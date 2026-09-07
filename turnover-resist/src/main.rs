@@ -7,7 +7,6 @@ use anyhow::Result;
 use clap::Parser;
 
 use turnover_resist::cli::Cli;
-use turnover_resist::engine;
 
 fn main() -> Result<()> {
     let t_total = std::time::Instant::now();
@@ -19,7 +18,7 @@ fn main() -> Result<()> {
     anyhow::ensure!(cli.step > 0.0, "--step must be > 0");
 
     let date_str = cli.date.format("%Y%m%d").to_string();
-    let output_path = cli.output.as_ref().map(|p| p.clone()).unwrap_or_else(|| {
+    let output_path = cli.output.clone().unwrap_or_else(|| {
         PathBuf::from(format!(
             "backtest_output/canonical_resist_rust_{}.csv",
             date_str

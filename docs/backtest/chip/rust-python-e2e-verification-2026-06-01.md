@@ -23,7 +23,7 @@
 - 日期：2026-05-25（交易日）
 - 窗口：1000 日，步长 0.01
 - Rust 二进制：`E:\rust-targets\release\turnover-resist.exe`（含 T-1 capital 修复，22:27 编译）
-- Python：`scripts/full_market_canonical_resist.py --method batch`（含 `make_price_grid` 修复）
+- Python：`scripts/data/full_market_canonical_resist.py --method batch`（含 `make_price_grid` 修复）
 
 ### 2.2 运行命令
 
@@ -34,7 +34,7 @@ E:\rust-targets\release\turnover-resist.exe \
   --output ../backtest_output/_rust_e2e_v2.csv
 
 # Python（从仓库根目录）
-D:/anaconda3/envs/vanna311/python.exe scripts/full_market_canonical_resist.py \
+D:/anaconda3/envs/vanna311/python.exe scripts/data/full_market_canonical_resist.py \
   --date 20260525 --method batch \
   --output backtest_output/_python_e2e.csv
 ```

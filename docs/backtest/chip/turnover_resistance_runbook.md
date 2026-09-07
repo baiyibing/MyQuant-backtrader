@@ -27,7 +27,7 @@ RULES = {
 
 ### 5.2 布林带位置
 
-**源码**：`backtest/chip_algorithm.py` `bb_position()` — 统一实现；`filter_chip_stocks` / `chip_factor_analysis` 均通过 `from backtest.chip_algorithm import bb_position` 导入。
+**源码**：`oskh_factors/price_bb.py` `bb_position()` — 统一实现；研究脚本直引 `oskh_factors`。
 
 ```python
 def bb_position(close: np.ndarray, period: int = 20, nbdev: float = 2.0) -> float:
@@ -297,18 +297,18 @@ def rolling_ic(reader, codes, lookback=365, step_days=20):
 
 ### 6.1 全市场计算
 
-**脚本**：`scripts/full_market_chip_resist.py`
+**脚本**：`scripts/data/full_market_chip_resist.py`
 
 ```bash
 # 默认日期 20260515
-D:/anaconda3/envs/vanna311/python.exe scripts/full_market_chip_resist.py
+D:/anaconda3/envs/vanna311/python.exe scripts/data/full_market_chip_resist.py
 
 # 指定日期 + 输出 CSV
-D:/anaconda3/envs/vanna311/python.exe scripts/full_market_chip_resist.py \
+D:/anaconda3/envs/vanna311/python.exe scripts/data/full_market_chip_resist.py \
     --date 20260522 --output full_market.csv
 
 # 自定义筹码窗口（默认 80，需 window+1 个交易日）
-D:/anaconda3/envs/vanna311/python.exe scripts/full_market_chip_resist.py \
+D:/anaconda3/envs/vanna311/python.exe scripts/data/full_market_chip_resist.py \
     --date 20260522 --window 80
 ```
 
@@ -322,20 +322,20 @@ D:/anaconda3/envs/vanna311/python.exe scripts/full_market_chip_resist.py \
 
 ### 6.2 Spot Check（随机抽样）
 
-**脚本**：`scripts/spot_check_chip_factors.py`
+**脚本**：`scripts/data/spot_check_chip_factors.py`
 
 > **无 `--stock` 参数**；从 `float_shares.parquet` 全市场列表中按 `--samples` / `--seed` 随机抽样。
 
 ```bash
 # 默认：日期 20260515，随机 100 只，seed=42
-D:/anaconda3/envs/vanna311/python.exe scripts/spot_check_chip_factors.py
+D:/anaconda3/envs/vanna311/python.exe scripts/data/spot_check_chip_factors.py
 
 # 指定日期、样本量、输出路径
-D:/anaconda3/envs/vanna311/python.exe scripts/spot_check_chip_factors.py \
+D:/anaconda3/envs/vanna311/python.exe scripts/data/spot_check_chip_factors.py \
     --date 20260522 --samples 50 --seed 42 --output spot_check.csv
 
 # 自定义筹码窗口
-D:/anaconda3/envs/vanna311/python.exe scripts/spot_check_chip_factors.py \
+D:/anaconda3/envs/vanna311/python.exe scripts/data/spot_check_chip_factors.py \
     --date 20260522 --window 80 --samples 20
 ```
 
@@ -390,21 +390,21 @@ D:/anaconda3/envs/vanna311/python.exe backtest/chip_factor_analysis.py --t1
 
 per-stock 截面因子仅在内存 `pool_factors` 中计算；导出请用 `daily_chip_logger` 或自行 dump。
 
-### 6.4 每日截面日志（canonical）
+### 6.4 每日截面日志（Legacy TR_80）
 
-**脚本**：`backtest/daily_chip_logger.py`
+**脚本**：`scripts/data/daily_chip_logger.py`
 
 按交易日落盘 `profit_chip_diff`、`turnover_ratio`、`turnover_resistance`（经 `derived_chip_factors`），并含 `turnover_chip_factors` 的 ARC/VRC/SRC/KRC。适合作为**每日生产截面**的参考实现。
 
 ```bash
 # 指定日期
-D:/anaconda3/envs/vanna311/python.exe backtest/daily_chip_logger.py --date 20260513
+D:/anaconda3/envs/vanna311/python.exe scripts/data/daily_chip_logger.py --date 20260513
 
 # 分钟线模式（输出文件名带 `_1m` 后缀：chip_daily_20260513_1m.csv）
-D:/anaconda3/envs/vanna311/python.exe backtest/daily_chip_logger.py --date 20260513 --freq 1m
+D:/anaconda3/envs/vanna311/python.exe scripts/data/daily_chip_logger.py --date 20260513 --freq 1m
 
 # 自动定时：每 10 分钟检查一次，15:30 执行后退出
-D:/anaconda3/envs/vanna311/python.exe backtest/daily_chip_logger.py --schedule
+D:/anaconda3/envs/vanna311/python.exe scripts/data/daily_chip_logger.py --schedule
 ```
 
 **参数**：
@@ -457,16 +457,16 @@ D:/anaconda3/envs/vanna311/python.exe backtest/filter_chip_stocks.py \
 
 ### 6.6 双路径对齐验证（§8）
 
-**脚本**：`scripts/verify_turnover_resistance_alignment.py`
+**脚本**：`scripts/gates/verify_turnover_resistance_alignment.py`
 
 对比 **路径 A**（`daily_chip_logger` 等价内联）与 **路径 B**（`compute_crossday_turnover_resistance`，与 full_market/spot_check 相同）：
 
 ```bash
-D:/anaconda3/envs/vanna311/python.exe scripts/verify_turnover_resistance_alignment.py \
+D:/anaconda3/envs/vanna311/python.exe scripts/gates/verify_turnover_resistance_alignment.py \
     --date 20260515 --samples 20 --seed 42
 
 # 可调阈值（默认 turnover 1e-4，阻力 0.05）
-D:/anaconda3/envs/vanna311/python.exe scripts/verify_turnover_resistance_alignment.py \
+D:/anaconda3/envs/vanna311/python.exe scripts/gates/verify_turnover_resistance_alignment.py \
     --date 20260515 --samples 50 --tol-turnover 1e-6 --tol-resist 0.01
 ```
 
@@ -501,13 +501,13 @@ CSV：`backtest_output/verify_turnover_resist_align_20260515.csv`
 
 ```bash
 # 单日：Rust TR 截面 → Parquet → TR BB
-D:/anaconda3/envs/vanna311/python.exe scripts/compute_turnover_resistance_bands.py --date YYYYMMDD
+D:/anaconda3/envs/vanna311/python.exe scripts/data/compute_turnover_resistance_bands.py --date YYYYMMDD
 
 # 仅补 TR BB（截面已入库）
-D:/anaconda3/envs/vanna311/python.exe scripts/compute_turnover_resistance_bands.py --date YYYYMMDD --backfill-bands-only
+D:/anaconda3/envs/vanna311/python.exe scripts/data/compute_turnover_resistance_bands.py --date YYYYMMDD --backfill-bands-only
 
 # 历史回填（默认 60 日历日 walk-back）
-D:/anaconda3/envs/vanna311/python.exe scripts/backfill_turnover_resistance_bands.py --end-date YYYYMMDD --skip-existing
+D:/anaconda3/envs/vanna311/python.exe scripts/data/backfill_turnover_resistance_bands.py --end-date YYYYMMDD --skip-existing
 ```
 
 输出：`stock_data/turnover_resistance_daily.parquet`（可由 `TURNOVER_RESIST_BANDS_PATH` 覆盖）。
@@ -529,10 +529,10 @@ D:/anaconda3/envs/vanna311/python.exe scripts/backfill_turnover_resistance_bands
 | 参数 | 默认值 | 位置 | 说明 |
 |------|--------|------|------|
 | `WINDOW_DAYS` | 80 | `chip_factor_analysis.py` | 筹码分布回测窗口（交易日） |
-| `--window`（canonical/full_market） | 1000 | `scripts/full_market_canonical_resist.py` | 全市场 canonical 计算窗口（交易日，约 4 年） |
+| `--window`（canonical/full_market） | 1000 | `scripts/data/full_market_canonical_resist.py` | 全市场 canonical 计算窗口（交易日，约 4 年） |
 | TR BB Parquet 路径 | `stock_data/turnover_resistance_daily.parquet` | `oskh_data/turnover_resistance_store.py` | 可由 `TURNOVER_RESIST_BANDS_PATH` 覆盖 |
-| TR BB `window`（硬编码） | 1000 | `scripts/compute_turnover_resistance_bands.py` | Canonical TR；与 Legacy TR_80 禁止混表 |
-| TR BB `period` | 20 | `backtest/chip_turnover_resistance_bands.py` | 与价格 BB 默认一致 |
+| TR BB `window`（硬编码） | 1000 | `scripts/data/compute_turnover_resistance_bands.py` | Canonical TR；与 Legacy TR_80 禁止混表 |
+| TR BB `period` | 20 | `oskh_factors/chip/bands.py` | 与价格 BB 默认一致 |
 | `--free-float-policy`（v1.1） | `warn-zero` | `full_market_canonical_resist.py` + `turnover-resist` (Rust) | 缺自由流通股本时：`warn-zero`=填0继续 / `skip`=跳过 / `fail`=报错。**Python/Rust 一致** |
 | `BACKTEST_START` | "2026-03-01" | `chip_factor_analysis.py` | 回测起点 |
 | `INITIAL_CASH` | 1,000,000 | `chip_factor_analysis.py` | 初始资金 |

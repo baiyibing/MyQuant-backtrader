@@ -320,6 +320,34 @@ def generate_trace_id(module: str, date: Optional[str] = None) -> str:
     return TraceIdGenerator.generate(module=module, date=date)
 
 
+def ensure_trace_id_24(candidate: Optional[str]) -> str:
+    """Return a canonical 24-char trace_id, never raising.
+
+    Defense-in-depth for observability paths that must not fail on trace_id
+    format mismatch (e.g. ``ops_order_metrics`` best-effort emits).
+
+    - 24-char valid (``TraceIdGenerator.validate``) → returned as-is.
+    - 12-char ``YYYYMMDDHHMM`` minute_key → ``SYSTEM_YYYYMMDD_HHMM0000``
+      (preserves the full minute_key inside the trace_id for traceability;
+      HHMM is all decimal digits, hence valid hex for the random slot).
+    - anything else (None / empty / wrong length) → a freshly generated
+      ``TraceIdGenerator.generate("system")`` so callers always get a
+      writeable trace_id.
+    """
+    if candidate is None:
+        return TraceIdGenerator.generate("system")
+    raw = str(candidate).strip()
+    if TraceIdGenerator.validate(raw):
+        return raw
+    if len(raw) == 12 and raw.isdigit():
+        date_part = raw[:8]
+        hhmm = raw[8:12]
+        padded = f"SYSTEM_{date_part}_{hhmm}0000"
+        if TraceIdGenerator.validate(padded):
+            return padded
+    return TraceIdGenerator.generate("system")
+
+
 # ==============================================================================
 # 公开 API 列表（严格限制）
 # ==============================================================================
@@ -336,6 +364,7 @@ __all__ = [
     "set_trace_context",
     "get_trace_context_safe",
     "apply_trace_for_miniqmt_callback",
+    "ensure_trace_id_24",
 ]
 
 

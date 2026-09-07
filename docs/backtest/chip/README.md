@@ -1,5 +1,12 @@
 # 筹码因子文档索引
 
+## 架构评审（进行中）
+
+| 文档 | 说明 |
+|------|------|
+| [`../../engineering/RFC-003-oskh-factors-package-extraction.md`](../../engineering/RFC-003-oskh-factors-package-extraction.md) | **因子独立包 `oskh_factors`（评审稿 v12 · 批准执行 M-003）** — Claude/Kimi/Codex 评审吸收 · M-003b 路径单源 · 附录 D checklist |
+| [`../../engineering/RFC-003-m1-tr-selector-interface.md`](../../engineering/RFC-003-m1-tr-selector-interface.md) | M-1 TR 选股接入接口（M-004 子文档） |
+
 ## 主文档
 
 | 文档 | 说明 |

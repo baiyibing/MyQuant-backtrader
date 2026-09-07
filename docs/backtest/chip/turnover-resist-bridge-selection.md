@@ -196,7 +196,7 @@ data = turnover_resist.compute_turnover_resist(date="20269999")
 |------|------|------|
 | 核心计算提取 | `turnover-resist/src/engine.rs` | `run(&Cli) -> Vec<OutputRow>`，CLI / PyO3 共用 |
 | PyO3 最小绑定 | `turnover-resist/src/lib.rs` | `compute_turnover_resist(...)` → JSON 字符串；已编译通过 |
-| Benchmark 脚本 | `scripts/benchmark_turnover_resist_bridge.py` | 可复跑 CLI / PyO3 对比 |
+| Benchmark 脚本 | `scripts/diagnostics/benchmark_turnover_resist_bridge.py` | 可复跑 CLI / PyO3 对比 |
 | PyO3 微型 stub | `turnover-resist/pyo3_bench_stub/` | 纯 FFI 开销测量 crate，不依赖 polars |
 
 > 若未来决定切 PyO3，只需：① 把 `lib.rs` 中的 JSON 返回改为 `Vec<PyDict>`；② `maturin develop --release`；③ 替换 `subprocess.run` 为 `turnover_resist.compute_turnover_resist(...)`。工作量 **≤0.5 人日**。

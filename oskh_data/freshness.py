@@ -5,13 +5,16 @@
 交易日历驱动：比较上一交易日数据，非自然日（避免周末/节假日误阻断）。
 """
 from __future__ import annotations
+from .symbol_format import to_partition_key
 
 import os
 from dataclasses import dataclass
 from datetime import time
-from typing import List, Optional
+from typing import List, Optional, cast
 
 import pandas as pd
+
+from oskh_data.pandas_typing import as_timestamp, normalize_timestamp, timestamp_strftime
 
 from common.infra.quant_logger import get_logger
 
@@ -42,17 +45,7 @@ except (ValueError, TypeError):
 _TRADING_START = time(9, 15)
 _TRADING_END = time(15, 0)
 
-# 交易日历延迟导入
-_calendar_cache = None
-
-
-def _get_sse_calendar():
-    global _calendar_cache
-    if _calendar_cache is None:
-        import pandas_market_calendars as mcal
-
-        _calendar_cache = mcal.get_calendar('SSE')
-    return _calendar_cache
+# 交易日历：common SSE cache（零副作用）
 
 
 @dataclass
@@ -74,23 +67,59 @@ def get_previous_trading_day(date: Optional[pd.Timestamp] = None) -> str:
 
     date 为 None 时使用今天。
     """
-    cal = _get_sse_calendar()
+    from common.infra.trading_calendar_pmc import get_trade_days_sse
+
     if date is None:
         date = pd.Timestamp.now()
-    schedule = cal.schedule(
-        (date - pd.Timedelta(days=30)).strftime('%Y-%m-%d'),
-        date.strftime('%Y-%m-%d'),
-    )
-    trading_days = schedule.index
-    if len(trading_days) < 1:
-        return date.strftime('%Y%m%d')
-    return trading_days[-1].strftime('%Y%m%d')
+    until = timestamp_strftime(date, "%Y%m%d")
+    since = timestamp_strftime(date - pd.Timedelta(days=30), "%Y%m%d")
+    df = get_trade_days_sse(since=since, until=until)
+    if df is None or df.empty:
+        return until
+    return str(df.iloc[-1]["cal_date"])
+
+
+def _trading_days_count(since_yyyymmdd: str, until_yyyymmdd: str) -> int:
+    from common.infra.trading_calendar_pmc import get_trade_days_sse
+
+    df = get_trade_days_sse(since=since_yyyymmdd, until=until_yyyymmdd)
+    return 0 if df is None else int(len(df))
 
 
 def _is_trading_session() -> bool:
     """判断当前是否在交易时段（09:15-15:00）。"""
     now = pd.Timestamp.now().time()
     return _TRADING_START <= now <= _TRADING_END
+
+
+def _check_adj_factor_table_freshness(expected_date: str) -> tuple[bool, str]:
+    """Return (ok, last_data_date) for adj_factor.parquet sidecar / date column."""
+    from oskh_data.adj_factor_meta import read_adj_factor_data_max_date
+
+    from common.infra.data_root import resolve_source_parquet
+
+    parquet_path = resolve_source_parquet("adj_factor.parquet")
+    if not parquet_path.is_file():
+        return False, ""
+    max_ts = read_adj_factor_data_max_date(parquet_path)
+    if max_ts is None:
+        try:
+            df = pd.read_parquet(parquet_path, columns=["date"])
+            if df.empty:
+                return False, ""
+            max_ts = pd.to_datetime(df["date"], errors="coerce").max()
+            if pd.isna(max_ts):
+                return False, ""
+            max_ts = normalize_timestamp(max_ts)
+        except Exception:
+            return False, ""
+    _adj_anchor = cast(
+        pd.Timestamp,
+        pd.Timestamp(str(expected_date)) - pd.Timedelta(days=1),
+    )
+    expected_prev = normalize_timestamp(get_previous_trading_day(_adj_anchor))
+    last_str = timestamp_strftime(max_ts, "%Y%m%d")
+    return normalize_timestamp(max_ts) >= expected_prev, last_str
 
 
 def check_data_freshness(
@@ -118,12 +147,42 @@ def check_data_freshness(
         expected_date = get_previous_trading_day()
 
     expected_count = len(symbols)
+
+    # adj_factor 表新鲜度（除权日 stale 防护）— 与 symbols 循环解耦；空列表仍查表
+    adj_ok, adj_last = _check_adj_factor_table_freshness(expected_date)
+    if not adj_ok:
+        action = "block" if _is_trading_session() else "warn"
+        _adj_anchor = cast(
+            pd.Timestamp,
+            pd.Timestamp(str(expected_date)) - pd.Timedelta(days=1),
+        )
+        logger.error(
+            "adj_factor freshness FAIL-CLOSE: last_data_date=%s, expected_prev_trading_day>=%s, action=%s",
+            adj_last or "N/A",
+            get_previous_trading_day(_adj_anchor),
+            action,
+        )
+        return FreshnessResult(
+            ok=(action != "block"),
+            coverage_ratio=0.0,
+            expected_count=expected_count,
+            loaded_count=0,
+            missing_symbols=["adj_factor.parquet"],
+            last_data_date=adj_last,
+            expected_date=expected_date,
+            action=action,
+        )
+
     if expected_count == 0:
         return FreshnessResult(
-            ok=True, coverage_ratio=1.0,
-            expected_count=0, loaded_count=0,
-            missing_symbols=[], last_data_date=expected_date,
-            expected_date=expected_date, action="pass",
+            ok=True,
+            coverage_ratio=1.0,
+            expected_count=0,
+            loaded_count=0,
+            missing_symbols=[],
+            last_data_date=adj_last or expected_date,
+            expected_date=expected_date,
+            action="pass",
         )
 
     # 逐标检查本地 Parquet 文件是否存在
@@ -135,9 +194,11 @@ def check_data_freshness(
     loaded_last_dates: List[pd.Timestamp] = []
 
     for sym in symbols:
-        safe = sym.replace('.', '_')
+        safe = to_partition_key(sym)
+        from common.infra.data_root import resolve_period_root
+
         path = (
-            data_root / 'stock_data' / 'period=1d' / 'dividend_type=none' /
+            resolve_period_root('1d') / 'dividend_type=none' /
             f'symbol={safe}' / 'data.parquet'
         )
         if path.exists():
@@ -150,7 +211,7 @@ def check_data_freshness(
                         missing_symbols.append(sym)
                         continue
                     loaded_count += 1
-                    loaded_last_dates.append(pd.Timestamp(ts.max()).tz_localize(None).normalize())
+                    loaded_last_dates.append(normalize_timestamp(as_timestamp(ts.max()).tz_localize(None)))
                 else:
                     missing_symbols.append(sym)
             except Exception:
@@ -160,19 +221,16 @@ def check_data_freshness(
 
     coverage_ratio = loaded_count / expected_count if expected_count > 0 else 1.0
 
-    expected_ts = pd.Timestamp(expected_date).normalize()
+    expected_ts = normalize_timestamp(pd.Timestamp(expected_date))
     if loaded_last_dates:
         last_data_ts = max(loaded_last_dates)
-        cal = _get_sse_calendar()
         if last_data_ts >= expected_ts:
             stale_trading_days = 0
         else:
-            sched = cal.schedule(
-                (last_data_ts + pd.Timedelta(days=1)).strftime("%Y-%m-%d"),
-                expected_ts.strftime("%Y-%m-%d"),
-            )
-            stale_trading_days = len(sched.index)
-        last_data_date = last_data_ts.strftime("%Y%m%d")
+            since_s = timestamp_strftime(last_data_ts + pd.Timedelta(days=1), "%Y%m%d")
+            until_s = timestamp_strftime(expected_ts, "%Y%m%d")
+            stale_trading_days = _trading_days_count(since_s, until_s)
+        last_data_date = timestamp_strftime(last_data_ts, "%Y%m%d")
     else:
         stale_trading_days = max_stale + 1
         last_data_date = ""

@@ -12,7 +12,8 @@ Seeded from OSkhQuant slim snapshot at commit `5d41252` (parent of RF-R0 package
 | `oskh_data/` | Parquet/DuckDB reader + QMT download / backfill |
 | `qlib_cost/` | Chip distribution algorithms |
 | `turnover-resist/` | Rust CLI for turnover resistance |
-| `oskh_core/turnover_resist_bridge.py` | Python bridge (FFI / CLI) to the Rust binary |
+| `oskh_factors/bridge/turnover_resist.py` | Python bridge (FFI / CLI) to the Rust binary |
+| `oskh_core/turnover_resist_bridge.py` | Compatibility re-export of the factors bridge |
 | `trade_decision/presets.py` | Sell presets used by optional BT adapter |
 | `common/infra/` | Slim infra (`timekeeping`, `quant_logger`, …) |
 | `stock_pool/` | Daily buy-list CSVs for full BT |
@@ -20,7 +21,7 @@ Seeded from OSkhQuant slim snapshot at commit `5d41252` (parent of RF-R0 package
 ## Environment
 
 ```text
-D:\anaconda3\envs\vanna311\python.exe -m pip install -r requirements.txt
+D:\anaconda3\envs\vanna312\python.exe -m pip install -r requirements.txt
 ```
 
 ## Run full backtest
@@ -29,15 +30,15 @@ Dates / capital are hardcoded in `backtest/backtest_main_full.py`. Needs `../sto
 
 ```powershell
 cd backtest
-D:\anaconda3\envs\vanna311\python.exe backtest_main_full.py
+D:\anaconda3\envs\vanna312\python.exe backtest_main_full.py
 ```
 
 ## Download / rebuild market data
 
 ```powershell
-D:\anaconda3\envs\vanna311\python.exe -m oskh_data.backfill --help
+D:\anaconda3\envs\vanna312\python.exe -m oskh_data.backfill --help
 # or shim:
-D:\anaconda3\envs\vanna311\python.exe backtest/backfill_daily_data.py download --start YYYYMMDD --end YYYYMMDD
+D:\anaconda3\envs\vanna312\python.exe backtest/backfill_daily_data.py download --start YYYYMMDD --end YYYYMMDD
 ```
 
 Config: `config/reader.yaml` (`mode: parquet` by default). Env: `OSKH_DATA_ROOT`.
@@ -51,12 +52,12 @@ cd turnover-resist
 cargo build --profile release-fast
 ```
 
-Python entry: `from oskh_core.turnover_resist_bridge import compute_turnover_resist`.
+Python entry: `from oskh_factors.bridge.turnover_resist import compute_turnover_resist` (also re-exported from `oskh_core.turnover_resist_bridge`).
 
 ## Tests
 
 ```powershell
-D:\anaconda3\envs\vanna311\python.exe -m pytest -q
+D:\anaconda3\envs\vanna312\python.exe -m pytest -q
 ```
 
 ## Git

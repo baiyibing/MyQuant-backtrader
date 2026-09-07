@@ -3,49 +3,119 @@ QMT 数据下载与本地缓存管理。
 
 xtquant 通过延迟导入（仅在 download_data 首次调用时加载），
 无 QMT 环境的进程可安全 import 本模块而不触发 xtquant 依赖。
+
+1d 落盘（``_process_downloaded_data``「写入文件」）：走
+``oskh_data.daily_parquet_write.write_processed_data``，模式由
+``OSKH_DAILY_PARQUET_WRITE_MODE``（默认 ``duckdb``）决定；日志
+``写入文件 (mode): N stocks``。分钟线仍用模块内串行 pandas 写盘。
 """
+# pyright: reportUnusedImport=false
+# （B3c 迁移 re-export 供 tests patch 面使用，见下方 noqa: F401 块）
+
 from __future__ import annotations
+from oskh_data.pandas_typing import normalize_timestamp
+from .symbol_format import to_partition_key
 
 import os
-import time
 import warnings
 from datetime import timedelta
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple, cast
 
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
 from common.infra.quant_logger import get_logger
-from common.infra.timekeeping import mono_now, parse_qmt_time
+from common.infra.timekeeping import parse_qmt_time
+from common.infra.constants import EnvVarKeys, StreamObservabilityEvent
+from common.infra.data_root import resolve_period_root
 
 logger = get_logger(__name__)
 
-# 全局缓存交易日历（延迟导入，避免 pandas_market_calendars 无安装时阻塞）
-_SSE_CALENDAR = None
+from oskh_data.download_transport import (  # noqa: F401 — B3c 迁移后 re-export
+    DailyBarsTransport,
+    _chunks,
+    _resolve_download_watchdog_timeouts,
+    resolve_download_transport,
+)
 
 
-def _get_sse_calendar():
-    global _SSE_CALENDAR
-    if _SSE_CALENDAR is None:
-        import pandas_market_calendars as mcal
+def _is_latest_bar_placeholder(file_path: Path, target_date: pd.Timestamp) -> bool:
+    """检查 parquet 中 target_date 对应最新 bar 是否为 QMT 占位符（volume=0）。
 
-        _SSE_CALENDAR = mcal.get_calendar('SSE')
-    return _SSE_CALENDAR
+    场景：盘后市场数据未 finalize 时，QMT 可能对目标交易日返回一条 OHLC=前收、
+    volume=0 的占位 bar。该 bar 会被写成 target_date，导致增量过滤认为数据已
+    最新而跳过真实数据下载。本函数通过读取 time/volume（及存在时的 amount）
+    判断最新 bar 是否为占位符。
+    """
+    try:
+        cols = ["time", "volume"]
+        has_amount = False
+        # 轻量检查列存在性：none 有 amount，front/back 无 amount
+        import pyarrow.parquet as pq
+
+        schema = pq.read_schema(file_path)
+        if "amount" in schema.names:
+            cols.append("amount")
+            has_amount = True
+        df = pd.read_parquet(file_path, engine="pyarrow", columns=cols)
+        if df.empty:
+            return False
+        latest = df.loc[df["time"].idxmax()]
+        # 存储口径 = UTC 零点毫秒（本模块写入路径由 tz-naive 日线索引物化，
+        # 见 download_data 的 time 列物化注释）。tz-naive 的 .value 直接给出
+        # 「naive 当 UTC」的 ns，与存储口径一致；此前用 naive .timestamp()
+        # （本机时区，+08 机 = 北京零点毫秒 = CST-as-UTC）比对 → 恒不等 →
+        # 占位检测静默失效（2026-07-20 实证：002677.SZ 停牌占位窗口）。
+        target_ts = int(pd.Timestamp(target_date).value // 10**6)
+        if int(latest["time"]) != target_ts:
+            return False
+        if float(latest["volume"]) != 0:
+            return False
+        if has_amount and float(latest.get("amount", 1)) != 0:
+            return False
+        return True
+    except Exception:
+        return False
 
 
-# xtquant 延迟导入
-_xtdata = None
+def _get_parquet_latest_date(file_path: Path) -> Optional[pd.Timestamp]:
+    """使用 pyarrow 元数据快速获取 parquet 文件最新日期，失败时返回 None。"""
+    try:
+        import pyarrow.parquet as pq
 
-
-def _get_xtdata():
-    global _xtdata
-    if _xtdata is None:
-        from xtquant import xtdata as _xt
-
-        _xtdata = _xt
-    return _xtdata
+        meta = pq.read_metadata(file_path)
+        max_ts: Optional[pd.Timestamp] = None
+        for rg_idx in range(meta.num_row_groups):
+            rg = meta.row_group(rg_idx)
+            for col_idx in range(rg.num_columns):
+                col = rg.column(col_idx)
+                stats = col.statistics
+                if stats is None or stats.max is None:
+                    continue
+                col_name = col.path_in_schema
+                # 优先使用 DatetimeIndex 列（DuckDB/旧版写入的 __index_level_0__）
+                if "index_level" in col_name:
+                    max_val = stats.max
+                    if max_val is not None:
+                        candidate = pd.Timestamp(max_val)
+                        if not bool(pd.isna(candidate)) and (
+                            max_ts is None or candidate > max_ts
+                        ):
+                            max_ts = cast(pd.Timestamp, candidate)
+                # 次选 time 列（毫秒 epoch），需要转为 Timestamp
+                elif col_name == "time":
+                    max_val = stats.max
+                    if max_val is not None:
+                        ts = pd.Timestamp(max_val, unit="ms")
+                        if not bool(pd.isna(ts)) and (max_ts is None or ts > max_ts):
+                            max_ts = cast(pd.Timestamp, ts)
+        if max_ts is not None:
+            return max_ts.normalize()
+    except Exception:
+        pass
+    return None
 
 
 # ------------------------------------------------------------------
@@ -57,20 +127,20 @@ class StockDataManager:
     """股票数据管理器（常量和配置）"""
 
     EXCHANGE_MAPPING = {
-        'SH': ['600', '601', '603', '605', '688'],
-        'SZ': ['000', '001', '002', '003', '300', '301'],
-        'BJ': ['43', '82', '83', '84', '87', '88', '920'],
+        "SH": ["600", "601", "603", "605", "688"],
+        "SZ": ["000", "001", "002", "003", "300", "301"],
+        "BJ": ["43", "82", "83", "84", "87", "88", "920"],
     }
 
     ADJUST_MAPPING = {
-        'none': 'none',
-        'front': 'front',
-        'back': 'back',
+        "none": "none",
+        "front": "front",
+        "back": "back",
     }
 
     # miniQMT xtdata.get_market_data_ex 返回的标准字段（小写）
-    STANDARD_COLUMNS = ['time', 'open', 'high', 'low', 'close', 'volume', 'amount']
-    STANDARD_DTYPES = {'time': 'int64', 'volume': 'int64', 'amount': 'float64'}
+    STANDARD_COLUMNS = ["time", "open", "high", "low", "close", "volume", "amount"]
+    STANDARD_DTYPES = {"time": "int64", "volume": "int64", "amount": "float64"}
 
     @classmethod
     def normalize_schema(cls, df: pd.DataFrame) -> pd.DataFrame:
@@ -83,11 +153,14 @@ class StockDataManager:
             logger.warning(
                 "normalize_schema dropping unknown columns from QMT response; "
                 "update STANDARD_COLUMNS if these fields are needed",
-                context={"dropped_columns": dropped, "standard_columns": cls.STANDARD_COLUMNS},
+                context={
+                    "dropped_columns": dropped,
+                    "standard_columns": cls.STANDARD_COLUMNS,
+                },
             )
         # 只保留标准小写列，丢弃任何大写/重复列
         available = [c for c in cls.STANDARD_COLUMNS if c in df.columns]
-        df = df[available].copy()
+        df = df.loc[:, available].copy()
         # 修正 dtype
         for col, dtype in cls.STANDARD_DTYPES.items():
             if col in df.columns and df[col].dtype != dtype:
@@ -95,15 +168,15 @@ class StockDataManager:
         return df
 
     PERIOD_MAPPING = {
-        '1m': ('1分钟', True),
-        '5m': ('5分钟', True),
-        '10m': ('10分钟', True),
-        '15m': ('15分钟', True),
-        '30m': ('30分钟', True),
-        '1h': ('60分钟', True),
-        '1d': ('日线', False),
-        '1w': ('周线', False),
-        '1M': ('月线', False),
+        "1m": ("1分钟", True),
+        "5m": ("5分钟", True),
+        "10m": ("10分钟", True),
+        "15m": ("15分钟", True),
+        "30m": ("30分钟", True),
+        "1h": ("60分钟", True),
+        "1d": ("日线", False),
+        "1w": ("周线", False),
+        "1M": ("月线", False),
     }
 
     def __init__(self, base_dir: str = "../stock_data"):
@@ -123,11 +196,11 @@ class StockDataManager:
 
     @classmethod
     def get_period_name(cls, period: str) -> str:
-        return cls.PERIOD_MAPPING.get(period, ('未知周期', False))[0]
+        return cls.PERIOD_MAPPING.get(period, ("未知周期", False))[0]
 
     @classmethod
     def get_recommended_adjust_type(cls, period: str) -> str:
-        return 'none' if cls.is_minute_period(period) else 'front'
+        return "none" if cls.is_minute_period(period) else "front"
 
 
 # ------------------------------------------------------------------
@@ -139,7 +212,9 @@ class PeriodDataManager:
     """周期数据管理器"""
 
     @staticmethod
-    def validate_time_range(period: str, start_time: str, end_time: str) -> Tuple[bool, str]:
+    def validate_time_range(
+        period: str, start_time: str, end_time: str
+    ) -> Tuple[bool, str]:
         try:
             start_dt = pd.to_datetime(start_time)
             end_dt = pd.to_datetime(end_time)
@@ -148,8 +223,12 @@ class PeriodDataManager:
             if StockDataManager.is_minute_period(period):
                 time_diff = end_dt - start_dt
                 max_days = {
-                    '1m': 7, '5m': 30, '10m': 30,
-                    '15m': 90, '30m': 180, '1h': 365,
+                    "1m": 7,
+                    "5m": 30,
+                    "10m": 30,
+                    "15m": 90,
+                    "30m": 180,
+                    "1h": 365,
                 }.get(period, 30)
                 if time_diff.days > max_days:
                     pass
@@ -158,9 +237,15 @@ class PeriodDataManager:
             return False, f"时间格式错误: {e}"
 
     @staticmethod
-    def get_file_path(base_dir: Path, period: str, adjust_type: str, stock_code: str) -> Path:
-        safe_stock_code = stock_code.replace('.', '_')
-        path = base_dir / f"period={period}" / f"dividend_type={adjust_type}" / f"symbol={safe_stock_code}"
+    def get_file_path(
+        base_dir: Path, period: str, adjust_type: str, stock_code: str
+    ) -> Path:
+        safe_stock_code = to_partition_key(stock_code)
+        path = (
+            resolve_period_root(period, base=base_dir)
+            / f"dividend_type={adjust_type}"
+            / f"symbol={safe_stock_code}"
+        )
         path.mkdir(parents=True, exist_ok=True)
         return path / "data.parquet"
 
@@ -176,23 +261,28 @@ class PeriodDataManager:
         if not df.index.is_unique:
             df = df.reset_index(drop=True)
 
-        calendar = _get_sse_calendar()
-        min_date = df.index.min()
-        max_date = df.index.max()
-        trading_days = calendar.schedule(
-            min_date.strftime('%Y-%m-%d'),
-            max_date.strftime('%Y-%m-%d'),
-        ).index
-        trading_days_date = trading_days.date  # type: ignore[reportAttributeAccessIssue]
-        mask_date = np.isin(df.index.date.astype('datetime64[D]'), trading_days_date)  # type: ignore[reportAttributeAccessIssue]
+        from common.infra.trading_calendar_pmc import get_trade_days_sse
+
+        min_date = cast(pd.Timestamp, df.index.min())
+        max_date = cast(pd.Timestamp, df.index.max())
+        cal_df = get_trade_days_sse(
+            since=min_date.strftime("%Y%m%d"),
+            until=max_date.strftime("%Y%m%d"),
+        )
+        if cal_df is None or cal_df.empty:
+            trading_days_date = np.array([], dtype="datetime64[D]")
+        else:
+            trading_days_date = pd.to_datetime(
+                cal_df["cal_date"].astype(str), format="%Y%m%d"
+            ).dt.date.to_numpy()
+        mask_date = np.isin(df.index.date.astype("datetime64[D]"), trading_days_date)  # type: ignore[reportAttributeAccessIssue]
 
         minutes = df.index.hour * 60 + df.index.minute  # type: ignore[reportAttributeAccessIssue]
-        mask_time = (
-            ((minutes >= 570) & (minutes <= 690))
-            | ((minutes >= 780) & (minutes <= 900))
+        mask_time = ((minutes >= 570) & (minutes <= 690)) | (
+            (minutes >= 780) & (minutes <= 900)
         )
         mask = mask_date & mask_time
-        return df[mask]
+        return cast(pd.DataFrame, df.loc[mask])
 
 
 # ------------------------------------------------------------------
@@ -203,33 +293,40 @@ class PeriodDataManager:
 class DataDownloader:
     """数据下载器（xtquant 延迟导入）"""
 
-    def __init__(self, base_dir: str = "../stock_data"):
+    def __init__(self, base_dir: str = "../stock_data",
+                 transport: Optional[DailyBarsTransport] = None):
         self.base_dir = Path(base_dir)
         self.base_dir.mkdir(parents=True, exist_ok=True)
+        # B3c/A2：xtdata 调用面经 transport；默认按旋钮解析（repo 默认 daqmt；
+        # mini host 须显式 xtdata；daqmt 工厂由 oskh_core 惰性注册）。
+        self._transport = transport if transport is not None else resolve_download_transport()
 
     def download_data(
         self,
         stock_list: List[str],
         start_time: str,
         end_time: str,
-        period: str = '1d',
-        adjust_type: str = 'front',
+        period: str = "1d",
+        adjust_type: str = "front",
         incrementally: bool = False,
         callback: Optional[Callable] = None,
+        # 默认 10s 节流：未显式传时按 ~10 秒一行采样，避免大批量下载每只一行
+        # 撑爆日志（5559 只 → 14 万+ tokens）。传 None/0 关闭节流（旧行为）。
+        progress_log_interval_sec: Optional[float] = 10.0,
     ) -> Dict[str, pd.DataFrame]:
-        xtdata = _get_xtdata()
-
         if not StockDataManager.validate_period(period):
             logger.error(f"不支持的周期: {period}")
             return {}
 
-        is_valid, msg = PeriodDataManager.validate_time_range(period, start_time, end_time)
+        is_valid, msg = PeriodDataManager.validate_time_range(
+            period, start_time, end_time
+        )
         if not is_valid:
             logger.error(f"时间范围无效: {msg}")
             return {}
 
         if StockDataManager.is_minute_period(period):
-            adjust_type = 'none'
+            adjust_type = "none"
             # P1-3: 分钟线下载要求 end_time 可被 parse_qmt_time 解析（+1min 修正依赖此格式）
             try:
                 parse_qmt_time(end_time)
@@ -246,7 +343,9 @@ class DataDownloader:
         )
 
         if incrementally:
-            actual_download_list = self._filter_incremental(stock_list, period, adjust_type, end_time)
+            actual_download_list = self._filter_incremental(
+                stock_list, period, adjust_type, end_time
+            )
         else:
             actual_download_list = stock_list
 
@@ -255,12 +354,14 @@ class DataDownloader:
             return {}
 
         adjusted_end_time = end_time
-        if period == '1m':
+        if period == "1m":
             try:
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore", UserWarning)
                     end_dt = parse_qmt_time(end_time)
-                adjusted_end_time = (end_dt + timedelta(minutes=1)).strftime('%Y%m%d%H%M%S')
+                adjusted_end_time = (end_dt + timedelta(minutes=1)).strftime(
+                    "%Y%m%d%H%M%S"
+                )
             except Exception as e:
                 # P1-3 FIX: +1min 修正失败必须阻断，禁止静默回退导致最后一根 bar 丢失
                 raise ValueError(
@@ -268,107 +369,71 @@ class DataDownloader:
                     f"got end_time={end_time!r}: {e}"
                 ) from e
 
-        _DOWNLOAD_START_TIMEOUT_SEC = 30.0
-        _DOWNLOAD_TOTAL_TIMEOUT_SEC = 300.0
-        _DOWNLOAD_STALL_TIMEOUT_SEC = 60.0
-
         try:
-            total_stocks = len(actual_download_list)
-            downloaded_set: set = set()
-            download_complete = False
-            download_started = False
-            last_progress_time = mono_now()
-            external_callback = callback
-
-            def on_progress(data):
-                nonlocal downloaded_set, download_complete, download_started, last_progress_time
-                download_started = True
-                last_progress_time = mono_now()
-                finished = data.get('finished', 0)
-                total = data.get('total', 0)
-                stock_code = data.get('message', 'N/A')
-                if stock_code and stock_code != 'N/A':
-                    downloaded_set.add(stock_code)
-                if finished > 0 and total > 0:
-                    logger.info(
-                        f"下载进度: {finished}/{total} ({(finished / total) * 100:.2f}%) - 当前: {stock_code}"
-                    )
-                if total > 0 and finished == total:
-                    download_complete = True
-                if external_callback is not None:
-                    try:
-                        external_callback(data)
-                    except Exception as _cb_exc:
-                        # Phase 2 P1 fix: log callback failures instead of
-                        # silently swallowing them.  Callback side effects
-                        # (audit records, progress updates) must not fail
-                        # invisibly.
-                        logger.warning(
-                            "download progress callback failed; download continues "
-                            "but caller side effects may be lost",
-                            context={
-                                "error_type": type(_cb_exc).__name__,
-                                "error": str(_cb_exc)[:200],
-                            },
-                        )
-
-            # NOTE: xtquant.download_history_data2 signature does not accept
-            # an `incrementally` keyword. The incremental logic is handled above
-            # by `_filter_incremental`; here we simply request the target range
-            # for the stocks that actually need updating.
-            xtdata.download_history_data2(
-                stock_list=actual_download_list,
+            outcome = self._transport.download_bulk(
+                actual_download_list,
+                start_time,
+                adjusted_end_time,
                 period=period,
-                start_time=start_time,
-                end_time=adjusted_end_time,
-                callback=on_progress,
+                adjust_type=adjust_type,
+                incrementally=incrementally,
+                callback=callback,
+                progress_log_interval_sec=progress_log_interval_sec,
+            )
+            # 剔除超时批，避免 _process_downloaded_data 的 per-stock "QMT returned None" 噪音
+            process_list = [
+                s for s in actual_download_list if s not in outcome.timeout_stock_set
+            ]
+            raw_data = outcome.frames
+            result = self._process_downloaded_data(
+                raw_data, process_list, period, adjust_type, start_time, end_time
             )
 
-            logger.info(f"等待{total_stocks}只股票下载完成...")
-            t0 = mono_now()
-            while not download_complete:
-                now = mono_now()
-                elapsed = now - t0
-
-                if not download_started and elapsed > _DOWNLOAD_START_TIMEOUT_SEC:
-                    raise TimeoutError(
-                        f"数据下载未在 {_DOWNLOAD_START_TIMEOUT_SEC:.0f}s 内启动，"
-                        f"可能 QMT 未连接或回调未注册 (stock_count={total_stocks})"
-                    )
-
-                if elapsed > _DOWNLOAD_TOTAL_TIMEOUT_SEC:
-                    raise TimeoutError(
-                        f"数据下载总超时 {_DOWNLOAD_TOTAL_TIMEOUT_SEC:.0f}s，"
-                        f"已完成 {len(downloaded_set)}/{total_stocks}"
-                    )
-
-                if download_started and (now - last_progress_time) > _DOWNLOAD_STALL_TIMEOUT_SEC:
-                    raise TimeoutError(
-                        f"数据下载停滞 {_DOWNLOAD_STALL_TIMEOUT_SEC:.0f}s 无新进度，"
-                        f"已完成 {len(downloaded_set)}/{total_stocks}"
-                    )
-
-                time.sleep(0.05)
-
-            logger.info(f"下载完成！共 {total_stocks} 个股票")
-
-            raw_data = xtdata.get_market_data_ex(
-                field_list=['time', 'open', 'high', 'low', 'close', 'volume', 'amount'],
-                stock_list=stock_list,
-                period=period,
-                start_time=start_time,
-                end_time=adjusted_end_time,
-                count=-1,
-                dividend_type=adjust_type,
-                fill_data=True,
+            FAIL_RATE_THRESHOLD = float(
+                os.environ.get(
+                    EnvVarKeys.OSKH_FASTPATH_READ_FAIL_RATE_THRESHOLD, "0.05"
+                )
             )
-
-            result = self._process_downloaded_data(raw_data, stock_list, period, adjust_type, start_time, end_time)
+            # 失败率检查（M8b 已删：必需股概念属盘中主路径，不属下载；只留 fail_rate 兜底）
+            # 小批量（<40）：单只失败即可超过 5%（如 1/19≈5.26%），要求至少 2 只失败才升为
+            # _download_error，避免残差重试被误杀（2026-07-13）。
             success_count = len(result)
-            fail_count = len(stock_list) - success_count
-            if fail_count > 0:
+            fail_count = (
+                len(actual_download_list) - success_count
+            )  # 分母=actual_download_list（含超时批）
+            fail_rate = (
+                fail_count / len(actual_download_list) if actual_download_list else 0.0
+            )
+            failed_codes = [s for fb in outcome.failed_batches for s in fb["stocks"]]
+            min_fails_for_error = 2 if len(actual_download_list) < 40 else 1
+            if fail_rate > FAIL_RATE_THRESHOLD and fail_count >= min_fails_for_error:
                 logger.warning(
-                    f"Batch download: {success_count}/{len(stock_list)} succeeded ({(success_count / len(stock_list) * 100 if stock_list else 0):.1f}%)"
+                    f"fastpath_read 失败率 {fail_rate:.2%} > {FAIL_RATE_THRESHOLD:.0%}（{fail_count}/{len(actual_download_list)}），返回 _download_error",
+                    context={
+                        "event": StreamObservabilityEvent.FASTPATH_READ_BATCH_TIMEOUT,
+                        "fail_rate": fail_rate,
+                        "fail_count": fail_count,
+                        "total": len(actual_download_list),
+                        "min_fails_for_error": min_fails_for_error,
+                    },
+                )
+                return cast(
+                    Dict[str, pd.DataFrame],
+                    {
+                        **result,  # 已成功批 parquet 已 salvage，调用方可据此 retry 失败批
+                        "_download_error": f"fastpath_read fail_rate={fail_rate:.2%}",
+                        "_failed_batch_codes": failed_codes,
+                    },
+                )
+            if fail_count and fail_rate > FAIL_RATE_THRESHOLD:
+                logger.warning(
+                    f"fastpath_read 失败率 {fail_rate:.2%} 超阈值但 fail_count={fail_count} "
+                    f"< min_fails_for_error={min_fails_for_error}（小批量豁免），继续返回已成功数据",
+                    context={
+                        "fail_rate": fail_rate,
+                        "fail_count": fail_count,
+                        "total": len(actual_download_list),
+                    },
                 )
             return result
         except (ValueError, TypeError) as structural_exc:
@@ -382,19 +447,47 @@ class DataDownloader:
             # "no data needed".  Incremental callers that receive _download_error
             # should retry on next run.
             logger.error(f"数据下载瞬态失败: {e}")
-            return {
-                "_download_error": type(e).__name__,
-                "_download_error_detail": str(e)[:500],
-                "_failed_stock_count": len(actual_download_list),
-            }
+            try:
+                from oskh_data.qmt_download_channel import maybe_write_stale_marker
+
+                maybe_write_stale_marker(self.base_dir, end_time, str(e))
+            except Exception as mark_exc:  # noqa: BLE001 — marker is best-effort
+                logger.warning(f"写入 QMT 通道腐坏标记失败: {mark_exc}")
+            return cast(
+                Dict[str, pd.DataFrame],
+                {
+                    "_download_error": type(e).__name__,
+                    "_download_error_detail": str(e)[:500],
+                    "_failed_stock_count": len(actual_download_list),
+                },
+            )
 
     def _filter_incremental(self, stock_list, period, adjust_type, end_time):
         need_update_stocks = []
+        end_dt = pd.to_datetime(end_time).normalize()
+        placeholder_count = 0
         for stock_code in stock_list:
-            file_path = PeriodDataManager.get_file_path(self.base_dir, period, adjust_type, stock_code)
+            file_path = PeriodDataManager.get_file_path(
+                self.base_dir, period, adjust_type, stock_code
+            )
             if os.path.exists(file_path):
+                # Phase 2 P3: 先用 pyarrow 元数据快速判断最新日期，避免全量读取
+                latest_date = _get_parquet_latest_date(file_path)
+                if latest_date is not None:
+                    if latest_date < end_dt:
+                        need_update_stocks.append(stock_code)
+                    elif latest_date == end_dt and _is_latest_bar_placeholder(
+                        file_path, end_dt
+                    ):
+                        # 2026-07-07 fix: target_date 是占位 bar（volume/amount=0）时
+                        # 不认为数据已最新，须重新下载以获取真实收盘
+                        need_update_stocks.append(stock_code)
+                        placeholder_count += 1
+                    continue
+
+                # 元数据不可用或解析失败时回退到完整读取
                 try:
-                    existing_data = pd.read_parquet(file_path, engine='pyarrow')
+                    existing_data = pd.read_parquet(file_path, engine="pyarrow")
                 except Exception as _pe:
                     # Phase 2 P2: corrupt parquet → re-download instead of crash
                     logger.warning(
@@ -404,30 +497,47 @@ class DataDownloader:
                     )
                     need_update_stocks.append(stock_code)
                     continue
-                if not existing_data.empty and isinstance(existing_data.index, pd.DatetimeIndex):
-                    latest_date = existing_data.index.max()
-                    end_dt = pd.to_datetime(end_time)
+                if not existing_data.empty and isinstance(
+                    existing_data.index, pd.DatetimeIndex
+                ):
+                    latest_date = normalize_timestamp(existing_data.index.max())
                     if latest_date < end_dt:
                         need_update_stocks.append(stock_code)
+                    elif latest_date == end_dt:
+                        # 回退路径同样检查占位 bar
+                        try:
+                            if _is_latest_bar_placeholder(file_path, end_dt):
+                                need_update_stocks.append(stock_code)
+                                placeholder_count += 1
+                        except Exception:
+                            pass
                 else:
                     need_update_stocks.append(stock_code)
             else:
                 need_update_stocks.append(stock_code)
         if need_update_stocks:
             logger.info(f"实际需要下载: {len(need_update_stocks)}/{len(stock_list)}")
+        if placeholder_count:
+            logger.info(
+                f"其中 {placeholder_count} 只因 target_date 占位 bar（volume/amount=0）需要重新下载"
+            )
         return need_update_stocks
 
     def _process_downloaded_data(
-        self, raw_data: Dict, stock_list: List[str], period: str, adjust_type: str,
-        start_time: str, end_time: str,
+        self,
+        raw_data: Dict,
+        stock_list: List[str],
+        period: str,
+        adjust_type: str,
+        start_time: str,
+        end_time: str,
     ) -> Dict[str, pd.DataFrame]:
-        result_data: Dict[str, pd.DataFrame] = {}
         start_dt = pd.Timestamp(pd.to_datetime(start_time))
         end_dt = pd.Timestamp(pd.to_datetime(end_time))
         if StockDataManager.is_minute_period(period):
             end_dt += pd.Timedelta(minutes=1)
 
-        numeric_cols = ['open', 'high', 'low', 'close', 'volume', 'amount']
+        numeric_cols = ["open", "high", "low", "close", "volume", "amount"]
         processed_data: Dict[str, pd.DataFrame] = {}
         failed_stocks: list = []
 
@@ -454,7 +564,7 @@ class DataDownloader:
                 _rows_before = len(stock_df)
                 for col in numeric_cols:
                     if col in stock_df.columns:
-                        stock_df[col] = pd.to_numeric(stock_df[col], errors='coerce')
+                        stock_df[col] = pd.to_numeric(stock_df[col], errors="coerce")
                 stock_df = stock_df.dropna(subset=numeric_cols)
                 _rows_dropped = _rows_before - len(stock_df)
                 if _rows_dropped > 0:
@@ -502,68 +612,111 @@ class DataDownloader:
                 f"Batch processing: {len(failed_stocks)}/{len(stock_list)} stocks FAILED due to exception",
                 context={"failed_stocks": failed_stocks[:20]},
             )
-        for stock_code, df_new in tqdm(processed_data.items(), desc="写入文件"):
-            # 统一 time 列为 UTC 午夜毫秒（修复 QMT CST 偏移 bug）
-            if 'time' in df_new.columns:
-                df_new['time'] = (pd.to_datetime(df_new.index).astype('int64') // 10**6).astype('int64')
+        # tqdm here only materializes time column — NOT the real parquet write
+        # (lesson 43: Agents mistook this bar for disk write completion).
+        for stock_code, df_new in tqdm(processed_data.items(), desc="物化time列"):
+            # Materialize time column from index as ms (encoding unchanged).
+            # Do NOT rewrite timezone/calendar (no +8h / full-history UTC-midnight unify);
+            # that caused CST-as-UTC + UTC-midnight double rows (2026-07-17).
+            if "time" in df_new.columns:
+                df_new["time"] = (
+                    pd.to_datetime(df_new.index).astype("int64") // 10**6
+                ).astype("int64")
 
-            file_path = PeriodDataManager.get_file_path(self.base_dir, period, adjust_type, stock_code)
-            if file_path.exists():
-                df_existing = pd.read_parquet(file_path, engine='pyarrow')
-                # 归一化旧文件 schema，修复大小写/dtype 遗留问题
-                df_existing = StockDataManager.normalize_schema(df_existing)
-                # P1-4: Schema 一致性门闸 — pd.concat 静默提升 dtype 会导致 reader 查询异常
-                _schema_errors = []
-                if set(df_existing.columns) != set(df_new.columns):
-                    _schema_errors.append(
-                        f"columns mismatch: existing={sorted(df_existing.columns)} "
-                        f"vs new={sorted(df_new.columns)}"
-                    )
-                _key_cols = ['time', 'open', 'high', 'low', 'close', 'volume']
-                for col in _key_cols:
-                    if col in df_existing.columns and col in df_new.columns:
-                        if df_existing[col].dtype != df_new[col].dtype:
-                            _schema_errors.append(
-                                f"{col} dtype mismatch: "
-                                f"existing={df_existing[col].dtype} vs new={df_new[col].dtype}"
-                            )
-                if type(df_existing.index) != type(df_new.index):
-                    _schema_errors.append(
-                        f"index type mismatch: "
-                        f"existing={type(df_existing.index).__name__} "
-                        f"vs new={type(df_new.index).__name__}"
-                    )
-                if _schema_errors:
-                    logger.warning(
-                        f"Schema mismatch for {stock_code} (period={period}, adjust={adjust_type}): "
-                        f"{'; '.join(_schema_errors)}. Overwriting corrupted local file with new data."
-                    )
-                    df_new.to_parquet(file_path, engine='pyarrow', compression='snappy')
-                else:
+        if period == "1d":
+            from oskh_data.daily_parquet_write import (
+                resolve_write_mode,
+                write_processed_data,
+            )
+
+            mode = resolve_write_mode()
+            logger.info(
+                f"写入文件 ({mode}): 开始真实写盘 {len(processed_data)} stocks "
+                f"(OSKH_DAILY_PARQUET_WRITE_MODE；进度见 parquet write 心跳)"
+            )
+            ok_n, write_errs = write_processed_data(
+                self.base_dir,
+                adjust_type,
+                processed_data,
+                mode=mode,
+            )
+            if write_errs:
+                logger.warning(
+                    f"parquet write errors: {len(write_errs)}/{len(processed_data)}",
+                    context={"sample": write_errs[:10]},
+                )
+            logger.info(f"成功处理 {ok_n} 只股票数据 (write_mode={mode})")
+            return processed_data
+
+        # 分钟线并行写盘（复用 daily_parquet_write 的 ThreadPool 模式）
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        _MINUTE_WRITE_WORKERS = max(4, min(16, (os.cpu_count() or 8)))
+
+        def _merge_write_one_minute(args):
+            stock_code, df_new = args
+            try:
+                file_path = PeriodDataManager.get_file_path(
+                    self.base_dir, period, adjust_type, stock_code
+                )
+                if file_path.exists():
+                    df_existing = pd.read_parquet(file_path, engine="pyarrow")
+                    df_existing = StockDataManager.normalize_schema(df_existing)
                     df_merged = pd.concat([df_existing, df_new])
-                    df_merged = df_merged[~df_merged.index.duplicated(keep='last')]
+                    df_merged = df_merged[~df_merged.index.duplicated(keep="last")]
                     df_merged = df_merged.sort_index()
-                    df_merged.to_parquet(file_path, engine='pyarrow', compression='snappy')
-            else:
-                df_new.to_parquet(file_path, engine='pyarrow', compression='snappy')
+                    df_merged.to_parquet(
+                        file_path, engine="pyarrow", compression="snappy"
+                    )
+                else:
+                    df_new.to_parquet(file_path, engine="pyarrow", compression="snappy")
+                return None
+            except Exception as exc:
+                return f"{stock_code}: {type(exc).__name__}: {exc}"
 
-        logger.info(f"成功处理 {len(processed_data)} 只股票数据")
+        ok_n = 0
+        write_errs = []
+        with ThreadPoolExecutor(max_workers=_MINUTE_WRITE_WORKERS) as pool:
+            futs = {
+                pool.submit(_merge_write_one_minute, (code, df)): code
+                for code, df in processed_data.items()
+            }
+            for fut in tqdm(as_completed(futs), total=len(futs), desc="写入文件(并行)"):
+                err = fut.result()
+                if err is None:
+                    ok_n += 1
+                else:
+                    write_errs.append(err)
+        if write_errs:
+            logger.warning(
+                f"minute parquet write errors: {len(write_errs)}/{len(processed_data)}",
+                context={"sample": write_errs[:10]},
+            )
+        logger.info(
+            f"成功处理 {ok_n} 只股票数据 (minute parallel write, workers={_MINUTE_WRITE_WORKERS})"
+        )
         return processed_data
 
     def get_stock_data(
-        self, stock_code: str, start_time: str, end_time: str,
-        period: str = '1d', adjust_type: str = 'front',
+        self,
+        stock_code: str,
+        start_time: str,
+        end_time: str,
+        period: str = "1d",
+        adjust_type: str = "front",
     ) -> Optional[pd.DataFrame]:
         if not StockDataManager.validate_period(period):
             return None
         if StockDataManager.is_minute_period(period):
-            adjust_type = 'none'
+            adjust_type = "none"
 
-        file_path = PeriodDataManager.get_file_path(self.base_dir, period, adjust_type, stock_code)
+        file_path = PeriodDataManager.get_file_path(
+            self.base_dir, period, adjust_type, stock_code
+        )
         if not file_path.exists():
             return None
         try:
-            df = pd.read_parquet(file_path, engine='pyarrow')
+            df = pd.read_parquet(file_path, engine="pyarrow")
             start_dt = pd.to_datetime(start_time)
             end_dt = pd.to_datetime(end_time)
             mask = (df.index >= start_dt) & (df.index <= end_dt)
@@ -573,7 +726,7 @@ class DataDownloader:
             return None
 
     def get_available_periods(self) -> List[str]:
-        periods_dir = self.base_dir / "period=1d"
+        periods_dir = resolve_period_root("1d", base=self.base_dir)
         if periods_dir.exists():
             return list(StockDataManager.PERIOD_MAPPING.keys())
         return []

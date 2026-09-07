@@ -5,14 +5,16 @@ LastEditors: hugo2046 shen.lan123@gmail.com
 LastEditTime: 2023-03-29 10:50:17
 Description: 画图
 """
-from typing import List, Tuple
+from typing import Any, List, Optional, Tuple, cast
 
-import empyrical as ep
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.axes import Axes
+from matplotlib.figure import Figure
 from scipy import stats
 import statsmodels.api as sm
+from fincore.empyrical import Empyrical
 
 from .cyq import calc_dist_chips
 
@@ -27,6 +29,7 @@ plt.rcParams["font.sans-serif"] = ["SimHei"]
 # plt显示负号
 plt.rcParams["axes.unicode_minus"] = False
 
+
 ############################# 筹码分布 #############################
 
 
@@ -34,9 +37,9 @@ def plot_dist_chips(
     df: pd.DataFrame,
     method: str,
     title: str = "",
-    figsize: tuple = (14, 6),
-    ax: plt.axes = None,
-) -> plt.axes:
+    figsize: Tuple[float, float] = (14, 6),
+    ax: Optional[Axes] = None,
+) -> Axes:
     """画筹码分布
 
     Args:
@@ -60,8 +63,9 @@ def plot_dist_chips(
     ax.set_title(title)
 
     if method in {"triang", "uniform"}:
-        ax.bar(x=cum_vol.index, height=cum_vol.values, width=0.01, edgecolor="#4c89bc")
-        min_p, max_p = cum_vol.index.min(), cum_vol.index.max()
+        ax.bar(x=cum_vol.index, height=cast(Any, cum_vol.values), width=0.01, edgecolor="#4c89bc")
+        min_p = float(cast(Any, cum_vol.index.min()))
+        max_p = float(cast(Any, cum_vol.index.max()))
         ax.set_xlim(min_p - 0.5, max_p + 0.5)
     else:
         cum_vol.index = np.round(cum_vol.index, 4)
@@ -105,8 +109,8 @@ def _get_score_return(pred_label: pd.DataFrame, N: int = 5, **kwargs) -> pd.Data
     pred_label_drop: pd.DataFrame = pred_label.dropna(subset=["score"])
     pred_label_drop["group"] = pred_label_drop.groupby(level="datetime")[
         "score"
-    ].transform(lambda df: pd.qcut(df, N, labels=False, **kwargs) + 1)
-    last_group_num: int = pred_label_drop["group"].max()
+    ].transform(lambda s: cast(Any, pd.qcut(s, N, labels=False, **kwargs)) + 1)
+    last_group_num: int = int(pred_label_drop["group"].max())
     pred_label_drop["group"] = pred_label_drop["group"].apply(lambda x: "Group%d" % x)
     ts_df: pd.DataFrame = pd.pivot_table(
         pred_label_drop.reset_index(), index="datetime", columns="group", values="label"
@@ -185,32 +189,35 @@ def _calculate_mdd(cum_returns: pd.Series) -> pd.Series:
     return cum_returns - cum_returns.cummax()
 
 
-def report_graph(report_df: pd.DataFrame, figsize: Tuple = None) -> plt.figure:
-    df: pd.DataFrame = report_df[["return", "cost", "bench"]].copy()
+def report_graph(report_df: pd.DataFrame, figsize: Optional[Tuple[float, float]] = None) -> Figure:
+    df = cast(pd.DataFrame, report_df[["return", "cost", "bench"]].copy())
 
-    cum_frame: pd.DataFrame = (
-        df.pipe(
-            pd.DataFrame.assign, cum_return_with_cost=lambda x: x["return"] - x["cost"]
-        )
-        .pipe(pd.DataFrame.drop, columns="cost")
-        .pipe(pd.DataFrame.apply, ep.cum_returns)
-        .pipe(pd.DataFrame.rename, columns={"return": "cum_return_without_cost"})
-        .pipe(pd.DataFrame.sort_index, axis=1, key=lambda x: x.str.lower())
+    pipe_df = df.pipe(
+        pd.DataFrame.assign, cum_return_with_cost=lambda x: x["return"] - x["cost"]
+    ).pipe(pd.DataFrame.drop, columns="cost")
+    pipe_df = cast(pd.DataFrame, pipe_df).pipe(pd.DataFrame.apply, Empyrical.cum_returns)
+    renamed = cast(pd.DataFrame, pipe_df).pipe(
+        pd.DataFrame.rename, columns={"return": "cum_return_without_cost"}
+    )
+    cum_frame = cast(
+        pd.DataFrame,
+        cast(pd.DataFrame, renamed).pipe(
+            pd.DataFrame.sort_index, axis=1, key=lambda x: x.str.lower()
+        ),
     )
 
-    if figsize is None:
-        figsize = (18, 8)
-    fig, axes = plt.subplots(2, 1, figsize=figsize, sharex=True)
+    resolved_figsize = figsize if figsize is not None else (18, 8)
+    fig, axes = plt.subplots(2, 1, figsize=resolved_figsize, sharex=True)
     sns.lineplot(cum_frame, ax=axes[0])
     axes[0].axhline(0, ls="--", color="black")
     axes[0].set_ylabel("Cumulative Return")
     axes[0].yaxis.set_major_formatter(
         ticker.FuncFormatter(lambda x, pos: "%.2f%%" % (x * 100))
     )
-    _calculate_mdd(cum_frame["cum_return_with_cost"]).plot.area(
+    _calculate_mdd(cast(pd.Series, cum_frame["cum_return_with_cost"])).plot.area(
         ax=axes[1], color="#ea9393", label="cum_return_with_cost"
     )
-    _calculate_mdd(cum_frame["cum_return_without_cost"]).plot.area(
+    _calculate_mdd(cast(pd.Series, cum_frame["cum_return_without_cost"])).plot.area(
         ax=axes[1], color="#d62728", label="cum_return_without_cost"
     )
     axes[1].yaxis.set_major_formatter(
@@ -225,17 +232,17 @@ def report_graph(report_df: pd.DataFrame, figsize: Tuple = None) -> plt.figure:
 
 def model_performance_graph(
     pred_label: pd.DataFrame,
-    figsize: Tuple = None,
+    figsize: Optional[Tuple[float, float]] = None,
     N=5,
     lag=1,
     reverse: bool = False,
     dist=stats.norm,
     **kwargs,
-) -> plt.figure:
-    figsize: Tuple = (18, 25) if figsize is None else figsize
+) -> Figure:
+    resolved_figsize: Tuple[float, float] = (18, 25) if figsize is None else figsize
 
     plt.close("all")
-    fig = plt.figure(figsize=figsize)
+    fig = plt.figure(figsize=resolved_figsize)
 
     ts_cum_ax = plt.subplot2grid((6, 2), (0, 0), colspan=2)
     ls_hist_ax = plt.subplot2grid((6, 2), (1, 0))
@@ -252,7 +259,7 @@ def model_performance_graph(
     ts_df: pd.DataFrame = _get_score_return(pred_label, N=N, **kwargs)
 
     ts_cum_ax.set_title("Cumulative Return")
-    sns.lineplot(data=ep.cum_returns(ts_df), ax=ts_cum_ax)
+    sns.lineplot(data=cast(Any, Empyrical.cum_returns(ts_df)), ax=ts_cum_ax)
     ts_cum_ax.yaxis.set_major_formatter(
         ticker.FuncFormatter(lambda x, pos: "%.2f%%" % (x * 100))
     )
@@ -262,27 +269,27 @@ def model_performance_graph(
     # _bin_size:float = float(((t_df.max() - t_df.min()) / 20).min())
 
     ls_hist_ax.set_title("Long-Short")
-    sns.histplot(data=ts_df["long-short"], kde=True, ax=ls_hist_ax)
+    sns.histplot(data=cast(Any, ts_df["long-short"]), kde=True, ax=ls_hist_ax)
 
     la_hist_ax.set_title("Long-Average")
-    sns.histplot(data=ts_df["long-average"], kde=True, ax=la_hist_ax)
+    sns.histplot(data=cast(Any, ts_df["long-average"]), kde=True, ax=la_hist_ax)
 
     # IC
     ic_frame: pd.DataFrame = _get_score_ic(pred_label)
     ts_ic_ax.set_title("Score IC")
     sns.lineplot(data=ic_frame, markers=True, ax=ts_ic_ax)
     # QQ plot
-    _plt_fig: plt.figure = sm.qqplot(
+    _plt_fig: Figure = cast(Figure, sm.qqplot(
         ic_frame["ic"].dropna(), dist=dist, fit=True, line="45"
-    )
+    ))
     plt.close(_plt_fig)
     qqplot_data = _plt_fig.gca().lines
 
     dist_name = "Normal" if isinstance(dist, stats.norm.__class__) else "Unknown"
 
     sns.regplot(
-        x=qqplot_data[0].get_xdata(),
-        y=qqplot_data[0].get_ydata(),
+        x=cast(Any, qqplot_data[0].get_xdata()),
+        y=cast(Any, qqplot_data[0].get_ydata()),
         line_kws={"color": "red"},
         ax=ic_qq_ax,
     )
@@ -291,7 +298,7 @@ def model_performance_graph(
     ic_qq_ax.set_xlabel(f"{dist_name} Distribution Quantile")
 
     ic_hist_ax.set_title("IC")
-    sns.histplot(data=ic_frame["ic"].dropna(), kde=True, ax=ic_hist_ax)
+    sns.histplot(data=cast(Any, ic_frame["ic"].dropna()), kde=True, ax=ic_hist_ax)
 
     # AutoCorr
     _df: pd.DataFrame = _get_auto_correlation(pred_label, lag=lag)
@@ -309,9 +316,9 @@ def model_performance_graph(
 def plot_score_ic(
     pred_label: pd.DataFrame,
     dist=stats.norm,
-    ax: plt.axes = None,
-    figsize: Tuple = None,
-) -> plt.axes:
+    ax: Optional[Axes] = None,
+    figsize: Optional[Tuple[float, float]] = None,
+) -> Figure:
     """画IC,Rank_IC
 
     Args:
@@ -323,9 +330,8 @@ def plot_score_ic(
         plt.axes:
     """
 
-    if figsize is None:
-        figsize: Tuple = (18, 8)
-    fig = plt.figure(figsize=figsize)
+    resolved_figsize = figsize if figsize is not None else (18, 8)
+    fig = plt.figure(figsize=resolved_figsize)
 
     ic_ts = plt.subplot(211)
     ic_hist = plt.subplot(223)
@@ -335,15 +341,15 @@ def plot_score_ic(
     ic_ts.set_title("Score IC")
     sns.lineplot(data=ic_frame, markers=True, ax=ic_ts)
     # QQ plot
-    _plt_fig = sm.qqplot(ic_frame["ic"].dropna(), dist=dist, fit=True, line="45")
+    _plt_fig = cast(Figure, sm.qqplot(ic_frame["ic"].dropna(), dist=dist, fit=True, line="45"))
     plt.close(_plt_fig)
     qqplot_data = _plt_fig.gca().lines
 
     dist_name = "Normal" if isinstance(dist, stats.norm.__class__) else "Unknown"
 
     sns.regplot(
-        x=qqplot_data[0].get_xdata(),
-        y=qqplot_data[0].get_ydata(),
+        x=cast(Any, qqplot_data[0].get_xdata()),
+        y=cast(Any, qqplot_data[0].get_ydata()),
         line_kws={"color": "red"},
         ax=ic_qq,
     )
@@ -352,13 +358,13 @@ def plot_score_ic(
     ic_qq.set_xlabel(f"{dist_name} Distribution Quantile")
 
     ic_hist.set_title("IC")
-    sns.histplot(data=ic_frame["ic"].dropna(), kde=True, ax=ic_hist)
+    sns.histplot(data=cast(Any, ic_frame["ic"].dropna()), kde=True, ax=ic_hist)
 
     return fig
 
 
 def plot_group_score_return(
-    pred_label: pd.DataFrame, N: int = 5, figsize: Tuple = None, **kwargs
+    pred_label: pd.DataFrame, N: int = 5, figsize: Optional[Tuple[float, float]] = None, **kwargs
 ):
     if "show_long_short" in kwargs:
         show_long_short: bool = kwargs.get("show_long_short", False)
@@ -366,10 +372,9 @@ def plot_group_score_return(
 
     ts_df: pd.DataFrame = _get_score_return(pred_label, N, **kwargs)
 
-    if figsize is None:
-        figsize: Tuple = (18, 8)
+    resolved_figsize = figsize if figsize is not None else (18, 8)
 
-    fig = plt.figure(figsize=figsize)
+    fig = plt.figure(figsize=resolved_figsize)
     ts_line = plt.subplot(211)
     long_short_hist = plt.subplot(223)
     long_avg_hist = plt.subplot(224)
@@ -384,7 +389,7 @@ def plot_group_score_return(
     if show_long_short:
         select: List = ts_df.columns.tolist()
 
-    sns.lineplot(data=ep.cum_returns(ts_df[select]), ax=ts_line)
+    sns.lineplot(data=cast(Any, Empyrical.cum_returns(ts_df[select])), ax=ts_line)
     ts_line.yaxis.set_major_formatter(ticker.PercentFormatter(xmax=1, decimals=1))
     ts_line.axhline(0, color="black", lw=1, ls="--")
 
@@ -392,39 +397,43 @@ def plot_group_score_return(
     # _bin_size:float = float(((t_df.max() - t_df.min()) / 20).min())
 
     long_short_hist.set_title("Long-Short")
-    sns.histplot(data=ts_df["long-short"], kde=True, ax=long_short_hist)
+    sns.histplot(data=cast(Any, ts_df["long-short"]), kde=True, ax=long_short_hist)
 
     long_avg_hist.set_title("Long-Average")
-    sns.histplot(data=ts_df["long-average"], kde=True, ax=long_avg_hist)
+    sns.histplot(data=cast(Any, ts_df["long-average"]), kde=True, ax=long_avg_hist)
 
     return fig
 
 
 def plot_factor_autocorr(
-    pred_label: pd.DataFrame, lag=1, ax: plt.axes = None, figsize: Tuple = None
-) -> tuple:
+    pred_label: pd.DataFrame, lag=1, ax: Optional[Axes] = None, figsize: Optional[Tuple[float, float]] = None
+) -> Figure:
     _df: pd.DataFrame = _get_auto_correlation(pred_label, lag=lag)
 
-    figsize: Tuple = (18, 6) if figsize is None else figsize
+    resolved_figsize = figsize if figsize is not None else (18, 6)
     if ax is None:
-        fig, ax = plt.subplots(figsize=figsize)
+        fig_obj, ax = plt.subplots(figsize=resolved_figsize)
+    else:
+        fig_obj = ax.figure
 
     ax.set_title("Auto Correlation")
     sns.lineplot(data=_df, ax=ax)
 
-    return fig
+    return cast(Figure, fig_obj)
 
 
 def plot_group_turnover(
-    pred_label: pd.DataFrame, N=5, lag=1, ax: plt.axes = None, figsize: Tuple = None
-) -> tuple:
+    pred_label: pd.DataFrame, N=5, lag=1, ax: Optional[Axes] = None, figsize: Optional[Tuple[float, float]] = None
+) -> Figure:
     r_df: pd.DataFrame = _get_group_turnover(pred_label, N, lag)
 
-    figsize: Tuple = (18, 6) if figsize is None else figsize
+    resolved_figsize = figsize if figsize is not None else (18, 6)
     if ax is None:
-        fig, ax = plt.subplots(figsize=figsize)
+        fig_obj, ax = plt.subplots(figsize=resolved_figsize)
+    else:
+        fig_obj = ax.figure
 
     ax.set_title("Top-Bottom Turnover")
     sns.lineplot(data=r_df, ax=ax)
 
-    return fig
+    return cast(Figure, fig_obj)

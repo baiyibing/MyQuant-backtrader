@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import tempfile
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import duckdb
 import pytest
@@ -120,7 +121,12 @@ class TestFreshness:
         assert len(prev) == 8
         assert prev.isdigit()
 
-    def test_check_freshness_empty(self):
+    def test_check_freshness_empty(self, monkeypatch):
+        # Empty symbols still runs adj_factor table check (EDPC Phase 1).
+        monkeypatch.setattr(
+            "oskh_data.freshness._check_adj_factor_table_freshness",
+            lambda _e: (True, "20260608"),
+        )
         from oskh_data.freshness import check_data_freshness
 
         result = check_data_freshness([])
@@ -213,6 +219,52 @@ class TestETFLimits:
         assert "513" in rules
 
 
+class TestDuckDBDailyBarsProxy:
+    """DuckDBDailyBarsProxy routing logic."""
+
+    def test_proxy_t_plus_0_routes_to_delegate(self):
+        from common.integrations.duckdb_daily_bars_adapter import DuckDBDailyBarsProxy
+
+        delegate = MagicMock()
+        delegate.stock_daily_bars.return_value = {"ok": True, "source": "qmt"}
+        proxy = DuckDBDailyBarsProxy(delegate)
+
+        import datetime
+
+        today = datetime.date.today().strftime("%Y%m%d")
+        result = proxy.stock_daily_bars(
+            symbol="000001.SZ", start_date=today, end_date=today,
+            adjust="none", trace_id="test",
+        )
+        assert result["source"] == "qmt"
+        delegate.stock_daily_bars.assert_called_once()
+
+    def test_proxy_passthrough(self):
+        from common.integrations.duckdb_daily_bars_adapter import DuckDBDailyBarsProxy
+
+        delegate = MagicMock()
+        delegate.full_tick.return_value = {"ok": True}
+        proxy = DuckDBDailyBarsProxy(delegate)
+
+        result = proxy.full_tick(symbols=["000001.SZ"], trace_id="test")
+        assert result["ok"]
+        delegate.full_tick.assert_called_once()
+
+    def test_proxy_cfg_only_routes_to_duckdb(self):
+        from common.integrations.duckdb_daily_bars_adapter import DuckDBDailyBarsProxy
+
+        delegate = MagicMock()
+        delegate.stock_daily_bars_cfg_only.return_value = {"ok": True, "source": "qmt"}
+        proxy = DuckDBDailyBarsProxy(delegate)
+
+        # T-1 date → tries DuckDB first, falls back to delegate if miss
+        result = proxy.stock_daily_bars_cfg_only(
+            symbol="000001.SZ", start_date="20200101", end_date="20200101",
+            adjust="none", trace_id="test",
+        )
+        assert result["ok"]
+
+
 class TestDataDownloader:
     """DataDownloader class structure (QMT not needed for import)."""
 
@@ -258,3 +310,30 @@ class TestCachePort:
 
         inv = invalidate_current_run_id("1d")
         assert inv in (True, False)
+
+
+class TestDownloadOps:
+    def test_download_ops_aliases(self):
+        from oskh_data.download_ops import (
+            clear_local_market_data,
+            clear_stock_data,
+            download_market_data,
+            get_miniqmt_data,
+        )
+
+        assert download_market_data is get_miniqmt_data
+        assert clear_local_market_data is clear_stock_data
+
+
+class TestBacktestNoDownloadContract:
+    def test_verify_oskh_data_contract_includes_backtest_scan(self):
+        import subprocess
+        import sys
+
+        proc = subprocess.run(
+            [sys.executable, "scripts/gates/verify_oskh_data_contract.py"],
+            cwd=str(Path(__file__).resolve().parents[1]),
+            capture_output=True,
+            text=True,
+        )
+        assert proc.returncode == 0, proc.stdout + proc.stderr

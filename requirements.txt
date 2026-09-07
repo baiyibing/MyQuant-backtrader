@@ -1,5 +1,5 @@
 # Standalone backtrader + stock data + chip/turnover-resist fork
-# Interpreter: D:\anaconda3\envs\vanna311\python.exe
+# Interpreter: D:\anaconda3\envs\vanna312\python.exe (Python 3.12)
 
 backtrader>=1.9.78
 pandas>=2.0
@@ -12,6 +12,8 @@ tqdm>=4.65
 psutil>=5.9
 scipy>=1.11
 pandas-market-calendars>=5.0
+filelock>=3.13
+chardet>=5.2
 # QMT download (optional if data already on disk)
 xtquant>=240194.1.1; platform_system=="Windows"
 

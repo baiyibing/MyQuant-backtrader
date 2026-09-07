@@ -877,7 +877,7 @@ adj_price = unadj_price * cumulative_adj_factor_at_day_t
 2. 配置 cron / Windows Task Scheduler，交易日下午 15:30 触发
 3. 增加异常告警（如 stock_pool 缺失、因子计算全部失败等边界情况）
 
-**交付物**：`scripts/daily_chip_pipeline.sh`（或 `.bat`），一行命令即可注册定时任务。
+**交付物**：`~~scripts/daily_chip_pipeline.sh~~（已删除）`（或 `.bat`），一行命令即可注册定时任务。
 
 **预估工作量**：0.5 小时。
 

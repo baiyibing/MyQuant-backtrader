@@ -5,17 +5,22 @@ LastEditors: hugo2046 shen.lan123@gmail.com
 LastEditTime: 2023-03-29 10:50:17
 Description: 历史换手率衰减筹码分布算子
 """
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, Type
 
 import numpy as np
 import pandas as pd
+
+
+class _PairRollingFallback:
+    def __init__(self, *args: Any, **kwargs: Any) -> None: ...
+
+
 try:
-    from qlib.data.ops import PairRolling
+    from qlib.data.ops import PairRolling as _PairRollingImported
 except ImportError:
-    # qlib 不可用时的空实现（本仓库仅用 calc_distribution_of_chips/calc_rc/calc_roll_cyq，
-    # 不依赖 PairRolling 算子）
-    class PairRolling:
-        def __init__(self, *args, **kwargs): ...
+    _PairRollingImported = _PairRollingFallback
+
+_PairRollingBase: Type[Any] = _PairRollingImported
 
 from .distribution_of_chips import calc_normalization_turnover
 from .utils import rolling_frame
@@ -33,7 +38,7 @@ def calc_rc(close_arr: np.ndarray) -> np.ndarray:
 
 def calc_distribution_of_chips(
     turnover: np.ndarray, close: np.ndarray, N: int
-) -> Tuple[np.float64]:
+) -> Tuple[np.float64, np.float64, np.float64, np.float64]:
     """计算筹码分布指标"""
     weight: np.ndarray = calc_normalization_turnover(turnover)
     rc: np.ndarray = calc_rc(close)
@@ -75,22 +80,22 @@ def calc_roll_cyq(
                    处于小赢小亏状态的筹码非常少;
                    KRC特别小则表现盈亏分化很小,筹码处于小赢小亏的状态;
     """
-    method: str = method.upper()
+    method_norm: str = method.upper()
     method_dic: Dict = {"ARC": 0, "VRC": 1, "SRC": 2, "KRC": 3}
 
     turnover_ls: np.ndarray = rolling_frame(turnover, N)
     close_ls: np.ndarray = rolling_frame(close, N)
 
-    idx: pd.Index = turnover.index[N - 1 :]
+    idx = pd.Index(turnover.index[N - 1 :])
     ls: List = [
-        calc_distribution_of_chips(left, right, N)[method_dic[method]]
+        calc_distribution_of_chips(left, right, N)[method_dic[method_norm]]
         for left, right in zip(turnover_ls, close_ls)
     ]
     return pd.Series(index=idx, dtype=np.float16, data=ls)
 
 
 #################### 构建算子 ####################
-class ARC(PairRolling):
+class ARC(_PairRollingBase):
     def __init__(self, feature_left, feature_right, N):
 
         super(ARC, self).__init__(feature_left, feature_right, N, "Arc")
@@ -110,7 +115,7 @@ class ARC(PairRolling):
         return calc_roll_cyq(series_left, series_right, self.N, "ARC")
 
 
-class VRC(PairRolling):
+class VRC(_PairRollingBase):
     def __init__(self, feature_left, feature_right, N):
 
         super(VRC, self).__init__(feature_left, feature_right, N, "Vrc")
@@ -128,7 +133,7 @@ class VRC(PairRolling):
         return calc_roll_cyq(series_left, series_right, self.N, "VRC")
 
 
-class SRC(PairRolling):
+class SRC(_PairRollingBase):
     def __init__(self, feature_left, feature_right, N):
 
         super(SRC, self).__init__(feature_left, feature_right, N, "Src")
@@ -146,7 +151,7 @@ class SRC(PairRolling):
         return calc_roll_cyq(series_left, series_right, self.N, "SRC")
 
 
-class KRC(PairRolling):
+class KRC(_PairRollingBase):
     def __init__(self, feature_left, feature_right, N):
 
         super(KRC, self).__init__(feature_left, feature_right, N, "Krc")

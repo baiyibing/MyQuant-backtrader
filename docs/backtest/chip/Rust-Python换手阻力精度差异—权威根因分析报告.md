@@ -34,7 +34,7 @@ Rust 版和 Python 版全市场换手阻力计算：4594 只共同股票中，20
 
 工具：
 - Rust: `turnover-resist/src/debug_precision.rs`
-- Python: `scripts/debug_precision.py`
+- Python: `scripts/legacy/debug_precision.py`
 
 ---
 
@@ -164,7 +164,7 @@ Python batch 版（`_batch_triang_curpdf`）和 Rust（`calc_single_day_curpdf`�
 ### 核心修复
 
 ```diff
-# scripts/full_market_canonical_resist.py
+# scripts/data/full_market_canonical_resist.py
 - xs = np.arange(min_p, max_p + step, step)
 + from qlib_cost.distribution_of_chips import make_price_grid
 + xs = make_price_grid(min_p, max_p, step)
@@ -174,11 +174,11 @@ Python batch 版（`_batch_triang_curpdf`）和 Rust（`calc_single_day_curpdf`�
 
 | 文件 | 替换数 | 状态 |
 |------|-------|------|
-| `scripts/full_market_canonical_resist.py` | 1 | ✅ 已修 |
+| `scripts/data/full_market_canonical_resist.py` | 1 | ✅ 已修 |
 | `qlib_cost/distribution_of_chips.py` | 4 + `make_price_grid` 定义 | ✅ 已修 |
 | `qlib_cost/cyq.py` | 1 | ✅ 已修 |
 | `backtest/chip_algorithm.py` | 3 | ✅ 已修 |
-| `scripts/full_market_equal_weight_resist.py` | 1 | ✅ 已修 |
+| `scripts/data/full_market_equal_weight_resist.py` | 1 | ✅ 已修 |
 
 ### 验证
 
@@ -225,7 +225,7 @@ Python 先除后加，Rust 先加后除。实测差异 < 1e-16。
 cd turnover-resist && cargo run --release --bin debug-precision -- --code 002374.SZ --date 20260525
 
 # Python
-D:/anaconda3/envs/vanna311/python.exe scripts/debug_precision.py --code 002374.SZ --date 20260525
+D:/anaconda3/envs/vanna311/python.exe scripts/legacy/debug_precision.py --code 002374.SZ --date 20260525
 ```
 
 ---

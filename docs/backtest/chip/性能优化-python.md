@@ -57,7 +57,7 @@
 ### 1.3 宏观评测（全市场）
 
 ```bash
-time python scripts/full_market_canonical_resist.py --date 20260525 --method batch
+time python scripts/data/full_market_canonical_resist.py --date 20260525 --method batch
 ```
 
 全市场 5531 只，7 worker，测量 wall-clock 时间。同时用 `--method original` 跑对照。
@@ -125,12 +125,12 @@ assert len(top_batch & top_orig) / len(top_batch) > 0.999  # 若实测不通过�
 **一键回归脚本**（建议实现）：上述 4 步不应手动执行，应封装为：
 
 ```bash
-python scripts/verify_canonical_resist_regression.py --date 20260525
+python ~~scripts/gates/verify_canonical_resist_regression.py~~（已删除） --date 20260525
 # 自动完成：小样本对比 → 全量对比 → 单点抽查 → 边界测试 → 生成报告
 # 退出码 0=通过，非 0=差异详情
 ```
 
-该脚本可接入 CI（`.github/workflows/`），每次 PR 修改 `scripts/full_market_canonical_resist.py` 时自动触发。
+该脚本可接入 CI（`.github/workflows/`），每次 PR 修改 `scripts/data/full_market_canonical_resist.py` 时自动触发。
 
 ---
 
@@ -138,7 +138,7 @@ python scripts/verify_canonical_resist_regression.py --date 20260525
 
 ### 2.1 原始程序
 
-`scripts/full_market_canonical_resist.py`，全市场 ~5500 只股票，每只 1000 日窗口 + 布林带，每只股票调 4 次 `_canonical_cyqk`：
+`scripts/data/full_market_canonical_resist.py`，全市场 ~5500 只股票，每只 1000 日窗口 + 布林带，每只股票调 4 次 `_canonical_cyqk`：
 
 ```
 per stock = _canonical_cyqk(T, circ)   # T日，流通股本口径
@@ -329,7 +329,7 @@ free_prev_map = {"000001.SZ": 8.60e9, "000002.SZ": 6.47e9, ...}
 
 ### 4.3 改动范围
 
-只改 `scripts/full_market_canonical_resist.py` 内部，`chip_algorithm.py` 不动。
+只改 `scripts/data/full_market_canonical_resist.py` 内部，`chip_algorithm.py` 不动。
 
 | 位置 | 改动 |
 |------|------|
@@ -430,11 +430,11 @@ T 窗口（1000 天到 T）的归一化股本用 `capital(T)`，T-1 窗口（100
 
 ```bash
 # 优化版（默认）
-python scripts/full_market_canonical_resist.py --date 20260525 --method batch
+python scripts/data/full_market_canonical_resist.py --date 20260525 --method batch
 # 输出：canonical_resist_batch_20260525.csv
 
 # 原始版（4×cyqk，对照基准）
-python scripts/full_market_canonical_resist.py --date 20260525 --method original
+python scripts/data/full_market_canonical_resist.py --date 20260525 --method original
 # 输出：canonical_resist_orig_20260525.csv
 ```
 
@@ -597,7 +597,7 @@ with ProcessPoolExecutor(max_workers=7) as executor:
 | `quant_logger` 接入 + `trace_id` | 遵循项目 AGENTS.md 强制规范 |
 | 跳过原因分类统计 | 可能掩盖数据 bug |
 | 单只异常 catch 后继续，不终止全市场 | 避免一只坏股票废掉全量 |
-| 管道执行：`python scripts/full_market_canonical_resist.py --date YYYYMMDD` | 先命令行，不需要 main.py 子命令 |
+| 管道执行：`python scripts/data/full_market_canonical_resist.py --date YYYYMMDD` | 先命令行，不需要 main.py 子命令 |
 
 **实盘前补充**（不做，记录即可）：main.py 子命令、ops_scheduler 调度、数据就绪信号、Redis 热加载、gateway-health-check。
 
@@ -608,7 +608,7 @@ with ProcessPoolExecutor(max_workers=7) as executor:
 - `data.rs`：capital 预加载为 `HashMap`（等价于本文 §四方案）
 - `algorithm.rs`：`compute_cyqk_for_adjacent_windows`（等价于本文 §2.2）
 - `main.rs`：`rayon::par_iter` 全市场并行（等价于本文 §2.5）
-- `scripts/verify_rust_python_alignment.py`：跨语言精度对齐脚本
+- `scripts/gates/verify_rust_python_alignment.py`：跨语言精度对齐脚本
 
 **Rust 版的角色**：作为 Python 优化的**性能天花板参照**——它代表了同一算法在同台机器上能达到的理论上限（原生 SIMD、零 GC、work-stealing 线程池）。Python 优化不需要达到 Rust 的速度，但可以通过对标找到 Python 侧的剩余优化空间有多大。
 
@@ -699,7 +699,7 @@ Python 优化就此定型。后续精力转 Rust 精度对齐。
 - [ ] 跳过原因有分类统计（历史不足 / 资本缺失 / 数据异常）
 - [ ] 单次运行产出 Parquet（主）+ CSV（审计）+ 摘要（耗时、有效数、跳过分类）
 - [ ] 文档内无并列"可选方案"——所有地方收敛为"当前采用"或"未来阶段"
-- [ ] 一键回归脚本可用：`python scripts/verify_canonical_resist_regression.py --date YYYYMMDD`
+- [ ] 一键回归脚本可用：`python ~~scripts/gates/verify_canonical_resist_regression.py~~（已删除） --date YYYYMMDD`
 - [ ] ThreadPool / ProcessPool 分支决策已执行，结果记录在文档中
 - [ ] 改代码后精度回归通过（100 只分层小样本 batch vs original）
 

@@ -21,7 +21,7 @@ alwaysApply: true
 - After writing `.py` / `.md` / `.json` / `.yaml` / `.mdc`, verify NUL count is 0:
 
 ```powershell
-D:\anaconda3\envs\vanna311\python.exe -c "p=r'PATH'; b=open(p,'rb').read(); assert b.count(0)==0, p; print('utf8-ok', p)"
+D:\anaconda3\envs\vanna312\python.exe -c "p=r'PATH'; b=open(p,'rb').read(); assert b.count(0)==0, p; print('utf8-ok', p)"
 ```
 
 Non-zero NUL count → rewrite immediately; do not proceed.

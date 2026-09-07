@@ -31,7 +31,7 @@ Rust 版和 Python 版全市场换手阻力计算结果存在差异：4594 只�
 4. **cyqk**：对比 winner/total 计算结果
 
 使用已有的 debug 工具：
-- Python: `scripts/debug_precision.py --code 002374.SZ --date 20260525`
+- Python: `scripts/legacy/debug_precision.py --code 002374.SZ --date 20260525`
 - Rust: `turnover-resist/target/release/debug-precision --code 002374.SZ --date 20260525`
 
 同时将 Rust 算法在 Python 中用 numba 精确复刻，与 Python 批量算法在**相同 Python 运行时**下逐环节对比，排除跨语言浮点行为差异。
@@ -179,7 +179,7 @@ arange  <= close → 3.780...202505 <= 3.780...24869 → FALSE → bin 排除
 
 ### 5.1 代码修改
 
-`scripts/full_market_canonical_resist.py` 第 297 行：
+`scripts/data/full_market_canonical_resist.py` 第 297 行：
 
 ```diff
 -    xs = np.arange(min_p, max_p + step, step)
@@ -200,7 +200,7 @@ from qlib_cost.distribution_of_chips import make_price_grid
 
 ```bash
 # Python: 运行 debug 脚本，确认 cyqk 与 Rust 一致
-D:/anaconda3/envs/vanna311/python.exe scripts/debug_precision.py --code 002374.SZ --date 20260525
+D:/anaconda3/envs/vanna311/python.exe scripts/legacy/debug_precision.py --code 002374.SZ --date 20260525
 
 # Rust: 运行 debug 二进制，确认 cyqk 与 Python 一致
 cd turnover-resist && cargo run --release --bin debug-precision -- --code 002374.SZ --date 20260525
@@ -234,9 +234,9 @@ cd turnover-resist && cargo run --release --bin debug-precision -- --code 002374
 
 | 文件 | 角色 |
 |------|------|
-| `scripts/full_market_canonical_resist.py` | Python 生产批量代码（需修复） |
+| `scripts/data/full_market_canonical_resist.py` | Python 生产批量代码（需修复） |
 | `qlib_cost/distribution_of_chips.py` | `make_price_grid` 正确实现 |
 | `turnover-resist/src/algorithm.rs` | Rust 核心算法（网格构造正确） |
-| `scripts/debug_precision.py` | Python 精度排查 debug 工具 |
+| `scripts/legacy/debug_precision.py` | Python 精度排查 debug 工具 |
 | `turnover-resist/src/debug_precision.rs` | Rust 精度排查 debug 工具 |
 | `docs/prompts/prompt-rust-python-precision-investigation.md` | 排查需求 prompt |

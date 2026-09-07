@@ -10,6 +10,7 @@
   stock_data_none.duckdb / stock_data_front.duckdb / stock_data_back.duckdb
 """
 from __future__ import annotations
+from .symbol_format import to_partition_key, to_canonical_symbol
 
 import os
 import sys
@@ -21,7 +22,11 @@ from typing import List, Literal, Optional
 import duckdb
 import pandas as pd
 
+from oskh_data.pandas_typing import as_timestamp, index_normalize_series, normalize_timestamp, timestamp_strftime
+
 from common.infra.quant_logger import get_logger
+from common.infra.data_root import resolve_data_root as _resolve_data_root
+from common.infra.data_root import resolve_period_root as _resolve_period_root
 
 logger = get_logger(__name__)
 
@@ -44,39 +49,8 @@ _ADJUST_DB_SUFFIX: dict[str, str] = {
 _RESTRICTED_MODULE_PREFIXES = ('live_trading.', 'trade_decision.')
 # 允许使用非 none 复权类型的白名单模块
 _ADJUST_WHITELIST_MODULES: tuple[str, ...] = (
-    'live_trading.live_trading_ma_indicator_provider',
+    'live_trading.indicators.ma_provider',
 )
-
-
-def _resolve_data_root(
-    *,
-    explicit_root: Optional[str] = None,
-    env_var: Optional[str] = None,
-    fallback_marker: str = "stock_data",
-) -> Path:
-    """按优先级解析数据根目录。
-
-    1) 显式参数 ``explicit_root``
-    2) 环境变量 ``OSKH_DATA_ROOT``
-    3) ``__file__`` 向上查找 ``stock_data/``（仅源码树场景可用）
-    """
-    if explicit_root:
-        return Path(explicit_root)
-    if env_var is None:
-        from common.infra.constants import EnvVarKeys
-        env_var = EnvVarKeys.OSKH_DATA_ROOT
-    env_root = os.environ.get(env_var)
-    if env_root:
-        return Path(env_root)
-    p = Path(__file__).resolve().parent
-    for ancestor in [p] + list(p.parents):
-        if (ancestor / fallback_marker).is_dir():
-            return ancestor
-    raise RuntimeError(
-        f"Cannot resolve data root: set {env_var} env var or pass explicit_root. "
-        f"Tried fallback_marker={fallback_marker} from {__file__}"
-    )
-
 
 def _resolve_default_mode() -> str:
     """按优先级解析默认 mode: 环境变量 > config/reader.yaml > parquet."""
@@ -109,10 +83,10 @@ DEFAULT_READER_MODE = _resolve_default_mode()
 
 def _parse_time(t: str) -> int:
     """将 '20240101' 或 '20240101093000' 转为毫秒 epoch."""
-    ts = pd.Timestamp(t)
-    if ts is pd.NaT:
+    ts = as_timestamp(t)
+    if pd.isna(ts):
         raise ValueError(f"Cannot parse time: {t}")
-    return int(ts.timestamp() * 1000)  # type: ignore[reportAttributeAccessIssue]
+    return int(ts.timestamp() * 1000)
 
 
 def _get_caller_module() -> str:
@@ -256,7 +230,7 @@ class StockDataReader:
     def _resolve_db_path(self, db_path: Optional[str]) -> Path:
         """根据 asset_type 和 adjust_type 返回 DuckDB 文件路径。
 
-        ETF: stock_data_etf.duckdb
+        ETF: stock_data_etf_none.duckdb（默认探测）/ stock_data_etf_front.duckdb
         个股: stock_data_front.duckdb（默认优先）> stock_data.duckdb > stock_data_none.duckdb
         默认（无 adjust_type 上下文时）: 自动探测可用的 DuckDB，避免因 stock_data.duckdb
         不存在而静默降级到 :memory: 模式读取可能过期的 Parquet 文件。
@@ -264,7 +238,15 @@ class StockDataReader:
         if db_path:
             return Path(db_path)
         if self._asset_type == 'etf':
-            return self._base_dir / 'stock_data_etf.duckdb'
+            # Align with etf_backfill + _adjust_db_path (never stock_data_etf.duckdb typo).
+            for name in (
+                'stock_data_etf_none.duckdb',
+                'stock_data_etf_front.duckdb',
+            ):
+                candidate = self._base_dir / name
+                if candidate.exists():
+                    return candidate
+            return self._base_dir / 'stock_data_etf_none.duckdb'
         # 自动探测：优先 front（最常用），其次兼容旧名，再次 none
         candidates = [
             self._base_dir / 'stock_data_front.duckdb',
@@ -279,10 +261,13 @@ class StockDataReader:
     def _adjust_db_path(self, adjust_type: str) -> Optional[Path]:
         """按复权类型返回对应 DuckDB 文件路径。
 
-        ETF 只有 none 类型。
+        ETF: none → stock_data_etf_none.duckdb；front → stock_data_etf_front.duckdb。
         个股按 none/front/back 分文件：stock_data_none.duckdb / stock_data_front.duckdb / ...
         """
         if self._asset_type == 'etf':
+            adj = str(adjust_type or 'none').strip().lower()
+            if adj == 'front':
+                return self._base_dir / 'stock_data_etf_front.duckdb'
             return self._base_dir / 'stock_data_etf_none.duckdb'
         suffix = _ADJUST_DB_SUFFIX.get(adjust_type, '_none')
         return self._base_dir / f'stock_data{suffix}.duckdb'
@@ -317,7 +302,7 @@ class StockDataReader:
         target_ts = pd.Timestamp(target_date)
         df = self.read_stock(
             stock_code,
-            start_time=(target_ts - pd.Timedelta(days=400)).strftime('%Y%m%d'),
+            start_time=timestamp_strftime(target_ts - pd.Timedelta(days=400), '%Y%m%d'),
             end_time=target_date,
             period=period,
             adjust_type=adjust_type,
@@ -327,22 +312,40 @@ class StockDataReader:
             return False, f"{stock_code}: {period}/{adjust_type} 返回空数据"
 
         df = df.sort_index()
-        max_date = df.index.max().normalize()
+        max_date = normalize_timestamp(df.index.max())
 
         if max_date < target_ts:
             return False, (
-                f"{stock_code}: {period}/{adjust_type} 最新日期为 {max_date.strftime('%Y-%m-%d')}，"
+                f"{stock_code}: {period}/{adjust_type} 最新日期为 {timestamp_strftime(max_date, '%Y-%m-%d')}，"
                 f"不覆盖目标日期 {target_date}"
             )
 
-        unique_days = len(df.index.normalize().unique())
-        if unique_days < min_trading_days:
+        window_start = timestamp_strftime(target_ts - pd.Timedelta(days=400), '%Y-%m-%d')
+        window_end = timestamp_strftime(min(target_ts, max_date), '%Y-%m-%d')
+        try:
+            from common.infra.trading_calendar_pmc import get_trade_days_sse
+
+            since_s = timestamp_strftime(window_start, "%Y%m%d")
+            until_s = timestamp_strftime(window_end, "%Y%m%d")
+            cal_df = get_trade_days_sse(since=since_s, until=until_s)
+            expected_trading_days = 0 if cal_df is None else int(len(cal_df))
+        except Exception as exc:
+            logger.warning(
+                "validate_freshness: SSE calendar fallback to index unique_days",
+                context={"error": str(exc)[:200]},
+            )
+            expected_trading_days = len(index_normalize_series(df.index).unique())
+
+        if expected_trading_days < min_trading_days:
             return False, (
-                f"{stock_code}: {period}/{adjust_type} 仅 {unique_days} 个交易日，"
+                f"{stock_code}: {period}/{adjust_type} 窗口内仅 {expected_trading_days} 个 SSE 交易日，"
                 f"不足最小要求 {min_trading_days} 天"
             )
 
-        return True, f"{stock_code}: {period}/{adjust_type} 覆盖 {target_date}（{unique_days} 天）"
+        return True, (
+            f"{stock_code}: {period}/{adjust_type} 覆盖 {target_date}"
+            f"（{expected_trading_days} 个 SSE 交易日）"
+        )
 
     def read_stock(
         self,
@@ -457,8 +460,8 @@ class StockDataReader:
         _check_disk_watermark(db.parent)
 
         style = _detect_style(base, period, adjust_type)
-        glob_pattern = str(base / f'period={period}' / f'dividend_type={adjust_type}' /
-                          '*' / 'data.parquet').replace('\\', '/')
+        period_dir = _resolve_period_root(period, base=base) / f'dividend_type={adjust_type}'
+        glob_pattern = str(period_dir / '*' / 'data.parquet').replace('\\', '/')
         _validate_parquet_schema_consistency(base, period=period, adjust_type=adjust_type)
 
         t0 = time.perf_counter()
@@ -467,10 +470,31 @@ class StockDataReader:
         if staging.exists():
             staging.unlink()
         con = duckdb.connect(str(staging))
+        # Pandas leftover __index_level_0__ may be absent (post CST→UTC repair writes
+        # preserve_index=False) or present with drifting types (BIGINT vs TIMESTAMP_NS).
+        # SELECT * + union_by_name=True fails to cast conflicting types during union;
+        # EXCLUDE avoids that, but EXCLUDE errors when the column is missing from ALL
+        # files — so probe the schema and conditionally exclude.
+        import pyarrow.parquet as _pq
+        _sample_files = sorted(period_dir.glob("symbol=*/data.parquet"))
+        _has_index_col = any(
+            "__index_level_0__" in _pq.read_schema(_p).names for _p in _sample_files
+        )
+        _select_clause = "SELECT * EXCLUDE (__index_level_0__)" if _has_index_col else "SELECT *"
         con.execute(f"""
             CREATE TABLE stock_data AS
-            SELECT * FROM read_parquet('{glob_pattern}', hive_partitioning=1, union_by_name=True)
+            {_select_clause}
+            FROM read_parquet(
+                '{glob_pattern}',
+                hive_partitioning=1,
+                union_by_name=True
+            )
         """)
+        col_names = {
+            str(r[0]) for r in con.execute("DESCRIBE stock_data").fetchall()
+        }
+        if "__index_level_0__" in col_names:
+            con.execute('ALTER TABLE stock_data DROP COLUMN "__index_level_0__"')
         if style == 'underscore':
             con.execute("UPDATE stock_data SET symbol = REPLACE(symbol, '_', '.')")
         con.execute("CREATE INDEX idx_symbol ON stock_data(symbol)")
@@ -491,7 +515,7 @@ class StockDataReader:
             timestamp = time.strftime('%Y%m%d_%H%M%S')
             backup = db.with_name(f'{db.stem}.bak.{timestamp}{db.suffix}')
             db.rename(backup)
-            logger.info("Backed up previous version: %s", backup.name)
+            logger.info(f"Backed up previous version: {backup.name}")
 
         # ── 4. 原子切换（同卷 os.replace） ──
         os.replace(str(staging), str(db))
@@ -499,8 +523,7 @@ class StockDataReader:
 
         size_mb = db.stat().st_size / (1024 * 1024)
         logger.info(
-            "Atomic publish OK: %s (%.0f MB, %d rows) in %.1fs",
-            db, size_mb, row_count, elapsed,
+            f"Atomic publish OK: {db} ({size_mb:.0f} MB, {row_count} rows) in {elapsed:.1f}s"
         )
 
         # ── 5. 清理旧备份（保留最近 max_backups 个） ──
@@ -529,7 +552,7 @@ class StockDataReader:
                 con = duckdb.connect(':memory:')
                 base = self._etf_parquet_dir if self._etf_parquet_dir is not None else self._base_dir
                 glob_pattern = str(
-                    base / 'period=1m' / 'dividend_type=none' / 'symbol=*' / 'data.parquet'
+                    _resolve_period_root('1m', base=base) / 'dividend_type=none' / 'symbol=*' / 'data.parquet'
                 ).replace('\\', '/')
                 con.execute(f"""
                     CREATE VIEW stock_data AS
@@ -542,8 +565,7 @@ class StockDataReader:
                 _row = con.execute('SELECT COUNT(*) FROM stock_data').fetchone()
                 _cnt = _row[0] if _row else 0
                 logger.info(
-                    "Minute :memory: view created: {} rows, {:.1f}s",
-                    f"{_cnt:,}", _elapsed,
+                    f"Minute :memory: view created: {_cnt:,} rows, {_elapsed:.1f}s"
                 )
                 self._con_minute = con
             return self._con_minute
@@ -553,9 +575,7 @@ class StockDataReader:
             return self._con
         if not adjust_db.exists():
             logger.warning(
-                "Persistent DB not found for adjust_type=%s (%s); falling back to parquet for correctness",
-                adjust_type,
-                adjust_db,
+                f"Persistent DB not found for adjust_type={adjust_type} ({adjust_db}); falling back to parquet for correctness"
             )
             return None
         if adjust_db == self._db_path:
@@ -625,10 +645,9 @@ class StockDataReader:
                      period, adjust_type, columns):
         self._ensure_style(period, adjust_type)
         base = self._etf_parquet_dir if self._etf_parquet_dir is not None else self._base_dir
-        glob = str(base / f'period={period}' /
+        glob = str(_resolve_period_root(period, base=base) /
                    f'dividend_type={adjust_type}' / '*' / 'data.parquet').replace('\\', '/')
 
-        col_list = self._build_column_list(columns)
         symbol_expr = self._symbol_expr()
 
         parts = [f"SELECT {symbol_expr} AS symbol, time"]
@@ -690,11 +709,11 @@ class StockDataReader:
     # ------------------------------------------------------------------
 
     def _make_path(self, stock_code, period, adjust_type):
-        safe = stock_code.replace('.', '_')
+        safe = to_partition_key(stock_code)
         # Phase 2 P0 fix: ETF parquet data is stored under stock_data/etf/
         # (aligned with etf_backfill.py). Stock data uses stock_data/ directly.
         base = self._etf_parquet_dir if self._etf_parquet_dir is not None else self._base_dir
-        return (base / f'period={period}' /
+        return (_resolve_period_root(period, base=base) /
                 f'dividend_type={adjust_type}' / f'symbol={safe}' / 'data.parquet')
 
     def _filter_time_parquet(self, df, start_time, end_time):
@@ -768,8 +787,7 @@ class StockDataReader:
                 symbol = str(out.get("symbol", "unknown"))
                 # P1-1: 任何非零丢弃都记录 warning（可观测性）
                 logger.warning(
-                    "时间戳解析丢弃 %d/%d 行 (%.1f%%)，symbol=%s",
-                    n_dropped, n_before, ratio * 100, symbol,
+                    f"时间戳解析丢弃 {n_dropped}/{n_before} 行 ({ratio * 100:.1f}%)，symbol={symbol}"
                 )
                 # P1-1: 阈值从 99% 降到 5%
                 if ratio >= 0.05:
@@ -802,8 +820,7 @@ def _check_disk_watermark(parent: Path) -> None:
         pct = (usage.used / usage.total) * 100 if usage.total > 0 else 0
         if pct >= _DISK_WATERMARK_PCT:
             logger.warning(
-                "Disk watermark alert: %.1f%% used on %s (threshold %d%%)",
-                pct, parent, _DISK_WATERMARK_PCT,
+                f"Disk watermark alert: {pct:.1f}% used on {parent} (threshold {_DISK_WATERMARK_PCT}%)"
             )
     except Exception:
         logger.exception("Disk watermark check failed")
@@ -821,9 +838,8 @@ def _check_schema_version(db_path: Path) -> None:
             version = vr[0] if vr else None
             if version is not None and version < _SCHEMA_VERSION:
                 logger.warning(
-                    "Schema version mismatch: DB=%s, supported=%s. "
-                    "Consider running rebuild_duckdb.",
-                    version, _SCHEMA_VERSION,
+                    f"Schema version mismatch: DB={version}, supported={_SCHEMA_VERSION}. "
+                    "Consider running rebuild_duckdb."
                 )
         con.close()
     except Exception:
@@ -842,13 +858,13 @@ def _prune_backups(db: Path, max_backups: int) -> None:
     for old in backups[max_backups:]:
         try:
             old.unlink()
-            logger.info("Pruned old backup: %s", old.name)
+            logger.info(f"Pruned old backup: {old.name}")
         except OSError:
             pass
 
 
 def _detect_style(base_dir: Path, period: str, adjust_type: str) -> str:
-    full_dir = base_dir / f'period={period}' / f'dividend_type={adjust_type}'
+    full_dir = _resolve_period_root(period, base=base_dir) / f'dividend_type={adjust_type}'
     if not full_dir.is_dir():
         return 'underscore'
     all_dirs = [d for d in os.listdir(full_dir) if d.startswith('symbol=')]
@@ -864,10 +880,20 @@ def _detect_style(base_dir: Path, period: str, adjust_type: str) -> str:
 
 
 def _validate_parquet_schema_consistency(base_dir: Path, *, period: str, adjust_type: str) -> None:
-    """Fail-close when parquet partition schemas drift on critical columns."""
+    """Fail-close when parquet partition schemas drift vs canonical 1d types.
+
+    Canonical contract (same as ``oskh_data.daily_parquet_write``):
+    ``time/volume=int64``, OHLC/amount=float64(``double``).
+
+    Historically compared partitions to the *first* file alphabetically, so a
+    single drifted ``symbol=000001_SH`` (volume=double) poisoned the whole
+    rebuild with a useless ``data.parquet`` path in the error (2026-08-02).
+    """
     import pyarrow.parquet as pq
 
-    period_dir = base_dir / f"period={period}" / f"dividend_type={adjust_type}"
+    from oskh_data.daily_parquet_write import CANONICAL_ARROW_TYPES
+
+    period_dir = _resolve_period_root(period, base=base_dir) / f"dividend_type={adjust_type}"
     if not period_dir.is_dir():
         raise RuntimeError(f"Data directory not found for schema validation: {period_dir}")
 
@@ -875,42 +901,53 @@ def _validate_parquet_schema_consistency(base_dir: Path, *, period: str, adjust_
     if not files:
         raise RuntimeError(f"No parquet files found for schema validation: {period_dir}")
 
-    required_cols = {"time", "open", "high", "low", "close", "volume"}
-    required_types: dict[str, str] | None = None
+    required_cols = ("time", "open", "high", "low", "close", "volume")
+    expected = {col: str(CANONICAL_ARROW_TYPES[col]) for col in required_cols}
+    drifted: list[str] = []
     for p in files:
         schema = pq.read_schema(p)
         names = set(schema.names)
-        missing = required_cols - names
+        missing = set(required_cols) - names
+        label = p.parent.name  # symbol=XXXXXX_XX
         if missing:
             raise RuntimeError(
-                f"Schema validation failed: required columns missing in {p.name}: {sorted(missing)}"
+                f"Schema validation failed: required columns missing in {label}: "
+                f"{sorted(missing)}"
             )
         current_types = {col: str(schema.field(col).type) for col in required_cols}
-        if required_types is None:
-            required_types = current_types
-            continue
         mismatched = {
-            col: (required_types[col], current_types[col])
+            col: (expected[col], current_types[col])
             for col in required_cols
-            if required_types[col] != current_types[col]
+            if expected[col] != current_types[col]
         }
         if mismatched:
-            raise RuntimeError(
-                "Schema validation failed: column type drift detected in "
-                f"{p.name}: {mismatched}"
-            )
+            drifted.append(f"{label}: {mismatched}")
+            if len(drifted) >= 8:
+                break
+    if drifted:
+        sample = "; ".join(drifted)
+        raise RuntimeError(
+            "Schema validation failed: column type drift vs canonical "
+            f"(time/volume=int64, OHLC=double) in {period}/{adjust_type}: {sample}. "
+            "Repair: "
+            "scripts/data/repair_daily_parquet_schema.py "
+            f"--period {period} --adjust-type {adjust_type} --apply "
+            "then rebuild --period 1d / --resume"
+        )
 
 
 def _load_all_codes(base_dir: Path) -> List[str]:
-    fs_path = base_dir / 'float_shares.parquet'
+    from common.infra.data_root import resolve_period_root, resolve_source_parquet
+
+    fs_path = resolve_source_parquet('float_shares.parquet')
     if fs_path.exists():
         return pd.read_parquet(fs_path)['stock_code'].tolist()
-    period_dir = base_dir / 'period=1d' / 'dividend_type=front'
+    period_dir = resolve_period_root('1d') / 'dividend_type=front'
     if period_dir.is_dir():
         codes = []
         for d in os.listdir(period_dir):
             if d.startswith('symbol='):
-                code = d[len('symbol='):].replace('_', '.')
+                code = to_canonical_symbol(d[len('symbol='):])
                 codes.append(code)
         return codes
     return []
@@ -921,7 +958,7 @@ _LAZY_PREV_CLOSE_ETF_READER: Optional[StockDataReader] = None
 _LAZY_PREV_CLOSE_READER_LOCK = threading.Lock()
 
 
-def lazy_prev_close_reader(asset_type: str = "stock") -> StockDataReader:
+def lazy_prev_close_reader(asset_type: str = "stock") -> Optional[StockDataReader]:
     """Thread-safe singleton for limit_info / gap_down DuckDB ``none`` reads.
 
     Phase 2 P0 fix: accepts ``asset_type`` to route ETF codes to

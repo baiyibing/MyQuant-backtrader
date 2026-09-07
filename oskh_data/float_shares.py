@@ -29,12 +29,17 @@ fetch_float_shares.py — 批量获取 A 股流通股本 (Step 2)
 """
 
 import argparse
+from .symbol_format import to_canonical_symbol
 import os
+
+from common.infra.data_root import resolve_period_root, resolve_source_parquet
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
+
+from oskh_data.pandas_typing import normalize_timestamp
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, REPO)
@@ -46,13 +51,13 @@ _xtdata = None
 def _get_xtdata():
     global _xtdata
     if _xtdata is None:
-        from xtquant import xtdata as _xt
+        from oskh_data.qmt_xtdata import get_xtdata
 
-        _xtdata = _xt
+        _xtdata = get_xtdata()
     return _xtdata
 
 
-DEFAULT_SNAPSHOT_PATH = os.path.join(REPO, "stock_data", "float_shares.parquet")
+DEFAULT_SNAPSHOT_PATH = str(resolve_source_parquet("float_shares.parquet"))
 
 
 def collect_from_daily_data(data_dir: str) -> list:
@@ -66,7 +71,7 @@ def collect_from_daily_data(data_dir: str) -> list:
     for d in sorted(path.iterdir()):
         if d.is_dir() and d.name.startswith("symbol="):
             sym = d.name.replace("symbol=", "")
-            code = sym.replace("_SZ", ".SZ").replace("_SH", ".SH").replace("_BJ", ".BJ")
+            code = to_canonical_symbol(sym)
             codes.append(code)
     return codes
 
@@ -179,11 +184,14 @@ def build_snapshot_df(rows: list, now_ts: str) -> pd.DataFrame:
 def normalize_snapshot_date(snapshot_date=None) -> pd.Timestamp:  # type: ignore[reportArgumentType]
     """将快照日期归一化为交易日维度日期。"""
     if snapshot_date:
-        return pd.Timestamp(snapshot_date).normalize()
-    return pd.Timestamp.today().normalize()
+        return normalize_timestamp(pd.Timestamp(snapshot_date))
+    return normalize_timestamp(pd.Timestamp.today())
 
 
 def main():
+    from oskh_data.qmt_xtdata import skip_if_forbids_xtdata_init
+    if skip_if_forbids_xtdata_init():
+        return
     parser = argparse.ArgumentParser(description="批量获取 A 股流通股本")
     src = parser.add_mutually_exclusive_group()
     src.add_argument("--stocks", default=None,
@@ -210,7 +218,7 @@ def main():
         source_label = f"stock_pool ({len(stock_list)} stocks)"
     else:
         # 默认：从日线前复权数据获取全市场标的
-        daily_dir = os.path.join(REPO, "stock_data", "period=1d", "dividend_type=front")
+        daily_dir = str(resolve_period_root("1d") / "dividend_type=front")
         stock_list = collect_from_daily_data(daily_dir)
         source_label = f"daily data ({len(stock_list)} stocks)"
 
@@ -257,7 +265,9 @@ def main():
 
     # 覆盖率门禁：基于有效 float_shares 值（非空且 >0），低于阈值时回滚
     _COVERAGE_THRESHOLD = 0.95
-    daily_dir = os.path.join(os.path.dirname(str(output)), "period=1d", "dividend_type=front")
+    # 覆盖率门闸读权威日线根（claude-Y1：不再从 output 父目录推导——分设根时
+    # exists 守卫会静默跳过门闸）
+    daily_dir = str(resolve_period_root("1d") / "dividend_type=front")
     if os.path.exists(daily_dir):
         total_symbols = sum(
             1 for d in os.listdir(daily_dir)

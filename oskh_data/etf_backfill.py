@@ -4,11 +4,18 @@
 ETF 日线数据回填脚本。
 
 标的识别：交易所产品类型字段优先 + 本地白名单兜底 + 每日快照 + diff。
-数据隔离：stock_data/etf/ 独立目录 + stock_data_etf_none.duckdb 独立文件。
-仅 none 复权（ETF 无复权需求）。
+数据隔离：stock_data/etf/ 独立目录 + stock_data_etf_{none,front}.duckdb 独立文件。
+支持 none / front 复权（RSRS 25 日窗需 front 平滑除权跳变）。
+
+与主 hive「指数/ETF 副轨」的关系（2026-07-15）：
+- **本模块** = 全量 ETF 隔离树（``stock_data/etf/``），勿并入沪深京A股主轨。
+- 若需在主 hive ``period=1d`` 保留少量基准（如 510050/159915），用
+  ``config/market_data_etf_index_universe.txt`` +
+  ``scripts/data/update_etf_index_daily.py``，不要改 ``_get_all_a_stock_codes()``。
 
 用法：
     D:/anaconda3/envs/vanna311/python.exe -m oskh_data.etf_backfill --start 20200101
+    D:/anaconda3/envs/vanna311/python.exe -m oskh_data.etf_backfill --core-pool-only --adjust both --rebuild-duckdb
 """
 from __future__ import annotations
 
@@ -29,33 +36,43 @@ logger = get_logger(__name__)
 
 # ETF 数据隔离目录
 ETF_DATA_DIR = "stock_data/etf"
-ETF_DUCKDB = "stock_data/stock_data_etf_none.duckdb"
+ETF_DUCKDB_NONE = "stock_data/stock_data_etf_none.duckdb"
+ETF_DUCKDB_FRONT = "stock_data/stock_data_etf_front.duckdb"
 ETF_SYMBOLS_SNAPSHOT = "stock_data/etf/.symbols_snapshot.json"
 ETF_SYMBOLS_DIFF = "stock_data/etf/.symbols_diff.log"
 
-# 本地白名单（核心 ETF，兜底用）
+# ETFRotationStrategy 默认池（Phase 1 必回填）
+_CORE_ETF_POOL = [
+    "510180.SH",  # 上证180
+    "159915.SZ",  # 创业板
+    "513100.SH",  # 纳指
+    "518880.SH",  # 黄金
+]
+
+# 本地白名单（核心 ETF，兜底用）— 含默认池
 _CORE_ETF_WHITELIST = [
+    # 默认池（RSRS）
+    *_CORE_ETF_POOL,
     # 宽基
     "510050.SH", "510300.SH", "510500.SH", "510880.SH",  # 上证50/沪深300/中证500/红利
-    "159915.SZ", "159919.SZ", "159922.SZ", "159949.SZ",  # 创业板/沪深300/中证500/创业板50
+    "159919.SZ", "159922.SZ", "159949.SZ",  # 沪深300/中证500/创业板50
     # 行业
     "512880.SH", "512100.SH", "512010.SH", "512690.SH",  # 证券/中证1000/医药/酒
     # 科创板
     "588000.SH", "588080.SH",  # 科创50/科创50ETF
-    # 商品
-    "518880.SH",  # 黄金
     # 债券
     "511010.SH", "511260.SH",  # 国债/10年国债
-    # 跨境
-    "513100.SH", "513050.SH", "159941.SZ",  # 纳指100/中概互联/纳指
+    # 跨境（纳指已在默认池）
+    "513050.SH", "159941.SZ",  # 中概互联/纳指
 ]
 
 
 def _get_xtdata():
     try:
-        from xtquant import xtdata as _xt  # type: ignore[reportUnusedImport]
-        return _xt
-    except ImportError:
+        from oskh_data.qmt_xtdata import try_get_xtdata
+
+        return try_get_xtdata()
+    except Exception:
         return None
 
 
@@ -65,7 +82,8 @@ def _identify_etf_codes() -> Tuple[List[str], str]:
     Returns (codes, source) where source is one of:
       - "qmt_sector" — QMT 行业列表（最完整）
       - "qmt_instrument_detail" — get_instrument_detail 扫描（采样）
-      - "local_whitelist" — 本地白名单兜底（仅 20 只核心 ETF）
+      - "local_whitelist" — 本地白名单兜底
+      - "core_pool" — --core-pool-only
     """
     codes: Set[str] = set()
     source = "local_whitelist"
@@ -107,7 +125,7 @@ def _identify_etf_codes() -> Tuple[List[str], str]:
             except Exception:
                 pass
 
-    # 兜底：本地白名单
+    # 兜底：本地白名单（始终并入默认池，避免识别源漏掉 510180 等）
     if not codes:
         logger.warning(
             "QMT ETF identification failed, using local whitelist (%d ETFs). "
@@ -115,6 +133,8 @@ def _identify_etf_codes() -> Tuple[List[str], str]:
             len(_CORE_ETF_WHITELIST),
         )
         codes.update(_CORE_ETF_WHITELIST)
+    else:
+        codes.update(_CORE_ETF_POOL)
 
     logger.info("ETF identification complete: %d codes, source=%s", len(codes), source)
     return sorted(codes), source
@@ -160,32 +180,75 @@ def _save_snapshot(codes: List[str]) -> None:
                        context={"added": added, "removed": removed})
 
 
+def _resolve_adjust_types(adjust: str) -> List[str]:
+    adj = str(adjust or "both").strip().lower()
+    if adj == "both":
+        return ["none", "front"]
+    if adj in ("none", "front"):
+        return [adj]
+    raise ValueError(f"unsupported --adjust={adjust!r}; use none|front|both")
+
+
+def _duckdb_relpath(adjust_type: str) -> str:
+    if adjust_type == "front":
+        return ETF_DUCKDB_FRONT
+    return ETF_DUCKDB_NONE
+
+
 def main() -> int:
+    from oskh_data.qmt_xtdata import skip_if_forbids_xtdata_init
+    if skip_if_forbids_xtdata_init():
+        return 0
     parser = argparse.ArgumentParser(description="ETF 日线数据回填")
     parser.add_argument("--start", default="20200101", help="开始日期 YYYYMMDD")
     parser.add_argument("--end", default=None, help="结束日期（默认今天）")
     parser.add_argument("--identify-only", action="store_true",
                         help="仅识别 ETF 标的并保存快照，不下载数据")
     parser.add_argument("--rebuild-duckdb", action="store_true",
-                        help="下载完成后重建 stock_data_etf_none.duckdb")
+                        help="下载完成后重建 stock_data_etf_{none,front}.duckdb")
+    parser.add_argument(
+        "--adjust",
+        default="both",
+        choices=("none", "front", "both"),
+        help="复权口径（默认 both：none+front）",
+    )
+    parser.add_argument(
+        "--core-pool-only",
+        action="store_true",
+        help="仅回填 ETFRotationStrategy 默认 4 ETF（510180/159915/513100/518880）",
+    )
+    parser.add_argument(
+        "--symbols",
+        default=None,
+        help="逗号分隔代码列表（覆盖识别结果）",
+    )
     args = parser.parse_args()
 
     end_date = args.end or datetime.now(timezone.utc).strftime("%Y%m%d")
+    adjust_types = _resolve_adjust_types(args.adjust)
 
     # ── 标的识别 + 快照 ──
-    logger.info("Identifying ETF codes...")
-    codes, etf_source = _identify_etf_codes()
+    if args.symbols:
+        codes = [c.strip().upper() for c in str(args.symbols).split(",") if c.strip()]
+        etf_source = "cli_symbols"
+    elif args.core_pool_only:
+        codes = list(_CORE_ETF_POOL)
+        etf_source = "core_pool"
+    else:
+        logger.info("Identifying ETF codes...")
+        codes, etf_source = _identify_etf_codes()
     _save_snapshot(codes)
     print(f"ETF codes identified: {len(codes)} (source: {etf_source})")
     for c in codes[:10]:
         print(f"  {c}")
     if len(codes) > 10:
         print(f"  ... and {len(codes) - 10} more")
+    print(f"Adjust types: {adjust_types}")
 
     if args.identify_only:
         return 0
 
-    # ── 下载日线数据（仅 none 复权） ──
+    # ── 下载日线数据 ──
     xtdata = _get_xtdata()
     if xtdata is None:
         logger.error("QMT not available, cannot download ETF data")
@@ -195,25 +258,30 @@ def main() -> int:
 
     etf_dir = os.path.join(REPO, ETF_DATA_DIR)
     downloader = DataDownloader(base_dir=etf_dir)
-    logger.info("Downloading ETF daily data: %d codes, %s → %s",
-                len(codes), args.start, end_date)
-    result = downloader.download_data(
-        codes, args.start, end_date, period="1d", adjust_type="none",
-    )
-    print(f"Downloaded: {len(result)}/{len(codes)} ETFs")
+    for adj in adjust_types:
+        logger.info(
+            "Downloading ETF daily data: %d codes, %s → %s, adjust=%s",
+            len(codes), args.start, end_date, adj,
+        )
+        result = downloader.download_data(
+            codes, args.start, end_date, period="1d", adjust_type=adj,
+        )
+        print(f"Downloaded adjust={adj}: {len(result)}/{len(codes)} ETFs")
 
     # ── 重建 DuckDB ──
     if args.rebuild_duckdb:
         from oskh_data.reader import StockDataReader
 
-        db_path = os.path.join(REPO, ETF_DUCKDB)
-        logger.info("Rebuilding %s ...", ETF_DUCKDB)
-        db_file, elapsed = StockDataReader.build_persistent_db(
-            base_dir=etf_dir, db_path=db_path,
-            period="1d", adjust_type="none",
-        )
-        size_mb = os.path.getsize(db_file) / (1024 * 1024)
-        print(f"ETF DuckDB built: {db_file} ({size_mb:.0f} MB) in {elapsed:.0f}s")
+        for adj in adjust_types:
+            rel = _duckdb_relpath(adj)
+            db_path = os.path.join(REPO, rel)
+            logger.info("Rebuilding %s ...", rel)
+            db_file, elapsed = StockDataReader.build_persistent_db(
+                base_dir=etf_dir, db_path=db_path,
+                period="1d", adjust_type=adj,
+            )
+            size_mb = os.path.getsize(db_file) / (1024 * 1024)
+            print(f"ETF DuckDB built: {db_file} ({size_mb:.0f} MB) in {elapsed:.0f}s")
 
     return 0
 

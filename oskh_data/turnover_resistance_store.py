@@ -11,7 +11,9 @@ from typing import Any, Dict, Iterator, List, Optional, Sequence, Union
 import pandas as pd
 from filelock import FileLock
 
-from backtest.chip_turnover_resistance_bands import compute_tr_bb_columns
+from oskh_data.pandas_typing import as_dataframe, as_series, to_numeric_series
+
+from oskh_factors.chip.bands import compute_tr_bb_columns
 from common.infra.quant_logger import get_logger
 from common.infra.timekeeping import wall_now_s
 from oskh_data.reader import _resolve_data_root
@@ -93,8 +95,9 @@ def resolve_parquet_path(path: Optional[Union[str, Path]] = None) -> Path:
     env = os.getenv("TURNOVER_RESIST_BANDS_PATH")
     if env:
         return Path(env)
-    root = _resolve_data_root()
-    return root / "stock_data" / "turnover_resistance_daily.parquet"
+    from common.infra.data_root import resolve_source_parquet
+
+    return resolve_source_parquet("turnover_resistance_daily.parquet")
 
 
 def resolve_staging_dir(staging_dir: Optional[Union[str, Path]] = None) -> Path:
@@ -234,13 +237,13 @@ def _ensure_schema(df: pd.DataFrame) -> pd.DataFrame:
     out = out[list(SCHEMA_COLUMNS)]
     out["stock_code"] = out["stock_code"].astype(str)
     out["trade_date"] = out["trade_date"].astype(str)
-    out["stock_name"] = out["stock_name"].fillna("").astype(str)
-    out["source"] = out["source"].fillna("canonical_rust").astype(str)
-    out["free_float_policy"] = out["free_float_policy"].fillna(DEFAULT_FREE_FLOAT_POLICY).astype(str)
-    out["window"] = pd.to_numeric(out["window"], errors="coerce").fillna(DEFAULT_WINDOW).astype("int64")
+    out["stock_name"] = as_series(out["stock_name"]).fillna("").astype(str)
+    out["source"] = as_series(out["source"]).fillna("canonical_rust").astype(str)
+    out["free_float_policy"] = as_series(out["free_float_policy"]).fillna(DEFAULT_FREE_FLOAT_POLICY).astype(str)
+    out["window"] = to_numeric_series(out["window"], errors="coerce").fillna(DEFAULT_WINDOW).astype("int64")
     for col in _FLOAT_COLUMNS:
-        out[col] = pd.to_numeric(out[col], errors="coerce")
-    return out
+        out[col] = to_numeric_series(out[col], errors="coerce")
+    return pd.DataFrame(out)
 
 
 def _validate_audit_columns(df: pd.DataFrame, *, strict: bool) -> None:
@@ -311,13 +314,13 @@ class TurnoverResistanceStore:
 
         with self._locked():
             existing = self._read()
-            same_day = existing[existing["trade_date"] == trade_date]
+            same_day = as_dataframe(existing[existing["trade_date"] == trade_date])
             if not same_day.empty:
-                for code in new_df["stock_code"].unique():
-                    prev = same_day[same_day["stock_code"] == code]
+                for code in as_series(new_df["stock_code"]).unique():
+                    prev = as_dataframe(same_day[same_day["stock_code"] == code])
                     if prev.empty:
                         continue
-                    prev_windows = prev["window"].unique()
+                    prev_windows = as_series(prev["window"]).unique()
                     if len(prev_windows) != 1 or int(prev_windows[0]) != int(window):
                         raise ValueError(
                             f"window 冲突: {code} @ {trade_date} "
@@ -375,7 +378,7 @@ class TurnoverResistanceStore:
         sub = df[(df["stock_code"] == stock_code) & (df["window"] == int(window))]
         if end_date:
             sub = sub[sub["trade_date"] <= str(end_date)]
-        sub = sub.sort_values("trade_date")
+        sub = pd.DataFrame(sub).sort_values(by="trade_date")  # pyright: ignore[reportCallIssue]
         if n > 0:
             sub = sub.tail(n)
 
@@ -396,10 +399,10 @@ class TurnoverResistanceStore:
         require_bands: bool = False,
     ) -> pd.DataFrame:
         df = self._read()
-        sub = df[(df["trade_date"] == str(trade_date)) & (df["window"] == int(window))]
+        sub = as_dataframe(df[(df["trade_date"] == str(trade_date)) & (df["window"] == int(window))])
         if require_bands:
-            sub = sub[sub["bands_computed_at"].notna()]
-        return sub.sort_values("stock_code").reset_index(drop=True)
+            sub = as_dataframe(sub[as_series(sub["bands_computed_at"]).notna()])
+        return as_dataframe(sub.sort_values(by="stock_code").reset_index(drop=True))
 
     def load_bb_breakout(
         self,
@@ -412,9 +415,13 @@ class TurnoverResistanceStore:
         if df.empty:
             return df
         if band == "upper":
-            return df[df["turnover_resistance"] > df["tr_bb_upper"]].reset_index(drop=True)
+            return pd.DataFrame(
+                df.loc[df["turnover_resistance"] > df["tr_bb_upper"]].reset_index(drop=True)
+            )
         if band == "lower":
-            return df[df["turnover_resistance"] < df["tr_bb_lower"]].reset_index(drop=True)
+            return pd.DataFrame(
+                df.loc[df["turnover_resistance"] < df["tr_bb_lower"]].reset_index(drop=True)
+            )
         raise ValueError(f"unsupported band={band!r}; use 'upper' or 'lower'")
 
     def load_recent_history(
@@ -428,14 +435,14 @@ class TurnoverResistanceStore:
         df = self._read()
         if df.empty:
             return df
-        sub = df[df["window"] == int(window)]
+        sub = as_dataframe(df[df["window"] == int(window)])
         if end_date:
-            sub = sub[sub["trade_date"] <= str(end_date)]
+            sub = as_dataframe(sub[sub["trade_date"] <= str(end_date)])
         if sub.empty:
-            return sub
-        dates = sorted(sub["trade_date"].unique())
+            return as_dataframe(sub)
+        dates = sorted(as_series(sub["trade_date"]).unique())
         keep = set(dates[-n_trading_days:])
-        return sub[sub["trade_date"].isin(keep)].reset_index(drop=True)
+        return as_dataframe(sub.loc[as_series(sub["trade_date"]).isin(list(keep))].reset_index(drop=True))
 
     def compute_and_update_bands(
         self,
@@ -454,20 +461,20 @@ class TurnoverResistanceStore:
             if df.empty:
                 return {"updated_rows": 0, "trade_dates": 0}
 
-            sub = df[df["window"] == int(window)].copy()
+            sub = as_dataframe(df[df["window"] == int(window)].copy())
             if trade_dates is not None:
                 want = {str(d) for d in trade_dates}
-                sub_target = sub[sub["trade_date"].isin(want)]
+                sub_target = as_dataframe(sub.loc[as_series(sub["trade_date"]).isin(list(want))])
             elif only_missing:
-                sub_target = sub[sub["bands_computed_at"].isna()]
+                sub_target = as_dataframe(sub[as_series(sub["bands_computed_at"]).isna()])
             else:
                 sub_target = sub
 
             if sub_target.empty:
                 return {"updated_rows": 0, "trade_dates": 0}
 
-            target_dates = sorted(sub_target["trade_date"].unique())
-            all_dates = sorted(sub["trade_date"].unique())
+            target_dates = sorted(as_series(sub_target["trade_date"]).unique())
+            all_dates = sorted(as_series(sub["trade_date"]).unique())
             date_to_idx = {d: i for i, d in enumerate(all_dates)}
 
             updated = 0
@@ -476,7 +483,7 @@ class TurnoverResistanceStore:
                 idx_pos = date_to_idx[td]
                 start = max(0, idx_pos - n_history + 1)
                 hist_dates = set(all_dates[start : idx_pos + 1])
-                hist = sub[sub["trade_date"].isin(hist_dates)]
+                hist = as_dataframe(sub.loc[as_series(sub["trade_date"]).isin(list(hist_dates))])
                 _validate_audit_columns(hist, strict=True)
                 computed = compute_tr_bb_columns(
                     hist,
@@ -498,7 +505,8 @@ class TurnoverResistanceStore:
                         continue
                     for idx in hit:
                         for col in _TR_BB_COLUMNS:
-                            val = row[col]
+                            raw_val = row[col]
+                            val = raw_val.item() if isinstance(raw_val, pd.Series) else raw_val
                             df.at[idx, col] = float(val) if pd.notna(val) else float("nan")
                         df.at[idx, "bands_computed_at"] = now
                         updated += 1
@@ -548,8 +556,8 @@ class TurnoverResistanceStore:
         df = self._read()
         if df.empty:
             return []
-        sub = df[df["window"] == int(window)]
-        return sorted(sub["trade_date"].unique())
+        sub = as_dataframe(df[df["window"] == int(window)])
+        return sorted(as_series(sub["trade_date"]).unique())
 
     def has_trade_date(self, trade_date: str, *, window: int = DEFAULT_WINDOW) -> bool:
         df = self._read()
@@ -568,12 +576,12 @@ class TurnoverResistanceStore:
         df = self._read()
         if df.empty:
             return {}
-        sub = df[df["window"] == int(window)]
+        sub = as_dataframe(df[df["window"] == int(window)])
         if trade_date:
-            sub = sub[sub["trade_date"] == str(trade_date)]
+            sub = as_dataframe(sub[sub["trade_date"] == str(trade_date)])
         if sub.empty:
             return {}
-        tr = sub["turnover_resistance"].dropna()
+        tr = as_series(sub["turnover_resistance"]).dropna()
         if tr.empty:
             return {}
         abs_tr = tr.abs()

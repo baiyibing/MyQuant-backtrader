@@ -64,8 +64,7 @@ class ChipsFactorBaisc(DataHandlerLP):
         return (["Ref($open, -2)/Ref($open, -1) - 1"], ["LABEL0"])
 
     def get_feature_config(self) -> Tuple[List, List]:
-
-        pass
+        raise NotImplementedError
 
 
 class TurnCoeffChips(ChipsFactorBaisc):

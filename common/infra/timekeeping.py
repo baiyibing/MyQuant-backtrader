@@ -5,13 +5,16 @@ Explicit UTC vs Asia/Shanghai clocks for audit vs A-share market semantics.
 - UTC: persisted audit timestamps, trace-id date segment (YYYYMMDD), cross-process logs.
 - Asia/Shanghai: trading calendar wall date, session windows, exchange-oriented fields.
 
-Stdlib only; no quant_logger / trace_context / runtime_config imports.
+Stdlib only at import time; no quant_logger / trace_context / runtime_config
+import-time triggers (YAML debug toggle is applied post-bootstrap via
+``set_mono_debug_mode`` / main.py).
 
 See docs/architecture/timezone-v2.md (single entry for clocks and QMT wall-time parsing).
 """
 
 from __future__ import annotations
 
+import os
 import re
 import time as _stdlib_time
 import warnings
@@ -25,26 +28,22 @@ CN_TZ = ZoneInfo("Asia/Shanghai")
 # ---------------------------------------------------------------------------
 # Emergency debug toggle: mono_now() -> wall_now_s()
 # ---------------------------------------------------------------------------
-# Set OSKH_DEBUG_MONOTONIC_AS_WALLCLOCK=1 (env) or DEBUG_MONOTONIC_AS_WALLCLOCK
-# in runtime YAML to diagnose whether a bug is related to monotonic() vs
-# wall-clock choice. When enabled, mono_now() returns wall_now_s() instead,
-# providing a uniform baseline for comparison.
-# This is a DEBUG-ONLY knob; never enable in production.
-def _load_mono_debug_flag_from_runtime_config() -> bool:
-    """Read debug flag ONLY through runtime_config. No bare os.environ fallback."""
-    try:
-        from common.infra.runtime_config import get_raw as _cfg_raw
-
-        got = _cfg_raw("OSKH_DEBUG_MONOTONIC_AS_WALLCLOCK")
-        if got is not None:
-            return str(got).lower() in ("1", "true", "yes", "on")
-    except Exception:
-        # runtime_config not ready → default False
-        return False
-    return False
+# Import-time: read OSKH_DEBUG_MONOTONIC_AS_WALLCLOCK from os.environ only
+# (once). Do NOT call runtime_config/ensure_* here — that cold-loads config
+# before MINIQMT_CONFIG_PATH may be pinned (start-stack landmine).
+# YAML key is applied after bootstrap via set_mono_debug_mode (main.py).
+# DEBUG-ONLY; never enable in production.
+def _mono_debug_flag_from_environ() -> bool:
+    """Module-level read of env debug flag (no runtime_config)."""
+    return (os.environ.get("OSKH_DEBUG_MONOTONIC_AS_WALLCLOCK") or "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
 
 
-_OSKH_DEBUG_MONOTONIC_AS_WALLCLOCK = _load_mono_debug_flag_from_runtime_config()
+_OSKH_DEBUG_MONOTONIC_AS_WALLCLOCK = _mono_debug_flag_from_environ()
 
 
 def set_mono_debug_mode(enabled: bool) -> None:
@@ -76,7 +75,10 @@ def to_shanghai(dt: datetime) -> datetime:
 
 
 def utc_now() -> datetime:
-    """Current instant in UTC (timezone-aware)."""
+    """Current instant in UTC (timezone-aware).
+
+    Never derived from :func:`set_mock_trading_datetime` (clock-domain iron rule).
+    """
     return datetime.now(timezone.utc)
 
 
@@ -85,8 +87,167 @@ def now_utc() -> datetime:
     return utc_now()
 
 
+# ---------------------------------------------------------------------------
+# Mock trading datetime (MOCK_QMT multi-strategy) — shanghai_now only
+# ---------------------------------------------------------------------------
+# Full-stack / subprocess injection. Process-local live_trading tests should use
+# MockTradingClockPort instead (same process must not use both — dual-source ban).
+# Does NOT fake mono_now() / utc_now() / wall_now_s().
+_MOCK_SHANGHAI_NOW: Optional[datetime] = None
+# 跨进程 mock 时钟文件（2026-08-04）：OSKH_MOCK_CLOCK_FILE 指向一个文本文件
+# （内容 ISO-8601 Asia/Shanghai），trading/executor 两进程的 shanghai_now() 都读它 →
+# 外部驱动脚本周期性写文件即可**运行时推进 mock 时钟**（价格剧本按时间选档随之
+# 变动 → 依赖价格变化的路径——熔断/止损/破位——可在单次栈运行内触发）。
+# 文件不存在/未配置 → 回退 _MOCK_SHANGHAI_NOW（进程内静态，原行为）。
+# 2026-08-21：未开 MOCK_QMT_ENABLED 时忽略钟文件（纸/实盘残留 env 不得改 shanghai_now）。
+_MOCK_CLOCK_FILE: Optional[str] = None
+_MOCK_CLOCK_CACHE: Tuple[str, Optional[datetime]] = ("", None)  # (文件签名, 解析值)
+
+
+def _is_truthy_flag(raw: object) -> bool:
+    return str(raw or "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _mock_qmt_enabled() -> bool:
+    """MOCK_QMT_ENABLED 是否开。env 优先，避免冷加载 YAML。"""
+    env = os.environ.get("MOCK_QMT_ENABLED")
+    if env is not None and str(env).strip() != "":
+        return _is_truthy_flag(env)
+    try:
+        from common.infra.runtime_config import get_raw as _cfg_raw
+
+        return _is_truthy_flag(_cfg_raw("MOCK_QMT_ENABLED"))
+    except Exception:
+        return False
+
+
+def _configure_mock_clock_file() -> None:
+    global _MOCK_CLOCK_FILE
+    if _MOCK_CLOCK_FILE is not None:
+        return
+    raw = ""
+    try:
+        from common.infra.runtime_config import get_raw as _cfg_raw
+
+        raw = str(_cfg_raw("OSKH_MOCK_CLOCK_FILE") or "").strip()
+    except Exception:
+        raw = ""
+    if not raw:
+        # get_raw 未注册时回退 env（OSKH_MOCK_CLOCK_FILE 由 mock 栈 launcher 注入）
+        raw = str(os.environ.get("OSKH_MOCK_CLOCK_FILE", "") or "").strip()
+    if raw and not _mock_qmt_enabled():
+        # 残留钟文件不得污染 paper/live 的 AUTO 日 / shanghai_now
+        _MOCK_CLOCK_FILE = ""
+        return
+    _MOCK_CLOCK_FILE = raw or ""
+
+
+def mock_clock_file_now() -> Optional[datetime]:
+    """读跨进程 mock 时钟文件（有变化才重读，防高频 stat）。"""
+    global _MOCK_CLOCK_CACHE
+    if not _MOCK_CLOCK_FILE:
+        return None
+    try:
+        from pathlib import Path as _P
+
+        p = _P(_MOCK_CLOCK_FILE)
+        if not p.is_file():
+            return None
+        sig = f"{p.stat().st_mtime_ns}:{p.stat().st_size}"
+        if sig == _MOCK_CLOCK_CACHE[0]:
+            return _MOCK_CLOCK_CACHE[1]
+        text = p.read_text(encoding="utf-8").strip()
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        parsed = parsed.astimezone(CN_TZ)
+        _MOCK_CLOCK_CACHE = (sig, parsed)
+        return parsed
+    except Exception:
+        return None
+
+
+def mock_trading_datetime_active() -> bool:
+    """True when mock 时钟持有非 None instant（文件或进程内）。"""
+    if _MOCK_CLOCK_FILE is not None and mock_clock_file_now() is not None:
+        return True
+    return _MOCK_SHANGHAI_NOW is not None
+
+
+def get_mock_trading_datetime() -> Optional[datetime]:
+    """Return the active mock Shanghai instant, or None."""
+    return mock_clock_file_now() or _MOCK_SHANGHAI_NOW
+
+
+def clear_mock_trading_datetime() -> None:
+    """Clear timekeeping-level mock trading datetime."""
+    global _MOCK_SHANGHAI_NOW
+    _MOCK_SHANGHAI_NOW = None
+
+
+def set_mock_trading_datetime(dt: Optional[datetime]) -> None:
+    """Set process-wide mock for :func:`shanghai_now` (None clears).
+
+    Dual-source ban vs ``MockTradingClockPort``: probe only if
+    ``live_trading.ports.trading_clock`` is **already** in ``sys.modules``.
+    Never import ``live_trading`` here — ``strategy_config.bootstrap_time`` may
+    call this while ``strategy_config`` is still initializing; importing
+    ``live_trading`` → facade assembly → ``TRADING_SESSION_SCHEDULE`` re-enters
+    partial ``strategy_config`` and leaves ``sys.modules`` without a loaded
+    ``live_trading`` package (submodules remain → later
+    ``RuntimeError: live_trading package is not loaded``).
+    """
+    global _MOCK_SHANGHAI_NOW
+    if dt is None:
+        _MOCK_SHANGHAI_NOW = None
+        return
+    aware = to_shanghai(dt)
+    import sys
+
+    tc = sys.modules.get("live_trading.ports.trading_clock")
+    if tc is not None:
+        peek = getattr(tc, "peek_process_trading_clock_port", None)
+        port = peek() if callable(peek) else None
+        if port is not None and type(port).__name__ == "MockTradingClockPort":
+            raise RuntimeError(
+                "Dual mock clock sources forbidden: MockTradingClockPort is bound "
+                "and set_mock_trading_datetime() was called (use one injection point)"
+            )
+    _MOCK_SHANGHAI_NOW = aware
+
+
+def apply_mock_trading_datetime_from_config() -> Optional[datetime]:
+    """Apply ``OSKH_MOCK_TRADING_DATETIME`` via runtime_config (lazy import).
+
+    Returns the applied instant, or None when unset. Caller must ensure
+    ``MOCK_QMT_ENABLED`` (strategy_config bootstrap enforces).
+    """
+    try:
+        from common.infra.runtime_config import get_raw as _cfg_raw
+
+        raw = _cfg_raw("OSKH_MOCK_TRADING_DATETIME")
+    except Exception:
+        return None
+    text = str(raw or "").strip()
+    if not text:
+        return None
+    # Accept ISO-8601 with offset, or naive Shanghai wall.
+    parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    set_mock_trading_datetime(parsed)
+    return _MOCK_SHANGHAI_NOW
+
+
 def shanghai_now() -> datetime:
-    """Current instant in Asia/Shanghai (aware)."""
+    """Current instant in Asia/Shanghai (aware).
+
+    When mock trading datetime is set (MOCK_QMT scenarios), returns that instant.
+    优先级：跨进程 mock 时钟文件（OSKH_MOCK_CLOCK_FILE）> 进程内静态 mock。
+    """
+    if _MOCK_CLOCK_FILE is None:
+        _configure_mock_clock_file()
+    fnow = mock_clock_file_now() if _MOCK_CLOCK_FILE is not None else None
+    if fnow is not None:
+        return fnow
+    if _MOCK_SHANGHAI_NOW is not None:
+        return _MOCK_SHANGHAI_NOW
     return datetime.now(CN_TZ)
 
 
@@ -177,7 +338,7 @@ def parse_hhmm_to_minutes(raw: str, *, default: int | None = None) -> int:
 
     Single entry point for all HH:MM → minutes parsing across:
       - ``strategy_config/_bootstrap.py``
-      - ``live_trading/live_trading_runtime.py``
+      - ``live_trading/runtime/loop.py``
       - ``common/infra/csv_production_baseline.py``
     """
     s = (raw or "").strip().replace("：", ":")
@@ -309,21 +470,18 @@ def in_trading_window(
     afternoon_end: time = time(15, 0),
     pre_open_start: time = time(9, 15),
     pre_open_end: time = time(9, 25),
-    paper_start: time = time(10, 0),
-    paper_end: time = time(17, 0),
 ) -> bool:
     """
     Trading session gate (Shanghai wall clock), v2.0 **inclusive** segment ends for live.
 
     - ``continuous``: A-share continuous auction (morning + afternoon); **not** call auction.
     - ``continuous_plus_preopen``: above plus ``pre_open`` segment (09:15–09:25).
-    - ``paper`` ``trading_type``: single inclusive segment ``[paper_start, paper_end]``.
+    - ``paper`` and ``live`` use the same inclusive morning and afternoon
+      continuous-auction segments; the lunch break is outside the session.
     """
     now_sh = _shanghai_instant(dt_utc, now_shanghai=now_shanghai)
     tt = str(trading_type or "live").strip().lower()
     tol = int(tolerance_seconds)
-    if tt == "paper":
-        return shanghai_segment_inclusive(now_sh, paper_start, paper_end, tolerance_seconds=tol)
     segs: list[Tuple[time, time]] = []
     if kind == "continuous_plus_preopen":
         segs.append((pre_open_start, pre_open_end))
@@ -514,7 +672,7 @@ def parse_qmt_timestamp(ts: int | float, unit: str = "ms") -> datetime:
     return datetime.fromtimestamp(x, tz=timezone.utc)
 
 
-# --- Process vs wall clock (see AGENTS.md Timekeeping; scripts/verify_clock_domain_policy.py) ---
+# --- Process vs wall clock (see AGENTS.md Timekeeping; scripts/gates/verify_clock_domain_policy.py) ---
 
 MonoSeconds = NewType("MonoSeconds", float)
 """Seconds in ``time.monotonic()`` domain; combine only with same-domain timestamps."""
@@ -529,7 +687,7 @@ def mono_now() -> MonoSeconds:
     When ``OSKH_DEBUG_MONOTONIC_AS_WALLCLOCK=1`` is set, returns
     ``wall_now_s()`` instead to provide a uniform baseline for diagnosing
     whether a bug is related to monotonic vs wall-clock choice.
-    See ``scripts/toggle_monotonic_debug_mode.py``.
+    See ``scripts/misc/toggle_monotonic_debug_mode.py``.
     """
     if _OSKH_DEBUG_MONOTONIC_AS_WALLCLOCK:
         return MonoSeconds(wall_now_s())
@@ -539,5 +697,4 @@ def mono_now() -> MonoSeconds:
 def wall_now_s() -> WallSeconds:
     """POSIX wall instant in seconds; prefer for persisted REAL columns and broker protocol windows."""
     return WallSeconds(_stdlib_time.time())
-
 

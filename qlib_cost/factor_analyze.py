@@ -6,10 +6,29 @@ LastEditTime: 2023-04-06 20:18:28
 Description: 
 '''
 
-from alphalens.utils import quantize_factor
-import pandas as pd
-from typing import Dict,List
+from typing import Dict, List, cast
 
+import pandas as pd
+
+
+def quantize_factor(
+    factor_data: pd.DataFrame,
+    quantiles: int,
+    no_raise: bool = False,
+) -> pd.Series:
+    """Per-date quantile buckets via pandas.qcut."""
+    pieces: List[pd.Series] = []
+    for _, values in factor_data["factor"].groupby(level=0):
+        try:
+            codes = cast(pd.Series, pd.qcut(values, quantiles, labels=False))
+            pieces.append(codes + 1)
+        except ValueError:
+            if not no_raise:
+                raise
+            pieces.append(pd.Series(float("nan"), index=values.index))
+    out = cast(pd.Series, pd.concat(pieces))
+    out.name = "factor_quantile"
+    return cast(pd.Series, out.dropna())
 
 
 def clean_factor_data(factor_data: pd.DataFrame) -> pd.DataFrame:
@@ -48,7 +67,7 @@ def get_factor_group_returns(
     returns_dict: Dict = {}
     for col in sel_cols:
         clean_factor[f"{col}_group"] = quantize_factor(
-            clean_factor.rename(columns={col: "factor"})[["factor"]],
+            cast(pd.DataFrame, clean_factor.rename(columns={col: "factor"})[["factor"]]),
             quantiles=quantile,
             no_raise=no_raise,
         )

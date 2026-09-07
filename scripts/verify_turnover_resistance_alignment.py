@@ -3,6 +3,8 @@
 """Verify canonical vs ops turnover resistance (compute_crossday_turnover_resistance)."""
 from __future__ import annotations
 
+from typing import Any, cast
+
 import argparse
 import random
 import sys
@@ -11,16 +13,18 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-REPO = Path(__file__).resolve().parent.parent
+_HERE = Path(__file__).resolve()
+REPO = _HERE.parents[2] if _HERE.parent.name in {"gates", "diagnostics", "data"} else _HERE.parents[1]
 sys.path.insert(0, str(REPO))
 
-from backtest.chip_algorithm import (
+from common.infra.data_root import resolve_source_parquet
+from oskh_factors.chip.core import (
     adapt_columns,
     compute_crossday_turnover_resistance,
-    cyq,
     daily_chip_distribution,
     derived_chip_factors,
 )
+from qlib_cost import cyq
 from oskh_data.reader import StockDataReader
 
 WINDOW = 80
@@ -34,7 +38,7 @@ def _canonical_inline(df: pd.DataFrame, stock_code: str, window: int) -> dict:
     as_of_t = pd.Timestamp(unique_dates[-1]).normalize()
     mask_t = df.index.normalize().isin(unique_dates[-window:])
     df_t = df.loc[mask_t]
-    arr_t = adapt_columns(df_t, stock_code=stock_code, as_of_date=as_of_t)
+    arr_t = adapt_columns(cast(Any, df_t), stock_code=stock_code, as_of_date=as_of_t)
     dist_t = daily_chip_distribution(arr_t, method="triang")
     cf_t = cyq.ChipFactor(float(arr_t[-1, 0]), dist_t)
 
@@ -42,7 +46,7 @@ def _canonical_inline(df: pd.DataFrame, stock_code: str, window: int) -> dict:
     as_of_y = pd.Timestamp(prev_dates[-1]).normalize()
     mask_y = df.index.normalize().isin(prev_dates)
     df_y = df.loc[mask_y]
-    arr_y = adapt_columns(df_y, stock_code=stock_code, as_of_date=as_of_y)
+    arr_y = adapt_columns(cast(Any, df_y), stock_code=stock_code, as_of_date=as_of_y)
     dist_y = daily_chip_distribution(arr_y, method="triang")
     cf_y = cyq.ChipFactor(float(arr_y[-1, 0]), dist_y)
 
@@ -67,7 +71,7 @@ def main() -> int:
     parser.add_argument("--tol-resist", type=float, default=0.05)
     args = parser.parse_args()
 
-    fs_path = REPO / "stock_data" / "float_shares.parquet"
+    fs_path = resolve_source_parquet("float_shares.parquet")
     if not fs_path.exists():
         print(f"[FATAL] missing {fs_path}")
         return 1
@@ -99,6 +103,7 @@ def main() -> int:
             period="1d",
             adjust_type="front",
         )
+        assert df is not None
         df = df.sort_index()
         try:
             a = _canonical_inline(df, code, window)

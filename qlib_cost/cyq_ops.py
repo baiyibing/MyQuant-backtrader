@@ -1,4 +1,4 @@
-from typing import Dict, List, Tuple
+from typing import Any, List, cast
 
 import numpy as np
 import pandas as pd
@@ -140,17 +140,22 @@ class CyqBasic(FiveFeatureOperator):
         """
         factor_name: str = f"get_{self.factor_name.lower()}"
 
-        def _calc_factor(arr: pd.DataFrame) -> float:
+        def _calc_factor(arr: np.ndarray) -> float:
+            if arr.ndim == 1:
+                arr = arr.reshape(1, -1)
 
-            cumpdf: pd.Series = calc_dist_chips(arr, method=self.method)
+            frame = pd.DataFrame(
+                arr, columns=cast(Any, ["close", "high", "low", "vol", "turnover_rate"])
+            )
+            cumpdf: pd.Series = calc_dist_chips(frame, method=self.method)
 
-            doc_factor: ChipFactor = ChipFactor(arr[-1, 0], cumpdf)
+            doc_factor: ChipFactor = ChipFactor(float(arr[-1, 0]), cumpdf)
 
             return getattr(doc_factor, factor_name)()
 
-        data: pd.DataFrame = pd.concat(
+        data = pd.concat(
             (
-                feature.load(instrument, start_index, end_index, *args)
+                cast(Expression, feature).load(instrument, start_index, end_index, *args)
                 for feature in (
                     self.feature_a,
                     self.feature_b,
@@ -162,24 +167,24 @@ class CyqBasic(FiveFeatureOperator):
             axis=1,
         )
         # 必须保证位置顺序
-        data: pd.DataFrame = data[["$close", "$high", "$low", "$vol", "$turnover_rate"]]
+        data = data[["$close", "$high", "$low", "$vol", "$turnover_rate"]]
 
         # TODO:  More precision types should be configurable
-        data:pd.DataFrame = data.astype(np.float32)
-        idx:pd.DatetimeIndex = data.index # 获取时间索引
-        data:pd.DataFrame = data.dropna()
+        data = data.astype(np.float32)
+        full_idx = data.index
+        data = data.dropna()
 
         if data.empty:
-            return pd.Series([np.nan] * len(idx), index=idx)
-        
-        idx:pd.DatetimeIndex = data.index # 重新获取时间索引
-        
+            return pd.Series([np.nan] * len(full_idx), index=full_idx)
+
+        trim_idx = data.index
+
         if len(data) < self.N:
-            return pd.Series(_calc_factor(data.values), index=[idx[-1]])
+            return pd.Series([_calc_factor(np.asarray(data.values))], index=[trim_idx[-1]])
 
         dfs: np.ndarray = rolling_frame(data, self.N)
-        idx: pd.Index = idx[self.N - 1 :]
-        return pd.Series([_calc_factor(df) for df in dfs], index=idx).sort_index()
+        out_idx = full_idx[self.N - 1 :]
+        return pd.Series([_calc_factor(np.asarray(df)) for df in dfs], index=out_idx).sort_index()
 
 
 #################### CYQK_C ####################

@@ -6,7 +6,7 @@
 
 ## 1. 背景与动机
 
-`scripts/full_market_canonical_resist.py` 是全市场 canonical（换手率衰减）筹码换手阻力计算脚本。Python 实现在全市场 ~5500 只股票、window=1000 日的情况下耗时 10-30 分钟，主要原因：
+`scripts/data/full_market_canonical_resist.py` 是全市场 canonical（换手率衰减）筹码换手阻力计算脚本。Python 实现在全市场 ~5500 只股票、window=1000 日的情况下耗时 10-30 分钟，主要原因：
 
 1. Python 解释器开销 + 单线程逐只处理
 2. `numba.jit` 虽已加速 `calc_cumpdf` 和 `triang_pdf`，但 `np.apply_along_axis` 逐行构造 curpdf 矩阵仍是 Python 循环
@@ -470,7 +470,7 @@ Rust debug 构建：全市场 window=100 约 90 秒。
    Rust 现已加载 `free_float_shares.parquet`，merge_asof 查 `circulating_capital` + `freeFloatCapital`，输出双口径换手阻力（`turnover_resistance` / `turnover_resistance_free`）。
 
 2. **结果一致性验证脚本** ✅ 已完成  
-   `scripts/verify_rust_python_alignment.py` 支持一键运行 Rust/Python 并输出差异报告（含阈值判定）。
+   `scripts/gates/verify_rust_python_alignment.py` 支持一键运行 Rust/Python 并输出差异报告（含阈值判定）。
 
 ### 7.2 可选（改善体验/性能）
 
@@ -513,7 +513,7 @@ Rust debug 构建：全市场 window=100 约 90 秒。
 
 ## 9. 参考
 
-- `scripts/full_market_canonical_resist.py` — Python 端到端参考实现
+- `scripts/data/full_market_canonical_resist.py` — Python 端到端参考实现
 - `qlib_cost/cyq.py` — `calc_cumpdf` 衰减累积 + `ChipFactor.get_cyqk_c` 获利占比
 - `qlib_cost/distribution_of_chips.py` — `triang_pdf`、`calc_triang_pdf` 三角分布
 - `backtest/chip_algorithm.py` — `adapt_columns`（换手率公式）、`bb_position`（布林带）

@@ -19,9 +19,7 @@ use crate::data::{
     load_all_stocks_parquet, load_float_shares, load_free_float_shares, stock_code_to_dir,
     ParquetLoadStats,
 };
-use crate::types::{
-    BarRow, ComputeContext, FloatSharesInfo, FreeFloatSharesInfo, OutputRow,
-};
+use crate::types::{BarRow, ComputeContext, FloatSharesInfo, FreeFloatSharesInfo, OutputRow};
 
 /// YYYYMMDD 日期 → UTC 午夜的 epoch 毫秒。
 pub fn date_to_ms(date: NaiveDate) -> i64 {

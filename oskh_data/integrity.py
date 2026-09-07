@@ -2,36 +2,44 @@
 # -*- coding: utf-8 -*-
 """
 股票数据完整性检查脚本（从股票池文件加载股票列表）
-检查指定日期的分钟线数据是否完整（包含15:00，且全天分钟数据无明显缺失），以及日线数据是否存在。
+检查指定日期的分钟线数据是否完整（包含15:00，且全天分钟数据无明显缺失），
+以及日线是否存在且 OHLC 内容合法。
 """
 
+import math
 import os
 import sys
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 from pathlib import Path
-from typing import List
+from typing import List, Optional, Tuple
 
 import pandas as pd
 
 from common.infra.quant_logger import get_logger
+from oskh_data.pandas_typing import (
+    as_series,
+    index_normalize_series,
+    normalize_timestamp,
+    timestamp_strftime,
+)
 
 # 项目根目录
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-# 过渡期导入（工具函数保留在 backtest，后续迁入 common/infra）。
-# Phase 2 P1 TODO: get_stock_data_from_cache() uses the OLD DataDownloader path
-# which bypasses StockDataReader validation (normalize_schema, NaN/Inf detection,
-# timezone normalization, dtype validation).  Corrupted minute/ETF parquet files
-# may pass integrity checks undetected.  Migrate to StockDataReader.read_stock()
-# when the backtest→oskh_data migration is complete.
-from backtest.qmt_utils_adv import (  # type: ignore[reportUnusedImport]
-    SSE_CALENDAR,
+# Tool functions migrated to common.infra (M-003a · RFC-003).
+from common.infra.qmt_utils_adv import (
     batch_format_stock_codes,
     get_stock_data_from_cache,
     read_stock_codes,
 )
 
 logger = get_logger(__name__)
+
+# Absolute close-to-prev-close move that fails the daily content gate.
+# 10%/20% limit-up/down is legal; do not use 11%.
+_DAILY_CLOSE_JUMP_LIMIT = 0.30
+_OHLC_COLS: Tuple[str, str, str, str] = ("open", "high", "low", "close")
+_PREV_TRADING_DAY_LOOKBACK_CALENDAR_DAYS = 20
 
 
 def collect_stock_codes(pool_dir: str, start_date: str, end_date: str) -> set:
@@ -60,11 +68,15 @@ def collect_stock_codes(pool_dir: str, start_date: str, end_date: str) -> set:
 
 
 def is_trading_day(date_obj):
-    """判断给定日期是否为交易日（复用 qmt_utils_adv 中的函数）"""
+    """判断给定日期是否为交易日（common SSE cache）。"""
+    from common.infra.trading_calendar_pmc import get_trade_days_sse
+
     if isinstance(date_obj, str):
-        date_obj = datetime.strptime(date_obj, '%Y%m%d').date()
-    trading_days = SSE_CALENDAR.valid_days(start_date=date_obj, end_date=date_obj)
-    return len(trading_days) > 0
+        ymd = date_obj if len(date_obj) == 8 else datetime.strptime(date_obj, "%Y-%m-%d").strftime("%Y%m%d")
+    else:
+        ymd = date_obj.strftime("%Y%m%d")
+    df = get_trade_days_sse(since=ymd, until=ymd)
+    return df is not None and not df.empty
 
 
 def check_minute_data_integrity(stock_code, target_date):
@@ -93,16 +105,17 @@ def check_minute_data_integrity(stock_code, target_date):
         df.index = pd.to_datetime(df.index)
 
     target_date_dt = datetime.strptime(target_date, '%Y%m%d').date()
-    day_data = df[df.index.date == target_date_dt]
+    target_ts = normalize_timestamp(pd.Timestamp(target_date_dt))
+    day_data = df[index_normalize_series(df.index) == target_ts]
 
     if day_data.empty:
         return 'ERROR', f"当天无数据"
 
     # 1. 检查是否有15:00之后的数据（收盘）
     target_time = time(15, 0, 0)
-    has_15 = (day_data.index.time >= target_time).any()
+    has_15 = (pd.Series(day_data.index).dt.time >= target_time).any()
     if not has_15:
-        return 'ERROR', f"缺少15:00之后的数据，最后一条时间为 {day_data.index.max().strftime('%H:%M:%S')}"
+        return 'ERROR', f"缺少15:00之后的数据，最后一条时间为 {timestamp_strftime(day_data.index.max(), '%H:%M:%S')}"
 
     # 2. 计算预期分钟数（交易日且非节假日）
     if not is_trading_day(target_date_dt):
@@ -147,7 +160,7 @@ def check_minute_data_integrity(stock_code, target_date):
         integrity = "严重缺失"
 
     details = (f"共{actual_count}/{expected_count}分钟，缺失{missing_count}条({missing_ratio:.1f}%)，"
-               f"最后时间{actual_times.max().strftime('%H:%M:%S')}，完整性评级：{integrity}")
+               f"最后时间{timestamp_strftime(actual_times.max(), '%H:%M:%S')}，完整性评级：{integrity}")
 
     # 3. Phase 2 P2: price/volume sanity checks
     sanity_warnings: List[str] = []
@@ -167,7 +180,7 @@ def check_minute_data_integrity(stock_code, target_date):
         # Phase 2 P2: sort index before pct_change (ensures consecutive diffs
         # are between chronologically adjacent bars, not arbitrary index order)
         sorted_data = day_data.sort_index()
-        pct_chg = sorted_data["close"].pct_change().abs()
+        pct_chg = as_series(sorted_data["close"]).pct_change().abs()
         spikes = int((pct_chg > 0.2).sum())
         if spikes > 0:
             sanity_warnings.append(f"minute_spike_gt20pct={spikes}")
@@ -186,10 +199,79 @@ def check_minute_data_integrity(stock_code, target_date):
         return 'OK', details
 
 
+def _finite_positive(value) -> Optional[float]:
+    try:
+        x = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(x) or x <= 0.0:
+        return None
+    return x
+
+
+def _row_for_ymd(df: pd.DataFrame, ymd: str) -> Optional[pd.Series]:
+    """Positional date hit (same timestamp-normalize as the old any() check)."""
+    target_date_dt = datetime.strptime(ymd, "%Y%m%d").date()
+    target_ts = normalize_timestamp(pd.Timestamp(target_date_dt))
+    hit = (index_normalize_series(df.index) == target_ts).tolist()
+    for i, matched in enumerate(hit):
+        if matched:
+            return as_series(df.iloc[i])
+    return None
+
+
+def _parse_daily_ohlc(row: pd.Series) -> Optional[Tuple[float, float, float, float]]:
+    parsed: List[float] = []
+    for col in _OHLC_COLS:
+        if col not in row.index:
+            return None
+        val = _finite_positive(row[col])
+        if val is None:
+            return None
+        parsed.append(val)
+    open_, high, low, close = parsed
+    if high < max(open_, close, low):
+        return None
+    if low > min(open_, close, high):
+        return None
+    return open_, high, low, close
+
+
+def _previous_trading_day_ymd(target_date: str) -> Optional[str]:
+    target_dt = datetime.strptime(target_date, "%Y%m%d")
+    for offset in range(1, _PREV_TRADING_DAY_LOOKBACK_CALENDAR_DAYS + 1):
+        cand = (target_dt - timedelta(days=offset)).date()
+        if is_trading_day(cand):
+            return cand.strftime("%Y%m%d")
+    return None
+
+
+def _prev_trading_day_close_from_cache(stock_code, target_date: str) -> Optional[float]:
+    """Previous SSE session close from cache, or None to skip the jump gate."""
+    prev_ymd = _previous_trading_day_ymd(target_date)
+    if prev_ymd is None:
+        return None
+    df = get_stock_data_from_cache(
+        stock_code=stock_code,
+        start_time=f"{prev_ymd}000000",
+        end_time=f"{prev_ymd}235959",
+        period="1d",
+        adjust_type="none",
+    )
+    if df is None or df.empty:
+        return None
+    if not isinstance(df.index, pd.DatetimeIndex):
+        df.index = pd.to_datetime(df.index)
+    row = _row_for_ymd(df, prev_ymd)
+    if row is None or "close" not in row.index:
+        return None
+    return _finite_positive(row["close"])
+
+
 def check_daily_data(stock_code, target_date):
     """
-    检查日线数据是否包含目标日期。
-    返回 bool
+    检查日线是否包含目标日期，且当日 OHLC 内容合法。
+    返回 bool：缺行或内容不合法为 False。
     """
     start_dt = f"{target_date}000000"
     end_dt   = f"{target_date}235959"
@@ -208,8 +290,21 @@ def check_daily_data(stock_code, target_date):
     if not isinstance(df.index, pd.DatetimeIndex):
         df.index = pd.to_datetime(df.index)
 
-    target_date_dt = datetime.strptime(target_date, '%Y%m%d').date()
-    return any(df.index.date == target_date_dt)
+    row = _row_for_ymd(df, target_date)
+    if row is None:
+        return False
+
+    ohlc = _parse_daily_ohlc(row)
+    if ohlc is None:
+        return False
+    close = ohlc[3]
+
+    prev_close = _prev_trading_day_close_from_cache(stock_code, target_date)
+    if prev_close is None:
+        return True
+    if abs(close / prev_close - 1.0) >= _DAILY_CLOSE_JUMP_LIMIT:
+        return False
+    return True
 
 
 def main():

@@ -19,11 +19,11 @@ from __future__ import annotations
 import argparse
 import re
 import subprocess
-import sys
 import time
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parent.parent
+_HERE = Path(__file__).resolve()
+REPO = _HERE.parents[2] if _HERE.parent.name in {"gates", "diagnostics", "data"} else _HERE.parents[1]
 RUST_EXE = Path("E:/rust-targets/release/turnover-resist.exe")
 RE_TIMING = re.compile(
     r"\[Timing\]\s+setup=([0-9.]+)s\s+capital=([0-9.]+)s\s+compute=([0-9.]+)s\s+sort\+csv=([0-9.]+)s\s+total=([0-9.]+)s"

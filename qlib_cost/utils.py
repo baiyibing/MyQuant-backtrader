@@ -41,13 +41,13 @@ def rolling_windows(arr: np.ndarray, window: int) -> np.ndarray:
 
 
 def rolling_frame(
-    df: Union[pd.DataFrame, pd.Series, np.array], window: int
+    df: Union[pd.DataFrame, pd.Series, np.ndarray], window: int
 ) -> np.ndarray:
     """滚动df
 
     Parameters
     ----------
-    df : Union[pd.DataFrame,pd.Series,np.array]
+    df : Union[pd.DataFrame,pd.Series,np.ndarray]
         数据
     wondows : int
         滚动窗口
@@ -64,7 +64,9 @@ def rolling_frame(
         )
 
     if isinstance(df, (pd.DataFrame, pd.Series)):
-        arr: np.array = df.values
+        arr = np.asarray(df.values)
+    else:
+        arr = np.asarray(df)
 
     if arr.ndim == 1:
         arr = arr.copy().reshape(-1, 1)

@@ -1,3 +1,5 @@
+from typing import Any, cast
+
 # -*- coding: utf-8 -*-
 """
 单只股票换手阻力分步验算脚本。
@@ -6,14 +8,15 @@
 中间量与最终结果，并与全市场 CSV 输出交叉验证。
 
 用法：
-    python scripts/verify_single_stock_turnover_resist.py --code 003816.SZ --date 20260604
+    python scripts/gates/verify_single_stock_turnover_resist.py --code 003816.SZ --date 20260604
 """
 
 import argparse
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+REPO = str(next(p for p in Path(__file__).resolve().parents if p.name == "scripts").parent)
+sys.path.append(REPO)  # append (not insert(0)) keeps stdlib precedence; gate-clean
 
 import duckdb
 import numpy as np
@@ -197,7 +200,7 @@ def verify(code: str, date_str: str, window: int = 1000, step: float = 0.01) -> 
     print("=" * 50)
     print("Step 0: 获取股本数据")
     print("=" * 50)
-    caps = load_capital_maps(code, target)
+    caps = load_capital_maps(code, cast(Any, target))
     print(f"circulating_capital T    = {caps['circ_t']:,.0f}")
     print(f"circulating_capital T-1  = {caps['circ_prev']:,.0f}")
     print(f"freeFloatCapital T       = {caps['free_t']:,.0f}")
@@ -209,6 +212,7 @@ def verify(code: str, date_str: str, window: int = 1000, step: float = 0.01) -> 
     print("=" * 50)
     reader = StockDataReader()
     df = reader.read_stock(code, period="1d", adjust_type="front")
+    assert df is not None
     df = df.sort_index()
     print(f"原始数据条数: {len(df)}")
     print(f"数据起止: {df.index.min().date()} ~ {df.index.max().date()}")

@@ -37,13 +37,13 @@
 
 ```bash
 # 单日增量（TR 截面 + TR BB）
-D:/anaconda3/envs/vanna311/python.exe scripts/compute_turnover_resistance_bands.py --date YYYYMMDD
+D:/anaconda3/envs/vanna311/python.exe scripts/data/compute_turnover_resistance_bands.py --date YYYYMMDD
 
 # 仅补算 TR BB（Step 1-2 已完成）
-D:/anaconda3/envs/vanna311/python.exe scripts/compute_turnover_resistance_bands.py --date YYYYMMDD --backfill-bands-only
+D:/anaconda3/envs/vanna311/python.exe scripts/data/compute_turnover_resistance_bands.py --date YYYYMMDD --backfill-bands-only
 
 # 历史回填（默认 60 日历日 walk-back，再批量 TR BB）
-D:/anaconda3/envs/vanna311/python.exe scripts/backfill_turnover_resistance_bands.py --end-date YYYYMMDD --days 60 --skip-existing
+D:/anaconda3/envs/vanna311/python.exe scripts/data/backfill_turnover_resistance_bands.py --end-date YYYYMMDD --days 60 --skip-existing
 ```
 
 ## 源码
@@ -52,5 +52,5 @@ D:/anaconda3/envs/vanna311/python.exe scripts/backfill_turnover_resistance_bands
 |------|------|
 | `oskh_data/turnover_resistance_store.py` | Parquet UPSERT + 查询 + 批量 TR BB 写回 |
 | `backtest/chip_turnover_resistance_bands.py` | `tr_bollinger_bands()` / `compute_tr_bb_columns()` |
-| `scripts/compute_turnover_resistance_bands.py` | 盘后单日流水线 |
-| `scripts/backfill_turnover_resistance_bands.py` | 历史回填 |
+| `scripts/data/compute_turnover_resistance_bands.py` | 盘后单日流水线 |
+| `scripts/data/backfill_turnover_resistance_bands.py` | 历史回填 |

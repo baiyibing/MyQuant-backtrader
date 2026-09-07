@@ -31,40 +31,30 @@ fetch_free_float_shares.py — 从 QMT 财务数据 Capital 表获取自由流�
 
 import argparse
 import os
+
+from common.infra.data_root import resolve_source_parquet
 import sys
 import time
-from datetime import datetime, timezone
 
 from common.infra.timekeeping import shanghai_date_yyyymmdd
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, cast
 
 import pandas as pd
+
+from oskh_data.pandas_typing import normalize_timestamp
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, REPO)
 
-DEFAULT_OUTPUT = os.path.join(REPO, "stock_data", "free_float_shares.parquet")
+DEFAULT_OUTPUT = str(resolve_source_parquet("free_float_shares.parquet"))
 
 
 def _ensure_xtdata():
     """确保 xtdata 可用并已连接（兼容国金 miniQMT 无 init/connect，使用 reconnect）。"""
-    from xtquant import xtdata
+    from oskh_data.qmt_xtdata import ensure_xtdata_session
 
-    init_fn = getattr(xtdata, "init", None)
-    if callable(init_fn):
-        init_fn()
-        return xtdata
-    connect_fn = getattr(xtdata, "connect", None)
-    if callable(connect_fn):
-        connect_fn()
-        return xtdata
-    reconnect_fn = getattr(xtdata, "reconnect", None)
-    if callable(reconnect_fn):
-        reconnect_fn()
-        return xtdata
-    raise RuntimeError("xtdata 无 init/connect/reconnect 方法，请确认 xtquant 已安装")
-    return xtdata
+    return ensure_xtdata_session()
 
 
 def download_capital_structure(
@@ -155,7 +145,7 @@ def fetch_capital_structure(
             timetag = row.get("m_timetag")
             if timetag is None:
                 continue
-            date_val = pd.Timestamp(timetag).normalize()
+            date_val = normalize_timestamp(pd.Timestamp(timetag))
             rows.append({
                 "stock_code": code,
                 "m_timetag": date_val,
@@ -169,10 +159,10 @@ def fetch_capital_structure(
             print(f"  ... {i + 1}/{len(stock_codes)} (rows={len(rows)})")
 
     if not rows:
-        return pd.DataFrame(columns=[
+        return pd.DataFrame(columns=cast(Any, [
             "stock_code", "m_timetag", "freeFloatCapital",
             "circulating_capital", "restrict_circulating_capital", "total_capital",
-        ])
+        ]))
     df = pd.DataFrame(rows)
     df["m_timetag"] = pd.to_datetime(df["m_timetag"]).dt.normalize()
     df = df.sort_values(["stock_code", "m_timetag"]).reset_index(drop=True)
@@ -194,7 +184,7 @@ def merge_existing(existing_path: str, incoming: pd.DataFrame) -> pd.DataFrame:
 
 def get_stock_list() -> List[str]:
     """获取全市场 A 股代码列表（从现有 float_shares 或 xtdata）。"""
-    float_path = os.path.join(REPO, "stock_data", "float_shares.parquet")
+    float_path = str(resolve_source_parquet("float_shares.parquet"))
     if os.path.exists(float_path):
         df = pd.read_parquet(float_path)
         return sorted(df["stock_code"].astype(str).tolist())
@@ -210,6 +200,9 @@ def get_stock_list() -> List[str]:
 
 
 def main() -> None:
+    from oskh_data.qmt_xtdata import skip_if_forbids_xtdata_init
+    if skip_if_forbids_xtdata_init():
+        return
     parser = argparse.ArgumentParser(description="Fetch free-float shares from QMT Capital")
     parser.add_argument("--download", action="store_true", help="download Capital data to QMT cache")
     parser.add_argument("--export", action="store_true", help="read from cache and export parquet")

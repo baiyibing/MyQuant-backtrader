@@ -742,14 +742,14 @@ def _write_monthly_partitioned(
 
 #### 4.13.1 消费者盘点（P1 上线前必填）
 
-方案 B 改动了 parquet 目录结构（`symbol=XXX/data.parquet` → `symbol=XXX/month=YYYY-MM/data.parquet`），所有**直接打开 parquet 文件**的代码都需要迁移。落地前需运行盘点脚本（建议新建 `scripts/audit_minute_parquet_consumers.py`），输出至少包含：
+方案 B 改动了 parquet 目录结构（`symbol=XXX/data.parquet` → `symbol=XXX/month=YYYY-MM/data.parquet`），所有**直接打开 parquet 文件**的代码都需要迁移。落地前需运行盘点脚本（建议新建 `~~scripts/audit_minute_parquet_consumers.py~~（已删除）`），输出至少包含：
 
 | 类别 | 已知入口（需核实，不可视为完整） | 迁移策略 |
 |------|-------------------------------|----------|
 | 域层权威读取 | `oskh_data/reader.py`（`StockDataReader`） | 修改为 DuckDB 优先；parquet 模式自动 `read_parquet('symbol=*/month=*/data.parquet', hive_partitioning=1)` |
 | 回测入口 | `backtest/**/*.py`、`verify_chip_factor_consistency.py`、`preflight_chip_diagnosis.py` | 统一收敛到 `StockDataReader`；禁止直接 `pd.read_parquet(symbol_path)` |
 | 特征工程 | `features/` 下分钟线因子脚本（若有） | 同上 |
-| 运维脚本 | `scripts/rebuild_minute_duckdb_standalone.py`、`backfill.py` | 按新路径重写 |
+| 运维脚本 | `scripts/data/rebuild_minute_duckdb_standalone.py`、`backfill.py` | 按新路径重写 |
 | 测试 fixture | `tests/` 下依赖固定 parquet 的用例 | fixture 改为月分区目录结构 |
 
 **盘点方法**：在仓库根跑 `rg -n "read_parquet|period=1m|dividend_type=none"` + `rg -n "symbol=.*\.parquet"`，人工分类到上表；结果纳入 PR 描述，作为方案 B 合入的硬性前置。
@@ -1058,10 +1058,10 @@ Gate 0（实施前，半天）：架构决策——必须先通过
 | `oskh_data/backfill.py:251-362` | `_download_impl` 批次循环 |
 | `oskh_data/reader.py:411-489` | `build_persistent_db` DuckDB 建库实现（staging → switch） |
 | `oskh_data/reader.py:440-442` | `_validate_parquet_schema_consistency` |
-| `scripts/rebuild_minute_duckdb_standalone.py` | 独立 rebuild 脚本 |
-| `scripts/audit_minute_parquet_consumers.py`（待新建） | §4.13.1 消费者盘点 |
-| `scripts/verify_minute_parquet_duckdb_parity.py`（待新建） | §4.13.2 / §5.4 差异审计 |
-| `scripts/compact_minute_yearly.py`（待新建） | §4.12 年合并 |
+| `scripts/data/rebuild_minute_duckdb_standalone.py` | 独立 rebuild 脚本 |
+| `~~scripts/audit_minute_parquet_consumers.py~~（已删除）`（待新建） | §4.13.1 消费者盘点 |
+| `~~scripts/gates/verify_minute_parquet_duckdb_parity.py~~（已删除）`（待新建） | §4.13.2 / §5.4 差异审计 |
+| `~~scripts/compact_minute_yearly.py~~（已删除）`（待新建） | §4.12 年合并 |
 | （方案 A 回滚无需独立脚本：`rm staging + rebuild --period 1m` 一行命令，见 §5.3） |
 | `docs/backtest/data/parquet_duckdb_dual_mode_reader_plan.md` | 双模式读取方案（背景与 benchmark） |
 | `docs/prompts/prompt-stock-data-minute-backfill-sync-workflow.md` | 分钟线补录工作流 |

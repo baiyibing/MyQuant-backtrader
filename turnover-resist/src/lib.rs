@@ -13,6 +13,7 @@ use pyo3::prelude::*;
 ///
 /// 返回 JSON 数组，每个元素是一个 OutputRow 的对象表示。
 /// 字段名与 CSV 输出一致（含 serde(rename) 映射）。
+#[allow(clippy::too_many_arguments)] // 9 个 Python 入参，pyo3 绑定天然多参；重构 struct 会动 Python 侧签名
 #[pyfunction]
 fn compute_turnover_resist(
     date: &str,
@@ -25,32 +26,42 @@ fn compute_turnover_resist(
     bb_ddof: usize,
     max_grid_points: usize,
 ) -> PyResult<String> {
-    let date = chrono::NaiveDate::parse_from_str(date, "%Y%m%d")
-        .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("invalid date '{}': {}", date, e)))?;
+    let date = chrono::NaiveDate::parse_from_str(date, "%Y%m%d").map_err(|e| {
+        pyo3::exceptions::PyValueError::new_err(format!("invalid date '{}': {}", date, e))
+    })?;
 
     let sort_by = match sort_by {
         "circulating" => cli::SortBy::Circulating,
         "free" => cli::SortBy::Free,
-        _ => return Err(pyo3::exceptions::PyValueError::new_err(
-            format!("sort_by must be 'circulating' or 'free', got '{}'", sort_by)
-        )),
+        _ => {
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "sort_by must be 'circulating' or 'free', got '{}'",
+                sort_by
+            )))
+        }
     };
 
     let free_float_policy = match free_float_policy {
         "warn-zero" => cli::FreeFloatPolicy::WarnZero,
         "skip" => cli::FreeFloatPolicy::Skip,
         "fail" => cli::FreeFloatPolicy::Fail,
-        _ => return Err(pyo3::exceptions::PyValueError::new_err(
-            format!("free_float_policy must be 'warn-zero', 'skip' or 'fail', got '{}'", free_float_policy)
-        )),
+        _ => {
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "free_float_policy must be 'warn-zero', 'skip' or 'fail', got '{}'",
+                free_float_policy
+            )))
+        }
     };
 
     let target_date_policy = match target_date_policy {
         "strict" => cli::TargetDatePolicy::Strict,
         "allow-previous" => cli::TargetDatePolicy::AllowPrevious,
-        _ => return Err(pyo3::exceptions::PyValueError::new_err(
-            format!("target_date_policy must be 'strict' or 'allow-previous', got '{}'", target_date_policy)
-        )),
+        _ => {
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "target_date_policy must be 'strict' or 'allow-previous', got '{}'",
+                target_date_policy
+            )))
+        }
     };
 
     let cli = cli::Cli {
@@ -66,9 +77,8 @@ fn compute_turnover_resist(
         data_dir: std::path::PathBuf::from(data_dir),
     };
 
-    let results = engine::run(&cli).map_err(|e| {
-        pyo3::exceptions::PyRuntimeError::new_err(format!("compute failed: {}", e))
-    })?;
+    let results = engine::run(&cli)
+        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(format!("compute failed: {}", e)))?;
 
     let json = serde_json::to_string(&results).map_err(|e| {
         pyo3::exceptions::PyRuntimeError::new_err(format!("serialize failed: {}", e))

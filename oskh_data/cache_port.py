@@ -88,7 +88,11 @@ def get_current_run_id(period: str) -> Optional[str]:
     try:
         key = _POINTER_KEY_FMT.format(period=period)
         val = r.get(key)
-        return val.decode("utf-8") if val else None  # type: ignore[reportAttributeAccessIssue]
+        if val is None:
+            return None
+        if isinstance(val, (bytes, bytearray)):
+            return val.decode("utf-8")
+        return str(val)
     except Exception:
         logger.exception("Failed to get current_run_id for %s", period)
         return None

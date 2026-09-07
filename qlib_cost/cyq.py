@@ -5,7 +5,7 @@ LastEditors: hugo2046 shen.lan123@gmail.com
 LastEditTime: 2023-03-29 10:50:17
 Description: 计算筹码分布
 """
-from typing import Union
+from typing import Any, Optional, Union, cast
 
 import numpy as np
 import pandas as pd
@@ -22,8 +22,8 @@ def calc_curpdf(
     high: float,
     low: float,
     vol: float,
-    min_p: float = None,
-    max_p: float = None,
+    min_p: Optional[float] = None,
+    max_p: Optional[float] = None,
     step: float = 0.01,
     method: str = "triang",
 ) -> np.ndarray:
@@ -44,13 +44,13 @@ def calc_curpdf(
     Returns:
         np.ndarray: 成交量分布
     """
-    method: str = method.lower()
+    method_norm = method.lower()
 
-    if method == "triang":
+    if method_norm == "triang":
 
         return calc_triang_pdf(close, high, low, vol, min_p, max_p, step)
 
-    elif method == "uniform":
+    elif method_norm == "uniform":
 
         return calc_uniform_pdf(close, high, low, vol, min_p, max_p, step)
 
@@ -97,15 +97,19 @@ def calc_dist_chips(
         pd.Series: index-price, value-vol
     """
     if isinstance(arr, pd.DataFrame):
-        arr: pd.DataFrame = arr[["close", "high", "low", "vol", "turnover_rate"]]
-        arr: np.ndarray = arr.values
+        frame = arr[["close", "high", "low", "vol", "turnover_rate"]]
+        values = frame.to_numpy()
+    else:
+        values = np.asarray(arr)
 
-    method: str = method.lower()
-    if method in {"triang", "uniform"}:
+    method_norm = method.lower()
+    cum_vol: pd.Series
+
+    if method_norm in {"triang", "uniform"}:
 
         # max_p,min_p可能区间为nan
-        max_p: float = np.nanmax(arr[:, 1])
-        min_p: float = np.nanmin(arr[:, 2])
+        max_p: float = float(np.nanmax(values[:, 1]))
+        min_p: float = float(np.nanmin(values[:, 2]))
         try:
             xs: np.ndarray = make_price_grid(min_p, max_p, step)
         except ValueError as e:
@@ -115,26 +119,30 @@ def calc_dist_chips(
         try:
             curpdf: np.ndarray = np.apply_along_axis(
                 lambda x: calc_curpdf(
-                    x[0], x[1], x[2], x[3], min_p, max_p, step, method
+                    x[0], x[1], x[2], x[3], min_p, max_p, step, method_norm
                 ),
                 1,
-                arr,
+                values,
             )
         except Exception as e:
             print(min_p, max_p)
             raise e
-        cum_vol: np.ndarray = calc_cumpdf(curpdf, arr[:, 4])
-        cum_vol: pd.Series = pd.Series(cum_vol, index=xs)
+        cum_vol_arr = calc_cumpdf(curpdf, values[:, 4])
+        cum_vol = pd.Series(cum_vol_arr, index=xs)
 
-    elif method == "turn_coeff":
+    elif method_norm == "turn_coeff":
 
-        turn_coeff: np.ndarray = calc_adj_turnover(arr[:, 4])
-        total_vol: float = arr[:, 3].sum()
-        data: pd.DataFrame = pd.Series(
+        turn_coeff: np.ndarray = calc_adj_turnover(values[:, 4])
+        total_vol: float = float(values[:, 3].sum())
+        coeff_series = pd.Series(
             data=turn_coeff,
-            index=arr[:, 1],
+            index=values[:, 1],
         )
-        cum_vol: pd.Series = data.groupby(level=0).sum() * total_vol
+        grouped = coeff_series.groupby(level=0).sum()
+        cum_vol = pd.Series(grouped.to_numpy() * total_vol, index=grouped.index)
+
+    else:
+        raise ValueError(f"unknown method: {method}")
 
     return cum_vol
 
@@ -158,10 +166,10 @@ class ChipFactor:
     @staticmethod
     def winsorize(cumpdf: pd.Series, scale: int = 3) -> pd.Series:
 
-        std: float = cumpdf.std()
-        mean: float = cumpdf.mean()
+        std_val = float(cumpdf.std())
+        mean_val = float(cumpdf.mean())
 
-        return cumpdf.clip(mean - scale * std, mean + scale * std)
+        return cumpdf.clip(mean_val - scale * std_val, mean_val + scale * std_val)
 
     def get_asr(self, lower: float = 0.9, upper: float = 1.1) -> float:
         """活动筹码
@@ -200,8 +208,8 @@ class ChipFactor:
             winsorize: pd.Series = self.winsorize(winsorize, scale)
         # 平均成本
         mean: float = self.get_cost(0.5)
-        min_p: float = winsorize.idxmin()
-        max_p: float = winsorize.idxmax()
+        min_p = float(cast(Any, winsorize.idxmin()))
+        max_p = float(cast(Any, winsorize.idxmax()))
 
         return (mean - min_p) / (max_p - min_p)
 
@@ -255,5 +263,7 @@ class ChipFactor:
         # 累计筹码比例
         acc_cum: pd.Series = (self.cumpdf / tot_cnt).cumsum()
 
-        threshold_ser: pd.Series = acc_cum[acc_cum < winner_ratio]
-        return np.nan if threshold_ser.empty else threshold_ser.index[-1]
+        threshold_ser = cast(pd.Series, acc_cum[acc_cum < winner_ratio])
+        if threshold_ser.empty:
+            return float("nan")
+        return float(cast(Any, threshold_ser.index[-1]))

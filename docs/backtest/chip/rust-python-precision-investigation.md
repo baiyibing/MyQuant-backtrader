@@ -24,7 +24,7 @@ Rust 版和 Python 版全市场换手阻力计算结果存在差异：4594 只�
 
 逐环节对比以下文件：
 - Rust：`turnover-resist/src/algorithm.rs` + `main.rs` + `data.rs`
-- Python：`scripts/full_market_canonical_resist.py` + `qlib_cost/cyq.py` + `qlib_cost/distribution_of_chips.py`
+- Python：`scripts/data/full_market_canonical_resist.py` + `qlib_cost/cyq.py` + `qlib_cost/distribution_of_chips.py`
 
 ---
 

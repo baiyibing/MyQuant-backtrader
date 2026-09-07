@@ -67,7 +67,7 @@
 - `turnover-resist/src/main.rs`
 - `turnover-resist/src/algorithm.rs`
 - `turnover-resist/tests/algorithm_and_bollinger_tests.rs`
-- `scripts/verify_rust_python_alignment.py`
+- `scripts/gates/verify_rust_python_alignment.py`
 
 ## 3. 当前完成情况评估
 
@@ -115,7 +115,7 @@
    - `cargo clippy --all-targets --all-features -- -D warnings`
 
 2. 跨语言对齐 + 运行性能（真实数据）
-   - 在仓库根目录运行 `scripts/verify_rust_python_alignment.py`
+   - 在仓库根目录运行 `scripts/gates/verify_rust_python_alignment.py`
    - 使用参数：
      - `--date <交易日>`
      - `--window 1000 --step 0.01`

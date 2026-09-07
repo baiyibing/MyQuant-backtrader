@@ -15,7 +15,8 @@
 | 股票数量 | front: 2,115 / back: 2,097 / none: 2,123 |
 | 总大小 | 145 MB |
 | 数据源 | miniQMT `xtdata.download_history_data2` + `xtdata.get_market_data_ex` |
-| 主下载脚本 | `backtest/qmt_utils_adv.py`（`DataDownloader` 类） |
+| 主下载脚本 | `oskh_data/downloader.py`（`DataDownloader` 类） |
+| 回测读路径 | `common/infra/qmt_utils_adv.py` → `oskh_data.StockDataReader`（RF-R2 SSOT） |
 
 **核心问题**：
 1. 增量逻辑只向后、不向前：`incrementally=True` 仅检查 `latest_date < end_dt`，无法向前补录历史数据。
@@ -55,7 +56,7 @@ for stock_code, df_new in tqdm(processed_data.items(), desc="写入文件"):
 
 ### 2.2 批量 backfill 脚本
 
-新建文件：`oskh_data/backfill.py`（兼容重导出：`backtest/backfill_daily_data.py`）
+新建文件：`oskh_data/backfill.py`（CLI：`scripts/data/backfill_daily_data.py` 或 `python -m oskh_data.backfill`）
 
 入口：`python -m oskh_data.backfill <子命令>`
 
@@ -121,7 +122,7 @@ for stock_code, df_new in tqdm(processed_data.items(), desc="写入文件"):
 
 **每阶段执行命令示例**（第一批）：
 ```bash
-D:\anaconda3\envs\vanna311\python.exe backtest/backfill_daily_data.py \
+D:\anaconda3\envs\vanna311\python.exe scripts/data/backfill_daily_data.py \
   --start 20200101 --end 20250101 \
   --batch 100 --adjust-types front,back,none
 ```
@@ -271,7 +272,7 @@ python -m oskh_data.backfill rebuild --period 1d
 
 ```bash
 # stocks.txt 每行一个代码（如 000001.SZ）
-D:\anaconda3\envs\vanna311\python.exe backtest/backfill_daily_data.py \
+D:\anaconda3\envs\vanna311\python.exe scripts/data/backfill_daily_data.py \
   --codes stocks.txt --start 19900101 --end 20260101
 ```
 
@@ -283,7 +284,7 @@ D:\anaconda3\envs\vanna311\python.exe backtest/backfill_daily_data.py \
 |------|------|------|------|
 | 覆盖写入导致数据丢失 | **高** | 若保存逻辑未正确合并，会覆盖现有数据 | 已修改为合并写入；执行前已备份 |
 | QMT 批量下载超时 | 中 | 某批可能因网络或 QMT 负载超时 | 每批 100 只；失败批次可单独重试 |
-| 前复权漂移 | 低 | 前复权序列是时点依赖的，未来分红后会变化 | 已落地 `scripts/update_adjusted_daily.py`，除权后自动缩放历史 front 并维护 `adj_factor.parquet`；详见 [`daily-adjusted-update-ssot.md`](daily-adjusted-update-ssot.md) |
+| 前复权漂移 | 低 | 前复权序列是时点依赖的，未来分红后会变化 | 已落地 `scripts/data/update_adjusted_daily.py`，除权后自动缩放历史 front 并维护 `adj_factor.parquet`；详见 [`daily-adjusted-update-ssot.md`](daily-adjusted-update-ssot.md) |
 | 磁盘空间 | 低 | 补录后约 2.5 GB | 提前确认磁盘空间充足 |
 | 退市/停牌股票无历史数据 | 低 | 部分股票已退市，OpenDate 后无数据 | `download_history_data2` 自动处理；无数据则跳过 |
 
@@ -294,7 +295,7 @@ D:\anaconda3\envs\vanna311\python.exe backtest/backfill_daily_data.py \
 | 文件 | 变更类型 | 说明 |
 |------|---------|------|
 | `backtest/qmt_utils_adv.py` | 修改 | `_process_downloaded_data` 保存逻辑增强为合并写入 |
-| `backtest/backfill_daily_data.py` | 新增 | 全量批量 backfill 入口脚本 |
+| `scripts/data/backfill_daily_data.py` | CLI | 全量批量 backfill 入口（→ `oskh_data.backfill`） |
 
 ---
 

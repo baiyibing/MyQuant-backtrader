@@ -25,7 +25,7 @@
 - 数据层方案：[`parquet_duckdb_dual_mode_reader_plan.md`](parquet_duckdb_dual_mode_reader_plan.md)
 - 性能基准：[`duckdb_scheme_a_vs_b_benchmark_plan.md`](duckdb_scheme_a_vs_b_benchmark_plan.md)
 - 实施计划（含已知错误，见最终综合方案）：[`../operations/csv-live/pre-close-duckdb-preheat-plan.md`](../operations/csv-live/pre-close-duckdb-preheat-plan.md)
-- 综合方案（实盘 limit_info 优先级）：[`../operations/csv-live/limit-info-duckdb-pre-close-solution.md`](../operations/csv-live/limit-info-duckdb-pre-close-solution.md)
+- 综合方案（实盘 limit_info 优先级）：`../operations/csv-live/limit-info-duckdb-pre-close-solution.md`（已清理）
 
 ---
 

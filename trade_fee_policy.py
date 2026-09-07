@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import threading
 from decimal import Decimal, ROUND_HALF_UP
-from typing import Callable, FrozenSet, Iterable, Optional, Tuple
+from typing import Callable, FrozenSet, Iterable, NamedTuple, Optional, Tuple
 
 _VALID_ACTIONS = frozenset({"BUY", "SELL"})
 
@@ -234,46 +234,17 @@ def is_stamp_tax_exempt_symbol(
     return True
 
 
-def _commission_amount(amount: float, commission_rate: float, min_commission: float, max_commission: Optional[float] = None) -> float:
-    amt = Decimal(str(float(amount)))
-    rate = Decimal(str(float(commission_rate)))
-    min_fee = Decimal(str(float(min_commission)))
-    if rate <= Decimal("0"):
-        return 0.0
-    fee = amt * rate
-    if fee < min_fee:
-        fee = min_fee
-    if max_commission is not None:
-        max_fee = Decimal(str(float(max_commission)))
-        if fee > max_fee:
-            fee = max_fee
-    return float(fee.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
-
-
-def _transfer_fee_sh_amount(
-    amount: float,
-    stock: str,
-    transfer_fee_rate_sh: float,
-    min_transfer_fee: float = 1.0,
-) -> float:
-    if float(transfer_fee_rate_sh) <= 0:
-        return 0.0
-    if not _shanghai_a_share_transfer_heuristic(stock):
-        return 0.0
-    raw = Decimal(str(float(amount))) * Decimal(str(float(transfer_fee_rate_sh)))
-    fee = raw.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-    min_fee = Decimal(str(float(min_transfer_fee)))
-    if fee < min_fee:
-        fee = min_fee
-    return float(fee)
-
-
 # 费率上限钳制（防止异常配置导致巨额费用）
 _MAX_COMMISSION_RATE = 0.1          # 10%
 _MAX_STAMP_TAX_RATE = 0.01          # 1%
 _MAX_TRANSFER_FEE_RATE = 0.001      # 0.1%
 # Upper bound on ``extra_fee_hook`` output as a fraction of trade notional (anti foot-gun).
-_EXTRA_FEE_MAX_FRACTION_OF_NOTIONAL = 0.10
+_EXTRA_FEE_MAX_FRACTION_OF_NOTIONAL = Decimal("0.10")
+
+_MONEY_QUANT = Decimal("0.01")
+_ZERO = Decimal("0")
+_FEN_PER_YUAN = Decimal(100)
+_MIN_TRANSFER_FEE_SH = Decimal("1.0")
 
 
 def _validate_fee_rate_inputs(
@@ -357,82 +328,118 @@ def _validate_trade_fee_inputs_from_notional_fen(
     return act
 
 
-def _notional_yuan_from_fen(notional_fen: int) -> float:
-    return float(
-        (Decimal(int(notional_fen)) / Decimal(100)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-    )
-
-
 def _implied_price_yuan_from_notional_fen(notional_fen: int, volume: int) -> float:
     """VWAP-style yuan price from integer fen notional and volume; quantized to 0.01 CNY/share."""
     if int(volume) <= 0:
         return 0.0
-    amt = Decimal(int(notional_fen)) / Decimal(100)
+    amt = Decimal(int(notional_fen)) / _FEN_PER_YUAN
     vol = Decimal(int(volume))
-    px = (amt / vol).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    px = (amt / vol).quantize(_MONEY_QUANT, rounding=ROUND_HALF_UP)
     return float(px)
 
 
-def _clamp_extra_fee_to_notional(
-    extra_fee: float,
-    amount_yuan: float,
-    *,
-    stock: str,
-    action: str,
-    notional_fen: Optional[int] = None,
-) -> float:
-    if extra_fee <= 0:
-        return 0.0
-    amt = float(amount_yuan)
-    if amt <= 0:
-        return 0.0
-    cap = amt * float(_EXTRA_FEE_MAX_FRACTION_OF_NOTIONAL)
-    if extra_fee > cap:
-        _debug_log_extra_fee_clamped(
-            stock,
-            action,
-            raw_extra=extra_fee,
-            capped_extra=cap,
-            amount_yuan=amt,
-            notional_fen=notional_fen,
-        )
-        return float(Decimal(str(cap)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
-    return float(extra_fee)
+class _FeeKernelResult(NamedTuple):
+    commission: Decimal
+    stamp_tax: Decimal
+    total: Decimal
 
 
-def _commission_and_stamp_from_amount_yuan(
+def _calculate_fee_kernel(
     action_norm: str,
     stock: str,
-    amount: float,
+    amount_yuan: Decimal,
     *,
-    commission_rate: float,
-    min_commission: float,
-    stamp_tax_rate_stock: float,
+    commission_rate: Decimal,
+    min_commission: Decimal,
+    stamp_tax_rate_stock: Decimal,
     stamp_tax_exempt_prefixes: Iterable[str],
     stamp_tax_unknown_as_stock: bool,
     stamp_tax_exempt_symbol_keys: Optional[FrozenSet[str]] = None,
     on_unknown_stamp_tax_as_stock: Optional[Callable[[str], None]] = None,
-    transfer_fee_rate_sh: float = 0.0,
-) -> Tuple[float, float]:
-    commission = _commission_amount(amount, commission_rate, min_commission)
-    transfer_sh = _transfer_fee_sh_amount(amount, stock, transfer_fee_rate_sh)
-    commission_total = float(
-        (Decimal(str(commission)) + Decimal(str(transfer_sh))).quantize(
-            Decimal("0.01"), rounding=ROUND_HALF_UP
+    transfer_fee_rate_sh: Decimal = _ZERO,
+    extra_fee_hook: Optional[Callable[..., float]] = None,
+    hook_action: Optional[str] = None,
+    hook_volume: Optional[int] = None,
+    hook_price: object = None,
+    notional_fen: Optional[int] = None,
+) -> _FeeKernelResult:
+    """Calculate every fee component and total without leaving Decimal money arithmetic."""
+    commission = _ZERO
+    if commission_rate > _ZERO:
+        commission = amount_yuan * commission_rate
+        if commission < min_commission:
+            commission = min_commission
+        commission = commission.quantize(_MONEY_QUANT, rounding=ROUND_HALF_UP)
+
+    transfer_sh = _ZERO
+    if (
+        transfer_fee_rate_sh > _ZERO
+        and _shanghai_a_share_transfer_heuristic(stock)
+    ):
+        transfer_sh = (amount_yuan * transfer_fee_rate_sh).quantize(
+            _MONEY_QUANT, rounding=ROUND_HALF_UP
         )
+        if transfer_sh < _MIN_TRANSFER_FEE_SH:
+            transfer_sh = _MIN_TRANSFER_FEE_SH
+
+    commission_total = (commission + transfer_sh).quantize(
+        _MONEY_QUANT, rounding=ROUND_HALF_UP
     )
-    if action_norm != "SELL":
-        return commission_total, 0.0
-    if is_stamp_tax_exempt_symbol(
+
+    stamp_tax = _ZERO
+    if action_norm == "SELL" and not is_stamp_tax_exempt_symbol(
         stock,
         stamp_tax_exempt_prefixes,
         stamp_tax_unknown_as_stock,
         exempt_symbol_keys=stamp_tax_exempt_symbol_keys,
         on_unknown_as_stock=on_unknown_stamp_tax_as_stock,
     ):
-        return commission_total, 0.0
-    stamp_tax = Decimal(str(amount)) * Decimal(str(float(stamp_tax_rate_stock)))
-    return commission_total, float(stamp_tax.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+        stamp_tax = (amount_yuan * stamp_tax_rate_stock).quantize(
+            _MONEY_QUANT, rounding=ROUND_HALF_UP
+        )
+
+    extra_fee = _ZERO
+    if callable(extra_fee_hook):
+        action_for_hook = action_norm if hook_action is None else hook_action
+        try:
+            raw_extra = float(
+                extra_fee_hook(
+                    action=action_for_hook,
+                    stock=stock,
+                    volume=hook_volume,
+                    price=hook_price,
+                    commission=float(commission_total),
+                    stamp_tax=float(stamp_tax),
+                )
+            )
+            extra_fee = Decimal(str(raw_extra))
+        except Exception as e:
+            _debug_log_extra_fee_hook_failure(
+                stock,
+                action_for_hook,
+                e,
+                notional_fen=notional_fen,
+            )
+            extra_fee = _ZERO
+
+        if extra_fee < _ZERO:
+            extra_fee = _ZERO
+        cap = amount_yuan * _EXTRA_FEE_MAX_FRACTION_OF_NOTIONAL
+        if extra_fee > cap:
+            _debug_log_extra_fee_clamped(
+                stock,
+                action_for_hook,
+                raw_extra=float(extra_fee),
+                capped_extra=float(cap),
+                amount_yuan=float(amount_yuan),
+                notional_fen=notional_fen,
+            )
+            extra_fee = cap.quantize(_MONEY_QUANT, rounding=ROUND_HALF_UP)
+
+    total = (commission_total + stamp_tax + extra_fee).quantize(
+        _MONEY_QUANT, rounding=ROUND_HALF_UP
+    )
+    return _FeeKernelResult(commission_total, stamp_tax, total)
 
 
 def calculate_commission_and_stamp_tax(
@@ -465,20 +472,21 @@ def calculate_commission_and_stamp_tax(
         stamp_tax_rate_stock=stamp_tax_rate_stock,
         transfer_fee_rate_sh=transfer_fee_rate_sh,
     )
-    amount = float(Decimal(str(int(volume))) * Decimal(str(float(price))))
-    return _commission_and_stamp_from_amount_yuan(
+    amount_yuan = Decimal(int(volume)) * Decimal(str(price))
+    result = _calculate_fee_kernel(
         action_norm,
         stock,
-        amount,
-        commission_rate=commission_rate,
-        min_commission=min_commission,
-        stamp_tax_rate_stock=stamp_tax_rate_stock,
+        amount_yuan,
+        commission_rate=Decimal(str(commission_rate)),
+        min_commission=Decimal(str(min_commission)),
+        stamp_tax_rate_stock=Decimal(str(stamp_tax_rate_stock)),
         stamp_tax_exempt_prefixes=stamp_tax_exempt_prefixes,
         stamp_tax_unknown_as_stock=stamp_tax_unknown_as_stock,
         stamp_tax_exempt_symbol_keys=stamp_tax_exempt_symbol_keys,
         on_unknown_stamp_tax_as_stock=on_unknown_stamp_tax_as_stock,
-        transfer_fee_rate_sh=transfer_fee_rate_sh,
+        transfer_fee_rate_sh=Decimal(str(transfer_fee_rate_sh)),
     )
+    return float(result.commission), float(result.stamp_tax)
 
 
 def calculate_commission_and_stamp_tax_from_notional_fen(
@@ -511,20 +519,21 @@ def calculate_commission_and_stamp_tax_from_notional_fen(
         stamp_tax_rate_stock=stamp_tax_rate_stock,
         transfer_fee_rate_sh=transfer_fee_rate_sh,
     )
-    amount = _notional_yuan_from_fen(int(notional_fen))
-    return _commission_and_stamp_from_amount_yuan(
+    amount_yuan = Decimal(int(notional_fen)) / _FEN_PER_YUAN
+    result = _calculate_fee_kernel(
         action_norm,
         stock,
-        amount,
-        commission_rate=commission_rate,
-        min_commission=min_commission,
-        stamp_tax_rate_stock=stamp_tax_rate_stock,
+        amount_yuan,
+        commission_rate=Decimal(str(commission_rate)),
+        min_commission=Decimal(str(min_commission)),
+        stamp_tax_rate_stock=Decimal(str(stamp_tax_rate_stock)),
         stamp_tax_exempt_prefixes=stamp_tax_exempt_prefixes,
         stamp_tax_unknown_as_stock=stamp_tax_unknown_as_stock,
         stamp_tax_exempt_symbol_keys=stamp_tax_exempt_symbol_keys,
         on_unknown_stamp_tax_as_stock=on_unknown_stamp_tax_as_stock,
-        transfer_fee_rate_sh=transfer_fee_rate_sh,
+        transfer_fee_rate_sh=Decimal(str(transfer_fee_rate_sh)),
     )
+    return float(result.commission), float(result.stamp_tax)
 
 
 def calculate_trade_fee(
@@ -543,43 +552,34 @@ def calculate_trade_fee(
     extra_fee_hook: Optional[Callable[..., float]] = None,
     transfer_fee_rate_sh: float = 0.0,
 ) -> float:
-    com, tax = calculate_commission_and_stamp_tax(
+    action_norm = _validate_trade_fee_inputs(
         action,
-        stock,
         volume,
         price,
         commission_rate=commission_rate,
         min_commission=min_commission,
         stamp_tax_rate_stock=stamp_tax_rate_stock,
+        transfer_fee_rate_sh=transfer_fee_rate_sh,
+    )
+    amount_yuan = Decimal(int(volume)) * Decimal(str(price))
+    result = _calculate_fee_kernel(
+        action_norm,
+        stock,
+        amount_yuan,
+        commission_rate=Decimal(str(commission_rate)),
+        min_commission=Decimal(str(min_commission)),
+        stamp_tax_rate_stock=Decimal(str(stamp_tax_rate_stock)),
         stamp_tax_exempt_prefixes=stamp_tax_exempt_prefixes,
         stamp_tax_unknown_as_stock=stamp_tax_unknown_as_stock,
         stamp_tax_exempt_symbol_keys=stamp_tax_exempt_symbol_keys,
         on_unknown_stamp_tax_as_stock=on_unknown_stamp_tax_as_stock,
-        transfer_fee_rate_sh=transfer_fee_rate_sh,
+        transfer_fee_rate_sh=Decimal(str(transfer_fee_rate_sh)),
+        extra_fee_hook=extra_fee_hook,
+        hook_action=action,
+        hook_volume=volume,
+        hook_price=price,
     )
-    extra_fee = 0.0
-    if callable(extra_fee_hook):
-        amount = float(Decimal(str(int(volume))) * Decimal(str(float(price))))
-        try:
-            extra_fee = float(
-                extra_fee_hook(
-                    action=action,
-                    stock=stock,
-                    volume=volume,
-                    price=price,
-                    commission=float(com),
-                    stamp_tax=float(tax),
-                )
-            )
-        except Exception as e:
-            _debug_log_extra_fee_hook_failure(stock, action, e)
-            extra_fee = 0.0
-        if extra_fee < 0:
-            extra_fee = 0.0
-        extra_fee = _clamp_extra_fee_to_notional(
-            extra_fee, amount, stock=stock, action=str(action)
-        )
-    return float(com + tax + extra_fee)
+    return float(result.total)
 
 
 def calculate_trade_fee_from_notional_fen(
@@ -598,47 +598,38 @@ def calculate_trade_fee_from_notional_fen(
     extra_fee_hook: Optional[Callable[..., float]] = None,
     transfer_fee_rate_sh: float = 0.0,
 ) -> float:
-    com, tax = calculate_commission_and_stamp_tax_from_notional_fen(
+    action_norm = _validate_trade_fee_inputs_from_notional_fen(
         action,
-        stock,
         volume,
         notional_fen,
         commission_rate=commission_rate,
         min_commission=min_commission,
         stamp_tax_rate_stock=stamp_tax_rate_stock,
+        transfer_fee_rate_sh=transfer_fee_rate_sh,
+    )
+    notional_fen_int = int(notional_fen)
+    amount_yuan = Decimal(notional_fen_int) / _FEN_PER_YUAN
+    hook_price = (
+        _implied_price_yuan_from_notional_fen(notional_fen_int, int(volume))
+        if callable(extra_fee_hook)
+        else None
+    )
+    result = _calculate_fee_kernel(
+        action_norm,
+        stock,
+        amount_yuan,
+        commission_rate=Decimal(str(commission_rate)),
+        min_commission=Decimal(str(min_commission)),
+        stamp_tax_rate_stock=Decimal(str(stamp_tax_rate_stock)),
         stamp_tax_exempt_prefixes=stamp_tax_exempt_prefixes,
         stamp_tax_unknown_as_stock=stamp_tax_unknown_as_stock,
         stamp_tax_exempt_symbol_keys=stamp_tax_exempt_symbol_keys,
         on_unknown_stamp_tax_as_stock=on_unknown_stamp_tax_as_stock,
-        transfer_fee_rate_sh=transfer_fee_rate_sh,
+        transfer_fee_rate_sh=Decimal(str(transfer_fee_rate_sh)),
+        extra_fee_hook=extra_fee_hook,
+        hook_action=action,
+        hook_volume=volume,
+        hook_price=hook_price,
+        notional_fen=notional_fen_int,
     )
-    amount = _notional_yuan_from_fen(int(notional_fen))
-    extra_fee = 0.0
-    if callable(extra_fee_hook):
-        try:
-            px = _implied_price_yuan_from_notional_fen(int(notional_fen), int(volume))
-            extra_fee = float(
-                extra_fee_hook(
-                    action=action,
-                    stock=stock,
-                    volume=volume,
-                    price=float(px),
-                    commission=float(com),
-                    stamp_tax=float(tax),
-                )
-            )
-        except Exception as e:
-            _debug_log_extra_fee_hook_failure(
-                stock, action, e, notional_fen=int(notional_fen)
-            )
-            extra_fee = 0.0
-        if extra_fee < 0:
-            extra_fee = 0.0
-        extra_fee = _clamp_extra_fee_to_notional(
-            extra_fee,
-            amount,
-            stock=stock,
-            action=str(action),
-            notional_fen=int(notional_fen),
-        )
-    return float(com + tax + extra_fee)
+    return float(result.total)

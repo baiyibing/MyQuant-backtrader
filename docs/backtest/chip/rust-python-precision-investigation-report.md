@@ -29,7 +29,7 @@
 ### 2.1 工具
 
 - **Rust 调试二进制**：`turnover-resist/src/debug_precision.rs`（`cargo build --release --bin debug-precision`）
-- **Python 调试脚本**：`scripts/debug_precision.py`（内嵌 Rust 算法的纯 Python 复现，逐环节对比）
+- **Python 调试脚本**：`scripts/legacy/debug_precision.py`（内嵌 Rust 算法的纯 Python 复现，逐环节对比）
 
 ### 2.2 逐环节对比结果（002374.SZ）
 
@@ -108,8 +108,8 @@ def make_price_grid(min_p: float, max_p: float, step: float) -> np.ndarray:
 | `qlib_cost/distribution_of_chips.py` | 4 |
 | `qlib_cost/cyq.py` | 1 |
 | `backtest/chip_algorithm.py` | 3 |
-| `scripts/full_market_canonical_resist.py` | 1 |
-| `scripts/full_market_equal_weight_resist.py` | 1 |
+| `scripts/data/full_market_canonical_resist.py` | 1 |
+| `scripts/data/full_market_equal_weight_resist.py` | 1 |
 | **合计** | **10** |
 
 ### 5.3 验证结果
@@ -163,5 +163,5 @@ turnover_circ_prev_arr = vol_arr * 100.0 / circ_cap_prev
 | 工具 | 路径 | 用途 |
 |------|------|------|
 | Rust debug binary | `turnover-resist/src/debug_precision.rs` | 打印单只股票每个环节的中间值 |
-| Python debug script | `scripts/debug_precision.py` | 内嵌 Rust 算法复现，逐环节对比 |
+| Python debug script | `scripts/legacy/debug_precision.py` | 内嵌 Rust 算法复现，逐环节对比 |
 | 排查 prompt | `docs/prompts/prompt-rust-python-precision-investigation.md` | 排查流程指引 |

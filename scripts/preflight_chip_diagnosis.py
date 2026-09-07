@@ -10,8 +10,8 @@
 6. 任一失败退出非零码，阻断发布
 
 用法：
-    D:/anaconda3/envs/vanna311/python.exe scripts/preflight_chip_diagnosis.py
-    D:/anaconda3/envs/vanna311/python.exe scripts/preflight_chip_diagnosis.py --config config/chip_diagnosis.yaml
+    python scripts/diagnostics/preflight_chip_diagnosis.py
+    python scripts/diagnostics/preflight_chip_diagnosis.py --config config/chip_diagnosis.yaml
 """
 from __future__ import annotations
 
@@ -19,6 +19,8 @@ import argparse
 import hashlib
 import json
 import os
+
+from common.infra.data_root import resolve_period_root, resolve_source_parquet
 import sys
 from pathlib import Path
 
@@ -26,10 +28,29 @@ import pandas as pd
 import yaml
 
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+_HERE = Path(__file__).resolve()
+PROJECT_ROOT = _HERE.parents[2] if _HERE.parent.name in {"gates", "diagnostics", "data"} else _HERE.parents[1]
 DEFAULT_CONFIG = PROJECT_ROOT / "config" / "chip_diagnosis.yaml"
 STOCK_DATA = PROJECT_ROOT / "stock_data"
 REPORT_DIR = PROJECT_ROOT / "docs" / "investigation_reports"
+
+# 标准 bootstrap（scripts/_script_bootstrap.py；裸 sys.path.insert 被
+# verify_no_new_scripts_sys_path_insert 拦截，统一走 ensure_repo_on_syspath）
+import importlib.util as _ilu
+
+_sb_dir = next(
+    (_p for _p in Path(__file__).resolve().parents if _p.name == "scripts"),
+    Path(__file__).resolve().parent,
+)
+_sb_spec = _ilu.spec_from_file_location("_script_bootstrap", _sb_dir / "_script_bootstrap.py")
+if _sb_spec is None or _sb_spec.loader is None:
+    raise ImportError("_script_bootstrap unavailable")
+_bs_mod = _ilu.module_from_spec(_sb_spec)
+sys.modules["_script_bootstrap"] = _bs_mod
+_sb_spec.loader.exec_module(_bs_mod)
+_bs_mod.ensure_repo_on_syspath(__file__)
+
+from common.infra.data_root import resolve_period_root  # noqa: E402
 
 
 def load_config(path: Path) -> dict:
@@ -44,7 +65,7 @@ def load_config(path: Path) -> dict:
 def check_float_shares(cfg: dict) -> tuple[bool, str]:
     """检查 float_shares.parquet 覆盖率."""
     threshold = cfg["preflight"]["checks"]["float_shares_coverage"]
-    pq_path = STOCK_DATA / "float_shares.parquet"
+    pq_path = resolve_source_parquet("float_shares.parquet")
 
     if not pq_path.exists():
         return False, f"float_shares.parquet 不存在: {pq_path}"
@@ -53,7 +74,7 @@ def check_float_shares(cfg: dict) -> tuple[bool, str]:
     covered = len(df)
 
     # 分母：period=1d/dividend_type=front 目录下有有效 parquet 的标的数
-    daily_dir = STOCK_DATA / "period=1d" / "dividend_type=front"
+    daily_dir = resolve_period_root("1d", base=STOCK_DATA) / "dividend_type=front"
     if daily_dir.exists():
         total = sum(
             1 for d in os.listdir(daily_dir)
@@ -74,7 +95,7 @@ def check_float_shares(cfg: dict) -> tuple[bool, str]:
 
 def check_daily_data(cfg: dict) -> tuple[bool, str]:
     """检查日线 front 复权数据存在且非空."""
-    daily_dir = STOCK_DATA / "period=1d" / "dividend_type=front"
+    daily_dir = resolve_period_root("1d", base=STOCK_DATA) / "dividend_type=front"
     if not daily_dir.exists():
         return False, f"日线 front 目录不存在: {daily_dir}"
 
@@ -108,7 +129,7 @@ def check_daily_data(cfg: dict) -> tuple[bool, str]:
 
 def check_minute_data(cfg: dict) -> tuple[bool, str]:
     """检查分钟线 none 数据存在且非空."""
-    minute_dir = STOCK_DATA / "period=1m" / "dividend_type=none"
+    minute_dir = resolve_period_root("1m", base=STOCK_DATA) / "dividend_type=none"
     if not minute_dir.exists():
         return False, f"分钟线 none 目录不存在: {minute_dir}"
 

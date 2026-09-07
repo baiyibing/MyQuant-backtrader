@@ -3,16 +3,16 @@
 r"""
 构建日线复权因子表。
 
-由于 QMT 返回的 front 复权数据不可靠（与 none 相同），本脚本改为从 back/none
-推导前复权因子：
-    adj_factor_back[t] = close_back[t] / close_none[t]
-    cumulative_adj_factor[t] = adj_factor_back[t] / adj_factor_back[latest]
+2026-07-09 起：front 以 QMT 下载落盘为 ground truth（见
+``docs/engineering/plan-front-adj-factor-dr-based-2026-07-09.md``）。
+本模块从已落盘的 front/none/back 计算因子，**禁止**再用 back/none 推导 front：
 
-其中 latest 为该股票在本地数据中的最新交易日，cumulative_adj_factor[latest] = 1.0。
+    cumulative_adj_factor[t] = close_front[t] / close_none[t]
+    adj_factor_back[t]       = close_back[t]  / close_none[t]   # 观测列，可含噪声
 
 用法：
-    python backtest/build_adj_factor_table.py
-    python backtest/build_adj_factor_table.py --stocks 500
+    python scripts/data/build_adj_factor_table.py
+    python scripts/data/build_adj_factor_table.py --stocks 500
 
 输出：
     stock_data/adj_factor.parquet
@@ -25,11 +25,14 @@ r"""
     用于 §10.4.2 方案 B 的分钟级复权校正。
 
 注意：
-    日常增量更新推荐使用 scripts/update_adjusted_daily.py；
+    日常增量更新推荐使用 scripts/data/run_daily_adjusted_fast.py；
     本脚本更适合一次性全量重建或首次初始化。
 """
 
 import argparse
+from typing import Any, cast
+from oskh_data.pandas_typing import as_series
+from .symbol_format import to_canonical_symbol
 import os
 import sys
 
@@ -43,65 +46,106 @@ from common.infra.quant_logger import get_logger
 
 logger = get_logger(__name__)
 
-BACK_DIR = os.path.join(REPO, "stock_data", "period=1d", "dividend_type=back")
-NONE_DIR = os.path.join(REPO, "stock_data", "period=1d", "dividend_type=none")
+def _period_dirs() -> tuple:
+    """周期分区单源（plan-data-path-ssot）：honors OSKH_PERIOD_1D_ROOT。"""
+    from common.infra.data_root import resolve_period_root
+
+    base = resolve_period_root("1d")
+    return (
+        str(base / "dividend_type=front"),
+        str(base / "dividend_type=back"),
+        str(base / "dividend_type=none"),
+    )
+
+
+FRONT_DIR, BACK_DIR, NONE_DIR = _period_dirs()
 
 
 def _common_symbols(limit=None) -> list:  # type: ignore[reportArgumentType]
-    """获取同时有 back 和 none 数据的标的。"""
-    back_syms = set(d.replace("symbol=", "") for d in os.listdir(BACK_DIR)
-                    if d.startswith("symbol="))
-    none_syms = set(d.replace("symbol=", "") for d in os.listdir(NONE_DIR)
-                    if d.startswith("symbol="))
-    common = sorted(back_syms & none_syms)
+    """获取同时有 front 和 none 数据的标的（back 可选）。"""
+    front_syms = set(
+        d.replace("symbol=", "")
+        for d in os.listdir(FRONT_DIR)
+        if d.startswith("symbol=")
+    ) if os.path.isdir(FRONT_DIR) else set()
+    none_syms = set(
+        d.replace("symbol=", "")
+        for d in os.listdir(NONE_DIR)
+        if d.startswith("symbol=")
+    ) if os.path.isdir(NONE_DIR) else set()
+    common = sorted(front_syms & none_syms)
     if limit:
         common = common[:limit]
     return common
 
 
 def build_for_symbol(sym: str) -> pd.DataFrame:
-    """为单只标的构建复权因子序列。"""
-    back_path = os.path.join(BACK_DIR, f"symbol={sym}", "data.parquet")
+    """为单只标的构建复权因子序列（读已下载 front/none/back）。"""
+    front_path = os.path.join(FRONT_DIR, f"symbol={sym}", "data.parquet")
     none_path = os.path.join(NONE_DIR, f"symbol={sym}", "data.parquet")
+    back_path = os.path.join(BACK_DIR, f"symbol={sym}", "data.parquet")
 
-    df_b = pd.read_parquet(back_path)
-    df_n = pd.read_parquet(none_path)
-
-    # 若 parquet 已带 DatetimeIndex，先 reset 避免与 date 列冲突
-    if isinstance(df_b.index, pd.DatetimeIndex):
-        df_b = df_b.reset_index()
-    if isinstance(df_n.index, pd.DatetimeIndex):
-        df_n = df_n.reset_index()
-
-    # 对齐日期
-    df_b["date"] = pd.to_datetime(df_b["time"], unit="ms").dt.normalize()
-    df_n["date"] = pd.to_datetime(df_n["time"], unit="ms").dt.normalize()
-
-    # outer join 防止静默丢弃只在单侧存在的日期
-    merged = df_b[["date", "close"]].merge(
-        df_n[["date", "close"]],
-        on="date", suffixes=("_back", "_none"), how="outer"
-    ).sort_values("date").reset_index(drop=True)
-
-    # 前向填充单侧缺失
-    merged["close_back"] = merged["close_back"].ffill()
-    merged["close_none"] = merged["close_none"].ffill()
-
-    # Phase 2 P2: validate symbol format
-    code = sym.replace("_SZ", ".SZ").replace("_SH", ".SH").replace("_BJ", ".BJ")
-    if "." not in code or len(code.split(".")[0]) != 6:
-        logger.warning("adj_factor: unrecognized symbol format, skipping: %s", sym)
-        return pd.DataFrame(columns=[
+    if not os.path.isfile(front_path) or not os.path.isfile(none_path):
+        return pd.DataFrame(columns=cast(Any, [
             "date", "stock_code", "close_front", "close_none",
             "cumulative_adj_factor", "adj_factor_back",
-        ])
+        ]))
 
-    # 单侧缺失标记为 NaN
-    _one_sided_na = (
-        merged["close_back"].isna() | merged["close_none"].isna()
+    df_f = pd.read_parquet(front_path)
+    df_n = pd.read_parquet(none_path)
+    df_b = pd.read_parquet(back_path) if os.path.isfile(back_path) else None
+
+    if isinstance(df_f.index, pd.DatetimeIndex):
+        df_f = df_f.reset_index()
+    if isinstance(df_n.index, pd.DatetimeIndex):
+        df_n = df_n.reset_index()
+    if df_b is not None and isinstance(df_b.index, pd.DatetimeIndex):
+        df_b = df_b.reset_index()
+
+    df_f["date"] = pd.to_datetime(df_f["time"], unit="ms").dt.normalize()
+    df_n["date"] = pd.to_datetime(df_n["time"], unit="ms").dt.normalize()
+
+    merged = df_f[["date", "close"]].merge(
+        df_n[["date", "close"]],
+        on="date", suffixes=("_front", "_none"), how="outer",
+    ).sort_values("date").reset_index(drop=True)
+
+    if df_b is not None and "close" in df_b.columns:
+        df_b["date"] = pd.to_datetime(df_b["time"], unit="ms").dt.normalize()
+        back_close = cast(pd.DataFrame, df_b[["date", "close"]]).copy()
+        back_close.columns = pd.Index(["date", "close_back"])
+        merged = merged.merge(
+            back_close,
+            on="date",
+            how="left",
+        )
+    else:
+        merged["close_back"] = np.nan
+
+    merged["close_front"] = merged["close_front"].ffill()
+    merged["close_none"] = merged["close_none"].ffill()
+    merged["close_back"] = merged["close_back"].ffill()
+
+    code = to_canonical_symbol(sym)
+    if "." not in code or len(code.split(".")[0]) != 6:
+        logger.warning("adj_factor: unrecognized symbol format, skipping: %s", sym)
+        return pd.DataFrame(columns=cast(Any, [
+            "date", "stock_code", "close_front", "close_none",
+            "cumulative_adj_factor", "adj_factor_back",
+        ]))
+
+    _one_sided_na = merged["close_front"].isna() | merged["close_none"].isna()
+    merged["cumulative_adj_factor"] = np.where(
+        _one_sided_na,
+        np.nan,
+        np.where(
+            merged["close_none"] > 0,
+            merged["close_front"] / merged["close_none"],
+            np.nan,
+        ),
     )
     merged["adj_factor_back"] = np.where(
-        _one_sided_na,
+        merged["close_back"].isna() | merged["close_none"].isna(),
         np.nan,
         np.where(
             merged["close_none"] > 0,
@@ -110,34 +154,23 @@ def build_for_symbol(sym: str) -> pd.DataFrame:
         ),
     )
 
-    # 前复权因子：以最新日期为基准 1
-    latest_back_factor = merged["adj_factor_back"].iloc[-1]
-    merged["cumulative_adj_factor"] = np.where(
-        pd.isna(merged["adj_factor_back"]) | (latest_back_factor == 0),
-        np.nan,
-        merged["adj_factor_back"] / latest_back_factor,
-    )
-
-    # 推导 front close（与 update_adjusted_daily.py 一致）
-    merged["close_front"] = np.where(
-        pd.isna(merged["cumulative_adj_factor"]),
-        np.nan,
-        merged["close_none"] * merged["cumulative_adj_factor"],
-    )
-
     merged["stock_code"] = code
 
-    return merged[[
+    return pd.DataFrame(merged[[
         "date", "stock_code", "close_front", "close_none",
         "cumulative_adj_factor", "adj_factor_back",
-    ]]
+    ]])
 
 
 def main():
     parser = argparse.ArgumentParser(description="构建日线复权因子表")
     parser.add_argument("--stocks", type=int, default=0,
                         help="限制标的数（0=全部）")
-    parser.add_argument("--output", default=os.path.join(REPO, "stock_data", "adj_factor.parquet"))
+    from common.infra.data_root import resolve_source_parquet
+
+    parser.add_argument(
+        "--output", default=str(resolve_source_parquet("adj_factor.parquet"))
+    )
     args = parser.parse_args()
 
     syms = _common_symbols(limit=args.stocks if args.stocks > 0 else None)
@@ -151,11 +184,11 @@ def main():
         try:
             df = build_for_symbol(sym)
             if len(df) > 0:
-                both_na = df[["close_front", "close_none"]].isna().all(axis=1)
-                one_sided_na = df[["close_front", "close_none"]].isna().any(axis=1) & ~both_na
+                both_na = as_series(df[["close_front", "close_none"]].isna().all(axis=1))
+                one_sided_na = as_series(df[["close_front", "close_none"]].isna().any(axis=1) & ~both_na)
                 unfillable = int(both_na.sum()) + int(one_sided_na.sum())
                 if unfillable > 0:
-                    gap_symbols.append((sym.replace("_SZ", ".SZ").replace("_SH", ".SH").replace("_BJ", ".BJ"), unfillable))
+                    gap_symbols.append((to_canonical_symbol(sym), unfillable))
                 frames.append(df)
         except Exception as e:
             print(f"  [WARN] {sym}: {e}")
@@ -180,8 +213,8 @@ def main():
 
     nan_factors = result[result["cumulative_adj_factor"].isna()]
     if len(nan_factors) > 0:
-        nan_dates = sorted(nan_factors["date"].dt.strftime("%Y-%m-%d").unique())
-        nan_stocks = nan_factors["stock_code"].nunique()
+        nan_dates = sorted(as_series(nan_factors["date"]).dt.strftime("%Y-%m-%d").unique())
+        nan_stocks = int(as_series(nan_factors["stock_code"]).nunique())
         print(f"\n[NaN 因子] {len(nan_factors)} 行 NaN 因子, 涉及 {nan_stocks} 只标的")
         if len(nan_dates) <= 10:
             print(f"  日期: {', '.join(nan_dates)}")
@@ -200,17 +233,19 @@ def main():
     print(f"后复权因子: mean={bf.mean():.4f}, std={bf.std():.4f}, "
           f"min={bf.min():.4f}, max={bf.max():.4f}")
 
-    # 检测除权日（back 因子突变 >1% 的日期）
     result["factor_change"] = result.groupby("stock_code")["adj_factor_back"].pct_change(fill_method=None).abs()
     events = result[result["factor_change"] > 0.01]
     print(f"除权事件（back 因子变化>1%）: {len(events):,} 条, "
-          f"覆盖 {events['stock_code'].nunique()} 只标的")
+          f"覆盖 {int(as_series(events['stock_code']).nunique())} 只标的")
 
     result = result.drop(columns=["factor_change"])
 
     output = args.output
     os.makedirs(os.path.dirname(output), exist_ok=True)
     result.to_parquet(output, index=False)
+    from oskh_data.adj_factor_meta import write_adj_factor_meta
+
+    write_adj_factor_meta(output, result, source="oskh_data.adj_factor.main")
     print(f"\nSaved: {output}")
 
 

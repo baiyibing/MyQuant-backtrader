@@ -1,3 +1,5 @@
+# pyright: reportUnusedImport=false
+# re-export hub — imports consumed by external callers; pyright cannot trace cross-module re-export
 """qlib_cost — 筹码分布纯算法包。
 
 核心算法仅依赖 numpy/pandas/numba，无可视化/外部依赖。

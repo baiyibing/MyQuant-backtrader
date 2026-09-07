@@ -1,4 +1,4 @@
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 from functools import partial
 from qlib.data.dataset import DatasetH
 from qlib.utils import init_instance_by_config
@@ -97,15 +97,15 @@ def get_transformer_config(
     reg: float = 1e-3,
     n_jobs: int = 10,
     GPU: int = 0,
-    seed: int = None,
+    seed: Optional[int] = None,
     method: str = "ts",
 ) -> Dict:
-    
-    method: str = method.lower()
+
+    method_norm: str = method.lower()
     module_path: str = {
         "ts": "qlib.contrib.model.pytorch_transformer_ts",
         "normal": "qlib.contrib.model.pytorch_transformer",
-    }[method]
+    }[method_norm]
 
     return {
         "class": "TransformerModel",
@@ -284,21 +284,21 @@ def run_model(
     model: str,
     start_time: str,
     end_time: str,
-    model_kw: Dict = None,
+    model_kw: Optional[Dict] = None,
     experiment_name: str = "workflow",
     trained_model: str = "trained_model.pkl",
 ) -> Dict:
-    model: str = model.lower()
+    model_key = model.lower()
 
     if model_kw is not None:
         print()
-        model_config: Dict = MODEL_CONFIG[model](**model_kw)
+        model_config: Dict = MODEL_CONFIG[model_key](**model_kw)
     else:
-        model_config: Dict = MODEL_CONFIG[model]()
+        model_config: Dict = MODEL_CONFIG[model_key]()
 
-    save_path = "tmp.pth" if model != "gbdt" else None
+    save_path = "tmp.pth" if model_key != "gbdt" else None
 
-    model = init_instance_by_config(model_config)
+    model_instance = init_instance_by_config(model_config)
     # R变量可以理解为实验记录管理器。
     console.log(f"实验名:{experiment_name},训练模型:{trained_model},开始运行...")
 
@@ -307,10 +307,10 @@ def run_model(
         # 训练
         #############
 
-        model.fit(dataset, save_path=save_path)
+        model_instance.fit(dataset, save_path=save_path)
 
         # 训练好的模型以pkl文件形式保存到本次实验运行记录目录下的artifacts子目录
-        R.save_objects(**{trained_model: model})
+        R.save_objects(**{trained_model: model_instance})
 
         ###############
         # 预测
@@ -318,7 +318,7 @@ def run_model(
         # 本次实验的实验记录器
         recorder = R.get_recorder()
         # 生成预测结果文件
-        sig_rec = SignalRecord(model, dataset, recorder)
+        sig_rec = SignalRecord(model_instance, dataset, recorder)
         sig_rec.generate()
 
         # 生成预测结果分析文件
@@ -342,7 +342,7 @@ def run_model(
                 "kwargs": {
                     # "model": model,  # 模型对象
                     # "dataset": dataset,  # 数据集
-                    "signal": (model, dataset),  # 信号，也可以是pred_df，得到测试集的预测值score
+                    "signal": (model_instance, dataset),  # 信号，也可以是pred_df，得到测试集的预测值score
                     "topk": 30,
                     "n_drop": 0,
                     "only_tradable": True,

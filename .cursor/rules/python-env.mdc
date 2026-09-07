@@ -1,5 +1,5 @@
 ---
-description: Python environment (vanna311) and UTF-8 encoding rules
+description: Python environment (vanna312) and UTF-8 encoding rules
 globs:
   - "**/*.py"
 alwaysApply: true
@@ -7,23 +7,25 @@ alwaysApply: true
 
 ## Environment
 
-Project Python environment is fixed to **vanna311**.
+Project Python environment is fixed to **vanna312** (Python 3.12).
 
-- Interpreter: `D:\anaconda3\envs\vanna311\python.exe`
-- Conda: `D:\anaconda3\Scripts\conda.exe`
+- Resolve order: `OSKH_MERGE_PYTHON` → `VANNA312_PYTHON` → `VANNA311_PYTHON` (legacy) → `D:\anaconda3\envs\vanna312\python.exe`
+- Helper: `scripts/_script_bootstrap.py` (`resolve_oskh_python`)
+- Conda (machine default): `D:\anaconda3\Scripts\conda.exe`
 - Working directory: `${workspaceFolder}`
 
 ### Execution
 
-1. Always use the explicit interpreter path:
-   - `D:\anaconda3\envs\vanna311\python.exe <script_or_module>`
-   - If the path does not exist, fall back to `OSKH_MERGE_PYTHON` or `VANNA311_PYTHON` env vars (see `AGENTS.md`).
-2. Pip: `D:\anaconda3\envs\vanna311\python.exe -m pip ...`
-3. Tests (pick one, **never** bare `python -m pytest`):
-   - `D:\anaconda3\envs\vanna311\python.exe -m pytest ...`
-   - `conda run -n vanna311 python -m pytest ...`
+1. Prefer env-resolved interpreter; do **not** copy the machine default path into new script constants:
+   - `OSKH_MERGE_PYTHON` / `VANNA312_PYTHON` when set
+   - else `D:\anaconda3\envs\vanna312\python.exe` if present
+   - interactive: `conda activate vanna312` then `python …`
+2. Pip: the resolved exe `-m pip ...`
+3. Tests (pick one, **never** bare system `python -m pytest`):
+   - resolved vanna312 exe `-m pytest ...`
+   - `conda run -n vanna312 python -m pytest ...`
 4. Never use system `python` / `pip` implicitly.
-5. Terminal activation: `conda activate vanna311`
+5. Terminal activation: `conda activate vanna312`
 
 ## Encoding
 
@@ -32,4 +34,3 @@ Project Python environment is fixed to **vanna311**.
 - Python 源文件默认 UTF-8（Python 3 默认），可省略 `# -*- coding: utf-8 -*-` 声明
 - 所有 `open()` / `read()` / `write()` 调用使用 `encoding="utf-8"`
 - 子进程通信设置 `PYTHONIOENCODING=utf-8`
-

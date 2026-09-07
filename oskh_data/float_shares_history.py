@@ -14,16 +14,20 @@ Original doc: Backfill float_shares history parquet. Sources: 1) snapshot 2) aks
 
 import argparse
 import os
+
+from common.infra.data_root import resolve_source_parquet
 import sys
 from pathlib import Path
-from typing import List
+from typing import Any, List, cast
 
 import pandas as pd
+
+from oskh_data.pandas_typing import normalize_timestamp
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, REPO)
 
-DEFAULT_SNAPSHOT_PATH = os.path.join(REPO, "stock_data", "float_shares.parquet")
+DEFAULT_SNAPSHOT_PATH = str(resolve_source_parquet("float_shares.parquet"))
 DEFAULT_HISTORY_PATH = os.path.join(REPO, "stock_data", "float_shares_history.parquet")
 
 
@@ -39,9 +43,9 @@ def build_snapshot_backfill(snapshot_df: pd.DataFrame, dates: List[pd.Timestamp]
         day_df["date"] = d.normalize()
         frames.append(day_df)
     if not frames:
-        return pd.DataFrame(columns=["date", "stock_code", "FloatVolume", "TotalVolume", "name"])
+        return pd.DataFrame(columns=cast(Any, ["date", "stock_code", "FloatVolume", "TotalVolume", "name"]))
     out = pd.concat(frames, ignore_index=True)
-    return out[["date", "stock_code", "FloatVolume", "TotalVolume", "name"]]
+    return pd.DataFrame(out[["date", "stock_code", "FloatVolume", "TotalVolume", "name"]])
 
 
 def merge_history(existing: pd.DataFrame, incoming: pd.DataFrame) -> pd.DataFrame:
@@ -68,8 +72,8 @@ def main() -> None:
     parser.add_argument("--codes", default=None, help="comma-separated stock codes")
     args = parser.parse_args()
 
-    start_ts = pd.Timestamp(args.start_date).normalize()
-    end_ts = pd.Timestamp(args.end_date).normalize()
+    start_ts = normalize_timestamp(pd.Timestamp(args.start_date))
+    end_ts = normalize_timestamp(pd.Timestamp(args.end_date))
     if end_ts < start_ts:
         raise ValueError("end-date must be >= start-date")
 
@@ -78,10 +82,12 @@ def main() -> None:
 
     if args.codes:
         selected_codes = [c.strip().upper() for c in args.codes.split(",") if c.strip()]
-        snapshot_df = snapshot_df[snapshot_df["stock_code"].isin(selected_codes)].copy()
+        snapshot_df = pd.DataFrame(
+            snapshot_df.loc[snapshot_df["stock_code"].isin(selected_codes)]
+        )
 
     if args.max_stocks and args.max_stocks > 0:
-        snapshot_df = snapshot_df.head(args.max_stocks).copy()
+        snapshot_df = pd.DataFrame(snapshot_df.head(args.max_stocks))
 
     incoming = build_snapshot_backfill(snapshot_df, business_days(args.start_date, args.end_date))
 
@@ -99,10 +105,13 @@ def main() -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
     merged.to_parquet(str(out), index=False)
 
-    latest_date = pd.to_datetime(merged["date"]).max().normalize()
-    latest = merged[merged["date"] == latest_date][["stock_code", "FloatVolume", "TotalVolume", "name"]].copy()
+    latest_date = normalize_timestamp(pd.to_datetime(merged["date"]).max())
+    latest = cast(
+        pd.DataFrame,
+        merged[merged["date"] == latest_date][["stock_code", "FloatVolume", "TotalVolume", "name"]],
+    ).copy()
     latest["updated_at"] = pd.Timestamp.now().isoformat()
-    latest = latest.sort_values("stock_code").reset_index(drop=True)
+    latest = latest.sort_values(by="stock_code").reset_index(drop=True)  # pyright: ignore[reportCallIssue]
     latest.to_parquet(args.snapshot_path, index=False)
 
     print(f"source: snapshot")

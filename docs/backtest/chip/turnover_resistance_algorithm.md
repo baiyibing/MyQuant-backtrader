@@ -11,8 +11,8 @@
 > - `backtest/chip_factor_analysis.py`
 > - `backtest/daily_chip_logger.py`
 > - `backtest/filter_chip_stocks.py`
-> - `scripts/full_market_chip_resist.py`
-> - `scripts/spot_check_chip_factors.py`
+> - `scripts/data/full_market_chip_resist.py`
+> - `scripts/data/spot_check_chip_factors.py`
 > - `stock_data/float_shares.parquet`、`stock_data/free_float_shares.parquet`（流通股本）
 
 ---
@@ -75,8 +75,8 @@ $$
 ```
 用户脚本 / 回测框架
     │
-    ├─ scripts/full_market_chip_resist.py      全市场批量计算
-    ├─ scripts/spot_check_chip_factors.py      随机抽样 Spot Check（无 --stock 参数）
+    ├─ scripts/data/full_market_chip_resist.py      全市场批量计算
+    ├─ scripts/data/spot_check_chip_factors.py      随机抽样 Spot Check（无 --stock 参数）
     ├─ backtest/chip_factor_analysis.py        多轮回测 + 滚动 IC
     ├─ backtest/daily_chip_logger.py           每日截面 canonical（含 ARC/VRC/SRC/KRC）
     └─ backtest/filter_chip_stocks.py          按阻力+BB 条件筛选全市场

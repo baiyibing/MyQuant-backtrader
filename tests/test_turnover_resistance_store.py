@@ -3,13 +3,15 @@
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
 
-from backtest.chip_turnover_resistance_bands import (
+from oskh_factors.chip.bands import (
     classify_tr_bb_signal,
     compute_tr_bb_columns,
     tr_bollinger_bands,
@@ -188,10 +190,11 @@ class TestTurnoverResistanceStore:
         last_day = computed[computed["trade_date"] == "20260220"]
         assert len(last_day) == len(codes)
         for _, row in last_day.iterrows():
-            series = computed[computed["stock_code"] == row["stock_code"]].sort_values(
-                "trade_date"
-            )["turnover_resistance"]
-            manual = tr_bollinger_bands(series.reset_index(drop=True), period=20)
+            frame = computed[computed["stock_code"] == row["stock_code"]].sort_values(  # pyright: ignore[reportCallIssue]
+                by="trade_date"
+            )
+            series = frame["turnover_resistance"]
+            manual = tr_bollinger_bands(cast(Any, series.reset_index(drop=True)), period=20)
             assert row["tr_bb_middle"] == pytest.approx(manual["tr_bb_middle"])
 
 

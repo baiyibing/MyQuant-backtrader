@@ -5,6 +5,8 @@ LastEditors: hugo2046 shen.lan123@gmail.com
 LastEditTime: 2023-03-29 10:50:17
 Description: 筹码分布算法(distribution_of_chips)
 """
+from typing import Optional
+
 import numpy as np
 from numba import jit
 # from scipy.stats import triang, uniform
@@ -121,8 +123,8 @@ def calc_triang_pdf(
     high: float,
     low: float,
     vol: float,
-    min_p: float = None,
-    max_p: float = None,
+    min_p: Optional[float] = None,
+    max_p: Optional[float] = None,
     step: float = 0.01,
 ) -> np.ndarray:
     """三角分布
@@ -167,7 +169,7 @@ def calc_triang_pdf(
 #################### 平均分布 ####################
 
 @jit(nopython=True)
-def uniform_pdf(x,loc=0,scale=1)->np.ndarray:
+def uniform_pdf(x, loc=0.0, scale=1.0) -> np.ndarray:
     if scale == 0:
         return np.zeros_like(x) * np.nan
     a:np.ndarray = (x - loc) / scale
@@ -178,8 +180,8 @@ def calc_uniform_pdf(
     high: float,
     low: float,
     vol: float,
-    min_p: float = None,
-    max_p: float = None,
+    min_p: Optional[float] = None,
+    max_p: Optional[float] = None,
     step: float = 0.01,
 ) -> np.ndarray:
     """平均分布

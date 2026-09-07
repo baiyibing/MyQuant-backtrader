@@ -22,8 +22,12 @@ C'. 开盘前覆盖率 fail-close、E'. UPSERT 回填+审计追踪
 """
 from __future__ import annotations
 
-from oskh_data.downloader import DataDownloader, PeriodDataManager, StockDataManager
-from oskh_data.reader import DEFAULT_READER_MODE, StockDataReader
+from importlib import import_module
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from oskh_data.downloader import DataDownloader, PeriodDataManager, StockDataManager
+    from oskh_data.reader import DEFAULT_READER_MODE, StockDataReader
 
 # 子模块按需导入，避免包初始化时触发不必要的依赖：
 #   from oskh_data.cache_port import get_daily_bars_cached, ...
@@ -31,6 +35,8 @@ from oskh_data.reader import DEFAULT_READER_MODE, StockDataReader
 #   from oskh_data.audit import record_run_start, record_run_end, ...
 #   from oskh_data.etf_limits import get_etf_limit_pct
 #   from oskh_data.etf_backfill import main  # ETF 回填 CLI
+#   from oskh_data.download_ops import download_market_data  # QMT → parquet
+# CLI: scripts/data/backfill_daily_data.py, scripts/data/update_adjusted_daily.py, ...
 
 __all__ = [
     "StockDataReader",
@@ -40,3 +46,25 @@ __all__ = [
     "StockDataManager",
 ]
 
+_LAZY_EXPORTS = {
+    "StockDataReader": ("oskh_data.reader", "StockDataReader"),
+    "DEFAULT_READER_MODE": ("oskh_data.reader", "DEFAULT_READER_MODE"),
+    "DataDownloader": ("oskh_data.downloader", "DataDownloader"),
+    "PeriodDataManager": ("oskh_data.downloader", "PeriodDataManager"),
+    "StockDataManager": ("oskh_data.downloader", "StockDataManager"),
+}
+
+
+def __getattr__(name: str) -> Any:
+    """Preserve root exports without loading DuckDB for lightweight submodules."""
+    target = _LAZY_EXPORTS.get(name)
+    if target is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    module_name, attribute_name = target
+    value = getattr(import_module(module_name), attribute_name)
+    globals()[name] = value
+    return value
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()) | set(__all__))

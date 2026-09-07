@@ -27,8 +27,8 @@
 
 | 来源 | 默认窗口 | 典型输出 | 语义 |
 |---|---|---|---|
-| `oskh_core/turnover_resist_bridge.py` (Rust PyO3 FFI) | **1000** 日 | `compute_turnover_resist()` | **Canonical（生产/持久化）** |
-| `scripts/full_market_canonical_resist.py` | **1000** 日 | `canonical_resist_batch_{date}.csv` | **Canonical（同 Rust）** |
+| `oskh_factors/bridge/turnover_resist.py` (Rust PyO3 FFI) | **1000** 日 | `compute_turnover_resist()` | **Canonical（生产/持久化）** |
+| `scripts/data/full_market_canonical_resist.py` | **1000** 日 | `canonical_resist_batch_{date}.csv` | **Canonical（同 Rust）** |
 | `backtest/daily_chip_logger.py` | **80** 日 | `chip_daily_{date}.csv` | **Legacy（回测专用）** |
 | `backtest/chip_factor_analysis.py` | **80** 日 (`WINDOW_DAYS`) | 回测因子截面 | **Legacy（已验证选股规则）** |
 
@@ -103,7 +103,7 @@ if tr_bb:
 | 换手阻力公式 | `(cyqk_today - cyqk_yesterday) / turnover_today` | [`turnover_resistance_algorithm.md`](turnover_resistance_algorithm.md) §2.1 |
 | Python canonical 入口 | `backtest/chip_algorithm.py:compute_crossday_turnover_resistance` | 源码 L692 |
 | Rust 高性能实现 | `turnover-resist/src/engine.rs:process_one_stock` | 源码 L48 |
-| **Python PyO3 桥接** | `oskh_core/turnover_resist_bridge.py:compute_turnover_resist()` | 源码 L70（v1.0, 2026-06-07） |
+| **Python PyO3 桥接** | `oskh_factors/bridge/turnover_resist.py:compute_turnover_resist()` | v1.0, 2026-06-07（`oskh_core` shim 已删 2026-08-24 PR-4） |
 | 当前价格布林带 | `MA(close, 20) ± 2σ` | `turnover-resist/src/bollinger.rs` / `backtest/chip_algorithm.py:bb_position` |
 | 当前选股规则 | `\|阻力\|>20 & price_BB_position>=0.5`（两个独立指标组合） | `backtest/chip_factor_analysis.py:318` |
 | 每日截面输出 | `canonical_resist_batch_{date}.csv`（18 列，含 TR 双口径 + price BB） | `full_market_canonical_resist.py` |
@@ -130,7 +130,7 @@ if tr_bb:
 ```
 每日收盘后                             已有资产
 ═══════════                            ════════
-Rust PyO3 FFI ──→ 全市场 TR 截面       oskh_core/turnover_resist_bridge.py
+Rust PyO3 FFI ──→ 全市场 TR 截面       oskh_factors/bridge/turnover_resist.py
   (27s/日, 5500 只, 18 列)             compute_turnover_resist(date=T, window=1000)
       │
       ▼
@@ -185,7 +185,7 @@ turnover-resist/src/
 - `backtest/chip_algorithm.py` 中的 `compute_crossday_turnover_resistance` 与 `bb_position`
 - `oskh_core/turnover_resist_bridge.py` 当前接口（`compute_turnover_resist()` 18 列不变）
 - `turnover-resist/src/engine.rs`（Rust 不扩展 TR BB）
-- `scripts/full_market_canonical_resist.py` 当前输出格式
+- `scripts/data/full_market_canonical_resist.py` 当前输出格式
 
 **CSV 与 Parquet 表同步声明**（S2）：CSV（`canonical_resist_batch_{date}.csv`）与 Parquet 表同源——均为 Rust FFI `window=1000` 输出，数值应完全一致。Parquet 表为主查询路径，CSV 为可读备份。如两者数值不一致，以 Parquet 表为准，排查 `upsert_daily` 实现或 `pd.read_csv` 类型转换。
 
@@ -435,7 +435,7 @@ Rust 侧唯一可能的未来扩展（非本方案范围）：在 `turnover-resi
 收盘后
   │
   ▼
-scripts/compute_turnover_resistance_bands.py --date YYYYMMDD
+scripts/data/compute_turnover_resistance_bands.py --date YYYYMMDD
   │
   ├── Step 1: compute_turnover_resist(
   │           date=YYYYMMDD,
@@ -566,8 +566,8 @@ elif latest["turnover_resistance"] < latest["tr_bb_lower"]:
 - [ ] **window=80 与 window=1000 同日冲突测试**（P0-4）：`upsert_daily` 在 window 不一致时抛 `ValueError`，拒绝静默覆盖；
 - [ ] **TR BB 与手工 groupby rolling 全市场抽样对齐**（P2-3）：≥10 股 × 20 日；
 - [ ] **`load_series` 口径不一致返回 `ValueError` 单测**（严格模式）；
-- [ ] `scripts/compute_turnover_resistance_bands.py`：单日全市场跑通（Rust PyO3 FFI → Parquet → TR BB），写入 `stock_data/turnover_resistance_daily.parquet`；
-- [ ] `scripts/backfill_turnover_resistance_bands.py`：历史回填 60 交易日，幂等（`--skip-existing`），口径一致（`window=1000`）；
+- [ ] `scripts/data/compute_turnover_resistance_bands.py`：单日全市场跑通（Rust PyO3 FFI → Parquet → TR BB），写入 `stock_data/turnover_resistance_daily.parquet`；
+- [ ] `scripts/data/backfill_turnover_resistance_bands.py`：历史回填 60 交易日，幂等（`--skip-existing`），口径一致（`window=1000`）；
 - [ ] 策略/回测能通过 `TurnoverResistanceStore.load_series()` 毫秒级读取历史 TR 时序；
 - [ ] SSOT 文档更新：`docs/backtest/chip/turnover_resistance.md` 索引页新增 TR-Bollinger 子页面 + Canonical vs Legacy 窗口声明（P0-3）；**去掉 `daily_chip_logger` 的 canonical 称谓，改为 Legacy TR_80**；
 - [ ] `.gitignore` 确认覆盖 `stock_data/turnover_resistance_daily.parquet`（派生数据不入库）；
@@ -586,8 +586,8 @@ elif latest["turnover_resistance"] < latest["tr_bb_lower"]:
 |---|---|---|
 | Step 1 | `oskh_data/turnover_resistance_store.py` — Parquet schema + UPSERT + 查询 + 口径校验 | 0.5 d |
 | Step 2 | `backtest/chip_turnover_resistance_bands.py` — TR BB `rolling` 计算 + 单测 | 0.25 d |
-| Step 3 | `scripts/backfill_turnover_resistance_bands.py` — 批量跑 60 天 Rust FFI → 入库 → 算 TR BB | 0.25 d |
-| Step 4 | `scripts/compute_turnover_resistance_bands.py` — 每日增量入口 | 0.25 d |
+| Step 3 | `scripts/data/backfill_turnover_resistance_bands.py` — 批量跑 60 天 Rust FFI → 入库 → 算 TR BB | 0.25 d |
+| Step 4 | `scripts/data/compute_turnover_resistance_bands.py` — 每日增量入口 | 0.25 d |
 | Step 5 | （Phase 2：独立 PR）`backtest/chip_factor_analysis.py` 接入 `resist_tr_bb_1000` 规则 + IC/多轮回测 | 0.5 d |
 | Step 6 | SSOT 文档更新 + contract gates | 0.25 d |
 | **合计** | | **~1.75 d** |
@@ -655,12 +655,12 @@ elif latest["turnover_resistance"] < latest["tr_bb_lower"]:
 | [`turnover_resistance_runbook.md`](turnover_resistance_runbook.md) | 运行手册（参数速查） |
 | [`turnover-resist-bridge-selection.md`](turnover-resist-bridge-selection.md) | PyO3 vs CLI 桥接选型 benchmark |
 | [`Rust-Python换手阻力精度差异—权威根因分析报告.md`](Rust-Python换手阻力精度差异—权威根因分析报告.md) | `np.arange` 网格修复根因 |
-| [`../../oskh_core/turnover_resist_bridge.py`](../../oskh_core/turnover_resist_bridge.py) | PyO3 FFI 桥接（v1.0） |
+| [`../../oskh_factors/bridge/turnover_resist.py`](../../oskh_factors/bridge/turnover_resist.py) | PyO3 FFI 桥接（v1.0；`oskh_core` shim 已删 2026-08-24 PR-4） |
 | [`../../../turnover-resist/src/engine.rs`](../../../turnover-resist/src/engine.rs) | Rust 核心计算引擎 |
 | [`../../../turnover-resist/src/bollinger.rs`](../../../turnover-resist/src/bollinger.rs) | Rust 价格布林带 |
 | [`../../backtest/chip_factor_analysis.py`](../../backtest/chip_factor_analysis.py) | 选股规则 RULES |
 | [`../../backtest/daily_chip_logger.py`](../../backtest/daily_chip_logger.py) | 每日截面 CSV 输出（WINDOW_DAYS=80） |
-| [`../../../scripts/full_market_canonical_resist.py`](../../../scripts/full_market_canonical_resist.py) | Python canonical 全市场入口（默认 window=1000） |
+| [`../../../scripts/data/full_market_canonical_resist.py`](../../../scripts/data/full_market_canonical_resist.py) | Python canonical 全市场入口（默认 window=1000） |
 
 ---
 

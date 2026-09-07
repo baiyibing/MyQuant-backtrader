@@ -2,6 +2,7 @@
 
 > 日期：2026-05-18
 > 状态：已完成
+> 2026-08 环境/依赖处置（vanna312、alphalens、#299/#300）：[`../../engineering/qlib-cost-package-status-2026-08-19.md`](../../engineering/qlib-cost-package-status-2026-08-19.md)
 
 ## 背景
 

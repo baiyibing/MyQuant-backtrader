@@ -589,9 +589,9 @@ class QMTEmergencyModeError(QuantException):
 
 class TradingRiskError(QuantException):
     """
-    交易风控层异常（含资金熔断、持仓限制）
+    交易风控层异常（持仓限制等；资金熔断子系统已退役 2026-08-25，化石清单 §A.7）
 
-    Phase 3：增加对 constants.CASH_FUSE_THRESHOLD 的引用能力（通过 extra 传递）
+    Phase 3：风控阈值等参数通过 extra 传递
     """
 
     def __init__(
@@ -633,7 +633,7 @@ class TradingExecutionError(QuantException):
     - 订单委托失败（order_stock 返回 None 或抛出异常）
     - 订单等待完成超时（wait_for_orders_completion 中断）
     - 成交回报处理异常（on_trade/on_order 回调失败）
-    - 买卖执行最终失败（超过 TradingConstants.SELL/BUY_MAX_RETRIES 重试次数）
+    - 买卖执行最终失败（本地批量重试耗尽）
     - 交易记录持久化失败（CSV文件锁定、IO错误、权限拒绝）
     - 资金熔断触发（CASH_CIRCUIT_BREAKER_TRIGGERED）后的执行中断
 
@@ -794,7 +794,7 @@ class StrategyExecutionError(QuantException):
     - 策略数据加载失败（CSV/Portfolio记录损坏、格式不兼容）
     - 选股文件读写失败（权限错误、磁盘满、编码错误）
     - 选股生成失败（generate_stock_selection 算法异常）
-    - 交易日历查询失败（依赖服务不可用，is_trade_day/is_rebalance_day）
+    - 交易日历查询失败（依赖服务不可用，is_trade_day）
     - 投资组合记录更新失败（SQLite WAL冲突、并发写入、Schema不匹配）
     - 日终对账（EOD Reconcile）执行失败（资金偏差超限）
     - 日终刷新失败（EOD Refresh，价格获取失败）

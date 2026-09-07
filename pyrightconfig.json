@@ -1,12 +1,13 @@
 {
-  "pythonVersion": "3.11",
-  "venv": "vanna311",
+  "pythonVersion": "3.12",
+  "venv": "vanna312",
   "venvPath": "D:/anaconda3/envs",
   "typeCheckingMode": "basic",
   "include": [
     "common",
     "oskh_data",
     "oskh_core",
+    "oskh_factors",
     "trade_decision",
     "backtest",
     "qlib_cost",
