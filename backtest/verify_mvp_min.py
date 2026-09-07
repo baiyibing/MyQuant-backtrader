@@ -29,6 +29,7 @@ import pandas as pd
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, REPO)
 
+from common.infra.data_root import resolve_period_root, resolve_source_parquet
 from backtest.chip_algorithm import adapt_columns, daily_chip_distribution, cyq  # noqa: E402
 from backtest.stock_data_reader import StockDataReader
 
@@ -45,7 +46,7 @@ def _get_reader():
         _reader = StockDataReader()
     return _reader
 SAMPLE_SIZE = 15
-PARQUET_DIR = os.path.join(REPO, "stock_data", "period=1d", "dividend_type=none")
+PARQUET_DIR = str(resolve_period_root("1d") / "dividend_type=none")
 
 # 验收门禁阈值
 CYQK_C_RANGE = (0.0, 1.0)
@@ -161,7 +162,7 @@ def verify_single(stock_code: str, reader=None) -> dict:
 
 def collect_stocks(limit: int = None) -> list:
     """从 float_shares.parquet 获取有日线缓存的标的列表。"""
-    fs_path = os.path.join(REPO, "stock_data", "float_shares.parquet")
+    fs_path = str(resolve_source_parquet("float_shares.parquet"))
     if not os.path.exists(fs_path):
         return []
 

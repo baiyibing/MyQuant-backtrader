@@ -115,7 +115,6 @@ def load_stock_data(cerebro, processed_list, start_date: str, end_date: str, buy
 
         # 加载日线数据
         daily_data = get_stock_data_from_cache(
-            base_dir="../stock_data",
             stock_code=code,
             period='1d',
             adjust_type=adjust_type,

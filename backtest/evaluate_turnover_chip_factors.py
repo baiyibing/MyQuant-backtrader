@@ -23,6 +23,7 @@ REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, REPO)
 
 from backtest.chip_algorithm import turnover_chip_factors, _get_float_shares, _estimate_turnover
+from common.infra.data_root import resolve_source_parquet
 from backtest.stock_data_reader import StockDataReader
 
 _reader = None
@@ -32,7 +33,7 @@ def _get_reader():
     if _reader is None:
         _reader = StockDataReader()
     return _reader
-FLOAT_SHARES_PATH = os.path.join(REPO, "stock_data", "float_shares.parquet")
+FLOAT_SHARES_PATH = str(resolve_source_parquet("float_shares.parquet"))
 OUTPUT_DIR = os.path.join(REPO, "backtest_output")
 WINDOW = 60
 

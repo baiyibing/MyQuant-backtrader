@@ -425,25 +425,28 @@ def _clear_adjust_type_data(adjust_path, stock_code):
             print(f"目录不存在: {target_path}")
 
 def get_stock_data_from_cache(base_dir="../stock_data", stock_code=None, period='1d', adjust_type='front', start_time=None, end_time=None):
-    """ 从缓存中获取特定股票的数据 参数: base_dir: 基础目录 stock_code: 股票代码，如'000001.SZ' period: 周期 adjust_type: 复权类型 start_time: 开始时间 end_time: 结束时间 """
+    """Load OHLCV via path-SSOT. Legacy ``../stock_data`` is ignored."""
     if stock_code is None:
         print("请指定股票代码")
         return None
+    from common.infra.qmt_utils_adv import get_stock_data_from_cache as _ssot_get
+
+    kwargs = {}
+    if base_dir not in (None, "", "../stock_data"):
+        kwargs["base_dir"] = base_dir
+    start = start_time if start_time is not None else "19900101"
+    end = end_time if end_time is not None else "20991231"
     try:
-        # 构建文件路径
-        file_path = _get_hive_path(base_dir, period, adjust_type, stock_code)
-        if not os.path.exists(file_path):
-            print(f"股票 {stock_code} 的数据文件不存在: {file_path}")
-            return None
-        # 读取数据
-        df = pd.read_parquet(file_path)
-        # 按时间范围过滤
-        if start_time is not None and end_time is not None:
-            start_dt = pd.to_datetime(start_time)
-            end_dt = pd.to_datetime(end_time)
-            mask = (df.index >= start_dt) & (df.index <= end_dt)
-            df = df.loc[mask]
-        print(f"✅ 成功加载 {stock_code} 数据，共 {len(df)} 条记录")
+        df = _ssot_get(
+            stock_code=stock_code,
+            start_time=start,
+            end_time=end,
+            period=period,
+            adjust_type=adjust_type,
+            **kwargs,
+        )
+        if df is not None:
+            print(f"✅ 成功加载 {stock_code} 数据，共 {len(df)} 条记录")
         return df
     except Exception as e:
         print(f"加载股票数据时出错: {e}")

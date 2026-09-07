@@ -50,13 +50,13 @@ def _load_float_shares_map(parquet_path: str = None) -> pd.DataFrame:
     global _float_shares_cache
     if _float_shares_cache is not None:
         return _float_shares_cache
-    import os as _os
-    if parquet_path is None:
-        parquet_path = _os.path.join(
-            _os.path.dirname(_os.path.abspath(__file__)), "..", "stock_data", "float_shares.parquet"
-        )
-    if _os.path.exists(parquet_path):
-        _float_shares_cache = pd.read_parquet(parquet_path)
+    from pathlib import Path
+
+    from common.infra.data_root import resolve_source_parquet
+
+    path = Path(parquet_path) if parquet_path else resolve_source_parquet("float_shares.parquet")
+    if path.exists():
+        _float_shares_cache = pd.read_parquet(path)
     else:
         _float_shares_cache = pd.DataFrame()
     return _float_shares_cache
@@ -67,15 +67,15 @@ def _load_free_float_shares(parquet_path: str = None) -> pd.DataFrame:
     global _free_float_shares_cache
     if _free_float_shares_cache is not None:
         return _free_float_shares_cache
-    import os as _os
-    if parquet_path is None:
-        parquet_path = _os.path.join(
-            _os.path.dirname(_os.path.abspath(__file__)), "..", "stock_data", "free_float_shares.parquet"
-        )
-    if not _os.path.exists(parquet_path):
+    from pathlib import Path
+
+    from common.infra.data_root import resolve_source_parquet
+
+    path = Path(parquet_path) if parquet_path else resolve_source_parquet("free_float_shares.parquet")
+    if not path.exists():
         _free_float_shares_cache = pd.DataFrame()
         return _free_float_shares_cache
-    df = pd.read_parquet(parquet_path)
+    df = pd.read_parquet(path)
     if not df.empty and "m_timetag" in df.columns:
         df = df.copy()
         df["m_timetag"] = pd.to_datetime(df["m_timetag"]).dt.normalize()
@@ -570,14 +570,13 @@ def _load_adj_factor_table(parquet_path: str = None) -> pd.DataFrame:
     global _adj_factor_cache
     if _adj_factor_cache is not None:
         return _adj_factor_cache
-    if parquet_path is None:
-        import os as _os
-        parquet_path = _os.path.join(
-            _os.path.dirname(_os.path.abspath(__file__)), "..",
-            "stock_data", "adj_factor.parquet",
-        )
-    if _os.path.exists(parquet_path):
-        _adj_factor_cache = pd.read_parquet(parquet_path)
+    from pathlib import Path
+
+    from common.infra.data_root import resolve_source_parquet
+
+    path = Path(parquet_path) if parquet_path else resolve_source_parquet("adj_factor.parquet")
+    if path.exists():
+        _adj_factor_cache = pd.read_parquet(path)
     else:
         _adj_factor_cache = pd.DataFrame()
     return _adj_factor_cache

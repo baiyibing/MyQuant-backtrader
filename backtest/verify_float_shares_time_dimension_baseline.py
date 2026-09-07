@@ -27,11 +27,12 @@ import pandas as pd
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, REPO)
 
+from common.infra.data_root import resolve_period_root, resolve_source_parquet
 from backtest.chip_algorithm import _get_float_shares, turnover_chip_factors  # noqa: E402
 
-FLOAT_SHARES_PATH = os.path.join(REPO, "stock_data", "float_shares.parquet")
-FLOAT_SHARES_HISTORY_PATH = os.path.join(REPO, "stock_data", "float_shares_history.parquet")
-DAILY_DIR = os.path.join(REPO, "stock_data", "period=1d", "dividend_type=front")
+FLOAT_SHARES_PATH = str(resolve_source_parquet("float_shares.parquet"))
+FLOAT_SHARES_HISTORY_PATH = str(resolve_source_parquet("float_shares_history.parquet"))
+DAILY_DIR = str(resolve_period_root("1d") / "dividend_type=front")
 OUTPUT_DIR = os.path.join(REPO, "backtest_output")
 
 

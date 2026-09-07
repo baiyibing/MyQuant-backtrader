@@ -26,7 +26,7 @@ D:\anaconda3\envs\vanna312\python.exe -m pip install -r requirements.txt
 
 ## Run full backtest
 
-Dates / capital are hardcoded in `backtest/backtest_main_full.py`. Needs `../stock_pool` and `../stock_data` (legacy minute parquet via `qmt_utils_adv`).
+Dates / capital are hardcoded in `backtest/backtest_main_full.py`. Needs `../stock_pool`. Minute/daily bars load via `oskh_data.StockDataReader` (path-SSOT; F parquet when `.authority` is present).
 
 ```powershell
 cd backtest

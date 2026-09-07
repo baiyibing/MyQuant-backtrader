@@ -27,9 +27,10 @@ from backtest.chip_algorithm import (
     adapt_columns, daily_chip_distribution, minute_chip_distribution,
     adj_minute_chip_distribution, get_adj_factor, cyq,
 )
+from common.infra.data_root import resolve_period_root, resolve_source_parquet
 from backtest.stock_data_reader import StockDataReader
 
-MINUTE_DIR = os.path.join(REPO, "stock_data", "period=1m", "dividend_type=none")
+MINUTE_DIR = str(resolve_period_root("1m") / "dividend_type=none")
 WINDOW = 80
 
 _reader = None
@@ -44,7 +45,7 @@ DATE_STR = "2026-05-13"
 
 def _pick_stocks(n: int) -> list:
     """一次查询 adj_factor 表，找偏离最大的 stock + 验证因子可用。"""
-    af = pd.read_parquet(os.path.join(REPO, "stock_data", "adj_factor.parquet"))
+    af = pd.read_parquet(str(resolve_source_parquet("adj_factor.parquet")))
     # P1-2: NaN 因子行统计
     nan_count = int(af["cumulative_adj_factor"].isna().sum())
     total_count = len(af)

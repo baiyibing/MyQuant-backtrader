@@ -1,3 +1,4 @@
+# Deprecated: Cerebro I/O uses backtest.qmt_utils_adv (path-SSOT). Do not add new callers.
 import gc
 import logging
 import math

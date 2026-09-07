@@ -50,12 +50,13 @@ sys.path.insert(0, REPO)
 import backtrader as bt
 
 from backtest.chip_algorithm import adapt_columns, daily_chip_distribution, minute_chip_distribution, cyq
+from common.infra.data_root import resolve_source_parquet
 from backtest.stock_data_reader import StockDataReader
 
 # ---------------------------------------------------------------------------
 # 配置
 # ---------------------------------------------------------------------------
-FLOAT_SHARES_PATH = os.path.join(REPO, "stock_data", "float_shares.parquet")
+FLOAT_SHARES_PATH = str(resolve_source_parquet("float_shares.parquet"))
 
 _reader = None
 

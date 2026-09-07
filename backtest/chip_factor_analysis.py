@@ -33,6 +33,7 @@ from backtest.chip_algorithm import (
     derived_chip_factors, _estimate_turnover, cyq,
 )
 from backtest.chip_indicator import ChipDistribution
+from common.infra.data_root import resolve_source_parquet
 from backtest.stock_data_reader import StockDataReader
 
 _reader = None
@@ -42,7 +43,7 @@ def _get_reader():
     if _reader is None:
         _reader = StockDataReader()
     return _reader
-FLOAT_SHARES_PATH = os.path.join(REPO, "stock_data", "float_shares.parquet")
+FLOAT_SHARES_PATH = str(resolve_source_parquet("float_shares.parquet"))
 OUTPUT_DIR = os.path.join(REPO, "backtest_output")
 
 # A股交易日历

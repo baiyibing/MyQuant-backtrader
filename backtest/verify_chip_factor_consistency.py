@@ -33,11 +33,12 @@ from backtest.chip_algorithm import (
     minute_chip_distribution,
     cyq,
 )
+from common.infra.data_root import resolve_period_root, resolve_source_parquet
 from backtest.stock_data_reader import StockDataReader
 
-MINUTE_DIR = os.path.join(REPO, "stock_data", "period=1m", "dividend_type=none")
-DAILY_DIR = os.path.join(REPO, "stock_data", "period=1d", "dividend_type=front")
-FLOAT_SHARES_PATH = os.path.join(REPO, "stock_data", "float_shares.parquet")
+MINUTE_DIR = str(resolve_period_root("1m") / "dividend_type=none")
+DAILY_DIR = str(resolve_period_root("1d") / "dividend_type=front")
+FLOAT_SHARES_PATH = str(resolve_source_parquet("float_shares.parquet"))
 
 _reader = None
 

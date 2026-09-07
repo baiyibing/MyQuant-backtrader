@@ -29,9 +29,10 @@ sys.path.insert(0, REPO)
 from backtest.chip_algorithm import (
     adapt_columns, bb_position, daily_chip_distribution, derived_chip_factors, cyq,
 )
+from common.infra.data_root import resolve_period_root, resolve_source_parquet
 from backtest.stock_data_reader import StockDataReader
 
-FLOAT_SHARES_PATH = os.path.join(REPO, "stock_data", "float_shares.parquet")
+FLOAT_SHARES_PATH = str(resolve_source_parquet("float_shares.parquet"))
 OUTPUT_DIR = os.path.join(REPO, "backtest_output")
 WINDOW_DAYS = 80
 FLOAT_SHARES_COVERAGE_THRESHOLD = 0.95
@@ -39,7 +40,7 @@ FLOAT_SHARES_COVERAGE_THRESHOLD = 0.95
 
 def _load_all_market_codes() -> list:
     """从日线 front 目录扫描全市场代码。"""
-    front_dir = os.path.join(REPO, "stock_data", "period=1d", "dividend_type=front")
+    front_dir = str(resolve_period_root("1d") / "dividend_type=front")
     codes = []
     if os.path.exists(front_dir):
         for d in os.listdir(front_dir):
