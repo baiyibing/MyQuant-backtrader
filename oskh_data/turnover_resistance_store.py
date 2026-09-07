@@ -16,8 +16,6 @@ from oskh_data.pandas_typing import as_dataframe, as_series, to_numeric_series
 from oskh_factors.chip.bands import compute_tr_bb_columns
 from common.infra.quant_logger import get_logger
 from common.infra.timekeeping import wall_now_s
-from oskh_data.reader import _resolve_data_root
-
 _log = get_logger(__name__)
 
 DEFAULT_WINDOW = 1000
@@ -101,14 +99,15 @@ def resolve_parquet_path(path: Optional[Union[str, Path]] = None) -> Path:
 
 
 def resolve_staging_dir(staging_dir: Optional[Union[str, Path]] = None) -> Path:
-    """Directory for per-year TR staging Parquet files."""
+    """Directory for per-year TR staging Parquet files (F parquet container)."""
     if staging_dir is not None:
         return Path(staging_dir)
     env = os.getenv("TURNOVER_RESIST_STAGING_DIR")
     if env:
         return Path(env)
-    root = _resolve_data_root()
-    return root / "stock_data" / "tr_staging"
+    from common.infra.data_root import resolve_tr_staging_dir
+
+    return resolve_tr_staging_dir()
 
 
 def resolve_year_staging_path(

@@ -26,6 +26,8 @@ from oskh_data.pandas_typing import as_timestamp, index_normalize_series, normal
 
 from common.infra.quant_logger import get_logger
 from common.infra.data_root import resolve_data_root as _resolve_data_root
+from common.infra.data_root import resolve_e_stock_data_container as _resolve_e_stock_data_container
+from common.infra.data_root import resolve_parquet_container as _resolve_parquet_container
 from common.infra.data_root import resolve_period_root as _resolve_period_root
 
 logger = get_logger(__name__)
@@ -148,11 +150,19 @@ class StockDataReader:
         asset_type: Literal["stock", "etf"] = "stock",
     ) -> None:
         self._project_root = _resolve_data_root(explicit_root=project_root)
-        self._base_dir = Path(base_dir) if base_dir else self._project_root / 'stock_data'
-        # Phase 2 P0 fix: ETF parquet data lives in stock_data/etf/ (aligned with
-        # etf_backfill.py). DuckDB paths use _base_dir (stock_data/) since the
-        # DuckDB file is built alongside stock DuckDBs.
-        self._etf_parquet_dir = self._base_dir / 'etf' if asset_type == 'etf' else None
+        if base_dir:
+            self._e_container = Path(base_dir)
+            self._parquet_container = Path(base_dir)
+        else:
+            self._e_container = _resolve_e_stock_data_container(
+                explicit_root=project_root
+            )
+            self._parquet_container = _resolve_parquet_container()
+        # DuckDB 与运营文件仍在 E 容器；parquet hive 经 _parquet_container + resolver。
+        self._base_dir = self._e_container
+        self._etf_parquet_dir = (
+            self._parquet_container / "etf" if asset_type == "etf" else None
+        )
         self._mode: str = mode or DEFAULT_READER_MODE
         if self._mode not in ('parquet', 'duckdb', 'duckdb_persistent'):
             raise ValueError(f"Invalid mode: {self._mode}. Use parquet | duckdb | duckdb_persistent")
@@ -449,7 +459,11 @@ class StockDataReader:
         period='1m' → :memory: + read_parquet(glob) 视图（不再使用持久化 .duckdb）
         """
         project_root = _resolve_data_root()
-        base = Path(base_dir) if base_dir else project_root / 'stock_data'
+        base = (
+            Path(base_dir)
+            if base_dir
+            else _resolve_parquet_container(explicit_root=project_root)
+        )
         suffix = _ADJUST_DB_SUFFIX.get(adjust_type, '_none')
         db = Path(db_path) if db_path else (
             base / f'stock_data{"_minute" if period == "1m" else ""}{suffix if period != "1m" else ""}.duckdb'
@@ -550,7 +564,7 @@ class StockDataReader:
                 import time as _time
                 _t0 = _time.perf_counter()
                 con = duckdb.connect(':memory:')
-                base = self._etf_parquet_dir if self._etf_parquet_dir is not None else self._base_dir
+                base = self._etf_parquet_dir if self._etf_parquet_dir is not None else self._parquet_container
                 glob_pattern = str(
                     _resolve_period_root('1m', base=base) / 'dividend_type=none' / 'symbol=*' / 'data.parquet'
                 ).replace('\\', '/')
@@ -606,7 +620,7 @@ class StockDataReader:
     def _scan_parquet(self, stock_codes, start_time, end_time,
                       period, adjust_type, columns):
         if stock_codes is None:
-            stock_codes = _load_all_codes(self._base_dir)
+            stock_codes = _load_all_codes(self._parquet_container)
         frames = []
         for code in stock_codes:
             path = self._make_path(code, period, adjust_type)
@@ -644,7 +658,7 @@ class StockDataReader:
     def _scan_duckdb(self, stock_codes, start_time, end_time,
                      period, adjust_type, columns):
         self._ensure_style(period, adjust_type)
-        base = self._etf_parquet_dir if self._etf_parquet_dir is not None else self._base_dir
+        base = self._etf_parquet_dir if self._etf_parquet_dir is not None else self._parquet_container
         glob = str(_resolve_period_root(period, base=base) /
                    f'dividend_type={adjust_type}' / '*' / 'data.parquet').replace('\\', '/')
 
@@ -712,7 +726,7 @@ class StockDataReader:
         safe = to_partition_key(stock_code)
         # Phase 2 P0 fix: ETF parquet data is stored under stock_data/etf/
         # (aligned with etf_backfill.py). Stock data uses stock_data/ directly.
-        base = self._etf_parquet_dir if self._etf_parquet_dir is not None else self._base_dir
+        base = self._etf_parquet_dir if self._etf_parquet_dir is not None else self._parquet_container
         return (_resolve_period_root(period, base=base) /
                 f'dividend_type={adjust_type}' / f'symbol={safe}' / 'data.parquet')
 
@@ -724,7 +738,7 @@ class StockDataReader:
 
     def _ensure_style(self, period, adjust_type):
         if self._style is None:
-            base = self._etf_parquet_dir if self._etf_parquet_dir is not None else self._base_dir
+            base = self._etf_parquet_dir if self._etf_parquet_dir is not None else self._parquet_container
             self._style = _detect_style(base, period, adjust_type)
 
     def _symbol_expr(self):
@@ -864,7 +878,7 @@ def _prune_backups(db: Path, max_backups: int) -> None:
 
 
 def _detect_style(base_dir: Path, period: str, adjust_type: str) -> str:
-    full_dir = _resolve_period_root(period, base=base_dir) / f'dividend_type={adjust_type}'
+    full_dir = _resolve_period_root(period) / f'dividend_type={adjust_type}'
     if not full_dir.is_dir():
         return 'underscore'
     all_dirs = [d for d in os.listdir(full_dir) if d.startswith('symbol=')]
@@ -893,7 +907,7 @@ def _validate_parquet_schema_consistency(base_dir: Path, *, period: str, adjust_
 
     from oskh_data.daily_parquet_write import CANONICAL_ARROW_TYPES
 
-    period_dir = _resolve_period_root(period, base=base_dir) / f"dividend_type={adjust_type}"
+    period_dir = _resolve_period_root(period) / f"dividend_type={adjust_type}"
     if not period_dir.is_dir():
         raise RuntimeError(f"Data directory not found for schema validation: {period_dir}")
 

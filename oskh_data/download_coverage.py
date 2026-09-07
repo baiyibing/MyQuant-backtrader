@@ -149,7 +149,7 @@ def resolve_skip_list_container_paths(
     another drive, skip JSON may be written there by mistake (``--base-dir F:``).
     Callers must consult **all** roots (lesson 48).
     """
-    from common.infra.data_root import resolve_data_root, resolve_source_parquet
+    from common.infra.data_root import resolve_source_parquet
 
     paths: list[Path] = []
     seen: set[str] = set()
@@ -164,7 +164,9 @@ def resolve_skip_list_container_paths(
     if repo_stock_data is not None:
         _add(repo_stock_data)
     else:
-        _add(resolve_data_root() / "stock_data")
+        from common.infra.data_root import resolve_e_stock_data_container
+
+        _add(resolve_e_stock_data_container())
 
     _add(resolve_source_parquet("adj_factor.parquet").parent)
     return paths
@@ -304,7 +306,7 @@ def scan_dividend_coverage(
     skip = _normalize_skip_keys(skip_codes)
     from common.infra.data_root import resolve_period_root
 
-    root = resolve_period_root("1d", base=base) / f"dividend_type={adjust_type}"
+    root = resolve_period_root("1d") / f"dividend_type={adjust_type}"
     if not root.is_dir():
         return report
 

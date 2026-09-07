@@ -38,7 +38,11 @@ import pandas as pd
 from oskh_data.pandas_typing import as_series  # noqa: F401
 
 from common.infra.quant_logger import get_logger
-from common.infra.data_root import resolve_period_root, resolve_source_parquet
+from common.infra.data_root import (
+    resolve_e_stock_data_container,
+    resolve_period_root,
+    resolve_source_parquet,
+)
 from oskh_data.downloader import DataDownloader
 from oskh_data.reader import StockDataReader
 
@@ -74,7 +78,7 @@ def _qmt_available() -> bool:
 DEFAULT_START = "20200101"
 DEFAULT_END = "20250101"
 DEFAULT_BATCH = 100
-BASE_DIR = os.path.join(REPO, "stock_data")
+BASE_DIR = str(resolve_e_stock_data_container())
 FLOAT_SHARES_PATH = str(resolve_source_parquet("float_shares.parquet"))
 FAILED_LOG_PATH = os.path.join(REPO, "backtest_output", "backfill_failed.json")
 
@@ -122,7 +126,7 @@ def _get_all_a_stock_codes() -> List[str]:
         codes = df["stock_code"].dropna().unique().tolist()
         fallback_source = os.path.basename(FLOAT_SHARES_PATH)
     else:
-        front_dir = str(resolve_period_root("1d", base=Path(BASE_DIR)) / "dividend_type=front")
+        front_dir = str(resolve_period_root("1d") / "dividend_type=front")
         if os.path.exists(front_dir):
             codes = [
                 to_canonical_symbol(d)
@@ -153,8 +157,8 @@ def _get_all_a_stock_codes() -> List[str]:
 
 def _get_codes_for_minute_backfill() -> List[str]:
     """获取需要补录分钟线的股票：有日线但无分钟线。"""
-    daily_dir = str(resolve_period_root("1d", base=Path(BASE_DIR)) / "dividend_type=none")
-    minute_dir = str(resolve_period_root("1m", base=Path(BASE_DIR)) / "dividend_type=none")
+    daily_dir = str(resolve_period_root("1d") / "dividend_type=none")
+    minute_dir = str(resolve_period_root("1m") / "dividend_type=none")
 
     if not os.path.exists(daily_dir):
         raise RuntimeError(f"日线目录不存在: {daily_dir}")
@@ -209,7 +213,7 @@ def _verify_minute_bar_integrity(done: Set[str], end_date: str) -> Set[str]:
     # Sample up to 50 stocks from progress
     sample = random.sample(sorted(done), min(50, len(done)))
     # Determine last 5 trading days from the data files themselves
-    minute_dir = str(resolve_period_root("1m", base=Path(BASE_DIR)) / "dividend_type=none")
+    minute_dir = str(resolve_period_root("1m") / "dividend_type=none")
     trading_days: Set[str] = set()
     for code in sample[:5]:  # use first 5 stocks to discover recent trading days
         sym_dir = to_partition_key(code)
@@ -297,7 +301,7 @@ def _rebuild_duckdb(rebuild_period: str) -> None:
 
     required_failed: list[str] = []
     for period, adjust in periods_to_build:
-        period_dir = resolve_period_root(period, base=Path(BASE_DIR)) / f"dividend_type={adjust}"
+        period_dir = resolve_period_root(period) / f"dividend_type={adjust}"
         if adjust == "back" and not period_dir.is_dir():
             logger.info(
                 f"{period}/{adjust}: 分区不存在，跳过 rebuild（日常默认不下 back）"
@@ -436,7 +440,7 @@ def _gate_check_parquet_health(period: str = '1m') -> int:
     import duckdb as _duckdb
 
     parquet_glob = os.path.join(
-        str(resolve_period_root(period, base=Path(BASE_DIR)) / 'dividend_type=none' / 'symbol=*' / 'data.parquet')
+        str(resolve_period_root(period) / 'dividend_type=none' / 'symbol=*' / 'data.parquet')
     ).replace('\\', '/')
 
     con = _duckdb.connect(':memory:')
@@ -467,7 +471,7 @@ def _gate_verify_freshness(period: str, done_count: int) -> None:
     import pandas as _pd
     from pathlib import Path as _Path
 
-    parquet_dir = resolve_period_root(period, base=_Path(BASE_DIR)) / 'dividend_type=none'
+    parquet_dir = resolve_period_root(period) / 'dividend_type=none'
     if not parquet_dir.is_dir():
         logger.warning("门禁 3 跳过：parquet 目录不存在")
         return
@@ -520,7 +524,7 @@ def _gate_inventory_snapshot(period: str = '1m', adjust_type: str = 'none') -> N
 
     adj = 'none' if period == '1m' else adjust_type
     parquet_glob = str(
-        resolve_period_root(period, base=Path(BASE_DIR))
+        resolve_period_root(period)
         / f'dividend_type={adj}' / 'symbol=*' / 'data.parquet'
     ).replace('\\', '/')
 

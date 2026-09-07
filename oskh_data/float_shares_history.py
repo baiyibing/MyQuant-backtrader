@@ -15,7 +15,7 @@ Original doc: Backfill float_shares history parquet. Sources: 1) snapshot 2) aks
 import argparse
 import os
 
-from common.infra.data_root import resolve_source_parquet
+from common.infra.data_root import resolve_parquet_container, resolve_source_parquet
 import sys
 from pathlib import Path
 from typing import Any, List, cast
@@ -28,7 +28,7 @@ REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, REPO)
 
 DEFAULT_SNAPSHOT_PATH = str(resolve_source_parquet("float_shares.parquet"))
-DEFAULT_HISTORY_PATH = os.path.join(REPO, "stock_data", "float_shares_history.parquet")
+DEFAULT_HISTORY_PATH = str(resolve_parquet_container() / "float_shares_history.parquet")
 
 
 def business_days(start_date: str, end_date: str) -> List[pd.Timestamp]:

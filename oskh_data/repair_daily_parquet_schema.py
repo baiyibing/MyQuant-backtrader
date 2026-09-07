@@ -42,7 +42,7 @@ def scan_schema_drift(
     from common.infra.data_root import resolve_period_root
 
     for adj in adjust_types:
-        period_dir = resolve_period_root(period, base=base) / f"dividend_type={adj}"
+        period_dir = resolve_period_root(period) / f"dividend_type={adj}"
         if not period_dir.is_dir():
             continue
         for p in sorted(period_dir.glob("symbol=*/data.parquet")):

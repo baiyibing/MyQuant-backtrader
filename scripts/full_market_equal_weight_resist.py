@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import numpy as np
 import pandas as pd
 
+from common.infra.data_root import resolve_source_parquet
 import oskh_data.reader as reader
 from backtest.chip_algorithm import adapt_columns, _get_float_shares
 from qlib_cost import cyq
@@ -124,7 +125,7 @@ def run(date_str: str, output: str, window: int = 120, workers: int = 6):
     target = pd.Timestamp(date_str)
     target_prev = target - pd.Timedelta(days=1)
 
-    fs_path = Path("stock_data/float_shares.parquet")
+    fs_path = resolve_source_parquet("float_shares.parquet")
     if not fs_path.exists():
         raise FileNotFoundError(f"{fs_path} not found")
 

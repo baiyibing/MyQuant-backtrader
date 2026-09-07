@@ -6,7 +6,7 @@ import shutil
 from datetime import datetime, date
 
 from common.infra.timekeeping import CN_TZ, parse_qmt_time
-from common.infra.data_root import resolve_data_root
+from common.infra.data_root import resolve_e_stock_data_container
 from pathlib import Path
 from typing import Any, List, Dict, Optional, Tuple, cast
 import chardet
@@ -16,8 +16,8 @@ import pandas as pd
 logger = get_logger(__name__)
 
 
-# RF-R0/PR-B: resolve via data_root SSOT (M-003b); not cwd-relative ../stock_data.
-_DEFAULT_STOCK_DATA_DIR = str(resolve_data_root() / "stock_data")
+# E workspace (duckdb / ops). Parquet hive is resolved inside StockDataReader.
+_DEFAULT_STOCK_DATA_DIR = str(resolve_e_stock_data_container())
 
 # RF-R2: lazy StockDataReader instances keyed by base_dir (parquet mode, same hive as legacy).
 _oskh_reader_cache: Dict[str, object] = {}
@@ -74,9 +74,17 @@ def _normalize_reader_adjust_type(adjust_type: str) -> str:
 def _get_oskh_data_reader(base_dir: str) -> Any:
     from oskh_data import StockDataReader
 
-    key = str(base_dir)
+    try:
+        is_e_default = Path(base_dir).resolve() == resolve_e_stock_data_container().resolve()
+    except OSError:
+        is_e_default = False
+    # Default E workspace must not pin parquet to E; authority / env SSOT applies.
+    key = "__ssot_parquet__" if is_e_default else str(base_dir)
     if key not in _oskh_reader_cache:
-        _oskh_reader_cache[key] = StockDataReader(mode="parquet", base_dir=key)
+        if is_e_default:
+            _oskh_reader_cache[key] = StockDataReader(mode="parquet")
+        else:
+            _oskh_reader_cache[key] = StockDataReader(mode="parquet", base_dir=str(base_dir))
     return _oskh_reader_cache[key]
 
 

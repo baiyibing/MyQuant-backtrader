@@ -20,7 +20,7 @@ import hashlib
 import json
 import os
 
-from common.infra.data_root import resolve_period_root, resolve_source_parquet
+from common.infra.data_root import resolve_parquet_container, resolve_period_root, resolve_source_parquet
 import sys
 from pathlib import Path
 
@@ -31,7 +31,7 @@ import yaml
 _HERE = Path(__file__).resolve()
 PROJECT_ROOT = _HERE.parents[2] if _HERE.parent.name in {"gates", "diagnostics", "data"} else _HERE.parents[1]
 DEFAULT_CONFIG = PROJECT_ROOT / "config" / "chip_diagnosis.yaml"
-STOCK_DATA = PROJECT_ROOT / "stock_data"
+STOCK_DATA = resolve_parquet_container()
 REPORT_DIR = PROJECT_ROOT / "docs" / "investigation_reports"
 
 # 标准 bootstrap（scripts/_script_bootstrap.py；裸 sys.path.insert 被
@@ -74,7 +74,7 @@ def check_float_shares(cfg: dict) -> tuple[bool, str]:
     covered = len(df)
 
     # 分母：period=1d/dividend_type=front 目录下有有效 parquet 的标的数
-    daily_dir = resolve_period_root("1d", base=STOCK_DATA) / "dividend_type=front"
+    daily_dir = resolve_period_root("1d") / "dividend_type=front"
     if daily_dir.exists():
         total = sum(
             1 for d in os.listdir(daily_dir)
@@ -95,7 +95,7 @@ def check_float_shares(cfg: dict) -> tuple[bool, str]:
 
 def check_daily_data(cfg: dict) -> tuple[bool, str]:
     """检查日线 front 复权数据存在且非空."""
-    daily_dir = resolve_period_root("1d", base=STOCK_DATA) / "dividend_type=front"
+    daily_dir = resolve_period_root("1d") / "dividend_type=front"
     if not daily_dir.exists():
         return False, f"日线 front 目录不存在: {daily_dir}"
 
@@ -129,7 +129,7 @@ def check_daily_data(cfg: dict) -> tuple[bool, str]:
 
 def check_minute_data(cfg: dict) -> tuple[bool, str]:
     """检查分钟线 none 数据存在且非空."""
-    minute_dir = resolve_period_root("1m", base=STOCK_DATA) / "dividend_type=none"
+    minute_dir = resolve_period_root("1m") / "dividend_type=none"
     if not minute_dir.exists():
         return False, f"分钟线 none 目录不存在: {minute_dir}"
 

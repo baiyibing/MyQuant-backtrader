@@ -41,7 +41,7 @@ def _partition_parquet(base_dir: Path, adjust_type: str, canon: str) -> Path:
     from common.infra.data_root import resolve_period_root
 
     return (
-        resolve_period_root("1d", base=Path(base_dir))
+        resolve_period_root("1d")
         / f"dividend_type={adjust_type}"
         / f"symbol={part}"
         / "data.parquet"

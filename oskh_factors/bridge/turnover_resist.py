@@ -10,7 +10,7 @@ plan-main v22 Phase A1 交付项：替代 CLI subprocess.run 调用，
 
     results = compute_turnover_resist(
         date="20260606",
-        data_dir="E:/data/parquet",
+        # data_dir 默认 resolve_parquet_container()（F parquet）；DuckDB 仍在 E
     )
     # returns list[dict] with keys: stock_code, stock_name, date, close,
     #   cyqk_T, cyqk_T_1, profit_chip_diff, turnover, turnover_resistance,
@@ -232,9 +232,9 @@ def _find_exe() -> Path:
 
 
 def _default_data_dir() -> str:
-    import os
+    from common.infra.data_root import resolve_turnover_resist_parquet_root
 
-    return os.getenv("TURNOVER_RESIST_DATA_DIR", "E:/data/parquet")
+    return str(resolve_turnover_resist_parquet_root())
 
 
 # ---------------------------------------------------------------------------

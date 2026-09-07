@@ -182,12 +182,17 @@ def _file_path(
     *,
     ensure_dir: bool = True,
 ) -> Path:
-    from common.infra.data_root import resolve_period_root
+    import os
+
+    from common.infra.data_root import find_authority_marker, resolve_period_root
 
     part = to_partition_key(to_canonical_symbol(stock_code))
-    # path-SSOT D2 写侧契约：周期根经 resolve_period_root（env 胜 base——
-    # 写后路径 == 读路径；base_dir 保持容器语义，禁传 period 根（双后缀陷阱））
-    d = resolve_period_root("1d", base=base_dir) / f"dividend_type={adjust_type}" / f"symbol={part}"
+    # path-SSOT D2：env / F authority 胜 base_dir；无 marker 且无 env 时 legacy base_dir。
+    if find_authority_marker() is None and not os.environ.get("OSKH_PERIOD_1D_ROOT"):
+        period_root = resolve_period_root("1d", base=base_dir)
+    else:
+        period_root = resolve_period_root("1d")
+    d = period_root / f"dividend_type={adjust_type}" / f"symbol={part}"
     if ensure_dir:
         d.mkdir(parents=True, exist_ok=True)
     return d / "data.parquet"
@@ -632,7 +637,7 @@ def _path_b_batch(
     from common.infra.data_root import resolve_period_root
 
     none_glob = str(
-        resolve_period_root("1d", base=base)
+        resolve_period_root("1d")
         / "dividend_type=none" / "symbol=*" / "data.parquet"
     ).replace("\\", "/")
     day_end = target_ms + 86_400_000

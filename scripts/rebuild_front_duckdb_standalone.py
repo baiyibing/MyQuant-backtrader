@@ -1,13 +1,19 @@
 """独立重建日线前复权 DuckDB，不依赖 oskh_data.reader（避免 xtquant 导入链）。"""
 import os
+import sys
 import time
 import shutil
 from pathlib import Path
 import duckdb
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-BASE_DIR = PROJECT_ROOT / "stock_data"
-DB_PATH = PROJECT_ROOT / "stock_data" / "stock_data_front.duckdb"
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from common.infra.data_root import resolve_e_stock_data_container, resolve_period_root
+
+# DuckDB stays on E; hive parquet is listed from the F/SSOT period root.
+E_DIR = resolve_e_stock_data_container()
+DB_PATH = E_DIR / "stock_data_front.duckdb"
 STAGING_PATH = DB_PATH.with_name(DB_PATH.stem + "_staging" + DB_PATH.suffix)
 
 
@@ -18,7 +24,7 @@ def main():
         STAGING_PATH.unlink()
 
     glob_pattern = str(
-        BASE_DIR / "period=1d" / "dividend_type=front" / "*" / "data.parquet"
+        resolve_period_root("1d") / "dividend_type=front" / "*" / "data.parquet"
     ).replace("\\", "/")
 
     con = duckdb.connect(str(STAGING_PATH))

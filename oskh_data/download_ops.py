@@ -9,12 +9,12 @@ import shutil
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from common.infra.data_root import resolve_data_root
+from common.infra.data_root import resolve_e_stock_data_container, resolve_period_root
 from oskh_data.downloader import DataDownloader
 
 logger = get_logger(__name__)
 
-_DEFAULT_STOCK_DATA_DIR = str(resolve_data_root() / "stock_data")
+_DEFAULT_STOCK_DATA_DIR = str(resolve_e_stock_data_container())
 
 
 def download_market_data(
@@ -58,7 +58,7 @@ def clear_local_market_data(
             return
         from common.infra.data_root import resolve_period_root
 
-        period_path = resolve_period_root(period, base=base_path)
+        period_path = resolve_period_root(period)
         if adjust_type is None:
             if period_path.exists():
                 shutil.rmtree(period_path)

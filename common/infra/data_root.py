@@ -1,5 +1,18 @@
 # -*- coding: utf-8 -*-
-"""Single-source data root resolution (M-003b · RFC-003)."""
+"""Single-source data root resolution (M-003b · RFC-003).
+
+Two containers — do not mix:
+
+* Parquet hive + loose source files (``period=1d/1m``, adj/float/etf):
+  ``resolve_parquet_container()`` / ``resolve_period_root()`` /
+  ``resolve_source_parquet()``. With ``F:/stock_data/.authority`` and no env,
+  this resolves to F (unset env is not a rollback).
+* E workspace (duckdb, exp, skip JSON, stale marker):
+  ``resolve_e_stock_data_container()`` / ``OSKH_DATA_ROOT``.
+* TR bar input + ``tr_staging/`` share the parquet container (F when authority
+  exists): ``resolve_turnover_resist_parquet_root()`` /
+  ``resolve_tr_staging_dir()``. ``TURNOVER_RESIST_DATA_DIR`` is opt-in rollback.
+"""
 
 from __future__ import annotations
 
@@ -25,6 +38,7 @@ def resolve_data_root(
     1) explicit_root argument
     2) environment variable (default OSKH_DATA_ROOT)
     3) walk ``__file__`` parents until ``fallback_marker`` directory exists
+    4) slim-fork fallback: this package's repo root (no ``main.py`` / local tree)
     """
     if explicit_root:
         return Path(explicit_root)
@@ -76,7 +90,62 @@ def reset_authority_fallback_warnings() -> None:
     _AUTHORITY_WARNED.clear()
 
 
-def _warn_authority_env_missing(*, env_key: str, fallback: Path) -> None:
+def resolve_e_stock_data_container(*, explicit_root: Optional[str] = None) -> Path:
+    """E workspace ``stock_data/`` (duckdb / exp / skip JSON / stale marker).
+
+    Always under ``OSKH_DATA_ROOT``; does not follow the F parquet authority flip.
+    """
+    return resolve_data_root(explicit_root=explicit_root) / "stock_data"
+
+
+def resolve_turnover_resist_parquet_root(*, explicit_root: Optional[str] = None) -> Path:
+    """Rust TR bridge parquet input container (same root as ``resolve_parquet_container``).
+
+    Holds ``period=1d/`` hive plus float / free-float parquet. Rust reads parquet
+    files, not DuckDB. DuckDB stays on E via ``resolve_e_stock_data_container``.
+
+    Priority:
+    1) explicit_root
+    2) ``TURNOVER_RESIST_DATA_DIR`` (explicit override / rollback to old E path)
+    3) ``resolve_parquet_container()``
+    """
+    if explicit_root:
+        return Path(explicit_root)
+    env = os.environ.get("TURNOVER_RESIST_DATA_DIR")
+    if env:
+        return Path(env)
+    return resolve_parquet_container()
+
+
+def resolve_tr_staging_dir(*, explicit_root: Optional[str] = None) -> Path:
+    """Yearly TR backfill staging parquet (same F container as canonical)."""
+    return resolve_turnover_resist_parquet_root(explicit_root=explicit_root) / "tr_staging"
+
+
+def resolve_parquet_container(*, explicit_root: Optional[str] = None) -> Path:
+    """Parquet-family container (period hive + loose source parquet).
+
+    Priority:
+    1) explicit_root
+    2) ``OSKH_SOURCE_PARQUET_ROOT``
+    3) ``<authority_marker_parent>`` when ``F:/stock_data/.authority`` (or hint) exists
+    4) ``resolve_e_stock_data_container()`` (E default when no marker)
+    """
+    if explicit_root:
+        return Path(explicit_root)
+    from common.infra.constants import EnvVarKeys
+
+    env_root = os.environ.get(EnvVarKeys.OSKH_SOURCE_PARQUET_ROOT)
+    if env_root:
+        return Path(env_root)
+    marker = find_authority_marker()
+    if marker is not None:
+        return marker.parent
+    return resolve_e_stock_data_container()
+
+
+def _warn_authority_env_missing(*, env_key: str, resolved: Path) -> None:
+    """Once-per-process hint when env unset but authority marker steered to F."""
     marker = find_authority_marker()
     if marker is None:
         return
@@ -86,8 +155,8 @@ def _warn_authority_env_missing(*, env_key: str, fallback: Path) -> None:
     _AUTHORITY_WARNED.add(latch)
     warnings.warn(
         f"path-SSOT authority marker present at {marker} but {env_key} is unset; "
-        f"falling back to {fallback}. Set {env_key} explicitly to the F root, "
-        f"or set it to the E path to roll back. Unset is not a rollback.",
+        f"using {resolved} from marker parent. Set {env_key} explicitly to silence, "
+        f"or set it to the E path to roll back. Unset alone is not a rollback.",
         UserWarning,
         stacklevel=3,
     )
@@ -99,10 +168,9 @@ def resolve_l2_parquet_root(*, explicit_root: Optional[str] = None) -> Path:
     Priority:
     1) explicit_root argument
     2) ``OSKH_L2_PARQUET_ROOT`` env var (L2-specific override; e.g. ``F:\\stock_data\\l2_parquet``)
-    3) ``resolve_data_root() / "stock_data" / "l2_parquet"`` (default; honors ``OSKH_DATA_ROOT``)
+    3) ``resolve_parquet_container() / "l2_parquet"``
 
-    Returns the path without checking existence (callers decide: ``connect()`` raises
-    ``FileNotFoundError``; ``qmt_l2_source`` returns ``[]``; ``available_l2_dates`` returns ``[]``).
+    Returns the path without checking existence (callers decide).
     """
     if explicit_root:
         return Path(explicit_root)
@@ -111,11 +179,11 @@ def resolve_l2_parquet_root(*, explicit_root: Optional[str] = None) -> Path:
     env_root = os.environ.get(EnvVarKeys.OSKH_L2_PARQUET_ROOT)
     if env_root:
         return Path(env_root)
-    fallback = resolve_data_root() / "stock_data" / "l2_parquet"
+    resolved = resolve_parquet_container() / "l2_parquet"
     _warn_authority_env_missing(
-        env_key=EnvVarKeys.OSKH_L2_PARQUET_ROOT, fallback=fallback
+        env_key=EnvVarKeys.OSKH_L2_PARQUET_ROOT, resolved=resolved
     )
-    return fallback
+    return resolved
 
 
 def resolve_period_root(
@@ -131,7 +199,7 @@ def resolve_period_root(
     2) ``OSKH_PERIOD_{PERIOD}_ROOT`` env var (period-specific override; e.g.
        ``OSKH_PERIOD_1M_ROOT=F:\\stock_data\\period=1m``)
     3) ``base / f"period={period}"`` if ``base`` given
-    4) ``resolve_data_root() / "stock_data" / f"period={period}"`` (default)
+    4) ``resolve_parquet_container() / f"period={period}"`` (default)
 
     Returns the period directory without checking existence. When the env var
     is set, ``base`` is ignored (override wins regardless of caller's base).
@@ -144,9 +212,9 @@ def resolve_period_root(
         return Path(env_root)
     if base is not None:
         return base / f"period={period}"
-    fallback = resolve_data_root() / "stock_data" / f"period={period}"
-    _warn_authority_env_missing(env_key=env_key, fallback=fallback)
-    return fallback
+    resolved = resolve_parquet_container() / f"period={period}"
+    _warn_authority_env_missing(env_key=env_key, resolved=resolved)
+    return resolved
 
 
 def resolve_source_parquet(
@@ -162,7 +230,7 @@ def resolve_source_parquet(
     Priority（与 ``resolve_period_root`` 同型）:
     1) explicit_root 参数（罕见；= 含文件族的容器目录）
     2) ``OSKH_SOURCE_PARQUET_ROOT`` env var（容器目录覆盖，如 ``F:/stock_data``）
-    3) ``resolve_data_root() / "stock_data"``（默认；honors ``OSKH_DATA_ROOT``）
+    3) ``resolve_parquet_container()``（权威 marker 或 E 默认）
 
     不检查存在性（调用方 fail-visible：FileNotFoundError 带路径）。
     """
@@ -173,8 +241,9 @@ def resolve_source_parquet(
     env_root = os.environ.get(EnvVarKeys.OSKH_SOURCE_PARQUET_ROOT)
     if env_root:
         return Path(env_root) / name
-    fallback_dir = resolve_data_root() / "stock_data"
+    container = resolve_parquet_container()
+    resolved = container / name
     _warn_authority_env_missing(
-        env_key=EnvVarKeys.OSKH_SOURCE_PARQUET_ROOT, fallback=fallback_dir / name
+        env_key=EnvVarKeys.OSKH_SOURCE_PARQUET_ROOT, resolved=resolved
     )
-    return fallback_dir / name
+    return resolved

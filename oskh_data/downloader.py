@@ -29,7 +29,11 @@ from tqdm import tqdm
 from common.infra.quant_logger import get_logger
 from common.infra.timekeeping import parse_qmt_time
 from common.infra.constants import EnvVarKeys, StreamObservabilityEvent
-from common.infra.data_root import resolve_period_root
+from common.infra.data_root import (
+    resolve_e_stock_data_container,
+    resolve_parquet_container,
+    resolve_period_root,
+)
 
 logger = get_logger(__name__)
 
@@ -179,12 +183,17 @@ class StockDataManager:
         "1M": ("月线", False),
     }
 
-    def __init__(self, base_dir: str = "../stock_data"):
-        self.base_dir = Path(base_dir)
+    def __init__(self, base_dir: str | None = None):
+        if base_dir:
+            self._ops_base = Path(base_dir)
+            self.base_dir = Path(base_dir)
+        else:
+            self._ops_base = resolve_e_stock_data_container()
+            self.base_dir = resolve_parquet_container()
         self._ensure_directories()
 
     def _ensure_directories(self):
-        self.base_dir.mkdir(parents=True, exist_ok=True)
+        self._ops_base.mkdir(parents=True, exist_ok=True)
 
     @classmethod
     def validate_period(cls, period: str) -> bool:
@@ -238,11 +247,12 @@ class PeriodDataManager:
 
     @staticmethod
     def get_file_path(
-        base_dir: Path, period: str, adjust_type: str, stock_code: str
+        base_dir: Path | None, period: str, adjust_type: str, stock_code: str
     ) -> Path:
+        _ = base_dir  # legacy param; parquet hive 经 resolve_period_root SSOT
         safe_stock_code = to_partition_key(stock_code)
         path = (
-            resolve_period_root(period, base=base_dir)
+            resolve_period_root(period)
             / f"dividend_type={adjust_type}"
             / f"symbol={safe_stock_code}"
         )
@@ -293,10 +303,18 @@ class PeriodDataManager:
 class DataDownloader:
     """数据下载器（xtquant 延迟导入）"""
 
-    def __init__(self, base_dir: str = "../stock_data",
-                 transport: Optional[DailyBarsTransport] = None):
-        self.base_dir = Path(base_dir)
-        self.base_dir.mkdir(parents=True, exist_ok=True)
+    def __init__(
+        self,
+        base_dir: str | None = None,
+        transport: Optional[DailyBarsTransport] = None,
+    ):
+        if base_dir:
+            self._ops_base = Path(base_dir)
+            self.base_dir = Path(base_dir)
+        else:
+            self._ops_base = resolve_e_stock_data_container()
+            self.base_dir = resolve_parquet_container()
+        self._ops_base.mkdir(parents=True, exist_ok=True)
         # B3c/A2：xtdata 调用面经 transport；默认按旋钮解析（repo 默认 daqmt；
         # mini host 须显式 xtdata；daqmt 工厂由 oskh_core 惰性注册）。
         self._transport = transport if transport is not None else resolve_download_transport()
@@ -450,7 +468,7 @@ class DataDownloader:
             try:
                 from oskh_data.qmt_download_channel import maybe_write_stale_marker
 
-                maybe_write_stale_marker(self.base_dir, end_time, str(e))
+                maybe_write_stale_marker(self._ops_base, end_time, str(e))
             except Exception as mark_exc:  # noqa: BLE001 — marker is best-effort
                 logger.warning(f"写入 QMT 通道腐坏标记失败: {mark_exc}")
             return cast(
@@ -726,7 +744,7 @@ class DataDownloader:
             return None
 
     def get_available_periods(self) -> List[str]:
-        periods_dir = resolve_period_root("1d", base=self.base_dir)
+        periods_dir = resolve_period_root("1d")
         if periods_dir.exists():
             return list(StockDataManager.PERIOD_MAPPING.keys())
         return []

@@ -23,6 +23,7 @@ import numpy as np
 import pandas as pd
 from numba import jit
 
+from common.infra.data_root import resolve_source_parquet
 from oskh_data.reader import StockDataReader
 from qlib_cost import cyq
 from qlib_cost.distribution_of_chips import make_price_grid
@@ -142,7 +143,7 @@ def _batch_cumpdf_4way(
 def load_capital_maps(code: str, target: pd.Timestamp) -> dict:
     """从 free_float_shares.parquet + float_shares.parquet 加载单只股票股本。"""
     target_prev = target - pd.Timedelta(days=1)
-    cap_path = str(Path("stock_data/free_float_shares.parquet").resolve())
+    cap_path = str(resolve_source_parquet("free_float_shares.parquet"))
 
     con = duckdb.connect()
     cap_df = con.execute(
@@ -175,7 +176,7 @@ def load_capital_maps(code: str, target: pd.Timestamp) -> dict:
                 free_tp = row["freeFloatCapital"] or 0
 
     if cap_t <= 0 or cap_tp <= 0:
-        fs_df = pd.read_parquet("stock_data/float_shares.parquet")
+        fs_df = pd.read_parquet(resolve_source_parquet("float_shares.parquet"))
         fs_map = dict(zip(fs_df["stock_code"], fs_df["FloatVolume"]))
         fallback = fs_map.get(code, 0)
         cap_t = cap_t or fallback

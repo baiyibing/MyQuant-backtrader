@@ -25,6 +25,7 @@ import numpy as np
 import pandas as pd
 from numba import jit
 
+from common.infra.data_root import resolve_source_parquet
 import oskh_data.reader as reader
 from backtest.chip_algorithm import (adapt_columns, _get_float_shares,
                                      _get_free_float_shares)
@@ -468,7 +469,7 @@ def run(date_str, output, window=1000, step=0.01,
         target_date_policy="strict"):
     target = pd.Timestamp(date_str)
 
-    fs_path = Path("stock_data/float_shares.parquet")
+    fs_path = resolve_source_parquet("float_shares.parquet")
     if not fs_path.exists():
         raise FileNotFoundError(f"{fs_path} not found")
 
@@ -493,7 +494,7 @@ def run(date_str, output, window=1000, step=0.01,
     target_prev_ts = target_prev.strftime('%Y-%m-%d')
 
     con = duckdb.connect()
-    cap_path = str(Path('stock_data/free_float_shares.parquet').resolve())
+    cap_path = str(resolve_source_parquet("free_float_shares.parquet"))
     cap_df = con.execute(f"""
         SELECT * FROM (
           SELECT stock_code, 'T' as which, freeFloatCapital, circulating_capital,
@@ -521,7 +522,7 @@ def run(date_str, output, window=1000, step=0.01,
             free_tp[row['stock_code']] = row['freeFloatCapital'] if row['freeFloatCapital'] and row['freeFloatCapital'] > 0 else 0
 
     # Fallback: float_shares.parquet for missing circulating_capital
-    fs_df = pd.read_parquet('stock_data/float_shares.parquet')
+    fs_df = pd.read_parquet(resolve_source_parquet("float_shares.parquet"))
     fs_map = dict(zip(fs_df['stock_code'], fs_df['FloatVolume']))
     for code in codes:
         if cap_t.get(code, 0) <= 0:

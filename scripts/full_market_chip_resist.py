@@ -18,6 +18,7 @@ import pandas as pd
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 
+from common.infra.data_root import resolve_source_parquet
 from oskh_data.reader import StockDataReader
 from backtest.chip_algorithm import (
     adapt_columns,
@@ -69,7 +70,7 @@ def main() -> int:
     target_ts = pd.Timestamp(target_date)
     window = args.window
 
-    fs_path = REPO / "stock_data" / "float_shares.parquet"
+    fs_path = resolve_source_parquet("float_shares.parquet")
     if not fs_path.exists():
         print("[FATAL] float_shares.parquet 不存在")
         return 1

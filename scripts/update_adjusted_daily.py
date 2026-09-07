@@ -32,6 +32,11 @@ import pandas as pd
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, REPO)
 
+from common.infra.data_root import (
+    resolve_e_stock_data_container,
+    resolve_period_root,
+    resolve_source_parquet,
+)
 from common.infra.quant_logger import get_logger
 from oskh_data.downloader import DataDownloader, PeriodDataManager, StockDataManager
 
@@ -89,7 +94,7 @@ def _get_all_a_stock_codes() -> List[str]:
             logger.warning(f"QMT 获取股票列表失败: {e}")
 
     # fallback: 本地 none 目录
-    none_dir = os.path.join(BASE_DIR, "period=1d", "dividend_type=none")
+    none_dir = str(resolve_period_root("1d") / "dividend_type=none")
     if os.path.exists(none_dir):
         codes = [
             d.replace("symbol=", "").replace("_", ".")
@@ -113,7 +118,7 @@ def _load_adj_factor(base_dir: str) -> pd.DataFrame:
     保持与旧格式兼容：列名为 date, stock_code, close_front, close_none,
     cumulative_adj_factor（front 因子）。额外增加 adj_factor_back 列用于 back 因子。
     """
-    path = os.path.join(base_dir, ADJ_FACTOR_PATH)
+    path = str(resolve_source_parquet(ADJ_FACTOR_PATH))
     if not os.path.exists(path):
         return pd.DataFrame(columns=[
             "date", "stock_code", "close_front", "close_none",
@@ -151,7 +156,8 @@ def _load_adj_factor(base_dir: str) -> pd.DataFrame:
 
 
 def _save_adj_factor(df: pd.DataFrame, base_dir: str) -> None:
-    path = os.path.join(base_dir, ADJ_FACTOR_PATH)
+    _ = base_dir
+    path = str(resolve_source_parquet(ADJ_FACTOR_PATH))
     df = df.sort_values(["stock_code", "date"]).reset_index(drop=True)
     before = len(df)
     df = df.drop_duplicates(subset=["date", "stock_code"], keep="last")
@@ -395,7 +401,11 @@ def _chunked(lst: List, n: int):
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="日线复权数据增量更新")
-    parser.add_argument("--base-dir", default=os.path.join(REPO, "stock_data"), help="数据根目录")
+    parser.add_argument(
+        "--base-dir",
+        default=str(resolve_e_stock_data_container()),
+        help="E workspace / ops root (parquet hive follows path-SSOT)",
+    )
     parser.add_argument("--start", default=DEFAULT_START, help="历史起始日期 YYYYMMDD")
     parser.add_argument("--end", default=None, help="目标日期 YYYYMMDD，默认今天")
     parser.add_argument("--threshold", type=float, default=DEFAULT_THRESHOLD, help="adj_factor 变化阈值")

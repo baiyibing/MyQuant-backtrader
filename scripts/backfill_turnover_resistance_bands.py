@@ -27,7 +27,7 @@ from oskh_data.turnover_resistance_store import (
     TurnoverResistanceStore,
     resolve_parquet_path,
 )
-from oskh_data.reader import _resolve_data_root
+from common.infra.data_root import resolve_turnover_resist_parquet_root
 
 _log = get_logger(__name__)
 
@@ -77,7 +77,7 @@ def list_trading_dates(
 
 
 def _default_data_dir() -> str:
-    return str(_resolve_data_root() / "stock_data")
+    return str(resolve_turnover_resist_parquet_root())
 
 
 def _write_progress(payload: dict) -> None:
@@ -120,7 +120,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--data-dir",
         default="",
-        help="Parquet root (default: OSKH_DATA_ROOT/stock_data)",
+        help="Parquet root (default: resolve_turnover_resist_parquet_root)",
     )
     parser.add_argument("--parquet-path", default="", help="Override store Parquet path")
     parser.add_argument("--window", type=int, default=CANONICAL_WINDOW)

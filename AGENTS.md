@@ -16,6 +16,13 @@ Keep: `backtest/`, `oskh_data/`, `qlib_cost/`, `turnover-resist/`, `oskh_factors
 
 Do not reintroduce live trading packages (`live_trading`, `executor_stream`, `redis_stream_bridge`, `stream_monitor`, `oskh_db`, full `strategy_config`).
 
+## Data disks (do not mix)
+
+- **Parquet** (`period=1d/1m`, adj/float/etf, TR bars, `tr_staging/`): `resolve_parquet_container()` / `resolve_period_root()` / `resolve_source_parquet()` / `resolve_turnover_resist_parquet_root()`. With `F:\\stock_data\\.authority` and no env, this is F. Unset env is not a rollback.
+- **E workspace** (duckdb, exp, skip JSON, stale marker): `resolve_e_stock_data_container()` / `OSKH_DATA_ROOT`.
+- `TURNOVER_RESIST_DATA_DIR` is opt-in rollback to an old E path; default follows the parquet container.
+- Frozen `backtest/` may still contain literal `stock_data/` paths; new code must use resolvers.
+
 ## Encoding
 
 UTF-8 without BOM for all text files. After writing `.py` / `.md`, verify NUL count is 0.

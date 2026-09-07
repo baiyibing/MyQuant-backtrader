@@ -29,6 +29,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import numpy as np
 import pandas as pd
 
+from common.infra.data_root import resolve_source_parquet
 from backtest.chip_algorithm import (
     adapt_columns, bb_position, daily_chip_distribution, _get_float_shares, cyq,
 )
@@ -121,7 +122,7 @@ def run(date_str: str, output: str, window: int = WINDOW_DAYS, workers: int = 6,
         codes = stocks
         use_pool = len(codes) > 10
     else:
-        fs_path = Path("stock_data/float_shares.parquet")
+        fs_path = resolve_source_parquet("float_shares.parquet")
         if not fs_path.exists():
             raise FileNotFoundError(f"{fs_path} not found; run oskh_data/float_shares.py first")
         fs_df = pd.read_parquet(fs_path)
