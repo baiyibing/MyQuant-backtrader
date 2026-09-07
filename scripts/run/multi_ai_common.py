@@ -247,32 +247,36 @@ def codex_cmd(prompt: str) -> list[str]:
     return ["codex", "exec", "--ephemeral", prompt]
 
 
+def _replace_cursor_mode(cmd: list[str], mode: str) -> list[str]:
+    """把 cursor-agent 命令行的 ``--mode`` 换成 ``mode``（无则追加）。"""
+    out = list(cmd)
+    if "--mode" in out:
+        i = out.index("--mode")
+        if i + 1 < len(out):
+            out[i + 1] = mode
+            return out
+    out.extend(["--mode", mode])
+    return out
+
+
 def cursor_headless_mode() -> str:
-    """只读 headless 模式：Windows 用 plan（r1 实测 stdout 有正文）；Linux 用 ask。
+    """只读 headless 模式：默认 **ask**（正文进 stdout）。
 
-    2026-08-16 Linux 实测：``--mode plan`` 短 prompt 能出字，但长评审走 CreatePlan，
-    ``-p --output-format text`` 终稿不落 stdout（rc=0 空产）。``--mode ask`` 是只读
-    问答，正文进 stdout。Windows 保持 plan，不改已验证路径。
+    2026-08-16 Linux：``--mode plan`` 长评审走 CreatePlan，``-p text`` 终稿不落
+    stdout（rc=0 空产）。2026-09-07 本仓 r2：Windows ``cursor:auto`` + plan 同样
+    rc=0 空壳，同命令重试两次仍空；``ask`` 是只读问答，终稿进 stdout。
 
-    2026-09-06 Windows 补判：plan 在**跨盘探查/头脑风暴类任务**（读 workspace 外
-    F: 盘 + 长产出）同样 rc=0 空 stdout——composer-2.5-fast / auto / kimi-k3-high
-    三模型实证，与模型家族无关；直连加 ``--mode ask`` 同任务 11KB 满产。此类任务
-    绕编排器直连 ask 根治；文档评审类任务 plan 维持。行为开关改造（env 覆盖/空产
-    升档重试）见 ``plan-cursor-headless-ask-fallback-2026-09-06.md``（GO 前禁编码）。
-
-    Slice A（2026-09-06 GO 落地）：env ``OSKH_CURSOR_HEADLESS_MODE``（``plan``|``ask``，
-    大小写归一、空白裁剪）覆盖平台默认；非法值 ValueError fail-fast（工具级显式报错
-    优于静默回落）。默认不设 = 平台默认不动。
+    ``OSKH_CURSOR_HEADLESS_MODE=plan|ask`` 可覆盖。空产重试会把 plan 升成 ask。
     """
     env = os.environ.get("OSKH_CURSOR_HEADLESS_MODE", "").strip().lower()
     if env:
         if env not in ("plan", "ask"):
             raise ValueError(
                 f"OSKH_CURSOR_HEADLESS_MODE 非法值 {env!r}（仅 plan|ask；"
-                "不设则用平台默认 win32=plan / 其他=ask）"
+                "不设则默认 ask）"
             )
         return env
-    return "plan" if sys.platform == "win32" else "ask"
+    return "ask"
 
 
 def kimi_model_alias() -> str:
@@ -421,9 +425,7 @@ def cursor_cmd(prompt: str) -> list[str]:
     裸 CLI ``agent --model`` 必须用完整 ID（``cursor-grok-4.6-xhigh-fast``）；短名
     ``grok-4.6-xhigh-fast`` 会被拒。编排器 ``cursor:grok-…`` 由 normalize_cursor_model 补前缀。
     prompt 由 run_agent 走 stdin 管道（避 Windows CLI 长度/编码限制；直连 Node 绕 .ps1）。
-    --mode 由 cursor_headless_mode() 选：Windows plan（r1 实测 stdout 有正文；
-    但跨盘探查类任务空 stdout，2026-09-06——须直连 ask，见该函数 docstring），
-    Linux ask（2026-08-16：长评审 plan 走 CreatePlan，-p text 空 stdout）。
+    --mode 由 cursor_headless_mode() 选：默认 ask（plan 长评审易 rc=0 空壳）。
     裸 -p 按官方语义可访问全部工具含写/shell，所以必须钉只读 mode；
     --trust = headless 免工作区信任提示；
     -f/--force = headless 下自动放行工具审批（2026-08-13 实测：无 -f 时 plan 模式读文件/搜索/终端被审批墙拦死，
@@ -606,9 +608,10 @@ def classic_agents_csv() -> str:
     Windows: claude + kimi + codex + cursor.
     """
     cursor = "cursor:auto"
+    kimi = classic_kimi_seat()
     if sys.platform == "win32":
-        return f"codex,kimi,{cursor},claude"
-    return f"codex,kimi,{cursor},grok"
+        return f"codex,{kimi},{cursor},claude"
+    return f"codex,{kimi},{cursor},grok"
 
 
 def default_host() -> str:
@@ -663,7 +666,8 @@ PRESETS: Dict[str, dict] = {
             "经典组（按平台）：Linux=codex+kimi+cursor+grok；"
             "Windows=codex+kimi+cursor+claude。"
             "默认 host：Linux=claude（空槽，四家全跑）；Windows=cursor-desktop（四家全跑）。"
-            "qoder 额度暂停，不进默认阵容；明确启用或 OSKH_ENABLE_QODER=1 才可 --agents qoder。"
+            "kimi 席位默认 Cursor Kimi（kimi-k3-high；独立 kimi-code 周额度用尽）。"
+            "OSKH_KIMI_VIA_CURSOR=0 才回独立 CLI。qoder 额度暂停，不进默认阵容。"
             "cursor 显式 --model auto（2026-08-26 人裁；换钉用 cursor:<model> 语法）。"
         ),
     }),
@@ -702,13 +706,41 @@ STDIN_AGENTS = {"cursor"}
 # kimi=1500（2026-08-13 r31 轮 900s 超时 rc=124——思考流完整但死在整理阶段，产出 82KB 未整理；
 # 评审发现不亚于其他家，问题纯在预算；调大让其出正式报告）
 DEFAULT_TIMEOUTS_BASE: Dict[str, int] = {
-    "codex": 900, "kimi": 1500, "qoder": 900, "cursor": 900, "claude": 900, "grok": 900,
+    "codex": 1500, "kimi": 1500, "qoder": 900, "cursor": 900, "claude": 900, "grok": 900,
 }
 
 
 def agent_base(agent: str) -> str:
     """Return base agent name (strip :model suffix). 'cursor:auto' -> 'cursor'."""
     return agent.split(":", 1)[0]
+
+
+def review_seat(agent: str) -> str:
+    """Logical roster seat for role / exclude / timeout.
+
+    ``cursor:kimi-*`` keeps the kimi seat (standalone kimi-code quota → Cursor Kimi).
+    """
+    if agent.startswith("cursor:kimi"):
+        return "kimi"
+    return agent_base(agent)
+
+
+def agent_timeout_key(agent: str) -> str:
+    return review_seat(agent)
+
+
+def classic_kimi_seat() -> str:
+    """classic 的 kimi 席位。独立 kimi-code 周额度用尽时走 Cursor Kimi。
+
+    - 默认 ``cursor:kimi-k3-high``（``OSKH_KIMI_VIA_CURSOR`` 缺省为开）
+    - ``OSKH_KIMI_VIA_CURSOR=0`` 强制独立 ``kimi`` CLI
+    - ``OSKH_KIMI_CURSOR_MODEL`` 换钉（默认 kimi-k3-high）
+    """
+    via = os.environ.get("OSKH_KIMI_VIA_CURSOR", "1").strip().lower()
+    if via in ("0", "false", "no"):
+        return "kimi"
+    model = os.environ.get("OSKH_KIMI_CURSOR_MODEL", "kimi-k3-high").strip() or "kimi-k3-high"
+    return f"cursor:{normalize_cursor_model(model)}"
 
 
 def fs_safe(name: str) -> str:
@@ -970,7 +1002,18 @@ def run_agent(
                     fh.write(f"\n\n[runner] {name} 拒评签名命中（hook/环境类故障），不自动重试；修复环境后需人工重跑\n")
                 return rc, time.time() - t0
             if rc == 0 and attempts <= retries and is_stub_output(outpath):
-                print(f"[retry] {name}: rc=0 但输出为空（stub），自动重试 {attempts}/{retries}", flush=True)
+                if agent_base(name) == "cursor":
+                    cmd = _replace_cursor_mode(cmd, "ask")
+                    print(
+                        f"[retry] {name}: rc=0 空壳（stub），改 --mode ask 后重试 "
+                        f"{attempts}/{retries}",
+                        flush=True,
+                    )
+                else:
+                    print(
+                        f"[retry] {name}: rc=0 但输出为空（stub），自动重试 {attempts}/{retries}",
+                        flush=True,
+                    )
                 continue
             if attempts > 1:
                 with Path(outpath).open("a", encoding="utf-8") as fh:

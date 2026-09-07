@@ -6,18 +6,99 @@ import pandas as pd
 import pytest
 
 from backtest.research.ma_chip_edge_backtest import (
+    CHIP_WINDOW,
     MaChipEdgeStrategy,
     SignalPandasData,
     AShareCommInfo,
+    _cyqk_series_python,
+    _try_cyqk_series_rust,
     affordable_size,
     board_of,
     build_signal_frame,
+    cyqk_series,
+    format_trades_by_stock,
     is_limit_open,
     mask_pre_window_edges,
+    pair_round_trips,
+    turnover_from_daily_shares,
     week_ma20_asof,
 )
 
 import backtrader as bt
+
+
+def test_chip_window_is_200_bars_including_d():
+    assert CHIP_WINDOW == 200
+
+
+def test_turnover_uses_each_day_asof_shares():
+    vol = np.array([1.0e6, 1.0e6, 1.0e6])
+    sh = np.array([1.0e8, 2.0e8, 2.0e8])
+    tr = turnover_from_daily_shares(vol, sh)
+    assert tr[0] == pytest.approx(1.0)
+    assert tr[1] == pytest.approx(0.5)
+    assert tr[2] == pytest.approx(0.5)
+    bad = turnover_from_daily_shares(vol, np.array([1.0e8, np.nan, 2.0e8]))
+    assert np.isfinite(bad[0])
+    assert not np.isfinite(bad[1])
+    assert np.isfinite(bad[2])
+
+
+def test_cyqk_series_skips_window_with_missing_day_shares(monkeypatch):
+    n = 6
+    idx = pd.bdate_range("2024-01-02", periods=n)
+    df = pd.DataFrame(
+        {
+            "open": np.full(n, 10.0),
+            "high": np.full(n, 10.1),
+            "low": np.full(n, 9.9),
+            "close": np.full(n, 10.0),
+            "volume": np.full(n, 1e6),
+        },
+        index=idx,
+    )
+    sh = np.full(n, 1.0e8)
+    sh[2] = np.nan
+    monkeypatch.setattr(
+        "backtest.research.ma_chip_edge_backtest.shares_asof_series",
+        lambda *args, **kwargs: sh,
+    )
+    out = cyqk_series(df, "000001.SZ", window=4)
+    # last index can form a 4-bar window only if all 4 shares finite; sh[2] poisons i>=2
+    assert not np.isfinite(out.to_numpy()).any()
+
+
+def test_cyqk_rust_matches_python_when_available(monkeypatch):
+    n = 30
+    window = 20
+    idx = pd.bdate_range("2024-01-02", periods=n)
+    close = np.linspace(10.0, 12.0, n)
+    df = pd.DataFrame(
+        {
+            "open": close,
+            "high": close + 0.15,
+            "low": close - 0.15,
+            "close": close,
+            "volume": np.full(n, 5.0e5),
+        },
+        index=idx,
+    )
+    sh = np.full(n, 1.0e9)
+    sh[18:] = 2.0e9
+    monkeypatch.setattr(
+        "backtest.research.ma_chip_edge_backtest.shares_asof_series",
+        lambda *args, **kwargs: sh,
+    )
+    rust = _try_cyqk_series_rust(df, sh, window, window - 1)
+    if rust is None:
+        pytest.skip("turnover_resist.compute_cyqk_series not installed")
+    py = _cyqk_series_python(df, "000001.SZ", sh, window, window - 1)
+    r = rust.to_numpy()
+    p = py.to_numpy()
+    mask = np.isfinite(p)
+    assert mask.any()
+    assert np.isfinite(r[mask]).all()
+    assert float(np.max(np.abs(r[mask] - p[mask]))) < 1e-6
 
 
 def test_board_of_excludes_star():
@@ -47,7 +128,7 @@ def test_week_ma_asof_does_not_use_unfinished_week():
 
 
 def test_edge_requires_finite_prev_and_false_prev():
-    n = 120
+    n = CHIP_WINDOW + 40
     idx = pd.bdate_range("2022-01-03", periods=n)
     close = np.linspace(10.0, 20.0, n)
     df = pd.DataFrame(
@@ -166,6 +247,98 @@ def test_affordable_size_leaves_commission():
     size = affordable_size(1_000_000.0, 31.05)
     assert size >= 100
     assert size * 31.05 + max(size * 31.05 * 0.00005, 5.0) <= 1_000_000.0 - 1.0
+
+
+def test_pending_buy_stale_across_halt_gap():
+    idx = list(pd.bdate_range("2024-01-01", periods=3)) + list(pd.bdate_range("2024-01-24", periods=3))
+    n = len(idx)
+    close = [10.0, 10.0, 10.0, 15.0, 15.0, 15.0]
+    df = pd.DataFrame(
+        {
+            "open": [10.0, 10.0, 10.0, 15.0, 15.0, 15.0],
+            "high": [c + 0.2 for c in close],
+            "low": [c - 0.2 for c in close],
+            "close": close,
+            "volume": [1e6] * n,
+            "edge": [0.0, 0.0, 1.0, 0.0, 0.0, 0.0],
+        },
+        index=pd.DatetimeIndex(idx),
+    )
+    strat = _run_edge_feed(df)
+    assert not any(t["side"] == "BUY" for t in strat.trades)
+    assert any(e.get("reason") == "stale" for e in strat.events)
+
+
+def test_first_day_up_but_below_sma5_sells_next_open():
+    idx = pd.bdate_range("2024-01-02", periods=6)
+    # SMA5 on buy bar uses closes 12,11.5,11.2,10.9,11.1 → 11.34; close 11.1 > prev 10.9
+    close = [12.0, 11.5, 11.2, 10.9, 11.1, 10.8]
+    open_ = [12.0, 11.5, 11.2, 10.9, 11.0, 10.7]
+    edge = [0.0, 0.0, 0.0, 1.0, 0.0, 0.0]
+    df = pd.DataFrame(
+        {
+            "open": open_,
+            "high": [c + 0.2 for c in close],
+            "low": [c - 0.2 for c in close],
+            "close": close,
+            "volume": [1e6] * 6,
+            "edge": edge,
+        },
+        index=idx,
+    )
+    strat = _run_edge_feed(df)
+    sides = [(t["date"], t["side"], t["price"]) for t in strat.trades]
+    assert ("2024-01-08", "BUY", 11.0) in sides
+    assert ("2024-01-09", "SELL", 10.7) in sides
+
+
+def test_pair_round_trips_fifo_open_and_unmatched():
+    trades = [
+        {"date": "2024-01-10", "code": "000001.SZ", "side": "BUY", "price": 10.0, "size": 32200},
+        {"date": "2024-01-12", "code": "000001.SZ", "side": "SELL", "price": 11.0, "size": 32200},
+        {"date": "2024-02-01", "code": "000001.SZ", "side": "BUY", "price": 12.0, "size": 20000},
+        {"date": "2024-03-01", "code": "600000.SH", "side": "SELL", "price": 8.0, "size": 1000},
+    ]
+    pairs = pair_round_trips(trades)
+    assert [p["status"] for p in pairs] == ["closed", "open", "unmatched_sell"]
+    closed = pairs[0]
+    assert closed["buy_size"] == 32200
+    assert closed["sell_size"] == 32200
+    assert closed["hold_days"] == 2
+    assert closed["ret_pct"] == pytest.approx(0.1)
+    assert pairs[1]["status"] == "open"
+    assert pairs[1]["buy_size"] == 20000
+    assert pairs[2]["code"] == "600000.SH"
+
+
+def test_format_trades_by_stock_uses_share_count_not_series_size():
+    pairs = pair_round_trips(
+        [
+            {"date": "2024-01-10", "code": "000001.SZ", "side": "BUY", "price": 10.5, "size": 32200},
+            {"date": "2024-01-11", "code": "000001.SZ", "side": "SELL", "price": 10.0, "size": 32200},
+        ]
+    )
+    stats = pd.DataFrame(
+        [{"code": "000001.SZ", "board": "sz_main", "n_buys": 1, "ret": -0.05, "max_dd": -0.1}]
+    )
+    universe = pd.DataFrame([{"code": "000001.SZ", "board": "sz_main", "replaced": False}])
+    text = format_trades_by_stock(
+        pairs,
+        stats,
+        universe,
+        [
+            {"date": "2024-01-09", "code": "000001.SZ", "event": "skip_buy", "open": 10.1, "reason": "stale"},
+            {"date": "2024-01-08", "code": "000001.SZ", "event": "skip_buy", "open": 10.2, "reason": float("nan")},
+        ],
+        title="unit",
+        cash=1_000_000,
+    )
+    assert "32200" in text
+    assert "size=5" not in text
+    assert "skip_buy  2024-01-09  open=10.1000  reason=stale" in text
+    assert "skip_buy  2024-01-08  open=10.2000" in text
+    assert "reason=nan" not in text
+    assert "-4.76%" in text
 
 
 def test_no_second_buy_while_still_long():

@@ -87,9 +87,40 @@ fn compute_turnover_resist(
     Ok(json)
 }
 
+/// 滚动窗口盈筹率序列：窗内每一日用该日流通股本算换手。
+///
+/// 数组等长；`out[i]` 对应截至第 i 根（含）的 `window` 日窗口。
+/// `start_i` 之前（以及不满一整窗）为 NaN。
+#[pyfunction]
+#[pyo3(signature = (close, high, low, volume, shares, window, start_i=0, step=0.01))]
+fn compute_cyqk_series(
+    py: Python<'_>,
+    close: Vec<f64>,
+    high: Vec<f64>,
+    low: Vec<f64>,
+    volume: Vec<f64>,
+    shares: Vec<f64>,
+    window: usize,
+    start_i: usize,
+    step: f64,
+) -> PyResult<Vec<f64>> {
+    let n = close.len();
+    if high.len() != n || low.len() != n || volume.len() != n || shares.len() != n {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "close/high/low/volume/shares must have the same length",
+        ));
+    }
+    Ok(py.allow_threads(|| {
+        algorithm::compute_cyqk_series(
+            &close, &high, &low, &volume, &shares, window, start_i, step,
+        )
+    }))
+}
+
 /// Python 模块名 turnover_resist（与 Cargo [lib] name 一致）。
 #[pymodule]
 fn turnover_resist(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(compute_turnover_resist, m)?)?;
+    m.add_function(wrap_pyfunction!(compute_cyqk_series, m)?)?;
     Ok(())
 }

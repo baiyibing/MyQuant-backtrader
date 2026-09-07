@@ -1,7 +1,8 @@
 use std::time::Instant;
 use turnover_resist::algorithm::{
     calc_cumpdf_decay, calc_cyqk, calc_single_day_curpdf, calc_turnover_rate,
-    compute_cyqk_for_adjacent_windows, compute_cyqk_for_window,
+    compute_cyqk_for_adjacent_windows, compute_cyqk_for_window, compute_cyqk_ohlcv_window,
+    compute_cyqk_series,
 };
 use turnover_resist::bollinger::bollinger_bands;
 use turnover_resist::types::BarRow;
@@ -88,6 +89,85 @@ fn adjacent_window_matches_baseline_window_compute() {
     // 在真实数据分布下差异通常很小，这里保留宽松阈值用于防回归。
     assert!((cyqk_t - base_t).abs() < 5e-2);
     assert!((cyqk_t1 - base_t1).abs() < 5e-2);
+}
+
+fn bars_to_ohlcv(bars: &[BarRow]) -> (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>) {
+    (
+        bars.iter().map(|b| b.close).collect(),
+        bars.iter().map(|b| b.high).collect(),
+        bars.iter().map(|b| b.low).collect(),
+        bars.iter().map(|b| b.volume as f64).collect(),
+    )
+}
+
+#[test]
+fn daily_share_window_matches_single_share_when_constant() {
+    let mut bars = Vec::new();
+    for i in 0..25 {
+        let c = 10.0 + i as f64 * 0.05;
+        bars.push(bar(i as i64, c, c + 0.2, c - 0.2, 50_000 + i as i64 * 100));
+    }
+    let float_shares = 1_000_000_000.0;
+    let step = 0.01;
+    let expected = compute_cyqk_for_window(&bars, float_shares, step).unwrap();
+    let (close, high, low, volume) = bars_to_ohlcv(&bars);
+    let shares = vec![float_shares; bars.len()];
+    let got = compute_cyqk_ohlcv_window(&close, &high, &low, &volume, &shares, step).unwrap();
+    assert!((got - expected).abs() < 1e-12);
+}
+
+#[test]
+fn daily_share_window_changes_when_shares_change() {
+    let mut bars = Vec::new();
+    for i in 0..25 {
+        let c = 10.0 + i as f64 * 0.05;
+        bars.push(bar(i as i64, c, c + 0.2, c - 0.2, 50_000 + i as i64 * 100));
+    }
+    let step = 0.01;
+    let (close, high, low, volume) = bars_to_ohlcv(&bars);
+    let constant = vec![1_000_000_000.0; bars.len()];
+    let mut varied = constant.clone();
+    for s in varied.iter_mut().skip(12) {
+        *s = 2_000_000_000.0;
+    }
+    let a = compute_cyqk_ohlcv_window(&close, &high, &low, &volume, &constant, step).unwrap();
+    let b = compute_cyqk_ohlcv_window(&close, &high, &low, &volume, &varied, step).unwrap();
+    assert!((a - b).abs() > 1e-8);
+}
+
+#[test]
+fn daily_share_window_nan_share_is_none() {
+    let close = vec![10.0; 20];
+    let high = vec![10.2; 20];
+    let low = vec![9.8; 20];
+    let volume = vec![50_000.0; 20];
+    let mut shares = vec![1_000_000_000.0; 20];
+    shares[7] = f64::NAN;
+    assert!(compute_cyqk_ohlcv_window(&close, &high, &low, &volume, &shares, 0.01).is_none());
+}
+
+#[test]
+fn cyqk_series_nan_prefix_and_recovers_after_poisoned_day() {
+    let n = 30usize;
+    let window = 20usize;
+    let mut close = Vec::with_capacity(n);
+    let mut high = Vec::with_capacity(n);
+    let mut low = Vec::with_capacity(n);
+    let mut volume = Vec::with_capacity(n);
+    for i in 0..n {
+        let c = 10.0 + i as f64 * 0.04;
+        close.push(c);
+        high.push(c + 0.15);
+        low.push(c - 0.15);
+        volume.push(40_000.0);
+    }
+    let mut shares = vec![1_000_000_000.0; n];
+    shares[0] = f64::NAN;
+    let out = compute_cyqk_series(&close, &high, &low, &volume, &shares, window, 0, 0.01);
+    assert_eq!(out.len(), n);
+    assert!(out[..window - 1].iter().all(|v| v.is_nan()));
+    assert!(out[window - 1].is_nan());
+    assert!(out[window].is_finite());
 }
 
 #[test]

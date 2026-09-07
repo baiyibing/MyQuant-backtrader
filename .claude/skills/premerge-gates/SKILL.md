@@ -16,10 +16,10 @@ git diff --name-only main...HEAD | awk -F/ '{print $1}' | sort -u
 
 | If any changed file is in... | Run this script |
 |---|---|
-| `common/`, `oskh_core/`, `oskh_db/`, `trade_decision/`, `live_trading/`, `executor_stream/` | `D:/anaconda3/envs/vanna311/python.exe scripts/run_common_package_contract_gates.py` |
-| `oskh_core/` (cash, capital_pool, position, T+1, risk_engine) | `D:/anaconda3/envs/vanna311/python.exe scripts/run_stream_execution_contract_bundle.py` |
-| Broad change / unsure | `D:/anaconda3/envs/vanna311/python.exe scripts/run_merge_acceptance_gates_vanna311.py` (covers everything) |
-| CSV-only change | `D:/anaconda3/envs/vanna311/python.exe scripts/verify_csv_signoff_readiness.py` |
+| `common/`, `oskh_core/`, `oskh_db/`, `trade_decision/`, `live_trading/`, `executor_stream/` | `D:/anaconda3/envs/vanna312/python.exe scripts/run_common_package_contract_gates.py` |
+| `oskh_core/` (cash, capital_pool, position, T+1, risk_engine) | `D:/anaconda3/envs/vanna312/python.exe scripts/run_stream_execution_contract_bundle.py` |
+| Broad change / unsure | `D:/anaconda3/envs/vanna312/python.exe scripts/run_merge_acceptance_gates_vanna311.py` (covers everything) |
+| CSV-only change | `D:/anaconda3/envs/vanna312/python.exe scripts/verify_csv_signoff_readiness.py` |
 
 ## Step 3: Report
 

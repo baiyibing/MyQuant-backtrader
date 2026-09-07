@@ -11,22 +11,21 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import subprocess
 import sys
 import time
 from pathlib import Path
 
 ROOT = next(p for p in Path(__file__).resolve().parents if p.name == "scripts").parent
-PY = os.environ.get("OSKH_MERGE_PYTHON") or os.environ.get("VANNA311_PYTHON") or r"D:\anaconda3\envs\vanna311\python.exe"
 BACKFILL = ROOT / "scripts" / "tr" / "backfill_turnover_resistance_bands.py"
 PROGRESS = ROOT / "backtest_output" / "tr_backfill_yearly_progress.json"
 
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
-from scripts._script_bootstrap import ensure_repo_on_syspath
+from scripts._script_bootstrap import ensure_repo_on_syspath, resolve_oskh_python
 
 ensure_repo_on_syspath(__file__)
+PY = str(resolve_oskh_python())
 
 from oskh_data.turnover_resistance_store import (  # noqa: E402
     merge_parquet_into_canonical,

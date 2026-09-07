@@ -7,7 +7,7 @@ Linux=claude（空槽，classic 四家全跑）；Windows=cursor-desktop（class
 
 两种预设模式（--preset）：
   classic      按平台四家（默认；Linux=codex+kimi+cursor+grok；Win=codex+kimi+cursor+claude；
-               cursor 钉 4.6-xhigh-fast）。qoder 额度暂停，不进默认阵容。
+               kimi 席位默认 Cursor Kimi）。qoder 额度暂停，不进默认阵容。
                host 从成员选一 / cursor-desktop→全员跑
   mixed        混合组：成员全是 cursor 自带模型（不拉独立 CLI）。host 不预设，
                谁发起谁综合（独立 agent / 某个 cursor:<model> / cursor-desktop）。
@@ -88,6 +88,8 @@ from multi_ai_common import (  # noqa: E402
     STDIN_AGENTS,
     DEFAULT_TIMEOUTS_BASE,
     agent_base,
+    agent_timeout_key,
+    review_seat,
     fs_safe,
     HOST_CHOICES,
     parse_host_arg,
@@ -184,13 +186,13 @@ def _resolve_role_suffix(agent: str, host: str) -> str:
     """Resolve fixed role suffix for agent.
 
     - ``agent == host`` → 空串（host 做综合裁决，不追加评审侧重）
-    - ``agent`` 形如 ``cursor:<model>`` → base ``cursor`` 角色
+    - ``cursor:kimi-*`` → **kimi** 席位（实验验证），不走 cursor SSOT 角色
+    - 其余 ``cursor:<model>`` → base ``cursor`` 角色
     - 其余 → agent 自己的侧重
     """
     if agent == host:
         return ""
-    base = _agent_base(agent)
-    return AGENT_ROLE_SUFFIX.get(base, "")
+    return AGENT_ROLE_SUFFIX.get(review_seat(agent), "")
 
 
 def _fs_safe(name: str) -> str:
@@ -294,7 +296,7 @@ def _run_serial(
             continue
         base_name = n.split(":", 1)[0]
         timeout = (
-            args.timeout if args.timeout > 0 else DEFAULT_AGENT_TIMEOUTS.get(base_name, 600)
+            args.timeout if args.timeout > 0 else DEFAULT_AGENT_TIMEOUTS.get(agent_timeout_key(n), 600)
         )
         if args.dry_run:
             shown = (
@@ -343,7 +345,7 @@ def _run_parallel(
                 continue
             base_name = n.split(":", 1)[0]
             timeout = (
-                args.timeout if args.timeout > 0 else DEFAULT_AGENT_TIMEOUTS.get(base_name, 600)
+                args.timeout if args.timeout > 0 else DEFAULT_AGENT_TIMEOUTS.get(agent_timeout_key(n), 600)
             )
             agent_dir = parallel_root / _fs_safe(n)
             agent_dir.mkdir(parents=True, exist_ok=True)
@@ -504,7 +506,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # host 在 exclude 里 = 矛盾配置，fail-fast（此前静默保留 host 并继续 fan-out，
     # tests/test_run_multi_ai_review_host.py 记录的期望行为）
-    if host in excluded or _agent_base(host) in excluded:
+    if host in excluded or review_seat(host) in excluded or _agent_base(host) in excluded:
         print(
             f"[err] host={host} 在 --exclude 列表中（矛盾配置）。\n"
             f"      host 是综合空槽（不被子进程拉起为评审员）：起草者=host 时无需 exclude，\n"
@@ -521,7 +523,11 @@ def main(argv: list[str] | None = None) -> int:
     # 排除非 host agent（--exclude cursor 也去掉 cursor:<model> 变体）
     names = [
         n for n in names
-        if n == host or (n not in excluded and _agent_base(n) not in excluded)
+        if n == host or (
+            n not in excluded
+            and _agent_base(n) not in excluded
+            and review_seat(n) not in excluded
+        )
     ]
 
     assert_qoder_allowed(names)

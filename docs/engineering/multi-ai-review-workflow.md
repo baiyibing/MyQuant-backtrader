@@ -11,9 +11,11 @@ D:\anaconda3\envs\vanna312\python.exe scripts/run/run_multi_ai_review.py `
 
 常用 flag：
 
-- `--preset classic`（默认；Windows = codex + kimi + cursor + claude；host 默认 `cursor-desktop`）
+- `--preset classic`（默认；Windows = codex + **Cursor Kimi** + cursor:auto + claude；host 默认 `cursor-desktop`）
+- kimi 席位默认 `cursor:kimi-k3-high`（独立 kimi-code 周额度用尽）。`OSKH_KIMI_VIA_CURSOR=0` 才回独立 CLI
 - `--preset mixed`（只拉 Cursor 自家模型：auto / grok-4.6-xhigh-fast / composer-2.5-fast）
 - `--dry-run` 只打印命令
+- Cursor headless 默认 ``--mode ask``（``plan`` 会长评审 rc=0 空壳）。空产会再以 ask 重试。``OSKH_CURSOR_HEADLESS_MODE=plan`` 可强制 plan
 
 产物：`docs/architecture/reviews/<YYYY-MM-DD>/<plan-stem>/`
 

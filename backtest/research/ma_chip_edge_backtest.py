@@ -32,17 +32,19 @@ from common.infra.data_root import resolve_period_root, resolve_source_parquet
 from oskh_data import StockDataReader
 from oskh_data.symbol_format import to_canonical_symbol
 from oskh_factors.chip.shares import (
-    _estimate_turnover,
     _load_float_shares_map,
     _load_free_float_shares,
 )
 
-CHIP_WINDOW = 80
+CHIP_WINDOW = 200
 WEEK_RULE = "W-FRI"
 CYQK_TH = 0.70
+PENDING_BUY_MAX_GAP_DAYS = 4
 LOAD_START = "20220701"
 DEFAULT_SEED = 20240907
 DEFAULT_CASH = 1_000_000.0
+# 统计窗前预热：至少满 CHIP_WINDOW 根，再留一段给 D-1 finite。
+CYQK_PRE_STATS_CAL_DAYS = max(200, int(CHIP_WINDOW * 1.6))
 HELP_LOCK = """
 锁定口径（plan v3 §2）：
   成交：Cerebro(cheat_on_open=True)+next_open 下 Market；禁止 bt.Order.Open
@@ -50,8 +52,11 @@ HELP_LOCK = """
   等号：买入日收盘 <= T-1 收盘 → 次日开盘卖（fail-closed）
   否则：持有到收盘 < SMA5，再下一根开盘卖；买入日不挂卖
   skip：涨停买/跌停卖/停牌不成交；skip_sell 保留 pending 次日再试
+  pending_buy：仅信号日后 <=4 个自然日内的下一根 bar 有效，更长缺口 skip_buy(stale)
   统计窗：--start 前最后一个交易日之前的 edge 置假；窗前成交不进净值
-  盈筹率：get_cyqk_c 为 0-1，阈值 0.70；80 日窗口含 D，股本 asof=D
+  盈筹率：get_cyqk_c 为 0-1，阈值 0.70；200 日窗口含 D，换手按窗内每日 asof 股本
+  加速：cyqk 序列优先 turnover_resist.compute_cyqk_series（Rust）；失败回退 Python
+  出报：trades_by_stock.txt / trade_pairs.csv（按票 BUY→下一笔 SELL）
 """
 
 
@@ -164,32 +169,83 @@ def shares_asof_series(stock_code: str, index: pd.DatetimeIndex) -> np.ndarray:
     return out
 
 
-def cyqk_series(
+def turnover_from_daily_shares(volume: np.ndarray, shares: np.ndarray) -> np.ndarray:
+    """换手 = volume(手) * 100 / 当日 asof 流通股本（股）。按日对齐，禁止用单日股本铺整窗。"""
+    vol = np.asarray(volume, dtype=np.float64)
+    sh = np.asarray(shares, dtype=np.float64)
+    if vol.shape != sh.shape:
+        raise ValueError(f"volume/shares length mismatch: {vol.shape} vs {sh.shape}")
+    out = np.full(vol.shape, np.nan, dtype=np.float64)
+    ok = np.isfinite(vol) & np.isfinite(sh) & (sh > 0.0)
+    out[ok] = vol[ok] * 100.0 / sh[ok]
+    return out
+
+
+def _cyqk_start_i(
+    index: pd.Index,
+    window: int,
+    compute_from: Optional[pd.Timestamp],
+) -> int:
+    start_i = window - 1
+    if compute_from is not None:
+        hits = np.flatnonzero(index >= pd.Timestamp(compute_from))
+        if len(hits):
+            start_i = max(start_i, int(hits[0]))
+    return start_i
+
+
+def _try_cyqk_series_rust(
+    df: pd.DataFrame,
+    shares: np.ndarray,
+    window: int,
+    start_i: int,
+    step: float = 0.01,
+) -> Optional[pd.Series]:
+    """调用已安装的 PyO3 `compute_cyqk_series`；符号不存在或失败则 None。"""
+    try:
+        import turnover_resist as tr  # type: ignore[import-not-found]
+    except ImportError:
+        return None
+    fn = getattr(tr, "compute_cyqk_series", None)
+    if fn is None:
+        return None
+    try:
+        arr = fn(
+            np.ascontiguousarray(df["close"], dtype=np.float64).tolist(),
+            np.ascontiguousarray(df["high"], dtype=np.float64).tolist(),
+            np.ascontiguousarray(df["low"], dtype=np.float64).tolist(),
+            np.ascontiguousarray(df["volume"], dtype=np.float64).tolist(),
+            np.ascontiguousarray(shares, dtype=np.float64).tolist(),
+            int(window),
+            int(start_i),
+            float(step),
+        )
+    except Exception:
+        return None
+    if arr is None or len(arr) != len(df):
+        return None
+    return pd.Series(np.asarray(arr, dtype=np.float64), index=df.index)
+
+
+def _cyqk_series_python(
     df: pd.DataFrame,
     stock_code: str,
-    window: int = CHIP_WINDOW,
-    compute_from: Optional[pd.Timestamp] = None,
+    shares: np.ndarray,
+    window: int,
+    start_i: int,
 ) -> pd.Series:
-    """截至当日（含）的 80 日筹码盈筹率，整窗换手用当天 asof 股本。"""
     n = len(df)
     out = np.full(n, np.nan, dtype=np.float64)
     closes = df["close"].to_numpy(dtype=np.float64)
     volume = df["volume"].to_numpy(dtype=np.float64)
-    shares = shares_asof_series(stock_code, pd.DatetimeIndex(df.index))
-    start_i = window - 1
-    if compute_from is not None:
-        hits = np.flatnonzero(df.index >= pd.Timestamp(compute_from))
-        if len(hits):
-            start_i = max(start_i, int(hits[0]))
     work = df[["close", "high", "low", "volume"]].copy()
     for i in range(start_i, n):
-        fs = float(shares[i]) if i < len(shares) else np.nan
-        if not np.isfinite(fs) or fs <= 0:
+        lo = i - window + 1
+        win_sh = shares[lo : i + 1]
+        if win_sh.size != window or not np.isfinite(win_sh).all() or np.any(win_sh <= 0):
             continue
-        sl = work.iloc[i - window + 1 : i + 1].copy()
-        sl["turnover_rate"] = _estimate_turnover(
-            volume[i - window + 1 : i + 1], fs
-        )
+        sl = work.iloc[lo : i + 1].copy()
+        sl["turnover_rate"] = turnover_from_daily_shares(volume[lo : i + 1], win_sh)
         as_of = pd.Timestamp(df.index[i])
         try:
             arr = adapt_columns(sl, stock_code=stock_code, as_of_date=as_of)
@@ -198,6 +254,24 @@ def cyqk_series(
         except Exception:
             out[i] = np.nan
     return pd.Series(out, index=df.index)
+
+
+def cyqk_series(
+    df: pd.DataFrame,
+    stock_code: str,
+    window: int = CHIP_WINDOW,
+    compute_from: Optional[pd.Timestamp] = None,
+) -> pd.Series:
+    """截至当日（含）的 200 日筹码盈筹率；窗内每一日换手用该日 asof 股本。
+
+    优先 Rust PyO3（按日股本 + 每窗独立价格网格）；失败回退本文件 Python 循环。
+    """
+    shares = shares_asof_series(stock_code, pd.DatetimeIndex(df.index))
+    start_i = _cyqk_start_i(df.index, window, compute_from)
+    rust = _try_cyqk_series_rust(df, shares, window, start_i)
+    if rust is not None:
+        return rust
+    return _cyqk_series_python(df, stock_code, shares, window, start_i)
 
 
 def build_signal_frame(
@@ -318,6 +392,7 @@ class MaChipEdgeStrategy(bt.Strategy):
         self._long = False
         self._pending_ref_close: Optional[float] = None
         self._sold_today = False
+        self._buy_sig_date: Optional[date] = None
 
     def _dt(self) -> date:
         return self.data.datetime.date(0)
@@ -385,7 +460,16 @@ class MaChipEdgeStrategy(bt.Strategy):
             return
 
         if self.pending_buy and (not long_now):
-            if vol <= 0 or is_limit_open(code, o, prev_c, up=True):
+            gap = (
+                (self._dt() - self._buy_sig_date).days
+                if self._buy_sig_date is not None
+                else 10**9
+            )
+            if self._buy_sig_date is None or gap > PENDING_BUY_MAX_GAP_DAYS:
+                self.events.append(
+                    {"date": d, "code": code, "event": "skip_buy", "open": o, "reason": "stale"}
+                )
+            elif vol <= 0 or is_limit_open(code, o, prev_c, up=True):
                 self.events.append({"date": d, "code": code, "event": "skip_buy", "open": o})
             else:
                 size = affordable_size(float(self.broker.getcash()), o)
@@ -393,6 +477,7 @@ class MaChipEdgeStrategy(bt.Strategy):
                     self._pending_ref_close = prev_c
                     self.buy(size=size)
             self.pending_buy = False
+            self._buy_sig_date = None
 
     def next(self):
         c = float(self.data.close[0])
@@ -406,6 +491,8 @@ class MaChipEdgeStrategy(bt.Strategy):
                     self.pending_sell = True
                 else:
                     self.hold_mode = "ma5"
+                    if np.isfinite(sma5) and c < sma5:
+                        self.pending_sell = True
             elif self.hold_mode == "ma5" and long_now:
                 if np.isfinite(sma5) and c < sma5:
                     self.pending_sell = True
@@ -419,6 +506,7 @@ class MaChipEdgeStrategy(bt.Strategy):
         ):
             if float(self.data.edge[0]) > 0.5:
                 self.pending_buy = True
+                self._buy_sig_date = self._dt()
 
         self.equity_curve.append((self._dt(), float(self.broker.getvalue())))
         self._sold_today = False
@@ -504,18 +592,266 @@ def run_one(code: str, board: str, sig: pd.DataFrame, stats_start: pd.Timestamp,
     cerebro.addstrategy(MaChipEdgeStrategy, stock_code=code)
     strat = cerebro.run()[0]
     trades = [t for t in strat.trades if pd.Timestamp(t["date"]) >= stats_start]
+    events = [e for e in strat.events if pd.Timestamp(e["date"]) >= stats_start]
     return RunResult(
         code=code,
         board=board,
         trades=trades,
-        events=list(strat.events),
+        events=events,
         equity_end=float(cerebro.broker.getvalue()),
         n_buys=sum(1 for t in trades if t["side"] == "BUY"),
         max_dd=max_drawdown(strat.equity_curve, stats_start),
     )
 
 
-def _write_report(out_dir: Path, universe: pd.DataFrame, results: list[RunResult], stats: pd.DataFrame) -> None:
+def _as_ymd(value) -> str:
+    return pd.Timestamp(value).strftime("%Y-%m-%d")
+
+
+def pair_round_trips(trades: Iterable[dict]) -> list[dict]:
+    """同一票按时间 FIFO：BUY 配下一笔 SELL。连续两买则先一笔记 OPEN。"""
+    by_code: dict[str, list[dict]] = {}
+    for raw in trades:
+        by_code.setdefault(str(raw["code"]), []).append(raw)
+
+    def _sort_key(row: dict) -> tuple:
+        side = str(row.get("side", "")).upper()
+        return (pd.Timestamp(row["date"]), 0 if side == "BUY" else 1)
+
+    out: list[dict] = []
+    for code, rows in by_code.items():
+        pending: Optional[dict] = None
+        seq = 0
+        for row in sorted(rows, key=_sort_key):
+            side = str(row.get("side", "")).upper()
+            if side == "BUY":
+                if pending is not None:
+                    seq += 1
+                    out.append(_open_pair(code, seq, pending))
+                pending = row
+            elif side == "SELL":
+                if pending is None:
+                    seq += 1
+                    out.append(_unmatched_sell(code, seq, row))
+                else:
+                    seq += 1
+                    out.append(_closed_pair(code, seq, pending, row))
+                    pending = None
+        if pending is not None:
+            seq += 1
+            out.append(_open_pair(code, seq, pending))
+    return out
+
+
+def _trade_px(row: dict) -> float:
+    return float(row["price"])
+
+
+def _trade_sz(row: dict) -> int:
+    return int(round(float(row["size"])))
+
+
+def _closed_pair(code: str, seq: int, buy: dict, sell: dict) -> dict:
+    buy_d = pd.Timestamp(buy["date"])
+    sell_d = pd.Timestamp(sell["date"])
+    buy_px = _trade_px(buy)
+    sell_px = _trade_px(sell)
+    ret = (sell_px / buy_px - 1.0) if buy_px > 0 else float("nan")
+    return {
+        "code": code,
+        "seq": seq,
+        "buy_date": _as_ymd(buy_d),
+        "buy_price": buy_px,
+        "buy_size": _trade_sz(buy),
+        "sell_date": _as_ymd(sell_d),
+        "sell_price": sell_px,
+        "sell_size": _trade_sz(sell),
+        "hold_days": int((sell_d.normalize() - buy_d.normalize()).days),
+        "ret_pct": ret,
+        "status": "closed",
+    }
+
+
+def _open_pair(code: str, seq: int, buy: dict) -> dict:
+    return {
+        "code": code,
+        "seq": seq,
+        "buy_date": _as_ymd(buy["date"]),
+        "buy_price": _trade_px(buy),
+        "buy_size": _trade_sz(buy),
+        "sell_date": "",
+        "sell_price": float("nan"),
+        "sell_size": 0,
+        "hold_days": 0,
+        "ret_pct": float("nan"),
+        "status": "open",
+    }
+
+
+def _unmatched_sell(code: str, seq: int, sell: dict) -> dict:
+    return {
+        "code": code,
+        "seq": seq,
+        "buy_date": "",
+        "buy_price": float("nan"),
+        "buy_size": 0,
+        "sell_date": _as_ymd(sell["date"]),
+        "sell_price": _trade_px(sell),
+        "sell_size": _trade_sz(sell),
+        "hold_days": 0,
+        "ret_pct": float("nan"),
+        "status": "unmatched_sell",
+    }
+
+
+def format_trades_by_stock(
+    pairs: list[dict],
+    stats: pd.DataFrame,
+    universe: pd.DataFrame,
+    events: Iterable[dict],
+    *,
+    title: str,
+    cash: float = DEFAULT_CASH,
+) -> str:
+    """给人看的按票配对清单。size 必须用成交股数字段，禁止 Series.size。"""
+    board = {}
+    if len(universe) and "code" in universe.columns:
+        board = dict(zip(universe["code"].astype(str), universe.get("board", pd.Series(dtype=str)).astype(str)))
+    order: list[str] = []
+    if len(universe) and "code" in universe.columns:
+        order = [str(c) for c in universe["code"].tolist()]
+    extra = [c for c in dict.fromkeys(str(p["code"]) for p in pairs) if c not in order]
+    order.extend(extra)
+
+    stats_map = {}
+    if len(stats) and "code" in stats.columns:
+        for rec in stats.to_dict("records"):
+            stats_map[str(rec["code"])] = rec
+
+    ev_map: dict[str, list[dict]] = {}
+    for ev in events:
+        name = str(ev.get("code", ""))
+        if ev.get("event") in {"skip_buy", "skip_sell"}:
+            ev_map.setdefault(name, []).append(ev)
+
+    by_code: dict[str, list[dict]] = {}
+    for p in pairs:
+        by_code.setdefault(str(p["code"]), []).append(p)
+
+    cash_txt = f"{cash:.0f}"
+    lines = [
+        f"# {title}" if title else "# ma_chip_edge trades_by_stock",
+        "",
+        f"每票独立现金 {cash_txt}，前复权开盘成交。配对 = 同一票 BUY 后第一笔 SELL。",
+        "ret_pct = 卖价/买价-1（不含费用）。OPEN = 期末未平。hold = 日历日。",
+        "",
+    ]
+    for code in order:
+        st = stats_map.get(code, {})
+        bd = board.get(code, st.get("board", ""))
+        n_buys = int(st["n_buys"]) if "n_buys" in st and pd.notna(st["n_buys"]) else len(by_code.get(code, []))
+        ret = st.get("ret", float("nan"))
+        dd = st.get("max_dd", float("nan"))
+        ret_s = f"{float(ret)*100:+.2f}%" if pd.notna(ret) else "nan"
+        dd_s = f"{float(dd)*100:.2f}%" if pd.notna(dd) else "nan"
+        lines.append(f"## {code}  {bd}  n_buys={n_buys}  ret={ret_s}  max_dd={dd_s}")
+        for p in by_code.get(code, []):
+            lines.append(_format_pair_line(p))
+        for ev in ev_map.get(code, []):
+            reason = ev.get("reason")
+            if reason is None or (isinstance(reason, float) and pd.isna(reason)):
+                reason = ""
+            else:
+                reason = str(reason).strip()
+            if reason.lower() in {"", "nan", "none"}:
+                reason = ""
+            extra = f"  reason={reason}" if reason else ""
+            open_px = ev.get("open", "")
+            try:
+                open_s = f"{float(open_px):.4f}"
+            except (TypeError, ValueError):
+                open_s = str(open_px)
+            lines.append(f"    {ev.get('event')}  {_as_ymd(ev.get('date'))}  open={open_s}{extra}")
+        lines.append("")
+    return "\n".join(lines)
+
+
+def _format_pair_line(pair: dict) -> str:
+    seq = int(pair["seq"])
+    status = str(pair.get("status", ""))
+    if status == "closed":
+        ret = float(pair["ret_pct"])
+        return (
+            f"{seq:3d} {_as_ymd(pair['buy_date'])} BUY  {float(pair['buy_price']):8.4f}  {int(pair['buy_size']):7d}"
+            f"  ->  {_as_ymd(pair['sell_date'])} SELL {float(pair['sell_price']):8.4f}  {int(pair['sell_size']):7d}"
+            f"  hold={int(pair['hold_days'])}d  {ret*100:+.2f}%"
+        )
+    if status == "open":
+        return (
+            f"{seq:3d} {_as_ymd(pair['buy_date'])} BUY  {float(pair['buy_price']):8.4f}  {int(pair['buy_size']):7d}"
+            f"  ->  OPEN"
+        )
+    return (
+        f"{seq:3d} ----           SELL {float(pair['sell_price']):8.4f}  {int(pair['sell_size']):7d}"
+        f"  unmatched_sell {_as_ymd(pair['sell_date'])}"
+    )
+
+
+def write_paired_trade_listing(
+    out_dir: Path,
+    trades: list[dict],
+    stats: pd.DataFrame,
+    universe: pd.DataFrame,
+    events: list[dict],
+    *,
+    title: str,
+    cash: float = DEFAULT_CASH,
+) -> Path:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    pairs = pair_round_trips(trades)
+    pd.DataFrame(pairs).to_csv(out_dir / "trade_pairs.csv", index=False, encoding="utf-8")
+    text = format_trades_by_stock(
+        pairs, stats, universe, events, title=title, cash=cash
+    )
+    path = out_dir / "trades_by_stock.txt"
+    path.write_text(text, encoding="utf-8", newline="\n")
+    return path
+
+
+def rebuild_paired_listing(
+    out_dir: Path,
+    *,
+    title: str = "",
+    cash: float = DEFAULT_CASH,
+) -> Path:
+    """从已有 trades.csv 重出配对清单，不重跑 Cerebro。"""
+    def _read(name: str) -> pd.DataFrame:
+        p = out_dir / name
+        if not p.exists() or p.stat().st_size < 4:
+            return pd.DataFrame()
+        return pd.read_csv(p)
+
+    trades_df = _read("trades.csv")
+    stats = _read("per_stock_stats.csv")
+    universe = _read("universe.csv")
+    events_df = _read("events.csv")
+    trades = trades_df.to_dict("records") if len(trades_df) else []
+    events = events_df.to_dict("records") if len(events_df) else []
+    head = title or out_dir.name
+    return write_paired_trade_listing(
+        out_dir, trades, stats, universe, events, title=head, cash=cash
+    )
+
+
+def _write_report(
+    out_dir: Path,
+    universe: pd.DataFrame,
+    results: list[RunResult],
+    stats: pd.DataFrame,
+    *,
+    title: str = "",
+    cash: float = DEFAULT_CASH,
+) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     universe.to_csv(out_dir / "universe.csv", index=False, encoding="utf-8")
     trades = [t for r in results for t in r.trades]
@@ -556,9 +892,19 @@ def _write_report(out_dir: Path, universe: pd.DataFrame, results: list[RunResult
         f"- names_still_open: {n_open}",
         f"- skip_buy: {n_skip_buy}",
         f"- skip_sell: {n_skip_sell}",
+        "- paired_listing: trades_by_stock.txt / trade_pairs.csv",
         "",
     ]
     (out_dir / "summary.md").write_text("\n".join(lines), encoding="utf-8", newline="\n")
+    write_paired_trade_listing(
+        out_dir,
+        trades,
+        stats,
+        universe,
+        events,
+        title=title or out_dir.name,
+        cash=cash,
+    )
 
 
 def main(argv: Optional[Iterable[str]] = None) -> int:
@@ -573,11 +919,24 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
     ap.add_argument("--per-board", type=int, default=10)
     ap.add_argument("--cash", type=float, default=DEFAULT_CASH)
     ap.add_argument("--codes", default="", help="comma codes, skip random sample")
+    ap.add_argument(
+        "--from-dir",
+        default="",
+        help="rebuild trades_by_stock.txt from an existing output dir (no Cerebro)",
+    )
     args = ap.parse_args(list(argv) if argv is not None else None)
+
+    if args.from_dir:
+        out = Path(args.from_dir)
+        if not out.is_absolute():
+            out = Path(REPO) / out
+        path = rebuild_paired_listing(out, title=out.name, cash=args.cash)
+        print(f"wrote {path}")
+        return 0
 
     end = args.end or date.today().strftime("%Y%m%d")
     stats_start = pd.Timestamp(args.start)
-    cyqk_from = stats_start - pd.Timedelta(days=200)
+    cyqk_from = stats_start - pd.Timedelta(days=CYQK_PRE_STATS_CAL_DAYS)
     results: list[RunResult] = []
     stat_rows = []
     used = []
@@ -645,7 +1004,14 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
 
     out_dir = Path(REPO) / "backtest_output" / f"ma_chip_edge_{args.seed}_{end}"
     stats = pd.DataFrame(stat_rows)
-    _write_report(out_dir, pd.DataFrame(used), results, stats)
+    _write_report(
+        out_dir,
+        pd.DataFrame(used),
+        results,
+        stats,
+        title=f"ma_chip_edge trades (seed={args.seed}, {args.start}..{end})",
+        cash=args.cash,
+    )
     print(f"wrote {out_dir}")
     print(stats.to_string(index=False) if len(stats) else "no names ran")
     return 0

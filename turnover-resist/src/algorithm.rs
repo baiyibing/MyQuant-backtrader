@@ -4,6 +4,7 @@
 //! 所有公式语义与 Python 端一致，差异仅在于 f64 浮点累积精度。
 
 use crate::types::BarRow;
+use rayon::prelude::*;
 use thiserror::Error;
 
 /// 三角分布 PDF 单点求值，等价于 numba jit `triang_pdf`（`distribution_of_chips.py:52-105`）。
@@ -338,6 +339,145 @@ pub fn compute_cyqk_for_window(bars: &[BarRow], float_shares: f64, step: f64) ->
     } else {
         Some(cyqk)
     }
+}
+
+/// 单窗口 CYQK：窗内每一日用该日流通股本算换手（`vol × 100 / shares[i]`）。
+///
+/// 价格网格按**本窗口** `min(low)` / `max(high)` 重建，与 Python `calc_dist_chips` 一致。
+/// 不要复用 `compute_cyqk_for_window`（整窗单一股本）。
+///
+/// 窗内任一日股本非有限或 ≤0、OHLCV 非有限、价格范围无效 → `None`。
+/// 不设「至少 20 根」门槛：窗口长度由调用方决定（策略锁 200）。
+pub fn compute_cyqk_ohlcv_window(
+    close: &[f64],
+    high: &[f64],
+    low: &[f64],
+    volume: &[f64],
+    shares: &[f64],
+    step: f64,
+) -> Option<f64> {
+    let n_days = close.len();
+    if n_days == 0
+        || high.len() != n_days
+        || low.len() != n_days
+        || volume.len() != n_days
+        || shares.len() != n_days
+        || !step.is_finite()
+        || step <= 0.0
+    {
+        return None;
+    }
+
+    let mut min_p = f64::INFINITY;
+    let mut max_p = f64::NEG_INFINITY;
+    let mut turnovers = Vec::with_capacity(n_days);
+    for i in 0..n_days {
+        let c = close[i];
+        let h = high[i];
+        let l = low[i];
+        let vol = volume[i];
+        let sh = shares[i];
+        if !c.is_finite()
+            || !h.is_finite()
+            || !l.is_finite()
+            || !vol.is_finite()
+            || vol < 0.0
+            || !sh.is_finite()
+            || sh <= 0.0
+        {
+            return None;
+        }
+        if l < min_p {
+            min_p = l;
+        }
+        if h > max_p {
+            max_p = h;
+        }
+        turnovers.push((vol * 100.0) / sh);
+    }
+
+    if !min_p.is_finite() || !max_p.is_finite() || max_p <= min_p {
+        return None;
+    }
+
+    let n_prices = ((max_p - min_p) / step).ceil() as usize + 1;
+    let xs: Vec<f64> = (0..n_prices).map(|i| min_p + i as f64 * step).collect();
+    let mut curpdfs: Vec<f64> = Vec::with_capacity(n_days * n_prices);
+    let mut day_buf = vec![0.0f64; n_prices];
+    for i in 0..n_days {
+        calc_single_day_curpdf_into(
+            close[i],
+            high[i],
+            low[i],
+            volume[i],
+            &xs,
+            step,
+            &mut day_buf,
+        );
+        if day_buf.iter().any(|v| !v.is_finite()) {
+            return None;
+        }
+        curpdfs.extend_from_slice(&day_buf);
+    }
+
+    let cumpdf = calc_cumpdf_decay(&curpdfs, &turnovers, n_days, n_prices);
+    let cyqk = calc_cyqk(&cumpdf, &xs, close[n_days - 1]);
+    if cyqk.is_nan() {
+        None
+    } else {
+        Some(cyqk)
+    }
+}
+
+/// 滚动窗口 CYQK 序列。`out[i]` = 窗口 `[i-window+1, i]`（含 i）。
+///
+/// `i < max(window-1, start_i)` 或窗口无效 → `NaN`。按日并行（rayon）。
+pub fn compute_cyqk_series(
+    close: &[f64],
+    high: &[f64],
+    low: &[f64],
+    volume: &[f64],
+    shares: &[f64],
+    window: usize,
+    start_i: usize,
+    step: f64,
+) -> Vec<f64> {
+    let n = close.len();
+    let mut out = vec![f64::NAN; n];
+    if window == 0
+        || n < window
+        || high.len() != n
+        || low.len() != n
+        || volume.len() != n
+        || shares.len() != n
+    {
+        return out;
+    }
+    let first = start_i.max(window - 1);
+    if first >= n {
+        return out;
+    }
+
+    let computed: Vec<(usize, f64)> = (first..n)
+        .into_par_iter()
+        .map(|i| {
+            let lo = i + 1 - window;
+            let v = compute_cyqk_ohlcv_window(
+                &close[lo..=i],
+                &high[lo..=i],
+                &low[lo..=i],
+                &volume[lo..=i],
+                &shares[lo..=i],
+                step,
+            )
+            .unwrap_or(f64::NAN);
+            (i, v)
+        })
+        .collect();
+    for (i, v) in computed {
+        out[i] = v;
+    }
+    out
 }
 
 /// 计算相邻两个窗口（T 与 T-1）的 CYQK，避免重复构建价格网格。

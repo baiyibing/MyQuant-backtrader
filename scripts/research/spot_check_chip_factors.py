@@ -2,8 +2,8 @@
 """筹码因子抽样检查 — 输出流通股本、换手率、赢筹率及阻力因子供人工复核。
 
 用法：
-    D:/anaconda3/envs/vanna311/python.exe scripts/research/spot_check_chip_factors.py
-    D:/anaconda3/envs/vanna311/python.exe scripts/research/spot_check_chip_factors.py --date 20260515 --samples 100 --seed 42
+    D:/anaconda3/envs/vanna312/python.exe scripts/research/spot_check_chip_factors.py
+    D:/anaconda3/envs/vanna312/python.exe scripts/research/spot_check_chip_factors.py --date 20260515 --samples 100 --seed 42
 """
 from __future__ import annotations
 

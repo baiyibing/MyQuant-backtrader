@@ -3,8 +3,8 @@
 """全市场换手阻力 + 布林带输出。
 
 用法：
-    D:/anaconda3/envs/vanna311/python.exe scripts/research/full_market_chip_resist.py
-    D:/anaconda3/envs/vanna311/python.exe scripts/research/full_market_chip_resist.py --date 20260515 --output full_market.csv
+    D:/anaconda3/envs/vanna312/python.exe scripts/research/full_market_chip_resist.py
+    D:/anaconda3/envs/vanna312/python.exe scripts/research/full_market_chip_resist.py --date 20260515 --output full_market.csv
 """
 from __future__ import annotations
 

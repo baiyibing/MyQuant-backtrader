@@ -5,8 +5,8 @@
 输出窗口长度对赢筹值的影响幅度。
 
 用法：
-    D:/anaconda3/envs/vanna311/python.exe scripts/research/chip_window_sensitivity.py
-    D:/anaconda3/envs/vanna311/python.exe scripts/research/chip_window_sensitivity.py --dates 3
+    D:/anaconda3/envs/vanna312/python.exe scripts/research/chip_window_sensitivity.py
+    D:/anaconda3/envs/vanna312/python.exe scripts/research/chip_window_sensitivity.py --dates 3
 """
 from __future__ import annotations
 
