@@ -1,0 +1,35 @@
+---
+description: Python environment (vanna311) and UTF-8 encoding rules
+globs:
+  - "**/*.py"
+alwaysApply: true
+---
+
+## Environment
+
+Project Python environment is fixed to **vanna311**.
+
+- Interpreter: `D:\anaconda3\envs\vanna311\python.exe`
+- Conda: `D:\anaconda3\Scripts\conda.exe`
+- Working directory: `${workspaceFolder}`
+
+### Execution
+
+1. Always use the explicit interpreter path:
+   - `D:\anaconda3\envs\vanna311\python.exe <script_or_module>`
+   - If the path does not exist, fall back to `OSKH_MERGE_PYTHON` or `VANNA311_PYTHON` env vars (see `AGENTS.md`).
+2. Pip: `D:\anaconda3\envs\vanna311\python.exe -m pip ...`
+3. Tests (pick one, **never** bare `python -m pytest`):
+   - `D:\anaconda3\envs\vanna311\python.exe -m pytest ...`
+   - `conda run -n vanna311 python -m pytest ...`
+4. Never use system `python` / `pip` implicitly.
+5. Terminal activation: `conda activate vanna311`
+
+## Encoding
+
+系统已启用 Windows "Beta: Unicode UTF-8" 全局支持，系统级默认编码为 UTF-8。以下为仓库编码约定：
+
+- Python 源文件默认 UTF-8（Python 3 默认），可省略 `# -*- coding: utf-8 -*-` 声明
+- 所有 `open()` / `read()` / `write()` 调用使用 `encoding="utf-8"`
+- 子进程通信设置 `PYTHONIOENCODING=utf-8`
+

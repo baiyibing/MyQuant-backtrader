@@ -1,0 +1,4 @@
+# StockDataReader 模式配置
+# 取值: parquet | duckdb | duckdb_persistent
+# 优先级: 环境变量 STOCK_DATA_READER_MODE > 本文件 > 默认 parquet
+mode: parquet

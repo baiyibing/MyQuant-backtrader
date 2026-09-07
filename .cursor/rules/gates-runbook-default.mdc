@@ -1,0 +1,20 @@
+---
+description: Default gate execution follows health runbook
+alwaysApply: true
+---
+
+Gate execution must follow:
+`docs/quality/contract-gates-runbook.md`.
+
+Layered execution order:
+1. Targeted quick tests (if relevant to change scope)
+2. `scripts/run_common_package_contract_gates.py`
+3. `scripts/run_stream_execution_contract_bundle.py` (as required by change scope)
+
+Rules:
+- On Windows/PowerShell, prefer direct redirection to file + check `$LASTEXITCODE`; avoid `Tee-Object` as primary collection path.
+- Verdict is based on exit code (`0` = pass), not logging noise (stream-close/sink warnings).
+- Use runbook health milestones/timeouts to distinguish "healthy progress" from a real hang before stopping/retrying.
+- If background execution doesn't start on Windows sandboxed runs, switch to non-sandbox execution (per runbook).
+
+Gate result report must include: commands executed, exit code(s), and whether runbook milestones were observed (if troubleshooting was needed).

@@ -1,0 +1,126 @@
+# 赢筹（获利筹码）偏差诊断 — 单一真相源（SSOT）
+# 所有诊断脚本统一从此文件读取参数，禁止各自硬编码
+# 报告附录须记录本文件的 SHA-256 哈希
+
+# ------------------------------------------------------------------
+# P0 修复参数
+# ------------------------------------------------------------------
+p0_fixes:
+  float_shares:
+    source_script: "oskh_data/float_shares.py"
+    output_path: "stock_data/float_shares.parquet"
+    backup: true                           # 写入前备份旧版本
+    backup_suffix: ".bak.{timestamp}"      # timestamp = YYYYMMDD_HHMMSS
+    coverage_threshold: 0.99              # 覆盖率低于此值回滚
+    coverage_denominator: "period=1d/dividend_type=front"  # 或 "qmt_sector:沪深A股"
+
+  adjust_type:
+    daily_adjust: "front"                  # 日线赢筹计算使用前复权
+    minute_adjust: "none"                  # QMT 分钟线不支持复权
+    hybrid_enabled: true                   # 使用 hybrid_chip_distribution 折中
+
+# ------------------------------------------------------------------
+# 算法参数（方案 A 诊断范围）
+# ------------------------------------------------------------------
+algorithm:
+  default_window: 80                       # 当前默认历史窗口（天）
+  sensitivity_windows: [60, 80, 100, 120]  # 敏感性分析覆盖的窗口长度
+  sensitivity_sample_size: 20             # 敏感性分析样本股数
+  sensitivity_grouping:                    # 分层覆盖
+    large_cap: 4
+    mid_cap: 4
+    small_cap: 4
+    high_volatility: 4
+    low_volatility: 4
+  sensitivity_threshold: 0.20             # 敏感股票占比超过此值才投入参数调优
+  default_decay_model: "linear"           # 当前衰减模型: linear (A=1.0)
+  alternative_decay_models: ["half_life"]  # 备选模型（仅记录，不强制测试）
+
+# ------------------------------------------------------------------
+# 方案 B：样本对比参数
+# ------------------------------------------------------------------
+sample_comparison:
+  # 样本选取
+  min_cross_sections: 30                  # 最少截面点（停损条件 N >= 30）
+  grouping:
+    large_blue_chip: 5
+    small_growth: 5
+    recent_surge: 5
+    recent_slump: 5
+    consolidation: 5
+    new_listing: 5
+  dates_per_stock: 3                      # 每只股票选取截面日期数
+
+  # 基准数据源
+  benchmark:
+    primary: "local_automated"            # 一级基准：QMT + 本地算法
+    secondary: "akshare_stock_cyq_em"     # 二级基准：东方财富筹码分布
+    secondary_fallback: "manual_screenshot"  # 降级路径
+    secondary_deadline_days: 7            # 二级基准超时天数，超时自动降级
+    manual_sanity_check_size: 8           # 人工 sanity check 样本数（5-10）
+
+# ------------------------------------------------------------------
+# 停损条件（方案 B 关闭/记录/硬停损）
+# ------------------------------------------------------------------
+stop_conditions:
+  # 关闭条件 — 二级基准可用时
+  close_external_available:
+    mae_threshold: 0.05                   # MAE < 5%
+    rankic_threshold: 0.6                 # Spearman RankIC > 0.6
+    min_cross_sections: 30
+    group_coverage: ["large_cap", "mid_cap", "small_cap"]
+
+  # 关闭条件 — 降级路径（外部基准不可用）
+  close_degraded:
+    primary_repair_confirmed: true        # 一级基准两轮对比确认修复有效
+    primary_min_change_pct: 0.05          # 异常样本中位绝对变化 > 5%
+    sanity_check_pass: true               # 人工 sanity check 无量级错误
+    theory_checklist_no_unexplained: true # 理论偏差清单无 P0/P1 未解释项
+
+  # 记录决策条件
+  record_decision:
+    mae_threshold: 0.10                  # MAE > 10%
+    rankic_threshold: 0.4                # RankIC < 0.4
+
+  # 硬停损
+  hard_stop_days: 3                       # 3 人天上限
+
+  # 阈值收紧（外部 API 稳定后自动切换）
+  tightened_thresholds:
+    trigger: "external_api_stable_2_weeks"  # 连续 2 周稳定后触发
+    mae_close: 0.03
+    mae_record: 0.07
+    rankic_close: 0.7
+
+# ------------------------------------------------------------------
+# P0 #2 复权关闭标准
+# ------------------------------------------------------------------
+p0_adjust_close:
+  pearson_r_daily_vs_minute: 0.85         # 总体 Pearson r 下限
+  pearson_r_per_date: 0.75               # 按日期分组 r 下限
+  min_date_slices: 20                     # 至少覆盖交易日切片数
+  max_failed_slices_ratio: 0.10          # 允许失败切片上限（<= 10%）
+
+# ------------------------------------------------------------------
+# 数据冻结
+# ------------------------------------------------------------------
+data_freeze:
+  enabled: true                           # 方案 B 两轮对比期间冻结数据
+  freeze_scope:
+    - "oskh_data.backfill"
+    - "oskh_data.downloader"
+    - "DuckDB 增量更新"
+    - "Parquet 写入"
+
+# ------------------------------------------------------------------
+# 发布门禁（preflight_chip_diagnosis.py）
+# ------------------------------------------------------------------
+preflight:
+  checks:
+    float_shares_coverage: 0.99
+    daily_data_exists: true
+    minute_data_exists: true
+    min_sample_cross_sections: 30
+    config_hash_in_report: true
+  exit_on_failure: true                   # 非零退出码阻断发布
+  ci_enforced: true                       # CI 流水线强制触发

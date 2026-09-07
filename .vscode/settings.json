@@ -1,0 +1,30 @@
+{
+  "terminal.integrated.defaultProfile.windows": "PowerShell",
+  "terminal.external.windowsExec": "wt.exe",
+  "terminal.external.windowsExecArgs": [
+    "-d",
+    "${workspaceFolder}"
+  ],
+  "python.terminal.activateEnvironment": true,
+  "python.defaultInterpreterPath": "D:\\anaconda3\\envs\\vanna311\\python.exe",
+  "python.condaPath": "D:\\anaconda3\\Scripts\\conda.exe",
+  "terminal.integrated.profiles.windows": {
+    "Git Bash": {
+      "path": "C:\\Program Files\\Git\\bin\\bash.exe",
+      "args": ["--login", "-i"],
+      "icon": "terminal-bash",
+      "env": {
+        "LANG": "en_US.UTF-8",
+        "LC_ALL": "en_US.UTF-8"
+      }
+    },
+    "PowerShell": {
+      "source": "PowerShell",
+      "args": [
+        "-NoExit",
+        "-Command",
+        "& { Set-Location '${workspaceFolder}'; conda activate vanna311 }"
+      ]
+    }
+  }
+}

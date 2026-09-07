@@ -1,0 +1,52 @@
+{
+  "pythonVersion": "3.11",
+  "venv": "vanna311",
+  "venvPath": "D:/anaconda3/envs",
+  "typeCheckingMode": "basic",
+  "include": [
+    "common",
+    "oskh_data",
+    "oskh_core",
+    "trade_decision",
+    "backtest",
+    "qlib_cost",
+    "scripts",
+    "tests",
+    "trade_fee_policy.py"
+  ],
+  "exclude": [
+    "**/__pycache__",
+    ".git",
+    ".venv",
+    "venv",
+    "**/_tmp_*.py",
+    "turnover-resist"
+  ],
+  "executionEnvironments": [
+    {
+      "root": "oskh_data",
+      "reportMissingImports": "warning"
+    },
+    {
+      "root": "backtest",
+      "reportMissingImports": "none",
+      "reportAttributeAccessIssue": "none",
+      "reportCallIssue": "none"
+    },
+    {
+      "root": "qlib_cost",
+      "reportMissingImports": "none"
+    },
+    {
+      "root": "scripts",
+      "reportMissingImports": "warning"
+    },
+    {
+      "root": "tests",
+      "reportMissingImports": "warning"
+    }
+  ],
+  "reportMissingImports": true,
+  "reportMissingModuleSource": "none",
+  "reportUnusedImport": "warning"
+}

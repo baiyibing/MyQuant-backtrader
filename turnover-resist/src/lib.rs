@@ -1,0 +1,85 @@
+//! turnover-resist library entry.
+pub mod algorithm;
+pub mod bollinger;
+pub mod cli;
+pub mod data;
+pub mod engine;
+pub mod types;
+
+// ---- PyO3 绑定（选型 benchmark 用最小原型） ----
+use pyo3::prelude::*;
+
+/// Python 入口：接收标量参数 → 调用 Rust 核心计算 → 返回 JSON 字符串。
+///
+/// 返回 JSON 数组，每个元素是一个 OutputRow 的对象表示。
+/// 字段名与 CSV 输出一致（含 serde(rename) 映射）。
+#[pyfunction]
+fn compute_turnover_resist(
+    date: &str,
+    window: usize,
+    step: f64,
+    data_dir: &str,
+    sort_by: &str,
+    free_float_policy: &str,
+    target_date_policy: &str,
+    bb_ddof: usize,
+    max_grid_points: usize,
+) -> PyResult<String> {
+    let date = chrono::NaiveDate::parse_from_str(date, "%Y%m%d")
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("invalid date '{}': {}", date, e)))?;
+
+    let sort_by = match sort_by {
+        "circulating" => cli::SortBy::Circulating,
+        "free" => cli::SortBy::Free,
+        _ => return Err(pyo3::exceptions::PyValueError::new_err(
+            format!("sort_by must be 'circulating' or 'free', got '{}'", sort_by)
+        )),
+    };
+
+    let free_float_policy = match free_float_policy {
+        "warn-zero" => cli::FreeFloatPolicy::WarnZero,
+        "skip" => cli::FreeFloatPolicy::Skip,
+        "fail" => cli::FreeFloatPolicy::Fail,
+        _ => return Err(pyo3::exceptions::PyValueError::new_err(
+            format!("free_float_policy must be 'warn-zero', 'skip' or 'fail', got '{}'", free_float_policy)
+        )),
+    };
+
+    let target_date_policy = match target_date_policy {
+        "strict" => cli::TargetDatePolicy::Strict,
+        "allow-previous" => cli::TargetDatePolicy::AllowPrevious,
+        _ => return Err(pyo3::exceptions::PyValueError::new_err(
+            format!("target_date_policy must be 'strict' or 'allow-previous', got '{}'", target_date_policy)
+        )),
+    };
+
+    let cli = cli::Cli {
+        date,
+        target_date_policy,
+        window,
+        step,
+        max_grid_points,
+        bb_ddof,
+        sort_by,
+        free_float_policy,
+        output: None,
+        data_dir: std::path::PathBuf::from(data_dir),
+    };
+
+    let results = engine::run(&cli).map_err(|e| {
+        pyo3::exceptions::PyRuntimeError::new_err(format!("compute failed: {}", e))
+    })?;
+
+    let json = serde_json::to_string(&results).map_err(|e| {
+        pyo3::exceptions::PyRuntimeError::new_err(format!("serialize failed: {}", e))
+    })?;
+
+    Ok(json)
+}
+
+/// Python 模块名 turnover_resist（与 Cargo [lib] name 一致）。
+#[pymodule]
+fn turnover_resist(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(compute_turnover_resist, m)?)?;
+    Ok(())
+}

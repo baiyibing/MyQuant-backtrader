@@ -1,0 +1,22 @@
+---
+description: Rust 编译必须从 turnover-resist/ 目录执行，否则 sccache 不生效
+globs: "turnover-resist/**/*.rs"
+alwaysApply: true
+---
+
+# Rust 编译规则
+
+**编译 turnover-resist 时，必须 `cd turnover-resist && cargo build`，不能从仓库根目录执行 `cargo build --manifest-path turnover-resist/Cargo.toml`。**
+
+原因：sccache 的 `rustc-wrapper` 配置写在 `turnover-resist/.cargo/config.toml` 中，Cargo 只读当前工作目录（及父目录）的 `.cargo/config.toml`。从根目录执行会跳过该配置，sccache 不生效。
+
+- **首次编译**（clean 后）：~15 分钟
+- **增量编译**（只改 .rs 文件）：~5-6 分钟
+- **禁止 `cargo clean`**：不要清理 target/，DuckDB bundled 会重编 ~30 分钟
+- cleanup 用 `cargo clean` 仅限依赖变更或缓存损坏时
+
+DuckDB 和 Redis 依赖已在 Cargo.toml 中注释（避免 30 分钟 C++ clean 编译），需要时取消注释即可启用。
+启用 DuckDB 时需同时保留 `build.rs`（显式链接 Windows SDK 的 `Rstrtmgr.lib`）。
+`data.rs` 中 `load_all_stocks_duckdb()` 通过 `#[cfg(feature = "duckdb")]` 保护，启用依赖后自动编译。
+polars parquet 是默认加载方式（实测比 DuckDB 快 1.5×），`load_all_stocks_parquet()` 为主路径。
+详见 `docs/engineering/Rust换手阻力性能优化方案.md` §3.2-§3.3。

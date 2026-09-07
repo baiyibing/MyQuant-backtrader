@@ -1,0 +1,38 @@
+---
+description: Mandatory UTF-8 text files; never UTF-16 (Windows agent write safety)
+alwaysApply: true
+---
+
+# UTF-8 only — never UTF-16
+
+**Hard rule (always):** Every text file created or edited in this repo MUST be **UTF-8 without BOM**. **Never** write UTF-16 (LE/BE).
+
+## Forbidden
+
+- UTF-16 / UCS-2 encodings (`utf-16`, `utf-16-le`, `utf-16-be`, `unicode`)
+- PowerShell `Out-File` / `Set-Content` without explicit UTF-8 no-BOM (PS 5.x defaults often produce UTF-16 or UTF-8 BOM)
+- Saving via tools that emit UTF-16 (symptom: **NUL bytes between ASCII characters**)
+
+## Required
+
+- Python: `Path.write_text(..., encoding="utf-8", newline="\n")` or `open(..., encoding="utf-8")`
+- PowerShell (safe): `[System.IO.File]::WriteAllText($path, $content, (New-Object System.Text.UTF8Encoding $false))`
+- New file with CJK: copy UTF-8 template + ASCII-only patch, or Python `\uXXXX` in ASCII-only generator, or `WriteAllText` as above
+- After writing `.py` / `.md` / `.json` / `.yaml` / `.mdc`, verify NUL count is 0:
+
+```powershell
+D:\anaconda3\envs\vanna311\python.exe -c "p=r'PATH'; b=open(p,'rb').read(); assert b.count(0)==0, p; print('utf8-ok', p)"
+```
+
+Non-zero NUL count → rewrite immediately; do not proceed.
+
+## Symptoms
+
+- `SyntaxError: source code cannot contain null bytes`
+- File size ~2x expected; `b'#\x00!\x00'` at start of `.py`
+
+## Scope
+
+All text files (source, docs, prompts, configs, rules). Binary assets excluded.
+
+Aligns with `python-env.mdc` and `AGENTS.md`.
