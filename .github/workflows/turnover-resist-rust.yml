@@ -16,7 +16,8 @@ on:
 
 jobs:
   rust-checks:
-    runs-on: windows-latest
+    # ubuntu: duckdb bundled fails to compile on windows-latest MSVC 14.51 (fmt)
+    runs-on: ubuntu-latest
     env:
       # Local .cargo/config.toml may set rustc-wrapper=sccache; disable in CI runner.
       RUSTC_WRAPPER: ""
@@ -25,6 +26,11 @@ jobs:
         working-directory: turnover-resist
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set up Python (pyo3 / all-features)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
