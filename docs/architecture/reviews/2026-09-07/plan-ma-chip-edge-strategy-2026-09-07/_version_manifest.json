@@ -1,0 +1,29 @@
+{
+  "plan": {
+    "claude": {
+      "content_sha256_16": "5da0c827cee0c002",
+      "git_sha": "<untracked>",
+      "path": "docs/backtest/plan-ma-chip-edge-strategy-2026-09-07.md",
+      "reviewed_at": "2026-09-07"
+    },
+    "codex": {
+      "content_sha256_16": "5da0c827cee0c002",
+      "git_sha": "<untracked>",
+      "path": "docs/backtest/plan-ma-chip-edge-strategy-2026-09-07.md",
+      "reviewed_at": "2026-09-07"
+    },
+    "cursor-auto": {
+      "content_sha256_16": "5da0c827cee0c002",
+      "git_sha": "<untracked>",
+      "path": "docs/backtest/plan-ma-chip-edge-strategy-2026-09-07.md",
+      "reviewed_at": "2026-09-07"
+    },
+    "kimi": {
+      "content_sha256_16": "5da0c827cee0c002",
+      "git_sha": "<untracked>",
+      "path": "docs/backtest/plan-ma-chip-edge-strategy-2026-09-07.md",
+      "reviewed_at": "2026-09-07"
+    }
+  },
+  "schema_version": 1
+}

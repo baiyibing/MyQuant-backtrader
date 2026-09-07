@@ -1,0 +1,4 @@
+path=docs/backtest/plan-ma-chip-edge-strategy-2026-09-07.md
+git_sha=<untracked>
+content_sha256_16=5da0c827cee0c002
+reviewed_at=2026-09-07
