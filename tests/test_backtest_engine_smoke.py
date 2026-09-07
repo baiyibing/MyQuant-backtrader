@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from datetime import date
 
-from backtest.engine import BarReplayEngine, BacktestConfig
+from backtest.legacy.engine import BarReplayEngine, BacktestConfig
 
 
 class _S:

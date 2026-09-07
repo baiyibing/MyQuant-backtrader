@@ -22,7 +22,7 @@ _SCAN_DIRS = ("oskh_data", "oskh_factors", "scripts")
 # (tag, expected_hits) — fill after first scan; keep only remaining debt.
 _ALLOWLIST: Dict[str, Tuple[str, int]] = {
     "oskh_data/freshness.py": ("LABEL_NONPATH", 1),
-    "scripts/backfill_turnover_resistance_bands.py": ("LEGIT_TR", 1),
+    "scripts/tr/backfill_turnover_resistance_bands.py": ("LEGIT_TR", 1),
 }
 
 _PATTERNS: List[Pattern[str]] = [

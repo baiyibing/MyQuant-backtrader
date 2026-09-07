@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-from backtest.mock_qmt_backtrader_adapter import BacktestMockQmtPipeline, BacktestOrderIntent
+from backtest.legacy.mock_qmt_backtrader_adapter import BacktestMockQmtPipeline, BacktestOrderIntent
 
 
 def test_backtest_mock_qmt_pipeline_buy_then_sell(monkeypatch):

@@ -8,7 +8,10 @@ Seeded from OSkhQuant slim snapshot at commit `5d41252` (parent of RF-R0 package
 
 | Path | Role |
 |------|------|
-| `backtest/` | Cerebro strategies (`backtest_main_full`, rolling invest, chip tools) |
+| `backtest/` | Cerebro engine at root (`backtest_main_full`, rolling invest, chip indicator) |
+| `backtest/research/` | Chip research CLIs (`chip_backtest`, factor analysis, verify scripts) |
+| `backtest/tools/` | One-off local utilities |
+| `backtest/legacy/` | Non-Cerebro bar-replay / mock engines |
 | `oskh_data/` | Parquet/DuckDB reader (no QMT download) |
 | `qlib_cost/` | Chip distribution algorithms |
 | `turnover-resist/` | Rust CLI for turnover resistance |
@@ -16,6 +19,9 @@ Seeded from OSkhQuant slim snapshot at commit `5d41252` (parent of RF-R0 package
 | `oskh_core/turnover_resist_bridge.py` | Compatibility re-export of the factors bridge |
 | `trade_decision/presets.py` | Sell presets used by optional BT adapter |
 | `common/infra/` | Slim infra (`timekeeping`, `quant_logger`, …) |
+| `scripts/gates/` | Contract / path-SSOT gates |
+| `scripts/research/` | Full-market chip / TR research CLIs |
+| `scripts/tr/` | Turnover-resistance backfill and DuckDB rebuild |
 | `stock_pool/` | Daily buy-list CSVs for full BT |
 
 ## Environment
