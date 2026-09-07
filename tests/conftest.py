@@ -11,8 +11,6 @@ from typing import Generator
 
 import pytest
 
-from common.infra.security import mask_account
-
 
 def pytest_configure(config: pytest.Config) -> None:  # noqa: ARG001
     """Ensure repo-local pytest basetemp exists."""
@@ -60,7 +58,3 @@ def loguru_caplog_mirror() -> Generator[None, None, None]:
         loguru_logger.remove(handler_id)
     except ValueError:
         pass
-
-
-TEST_FIXTURE_ACCOUNT_ID = "62205221"
-TEST_FIXTURE_ACCOUNT_ID_MASKED = mask_account(TEST_FIXTURE_ACCOUNT_ID)

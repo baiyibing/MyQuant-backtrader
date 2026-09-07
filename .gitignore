@@ -94,6 +94,11 @@ scripts/baselines/*_last_run.log
 /nonexistent_exec_parity.db-wal
 /unit_degraded_dwell.db
 /.claude/*.pid
+/.claude/settings.local.json
+/.claude/*.local.json
+/.claude/ssot_missed_queries.jsonl
+/.claude/mcp.json
+/.cursor/mcp.json
 /qlib_cost/mlruns/
 /backtest_output/
 /stock_data/stock_data.duckdb

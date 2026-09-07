@@ -61,6 +61,5 @@ D:\anaconda3\envs\vanna311\python.exe -m pytest -q
 
 ## Git
 
-- Path: `E:\PycharmProjects\MyQuant-backtrader`
-- Remote: `origin` → `http://netgear.seetell.net:13000/baiyibing/MyQuant-backtrader.git`
-- Slimmed backtest tree is the committed baseline on `master`. Push only when explicitly requested.
+- Public: https://github.com/baiyibing/MyQuant-backtrader
+- `master` tracks a private internal remote named `origin`. Do not publish that URL. Use `git push github` for the public mirror.
