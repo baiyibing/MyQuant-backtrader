@@ -23,7 +23,6 @@ _SCAN_DIRS = ("oskh_data", "oskh_factors", "scripts")
 _ALLOWLIST: Dict[str, Tuple[str, int]] = {
     "oskh_data/freshness.py": ("LABEL_NONPATH", 1),
     "scripts/backfill_turnover_resistance_bands.py": ("LEGIT_TR", 1),
-    "scripts/update_adjusted_daily.py": ("LABEL_NONPATH", 1),
 }
 
 _PATTERNS: List[Pattern[str]] = [
@@ -41,9 +40,7 @@ _RESOLVER_MARK = re.compile(
     r"resolve_tr_staging_dir"
 )
 
-_LOOSE_WRITE_BAN_FILES = (
-    "scripts/update_adjusted_daily.py",
-)
+_LOOSE_WRITE_BAN_FILES: Tuple[str, ...] = ()
 _EXPLICIT_ROOT_CALL = re.compile(r"resolve_source_parquet\([^\n]*explicit_root\s*=")
 
 

@@ -1,4 +1,4 @@
-"""独立重建日线前复权 DuckDB，不依赖 oskh_data.reader（避免 xtquant 导入链）。"""
+"""独立重建日线前复权 DuckDB，不依赖 oskh_data.reader。"""
 import os
 import sys
 import time

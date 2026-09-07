@@ -17,7 +17,7 @@ from typing import Iterable, List, Optional, Sequence
 import pandas as pd
 
 from oskh_data.pandas_typing import normalize_timestamp, timestamp_strftime
-from oskh_data.downloader import _get_parquet_latest_date
+from oskh_data.parquet_meta import get_parquet_latest_date
 from oskh_data.symbol_format import is_canonical_symbol, to_canonical_symbol, to_partition_key
 
 
@@ -92,7 +92,7 @@ def seed_missing_front_from_none(
             continue
 
         if min_date is not None:
-            latest = _get_parquet_latest_date(none_pq)
+            latest = get_parquet_latest_date(none_pq)
             if latest is None:
                 try:
                     df = pd.read_parquet(none_pq, columns=["time"])

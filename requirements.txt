@@ -14,8 +14,6 @@ scipy>=1.11
 pandas-market-calendars>=5.0
 filelock>=3.13
 chardet>=5.2
-# QMT download (optional if data already on disk)
-xtquant>=240194.1.1; platform_system=="Windows"
 
 # Dev / tests
 pytest>=8.0

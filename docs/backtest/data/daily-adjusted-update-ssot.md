@@ -1,5 +1,7 @@
 # SSOT：A 股日线复权增量更新
 
+> **本叉不再下载行情。** QMT / `update_adjusted_daily` / `oskh_data.backfill` 以原仓库为准；此处只读 path-SSOT parquet。下文是历史运维口径，命令在本仓库已删除。
+>
 > 单一事实源。本文件记录日线复权数据（front / none / back）的增量更新策略、QMT 复权接口可行性结论、`scripts/data/update_adjusted_daily.py` 的用法与运维口径。
 > 关联：[`docs/backtest/data/daily_data_backfill_summary.md`](daily_data_backfill_summary.md)、[`docs/prompts/prompt-stock-data-backfill-export-workflow.md`](../../prompts/prompt-stock-data-backfill-export-workflow.md)、[`scripts/data/update_adjusted_daily.py`](../../../scripts/data/update_adjusted_daily.py)、[`docs/engineering/proposal-daily-adjusted-fast-path.md`](../../engineering/proposal-daily-adjusted-fast-path.md)（快路径编排）、[`docs/engineering/daily-adjusted-update-performance-review-2026-07-04.md`](../../engineering/daily-adjusted-update-performance-review-2026-07-04.md)（性能瓶颈评审与实测汇总）。
 > **数据卫生**：front/back 历史 pre-2020 周末伪交易日行清洗 → [`daily-weekend-contamination-cleanup-2026-06-23.md`](daily-weekend-contamination-cleanup-2026-06-23.md)（调休合法周末日 ≠ 污染，清洗锚 `none` 日期集）。

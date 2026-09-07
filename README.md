@@ -1,6 +1,6 @@
 # MyQuant-backtrader
 
-Standalone **backtrader** backtest + stock data download/read + chip / turnover-resistance (Python + Rust).
+Standalone **backtrader** backtest + local stock-data read + chip / turnover-resistance (Python + Rust). Market **download** lives in the original repo; this fork only reads path-SSOT parquet.
 
 Seeded from OSkhQuant slim snapshot at commit `5d41252` (parent of RF-R0 package re-engineering). Live trading, Redis streams, executor, monitor, and most of `oskh_core` / `oskh_db` were removed.
 
@@ -9,7 +9,7 @@ Seeded from OSkhQuant slim snapshot at commit `5d41252` (parent of RF-R0 package
 | Path | Role |
 |------|------|
 | `backtest/` | Cerebro strategies (`backtest_main_full`, rolling invest, chip tools) |
-| `oskh_data/` | Parquet/DuckDB reader + QMT download / backfill |
+| `oskh_data/` | Parquet/DuckDB reader (no QMT download) |
 | `qlib_cost/` | Chip distribution algorithms |
 | `turnover-resist/` | Rust CLI for turnover resistance |
 | `oskh_factors/bridge/turnover_resist.py` | Python bridge (FFI / CLI) to the Rust binary |
@@ -33,13 +33,9 @@ cd backtest
 D:\anaconda3\envs\vanna312\python.exe backtest_main_full.py
 ```
 
-## Download / rebuild market data
+## Market data (read-only)
 
-```powershell
-D:\anaconda3\envs\vanna312\python.exe -m oskh_data.backfill --help
-# or shim:
-D:\anaconda3\envs\vanna312\python.exe backtest/backfill_daily_data.py download --start YYYYMMDD --end YYYYMMDD
-```
+Bars, adj factors, and float-share sidecars are produced by the original repo and consumed here via `oskh_data.StockDataReader` (path-SSOT; F parquet when `.authority` is present). This fork does not ship QMT / xtquant download.
 
 Config: `config/reader.yaml` (`mode: parquet` by default). Env: `OSKH_DATA_ROOT`.
 

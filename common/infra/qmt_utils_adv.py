@@ -463,12 +463,11 @@ def check_bom(file_path):
         return 'unknown'
 
 
-# 测试代码（只读缓存；下载/更新见 scripts/data/backfill_daily_data.py）
 if __name__ == "__main__":
-    from oskh_data.downloader import PeriodDataManager, StockDataManager
+    from oskh_data.period_schema import PeriodDataManager, StockDataManager
 
     def run_period_support():
-        print("=== 周期支持测试 ===")
+        print("=== 周期支持测试（只读，无下载）===")
         test_periods = ['1m', '5m', '10m', '15m', '30m', '1h', '1d', '1w', '1M', 'invalid']
         for period in test_periods:
             is_valid = StockDataManager.validate_period(period)
@@ -487,4 +486,3 @@ if __name__ == "__main__":
             print(f"{period} {start}~{end}: 有效={is_valid}, 消息={msg}")
 
     run_period_support()
-    print("下载/回填请使用: python scripts/data/backfill_daily_data.py 或 python -m oskh_data.backfill")

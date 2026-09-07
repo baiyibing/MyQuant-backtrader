@@ -7,8 +7,9 @@ or if live_trading / trade_decision modules misuse adjust_type in daily bar call
 Checks performed:
   1. oskh_data does not import from backtest/ (no reverse dependency)
   2. oskh_data does not import from oskh_core / oskh_db (orthogonal)
-  3. oskh_data does not import backtrader / xtquant at module level
-     (delayed imports only)
+  3. oskh_data does not import backtrader at module level, and must not
+     import xtquant anywhere (this fork has no QMT download)
+  3b. backtest/ must not import download modules or xtquant
   4. data_audit.db direct sqlite3 access is whitelisted in oskh_data/audit.py
   5. live_trading/ and trade_decision/ hot-path calls to stock_daily_bars /
      stock_daily_bars_cfg_only / read_stock must use adjust_type="none"
@@ -34,6 +35,7 @@ _FORBIDDEN_ANYWHERE_IMPORTS: Tuple[Tuple[str, str], ...] = (
     ("backtest", "oskh_data must not depend on backtest/"),
     ("oskh_core", "oskh_data must not depend on oskh_core (orthogonal)"),
     ("oskh_db", "oskh_data must not depend on oskh_db (orthogonal)"),
+    ("xtquant", "this fork has no QMT download; xtquant is forbidden"),
 )
 
 # Forbidden only at module top-level (delayed import inside functions OK)
@@ -49,15 +51,14 @@ _BACKTEST_DIR = _REPO / "backtest"
 
 # This fork keeps thin backtest/ shims that re-export oskh_data CLIs.
 _BACKTEST_SHIM_WHITELIST = {
-    "backtest/backfill_daily_data.py",
     "backtest/backfill_float_shares_history.py",
     "backtest/build_adj_factor_table.py",
     "backtest/check_data_integrity.py",
-    "backtest/fetch_float_shares.py",
 }
 
 # backtest/ must read local hive only — download/update lives in oskh_data + scripts/
 _FORBIDDEN_BACKTEST_IMPORT_MODULES: Tuple[str, ...] = (
+    "xtquant",
     "oskh_data.backfill",
     "oskh_data.float_shares",
     "oskh_data.float_shares_history",
@@ -67,6 +68,8 @@ _FORBIDDEN_BACKTEST_IMPORT_MODULES: Tuple[str, ...] = (
     "oskh_data.minute_backfill",
     "oskh_data.etf_backfill",
     "oskh_data.downloader",
+    "oskh_data.qmt_xtdata",
+    "oskh_data.download_transport",
 )
 
 _FORBIDDEN_BACKTEST_CALL_NAMES: Tuple[str, ...] = (
@@ -165,13 +168,20 @@ def _check_backtest_no_download_ops(path: Path) -> List[str]:
         return errors
 
     for node in tree.body:
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == "xtquant" or alias.name.startswith("xtquant."):
+                    errors.append(
+                        f"{path}: backtest must not import xtquant "
+                        f"(market download lives in the original repo)"
+                    )
         if isinstance(node, ast.ImportFrom) and node.module:
             mod = node.module
             for forbidden in _FORBIDDEN_BACKTEST_IMPORT_MODULES:
                 if mod == forbidden or mod.startswith(forbidden + "."):
                     errors.append(
                         f"{path}: backtest must not import download module '{mod}' "
-                        f"(use scripts/ or python -m oskh_data.*)"
+                        f"(market download lives in the original repo)"
                     )
             if mod == "oskh_data" and node.names:
                 for alias in node.names:
@@ -310,7 +320,9 @@ def main() -> int:
         errors.extend(_check_module_imports(py_file))
         errors.extend(_check_sqlite_whitelist(py_file))
 
-    # Frozen backtest/ still contains pre-RF download helpers; do not scan them here.
+    if _BACKTEST_DIR.is_dir():
+        for py_file in sorted(_BACKTEST_DIR.rglob("*.py")):
+            errors.extend(_check_backtest_no_download_ops(py_file))
 
     # Check 5: adjust_type hot-path guard
     errors.extend(_check_adjust_type_hot_path())

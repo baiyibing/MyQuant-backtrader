@@ -265,8 +265,8 @@ class TestDuckDBDailyBarsProxy:
         assert result["ok"]
 
 
-class TestDataDownloader:
-    """DataDownloader class structure (QMT not needed for import)."""
+class TestPeriodSchema:
+    """Local period helpers (no QMT download)."""
 
     def test_import(self):
         from oskh_data import StockDataManager
@@ -276,7 +276,7 @@ class TestDataDownloader:
         assert StockDataManager.is_minute_period("1m") is True
 
     def test_period_data_manager_validate(self):
-        from oskh_data.downloader import PeriodDataManager
+        from oskh_data.period_schema import PeriodDataManager
 
         ok, msg = PeriodDataManager.validate_time_range("1d", "20200101", "20201231")
         assert ok
@@ -310,19 +310,6 @@ class TestCachePort:
 
         inv = invalidate_current_run_id("1d")
         assert inv in (True, False)
-
-
-class TestDownloadOps:
-    def test_download_ops_aliases(self):
-        from oskh_data.download_ops import (
-            clear_local_market_data,
-            clear_stock_data,
-            download_market_data,
-            get_miniqmt_data,
-        )
-
-        assert download_market_data is get_miniqmt_data
-        assert clear_local_market_data is clear_stock_data
 
 
 class TestBacktestNoDownloadContract:

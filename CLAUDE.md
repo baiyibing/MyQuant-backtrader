@@ -10,7 +10,6 @@ This repository is a **slim backtrader fork**. See [README.md](README.md) and [A
 # conda activate vanna312
 D:\anaconda3\envs\vanna312\python.exe --version
 D:\anaconda3\envs\vanna312\python.exe -c "import oskh_data, common.infra.timekeeping, trade_decision.presets"
-D:\anaconda3\envs\vanna312\python.exe -m oskh_data.backfill --help
 D:\anaconda3\envs\vanna312\python.exe -m pytest -q
 ```
 

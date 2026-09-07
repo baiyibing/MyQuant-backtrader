@@ -2,12 +2,10 @@
 """Cerebro-facing data helpers.
 
 Hive reads go through ``common.infra.qmt_utils_adv`` / ``oskh_data.StockDataReader``
-(path-SSOT). Download goes through ``oskh_data.DataDownloader``. Cerebro-only
-pieces (``PrevClosePandasData``, ``load_single_stock_data``) stay here.
+(path-SSOT). This fork does not download market data. Cerebro-only pieces
+(``PrevClosePandasData``, ``load_single_stock_data``) stay here.
 """
 from __future__ import annotations
-
-from typing import Optional
 
 import backtrader as bt
 import pandas as pd
@@ -33,11 +31,9 @@ __all__ = [
     "batch_format_stock_codes",
     "check_bom",
     "check_date_in_data",
-    "clear_stock_data",
     "detect_encoding",
     "ensure_datetime_index",
     "format_stock_code",
-    "get_miniqmt_data",
     "get_stock_data_from_cache",
     "is_close",
     "is_trading_day",
@@ -60,40 +56,6 @@ class PrevClosePandasData(bt.feeds.PandasData):
         ("volume", -1),
         ("prev_close", -1),
         ("turnover_rate", -1),
-    )
-
-
-def get_miniqmt_data(
-    stock_list,
-    start_time: str,
-    end_time: str,
-    period: str = "1d",
-    base_dir: Optional[str] = None,
-    adjust_type: str = "front",
-    incrementally: bool = False,
-):
-    """Download OHLCV via ``oskh_data.DataDownloader`` (parquet SSOT)."""
-    from oskh_data.downloader import DataDownloader
-
-    downloader = DataDownloader(base_dir)
-    return downloader.download_data(
-        stock_list, start_time, end_time, period, adjust_type, incrementally
-    )
-
-
-def clear_stock_data(
-    base_dir: Optional[str] = None,
-    period: Optional[str] = None,
-    adjust_type: Optional[str] = None,
-    stock_code: Optional[str] = None,
-) -> None:
-    from oskh_data.download_ops import clear_local_market_data
-
-    kwargs = {}
-    if base_dir is not None:
-        kwargs["base_dir"] = base_dir
-    clear_local_market_data(
-        period=period, adjust_type=adjust_type, stock_code=stock_code, **kwargs
     )
 
 

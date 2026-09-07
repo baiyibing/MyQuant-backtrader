@@ -4,8 +4,8 @@
 防两类回归：
 - 双后缀陷阱（评审 A5）：把 period 根当 base_dir 传入会得到
   ``period=1d/period=1d/...``；
-- 读写分叉（评审 R1 实证）：downloader 读路径走 resolver、写入传 raw base
-  ——env 置位后同一次日更读 F 写 E。
+- 读写分叉（评审 R1 实证）：读路径走 resolver、写入传 raw base
+  ——env 置位后同一次写会读 F 写 E。
 """
 from __future__ import annotations
 
