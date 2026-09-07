@@ -31,7 +31,7 @@ sys.path.insert(0, REPO)
 
 from common.infra.data_root import resolve_period_root, resolve_source_parquet
 from backtest.chip_algorithm import adapt_columns, daily_chip_distribution, cyq  # noqa: E402
-from backtest.stock_data_reader import StockDataReader
+from oskh_data import StockDataReader
 
 # ---------------------------------------------------------------------------
 # 配置

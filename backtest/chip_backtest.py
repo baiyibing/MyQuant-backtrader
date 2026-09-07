@@ -38,7 +38,7 @@ import backtrader as bt
 
 from backtest.chip_indicator import ChipDistribution
 from backtest.chip_algorithm import adapt_columns, daily_chip_distribution, minute_chip_distribution, cyq
-from backtest.stock_data_reader import StockDataReader
+from oskh_data import StockDataReader
 
 # ---------------------------------------------------------------------------
 # 配置

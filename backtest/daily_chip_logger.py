@@ -46,7 +46,7 @@ from backtest.chip_algorithm import (
     derived_chip_factors,
     cyq,
 )
-from backtest.stock_data_reader import StockDataReader
+from oskh_data import StockDataReader
 
 OUTPUT_DIR = os.path.join(REPO, "backtest_output")
 STOCK_POOL_DIR = os.path.join(REPO, "stock_pool")

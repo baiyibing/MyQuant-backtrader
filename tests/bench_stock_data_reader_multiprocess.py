@@ -15,7 +15,7 @@ TEST_CODES = ['000001.SZ', '000002.SZ', '600000.SH', '600036.SH']
 
 def worker_persistent(worker_id):
     """每个进程独立创建 StockDataReader (duckdb_persistent)."""
-    from backtest.stock_data_reader import StockDataReader
+    from oskh_data import StockDataReader
     results = []
     try:
         reader = StockDataReader(mode='duckdb_persistent')
@@ -32,7 +32,7 @@ def worker_persistent(worker_id):
 
 def worker_parquet(worker_id):
     """每个进程独立创建 StockDataReader (parquet)."""
-    from backtest.stock_data_reader import StockDataReader
+    from oskh_data import StockDataReader
     results = []
     try:
         reader = StockDataReader(mode='parquet')
@@ -49,7 +49,7 @@ def worker_parquet(worker_id):
 
 def worker_duckdb(worker_id):
     """每个进程独立创建 :memory: DuckDB."""
-    from backtest.stock_data_reader import StockDataReader
+    from oskh_data import StockDataReader
     results = []
     try:
         reader = StockDataReader(mode='duckdb')

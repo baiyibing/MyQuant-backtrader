@@ -26,7 +26,7 @@ from backtest.chip_algorithm import (
     minute_chip_distribution,
     cyq,
 )
-from backtest.stock_data_reader import StockDataReader
+from oskh_data import StockDataReader
 
 STOCK_CODE = "000001.SZ"
 WINDOW_DAYS = 80

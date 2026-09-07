@@ -28,7 +28,7 @@ from backtest.chip_algorithm import (
     turnover_chip_factors, _get_float_shares, _estimate_turnover,
 )
 from common.infra.data_root import resolve_source_parquet
-from backtest.stock_data_reader import StockDataReader
+from oskh_data import StockDataReader
 
 _reader = None
 

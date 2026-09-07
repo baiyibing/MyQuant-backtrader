@@ -33,7 +33,7 @@ from common.infra.data_root import resolve_source_parquet
 from backtest.chip_algorithm import (
     adapt_columns, bb_position, daily_chip_distribution, _get_float_shares, cyq,
 )
-from backtest.stock_data_reader import StockDataReader
+from oskh_data import StockDataReader
 
 # 默认参数
 WINDOW_DAYS: int = 120

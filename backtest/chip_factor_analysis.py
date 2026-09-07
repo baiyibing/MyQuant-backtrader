@@ -34,7 +34,7 @@ from backtest.chip_algorithm import (
 )
 from backtest.chip_indicator import ChipDistribution
 from common.infra.data_root import resolve_source_parquet
-from backtest.stock_data_reader import StockDataReader
+from oskh_data import StockDataReader
 
 _reader = None
 

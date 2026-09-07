@@ -51,7 +51,7 @@ import backtrader as bt
 
 from backtest.chip_algorithm import adapt_columns, daily_chip_distribution, minute_chip_distribution, cyq
 from common.infra.data_root import resolve_source_parquet
-from backtest.stock_data_reader import StockDataReader
+from oskh_data import StockDataReader
 
 # ---------------------------------------------------------------------------
 # 配置

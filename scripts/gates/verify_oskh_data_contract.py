@@ -50,11 +50,7 @@ _FORBIDDEN_MODULE_IMPORTS = _FORBIDDEN_ANYWHERE_IMPORTS + _FORBIDDEN_MODULE_LEVE
 _BACKTEST_DIR = _REPO / "backtest"
 
 # This fork keeps thin backtest/ shims that re-export oskh_data CLIs.
-_BACKTEST_SHIM_WHITELIST = {
-    "backtest/backfill_float_shares_history.py",
-    "backtest/build_adj_factor_table.py",
-    "backtest/check_data_integrity.py",
-}
+_BACKTEST_SHIM_WHITELIST: set[str] = set()
 
 # backtest/ must read local hive only — download/update lives in oskh_data + scripts/
 _FORBIDDEN_BACKTEST_IMPORT_MODULES: Tuple[str, ...] = (

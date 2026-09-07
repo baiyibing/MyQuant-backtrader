@@ -34,7 +34,7 @@ from backtest.chip_algorithm import (
     cyq,
 )
 from common.infra.data_root import resolve_period_root, resolve_source_parquet
-from backtest.stock_data_reader import StockDataReader
+from oskh_data import StockDataReader
 
 MINUTE_DIR = str(resolve_period_root("1m") / "dividend_type=none")
 DAILY_DIR = str(resolve_period_root("1d") / "dividend_type=front")

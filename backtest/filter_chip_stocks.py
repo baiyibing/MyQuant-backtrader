@@ -30,7 +30,7 @@ from backtest.chip_algorithm import (
     adapt_columns, bb_position, daily_chip_distribution, derived_chip_factors, cyq,
 )
 from common.infra.data_root import resolve_period_root, resolve_source_parquet
-from backtest.stock_data_reader import StockDataReader
+from oskh_data import StockDataReader
 
 FLOAT_SHARES_PATH = str(resolve_source_parquet("float_shares.parquet"))
 OUTPUT_DIR = os.path.join(REPO, "backtest_output")

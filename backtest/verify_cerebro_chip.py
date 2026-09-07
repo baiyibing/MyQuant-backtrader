@@ -24,7 +24,7 @@ import backtrader as bt
 import pandas as pd
 
 from backtest.chip_indicator import ChipDistribution
-from backtest.stock_data_reader import StockDataReader
+from oskh_data import StockDataReader
 
 _reader = None
 

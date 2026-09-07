@@ -28,7 +28,7 @@ from backtest.chip_algorithm import (
     adapt_columns, daily_chip_distribution, cyq,
     _get_float_shares, _estimate_turnover,
 )
-from backtest.stock_data_reader import StockDataReader
+from oskh_data import StockDataReader
 
 STOCK_POOL_DIR = os.path.join(REPO, "stock_pool")
 WINDOW = 80
