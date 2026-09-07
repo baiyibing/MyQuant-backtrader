@@ -17,7 +17,7 @@
 
 用户口头规则（2026-09-07），**实现口径以 §2 为准**（等号已 fail-closed）：
 
-1. **买入（T 日开盘）**：t-1 价格 > 20 日均线 and > 20 周均线 and > 60 日均线 and 盈筹率 > 70%；t-2 **不同时**满足（且 t-2 四输入有限）。
+1. **买入（T 日开盘）**：t-1 价格 > 20 日均线 and > 20 周均线 and > 60 日均线 and **当日最高价 > 布林上轨** and 盈筹率 > 70%；t-2 **不同时**满足（且 t-2 各输入有限）。
 2. **持有**：T 收盘 **≤** t-1 收盘 → T+1 开盘卖；T 收盘 **>** T-1 收盘 → 持有到收盘 < 5 日均线，再下一根开盘卖。
 3. 先 30 只试验；后续再加价格/量约束。
 
@@ -30,6 +30,7 @@
 | 决策时点 | 在 **日 D 的 next()**（D 收盘已知）算 `cond[D]`；边缘成立则 `pending_buy=True`。**禁止** `bt.Order.Open`。成交用 `Cerebro(cheat_on_open=True, runonce=False)` + `next_open()` 下 Market（仅 `broker.set_coo` 不够，订单会落到下一根开盘）。可测行为：D+1 开盘买或 skip。T=D+1。`pending_buy` **仅对信号日后 ≤4 个自然日的下一根 bar 有效**（覆盖周末）；更长缺口（停牌/长假）记 `skip_buy(stale)` 并消耗 |
 | 价格 | 日线 `period=1d` **`adjust_type=front`**。禁止 `load_single_stock_data`（默认 1m + none） |
 | 比均线 | 在日 D 评 `cond[D]` 时 SMA 输入止于 D（`sma` 含 D 合法）。**禁止在日 T 用含 T 的 sma 去判断 T-1**。对抗旧句「均线只用 [-1]」已由 v2/v3 重述，勿回退 |
+| 布林上轨 | 价格 BB：中轨 `SMA20(close)`（含 D），上轨 = 中轨 + 2σ，`σ=rolling.std(ddof=1)`（与 `turnover-resist` / pandas 默认对齐）。`cond` 要求 **D 的 `high` > 上轨**（不是收盘价）。上轨或 high 非有限 → 该日 `finite` 为假 |
 | 20 周均线 | 按 `oskh_factors.weekly_macd_divergence._daily_to_weekly` 同构：`W-FRI` + `_last_day=max`。asof 键 = `_last_day`，**只 backward** 到 D。中间未完成周不参与；**序列末端**未完成周若 `_last_day<=D` 可参与（无未来价）。不改 `oskh_factors` |
 | 盈筹率 | 阈值 **0.70**（`get_cyqk_c` 为 0–1）。窗口 = 截至 D 的最近 200 根 **含 D** 的 OHLC；换手按 **窗内每一日各自的 asof 流通股本**（`free_float_shares.circulating_capital` backward merge_asof，不用 D 日一条股本铺整窗）。窗内任一日股本缺失或 ≤0 → 该日 cyqk NaN。实现一次预计算日股本序列。计算优先 `turnover_resist.compute_cyqk_series`（Rust，每窗独立网格），失败回退 Python；不改 `oskh_factors` / `qlib_cost` 公共 API |
 | 边缘 | `cond[D] is True` 且 `cond[D-1] is False`。**两边都必须有限**。D-1 为 NaN ≠ 边缘 |

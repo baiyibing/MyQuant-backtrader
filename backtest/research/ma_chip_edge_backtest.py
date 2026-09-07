@@ -39,6 +39,9 @@ from oskh_factors.chip.shares import (
 CHIP_WINDOW = 200
 WEEK_RULE = "W-FRI"
 CYQK_TH = 0.70
+BB_PERIOD = 20
+BB_NBDEV = 2.0
+BB_DDOF = 1
 PENDING_BUY_MAX_GAP_DAYS = 4
 LOAD_START = "20220701"
 DEFAULT_SEED = 20240907
@@ -48,14 +51,17 @@ CYQK_PRE_STATS_CAL_DAYS = max(200, int(CHIP_WINDOW * 1.6))
 HELP_LOCK = """
 锁定口径（plan v3 §2）：
   成交：Cerebro(cheat_on_open=True)+next_open 下 Market；禁止 bt.Order.Open
-  买入：D 收盘四条件全真且有限，D-1 有限但非全真 → D+1 开盘买
+  买入：D 收盘条件全真且有限（三条均线 + 最高价>布林上轨 + 可选盈筹），D-1 有限但非全真 → D+1 开盘买
   等号：买入日收盘 <= T-1 收盘 → 次日开盘卖（fail-closed）
   否则：持有到收盘 < SMA5，再下一根开盘卖；买入日不挂卖
   skip：涨停买/跌停卖/停牌不成交；skip_sell 保留 pending 次日再试
   pending_buy：仅信号日后 <=4 个自然日内的下一根 bar 有效，更长缺口 skip_buy(stale)
   统计窗：--start 前最后一个交易日之前的 edge 置假；窗前成交不进净值
-  盈筹率：get_cyqk_c 为 0-1，阈值 0.70；200 日窗口含 D，换手按窗内每日 asof 股本
+  盈筹率：get_cyqk_c 为 0-1，默认阈值 0.70（--cyqk-th 可改）；200 日窗口含 D，换手按窗内每日 asof 股本
   加速：cyqk 序列优先 turnover_resist.compute_cyqk_series（Rust）；失败回退 Python
+  布林：上轨 = SMA20(close) + 2σ，σ 用 pandas rolling.std(ddof=1)；cond 要求 D 的 high > 上轨
+  --no-bb：买入 cond 去掉布林上轨
+  --no-cyqk：买入 cond 去掉盈筹；不计算 cyqk
   出报：trades_by_stock.txt / trade_pairs.csv（按票 BUY→下一笔 SELL）
 """
 
@@ -117,6 +123,18 @@ def week_ma20_asof(close: pd.Series) -> pd.Series:
         if wi > 0:
             out[i] = w_ma[wi - 1]
     return pd.Series(out, index=close.index)
+
+
+def bb_upper_series(
+    close: pd.Series,
+    period: int = BB_PERIOD,
+    nbdev: float = BB_NBDEV,
+    ddof: int = BB_DDOF,
+) -> pd.Series:
+    """价格布林上轨：中轨 SMA(close, 20) + 2σ，σ 与 pandas / Rust ddof=1 对齐。"""
+    mid = close.rolling(period, min_periods=period).mean()
+    std = close.rolling(period, min_periods=period).std(ddof=ddof)
+    return mid + nbdev * std
 
 
 def _code_keys(stock_code: str) -> list[str]:
@@ -278,6 +296,10 @@ def build_signal_frame(
     df: pd.DataFrame,
     stock_code: str,
     cyqk_from: Optional[pd.Timestamp] = None,
+    *,
+    use_cyqk: bool = True,
+    cyqk_th: float = CYQK_TH,
+    use_bb: bool = True,
 ) -> pd.DataFrame:
     """给日线 OHLCV 加上均线、盈筹率、finite、cond、edge。"""
     out = df.copy()
@@ -286,21 +308,36 @@ def build_signal_frame(
     out["sma20"] = close.rolling(20, min_periods=20).mean()
     out["sma60"] = close.rolling(60, min_periods=60).mean()
     out["week_ma20"] = week_ma20_asof(close)
-    out["cyqk"] = cyqk_series(out, stock_code, compute_from=cyqk_from)
+    out["bb_upper"] = bb_upper_series(close)
+    if use_cyqk:
+        out["cyqk"] = cyqk_series(out, stock_code, compute_from=cyqk_from)
+    else:
+        out["cyqk"] = np.nan
+    high_v = out["high"].to_numpy(dtype=np.float64)
     finite = (
         np.isfinite(out["sma20"].to_numpy(dtype=np.float64))
         & np.isfinite(out["sma60"].to_numpy(dtype=np.float64))
         & np.isfinite(out["week_ma20"].to_numpy(dtype=np.float64))
-        & np.isfinite(out["cyqk"].to_numpy(dtype=np.float64))
     )
+    if use_bb:
+        finite = (
+            finite
+            & np.isfinite(out["bb_upper"].to_numpy(dtype=np.float64))
+            & np.isfinite(high_v)
+        )
+    if use_cyqk:
+        finite = finite & np.isfinite(out["cyqk"].to_numpy(dtype=np.float64))
     close_v = close.to_numpy(dtype=np.float64)
     cond = (
         finite
         & (close_v > out["sma20"].to_numpy(dtype=np.float64))
         & (close_v > out["sma60"].to_numpy(dtype=np.float64))
         & (close_v > out["week_ma20"].to_numpy(dtype=np.float64))
-        & (out["cyqk"].to_numpy(dtype=np.float64) > CYQK_TH)
     )
+    if use_bb:
+        cond = cond & (high_v > out["bb_upper"].to_numpy(dtype=np.float64))
+    if use_cyqk:
+        cond = cond & (out["cyqk"].to_numpy(dtype=np.float64) > float(cyqk_th))
     edge = np.zeros(len(out), dtype=bool)
     edge[1:] = cond[1:] & (~cond[:-1]) & finite[:-1]
     out["finite"] = finite
@@ -851,6 +888,9 @@ def _write_report(
     *,
     title: str = "",
     cash: float = DEFAULT_CASH,
+    use_cyqk: bool = True,
+    cyqk_th: float = CYQK_TH,
+    use_bb: bool = True,
 ) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     universe.to_csv(out_dir / "universe.csv", index=False, encoding="utf-8")
@@ -883,6 +923,8 @@ def _write_report(
         "",
         "框架试验，不论证因子有效。涨跌停用 front 昨收，未套 ST 5%。",
         "",
+        f"- cyqk_filter: {'on > ' + f'{cyqk_th:.2f}' if use_cyqk else 'off'}",
+        f"- bb_break: {'D high > SMA20(close)+2σ (ddof=1)' if use_bb else 'off'}",
         f"- names: {len(stats)}",
         f"- per_board: {board_counts}",
         f"- names_with_buy: {n_trig}",
@@ -924,6 +966,22 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
         default="",
         help="rebuild trades_by_stock.txt from an existing output dir (no Cerebro)",
     )
+    ap.add_argument(
+        "--no-cyqk",
+        action="store_true",
+        help="drop cyqk from entry; MA+BB-upper edge (writes *_nocyqk dir)",
+    )
+    ap.add_argument(
+        "--cyqk-th",
+        type=float,
+        default=CYQK_TH,
+        help="cyqk threshold in 0-1 (default 0.70); ignored with --no-cyqk",
+    )
+    ap.add_argument(
+        "--no-bb",
+        action="store_true",
+        help="drop high>bb_upper from entry (writes *_nobb dir)",
+    )
     args = ap.parse_args(list(argv) if argv is not None else None)
 
     if args.from_dir:
@@ -936,6 +994,11 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
 
     end = args.end or date.today().strftime("%Y%m%d")
     stats_start = pd.Timestamp(args.start)
+    use_cyqk = not args.no_cyqk
+    use_bb = not args.no_bb
+    cyqk_th = float(args.cyqk_th)
+    if use_cyqk and (not np.isfinite(cyqk_th) or cyqk_th <= 0.0 or cyqk_th >= 1.0):
+        raise SystemExit(f"--cyqk-th must be in (0, 1), got {cyqk_th}")
     cyqk_from = stats_start - pd.Timedelta(days=CYQK_PRE_STATS_CAL_DAYS)
     results: list[RunResult] = []
     stat_rows = []
@@ -945,7 +1008,14 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
         raw = load_front_daily(code, LOAD_START, end)
         if raw is None or len(raw) < CHIP_WINDOW + 60:
             return None
-        sig = build_signal_frame(raw, code, cyqk_from=cyqk_from)
+        sig = build_signal_frame(
+            raw,
+            code,
+            cyqk_from=cyqk_from,
+            use_cyqk=use_cyqk,
+            cyqk_th=cyqk_th,
+            use_bb=use_bb,
+        )
         if not ready_for_stats(sig, stats_start):
             return None
         print(f"[run] {board} {code}", flush=True)
@@ -1002,15 +1072,25 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
                 )
                 got_n += 1
 
-    out_dir = Path(REPO) / "backtest_output" / f"ma_chip_edge_{args.seed}_{end}"
+    tag = f"ma_chip_edge_{args.seed}_{end}"
+    if not use_cyqk:
+        tag += "_nocyqk"
+    elif abs(cyqk_th - CYQK_TH) > 1e-12:
+        tag += f"_cyqk{int(round(cyqk_th * 100))}"
+    if not use_bb:
+        tag += "_nobb"
+    out_dir = Path(REPO) / "backtest_output" / tag
     stats = pd.DataFrame(stat_rows)
     _write_report(
         out_dir,
         pd.DataFrame(used),
         results,
         stats,
-        title=f"ma_chip_edge trades (seed={args.seed}, {args.start}..{end})",
+        title=f"{tag} (seed={args.seed}, {args.start}..{end})",
         cash=args.cash,
+        use_cyqk=use_cyqk,
+        cyqk_th=cyqk_th,
+        use_bb=use_bb,
     )
     print(f"wrote {out_dir}")
     print(stats.to_string(index=False) if len(stats) else "no names ran")

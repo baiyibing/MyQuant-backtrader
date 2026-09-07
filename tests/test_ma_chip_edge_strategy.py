@@ -13,6 +13,7 @@ from backtest.research.ma_chip_edge_backtest import (
     _cyqk_series_python,
     _try_cyqk_series_rust,
     affordable_size,
+    bb_upper_series,
     board_of,
     build_signal_frame,
     cyqk_series,
@@ -148,6 +149,93 @@ def test_edge_requires_finite_prev_and_false_prev():
         pytest.skip("synthetic chip window produced no finite cyqk")
     first = int(finite_i[0])
     assert bool(sig["edge"].iloc[first]) is False
+
+
+def test_no_cyqk_cond_is_ma_only():
+    n = 160
+    idx = pd.bdate_range("2022-01-03", periods=n)
+    close = np.concatenate(
+        [np.linspace(10.0, 12.0, 120), np.linspace(12.0, 9.0, 20), np.linspace(9.0, 14.0, 20)]
+    )
+    df = pd.DataFrame(
+        {
+            "open": close,
+            "high": close + 0.1,
+            "low": close - 0.1,
+            "close": close,
+            "volume": np.full(n, 1e6),
+        },
+        index=idx,
+    )
+    off = build_signal_frame(df, "000001.SZ", use_cyqk=False)
+    assert off["cyqk"].isna().all()
+    close_v = off["close"].to_numpy(dtype=np.float64)
+    high_v = off["high"].to_numpy(dtype=np.float64)
+    ma_bb = (
+        off["finite"].to_numpy()
+        & (close_v > off["sma20"].to_numpy(dtype=np.float64))
+        & (close_v > off["sma60"].to_numpy(dtype=np.float64))
+        & (close_v > off["week_ma20"].to_numpy(dtype=np.float64))
+        & (high_v > off["bb_upper"].to_numpy(dtype=np.float64))
+    )
+    assert np.array_equal(off["cond"].to_numpy(), ma_bb)
+    assert bool(off["edge"].any())
+
+
+def test_cyqk_th_080_rejects_075(monkeypatch):
+    n = 160
+    idx = pd.bdate_range("2022-01-03", periods=n)
+    close = np.concatenate(
+        [np.linspace(10.0, 12.0, 120), np.linspace(12.0, 9.0, 20), np.linspace(9.0, 14.0, 20)]
+    )
+    df = pd.DataFrame(
+        {
+            "open": close,
+            "high": close + 0.1,
+            "low": close - 0.1,
+            "close": close,
+            "volume": np.full(n, 1e6),
+        },
+        index=idx,
+    )
+    fake = pd.Series(np.full(n, 0.75), index=idx)
+    monkeypatch.setattr(
+        "backtest.research.ma_chip_edge_backtest.cyqk_series",
+        lambda *args, **kwargs: fake,
+    )
+    lo = build_signal_frame(df, "000001.SZ", use_cyqk=True, cyqk_th=0.70)
+    hi = build_signal_frame(df, "000001.SZ", use_cyqk=True, cyqk_th=0.80)
+    assert bool(lo["cond"].any())
+    assert not bool(hi["cond"].any())
+
+
+def test_bb_upper_blocks_when_high_inside_band():
+    n = 160
+    idx = pd.bdate_range("2022-01-03", periods=n)
+    tail = np.linspace(9.5, 11.0, 20)
+    close = np.concatenate([np.full(140, 10.0), tail])
+    high_in = close.copy()
+    high_in[-1] = close[-1] + 0.02
+    df = pd.DataFrame(
+        {
+            "open": close,
+            "high": high_in,
+            "low": close - 0.05,
+            "close": close,
+            "volume": np.full(n, 1e6),
+        },
+        index=idx,
+    )
+    upper = float(bb_upper_series(pd.Series(close, index=idx)).iloc[-1])
+    assert high_in[-1] < upper
+    blocked = build_signal_frame(df, "000001.SZ", use_cyqk=False)
+    assert bool(blocked["finite"].iloc[-1])
+    assert bool(blocked["cond"].iloc[-1]) is False
+
+    df2 = df.copy()
+    df2.loc[df2.index[-1], "high"] = upper + 0.05
+    opened = build_signal_frame(df2, "000001.SZ", use_cyqk=False)
+    assert bool(opened["cond"].iloc[-1]) is True
 
 
 def _run_edge_feed(df: pd.DataFrame, code: str = "000001.SZ") -> MaChipEdgeStrategy:
