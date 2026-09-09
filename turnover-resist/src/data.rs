@@ -1,7 +1,8 @@
 //! 数据 I/O 层：parquet 文件读取 + 流通股本加载 + 股票代码格式转换。
 //!
 //! 使用 polars lazy API 读取 parquet，列式批量读取后在 Rust 侧逐行转换为 `BarRow`。
-//! 日线数据路径遵循 Hive 分区规范：`{data_dir}/period=1d/dividend_type=front/symbol={CODE}/data.parquet`
+//! 日线数据路径遵循 Hive 分区规范：`{data_dir}/stock/period=1d/dividend_type=front/symbol={CODE}/data.parquet`
+//! （hive-split 前旧布局 `{data_dir}/period=1d/...` 仅在 stock 子树不存在时短暂回落，见 `stock_period_1d_root`）
 
 use anyhow::{Context, Result};
 use polars::datatypes::DataType;
@@ -265,15 +266,25 @@ pub fn load_all_stocks_duckdb(
 ///
 /// 每只股票独立打开 parquet 文件，使用 polars lazy scan + 谓词下推 + tail。
 /// 串行执行以避免 rayon 栈溢出。
+/// hive-split（2026-09-09）后股票日线根优先 `<data_dir>/stock/period=1d`；
+/// 仅旧布局存在时短暂回落 `<data_dir>/period=1d`（S2b 过渡，与 Python 侧
+/// `resolve_period_root` 同型）。散装 parquet（float_shares 等）仍在容器根。
+fn stock_period_1d_root(data_dir: &str) -> std::path::PathBuf {
+    let new_root = Path::new(data_dir).join("stock").join("period=1d");
+    if new_root.is_dir() || !Path::new(data_dir).join("period=1d").is_dir() {
+        new_root
+    } else {
+        Path::new(data_dir).join("period=1d")
+    }
+}
+
 pub fn load_all_stocks_parquet(
     data_dir: &str,
     code_dirs: &[String],
     start_ms: i64,
     end_ms: i64,
 ) -> Result<ParquetLoadResult> {
-    let base = std::path::Path::new(data_dir)
-        .join("period=1d")
-        .join("dividend_type=front");
+    let base = stock_period_1d_root(data_dir).join("dividend_type=front");
 
     let n_stocks = code_dirs.len();
     let mut stats = ParquetLoadStats {
@@ -394,8 +405,7 @@ pub fn load_daily_bars_filtered(
     target_ms: i64,
     keep_rows: usize,
 ) -> Result<Vec<BarRow>> {
-    let path = Path::new(data_dir)
-        .join("period=1d")
+    let path = stock_period_1d_root(data_dir)
         .join("dividend_type=front")
         .join(code_dir)
         .join("data.parquet");

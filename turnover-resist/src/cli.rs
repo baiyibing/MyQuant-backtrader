@@ -49,7 +49,7 @@ pub struct Cli {
     #[arg(long)]
     pub output: Option<PathBuf>,
 
-    /// 数据根目录（含 `float_shares.parquet` 和 `period=1d/` 子目录），默认 `stock_data`
+    /// 数据根目录（含 `float_shares.parquet` 与 `stock/period=1d/` 日线树；旧布局 `period=1d/` 自动回落），默认 `stock_data`
     #[arg(long, default_value = "stock_data")]
     pub data_dir: PathBuf,
 }

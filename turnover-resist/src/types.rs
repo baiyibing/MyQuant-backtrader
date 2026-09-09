@@ -6,7 +6,7 @@ use serde::Serialize;
 
 /// 单根日线 K 线数据，对应 parquet 文件中一行。
 ///
-/// 列名与 `stock_data/period=1d/dividend_type=front/symbol=*/data.parquet` 的 schema 一致。
+/// 列名与 `stock_data/stock/period=1d/dividend_type=front/symbol=*/data.parquet` 的 schema 一致。
 #[derive(Debug, Clone)]
 pub struct BarRow {
     /// epoch 毫秒（UTC 午夜），对应 parquet 的 `time` 列

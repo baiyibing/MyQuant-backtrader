@@ -3,10 +3,13 @@
 
 Two containers — do not mix:
 
-* Parquet hive + loose source files (``period=1d/1m``, adj/float/etf):
-  ``resolve_parquet_container()`` / ``resolve_period_root()`` /
-  ``resolve_source_parquet()``. With ``F:/stock_data/.authority`` and no env,
-  this resolves to F (unset env is not a rollback).
+* Parquet hive + loose source files (adj/float/etf, plus the hive-split v1.5
+  three trees ``stock/period=1d/1m`` · ``index/period=1d`` ·
+  ``etf/period=1d``): ``resolve_parquet_container()`` /
+  ``resolve_period_root()`` / ``resolve_index_daily_root()`` /
+  ``resolve_etf_daily_root()`` / ``resolve_source_parquet()``. With
+  ``F:/stock_data/.authority`` and no env, this resolves to F (unset env is
+  not a rollback).
 * E workspace (duckdb, exp, skip JSON, stale marker):
   ``resolve_e_stock_data_container()`` / ``OSKH_DATA_ROOT``.
 * TR bar input + ``tr_staging/`` share the parquet container (F when authority
@@ -197,9 +200,12 @@ def resolve_period_root(
     Priority:
     1) explicit_root argument
     2) ``OSKH_PERIOD_{PERIOD}_ROOT`` env var (period-specific override; e.g.
-       ``OSKH_PERIOD_1M_ROOT=F:\\stock_data\\period=1m``)
+       ``OSKH_PERIOD_1M_ROOT=F:\\stock_data\\stock\\period=1m``)
     3) ``base / f"period={period}"`` if ``base`` given
-    4) ``resolve_parquet_container() / f"period={period}"`` (default)
+    4) ``resolve_parquet_container() / "stock" / f"period={period}"``
+       (hive-split v1.5 three trees; briefly falls back to the old
+       ``container/period={period}`` root when only that exists — S2b
+       transition compat)
 
     Returns the period directory without checking existence. When the env var
     is set, ``base`` is ignored (override wins regardless of caller's base).
@@ -212,9 +218,53 @@ def resolve_period_root(
         return Path(env_root)
     if base is not None:
         return base / f"period={period}"
-    resolved = resolve_parquet_container() / f"period={period}"
+    container = resolve_parquet_container()
+    stock_root = container / "stock" / f"period={period}"
+    legacy_root = container / f"period={period}"
+    if not stock_root.exists() and legacy_root.exists():
+        # 短暂兼容旧根（hive-split S2b 过渡：未搬盘容器 / E 回退点仍指旧布局）。
+        _warn_authority_env_missing(env_key=env_key, resolved=legacy_root)
+        return legacy_root
+    _warn_authority_env_missing(env_key=env_key, resolved=stock_root)
+    return stock_root
+
+
+INDEX_DAILY_ROOT_ENV = "OSKH_INDEX_DAILY_ROOT"
+ETF_DAILY_ROOT_ENV = "OSKH_ETF_DAILY_ROOT"
+
+
+def _resolve_kind_daily_root(
+    kind: str, *, env_key: str, explicit_root: Optional[Path] = None
+) -> Path:
+    """指数/ETF 日线树根共型（plan-hive-ashare-pure-index-etf-split v1.5 三树同型）。
+
+    与 ``resolve_period_root`` 同优先级序（explicit > env > container），但
+    **永不读 ``OSKH_PERIOD_1D_ROOT``**——env 劫持（plan F6）正是本线要修的缺陷，
+    不是契约。默认 ``resolve_parquet_container() / f"{kind}/period=1d"``；
+    不检查存在性（调用方 fail-visible：FileNotFoundError 带路径）。
+    """
+    if explicit_root:
+        return Path(explicit_root)
+    env_root = os.environ.get(env_key)
+    if env_root:
+        return Path(env_root)
+    resolved = resolve_parquet_container() / kind / "period=1d"
     _warn_authority_env_missing(env_key=env_key, resolved=resolved)
     return resolved
+
+
+def resolve_index_daily_root(*, explicit_root: Optional[Path] = None) -> Path:
+    """指数日线树根：``<container>/index/period=1d``；env ``OSKH_INDEX_DAILY_ROOT``。"""
+    return _resolve_kind_daily_root(
+        "index", env_key=INDEX_DAILY_ROOT_ENV, explicit_root=explicit_root
+    )
+
+
+def resolve_etf_daily_root(*, explicit_root: Optional[Path] = None) -> Path:
+    """ETF 日线树根：``<container>/etf/period=1d``；env ``OSKH_ETF_DAILY_ROOT``。"""
+    return _resolve_kind_daily_root(
+        "etf", env_key=ETF_DAILY_ROOT_ENV, explicit_root=explicit_root
+    )
 
 
 def resolve_source_parquet(

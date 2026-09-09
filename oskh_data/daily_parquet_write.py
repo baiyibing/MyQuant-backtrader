@@ -189,11 +189,35 @@ def _file_path(
 ) -> Path:
     import os
 
-    from common.infra.data_root import find_authority_marker, resolve_period_root
+    from common.infra.data_root import (
+        find_authority_marker,
+        resolve_etf_daily_root,
+        resolve_index_daily_root,
+        resolve_period_root,
+    )
+    from oskh_data.lake_kind import classify_daily_lake_kind
 
     part = to_partition_key(to_canonical_symbol(stock_code))
+    # 三树路由（hive-split §2.2）：指数/ETF 永不进股票树、永不读
+    # OSKH_PERIOD_1D_ROOT；unknown fail-closed 拒写（§2.1）。
+    kind = classify_daily_lake_kind(stock_code)
+    if kind == "unknown":
+        raise ValueError(
+            f"refusing daily-lake write for unclassifiable symbol {stock_code!r} "
+            f"(hive-split §2.1 fail-closed)"
+        )
+    if kind == "index":
+        if adjust_type != "none":
+            # v1.3 人裁锁：指数树 none-only（既有指数 front 迁出后丢弃）。
+            raise ValueError(
+                f"index tree is none-only (hive-split v1.3 lock): refusing "
+                f"dividend_type={adjust_type} write for {stock_code!r}"
+            )
+        period_root = resolve_index_daily_root()
+    elif kind == "etf":
+        period_root = resolve_etf_daily_root()
     # path-SSOT D2：env / F authority 胜 base_dir；无 marker 且无 env 时 legacy base_dir。
-    if find_authority_marker() is None and not os.environ.get("OSKH_PERIOD_1D_ROOT"):
+    elif find_authority_marker() is None and not os.environ.get("OSKH_PERIOD_1D_ROOT"):
         period_root = resolve_period_root("1d", base=base_dir)
     else:
         period_root = resolve_period_root("1d")
