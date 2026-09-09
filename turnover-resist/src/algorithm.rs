@@ -432,6 +432,7 @@ pub fn compute_cyqk_ohlcv_window(
 /// 滚动窗口 CYQK 序列。`out[i]` = 窗口 `[i-window+1, i]`（含 i）。
 ///
 /// `i < max(window-1, start_i)` 或窗口无效 → `NaN`。按日并行（rayon）。
+#[allow(clippy::too_many_arguments)] // 数值序列入参天然多参；与 pyo3 绑定签名一一对应
 pub fn compute_cyqk_series(
     close: &[f64],
     high: &[f64],

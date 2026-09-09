@@ -93,6 +93,7 @@ fn compute_turnover_resist(
 /// `start_i` 之前（以及不满一整窗）为 NaN。
 #[pyfunction]
 #[pyo3(signature = (close, high, low, volume, shares, window, start_i=0, step=0.01))]
+#[allow(clippy::too_many_arguments)] // 9 个 Python 入参，pyo3 绑定天然多参；重构 struct 会动 Python 侧签名
 fn compute_cyqk_series(
     py: Python<'_>,
     close: Vec<f64>,
