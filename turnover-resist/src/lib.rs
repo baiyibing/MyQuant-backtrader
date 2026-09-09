@@ -111,9 +111,7 @@ fn compute_cyqk_series(
         ));
     }
     Ok(py.allow_threads(|| {
-        algorithm::compute_cyqk_series(
-            &close, &high, &low, &volume, &shares, window, start_i, step,
-        )
+        algorithm::compute_cyqk_series(&close, &high, &low, &volume, &shares, window, start_i, step)
     }))
 }
 
