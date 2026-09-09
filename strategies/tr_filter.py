@@ -12,13 +12,28 @@ from typing import Callable, Sequence
 
 import pandas as pd
 
-from common import ConfigurationError, ErrorCode, get_logger
 from common.infra.constants import EnvVarKeys
+from common.infra.quant_logger import get_logger
 from common.infra.runtime_config import get_raw as _cfg_raw
 from oskh_factors.chip.bands import classify_tr_bb_signal
 from oskh_factors.chip.constants import CANONICAL_TR_WINDOW, TRWindow
 from oskh_factors.chip.window_guard import validate_tr_window_rule, warn_non_canonical_tr_window
-from common.infra.strategy_env_parse_defaults_loader import load_env_parse_defaults_dict
+
+# Slim-fork decoupling (migration S2 · 2026-09-10)：1.3 的 common 公共面
+# （ConfigurationError / ErrorCode / strategy_env_parse_defaults_loader）不随迁。
+# 错误类按本仓语义内联；env-parse defaults 退化为内联字面量——strategy_config
+# 在本仓不存在，覆盖顺序保持 env/runtime_config > 内联默认。
+_ERROR_CODE_CFG_VALIDATION_FAILED = "CFG_VALIDATION_FAILED"
+
+
+class ConfigurationError(ValueError):
+    """Invalid selector/tr-filter configuration（1.3 common.ConfigurationError 等价内联）."""
+
+    def __init__(self, message: str, *, error_code: str = _ERROR_CODE_CFG_VALIDATION_FAILED, **details: object) -> None:
+        super().__init__(message)
+        self.error_code = error_code
+        self.details = details
+
 
 _logger = get_logger("strategies.tr_filter")
 
@@ -39,22 +54,14 @@ def _parse_bool(raw: object | None, *, default: bool) -> bool:
 
 def resolve_selector_tr_filter_enabled() -> bool:
     raw = _cfg_raw(EnvVarKeys.SELECTOR_TR_FILTER_ENABLED)
-    default = _parse_bool(
-        load_env_parse_defaults_dict().get(EnvVarKeys.SELECTOR_TR_FILTER_ENABLED, "false"),
-        default=False,
-    )
-    return _parse_bool(raw, default=default)
+    return _parse_bool(raw, default=False)
 
 
 def resolve_selector_tr_fail_closed(*, explicit: bool | None = None) -> bool:
     if explicit is not None:
         return bool(explicit)
     raw = _cfg_raw(EnvVarKeys.SELECTOR_TR_FAIL_CLOSED)
-    default = _parse_bool(
-        load_env_parse_defaults_dict().get(EnvVarKeys.SELECTOR_TR_FAIL_CLOSED, "true"),
-        default=True,
-    )
-    return _parse_bool(raw, default=default)
+    return _parse_bool(raw, default=True)
 
 
 def resolve_selector_tr_window(*, explicit: int | None = None) -> int:
@@ -62,8 +69,7 @@ def resolve_selector_tr_window(*, explicit: int | None = None) -> int:
         window = int(explicit)
     else:
         raw = _cfg_raw(EnvVarKeys.SELECTOR_TR_WINDOW)
-        default_s = load_env_parse_defaults_dict().get(EnvVarKeys.SELECTOR_TR_WINDOW, "1000")
-        window = int(str(raw or default_s).strip())
+        window = int(str(raw or "1000").strip())
     if window not in _VALID_WINDOWS:
         raise ValueError(f"SELECTOR_TR_WINDOW must be 80 or 1000, got {window}")
     return window
@@ -151,7 +157,7 @@ def apply_turnover_resistance_filter(
         if fc:
             raise ConfigurationError(
                 "TR filter fail-closed: cross_section is empty",
-                error_code=ErrorCode.CFG_VALIDATION_FAILED,
+                error_code=_ERROR_CODE_CFG_VALIDATION_FAILED,
                 config_key="cross_section",
             )
         _logger.warning(
@@ -176,7 +182,7 @@ def apply_turnover_resistance_filter(
             if fc:
                 raise ConfigurationError(
                     f"TR filter fail-closed: missing cross_section row for {norm!r}",
-                    error_code=ErrorCode.CFG_VALIDATION_FAILED,
+                    error_code=_ERROR_CODE_CFG_VALIDATION_FAILED,
                     config_key="stock_code",
                 )
             _logger.warning(

@@ -43,17 +43,19 @@ def test_import_plotting_when_matplotlib_present():
     assert matplotlib is not None
 
 
-def test_xtquant_line_win32_pinned():
-    text = (REPO / "deploy" / "requirements-runtime.txt").read_text(encoding="utf-8")
+def test_xtquant_not_a_dependency():
+    """Fork policy guard: this repo is read-only for market bars — no QMT/xtquant.
+
+    1.3 pins xtquant in deploy/requirements-runtime.txt (win32); that artifact and
+    the QMT download pipeline stay with the original repo (AGENTS.md scope).
+    """
+    req = (REPO / "requirements.txt").read_text(encoding="utf-8")
     xtquant_lines = [
         ln
-        for ln in text.splitlines()
+        for ln in req.splitlines()
         if ln.strip() and not ln.strip().startswith("#") and "xtquant" in ln.lower()
     ]
-    assert len(xtquant_lines) == 1, xtquant_lines
-    line = xtquant_lines[0]
-    assert "250516" in line
-    assert "win32" in line
+    assert xtquant_lines == [], xtquant_lines
 
 
 def test_qlib_cost_requirements_pin_fincore():
