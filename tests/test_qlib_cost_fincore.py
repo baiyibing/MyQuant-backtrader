@@ -27,6 +27,9 @@ def test_import_qlib_cost_package():
 
 
 def test_empyrical_cum_returns_matches_known_values():
+    # fincore 只在 qlib_cost/requirements.txt 子包 pin（研究侧可选依赖），
+    # 根环境/CI 未装时跳过——与下方 matplotlib 用例同款守卫。
+    pytest.importorskip("fincore")
     from fincore.empyrical import Empyrical
 
     rets = pd.Series([0.01, 0.02, -0.015, 0.03])
