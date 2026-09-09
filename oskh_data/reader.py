@@ -28,6 +28,7 @@ from common.infra.quant_logger import get_logger
 from common.infra.data_root import resolve_data_root as _resolve_data_root
 from common.infra.data_root import resolve_e_stock_data_container as _resolve_e_stock_data_container
 from common.infra.data_root import resolve_parquet_container as _resolve_parquet_container
+from common.infra.data_root import resolve_etf_daily_root as _resolve_etf_daily_root
 from common.infra.data_root import resolve_period_root as _resolve_period_root
 
 logger = get_logger(__name__)
@@ -163,6 +164,8 @@ class StockDataReader:
         self._etf_parquet_dir = (
             self._parquet_container / "etf" if asset_type == "etf" else None
         )
+        # hive-split S1：显式 base_dir 标记（etf 读者优先用它，而非 env/container）
+        self._explicit_base_dir: Optional[Path] = Path(base_dir) if base_dir else None
         self._mode: str = mode or DEFAULT_READER_MODE
         if self._mode not in ('parquet', 'duckdb', 'duckdb_persistent'):
             raise ValueError(f"Invalid mode: {self._mode}. Use parquet | duckdb | duckdb_persistent")
@@ -447,6 +450,7 @@ class StockDataReader:
         period: str = '1d',
         adjust_type: str = 'front',
         max_backups: int = 2,
+        asset_type: Literal["stock", "etf"] = "stock",
     ):
         """原子发布构建 .duckdb 文件。
 
@@ -457,13 +461,24 @@ class StockDataReader:
           - front → stock_data_front.duckdb
           - back → stock_data_back.duckdb
         period='1m' → :memory: + read_parquet(glob) 视图（不再使用持久化 .duckdb）
+
+        hive-split S1：``asset_type='etf'`` 时 parquet glob 走 etf 树专用根
+        （显式 ``base_dir``=etf 树容器时用之，否则 ``resolve_etf_daily_root()``），
+        不受 ``OSKH_PERIOD_1D_ROOT`` 劫持（plan F6）。
         """
         project_root = _resolve_data_root()
-        base = (
-            Path(base_dir)
-            if base_dir
-            else _resolve_parquet_container(explicit_root=project_root)
-        )
+        if asset_type == 'etf':
+            base = (
+                Path(base_dir)
+                if base_dir
+                else _resolve_etf_daily_root().parent
+            )
+        else:
+            base = (
+                Path(base_dir)
+                if base_dir
+                else _resolve_parquet_container(explicit_root=project_root)
+            )
         suffix = _ADJUST_DB_SUFFIX.get(adjust_type, '_none')
         db = Path(db_path) if db_path else (
             base / f'stock_data{"_minute" if period == "1m" else ""}{suffix if period != "1m" else ""}.duckdb'
@@ -473,10 +488,21 @@ class StockDataReader:
         # ── 磁盘水位检查 ──
         _check_disk_watermark(db.parent)
 
-        style = _detect_style(base, period, adjust_type)
-        period_dir = _resolve_period_root(period, base=base) / f'dividend_type={adjust_type}'
+        if asset_type == 'etf':
+            period_dir = (
+                (base / f'period={period}') if base_dir else _resolve_etf_daily_root()
+            ) / f'dividend_type={adjust_type}'
+        elif base_dir:
+            # 显式 base_dir（测试/隔离）保持 base/period=* 语义。
+            period_dir = _resolve_period_root(period, base=Path(base_dir)) / f'dividend_type={adjust_type}'
+        else:
+            # 无显式 base：env > stock/period=* 新默认 > 旧根回落（不指死根）。
+            period_dir = _resolve_period_root(period) / f'dividend_type={adjust_type}'
+        style = _detect_style(base, period, adjust_type, explicit_period_dir=period_dir)
         glob_pattern = str(period_dir / '*' / 'data.parquet').replace('\\', '/')
-        _validate_parquet_schema_consistency(base, period=period, adjust_type=adjust_type)
+        _validate_parquet_schema_consistency(
+            base, period=period, adjust_type=adjust_type, explicit_period_dir=period_dir
+        )
 
         t0 = time.perf_counter()
 
@@ -564,9 +590,8 @@ class StockDataReader:
                 import time as _time
                 _t0 = _time.perf_counter()
                 con = duckdb.connect(':memory:')
-                base = self._etf_parquet_dir if self._etf_parquet_dir is not None else self._parquet_container
                 glob_pattern = str(
-                    _resolve_period_root('1m', base=base) / 'dividend_type=none' / 'symbol=*' / 'data.parquet'
+                    self._lake_period_root('1m') / 'dividend_type=none' / 'symbol=*' / 'data.parquet'
                 ).replace('\\', '/')
                 con.execute(f"""
                     CREATE VIEW stock_data AS
@@ -658,8 +683,7 @@ class StockDataReader:
     def _scan_duckdb(self, stock_codes, start_time, end_time,
                      period, adjust_type, columns):
         self._ensure_style(period, adjust_type)
-        base = self._etf_parquet_dir if self._etf_parquet_dir is not None else self._parquet_container
-        glob = str(_resolve_period_root(period, base=base) /
+        glob = str(self._lake_period_root(period) /
                    f'dividend_type={adjust_type}' / '*' / 'data.parquet').replace('\\', '/')
 
         symbol_expr = self._symbol_expr()
@@ -722,12 +746,28 @@ class StockDataReader:
     # Helpers
     # ------------------------------------------------------------------
 
+    def _lake_period_root(self, period: str) -> Path:
+        """本 reader 的 period 树根（hive-split S1）。
+
+        etf 读者绝不读 ``OSKH_PERIOD_1D_ROOT``（plan F6 劫持修复）：显式
+        ``base_dir``（测试/隔离）沿用 ``base/etf/period=*``；否则走
+        ``resolve_etf_daily_root()``（env ``OSKH_ETF_DAILY_ROOT`` > container）。
+        股票读者：显式 ``base_dir`` 保持 base 语义；无显式 base 时走
+        ``resolve_period_root`` 完整优先级（env > ``stock/period=*`` 新默认
+        > 旧根短暂回落）——无 env 环境不再指已消失的旧根。
+        """
+        if self._etf_parquet_dir is not None:
+            if self._explicit_base_dir is not None:
+                return self._explicit_base_dir / "etf" / f"period={period}"
+            return _resolve_etf_daily_root()
+        if self._explicit_base_dir is not None:
+            return _resolve_period_root(period, base=self._explicit_base_dir)
+        return _resolve_period_root(period)
+
     def _make_path(self, stock_code, period, adjust_type):
         safe = to_partition_key(stock_code)
-        # Phase 2 P0 fix: ETF parquet data is stored under stock_data/etf/
-        # (aligned with etf_backfill.py). Stock data uses stock_data/ directly.
-        base = self._etf_parquet_dir if self._etf_parquet_dir is not None else self._parquet_container
-        return (_resolve_period_root(period, base=base) /
+        # hive-split S1：etf 树走专用根，不受 OSKH_PERIOD_1D_ROOT 劫持（F6）。
+        return (self._lake_period_root(period) /
                 f'dividend_type={adjust_type}' / f'symbol={safe}' / 'data.parquet')
 
     def _filter_time_parquet(self, df, start_time, end_time):
@@ -739,7 +779,10 @@ class StockDataReader:
     def _ensure_style(self, period, adjust_type):
         if self._style is None:
             base = self._etf_parquet_dir if self._etf_parquet_dir is not None else self._parquet_container
-            self._style = _detect_style(base, period, adjust_type)
+            self._style = _detect_style(
+                base, period, adjust_type,
+                explicit_period_dir=self._lake_period_root(period) / f'dividend_type={adjust_type}',
+            )
 
     def _symbol_expr(self):
         self._ensure_style('1d', 'front')
@@ -877,8 +920,19 @@ def _prune_backups(db: Path, max_backups: int) -> None:
             pass
 
 
-def _detect_style(base_dir: Path, period: str, adjust_type: str) -> str:
-    full_dir = _resolve_period_root(period) / f'dividend_type={adjust_type}'
+def _detect_style(
+    base_dir: Path,
+    period: str,
+    adjust_type: str,
+    *,
+    explicit_period_dir: Optional[Path] = None,
+) -> str:
+    # hive-split S1：etf 树调用方传 explicit_period_dir，避免落到股票树/env 根。
+    full_dir = (
+        explicit_period_dir
+        if explicit_period_dir is not None
+        else _resolve_period_root(period) / f'dividend_type={adjust_type}'
+    )
     if not full_dir.is_dir():
         return 'underscore'
     all_dirs = [d for d in os.listdir(full_dir) if d.startswith('symbol=')]
@@ -893,7 +947,13 @@ def _detect_style(base_dir: Path, period: str, adjust_type: str) -> str:
     return 'underscore' if has_underscore else 'dot'
 
 
-def _validate_parquet_schema_consistency(base_dir: Path, *, period: str, adjust_type: str) -> None:
+def _validate_parquet_schema_consistency(
+    base_dir: Path,
+    *,
+    period: str,
+    adjust_type: str,
+    explicit_period_dir: Optional[Path] = None,
+) -> None:
     """Fail-close when parquet partition schemas drift vs canonical 1d types.
 
     Canonical contract (same as ``oskh_data.daily_parquet_write``):
@@ -907,7 +967,11 @@ def _validate_parquet_schema_consistency(base_dir: Path, *, period: str, adjust_
 
     from oskh_data.daily_parquet_write import CANONICAL_ARROW_TYPES
 
-    period_dir = _resolve_period_root(period) / f"dividend_type={adjust_type}"
+    period_dir = (
+        explicit_period_dir
+        if explicit_period_dir is not None
+        else _resolve_period_root(period) / f"dividend_type={adjust_type}"
+    )
     if not period_dir.is_dir():
         raise RuntimeError(f"Data directory not found for schema validation: {period_dir}")
 

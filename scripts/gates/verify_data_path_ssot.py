@@ -23,6 +23,9 @@ _SCAN_DIRS = ("oskh_data", "oskh_factors", "scripts")
 _ALLOWLIST: Dict[str, Tuple[str, int]] = {
     "oskh_data/freshness.py": ("LABEL_NONPATH", 1),
     "scripts/tr/backfill_turnover_resistance_bands.py": ("LEGIT_TR", 1),
+    # hive-split S1：etf 读者的显式 base 隔离语义（base/period=* 构造两处）；
+    # env/container 路径已分流至 _resolve_etf_daily_root，非旧根在册债务。
+    "oskh_data/reader.py": ("HIVE_ETF_BASE", 2),
 }
 
 _PATTERNS: List[Pattern[str]] = [

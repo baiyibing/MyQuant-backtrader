@@ -38,8 +38,18 @@ PROGRESS_FILE = Path("backtest_output/tr_backfill_progress.json")
 
 
 def _daily_glob(data_dir: Path) -> str:
+    # hive-split：股票日线在 <container>/stock/period=1d（OSKH_PERIOD_1D_ROOT
+    # 覆盖优先）；仅旧布局存在时短暂回落旧根（S2b 过渡，与 resolve_period_root 同型）。
+    from common.infra.data_root import resolve_period_root
+
+    legacy_root = data_dir / "period=1d"
+    period_root = resolve_period_root("1d", base=data_dir / "stock")
+    if not (period_root / "dividend_type=front").is_dir() and (
+        legacy_root / "dividend_type=front"
+    ).is_dir():
+        period_root = legacy_root
     return str(
-        data_dir / "period=1d" / "dividend_type=front" / "*" / "data.parquet"
+        period_root / "dividend_type=front" / "*" / "data.parquet"
     ).replace("\\", "/")
 
 

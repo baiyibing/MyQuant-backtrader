@@ -63,7 +63,8 @@ def test_period_default_uses_authority_parent_when_env_unset(
     monkeypatch.delenv("OSKH_PERIOD_1D_ROOT", raising=False)
     with pytest.warns(UserWarning, match="OSKH_PERIOD_1D_ROOT is unset"):
         got = resolve_period_root("1d")
-    assert got == _isolate_authority_hint / "period=1d"
+    # hive-split v1.5：默认指向三树容器下的 stock/period=1d（不存在的旧根不再默认）。
+    assert got == _isolate_authority_hint / "stock" / "period=1d"
 
 
 def test_period_no_warn_when_env_set(monkeypatch, _isolate_authority_hint, tmp_path):
