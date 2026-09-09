@@ -189,6 +189,11 @@ class EnvVarKeys:
     # main.py bootstrap：为 true 时，工作日上海时间 09:25–15:00 禁止启动 trading-* / executor（粗粒度，不含节假日历）
     BOOTSTRAP_ENFORCE_PRE_OPEN_WINDOW: Final[str] = "BOOTSTRAP_ENFORCE_PRE_OPEN_WINDOW"
 
+    # Selector TR filter（strategies/tr_filter，migration S2 自 1.3 迁入）
+    SELECTOR_TR_FILTER_ENABLED: Final[str] = "SELECTOR_TR_FILTER_ENABLED"
+    SELECTOR_TR_FAIL_CLOSED: Final[str] = "SELECTOR_TR_FAIL_CLOSED"
+    SELECTOR_TR_WINDOW: Final[str] = "SELECTOR_TR_WINDOW"
+
     # QMT连接层
     QMT_BATCH_SIZE: Final[str] = "QMT_BATCH_SIZE"
     QMT_PRICE_TOLERANCE: Final[str] = "QMT_PRICE_TOLERANCE"

@@ -6,8 +6,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from common import ConfigurationError
-from strategies.tr_filter import apply_turnover_resistance_filter
+from strategies.tr_filter import ConfigurationError, apply_turnover_resistance_filter
 
 
 def _row(
