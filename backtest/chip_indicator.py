@@ -117,6 +117,13 @@ class ChipDistribution(bt.Indicator):
                 dtype=np.float64,
             ),
         }
+        # Prefer feed turnover_rate when present so adapt_columns does not
+        # fail-close on missing float_shares (warmup tests / precomputed series).
+        if hasattr(self.data.lines, "turnover_rate"):
+            window_data["turnover_rate"] = np.array(
+                [self.data.turnover_rate[i] for i in range(-self.p.period, 0)],
+                dtype=np.float64,
+            )
         df = pd.DataFrame(window_data)
 
         try:

@@ -48,7 +48,7 @@ def test_write_processed_data_lands_on_env_root(monkeypatch, tmp_path):
     f_root = tmp_path / "f_authority"
     monkeypatch.setenv("OSKH_PERIOD_1D_ROOT", str(f_root))
     df = pd.DataFrame(
-        {"time": [1759000000000], "open": [10.0], "high": [10.2],
+        {"time": [1758931200000], "open": [10.0], "high": [10.2],
          "low": [9.8], "close": [10.0], "volume": [1000.0], "amount": [10000.0]}
     )
     ok_n, errs = write_processed_data(

@@ -62,12 +62,17 @@ def utc_midnight_ms_from_time_ms(time_ms: pd.Series) -> pd.Series:
     """Map epoch-ms (CST-as-UTC or UTC midnight) → Shanghai calendar day's UTC midnight ms.
 
     Same formula as ``shanghai_day`` in
-    ``scripts/data/_repair_daily_cst_utc_double_rows.py``, then
-    ``int(ts.value // 10**6)`` — not string-date normalize.
+    ``scripts/data/_repair_daily_cst_utc_double_rows.py``, then epoch ms —
+    not string-date normalize.
+
+    Pandas 2.2+/3 may yield ``datetime64[us]`` (or ``[ms]``) from
+    ``to_datetime``/``normalize``; ``astype("int64") // 10**6`` assumed ns and
+    produced bogus epoch-seconds. Cast to ``datetime64[ms]`` first so int64 is
+    always milliseconds.
     """
     ts = pd.to_datetime(time_ms.astype("int64"), unit="ms")
     sh = (ts + pd.Timedelta(hours=8)).dt.normalize()
-    return (sh.astype("int64") // 10**6).astype("int64")
+    return sh.astype("datetime64[ms]").astype("int64")
 
 
 def normalize_daily_times_to_utc_midnight(df: pd.DataFrame) -> pd.DataFrame:
