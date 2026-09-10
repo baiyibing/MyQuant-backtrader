@@ -28,9 +28,9 @@ sys.path.insert(0, REPO)
 import backtrader as bt
 
 from backtest.chip_algorithm import adapt_columns, daily_chip_distribution, cyq
-from common.infra.data_root import resolve_period_root, resolve_source_parquet
+from common.infra.data_root import resolve_index_daily_root, resolve_period_root, resolve_source_parquet
 from oskh_data import StockDataReader
-from oskh_data.symbol_format import to_canonical_symbol
+from oskh_data.symbol_format import to_canonical_symbol, to_partition_key
 from oskh_factors.chip.shares import (
     _load_float_shares_map,
     _load_free_float_shares,
@@ -42,6 +42,13 @@ CYQK_TH = 0.70
 BB_PERIOD = 20
 BB_NBDEV = 2.0
 BB_DDOF = 1
+INDEX_MA_FAST = 5
+INDEX_MA_SLOW = 10
+BOARD_INDEX = {
+    "sh_main": "000001.SH",  # 上证指数
+    "sz_main": "399001.SZ",  # 深证成指
+    "chinext": "399006.SZ",  # 创业板指
+}
 PENDING_BUY_MAX_GAP_DAYS = 4
 LOAD_START = "20220701"
 DEFAULT_SEED = 20240907
@@ -60,6 +67,9 @@ HELP_LOCK = """
   盈筹率：get_cyqk_c 为 0-1，默认阈值 0.70（--cyqk-th 可改）；200 日窗口含 D，换手按窗内每日 asof 股本
   加速：cyqk 序列优先 turnover_resist.compute_cyqk_series（Rust）；失败回退 Python
   布林：上轨 = SMA20(close) + 2σ，σ 用 pandas rolling.std(ddof=1)；cond 要求 D 的 high > 上轨
+  指数过滤：D 收盘时个股对应指数收盘 > 指数 MA5 且 > MA10（沪主板=上证 000001.SH·
+    深主板=深成 399001.SZ·创业板=创业板指 399006.SZ；--no-index-ma 关闭）。
+    指数均线只用指数自身历史（对齐到个股日历 ffill）；指数缺失 fail-closed 无信号。
   --no-bb：买入 cond 去掉布林上轨
   --no-cyqk：买入 cond 去掉盈筹；不计算 cyqk
   出报：trades_by_stock.txt / trade_pairs.csv（按票 BUY→下一笔 SELL）
@@ -135,6 +145,40 @@ def bb_upper_series(
     mid = close.rolling(period, min_periods=period).mean()
     std = close.rolling(period, min_periods=period).std(ddof=ddof)
     return mid + nbdev * std
+
+
+def load_index_close(index_code: str, start: str, end: str) -> Optional[pd.Series]:
+    """指数日线收盘（index 树 none-only），epoch-ms time → UTC 午夜索引。"""
+    root = resolve_index_daily_root()
+    part = to_partition_key(to_canonical_symbol(index_code))
+    path = root / "dividend_type=none" / f"symbol={part}" / "data.parquet"
+    if not path.is_file():
+        return None
+    df = pd.read_parquet(path, columns=["time", "close"])
+    df["time"] = pd.to_datetime(df["time"], unit="ms")
+    df = df.set_index("time").sort_index()
+    ts = pd.Timestamp(start) - pd.Timedelta(days=30)  # 均线预热余量
+    te = pd.Timestamp(end)
+    win = df.loc[(df.index >= ts) & (df.index <= te), "close"]
+    if win.empty:
+        return None
+    return win.astype(np.float64)
+
+
+def index_ma_frame(index_close: pd.Series, stock_index: pd.DatetimeIndex) -> pd.DataFrame:
+    """指数收盘 + MA5/MA10 对齐到个股日历（ffill，仅用指数自身历史，无未来价）。
+
+    fail-closed：个股日早于指数首根（NaN）或晚于指数末根（数据停更）→ NaN，
+    对应 finite 为假、不产生信号——不得拿陈旧指数值继续放行过滤。
+    """
+    s = index_close.sort_index()
+    ma = pd.DataFrame({"idx_close": s})
+    ma["idx_sma5"] = s.rolling(INDEX_MA_FAST, min_periods=INDEX_MA_FAST).mean()
+    ma["idx_sma10"] = s.rolling(INDEX_MA_SLOW, min_periods=INDEX_MA_SLOW).mean()
+    target = pd.DatetimeIndex(stock_index).normalize()
+    aligned = ma.reindex(target, method="ffill")
+    aligned[target > s.index[-1]] = np.nan
+    return aligned
 
 
 def _code_keys(stock_code: str) -> list[str]:
@@ -300,8 +344,13 @@ def build_signal_frame(
     use_cyqk: bool = True,
     cyqk_th: float = CYQK_TH,
     use_bb: bool = True,
+    index_close: Optional[pd.Series] = None,
 ) -> pd.DataFrame:
-    """给日线 OHLCV 加上均线、盈筹率、finite、cond、edge。"""
+    """给日线 OHLCV 加上均线、盈筹率、finite、cond、edge。
+
+    ``index_close`` 提供时（指数过滤开启）：D 收盘要求对应指数收盘 > 指数
+    MA5 且 > MA10；指数值缺失 → finite 为假（fail-closed 无信号）。
+    """
     out = df.copy()
     close = out["close"]
     out["sma5"] = close.rolling(5, min_periods=5).mean()
@@ -313,6 +362,11 @@ def build_signal_frame(
         out["cyqk"] = cyqk_series(out, stock_code, compute_from=cyqk_from)
     else:
         out["cyqk"] = np.nan
+    if index_close is not None:
+        idx = index_ma_frame(index_close, out.index)
+        out["idx_close"] = idx["idx_close"].to_numpy(dtype=np.float64)
+        out["idx_sma5"] = idx["idx_sma5"].to_numpy(dtype=np.float64)
+        out["idx_sma10"] = idx["idx_sma10"].to_numpy(dtype=np.float64)
     high_v = out["high"].to_numpy(dtype=np.float64)
     finite = (
         np.isfinite(out["sma20"].to_numpy(dtype=np.float64))
@@ -327,6 +381,13 @@ def build_signal_frame(
         )
     if use_cyqk:
         finite = finite & np.isfinite(out["cyqk"].to_numpy(dtype=np.float64))
+    if index_close is not None:
+        finite = (
+            finite
+            & np.isfinite(out["idx_close"].to_numpy(dtype=np.float64))
+            & np.isfinite(out["idx_sma5"].to_numpy(dtype=np.float64))
+            & np.isfinite(out["idx_sma10"].to_numpy(dtype=np.float64))
+        )
     close_v = close.to_numpy(dtype=np.float64)
     cond = (
         finite
@@ -338,6 +399,12 @@ def build_signal_frame(
         cond = cond & (high_v > out["bb_upper"].to_numpy(dtype=np.float64))
     if use_cyqk:
         cond = cond & (out["cyqk"].to_numpy(dtype=np.float64) > float(cyqk_th))
+    if index_close is not None:
+        cond = (
+            cond
+            & (out["idx_close"].to_numpy(dtype=np.float64) > out["idx_sma5"].to_numpy(dtype=np.float64))
+            & (out["idx_close"].to_numpy(dtype=np.float64) > out["idx_sma10"].to_numpy(dtype=np.float64))
+        )
     edge = np.zeros(len(out), dtype=bool)
     edge[1:] = cond[1:] & (~cond[:-1]) & finite[:-1]
     out["finite"] = finite
@@ -891,6 +958,7 @@ def _write_report(
     use_cyqk: bool = True,
     cyqk_th: float = CYQK_TH,
     use_bb: bool = True,
+    use_index_ma: bool = False,
 ) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     universe.to_csv(out_dir / "universe.csv", index=False, encoding="utf-8")
@@ -925,6 +993,16 @@ def _write_report(
         "",
         f"- cyqk_filter: {'on > ' + f'{cyqk_th:.2f}' if use_cyqk else 'off'}",
         f"- bb_break: {'D high > SMA20(close)+2σ (ddof=1)' if use_bb else 'off'}",
+        f"- index_ma: "
+        + (
+            "D 收盘对应指数 > MA{} 且 > MA{}（{}）".format(
+                INDEX_MA_FAST,
+                INDEX_MA_SLOW,
+                "·".join(f"{b}={BOARD_INDEX[b]}" for b in sorted(BOARD_INDEX)),
+            )
+            if use_index_ma
+            else "off"
+        ),
         f"- names: {len(stats)}",
         f"- per_board: {board_counts}",
         f"- names_with_buy: {n_trig}",
@@ -982,6 +1060,11 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
         action="store_true",
         help="drop high>bb_upper from entry (writes *_nobb dir)",
     )
+    ap.add_argument(
+        "--no-index-ma",
+        action="store_true",
+        help="drop the board-index MA5/MA10 filter from entry (writes *_noidx dir)",
+    )
     args = ap.parse_args(list(argv) if argv is not None else None)
 
     if args.from_dir:
@@ -996,10 +1079,25 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
     stats_start = pd.Timestamp(args.start)
     use_cyqk = not args.no_cyqk
     use_bb = not args.no_bb
+    use_index_ma = not args.no_index_ma
     cyqk_th = float(args.cyqk_th)
     if use_cyqk and (not np.isfinite(cyqk_th) or cyqk_th <= 0.0 or cyqk_th >= 1.0):
         raise SystemExit(f"--cyqk-th must be in (0, 1), got {cyqk_th}")
     cyqk_from = stats_start - pd.Timedelta(days=CYQK_PRE_STATS_CAL_DAYS)
+    index_close_by_board: dict[str, pd.Series] = {}
+    if use_index_ma:
+        for board, idx_code in BOARD_INDEX.items():
+            s = load_index_close(idx_code, LOAD_START, end)
+            if s is None or s.empty:
+                raise SystemExit(
+                    f"index filter is on but {idx_code} ({board}) has no data at "
+                    f"{resolve_index_daily_root()} (index tree, dividend_type=none)"
+                )
+            index_close_by_board[board] = s
+        print(
+            "[index] " + " ".join(f"{b}={BOARD_INDEX[b]}" for b in sorted(index_close_by_board)),
+            flush=True,
+        )
     results: list[RunResult] = []
     stat_rows = []
     used = []
@@ -1008,6 +1106,10 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
         raw = load_front_daily(code, LOAD_START, end)
         if raw is None or len(raw) < CHIP_WINDOW + 60:
             return None
+        idx_series = index_close_by_board.get(board) if use_index_ma else None
+        if use_index_ma and idx_series is None:
+            print(f"[skip] {code}: board {board!r} has no mapped index for the filter", flush=True)
+            return None
         sig = build_signal_frame(
             raw,
             code,
@@ -1015,6 +1117,7 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
             use_cyqk=use_cyqk,
             cyqk_th=cyqk_th,
             use_bb=use_bb,
+            index_close=idx_series,
         )
         if not ready_for_stats(sig, stats_start):
             return None
@@ -1079,6 +1182,8 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
         tag += f"_cyqk{int(round(cyqk_th * 100))}"
     if not use_bb:
         tag += "_nobb"
+    if not use_index_ma:
+        tag += "_noidx"
     out_dir = Path(REPO) / "backtest_output" / tag
     stats = pd.DataFrame(stat_rows)
     _write_report(
@@ -1091,6 +1196,7 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
         use_cyqk=use_cyqk,
         cyqk_th=cyqk_th,
         use_bb=use_bb,
+        use_index_ma=use_index_ma,
     )
     print(f"wrote {out_dir}")
     print(stats.to_string(index=False) if len(stats) else "no names ran")
