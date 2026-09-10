@@ -12,12 +12,8 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, Dict, List, Optional, Protocol, Tuple
 
-from common import TraceIdGenerator
-from oskh_db.money_sqlite import yuan_snap_fen, yuan_to_fen
-from trade_fee_policy import (
-    build_stamp_tax_exempt_symbol_keys,
-    calculate_trade_fee_from_notional_fen,
-)
+from common.infra.trace_context import TraceIdGenerator
+from trade_fee_policy import build_stamp_tax_exempt_symbol_keys, calculate_trade_fee
 
 
 class StrategyLike(Protocol):
@@ -59,12 +55,11 @@ def estimate_backtest_trade_fee(
 ) -> float:
     """与实盘相同的费用估算（后续接入撮合时可写入 SimulatedFill.fee）。"""
     keys = build_stamp_tax_exempt_symbol_keys(cfg.stamp_tax_exempt_symbols)
-    notional_fen = yuan_to_fen(yuan_snap_fen(float(volume) * float(price)))
-    return calculate_trade_fee_from_notional_fen(
+    return calculate_trade_fee(
         action,
         stock,
         volume,
-        notional_fen,
+        price,
         commission_rate=cfg.commission_rate,
         min_commission=cfg.min_commission,
         stamp_tax_rate_stock=cfg.tax_rate_sell,
