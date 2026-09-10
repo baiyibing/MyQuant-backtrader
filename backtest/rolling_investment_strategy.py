@@ -124,6 +124,11 @@ class RollingInvestmentStrategy(bt.Strategy):
         else:
             logger.info(f"✅ PortfolioManager已注入全局资金管理器")
 
+        # 策略6买侧契约（2026-09-10）：尾盘涨停直接弃买——不建延期额度、不标记次日买入。
+        if self.params.strategy_version == 'version6' and not self.params.skip_limit_up:
+            logger.info("✅ 策略6：强制 skip_limit_up=True（尾盘涨停跳过，不延期不次日追）")
+            self.params.skip_limit_up = True
+
         # 存储日线数据（用于计算指标）
         self.stock_daily_data = {}
         self.calc_indicators = {}
@@ -1419,8 +1424,8 @@ class RollingInvestmentStrategy(bt.Strategy):
                 order_exectype = bt.Order.Limit  # 默认限价单
                 if reason.startswith('profit_take'):
                     reason_type = '止盈'
-                    # 动态止盈（version1/version2）需使用市价单确保成交
-                    if self.params.strategy_version in ('version1', 'version2'):
+                    # 动态止盈（version1/version2）与策略6分档回撤止盈需使用市价单确保成交
+                    if self.params.strategy_version in ('version1', 'version2', 'version6'):
                         order_exectype = bt.Order.Market
                     # 静态止盈（version3/version5）保持限价单以获取更好价格
                 elif reason.startswith('stop_loss'):

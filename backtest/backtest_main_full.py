@@ -1,9 +1,17 @@
 import os
 import gc
 import pprint
+import sys
 import timeit
 import time
 from datetime import datetime, timedelta
+
+# 平铺导入（rolling_investment_strategy 等）要求 repo 根在 sys.path；
+# 本机 vanna312 的 oskh_quant editable 已移除，无全局 common 来源。
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
 import psutil
 import backtrader as bt
 from backtrader.feeds import PandasData
@@ -162,6 +170,7 @@ if __name__ == '__main__':
     # 解析命令行参数
     parser = argparse.ArgumentParser(description='Backtest with logging control')
     parser.add_argument('--debug', action='store_true', help='Enable debug logging')
+    parser.add_argument('--strategies', default='', help='comma versions to run (e.g. version6); default all')
     args = parser.parse_args()
 
     # 根据 debug 标志调整根日志级别
@@ -181,12 +190,16 @@ if __name__ == '__main__':
         ('version3', None, "策略3: 4%止损 + 20%止盈 + 开盘涨停保留"),
         ('version4', None, "策略4: 10日线买/5日线卖"),
         ('version5', None, "策略5: 无止损 + 2%止盈 + 固定时间强制卖出"),
+        ('version6', None, "策略6: 4%止损 + 2%锚定分档回撤止盈(T+1=50%/T+2=40%/T+3+=30%) + 尾盘涨停弃买"),
         ('version1', {'profit_drawdown_pct': 0.60}, "策略1变体: 回撤阈值60%"),
         ('version2', {'dynamic_drawdown_rules': {1: 0.55, 2: 0.45, 3: 0.35, 4: 0.25, 5: 0.15}}, "策略2变体: 调整动态规则"),
     ]
 
-    # 默认跑全量策略集合；如需缩小范围可在此切片。
+    # 默认跑全量策略集合；如需缩小范围用 --strategies version6,version1 过滤。
     select_strategies = strategies
+    if args.strategies.strip():
+        wanted = {v.strip() for v in args.strategies.split(',') if v.strip()}
+        select_strategies = [row for row in strategies if row[0] in wanted]
 
     for version, params, desc in select_strategies:
         logger.info(f"批量回测五种策略（对比效果）: {desc}")

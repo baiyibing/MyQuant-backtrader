@@ -388,6 +388,83 @@ class Strategy5(ProfitStrategy):
         return True, "策略5允许买入"
 
 
+class Strategy6(ProfitStrategy):
+    """
+    策略6（2026-09-10 增补）：4% 盘中止损 + 基础止盈 2% 锚定的分档回撤止盈。
+
+    止损：市价较买入价回撤 >= stop_loss_pct（默认 4%），盘中触发即卖（市价单）。
+
+    止盈（+2% 锚定回撤，分档比例按持仓交易日数 T+N）：
+      记 peak_excess = 持仓期最高价/买入价 - (1 + profit_base_pct)，
+          cur_excess  = 市价/买入价 - (1 + profit_base_pct)。
+      - 峰值曾超过 +2%（peak_excess > 0）：
+          T+1 回撤到峰值超额的 50% 止盈；T+2 → 40%；T+3 及以后 → 30%
+          （触发条件 cur_excess <= 档位比例 × peak_excess；跌破 +2% 锚同样触发）。
+      - 峰值从未超过 +2%（peak_excess <= 0）：市价进入正利润后，
+          回撤到峰值正利润的 50% 止盈（正利润保护性离场）。
+      开盘价高于/低于买入价本身不构成卖出动作（观察），卖点全部由盘中触发。
+
+    买侧契约（由 RollingInvestmentStrategy 强制）：
+      尾盘涨停直接跳过——不建延期额度、不标记次日买入（skip_limit_up=True）。
+    """
+
+    def __init__(self, stop_loss_pct: float = 0.04, profit_base_pct: float = 0.02,
+                 trailing_rules: Optional[Dict] = None, trailing_default: float = 0.30,
+                 positive_trail_ratio: float = 0.50):
+        params = {
+            'stop_loss_pct': float(stop_loss_pct),
+            'profit_base_pct': float(profit_base_pct),
+            'trailing_rules': dict(trailing_rules or {1: 0.50, 2: 0.40}),
+            'trailing_default': float(trailing_default),
+            'positive_trail_ratio': float(positive_trail_ratio),
+        }
+        super().__init__(**params)
+
+    def _validate_params(self):
+        assert 0 < self.params['stop_loss_pct'] < 1, "止损比例需在(0,1)"
+        assert 0 < self.params['profit_base_pct'] < 1, "基础止盈锚点需在(0,1)"
+        assert 0 < self.params['trailing_default'] <= 1, "T+3+ 回撤档位需在(0,1]"
+        assert 0 < self.params['positive_trail_ratio'] <= 1, "正利润回撤比例需在(0,1]"
+        for day, ratio in self.params['trailing_rules'].items():
+            assert int(day) >= 1, "回撤档位键为持仓交易日数(>=1)"
+            assert 0 < ratio <= 1, "回撤档位比例需在(0,1]"
+
+    def should_sell(self, status, current_datetime, current_price, is_limit_up=False, is_limit_down=False, indicators=None):
+        cost = float(getattr(status, 'cost_price', 0.0) or 0.0)
+        if cost <= 0 or current_price <= 0:
+            return False, None
+
+        ret = current_price / cost - 1.0
+        # 一、止损：4% 盘中触发即卖
+        if ret <= -self.params['stop_loss_pct']:
+            return True, f"stop_loss 亏损{(-ret) * 100:.2f}%触发{self.params['stop_loss_pct'] * 100:.0f}%止损"
+
+        peak_ret = float(getattr(status, 'holding_high', current_price) or current_price) / cost - 1.0
+        day = max(1, int(getattr(status, 'hold_days', 1) or 1))
+        base = self.params['profit_base_pct']
+        peak_excess = peak_ret - base
+
+        if peak_excess > 0:
+            # 二.1-4：+2% 锚定分档回撤（T+1=50% / T+2=40% / T+3+=30%）
+            ratio = float(self.params['trailing_rules'].get(day, self.params['trailing_default']))
+            cur_excess = ret - base
+            if cur_excess <= ratio * peak_excess:
+                return True, (f"profit_take:drawdown 基础止盈上方回撤 "
+                              f"T+{day}档{ratio * 100:.0f}%（峰值超额{(peak_excess) * 100:.2f}%，"
+                              f"当前超额{(cur_excess) * 100:.2f}%）")
+        else:
+            # 二.5：峰值未达 +2%，市价进入正利润后按 50% 回撤保护离场
+            if peak_ret > 0 and ret <= self.params['positive_trail_ratio'] * peak_ret:
+                return True, (f"profit_take:drawdown 正利润回撤"
+                              f"{self.params['positive_trail_ratio'] * 100:.0f}%（峰值{peak_ret * 100:.2f}%，"
+                              f"当前{ret * 100:.2f}%）")
+
+        return False, None
+
+    def should_buy(self, status, current_datetime, current_price, is_limit_up=False, is_limit_down=False, indicators=None):
+        return True, "策略6允许买入（买侧涨停拦截由滚动层 skip_limit_up 强制）"
+
+
 class StrategyFactory:
     """策略工厂：预设配置 + 自定义参数覆盖"""
 
@@ -400,7 +477,8 @@ class StrategyFactory:
         }),
         'version3': (Strategy3, {'stop_loss_pct': 0.04, 'profit_target_pct': 0.20}),
         'version4': (Strategy4, {'ma_buy_period': 10, 'ma_sell_period': 5}),
-        'version5': (Strategy5, {'profit_target_pct': 0.02, 'force_sell_time': '14:50', 'force_sell_policy': 'time_only', 'force_sell_days': 0, 'limit_up_reserve_enabled': False, 'limit_up_reserve_start': '09:30', 'limit_up_reserve_end': '09:40'})
+        'version5': (Strategy5, {'profit_target_pct': 0.02, 'force_sell_time': '14:50', 'force_sell_policy': 'time_only', 'force_sell_days': 0, 'limit_up_reserve_enabled': False, 'limit_up_reserve_start': '09:30', 'limit_up_reserve_end': '09:40'}),
+        'version6': (Strategy6, {'stop_loss_pct': 0.04, 'profit_base_pct': 0.02, 'trailing_rules': {1: 0.50, 2: 0.40}, 'trailing_default': 0.30, 'positive_trail_ratio': 0.50}),
     }
 
     @classmethod
