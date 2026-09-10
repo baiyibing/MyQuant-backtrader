@@ -171,6 +171,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Backtest with logging control')
     parser.add_argument('--debug', action='store_true', help='Enable debug logging')
     parser.add_argument('--strategies', default='', help='comma versions to run (e.g. version6); default all')
+    parser.add_argument('--start', default='20251023', help='buy-window start YYYYMMDD (pool CSV filter)')
+    parser.add_argument('--end', default='20251104', help='buy-window end YYYYMMDD (pool CSV filter)')
     args = parser.parse_args()
 
     # 根据 debug 标志调整根日志级别
@@ -215,8 +217,8 @@ if __name__ == '__main__':
         stock_buy_set = set()
         stock_buy_dict = {}
 
-        BUY_DATE_STR = '20251023'
-        END_DATE_STR = '20251104'
+        BUY_DATE_STR = args.start
+        END_DATE_STR = args.end
 
         for file_path in csv_files:
             file_start_time = timeit.default_timer()
