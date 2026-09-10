@@ -12,8 +12,12 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, Dict, List, Optional, Protocol, Tuple
 
-from common import TraceIdGenerator
-from oskh_db.money_sqlite import yuan_snap_fen, yuan_to_fen
+# Slim-fork decoupling (migration S2 · 2026-09-10)：1.3 公共面符号改指本仓真实
+# 所有者——TraceIdGenerator 在 common.infra.trace_context；分/元算术真身是
+# oskh_core.money_arithmetic（oskh_db 属主仓域，禁回迁，其 money_sqlite 仅
+# re-export 本模块）。
+from common.infra.trace_context import TraceIdGenerator
+from oskh_core.money_arithmetic import yuan_snap_fen, yuan_to_fen
 from trade_fee_policy import (
     build_stamp_tax_exempt_symbol_keys,
     calculate_trade_fee_from_notional_fen,
