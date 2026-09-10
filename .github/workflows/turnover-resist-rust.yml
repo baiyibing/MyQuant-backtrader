@@ -4,13 +4,11 @@ on:
   pull_request:
     paths:
       - "turnover-resist/**"
-      - "scripts/verify_rust_python_alignment.py"
       - "docs/backtest/chip/turnover_resistance_rust.md"
       - ".github/workflows/turnover-resist-rust.yml"
   push:
     paths:
       - "turnover-resist/**"
-      - "scripts/verify_rust_python_alignment.py"
       - ".github/workflows/turnover-resist-rust.yml"
   workflow_dispatch:
 

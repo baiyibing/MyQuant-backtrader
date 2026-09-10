@@ -63,13 +63,21 @@ def _flatten_yaml_root(loaded: Dict[str, Any]) -> Dict[str, str]:
 
 def _log_yaml_failure(msg: str) -> None:
     """Log YAML load failures through both warnings and quant_logger if available."""
-    from common.infra.quant_logger import get_logger
-
     warnings.warn(f"[runtime_config] {msg}", RuntimeWarning, stacklevel=3)
-    get_logger("runtime_config", "yaml_load", trace_id="SYSTEM").error(
-        f"[runtime_config] {msg}",
-        context={"detail": msg},
-    )
+    try:
+        from common.infra.quant_logger import get_logger
+
+        get_logger("runtime_config", "yaml_load", trace_id="SYSTEM").error(
+            f"[runtime_config] {msg}",
+            context={"detail": msg},
+        )
+    except Exception:
+        # quant_logger 不可用时 fail-open：本函数会在 constants 模块体的 env 引导
+        # （QMTConstants.* 等 _get_env_int_in_range）期间被调用，此时 import
+        # quant_logger 会回撞半初始化的 constants（ImportError: LoggingConstants，
+        # 继承主仓相对 MINIQMT_CONFIG_PATH 且文件缺失时实证）。warnings 已发出，
+        # 结构化日志不得阻断配置默认值路径（codex R2，2026-09-09）。
+        pass
 
 
 def _load_yaml_file(path: Path) -> Dict[str, str]:
