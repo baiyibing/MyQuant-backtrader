@@ -71,7 +71,7 @@ def _log_yaml_failure(msg: str) -> None:
             f"[runtime_config] {msg}",
             context={"detail": msg},
         )
-    except Exception:
+    except ImportError:
         # quant_logger 不可用时 fail-open：本函数会在 constants 模块体的 env 引导
         # （QMTConstants.* 等 _get_env_int_in_range）期间被调用，此时 import
         # quant_logger 会回撞半初始化的 constants（ImportError: LoggingConstants，
