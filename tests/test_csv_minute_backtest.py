@@ -8,6 +8,7 @@ import pandas as pd
 import pytest
 
 import backtest.research.csv_minute_backtest as sim
+from backtest.research.csv_daily_backtest import chase_explained
 
 
 def test_scan_gap_open_stop():
@@ -209,11 +210,17 @@ def test_simulate_limit_up_at_1455_abandons_when_945_below_open():
     minute = {"600000.SH": pd.concat([m, m2])}
     daily = {"600000.SH": _daily(dates, [11.0, 11.12])}
     st = sim.simulate(
-        minute, daily, {"20251103": ["600000.SH"]}, "20251103", "20251104"
+        minute,
+        daily,
+        {"20251103": ["600000.SH"]},
+        "20251103",
+        "20251104",
+        strategy="version6",
     )
     assert st.stats["skip_limit_up"] == 1
     assert st.stats["chase_abandon"] == 1
     assert st.stats["buys"] == 0
+    assert chase_explained(st) == st.stats["skip_limit_up"]
 
 
 def test_simulate_limit_up_chases_when_945_above_open():
@@ -232,10 +239,16 @@ def test_simulate_limit_up_chases_when_945_above_open():
     minute = {"600000.SH": pd.concat([m, m2])}
     daily = {"600000.SH": _daily(dates, [11.0, 11.15])}
     st = sim.simulate(
-        minute, daily, {"20251103": ["600000.SH"]}, "20251103", "20251104"
+        minute,
+        daily,
+        {"20251103": ["600000.SH"]},
+        "20251103",
+        "20251104",
+        strategy="version6",
     )
     assert st.stats["skip_limit_up"] == 1
     assert st.stats["chase_buy"] == 1
+    assert chase_explained(st) == st.stats["skip_limit_up"]
     buy = [t for t in st.trades if t["side"] == "BUY"][0]
     assert buy["reason"] == "chase:T+1"
     assert buy["date"] == "20251104"
@@ -256,10 +269,61 @@ def test_simulate_skip_when_1455_above_computed_limit():
     minute = {"000592.SZ": pd.concat([m, m2])}
     daily = {"000592.SZ": _daily(dates, [4.13, 4.54], prev=3.75)}
     st = sim.simulate(
-        minute, daily, {"20251103": ["000592.SZ"]}, "20251103", "20251104"
+        minute,
+        daily,
+        {"20251103": ["000592.SZ"]},
+        "20251103",
+        "20251104",
+        strategy="version6",
     )
     assert st.stats["skip_limit_up"] == 1
     assert st.stats["buys"] == 0
+    assert chase_explained(st) == st.stats["skip_limit_up"]
+
+
+def test_simulate_chase_pending_eod_on_last_day():
+    dates = ["2025-11-03"]
+    m = _day(
+        "2025-11-03", [(930, 10.5, 11.0, 10.5, 10.8), (1455, 11.0, 11.0, 11.0, 11.0)]
+    )
+    st = sim.simulate(
+        {"600000.SH": m},
+        {"600000.SH": _daily(dates, [11.0])},
+        {"20251103": ["600000.SH"]},
+        "20251103",
+        "20251103",
+        strategy="version6",
+    )
+    assert st.stats["skip_limit_up"] == 1
+    assert st.stats["chase_pending_eod"] == 1
+    assert chase_explained(st) == st.stats["skip_limit_up"]
+
+
+def test_simulate_chase_overwrite_same_day_duplicate_pool():
+    dates = ["2025-11-03", "2025-11-04"]
+    m = _day(
+        "2025-11-03", [(930, 10.5, 11.0, 10.5, 10.8), (1455, 11.0, 11.0, 11.0, 11.0)]
+    )
+    m2 = _day(
+        "2025-11-04",
+        [
+            (930, 11.20, 11.20, 11.10, 11.15),
+            (945, 11.10, 11.12, 11.05, 11.08),
+            (1455, 11.10, 11.20, 11.00, 11.12),
+        ],
+    )
+    st = sim.simulate(
+        {"600000.SH": pd.concat([m, m2])},
+        {"600000.SH": _daily(dates, [11.0, 11.12])},
+        {"20251103": ["600000.SH", "600000.SH"]},
+        "20251103",
+        "20251104",
+        strategy="version6",
+    )
+    assert st.stats["skip_limit_up"] == 2
+    assert st.stats["chase_overwrite"] == 1
+    assert st.stats["chase_abandon"] == 1
+    assert chase_explained(st) == st.stats["skip_limit_up"]
 
 
 def test_simulate_buy_at_1455_and_t1_stop_next_open():
@@ -278,6 +342,7 @@ def test_simulate_buy_at_1455_and_t1_stop_next_open():
         {"20251103": ["600000.SH"]},
         "20251103",
         "20251104",
+        strategy="version6",
         stop_pct=0.02,
     )
     assert st.stats["buys"] == 1
@@ -310,7 +375,12 @@ def test_t0_after_buy_high_does_not_set_peak():
     minute = {"600000.SH": pd.concat([m0, m1])}
     daily = {"600000.SH": _daily(dates, [10.45, 10.10])}
     st = sim.simulate(
-        minute, daily, {"20251103": ["600000.SH"]}, "20251103", "20251104"
+        minute,
+        daily,
+        {"20251103": ["600000.SH"]},
+        "20251103",
+        "20251104",
+        strategy="version6",
     )
     assert st.stats["buys"] == 1
     assert st.stats["sell_trail"] == 0
@@ -382,6 +452,7 @@ def test_simulate_uses_day_spans_same_as_loc():
         {"20251103": ["600000.SH"]},
         "20251103",
         "20251104",
+        strategy="version6",
         stop_pct=0.02,
     )
     assert st.stats["buys"] == 1

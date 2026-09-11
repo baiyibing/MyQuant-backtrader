@@ -268,7 +268,7 @@ def test_v6_adapter_routes_sell_to_local_strategy():
 
 
 # ---------------------------------------------------------------------------
-# 策略8（version8）：15% 止损 + 20% 锚绝对涨幅分档 + 涨幅>50% 最高价回撤 20%
+# 策略8（version8）：20% 止损 + 0%~15%→+2% + 15% 锚分档 + 涨幅>120% 最高价回撤 20%
 # ---------------------------------------------------------------------------
 
 
@@ -278,41 +278,52 @@ def _v8(**overrides):
 
 def test_v8_factory_registered_with_expected_defaults():
     s = StrategyFactory.create("version8")
-    assert s.params["stop_loss_pct"] == 0.15
+    assert s.params["stop_loss_pct"] == 0.20
 
 
-def test_v8_stop_loss_triggers_at_15pct_not_14pct():
+def test_v8_stop_loss_triggers_at_20pct_not_19pct():
     s = _v8()
     ok, _ = s.should_sell(
-        _st(cost=10.0, high=10.0), _dt(2025, 11, 3, 10, 0), 8.611
+        _st(cost=10.0, high=10.0), _dt(2025, 11, 3, 10, 0), 8.011
     )
     assert not ok
     ok, reason = s.should_sell(
-        _st(cost=10.0, high=10.0), _dt(2025, 11, 3, 10, 1), 8.489
+        _st(cost=10.0, high=10.0), _dt(2025, 11, 3, 10, 1), 7.989
     )
     assert ok and reason.startswith("stop_loss")
 
 
-def test_v8_band_20_to_40_floors_at_20pct():
+def test_v8_band_15_to_40_floors_at_15pct():
     s = _v8()
     now = _dt(2025, 11, 3, 10, 0)
-    ok, _ = s.should_sell(_st(cost=10.0, high=13.0, days=1), now, 12.011)
+    ok, _ = s.should_sell(_st(cost=10.0, high=13.0, days=1), now, 11.511)
     assert not ok
-    ok, reason = s.should_sell(_st(cost=10.0, high=13.0, days=1), now, 11.989)
-    assert ok and "trail:band:20" in reason
+    ok, reason = s.should_sell(_st(cost=10.0, high=13.0, days=1), now, 11.489)
+    assert ok and "trail:band:15" in reason
 
 
-def test_v8_no_tp_until_peak_above_20pct():
+def test_v8_small_band_floors_at_2pct():
+    s = _v8()
+    now = _dt(2025, 11, 3, 10, 0)
+    ok, _ = s.should_sell(_st(cost=10.0, high=10.10, days=1), now, 10.05)
+    assert not ok
+    ok, _ = s.should_sell(_st(cost=10.0, high=10.60, days=1), now, 10.201)
+    assert not ok
+    ok, reason = s.should_sell(_st(cost=10.0, high=10.60, days=1), now, 10.20)
+    assert ok and "trail:band:2" in reason
+
+
+def test_v8_no_tp_when_small_band_still_above_2pct():
     s = _v8()
     ok, _ = s.should_sell(
-        _st(cost=10.0, high=11.99, days=1), _dt(2025, 11, 3, 10, 0), 11.50
+        _st(cost=10.0, high=11.50, days=1), _dt(2025, 11, 3, 10, 0), 11.40
     )
     assert not ok
 
 
-def test_v8_peak_dd_when_tighter_than_band():
+def test_v8_peak_dd_when_gain_over_120pct():
     s = _v8()
-    # 峰值 +200%：分档地板 +110%=21；最高价×80%=24。23 只触峰回撤。
+    # 峰值 +200%：无分档地板；最高价×80%=24。23 只触峰回撤。
     ok, reason = s.should_sell(
         _st(cost=10.0, high=30.0, days=1), _dt(2025, 11, 3, 10, 0), 23.00
     )
@@ -324,6 +335,6 @@ def test_v8_adapter_routes_sell_to_local_strategy():
 
     adapter = create_preset_strategy_adapter("version8")
     ok, reason = adapter.should_sell(
-        _st(cost=10.0, high=10.0), _dt(2025, 11, 3, 10, 0), 8.489
+        _st(cost=10.0, high=10.0), _dt(2025, 11, 3, 10, 0), 7.989
     )
     assert ok and reason.startswith("stop_loss")

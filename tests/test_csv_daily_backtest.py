@@ -41,6 +41,7 @@ def _bars(days: list[str], rows: dict[str, list[tuple]], start_offset: int = 1) 
 
 
 def _run(pool: dict, bars: dict, **kwargs):
+    kwargs.setdefault("strategy", "version6")
     return sim.simulate(bars, pool, "20251103", "20251107", **kwargs)
 
 
@@ -77,12 +78,23 @@ def test_stop_pct_override_changes_fill():
     }
     bars = _bars(DAYS, rows)
     pool = {"20251103": ["600000.SH"]}
-    sell4 = [t for t in _run(pool, bars, stop_pct=0.04).trades if t["side"] == "SELL"][0]
+    sell4 = [t for t in _run(pool, bars, stop_pct=0.04).trades if t["side"] == "SELL"][
+        0
+    ]
     assert sell4["reason"] == "stop_loss:touch"
     assert sell4["price"] == pytest.approx(9.6)
-    sell2 = [t for t in _run(pool, bars, stop_pct=0.02).trades if t["side"] == "SELL"][0]
+    sell2 = [t for t in _run(pool, bars, stop_pct=0.02).trades if t["side"] == "SELL"][
+        0
+    ]
     assert sell2["reason"] == "stop_loss:gap_open"
     assert sell2["price"] == pytest.approx(9.70)
+
+
+def test_csv_strategy_arg_is_required():
+    ap = argparse.ArgumentParser()
+    sim.add_csv_strategy_arg(ap)
+    with pytest.raises(SystemExit):
+        ap.parse_args([])
 
 
 def test_csv_strategy_version8_uses_shared_engine():
@@ -93,8 +105,10 @@ def test_csv_strategy_version8_uses_shared_engine():
     kw = sim.csv_run_kwargs_from_args(args)
     assert kw["strategy"] == "version8"
     hooks = sim.apply_csv_strategy(**kw)
-    assert hooks["stop_pct"] == pytest.approx(0.15)
+    assert hooks["stop_pct"] == pytest.approx(0.20)
     assert hooks["take_profit"] is not None
+    assert hooks["allow_add"] is True
+    assert hooks["book"] == "v8"
 
 
 def test_strategy6_ratio_args_parse():
@@ -106,7 +120,9 @@ def test_strategy6_ratio_args_parse():
     assert kw["tiers"] == {1: 0.30, 2: 0.40, 3: 0.50, 4: 0.60}
     assert kw["tier_default"] == pytest.approx(0.70)
     kw = sim.strategy6_kwargs_from_args(
-        ap.parse_args(["--stop-pct", "0.03", "--profit-base", "0.02", "--trail-t1", "0.6"])
+        ap.parse_args(
+            ["--stop-pct", "0.03", "--profit-base", "0.02", "--trail-t1", "0.6"]
+        )
     )
     assert kw["stop_pct"] == pytest.approx(0.03)
     assert kw["profit_base"] == pytest.approx(0.02)
@@ -246,6 +262,7 @@ def test_limit_up_close_skips_then_abandons_when_close_below_open():
     assert st.stats["skip_limit_up"] == 1
     assert st.stats["chase_abandon"] == 1
     assert st.stats["buys"] == 0
+    assert sim.chase_explained(st) == st.stats["skip_limit_up"]
 
 
 def test_limit_up_close_chases_when_close_above_open():
@@ -261,6 +278,7 @@ def test_limit_up_close_chases_when_close_above_open():
     st = _run({"20251103": ["600000.SH"]}, _bars(DAYS, rows))
     assert st.stats["skip_limit_up"] == 1
     assert st.stats["chase_buy"] == 1
+    assert sim.chase_explained(st) == st.stats["skip_limit_up"]
     buy = [t for t in st.trades if t["side"] == "BUY"][0]
     assert buy["date"] == "20251104"
     assert buy["reason"] == "chase:T+1"
@@ -282,6 +300,7 @@ def test_later_pool_day_still_buys_after_chase_abandon():
     assert st.stats["skip_limit_up"] == 1
     assert st.stats["chase_abandon"] == 1
     assert st.stats["buys"] == 1
+    assert sim.chase_explained(st) == st.stats["skip_limit_up"]
     buy = [t for t in st.trades if t["side"] == "BUY"][0]
     assert buy["date"] == "20251104"
     assert buy["reason"] == "pool"
@@ -385,6 +404,120 @@ def test_limit_up_skip_when_close_above_computed_limit():
     st = _run({"20251103": ["000592.SZ"]}, bars)
     assert st.stats["skip_limit_up"] == 1
     assert st.stats["buys"] == 0
+    assert sim.chase_explained(st) == st.stats["skip_limit_up"]
+
+
+def test_chase_pending_eod_on_last_calendar_day():
+    rows = {
+        "600000.SH": [
+            (10.0, 10.1, 9.9, 10.0),
+            (10.0, 10.1, 9.9, 10.0),
+            (10.0, 10.1, 9.9, 10.0),
+            (10.0, 10.1, 9.9, 10.0),
+            (10.5, 11.0, 10.5, 11.0),
+        ]
+    }
+    st = _run({"20251107": ["600000.SH"]}, _bars(DAYS, rows))
+    assert st.stats["skip_limit_up"] == 1
+    assert st.stats["chase_pending_eod"] == 1
+    assert st.stats["chase_buy"] == 0
+    assert st.stats["chase_abandon"] == 0
+    assert sim.chase_explained(st) == st.stats["skip_limit_up"]
+
+
+def test_chase_overwrite_same_day_duplicate_pool():
+    rows = {
+        "600000.SH": [
+            (10.5, 11.0, 10.5, 11.0),
+            (11.20, 11.30, 10.90, 11.05),
+            (11.0, 11.2, 10.8, 10.9),
+            (10.9, 11.0, 10.7, 10.8),
+            (10.8, 10.9, 10.6, 10.7),
+        ]
+    }
+    st = _run({"20251103": ["600000.SH", "600000.SH"]}, _bars(DAYS, rows))
+    assert st.stats["skip_limit_up"] == 2
+    assert st.stats["chase_overwrite"] == 1
+    assert st.stats["chase_abandon"] == 1
+    assert sim.chase_explained(st) == st.stats["skip_limit_up"]
+
+
+def test_chase_skip_limit_when_t1_still_limit_up():
+    rows = {
+        "600000.SH": [
+            (10.5, 11.0, 10.5, 11.0),
+            (12.00, 12.10, 11.80, 12.10),
+            (12.1, 12.2, 11.9, 12.0),
+            (12.0, 12.1, 11.8, 11.9),
+            (11.9, 12.0, 11.7, 11.8),
+        ]
+    }
+    st = _run({"20251103": ["600000.SH"]}, _bars(DAYS, rows))
+    assert st.stats["skip_limit_up"] == 1
+    assert st.stats["chase_skip_limit"] == 1
+    assert st.stats["buys"] == 0
+    assert sim.chase_explained(st) == st.stats["skip_limit_up"]
+
+
+def test_chase_no_bar_when_t1_missing():
+    rows = {
+        "600000.SH": [
+            (10.5, 11.0, 10.5, 11.0),
+            (11.20, 11.30, 10.90, 11.05),
+            (11.0, 11.2, 10.8, 10.9),
+            (10.9, 11.0, 10.7, 10.8),
+            (10.8, 10.9, 10.6, 10.7),
+        ],
+        "000001.SZ": [
+            (10.0, 10.1, 9.9, 10.0),
+            (10.0, 10.1, 9.9, 10.0),
+            (10.0, 10.1, 9.9, 10.0),
+            (10.0, 10.1, 9.9, 10.0),
+            (10.0, 10.1, 9.9, 10.0),
+        ],
+    }
+    bars = _bars(DAYS, rows)
+    bars["600000.SH"] = bars["600000.SH"].drop(pd.Timestamp("2025-11-04"))
+    st = _run({"20251103": ["600000.SH"]}, bars)
+    assert st.stats["skip_limit_up"] == 1
+    assert st.stats["chase_no_bar"] == 1
+    assert sim.chase_explained(st) == st.stats["skip_limit_up"]
+
+
+def test_chase_buy_fail_when_cash_short():
+    rows = {
+        "600000.SH": [
+            (10.5, 11.0, 10.5, 11.0),
+            (11.00, 11.40, 10.90, 11.20),
+            (11.2, 11.3, 11.0, 11.1),
+            (11.1, 11.2, 10.9, 11.0),
+            (11.0, 11.1, 10.8, 10.9),
+        ]
+    }
+    st = _run({"20251103": ["600000.SH"]}, _bars(DAYS, rows), total_cash=50.0)
+    assert st.stats["skip_limit_up"] == 1
+    assert st.stats["chase_buy_fail"] == 1
+    assert st.stats["chase_buy"] == 0
+    assert st.stats["buys"] == 0
+    assert sim.chase_explained(st) == st.stats["skip_limit_up"]
+
+
+def test_summarize_prints_chase_breakdown():
+    st = sim.SimState()
+    st.equity_curve = [("20251103", 21_000_000.0)]
+    st.stats["skip_limit_up"] = 10
+    st.stats["chase_buy"] = 3
+    st.stats["chase_abandon"] = 2
+    st.stats["chase_skip_limit"] = 1
+    st.stats["chase_no_bar"] = 1
+    st.stats["chase_pending_eod"] = 1
+    st.stats["chase_overwrite"] = 1
+    st.stats["chase_buy_fail"] = 1
+    text = sim.summarize(
+        st, 21_000_000.0, "20251103", "20251103", engine="csv_daily_v8"
+    )
+    assert "涨停分解:" in text
+    assert "合计 10 / 涨停跳过 10" in text
 
 
 def test_load_pool_days_reads_utf8_without_qmt_logger(tmp_path):
@@ -461,6 +594,8 @@ def test_find_daily_equity_prefers_covering_end(tmp_path):
     b.mkdir()
     (a / "daily_equity.csv").write_text("date,equity\n20251104,1\n", encoding="utf-8")
     (b / "daily_equity.csv").write_text("date,equity\n20260525,1\n", encoding="utf-8")
-    got = sim.find_daily_equity_csv("20251023", "20260525", output_root=tmp_path)
+    got = sim.find_daily_equity_csv(
+        "20251023", "20260525", output_root=tmp_path, book="v6"
+    )
     assert got is not None
     assert got.parent.name.endswith("20260909")

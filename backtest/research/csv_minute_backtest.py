@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""CSV 模式分钟向量化回测（策略 6 / 策略 8 共用引擎，绕开 Cerebro）。
+"""CSV 模式分钟向量化回测（共用买侧/资金引擎，卖点由策略书提供）。
 
 与日线近似版同一套 CSV 额度 / T+1 / 涨停跳过 / force_min / 0.1% 双边佣金。
 卖点按分钟路径扫描：峰值用 bar high，现价用 close；开盘已跌破止损则按开盘价
-成交。默认策略 6；`--strategy version8` 只换金榕元卖点。买入用 14:55 分钟收盘
+成交。必须 `--strategy version6|version8`，无缺省。买入用 14:55 分钟收盘
 （湖内时间为「中国交易时钟标成 UTC」——09:30 UTC = 09:30 CST）。
 
 用法：
-    python backtest/research/csv_minute_backtest.py --start 20251023 --end 20251104
+    python backtest/research/csv_minute_backtest.py --strategy version6 --start 20251023 --end 20251104
     python backtest/research/csv_minute_backtest.py --strategy version8 --start 20251023 --end 20260909
 """
 
@@ -34,13 +34,9 @@ from backtest.research.csv_daily_backtest import (  # noqa: E402
     CHASE_HM,
     DEFAULT_DAILY_QUOTA,
     DEFAULT_TOTAL_CASH,
-    HELP_LOCK_V8,
     MINUTE_LAKE_END,
     PEAK_GAP_MIN,
     POS_TRAIL,
-    PROFIT_BASE,
-    TIER_DEFAULT,
-    TIERS,
     SimState,
     add_csv_strategy_arg,
     add_strategy6_ratio_args,
@@ -49,7 +45,10 @@ from backtest.research.csv_daily_backtest import (  # noqa: E402
     csv_run_kwargs_from_args,
     engine_book,
     execute_buy,
-    record_strategy6_params,
+    finish_pending_chase,
+    queue_limit_up_chase,
+    help_lock_all,
+    help_lock_for,
     _limit_prices,
     hit_limit_down,
     peak_gap_blocks,
@@ -82,12 +81,11 @@ HELP_LOCK = """
   时钟：分钟湖 time 把 A 股会话钟点标成 UTC（09:30 UTC=开盘）。交易日=该 UTC 日期。
   买入：池 CSV 当日候选、14:55 收盘价；买价达到或超过涨停价 → 当日不买，
         记下额度。T+1 09:45 市价>当日开盘 → 09:45 收盘追买；否则弃买。一次机会。
+        已持再买或跳过由 --strategy 策略书决定。
   止损：D+1 起，开盘 ≤ 买入价×(1-stop) → 开盘成交；否则该分钟 close 触价 → close 成交。
-  止盈：基础锚 +1%。峰值用 bar high，现价用 close；仅峰值超过 +1% 后按
-        T+1=0.3 / T+2=0.4 / T+3=0.5 / T+4=0.6 / T+5+=0.7 回撤。开盘 < 锚先观察。
-        触价 bar 与创新高 bar 间隔不能 < 15 分钟（=15 允许；隔夜/午休 gap<0 视为满足）。
-        触发价 < 买入价不止盈。未过锚不止盈。盘中触线按该分钟 close 走。
-  比例：--stop-pct / --profit-base / --trail-t1..t5 可改。
+  止盈 / 峰值：见下方对应策略书。峰值用 bar high，现价用 close。
+        策略 6 触价 bar 与创新高 bar 间隔不能 < 15 分钟（=15 允许；隔夜/午休 gap<0 视为满足）。
+        盘中触线按该分钟 close 走。
   T+0：不可卖；峰值固定为买入价，14:55 之后的 high 不计入。峰值从 T+1 起算。
   资金 / T+1 / force_min / 佣金：与 csv_daily_backtest 相同。
   复权：买卖价、涨跌停、净值全程 dividend_type=none（与日线/Cerebro 对齐，
@@ -97,8 +95,8 @@ HELP_LOCK = """
         row group，磁盘还是整文件读，但 CPU 从「全历史转换」降到「窗口转换」。
   缓存：窗口分钟条写入 backtest_output/bar_cache/（E 盘，已 annotated）。默认
         命中直接读缓存；缺码再补湖并回写。--no-cache 跳过；--rebuild-cache 重做。
-  落盘：与日线同三件套；若已有同策略 csv_daily_{v6|v8}_{start}_* 净值，summary 末尾附对照。
-  策略：--strategy version6（默认）或 version8。同一引擎，只换卖点。
+  落盘：与日线同三件套；若已有同策略 csv_daily_{book}_{start}_* 净值，summary 末尾附对照。
+  策略：必须 --strategy version6 或 version8（无缺省）。共用引擎，策略书换卖点与加仓。
 """
 
 CACHE_ROOT = Path(REPO) / "backtest_output" / "bar_cache"
@@ -434,12 +432,12 @@ def scan_held_day(
         ret = px_close / cost - 1.0
         if ret <= -stop_pct:
             return i, px_close, "stop_loss:touch", new_peak, new_peak_hm
+        if new_peak_hm >= 0 and peak_gap_blocks(cur_hm - new_peak_hm, peak_gap_min):
+            continue
         if take_profit is not None:
             reason = take_profit(px_close, cost, new_peak, n_days)
             if reason:
                 return i, px_close, reason, new_peak, new_peak_hm
-            continue
-        if new_peak_hm >= 0 and peak_gap_blocks(cur_hm - new_peak_hm, peak_gap_min):
             continue
         if trail_hits(px_close, cost, new_peak, profit_base, trail_ratio):
             return i, px_close, f"trail:T+{max(1, n_days)}", new_peak, new_peak_hm
@@ -510,36 +508,34 @@ def simulate(
     total_cash: float = DEFAULT_TOTAL_CASH,
     daily_quota: float = DEFAULT_DAILY_QUOTA,
     stop_pct: Optional[float] = None,
-    profit_base: float = PROFIT_BASE,
+    profit_base: Optional[float] = None,
     tiers: Optional[dict] = None,
-    tier_default: float = TIER_DEFAULT,
+    tier_default: Optional[float] = None,
     pos_trail: float = POS_TRAIL,
-    strategy: str = "version6",
+    strategy: str,
     take_profit=None,
     record_params=None,
 ) -> SimState:
     hooks = apply_csv_strategy(
-        strategy, stop_pct=stop_pct, take_profit=take_profit, record_params=record_params
+        strategy,
+        stop_pct=stop_pct,
+        take_profit=take_profit,
+        record_params=record_params,
+        profit_base=profit_base,
+        tiers=tiers,
+        tier_default=tier_default,
     )
     stop_pct = hooks["stop_pct"]
     take_profit = hooks["take_profit"]
     record_params = hooks["record_params"]
-    tier_map = dict(tiers or TIERS)
+    peak_gap_min = int(hooks["peak_gap_min"])
     calendar = build_calendar(daily_bars, start, end)
 
     st = SimState(cash=float(total_cash))
-    if record_params is not None:
-        record_params(st)
-    else:
-        record_strategy6_params(
-            st,
-            stop_pct=stop_pct,
-            profit_base=profit_base,
-            tiers=tier_map,
-            tier_default=tier_default,
-        )
+    record_params(st)
     st.stats["bars_loaded"] = len(minute_bars)
     st.stats["pool_days"] = len(pool_days)
+    allow_add = bool(hooks["allow_add"])
     day_spans = {code: build_day_spans(df) for code, df in minute_bars.items()}
     pending_chase: dict[str, tuple[float, int]] = {}
 
@@ -548,7 +544,6 @@ def simulate(
         st.daily_quota_used = 0.0
 
         for code in list(st.positions):
-            pos = st.positions[code]
             mdf = minute_bars.get(code)
             ddf = daily_bars.get(code)
             if mdf is None or ddf is None or day not in ddf.index:
@@ -561,43 +556,46 @@ def simulate(
                 continue
             prev_close = float(prev_rows.iloc[-1]["close"])
             _, limit_down = _limit_prices(code, prev_close)
-            n_days = i - pos.entry_idx
             o = day_m["open"].to_numpy(np.float64)
             h = day_m["high"].to_numpy(np.float64)
             c = day_m["close"].to_numpy(np.float64)
             hm = day_m["hm"].to_numpy(np.int64)
-            idx, px, reason, new_peak, new_peak_hm = scan_held_day(
-                o,
-                h,
-                c,
-                cost=pos.cost,
-                peak=pos.peak,
-                n_days=n_days,
-                can_sell=(n_days >= 1),
-                stop_pct=stop_pct,
-                profit_base=profit_base,
-                trail_ratio=float(tier_map.get(n_days, tier_default)),
-                pos_trail=pos_trail,
-                limit_down=limit_down,
-                hm=hm,
-                peak_hm=int(pos.peak_hm),
-                take_profit=take_profit,
-            )
-            pos.peak = new_peak
-            pos.peak_hm = new_peak_hm
-            if idx >= 0:
-                if hit_limit_down(float(o[idx]), limit_down) and reason.startswith(
-                    "stop_loss"
-                ):
-                    st.stats["defer_sell_limit_down"] += 1
-                    continue
-                _sell(st, code, pos, px, day, reason)
+            for pos in list(st.positions.get(code, [])):
+                n_days = i - pos.entry_idx
+                idx, px, reason, new_peak, new_peak_hm = scan_held_day(
+                    o,
+                    h,
+                    c,
+                    cost=pos.cost,
+                    peak=pos.peak,
+                    n_days=n_days,
+                    can_sell=(n_days >= 1),
+                    stop_pct=stop_pct,
+                    profit_base=profit_base if profit_base is not None else 0.0,
+                    trail_ratio=0.0,
+                    pos_trail=pos_trail,
+                    limit_down=limit_down,
+                    hm=hm,
+                    peak_hm=int(pos.peak_hm),
+                    peak_gap_min=peak_gap_min,
+                    take_profit=take_profit,
+                )
+                pos.peak = new_peak
+                pos.peak_hm = new_peak_hm
+                if idx >= 0:
+                    if hit_limit_down(float(o[idx]), limit_down) and reason.startswith(
+                        "stop_loss"
+                    ):
+                        st.stats["defer_sell_limit_down"] += 1
+                        continue
+                    _sell(st, code, pos, px, day, reason)
 
         due = [c for c, (_per, sig) in pending_chase.items() if i == sig + 1]
         for code in due:
             per_ch, _sig = pending_chase.pop(code)
-            if code in st.positions:
+            if code in st.positions and not allow_add:
                 st.stats["skip_held"] += 1
+                st.stats["chase_skip_held"] += 1
                 continue
             mdf = minute_bars.get(code)
             ddf = daily_bars.get(code)
@@ -623,13 +621,14 @@ def simulate(
             if decision != "buy":
                 st.stats["chase_abandon"] += 1
                 continue
-            execute_buy(st, code, px, per_ch, i, day, reason="chase:T+1")
+            if not execute_buy(st, code, px, per_ch, i, day, reason="chase:T+1"):
+                st.stats["chase_buy_fail"] += 1
 
         planned = list(pool_days.get(ds, []))
         if planned:
             per = min(daily_quota, st.cash) / len(planned)
             for code in planned:
-                if code in st.positions:
+                if code in st.positions and not allow_add:
                     st.stats["skip_held"] += 1
                     continue
                 mdf = minute_bars.get(code)
@@ -652,40 +651,43 @@ def simulate(
                 prev_close = float(prev_rows.iloc[-1]["close"])
                 limit_up, _ = _limit_prices(code, prev_close)
                 if hit_limit_up(px, limit_up):
-                    st.stats["skip_limit_up"] += 1
-                    pending_chase[code] = (per, i)
+                    queue_limit_up_chase(st, pending_chase, code, per, i)
                     continue
                 execute_buy(st, code, px, per, i, day, reason="pool")
 
         eq = st.cash
-        for code, pos in st.positions.items():
+        for code, lots in st.positions.items():
             ddf = daily_bars.get(code)
-            if ddf is not None and day in ddf.index:
-                eq += pos.shares * float(ddf.loc[day]["close"])
-            else:
-                eq += pos.shares * pos.cost
+            for pos in lots:
+                if ddf is not None and day in ddf.index:
+                    eq += pos.shares * float(ddf.loc[day]["close"])
+                else:
+                    eq += pos.shares * pos.cost
         st.equity_curve.append((ds, eq))
 
         if day == calendar[-1] and st.positions:
-            for code, pos in st.positions.items():
+            for code, lots in st.positions.items():
                 ddf = daily_bars.get(code)
-                last = (
-                    float(ddf.loc[day]["close"])
-                    if ddf is not None and day in ddf.index
-                    else pos.cost
-                )
-                st.trades.append(
-                    {
-                        "date": ds,
-                        "code": code,
-                        "side": "EOD_MARK",
-                        "price": last,
-                        "shares": pos.shares,
-                        "notional": pos.shares * last,
-                        "commission": 0.0,
-                    }
-                )
+                for pos in lots:
+                    last = (
+                        float(ddf.loc[day]["close"])
+                        if ddf is not None and day in ddf.index
+                        else pos.cost
+                    )
+                    st.trades.append(
+                        {
+                            "date": ds,
+                            "code": code,
+                            "side": "EOD_MARK",
+                            "price": last,
+                            "shares": pos.shares,
+                            "notional": pos.shares * last,
+                            "commission": 0.0,
+                            "lot": pos.lot_id,
+                        }
+                    )
 
+    finish_pending_chase(st, pending_chase)
     return st
 
 
@@ -696,14 +698,14 @@ def run(
     total_cash: float = DEFAULT_TOTAL_CASH,
     daily_quota: float = DEFAULT_DAILY_QUOTA,
     stop_pct: Optional[float] = None,
-    profit_base: float = PROFIT_BASE,
+    profit_base: Optional[float] = None,
     tiers: Optional[dict] = None,
-    tier_default: float = TIER_DEFAULT,
+    tier_default: Optional[float] = None,
     pos_trail: float = POS_TRAIL,
     workers: int = 16,
     use_cache: bool = True,
     rebuild_cache: bool = False,
-    strategy: str = "version6",
+    strategy: str,
     take_profit=None,
     record_params=None,
 ) -> SimState:
@@ -774,8 +776,8 @@ def run(
 
 def main(argv: Optional[list] = None) -> int:
     ap = argparse.ArgumentParser(
-        description="CSV-mode vectorized minute backtest (version6 / version8)",
-        epilog=HELP_LOCK + HELP_LOCK_V8,
+        description="CSV-mode vectorized minute backtest (required --strategy)",
+        epilog=help_lock_all(HELP_LOCK),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     ap.add_argument("--start", default="20251023")
@@ -819,7 +821,7 @@ def main(argv: Optional[list] = None) -> int:
         Path(REPO) / "backtest_output" / tag,
         st,
         text,
-        HELP_LOCK + (HELP_LOCK_V8 if book == "v8" else ""),
+        help_lock_for(args.strategy, shared=HELP_LOCK),
     )
     return 0
 

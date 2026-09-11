@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""CSV 模式日线近似回测（策略 6 / 策略 8 共用向量化引擎）。
+"""CSV 模式日线近似回测（共用买侧/资金引擎，卖点由策略书提供）。
 
 完整滚动投资流程（分钟 Cerebro 链）的日线近似版：同口径的 CSV 每日买入名单、
-每日 100 万常规额度、补充资金、T+1、涨跌停拦截、全局 2100 万资金池。默认策略 6
-卖点；`--strategy version8` 只换金榕元卖点（见 HELP_LOCK）。数据用不复权日线
-（与分钟链 adjust_type='none' 对齐）；佣金 0.1% 双边（与 broker.setcommission
-(0.001) 对齐），无最低佣金。
+每日 100 万常规额度、补充资金、T+1、涨跌停拦截、全局 2100 万资金池。必须
+`--strategy version6|version8`，无缺省。数据用不复权日线（与分钟链
+adjust_type='none' 对齐）；佣金 0.1% 双边（与 broker.setcommission(0.001)
+对齐），无最低佣金。
 
 用法：
-    python backtest/research/csv_daily_backtest.py --start 20251023 --end 20260909
+    python backtest/research/csv_daily_backtest.py --strategy version6 --start 20251023 --end 20260909
     python backtest/research/csv_daily_backtest.py --strategy version8 --start 20251023 --end 20260909
 """
 
@@ -32,6 +32,42 @@ import pyarrow.parquet as pq
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, REPO)
 
+from backtest.research.csv_strategy_books import (  # noqa: E402
+    HELP_LOCK_V6,
+    HELP_LOCK_V8,
+    add_csv_strategy_arg,
+    add_strategy6_ratio_args,
+    apply_csv_strategy,
+    csv_run_kwargs_from_args,
+    engine_book,
+    help_lock_all,
+    help_lock_for as _help_lock_for,
+    normalize_csv_strategy,
+    strategy6_kwargs_from_args,
+)
+from backtest.research.strategy6_rules import (  # noqa: E402
+    POS_TRAIL,
+    PROFIT_BASE,
+    STOP_PCT,
+    TIER_DEFAULT,
+    TIERS,
+    record_strategy6_params,
+    trail_hits,
+)
+
+# 测试与分钟引擎仍从本模块引用策略书/策略6符号。
+_ = (
+    HELP_LOCK_V6,
+    HELP_LOCK_V8,
+    normalize_csv_strategy,
+    strategy6_kwargs_from_args,
+    PROFIT_BASE,
+    STOP_PCT,
+    TIER_DEFAULT,
+    TIERS,
+    record_strategy6_params,
+    trail_hits,
+)
 from backtest.research.ma_chip_edge_backtest import limit_pct  # noqa: E402
 from common.infra.data_root import resolve_period_root  # noqa: E402
 from common.infra.qmt_utils_adv import batch_format_stock_codes  # noqa: E402
@@ -40,12 +76,7 @@ from oskh_data.symbol_format import to_partition_key  # noqa: E402
 DEFAULT_TOTAL_CASH = 21_000_000.0
 DEFAULT_DAILY_QUOTA = 1_000_000.0
 COMMISSION = 0.001  # 双边，与分钟链 cerebro.broker.setcommission(commission=0.001) 对齐
-STOP_PCT = 0.06
-PROFIT_BASE = 0.01
-TIERS = {1: 0.30, 2: 0.40, 3: 0.50, 4: 0.60}
-TIER_DEFAULT = 0.70
-POS_TRAIL = 0.50  # 已停用：策略6不再做未过锚的正利润回撤
-PEAK_GAP_MIN = 15  # 止盈与最高价间隔不能 < 15 分钟（分钟引擎执行；=15 允许）
+PEAK_GAP_MIN = 15  # 分钟扫描默认间隔；策略书可覆盖为 0
 CHASE_HM = 9 * 60 + 45  # 尾盘涨停后次日 09:45 追买/弃买
 LIMIT_EPS = 0.001  # 涨跌停等值判定；须远小于 1 分，避免把普通价误判为涨停
 WARMUP_DAYS = 10
@@ -62,17 +93,13 @@ _PERIOD_ENV_KEYS = (
 HELP_LOCK = """
 日线近似口径（相对分钟保真版的唯一失真来源）：
   买入：池 CSV 当日候选、收盘价成交（分钟版 14:55≈收盘）；买价达到或超过
-        涨停价 → 当日不买，记下该票额度，次日按追买规则处理。已持有则跳过。
+        涨停价 → 当日不买，记下该票额度，次日按追买规则处理。
+        已持再买或跳过由 --strategy 策略书决定。
         常规额度按当日池 CSV 全部名单均分（含随后被跳过的票）。
   止损：D+1 起，触发价 = 买入价×(1-stop)。开盘 ≤ 触发价 → 开盘价成交（跳空）；
         否则日内 low 触价 → 触发价成交。卖出日开盘跌停 → 顺延下一交易日。
-  止盈：基础锚 +1%。仅当峰值超过买入价×1.01 后评估
-        （开盘 < 锚则先观察，涨过锚再按档；开盘 ≥ 锚则当日起按档）。
-        公式 (市价/买价-1.01)/(峰值/买价-1.01) ≤
-        T+1=0.3 / T+2=0.4 / T+3=0.5 / T+4=0.6 / T+5+=0.7。
-        触发价 < 买入价不止盈。未过 +1% 锚不止盈。收盘评估、次日开盘离场
-        （隔夜间隔已 ≥ 15 分钟）。
-  峰值：从 T+1 起用当日 high 更新；T+0 固定为买入价。T+0 不评估止盈。
+  止盈 / 峰值：见下方对应策略书。峰值从 T+1 起用当日 high 更新；T+0 固定为买入价。
+        日线收盘评估、次日开盘离场（隔夜间隔已 ≥ 15 分钟）。
   买侧：尾盘涨停不买。T+1 用收盘>开盘近似分钟 09:45 市价>开盘 → 收盘追买；
         否则弃买。只给一次机会，不再延期。成交价用收盘（相对 09:45 的失真）。
   资金：2100 万全局池；每日 100 万常规额度；不足 100 股用补充资金补足
@@ -80,19 +107,15 @@ HELP_LOCK = """
   T+1：买入日不可卖；期末持仓按最后收盘估值（eod_mark）。
   窗口：--end 是估值/离场末日。买入只发生在 stock_pool/ 有 CSV 的交易日
         （缺日不买）。分钟湖若短于 --end，用日线版接到今天。
-  落盘：backtest_output/csv_daily_v6_{start}_{end}/ 三件套 summary.txt、
+  落盘：backtest_output/csv_daily_{book}_{start}_{end}/ 三件套 summary.txt、
         daily_equity.csv、trades.csv（与分钟版同结构）。
   环境：勿残留 OSKH_PERIOD_* ；有 F:\\stock_data\\.authority 时跟权威盘。
-  比例：--stop-pct / --profit-base / --trail-t1..t5 可改，不必改代码。
-  策略：--strategy version6（默认）或 version8。同一引擎，只换卖点。
+  策略：必须 --strategy version6 或 version8（无缺省）。共用引擎，策略书换卖点与加仓。
 """
 
-HELP_LOCK_V8 = """
-策略 8 卖点（--strategy version8，买侧/资金/T+1 同上）：
-  止损 15 个点。止盈：峰值涨幅须 > 20% 后按绝对涨幅分档回撤到
-        20/30/50/70/90/110；涨幅 > 50% 且现价 <= 最高价×80% 也止盈。
-  落盘：backtest_output/csv_{daily|minute}_v8_{start}_{end}/
-"""
+
+def help_lock_for(strategy: str, *, shared: str = HELP_LOCK) -> str:
+    return _help_lock_for(strategy, shared=shared)
 
 
 @dataclass
@@ -103,6 +126,8 @@ class Position:
     entry_idx: int  # 全局日历下标
     peak: float  # 持仓期最高价（起始=买入价；T+1 起用每日 high 更新）
     peak_hm: int = -1  # 峰值所在分钟 hm；跨日为负间隔，分钟止盈用
+    lot_id: int = 0  # 同码多笔：各自成本/峰值
+    pending_exit: str = ""  # 日线止盈：次日开盘离场原因
 
 
 @dataclass
@@ -121,7 +146,12 @@ class SimState:
             "chase_abandon": 0,
             "chase_skip_limit": 0,
             "chase_no_bar": 0,
+            "chase_overwrite": 0,
+            "chase_buy_fail": 0,
+            "chase_pending_eod": 0,
+            "chase_skip_held": 0,
             "skip_held": 0,
+            "add_lots": 0,
             "skip_no_bar": 0,
             "sell_stop": 0,
             "sell_trail": 0,
@@ -135,175 +165,6 @@ class SimState:
     )
 
 
-def normalize_csv_strategy(strategy: str) -> str:
-    raw = (strategy or "version6").strip().lower()
-    aliases = {
-        "6": "version6",
-        "v6": "version6",
-        "version6": "version6",
-        "8": "version8",
-        "v8": "version8",
-        "version8": "version8",
-    }
-    if raw not in aliases:
-        raise ValueError(
-            f"unsupported csv strategy {strategy!r}; use version6 or version8"
-        )
-    return aliases[raw]
-
-
-def apply_csv_strategy(
-    strategy: str = "version6",
-    *,
-    stop_pct: Optional[float] = None,
-    take_profit=None,
-    record_params=None,
-) -> dict:
-    """同一引擎上的卖点挂钩。version8 默认止损 15%、金榕元分档。"""
-    name = normalize_csv_strategy(strategy)
-    if name == "version8":
-        from backtest.research.strategy8_rules import (
-            STOP_PCT as V8_STOP,
-            record_strategy8_params,
-            take_profit_reason,
-        )
-
-        resolved = V8_STOP if stop_pct is None else float(stop_pct)
-        return {
-            "stop_pct": resolved,
-            "take_profit": take_profit_reason if take_profit is None else take_profit,
-            "record_params": (
-                record_params
-                if record_params is not None
-                else (lambda st: record_strategy8_params(st, stop_pct=resolved))
-            ),
-        }
-    return {
-        "stop_pct": STOP_PCT if stop_pct is None else float(stop_pct),
-        "take_profit": take_profit,
-        "record_params": record_params,
-    }
-
-
-def add_csv_strategy_arg(ap: argparse.ArgumentParser) -> None:
-    ap.add_argument(
-        "--strategy",
-        choices=("version6", "version8"),
-        default="version6",
-        help="sell book on the shared CSV engine (default version6)",
-    )
-
-
-def engine_book(strategy: str) -> str:
-    return "v8" if normalize_csv_strategy(strategy) == "version8" else "v6"
-
-
-def help_lock_for(strategy: str) -> str:
-    if normalize_csv_strategy(strategy) == "version8":
-        return HELP_LOCK + HELP_LOCK_V8
-    return HELP_LOCK
-
-
-def add_strategy6_ratio_args(ap: argparse.ArgumentParser) -> None:
-    """止损 / 锚 / 分档回撤：改比例走命令行，不必改常量。"""
-    ap.add_argument(
-        "--stop-pct",
-        type=float,
-        default=None,
-        help="stop-loss fraction (version6 default 0.06, version8 default 0.15)",
-    )
-    ap.add_argument(
-        "--profit-base",
-        type=float,
-        default=PROFIT_BASE,
-        help=f"take-profit anchor fraction (default {PROFIT_BASE:g})",
-    )
-    ap.add_argument(
-        "--trail-t1",
-        type=float,
-        default=TIERS[1],
-        help=f"T+1 retain ratio of peak excess (default {TIERS[1]:g})",
-    )
-    ap.add_argument(
-        "--trail-t2",
-        type=float,
-        default=TIERS[2],
-        help=f"T+2 retain ratio (default {TIERS[2]:g})",
-    )
-    ap.add_argument(
-        "--trail-t3",
-        type=float,
-        default=TIERS[3],
-        help=f"T+3 retain ratio (default {TIERS[3]:g})",
-    )
-    ap.add_argument(
-        "--trail-t4",
-        type=float,
-        default=TIERS[4],
-        help=f"T+4 retain ratio (default {TIERS[4]:g})",
-    )
-    ap.add_argument(
-        "--trail-t5",
-        type=float,
-        default=TIER_DEFAULT,
-        help=f"T+5+ retain ratio (default {TIER_DEFAULT:g})",
-    )
-
-
-def strategy6_kwargs_from_args(args) -> dict:
-    stop_pct = STOP_PCT if args.stop_pct is None else float(args.stop_pct)
-    profit_base = float(args.profit_base)
-    t1 = float(args.trail_t1)
-    t2 = float(args.trail_t2)
-    t3 = float(args.trail_t3)
-    t4 = float(args.trail_t4)
-    t5 = float(args.trail_t5)
-    for name, val in (
-        ("--stop-pct", stop_pct),
-        ("--profit-base", profit_base),
-        ("--trail-t1", t1),
-        ("--trail-t2", t2),
-        ("--trail-t3", t3),
-        ("--trail-t4", t4),
-        ("--trail-t5", t5),
-    ):
-        if not 0 < val < 1:
-            raise SystemExit(f"{name} must be in (0, 1), got {val}")
-    return {
-        "stop_pct": stop_pct,
-        "profit_base": profit_base,
-        "tiers": {1: t1, 2: t2, 3: t3, 4: t4},
-        "tier_default": t5,
-    }
-
-
-def csv_run_kwargs_from_args(args) -> dict:
-    name = normalize_csv_strategy(getattr(args, "strategy", "version6"))
-    if name == "version8":
-        stop = args.stop_pct
-        if stop is not None and not 0 < float(stop) < 1:
-            raise SystemExit(f"--stop-pct must be in (0, 1), got {stop}")
-        return {"strategy": "version8", "stop_pct": stop}
-    return {"strategy": "version6", **strategy6_kwargs_from_args(args)}
-
-
-def record_strategy6_params(
-    st: SimState,
-    *,
-    stop_pct: float,
-    profit_base: float,
-    tiers: dict,
-    tier_default: float,
-) -> None:
-    st.stats["stop_pct"] = float(stop_pct)
-    st.stats["profit_base"] = float(profit_base)
-    st.stats["trail_t1"] = float(tiers.get(1, TIERS[1]))
-    st.stats["trail_t2"] = float(tiers.get(2, TIERS[2]))
-    st.stats["trail_t3"] = float(tiers.get(3, TIERS[3]))
-    st.stats["trail_t4"] = float(tiers.get(4, TIERS[4]))
-    st.stats["trail_t5"] = float(tier_default)
-
-
 def chase_decision(open_px: float, px: float, limit_up: float) -> str:
     """T+1 09:45：市价>开盘且非涨停 → buy；否则 abandon / limit。"""
     if hit_limit_up(px, limit_up):
@@ -311,6 +172,32 @@ def chase_decision(open_px: float, px: float, limit_up: float) -> str:
     if px > open_px:
         return "buy"
     return "abandon"
+
+
+def queue_limit_up_chase(st: SimState, pending_chase: dict, code: str, per: float, sig_idx: int) -> None:
+    st.stats["skip_limit_up"] += 1
+    if code in pending_chase:
+        st.stats["chase_overwrite"] += 1
+    pending_chase[code] = (per, sig_idx)
+
+
+def finish_pending_chase(st: SimState, pending_chase: dict) -> None:
+    st.stats["chase_pending_eod"] = len(pending_chase)
+    st.stats["chase_explained"] = chase_explained(st)
+
+
+def chase_explained(st: SimState) -> int:
+    """涨停跳过应对齐的追买分解合计。"""
+    return (
+        int(st.stats.get("chase_buy", 0))
+        + int(st.stats.get("chase_abandon", 0))
+        + int(st.stats.get("chase_skip_limit", 0))
+        + int(st.stats.get("chase_no_bar", 0))
+        + int(st.stats.get("chase_pending_eod", 0))
+        + int(st.stats.get("chase_overwrite", 0))
+        + int(st.stats.get("chase_buy_fail", 0))
+        + int(st.stats.get("chase_skip_held", 0))
+    )
 
 
 def _ymd(ts) -> str:
@@ -378,24 +265,6 @@ def hit_limit_down(price: float, limit_down: float) -> bool:
 def peak_gap_blocks(gap, peak_gap_min: int = PEAK_GAP_MIN) -> bool:
     """同会话分钟差 < 15 则挡住止盈；隔夜/午休 gap<0 视为满足。"""
     return 0 <= int(gap) < int(peak_gap_min)
-
-
-def trail_hits(
-    px: float,
-    cost: float,
-    peak: float,
-    profit_base: float,
-    ratio: float,
-) -> bool:
-    """锚定回撤是否触发。触发价 < 买入价不执行止盈。"""
-    if float(px) < float(cost):
-        return False
-    peak_excess = float(peak) / float(cost) - 1.0 - float(profit_base)
-    if peak_excess <= 0:
-        return False
-    return (
-        float(px) / float(cost) - 1.0 - float(profit_base) <= float(ratio) * peak_excess
-    )
 
 
 def round_fen(price: float) -> float:
@@ -504,42 +373,38 @@ def simulate(
     total_cash: float = DEFAULT_TOTAL_CASH,
     daily_quota: float = DEFAULT_DAILY_QUOTA,
     stop_pct: Optional[float] = None,
-    profit_base: float = PROFIT_BASE,
+    profit_base: Optional[float] = None,
     tiers: Optional[dict] = None,
-    tier_default: float = TIER_DEFAULT,
+    tier_default: Optional[float] = None,
     pos_trail: float = POS_TRAIL,
-    strategy: str = "version6",
+    strategy: str,
     take_profit=None,
     record_params=None,
 ) -> SimState:
     """核心日循环。bars/pool_days 可由测试注入；run() 负责从湖与 CSV 加载。
 
-    strategy=version8 换金榕元卖点；take_profit(...) 仍可显式覆盖。
+    strategy 必填（version6 / version8）；take_profit(...) 仍可显式覆盖。
     """
     del pos_trail
     hooks = apply_csv_strategy(
-        strategy, stop_pct=stop_pct, take_profit=take_profit, record_params=record_params
+        strategy,
+        stop_pct=stop_pct,
+        take_profit=take_profit,
+        record_params=record_params,
+        profit_base=profit_base,
+        tiers=tiers,
+        tier_default=tier_default,
     )
     stop_pct = hooks["stop_pct"]
     take_profit = hooks["take_profit"]
     record_params = hooks["record_params"]
-    tier_map = dict(tiers or TIERS)
     calendar = build_calendar(bars, start, end)
 
     st = SimState(cash=float(total_cash))
-    if record_params is not None:
-        record_params(st)
-    else:
-        record_strategy6_params(
-            st,
-            stop_pct=stop_pct,
-            profit_base=profit_base,
-            tiers=tier_map,
-            tier_default=tier_default,
-        )
+    record_params(st)
     st.stats["bars_loaded"] = len(bars)
     st.stats["pool_days"] = len(pool_days)
-    pending_exit: dict[str, str] = {}  # code -> 原因（次日开盘离场）
+    allow_add = bool(hooks["allow_add"])
     pending_chase: dict[str, tuple[float, int]] = {}  # code -> (per, signal_idx)
 
     for i, day in enumerate(calendar):
@@ -547,7 +412,6 @@ def simulate(
         st.daily_quota_used = 0.0  # 每个交易日开盘重置常规额度
 
         for code in list(st.positions):
-            pos = st.positions[code]
             if code not in bars or day not in bars[code].index:
                 continue
             row = bars[code].loc[day]
@@ -556,47 +420,47 @@ def simulate(
                 continue
             prev_close = float(prev_rows.iloc[-1]["close"])
             _, limit_down = _limit_prices(code, prev_close)
-            n_days = i - pos.entry_idx  # 持仓交易日数（买入日=0）
+            for pos in list(st.positions.get(code, [])):
+                n_days = i - pos.entry_idx  # 持仓交易日数（买入日=0）
 
-            if code in pending_exit and n_days >= 1:
-                if hit_limit_down(float(row["open"]), limit_down):
-                    st.stats["defer_sell_limit_down"] += 1
-                else:
-                    _sell(
-                        st, code, pos, float(row["open"]), day, pending_exit.pop(code)
-                    )
-                continue
-
-            if n_days >= 1:
-                trigger = pos.cost * (1.0 - stop_pct)
-                if float(row["open"]) <= trigger:
+                if pos.pending_exit and n_days >= 1:
                     if hit_limit_down(float(row["open"]), limit_down):
                         st.stats["defer_sell_limit_down"] += 1
                     else:
-                        _sell(
-                            st, code, pos, float(row["open"]), day, "stop_loss:gap_open"
-                        )
-                    continue
-                if float(row["low"]) <= trigger:
-                    _sell(st, code, pos, trigger, day, "stop_loss:touch")
+                        _sell(st, code, pos, float(row["open"]), day, pos.pending_exit)
                     continue
 
-                pos.peak = max(pos.peak, float(row["high"]))
-                close = float(row["close"])
-                if take_profit is not None:
+                if n_days >= 1:
+                    trigger = pos.cost * (1.0 - stop_pct)
+                    if float(row["open"]) <= trigger:
+                        if hit_limit_down(float(row["open"]), limit_down):
+                            st.stats["defer_sell_limit_down"] += 1
+                        else:
+                            _sell(
+                                st,
+                                code,
+                                pos,
+                                float(row["open"]),
+                                day,
+                                "stop_loss:gap_open",
+                            )
+                        continue
+                    if float(row["low"]) <= trigger:
+                        _sell(st, code, pos, trigger, day, "stop_loss:touch")
+                        continue
+
+                    pos.peak = max(pos.peak, float(row["high"]))
+                    close = float(row["close"])
                     reason = take_profit(close, pos.cost, pos.peak, n_days)
                     if reason:
-                        pending_exit[code] = reason
-                else:
-                    ratio = float(tier_map.get(n_days, tier_default))
-                    if trail_hits(close, pos.cost, pos.peak, profit_base, ratio):
-                        pending_exit[code] = f"trail:T+{n_days}"
+                        pos.pending_exit = reason
 
         due = [c for c, (_per, sig) in pending_chase.items() if i == sig + 1]
         for code in due:
             per_ch, _sig = pending_chase.pop(code)
-            if code in st.positions:
+            if code in st.positions and not allow_add:
                 st.stats["skip_held"] += 1
+                st.stats["chase_skip_held"] += 1
                 continue
             if code not in bars or day not in bars[code].index:
                 st.stats["chase_no_bar"] += 1
@@ -618,14 +482,15 @@ def simulate(
             if decision != "buy":
                 st.stats["chase_abandon"] += 1
                 continue
-            execute_buy(st, code, close_px, per_ch, i, day, reason="chase:T+1")
+            if not execute_buy(st, code, close_px, per_ch, i, day, reason="chase:T+1"):
+                st.stats["chase_buy_fail"] += 1
 
         planned = list(pool_days.get(ds, []))
         if planned:
             n_plan = len(planned)
             per = min(daily_quota, st.cash) / n_plan
             for code in planned:
-                if code in st.positions:
+                if code in st.positions and not allow_add:
                     st.stats["skip_held"] += 1
                     continue
                 if code not in bars or day not in bars[code].index:
@@ -640,40 +505,43 @@ def simulate(
                 limit_up, _ = _limit_prices(code, prev_close)
                 close = float(df_c.loc[day]["close"])
                 if hit_limit_up(close, limit_up):
-                    st.stats["skip_limit_up"] += 1
-                    pending_chase[code] = (per, i)
+                    queue_limit_up_chase(st, pending_chase, code, per, i)
                     continue
                 execute_buy(st, code, close, per, i, day, reason="pool")
 
         eq = st.cash
-        for code, pos in st.positions.items():
+        for code, lots in st.positions.items():
             df_c = bars.get(code)
-            if df_c is not None and day in df_c.index:
-                eq += pos.shares * float(df_c.loc[day]["close"])
-            else:
-                eq += pos.shares * pos.cost
+            for pos in lots:
+                if df_c is not None and day in df_c.index:
+                    eq += pos.shares * float(df_c.loc[day]["close"])
+                else:
+                    eq += pos.shares * pos.cost
         st.equity_curve.append((ds, eq))
 
         if day == calendar[-1] and st.positions:
-            for code, pos in st.positions.items():
+            for code, lots in st.positions.items():
                 df_c = bars.get(code)
-                last = (
-                    float(df_c.loc[day]["close"])
-                    if df_c is not None and day in df_c.index
-                    else pos.cost
-                )
-                st.trades.append(
-                    {
-                        "date": ds,
-                        "code": code,
-                        "side": "EOD_MARK",
-                        "price": last,
-                        "shares": pos.shares,
-                        "notional": pos.shares * last,
-                        "commission": 0.0,
-                    }
-                )
+                for pos in lots:
+                    last = (
+                        float(df_c.loc[day]["close"])
+                        if df_c is not None and day in df_c.index
+                        else pos.cost
+                    )
+                    st.trades.append(
+                        {
+                            "date": ds,
+                            "code": code,
+                            "side": "EOD_MARK",
+                            "price": last,
+                            "shares": pos.shares,
+                            "notional": pos.shares * last,
+                            "commission": 0.0,
+                            "lot": pos.lot_id,
+                        }
+                    )
 
+    finish_pending_chase(st, pending_chase)
     return st
 
 
@@ -684,12 +552,12 @@ def run(
     total_cash: float = DEFAULT_TOTAL_CASH,
     daily_quota: float = DEFAULT_DAILY_QUOTA,
     stop_pct: Optional[float] = None,
-    profit_base: float = PROFIT_BASE,
+    profit_base: Optional[float] = None,
     tiers: Optional[dict] = None,
-    tier_default: float = TIER_DEFAULT,
+    tier_default: Optional[float] = None,
     pos_trail: float = POS_TRAIL,
     workers: int = 16,
-    strategy: str = "version6",
+    strategy: str,
     take_profit=None,
     record_params=None,
 ) -> SimState:
@@ -774,7 +642,9 @@ def execute_buy(
     st.daily_quota_used += min(per, notional)
     st.stats["supplementary_used"] += supp
     st.stats["invested_notional"] += notional
-    st.positions[code] = Position(code, shares, px, entry_idx, px)
+    lots = st.positions.setdefault(code, [])
+    lot_id = lots[-1].lot_id + 1 if lots else 0
+    lots.append(Position(code, shares, px, entry_idx, px, lot_id=lot_id))
     st.trades.append(
         {
             "date": _ymd(day),
@@ -785,9 +655,12 @@ def execute_buy(
             "notional": notional,
             "commission": comm,
             "reason": reason,
+            "lot": lot_id,
         }
     )
     st.stats["buys"] += 1
+    if lot_id > 0:
+        st.stats["add_lots"] += 1
     if reason.startswith("chase"):
         st.stats["chase_buy"] += 1
     return True
@@ -807,6 +680,7 @@ def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str) -
             "notional": notional,
             "commission": comm,
             "reason": reason,
+            "lot": pos.lot_id,
         }
     )
     if reason.startswith("stop_loss"):
@@ -815,7 +689,10 @@ def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str) -
         st.stats["sell_trail"] += 1
     else:
         st.stats["sell_pos_trail"] += 1
-    del st.positions[code]
+    lots = st.positions.get(code) or []
+    st.positions[code] = [p for p in lots if p is not pos]
+    if not st.positions[code]:
+        del st.positions[code]
 
 
 def summarize(
@@ -843,11 +720,14 @@ def summarize(
     ]
     if st.stats.get("sell_book") == "v8":
         lines.append(
-            f"  参数: 止损 {st.stats['stop_pct']:.0%} | 基础止盈 "
+            f"  参数: 止损 {st.stats['stop_pct']:.0%} | "
+            f"{st.stats.get('small_arm', 0.06):.0%}≤涨幅≤"
+            f"{st.stats['profit_base']:.0%} 回撤到+"
+            f"{st.stats.get('small_floor', 0.02):.0%} | 基础止盈 "
             f"{st.stats['profit_base']:.0%} | 涨幅>{st.stats['peak_dd_arm']:.0%} 时 "
             f"最高价回撤 {st.stats['peak_dd_pct']:.0%}"
         )
-    elif "stop_pct" in st.stats:
+    elif st.stats.get("sell_book") == "v6" or "trail_t1" in st.stats:
         lines.append(
             f"  参数: 止损 {st.stats['stop_pct']:.0%} | 锚 {st.stats['profit_base']:.0%} | "
             f"回撤 T+1 {st.stats['trail_t1']:.0%} / T+2 {st.stats['trail_t2']:.0%} / "
@@ -858,7 +738,16 @@ def summarize(
         [
             f"  买入 {st.stats['buys']} | 涨停跳过 {st.stats['skip_limit_up']} | "
             f"追买 {st.stats.get('chase_buy', 0)} | 弃买 {st.stats.get('chase_abandon', 0)} | "
-            f"已持跳过 {st.stats['skip_held']}",
+            f"已持跳过 {st.stats['skip_held']} | 加仓 {st.stats.get('add_lots', 0)}",
+            f"  涨停分解: 追买 {st.stats.get('chase_buy', 0)} | "
+            f"弃买 {st.stats.get('chase_abandon', 0)} | "
+            f"追买日仍涨停 {st.stats.get('chase_skip_limit', 0)} | "
+            f"缺行情 {st.stats.get('chase_no_bar', 0)} | "
+            f"末日未追 {st.stats.get('chase_pending_eod', 0)} | "
+            f"覆盖 {st.stats.get('chase_overwrite', 0)} | "
+            f"买失败 {st.stats.get('chase_buy_fail', 0)} | "
+            f"追买已持跳过 {st.stats.get('chase_skip_held', 0)} | "
+            f"合计 {chase_explained(st)} / 涨停跳过 {st.stats['skip_limit_up']}",
             f"  卖出: 止损 {st.stats['sell_stop']} | 锚定回撤 {st.stats['sell_trail']} | 正利润回撤 {st.stats['sell_pos_trail']}",
             f"  跌停顺延卖出 {st.stats['defer_sell_limit_down']} | 补充资金 {st.stats['supplementary_used']:,.0f}",
             f"  日线加载 {st.stats['bars_loaded']} | 池天数 {st.stats['pool_days']}",
@@ -906,7 +795,7 @@ def find_daily_equity_csv(
     end: str,
     output_root: Optional[Path] = None,
     *,
-    book: str = "v6",
+    book: str,
 ) -> Optional[Path]:
     root = (
         Path(output_root) if output_root is not None else Path(REPO) / "backtest_output"
@@ -980,8 +869,8 @@ def maybe_compare_daily(
     output_root: Optional[Path] = None,
     book: Optional[str] = None,
 ) -> str:
-    if book is None:
-        book = "v8" if "v8" in this_label else "v6"
+    if not book:
+        return ""
     peer = find_daily_equity_csv(start, end, output_root, book=book)
     if peer is None:
         return ""
@@ -993,8 +882,8 @@ def maybe_compare_daily(
 
 def main(argv: Optional[list] = None) -> int:
     ap = argparse.ArgumentParser(
-        description="CSV-mode daily-bar backtest (version6 / version8)",
-        epilog=HELP_LOCK + HELP_LOCK_V8,
+        description="CSV-mode daily-bar backtest (required --strategy)",
+        epilog=help_lock_all(HELP_LOCK),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     ap.add_argument("--start", default="20251023")
