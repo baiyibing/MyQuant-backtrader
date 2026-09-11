@@ -27,10 +27,14 @@ from backtest.research.strategy7_rules import (
     SEVEN_NORMAL,
     THREE_AFTER_CHOP,
     TRIAL,
+    build_index_gate,
     ladder_decision,
     stop_decision,
+    timer_due,
+    validate_index_symbol,
 )
-from common.infra.data_root import resolve_period_root
+from common.infra.data_root import resolve_index_daily_root, resolve_period_root
+from oskh_data.lake_kind import classify_daily_lake_kind
 from oskh_data.symbol_format import to_canonical_symbol, to_partition_key
 
 
@@ -230,13 +234,16 @@ def _sell_lots(state: SimResult, position: Position, day: date, hm: int, price: 
 def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Sequence[str]] | None,
                 index_days: Any = None, *, cash_total: float = 21_000_000.0,
                 start: Any = None, end: Any = None) -> SimResult:
-    """Run Slice-B/C matching. ``index_days`` supplies the calendar, not a live gate."""
+    """Run the matcher; an index date->close mapping enables the new-open gate."""
     minutes = _minute_records(minute_bars)
     closes = _daily_closes(daily_bars)
     pools = _pool(pool_days)
     state = SimResult(float(cash_total))
+    gate: dict[date, bool] = {}
     if isinstance(index_days, Mapping):
-        calendar = sorted(_as_date(day) for day in index_days)
+        index_closes = {_as_date(day): float(close) for day, close in index_days.items()}
+        gate = build_index_gate(index_closes)
+        calendar = sorted(gate)
     elif index_days:
         calendar = sorted(_as_date(day) for day in index_days)
     else:
@@ -245,9 +252,12 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
         calendar = [day for day in calendar if day >= _as_date(start)]
     if end is not None:
         calendar = [day for day in calendar if day <= _as_date(end)]
+    if isinstance(index_days, Mapping) and any(day not in gate for day in calendar):
+        raise ValueError("index closes lack the required 11-session gate warmup")
 
     last_prices: dict[str, float] = {}
     for day in calendar:
+        cleared_today: set[str] = set()
         symbols_today = minutes.get(day, {})
         ordered = list(dict.fromkeys(pools.get(day, []) + list(state.positions) + list(symbols_today)))
         for symbol in ordered:
@@ -269,6 +279,17 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
                 last_prices[symbol] = close_px
                 position = state.positions.get(symbol)
                 if position is not None:
+                    if (first and position.last_add_date is not None
+                            and timer_due(calendar, position.last_add_date, day, position.stage)):
+                        if limits is not None and open_px <= limits[1]:
+                            _event(state, day, symbol, hm, "defer", 0, open_px, "defer_limit_down")
+                        elif _sell_lots(state, position, day, hm, open_px, "exit:timer5"):
+                            if symbol not in state.positions:
+                                cleared_today.add(symbol)
+                        position = state.positions.get(symbol)
+                    if position is None:
+                        first = False
+                        continue
                     position.peak = max(position.peak, high_px)
                     decision = stop_decision(position.stage, entry_a=position.entry_A,
                                              average_cost=position.avg_cost,
@@ -287,6 +308,8 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
                         else:
                             reason = "stop:trial_a096" if decision.action == "dump_trial" else "stop:nine_avg101"
                             _sell_lots(state, position, day, hm, check_px, reason)
+                    if symbol not in state.positions:
+                        cleared_today.add(symbol)
                     position = state.positions.get(symbol)
                     if position is not None:
                         ladder = ladder_decision(position.stage, close_px, entry_a=position.entry_A,
@@ -307,9 +330,12 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
                                     position.stage = NINE
                                 elif ladder.action == "readd_a1_104":
                                     position.stage = SEVEN_AFTER_READD
-                if hm == 895 and symbol in pools.get(day, []) and symbol not in state.positions:
+                if (hm == 895 and symbol in pools.get(day, []) and symbol not in state.positions
+                        and symbol not in cleared_today):
                     open_checked = True
-                    if previous is None:
+                    if gate.get(day, False):
+                        _event(state, day, symbol, hm, "skip", 0, close_px, "skip_index_gate")
+                    elif previous is None:
                         _event(state, day, symbol, hm, "skip", 0, close_px, "skip_no_prev_close")
                     else:
                         upper, lower = _limit_prices(symbol, previous)
@@ -327,6 +353,42 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
         state.equity_curve.append({"date": day.isoformat(), "cash": state.cash,
                                    "holdings": holdings, "equity": state.cash + holdings})
     return state
+
+
+def load_index_daily(start: date, end: date, *, symbol: str = "000001.SH",
+                     root: Path | None = None) -> dict[date, float]:
+    """Read the locked SSE index partition directly and validate the run range."""
+    validate_index_symbol(symbol)
+    if classify_daily_lake_kind(symbol) != "index":
+        raise ValueError(f"not an index daily-lake symbol: {symbol}")
+    directory = (root or resolve_index_daily_root()) / "dividend_type=none" / f"symbol={to_partition_key(symbol)}"
+    files = sorted(directory.glob("*.parquet"))
+    if not files:
+        raise FileNotFoundError(f"missing index daily partition: {directory}")
+    import pandas as pd
+
+    frame = pd.concat((pd.read_parquet(path) for path in files), ignore_index=True)
+    day_column = next((name for name in ("date", "datetime", "timestamp", "time") if name in frame), None)
+    if day_column is None or "close" not in frame:
+        raise ValueError("index daily parquet requires a date/time column and close")
+    closes: dict[date, float] = {}
+    for raw_day, raw_close in zip(frame[day_column], frame["close"]):
+        day = _as_date(raw_day)
+        if day <= end:
+            closes[day] = float(raw_close)
+    sessions = sorted(closes)
+    window = [day for day in sessions if start <= day <= end]
+    preload = [day for day in sessions if day < start][-11:]
+    required = preload + window
+    if len(preload) < 11 or not window:
+        raise ValueError("index daily data lacks 11 preload sessions or the requested window")
+    if any(closes[day] <= 0 for day in required):
+        raise ValueError("index closes must be positive in preload and requested window")
+    selected = {day: closes[day] for day in required}
+    built = build_index_gate(selected, symbol=symbol)
+    if any(day not in built for day in window):
+        raise ValueError("index daily data is insufficient for every requested session")
+    return selected
 
 
 def summarize_v7(state: SimResult) -> str:
@@ -408,8 +470,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         raise SystemExit("--end must be on or after --start")
     pools = load_pool_days(Path(pool_value), start, end)
     minute, daily = _load_cli_bars(pools, start, end)
-    calendar = [start + timedelta(days=n) for n in range((end - start).days + 1)]
-    state = simulate_v7(minute, daily, pools, calendar, cash_total=args.cash_total,
+    if pools:
+        index_closes = load_index_daily(start, end)
+    else:
+        index_closes = [start + timedelta(days=n) for n in range((end - start).days + 1)]
+    state = simulate_v7(minute, daily, pools, index_closes, cash_total=args.cash_total,
                         start=start, end=end)
     output = Path(args.output_dir or f"backtest_output/csv_minute_v7_{args.start}_{args.end}")
     write_run_artifacts(state, output)

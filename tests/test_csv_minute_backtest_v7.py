@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 
@@ -24,6 +24,11 @@ def reasons(state):
 
 def daily():
     return {SYMBOL: {date(2026, 8, 31): 100.0, D1: 100.0}}
+
+
+def index_closes(values):
+    first = date(2026, 8, 17)
+    return {first + timedelta(days=offset): value for offset, value in enumerate(values)}
 
 
 def test_7_trial_bought_at_1455_cannot_stop_same_day_but_can_next_day():
@@ -105,6 +110,51 @@ def test_9_exact_1455_limit_up_and_open_limit_down_rules():
     assert "defer_limit_down" in reasons(stopped)
     assert "stop:trial_a096" not in reasons(stopped)
     assert stopped.positions[SYMBOL].shares > 0
+
+
+def test_10_index_gate_blocks_new_open_but_does_not_freeze_existing_stop():
+    index = index_closes([100.0] * 9 + [90.0, 89.0, 88.0, 87.0])
+    gate_day = sorted(index)[11]
+    stock_daily = {SYMBOL: {gate_day - timedelta(days=1): 100.0, gate_day: 100.0}}
+
+    blocked = simulate_v7(
+        {SYMBOL: [bar(gate_day, 895, 100)]}, stock_daily,
+        {gate_day: [SYMBOL]}, index, start=gate_day, end=gate_day,
+    )
+    assert "buy:trial" not in reasons(blocked)
+    assert "skip_index_gate" in reasons(blocked)
+
+    # Seed on the recovery-output session by keeping its preceding closes healthy,
+    # then make the following gate output blocked while the held lot remains sellable.
+    held_index = index_closes([100.0] * 10 + [101.0, 90.0, 89.0, 88.0])
+    open_day, stop_day = sorted(held_index)[11], sorted(held_index)[13]
+    stock_daily = {SYMBOL: {open_day - timedelta(days=1): 100.0, open_day: 100.0}}
+    stopped = simulate_v7(
+        {SYMBOL: [bar(open_day, 895, 100), bar(stop_day, 570, 95)]},
+        stock_daily, {open_day: [SYMBOL]}, held_index, start=open_day, end=stop_day,
+    )
+    assert "buy:trial" in reasons(stopped)
+    assert "stop:trial_a096" in reasons(stopped)
+
+
+def test_10_timer_exit_locks_same_day_reopen_and_short_index_fails():
+    index = index_closes([100.0] * 17)
+    sessions = sorted(index)[11:]
+    open_day, timer_day = sessions[0], sessions[5]
+    stock_daily = {SYMBOL: {open_day - timedelta(days=1): 100.0, open_day: 100.0,
+                            timer_day - timedelta(days=1): 100.0}}
+    state = simulate_v7(
+        {SYMBOL: [bar(open_day, 895, 100), bar(timer_day, 570, 100),
+                  bar(timer_day, 895, 100)]},
+        stock_daily, {open_day: [SYMBOL], timer_day: [SYMBOL]}, index,
+        start=open_day, end=timer_day,
+    )
+    assert reasons(state).count("exit:timer5") == 1
+    assert reasons(state).count("buy:trial") == 1
+    assert state.positions == {}
+
+    with pytest.raises(ValueError, match="11 warmup"):
+        simulate_v7({}, {}, {}, index_closes([100.0] * 11))
 
 
 def test_cli_empty_pool_is_legal_and_missing_pool_is_system_exit(tmp_path, monkeypatch):
