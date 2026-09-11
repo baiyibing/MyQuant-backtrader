@@ -450,3 +450,89 @@ def test_no_second_buy_while_still_long():
     buys = [t for t in strat.trades if t["side"] == "BUY"]
     assert len(buys) == 1
     assert buys[0]["date"] == "2024-01-04"
+
+
+# ---------------------------------------------------------------------------
+# 指数均线过滤（board-index MA5/MA10，2026-09-10 增补）
+# ---------------------------------------------------------------------------
+
+def _index_filter_stock_df(n: int = 200) -> pd.DataFrame:
+    close = np.linspace(10.0, 20.0, n)
+    idx = pd.bdate_range("2022-01-03", periods=n)
+    return pd.DataFrame(
+        {
+            "open": close,
+            "high": close + 0.1,
+            "low": close - 0.1,
+            "close": close,
+            "volume": np.full(n, 1e6),
+        },
+        index=idx,
+    )
+
+
+def test_board_index_mapping_covers_three_boards():
+    from backtest.research.ma_chip_edge_backtest import BOARD_INDEX, INDEX_MA_FAST, INDEX_MA_SLOW
+
+    assert set(BOARD_INDEX) == {"sh_main", "sz_main", "chinext"}
+    assert BOARD_INDEX["chinext"] == "399006.SZ"  # 3 开头 → 创业板指
+    assert BOARD_INDEX["sz_main"] == "399001.SZ"
+    assert BOARD_INDEX["sh_main"] == "000001.SH"
+    assert (INDEX_MA_FAST, INDEX_MA_SLOW) == (5, 10)
+
+
+def test_index_ma_frame_uses_only_index_history_and_ffill():
+    from backtest.research.ma_chip_edge_backtest import index_ma_frame
+
+    n = 40
+    days = pd.bdate_range("2024-01-02", periods=n)
+    idx_days = days[::2]  # 20 个指数更新日（偶数位），模拟个股/指数日历错位
+    vals = np.linspace(3000.0, 3100.0, len(idx_days))
+    s = pd.Series(vals, index=idx_days)
+    # 末位补一个指数值，避免触发「指数停更 fail-closed」（该行为另测）
+    s_extra = pd.concat([s, pd.Series({days[-1]: vals[-1] + 1.0})]).sort_index()
+    frame = index_ma_frame(s_extra, days)
+    assert frame["idx_close"].isna().sum() == 0
+    odd = days[1::2][:-1]  # 奇数位日必须 ffill 自前一指数日（days[2i+1] ← vals[i]）
+    pd.testing.assert_series_equal(
+        frame.loc[odd, "idx_close"], pd.Series(vals[: len(odd)], index=odd), check_names=False
+    )
+    # MA 只用指数自身历史：第 k 个指数日的 sma5/sma10 = vals 的尾 5/尾 10 均值
+    k = 15
+    d = days.get_loc(idx_days[k])
+    assert frame["idx_sma5"].iloc[d] == pytest.approx(vals[k - 4 : k + 1].mean())
+    assert frame["idx_sma10"].iloc[d] == pytest.approx(vals[k - 9 : k + 1].mean())
+
+
+def test_index_filter_blocks_when_index_below_ma():
+    df = _index_filter_stock_df()
+    n = len(df)
+    base = build_signal_frame(df, "000001.SZ", use_cyqk=False, use_bb=False)
+    rising = pd.Series(np.linspace(3000.0, 3400.0, n), index=df.index)  # 站上自身 MA5/10
+    falling = pd.Series(np.linspace(3400.0, 3000.0, n), index=df.index)  # 跌破自身 MA5/10
+    with_rise = build_signal_frame(df, "000001.SZ", use_cyqk=False, use_bb=False, index_close=rising)
+    with_fall = build_signal_frame(df, "000001.SZ", use_cyqk=False, use_bb=False, index_close=falling)
+
+    # 指数上行（过滤通过）不得改变原 cond；下行则完全压制（数据在、条件假）
+    np.testing.assert_array_equal(with_rise["cond"].to_numpy(), base["cond"].to_numpy())
+    assert base["cond"].to_numpy().any()  # 前置：原 cond 确有真段
+    assert not with_fall["cond"].to_numpy().any()
+    assert with_fall["finite"].to_numpy().any()
+
+
+def test_index_filter_missing_or_stale_index_fail_closed():
+    from backtest.research.ma_chip_edge_backtest import index_ma_frame
+
+    df = _index_filter_stock_df()
+    short = pd.Series(np.linspace(3000.0, 3400.0, 30), index=df.index[:30])  # 指数 30 日后停更
+    sig = build_signal_frame(df, "000001.SZ", use_cyqk=False, use_bb=False, index_close=short)
+    after = sig.index > df.index[29]
+    # 停更后不得拿 ffill 陈旧值放行：finite 假、cond 假
+    assert not sig.loc[after, "finite"].to_numpy().any()
+    assert not sig.loc[after, "cond"].to_numpy().any()
+
+    frame = index_ma_frame(short, df.index)
+    assert frame.loc[after, "idx_close"].isna().all()
+
+    early = df.index < short.index[0]
+    assert bool(early.any()) is False or frame.loc[early, "idx_close"].isna().all()
