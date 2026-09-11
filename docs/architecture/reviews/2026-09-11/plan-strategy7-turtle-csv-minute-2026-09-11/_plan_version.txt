@@ -1,0 +1,4 @@
+path=docs/backtest/plan-strategy7-turtle-csv-minute-2026-09-11.md
+git_sha=<untracked>
+content_sha256_16=395f9bdb1dac3dd7
+reviewed_at=2026-09-11
