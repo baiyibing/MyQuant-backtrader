@@ -230,7 +230,7 @@ def _sell_lots(state: SimResult, position: Position, day: date, hm: int, price: 
 def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Sequence[str]] | None,
                 index_days: Any = None, *, cash_total: float = 21_000_000.0,
                 start: Any = None, end: Any = None) -> SimResult:
-    """Run Slice-B matching. ``index_days`` supplies the calendar, not a live gate."""
+    """Run Slice-B/C matching. ``index_days`` supplies the calendar, not a live gate."""
     minutes = _minute_records(minute_bars)
     closes = _daily_closes(daily_bars)
     pools = _pool(pool_days)
