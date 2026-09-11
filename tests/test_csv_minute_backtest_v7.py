@@ -9,6 +9,7 @@ from backtest.research.csv_minute_backtest_v7 import main, simulate_v7
 SYMBOL = "600000.SH"
 D1 = date(2026, 9, 1)
 D2 = date(2026, 9, 2)
+D3 = date(2026, 9, 3)
 
 
 def bar(day, hm, close, open=None):
@@ -40,12 +41,54 @@ def test_8_prior_trial_can_chop_same_day_add_but_new_lots_are_t_plus_one():
     assert "buy:add_a104" in reasons(state)
     assert "stop:chop_trial_a099" in reasons(state)
     assert "stop:three_a1_096" not in reasons(state)
+    assert state.positions[SYMBOL].stage == "three_after_chop"
     assert state.positions[SYMBOL].shares > 0
 
     same_day = simulate_v7({SYMBOL: [bar(D1, 895, 100), bar(D1, 896, 104), bar(D1, 897, 99)]},
                            daily(), {D1: [SYMBOL]}, [D1])
     assert "buy:add_a104" in reasons(same_day)
     assert "stop:chop_trial_a099" not in reasons(same_day)
+
+
+def test_8_chop_next_minute_three_stop_cascades_only_when_residual_is_sellable():
+    minutes = {SYMBOL: [
+        bar(D1, 895, 100),
+        bar(D2, 570, 104),
+        bar(D3, 570, 99),
+        bar(D3, 571, 99),
+    ]}
+    state = simulate_v7(minutes, daily(), {D1: [SYMBOL]}, [D1, D2, D3])
+    assert reasons(state) == [
+        "buy:trial",
+        "buy:add_a104",
+        "stop:chop_trial_a099",
+        "stop:three_a1_096",
+    ]
+    assert state.positions == {}
+    chop, clear = state.trades[-2:]
+    assert chop["date"] == clear["date"] == D3.isoformat()
+    assert chop["hm"] == 570
+    assert clear["hm"] == 571
+
+
+def test_8_full_chop_readd_path_reaches_nine_with_locked_reasons():
+    minutes = {SYMBOL: [
+        bar(D1, 895, 100),
+        bar(D2, 570, 104),
+        bar(D2, 571, 99),
+        bar(D2, 572, 108.16),
+        bar(D2, 573, 114.40),
+    ]}
+    path_daily = {SYMBOL: {date(2026, 8, 31): 100.0, D1: 107.0}}
+    state = simulate_v7(minutes, path_daily, {D1: [SYMBOL]}, [D1, D2])
+    assert reasons(state) == [
+        "buy:trial",
+        "buy:add_a104",
+        "stop:chop_trial_a099",
+        "buy:readd_a1_104",
+        "buy:readd_a1_110",
+    ]
+    assert state.positions[SYMBOL].stage == "nine"
 
 
 def test_9_exact_1455_limit_up_and_open_limit_down_rules():
