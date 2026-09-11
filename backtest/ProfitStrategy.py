@@ -533,36 +533,39 @@ class Strategy6(ProfitStrategy):
     """
     策略6：6% 盘中止损 + 基础止盈 1% 锚定的分档回撤止盈。
 
-    止损：市价较买入价回撤 >= stop_loss_pct（默认 6%），盘中触发即卖（市价单）。
+    止损：市价较买入价回撤 >= stop_loss_pct（默认 6%），盘中触发即按该止损卖。
 
     止盈（+1% 锚定回撤，分档按持仓交易日数 T+N）：
       记 peak_excess = 持仓期最高价/买入价 - (1 + profit_base_pct)，
           cur_excess  = 市价/买入价 - (1 + profit_base_pct)。
       持仓期最高价从 T+1 起算（T+0 固定为买入价）。
-      仅当峰值超过 +1%（peak_excess > 0）才止盈：
-          T+1 档 0.50；T+2 档 0.40；T+3+ 档 0.30
-          （cur_excess <= 档位 × peak_excess；跌破 +1% 锚同样触发）。
+      仅当峰值超过 +1%（peak_excess > 0）且触发价 ≥ 买入价才止盈：
+          T+1 档 0.30；T+2 档 0.40；T+3 档 0.50；T+4 档 0.60；T+5+ 档 0.70
+          （cur_excess <= 档位 × peak_excess；跌破 +1% 锚但未跌破成本同样触发）。
       开盘 < 买入价×1.01：先观察，市价涨过锚后再按档；开盘 ≥ 锚则当日起按档。
-      分钟引擎：触发止盈的 bar 与创新高 bar 间隔须大于 2 分钟。
+      分钟引擎：触发止盈的 bar 与创新高 bar 间隔不能 < 15 分钟（=15 允许）。
       未过 +1% 锚不止盈（不做正利润回撤）。
 
-    买侧契约（由 RollingInvestmentStrategy 强制）：
-      尾盘涨停直接跳过——不建延期额度、不标记次日买入（skip_limit_up=True）。
-      T+1 09:35 追买/弃买规则停用。
+    买侧契约（由 RollingInvestmentStrategy / CSV 引擎执行）：
+      尾盘涨停当日不买；T+1 09:45 市价>当日开盘则追买，否则弃买。
     """
+
+    PEAK_GAP_MIN = 15
 
     def __init__(
         self,
         stop_loss_pct: float = 0.06,
         profit_base_pct: float = 0.01,
         trailing_rules: Optional[Dict] = None,
-        trailing_default: float = 0.30,
+        trailing_default: float = 0.70,
         positive_trail_ratio: float = 0.50,
     ):
         params = {
             "stop_loss_pct": float(stop_loss_pct),
             "profit_base_pct": float(profit_base_pct),
-            "trailing_rules": dict(trailing_rules or {1: 0.50, 2: 0.40}),
+            "trailing_rules": dict(
+                trailing_rules or {1: 0.30, 2: 0.40, 3: 0.50, 4: 0.60}
+            ),
             "trailing_default": float(trailing_default),
             "positive_trail_ratio": float(positive_trail_ratio),
         }
@@ -571,7 +574,7 @@ class Strategy6(ProfitStrategy):
     def _validate_params(self):
         assert 0 < self.params["stop_loss_pct"] < 1, "止损比例需在(0,1)"
         assert 0 < self.params["profit_base_pct"] < 1, "基础止盈锚点需在(0,1)"
-        assert 0 < self.params["trailing_default"] <= 1, "T+3+ 回撤档位需在(0,1]"
+        assert 0 < self.params["trailing_default"] <= 1, "T+5+ 回撤档位需在(0,1]"
         assert 0 < self.params["positive_trail_ratio"] <= 1, "正利润回撤比例需在(0,1]"
         for day, ratio in self.params["trailing_rules"].items():
             assert int(day) >= 1, "回撤档位键为持仓交易日数(>=1)"
@@ -598,6 +601,10 @@ class Strategy6(ProfitStrategy):
                 f"stop_loss 亏损{(-ret) * 100:.2f}%触发{self.params['stop_loss_pct'] * 100:.0f}%止损",
             )
 
+        # 触发价 < 买入价不执行止盈（亏损交给止损）
+        if current_price < cost:
+            return False, None
+
         peak_ret = (
             float(getattr(status, "holding_high", current_price) or current_price)
             / cost
@@ -613,7 +620,7 @@ class Strategy6(ProfitStrategy):
                 peak_tm = indicators.get("peak_time")
             if peak_tm is not None and current_datetime is not None:
                 delta_min = (current_datetime - peak_tm).total_seconds() / 60.0
-                if delta_min <= 2.0:
+                if 0 <= delta_min < float(self.PEAK_GAP_MIN):
                     return False, None
             ratio = float(
                 self.params["trailing_rules"].get(day, self.params["trailing_default"])
@@ -672,8 +679,8 @@ class StrategyFactory:
             {
                 "stop_loss_pct": 0.06,
                 "profit_base_pct": 0.01,
-                "trailing_rules": {1: 0.50, 2: 0.40},
-                "trailing_default": 0.30,
+                "trailing_rules": {1: 0.30, 2: 0.40, 3: 0.50, 4: 0.60},
+                "trailing_default": 0.70,
                 "positive_trail_ratio": 0.50,
             },
         ),

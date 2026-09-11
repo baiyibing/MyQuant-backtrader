@@ -91,7 +91,8 @@ def test_strategy6_ratio_args_parse():
     kw = sim.strategy6_kwargs_from_args(ap.parse_args([]))
     assert kw["stop_pct"] == sim.STOP_PCT
     assert kw["profit_base"] == sim.PROFIT_BASE
-    assert kw["tiers"] == {1: sim.TIERS[1], 2: sim.TIERS[2]}
+    assert kw["tiers"] == {1: 0.30, 2: 0.40, 3: 0.50, 4: 0.60}
+    assert kw["tier_default"] == pytest.approx(0.70)
     kw = sim.strategy6_kwargs_from_args(
         ap.parse_args(["--stop-pct", "0.03", "--profit-base", "0.02", "--trail-t1", "0.6"])
     )
@@ -120,7 +121,7 @@ def test_trail_t1_fires_and_exits_next_open():
     rows = {
         "600000.SH": [
             (10.0, 10.1, 9.95, 10.0),
-            (10.05, 10.50, 10.0, 10.298),  # 锚 1% 后超额 1.98% <= T+1 档 2.00% → 触发
+            (10.05, 10.50, 10.0, 10.218),  # 锚 1% 后超额 1.18% <= T+1 档 1.20% → 触发
             (10.33, 10.35, 10.2, 10.25),
             (10.2, 10.3, 10.1, 10.2),
             (10.2, 10.25, 10.1, 10.15),
@@ -145,12 +146,43 @@ def test_trail_t2_fires_when_above_t1_threshold():
             (10.20, 10.25, 10.10, 10.15),
         ]
     }
-    st = _run({"20251103": ["600000.SH"]}, _bars(DAYS, rows))
+    st = _run(
+        {"20251103": ["600000.SH"]},
+        _bars(DAYS, rows),
+        tiers={1: 0.50, 2: 0.40},
+        tier_default=0.30,
+    )
     assert st.stats["sell_trail"] == 1
     sell = [t for t in st.trades if t["side"] == "SELL"][0]
     assert sell["reason"] == "trail:T+2"
     assert sell["date"] == "20251106"
     assert sell["price"] == pytest.approx(10.30)
+
+
+def test_no_trail_when_close_below_cost():
+    # 峰值已过锚，公式会火，但收盘 < 成本 → 不止盈
+    rows = {
+        "600000.SH": [
+            (10.0, 10.1, 9.95, 10.0),
+            (10.05, 10.50, 9.80, 9.95),  # T+1 收盘 < 成本，公式会火但不止盈
+            (10.40, 10.45, 10.30, 10.40),  # 之后站上各档线
+            (10.40, 10.45, 10.30, 10.40),
+            (10.40, 10.45, 10.30, 10.40),
+        ]
+    }
+    st = _run({"20251103": ["600000.SH"]}, _bars(DAYS, rows))
+    assert st.stats["sell_trail"] == 0
+    assert st.stats["sell_stop"] == 0
+
+
+def test_trail_hits_helper():
+    assert not sim.trail_hits(9.95, 10.0, 10.50, 0.01, 0.30)
+    assert sim.trail_hits(10.00, 10.0, 10.50, 0.01, 0.30)
+    assert sim.trail_hits(10.218, 10.0, 10.50, 0.01, 0.30)
+    assert not sim.trail_hits(10.222, 10.0, 10.50, 0.01, 0.30)
+    assert sim.peak_gap_blocks(14)
+    assert not sim.peak_gap_blocks(15)
+    assert not sim.peak_gap_blocks(-90)
 
 
 def test_no_trail_when_peak_not_above_1pct_anchor():
@@ -170,16 +202,15 @@ def test_no_trail_when_peak_not_above_1pct_anchor():
 
 def test_entry_day_high_does_not_set_peak():
     # D0 high=10.50 发生在收盘买入之前，不得计入峰值。
-    # 若误用 D0 high：D1 close=10.10 超额 -? 峰值超额 3%，close 超额 -0.9%? 1%-2%=-1%
-    #   → cur_excess=-1% <= 50%*3%=1.5% → 会误触发锚定回撤。
-    # 正确：峰值从 10.0 起，D1 high/close=10.10 → 正利润回撤线 +0.5%，10.10 不触发。
+    # 若误用 D0 high：D1 close=10.005 相对 10.50 会立刻触发锚定回撤。
+    # 正确：峰值从 10.0 起，后续 high 未过 +1% 锚 → 不止盈。
     rows = {
         "600000.SH": [
             (10.0, 10.50, 9.95, 10.0),
-            (10.08, 10.10, 10.05, 10.10),
-            (10.10, 10.12, 10.08, 10.11),
-            (10.11, 10.13, 10.09, 10.12),
-            (10.12, 10.14, 10.10, 10.13),
+            (10.00, 10.009, 9.99, 10.005),
+            (10.00, 10.008, 9.99, 10.002),
+            (10.00, 10.007, 9.99, 10.001),
+            (10.00, 10.006, 9.99, 10.000),
         ]
     }
     st = _run({"20251103": ["600000.SH"]}, _bars(DAYS, rows))
@@ -188,28 +219,47 @@ def test_entry_day_high_does_not_set_peak():
     assert any(t["side"] == "EOD_MARK" for t in st.trades)
 
 
-def test_limit_up_close_skips_buy_without_requeue():
-    # 10% 涨停：昨收 10.0 → 涨停 11.0；D0 收盘 11.0 → 跳过且不建次日追买。
-    # D1 不在池里 → 全程 0 买。
+def test_limit_up_close_skips_then_abandons_when_close_below_open():
+    # D0 收盘涨停跳过；D1 收盘 11.05 < 开盘 11.20 → 弃买（日线近似 09:45）。
     rows = {
         "600000.SH": [
             (10.5, 11.0, 10.5, 11.0),
-            (11.0, 11.5, 10.9, 11.2),
-            (11.2, 11.4, 11.0, 11.1),
-            (11.1, 11.3, 10.9, 11.0),
+            (11.20, 11.30, 10.90, 11.05),
             (11.0, 11.2, 10.8, 10.9),
+            (10.9, 11.0, 10.7, 10.8),
+            (10.8, 10.9, 10.6, 10.7),
         ]
     }
     st = _run({"20251103": ["600000.SH"]}, _bars(DAYS, rows))
     assert st.stats["skip_limit_up"] == 1
+    assert st.stats["chase_abandon"] == 1
     assert st.stats["buys"] == 0
 
 
-def test_later_pool_day_still_buys_after_prior_limit_up_skip():
+def test_limit_up_close_chases_when_close_above_open():
     rows = {
         "600000.SH": [
             (10.5, 11.0, 10.5, 11.0),
-            (11.0, 11.5, 10.9, 11.2),
+            (11.00, 11.40, 10.90, 11.20),
+            (11.2, 11.3, 11.0, 11.1),
+            (11.1, 11.2, 10.9, 11.0),
+            (11.0, 11.1, 10.8, 10.9),
+        ]
+    }
+    st = _run({"20251103": ["600000.SH"]}, _bars(DAYS, rows))
+    assert st.stats["skip_limit_up"] == 1
+    assert st.stats["chase_buy"] == 1
+    buy = [t for t in st.trades if t["side"] == "BUY"][0]
+    assert buy["date"] == "20251104"
+    assert buy["reason"] == "chase:T+1"
+    assert buy["price"] == pytest.approx(11.20)
+
+
+def test_later_pool_day_still_buys_after_chase_abandon():
+    rows = {
+        "600000.SH": [
+            (10.5, 11.0, 10.5, 11.0),
+            (11.30, 11.40, 10.90, 11.10),  # 收盘<开盘 → 弃买
             (11.2, 11.4, 11.0, 11.1),
             (11.1, 11.3, 10.9, 11.0),
             (11.0, 11.2, 10.8, 10.9),
@@ -218,10 +268,12 @@ def test_later_pool_day_still_buys_after_prior_limit_up_skip():
     pool = {"20251103": ["600000.SH"], "20251104": ["600000.SH"]}
     st = _run(pool, _bars(DAYS, rows))
     assert st.stats["skip_limit_up"] == 1
+    assert st.stats["chase_abandon"] == 1
     assert st.stats["buys"] == 1
     buy = [t for t in st.trades if t["side"] == "BUY"][0]
     assert buy["date"] == "20251104"
-    assert buy["price"] == pytest.approx(11.2)
+    assert buy["reason"] == "pool"
+    assert buy["price"] == pytest.approx(11.1)
 
 
 def test_quota_split_evenly_across_pool_names():
@@ -308,7 +360,7 @@ def test_limit_up_skip_when_close_above_computed_limit():
     rows = {
         "000592.SZ": [
             (3.78, 4.13, 3.71, 4.13),
-            (4.44, 4.54, 4.25, 4.54),
+            (4.60, 4.62, 4.40, 4.50),  # 收盘<开盘 → 弃买，本用例只锁 T+0 涨停跳过
             (4.54, 4.55, 4.40, 4.50),
             (4.50, 4.52, 4.40, 4.45),
             (4.45, 4.48, 4.30, 4.40),
@@ -342,13 +394,16 @@ def test_summarize_engine_tag_and_timings():
     assert "参数:" not in text
     st.stats["stop_pct"] = 0.02
     st.stats["profit_base"] = 0.01
-    st.stats["trail_t1"] = 0.50
+    st.stats["trail_t1"] = 0.30
     st.stats["trail_t2"] = 0.40
-    st.stats["trail_t3"] = 0.30
+    st.stats["trail_t3"] = 0.50
+    st.stats["trail_t4"] = 0.60
+    st.stats["trail_t5"] = 0.70
     text = sim.summarize(
         st, 21_000_000.0, "20251103", "20251103", engine="csv_minute_v6"
     )
     assert "参数: 止损 2%" in text
+    assert "T+5+ 70%" in text
     assert "缓存 hit" in text
     assert "模拟 1.3s" in text or "模拟 1.2s" in text
 

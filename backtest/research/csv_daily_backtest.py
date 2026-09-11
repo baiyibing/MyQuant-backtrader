@@ -3,7 +3,7 @@
 
 完整滚动投资流程（分钟 Cerebro 链）的日线近似版：同口径的 CSV 每日买入名单、
 每日 100 万常规额度、补充资金、T+1、涨跌停拦截、全局 2100 万资金池；策略 6 的
-2% 止损与 +1% 锚定分档回撤止盈改为日线约定（见 HELP_LOCK）。数据用不复权日线
+6% 止损与 +1% 锚定分档回撤止盈改为日线约定（见 HELP_LOCK）。数据用不复权日线
 （与分钟链 adjust_type='none' 对齐）；佣金 0.1% 双边（与 broker.setcommission
 (0.001) 对齐），无最低佣金。
 
@@ -41,14 +41,15 @@ DEFAULT_DAILY_QUOTA = 1_000_000.0
 COMMISSION = 0.001  # 双边，与分钟链 cerebro.broker.setcommission(commission=0.001) 对齐
 STOP_PCT = 0.06
 PROFIT_BASE = 0.01
-TIERS = {1: 0.50, 2: 0.40}
-TIER_DEFAULT = 0.30
+TIERS = {1: 0.30, 2: 0.40, 3: 0.50, 4: 0.60}
+TIER_DEFAULT = 0.70
 POS_TRAIL = 0.50  # 已停用：策略6不再做未过锚的正利润回撤
-PEAK_GAP_MIN = 2  # 止盈与最高价间隔须大于 2 分钟（分钟引擎执行）
+PEAK_GAP_MIN = 15  # 止盈与最高价间隔不能 < 15 分钟（分钟引擎执行；=15 允许）
+CHASE_HM = 9 * 60 + 45  # 尾盘涨停后次日 09:45 追买/弃买
 LIMIT_EPS = 0.001  # 涨跌停等值判定；须远小于 1 分，避免把普通价误判为涨停
 WARMUP_DAYS = 10
-# 2026-09-10 实测：F 盘 period=1m 最后一根交易日。湖续写后改这里。
-MINUTE_LAKE_END = "20260525"
+# 2026-09-11 实测：F 盘 period=1m 最后一根交易日（抽样 50 只含 000001，无 20260910）。
+MINUTE_LAKE_END = "20260909"
 _PERIOD_ENV_KEYS = (
     "OSKH_PERIOD_1D_ROOT",
     "OSKH_PERIOD_1M_ROOT",
@@ -60,17 +61,19 @@ _PERIOD_ENV_KEYS = (
 HELP_LOCK = """
 日线近似口径（相对分钟保真版的唯一失真来源）：
   买入：池 CSV 当日候选、收盘价成交（分钟版 14:55≈收盘）；买价达到或超过
-        涨停价 → 跳过，不延期不次日追（策略 6 契约）；已持有则跳过。常规额度按当日池 CSV
-        全部名单均分（与分钟链开盘等额/force_min 一致，含随后被跳过的票）。
+        涨停价 → 当日不买，记下该票额度，次日按追买规则处理。已持有则跳过。
+        常规额度按当日池 CSV 全部名单均分（含随后被跳过的票）。
   止损：D+1 起，触发价 = 买入价×(1-stop)。开盘 ≤ 触发价 → 开盘价成交（跳空）；
         否则日内 low 触价 → 触发价成交。卖出日开盘跌停 → 顺延下一交易日。
   止盈：基础锚 +1%。仅当峰值超过买入价×1.01 后评估
         （开盘 < 锚则先观察，涨过锚再按档；开盘 ≥ 锚则当日起按档）。
-        公式 (市价/买价-1.01)/(峰值/买价-1.01) ≤ T+1=0.5 / T+2=0.4 / T+3+=0.3。
-        未过 +1% 锚不止盈（已取消正利润回撤）。收盘评估、次日开盘离场
-        （间隔已大于 2 分钟；分钟版另要求触价与最高价间隔＞2 分钟）。
+        公式 (市价/买价-1.01)/(峰值/买价-1.01) ≤
+        T+1=0.3 / T+2=0.4 / T+3=0.5 / T+4=0.6 / T+5+=0.7。
+        触发价 < 买入价不止盈。未过 +1% 锚不止盈。收盘评估、次日开盘离场
+        （隔夜间隔已 ≥ 15 分钟）。
   峰值：从 T+1 起用当日 high 更新；T+0 固定为买入价。T+0 不评估止盈。
-  买侧：尾盘涨停跳过；T+1 09:35 追买/弃买规则停用。
+  买侧：尾盘涨停不买。T+1 用收盘>开盘近似分钟 09:45 市价>开盘 → 收盘追买；
+        否则弃买。只给一次机会，不再延期。成交价用收盘（相对 09:45 的失真）。
   资金：2100 万全局池；每日 100 万常规额度；不足 100 股用补充资金补足
         （force_min，自主池、不占额度）；佣金 0.1% 双边无最低。
   T+1：买入日不可卖；期末持仓按最后收盘估值（eod_mark）。
@@ -79,7 +82,7 @@ HELP_LOCK = """
   落盘：backtest_output/csv_daily_v6_{start}_{end}/ 三件套 summary.txt、
         daily_equity.csv、trades.csv（与分钟版同结构）。
   环境：勿残留 OSKH_PERIOD_* ；有 F:\\stock_data\\.authority 时跟权威盘。
-  比例：--stop-pct / --profit-base / --trail-t1 / --trail-t2 / --trail-t3 可改，不必改代码。
+  比例：--stop-pct / --profit-base / --trail-t1..t5 可改，不必改代码。
 """
 
 
@@ -105,6 +108,10 @@ class SimState:
         default_factory=lambda: {
             "buys": 0,
             "skip_limit_up": 0,
+            "chase_buy": 0,
+            "chase_abandon": 0,
+            "chase_skip_limit": 0,
+            "chase_no_bar": 0,
             "skip_held": 0,
             "skip_no_bar": 0,
             "sell_stop": 0,
@@ -148,8 +155,20 @@ def add_strategy6_ratio_args(ap: argparse.ArgumentParser) -> None:
     ap.add_argument(
         "--trail-t3",
         type=float,
+        default=TIERS[3],
+        help=f"T+3 retain ratio (default {TIERS[3]:g})",
+    )
+    ap.add_argument(
+        "--trail-t4",
+        type=float,
+        default=TIERS[4],
+        help=f"T+4 retain ratio (default {TIERS[4]:g})",
+    )
+    ap.add_argument(
+        "--trail-t5",
+        type=float,
         default=TIER_DEFAULT,
-        help=f"T+3+ retain ratio (default {TIER_DEFAULT:g})",
+        help=f"T+5+ retain ratio (default {TIER_DEFAULT:g})",
     )
 
 
@@ -159,20 +178,24 @@ def strategy6_kwargs_from_args(args) -> dict:
     t1 = float(args.trail_t1)
     t2 = float(args.trail_t2)
     t3 = float(args.trail_t3)
+    t4 = float(args.trail_t4)
+    t5 = float(args.trail_t5)
     for name, val in (
         ("--stop-pct", stop_pct),
         ("--profit-base", profit_base),
         ("--trail-t1", t1),
         ("--trail-t2", t2),
         ("--trail-t3", t3),
+        ("--trail-t4", t4),
+        ("--trail-t5", t5),
     ):
         if not 0 < val < 1:
             raise SystemExit(f"{name} must be in (0, 1), got {val}")
     return {
         "stop_pct": stop_pct,
         "profit_base": profit_base,
-        "tiers": {1: t1, 2: t2},
-        "tier_default": t3,
+        "tiers": {1: t1, 2: t2, 3: t3, 4: t4},
+        "tier_default": t5,
     }
 
 
@@ -188,7 +211,18 @@ def record_strategy6_params(
     st.stats["profit_base"] = float(profit_base)
     st.stats["trail_t1"] = float(tiers.get(1, TIERS[1]))
     st.stats["trail_t2"] = float(tiers.get(2, TIERS[2]))
-    st.stats["trail_t3"] = float(tier_default)
+    st.stats["trail_t3"] = float(tiers.get(3, TIERS[3]))
+    st.stats["trail_t4"] = float(tiers.get(4, TIERS[4]))
+    st.stats["trail_t5"] = float(tier_default)
+
+
+def chase_decision(open_px: float, px: float, limit_up: float) -> str:
+    """T+1 09:45：市价>开盘且非涨停 → buy；否则 abandon / limit。"""
+    if hit_limit_up(px, limit_up):
+        return "limit"
+    if px > open_px:
+        return "buy"
+    return "abandon"
 
 
 def _ymd(ts) -> str:
@@ -251,6 +285,29 @@ def hit_limit_up(price: float, limit_up: float) -> bool:
 def hit_limit_down(price: float, limit_down: float) -> bool:
     """卖价达到或低于跌停价则不可卖。"""
     return float(price) - LIMIT_EPS <= float(limit_down)
+
+
+def peak_gap_blocks(gap, peak_gap_min: int = PEAK_GAP_MIN) -> bool:
+    """同会话分钟差 < 15 则挡住止盈；隔夜/午休 gap<0 视为满足。"""
+    return 0 <= int(gap) < int(peak_gap_min)
+
+
+def trail_hits(
+    px: float,
+    cost: float,
+    peak: float,
+    profit_base: float,
+    ratio: float,
+) -> bool:
+    """锚定回撤是否触发。触发价 < 买入价不执行止盈。"""
+    if float(px) < float(cost):
+        return False
+    peak_excess = float(peak) / float(cost) - 1.0 - float(profit_base)
+    if peak_excess <= 0:
+        return False
+    return (
+        float(px) / float(cost) - 1.0 - float(profit_base) <= float(ratio) * peak_excess
+    )
 
 
 def round_fen(price: float) -> float:
@@ -379,6 +436,7 @@ def simulate(
     st.stats["bars_loaded"] = len(bars)
     st.stats["pool_days"] = len(pool_days)
     pending_exit: dict[str, str] = {}  # code -> 原因（次日开盘离场）
+    pending_chase: dict[str, tuple[float, int]] = {}  # code -> (per, signal_idx)
 
     for i, day in enumerate(calendar):
         ds = _ymd(day)
@@ -421,11 +479,37 @@ def simulate(
 
                 pos.peak = max(pos.peak, float(row["high"]))
                 close = float(row["close"])
-                peak_excess = pos.peak / pos.cost - 1.0 - profit_base
-                if peak_excess > 0:
-                    ratio = float(tier_map.get(n_days, tier_default))
-                    if close / pos.cost - 1.0 - profit_base <= ratio * peak_excess:
-                        pending_exit[code] = f"trail:T+{n_days}"
+                ratio = float(tier_map.get(n_days, tier_default))
+                if trail_hits(close, pos.cost, pos.peak, profit_base, ratio):
+                    pending_exit[code] = f"trail:T+{n_days}"
+
+        due = [c for c, (_per, sig) in pending_chase.items() if i == sig + 1]
+        for code in due:
+            per_ch, _sig = pending_chase.pop(code)
+            if code in st.positions:
+                st.stats["skip_held"] += 1
+                continue
+            if code not in bars or day not in bars[code].index:
+                st.stats["chase_no_bar"] += 1
+                continue
+            df_c = bars[code]
+            prev_rows = df_c.loc[df_c.index < day]
+            if prev_rows.empty:
+                st.stats["chase_no_bar"] += 1
+                continue
+            row = df_c.loc[day]
+            open_px = float(row["open"])
+            close_px = float(row["close"])
+            prev_close = float(prev_rows.iloc[-1]["close"])
+            limit_up, _ = _limit_prices(code, prev_close)
+            decision = chase_decision(open_px, close_px, limit_up)
+            if decision == "limit":
+                st.stats["chase_skip_limit"] += 1
+                continue
+            if decision != "buy":
+                st.stats["chase_abandon"] += 1
+                continue
+            execute_buy(st, code, close_px, per_ch, i, day, reason="chase:T+1")
 
         planned = list(pool_days.get(ds, []))
         if planned:
@@ -448,31 +532,9 @@ def simulate(
                 close = float(df_c.loc[day]["close"])
                 if hit_limit_up(close, limit_up):
                     st.stats["skip_limit_up"] += 1
+                    pending_chase[code] = (per, i)
                     continue
-                shares, supp = _buy_size(per, close)
-                if shares <= 0:
-                    continue
-                notional = shares * close
-                comm = notional * COMMISSION
-                if notional + comm > st.cash:
-                    continue
-                st.cash -= notional + comm
-                st.daily_quota_used += min(per, notional)
-                st.stats["supplementary_used"] += supp
-                st.stats["invested_notional"] += notional
-                st.positions[code] = Position(code, shares, close, i, close)
-                st.trades.append(
-                    {
-                        "date": ds,
-                        "code": code,
-                        "side": "BUY",
-                        "price": close,
-                        "shares": shares,
-                        "notional": notional,
-                        "commission": comm,
-                    }
-                )
-                st.stats["buys"] += 1
+                execute_buy(st, code, close, per, i, day, reason="pool")
 
         eq = st.cash
         for code, pos in st.positions.items():
@@ -573,6 +635,49 @@ def _buy_size(per_quota: float, price: float) -> tuple[int, float]:
     return shares, supp
 
 
+def execute_buy(
+    st: SimState,
+    code: str,
+    px: float,
+    per: float,
+    entry_idx: int,
+    day,
+    *,
+    reason: str = "pool",
+) -> bool:
+    """常规/追买共用：整百股 + force_min + 0.1% 佣金。成功返回 True。"""
+    if px <= 0:
+        return False
+    shares, supp = _buy_size(per, px)
+    if shares <= 0:
+        return False
+    notional = shares * px
+    comm = notional * COMMISSION
+    if notional + comm > st.cash:
+        return False
+    st.cash -= notional + comm
+    st.daily_quota_used += min(per, notional)
+    st.stats["supplementary_used"] += supp
+    st.stats["invested_notional"] += notional
+    st.positions[code] = Position(code, shares, px, entry_idx, px)
+    st.trades.append(
+        {
+            "date": _ymd(day),
+            "code": code,
+            "side": "BUY",
+            "price": px,
+            "shares": shares,
+            "notional": notional,
+            "commission": comm,
+            "reason": reason,
+        }
+    )
+    st.stats["buys"] += 1
+    if reason.startswith("chase"):
+        st.stats["chase_buy"] += 1
+    return True
+
+
 def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str) -> None:
     notional = pos.shares * px
     comm = notional * COMMISSION
@@ -625,11 +730,14 @@ def summarize(
         lines.append(
             f"  参数: 止损 {st.stats['stop_pct']:.0%} | 锚 {st.stats['profit_base']:.0%} | "
             f"回撤 T+1 {st.stats['trail_t1']:.0%} / T+2 {st.stats['trail_t2']:.0%} / "
-            f"T+3+ {st.stats['trail_t3']:.0%}"
+            f"T+3 {st.stats.get('trail_t3', 0):.0%} / T+4 {st.stats.get('trail_t4', 0):.0%} / "
+            f"T+5+ {st.stats.get('trail_t5', st.stats.get('trail_t3', 0)):.0%}"
         )
     lines.extend(
         [
-            f"  买入 {st.stats['buys']} | 涨停跳过 {st.stats['skip_limit_up']} | 已持跳过 {st.stats['skip_held']}",
+            f"  买入 {st.stats['buys']} | 涨停跳过 {st.stats['skip_limit_up']} | "
+            f"追买 {st.stats.get('chase_buy', 0)} | 弃买 {st.stats.get('chase_abandon', 0)} | "
+            f"已持跳过 {st.stats['skip_held']}",
             f"  卖出: 止损 {st.stats['sell_stop']} | 锚定回撤 {st.stats['sell_trail']} | 正利润回撤 {st.stats['sell_pos_trail']}",
             f"  跌停顺延卖出 {st.stats['defer_sell_limit_down']} | 补充资金 {st.stats['supplementary_used']:,.0f}",
             f"  日线加载 {st.stats['bars_loaded']} | 池天数 {st.stats['pool_days']}",

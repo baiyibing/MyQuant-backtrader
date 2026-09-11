@@ -137,10 +137,8 @@ def test_backtest_version4_accepts_numpy_real_ma_values():
 
 # ---------------------------------------------------------------------------
 # 策略6（version6）：6% 盘中止损 + 1% 锚定分档回撤止盈
-# ---------------------------------------------------------------------------
-# 策略6（version6）：6% 盘中止损 + 1% 锚定分档回撤止盈
 # 边界用例一律用跨线价（±0.002）而非恰好压线，规避浮点 epsilon；
-# 场景必须逐 bar 可达（如「跌破成本仍持有正峰值」在真实流程中早于 +0.5% 离场）。
+# 触发价 < 买入价不止盈；峰值间隔不能 < 15 分钟。
 # ---------------------------------------------------------------------------
 
 from datetime import datetime as _dt
@@ -158,8 +156,8 @@ def test_v6_factory_registered_with_expected_defaults():
     s = StrategyFactory.create("version6")
     assert s.params["stop_loss_pct"] == 0.06
     assert s.params["profit_base_pct"] == 0.01
-    assert s.params["trailing_rules"] == {1: 0.50, 2: 0.40}
-    assert s.params["trailing_default"] == 0.30
+    assert s.params["trailing_rules"] == {1: 0.30, 2: 0.40, 3: 0.50, 4: 0.60}
+    assert s.params["trailing_default"] == 0.70
     assert s.params["positive_trail_ratio"] == 0.50
 
 
@@ -175,28 +173,33 @@ def test_v6_stop_loss_triggers_at_6pct_not_5pct():
     assert ok and reason.startswith("stop_loss")
 
 
-def test_v6_t1_trailing_50pct_of_peak_excess_above_1pct():
+def test_v6_t1_trailing_30pct_of_peak_excess_above_1pct():
     s = _v6()
     now = _dt(2025, 11, 3, 10, 0)
-    # 峰值 10.5（+5%，超额+4%）；T+1 档 50% → 触发线 = 1.01 + 0.5*0.04 = +3.0% → 10.30
-    ok, reason = s.should_sell(_st(cost=10.0, high=10.5, days=1), now, 10.302)
+    # 峰值 10.5（+5%，超额+4%）；T+1 档 30% → 触发线 = 1.01 + 0.3*0.04 = +2.2% → 10.22
+    ok, reason = s.should_sell(_st(cost=10.0, high=10.5, days=1), now, 10.222)
     assert not ok
-    ok, reason = s.should_sell(_st(cost=10.0, high=10.5, days=1), now, 10.298)
+    ok, reason = s.should_sell(_st(cost=10.0, high=10.5, days=1), now, 10.218)
     assert ok and reason.startswith("profit_take:drawdown") and "T+1" in reason
 
 
-def test_v6_t2_uses_40pct_t3plus_uses_30pct():
+def test_v6_tiers_t2_t3_t5():
     s = _v6()
     now = _dt(2025, 11, 4, 10, 0)
-    # 峰值 +5%（超额 4%）：T+2 触发线 = 1.01 + 0.4*0.04 = +2.6% → 10.26
+    # 峰值 +5%（超额 4%）：T+2 40% → 1.01+0.4*0.04=+2.6% → 10.26
     ok, _ = s.should_sell(_st(cost=10.0, high=10.5, days=2), now, 10.262)
     assert not ok
     ok, _ = s.should_sell(_st(cost=10.0, high=10.5, days=2), now, 10.258)
     assert ok
-    # T+3+ 档 30%：触发线 = 1.01 + 0.3*0.04 = +2.2% → 10.22
-    ok, reason = s.should_sell(_st(cost=10.0, high=10.5, days=5), now, 10.218)
+    # T+3 50% → +3.0% → 10.30
+    ok, _ = s.should_sell(_st(cost=10.0, high=10.5, days=3), now, 10.302)
+    assert not ok
+    ok, _ = s.should_sell(_st(cost=10.0, high=10.5, days=3), now, 10.298)
+    assert ok
+    # T+5+ 70% → +3.8% → 10.38
+    ok, reason = s.should_sell(_st(cost=10.0, high=10.5, days=5), now, 10.378)
     assert ok and "T+5" in reason
-    ok, _ = s.should_sell(_st(cost=10.0, high=10.5, days=5), now, 10.222)
+    ok, _ = s.should_sell(_st(cost=10.0, high=10.5, days=5), now, 10.382)
     assert not ok
 
 
@@ -215,15 +218,15 @@ def test_v6_no_trail_when_peak_not_above_1pct():
     assert not ok
 
 
-def test_v6_tp_blocked_within_2_minutes_of_peak():
+def test_v6_tp_blocked_within_15_minutes_of_peak():
     s = _v6()
     peak_tm = _dt(2025, 11, 3, 10, 0)
-    now = _dt(2025, 11, 3, 10, 2)
+    now = _dt(2025, 11, 3, 10, 14)
     ok, _ = s.should_sell(
         _st(cost=10.0, high=10.5, days=1), now, 10.20, indicators={"peak_time": peak_tm}
     )
     assert not ok
-    later = _dt(2025, 11, 3, 10, 3)
+    later = _dt(2025, 11, 3, 10, 15)
     ok, reason = s.should_sell(
         _st(cost=10.0, high=10.5, days=1),
         later,
@@ -231,6 +234,14 @@ def test_v6_tp_blocked_within_2_minutes_of_peak():
         indicators={"peak_time": peak_tm},
     )
     assert ok and reason.startswith("profit_take:drawdown")
+
+
+def test_v6_no_trail_when_price_below_cost():
+    s = _v6()
+    ok, _ = s.should_sell(
+        _st(cost=10.0, high=10.5, days=1), _dt(2025, 11, 3, 10, 20), 9.95
+    )
+    assert not ok
 
 
 def test_v6_below_cost_without_stop_or_positive_peak_observes():

@@ -124,9 +124,10 @@ class RollingInvestmentStrategy(bt.Strategy):
         else:
             logger.info(f"✅ PortfolioManager已注入全局资金管理器")
 
-        # 策略6买侧契约（2026-09-10）：尾盘涨停直接弃买——不建延期额度、不标记次日买入。
+        # 策略6：尾盘涨停当日不买（skip_limit_up），不走 3 日延期额度；
+        # T+1 09:45 用 v6_chase 判断市价>开盘则追买，否则弃买。
         if self.params.strategy_version == 'version6' and not self.params.skip_limit_up:
-            logger.info("✅ 策略6：强制 skip_limit_up=True（尾盘涨停跳过，不延期不次日追）")
+            logger.info("✅ 策略6：强制 skip_limit_up=True（尾盘涨停不买，次日 09:45 追买/弃买）")
             self.params.skip_limit_up = True
 
         # 存储日线数据（用于计算指标）
@@ -149,6 +150,8 @@ class RollingInvestmentStrategy(bt.Strategy):
 
         # 新增：收盘标志，防止收盘后再次创建订单
         self._market_closed = False
+        self.v6_chase = {}  # version6：尾盘涨停后次日 09:45 追买 {stock: allocated_cash}
+        self.v6_session_open = {}
 
         # 存储股票买入日期映射（支持一对多）
         # 格式: {买入日期: [股票代码]}  和  {股票代码: [买入日期列表]}
@@ -1243,6 +1246,14 @@ class RollingInvestmentStrategy(bt.Strategy):
             # 更新市场数据
             stock_data_dict = self._prepare_market_data(current_datetime)
             self.portfolio_manager.update_market_data(current_datetime, stock_data_dict)
+            if (
+                self.params.strategy_version == "version6"
+                and current_time == time(9, 30)
+            ):
+                self.v6_session_open = {
+                    stock: float(data.open[0])
+                    for stock, data in self.stock_data.items()
+                }
 
             # 自动检查止损止盈
             self._process_sell_orders(current_datetime)
@@ -1521,10 +1532,65 @@ class RollingInvestmentStrategy(bt.Strategy):
             if time(9, 30) <= current_time <= time(9, 45):
                 self._process_next_day_buy_orders(current_datetime)
 
+        if (
+            self.params.strategy_version == "version6"
+            and current_time == time(9, 45)
+        ):
+            self._process_v6_chase_buys(current_datetime)
+
         # 2. 处理正常买入逻辑（14:55后）
         if current_time >= self.params.buy_time:
             # 注意：每次触发都会计算平均分配资金，已在每日开始时计算，此处直接使用
             self._process_normal_buy_orders(current_datetime)
+
+    def _process_v6_chase_buys(self, current_datetime):
+        """策略6：尾盘涨停后 T+1 09:45，市价>当日开盘则追买，否则弃买。"""
+        if self._market_closed or not self.v6_chase:
+            return
+        current_date_str = current_datetime.date().strftime("%Y%m%d")
+        for stock, allocated in list(self.v6_chase.items()):
+            self.v6_chase.pop(stock, None)
+            if stock not in self.stock_data:
+                continue
+            if not self._can_buy(stock):
+                continue
+            data = self.stock_data[stock]
+            px = float(data.close[0])
+            open_px = float(self.v6_session_open.get(stock, data.open[0]))
+            if self.portfolio_manager.limit_manager.is_limit_up(stock, px):
+                logger.info(f"策略6追买跳过 {stock}：09:45 仍涨停")
+                continue
+            if px <= open_px:
+                logger.info(
+                    f"策略6弃买 {stock}：09:45 {px:.2f} <= 开盘 {open_px:.2f}"
+                )
+                continue
+            size, _ = self.portfolio_manager.get_buy_size(
+                price=px,
+                stock_code=stock,
+                allocated_cash=allocated,
+                allow_supplementary=True,
+                is_deferred=False,
+                force_min=True,
+            )
+            if size < 100:
+                continue
+            self.order_decision_time[stock] = current_datetime
+            order = self.buy(
+                data,
+                size=size,
+                price=0,
+                exectype=bt.Order.Market,
+                valid=bt.Order.DAY,
+                info={
+                    "is_deferred": False,
+                    "stock": stock,
+                    "date_str": current_date_str,
+                    "reason": "chase:T+1",
+                },
+            )
+            self.orders[stock] = order
+            logger.info(f"策略6追买 {stock}：09:45 {px:.2f} > 开盘 {open_px:.2f}")
 
     def _process_next_day_buy_orders(self, current_datetime):
         """处理次日开盘买入逻辑，增加时间分析
@@ -1843,7 +1909,9 @@ class RollingInvestmentStrategy(bt.Strategy):
             if self.portfolio_manager.limit_manager.is_limit_up(stock, current_price):
                 if self.params.skip_limit_up:
                     status.need_buy_next_day = False
-                    self.log_trade("涨停跳过", stock, data.close[0], 0, "不标记次日买入")
+                    if self.params.strategy_version == "version6":
+                        self.v6_chase[stock] = float(self.cash_per_stock or 0.0)
+                    self.log_trade("涨停跳过", stock, data.close[0], 0, "次日09:45追买")
                 else:
                     # 获取当前剩余常规额度
                     available_normal_now = self.portfolio_manager.get_available_normal(current_datetime)

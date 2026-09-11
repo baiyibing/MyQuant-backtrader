@@ -54,11 +54,11 @@ def test_scan_no_sell_when_t0():
 
 def test_scan_t1_trail_on_close():
     # 峰值 10.50（+5%，锚 1% 后超额 4%），T+1 档 50% → 线 +3% → 10.30
-    # 09:30 创新高，09:34 才允许止盈（间隔＞2 分钟）
+    # 09:30 创新高，09:45 才允许止盈（间隔 15 分钟）
     o = np.array([10.40, 10.40, 10.40, 10.36])
     h = np.array([10.50, 10.50, 10.50, 10.36])
     c = np.array([10.45, 10.45, 10.45, 10.298])
-    hm = np.array([570, 571, 572, 574])
+    hm = np.array([570, 571, 572, 585])
     idx, px, reason, _, _ = sim.scan_held_day(
         o,
         h,
@@ -77,11 +77,11 @@ def test_scan_t1_trail_on_close():
     assert px == pytest.approx(10.298)
 
 
-def test_scan_tp_blocked_within_2_minutes_of_peak():
+def test_scan_tp_blocked_within_15_minutes_of_peak():
     o = np.array([10.40, 10.20])
     h = np.array([10.50, 10.20])
     c = np.array([10.45, 10.20])
-    hm = np.array([570, 572])  # 间隔 2 分钟，须大于 2
+    hm = np.array([570, 584])  # 间隔 14 分钟，不能 < 15
     idx, _, reason, _, _ = sim.scan_held_day(
         o,
         h,
@@ -93,6 +93,51 @@ def test_scan_tp_blocked_within_2_minutes_of_peak():
         stop_pct=0.02,
         profit_base=0.01,
         trail_ratio=0.50,
+        hm=hm,
+    )
+    assert idx == -1
+    assert reason == ""
+
+
+def test_scan_tp_allowed_at_15_minutes():
+    o = np.array([10.40, 10.20])
+    h = np.array([10.50, 10.20])
+    c = np.array([10.45, 10.20])
+    hm = np.array([570, 585])  # 间隔 15 分钟，允许
+    idx, px, reason, _, _ = sim.scan_held_day(
+        o,
+        h,
+        c,
+        cost=10.0,
+        peak=10.0,
+        n_days=1,
+        can_sell=True,
+        stop_pct=0.02,
+        profit_base=0.01,
+        trail_ratio=0.50,
+        hm=hm,
+    )
+    assert idx == 1
+    assert reason == "trail:T+1"
+    assert px == pytest.approx(10.20)
+
+
+def test_scan_no_tp_when_close_below_cost():
+    o = np.array([10.40, 9.90])
+    h = np.array([10.50, 10.00])
+    c = np.array([10.45, 9.95])
+    hm = np.array([570, 585])
+    idx, _, reason, _, _ = sim.scan_held_day(
+        o,
+        h,
+        c,
+        cost=10.0,
+        peak=10.0,
+        n_days=1,
+        can_sell=True,
+        stop_pct=0.08,
+        profit_base=0.01,
+        trail_ratio=0.30,
         hm=hm,
     )
     assert idx == -1
@@ -148,22 +193,53 @@ def _daily(dates: list[str], closes: list[float], prev: float = 10.0) -> pd.Data
     ).astype(np.float64)
 
 
-def test_simulate_limit_up_at_1455_skips_without_requeue():
-    # 昨收 10 → 涨停 11；14:55 close=11.0 → 跳过；次日不在池里
+def test_simulate_limit_up_at_1455_abandons_when_945_below_open():
     dates = ["2025-11-03", "2025-11-04"]
     m = _day(
         "2025-11-03", [(930, 10.5, 11.0, 10.5, 10.8), (1455, 11.0, 11.0, 11.0, 11.0)]
     )
     m2 = _day(
-        "2025-11-04", [(930, 11.0, 11.2, 10.9, 11.1), (1455, 11.1, 11.2, 11.0, 11.2)]
+        "2025-11-04",
+        [
+            (930, 11.20, 11.20, 11.10, 11.15),
+            (945, 11.10, 11.12, 11.05, 11.08),
+            (1455, 11.10, 11.20, 11.00, 11.12),
+        ],
     )
     minute = {"600000.SH": pd.concat([m, m2])}
-    daily = {"600000.SH": _daily(dates, [11.0, 11.2])}
+    daily = {"600000.SH": _daily(dates, [11.0, 11.12])}
     st = sim.simulate(
         minute, daily, {"20251103": ["600000.SH"]}, "20251103", "20251104"
     )
     assert st.stats["skip_limit_up"] == 1
+    assert st.stats["chase_abandon"] == 1
     assert st.stats["buys"] == 0
+
+
+def test_simulate_limit_up_chases_when_945_above_open():
+    dates = ["2025-11-03", "2025-11-04"]
+    m = _day(
+        "2025-11-03", [(930, 10.5, 11.0, 10.5, 10.8), (1455, 11.0, 11.0, 11.0, 11.0)]
+    )
+    m2 = _day(
+        "2025-11-04",
+        [
+            (930, 11.00, 11.05, 10.98, 11.02),
+            (945, 11.08, 11.12, 11.06, 11.10),
+            (1455, 11.10, 11.20, 11.00, 11.15),
+        ],
+    )
+    minute = {"600000.SH": pd.concat([m, m2])}
+    daily = {"600000.SH": _daily(dates, [11.0, 11.15])}
+    st = sim.simulate(
+        minute, daily, {"20251103": ["600000.SH"]}, "20251103", "20251104"
+    )
+    assert st.stats["skip_limit_up"] == 1
+    assert st.stats["chase_buy"] == 1
+    buy = [t for t in st.trades if t["side"] == "BUY"][0]
+    assert buy["reason"] == "chase:T+1"
+    assert buy["date"] == "20251104"
+    assert buy["price"] == pytest.approx(11.10)
 
 
 def test_simulate_skip_when_1455_above_computed_limit():
@@ -212,35 +288,33 @@ def test_simulate_buy_at_1455_and_t1_stop_next_open():
 
 
 def test_t0_after_buy_high_does_not_set_peak():
-    # 14:55 买 10.00，随后 high=10.02；若误记 T+0 峰值，次日开盘 10.00 会 pos_trail。
+    # 14:55 买 10.00，随后 high=10.50。若把 T+0 高点当峰值，T+1 close=10.10 会锚定回撤。
     dates = ["2025-11-03", "2025-11-04"]
     m0 = _day(
         "2025-11-03",
         [
             (930, 10.0, 10.3, 9.9, 10.0),
             (1455, 10.0, 10.02, 9.99, 10.0),
-            (1500, 10.01, 10.02, 10.00, 10.01),
+            (1500, 10.40, 10.50, 10.30, 10.45),
         ],
     )
     m1 = _day(
         "2025-11-04",
         [
-            (930, 10.00, 10.00, 10.00, 10.00),
-            (931, 10.05, 10.20, 10.04, 10.18),
-            (1455, 10.18, 10.20, 10.15, 10.16),
+            (930, 10.08, 10.10, 10.05, 10.10),
+            (931, 10.08, 10.10, 10.05, 10.10),
+            (945, 10.08, 10.10, 10.05, 10.10),
+            (1455, 10.08, 10.10, 10.05, 10.10),
         ],
     )
     minute = {"600000.SH": pd.concat([m0, m1])}
-    daily = {"600000.SH": _daily(dates, [10.01, 10.16])}
+    daily = {"600000.SH": _daily(dates, [10.45, 10.10])}
     st = sim.simulate(
         minute, daily, {"20251103": ["600000.SH"]}, "20251103", "20251104"
     )
     assert st.stats["buys"] == 1
-    sells = [t for t in st.trades if t["side"] == "SELL"]
-    assert sells == [] or sells[0]["reason"] != "pos_trail"
-    assert not any(
-        t["date"] == "20251104" and t.get("reason") == "pos_trail" for t in st.trades
-    )
+    assert st.stats["sell_trail"] == 0
+    assert not any(t["side"] == "SELL" for t in st.trades)
 
 
 def test_minute_cache_roundtrip(tmp_path):

@@ -105,6 +105,7 @@ class PortfolioManager:
             resolve_use_preset_sell_adapter,
         )
 
+        self.strategy_version = strategy_version
         self.use_preset_sell_adapter = resolve_use_preset_sell_adapter(use_preset_sell_adapter)
         try:
             if self.use_preset_sell_adapter:
@@ -399,9 +400,13 @@ class PortfolioManager:
                 status.limit_up_price = limit_up
                 status.limit_down_price = limit_down
 
-            # 只有在持有股票时才更新最高价
+            # 只有在持有股票时才更新最高价。策略6：峰值从 T+1 起算，T+0 固定买入价。
             if status.cost_price > 0:
-                status.update_high_price(current_date, current_time, data['high'])
+                if self.strategy_version == "version6" and int(status.hold_days or 0) < 1:
+                    if status.holding_high <= 0:
+                        status.holding_high = status.cost_price
+                else:
+                    status.update_high_price(current_date, current_time, data["high"])
 
     def can_trade_tplus1(self, stock_code, direction, current_datetime):
         """

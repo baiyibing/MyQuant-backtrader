@@ -30,7 +30,7 @@ REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, REPO)
 
 from backtest.research.csv_daily_backtest import (  # noqa: E402
-    COMMISSION,
+    CHASE_HM,
     DEFAULT_DAILY_QUOTA,
     DEFAULT_TOTAL_CASH,
     MINUTE_LAKE_END,
@@ -40,14 +40,16 @@ from backtest.research.csv_daily_backtest import (  # noqa: E402
     STOP_PCT,
     TIER_DEFAULT,
     TIERS,
-    Position,
     SimState,
     add_strategy6_ratio_args,
+    chase_decision,
+    execute_buy,
     record_strategy6_params,
     strategy6_kwargs_from_args,
-    _buy_size,
     _limit_prices,
     hit_limit_down,
+    peak_gap_blocks,
+    trail_hits,
     hit_limit_up,
     _progress,
     _sell,
@@ -74,14 +76,14 @@ PM_OPEN, PM_CLOSE = 13 * 60, 15 * 60
 HELP_LOCK = """
 分钟向量化口径（相对 Cerebro 保真版：无事件总线，同公式逐分钟扫描）：
   时钟：分钟湖 time 把 A 股会话钟点标成 UTC（09:30 UTC=开盘）。交易日=该 UTC 日期。
-  买入：池 CSV 当日候选、14:55 收盘价；买价达到或超过涨停价 → 跳过。
-        T+1 09:35 追买/弃买规则停用。
+  买入：池 CSV 当日候选、14:55 收盘价；买价达到或超过涨停价 → 当日不买，
+        记下额度。T+1 09:45 市价>当日开盘 → 09:45 收盘追买；否则弃买。一次机会。
   止损：D+1 起，开盘 ≤ 买入价×(1-stop) → 开盘成交；否则该分钟 close 触价 → close 成交。
   止盈：基础锚 +1%。峰值用 bar high，现价用 close；仅峰值超过 +1% 后按
-        T+1=0.5 / T+2=0.4 / T+3+=0.3 回撤。开盘 < 锚先观察。触价 bar 与
-        创新高 bar 间隔须大于 2 分钟（隔夜/午休间隔为负或很大，视为满足）。
-        未过锚不止盈。盘中触线按该分钟 close 走。
-  比例：--stop-pct / --profit-base / --trail-t1 / --trail-t2 / --trail-t3 可改。
+        T+1=0.3 / T+2=0.4 / T+3=0.5 / T+4=0.6 / T+5+=0.7 回撤。开盘 < 锚先观察。
+        触价 bar 与创新高 bar 间隔不能 < 15 分钟（=15 允许；隔夜/午休 gap<0 视为满足）。
+        触发价 < 买入价不止盈。未过锚不止盈。盘中触线按该分钟 close 走。
+  比例：--stop-pct / --profit-base / --trail-t1..t5 可改。
   T+0：不可卖；峰值固定为买入价，14:55 之后的 high 不计入。峰值从 T+1 起算。
   资金 / T+1 / force_min / 佣金：与 csv_daily_backtest 相同。
   复权：买卖价、涨跌停、净值全程 dividend_type=none（与日线/Cerebro 对齐，
@@ -246,23 +248,69 @@ def write_minute_cache(
     return path
 
 
+def _frame_from_cache_group(g: pd.DataFrame) -> pd.DataFrame:
+    frame = g.drop(columns=["symbol"])
+    frame.index = pd.DatetimeIndex(frame.pop("time"))
+    frame["hm"] = frame["hm"].astype(np.int64, copy=False)
+    if not frame.index.is_monotonic_increasing:
+        frame = frame.sort_index()
+    return frame
+
+
 def read_minute_cache(
     path: Path, codes: Optional[set[str]] = None
 ) -> dict[str, pd.DataFrame]:
+    """按 row group 读（写入时一码一组），避免整表 to_pandas 顶满内存。"""
     print(f"reading minute cache {path}", flush=True)
-    table = pq.read_table(path)
-    if codes:
-        table = table.filter(pc.field("symbol").isin(sorted(codes)))
-    if table.num_rows == 0:
-        return {}
-    print(f"minute cache rows={table.num_rows}", flush=True)
-    df = table.to_pandas()
+    pf = pq.ParquetFile(path)
+    want = set(codes) if codes else None
     out: dict[str, pd.DataFrame] = {}
-    for code, g in df.groupby("symbol", sort=False):
-        frame = g.drop(columns=["symbol"]).copy()
-        frame.index = pd.DatetimeIndex(frame.pop("time"))
-        frame["hm"] = frame["hm"].astype(np.int64)
-        out[str(code)] = frame.sort_index()
+    n_rows = 0
+    n_rg = pf.num_row_groups
+    for i in range(n_rg):
+        table = pf.read_row_group(i)
+        if table.num_rows == 0:
+            continue
+        uniq = pc.unique(table.column("symbol"))
+        if len(uniq) == 1:
+            code = uniq[0].as_py()
+            if want is not None and code not in want:
+                continue
+            key = str(code)
+            df = table.to_pandas()
+            n_rows += len(df)
+            frame = _frame_from_cache_group(df)
+            if key in out:
+                merged = pd.concat([out[key], frame])
+                out[key] = (
+                    merged
+                    if merged.index.is_monotonic_increasing
+                    else merged.sort_index()
+                )
+            else:
+                out[key] = frame
+        else:
+            if want is not None:
+                table = table.filter(pc.field("symbol").isin(sorted(want)))
+                if table.num_rows == 0:
+                    continue
+            df = table.to_pandas()
+            n_rows += len(df)
+            for code, g in df.groupby("symbol", sort=False):
+                frame = _frame_from_cache_group(g)
+                key = str(code)
+                if key in out:
+                    merged = pd.concat([out[key], frame])
+                    out[key] = (
+                        merged
+                        if merged.index.is_monotonic_increasing
+                        else merged.sort_index()
+                    )
+                else:
+                    out[key] = frame
+        if (i + 1) == n_rg or (i + 1) % 400 == 0:
+            print(f"minute cache rg {i + 1}/{n_rg} symbols={len(out)}", flush=True)
+    print(f"minute cache rows={n_rows}", flush=True)
     return out
 
 
@@ -363,7 +411,8 @@ def scan_held_day(
     new_peak_hm = int(peak_hm)
     n = int(len(c))
     for i in range(n):
-        if not can_sell:
+        # T+0 不卖、不更新峰值（历史最高价从 T+1 起算）
+        if (not can_sell) or n_days < 1:
             continue
         hi = float(h[i])
         cur_hm = int(hm[i]) if hm is not None else i
@@ -379,15 +428,9 @@ def scan_held_day(
         ret = px_close / cost - 1.0
         if ret <= -stop_pct:
             return i, px_close, "stop_loss:touch", new_peak, new_peak_hm
-        peak_ret = new_peak / cost - 1.0
-        peak_excess = peak_ret - profit_base
-        if peak_excess <= 0:
+        if new_peak_hm >= 0 and peak_gap_blocks(cur_hm - new_peak_hm, peak_gap_min):
             continue
-        if new_peak_hm >= 0:
-            gap = cur_hm - new_peak_hm
-            if 0 <= gap <= int(peak_gap_min):
-                continue
-        if ret - profit_base <= trail_ratio * peak_excess:
+        if trail_hits(px_close, cost, new_peak, profit_base, trail_ratio):
             return i, px_close, f"trail:T+{max(1, n_days)}", new_peak, new_peak_hm
     return -1, float("nan"), "", new_peak, new_peak_hm
 
@@ -432,6 +475,20 @@ def _buy_px(day_df: pd.DataFrame) -> Optional[float]:
     return float(late["close"].iloc[-1])
 
 
+def _chase_quotes(day_df: pd.DataFrame) -> Optional[tuple[float, float]]:
+    """(当日开盘, 09:45 市价)。缺 09:45 则用 ≤09:45 最后一根 close。"""
+    if day_df is None or day_df.empty:
+        return None
+    open_px = float(day_df.iloc[0]["open"])
+    hit = day_df.loc[day_df["hm"] == CHASE_HM]
+    if not hit.empty:
+        return open_px, float(hit["close"].iloc[0])
+    early = day_df.loc[(day_df["hm"] >= AM_OPEN) & (day_df["hm"] <= CHASE_HM)]
+    if early.empty:
+        return None
+    return open_px, float(early["close"].iloc[-1])
+
+
 def simulate(
     minute_bars: dict[str, pd.DataFrame],
     daily_bars: dict[str, pd.DataFrame],
@@ -461,6 +518,7 @@ def simulate(
     st.stats["bars_loaded"] = len(minute_bars)
     st.stats["pool_days"] = len(pool_days)
     day_spans = {code: build_day_spans(df) for code, df in minute_bars.items()}
+    pending_chase: dict[str, tuple[float, int]] = {}
 
     for i, day in enumerate(calendar):
         ds = _ymd(day)
@@ -511,6 +569,38 @@ def simulate(
                     continue
                 _sell(st, code, pos, px, day, reason)
 
+        due = [c for c, (_per, sig) in pending_chase.items() if i == sig + 1]
+        for code in due:
+            per_ch, _sig = pending_chase.pop(code)
+            if code in st.positions:
+                st.stats["skip_held"] += 1
+                continue
+            mdf = minute_bars.get(code)
+            ddf = daily_bars.get(code)
+            if mdf is None or ddf is None or day not in ddf.index:
+                st.stats["chase_no_bar"] += 1
+                continue
+            day_m = _slice_day(mdf, day_spans.get(code, {}), ds)
+            quotes = _chase_quotes(day_m) if day_m is not None else None
+            if quotes is None:
+                st.stats["chase_no_bar"] += 1
+                continue
+            open_px, px = quotes
+            prev_rows = ddf.loc[ddf.index < day]
+            if prev_rows.empty:
+                st.stats["chase_no_bar"] += 1
+                continue
+            prev_close = float(prev_rows.iloc[-1]["close"])
+            limit_up, _ = _limit_prices(code, prev_close)
+            decision = chase_decision(open_px, px, limit_up)
+            if decision == "limit":
+                st.stats["chase_skip_limit"] += 1
+                continue
+            if decision != "buy":
+                st.stats["chase_abandon"] += 1
+                continue
+            execute_buy(st, code, px, per_ch, i, day, reason="chase:T+1")
+
         planned = list(pool_days.get(ds, []))
         if planned:
             per = min(daily_quota, st.cash) / len(planned)
@@ -539,32 +629,9 @@ def simulate(
                 limit_up, _ = _limit_prices(code, prev_close)
                 if hit_limit_up(px, limit_up):
                     st.stats["skip_limit_up"] += 1
+                    pending_chase[code] = (per, i)
                     continue
-                shares, supp = _buy_size(per, px)
-                if shares <= 0:
-                    continue
-                notional = shares * px
-                comm = notional * COMMISSION
-                if notional + comm > st.cash:
-                    continue
-                st.cash -= notional + comm
-                st.daily_quota_used += min(per, notional)
-                st.stats["supplementary_used"] += supp
-                st.stats["invested_notional"] += notional
-                # T+0 不记峰值；持仓峰值从 T+1 的 high 起算
-                st.positions[code] = Position(code, shares, px, i, px)
-                st.trades.append(
-                    {
-                        "date": ds,
-                        "code": code,
-                        "side": "BUY",
-                        "price": px,
-                        "shares": shares,
-                        "notional": notional,
-                        "commission": comm,
-                    }
-                )
-                st.stats["buys"] += 1
+                execute_buy(st, code, px, per, i, day, reason="pool")
 
         eq = st.cash
         for code, pos in st.positions.items():
