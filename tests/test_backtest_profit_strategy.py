@@ -265,3 +265,65 @@ def test_v6_adapter_routes_sell_to_local_strategy():
         _st(cost=10.0, high=10.0), _dt(2025, 11, 3, 10, 0), 9.398
     )
     assert ok and reason.startswith("stop_loss")
+
+
+# ---------------------------------------------------------------------------
+# 策略8（version8）：15% 止损 + 20% 锚绝对涨幅分档 + 涨幅>50% 最高价回撤 20%
+# ---------------------------------------------------------------------------
+
+
+def _v8(**overrides):
+    return StrategyFactory.create("version8", overrides or None)
+
+
+def test_v8_factory_registered_with_expected_defaults():
+    s = StrategyFactory.create("version8")
+    assert s.params["stop_loss_pct"] == 0.15
+
+
+def test_v8_stop_loss_triggers_at_15pct_not_14pct():
+    s = _v8()
+    ok, _ = s.should_sell(
+        _st(cost=10.0, high=10.0), _dt(2025, 11, 3, 10, 0), 8.611
+    )
+    assert not ok
+    ok, reason = s.should_sell(
+        _st(cost=10.0, high=10.0), _dt(2025, 11, 3, 10, 1), 8.489
+    )
+    assert ok and reason.startswith("stop_loss")
+
+
+def test_v8_band_20_to_40_floors_at_20pct():
+    s = _v8()
+    now = _dt(2025, 11, 3, 10, 0)
+    ok, _ = s.should_sell(_st(cost=10.0, high=13.0, days=1), now, 12.011)
+    assert not ok
+    ok, reason = s.should_sell(_st(cost=10.0, high=13.0, days=1), now, 11.989)
+    assert ok and "trail:band:20" in reason
+
+
+def test_v8_no_tp_until_peak_above_20pct():
+    s = _v8()
+    ok, _ = s.should_sell(
+        _st(cost=10.0, high=11.99, days=1), _dt(2025, 11, 3, 10, 0), 11.50
+    )
+    assert not ok
+
+
+def test_v8_peak_dd_when_tighter_than_band():
+    s = _v8()
+    # 峰值 +200%：分档地板 +110%=21；最高价×80%=24。23 只触峰回撤。
+    ok, reason = s.should_sell(
+        _st(cost=10.0, high=30.0, days=1), _dt(2025, 11, 3, 10, 0), 23.00
+    )
+    assert ok and "trail:peak_dd" in reason
+
+
+def test_v8_adapter_routes_sell_to_local_strategy():
+    from backtest.preset_strategy_adapter import create_preset_strategy_adapter
+
+    adapter = create_preset_strategy_adapter("version8")
+    ok, reason = adapter.should_sell(
+        _st(cost=10.0, high=10.0), _dt(2025, 11, 3, 10, 0), 8.489
+    )
+    assert ok and reason.startswith("stop_loss")

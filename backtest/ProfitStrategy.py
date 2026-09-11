@@ -647,6 +647,78 @@ class Strategy6(ProfitStrategy):
         return True, "策略6允许买入（买侧涨停拦截由滚动层 skip_limit_up 强制）"
 
 
+class Strategy8(ProfitStrategy):
+    """
+    策略8：金榕元交易回测。15% 止损 + 基础止盈 20% 的绝对涨幅分档回撤。
+
+    止损：市价较买入价回撤 >= 15 个点（默认 15%），盘中触发即按该止损卖。
+
+    止盈（峰值涨幅 = 持仓最高价/买入价 - 1；峰值从 T+1 起算）：
+      未过基础 20% 不止盈。过锚后回撤到对应绝对涨幅：
+          20% < 涨幅 <= 40% → 回撤到 +20%
+          40% < 涨幅 <= 60% → 回撤到 +30%
+          60% < 涨幅 <= 80% → 回撤到 +50%
+          80% < 涨幅 <= 100% → 回撤到 +70%
+          100% < 涨幅 <= 120% → 回撤到 +90%
+          120% < 涨幅 → 回撤到 +110%
+      另：峰值涨幅 > 50% 且现价 <= 最高价 × 80%（最高价回撤 20%）也止盈。
+      打到 +20% 当日不硬止盈；须峰值超过 20% 后再回撤到档位。
+
+    买侧契约（由 RollingInvestmentStrategy / CSV 引擎执行）：
+      尾盘涨停当日不买；T+1 09:45 市价>当日开盘则追买，否则弃买。
+    """
+
+    def __init__(self, stop_loss_pct: float = 0.15):
+        super().__init__(stop_loss_pct=float(stop_loss_pct))
+
+    def _validate_params(self):
+        assert 0 < self.params["stop_loss_pct"] < 1, "止损比例需在(0,1)"
+
+    def should_sell(
+        self,
+        status,
+        current_datetime,
+        current_price,
+        is_limit_up=False,
+        is_limit_down=False,
+        indicators=None,
+    ):
+        from backtest.research.strategy8_rules import (
+            stop_hits,
+            take_profit_reason,
+        )
+
+        del current_datetime, is_limit_up, is_limit_down, indicators
+        cost = float(getattr(status, "cost_price", 0.0) or 0.0)
+        if cost <= 0 or current_price <= 0:
+            return False, None
+        if stop_hits(current_price, cost, self.params["stop_loss_pct"]):
+            ret = current_price / cost - 1.0
+            return (
+                True,
+                f"stop_loss 亏损{(-ret) * 100:.2f}%触发"
+                f"{self.params['stop_loss_pct'] * 100:.0f}%止损",
+            )
+        peak = float(
+            getattr(status, "holding_high", current_price) or current_price
+        )
+        reason = take_profit_reason(current_price, cost, peak)
+        if reason:
+            return True, f"profit_take:{reason}"
+        return False, None
+
+    def should_buy(
+        self,
+        status,
+        current_datetime,
+        current_price,
+        is_limit_up=False,
+        is_limit_down=False,
+        indicators=None,
+    ):
+        return True, "策略8允许买入（买侧涨停拦截由滚动层 skip_limit_up 强制）"
+
+
 class StrategyFactory:
     """策略工厂：预设配置 + 自定义参数覆盖"""
 
@@ -684,6 +756,7 @@ class StrategyFactory:
                 "positive_trail_ratio": 0.50,
             },
         ),
+        "version8": (Strategy8, {"stop_loss_pct": 0.15}),
     }
 
     @classmethod

@@ -85,6 +85,18 @@ def test_stop_pct_override_changes_fill():
     assert sell2["price"] == pytest.approx(9.70)
 
 
+def test_csv_strategy_version8_uses_shared_engine():
+    ap = argparse.ArgumentParser()
+    sim.add_csv_strategy_arg(ap)
+    sim.add_strategy6_ratio_args(ap)
+    args = ap.parse_args(["--strategy", "version8"])
+    kw = sim.csv_run_kwargs_from_args(args)
+    assert kw["strategy"] == "version8"
+    hooks = sim.apply_csv_strategy(**kw)
+    assert hooks["stop_pct"] == pytest.approx(0.15)
+    assert hooks["take_profit"] is not None
+
+
 def test_strategy6_ratio_args_parse():
     ap = argparse.ArgumentParser()
     sim.add_strategy6_ratio_args(ap)

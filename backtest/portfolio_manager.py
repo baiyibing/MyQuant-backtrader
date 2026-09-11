@@ -402,7 +402,9 @@ class PortfolioManager:
 
             # 只有在持有股票时才更新最高价。策略6：峰值从 T+1 起算，T+0 固定买入价。
             if status.cost_price > 0:
-                if self.strategy_version == "version6" and int(status.hold_days or 0) < 1:
+                if self.strategy_version in ("version6", "version8") and int(
+                    status.hold_days or 0
+                ) < 1:
                     if status.holding_high <= 0:
                         status.holding_high = status.cost_price
                 else:

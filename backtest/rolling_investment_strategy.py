@@ -124,10 +124,16 @@ class RollingInvestmentStrategy(bt.Strategy):
         else:
             logger.info(f"✅ PortfolioManager已注入全局资金管理器")
 
-        # 策略6：尾盘涨停当日不买（skip_limit_up），不走 3 日延期额度；
+        # 策略6/8：尾盘涨停当日不买（skip_limit_up），不走 3 日延期额度；
         # T+1 09:45 用 v6_chase 判断市价>开盘则追买，否则弃买。
-        if self.params.strategy_version == 'version6' and not self.params.skip_limit_up:
-            logger.info("✅ 策略6：强制 skip_limit_up=True（尾盘涨停不买，次日 09:45 追买/弃买）")
+        if (
+            self.params.strategy_version in ("version6", "version8")
+            and not self.params.skip_limit_up
+        ):
+            logger.info(
+                f"✅ {self.params.strategy_version}：强制 skip_limit_up=True"
+                "（尾盘涨停不买，次日 09:45 追买/弃买）"
+            )
             self.params.skip_limit_up = True
 
         # 存储日线数据（用于计算指标）
@@ -150,7 +156,7 @@ class RollingInvestmentStrategy(bt.Strategy):
 
         # 新增：收盘标志，防止收盘后再次创建订单
         self._market_closed = False
-        self.v6_chase = {}  # version6：尾盘涨停后次日 09:45 追买 {stock: allocated_cash}
+        self.v6_chase = {}  # version6/8：尾盘涨停后次日 09:45 追买 {stock: allocated_cash}
         self.v6_session_open = {}
 
         # 存储股票买入日期映射（支持一对多）
@@ -1247,7 +1253,7 @@ class RollingInvestmentStrategy(bt.Strategy):
             stock_data_dict = self._prepare_market_data(current_datetime)
             self.portfolio_manager.update_market_data(current_datetime, stock_data_dict)
             if (
-                self.params.strategy_version == "version6"
+                self.params.strategy_version in ("version6", "version8")
                 and current_time == time(9, 30)
             ):
                 self.v6_session_open = {
@@ -1436,7 +1442,12 @@ class RollingInvestmentStrategy(bt.Strategy):
                 if reason.startswith('profit_take'):
                     reason_type = '止盈'
                     # 动态止盈（version1/version2）与策略6分档回撤止盈需使用市价单确保成交
-                    if self.params.strategy_version in ('version1', 'version2', 'version6'):
+                    if self.params.strategy_version in (
+                        "version1",
+                        "version2",
+                        "version6",
+                        "version8",
+                    ):
                         order_exectype = bt.Order.Market
                     # 静态止盈（version3/version5）保持限价单以获取更好价格
                 elif reason.startswith('stop_loss'):
@@ -1533,7 +1544,7 @@ class RollingInvestmentStrategy(bt.Strategy):
                 self._process_next_day_buy_orders(current_datetime)
 
         if (
-            self.params.strategy_version == "version6"
+            self.params.strategy_version in ("version6", "version8")
             and current_time == time(9, 45)
         ):
             self._process_v6_chase_buys(current_datetime)
@@ -1909,7 +1920,7 @@ class RollingInvestmentStrategy(bt.Strategy):
             if self.portfolio_manager.limit_manager.is_limit_up(stock, current_price):
                 if self.params.skip_limit_up:
                     status.need_buy_next_day = False
-                    if self.params.strategy_version == "version6":
+                    if self.params.strategy_version in ("version6", "version8"):
                         self.v6_chase[stock] = float(self.cash_per_stock or 0.0)
                     self.log_trade("涨停跳过", stock, data.close[0], 0, "次日09:45追买")
                 else:

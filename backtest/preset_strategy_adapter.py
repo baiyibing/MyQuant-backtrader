@@ -183,9 +183,9 @@ class PresetStrategyAdapter(ProfitStrategy):
         indicators=None,
     ) -> Tuple[bool, Optional[str]]:
         del is_limit_down
-        # version6 是回测本地预设（2026-09-10）：trade_decision.presets 为两仓共享 SSOT
-        # （blob 与 1.3 main 一致），不在其中注册；卖侧委托 Strategy6 实例，验证后再上游化。
-        if self.preset_version == "version6":
+        # version6 / version8 是回测本地预设：trade_decision.presets 为两仓共享 SSOT
+        # （blob 与 1.3 main 一致），不在其中注册；卖侧委托本地 Strategy 实例。
+        if self.preset_version in ("version6", "version8"):
             return self._legacy_strategy.should_sell(
                 status, current_datetime, current_price, is_limit_up, False, indicators
             )

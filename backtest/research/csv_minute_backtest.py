@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""CSV 模式分钟向量化回测（策略 6，绕开 Cerebro）。
+"""CSV 模式分钟向量化回测（策略 6 / 策略 8 共用引擎，绕开 Cerebro）。
 
 与日线近似版同一套 CSV 额度 / T+1 / 涨停跳过 / force_min / 0.1% 双边佣金。
-卖点按分钟路径扫描：峰值用 bar high，止损/止盈用 Strategy6 公式（close 作现价；
-开盘已跌破止损则按开盘价成交）。买入用 14:55 分钟收盘（湖内时间为
-「中国交易时钟标成 UTC」——09:30 UTC = 09:30 CST）。
+卖点按分钟路径扫描：峰值用 bar high，现价用 close；开盘已跌破止损则按开盘价
+成交。默认策略 6；`--strategy version8` 只换金榕元卖点。买入用 14:55 分钟收盘
+（湖内时间为「中国交易时钟标成 UTC」——09:30 UTC = 09:30 CST）。
 
 用法：
     python backtest/research/csv_minute_backtest.py --start 20251023 --end 20251104
+    python backtest/research/csv_minute_backtest.py --strategy version8 --start 20251023 --end 20260909
 """
 
 from __future__ import annotations
@@ -33,19 +34,22 @@ from backtest.research.csv_daily_backtest import (  # noqa: E402
     CHASE_HM,
     DEFAULT_DAILY_QUOTA,
     DEFAULT_TOTAL_CASH,
+    HELP_LOCK_V8,
     MINUTE_LAKE_END,
     PEAK_GAP_MIN,
     POS_TRAIL,
     PROFIT_BASE,
-    STOP_PCT,
     TIER_DEFAULT,
     TIERS,
     SimState,
+    add_csv_strategy_arg,
     add_strategy6_ratio_args,
+    apply_csv_strategy,
     chase_decision,
+    csv_run_kwargs_from_args,
+    engine_book,
     execute_buy,
     record_strategy6_params,
-    strategy6_kwargs_from_args,
     _limit_prices,
     hit_limit_down,
     peak_gap_blocks,
@@ -93,7 +97,8 @@ HELP_LOCK = """
         row group，磁盘还是整文件读，但 CPU 从「全历史转换」降到「窗口转换」。
   缓存：窗口分钟条写入 backtest_output/bar_cache/（E 盘，已 annotated）。默认
         命中直接读缓存；缺码再补湖并回写。--no-cache 跳过；--rebuild-cache 重做。
-  落盘：与日线同三件套；若已有 csv_daily_v6_{start}_* 净值，summary 末尾附对照。
+  落盘：与日线同三件套；若已有同策略 csv_daily_{v6|v8}_{start}_* 净值，summary 末尾附对照。
+  策略：--strategy version6（默认）或 version8。同一引擎，只换卖点。
 """
 
 CACHE_ROOT = Path(REPO) / "backtest_output" / "bar_cache"
@@ -404,6 +409,7 @@ def scan_held_day(
     hm: Optional[np.ndarray] = None,
     peak_hm: int = -1,
     peak_gap_min: int = PEAK_GAP_MIN,
+    take_profit=None,
 ) -> tuple[int, float, str, float, int]:
     """逐分钟扫描。返回 (idx, px, reason, new_peak, new_peak_hm)。"""
     trigger = cost * (1.0 - stop_pct)
@@ -428,6 +434,11 @@ def scan_held_day(
         ret = px_close / cost - 1.0
         if ret <= -stop_pct:
             return i, px_close, "stop_loss:touch", new_peak, new_peak_hm
+        if take_profit is not None:
+            reason = take_profit(px_close, cost, new_peak, n_days)
+            if reason:
+                return i, px_close, reason, new_peak, new_peak_hm
+            continue
         if new_peak_hm >= 0 and peak_gap_blocks(cur_hm - new_peak_hm, peak_gap_min):
             continue
         if trail_hits(px_close, cost, new_peak, profit_base, trail_ratio):
@@ -498,23 +509,35 @@ def simulate(
     *,
     total_cash: float = DEFAULT_TOTAL_CASH,
     daily_quota: float = DEFAULT_DAILY_QUOTA,
-    stop_pct: float = STOP_PCT,
+    stop_pct: Optional[float] = None,
     profit_base: float = PROFIT_BASE,
     tiers: Optional[dict] = None,
     tier_default: float = TIER_DEFAULT,
     pos_trail: float = POS_TRAIL,
+    strategy: str = "version6",
+    take_profit=None,
+    record_params=None,
 ) -> SimState:
+    hooks = apply_csv_strategy(
+        strategy, stop_pct=stop_pct, take_profit=take_profit, record_params=record_params
+    )
+    stop_pct = hooks["stop_pct"]
+    take_profit = hooks["take_profit"]
+    record_params = hooks["record_params"]
     tier_map = dict(tiers or TIERS)
     calendar = build_calendar(daily_bars, start, end)
 
     st = SimState(cash=float(total_cash))
-    record_strategy6_params(
-        st,
-        stop_pct=stop_pct,
-        profit_base=profit_base,
-        tiers=tier_map,
-        tier_default=tier_default,
-    )
+    if record_params is not None:
+        record_params(st)
+    else:
+        record_strategy6_params(
+            st,
+            stop_pct=stop_pct,
+            profit_base=profit_base,
+            tiers=tier_map,
+            tier_default=tier_default,
+        )
     st.stats["bars_loaded"] = len(minute_bars)
     st.stats["pool_days"] = len(pool_days)
     day_spans = {code: build_day_spans(df) for code, df in minute_bars.items()}
@@ -558,6 +581,7 @@ def simulate(
                 limit_down=limit_down,
                 hm=hm,
                 peak_hm=int(pos.peak_hm),
+                take_profit=take_profit,
             )
             pos.peak = new_peak
             pos.peak_hm = new_peak_hm
@@ -671,7 +695,7 @@ def run(
     *,
     total_cash: float = DEFAULT_TOTAL_CASH,
     daily_quota: float = DEFAULT_DAILY_QUOTA,
-    stop_pct: float = STOP_PCT,
+    stop_pct: Optional[float] = None,
     profit_base: float = PROFIT_BASE,
     tiers: Optional[dict] = None,
     tier_default: float = TIER_DEFAULT,
@@ -679,6 +703,9 @@ def run(
     workers: int = 16,
     use_cache: bool = True,
     rebuild_cache: bool = False,
+    strategy: str = "version6",
+    take_profit=None,
+    record_params=None,
 ) -> SimState:
     warn_stale_period_env()
     if end > MINUTE_LAKE_END:
@@ -732,6 +759,9 @@ def run(
         tiers=tiers,
         tier_default=tier_default,
         pos_trail=pos_trail,
+        strategy=strategy,
+        take_profit=take_profit,
+        record_params=record_params,
     )
     st.stats["t_pool_s"] = t_pool
     st.stats["t_daily_s"] = t_daily
@@ -744,8 +774,8 @@ def run(
 
 def main(argv: Optional[list] = None) -> int:
     ap = argparse.ArgumentParser(
-        description="CSV-mode vectorized minute strategy6 backtest",
-        epilog=HELP_LOCK,
+        description="CSV-mode vectorized minute backtest (version6 / version8)",
+        epilog=HELP_LOCK + HELP_LOCK_V8,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     ap.add_argument("--start", default="20251023")
@@ -761,6 +791,7 @@ def main(argv: Optional[list] = None) -> int:
     ap.add_argument(
         "--rebuild-cache", action="store_true", help="reload lake and rewrite cache"
     )
+    add_csv_strategy_arg(ap)
     add_strategy6_ratio_args(ap)
     args = ap.parse_args(argv if argv is not None else None)
 
@@ -772,17 +803,24 @@ def main(argv: Optional[list] = None) -> int:
         workers=args.workers,
         use_cache=not args.no_cache,
         rebuild_cache=args.rebuild_cache,
-        **strategy6_kwargs_from_args(args),
+        **csv_run_kwargs_from_args(args),
     )
-    text = summarize(st, args.cash_total, args.start, args.end, engine="csv_minute_v6")
+    book = engine_book(args.strategy)
+    engine = f"csv_minute_{book}"
+    text = summarize(st, args.cash_total, args.start, args.end, engine=engine)
     cmp = maybe_compare_daily(
-        st.equity_curve, args.start, args.end, this_label="csv_minute_v6"
+        st.equity_curve, args.start, args.end, this_label=engine, book=book
     )
     if cmp:
         text = text + "\n" + cmp
     print(text)
-    tag = f"csv_minute_v6_{args.start}_{args.end}"
-    write_run_artifacts(Path(REPO) / "backtest_output" / tag, st, text, HELP_LOCK)
+    tag = f"{engine}_{args.start}_{args.end}"
+    write_run_artifacts(
+        Path(REPO) / "backtest_output" / tag,
+        st,
+        text,
+        HELP_LOCK + (HELP_LOCK_V8 if book == "v8" else ""),
+    )
     return 0
 
 
