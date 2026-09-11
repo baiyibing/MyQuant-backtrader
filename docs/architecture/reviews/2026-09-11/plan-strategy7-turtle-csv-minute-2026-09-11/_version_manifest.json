@@ -1,0 +1,29 @@
+{
+  "plan": {
+    "claude": {
+      "content_sha256_16": "395f9bdb1dac3dd7",
+      "git_sha": "<untracked>",
+      "path": "docs/backtest/plan-strategy7-turtle-csv-minute-2026-09-11.md",
+      "reviewed_at": "2026-09-11"
+    },
+    "codex": {
+      "content_sha256_16": "395f9bdb1dac3dd7",
+      "git_sha": "<untracked>",
+      "path": "docs/backtest/plan-strategy7-turtle-csv-minute-2026-09-11.md",
+      "reviewed_at": "2026-09-11"
+    },
+    "cursor-auto": {
+      "content_sha256_16": "395f9bdb1dac3dd7",
+      "git_sha": "<untracked>",
+      "path": "docs/backtest/plan-strategy7-turtle-csv-minute-2026-09-11.md",
+      "reviewed_at": "2026-09-11"
+    },
+    "cursor-kimi-k3-high": {
+      "content_sha256_16": "395f9bdb1dac3dd7",
+      "git_sha": "<untracked>",
+      "path": "docs/backtest/plan-strategy7-turtle-csv-minute-2026-09-11.md",
+      "reviewed_at": "2026-09-11"
+    }
+  },
+  "schema_version": 1
+}
