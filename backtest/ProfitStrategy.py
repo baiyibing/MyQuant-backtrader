@@ -42,13 +42,13 @@ class ProfitStrategy(ABC):
 
     @abstractmethod
     def should_sell(
-            self,
-            status,
-            current_datetime,
-            current_price: float,
-            is_limit_up: bool,
-            is_limit_down: bool,
-            indicators: Optional[Dict] = None
+        self,
+        status,
+        current_datetime,
+        current_price: float,
+        is_limit_up: bool,
+        is_limit_down: bool,
+        indicators: Optional[Dict] = None,
     ) -> Tuple[bool, Optional[str]]:
         """
         判断是否应卖出持仓
@@ -64,13 +64,13 @@ class ProfitStrategy(ABC):
 
     @abstractmethod
     def should_buy(
-            self,
-            status,
-            current_datetime,
-            current_price: float,
-            is_limit_up: bool,
-            is_limit_down: bool,
-            indicators: Optional[Dict] = None
+        self,
+        status,
+        current_datetime,
+        current_price: float,
+        is_limit_up: bool,
+        is_limit_down: bool,
+        indicators: Optional[Dict] = None,
     ) -> Tuple[bool, Optional[str]]:
         """
         判断是否应买入股票
@@ -109,19 +109,27 @@ class Strategy1(ProfitStrategy):
     """策略1: 亏损2%止损 + 回撤达到利润50%止盈"""
 
     def _validate_params(self):
-        self.params.setdefault('stop_loss_pct', 0.02)
-        self.params.setdefault('profit_drawdown_pct', 0.50)
-        assert 0 < self.params['stop_loss_pct'] < 1, "止损比例需在(0,1)"
-        assert 0 < self.params['profit_drawdown_pct'] <= 1, "回撤比例需在(0,1]"
+        self.params.setdefault("stop_loss_pct", 0.02)
+        self.params.setdefault("profit_drawdown_pct", 0.50)
+        assert 0 < self.params["stop_loss_pct"] < 1, "止损比例需在(0,1)"
+        assert 0 < self.params["profit_drawdown_pct"] <= 1, "回撤比例需在(0,1]"
 
-    def should_sell(self, status, current_datetime, current_price,is_limit_up=False,is_limit_down=False, indicators=None):
+    def should_sell(
+        self,
+        status,
+        current_datetime,
+        current_price,
+        is_limit_up=False,
+        is_limit_down=False,
+        indicators=None,
+    ):
         if status.cost_price <= 0:
             return False, None
 
         # 止损判断
         if current_price < status.cost_price:
             loss_ratio = (status.cost_price - current_price) / status.cost_price
-            if loss_ratio >= self.params['stop_loss_pct']:
+            if loss_ratio >= self.params["stop_loss_pct"]:
                 return True, f"stop_loss 亏损{loss_ratio * 100:.2f}%"
             return False, None
 
@@ -130,13 +138,21 @@ class Strategy1(ProfitStrategy):
             drawdown_ratio = self._calculate_drawdown_ratio(
                 status.holding_high, current_price, status.cost_price
             )
-            if drawdown_ratio >= self.params['profit_drawdown_pct']:
+            if drawdown_ratio >= self.params["profit_drawdown_pct"]:
                 # 修改：止盈原因以 profit_take:drawdown 开头，便于上层识别为动态回撤止盈
                 return True, f"profit_take:drawdown 回撤{drawdown_ratio * 100:.2f}%"
 
         return False, None
 
-    def should_buy(self, status, current_datetime, current_price,is_limit_up=False,is_limit_down=False, indicators=None):
+    def should_buy(
+        self,
+        status,
+        current_datetime,
+        current_price,
+        is_limit_up=False,
+        is_limit_down=False,
+        indicators=None,
+    ):
         # 买入逻辑由外部选股池控制，策略层允许买入
         return True, "策略1允许买入"
 
@@ -147,26 +163,36 @@ class Strategy2(ProfitStrategy):
     DEFAULT_RULES = {1: 0.50, 2: 0.40, 3: 0.30, 4: 0.20, 5: 0.10}
 
     def _validate_params(self):
-        self.params.setdefault('stop_loss_pct', 0.02)
-        self.params.setdefault('dynamic_drawdown_rules', self.DEFAULT_RULES.copy())
-        assert 0 < self.params['stop_loss_pct'] < 1, "止损比例需在(0,1)"
-        assert isinstance(self.params['dynamic_drawdown_rules'], dict), "动态规则需为字典"
+        self.params.setdefault("stop_loss_pct", 0.02)
+        self.params.setdefault("dynamic_drawdown_rules", self.DEFAULT_RULES.copy())
+        assert 0 < self.params["stop_loss_pct"] < 1, "止损比例需在(0,1)"
+        assert isinstance(self.params["dynamic_drawdown_rules"], dict), (
+            "动态规则需为字典"
+        )
 
-    def should_sell(self, status, current_datetime, current_price,is_limit_up=False,is_limit_down=False, indicators=None):
+    def should_sell(
+        self,
+        status,
+        current_datetime,
+        current_price,
+        is_limit_up=False,
+        is_limit_down=False,
+        indicators=None,
+    ):
         if status.cost_price <= 0:
             return False, None
 
         # 止损判断
         if current_price < status.cost_price:
             loss_ratio = (status.cost_price - current_price) / status.cost_price
-            if loss_ratio >= self.params['stop_loss_pct']:
+            if loss_ratio >= self.params["stop_loss_pct"]:
                 return True, f"stop_loss 亏损{loss_ratio * 100:.2f}%"
             return False, None
 
         # 动态止盈判断
         hold_days = max(1, status.hold_days)  # 至少1天
         # 根据持仓天数获取对应的回撤阈值：优先使用精确天数，否则取最大天数对应的规则，最后默认0.10
-        rules = self.params['dynamic_drawdown_rules']
+        rules = self.params["dynamic_drawdown_rules"]
         threshold = rules.get(hold_days, rules.get(max(rules.keys()), 0.10))
 
         if status.holding_high > status.cost_price and status.holding_high > 0:
@@ -175,13 +201,26 @@ class Strategy2(ProfitStrategy):
             )
             # 当回撤超过阈值时卖出
             if drawdown_ratio >= threshold:
-                profit_pct = (current_price - status.cost_price) / status.cost_price * 100
+                profit_pct = (
+                    (current_price - status.cost_price) / status.cost_price * 100
+                )
                 # 修改：止盈原因以 profit_take:drawdown 开头，便于上层识别为动态回撤止盈
-                return True, f"profit_take:drawdown 盈利{profit_pct:.2f}%,持仓{hold_days}天回撤{drawdown_ratio * 100:.2f}%"
+                return (
+                    True,
+                    f"profit_take:drawdown 盈利{profit_pct:.2f}%,持仓{hold_days}天回撤{drawdown_ratio * 100:.2f}%",
+                )
 
         return False, None
 
-    def should_buy(self, status, current_datetime, current_price,is_limit_up=False,is_limit_down=False, indicators=None):
+    def should_buy(
+        self,
+        status,
+        current_datetime,
+        current_price,
+        is_limit_up=False,
+        is_limit_down=False,
+        indicators=None,
+    ):
         return True, "策略2允许买入"
 
 
@@ -195,18 +234,25 @@ class Strategy3(ProfitStrategy):
 
     def _validate_params(self):
         # 参数必须通过构造传入，此处仅校验有效性
-        assert 0 < self.params['stop_loss_pct'] < 1, "止损比例需在(0,1)"
-        assert 0 < self.params['profit_target_pct'] <= 1, "止盈比例需在(0,1]"
+        assert 0 < self.params["stop_loss_pct"] < 1, "止损比例需在(0,1)"
+        assert 0 < self.params["profit_target_pct"] <= 1, "止盈比例需在(0,1]"
 
-    def should_sell(self, status, current_datetime, current_price,is_limit_up=False,is_limit_down=False, indicators=None):
-
+    def should_sell(
+        self,
+        status,
+        current_datetime,
+        current_price,
+        is_limit_up=False,
+        is_limit_down=False,
+        indicators=None,
+    ):
         if status.cost_price <= 0:
             return False, None
 
         # 止损判断
         if current_price < status.cost_price:
             loss_ratio = (status.cost_price - current_price) / status.cost_price
-            if loss_ratio >= self.params['stop_loss_pct']:
+            if loss_ratio >= self.params["stop_loss_pct"]:
                 return True, f"stop_loss 亏损{loss_ratio * 100:.2f}%"
             return False, None
         else:
@@ -216,43 +262,71 @@ class Strategy3(ProfitStrategy):
             if current_time.hour == 9 and 30 <= current_time.minute < 40:
                 # 开盘10分钟内涨停，标记为特殊状态_reserved_for_limit_up，用于10分钟后判断是否开板
                 if is_limit_up:
-                    if not hasattr(status, '_reserved_for_limit_up'):
+                    if not hasattr(status, "_reserved_for_limit_up"):
                         status._reserved_for_limit_up = True
-                        logger.debug(f"{status.stock_code} 开盘10分钟内涨停，保留观察{current_date} {current_time}")
+                        logger.debug(
+                            f"{status.stock_code} 开盘10分钟内涨停，保留观察{current_date} {current_time}"
+                        )
                         return False, "开盘10分钟内涨停，保留观察"
                     else:
                         status._reserved_for_limit_up = True
-                        logger.debug(f"{status.stock_code} 开盘10分钟内涨停，保留观察{current_date} {current_time}")
+                        logger.debug(
+                            f"{status.stock_code} 开盘10分钟内涨停，保留观察{current_date} {current_time}"
+                        )
                         return False, "开盘10分钟内涨停，保留观察"
                 else:
                     # 如果在10分钟内但未涨停，清除之前可能存在的保留标记（例如前一交易日涨停延续到今日开盘）
-                    if hasattr(status, '_reserved_for_limit_up'):
-                        logger.debug(f"{status.stock_code} 在10分钟内但未涨停，清除保留标记{current_date} {current_time} {status._reserved_for_limit_up}")
-                        delattr(status, '_reserved_for_limit_up')
+                    if hasattr(status, "_reserved_for_limit_up"):
+                        logger.debug(
+                            f"{status.stock_code} 在10分钟内但未涨停，清除保留标记{current_date} {current_time} {status._reserved_for_limit_up}"
+                        )
+                        delattr(status, "_reserved_for_limit_up")
                     # 非涨停场景不应屏蔽目标止盈：开盘窗口内仍允许达到目标即卖出
-                    profit_ratio = (current_price - status.cost_price) / status.cost_price
-                    if profit_ratio >= self.params['profit_target_pct']:
-                        return True, f'profit_take:target 盈利{profit_ratio * 100:.2f}%达到目标{self.params["profit_target_pct"] * 100:.0f}%'
+                    profit_ratio = (
+                        current_price - status.cost_price
+                    ) / status.cost_price
+                    if profit_ratio >= self.params["profit_target_pct"]:
+                        return (
+                            True,
+                            f"profit_take:target 盈利{profit_ratio * 100:.2f}%达到目标{self.params['profit_target_pct'] * 100:.0f}%",
+                        )
             else:
                 profit_ratio = (current_price - status.cost_price) / status.cost_price
                 # 开盘10分钟后，检查是否开板
-                if hasattr(status, '_reserved_for_limit_up') and status._reserved_for_limit_up:
+                if (
+                    hasattr(status, "_reserved_for_limit_up")
+                    and status._reserved_for_limit_up
+                ):
                     if is_limit_up:
                         # 仍然涨停，继续保留
                         return False, "仍然涨停，继续保留"
                     else:
                         # 开板了，卖出（此信号不作为止盈，保持原字符串，不以 profit_take 开头）
-                        delattr(status, '_reserved_for_limit_up')
-                        return True, f'开盘10分钟后开板，卖出，盈利{profit_ratio * 100:.2f}%'
+                        delattr(status, "_reserved_for_limit_up")
+                        return (
+                            True,
+                            f"开盘10分钟后开板，卖出，盈利{profit_ratio * 100:.2f}%",
+                        )
 
                 # 若无保留标记，则判断是否达到目标盈利（20%）
-                if profit_ratio >= self.params['profit_target_pct']:
+                if profit_ratio >= self.params["profit_target_pct"]:
                     # 修改：目标止盈原因以 profit_take:target 开头，便于上层识别为静态目标止盈
-                    return True, f'profit_take:target 盈利{profit_ratio * 100:.2f}%达到目标{self.params["profit_target_pct"] * 100:.0f}%'
+                    return (
+                        True,
+                        f"profit_take:target 盈利{profit_ratio * 100:.2f}%达到目标{self.params['profit_target_pct'] * 100:.0f}%",
+                    )
 
         return False, None
 
-    def should_buy(self, status, current_datetime, current_price,is_limit_up=False,is_limit_down=False, indicators=None):
+    def should_buy(
+        self,
+        status,
+        current_datetime,
+        current_price,
+        is_limit_up=False,
+        is_limit_down=False,
+        indicators=None,
+    ):
         return True, "策略3允许买入"
 
 
@@ -261,34 +335,56 @@ class Strategy4(ProfitStrategy):
 
     def _validate_params(self):
         # 策略4不使用止损/止盈参数，但保留扩展性
-        self.params.setdefault('ma_buy_period', 10)
-        self.params.setdefault('ma_sell_period', 5)
+        self.params.setdefault("ma_buy_period", 10)
+        self.params.setdefault("ma_sell_period", 5)
 
-    def should_sell(self, status, current_datetime, current_price,is_limit_up=False,is_limit_down=False, indicators=None):
+    def should_sell(
+        self,
+        status,
+        current_datetime,
+        current_price,
+        is_limit_up=False,
+        is_limit_down=False,
+        indicators=None,
+    ):
         if not indicators or status.cost_price <= 0:
             return False, None
 
         # 仅依赖均线信号：价格跌破指定卖出均线时卖出
-        ma_sell = indicators.get(f'ma{self.params["ma_sell_period"]}')
+        ma_sell = indicators.get(f"ma{self.params['ma_sell_period']}")
         if ma_sell is not None and not (isinstance(ma_sell, float) and ma_sell > 0):
             return False, None
 
         if current_price < ma_sell:
-            return True, f"ma_signal 价格{current_price:.2f}跌破MA{self.params['ma_sell_period']}({ma_sell:.2f})"
+            return (
+                True,
+                f"ma_signal 价格{current_price:.2f}跌破MA{self.params['ma_sell_period']}({ma_sell:.2f})",
+            )
 
         return False, None
 
-    def should_buy(self, status, current_datetime, current_price,is_limit_up=False,is_limit_down=False, indicators=None):
+    def should_buy(
+        self,
+        status,
+        current_datetime,
+        current_price,
+        is_limit_up=False,
+        is_limit_down=False,
+        indicators=None,
+    ):
         if not indicators:
             return False, "指标数据不足"
 
         # 仅依赖均线信号：价格站上指定买入均线时买入
-        ma_buy = indicators.get(f'ma{self.params["ma_buy_period"]}')
+        ma_buy = indicators.get(f"ma{self.params['ma_buy_period']}")
         if ma_buy is None or not (isinstance(ma_buy, float) and ma_buy > 0):
             return False, "MA指标无效"
 
         if current_price >= ma_buy:
-            return True, f"ma_signal 价格{current_price:.2f}站上MA{self.params['ma_buy_period']}({ma_buy:.2f})"
+            return (
+                True,
+                f"ma_signal 价格{current_price:.2f}站上MA{self.params['ma_buy_period']}({ma_buy:.2f})",
+            )
 
         return False, None
 
@@ -297,23 +393,25 @@ class Strategy5(ProfitStrategy):
     """策略5: 无止损 + 盈利2%止盈 + 固定时间强制卖出（默认）"""
 
     def _validate_params(self):
-        assert 0 < self.params['profit_target_pct'] <= 1, "止盈比例需在(0,1]"
-        self.params.setdefault('force_sell_days', 0)
-        self.params.setdefault('force_sell_time', '14:50')
-        self.params.setdefault('force_sell_policy', 'time_only')
-        self.params.setdefault('limit_up_reserve_enabled', False)
-        self.params.setdefault('limit_up_reserve_start', '09:30')
-        self.params.setdefault('limit_up_reserve_end', '09:40')
-        assert int(self.params['force_sell_days']) >= 0, "force_sell_days 需 >=0"
+        assert 0 < self.params["profit_target_pct"] <= 1, "止盈比例需在(0,1]"
+        self.params.setdefault("force_sell_days", 0)
+        self.params.setdefault("force_sell_time", "14:50")
+        self.params.setdefault("force_sell_policy", "time_only")
+        self.params.setdefault("limit_up_reserve_enabled", False)
+        self.params.setdefault("limit_up_reserve_start", "09:30")
+        self.params.setdefault("limit_up_reserve_end", "09:40")
+        assert int(self.params["force_sell_days"]) >= 0, "force_sell_days 需 >=0"
 
     @staticmethod
     def _parse_force_sell_time(raw, default_time: str = "14:50"):
         val = str(raw or default_time).strip()
         try:
             from datetime import time as _time
+
             return _time.fromisoformat(val)
         except ValueError:
             from datetime import time as _time
+
             return _time.fromisoformat(default_time)
 
     @staticmethod
@@ -331,14 +429,28 @@ class Strategy5(ProfitStrategy):
             return False
         return bool(default)
 
-    def should_sell(self, status, current_datetime, current_price, is_limit_up=False, is_limit_down=False, indicators=None):
+    def should_sell(
+        self,
+        status,
+        current_datetime,
+        current_price,
+        is_limit_up=False,
+        is_limit_down=False,
+        indicators=None,
+    ):
         if status.cost_price <= 0:
             return False, None
 
         pnl = (current_price - status.cost_price) / status.cost_price
-        force_sell_days = int(self.params.get('force_sell_days', 0))
-        force_sell_time = self._parse_force_sell_time(self.params.get('force_sell_time', '14:50'))
-        force_sell_policy = str(self.params.get('force_sell_policy', 'time_only') or 'time_only').strip().lower()
+        force_sell_days = int(self.params.get("force_sell_days", 0))
+        force_sell_time = self._parse_force_sell_time(
+            self.params.get("force_sell_time", "14:50")
+        )
+        force_sell_policy = (
+            str(self.params.get("force_sell_policy", "time_only") or "time_only")
+            .strip()
+            .lower()
+        )
         if force_sell_policy == "and":
             force_sell_policy = "days_and_time"
         elif force_sell_policy == "or":
@@ -346,23 +458,37 @@ class Strategy5(ProfitStrategy):
         if force_sell_policy not in {"time_only", "days_or_time", "days_and_time"}:
             force_sell_policy = "time_only"
 
-        reserve_enabled = self._parse_bool(self.params.get('limit_up_reserve_enabled', False), default=False)
-        reserve_start = self._parse_force_sell_time(self.params.get('limit_up_reserve_start', '09:30'), default_time='09:30')
-        reserve_end = self._parse_force_sell_time(self.params.get('limit_up_reserve_end', '09:40'), default_time='09:40')
+        reserve_enabled = self._parse_bool(
+            self.params.get("limit_up_reserve_enabled", False), default=False
+        )
+        reserve_start = self._parse_force_sell_time(
+            self.params.get("limit_up_reserve_start", "09:30"), default_time="09:30"
+        )
+        reserve_end = self._parse_force_sell_time(
+            self.params.get("limit_up_reserve_end", "09:40"), default_time="09:40"
+        )
         now_t = current_datetime.time()
         in_reserve_window = reserve_start <= now_t < reserve_end
         if reserve_enabled:
             if in_reserve_window and is_limit_up:
                 status._reserved_for_limit_up = True
                 return False, "开盘窗口涨停保留"
-            if in_reserve_window and hasattr(status, '_reserved_for_limit_up') and not is_limit_up:
-                delattr(status, '_reserved_for_limit_up')
+            if (
+                in_reserve_window
+                and hasattr(status, "_reserved_for_limit_up")
+                and not is_limit_up
+            ):
+                delattr(status, "_reserved_for_limit_up")
                 return False, None
-            if hasattr(status, '_reserved_for_limit_up') and status._reserved_for_limit_up and not is_limit_up:
-                delattr(status, '_reserved_for_limit_up')
-                return True, f'开板卖出 盈利{pnl * 100:.2f}%'
-        elif hasattr(status, '_reserved_for_limit_up'):
-            delattr(status, '_reserved_for_limit_up')
+            if (
+                hasattr(status, "_reserved_for_limit_up")
+                and status._reserved_for_limit_up
+                and not is_limit_up
+            ):
+                delattr(status, "_reserved_for_limit_up")
+                return True, f"开板卖出 盈利{pnl * 100:.2f}%"
+        elif hasattr(status, "_reserved_for_limit_up"):
+            delattr(status, "_reserved_for_limit_up")
 
         days_triggered = force_sell_days > 0 and status.hold_days >= force_sell_days
         time_triggered = now_t >= force_sell_time
@@ -374,94 +500,143 @@ class Strategy5(ProfitStrategy):
             force_triggered = time_triggered
         if force_triggered:
             if force_sell_policy == "days_and_time":
-                return True, f"force_sell days_and_time 持仓{status.hold_days}天 {now_t}"
-            if force_sell_policy == "days_or_time" and days_triggered and not time_triggered:
+                return (
+                    True,
+                    f"force_sell days_and_time 持仓{status.hold_days}天 {now_t}",
+                )
+            if (
+                force_sell_policy == "days_or_time"
+                and days_triggered
+                and not time_triggered
+            ):
                 return True, f"force_sell days 持仓{status.hold_days}天"
             return True, f"force_sell time {now_t}"
 
-        if pnl >= self.params['profit_target_pct']:
+        if pnl >= self.params["profit_target_pct"]:
             return True, f"profit_take:target 盈利{pnl * 100:.2f}%"
 
         return False, None
 
-    def should_buy(self, status, current_datetime, current_price, is_limit_up=False, is_limit_down=False, indicators=None):
+    def should_buy(
+        self,
+        status,
+        current_datetime,
+        current_price,
+        is_limit_up=False,
+        is_limit_down=False,
+        indicators=None,
+    ):
         return True, "策略5允许买入"
 
 
 class Strategy6(ProfitStrategy):
     """
-    策略6（2026-09-10 增补）：4% 盘中止损 + 基础止盈 2% 锚定的分档回撤止盈。
+    策略6：6% 盘中止损 + 基础止盈 1% 锚定的分档回撤止盈。
 
-    止损：市价较买入价回撤 >= stop_loss_pct（默认 4%），盘中触发即卖（市价单）。
+    止损：市价较买入价回撤 >= stop_loss_pct（默认 6%），盘中触发即卖（市价单）。
 
-    止盈（+2% 锚定回撤，分档比例按持仓交易日数 T+N）：
+    止盈（+1% 锚定回撤，分档按持仓交易日数 T+N）：
       记 peak_excess = 持仓期最高价/买入价 - (1 + profit_base_pct)，
           cur_excess  = 市价/买入价 - (1 + profit_base_pct)。
-      - 峰值曾超过 +2%（peak_excess > 0）：
-          T+1 回撤到峰值超额的 50% 止盈；T+2 → 40%；T+3 及以后 → 30%
-          （触发条件 cur_excess <= 档位比例 × peak_excess；跌破 +2% 锚同样触发）。
-      - 峰值从未超过 +2%（peak_excess <= 0）：市价进入正利润后，
-          回撤到峰值正利润的 50% 止盈（正利润保护性离场）。
-      开盘价高于/低于买入价本身不构成卖出动作（观察），卖点全部由盘中触发。
+      持仓期最高价从 T+1 起算（T+0 固定为买入价）。
+      仅当峰值超过 +1%（peak_excess > 0）才止盈：
+          T+1 档 0.50；T+2 档 0.40；T+3+ 档 0.30
+          （cur_excess <= 档位 × peak_excess；跌破 +1% 锚同样触发）。
+      开盘 < 买入价×1.01：先观察，市价涨过锚后再按档；开盘 ≥ 锚则当日起按档。
+      分钟引擎：触发止盈的 bar 与创新高 bar 间隔须大于 2 分钟。
+      未过 +1% 锚不止盈（不做正利润回撤）。
 
     买侧契约（由 RollingInvestmentStrategy 强制）：
       尾盘涨停直接跳过——不建延期额度、不标记次日买入（skip_limit_up=True）。
+      T+1 09:35 追买/弃买规则停用。
     """
 
-    def __init__(self, stop_loss_pct: float = 0.04, profit_base_pct: float = 0.02,
-                 trailing_rules: Optional[Dict] = None, trailing_default: float = 0.30,
-                 positive_trail_ratio: float = 0.50):
+    def __init__(
+        self,
+        stop_loss_pct: float = 0.06,
+        profit_base_pct: float = 0.01,
+        trailing_rules: Optional[Dict] = None,
+        trailing_default: float = 0.30,
+        positive_trail_ratio: float = 0.50,
+    ):
         params = {
-            'stop_loss_pct': float(stop_loss_pct),
-            'profit_base_pct': float(profit_base_pct),
-            'trailing_rules': dict(trailing_rules or {1: 0.50, 2: 0.40}),
-            'trailing_default': float(trailing_default),
-            'positive_trail_ratio': float(positive_trail_ratio),
+            "stop_loss_pct": float(stop_loss_pct),
+            "profit_base_pct": float(profit_base_pct),
+            "trailing_rules": dict(trailing_rules or {1: 0.50, 2: 0.40}),
+            "trailing_default": float(trailing_default),
+            "positive_trail_ratio": float(positive_trail_ratio),
         }
         super().__init__(**params)
 
     def _validate_params(self):
-        assert 0 < self.params['stop_loss_pct'] < 1, "止损比例需在(0,1)"
-        assert 0 < self.params['profit_base_pct'] < 1, "基础止盈锚点需在(0,1)"
-        assert 0 < self.params['trailing_default'] <= 1, "T+3+ 回撤档位需在(0,1]"
-        assert 0 < self.params['positive_trail_ratio'] <= 1, "正利润回撤比例需在(0,1]"
-        for day, ratio in self.params['trailing_rules'].items():
+        assert 0 < self.params["stop_loss_pct"] < 1, "止损比例需在(0,1)"
+        assert 0 < self.params["profit_base_pct"] < 1, "基础止盈锚点需在(0,1)"
+        assert 0 < self.params["trailing_default"] <= 1, "T+3+ 回撤档位需在(0,1]"
+        assert 0 < self.params["positive_trail_ratio"] <= 1, "正利润回撤比例需在(0,1]"
+        for day, ratio in self.params["trailing_rules"].items():
             assert int(day) >= 1, "回撤档位键为持仓交易日数(>=1)"
             assert 0 < ratio <= 1, "回撤档位比例需在(0,1]"
 
-    def should_sell(self, status, current_datetime, current_price, is_limit_up=False, is_limit_down=False, indicators=None):
-        cost = float(getattr(status, 'cost_price', 0.0) or 0.0)
+    def should_sell(
+        self,
+        status,
+        current_datetime,
+        current_price,
+        is_limit_up=False,
+        is_limit_down=False,
+        indicators=None,
+    ):
+        cost = float(getattr(status, "cost_price", 0.0) or 0.0)
         if cost <= 0 or current_price <= 0:
             return False, None
 
         ret = current_price / cost - 1.0
-        # 一、止损：4% 盘中触发即卖
-        if ret <= -self.params['stop_loss_pct']:
-            return True, f"stop_loss 亏损{(-ret) * 100:.2f}%触发{self.params['stop_loss_pct'] * 100:.0f}%止损"
+        # 一、止损：6% 盘中触发即卖
+        if ret <= -self.params["stop_loss_pct"]:
+            return (
+                True,
+                f"stop_loss 亏损{(-ret) * 100:.2f}%触发{self.params['stop_loss_pct'] * 100:.0f}%止损",
+            )
 
-        peak_ret = float(getattr(status, 'holding_high', current_price) or current_price) / cost - 1.0
-        day = max(1, int(getattr(status, 'hold_days', 1) or 1))
-        base = self.params['profit_base_pct']
+        peak_ret = (
+            float(getattr(status, "holding_high", current_price) or current_price)
+            / cost
+            - 1.0
+        )
+        day = max(1, int(getattr(status, "hold_days", 1) or 1))
+        base = self.params["profit_base_pct"]
         peak_excess = peak_ret - base
 
         if peak_excess > 0:
-            # 二.1-4：+2% 锚定分档回撤（T+1=50% / T+2=40% / T+3+=30%）
-            ratio = float(self.params['trailing_rules'].get(day, self.params['trailing_default']))
+            peak_tm = None
+            if isinstance(indicators, dict):
+                peak_tm = indicators.get("peak_time")
+            if peak_tm is not None and current_datetime is not None:
+                delta_min = (current_datetime - peak_tm).total_seconds() / 60.0
+                if delta_min <= 2.0:
+                    return False, None
+            ratio = float(
+                self.params["trailing_rules"].get(day, self.params["trailing_default"])
+            )
             cur_excess = ret - base
             if cur_excess <= ratio * peak_excess:
-                return True, (f"profit_take:drawdown 基础止盈上方回撤 "
-                              f"T+{day}档{ratio * 100:.0f}%（峰值超额{(peak_excess) * 100:.2f}%，"
-                              f"当前超额{(cur_excess) * 100:.2f}%）")
-        else:
-            # 二.5：峰值未达 +2%，市价进入正利润后按 50% 回撤保护离场
-            if peak_ret > 0 and ret <= self.params['positive_trail_ratio'] * peak_ret:
-                return True, (f"profit_take:drawdown 正利润回撤"
-                              f"{self.params['positive_trail_ratio'] * 100:.0f}%（峰值{peak_ret * 100:.2f}%，"
-                              f"当前{ret * 100:.2f}%）")
+                return True, (
+                    f"profit_take:drawdown 基础止盈上方回撤 "
+                    f"T+{day}档{ratio * 100:.0f}%（峰值超额{(peak_excess) * 100:.2f}%，"
+                    f"当前超额{(cur_excess) * 100:.2f}%）"
+                )
 
         return False, None
 
-    def should_buy(self, status, current_datetime, current_price, is_limit_up=False, is_limit_down=False, indicators=None):
+    def should_buy(
+        self,
+        status,
+        current_datetime,
+        current_price,
+        is_limit_up=False,
+        is_limit_down=False,
+        indicators=None,
+    ):
         return True, "策略6允许买入（买侧涨停拦截由滚动层 skip_limit_up 强制）"
 
 
@@ -470,19 +645,44 @@ class StrategyFactory:
 
     # 预设策略配置（策略类, 默认参数字典）
     PRESETS = {
-        'version1': (Strategy1, {'stop_loss_pct': 0.02, 'profit_drawdown_pct': 0.50}),
-        'version2': (Strategy2, {
-            'stop_loss_pct': 0.02,
-            'dynamic_drawdown_rules': {1: 0.50, 2: 0.40, 3: 0.30, 4: 0.20, 5: 0.10}
-        }),
-        'version3': (Strategy3, {'stop_loss_pct': 0.04, 'profit_target_pct': 0.20}),
-        'version4': (Strategy4, {'ma_buy_period': 10, 'ma_sell_period': 5}),
-        'version5': (Strategy5, {'profit_target_pct': 0.02, 'force_sell_time': '14:50', 'force_sell_policy': 'time_only', 'force_sell_days': 0, 'limit_up_reserve_enabled': False, 'limit_up_reserve_start': '09:30', 'limit_up_reserve_end': '09:40'}),
-        'version6': (Strategy6, {'stop_loss_pct': 0.04, 'profit_base_pct': 0.02, 'trailing_rules': {1: 0.50, 2: 0.40}, 'trailing_default': 0.30, 'positive_trail_ratio': 0.50}),
+        "version1": (Strategy1, {"stop_loss_pct": 0.02, "profit_drawdown_pct": 0.50}),
+        "version2": (
+            Strategy2,
+            {
+                "stop_loss_pct": 0.02,
+                "dynamic_drawdown_rules": {1: 0.50, 2: 0.40, 3: 0.30, 4: 0.20, 5: 0.10},
+            },
+        ),
+        "version3": (Strategy3, {"stop_loss_pct": 0.04, "profit_target_pct": 0.20}),
+        "version4": (Strategy4, {"ma_buy_period": 10, "ma_sell_period": 5}),
+        "version5": (
+            Strategy5,
+            {
+                "profit_target_pct": 0.02,
+                "force_sell_time": "14:50",
+                "force_sell_policy": "time_only",
+                "force_sell_days": 0,
+                "limit_up_reserve_enabled": False,
+                "limit_up_reserve_start": "09:30",
+                "limit_up_reserve_end": "09:40",
+            },
+        ),
+        "version6": (
+            Strategy6,
+            {
+                "stop_loss_pct": 0.06,
+                "profit_base_pct": 0.01,
+                "trailing_rules": {1: 0.50, 2: 0.40},
+                "trailing_default": 0.30,
+                "positive_trail_ratio": 0.50,
+            },
+        ),
     }
 
     @classmethod
-    def create(cls, version: str, custom_params: Optional[Dict] = None) -> ProfitStrategy:
+    def create(
+        cls, version: str, custom_params: Optional[Dict] = None
+    ) -> ProfitStrategy:
         """
         创建策略实例
         :param version: 策略版本标识 (version1 ～ version5)
@@ -509,25 +709,22 @@ class StrategyFactory:
 # ==================== 使用示例（文档用途） ====================
 if __name__ == "__main__":
     # 示例1: 使用预设策略
-    strategy_v1 = StrategyFactory.create('version1')
+    strategy_v1 = StrategyFactory.create("version1")
 
     # 示例2: 微调参数（将策略1的回撤阈值改为60%）
     strategy_v1_custom = StrategyFactory.create(
-        'version1',
-        custom_params={'profit_drawdown_pct': 0.60}
+        "version1", custom_params={"profit_drawdown_pct": 0.60}
     )
 
     # 示例3: 完全自定义策略2的动态规则
     custom_rules = {1: 0.55, 2: 0.45, 3: 0.35, 4: 0.25, 5: 0.15, 6: 0.10}
     strategy_v2_custom = StrategyFactory.create(
-        'version2',
-        custom_params={'dynamic_drawdown_rules': custom_rules}
+        "version2", custom_params={"dynamic_drawdown_rules": custom_rules}
     )
 
     # 示例4: 策略4使用20日线买入（演示参数覆盖能力）
     strategy_v4_custom = StrategyFactory.create(
-        'version4',
-        custom_params={'ma_buy_period': 20}
+        "version4", custom_params={"ma_buy_period": 20}
     )
 
     print("策略工厂测试通过 ✓")

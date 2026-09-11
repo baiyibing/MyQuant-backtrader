@@ -1,0 +1,785 @@
+#!/usr/bin/env python3
+"""CSV 模式日线近似回测（策略 6，2026-09-10）。
+
+完整滚动投资流程（分钟 Cerebro 链）的日线近似版：同口径的 CSV 每日买入名单、
+每日 100 万常规额度、补充资金、T+1、涨跌停拦截、全局 2100 万资金池；策略 6 的
+2% 止损与 +1% 锚定分档回撤止盈改为日线约定（见 HELP_LOCK）。数据用不复权日线
+（与分钟链 adjust_type='none' 对齐）；佣金 0.1% 双边（与 broker.setcommission
+(0.001) 对齐），无最低佣金。
+
+用法：
+    python backtest/research/csv_daily_backtest.py --start 20251023 --end 20260909
+"""
+
+from __future__ import annotations
+
+import argparse
+import os
+import sys
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass, field
+from decimal import ROUND_HALF_UP, Decimal
+from pathlib import Path
+from typing import Optional
+
+import numpy as np
+import pandas as pd
+import pyarrow.compute as pc
+import pyarrow.parquet as pq
+
+REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+sys.path.insert(0, REPO)
+
+from backtest.research.ma_chip_edge_backtest import limit_pct  # noqa: E402
+from common.infra.data_root import resolve_period_root  # noqa: E402
+from common.infra.qmt_utils_adv import batch_format_stock_codes  # noqa: E402
+from oskh_data.symbol_format import to_partition_key  # noqa: E402
+
+DEFAULT_TOTAL_CASH = 21_000_000.0
+DEFAULT_DAILY_QUOTA = 1_000_000.0
+COMMISSION = 0.001  # 双边，与分钟链 cerebro.broker.setcommission(commission=0.001) 对齐
+STOP_PCT = 0.06
+PROFIT_BASE = 0.01
+TIERS = {1: 0.50, 2: 0.40}
+TIER_DEFAULT = 0.30
+POS_TRAIL = 0.50  # 已停用：策略6不再做未过锚的正利润回撤
+PEAK_GAP_MIN = 2  # 止盈与最高价间隔须大于 2 分钟（分钟引擎执行）
+LIMIT_EPS = 0.001  # 涨跌停等值判定；须远小于 1 分，避免把普通价误判为涨停
+WARMUP_DAYS = 10
+# 2026-09-10 实测：F 盘 period=1m 最后一根交易日。湖续写后改这里。
+MINUTE_LAKE_END = "20260525"
+_PERIOD_ENV_KEYS = (
+    "OSKH_PERIOD_1D_ROOT",
+    "OSKH_PERIOD_1M_ROOT",
+    "OSKH_INDEX_DAILY_ROOT",
+    "OSKH_ETF_DAILY_ROOT",
+    "OSKH_SOURCE_PARQUET_ROOT",
+)
+
+HELP_LOCK = """
+日线近似口径（相对分钟保真版的唯一失真来源）：
+  买入：池 CSV 当日候选、收盘价成交（分钟版 14:55≈收盘）；买价达到或超过
+        涨停价 → 跳过，不延期不次日追（策略 6 契约）；已持有则跳过。常规额度按当日池 CSV
+        全部名单均分（与分钟链开盘等额/force_min 一致，含随后被跳过的票）。
+  止损：D+1 起，触发价 = 买入价×(1-stop)。开盘 ≤ 触发价 → 开盘价成交（跳空）；
+        否则日内 low 触价 → 触发价成交。卖出日开盘跌停 → 顺延下一交易日。
+  止盈：基础锚 +1%。仅当峰值超过买入价×1.01 后评估
+        （开盘 < 锚则先观察，涨过锚再按档；开盘 ≥ 锚则当日起按档）。
+        公式 (市价/买价-1.01)/(峰值/买价-1.01) ≤ T+1=0.5 / T+2=0.4 / T+3+=0.3。
+        未过 +1% 锚不止盈（已取消正利润回撤）。收盘评估、次日开盘离场
+        （间隔已大于 2 分钟；分钟版另要求触价与最高价间隔＞2 分钟）。
+  峰值：从 T+1 起用当日 high 更新；T+0 固定为买入价。T+0 不评估止盈。
+  买侧：尾盘涨停跳过；T+1 09:35 追买/弃买规则停用。
+  资金：2100 万全局池；每日 100 万常规额度；不足 100 股用补充资金补足
+        （force_min，自主池、不占额度）；佣金 0.1% 双边无最低。
+  T+1：买入日不可卖；期末持仓按最后收盘估值（eod_mark）。
+  窗口：--end 是估值/离场末日。买入只发生在 stock_pool/ 有 CSV 的交易日
+        （缺日不买）。分钟湖若短于 --end，用日线版接到今天。
+  落盘：backtest_output/csv_daily_v6_{start}_{end}/ 三件套 summary.txt、
+        daily_equity.csv、trades.csv（与分钟版同结构）。
+  环境：勿残留 OSKH_PERIOD_* ；有 F:\\stock_data\\.authority 时跟权威盘。
+  比例：--stop-pct / --profit-base / --trail-t1 / --trail-t2 / --trail-t3 可改，不必改代码。
+"""
+
+
+@dataclass
+class Position:
+    code: str
+    shares: int
+    cost: float  # 买入价（收盘成交价）
+    entry_idx: int  # 全局日历下标
+    peak: float  # 持仓期最高价（起始=买入价；T+1 起用每日 high 更新）
+    peak_hm: int = -1  # 峰值所在分钟 hm；跨日为负间隔，分钟止盈用
+
+
+@dataclass
+class SimState:
+    cash: float = DEFAULT_TOTAL_CASH
+    positions: dict = field(default_factory=dict)
+    daily_quota_used: float = 0.0
+    supplementary_used: float = 0.0
+    trades: list = field(default_factory=list)
+    equity_curve: list = field(default_factory=list)
+    stats: dict = field(
+        default_factory=lambda: {
+            "buys": 0,
+            "skip_limit_up": 0,
+            "skip_held": 0,
+            "skip_no_bar": 0,
+            "sell_stop": 0,
+            "sell_trail": 0,
+            "sell_pos_trail": 0,
+            "defer_sell_limit_down": 0,
+            "invested_notional": 0.0,
+            "supplementary_used": 0.0,
+            "bars_loaded": 0,
+            "pool_days": 0,
+        }
+    )
+
+
+def add_strategy6_ratio_args(ap: argparse.ArgumentParser) -> None:
+    """止损 / 锚 / 分档回撤：改比例走命令行，不必改常量。"""
+    ap.add_argument(
+        "--stop-pct",
+        type=float,
+        default=STOP_PCT,
+        help=f"stop-loss fraction (default {STOP_PCT:g})",
+    )
+    ap.add_argument(
+        "--profit-base",
+        type=float,
+        default=PROFIT_BASE,
+        help=f"take-profit anchor fraction (default {PROFIT_BASE:g})",
+    )
+    ap.add_argument(
+        "--trail-t1",
+        type=float,
+        default=TIERS[1],
+        help=f"T+1 retain ratio of peak excess (default {TIERS[1]:g})",
+    )
+    ap.add_argument(
+        "--trail-t2",
+        type=float,
+        default=TIERS[2],
+        help=f"T+2 retain ratio (default {TIERS[2]:g})",
+    )
+    ap.add_argument(
+        "--trail-t3",
+        type=float,
+        default=TIER_DEFAULT,
+        help=f"T+3+ retain ratio (default {TIER_DEFAULT:g})",
+    )
+
+
+def strategy6_kwargs_from_args(args) -> dict:
+    stop_pct = float(args.stop_pct)
+    profit_base = float(args.profit_base)
+    t1 = float(args.trail_t1)
+    t2 = float(args.trail_t2)
+    t3 = float(args.trail_t3)
+    for name, val in (
+        ("--stop-pct", stop_pct),
+        ("--profit-base", profit_base),
+        ("--trail-t1", t1),
+        ("--trail-t2", t2),
+        ("--trail-t3", t3),
+    ):
+        if not 0 < val < 1:
+            raise SystemExit(f"{name} must be in (0, 1), got {val}")
+    return {
+        "stop_pct": stop_pct,
+        "profit_base": profit_base,
+        "tiers": {1: t1, 2: t2},
+        "tier_default": t3,
+    }
+
+
+def record_strategy6_params(
+    st: SimState,
+    *,
+    stop_pct: float,
+    profit_base: float,
+    tiers: dict,
+    tier_default: float,
+) -> None:
+    st.stats["stop_pct"] = float(stop_pct)
+    st.stats["profit_base"] = float(profit_base)
+    st.stats["trail_t1"] = float(tiers.get(1, TIERS[1]))
+    st.stats["trail_t2"] = float(tiers.get(2, TIERS[2]))
+    st.stats["trail_t3"] = float(tier_default)
+
+
+def _ymd(ts) -> str:
+    return pd.Timestamp(ts).strftime("%Y%m%d")
+
+
+def utc_ms_range(start: str, end: str) -> tuple[int, int]:
+    """YYYYMMDD 闭区间 → UTC 午夜毫秒（日线/分钟湖把交易日钟点标成 UTC）。"""
+    t0 = int(pd.Timestamp(start, tz="UTC").timestamp() * 1000)
+    t1 = (
+        int((pd.Timestamp(end, tz="UTC") + pd.Timedelta(days=1)).timestamp() * 1000) - 1
+    )
+    return t0, t1
+
+
+def warmup_start(start: str, days: int = WARMUP_DAYS) -> str:
+    return (pd.Timestamp(start) - pd.Timedelta(days=int(days))).strftime("%Y%m%d")
+
+
+def warn_stale_period_env() -> None:
+    hit = [k for k in _PERIOD_ENV_KEYS if os.environ.get(k)]
+    if hit:
+        print(
+            f"[warn] {', '.join(hit)} is set; lake may ignore F:\\stock_data\\.authority",
+            flush=True,
+        )
+
+
+def _progress(done: int, total: int, label: str, every: int = 200) -> None:
+    if total <= 0:
+        return
+    if done == 1 or done == total or done % every == 0:
+        print(f"{label} {done}/{total}", flush=True)
+
+
+def build_calendar(bars: dict[str, pd.DataFrame], start: str, end: str) -> list:
+    t0 = pd.Timestamp(start)
+    t1 = pd.Timestamp(end)
+    seen = set()
+    for df in bars.values():
+        idx = df.index
+        for d in idx[(idx >= t0) & (idx <= t1)]:
+            seen.add(d)
+    calendar = sorted(seen)
+    if not calendar:
+        raise SystemExit("no daily bars in window")
+    return calendar
+
+
+def _at_limit(price: float, limit: float) -> bool:
+    """价格≈等于涨/跌停价。买入拦截请用 hit_limit_up（含越过涨停价）。"""
+    return abs(price - limit) <= LIMIT_EPS
+
+
+def hit_limit_up(price: float, limit_up: float) -> bool:
+    """买价达到或超过涨停价则不可买（含舍入导致买价高于算出的涨停价）。"""
+    return float(price) + LIMIT_EPS >= float(limit_up)
+
+
+def hit_limit_down(price: float, limit_down: float) -> bool:
+    """卖价达到或低于跌停价则不可卖。"""
+    return float(price) - LIMIT_EPS <= float(limit_down)
+
+
+def round_fen(price: float) -> float:
+    """A 股涨跌停：分位四舍五入（不用 Python round 的银行家舍入）。"""
+    return float(Decimal(str(price)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+
+def _limit_prices(code: str, prev_close: float) -> tuple[float, float]:
+    pct = limit_pct(code)
+    prev = Decimal(str(prev_close))
+    step = Decimal("0.01")
+    up = (prev * (Decimal("1") + Decimal(str(pct)))).quantize(
+        step, rounding=ROUND_HALF_UP
+    )
+    down = (prev * (Decimal("1") - Decimal(str(pct)))).quantize(
+        step, rounding=ROUND_HALF_UP
+    )
+    return float(up), float(down)
+
+
+def load_pool_days(
+    start: str, end: str, pool_dir: Optional[Path] = None
+) -> dict[str, list[str]]:
+    """{YYYYMMDD: [canonical codes]}，直接读 stock_pool/ 头列（避免 read_stock_codes 刷 INFO）。"""
+    root = Path(pool_dir) if pool_dir is not None else Path(REPO) / "stock_pool"
+    days: dict[str, list[str]] = {}
+    for p in sorted(root.glob("*.csv")):
+        if not (start <= p.stem <= end):
+            continue
+        try:
+            df = pd.read_csv(p, header=None, dtype={0: str}, encoding="utf-8-sig")
+        except Exception as exc:
+            print(f"skip pool {p.name}: {exc}", flush=True)
+            continue
+        if df.empty:
+            continue
+        raw = df.iloc[:, 0].dropna().astype(str).tolist()
+        if not raw:
+            continue
+        days[p.stem] = list(batch_format_stock_codes(raw))
+    return days
+
+
+def _read_one_daily(
+    code: str, root: Path, start: str, end: str
+) -> Optional[pd.DataFrame]:
+    path = root / f"symbol={to_partition_key(code)}" / "data.parquet"
+    if not path.is_file():
+        return None
+    t0, t1 = utc_ms_range(start, end)
+    try:
+        table = pq.read_table(path, columns=["time", "open", "high", "low", "close"])
+        table = table.filter((pc.field("time") >= t0) & (pc.field("time") <= t1))
+    except Exception:
+        return None
+    if table.num_rows == 0:
+        return None
+    ms = table["time"].to_numpy()
+    idx = pd.to_datetime(ms, unit="ms", utc=True).tz_localize(None).normalize()
+    out = pd.DataFrame(
+        {
+            "open": table["open"].to_numpy(),
+            "high": table["high"].to_numpy(),
+            "low": table["low"].to_numpy(),
+            "close": table["close"].to_numpy(),
+        },
+        index=idx,
+    ).astype(np.float64)
+    out = out[~out.index.duplicated(keep="last")].sort_index()
+    return out if not out.empty else None
+
+
+def load_daily_bars(
+    codes: set[str], start: str, end: str, *, workers: int = 16
+) -> dict[str, pd.DataFrame]:
+    """不复权日线（与分钟链 adjust_type='none' 对齐），index=交易日 00:00。"""
+    root = resolve_period_root("1d") / "dividend_type=none"
+    out: dict[str, pd.DataFrame] = {}
+    codes_list = sorted(codes)
+    n = max(1, int(workers))
+    with ThreadPoolExecutor(max_workers=n) as pool:
+        futs = {
+            pool.submit(_read_one_daily, c, root, start, end): c for c in codes_list
+        }
+        done = 0
+        total = len(futs)
+        for fut in as_completed(futs):
+            done += 1
+            _progress(done, total, "daily lake")
+            code = futs[fut]
+            try:
+                df = fut.result()
+            except Exception:
+                continue
+            if df is not None and not df.empty:
+                out[code] = df
+    return out
+
+
+def simulate(
+    bars: dict[str, pd.DataFrame],
+    pool_days: dict[str, list[str]],
+    start: str,
+    end: str,
+    *,
+    total_cash: float = DEFAULT_TOTAL_CASH,
+    daily_quota: float = DEFAULT_DAILY_QUOTA,
+    stop_pct: float = STOP_PCT,
+    profit_base: float = PROFIT_BASE,
+    tiers: Optional[dict] = None,
+    tier_default: float = TIER_DEFAULT,
+    pos_trail: float = POS_TRAIL,
+) -> SimState:
+    """核心日循环。bars/pool_days 可由测试注入；run() 负责从湖与 CSV 加载。"""
+    tier_map = dict(tiers or TIERS)
+    calendar = build_calendar(bars, start, end)
+
+    st = SimState(cash=float(total_cash))
+    record_strategy6_params(
+        st,
+        stop_pct=stop_pct,
+        profit_base=profit_base,
+        tiers=tier_map,
+        tier_default=tier_default,
+    )
+    st.stats["bars_loaded"] = len(bars)
+    st.stats["pool_days"] = len(pool_days)
+    pending_exit: dict[str, str] = {}  # code -> 原因（次日开盘离场）
+
+    for i, day in enumerate(calendar):
+        ds = _ymd(day)
+        st.daily_quota_used = 0.0  # 每个交易日开盘重置常规额度
+
+        for code in list(st.positions):
+            pos = st.positions[code]
+            if code not in bars or day not in bars[code].index:
+                continue
+            row = bars[code].loc[day]
+            prev_rows = bars[code].loc[bars[code].index < day]
+            if prev_rows.empty:
+                continue
+            prev_close = float(prev_rows.iloc[-1]["close"])
+            _, limit_down = _limit_prices(code, prev_close)
+            n_days = i - pos.entry_idx  # 持仓交易日数（买入日=0）
+
+            if code in pending_exit and n_days >= 1:
+                if hit_limit_down(float(row["open"]), limit_down):
+                    st.stats["defer_sell_limit_down"] += 1
+                else:
+                    _sell(
+                        st, code, pos, float(row["open"]), day, pending_exit.pop(code)
+                    )
+                continue
+
+            if n_days >= 1:
+                trigger = pos.cost * (1.0 - stop_pct)
+                if float(row["open"]) <= trigger:
+                    if hit_limit_down(float(row["open"]), limit_down):
+                        st.stats["defer_sell_limit_down"] += 1
+                    else:
+                        _sell(
+                            st, code, pos, float(row["open"]), day, "stop_loss:gap_open"
+                        )
+                    continue
+                if float(row["low"]) <= trigger:
+                    _sell(st, code, pos, trigger, day, "stop_loss:touch")
+                    continue
+
+                pos.peak = max(pos.peak, float(row["high"]))
+                close = float(row["close"])
+                peak_excess = pos.peak / pos.cost - 1.0 - profit_base
+                if peak_excess > 0:
+                    ratio = float(tier_map.get(n_days, tier_default))
+                    if close / pos.cost - 1.0 - profit_base <= ratio * peak_excess:
+                        pending_exit[code] = f"trail:T+{n_days}"
+
+        planned = list(pool_days.get(ds, []))
+        if planned:
+            n_plan = len(planned)
+            per = min(daily_quota, st.cash) / n_plan
+            for code in planned:
+                if code in st.positions:
+                    st.stats["skip_held"] += 1
+                    continue
+                if code not in bars or day not in bars[code].index:
+                    st.stats["skip_no_bar"] += 1
+                    continue
+                df_c = bars[code]
+                prev_rows = df_c.loc[df_c.index < day]
+                if prev_rows.empty:
+                    st.stats["skip_no_bar"] += 1
+                    continue
+                prev_close = float(prev_rows.iloc[-1]["close"])
+                limit_up, _ = _limit_prices(code, prev_close)
+                close = float(df_c.loc[day]["close"])
+                if hit_limit_up(close, limit_up):
+                    st.stats["skip_limit_up"] += 1
+                    continue
+                shares, supp = _buy_size(per, close)
+                if shares <= 0:
+                    continue
+                notional = shares * close
+                comm = notional * COMMISSION
+                if notional + comm > st.cash:
+                    continue
+                st.cash -= notional + comm
+                st.daily_quota_used += min(per, notional)
+                st.stats["supplementary_used"] += supp
+                st.stats["invested_notional"] += notional
+                st.positions[code] = Position(code, shares, close, i, close)
+                st.trades.append(
+                    {
+                        "date": ds,
+                        "code": code,
+                        "side": "BUY",
+                        "price": close,
+                        "shares": shares,
+                        "notional": notional,
+                        "commission": comm,
+                    }
+                )
+                st.stats["buys"] += 1
+
+        eq = st.cash
+        for code, pos in st.positions.items():
+            df_c = bars.get(code)
+            if df_c is not None and day in df_c.index:
+                eq += pos.shares * float(df_c.loc[day]["close"])
+            else:
+                eq += pos.shares * pos.cost
+        st.equity_curve.append((ds, eq))
+
+        if day == calendar[-1] and st.positions:
+            for code, pos in st.positions.items():
+                df_c = bars.get(code)
+                last = (
+                    float(df_c.loc[day]["close"])
+                    if df_c is not None and day in df_c.index
+                    else pos.cost
+                )
+                st.trades.append(
+                    {
+                        "date": ds,
+                        "code": code,
+                        "side": "EOD_MARK",
+                        "price": last,
+                        "shares": pos.shares,
+                        "notional": pos.shares * last,
+                        "commission": 0.0,
+                    }
+                )
+
+    return st
+
+
+def run(
+    start: str,
+    end: str,
+    *,
+    total_cash: float = DEFAULT_TOTAL_CASH,
+    daily_quota: float = DEFAULT_DAILY_QUOTA,
+    stop_pct: float = STOP_PCT,
+    profit_base: float = PROFIT_BASE,
+    tiers: Optional[dict] = None,
+    tier_default: float = TIER_DEFAULT,
+    pos_trail: float = POS_TRAIL,
+    workers: int = 16,
+) -> SimState:
+    warn_stale_period_env()
+    t_pool = time.perf_counter()
+    pool_days = load_pool_days(start, end)
+    t_pool = time.perf_counter() - t_pool
+    if not pool_days:
+        raise SystemExit(f"no pool CSVs in [{start}, {end}] under stock_pool/")
+    all_codes = {c for codes in pool_days.values() for c in codes}
+    load_start = warmup_start(start)
+    print(
+        f"loading daily bars: {len(all_codes)} codes, {load_start}..{end}; "
+        f"pool {min(pool_days)}..{max(pool_days)} ({len(pool_days)} days)",
+        flush=True,
+    )
+    t_daily = time.perf_counter()
+    bars = load_daily_bars(all_codes, load_start, end, workers=workers)
+    t_daily = time.perf_counter() - t_daily
+    print(
+        f"loaded {len(bars)}/{len(all_codes)} daily series, {len(pool_days)} pool days",
+        flush=True,
+    )
+    t_sim = time.perf_counter()
+    st = simulate(
+        bars,
+        pool_days,
+        start,
+        end,
+        total_cash=total_cash,
+        daily_quota=daily_quota,
+        stop_pct=stop_pct,
+        profit_base=profit_base,
+        tiers=tiers,
+        tier_default=tier_default,
+        pos_trail=pos_trail,
+    )
+    st.stats["t_pool_s"] = t_pool
+    st.stats["t_daily_s"] = t_daily
+    st.stats["t_sim_s"] = time.perf_counter() - t_sim
+    st.stats["codes_missing"] = max(0, len(all_codes) - len(bars))
+    return st
+
+
+def _buy_size(per_quota: float, price: float) -> tuple[int, float]:
+    """常规额度内最大整百股；不足 100 股用补充资金补足（返回 (shares, supp_used))。"""
+    if price <= 0 or per_quota <= 0:
+        return 0, 0.0
+    shares = int(per_quota / price / 100.0) * 100
+    supp = 0.0
+    if shares == 0:
+        notional = 100 * price
+        supp = max(0.0, notional - per_quota)
+        shares = 100
+    return shares, supp
+
+
+def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str) -> None:
+    notional = pos.shares * px
+    comm = notional * COMMISSION
+    st.cash += notional - comm
+    st.trades.append(
+        {
+            "date": _ymd(day),
+            "code": code,
+            "side": "SELL",
+            "price": px,
+            "shares": pos.shares,
+            "notional": notional,
+            "commission": comm,
+            "reason": reason,
+        }
+    )
+    if reason.startswith("stop_loss"):
+        st.stats["sell_stop"] += 1
+    elif reason.startswith("trail"):
+        st.stats["sell_trail"] += 1
+    else:
+        st.stats["sell_pos_trail"] += 1
+    del st.positions[code]
+
+
+def summarize(
+    st: SimState,
+    total_cash: float,
+    start: str,
+    end: str,
+    *,
+    engine: str = "csv_daily_v6",
+) -> str:
+    eq = pd.DataFrame(st.equity_curve, columns=["date", "equity"])
+    final = float(eq["equity"].iloc[-1]) if len(eq) else total_cash
+    peak = eq["equity"].cummax()
+    max_dd = float((eq["equity"] / peak - 1.0).min()) if len(eq) else 0.0
+    invested = st.stats["invested_notional"]
+    deployed = (final - total_cash) / invested if invested > 0 else float("nan")
+    lines = [
+        f"{engine} {start}..{end}",
+        f"  期末净值: {final:,.2f} / {total_cash:,.0f}",
+        f"  总收益率(全资金): {final / total_cash - 1:+.2%}",
+        f"  动用资金收益率: {deployed:+.2%}"
+        if invested > 0
+        else "  动用资金收益率: n/a",
+        f"  最大回撤: {max_dd:.2%}",
+    ]
+    if "stop_pct" in st.stats:
+        lines.append(
+            f"  参数: 止损 {st.stats['stop_pct']:.0%} | 锚 {st.stats['profit_base']:.0%} | "
+            f"回撤 T+1 {st.stats['trail_t1']:.0%} / T+2 {st.stats['trail_t2']:.0%} / "
+            f"T+3+ {st.stats['trail_t3']:.0%}"
+        )
+    lines.extend(
+        [
+            f"  买入 {st.stats['buys']} | 涨停跳过 {st.stats['skip_limit_up']} | 已持跳过 {st.stats['skip_held']}",
+            f"  卖出: 止损 {st.stats['sell_stop']} | 锚定回撤 {st.stats['sell_trail']} | 正利润回撤 {st.stats['sell_pos_trail']}",
+            f"  跌停顺延卖出 {st.stats['defer_sell_limit_down']} | 补充资金 {st.stats['supplementary_used']:,.0f}",
+            f"  日线加载 {st.stats['bars_loaded']} | 池天数 {st.stats['pool_days']}",
+        ]
+    )
+    timing_parts = []
+    for key, lab in (
+        ("t_pool_s", "池"),
+        ("t_daily_s", "日线"),
+        ("t_minute_s", "分钟"),
+        ("t_sim_s", "模拟"),
+    ):
+        if key in st.stats:
+            timing_parts.append(f"{lab} {float(st.stats[key]):.1f}s")
+    cache = st.stats.get("cache")
+    if cache:
+        timing_parts.append(f"缓存 {cache}")
+    if timing_parts:
+        lines.append("  耗时: " + " | ".join(timing_parts))
+    missing = st.stats.get("codes_missing")
+    if missing:
+        lines.append(f"  缺行情 {int(missing)}")
+    return "\n".join(lines)
+
+
+def write_run_artifacts(out_dir: Path, st: SimState, text: str, help_lock: str) -> Path:
+    """三件套：summary.txt / daily_equity.csv / trades.csv。"""
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(st.trades).to_csv(
+        out_dir / "trades.csv", index=False, encoding="utf-8"
+    )
+    pd.DataFrame(st.equity_curve, columns=["date", "equity"]).to_csv(
+        out_dir / "daily_equity.csv", index=False, encoding="utf-8"
+    )
+    (out_dir / "summary.txt").write_text(
+        text + "\n" + help_lock, encoding="utf-8", newline="\n"
+    )
+    print(f"wrote {out_dir}", flush=True)
+    return out_dir
+
+
+def find_daily_equity_csv(
+    start: str, end: str, output_root: Optional[Path] = None
+) -> Optional[Path]:
+    root = (
+        Path(output_root) if output_root is not None else Path(REPO) / "backtest_output"
+    )
+    exact = root / f"csv_daily_v6_{start}_{end}" / "daily_equity.csv"
+    if exact.is_file():
+        return exact
+    found: list[tuple[str, Path]] = []
+    for path in root.glob(f"csv_daily_v6_{start}_*/daily_equity.csv"):
+        found.append((path.parent.name.rsplit("_", 1)[-1], path))
+    if not found:
+        return None
+    covering = [item for item in found if item[0] >= end]
+    pool = covering or found
+    pool.sort(key=lambda item: item[0])
+    return pool[-1][1]
+
+
+def format_equity_compare(
+    this_curve: list,
+    peer_csv: Path,
+    *,
+    this_label: str,
+    peer_label: str = "csv_daily_v6",
+    highlight: str = "20251104",
+) -> str:
+    this = pd.DataFrame(this_curve, columns=["date", "equity"])
+    peer = pd.read_csv(peer_csv, encoding="utf-8")
+    if (
+        this.empty
+        or peer.empty
+        or "date" not in peer.columns
+        or "equity" not in peer.columns
+    ):
+        return f"对照 {peer_label}: 对端净值表为空（{peer_csv}）"
+    this["date"] = this["date"].astype(str)
+    peer["date"] = peer["date"].astype(str)
+    merged = this.merge(peer, on="date", suffixes=("_this", "_peer"))
+    if merged.empty:
+        return f"对照 {peer_label}: 无重叠交易日（{peer_csv}）"
+    merged["gap"] = merged["equity_this"] - merged["equity_peer"]
+    merged["gap_pct"] = merged["gap"] / merged["equity_peer"]
+    first = merged.iloc[0]
+    last = merged.iloc[-1]
+    worst = merged.loc[merged["gap"].abs().idxmax()]
+    lines = [
+        f"对照 {peer_label}（{peer_csv.parent.name}）重叠 {len(merged)} 日 "
+        f"{first['date']}..{last['date']}（双方均为 none 成交价，差来自卖点时钟）:",
+        f"  首日 {this_label} {first['equity_this']:,.2f} vs {peer_label} "
+        f"{first['equity_peer']:,.2f} 差 {first['gap']:+,.2f}",
+        f"  末日 {this_label} {last['equity_this']:,.2f} vs {peer_label} "
+        f"{last['equity_peer']:,.2f} 差 {last['gap']:+,.2f} ({last['gap_pct']:+.2%})",
+        f"  最大绝对偏差 {worst['date']} {worst['gap']:+,.2f} ({worst['gap_pct']:+.2%})",
+    ]
+    hit = merged.loc[merged["date"] == highlight]
+    if not hit.empty:
+        row = hit.iloc[0]
+        lines.append(
+            f"  {highlight} {this_label} {row['equity_this']:,.2f} vs "
+            f"{peer_label} {row['equity_peer']:,.2f} 差 {row['gap']:+,.2f}"
+        )
+    return "\n".join(lines)
+
+
+def maybe_compare_daily(
+    this_curve: list,
+    start: str,
+    end: str,
+    *,
+    this_label: str,
+    output_root: Optional[Path] = None,
+) -> str:
+    peer = find_daily_equity_csv(start, end, output_root)
+    if peer is None:
+        return ""
+    return format_equity_compare(this_curve, peer, this_label=this_label)
+
+
+def main(argv: Optional[list] = None) -> int:
+    ap = argparse.ArgumentParser(
+        description="CSV-mode daily-bar strategy6 backtest",
+        epilog=HELP_LOCK,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    ap.add_argument("--start", default="20251023")
+    ap.add_argument("--end", default="20260909")
+    ap.add_argument("--cash-total", type=float, default=DEFAULT_TOTAL_CASH)
+    ap.add_argument("--daily-quota", type=float, default=DEFAULT_DAILY_QUOTA)
+    ap.add_argument("--workers", type=int, default=16)
+    add_strategy6_ratio_args(ap)
+    args = ap.parse_args(argv if argv is not None else None)
+
+    st = run(
+        args.start,
+        args.end,
+        total_cash=args.cash_total,
+        daily_quota=args.daily_quota,
+        workers=args.workers,
+        **strategy6_kwargs_from_args(args),
+    )
+    text = summarize(st, args.cash_total, args.start, args.end, engine="csv_daily_v6")
+    print(text)
+    tag = f"csv_daily_v6_{args.start}_{args.end}"
+    write_run_artifacts(Path(REPO) / "backtest_output" / tag, st, text, HELP_LOCK)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
