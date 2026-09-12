@@ -10,8 +10,15 @@ import argparse
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
-from backtest.research import strategy6_rules, strategy8_rules
+from backtest.research import (
+    strategy1_rules,
+    strategy2_rules,
+    strategy6_rules,
+    strategy8_rules,
+)
 
+HELP_LOCK_V1 = strategy1_rules.HELP_LOCK
+HELP_LOCK_V2 = strategy2_rules.HELP_LOCK
 HELP_LOCK_V6 = strategy6_rules.HELP_LOCK
 HELP_LOCK_V8 = strategy8_rules.HELP_LOCK
 
@@ -181,6 +188,57 @@ def csv_run_kwargs_from_args(args) -> dict:
     return get_book(name).run_kwargs(args)
 
 
+def _stop_override_from_args(args) -> Optional[float]:
+    stop = getattr(args, "stop_pct", None)
+    if stop is not None and not 0 < float(stop) < 1:
+        raise SystemExit(f"--stop-pct must be in (0, 1), got {stop}")
+    return None if stop is None else float(stop)
+
+
+def _apply_version1(
+    *, stop_pct: Optional[float] = None, take_profit=None, record_params=None, **_
+) -> dict:
+    resolved = strategy1_rules.STOP_PCT if stop_pct is None else float(stop_pct)
+
+    def _tp(px, cost, peak, n_days):
+        return strategy1_rules.take_profit_reason(px, cost, peak, n_days)
+
+    def _rec(st):
+        strategy1_rules.record_strategy1_params(st, stop_pct=resolved)
+
+    return {
+        "stop_pct": resolved,
+        "take_profit": _tp if take_profit is None else take_profit,
+        "record_params": _rec if record_params is None else record_params,
+    }
+
+
+def _run_kwargs_version1(args) -> dict:
+    return {"strategy": "version1", "stop_pct": _stop_override_from_args(args)}
+
+
+def _apply_version2(
+    *, stop_pct: Optional[float] = None, take_profit=None, record_params=None, **_
+) -> dict:
+    resolved = strategy2_rules.STOP_PCT if stop_pct is None else float(stop_pct)
+
+    def _tp(px, cost, peak, n_days):
+        return strategy2_rules.take_profit_reason(px, cost, peak, n_days)
+
+    def _rec(st):
+        strategy2_rules.record_strategy2_params(st, stop_pct=resolved)
+
+    return {
+        "stop_pct": resolved,
+        "take_profit": _tp if take_profit is None else take_profit,
+        "record_params": _rec if record_params is None else record_params,
+    }
+
+
+def _run_kwargs_version2(args) -> dict:
+    return {"strategy": "version2", "stop_pct": _stop_override_from_args(args)}
+
+
 def _apply_version6(
     *,
     stop_pct: Optional[float] = None,
@@ -249,6 +307,30 @@ def _run_kwargs_version8(args) -> dict:
     return {"strategy": "version8", "stop_pct": stop}
 
 
+register(
+    CsvStrategyBook(
+        name="version1",
+        tag=strategy1_rules.BOOK_TAG,
+        aliases=("1", "v1", "version1"),
+        allow_add=strategy1_rules.ALLOW_ADD,
+        peak_gap_min=strategy1_rules.PEAK_GAP_MIN,
+        help_lock=strategy1_rules.HELP_LOCK,
+        apply=_apply_version1,
+        run_kwargs=_run_kwargs_version1,
+    )
+)
+register(
+    CsvStrategyBook(
+        name="version2",
+        tag=strategy2_rules.BOOK_TAG,
+        aliases=("2", "v2", "version2"),
+        allow_add=strategy2_rules.ALLOW_ADD,
+        peak_gap_min=strategy2_rules.PEAK_GAP_MIN,
+        help_lock=strategy2_rules.HELP_LOCK,
+        apply=_apply_version2,
+        run_kwargs=_run_kwargs_version2,
+    )
+)
 register(
     CsvStrategyBook(
         name="version6",
