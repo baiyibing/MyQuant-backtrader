@@ -3,7 +3,7 @@
 
 与日线近似版同一套 CSV 额度 / T+1 / 涨停跳过 / force_min / 0.1% 双边佣金。
 卖点按分钟路径扫描：峰值用 bar high，现价用 close；开盘已跌破止损则按开盘价
-成交。必须 `--strategy version6|version8`，无缺省。买入用 14:55 分钟收盘
+成交。必须从已注册策略中显式指定 `--strategy`，无缺省。买入用 14:55 分钟收盘
 （湖内时间为「中国交易时钟标成 UTC」——09:30 UTC = 09:30 CST）。
 
 用法：
@@ -71,6 +71,7 @@ import pyarrow.compute as pc  # noqa: E402
 import pyarrow.parquet as pq  # noqa: E402
 from common.infra.data_root import resolve_period_root  # noqa: E402
 from oskh_data.symbol_format import to_partition_key  # noqa: E402
+from backtest.research.strategy3_rules import reserve_step_minute  # noqa: E402
 
 BUY_HM = 14 * 60 + 55
 AM_OPEN, AM_CLOSE = 9 * 60 + 30, 11 * 60 + 30
@@ -96,7 +97,7 @@ HELP_LOCK = """
   缓存：窗口分钟条写入 backtest_output/bar_cache/（E 盘，已 annotated）。默认
         命中直接读缓存；缺码再补湖并回写。--no-cache 跳过；--rebuild-cache 重做。
   落盘：与日线同三件套；若已有同策略 csv_daily_{book}_{start}_* 净值，summary 末尾附对照。
-  策略：必须 --strategy version6 或 version8（无缺省）。共用引擎，策略书换卖点与加仓。
+  策略：必须显式指定已注册 --strategy（无缺省）。共用引擎，策略书换卖点与加仓。
 """
 
 CACHE_ROOT = Path(REPO) / "backtest_output" / "bar_cache"
@@ -409,12 +410,17 @@ def scan_held_day(
     peak_gap_min: int = PEAK_GAP_MIN,
     take_profit=None,
     force_sell_hm: Optional[int] = None,
+    reserve_limit_up: bool = False,
+    limit_up: float = 0.0,
+    reserved: bool = False,
+    reserve_state: Optional[dict] = None,
 ) -> tuple[int, float, str, float, int]:
     """逐分钟扫描。返回 (idx, px, reason, new_peak, new_peak_hm)。"""
     stop_enabled = isinstance(stop_pct, float) and 0 < stop_pct < 1
     trigger = cost * (1.0 - stop_pct) if stop_enabled else None
     new_peak = float(peak)
     new_peak_hm = int(peak_hm)
+    current_reserved = bool(reserved)
     n = int(len(c))
     for i in range(n):
         # T+0 不卖、不更新峰值（历史最高价从 T+1 起算）
@@ -434,6 +440,17 @@ def scan_held_day(
         ret = px_close / cost - 1.0
         if stop_enabled and ret <= -stop_pct:
             return i, px_close, "stop_loss:touch", new_peak, new_peak_hm
+        if reserve_limit_up:
+            is_limit_up = limit_up > 0 and hit_limit_up(px_close, limit_up)
+            current_reserved, reserve_reason = reserve_step_minute(
+                reserved=current_reserved, hm=cur_hm, is_limit_up=is_limit_up
+            )
+            if reserve_state is not None:
+                reserve_state["reserved"] = current_reserved
+            if reserve_reason:
+                return i, px_close, reserve_reason, new_peak, new_peak_hm
+            if current_reserved and is_limit_up:
+                continue
         peak_blocked = new_peak_hm >= 0 and peak_gap_blocks(
             cur_hm - new_peak_hm, peak_gap_min
         )
@@ -537,6 +554,7 @@ def simulate(
     record_params = hooks["record_params"]
     peak_gap_min = int(hooks["peak_gap_min"])
     force_sell_hm = hooks.get("force_sell_hm")
+    reserve_limit_up = bool(hooks.get("reserve_limit_up"))
     calendar = build_calendar(daily_bars, start, end)
 
     st = SimState(cash=float(total_cash))
@@ -563,13 +581,14 @@ def simulate(
             if prev_rows.empty:
                 continue
             prev_close = float(prev_rows.iloc[-1]["close"])
-            _, limit_down = _limit_prices(code, prev_close)
+            limit_up, limit_down = _limit_prices(code, prev_close)
             o = day_m["open"].to_numpy(np.float64)
             h = day_m["high"].to_numpy(np.float64)
             c = day_m["close"].to_numpy(np.float64)
             hm = day_m["hm"].to_numpy(np.int64)
             for pos in list(st.positions.get(code, [])):
                 n_days = i - pos.entry_idx
+                reserve_state = {"reserved": bool(pos.reserved)}
                 idx, px, reason, new_peak, new_peak_hm = scan_held_day(
                     o,
                     h,
@@ -588,9 +607,14 @@ def simulate(
                     peak_gap_min=peak_gap_min,
                     take_profit=take_profit,
                     force_sell_hm=force_sell_hm,
+                    reserve_limit_up=reserve_limit_up,
+                    limit_up=limit_up,
+                    reserved=bool(pos.reserved),
+                    reserve_state=reserve_state,
                 )
                 pos.peak = new_peak
                 pos.peak_hm = new_peak_hm
+                pos.reserved = bool(reserve_state["reserved"])
                 if idx >= 0:
                     if hit_limit_down(float(o[idx]), limit_down) and reason.startswith(
                         "stop_loss"

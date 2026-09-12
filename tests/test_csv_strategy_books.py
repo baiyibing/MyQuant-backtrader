@@ -19,7 +19,7 @@ from backtest.research.csv_strategy_books import (
 
 def test_registered_books_are_explicit():
     assert csv_strategy_names() == (
-        "version1", "version2", "version5", "version6", "version8"
+        "version1", "version2", "version3", "version5", "version6", "version8"
     )
     assert get_book("version1").allow_add is False
     assert get_book("version1").peak_gap_min == 0

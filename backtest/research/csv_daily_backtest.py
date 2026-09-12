@@ -3,7 +3,7 @@
 
 完整滚动投资流程（分钟 Cerebro 链）的日线近似版：同口径的 CSV 每日买入名单、
 每日 100 万常规额度、补充资金、T+1、涨跌停拦截、全局 2100 万资金池。必须
-`--strategy version6|version8`，无缺省。数据用不复权日线（与分钟链
+`--strategy` 必须从已注册策略中显式指定，无缺省。数据用不复权日线（与分钟链
 adjust_type='none' 对齐）；佣金 0.1% 双边（与 broker.setcommission(0.001)
 对齐），无最低佣金。
 
@@ -114,7 +114,7 @@ HELP_LOCK = """
   落盘：backtest_output/csv_daily_{book}_{start}_{end}/ 三件套 summary.txt、
         daily_equity.csv、trades.csv（与分钟版同结构）。
   环境：勿残留 OSKH_PERIOD_* ；有 F:\\stock_data\\.authority 时跟权威盘。
-  策略：必须 --strategy version6 或 version8（无缺省）。共用引擎，策略书换卖点与加仓。
+  策略：必须显式指定已注册 --strategy（无缺省）。共用引擎，策略书换卖点与加仓。
 """
 
 
@@ -132,6 +132,7 @@ class Position:
     peak_hm: int = -1  # 峰值所在分钟 hm；跨日为负间隔，分钟止盈用
     lot_id: int = 0  # 同码多笔：各自成本/峰值
     pending_exit: str = ""  # 日线止盈：次日开盘离场原因
+    reserved: bool = False  # 策略 3 涨停保留状态；分钟引擎复用本类
 
 
 @dataclass
@@ -352,7 +353,7 @@ def simulate(
 ) -> SimState:
     """核心日循环。bars/pool_days 可由测试注入；run() 负责从湖与 CSV 加载。
 
-    strategy 必填（version6 / version8）；take_profit(...) 仍可显式覆盖。
+    strategy 必填；take_profit(...) 仍可显式覆盖。
     """
     del pos_trail
     hooks = apply_csv_strategy(
@@ -374,6 +375,8 @@ def simulate(
     st.stats["bars_loaded"] = len(bars)
     st.stats["pool_days"] = len(pool_days)
     allow_add = bool(hooks["allow_add"])
+    reserve_limit_up = bool(hooks.get("reserve_limit_up"))
+    daily_same_bar_prefixes = tuple(hooks.get("daily_same_bar_prefixes", ()))
     pending_chase: dict[str, tuple[float, int]] = {}  # code -> (per, signal_idx)
 
     for i, day in enumerate(calendar):
@@ -388,7 +391,7 @@ def simulate(
             if prev_rows.empty:
                 continue
             prev_close = float(prev_rows.iloc[-1]["close"])
-            _, limit_down = _limit_prices(code, prev_close)
+            limit_up, limit_down = _limit_prices(code, prev_close)
             for pos in list(st.positions.get(code, [])):
                 n_days = i - pos.entry_idx  # 持仓交易日数（买入日=0）
 
@@ -422,9 +425,26 @@ def simulate(
 
                     pos.peak = max(pos.peak, float(row["high"]))
                     close = float(row["close"])
-                    reason = take_profit(close, pos.cost, pos.peak, n_days)
+                    if reserve_limit_up and hit_limit_up(float(row["open"]), limit_up):
+                        pos.reserved = True
+                    if reserve_limit_up and pos.reserved:
+                        if hit_limit_up(close, limit_up):
+                            continue
+                        pos.reserved = False
+                        reason = "open_board"
+                    else:
+                        reason = take_profit(close, pos.cost, pos.peak, n_days)
                     if reason:
-                        pos.pending_exit = reason
+                        same_bar = any(
+                            reason.startswith(prefix)
+                            for prefix in daily_same_bar_prefixes
+                        )
+                        if same_bar and not hit_limit_down(close, limit_down):
+                            _sell(st, code, pos, close, day, reason)
+                        else:
+                            if same_bar:
+                                st.stats["defer_sell_limit_down"] += 1
+                            pos.pending_exit = reason
 
         due = [c for c, (_per, sig) in pending_chase.items() if i == sig + 1]
         for code in due:

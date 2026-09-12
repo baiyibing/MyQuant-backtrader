@@ -145,6 +145,51 @@ def test_strategy5_daily_target_sells_next_open_without_force_reason():
     assert not any(t["reason"].startswith("force_sell") for t in sells)
 
 
+def test_strategy3_daily_limit_up_close_suppresses_twenty_percent_target():
+    rows = {"300001.SZ": [
+        (10.0, 10.0, 10.0, 10.0),
+        (12.0, 12.0, 12.0, 12.0),
+        (14.4, 14.4, 14.4, 14.4),
+        (17.28, 17.28, 17.28, 17.28),
+        (20.74, 20.74, 20.74, 20.74),
+    ]}
+    st = _run({"20251103": ["300001.SZ"]}, _bars(DAYS, rows), strategy="version3")
+    assert not [trade for trade in st.trades if trade["side"] == "SELL"]
+    assert st.positions["300001.SZ"][0].reserved is True
+    assert st.positions["300001.SZ"][0].pending_exit == ""
+
+
+def test_strategy3_daily_open_board_sells_same_close():
+    rows = {"300001.SZ": [
+        (10.0, 10.0, 10.0, 10.0),
+        (12.0, 12.0, 10.8, 11.8),
+        (11.8, 11.8, 11.8, 11.8),
+        (11.8, 11.8, 11.8, 11.8),
+        (11.8, 11.8, 11.8, 11.8),
+    ]}
+    st = _run({"20251103": ["300001.SZ"]}, _bars(DAYS, rows), strategy="version3")
+    sell = [trade for trade in st.trades if trade["side"] == "SELL"][0]
+    assert sell["date"] == "20251104"
+    assert sell["price"] == pytest.approx(11.8)
+    assert sell["reason"] == "open_board"
+
+
+def test_strategy3_daily_open_board_limit_down_defers_to_next_open():
+    rows = {"300001.SZ": [
+        (10.0, 10.0, 10.0, 10.0),
+        # Synthetic low keeps the earlier stop clock from winning this U-R20 case.
+        (12.0, 12.0, 10.0, 8.0),
+        (8.2, 8.2, 8.2, 8.2),
+        (8.2, 8.2, 8.2, 8.2),
+        (8.2, 8.2, 8.2, 8.2),
+    ]}
+    st = _run({"20251103": ["300001.SZ"]}, _bars(DAYS, rows), strategy="version3")
+    sell = [trade for trade in st.trades if trade["side"] == "SELL"][0]
+    assert sell["date"] == "20251105"
+    assert sell["price"] == pytest.approx(8.2)
+    assert sell["reason"] == "open_board"
+
+
 @pytest.mark.parametrize(
     ("reason", "bucket"),
     [

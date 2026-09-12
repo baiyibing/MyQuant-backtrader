@@ -38,7 +38,7 @@ Qlib `PortAnaRecord` 停用。Cerebro / Rolling 观察退役（对照化石，�
 
 ### 3.1 向量化（本仓）
 
-- **入口**：`backtest/research/csv_daily_backtest.py`、`csv_minute_backtest.py`（`--strategy version1|version2|version5|version6|version8`）；`csv_minute_backtest_v7.py`（金榕元仓位机，独立，不进策略书）。
+- **入口**：`backtest/research/csv_daily_backtest.py`、`csv_minute_backtest.py`（`--strategy version1|version2|version3|version5|version6|version8`）；`csv_minute_backtest_v7.py`（金榕元仓位机，独立，不进策略书）。
 - **输入**：日名单 CSV（`parse_pool_csv`）。来源可以是 Qlib 导出、本仓技术分析、手工，下游不认来源。
 - **成交模型**：当根 close / 分钟触价；自写账本；T+1、涨跌停、整手在引擎里。
 - **用途**：锁规则、扫参、名单质量对照。快。
@@ -71,7 +71,7 @@ Qlib `PortAnaRecord` 停用。Cerebro / Rolling 观察退役（对照化石，�
 名单源 B  本仓               技术分析 / chip / TR / 手工
               ↓  同一契约（YYYYMMDD.csv，裸六位码）
 本仓向量化
-  1/2/5/6/8 策略书锁规则；7 只吃海龟池
+  1/2/3/5/6/8 策略书锁规则；7 只吃海龟池
        ↓  要上 Paper 才走
 1.3 trade_decision 纯函数 → LEBS 扫描 → MockQMT 真栈
 ```

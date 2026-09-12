@@ -1,7 +1,7 @@
 """CSV 回测策略书注册表。
 
 日线 / 分钟引擎只跑买侧、资金、T+1、涨跌停。卖点与是否加仓由策略书提供。
-必须显式指定 version6 / version8；无缺省。新策略：strategyN_rules.py + register()。
+必须显式指定已注册策略；无缺省。新策略：strategyN_rules.py + register()。
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ from typing import Any, Callable, Optional
 from backtest.research import (
     strategy1_rules,
     strategy2_rules,
+    strategy3_rules,
     strategy5_rules,
     strategy6_rules,
     strategy8_rules,
@@ -20,6 +21,7 @@ from backtest.research import (
 
 HELP_LOCK_V1 = strategy1_rules.HELP_LOCK
 HELP_LOCK_V2 = strategy2_rules.HELP_LOCK
+HELP_LOCK_V3 = strategy3_rules.HELP_LOCK
 HELP_LOCK_V5 = strategy5_rules.HELP_LOCK
 HELP_LOCK_V6 = strategy6_rules.HELP_LOCK
 HELP_LOCK_V8 = strategy8_rules.HELP_LOCK
@@ -246,6 +248,31 @@ def _run_kwargs_version2(args) -> dict:
     return {"strategy": "version2", "stop_pct": _stop_override_from_args(args)}
 
 
+def _apply_version3(
+    *, stop_pct: Optional[float] = None, take_profit=None, record_params=None, **_
+) -> dict:
+    resolved = strategy3_rules.STOP_PCT if stop_pct is None else float(stop_pct)
+
+    def _tp(px, cost, peak, n_days):
+        return strategy3_rules.take_profit_reason(px, cost, peak, n_days)
+
+    def _rec(st):
+        strategy3_rules.record_strategy3_params(st, stop_pct=resolved)
+
+    return {
+        "stop_pct": resolved,
+        "take_profit": _tp if take_profit is None else take_profit,
+        "record_params": _rec if record_params is None else record_params,
+        "reserve_limit_up": True,
+        "force_sell_hm": None,
+        "daily_same_bar_prefixes": ("open_board",),
+    }
+
+
+def _run_kwargs_version3(args) -> dict:
+    return {"strategy": "version3", "stop_pct": _stop_override_from_args(args)}
+
+
 def _apply_version5(
     *, stop_pct: Optional[float] = None, take_profit=None, record_params=None, **_
 ) -> dict:
@@ -364,6 +391,18 @@ register(
         help_lock=strategy2_rules.HELP_LOCK,
         apply=_apply_version2,
         run_kwargs=_run_kwargs_version2,
+    )
+)
+register(
+    CsvStrategyBook(
+        name="version3",
+        tag=strategy3_rules.BOOK_TAG,
+        aliases=("3", "v3", "version3"),
+        allow_add=strategy3_rules.ALLOW_ADD,
+        peak_gap_min=strategy3_rules.PEAK_GAP_MIN,
+        help_lock=strategy3_rules.HELP_LOCK,
+        apply=_apply_version3,
+        run_kwargs=_run_kwargs_version3,
     )
 )
 register(

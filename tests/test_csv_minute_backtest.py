@@ -109,6 +109,37 @@ def test_strategy5_force_sell_defers_at_limit_down_close():
     assert reason == ""
 
 
+def test_strategy3_limit_up_reserve_then_open_board_ignores_peak_gap():
+    hooks = sim.apply_csv_strategy("version3")
+    state = {"reserved": False}
+    idx, px, reason, _, _ = sim.scan_held_day(
+        np.array([12.0, 11.9]), np.array([12.0, 12.1]), np.array([12.0, 11.9]),
+        cost=10.0, peak=10.0, n_days=1, can_sell=True,
+        stop_pct=hooks["stop_pct"], profit_base=0.0, trail_ratio=0.0,
+        hm=np.array([575, 581]), peak_gap_min=999,
+        take_profit=hooks["take_profit"], reserve_limit_up=True, limit_up=12.0,
+        reserve_state=state,
+    )
+    assert (idx, reason, px) == (1, "open_board", pytest.approx(11.9))
+    assert state["reserved"] is False
+
+
+def test_strategy3_reserved_twenty_percent_board_skips_target():
+    hooks = sim.apply_csv_strategy("version3")
+    state = {"reserved": False}
+    idx, _, reason, _, _ = sim.scan_held_day(
+        np.array([12.0, 12.0]), np.array([12.0, 12.0]), np.array([12.0, 12.0]),
+        cost=10.0, peak=10.0, n_days=1, can_sell=True,
+        stop_pct=hooks["stop_pct"], profit_base=0.0, trail_ratio=0.0,
+        hm=np.array([575, 581]), peak_gap_min=hooks["peak_gap_min"],
+        take_profit=hooks["take_profit"], reserve_limit_up=True, limit_up=12.0,
+        reserve_state=state,
+    )
+    assert idx == -1
+    assert reason == ""
+    assert state["reserved"] is True
+
+
 def test_scan_t1_trail_on_close():
     # 峰值 10.50（+5%，锚 1% 后超额 4%），T+1 档 50% → 线 +3% → 10.30
     # 09:30 创新高，09:45 才允许止盈（间隔 15 分钟）
