@@ -1,7 +1,8 @@
 # Plan：Qlib 训练厂 R3（processors + filter_pipe；不做 M5）
 
 > **落盘**：2026-09-12。
-> **状态**：📄 **v1.0 · 人裁「R3 / M5 另开一轮」→ 本轮只做 R3**。本 PR 合入即授权按切片实施。
+> **状态**：📄 **v1.0 · 已实施**（本仓 [#25](https://github.com/baiyibing/MyQuant-backtrader/pull/25)，MyQuant [#3](https://github.com/baiyibing/MyQuant/pull/3)；第 4 轮重训 2026-09-12 已出新 pred）。
+> **后续**：M5 见 [plan-m5-list-attribution-2026-09-13.md](plan-m5-list-attribution-2026-09-13.md)。
 > **风险档**：**L1**（MyQuant handler / 训练入口接线；不重训作合入门、不重写引擎、不做名单归因）。
 > **范围**：实施几乎全在 **MyQuant**。本仓只存 plan 与入口链。1.3 只读。
 > **上游走查**：MyQuant `my_docs/qlib_backtest_walkthrough_results.md` §1.1、§1.2、§1.3、§2。
