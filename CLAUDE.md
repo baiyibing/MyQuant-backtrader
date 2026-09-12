@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-This repository is a **slim backtrader fork**. See [README.md](README.md) and [AGENTS.md](AGENTS.md).
+This repository is the **research face**: vectorized CSV backtests + chip/TR. LEBS / MockQMT live in OSkhQuant1.3. See [README.md](README.md), [AGENTS.md](AGENTS.md), and [docs/backtest/engine-positioning-ssot.md](docs/backtest/engine-positioning-ssot.md).
 
 ## Python
 

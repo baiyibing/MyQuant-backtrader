@@ -1,6 +1,6 @@
 # 多 agent 设计稿评审（本仓精简版）
 
-从 OSkhQuant1.3 复制编排器，按本仓范围裁剪。本仓是 Cerebro + path-SSOT 只读回测，不评实盘 / QMT / Redis。
+从 OSkhQuant1.3 复制编排器，按本仓范围裁剪。本仓是向量化 CSV 研究回测 + path-SSOT 只读行情，不评实盘 / QMT / Redis。Cerebro 观察退役。引擎分工见 `docs/backtest/engine-positioning-ssot.md`。
 
 ## 一条命令
 

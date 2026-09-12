@@ -1,33 +1,35 @@
 # MyQuant-backtrader
 
-Standalone **backtrader** backtest + local stock-data read + chip / turnover-resistance (Python + Rust). Market **download** lives in the original repo; this fork only reads path-SSOT parquet.
+研究脸：日名单 CSV + **向量化**回测，以及筹码 / 换手阻力（Python + Rust）。行情只读 path-SSOT parquet；下载在原仓。成交验收（LEBS / MockQMT）在 [OSkhQuant1.3](https://github.com/baiyibing/OSkhQuant1.3)。
 
-Seeded from OSkhQuant slim snapshot at commit `5d41252` (parent of RF-R0 package re-engineering). Live trading, Redis streams, executor, monitor, and most of `oskh_core` / `oskh_db` were removed. Since migration S2 (2026-09-09) this repo owns the full research face absorbed from OSkhQuant1.3 (`l2_analytics`, `strategies`, research scripts/gates/tests); the trading stack upstream keeps only the `oskh_factors` chip/bridge micropackage.
+三件引擎怎么分工：[`docs/backtest/engine-positioning-ssot.md`](docs/backtest/engine-positioning-ssot.md)。Qlib 回测停用；Cerebro 观察退役。本仓没有 `backtest/lebs/`。
+
+Seeded from OSkhQuant slim snapshot at `5d41252`。S2（2026-09-09）之后本仓收研究面；交易栈只留 `oskh_factors` chip/bridge 微包。
 
 ## Layout
 
 | Path | Role |
 |------|------|
-| `backtest/` | Cerebro engine at root (`backtest_main_full`, rolling invest, chip indicator) |
-| `backtest/research/` | Chip research CLIs (`chip_backtest`, factor analysis, verify scripts) |
-| `backtest/research/chip/` | Chip factor consumers (qlib_cost / factors evaluation CLIs) |
-| `backtest/tools/` | One-off local utilities |
-| `backtest/legacy/` | Non-Cerebro bar-replay / mock engines |
-| `oskh_data/` | Parquet/DuckDB reader (no QMT download; three-tree hive roots) |
-| `l2_analytics/` | L2 offline aggregates / ETL templates (duckdb, SQL) |
-| `qlib_cost/` | Chip distribution algorithms |
-| `turnover-resist/` | Rust CLI for turnover resistance (Rust SSOT) |
-| `oskh_factors/bridge/turnover_resist.py` | Python bridge (FFI / CLI) to the Rust binary |
-| `strategies/tr_filter.py` | Turnover-resistance selector filter (decoupled from upstream common) |
-| `oskh_core/` | TR bridge re-export + `a_share_symbol_normalize` |
-| `trade_decision/presets.py` | Sell presets used by optional BT adapter |
-| `common/infra/` | Slim infra (`timekeeping`, `quant_logger`, …) |
-| `scripts/gates/` | Contract / path-SSOT gates |
-| `scripts/research/` | Full-market chip / TR research CLIs |
-| `scripts/data/` | Chip / resist research CLIs (absorbed from upstream) |
-| `scripts/run/` | L2 ETL entry points (`run_l2_etl_day`, `run_l2_build_aggregates`, …) |
-| `scripts/tr/` | Turnover-resistance backfill and DuckDB rebuild |
-| `stock_pool/` | Daily buy-list CSVs for full BT |
+| `backtest/research/csv_daily_backtest.py` | 向量化日线（策略 6/8 策略书） |
+| `backtest/research/csv_minute_backtest.py` | 向量化分钟（策略 6/8） |
+| `backtest/research/csv_minute_backtest_v7.py` | 策略 7 金榕元仓位机（独立） |
+| `backtest/research/csv_pool.py` | 名单 CSV：裸六位码 → canonical |
+| `backtest/research/csv_strategy_books.py` | 6/8 策略书 |
+| `backtest/research/chip/` | Chip 因子消费者 |
+| `backtest/` 根上 Cerebro | 观察退役（`backtest_main_full`、Rolling、chip indicator） |
+| `backtest/legacy/` | 非 Cerebro 旧回放 |
+| `oskh_data/` | Parquet/DuckDB 只读（三树 hive） |
+| `l2_analytics/` | L2 离线聚合 / ETL |
+| `qlib_cost/` | 筹码分布算法 |
+| `turnover-resist/` | 换手阻力 Rust SSOT |
+| `oskh_factors/bridge/turnover_resist.py` | Rust 的 Python 桥 |
+| `strategies/tr_filter.py` | 换手阻力选股过滤 |
+| `oskh_core/` | TR 再导出 + `a_share_symbol_normalize` |
+| `trade_decision/presets.py` | 卖点 presets（研究副本，不改 1.3 交易核） |
+| `common/infra/` | 薄基建（timekeeping、path-SSOT） |
+| `scripts/gates/` | 契约 / path-SSOT gates |
+| `scripts/research/` `scripts/data/` `scripts/tr/` | chip / TR / L2 研究 CLI |
+| `stock_pool/` | 6/8 默认日名单（不是海龟池） |
 
 ## Environment
 
@@ -35,20 +37,25 @@ Seeded from OSkhQuant slim snapshot at commit `5d41252` (parent of RF-R0 package
 D:\anaconda3\envs\vanna312\python.exe -m pip install -r requirements.txt
 ```
 
-## Run full backtest
+## Run research backtest
 
-Dates / capital are hardcoded in `backtest/backtest_main_full.py`. Needs `../stock_pool`. Minute/daily bars load via `oskh_data.StockDataReader` (path-SSOT; F parquet when `.authority` is present).
+必须 `--strategy version6|version8`（6/8）。7 必须 `--pool-dir`。数据经 `oskh_data` / `resolve_period_root`（有 `F:\stock_data\.authority` 时跟 F 盘）。
 
 ```powershell
-cd backtest
-D:\anaconda3\envs\vanna312\python.exe backtest_main_full.py
+D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_daily_backtest.py --strategy version6 --start 20251023 --end 20260909
+D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_minute_backtest.py --strategy version8 --start 20251023 --end 20260909
+D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_minute_backtest_v7.py --start 20260804 --end 20260909 --pool-dir E:\PycharmProjects\OSkhQuant1.3\stock_pool_turtle
 ```
+
+细则与 1.3 入口：[`docs/backtest/README.md`](docs/backtest/README.md)。
+
+Cerebro 全市场滚动（`backtest/backtest_main_full.py`）只做旧对照，不接新策略。
 
 ## Market data (read-only)
 
-Bars, adj factors, and float-share sidecars are produced by the original repo and consumed here via `oskh_data.StockDataReader` (path-SSOT; F parquet when `.authority` is present). This fork does not ship QMT / xtquant download.
+Bars、复权、流通股本由原仓生产，这里用 `oskh_data.StockDataReader` 读。无 QMT / xtquant 下载。
 
-Config: `config/reader.yaml` (`mode: parquet` by default). Env: `OSKH_DATA_ROOT`.
+Config: `config/reader.yaml`（默认 `mode: parquet`）。盘符分层见 `AGENTS.md`。
 
 ## Rust turnover-resist
 
@@ -59,7 +66,7 @@ cd turnover-resist
 cargo build --profile release-fast
 ```
 
-Python entry: `from oskh_factors.bridge.turnover_resist import compute_turnover_resist` (also re-exported from `oskh_core.turnover_resist_bridge`).
+Python: `from oskh_factors.bridge.turnover_resist import compute_turnover_resist`（也从 `oskh_core.turnover_resist_bridge` 再导出）。
 
 ## Tests
 
