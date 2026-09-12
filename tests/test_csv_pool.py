@@ -7,6 +7,7 @@ from backtest.research.csv_pool import (
     load_pool_name_map,
     parse_pool_csv,
     parse_pool_csv_entries,
+    validate_pool_dir,
 )
 
 
@@ -38,6 +39,40 @@ def test_parse_pool_csv_already_suffixed_and_comments(tmp_path: Path):
         newline="\n",
     )
     assert parse_pool_csv(path) == ["600000.SH", "000001.SZ"]
+
+
+def test_validate_pool_dir_rejects_prefixed_code_but_parser_stays_loose(tmp_path: Path):
+    path = tmp_path / "20260805.csv"
+    path.write_text("代码,名称\nSZ300190,维尔利\n", encoding="utf-8", newline="\n")
+
+    failures = validate_pool_dir(tmp_path)
+
+    assert len(failures) == 1
+    assert "SZ300190" in failures[0]
+    assert parse_pool_csv(path) == ["300190.SZ"]
+    assert parse_pool_csv_entries(path) == [("300190.SZ", "维尔利")]
+
+
+def test_validate_pool_dir_accepts_exact_six_digit_rows(tmp_path: Path):
+    (tmp_path / "20260805.csv").write_text(
+        'code,name\n"300190",维尔利\n920014,倍益康\n',
+        encoding="utf-8",
+        newline="\n",
+    )
+
+    assert validate_pool_dir(tmp_path) == []
+
+
+def test_validate_pool_dir_collects_filename_and_row_failures(tmp_path: Path):
+    (tmp_path / "pool.csv").write_text("600000.SH,浦发银行\n", encoding="utf-8")
+    (tmp_path / "20260230.csv").write_text("000001,平安银行\n", encoding="utf-8")
+
+    failures = validate_pool_dir(tmp_path)
+
+    assert len(failures) == 3
+    assert any("pool.csv: filename" in failure for failure in failures)
+    assert any("600000.SH" in failure for failure in failures)
+    assert any("20260230.csv: filename" in failure for failure in failures)
 
 
 def test_load_pool_day_map_empty_policy_and_key_type(tmp_path: Path):
