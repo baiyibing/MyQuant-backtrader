@@ -1,7 +1,7 @@
 # Plan：M5 名单归因（R3 pred TopN vs 手工池；同一 version6 书）
 
 > **落盘**：2026-09-13。
-> **状态**：📄 **v1.0 · R3 重训已出新 pred，本轮做名单归因**。本 PR 合入即授权按切片实施。
+> **状态**：📄 **v1.0 · 工具链已合 [#27](https://github.com/baiyibing/MyQuant-backtrader/pull/27)；C 本机 2026-09-13 补跑，数字在 [m5-list-attribution-2026-03.md](m5-list-attribution-2026-03.md)**。
 > **风险档**：**L1**（对照跑 + 落盘隔离 + 宽度对齐；不重写引擎、不改卖点、不用 PortAna/R0 净值验收）。
 > **范围**：本仓为主。MyQuant 只读：R3 之后的 `预测结果.csv` + 已有 `export_daily_pool.py`。
 > **前序**：R2/R5 管道 [#24](https://github.com/baiyibing/MyQuant-backtrader/pull/24)；R3 厂 [#25](https://github.com/baiyibing/MyQuant-backtrader/pull/25) / MyQuant [#3](https://github.com/baiyibing/MyQuant/pull/3)。第 4 轮重训 2026-09-12 23:45 写出新 `预测结果.csv`（83903 行 / 16 日；pre-R3 为 87363 行，score 相关约 0.65）。
