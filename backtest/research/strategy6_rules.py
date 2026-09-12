@@ -25,6 +25,7 @@ HELP_LOCK = """
         T+1=0.3 / T+2=0.4 / T+3=0.5 / T+4=0.6 / T+5+=0.7。
         触发价 < 买入价不止盈。未过 +1% 锚不止盈。
   已持仓票跳过，不叠加 lot。
+  跌停：trail / 止损等任何卖因成交前跌停则 defer，次日再评（不只 stop_loss）。
   比例：--stop-pct / --profit-base / --trail-t1..t5 可改。
   落盘：backtest_output/csv_{daily|minute}_v6_{start}_{end}/
 """

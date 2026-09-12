@@ -22,8 +22,7 @@ if __package__ in (None, ""):
 from backtest.research.market_layer import (
     as_date as _as_date,
     as_datetime as _as_datetime,
-    limit_pct,
-    round_fen,
+    limit_prices,
 )
 from backtest.research.strategy7_rules import (
     NINE,
@@ -42,6 +41,8 @@ from common.infra.data_root import resolve_index_daily_root, resolve_period_root
 from oskh_data.lake_kind import classify_daily_lake_kind
 from oskh_data.symbol_format import to_canonical_symbol, to_partition_key
 
+# Decimal HALF_UP SSOT; 1.65×10% 跌停钉 1.49（不再用本地 float 1.48）。
+_limit_prices = limit_prices
 
 COMMISSION = 0.001
 NAME_BUDGET = 1_000_000.0
@@ -176,11 +177,6 @@ def _previous_close(closes: Mapping[date, float], today: date) -> float | None:
     return float(closes[max(prior)]) if prior else None
 
 
-def _limit_prices(symbol: str, previous_close: float) -> tuple[float, float]:
-    pct = limit_pct(symbol)
-    return round_fen(previous_close * (1 + pct)), round_fen(previous_close * (1 - pct))
-
-
 def _event(state: SimResult, day: date, symbol: str, hm: int | None, side: str, shares: int,
            price: float | None, reason: str) -> None:
     state.trades.append({"date": day.isoformat(), "symbol": symbol, "hm": hm, "side": side,
@@ -267,7 +263,7 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
                     _event(state, day, symbol, None, "skip", 0, None, "skip_no_1455")
                 continue
             previous = _previous_close(closes.get(symbol, {}), day)
-            limits = _limit_prices(symbol, previous) if previous is not None else None
+            limits = limit_prices(symbol, previous) if previous is not None else None
             first = True
             chopped_hm: int | None = None
             open_checked = False
@@ -338,11 +334,15 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
                     elif previous is None:
                         _event(state, day, symbol, hm, "skip", 0, close_px, "skip_no_prev_close")
                     else:
-                        upper, lower = _limit_prices(symbol, previous)
-                        if close_px >= upper:
-                            _event(state, day, symbol, hm, "skip", 0, close_px, "skip_limit_up")
-                        elif close_px > lower:
-                            _buy(state, None, symbol, day, hm, close_px, 0.40, "buy:trial", "trial")
+                        priced = limit_prices(symbol, previous)
+                        if priced is None:
+                            _event(state, day, symbol, hm, "skip", 0, close_px, "skip_unknown_board")
+                        else:
+                            upper, lower = priced
+                            if close_px >= upper:
+                                _event(state, day, symbol, hm, "skip", 0, close_px, "skip_limit_up")
+                            elif close_px > lower:
+                                _buy(state, None, symbol, day, hm, close_px, 0.40, "buy:trial", "trial")
                 first = False
 
             if symbol in pools.get(day, []) and symbol not in state.positions and not open_checked:

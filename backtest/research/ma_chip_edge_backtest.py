@@ -108,6 +108,8 @@ def is_limit_open(code: str, open_px: float, prev_close: float, *, up: bool) -> 
     if not np.isfinite(open_px) or not np.isfinite(prev_close) or prev_close <= 0:
         return False
     pct = limit_pct(code)
+    if pct is None:
+        return False
     target = round(prev_close * (1 + pct if up else 1 - pct), 2)
     return abs(open_px - target) <= 0.01 + 1e-9
 

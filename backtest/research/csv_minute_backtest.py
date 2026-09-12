@@ -51,8 +51,9 @@ from backtest.research.csv_daily_backtest import (  # noqa: E402
     queue_limit_up_chase,
     help_lock_all,
     help_lock_for,
-    _limit_prices,
+    _named_limits,
     hit_limit_down,
+    last_close_mark,
     peak_gap_blocks,
     trail_hits,
     hit_limit_up,
@@ -62,6 +63,7 @@ from backtest.research.csv_daily_backtest import (  # noqa: E402
     build_calendar,
     load_daily_bars,
     load_pool_days,
+    load_pool_name_map,
     maybe_compare_daily,
     normalize_csv_strategy,
     summarize,
@@ -84,9 +86,14 @@ HELP_LOCK = """
 分钟向量化口径（相对 Cerebro 保真版：无事件总线，同公式逐分钟扫描）：
   时钟：分钟湖 time 把 A 股会话钟点标成 UTC（09:30 UTC=开盘）。交易日=该 UTC 日期。
   买入：池 CSV 当日候选、14:55 收盘价；买价达到或超过涨停价 → 当日不买，
-        记下额度。T+1 09:45 市价>当日开盘 → 09:45 收盘追买；否则弃买。一次机会。
+        记下额度。T+1 09:45 市价>当日开盘 → 09:45 收盘追买；否则弃买。
+        追买日无 K 保留 pending 到下一有 K 日（仍只评一次）。
         已持再买或跳过由 --strategy 策略书决定。
+        未知板块且无 ST 名 → skip_unknown_board，不交易。
   止损：D+1 起，开盘 ≤ 买入价×(1-stop) → 开盘成交；否则该分钟 close 触价 → close 成交。
+  跌停禁卖：任何卖因成交前若开盘或成交价跌停 → 不成交、当日跳过、次日再评
+        （含 trail / profit_take / force / ma_signal / open_board，不只 stop_loss）。
+  停牌：冻仓；净值用最近有 K 的 close。
   止盈 / 峰值：见下方对应策略书。峰值用 bar high，现价用 close。
         策略 6 触价 bar 与创新高 bar 间隔不能 < 15 分钟（=15 允许；隔夜/午休 gap<0 视为满足）。
         盘中触线按该分钟 close 走。
@@ -555,6 +562,7 @@ def simulate(
     strategy: str,
     take_profit=None,
     record_params=None,
+    pool_names: Optional[dict[str, str]] = None,
 ) -> SimState:
     hooks = apply_csv_strategy(
         strategy,
@@ -582,6 +590,7 @@ def simulate(
     allow_add = bool(hooks["allow_add"])
     day_spans = {code: build_day_spans(df) for code, df in minute_bars.items()}
     pending_chase: dict[str, tuple[float, int]] = {}
+    names = dict(pool_names or {})
 
     for i, day in enumerate(calendar):
         ds = _ymd(day)
@@ -599,7 +608,11 @@ def simulate(
             if prev_rows.empty:
                 continue
             prev_close = float(prev_rows.iloc[-1]["close"])
-            limit_up, limit_down = _limit_prices(code, prev_close)
+            limits = _named_limits(code, prev_close, names)
+            if limits is None:
+                st.stats["skip_unknown_board"] += 1
+                continue
+            limit_up, limit_down = limits
             o = day_m["open"].to_numpy(np.float64)
             h = day_m["high"].to_numpy(np.float64)
             c = day_m["close"].to_numpy(np.float64)
@@ -638,37 +651,42 @@ def simulate(
                 pos.peak_hm = new_peak_hm
                 pos.reserved = bool(reserve_state["reserved"])
                 if idx >= 0:
-                    if hit_limit_down(float(o[idx]), limit_down) and reason.startswith(
-                        "stop_loss"
+                    fill_open = float(o[idx])
+                    if limit_down > 0 and (
+                        hit_limit_down(fill_open, limit_down)
+                        or hit_limit_down(float(px), limit_down)
                     ):
                         st.stats["defer_sell_limit_down"] += 1
                         continue
                     _sell(st, code, pos, px, day, reason)
 
-        due = [c for c, (_per, sig) in pending_chase.items() if i == sig + 1]
+        due = [c for c, (_per, sig) in pending_chase.items() if i > sig]
         for code in due:
-            per_ch, _sig = pending_chase.pop(code)
+            per_ch, _sig = pending_chase[code]
             if code in st.positions and not allow_add:
+                pending_chase.pop(code)
                 st.stats["skip_held"] += 1
                 st.stats["chase_skip_held"] += 1
                 continue
             mdf = minute_bars.get(code)
             ddf = daily_bars.get(code)
             if mdf is None or ddf is None or day not in ddf.index:
-                st.stats["chase_no_bar"] += 1
                 continue
             day_m = _slice_day(mdf, day_spans.get(code, {}), ds)
             quotes = _chase_quotes(day_m) if day_m is not None else None
             if quotes is None:
-                st.stats["chase_no_bar"] += 1
                 continue
             open_px, px = quotes
             prev_rows = ddf.loc[ddf.index < day]
             if prev_rows.empty:
-                st.stats["chase_no_bar"] += 1
                 continue
+            pending_chase.pop(code)
             prev_close = float(prev_rows.iloc[-1]["close"])
-            limit_up, _ = _limit_prices(code, prev_close)
+            limits = _named_limits(code, prev_close, names)
+            if limits is None:
+                st.stats["skip_unknown_board"] += 1
+                continue
+            limit_up, _ = limits
             decision = chase_decision(open_px, px, limit_up)
             if decision == "limit":
                 st.stats["chase_skip_limit"] += 1
@@ -710,7 +728,11 @@ def simulate(
                     st.stats["skip_no_bar"] += 1
                     continue
                 prev_close = float(prev_rows.iloc[-1]["close"])
-                limit_up, _ = _limit_prices(code, prev_close)
+                limits = _named_limits(code, prev_close, names)
+                if limits is None:
+                    st.stats["skip_unknown_board"] += 1
+                    continue
+                limit_up, _ = limits
                 if hit_limit_up(px, limit_up):
                     queue_limit_up_chase(st, pending_chase, code, per, i)
                     continue
@@ -726,21 +748,14 @@ def simulate(
         for code, lots in st.positions.items():
             ddf = daily_bars.get(code)
             for pos in lots:
-                if ddf is not None and day in ddf.index:
-                    eq += pos.shares * float(ddf.loc[day]["close"])
-                else:
-                    eq += pos.shares * pos.cost
+                eq += pos.shares * last_close_mark(ddf, day, pos.cost)
         st.equity_curve.append((ds, eq))
 
         if day == calendar[-1] and st.positions:
             for code, lots in st.positions.items():
                 ddf = daily_bars.get(code)
                 for pos in lots:
-                    last = (
-                        float(ddf.loc[day]["close"])
-                        if ddf is not None and day in ddf.index
-                        else pos.cost
-                    )
+                    last = last_close_mark(ddf, day, pos.cost)
                     st.trades.append(
                         {
                             "date": ds,
@@ -787,6 +802,7 @@ def run(
     t_pool = time.perf_counter()
     actual_pool_dir = Path(pool_dir) if pool_dir is not None else Path(REPO) / "stock_pool"
     pool_days = load_pool_days(start, end, pool_dir=actual_pool_dir)
+    pool_names = load_pool_name_map(actual_pool_dir, start, end)
     t_pool = time.perf_counter() - t_pool
     if not pool_days:
         raise SystemExit(f"no pool CSVs in [{start}, {end}] under {actual_pool_dir}")
@@ -838,6 +854,7 @@ def run(
         strategy=strategy,
         take_profit=take_profit,
         record_params=record_params,
+        pool_names=pool_names,
     )
     st.stats["t_pool_s"] = t_pool
     st.stats["t_daily_s"] = t_daily

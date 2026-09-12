@@ -1,7 +1,7 @@
 # Plan：本仓回测统一（策略 1–8 + 市场层 + Cerebro 化石）
 
 > **落盘**：2026-09-12。
-> **状态**：📄 **v1.2 · classic fan-out 已吸收 · 可进切片 A**。未授权实施（等人说「按 plan 实施」）。
+> **状态**：✅ **A–E 已合**。成交核现锁见 [engine-ashare-correctness.md](engine-ashare-correctness.md)（E-R1–E-R4）。本文 U-R\* **卖点与书契约**仍有效；U-R1 / U-R10 / U-R11 / U-R12 / U-R27 / U-R30 的撮合句以 E-R\* 为准。
 > **fan-out**：2026-09-12 classic，四家 rc=0（codex 293s / kimi 263s / auto 234s / claude 500s）。综合：`docs/architecture/reviews/2026-09-12/plan-unify-csv-strategies-1-8-2026-09-12/merge-consensus.md`。
 > **风险档**：**L2**（策略书扩面 + 引擎原语 + Cerebro 入口冻结；不进实盘 / 不改 `presets.py`）。
 > **范围**：MyQuant-backtrader。1.3 只读对照。LEBS / MockQMT 不搬进本仓。
@@ -43,8 +43,8 @@ Cerebro / Rolling **观察退役**（可对照，默认不跑）。市场层只�
 | 策略 4 全市场无名单扫 | 宇宙仍是日 CSV；均线只过滤能不能买 |
 | 策略 3/5 日线引擎假装有 09:30–09:40 / 14:50 逐分钟 | 日线必须写清近似 |
 | `load_pool_days(..., pool_dir=None)` 给 7 用 / 回落 `stock_pool/` | 策略 7 F-R5 |
-| 本轮改 `limit_pct` 北交/ST 档 | 会改 6/8/7 热路径；只搬家、档位另锁 |
-| 本轮改 6/8 停牌日追买 `pop` / 净值标成本 | 已知失真，写入 HELP_LOCK，不顺手「修好」 |
+| ~~本轮改 `limit_pct` 北交/ST 档~~ | **已重开** → E-R2，见 [engine-ashare-correctness.md](engine-ashare-correctness.md) |
+| ~~本轮改 6/8 停牌日追买 `pop` / 净值标成本~~ | **已重开** → E-R4 |
 | 1–5 书 / 市场层引入 `cyqk` / `chip_indicator` / `chip_algorithm` | 盈筹率本 plan **不适用** |
 | 6/8 湖索引改走 v7 `_as_datetime` | 日历契约不同 |
 
@@ -116,8 +116,10 @@ Cerebro / Rolling **观察退役**（可对照，默认不跑）。市场层只�
 | **U-R29** | **`sell_gate(code, px, day, daily_closes_ending_yesterday) -> Optional[str]`**。6/8/1/2/3/5 为 None，引擎走 `take_profit`。仅 4 实现。禁止给 `take_profit` 加第 5 参（会炸 6/8 闭包）。 |
 | **U-R30** | 主持裁实验复现：v7 float `_limit_prices` vs 日线 Decimal，399802 组中 **1073** 组跌停差 1 分（`prev=1.65, pct=0.10 → 1.48 vs 1.49`）。故 U-R10 不搬 `_limit_prices`。 |
 | **U-R31** | CLI：`--stop-pct` 对 version4/5 **显式传入 → SystemExit**；1/2/3 允许覆盖各自默认止损；6/8 保持现语义。1–5 的 `run_kwargs` 不得走 `strategy6_kwargs_from_args`。 |
-| **U-R32** | `Position.reserved` **只加在** `csv_daily_backtest.Position`（分钟已 import 同一份）。7 的 `Position` 不加。 |
+| **U-R32** | `Position.reserved` 只加在 6/8 账本 `Position`（现住 `csv_ledger.py`，日线/分钟再导出）。7 的 `Position` 不加。 |
 | **U-R33** | `run()` / `simulate()` 新增 kwarg 只从 `hooks` 读（`buy_gate`/`sell_gate`/`force_sell_hm`/`reserve_limit_up`），缺省 no-op。`apply_csv_strategy` **不**对 `buy_gate`/`sell_gate` 硬 raise。 |
+
+> **2026-09-12 成交核重开**：上表 U-R1 / U-R10 / U-R11 / U-R12 / U-R27 / U-R30 的撮合句已由 [engine-ashare-correctness.md](engine-ashare-correctness.md) E-R1–E-R4 取代。卖点/书契约（reason、时钟、闸、BOOKS）仍以本表为准。
 
 ---
 
@@ -138,7 +140,7 @@ Cerebro / Rolling **观察退役**（可对照，默认不跑）。市场层只�
 | `docs/backtest/README.md` / `engine-positioning-ssot.md` | 书单随 register，见 U-R28 |
 | `tests/test_market_layer.py` `test_strategy{1-5}_rules.py` `test_csv_strategy_books.py` | 扩 |
 
-`Position.reserved` 只加在 `csv_daily_backtest.py`（U-R32）。7 的 `Position` **不加**。
+`Position.reserved` 只加在 6/8 账本（现 `csv_ledger.py`，U-R32）。7 的 `Position` **不加**。
 
 ---
 
@@ -205,15 +207,15 @@ D:\anaconda3\envs\vanna312\python.exe -m pytest -q `
 - 策略 3 日线近似 ≠ 分钟窗口 ≠ presets。HELP_LOCK 三行（U-R20）。
 - 策略 5 日线无 14:50，强制卖只在分钟。HELP_LOCK 必须写。
 - 策略 4 均线排除今日 K，比 Cerebro `SMA[0]` 更严。
-- `limit_pct` 北交/ST 未建模（U-R12）。
-- 停牌：冻仓、追买一次作废、净值标成本（U-R27）。
+- `limit_pct` 档位已升格（北交 30% / 689·20% / ST 5% / 未知板块 skip）；U-R12 原「不建模」作废。
+- 停牌：冻仓；净值用最近有 K 的 close；追买日无 K 保留 pending（U-R27 已重开）。
 - `add_csv_strategy_arg` 的 `choices=` 随书变长；旧脚本写死 version6/8 仍合法。
 
 ---
 
 ## 8. 修订程序
 
-改 U-R1–U-R33 须改本文。v1.2 已吸收 classic 🔴，不另开第二轮，除非实施中发现新的事实互斥。综合见 `merge-consensus.md`。
+改 U-R\* **卖点/书契约**须改本文。改成交核（跌停范围、档位、涨跌停价算术、停牌净值/追买）须改 [engine-ashare-correctness.md](engine-ashare-correctness.md) 的 E-R\*，不要只改本文旧句。v1.2 已吸收 classic 🔴。综合见 `merge-consensus.md`。
 
 ---
 
@@ -231,7 +233,7 @@ D:\anaconda3\envs\vanna312\python.exe -m pytest -q `
 6. **SMA 预载按交易日 ≥10（实现 11），不靠 `WARMUP_DAYS=10` 日历。**
 7. **`csv_pool` 统一函数不得带 `pool_dir=None` 默认 `stock_pool/`。** 7 空 CSV 仍进 map。
 8. **6/8 不换用 v7 `_as_datetime` 建索引。** 市场层是叶子。
-9. **`limit_pct` 本轮只搬家，不改档。** 北交/ST 写进「不建模」。
+9. **`limit_pct` 本轮只搬家，不改档。** 北交/ST 写进「不建模」。**后由 E-R2 重开。**
 10. **实施序 U-R23**：先引擎、后 register、后 names 元组。文档书单不随切片 A 漂。
 11. **1–5 `peak_gap_min=0`。** 追买过 `buy_gate`。
 12. **开板收盘必须查跌停。** `reserved` 必须压过 20% 目标。
@@ -242,8 +244,8 @@ D:\anaconda3\envs\vanna312\python.exe -m pytest -q `
 - 不把 7 注册进 BOOKS；不拷 LEBS/MockQMT。
 - 不改 `presets.py`。
 - 不删除 Cerebro 代码；化石门留切片 E。
-- 本轮不改 6/8 停牌追买 / 净值标成本（只声明）。
-- 本轮不把北交改成 30%（避免 6/8/7 热路径 silently 变买/卖阈值）。
+- 本轮不改 6/8 停牌追买 / 净值标成本（只声明）。**后由 E-R4 重开。**
+- 本轮不把北交改成 30%（避免 6/8/7 热路径 silently 变买/卖阈值）。**后由 E-R2 重开。**
 
 ### 9.3 条目对照
 

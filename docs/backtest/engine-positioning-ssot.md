@@ -38,9 +38,9 @@ Qlib `PortAnaRecord` 停用。Cerebro / Rolling 观察退役（对照化石，�
 
 ### 3.1 向量化（本仓）
 
-- **入口**：`backtest/research/csv_daily_backtest.py`、`csv_minute_backtest.py`（`--strategy version1|version2|version3|version4|version5|version6|version8`）；`csv_minute_backtest_v7.py`（金榕元仓位机，独立，不进策略书）。
+- **入口**：`backtest/research/csv_daily_backtest.py`、`csv_minute_backtest.py`（`--strategy version1|version2|version3|version4|version5|version6|version8`）；`csv_minute_backtest_v7.py`（金榕元仓位机，独立，不进策略书）。账本：`csv_ledger.py`。市场事实：`market_layer.py`。
 - **输入**：日名单 CSV（`parse_pool_csv`）。来源可以是 Qlib 导出、本仓技术分析、手工，下游不认来源。
-- **成交模型**：当根 close / 分钟触价；自写账本；T+1、涨跌停、整手在引擎里。
+- **成交模型**：当根 close / 分钟触价；自写账本；T+1、涨跌停、整手在引擎里。细则见 [engine-ashare-correctness.md](engine-ashare-correctness.md)。**向量化跌停 = 全卖因 defer**（含 6/8 trail），不成交。档位：主板 10% / 创科 20% / 北交 30% / ST 5%；未知板块 skip。
 - **用途**：锁规则、扫参、名单质量对照。快。
 - **禁**：复刻 Redis / live；把 7 注册进 6/8；用 `simulate_v7` 跑 Alpha158。
 

@@ -2,7 +2,7 @@
 
 Standalone research-face fork (see [README.md](README.md)). Since migration S2 (2026-09-09) this repo owns the research face; OSkhQuant1.3 stays the trading stack and keeps only the `oskh_factors` chip/bridge micropackage.
 
-**成交引擎定位**：本仓 = 向量化。1.3 = LEBS + MockQMT 真栈。Qlib PortAnaRecord 停用；Cerebro 观察退役。见 [`docs/backtest/engine-positioning-ssot.md`](docs/backtest/engine-positioning-ssot.md)。入口命令见 [`docs/backtest/README.md`](docs/backtest/README.md)。
+**成交引擎定位**：本仓 = 向量化。1.3 = LEBS + MockQMT 真栈。Qlib PortAnaRecord 停用；Cerebro 观察退役。见 [`docs/backtest/engine-positioning-ssot.md`](docs/backtest/engine-positioning-ssot.md)。成交核（档位 / 全卖因跌停 / Decimal 涨跌停价）见 [`docs/backtest/engine-ashare-correctness.md`](docs/backtest/engine-ashare-correctness.md)。入口命令见 [`docs/backtest/README.md`](docs/backtest/README.md)。
 
 ## Research entries
 

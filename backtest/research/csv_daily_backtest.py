@@ -19,7 +19,6 @@ import os
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
@@ -53,8 +52,38 @@ from backtest.research.strategy6_rules import (  # noqa: E402
     record_strategy6_params,
     trail_hits,
 )
+from backtest.research.csv_ledger import (  # noqa: E402
+    CHASE_HM,
+    COMMISSION,
+    DEFAULT_TOTAL_CASH,
+    LIMIT_EPS,
+    PEAK_GAP_MIN,
+    Position,
+    SimState,
+    _at_limit,
+    _buy_size,
+    _sell,
+    _ymd,
+    chase_decision,
+    chase_explained,
+    execute_buy,
+    finish_pending_chase,
+    hit_limit_down,
+    hit_limit_up,
+    last_close_mark,
+    peak_gap_blocks,
+    queue_limit_up_chase,
+    resolve_limit_prices,
+)
+from backtest.research.csv_pool import load_pool_day_map, load_pool_name_map  # noqa: E402
+from backtest.research.market_layer import (  # noqa: E402
+    limit_pct,
+    limit_prices,
+    round_fen,
+    utc_ms_range,
+)
 
-# 测试与分钟引擎仍从本模块引用策略书/策略6符号。
+# 测试与分钟引擎仍从本模块引用策略书/账本/市场层符号。
 _ = (
     HELP_LOCK_V6,
     HELP_LOCK_V8,
@@ -66,23 +95,22 @@ _ = (
     TIERS,
     record_strategy6_params,
     trail_hits,
-)
-from backtest.research.csv_pool import load_pool_day_map  # noqa: E402
-from backtest.research.market_layer import (  # noqa: E402
+    CHASE_HM,
+    COMMISSION,
+    LIMIT_EPS,
+    PEAK_GAP_MIN,
+    Position,
+    _at_limit,
+    _buy_size,
+    peak_gap_blocks,
     limit_pct,
     limit_prices,
     round_fen,
-    utc_ms_range,
 )
 from common.infra.data_root import resolve_period_root  # noqa: E402
 from oskh_data.symbol_format import to_partition_key  # noqa: E402
 
-DEFAULT_TOTAL_CASH = 21_000_000.0
 DEFAULT_DAILY_QUOTA = 1_000_000.0
-COMMISSION = 0.001  # 双边，与分钟链 cerebro.broker.setcommission(commission=0.001) 对齐
-PEAK_GAP_MIN = 15  # 分钟扫描默认间隔；策略书可覆盖为 0
-CHASE_HM = 9 * 60 + 45  # 尾盘涨停后次日 09:45 追买/弃买
-LIMIT_EPS = 0.001  # 涨跌停等值判定；须远小于 1 分，避免把普通价误判为涨停
 WARMUP_DAYS = 10
 STRATEGY4_CALENDAR_SLACK_DAYS = 22
 # 2026-09-11 实测：F 盘 period=1m 最后一根交易日（抽样 50 只含 000001，无 20260910）。
@@ -102,14 +130,20 @@ HELP_LOCK = """
         已持再买或跳过由 --strategy 策略书决定。
         常规额度按当日池 CSV 全部名单均分（含随后被跳过的票）。
   止损：D+1 起，触发价 = 买入价×(1-stop)。开盘 ≤ 触发价 → 开盘价成交（跳空）；
-        否则日内 low 触价 → 触发价成交。卖出日开盘跌停 → 顺延下一交易日。
+        否则日内 low 触价 → 触发价成交。
+  跌停禁卖：任何卖因在成交前若开盘或成交价跌停 → 不成交、顺延（含 trail /
+        profit_take / force / ma_signal / open_board / pending）。
+  档位：主板 10% / 创科 20%（含 302、689）/ 北交 30%；名单第二列 ST/*ST=5%。
+        未知板块且无 ST 名 → skip_unknown_board，不交易。
   止盈 / 峰值：见下方对应策略书。峰值从 T+1 起用当日 high 更新；T+0 固定为买入价。
         日线收盘评估、次日开盘离场（隔夜间隔已 ≥ 15 分钟）。
   买侧：尾盘涨停不买。T+1 用收盘>开盘近似分钟 09:45 市价>开盘 → 收盘追买；
-        否则弃买。只给一次机会，不再延期。成交价用收盘（相对 09:45 的失真）。
+        否则弃买。追买日无 K 保留 pending 到下一有 K 日（仍只评一次）。
+        成交价用收盘（相对 09:45 的失真）。
+  停牌：冻仓；净值用最近有 K 的 close，不用成本价冒充。
   资金：2100 万全局池；每日 100 万常规额度；不足 100 股用补充资金补足
         （force_min，自主池、不占额度）；佣金 0.1% 双边无最低。
-  T+1：买入日不可卖；期末持仓按最后收盘估值（eod_mark）。
+  T+1：买入日不可卖；期末持仓按最后有 K 收盘估值（eod_mark）。
   窗口：--end 是估值/离场末日。买入只发生在 stock_pool/ 有 CSV 的交易日
         （缺日不买）。分钟湖若短于 --end，用日线版接到今天。
   落盘：backtest_output/csv_daily_{book}_{start}_{end}/ 三件套 summary.txt、
@@ -121,99 +155,6 @@ HELP_LOCK = """
 
 def help_lock_for(strategy: str, *, shared: str = HELP_LOCK) -> str:
     return _help_lock_for(strategy, shared=shared)
-
-
-@dataclass
-class Position:
-    code: str
-    shares: int
-    cost: float  # 买入价（收盘成交价）
-    entry_idx: int  # 全局日历下标
-    peak: float  # 持仓期最高价（起始=买入价；T+1 起用每日 high 更新）
-    peak_hm: int = -1  # 峰值所在分钟 hm；跨日为负间隔，分钟止盈用
-    lot_id: int = 0  # 同码多笔：各自成本/峰值
-    pending_exit: str = ""  # 日线止盈：次日开盘离场原因
-    reserved: bool = False  # 策略 3 涨停保留状态；分钟引擎复用本类
-
-
-@dataclass
-class SimState:
-    cash: float = DEFAULT_TOTAL_CASH
-    positions: dict = field(default_factory=dict)
-    daily_quota_used: float = 0.0
-    supplementary_used: float = 0.0
-    trades: list = field(default_factory=list)
-    equity_curve: list = field(default_factory=list)
-    stats: dict = field(
-        default_factory=lambda: {
-            "buys": 0,
-            "skip_limit_up": 0,
-            "chase_buy": 0,
-            "chase_abandon": 0,
-            "chase_skip_limit": 0,
-            "chase_no_bar": 0,
-            "chase_overwrite": 0,
-            "chase_buy_fail": 0,
-            "chase_pending_eod": 0,
-            "chase_skip_held": 0,
-            "skip_held": 0,
-            "add_lots": 0,
-            "skip_no_bar": 0,
-            "skip_buy_gate": 0,
-            "skip_sma_warmup": 0,
-            "sell_stop": 0,
-            "sell_trail": 0,
-            "sell_pos_trail": 0,
-            "sell_profit_take": 0,
-            "sell_open_board": 0,
-            "sell_force": 0,
-            "sell_ma": 0,
-            "defer_sell_limit_down": 0,
-            "invested_notional": 0.0,
-            "supplementary_used": 0.0,
-            "bars_loaded": 0,
-            "pool_days": 0,
-        }
-    )
-
-
-def chase_decision(open_px: float, px: float, limit_up: float) -> str:
-    """T+1 09:45：市价>开盘且非涨停 → buy；否则 abandon / limit。"""
-    if hit_limit_up(px, limit_up):
-        return "limit"
-    if px > open_px:
-        return "buy"
-    return "abandon"
-
-
-def queue_limit_up_chase(st: SimState, pending_chase: dict, code: str, per: float, sig_idx: int) -> None:
-    st.stats["skip_limit_up"] += 1
-    if code in pending_chase:
-        st.stats["chase_overwrite"] += 1
-    pending_chase[code] = (per, sig_idx)
-
-
-def finish_pending_chase(st: SimState, pending_chase: dict) -> None:
-    st.stats["chase_pending_eod"] = len(pending_chase)
-    st.stats["chase_explained"] = chase_explained(st)
-
-
-def chase_explained(st: SimState) -> int:
-    """涨停跳过应对齐的追买分解合计。"""
-    return (
-        int(st.stats.get("chase_buy", 0))
-        + int(st.stats.get("chase_abandon", 0))
-        + int(st.stats.get("chase_skip_limit", 0))
-        + int(st.stats.get("chase_no_bar", 0))
-        + int(st.stats.get("chase_pending_eod", 0))
-        + int(st.stats.get("chase_overwrite", 0))
-        + int(st.stats.get("chase_buy_fail", 0))
-        + int(st.stats.get("chase_skip_held", 0))
-    )
-
-
-def _ymd(ts) -> str:
-    return pd.Timestamp(ts).strftime("%Y%m%d")
 
 
 def warmup_start(start: str, days: int = WARMUP_DAYS) -> str:
@@ -250,27 +191,7 @@ def build_calendar(bars: dict[str, pd.DataFrame], start: str, end: str) -> list:
     return calendar
 
 
-def _at_limit(price: float, limit: float) -> bool:
-    """价格≈等于涨/跌停价。买入拦截请用 hit_limit_up（含越过涨停价）。"""
-    return abs(price - limit) <= LIMIT_EPS
-
-
-def hit_limit_up(price: float, limit_up: float) -> bool:
-    """买价达到或超过涨停价则不可买（含舍入导致买价高于算出的涨停价）。"""
-    return float(price) + LIMIT_EPS >= float(limit_up)
-
-
-def hit_limit_down(price: float, limit_down: float) -> bool:
-    """卖价达到或低于跌停价则不可卖。"""
-    return float(price) - LIMIT_EPS <= float(limit_down)
-
-
-def peak_gap_blocks(gap, peak_gap_min: int = PEAK_GAP_MIN) -> bool:
-    """同会话分钟差 < 15 则挡住止盈；隔夜/午休 gap<0 视为满足。"""
-    return 0 <= int(gap) < int(peak_gap_min)
-
-
-_limit_prices = limit_prices
+_limit_prices = resolve_limit_prices
 
 
 def load_pool_days(
@@ -337,6 +258,10 @@ def load_daily_bars(
     return out
 
 
+def _named_limits(code: str, prev_close: float, names: dict[str, str]):
+    return resolve_limit_prices(code, prev_close, names.get(code, ""))
+
+
 def simulate(
     bars: dict[str, pd.DataFrame],
     pool_days: dict[str, list[str]],
@@ -353,6 +278,7 @@ def simulate(
     strategy: str,
     take_profit=None,
     record_params=None,
+    pool_names: Optional[dict[str, str]] = None,
 ) -> SimState:
     """核心日循环。bars/pool_days 可由测试注入；run() 负责从湖与 CSV 加载。
 
@@ -383,6 +309,7 @@ def simulate(
     reserve_limit_up = bool(hooks.get("reserve_limit_up"))
     daily_same_bar_prefixes = tuple(hooks.get("daily_same_bar_prefixes", ()))
     pending_chase: dict[str, tuple[float, int]] = {}  # code -> (per, signal_idx)
+    names = dict(pool_names or {})
 
     for i, day in enumerate(calendar):
         ds = _ymd(day)
@@ -396,7 +323,11 @@ def simulate(
             if prev_rows.empty:
                 continue
             prev_close = float(prev_rows.iloc[-1]["close"])
-            limit_up, limit_down = _limit_prices(code, prev_close)
+            limits = _named_limits(code, prev_close, names)
+            if limits is None:
+                st.stats["skip_unknown_board"] += 1
+                continue
+            limit_up, limit_down = limits
             for pos in list(st.positions.get(code, [])):
                 n_days = i - pos.entry_idx  # 持仓交易日数（买入日=0）
 
@@ -425,7 +356,11 @@ def simulate(
                                 )
                             continue
                         if float(row["low"]) <= trigger:
-                            _sell(st, code, pos, trigger, day, "stop_loss:touch")
+                            if hit_limit_down(trigger, limit_down):
+                                st.stats["defer_sell_limit_down"] += 1
+                                pos.pending_exit = "stop_loss:touch"
+                            else:
+                                _sell(st, code, pos, trigger, day, "stop_loss:touch")
                             continue
 
                     pos.peak = max(pos.peak, float(row["high"]))
@@ -452,30 +387,34 @@ def simulate(
                         if same_bar and not hit_limit_down(close, limit_down):
                             _sell(st, code, pos, close, day, reason)
                         else:
-                            if same_bar:
+                            if same_bar or hit_limit_down(close, limit_down):
                                 st.stats["defer_sell_limit_down"] += 1
                             pos.pending_exit = reason
 
-        due = [c for c, (_per, sig) in pending_chase.items() if i == sig + 1]
+        due = [c for c, (_per, sig) in pending_chase.items() if i > sig]
         for code in due:
-            per_ch, _sig = pending_chase.pop(code)
+            per_ch, _sig = pending_chase[code]
             if code in st.positions and not allow_add:
+                pending_chase.pop(code)
                 st.stats["skip_held"] += 1
                 st.stats["chase_skip_held"] += 1
                 continue
             if code not in bars or day not in bars[code].index:
-                st.stats["chase_no_bar"] += 1
                 continue
             df_c = bars[code]
             prev_rows = df_c.loc[df_c.index < day]
             if prev_rows.empty:
-                st.stats["chase_no_bar"] += 1
                 continue
+            pending_chase.pop(code)
             row = df_c.loc[day]
             open_px = float(row["open"])
             close_px = float(row["close"])
             prev_close = float(prev_rows.iloc[-1]["close"])
-            limit_up, _ = _limit_prices(code, prev_close)
+            limits = _named_limits(code, prev_close, names)
+            if limits is None:
+                st.stats["skip_unknown_board"] += 1
+                continue
+            limit_up, _ = limits
             decision = chase_decision(open_px, close_px, limit_up)
             if decision == "limit":
                 st.stats["chase_skip_limit"] += 1
@@ -509,7 +448,11 @@ def simulate(
                     st.stats["skip_no_bar"] += 1
                     continue
                 prev_close = float(prev_rows.iloc[-1]["close"])
-                limit_up, _ = _limit_prices(code, prev_close)
+                limits = _named_limits(code, prev_close, names)
+                if limits is None:
+                    st.stats["skip_unknown_board"] += 1
+                    continue
+                limit_up, _ = limits
                 close = float(df_c.loc[day]["close"])
                 if hit_limit_up(close, limit_up):
                     queue_limit_up_chase(st, pending_chase, code, per, i)
@@ -526,21 +469,14 @@ def simulate(
         for code, lots in st.positions.items():
             df_c = bars.get(code)
             for pos in lots:
-                if df_c is not None and day in df_c.index:
-                    eq += pos.shares * float(df_c.loc[day]["close"])
-                else:
-                    eq += pos.shares * pos.cost
+                eq += pos.shares * last_close_mark(df_c, day, pos.cost)
         st.equity_curve.append((ds, eq))
 
         if day == calendar[-1] and st.positions:
             for code, lots in st.positions.items():
                 df_c = bars.get(code)
                 for pos in lots:
-                    last = (
-                        float(df_c.loc[day]["close"])
-                        if df_c is not None and day in df_c.index
-                        else pos.cost
-                    )
+                    last = last_close_mark(df_c, day, pos.cost)
                     st.trades.append(
                         {
                             "date": ds,
@@ -579,6 +515,7 @@ def run(
     t_pool = time.perf_counter()
     actual_pool_dir = Path(pool_dir) if pool_dir is not None else Path(REPO) / "stock_pool"
     pool_days = load_pool_days(start, end, pool_dir=actual_pool_dir)
+    pool_names = load_pool_name_map(actual_pool_dir, start, end)
     t_pool = time.perf_counter() - t_pool
     if not pool_days:
         raise SystemExit(f"no pool CSVs in [{start}, {end}] under {actual_pool_dir}")
@@ -617,110 +554,13 @@ def run(
         strategy=strategy,
         take_profit=take_profit,
         record_params=record_params,
+        pool_names=pool_names,
     )
     st.stats["t_pool_s"] = t_pool
     st.stats["t_daily_s"] = t_daily
     st.stats["t_sim_s"] = time.perf_counter() - t_sim
     st.stats["codes_missing"] = max(0, len(all_codes) - len(bars))
     return st
-
-
-def _buy_size(per_quota: float, price: float) -> tuple[int, float]:
-    """常规额度内最大整百股；不足 100 股用补充资金补足（返回 (shares, supp_used))。"""
-    if price <= 0 or per_quota <= 0:
-        return 0, 0.0
-    shares = int(per_quota / price / 100.0) * 100
-    supp = 0.0
-    if shares == 0:
-        notional = 100 * price
-        supp = max(0.0, notional - per_quota)
-        shares = 100
-    return shares, supp
-
-
-def execute_buy(
-    st: SimState,
-    code: str,
-    px: float,
-    per: float,
-    entry_idx: int,
-    day,
-    *,
-    reason: str = "pool",
-) -> bool:
-    """常规/追买共用：整百股 + force_min + 0.1% 佣金。成功返回 True。"""
-    if px <= 0:
-        return False
-    shares, supp = _buy_size(per, px)
-    if shares <= 0:
-        return False
-    notional = shares * px
-    comm = notional * COMMISSION
-    if notional + comm > st.cash:
-        return False
-    st.cash -= notional + comm
-    st.daily_quota_used += min(per, notional)
-    st.stats["supplementary_used"] += supp
-    st.stats["invested_notional"] += notional
-    lots = st.positions.setdefault(code, [])
-    lot_id = lots[-1].lot_id + 1 if lots else 0
-    lots.append(Position(code, shares, px, entry_idx, px, lot_id=lot_id))
-    st.trades.append(
-        {
-            "date": _ymd(day),
-            "code": code,
-            "side": "BUY",
-            "price": px,
-            "shares": shares,
-            "notional": notional,
-            "commission": comm,
-            "reason": reason,
-            "lot": lot_id,
-        }
-    )
-    st.stats["buys"] += 1
-    if lot_id > 0:
-        st.stats["add_lots"] += 1
-    if reason.startswith("chase"):
-        st.stats["chase_buy"] += 1
-    return True
-
-
-def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str) -> None:
-    notional = pos.shares * px
-    comm = notional * COMMISSION
-    st.cash += notional - comm
-    st.trades.append(
-        {
-            "date": _ymd(day),
-            "code": code,
-            "side": "SELL",
-            "price": px,
-            "shares": pos.shares,
-            "notional": notional,
-            "commission": comm,
-            "reason": reason,
-            "lot": pos.lot_id,
-        }
-    )
-    if reason.startswith("stop_loss"):
-        st.stats["sell_stop"] += 1
-    elif reason.startswith("trail"):
-        st.stats["sell_trail"] += 1
-    elif reason.startswith("profit_take"):
-        st.stats["sell_profit_take"] += 1
-    elif reason.startswith("open_board"):
-        st.stats["sell_open_board"] += 1
-    elif reason.startswith("force_sell"):
-        st.stats["sell_force"] += 1
-    elif reason.startswith("ma_signal"):
-        st.stats["sell_ma"] += 1
-    else:
-        st.stats["sell_pos_trail"] += 1
-    lots = st.positions.get(code) or []
-    st.positions[code] = [p for p in lots if p is not pos]
-    if not st.positions[code]:
-        del st.positions[code]
 
 
 def summarize(
