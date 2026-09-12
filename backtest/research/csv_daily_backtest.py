@@ -10,6 +10,7 @@ adjust_type='none' 对齐）；佣金 0.1% 双边（与 broker.setcommission(0.0
 用法：
     python backtest/research/csv_daily_backtest.py --strategy version6 --start 20251023 --end 20260909
     python backtest/research/csv_daily_backtest.py --strategy version8 --start 20251023 --end 20260909
+    python backtest/research/csv_daily_backtest.py --strategy version6 --start 20260303 --end 20260323 --out-dir backtest_output/m5_pred
 """
 
 from __future__ import annotations
@@ -149,8 +150,8 @@ HELP_LOCK = """
   T+1：买入日不可卖；期末持仓按最后有 K 收盘估值（eod_mark）。
   窗口：--end 是估值/离场末日。买入只发生在 stock_pool/ 有 CSV 的交易日
         （缺日不买）。分钟湖若短于 --end，用日线版接到今天。
-  落盘：backtest_output/csv_daily_{book}_{start}_{end}/ 三件套 summary.txt、
-        daily_equity.csv、trades.csv（与分钟版同结构）。
+  落盘：缺省 backtest_output/csv_daily_{book}_{start}_{end}/ 三件套 summary.txt、
+        daily_equity.csv、trades.csv（与分钟版同结构）。--out-dir 指定则写入该目录。
   环境：勿残留 OSKH_PERIOD_* ；有 F:\\stock_data\\.authority 时跟权威盘。
   策略：必须显式指定已注册 --strategy（无缺省）。共用引擎，策略书换卖点与加仓。
 """
@@ -691,6 +692,19 @@ def summarize(
     return "\n".join(lines)
 
 
+def resolve_csv_daily_out_dir(
+    out_dir: Optional[Path],
+    *,
+    book: str,
+    start: str,
+    end: str,
+) -> Path:
+    """Explicit --out-dir wins; otherwise the historical csv_daily_{book}_{start}_{end} path."""
+    if out_dir is not None:
+        return Path(out_dir)
+    return Path(REPO) / "backtest_output" / f"csv_daily_{book}_{start}_{end}"
+
+
 def write_run_artifacts(out_dir: Path, st: SimState, text: str, help_lock: str) -> Path:
     """三件套：summary.txt / daily_equity.csv / trades.csv。"""
     out_dir = Path(out_dir)
@@ -810,6 +824,12 @@ def main(argv: Optional[list] = None) -> int:
     ap.add_argument("--daily-quota", type=float, default=DEFAULT_DAILY_QUOTA)
     ap.add_argument("--workers", type=int, default=16)
     ap.add_argument("--pool-dir", type=Path, default=Path(REPO) / "stock_pool")
+    ap.add_argument(
+        "--out-dir",
+        type=Path,
+        default=None,
+        help="artifact directory; default backtest_output/csv_daily_{book}_{start}_{end}/",
+    )
     add_csv_strategy_arg(ap)
     add_strategy6_ratio_args(ap)
     args = ap.parse_args(argv if argv is not None else None)
@@ -827,9 +847,13 @@ def main(argv: Optional[list] = None) -> int:
     engine = f"csv_daily_{book}"
     text = summarize(st, args.cash_total, args.start, args.end, engine=engine)
     print(text)
-    tag = f"{engine}_{args.start}_{args.end}"
     write_run_artifacts(
-        Path(REPO) / "backtest_output" / tag, st, text, help_lock_for(args.strategy)
+        resolve_csv_daily_out_dir(
+            args.out_dir, book=book, start=args.start, end=args.end
+        ),
+        st,
+        text,
+        help_lock_for(args.strategy),
     )
     return 0
 
