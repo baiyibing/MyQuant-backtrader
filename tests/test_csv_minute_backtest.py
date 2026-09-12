@@ -72,6 +72,19 @@ def test_scan_none_stop_does_not_sell_after_halving():
     assert peak == pytest.approx(10.0)
 
 
+def test_strategy4_scan_uses_sell_gate_with_yesterday_closes():
+    hooks = sim.apply_csv_strategy("version4")
+    idx, px, reason, _, _ = sim.scan_held_day(
+        np.array([9.9]), np.array([10.0]), np.array([9.9]),
+        cost=10.0, peak=10.0, n_days=1, can_sell=True,
+        stop_pct=None, profit_base=0.0, trail_ratio=0.0,
+        take_profit=hooks["take_profit"], sell_gate=hooks["sell_gate"],
+        gate_code="600000.SH", gate_day=pd.Timestamp("2025-11-04"),
+        daily_closes_ending_yesterday=[10.0] * 5,
+    )
+    assert (idx, reason, px) == (0, "ma_signal:MA5", pytest.approx(9.9))
+
+
 @pytest.mark.parametrize(
     ("n_days", "can_sell", "hm", "close", "expected_idx", "expected_reason"),
     [

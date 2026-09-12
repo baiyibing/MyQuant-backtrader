@@ -14,6 +14,7 @@ from backtest.research import (
     strategy1_rules,
     strategy2_rules,
     strategy3_rules,
+    strategy4_rules,
     strategy5_rules,
     strategy6_rules,
     strategy8_rules,
@@ -22,6 +23,7 @@ from backtest.research import (
 HELP_LOCK_V1 = strategy1_rules.HELP_LOCK
 HELP_LOCK_V2 = strategy2_rules.HELP_LOCK
 HELP_LOCK_V3 = strategy3_rules.HELP_LOCK
+HELP_LOCK_V4 = strategy4_rules.HELP_LOCK
 HELP_LOCK_V5 = strategy5_rules.HELP_LOCK
 HELP_LOCK_V6 = strategy6_rules.HELP_LOCK
 HELP_LOCK_V8 = strategy8_rules.HELP_LOCK
@@ -273,6 +275,35 @@ def _run_kwargs_version3(args) -> dict:
     return {"strategy": "version3", "stop_pct": _stop_override_from_args(args)}
 
 
+def _apply_version4(
+    *, stop_pct: Optional[float] = None, take_profit=None, record_params=None, **_
+) -> dict:
+    del stop_pct
+
+    def _tp(*args):
+        del args
+        return None
+
+    def _rec(st):
+        strategy4_rules.record_strategy4_params(st, stop_pct=None)
+
+    return {
+        "stop_pct": None,
+        "take_profit": _tp if take_profit is None else take_profit,
+        "record_params": _rec if record_params is None else record_params,
+        "buy_gate": strategy4_rules.buy_gate,
+        "sell_gate": strategy4_rules.sell_gate,
+        "force_sell_hm": None,
+        "reserve_limit_up": False,
+    }
+
+
+def _run_kwargs_version4(args) -> dict:
+    if getattr(args, "stop_pct", None) is not None:
+        raise SystemExit("--stop-pct is not supported for version4 (no stop loss)")
+    return {"strategy": "version4"}
+
+
 def _apply_version5(
     *, stop_pct: Optional[float] = None, take_profit=None, record_params=None, **_
 ) -> dict:
@@ -403,6 +434,18 @@ register(
         help_lock=strategy3_rules.HELP_LOCK,
         apply=_apply_version3,
         run_kwargs=_run_kwargs_version3,
+    )
+)
+register(
+    CsvStrategyBook(
+        name="version4",
+        tag=strategy4_rules.BOOK_TAG,
+        aliases=("4", "v4", "version4"),
+        allow_add=strategy4_rules.ALLOW_ADD,
+        peak_gap_min=strategy4_rules.PEAK_GAP_MIN,
+        help_lock=strategy4_rules.HELP_LOCK,
+        apply=_apply_version4,
+        run_kwargs=_run_kwargs_version4,
     )
 )
 register(

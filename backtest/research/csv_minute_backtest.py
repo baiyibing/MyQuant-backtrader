@@ -38,6 +38,8 @@ from backtest.research.csv_daily_backtest import (  # noqa: E402
     PEAK_GAP_MIN,
     POS_TRAIL,
     SimState,
+    STRATEGY4_CALENDAR_SLACK_DAYS,
+    WARMUP_DAYS,
     add_csv_strategy_arg,
     add_strategy6_ratio_args,
     apply_csv_strategy,
@@ -61,6 +63,7 @@ from backtest.research.csv_daily_backtest import (  # noqa: E402
     load_daily_bars,
     load_pool_days,
     maybe_compare_daily,
+    normalize_csv_strategy,
     summarize,
     utc_ms_range,
     warn_stale_period_env,
@@ -409,6 +412,10 @@ def scan_held_day(
     peak_hm: int = -1,
     peak_gap_min: int = PEAK_GAP_MIN,
     take_profit=None,
+    sell_gate=None,
+    gate_code=None,
+    gate_day=None,
+    daily_closes_ending_yesterday=None,
     force_sell_hm: Optional[int] = None,
     reserve_limit_up: bool = False,
     limit_up: float = 0.0,
@@ -455,7 +462,16 @@ def scan_held_day(
             cur_hm - new_peak_hm, peak_gap_min
         )
         if not peak_blocked:
-            if take_profit is not None:
+            if callable(sell_gate):
+                reason = sell_gate(
+                    gate_code,
+                    px_close,
+                    gate_day,
+                    daily_closes_ending_yesterday or [],
+                )
+                if reason:
+                    return i, px_close, reason, new_peak, new_peak_hm
+            elif take_profit is not None:
                 reason = take_profit(px_close, cost, new_peak, n_days)
                 if reason:
                     return i, px_close, reason, new_peak, new_peak_hm
@@ -551,6 +567,8 @@ def simulate(
     )
     stop_pct = hooks["stop_pct"]
     take_profit = hooks["take_profit"]
+    buy_gate = hooks.get("buy_gate")
+    sell_gate = hooks.get("sell_gate")
     record_params = hooks["record_params"]
     peak_gap_min = int(hooks["peak_gap_min"])
     force_sell_hm = hooks.get("force_sell_hm")
@@ -606,6 +624,10 @@ def simulate(
                     peak_hm=int(pos.peak_hm),
                     peak_gap_min=peak_gap_min,
                     take_profit=take_profit,
+                    sell_gate=sell_gate,
+                    gate_code=code,
+                    gate_day=day,
+                    daily_closes_ending_yesterday=prev_rows["close"].astype(float).tolist(),
                     force_sell_hm=force_sell_hm,
                     reserve_limit_up=reserve_limit_up,
                     limit_up=limit_up,
@@ -654,6 +676,12 @@ def simulate(
             if decision != "buy":
                 st.stats["chase_abandon"] += 1
                 continue
+            closes = prev_rows["close"].astype(float).tolist()
+            if callable(buy_gate) and not buy_gate(code, px, day, closes):
+                st.stats["skip_buy_gate"] += 1
+                if len(closes) < 10:
+                    st.stats["skip_sma_warmup"] += 1
+                continue
             if not execute_buy(st, code, px, per_ch, i, day, reason="chase:T+1"):
                 st.stats["chase_buy_fail"] += 1
 
@@ -685,6 +713,12 @@ def simulate(
                 limit_up, _ = _limit_prices(code, prev_close)
                 if hit_limit_up(px, limit_up):
                     queue_limit_up_chase(st, pending_chase, code, per, i)
+                    continue
+                closes = prev_rows["close"].astype(float).tolist()
+                if callable(buy_gate) and not buy_gate(code, px, day, closes):
+                    st.stats["skip_buy_gate"] += 1
+                    if len(closes) < 10:
+                        st.stats["skip_sma_warmup"] += 1
                     continue
                 execute_buy(st, code, px, per, i, day, reason="pool")
 
@@ -757,7 +791,12 @@ def run(
     if not pool_days:
         raise SystemExit(f"no pool CSVs in [{start}, {end}] under {actual_pool_dir}")
     all_codes = {c for codes in pool_days.values() for c in codes}
-    load_start = warmup_start(start)
+    load_start = warmup_start(
+        start,
+        STRATEGY4_CALENDAR_SLACK_DAYS
+        if normalize_csv_strategy(strategy) == "version4"
+        else WARMUP_DAYS,
+    )
     print(
         f"loading daily+minute: {len(all_codes)} codes, {load_start}..{end}; "
         f"pool {min(pool_days)}..{max(pool_days)} ({len(pool_days)} days)",

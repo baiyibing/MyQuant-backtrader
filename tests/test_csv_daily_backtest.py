@@ -45,6 +45,43 @@ def _run(pool: dict, bars: dict, **kwargs):
     return sim.simulate(bars, pool, "20251103", "20251107", **kwargs)
 
 
+def _v4_bars(prior_closes, rows):
+    prior_idx = pd.bdate_range(end="2025-10-31", periods=len(prior_closes))
+    trade_idx = pd.to_datetime(DAYS[: len(rows)])
+    closes = list(prior_closes) + [r[3] for r in rows]
+    return {"600000.SH": pd.DataFrame({
+        "open": list(prior_closes) + [r[0] for r in rows],
+        "high": list(prior_closes) + [r[1] for r in rows],
+        "low": list(prior_closes) + [r[2] for r in rows],
+        "close": closes,
+    }, index=prior_idx.append(trade_idx)).astype(np.float64)}
+
+
+def test_strategy4_sma10_blocks_buy_and_counts_gate():
+    bars = _v4_bars([10.0] * 10, [(9.0, 9.0, 9.0, 9.0)])
+    st = sim.simulate(bars, {"20251103": ["600000.SH"]}, "20251103", "20251103", strategy="version4")
+    assert st.stats["buys"] == 0
+    assert st.stats["skip_buy_gate"] == 1
+    assert st.stats["skip_sma_warmup"] == 0
+
+
+def test_strategy4_starved_sma10_counts_warmup():
+    bars = _v4_bars([10.0] * 9, [(10.0, 10.0, 10.0, 10.0)])
+    st = sim.simulate(bars, {"20251103": ["600000.SH"]}, "20251103", "20251103", strategy="version4")
+    assert st.stats["skip_buy_gate"] == 1
+    assert st.stats["skip_sma_warmup"] == 1
+
+
+def test_strategy4_ma5_break_becomes_next_open_exit():
+    rows = [(10, 10, 10, 10), (10, 10, 9, 9), (9.1, 9.1, 9.1, 9.1)]
+    bars = _v4_bars([10.0] * 10, rows)
+    st = sim.simulate(bars, {"20251103": ["600000.SH"]}, "20251103", "20251105", strategy="version4")
+    sells = [trade for trade in st.trades if trade["side"] == "SELL"]
+    assert sells[0]["date"] == "20251105"
+    assert sells[0]["price"] == pytest.approx(9.1)
+    assert sells[0]["reason"] == "ma_signal:MA5"
+
+
 def test_t1_no_sell_on_entry_day():
     # 买入日（D0 收盘 10.0 买入）当日即使 low 砸到 -5% 也不卖（T+1）
     rows = {

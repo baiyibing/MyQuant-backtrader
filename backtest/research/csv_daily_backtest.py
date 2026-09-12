@@ -84,6 +84,7 @@ PEAK_GAP_MIN = 15  # 分钟扫描默认间隔；策略书可覆盖为 0
 CHASE_HM = 9 * 60 + 45  # 尾盘涨停后次日 09:45 追买/弃买
 LIMIT_EPS = 0.001  # 涨跌停等值判定；须远小于 1 分，避免把普通价误判为涨停
 WARMUP_DAYS = 10
+STRATEGY4_CALENDAR_SLACK_DAYS = 22
 # 2026-09-11 实测：F 盘 period=1m 最后一根交易日（抽样 50 只含 000001，无 20260910）。
 MINUTE_LAKE_END = "20260909"
 _PERIOD_ENV_KEYS = (
@@ -158,6 +159,8 @@ class SimState:
             "skip_held": 0,
             "add_lots": 0,
             "skip_no_bar": 0,
+            "skip_buy_gate": 0,
+            "skip_sma_warmup": 0,
             "sell_stop": 0,
             "sell_trail": 0,
             "sell_pos_trail": 0,
@@ -367,6 +370,8 @@ def simulate(
     )
     stop_pct = hooks["stop_pct"]
     take_profit = hooks["take_profit"]
+    buy_gate = hooks.get("buy_gate")
+    sell_gate = hooks.get("sell_gate")
     record_params = hooks["record_params"]
     calendar = build_calendar(bars, start, end)
 
@@ -433,7 +438,12 @@ def simulate(
                         pos.reserved = False
                         reason = "open_board"
                     else:
-                        reason = take_profit(close, pos.cost, pos.peak, n_days)
+                        closes = prev_rows["close"].astype(float).tolist()
+                        reason = (
+                            sell_gate(code, close, day, closes)
+                            if callable(sell_gate)
+                            else take_profit(close, pos.cost, pos.peak, n_days)
+                        )
                     if reason:
                         same_bar = any(
                             reason.startswith(prefix)
@@ -473,6 +483,12 @@ def simulate(
             if decision != "buy":
                 st.stats["chase_abandon"] += 1
                 continue
+            closes = prev_rows["close"].astype(float).tolist()
+            if callable(buy_gate) and not buy_gate(code, close_px, day, closes):
+                st.stats["skip_buy_gate"] += 1
+                if len(closes) < 10:
+                    st.stats["skip_sma_warmup"] += 1
+                continue
             if not execute_buy(st, code, close_px, per_ch, i, day, reason="chase:T+1"):
                 st.stats["chase_buy_fail"] += 1
 
@@ -497,6 +513,12 @@ def simulate(
                 close = float(df_c.loc[day]["close"])
                 if hit_limit_up(close, limit_up):
                     queue_limit_up_chase(st, pending_chase, code, per, i)
+                    continue
+                closes = prev_rows["close"].astype(float).tolist()
+                if callable(buy_gate) and not buy_gate(code, close, day, closes):
+                    st.stats["skip_buy_gate"] += 1
+                    if len(closes) < 10:
+                        st.stats["skip_sma_warmup"] += 1
                     continue
                 execute_buy(st, code, close, per, i, day, reason="pool")
 
@@ -561,7 +583,12 @@ def run(
     if not pool_days:
         raise SystemExit(f"no pool CSVs in [{start}, {end}] under {actual_pool_dir}")
     all_codes = {c for codes in pool_days.values() for c in codes}
-    load_start = warmup_start(start)
+    load_start = warmup_start(
+        start,
+        STRATEGY4_CALENDAR_SLACK_DAYS
+        if normalize_csv_strategy(strategy) == "version4"
+        else WARMUP_DAYS,
+    )
     print(
         f"loading daily bars: {len(all_codes)} codes, {load_start}..{end}; "
         f"pool {min(pool_days)}..{max(pool_days)} ({len(pool_days)} days)",
