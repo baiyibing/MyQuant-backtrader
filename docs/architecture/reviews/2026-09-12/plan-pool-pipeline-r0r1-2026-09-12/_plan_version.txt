@@ -1,0 +1,4 @@
+path=docs/backtest/plan-pool-pipeline-r0r1-2026-09-12.md
+git_sha=<untracked>
+content_sha256_16=4cfdbe48a0dd33e2
+reviewed_at=2026-09-12

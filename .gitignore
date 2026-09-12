@@ -101,6 +101,7 @@ scripts/baselines/*_last_run.log
 /.cursor/mcp.json
 /qlib_cost/mlruns/
 /backtest_output/
+/exports/
 /stock_data/stock_data.duckdb
 /stock_data/stock_data_minute.duckdb
 /stock_data/stock_data_minute.duckdb.wal

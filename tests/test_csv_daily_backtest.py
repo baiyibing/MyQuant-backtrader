@@ -45,6 +45,16 @@ def _run(pool: dict, bars: dict, **kwargs):
     return sim.simulate(bars, pool, "20251103", "20251107", **kwargs)
 
 
+def _write_daily_lake_frame(tmp_path, code: str, frame: pd.DataFrame) -> None:
+    partition = tmp_path / f"symbol={sim.to_partition_key(code)}"
+    partition.mkdir(parents=True, exist_ok=True)
+    frame.to_parquet(partition / "data.parquet", index=False)
+
+
+def _daily_time_ms(*dates: str) -> list[int]:
+    return [int(pd.Timestamp(date, tz="UTC").timestamp() * 1000) for date in dates]
+
+
 def _v4_bars(prior_closes, rows):
     prior_idx = pd.bdate_range(end="2025-10-31", periods=len(prior_closes))
     trade_idx = pd.to_datetime(DAYS[: len(rows)])
@@ -55,6 +65,54 @@ def _v4_bars(prior_closes, rows):
         "low": list(prior_closes) + [r[2] for r in rows],
         "close": closes,
     }, index=prior_idx.append(trade_idx)).astype(np.float64)}
+
+
+def test_read_one_daily_drops_zero_volume_rows(tmp_path):
+    _write_daily_lake_frame(
+        tmp_path,
+        "600000.SH",
+        pd.DataFrame(
+            {
+                "time": _daily_time_ms("2025-11-03", "2025-11-04"),
+                "open": [10.0, 0.0],
+                "high": [10.1, 0.0],
+                "low": [9.9, 0.0],
+                "close": [10.0, 0.0],
+                "volume": [1000.0, 0.0],
+            }
+        ),
+    )
+
+    got = sim._read_one_daily("600000.SH", tmp_path, "20251103", "20251104")
+
+    assert got is not None
+    assert list(got.index) == [pd.Timestamp("2025-11-03")]
+    assert list(got.columns) == ["open", "high", "low", "close"]
+
+
+def test_read_one_daily_without_volume_keeps_original_behavior(tmp_path):
+    _write_daily_lake_frame(
+        tmp_path,
+        "600000.SH",
+        pd.DataFrame(
+            {
+                "time": _daily_time_ms("2025-11-03", "2025-11-04"),
+                "open": [10.0, 10.1],
+                "high": [10.1, 10.2],
+                "low": [9.9, 10.0],
+                "close": [10.0, 10.1],
+            }
+        ),
+    )
+
+    got = sim._read_one_daily("600000.SH", tmp_path, "20251103", "20251104")
+
+    assert got is not None
+    assert list(got.index) == [
+        pd.Timestamp("2025-11-03"),
+        pd.Timestamp("2025-11-04"),
+    ]
+    assert list(got["close"]) == [10.0, 10.1]
 
 
 def test_strategy4_sma10_blocks_buy_and_counts_gate():
@@ -787,6 +845,54 @@ def test_st_name_uses_five_percent_limit_up():
     assert allowed.stats["buys"] == 1
 
 
+def test_pool_name_asof_missing_held_code_falls_back_to_yesterday():
+    rows = {
+        "600000.SH": [
+            (10.0, 10.0, 10.0, 10.0),
+            (9.39, 9.39, 9.39, 9.39),
+        ]
+    }
+    bars = _bars(DAYS[:2], rows)
+
+    st = sim.simulate(
+        bars,
+        {"20251103": ["600000.SH"]},
+        "20251103",
+        "20251104",
+        strategy="version6",
+        pool_names_by_day={
+            "20251103": {"600000.SH": "*ST 浦发"},
+            "20251104": {"000001.SZ": "平安"},
+        },
+    )
+
+    assert st.stats["defer_sell_limit_down"] == 1
+    assert not any(trade["side"] == "SELL" for trade in st.trades)
+
+
+def test_pool_name_asof_future_st_does_not_change_earlier_limit():
+    rows = {
+        "600000.SH": [
+            (10.0, 10.0, 10.0, 10.0),
+            (10.5, 10.5, 10.5, 10.5),
+            (10.5, 10.5, 10.5, 10.5),
+        ]
+    }
+    bars = _bars(DAYS[:3], rows)
+
+    st = sim.simulate(
+        bars,
+        {"20251104": ["600000.SH"]},
+        "20251103",
+        "20251105",
+        strategy="version6",
+        pool_names_by_day={"20251105": {"600000.SH": "*ST 浦发"}},
+    )
+
+    assert st.stats["buys"] == 1
+    assert st.stats["skip_limit_up"] == 0
+
+
 def test_bj_thirty_percent_allows_close_that_would_be_ten_percent_limit():
     rows = {"920014.BJ": [(12.5, 12.5, 12.4, 12.5)] * 5}
     st = _run({"20251103": ["920014.BJ"]}, _bars(DAYS, rows))
@@ -818,6 +924,120 @@ def test_halt_day_equity_uses_last_close_not_cost():
     eq = dict(st.equity_curve)
     assert eq["20251105"] == pytest.approx(cash + 100_000 * 11.0)
     assert eq["20251105"] != pytest.approx(cash + 100_000 * 10.0)
+
+
+def test_zero_volume_placeholder_day_cannot_sell_or_buy_and_marks_last_close(
+    tmp_path,
+):
+    common_time = _daily_time_ms("2025-10-31", "2025-11-03", "2025-11-04")
+    _write_daily_lake_frame(
+        tmp_path,
+        "600000.SH",
+        pd.DataFrame(
+            {
+                "time": common_time,
+                "open": [10.0, 10.0, 5.0],
+                "high": [10.0, 10.1, 99.0],
+                "low": [10.0, 9.9, 1.0],
+                "close": [10.0, 10.0, 99.0],
+                "volume": [1000.0, 1000.0, 0.0],
+            }
+        ),
+    )
+    _write_daily_lake_frame(
+        tmp_path,
+        "600001.SH",
+        pd.DataFrame(
+            {
+                "time": common_time,
+                "open": [20.0, 20.0, 18.0],
+                "high": [20.0, 20.1, 18.0],
+                "low": [20.0, 19.9, 18.0],
+                "close": [20.0, 20.0, 18.0],
+                "volume": [1000.0, 1000.0, 0.0],
+            }
+        ),
+    )
+    held = sim._read_one_daily("600000.SH", tmp_path, "20251031", "20251104")
+    candidate = sim._read_one_daily(
+        "600001.SH", tmp_path, "20251031", "20251104"
+    )
+    assert held is not None and candidate is not None
+    calendar_anchor = pd.DataFrame(
+        {
+            "open": [1.0, 1.0],
+            "high": [1.0, 1.0],
+            "low": [1.0, 1.0],
+            "close": [1.0, 1.0],
+        },
+        index=pd.to_datetime(["2025-11-03", "2025-11-04"]),
+    )
+
+    st = sim.simulate(
+        {
+            "600000.SH": held,
+            "600001.SH": candidate,
+            "000001.SZ": calendar_anchor,
+        },
+        {"20251103": ["600000.SH"], "20251104": ["600001.SH"]},
+        "20251103",
+        "20251104",
+        strategy="version6",
+        stop_pct=0.02,
+    )
+
+    assert not any(trade["side"] == "SELL" for trade in st.trades)
+    assert not any(
+        trade["side"] == "BUY" and trade["code"] == "600001.SH"
+        for trade in st.trades
+    )
+    assert st.stats["skip_no_bar"] == 1
+    pos = st.positions["600000.SH"][0]
+    equity = dict(st.equity_curve)["20251104"]
+    assert equity == pytest.approx(st.cash + pos.shares * 10.0)
+    assert equity != pytest.approx(st.cash + pos.shares * 99.0)
+
+
+def test_zero_volume_placeholder_chase_day_stays_pending(tmp_path):
+    _write_daily_lake_frame(
+        tmp_path,
+        "600000.SH",
+        pd.DataFrame(
+            {
+                "time": _daily_time_ms(
+                    "2025-10-31", "2025-11-03", "2025-11-04"
+                ),
+                "open": [10.0, 10.5, 11.0],
+                "high": [10.0, 11.0, 11.0],
+                "low": [10.0, 10.5, 10.0],
+                "close": [10.0, 11.0, 10.0],
+                "volume": [1000.0, 1000.0, 0.0],
+            }
+        ),
+    )
+    target = sim._read_one_daily("600000.SH", tmp_path, "20251031", "20251104")
+    assert target is not None
+    calendar_anchor = pd.DataFrame(
+        {
+            "open": [1.0, 1.0],
+            "high": [1.0, 1.0],
+            "low": [1.0, 1.0],
+            "close": [1.0, 1.0],
+        },
+        index=pd.to_datetime(["2025-11-03", "2025-11-04"]),
+    )
+
+    st = sim.simulate(
+        {"600000.SH": target, "000001.SZ": calendar_anchor},
+        {"20251103": ["600000.SH"]},
+        "20251103",
+        "20251104",
+        strategy="version6",
+    )
+
+    assert st.stats["skip_limit_up"] == 1
+    assert st.stats["chase_pending_eod"] == 1
+    assert st.stats["buys"] == 0
 
 
 def test_pre_er1_trades_snapshot_exists():

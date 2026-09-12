@@ -52,6 +52,7 @@ from backtest.research.csv_daily_backtest import (  # noqa: E402
     help_lock_all,
     help_lock_for,
     _named_limits,
+    _pool_names_asof,
     hit_limit_down,
     last_close_mark,
     peak_gap_blocks,
@@ -63,7 +64,7 @@ from backtest.research.csv_daily_backtest import (  # noqa: E402
     build_calendar,
     load_daily_bars,
     load_pool_days,
-    load_pool_name_map,
+    load_pool_names_by_day,
     maybe_compare_daily,
     normalize_csv_strategy,
     summarize,
@@ -153,7 +154,11 @@ def _read_one_minute(
         return None
     t0, t1 = utc_ms_range(start, end)
     try:
-        table = pq.read_table(path, columns=["time", "open", "high", "low", "close"])
+        columns = ["time", "open", "high", "low", "close"]
+        has_volume = "volume" in pq.read_schema(path).names
+        table = pq.read_table(
+            path, columns=columns + (["volume"] if has_volume else [])
+        )
         table = table.filter((pc.field("time") >= t0) & (pc.field("time") <= t1))
     except Exception:
         return None
@@ -173,6 +178,11 @@ def _read_one_minute(
             "close": table["close"].to_numpy()[keep],
             "ymd": utc.strftime("%Y%m%d"),
             "hm": hm.to_numpy()[keep],
+            **(
+                {"_volume": table["volume"].to_numpy()[keep]}
+                if has_volume
+                else {}
+            ),
         },
         index=utc.tz_localize(None),
     ).astype(
@@ -185,6 +195,9 @@ def _read_one_minute(
         }
     )
     out = out[~out.index.duplicated(keep="last")].sort_index()
+    if has_volume:
+        day_volume = out.groupby("ymd")["_volume"].transform("sum")
+        out = out.loc[day_volume != 0].drop(columns="_volume")
     return out if not out.empty else None
 
 
@@ -563,6 +576,7 @@ def simulate(
     take_profit=None,
     record_params=None,
     pool_names: Optional[dict[str, str]] = None,
+    pool_names_by_day: Optional[dict[str, dict[str, str]]] = None,
 ) -> SimState:
     hooks = apply_csv_strategy(
         strategy,
@@ -590,10 +604,11 @@ def simulate(
     allow_add = bool(hooks["allow_add"])
     day_spans = {code: build_day_spans(df) for code, df in minute_bars.items()}
     pending_chase: dict[str, tuple[float, int]] = {}
-    names = dict(pool_names or {})
+    names_asof = _pool_names_asof(pool_names, pool_names_by_day)
 
     for i, day in enumerate(calendar):
         ds = _ymd(day)
+        names = names_asof(ds)
         st.daily_quota_used = 0.0
 
         for code in list(st.positions):
@@ -802,7 +817,7 @@ def run(
     t_pool = time.perf_counter()
     actual_pool_dir = Path(pool_dir) if pool_dir is not None else Path(REPO) / "stock_pool"
     pool_days = load_pool_days(start, end, pool_dir=actual_pool_dir)
-    pool_names = load_pool_name_map(actual_pool_dir, start, end)
+    pool_names_by_day = load_pool_names_by_day(actual_pool_dir, start, end)
     t_pool = time.perf_counter() - t_pool
     if not pool_days:
         raise SystemExit(f"no pool CSVs in [{start}, {end}] under {actual_pool_dir}")
@@ -854,7 +869,7 @@ def run(
         strategy=strategy,
         take_profit=take_profit,
         record_params=record_params,
-        pool_names=pool_names,
+        pool_names_by_day=pool_names_by_day,
     )
     st.stats["t_pool_s"] = t_pool
     st.stats["t_daily_s"] = t_daily

@@ -11,6 +11,72 @@ import backtest.research.csv_minute_backtest as sim
 from backtest.research.csv_daily_backtest import chase_explained
 
 
+def _write_minute_lake_frame(tmp_path, code: str, frame: pd.DataFrame) -> None:
+    partition = tmp_path / f"symbol={sim.to_partition_key(code)}"
+    partition.mkdir(parents=True, exist_ok=True)
+    frame.to_parquet(partition / "data.parquet", index=False)
+
+
+def _minute_time_ms(*timestamps: str) -> list[int]:
+    return [
+        int(pd.Timestamp(timestamp, tz="UTC").timestamp() * 1000)
+        for timestamp in timestamps
+    ]
+
+
+def test_read_one_minute_drops_only_whole_zero_volume_days(tmp_path):
+    _write_minute_lake_frame(
+        tmp_path,
+        "600000.SH",
+        pd.DataFrame(
+            {
+                "time": _minute_time_ms(
+                    "2025-11-03 09:30",
+                    "2025-11-03 14:55",
+                    "2025-11-04 09:30",
+                    "2025-11-04 14:55",
+                ),
+                "open": [10.0, 10.0, 0.0, 0.0],
+                "high": [10.1, 10.1, 0.0, 0.0],
+                "low": [9.9, 9.9, 0.0, 0.0],
+                "close": [10.0, 10.0, 0.0, 0.0],
+                "volume": [0.0, 1000.0, 0.0, 0.0],
+            }
+        ),
+    )
+
+    got = sim._read_one_minute("600000.SH", tmp_path, "20251103", "20251104")
+
+    assert got is not None
+    assert list(got["ymd"]) == ["20251103", "20251103"]
+    assert list(got["hm"]) == [570, 895]
+    assert list(got.columns) == ["open", "high", "low", "close", "ymd", "hm"]
+
+
+def test_read_one_minute_without_volume_keeps_original_behavior(tmp_path):
+    _write_minute_lake_frame(
+        tmp_path,
+        "600000.SH",
+        pd.DataFrame(
+            {
+                "time": _minute_time_ms(
+                    "2025-11-03 09:30", "2025-11-04 09:30"
+                ),
+                "open": [10.0, 10.1],
+                "high": [10.1, 10.2],
+                "low": [9.9, 10.0],
+                "close": [10.0, 10.1],
+            }
+        ),
+    )
+
+    got = sim._read_one_minute("600000.SH", tmp_path, "20251103", "20251104")
+
+    assert got is not None
+    assert list(got["ymd"]) == ["20251103", "20251104"]
+    assert list(got["close"]) == [10.0, 10.1]
+
+
 def test_scan_gap_open_stop():
     o = np.array([9.40, 9.50])
     h = np.array([9.50, 9.55])
@@ -450,6 +516,35 @@ def test_simulate_buy_at_1455_and_t1_stop_next_open():
     assert sell["reason"] == "stop_loss:gap_open"
     assert sell["date"] == "20251104"
     assert sell["price"] == pytest.approx(9.40)
+
+
+def test_pool_name_asof_normal_then_st_and_by_day_beats_flat_map():
+    dates = ["2025-11-03", "2025-11-04"]
+    m0 = _day(
+        dates[0],
+        [(930, 10.0, 10.0, 10.0, 10.0), (1455, 10.5, 10.5, 10.5, 10.5)],
+    )
+    m1 = _day(
+        dates[1],
+        [(930, 11.03, 11.03, 11.03, 11.03), (1455, 11.03, 11.03, 11.03, 11.03)],
+    )
+
+    st = sim.simulate(
+        {"600000.SH": pd.concat([m0, m1])},
+        {"600000.SH": _daily(dates, [10.5, 11.03])},
+        {"20251103": ["600000.SH"], "20251104": ["600000.SH"]},
+        "20251103",
+        "20251104",
+        strategy="version8",
+        pool_names={"600000.SH": "*ST 扁平名"},
+        pool_names_by_day={
+            "20251103": {"600000.SH": "浦发"},
+            "20251104": {"600000.SH": "*ST 浦发"},
+        },
+    )
+
+    assert st.stats["buys"] == 1
+    assert st.stats["skip_limit_up"] == 1
 
 
 def test_t0_after_buy_high_does_not_set_peak():
