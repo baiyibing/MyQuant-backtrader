@@ -3,7 +3,7 @@
 
 完整滚动投资流程（分钟 Cerebro 链）的日线近似版：同口径的 CSV 每日买入名单、
 每日 100 万常规额度、补充资金、T+1、涨跌停拦截、全局 2100 万资金池。必须
-`--strategy version6|version8`，无缺省。数据用不复权日线（与分钟链
+`--strategy` 必须从已注册策略中显式指定，无缺省。数据用不复权日线（与分钟链
 adjust_type='none' 对齐）；佣金 0.1% 双边（与 broker.setcommission(0.001)
 对齐），无最低佣金。
 
@@ -20,7 +20,6 @@ import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
-from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 from typing import Optional
 
@@ -68,8 +67,13 @@ _ = (
     record_strategy6_params,
     trail_hits,
 )
-from backtest.research.csv_pool import parse_pool_csv  # noqa: E402
-from backtest.research.ma_chip_edge_backtest import limit_pct  # noqa: E402
+from backtest.research.csv_pool import load_pool_day_map  # noqa: E402
+from backtest.research.market_layer import (  # noqa: E402
+    limit_pct,
+    limit_prices,
+    round_fen,
+    utc_ms_range,
+)
 from common.infra.data_root import resolve_period_root  # noqa: E402
 from oskh_data.symbol_format import to_partition_key  # noqa: E402
 
@@ -80,6 +84,7 @@ PEAK_GAP_MIN = 15  # 分钟扫描默认间隔；策略书可覆盖为 0
 CHASE_HM = 9 * 60 + 45  # 尾盘涨停后次日 09:45 追买/弃买
 LIMIT_EPS = 0.001  # 涨跌停等值判定；须远小于 1 分，避免把普通价误判为涨停
 WARMUP_DAYS = 10
+STRATEGY4_CALENDAR_SLACK_DAYS = 22
 # 2026-09-11 实测：F 盘 period=1m 最后一根交易日（抽样 50 只含 000001，无 20260910）。
 MINUTE_LAKE_END = "20260909"
 _PERIOD_ENV_KEYS = (
@@ -110,7 +115,7 @@ HELP_LOCK = """
   落盘：backtest_output/csv_daily_{book}_{start}_{end}/ 三件套 summary.txt、
         daily_equity.csv、trades.csv（与分钟版同结构）。
   环境：勿残留 OSKH_PERIOD_* ；有 F:\\stock_data\\.authority 时跟权威盘。
-  策略：必须 --strategy version6 或 version8（无缺省）。共用引擎，策略书换卖点与加仓。
+  策略：必须显式指定已注册 --strategy（无缺省）。共用引擎，策略书换卖点与加仓。
 """
 
 
@@ -128,6 +133,7 @@ class Position:
     peak_hm: int = -1  # 峰值所在分钟 hm；跨日为负间隔，分钟止盈用
     lot_id: int = 0  # 同码多笔：各自成本/峰值
     pending_exit: str = ""  # 日线止盈：次日开盘离场原因
+    reserved: bool = False  # 策略 3 涨停保留状态；分钟引擎复用本类
 
 
 @dataclass
@@ -153,9 +159,15 @@ class SimState:
             "skip_held": 0,
             "add_lots": 0,
             "skip_no_bar": 0,
+            "skip_buy_gate": 0,
+            "skip_sma_warmup": 0,
             "sell_stop": 0,
             "sell_trail": 0,
             "sell_pos_trail": 0,
+            "sell_profit_take": 0,
+            "sell_open_board": 0,
+            "sell_force": 0,
+            "sell_ma": 0,
             "defer_sell_limit_down": 0,
             "invested_notional": 0.0,
             "supplementary_used": 0.0,
@@ -202,15 +214,6 @@ def chase_explained(st: SimState) -> int:
 
 def _ymd(ts) -> str:
     return pd.Timestamp(ts).strftime("%Y%m%d")
-
-
-def utc_ms_range(start: str, end: str) -> tuple[int, int]:
-    """YYYYMMDD 闭区间 → UTC 午夜毫秒（日线/分钟湖把交易日钟点标成 UTC）。"""
-    t0 = int(pd.Timestamp(start, tz="UTC").timestamp() * 1000)
-    t1 = (
-        int((pd.Timestamp(end, tz="UTC") + pd.Timedelta(days=1)).timestamp() * 1000) - 1
-    )
-    return t0, t1
 
 
 def warmup_start(start: str, days: int = WARMUP_DAYS) -> str:
@@ -267,22 +270,7 @@ def peak_gap_blocks(gap, peak_gap_min: int = PEAK_GAP_MIN) -> bool:
     return 0 <= int(gap) < int(peak_gap_min)
 
 
-def round_fen(price: float) -> float:
-    """A 股涨跌停：分位四舍五入（不用 Python round 的银行家舍入）。"""
-    return float(Decimal(str(price)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
-
-
-def _limit_prices(code: str, prev_close: float) -> tuple[float, float]:
-    pct = limit_pct(code)
-    prev = Decimal(str(prev_close))
-    step = Decimal("0.01")
-    up = (prev * (Decimal("1") + Decimal(str(pct)))).quantize(
-        step, rounding=ROUND_HALF_UP
-    )
-    down = (prev * (Decimal("1") - Decimal(str(pct)))).quantize(
-        step, rounding=ROUND_HALF_UP
-    )
-    return float(up), float(down)
+_limit_prices = limit_prices
 
 
 def load_pool_days(
@@ -290,18 +278,7 @@ def load_pool_days(
 ) -> dict[str, list[str]]:
     """{YYYYMMDD: [canonical codes]}。头列无后缀，口径同 1.3 ``parse_pool_csv``。"""
     root = Path(pool_dir) if pool_dir is not None else Path(REPO) / "stock_pool"
-    days: dict[str, list[str]] = {}
-    for p in sorted(root.glob("*.csv")):
-        if not (start <= p.stem <= end):
-            continue
-        try:
-            codes = parse_pool_csv(p)
-        except Exception as exc:
-            print(f"skip pool {p.name}: {exc}", flush=True)
-            continue
-        if codes:
-            days[p.stem] = codes
-    return days
+    return load_pool_day_map(root, start, end, key="ymd", empty_in_map=False)
 
 
 def _read_one_daily(
@@ -379,7 +356,7 @@ def simulate(
 ) -> SimState:
     """核心日循环。bars/pool_days 可由测试注入；run() 负责从湖与 CSV 加载。
 
-    strategy 必填（version6 / version8）；take_profit(...) 仍可显式覆盖。
+    strategy 必填；take_profit(...) 仍可显式覆盖。
     """
     del pos_trail
     hooks = apply_csv_strategy(
@@ -393,6 +370,8 @@ def simulate(
     )
     stop_pct = hooks["stop_pct"]
     take_profit = hooks["take_profit"]
+    buy_gate = hooks.get("buy_gate")
+    sell_gate = hooks.get("sell_gate")
     record_params = hooks["record_params"]
     calendar = build_calendar(bars, start, end)
 
@@ -401,6 +380,8 @@ def simulate(
     st.stats["bars_loaded"] = len(bars)
     st.stats["pool_days"] = len(pool_days)
     allow_add = bool(hooks["allow_add"])
+    reserve_limit_up = bool(hooks.get("reserve_limit_up"))
+    daily_same_bar_prefixes = tuple(hooks.get("daily_same_bar_prefixes", ()))
     pending_chase: dict[str, tuple[float, int]] = {}  # code -> (per, signal_idx)
 
     for i, day in enumerate(calendar):
@@ -415,7 +396,7 @@ def simulate(
             if prev_rows.empty:
                 continue
             prev_close = float(prev_rows.iloc[-1]["close"])
-            _, limit_down = _limit_prices(code, prev_close)
+            limit_up, limit_down = _limit_prices(code, prev_close)
             for pos in list(st.positions.get(code, [])):
                 n_days = i - pos.entry_idx  # 持仓交易日数（买入日=0）
 
@@ -427,29 +408,53 @@ def simulate(
                     continue
 
                 if n_days >= 1:
-                    trigger = pos.cost * (1.0 - stop_pct)
-                    if float(row["open"]) <= trigger:
-                        if hit_limit_down(float(row["open"]), limit_down):
-                            st.stats["defer_sell_limit_down"] += 1
-                        else:
-                            _sell(
-                                st,
-                                code,
-                                pos,
-                                float(row["open"]),
-                                day,
-                                "stop_loss:gap_open",
-                            )
-                        continue
-                    if float(row["low"]) <= trigger:
-                        _sell(st, code, pos, trigger, day, "stop_loss:touch")
-                        continue
+                    stop_enabled = isinstance(stop_pct, float) and 0 < stop_pct < 1
+                    if stop_enabled:
+                        trigger = pos.cost * (1.0 - stop_pct)
+                        if float(row["open"]) <= trigger:
+                            if hit_limit_down(float(row["open"]), limit_down):
+                                st.stats["defer_sell_limit_down"] += 1
+                            else:
+                                _sell(
+                                    st,
+                                    code,
+                                    pos,
+                                    float(row["open"]),
+                                    day,
+                                    "stop_loss:gap_open",
+                                )
+                            continue
+                        if float(row["low"]) <= trigger:
+                            _sell(st, code, pos, trigger, day, "stop_loss:touch")
+                            continue
 
                     pos.peak = max(pos.peak, float(row["high"]))
                     close = float(row["close"])
-                    reason = take_profit(close, pos.cost, pos.peak, n_days)
+                    if reserve_limit_up and hit_limit_up(float(row["open"]), limit_up):
+                        pos.reserved = True
+                    if reserve_limit_up and pos.reserved:
+                        if hit_limit_up(close, limit_up):
+                            continue
+                        pos.reserved = False
+                        reason = "open_board"
+                    else:
+                        closes = prev_rows["close"].astype(float).tolist()
+                        reason = (
+                            sell_gate(code, close, day, closes)
+                            if callable(sell_gate)
+                            else take_profit(close, pos.cost, pos.peak, n_days)
+                        )
                     if reason:
-                        pos.pending_exit = reason
+                        same_bar = any(
+                            reason.startswith(prefix)
+                            for prefix in daily_same_bar_prefixes
+                        )
+                        if same_bar and not hit_limit_down(close, limit_down):
+                            _sell(st, code, pos, close, day, reason)
+                        else:
+                            if same_bar:
+                                st.stats["defer_sell_limit_down"] += 1
+                            pos.pending_exit = reason
 
         due = [c for c, (_per, sig) in pending_chase.items() if i == sig + 1]
         for code in due:
@@ -478,6 +483,12 @@ def simulate(
             if decision != "buy":
                 st.stats["chase_abandon"] += 1
                 continue
+            closes = prev_rows["close"].astype(float).tolist()
+            if callable(buy_gate) and not buy_gate(code, close_px, day, closes):
+                st.stats["skip_buy_gate"] += 1
+                if len(closes) < 10:
+                    st.stats["skip_sma_warmup"] += 1
+                continue
             if not execute_buy(st, code, close_px, per_ch, i, day, reason="chase:T+1"):
                 st.stats["chase_buy_fail"] += 1
 
@@ -502,6 +513,12 @@ def simulate(
                 close = float(df_c.loc[day]["close"])
                 if hit_limit_up(close, limit_up):
                     queue_limit_up_chase(st, pending_chase, code, per, i)
+                    continue
+                closes = prev_rows["close"].astype(float).tolist()
+                if callable(buy_gate) and not buy_gate(code, close, day, closes):
+                    st.stats["skip_buy_gate"] += 1
+                    if len(closes) < 10:
+                        st.stats["skip_sma_warmup"] += 1
                     continue
                 execute_buy(st, code, close, per, i, day, reason="pool")
 
@@ -553,18 +570,25 @@ def run(
     tier_default: Optional[float] = None,
     pos_trail: float = POS_TRAIL,
     workers: int = 16,
+    pool_dir: Optional[Path] = None,
     strategy: str,
     take_profit=None,
     record_params=None,
 ) -> SimState:
     warn_stale_period_env()
     t_pool = time.perf_counter()
-    pool_days = load_pool_days(start, end)
+    actual_pool_dir = Path(pool_dir) if pool_dir is not None else Path(REPO) / "stock_pool"
+    pool_days = load_pool_days(start, end, pool_dir=actual_pool_dir)
     t_pool = time.perf_counter() - t_pool
     if not pool_days:
-        raise SystemExit(f"no pool CSVs in [{start}, {end}] under stock_pool/")
+        raise SystemExit(f"no pool CSVs in [{start}, {end}] under {actual_pool_dir}")
     all_codes = {c for codes in pool_days.values() for c in codes}
-    load_start = warmup_start(start)
+    load_start = warmup_start(
+        start,
+        STRATEGY4_CALENDAR_SLACK_DAYS
+        if normalize_csv_strategy(strategy) == "version4"
+        else WARMUP_DAYS,
+    )
     print(
         f"loading daily bars: {len(all_codes)} codes, {load_start}..{end}; "
         f"pool {min(pool_days)}..{max(pool_days)} ({len(pool_days)} days)",
@@ -683,6 +707,14 @@ def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str) -
         st.stats["sell_stop"] += 1
     elif reason.startswith("trail"):
         st.stats["sell_trail"] += 1
+    elif reason.startswith("profit_take"):
+        st.stats["sell_profit_take"] += 1
+    elif reason.startswith("open_board"):
+        st.stats["sell_open_board"] += 1
+    elif reason.startswith("force_sell"):
+        st.stats["sell_force"] += 1
+    elif reason.startswith("ma_signal"):
+        st.stats["sell_ma"] += 1
     else:
         st.stats["sell_pos_trail"] += 1
     lots = st.positions.get(code) or []
@@ -714,9 +746,14 @@ def summarize(
         else "  动用资金收益率: n/a",
         f"  最大回撤: {max_dd:.2%}",
     ]
+    stop_text = (
+        f"{st.stats.get('stop_pct'):.0%}"
+        if isinstance(st.stats.get("stop_pct"), (int, float))
+        else "关闭"
+    )
     if st.stats.get("sell_book") == "v8":
         lines.append(
-            f"  参数: 止损 {st.stats['stop_pct']:.0%} | "
+            f"  参数: 止损 {stop_text} | "
             f"{st.stats.get('small_arm', 0.06):.0%}≤涨幅≤"
             f"{st.stats['profit_base']:.0%} 回撤到+"
             f"{st.stats.get('small_floor', 0.02):.0%} | 基础止盈 "
@@ -725,7 +762,7 @@ def summarize(
         )
     elif st.stats.get("sell_book") == "v6" or "trail_t1" in st.stats:
         lines.append(
-            f"  参数: 止损 {st.stats['stop_pct']:.0%} | 锚 {st.stats['profit_base']:.0%} | "
+            f"  参数: 止损 {stop_text} | 锚 {st.stats['profit_base']:.0%} | "
             f"回撤 T+1 {st.stats['trail_t1']:.0%} / T+2 {st.stats['trail_t2']:.0%} / "
             f"T+3 {st.stats.get('trail_t3', 0):.0%} / T+4 {st.stats.get('trail_t4', 0):.0%} / "
             f"T+5+ {st.stats.get('trail_t5', st.stats.get('trail_t3', 0)):.0%}"
@@ -744,7 +781,10 @@ def summarize(
             f"买失败 {st.stats.get('chase_buy_fail', 0)} | "
             f"追买已持跳过 {st.stats.get('chase_skip_held', 0)} | "
             f"合计 {chase_explained(st)} / 涨停跳过 {st.stats['skip_limit_up']}",
-            f"  卖出: 止损 {st.stats['sell_stop']} | 锚定回撤 {st.stats['sell_trail']} | 正利润回撤 {st.stats['sell_pos_trail']}",
+            f"  卖出: 止损 {st.stats['sell_stop']} | 锚定回撤 {st.stats['sell_trail']} | "
+            f"正利润回撤 {st.stats['sell_pos_trail']} | 止盈 {st.stats.get('sell_profit_take', 0)} | "
+            f"开板 {st.stats.get('sell_open_board', 0)} | 强制 {st.stats.get('sell_force', 0)} | "
+            f"均线 {st.stats.get('sell_ma', 0)}",
             f"  跌停顺延卖出 {st.stats['defer_sell_limit_down']} | 补充资金 {st.stats['supplementary_used']:,.0f}",
             f"  日线加载 {st.stats['bars_loaded']} | 池天数 {st.stats['pool_days']}",
         ]
@@ -887,6 +927,7 @@ def main(argv: Optional[list] = None) -> int:
     ap.add_argument("--cash-total", type=float, default=DEFAULT_TOTAL_CASH)
     ap.add_argument("--daily-quota", type=float, default=DEFAULT_DAILY_QUOTA)
     ap.add_argument("--workers", type=int, default=16)
+    ap.add_argument("--pool-dir", type=Path, default=Path(REPO) / "stock_pool")
     add_csv_strategy_arg(ap)
     add_strategy6_ratio_args(ap)
     args = ap.parse_args(argv if argv is not None else None)
@@ -897,6 +938,7 @@ def main(argv: Optional[list] = None) -> int:
         total_cash=args.cash_total,
         daily_quota=args.daily_quota,
         workers=args.workers,
+        pool_dir=args.pool_dir,
         **csv_run_kwargs_from_args(args),
     )
     book = engine_book(args.strategy)

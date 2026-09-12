@@ -1,0 +1,29 @@
+{
+  "plan": {
+    "claude": {
+      "content_sha256_16": "99c9db06e33ce350",
+      "git_sha": "<untracked>",
+      "path": "docs/backtest/plan-unify-csv-strategies-1-8-2026-09-12.md",
+      "reviewed_at": "2026-09-12"
+    },
+    "codex": {
+      "content_sha256_16": "99c9db06e33ce350",
+      "git_sha": "<untracked>",
+      "path": "docs/backtest/plan-unify-csv-strategies-1-8-2026-09-12.md",
+      "reviewed_at": "2026-09-12"
+    },
+    "cursor-auto": {
+      "content_sha256_16": "99c9db06e33ce350",
+      "git_sha": "<untracked>",
+      "path": "docs/backtest/plan-unify-csv-strategies-1-8-2026-09-12.md",
+      "reviewed_at": "2026-09-12"
+    },
+    "cursor-kimi-k3-high": {
+      "content_sha256_16": "99c9db06e33ce350",
+      "git_sha": "<untracked>",
+      "path": "docs/backtest/plan-unify-csv-strategies-1-8-2026-09-12.md",
+      "reviewed_at": "2026-09-12"
+    }
+  },
+  "schema_version": 1
+}

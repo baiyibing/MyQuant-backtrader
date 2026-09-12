@@ -1,0 +1,4 @@
+path=docs/backtest/plan-unify-csv-strategies-1-8-2026-09-12.md
+git_sha=<untracked>
+content_sha256_16=99c9db06e33ce350
+reviewed_at=2026-09-12

@@ -3,7 +3,7 @@
 
 与日线近似版同一套 CSV 额度 / T+1 / 涨停跳过 / force_min / 0.1% 双边佣金。
 卖点按分钟路径扫描：峰值用 bar high，现价用 close；开盘已跌破止损则按开盘价
-成交。必须 `--strategy version6|version8`，无缺省。买入用 14:55 分钟收盘
+成交。必须从已注册策略中显式指定 `--strategy`，无缺省。买入用 14:55 分钟收盘
 （湖内时间为「中国交易时钟标成 UTC」——09:30 UTC = 09:30 CST）。
 
 用法：
@@ -38,6 +38,8 @@ from backtest.research.csv_daily_backtest import (  # noqa: E402
     PEAK_GAP_MIN,
     POS_TRAIL,
     SimState,
+    STRATEGY4_CALENDAR_SLACK_DAYS,
+    WARMUP_DAYS,
     add_csv_strategy_arg,
     add_strategy6_ratio_args,
     apply_csv_strategy,
@@ -61,6 +63,7 @@ from backtest.research.csv_daily_backtest import (  # noqa: E402
     load_daily_bars,
     load_pool_days,
     maybe_compare_daily,
+    normalize_csv_strategy,
     summarize,
     utc_ms_range,
     warn_stale_period_env,
@@ -71,6 +74,7 @@ import pyarrow.compute as pc  # noqa: E402
 import pyarrow.parquet as pq  # noqa: E402
 from common.infra.data_root import resolve_period_root  # noqa: E402
 from oskh_data.symbol_format import to_partition_key  # noqa: E402
+from backtest.research.strategy3_rules import reserve_step_minute  # noqa: E402
 
 BUY_HM = 14 * 60 + 55
 AM_OPEN, AM_CLOSE = 9 * 60 + 30, 11 * 60 + 30
@@ -96,7 +100,7 @@ HELP_LOCK = """
   缓存：窗口分钟条写入 backtest_output/bar_cache/（E 盘，已 annotated）。默认
         命中直接读缓存；缺码再补湖并回写。--no-cache 跳过；--rebuild-cache 重做。
   落盘：与日线同三件套；若已有同策略 csv_daily_{book}_{start}_* 净值，summary 末尾附对照。
-  策略：必须 --strategy version6 或 version8（无缺省）。共用引擎，策略书换卖点与加仓。
+  策略：必须显式指定已注册 --strategy（无缺省）。共用引擎，策略书换卖点与加仓。
 """
 
 CACHE_ROOT = Path(REPO) / "backtest_output" / "bar_cache"
@@ -399,7 +403,7 @@ def scan_held_day(
     peak: float,
     n_days: int,
     can_sell: bool,
-    stop_pct: float,
+    stop_pct: Optional[float],
     profit_base: float,
     trail_ratio: float,
     pos_trail: float = 0.0,
@@ -408,11 +412,22 @@ def scan_held_day(
     peak_hm: int = -1,
     peak_gap_min: int = PEAK_GAP_MIN,
     take_profit=None,
+    sell_gate=None,
+    gate_code=None,
+    gate_day=None,
+    daily_closes_ending_yesterday=None,
+    force_sell_hm: Optional[int] = None,
+    reserve_limit_up: bool = False,
+    limit_up: float = 0.0,
+    reserved: bool = False,
+    reserve_state: Optional[dict] = None,
 ) -> tuple[int, float, str, float, int]:
     """逐分钟扫描。返回 (idx, px, reason, new_peak, new_peak_hm)。"""
-    trigger = cost * (1.0 - stop_pct)
+    stop_enabled = isinstance(stop_pct, float) and 0 < stop_pct < 1
+    trigger = cost * (1.0 - stop_pct) if stop_enabled else None
     new_peak = float(peak)
     new_peak_hm = int(peak_hm)
+    current_reserved = bool(reserved)
     n = int(len(c))
     for i in range(n):
         # T+0 不卖、不更新峰值（历史最高价从 T+1 起算）
@@ -427,20 +442,45 @@ def scan_held_day(
         px_close = float(c[i])
         if limit_down > 0 and hit_limit_down(px_open, limit_down):
             continue
-        if px_open <= trigger:
+        if stop_enabled and trigger is not None and px_open <= trigger:
             return i, px_open, "stop_loss:gap_open", new_peak, new_peak_hm
         ret = px_close / cost - 1.0
-        if ret <= -stop_pct:
+        if stop_enabled and ret <= -stop_pct:
             return i, px_close, "stop_loss:touch", new_peak, new_peak_hm
-        if new_peak_hm >= 0 and peak_gap_blocks(cur_hm - new_peak_hm, peak_gap_min):
-            continue
-        if take_profit is not None:
-            reason = take_profit(px_close, cost, new_peak, n_days)
-            if reason:
-                return i, px_close, reason, new_peak, new_peak_hm
-            continue
-        if trail_hits(px_close, cost, new_peak, profit_base, trail_ratio):
-            return i, px_close, f"trail:T+{max(1, n_days)}", new_peak, new_peak_hm
+        if reserve_limit_up:
+            is_limit_up = limit_up > 0 and hit_limit_up(px_close, limit_up)
+            current_reserved, reserve_reason = reserve_step_minute(
+                reserved=current_reserved, hm=cur_hm, is_limit_up=is_limit_up
+            )
+            if reserve_state is not None:
+                reserve_state["reserved"] = current_reserved
+            if reserve_reason:
+                return i, px_close, reserve_reason, new_peak, new_peak_hm
+            if current_reserved and is_limit_up:
+                continue
+        peak_blocked = new_peak_hm >= 0 and peak_gap_blocks(
+            cur_hm - new_peak_hm, peak_gap_min
+        )
+        if not peak_blocked:
+            if callable(sell_gate):
+                reason = sell_gate(
+                    gate_code,
+                    px_close,
+                    gate_day,
+                    daily_closes_ending_yesterday or [],
+                )
+                if reason:
+                    return i, px_close, reason, new_peak, new_peak_hm
+            elif take_profit is not None:
+                reason = take_profit(px_close, cost, new_peak, n_days)
+                if reason:
+                    return i, px_close, reason, new_peak, new_peak_hm
+            elif trail_hits(px_close, cost, new_peak, profit_base, trail_ratio):
+                return i, px_close, f"trail:T+{max(1, n_days)}", new_peak, new_peak_hm
+        if force_sell_hm is not None and cur_hm >= int(force_sell_hm):
+            if limit_down > 0 and hit_limit_down(px_close, limit_down):
+                continue
+            return i, px_close, "force_sell:time", new_peak, new_peak_hm
     return -1, float("nan"), "", new_peak, new_peak_hm
 
 
@@ -527,8 +567,12 @@ def simulate(
     )
     stop_pct = hooks["stop_pct"]
     take_profit = hooks["take_profit"]
+    buy_gate = hooks.get("buy_gate")
+    sell_gate = hooks.get("sell_gate")
     record_params = hooks["record_params"]
     peak_gap_min = int(hooks["peak_gap_min"])
+    force_sell_hm = hooks.get("force_sell_hm")
+    reserve_limit_up = bool(hooks.get("reserve_limit_up"))
     calendar = build_calendar(daily_bars, start, end)
 
     st = SimState(cash=float(total_cash))
@@ -555,13 +599,14 @@ def simulate(
             if prev_rows.empty:
                 continue
             prev_close = float(prev_rows.iloc[-1]["close"])
-            _, limit_down = _limit_prices(code, prev_close)
+            limit_up, limit_down = _limit_prices(code, prev_close)
             o = day_m["open"].to_numpy(np.float64)
             h = day_m["high"].to_numpy(np.float64)
             c = day_m["close"].to_numpy(np.float64)
             hm = day_m["hm"].to_numpy(np.int64)
             for pos in list(st.positions.get(code, [])):
                 n_days = i - pos.entry_idx
+                reserve_state = {"reserved": bool(pos.reserved)}
                 idx, px, reason, new_peak, new_peak_hm = scan_held_day(
                     o,
                     h,
@@ -579,9 +624,19 @@ def simulate(
                     peak_hm=int(pos.peak_hm),
                     peak_gap_min=peak_gap_min,
                     take_profit=take_profit,
+                    sell_gate=sell_gate,
+                    gate_code=code,
+                    gate_day=day,
+                    daily_closes_ending_yesterday=prev_rows["close"].astype(float).tolist(),
+                    force_sell_hm=force_sell_hm,
+                    reserve_limit_up=reserve_limit_up,
+                    limit_up=limit_up,
+                    reserved=bool(pos.reserved),
+                    reserve_state=reserve_state,
                 )
                 pos.peak = new_peak
                 pos.peak_hm = new_peak_hm
+                pos.reserved = bool(reserve_state["reserved"])
                 if idx >= 0:
                     if hit_limit_down(float(o[idx]), limit_down) and reason.startswith(
                         "stop_loss"
@@ -621,6 +676,12 @@ def simulate(
             if decision != "buy":
                 st.stats["chase_abandon"] += 1
                 continue
+            closes = prev_rows["close"].astype(float).tolist()
+            if callable(buy_gate) and not buy_gate(code, px, day, closes):
+                st.stats["skip_buy_gate"] += 1
+                if len(closes) < 10:
+                    st.stats["skip_sma_warmup"] += 1
+                continue
             if not execute_buy(st, code, px, per_ch, i, day, reason="chase:T+1"):
                 st.stats["chase_buy_fail"] += 1
 
@@ -652,6 +713,12 @@ def simulate(
                 limit_up, _ = _limit_prices(code, prev_close)
                 if hit_limit_up(px, limit_up):
                     queue_limit_up_chase(st, pending_chase, code, per, i)
+                    continue
+                closes = prev_rows["close"].astype(float).tolist()
+                if callable(buy_gate) and not buy_gate(code, px, day, closes):
+                    st.stats["skip_buy_gate"] += 1
+                    if len(closes) < 10:
+                        st.stats["skip_sma_warmup"] += 1
                     continue
                 execute_buy(st, code, px, per, i, day, reason="pool")
 
@@ -705,6 +772,7 @@ def run(
     workers: int = 16,
     use_cache: bool = True,
     rebuild_cache: bool = False,
+    pool_dir: Optional[Path] = None,
     strategy: str,
     take_profit=None,
     record_params=None,
@@ -717,12 +785,18 @@ def run(
             flush=True,
         )
     t_pool = time.perf_counter()
-    pool_days = load_pool_days(start, end)
+    actual_pool_dir = Path(pool_dir) if pool_dir is not None else Path(REPO) / "stock_pool"
+    pool_days = load_pool_days(start, end, pool_dir=actual_pool_dir)
     t_pool = time.perf_counter() - t_pool
     if not pool_days:
-        raise SystemExit(f"no pool CSVs in [{start}, {end}] under stock_pool/")
+        raise SystemExit(f"no pool CSVs in [{start}, {end}] under {actual_pool_dir}")
     all_codes = {c for codes in pool_days.values() for c in codes}
-    load_start = warmup_start(start)
+    load_start = warmup_start(
+        start,
+        STRATEGY4_CALENDAR_SLACK_DAYS
+        if normalize_csv_strategy(strategy) == "version4"
+        else WARMUP_DAYS,
+    )
     print(
         f"loading daily+minute: {len(all_codes)} codes, {load_start}..{end}; "
         f"pool {min(pool_days)}..{max(pool_days)} ({len(pool_days)} days)",
@@ -789,6 +863,7 @@ def main(argv: Optional[list] = None) -> int:
     ap.add_argument("--cash-total", type=float, default=DEFAULT_TOTAL_CASH)
     ap.add_argument("--daily-quota", type=float, default=DEFAULT_DAILY_QUOTA)
     ap.add_argument("--workers", type=int, default=16)
+    ap.add_argument("--pool-dir", type=Path, default=Path(REPO) / "stock_pool")
     ap.add_argument("--no-cache", action="store_true", help="skip minute window cache")
     ap.add_argument(
         "--rebuild-cache", action="store_true", help="reload lake and rewrite cache"
@@ -803,6 +878,7 @@ def main(argv: Optional[list] = None) -> int:
         total_cash=args.cash_total,
         daily_quota=args.daily_quota,
         workers=args.workers,
+        pool_dir=args.pool_dir,
         use_cache=not args.no_cache,
         rebuild_cache=args.rebuild_cache,
         **csv_run_kwargs_from_args(args),

@@ -1,7 +1,7 @@
 """CSV 回测策略书注册表。
 
 日线 / 分钟引擎只跑买侧、资金、T+1、涨跌停。卖点与是否加仓由策略书提供。
-必须显式指定 version6 / version8；无缺省。新策略：strategyN_rules.py + register()。
+必须显式指定已注册策略；无缺省。新策略：strategyN_rules.py + register()。
 """
 
 from __future__ import annotations
@@ -10,8 +10,21 @@ import argparse
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
-from backtest.research import strategy6_rules, strategy8_rules
+from backtest.research import (
+    strategy1_rules,
+    strategy2_rules,
+    strategy3_rules,
+    strategy4_rules,
+    strategy5_rules,
+    strategy6_rules,
+    strategy8_rules,
+)
 
+HELP_LOCK_V1 = strategy1_rules.HELP_LOCK
+HELP_LOCK_V2 = strategy2_rules.HELP_LOCK
+HELP_LOCK_V3 = strategy3_rules.HELP_LOCK
+HELP_LOCK_V4 = strategy4_rules.HELP_LOCK
+HELP_LOCK_V5 = strategy5_rules.HELP_LOCK
 HELP_LOCK_V6 = strategy6_rules.HELP_LOCK
 HELP_LOCK_V8 = strategy8_rules.HELP_LOCK
 
@@ -72,6 +85,11 @@ def apply_csv_strategy(strategy: str, **kwargs) -> dict:
     hooks["peak_gap_min"] = book.peak_gap_min
     hooks["book"] = book.tag
     hooks["name"] = book.name
+    hooks.setdefault("force_sell_hm", None)
+    hooks.setdefault("buy_gate", None)
+    hooks.setdefault("sell_gate", None)
+    hooks.setdefault("reserve_limit_up", False)
+    hooks.setdefault("daily_same_bar_prefixes", ("open_board",))
     if hooks.get("take_profit") is None:
         raise RuntimeError(f"{book.name} book missing take_profit")
     if hooks.get("record_params") is None:
@@ -181,6 +199,139 @@ def csv_run_kwargs_from_args(args) -> dict:
     return get_book(name).run_kwargs(args)
 
 
+def _stop_override_from_args(args) -> Optional[float]:
+    stop = getattr(args, "stop_pct", None)
+    if stop is not None and not 0 < float(stop) < 1:
+        raise SystemExit(f"--stop-pct must be in (0, 1), got {stop}")
+    return None if stop is None else float(stop)
+
+
+def _apply_version1(
+    *, stop_pct: Optional[float] = None, take_profit=None, record_params=None, **_
+) -> dict:
+    resolved = strategy1_rules.STOP_PCT if stop_pct is None else float(stop_pct)
+
+    def _tp(px, cost, peak, n_days):
+        return strategy1_rules.take_profit_reason(px, cost, peak, n_days)
+
+    def _rec(st):
+        strategy1_rules.record_strategy1_params(st, stop_pct=resolved)
+
+    return {
+        "stop_pct": resolved,
+        "take_profit": _tp if take_profit is None else take_profit,
+        "record_params": _rec if record_params is None else record_params,
+    }
+
+
+def _run_kwargs_version1(args) -> dict:
+    return {"strategy": "version1", "stop_pct": _stop_override_from_args(args)}
+
+
+def _apply_version2(
+    *, stop_pct: Optional[float] = None, take_profit=None, record_params=None, **_
+) -> dict:
+    resolved = strategy2_rules.STOP_PCT if stop_pct is None else float(stop_pct)
+
+    def _tp(px, cost, peak, n_days):
+        return strategy2_rules.take_profit_reason(px, cost, peak, n_days)
+
+    def _rec(st):
+        strategy2_rules.record_strategy2_params(st, stop_pct=resolved)
+
+    return {
+        "stop_pct": resolved,
+        "take_profit": _tp if take_profit is None else take_profit,
+        "record_params": _rec if record_params is None else record_params,
+    }
+
+
+def _run_kwargs_version2(args) -> dict:
+    return {"strategy": "version2", "stop_pct": _stop_override_from_args(args)}
+
+
+def _apply_version3(
+    *, stop_pct: Optional[float] = None, take_profit=None, record_params=None, **_
+) -> dict:
+    resolved = strategy3_rules.STOP_PCT if stop_pct is None else float(stop_pct)
+
+    def _tp(px, cost, peak, n_days):
+        return strategy3_rules.take_profit_reason(px, cost, peak, n_days)
+
+    def _rec(st):
+        strategy3_rules.record_strategy3_params(st, stop_pct=resolved)
+
+    return {
+        "stop_pct": resolved,
+        "take_profit": _tp if take_profit is None else take_profit,
+        "record_params": _rec if record_params is None else record_params,
+        "reserve_limit_up": True,
+        "force_sell_hm": None,
+        "daily_same_bar_prefixes": ("open_board",),
+    }
+
+
+def _run_kwargs_version3(args) -> dict:
+    return {"strategy": "version3", "stop_pct": _stop_override_from_args(args)}
+
+
+def _apply_version4(
+    *, stop_pct: Optional[float] = None, take_profit=None, record_params=None, **_
+) -> dict:
+    del stop_pct
+
+    def _tp(*args):
+        del args
+        return None
+
+    def _rec(st):
+        strategy4_rules.record_strategy4_params(st, stop_pct=None)
+
+    return {
+        "stop_pct": None,
+        "take_profit": _tp if take_profit is None else take_profit,
+        "record_params": _rec if record_params is None else record_params,
+        "buy_gate": strategy4_rules.buy_gate,
+        "sell_gate": strategy4_rules.sell_gate,
+        "force_sell_hm": None,
+        "reserve_limit_up": False,
+    }
+
+
+def _run_kwargs_version4(args) -> dict:
+    if getattr(args, "stop_pct", None) is not None:
+        raise SystemExit("--stop-pct is not supported for version4 (no stop loss)")
+    return {"strategy": "version4"}
+
+
+def _apply_version5(
+    *, stop_pct: Optional[float] = None, take_profit=None, record_params=None, **_
+) -> dict:
+    del stop_pct
+
+    def _tp(px, cost, peak, n_days):
+        return strategy5_rules.take_profit_reason(px, cost, peak, n_days)
+
+    def _rec(st):
+        strategy5_rules.record_strategy5_params(st, stop_pct=None)
+
+    return {
+        "stop_pct": None,
+        "take_profit": _tp if take_profit is None else take_profit,
+        "record_params": _rec if record_params is None else record_params,
+        "force_sell_hm": strategy5_rules.FORCE_SELL_HM,
+        "sell_gate": None,
+        "reserve_limit_up": False,
+        "daily_same_bar_prefixes": ("open_board",),
+    }
+
+
+def _run_kwargs_version5(args) -> dict:
+    if getattr(args, "stop_pct", None) is not None:
+        raise SystemExit("--stop-pct is not supported for version5 (no stop loss)")
+    return {"strategy": "version5"}
+
+
 def _apply_version6(
     *,
     stop_pct: Optional[float] = None,
@@ -249,6 +400,66 @@ def _run_kwargs_version8(args) -> dict:
     return {"strategy": "version8", "stop_pct": stop}
 
 
+register(
+    CsvStrategyBook(
+        name="version1",
+        tag=strategy1_rules.BOOK_TAG,
+        aliases=("1", "v1", "version1"),
+        allow_add=strategy1_rules.ALLOW_ADD,
+        peak_gap_min=strategy1_rules.PEAK_GAP_MIN,
+        help_lock=strategy1_rules.HELP_LOCK,
+        apply=_apply_version1,
+        run_kwargs=_run_kwargs_version1,
+    )
+)
+register(
+    CsvStrategyBook(
+        name="version2",
+        tag=strategy2_rules.BOOK_TAG,
+        aliases=("2", "v2", "version2"),
+        allow_add=strategy2_rules.ALLOW_ADD,
+        peak_gap_min=strategy2_rules.PEAK_GAP_MIN,
+        help_lock=strategy2_rules.HELP_LOCK,
+        apply=_apply_version2,
+        run_kwargs=_run_kwargs_version2,
+    )
+)
+register(
+    CsvStrategyBook(
+        name="version3",
+        tag=strategy3_rules.BOOK_TAG,
+        aliases=("3", "v3", "version3"),
+        allow_add=strategy3_rules.ALLOW_ADD,
+        peak_gap_min=strategy3_rules.PEAK_GAP_MIN,
+        help_lock=strategy3_rules.HELP_LOCK,
+        apply=_apply_version3,
+        run_kwargs=_run_kwargs_version3,
+    )
+)
+register(
+    CsvStrategyBook(
+        name="version4",
+        tag=strategy4_rules.BOOK_TAG,
+        aliases=("4", "v4", "version4"),
+        allow_add=strategy4_rules.ALLOW_ADD,
+        peak_gap_min=strategy4_rules.PEAK_GAP_MIN,
+        help_lock=strategy4_rules.HELP_LOCK,
+        apply=_apply_version4,
+        run_kwargs=_run_kwargs_version4,
+    )
+)
+register(
+    CsvStrategyBook(
+        name="version5",
+        tag=strategy5_rules.BOOK_TAG,
+        aliases=("5", "v5", "version5"),
+        allow_add=strategy5_rules.ALLOW_ADD,
+        peak_gap_min=strategy5_rules.PEAK_GAP_MIN,
+        help_lock=strategy5_rules.HELP_LOCK,
+        apply=_apply_version5,
+        run_kwargs=_run_kwargs_version5,
+    )
+)
 register(
     CsvStrategyBook(
         name="version6",

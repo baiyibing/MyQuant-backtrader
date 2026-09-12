@@ -9,8 +9,9 @@
 from __future__ import annotations
 
 import re
+from datetime import date, datetime
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Literal, Tuple
 
 from oskh_core.a_share_symbol_normalize import canonical_from_bare_code
 
@@ -56,3 +57,33 @@ def parse_pool_csv_entries(path: Path) -> List[Tuple[str, str]]:
 def parse_pool_csv(path: Path) -> List[str]:
     """解析一份名单文件 → canonical 代码（去重、保序）。"""
     return [code for code, _name in parse_pool_csv_entries(path)]
+
+
+def load_pool_day_map(
+    pool_dir: Path,
+    start: str | date,
+    end: str | date,
+    *,
+    key: Literal["ymd", "date"] = "ymd",
+    empty_in_map: bool = False,
+) -> dict[str, list[str]] | dict[date, list[str]]:
+    """Load dated pool CSVs with an explicit key and empty-file policy."""
+    if key not in ("ymd", "date"):
+        raise ValueError("key must be 'ymd' or 'date'")
+    root = Path(pool_dir)
+    start_ymd = start.strftime("%Y%m%d") if isinstance(start, date) else str(start).replace("-", "")
+    end_ymd = end.strftime("%Y%m%d") if isinstance(end, date) else str(end).replace("-", "")
+    days = {}
+    for path in sorted(root.glob("*.csv")):
+        stem = path.stem
+        if len(stem) != 8 or not stem.isdigit() or not start_ymd <= stem <= end_ymd:
+            continue
+        try:
+            codes = parse_pool_csv(path)
+        except Exception as exc:
+            print(f"skip pool {path.name}: {exc}", flush=True)
+            continue
+        if codes or empty_in_map:
+            map_key = datetime.strptime(stem, "%Y%m%d").date() if key == "date" else stem
+            days[map_key] = codes
+    return days

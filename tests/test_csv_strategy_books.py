@@ -18,11 +18,33 @@ from backtest.research.csv_strategy_books import (
 
 
 def test_registered_books_are_explicit():
-    assert csv_strategy_names() == ("version6", "version8")
+    assert csv_strategy_names() == (
+        "version1", "version2", "version3", "version4", "version5", "version6", "version8"
+    )
+    assert get_book("version1").allow_add is False
+    assert get_book("version1").peak_gap_min == 0
+    assert get_book("version2").allow_add is False
+    assert get_book("version2").peak_gap_min == 0
+    assert get_book("version4").allow_add is False
+    assert get_book("version4").peak_gap_min == 0
+    assert get_book("version5").allow_add is False
+    assert get_book("version5").peak_gap_min == 0
     assert get_book("version6").allow_add is False
     assert get_book("version8").allow_add is True
     assert engine_book("v6") == "v6"
     assert engine_book("v8") == "v8"
+
+
+@pytest.mark.parametrize("strategy", ["version1", "version2"])
+def test_apply_early_books(strategy):
+    hooks = apply_csv_strategy(strategy)
+    assert hooks["stop_pct"] == pytest.approx(0.02)
+    assert hooks["allow_add"] is False
+    assert hooks["peak_gap_min"] == 0
+    assert hooks["take_profit"](10.5, 10.0, 11.0, 1).startswith(
+        "profit_take:drawdown"
+    )
+    assert hooks["take_profit"](9.9, 10.0, 11.0, 1) is None
 
 
 def test_normalize_requires_strategy():
@@ -45,6 +67,40 @@ def test_apply_version6_is_not_a_silent_fallback():
     assert hooks["take_profit"](10.222, 10.0, 10.50, 1) is None
 
 
+def test_apply_version5_has_no_stop_and_has_minute_clock():
+    hooks = apply_csv_strategy("version5", stop_pct=0.03)
+    assert hooks["stop_pct"] is None
+    assert hooks["force_sell_hm"] == 890
+    assert hooks["take_profit"](10.2, 10.0, 10.2, 1) == "profit_take:target"
+    assert hooks["sell_gate"] is None
+    assert hooks["reserve_limit_up"] is False
+    assert hooks["daily_same_bar_prefixes"] == ("open_board",)
+
+
+def test_version5_cli_forbids_stop_override():
+    book = get_book("version5")
+    assert book.run_kwargs(argparse.Namespace(stop_pct=None)) == {"strategy": "version5"}
+    with pytest.raises(SystemExit, match="not supported"):
+        book.run_kwargs(argparse.Namespace(stop_pct=0.03))
+
+
+def test_apply_version4_has_sma_gates_and_no_stop():
+    hooks = apply_csv_strategy("v4", stop_pct=0.03)
+    assert hooks["stop_pct"] is None
+    assert callable(hooks["buy_gate"])
+    assert callable(hooks["sell_gate"])
+    assert hooks["take_profit"](1, 1, 1, 1) is None
+    assert hooks["force_sell_hm"] is None
+    assert hooks["reserve_limit_up"] is False
+
+
+def test_version4_cli_forbids_stop_override():
+    book = get_book("version4")
+    assert book.run_kwargs(argparse.Namespace(stop_pct=None)) == {"strategy": "version4"}
+    with pytest.raises(SystemExit, match="not supported"):
+        book.run_kwargs(argparse.Namespace(stop_pct=0.03))
+
+
 def test_missing_cli_strategy_exits():
     ap = argparse.ArgumentParser()
     from backtest.research.csv_strategy_books import add_csv_strategy_arg
@@ -55,6 +111,21 @@ def test_missing_cli_strategy_exits():
 
 
 def test_books_are_separate_modules():
+    assert BOOKS["version1"].apply is not BOOKS["version2"].apply
     assert BOOKS["version6"].apply is not BOOKS["version8"].apply
     assert "策略 6" in BOOKS["version6"].help_lock
     assert "策略 8" in BOOKS["version8"].help_lock
+
+
+@pytest.mark.parametrize("strategy", ["version1", "version2"])
+def test_early_book_run_kwargs_stop_override(strategy):
+    book = get_book(strategy)
+    assert book.run_kwargs(argparse.Namespace(stop_pct=None)) == {
+        "strategy": strategy,
+        "stop_pct": None,
+    }
+    assert book.run_kwargs(argparse.Namespace(stop_pct=0.03))["stop_pct"] == pytest.approx(
+        0.03
+    )
+    with pytest.raises(SystemExit, match="in \\(0, 1\\)"):
+        book.run_kwargs(argparse.Namespace(stop_pct=1.0))

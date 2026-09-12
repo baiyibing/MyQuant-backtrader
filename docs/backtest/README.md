@@ -9,7 +9,7 @@
 名单：`YYYYMMDD.csv`，首列裸六位码，`parse_pool_csv` 补交易所后缀。缺日 / 空文件 = 当日不买。6/8 默认读本仓 `stock_pool/`；7 必须 `--pool-dir`（或 `OSKH_TURTLE_POOL_DIR`），不要回落 `stock_pool/`。
 
 ```text
-# 策略 6 / 8：共用引擎，策略书换卖点与加仓。必须 --strategy，无缺省。
+# 策略 1 / 2 / 3 / 4 / 5 / 6 / 8：共用引擎，策略书换卖点与加仓。必须 --strategy，无缺省。
 # 日线近似（收盘成交；分钟湖短于窗口时用这个接到今天）
 D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_daily_backtest.py ^
   --strategy version6 --start 20251023 --end 20260909
@@ -22,7 +22,7 @@ D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_minute_backtest.py ^
 D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_minute_backtest.py ^
   --strategy version8 --start 20251023 --end 20260909
 
-# 策略 7 金榕元仓位机（独立，不进 6/8 策略书）。只吃海龟池。
+# 策略 7 金榕元仓位机（独立，不进 1/2/3/4/5/6/8 策略书）。只吃海龟池。
 D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_minute_backtest_v7.py ^
   --start 20260804 --end 20260909 ^
   --pool-dir E:\PycharmProjects\OSkhQuant1.3\stock_pool_turtle
@@ -46,7 +46,7 @@ D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_minute_backtest_v7.p
 
 ## Cerebro（观察退役）
 
-`backtest/backtest_main_full.py`、`ProfitStrategy`、chip / ma_chip 的 Cerebro 路径仍在树上，只做旧对照。**新策略不写 `ProfitStrategy.StrategyN`，不扩 Rolling。**
+`backtest/backtest_main_full.py --allow-cerebro-fossil`、`ProfitStrategy`、chip / ma_chip 的 Cerebro 路径仍在树上，只做旧对照；主入口没有该显式旗标会立即退出。**新策略不写 `ProfitStrategy.StrategyN`，不扩 Rolling。**
 
 ## SSOT
 

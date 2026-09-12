@@ -45,6 +45,43 @@ def _run(pool: dict, bars: dict, **kwargs):
     return sim.simulate(bars, pool, "20251103", "20251107", **kwargs)
 
 
+def _v4_bars(prior_closes, rows):
+    prior_idx = pd.bdate_range(end="2025-10-31", periods=len(prior_closes))
+    trade_idx = pd.to_datetime(DAYS[: len(rows)])
+    closes = list(prior_closes) + [r[3] for r in rows]
+    return {"600000.SH": pd.DataFrame({
+        "open": list(prior_closes) + [r[0] for r in rows],
+        "high": list(prior_closes) + [r[1] for r in rows],
+        "low": list(prior_closes) + [r[2] for r in rows],
+        "close": closes,
+    }, index=prior_idx.append(trade_idx)).astype(np.float64)}
+
+
+def test_strategy4_sma10_blocks_buy_and_counts_gate():
+    bars = _v4_bars([10.0] * 10, [(9.0, 9.0, 9.0, 9.0)])
+    st = sim.simulate(bars, {"20251103": ["600000.SH"]}, "20251103", "20251103", strategy="version4")
+    assert st.stats["buys"] == 0
+    assert st.stats["skip_buy_gate"] == 1
+    assert st.stats["skip_sma_warmup"] == 0
+
+
+def test_strategy4_starved_sma10_counts_warmup():
+    bars = _v4_bars([10.0] * 9, [(10.0, 10.0, 10.0, 10.0)])
+    st = sim.simulate(bars, {"20251103": ["600000.SH"]}, "20251103", "20251103", strategy="version4")
+    assert st.stats["skip_buy_gate"] == 1
+    assert st.stats["skip_sma_warmup"] == 1
+
+
+def test_strategy4_ma5_break_becomes_next_open_exit():
+    rows = [(10, 10, 10, 10), (10, 10, 9, 9), (9.1, 9.1, 9.1, 9.1)]
+    bars = _v4_bars([10.0] * 10, rows)
+    st = sim.simulate(bars, {"20251103": ["600000.SH"]}, "20251103", "20251105", strategy="version4")
+    sells = [trade for trade in st.trades if trade["side"] == "SELL"]
+    assert sells[0]["date"] == "20251105"
+    assert sells[0]["price"] == pytest.approx(9.1)
+    assert sells[0]["reason"] == "ma_signal:MA5"
+
+
 def test_t1_no_sell_on_entry_day():
     # 买入日（D0 收盘 10.0 买入）当日即使 low 砸到 -5% 也不卖（T+1）
     rows = {
@@ -88,6 +125,125 @@ def test_stop_pct_override_changes_fill():
     ]
     assert sell2["reason"] == "stop_loss:gap_open"
     assert sell2["price"] == pytest.approx(9.70)
+
+
+def test_none_stop_short_circuits_even_after_price_halves(monkeypatch):
+    def no_stop_hooks(_strategy, **_kwargs):
+        def record(st):
+            st.stats.update(
+                stop_pct=None,
+                sell_book="v6",
+                profit_base=0.01,
+                trail_t1=0.5,
+                trail_t2=0.4,
+                trail_t3=0.3,
+                trail_t4=0.2,
+                trail_t5=0.1,
+            )
+
+        return {
+            "stop_pct": None,
+            "take_profit": lambda *_args: None,
+            "record_params": record,
+            "allow_add": False,
+        }
+
+    monkeypatch.setattr(sim, "apply_csv_strategy", no_stop_hooks)
+    rows = {"600000.SH": [(10, 10, 10, 10)] + [(5, 5, 5, 5)] * 4}
+    st = _run({"20251103": ["600000.SH"]}, _bars(DAYS, rows))
+    assert not [
+        trade
+        for trade in st.trades
+        if trade.get("reason", "").startswith("stop_loss:")
+    ]
+    assert "止损 关闭" in sim.summarize(st, 21_000_000, "20251103", "20251107")
+
+
+def test_strategy5_daily_target_sells_next_open_without_force_reason():
+    rows = {
+        "600000.SH": [
+            (10.0, 10.0, 10.0, 10.0),
+            (10.1, 10.3, 10.1, 10.2),
+            (10.3, 10.3, 10.3, 10.3),
+            (10.3, 10.3, 10.3, 10.3),
+            (10.3, 10.3, 10.3, 10.3),
+        ]
+    }
+    st = _run(
+        {"20251103": ["600000.SH"]},
+        _bars(DAYS, rows),
+        strategy="version5",
+    )
+    sells = [trade for trade in st.trades if trade["side"] == "SELL"]
+    assert len(sells) == 1
+    assert sells[0]["date"] == "20251105"
+    assert sells[0]["price"] == pytest.approx(10.3)
+    assert sells[0]["reason"] == "profit_take:target"
+    assert not any(t["reason"].startswith("force_sell") for t in sells)
+
+
+def test_strategy3_daily_limit_up_close_suppresses_twenty_percent_target():
+    rows = {"300001.SZ": [
+        (10.0, 10.0, 10.0, 10.0),
+        (12.0, 12.0, 12.0, 12.0),
+        (14.4, 14.4, 14.4, 14.4),
+        (17.28, 17.28, 17.28, 17.28),
+        (20.74, 20.74, 20.74, 20.74),
+    ]}
+    st = _run({"20251103": ["300001.SZ"]}, _bars(DAYS, rows), strategy="version3")
+    assert not [trade for trade in st.trades if trade["side"] == "SELL"]
+    assert st.positions["300001.SZ"][0].reserved is True
+    assert st.positions["300001.SZ"][0].pending_exit == ""
+
+
+def test_strategy3_daily_open_board_sells_same_close():
+    rows = {"300001.SZ": [
+        (10.0, 10.0, 10.0, 10.0),
+        (12.0, 12.0, 10.8, 11.8),
+        (11.8, 11.8, 11.8, 11.8),
+        (11.8, 11.8, 11.8, 11.8),
+        (11.8, 11.8, 11.8, 11.8),
+    ]}
+    st = _run({"20251103": ["300001.SZ"]}, _bars(DAYS, rows), strategy="version3")
+    sell = [trade for trade in st.trades if trade["side"] == "SELL"][0]
+    assert sell["date"] == "20251104"
+    assert sell["price"] == pytest.approx(11.8)
+    assert sell["reason"] == "open_board"
+
+
+def test_strategy3_daily_open_board_limit_down_defers_to_next_open():
+    rows = {"300001.SZ": [
+        (10.0, 10.0, 10.0, 10.0),
+        # Synthetic low keeps the earlier stop clock from winning this U-R20 case.
+        (12.0, 12.0, 10.0, 8.0),
+        (8.2, 8.2, 8.2, 8.2),
+        (8.2, 8.2, 8.2, 8.2),
+        (8.2, 8.2, 8.2, 8.2),
+    ]}
+    st = _run({"20251103": ["300001.SZ"]}, _bars(DAYS, rows), strategy="version3")
+    sell = [trade for trade in st.trades if trade["side"] == "SELL"][0]
+    assert sell["date"] == "20251105"
+    assert sell["price"] == pytest.approx(8.2)
+    assert sell["reason"] == "open_board"
+
+
+@pytest.mark.parametrize(
+    ("reason", "bucket"),
+    [
+        ("profit_take:target", "sell_profit_take"),
+        ("open_board", "sell_open_board"),
+        ("force_sell:time", "sell_force"),
+        ("ma_signal:MA5", "sell_ma"),
+    ],
+)
+def test_named_sell_reasons_have_dedicated_buckets(reason, bucket):
+    st = sim.SimState()
+    pos = sim.Position("600000.SH", 100, 10.0, 0, 10.0)
+    st.positions[pos.code] = [pos]
+    sim._sell(st, pos.code, pos, 10.0, pd.Timestamp("2025-11-04"), reason)
+    assert st.stats[bucket] == 1
+    assert st.stats["sell_trail"] == 0
+    assert st.stats["sell_pos_trail"] == 0
 
 
 def test_csv_strategy_arg_is_required():

@@ -53,6 +53,106 @@ def test_scan_no_sell_when_t0():
     assert peak == pytest.approx(10.0)  # T+0 不更新峰值
 
 
+def test_scan_none_stop_does_not_sell_after_halving():
+    idx, _, reason, peak, _ = sim.scan_held_day(
+        np.array([5.0]),
+        np.array([5.1]),
+        np.array([5.0]),
+        cost=10.0,
+        peak=10.0,
+        n_days=1,
+        can_sell=True,
+        stop_pct=None,
+        profit_base=0.01,
+        trail_ratio=0.50,
+        take_profit=lambda *_args: None,
+    )
+    assert idx == -1
+    assert reason == ""
+    assert peak == pytest.approx(10.0)
+
+
+def test_strategy4_scan_uses_sell_gate_with_yesterday_closes():
+    hooks = sim.apply_csv_strategy("version4")
+    idx, px, reason, _, _ = sim.scan_held_day(
+        np.array([9.9]), np.array([10.0]), np.array([9.9]),
+        cost=10.0, peak=10.0, n_days=1, can_sell=True,
+        stop_pct=None, profit_base=0.0, trail_ratio=0.0,
+        take_profit=hooks["take_profit"], sell_gate=hooks["sell_gate"],
+        gate_code="600000.SH", gate_day=pd.Timestamp("2025-11-04"),
+        daily_closes_ending_yesterday=[10.0] * 5,
+    )
+    assert (idx, reason, px) == (0, "ma_signal:MA5", pytest.approx(9.9))
+
+
+@pytest.mark.parametrize(
+    ("n_days", "can_sell", "hm", "close", "expected_idx", "expected_reason"),
+    [
+        (0, False, 890, 10.0, -1, ""),
+        (1, True, 571, 10.0, -1, ""),
+        (1, True, 890, 10.0, 0, "force_sell:time"),
+        (1, True, 890, 10.2, 0, "profit_take:target"),
+    ],
+)
+def test_strategy5_force_sell_clock(
+    n_days, can_sell, hm, close, expected_idx, expected_reason
+):
+    hooks = sim.apply_csv_strategy("version5")
+    idx, _, reason, _, _ = sim.scan_held_day(
+        np.array([close]), np.array([close]), np.array([close]),
+        cost=10.0, peak=10.0, n_days=n_days, can_sell=can_sell,
+        stop_pct=hooks["stop_pct"], profit_base=0.0, trail_ratio=0.0,
+        hm=np.array([hm]), peak_gap_min=hooks["peak_gap_min"],
+        take_profit=hooks["take_profit"], force_sell_hm=hooks["force_sell_hm"],
+    )
+    assert idx == expected_idx
+    assert reason == expected_reason
+
+
+def test_strategy5_force_sell_defers_at_limit_down_close():
+    hooks = sim.apply_csv_strategy("version5")
+    idx, _, reason, _, _ = sim.scan_held_day(
+        np.array([9.1]), np.array([9.1]), np.array([9.0]),
+        cost=10.0, peak=10.0, n_days=1, can_sell=True, stop_pct=None,
+        profit_base=0.0, trail_ratio=0.0, limit_down=9.0,
+        hm=np.array([890]), take_profit=hooks["take_profit"],
+        force_sell_hm=hooks["force_sell_hm"],
+    )
+    assert idx == -1
+    assert reason == ""
+
+
+def test_strategy3_limit_up_reserve_then_open_board_ignores_peak_gap():
+    hooks = sim.apply_csv_strategy("version3")
+    state = {"reserved": False}
+    idx, px, reason, _, _ = sim.scan_held_day(
+        np.array([12.0, 11.9]), np.array([12.0, 12.1]), np.array([12.0, 11.9]),
+        cost=10.0, peak=10.0, n_days=1, can_sell=True,
+        stop_pct=hooks["stop_pct"], profit_base=0.0, trail_ratio=0.0,
+        hm=np.array([575, 581]), peak_gap_min=999,
+        take_profit=hooks["take_profit"], reserve_limit_up=True, limit_up=12.0,
+        reserve_state=state,
+    )
+    assert (idx, reason, px) == (1, "open_board", pytest.approx(11.9))
+    assert state["reserved"] is False
+
+
+def test_strategy3_reserved_twenty_percent_board_skips_target():
+    hooks = sim.apply_csv_strategy("version3")
+    state = {"reserved": False}
+    idx, _, reason, _, _ = sim.scan_held_day(
+        np.array([12.0, 12.0]), np.array([12.0, 12.0]), np.array([12.0, 12.0]),
+        cost=10.0, peak=10.0, n_days=1, can_sell=True,
+        stop_pct=hooks["stop_pct"], profit_base=0.0, trail_ratio=0.0,
+        hm=np.array([575, 581]), peak_gap_min=hooks["peak_gap_min"],
+        take_profit=hooks["take_profit"], reserve_limit_up=True, limit_up=12.0,
+        reserve_state=state,
+    )
+    assert idx == -1
+    assert reason == ""
+    assert state["reserved"] is True
+
+
 def test_scan_t1_trail_on_close():
     # 峰值 10.50（+5%，锚 1% 后超额 4%），T+1 档 50% → 线 +3% → 10.30
     # 09:30 创新高，09:45 才允许止盈（间隔 15 分钟）
