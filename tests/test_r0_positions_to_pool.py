@@ -37,6 +37,15 @@ def test_converter_ignores_the_holdings_table(tmp_path: Path):
     assert "600000" not in (tmp_path / "20260311.csv").read_text(encoding="utf-8")
 
 
+def test_converter_skips_report_date_range_header():
+    text = (
+        "日期范围: 2026-03-02 00:00:00 至 2026-03-23 00:00:00\n"
+        "日期: 2026-03-03 00:00:00\n"
+        "持仓标的列表: ['SZ300190']\n"
+    )
+    assert parse_positions_text(text) == {"20260303": ["300190"]}
+
+
 def test_missing_explicit_source_reports_tried_path(tmp_path: Path):
     missing = tmp_path / "missing-position_analysis.txt"
     with pytest.raises(SystemExit, match="tried paths") as exc_info:
