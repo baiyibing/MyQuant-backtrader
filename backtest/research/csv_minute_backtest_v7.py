@@ -12,7 +12,7 @@ import csv
 import os
 import sys
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
@@ -33,6 +33,7 @@ from backtest.research.strategy7_rules import (
     timer_due,
     validate_index_symbol,
 )
+from backtest.research.csv_pool import parse_pool_csv
 from common.infra.data_root import resolve_index_daily_root, resolve_period_root
 from oskh_data.lake_kind import classify_daily_lake_kind
 from oskh_data.symbol_format import to_canonical_symbol, to_partition_key
@@ -78,13 +79,49 @@ def round_fen(value: float) -> float:
     return float(Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
 
-def _as_date(value: Any) -> date:
+def _as_datetime(value: Any) -> datetime:
+    """湖内 time 是交易钟点标成 UTC 的毫秒/秒；YYYYMMDD / datetime 原样用。"""
     if isinstance(value, datetime):
-        return value.date()
+        return value.replace(tzinfo=None) if value.tzinfo else value
     if isinstance(value, date):
-        return value
+        return datetime(value.year, value.month, value.day)
+    number: int | None = None
+    if isinstance(value, bool):
+        number = None
+    elif isinstance(value, int):
+        number = value
+    elif isinstance(value, float) and value.is_integer():
+        number = int(value)
+    elif hasattr(value, "item"):
+        inner = value.item()
+        if isinstance(inner, bool):
+            number = None
+        elif isinstance(inner, int):
+            number = inner
+        elif isinstance(inner, float) and inner.is_integer():
+            number = int(inner)
+    if number is not None:
+        if number >= 10**11:
+            return datetime.fromtimestamp(number / 1000.0, tz=timezone.utc).replace(
+                tzinfo=None
+            )
+        if number >= 10**9:
+            return datetime.fromtimestamp(number, tz=timezone.utc).replace(tzinfo=None)
+        if 19900101 <= number <= 21001231:
+            return datetime.strptime(str(number), "%Y%m%d")
     text = str(value).strip().replace("-", "")[:8]
-    return datetime.strptime(text, "%Y%m%d").date()
+    return datetime.strptime(text, "%Y%m%d")
+
+
+def _as_date(value: Any) -> date:
+    return _as_datetime(value).date()
+
+
+def _record_stamp(record: Mapping[str, Any]) -> Any:
+    for key in ("datetime", "timestamp", "date", "time"):
+        if key in record and record[key] is not None:
+            return record[key]
+    return None
 
 
 def _record_dict(record: Any) -> dict[str, Any]:
@@ -117,15 +154,13 @@ def _minute_records(minute_bars: Any) -> dict[date, dict[str, list[dict[str, Any
     else:
         flat = list(_iter_records(minute_bars))
     for record in flat:
-        stamp = record.get("datetime", record.get("timestamp", record.get("date")))
-        day = _as_date(stamp)
+        stamp = _record_stamp(record)
+        if stamp is None:
+            raise ValueError("minute record requires datetime/timestamp/date/time")
+        parsed = _as_datetime(stamp)
+        day = parsed.date()
         if "hm" not in record:
-            if isinstance(stamp, str):
-                stamp = datetime.fromisoformat(stamp)
-            if hasattr(stamp, "hour"):
-                record["hm"] = int(stamp.hour) * 60 + int(stamp.minute)
-            else:
-                raise ValueError("minute record requires hm or datetime")
+            record["hm"] = int(parsed.hour) * 60 + int(parsed.minute)
         symbol = to_canonical_symbol(str(record["symbol"]))
         record["symbol"] = symbol
         record["date"] = day
@@ -160,7 +195,10 @@ def _daily_closes(daily_bars: Any) -> dict[str, dict[date, float]]:
                     out.setdefault(canonical, {})[_as_date(day)] = float(close)
             else:
                 for row in _iter_records(records):
-                    out.setdefault(canonical, {})[_as_date(row.get("date", row.get("datetime")))] = float(row["close"])
+                    stamp = _record_stamp(row)
+                    if stamp is None:
+                        raise ValueError("daily record requires date/datetime/time")
+                    out.setdefault(canonical, {})[_as_date(stamp)] = float(row["close"])
     return out
 
 
@@ -422,12 +460,7 @@ def load_pool_days(pool_dir: Path, start: date, end: date) -> dict[date, list[st
             continue
         if not start <= day <= end:
             continue
-        with path.open("r", encoding="utf-8-sig", newline="") as handle:
-            rows = list(csv.reader(handle))
-        raw = [row[0].strip() for row in rows if row and row[0].strip()]
-        if raw and not any(char.isdigit() for char in raw[0]):
-            raw = raw[1:]
-        result[day] = [to_canonical_symbol(code) for code in raw]
+        result[day] = parse_pool_csv(path)
     return result
 
 

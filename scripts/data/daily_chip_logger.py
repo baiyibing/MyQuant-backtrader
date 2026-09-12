@@ -42,6 +42,7 @@ from _script_bootstrap import ensure_repo_on_syspath
 
 REPO = ensure_repo_on_syspath(__file__)
 
+from backtest.research.csv_pool import parse_pool_csv  # noqa: E402
 from oskh_data import StockDataReader  # noqa: E402
 from oskh_factors.chip.core import (  # noqa: E402
     adapt_columns,
@@ -71,23 +72,7 @@ def load_stock_pool(date_str: str) -> list[str]:
     path = STOCK_POOL_DIR / f"{date_str}.csv"
     if not path.is_file():
         return []
-    codes: list[str] = []
-    for enc in ("utf-8", "gbk", "cp936"):
-        try:
-            with path.open("r", encoding=enc) as f:
-                for line in f:
-                    code = line.strip().split(",")[0].strip()
-                    if code.isdigit() and len(code) == 6:
-                        if code.startswith(("60", "68")):
-                            codes.append(f"{code}.SH")
-                        elif code.startswith(("00", "30")):
-                            codes.append(f"{code}.SZ")
-                        else:
-                            codes.append(f"{code}.SZ")
-            break
-        except (UnicodeDecodeError, OSError):
-            continue
-    return codes
+    return parse_pool_csv(path)
 
 
 def compute_factors(code: str, freq: str = "1d", reader: StockDataReader | None = None) -> dict | None:

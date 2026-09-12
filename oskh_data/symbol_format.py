@@ -48,6 +48,11 @@ def to_canonical_symbol(key: str) -> str:
     ``603196_SH`` or ``symbol=603196_SH`` -> ``603196.SH``. Use when reading
     symbols back from partition dir names into the trading layer.
 
+    Does **not** infer an exchange from a bare 6-digit CSV cell (``000001``
+    stays ``000001``). Pool CSVs use
+    ``oskh_core.a_share_symbol_normalize.canonical_from_bare_code`` via
+    ``backtest.research.csv_pool.parse_pool_csv``.
+
     Market-suffix aware (``_SH/_SZ/_BJ``) for precision; falls back to blanket
     underscore->dot only when no recognized suffix. Safe for A-share codes
     (6 digits + market suffix, no internal underscore) — equivalent to both the

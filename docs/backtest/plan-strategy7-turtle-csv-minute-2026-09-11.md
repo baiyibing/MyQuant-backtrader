@@ -1,7 +1,7 @@
 # Plan：策略 7 金榕元/海龟 CSV 分钟回测（v1）
 
 > **落盘**：2026-09-11。
-> **状态**：📄 **v1.2 · classic fan-out 已综合 · 可进切片 A**（[`merge-consensus.md`](../architecture/reviews/2026-09-11/plan-strategy7-turtle-csv-minute-2026-09-11/merge-consensus.md)）。
+> **状态**：✅ **A–D 已合 master**（#10/#11/#13/#14，切片 D = `6ca8050`）。**E 真名单一窗已在本机跑完**；禁止在虚拟机重跑。
 > **风险档**：**L2**（新回测引擎 + 分档仓位机 + 指数闸；不进实盘 / 不改 `presets.py`）。
 > **范围**：MyQuant-backtrader 回测本地。OSkhQuant1.3 只读名单与规则对照，不改 Paper/live。
 > **人裁会话**：2026-09-11 17:35 原文 + 18:23–19:03 止损/减试错锁。
@@ -99,7 +99,7 @@ xlsx 交替止盈数值（成本 ×1.3/1.5/1.8/2.0，卖剩余 30/20/30/20）与
 
 **不要**把逻辑塞进 `csv_minute_backtest.py`。不要写 `ProfitStrategy.Strategy7`。
 
-**允许 import**：`utc_ms_range` / `warn_stale_period_env` / `_ymd` / `_limit_prices` / `hit_limit_up` / `hit_limit_down` / `round_fen` / `load_pool_days`（必须显式 `pool_dir`）/ `load_daily_bars`（**仅股票**昨收）/ `load_minute_bars` 与 cache 三件套（**v7 自己的 cache 文件名**）/ `write_run_artifacts` / `COMMISSION` / `TURTLE_ADD_BANDS` / `resolve_period_root` / `resolve_index_daily_root` / `to_partition_key` / `classify_daily_lake_kind`。
+**允许 import**：`utc_ms_range` / `warn_stale_period_env` / `_ymd` / `_limit_prices` / `hit_limit_up` / `hit_limit_down` / `round_fen` / `parse_pool_csv`（1.3 同口径，`canonical_from_bare_code`）/ `load_pool_days`（必须显式 `pool_dir`）/ `load_daily_bars`（**仅股票**昨收）/ `load_minute_bars` 与 cache 三件套（**v7 自己的 cache 文件名**）/ `write_run_artifacts` / `COMMISSION` / `TURTLE_ADD_BANDS` / `resolve_period_root` / `resolve_index_daily_root` / `to_partition_key` / `classify_daily_lake_kind`。
 
 **禁止 import**：`execute_buy` `_buy_size` `_sell` `SimState` `Position` `chase_decision` `CHASE_HM` `DEFAULT_DAILY_QUOTA` `_buy_px` `scan_held_day` `warmup_start`（日历日暖机不够 10 个交易日）`STOP_PCT` `TIERS` `trail_hits` `summarize` `maybe_compare_daily` `chip_indicator` `StockDataReader` `trade_decision.turtle.sell` `presets` 1.3 `stop.py` / 1.3 加仓函数 `backtest.lebs`。
 
@@ -317,13 +317,13 @@ profit_dd ≥ 阈值 → 全清
 
 ## 9. 切片（建议 Codex 按序）
 
-| 切片 | 内容 | 完成定义 |
-|------|------|----------|
-| **A** | `strategy7_rules.py` + 单测 1–6 | pytest 绿 |
-| **B** | `simulate_v7` + CLI：账本 / T+1 / 14:55 / 涨停 / 落盘 | 单测 7–9；窗内无 CSV = 0 笔跑通；未指定 pool-dir = 非 0 退出 |
-| **C** | §4.4 路径接进引擎 + 单测 8 | reason 对齐 |
-| **D** | 指数闸 + 单测 10 | 缺数 fail |
-| **E** | 真名单 20260804–20260909 一跑（勿开全市场 Cerebro） | `summary.txt` 有买卖计数；不要求正收益 |
+| 切片 | 内容 | 完成定义 | 进度 |
+|------|------|----------|------|
+| **A** | `strategy7_rules.py` + 单测 1–6 | pytest 绿 | ✅ [#10](https://github.com/baiyibing/MyQuant-backtrader/pull/10) |
+| **B** | `simulate_v7` + CLI：账本 / T+1 / 14:55 / 涨停 / 落盘 | 单测 7–9；窗内无 CSV = 0 笔跑通；未指定 pool-dir = 非 0 退出 | ✅ [#11](https://github.com/baiyibing/MyQuant-backtrader/pull/11) |
+| **C** | §4.4 路径接进引擎 + 单测 8 | reason 对齐 | ✅ [#13](https://github.com/baiyibing/MyQuant-backtrader/pull/13) `409671e` |
+| **D** | 指数闸 + 单测 10 | 缺数 fail | ✅ [#14](https://github.com/baiyibing/MyQuant-backtrader/pull/14) `6ca8050`（CI 绿，分支已删） |
+| **E** | 真名单 20260804–20260909 一跑（勿开全市场 Cerebro） | `summary.txt` 有买卖计数；不要求正收益 | ✅ 本机已跑。**不在虚拟机执行** |
 
 ---
 
@@ -334,6 +334,7 @@ profit_dd ≥ 阈值 → 全清
 - 不改 `presets.py`、`turtle/sell.py`、策略 6 默认参数。本仓无 `stop.py`；禁止 import 1.3 `stop.py`。
 - 不 `git commit`，除非用户另说。
 - 不在 paper 测试机下指数分钟。
+- **E 真名单一窗只在本机跑，不在虚拟机执行。**
 
 ---
 

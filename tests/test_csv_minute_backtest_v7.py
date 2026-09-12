@@ -3,13 +3,35 @@ from datetime import date, timedelta
 
 import pytest
 
-from backtest.research.csv_minute_backtest_v7 import main, simulate_v7
+from backtest.research.csv_minute_backtest_v7 import (
+    _as_date,
+    _as_datetime,
+    load_pool_days,
+    main,
+    simulate_v7,
+)
 
 
 SYMBOL = "600000.SH"
 D1 = date(2026, 9, 1)
 D2 = date(2026, 9, 2)
 D3 = date(2026, 9, 3)
+
+
+def test_load_pool_days_adds_exchange_suffix(tmp_path):
+    p = tmp_path / "20260804.csv"
+    p.write_text("000739,普洛药业\n600326,西藏天路\n", encoding="utf-8", newline="\n")
+    days = load_pool_days(tmp_path, date(2026, 8, 4), date(2026, 8, 4))
+    assert days[date(2026, 8, 4)] == ["000739.SZ", "600326.SH"]
+
+
+def test_as_date_reads_lake_utc_millis_and_yyyymmdd():
+    assert _as_date(661564800000) == date(1990, 12, 19)
+    assert _as_date(1735810200000) == date(2025, 1, 2)
+    assert _as_datetime(1735810200000).hour == 9
+    assert _as_datetime(1735810200000).minute == 30
+    assert _as_date(20260804) == date(2026, 8, 4)
+    assert _as_date("2026-08-04") == date(2026, 8, 4)
 
 
 def bar(day, hm, close, open=None):
