@@ -53,6 +53,25 @@ def test_scan_no_sell_when_t0():
     assert peak == pytest.approx(10.0)  # T+0 不更新峰值
 
 
+def test_scan_none_stop_does_not_sell_after_halving():
+    idx, _, reason, peak, _ = sim.scan_held_day(
+        np.array([5.0]),
+        np.array([5.1]),
+        np.array([5.0]),
+        cost=10.0,
+        peak=10.0,
+        n_days=1,
+        can_sell=True,
+        stop_pct=None,
+        profit_base=0.01,
+        trail_ratio=0.50,
+        take_profit=lambda *_args: None,
+    )
+    assert idx == -1
+    assert reason == ""
+    assert peak == pytest.approx(10.0)
+
+
 def test_scan_t1_trail_on_close():
     # 峰值 10.50（+5%，锚 1% 后超额 4%），T+1 档 50% → 线 +3% → 10.30
     # 09:30 创新高，09:45 才允许止盈（间隔 15 分钟）

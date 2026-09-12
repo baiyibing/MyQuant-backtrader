@@ -399,7 +399,7 @@ def scan_held_day(
     peak: float,
     n_days: int,
     can_sell: bool,
-    stop_pct: float,
+    stop_pct: Optional[float],
     profit_base: float,
     trail_ratio: float,
     pos_trail: float = 0.0,
@@ -410,7 +410,8 @@ def scan_held_day(
     take_profit=None,
 ) -> tuple[int, float, str, float, int]:
     """逐分钟扫描。返回 (idx, px, reason, new_peak, new_peak_hm)。"""
-    trigger = cost * (1.0 - stop_pct)
+    stop_enabled = isinstance(stop_pct, float) and 0 < stop_pct < 1
+    trigger = cost * (1.0 - stop_pct) if stop_enabled else None
     new_peak = float(peak)
     new_peak_hm = int(peak_hm)
     n = int(len(c))
@@ -427,10 +428,10 @@ def scan_held_day(
         px_close = float(c[i])
         if limit_down > 0 and hit_limit_down(px_open, limit_down):
             continue
-        if px_open <= trigger:
+        if stop_enabled and trigger is not None and px_open <= trigger:
             return i, px_open, "stop_loss:gap_open", new_peak, new_peak_hm
         ret = px_close / cost - 1.0
-        if ret <= -stop_pct:
+        if stop_enabled and ret <= -stop_pct:
             return i, px_close, "stop_loss:touch", new_peak, new_peak_hm
         if new_peak_hm >= 0 and peak_gap_blocks(cur_hm - new_peak_hm, peak_gap_min):
             continue
@@ -705,6 +706,7 @@ def run(
     workers: int = 16,
     use_cache: bool = True,
     rebuild_cache: bool = False,
+    pool_dir: Optional[Path] = None,
     strategy: str,
     take_profit=None,
     record_params=None,
@@ -717,10 +719,11 @@ def run(
             flush=True,
         )
     t_pool = time.perf_counter()
-    pool_days = load_pool_days(start, end)
+    actual_pool_dir = Path(pool_dir) if pool_dir is not None else Path(REPO) / "stock_pool"
+    pool_days = load_pool_days(start, end, pool_dir=actual_pool_dir)
     t_pool = time.perf_counter() - t_pool
     if not pool_days:
-        raise SystemExit(f"no pool CSVs in [{start}, {end}] under stock_pool/")
+        raise SystemExit(f"no pool CSVs in [{start}, {end}] under {actual_pool_dir}")
     all_codes = {c for codes in pool_days.values() for c in codes}
     load_start = warmup_start(start)
     print(
@@ -789,6 +792,7 @@ def main(argv: Optional[list] = None) -> int:
     ap.add_argument("--cash-total", type=float, default=DEFAULT_TOTAL_CASH)
     ap.add_argument("--daily-quota", type=float, default=DEFAULT_DAILY_QUOTA)
     ap.add_argument("--workers", type=int, default=16)
+    ap.add_argument("--pool-dir", type=Path, default=Path(REPO) / "stock_pool")
     ap.add_argument("--no-cache", action="store_true", help="skip minute window cache")
     ap.add_argument(
         "--rebuild-cache", action="store_true", help="reload lake and rewrite cache"
@@ -803,6 +807,7 @@ def main(argv: Optional[list] = None) -> int:
         total_cash=args.cash_total,
         daily_quota=args.daily_quota,
         workers=args.workers,
+        pool_dir=args.pool_dir,
         use_cache=not args.no_cache,
         rebuild_cache=args.rebuild_cache,
         **csv_run_kwargs_from_args(args),

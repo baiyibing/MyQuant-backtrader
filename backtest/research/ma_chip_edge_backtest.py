@@ -28,6 +28,7 @@ sys.path.insert(0, REPO)
 import backtrader as bt
 
 from backtest.chip_algorithm import adapt_columns, daily_chip_distribution, cyq
+from backtest.research.market_layer import limit_pct as limit_pct
 from common.infra.data_root import resolve_index_daily_root, resolve_period_root, resolve_source_parquet
 from oskh_data import StockDataReader
 from oskh_data.symbol_format import to_canonical_symbol, to_partition_key
@@ -87,13 +88,6 @@ def board_of(code: str) -> Optional[str]:
     if exch == "SZ" and num.startswith(("300", "301")):
         return "chinext"
     return None
-
-
-def limit_pct(code: str) -> float:
-    num = "".join(c for c in code if c.isdigit())
-    if num.startswith(("300", "301", "688")):
-        return 0.20
-    return 0.10
 
 
 def affordable_size(cash: float, price: float, commission: float = 0.00005, min_commission: float = 5.0) -> int:

@@ -90,6 +90,57 @@ def test_stop_pct_override_changes_fill():
     assert sell2["price"] == pytest.approx(9.70)
 
 
+def test_none_stop_short_circuits_even_after_price_halves(monkeypatch):
+    def no_stop_hooks(_strategy, **_kwargs):
+        def record(st):
+            st.stats.update(
+                stop_pct=None,
+                sell_book="v6",
+                profit_base=0.01,
+                trail_t1=0.5,
+                trail_t2=0.4,
+                trail_t3=0.3,
+                trail_t4=0.2,
+                trail_t5=0.1,
+            )
+
+        return {
+            "stop_pct": None,
+            "take_profit": lambda *_args: None,
+            "record_params": record,
+            "allow_add": False,
+        }
+
+    monkeypatch.setattr(sim, "apply_csv_strategy", no_stop_hooks)
+    rows = {"600000.SH": [(10, 10, 10, 10)] + [(5, 5, 5, 5)] * 4}
+    st = _run({"20251103": ["600000.SH"]}, _bars(DAYS, rows))
+    assert not [
+        trade
+        for trade in st.trades
+        if trade.get("reason", "").startswith("stop_loss:")
+    ]
+    assert "止损 关闭" in sim.summarize(st, 21_000_000, "20251103", "20251107")
+
+
+@pytest.mark.parametrize(
+    ("reason", "bucket"),
+    [
+        ("profit_take:target", "sell_profit_take"),
+        ("open_board", "sell_open_board"),
+        ("force_sell:time", "sell_force"),
+        ("ma_signal:MA5", "sell_ma"),
+    ],
+)
+def test_named_sell_reasons_have_dedicated_buckets(reason, bucket):
+    st = sim.SimState()
+    pos = sim.Position("600000.SH", 100, 10.0, 0, 10.0)
+    st.positions[pos.code] = [pos]
+    sim._sell(st, pos.code, pos, 10.0, pd.Timestamp("2025-11-04"), reason)
+    assert st.stats[bucket] == 1
+    assert st.stats["sell_trail"] == 0
+    assert st.stats["sell_pos_trail"] == 0
+
+
 def test_csv_strategy_arg_is_required():
     ap = argparse.ArgumentParser()
     sim.add_csv_strategy_arg(ap)

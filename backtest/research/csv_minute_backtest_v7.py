@@ -12,15 +12,19 @@ import csv
 import os
 import sys
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta, timezone
-from decimal import Decimal, ROUND_HALF_UP
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from backtest.research.ma_chip_edge_backtest import limit_pct
+from backtest.research.market_layer import (
+    as_date as _as_date,
+    as_datetime as _as_datetime,
+    limit_pct,
+    round_fen,
+)
 from backtest.research.strategy7_rules import (
     NINE,
     SEVEN_AFTER_READD,
@@ -33,7 +37,7 @@ from backtest.research.strategy7_rules import (
     timer_due,
     validate_index_symbol,
 )
-from backtest.research.csv_pool import parse_pool_csv
+from backtest.research.csv_pool import load_pool_day_map
 from common.infra.data_root import resolve_index_daily_root, resolve_period_root
 from oskh_data.lake_kind import classify_daily_lake_kind
 from oskh_data.symbol_format import to_canonical_symbol, to_partition_key
@@ -73,48 +77,6 @@ class SimResult:
     positions: dict[str, Position] = field(default_factory=dict)
     trades: list[dict[str, Any]] = field(default_factory=list)
     equity_curve: list[dict[str, Any]] = field(default_factory=list)
-
-
-def round_fen(value: float) -> float:
-    return float(Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
-
-
-def _as_datetime(value: Any) -> datetime:
-    """湖内 time 是交易钟点标成 UTC 的毫秒/秒；YYYYMMDD / datetime 原样用。"""
-    if isinstance(value, datetime):
-        return value.replace(tzinfo=None) if value.tzinfo else value
-    if isinstance(value, date):
-        return datetime(value.year, value.month, value.day)
-    number: int | None = None
-    if isinstance(value, bool):
-        number = None
-    elif isinstance(value, int):
-        number = value
-    elif isinstance(value, float) and value.is_integer():
-        number = int(value)
-    elif hasattr(value, "item"):
-        inner = value.item()
-        if isinstance(inner, bool):
-            number = None
-        elif isinstance(inner, int):
-            number = inner
-        elif isinstance(inner, float) and inner.is_integer():
-            number = int(inner)
-    if number is not None:
-        if number >= 10**11:
-            return datetime.fromtimestamp(number / 1000.0, tz=timezone.utc).replace(
-                tzinfo=None
-            )
-        if number >= 10**9:
-            return datetime.fromtimestamp(number, tz=timezone.utc).replace(tzinfo=None)
-        if 19900101 <= number <= 21001231:
-            return datetime.strptime(str(number), "%Y%m%d")
-    text = str(value).strip().replace("-", "")[:8]
-    return datetime.strptime(text, "%Y%m%d")
-
-
-def _as_date(value: Any) -> date:
-    return _as_datetime(value).date()
 
 
 def _record_stamp(record: Mapping[str, Any]) -> Any:
@@ -452,16 +414,7 @@ def write_run_artifacts(state: SimResult, output_dir: Path) -> None:
 def load_pool_days(pool_dir: Path, start: date, end: date) -> dict[date, list[str]]:
     if not pool_dir.is_dir():
         raise FileNotFoundError(f"pool directory does not exist: {pool_dir}")
-    result: dict[date, list[str]] = {}
-    for path in sorted(pool_dir.glob("*.csv")):
-        try:
-            day = _as_date(path.stem)
-        except ValueError:
-            continue
-        if not start <= day <= end:
-            continue
-        result[day] = parse_pool_csv(path)
-    return result
+    return load_pool_day_map(pool_dir, start, end, key="date", empty_in_map=True)
 
 
 def _load_cli_bars(pool_days: Mapping[date, Sequence[str]], start: date, end: date) -> tuple[dict, dict]:

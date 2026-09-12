@@ -1,6 +1,8 @@
 from pathlib import Path
 
-from backtest.research.csv_pool import parse_pool_csv, parse_pool_csv_entries
+from datetime import date
+
+from backtest.research.csv_pool import load_pool_day_map, parse_pool_csv, parse_pool_csv_entries
 
 
 def test_parse_pool_csv_bare_codes_and_header(tmp_path: Path):
@@ -31,3 +33,21 @@ def test_parse_pool_csv_already_suffixed_and_comments(tmp_path: Path):
         newline="\n",
     )
     assert parse_pool_csv(path) == ["600000.SH", "000001.SZ"]
+
+
+def test_load_pool_day_map_empty_policy_and_key_type(tmp_path: Path):
+    (tmp_path / "20260804.csv").write_text("代码,名称\n", encoding="utf-8")
+    (tmp_path / "20260805.csv").write_text("600000,浦发银行\n", encoding="utf-8")
+
+    omitted = load_pool_day_map(
+        tmp_path, "20260804", "20260805", key="ymd", empty_in_map=False
+    )
+    assert omitted == {"20260805": ["600000.SH"]}
+
+    retained = load_pool_day_map(
+        tmp_path, date(2026, 8, 4), date(2026, 8, 5), key="date", empty_in_map=True
+    )
+    assert retained == {
+        date(2026, 8, 4): [],
+        date(2026, 8, 5): ["600000.SH"],
+    }
