@@ -12,13 +12,15 @@
 # 策略 1 / 2 / 3 / 4 / 5 / 6 / 8：共用引擎，策略书换卖点与加仓。必须 --strategy，无缺省。
 # 日线近似（收盘成交；分钟湖短于窗口时用这个接到今天）
 D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_daily_backtest.py ^
-  --strategy version6 --start 20251023 --end 20260909
+  --strategy version6 --start 20251023 --end 20260909 ^
+  --pool-dir D:\path\to\version6_pool
 D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_daily_backtest.py ^
   --strategy version8 --start 20251023 --end 20260909
 
 # 分钟（14:55 买入；湖 time 为中国交易时钟标成 UTC）
 D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_minute_backtest.py ^
-  --strategy version6 --start 20251023 --end 20251104
+  --strategy version6 --start 20251023 --end 20251104 ^
+  --pool-dir D:\path\to\version6_pool
 D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_minute_backtest.py ^
   --strategy version8 --start 20251023 --end 20260909
 
