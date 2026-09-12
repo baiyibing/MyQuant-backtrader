@@ -27,6 +27,7 @@ import argparse
 import os
 import sys
 from datetime import datetime
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -38,6 +39,7 @@ import backtrader as bt
 
 from backtest.chip_indicator import ChipDistribution
 from backtest.chip_algorithm import adapt_columns, daily_chip_distribution, minute_chip_distribution, cyq
+from backtest.research.csv_pool import parse_pool_csv
 from oskh_data import StockDataReader
 
 # ---------------------------------------------------------------------------
@@ -147,19 +149,7 @@ def load_stock_pool(date_str: str) -> list:
     path = os.path.join(STOCK_POOL_DIR, f"{date_str}.csv")
     if not os.path.exists(path):
         return []
-    codes = []
-    with open(path, "r", encoding="utf-8") as f:
-        for line in f:
-            code = line.strip().split(",")[0].strip()
-            if code.isdigit() and len(code) == 6:
-                # 推断交易所
-                if code.startswith(("60", "68")):
-                    codes.append(f"{code}.SH")
-                elif code.startswith(("00", "30")):
-                    codes.append(f"{code}.SZ")
-                else:
-                    codes.append(f"{code}.SZ")
-    return codes
+    return parse_pool_csv(Path(path))
 
 
 # ---------------------------------------------------------------------------

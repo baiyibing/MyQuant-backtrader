@@ -43,6 +43,7 @@ from oskh_factors.chip.core import (
 )
 from oskh_factors.chip.shares import _estimate_turnover, _get_float_shares
 from qlib_cost import cyq
+from backtest.research.csv_pool import parse_pool_csv_entries
 from oskh_data import StockDataReader
 
 STOCK_POOL_DIR = os.path.join(REPO, "stock_pool")
@@ -63,25 +64,7 @@ def load_stock_pool(date_str: str) -> list:
     path = os.path.join(STOCK_POOL_DIR, f"{date_str}.csv")
     if not os.path.exists(path):
         return []
-    entries = []
-    for enc in ["utf-8", "gbk", "cp936"]:
-        try:
-            with open(path, "r", encoding=enc) as f:
-                for line in f:
-                    parts = line.strip().split(",")
-                    code = parts[0].strip()
-                    name = parts[1].strip() if len(parts) > 1 else ""
-                    if code.isdigit() and len(code) == 6:
-                        if code.startswith(("60", "68")):
-                            entries.append((f"{code}.SH", name))
-                        elif code.startswith(("00", "30")):
-                            entries.append((f"{code}.SZ", name))
-                        else:
-                            entries.append((f"{code}.SZ", name))
-            break
-        except (UnicodeDecodeError, Exception):
-            continue
-    return entries
+    return parse_pool_csv_entries(path)
 
 
 def compute_all_factors(code: str, reader=None) -> Optional[dict]:

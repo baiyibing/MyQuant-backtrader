@@ -33,8 +33,8 @@ from backtest.research.strategy7_rules import (
     timer_due,
     validate_index_symbol,
 )
+from backtest.research.csv_pool import parse_pool_csv
 from common.infra.data_root import resolve_index_daily_root, resolve_period_root
-from common.infra.qmt_utils_adv import batch_format_stock_codes
 from oskh_data.lake_kind import classify_daily_lake_kind
 from oskh_data.symbol_format import to_canonical_symbol, to_partition_key
 
@@ -460,12 +460,7 @@ def load_pool_days(pool_dir: Path, start: date, end: date) -> dict[date, list[st
             continue
         if not start <= day <= end:
             continue
-        with path.open("r", encoding="utf-8-sig", newline="") as handle:
-            rows = list(csv.reader(handle))
-        raw = [row[0].strip() for row in rows if row and row[0].strip()]
-        if raw and not any(char.isdigit() for char in raw[0]):
-            raw = raw[1:]
-        result[day] = list(batch_format_stock_codes(raw))
+        result[day] = parse_pool_csv(path)
     return result
 
 

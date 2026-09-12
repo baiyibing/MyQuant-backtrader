@@ -28,6 +28,7 @@ from backtest.chip_algorithm import (
     adapt_columns, daily_chip_distribution, cyq,
     _get_float_shares, _estimate_turnover,
 )
+from backtest.research.csv_pool import parse_pool_csv
 from oskh_data import StockDataReader
 
 STOCK_POOL_DIR = os.path.join(REPO, "stock_pool")
@@ -70,23 +71,7 @@ def load_pool_stocks(date_str: str) -> list:
     path = os.path.join(STOCK_POOL_DIR, f"{date_str}.csv")
     if not os.path.exists(path):
         return []
-    codes = []
-    for enc in ["utf-8", "gbk", "cp936"]:
-        try:
-            with open(path, "r", encoding=enc) as f:
-                for line in f:
-                    code = line.strip().split(",")[0].strip()
-                    if code.isdigit() and len(code) == 6:
-                        if code.startswith(("60", "68")):
-                            codes.append(f"{code}.SH")
-                        elif code.startswith(("00", "30")):
-                            codes.append(f"{code}.SZ")
-                        else:
-                            codes.append(f"{code}.SZ")
-            break
-        except (UnicodeDecodeError, Exception):
-            continue
-    return codes
+    return parse_pool_csv(path)
 
 
 def compute_cyqk(code: str, reader=None) -> float:

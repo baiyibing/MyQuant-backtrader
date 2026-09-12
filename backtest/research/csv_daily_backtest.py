@@ -68,9 +68,9 @@ _ = (
     record_strategy6_params,
     trail_hits,
 )
+from backtest.research.csv_pool import parse_pool_csv  # noqa: E402
 from backtest.research.ma_chip_edge_backtest import limit_pct  # noqa: E402
 from common.infra.data_root import resolve_period_root  # noqa: E402
-from common.infra.qmt_utils_adv import batch_format_stock_codes  # noqa: E402
 from oskh_data.symbol_format import to_partition_key  # noqa: E402
 
 DEFAULT_TOTAL_CASH = 21_000_000.0
@@ -288,23 +288,19 @@ def _limit_prices(code: str, prev_close: float) -> tuple[float, float]:
 def load_pool_days(
     start: str, end: str, pool_dir: Optional[Path] = None
 ) -> dict[str, list[str]]:
-    """{YYYYMMDD: [canonical codes]}，直接读 stock_pool/ 头列（避免 read_stock_codes 刷 INFO）。"""
+    """{YYYYMMDD: [canonical codes]}。头列无后缀，口径同 1.3 ``parse_pool_csv``。"""
     root = Path(pool_dir) if pool_dir is not None else Path(REPO) / "stock_pool"
     days: dict[str, list[str]] = {}
     for p in sorted(root.glob("*.csv")):
         if not (start <= p.stem <= end):
             continue
         try:
-            df = pd.read_csv(p, header=None, dtype={0: str}, encoding="utf-8-sig")
+            codes = parse_pool_csv(p)
         except Exception as exc:
             print(f"skip pool {p.name}: {exc}", flush=True)
             continue
-        if df.empty:
-            continue
-        raw = df.iloc[:, 0].dropna().astype(str).tolist()
-        if not raw:
-            continue
-        days[p.stem] = list(batch_format_stock_codes(raw))
+        if codes:
+            days[p.stem] = codes
     return days
 
 
