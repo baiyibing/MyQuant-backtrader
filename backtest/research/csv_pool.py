@@ -59,6 +59,36 @@ def parse_pool_csv(path: Path) -> List[str]:
     return [code for code, _name in parse_pool_csv_entries(path)]
 
 
+def _window_ymd(start: str | date, end: str | date) -> tuple[str, str]:
+    start_ymd = start.strftime("%Y%m%d") if isinstance(start, date) else str(start).replace("-", "")
+    end_ymd = end.strftime("%Y%m%d") if isinstance(end, date) else str(end).replace("-", "")
+    return start_ymd, end_ymd
+
+
+def load_pool_name_map(
+    pool_dir: Path,
+    start: str | date,
+    end: str | date,
+) -> dict[str, str]:
+    """Union of CSV second-column names in [start, end]; later files win."""
+    root = Path(pool_dir)
+    start_ymd, end_ymd = _window_ymd(start, end)
+    names: dict[str, str] = {}
+    for path in sorted(root.glob("*.csv")):
+        stem = path.stem
+        if len(stem) != 8 or not stem.isdigit() or not start_ymd <= stem <= end_ymd:
+            continue
+        try:
+            entries = parse_pool_csv_entries(path)
+        except Exception as exc:
+            print(f"skip pool {path.name}: {exc}", flush=True)
+            continue
+        for code, name in entries:
+            if name:
+                names[code] = name
+    return names
+
+
 def load_pool_day_map(
     pool_dir: Path,
     start: str | date,
@@ -71,8 +101,7 @@ def load_pool_day_map(
     if key not in ("ymd", "date"):
         raise ValueError("key must be 'ymd' or 'date'")
     root = Path(pool_dir)
-    start_ymd = start.strftime("%Y%m%d") if isinstance(start, date) else str(start).replace("-", "")
-    end_ymd = end.strftime("%Y%m%d") if isinstance(end, date) else str(end).replace("-", "")
+    start_ymd, end_ymd = _window_ymd(start, end)
     days = {}
     for path in sorted(root.glob("*.csv")):
         stem = path.stem

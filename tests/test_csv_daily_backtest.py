@@ -636,7 +636,8 @@ def test_chase_no_bar_when_t1_missing():
     bars["600000.SH"] = bars["600000.SH"].drop(pd.Timestamp("2025-11-04"))
     st = _run({"20251103": ["600000.SH"]}, bars)
     assert st.stats["skip_limit_up"] == 1
-    assert st.stats["chase_no_bar"] == 1
+    assert st.stats["chase_no_bar"] == 0
+    assert st.stats["chase_abandon"] == 1
     assert sim.chase_explained(st) == st.stats["skip_limit_up"]
 
 
@@ -755,3 +756,73 @@ def test_find_daily_equity_prefers_covering_end(tmp_path):
     )
     assert got is not None
     assert got.parent.name.endswith("20260909")
+
+
+def test_unknown_board_skips_buy():
+    rows = {"159001.SZ": [(10.0, 10.1, 9.9, 10.0)] * 5}
+    st = _run({"20251103": ["159001.SZ"]}, _bars(DAYS, rows))
+    assert st.stats["skip_unknown_board"] == 1
+    assert st.stats["buys"] == 0
+
+
+def test_st_name_uses_five_percent_limit_up():
+    rows = {
+        "600000.SH": [
+            (10.5, 10.5, 10.4, 10.5),
+            (10.4, 10.5, 10.3, 10.4),
+            (10.3, 10.4, 10.2, 10.3),
+            (10.2, 10.3, 10.1, 10.2),
+            (10.1, 10.2, 10.0, 10.1),
+        ]
+    }
+    bars = _bars(DAYS, rows)
+    pool = {"20251103": ["600000.SH"]}
+    blocked = sim.simulate(
+        bars, pool, "20251103", "20251107", strategy="version6",
+        pool_names={"600000.SH": "*ST 宁科"},
+    )
+    assert blocked.stats["skip_limit_up"] == 1
+    assert blocked.stats["buys"] == 0
+    allowed = _run(pool, bars)
+    assert allowed.stats["buys"] == 1
+
+
+def test_bj_thirty_percent_allows_close_that_would_be_ten_percent_limit():
+    rows = {"920014.BJ": [(12.5, 12.5, 12.4, 12.5)] * 5}
+    st = _run({"20251103": ["920014.BJ"]}, _bars(DAYS, rows))
+    assert st.stats["buys"] == 1
+    assert st.stats["skip_limit_up"] == 0
+
+
+def test_halt_day_equity_uses_last_close_not_cost():
+    rows = {
+        "600000.SH": [
+            (10.0, 10.1, 9.9, 10.0),
+            (11.0, 11.2, 10.8, 11.0),
+            (11.0, 11.1, 10.9, 11.0),
+            (11.0, 11.1, 10.9, 11.0),
+            (11.0, 11.1, 10.9, 11.0),
+        ],
+        "000001.SZ": [
+            (20.0, 20.1, 19.9, 20.0),
+            (20.0, 20.1, 19.9, 20.0),
+            (20.0, 20.1, 19.9, 20.0),
+            (20.0, 20.1, 19.9, 20.0),
+            (20.0, 20.1, 19.9, 20.0),
+        ],
+    }
+    bars = _bars(DAYS, rows)
+    bars["600000.SH"] = bars["600000.SH"].drop(pd.Timestamp("2025-11-05"))
+    st = _run({"20251103": ["600000.SH"]}, bars)
+    cash = 21_000_000.0 - 1_001_000.0
+    eq = dict(st.equity_curve)
+    assert eq["20251105"] == pytest.approx(cash + 100_000 * 11.0)
+    assert eq["20251105"] != pytest.approx(cash + 100_000 * 10.0)
+
+
+def test_pre_er1_trades_snapshot_exists():
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent / "fixtures" / "csv_engine_pre_er1"
+    assert (root / "version6_trades.csv").is_file()
+    assert (root / "version8_trades.csv").is_file()

@@ -557,3 +557,44 @@ def test_simulate_uses_day_spans_same_as_loc():
     )
     assert st.stats["buys"] == 1
     assert st.stats["sell_stop"] == 1
+
+
+def test_simulate_trail_defers_at_limit_down_close_then_resells():
+    dates = ["2025-11-03", "2025-11-04", "2025-11-05", "2025-11-06"]
+    m0 = _day(
+        "2025-11-03", [(930, 10.0, 10.1, 9.9, 10.0), (1455, 10.0, 10.05, 9.98, 10.0)]
+    )
+    m1 = _day(
+        "2025-11-04", [(930, 11.5, 12.0, 11.4, 11.8), (1455, 11.8, 11.9, 11.7, 11.8)]
+    )
+    m2 = _day(
+        "2025-11-05",
+        [
+            (930, 11.0, 12.0, 10.8, 11.5),
+            (945, 10.80, 10.85, 10.62, 10.62),
+            (1455, 10.62, 10.70, 10.62, 10.62),
+        ],
+    )
+    m3 = _day(
+        "2025-11-06",
+        [
+            (930, 10.70, 10.80, 10.60, 10.70),
+            (945, 10.70, 10.80, 10.60, 10.70),
+            (1455, 10.70, 10.80, 10.60, 10.70),
+        ],
+    )
+    minute = {"600000.SH": pd.concat([m0, m1, m2, m3])}
+    daily = {"600000.SH": _daily(dates, [10.0, 11.8, 10.62, 10.70])}
+    st = sim.simulate(
+        minute,
+        daily,
+        {"20251103": ["600000.SH"]},
+        "20251103",
+        "20251106",
+        strategy="version6",
+    )
+    sells = [t for t in st.trades if t["side"] == "SELL"]
+    assert st.stats["defer_sell_limit_down"] >= 1
+    assert sells[0]["date"] == "20251106"
+    assert sells[0]["reason"].startswith("trail:")
+    assert sells[0]["price"] == pytest.approx(10.70)

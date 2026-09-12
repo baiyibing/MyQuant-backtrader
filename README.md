@@ -2,7 +2,7 @@
 
 研究脸：日名单 CSV + **向量化**回测，以及筹码 / 换手阻力（Python + Rust）。行情只读 path-SSOT parquet；下载在原仓。成交验收（LEBS / MockQMT）在 [OSkhQuant1.3](https://github.com/baiyibing/OSkhQuant1.3)。
 
-三件引擎怎么分工：[`docs/backtest/engine-positioning-ssot.md`](docs/backtest/engine-positioning-ssot.md)。Qlib 回测停用；Cerebro 观察退役。本仓没有 `backtest/lebs/`。
+三件引擎怎么分工：[`docs/backtest/engine-positioning-ssot.md`](docs/backtest/engine-positioning-ssot.md)。成交核（档位 / 全卖因跌停 / Decimal 涨跌停价）：[`docs/backtest/engine-ashare-correctness.md`](docs/backtest/engine-ashare-correctness.md)。Qlib 回测停用；Cerebro 观察退役。本仓没有 `backtest/lebs/`。
 
 Seeded from OSkhQuant slim snapshot at `5d41252`。S2（2026-09-09）之后本仓收研究面；交易栈只留 `oskh_factors` chip/bridge 微包。
 
@@ -13,6 +13,8 @@ Seeded from OSkhQuant slim snapshot at `5d41252`。S2（2026-09-09）之后本�
 | `backtest/research/csv_daily_backtest.py` | 向量化日线（策略 1/2/3/4/5/6/8 策略书） |
 | `backtest/research/csv_minute_backtest.py` | 向量化分钟（策略 1/2/3/4/5/6/8） |
 | `backtest/research/csv_minute_backtest_v7.py` | 策略 7 金榕元仓位机（独立） |
+| `backtest/research/csv_ledger.py` | 6/8 共用账本（Position / 买卖 / 追买桶） |
+| `backtest/research/market_layer.py` | 涨跌停档位与 Decimal 涨跌停价 |
 | `backtest/research/csv_pool.py` | 名单 CSV：裸六位码 → canonical |
 | `backtest/research/csv_strategy_books.py` | 1/2/3/4/5/6/8 策略书 |
 | `backtest/research/chip/` | Chip 因子消费者 |

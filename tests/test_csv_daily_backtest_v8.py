@@ -50,9 +50,10 @@ def test_t1_no_sell_on_entry_day():
     st = _run({"20251103": ["600000.SH"]}, _bars(DAYS, rows))
     assert st.stats["buys"] == 1
     sells = [t for t in st.trades if t["side"] == "SELL"]
-    assert sells[0]["date"] == "20251104"
+    assert st.stats["defer_sell_limit_down"] >= 1
+    assert sells[0]["date"] == "20251105"
     assert sells[0]["reason"] == "stop_loss:touch"
-    assert sells[0]["price"] == pytest.approx(8.0)
+    assert sells[0]["price"] == pytest.approx(9.4)
 
 
 def test_gap_open_stop_20pct():
@@ -213,7 +214,7 @@ def test_held_name_adds_independent_lot():
             (10.2, 10.5, 10.1, 10.3),
             (10.8, 11.1, 10.7, 11.0),
             (10.5, 10.6, 8.50, 10.50),
-            (9.0, 9.1, 8.8, 8.9),
+            (10.0, 10.1, 9.8, 9.9),
         ]
     }
     pool = {"20251103": ["600000.SH"], "20251105": ["600000.SH"]}
@@ -229,7 +230,8 @@ def test_held_name_adds_independent_lot():
     assert len(sells) == 1
     assert sells[0]["lot"] == 1
     assert sells[0]["reason"] == "stop_loss:touch"
-    assert sells[0]["price"] == pytest.approx(8.8)
+    assert sells[0]["price"] == pytest.approx(10.0)
+    assert st.stats["defer_sell_limit_down"] >= 1
     assert 0 in {p.lot_id for p in st.positions["600000.SH"]}
 
     st6 = _run(pool, bars, strategy="version6")

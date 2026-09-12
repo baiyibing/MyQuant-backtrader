@@ -99,7 +99,7 @@ xlsx 交替止盈数值（成本 ×1.3/1.5/1.8/2.0，卖剩余 30/20/30/20）与
 
 **不要**把逻辑塞进 `csv_minute_backtest.py`。不要写 `ProfitStrategy.Strategy7`。
 
-**允许 import**：`utc_ms_range` / `warn_stale_period_env` / `_ymd` / `_limit_prices` / `hit_limit_up` / `hit_limit_down` / `round_fen` / `parse_pool_csv`（1.3 同口径，`canonical_from_bare_code`）/ `load_pool_days`（必须显式 `pool_dir`）/ `load_daily_bars`（**仅股票**昨收）/ `load_minute_bars` 与 cache 三件套（**v7 自己的 cache 文件名**）/ `write_run_artifacts` / `COMMISSION` / `TURTLE_ADD_BANDS` / `resolve_period_root` / `resolve_index_daily_root` / `to_partition_key` / `classify_daily_lake_kind`。
+**允许 import**：`utc_ms_range` / `warn_stale_period_env` / `_ymd` / `market_layer.limit_prices`（Decimal HALF_UP；本地 `_limit_prices` 只是别名）/ `hit_limit_up` / `hit_limit_down` / `round_fen` / `parse_pool_csv`（1.3 同口径，`canonical_from_bare_code`）/ `load_pool_days`（必须显式 `pool_dir`）/ `load_daily_bars`（**仅股票**昨收）/ `load_minute_bars` 与 cache 三件套（**v7 自己的 cache 文件名**）/ `write_run_artifacts` / `COMMISSION` / `TURTLE_ADD_BANDS` / `resolve_period_root` / `resolve_index_daily_root` / `to_partition_key` / `classify_daily_lake_kind`。涨跌停价钉 `1.65×10%` 跌停 = **1.49**。禁止再写本地 float `_limit_prices`。仍禁止 import 6/8 `SimState` / `execute_buy`。
 
 **禁止 import**：`execute_buy` `_buy_size` `_sell` `SimState` `Position` `chase_decision` `CHASE_HM` `DEFAULT_DAILY_QUOTA` `_buy_px` `scan_held_day` `warmup_start`（日历日暖机不够 10 个交易日）`STOP_PCT` `TIERS` `trail_hits` `summarize` `maybe_compare_daily` `chip_indicator` `StockDataReader` `trade_decision.turtle.sell` `presets` 1.3 `stop.py` / 1.3 加仓函数 `backtest.lebs`。
 

@@ -2,7 +2,12 @@ from pathlib import Path
 
 from datetime import date
 
-from backtest.research.csv_pool import load_pool_day_map, parse_pool_csv, parse_pool_csv_entries
+from backtest.research.csv_pool import (
+    load_pool_day_map,
+    load_pool_name_map,
+    parse_pool_csv,
+    parse_pool_csv_entries,
+)
 
 
 def test_parse_pool_csv_bare_codes_and_header(tmp_path: Path):
@@ -51,3 +56,11 @@ def test_load_pool_day_map_empty_policy_and_key_type(tmp_path: Path):
         date(2026, 8, 4): [],
         date(2026, 8, 5): ["600000.SH"],
     }
+
+
+def test_load_pool_name_map_keeps_st_column(tmp_path: Path):
+    (tmp_path / "20260804.csv").write_text("600000,浦发银行\n", encoding="utf-8")
+    (tmp_path / "20260805.csv").write_text("600000,*ST 浦发\n920014,倍益康\n", encoding="utf-8")
+    names = load_pool_name_map(tmp_path, "20260804", "20260805")
+    assert names["600000.SH"] == "*ST 浦发"
+    assert names["920014.BJ"] == "倍益康"

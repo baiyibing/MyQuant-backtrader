@@ -7,9 +7,20 @@ or strategy implementation.
 
 from __future__ import annotations
 
+import re
 from datetime import date, datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal
-from typing import Any
+from typing import Any, Optional
+
+_ST_NAME_RE = re.compile(r"(?:\*ST|(?<![A-Za-z])ST)", re.IGNORECASE)
+
+# ChiNext / STAR (incl. 689 CDR). Longer prefixes first.
+_BOARD_20 = ("300", "301", "302", "688", "689")
+# Beijing Stock Exchange. Plan E-R2: 430 / 83 / 87 / 88 / 920.
+_BOARD_30 = ("920", "430", "83", "87", "88")
+# Shanghai / Shenzhen main + SME. Fail-closed: anything else is unknown.
+_BOARD_10 = ("600", "601", "603", "605", "000", "001", "002", "003")
+
 
 def utc_ms_range(start: str, end: str) -> tuple[int, int]:
     """Convert a closed YYYYMMDD range to UTC-midnight milliseconds."""
@@ -20,11 +31,38 @@ def utc_ms_range(start: str, end: str) -> tuple[int, int]:
     return t0, t1
 
 
-def limit_pct(code: str) -> float:
-    num = "".join(c for c in code if c.isdigit())
-    if num.startswith(("300", "301", "688")):
+def is_st_name(name: str) -> bool:
+    """True when the pool name column marks ST / *ST (not a Latin token like WEST)."""
+    return bool(name and _ST_NAME_RE.search(str(name)))
+
+
+def _digit_prefix(code: str) -> str:
+    return "".join(c for c in str(code) if c.isdigit())
+
+
+def board_limit_pct(code: str) -> Optional[float]:
+    """Board-only limit ratio, or None when the prefix is not a known A-share board."""
+    num = _digit_prefix(code)
+    if not num:
+        return None
+    if num.startswith(_BOARD_20):
         return 0.20
-    return 0.10
+    if num.startswith(_BOARD_30):
+        return 0.30
+    if num.startswith(_BOARD_10):
+        return 0.10
+    return None
+
+
+def limit_pct(code: str, name: str = "") -> Optional[float]:
+    """A-share limit ratio, or None when the board is unknown and the name is not ST.
+
+    ST / *ST in the pool name column is 5%. Known boards without a name stay
+    tradable (600 → 10%). Unknown prefixes without a name are fail-closed.
+    """
+    if is_st_name(name):
+        return 0.05
+    return board_limit_pct(code)
 
 
 def round_fen(price: float) -> float:
@@ -32,9 +70,13 @@ def round_fen(price: float) -> float:
     return float(Decimal(str(price)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
 
-def limit_prices(code: str, prev_close: float) -> tuple[float, float]:
-    """6/8 limit prices, preserving their Decimal-before-multiply arithmetic."""
-    pct = limit_pct(code)
+def limit_prices(
+    code: str, prev_close: float, name: str = ""
+) -> Optional[tuple[float, float]]:
+    """昨收 × (1±档) 先 Decimal 再 HALF_UP 到分。未知板块返回 None。"""
+    pct = limit_pct(code, name)
+    if pct is None:
+        return None
     prev = Decimal(str(prev_close))
     step = Decimal("0.01")
     up = (prev * (Decimal("1") + Decimal(str(pct)))).quantize(step, rounding=ROUND_HALF_UP)

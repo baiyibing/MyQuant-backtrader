@@ -30,7 +30,7 @@ D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_minute_backtest_v7.p
 
 落盘：`backtest_output/csv_daily_{book}_{start}_{end}/`、`csv_minute_{book}_{start}_{end}/`、`csv_minute_v7_{start}_{end}/`（`summary.txt`、`daily_equity.csv`、`trades.csv`）。
 
-规则与闸：策略 7 见 [plan-strategy7-turtle-csv-minute-2026-09-11.md](plan-strategy7-turtle-csv-minute-2026-09-11.md)。6/8 口径写在各自 CLI 的 help lock。
+规则与闸：策略 7 见 [plan-strategy7-turtle-csv-minute-2026-09-11.md](plan-strategy7-turtle-csv-minute-2026-09-11.md)。6/8 口径写在各自 CLI 的 help lock。成交核（档位 / 全卖因跌停 / Decimal 涨跌停价 / 停牌净值）见 [engine-ashare-correctness.md](engine-ashare-correctness.md)。名单 as-of 与 ST 名称列见 [pool-csv-contract.md](pool-csv-contract.md)。
 
 数据：只读 F 湖 parquet（有 `F:\stock_data\.authority` 且勿残留 `OSKH_PERIOD_*`）。细则见根 `AGENTS.md`。
 
@@ -53,6 +53,9 @@ D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_minute_backtest_v7.p
 | 主题 | 文档 |
 |------|------|
 | **★ 三件引擎定位（本仓 + 1.3）** | [engine-positioning-ssot.md](engine-positioning-ssot.md) |
+| **★ 向量化成交核（A 股档位 / 跌停 / 停牌）** | [engine-ashare-correctness.md](engine-ashare-correctness.md) |
+| 名单 CSV 契约（as-of = 买入日 T） | [pool-csv-contract.md](pool-csv-contract.md) |
+| 策略 1–8 书契约（U-R\*；撮合句以 E-R\* 为准） | [plan-unify-csv-strategies-1-8-2026-09-12.md](plan-unify-csv-strategies-1-8-2026-09-12.md) |
 | **策略 7 金榕元 CSV 分钟（A–D 已合；E 本机）** | [plan-strategy7-turtle-csv-minute-2026-09-11.md](plan-strategy7-turtle-csv-minute-2026-09-11.md) |
 | 日线复权增量 | [data/daily-adjusted-update-ssot.md](data/daily-adjusted-update-ssot.md) |
 | ma + 筹码边（Cerebro 对照，2026-09-07） | [plan-ma-chip-edge-strategy-2026-09-07.md](plan-ma-chip-edge-strategy-2026-09-07.md) |
