@@ -408,6 +408,7 @@ def scan_held_day(
     peak_hm: int = -1,
     peak_gap_min: int = PEAK_GAP_MIN,
     take_profit=None,
+    force_sell_hm: Optional[int] = None,
 ) -> tuple[int, float, str, float, int]:
     """逐分钟扫描。返回 (idx, px, reason, new_peak, new_peak_hm)。"""
     stop_enabled = isinstance(stop_pct, float) and 0 < stop_pct < 1
@@ -433,15 +434,20 @@ def scan_held_day(
         ret = px_close / cost - 1.0
         if stop_enabled and ret <= -stop_pct:
             return i, px_close, "stop_loss:touch", new_peak, new_peak_hm
-        if new_peak_hm >= 0 and peak_gap_blocks(cur_hm - new_peak_hm, peak_gap_min):
-            continue
-        if take_profit is not None:
-            reason = take_profit(px_close, cost, new_peak, n_days)
-            if reason:
-                return i, px_close, reason, new_peak, new_peak_hm
-            continue
-        if trail_hits(px_close, cost, new_peak, profit_base, trail_ratio):
-            return i, px_close, f"trail:T+{max(1, n_days)}", new_peak, new_peak_hm
+        peak_blocked = new_peak_hm >= 0 and peak_gap_blocks(
+            cur_hm - new_peak_hm, peak_gap_min
+        )
+        if not peak_blocked:
+            if take_profit is not None:
+                reason = take_profit(px_close, cost, new_peak, n_days)
+                if reason:
+                    return i, px_close, reason, new_peak, new_peak_hm
+            elif trail_hits(px_close, cost, new_peak, profit_base, trail_ratio):
+                return i, px_close, f"trail:T+{max(1, n_days)}", new_peak, new_peak_hm
+        if force_sell_hm is not None and cur_hm >= int(force_sell_hm):
+            if limit_down > 0 and hit_limit_down(px_close, limit_down):
+                continue
+            return i, px_close, "force_sell:time", new_peak, new_peak_hm
     return -1, float("nan"), "", new_peak, new_peak_hm
 
 
@@ -530,6 +536,7 @@ def simulate(
     take_profit = hooks["take_profit"]
     record_params = hooks["record_params"]
     peak_gap_min = int(hooks["peak_gap_min"])
+    force_sell_hm = hooks.get("force_sell_hm")
     calendar = build_calendar(daily_bars, start, end)
 
     st = SimState(cash=float(total_cash))
@@ -580,6 +587,7 @@ def simulate(
                     peak_hm=int(pos.peak_hm),
                     peak_gap_min=peak_gap_min,
                     take_profit=take_profit,
+                    force_sell_hm=force_sell_hm,
                 )
                 pos.peak = new_peak
                 pos.peak_hm = new_peak_hm

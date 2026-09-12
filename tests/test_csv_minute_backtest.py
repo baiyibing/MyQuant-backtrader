@@ -72,6 +72,43 @@ def test_scan_none_stop_does_not_sell_after_halving():
     assert peak == pytest.approx(10.0)
 
 
+@pytest.mark.parametrize(
+    ("n_days", "can_sell", "hm", "close", "expected_idx", "expected_reason"),
+    [
+        (0, False, 890, 10.0, -1, ""),
+        (1, True, 571, 10.0, -1, ""),
+        (1, True, 890, 10.0, 0, "force_sell:time"),
+        (1, True, 890, 10.2, 0, "profit_take:target"),
+    ],
+)
+def test_strategy5_force_sell_clock(
+    n_days, can_sell, hm, close, expected_idx, expected_reason
+):
+    hooks = sim.apply_csv_strategy("version5")
+    idx, _, reason, _, _ = sim.scan_held_day(
+        np.array([close]), np.array([close]), np.array([close]),
+        cost=10.0, peak=10.0, n_days=n_days, can_sell=can_sell,
+        stop_pct=hooks["stop_pct"], profit_base=0.0, trail_ratio=0.0,
+        hm=np.array([hm]), peak_gap_min=hooks["peak_gap_min"],
+        take_profit=hooks["take_profit"], force_sell_hm=hooks["force_sell_hm"],
+    )
+    assert idx == expected_idx
+    assert reason == expected_reason
+
+
+def test_strategy5_force_sell_defers_at_limit_down_close():
+    hooks = sim.apply_csv_strategy("version5")
+    idx, _, reason, _, _ = sim.scan_held_day(
+        np.array([9.1]), np.array([9.1]), np.array([9.0]),
+        cost=10.0, peak=10.0, n_days=1, can_sell=True, stop_pct=None,
+        profit_base=0.0, trail_ratio=0.0, limit_down=9.0,
+        hm=np.array([890]), take_profit=hooks["take_profit"],
+        force_sell_hm=hooks["force_sell_hm"],
+    )
+    assert idx == -1
+    assert reason == ""
+
+
 def test_scan_t1_trail_on_close():
     # 峰值 10.50（+5%，锚 1% 后超额 4%），T+1 档 50% → 线 +3% → 10.30
     # 09:30 创新高，09:45 才允许止盈（间隔 15 分钟）

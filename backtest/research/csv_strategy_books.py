@@ -13,12 +13,14 @@ from typing import Any, Callable, Optional
 from backtest.research import (
     strategy1_rules,
     strategy2_rules,
+    strategy5_rules,
     strategy6_rules,
     strategy8_rules,
 )
 
 HELP_LOCK_V1 = strategy1_rules.HELP_LOCK
 HELP_LOCK_V2 = strategy2_rules.HELP_LOCK
+HELP_LOCK_V5 = strategy5_rules.HELP_LOCK
 HELP_LOCK_V6 = strategy6_rules.HELP_LOCK
 HELP_LOCK_V8 = strategy8_rules.HELP_LOCK
 
@@ -79,6 +81,11 @@ def apply_csv_strategy(strategy: str, **kwargs) -> dict:
     hooks["peak_gap_min"] = book.peak_gap_min
     hooks["book"] = book.tag
     hooks["name"] = book.name
+    hooks.setdefault("force_sell_hm", None)
+    hooks.setdefault("buy_gate", None)
+    hooks.setdefault("sell_gate", None)
+    hooks.setdefault("reserve_limit_up", False)
+    hooks.setdefault("daily_same_bar_prefixes", ("open_board",))
     if hooks.get("take_profit") is None:
         raise RuntimeError(f"{book.name} book missing take_profit")
     if hooks.get("record_params") is None:
@@ -239,6 +246,34 @@ def _run_kwargs_version2(args) -> dict:
     return {"strategy": "version2", "stop_pct": _stop_override_from_args(args)}
 
 
+def _apply_version5(
+    *, stop_pct: Optional[float] = None, take_profit=None, record_params=None, **_
+) -> dict:
+    del stop_pct
+
+    def _tp(px, cost, peak, n_days):
+        return strategy5_rules.take_profit_reason(px, cost, peak, n_days)
+
+    def _rec(st):
+        strategy5_rules.record_strategy5_params(st, stop_pct=None)
+
+    return {
+        "stop_pct": None,
+        "take_profit": _tp if take_profit is None else take_profit,
+        "record_params": _rec if record_params is None else record_params,
+        "force_sell_hm": strategy5_rules.FORCE_SELL_HM,
+        "sell_gate": None,
+        "reserve_limit_up": False,
+        "daily_same_bar_prefixes": ("open_board",),
+    }
+
+
+def _run_kwargs_version5(args) -> dict:
+    if getattr(args, "stop_pct", None) is not None:
+        raise SystemExit("--stop-pct is not supported for version5 (no stop loss)")
+    return {"strategy": "version5"}
+
+
 def _apply_version6(
     *,
     stop_pct: Optional[float] = None,
@@ -329,6 +364,18 @@ register(
         help_lock=strategy2_rules.HELP_LOCK,
         apply=_apply_version2,
         run_kwargs=_run_kwargs_version2,
+    )
+)
+register(
+    CsvStrategyBook(
+        name="version5",
+        tag=strategy5_rules.BOOK_TAG,
+        aliases=("5", "v5", "version5"),
+        allow_add=strategy5_rules.ALLOW_ADD,
+        peak_gap_min=strategy5_rules.PEAK_GAP_MIN,
+        help_lock=strategy5_rules.HELP_LOCK,
+        apply=_apply_version5,
+        run_kwargs=_run_kwargs_version5,
     )
 )
 register(

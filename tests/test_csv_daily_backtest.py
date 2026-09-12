@@ -122,6 +122,29 @@ def test_none_stop_short_circuits_even_after_price_halves(monkeypatch):
     assert "止损 关闭" in sim.summarize(st, 21_000_000, "20251103", "20251107")
 
 
+def test_strategy5_daily_target_sells_next_open_without_force_reason():
+    rows = {
+        "600000.SH": [
+            (10.0, 10.0, 10.0, 10.0),
+            (10.1, 10.3, 10.1, 10.2),
+            (10.3, 10.3, 10.3, 10.3),
+            (10.3, 10.3, 10.3, 10.3),
+            (10.3, 10.3, 10.3, 10.3),
+        ]
+    }
+    st = _run(
+        {"20251103": ["600000.SH"]},
+        _bars(DAYS, rows),
+        strategy="version5",
+    )
+    sells = [trade for trade in st.trades if trade["side"] == "SELL"]
+    assert len(sells) == 1
+    assert sells[0]["date"] == "20251105"
+    assert sells[0]["price"] == pytest.approx(10.3)
+    assert sells[0]["reason"] == "profit_take:target"
+    assert not any(t["reason"].startswith("force_sell") for t in sells)
+
+
 @pytest.mark.parametrize(
     ("reason", "bucket"),
     [
