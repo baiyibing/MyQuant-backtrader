@@ -4,7 +4,7 @@ from datetime import date
 
 from backtest.research.csv_pool import (
     load_pool_day_map,
-    load_pool_name_map,
+    load_pool_names_by_day,
     parse_pool_csv,
     parse_pool_csv_entries,
     validate_pool_dir,
@@ -93,9 +93,17 @@ def test_load_pool_day_map_empty_policy_and_key_type(tmp_path: Path):
     }
 
 
-def test_load_pool_name_map_keeps_st_column(tmp_path: Path):
-    (tmp_path / "20260804.csv").write_text("600000,浦发银行\n", encoding="utf-8")
-    (tmp_path / "20260805.csv").write_text("600000,*ST 浦发\n920014,倍益康\n", encoding="utf-8")
-    names = load_pool_name_map(tmp_path, "20260804", "20260805")
-    assert names["600000.SH"] == "*ST 浦发"
-    assert names["920014.BJ"] == "倍益康"
+def test_load_pool_names_by_day_keeps_dates_and_non_empty_names(tmp_path: Path):
+    (tmp_path / "20260804.csv").write_text(
+        "600000,浦发\n000001,\n", encoding="utf-8"
+    )
+    (tmp_path / "20260805.csv").write_text(
+        "600000,*ST 浦发\n920014,倍益康\n", encoding="utf-8"
+    )
+
+    names = load_pool_names_by_day(tmp_path, "20260804", "20260805")
+
+    assert names == {
+        "20260804": {"600000.SH": "浦发"},
+        "20260805": {"600000.SH": "*ST 浦发", "920014.BJ": "倍益康"},
+    }

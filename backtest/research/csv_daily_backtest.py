@@ -75,7 +75,10 @@ from backtest.research.csv_ledger import (  # noqa: E402
     queue_limit_up_chase,
     resolve_limit_prices,
 )
-from backtest.research.csv_pool import load_pool_day_map, load_pool_name_map  # noqa: E402
+from backtest.research.csv_pool import (  # noqa: E402
+    load_pool_day_map,
+    load_pool_names_by_day,
+)
 from backtest.research.market_layer import (  # noqa: E402
     limit_pct,
     limit_prices,
@@ -262,6 +265,32 @@ def _named_limits(code: str, prev_close: float, names: dict[str, str]):
     return resolve_limit_prices(code, prev_close, names.get(code, ""))
 
 
+def _pool_names_asof(
+    pool_names: Optional[dict[str, str]],
+    pool_names_by_day: Optional[dict[str, dict[str, str]]],
+):
+    """Return a monotonic per-day name resolver; by-day input has priority."""
+    if pool_names_by_day is None:
+        names = dict(pool_names or {})
+        return lambda _ds: names
+
+    updates = sorted(pool_names_by_day.items())
+    last_seen: dict[str, str] = {}
+    cursor = 0
+
+    def names_for_day(ds: str) -> dict[str, str]:
+        nonlocal cursor
+        while cursor < len(updates) and updates[cursor][0] <= ds:
+            _ymd_key, observed = updates[cursor]
+            for code, name in observed.items():
+                if name:
+                    last_seen[code] = name
+            cursor += 1
+        return last_seen
+
+    return names_for_day
+
+
 def simulate(
     bars: dict[str, pd.DataFrame],
     pool_days: dict[str, list[str]],
@@ -279,6 +308,7 @@ def simulate(
     take_profit=None,
     record_params=None,
     pool_names: Optional[dict[str, str]] = None,
+    pool_names_by_day: Optional[dict[str, dict[str, str]]] = None,
 ) -> SimState:
     """核心日循环。bars/pool_days 可由测试注入；run() 负责从湖与 CSV 加载。
 
@@ -309,10 +339,11 @@ def simulate(
     reserve_limit_up = bool(hooks.get("reserve_limit_up"))
     daily_same_bar_prefixes = tuple(hooks.get("daily_same_bar_prefixes", ()))
     pending_chase: dict[str, tuple[float, int]] = {}  # code -> (per, signal_idx)
-    names = dict(pool_names or {})
+    names_asof = _pool_names_asof(pool_names, pool_names_by_day)
 
     for i, day in enumerate(calendar):
         ds = _ymd(day)
+        names = names_asof(ds)
         st.daily_quota_used = 0.0  # 每个交易日开盘重置常规额度
 
         for code in list(st.positions):
@@ -515,7 +546,7 @@ def run(
     t_pool = time.perf_counter()
     actual_pool_dir = Path(pool_dir) if pool_dir is not None else Path(REPO) / "stock_pool"
     pool_days = load_pool_days(start, end, pool_dir=actual_pool_dir)
-    pool_names = load_pool_name_map(actual_pool_dir, start, end)
+    pool_names_by_day = load_pool_names_by_day(actual_pool_dir, start, end)
     t_pool = time.perf_counter() - t_pool
     if not pool_days:
         raise SystemExit(f"no pool CSVs in [{start}, {end}] under {actual_pool_dir}")
@@ -554,7 +585,7 @@ def run(
         strategy=strategy,
         take_profit=take_profit,
         record_params=record_params,
-        pool_names=pool_names,
+        pool_names_by_day=pool_names_by_day,
     )
     st.stats["t_pool_s"] = t_pool
     st.stats["t_daily_s"] = t_daily

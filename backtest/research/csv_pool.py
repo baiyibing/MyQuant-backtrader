@@ -117,7 +117,11 @@ def load_pool_name_map(
     start: str | date,
     end: str | date,
 ) -> dict[str, str]:
-    """Union of CSV second-column names in [start, end]; later files win."""
+    """Deprecated legacy window flattening; unsafe for temporal decisions.
+
+    Later files still win for compatibility with callers outside the production
+    engines.  Use :func:`load_pool_names_by_day` for as-of name resolution.
+    """
     root = Path(pool_dir)
     start_ymd, end_ymd = _window_ymd(start, end)
     names: dict[str, str] = {}
@@ -134,6 +138,30 @@ def load_pool_name_map(
             if name:
                 names[code] = name
     return names
+
+
+def load_pool_names_by_day(
+    pool_dir: Path,
+    start: str | date,
+    end: str | date,
+) -> dict[str, dict[str, str]]:
+    """Load non-empty second-column names keyed by pool date (``YYYYMMDD``)."""
+    root = Path(pool_dir)
+    start_ymd, end_ymd = _window_ymd(start, end)
+    names_by_day: dict[str, dict[str, str]] = {}
+    for path in _iter_pool_csv_paths(root):
+        stem = path.stem
+        if len(stem) != 8 or not stem.isdigit() or not start_ymd <= stem <= end_ymd:
+            continue
+        try:
+            entries = parse_pool_csv_entries(path)
+        except Exception as exc:
+            print(f"skip pool {path.name}: {exc}", flush=True)
+            continue
+        names = {code: name for code, name in entries if name}
+        if names:
+            names_by_day[stem] = names
+    return names_by_day
 
 
 def load_pool_day_map(

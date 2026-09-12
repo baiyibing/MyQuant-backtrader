@@ -452,6 +452,35 @@ def test_simulate_buy_at_1455_and_t1_stop_next_open():
     assert sell["price"] == pytest.approx(9.40)
 
 
+def test_pool_name_asof_normal_then_st_and_by_day_beats_flat_map():
+    dates = ["2025-11-03", "2025-11-04"]
+    m0 = _day(
+        dates[0],
+        [(930, 10.0, 10.0, 10.0, 10.0), (1455, 10.5, 10.5, 10.5, 10.5)],
+    )
+    m1 = _day(
+        dates[1],
+        [(930, 11.03, 11.03, 11.03, 11.03), (1455, 11.03, 11.03, 11.03, 11.03)],
+    )
+
+    st = sim.simulate(
+        {"600000.SH": pd.concat([m0, m1])},
+        {"600000.SH": _daily(dates, [10.5, 11.03])},
+        {"20251103": ["600000.SH"], "20251104": ["600000.SH"]},
+        "20251103",
+        "20251104",
+        strategy="version8",
+        pool_names={"600000.SH": "*ST 扁平名"},
+        pool_names_by_day={
+            "20251103": {"600000.SH": "浦发"},
+            "20251104": {"600000.SH": "*ST 浦发"},
+        },
+    )
+
+    assert st.stats["buys"] == 1
+    assert st.stats["skip_limit_up"] == 1
+
+
 def test_t0_after_buy_high_does_not_set_peak():
     # 14:55 买 10.00，随后 high=10.50。若把 T+0 高点当峰值，T+1 close=10.10 会锚定回撤。
     dates = ["2025-11-03", "2025-11-04"]

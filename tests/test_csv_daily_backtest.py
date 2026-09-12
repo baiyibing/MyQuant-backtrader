@@ -787,6 +787,54 @@ def test_st_name_uses_five_percent_limit_up():
     assert allowed.stats["buys"] == 1
 
 
+def test_pool_name_asof_missing_held_code_falls_back_to_yesterday():
+    rows = {
+        "600000.SH": [
+            (10.0, 10.0, 10.0, 10.0),
+            (9.39, 9.39, 9.39, 9.39),
+        ]
+    }
+    bars = _bars(DAYS[:2], rows)
+
+    st = sim.simulate(
+        bars,
+        {"20251103": ["600000.SH"]},
+        "20251103",
+        "20251104",
+        strategy="version6",
+        pool_names_by_day={
+            "20251103": {"600000.SH": "*ST 浦发"},
+            "20251104": {"000001.SZ": "平安"},
+        },
+    )
+
+    assert st.stats["defer_sell_limit_down"] == 1
+    assert not any(trade["side"] == "SELL" for trade in st.trades)
+
+
+def test_pool_name_asof_future_st_does_not_change_earlier_limit():
+    rows = {
+        "600000.SH": [
+            (10.0, 10.0, 10.0, 10.0),
+            (10.5, 10.5, 10.5, 10.5),
+            (10.5, 10.5, 10.5, 10.5),
+        ]
+    }
+    bars = _bars(DAYS[:3], rows)
+
+    st = sim.simulate(
+        bars,
+        {"20251104": ["600000.SH"]},
+        "20251103",
+        "20251105",
+        strategy="version6",
+        pool_names_by_day={"20251105": {"600000.SH": "*ST 浦发"}},
+    )
+
+    assert st.stats["buys"] == 1
+    assert st.stats["skip_limit_up"] == 0
+
+
 def test_bj_thirty_percent_allows_close_that_would_be_ten_percent_limit():
     rows = {"920014.BJ": [(12.5, 12.5, 12.4, 12.5)] * 5}
     st = _run({"20251103": ["920014.BJ"]}, _bars(DAYS, rows))
