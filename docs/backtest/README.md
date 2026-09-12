@@ -87,7 +87,7 @@ python -m backtest.lebs.scan_report <scan-workdir> [--metric sharpe]
 | **★ 同源线复核交接（2026-08-27）** | [`../handoff/mockqmt-lebs-homology-review-handoff-2026-08-27.md`](../handoff/mockqmt-lebs-homology-review-handoff-2026-08-27.md) |
 | **★ LEBS 轻量事件驱动回测壳** | [`../engineering/plan-lightweight-event-backtest-shell-2026-08-25.md`](../engineering/plan-lightweight-event-backtest-shell-2026-08-25.md) |
 | 日线复权增量 | [`data/daily-adjusted-update-ssot.md`](data/daily-adjusted-update-ssot.md) |
-| **策略 7 金榕元 CSV 分钟（立项）** | [`plan-strategy7-turtle-csv-minute-2026-09-11.md`](plan-strategy7-turtle-csv-minute-2026-09-11.md) |
+| **策略 7 海龟 CSV 分钟（A–D 已合；E 本机）** | [`plan-strategy7-turtle-csv-minute-2026-09-11.md`](plan-strategy7-turtle-csv-minute-2026-09-11.md) |
 | **复权泄漏 / as_of_date（P1-7b）** | [`../operations/backtest/data-asof-leak-ssot.md`](../operations/backtest/data-asof-leak-ssot.md) |
 
 历史 Cerebro 结算权威评审稿仍在本目录，仅作考古，不再约束实现。
