@@ -56,6 +56,36 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def build_argument_parser():
+    """Build the legacy Cerebro entrypoint parser."""
+    import argparse
+
+    parser = argparse.ArgumentParser(description='Backtest with logging control')
+    parser.add_argument('--debug', action='store_true', help='Enable debug logging')
+    parser.add_argument('--strategies', default='', help='comma versions to run (e.g. version6); default all')
+    parser.add_argument('--start', default='20251023', help='buy-window start YYYYMMDD (pool CSV filter)')
+    parser.add_argument('--end', default='20251104', help='buy-window end YYYYMMDD (pool CSV filter)')
+    parser.add_argument(
+        '--allow-cerebro-fossil',
+        action='store_true',
+        help='explicitly allow the retired Cerebro/Rolling comparison path',
+    )
+    return parser
+
+
+def require_cerebro_fossil_opt_in(args):
+    """Fail closed before any Rolling/Cerebro backtest work starts."""
+    if not args.allow_cerebro_fossil:
+        print(
+            "Cerebro/Rolling is a retired comparison path. Use "
+            "backtest/research/csv_daily_backtest.py or "
+            "backtest/research/csv_minute_backtest.py with a strategy book; "
+            "pass --allow-cerebro-fossil only for legacy comparison.",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
+
+
 def load_stock_data(cerebro, processed_list, start_date: str, end_date: str, buy_date: str, adjust_type: str = 'none'):
     """统一的数据加载函数 - 优化版本（使用交易日历计算日线起始日期）
 
@@ -165,15 +195,10 @@ def load_stock_data(cerebro, processed_list, start_date: str, end_date: str, buy
 
 # ==================== 主程序 ====================
 if __name__ == '__main__':
-    import argparse
-
     # 解析命令行参数
-    parser = argparse.ArgumentParser(description='Backtest with logging control')
-    parser.add_argument('--debug', action='store_true', help='Enable debug logging')
-    parser.add_argument('--strategies', default='', help='comma versions to run (e.g. version6); default all')
-    parser.add_argument('--start', default='20251023', help='buy-window start YYYYMMDD (pool CSV filter)')
-    parser.add_argument('--end', default='20251104', help='buy-window end YYYYMMDD (pool CSV filter)')
+    parser = build_argument_parser()
     args = parser.parse_args()
+    require_cerebro_fossil_opt_in(args)
 
     # 根据 debug 标志调整根日志级别
     root_logger = logging.getLogger()

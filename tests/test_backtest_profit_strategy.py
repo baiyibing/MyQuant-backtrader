@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+import subprocess
+import sys
 
 from common.infra.timekeeping import CN_TZ
 
@@ -95,6 +97,33 @@ def test_backtest_main_full_strategy_list_uses_valid_factory_versions():
     assert "version1.1" not in text
     assert "version2.1" not in text
     assert "select_strategies = strategies" in text
+
+
+def test_backtest_main_full_requires_cerebro_fossil_flag():
+    repo_root = Path(__file__).resolve().parents[1]
+    result = subprocess.run(
+        [sys.executable, "backtest/backtest_main_full.py"],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode != 0
+    assert "csv_daily_backtest.py" in result.stderr
+    assert "csv_minute_backtest.py" in result.stderr
+
+
+def test_backtest_main_full_fossil_flag_allows_entry(monkeypatch):
+    repo_root = Path(__file__).resolve().parents[1]
+    monkeypatch.syspath_prepend(str(repo_root / "backtest"))
+    from backtest.backtest_main_full import (
+        build_argument_parser,
+        require_cerebro_fossil_opt_in,
+    )
+
+    args = build_argument_parser().parse_args(["--allow-cerebro-fossil"])
+    require_cerebro_fossil_opt_in(args)
 
 
 def test_rolling_strategy_indicator_config_drives_ma_construction():

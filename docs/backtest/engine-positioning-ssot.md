@@ -71,7 +71,7 @@ Qlib `PortAnaRecord` 停用。Cerebro / Rolling 观察退役（对照化石，�
 名单源 B  本仓               技术分析 / chip / TR / 手工
               ↓  同一契约（YYYYMMDD.csv，裸六位码）
 本仓向量化
-  1/2/3/5/6/8 策略书锁规则；7 只吃海龟池
+  1/2/3/4/5/6/8 策略书锁规则；7 只吃海龟池且不进 choices
        ↓  要上 Paper 才走
 1.3 trade_decision 纯函数 → LEBS 扫描 → MockQMT 真栈
 ```

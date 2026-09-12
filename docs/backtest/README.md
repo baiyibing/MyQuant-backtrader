@@ -46,7 +46,7 @@ D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_minute_backtest_v7.p
 
 ## Cerebro（观察退役）
 
-`backtest/backtest_main_full.py`、`ProfitStrategy`、chip / ma_chip 的 Cerebro 路径仍在树上，只做旧对照。**新策略不写 `ProfitStrategy.StrategyN`，不扩 Rolling。**
+`backtest/backtest_main_full.py --allow-cerebro-fossil`、`ProfitStrategy`、chip / ma_chip 的 Cerebro 路径仍在树上，只做旧对照；主入口没有该显式旗标会立即退出。**新策略不写 `ProfitStrategy.StrategyN`，不扩 Rolling。**
 
 ## SSOT
 

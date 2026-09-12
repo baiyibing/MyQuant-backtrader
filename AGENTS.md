@@ -6,8 +6,8 @@ Standalone research-face fork (see [README.md](README.md)). Since migration S2 (
 
 ## Research entries
 
-- 6/8 日线：`backtest/research/csv_daily_backtest.py --strategy version6|version8`
-- 6/8 分钟：`backtest/research/csv_minute_backtest.py --strategy version6|version8`
+- 1/2/3/4/5/6/8 日线：`backtest/research/csv_daily_backtest.py --strategy version1|version2|version3|version4|version5|version6|version8`
+- 1/2/3/4/5/6/8 分钟：`backtest/research/csv_minute_backtest.py --strategy version1|version2|version3|version4|version5|version6|version8`
 - 7 金榕元：`backtest/research/csv_minute_backtest_v7.py`（`--pool-dir` 必填，不回落 `stock_pool/`）
 - 名单：`backtest/research/csv_pool.py`（与 1.3 `lebs/csv/universe.py` 同口径）
 - 不要 `python -m backtest.lebs`（包不在本仓）。不要为新策略开 Cerebro。
