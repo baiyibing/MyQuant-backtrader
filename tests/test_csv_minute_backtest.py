@@ -11,6 +11,72 @@ import backtest.research.csv_minute_backtest as sim
 from backtest.research.csv_daily_backtest import chase_explained
 
 
+def _write_minute_lake_frame(tmp_path, code: str, frame: pd.DataFrame) -> None:
+    partition = tmp_path / f"symbol={sim.to_partition_key(code)}"
+    partition.mkdir(parents=True, exist_ok=True)
+    frame.to_parquet(partition / "data.parquet", index=False)
+
+
+def _minute_time_ms(*timestamps: str) -> list[int]:
+    return [
+        int(pd.Timestamp(timestamp, tz="UTC").timestamp() * 1000)
+        for timestamp in timestamps
+    ]
+
+
+def test_read_one_minute_drops_only_whole_zero_volume_days(tmp_path):
+    _write_minute_lake_frame(
+        tmp_path,
+        "600000.SH",
+        pd.DataFrame(
+            {
+                "time": _minute_time_ms(
+                    "2025-11-03 09:30",
+                    "2025-11-03 14:55",
+                    "2025-11-04 09:30",
+                    "2025-11-04 14:55",
+                ),
+                "open": [10.0, 10.0, 0.0, 0.0],
+                "high": [10.1, 10.1, 0.0, 0.0],
+                "low": [9.9, 9.9, 0.0, 0.0],
+                "close": [10.0, 10.0, 0.0, 0.0],
+                "volume": [0.0, 1000.0, 0.0, 0.0],
+            }
+        ),
+    )
+
+    got = sim._read_one_minute("600000.SH", tmp_path, "20251103", "20251104")
+
+    assert got is not None
+    assert list(got["ymd"]) == ["20251103", "20251103"]
+    assert list(got["hm"]) == [570, 895]
+    assert list(got.columns) == ["open", "high", "low", "close", "ymd", "hm"]
+
+
+def test_read_one_minute_without_volume_keeps_original_behavior(tmp_path):
+    _write_minute_lake_frame(
+        tmp_path,
+        "600000.SH",
+        pd.DataFrame(
+            {
+                "time": _minute_time_ms(
+                    "2025-11-03 09:30", "2025-11-04 09:30"
+                ),
+                "open": [10.0, 10.1],
+                "high": [10.1, 10.2],
+                "low": [9.9, 10.0],
+                "close": [10.0, 10.1],
+            }
+        ),
+    )
+
+    got = sim._read_one_minute("600000.SH", tmp_path, "20251103", "20251104")
+
+    assert got is not None
+    assert list(got["ymd"]) == ["20251103", "20251104"]
+    assert list(got["close"]) == [10.0, 10.1]
+
+
 def test_scan_gap_open_stop():
     o = np.array([9.40, 9.50])
     h = np.array([9.50, 9.55])

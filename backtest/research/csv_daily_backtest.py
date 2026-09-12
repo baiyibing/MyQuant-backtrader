@@ -213,7 +213,11 @@ def _read_one_daily(
         return None
     t0, t1 = utc_ms_range(start, end)
     try:
-        table = pq.read_table(path, columns=["time", "open", "high", "low", "close"])
+        columns = ["time", "open", "high", "low", "close"]
+        has_volume = "volume" in pq.read_schema(path).names
+        table = pq.read_table(
+            path, columns=columns + (["volume"] if has_volume else [])
+        )
         table = table.filter((pc.field("time") >= t0) & (pc.field("time") <= t1))
     except Exception:
         return None
@@ -227,10 +231,17 @@ def _read_one_daily(
             "high": table["high"].to_numpy(),
             "low": table["low"].to_numpy(),
             "close": table["close"].to_numpy(),
+            **(
+                {"_volume": table["volume"].to_numpy()}
+                if has_volume
+                else {}
+            ),
         },
         index=idx,
     ).astype(np.float64)
     out = out[~out.index.duplicated(keep="last")].sort_index()
+    if has_volume:
+        out = out.loc[out["_volume"] != 0].drop(columns="_volume")
     return out if not out.empty else None
 
 
