@@ -1,0 +1,29 @@
+{
+  "plan": {
+    "claude": {
+      "content_sha256_16": "4cfdbe48a0dd33e2",
+      "git_sha": "<untracked>",
+      "path": "docs/backtest/plan-pool-pipeline-r0r1-2026-09-12.md",
+      "reviewed_at": "2026-09-12"
+    },
+    "codex": {
+      "content_sha256_16": "4cfdbe48a0dd33e2",
+      "git_sha": "<untracked>",
+      "path": "docs/backtest/plan-pool-pipeline-r0r1-2026-09-12.md",
+      "reviewed_at": "2026-09-12"
+    },
+    "cursor-auto": {
+      "content_sha256_16": "4cfdbe48a0dd33e2",
+      "git_sha": "<untracked>",
+      "path": "docs/backtest/plan-pool-pipeline-r0r1-2026-09-12.md",
+      "reviewed_at": "2026-09-12"
+    },
+    "cursor-kimi-k3-high": {
+      "content_sha256_16": "4cfdbe48a0dd33e2",
+      "git_sha": "<untracked>",
+      "path": "docs/backtest/plan-pool-pipeline-r0r1-2026-09-12.md",
+      "reviewed_at": "2026-09-12"
+    }
+  },
+  "schema_version": 1
+}
