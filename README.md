@@ -49,6 +49,18 @@ D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_minute_backtest.py -
 D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_minute_backtest_v7.py --start 20260804 --end 20260909 --pool-dir E:\PycharmProjects\OSkhQuant1.3\stock_pool_turtle
 ```
 
+R5（仅做 pred TopN 管道检查）：
+
+```powershell
+# MyQuant 仓导出（不要使用 holdings 口径的 exports/r0_*）
+D:\anaconda3\envs\vanna312\python.exe my_scripts/export_daily_pool.py --pred my_scripts\预测结果.csv --topk 10 --asof pred_minus_one --out-dir exports/r2_pred_topn_20260302_20260323
+# 本仓；<first>/<last> 是导出目录内首末 CSV 的文件名 stem
+D:\anaconda3\envs\vanna312\python.exe -c "from pathlib import Path; from backtest.research.csv_pool import validate_pool_dir; err=validate_pool_dir(Path(r'<r2 out>')); assert err == [], err"
+D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_daily_backtest.py --strategy version6 --pool-dir <r2 out> --start <first> --end <last>
+```
+
+`--start/--end` 跟导出文件名走：H0 / `pred_minus_one` 常没有 `20260302.csv`，最后一个 pred 日也不写文件。无名称的 ST 按代码前缀使用 10% / 20% / 30% 档，不按 5%；本例只检查管道，不能把 NAV 或涨跌停桶当作模型结论。详见 [R2/R5 计划](docs/backtest/plan-pool-pipeline-r2r5-2026-09-12.md)与[名单 CSV 契约](docs/backtest/pool-csv-contract.md)。
+
 细则与 1.3 入口：[`docs/backtest/README.md`](docs/backtest/README.md)。
 
 Cerebro 全市场滚动（`backtest/backtest_main_full.py --allow-cerebro-fossil`）只做旧对照，不接新策略；无该显式旗标会立即退出。

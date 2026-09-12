@@ -24,11 +24,19 @@ D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_minute_backtest.py ^
 D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_minute_backtest.py ^
   --strategy version8 --start 20251023 --end 20260909
 
+# R5：MyQuant pred 当日 TopN；仅检查管道，不要使用 holdings 口径的 exports/r0_*
+D:\anaconda3\envs\vanna312\python.exe my_scripts/export_daily_pool.py --pred my_scripts\预测结果.csv --topk 10 --asof pred_minus_one --out-dir exports/r2_pred_topn_20260302_20260323
+D:\anaconda3\envs\vanna312\python.exe -c "from pathlib import Path; from backtest.research.csv_pool import validate_pool_dir; err=validate_pool_dir(Path(r'<r2 out>')); assert err == [], err"
+D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_daily_backtest.py ^
+  --strategy version6 --pool-dir <r2 out> --start <first filename stem> --end <last filename stem>
+
 # 策略 7 金榕元仓位机（独立，不进 1/2/3/4/5/6/8 策略书）。只吃海龟池。
 D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_minute_backtest_v7.py ^
   --start 20260804 --end 20260909 ^
   --pool-dir E:\PycharmProjects\OSkhQuant1.3\stock_pool_turtle
 ```
+
+R5 的 `--start/--end` 必须跟导出的首末文件名走：H0 / `pred_minus_one` 常没有 `20260302.csv`，最后一个 pred 日不写文件。无名称的 ST 按代码前缀使用 10% / 20% / 30% 档，不按 5%；该例只验管道，NAV / 涨跌停桶不是模型结论。细则见 [R2/R5 计划](plan-pool-pipeline-r2r5-2026-09-12.md)与[名单 CSV 契约](pool-csv-contract.md)。
 
 落盘：`backtest_output/csv_daily_{book}_{start}_{end}/`、`csv_minute_{book}_{start}_{end}/`、`csv_minute_v7_{start}_{end}/`（`summary.txt`、`daily_equity.csv`、`trades.csv`）。
 
