@@ -1,6 +1,16 @@
 # AGENTS
 
-Standalone backtrader + data fork (see [README.md](README.md)). Since migration S2 (2026-09-09) this repo owns the full research face; OSkhQuant1.3 stays the trading stack and keeps only the `oskh_factors` chip/bridge micropackage.
+Standalone research-face fork (see [README.md](README.md)). Since migration S2 (2026-09-09) this repo owns the research face; OSkhQuant1.3 stays the trading stack and keeps only the `oskh_factors` chip/bridge micropackage.
+
+**成交引擎定位**：本仓 = 向量化。1.3 = LEBS + MockQMT 真栈。Qlib PortAnaRecord 停用；Cerebro 观察退役。见 [`docs/backtest/engine-positioning-ssot.md`](docs/backtest/engine-positioning-ssot.md)。入口命令见 [`docs/backtest/README.md`](docs/backtest/README.md)。
+
+## Research entries
+
+- 6/8 日线：`backtest/research/csv_daily_backtest.py --strategy version6|version8`
+- 6/8 分钟：`backtest/research/csv_minute_backtest.py --strategy version6|version8`
+- 7 金榕元：`backtest/research/csv_minute_backtest_v7.py`（`--pool-dir` 必填，不回落 `stock_pool/`）
+- 名单：`backtest/research/csv_pool.py`（与 1.3 `lebs/csv/universe.py` 同口径）
+- 不要 `python -m backtest.lebs`（包不在本仓）。不要为新策略开 Cerebro。
 
 ## Python
 

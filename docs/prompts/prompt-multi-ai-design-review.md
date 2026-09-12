@@ -25,6 +25,6 @@ D:\anaconda3\envs\vanna312\python.exe scripts/run/run_multi_ai_review.py `
 
 ## 本仓约束
 
-- 只评 Cerebro / path-SSOT / 筹码包装，不把实盘栈当前提。
+- 只评本仓向量化 / path-SSOT / 筹码包装，不把实盘栈当前提。Cerebro 仅考古。引擎分工见 `docs/backtest/engine-positioning-ssot.md`。
 - 评审员禁改文件。
 - 输出：🔴 / 🟡 / 🟢 / ✅，每条带 `file:line`。
