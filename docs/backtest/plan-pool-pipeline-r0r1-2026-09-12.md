@@ -6,6 +6,7 @@
 > **fan-out**：2026-09-12 classic，四家 rc=0（codex 224s / kimi 677s / auto 147s / claude 446s）。综合：`docs/architecture/reviews/2026-09-12/plan-pool-pipeline-r0r1-2026-09-12/merge-consensus.md`。
 > **范围**：MyQuant-backtrader 为主。MyQuant `position_analysis.txt` 只读输入。1.3 只读对照。
 > **定位 SSOT**：[engine-positioning-ssot.md](engine-positioning-ssot.md)。成交核现锁：[engine-ashare-correctness.md](engine-ashare-correctness.md)（E-R1–E-R4，PR #18）。
+> **后续**：R2/R5（pred TopN 闭环，不做 R3）见 [plan-pool-pipeline-r2r5-2026-09-12.md](plan-pool-pipeline-r2r5-2026-09-12.md)。本文「不碰 R2/R5」只约束当时那一轮。
 > **上游**：MyQuant `docs/plan-three-repo-roadmap-2026-09-12.md` §3 R0/R1、§3.1、§6（外仓路径，不作本仓入口）。人裁「以本仓为主：A–E 后剩下的正确性 + 名单管道 + 轻量清债，不重写引擎」。
 > **对抗**：dissent-steelman / domain-safety / pattern-evidence（不计票）。勘误 §8。综合草案：`docs/architecture/reviews/2026-09-12/plan-pool-pipeline-r0r1-2026-09-12/review-by-cursor.md`。
 
