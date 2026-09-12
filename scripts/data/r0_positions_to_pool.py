@@ -35,7 +35,11 @@ _QLIB_CODE_RE = re.compile(r"^(?:SH|SZ|BJ)(\d{6})$")
 
 def _parse_date_line(line: str, line_number: int) -> str | None:
     """Return YYYYMMDD for a date label, or None for an unrelated line."""
-    if not line.lstrip().startswith("日期"):
+    stripped = line.lstrip()
+    # Real Qlib reports also have "日期范围:" in the header; that is not a day.
+    if stripped.startswith("日期范围"):
+        return None
+    if not stripped.startswith("日期"):
         return None
     match = _DATE_LABEL_RE.fullmatch(line)
     if match is None:
