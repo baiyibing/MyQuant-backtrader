@@ -70,6 +70,7 @@ R5 的 `--start/--end` 必须跟导出的首末文件名走：H0 / `pred_minus_o
 | **Qlib 训练厂 R3（processors + filter；不做 M5）** | [plan-qlib-train-r3-2026-09-12.md](plan-qlib-train-r3-2026-09-12.md) |
 | **M5 名单归因（首轮 2026-03）** | [plan-m5-list-attribution-2026-09-13.md](plan-m5-list-attribution-2026-09-13.md) · [2026-03 报告](m5-list-attribution-2026-03.md) |
 | **M5 二轮（长窗三源；等 MyQuant pred）** | [plan-m5-round2-2026-09-13.md](plan-m5-round2-2026-09-13.md) |
+| **名单源 B（TR → 契约 CSV；计划）** | [plan-source-b-ta-pool-2026-09-13.md](plan-source-b-ta-pool-2026-09-13.md) |
 | **MyQuant 中期同步（2026-09-13）** | [myquant-progress-sync-2026-09-13.md](myquant-progress-sync-2026-09-13.md) |
 | 策略 1–8 书契约（U-R\*；撮合句以 E-R\* 为准） | [plan-unify-csv-strategies-1-8-2026-09-12.md](plan-unify-csv-strategies-1-8-2026-09-12.md) |
 | **策略 7 金榕元 CSV 分钟（A–D 已合；E 本机）** | [plan-strategy7-turtle-csv-minute-2026-09-11.md](plan-strategy7-turtle-csv-minute-2026-09-11.md) |
