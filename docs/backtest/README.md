@@ -80,6 +80,7 @@ R5 的 `--start/--end` 必须跟导出的首末文件名走：H0 / `pred_minus_o
 | **Qlib 训练厂 R3（processors + filter；不做 M5）** | [plan-qlib-train-r3-2026-09-12.md](plan-qlib-train-r3-2026-09-12.md) |
 | **M5 名单归因（首轮 2026-03）** | [plan-m5-list-attribution-2026-09-13.md](plan-m5-list-attribution-2026-09-13.md) · [2026-03 报告](m5-list-attribution-2026-03.md) |
 | **M5 二轮（2026-03–09 三源）** | [plan-m5-round2-2026-09-13.md](plan-m5-round2-2026-09-13.md) · [报告](m5-list-attribution-2026-03-09.md) |
+| **策略 9 / 10 宿主烟测（2026-09-13）** | [s9-s10-host-smoke-2026-09-13.md](s9-s10-host-smoke-2026-09-13.md) |
 | **MyQuant 中期同步（2026-09-13）** | [myquant-progress-sync-2026-09-13.md](myquant-progress-sync-2026-09-13.md) |
 | 策略 1–8 书契约（U-R\*；撮合句以 E-R\* 为准） | [plan-unify-csv-strategies-1-8-2026-09-12.md](plan-unify-csv-strategies-1-8-2026-09-12.md) |
 | **策略 9 底量超顶量（买点 CSV + v9 卖点）** | [plan-strategy9-bottom-vol-2026-09-13.md](plan-strategy9-bottom-vol-2026-09-13.md) |
