@@ -2,7 +2,7 @@
 
 > **落盘**：2026-09-12。
 > **状态**：📄 **v1.0 · 已实施**（本仓 [#24](https://github.com/baiyibing/MyQuant-backtrader/pull/24)，MyQuant [#2](https://github.com/baiyibing/MyQuant/pull/2)）。
-> **后续**：训练厂 R3 见 [plan-qlib-train-r3-2026-09-12.md](plan-qlib-train-r3-2026-09-12.md)。M5 等 R3 重训再开。
+> **后续**：训练厂 R3 见 [plan-qlib-train-r3-2026-09-12.md](plan-qlib-train-r3-2026-09-12.md)。首轮 M5 已做；长窗二轮见 [plan-m5-round2-2026-09-13.md](plan-m5-round2-2026-09-13.md)。
 > **风险档**：**L1**（pred 导出胶水 + R0 真窗残留修 + 本仓消费闭环；不重写引擎 / 不改卖点 / 不做 R3）。
 > **范围**：两仓。MyQuant 出 R2 导出；本仓修 R0 残留并跑 R5。1.3 只读对照。
 > **定位 SSOT**：[engine-positioning-ssot.md](engine-positioning-ssot.md)。成交核现锁：[engine-ashare-correctness.md](engine-ashare-correctness.md)（E-R1–E-R4）。名单契约：[pool-csv-contract.md](pool-csv-contract.md)。R0/R1 已合 [#21](https://github.com/baiyibing/MyQuant-backtrader/pull/21)。

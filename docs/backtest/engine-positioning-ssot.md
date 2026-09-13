@@ -87,7 +87,7 @@ Qlib `PortAnaRecord` 停用。Cerebro / Rolling 观察退役（对照化石，�
 | 新名单、新卖点、扫窗、问「这规则赚不赚」 | 本仓向量化 |
 | 规则已锁，且产品要和 Paper 同一决策核 | 1.3 LEBS |
 | 改了资金 / 卖核 / 调度，问「栈过不过」 | 1.3 MockQMT 真栈 |
-| 模型打分、IC、出 CSV | MyQuant（不跑 PortAnaRecord） |
+| 模型打分、IC、出 CSV | MyQuant（不跑 PortAnaRecord；训练/导出已写 `myquant.run-manifest/1`，本仓暂不接） |
 | 对照「下一开盘才成交」的旧结果 | 本仓已有 Cerebro 产物，不新开 |
 
 ---
