@@ -10,13 +10,13 @@ Seeded from OSkhQuant slim snapshot at `5d41252`。S2（2026-09-09）之后本�
 
 | Path | Role |
 |------|------|
-| `backtest/research/csv_daily_backtest.py` | 向量化日线（策略 1/2/3/4/5/6/8 策略书） |
-| `backtest/research/csv_minute_backtest.py` | 向量化分钟（策略 1/2/3/4/5/6/8） |
+| `backtest/research/csv_daily_backtest.py` | 向量化日线（策略 1/2/3/4/5/6/8/9/10 策略书） |
+| `backtest/research/csv_minute_backtest.py` | 向量化分钟（策略 1/2/3/4/5/6/8/9/10） |
 | `backtest/research/csv_minute_backtest_v7.py` | 策略 7 金榕元仓位机（独立） |
 | `backtest/research/csv_ledger.py` | 6/8 共用账本（Position / 买卖 / 追买桶） |
 | `backtest/research/market_layer.py` | 涨跌停档位与 Decimal 涨跌停价 |
 | `backtest/research/csv_pool.py` | 名单 CSV：裸六位码 → canonical |
-| `backtest/research/csv_strategy_books.py` | 1/2/3/4/5/6/8 策略书 |
+| `backtest/research/csv_strategy_books.py` | 1/2/3/4/5/6/8/9/10 策略书 |
 | `backtest/research/chip/` | Chip 因子消费者 |
 | `backtest/` 根上 Cerebro | 观察退役（`backtest_main_full`、Rolling、chip indicator） |
 | `backtest/legacy/` | 非 Cerebro 旧回放 |
@@ -41,7 +41,7 @@ D:\anaconda3\envs\vanna312\python.exe -m pip install -r requirements.txt
 
 ## Run research backtest
 
-必须 `--strategy version1|version2|version3|version4|version5|version6|version8`。7 不在 choices，必须走独立入口并传 `--pool-dir`。数据经 `oskh_data` / `resolve_period_root`（有 `F:\stock_data\.authority` 时跟 F 盘）。
+必须 `--strategy version1|…|version6|version8|version9|version10`。7 不在 choices，必须走独立入口并传 `--pool-dir`。9 / 10 在 choices 里，但也必须 `--pool-dir`（`export_strategy9_pool.py` / `export_ta_pool.py`），拒绝 `stock_pool/`。数据经 `oskh_data` / `resolve_period_root`（有 `F:\stock_data\.authority` 时跟 F 盘）。
 
 ```powershell
 D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_daily_backtest.py --strategy version6 --start 20251023 --end 20260909

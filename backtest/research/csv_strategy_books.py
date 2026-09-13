@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Callable, Optional
 
 from backtest.research import (
@@ -18,7 +19,10 @@ from backtest.research import (
     strategy5_rules,
     strategy6_rules,
     strategy8_rules,
+    strategy9_rules,
+    strategy10_rules,
 )
+from backtest.research.csv_pool import is_repo_stock_pool
 
 HELP_LOCK_V1 = strategy1_rules.HELP_LOCK
 HELP_LOCK_V2 = strategy2_rules.HELP_LOCK
@@ -27,6 +31,10 @@ HELP_LOCK_V4 = strategy4_rules.HELP_LOCK
 HELP_LOCK_V5 = strategy5_rules.HELP_LOCK
 HELP_LOCK_V6 = strategy6_rules.HELP_LOCK
 HELP_LOCK_V8 = strategy8_rules.HELP_LOCK
+HELP_LOCK_V9 = strategy9_rules.HELP_LOCK
+HELP_LOCK_V10 = strategy10_rules.HELP_LOCK
+
+FORBIDDEN_DEFAULT_STOCK_POOL = frozenset({"version9", "version10"})
 
 
 @dataclass(frozen=True)
@@ -125,7 +133,7 @@ def add_strategy6_ratio_args(ap: argparse.ArgumentParser) -> None:
         "--stop-pct",
         type=float,
         default=None,
-        help="stop-loss fraction override (version6 default 0.06, version8 default 0.20)",
+        help="stop-loss fraction override (v6 0.06, v8 0.20, v9 0.08)",
     )
     ap.add_argument(
         "--profit-base",
@@ -192,6 +200,26 @@ def strategy6_kwargs_from_args(args) -> dict:
         "tiers": {1: t1, 2: t2, 3: t3, 4: t4},
         "tier_default": t5,
     }
+
+
+def resolve_research_pool_dir(
+    strategy: str,
+    pool_dir: Path | None,
+    *,
+    repo: str | Path,
+) -> Path:
+    """1–6/8 default to ``stock_pool/``; version9/10 refuse that tree."""
+    name = normalize_csv_strategy(strategy)
+    default = Path(repo) / "stock_pool"
+    chosen = default if pool_dir is None else Path(pool_dir)
+    if name in FORBIDDEN_DEFAULT_STOCK_POOL and is_repo_stock_pool(
+        chosen, repo=Path(repo)
+    ):
+        raise SystemExit(
+            f"{name} requires --pool-dir from export_strategy9_pool.py; "
+            f"refusing stock_pool/: {chosen}"
+        )
+    return chosen
 
 
 def csv_run_kwargs_from_args(args) -> dict:
@@ -400,6 +428,63 @@ def _run_kwargs_version8(args) -> dict:
     return {"strategy": "version8", "stop_pct": stop}
 
 
+def _apply_version9(
+    *, stop_pct: Optional[float] = None, take_profit=None, record_params=None, **_
+) -> dict:
+    resolved = strategy9_rules.STOP_PCT if stop_pct is None else float(stop_pct)
+
+    def _tp(px, cost, peak, n_days):
+        return strategy9_rules.take_profit_reason(px, cost, peak, n_days)
+
+    def _rec(st):
+        strategy9_rules.record_strategy9_params(st, stop_pct=resolved)
+
+    return {
+        "stop_pct": resolved,
+        "take_profit": _tp if take_profit is None else take_profit,
+        "record_params": _rec if record_params is None else record_params,
+    }
+
+
+def _run_kwargs_version9(args) -> dict:
+    return {"strategy": "version9", "stop_pct": _stop_override_from_args(args)}
+
+
+def _apply_version10(
+    *,
+    stop_pct: Optional[float] = None,
+    take_profit=None,
+    record_params=None,
+    profit_base: Optional[float] = None,
+    tiers: Optional[dict] = None,
+    tier_default: Optional[float] = None,
+    **_,
+) -> dict:
+    hooks = _apply_version6(
+        stop_pct=stop_pct,
+        take_profit=take_profit,
+        record_params=record_params,
+        profit_base=profit_base,
+        tiers=tiers,
+        tier_default=tier_default,
+    )
+    if record_params is not None:
+        return hooks
+    inner = hooks["record_params"]
+
+    def _rec(st):
+        inner(st)
+        st.stats["sell_book"] = strategy10_rules.BOOK_TAG
+        st.stats["sell_logic"] = "version6"
+
+    hooks["record_params"] = _rec
+    return hooks
+
+
+def _run_kwargs_version10(args) -> dict:
+    return {"strategy": "version10", **strategy6_kwargs_from_args(args)}
+
+
 register(
     CsvStrategyBook(
         name="version1",
@@ -482,5 +567,29 @@ register(
         help_lock=strategy8_rules.HELP_LOCK,
         apply=_apply_version8,
         run_kwargs=_run_kwargs_version8,
+    )
+)
+register(
+    CsvStrategyBook(
+        name="version9",
+        tag=strategy9_rules.BOOK_TAG,
+        aliases=("9", "v9", "version9"),
+        allow_add=strategy9_rules.ALLOW_ADD,
+        peak_gap_min=strategy9_rules.PEAK_GAP_MIN,
+        help_lock=strategy9_rules.HELP_LOCK,
+        apply=_apply_version9,
+        run_kwargs=_run_kwargs_version9,
+    )
+)
+register(
+    CsvStrategyBook(
+        name="version10",
+        tag=strategy10_rules.BOOK_TAG,
+        aliases=("10", "v10", "version10"),
+        allow_add=strategy10_rules.ALLOW_ADD,
+        peak_gap_min=strategy10_rules.PEAK_GAP_MIN,
+        help_lock=strategy10_rules.HELP_LOCK,
+        apply=_apply_version10,
+        run_kwargs=_run_kwargs_version10,
     )
 )

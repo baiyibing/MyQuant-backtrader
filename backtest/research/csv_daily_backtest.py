@@ -11,6 +11,7 @@ adjust_type='none' 对齐）；佣金 0.1% 双边（与 broker.setcommission(0.0
     python backtest/research/csv_daily_backtest.py --strategy version6 --start 20251023 --end 20260909
     python backtest/research/csv_daily_backtest.py --strategy version8 --start 20251023 --end 20260909
     python backtest/research/csv_daily_backtest.py --strategy version6 --start 20260303 --end 20260323 --out-dir backtest_output/m5_pred
+    python backtest/research/csv_daily_backtest.py --strategy version9 --pool-dir exports/s9_bvot_20260303_20260908 --start 20260303 --end 20260908
 """
 
 from __future__ import annotations
@@ -34,6 +35,7 @@ sys.path.insert(0, REPO)
 from backtest.research.csv_strategy_books import (  # noqa: E402
     HELP_LOCK_V6,
     HELP_LOCK_V8,
+    HELP_LOCK_V9,
     add_csv_strategy_arg,
     add_strategy6_ratio_args,
     apply_csv_strategy,
@@ -42,6 +44,7 @@ from backtest.research.csv_strategy_books import (  # noqa: E402
     help_lock_all,
     help_lock_for as _help_lock_for,
     normalize_csv_strategy,
+    resolve_research_pool_dir,
     strategy6_kwargs_from_args,
 )
 from backtest.research.strategy6_rules import (  # noqa: E402
@@ -91,6 +94,7 @@ from backtest.research.market_layer import (  # noqa: E402
 _ = (
     HELP_LOCK_V6,
     HELP_LOCK_V8,
+    HELP_LOCK_V9,
     normalize_csv_strategy,
     strategy6_kwargs_from_args,
     PROFIT_BASE,
@@ -556,7 +560,7 @@ def run(
 ) -> SimState:
     warn_stale_period_env()
     t_pool = time.perf_counter()
-    actual_pool_dir = Path(pool_dir) if pool_dir is not None else Path(REPO) / "stock_pool"
+    actual_pool_dir = resolve_research_pool_dir(strategy, pool_dir, repo=REPO)
     pool_days = load_pool_days(start, end, pool_dir=actual_pool_dir)
     pool_names_by_day = load_pool_names_by_day(actual_pool_dir, start, end)
     t_pool = time.perf_counter() - t_pool
@@ -643,7 +647,12 @@ def summarize(
             f"{st.stats['profit_base']:.0%} | 涨幅>{st.stats['peak_dd_arm']:.0%} 时 "
             f"最高价回撤 {st.stats['peak_dd_pct']:.0%}"
         )
-    elif st.stats.get("sell_book") == "v6" or "trail_t1" in st.stats:
+    elif st.stats.get("sell_book") == "v9":
+        lines.append(
+            f"  参数: 止损 {stop_text} | 满持有 "
+            f"{int(st.stats.get('max_hold', 20))} 日 force_sell"
+        )
+    elif st.stats.get("sell_book") in {"v6", "v10"} or "trail_t1" in st.stats:
         lines.append(
             f"  参数: 止损 {stop_text} | 锚 {st.stats['profit_base']:.0%} | "
             f"回撤 T+1 {st.stats['trail_t1']:.0%} / T+2 {st.stats['trail_t2']:.0%} / "
@@ -833,6 +842,7 @@ def main(argv: Optional[list] = None) -> int:
     add_csv_strategy_arg(ap)
     add_strategy6_ratio_args(ap)
     args = ap.parse_args(argv if argv is not None else None)
+    pool_dir = resolve_research_pool_dir(args.strategy, args.pool_dir, repo=REPO)
 
     st = run(
         args.start,
@@ -840,7 +850,7 @@ def main(argv: Optional[list] = None) -> int:
         total_cash=args.cash_total,
         daily_quota=args.daily_quota,
         workers=args.workers,
-        pool_dir=args.pool_dir,
+        pool_dir=pool_dir,
         **csv_run_kwargs_from_args(args),
     )
     book = engine_book(args.strategy)
