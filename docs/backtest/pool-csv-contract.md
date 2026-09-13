@@ -24,8 +24,10 @@ empty or parse-empty files always mean “no buys”.
 校验失败；宽松的 `_cell_to_bare`、`parse_pool_csv` 和
 `parse_pool_csv_entries` 仍接受这类输入。成交引擎的 `run()` 不调用严格校验。
 
-The map representation intentionally differs by engine. Strategies 6/8 omit an
-empty file from their `YYYYMMDD`-keyed map (`empty_in_map=False`). Strategy 7
+The map representation intentionally differs by engine. Strategies 6/8/9/10 omit
+an empty file from their `YYYYMMDD`-keyed map (`empty_in_map=False`). Strategy 7
 retains it as an empty list in its `datetime.date`-keyed map
-(`empty_in_map=True`). Strategy 7 still requires an explicit `--pool-dir`; only
-the 6/8 engines default to the repository `stock_pool/` directory.
+(`empty_in_map=True`). Strategies 7, 9 and 10 still require an explicit
+`--pool-dir`; only the 1–6/8 engines default to the repository `stock_pool/`
+directory. Strategies 9 and 10 also refuse that tree when it is passed
+explicitly.

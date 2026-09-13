@@ -46,6 +46,7 @@ from backtest.research.csv_daily_backtest import (  # noqa: E402
     chase_decision,
     csv_run_kwargs_from_args,
     engine_book,
+    resolve_research_pool_dir,
     execute_buy,
     finish_pending_chase,
     queue_limit_up_chase,
@@ -815,7 +816,7 @@ def run(
             flush=True,
         )
     t_pool = time.perf_counter()
-    actual_pool_dir = Path(pool_dir) if pool_dir is not None else Path(REPO) / "stock_pool"
+    actual_pool_dir = resolve_research_pool_dir(strategy, pool_dir, repo=REPO)
     pool_days = load_pool_days(start, end, pool_dir=actual_pool_dir)
     pool_names_by_day = load_pool_names_by_day(actual_pool_dir, start, end)
     t_pool = time.perf_counter() - t_pool
@@ -903,6 +904,7 @@ def main(argv: Optional[list] = None) -> int:
     add_csv_strategy_arg(ap)
     add_strategy6_ratio_args(ap)
     args = ap.parse_args(argv if argv is not None else None)
+    pool_dir = resolve_research_pool_dir(args.strategy, args.pool_dir, repo=REPO)
 
     st = run(
         args.start,
@@ -910,7 +912,7 @@ def main(argv: Optional[list] = None) -> int:
         total_cash=args.cash_total,
         daily_quota=args.daily_quota,
         workers=args.workers,
-        pool_dir=args.pool_dir,
+        pool_dir=pool_dir,
         use_cache=not args.no_cache,
         rebuild_cache=args.rebuild_cache,
         **csv_run_kwargs_from_args(args),

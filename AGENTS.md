@@ -6,9 +6,11 @@ Standalone research-face fork (see [README.md](README.md)). Since migration S2 (
 
 ## Research entries
 
-- 1/2/3/4/5/6/8 日线：`backtest/research/csv_daily_backtest.py --strategy version1|version2|version3|version4|version5|version6|version8`
-- 1/2/3/4/5/6/8 分钟：`backtest/research/csv_minute_backtest.py --strategy version1|version2|version3|version4|version5|version6|version8`
+- 1/2/3/4/5/6/8/9/10 日线：`backtest/research/csv_daily_backtest.py --strategy version1|…|version6|version8|version9|version10`
+- 1/2/3/4/5/6/8/9/10 分钟：`backtest/research/csv_minute_backtest.py --strategy version1|…|version6|version8|version9|version10`
 - 7 金榕元：`backtest/research/csv_minute_backtest_v7.py`（`--pool-dir` 必填，不回落 `stock_pool/`）
+- 9 底量超顶量：`scripts/data/export_strategy9_pool.py` 写名单，再 `--strategy version9 --pool-dir`（拒绝 `stock_pool/`）
+- 10 换手阻力 / 源 B：`scripts/data/export_ta_pool.py` 写名单（湖当日有 K；不做 TopK），再 `--strategy version10 --pool-dir`（卖点同 6；拒绝 `stock_pool/`）
 - 名单：`backtest/research/csv_pool.py`（与 1.3 `lebs/csv/universe.py` 同口径）
 - 不要 `python -m backtest.lebs`（包不在本仓）。不要为新策略开 Cerebro。
 

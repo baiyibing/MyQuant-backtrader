@@ -6,10 +6,10 @@
 
 ## 本仓研究入口（向量化）
 
-名单：`YYYYMMDD.csv`，首列裸六位码，`parse_pool_csv` 补交易所后缀。缺日 / 空文件 = 当日不买。6/8 默认读本仓 `stock_pool/`；7 必须 `--pool-dir`（或 `OSKH_TURTLE_POOL_DIR`），不要回落 `stock_pool/`。
+名单：`YYYYMMDD.csv`，首列裸六位码，`parse_pool_csv` 补交易所后缀。缺日 / 空文件 = 当日不买。6/8 默认读本仓 `stock_pool/`；7 / **9** / **10** 必须 `--pool-dir`，不要回落 `stock_pool/`。
 
 ```text
-# 策略 1 / 2 / 3 / 4 / 5 / 6 / 8：共用引擎，策略书换卖点与加仓。必须 --strategy，无缺省。
+# 策略 1 / 2 / 3 / 4 / 5 / 6 / 8 / 9 / 10：共用引擎，策略书换卖点与加仓。必须 --strategy，无缺省。
 # 日线近似（收盘成交；分钟湖短于窗口时用这个接到今天）
 D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_daily_backtest.py ^
   --strategy version6 --start 20251023 --end 20260909 ^
@@ -30,7 +30,17 @@ D:\anaconda3\envs\vanna312\python.exe -c "from pathlib import Path; from backtes
 D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_daily_backtest.py ^
   --strategy version6 --pool-dir <r2 out> --start <first filename stem> --end <last filename stem>
 
-# 策略 7 金榕元仓位机（独立，不进 1/2/3/4/5/6/8 策略书）。只吃海龟池。
+# 策略 9 底量超顶量（共用引擎；名单必须由导出器写，禁止 stock_pool/）
+D:\anaconda3\envs\vanna312\python.exe scripts/data/export_strategy9_pool.py --start 20260303 --end 20260908
+D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_daily_backtest.py ^
+  --strategy version9 --pool-dir exports/s9_bvot_20260303_20260908 --start 20260303 --end 20260908
+
+# 策略 10 / 源 B（export_ta_pool.py；湖当日有 K；禁止 stock_pool/；不做 TopK）
+D:\anaconda3\envs\vanna312\python.exe scripts/data/export_ta_pool.py --start 20260303 --end 20260908
+D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_daily_backtest.py ^
+  --strategy version10 --pool-dir exports/src_b_tr_bb1000_20260303_20260908 --start 20260303 --end 20260908
+
+# 策略 7 金榕元仓位机（独立，不进 1–6/8/9/10 策略书）。只吃海龟池。
 D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_minute_backtest_v7.py ^
   --start 20260804 --end 20260909 ^
   --pool-dir E:\PycharmProjects\OSkhQuant1.3\stock_pool_turtle
@@ -72,6 +82,9 @@ R5 的 `--start/--end` 必须跟导出的首末文件名走：H0 / `pred_minus_o
 | **M5 二轮（长窗三源；等 MyQuant pred）** | [plan-m5-round2-2026-09-13.md](plan-m5-round2-2026-09-13.md) |
 | **MyQuant 中期同步（2026-09-13）** | [myquant-progress-sync-2026-09-13.md](myquant-progress-sync-2026-09-13.md) |
 | 策略 1–8 书契约（U-R\*；撮合句以 E-R\* 为准） | [plan-unify-csv-strategies-1-8-2026-09-12.md](plan-unify-csv-strategies-1-8-2026-09-12.md) |
+| **策略 9 底量超顶量（买点 CSV + v9 卖点）** | [plan-strategy9-bottom-vol-2026-09-13.md](plan-strategy9-bottom-vol-2026-09-13.md) |
+| **策略 10 换手阻力 / 源 B（CSV + v6 卖点）** | [plan-strategy10-tr-pool-2026-09-13.md](plan-strategy10-tr-pool-2026-09-13.md) |
+| **名单源 B（TR → 契约 CSV；B-R*）** | [plan-source-b-ta-pool-2026-09-13.md](plan-source-b-ta-pool-2026-09-13.md) |
 | **策略 7 金榕元 CSV 分钟（A–D 已合；E 本机）** | [plan-strategy7-turtle-csv-minute-2026-09-11.md](plan-strategy7-turtle-csv-minute-2026-09-11.md) |
 | 日线复权增量 | [data/daily-adjusted-update-ssot.md](data/daily-adjusted-update-ssot.md) |
 | ma + 筹码边（Cerebro 对照，2026-09-07） | [plan-ma-chip-edge-strategy-2026-09-07.md](plan-ma-chip-edge-strategy-2026-09-07.md) |

@@ -73,6 +73,18 @@ def parse_pool_csv(path: Path) -> List[str]:
     return [code for code, _name in parse_pool_csv_entries(path)]
 
 
+def is_repo_stock_pool(path: Path, *, repo: Path | None = None) -> bool:
+    """True when ``path`` is the repo ``stock_pool/`` or a path inside it."""
+    root = (
+        Path(repo) if repo is not None else Path(__file__).resolve().parents[2]
+    ) / "stock_pool"
+    try:
+        Path(path).resolve().relative_to(root.resolve())
+    except ValueError:
+        return False
+    return True
+
+
 def validate_pool_dir(pool_dir: Path) -> List[str]:
     """Return strict pool-contract failures found in ``pool_dir``.
 
@@ -107,8 +119,14 @@ def validate_pool_dir(pool_dir: Path) -> List[str]:
 
 
 def _window_ymd(start: str | date, end: str | date) -> tuple[str, str]:
-    start_ymd = start.strftime("%Y%m%d") if isinstance(start, date) else str(start).replace("-", "")
-    end_ymd = end.strftime("%Y%m%d") if isinstance(end, date) else str(end).replace("-", "")
+    start_ymd = (
+        start.strftime("%Y%m%d")
+        if isinstance(start, date)
+        else str(start).replace("-", "")
+    )
+    end_ymd = (
+        end.strftime("%Y%m%d") if isinstance(end, date) else str(end).replace("-", "")
+    )
     return start_ymd, end_ymd
 
 
@@ -188,6 +206,8 @@ def load_pool_day_map(
             print(f"skip pool {path.name}: {exc}", flush=True)
             continue
         if codes or empty_in_map:
-            map_key = datetime.strptime(stem, "%Y%m%d").date() if key == "date" else stem
+            map_key = (
+                datetime.strptime(stem, "%Y%m%d").date() if key == "date" else stem
+            )
             days[map_key] = codes
     return days
