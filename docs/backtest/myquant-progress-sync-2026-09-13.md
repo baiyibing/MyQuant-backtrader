@@ -2,13 +2,13 @@
 
 > **落盘**：2026-09-13。
 > **对照**：MyQuant `github/master` tip `b06d124`（#20 CI）。下午路线图回写仍在 MyQuant [#21](https://github.com/baiyibing/MyQuant/pull/21)（未合）。
-> **本仓动作**：不改成交核、不重开 `--asof`、不 `import qlib`。下一刀是 [plan-m5-round2-2026-09-13.md](plan-m5-round2-2026-09-13.md)。
+> **本仓动作**：不改成交核、不重开 `--asof`、不 `import qlib`。M5 二轮见 [m5-list-attribution-2026-03-09.md](m5-list-attribution-2026-03-09.md)。
 
 ---
 
 ## 0. 一句话
 
-MyQuant 中期**代码片已齐**，宿主真跑也出了数。本仓首轮 M5 结论不变（名单几乎不重叠）。下一轮本仓只做**长窗三源对照**；扩展窗 pred 还在 MyQuant [#18](https://github.com/baiyibing/MyQuant/pull/18) 任务书，master 上还没有 `predict_extended.py`。
+MyQuant 中期代码片已齐，扩展窗 pred 已交。本仓 M5 二轮已跑：长窗 **仍几乎不重叠**（129 对齐日 pred∩hand / pred∩hand10 全空）。不据此改 topk。
 
 ---
 
@@ -35,9 +35,8 @@ OOS 预锁（MyQuant）：**不改线上 topk 默认**；改参要第三窗。�
 | 项 | 状态 | 本仓是否等待 |
 |----|------|----------------|
 | 路线图下午回写 | [#21](https://github.com/baiyibing/MyQuant/pull/21) 开着 | 不阻塞；数字以本文与中期计划为准 |
-| M5 二轮任务书 | [#18](https://github.com/baiyibing/MyQuant/pull/18) **仅文档** | 等任务 1/2：`预测结果_ext.csv` + `exports/m5r2_pred_topn10_20260302_20260908/` |
+| M5 二轮 Qlib 臂 | 本机 2026-09-13 已交：`预测结果_ext.csv`（713,548 行 / 132 日）+ `exports/m5r2_pred_topn10_20260302_20260908/`（131 文件） | 本仓已直读跑完三源；见 [m5-list-attribution-2026-03-09.md](m5-list-attribution-2026-03-09.md) |
 | Kimi 万得续跑 | [#17](https://github.com/baiyibing/MyQuant/pull/17) | 不关本仓 |
-| `predict_extended.py` | master **无此文件** | **实跑三列必须等** |
 
 ---
 
@@ -54,15 +53,9 @@ OOS 预锁（MyQuant）：**不改线上 topk 默认**；改参要第三窗。�
 
 ## 4. 本仓现在能做 / 不能做
 
-**能做（不等 pred）：**
+**已做完（2026-09-13）：** #28 已合；冻结快照 + hand10 + `version6`/`version8` 三列。结论见二轮报告。
 
-1. ~~合 [#28](https://github.com/baiyibing/MyQuant-backtrader/pull/28)~~ 已合。
-2. 冻结手工池快照脚本（拷到 `exports/m5r2_hand_*`，不写 `stock_pool/`）。
-3. 可选：`csv_daily` 写出 `myquant.run-manifest/1` 的 export/backtest 旁路——**单独开片**，不塞进二轮完成定义。
-
-**必须等 MyQuant 任务 1/2：**
-
-- 长窗 pred Top10 目录齐了，才跑三源 `version6`（`version8` 另目录、可选）。
+**仍可选、不挡二轮：** `csv_daily` 接 `myquant.run-manifest/1`——单独开片。
 
 **不要做：**
 
