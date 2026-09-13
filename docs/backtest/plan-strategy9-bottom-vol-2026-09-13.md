@@ -1,9 +1,9 @@
 # Plan：策略 9 底量超顶量
 
 > **落盘**：2026-09-13。
-> **状态**：已编码（夹具）。
+> **状态**：已编码（夹具已合 [#32](https://github.com/baiyibing/MyQuant-backtrader/pull/32)）。宿主长窗烟测 2026-09-13，见 [s9-s10-host-smoke-2026-09-13.md](s9-s10-host-smoke-2026-09-13.md)。
 > **风险档**：L1（新策略书 + 名单导出；不改账本公式、不第四台引擎、不写 `stock_pool/`、不 `import qlib`）。
-> **范围**：本仓。策略 10（换手阻力源 B）后置，不进本片。
+> **范围**：本仓。策略 10 已另片落地，不进本计划正文。
 
 ## 0. 一句话
 
@@ -46,3 +46,5 @@ csv_daily --strategy version9 --pool-dir <s9>
 D:\anaconda3\envs\vanna312\python.exe scripts/data/export_strategy9_pool.py --start 20260303 --end 20260908
 D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_daily_backtest.py --strategy version9 --pool-dir exports/s9_bvot_20260303_20260908 --start 20260303 --end 20260908 --out-dir backtest_output/s9_bvot
 ```
+
+宿主长窗（2026-09-13）：131 文件、`validate=[]`、相对 pred 空日 0；同日 ∩ pred 仅 1 日 1 只，∩ 手工 / 手工 Top10 全空。禁止用该窗 NAV 宣称规则有效。

@@ -1,7 +1,7 @@
 # Plan：名单源 B（技术分析 → 契约日 CSV）
 
 > **落盘**：2026-09-13。
-> **状态**：✅ **已实施**（A–C 夹具；E 宿主烟测不是合入门）。
+> **状态**：✅ **已实施**（A–C 夹具已合 [#32](https://github.com/baiyibing/MyQuant-backtrader/pull/32)；E 宿主烟测 2026-09-13 已跑，不是合入门，见 [s9-s10-host-smoke-2026-09-13.md](s9-s10-host-smoke-2026-09-13.md)）。
 > **风险档**：**L1**（导出胶水 + 注入单测；不重写成交核、不写 `stock_pool/`、不 `import qlib`）。
 > **范围**：本仓。MyQuant / 1.3 只读。
 > **上游**：[#31](https://github.com/baiyibing/MyQuant-backtrader/pull/31) 计划原文。下游书号落成 **version10**（卖点复用 6）；契约 CSV 仍可喂 version6/8。
@@ -51,7 +51,7 @@ csv_daily --strategy version10 --pool-dir <src_b>
 | **B · 接 filter** | 已做：`scan_tr_days` + 注入截面 |
 | **C · CLI** | 已做：`export_ta_pool.py` |
 | **D · 文档** | 本文 + README |
-| **E · 宿主烟测** | 非合入门 |
+| **E · 宿主烟测** | 2026-09-13 已跑：活 Store 缺带 fail-closed；湖⊃Store 缺行 fail-closed；带副本 + 宇宙⊆截面可出票。数字见烟测文。仍非合入门 |
 
 ```text
 D:\anaconda3\envs\vanna312\python.exe -m pytest -q tests/test_export_ta_pool.py tests/test_selector_tr_filter.py tests/test_strategy10_tr_pool.py

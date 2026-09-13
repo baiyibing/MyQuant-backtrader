@@ -1,7 +1,7 @@
 # Plan：策略 10 换手阻力（名单源 B）
 
 > **落盘**：2026-09-13。
-> **状态**：已编码（夹具）。
+> **状态**：已编码（夹具已合 [#32](https://github.com/baiyibing/MyQuant-backtrader/pull/32)）。宿主短窗烟测 2026-09-13，见 [s9-s10-host-smoke-2026-09-13.md](s9-s10-host-smoke-2026-09-13.md)。
 > **风险档**：L1。不改账本公式、不第四台引擎、不写 `stock_pool/`、不 `import qlib`。
 > **上游**：源 B 计划口径；本片把编号落成 **version10**。
 
@@ -37,3 +37,5 @@ csv_daily --strategy version10 --pool-dir <s10>
 D:\anaconda3\envs\vanna312\python.exe scripts/data/export_ta_pool.py --start 20260303 --end 20260908
 D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_daily_backtest.py --strategy version10 --pool-dir exports/src_b_tr_bb1000_20260303_20260908 --start 20260303 --end 20260908 --out-dir backtest_output/s10_tr
 ```
+
+宿主（2026-09-13）：活 Store `require_bands=True` 全空 → fail-closed；默认湖宇宙在带副本上仍因缺行（如 `001220.SZ`）fail-closed。`--universe-file`⊆截面后短窗 9/9 日能出票，`validate=[]`。不写回活 Store。禁止用该窗 NAV 宣称规则有效。
