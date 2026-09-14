@@ -3,7 +3,7 @@
 > **落盘**：2026-09-13。
 > **计划 SSOT**：[plan-m5-round2-2026-09-13.md](plan-m5-round2-2026-09-13.md)。
 > **书 / 窗**：`version6` 必跑、`version8` 同窗另目录；买入日 `20260303`–`20260908`（pred 131 日；手工冻结 129 日）。`--asof` 维持 `pred_minus_one`，topk=10，不重开。
-> **不做**：R0、PortAna / Cerebro 净值、改卖点、改 `--asof`、把本窗 NAV 当模型晋升、按 M3-B 改 topk。
+> **不做**：R0、PortAna / Cerebro 净值、改卖点、改 `--asof`、把本窗 NAV 当模型晋升、按 M3-B 改 topk。策略 9/10 是另一套名单源，见 [s9-s10-host-smoke-2026-09-13.md](s9-s10-host-smoke-2026-09-13.md)，**不是**本报告第四列。
 
 同一资金、同一买入日窗，只换名单。三列已齐（M5R2-1）：
 
