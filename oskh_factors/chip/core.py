@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import os
+
 import numpy as np
 import pandas as pd
 from typing import Optional, cast
@@ -83,27 +85,73 @@ def daily_chip_distribution(arr: np.ndarray, method: str = "triang") -> pd.Serie
 
 # ---------------------------------------------------------------------------
 # 分钟线筹码分布（实际量价累积，跳过 PDF 假设）
+# Optional numba path gated like scan_held_day (H15 / D2).
 # ---------------------------------------------------------------------------
-def minute_chip_distribution(
+
+try:
+    from numba import njit as _njit  # type: ignore
+
+    @_njit(cache=True)
+    def _minute_chip_cumpdf_numba(close, vol, decay, diff, min_p, step, n_bins):
+        """Accumulate + normalize cumpdf; mirrors minute_chip_distribution_python."""
+        cumpdf = np.zeros(n_bins, dtype=np.float64)
+        n = len(close)
+        for i in range(n):
+            c = close[i]
+            v = vol[i]
+            if np.isnan(c) or v <= 0.0:
+                continue
+            idx = int((c - min_p) / step)
+            if idx < 0:
+                idx = 0
+            elif idx >= n_bins:
+                idx = n_bins - 1
+            add = v * decay[i]
+            if i == 0:
+                for j in range(n_bins):
+                    cumpdf[j] = 0.0
+                cumpdf[idx] = add
+            else:
+                scale = diff[i]
+                for j in range(n_bins):
+                    cumpdf[j] *= scale
+                cumpdf[idx] += add
+        return cumpdf
+
+    _NUMBA_MINUTE_CHIP_AVAILABLE = True
+except Exception:  # pragma: no cover - optional dep
+    _NUMBA_MINUTE_CHIP_AVAILABLE = False
+    _minute_chip_cumpdf_numba = None  # type: ignore
+
+
+def _want_numba_minute_chip(use_numba: Optional[bool]) -> bool:
+    if use_numba is True:
+        return True
+    if use_numba is False:
+        return False
+    backend = (os.environ.get("MINUTE_CHIP_BACKEND") or "python").strip().lower()
+    return backend in {"numba", "jit"}
+
+
+def _minute_chip_empty_series(stock_code: str, min_p: float, max_p: float) -> pd.Series:
+    label = f"{stock_code} " if stock_code else ""
+    reason = (
+        f"{label}价格全部相同 (max={max_p} <= min={min_p})，"
+        f"可能原因：停牌、一字板涨跌停、或数据异常"
+    )
+    logger.warning(reason)
+    return pd.Series(dtype=float, name="cumpdf")
+
+
+def minute_chip_distribution_python(
     arr: np.ndarray,
     step: float = 0.01,
     stock_code: str = "",
 ) -> pd.Series:
     """
-    分钟线筹码分布：用每分钟的实际 (close, volume) 构建直方图。
+    Python reference for minute-line chip distribution (semantic lock).
 
-    跳过三角/均匀 PDF 假设，直接用量价累积。
-    但仍需假设分钟内成交价格代表值为 close。
-
-    Args:
-        arr: adapt_columns() 输出 (N, 5) 数组。
-             N ≈ 80 天 × 240 分钟 = 19,200。
-             columns: close, high, low, vol, turnover_rate
-        step: 价格步长（元）
-        stock_code: 标的代码（仅用于异常时的日志上下文）
-
-    Returns:
-        pd.Series, index=price（以 step 为步长）, values=累计 chip volume
+    用每分钟的实际 (close, volume) 构建直方图；跳过三角/均匀 PDF。
     """
     close = arr[:, 0]   # 分钟 close
     vol = arr[:, 3]     # 分钟 volume
@@ -113,13 +161,7 @@ def minute_chip_distribution(
     max_p = float(np.nanmax(close))
     if np.isnan(min_p) or np.isnan(max_p) or max_p <= min_p:
         # P1-5 fix: 记录原因（停牌/一字板/数据异常），不再静默返回空
-        label = f"{stock_code} " if stock_code else ""
-        reason = (
-            f"{label}价格全部相同 (max={max_p} <= min={min_p})，"
-            f"可能原因：停牌、一字板涨跌停、或数据异常"
-        )
-        logger.warning(reason)
-        return pd.Series(dtype=float, name="cumpdf")
+        return _minute_chip_empty_series(stock_code, min_p, max_p)
 
     price_bins = make_price_grid(min_p, max_p, step)
     cumpdf = np.zeros(len(price_bins), dtype=np.float64)
@@ -153,6 +195,70 @@ def minute_chip_distribution(
         cumpdf /= total
 
     return pd.Series(cumpdf, index=price_bins, name="cumpdf")
+
+
+def _minute_chip_distribution_numba(
+    arr: np.ndarray,
+    step: float = 0.01,
+    stock_code: str = "",
+) -> pd.Series:
+    """Numba-backed minute chip path; must bit-close match the Python reference."""
+    close = np.ascontiguousarray(arr[:, 0], dtype=np.float64)
+    vol = np.ascontiguousarray(arr[:, 3], dtype=np.float64)
+    turnover = np.ascontiguousarray(arr[:, 4], dtype=np.float64)
+
+    min_p = float(np.nanmin(close))
+    max_p = float(np.nanmax(close))
+    if np.isnan(min_p) or np.isnan(max_p) or max_p <= min_p:
+        return _minute_chip_empty_series(stock_code, min_p, max_p)
+
+    price_bins = make_price_grid(min_p, max_p, step)
+    decay = turnover.copy()
+    diff = 1.0 - decay
+    cumpdf = _minute_chip_cumpdf_numba(
+        close, vol, decay, diff, min_p, float(step), len(price_bins)
+    )
+    # Normalize in NumPy (same as Python reference) for bit-close parity.
+    total = cumpdf.sum()
+    if total > 0:
+        cumpdf = cumpdf / total
+    return pd.Series(cumpdf, index=price_bins, name="cumpdf")
+
+
+def minute_chip_distribution(
+    arr: np.ndarray,
+    step: float = 0.01,
+    stock_code: str = "",
+    use_numba: Optional[bool] = None,
+) -> pd.Series:
+    """
+    分钟线筹码分布：用每分钟的实际 (close, volume) 构建直方图。
+
+    跳过三角/均匀 PDF 假设，直接用量价累积。
+    但仍需假设分钟内成交价格代表值为 close。
+
+    Default backend is the Python reference. Optional numba path is gated by
+    ``use_numba=True`` or env ``MINUTE_CHIP_BACKEND=numba`` (or ``jit``).
+
+    Args:
+        arr: adapt_columns() 输出 (N, 5) 数组。
+             N ≈ 80 天 × 240 分钟 = 19,200。
+             columns: close, high, low, vol, turnover_rate
+        step: 价格步长（元）
+        stock_code: 标的代码（仅用于异常时的日志上下文）
+        use_numba: None=env/default python; True=force numba if available;
+            False=force Python reference
+
+    Returns:
+        pd.Series, index=price（以 step 为步长）, values=累计 chip volume
+    """
+    if (
+        _want_numba_minute_chip(use_numba)
+        and _NUMBA_MINUTE_CHIP_AVAILABLE
+        and _minute_chip_cumpdf_numba is not None
+    ):
+        return _minute_chip_distribution_numba(arr, step=step, stock_code=stock_code)
+    return minute_chip_distribution_python(arr, step=step, stock_code=stock_code)
 
 
 # ---------------------------------------------------------------------------
