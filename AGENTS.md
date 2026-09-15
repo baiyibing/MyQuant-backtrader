@@ -26,7 +26,9 @@ Standalone research-face fork (see [README.md](README.md)). Since migration S2 (
 
 ## Scope
 
-Keep: `backtest/` (incl. `research/` + `research/chip/`), `oskh_data/`, `l2_analytics/`, `qlib_cost/`, `turnover-resist/` (Rust SSOT), `oskh_factors/` (full research copy), `strategies/` (`tr_filter`), research `scripts/` (analysis/backtest/data/diagnostics/gates/run incl. `run_l2_*` ETL), slim `common/infra`, `trade_decision/presets`, `oskh_core` (TR re-export + `a_share_symbol_normalize`).
+Keep: `backtest/` (incl. `research/` + `research/chip/`), `oskh_data/`, `l2_analytics/`, `qlib_cost/`, `turnover-resist/` (Rust SSOT for TR/cyqk audit & Store), `oskh_factors/` (full research copy), `strategies/` (`tr_filter`), research `scripts/` (analysis/backtest/data/diagnostics/gates/run incl. `run_l2_*` ETL), slim `common/infra`, `trade_decision/presets`, `oskh_core` (TR re-export + `a_share_symbol_normalize`).
+
+**CYQ / TR boundary (H13):** full-market daily `winner_ratio` feeder lives in sibling **MyQuant** (`build_winner_ratio.py`, numba); do **not** reimplement it here. This repo’s Rust path is TR/Store/audit — see `docs/backtest/plan-h13-cyq-tr-boundary-2026-09-15.md` and chip inventory §E.
 
 **L2 篱笆：** `l2_analytics/` 与 `scripts/run/run_l2_*` 仅离线研究分析（CSV→Parquet ETL、聚合、DuckDB 查询）。不是 LEBS / MockQMT / 交易栈；不要把新 CSV 策略书接到 L2；不要借 L2 长大 live 包。
 
