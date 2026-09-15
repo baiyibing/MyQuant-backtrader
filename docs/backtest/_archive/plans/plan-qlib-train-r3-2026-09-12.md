@@ -149,7 +149,7 @@ python my_scripts/custom_train_backtest.py
 
 ## 7. 修订程序
 
-改 Q3-R* 须改本文。改 pred 文件名语义须改 [plan-pool-pipeline-r2r5-2026-09-12.md](plan-pool-pipeline-r2r5-2026-09-12.md) 与 [pool-csv-contract.md](pool-csv-contract.md)。M5 另开 plan，输入必须是 **R3 之后** 重训并经 R2 导出的名单。
+改 Q3-R* 须改本文。改 pred 文件名语义须改 [plan-pool-pipeline-r2r5-2026-09-12.md](plan-pool-pipeline-r2r5-2026-09-12.md) 与 [pool-csv-contract.md](../../pool-csv-contract.md)。M5 另开 plan，输入必须是 **R3 之后** 重训并经 R2 导出的名单。
 
 ---
 

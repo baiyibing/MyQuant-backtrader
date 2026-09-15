@@ -59,7 +59,7 @@ D:\anaconda3\envs\vanna312\python.exe -c "from pathlib import Path; from backtes
 D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_daily_backtest.py --strategy version6 --pool-dir <r2 out> --start <first> --end <last>
 ```
 
-`--start/--end` 跟导出文件名走：H0 / `pred_minus_one` 常没有 `20260302.csv`，最后一个 pred 日也不写文件。无名称的 ST 按代码前缀使用 10% / 20% / 30% 档，不按 5%；本例只检查管道，不能把 NAV 或涨跌停桶当作模型结论。详见 [R2/R5 计划](docs/backtest/plan-pool-pipeline-r2r5-2026-09-12.md)与[名单 CSV 契约](docs/backtest/pool-csv-contract.md)。
+`--start/--end` 跟导出文件名走：H0 / `pred_minus_one` 常没有 `20260302.csv`，最后一个 pred 日也不写文件。无名称的 ST 按代码前缀使用 10% / 20% / 30% 档，不按 5%；本例只检查管道，不能把 NAV 或涨跌停桶当作模型结论。详见 [R2/R5 计划](docs/backtest/_archive/plans/plan-pool-pipeline-r2r5-2026-09-12.md)与[名单 CSV 契约](docs/backtest/pool-csv-contract.md)。
 
 细则与 1.3 入口：[`docs/backtest/README.md`](docs/backtest/README.md)。
 

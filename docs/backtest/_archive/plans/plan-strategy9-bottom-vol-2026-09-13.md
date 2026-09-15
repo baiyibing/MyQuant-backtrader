@@ -1,7 +1,7 @@
 # Plan：策略 9 底量超顶量
 
 > **落盘**：2026-09-13。
-> **状态**：已编码（夹具已合 [#32](https://github.com/baiyibing/MyQuant-backtrader/pull/32)）。宿主长窗烟测 2026-09-13，见 [s9-s10-host-smoke-2026-09-13.md](s9-s10-host-smoke-2026-09-13.md)。
+> **状态**：已编码（夹具已合 [#32](https://github.com/baiyibing/MyQuant-backtrader/pull/32)）。宿主长窗烟测 2026-09-13，见 [s9-s10-host-smoke-2026-09-13.md](../../s9-s10-host-smoke-2026-09-13.md)。
 > **风险档**：L1（新策略书 + 名单导出；不改账本公式、不第四台引擎、不写 `stock_pool/`、不 `import qlib`）。
 > **范围**：本仓。策略 10 已另片落地，不进本计划正文。
 

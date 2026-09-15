@@ -1,7 +1,7 @@
 # Plan：M5 名单归因（R3 pred TopN vs 手工池；同一 version6 书）
 
 > **落盘**：2026-09-13。
-> **状态**：📄 **v1.0 · 工具链已合 [#27](https://github.com/baiyibing/MyQuant-backtrader/pull/27)；C 本机补跑已合 [#28](https://github.com/baiyibing/MyQuant-backtrader/pull/28)，数字在 [m5-list-attribution-2026-03.md](m5-list-attribution-2026-03.md)**。
+> **状态**：📄 **v1.0 · 工具链已合 [#27](https://github.com/baiyibing/MyQuant-backtrader/pull/27)；C 本机补跑已合 [#28](https://github.com/baiyibing/MyQuant-backtrader/pull/28)，数字在 [m5-list-attribution-2026-03.md](../../m5-list-attribution-2026-03.md)**。
 > **后续**：长窗二轮见 [plan-m5-round2-2026-09-13.md](plan-m5-round2-2026-09-13.md)。不重开本文件 M5-R*。
 > **风险档**：**L1**（对照跑 + 落盘隔离 + 宽度对齐；不重写引擎、不改卖点、不用 PortAna/R0 净值验收）。
 > **范围**：本仓为主。MyQuant 只读：R3 之后的 `预测结果.csv` + 已有 `export_daily_pool.py`。
@@ -118,7 +118,7 @@ D:\anaconda3\envs\vanna312\python.exe -m pytest -q tests/test_m5_hand_topn.py te
 
 ## 7. 修订程序
 
-改 M5-R* 须改本文。改买入日语义须改 [pool-csv-contract.md](pool-csv-contract.md) 与 [plan-pool-pipeline-r2r5-2026-09-12.md](plan-pool-pipeline-r2r5-2026-09-12.md)。
+改 M5-R* 须改本文。改买入日语义须改 [pool-csv-contract.md](../../pool-csv-contract.md) 与 [plan-pool-pipeline-r2r5-2026-09-12.md](plan-pool-pipeline-r2r5-2026-09-12.md)。
 
 ---
 

@@ -79,6 +79,13 @@ import pyarrow.parquet as pq  # noqa: E402
 from common.infra.data_root import resolve_period_root  # noqa: E402
 from oskh_data.symbol_format import to_partition_key  # noqa: E402
 from backtest.research.strategy3_rules import reserve_step_minute  # noqa: E402
+from backtest.research.csv_simulate_loop import (  # noqa: E402
+    append_equity_and_eod_marks,
+    init_sim_state,
+    prepare_strategy_hooks,
+    run_chase_due_day,
+    run_pool_buys_day,
+)
 
 BUY_HM = 14 * 60 + 55
 AM_OPEN, AM_CLOSE = 9 * 60 + 30, 11 * 60 + 30
@@ -415,7 +422,95 @@ def load_minute_bars(
     return {c: cached[c] for c in want if c in cached}
 
 
-def scan_held_day(
+_LIMIT_EPS = 0.001  # mirror csv_ledger.LIMIT_EPS for numba core
+
+try:
+    from numba import njit as _njit  # type: ignore
+
+    @_njit(cache=True)
+    def _scan_held_day_numba_trail(
+        o,
+        h,
+        c,
+        hm,
+        cost,
+        peak,
+        n_days,
+        can_sell,
+        stop_pct,
+        stop_enabled,
+        profit_base,
+        trail_ratio,
+        limit_down,
+        peak_hm,
+        peak_gap_min,
+        force_sell_hm,
+        has_force,
+    ):
+        """Pure trail path (no sell_gate / take_profit / reserve). Reasons as int codes."""
+        trigger = cost * (1.0 - stop_pct) if stop_enabled else 0.0
+        new_peak = peak
+        new_peak_hm = peak_hm
+        n = len(c)
+        for i in range(n):
+            if (not can_sell) or n_days < 1:
+                continue
+            hi = h[i]
+            cur_hm = hm[i]
+            if hi > new_peak:
+                new_peak = hi
+                new_peak_hm = cur_hm
+            px_open = o[i]
+            px_close = c[i]
+            if limit_down > 0.0 and (px_open - _LIMIT_EPS) <= limit_down:
+                continue
+            if stop_enabled and px_open <= trigger:
+                return i, px_open, 1, new_peak, new_peak_hm
+            ret = px_close / cost - 1.0
+            if stop_enabled and ret <= -stop_pct:
+                return i, px_close, 2, new_peak, new_peak_hm
+            gap = cur_hm - new_peak_hm
+            peak_blocked = new_peak_hm >= 0 and (0 <= gap < peak_gap_min)
+            if not peak_blocked:
+                # inline trail_hits
+                if px_close >= cost:
+                    peak_excess = new_peak / cost - 1.0 - profit_base
+                    if peak_excess > 0.0:
+                        if (
+                            px_close / cost - 1.0 - profit_base
+                            <= trail_ratio * peak_excess
+                        ):
+                            return i, px_close, 3, new_peak, new_peak_hm
+            if has_force and cur_hm >= force_sell_hm:
+                if limit_down > 0.0 and (px_close - _LIMIT_EPS) <= limit_down:
+                    continue
+                return i, px_close, 4, new_peak, new_peak_hm
+        return -1, np.nan, 0, new_peak, new_peak_hm
+
+    _NUMBA_SCAN_AVAILABLE = True
+except Exception:  # pragma: no cover - optional dep
+    _NUMBA_SCAN_AVAILABLE = False
+    _scan_held_day_numba_trail = None  # type: ignore
+
+
+_NUMBA_REASON = {
+    1: "stop_loss:gap_open",
+    2: "stop_loss:touch",
+    3: None,  # filled with trail:T+N
+    4: "force_sell:time",
+}
+
+
+def _want_numba_scan(use_numba: Optional[bool]) -> bool:
+    if use_numba is True:
+        return True
+    if use_numba is False:
+        return False
+    backend = (os.environ.get("CSV_SCAN_HELD_DAY_BACKEND") or "python").strip().lower()
+    return backend in {"numba", "jit"}
+
+
+def scan_held_day_python(
     o: np.ndarray,
     h: np.ndarray,
     c: np.ndarray,
@@ -443,7 +538,8 @@ def scan_held_day(
     reserved: bool = False,
     reserve_state: Optional[dict] = None,
 ) -> tuple[int, float, str, float, int]:
-    """逐分钟扫描。返回 (idx, px, reason, new_peak, new_peak_hm)。"""
+    """Python reference implementation of the minute sell scan."""
+    del pos_trail  # reserved for future; kept for API parity with callers
     stop_enabled = isinstance(stop_pct, float) and 0 < stop_pct < 1
     trigger = cost * (1.0 - stop_pct) if stop_enabled else None
     new_peak = float(peak)
@@ -503,6 +599,117 @@ def scan_held_day(
                 continue
             return i, px_close, "force_sell:time", new_peak, new_peak_hm
     return -1, float("nan"), "", new_peak, new_peak_hm
+
+
+def scan_held_day(
+    o: np.ndarray,
+    h: np.ndarray,
+    c: np.ndarray,
+    *,
+    cost: float,
+    peak: float,
+    n_days: int,
+    can_sell: bool,
+    stop_pct: Optional[float],
+    profit_base: float,
+    trail_ratio: float,
+    pos_trail: float = 0.0,
+    limit_down: float = 0.0,
+    hm: Optional[np.ndarray] = None,
+    peak_hm: int = -1,
+    peak_gap_min: int = PEAK_GAP_MIN,
+    take_profit=None,
+    sell_gate=None,
+    gate_code=None,
+    gate_day=None,
+    daily_closes_ending_yesterday=None,
+    force_sell_hm: Optional[int] = None,
+    reserve_limit_up: bool = False,
+    limit_up: float = 0.0,
+    reserved: bool = False,
+    reserve_state: Optional[dict] = None,
+    use_numba: Optional[bool] = None,
+) -> tuple[int, float, str, float, int]:
+    """逐分钟扫描。返回 (idx, px, reason, new_peak, new_peak_hm)。
+
+    Default backend is the Python reference. Optional numba trail-only path
+    is gated by ``use_numba=True`` or env ``CSV_SCAN_HELD_DAY_BACKEND=numba``.
+    Callables (sell_gate / take_profit) and reserve_limit_up always use Python.
+    """
+    can_offload = (
+        _want_numba_scan(use_numba)
+        and _NUMBA_SCAN_AVAILABLE
+        and sell_gate is None
+        and take_profit is None
+        and not reserve_limit_up
+        and reserve_state is None
+    )
+    if can_offload:
+        o64 = np.asarray(o, dtype=np.float64)
+        h64 = np.asarray(h, dtype=np.float64)
+        c64 = np.asarray(c, dtype=np.float64)
+        if hm is None:
+            hm64 = np.arange(len(c64), dtype=np.int64)
+        else:
+            hm64 = np.asarray(hm, dtype=np.int64)
+        stop_enabled = isinstance(stop_pct, float) and 0 < float(stop_pct) < 1
+        stop_v = float(stop_pct) if stop_enabled else 0.0
+        has_force = force_sell_hm is not None
+        force_v = int(force_sell_hm) if has_force else 0
+        idx, px, code, new_peak, new_peak_hm = _scan_held_day_numba_trail(
+            o64,
+            h64,
+            c64,
+            hm64,
+            float(cost),
+            float(peak),
+            int(n_days),
+            bool(can_sell),
+            stop_v,
+            bool(stop_enabled),
+            float(profit_base),
+            float(trail_ratio),
+            float(limit_down),
+            int(peak_hm),
+            int(peak_gap_min),
+            force_v,
+            bool(has_force),
+        )
+        if code == 0:
+            return -1, float("nan"), "", float(new_peak), int(new_peak_hm)
+        if code == 3:
+            reason = f"trail:T+{max(1, int(n_days))}"
+        else:
+            reason = _NUMBA_REASON[int(code)]
+        return int(idx), float(px), reason, float(new_peak), int(new_peak_hm)
+
+    return scan_held_day_python(
+        o,
+        h,
+        c,
+        cost=cost,
+        peak=peak,
+        n_days=n_days,
+        can_sell=can_sell,
+        stop_pct=stop_pct,
+        profit_base=profit_base,
+        trail_ratio=trail_ratio,
+        pos_trail=pos_trail,
+        limit_down=limit_down,
+        hm=hm,
+        peak_hm=peak_hm,
+        peak_gap_min=peak_gap_min,
+        take_profit=take_profit,
+        sell_gate=sell_gate,
+        gate_code=gate_code,
+        gate_day=gate_day,
+        daily_closes_ending_yesterday=daily_closes_ending_yesterday,
+        force_sell_hm=force_sell_hm,
+        reserve_limit_up=reserve_limit_up,
+        limit_up=limit_up,
+        reserved=reserved,
+        reserve_state=reserve_state,
+    )
 
 
 def _day_arrays(df: pd.DataFrame, ymd: str) -> Optional[pd.DataFrame]:
@@ -579,7 +786,7 @@ def simulate(
     pool_names: Optional[dict[str, str]] = None,
     pool_names_by_day: Optional[dict[str, dict[str, str]]] = None,
 ) -> SimState:
-    hooks = apply_csv_strategy(
+    hooks = prepare_strategy_hooks(
         strategy,
         stop_pct=stop_pct,
         take_profit=take_profit,
@@ -587,25 +794,27 @@ def simulate(
         profit_base=profit_base,
         tiers=tiers,
         tier_default=tier_default,
+        apply_fn=apply_csv_strategy,
     )
     stop_pct = hooks["stop_pct"]
     take_profit = hooks["take_profit"]
     buy_gate = hooks.get("buy_gate")
     sell_gate = hooks.get("sell_gate")
-    record_params = hooks["record_params"]
     peak_gap_min = int(hooks["peak_gap_min"])
     force_sell_hm = hooks.get("force_sell_hm")
     reserve_limit_up = bool(hooks.get("reserve_limit_up"))
     calendar = build_calendar(daily_bars, start, end)
 
-    st = SimState(cash=float(total_cash))
-    record_params(st)
-    st.stats["bars_loaded"] = len(minute_bars)
-    st.stats["pool_days"] = len(pool_days)
+    st, pending_chase, names_asof = init_sim_state(
+        hooks,
+        total_cash=total_cash,
+        bars_loaded=len(minute_bars),
+        pool_days=pool_days,
+        pool_names=pool_names,
+        pool_names_by_day=pool_names_by_day,
+    )
     allow_add = bool(hooks["allow_add"])
     day_spans = {code: build_day_spans(df) for code, df in minute_bars.items()}
-    pending_chase: dict[str, tuple[float, int]] = {}
-    names_asof = _pool_names_asof(pool_names, pool_names_by_day)
 
     for i, day in enumerate(calendar):
         ds = _ymd(day)
@@ -676,114 +885,71 @@ def simulate(
                         continue
                     _sell(st, code, pos, px, day, reason)
 
-        due = [c for c, (_per, sig) in pending_chase.items() if i > sig]
-        for code in due:
-            per_ch, _sig = pending_chase[code]
-            if code in st.positions and not allow_add:
-                pending_chase.pop(code)
-                st.stats["skip_held"] += 1
-                st.stats["chase_skip_held"] += 1
-                continue
+        def _chase_quotes_for(code: str):
             mdf = minute_bars.get(code)
             ddf = daily_bars.get(code)
             if mdf is None or ddf is None or day not in ddf.index:
-                continue
+                return None
             day_m = _slice_day(mdf, day_spans.get(code, {}), ds)
             quotes = _chase_quotes(day_m) if day_m is not None else None
             if quotes is None:
-                continue
+                return None
             open_px, px = quotes
             prev_rows = ddf.loc[ddf.index < day]
             if prev_rows.empty:
-                continue
-            pending_chase.pop(code)
-            prev_close = float(prev_rows.iloc[-1]["close"])
-            limits = _named_limits(code, prev_close, names)
-            if limits is None:
-                st.stats["skip_unknown_board"] += 1
-                continue
-            limit_up, _ = limits
-            decision = chase_decision(open_px, px, limit_up)
-            if decision == "limit":
-                st.stats["chase_skip_limit"] += 1
-                continue
-            if decision != "buy":
-                st.stats["chase_abandon"] += 1
-                continue
+                return None
             closes = prev_rows["close"].astype(float).tolist()
-            if callable(buy_gate) and not buy_gate(code, px, day, closes):
-                st.stats["skip_buy_gate"] += 1
-                if len(closes) < 10:
-                    st.stats["skip_sma_warmup"] += 1
-                continue
-            if not execute_buy(st, code, px, per_ch, i, day, reason="chase:T+1"):
-                st.stats["chase_buy_fail"] += 1
+            return open_px, px, closes
 
-        planned = list(pool_days.get(ds, []))
-        if planned:
-            per = min(daily_quota, st.cash) / len(planned)
-            for code in planned:
-                if code in st.positions and not allow_add:
-                    st.stats["skip_held"] += 1
-                    continue
-                mdf = minute_bars.get(code)
-                ddf = daily_bars.get(code)
-                if mdf is None or ddf is None or day not in ddf.index:
-                    st.stats["skip_no_bar"] += 1
-                    continue
-                day_m = _slice_day(mdf, day_spans.get(code, {}), ds)
-                if day_m is None:
-                    st.stats["skip_no_bar"] += 1
-                    continue
-                prev_rows = ddf.loc[ddf.index < day]
-                if prev_rows.empty:
-                    st.stats["skip_no_bar"] += 1
-                    continue
-                px = _buy_px(day_m)
-                if px is None or px <= 0:
-                    st.stats["skip_no_bar"] += 1
-                    continue
-                prev_close = float(prev_rows.iloc[-1]["close"])
-                limits = _named_limits(code, prev_close, names)
-                if limits is None:
-                    st.stats["skip_unknown_board"] += 1
-                    continue
-                limit_up, _ = limits
-                if hit_limit_up(px, limit_up):
-                    queue_limit_up_chase(st, pending_chase, code, per, i)
-                    continue
-                closes = prev_rows["close"].astype(float).tolist()
-                if callable(buy_gate) and not buy_gate(code, px, day, closes):
-                    st.stats["skip_buy_gate"] += 1
-                    if len(closes) < 10:
-                        st.stats["skip_sma_warmup"] += 1
-                    continue
-                execute_buy(st, code, px, per, i, day, reason="pool")
+        run_chase_due_day(
+            st,
+            pending_chase,
+            day_i=i,
+            day=day,
+            names=names,
+            allow_add=allow_add,
+            buy_gate=buy_gate,
+            quotes_for=_chase_quotes_for,
+        )
 
-        eq = st.cash
-        for code, lots in st.positions.items():
+        def _pool_quote_for(code: str):
+            mdf = minute_bars.get(code)
             ddf = daily_bars.get(code)
-            for pos in lots:
-                eq += pos.shares * last_close_mark(ddf, day, pos.cost)
-        st.equity_curve.append((ds, eq))
+            if mdf is None or ddf is None or day not in ddf.index:
+                return None
+            day_m = _slice_day(mdf, day_spans.get(code, {}), ds)
+            if day_m is None:
+                return None
+            prev_rows = ddf.loc[ddf.index < day]
+            if prev_rows.empty:
+                return None
+            px = _buy_px(day_m)
+            if px is None or px <= 0:
+                return None
+            closes = prev_rows["close"].astype(float).tolist()
+            return px, closes
 
-        if day == calendar[-1] and st.positions:
-            for code, lots in st.positions.items():
-                ddf = daily_bars.get(code)
-                for pos in lots:
-                    last = last_close_mark(ddf, day, pos.cost)
-                    st.trades.append(
-                        {
-                            "date": ds,
-                            "code": code,
-                            "side": "EOD_MARK",
-                            "price": last,
-                            "shares": pos.shares,
-                            "notional": pos.shares * last,
-                            "commission": 0.0,
-                            "lot": pos.lot_id,
-                        }
-                    )
+        run_pool_buys_day(
+            st,
+            pending_chase,
+            day_i=i,
+            day=day,
+            ds=ds,
+            pool_days=pool_days,
+            daily_quota=daily_quota,
+            names=names,
+            allow_add=allow_add,
+            buy_gate=buy_gate,
+            buy_quote_for=_pool_quote_for,
+        )
+
+        append_equity_and_eod_marks(
+            st,
+            ds=ds,
+            day=day,
+            calendar_last=calendar[-1],
+            mark_bars=daily_bars,
+        )
 
     finish_pending_chase(st, pending_chase)
     return st

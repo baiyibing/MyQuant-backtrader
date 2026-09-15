@@ -5,7 +5,7 @@
 > **后续**：训练厂 R3 见 [plan-qlib-train-r3-2026-09-12.md](plan-qlib-train-r3-2026-09-12.md)。首轮 M5 已做；长窗二轮见 [plan-m5-round2-2026-09-13.md](plan-m5-round2-2026-09-13.md)。
 > **风险档**：**L1**（pred 导出胶水 + R0 真窗残留修 + 本仓消费闭环；不重写引擎 / 不改卖点 / 不做 R3）。
 > **范围**：两仓。MyQuant 出 R2 导出；本仓修 R0 残留并跑 R5。1.3 只读对照。
-> **定位 SSOT**：[engine-positioning-ssot.md](engine-positioning-ssot.md)。成交核现锁：[engine-ashare-correctness.md](engine-ashare-correctness.md)（E-R1–E-R4）。名单契约：[pool-csv-contract.md](pool-csv-contract.md)。R0/R1 已合 [#21](https://github.com/baiyibing/MyQuant-backtrader/pull/21)。
+> **定位 SSOT**：[engine-positioning-ssot.md](../../engine-positioning-ssot.md)。成交核现锁：[engine-ashare-correctness.md](../../engine-ashare-correctness.md)（E-R1–E-R4）。名单契约：[pool-csv-contract.md](../../pool-csv-contract.md)。R0/R1 已合 [#21](https://github.com/baiyibing/MyQuant-backtrader/pull/21)。
 > **上游**：MyQuant `docs/plan-three-repo-roadmap-2026-09-12.md` §2.4、§3 R2/R5、§3.1、§6、§8。人裁「先收 R0 真窗，再做 MyQuant R2 导出 + 本仓 R5 闭环；**同一轮不做 R3**」。
 > **前序 plan**：[plan-pool-pipeline-r0r1-2026-09-12.md](plan-pool-pipeline-r0r1-2026-09-12.md)（P-R* 仍管 R0 胶水与名称 as-of；其中「不碰 R2/R5」已被本文件取代）。
 
@@ -83,7 +83,7 @@ R0 窗 2026-03-02..03-23 无中国大陆节假日，只有周末（03-07/08、03
 | ID | 锁 |
 |----|----|
 | **Q2-R1** | 只做：A 修 R0 `日期范围:`；B 实测 pred as-of；C MyQuant 导出；D 本仓 R5 消费；E 本仓文档。禁止 R3。禁止重写引擎、改卖点、改 `presets.py`、`register(version7)`、Qlib/Cerebro 净值对照。 |
-| **Q2-R2** | **产品锁**（路线图 §2.4 + [pool-csv-contract.md](pool-csv-contract.md)）：文件名 = 买入日 T。**映射假设 H0**：`file[T] = TopN(pred[prev(T)])`，即内容来自 pred(T−1)。`prev` / `next` **只**用该 pred 文件里已出现的日期集合，禁止 `D.calendar`，禁止 `weekday+1` 猜假期。实现：对每个 pred 日 `D` 写 `next(D).csv`，内容 = TopN(pred[D])；**最后一个 pred 日没有 next → 不写文件**。切片 **B 先于 C 锁默认 `--asof`**。B 结论只能是 `pred_minus_one`（H0）或 `identity`（`file[T]=TopN(pred[T])`）。若实测 pred 索引日已经是买入/成交日，必须用 `identity`，**禁止再套一层 T−1**，并先改本条再写 C。仍歧义则默认 H0，把残余风险写进 B 笔记。C 的 CLI **必须同时**实现 `--asof pred_minus_one` 与 `--asof identity`；默认值 = B 锁定值，写进 docstring。契约「文件名=买入日」不改；改的只是 pred 哪一行写入那天。 |
+| **Q2-R2** | **产品锁**（路线图 §2.4 + [pool-csv-contract.md](../../pool-csv-contract.md)）：文件名 = 买入日 T。**映射假设 H0**：`file[T] = TopN(pred[prev(T)])`，即内容来自 pred(T−1)。`prev` / `next` **只**用该 pred 文件里已出现的日期集合，禁止 `D.calendar`，禁止 `weekday+1` 猜假期。实现：对每个 pred 日 `D` 写 `next(D).csv`，内容 = TopN(pred[D])；**最后一个 pred 日没有 next → 不写文件**。切片 **B 先于 C 锁默认 `--asof`**。B 结论只能是 `pred_minus_one`（H0）或 `identity`（`file[T]=TopN(pred[T])`）。若实测 pred 索引日已经是买入/成交日，必须用 `identity`，**禁止再套一层 T−1**，并先改本条再写 C。仍歧义则默认 H0，把残余风险写进 B 笔记。C 的 CLI **必须同时**实现 `--asof pred_minus_one` 与 `--asof identity`；默认值 = B 锁定值，写进 docstring。契约「文件名=买入日」不改；改的只是 pred 哪一行写入那天。 |
 | **Q2-R3** | R2 路径：MyQuant `my_scripts/export_daily_pool.py`。单测：`my_tests/test_export_daily_pool.py`。禁止放进本仓 `scripts/research/` 或本仓第二份导出。禁止 MyQuant 导出脚本 import 本仓包。方言在导出侧完成：`SZ300190` / `SH600000` / `BJ920014` → 裸六位。 |
 | **Q2-R4** | 输出：utf-8 **无 BOM**；**无表头**；**无名称列**；每行恰好六位数字。无法匹配 `^(?:SH|SZ|BJ)?(\d{6})$` 的 instrument 丢弃，stderr 计数。该日无有效 TopN → 不写文件。禁止写两仓 `stock_pool/`。MyQuant 默认 `--out-dir exports/r2_pred_topn_20260302_20260323/`。本仓 `/exports/` 已 gitignore；MyQuant 已 ignore `*.csv`，仍须写进 `exports/` 而不是 `my_scripts/`。 |
 | **Q2-R5** | TopN 默认 **10**（对齐训练脚本 `topk: 10`）。排序：`score` 降序，并列按 **instrument 原字符串**升序，再转裸码；去重保序。不是持仓回放。R5 **禁止** `--pool-dir exports/r0_*`。 |
@@ -174,7 +174,7 @@ D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_daily_backtest.py --
 
 ## 7. 修订程序
 
-改 Q2-R* 须改本文。改成交核须改 [engine-ashare-correctness.md](engine-ashare-correctness.md) 的 E-R*。改名单文件名语义须改 [pool-csv-contract.md](pool-csv-contract.md)。B 若推翻 H0，先改 Q2-R2 再写 C。
+改 Q2-R* 须改本文。改成交核须改 [engine-ashare-correctness.md](../../engine-ashare-correctness.md) 的 E-R*。改名单文件名语义须改 [pool-csv-contract.md](../../pool-csv-contract.md)。B 若推翻 H0，先改 Q2-R2 再写 C。
 
 ---
 

@@ -1,7 +1,7 @@
 # Plan：策略 10 换手阻力（名单源 B）
 
 > **落盘**：2026-09-13。
-> **状态**：已编码（夹具已合 [#32](https://github.com/baiyibing/MyQuant-backtrader/pull/32)）。宿主短窗烟测 2026-09-13，见 [s9-s10-host-smoke-2026-09-13.md](s9-s10-host-smoke-2026-09-13.md)。
+> **状态**：已编码（夹具已合 [#32](https://github.com/baiyibing/MyQuant-backtrader/pull/32)）。宿主短窗烟测 2026-09-13，见 [s9-s10-host-smoke-2026-09-13.md](../../s9-s10-host-smoke-2026-09-13.md)。
 > **风险档**：L1。不改账本公式、不第四台引擎、不写 `stock_pool/`、不 `import qlib`。
 > **上游**：源 B 计划口径；本片把编号落成 **version10**。
 

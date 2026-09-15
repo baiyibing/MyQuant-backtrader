@@ -1,11 +1,11 @@
 # Plan：本仓回测统一（策略 1–8 + 市场层 + Cerebro 化石）
 
 > **落盘**：2026-09-12。
-> **状态**：✅ **A–E 已合**。成交核现锁见 [engine-ashare-correctness.md](engine-ashare-correctness.md)（E-R1–E-R4）。本文 U-R\* **卖点与书契约**仍有效；U-R1 / U-R10 / U-R11 / U-R12 / U-R27 / U-R30 的撮合句以 E-R\* 为准。
+> **状态**：✅ **A–E 已合**。成交核现锁见 [engine-ashare-correctness.md](../../engine-ashare-correctness.md)（E-R1–E-R4）。本文 U-R\* **卖点与书契约**仍有效；U-R1 / U-R10 / U-R11 / U-R12 / U-R27 / U-R30 的撮合句以 E-R\* 为准。
 > **fan-out**：2026-09-12 classic，四家 rc=0（codex 293s / kimi 263s / auto 234s / claude 500s）。综合：`docs/architecture/reviews/2026-09-12/plan-unify-csv-strategies-1-8-2026-09-12/merge-consensus.md`。
 > **风险档**：**L2**（策略书扩面 + 引擎原语 + Cerebro 入口冻结；不进实盘 / 不改 `presets.py`）。
 > **范围**：MyQuant-backtrader。1.3 只读对照。LEBS / MockQMT 不搬进本仓。
-> **定位 SSOT**：[engine-positioning-ssot.md](engine-positioning-ssot.md)。
+> **定位 SSOT**：[engine-positioning-ssot.md](../../engine-positioning-ssot.md)。
 > **上游**：2026-09-12 三仓讨论；人裁「1–8 一次性都改完」「Cerebro 和 1–5 这轮也动」。
 > **对抗**：dissent-steelman / domain-safety / pattern-evidence（不计票）。勘误 §9。
 
@@ -43,7 +43,7 @@ Cerebro / Rolling **观察退役**（可对照，默认不跑）。市场层只�
 | 策略 4 全市场无名单扫 | 宇宙仍是日 CSV；均线只过滤能不能买 |
 | 策略 3/5 日线引擎假装有 09:30–09:40 / 14:50 逐分钟 | 日线必须写清近似 |
 | `load_pool_days(..., pool_dir=None)` 给 7 用 / 回落 `stock_pool/` | 策略 7 F-R5 |
-| ~~本轮改 `limit_pct` 北交/ST 档~~ | **已重开** → E-R2，见 [engine-ashare-correctness.md](engine-ashare-correctness.md) |
+| ~~本轮改 `limit_pct` 北交/ST 档~~ | **已重开** → E-R2，见 [engine-ashare-correctness.md](../../engine-ashare-correctness.md) |
 | ~~本轮改 6/8 停牌日追买 `pop` / 净值标成本~~ | **已重开** → E-R4 |
 | 1–5 书 / 市场层引入 `cyqk` / `chip_indicator` / `chip_algorithm` | 盈筹率本 plan **不适用** |
 | 6/8 湖索引改走 v7 `_as_datetime` | 日历契约不同 |
@@ -119,7 +119,7 @@ Cerebro / Rolling **观察退役**（可对照，默认不跑）。市场层只�
 | **U-R32** | `Position.reserved` 只加在 6/8 账本 `Position`（现住 `csv_ledger.py`，日线/分钟再导出）。7 的 `Position` 不加。 |
 | **U-R33** | `run()` / `simulate()` 新增 kwarg 只从 `hooks` 读（`buy_gate`/`sell_gate`/`force_sell_hm`/`reserve_limit_up`），缺省 no-op。`apply_csv_strategy` **不**对 `buy_gate`/`sell_gate` 硬 raise。 |
 
-> **2026-09-12 成交核重开**：上表 U-R1 / U-R10 / U-R11 / U-R12 / U-R27 / U-R30 的撮合句已由 [engine-ashare-correctness.md](engine-ashare-correctness.md) E-R1–E-R4 取代。卖点/书契约（reason、时钟、闸、BOOKS）仍以本表为准。
+> **2026-09-12 成交核重开**：上表 U-R1 / U-R10 / U-R11 / U-R12 / U-R27 / U-R30 的撮合句已由 [engine-ashare-correctness.md](../../engine-ashare-correctness.md) E-R1–E-R4 取代。卖点/书契约（reason、时钟、闸、BOOKS）仍以本表为准。
 
 ---
 
@@ -215,7 +215,7 @@ D:\anaconda3\envs\vanna312\python.exe -m pytest -q `
 
 ## 8. 修订程序
 
-改 U-R\* **卖点/书契约**须改本文。改成交核（跌停范围、档位、涨跌停价算术、停牌净值/追买）须改 [engine-ashare-correctness.md](engine-ashare-correctness.md) 的 E-R\*，不要只改本文旧句。v1.2 已吸收 classic 🔴。综合见 `merge-consensus.md`。
+改 U-R\* **卖点/书契约**须改本文。改成交核（跌停范围、档位、涨跌停价算术、停牌净值/追买）须改 [engine-ashare-correctness.md](../../engine-ashare-correctness.md) 的 E-R\*，不要只改本文旧句。v1.2 已吸收 classic 🔴。综合见 `merge-consensus.md`。
 
 ---
 
