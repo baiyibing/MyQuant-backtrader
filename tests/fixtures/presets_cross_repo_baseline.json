@@ -1,0 +1,6 @@
+{
+  "upstream_repository": "OSkhQuant1.3",
+  "upstream_commit": "275a6c2dce0ec4096900a8a57d0244d86a126f22",
+  "upstream_path": "trade_decision/presets.py",
+  "presets_sha256": "6d928c968b2a414c72adf8fb1478402a3ea6bc14cb8dd41b3adea22d4c6b6db3"
+}

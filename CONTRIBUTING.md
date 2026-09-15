@@ -19,4 +19,10 @@
 
 PR 写清问题、改动与验证结果，使用 GitHub Actions 的 [Python 测试与契约 gates](.github/workflows/python-tests.yml)；涉及 Rust 时还需通过 [Rust 检查](.github/workflows/turnover-resist-rust.yml)。本地 CLI 可用，无需 CloudAgent。
 
+### 刷新 presets 跨仓基线
+
+`tests/fixtures/presets_cross_repo_baseline.json` 固定一次已核对的 OSkhQuant1.3 commit 与其 `trade_decision/presets.py` SHA-256，使没有兄弟仓 checkout 的 CI 也能发现本仓副本漂移。该基线仅证明与所记录 commit 一致，**不证明已同步 OSkhQuant1.3 最新版本**；有兄弟仓时测试仍会直接逐字节比较。
+
+仅在 presets 契约已在两仓有意同步后刷新：在 OSkhQuant1.3 运行 `git rev-parse HEAD`，并对其 `trade_decision/presets.py` 计算完整 SHA-256；将结果分别写入 fixture 的 `upstream_commit` 与 `presets_sha256`。确认本仓同名文件的 SHA-256 相同，再运行 `pytest -q tests/test_presets_cross_repo_snapshot.py`。fixture 与本仓 presets 变更应在同一 PR 中接受审查。
+
 本地 Python 按 [AGENTS.md](AGENTS.md#python) 解析解释器，不隐式使用系统 `python` / `pip`；Rust 在 `turnover-resist/` 内构建。文本使用 UTF-8 无 BOM，写入 `.py` / `.md` 后确认 NUL 为 0。
