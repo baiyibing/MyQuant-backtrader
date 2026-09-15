@@ -8,6 +8,7 @@
 - D1 结果：[chip/h14-d1-minute-chip-profile-results-2026-09-15.md](chip/h14-d1-minute-chip-profile-results-2026-09-15.md) · [plan-h14-d1-minute-chip-profile-2026-09-15.md](plan-h14-d1-minute-chip-profile-2026-09-15.md)
 - D2 计划：[plan-h15-d2-minute-chip-numba-2026-09-15.md](plan-h15-d2-minute-chip-numba-2026-09-15.md)
 - C soft+ 计划：[plan-h16-c-soft-list-quality-2026-09-15.md](plan-h16-c-soft-list-quality-2026-09-15.md)
+- Theme A 实测：[minute-simulate-profile-results-2026-09-15.md](minute-simulate-profile-results-2026-09-15.md)
 
 软队列 H1–H13 已覆盖 docs/CLI/L2 fence/CI gates/list-quality/chip inventory/CYQ–TR 边界；**D1（H14）+ D2（H15）+ C soft+ list-quality deepen（H16）已完成**。下列为继续 brainstorm / 开片的有序重活；**不是**已批准的实现承诺。
 
