@@ -36,6 +36,7 @@ from backtest.research.csv_strategy_books import (  # noqa: E402
     HELP_LOCK_V6,
     HELP_LOCK_V8,
     HELP_LOCK_V9,
+    add_csv_backtest_common_args,
     add_csv_strategy_arg,
     add_strategy6_ratio_args,
     apply_csv_strategy,
@@ -756,20 +757,19 @@ def main(argv: Optional[list] = None) -> int:
         epilog=help_lock_all(HELP_LOCK),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    ap.add_argument("--start", default="20251023")
-    ap.add_argument("--end", default="20260909")
-    ap.add_argument("--cash-total", type=float, default=DEFAULT_TOTAL_CASH)
-    ap.add_argument("--daily-quota", type=float, default=DEFAULT_DAILY_QUOTA)
-    ap.add_argument("--workers", type=int, default=16)
-    ap.add_argument("--pool-dir", type=Path, default=Path(REPO) / "stock_pool")
+    add_csv_backtest_common_args(
+        ap,
+        repo=REPO,
+        end_default="20260909",
+        cash_total_default=DEFAULT_TOTAL_CASH,
+        daily_quota_default=DEFAULT_DAILY_QUOTA,
+    )
     ap.add_argument(
         "--out-dir",
         type=Path,
         default=None,
         help="artifact directory; default backtest_output/csv_daily_{book}_{start}_{end}/",
     )
-    add_csv_strategy_arg(ap)
-    add_strategy6_ratio_args(ap)
     args = ap.parse_args(argv if argv is not None else None)
     pool_dir = resolve_research_pool_dir(args.strategy, args.pool_dir, repo=REPO)
 
