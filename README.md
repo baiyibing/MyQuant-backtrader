@@ -31,7 +31,7 @@ Seeded from OSkhQuant slim snapshot at `5d41252`。S2（2026-09-09）之后本�
 | `common/infra/` | 薄基建（timekeeping、path-SSOT） |
 | `scripts/gates/` | 契约 / path-SSOT gates |
 | `scripts/research/` `scripts/data/` `scripts/tr/` | chip / TR / L2 研究 CLI |
-| `stock_pool/` | 6/8 默认日名单（不是海龟池） |
+| `stock_pool/` | 6/8 **可变默认**日名单（非快照；不是海龟池）；实验/冻结见 `exports/` — [pool-csv-contract](docs/backtest/pool-csv-contract.md)#lifecycle-ssot-stock_pool-vs-exports |
 
 ## Environment
 
@@ -41,7 +41,7 @@ D:\anaconda3\envs\vanna312\python.exe -m pip install -r requirements.txt
 
 ## Run research backtest
 
-必须 `--strategy version1|…|version6|version8|version9|version10`。7 不在 choices，必须走独立入口并传 `--pool-dir`。9 / 10 在 choices 里，但也必须 `--pool-dir`（`export_strategy9_pool.py` / `export_ta_pool.py`），拒绝 `stock_pool/`。数据经 `oskh_data` / `resolve_period_root`（有 `F:\stock_data\.authority` 时跟 F 盘）。
+必须 `--strategy version1|…|version6|version8|version9|version10`。7 不在 choices，必须走独立入口并传 `--pool-dir`。9 / 10 在 choices 里，但也必须 `--pool-dir`（`export_strategy9_pool.py` / `export_ta_pool.py`），拒绝 `stock_pool/`。`stock_pool/` 是 6/8 可变默认，不是实验快照；可复现跑用 `exports/`（见 [pool-csv-contract](docs/backtest/pool-csv-contract.md)）。数据经 `oskh_data` / `resolve_period_root`（有 `F:\stock_data\.authority` 时跟 F 盘）。
 
 ```powershell
 D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_daily_backtest.py --strategy version6 --start 20251023 --end 20260909

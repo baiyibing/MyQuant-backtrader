@@ -31,3 +31,9 @@ retains it as an empty list in its `datetime.date`-keyed map
 `--pool-dir`; only the 1–6/8 engines default to the repository `stock_pool/`
 directory. Strategies 9 and 10 also refuse that tree when it is passed
 explicitly.
+
+## Lifecycle SSOT: stock_pool vs exports
+
+- **`stock_pool/`** is the **mutable default** day-list tree for strategies **1–6/8** when `--pool-dir` is omitted. It may be overwritten in day-to-day work. **Do not treat it as an experimental or frozen snapshot.**
+- **`exports/`** holds **experimental / frozen** runs written by exporters (R5 pred TopN, strategy 9/10 pools, etc.). Point `--pool-dir` at a specific export directory for reproducibility.
+- Strategies **9** and **10** require `--pool-dir` and **refuse** the repository `stock_pool/` tree even if passed explicitly. Strategy **7** also requires an explicit `--pool-dir` (e.g. turtle pool) and does not fall back to this repo’s `stock_pool/`.
