@@ -289,6 +289,7 @@ def simulate(
     *,
     total_cash: float = DEFAULT_TOTAL_CASH,
     daily_quota: float = DEFAULT_DAILY_QUOTA,
+    name_budget: Optional[float] = None,
     stop_pct: Optional[float] = None,
     profit_base: Optional[float] = None,
     tiers: Optional[dict] = None,
@@ -310,6 +311,7 @@ def simulate(
         stop_pct=stop_pct,
         take_profit=take_profit,
         record_params=record_params,
+        name_budget=name_budget,
         profit_base=profit_base,
         tiers=tiers,
         tier_default=tier_default,
@@ -454,6 +456,8 @@ def simulate(
             allow_add=allow_add,
             buy_gate=buy_gate,
             buy_quote_for=_pool_quote_for,
+            sizing=hooks.get("sizing", "daily_quota"),
+            name_budget=hooks.get("name_budget", 1_000_000.0),
         )
 
         append_equity_and_eod_marks(
@@ -474,6 +478,7 @@ def run(
     *,
     total_cash: float = DEFAULT_TOTAL_CASH,
     daily_quota: float = DEFAULT_DAILY_QUOTA,
+    name_budget: Optional[float] = None,
     stop_pct: Optional[float] = None,
     profit_base: Optional[float] = None,
     tiers: Optional[dict] = None,
@@ -528,6 +533,7 @@ def run(
         strategy=strategy,
         take_profit=take_profit,
         record_params=record_params,
+        name_budget=name_budget,
         pool_names_by_day=pool_names_by_day,
     )
     st.stats["t_pool_s"] = t_pool
@@ -608,6 +614,14 @@ def summarize(
             f"  日线加载 {st.stats['bars_loaded']} | 池天数 {st.stats['pool_days']}",
         ]
     )
+    if "sizing" in st.stats:
+        lines.append(
+            f"  sizing={st.stats['sizing']} | name_budget={st.stats['name_budget']:,.0f} | "
+            f"skip_cash={st.stats.get('skip_cash', 0)} | "
+            f"skip_cash_notional={st.stats.get('skip_cash_notional', 0):,.0f} | "
+            f"chase_buy_fail_cash={st.stats.get('chase_buy_fail_cash', 0)} | "
+            f"chase_buy_fail_shares={st.stats.get('chase_buy_fail_shares', 0)}"
+        )
     timing_parts = []
     for key, lab in (
         ("t_pool_s", "池"),

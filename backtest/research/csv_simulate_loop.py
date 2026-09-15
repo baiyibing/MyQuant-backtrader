@@ -15,6 +15,8 @@ import pandas as pd
 from backtest.research.csv_common import _named_limits, _pool_names_asof
 from backtest.research.csv_ledger import (
     SimState,
+    COMMISSION,
+    _buy_size,
     chase_decision,
     execute_buy,
     hit_limit_up,
@@ -32,6 +34,7 @@ PoolQuoteFn = Callable[[str], Optional[tuple[float, list[float]]]]
 def prepare_strategy_hooks(
     strategy: str,
     *,
+    name_budget=None,
     stop_pct=None,
     take_profit=None,
     record_params=None,
@@ -48,6 +51,7 @@ def prepare_strategy_hooks(
     fn = apply_fn or apply_csv_strategy
     return fn(
         strategy,
+        name_budget=name_budget,
         stop_pct=stop_pct,
         take_profit=take_profit,
         record_params=record_params,
@@ -120,8 +124,15 @@ def run_chase_due_day(
             if len(closes) < 10:
                 st.stats["skip_sma_warmup"] += 1
             continue
+        quota_used = st.daily_quota_used
         if not execute_buy(st, code, buy_px, per_ch, day_i, day, reason="chase:T+1"):
             st.stats["chase_buy_fail"] += 1
+            shares, _ = _buy_size(per_ch, buy_px)
+            key = "chase_buy_fail_shares" if shares <= 0 else "chase_buy_fail_cash"
+            st.stats[key] = st.stats.setdefault(key, 0) + 1
+        if st.stats.get("sizing") == "per_name":
+            # daily_quota_used is vestigial; per_name never consumes a day quota.
+            st.daily_quota_used = quota_used
 
 
 def run_pool_buys_day(
@@ -137,12 +148,14 @@ def run_pool_buys_day(
     allow_add: bool,
     buy_gate,
     buy_quote_for: PoolQuoteFn,
+    sizing: str = "daily_quota",
+    name_budget: float = 1_000_000.0,
 ) -> None:
     """Pool buys for ``ds``; ``buy_quote_for`` supplies buy price + prev closes."""
     planned = list(pool_days.get(ds, []))
     if not planned:
         return
-    per = min(daily_quota, st.cash) / len(planned)
+    per = name_budget if sizing == "per_name" else min(daily_quota, st.cash) / len(planned)
     for code in planned:
         if code in st.positions and not allow_add:
             st.stats["skip_held"] += 1
@@ -169,7 +182,19 @@ def run_pool_buys_day(
             if len(closes) < 10:
                 st.stats["skip_sma_warmup"] += 1
             continue
-        execute_buy(st, code, px, per, day_i, day, reason="pool")
+        if sizing == "per_name":
+            shares, _ = _buy_size(per, px)
+            notional = shares * px
+            if notional + notional * COMMISSION > st.cash:
+                st.stats["skip_cash"] = st.stats.setdefault("skip_cash", 0) + 1
+                st.stats["skip_cash_notional"] = st.stats.setdefault("skip_cash_notional", 0.0) + per
+                continue
+            quota_used = st.daily_quota_used
+            execute_buy(st, code, px, per, day_i, day, reason="pool")
+            # Ledger's daily_quota_used is vestigial, not per_name enforcement.
+            st.daily_quota_used = quota_used
+        else:
+            execute_buy(st, code, px, per, day_i, day, reason="pool")
 
 
 def append_equity_and_eod_marks(

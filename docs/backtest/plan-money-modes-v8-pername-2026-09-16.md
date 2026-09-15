@@ -172,7 +172,7 @@ D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_daily_backtest.py --
 
 | 切片 | 状态 | commit | 备注 |
 |------|------|--------|------|
-| A · 模式框架 | ☐ | | |
+| A · 模式框架 | ✅ | 本切片提交（见 git log） | 579 passed / 3 skipped；新增 summary 用例后策略书 30 passed；策略 1/6 trades 与 9f4303c 基线逐字节一致；静态 pre_er1 未动 |
 | B · v8 切换（P1 去武装已裁） | ☐ | | 前置：PR #58 合入 |
 | C · 文档 | ☐ | | |
 | D · 宿主烟测（非合入门） | ☐ | | |

@@ -779,6 +779,7 @@ def simulate(
     *,
     total_cash: float = DEFAULT_TOTAL_CASH,
     daily_quota: float = DEFAULT_DAILY_QUOTA,
+    name_budget: Optional[float] = None,
     stop_pct: Optional[float] = None,
     profit_base: Optional[float] = None,
     tiers: Optional[dict] = None,
@@ -795,6 +796,7 @@ def simulate(
         stop_pct=stop_pct,
         take_profit=take_profit,
         record_params=record_params,
+        name_budget=name_budget,
         profit_base=profit_base,
         tiers=tiers,
         tier_default=tier_default,
@@ -945,6 +947,8 @@ def simulate(
             allow_add=allow_add,
             buy_gate=buy_gate,
             buy_quote_for=_pool_quote_for,
+            sizing=hooks.get("sizing", "daily_quota"),
+            name_budget=hooks.get("name_budget", 1_000_000.0),
         )
 
         append_equity_and_eod_marks(
@@ -965,6 +969,7 @@ def run(
     *,
     total_cash: float = DEFAULT_TOTAL_CASH,
     daily_quota: float = DEFAULT_DAILY_QUOTA,
+    name_budget: Optional[float] = None,
     stop_pct: Optional[float] = None,
     profit_base: Optional[float] = None,
     tiers: Optional[dict] = None,
@@ -1040,6 +1045,7 @@ def run(
         strategy=strategy,
         take_profit=take_profit,
         record_params=record_params,
+        name_budget=name_budget,
         pool_names_by_day=pool_names_by_day,
     )
     st.stats["t_pool_s"] = t_pool
