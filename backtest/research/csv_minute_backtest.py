@@ -415,7 +415,95 @@ def load_minute_bars(
     return {c: cached[c] for c in want if c in cached}
 
 
-def scan_held_day(
+_LIMIT_EPS = 0.001  # mirror csv_ledger.LIMIT_EPS for numba core
+
+try:
+    from numba import njit as _njit  # type: ignore
+
+    @_njit(cache=True)
+    def _scan_held_day_numba_trail(
+        o,
+        h,
+        c,
+        hm,
+        cost,
+        peak,
+        n_days,
+        can_sell,
+        stop_pct,
+        stop_enabled,
+        profit_base,
+        trail_ratio,
+        limit_down,
+        peak_hm,
+        peak_gap_min,
+        force_sell_hm,
+        has_force,
+    ):
+        """Pure trail path (no sell_gate / take_profit / reserve). Reasons as int codes."""
+        trigger = cost * (1.0 - stop_pct) if stop_enabled else 0.0
+        new_peak = peak
+        new_peak_hm = peak_hm
+        n = len(c)
+        for i in range(n):
+            if (not can_sell) or n_days < 1:
+                continue
+            hi = h[i]
+            cur_hm = hm[i]
+            if hi > new_peak:
+                new_peak = hi
+                new_peak_hm = cur_hm
+            px_open = o[i]
+            px_close = c[i]
+            if limit_down > 0.0 and (px_open - _LIMIT_EPS) <= limit_down:
+                continue
+            if stop_enabled and px_open <= trigger:
+                return i, px_open, 1, new_peak, new_peak_hm
+            ret = px_close / cost - 1.0
+            if stop_enabled and ret <= -stop_pct:
+                return i, px_close, 2, new_peak, new_peak_hm
+            gap = cur_hm - new_peak_hm
+            peak_blocked = new_peak_hm >= 0 and (0 <= gap < peak_gap_min)
+            if not peak_blocked:
+                # inline trail_hits
+                if px_close >= cost:
+                    peak_excess = new_peak / cost - 1.0 - profit_base
+                    if peak_excess > 0.0:
+                        if (
+                            px_close / cost - 1.0 - profit_base
+                            <= trail_ratio * peak_excess
+                        ):
+                            return i, px_close, 3, new_peak, new_peak_hm
+            if has_force and cur_hm >= force_sell_hm:
+                if limit_down > 0.0 and (px_close - _LIMIT_EPS) <= limit_down:
+                    continue
+                return i, px_close, 4, new_peak, new_peak_hm
+        return -1, np.nan, 0, new_peak, new_peak_hm
+
+    _NUMBA_SCAN_AVAILABLE = True
+except Exception:  # pragma: no cover - optional dep
+    _NUMBA_SCAN_AVAILABLE = False
+    _scan_held_day_numba_trail = None  # type: ignore
+
+
+_NUMBA_REASON = {
+    1: "stop_loss:gap_open",
+    2: "stop_loss:touch",
+    3: None,  # filled with trail:T+N
+    4: "force_sell:time",
+}
+
+
+def _want_numba_scan(use_numba: Optional[bool]) -> bool:
+    if use_numba is True:
+        return True
+    if use_numba is False:
+        return False
+    backend = (os.environ.get("CSV_SCAN_HELD_DAY_BACKEND") or "python").strip().lower()
+    return backend in {"numba", "jit"}
+
+
+def scan_held_day_python(
     o: np.ndarray,
     h: np.ndarray,
     c: np.ndarray,
@@ -443,7 +531,8 @@ def scan_held_day(
     reserved: bool = False,
     reserve_state: Optional[dict] = None,
 ) -> tuple[int, float, str, float, int]:
-    """逐分钟扫描。返回 (idx, px, reason, new_peak, new_peak_hm)。"""
+    """Python reference implementation of the minute sell scan."""
+    del pos_trail  # reserved for future; kept for API parity with callers
     stop_enabled = isinstance(stop_pct, float) and 0 < stop_pct < 1
     trigger = cost * (1.0 - stop_pct) if stop_enabled else None
     new_peak = float(peak)
@@ -503,6 +592,117 @@ def scan_held_day(
                 continue
             return i, px_close, "force_sell:time", new_peak, new_peak_hm
     return -1, float("nan"), "", new_peak, new_peak_hm
+
+
+def scan_held_day(
+    o: np.ndarray,
+    h: np.ndarray,
+    c: np.ndarray,
+    *,
+    cost: float,
+    peak: float,
+    n_days: int,
+    can_sell: bool,
+    stop_pct: Optional[float],
+    profit_base: float,
+    trail_ratio: float,
+    pos_trail: float = 0.0,
+    limit_down: float = 0.0,
+    hm: Optional[np.ndarray] = None,
+    peak_hm: int = -1,
+    peak_gap_min: int = PEAK_GAP_MIN,
+    take_profit=None,
+    sell_gate=None,
+    gate_code=None,
+    gate_day=None,
+    daily_closes_ending_yesterday=None,
+    force_sell_hm: Optional[int] = None,
+    reserve_limit_up: bool = False,
+    limit_up: float = 0.0,
+    reserved: bool = False,
+    reserve_state: Optional[dict] = None,
+    use_numba: Optional[bool] = None,
+) -> tuple[int, float, str, float, int]:
+    """逐分钟扫描。返回 (idx, px, reason, new_peak, new_peak_hm)。
+
+    Default backend is the Python reference. Optional numba trail-only path
+    is gated by ``use_numba=True`` or env ``CSV_SCAN_HELD_DAY_BACKEND=numba``.
+    Callables (sell_gate / take_profit) and reserve_limit_up always use Python.
+    """
+    can_offload = (
+        _want_numba_scan(use_numba)
+        and _NUMBA_SCAN_AVAILABLE
+        and sell_gate is None
+        and take_profit is None
+        and not reserve_limit_up
+        and reserve_state is None
+    )
+    if can_offload:
+        o64 = np.asarray(o, dtype=np.float64)
+        h64 = np.asarray(h, dtype=np.float64)
+        c64 = np.asarray(c, dtype=np.float64)
+        if hm is None:
+            hm64 = np.arange(len(c64), dtype=np.int64)
+        else:
+            hm64 = np.asarray(hm, dtype=np.int64)
+        stop_enabled = isinstance(stop_pct, float) and 0 < float(stop_pct) < 1
+        stop_v = float(stop_pct) if stop_enabled else 0.0
+        has_force = force_sell_hm is not None
+        force_v = int(force_sell_hm) if has_force else 0
+        idx, px, code, new_peak, new_peak_hm = _scan_held_day_numba_trail(
+            o64,
+            h64,
+            c64,
+            hm64,
+            float(cost),
+            float(peak),
+            int(n_days),
+            bool(can_sell),
+            stop_v,
+            bool(stop_enabled),
+            float(profit_base),
+            float(trail_ratio),
+            float(limit_down),
+            int(peak_hm),
+            int(peak_gap_min),
+            force_v,
+            bool(has_force),
+        )
+        if code == 0:
+            return -1, float("nan"), "", float(new_peak), int(new_peak_hm)
+        if code == 3:
+            reason = f"trail:T+{max(1, int(n_days))}"
+        else:
+            reason = _NUMBA_REASON[int(code)]
+        return int(idx), float(px), reason, float(new_peak), int(new_peak_hm)
+
+    return scan_held_day_python(
+        o,
+        h,
+        c,
+        cost=cost,
+        peak=peak,
+        n_days=n_days,
+        can_sell=can_sell,
+        stop_pct=stop_pct,
+        profit_base=profit_base,
+        trail_ratio=trail_ratio,
+        pos_trail=pos_trail,
+        limit_down=limit_down,
+        hm=hm,
+        peak_hm=peak_hm,
+        peak_gap_min=peak_gap_min,
+        take_profit=take_profit,
+        sell_gate=sell_gate,
+        gate_code=gate_code,
+        gate_day=gate_day,
+        daily_closes_ending_yesterday=daily_closes_ending_yesterday,
+        force_sell_hm=force_sell_hm,
+        reserve_limit_up=reserve_limit_up,
+        limit_up=limit_up,
+        reserved=reserved,
+        reserve_state=reserve_state,
+    )
 
 
 def _day_arrays(df: pd.DataFrame, ymd: str) -> Optional[pd.DataFrame]:
