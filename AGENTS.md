@@ -28,7 +28,7 @@ Keep: `backtest/` (incl. `research/` + `research/chip/`), `oskh_data/`, `l2_anal
 
 Do not reintroduce live trading packages (`live_trading`, `executor_stream`, `redis_stream_bridge`, `stream_monitor`, `oskh_db`, full `strategy_config`).
 
-Do not reintroduce QMT / xtquant market download. The original repo owns that pipeline.
+Consume only. All external downloads and vendor merges live in OSkhQuant1.3. This fork only reads the F lake.
 
 ## Data disks (do not mix)
 
