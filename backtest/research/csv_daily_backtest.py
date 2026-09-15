@@ -84,6 +84,13 @@ from backtest.research.csv_common import (  # noqa: E402
     _named_limits,
     _pool_names_asof,
 )
+from backtest.research.csv_simulate_loop import (  # noqa: E402
+    append_equity_and_eod_marks,
+    init_sim_state,
+    prepare_strategy_hooks,
+    run_chase_due_day,
+    run_pool_buys_day,
+)
 from backtest.research.csv_pool import (  # noqa: E402
     load_pool_day_map,
     load_pool_names_by_day,
@@ -296,7 +303,7 @@ def simulate(
     strategy 必填；take_profit(...) 仍可显式覆盖。
     """
     del pos_trail
-    hooks = apply_csv_strategy(
+    hooks = prepare_strategy_hooks(
         strategy,
         stop_pct=stop_pct,
         take_profit=take_profit,
@@ -304,23 +311,25 @@ def simulate(
         profit_base=profit_base,
         tiers=tiers,
         tier_default=tier_default,
+        apply_fn=apply_csv_strategy,
     )
     stop_pct = hooks["stop_pct"]
     take_profit = hooks["take_profit"]
     buy_gate = hooks.get("buy_gate")
     sell_gate = hooks.get("sell_gate")
-    record_params = hooks["record_params"]
     calendar = build_calendar(bars, start, end)
 
-    st = SimState(cash=float(total_cash))
-    record_params(st)
-    st.stats["bars_loaded"] = len(bars)
-    st.stats["pool_days"] = len(pool_days)
+    st, pending_chase, names_asof = init_sim_state(
+        hooks,
+        total_cash=total_cash,
+        bars_loaded=len(bars),
+        pool_days=pool_days,
+        pool_names=pool_names,
+        pool_names_by_day=pool_names_by_day,
+    )
     allow_add = bool(hooks["allow_add"])
     reserve_limit_up = bool(hooks.get("reserve_limit_up"))
     daily_same_bar_prefixes = tuple(hooks.get("daily_same_bar_prefixes", ()))
-    pending_chase: dict[str, tuple[float, int]] = {}  # code -> (per, signal_idx)
-    names_asof = _pool_names_asof(pool_names, pool_names_by_day)
 
     for i, day in enumerate(calendar):
         ds = _ymd(day)
@@ -403,104 +412,59 @@ def simulate(
                                 st.stats["defer_sell_limit_down"] += 1
                             pos.pending_exit = reason
 
-        due = [c for c, (_per, sig) in pending_chase.items() if i > sig]
-        for code in due:
-            per_ch, _sig = pending_chase[code]
-            if code in st.positions and not allow_add:
-                pending_chase.pop(code)
-                st.stats["skip_held"] += 1
-                st.stats["chase_skip_held"] += 1
-                continue
+        def _chase_quotes_for(code: str):
             if code not in bars or day not in bars[code].index:
-                continue
+                return None
             df_c = bars[code]
             prev_rows = df_c.loc[df_c.index < day]
             if prev_rows.empty:
-                continue
-            pending_chase.pop(code)
+                return None
             row = df_c.loc[day]
-            open_px = float(row["open"])
-            close_px = float(row["close"])
-            prev_close = float(prev_rows.iloc[-1]["close"])
-            limits = _named_limits(code, prev_close, names)
-            if limits is None:
-                st.stats["skip_unknown_board"] += 1
-                continue
-            limit_up, _ = limits
-            decision = chase_decision(open_px, close_px, limit_up)
-            if decision == "limit":
-                st.stats["chase_skip_limit"] += 1
-                continue
-            if decision != "buy":
-                st.stats["chase_abandon"] += 1
-                continue
             closes = prev_rows["close"].astype(float).tolist()
-            if callable(buy_gate) and not buy_gate(code, close_px, day, closes):
-                st.stats["skip_buy_gate"] += 1
-                if len(closes) < 10:
-                    st.stats["skip_sma_warmup"] += 1
-                continue
-            if not execute_buy(st, code, close_px, per_ch, i, day, reason="chase:T+1"):
-                st.stats["chase_buy_fail"] += 1
+            return float(row["open"]), float(row["close"]), closes
 
-        planned = list(pool_days.get(ds, []))
-        if planned:
-            n_plan = len(planned)
-            per = min(daily_quota, st.cash) / n_plan
-            for code in planned:
-                if code in st.positions and not allow_add:
-                    st.stats["skip_held"] += 1
-                    continue
-                if code not in bars or day not in bars[code].index:
-                    st.stats["skip_no_bar"] += 1
-                    continue
-                df_c = bars[code]
-                prev_rows = df_c.loc[df_c.index < day]
-                if prev_rows.empty:
-                    st.stats["skip_no_bar"] += 1
-                    continue
-                prev_close = float(prev_rows.iloc[-1]["close"])
-                limits = _named_limits(code, prev_close, names)
-                if limits is None:
-                    st.stats["skip_unknown_board"] += 1
-                    continue
-                limit_up, _ = limits
-                close = float(df_c.loc[day]["close"])
-                if hit_limit_up(close, limit_up):
-                    queue_limit_up_chase(st, pending_chase, code, per, i)
-                    continue
-                closes = prev_rows["close"].astype(float).tolist()
-                if callable(buy_gate) and not buy_gate(code, close, day, closes):
-                    st.stats["skip_buy_gate"] += 1
-                    if len(closes) < 10:
-                        st.stats["skip_sma_warmup"] += 1
-                    continue
-                execute_buy(st, code, close, per, i, day, reason="pool")
+        run_chase_due_day(
+            st,
+            pending_chase,
+            day_i=i,
+            day=day,
+            names=names,
+            allow_add=allow_add,
+            buy_gate=buy_gate,
+            quotes_for=_chase_quotes_for,
+        )
 
-        eq = st.cash
-        for code, lots in st.positions.items():
-            df_c = bars.get(code)
-            for pos in lots:
-                eq += pos.shares * last_close_mark(df_c, day, pos.cost)
-        st.equity_curve.append((ds, eq))
+        def _pool_quote_for(code: str):
+            if code not in bars or day not in bars[code].index:
+                return None
+            df_c = bars[code]
+            prev_rows = df_c.loc[df_c.index < day]
+            if prev_rows.empty:
+                return None
+            closes = prev_rows["close"].astype(float).tolist()
+            return float(df_c.loc[day]["close"]), closes
 
-        if day == calendar[-1] and st.positions:
-            for code, lots in st.positions.items():
-                df_c = bars.get(code)
-                for pos in lots:
-                    last = last_close_mark(df_c, day, pos.cost)
-                    st.trades.append(
-                        {
-                            "date": ds,
-                            "code": code,
-                            "side": "EOD_MARK",
-                            "price": last,
-                            "shares": pos.shares,
-                            "notional": pos.shares * last,
-                            "commission": 0.0,
-                            "lot": pos.lot_id,
-                        }
-                    )
+        run_pool_buys_day(
+            st,
+            pending_chase,
+            day_i=i,
+            day=day,
+            ds=ds,
+            pool_days=pool_days,
+            daily_quota=daily_quota,
+            names=names,
+            allow_add=allow_add,
+            buy_gate=buy_gate,
+            buy_quote_for=_pool_quote_for,
+        )
+
+        append_equity_and_eod_marks(
+            st,
+            ds=ds,
+            day=day,
+            calendar_last=calendar[-1],
+            mark_bars=bars,
+        )
 
     finish_pending_chase(st, pending_chase)
     return st

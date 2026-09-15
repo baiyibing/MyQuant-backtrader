@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """Light shared helpers for CSV daily / minute engines.
 
-Extracted so both engines can import calendar / name-asof without coupling
-through the daily module. Do **not** merge the two ``simulate()`` loops here —
-that remains future work after sell-book contracts stay locked.
+Calendar / name-asof live here so engines avoid coupling through the daily
+module. Chase / pool / equity-mark skeleton is in ``csv_simulate_loop.py``;
+sell loops stay split on purpose (daily bar rules vs ``scan_held_day``).
 """
 
 from __future__ import annotations

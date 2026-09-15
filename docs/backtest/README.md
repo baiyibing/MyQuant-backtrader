@@ -94,7 +94,7 @@ R5 的 `--start/--end` 必须跟导出的首末文件名走：H0 / `pred_minus_o
 | 已完成 plan 归档 | [_archive/plans/](_archive/plans/) |
 
 
-**Hygiene / future work:** daily vs minute `simulate()` still duplicated on purpose (unify A–E locked sell books; do not big-bang merge). Light shared helpers live in `backtest/research/csv_common.py`. Cerebro stays fossil-gated (`--allow-cerebro-fossil`); do not delete modules in this tree.
+**Hygiene / future work:** chase / pool / equity-mark skeleton is shared in `backtest/research/csv_simulate_loop.py` (plus calendar / name-asof in `csv_common.py`); sell loops remain split on purpose (daily bar rules vs `scan_held_day`; unify A–E locked sell books later — do not big-bang merge). Cerebro stays fossil-gated (`--allow-cerebro-fossil`); do not delete modules in this tree.
 
 下列链到本仓不存在的 1.3 迁仓文件，不要当本仓入口：`backtest-architecture-ssot.md`、`../handoff/mockqmt-lebs-homology-review-handoff-2026-08-27.md`、`../engineering/plan-lightweight-event-backtest-shell-2026-08-25.md`。
 

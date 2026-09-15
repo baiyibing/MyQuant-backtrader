@@ -79,6 +79,13 @@ import pyarrow.parquet as pq  # noqa: E402
 from common.infra.data_root import resolve_period_root  # noqa: E402
 from oskh_data.symbol_format import to_partition_key  # noqa: E402
 from backtest.research.strategy3_rules import reserve_step_minute  # noqa: E402
+from backtest.research.csv_simulate_loop import (  # noqa: E402
+    append_equity_and_eod_marks,
+    init_sim_state,
+    prepare_strategy_hooks,
+    run_chase_due_day,
+    run_pool_buys_day,
+)
 
 BUY_HM = 14 * 60 + 55
 AM_OPEN, AM_CLOSE = 9 * 60 + 30, 11 * 60 + 30
@@ -779,7 +786,7 @@ def simulate(
     pool_names: Optional[dict[str, str]] = None,
     pool_names_by_day: Optional[dict[str, dict[str, str]]] = None,
 ) -> SimState:
-    hooks = apply_csv_strategy(
+    hooks = prepare_strategy_hooks(
         strategy,
         stop_pct=stop_pct,
         take_profit=take_profit,
@@ -787,25 +794,27 @@ def simulate(
         profit_base=profit_base,
         tiers=tiers,
         tier_default=tier_default,
+        apply_fn=apply_csv_strategy,
     )
     stop_pct = hooks["stop_pct"]
     take_profit = hooks["take_profit"]
     buy_gate = hooks.get("buy_gate")
     sell_gate = hooks.get("sell_gate")
-    record_params = hooks["record_params"]
     peak_gap_min = int(hooks["peak_gap_min"])
     force_sell_hm = hooks.get("force_sell_hm")
     reserve_limit_up = bool(hooks.get("reserve_limit_up"))
     calendar = build_calendar(daily_bars, start, end)
 
-    st = SimState(cash=float(total_cash))
-    record_params(st)
-    st.stats["bars_loaded"] = len(minute_bars)
-    st.stats["pool_days"] = len(pool_days)
+    st, pending_chase, names_asof = init_sim_state(
+        hooks,
+        total_cash=total_cash,
+        bars_loaded=len(minute_bars),
+        pool_days=pool_days,
+        pool_names=pool_names,
+        pool_names_by_day=pool_names_by_day,
+    )
     allow_add = bool(hooks["allow_add"])
     day_spans = {code: build_day_spans(df) for code, df in minute_bars.items()}
-    pending_chase: dict[str, tuple[float, int]] = {}
-    names_asof = _pool_names_asof(pool_names, pool_names_by_day)
 
     for i, day in enumerate(calendar):
         ds = _ymd(day)
@@ -876,114 +885,71 @@ def simulate(
                         continue
                     _sell(st, code, pos, px, day, reason)
 
-        due = [c for c, (_per, sig) in pending_chase.items() if i > sig]
-        for code in due:
-            per_ch, _sig = pending_chase[code]
-            if code in st.positions and not allow_add:
-                pending_chase.pop(code)
-                st.stats["skip_held"] += 1
-                st.stats["chase_skip_held"] += 1
-                continue
+        def _chase_quotes_for(code: str):
             mdf = minute_bars.get(code)
             ddf = daily_bars.get(code)
             if mdf is None or ddf is None or day not in ddf.index:
-                continue
+                return None
             day_m = _slice_day(mdf, day_spans.get(code, {}), ds)
             quotes = _chase_quotes(day_m) if day_m is not None else None
             if quotes is None:
-                continue
+                return None
             open_px, px = quotes
             prev_rows = ddf.loc[ddf.index < day]
             if prev_rows.empty:
-                continue
-            pending_chase.pop(code)
-            prev_close = float(prev_rows.iloc[-1]["close"])
-            limits = _named_limits(code, prev_close, names)
-            if limits is None:
-                st.stats["skip_unknown_board"] += 1
-                continue
-            limit_up, _ = limits
-            decision = chase_decision(open_px, px, limit_up)
-            if decision == "limit":
-                st.stats["chase_skip_limit"] += 1
-                continue
-            if decision != "buy":
-                st.stats["chase_abandon"] += 1
-                continue
+                return None
             closes = prev_rows["close"].astype(float).tolist()
-            if callable(buy_gate) and not buy_gate(code, px, day, closes):
-                st.stats["skip_buy_gate"] += 1
-                if len(closes) < 10:
-                    st.stats["skip_sma_warmup"] += 1
-                continue
-            if not execute_buy(st, code, px, per_ch, i, day, reason="chase:T+1"):
-                st.stats["chase_buy_fail"] += 1
+            return open_px, px, closes
 
-        planned = list(pool_days.get(ds, []))
-        if planned:
-            per = min(daily_quota, st.cash) / len(planned)
-            for code in planned:
-                if code in st.positions and not allow_add:
-                    st.stats["skip_held"] += 1
-                    continue
-                mdf = minute_bars.get(code)
-                ddf = daily_bars.get(code)
-                if mdf is None or ddf is None or day not in ddf.index:
-                    st.stats["skip_no_bar"] += 1
-                    continue
-                day_m = _slice_day(mdf, day_spans.get(code, {}), ds)
-                if day_m is None:
-                    st.stats["skip_no_bar"] += 1
-                    continue
-                prev_rows = ddf.loc[ddf.index < day]
-                if prev_rows.empty:
-                    st.stats["skip_no_bar"] += 1
-                    continue
-                px = _buy_px(day_m)
-                if px is None or px <= 0:
-                    st.stats["skip_no_bar"] += 1
-                    continue
-                prev_close = float(prev_rows.iloc[-1]["close"])
-                limits = _named_limits(code, prev_close, names)
-                if limits is None:
-                    st.stats["skip_unknown_board"] += 1
-                    continue
-                limit_up, _ = limits
-                if hit_limit_up(px, limit_up):
-                    queue_limit_up_chase(st, pending_chase, code, per, i)
-                    continue
-                closes = prev_rows["close"].astype(float).tolist()
-                if callable(buy_gate) and not buy_gate(code, px, day, closes):
-                    st.stats["skip_buy_gate"] += 1
-                    if len(closes) < 10:
-                        st.stats["skip_sma_warmup"] += 1
-                    continue
-                execute_buy(st, code, px, per, i, day, reason="pool")
+        run_chase_due_day(
+            st,
+            pending_chase,
+            day_i=i,
+            day=day,
+            names=names,
+            allow_add=allow_add,
+            buy_gate=buy_gate,
+            quotes_for=_chase_quotes_for,
+        )
 
-        eq = st.cash
-        for code, lots in st.positions.items():
+        def _pool_quote_for(code: str):
+            mdf = minute_bars.get(code)
             ddf = daily_bars.get(code)
-            for pos in lots:
-                eq += pos.shares * last_close_mark(ddf, day, pos.cost)
-        st.equity_curve.append((ds, eq))
+            if mdf is None or ddf is None or day not in ddf.index:
+                return None
+            day_m = _slice_day(mdf, day_spans.get(code, {}), ds)
+            if day_m is None:
+                return None
+            prev_rows = ddf.loc[ddf.index < day]
+            if prev_rows.empty:
+                return None
+            px = _buy_px(day_m)
+            if px is None or px <= 0:
+                return None
+            closes = prev_rows["close"].astype(float).tolist()
+            return px, closes
 
-        if day == calendar[-1] and st.positions:
-            for code, lots in st.positions.items():
-                ddf = daily_bars.get(code)
-                for pos in lots:
-                    last = last_close_mark(ddf, day, pos.cost)
-                    st.trades.append(
-                        {
-                            "date": ds,
-                            "code": code,
-                            "side": "EOD_MARK",
-                            "price": last,
-                            "shares": pos.shares,
-                            "notional": pos.shares * last,
-                            "commission": 0.0,
-                            "lot": pos.lot_id,
-                        }
-                    )
+        run_pool_buys_day(
+            st,
+            pending_chase,
+            day_i=i,
+            day=day,
+            ds=ds,
+            pool_days=pool_days,
+            daily_quota=daily_quota,
+            names=names,
+            allow_add=allow_add,
+            buy_gate=buy_gate,
+            buy_quote_for=_pool_quote_for,
+        )
+
+        append_equity_and_eod_marks(
+            st,
+            ds=ds,
+            day=day,
+            calendar_last=calendar[-1],
+            mark_bars=daily_bars,
+        )
 
     finish_pending_chase(st, pending_chase)
     return st
