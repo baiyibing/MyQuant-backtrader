@@ -1,7 +1,7 @@
 # MyQuant-backtrader hygiene backlog（头脑风暴续）
 
 - 日期：2026-09-15
-- 状态：进行中（一条条：Codex 改 → Grok 核）
+- 状态：**队列完成**（H1–H7 均 ✓；Codex 改 → Grok 核无有效 🔴）
 - 前置：PR #34（hotpath / presets 快照 / simulate 骨架 / plan 归档）
 - 禁区（不动）：改 6/8 卖点、重开 `--asof`、PortAna 定胜负、本仓复刻 LEBS/真栈、缺行 fail-closed→跳过、Cerebro 物理删除、Cursor CloudAgent
 
@@ -15,6 +15,8 @@
 | **H4** ✓ | research 入口防误 import Cerebro | `test_research_face_imports`：向量化五模块可导入且不拉 backtrader；chip 对照仍可 bt |
 | **H5** ✓ | 日线 mark 按 code 缓存 + microbench | plan + `market_close_mark` / `append_equity` 缓存；`bench_daily_mark.py`；pytest；Grok 核无 🔴 |
 | **H6** ✓ | CI 备注：numba 在 requirements，parity 必跑 | workflow 注释 + `import numba` 断言；Python 默认后端不变；Grok 核无 🔴 |
-| **H7** | `stock_pool/` vs `exports/` 生命周期一句 SSOT | README/pool-csv-contract 补短段 |
+| **H7** ✓ | `stock_pool/` vs `exports/` 生命周期一句 SSOT | pool-csv-contract SSOT + README 指针；无 Python 行为变更；Grok 核无 🔴 |
 
 已合不重复：csv_common、csv_simulate_loop、presets 快照、plan `_archive/plans/`、numba trail 可选。
+
+**队列收口（2026-09-15）**：H1–H7 全部交付并经 Grok 核；后续 hygiene 另开 backlog。

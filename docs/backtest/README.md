@@ -6,7 +6,7 @@
 
 ## 本仓研究入口（向量化）
 
-名单：`YYYYMMDD.csv`，首列裸六位码，`parse_pool_csv` 补交易所后缀。缺日 / 空文件 = 当日不买。6/8 默认读本仓 `stock_pool/`；7 / **9** / **10** 必须 `--pool-dir`，不要回落 `stock_pool/`。
+名单：`YYYYMMDD.csv`，首列裸六位码，`parse_pool_csv` 补交易所后缀。缺日 / 空文件 = 当日不买。6/8 默认读本仓 **可变** `stock_pool/`（不是快照）；实验/冻结跑用 `exports/` + `--pool-dir`；7 / **9** / **10** 必须 `--pool-dir`，9/10 拒绝 `stock_pool/`。生命周期 SSOT：[pool-csv-contract.md](pool-csv-contract.md)#lifecycle-ssot-stock_pool-vs-exports。
 
 ```text
 # 策略 1 / 2 / 3 / 4 / 5 / 6 / 8 / 9 / 10：共用引擎，策略书换卖点与加仓。必须 --strategy，无缺省。
