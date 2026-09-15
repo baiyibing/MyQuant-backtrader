@@ -31,14 +31,16 @@ jobs:
           cache: pip
           cache-dependency-path: requirements.txt
 
-      # Data-free / repo-only path-SSOT + contract gates (H10 Theme E).
+      # Data-free / repo-only path-SSOT + contract gates (H10 Theme E + H12 TR bridge).
       # Do NOT add lake-backed chip/TR/L2 gates here — they fail without F:\stock_data.
       # Inventory: docs/backtest/plan-h10-ci-path-gates-2026-09-15.md
+      #            docs/backtest/plan-h12-ci-tr-bridge-gate-2026-09-15.md
       - name: Contract gates
         run: |
           python scripts/gates/verify_oskh_data_contract.py
           python scripts/gates/verify_data_path_ssot.py
           python scripts/gates/verify_no_hardcoded_machine_paths.py
+          python scripts/gates/verify_tr_bridge_import_ssot.py
 
       # requirements.txt includes numba>=0.60 so scan_held_day numba/Python
       # parity (tests/test_scan_held_day_numba_parity.py) runs in CI instead of

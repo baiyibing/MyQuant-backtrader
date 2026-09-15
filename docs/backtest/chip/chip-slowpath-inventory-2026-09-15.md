@@ -37,7 +37,7 @@ Python `oskh_factors.chip` + `qlib_cost.cyq*` 仍是**研究 / 对照 / 短窗 c
 | `strategies/tr_filter.py` | 名单过滤：读已算好的 `turnover_resistance` | **leave** |
 | `scripts/research/benchmark_turnover_resist_bridge.py` | Bridge 选型 benchmark | **leave** |
 | `tests/test_turnover_resist_bridge.py` | Bridge mode / shim / prefer_ffi（无湖） | **leave** |
-| `scripts/gates/verify_tr_bridge_import_ssot.py`（H11） | 静态：shim / 已知消费者仍指向 factors bridge | **leave** |
+| `scripts/gates/verify_tr_bridge_import_ssot.py`（H11；**H12 进 CI**） | 静态：shim / 已知消费者仍指向 factors bridge | **leave** |
 
 ---
 

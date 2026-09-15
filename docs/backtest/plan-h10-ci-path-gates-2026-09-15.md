@@ -25,6 +25,7 @@
 | `verify_oskh_data_contract.py` | data-free（AST / 包边界） | 仅仓库源码 | ✓ 已有 |
 | `verify_data_path_ssot.py` | data-free（路径字面量扫描） | 仅仓库源码 | ✓ 已有；H10 扩扫 `common/` |
 | `verify_no_hardcoded_machine_paths.py` | data-free（本机路径硬编码） | 仅仓库源码 | ✓ **H10 新增** |
+| `verify_tr_bridge_import_ssot.py` | data-free（TR bridge import AST） | 仅仓库源码 | ✓ **H12 接线**（脚本 H11） |
 | `verify_l2_manifest.py` | 需 L2 parquet / manifest | 无湖时 SKIP 退出 0；有湖才校验 | ✗ 不加（CI 无湖恒 SKIP，无增益） |
 | `verify_mvp_min.py` | 需湖 | parquet / `StockDataReader` | ✗ |
 | `verify_minute_chip.py` | 需湖 | 同上 | ✗ |

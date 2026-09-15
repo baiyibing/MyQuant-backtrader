@@ -54,7 +54,7 @@ R5 的 `--start/--end` 必须跟导出的首末文件名走：H0 / `pred_minus_o
 
 数据：只读 F 湖 parquet（有 `F:\stock_data\.authority` 且勿残留 `OSKH_PERIOD_*`）。细则见根 `AGENTS.md`。
 
-**CI contract gates（无 F 湖 / repo-only）：** `.github/workflows/python-tests.yml` 在 `pip` 前跑 `verify_oskh_data_contract.py`、`verify_data_path_ssot.py`（扫 `oskh_data` / `oskh_factors` / `scripts` / `common`）、`verify_no_hardcoded_machine_paths.py`。chip / TR / L2 等需湖门禁不进 CI。清单见 [plan-h10-ci-path-gates-2026-09-15.md](plan-h10-ci-path-gates-2026-09-15.md)。
+**CI contract gates（无 F 湖 / repo-only）：** `.github/workflows/python-tests.yml` 在 `pip` 前跑 `verify_oskh_data_contract.py`、`verify_data_path_ssot.py`（扫 `oskh_data` / `oskh_factors` / `scripts` / `common`）、`verify_no_hardcoded_machine_paths.py`、`verify_tr_bridge_import_ssot.py`（H12）。chip / TR / L2 等需湖门禁不进 CI。清单见 [plan-h10-ci-path-gates-2026-09-15.md](plan-h10-ci-path-gates-2026-09-15.md) · [plan-h12-ci-tr-bridge-gate-2026-09-15.md](plan-h12-ci-tr-bridge-gate-2026-09-15.md)。
 
 ## 1.3：LEBS 与 MockQMT（不在本仓跑）
 
@@ -78,6 +78,7 @@ R5 的 `--start/--end` 必须跟导出的首末文件名走：H0 / `pred_minus_o
 | **★ 向量化成交核（A 股档位 / 跌停 / 停牌）** | [engine-ashare-correctness.md](engine-ashare-correctness.md) |
 | 名单 CSV 契约（as-of = 买入日 T；H9 list-quality CLI） | [pool-csv-contract.md](pool-csv-contract.md)#list-quality-reporter-h9 |
 | **CI path-SSOT / contract gates（H10；无湖）** | [plan-h10-ci-path-gates-2026-09-15.md](plan-h10-ci-path-gates-2026-09-15.md) · workflow `python-tests.yml` |
+| **CI TR bridge import gate（H12；无湖）** | [plan-h12-ci-tr-bridge-gate-2026-09-15.md](plan-h12-ci-tr-bridge-gate-2026-09-15.md) · `verify_tr_bridge_import_ssot.py` |
 | **Chip / TR slow-path inventory（H11；Theme D 软）** | [chip/chip-slowpath-inventory-2026-09-15.md](chip/chip-slowpath-inventory-2026-09-15.md) · [plan-h11-chip-slowpath-inventory-2026-09-15.md](plan-h11-chip-slowpath-inventory-2026-09-15.md) |
 | 名单管道 R0/R1（持仓胶水；已合 #21） | [plan-pool-pipeline-r0r1-2026-09-12.md](_archive/plans/plan-pool-pipeline-r0r1-2026-09-12.md) |
 | **名单管道 R2/R5（pred TopN 闭环）** | [plan-pool-pipeline-r2r5-2026-09-12.md](_archive/plans/plan-pool-pipeline-r2r5-2026-09-12.md) |
@@ -98,7 +99,7 @@ R5 的 `--start/--end` 必须跟导出的首末文件名走：H0 / `pred_minus_o
 | 已完成 plan 归档 | [_archive/plans/](_archive/plans/) |
 
 
-**Hygiene / future work:** backlog [plan-hygiene-backlog-2026-09-15.md](plan-hygiene-backlog-2026-09-15.md)（H1–H11 ✓；主题 A–F 仍开放）。chase / pool / equity-mark skeleton is shared in `backtest/research/csv_simulate_loop.py` (plus calendar / name-asof in `csv_common.py`); sell loops remain split on purpose (daily bar rules vs `scan_held_day`; unify A–E locked sell books later — do not big-bang merge). Cerebro stays fossil-gated (`--allow-cerebro-fossil`); do not delete modules in this tree. L2 (`l2_analytics/` / `run_l2_*`) stays offline ETL/aggregates — do not expand into trading or strategy books.
+**Hygiene / future work:** backlog [plan-hygiene-backlog-2026-09-15.md](plan-hygiene-backlog-2026-09-15.md)（H1–H12 ✓ 软切片大致收口；主题 A–F 仍有重活；run-manifest / chip offload 另开）。chase / pool / equity-mark skeleton is shared in `backtest/research/csv_simulate_loop.py` (plus calendar / name-asof in `csv_common.py`); sell loops remain split on purpose (daily bar rules vs `scan_held_day`; unify A–E locked sell books later — do not big-bang merge). Cerebro stays fossil-gated (`--allow-cerebro-fossil`); do not delete modules in this tree. L2 (`l2_analytics/` / `run_l2_*`) stays offline ETL/aggregates — do not expand into trading or strategy books.
 
 下列链到本仓不存在的 1.3 迁仓文件，不要当本仓入口：`backtest-architecture-ssot.md`、`../handoff/mockqmt-lebs-homology-review-handoff-2026-08-27.md`、`../engineering/plan-lightweight-event-backtest-shell-2026-08-25.md`。
 
