@@ -96,7 +96,7 @@ HELP_LOCK = """
   买入：池 CSV 当日候选、14:55 收盘价；买价达到或超过涨停价 → 当日不买，
         记下额度。T+1 09:45 市价>当日开盘 → 09:45 收盘追买；否则弃买。
         追买日无 K 保留 pending 到下一有 K 日（仍只评一次）。
-        已持再买或跳过由 --strategy 策略书决定。
+        per_name 已持跳过、不加仓；daily_quota 沿用策略书历史加仓路径。
         未知板块且无 ST 名 → skip_unknown_board，不交易。
   止损：D+1 起，开盘 ≤ 买入价×(1-stop) → 开盘成交；否则该分钟 close 触价 → close 成交。
   跌停禁卖：任何卖因成交前若开盘或成交价跌停 → 不成交、当日跳过、次日再评
@@ -107,6 +107,7 @@ HELP_LOCK = """
         盘中触线按该分钟 close 走。
   T+0：不可卖；峰值固定为买入价，14:55 之后的 high 不计入。峰值从 T+1 起算。
   资金 / T+1 / force_min / 佣金：与 csv_daily_backtest 相同。
+        资金模式见策略书（v8=每股预算）；per_name 现金不足（含佣金）整笔 skip_cash。
   复权：买卖价、涨跌停、净值全程 dividend_type=none（与日线/Cerebro 对齐，
         不用 front 对照）。
   窗口：分钟湖目前到 2026-05-25；要「→今天」用日线版。
@@ -779,6 +780,7 @@ def simulate(
     *,
     total_cash: float = DEFAULT_TOTAL_CASH,
     daily_quota: float = DEFAULT_DAILY_QUOTA,
+    name_budget: Optional[float] = None,
     stop_pct: Optional[float] = None,
     profit_base: Optional[float] = None,
     tiers: Optional[dict] = None,
@@ -795,6 +797,7 @@ def simulate(
         stop_pct=stop_pct,
         take_profit=take_profit,
         record_params=record_params,
+        name_budget=name_budget,
         profit_base=profit_base,
         tiers=tiers,
         tier_default=tier_default,
@@ -945,6 +948,8 @@ def simulate(
             allow_add=allow_add,
             buy_gate=buy_gate,
             buy_quote_for=_pool_quote_for,
+            sizing=hooks.get("sizing", "daily_quota"),
+            name_budget=hooks.get("name_budget", 1_000_000.0),
         )
 
         append_equity_and_eod_marks(
@@ -965,6 +970,7 @@ def run(
     *,
     total_cash: float = DEFAULT_TOTAL_CASH,
     daily_quota: float = DEFAULT_DAILY_QUOTA,
+    name_budget: Optional[float] = None,
     stop_pct: Optional[float] = None,
     profit_base: Optional[float] = None,
     tiers: Optional[dict] = None,
@@ -1040,6 +1046,7 @@ def run(
         strategy=strategy,
         take_profit=take_profit,
         record_params=record_params,
+        name_budget=name_budget,
         pool_names_by_day=pool_names_by_day,
     )
     st.stats["t_pool_s"] = t_pool

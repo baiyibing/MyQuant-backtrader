@@ -149,8 +149,9 @@ HELP_LOCK = """
 日线近似口径（相对分钟保真版的唯一失真来源）：
   买入：池 CSV 当日候选、收盘价成交（分钟版 14:55≈收盘）；买价达到或超过
         涨停价 → 当日不买，记下该票额度，次日按追买规则处理。
-        已持再买或跳过由 --strategy 策略书决定。
-        常规额度按当日池 CSV 全部名单均分（含随后被跳过的票）。
+        per_name 已持跳过、不加仓；daily_quota 沿用策略书历史加仓路径。
+        daily_quota 常规额度按当日池 CSV 全部名单均分（含随后被跳过的票）。
+        资金模式见策略书（v8=每股预算）。
   止损：D+1 起，触发价 = 买入价×(1-stop)。开盘 ≤ 触发价 → 开盘价成交（跳空）；
         否则日内 low 触价 → 触发价成交。
   跌停禁卖：任何卖因在成交前若开盘或成交价跌停 → 不成交、顺延（含 trail /
@@ -163,7 +164,8 @@ HELP_LOCK = """
         否则弃买。追买日无 K 保留 pending 到下一有 K 日（仍只评一次）。
         成交价用收盘（相对 09:45 的失真）。
   停牌：冻仓；净值用最近有 K 的 close，不用成本价冒充。
-  资金：2100 万全局池；每日 100 万常规额度；不足 100 股用补充资金补足
+  资金：2100 万全局池；daily_quota 每日 100 万均分，per_name 每码 --name-budget；
+        per_name 现金不足（含佣金）整笔 skip_cash、不缩量；不足 100 股用补充资金补足
         （force_min，自主池、不占额度）；佣金 0.1% 双边无最低。
   T+1：买入日不可卖；期末持仓按最后有 K 收盘估值（eod_mark）。
   窗口：--end 是估值/离场末日。买入只发生在 stock_pool/ 有 CSV 的交易日
@@ -289,6 +291,7 @@ def simulate(
     *,
     total_cash: float = DEFAULT_TOTAL_CASH,
     daily_quota: float = DEFAULT_DAILY_QUOTA,
+    name_budget: Optional[float] = None,
     stop_pct: Optional[float] = None,
     profit_base: Optional[float] = None,
     tiers: Optional[dict] = None,
@@ -310,6 +313,7 @@ def simulate(
         stop_pct=stop_pct,
         take_profit=take_profit,
         record_params=record_params,
+        name_budget=name_budget,
         profit_base=profit_base,
         tiers=tiers,
         tier_default=tier_default,
@@ -454,6 +458,8 @@ def simulate(
             allow_add=allow_add,
             buy_gate=buy_gate,
             buy_quote_for=_pool_quote_for,
+            sizing=hooks.get("sizing", "daily_quota"),
+            name_budget=hooks.get("name_budget", 1_000_000.0),
         )
 
         append_equity_and_eod_marks(
@@ -474,6 +480,7 @@ def run(
     *,
     total_cash: float = DEFAULT_TOTAL_CASH,
     daily_quota: float = DEFAULT_DAILY_QUOTA,
+    name_budget: Optional[float] = None,
     stop_pct: Optional[float] = None,
     profit_base: Optional[float] = None,
     tiers: Optional[dict] = None,
@@ -528,6 +535,7 @@ def run(
         strategy=strategy,
         take_profit=take_profit,
         record_params=record_params,
+        name_budget=name_budget,
         pool_names_by_day=pool_names_by_day,
     )
     st.stats["t_pool_s"] = t_pool
@@ -568,7 +576,7 @@ def summarize(
     if st.stats.get("sell_book") == "v8":
         lines.append(
             f"  参数: 止损 {stop_text} | "
-            f"{st.stats.get('small_arm', 0.06):.0%}≤涨幅≤"
+            f"0%<涨幅≤"
             f"{st.stats['profit_base']:.0%} 回撤到+"
             f"{st.stats.get('small_floor', 0.02):.0%} | 基础止盈 "
             f"{st.stats['profit_base']:.0%} | 涨幅>{st.stats['peak_dd_arm']:.0%} 时 "
@@ -608,6 +616,14 @@ def summarize(
             f"  日线加载 {st.stats['bars_loaded']} | 池天数 {st.stats['pool_days']}",
         ]
     )
+    if "sizing" in st.stats:
+        lines.append(
+            f"  sizing={st.stats['sizing']} | name_budget={st.stats['name_budget']:,.0f} | "
+            f"skip_cash={st.stats.get('skip_cash', 0)} | "
+            f"skip_cash_notional={st.stats.get('skip_cash_notional', 0):,.0f} | "
+            f"chase_buy_fail_cash={st.stats.get('chase_buy_fail_cash', 0)} | "
+            f"chase_buy_fail_shares={st.stats.get('chase_buy_fail_shares', 0)}"
+        )
     timing_parts = []
     for key, lab in (
         ("t_pool_s", "池"),

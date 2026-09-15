@@ -12,10 +12,10 @@ from backtest.research.csv_daily_backtest import chase_explained
 from backtest.research.strategy8_rules import take_profit_reason
 
 
-def test_scan_gap_open_stop_20pct():
-    o = np.array([7.90, 8.00])
-    h = np.array([8.00, 8.10])
-    c = np.array([7.95, 8.05])
+def test_scan_gap_open_stop_30pct():
+    o = np.array([6.90, 7.00])
+    h = np.array([7.00, 7.10])
+    c = np.array([6.95, 7.05])
     idx, px, reason, _, _ = sim.scan_held_day(
         o,
         h,
@@ -24,7 +24,7 @@ def test_scan_gap_open_stop_20pct():
         peak=10.0,
         n_days=1,
         can_sell=True,
-        stop_pct=0.20,
+        stop_pct=0.30,
         profit_base=0.15,
         trail_ratio=0.0,
         peak_gap_min=0,
@@ -32,7 +32,7 @@ def test_scan_gap_open_stop_20pct():
     )
     assert idx == 0
     assert reason == "stop_loss:gap_open"
-    assert px == pytest.approx(7.90)
+    assert px == pytest.approx(6.90)
 
 
 def test_scan_no_sell_when_t0():
@@ -47,7 +47,7 @@ def test_scan_no_sell_when_t0():
         peak=10.0,
         n_days=0,
         can_sell=False,
-        stop_pct=0.20,
+        stop_pct=0.30,
         profit_base=0.15,
         trail_ratio=0.0,
         peak_gap_min=0,
@@ -58,11 +58,11 @@ def test_scan_no_sell_when_t0():
     assert peak == pytest.approx(10.0)
 
 
-def test_scan_small_band_no_tp_when_peak_only_1pct():
+def test_scan_small_band_disarmed_tp_when_peak_only_1pct():
     o = np.array([10.05, 10.04])
     h = np.array([10.10, 10.06])
     c = np.array([10.08, 10.05])
-    idx, _, reason, _, _ = sim.scan_held_day(
+    idx, px, reason, _, _ = sim.scan_held_day(
         o,
         h,
         c,
@@ -70,14 +70,15 @@ def test_scan_small_band_no_tp_when_peak_only_1pct():
         peak=10.0,
         n_days=1,
         can_sell=True,
-        stop_pct=0.20,
+        stop_pct=0.30,
         profit_base=0.15,
         trail_ratio=0.0,
         peak_gap_min=0,
         take_profit=take_profit_reason,
     )
-    assert idx == -1
-    assert reason == ""
+    assert idx == 0
+    assert px == pytest.approx(10.08)
+    assert reason == "trail:band:2"
 
 
 def test_scan_small_band_tp_on_close():
@@ -92,7 +93,7 @@ def test_scan_small_band_tp_on_close():
         peak=10.0,
         n_days=1,
         can_sell=True,
-        stop_pct=0.20,
+        stop_pct=0.30,
         profit_base=0.15,
         trail_ratio=0.0,
         peak_gap_min=0,
@@ -115,7 +116,7 @@ def test_scan_band_tp_on_close():
         peak=10.0,
         n_days=1,
         can_sell=True,
-        stop_pct=0.20,
+        stop_pct=0.30,
         profit_base=0.15,
         trail_ratio=0.0,
         peak_gap_min=0,
@@ -138,7 +139,7 @@ def test_scan_peak_dd():
         peak=10.0,
         n_days=1,
         can_sell=True,
-        stop_pct=0.20,
+        stop_pct=0.30,
         profit_base=0.15,
         trail_ratio=0.0,
         peak_gap_min=0,
@@ -236,7 +237,7 @@ def test_simulate_limit_up_abandons_when_945_below_open():
     assert chase_explained(st) == st.stats["skip_limit_up"]
 
 
-def test_simulate_held_name_adds_lot():
+def test_simulate_held_name_skips_without_adding_lot():
     dates = ["2025-11-03", "2025-11-04"]
     m = _day(
         "2025-11-03", [(930, 10.0, 10.1, 9.95, 10.0), (1455, 10.0, 10.05, 9.98, 10.0)]
@@ -253,11 +254,10 @@ def test_simulate_held_name_adds_lot():
     pool = {"20251103": ["600000.SH"], "20251104": ["600000.SH"]}
     st = sim.simulate(minute, daily, pool, "20251103", "20251104", strategy="version8")
     buys = [t for t in st.trades if t["side"] == "BUY"]
-    assert [t["lot"] for t in buys] == [0, 1]
+    assert [t["lot"] for t in buys] == [0]
     assert buys[0]["price"] == pytest.approx(10.0)
-    assert buys[1]["price"] == pytest.approx(10.45)
-    assert st.stats["add_lots"] == 1
-    assert st.stats["skip_held"] == 0
+    assert st.stats["add_lots"] == 0
+    assert st.stats["skip_held"] == 1
 
     st6 = sim.simulate(minute, daily, pool, "20251103", "20251104", strategy="version6")
     assert st6.stats["buys"] == 1

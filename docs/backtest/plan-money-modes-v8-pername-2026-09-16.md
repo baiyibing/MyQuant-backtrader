@@ -1,11 +1,11 @@
 # Plan：资金管理模式化 + 策略 8 每股 100 万（daily_quota / per_name 双模式）
 
 > **落盘**：2026-09-16。**v1.1**（2026-09-16 评审修订，见 changelog §10）。
-> **状态**：🚧 **v1.1 · 已人裁 GO（2026-09-16），实施中**（分支 `feat/money-modes-v8-pername`，执行：Codex；前置 cerebro-retire 合入后开工）。人裁结果见 §3。
+> **状态**：✅ **v1.1 · 已实施（PR #61，未合并）**。A–C 完成；D 已尝试，VM 缺湖与同窗基线，按非合入门分支记录 blocker 并跳过重跑。人裁 GO 与 M-R* 不变。
 > **风险档**：**L1**（研究面引擎参数化 + 策略书切换；不碰成交核 E-R1–E-R4、不碰 1.3、不写湖、不写 `stock_pool/`）。
 > **业务源**：MyQuant `docs/bucket_policy/金榕元交易回测策略--0913--策略8.docx`（§1 摘录对照）。
 > **工作流**：走 [Codex 交接工作流](workflow-codex-handoff.md)。权威细则：MyQuant `ai-code-review-governance.md`、`multi-ai-review-workflow.md`。
-> **前置**：[plan-cerebro-retire-2026-09-16.md](plan-cerebro-retire-2026-09-16.md) 已在 PR #58 完成 A→D，P5 双真源已由 Cerebro 退场消解；#58 尚未合并，本 plan 仍须等待前置合入后开工。本次仅回写 P5，不实施本 plan 切片 B。
+> **前置**：[plan-cerebro-retire-2026-09-16.md](plan-cerebro-retire-2026-09-16.md) 已在 PR #58 完成 A→D，P5 双真源已由 Cerebro 退场消解；#58 已合并（e89d1b8），本 plan A/B 已实施。
 > **成交核现锁**：[engine-ashare-correctness.md](engine-ashare-correctness.md)（E-R1–E-R4，本轮不动）。名单契约 [pool-csv-contract.md](pool-csv-contract.md) 不动。
 > **实施交接**：[handoff-money-modes-v8-pername-codex-impl-2026-09-16.md](handoff-money-modes-v8-pername-codex-impl-2026-09-16.md)（人裁 GO 后生效）。
 
@@ -85,7 +85,7 @@ docx 原文（`金榕元交易回测策略--0913--策略8.docx`）：
 | **P2** | `per_name` 模式下 v8 是否取消同码加仓？ | **已裁：取消**。硬锁见 M-R3（hook 层强制 + skip_held/chase_skip_held 单测）。 |
 | **P3** | 采纳 M-R8 对比纪律？ | **已裁：采纳**（切片 C/D 落地）。 |
 | **P4** | 名单序偏差：现金不足整笔跳过时，入选优先级=名单行序（现实=代码升序）可否接受？ | **已裁：接受现状**（缩量买=无业务背书的第三种语义）；排序列后置另开 plan。 |
-| **P5** | v8 止损双真源（Cerebro `ProfitStrategy.py:760`）如何处置？ | **已消解（PR #58，2026-09-16）**：Cerebro 栈已删除（切片 A：`59ba18d`），v8 规则默认止损真源保留 `strategy8_rules.STOP_PCT`（仍为 20%，本次未改为 30%）。[退场 plan](plan-cerebro-retire-2026-09-16.md) A→D 已实施但尚未合并；本 plan 切片 B 仍待其合入。 |
+| **P5** | v8 止损双真源（Cerebro `ProfitStrategy.py:760`）如何处置？ | **已消解（PR #58，2026-09-16）**：Cerebro 栈已删除（切片 A：`59ba18d`），v8 规则默认止损真源保留 `strategy8_rules.STOP_PCT`（退场时为 20%，本 plan 切片 B 已改为 30%）。[退场 plan](plan-cerebro-retire-2026-09-16.md) 已合并于 e89d1b8；前置满足。 |
 
 ---
 
@@ -165,3 +165,14 @@ D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_daily_backtest.py --
 
 - **v1.1**（2026-09-16，吸收两路评审）：新增 M-R8 对比纪律与 P3/P4；P5 从两难改为「前置 cerebro-retire 消解」；P1 默认翻转（去武装）并呈两路分歧；M-R2 补名单序偏差声明 + skip_cash_notional + force-min 措辞修正（v7 无 force-min）；M-R3 加 hook 层 allow_add 硬锁 + chase 弃单终态；M-R4 补解读锁定/时机差距声明/滑出量化；§2 锚点勘误（apply_csv_strategy :89；排单 :164-165；`_empty_stats`）；§7 测试落点补全（test_csv_daily_backtest_v8 / test_strategy8_rules / test_csv_minute_backtest_v8 / `--stop-pct` help / HELP_LOCK 共享文案）；§8 补 fixture 禁重生成、caption 陷阱、静默买败声明。
 - **v1.0**（2026-09-16）：初稿。
+
+---
+
+## 11. 实施记录（Codex 随本 PR 回写）
+
+| 切片 | 状态 | commit | 备注 |
+|------|------|--------|------|
+| A · 模式框架 | ✅ | `c63c0a4` | 579 passed / 3 skipped；新增 summary 用例后策略书 26 passed；策略 1/6 trades 与 9f4303c 基线逐字节一致；静态 pre_er1 未动 |
+| B · v8 切换（P1 去武装已裁） | ✅ | `12d1910` | 前置 e89d1b8 已合入；六文件门禁 141 passed；ST 名称门禁显式走历史 daily_quota 加仓路径，保留断言 |
+| C · 文档 | ✅ | `092a96c` | README / 共享 HELP_LOCK 已同步；M-R8③ 选先重跑 daily per_name 的流程锁，已写回交接 |
+| D · 宿主烟测（非合入门） | ⚠️ 已尝试 / 缺数跳过 | 本切片提交（`docs(money-modes): 切片D 宿主烟测短记`） | 215 天 / 2322 码，行情 0；同窗基线缺失；[短记](money-modes-v8-pername-smoke-2026-09-16.md)。最终 581 passed / 3 skipped |

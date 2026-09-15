@@ -47,6 +47,8 @@ class CsvStrategyBook:
     help_lock: str
     apply: Callable[..., dict]
     run_kwargs: Callable[[Any], dict]
+    sizing: str = "daily_quota"
+    name_budget: float = 1_000_000.0
 
 
 BOOKS: dict[str, CsvStrategyBook] = {}
@@ -88,8 +90,16 @@ def get_book(strategy: str) -> CsvStrategyBook:
 
 def apply_csv_strategy(strategy: str, **kwargs) -> dict:
     book = get_book(strategy)
+    name_budget = kwargs.pop("name_budget", None)
     hooks = dict(book.apply(**kwargs))
+    hooks["sizing"] = book.sizing
+    hooks["name_budget"] = (
+        float(name_budget) if book.sizing == "per_name" and name_budget is not None
+        else book.name_budget
+    )
     hooks["allow_add"] = book.allow_add
+    if book.sizing == "per_name":
+        hooks["allow_add"] = False
     hooks["peak_gap_min"] = book.peak_gap_min
     hooks["book"] = book.tag
     hooks["name"] = book.name
@@ -102,6 +112,16 @@ def apply_csv_strategy(strategy: str, **kwargs) -> dict:
         raise RuntimeError(f"{book.name} book missing take_profit")
     if hooks.get("record_params") is None:
         raise RuntimeError(f"{book.name} book missing record_params")
+    record = hooks["record_params"]
+
+    def record_money_params(st):
+        record(st)
+        st.stats["sizing"] = hooks["sizing"]
+        st.stats["name_budget"] = hooks["name_budget"]
+        for key in ("skip_cash", "skip_cash_notional", "chase_buy_fail_cash", "chase_buy_fail_shares"):
+            st.stats.setdefault(key, 0)
+
+    hooks["record_params"] = record_money_params
     return hooks
 
 
@@ -133,7 +153,7 @@ def add_strategy6_ratio_args(ap: argparse.ArgumentParser) -> None:
         "--stop-pct",
         type=float,
         default=None,
-        help="stop-loss fraction override (v6 0.06, v8 0.20, v9 0.08)",
+        help="stop-loss fraction override (v6 0.06, v8 0.30, v9 0.08)",
     )
     ap.add_argument(
         "--profit-base",
@@ -197,6 +217,8 @@ def add_csv_backtest_common_args(
         ap.add_argument("--end", default=end_default, help=end_help)
     ap.add_argument("--cash-total", type=float, default=cash_total_default)
     ap.add_argument("--daily-quota", type=float, default=daily_quota_default)
+    ap.add_argument("--name-budget", type=float, default=1_000_000.0,
+                    help="per-name budget; effective only for per_name strategy books")
     ap.add_argument("--workers", type=int, default=workers_default)
     ap.add_argument("--pool-dir", type=Path, default=Path(repo) / "stock_pool")
     add_csv_strategy_arg(ap)
@@ -254,7 +276,10 @@ def resolve_research_pool_dir(
 
 def csv_run_kwargs_from_args(args) -> dict:
     name = normalize_csv_strategy(getattr(args, "strategy", "") or "")
-    return get_book(name).run_kwargs(args)
+    kwargs = get_book(name).run_kwargs(args)
+    if get_book(name).sizing == "per_name":
+        kwargs["name_budget"] = getattr(args, "name_budget", get_book(name).name_budget)
+    return kwargs
 
 
 def _stop_override_from_args(args) -> Optional[float]:
@@ -590,6 +615,8 @@ register(
 register(
     CsvStrategyBook(
         name="version8",
+        sizing="per_name",
+        name_budget=1_000_000.0,
         tag=strategy8_rules.BOOK_TAG,
         aliases=("8", "v8", "version8"),
         allow_add=strategy8_rules.ALLOW_ADD,

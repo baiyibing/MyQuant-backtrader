@@ -50,6 +50,10 @@ R5 的 `--start/--end` 必须跟导出的首末文件名走：H0 / `pred_minus_o
 
 落盘：`backtest_output/csv_daily_{book}_{start}_{end}/`、`csv_minute_{book}_{start}_{end}/`、`csv_minute_v7_{start}_{end}/`（`summary.txt`、`daily_equity.csv`、`trades.csv`）。日线可用 `--out-dir` 改目录（M5 三列必须显式指定，见 [m5-list-attribution-2026-03.md](m5-list-attribution-2026-03.md)）。
 
+**策略 8**：默认 `per_name`，每股票 100 万（`--name-budget` 可覆盖），止损 30%；第一档 `(0,15%]` 回撤到 +2%，无需先涨到 +6%。已持仓跳过、不加仓；现金不足支付整笔股款与佣金时记 `skip_cash`，按名单行序先到先得、不缩量。小预算不足 100 股时仍补足 100 股，现金不足则跳过。策略 1–6/9/10 保持 `daily_quota` 日额度均分。
+
+**v8 对照顺序（M-R8③）**：首次宿主烟测先重跑同窗 daily v8，确认其 `summary.txt` 为 `sizing=per_name` 且预算相同，再运行分钟版。旧 daily_quota 工件先保存 commit/日期与池来源；跨 sizing 仅比较 lot 收益分布、胜率及单码敞口，不用 NAV 排名。日线收盘确认、次日开盘止盈，分钟逐 bar 判断成交；跨引擎结论以分钟版为准。
+
 规则与闸：策略 7 见 [plan-strategy7-turtle-csv-minute-2026-09-11.md](_archive/plans/plan-strategy7-turtle-csv-minute-2026-09-11.md)。6/8 口径写在各自 CLI 的 help lock。成交核（档位 / 全卖因跌停 / Decimal 涨跌停价 / 停牌净值）见 [engine-ashare-correctness.md](engine-ashare-correctness.md)。名单 as-of 与 ST 名称列见 [pool-csv-contract.md](pool-csv-contract.md)。
 
 数据：只读 F 湖 parquet（有 `F:\stock_data\.authority` 且勿残留 `OSKH_PERIOD_*`）。细则见根 `AGENTS.md`。
