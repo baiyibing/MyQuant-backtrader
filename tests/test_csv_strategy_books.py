@@ -320,3 +320,19 @@ def test_money_mode_summary_is_self_describing(per_name_hooks):
     assert "sizing=per_name | name_budget=1,000,000" in text
     assert "skip_cash=0 | skip_cash_notional=0" in text
     assert "chase_buy_fail_cash=0 | chase_buy_fail_shares=0" in text
+
+
+def test_v8_daily_quota_history_keeps_allow_add(monkeypatch):
+    from dataclasses import replace
+
+    assert BOOKS["version8"].sizing == "per_name"
+    monkeypatch.setitem(BOOKS, "version8", replace(BOOKS["version8"], sizing="daily_quota"))
+    hooks = apply_csv_strategy("version8", stop_pct=0.20)
+    assert hooks["allow_add"] is True
+    assert hooks["stop_pct"] == 0.20
+    st = _money_state(hooks)
+    _pool_buy(st, hooks, ["600000.SH"])
+    _pool_buy(st, hooks, ["600000.SH"], day_i=1)
+    assert st.stats["add_lots"] == 1
+    assert st.stats["skip_held"] == 0
+    assert [t["lot"] for t in st.trades] == [0, 1]

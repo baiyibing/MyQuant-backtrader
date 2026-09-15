@@ -153,7 +153,7 @@ def add_strategy6_ratio_args(ap: argparse.ArgumentParser) -> None:
         "--stop-pct",
         type=float,
         default=None,
-        help="stop-loss fraction override (v6 0.06, v8 0.20, v9 0.08)",
+        help="stop-loss fraction override (v6 0.06, v8 0.30, v9 0.08)",
     )
     ap.add_argument(
         "--profit-base",
@@ -615,6 +615,8 @@ register(
 register(
     CsvStrategyBook(
         name="version8",
+        sizing="per_name",
+        name_budget=1_000_000.0,
         tag=strategy8_rules.BOOK_TAG,
         aliases=("8", "v8", "version8"),
         allow_add=strategy8_rules.ALLOW_ADD,

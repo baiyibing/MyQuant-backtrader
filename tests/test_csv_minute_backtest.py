@@ -518,7 +518,12 @@ def test_simulate_buy_at_1455_and_t1_stop_next_open():
     assert sell["price"] == pytest.approx(9.40)
 
 
-def test_pool_name_asof_normal_then_st_and_by_day_beats_flat_map():
+def test_pool_name_asof_normal_then_st_and_by_day_beats_flat_map(monkeypatch):
+    # Keep the historical add path so the second day's ST limit gate is exercised.
+    from dataclasses import replace
+    from backtest.research.csv_strategy_books import BOOKS
+
+    monkeypatch.setitem(BOOKS, "version8", replace(BOOKS["version8"], sizing="daily_quota"))
     dates = ["2025-11-03", "2025-11-04"]
     m0 = _day(
         dates[0],

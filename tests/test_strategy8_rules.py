@@ -15,9 +15,7 @@ from backtest.research.strategy8_rules import (
 
 def test_band_floor_boundaries():
     assert band_floor(0.0) is None
-    assert band_floor(0.01) is None
-    assert band_floor(0.059) is None
-    assert band_floor(0.06) == pytest.approx(0.02)
+    assert band_floor(0.01) == pytest.approx(0.02)
     assert band_floor(0.15) == pytest.approx(0.02)
     assert band_floor(0.1501) == pytest.approx(0.15)
     assert band_floor(0.40) == pytest.approx(0.15)
@@ -33,10 +31,10 @@ def test_band_floor_boundaries():
     assert band_floor(3.00) is None
 
 
-def test_stop_hits_20pct():
-    assert not stop_hits(8.011, 10.0)
-    assert stop_hits(7.989, 10.0)
-    assert not stop_hits(7.989, 10.0, stop_pct=0.21)
+def test_stop_hits_30pct():
+    assert not stop_hits(7.011, 10.0)
+    assert stop_hits(6.989, 10.0)
+    assert not stop_hits(6.989, 10.0, stop_pct=0.31)
 
 
 def test_take_profit_first_band():
@@ -52,8 +50,8 @@ def test_take_profit_mid_bands():
 
 
 def test_take_profit_small_band_to_plus_2pct():
-    assert take_profit_reason(10.05, 10.0, 10.10) is None  # 峰值 +1%，未到 +6%
-    assert take_profit_reason(10.10, 10.0, 10.50) is None  # 峰值 +5%，未到 +6%
+    assert take_profit_reason(10.05, 10.0, 10.10) == "trail:band:2"
+    assert take_profit_reason(10.10, 10.0, 10.50) == "trail:band:2"
     assert take_profit_reason(10.201, 10.0, 10.60) is None
     assert take_profit_reason(10.20, 10.0, 10.60) == "trail:band:2"
     assert take_profit_reason(10.20, 10.0, 11.0) == "trail:band:2"

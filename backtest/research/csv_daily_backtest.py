@@ -149,7 +149,7 @@ HELP_LOCK = """
 日线近似口径（相对分钟保真版的唯一失真来源）：
   买入：池 CSV 当日候选、收盘价成交（分钟版 14:55≈收盘）；买价达到或超过
         涨停价 → 当日不买，记下该票额度，次日按追买规则处理。
-        已持再买或跳过由 --strategy 策略书决定。
+        per_name 已持跳过、不加仓；daily_quota 沿用策略书历史加仓路径。
         常规额度按当日池 CSV 全部名单均分（含随后被跳过的票）。
   止损：D+1 起，触发价 = 买入价×(1-stop)。开盘 ≤ 触发价 → 开盘价成交（跳空）；
         否则日内 low 触价 → 触发价成交。
@@ -574,7 +574,7 @@ def summarize(
     if st.stats.get("sell_book") == "v8":
         lines.append(
             f"  参数: 止损 {stop_text} | "
-            f"{st.stats.get('small_arm', 0.06):.0%}≤涨幅≤"
+            f"0%<涨幅≤"
             f"{st.stats['profit_base']:.0%} 回撤到+"
             f"{st.stats.get('small_floor', 0.02):.0%} | 基础止盈 "
             f"{st.stats['profit_base']:.0%} | 涨幅>{st.stats['peak_dd_arm']:.0%} 时 "

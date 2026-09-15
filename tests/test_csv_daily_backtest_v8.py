@@ -40,8 +40,8 @@ def _run(pool: dict, bars: dict, **kwargs):
 def test_t1_no_sell_on_entry_day():
     rows = {
         "600000.SH": [
-            (10.2, 10.3, 8.0, 10.0),
-            (9.85, 9.90, 7.90, 9.60),
+            (10.2, 10.3, 6.0, 10.0),
+            (9.85, 9.90, 6.90, 9.60),
             (9.4, 9.5, 9.2, 9.3),
             (9.3, 9.4, 9.1, 9.2),
             (9.2, 9.3, 9.0, 9.1),
@@ -56,22 +56,22 @@ def test_t1_no_sell_on_entry_day():
     assert sells[0]["price"] == pytest.approx(9.4)
 
 
-def test_gap_open_stop_20pct():
-    # 创业板 20% 板：D1 开盘=跌停=20% 止损线 → 顺延；D2 用新昨收，开盘跌破止损且未跌停。
+def test_gap_open_stop_30pct():
+    # 创业板 20% 板：D1 未到 30% 止损；D2 跌停顺延；D3 跌破止损且未跌停。
     rows = {
         "300001.SZ": [
             (10.2, 10.3, 9.4, 10.0),
-            (8.00, 8.50, 8.00, 8.30),
-            (7.90, 8.00, 7.80, 7.95),
-            (7.9, 8.0, 7.7, 7.8),
+            (8.00, 8.50, 8.00, 8.00),
+            (6.40, 7.00, 6.40, 6.80),
+            (6.9, 7.0, 6.7, 6.8),
             (7.8, 7.9, 7.6, 7.7),
         ]
     }
     st = _run({"20251103": ["300001.SZ"]}, _bars(DAYS, rows))
     sell = [t for t in st.trades if t["side"] == "SELL"][0]
     assert sell["reason"] == "stop_loss:gap_open"
-    assert sell["date"] == "20251105"
-    assert sell["price"] == pytest.approx(7.90)
+    assert sell["date"] == "20251106"
+    assert sell["price"] == pytest.approx(6.90)
     assert st.stats["defer_sell_limit_down"] == 1
 
 
@@ -111,7 +111,7 @@ def test_small_band_tp_exits_next_open():
     assert sell["price"] == pytest.approx(10.15)
 
 
-def test_no_tp_when_peak_only_1pct():
+def test_disarmed_tp_when_peak_only_1pct():
     rows = {
         "600000.SH": [
             (10.0, 10.1, 9.95, 10.0),
@@ -122,7 +122,11 @@ def test_no_tp_when_peak_only_1pct():
         ]
     }
     st = _run({"20251103": ["600000.SH"]}, _bars(DAYS, rows))
-    assert st.stats["sell_trail"] == 0
+    assert st.stats["sell_trail"] == 1
+    sell = [t for t in st.trades if t["side"] == "SELL"][0]
+    assert sell["date"] == "20251105"
+    assert sell["reason"] == "trail:band:2"
+    assert sell["price"] == pytest.approx(10.04)
     assert st.stats["sell_stop"] == 0
 
 
@@ -200,14 +204,14 @@ def test_summarize_v8_params():
     record_strategy8_params(st)
     st.equity_curve = [("20251103", 21_000_000.0)]
     text = summarize(st, 21_000_000.0, "20251103", "20251103", engine="csv_daily_v8")
-    assert "止损 20%" in text
+    assert "止损 30%" in text
     assert "基础止盈 15%" in text
-    assert "6%≤涨幅≤15% 回撤到+2%" in text
+    assert "0%<涨幅≤15% 回撤到+2%" in text
     assert "涨幅>120%" in text
     assert "T+5+" not in text
 
 
-def test_held_name_adds_independent_lot():
+def test_held_name_skips_without_adding_lot():
     rows = {
         "600000.SH": [
             (10.0, 10.1, 9.95, 10.0),
@@ -221,18 +225,12 @@ def test_held_name_adds_independent_lot():
     bars = _bars(DAYS, rows)
     st = _run(pool, bars)
     buys = [t for t in st.trades if t["side"] == "BUY"]
-    assert [t["lot"] for t in buys] == [0, 1]
+    assert [t["lot"] for t in buys] == [0]
     assert buys[0]["price"] == pytest.approx(10.0)
-    assert buys[1]["price"] == pytest.approx(11.0)
-    assert st.stats["add_lots"] == 1
-    assert st.stats["skip_held"] == 0
-    sells = [t for t in st.trades if t["side"] == "SELL"]
-    assert len(sells) == 1
-    assert sells[0]["lot"] == 1
-    assert sells[0]["reason"] == "stop_loss:touch"
-    assert sells[0]["price"] == pytest.approx(10.0)
-    assert st.stats["defer_sell_limit_down"] >= 1
-    assert 0 in {p.lot_id for p in st.positions["600000.SH"]}
+    assert st.stats["add_lots"] == 0
+    assert st.stats["skip_held"] == 1
+    assert not [t for t in st.trades if t["side"] == "SELL"]
+    assert [p.lot_id for p in st.positions["600000.SH"]] == [0]
 
     st6 = _run(pool, bars, strategy="version6")
     assert st6.stats["buys"] == 1
