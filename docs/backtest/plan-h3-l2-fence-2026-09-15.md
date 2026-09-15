@@ -1,7 +1,7 @@
 # H3：L2 范围篱笆
 
 - 日期：2026-09-15
-- 状态：已实施 / 待 Grok 核
+- 状态：已完成（Grok 核无有效 🔴）
 - 父队列：[plan-hygiene-backlog-2026-09-15.md](plan-hygiene-backlog-2026-09-15.md)
 
 ## 目标
