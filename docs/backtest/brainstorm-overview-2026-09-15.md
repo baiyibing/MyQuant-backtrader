@@ -6,6 +6,7 @@
 
 详细 backlog：[plan-hygiene-backlog-2026-09-15.md](plan-hygiene-backlog-2026-09-15.md)。  
 仍开放重活队列：[plan-brainstorm-next-heavy-2026-09-15.md](plan-brainstorm-next-heavy-2026-09-15.md)。
+本仓对照分析（H1–H16 后）：[repo-analysis-vs-brainstorm-2026-09-15.md](repo-analysis-vs-brainstorm-2026-09-15.md)。
 
 ---
 
