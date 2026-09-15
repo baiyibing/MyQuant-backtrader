@@ -82,6 +82,7 @@ from backtest.research.csv_ledger import (  # noqa: E402
 )
 from backtest.research.csv_common import (  # noqa: E402
     build_calendar,
+    day_bar_and_prev_closes,
     _named_limits,
     _pool_names_asof,
 )
@@ -338,13 +339,13 @@ def simulate(
         st.daily_quota_used = 0.0  # 每个交易日开盘重置常规额度
 
         for code in list(st.positions):
-            if code not in bars or day not in bars[code].index:
+            if code not in bars:
                 continue
-            row = bars[code].loc[day]
-            prev_rows = bars[code].loc[bars[code].index < day]
-            if prev_rows.empty:
+            got = day_bar_and_prev_closes(bars[code], day)
+            if got is None:
                 continue
-            prev_close = float(prev_rows.iloc[-1]["close"])
+            row, closes = got
+            prev_close = float(closes[-1])
             limits = _named_limits(code, prev_close, names)
             if limits is None:
                 st.stats["skip_unknown_board"] += 1
@@ -395,7 +396,6 @@ def simulate(
                         pos.reserved = False
                         reason = "open_board"
                     else:
-                        closes = prev_rows["close"].astype(float).tolist()
                         reason = (
                             sell_gate(code, close, day, closes)
                             if callable(sell_gate)
@@ -414,14 +414,12 @@ def simulate(
                             pos.pending_exit = reason
 
         def _chase_quotes_for(code: str):
-            if code not in bars or day not in bars[code].index:
+            if code not in bars:
                 return None
-            df_c = bars[code]
-            prev_rows = df_c.loc[df_c.index < day]
-            if prev_rows.empty:
+            got = day_bar_and_prev_closes(bars[code], day)
+            if got is None:
                 return None
-            row = df_c.loc[day]
-            closes = prev_rows["close"].astype(float).tolist()
+            row, closes = got
             return float(row["open"]), float(row["close"]), closes
 
         run_chase_due_day(
@@ -436,14 +434,13 @@ def simulate(
         )
 
         def _pool_quote_for(code: str):
-            if code not in bars or day not in bars[code].index:
+            if code not in bars:
                 return None
-            df_c = bars[code]
-            prev_rows = df_c.loc[df_c.index < day]
-            if prev_rows.empty:
+            got = day_bar_and_prev_closes(bars[code], day)
+            if got is None:
                 return None
-            closes = prev_rows["close"].astype(float).tolist()
-            return float(df_c.loc[day]["close"]), closes
+            row, closes = got
+            return float(row["close"]), closes
 
         run_pool_buys_day(
             st,
