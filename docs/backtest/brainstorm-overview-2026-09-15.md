@@ -7,6 +7,7 @@
 详细 backlog：[plan-hygiene-backlog-2026-09-15.md](plan-hygiene-backlog-2026-09-15.md)。  
 仍开放重活队列：[plan-brainstorm-next-heavy-2026-09-15.md](plan-brainstorm-next-heavy-2026-09-15.md)。
 本仓对照分析（H1–H16 后）：[repo-analysis-vs-brainstorm-2026-09-15.md](repo-analysis-vs-brainstorm-2026-09-15.md)。
+刷新（local Opus 5 真跑 · tip `ad0c4ba` = `8793fd5`+#51–#56 ⊕ master `e06e1a9` pool-pipeline/source-B docs）：[repo-analysis-opus5-next-2026-09-15.md](repo-analysis-opus5-next-2026-09-15.md)。
 
 ---
 
@@ -37,7 +38,7 @@
 | [#49](https://github.com/baiyibing/MyQuant-backtrader/pull/49) | H15/D2 minute chip optional numba |
 | [#50](https://github.com/baiyibing/MyQuant-backtrader/pull/50) | H16/C soft+ list-quality 加深 |
 
-`master` tip（刷新时）：见仓库默认分支；本文落盘时约 `62d3449`（#50 merge）。
+`master` tip（刷新时）：见仓库默认分支；分析基线约 `e06e1a9`（#56 后 + pool-pipeline/source-B docs）；H1–H16 收口约 `62d3449`（#50）。
 
 ---
 
@@ -55,5 +56,6 @@
 ## 下一步（若继续）
 
 队列头：**run-manifest 硬接**（需产品点头，另开片）。  
-其它可选项：A 分钟卖环微优化；E 湖门禁仍保持 host-only；inventory hybrid/curpdf later。  
+有序建议见 [repo-analysis-opus5-next-2026-09-15.md](repo-analysis-opus5-next-2026-09-15.md) §7–§8（WP1–WP5；无痛点时优先 **WP4 docs SSOT/de-dup** 或 **WP2 host 湖门禁 cookbook**；分钟窗痛点再开 WP1）。  
+其它可选项：C list-quality golden fixture（WP3）；inventory hybrid/curpdf later（并入 WP4）。  
 默认：**先停在已合 master**，需要时再点名开片。
