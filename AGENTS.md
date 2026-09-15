@@ -28,6 +28,8 @@ Standalone research-face fork (see [README.md](README.md)). Since migration S2 (
 
 Keep: `backtest/` (incl. `research/` + `research/chip/`), `oskh_data/`, `l2_analytics/`, `qlib_cost/`, `turnover-resist/` (Rust SSOT), `oskh_factors/` (full research copy), `strategies/` (`tr_filter`), research `scripts/` (analysis/backtest/data/diagnostics/gates/run incl. `run_l2_*` ETL), slim `common/infra`, `trade_decision/presets`, `oskh_core` (TR re-export + `a_share_symbol_normalize`).
 
+**L2 篱笆：** `l2_analytics/` 与 `scripts/run/run_l2_*` 仅离线研究分析（CSV→Parquet ETL、聚合、DuckDB 查询）。不是 LEBS / MockQMT / 交易栈；不要把新 CSV 策略书接到 L2；不要借 L2 长大 live 包。
+
 Do not reintroduce live trading packages (`live_trading`, `executor_stream`, `redis_stream_bridge`, `stream_monitor`, `oskh_db`, full `strategy_config`).
 
 Consume only. All external downloads and vendor merges live in OSkhQuant1.3. This fork only reads the F lake.

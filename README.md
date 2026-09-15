@@ -21,7 +21,7 @@ Seeded from OSkhQuant slim snapshot at `5d41252`。S2（2026-09-09）之后本�
 | `backtest/` 根上 Cerebro | 观察退役（`backtest_main_full`、Rolling、chip indicator） |
 | `backtest/legacy/` | 非 Cerebro 旧回放 |
 | `oskh_data/` | Parquet/DuckDB 只读（三树 hive） |
-| `l2_analytics/` | L2 离线聚合 / ETL |
+| `l2_analytics/` | L2 离线分析 only（ETL / 聚合；不扩交易核 / 策略书 / LEBS） |
 | `qlib_cost/` | 筹码分布算法 |
 | `turnover-resist/` | 换手阻力 Rust SSOT |
 | `oskh_factors/bridge/turnover_resist.py` | Rust 的 Python 桥 |
