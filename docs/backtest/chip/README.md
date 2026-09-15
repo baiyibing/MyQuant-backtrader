@@ -13,6 +13,7 @@
 |------|------|
 | [`chip-slowpath-inventory-2026-09-15.md`](chip-slowpath-inventory-2026-09-15.md) | **H11 Theme D 软：chip/TR 慢路径清点**（Rust SSOT / research / Cerebro fossil / hot loops；leave·later offload·fossil）；**H13 §E：MyQuant numba CYQ feeder ≠ 本仓 Rust TR** |
 | [`../plan-h13-cyq-tr-boundary-2026-09-15.md`](../plan-h13-cyq-tr-boundary-2026-09-15.md) | **H13：CYQ / TR 产品边界**（不在本仓复刻 MyQuant `build_winner_ratio`） |
+| [`h14-d1-minute-chip-profile-results-2026-09-15.md`](h14-d1-minute-chip-profile-results-2026-09-15.md) · [`../plan-h14-d1-minute-chip-profile-2026-09-15.md`](../plan-h14-d1-minute-chip-profile-2026-09-15.md) | **H14/D1：minute/hybrid 合成 profile**；D2=numba `minute_chip_distribution` |
 | [`turnover_resistance.md`](turnover_resistance.md) | **换手阻力**索引页（算法 + 运行手册） |
 | [`turnover_resistance_algorithm.md`](turnover_resistance_algorithm.md) | 算法核心：公式、调用链、qlib_cost 数学层、各层实现、附录 A/B |
 | [`turnover_resistance_runbook.md`](turnover_resistance_runbook.md) | 运行手册：回测框架、选股规则、脚本 CLI、参数速查 |

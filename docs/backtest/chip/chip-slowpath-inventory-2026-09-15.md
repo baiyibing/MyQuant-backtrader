@@ -94,6 +94,9 @@ Python `oskh_factors.chip` + `qlib_cost.cyq*` 仍是**研究 / 对照 / 短窗 c
 | `oskh_factors/chip/core.py` — `compute_crossday_turnover_resistance` / `turnover_chip_factors` | 短窗对照路径（非 Rust window=1000 主路径） | **leave** research；大批量 → Rust bridge |
 | `scripts/data|research/full_market_canonical_resist.py` | 已含 numba `_batch_triang_curpdf` / `_batch_cumpdf_4way` | **leave** 作 parity / 性能文案；**生产全市场 leave→Rust**（勿再扩 Python 主路径） |
 | `docs/backtest/chip/性能优化-python.md` / `性能优化-rust.md` | 历史 profile 与定型判据 | **leave**（文档；非代码热路径） |
+| [h14-d1-minute-chip-profile-results-2026-09-15.md](h14-d1-minute-chip-profile-results-2026-09-15.md) | **H14/D1** 合成 microbench：minute ~50.7ms、hybrid ~1.0ms、cumpdf已numba；**D2=numba minute** | **leave**（文档；代码仍 later offload 至 D2） |
+
+**H14 注：** `minute_chip_distribution` / `hybrid` 行 recommendation 仍为 **later offload**，直至 D2 落地后再改。
 
 **明确不在本表扩写：** 向量化成交核 `scan_held_day` / daily sell index（主题 A / H5–H8）——与 chip/TR 正交。
 
