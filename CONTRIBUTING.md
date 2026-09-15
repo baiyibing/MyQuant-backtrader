@@ -13,6 +13,7 @@
 - 不在本仓运行 `python -m backtest.lebs`，不恢复 Qlib `PortAnaRecord` 回测。
 - 不为新策略开 Cerebro，不新增 `ProfitStrategy.StrategyN` 或扩 Rolling；保留现有 Cerebro 代码用于旧对照。
 - 不静默漂移成交核、策略书或与 1.3 的 presets 契约；相关改动须同步规则文档与契约检查。
+- 不在本仓复刻 MyQuant 全市场日频 CYQ / `winner_ratio` feeder（`build_winner_ratio.py`）；该产品路径在兄弟仓 MyQuant；本仓 Rust `turnover-resist` 是 TR/cyqk 审计与 Store，见 [plan-h13-cyq-tr-boundary-2026-09-15.md](docs/backtest/plan-h13-cyq-tr-boundary-2026-09-15.md)。
 
 ## PR 与验证
 

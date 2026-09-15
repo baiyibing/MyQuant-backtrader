@@ -1,8 +1,8 @@
 # Chip / TR slow-path inventory（H11 · Theme D soft）
 
 - 日期：2026-09-15
-- 状态：SSOT 清点（inventory only；无算法 / 卖点变更）
-- Plan：[../plan-h11-chip-slowpath-inventory-2026-09-15.md](../plan-h11-chip-slowpath-inventory-2026-09-15.md)
+- 状态：SSOT 清点（inventory only；无算法 / 卖点变更）；**H13 补边界节**
+- Plan：[../plan-h11-chip-slowpath-inventory-2026-09-15.md](../plan-h11-chip-slowpath-inventory-2026-09-15.md) · [../plan-h13-cyq-tr-boundary-2026-09-15.md](../plan-h13-cyq-tr-boundary-2026-09-15.md)
 - 父队列：[../plan-hygiene-backlog-2026-09-15.md](../plan-hygiene-backlog-2026-09-15.md)
 
 ## 怎么读
@@ -99,7 +99,25 @@ Python `oskh_factors.chip` + `qlib_cost.cyq*` 仍是**研究 / 对照 / 短窗 c
 
 ---
 
-## E. 边界与非目标（H11）
+## E. MyQuant numba CYQ vs 本仓 Rust TR（H13 边界 · 2026-09-14/15）
+
+**不要混：**
+
+| | MyQuant CYQ / `winner_ratio` | 本仓 Rust `turnover-resist` |
+|--|------------------------------|-----------------------------|
+| **仓** | 兄弟仓 **MyQuant**（非本树） | **本仓** `turnover-resist/` |
+| **入口** | `my_scripts/build_winner_ratio.py`（numba；不可用回落纯 Python） | PyO3 bridge → Store → 策略 10 / `export_ta_pool` / `tr_filter` |
+| **产物** | 全市场日频 exact `winner_ratio` parquet（买过滤外置馈源） | Canonical TR / cyqk 行 + Store；审计与生产 TR 路径 |
+| **算法 SSOT** | 对齐本仓 `qlib_cost.cyq`（同族；对拍见 MyQuant parity 文） | 注释复刻 Python SSOT；全市场 window=1000 以 Rust 为准 |
+| **量级（用户确认）** | ~5569×166 日频，约 **~53s** 量级 | 既有 Rust 全市场 TR 路径（见 `turnover_resistance_rust.md`） |
+| **证据** | 兄弟仓 `MyQuant/my_scripts/build_winner_ratio.py` · `MyQuant/docs/winner-ratio-cyq-parity-2026-09-14.md`（只读，不迁树） | 本 inventory §A + bridge selection |
+
+**本仓不做：** 不把 MyQuant feeder 迁进本树；不在本仓再写一套全市场日频 CYQ/`winner_ratio` 构建器去「替代」MyQuant。  
+**日后 offload（仍开放、仍在本仓）：** §D 的 minute/hybrid chip、`calc_curpdf` 短窗研究等 —— **不是**复刻 MyQuant 日频 feeder。
+
+Plan：[../plan-h13-cyq-tr-boundary-2026-09-15.md](../plan-h13-cyq-tr-boundary-2026-09-15.md)
+
+## F. 边界与非目标（H11 + H13）
 
 | 项 | 本切片 |
 |----|--------|
@@ -109,6 +127,8 @@ Python `oskh_factors.chip` + `qlib_cost.cyq*` 仍是**研究 / 对照 / 短窗 c
 | 扩 L2 → 交易/策略书 | ✗ |
 | 需湖 chip/TR gate 进 CI | ✗（H10） |
 | Bridge import 仍指向 `oskh_factors.bridge.turnover_resist` | ✓ data-free 断言 |
+| 在本仓 reimplement MyQuant CYQ / `winner_ratio` feeder | ✗（H13；产品在 MyQuant） |
+| 把 MyQuant 日频 feeder 与 Rust TR Store 路径混用为同一 SSOT | ✗（H13 边界） |
 
 ## 相关文档
 
@@ -116,3 +136,5 @@ Python `oskh_factors.chip` + `qlib_cost.cyq*` 仍是**研究 / 对照 / 短窗 c
 - [turnover_resistance_rust.md](turnover_resistance_rust.md) / [turnover_resistance_algorithm.md](turnover_resistance_algorithm.md)
 - [../plan-h10-ci-path-gates-2026-09-15.md](../plan-h10-ci-path-gates-2026-09-15.md) — 需湖 gates 清单
 - [README.md](README.md) — chip 文档索引
+- [../plan-h13-cyq-tr-boundary-2026-09-15.md](../plan-h13-cyq-tr-boundary-2026-09-15.md) — MyQuant CYQ vs Rust TR 边界
+- 兄弟仓证据（只读）：`MyQuant/docs/winner-ratio-cyq-parity-2026-09-14.md`

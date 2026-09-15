@@ -80,6 +80,8 @@ R5 的 `--start/--end` 必须跟导出的首末文件名走：H0 / `pred_minus_o
 | **CI path-SSOT / contract gates（H10；无湖）** | [plan-h10-ci-path-gates-2026-09-15.md](plan-h10-ci-path-gates-2026-09-15.md) · workflow `python-tests.yml` |
 | **CI TR bridge import gate（H12；无湖）** | [plan-h12-ci-tr-bridge-gate-2026-09-15.md](plan-h12-ci-tr-bridge-gate-2026-09-15.md) · `verify_tr_bridge_import_ssot.py` |
 | **Chip / TR slow-path inventory（H11；Theme D 软）** | [chip/chip-slowpath-inventory-2026-09-15.md](chip/chip-slowpath-inventory-2026-09-15.md) · [plan-h11-chip-slowpath-inventory-2026-09-15.md](plan-h11-chip-slowpath-inventory-2026-09-15.md) |
+| **CYQ / TR 产品边界（H13）** | [plan-h13-cyq-tr-boundary-2026-09-15.md](plan-h13-cyq-tr-boundary-2026-09-15.md) · inventory §E：MyQuant numba `winner_ratio` feeder ≠ 本仓 Rust TR Store |
+| **Next heavy brainstorm** | [plan-brainstorm-next-heavy-2026-09-15.md](plan-brainstorm-next-heavy-2026-09-15.md) |
 | 名单管道 R0/R1（持仓胶水；已合 #21） | [plan-pool-pipeline-r0r1-2026-09-12.md](_archive/plans/plan-pool-pipeline-r0r1-2026-09-12.md) |
 | **名单管道 R2/R5（pred TopN 闭环）** | [plan-pool-pipeline-r2r5-2026-09-12.md](_archive/plans/plan-pool-pipeline-r2r5-2026-09-12.md) |
 | **Qlib 训练厂 R3（processors + filter；不做 M5）** | [plan-qlib-train-r3-2026-09-12.md](_archive/plans/plan-qlib-train-r3-2026-09-12.md) |
@@ -99,7 +101,7 @@ R5 的 `--start/--end` 必须跟导出的首末文件名走：H0 / `pred_minus_o
 | 已完成 plan 归档 | [_archive/plans/](_archive/plans/) |
 
 
-**Hygiene / future work:** backlog [plan-hygiene-backlog-2026-09-15.md](plan-hygiene-backlog-2026-09-15.md)（H1–H12 ✓ 软切片大致收口；主题 A–F 仍有重活；run-manifest / chip offload 另开）。chase / pool / equity-mark skeleton is shared in `backtest/research/csv_simulate_loop.py` (plus calendar / name-asof in `csv_common.py`); sell loops remain split on purpose (daily bar rules vs `scan_held_day`; unify A–E locked sell books later — do not big-bang merge). Cerebro stays fossil-gated (`--allow-cerebro-fossil`); do not delete modules in this tree. L2 (`l2_analytics/` / `run_l2_*`) stays offline ETL/aggregates — do not expand into trading or strategy books.
+**Hygiene / future work:** backlog [plan-hygiene-backlog-2026-09-15.md](plan-hygiene-backlog-2026-09-15.md)（H1–H13 ✓；CYQ feeder 在 MyQuant、Rust TR 在本仓——见 H13；主题 A–F 仍有重活；next heavy → [plan-brainstorm-next-heavy-2026-09-15.md](plan-brainstorm-next-heavy-2026-09-15.md)）。chase / pool / equity-mark skeleton is shared in `backtest/research/csv_simulate_loop.py` (plus calendar / name-asof in `csv_common.py`); sell loops remain split on purpose (daily bar rules vs `scan_held_day`; unify A–E locked sell books later — do not big-bang merge). Cerebro stays fossil-gated (`--allow-cerebro-fossil`); do not delete modules in this tree. L2 (`l2_analytics/` / `run_l2_*`) stays offline ETL/aggregates — do not expand into trading or strategy books.
 
 下列链到本仓不存在的 1.3 迁仓文件，不要当本仓入口：`backtest-architecture-ssot.md`、`../handoff/mockqmt-lebs-homology-review-handoff-2026-08-27.md`、`../engineering/plan-lightweight-event-backtest-shell-2026-08-25.md`。
 
@@ -107,7 +109,7 @@ R5 的 `--start/--end` 必须跟导出的首末文件名走：H0 / `pred_minus_o
 
 | 目录 | 说明 |
 |------|------|
-| [chip/](chip/) | Chip 因子与 cost-migration；**H11 slow-path inventory** → [chip/chip-slowpath-inventory-2026-09-15.md](chip/chip-slowpath-inventory-2026-09-15.md) |
+| [chip/](chip/) | Chip 因子与 cost-migration；**H11 inventory** → [chip/chip-slowpath-inventory-2026-09-15.md](chip/chip-slowpath-inventory-2026-09-15.md)（含 **H13** MyQuant CYQ vs Rust TR 边界） |
 | [_archive/plans/](_archive/plans/) | 已完成 plan-*.md（状态 已合/已实施） |
 | [_archive/fossils/](_archive/fossils/README.md) | 观察退役的 Backtrader 框架考古 |
 | [code-reviews/](code-reviews/) | 历史 Backtrader 代码审查（考古） |
