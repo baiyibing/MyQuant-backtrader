@@ -5,6 +5,8 @@ Completed / absorbed `plan-*.md` files moved here on 2026-09-15 so
 
 | File | Why archived |
 |------|----------------|
+| `plan-money-modes-v8-pername-2026-09-16.md` | 已实施（PR #61 / merge a606070；D 宿主烟测已补跑，[短记](../../money-modes-v8-pername-smoke-2026-09-16.md)） |
+| `plan-cerebro-retire-2026-09-16.md` | 已实施（PR #58 / merge e89d1b8；复核 PASS，树内 backtrader 零命中） |
 | `plan-unify-csv-strategies-1-8-2026-09-12.md` | A–E 已合；U-R\* 卖点契约仍有效，撮合句以 [engine-ashare-correctness.md](../../engine-ashare-correctness.md) E-R\* 为准 |
 | `plan-strategy7-turtle-csv-minute-2026-09-11.md` | A–D 已合 master；E 真名单一窗本机已跑 |
 | `plan-pool-pipeline-r0r1-2026-09-12.md` | R0/R1 已合 #21 |

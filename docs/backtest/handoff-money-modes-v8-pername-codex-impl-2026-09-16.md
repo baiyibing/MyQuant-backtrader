@@ -1,10 +1,10 @@
 # 交接 · money-modes + v8 每股 100 万 实施（Codex 接手）
 
 > 日期：2026-09-16
-> 状态：**plan v1.1 已人裁 GO（2026-09-16，P1 去武装/P2 取消加仓/P3 采纳/P4 接受/P5 前置退场）——实施交接完成（PR #61 未合并）；A–C 完成，D 已尝试但 VM 缺数，按非合入门分支跳过**。分支 `feat/money-modes-v8-pername`；前置 PR #58 已于 e89d1b8 合入，切片 B 已完成。
+> 状态：**✅ 交接闭环（PR #61 已合入，merge `a606070`；A–C 完成，D 宿主烟测已于 2026-09-16 在本机 F 湖补跑，见[烟测短记](money-modes-v8-pername-smoke-2026-09-16.md)；合入后复核 PASS 581 passed / 3 skipped）**。本交接文档至此关闭。
 > 评审链：[zcode-facts](../architecture/reviews/2026-09-16/plan-money-modes-v8-pername/zcode-facts.md) / [zcode-domain](../architecture/reviews/2026-09-16/plan-money-modes-v8-pername/zcode-domain.md) / [merge-consensus](../architecture/reviews/2026-09-16/plan-money-modes-v8-pername/merge-consensus.md)。
-> 权威对象：[plan-money-modes-v8-pername-2026-09-16.md](plan-money-modes-v8-pername-2026-09-16.md)（v1.1）。
-> 前置：[plan-cerebro-retire-2026-09-16.md](plan-cerebro-retire-2026-09-16.md) 已合入（否则 B 切片不得开工）。
+> 权威对象：[plan-money-modes-v8-pername-2026-09-16.md](_archive/plans/plan-money-modes-v8-pername-2026-09-16.md)（v1.1）。
+> 前置：[plan-cerebro-retire-2026-09-16.md](_archive/plans/plan-cerebro-retire-2026-09-16.md) 已合入（否则 B 切片不得开工）。
 > 分支：从当时 master 开 `feat/money-modes-v8-pername`；切片 A/B 分 commit。
 
 ## 0. 硬边界（人裁已定，勿越）
