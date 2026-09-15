@@ -1,6 +1,7 @@
 # MyQuant-backtrader hygiene backlog（头脑风暴续）
 
 - 日期：2026-09-15
+- **总览**：[brainstorm-overview-2026-09-15.md](brainstorm-overview-2026-09-15.md)（A–F 对照 · PR 索引 · 边界）
 - 状态：**软扩展 + D1/D2 + C soft+ 收口**（H1–H16 ✓；CYQ/TR 边界已写清；D1/D2 + list-quality deepen 已交付；主题 **A–F** 重活仍开放；run-manifest hard 仍延期；不扩 L2；不删 Cerebro）
 - 前置：PR #34（hotpath / presets 快照 / simulate 骨架 / plan 归档）
 - 禁区（不动）：改 6/8 卖点、重开 `--asof`、PortAna 定胜负、本仓复刻 LEBS/真栈、缺行 fail-closed→跳过、Cerebro 物理删除、Cursor CloudAgent
