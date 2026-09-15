@@ -33,5 +33,6 @@
 ## 结论
 
 - plan v1.1 已按裁决回写完毕 → **READY，待人裁 GO（P1–P4；P5 已裁）**。
-- 前置依赖：cerebro-retire plan 先行（其自身待人裁 GO）。
+- **人裁（2026-09-16）：GO，全部采纳默认**（P1 去武装 / P2 取消加仓 / P3 采纳 M-R8 / P4 接受名单序现状）。
+- 前置依赖：cerebro-retire plan 先行（已同批 GO）。
 - 人裁 GO 后：交接文档 [handoff-money-modes-v8-pername-codex-impl-2026-09-16.md](../../../../backtest/handoff-money-modes-v8-pername-codex-impl-2026-09-16.md) 生效，交 Codex 实施。

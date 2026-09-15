@@ -1,7 +1,7 @@
 # 交接 · money-modes + v8 每股 100 万 实施（Codex 接手）
 
 > 日期：2026-09-16
-> 状态：**plan v1.1 已评审（READY）；待人裁 GO（P1–P4；P5 已裁=前置退场）后本交接生效**。GO 后把 plan §3 人裁表回填，本文件 §0 硬边界即冻结。
+> 状态：**plan v1.1 已人裁 GO（2026-09-16，P1 去武装/P2 取消加仓/P3 采纳/P4 接受/P5 前置退场）——本交接已生效**。分支 `feat/money-modes-v8-pername`；前置 cerebro-retire PR 合入后开工切片 B。
 > 评审链：[zcode-facts](../architecture/reviews/2026-09-16/plan-money-modes-v8-pername/zcode-facts.md) / [zcode-domain](../architecture/reviews/2026-09-16/plan-money-modes-v8-pername/zcode-domain.md) / [merge-consensus](../architecture/reviews/2026-09-16/plan-money-modes-v8-pername/merge-consensus.md)。
 > 权威对象：[plan-money-modes-v8-pername-2026-09-16.md](plan-money-modes-v8-pername-2026-09-16.md)（v1.1）。
 > 前置：[plan-cerebro-retire-2026-09-16.md](plan-cerebro-retire-2026-09-16.md) 已合入（否则 B 切片不得开工）。
@@ -56,7 +56,7 @@
 
 1. v8 注册项：`sizing="per_name"`、`name_budget=1_000_000.0`。
 2. `STOP_PCT = 0.30`；docstring/HELP_LOCK/`--stop-pct` help/summarize 同步（HELP_LOCK 写明模式分叉：per_name 无加仓、daily_quota 历史复跑路径）。
-3. **P1 待裁**：去武装则删 `SMALL_ARM` + `band_floor` :38 分支 + 相关测试（facts 列了 :17-21/:54-60、`test_csv_daily_backtest_v8.py:96-111`）；保留则仅改 v1.1 所列四处。**先等人裁，勿预改。**
+3. **P1 已裁=去武装**：删 `SMALL_ARM`（:20）+ `band_floor` :38 第一档分支 + 相关测试（`test_strategy8_rules.py:17-21/:54-60`、`test_csv_daily_backtest_v8.py:96-111`），第一档按 docx (0,15%] → 2% 地板。
 4. 按上方清单更新三个测试文件（校准断言，非放宽）。
 
 ## 3. 切片 C · 文档

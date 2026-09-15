@@ -1,7 +1,7 @@
 # Plan：资金管理模式化 + 策略 8 每股 100 万（daily_quota / per_name 双模式）
 
 > **落盘**：2026-09-16。**v1.1**（2026-09-16 评审修订，见 changelog §10）。
-> **状态**：📄 **v1.1 · 已评审，待人裁 GO**（评审记录：[zcode-facts](../architecture/reviews/2026-09-16/plan-money-modes-v8-pername/zcode-facts.md) / [zcode-domain](../architecture/reviews/2026-09-16/plan-money-modes-v8-pername/zcode-domain.md) / [merge-consensus](../architecture/reviews/2026-09-16/plan-money-modes-v8-pername/merge-consensus.md)）。
+> **状态**：🚧 **v1.1 · 已人裁 GO（2026-09-16），实施中**（分支 `feat/money-modes-v8-pername`，执行：Codex；前置 cerebro-retire 合入后开工）。人裁结果见 §3。
 > **风险档**：**L1**（研究面引擎参数化 + 策略书切换；不碰成交核 E-R1–E-R4、不碰 1.3、不写湖、不写 `stock_pool/`）。
 > **业务源**：MyQuant `docs/bucket_policy/金榕元交易回测策略--0913--策略8.docx`（§1 摘录对照）。
 > **工作流**：走 [Codex 交接工作流](workflow-codex-handoff.md)。权威细则：MyQuant `ai-code-review-governance.md`、`multi-ai-review-workflow.md`。
@@ -71,21 +71,21 @@ docx 原文（`金榕元交易回测策略--0913--策略8.docx`）：
 | **M-R1** | sizing 模式是**策略书属性**（`CsvStrategyBook.sizing`），不是全局 CLI 开关。**不加 `--sizing` 参数**（防 1–6/9/10 被误切导致跨策略不可比）。仅加 `--name-budget`（默认 1,000,000）覆盖 per_name 书的预算值。1–6/9/10 书锁 `daily_quota`；v8 书切 `per_name`。 |
 | **M-R2** | `per_name` 语义：每码单次买入目标 = `name_budget`，整百股向下取整；**skip_cash 对齐 v7**（`notional+佣金 > st.cash` → 整笔跳过，不缩量、不挪用差额；名单序 = 契约 CSV 序，先到先得）；**force-min 是 docx「资金池补齐」条款、v7 无此行为**（预算 < 100 股市值时强买 100 股，超额记 `supplementary_used` 统计；仅 `--name-budget` 小值可激活）。**偏差声明**：现实 `stock_pool/` 文件为代码升序，现金受限日（21M ≈ 21 码并发上限）的入选集合系统性偏向小代码，早期窗约 45% 名单买不进——名单序语义 = 导出器契约，本 plan 不定义优先级（P4）；切片 D 必须报告逐日 bought/skip/宽度表让偏差可见。stats 增项：`skip_cash`（笔数）、`skip_cash_notional`（被跳过目标金额），经 `setdefault` 写入。 |
 | **M-R3** | `per_name` 模式下已持有 → **skip**（`skip_held`），含 chase 当日已持有；**实施硬锁：`apply_csv_strategy`（csv_strategy_books.py:89-105）在 `sizing=="per_name"` 时覆写 `hooks["allow_add"]=False`**（hook 层单点，保证池买 :147 / chase :94 两路径同锁；不许在引擎分支各改一处）。`per_ch = name_budget` 由排单日写入（:164-165），chase 日先 pop 再买，现金不足 = `chase_buy_fail` **永久弃单不重试**（与 v7 同构；排单不冻结现金）。`chase_buy_fail` 拆「现金不足 / shares≤0」计数（后者 force-min 下不可达，出现即 bug）。v8 旧 `ALLOW_ADD=True`（各 lot 独立）仅在 `daily_quota` 模式下保留供历史复跑——两模式行为分叉写入 HELP_LOCK。 |
-| **M-R4** | v8 止损改 30%（docx §2；CSV 侧 `strategy8_rules.STOP_PCT`，Cerebro 真源由前置退场 plan 消解）；止盈阶梯维持现行 `BANDS`/`PEAK_DD`（与 docx §3 一致，解读见 §1 锁定段）；第一档武装 `SMALL_ARM=6%` 去留 = **P1 人裁**。卖出执行时机沿用各引擎现行语义，日线/分钟差距按 §1 声明族对业务显式披露。**止损滑出量化**（连续跌停 defer 下实际成交）：10% 板约 -34%、20% 板约 -45%~-50%、30% 板约 -51%；单 lot 最大亏损 ≈ 0.51M ≈ 21M 的 2.4%——切片 D 从 trades 事后统计实际滑出分布（不动 csv_ledger stats）。 |
+| **M-R4** | v8 止损改 30%（docx §2；CSV 侧 `strategy8_rules.STOP_PCT`，Cerebro 真源由前置退场 plan 消解）；止盈阶梯维持现行 `BANDS`/`PEAK_DD`（与 docx §3 一致，解读见 §1 锁定段）；第一档武装 `SMALL_ARM=6%` **已裁去武装（P1）**：`band_floor` 第一档分支改为 docx 字面 (0,15%] → 2% 地板。卖出执行时机沿用各引擎现行语义，日线/分钟差距按 §1 声明族对业务显式披露。**止损滑出量化**（连续跌停 defer 下实际成交）：10% 板约 -34%、20% 板约 -45%~-50%、30% 板约 -51%；单 lot 最大亏损 ≈ 0.51M ≈ 21M 的 2.4%——切片 D 从 trades 事后统计实际滑出分布（不动 csv_ledger stats）。 |
 | **M-R5** | 回归锁：`daily_quota` 模式默认路径 **trades CSV 逐字节不变**（1–6/9/10 任选两策略 fixture 窗前后对照）。`stats`/`summary.txt` 允许**新增**字段（sizing、name_budget、skip_cash、skip_cash_notional、chase_buy_fail 拆分），既有字段值不得变。**禁止重生成** `tests/fixtures/csv_engine_pre_er1/version8_trades.csv` 静态锚点（`generate_snapshot.py` 不重跑）。`daily_quota_used` 在 per_name 分支不累加并注释 vestigial（现状亦从未参与 enforcement，仅 :202 累加 :339 重置）。 |
 | **M-R6** | 不碰：成交核 E-R1–E-R4、佣金、整百股、涨跌停 defer、T+1、`csv_ledger.py` 记账结构（含 `_empty_stats`/`_buy_size`/`execute_buy`）、v7 引擎本体、MyQuant 仓、`stock_pool/`。 |
 | **M-R7** | 本轮只做两模式。`equal_risk`（等风险定仓）/ `equity_pct`（净值比例额度）**后置另开 plan**，连枚举占位都不加。 |
 | **M-R8** | **对比纪律**（评审 🟡-6）：①跨策略表只允许同 sizing 比 NAV；跨 sizing 只比 lot 级指标（每笔收益分布/胜率/单码敞口），summary 自带 `sizing` 字段做工件自描述。②v8 的 daily_quota 对照基线 = 切换前同窗同池工件（记录基线工件 commit/日期）。③切换后首次宿主烟测**必须先重跑 daily v8（per_name）同窗工件**再做分钟对照（否则 `maybe_compare_daily` 的「差来自卖点时钟」caption 会把 sizing 差错误归因）；或把 caption 触发条件改为双方 sizing 一致——二选一，实施时定，写进交接文档。 |
 
-**人裁点（GO 前必须回答）**
+**人裁点（2026-09-16 已裁，采纳默认）**
 
-| # | 问题 | 建议（含评审分歧） |
-|---|------|----------|
-| **P1** | 第一档止盈是否保留「先摸到 +6% 才武装 +2% 地板」？ | **两路评审分歧**。事实路：保留（去武装破 `test_strategy8_rules.py:17-21/:54-60`、`test_csv_daily_backtest_v8.py:96-111` 等 + 文案，成本高于 v1.0 估计）。语义路：**去武装**（SMALL_ARM 是 20% 止损时代口径，与 30% 组合后 pre-6% 峰值仓位从「骑到 -20%」变「骑到 -30%」，该组合业务从未确认；docx 七档边界精确反证「漏写」概率低）。**v1.1 默认翻转为按 docx 字面去武装**，切片 D 保留有/无武装 A/B 数据点；业务重申「2%×2」口径即恢复（一个常量 + 多处单测 + 文案）。 |
-| **P2** | `per_name` 模式下 v8 是否取消同码加仓？ | **取消**（两路一致）。硬锁见 M-R3（hook 层强制 + skip_held/chase_skip_held 单测）。理由：docx「单个股票金额100万」读作单码总敞口；保留加仓 = 单码敞口日增 1M 直至现金耗尽，叠加跌停 defer 尾部（-34%~-51%/lot）。 |
-| **P3** | 采纳 M-R8 对比纪律？ | **建议采纳**（语义路提出）：混 sizing 对照的自动 caption 是切换后第一天就会踩的错误归因坑。 |
-| **P4** | 名单序偏差业务确认：现金不足整笔跳过时，入选优先级 = 名单行序（现实文件 = 代码升序）可否接受？ | **建议接受现状**（缩量买 = 无业务方背书的第三种语义）；不可接受则名单契约加排序列（另开 plan）。 |
-| **P5** | v8 止损双真源（Cerebro `ProfitStrategy.py:760`）如何处置？ | **已裁**：全局退 Cerebro（[plan-cerebro-retire-2026-09-16.md](plan-cerebro-retire-2026-09-16.md) 先行，本 plan 切片 B 依赖其完成）。退场未先行时临时锁 CSV-only 双默认并记录。 |
+| # | 问题 | 裁决 |
+|---|------|------|
+| **P1** | 第一档止盈是否保留「先摸到 +6% 才武装 +2% 地板」？ | **已裁：按 docx 字面去武装**（删 `SMALL_ARM` + `band_floor` 第一档分支；切片 D 留有/无武装 A/B 数据点；恢复路径=一个常量+多处单测+文案）。 |
+| **P2** | `per_name` 模式下 v8 是否取消同码加仓？ | **已裁：取消**。硬锁见 M-R3（hook 层强制 + skip_held/chase_skip_held 单测）。 |
+| **P3** | 采纳 M-R8 对比纪律？ | **已裁：采纳**（切片 C/D 落地）。 |
+| **P4** | 名单序偏差：现金不足整笔跳过时，入选优先级=名单行序（现实=代码升序）可否接受？ | **已裁：接受现状**（缩量买=无业务背书的第三种语义）；排序列后置另开 plan。 |
+| **P5** | v8 止损双真源（Cerebro `ProfitStrategy.py:760`）如何处置？ | **已裁：全局退 Cerebro**（[plan-cerebro-retire-2026-09-16.md](plan-cerebro-retire-2026-09-16.md) 先行，本 plan 切片 B 依赖其完成）。 |
 
 ---
 
@@ -110,7 +110,7 @@ docx 原文（`金榕元交易回测策略--0913--策略8.docx`）：
 | 切片 | 做什么 | 完成定义 |
 |------|--------|----------|
 | **A · 模式框架** | `CsvStrategyBook` 加 `sizing: str = "daily_quota"`、`name_budget: float = 1_000_000.0`；`apply_csv_strategy` 注入 hooks（含 M-R3 的 per_name→allow_add=False 覆写）；`run_pool_buys_day` 加 per_name 分支（skip_cash/skip_cash_notional、daily_quota_used 不累加、chase_buy_fail 拆分）；CLI `--name-budget`；stats 记录 sizing/name_budget | 1–6/9/10 现有测试全绿 + fixture 窗 trades 逐字节对照通过；新增单测：per_name 不均分、skip_cash（含 notional）、chase 排单预算、force-min 用 `--name-budget` 小值构造（budget=3,000、px=40 → 强买 100 股 supp=1,000，**不按 1M 写**）、per_name 同码再现 → skip_held+1 且 add_lots 恒 0 |
-| **B · v8 切换** | v8 书 `sizing="per_name"`、`name_budget=1M`；`STOP_PCT 0.30`（P1 裁后或删 SMALL_ARM 及其单测）；HELP_LOCK、模块 docstring、`--stop-pct` help（csv_strategy_books.py:136）、summarize 文案更新 | 测试全绿，含：`tests/test_csv_daily_backtest_v8.py`（`test_t1_no_sell_on_entry_day` :40、`test_gap_open_stop_20pct` :59、`test_summarize_v8_params` :195、`test_held_name_adds_independent_lot` :210 四例更新）、`tests/test_strategy8_rules.py::test_stop_hits_20pct`（:36，阈值改 6.989/7.011 对）、`tests/test_csv_minute_backtest_v8.py::test_simulate_held_name_adds_lot`（:233，随 P2 改）；chase 到期日已持 → chase_skip_held 单测 |
+| **B · v8 切换** | v8 书 `sizing="per_name"`、`name_budget=1M`；`STOP_PCT 0.30`；**P1 已裁=去武装**（删 `SMALL_ARM` 及 `band_floor` 第一档分支与相关单测）；HELP_LOCK、模块 docstring、`--stop-pct` help（csv_strategy_books.py:136）、summarize 文案更新 | 测试全绿，含：`tests/test_csv_daily_backtest_v8.py`（`test_t1_no_sell_on_entry_day` :40、`test_gap_open_stop_20pct` :59、`test_summarize_v8_params` :195、`test_held_name_adds_independent_lot` :210 四例更新）、`tests/test_strategy8_rules.py::test_stop_hits_20pct`（:36，阈值改 6.989/7.011 对）、`tests/test_csv_minute_backtest_v8.py::test_simulate_held_name_adds_lot`（:233，随 P2 改）；chase 到期日已持 → chase_skip_held 单测 |
 | **C · 文档** | README v8 例注（每股 100 万/止损 30%）；**共享引擎 HELP_LOCK 修**（csv_daily_backtest.py:153/:166「按名单均分/每日 100 万」加「资金模式见策略书（v8=每股预算）」、csv_minute_backtest.py:109 同步）；M-R8 ③ 的 caption 修正（若选该路径）；本 plan 状态回写 | review |
 | **D · 宿主烟测**（非合入门） | 一窗 v8 per_name vs 切前 daily_quota 工件（基线 commit 记录）；**先重跑 daily per_name 再分钟对照**（M-R8）；输出：逐日 bought/skip/宽度表、NAV 对照、（P1 去武装时）有/无武装 A/B、止损滑出分布（trades 事后算） | `summary.txt` + 对照短记落 `docs/backtest/`；数字不入库 |
 

@@ -1,7 +1,7 @@
 # Plan：Cerebro 全局退场（策略书栈 + chip/ma_chip 宿主薄壳）
 
 > **落盘**：2026-09-16。
-> **状态**：📄 **v1.0 · 计划，待人裁 GO**（依赖事实已核验；未走多 AI 评审，如裁 GO 前须评审可补）。
+> **状态**：🚧 **v1.0 · 已人裁 GO（2026-09-16），实施中**（分支 `feat/cerebro-retire`，执行：Codex）。
 > **风险档**：**L1**（纯删除 + SSOT 措辞修订；不写湖、不碰 1.3、不碰 CSV 成交核）。
 > **工作流**：走 [Codex 交接工作流](workflow-codex-handoff.md)。
 > **动因**：[plan-money-modes-v8-pername](plan-money-modes-v8-pername-2026-09-16.md) 评审 🔴1 暴露 v8 止损双真源（`ProfitStrategy.py:760` Cerebro 预设 vs `strategy8_rules.py`）；人裁方向：**全局去掉 Cerebro**——入场/筹码逻辑不依赖回测框架，框架耦合的只是薄壳。
