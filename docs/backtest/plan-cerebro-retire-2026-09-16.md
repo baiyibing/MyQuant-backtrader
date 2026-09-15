@@ -80,3 +80,14 @@ grep -rn 'ProfitStrategy' backtest/ scripts/ tests/ docs/backtest/README.md READ
 ## 6. 修订程序
 
 改 C-R\* 须改本文并回写状态。version11 移植另开 dated plan，不塞进本文件。
+
+---
+
+## 7. 实施记录（Codex 随本 PR 回写）
+
+| 切片 | 状态 | commit | 备注 |
+|------|------|--------|------|
+| A · 退场删除 | ☐ | | |
+| B · SSOT 同步 | ☐ | | |
+| C · 依赖清理 | ☐ | | |
+| D · 回写 | ☐ | | |
