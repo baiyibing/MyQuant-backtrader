@@ -1,7 +1,7 @@
 # MyQuant-backtrader hygiene backlog（头脑风暴续）
 
 - 日期：2026-09-15
-- 状态：**软扩展**（H1–H10 ✓；主题 **A–F** 仍开放；run-manifest 仍延期）
+- 状态：**软扩展**（H1–H11 ✓；主题 **A–F** 仍开放；run-manifest 仍延期；不扩 L2；不删 Cerebro）
 - 前置：PR #34（hotpath / presets 快照 / simulate 骨架 / plan 归档）
 - 禁区（不动）：改 6/8 卖点、重开 `--asof`、PortAna 定胜负、本仓复刻 LEBS/真栈、缺行 fail-closed→跳过、Cerebro 物理删除、Cursor CloudAgent
 
@@ -19,9 +19,10 @@
 | **H8** ✓ | 日线卖出环 searchsorted / 缓存索引（主题 A） | plan + `day_bar_and_prev_closes`；sell/chase/pool 共用；`bench_daily_sell_index.py`；golden 绿；Grok 核无 🔴 |
 | **H9** ✓ | 名单质量 / pool 目录 tooling（主题 C 软切片） | plan + `report_pool_list_quality` / `pool_list_quality`；day/empty/histogram/overlap/`validate_pool_dir`；pytest；Grok 核无 🔴；**非** run-manifest |
 | **H10** ✓ | CI path-SSOT / contract gates（主题 E 软切片） | plan + 门禁清单；扩 `verify_data_path_ssot`→`common/`；`verify_no_hardcoded_machine_paths`；workflow Contract gates；README/AGENTS 指针；Grok 核无 🔴；无湖门禁 |
+| **H11** ✓ | Chip / TR slow-path inventory（主题 D 软切片） | plan + [chip/chip-slowpath-inventory-2026-09-15.md](chip/chip-slowpath-inventory-2026-09-15.md)；四桶表 leave/later offload/fossil；`verify_tr_bridge_import_ssot` + pytest；README chip 指针；Grok 核无 🔴；无算法/卖点变更；无 L2 扩张；无 Cerebro 删除 |
 
 已合不重复：csv_common、csv_simulate_loop、presets 快照、plan `_archive/plans/`、numba trail 可选。
 
 **队列收口（2026-09-15）**：H1–H7 全部交付并经 Grok 核。
 
-**软扩展（2026-09-15）**：在 H1–H7 收口之上续 **H8**（主题 A）、**H9**（主题 C 软：list-quality）、**H10**（主题 E 软：CI path-SSOT / contract gates，无 F 湖）。头脑风暴主题 **A–F 仍开放**（未逐项排入 Hx 的项不视为关闭）。**MyQuant run-manifest 本仓暂不接**（另开片；见 progress-sync）。
+**软扩展（2026-09-15）**：在 H1–H7 收口之上续 **H8**（主题 A）、**H9**（主题 C 软：list-quality）、**H10**（主题 E 软：CI path-SSOT / contract gates，无 F 湖）、**H11**（主题 D 软：chip/TR slow-path inventory，非 full Rust rewrite）。头脑风暴主题 **A–F 仍开放**（未逐项排入 Hx 的项不视为关闭）。**不扩 L2**；**不物理删除 Cerebro**。**MyQuant run-manifest 本仓暂不接**（另开片；见 progress-sync）。
