@@ -41,8 +41,6 @@ from backtest.research.csv_daily_backtest import (  # noqa: E402
     STRATEGY4_CALENDAR_SLACK_DAYS,
     WARMUP_DAYS,
     add_csv_backtest_common_args,
-    add_csv_strategy_arg,
-    add_strategy6_ratio_args,
     apply_csv_strategy,
     chase_decision,
     csv_run_kwargs_from_args,
