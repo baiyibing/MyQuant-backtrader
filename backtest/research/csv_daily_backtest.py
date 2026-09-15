@@ -79,6 +79,11 @@ from backtest.research.csv_ledger import (  # noqa: E402
     queue_limit_up_chase,
     resolve_limit_prices,
 )
+from backtest.research.csv_common import (  # noqa: E402
+    build_calendar,
+    _named_limits,
+    _pool_names_asof,
+)
 from backtest.research.csv_pool import (  # noqa: E402
     load_pool_day_map,
     load_pool_names_by_day,
@@ -185,19 +190,8 @@ def _progress(done: int, total: int, label: str, every: int = 200) -> None:
         print(f"{label} {done}/{total}", flush=True)
 
 
-def build_calendar(bars: dict[str, pd.DataFrame], start: str, end: str) -> list:
-    t0 = pd.Timestamp(start)
-    t1 = pd.Timestamp(end)
-    seen = set()
-    for df in bars.values():
-        idx = df.index
-        for d in idx[(idx >= t0) & (idx <= t1)]:
-            seen.add(d)
-    calendar = sorted(seen)
-    if not calendar:
-        raise SystemExit("no daily bars in window")
-    return calendar
-
+# Re-exported from csv_common for existing imports / minute engine.
+# (build_calendar, _named_limits, _pool_names_asof)
 
 _limit_prices = resolve_limit_prices
 
@@ -276,35 +270,6 @@ def load_daily_bars(
                 out[code] = df
     return out
 
-
-def _named_limits(code: str, prev_close: float, names: dict[str, str]):
-    return resolve_limit_prices(code, prev_close, names.get(code, ""))
-
-
-def _pool_names_asof(
-    pool_names: Optional[dict[str, str]],
-    pool_names_by_day: Optional[dict[str, dict[str, str]]],
-):
-    """Return a monotonic per-day name resolver; by-day input has priority."""
-    if pool_names_by_day is None:
-        names = dict(pool_names or {})
-        return lambda _ds: names
-
-    updates = sorted(pool_names_by_day.items())
-    last_seen: dict[str, str] = {}
-    cursor = 0
-
-    def names_for_day(ds: str) -> dict[str, str]:
-        nonlocal cursor
-        while cursor < len(updates) and updates[cursor][0] <= ds:
-            _ymd_key, observed = updates[cursor]
-            for code, name in observed.items():
-                if name:
-                    last_seen[code] = name
-            cursor += 1
-        return last_seen
-
-    return names_for_day
 
 
 def simulate(
