@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Verify canonical vs ops turnover resistance (compute_crossday_turnover_resistance)."""
+"""Verify Python canonical vs research-ops turnover resistance alignment.
+
+This is a lake-backed research-path check, not Rust Store acceptance.
+"""
 from __future__ import annotations
 
 from typing import Any, cast
@@ -27,6 +30,19 @@ from qlib_cost import cyq
 from oskh_data.reader import StockDataReader
 
 WINDOW = 80
+
+
+def alignment_exit_code(
+    valid_samples: int,
+    turnover_passes: int,
+    resistance_passes: int,
+) -> int:
+    """Return 0 only when a non-empty sample passes both alignment metrics."""
+    if valid_samples <= 0:
+        return 1
+    if turnover_passes == valid_samples and resistance_passes == valid_samples:
+        return 0
+    return 2
 
 
 def _canonical_inline(df: pd.DataFrame, stock_code: str, window: int) -> dict:
@@ -136,7 +152,7 @@ def main() -> int:
 
     if not rows:
         print(f"[FATAL] no rows; errors={len(errors)}")
-        return 1
+        return alignment_exit_code(0, 0, 0)
 
     out = pd.DataFrame(rows)
     n = len(out)
@@ -150,7 +166,7 @@ def main() -> int:
     out.to_csv(out_path, index=False, encoding="utf-8-sig")
     print(f"Saved: {out_path}")
 
-    return 0 if t_ok == n else 2
+    return alignment_exit_code(n, t_ok, r_ok)
 
 
 if __name__ == "__main__":
