@@ -40,7 +40,7 @@ Consume only. All external downloads and vendor merges live in OSkhQuant1.3. Thi
 - **E workspace** (duckdb, exp, skip JSON, stale marker): `resolve_e_stock_data_container()` / `OSKH_DATA_ROOT`.
 - `TURNOVER_RESIST_DATA_DIR` is opt-in rollback to an old E path; default follows the parquet container.
 - This fork is read-only for market bars. New code must use resolvers, not cwd `stock_data/` literals.
-- **CI data-free gates** (no F lake): `verify_oskh_data_contract.py`, `verify_data_path_ssot.py`, `verify_no_hardcoded_machine_paths.py` in `.github/workflows/python-tests.yml` before pip. See `docs/backtest/plan-h10-ci-path-gates-2026-09-15.md`.
+- **CI data-free gates** (no F lake): `verify_oskh_data_contract.py`, `verify_data_path_ssot.py`, `verify_no_hardcoded_machine_paths.py`, `verify_tr_bridge_import_ssot.py` in `.github/workflows/python-tests.yml` before pip. See `docs/backtest/plan-h10-ci-path-gates-2026-09-15.md` · `docs/backtest/plan-h12-ci-tr-bridge-gate-2026-09-15.md`.
 
 ## Encoding
 
