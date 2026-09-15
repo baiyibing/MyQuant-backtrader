@@ -1,7 +1,7 @@
 # Plan：资金管理模式化 + 策略 8 每股 100 万（daily_quota / per_name 双模式）
 
 > **落盘**：2026-09-16。**v1.1**（2026-09-16 评审修订，见 changelog §10）。
-> **状态**：🚧 **v1.1 · 已人裁 GO（2026-09-16），实施中**（分支 `feat/money-modes-v8-pername`，执行：Codex；前置 cerebro-retire 已合入；A–C 完成，D 待宿主检查）。人裁结果见 §3。
+> **状态**：✅ **v1.1 · 已实施（PR #61，未合并）**。A–C 完成；D 已尝试，VM 缺湖与同窗基线，按非合入门分支记录 blocker 并跳过重跑。人裁 GO 与 M-R* 不变。
 > **风险档**：**L1**（研究面引擎参数化 + 策略书切换；不碰成交核 E-R1–E-R4、不碰 1.3、不写湖、不写 `stock_pool/`）。
 > **业务源**：MyQuant `docs/bucket_policy/金榕元交易回测策略--0913--策略8.docx`（§1 摘录对照）。
 > **工作流**：走 [Codex 交接工作流](workflow-codex-handoff.md)。权威细则：MyQuant `ai-code-review-governance.md`、`multi-ai-review-workflow.md`。
@@ -174,5 +174,5 @@ D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_daily_backtest.py --
 |------|------|--------|------|
 | A · 模式框架 | ✅ | `c63c0a4` | 579 passed / 3 skipped；新增 summary 用例后策略书 26 passed；策略 1/6 trades 与 9f4303c 基线逐字节一致；静态 pre_er1 未动 |
 | B · v8 切换（P1 去武装已裁） | ✅ | `12d1910` | 前置 e89d1b8 已合入；六文件门禁 141 passed；ST 名称门禁显式走历史 daily_quota 加仓路径，保留断言 |
-| C · 文档 | ✅ | 本切片提交（见 git log） | README / 共享 HELP_LOCK 已同步；M-R8③ 选先重跑 daily per_name 的流程锁，已写回交接 |
-| D · 宿主烟测（非合入门） | ☐ | | |
+| C · 文档 | ✅ | `092a96c` | README / 共享 HELP_LOCK 已同步；M-R8③ 选先重跑 daily per_name 的流程锁，已写回交接 |
+| D · 宿主烟测（非合入门） | ⚠️ 已尝试 / 缺数跳过 | 本切片提交（`docs(money-modes): 切片D 宿主烟测短记`） | 215 天 / 2322 码，行情 0；同窗基线缺失；[短记](money-modes-v8-pername-smoke-2026-09-16.md)。最终 581 passed / 3 skipped |

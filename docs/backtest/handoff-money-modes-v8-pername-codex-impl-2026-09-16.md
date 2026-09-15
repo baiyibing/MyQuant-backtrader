@@ -1,7 +1,7 @@
 # 交接 · money-modes + v8 每股 100 万 实施（Codex 接手）
 
 > 日期：2026-09-16
-> 状态：**plan v1.1 已人裁 GO（2026-09-16，P1 去武装/P2 取消加仓/P3 采纳/P4 接受/P5 前置退场）——A/B 已实施，C 回写完成，D 待宿主可用性检查**。分支 `feat/money-modes-v8-pername`；前置 PR #58 已于 e89d1b8 合入，切片 B 已完成。
+> 状态：**plan v1.1 已人裁 GO（2026-09-16，P1 去武装/P2 取消加仓/P3 采纳/P4 接受/P5 前置退场）——实施交接完成（PR #61 未合并）；A–C 完成，D 已尝试但 VM 缺数，按非合入门分支跳过**。分支 `feat/money-modes-v8-pername`；前置 PR #58 已于 e89d1b8 合入，切片 B 已完成。
 > 评审链：[zcode-facts](../architecture/reviews/2026-09-16/plan-money-modes-v8-pername/zcode-facts.md) / [zcode-domain](../architecture/reviews/2026-09-16/plan-money-modes-v8-pername/zcode-domain.md) / [merge-consensus](../architecture/reviews/2026-09-16/plan-money-modes-v8-pername/merge-consensus.md)。
 > 权威对象：[plan-money-modes-v8-pername-2026-09-16.md](plan-money-modes-v8-pername-2026-09-16.md)（v1.1）。
 > 前置：[plan-cerebro-retire-2026-09-16.md](plan-cerebro-retire-2026-09-16.md) 已合入（否则 B 切片不得开工）。
@@ -81,3 +81,7 @@ grep -rn 'import backtrader' backtest/ tests/   # 前置退场已保证零命中
 
 - 行为变更断言**更新不放宽**；文本文件 UTF-8 无 BOM、NUL=0。
 - 完成后缺陷优先复核 diff，回写 plan 状态与交接完成标记。
+
+## 6. 实施结果
+
+A `c63c0a4` / B `12d1910` / C `092a96c`；D 见[宿主烟测短记](money-modes-v8-pername-smoke-2026-09-16.md)。全量门禁 581 passed、3 skipped；没有语义分叉。宿主无行情及同窗旧基线，D 不构成合入阻塞；补跑仍须遵守上面的 daily per_name → minute 顺序。PR 未合并。
