@@ -1,7 +1,7 @@
 # 交接 · money-modes + v8 每股 100 万 实施（Codex 接手）
 
 > 日期：2026-09-16
-> 状态：**plan v1.1 已人裁 GO（2026-09-16，P1 去武装/P2 取消加仓/P3 采纳/P4 接受/P5 前置退场）——本交接已生效**。分支 `feat/money-modes-v8-pername`；前置 cerebro-retire PR 合入后开工切片 B。
+> 状态：**plan v1.1 已人裁 GO（2026-09-16，P1 去武装/P2 取消加仓/P3 采纳/P4 接受/P5 前置退场）——A/B 已实施，C 回写完成，D 待宿主可用性检查**。分支 `feat/money-modes-v8-pername`；前置 PR #58 已于 e89d1b8 合入，切片 B 已完成。
 > 评审链：[zcode-facts](../architecture/reviews/2026-09-16/plan-money-modes-v8-pername/zcode-facts.md) / [zcode-domain](../architecture/reviews/2026-09-16/plan-money-modes-v8-pername/zcode-domain.md) / [merge-consensus](../architecture/reviews/2026-09-16/plan-money-modes-v8-pername/merge-consensus.md)。
 > 权威对象：[plan-money-modes-v8-pername-2026-09-16.md](plan-money-modes-v8-pername-2026-09-16.md)（v1.1）。
 > 前置：[plan-cerebro-retire-2026-09-16.md](plan-cerebro-retire-2026-09-16.md) 已合入（否则 B 切片不得开工）。
@@ -63,7 +63,7 @@
 
 - `docs/backtest/README.md` v8 例注（每股 100 万/止损 30%/skip_cash 语义一句）。
 - 共享 HELP_LOCK 加「资金模式见策略书（v8=每股预算）」。
-- M-R8③ 二选一落地：caption sizing 检查（`csv_daily_backtest.py:714` `format_equity_compare`）**或**切片 D 流程锁「先重跑 daily per_name 工件」——实施时定，写回交接。
+- **M-R8③ 已选：切片 D 流程锁**。先保存切前 daily_quota 同窗工件及 commit/日期；先重跑 daily v8 per_name，确认 summary 的 sizing 与 name_budget，再运行同窗分钟对照。caption 代码不变；daily 未成功或缺数据则跳过分钟对照，禁止拿旧 daily_quota 工件归因卖点时钟。
 - 本 plan 状态回写。
 
 ## 4. 切片 D · 宿主烟测（非合入门，不阻塞）

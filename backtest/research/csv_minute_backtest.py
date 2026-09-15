@@ -107,6 +107,7 @@ HELP_LOCK = """
         盘中触线按该分钟 close 走。
   T+0：不可卖；峰值固定为买入价，14:55 之后的 high 不计入。峰值从 T+1 起算。
   资金 / T+1 / force_min / 佣金：与 csv_daily_backtest 相同。
+        资金模式见策略书（v8=每股预算）；per_name 现金不足（含佣金）整笔 skip_cash。
   复权：买卖价、涨跌停、净值全程 dividend_type=none（与日线/Cerebro 对齐，
         不用 front 对照）。
   窗口：分钟湖目前到 2026-05-25；要「→今天」用日线版。
