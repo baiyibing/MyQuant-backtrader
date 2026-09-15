@@ -165,3 +165,14 @@ D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_daily_backtest.py --
 
 - **v1.1**（2026-09-16，吸收两路评审）：新增 M-R8 对比纪律与 P3/P4；P5 从两难改为「前置 cerebro-retire 消解」；P1 默认翻转（去武装）并呈两路分歧；M-R2 补名单序偏差声明 + skip_cash_notional + force-min 措辞修正（v7 无 force-min）；M-R3 加 hook 层 allow_add 硬锁 + chase 弃单终态；M-R4 补解读锁定/时机差距声明/滑出量化；§2 锚点勘误（apply_csv_strategy :89；排单 :164-165；`_empty_stats`）；§7 测试落点补全（test_csv_daily_backtest_v8 / test_strategy8_rules / test_csv_minute_backtest_v8 / `--stop-pct` help / HELP_LOCK 共享文案）；§8 补 fixture 禁重生成、caption 陷阱、静默买败声明。
 - **v1.0**（2026-09-16）：初稿。
+
+---
+
+## 11. 实施记录（Codex 随本 PR 回写）
+
+| 切片 | 状态 | commit | 备注 |
+|------|------|--------|------|
+| A · 模式框架 | ☐ | | |
+| B · v8 切换（P1 去武装已裁） | ☐ | | 前置：PR #58 合入 |
+| C · 文档 | ☐ | | |
+| D · 宿主烟测（非合入门） | ☐ | | |
