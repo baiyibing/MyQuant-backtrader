@@ -36,8 +36,15 @@ jobs:
           python scripts/gates/verify_oskh_data_contract.py
           python scripts/gates/verify_data_path_ssot.py
 
+      # requirements.txt includes numba>=0.60 so scan_held_day numba/Python
+      # parity (tests/test_scan_held_day_numba_parity.py) runs in CI instead of
+      # skipif(not _NUMBA_SCAN_AVAILABLE). Simulate/scan_held_day default remains
+      # the Python reference; numba is opt-in only.
       - name: Install dependencies
         run: python -m pip install -r requirements.txt
+
+      - name: Assert numba importable (parity must not silent-skip)
+        run: python -c "import numba; print('numba', numba.__version__)"
 
       - name: Pytest (exclude production / benchmark)
         run: python -m pytest -q -m "not production and not benchmark"
