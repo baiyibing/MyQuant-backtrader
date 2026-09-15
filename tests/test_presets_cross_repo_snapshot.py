@@ -2,12 +2,17 @@
 
 MyQuant-backtrader keeps a **research copy** of ``trade_decision/presets.py``.
 It must not silently drift from the trading-stack SSOT in sibling OSkhQuant1.3
-(or ``OSKH_TRADING_REPO``). When the sibling tree is absent, the test skips.
+(or ``OSKH_TRADING_REPO``). The pinned fixture makes local drift detectable when
+that sibling is absent; when present, the test also compares both files directly.
+
+The fixture is only a record of one checked upstream commit, not proof that this
+copy matches the latest upstream. See ``CONTRIBUTING.md`` for refresh steps.
 """
 
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 from pathlib import Path
 
@@ -15,6 +20,26 @@ import pytest
 
 REPO = Path(__file__).resolve().parents[1]
 LOCAL_PRESETS = REPO / "trade_decision" / "presets.py"
+BASELINE = REPO / "tests" / "fixtures" / "presets_cross_repo_baseline.json"
+
+
+def _sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def test_local_presets_match_pinned_trading_repo_baseline():
+    """Catch local preset drift even when the trading repository is absent."""
+    baseline = json.loads(BASELINE.read_text(encoding="utf-8"))
+    expected = baseline["presets_sha256"]
+    actual = _sha256(LOCAL_PRESETS)
+    assert actual == expected, (
+        "trade_decision/presets.py drifted from the pinned OSkhQuant1.3 baseline.\n"
+        f"  local={LOCAL_PRESETS} sha256={actual}\n"
+        f"  baseline={BASELINE} sha256={expected}\n"
+        f"  upstream_commit={baseline['upstream_commit']}\n"
+        "Synchronize the preset contract intentionally, then refresh the baseline "
+        "using CONTRIBUTING.md."
+    )
 
 
 def _sibling_presets() -> Path | None:
