@@ -12,7 +12,7 @@
 | **H1** ✓ | 考古 Backtrader 文档归档 + 短 CONTRIBUTING（含不要做） | `docs/backtest/` 根下订单/资金等考古 md 进 `_archive/fossils/`；根 `CONTRIBUTING.md`；链接修好；Grok 核无 🔴 |
 | **H2** ✓ | 日/分钟 CLI 共用 argparse | `add_csv_backtest_common_args`；daily/minute `main` 去重；pytest 绿 |
 | **H3** ✓ | L2 范围篱笆 | AGENTS/README 写明 L2 只读实验、不扩交易核；`run_l2_*` 不接新策略书 |
-| **H4** | research 入口防误 import Cerebro | `test_research_face_imports` 或 gate：research 主路径不强制 backtrader |
+| **H4** ✓ | research 入口防误 import Cerebro | `test_research_face_imports`：向量化五模块可导入且不拉 backtrader；chip 对照仍可 bt |
 | **H5** | 热路径下一步：日线 mark/循环微优化 | 有 plan + 不改成交语义的小步；有 bench/测试 |
 | **H6** | CI 备注：numba 在 requirements，parity 必跑 | workflow/注释对齐；可选明确 marker |
 | **H7** | `stock_pool/` vs `exports/` 生命周期一句 SSOT | README/pool-csv-contract 补短段 |
