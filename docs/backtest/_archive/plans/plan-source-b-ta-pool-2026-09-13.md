@@ -1,7 +1,7 @@
 # Plan：名单源 B（技术分析 → 契约日 CSV）
 
 > **落盘**：2026-09-13。
-> **状态**：✅ **已实施**（A–C 夹具已合 [#32](https://github.com/baiyibing/MyQuant-backtrader/pull/32)；E 宿主烟测 2026-09-13 已跑，不是合入门，见 [s9-s10-host-smoke-2026-09-13.md](s9-s10-host-smoke-2026-09-13.md)）。
+> **状态**：✅ **已实施**（A–C 夹具已合 [#32](https://github.com/baiyibing/MyQuant-backtrader/pull/32)；E 宿主烟测 2026-09-13 已跑，不是合入门，见 [s9-s10-host-smoke-2026-09-13.md](../../s9-s10-host-smoke-2026-09-13.md)）。
 > **风险档**：**L1**（导出胶水 + 注入单测；不重写成交核、不写 `stock_pool/`、不 `import qlib`）。
 > **范围**：本仓。MyQuant / 1.3 只读。
 > **上游**：[#31](https://github.com/baiyibing/MyQuant-backtrader/pull/31) 计划原文。下游书号落成 **version10**（卖点复用 6）；契约 CSV 仍可喂 version6/8。

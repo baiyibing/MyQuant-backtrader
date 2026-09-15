@@ -5,7 +5,7 @@
 > **风险档**：**L1**（契约 + 名称 as-of + 加载侧丢 volume==0 + 一次性管道胶水；不重写引擎 / 不改卖点 / 不改 `presets.py`）。
 > **fan-out**：2026-09-12 classic，四家 rc=0（codex 224s / kimi 677s / auto 147s / claude 446s）。综合：`docs/architecture/reviews/2026-09-12/plan-pool-pipeline-r0r1-2026-09-12/merge-consensus.md`。
 > **范围**：MyQuant-backtrader 为主。MyQuant `position_analysis.txt` 只读输入。1.3 只读对照。
-> **定位 SSOT**：[engine-positioning-ssot.md](engine-positioning-ssot.md)。成交核现锁：[engine-ashare-correctness.md](engine-ashare-correctness.md)（E-R1–E-R4，PR #18）。
+> **定位 SSOT**：[engine-positioning-ssot.md](../../engine-positioning-ssot.md)。成交核现锁：[engine-ashare-correctness.md](../../engine-ashare-correctness.md)（E-R1–E-R4，PR #18）。
 > **后续**：R2/R5（pred TopN 闭环，不做 R3）见 [plan-pool-pipeline-r2r5-2026-09-12.md](plan-pool-pipeline-r2r5-2026-09-12.md)。本文「不碰 R2/R5」只约束当时那一轮。
 > **上游**：MyQuant `docs/plan-three-repo-roadmap-2026-09-12.md` §3 R0/R1、§3.1、§6（外仓路径，不作本仓入口）。人裁「以本仓为主：A–E 后剩下的正确性 + 名单管道 + 轻量清债，不重写引擎」。
 > **对抗**：dissent-steelman / domain-safety / pattern-evidence（不计票）。勘误 §8。综合草案：`docs/architecture/reviews/2026-09-12/plan-pool-pipeline-r0r1-2026-09-12/review-by-cursor.md`。
@@ -42,7 +42,7 @@ summary.txt   只验收管道，不看赚亏，不当 E-R2 验收
 
 真正剩下的：
 
-1. **ST as-of**。`csv_pool.load_pool_name_map`（约 L68–89）把 `[start,end]` 第二列并成一张 `dict[code,name]`，后日覆盖前日。`csv_daily_backtest.run` L518 与 `csv_minute_backtest.run` L805 把这张表一次塞进 `simulate(..., pool_names=)`。契约 [pool-csv-contract.md](pool-csv-contract.md) 写的是「文件名 = 买入日 T」。现行为会让窗口末日的 `*ST` 污染前日主板档（`tests/test_csv_pool.py` `test_load_pool_name_map_keeps_st_column` 正是后日赢）。**生产路径必须按日，且 `ymd<=ds`。**
+1. **ST as-of**。`csv_pool.load_pool_name_map`（约 L68–89）把 `[start,end]` 第二列并成一张 `dict[code,name]`，后日覆盖前日。`csv_daily_backtest.run` L518 与 `csv_minute_backtest.run` L805 把这张表一次塞进 `simulate(..., pool_names=)`。契约 [pool-csv-contract.md](../../pool-csv-contract.md) 写的是「文件名 = 买入日 T」。现行为会让窗口末日的 `*ST` 污染前日主板档（`tests/test_csv_pool.py` `test_load_pool_name_map_keeps_st_column` 正是后日赢）。**生产路径必须按日，且 `ymd<=ds`。**
 2. **停牌 volume=0**。E-R4 只处理「当日无 K」。日线/分钟加载器 **不读 `volume`**（`csv_daily_backtest.py` 约 L213；分钟约 L156）。F 湖 **不省略**停牌日，写成 `volume==0` 占位 K（主持裁复现 `000004_SZ`：8668 行中 458 行零量、OHLC 平推）。切片 C **默认落地**：加载侧丢这些行，交易环与净值环走既有缺行路径。
 3. **R0 贯通**。MyQuant `my_scripts/position_analysis.txt` 2026-03-02~03-23 窗已含 `BJ920014`，无名称列，03-02 空仓。缺的是胶水 → `--pool-dir` → 日线 `version6` 出 `summary.txt`。不写 `stock_pool/`，不喂策略 7，不看赚亏。
 4. **R1 契约**。已有格式 + as-of + 名称列 + `empty_in_map` 分叉。缺：名称 as-of 谓词、方言链、`validate_pool_dir`（严格契约门）。不要为凑「30 行」灌水。路线图 R4（本仓 README「主入口 LEBS」）已修。外仓 README / MyQuant 路线图 §8 **不进本仓完成定义**。
@@ -79,7 +79,7 @@ R0 无名称列：真 ST 按代码前缀分板（600→10%，300/301/688→20%�
 | **P-R3** | **C 默认落地**。`_read_one_daily` / `_read_one_minute` 多读 `volume`（schema 已有，零迁移）。**加载后丢弃 `volume==0` 行**（分钟：按日 `volume` 合计 ==0 则整日丢行；列已在分钟 parquet）。丢行后既有 `day not in index` 自动满足：不评卖（含 pending）、不新开、追买不 pop、不更新 peak、净值走 `last_close_mark` 缺行分支。禁止「交易跳过但行留在 index」。缺 `volume` 列：先看 schema 或降级重读，**不得**落入现有 `except: return None`（否则整票消失）。测试夹具无该列 = 不冻。禁止 `StockDataReader` / `chip_indicator`。禁止造停牌状态机 / 复牌特限 / `pos.cost` 回潮。同步改 E-R4 文案。C 与 D **禁止同窗互验**。 |
 | **P-R4** | 人裁本仓为主：一次性胶水可留本仓，但 **不是** 第二份 Qlib 导出 SSOT，也 **不得** 进 `scripts/research/`。路径：`scripts/data/r0_positions_to_pool.py`。禁止 import `qlib` / `chip_indicator` / `StockDataReader`。`--src`：环境变量 `OSKH_R0_POSITIONS`，否则仓库根的 `../MyQuant/my_scripts/position_analysis.txt`（不存在 → SystemExit，文案带尝试过的路径）。`--out-dir` 默认 `exports/r0_20260302_20260323/`；gitignore `exports/r0_*/`。**解析**：日期取自每个 `持仓标的列表:` **之前最近的** `日期:` 行；持仓 **只** 来自该 list；`[]` → 不写文件。不解析其下表格。`SZ300190` / `BJ920014` → 裸六位。仓内最小 utf-8 fixture。禁止写 `stock_pool/`。docstring 写明：源列表是 Qlib **当日收盘持仓**，不是当日新买；引擎对已持仓走 `skip_held`。 |
 | **P-R5** | R0 验收：① converter 单测（03-02 无文件、有持仓日含 `920014`）；② `parse_pool_csv` 能吃；③ `canonical_from_bare_code("920014")=="920014.BJ"` 是已有 SSOT，不得单独当完成定义；④ 本机 `csv_daily_backtest.py --strategy version6 --pool-dir <out> --start 20260303 --end 20260323` 出 `summary.txt`。产物不入库。失败只报管道。禁止把该窗净值或涨跌停桶当模型/档位结论。HELP/docstring 写明 **全板块** 无名 ST 按前缀档。version8 可选。D 不依赖 C 落地。 |
-| **P-R6** | R1 补 [pool-csv-contract.md](pool-csv-contract.md)：**名称 as-of 谓词**（P-R2）+ 方言链 `Qlib SZ300190 → CSV 裸 300190 → 湖 300190_SZ → 交易层 300190.SZ`。不要凑行数。`validate_pool_dir` = **严格契约门**：文件名 `YYYYMMDD.csv`；数据行首列必须恰好六位数字（`SZ300190` 在 CSV 里校验失败，解析器 `_cell_to_bare` 仍宽松）。复用现有扫盘，禁止第二套 split/表头逻辑。失败模式：R0 胶水与单测调用；`run()` **不**因 validate 失败 SystemExit（现网 `stock_pool/` 保持宽松解析）。本仓 README / `docs/backtest/README.md` 链契约。MyQuant / 1.3 链接 **不** 写进本仓完成定义。 |
+| **P-R6** | R1 补 [pool-csv-contract.md](../../pool-csv-contract.md)：**名称 as-of 谓词**（P-R2）+ 方言链 `Qlib SZ300190 → CSV 裸 300190 → 湖 300190_SZ → 交易层 300190.SZ`。不要凑行数。`validate_pool_dir` = **严格契约门**：文件名 `YYYYMMDD.csv`；数据行首列必须恰好六位数字（`SZ300190` 在 CSV 里校验失败，解析器 `_cell_to_bare` 仍宽松）。复用现有扫盘，禁止第二套 split/表头逻辑。失败模式：R0 胶水与单测调用；`run()` **不**因 validate 失败 SystemExit（现网 `stock_pool/` 保持宽松解析）。本仓 README / `docs/backtest/README.md` 链契约。MyQuant / 1.3 链接 **不** 写进本仓完成定义。 |
 | **P-R7** | 不重开：费率、新股首日无板、复牌特限、ST 履历库、v7 名称列、R2/R3/R5、Qlib/Cerebro 净值对照。盈筹率不适用。复权保持 `none`。C 必须同步改 `engine-ashare-correctness.md` 的 E-R4 文案（加载丢零量行 ≡ 缺 K），不能只改本文。 |
 
 ---
@@ -141,7 +141,7 @@ D:\anaconda3\envs\vanna312\python.exe -m pytest -q `
 
 ## 7. 修订程序
 
-改 P-R\* 须改本文。改成交核（跌停范围、档位、涨跌停价算术、缺 K 净值/追买）须改 [engine-ashare-correctness.md](engine-ashare-correctness.md) 的 E-R\*。对抗 🔴 回填 §8.1；classic 🔴 回填 §8.4。未说「按 plan 实施」前不改业务代码。
+改 P-R\* 须改本文。改成交核（跌停范围、档位、涨跌停价算术、缺 K 净值/追买）须改 [engine-ashare-correctness.md](../../engine-ashare-correctness.md) 的 E-R\*。对抗 🔴 回填 §8.1；classic 🔴 回填 §8.4。未说「按 plan 实施」前不改业务代码。
 
 ---
 

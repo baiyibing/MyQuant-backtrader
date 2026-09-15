@@ -1,7 +1,7 @@
 # M5 名单归因（2026-03 窗 · version6）
 
 > **落盘**：2026-09-13。C 本机补跑同日。
-> **计划 SSOT**：[plan-m5-list-attribution-2026-09-13.md](plan-m5-list-attribution-2026-09-13.md)（[#26](https://github.com/baiyibing/MyQuant-backtrader/pull/26)）。工具链 [#27](https://github.com/baiyibing/MyQuant-backtrader/pull/27)。
+> **计划 SSOT**：[plan-m5-list-attribution-2026-09-13.md](_archive/plans/plan-m5-list-attribution-2026-09-13.md)（[#26](https://github.com/baiyibing/MyQuant-backtrader/pull/26)）。工具链 [#27](https://github.com/baiyibing/MyQuant-backtrader/pull/27)。
 > **书 / 窗**：`version6`；`20260303`–`20260323`（15 个买入日文件）。`--asof` 维持 `pred_minus_one`，不重开。
 > **不做**：R0 / `exports/r0_*`、PortAna / Cerebro 净值、改卖点、改 `--asof`、把 16 天净值当模型晋升。
 

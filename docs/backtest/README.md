@@ -46,11 +46,11 @@ D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_minute_backtest_v7.p
   --pool-dir E:\PycharmProjects\OSkhQuant1.3\stock_pool_turtle
 ```
 
-R5 的 `--start/--end` 必须跟导出的首末文件名走：H0 / `pred_minus_one` 常没有 `20260302.csv`，最后一个 pred 日不写文件。无名称的 ST 按代码前缀使用 10% / 20% / 30% 档，不按 5%；该例只验管道，NAV / 涨跌停桶不是模型结论。细则见 [R2/R5 计划](plan-pool-pipeline-r2r5-2026-09-12.md)与[名单 CSV 契约](pool-csv-contract.md)。
+R5 的 `--start/--end` 必须跟导出的首末文件名走：H0 / `pred_minus_one` 常没有 `20260302.csv`，最后一个 pred 日不写文件。无名称的 ST 按代码前缀使用 10% / 20% / 30% 档，不按 5%；该例只验管道，NAV / 涨跌停桶不是模型结论。细则见 [R2/R5 计划](_archive/plans/plan-pool-pipeline-r2r5-2026-09-12.md)与[名单 CSV 契约](pool-csv-contract.md)。
 
 落盘：`backtest_output/csv_daily_{book}_{start}_{end}/`、`csv_minute_{book}_{start}_{end}/`、`csv_minute_v7_{start}_{end}/`（`summary.txt`、`daily_equity.csv`、`trades.csv`）。日线可用 `--out-dir` 改目录（M5 三列必须显式指定，见 [m5-list-attribution-2026-03.md](m5-list-attribution-2026-03.md)）。
 
-规则与闸：策略 7 见 [plan-strategy7-turtle-csv-minute-2026-09-11.md](plan-strategy7-turtle-csv-minute-2026-09-11.md)。6/8 口径写在各自 CLI 的 help lock。成交核（档位 / 全卖因跌停 / Decimal 涨跌停价 / 停牌净值）见 [engine-ashare-correctness.md](engine-ashare-correctness.md)。名单 as-of 与 ST 名称列见 [pool-csv-contract.md](pool-csv-contract.md)。
+规则与闸：策略 7 见 [plan-strategy7-turtle-csv-minute-2026-09-11.md](_archive/plans/plan-strategy7-turtle-csv-minute-2026-09-11.md)。6/8 口径写在各自 CLI 的 help lock。成交核（档位 / 全卖因跌停 / Decimal 涨跌停价 / 停牌净值）见 [engine-ashare-correctness.md](engine-ashare-correctness.md)。名单 as-of 与 ST 名称列见 [pool-csv-contract.md](pool-csv-contract.md)。
 
 数据：只读 F 湖 parquet（有 `F:\stock_data\.authority` 且勿残留 `OSKH_PERIOD_*`）。细则见根 `AGENTS.md`。
 
@@ -75,20 +75,26 @@ R5 的 `--start/--end` 必须跟导出的首末文件名走：H0 / `pred_minus_o
 | **★ 三件引擎定位（本仓 + 1.3）** | [engine-positioning-ssot.md](engine-positioning-ssot.md) |
 | **★ 向量化成交核（A 股档位 / 跌停 / 停牌）** | [engine-ashare-correctness.md](engine-ashare-correctness.md) |
 | 名单 CSV 契约（as-of = 买入日 T） | [pool-csv-contract.md](pool-csv-contract.md) |
-| 名单管道 R0/R1（持仓胶水；已合 #21） | [plan-pool-pipeline-r0r1-2026-09-12.md](plan-pool-pipeline-r0r1-2026-09-12.md) |
-| **名单管道 R2/R5（pred TopN 闭环）** | [plan-pool-pipeline-r2r5-2026-09-12.md](plan-pool-pipeline-r2r5-2026-09-12.md) |
-| **Qlib 训练厂 R3（processors + filter；不做 M5）** | [plan-qlib-train-r3-2026-09-12.md](plan-qlib-train-r3-2026-09-12.md) |
-| **M5 名单归因（首轮 2026-03）** | [plan-m5-list-attribution-2026-09-13.md](plan-m5-list-attribution-2026-09-13.md) · [2026-03 报告](m5-list-attribution-2026-03.md) |
-| **M5 二轮（2026-03–09 三源）** | [plan-m5-round2-2026-09-13.md](plan-m5-round2-2026-09-13.md) · [报告](m5-list-attribution-2026-03-09.md) |
+| 名单管道 R0/R1（持仓胶水；已合 #21） | [plan-pool-pipeline-r0r1-2026-09-12.md](_archive/plans/plan-pool-pipeline-r0r1-2026-09-12.md) |
+| **名单管道 R2/R5（pred TopN 闭环）** | [plan-pool-pipeline-r2r5-2026-09-12.md](_archive/plans/plan-pool-pipeline-r2r5-2026-09-12.md) |
+| **Qlib 训练厂 R3（processors + filter；不做 M5）** | [plan-qlib-train-r3-2026-09-12.md](_archive/plans/plan-qlib-train-r3-2026-09-12.md) |
+| **M5 名单归因（首轮 2026-03）** | [plan-m5-list-attribution-2026-09-13.md](_archive/plans/plan-m5-list-attribution-2026-09-13.md) · [2026-03 报告](m5-list-attribution-2026-03.md) |
+| **M5 二轮（2026-03–09 三源）** | [plan-m5-round2-2026-09-13.md](_archive/plans/plan-m5-round2-2026-09-13.md) · [报告](m5-list-attribution-2026-03-09.md) |
 | **策略 9 / 10 宿主烟测（2026-09-13）** | [s9-s10-host-smoke-2026-09-13.md](s9-s10-host-smoke-2026-09-13.md) |
 | **MyQuant 中期同步（2026-09-13）** | [myquant-progress-sync-2026-09-13.md](myquant-progress-sync-2026-09-13.md) |
-| 策略 1–8 书契约（U-R\*；撮合句以 E-R\* 为准） | [plan-unify-csv-strategies-1-8-2026-09-12.md](plan-unify-csv-strategies-1-8-2026-09-12.md) |
-| **策略 9 底量超顶量（买点 CSV + v9 卖点）** | [plan-strategy9-bottom-vol-2026-09-13.md](plan-strategy9-bottom-vol-2026-09-13.md) |
-| **策略 10 换手阻力 / 源 B（CSV + v6 卖点）** | [plan-strategy10-tr-pool-2026-09-13.md](plan-strategy10-tr-pool-2026-09-13.md) |
-| **名单源 B（TR → 契约 CSV；B-R*）** | [plan-source-b-ta-pool-2026-09-13.md](plan-source-b-ta-pool-2026-09-13.md) |
-| **策略 7 金榕元 CSV 分钟（A–D 已合；E 本机）** | [plan-strategy7-turtle-csv-minute-2026-09-11.md](plan-strategy7-turtle-csv-minute-2026-09-11.md) |
+| 策略 1–8 书契约（U-R\*；撮合句以 E-R\* 为准） | [plan-unify-csv-strategies-1-8-2026-09-12.md](_archive/plans/plan-unify-csv-strategies-1-8-2026-09-12.md) |
+| **策略 9 底量超顶量（买点 CSV + v9 卖点）** | [plan-strategy9-bottom-vol-2026-09-13.md](_archive/plans/plan-strategy9-bottom-vol-2026-09-13.md) |
+| **策略 10 换手阻力 / 源 B（CSV + v6 卖点）** | [plan-strategy10-tr-pool-2026-09-13.md](_archive/plans/plan-strategy10-tr-pool-2026-09-13.md) |
+| **名单源 B（TR → 契约 CSV；B-R*）** | [plan-source-b-ta-pool-2026-09-13.md](_archive/plans/plan-source-b-ta-pool-2026-09-13.md) |
+| **策略 7 金榕元 CSV 分钟（A–D 已合；E 本机）** | [plan-strategy7-turtle-csv-minute-2026-09-11.md](_archive/plans/plan-strategy7-turtle-csv-minute-2026-09-11.md) |
 | 日线复权增量 | [data/daily-adjusted-update-ssot.md](data/daily-adjusted-update-ssot.md) |
-| ma + 筹码边（Cerebro 对照，2026-09-07） | [plan-ma-chip-edge-strategy-2026-09-07.md](plan-ma-chip-edge-strategy-2026-09-07.md) |
+| ma + 筹码边（Cerebro 对照，2026-09-07） | [plan-ma-chip-edge-strategy-2026-09-07.md](_archive/plans/plan-ma-chip-edge-strategy-2026-09-07.md) |
+| **★ 向量化热路径 offload（进行中）** | [plan-vectorized-hotpath-offload-2026-09-15.md](plan-vectorized-hotpath-offload-2026-09-15.md) |
+| 1.3 presets 契约快照（防漂移） | `tests/test_presets_cross_repo_snapshot.py`（sibling `OSkhQuant1.3`） |
+| 已完成 plan 归档 | [_archive/plans/](_archive/plans/) |
+
+
+**Hygiene / future work:** daily vs minute `simulate()` still duplicated on purpose (unify A–E locked sell books; do not big-bang merge). Light shared helpers live in `backtest/research/csv_common.py`. Cerebro stays fossil-gated (`--allow-cerebro-fossil`); do not delete modules in this tree.
 
 下列链到本仓不存在的 1.3 迁仓文件，不要当本仓入口：`backtest-architecture-ssot.md`、`../handoff/mockqmt-lebs-homology-review-handoff-2026-08-27.md`、`../engineering/plan-lightweight-event-backtest-shell-2026-08-25.md`。
 
@@ -97,6 +103,7 @@ R5 的 `--start/--end` 必须跟导出的首末文件名走：H0 / `pred_minus_o
 | 目录 | 说明 |
 |------|------|
 | [chip/](chip/) | Chip 因子与 cost-migration |
+| [_archive/plans/](_archive/plans/) | 已完成 plan-*.md（状态 已合/已实施） |
 | [code-reviews/](code-reviews/) | 历史 Backtrader 代码审查（考古） |
 | [data/](data/) | 回测数据方案（含 unified-daily-bars-plan） |
 
