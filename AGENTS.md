@@ -2,7 +2,7 @@
 
 Standalone research-face fork (see [README.md](README.md)). Since migration S2 (2026-09-09) this repo owns the research face; OSkhQuant1.3 stays the trading stack and keeps only the `oskh_factors` chip/bridge micropackage.
 
-**成交引擎定位**：本仓 = 向量化。1.3 = LEBS + MockQMT 真栈。Qlib PortAnaRecord 停用；Cerebro 观察退役。见 [`docs/backtest/engine-positioning-ssot.md`](docs/backtest/engine-positioning-ssot.md)。成交核（档位 / 全卖因跌停 / Decimal 涨跌停价）见 [`docs/backtest/engine-ashare-correctness.md`](docs/backtest/engine-ashare-correctness.md)。入口命令见 [`docs/backtest/README.md`](docs/backtest/README.md)。
+**成交引擎定位**：本仓 = 向量化。1.3 = LEBS + MockQMT 真栈。Qlib PortAnaRecord 停用；Cerebro / Rolling 已退场（2026-09-16）。见 [`docs/backtest/engine-positioning-ssot.md`](docs/backtest/engine-positioning-ssot.md)。成交核（档位 / 全卖因跌停 / Decimal 涨跌停价）见 [`docs/backtest/engine-ashare-correctness.md`](docs/backtest/engine-ashare-correctness.md)。入口命令见 [`docs/backtest/README.md`](docs/backtest/README.md)。
 
 ## Research entries
 
@@ -12,8 +12,8 @@ Standalone research-face fork (see [README.md](README.md)). Since migration S2 (
 - 9 底量超顶量：`scripts/data/export_strategy9_pool.py` 写名单，再 `--strategy version9 --pool-dir`（拒绝 `stock_pool/`）
 - 10 换手阻力 / 源 B：`scripts/data/export_ta_pool.py` 写名单（湖当日有 K；不做 TopK），再 `--strategy version10 --pool-dir`（卖点同 6；拒绝 `stock_pool/`）
 - 名单：`backtest/research/csv_pool.py`（与 1.3 `lebs/csv/universe.py` 同口径）
-- 不要 `python -m backtest.lebs`（包不在本仓）。不要为新策略开 Cerebro。
-- Cerebro 化石：仅 `backtest/backtest_main_full.py --allow-cerebro-fossil` 等旧对照；见 `docs/backtest/README.md` § Cerebro。
+- 不要 `python -m backtest.lebs`（包不在本仓）。Cerebro 已退场，禁止复活。
+- Cerebro / Rolling 已退场（2026-09-16）；chip / ma_chip 对照产物为静态档案，代码路径已删。ma_chip 默认归档；version11 CSV 移植须另开计划并重裁成交时点语义。
 - presets 与 1.3 契约：`tests/test_presets_cross_repo_snapshot.py`（勿静默漂移）。
 
 ## Python

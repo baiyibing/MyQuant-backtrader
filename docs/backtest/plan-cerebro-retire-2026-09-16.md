@@ -87,7 +87,7 @@ grep -rn 'ProfitStrategy' backtest/ scripts/ tests/ docs/backtest/README.md READ
 
 | 切片 | 状态 | commit | 备注 |
 |------|------|--------|------|
-| A · 退场删除 | ✅ | 本提交（切片 A；SHA 随后回填） | 精确删除 §1 的 16 个模块 + 6 个测试；授权仅改 file_compare 第 6 行；清理无消费者 fixture。presets 快照仅锁 trade_decision/presets.py，保留基线。复扫无新增消费者；pytest 527 passed / 3 skipped；backtrader import 扫描零命中（两处注释仅改措辞）。 |
-| B · SSOT 同步 | ☐ | | |
+| A · 退场删除 | ✅ | `59ba18d` | 精确删除 §1 的 16 个模块 + 6 个测试；授权仅改 file_compare 第 6 行；清理无消费者 fixture。presets 快照仅锁 trade_decision/presets.py，保留基线。复扫无新增消费者；pytest 527 passed / 3 skipped；backtrader import 扫描零命中（两处注释仅改措辞）。 |
+| B · SSOT 同步 | ✅ | 本提交（切片 B；SHA 随后回填） | C-R3 四文件同步：2026-09-16 已退场；chip/ma_chip 静态归档；仅 csv_* 回测入口，禁止复活。 |
 | C · 依赖清理 | ☐ | | |
 | D · 回写 | ☐ | | |

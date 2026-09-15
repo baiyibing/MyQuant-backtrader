@@ -2,7 +2,7 @@
 
 本仓研究入口是**向量化**，不是 LEBS，也不是 Cerebro。
 
-三件成交引擎（本仓向量化 / 1.3 LEBS / 1.3 MockQMT）怎么分工：见 **[engine-positioning-ssot.md](engine-positioning-ssot.md)**。Qlib `PortAnaRecord` 停用；Cerebro 观察退役。本仓没有 `backtest/lebs/`。
+三件成交引擎（本仓向量化 / 1.3 LEBS / 1.3 MockQMT）怎么分工：见 **[engine-positioning-ssot.md](engine-positioning-ssot.md)**。Qlib `PortAnaRecord` 停用；Cerebro / Rolling 已退场（2026-09-16）。本仓没有 `backtest/lebs/`。
 
 ## 本仓研究入口（向量化）
 
@@ -66,9 +66,9 @@ R5 的 `--start/--end` 必须跟导出的首末文件名走：H0 / `pred_minus_o
 
 本仓不复刻 LEBS / MockQMT，也不承诺和它们净值对齐。
 
-## Cerebro（观察退役）
+## Cerebro（已退场，2026-09-16）
 
-`backtest/backtest_main_full.py --allow-cerebro-fossil`、`ProfitStrategy`、chip / ma_chip 的 Cerebro 路径仍在树上，只做旧对照；主入口没有该显式旗标会立即退出。**新策略不写 `ProfitStrategy.StrategyN`，不扩 Rolling。**
+Cerebro / Rolling 已退场（2026-09-16）；chip / ma_chip 对照产物为静态档案，代码路径已删。保留 `backtest_output/`、历史对照报告和测试 fixtures，以及纯筹码计算、Rust TR 和 CSV 策略规则。ma_chip 默认归档；需要可跑研究时另开 version11 CSV 移植计划，重裁次日开盘与现行 CSV 成交时点语义。**Cerebro 已退场，禁止复活。**
 
 ## SSOT
 
@@ -100,13 +100,13 @@ R5 的 `--start/--end` 必须跟导出的首末文件名走：H0 / `pred_minus_o
 | **名单源 B（TR → 契约 CSV；B-R*）** | [plan-source-b-ta-pool-2026-09-13.md](_archive/plans/plan-source-b-ta-pool-2026-09-13.md) |
 | **策略 7 金榕元 CSV 分钟（A–D 已合；E 本机）** | [plan-strategy7-turtle-csv-minute-2026-09-11.md](_archive/plans/plan-strategy7-turtle-csv-minute-2026-09-11.md) |
 | 日线复权增量 | [data/daily-adjusted-update-ssot.md](data/daily-adjusted-update-ssot.md) |
-| ma + 筹码边（Cerebro 对照，2026-09-07） | [plan-ma-chip-edge-strategy-2026-09-07.md](_archive/plans/plan-ma-chip-edge-strategy-2026-09-07.md) |
+| ma + 筹码边（静态档案；代码已于 2026-09-16 退场） | [plan-ma-chip-edge-strategy-2026-09-07.md](_archive/plans/plan-ma-chip-edge-strategy-2026-09-07.md) |
 | **★ 向量化热路径 offload（进行中）** | [plan-vectorized-hotpath-offload-2026-09-15.md](plan-vectorized-hotpath-offload-2026-09-15.md) |
 | 1.3 presets 契约快照（防漂移） | `tests/test_presets_cross_repo_snapshot.py`（sibling `OSkhQuant1.3`） |
 | 已完成 plan 归档 | [_archive/plans/](_archive/plans/) |
 
 
-**Hygiene / future work:** 对照分析 [repo-analysis-vs-brainstorm-2026-09-15.md](repo-analysis-vs-brainstorm-2026-09-15.md)；总览 [brainstorm-overview-2026-09-15.md](brainstorm-overview-2026-09-15.md)；backlog [plan-hygiene-backlog-2026-09-15.md](plan-hygiene-backlog-2026-09-15.md)（H1–H16 ✓）；next heavy → [plan-brainstorm-next-heavy-2026-09-15.md](plan-brainstorm-next-heavy-2026-09-15.md)（队列头 run-manifest hard **仍延期**）。chase / pool / equity-mark skeleton is shared in `backtest/research/csv_simulate_loop.py` (plus calendar / name-asof in `csv_common.py`); sell loops remain split on purpose (daily bar rules vs `scan_held_day`; unify A–E locked sell books later — do not big-bang merge). Cerebro stays fossil-gated (`--allow-cerebro-fossil`); do not delete modules in this tree. L2 (`l2_analytics/` / `run_l2_*`) stays offline ETL/aggregates — do not expand into trading or strategy books.
+**Hygiene / future work:** 对照分析 [repo-analysis-vs-brainstorm-2026-09-15.md](repo-analysis-vs-brainstorm-2026-09-15.md)；总览 [brainstorm-overview-2026-09-15.md](brainstorm-overview-2026-09-15.md)；backlog [plan-hygiene-backlog-2026-09-15.md](plan-hygiene-backlog-2026-09-15.md)（H1–H16 ✓）；next heavy → [plan-brainstorm-next-heavy-2026-09-15.md](plan-brainstorm-next-heavy-2026-09-15.md)（队列头 run-manifest hard **仍延期**）。chase / pool / equity-mark skeleton is shared in `backtest/research/csv_simulate_loop.py` (plus calendar / name-asof in `csv_common.py`); sell loops remain split on purpose (daily bar rules vs `scan_held_day`; unify A–E locked sell books later — do not big-bang merge). Cerebro / Rolling 已退场（2026-09-16），禁止复活；chip / ma_chip 仅保留静态对照档案。 L2 (`l2_analytics/` / `run_l2_*`) stays offline ETL/aggregates — do not expand into trading or strategy books.
 
 下列链到本仓不存在的 1.3 迁仓文件，不要当本仓入口：`backtest-architecture-ssot.md`、`../handoff/mockqmt-lebs-homology-review-handoff-2026-08-27.md`、`../engineering/plan-lightweight-event-backtest-shell-2026-08-25.md`。
 
