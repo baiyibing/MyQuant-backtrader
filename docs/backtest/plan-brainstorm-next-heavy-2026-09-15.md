@@ -3,6 +3,7 @@
 - 日期：2026-09-15
 - 状态：队列草案（H1–H13 软卫生 + **H14/D1 ✓** + **H15/D2 ✓** + **H16/C soft+ ✓** 后的 **重活** 顺序）
 - 父：[plan-hygiene-backlog-2026-09-15.md](plan-hygiene-backlog-2026-09-15.md)
+- **总览**：[brainstorm-overview-2026-09-15.md](brainstorm-overview-2026-09-15.md)
 - 边界：[plan-h13-cyq-tr-boundary-2026-09-15.md](plan-h13-cyq-tr-boundary-2026-09-15.md) · [chip/chip-slowpath-inventory-2026-09-15.md](chip/chip-slowpath-inventory-2026-09-15.md) §D/§E
 - D1 结果：[chip/h14-d1-minute-chip-profile-results-2026-09-15.md](chip/h14-d1-minute-chip-profile-results-2026-09-15.md) · [plan-h14-d1-minute-chip-profile-2026-09-15.md](plan-h14-d1-minute-chip-profile-2026-09-15.md)
 - D2 计划：[plan-h15-d2-minute-chip-numba-2026-09-15.md](plan-h15-d2-minute-chip-numba-2026-09-15.md)

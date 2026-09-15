@@ -83,6 +83,7 @@ R5 的 `--start/--end` 必须跟导出的首末文件名走：H0 / `pred_minus_o
 | **CYQ / TR 产品边界（H13）** | [plan-h13-cyq-tr-boundary-2026-09-15.md](plan-h13-cyq-tr-boundary-2026-09-15.md) · inventory §E：MyQuant numba `winner_ratio` feeder ≠ 本仓 Rust TR Store |
 | **D1 minute/hybrid chip profile（H14）** | [plan-h14-d1-minute-chip-profile-2026-09-15.md](plan-h14-d1-minute-chip-profile-2026-09-15.md) · [chip/h14-d1-minute-chip-profile-results-2026-09-15.md](chip/h14-d1-minute-chip-profile-results-2026-09-15.md) · `bench_minute_chip_hotpath.py` |
 | **D2 minute chip numba（H15）** | [plan-h15-d2-minute-chip-numba-2026-09-15.md](plan-h15-d2-minute-chip-numba-2026-09-15.md) · `MINUTE_CHIP_BACKEND` / `use_numba` · `tests/test_minute_chip_numba_parity.py` |
+| **头脑风暴总览（A–F · H1–H16）** | [brainstorm-overview-2026-09-15.md](brainstorm-overview-2026-09-15.md) |
 | **Next heavy brainstorm** | [plan-brainstorm-next-heavy-2026-09-15.md](plan-brainstorm-next-heavy-2026-09-15.md) |
 | 名单管道 R0/R1（持仓胶水；已合 #21） | [plan-pool-pipeline-r0r1-2026-09-12.md](_archive/plans/plan-pool-pipeline-r0r1-2026-09-12.md) |
 | **名单管道 R2/R5（pred TopN 闭环）** | [plan-pool-pipeline-r2r5-2026-09-12.md](_archive/plans/plan-pool-pipeline-r2r5-2026-09-12.md) |
@@ -103,7 +104,7 @@ R5 的 `--start/--end` 必须跟导出的首末文件名走：H0 / `pred_minus_o
 | 已完成 plan 归档 | [_archive/plans/](_archive/plans/) |
 
 
-**Hygiene / future work:** backlog [plan-hygiene-backlog-2026-09-15.md](plan-hygiene-backlog-2026-09-15.md)（H1–H15 ✓；CYQ feeder 在 MyQuant、Rust TR 在本仓——见 H13；D1 profile ✓ + D2 numba minute ✓ → next **C soft+**；主题 A–F 仍有重活；next heavy → [plan-brainstorm-next-heavy-2026-09-15.md](plan-brainstorm-next-heavy-2026-09-15.md)）。chase / pool / equity-mark skeleton is shared in `backtest/research/csv_simulate_loop.py` (plus calendar / name-asof in `csv_common.py`); sell loops remain split on purpose (daily bar rules vs `scan_held_day`; unify A–E locked sell books later — do not big-bang merge). Cerebro stays fossil-gated (`--allow-cerebro-fossil`); do not delete modules in this tree. L2 (`l2_analytics/` / `run_l2_*`) stays offline ETL/aggregates — do not expand into trading or strategy books.
+**Hygiene / future work:** 总览 [brainstorm-overview-2026-09-15.md](brainstorm-overview-2026-09-15.md)；backlog [plan-hygiene-backlog-2026-09-15.md](plan-hygiene-backlog-2026-09-15.md)（H1–H16 ✓）；next heavy → [plan-brainstorm-next-heavy-2026-09-15.md](plan-brainstorm-next-heavy-2026-09-15.md)（队列头 run-manifest hard **仍延期**）。chase / pool / equity-mark skeleton is shared in `backtest/research/csv_simulate_loop.py` (plus calendar / name-asof in `csv_common.py`); sell loops remain split on purpose (daily bar rules vs `scan_held_day`; unify A–E locked sell books later — do not big-bang merge). Cerebro stays fossil-gated (`--allow-cerebro-fossil`); do not delete modules in this tree. L2 (`l2_analytics/` / `run_l2_*`) stays offline ETL/aggregates — do not expand into trading or strategy books.
 
 下列链到本仓不存在的 1.3 迁仓文件，不要当本仓入口：`backtest-architecture-ssot.md`、`../handoff/mockqmt-lebs-homology-review-handoff-2026-08-27.md`、`../engineering/plan-lightweight-event-backtest-shell-2026-08-25.md`。
 
