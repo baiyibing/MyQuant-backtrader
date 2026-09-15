@@ -1,7 +1,7 @@
 # H5：日线 mark / 循环微优化
 
 - 日期：2026-09-15
-- 状态：进行中
+- 状态：已完成（待 Grok 核）
 - 父队列：[plan-hygiene-backlog-2026-09-15.md](plan-hygiene-backlog-2026-09-15.md)
 - 相关：[plan-vectorized-hotpath-offload-2026-09-15.md](plan-vectorized-hotpath-offload-2026-09-15.md)
 
