@@ -2,8 +2,9 @@
 # -*- coding: utf-8 -*-
 """D4 path-SSOT gate for this slim fork.
 
-Parquet path construction in ``oskh_data/``, ``oskh_factors/``, and ``scripts/``
-must go through ``common/infra/data_root.py``. Frozen ``backtest/`` is not scanned.
+Parquet path construction in ``oskh_data/``, ``oskh_factors/``, ``scripts/``,
+and ``common/`` must go through ``common/infra/data_root.py``. Frozen ``backtest/``
+is not scanned.
 """
 
 from __future__ import annotations
@@ -17,7 +18,7 @@ from typing import Dict, List, Pattern, Tuple
 _HERE = Path(__file__).resolve()
 REPO_ROOT = _HERE.parents[2] if _HERE.parent.name in {"gates", "diagnostics", "data", "ops"} else _HERE.parents[1]
 
-_SCAN_DIRS = ("oskh_data", "oskh_factors", "scripts")
+_SCAN_DIRS = ("oskh_data", "oskh_factors", "scripts", "common")
 
 # (tag, expected_hits) — fill after first scan; keep only remaining debt.
 _ALLOWLIST: Dict[str, Tuple[str, int]] = {
@@ -26,6 +27,10 @@ _ALLOWLIST: Dict[str, Tuple[str, int]] = {
     # hive-split S1：etf 读者的显式 base 隔离语义（base/period=* 构造两处）；
     # env/container 路径已分流至 _resolve_etf_daily_root，非旧根在册债务。
     "oskh_data/reader.py": ("HIVE_ETF_BASE", 2),
+    # path-SSOT resolver itself joins period=*; docstring hits included by line scanner.
+    "common/infra/data_root.py": ("SSOT_RESOLVER", 5),
+    # Legacy cleanup helper joins period= under an explicit base_dir argument.
+    "common/infra/qmt_utils_adv.py": ("LEGACY_PERIOD_JOIN", 1),
 }
 
 _PATTERNS: List[Pattern[str]] = [

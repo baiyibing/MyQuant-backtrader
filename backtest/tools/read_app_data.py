@@ -136,9 +136,13 @@ def read_simple_method(file_path):
         return None
 
 
-# 使用示例
+# 使用示例（路径由 argv 传入，禁止本机硬编码）
 if __name__ == "__main__":
-    file_path = r"E:\PycharmProjects\OSkhQuant1.3\stock_pool\APPDATA\20251023.xls"  # 替换为实际文件路径
+    import sys
+
+    if len(sys.argv) < 2:
+        raise SystemExit(f"usage: {sys.argv[0]} <xls-or-xlsx-path>")
+    file_path = sys.argv[1]
 
     # 方法1: 复杂但可能更准确
     df1 = read_special_excel_format(file_path)

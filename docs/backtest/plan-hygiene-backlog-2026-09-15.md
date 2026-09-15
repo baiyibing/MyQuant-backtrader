@@ -1,7 +1,7 @@
 # MyQuant-backtrader hygiene backlog（头脑风暴续）
 
 - 日期：2026-09-15
-- 状态：**软扩展**（H1–H9 ✓；主题 **A–F** 仍开放；run-manifest 仍延期）
+- 状态：**软扩展**（H1–H10 ✓；主题 **A–F** 仍开放；run-manifest 仍延期）
 - 前置：PR #34（hotpath / presets 快照 / simulate 骨架 / plan 归档）
 - 禁区（不动）：改 6/8 卖点、重开 `--asof`、PortAna 定胜负、本仓复刻 LEBS/真栈、缺行 fail-closed→跳过、Cerebro 物理删除、Cursor CloudAgent
 
@@ -18,9 +18,10 @@
 | **H7** ✓ | `stock_pool/` vs `exports/` 生命周期一句 SSOT | pool-csv-contract SSOT + README 指针；无 Python 行为变更；Grok 核无 🔴 |
 | **H8** ✓ | 日线卖出环 searchsorted / 缓存索引（主题 A） | plan + `day_bar_and_prev_closes`；sell/chase/pool 共用；`bench_daily_sell_index.py`；golden 绿；Grok 核无 🔴 |
 | **H9** ✓ | 名单质量 / pool 目录 tooling（主题 C 软切片） | plan + `report_pool_list_quality` / `pool_list_quality`；day/empty/histogram/overlap/`validate_pool_dir`；pytest；Grok 核无 🔴；**非** run-manifest |
+| **H10** ✓ | CI path-SSOT / contract gates（主题 E 软切片） | plan + 门禁清单；扩 `verify_data_path_ssot`→`common/`；`verify_no_hardcoded_machine_paths`；workflow Contract gates；README/AGENTS 指针；Grok 核无 🔴；无湖门禁 |
 
 已合不重复：csv_common、csv_simulate_loop、presets 快照、plan `_archive/plans/`、numba trail 可选。
 
 **队列收口（2026-09-15）**：H1–H7 全部交付并经 Grok 核。
 
-**软扩展（2026-09-15）**：在 H1–H7 收口之上续 **H8**（主题 A：卖出环索引）与 **H9**（主题 C 软切片：list-quality / pool tooling）。头脑风暴主题 **A–F 仍开放**（未逐项排入 Hx 的项不视为关闭）。**MyQuant run-manifest 本仓暂不接**（另开片；见 progress-sync）。
+**软扩展（2026-09-15）**：在 H1–H7 收口之上续 **H8**（主题 A）、**H9**（主题 C 软：list-quality）、**H10**（主题 E 软：CI path-SSOT / contract gates，无 F 湖）。头脑风暴主题 **A–F 仍开放**（未逐项排入 Hx 的项不视为关闭）。**MyQuant run-manifest 本仓暂不接**（另开片；见 progress-sync）。
