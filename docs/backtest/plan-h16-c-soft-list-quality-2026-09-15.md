@@ -24,6 +24,14 @@
 5. `pool-csv-contract.md` H9 节 → H9/H16；backlog **H16 ✓**；next-heavy C soft+ ✓ → next **run-manifest hard（仍延期）**
 6. Grok → `docs/architecture/reviews/2026-09-15/h16-c-soft-list-quality/grok.md`；修有效 🔴；**push + PR → master**
 
+## 双目录校验修补
+
+后续修补：`--other-dir` 与 primary 共用严格校验；text / JSON / Markdown
+按 primary / other 标明错误。任一侧契约错误退出 1，路径 / IO 错误退出 2；
+单目录输出兼容。契约与验证入口见
+[pool-csv-contract.md](pool-csv-contract.md#list-quality-reporter-h9--h16)，
+回归：`tests/test_report_pool_list_quality.py`。
+
 ## 明确不做
 
 - **不**集成 MyQuant `run-manifest` / 不消费 manifest

@@ -47,6 +47,14 @@ days, code-count histogram, day-aligned overlap / Jaccard,
 top-N frequent codes, day-over-day churn, and ``--format text|json|markdown``.
 No lake writes; **not** run-manifest integration.
 
+Both `--pool-dir` (primary) and `--other-dir` (other) use the same strict
+`validate_pool_dir` contract, including bare codes and valid calendar filenames.
+Two-directory text/Markdown reports label validation sections `primary` / `other`;
+JSON adds `validation_errors_by_side` with those keys. The existing JSON
+`validation_errors` field remains primary-only; single-directory output is unchanged.
+Exit codes: **0** if both supplied directories pass, **1** for contract errors on
+either side, **2** for path/IO errors (which take precedence over contract errors).
+
 ```text
 /workspace/vanna312/bin/python scripts/research/report_pool_list_quality.py \
   --pool-dir <pool-a> [--other-dir <pool-b>] \
