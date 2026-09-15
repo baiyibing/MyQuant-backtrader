@@ -173,6 +173,36 @@ def add_strategy6_ratio_args(ap: argparse.ArgumentParser) -> None:
     )
 
 
+def add_csv_backtest_common_args(
+    ap: argparse.ArgumentParser,
+    *,
+    repo: str | Path,
+    end_default: str,
+    cash_total_default: float,
+    daily_quota_default: float,
+    end_help: Optional[str] = None,
+    start_default: str = "20251023",
+    workers_default: int = 16,
+) -> None:
+    """Shared daily/minute CSV backtest CLI flags (names + defaults preserved).
+
+    Adds ``--start/--end/--cash-total/--daily-quota/--workers/--pool-dir`` plus
+    strategy book args. Callers then add mode-specific flags (daily
+    ``--out-dir``; minute ``--no-cache`` / ``--rebuild-cache``).
+    """
+    ap.add_argument("--start", default=start_default)
+    if end_help is None:
+        ap.add_argument("--end", default=end_default)
+    else:
+        ap.add_argument("--end", default=end_default, help=end_help)
+    ap.add_argument("--cash-total", type=float, default=cash_total_default)
+    ap.add_argument("--daily-quota", type=float, default=daily_quota_default)
+    ap.add_argument("--workers", type=int, default=workers_default)
+    ap.add_argument("--pool-dir", type=Path, default=Path(repo) / "stock_pool")
+    add_csv_strategy_arg(ap)
+    add_strategy6_ratio_args(ap)
+
+
 def strategy6_kwargs_from_args(args) -> dict:
     stop_pct = (
         strategy6_rules.STOP_PCT if args.stop_pct is None else float(args.stop_pct)

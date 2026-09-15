@@ -40,6 +40,7 @@ from backtest.research.csv_daily_backtest import (  # noqa: E402
     SimState,
     STRATEGY4_CALENDAR_SLACK_DAYS,
     WARMUP_DAYS,
+    add_csv_backtest_common_args,
     add_csv_strategy_arg,
     add_strategy6_ratio_args,
     apply_csv_strategy,
@@ -1053,22 +1054,20 @@ def main(argv: Optional[list] = None) -> int:
         epilog=help_lock_all(HELP_LOCK),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    ap.add_argument("--start", default="20251023")
-    ap.add_argument(
-        "--end",
-        default=MINUTE_LAKE_END,
-        help=f"minute lake last day is {MINUTE_LAKE_END}; short parity window: 20251104",
+    add_csv_backtest_common_args(
+        ap,
+        repo=REPO,
+        end_default=MINUTE_LAKE_END,
+        end_help=(
+            f"minute lake last day is {MINUTE_LAKE_END}; short parity window: 20251104"
+        ),
+        cash_total_default=DEFAULT_TOTAL_CASH,
+        daily_quota_default=DEFAULT_DAILY_QUOTA,
     )
-    ap.add_argument("--cash-total", type=float, default=DEFAULT_TOTAL_CASH)
-    ap.add_argument("--daily-quota", type=float, default=DEFAULT_DAILY_QUOTA)
-    ap.add_argument("--workers", type=int, default=16)
-    ap.add_argument("--pool-dir", type=Path, default=Path(REPO) / "stock_pool")
     ap.add_argument("--no-cache", action="store_true", help="skip minute window cache")
     ap.add_argument(
         "--rebuild-cache", action="store_true", help="reload lake and rewrite cache"
     )
-    add_csv_strategy_arg(ap)
-    add_strategy6_ratio_args(ap)
     args = ap.parse_args(argv if argv is not None else None)
     pool_dir = resolve_research_pool_dir(args.strategy, args.pool_dir, repo=REPO)
 

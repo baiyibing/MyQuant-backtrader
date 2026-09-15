@@ -124,6 +124,40 @@ def test_missing_cli_strategy_exits():
         ap.parse_args([])
 
 
+def test_add_csv_backtest_common_args_defaults_and_end_help(tmp_path):
+    from backtest.research.csv_ledger import DEFAULT_TOTAL_CASH
+    from backtest.research.csv_strategy_books import add_csv_backtest_common_args
+
+    ap = argparse.ArgumentParser()
+    add_csv_backtest_common_args(
+        ap,
+        repo=tmp_path,
+        end_default="20260909",
+        cash_total_default=DEFAULT_TOTAL_CASH,
+        daily_quota_default=1_000_000.0,
+    )
+    with pytest.raises(SystemExit):
+        ap.parse_args([])
+    ns = ap.parse_args(["--strategy", "version6"])
+    assert ns.start == "20251023"
+    assert ns.end == "20260909"
+    assert ns.cash_total == DEFAULT_TOTAL_CASH
+    assert ns.daily_quota == 1_000_000.0
+    assert ns.workers == 16
+    assert ns.pool_dir == tmp_path / "stock_pool"
+
+    ap2 = argparse.ArgumentParser()
+    add_csv_backtest_common_args(
+        ap2,
+        repo=tmp_path,
+        end_default="20260909",
+        end_help="minute lake last day is 20260909; short parity window: 20251104",
+        cash_total_default=DEFAULT_TOTAL_CASH,
+        daily_quota_default=1_000_000.0,
+    )
+    assert "minute lake last day is 20260909" in ap2.format_help()
+
+
 def test_books_are_separate_modules():
     assert BOOKS["version1"].apply is not BOOKS["version2"].apply
     assert BOOKS["version6"].apply is not BOOKS["version8"].apply
