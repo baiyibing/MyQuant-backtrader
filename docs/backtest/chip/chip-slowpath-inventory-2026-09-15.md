@@ -90,13 +90,15 @@ Python `oskh_factors.chip` + `qlib_cost.cyq*` 仍是**研究 / 对照 / 短窗 c
 |------|----------|----------------|
 | `qlib_cost/cyq.py` — `calc_curpdf` / `calc_cumpdf` / `calc_dist_chips` | 逐日三角 PDF + 衰减累积 | **later offload**（全市场已有 Rust；短窗研究可留 Python / 既有 numba batch） |
 | `qlib_cost/distribution_of_chips.py` — `make_price_grid` 等 | 网格构建 | **later offload**（随 curpdf） |
-| `oskh_factors/chip/core.py` — `minute_chip_distribution` / `hybrid_chip_distribution` | Python `for` 调 `cyq.calc_curpdf` | **later offload** |
+| `oskh_factors/chip/core.py` — `minute_chip_distribution` | Python 默认；可选 numba（`use_numba` / `MINUTE_CHIP_BACKEND`；H15） | **optional numba**（默认 Python） |
+| `oskh_factors/chip/core.py` — `hybrid_chip_distribution` | Python `for` 调 `cyq.calc_curpdf` + 当日分钟直方图 | **leave**（D1：~1ms；非 D2 范围） |
 | `oskh_factors/chip/core.py` — `compute_crossday_turnover_resistance` / `turnover_chip_factors` | 短窗对照路径（非 Rust window=1000 主路径） | **leave** research；大批量 → Rust bridge |
 | `scripts/data|research/full_market_canonical_resist.py` | 已含 numba `_batch_triang_curpdf` / `_batch_cumpdf_4way` | **leave** 作 parity / 性能文案；**生产全市场 leave→Rust**（勿再扩 Python 主路径） |
 | `docs/backtest/chip/性能优化-python.md` / `性能优化-rust.md` | 历史 profile 与定型判据 | **leave**（文档；非代码热路径） |
-| [h14-d1-minute-chip-profile-results-2026-09-15.md](h14-d1-minute-chip-profile-results-2026-09-15.md) | **H14/D1** 合成 microbench：minute ~50.7ms、hybrid ~1.0ms、cumpdf已numba；**D2=numba minute** | **leave**（文档；代码仍 later offload 至 D2） |
+| [h14-d1-minute-chip-profile-results-2026-09-15.md](h14-d1-minute-chip-profile-results-2026-09-15.md) | **H14/D1** 合成 microbench：minute ~50.7ms、hybrid ~1.0ms、cumpdf已numba；**D2=numba minute** | **leave**（文档） |
+| [../plan-h15-d2-minute-chip-numba-2026-09-15.md](../plan-h15-d2-minute-chip-numba-2026-09-15.md) | **H15/D2** optional numba `minute_chip_distribution` + parity + bench | **optional numba** |
 
-**H14 注：** `minute_chip_distribution` / `hybrid` 行 recommendation 仍为 **later offload**，直至 D2 落地后再改。
+**H15 注：** `minute_chip_distribution` 已 optional numba（Python 默认）；`hybrid` / `calc_curpdf` 仍 leave。
 
 **明确不在本表扩写：** 向量化成交核 `scan_held_day` / daily sell index（主题 A / H5–H8）——与 chip/TR 正交。
 
@@ -116,7 +118,7 @@ Python `oskh_factors.chip` + `qlib_cost.cyq*` 仍是**研究 / 对照 / 短窗 c
 | **证据** | 兄弟仓 `MyQuant/my_scripts/build_winner_ratio.py` · `MyQuant/docs/winner-ratio-cyq-parity-2026-09-14.md`（只读，不迁树） | 本 inventory §A + bridge selection |
 
 **本仓不做：** 不把 MyQuant feeder 迁进本树；不在本仓再写一套全市场日频 CYQ/`winner_ratio` 构建器去「替代」MyQuant。  
-**日后 offload（仍开放、仍在本仓）：** §D 的 minute/hybrid chip、`calc_curpdf` 短窗研究等 —— **不是**复刻 MyQuant 日频 feeder。
+**日后 offload（仍开放、仍在本仓）：** §D 的 hybrid / `calc_curpdf` 短窗研究等（minute 已 H15 optional numba）—— **不是**复刻 MyQuant 日频 feeder。
 
 Plan：[../plan-h13-cyq-tr-boundary-2026-09-15.md](../plan-h13-cyq-tr-boundary-2026-09-15.md)
 

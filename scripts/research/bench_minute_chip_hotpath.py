@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Synthetic microbench for minute/hybrid chip hot paths (H14 / D1).
+"""Synthetic microbench for minute/hybrid chip hot paths (H14/D1 + H15/D2).
 
 No F-lake / market data required. Times:
-  - oskh_factors.chip.core.minute_chip_distribution
+  - oskh_factors.chip.core.minute_chip_distribution (python + numba when available)
   - oskh_factors.chip.core.hybrid_chip_distribution
   - qlib_cost.cyq.calc_curpdf (triang) + calc_cumpdf kernels
 
@@ -30,8 +30,10 @@ REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO))
 
 from oskh_factors.chip.core import (  # noqa: E402
+    _NUMBA_MINUTE_CHIP_AVAILABLE,
     hybrid_chip_distribution,
     minute_chip_distribution,
+    minute_chip_distribution_python,
 )
 from qlib_cost import cyq  # noqa: E402
 from qlib_cost.distribution_of_chips import make_price_grid  # noqa: E402
@@ -148,7 +150,7 @@ def main() -> int:
         print("ERROR: empty distribution on synthetic input")
         return 1
 
-    print("H14/D1 minute-chip hotpath microbench (synthetic; no lake)")
+    print("H14/D1+H15/D2 minute-chip hotpath microbench (synthetic; no lake)")
     print(
         f"  days={args.days} minutes/day={args.minutes} "
         f"minute_bars={len(minute_arr)} step={args.step} "
@@ -160,19 +162,42 @@ def main() -> int:
     rows: list[tuple[str, float, float, str]] = []
 
     tot, per = _time_call(
-        minute_chip_distribution,
+        minute_chip_distribution_python,
         (minute_arr,),
         {"step": args.step, "stock_code": "SYNTH"},
         args.reps,
     )
     rows.append(
         (
-            "minute_chip_distribution",
+            "minute_chip_distribution (python)",
             tot,
             per,
             f"{args.days}d×{args.minutes}m bars",
         )
     )
+    py_per = per
+
+    if _NUMBA_MINUTE_CHIP_AVAILABLE:
+        # Warm JIT once outside timed loop.
+        minute_chip_distribution(
+            minute_arr, step=args.step, stock_code="SYNTH", use_numba=True
+        )
+        tot, per = _time_call(
+            minute_chip_distribution,
+            (minute_arr,),
+            {"step": args.step, "stock_code": "SYNTH", "use_numba": True},
+            args.reps,
+        )
+        rows.append(
+            (
+                "minute_chip_distribution (numba)",
+                tot,
+                per,
+                f"{args.days}d×{args.minutes}m bars; speedup≈{py_per / per:.2f}x",
+            )
+        )
+    else:
+        print("minute numba SKIP (numba not installed / import failed)")
 
     tot, per = _time_call(
         hybrid_chip_distribution,
@@ -223,8 +248,8 @@ def main() -> int:
         print()
         print(
             _profile_fn(
-                "minute_chip_distribution",
-                minute_chip_distribution,
+                "minute_chip_distribution_python",
+                minute_chip_distribution_python,
                 (minute_arr,),
                 {"step": args.step, "stock_code": "SYNTH"},
                 top=args.profile_top,
