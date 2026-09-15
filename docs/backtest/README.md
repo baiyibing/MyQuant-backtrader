@@ -104,6 +104,7 @@ R5 的 `--start/--end` 必须跟导出的首末文件名走：H0 / `pred_minus_o
 |------|------|
 | [chip/](chip/) | Chip 因子与 cost-migration |
 | [_archive/plans/](_archive/plans/) | 已完成 plan-*.md（状态 已合/已实施） |
+| [_archive/fossils/](_archive/fossils/README.md) | 观察退役的 Backtrader 框架考古 |
 | [code-reviews/](code-reviews/) | 历史 Backtrader 代码审查（考古） |
 | [data/](data/) | 回测数据方案（含 unified-daily-bars-plan） |
 
@@ -111,8 +112,9 @@ R5 的 `--start/--end` 必须跟导出的首末文件名走：H0 / `pred_minus_o
 
 | 文件 | 说明 |
 |------|------|
-| [backtrader-order-types.md](backtrader-order-types.md) | 历史 Backtrader 订单类型 |
-| [部分成交处理逻辑分析.md](部分成交处理逻辑分析.md) | 部分成交 |
-| [订单生命周期详解.md](订单生命周期详解.md) | 历史 Backtrader 订单生命周期 |
-| [延期买入误检查.md](延期买入误检查.md) | 历史分析（A6b 已拆除） |
-| [资金管理实现逻辑（含回滚机制）.md](资金管理实现逻辑（含回滚机制）.md) | 资金管理（延期段 A6b 已拆除） |
+| [backtrader-order-types.md](_archive/fossils/backtrader-order-types.md) | 历史 Backtrader 订单类型 |
+| [结合本系统讨论 Backtrader 订单的创建与执行流程.md](<_archive/fossils/结合本系统讨论 Backtrader 订单的创建与执行流程.md>) | 历史订单创建与执行流程 |
+| [部分成交处理逻辑分析.md](_archive/fossils/部分成交处理逻辑分析.md) | 部分成交 |
+| [订单生命周期详解.md](_archive/fossils/订单生命周期详解.md) | 历史 Backtrader 订单生命周期 |
+| [延期买入误检查.md](_archive/fossils/延期买入误检查.md) | 历史分析（A6b 已拆除） |
+| [资金管理实现逻辑（含回滚机制）.md](_archive/fossils/资金管理实现逻辑（含回滚机制）.md) | 资金管理（延期段 A6b 已拆除） |
