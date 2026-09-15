@@ -1,13 +1,13 @@
 # Plan：资金管理模式化 + 策略 8 每股 100 万（daily_quota / per_name 双模式）
 
 > **落盘**：2026-09-16。**v1.1**（2026-09-16 评审修订，见 changelog §10）。
-> **状态**：✅ **v1.1 · 已实施（PR #61，未合并）**。A–C 完成；D 已尝试，VM 缺湖与同窗基线，按非合入门分支记录 blocker 并跳过重跑。人裁 GO 与 M-R* 不变。
+> **状态**：✅ **v1.1 · 已实施并合入**（PR [#61](https://github.com/baiyibing/MyQuant-backtrader/pull/61)，merge `a606070`，2026-09-16；原 #59 因 base 分支删除被 GitHub 自动关闭，rebase 后重开为 #61）。A–C 完成；D 宿主烟测补跑结果见 [烟测短记](../../money-modes-v8-pername-smoke-2026-09-16.md) 与 §11 D 行；合入后复核 PASS（581 passed / 3 skipped）。人裁 GO 与 M-R\* 不变。
 > **风险档**：**L1**（研究面引擎参数化 + 策略书切换；不碰成交核 E-R1–E-R4、不碰 1.3、不写湖、不写 `stock_pool/`）。
 > **业务源**：MyQuant `docs/bucket_policy/金榕元交易回测策略--0913--策略8.docx`（§1 摘录对照）。
-> **工作流**：走 [Codex 交接工作流](workflow-codex-handoff.md)。权威细则：MyQuant `ai-code-review-governance.md`、`multi-ai-review-workflow.md`。
+> **工作流**：走 [Codex 交接工作流](../../workflow-codex-handoff.md)。权威细则：MyQuant `ai-code-review-governance.md`、`multi-ai-review-workflow.md`。
 > **前置**：[plan-cerebro-retire-2026-09-16.md](plan-cerebro-retire-2026-09-16.md) 已在 PR #58 完成 A→D，P5 双真源已由 Cerebro 退场消解；#58 已合并（e89d1b8），本 plan A/B 已实施。
-> **成交核现锁**：[engine-ashare-correctness.md](engine-ashare-correctness.md)（E-R1–E-R4，本轮不动）。名单契约 [pool-csv-contract.md](pool-csv-contract.md) 不动。
-> **实施交接**：[handoff-money-modes-v8-pername-codex-impl-2026-09-16.md](handoff-money-modes-v8-pername-codex-impl-2026-09-16.md)（人裁 GO 后生效）。
+> **成交核现锁**：[engine-ashare-correctness.md](../../engine-ashare-correctness.md)（E-R1–E-R4，本轮不动）。名单契约 [pool-csv-contract.md](../../pool-csv-contract.md) 不动。
+> **实施交接**：[handoff-money-modes-v8-pername-codex-impl-2026-09-16.md](../../handoff-money-modes-v8-pername-codex-impl-2026-09-16.md)（人裁 GO 后生效）。
 
 ---
 
@@ -33,9 +33,9 @@ docx 原文（`金榕元交易回测策略--0913--策略8.docx`）：
 > 3. 止盈：基础止盈15%，0%＜涨幅≤15%，回撤到2%涨幅触发止盈；15%＜涨幅≤40%，回撤到15%触发；40%＜涨幅≤60%→30%；60%＜涨幅≤80%→50%；80%＜涨幅≤100%→70%；100%＜涨幅≤120%→90%；涨幅＞120%，回撤达到最高价\*20%触发止盈
 > 三、尾盘涨停不能买入股：T+1日9:45分 市价>开盘价 买入；市价<开盘价 弃买
 
-| # | docx 条款 | 现状（[strategy8_rules.py](../../backtest/research/strategy8_rules.py) / 引擎） | 差异 |
+| # | docx 条款 | 现状（[strategy8_rules.py](../../../backtest/research/strategy8_rules.py) / 引擎） | 差异 |
 |---|-----------|------|------|
-| 1 | 每股票 100 万；不足 100 股补齐 | 每日 100 万均分：`per = min(daily_quota, cash)/n`（[csv_simulate_loop.py:145](../../backtest/research/csv_simulate_loop.py#L145)）；force-min 100 股已有（[csv_ledger.py:168](../../backtest/research/csv_ledger.py#L168) `_buy_size`） | **核心变更**：新增 `per_name` 模式并让 v8 使用；force-min 保留（docx「资金池补齐」条款；**v7 无此行为**，见 M-R2） |
+| 1 | 每股票 100 万；不足 100 股补齐 | 每日 100 万均分：`per = min(daily_quota, cash)/n`（[csv_simulate_loop.py:145](../../../backtest/research/csv_simulate_loop.py#L145)）；force-min 100 股已有（[csv_ledger.py:168](../../../backtest/research/csv_ledger.py#L168) `_buy_size`） | **核心变更**：新增 `per_name` 模式并让 v8 使用；force-min 保留（docx「资金池补齐」条款；**v7 无此行为**，见 M-R2） |
 | 2 | 止损 30% | `STOP_PCT = 0.20`；⚠️ Cerebro 侧另有 `ProfitStrategy.py:760` 预设 20% 双真源 | CSV 侧改 `0.30`；Cerebro 真源由前置退场 plan 消解（P5） |
 | 3 | 止盈阶梯 | `PROFIT_BASE=0.15`、`BANDS`（(lo,hi] 半开区间：15/40/60/80/100/120 → 15/30/50/70/90 地板）、`PEAK_DD`（>120% 回撤峰价 20%）**已与 docx 一致** | 唯一差异：第一档现行有「须先摸到 +6%」武装（`SMALL_ARM=0.06`，注释「用户口径：2%×2」），docx 未提 → **P1 人裁** |
 | 4 | 尾盘涨停不买；T+1 9:45 市价>开盘买、<开盘弃 | 已有（`chase_decision` + `chase:T+1`） | 语义不变；`per_ch` 在 per_name 模式下 = `name_budget` |
@@ -50,17 +50,17 @@ docx 原文（`金榕元交易回测策略--0913--策略8.docx`）：
 
 | 已落地 | 锚点 |
 |--------|------|
-| 总资金 2100 万 `DEFAULT_TOTAL_CASH` | [csv_ledger.py:17](../../backtest/research/csv_ledger.py#L17) |
-| 日额度 100 万 `DEFAULT_DAILY_QUOTA`，开盘重置 | [csv_daily_backtest.py:135](../../backtest/research/csv_daily_backtest.py#L135)、:339；分钟 :826 |
-| 均分公式 `per = min(daily_quota, st.cash)/len(planned)` | [csv_simulate_loop.py:145](../../backtest/research/csv_simulate_loop.py#L145) |
-| 排单 `queue_limit_up_chase`（per_ch 由排单日 `per` 写入） | [csv_simulate_loop.py:164-165](../../backtest/research/csv_simulate_loop.py#L164)；chase 日仅消费（:91/:104/:123） |
-| 整百股向下取整 + force-min 100 股 + 补充资金统计 | [csv_ledger.py:168](../../backtest/research/csv_ledger.py#L168) `_buy_size`（force-min :174-177）；`execute_buy` :181（佣金 :198、现金拒单 :199、lot 独立记账 :205-207） |
-| v8 卖点阶梯（BANDS/SMALL_ARM/PEAK_DD）、`ALLOW_ADD=True` 多 lot | [strategy8_rules.py](../../backtest/research/strategy8_rules.py)（STOP_PCT :17、SMALL_ARM :20、BANDS :26-32、ALLOW_ADD :14） |
-| 策略书注册（name/tag/allow_add/apply/run_kwargs） | [csv_strategy_books.py:40](../../backtest/research/csv_strategy_books.py#L40) `CsvStrategyBook`；`apply_csv_strategy` **:89**，hooks 注入 :92-100（allow_add 注入 :92） |
-| 双引擎共享 `run_pool_buys_day` | 日线 [csv_daily_backtest.py:445](../../backtest/research/csv_daily_backtest.py#L445)、分钟 [csv_minute_backtest.py:936](../../backtest/research/csv_minute_backtest.py#L936)（买侧 sizing 全经此二函数；卖侧 `scan_held_day`/pending_exit 与 sizing 无关） |
-| v7 每码预算先例 `NAME_BUDGET=1M`、现金不足 `skip_cash`（**无 force-min**） | [csv_minute_backtest_v7.py:48](../../backtest/research/csv_minute_backtest_v7.py#L48)、:188-193 |
-| stats 预置 `_empty_stats`（无 skip_cash 键） | [csv_ledger.py:24-54](../../backtest/research/csv_ledger.py#L24)；新增 stats 须 `setdefault` 模式（csv_ledger 本轮禁改） |
-| 分钟引擎自动对照 `maybe_compare_daily`（caption「差来自卖点时钟」） | [csv_daily_backtest.py:714/:731-748](../../backtest/research/csv_daily_backtest.py#L714)；分钟 :1091-1095 |
+| 总资金 2100 万 `DEFAULT_TOTAL_CASH` | [csv_ledger.py:17](../../../backtest/research/csv_ledger.py#L17) |
+| 日额度 100 万 `DEFAULT_DAILY_QUOTA`，开盘重置 | [csv_daily_backtest.py:135](../../../backtest/research/csv_daily_backtest.py#L135)、:339；分钟 :826 |
+| 均分公式 `per = min(daily_quota, st.cash)/len(planned)` | [csv_simulate_loop.py:145](../../../backtest/research/csv_simulate_loop.py#L145) |
+| 排单 `queue_limit_up_chase`（per_ch 由排单日 `per` 写入） | [csv_simulate_loop.py:164-165](../../../backtest/research/csv_simulate_loop.py#L164)；chase 日仅消费（:91/:104/:123） |
+| 整百股向下取整 + force-min 100 股 + 补充资金统计 | [csv_ledger.py:168](../../../backtest/research/csv_ledger.py#L168) `_buy_size`（force-min :174-177）；`execute_buy` :181（佣金 :198、现金拒单 :199、lot 独立记账 :205-207） |
+| v8 卖点阶梯（BANDS/SMALL_ARM/PEAK_DD）、`ALLOW_ADD=True` 多 lot | [strategy8_rules.py](../../../backtest/research/strategy8_rules.py)（STOP_PCT :17、SMALL_ARM :20、BANDS :26-32、ALLOW_ADD :14） |
+| 策略书注册（name/tag/allow_add/apply/run_kwargs） | [csv_strategy_books.py:40](../../../backtest/research/csv_strategy_books.py#L40) `CsvStrategyBook`；`apply_csv_strategy` **:89**，hooks 注入 :92-100（allow_add 注入 :92） |
+| 双引擎共享 `run_pool_buys_day` | 日线 [csv_daily_backtest.py:445](../../../backtest/research/csv_daily_backtest.py#L445)、分钟 [csv_minute_backtest.py:936](../../../backtest/research/csv_minute_backtest.py#L936)（买侧 sizing 全经此二函数；卖侧 `scan_held_day`/pending_exit 与 sizing 无关） |
+| v7 每码预算先例 `NAME_BUDGET=1M`、现金不足 `skip_cash`（**无 force-min**） | [csv_minute_backtest_v7.py:48](../../../backtest/research/csv_minute_backtest_v7.py#L48)、:188-193 |
+| stats 预置 `_empty_stats`（无 skip_cash 键） | [csv_ledger.py:24-54](../../../backtest/research/csv_ledger.py#L24)；新增 stats 须 `setdefault` 模式（csv_ledger 本轮禁改） |
+| 分钟引擎自动对照 `maybe_compare_daily`（caption「差来自卖点时钟」） | [csv_daily_backtest.py:714/:731-748](../../../backtest/research/csv_daily_backtest.py#L714)；分钟 :1091-1095 |
 
 ---
 
@@ -175,4 +175,4 @@ D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_daily_backtest.py --
 | A · 模式框架 | ✅ | `c63c0a4` | 579 passed / 3 skipped；新增 summary 用例后策略书 26 passed；策略 1/6 trades 与 9f4303c 基线逐字节一致；静态 pre_er1 未动 |
 | B · v8 切换（P1 去武装已裁） | ✅ | `12d1910` | 前置 e89d1b8 已合入；六文件门禁 141 passed；ST 名称门禁显式走历史 daily_quota 加仓路径，保留断言 |
 | C · 文档 | ✅ | `092a96c` | README / 共享 HELP_LOCK 已同步；M-R8③ 选先重跑 daily per_name 的流程锁，已写回交接 |
-| D · 宿主烟测（非合入门） | ⚠️ 已尝试 / 缺数跳过 | 本切片提交（`docs(money-modes): 切片D 宿主烟测短记`） | 215 天 / 2322 码，行情 0；同窗基线缺失；[短记](money-modes-v8-pername-smoke-2026-09-16.md)。最终 581 passed / 3 skipped |
+| D · 宿主烟测（非合入门） | ✅（宿主补跑 2026-09-16） | 本 closeout PR | 本机 F 湖按 M-R8 顺序补跑：daily per_name -28.65%（18.7s）、minute per_name -23.31%（末日同 sizing 差 +7.49% 来自卖点时钟）；skip_cash 3,972/3,546、加仓恒 0、宽度>21 天占 104/215、止损滑出最差 -35.21%；P1 A/B 未跑（需 scratch 补丁，后置）。详见 [烟测短记](../../money-modes-v8-pername-smoke-2026-09-16.md) 宿主补跑节 |

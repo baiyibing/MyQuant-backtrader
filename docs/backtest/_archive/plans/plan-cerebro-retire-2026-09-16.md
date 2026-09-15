@@ -1,11 +1,11 @@
 # Plan：Cerebro 全局退场（策略书栈 + chip/ma_chip 宿主薄壳）
 
 > **落盘**：2026-09-16。
-> **状态**：✅ **已实施（PR #58）**（分支 `feat/cerebro-retire`，执行：Codex；A→D 已完成，PR 尚未合并）。
+> **状态**：✅ **已实施并合入**（PR [#58](https://github.com/baiyibing/MyQuant-backtrader/pull/58)，merge `e89d1b8`，2026-09-16；切片 A→D 全部完成；合入后复核 PASS：删除集空、纯逻辑保留、SSOT 四文件同步、树内 `import backtrader` 零命中）。
 > **风险档**：**L1**（纯删除 + SSOT 措辞修订；不写湖、不碰 1.3、不碰 CSV 成交核）。
-> **工作流**：走 [Codex 交接工作流](workflow-codex-handoff.md)。
+> **工作流**：走 [Codex 交接工作流](../../workflow-codex-handoff.md)。
 > **动因**：[plan-money-modes-v8-pername](plan-money-modes-v8-pername-2026-09-16.md) 评审 🔴1 暴露 v8 止损双真源（`ProfitStrategy.py:760` Cerebro 预设 vs `strategy8_rules.py`）；人裁方向：**全局去掉 Cerebro**——入场/筹码逻辑不依赖回测框架，框架耦合的只是薄壳。
-> **上游**：[engine-positioning-ssot.md](engine-positioning-ssot.md)（§2/§5 已同步为 Cerebro 全局退场、chip/ma_chip 静态归档；按其 §6 四文件同 commit 修订）。
+> **上游**：[engine-positioning-ssot.md](../../engine-positioning-ssot.md)（§2/§5 已同步为 Cerebro 全局退场、chip/ma_chip 静态归档；按其 §6 四文件同 commit 修订）。
 
 ---
 

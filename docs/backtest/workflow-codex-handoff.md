@@ -23,8 +23,12 @@
 - 行为变更类断言**更新断言不放宽 gate**（契约涟漪原则）
 - 文本文件 UTF-8 无 BOM、NUL 计数为 0
 
+## 坑位（累积）
+
+- **堆叠 PR 的 base 分支被删会连带关闭上层 PR**（实例：#59 base=`feat/cerebro-retire`，#58 合并删分支后 GitHub 自动关闭 #59，内容 rebase 后重开为 #61）。规则：前置 PR 合并后**立即确认上层 PR 存活**；重开时 rebase、并在 plan/交接文档回填新 PR 号。
+
 ## 历史用例
 
 - [plan-pool-pipeline-r2r5-2026-09-12.md](_archive/plans/plan-pool-pipeline-r2r5-2026-09-12.md)（"lock plan for Codex"，PR #24）
-- [plan-money-modes-v8-pername-2026-09-16.md](plan-money-modes-v8-pername-2026-09-16.md)（首个显式引用本工作流的 plan，含两路评审记录与 [handoff 交接文档](handoff-money-modes-v8-pername-codex-impl-2026-09-16.md)）
-- [plan-cerebro-retire-2026-09-16.md](plan-cerebro-retire-2026-09-16.md)（前置退场 plan）
+- [plan-cerebro-retire-2026-09-16.md](_archive/plans/plan-cerebro-retire-2026-09-16.md)（前置退场，PR #58 / merge `e89d1b8`）
+- [plan-money-modes-v8-pername-2026-09-16.md](_archive/plans/plan-money-modes-v8-pername-2026-09-16.md)（首个显式引用本工作流的 plan，含两路评审记录与 [handoff 交接文档](handoff-money-modes-v8-pername-codex-impl-2026-09-16.md)；PR #61 / merge `a606070`，#59 因 base 删除重开）
