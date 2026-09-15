@@ -7,6 +7,7 @@
 详细 backlog：[plan-hygiene-backlog-2026-09-15.md](plan-hygiene-backlog-2026-09-15.md)。  
 仍开放重活队列：[plan-brainstorm-next-heavy-2026-09-15.md](plan-brainstorm-next-heavy-2026-09-15.md)。
 本仓对照分析（H1–H16 后）：[repo-analysis-vs-brainstorm-2026-09-15.md](repo-analysis-vs-brainstorm-2026-09-15.md)。
+刷新（tip `8793fd5` / #51–#56）：[repo-analysis-opus5-next-2026-09-15.md](repo-analysis-opus5-next-2026-09-15.md)。
 
 ---
 
@@ -55,5 +56,6 @@
 ## 下一步（若继续）
 
 队列头：**run-manifest 硬接**（需产品点头，另开片）。  
-其它可选项：A 分钟卖环微优化；E 湖门禁仍保持 host-only；inventory hybrid/curpdf later。  
+有序建议见 [repo-analysis-opus5-next-2026-09-15.md](repo-analysis-opus5-next-2026-09-15.md) §7（WP1 分钟 simulate 编排微优化优先于再开 offload）。  
+其它可选项：E host 湖门禁 cookbook；C list-quality golden fixture；inventory hybrid/curpdf later。  
 默认：**先停在已合 master**，需要时再点名开片。
