@@ -17,7 +17,7 @@ Success for this slice does **not** require a full-lake NAV run.
 ## 2. Ranked offload candidates
 
 1. **numba on `scan_held_day` trail path (first)** — already in `requirements.txt`. Gate with `use_numba=` or `CSV_SCAN_HELD_DAY_BACKEND=numba`. Python reference remains default. Callables (`sell_gate` / `take_profit`) and `reserve_limit_up` stay on Python (no sell-semantics change for 6/8 books that inject `take_profit`).
-2. **Daily mark micro-opt (H5)** — done: per-code `market_close_mark` cache in `append_equity_and_eod_marks`; sell-loop `.loc` still later; do not merge daily+minute `simulate()` in the same PR.
+2. **Daily mark micro-opt (H5)** — done: per-code `market_close_mark` cache in `append_equity_and_eod_marks`. **H8**: sell/chase/pool day+prev_closes via `day_bar_and_prev_closes` (searchsorted); do not merge daily+minute `simulate()` in the same PR.
 3. **Rust extension** — only if numba plateaus and profiles still show scan-bound; prefer thin `pyo3` kernel matching the Python reference fixtures.
 
 ## 3. Success criteria
@@ -40,3 +40,4 @@ Success for this slice does **not** require a full-lake NAV run.
 - `scripts/research/bench_scan_held_day.py`
 - Optional numba trail offload behind env/kwarg + `tests/test_scan_held_day_numba_parity.py`
 - H5: `market_close_mark` + per-code cache in `append_equity_and_eod_marks`; `scripts/research/bench_daily_mark.py`; `tests/test_daily_mark_cache.py`
+- H8: `day_bar_and_prev_closes` (searchsorted) in daily sell/chase/pool; `scripts/research/bench_daily_sell_index.py`; `tests/test_daily_sell_index.py`

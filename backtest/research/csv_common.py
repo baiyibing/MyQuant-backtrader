@@ -15,6 +15,32 @@ import pandas as pd
 from backtest.research.csv_ledger import resolve_limit_prices
 
 
+def day_bar_and_prev_closes(
+    df: pd.DataFrame, day
+) -> Optional[tuple[pd.Series, list[float]]]:
+    """Day OHLC row + prior closes via searchsorted (no ``index < day`` mask).
+
+    Requires ``df.index`` sorted ascending and unique for ``day`` (as produced by
+    ``load_daily_bars`` / test fixtures). Semantics match::
+
+        if day not in df.index:
+            return None
+        prev = df.loc[df.index < day]
+        if prev.empty:
+            return None
+        return df.loc[day], prev["close"].astype(float).tolist()
+    """
+    idx = df.index
+    pos = idx.searchsorted(day)
+    if pos >= len(idx) or idx[pos] != day:
+        return None
+    if pos == 0:
+        return None
+    row = df.iloc[pos]
+    closes = df["close"].iloc[:pos].astype(float).tolist()
+    return row, closes
+
+
 def build_calendar(bars: dict[str, pd.DataFrame], start: str, end: str) -> list:
     t0 = pd.Timestamp(start)
     t1 = pd.Timestamp(end)
