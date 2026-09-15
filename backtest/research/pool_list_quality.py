@@ -128,6 +128,7 @@ class PoolListQualityReport:
     churn: PoolChurnSummary | None = None
     other_dir: Path | None = None
     overlap: PoolOverlapSummary | None = None
+    other_validation_errors: list[str] = field(default_factory=list)
 
 
 def code_count_histogram(codes_by_day: Mapping[str, Sequence[str]]) -> dict[int, int]:
@@ -229,22 +230,32 @@ def overlap_pools(
     )
 
 
+def _validated_pool_days(
+    root: Path, *, side: str,
+) -> tuple[dict[str, list[str]], list[str]]:
+    try:
+        errors = validate_pool_dir(root)
+        return load_pool_codes_by_day(root), errors
+    except OSError as exc:
+        raise OSError(f"{side} ({root}): {exc}") from exc
+
+
 def report_pool_list_quality(
     pool_dir: Path,
     *,
     other_dir: Path | None = None,
     top_n: int = 20,
 ) -> PoolListQualityReport:
-    """Build a read-only quality report for ``pool_dir`` (optional overlap)."""
+    """Validate both directories and build a read-only report with optional overlap."""
     root = Path(pool_dir)
-    codes_by_day = load_pool_codes_by_day(root)
-    validation_errors = validate_pool_dir(root)
+    codes_by_day, validation_errors = _validated_pool_days(root, side="primary")
     bad_cal = invalid_calendar_stems(codes_by_day)
     overlap: PoolOverlapSummary | None = None
     other: Path | None = None
+    other_validation_errors: list[str] = []
     if other_dir is not None:
         other = Path(other_dir)
-        other_codes = load_pool_codes_by_day(other)
+        other_codes, other_validation_errors = _validated_pool_days(other, side="other")
         overlap = overlap_pools(codes_by_day, other_codes)
     return PoolListQualityReport(
         pool_dir=root,
@@ -259,6 +270,7 @@ def report_pool_list_quality(
         churn=day_over_day_churn(codes_by_day),
         other_dir=other,
         overlap=overlap,
+        other_validation_errors=other_validation_errors,
     )
 
 
@@ -287,6 +299,10 @@ def _report_to_dict(report: PoolListQualityReport) -> dict[str, Any]:
         }
     if report.other_dir is not None:
         out["other_dir"] = str(report.other_dir)
+        out["validation_errors_by_side"] = {
+            "primary": list(report.validation_errors),
+            "other": list(report.other_validation_errors),
+        }
     if report.overlap is not None:
         ov = report.overlap
         out["overlap"] = {
@@ -342,12 +358,19 @@ def format_report(report: PoolListQualityReport) -> str:
         if len(ch.per_day) > 12:
             lines.append(f"  …(+{len(ch.per_day) - 12} transitions)")
     verr = report.validation_errors
-    lines.append(f"validate_pool_dir errors ({len(verr)}):")
+    primary_label = "primary " if report.other_dir is not None else ""
+    lines.append(f"{primary_label}validate_pool_dir errors ({len(verr)}):")
     if verr:
         for err in verr:
             lines.append(f"  - {err}")
     else:
         lines.append("  (none)")
+    if report.other_dir is not None:
+        errors = report.other_validation_errors
+        lines.append(f"other validate_pool_dir errors ({len(errors)}):")
+        lines.extend(f"  - {err}" for err in errors)
+        if not errors:
+            lines.append("  (none)")
     if report.overlap is not None and report.other_dir is not None:
         ov = report.overlap
         lines.append(f"other_dir: {report.other_dir}")
@@ -441,7 +464,8 @@ def format_report_markdown(report: PoolListQualityReport) -> str:
     else:
         lines.append("(need ≥2 days)")
     lines.append("")
-    lines.append("## validate_pool_dir")
+    primary_label = "primary " if report.other_dir is not None else ""
+    lines.append(f"## {primary_label}validate_pool_dir")
     lines.append("")
     verr = report.validation_errors
     if verr:
@@ -449,6 +473,11 @@ def format_report_markdown(report: PoolListQualityReport) -> str:
             lines.append(f"- {err}")
     else:
         lines.append("(none)")
+    if report.other_dir is not None:
+        lines.extend(["", "## other validate_pool_dir", ""])
+        lines.extend(f"- {err}" for err in report.other_validation_errors)
+        if not report.other_validation_errors:
+            lines.append("(none)")
     if report.overlap is not None and report.other_dir is not None:
         ov = report.overlap
         lines.append("")
@@ -474,7 +503,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
             "Report pool-dir list quality (day count, empty days, "
             "code-count histogram, top-N codes, day-over-day churn, "
             "calendar stems, validate_pool_dir, optional overlap). "
-            "Exit 1 if any validate_pool_dir error; exit 2 for bad paths."
+            "Exit 1 for contract errors on either side; exit 2 for path/IO errors."
         )
     )
     p.add_argument(
@@ -487,7 +516,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--other-dir",
         type=Path,
         default=None,
-        help="Optional second pool-dir for day-aligned overlap",
+        help="Optional second pool-dir, strictly validated, for day-aligned overlap",
     )
     p.add_argument(
         "--format",
@@ -514,9 +543,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     if other is not None and not other.is_dir():
         print(f"error: --other-dir is not a directory: {other}", file=sys.stderr)
         return 2
-    report = report_pool_list_quality(
-        pool_dir, other_dir=other, top_n=int(args.top_n)
-    )
+    try:
+        report = report_pool_list_quality(
+            pool_dir, other_dir=other, top_n=int(args.top_n)
+        )
+    except OSError as exc:
+        print(f"error: pool directory IO: {exc}", file=sys.stderr)
+        return 2
     fmt = args.format
     if fmt == "json":
         sys.stdout.write(format_report_json(report))
@@ -524,7 +557,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         sys.stdout.write(format_report_markdown(report))
     else:
         sys.stdout.write(format_report(report))
-    return 1 if report.validation_errors else 0
+    errors = report.validation_errors + report.other_validation_errors
+    # validate_pool_dir reports read failures as strings alongside contract errors.
+    if any(err.partition(": ")[2].startswith("cannot read pool CSV:") for err in errors):
+        return 2
+    return 1 if errors else 0
 
 
 if __name__ == "__main__":

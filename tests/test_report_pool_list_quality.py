@@ -6,6 +6,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
+from backtest.research.csv_pool import validate_pool_dir
 from backtest.research.pool_list_quality import (
     code_count_histogram,
     day_over_day_churn,
@@ -175,3 +178,78 @@ def test_format_json_and_markdown(tmp_path: Path, capsys):
     assert main(["--pool-dir", str(pool), "--format", "markdown"]) == 0
     md_out = capsys.readouterr().out
     assert md_out.startswith("# Pool list-quality summary")
+
+
+@pytest.mark.parametrize("fmt", ["text", "json", "markdown"])
+@pytest.mark.parametrize("side", ["primary", "other", "both"])
+@pytest.mark.parametrize("filename,body,diagnostic", [
+    ("20260303.csv", "SZ300190,x\n", "SZ300190"),
+    ("20260230.csv", "600000,x\n", "20260230.csv"),
+    ("badname.csv", "600000,x\n", "badname.csv"),
+])
+def test_two_dir_contract_errors(tmp_path, capsys, fmt, side, filename, body, diagnostic):
+    primary, other = tmp_path / "a", tmp_path / "b"
+    for label, directory in [("primary", primary), ("other", other)]:
+        _write(directory / "20260303.csv", "600000,x\n")
+        if side in (label, "both"):
+            _write(directory / filename, body)
+
+    report = report_pool_list_quality(primary, other_dir=other)
+    assert report.validation_errors == validate_pool_dir(primary)
+    assert report.other_validation_errors == validate_pool_dir(other)
+    assert main([
+        "--pool-dir", str(primary), "--other-dir", str(other), "--format", fmt,
+    ]) == 1
+    output = capsys.readouterr().out
+    if fmt == "json":
+        payload = json.loads(output)
+        errors = payload["validation_errors_by_side"]
+        assert payload["validation_errors"] == errors["primary"]
+    else:
+        prefix = "## " if fmt == "markdown" else ""
+        primary_output, other_output = output.split(f"{prefix}other validate_pool_dir", 1)
+        assert f"{prefix}primary validate_pool_dir" in primary_output
+        errors = {"primary": primary_output, "other": other_output}
+    for label in ("primary", "other"):
+        assert (diagnostic in str(errors[label])) == (side in (label, "both"))
+
+
+def test_two_clean_dirs_exit_zero(tmp_path, capsys):
+    primary, other = tmp_path / "a", tmp_path / "b"
+    for directory in (primary, other):
+        _write(directory / "20260303.csv", "600000,x\n")
+    assert main(["--pool-dir", str(primary), "--other-dir", str(other)]) == 0
+    output = capsys.readouterr().out
+    assert "primary validate_pool_dir errors (0)" in output
+    assert "other validate_pool_dir errors (0)" in output
+    assert "mean_jaccard=1.0000" in output
+
+
+@pytest.mark.parametrize("side", ["primary", "other"])
+@pytest.mark.parametrize("failure", ["missing", "file", "read", "scan"])
+def test_two_dir_io_errors_exit_two(tmp_path, capsys, monkeypatch, side, failure):
+    primary, other = tmp_path / "a", tmp_path / "b"
+    broken = primary if side == "primary" else other
+    good = other if side == "primary" else primary
+    # IO errors take precedence even when the opposite side has contract errors.
+    _write(good / "20260303.csv", "SZ300190,x\n")
+    if failure == "file":
+        _write(broken, "not a directory\n")
+    elif failure in ("read", "scan"):
+        _write(broken / "20260303.csv", "600000,x\n")
+        method = "read_text" if failure == "read" else "glob"
+        original = getattr(Path, method)
+
+        def fail(path, *args, **kwargs):
+            if path == broken or path.parent == broken:
+                raise PermissionError("fixture denied")
+            return original(path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, method, fail)
+    assert main(["--pool-dir", str(primary), "--other-dir", str(other)]) == 2
+    captured = capsys.readouterr()
+    if failure in ("missing", "file"):
+        assert ("--pool-dir" if side == "primary" else "--other-dir") in captured.err
+    else:
+        assert side in captured.out + captured.err
+        assert "fixture denied" in captured.out + captured.err
