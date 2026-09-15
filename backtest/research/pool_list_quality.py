@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
-"""Read-only pool-dir list-quality reporter (H9 / Theme C soft slice).
+"""Read-only pool-dir list-quality reporter (H9 / H16 Theme C soft+).
 
 Scans ``YYYYMMDD.csv`` trees: day count, empty days, code-count histogram,
-``validate_pool_dir`` failures, and optional day-aligned overlap vs a second
-directory. Uses ``backtest.research.csv_pool`` helpers only — no lake writes,
-no qlib, no run-manifest.
+``validate_pool_dir`` failures, optional day-aligned overlap vs a second
+directory, plus H16 deepeners: invalid calendar stems, top-N frequent codes,
+day-over-day churn, and text/json/markdown output. Uses
+``backtest.research.csv_pool`` helpers only — no lake writes, no qlib,
+no run-manifest.
 
 CLI: ``scripts/research/report_pool_list_quality.py``.
 """
@@ -12,11 +14,13 @@ CLI: ``scripts/research/report_pool_list_quality.py``.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
+from datetime import datetime
 from pathlib import Path
-from typing import Mapping, Sequence
+from typing import Any, Mapping, Sequence
 
 from backtest.research.csv_pool import (
     parse_pool_csv,
@@ -33,12 +37,26 @@ def _stem_is_ymd(stem: str) -> bool:
     return len(stem) == 8 and stem.isdigit()
 
 
+def _stem_is_valid_calendar(stem: str) -> bool:
+    """True iff ``stem`` is eight digits and a real Gregorian date."""
+    if not _stem_is_ymd(stem):
+        return False
+    try:
+        datetime.strptime(stem, "%Y%m%d")
+    except ValueError:
+        return False
+    return True
+
+
 def load_pool_codes_by_day(pool_dir: Path) -> dict[str, list[str]]:
     """Parse each ``YYYYMMDD.csv`` via ``parse_pool_csv`` (loose engine dialect).
 
     Non-``YYYYMMDD`` filenames are skipped for the day map (they still surface
     via ``validate_pool_dir``). Unreadable files yield an empty code list and
     are still counted as a day key when the stem is eight digits.
+
+    Eight-digit stems that fail calendar validation (e.g. ``20260230``) still
+    enter the map; callers can filter via ``invalid_calendar_stems``.
     """
     days: dict[str, list[str]] = {}
     for path in _ymd_csv_paths(pool_dir):
@@ -51,6 +69,11 @@ def load_pool_codes_by_day(pool_dir: Path) -> dict[str, list[str]]:
             codes = []
         days[stem] = codes
     return days
+
+
+def invalid_calendar_stems(codes_by_day: Mapping[str, Sequence[str]]) -> list[str]:
+    """Eight-digit day keys that are not valid Gregorian dates."""
+    return sorted(ymd for ymd in codes_by_day if not _stem_is_valid_calendar(ymd))
 
 
 @dataclass(frozen=True)
@@ -72,6 +95,25 @@ class PoolOverlapSummary:
     mean_intersection: float | None = None
 
 
+@dataclass(frozen=True)
+class DayChurn:
+    """Codes added/removed between two consecutive calendar-sorted days."""
+
+    from_ymd: str
+    to_ymd: str
+    n_added: int
+    n_removed: int
+
+
+@dataclass
+class PoolChurnSummary:
+    per_day: list[DayChurn] = field(default_factory=list)
+    total_added: int = 0
+    total_removed: int = 0
+    mean_added: float | None = None
+    mean_removed: float | None = None
+
+
 @dataclass
 class PoolListQualityReport:
     pool_dir: Path
@@ -80,6 +122,10 @@ class PoolListQualityReport:
     code_count_histogram: dict[int, int]
     validation_errors: list[str]
     codes_by_day: dict[str, list[str]]
+    invalid_calendar_stems: list[str] = field(default_factory=list)
+    valid_calendar_day_count: int = 0
+    top_codes: list[tuple[str, int]] = field(default_factory=list)
+    churn: PoolChurnSummary | None = None
     other_dir: Path | None = None
     overlap: PoolOverlapSummary | None = None
 
@@ -92,6 +138,56 @@ def code_count_histogram(codes_by_day: Mapping[str, Sequence[str]]) -> dict[int,
 
 def empty_day_stems(codes_by_day: Mapping[str, Sequence[str]]) -> list[str]:
     return sorted(ymd for ymd, codes in codes_by_day.items() if not codes)
+
+
+def top_frequent_codes(
+    codes_by_day: Mapping[str, Sequence[str]],
+    *,
+    top_n: int = 20,
+) -> list[tuple[str, int]]:
+    """Codes ranked by number of days they appear in (desc, then code asc).
+
+    Within a day, duplicate codes are counted once. ``top_n <= 0`` returns [].
+    """
+    if top_n <= 0:
+        return []
+    freq: Counter[str] = Counter()
+    for codes in codes_by_day.values():
+        freq.update(set(codes))
+    ranked = sorted(freq.items(), key=lambda kv: (-kv[1], kv[0]))
+    return ranked[:top_n]
+
+
+def day_over_day_churn(
+    codes_by_day: Mapping[str, Sequence[str]],
+) -> PoolChurnSummary:
+    """Adjacent-day set diffs on sorted YMD keys (includes invalid calendar stems)."""
+    ymds = sorted(codes_by_day)
+    per_day: list[DayChurn] = []
+    for i in range(1, len(ymds)):
+        prev, cur = ymds[i - 1], ymds[i]
+        set_prev = set(codes_by_day[prev])
+        set_cur = set(codes_by_day[cur])
+        n_added = len(set_cur - set_prev)
+        n_removed = len(set_prev - set_cur)
+        per_day.append(
+            DayChurn(
+                from_ymd=prev,
+                to_ymd=cur,
+                n_added=n_added,
+                n_removed=n_removed,
+            )
+        )
+    total_added = sum(d.n_added for d in per_day)
+    total_removed = sum(d.n_removed for d in per_day)
+    n = len(per_day)
+    return PoolChurnSummary(
+        per_day=per_day,
+        total_added=total_added,
+        total_removed=total_removed,
+        mean_added=(total_added / n) if n else None,
+        mean_removed=(total_removed / n) if n else None,
+    )
 
 
 def overlap_pools(
@@ -137,11 +233,13 @@ def report_pool_list_quality(
     pool_dir: Path,
     *,
     other_dir: Path | None = None,
+    top_n: int = 20,
 ) -> PoolListQualityReport:
     """Build a read-only quality report for ``pool_dir`` (optional overlap)."""
     root = Path(pool_dir)
     codes_by_day = load_pool_codes_by_day(root)
     validation_errors = validate_pool_dir(root)
+    bad_cal = invalid_calendar_stems(codes_by_day)
     overlap: PoolOverlapSummary | None = None
     other: Path | None = None
     if other_dir is not None:
@@ -155,15 +253,63 @@ def report_pool_list_quality(
         code_count_histogram=code_count_histogram(codes_by_day),
         validation_errors=validation_errors,
         codes_by_day=codes_by_day,
+        invalid_calendar_stems=bad_cal,
+        valid_calendar_day_count=len(codes_by_day) - len(bad_cal),
+        top_codes=top_frequent_codes(codes_by_day, top_n=top_n),
+        churn=day_over_day_churn(codes_by_day),
         other_dir=other,
         overlap=overlap,
     )
+
+
+def _report_to_dict(report: PoolListQualityReport) -> dict[str, Any]:
+    """JSON-serializable dict (paths as str; omit bulky codes_by_day)."""
+    out: dict[str, Any] = {
+        "pool_dir": str(report.pool_dir),
+        "day_count": report.day_count,
+        "valid_calendar_day_count": report.valid_calendar_day_count,
+        "invalid_calendar_stems": list(report.invalid_calendar_stems),
+        "empty_days": list(report.empty_days),
+        "code_count_histogram": {
+            str(k): v for k, v in report.code_count_histogram.items()
+        },
+        "validation_errors": list(report.validation_errors),
+        "top_codes": [{"code": c, "days": n} for c, n in report.top_codes],
+    }
+    if report.churn is not None:
+        ch = report.churn
+        out["churn"] = {
+            "total_added": ch.total_added,
+            "total_removed": ch.total_removed,
+            "mean_added": ch.mean_added,
+            "mean_removed": ch.mean_removed,
+            "per_day": [asdict(d) for d in ch.per_day],
+        }
+    if report.other_dir is not None:
+        out["other_dir"] = str(report.other_dir)
+    if report.overlap is not None:
+        ov = report.overlap
+        out["overlap"] = {
+            "days_only_a": list(ov.days_only_a),
+            "days_only_b": list(ov.days_only_b),
+            "shared_days": list(ov.shared_days),
+            "mean_jaccard": ov.mean_jaccard,
+            "mean_intersection": ov.mean_intersection,
+            "per_day": [asdict(d) for d in ov.per_day],
+        }
+    return out
 
 
 def format_report(report: PoolListQualityReport) -> str:
     lines: list[str] = []
     lines.append(f"pool_dir: {report.pool_dir}")
     lines.append(f"day_count: {report.day_count}")
+    lines.append(f"valid_calendar_day_count: {report.valid_calendar_day_count}")
+    bad = report.invalid_calendar_stems
+    lines.append(
+        f"invalid_calendar_stems ({len(bad)}): "
+        + (", ".join(bad) if bad else "(none)")
+    )
     lines.append(
         f"empty_days ({len(report.empty_days)}): "
         + (", ".join(report.empty_days) if report.empty_days else "(none)")
@@ -174,6 +320,27 @@ def format_report(report: PoolListQualityReport) -> str:
     else:
         hist_txt = "(none)"
     lines.append(f"code_count_histogram (codes→days): {hist_txt}")
+    if report.top_codes:
+        top_txt = ", ".join(f"{c}×{n}d" for c, n in report.top_codes)
+        lines.append(f"top_codes ({len(report.top_codes)}): {top_txt}")
+    else:
+        lines.append("top_codes (0): (none)")
+    if report.churn is not None:
+        ch = report.churn
+        if ch.mean_added is not None:
+            lines.append(
+                f"churn: transitions={len(ch.per_day)} "
+                f"total_added={ch.total_added} total_removed={ch.total_removed} "
+                f"mean_added={ch.mean_added:.2f} mean_removed={ch.mean_removed:.2f}"
+            )
+        else:
+            lines.append("churn: transitions=0 (need ≥2 days)")
+        for d in ch.per_day[:12]:
+            lines.append(
+                f"  {d.from_ymd}→{d.to_ymd}: +{d.n_added} -{d.n_removed}"
+            )
+        if len(ch.per_day) > 12:
+            lines.append(f"  …(+{len(ch.per_day) - 12} transitions)")
     verr = report.validation_errors
     lines.append(f"validate_pool_dir errors ({len(verr)}):")
     if verr:
@@ -213,11 +380,101 @@ def format_report(report: PoolListQualityReport) -> str:
     return "\n".join(lines) + "\n"
 
 
+def format_report_json(report: PoolListQualityReport) -> str:
+    return json.dumps(_report_to_dict(report), ensure_ascii=False, indent=2) + "\n"
+
+
+def format_report_markdown(report: PoolListQualityReport) -> str:
+    lines: list[str] = []
+    lines.append("# Pool list-quality summary")
+    lines.append("")
+    lines.append(f"- **pool_dir**: `{report.pool_dir}`")
+    lines.append(f"- **day_count**: {report.day_count}")
+    lines.append(
+        f"- **valid_calendar_day_count**: {report.valid_calendar_day_count}"
+    )
+    bad = report.invalid_calendar_stems
+    lines.append(
+        f"- **invalid_calendar_stems** ({len(bad)}): "
+        + (", ".join(f"`{s}`" for s in bad) if bad else "(none)")
+    )
+    lines.append(
+        f"- **empty_days** ({len(report.empty_days)}): "
+        + (", ".join(f"`{s}`" for s in report.empty_days) if report.empty_days else "(none)")
+    )
+    hist = report.code_count_histogram
+    if hist:
+        hist_txt = ", ".join(f"{n_codes}→{n_days}d" for n_codes, n_days in hist.items())
+    else:
+        hist_txt = "(none)"
+    lines.append(f"- **code_count_histogram**: {hist_txt}")
+    lines.append("")
+    lines.append("## Top codes")
+    lines.append("")
+    if report.top_codes:
+        lines.append("| code | days |")
+        lines.append("|------|------|")
+        for c, n in report.top_codes:
+            lines.append(f"| `{c}` | {n} |")
+    else:
+        lines.append("(none)")
+    lines.append("")
+    lines.append("## Day-over-day churn")
+    lines.append("")
+    if report.churn is not None and report.churn.per_day:
+        ch = report.churn
+        lines.append(
+            f"- transitions={len(ch.per_day)}; "
+            f"total_added={ch.total_added}; total_removed={ch.total_removed}; "
+            f"mean_added={ch.mean_added:.2f}; mean_removed={ch.mean_removed:.2f}"
+        )
+        lines.append("")
+        lines.append("| from | to | added | removed |")
+        lines.append("|------|----|-------|---------|")
+        for d in ch.per_day[:20]:
+            lines.append(
+                f"| `{d.from_ymd}` | `{d.to_ymd}` | {d.n_added} | {d.n_removed} |"
+            )
+        if len(ch.per_day) > 20:
+            lines.append("")
+            lines.append(f"_…(+{len(ch.per_day) - 20} transitions)_")
+    else:
+        lines.append("(need ≥2 days)")
+    lines.append("")
+    lines.append("## validate_pool_dir")
+    lines.append("")
+    verr = report.validation_errors
+    if verr:
+        for err in verr:
+            lines.append(f"- {err}")
+    else:
+        lines.append("(none)")
+    if report.overlap is not None and report.other_dir is not None:
+        ov = report.overlap
+        lines.append("")
+        lines.append("## Overlap")
+        lines.append("")
+        lines.append(f"- **other_dir**: `{report.other_dir}`")
+        lines.append(
+            f"- shared={len(ov.shared_days)}; only_a={len(ov.days_only_a)}; "
+            f"only_b={len(ov.days_only_b)}"
+        )
+        if ov.mean_jaccard is not None:
+            lines.append(
+                f"- mean_jaccard={ov.mean_jaccard:.4f}; "
+                f"mean_intersection={ov.mean_intersection:.2f}"
+            )
+    lines.append("")
+    return "\n".join(lines)
+
+
 def build_arg_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         description=(
             "Report pool-dir list quality (day count, empty days, "
-            "code-count histogram, validate_pool_dir, optional overlap)."
+            "code-count histogram, top-N codes, day-over-day churn, "
+            "calendar stems, validate_pool_dir, optional overlap). "
+            "Exit 1 if any validate_pool_dir error; exit 2 for bad paths."
         )
     )
     p.add_argument(
@@ -232,6 +489,18 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=None,
         help="Optional second pool-dir for day-aligned overlap",
     )
+    p.add_argument(
+        "--format",
+        choices=("text", "json", "markdown"),
+        default="text",
+        help="Output format (default: text)",
+    )
+    p.add_argument(
+        "--top-n",
+        type=int,
+        default=20,
+        help="Max frequent codes to report (default: 20; 0 disables)",
+    )
     return p
 
 
@@ -245,8 +514,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     if other is not None and not other.is_dir():
         print(f"error: --other-dir is not a directory: {other}", file=sys.stderr)
         return 2
-    report = report_pool_list_quality(pool_dir, other_dir=other)
-    sys.stdout.write(format_report(report))
+    report = report_pool_list_quality(
+        pool_dir, other_dir=other, top_n=int(args.top_n)
+    )
+    fmt = args.format
+    if fmt == "json":
+        sys.stdout.write(format_report_json(report))
+    elif fmt == "markdown":
+        sys.stdout.write(format_report_markdown(report))
+    else:
+        sys.stdout.write(format_report(report))
     return 1 if report.validation_errors else 0
 
 

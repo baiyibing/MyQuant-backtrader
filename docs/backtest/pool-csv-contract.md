@@ -39,16 +39,20 @@ explicitly.
 - Strategies **9** and **10** require `--pool-dir` and **refuse** the repository `stock_pool/` tree even if passed explicitly. Strategy **7** also requires an explicit `--pool-dir` (e.g. turtle pool) and does not fall back to this repo’s `stock_pool/`.
 
 
-## List-quality reporter (H9)
+## List-quality reporter (H9 / H16)
 
 Read-only tooling for a pool directory (and optional second dir): day count, empty
-days, code-count histogram, day-aligned overlap / Jaccard, and
-``validate_pool_dir`` errors. No lake writes; not run-manifest integration.
+days, code-count histogram, day-aligned overlap / Jaccard,
+``validate_pool_dir`` errors, plus H16 deepeners — invalid calendar stems,
+top-N frequent codes, day-over-day churn, and ``--format text|json|markdown``.
+No lake writes; **not** run-manifest integration.
 
 ```text
 /workspace/vanna312/bin/python scripts/research/report_pool_list_quality.py \
-  --pool-dir <pool-a> [--other-dir <pool-b>]
+  --pool-dir <pool-a> [--other-dir <pool-b>] \
+  [--format text|json|markdown] [--top-n 20]
 ```
 
-Library: ``backtest.research.pool_list_quality``. Plan:
-[plan-h9-list-quality-2026-09-15.md](plan-h9-list-quality-2026-09-15.md).
+Library: ``backtest.research.pool_list_quality``. Plans:
+[plan-h9-list-quality-2026-09-15.md](plan-h9-list-quality-2026-09-15.md) ·
+[plan-h16-c-soft-list-quality-2026-09-15.md](plan-h16-c-soft-list-quality-2026-09-15.md).
