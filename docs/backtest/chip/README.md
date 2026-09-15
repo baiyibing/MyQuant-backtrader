@@ -11,6 +11,7 @@
 
 | 文档 | 说明 |
 |------|------|
+| [`chip-slowpath-inventory-2026-09-15.md`](chip-slowpath-inventory-2026-09-15.md) | **H11 Theme D 软：chip/TR 慢路径清点**（Rust SSOT / research / Cerebro fossil / hot loops；leave·later offload·fossil） |
 | [`turnover_resistance.md`](turnover_resistance.md) | **换手阻力**索引页（算法 + 运行手册） |
 | [`turnover_resistance_algorithm.md`](turnover_resistance_algorithm.md) | 算法核心：公式、调用链、qlib_cost 数学层、各层实现、附录 A/B |
 | [`turnover_resistance_runbook.md`](turnover_resistance_runbook.md) | 运行手册：回测框架、选股规则、脚本 CLI、参数速查 |
