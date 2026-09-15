@@ -39,7 +39,7 @@ _RESEARCH_FACE_MODULES = (
     "oskh_core.a_share_symbol_normalize",
 )
 
-# H4：向量化 research 主路径 —— 不得强制 / 顺带 import backtrader。
+# H4：向量化 research 主路径 —— 不得强制 / 顺带加载 backtrader。
 _VECTORIZED_RESEARCH_FACE = (
     "backtest.research.csv_daily_backtest",
     "backtest.research.csv_minute_backtest",

@@ -3,7 +3,7 @@ import os
 import pandas as pd
 import re
 
-from qmt_utils_adv import detect_encoding, check_bom
+from common.infra.qmt_utils_adv import detect_encoding, check_bom
 
 
 # 更简单的方法：如果文件实际上是制表符分隔的
