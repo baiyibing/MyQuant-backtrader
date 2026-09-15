@@ -10,9 +10,9 @@ engine 曾带 ``from common import TraceIdGenerator`` /
 契约：本仓持有的研究面入口模块必须可导入；分/元算术（移植自
 ``oskh_core.money_arithmetic``）保持「按分对齐」语义。
 
-H4：向量化 CSV 主路径（日/分钟 + simulate/common/books）不得 import
-``backtrader``，也不应在导入图中拉入它。chip / ma_chip / verify_cerebro_*
-等对照化石仍可依赖 bt——不在本篱笆内，且 Cerebro 模块不得物理删除。
+Cerebro 已退场（2026-09-16）：研究面全部 Python 文件均不得导入
+``backtrader`` / ``bt``，零例外（含 chip 及未来新增模块）。研究入口与
+向量化 CSV 主路径也不得通过传递依赖把 backtrader 拉入导入图。
 """
 
 from __future__ import annotations
@@ -82,24 +82,13 @@ def _subprocess_import_no_backtrader(module: str) -> subprocess.CompletedProcess
     )
 
 
-@pytest.mark.parametrize("module", _VECTORIZED_RESEARCH_FACE)
+@pytest.mark.parametrize("module", _RESEARCH_FACE_MODULES + _VECTORIZED_RESEARCH_FACE)
 def test_vectorized_research_face_no_backtrader(module: str) -> None:
     """主路径导入不得要求或顺带加载 backtrader（子进程隔离，免测试顺序污染）。"""
     r = _subprocess_import_no_backtrader(module)
     assert r.returncode == 0, (
         f"module={module}\nstdout:\n{r.stdout}\nstderr:\n{r.stderr}"
     )
-
-
-def _module_to_path(module: str) -> Path:
-    rel = Path(*module.split("."))
-    py = REPO / f"{rel}.py"
-    if py.is_file():
-        return py
-    init = REPO / rel / "__init__.py"
-    if init.is_file():
-        return init
-    raise FileNotFoundError(module)
 
 
 def _direct_import_roots(path: Path) -> set[str]:
@@ -116,12 +105,16 @@ def _direct_import_roots(path: Path) -> set[str]:
     return roots
 
 
-@pytest.mark.parametrize("module", _VECTORIZED_RESEARCH_FACE)
-def test_vectorized_research_face_ast_no_backtrader(module: str) -> None:
-    """静态：五模块源文件顶层/任意 import 节点不得出现 backtrader / bt。"""
-    roots = _direct_import_roots(_module_to_path(module))
+@pytest.mark.parametrize(
+    "path",
+    sorted((REPO / "backtest" / "research").rglob("*.py")),
+    ids=lambda path: path.relative_to(REPO).as_posix(),
+)
+def test_research_face_ast_no_backtrader(path: Path) -> None:
+    """静态：研究面所有 Python 文件、任意导入节点，零例外。"""
+    roots = _direct_import_roots(path)
     bad = roots & _BT_NAMES
-    assert not bad, f"{module} directly imports {sorted(bad)}"
+    assert not bad, f"{path.relative_to(REPO)} directly imports {sorted(bad)}"
 
 
 def test_engine_config_and_trace_id_wired() -> None:
