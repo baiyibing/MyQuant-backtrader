@@ -143,16 +143,26 @@ def resolve_limit_prices(
     return limit_prices(code, prev_close, name)
 
 
-def last_close_mark(df, day, fallback: float) -> float:
-    """最近有 K 的 close；停牌日不用成本价冒充净值。"""
+def market_close_mark(df, day) -> Optional[float]:
+    """Data-driven close for ``day`` (or last prior bar).
+
+    Returns ``None`` when ``df`` is missing or has no bar on/before ``day``.
+    Callers that need a lot-cost fallback use ``last_close_mark``.
+    """
     if df is None:
-        return float(fallback)
+        return None
     if day in df.index:
         return float(df.loc[day]["close"])
     prior = df.loc[df.index < day]
     if prior.empty:
-        return float(fallback)
+        return None
     return float(prior.iloc[-1]["close"])
+
+
+def last_close_mark(df, day, fallback: float) -> float:
+    """最近有 K 的 close；停牌日不用成本价冒充净值。"""
+    m = market_close_mark(df, day)
+    return float(fallback) if m is None else m
 
 
 def _buy_size(per_quota: float, price: float) -> tuple[int, float]:

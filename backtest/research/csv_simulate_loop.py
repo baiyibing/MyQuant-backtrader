@@ -18,7 +18,7 @@ from backtest.research.csv_ledger import (
     chase_decision,
     execute_buy,
     hit_limit_up,
-    last_close_mark,
+    market_close_mark,
     queue_limit_up_chase,
 )
 from backtest.research.csv_strategy_books import apply_csv_strategy
@@ -180,19 +180,28 @@ def append_equity_and_eod_marks(
     calendar_last,
     mark_bars: dict[str, pd.DataFrame],
 ) -> None:
-    """Append equity point; on last calendar day emit EOD_MARK trades."""
+    """Append equity point; on last calendar day emit EOD_MARK trades.
+
+    Mark close is resolved once per code (not per lot): same data-driven
+    close for every lot; ``pos.cost`` only when no on/prior bar exists.
+    """
     eq = st.cash
+    # code -> market close, or None => use per-lot cost fallback
+    mark_by_code: dict[str, Optional[float]] = {}
     for code, lots in st.positions.items():
-        df_c = mark_bars.get(code)
+        if code not in mark_by_code:
+            mark_by_code[code] = market_close_mark(mark_bars.get(code), day)
+        m = mark_by_code[code]
         for pos in lots:
-            eq += pos.shares * last_close_mark(df_c, day, pos.cost)
+            last = float(pos.cost) if m is None else m
+            eq += pos.shares * last
     st.equity_curve.append((ds, eq))
 
     if day == calendar_last and st.positions:
         for code, lots in st.positions.items():
-            df_c = mark_bars.get(code)
+            m = mark_by_code[code]
             for pos in lots:
-                last = last_close_mark(df_c, day, pos.cost)
+                last = float(pos.cost) if m is None else m
                 st.trades.append(
                     {
                         "date": ds,

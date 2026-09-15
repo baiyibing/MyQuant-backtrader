@@ -13,7 +13,7 @@
 | **H2** ✓ | 日/分钟 CLI 共用 argparse | `add_csv_backtest_common_args`；daily/minute `main` 去重；pytest 绿 |
 | **H3** ✓ | L2 范围篱笆 | AGENTS/README 写明 L2 只读实验、不扩交易核；`run_l2_*` 不接新策略书 |
 | **H4** ✓ | research 入口防误 import Cerebro | `test_research_face_imports`：向量化五模块可导入且不拉 backtrader；chip 对照仍可 bt |
-| **H5** | 热路径下一步：日线 mark/循环微优化 | 有 plan + 不改成交语义的小步；有 bench/测试 |
+| **H5** ✓ | 日线 mark 按 code 缓存 + microbench | plan + `market_close_mark` / `append_equity` 缓存；`bench_daily_mark.py`；pytest；Grok 核无 🔴 |
 | **H6** | CI 备注：numba 在 requirements，parity 必跑 | workflow/注释对齐；可选明确 marker |
 | **H7** | `stock_pool/` vs `exports/` 生命周期一句 SSOT | README/pool-csv-contract 补短段 |
 
