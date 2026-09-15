@@ -741,6 +741,11 @@ def _slice_day(
     return _day_arrays(df, ymd)
 
 
+def _previous_rows(df: pd.DataFrame, day) -> pd.DataFrame:
+    """Rows strictly before ``day``; kept named so orchestration can be profiled."""
+    return df.loc[df.index < day]
+
+
 def _buy_px(day_df: pd.DataFrame) -> Optional[float]:
     hit = day_df.loc[day_df["hm"] == BUY_HM]
     if not hit.empty:
@@ -828,7 +833,7 @@ def simulate(
             day_m = _slice_day(mdf, day_spans.get(code, {}), ds)
             if day_m is None:
                 continue
-            prev_rows = ddf.loc[ddf.index < day]
+            prev_rows = _previous_rows(ddf, day)
             if prev_rows.empty:
                 continue
             prev_close = float(prev_rows.iloc[-1]["close"])
@@ -894,7 +899,7 @@ def simulate(
             if quotes is None:
                 return None
             open_px, px = quotes
-            prev_rows = ddf.loc[ddf.index < day]
+            prev_rows = _previous_rows(ddf, day)
             if prev_rows.empty:
                 return None
             closes = prev_rows["close"].astype(float).tolist()
@@ -919,7 +924,7 @@ def simulate(
             day_m = _slice_day(mdf, day_spans.get(code, {}), ds)
             if day_m is None:
                 return None
-            prev_rows = ddf.loc[ddf.index < day]
+            prev_rows = _previous_rows(ddf, day)
             if prev_rows.empty:
                 return None
             px = _buy_px(day_m)

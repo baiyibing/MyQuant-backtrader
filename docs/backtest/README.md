@@ -83,6 +83,7 @@ R5 的 `--start/--end` 必须跟导出的首末文件名走：H0 / `pred_minus_o
 | **CYQ / TR 产品边界（H13）** | [plan-h13-cyq-tr-boundary-2026-09-15.md](plan-h13-cyq-tr-boundary-2026-09-15.md) · inventory §E：MyQuant numba `winner_ratio` feeder ≠ 本仓 Rust TR Store |
 | **D1 minute/hybrid chip profile（H14）** | [plan-h14-d1-minute-chip-profile-2026-09-15.md](plan-h14-d1-minute-chip-profile-2026-09-15.md) · [chip/h14-d1-minute-chip-profile-results-2026-09-15.md](chip/h14-d1-minute-chip-profile-results-2026-09-15.md) · `bench_minute_chip_hotpath.py` |
 | **D2 minute chip numba（H15）** | [plan-h15-d2-minute-chip-numba-2026-09-15.md](plan-h15-d2-minute-chip-numba-2026-09-15.md) · `MINUTE_CHIP_BACKEND` / `use_numba` · `tests/test_minute_chip_numba_parity.py` |
+| **Minute `simulate()` real-path profile** | [minute-simulate-profile-results-2026-09-15.md](minute-simulate-profile-results-2026-09-15.md) · `bench_minute_simulate_hotpath.py` |
 | **头脑风暴总览（A–F · H1–H16）** | [brainstorm-overview-2026-09-15.md](brainstorm-overview-2026-09-15.md) |
 | **本仓对照分析（vs brainstorm · 2026-09-15）** | [repo-analysis-vs-brainstorm-2026-09-15.md](repo-analysis-vs-brainstorm-2026-09-15.md) |
 | **Next heavy brainstorm** | [plan-brainstorm-next-heavy-2026-09-15.md](plan-brainstorm-next-heavy-2026-09-15.md) |
