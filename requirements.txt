@@ -1,7 +1,6 @@
-# Standalone backtrader + stock data + chip/turnover-resist fork
+# Standalone vectorized research + stock data + chip/turnover-resist fork
 # Interpreter: D:\anaconda3\envs\vanna312\python.exe (Python 3.12)
 
-backtrader>=1.9.78
 pandas>=2.0
 numpy>=1.24
 duckdb>=1.0

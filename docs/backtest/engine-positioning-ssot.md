@@ -1,10 +1,10 @@
 # SSOT：三件成交引擎怎么分工
 
-- 日期：2026-09-12
-- 状态：v1。定位文档，不是排期。路线图见 MyQuant `docs/plan-three-repo-roadmap-2026-09-12.md`。本仓入口命令：同目录 `README.md`（U1，2026-09-12）。
+- 日期：2026-09-16
+- 状态：v2（Cerebro 全局退场）。定位文档，不是排期。路线图见 MyQuant `docs/plan-three-repo-roadmap-2026-09-12.md`。本仓入口命令：同目录 `README.md`（U1，2026-09-12）。
 - 涉及：MyQuant / MyQuant-backtrader（本仓）/ OSkhQuant1.3
 
-Qlib `PortAnaRecord` 停用。Cerebro / Rolling 观察退役（对照化石，不接新策略）。留下三件，问的不是同一个问题，不要合成一台，也不要互相当对照净值。
+Qlib `PortAnaRecord` 停用。Cerebro / Rolling 已退场（2026-09-16）。chip / ma_chip 对照产物为静态档案，代码路径已删。留下三件，问的不是同一个问题，不要合成一台，也不要互相当对照净值。
 
 ---
 
@@ -22,12 +22,12 @@ Qlib `PortAnaRecord` 停用。Cerebro / Rolling 观察退役（对照化石，�
 
 ---
 
-## 2. 已停用 / 观察退役
+## 2. 已停用 / 已退场
 
 | 件 | 仓 | 状态 | 还许做什么 |
 |---|---|---|---|
 | Qlib PortAnaRecord / Exchange | MyQuant | **停用**。不当产品，不当对照基准 | 训练、IC、导出日名单 CSV |
-| Cerebro / Rolling / vendor Backtrader 第一方策略 | 本仓 | **观察退役**。不接新策略 | 已有 chip / ma_chip 对照可跑；新工作不写 `ProfitStrategy.StrategyN` |
+| Cerebro / Rolling 第一方策略及 chip / ma_chip 宿主壳 | 本仓 | **已退场（2026-09-16）**，禁止复活 | 对照产物为静态档案，代码路径已删；纯逻辑保留。ma_chip 默认归档，version11 CSV 移植另开计划并重裁成交时点 |
 | 1.3 第一方 Cerebro | 1.3 | **已拆** | `vendor/backtrader` 只读不 import |
 
 「弃用 backtrader」指框架，不是弃用本仓。本仓留下向量化，以及技术分析选股（chip / TR / 手工名单）。
@@ -88,7 +88,7 @@ Qlib `PortAnaRecord` 停用。Cerebro / Rolling 观察退役（对照化石，�
 | 规则已锁，且产品要和 Paper 同一决策核 | 1.3 LEBS |
 | 改了资金 / 卖核 / 调度，问「栈过不过」 | 1.3 MockQMT 真栈 |
 | 模型打分、IC、出 CSV | MyQuant（不跑 PortAnaRecord；训练/导出已写 `myquant.run-manifest/1`，本仓暂不接） |
-| 对照「下一开盘才成交」的旧结果 | 本仓已有 Cerebro 产物，不新开 |
+| 对照「下一开盘才成交」的旧结果 | Cerebro / Rolling 已退场（2026-09-16）；chip / ma_chip 对照产物为静态档案，代码路径已删。保留 backtest_output/、历史报告与 fixtures |
 
 ---
 

@@ -7,7 +7,7 @@ or if live_trading / trade_decision modules misuse adjust_type in daily bar call
 Checks performed:
   1. oskh_data does not import from backtest/ (no reverse dependency)
   2. oskh_data does not import from oskh_core / oskh_db (orthogonal)
-  3. oskh_data does not import backtrader at module level, and must not
+  3. oskh_data does not load backtrader at module level, and must not
      import xtquant anywhere (this fork has no QMT download)
   3b. backtest/ must not import download modules or xtquant
   4. data_audit.db direct sqlite3 access is whitelisted in oskh_data/audit.py

@@ -5,7 +5,7 @@
 > **风险档**：**L1**（研究面引擎参数化 + 策略书切换；不碰成交核 E-R1–E-R4、不碰 1.3、不写湖、不写 `stock_pool/`）。
 > **业务源**：MyQuant `docs/bucket_policy/金榕元交易回测策略--0913--策略8.docx`（§1 摘录对照）。
 > **工作流**：走 [Codex 交接工作流](workflow-codex-handoff.md)。权威细则：MyQuant `ai-code-review-governance.md`、`multi-ai-review-workflow.md`。
-> **前置**：[plan-cerebro-retire-2026-09-16.md](plan-cerebro-retire-2026-09-16.md)（先行退场消解 P5；若未先行，临时锁 CSV-only 双默认并记录）。
+> **前置**：[plan-cerebro-retire-2026-09-16.md](plan-cerebro-retire-2026-09-16.md) 已在 PR #58 完成 A→D，P5 双真源已由 Cerebro 退场消解；#58 尚未合并，本 plan 仍须等待前置合入后开工。本次仅回写 P5，不实施本 plan 切片 B。
 > **成交核现锁**：[engine-ashare-correctness.md](engine-ashare-correctness.md)（E-R1–E-R4，本轮不动）。名单契约 [pool-csv-contract.md](pool-csv-contract.md) 不动。
 > **实施交接**：[handoff-money-modes-v8-pername-codex-impl-2026-09-16.md](handoff-money-modes-v8-pername-codex-impl-2026-09-16.md)（人裁 GO 后生效）。
 
@@ -85,7 +85,7 @@ docx 原文（`金榕元交易回测策略--0913--策略8.docx`）：
 | **P2** | `per_name` 模式下 v8 是否取消同码加仓？ | **已裁：取消**。硬锁见 M-R3（hook 层强制 + skip_held/chase_skip_held 单测）。 |
 | **P3** | 采纳 M-R8 对比纪律？ | **已裁：采纳**（切片 C/D 落地）。 |
 | **P4** | 名单序偏差：现金不足整笔跳过时，入选优先级=名单行序（现实=代码升序）可否接受？ | **已裁：接受现状**（缩量买=无业务背书的第三种语义）；排序列后置另开 plan。 |
-| **P5** | v8 止损双真源（Cerebro `ProfitStrategy.py:760`）如何处置？ | **已裁：全局退 Cerebro**（[plan-cerebro-retire-2026-09-16.md](plan-cerebro-retire-2026-09-16.md) 先行，本 plan 切片 B 依赖其完成）。 |
+| **P5** | v8 止损双真源（Cerebro `ProfitStrategy.py:760`）如何处置？ | **已消解（PR #58，2026-09-16）**：Cerebro 栈已删除（切片 A：`59ba18d`），v8 规则默认止损真源保留 `strategy8_rules.STOP_PCT`（仍为 20%，本次未改为 30%）。[退场 plan](plan-cerebro-retire-2026-09-16.md) A→D 已实施但尚未合并；本 plan 切片 B 仍待其合入。 |
 
 ---
 

@@ -2,7 +2,7 @@
 
 研究脸：日名单 CSV + **向量化**回测，以及筹码 / 换手阻力（Python + Rust）。行情只读 path-SSOT parquet；下载在原仓。成交验收（LEBS / MockQMT）在 [OSkhQuant1.3](https://github.com/baiyibing/OSkhQuant1.3)。
 
-三件引擎怎么分工：[`docs/backtest/engine-positioning-ssot.md`](docs/backtest/engine-positioning-ssot.md)。成交核（档位 / 全卖因跌停 / Decimal 涨跌停价）：[`docs/backtest/engine-ashare-correctness.md`](docs/backtest/engine-ashare-correctness.md)。名单 CSV 契约：[`docs/backtest/pool-csv-contract.md`](docs/backtest/pool-csv-contract.md)。Qlib 回测停用；Cerebro 观察退役。本仓没有 `backtest/lebs/`。
+三件引擎怎么分工：[`docs/backtest/engine-positioning-ssot.md`](docs/backtest/engine-positioning-ssot.md)。成交核（档位 / 全卖因跌停 / Decimal 涨跌停价）：[`docs/backtest/engine-ashare-correctness.md`](docs/backtest/engine-ashare-correctness.md)。名单 CSV 契约：[`docs/backtest/pool-csv-contract.md`](docs/backtest/pool-csv-contract.md)。Qlib 回测停用；Cerebro / Rolling 已退场（2026-09-16）。本仓没有 `backtest/lebs/`。
 
 Seeded from OSkhQuant slim snapshot at `5d41252`。S2（2026-09-09）之后本仓收研究面；交易栈只留 `oskh_factors` chip/bridge 微包。
 
@@ -18,7 +18,7 @@ Seeded from OSkhQuant slim snapshot at `5d41252`。S2（2026-09-09）之后本�
 | `backtest/research/csv_pool.py` | 名单 CSV：裸六位码 → canonical |
 | `backtest/research/csv_strategy_books.py` | 1/2/3/4/5/6/8/9/10 策略书 |
 | `backtest/research/chip/` | Chip 因子消费者 |
-| `backtest/` 根上 Cerebro | 观察退役（`backtest_main_full`、Rolling、chip indicator） |
+| Cerebro / Rolling 历史栈 | 已退场（2026-09-16）；chip / ma_chip 对照产物为静态档案，代码路径已删 |
 | `backtest/legacy/` | 非 Cerebro 旧回放 |
 | `oskh_data/` | Parquet/DuckDB 只读（三树 hive） |
 | `l2_analytics/` | L2 离线分析 only（ETL / 聚合；不扩交易核 / 策略书 / LEBS） |
@@ -63,7 +63,7 @@ D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_daily_backtest.py --
 
 细则与 1.3 入口：[`docs/backtest/README.md`](docs/backtest/README.md)。
 
-Cerebro 全市场滚动（`backtest/backtest_main_full.py --allow-cerebro-fossil`）只做旧对照，不接新策略；无该显式旗标会立即退出。
+Cerebro / Rolling 已退场（2026-09-16）。chip / ma_chip 对照产物为静态档案，代码路径已删；纯筹码计算与 Rust TR 保留。ma_chip 默认归档，需要恢复研究时另开 version11 CSV 移植计划并重裁成交时点语义。
 
 ## Market data (read-only)
 
