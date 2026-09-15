@@ -33,7 +33,7 @@
 | `verify_chip_factor_consistency.py` | 需湖 | 同上 | ✗ |
 | `verify_chip_pool_enhancement.py` | 需湖 | 同上 | ✗ |
 | `verify_float_shares_time_dimension_baseline.py` | 需湖 | float_shares parquet | ✗ |
-| `verify_turnover_resistance_alignment.py` | 需湖 | parquet / reader | ✗ |
+| `verify_turnover_resistance_alignment.py` | 需湖；Python canonical vs research ops（非 Rust Store SSOT 验收） | parquet / reader；CSV + 摘要；退出码 0=非空样本两项全通过、1=输入/零有效样本、2=任一项不对齐 | ✗ |
 | `verify_single_stock_turnover_resist.py` | 需湖 | duckdb + parquet | ✗ |
 
 **规则：** 只把 **data-free**（无湖不失败）的 gate 加进 CI；禁止加入缺 `F:\stock_data` 就红的脚本。

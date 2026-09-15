@@ -459,7 +459,7 @@ D:/anaconda3/envs/vanna311/python.exe backtest/filter_chip_stocks.py \
 
 **脚本**：`scripts/gates/verify_turnover_resistance_alignment.py`
 
-对比 **路径 A**（`daily_chip_logger` 等价内联）与 **路径 B**（`compute_crossday_turnover_resistance`，与 full_market/spot_check 相同）：
+对比 Python **canonical 内联路径**（`daily_chip_logger` 等价计算）与 Python **research ops 路径**（`compute_crossday_turnover_resistance`，与 full_market/spot_check 相同）。这是研究路径间的抽样对齐检查，**不是** Rust TR Store SSOT 的验收或 Python/Rust 精度门禁：
 
 ```bash
 D:/anaconda3/envs/vanna311/python.exe scripts/gates/verify_turnover_resistance_alignment.py \
@@ -470,7 +470,9 @@ D:/anaconda3/envs/vanna311/python.exe scripts/gates/verify_turnover_resistance_a
     --date 20260515 --samples 50 --tol-turnover 1e-6 --tol-resist 0.01
 ```
 
-输出摘要打印 P50/P95 偏差，并写入 `backtest_output/verify_turnover_resist_align_{date}.csv`。退出码：`0` 全部对齐，`2` 存在偏差。
+输入来自 parquet 湖的 `float_shares.parquet` 与 `StockDataReader` 日线；`--date`、`--samples`、`--seed`、`--window` 控制抽样，两个 `--tol-*` 参数只控制各自指标的通过判定。脚本打印有效样本数及两项通过数，并写入 `backtest_output/verify_turnover_resist_align_{date}.csv`。
+
+退出码：`0` 表示有效样本数大于零，且所有有效样本的 `turnover_ok` 与 `resist_ok` **同时**通过；`1` 表示缺输入或零有效样本；`2` 表示任一指标存在不对齐。该需湖 gate 不进入 data-free CI。
 
 **CSV 列**：`stock_code`, `turnover_canonical`, `turnover_ops`, `turnover_abs_diff`, `resist_canonical`, `resist_ops`, `resist_abs_diff`, `cyqk_t_abs_diff`, `cyqk_y_abs_diff`, `turnover_ok`, `resist_ok`
 
@@ -485,7 +487,7 @@ D:/anaconda3/envs/vanna311/python.exe scripts/gates/verify_turnover_resistance_a
 
 CSV：`backtest_output/verify_turnover_resist_align_20260515.csv`
 
-> 说明：当前样本下 history 与静态 parquet 一致，双轨无偏差。若日后 history 与静态表分叉，脚本会以退出码 2 标出换手率不一致标的。另跑 `spot_check`（5 只，4 有效）正常落盘。全市场大批量可再跑 `full_market_chip_resist.py --date 20260515` 做交叉核对。
+> 说明：当前样本下 history 与静态 parquet 一致，双轨无偏差。若日后任一路径的换手率或换手阻力分叉，脚本会以退出码 2 标出不一致标的。另跑 `spot_check`（5 只，4 有效）正常落盘。全市场大批量可再跑 `full_market_chip_resist.py --date 20260515` 做交叉核对。
 
 ### 6.7 手算核对表示例
 
@@ -559,4 +561,3 @@ D:/anaconda3/envs/vanna311/python.exe scripts/data/backfill_turnover_resistance_
 | 跌停卖出可成交性 | 未建模 | 暂未模拟“跌停难成交/不可成交” |
 
 ---
-
