@@ -1,7 +1,7 @@
 # Plan：NP3 引擎分层倒置修复（双入口 + 单共享核；纯机械重构）
 
 > **落盘**：2026-09-16。**v1.1**（2026-09-16 评审修订，见 changelog §10）。
-> **状态**：📄 **v1.1 · 已评审，待人裁 GO**（评审记录：[zcode-facts](../architecture/reviews/2026-09-16/plan-np3-engine-layering/zcode-facts.md) / [zcode-arch](../architecture/reviews/2026-09-16/plan-np3-engine-layering/zcode-arch.md) / [merge-consensus](../architecture/reviews/2026-09-16/plan-np3-engine-layering/merge-consensus.md)）。
+> **状态**：🚧 **v1.1 · 已人裁 GO（2026-09-16，P1–P4 采纳评审裁决值），实施中**（分支 `feat/np3-engine-layering`，执行：Codex）。评审记录：[zcode-facts](../architecture/reviews/2026-09-16/plan-np3-engine-layering/zcode-facts.md) / [zcode-arch](../architecture/reviews/2026-09-16/plan-np3-engine-layering/zcode-arch.md) / [merge-consensus](../architecture/reviews/2026-09-16/plan-np3-engine-layering/merge-consensus.md)。
 > **风险档**：**L1**（纯搬移重构；零行为变更；byte-identical golden + 补充单测兜底）。
 > **工作流**：走 [Codex 交接工作流](workflow-codex-handoff.md)。
 > **上游**：[strategic-analysis-opus5-next-2026-09-16.md](strategic-analysis-opus5-next-2026-09-16.md) §6 NP3；人裁方向（2026-09-16）：「**双入口 + 单共享核**，不是单引擎；不做 big-bang 卖环合并（G 禁区仍在）」。
@@ -74,10 +74,10 @@
 
 | # | 问题 | 建议（含评审改判） |
 |---|------|----------|
-| **P1** | 常量归属 | DEFAULT_DAILY_QUOTA / WARMUP_DAYS / STRATEGY4_CALENDAR_SLACK_DAYS → csv_common；**MINUTE_LAKE_END 改判：留 minute 自用**；`_PERIOD_ENV_KEYS` 随 loader |
-| **P2** | 是否留兼容 re-export | **不留**（消费者闭包已修正为 5 条 from-import + 属性点，一次改净；破坏模式是响亮 ImportError 非静默漂移） |
-| **P3** | load_pool_days 处置 | **改判：两引擎直呼 `load_pool_day_map(actual_pool_dir, …, key="ymd", empty_in_map=False)`**；wrapper 退役；csv_pool 不落 REPO 默认 |
-| **P4** | 假绿通道焊死（评审新增） | **建议直接采纳为完成定义**：B/C 片补三个 data-free 单测（maybe_compare_daily / warn_stale_period_env / summarize 确定性全文本 golden）+ 两新模块 docstring 契约句 |
+| **P1** | 常量归属 | **已裁**：三常量→csv_common；MINUTE_LAKE_END 留 minute 自用；`_PERIOD_ENV_KEYS` 随 loader |
+| **P2** | 是否留兼容 re-export | **已裁：不留**（消费者闭包已修正；破坏模式是响亮 ImportError 非静默漂移） |
+| **P3** | load_pool_days 处置 | **已裁**：两引擎直呼 `load_pool_day_map`；wrapper 退役；csv_pool 不落 REPO 默认 |
+| **P4** | 假绿通道焊死（评审新增） | **已裁：采纳为完成定义**（B/C 片三单测 + docstring 契约句） |
 
 ## 4. 非目标
 
