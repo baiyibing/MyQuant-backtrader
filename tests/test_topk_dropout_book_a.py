@@ -69,6 +69,40 @@ def test_planned_for_day_matches_decide_buy():
     planned = hooks["planned_for_day"](day, held)
     buy, _sell = decide_topk_dropout(held, scores_map, topk=5, n_drop=1)
     assert planned == buy
+    assert hooks["daily_same_bar_prefixes"] == ("open_board", "topk_drop")
+    assert hooks["cash_deploy_frac"] == pytest.approx(0.95)
+    assert hooks["qlib_limit_pct"] == pytest.approx(0.095)
+    assert hooks["limit_up_chase"] is False
+    assert hooks["limit_down_pending"] is False
+    assert hooks["forbid_all_trade_at_limit"] is True
+
+
+def test_planned_for_day_uses_opening_decide_not_post_sell_held():
+    """qlib one-shot: buy list is decide(opening), not decide(after dropout sells)."""
+    universe = [f"60000{i}.SH" for i in range(10)]
+    scores_map = {c: float(10 - i) for i, c in enumerate(universe)}
+    # Two weak held names: opening sells the worst one; after that sell,
+    # decide(post) wants two replacements (the overshoot we must not take).
+    scores_map[universe[3]] = 0.2
+    scores_map[universe[4]] = 0.1
+    day = "20260106"
+    hooks = apply_csv_strategy(
+        "topk_dropout",
+        scores_by_day={day: scores_map},
+        topk=5,
+        n_drop=1,
+    )
+    opening = universe[:5]
+    buy_open, sell_open = decide_topk_dropout(opening, scores_map, topk=5, n_drop=1)
+    assert len(sell_open) == 1
+    post_sell = [c for c in opening if c not in sell_open]
+    buy_post, _ = decide_topk_dropout(post_sell, scores_map, topk=5, n_drop=1)
+    assert len(buy_post) > len(buy_open)
+
+    hooks["bind_opening_held"](day, opening)
+    planned = hooks["planned_for_day"](day, post_sell)
+    assert planned == buy_open
+    assert hooks["sell_gate"](sell_open[0], 1.0, day, []) == "topk_drop:bottom"
 
 
 def test_planned_for_day_missing_scores_raises():
@@ -149,6 +183,121 @@ def test_run_pool_buys_day_hook_replaces_pool_default_none_unchanged():
         planned_for_day=only_second,
     )
     assert [t["code"] for t in st2.trades] == ["600001.SH"]
+
+
+def test_daily_simulate_holds_topk_after_fill():
+    """Stable ranks + one-shot decide + same-bar dropout → hold topk, not topk+n_drop."""
+    import pandas as pd
+    from backtest.research.csv_daily_backtest import simulate
+
+    days = pd.bdate_range("2026-01-05", periods=8)
+    codes = [f"60000{i}.SH" for i in range(8)]
+    rank = {c: float(8 - i) for i, c in enumerate(codes)}
+    bars = {
+        c: pd.DataFrame(
+            {
+                "open": [10.0] * len(days),
+                "high": [10.2] * len(days),
+                "low": [9.8] * len(days),
+                "close": [10.0] * len(days),
+                "volume": [1e6] * len(days),
+            },
+            index=days,
+        )
+        for c in codes
+    }
+    ymd = [d.strftime("%Y%m%d") for d in days]
+    pool = {d: codes[:5] for d in ymd}
+    scores = {d: dict(rank) for d in ymd}
+    names = {d: {c: "测试" for c in codes} for d in ymd}
+    st = simulate(
+        bars,
+        pool,
+        ymd[0],
+        ymd[-1],
+        total_cash=10_000_000,
+        daily_quota=10_000_000,
+        strategy="topk_dropout",
+        scores_by_day=scores,
+        topk=5,
+        n_drop=1,
+        stop_pct=0,
+        pool_names_by_day=names,
+    )
+    held: set[str] = set()
+    eod: list[int] = []
+    by_day: dict[str, list] = {}
+    for t in st.trades:
+        by_day.setdefault(str(t["date"]), []).append(t)
+    for d in ymd:
+        for t in by_day.get(d, []):
+            if t["side"] == "SELL":
+                held.discard(t["code"])
+            elif t["side"] == "BUY":
+                held.add(t["code"])
+        if held:
+            eod.append(len(held))
+    assert eod, st.trades
+    assert max(eod) == 5
+    assert eod[-1] == 5
+
+
+def test_topk_limit_skip_has_no_chase():
+    """+12% on ChiNext: v6/board would allow; qlib 9.5% skips and does not chase."""
+    import pandas as pd
+    from backtest.research.csv_daily_backtest import simulate
+
+    days = pd.DatetimeIndex(
+        [
+            pd.Timestamp("2026-01-05"),
+            pd.Timestamp("2026-01-06"),
+            pd.Timestamp("2026-01-07"),
+            pd.Timestamp("2026-01-08"),
+        ]
+    )
+    code = "300001.SZ"
+    bars = {
+        code: pd.DataFrame(
+            {
+                "open": [10.0, 10.0, 11.2, 11.1],
+                "high": [10.2, 11.3, 11.3, 11.2],
+                "low": [9.8, 10.0, 11.0, 11.0],
+                "close": [10.0, 11.2, 11.1, 11.1],
+                "volume": [1e6] * 4,
+            },
+            index=days,
+        ),
+    }
+    ymd = [d.strftime("%Y%m%d") for d in days]
+    scores = {d: {code: 1.0} for d in ymd}
+    names = {d: {code: "创业板测试"} for d in ymd}
+    pool = {d: [code] for d in ymd}
+    st = simulate(
+        bars,
+        pool,
+        ymd[0],
+        ymd[-1],
+        total_cash=2_000_000,
+        daily_quota=2_000_000,
+        strategy="topk_dropout",
+        scores_by_day=scores,
+        topk=1,
+        n_drop=1,
+        stop_pct=0,
+        pool_names_by_day=names,
+    )
+    assert st.stats["skip_limit_up"] >= 1
+    assert not any(t["reason"] == "chase:T+1" for t in st.trades)
+    assert not any(
+        t["side"] == "BUY" and str(t["date"]) == "20260106" for t in st.trades
+    )
+
+
+def test_version6_keeps_limit_up_chase_hook():
+    v6 = apply_csv_strategy("version6")
+    assert v6["limit_up_chase"] is True
+    assert v6["qlib_limit_pct"] is None
+    assert v6["limit_down_pending"] is True
 
 
 def test_version6_golden_stop_pct_unchanged():

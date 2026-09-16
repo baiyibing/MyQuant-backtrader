@@ -155,6 +155,18 @@ def load_scores_from_args(
     )
 
 
+def codes_from_scores(
+    scores_by_day: Mapping[str, Mapping[str, float]] | None,
+) -> set[str]:
+    """Union of canonical codes across score days (for lake load, not just TopK pool)."""
+    if not scores_by_day:
+        return set()
+    out: set[str] = set()
+    for day_map in scores_by_day.values():
+        out.update(day_map)
+    return out
+
+
 def require_day_scores(
     scores_by_day: Mapping[str, Mapping[str, float]], ds: str
 ) -> Mapping[str, float]:

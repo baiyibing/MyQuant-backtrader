@@ -84,11 +84,30 @@ def _read_one_daily(
         out = out.loc[out["_volume"] != 0].drop(columns="_volume")
     return out if not out.empty else None
 
+_DIVIDEND_TYPES = ("none", "front", "back")
+
+
 def load_daily_bars(
-    codes: set[str], start: str, end: str, *, workers: int = 16
+    codes: set[str],
+    start: str,
+    end: str,
+    *,
+    workers: int = 16,
+    dividend_type: str = "none",
+    daily_root: Path | str | None = None,
 ) -> dict[str, pd.DataFrame]:
-    """不复权日线（与分钟链 adjust_type='none' 对齐），index=交易日 00:00。"""
-    root = resolve_period_root("1d") / "dividend_type=none"
+    """日线湖装载。默认 ``none``（不复权）；``front`` / ``back`` 读对应分区。
+
+    ``daily_root`` 若给定，则替代 ``resolve_period_root("1d")``（其下仍要
+    ``dividend_type=.../symbol=.../data.parquet``）。不写权威湖。
+    """
+    kind = str(dividend_type or "none").strip().lower()
+    if kind not in _DIVIDEND_TYPES:
+        raise ValueError(
+            f"dividend_type must be one of {_DIVIDEND_TYPES}, got {dividend_type!r}"
+        )
+    base = Path(daily_root) if daily_root is not None else resolve_period_root("1d")
+    root = base / f"dividend_type={kind}"
     out: dict[str, pd.DataFrame] = {}
     codes_list = sorted(codes)
     n = max(1, int(workers))

@@ -99,6 +99,11 @@ def summarize(
             f"chase_buy_fail_cash={st.stats.get('chase_buy_fail_cash', 0)} | "
             f"chase_buy_fail_shares={st.stats.get('chase_buy_fail_shares', 0)}"
         )
+    if "buy_cost_rate" in st.stats:
+        lines.append(
+            f"  cost buy={st.stats['buy_cost_rate']:g} sell={st.stats['sell_cost_rate']:g} "
+            f"min={st.stats.get('min_cost', 0):g}"
+        )
     if "ration" in st.stats:
         lines.append(
             f"  ration={st.stats['ration']} | ration_seed={st.stats['ration_seed']}"

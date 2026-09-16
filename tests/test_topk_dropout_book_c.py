@@ -26,6 +26,17 @@ def test_topk_stop_pct_is_ten_percent_not_v6():
     assert v6["stop_pct"] == pytest.approx(0.06)
 
 
+def test_stop_pct_zero_disables_stop():
+    hooks = apply_csv_strategy(
+        "topk_dropout",
+        scores_by_day={"20260106": {"600000.SH": 1.0}},
+        topk=1,
+        n_drop=1,
+        stop_pct=0,
+    )
+    assert hooks["stop_pct"] is None
+
+
 def test_topk_stop_override_via_stop_pct_kwarg():
     hooks = apply_csv_strategy(
         "topk_dropout",
