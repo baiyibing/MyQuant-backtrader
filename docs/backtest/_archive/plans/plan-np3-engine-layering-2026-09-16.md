@@ -1,12 +1,12 @@
 # Plan：NP3 引擎分层倒置修复（双入口 + 单共享核；纯机械重构）
 
 > **落盘**：2026-09-16。**v1.2**（2026-09-16 人裁 GO P1–P4 全采纳，见 changelog §10）。
-> **状态**：✅ **P1–P4 GO 已裁 / A–D 已落地（待 PR 评审）**（评审记录：[zcode-facts](../architecture/reviews/2026-09-16/plan-np3-engine-layering/zcode-facts.md) / [zcode-arch](../architecture/reviews/2026-09-16/plan-np3-engine-layering/zcode-arch.md) / [merge-consensus](../architecture/reviews/2026-09-16/plan-np3-engine-layering/merge-consensus.md)）。
+> **状态**：✅ **已实施并合入**（PR [#78](https://github.com/baiyibing/MyQuant-backtrader/pull/78) / merge `71f0f3f`，2026-09-16；切片 A→D + nit 全部完成；Grok 核 [GO-WITH-NITS](../../../architecture/reviews/2026-09-16/pr-78-np3-engine-layering/grok-review.md)（nit 已于 `2951fca` 修）；zcode 宿主预合入 PASS：D-smoke daily+minute `trades.csv` 逐字节一致、N-R6=0、结构性锁 OK。计划评审记录：[zcode-facts](../../../architecture/reviews/2026-09-16/plan-np3-engine-layering/zcode-facts.md) / [zcode-arch](../../../architecture/reviews/2026-09-16/plan-np3-engine-layering/zcode-arch.md) / [merge-consensus](../../../architecture/reviews/2026-09-16/plan-np3-engine-layering/merge-consensus.md)）。
 > **风险档**：**L1**（纯搬移重构；零行为变更；byte-identical golden + 补充单测兜底）。
-> **工作流**：走 [Codex 交接工作流](workflow-codex-handoff.md)。
-> **上游**：[strategic-analysis-opus5-next-2026-09-16.md](strategic-analysis-opus5-next-2026-09-16.md) §6 NP3；人裁方向（2026-09-16）：「**双入口 + 单共享核**，不是单引擎；不做 big-bang 卖环合并（G 禁区仍在）」。
-> **成交核现锁**：[engine-ashare-correctness.md](engine-ashare-correctness.md)（E-R1–E-R5；本轮不动任何语义）。
-> **实施交接**：[handoff-np3-engine-layering-codex-impl-2026-09-16.md](handoff-np3-engine-layering-codex-impl-2026-09-16.md)（人裁 GO 2026-09-16 后生效）。
+> **工作流**：走 [Codex 交接工作流](../../workflow-codex-handoff.md)。
+> **上游**：[strategic-analysis-opus5-next-2026-09-16.md](../../strategic-analysis-opus5-next-2026-09-16.md) §6 NP3；人裁方向（2026-09-16）：「**双入口 + 单共享核**，不是单引擎；不做 big-bang 卖环合并（G 禁区仍在）」。
+> **成交核现锁**：[engine-ashare-correctness.md](../../engine-ashare-correctness.md)（E-R1–E-R5；本轮不动任何语义）。
+> **实施交接**：[handoff-np3-engine-layering-codex-impl-2026-09-16.md](../../handoff-np3-engine-layering-codex-impl-2026-09-16.md)（人裁 GO 2026-09-16 后生效）。
 
 ---
 
@@ -143,6 +143,20 @@ EOF
 
 ## 10. Changelog
 
-- **v1.2**（2026-09-16）：人裁 **P1–P4 GO 全采纳**（建议值）；A–D 落地；状态 → 待 PR 评审；交接生效。
+- **v1.2**（2026-09-16）：人裁 **P1–P4 GO 全采纳**（建议值）；A–D 落地；交接生效。
+- **v1.2 closeout**（2026-09-16）：PR #78 合入 merge `71f0f3f`；状态 → ✅ 已实施并合入；Grok GO-WITH-NITS + nit `2951fca`；zcode 宿主 PASS（trades.csv 逐字节一致 / N-R6=0）；归档至 `_archive/plans/`。
 - **v1.1**（2026-09-16，两路评审）：§1 重写为「符号处置总表 + 消费者闭包」（补 artifacts 两伴生、loader 闭包 `_read_one_daily`/`_PERIOD_ENV_KEYS`/REPO、3 个漏列测试文件、help_lock_for 双真身注记、load_pool_days=wrapper 勘误）；P1 改判 MINUTE_LAKE_END 留 minute、P3 改判直呼 load_pool_day_map、新增 P4（单测+docstring 契约）；`_progress` 改判 csv_common；新增 N-R8（搬移闭包）/N-R9（测试面保留清单）/N-R10（编码与解释器）；N-R6 升级持久围栏；§8 bench 风险行结案；§4 宣称降级。
 - **v1.0**（2026-09-16）：初稿。
+
+---
+
+## 11. 实施记录（Codex 随本 PR 回写；closeout 补齐合入）
+
+| 切片 | 状态 | commit | 备注 |
+|------|------|--------|------|
+| A · 改指真身（29 符号） | ✅ | `278bf6f` | minute→daily 41→10；P1–P4 GO 文档同提交 |
+| B · 抽 `csv_artifacts.py`（6 符号） | ✅ | `d0adf54` | artifacts 6 + `_progress`→csv_common；minute→daily 10→6 |
+| C · 抽 `csv_daily_loader.py` | ✅ | `8ec5bba` | loader + 3 常量→csv_common；minute→daily 6→0 |
+| D · 围栏与文档 | ✅ | `b9b101e` | AST 围栏、`_VECTORIZED_RESEARCH_FACE`、pin「仅测试」、README 引擎地图 |
+| nit + Grok review 落盘 | ✅ | `2951fca` | 删未用 `csv_common._limit_prices`；落 [grok-review.md](../../../architecture/reviews/2026-09-16/pr-78-np3-engine-layering/grok-review.md) |
+| 合入 | ✅ | `71f0f3f` | PR #78 merge；zcode 宿主 D-smoke daily+minute trades.csv 逐字节一致；N-R6=0；结构性锁 OK |

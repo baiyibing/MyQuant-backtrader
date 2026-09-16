@@ -1,10 +1,10 @@
 # 交接 · NP3 引擎分层倒置 实施（Codex 接手）
 
 > 日期：2026-09-16
-> 状态：**生效 / A–D 完成**（人裁 GO 2026-09-16；P1–P4 全采纳）。待 PR 评审，勿自动 merge。
-> 评审链：[zcode-facts](../architecture/reviews/2026-09-16/plan-np3-engine-layering/zcode-facts.md) / [zcode-arch](../architecture/reviews/2026-09-16/plan-np3-engine-layering/zcode-arch.md) / [merge-consensus](../architecture/reviews/2026-09-16/plan-np3-engine-layering/merge-consensus.md)。
-> 权威对象：[plan-np3-engine-layering-2026-09-16.md](plan-np3-engine-layering-2026-09-16.md)（v1.1）。
-> 分支：从当时 master 开 `feat/np3-engine-layering`；A/B/C/D 各一个 commit。
+> 状态：**✅ 交接闭环（PR #78 已合入，merge `71f0f3f`；A–D 完成；Grok GO-WITH-NITS + nit `2951fca`；zcode 宿主 PASS：daily+minute `trades.csv` 逐字节一致 / N-R6=0 / 结构性锁 OK）**。本交接文档至此关闭。
+> 评审链：[zcode-facts](../architecture/reviews/2026-09-16/plan-np3-engine-layering/zcode-facts.md) / [zcode-arch](../architecture/reviews/2026-09-16/plan-np3-engine-layering/zcode-arch.md) / [merge-consensus](../architecture/reviews/2026-09-16/plan-np3-engine-layering/merge-consensus.md) · PR 核评：[grok-review](../architecture/reviews/2026-09-16/pr-78-np3-engine-layering/grok-review.md)。
+> 权威对象：[plan-np3-engine-layering-2026-09-16.md](_archive/plans/plan-np3-engine-layering-2026-09-16.md)（v1.2+）。
+> 分支：从当时 master 开 `feat/np3-engine-layering`；A/B/C/D 各一个 commit；合入 `71f0f3f`。
 
 ## 0. 硬边界（勿越）
 
@@ -58,3 +58,7 @@ D:\anaconda3\envs\vanna312\python.exe -m pytest -q tests/
 ```
 
 - 完成后缺陷优先复核 diff（重点：函数体 diff 必须只有文件移动；确认无环），回写 plan 状态与本交接完成标记。
+
+## 6. 实施结果
+
+A `278bf6f` / B `d0adf54` / C `8ec5bba` / D `b9b101e` / nit+review `2951fca`；merge `71f0f3f`（PR #78）。Grok 核 GO-WITH-NITS → nit 已修；zcode 宿主预合入 PASS（D-smoke trades.csv 逐字节一致、N-R6=0、结构性锁 OK）。plan 已归档至 `_archive/plans/`。本交接关闭。
