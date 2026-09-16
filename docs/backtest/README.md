@@ -15,14 +15,14 @@ D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_daily_backtest.py ^
   --strategy version6 --start 20251023 --end 20260909 ^
   --pool-dir D:\path\to\version6_pool
 D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_daily_backtest.py ^
-  --strategy version8 --start 20251023 --end 20260909
+  --strategy version8 --start 20251023 --end 20260909 --cash-total 500000000
 
 # 分钟（14:55 买入；湖 time 为中国交易时钟标成 UTC）
 D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_minute_backtest.py ^
   --strategy version6 --start 20251023 --end 20251104 ^
   --pool-dir D:\path\to\version6_pool
 D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_minute_backtest.py ^
-  --strategy version8 --start 20251023 --end 20260909
+  --strategy version8 --start 20251023 --end 20260909 --cash-total 500000000
 
 # R5：MyQuant pred 当日 TopN；仅检查管道，不要使用 holdings 口径的 exports/r0_*
 D:\anaconda3\envs\vanna312\python.exe my_scripts/export_daily_pool.py --pred my_scripts\预测结果.csv --topk 10 --asof pred_minus_one --out-dir exports/r2_pred_topn_20260302_20260323
