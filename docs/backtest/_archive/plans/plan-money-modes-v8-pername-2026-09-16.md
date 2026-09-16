@@ -1,5 +1,7 @@
 # Plan：资金管理模式化 + 策略 8 每股 100 万（daily_quota / per_name 双模式）
 
+> **取代注记（2026-09-16）**：本 plan 中 M-R3「per_name 已持跳过」/ P2「取消加仓」/ P1 档位表 已被 [plan-v8-rules-v2-2026-09-16.md](../../plan-v8-rules-v2-2026-09-16.md) 取代；M-R8 对比纪律与 5 亿标准口径不变。
+
 > **落盘**：2026-09-16。**v1.1**（2026-09-16 评审修订，见 changelog §10）。
 > **状态**：✅ **v1.1 · 已实施并合入**（PR [#61](https://github.com/baiyibing/MyQuant-backtrader/pull/61)，merge `a606070`，2026-09-16；原 #59 因 base 分支删除被 GitHub 自动关闭，rebase 后重开为 #61）。A–C 完成；D 宿主烟测补跑结果见 [烟测短记](../../money-modes-v8-pername-smoke-2026-09-16.md) 与 §11 D 行；合入后复核 PASS（581 passed / 3 skipped）。人裁 GO 与 M-R\* 不变。
 > **风险档**：**L1**（研究面引擎参数化 + 策略书切换；不碰成交核 E-R1–E-R4、不碰 1.3、不写湖、不写 `stock_pool/`）。

@@ -1,3 +1,5 @@
+# NOTE: Do not regenerate for v8 rules v2 — snapshot is a frozen pre-E-R1
+# anchor only (existence asserts). See docs/backtest/plan-v8-rules-v2-2026-09-16.md.
 # -*- coding: utf-8 -*-
 """Write 6/8 synthetic-window trades.csv from the current daily engine."""
 
