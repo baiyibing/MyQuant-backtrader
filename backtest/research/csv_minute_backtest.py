@@ -814,6 +814,10 @@ def simulate(
     pool_names: Optional[dict[str, str]] = None,
     pool_names_by_day: Optional[dict[str, dict[str, str]]] = None,
     exdiv: Optional[dict] = None,
+    scores_by_day=None,
+    topk=None,
+    n_drop=None,
+    eligible_buy=None,
 ) -> SimState:
     hooks = prepare_strategy_hooks(
         strategy,
@@ -827,6 +831,10 @@ def simulate(
         tiers=tiers,
         tier_default=tier_default,
         apply_fn=apply_csv_strategy,
+        scores_by_day=scores_by_day,
+        topk=topk,
+        n_drop=n_drop,
+        eligible_buy=eligible_buy,
     )
     stop_pct = hooks["stop_pct"]
     take_profit = hooks["take_profit"]
@@ -852,6 +860,10 @@ def simulate(
         ds = _ymd(day)
         names = names_asof(ds)
         st.daily_quota_used = 0.0
+
+        bind_opening = hooks.get("bind_opening_held")
+        if callable(bind_opening):
+            bind_opening(ds, list(st.positions.keys()))
 
         for code in list(st.positions):
             mdf = minute_bars.get(code)
@@ -994,6 +1006,7 @@ def simulate(
             ration=hooks.get("ration", "file_order"),
             ration_seed=hooks.get("ration_seed", 0),
             exdiv=exdiv,
+            planned_for_day=hooks.get("planned_for_day"),
         )
 
         append_equity_and_eod_marks(
@@ -1029,6 +1042,10 @@ def run(
     strategy: str,
     take_profit=None,
     record_params=None,
+    scores_by_day=None,
+    topk=None,
+    n_drop=None,
+    eligible_buy=None,
 ) -> SimState:
     warn_stale_period_env()
     if end > MINUTE_LAKE_END:
@@ -1099,6 +1116,10 @@ def run(
         ration_seed=ration_seed,
         pool_names_by_day=pool_names_by_day,
         exdiv=exdiv,
+        scores_by_day=scores_by_day,
+        topk=topk,
+        n_drop=n_drop,
+        eligible_buy=eligible_buy,
     )
     if skipped.get("exdiv_skipped_no_factor"):
         st.stats["exdiv_skipped_no_factor"] = int(skipped["exdiv_skipped_no_factor"])
