@@ -21,6 +21,7 @@ from backtest.research import (
     strategy8_rules,
     strategy9_rules,
     strategy10_rules,
+    strategy_topk_dropout_rules,
 )
 from backtest.research.csv_pool import is_repo_stock_pool
 
@@ -33,6 +34,7 @@ HELP_LOCK_V6 = strategy6_rules.HELP_LOCK
 HELP_LOCK_V8 = strategy8_rules.HELP_LOCK
 HELP_LOCK_V9 = strategy9_rules.HELP_LOCK
 HELP_LOCK_V10 = strategy10_rules.HELP_LOCK
+HELP_LOCK_TOPK = strategy_topk_dropout_rules.HELP_LOCK
 
 FORBIDDEN_DEFAULT_STOCK_POOL = frozenset({"version9", "version10"})
 
@@ -112,6 +114,8 @@ def apply_csv_strategy(strategy: str, **kwargs) -> dict:
     hooks.setdefault("sell_gate", None)
     hooks.setdefault("reserve_limit_up", False)
     hooks.setdefault("daily_same_bar_prefixes", ("open_board",))
+    hooks.setdefault("planned_for_day", None)
+    hooks.setdefault("bind_opening_held", None)
     if hooks.get("take_profit") is None:
         raise RuntimeError(f"{book.name} book missing take_profit")
     if hooks.get("record_params") is None:
@@ -199,6 +203,53 @@ def add_strategy6_ratio_args(ap: argparse.ArgumentParser) -> None:
     )
 
 
+
+def add_topk_dropout_args(ap: argparse.ArgumentParser) -> None:
+    """TopkDropout score inputs + knobs; ignored by other books."""
+    ap.add_argument(
+        "--pred-csv",
+        type=Path,
+        default=None,
+        help="topk_dropout: multi-day pred CSV; buy day T uses pred[T-1]",
+    )
+    ap.add_argument(
+        "--scores-dir",
+        type=Path,
+        default=None,
+        help="topk_dropout: dir of YYYYMMDD.csv (filename=buy day, code+score)",
+    )
+    ap.add_argument(
+        "--topk",
+        type=int,
+        default=strategy_topk_dropout_rules.DEFAULT_TOPK,
+        help=f"topk_dropout topk (default {strategy_topk_dropout_rules.DEFAULT_TOPK})",
+    )
+    ap.add_argument(
+        "--n-drop",
+        type=int,
+        default=strategy_topk_dropout_rules.DEFAULT_N_DROP,
+        help=f"topk_dropout n_drop (default {strategy_topk_dropout_rules.DEFAULT_N_DROP})",
+    )
+    ap.add_argument(
+        "--st-daily-file",
+        type=Path,
+        default=None,
+        help="topk_dropout: st_daily.parquet PIT (BT-B; missing path fail-closed)",
+    )
+    ap.add_argument(
+        "--age-map-file",
+        type=Path,
+        default=None,
+        help="topk_dropout: code\tYYYYMMDD min-buy or listing start (BT-B)",
+    )
+    ap.add_argument(
+        "--age-days",
+        type=int,
+        default=60,
+        help="topk_dropout: listing age trading days when calendar given (default 60)",
+    )
+
+
 def add_csv_backtest_common_args(
     ap: argparse.ArgumentParser,
     *,
@@ -234,6 +285,7 @@ def add_csv_backtest_common_args(
     ap.add_argument("--pool-dir", type=Path, default=Path(repo) / "stock_pool")
     add_csv_strategy_arg(ap)
     add_strategy6_ratio_args(ap)
+    add_topk_dropout_args(ap)
 
 
 def strategy6_kwargs_from_args(args) -> dict:
@@ -553,6 +605,110 @@ def _run_kwargs_version10(args) -> dict:
     return {"strategy": "version10", **strategy6_kwargs_from_args(args)}
 
 
+def _apply_topk_dropout(
+    *,
+    stop_pct: Optional[float] = None,
+    take_profit=None,
+    record_params=None,
+    scores_by_day: Optional[dict] = None,
+    topk: Optional[int] = None,
+    n_drop: Optional[int] = None,
+    eligible_buy=None,
+    **_,
+) -> dict:
+    if not scores_by_day:
+        raise SystemExit(
+            "topk_dropout fail-closed: scores_by_day required "
+            "(pass --pred-csv or --scores-dir)"
+        )
+    topk_i = (
+        strategy_topk_dropout_rules.DEFAULT_TOPK if topk is None else int(topk)
+    )
+    n_drop_i = (
+        strategy_topk_dropout_rules.DEFAULT_N_DROP if n_drop is None else int(n_drop)
+    )
+    # BT-A: STOP_PCT is None. BT-C sets book default 0.10; CLI --stop-pct may override.
+    if stop_pct is None:
+        resolved_stop = strategy_topk_dropout_rules.STOP_PCT
+    else:
+        resolved_stop = float(stop_pct)
+
+    day_state: dict = {"ds": None, "opening_held": ()}
+
+    def _tp(*args):
+        del args
+        return None
+
+    def _rec(st):
+        strategy_topk_dropout_rules.record_topk_dropout_params(
+            st, stop_pct=resolved_stop, topk=topk_i, n_drop=n_drop_i
+        )
+
+    return {
+        "stop_pct": resolved_stop,
+        "take_profit": _tp if take_profit is None else take_profit,
+        "record_params": _rec if record_params is None else record_params,
+        "sell_gate": strategy_topk_dropout_rules.make_sell_gate(
+            scores_by_day=scores_by_day,
+            topk=topk_i,
+            n_drop=n_drop_i,
+            day_state=day_state,
+        ),
+        "planned_for_day": strategy_topk_dropout_rules.make_planned_for_day(
+            scores_by_day=scores_by_day,
+            topk=topk_i,
+            n_drop=n_drop_i,
+            eligible_buy=eligible_buy,
+        ),
+        "bind_opening_held": strategy_topk_dropout_rules.make_bind_opening_held(
+            day_state
+        ),
+        "buy_gate": None,
+        "force_sell_hm": None,
+        "reserve_limit_up": False,
+    }
+
+
+def _run_kwargs_topk_dropout(args) -> dict:
+    from backtest.research.topk_dropout_scores import load_scores_from_args
+
+    scores_by_day = load_scores_from_args(
+        pred_csv=getattr(args, "pred_csv", None),
+        scores_dir=getattr(args, "scores_dir", None),
+    )
+    stop = getattr(args, "stop_pct", None)
+    if stop is not None and not 0 < float(stop) < 1:
+        raise SystemExit(f"--stop-pct must be in (0, 1), got {stop}")
+    # When CLI omits --stop-pct, use book STOP_PCT (None in BT-A, 0.10 after BT-C).
+    resolved_stop = (
+        strategy_topk_dropout_rules.STOP_PCT if stop is None else float(stop)
+    )
+    topk = int(getattr(args, "topk", strategy_topk_dropout_rules.DEFAULT_TOPK))
+    n_drop = int(getattr(args, "n_drop", strategy_topk_dropout_rules.DEFAULT_N_DROP))
+    if topk < 0 or n_drop < 0:
+        raise SystemExit(f"--topk/--n-drop must be >= 0, got {topk}/{n_drop}")
+    out = {
+        "strategy": "topk_dropout",
+        "scores_by_day": scores_by_day,
+        "topk": topk,
+        "n_drop": n_drop,
+        "stop_pct": resolved_stop,
+    }
+    st_daily = getattr(args, "st_daily_file", None)
+    age_map = getattr(args, "age_map_file", None)
+    age_days = int(getattr(args, "age_days", 60))
+    if st_daily is not None or age_map is not None:
+        from backtest.research.topk_dropout_eligibility import make_eligible_buy
+
+        out["eligible_buy"] = make_eligible_buy(
+            st_daily_file=st_daily,
+            age_map_file=age_map,
+            age_days=age_days,
+        )
+    return out
+
+
+
 register(
     CsvStrategyBook(
         name="version1",
@@ -661,5 +817,18 @@ register(
         help_lock=strategy10_rules.HELP_LOCK,
         apply=_apply_version10,
         run_kwargs=_run_kwargs_version10,
+    )
+)
+
+register(
+    CsvStrategyBook(
+        name="topk_dropout",
+        tag=strategy_topk_dropout_rules.BOOK_TAG,
+        aliases=("topk", "version_topk", "topk_dropout"),
+        allow_add=strategy_topk_dropout_rules.ALLOW_ADD,
+        peak_gap_min=strategy_topk_dropout_rules.PEAK_GAP_MIN,
+        help_lock=strategy_topk_dropout_rules.HELP_LOCK,
+        apply=_apply_topk_dropout,
+        run_kwargs=_run_kwargs_topk_dropout,
     )
 )

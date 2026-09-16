@@ -47,11 +47,13 @@ def prepare_strategy_hooks(
     ration="file_order",
     ration_seed=0,
     apply_fn=None,
+    **extra,
 ) -> dict:
     """Unpack ``apply_csv_strategy``; callers read engine-specific hook keys.
 
     Pass ``apply_fn`` from the engine module so tests can monkeypatch
     ``csv_daily_backtest.apply_csv_strategy`` (or minute) and still win.
+    Extra kwargs (e.g. topk scores) forward to the strategy book apply.
     """
     fn = apply_fn or apply_csv_strategy
     return fn(
@@ -65,6 +67,7 @@ def prepare_strategy_hooks(
         tier_default=tier_default,
         ration=ration,
         ration_seed=ration_seed,
+        **extra,
     )
 
 
@@ -181,10 +184,19 @@ def run_pool_buys_day(
     ration: str = "file_order",
     ration_seed: int = 0,
     exdiv: Optional[dict] = None,
+    planned_for_day=None,
 ) -> None:
-    """Pool buys for ``ds``; ``buy_quote_for`` supplies buy price + prev closes."""
+    """Pool buys for ``ds``; ``buy_quote_for`` supplies buy price + prev closes.
+
+    ``planned_for_day(ds, held_codes)`` is optional (default None). When set, its
+    return replaces the pool file list before capital ration — old books unchanged.
+    """
+    raw = list(pool_days.get(ds, []))
+    if callable(planned_for_day):
+        held_codes = list(st.positions.keys())
+        raw = list(planned_for_day(ds, held_codes))
     planned = apply_capital_ration(
-        list(pool_days.get(ds, [])), ration=ration, ration_seed=ration_seed, ds=ds
+        raw, ration=ration, ration_seed=ration_seed, ds=ds
     )
     if not planned:
         return
