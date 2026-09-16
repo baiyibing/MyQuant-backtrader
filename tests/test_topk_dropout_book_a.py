@@ -39,7 +39,7 @@ def test_apply_topk_hooks_and_record_params():
         n_drop=1,
     )
     assert hooks["name"] == "topk_dropout"
-    assert hooks["stop_pct"] is None
+    assert hooks["stop_pct"] == pytest.approx(0.10)
     assert hooks["take_profit"](1, 1, 1, 1) is None
     assert callable(hooks["sell_gate"])
     assert callable(hooks["planned_for_day"])
@@ -52,7 +52,7 @@ def test_apply_topk_hooks_and_record_params():
     assert St.stats["sell_book"] == "topk_dropout"
     assert St.stats["topk"] == 2
     assert St.stats["n_drop"] == 1
-    assert St.stats["stop_pct"] is None
+    assert St.stats["stop_pct"] == pytest.approx(0.10)
 
 
 def test_planned_for_day_matches_decide_buy():
@@ -175,4 +175,4 @@ def test_run_kwargs_fail_closed_without_scores(tmp_path: Path):
     ns.scores_dir = scores_dir
     kw = book.run_kwargs(ns)
     assert "600000.SH" in kw["scores_by_day"]["20260106"]
-    assert kw["stop_pct"] is None
+    assert kw["stop_pct"] == pytest.approx(0.10)

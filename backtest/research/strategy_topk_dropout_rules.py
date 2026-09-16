@@ -12,15 +12,15 @@ from backtest.research.topk_dropout_rules import decide_topk_dropout
 BOOK_TAG = "topk_dropout"
 ALLOW_ADD = False
 PEAK_GAP_MIN = 0
-# BT-A: None. BT-C opens 0.10 on this book only — never touch version6 STOP_PCT.
-STOP_PCT = None
+# BT-C: 10% cost stop on this book only — never touch version6 STOP_PCT=0.06.
+STOP_PCT = 0.10
 DEFAULT_TOPK = 50
 DEFAULT_N_DROP = 5
 
 HELP_LOCK = """
 策略 topk_dropout（--strategy topk_dropout / topk / version_topk）：
   底座 = qlib TopkDropout（method_buy=top / method_sell=bottom），对引擎实仓现算。
-  不是 version6：无 trail 止盈；止损仅本书画布（BT-C 默认 10% 开仓价），不改 v6 的 6%。
+  不是 version6：无 trail 止盈；默认 10% 开仓价止损（stop_loss:touch / gap_open），不改 v6 的 6%。
   卖出 reason 前缀 topk_drop:bottom；止损仍用 stop_loss:touch / gap_open。
   排序与淘汰以 --pred-csv / --scores-dir 为准；--pool-dir 仍要（日历/契约），不以池 50 行当卖出。
   禁止「今日池 CSV 没有就清仓」；禁止读 live_pool/*sell.csv。
