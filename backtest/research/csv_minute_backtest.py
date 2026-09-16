@@ -110,8 +110,8 @@ HELP_LOCK = """
         资金模式见策略书（v8=每股预算）；per_name 现金不足（含佣金）整笔 skip_cash。
   配给：--ration file_order 保持 CSV 行序；seeded_shuffle 用 --ration-seed 与日期
         经 SHA-256 派生逐日稳定乱序；追买沿该次名单遍历产生的排队顺序。
-  复权：买卖价、涨跌停、净值全程 dividend_type=none（与日线/Cerebro 对齐，
-        不用 front 对照）。
+  复权：E-R5 已知边界 — 买卖价、涨跌停、净值/cost/peak 全程 dividend_type=none，
+        不对除权调整（与日线同链；不用 front）。见 engine-ashare-correctness.md E-R5。
   窗口：分钟湖目前到 2026-05-25；要「→今天」用日线版。
   加载：time 毫秒先切片再转 datetime（避免对整段 8 万行 strftime）；文件仍是单
         row group，磁盘还是整文件读，但 CPU 从「全历史转换」降到「窗口转换」。

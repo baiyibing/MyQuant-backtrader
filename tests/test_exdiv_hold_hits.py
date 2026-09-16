@@ -11,6 +11,7 @@ import pandas as pd
 from backtest.research.exdiv_hold_hits import (
     format_report_json,
     main,
+    parse_hold_lots,
     report_exdiv_hold_hits,
 )
 
@@ -180,3 +181,29 @@ def test_json_format_and_cli_exit_zero(tmp_path: Path, capsys):
     ]) == 0
     out = capsys.readouterr().out
     assert json.loads(out)["hold_exdiv_hit_lots"] == 5
+
+
+def test_eod_mark_rows_skipped_not_hard_fail(tmp_path: Path):
+    """Real trades.csv may contain EOD_MARK valuation rows; probe must skip them."""
+    trades = tmp_path / "trades.csv"
+    _write(
+        trades,
+        "date,code,side,price,shares,notional,commission,reason,lot\n"
+        "20251103,000001.SZ,BUY,10.0,100,1000.0,1.0,pool,0\n"
+        "20251104,000001.SZ,EOD_MARK,10.5,100,1050.0,0.0,eod_mark,0\n"
+        "20251108,000001.SZ,SELL,9.5,100,950.0,0.95,trail:peak_dd,0\n"
+        "20251109,600000.SH,EOD_MARK,20.0,0,0.0,0.0,eod_mark,-1\n",
+    )
+    ex = tmp_path / "ex.csv"
+    _write(ex, "stock_code,ex_date\n000001.SZ,20251104\n")
+
+    lots, skipped = parse_hold_lots(trades)
+    assert skipped == 2
+    assert len(lots) == 1
+    assert lots[0].code == "000001.SZ"
+    assert lots[0].exit_date == "20251108"
+
+    report = report_exdiv_hold_hits(trades, ex, start="20251023", end="20260909")
+    assert report.n_skipped_non_trade_sides == 2
+    assert report.hold_exdiv_hit_lots == 1
+    assert report.n_lots_matched == 1

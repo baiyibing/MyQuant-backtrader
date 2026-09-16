@@ -15,6 +15,8 @@ Design locks (survey-exdiv-adj-data-prep-2026-09-16.md §3):
 Adjudication (E-R5 vs 复权 plan) is a HUMAN cut after host numbers — never auto.
 NP2 is separate from NP1 (capital ration) and fees. Does not implement 复权.
 No engine imports, market-data writes, or golden regeneration.
+Non-BUY/SELL sides (e.g. EOD_MARK valuation rows) are skipped with a count —
+never hard-fail the probe.
 """
 
 from __future__ import annotations
@@ -110,6 +112,7 @@ class ExdivHoldHitsReport:
     n_lots_matched: int = 0
     n_lots_open: int = 0
     n_lots_in_window: int = 0
+    n_skipped_non_trade_sides: int = 0
     n_ex_events_in_window: int = 0
     n_codes_in_ex_index_window: int = 0
     hold_exdiv_hit_events: int = 0
@@ -189,11 +192,16 @@ def load_ex_date_index(path: Path, *, start: str, end: str) -> dict[str, list[st
     return {code: sorted(dates) for code, dates in by_code.items()}
 
 
-def parse_hold_lots(trades: Path) -> list[HoldLot]:
-    """Chronological FIFO BUY→SELL match on (code, lot); lot ids may restart."""
+def parse_hold_lots(trades: Path) -> tuple[list[HoldLot], int]:
+    """Chronological FIFO BUY→SELL match on (code, lot); lot ids may restart.
+
+    Non-BUY/SELL sides (e.g. ``EOD_MARK`` valuation marks in real trades.csv)
+    are skipped silently and counted — they must not hard-fail the probe.
+    """
     required = {"date", "code", "side", "reason", "lot"}
     open_buys: dict[tuple[str, int], deque[tuple[str, dict[str, str]]]] = defaultdict(deque)
     lots: list[HoldLot] = []
+    skipped_non_trade = 0
     with Path(trades).open(encoding="utf-8-sig", newline="") as stream:
         reader = csv.DictReader(stream)
         missing = required - set(reader.fieldnames or [])
@@ -201,6 +209,11 @@ def parse_hold_lots(trades: Path) -> list[HoldLot]:
             raise ValueError(f"trades CSV missing columns: {', '.join(sorted(missing))}")
         for row in reader:
             raw = {k: ("" if v is None else str(v)) for k, v in row.items()}
+            side = raw["side"].strip().upper()
+            if side not in {"BUY", "SELL"}:
+                # Valuation / bookkeeping rows (EOD_MARK, …) — skip with count.
+                skipped_non_trade += 1
+                continue
             try:
                 ds = normalize_date(raw["date"])
             except ValueError as exc:
@@ -214,11 +227,10 @@ def parse_hold_lots(trades: Path) -> list[HoldLot]:
                 raise ValueError(
                     f"trades row {reader.line_num}: invalid lot {raw['lot']!r}"
                 ) from exc
-            side = raw["side"].strip().upper()
             key = (code, lot_id)
             if side == "BUY":
                 open_buys[key].append((ds, raw))
-            elif side == "SELL":
+            else:  # SELL
                 if not open_buys[key]:
                     raise ValueError(
                         f"trades row {reader.line_num}: SELL without open BUY "
@@ -236,10 +248,6 @@ def parse_hold_lots(trades: Path) -> list[HoldLot]:
                         sell_reason=raw.get("reason", "") or "",
                     )
                 )
-            else:
-                raise ValueError(
-                    f"trades row {reader.line_num}: unknown side {raw['side']!r}"
-                )
     for (code, lot_id), pending in open_buys.items():
         for entry_ds, buy_row in pending:
             lots.append(
@@ -254,7 +262,7 @@ def parse_hold_lots(trades: Path) -> list[HoldLot]:
                 )
             )
     lots.sort(key=lambda x: (x.entry_date, x.code, x.lot))
-    return lots
+    return lots, skipped_non_trade
 
 
 def _lot_in_window(lot: HoldLot, start: str, end: str) -> bool:
@@ -365,7 +373,7 @@ def report_exdiv_hold_hits(
     if sample_limit < 0:
         raise ValueError("sample_limit must be non-negative")
 
-    lots = parse_hold_lots(Path(trades))
+    lots, n_skipped_non_trade = parse_hold_lots(Path(trades))
     ex_by_code = load_ex_date_index(Path(ex_date_index), start=lower, end=upper)
     n_ex_events = sum(len(v) for v in ex_by_code.values())
 
@@ -457,6 +465,7 @@ def report_exdiv_hold_hits(
         n_lots_matched=sum(1 for lot in lots if lot.exit_date is not None),
         n_lots_open=sum(1 for lot in lots if lot.exit_date is None),
         n_lots_in_window=len(window_lots),
+        n_skipped_non_trade_sides=n_skipped_non_trade,
         n_ex_events_in_window=n_ex_events,
         n_codes_in_ex_index_window=len(ex_by_code),
         hold_exdiv_hit_events=hit_events,

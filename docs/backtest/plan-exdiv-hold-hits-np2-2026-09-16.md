@@ -1,11 +1,11 @@
 # Plan：除权持仓命中只读计数 NP2（主源 ex_date_index → 人裁 E-R5 / 复权片）
 
-> **落盘**：2026-09-16（Asia/Shanghai）。**v1.0**。
-> **状态**：🚧 **implementing read-only count（切片 A）** → 宿主跑数（切片 B）→ **人裁** E-R5 vs 新复权 plan（**非自动**）。
+> **落盘**：2026-09-16（Asia/Shanghai）。**v1.1**。
+> **状态**：✅ **已人裁 E-R5**；复权片不开。切片 A/B 已合；宿主短记 [np2-exdiv-hold-hits-host-note-2026-09-16.md](np2-exdiv-hold-hits-host-note-2026-09-16.md)；锁落 [engine-ashare-correctness.md](engine-ashare-correctness.md) E-R5。
 > **风险档**：**L1**（A：事后归因脚本 + data-free pytest；零成交核 / 零 `dividend_type` / 零 golden 变更）。
 > **业务源**：survey [survey-exdiv-adj-data-prep-2026-09-16.md](survey-exdiv-adj-data-prep-2026-09-16.md) §0–§3 **GO + 三条设计锁**；引子 [handoff-exdiv-adj-data-prep-intro-2026-09-16.md](handoff-exdiv-adj-data-prep-intro-2026-09-16.md) §7；战略 [strategic-analysis-opus5-next-2026-09-16.md](strategic-analysis-opus5-next-2026-09-16.md) §6 NP2；D 烟测工件提示 [money-modes-v8-pername-smoke-2026-09-16.md](money-modes-v8-pername-smoke-2026-09-16.md)。
 > **工作流**：Codex / 本机 agent；**No CloudAgent**。与 NP1（配给）/ 费率严格分离。
-> **成交核现锁**：[engine-ashare-correctness.md](engine-ashare-correctness.md)（E-R1–E-R4，本轮不动；E-R5 仅人裁后另写）。
+> **成交核现锁**：[engine-ashare-correctness.md](engine-ashare-correctness.md)（E-R1–E-R5；**E-R5 已人裁落锁**，复权片不开）。
 > **基线 tip**：`578cb80`（`origin/master`，survey PR #71 合入后）。
 
 ---
@@ -102,4 +102,11 @@ D:\anaconda3\envs\vanna312\python.exe scripts\research\report_exdiv_hold_hits.py
 |------|------|
 | [exdiv-hold-hits-np2-host-runbook-2026-09-16.md](exdiv-hold-hits-np2-host-runbook-2026-09-16.md) | 宿主 CLI + 结果 stub |
 | [survey-exdiv-adj-data-prep-2026-09-16.md](survey-exdiv-adj-data-prep-2026-09-16.md) | GO + 三锁 + 幅度先验 |
-| [engine-ashare-correctness.md](engine-ashare-correctness.md) | 未来 E-R5 落点 |
+| [engine-ashare-correctness.md](engine-ashare-correctness.md) | **E-R5 已落**（known none-chain boundary） |
+
+---
+
+## 7. Changelog
+
+- **v1.0**（2026-09-16）：切片 A/B 只读计数 + 宿主短记；裁决待人裁。
+- **v1.1**（2026-09-16）：**已人裁 E-R5**；复权实施片不开；重开条件见 engine-ashare-correctness.md E-R5 / host-note §3。

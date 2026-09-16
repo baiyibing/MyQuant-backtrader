@@ -169,6 +169,8 @@ HELP_LOCK = """
         （force_min，自主池、不占额度）；佣金 0.1% 双边无最低。
   配给：--ration file_order 保持 CSV 行序；seeded_shuffle 用 --ration-seed 与日期
         经 SHA-256 派生逐日稳定乱序；追买沿该次名单遍历产生的排队顺序。
+  复权：E-R5 已知边界 — 全程 dividend_type=none；cost/peak/涨跌停参考价不对除权调整
+        （证据见 docs/backtest/engine-ashare-correctness.md E-R5）。
   T+1：买入日不可卖；期末持仓按最后有 K 收盘估值（eod_mark）。
   窗口：--end 是估值/离场末日。买入只发生在 stock_pool/ 有 CSV 的交易日
         （缺日不买）。分钟湖若短于 --end，用日线版接到今天。
