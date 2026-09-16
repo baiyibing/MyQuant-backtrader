@@ -36,6 +36,6 @@
 - 行为断言：除权日假 gap_open 归零（对照 `research_false_stops_exdiv.csv` 的 5 笔）；
 - 与 E-R1–E-R4 的关系：新 E-R6 条目（「除权日参考价修正」），E-R5 改为「非除权日的不复权近似（影响 ≤0.5% 量级）」。
 
-## 5. 待人裁
+## 5. 人裁记录
 
-**单选题：A（仅修订声明）还是 B（开 scoped 复权片）？** 裁决后：A → 我更新 E-R5 条目 + v2-D 放行；B → 我写复权片 plan 走评审流程，v2-D 挂其合入后。
+**已裁（2026-09-16）：选 B——开 scoped 复权片。** 复权片 plan：[plan-exdiv-refprice-2026-09-16.md](plan-exdiv-refprice-2026-09-16.md)；v2 切片 D 挂本片合入后执行。
