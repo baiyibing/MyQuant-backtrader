@@ -35,5 +35,5 @@
 
 ## 结论
 
-- plan v1.1 已按裁决回写 → READY。**人裁（2026-09-16）：GO，P1–P4 全部采纳评审裁决值。**
+- plan v1.1 已按裁决回写 → **READY，待人裁 GO（P1–P4）**。
 - 人裁 GO 后按 [Codex 交接工作流](../../../../backtest/workflow-codex-handoff.md) 开 `feat/np3-engine-layering`。
