@@ -14,6 +14,10 @@ import pandas as pd
 
 from backtest.research.csv_ledger import resolve_limit_prices
 
+DEFAULT_DAILY_QUOTA = 1_000_000.0
+WARMUP_DAYS = 10
+STRATEGY4_CALENDAR_SLACK_DAYS = 22
+
 
 def day_bar_and_prev_closes(
     df: pd.DataFrame, day

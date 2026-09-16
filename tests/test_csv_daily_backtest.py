@@ -16,6 +16,8 @@ import pytest
 
 import backtest.research.csv_daily_backtest as sim
 from backtest.research import csv_artifacts as artifacts
+from backtest.research import csv_daily_loader as loader
+from oskh_data.symbol_format import to_partition_key
 
 
 DAYS = ["2025-11-03", "2025-11-04", "2025-11-05", "2025-11-06", "2025-11-07"]
@@ -47,7 +49,7 @@ def _run(pool: dict, bars: dict, **kwargs):
 
 
 def _write_daily_lake_frame(tmp_path, code: str, frame: pd.DataFrame) -> None:
-    partition = tmp_path / f"symbol={sim.to_partition_key(code)}"
+    partition = tmp_path / f"symbol={to_partition_key(code)}"
     partition.mkdir(parents=True, exist_ok=True)
     frame.to_parquet(partition / "data.parquet", index=False)
 
@@ -84,7 +86,7 @@ def test_read_one_daily_drops_zero_volume_rows(tmp_path):
         ),
     )
 
-    got = sim._read_one_daily("600000.SH", tmp_path, "20251103", "20251104")
+    got = loader._read_one_daily("600000.SH", tmp_path, "20251103", "20251104")
 
     assert got is not None
     assert list(got.index) == [pd.Timestamp("2025-11-03")]
@@ -106,7 +108,7 @@ def test_read_one_daily_without_volume_keeps_original_behavior(tmp_path):
         ),
     )
 
-    got = sim._read_one_daily("600000.SH", tmp_path, "20251103", "20251104")
+    got = loader._read_one_daily("600000.SH", tmp_path, "20251103", "20251104")
 
     assert got is not None
     assert list(got.index) == [
@@ -963,8 +965,8 @@ def test_zero_volume_placeholder_day_cannot_sell_or_buy_and_marks_last_close(
             }
         ),
     )
-    held = sim._read_one_daily("600000.SH", tmp_path, "20251031", "20251104")
-    candidate = sim._read_one_daily(
+    held = loader._read_one_daily("600000.SH", tmp_path, "20251031", "20251104")
+    candidate = loader._read_one_daily(
         "600001.SH", tmp_path, "20251031", "20251104"
     )
     assert held is not None and candidate is not None
@@ -1020,7 +1022,7 @@ def test_zero_volume_placeholder_chase_day_stays_pending(tmp_path):
             }
         ),
     )
-    target = sim._read_one_daily("600000.SH", tmp_path, "20251031", "20251104")
+    target = loader._read_one_daily("600000.SH", tmp_path, "20251031", "20251104")
     assert target is not None
     calendar_anchor = pd.DataFrame(
         {

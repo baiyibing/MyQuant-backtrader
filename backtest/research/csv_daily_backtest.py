@@ -81,6 +81,9 @@ from backtest.research.csv_ledger import (  # noqa: E402
     resolve_limit_prices,
 )
 from backtest.research.csv_common import (  # noqa: E402
+    DEFAULT_DAILY_QUOTA,
+    STRATEGY4_CALENDAR_SLACK_DAYS,
+    WARMUP_DAYS,
     build_calendar,
     day_bar_and_prev_closes,
     _named_limits,
@@ -107,6 +110,11 @@ from backtest.research.market_layer import (  # noqa: E402
 from backtest.research.csv_artifacts import (  # noqa: E402
     summarize,
     write_run_artifacts,
+)
+from backtest.research.csv_daily_loader import (  # noqa: E402
+    load_daily_bars,
+    warmup_start,
+    warn_stale_period_env,
 )
 
 # 测试与分钟引擎仍从本模块引用策略书/账本/市场层符号。
@@ -135,21 +143,6 @@ _ = (
     round_fen,
 )
 from common.infra.data_root import resolve_period_root  # noqa: E402
-from oskh_data.symbol_format import to_partition_key  # noqa: E402
-
-DEFAULT_DAILY_QUOTA = 1_000_000.0
-WARMUP_DAYS = 10
-STRATEGY4_CALENDAR_SLACK_DAYS = 22
-# 2026-09-11 实测：F 盘 period=1m 最后一根交易日（抽样 50 只含 000001，无 20260910）。
-MINUTE_LAKE_END = "20260909"
-_PERIOD_ENV_KEYS = (
-    "OSKH_PERIOD_1D_ROOT",
-    "OSKH_PERIOD_1M_ROOT",
-    "OSKH_INDEX_DAILY_ROOT",
-    "OSKH_ETF_DAILY_ROOT",
-    "OSKH_SOURCE_PARQUET_ROOT",
-)
-
 HELP_LOCK = """
 日线近似口径（相对分钟保真版的唯一失真来源）：
   买入：池 CSV 当日候选、收盘价成交（分钟版 14:55≈收盘）；买价达到或超过
@@ -190,90 +183,7 @@ def help_lock_for(strategy: str, *, shared: str = HELP_LOCK) -> str:
     return _help_lock_for(strategy, shared=shared)
 
 
-def warmup_start(start: str, days: int = WARMUP_DAYS) -> str:
-    return (pd.Timestamp(start) - pd.Timedelta(days=int(days))).strftime("%Y%m%d")
-
-
-def warn_stale_period_env() -> None:
-    hit = [k for k in _PERIOD_ENV_KEYS if os.environ.get(k)]
-    if hit:
-        print(
-            f"[warn] {', '.join(hit)} is set; lake may ignore F:\\stock_data\\.authority",
-            flush=True,
-        )
-
-
-# Re-exported from csv_common for existing imports / minute engine.
-# (build_calendar, _named_limits, _pool_names_asof)
-
 _limit_prices = resolve_limit_prices
-
-
-def _read_one_daily(
-    code: str, root: Path, start: str, end: str
-) -> Optional[pd.DataFrame]:
-    path = root / f"symbol={to_partition_key(code)}" / "data.parquet"
-    if not path.is_file():
-        return None
-    t0, t1 = utc_ms_range(start, end)
-    try:
-        columns = ["time", "open", "high", "low", "close"]
-        has_volume = "volume" in pq.read_schema(path).names
-        table = pq.read_table(
-            path, columns=columns + (["volume"] if has_volume else [])
-        )
-        table = table.filter((pc.field("time") >= t0) & (pc.field("time") <= t1))
-    except Exception:
-        return None
-    if table.num_rows == 0:
-        return None
-    ms = table["time"].to_numpy()
-    idx = pd.to_datetime(ms, unit="ms", utc=True).tz_localize(None).normalize()
-    out = pd.DataFrame(
-        {
-            "open": table["open"].to_numpy(),
-            "high": table["high"].to_numpy(),
-            "low": table["low"].to_numpy(),
-            "close": table["close"].to_numpy(),
-            **(
-                {"_volume": table["volume"].to_numpy()}
-                if has_volume
-                else {}
-            ),
-        },
-        index=idx,
-    ).astype(np.float64)
-    out = out[~out.index.duplicated(keep="last")].sort_index()
-    if has_volume:
-        out = out.loc[out["_volume"] != 0].drop(columns="_volume")
-    return out if not out.empty else None
-
-
-def load_daily_bars(
-    codes: set[str], start: str, end: str, *, workers: int = 16
-) -> dict[str, pd.DataFrame]:
-    """不复权日线（与分钟链 adjust_type='none' 对齐），index=交易日 00:00。"""
-    root = resolve_period_root("1d") / "dividend_type=none"
-    out: dict[str, pd.DataFrame] = {}
-    codes_list = sorted(codes)
-    n = max(1, int(workers))
-    with ThreadPoolExecutor(max_workers=n) as pool:
-        futs = {
-            pool.submit(_read_one_daily, c, root, start, end): c for c in codes_list
-        }
-        done = 0
-        total = len(futs)
-        for fut in as_completed(futs):
-            done += 1
-            _progress(done, total, "daily lake")
-            code = futs[fut]
-            try:
-                df = fut.result()
-            except Exception:
-                continue
-            if df is not None and not df.empty:
-                out[code] = df
-    return out
 
 
 

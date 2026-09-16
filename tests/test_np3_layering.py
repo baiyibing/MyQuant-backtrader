@@ -102,3 +102,20 @@ def test_maybe_compare_daily_peer_caption(tmp_path: Path) -> None:
         )
         == ""
     )
+
+
+def test_warn_stale_period_env_monkeypatch(monkeypatch, capsys) -> None:
+    from backtest.research.csv_daily_loader import _PERIOD_ENV_KEYS, warn_stale_period_env
+
+    for k in _PERIOD_ENV_KEYS:
+        monkeypatch.delenv(k, raising=False)
+    warn_stale_period_env()
+    assert capsys.readouterr().out == ""
+
+    monkeypatch.setenv("OSKH_PERIOD_1D_ROOT", "/tmp/fake")
+    warn_stale_period_env()
+    out = capsys.readouterr().out
+    assert "OSKH_PERIOD_1D_ROOT" in out
+    assert "lake may ignore" in out
+    assert ".authority" in out
+
