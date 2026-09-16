@@ -1,7 +1,7 @@
 # Plan：策略 8 规则 v2（0916 业务修订：加仓恢复 + 涨幅比例回撤阶梯 + T+1 止盈豁免）
 
 > **落盘**：2026-09-16。**v1.1**（2026-09-16 两路评审修订，见 changelog §10）。
-> **状态**：📄 **v1.1 · 已评审，待人裁 GO（PG-1–PG-4，见 §3）**。评审记录：[zcode-facts](../architecture/reviews/2026-09-16/plan-v8-rules-v2/zcode-facts.md) / [zcode-arch](../architecture/reviews/2026-09-16/plan-v8-rules-v2/zcode-arch.md) / [merge-consensus](../architecture/reviews/2026-09-16/plan-v8-rules-v2/merge-consensus.md)。
+> **状态**：🚧 **v1.1 · 已人裁 GO（2026-09-16，PG-1–PG-4 全采纳建议值），实施中**（分支 `feat/v8-rules-v2`，执行：Codex；切片 D 挂 E-R5 复核结论之后）。评审记录：[zcode-facts](../architecture/reviews/2026-09-16/plan-v8-rules-v2/zcode-facts.md) / [zcode-arch](../architecture/reviews/2026-09-16/plan-v8-rules-v2/zcode-arch.md) / [merge-consensus](../architecture/reviews/2026-09-16/plan-v8-rules-v2/merge-consensus.md)。
 > **风险档**：**L1+**（触及 v8 卖点语义与 per_name 加仓锁——均为业务明示修订；不动成交核 E-R1–E-R5、不动 1–6/9/10）。
 > **工作流**：走 [Codex 交接工作流](workflow-codex-handoff.md)。
 > **业务源**：对话给定「金榕元回测交易策略8」修订版（2026-09-16），歧义已裁（§3）。
@@ -61,10 +61,10 @@
 
 | # | 问题 | 建议 |
 |---|------|------|
-| **PG-1** | 50%/100% 边界按业务原文（50%→档3 线 +30%；100%→档4 线 +70%） | 确认（表已按原文） |
-| **PG-2** | reason 契约 `trail:band:1..5` | 确认 |
-| **PG-3** | 档 1 允许保本/费用后微亏退出（70% 回撤的必然推论） | 接受并声明 |
-| **PG-4** | E-R5 复核与 v2 顺序：**推荐先 E-R5 复核再 5 亿重跑**（v2 核心变化作用于除权噪音最浓的微利区，混跑归因不净；且 E-R5 若落复权，v2 数字要重跑一遍） | 先 E-R5；若并行，D 短记附除权标注视图 |
+| **PG-1** | 50%/100% 边界 | **已裁**：按业务原文（50%→档3、100%→档4） |
+| **PG-2** | reason 契约 | **已裁**：`trail:band:1..5` |
+| **PG-3** | 档 1 保本/微亏退出 | **已裁**：接受，HELP_LOCK 声明 |
+| **PG-4** | E-R5 复核与 v2 顺序 | **已裁：先 E-R5 复核**；v2 切片 A/B/C 先行（无重跑依赖），**切片 D 挂 E-R5 复核结论后执行** |
 
 ## 4. 非目标
 

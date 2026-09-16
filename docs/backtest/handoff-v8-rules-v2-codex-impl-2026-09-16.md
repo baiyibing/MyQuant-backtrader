@@ -1,7 +1,7 @@
 # 交接 · v8 规则 v2 实施（Codex 接手）
 
 > 日期：2026-09-16
-> 状态：**plan v1.1 已评审（READY）；待人裁 GO（PG-1–PG-4）后本交接生效**。四点建议值如翻案，先回填 plan §3 再开工。
+> 状态：**✅ 已人裁 GO（2026-09-16，PG-1–PG-4 全采纳）——交接已生效**。分支 `feat/v8-rules-v2`；切片 A/B/C 即做，**切片 D 挂 E-R5 复核结论后**。
 > 权威对象：[plan-v8-rules-v2-2026-09-16.md](plan-v8-rules-v2-2026-09-16.md)（v1.1）。
 > 评审链：[zcode-facts](../architecture/reviews/2026-09-16/plan-v8-rules-v2/zcode-facts.md)（含**断言翻转全清单 §4**——切片 B 唯一权威清单）/ [zcode-arch](../architecture/reviews/2026-09-16/plan-v8-rules-v2/zcode-arch.md)（含**边界测试向量表**——切片 A 必收 #6/#10/#14/#16/#20/#21/#22）/ [merge-consensus](../architecture/reviews/2026-09-16/plan-v8-rules-v2/merge-consensus.md)。
 > 分支：从当时 master 开 `feat/v8-rules-v2`；A/B 分 commit。
