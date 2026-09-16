@@ -15,6 +15,7 @@ import pandas as pd
 import pytest
 
 import backtest.research.csv_daily_backtest as sim
+from backtest.research import csv_artifacts as artifacts
 
 
 DAYS = ["2025-11-03", "2025-11-04", "2025-11-05", "2025-11-06", "2025-11-07"]
@@ -214,7 +215,7 @@ def test_none_stop_short_circuits_even_after_price_halves(monkeypatch):
         for trade in st.trades
         if trade.get("reason", "").startswith("stop_loss:")
     ]
-    assert "止损 关闭" in sim.summarize(st, 21_000_000, "20251103", "20251107")
+    assert "止损 关闭" in artifacts.summarize(st, 21_000_000, "20251103", "20251107")
 
 
 def test_strategy5_daily_target_sells_next_open_without_force_reason():
@@ -730,7 +731,7 @@ def test_summarize_prints_chase_breakdown():
     st.stats["chase_pending_eod"] = 1
     st.stats["chase_overwrite"] = 1
     st.stats["chase_buy_fail"] = 1
-    text = sim.summarize(
+    text = artifacts.summarize(
         st, 21_000_000.0, "20251103", "20251103", engine="csv_daily_v8"
     )
     assert "涨停分解:" in text
@@ -751,7 +752,7 @@ def test_summarize_engine_tag_and_timings():
     st.equity_curve = [("20251103", 21_000_000.0)]
     st.stats["t_sim_s"] = 1.25
     st.stats["cache"] = "hit"
-    text = sim.summarize(
+    text = artifacts.summarize(
         st, 21_000_000.0, "20251103", "20251103", engine="csv_minute_v6"
     )
     assert text.startswith("csv_minute_v6 20251103..20251103")
@@ -763,7 +764,7 @@ def test_summarize_engine_tag_and_timings():
     st.stats["trail_t3"] = 0.50
     st.stats["trail_t4"] = 0.60
     st.stats["trail_t5"] = 0.70
-    text = sim.summarize(
+    text = artifacts.summarize(
         st, 21_000_000.0, "20251103", "20251103", engine="csv_minute_v6"
     )
     assert "参数: 止损 2%" in text
@@ -786,7 +787,7 @@ def test_write_run_artifacts_three_files(tmp_path):
             "commission": 1.0,
         }
     )
-    out = sim.write_run_artifacts(tmp_path / "run", st, "hello", "lock\n")
+    out = artifacts.write_run_artifacts(tmp_path / "run", st, "hello", "lock\n")
     assert (out / "summary.txt").read_text(encoding="utf-8").startswith("hello")
     assert (out / "daily_equity.csv").is_file()
     assert (out / "trades.csv").is_file()
@@ -800,7 +801,7 @@ def test_format_equity_compare_overlap(tmp_path):
         newline="\n",
     )
     curve = [("20251103", 20_900_000.0), ("20251104", 20_950_000.0)]
-    text = sim.format_equity_compare(curve, peer, this_label="csv_minute_v6")
+    text = artifacts.format_equity_compare(curve, peer, this_label="csv_minute_v6")
     assert "重叠 2 日" in text
     assert "20251104" in text
     assert "none 成交价" in text
@@ -813,7 +814,7 @@ def test_find_daily_equity_prefers_covering_end(tmp_path):
     b.mkdir()
     (a / "daily_equity.csv").write_text("date,equity\n20251104,1\n", encoding="utf-8")
     (b / "daily_equity.csv").write_text("date,equity\n20260525,1\n", encoding="utf-8")
-    got = sim.find_daily_equity_csv(
+    got = artifacts.find_daily_equity_csv(
         "20251023", "20260525", output_root=tmp_path, book="v6"
     )
     assert got is not None

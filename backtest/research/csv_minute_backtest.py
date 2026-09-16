@@ -50,6 +50,7 @@ from backtest.research.csv_common import (  # noqa: E402
     build_calendar,
     _named_limits,
     _pool_names_asof,
+    _progress,
 )
 from backtest.research.market_layer import utc_ms_range  # noqa: E402
 from backtest.research.csv_pool import (  # noqa: E402
@@ -70,17 +71,18 @@ from backtest.research.strategy6_rules import (  # noqa: E402
     POS_TRAIL,
     trail_hits,
 )
+from backtest.research.csv_artifacts import (  # noqa: E402
+    maybe_compare_daily,
+    summarize,
+    write_run_artifacts,
+)
 from backtest.research.csv_daily_backtest import (  # noqa: E402
     DEFAULT_DAILY_QUOTA,
     STRATEGY4_CALENDAR_SLACK_DAYS,
     WARMUP_DAYS,
-    _progress,
     load_daily_bars,
-    maybe_compare_daily,
-    summarize,
     warn_stale_period_env,
     warmup_start,
-    write_run_artifacts,
 )
 
 # 2026-09-11 实测：F 盘 period=1m 最后一根交易日（抽样 50 只含 000001，无 20260910）。

@@ -83,3 +83,16 @@ def _pool_names_asof(
         return last_seen
 
     return names_for_day
+
+
+def _progress(done: int, total: int, label: str, every: int = 200) -> None:
+    if total <= 0:
+        return
+    if done == 1 or done == total or done % every == 0:
+        print(f"{label} {done}/{total}", flush=True)
+
+
+# Re-exported from csv_common for existing imports / minute engine.
+# (build_calendar, _named_limits, _pool_names_asof)
+
+_limit_prices = resolve_limit_prices
