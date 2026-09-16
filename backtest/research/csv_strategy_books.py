@@ -104,8 +104,6 @@ def apply_csv_strategy(strategy: str, **kwargs) -> dict:
     hooks["ration"] = ration
     hooks["ration_seed"] = ration_seed
     hooks["allow_add"] = book.allow_add
-    if book.sizing == "per_name":
-        hooks["allow_add"] = False
     hooks["peak_gap_min"] = book.peak_gap_min
     hooks["book"] = book.tag
     hooks["name"] = book.name

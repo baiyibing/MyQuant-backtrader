@@ -324,7 +324,7 @@ def test_csv_strategy_version8_uses_shared_engine():
     hooks = sim.apply_csv_strategy(**kw)
     assert hooks["stop_pct"] == pytest.approx(0.30)
     assert hooks["take_profit"] is not None
-    assert hooks["allow_add"] is False
+    assert hooks["allow_add"] is True
     assert hooks["sizing"] == "per_name"
     assert hooks["name_budget"] == 1_000_000
     assert hooks["book"] == "v8"

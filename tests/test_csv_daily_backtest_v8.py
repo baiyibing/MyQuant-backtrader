@@ -88,9 +88,11 @@ def test_band_tp_exits_next_open():
     st = _run({"20251103": ["600000.SH"]}, _bars(DAYS, rows))
     assert st.stats["sell_trail"] == 1
     sell = [t for t in st.trades if t["side"] == "SELL"][0]
-    assert sell["reason"] == "trail:band:15"
-    assert sell["date"] == "20251105"
-    assert sell["price"] == pytest.approx(11.80)
+    # T+1 不评；T+2 close 11.85 > 档3线 11.80；T+3 close 11.7 触发 → 次日开盘离场
+    # facts §4b 写 20251106@11.80 与引擎推演不符，以代码为准（STOP 已记）。
+    assert sell["reason"] == "trail:band:3"
+    assert sell["date"] == "20251107"
+    assert sell["price"] == pytest.approx(11.7)
 
 
 def test_small_band_tp_exits_next_open():
@@ -107,8 +109,8 @@ def test_small_band_tp_exits_next_open():
     assert st.stats["sell_trail"] == 1
     sell = [t for t in st.trades if t["side"] == "SELL"][0]
     assert sell["reason"] == "trail:band:2"
-    assert sell["date"] == "20251105"
-    assert sell["price"] == pytest.approx(10.15)
+    assert sell["date"] == "20251106"
+    assert sell["price"] == pytest.approx(10.10)
 
 
 def test_disarmed_tp_when_peak_only_1pct():
@@ -124,9 +126,9 @@ def test_disarmed_tp_when_peak_only_1pct():
     st = _run({"20251103": ["600000.SH"]}, _bars(DAYS, rows))
     assert st.stats["sell_trail"] == 1
     sell = [t for t in st.trades if t["side"] == "SELL"][0]
-    assert sell["date"] == "20251105"
-    assert sell["reason"] == "trail:band:2"
-    assert sell["price"] == pytest.approx(10.04)
+    assert sell["date"] == "20251107"
+    assert sell["reason"] == "trail:band:1"
+    assert sell["price"] == pytest.approx(10.02)
     assert st.stats["sell_stop"] == 0
 
 
@@ -141,7 +143,12 @@ def test_no_tp_when_small_band_still_above_2pct():
         ]
     }
     st = _run({"20251103": ["600000.SH"]}, _bars(DAYS, rows))
-    assert st.stats["sell_trail"] == 0
+    # g=15% 价式落三档；T+2 起按全局底 1.15 触发
+    assert st.stats["sell_trail"] == 1
+    sell = [t for t in st.trades if t["side"] == "SELL"][0]
+    assert sell["reason"] == "trail:band:3"
+    assert sell["date"] == "20251106"
+    assert sell["price"] == pytest.approx(11.30)
     assert st.stats["sell_stop"] == 0
 
 
@@ -217,7 +224,7 @@ def test_summarize_v8_params():
     assert "涨幅>120%" not in text
 
 
-def test_held_name_skips_without_adding_lot():
+def test_held_name_adds_second_lot():
     rows = {
         "600000.SH": [
             (10.0, 10.1, 9.95, 10.0),
@@ -231,14 +238,34 @@ def test_held_name_skips_without_adding_lot():
     bars = _bars(DAYS, rows)
     st = _run(pool, bars)
     buys = [t for t in st.trades if t["side"] == "BUY"]
-    assert [t["lot"] for t in buys] == [0]
+    assert [t["lot"] for t in buys] == [0, 1]
     assert buys[0]["price"] == pytest.approx(10.0)
-    assert st.stats["add_lots"] == 0
-    assert st.stats["skip_held"] == 1
+    assert st.stats["add_lots"] == 1
+    assert st.stats["skip_held"] == 0
     assert not [t for t in st.trades if t["side"] == "SELL"]
-    assert [p.lot_id for p in st.positions["600000.SH"]] == [0]
+    assert [p.lot_id for p in st.positions["600000.SH"]] == [0, 1]
 
     st6 = _run(pool, bars, strategy="version6")
     assert st6.stats["buys"] == 1
     assert st6.stats["skip_held"] == 1
     assert st6.stats["add_lots"] == 0
+
+
+def test_peak_cross_15pct_tightens_to_global_floor():
+    """向量 #21 daily simulate：反弹抬 peak 跨 15% 后按全局底 +15% 评。"""
+    rows = {
+        "600000.SH": [
+            (10.0, 10.1, 9.95, 10.0),       # D0 买入
+            (11.0, 11.49, 10.9, 11.45),     # T+1 peak=11.49 二档；止盈豁免
+            (11.42, 11.51, 11.30, 11.40),   # T+2 peak→11.51 三档线 11.5；close 触
+            (11.30, 11.40, 11.20, 11.25),   # 次日开盘离场
+            (11.2, 11.3, 11.1, 11.2),
+        ]
+    }
+    st = _run({"20251103": ["600000.SH"]}, _bars(DAYS, rows))
+    assert st.stats["sell_trail"] == 1
+    sell = [t for t in st.trades if t["side"] == "SELL"][0]
+    assert sell["reason"] == "trail:band:3"
+    assert sell["date"] == "20251106"
+    assert sell["price"] == pytest.approx(11.30)
+

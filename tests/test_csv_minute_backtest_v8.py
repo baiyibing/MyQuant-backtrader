@@ -76,9 +76,7 @@ def test_scan_small_band_disarmed_tp_when_peak_only_1pct():
         peak_gap_min=0,
         take_profit=take_profit_reason,
     )
-    assert idx == 0
-    assert px == pytest.approx(10.08)
-    assert reason == "trail:band:2"
+    assert idx == -1  # T+1 止盈豁免
 
 
 def test_scan_small_band_tp_on_close():
@@ -99,9 +97,7 @@ def test_scan_small_band_tp_on_close():
         peak_gap_min=0,
         take_profit=take_profit_reason,
     )
-    assert idx == 1
-    assert reason == "trail:band:2"
-    assert px == pytest.approx(10.199)
+    assert idx == -1  # T+1 止盈豁免
 
 
 def test_scan_band_tp_on_close():
@@ -122,9 +118,7 @@ def test_scan_band_tp_on_close():
         peak_gap_min=0,
         take_profit=take_profit_reason,
     )
-    assert idx == 1
-    assert reason == "trail:band:15"
-    assert px == pytest.approx(11.489)
+    assert idx == -1  # T+1 止盈豁免
 
 
 def test_scan_peak_dd():
@@ -145,9 +139,7 @@ def test_scan_peak_dd():
         peak_gap_min=0,
         take_profit=take_profit_reason,
     )
-    assert idx == 1
-    assert reason == "trail:peak_dd"
-    assert px == pytest.approx(23.90)
+    assert idx == -1  # T+1 止盈豁免（peak_dd 退役）
 
 
 def _day(date: str, rows: list[tuple]) -> pd.DataFrame:
@@ -237,7 +229,7 @@ def test_simulate_limit_up_abandons_when_945_below_open():
     assert chase_explained(st) == st.stats["skip_limit_up"]
 
 
-def test_simulate_held_name_skips_without_adding_lot():
+def test_simulate_held_name_adds_second_lot():
     dates = ["2025-11-03", "2025-11-04"]
     m = _day(
         "2025-11-03", [(930, 10.0, 10.1, 9.95, 10.0), (1455, 10.0, 10.05, 9.98, 10.0)]
@@ -254,11 +246,37 @@ def test_simulate_held_name_skips_without_adding_lot():
     pool = {"20251103": ["600000.SH"], "20251104": ["600000.SH"]}
     st = sim.simulate(minute, daily, pool, "20251103", "20251104", strategy="version8")
     buys = [t for t in st.trades if t["side"] == "BUY"]
-    assert [t["lot"] for t in buys] == [0]
+    assert [t["lot"] for t in buys] == [0, 1]
     assert buys[0]["price"] == pytest.approx(10.0)
-    assert st.stats["add_lots"] == 0
-    assert st.stats["skip_held"] == 1
+    assert st.stats["add_lots"] == 1
+    assert st.stats["skip_held"] == 0
 
     st6 = sim.simulate(minute, daily, pool, "20251103", "20251104", strategy="version6")
     assert st6.stats["buys"] == 1
     assert st6.stats["skip_held"] == 1
+
+
+def test_scan_peak_cross_15pct_tightens_to_global_floor():
+    """向量 #21 minute scan：反弹抬 peak 跨 15% 后按全局底 +15% 评。"""
+    o = np.array([11.45, 11.42])
+    h = np.array([11.49, 11.51])  # peak 11.49→11.51 跨入三档
+    c = np.array([11.45, 11.40])
+    idx, px, reason, peak, _ = sim.scan_held_day(
+        o,
+        h,
+        c,
+        cost=10.0,
+        peak=11.49,
+        n_days=2,
+        can_sell=True,
+        stop_pct=0.30,
+        profit_base=0.15,
+        trail_ratio=0.0,
+        peak_gap_min=0,
+        take_profit=take_profit_reason,
+    )
+    assert idx == 1
+    assert reason == "trail:band:3"
+    assert px == pytest.approx(11.40)
+    assert peak == pytest.approx(11.51)
+
