@@ -8,6 +8,7 @@
 仍开放重活队列：[plan-brainstorm-next-heavy-2026-09-15.md](plan-brainstorm-next-heavy-2026-09-15.md)。
 本仓对照分析（H1–H16 后）：[repo-analysis-vs-brainstorm-2026-09-15.md](repo-analysis-vs-brainstorm-2026-09-15.md)。
 刷新（local Opus 5 真跑 · tip `ad0c4ba` = `8793fd5`+#51–#56 ⊕ master `e06e1a9` pool-pipeline/source-B docs）：[repo-analysis-opus5-next-2026-09-15.md](repo-analysis-opus5-next-2026-09-15.md)。
+战略刷新（local Opus 5 · tip `5ba97e4` · 2026-09-16；NP1–NP5，配给/除权/分层）：[strategic-analysis-opus5-next-2026-09-16.md](strategic-analysis-opus5-next-2026-09-16.md)。
 
 ---
 
