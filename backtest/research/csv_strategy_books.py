@@ -230,6 +230,24 @@ def add_topk_dropout_args(ap: argparse.ArgumentParser) -> None:
         default=strategy_topk_dropout_rules.DEFAULT_N_DROP,
         help=f"topk_dropout n_drop (default {strategy_topk_dropout_rules.DEFAULT_N_DROP})",
     )
+    ap.add_argument(
+        "--st-daily-file",
+        type=Path,
+        default=None,
+        help="topk_dropout: st_daily.parquet PIT (BT-B; missing path fail-closed)",
+    )
+    ap.add_argument(
+        "--age-map-file",
+        type=Path,
+        default=None,
+        help="topk_dropout: code\tYYYYMMDD min-buy or listing start (BT-B)",
+    )
+    ap.add_argument(
+        "--age-days",
+        type=int,
+        default=60,
+        help="topk_dropout: listing age trading days when calendar given (default 60)",
+    )
 
 
 def add_csv_backtest_common_args(
@@ -669,13 +687,25 @@ def _run_kwargs_topk_dropout(args) -> dict:
     n_drop = int(getattr(args, "n_drop", strategy_topk_dropout_rules.DEFAULT_N_DROP))
     if topk < 0 or n_drop < 0:
         raise SystemExit(f"--topk/--n-drop must be >= 0, got {topk}/{n_drop}")
-    return {
+    out = {
         "strategy": "topk_dropout",
         "scores_by_day": scores_by_day,
         "topk": topk,
         "n_drop": n_drop,
         "stop_pct": resolved_stop,
     }
+    st_daily = getattr(args, "st_daily_file", None)
+    age_map = getattr(args, "age_map_file", None)
+    age_days = int(getattr(args, "age_days", 60))
+    if st_daily is not None or age_map is not None:
+        from backtest.research.topk_dropout_eligibility import make_eligible_buy
+
+        out["eligible_buy"] = make_eligible_buy(
+            st_daily_file=st_daily,
+            age_map_file=age_map,
+            age_days=age_days,
+        )
+    return out
 
 
 
