@@ -57,3 +57,5 @@ file_order + `--ration seeded_shuffle --ration-seed {0,1,2,3}` 共 5 跑：
 - 分钟引擎资金需求远低于日线（207 vs 495 只并发）：日内卖出回款快。**5 亿对双引擎都绰绰有余**。
 - 21M 口径工件已保护：`csv_minute_v8_20251023_20260909_pername21m/`、`csv_minute_v8_20251023_20260909_preswitch_dailyquota/`。
 - 0913 docx 四条规则在 5 亿口径下的实现与跑批至此全部闭环（P1 去武装为已裁解释；业务若重申「+6% 武装」，回改成本=一个常量+单测）。
+
+> **口径脚注（2026-09-16）**：本文数字为 **修正前口径**（E-R6 除权日参考价修正落地前引擎）。假止损消失 ≠ 亏损全额回收；切片 D 回收上界约 +35~125 万（≈0.01–0.025pp）。见 [engine-ashare-correctness.md](engine-ashare-correctness.md) E-R6 / [plan-exdiv-refprice-2026-09-16.md](plan-exdiv-refprice-2026-09-16.md)。

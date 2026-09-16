@@ -1,7 +1,7 @@
 # 交接 · 除权日参考价修正片 实施（Codex 接手）
 
 > 日期：2026-09-16
-> 状态：✅ **PX GO / implementing**（人裁 2026-09-16：PX-1…PX-7 全部「是」）。本交接生效；切片 A/B/C 由 Codex 本地实施，D 宿主-only。
+> 状态：✅ **A/B/C 已落地**（人裁 PX-1…PX-7 全部「是」）。切片 D 宿主-only，见 runbook 注记；勿在 CI/本 PR 宣称 D 完成。
 > 权威对象：[plan-exdiv-refprice-2026-09-16.md](plan-exdiv-refprice-2026-09-16.md)（v1.1）。
 > 评审链（施工图）：[zcode-facts](../architecture/reviews/2026-09-16/plan-exdiv-refprice/zcode-facts.md)（5 触点精确行号锚 + 数据层契约）/ [zcode-arch](../architecture/reviews/2026-09-16/plan-exdiv-refprice/zcode-arch.md)（**边界向量 T1–T16** + E-R5 收窄措辞 + 残留声明）/ [merge-consensus](../architecture/reviews/2026-09-16/plan-exdiv-refprice/merge-consensus.md)。
 > 分支：从当时 master 开 `feat/exdiv-refprice`；A/B 分 commit；**与 PR #81（v8 v2）同文件不同区域，后合者 rebase**。
@@ -45,3 +45,10 @@ D:\anaconda3\envs\vanna312\python.exe -m pytest -q tests/
 ```
 
 完成后缺陷优先复核（重点：csv_simulate_loop diff 只允许 helper 传入、golden v1/v6 绿、空 map 逐字节对照），回写 plan 状态与本交接完成标记。
+
+## 6. 完成标记
+
+- [x] 切片 A · `exdiv_map.py` + tests
+- [x] 切片 B · 引擎 5 触点 + `rescale_position` + `simulate(exdiv=)` + T1–T16 必收向量
+- [x] 切片 C · E-R6 / E-R5 收窄 + HELP_LOCK×2 + README + 三份历史脚注
+- [ ] 切片 D · 宿主 5 亿重跑（**host-only**；见 [exdiv-refprice-slice-d-host-runbook-2026-09-16.md](exdiv-refprice-slice-d-host-runbook-2026-09-16.md)）

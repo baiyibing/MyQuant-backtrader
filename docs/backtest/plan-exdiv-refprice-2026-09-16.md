@@ -1,7 +1,7 @@
 # Plan：除权日参考价修正片（scoped；E-R6 落地 + E-R5 收窄）
 
 > **落盘**：2026-09-16。**v1.1**（2026-09-16 两路评审修订，见 changelog §10）。
-> **状态**：✅ **PX GO / implementing**（人裁 2026-09-16：PX-1…PX-7 全部「是」，按 §3 建议）。评审记录：[zcode-facts](../architecture/reviews/2026-09-16/plan-exdiv-refprice/zcode-facts.md) / [zcode-arch](../architecture/reviews/2026-09-16/plan-exdiv-refprice/zcode-arch.md) / [merge-consensus](../architecture/reviews/2026-09-16/plan-exdiv-refprice/merge-consensus.md)。
+> **状态**：✅ **A/B/C 已落地（PR）；切片 D 宿主-only 未做**（人裁 2026-09-16：PX-1…PX-7 全部「是」）。评审记录：[zcode-facts](../architecture/reviews/2026-09-16/plan-exdiv-refprice/zcode-facts.md) / [zcode-arch](../architecture/reviews/2026-09-16/plan-exdiv-refprice/zcode-arch.md) / [merge-consensus](../architecture/reviews/2026-09-16/plan-exdiv-refprice/merge-consensus.md)。
 > **风险档**：**L2**（正确性行为变更：v1–v6、v8–v10 在除权日的 limit/止损/trail/买侧涨停拦截判定变化；成交价与净值估值语义不变）。
 > **工作流**：走 [Codex 交接工作流](workflow-codex-handoff.md)。
 > **裁决源**：[er5-recheck-5e8-note](er5-recheck-5e8-note-2026-09-16.md)（人裁 2026-09-16 选 B）；[survey-exdiv-adj-data-prep](survey-exdiv-adj-data-prep-2026-09-16.md) **C2 设计锁（主源层级，本 v1.1 已改回遵守）**。
@@ -120,6 +120,7 @@ D:\anaconda3\envs\vanna312\python.exe -m pytest -q tests/
 
 ## 9. Changelog
 
+- **v1.1+impl**（2026-09-16）：切片 A/B/C 落地（exdiv_map + 引擎 5 触点 + E-R6/E-R5 文档）；D 宿主验证另记。
 - **v1.1+GO**（2026-09-16）：人裁 PX-1…PX-7 全部「是」；状态 → ✅ PX GO / implementing。
 - **v1.1**（2026-09-16，两路评审）：检测门改回 survey C2（ex_date_index 主 ∪ 跳变>1e-2 兜底，PX-4）；补 pool 买侧档位映射（第 5 触点，T9）；simulate 布线锁 `exdiv=None` 参数（防 golden 湖依赖）；k 改行到行 LAG（停牌跨度）；读窗含 warmup；cost/peak 落点定稿 ledger 纯函数 `rescale_position`；E-R6 残留三句 + 回收上界预写（PX-6）；v7 不接（PX-7）+ 假成交消失断言；stats 三键条件打印；验证命令修正（OSKH_SOURCE_PARQUET_ROOT）；v2 冲突面措辞改「同文件不同区域」。
 - **v1.0**（2026-09-16）：初稿。
