@@ -1,7 +1,7 @@
 # Plan：NP3 引擎分层倒置修复（双入口 + 单共享核；纯机械重构）
 
 > **落盘**：2026-09-16。**v1.2**（2026-09-16 人裁 GO P1–P4 全采纳，见 changelog §10）。
-> **状态**：✅ **P1–P4 GO 已裁 / implementing**（评审记录：[zcode-facts](../architecture/reviews/2026-09-16/plan-np3-engine-layering/zcode-facts.md) / [zcode-arch](../architecture/reviews/2026-09-16/plan-np3-engine-layering/zcode-arch.md) / [merge-consensus](../architecture/reviews/2026-09-16/plan-np3-engine-layering/merge-consensus.md)）。
+> **状态**：✅ **P1–P4 GO 已裁 / A–D 已落地（待 PR 评审）**（评审记录：[zcode-facts](../architecture/reviews/2026-09-16/plan-np3-engine-layering/zcode-facts.md) / [zcode-arch](../architecture/reviews/2026-09-16/plan-np3-engine-layering/zcode-arch.md) / [merge-consensus](../architecture/reviews/2026-09-16/plan-np3-engine-layering/merge-consensus.md)）。
 > **风险档**：**L1**（纯搬移重构；零行为变更；byte-identical golden + 补充单测兜底）。
 > **工作流**：走 [Codex 交接工作流](workflow-codex-handoff.md)。
 > **上游**：[strategic-analysis-opus5-next-2026-09-16.md](strategic-analysis-opus5-next-2026-09-16.md) §6 NP3；人裁方向（2026-09-16）：「**双入口 + 单共享核**，不是单引擎；不做 big-bang 卖环合并（G 禁区仍在）」。
@@ -143,6 +143,6 @@ EOF
 
 ## 10. Changelog
 
-- **v1.2**（2026-09-16）：人裁 **P1–P4 GO 全采纳**（建议值）；状态 → implementing；交接生效。
+- **v1.2**（2026-09-16）：人裁 **P1–P4 GO 全采纳**（建议值）；A–D 落地；状态 → 待 PR 评审；交接生效。
 - **v1.1**（2026-09-16，两路评审）：§1 重写为「符号处置总表 + 消费者闭包」（补 artifacts 两伴生、loader 闭包 `_read_one_daily`/`_PERIOD_ENV_KEYS`/REPO、3 个漏列测试文件、help_lock_for 双真身注记、load_pool_days=wrapper 勘误）；P1 改判 MINUTE_LAKE_END 留 minute、P3 改判直呼 load_pool_day_map、新增 P4（单测+docstring 契约）；`_progress` 改判 csv_common；新增 N-R8（搬移闭包）/N-R9（测试面保留清单）/N-R10（编码与解释器）；N-R6 升级持久围栏；§8 bench 风险行结案；§4 宣称降级。
 - **v1.0**（2026-09-16）：初稿。

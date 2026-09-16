@@ -117,7 +117,7 @@ from backtest.research.csv_daily_loader import (  # noqa: E402
     warn_stale_period_env,
 )
 
-# 测试与分钟引擎仍从本模块引用策略书/账本/市场层符号。
+# 仅测试：pin 策略书/账本/市场层符号，供测试面属性引用（N-R9）；非引擎转发。
 _ = (
     HELP_LOCK_V6,
     HELP_LOCK_V8,

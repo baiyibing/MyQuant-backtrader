@@ -46,6 +46,8 @@ _VECTORIZED_RESEARCH_FACE = (
     "backtest.research.csv_simulate_loop",
     "backtest.research.csv_common",
     "backtest.research.csv_strategy_books",
+    "backtest.research.csv_artifacts",
+    "backtest.research.csv_daily_loader",
 )
 
 _BT_NAMES = frozenset({"backtrader", "bt"})
@@ -132,3 +134,18 @@ def test_money_arithmetic_fen_alignment() -> None:
     assert ma.fen_to_yuan(2000) == pytest.approx(20.0)
     with pytest.raises(ValueError):
         ma.fen_to_yuan(None)  # NULL 金额不得隐式回退 0 元
+
+
+def test_csv_minute_ast_no_csv_daily_import() -> None:
+    """N-R6 持久围栏：minute 不得再 from-import csv_daily_backtest。"""
+    path = REPO / "backtest" / "research" / "csv_minute_backtest.py"
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    hits = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.ImportFrom)
+        and node.module
+        and node.module.endswith("csv_daily_backtest")
+    ]
+    assert hits == [], f"minute→daily import residual: {hits!r}"
+
