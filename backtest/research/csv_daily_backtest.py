@@ -81,10 +81,14 @@ from backtest.research.csv_ledger import (  # noqa: E402
     resolve_limit_prices,
 )
 from backtest.research.csv_common import (  # noqa: E402
+    DEFAULT_DAILY_QUOTA,
+    STRATEGY4_CALENDAR_SLACK_DAYS,
+    WARMUP_DAYS,
     build_calendar,
     day_bar_and_prev_closes,
     _named_limits,
     _pool_names_asof,
+    _progress,
 )
 from backtest.research.csv_simulate_loop import (  # noqa: E402
     append_equity_and_eod_marks,
@@ -103,8 +107,17 @@ from backtest.research.market_layer import (  # noqa: E402
     round_fen,
     utc_ms_range,
 )
+from backtest.research.csv_artifacts import (  # noqa: E402
+    summarize,
+    write_run_artifacts,
+)
+from backtest.research.csv_daily_loader import (  # noqa: E402
+    load_daily_bars,
+    warmup_start,
+    warn_stale_period_env,
+)
 
-# 测试与分钟引擎仍从本模块引用策略书/账本/市场层符号。
+# 仅测试：pin 策略书/账本/市场层符号，供测试面属性引用（N-R9）；非引擎转发。
 _ = (
     HELP_LOCK_V6,
     HELP_LOCK_V8,
@@ -130,21 +143,6 @@ _ = (
     round_fen,
 )
 from common.infra.data_root import resolve_period_root  # noqa: E402
-from oskh_data.symbol_format import to_partition_key  # noqa: E402
-
-DEFAULT_DAILY_QUOTA = 1_000_000.0
-WARMUP_DAYS = 10
-STRATEGY4_CALENDAR_SLACK_DAYS = 22
-# 2026-09-11 实测：F 盘 period=1m 最后一根交易日（抽样 50 只含 000001，无 20260910）。
-MINUTE_LAKE_END = "20260909"
-_PERIOD_ENV_KEYS = (
-    "OSKH_PERIOD_1D_ROOT",
-    "OSKH_PERIOD_1M_ROOT",
-    "OSKH_INDEX_DAILY_ROOT",
-    "OSKH_ETF_DAILY_ROOT",
-    "OSKH_SOURCE_PARQUET_ROOT",
-)
-
 HELP_LOCK = """
 日线近似口径（相对分钟保真版的唯一失真来源）：
   买入：池 CSV 当日候选、收盘价成交（分钟版 14:55≈收盘）；买价达到或超过
@@ -185,105 +183,7 @@ def help_lock_for(strategy: str, *, shared: str = HELP_LOCK) -> str:
     return _help_lock_for(strategy, shared=shared)
 
 
-def warmup_start(start: str, days: int = WARMUP_DAYS) -> str:
-    return (pd.Timestamp(start) - pd.Timedelta(days=int(days))).strftime("%Y%m%d")
-
-
-def warn_stale_period_env() -> None:
-    hit = [k for k in _PERIOD_ENV_KEYS if os.environ.get(k)]
-    if hit:
-        print(
-            f"[warn] {', '.join(hit)} is set; lake may ignore F:\\stock_data\\.authority",
-            flush=True,
-        )
-
-
-def _progress(done: int, total: int, label: str, every: int = 200) -> None:
-    if total <= 0:
-        return
-    if done == 1 or done == total or done % every == 0:
-        print(f"{label} {done}/{total}", flush=True)
-
-
-# Re-exported from csv_common for existing imports / minute engine.
-# (build_calendar, _named_limits, _pool_names_asof)
-
 _limit_prices = resolve_limit_prices
-
-
-def load_pool_days(
-    start: str, end: str, pool_dir: Optional[Path] = None
-) -> dict[str, list[str]]:
-    """{YYYYMMDD: [canonical codes]}。头列无后缀，口径同 1.3 ``parse_pool_csv``。"""
-    root = Path(pool_dir) if pool_dir is not None else Path(REPO) / "stock_pool"
-    return load_pool_day_map(root, start, end, key="ymd", empty_in_map=False)
-
-
-def _read_one_daily(
-    code: str, root: Path, start: str, end: str
-) -> Optional[pd.DataFrame]:
-    path = root / f"symbol={to_partition_key(code)}" / "data.parquet"
-    if not path.is_file():
-        return None
-    t0, t1 = utc_ms_range(start, end)
-    try:
-        columns = ["time", "open", "high", "low", "close"]
-        has_volume = "volume" in pq.read_schema(path).names
-        table = pq.read_table(
-            path, columns=columns + (["volume"] if has_volume else [])
-        )
-        table = table.filter((pc.field("time") >= t0) & (pc.field("time") <= t1))
-    except Exception:
-        return None
-    if table.num_rows == 0:
-        return None
-    ms = table["time"].to_numpy()
-    idx = pd.to_datetime(ms, unit="ms", utc=True).tz_localize(None).normalize()
-    out = pd.DataFrame(
-        {
-            "open": table["open"].to_numpy(),
-            "high": table["high"].to_numpy(),
-            "low": table["low"].to_numpy(),
-            "close": table["close"].to_numpy(),
-            **(
-                {"_volume": table["volume"].to_numpy()}
-                if has_volume
-                else {}
-            ),
-        },
-        index=idx,
-    ).astype(np.float64)
-    out = out[~out.index.duplicated(keep="last")].sort_index()
-    if has_volume:
-        out = out.loc[out["_volume"] != 0].drop(columns="_volume")
-    return out if not out.empty else None
-
-
-def load_daily_bars(
-    codes: set[str], start: str, end: str, *, workers: int = 16
-) -> dict[str, pd.DataFrame]:
-    """不复权日线（与分钟链 adjust_type='none' 对齐），index=交易日 00:00。"""
-    root = resolve_period_root("1d") / "dividend_type=none"
-    out: dict[str, pd.DataFrame] = {}
-    codes_list = sorted(codes)
-    n = max(1, int(workers))
-    with ThreadPoolExecutor(max_workers=n) as pool:
-        futs = {
-            pool.submit(_read_one_daily, c, root, start, end): c for c in codes_list
-        }
-        done = 0
-        total = len(futs)
-        for fut in as_completed(futs):
-            done += 1
-            _progress(done, total, "daily lake")
-            code = futs[fut]
-            try:
-                df = fut.result()
-            except Exception:
-                continue
-            if df is not None and not df.empty:
-                out[code] = df
-    return out
 
 
 
@@ -507,7 +407,7 @@ def run(
     warn_stale_period_env()
     t_pool = time.perf_counter()
     actual_pool_dir = resolve_research_pool_dir(strategy, pool_dir, repo=REPO)
-    pool_days = load_pool_days(start, end, pool_dir=actual_pool_dir)
+    pool_days = load_pool_day_map(actual_pool_dir, start, end, key="ymd", empty_in_map=False)
     pool_names_by_day = load_pool_names_by_day(actual_pool_dir, start, end)
     t_pool = time.perf_counter() - t_pool
     if not pool_days:
@@ -559,109 +459,6 @@ def run(
     return st
 
 
-def summarize(
-    st: SimState,
-    total_cash: float,
-    start: str,
-    end: str,
-    *,
-    engine: str = "csv_daily_v6",
-) -> str:
-    eq = pd.DataFrame(st.equity_curve, columns=["date", "equity"])
-    final = float(eq["equity"].iloc[-1]) if len(eq) else total_cash
-    peak = eq["equity"].cummax()
-    max_dd = float((eq["equity"] / peak - 1.0).min()) if len(eq) else 0.0
-    invested = st.stats["invested_notional"]
-    deployed = (final - total_cash) / invested if invested > 0 else float("nan")
-    lines = [
-        f"{engine} {start}..{end}",
-        f"  期末净值: {final:,.2f} / {total_cash:,.0f}",
-        f"  总收益率(全资金): {final / total_cash - 1:+.2%}",
-        f"  动用资金收益率: {deployed:+.2%}"
-        if invested > 0
-        else "  动用资金收益率: n/a",
-        f"  最大回撤: {max_dd:.2%}",
-    ]
-    stop_text = (
-        f"{st.stats.get('stop_pct'):.0%}"
-        if isinstance(st.stats.get("stop_pct"), (int, float))
-        else "关闭"
-    )
-    if st.stats.get("sell_book") == "v8":
-        lines.append(
-            f"  参数: 止损 {stop_text} | "
-            f"0%<涨幅≤"
-            f"{st.stats['profit_base']:.0%} 回撤到+"
-            f"{st.stats.get('small_floor', 0.02):.0%} | 基础止盈 "
-            f"{st.stats['profit_base']:.0%} | 涨幅>{st.stats['peak_dd_arm']:.0%} 时 "
-            f"最高价回撤 {st.stats['peak_dd_pct']:.0%}"
-        )
-    elif st.stats.get("sell_book") == "v9":
-        lines.append(
-            f"  参数: 止损 {stop_text} | 满持有 "
-            f"{int(st.stats.get('max_hold', 20))} 日 force_sell"
-        )
-    elif st.stats.get("sell_book") in {"v6", "v10"} or "trail_t1" in st.stats:
-        lines.append(
-            f"  参数: 止损 {stop_text} | 锚 {st.stats['profit_base']:.0%} | "
-            f"回撤 T+1 {st.stats['trail_t1']:.0%} / T+2 {st.stats['trail_t2']:.0%} / "
-            f"T+3 {st.stats.get('trail_t3', 0):.0%} / T+4 {st.stats.get('trail_t4', 0):.0%} / "
-            f"T+5+ {st.stats.get('trail_t5', st.stats.get('trail_t3', 0)):.0%}"
-        )
-    lines.extend(
-        [
-            f"  买入 {st.stats['buys']} | 涨停跳过 {st.stats['skip_limit_up']} | "
-            f"追买 {st.stats.get('chase_buy', 0)} | 弃买 {st.stats.get('chase_abandon', 0)} | "
-            f"已持跳过 {st.stats['skip_held']} | 加仓 {st.stats.get('add_lots', 0)}",
-            f"  涨停分解: 追买 {st.stats.get('chase_buy', 0)} | "
-            f"弃买 {st.stats.get('chase_abandon', 0)} | "
-            f"追买日仍涨停 {st.stats.get('chase_skip_limit', 0)} | "
-            f"缺行情 {st.stats.get('chase_no_bar', 0)} | "
-            f"末日未追 {st.stats.get('chase_pending_eod', 0)} | "
-            f"覆盖 {st.stats.get('chase_overwrite', 0)} | "
-            f"买失败 {st.stats.get('chase_buy_fail', 0)} | "
-            f"追买已持跳过 {st.stats.get('chase_skip_held', 0)} | "
-            f"合计 {chase_explained(st)} / 涨停跳过 {st.stats['skip_limit_up']}",
-            f"  卖出: 止损 {st.stats['sell_stop']} | 锚定回撤 {st.stats['sell_trail']} | "
-            f"正利润回撤 {st.stats['sell_pos_trail']} | 止盈 {st.stats.get('sell_profit_take', 0)} | "
-            f"开板 {st.stats.get('sell_open_board', 0)} | 强制 {st.stats.get('sell_force', 0)} | "
-            f"均线 {st.stats.get('sell_ma', 0)}",
-            f"  跌停顺延卖出 {st.stats['defer_sell_limit_down']} | 补充资金 {st.stats['supplementary_used']:,.0f}",
-            f"  日线加载 {st.stats['bars_loaded']} | 池天数 {st.stats['pool_days']}",
-        ]
-    )
-    if "sizing" in st.stats:
-        lines.append(
-            f"  sizing={st.stats['sizing']} | name_budget={st.stats['name_budget']:,.0f} | "
-            f"skip_cash={st.stats.get('skip_cash', 0)} | "
-            f"skip_cash_notional={st.stats.get('skip_cash_notional', 0):,.0f} | "
-            f"chase_buy_fail_cash={st.stats.get('chase_buy_fail_cash', 0)} | "
-            f"chase_buy_fail_shares={st.stats.get('chase_buy_fail_shares', 0)}"
-        )
-    if "ration" in st.stats:
-        lines.append(
-            f"  ration={st.stats['ration']} | ration_seed={st.stats['ration_seed']}"
-        )
-    timing_parts = []
-    for key, lab in (
-        ("t_pool_s", "池"),
-        ("t_daily_s", "日线"),
-        ("t_minute_s", "分钟"),
-        ("t_sim_s", "模拟"),
-    ):
-        if key in st.stats:
-            timing_parts.append(f"{lab} {float(st.stats[key]):.1f}s")
-    cache = st.stats.get("cache")
-    if cache:
-        timing_parts.append(f"缓存 {cache}")
-    if timing_parts:
-        lines.append("  耗时: " + " | ".join(timing_parts))
-    missing = st.stats.get("codes_missing")
-    if missing:
-        lines.append(f"  缺行情 {int(missing)}")
-    return "\n".join(lines)
-
-
 def resolve_csv_daily_out_dir(
     out_dir: Optional[Path],
     *,
@@ -673,113 +470,6 @@ def resolve_csv_daily_out_dir(
     if out_dir is not None:
         return Path(out_dir)
     return Path(REPO) / "backtest_output" / f"csv_daily_{book}_{start}_{end}"
-
-
-def write_run_artifacts(out_dir: Path, st: SimState, text: str, help_lock: str) -> Path:
-    """三件套：summary.txt / daily_equity.csv / trades.csv。"""
-    out_dir = Path(out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    pd.DataFrame(st.trades).to_csv(
-        out_dir / "trades.csv", index=False, encoding="utf-8"
-    )
-    pd.DataFrame(st.equity_curve, columns=["date", "equity"]).to_csv(
-        out_dir / "daily_equity.csv", index=False, encoding="utf-8"
-    )
-    (out_dir / "summary.txt").write_text(
-        text + "\n" + help_lock, encoding="utf-8", newline="\n"
-    )
-    print(f"wrote {out_dir}", flush=True)
-    return out_dir
-
-
-def find_daily_equity_csv(
-    start: str,
-    end: str,
-    output_root: Optional[Path] = None,
-    *,
-    book: str,
-) -> Optional[Path]:
-    root = (
-        Path(output_root) if output_root is not None else Path(REPO) / "backtest_output"
-    )
-    exact = root / f"csv_daily_{book}_{start}_{end}" / "daily_equity.csv"
-    if exact.is_file():
-        return exact
-    found: list[tuple[str, Path]] = []
-    for path in root.glob(f"csv_daily_{book}_{start}_*/daily_equity.csv"):
-        found.append((path.parent.name.rsplit("_", 1)[-1], path))
-    if not found:
-        return None
-    covering = [item for item in found if item[0] >= end]
-    pool = covering or found
-    pool.sort(key=lambda item: item[0])
-    return pool[-1][1]
-
-
-def format_equity_compare(
-    this_curve: list,
-    peer_csv: Path,
-    *,
-    this_label: str,
-    peer_label: str = "csv_daily_v6",
-    highlight: str = "20251104",
-) -> str:
-    this = pd.DataFrame(this_curve, columns=["date", "equity"])
-    peer = pd.read_csv(peer_csv, encoding="utf-8")
-    if (
-        this.empty
-        or peer.empty
-        or "date" not in peer.columns
-        or "equity" not in peer.columns
-    ):
-        return f"对照 {peer_label}: 对端净值表为空（{peer_csv}）"
-    this["date"] = this["date"].astype(str)
-    peer["date"] = peer["date"].astype(str)
-    merged = this.merge(peer, on="date", suffixes=("_this", "_peer"))
-    if merged.empty:
-        return f"对照 {peer_label}: 无重叠交易日（{peer_csv}）"
-    merged["gap"] = merged["equity_this"] - merged["equity_peer"]
-    merged["gap_pct"] = merged["gap"] / merged["equity_peer"]
-    first = merged.iloc[0]
-    last = merged.iloc[-1]
-    worst = merged.loc[merged["gap"].abs().idxmax()]
-    lines = [
-        f"对照 {peer_label}（{peer_csv.parent.name}）重叠 {len(merged)} 日 "
-        f"{first['date']}..{last['date']}（双方均为 none 成交价，差来自卖点时钟）:",
-        f"  首日 {this_label} {first['equity_this']:,.2f} vs {peer_label} "
-        f"{first['equity_peer']:,.2f} 差 {first['gap']:+,.2f}",
-        f"  末日 {this_label} {last['equity_this']:,.2f} vs {peer_label} "
-        f"{last['equity_peer']:,.2f} 差 {last['gap']:+,.2f} ({last['gap_pct']:+.2%})",
-        f"  最大绝对偏差 {worst['date']} {worst['gap']:+,.2f} ({worst['gap_pct']:+.2%})",
-    ]
-    hit = merged.loc[merged["date"] == highlight]
-    if not hit.empty:
-        row = hit.iloc[0]
-        lines.append(
-            f"  {highlight} {this_label} {row['equity_this']:,.2f} vs "
-            f"{peer_label} {row['equity_peer']:,.2f} 差 {row['gap']:+,.2f}"
-        )
-    return "\n".join(lines)
-
-
-def maybe_compare_daily(
-    this_curve: list,
-    start: str,
-    end: str,
-    *,
-    this_label: str,
-    output_root: Optional[Path] = None,
-    book: Optional[str] = None,
-) -> str:
-    if not book:
-        return ""
-    peer = find_daily_equity_csv(start, end, output_root, book=book)
-    if peer is None:
-        return ""
-    peer_label = f"csv_daily_{book}"
-    return format_equity_compare(
-        this_curve, peer, this_label=this_label, peer_label=peer_label
-    )
 
 
 def main(argv: Optional[list] = None) -> int:

@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 
 import backtest.research.csv_minute_backtest as sim
-from backtest.research.csv_daily_backtest import chase_explained
+from backtest.research.csv_ledger import chase_explained
 
 
 def _write_minute_lake_frame(tmp_path, code: str, frame: pd.DataFrame) -> None:

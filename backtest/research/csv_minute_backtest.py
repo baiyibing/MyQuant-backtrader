@@ -30,49 +30,63 @@ import pyarrow as pa
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, REPO)
 
-from backtest.research.csv_daily_backtest import (  # noqa: E402
+from backtest.research.csv_ledger import (  # noqa: E402
     CHASE_HM,
-    DEFAULT_DAILY_QUOTA,
     DEFAULT_TOTAL_CASH,
-    MINUTE_LAKE_END,
     PEAK_GAP_MIN,
-    POS_TRAIL,
     SimState,
-    STRATEGY4_CALENDAR_SLACK_DAYS,
-    WARMUP_DAYS,
-    add_csv_backtest_common_args,
-    apply_csv_strategy,
     chase_decision,
-    csv_run_kwargs_from_args,
-    engine_book,
-    resolve_research_pool_dir,
     execute_buy,
     finish_pending_chase,
     queue_limit_up_chase,
-    help_lock_all,
-    help_lock_for,
-    _named_limits,
-    _pool_names_asof,
     hit_limit_down,
+    hit_limit_up,
     last_close_mark,
     peak_gap_blocks,
-    trail_hits,
-    hit_limit_up,
-    _progress,
     _sell,
     _ymd,
+)
+from backtest.research.csv_common import (  # noqa: E402
+    DEFAULT_DAILY_QUOTA,
+    STRATEGY4_CALENDAR_SLACK_DAYS,
+    WARMUP_DAYS,
     build_calendar,
-    load_daily_bars,
-    load_pool_days,
+    _named_limits,
+    _pool_names_asof,
+    _progress,
+)
+from backtest.research.market_layer import utc_ms_range  # noqa: E402
+from backtest.research.csv_pool import (  # noqa: E402
+    load_pool_day_map,
     load_pool_names_by_day,
-    maybe_compare_daily,
+)
+from backtest.research.csv_strategy_books import (  # noqa: E402
+    add_csv_backtest_common_args,
+    apply_csv_strategy,
+    csv_run_kwargs_from_args,
+    engine_book,
+    resolve_research_pool_dir,
+    help_lock_all,
+    help_lock_for,
     normalize_csv_strategy,
+)
+from backtest.research.strategy6_rules import (  # noqa: E402
+    POS_TRAIL,
+    trail_hits,
+)
+from backtest.research.csv_artifacts import (  # noqa: E402
+    maybe_compare_daily,
     summarize,
-    utc_ms_range,
-    warn_stale_period_env,
-    warmup_start,
     write_run_artifacts,
 )
+from backtest.research.csv_daily_loader import (  # noqa: E402
+    load_daily_bars,
+    warn_stale_period_env,
+    warmup_start,
+)
+
+# 2026-09-11 实测：F 盘 period=1m 最后一根交易日（抽样 50 只含 000001，无 20260910）。
+MINUTE_LAKE_END = "20260909"
 import pyarrow.compute as pc  # noqa: E402
 import pyarrow.parquet as pq  # noqa: E402
 from common.infra.data_root import resolve_period_root  # noqa: E402
@@ -1003,7 +1017,7 @@ def run(
         )
     t_pool = time.perf_counter()
     actual_pool_dir = resolve_research_pool_dir(strategy, pool_dir, repo=REPO)
-    pool_days = load_pool_days(start, end, pool_dir=actual_pool_dir)
+    pool_days = load_pool_day_map(actual_pool_dir, start, end, key="ymd", empty_in_map=False)
     pool_names_by_day = load_pool_names_by_day(actual_pool_dir, start, end)
     t_pool = time.perf_counter() - t_pool
     if not pool_days:

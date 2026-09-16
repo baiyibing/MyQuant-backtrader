@@ -37,3 +37,4 @@
 
 - plan v1.1 已按裁决回写 → **READY，待人裁 GO（P1–P4）**。
 - 人裁 GO 后按 [Codex 交接工作流](../../../../backtest/workflow-codex-handoff.md) 开 `feat/np3-engine-layering`。
+- **人裁采纳（2026-09-16）**：P1–P4 全部按建议值 GO；plan → v1.2 / implementing；交接生效。

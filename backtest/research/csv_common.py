@@ -14,6 +14,10 @@ import pandas as pd
 
 from backtest.research.csv_ledger import resolve_limit_prices
 
+DEFAULT_DAILY_QUOTA = 1_000_000.0
+WARMUP_DAYS = 10
+STRATEGY4_CALENDAR_SLACK_DAYS = 22
+
 
 def day_bar_and_prev_closes(
     df: pd.DataFrame, day
@@ -83,3 +87,11 @@ def _pool_names_asof(
         return last_seen
 
     return names_for_day
+
+
+def _progress(done: int, total: int, label: str, every: int = 200) -> None:
+    if total <= 0:
+        return
+    if done == 1 or done == total or done % every == 0:
+        print(f"{label} {done}/{total}", flush=True)
+

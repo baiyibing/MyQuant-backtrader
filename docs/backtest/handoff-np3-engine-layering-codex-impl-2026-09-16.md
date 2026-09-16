@@ -1,7 +1,7 @@
 # 交接 · NP3 引擎分层倒置 实施（Codex 接手）
 
 > 日期：2026-09-16
-> 状态：**plan v1.1 已评审（READY）；待人裁 GO（P1–P4）后本交接生效**。P1–P4 建议均为评审裁决值，GO 时默认采纳；如翻案先回填 plan §3 再开工。
+> 状态：**生效 / A–D 完成**（人裁 GO 2026-09-16；P1–P4 全采纳）。待 PR 评审，勿自动 merge。
 > 评审链：[zcode-facts](../architecture/reviews/2026-09-16/plan-np3-engine-layering/zcode-facts.md) / [zcode-arch](../architecture/reviews/2026-09-16/plan-np3-engine-layering/zcode-arch.md) / [merge-consensus](../architecture/reviews/2026-09-16/plan-np3-engine-layering/merge-consensus.md)。
 > 权威对象：[plan-np3-engine-layering-2026-09-16.md](plan-np3-engine-layering-2026-09-16.md)（v1.1）。
 > 分支：从当时 master 开 `feat/np3-engine-layering`；A/B/C/D 各一个 commit。

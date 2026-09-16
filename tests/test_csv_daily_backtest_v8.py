@@ -197,7 +197,8 @@ def test_limit_up_close_abandons_when_close_below_open():
 
 
 def test_summarize_v8_params():
-    from backtest.research.csv_daily_backtest import SimState, summarize
+    from backtest.research.csv_ledger import SimState
+    from backtest.research.csv_artifacts import summarize
     from backtest.research.strategy8_rules import record_strategy8_params
 
     st = SimState()
