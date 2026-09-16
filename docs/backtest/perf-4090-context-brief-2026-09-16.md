@@ -111,7 +111,7 @@ Qlib 回测快**不靠 numba/GPU/编译内核**，靠四件事全压在向量化
 |----|------|--------|
 | #58 退场 / #61 资金管理 / #62 收口 | ✅ 已合入归档（`e89d1b8`/`a606070`/`b748b37`） | 无 |
 | D 宿主烟测 | ✅ 已补跑（PR #62，merge `b748b37`；[烟测短记](money-modes-v8-pername-smoke-2026-09-16.md) 宿主节，事实卡见本简报 §2.2） | P1 有/无武装 A/B 后置（需 scratch 补丁） |
-| **PR #60（GPU plan）** | 📄 draft 待评审 | 多 agent 评审 → 人裁 P1–P3 → 若批 S0（高配机/本机只读实测） |
+| **PR #60（GPU plan）** | 📄 v1.1 待人裁 P1–P3 / 回测线已预裁停 | 人裁分钟 chip 使用频率 → 可选分钟 chip S0 → 条件 S2；以 plan v1.1 为准 |
 | #57 的 WP2（宿主门禁 cookbook）/ WP4（R11 de-dup） | ✅ 本 PR 落地，**与 #60 无关** | WP4 root 指针 → [WP2 cookbook](host-lake-gates-cookbook-2026-09-16.md) |
 | #57 的 WP1(1)（prev-close/close-history 缓存） | ⬜ 未开工 | S0 数字支持时随 S1 做 |
 
