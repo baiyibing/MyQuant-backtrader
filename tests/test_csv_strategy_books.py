@@ -349,7 +349,7 @@ def test_daily_quota_trades_byte_identical(strategy):
 
 
 def test_money_mode_summary_is_self_describing(per_name_hooks):
-    from backtest.research.csv_daily_backtest import summarize
+    from backtest.research.csv_artifacts import summarize
 
     st = _money_state(per_name_hooks)
     text = summarize(st, 21_000_000, "20251103", "20251103", engine="csv_daily_v8")
