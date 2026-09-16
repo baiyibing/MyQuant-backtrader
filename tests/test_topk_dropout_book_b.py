@@ -5,7 +5,11 @@ from __future__ import annotations
 from datetime import date
 
 from backtest.research.csv_strategy_books import apply_csv_strategy
-from backtest.research.topk_dropout_eligibility import make_eligible_buy, with_return_threshold
+from backtest.research.topk_dropout_eligibility import (
+    load_age_min_buy_ymd,
+    make_eligible_buy,
+    with_return_threshold,
+)
 from backtest.research.topk_dropout_rules import decide_topk_dropout
 
 
@@ -136,3 +140,15 @@ def test_return_threshold_walks_down_hot_name():
     planned = hooks["planned_for_day"](day, held)
     assert "600010.SH" not in planned
     assert planned[0] == "600011.SH"
+
+
+def test_age_map_overflow_is_not_yet_eligible(tmp_path):
+    """起始 + 60 越出日历写成 99991231，不能写回上市日（2026-07-08 / 920072）。"""
+    p = tmp_path / "age.tsv"
+    p.write_text("920072.BJ\t2026-06-29\n920083.BJ\t2026-06-11\n", encoding="utf-8")
+    cal = ["20260611", "20260629", "20260630", "20260708"]
+    got = load_age_min_buy_ymd(p, age_days=60, calendar_ymd=cal)
+    assert got["920072.BJ"] == "99991231"
+    assert got["920083.BJ"] == "99991231"
+    fn = make_eligible_buy(min_buy_ymd=got)
+    assert fn("920072.BJ", "20260708") is False

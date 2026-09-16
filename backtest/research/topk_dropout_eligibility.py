@@ -29,7 +29,11 @@ def _ymd(value) -> str:
 
 
 def load_st_daily_by_day(path: Path | str) -> dict[date, set[str]]:
-    """st_daily.parquet → {date: {canonical code}} for rows with is_st."""
+    """st_daily.parquet → {date: {canonical code}} for rows with is_st.
+
+    Same contract as MyQuant ``BuyEligibilityFilter`` + ``--st-daily-file``:
+    parquet ``is_st`` only; do not read ``st_coverage.json``.
+    """
     p = Path(path)
     if not p.is_file():
         raise FileNotFoundError(f"st-daily-file not found: {p}")
@@ -91,12 +95,11 @@ def load_age_min_buy_ymd(
             continue
         idx = cal_pos.get(start_ymd)
         if idx is None:
-            # start not on calendar: keep as-is (do not invent future)
-            out[code] = start_ymd
+            # 日历之前的老股保持原日期；日历之后或无法对齐 → 窗内不可买
+            out[code] = "99991231" if cal and start_ymd > cal[-1] else start_ymd
             continue
         j = idx + int(age_days)
         if j >= len(cal):
-            # not yet eligible within known calendar
             out[code] = "99991231"
         else:
             out[code] = cal[j]

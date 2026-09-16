@@ -98,3 +98,23 @@ def test_daily_stop_kernel_gap_open_reason():
     assert sells[0]["reason"] == "stop_loss:gap_open"
     # No trail reasons
     assert all(not t["reason"].startswith("trail:") for t in sells)
+
+
+def test_bare_or_canon_pads_int_stripped_leading_zeros():
+    from backtest.research.topk_dropout_scores import _bare_or_canon
+
+    assert _bare_or_canon(48) == "000048.SZ"
+    assert _bare_or_canon(608) == "000608.SZ"
+    assert _bare_or_canon("000048") == "000048.SZ"
+    assert _bare_or_canon(600179) == "600179.SH"
+
+
+def test_load_scores_dir_keeps_leading_zeros(tmp_path):
+    from backtest.research.topk_dropout_scores import load_scores_dir
+
+    p = tmp_path / "20260106.csv"
+    p.write_text("code,score\n000048,0.11\n000608,0.57\n600179,0.14\n", encoding="utf-8")
+    got = load_scores_dir(tmp_path)["20260106"]
+    assert "000048.SZ" in got and got["000048.SZ"] == pytest.approx(0.11)
+    assert "000608.SZ" in got and got["000608.SZ"] == pytest.approx(0.57)
+    assert "600179.SH" in got
