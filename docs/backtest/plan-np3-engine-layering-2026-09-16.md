@@ -95,8 +95,8 @@
 
 | 切片 | 做什么 | 完成定义 |
 |------|--------|----------|
-| **A · 改指真身（29 符号）** | minute import 块按 §1.1 改指 6 个既有模块 + load_pool_days 直呼（P3）；minute 自定义 `MINUTE_LAKE_END`（P1） | minute→daily import 41→13；pytest 全绿；golden 绿 |
-| **B · 抽 `csv_artifacts.py`（6 符号）** | summarize / write_run_artifacts / maybe_compare_daily / **find_daily_equity_csv / format_equity_compare**（+`_progress` 迁 csv_common）；daily/minute/测试改指；**新单测**：maybe_compare_daily（tmp_path 对端目录）+ summarize 确定性全文本 golden | minute→daily import →8；无环；pytest 全绿（含新单测） |
+| **A · 改指真身（29 符号）** | minute import 块按 §1.1 改指 6 个既有模块 + load_pool_days 直呼（P3）；minute 自定义 `MINUTE_LAKE_END`（P1） | minute→daily import 41→10；pytest 全绿；golden 绿 |
+| **B · 抽 `csv_artifacts.py`（6 符号）** | summarize / write_run_artifacts / maybe_compare_daily / **find_daily_equity_csv / format_equity_compare**（+`_progress` 迁 csv_common）；daily/minute/测试改指；**新单测**：maybe_compare_daily（tmp_path 对端目录）+ summarize 确定性全文本 golden | minute→daily import →6；无环；pytest 全绿（含新单测） |
 | **C · 抽 `csv_daily_loader.py`（4 符号 + `_PERIOD_ENV_KEYS`）** | load_daily_bars / **`_read_one_daily`** / warmup_start / warn_stale_period_env（+REPO 复算；3 常量进 csv_common）；daily/minute/测试改指；**新单测**：warn_stale_period_env（monkeypatch env） | minute→daily import →0；`to_partition_key` 清理；全树 grep 无被下沉符号残余 import；pytest 全绿 |
 | **D · 围栏与文档** | 持久围栏 pytest（minute AST 无 daily import 节点）；两新模块入 `_VECTORIZED_RESEARCH_FACE`；daily pin 注释改「仅测试」；README 引擎地图段更新（双入口 + 共享核分层）；本 plan 状态回写 | 围栏测试绿；NUL=0 复核；HELP_LOCK 文案不变 |
 
