@@ -46,13 +46,16 @@ def summarize(
         else "关闭"
     )
     if st.stats.get("sell_book") == "v8":
+        arms = st.stats.get("band_arms", [0.06, 0.15, 0.50, 1.00])
+        keeps = st.stats.get("band_keeps", [0.30, 0.60, 0.70, 0.80])
+        b2 = float(st.stats.get("band2_abs_mult", 1.02))
+        b3 = float(st.stats.get("band3_global_mult", 1.15))
+        arms_txt = "/".join(f"{float(a):.0%}" for a in arms)
+        keeps_txt = "/".join(f"{float(k):.0%}" for k in keeps)
         lines.append(
-            f"  参数: 止损 {stop_text} | "
-            f"0%<涨幅≤"
-            f"{st.stats['profit_base']:.0%} 回撤到+"
-            f"{st.stats.get('small_floor', 0.02):.0%} | 基础止盈 "
-            f"{st.stats['profit_base']:.0%} | 涨幅>{st.stats['peak_dd_arm']:.0%} 时 "
-            f"最高价回撤 {st.stats['peak_dd_pct']:.0%}"
+            f"  参数: 止损 {stop_text} | 涨幅比例回撤阶梯 arm={arms_txt} "
+            f"keep={keeps_txt} | 档2底+{b2 - 1.0:.0%} | 档3全局底+{b3 - 1.0:.0%} "
+            f"| T+1止盈豁免"
         )
     elif st.stats.get("sell_book") == "v9":
         lines.append(

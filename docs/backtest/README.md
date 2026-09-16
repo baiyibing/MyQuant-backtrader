@@ -50,7 +50,7 @@ R5 的 `--start/--end` 必须跟导出的首末文件名走：H0 / `pred_minus_o
 
 落盘：`backtest_output/csv_daily_{book}_{start}_{end}/`、`csv_minute_{book}_{start}_{end}/`、`csv_minute_v7_{start}_{end}/`（`summary.txt`、`daily_equity.csv`、`trades.csv`）。日线可用 `--out-dir` 改目录（M5 三列必须显式指定，见 [m5-list-attribution-2026-03.md](m5-list-attribution-2026-03.md)）。
 
-**策略 8**：默认 `per_name`，每股票 100 万（`--name-budget` 可覆盖），止损 30%；第一档 `(0,15%]` 回撤到 +2%，无需先涨到 +6%。已持仓跳过、不加仓；现金不足支付整笔股款与佣金时记 `skip_cash`，按名单行序先到先得、不缩量。小预算不足 100 股时仍补足 100 股，现金不足则跳过。策略 1–6/9/10 保持 `daily_quota` 日额度均分。
+**策略 8（规则 v2）**：默认 `per_name`，每股票 100 万（`--name-budget` 可覆盖），止损 30%；止盈为涨幅比例回撤阶梯（arm 6/15/50/100%，keep 30/60/70/80%；档2 绝对底 +2%，档3 起全局底 +15%）；T+1 只评止损不评止盈。同码可加仓（独立 lot，单码单日上限 2 笔）。现金不足支付整笔股款与佣金时记 `skip_cash`，按名单行序先到先得、不缩量。小预算不足 100 股时仍补足 100 股，现金不足则跳过。策略 1–6/9/10 保持 `daily_quota` 日额度均分。详见 [plan-v8-rules-v2-2026-09-16.md](plan-v8-rules-v2-2026-09-16.md)。
 
 **v8 对照顺序（M-R8③）**：首次宿主烟测先重跑同窗 daily v8，确认其 `summary.txt` 为 `sizing=per_name` 且预算相同，再运行分钟版。旧 daily_quota 工件先保存 commit/日期与池来源；跨 sizing 仅比较 lot 收益分布、胜率及单码敞口，不用 NAV 排名。日线收盘确认、次日开盘止盈，分钟逐 bar 判断成交；跨引擎结论以分钟版为准。
 

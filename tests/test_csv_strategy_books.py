@@ -271,14 +271,14 @@ def test_per_name_commission_short_also_skips(per_name_hooks):
     assert st.stats["skip_cash"] == 1
 
 
-def test_per_name_never_adds_held_code(per_name_hooks):
-    assert per_name_hooks["allow_add"] is False
+def test_per_name_adds_held_code_as_new_lot(per_name_hooks):
+    assert per_name_hooks["allow_add"] is True
     st = _money_state(per_name_hooks)
     _pool_buy(st, per_name_hooks, ["600000.SH"])
     _pool_buy(st, per_name_hooks, ["600000.SH"], day_i=1)
-    assert st.stats["skip_held"] == 1
-    assert st.stats["add_lots"] == 0
-    assert len(st.positions["600000.SH"]) == 1
+    assert st.stats["skip_held"] == 0
+    assert st.stats["add_lots"] == 1
+    assert len(st.positions["600000.SH"]) == 2
 
 
 def test_per_name_force_min_cli_budget(per_name_hooks, tmp_path):
@@ -318,9 +318,8 @@ def test_per_name_chase_budget_and_terminal_outcomes(per_name_hooks, outcome):
     assert not pending
     assert st.daily_quota_used == 0
     if outcome == "held":
-        assert st.stats["chase_skip_held"] == 1
-        assert st.stats["skip_held"] == 1
-        assert st.stats["add_lots"] == 0
+        assert st.stats["chase_skip_held"] == 0
+        assert st.stats["add_lots"] == 1
     elif outcome == "buy":
         assert st.stats["chase_buy"] == 1
         assert st.trades[0]["notional"] == 1_000_000

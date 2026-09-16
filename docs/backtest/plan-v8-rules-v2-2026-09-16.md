@@ -1,7 +1,7 @@
 # Plan：策略 8 规则 v2（0916 业务修订：加仓恢复 + 涨幅比例回撤阶梯 + T+1 止盈豁免）
 
 > **落盘**：2026-09-16。**v1.1**（2026-09-16 两路评审修订，见 changelog §10）。
-> **状态**：🚧 **v1.1 · 已人裁 GO（2026-09-16，PG-1–PG-4 全采纳建议值），实施中**（分支 `feat/v8-rules-v2`，执行：Codex；切片 D 挂 E-R5 复核结论之后）。评审记录：[zcode-facts](../architecture/reviews/2026-09-16/plan-v8-rules-v2/zcode-facts.md) / [zcode-arch](../architecture/reviews/2026-09-16/plan-v8-rules-v2/zcode-arch.md) / [merge-consensus](../architecture/reviews/2026-09-16/plan-v8-rules-v2/merge-consensus.md)。
+> **状态**：✅ **v1.1 · A/B/C 已实施**（分支 `feat/v8-rules-v2`，执行：Codex；切片 D 仍挂 E-R5 复核结论之后）。评审记录：[zcode-facts](../architecture/reviews/2026-09-16/plan-v8-rules-v2/zcode-facts.md) / [zcode-arch](../architecture/reviews/2026-09-16/plan-v8-rules-v2/zcode-arch.md) / [merge-consensus](../architecture/reviews/2026-09-16/plan-v8-rules-v2/merge-consensus.md)。
 > **风险档**：**L1+**（触及 v8 卖点语义与 per_name 加仓锁——均为业务明示修订；不动成交核 E-R1–E-R5、不动 1–6/9/10）。
 > **工作流**：走 [Codex 交接工作流](workflow-codex-handoff.md)。
 > **业务源**：对话给定「金榕元回测交易策略8」修订版（2026-09-16），歧义已裁（§3）。
@@ -115,3 +115,14 @@ D:\anaconda3\envs\vanna312\python.exe -m pytest -q tests/test_strategy8_rules.py
 
 - **v1.1**（2026-09-16，两路评审）：档位边界按业务原文修正（50%→档3、100%→档4，删矛盾脚注）；补 px≥cost 前置与 reason 契约 `trail:band:1..5`；档位判定锁价格比较；n_days 默认值契约；V-R3 措辞（ALLOW_ADD 现状）；落点补 summarize/minute HELP；touch 语义措辞；单码单日 2 笔上限声明；切片 A 收边界向量表、B 收断言翻转清单、C 收 pre_er1 禁再生成、D 收 days==1 占比对照与双引擎峰值重测；§8 补资金四选项与 E-R5 叠加措辞。
 - **v1.0**（2026-09-16）：初稿。
+
+---
+
+## 11. 实施记录（Codex 随本 PR 回写）
+
+| 切片 | 状态 | commit | 备注 |
+|------|------|--------|------|
+| A · rules 重写 | ✅ | `241b607` | 向量表必收 #6/#10/#14/#16/#20/#21/#22；arch #6/#10/#22 期望与 plan 价式偶有出入，以 plan §1 为准 |
+| B · 引擎放开 + 断言校准 | ✅ | `5176cab` | facts §4 翻转；`:88-93` 推演日价与引擎不符→按代码 `20251107@11.7 trail:band:3`；引擎向量 #21 |
+| C · 文档 | ✅ | tip | HELP/README/归档取代注记/pre_er1 禁再生成 |
+| D · 宿主 5 亿重跑 | ⏸ | | **挂 E-R5 复核结论后**（PG-4） |

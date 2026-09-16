@@ -27,10 +27,10 @@ def test_summarize_deterministic_full_text_golden() -> None:
     st.stats["skip_limit_up"] = 1
     st.stats["sell_book"] = "v8"
     st.stats["stop_pct"] = 0.30
-    st.stats["profit_base"] = 0.15
-    st.stats["small_floor"] = 0.02
-    st.stats["peak_dd_arm"] = 0.15
-    st.stats["peak_dd_pct"] = 0.10
+    st.stats["band_arms"] = [0.06, 0.15, 0.50, 1.00]
+    st.stats["band_keeps"] = [0.30, 0.60, 0.70, 0.80]
+    st.stats["band2_abs_mult"] = 1.02
+    st.stats["band3_global_mult"] = 1.15
     st.stats["sizing"] = "per_name"
     st.stats["name_budget"] = 1_000_000.0
     st.stats["skip_cash"] = 1
@@ -52,7 +52,7 @@ def test_summarize_deterministic_full_text_golden() -> None:
             "  总收益率(全资金): +0.48%",
             "  动用资金收益率: +10.00%",
             "  最大回撤: 0.00%",
-            "  参数: 止损 30% | 0%<涨幅≤15% 回撤到+2% | 基础止盈 15% | 涨幅>15% 时 最高价回撤 10%",
+            "  参数: 止损 30% | 涨幅比例回撤阶梯 arm=6%/15%/50%/100% keep=30%/60%/70%/80% | 档2底+2% | 档3全局底+15% | T+1止盈豁免",
             "  买入 2 | 涨停跳过 1 | 追买 0 | 弃买 0 | 已持跳过 0 | 加仓 0",
             "  涨停分解: 追买 0 | 弃买 0 | 追买日仍涨停 0 | 缺行情 0 | 末日未追 0 | "
             "覆盖 0 | 买失败 0 | 追买已持跳过 0 | 合计 0 / 涨停跳过 1",

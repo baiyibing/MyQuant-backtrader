@@ -233,7 +233,7 @@ def test_t5_band_consistency_v8():
         {"20251103": [CODE]}, _daily_bars(rows), strategy="version8", exdiv=EXDIV_HALF
     )
     sells = [t for t in st.trades if t["side"] == "SELL"]
-    assert sells and sells[0]["reason"] == "trail:band:15"
+    assert sells and sells[0]["reason"] == "trail:band:3"
 
 
 def test_t6_buy_day_exdiv_no_double_scale():
