@@ -4,6 +4,10 @@ Pool files are named `YYYYMMDD.csv`, encoded as UTF-8/UTF-8-SIG, and contain a
 bare six-digit code in the first column. A header is optional. Missing dates and
 empty or parse-empty files always mean “no buys”.
 
+**资金配给序（B GO）**：默认 `--ration file_order` 严格沿用 CSV 行序；研究 A/B
+可用 `--ration seeded_shuffle --ration-seed N`，按 `(N, YYYYMMDD)` 经 SHA-256
+稳定派生逐日乱序。涨停追买沿本次名单遍历形成的排队序，不另做重排。
+
 **As-of**：文件名日期就是买入日 T（当日名单、当日尾盘/收盘成交）。不是 T+1
 信号日，也不是导出日。
 

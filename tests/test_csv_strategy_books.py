@@ -143,6 +143,8 @@ def test_add_csv_backtest_common_args_defaults_and_end_help(tmp_path):
     assert ns.end == "20260909"
     assert ns.cash_total == DEFAULT_TOTAL_CASH
     assert ns.daily_quota == 1_000_000.0
+    assert ns.ration == "file_order"
+    assert ns.ration_seed == 0
     assert ns.workers == 16
     assert ns.pool_dir == tmp_path / "stock_pool"
 
@@ -197,16 +199,50 @@ def _money_state(hooks, cash=21_000_000):
     return init_sim_state(hooks, total_cash=cash, bars_loaded=2, pool_days={})[0]
 
 
-def _pool_buy(st, hooks, codes, *, day_i=0, px=10, prev=10, pending=None):
+def _pool_buy(
+    st, hooks, codes, *, day_i=0, px=10, prev=10, pending=None,
+    ration="file_order", ration_seed=0, ds="20251103",
+):
     from backtest.research.csv_simulate_loop import run_pool_buys_day
 
     run_pool_buys_day(
         st, {} if pending is None else pending, day_i=day_i, day="2025-11-03",
-        ds="20251103", pool_days={"20251103": codes}, daily_quota=1_000_000,
+        ds=ds, pool_days={ds: codes}, daily_quota=1_000_000,
         names={}, allow_add=hooks["allow_add"], buy_gate=None,
         buy_quote_for=lambda code: (px, [prev]), sizing=hooks["sizing"],
         name_budget=hooks["name_budget"],
+        ration=ration, ration_seed=ration_seed,
     )
+
+
+def test_seeded_shuffle_is_stable_per_day_and_changes_cash_allocation(per_name_hooks):
+    from backtest.research.csv_simulate_loop import apply_capital_ration
+
+    codes = ["600000.SH", "000001.SZ", "000002.SZ", "600001.SH", "600002.SH"]
+    file_state = _money_state(per_name_hooks, 1_500_000)
+    _pool_buy(file_state, per_name_hooks, codes)
+    assert [t["code"] for t in file_state.trades] == ["600000.SH"]
+
+    shuffled_state = _money_state(per_name_hooks, 1_500_000)
+    _pool_buy(
+        shuffled_state, per_name_hooks, codes,
+        ration="seeded_shuffle", ration_seed=0,
+    )
+    assert [t["code"] for t in shuffled_state.trades] == ["600002.SH"]
+
+    order = apply_capital_ration(
+        codes, ration="seeded_shuffle", ration_seed=0, ds="20251103"
+    )
+    assert order == apply_capital_ration(
+        codes, ration="seeded_shuffle", ration_seed=0, ds="20251103"
+    )
+    assert order != apply_capital_ration(
+        codes, ration="seeded_shuffle", ration_seed=2, ds="20251103"
+    )
+    assert order != apply_capital_ration(
+        codes, ration="seeded_shuffle", ration_seed=0, ds="20251104"
+    )
+    assert codes == ["600000.SH", "000001.SZ", "000002.SZ", "600001.SH", "600002.SH"]
 
 
 def test_per_name_each_code_gets_full_budget(per_name_hooks):

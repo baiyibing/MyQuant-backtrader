@@ -8,6 +8,8 @@ limit / gate / sizing logic.
 
 from __future__ import annotations
 
+import hashlib
+import random
 from typing import Callable, Optional
 
 import pandas as pd
@@ -41,6 +43,8 @@ def prepare_strategy_hooks(
     profit_base=None,
     tiers=None,
     tier_default=None,
+    ration="file_order",
+    ration_seed=0,
     apply_fn=None,
 ) -> dict:
     """Unpack ``apply_csv_strategy``; callers read engine-specific hook keys.
@@ -58,7 +62,23 @@ def prepare_strategy_hooks(
         profit_base=profit_base,
         tiers=tiers,
         tier_default=tier_default,
+        ration=ration,
+        ration_seed=ration_seed,
     )
+
+
+def apply_capital_ration(
+    planned: list[str], *, ration: str, ration_seed: int, ds: str
+) -> list[str]:
+    """Return the day's stable capital-ration order without mutating input."""
+    ordered = list(planned)
+    if ration == "file_order":
+        return ordered
+    if ration != "seeded_shuffle":
+        raise ValueError(f"unsupported capital ration {ration!r}")
+    digest = hashlib.sha256(f"{int(ration_seed)}:{ds}".encode("utf-8")).digest()
+    random.Random(int.from_bytes(digest, "big")).shuffle(ordered)
+    return ordered
 
 
 def init_sim_state(
@@ -150,9 +170,13 @@ def run_pool_buys_day(
     buy_quote_for: PoolQuoteFn,
     sizing: str = "daily_quota",
     name_budget: float = 1_000_000.0,
+    ration: str = "file_order",
+    ration_seed: int = 0,
 ) -> None:
     """Pool buys for ``ds``; ``buy_quote_for`` supplies buy price + prev closes."""
-    planned = list(pool_days.get(ds, []))
+    planned = apply_capital_ration(
+        list(pool_days.get(ds, [])), ration=ration, ration_seed=ration_seed, ds=ds
+    )
     if not planned:
         return
     per = name_budget if sizing == "per_name" else min(daily_quota, st.cash) / len(planned)

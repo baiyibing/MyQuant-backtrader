@@ -1,11 +1,11 @@
 # Plan：资金配给显式化 NP1（先测量探针，后可选 `--ration`）
 
-> **落盘**：2026-09-16。**v1.0**。
-> **状态**：🚧 **v1.0 · A 实施中（本 PR）**。切片 **A（只读探针）** 为 **L1 / data-free**，与战略分析 NP1(a) 一致，**本 PR 实施 A**（不改引擎、不改默认配给）。切片 **B（`--ration`）须人裁 GO 后方可编码**；A 合入不构成 B 的 GO。
-> **风险档**：**L1**（A：事后归因脚本 + pytest 合成 fixture；零业务路径变更）。B 升为中风险（触及 `run_pool_buys_day`），另开或本 plan 修订后 GO。
+> **落盘**：2026-09-16。**v1.1**。
+> **状态**：✅ **P1 GO，B 已实施**。切片 A（只读探针）已合入；切片 B 实施 `--ration {file_order,seeded_shuffle}`，默认 `file_order` 保持原行为。
+> **风险档**：**中风险**（B 触及 `run_pool_buys_day`）；data-free 回归与 strategy_books byte-identical golden 为合入门。
 > **业务源**：[strategic-analysis-opus5-next-2026-09-16.md](strategic-analysis-opus5-next-2026-09-16.md) §6 NP1 / §5 D1；宿主证据 [money-modes-v8-pername-smoke-2026-09-16.md](money-modes-v8-pername-smoke-2026-09-16.md)（5,064 名次 → 271 成交；宽度>21 天 104/215 = 48%）。
-> **工作流**：走 [Codex 交接工作流](workflow-codex-handoff.md)。**本 plan 对 B 保留「GO 前禁编码」**；对 A 按战略分析「(a) 零风险、建议先单独成片」与人指令「A 明确 L1 可读即可同 PR」执行。
-> **成交核现锁**：[engine-ashare-correctness.md](engine-ashare-correctness.md)（E-R1–E-R4，本轮不动）。名单契约 [pool-csv-contract.md](pool-csv-contract.md) 不动（B 合入时各补一行，不在 A）。
+> **工作流**：走 [Codex 交接工作流](workflow-codex-handoff.md)。2026-09-16 人裁 **P1=GO for B**，P2 锁为仅 `file_order` / `seeded_shuffle`。
+> **成交核现锁**：[engine-ashare-correctness.md](engine-ashare-correctness.md)（E-R1–E-R4，本轮不动）。名单契约见 [pool-csv-contract.md](pool-csv-contract.md)。
 > **基线 tip**：`5d34603`（`origin/master`，含战略分析 #68）。
 
 ---
@@ -16,7 +16,7 @@
 
 ```text
 Slice A（本 PR）：report_capital_ration — 按日「宽度 / 获配 / 未获配位次」
-Slice B（人裁 GO 后）：--ration {file_order,seeded_shuffle,...}；默认 file_order = 现行行为
+Slice B（已 GO）：--ration {file_order,seeded_shuffle}；默认 file_order = 现行行为
 ```
 
 ---
@@ -50,8 +50,8 @@ Slice B（人裁 GO 后）：--ration {file_order,seeded_shuffle,...}；默认 f
 
 | # | 问题 | 默认 / 状态 |
 |---|------|-------------|
-| **P1** | 是否在 A 结果出来前批准 B（`--ration`）？ | **默认否**。A 合入后据宿主归因短记再裁；**B 编码前须显式 GO**。 |
-| **P2** | B 若 GO，首版枚举是否仅 `file_order` + `seeded_shuffle`？ | **建议是**（战略分析原文）；GO 时确认，禁止顺手加 score/optimizer。 |
+| **P1** | 是否批准 B（`--ration`）？ | ✅ **GO（2026-09-16）**。 |
+| **P2** | B 首版枚举是否仅 `file_order` + `seeded_shuffle`？ | ✅ **是**；禁止 score/optimizer。 |
 | **P3** | 追买（`reason` 以 `chase` 开头）是否计入「获配」？ | **A 默认：主表只计 `reason=pool`；追买单独列 `chase_buys` 观测，不并入挤出分母**（追买日 ≠ 名单日）。 |
 
 ---
@@ -60,7 +60,7 @@ Slice B（人裁 GO 后）：--ration {file_order,seeded_shuffle,...}；默认 f
 
 | 不做 | 原因 |
 |------|------|
-| 实现 `--ration` / 改 `run_pool_buys_day` 序 | B，待 P1 GO |
+| score / TopK / optimizer 等额外 ration 模式 | P2 只批准两个枚举；配给不是选股优化器 |
 | 改默认 sizing、加 `--sizing` 全局开关 | money-modes M-R1 已锁 |
 | 改 6/8 卖点、成交核、佣金、整百股 | R-1 / E-R\* |
 | 复权 / 除权探针（NP2） | R-6；另开 |
@@ -77,7 +77,7 @@ Slice B（人裁 GO 后）：--ration {file_order,seeded_shuffle,...}；默认 f
 | 切片 | 做什么 | 完成定义 | GO |
 |------|--------|----------|-----|
 | **A · 只读归因探针** | 库 + CLI：吃 `trades.csv` + `--pool-dir`；按日输出宽度 / 获配名数 / 未获配名次（文件序 0-based）/ 未获配位次直方图；全窗汇总（名次合计、获配合计、宽日阈值可选）；data-free pytest + 合成 pool+trades fixture；plan/README 短用法 | pytest 绿；NUL=0；引擎与策略书 **零 diff**；CLI `--help` 可跑 | **本 PR 直接做**（L1） |
-| **B · 可选 `--ration`**（后置） | CLI `--ration {file_order,seeded_shuffle}`（或 GO 裁定枚举）；`file_order` 默认；seeded 仅研究；HELP_LOCK / pool-csv-contract / engine-ashare 各一行；golden byte-identical | `file_order` 下 strategy_books golden 绿；宿主 A/B 短记**不进 CI** | **须人裁 GO（P1）** |
+| **B · 可选 `--ration`** | CLI `--ration {file_order,seeded_shuffle}`；`file_order` 默认；seeded 仅研究；逐日以 SHA-256 从 `(seed,date)` 稳定派生；HELP_LOCK / pool-csv-contract；golden byte-identical | `file_order` 下 strategy_books golden 绿；宿主 A/B 短记**不进 CI** | ✅ **P1 GO，已实施** |
 
 ---
 
@@ -102,8 +102,9 @@ Slice B（人裁 GO 后）：--ration {file_order,seeded_shuffle,...}；默认 f
 # 回归（确认引擎未碰）：
 /workspace/vanna312/bin/python -m pytest -q tests/test_csv_strategy_books.py tests/test_report_pool_list_quality.py
 
-# B（仅 GO 后；示意）
+# B
 # ... --ration file_order  → golden 绿
+# ... --ration seeded_shuffle --ration-seed 0
 # 宿主 A/B 短记不入库 CI
 ```
 
@@ -135,11 +136,12 @@ Slice B（人裁 GO 后）：--ration {file_order,seeded_shuffle,...}；默认 f
 
 ## 9. 修订程序
 
-改 R-\* 须改本文并升版本。P1 GO 后把状态改为「✅ B 已人裁 GO（hash）」再开 B 实施或同 plan 续片。A 合入后头部改为「✅ A 已实施（PR #N）」；B 仍为待 GO。
+改 R-\* 须改本文并升版本。B 已按 P1/P2 人裁实施；扩充枚举或改变默认序必须另行修订并重新 GO。
 
 ## 10. Changelog
 
 - **v1.0**（2026-09-16）：初稿。切片 A=只读探针（本 PR）；B=`--ration` 后人裁。硬锁 R-1…R-8；Qlib TopkDropout 仅分层镜子。
+- **v1.1**（2026-09-16）：P1 GO for B；P2 锁双枚举。实施逐日稳定 `seeded_shuffle`，默认 `file_order` 不变。宿主仍欠 3–5 个 seed 的 NAV smoke，属非 merge gate。
 
 ---
 
@@ -148,4 +150,4 @@ Slice B（人裁 GO 后）：--ration {file_order,seeded_shuffle,...}；默认 f
 | 切片 | 状态 | commit | 备注 |
 |------|------|--------|------|
 | A · 只读归因探针 | ✅ 本 PR | `592d40c` | data-free 探针 + 测试；引擎零 diff；B 仍待 GO |
-| B · `--ration` | ⏸ 待人裁 GO（P1） | — | 默认 file_order；勿抢跑 |
+| B · `--ration` | ✅ 已实施（P1 GO） | `d04b11b` | 双枚举；SHA-256 `(seed,date)` 逐日派生；golden 绿。宿主 3–5 seed NAV smoke 待做，非 merge gate |

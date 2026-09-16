@@ -108,6 +108,8 @@ HELP_LOCK = """
   T+0：不可卖；峰值固定为买入价，14:55 之后的 high 不计入。峰值从 T+1 起算。
   资金 / T+1 / force_min / 佣金：与 csv_daily_backtest 相同。
         资金模式见策略书（v8=每股预算）；per_name 现金不足（含佣金）整笔 skip_cash。
+  配给：--ration file_order 保持 CSV 行序；seeded_shuffle 用 --ration-seed 与日期
+        经 SHA-256 派生逐日稳定乱序；追买沿该次名单遍历产生的排队顺序。
   复权：买卖价、涨跌停、净值全程 dividend_type=none（与日线/Cerebro 对齐，
         不用 front 对照）。
   窗口：分钟湖目前到 2026-05-25；要「→今天」用日线版。
@@ -781,6 +783,8 @@ def simulate(
     total_cash: float = DEFAULT_TOTAL_CASH,
     daily_quota: float = DEFAULT_DAILY_QUOTA,
     name_budget: Optional[float] = None,
+    ration: str = "file_order",
+    ration_seed: int = 0,
     stop_pct: Optional[float] = None,
     profit_base: Optional[float] = None,
     tiers: Optional[dict] = None,
@@ -798,6 +802,8 @@ def simulate(
         take_profit=take_profit,
         record_params=record_params,
         name_budget=name_budget,
+        ration=ration,
+        ration_seed=ration_seed,
         profit_base=profit_base,
         tiers=tiers,
         tier_default=tier_default,
@@ -950,6 +956,8 @@ def simulate(
             buy_quote_for=_pool_quote_for,
             sizing=hooks.get("sizing", "daily_quota"),
             name_budget=hooks.get("name_budget", 1_000_000.0),
+            ration=hooks.get("ration", "file_order"),
+            ration_seed=hooks.get("ration_seed", 0),
         )
 
         append_equity_and_eod_marks(
@@ -971,6 +979,8 @@ def run(
     total_cash: float = DEFAULT_TOTAL_CASH,
     daily_quota: float = DEFAULT_DAILY_QUOTA,
     name_budget: Optional[float] = None,
+    ration: str = "file_order",
+    ration_seed: int = 0,
     stop_pct: Optional[float] = None,
     profit_base: Optional[float] = None,
     tiers: Optional[dict] = None,
@@ -1047,6 +1057,8 @@ def run(
         take_profit=take_profit,
         record_params=record_params,
         name_budget=name_budget,
+        ration=ration,
+        ration_seed=ration_seed,
         pool_names_by_day=pool_names_by_day,
     )
     st.stats["t_pool_s"] = t_pool

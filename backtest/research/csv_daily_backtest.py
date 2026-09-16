@@ -167,6 +167,8 @@ HELP_LOCK = """
   资金：2100 万全局池；daily_quota 每日 100 万均分，per_name 每码 --name-budget；
         per_name 现金不足（含佣金）整笔 skip_cash、不缩量；不足 100 股用补充资金补足
         （force_min，自主池、不占额度）；佣金 0.1% 双边无最低。
+  配给：--ration file_order 保持 CSV 行序；seeded_shuffle 用 --ration-seed 与日期
+        经 SHA-256 派生逐日稳定乱序；追买沿该次名单遍历产生的排队顺序。
   T+1：买入日不可卖；期末持仓按最后有 K 收盘估值（eod_mark）。
   窗口：--end 是估值/离场末日。买入只发生在 stock_pool/ 有 CSV 的交易日
         （缺日不买）。分钟湖若短于 --end，用日线版接到今天。
@@ -292,6 +294,8 @@ def simulate(
     total_cash: float = DEFAULT_TOTAL_CASH,
     daily_quota: float = DEFAULT_DAILY_QUOTA,
     name_budget: Optional[float] = None,
+    ration: str = "file_order",
+    ration_seed: int = 0,
     stop_pct: Optional[float] = None,
     profit_base: Optional[float] = None,
     tiers: Optional[dict] = None,
@@ -314,6 +318,8 @@ def simulate(
         take_profit=take_profit,
         record_params=record_params,
         name_budget=name_budget,
+        ration=ration,
+        ration_seed=ration_seed,
         profit_base=profit_base,
         tiers=tiers,
         tier_default=tier_default,
@@ -460,6 +466,8 @@ def simulate(
             buy_quote_for=_pool_quote_for,
             sizing=hooks.get("sizing", "daily_quota"),
             name_budget=hooks.get("name_budget", 1_000_000.0),
+            ration=hooks.get("ration", "file_order"),
+            ration_seed=hooks.get("ration_seed", 0),
         )
 
         append_equity_and_eod_marks(
@@ -481,6 +489,8 @@ def run(
     total_cash: float = DEFAULT_TOTAL_CASH,
     daily_quota: float = DEFAULT_DAILY_QUOTA,
     name_budget: Optional[float] = None,
+    ration: str = "file_order",
+    ration_seed: int = 0,
     stop_pct: Optional[float] = None,
     profit_base: Optional[float] = None,
     tiers: Optional[dict] = None,
@@ -536,6 +546,8 @@ def run(
         take_profit=take_profit,
         record_params=record_params,
         name_budget=name_budget,
+        ration=ration,
+        ration_seed=ration_seed,
         pool_names_by_day=pool_names_by_day,
     )
     st.stats["t_pool_s"] = t_pool
@@ -623,6 +635,10 @@ def summarize(
             f"skip_cash_notional={st.stats.get('skip_cash_notional', 0):,.0f} | "
             f"chase_buy_fail_cash={st.stats.get('chase_buy_fail_cash', 0)} | "
             f"chase_buy_fail_shares={st.stats.get('chase_buy_fail_shares', 0)}"
+        )
+    if "ration" in st.stats:
+        lines.append(
+            f"  ration={st.stats['ration']} | ration_seed={st.stats['ration_seed']}"
         )
     timing_parts = []
     for key, lab in (
