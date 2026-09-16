@@ -5,6 +5,7 @@ Completed / absorbed `plan-*.md` files moved here on 2026-09-15 so
 
 | File | Why archived |
 |------|----------------|
+| `plan-gpu-accel-4090-2026-09-16.md` | 已人裁关闭（回测 STOP / 关 S2 / 不开 S3；PR #60 merge `bc98a38`） |
 | `plan-money-modes-v8-pername-2026-09-16.md` | 已实施（PR #61 / merge a606070；D 宿主烟测已补跑，[短记](../../money-modes-v8-pername-smoke-2026-09-16.md)） |
 | `plan-cerebro-retire-2026-09-16.md` | 已实施（PR #58 / merge e89d1b8；复核 PASS，树内 backtrader 零命中） |
 | `plan-unify-csv-strategies-1-8-2026-09-12.md` | A–E 已合；U-R\* 卖点契约仍有效，撮合句以 [engine-ashare-correctness.md](../../engine-ashare-correctness.md) E-R\* 为准 |
