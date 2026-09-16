@@ -84,7 +84,7 @@ PR #57 = Opus 5 仓库自分析（[repo-analysis-opus5-next-2026-09-15.md](repo-
 
 「本仓=向量化」是**架构定位词**（研究脸 vs 事件驱动 vs 真栈），不是实现承诺。主循环是纯 Python 状态机；numpy 只在 IO/聚合层（`volume==0` 过滤、H8 `searchsorted` 日卖索引）；numba 仅两处可选且默认关（chip cumpdf 可达、卖环不可达）。「快」来自 CSV/parquet 批装载 + 轻量账本。
 
-### 2.7 落地产物：PR #60（draft，待评审）
+### 2.7 落地产物：PR #60（已人裁 · 合入后归档）
 
 [plan-gpu-accel-4090-2026-09-16.md](plan-gpu-accel-4090-2026-09-16.md)：S0 只读实测（真 F 湖两墙钟）→ P1 判定门（回测 <5min 且 chip 扫描不常跑 → **终止 GPU 项目**）→ S1（WP1(1) 引用 + CPU 并行 runbook）→ S2（chip CuPy/numba-cuda 第三后端 + 三向 parity + `requirements-gpu.txt` 隔离 + GPU 不进 CI）→ S3（另开 plan）。硬锁 A-R1–A-R7：默认 Python、S0 前禁止引用任何预期加速比、显存按码分批（全市场分钟窗 ~18GB 贴 24GB 上限）、直方图 int bin 或容差。
 
@@ -111,7 +111,7 @@ Qlib 回测快**不靠 numba/GPU/编译内核**，靠四件事全压在向量化
 |----|------|--------|
 | #58 退场 / #61 资金管理 / #62 收口 | ✅ 已合入归档（`e89d1b8`/`a606070`/`b748b37`） | 无 |
 | D 宿主烟测 | ✅ 已补跑（PR #62，merge `b748b37`；[烟测短记](money-modes-v8-pername-smoke-2026-09-16.md) 宿主节，事实卡见本简报 §2.2） | P1 有/无武装 A/B 后置（需 scratch 补丁） |
-| **PR #60（GPU plan）** | 📄 draft 待评审 | 多 agent 评审 → 人裁 P1–P3 → 若批 S0（高配机/本机只读实测） |
+| **PR #60（GPU plan）** | ✅ v1.1 已人裁归档（回测 STOP / 关 S2 / 不开 S3） | 合入后迁 `_archive/plans/`；GPU 项目关闭；S1 可选笔记不构成立项 |
 | #57 的 WP2（宿主门禁 cookbook）/ WP4（R11 de-dup） | ✅ 本 PR 落地，**与 #60 无关** | WP4 root 指针 → [WP2 cookbook](host-lake-gates-cookbook-2026-09-16.md) |
 | #57 的 WP1(1)（prev-close/close-history 缓存） | ⬜ 未开工 | S0 数字支持时随 S1 做 |
 
