@@ -91,12 +91,16 @@ def get_book(strategy: str) -> CsvStrategyBook:
 def apply_csv_strategy(strategy: str, **kwargs) -> dict:
     book = get_book(strategy)
     name_budget = kwargs.pop("name_budget", None)
+    ration = kwargs.pop("ration", "file_order")
+    ration_seed = int(kwargs.pop("ration_seed", 0))
     hooks = dict(book.apply(**kwargs))
     hooks["sizing"] = book.sizing
     hooks["name_budget"] = (
         float(name_budget) if book.sizing == "per_name" and name_budget is not None
         else book.name_budget
     )
+    hooks["ration"] = ration
+    hooks["ration_seed"] = ration_seed
     hooks["allow_add"] = book.allow_add
     if book.sizing == "per_name":
         hooks["allow_add"] = False
@@ -118,6 +122,8 @@ def apply_csv_strategy(strategy: str, **kwargs) -> dict:
         record(st)
         st.stats["sizing"] = hooks["sizing"]
         st.stats["name_budget"] = hooks["name_budget"]
+        st.stats["ration"] = hooks["ration"]
+        st.stats["ration_seed"] = hooks["ration_seed"]
         for key in ("skip_cash", "skip_cash_notional", "chase_buy_fail_cash", "chase_buy_fail_shares"):
             st.stats.setdefault(key, 0)
 
@@ -219,6 +225,11 @@ def add_csv_backtest_common_args(
     ap.add_argument("--daily-quota", type=float, default=daily_quota_default)
     ap.add_argument("--name-budget", type=float, default=1_000_000.0,
                     help="per-name budget; effective only for per_name strategy books")
+    ap.add_argument("--ration", choices=("file_order", "seeded_shuffle"),
+                    default="file_order",
+                    help="capital-ration order (default: file_order)")
+    ap.add_argument("--ration-seed", type=int, default=0,
+                    help="base seed for seeded_shuffle; derived independently per date")
     ap.add_argument("--workers", type=int, default=workers_default)
     ap.add_argument("--pool-dir", type=Path, default=Path(repo) / "stock_pool")
     add_csv_strategy_arg(ap)
@@ -277,6 +288,8 @@ def resolve_research_pool_dir(
 def csv_run_kwargs_from_args(args) -> dict:
     name = normalize_csv_strategy(getattr(args, "strategy", "") or "")
     kwargs = get_book(name).run_kwargs(args)
+    kwargs["ration"] = getattr(args, "ration", "file_order")
+    kwargs["ration_seed"] = int(getattr(args, "ration_seed", 0))
     if get_book(name).sizing == "per_name":
         kwargs["name_budget"] = getattr(args, "name_budget", get_book(name).name_budget)
     return kwargs
