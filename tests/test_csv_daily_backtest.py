@@ -738,9 +738,11 @@ def test_summarize_prints_chase_breakdown():
 
 
 def test_load_pool_days_reads_utf8_without_qmt_logger(tmp_path):
+    from backtest.research.csv_pool import load_pool_day_map
+
     p = tmp_path / "20251103.csv"
     p.write_text("000001,平安银行\n600000,浦发银行\n", encoding="utf-8", newline="\n")
-    days = sim.load_pool_days("20251103", "20251103", pool_dir=tmp_path)
+    days = load_pool_day_map(tmp_path, "20251103", "20251103", key="ymd", empty_in_map=False)
     assert days["20251103"] == ["000001.SZ", "600000.SH"]
 
 

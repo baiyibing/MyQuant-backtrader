@@ -211,14 +211,6 @@ def _progress(done: int, total: int, label: str, every: int = 200) -> None:
 _limit_prices = resolve_limit_prices
 
 
-def load_pool_days(
-    start: str, end: str, pool_dir: Optional[Path] = None
-) -> dict[str, list[str]]:
-    """{YYYYMMDD: [canonical codes]}。头列无后缀，口径同 1.3 ``parse_pool_csv``。"""
-    root = Path(pool_dir) if pool_dir is not None else Path(REPO) / "stock_pool"
-    return load_pool_day_map(root, start, end, key="ymd", empty_in_map=False)
-
-
 def _read_one_daily(
     code: str, root: Path, start: str, end: str
 ) -> Optional[pd.DataFrame]:
@@ -507,7 +499,7 @@ def run(
     warn_stale_period_env()
     t_pool = time.perf_counter()
     actual_pool_dir = resolve_research_pool_dir(strategy, pool_dir, repo=REPO)
-    pool_days = load_pool_days(start, end, pool_dir=actual_pool_dir)
+    pool_days = load_pool_day_map(actual_pool_dir, start, end, key="ymd", empty_in_map=False)
     pool_names_by_day = load_pool_names_by_day(actual_pool_dir, start, end)
     t_pool = time.perf_counter() - t_pool
     if not pool_days:

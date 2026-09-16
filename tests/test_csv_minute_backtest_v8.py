@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 
 import backtest.research.csv_minute_backtest as sim
-from backtest.research.csv_daily_backtest import chase_explained
+from backtest.research.csv_ledger import chase_explained
 from backtest.research.strategy8_rules import take_profit_reason
 
 
