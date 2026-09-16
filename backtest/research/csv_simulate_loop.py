@@ -26,6 +26,7 @@ from backtest.research.csv_ledger import (
     queue_limit_up_chase,
 )
 from backtest.research.csv_strategy_books import apply_csv_strategy
+from backtest.research.exdiv_map import mapped_prev_close
 
 # quotes_for(code) -> (open_px, buy_px, closes_ending_yesterday) or None to keep pending
 ChaseQuotesFn = Callable[[str], Optional[tuple[float, float, list[float]]]]
@@ -110,6 +111,8 @@ def run_chase_due_day(
     allow_add: bool,
     buy_gate,
     quotes_for: ChaseQuotesFn,
+    exdiv: Optional[dict] = None,
+    ds: Optional[str] = None,
 ) -> None:
     """T+1 chase for due codes; ``quotes_for`` supplies open/buy/prev closes."""
     due = [c for c, (_per, sig) in pending_chase.items() if day_i > sig]
@@ -126,7 +129,12 @@ def run_chase_due_day(
             continue
         open_px, buy_px, closes = quoted
         pending_chase.pop(code)
-        prev_close = float(closes[-1])
+        ymd = ds if ds is not None else pd.Timestamp(day).strftime("%Y%m%d")
+        prev_close, did_map = mapped_prev_close(exdiv, code, ymd, float(closes[-1]))
+        if did_map:
+            st.stats["exdiv_prev_close_mapped"] = (
+                int(st.stats.get("exdiv_prev_close_mapped", 0)) + 1
+            )
         limits = _named_limits(code, prev_close, names)
         if limits is None:
             st.stats["skip_unknown_board"] += 1
@@ -172,6 +180,7 @@ def run_pool_buys_day(
     name_budget: float = 1_000_000.0,
     ration: str = "file_order",
     ration_seed: int = 0,
+    exdiv: Optional[dict] = None,
 ) -> None:
     """Pool buys for ``ds``; ``buy_quote_for`` supplies buy price + prev closes."""
     planned = apply_capital_ration(
@@ -192,7 +201,11 @@ def run_pool_buys_day(
         if not closes:
             st.stats["skip_no_bar"] += 1
             continue
-        prev_close = float(closes[-1])
+        prev_close, did_map = mapped_prev_close(exdiv, code, ds, float(closes[-1]))
+        if did_map:
+            st.stats["exdiv_prev_close_mapped"] = (
+                int(st.stats.get("exdiv_prev_close_mapped", 0)) + 1
+            )
         limits = _named_limits(code, prev_close, names)
         if limits is None:
             st.stats["skip_unknown_board"] += 1

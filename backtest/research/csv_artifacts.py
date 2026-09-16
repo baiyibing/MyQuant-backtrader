@@ -117,6 +117,15 @@ def summarize(
     missing = st.stats.get("codes_missing")
     if missing:
         lines.append(f"  缺行情 {int(missing)}")
+    # E-R6 ex-div stats: print only when non-zero (keep np3_layering golden stable).
+    for key, lab in (
+        ("exdiv_adjusted_lots", "除权缩放 lots"),
+        ("exdiv_prev_close_mapped", "除权 prev_close 映射"),
+        ("exdiv_skipped_no_factor", "除权缺因子跳过"),
+    ):
+        val = st.stats.get(key)
+        if val:
+            lines.append(f"  {lab} {int(val)}")
     return "\n".join(lines)
 
 

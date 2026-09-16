@@ -78,7 +78,13 @@ from backtest.research.csv_ledger import (  # noqa: E402
     last_close_mark,
     peak_gap_blocks,
     queue_limit_up_chase,
+    rescale_position,
     resolve_limit_prices,
+)
+from backtest.research.exdiv_map import (  # noqa: E402
+    k_for,
+    load_exdiv_ratios,
+    mapped_prev_close,
 )
 from backtest.research.csv_common import (  # noqa: E402
     DEFAULT_DAILY_QUOTA,
@@ -167,8 +173,9 @@ HELP_LOCK = """
         （force_min，自主池、不占额度）；佣金 0.1% 双边无最低。
   配给：--ration file_order 保持 CSV 行序；seeded_shuffle 用 --ration-seed 与日期
         经 SHA-256 派生逐日稳定乱序；追买沿该次名单遍历产生的排队顺序。
-  复权：E-R5 已知边界 — 全程 dividend_type=none；cost/peak/涨跌停参考价不对除权调整
-        （证据见 docs/backtest/engine-ashare-correctness.md E-R5）。
+  复权：E-R6 除权日参考价修正 — 持仓期除权日一次性缩放 open lot 的 cost/peak，
+        并将当日 prev_close→档位换算点映射到 D 域；成交价/净值/股数仍 none。
+        非除权日与 ≤0.5% 噪声带见 E-R5 收窄声明（engine-ashare-correctness.md）。
   T+1：买入日不可卖；期末持仓按最后有 K 收盘估值（eod_mark）。
   窗口：--end 是估值/离场末日。买入只发生在 stock_pool/ 有 CSV 的交易日
         （缺日不买）。分钟湖若短于 --end，用日线版接到今天。
@@ -208,6 +215,7 @@ def simulate(
     record_params=None,
     pool_names: Optional[dict[str, str]] = None,
     pool_names_by_day: Optional[dict[str, dict[str, str]]] = None,
+    exdiv: Optional[dict] = None,
 ) -> SimState:
     """核心日循环。bars/pool_days 可由测试注入；run() 负责从湖与 CSV 加载。
 
@@ -257,7 +265,19 @@ def simulate(
             if got is None:
                 continue
             row, closes = got
-            prev_close = float(closes[-1])
+            # E-R6: rescale open lots then map prev_close before limits / lot loop.
+            kk = k_for(exdiv, code, ds)
+            if kk is not None:
+                for pos in list(st.positions.get(code, [])):
+                    rescale_position(pos, kk)
+                    st.stats["exdiv_adjusted_lots"] = (
+                        int(st.stats.get("exdiv_adjusted_lots", 0)) + 1
+                    )
+            prev_close, did_map = mapped_prev_close(exdiv, code, ds, float(closes[-1]))
+            if did_map:
+                st.stats["exdiv_prev_close_mapped"] = (
+                    int(st.stats.get("exdiv_prev_close_mapped", 0)) + 1
+                )
             limits = _named_limits(code, prev_close, names)
             if limits is None:
                 st.stats["skip_unknown_board"] += 1
@@ -343,6 +363,8 @@ def simulate(
             allow_add=allow_add,
             buy_gate=buy_gate,
             quotes_for=_chase_quotes_for,
+            exdiv=exdiv,
+            ds=ds,
         )
 
         def _pool_quote_for(code: str):
@@ -370,6 +392,7 @@ def simulate(
             name_budget=hooks.get("name_budget", 1_000_000.0),
             ration=hooks.get("ration", "file_order"),
             ration_seed=hooks.get("ration_seed", 0),
+            exdiv=exdiv,
         )
 
         append_equity_and_eod_marks(
@@ -431,6 +454,8 @@ def run(
         f"loaded {len(bars)}/{len(all_codes)} daily series, {len(pool_days)} pool days",
         flush=True,
     )
+    skipped: dict[str, int] = {}
+    exdiv = load_exdiv_ratios(all_codes, start, end, skipped_out=skipped)
     t_sim = time.perf_counter()
     st = simulate(
         bars,
@@ -451,7 +476,10 @@ def run(
         ration=ration,
         ration_seed=ration_seed,
         pool_names_by_day=pool_names_by_day,
+        exdiv=exdiv,
     )
+    if skipped.get("exdiv_skipped_no_factor"):
+        st.stats["exdiv_skipped_no_factor"] = int(skipped["exdiv_skipped_no_factor"])
     st.stats["t_pool_s"] = t_pool
     st.stats["t_daily_s"] = t_daily
     st.stats["t_sim_s"] = time.perf_counter() - t_sim

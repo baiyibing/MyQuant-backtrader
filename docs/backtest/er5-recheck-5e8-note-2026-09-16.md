@@ -39,3 +39,5 @@
 ## 5. 人裁记录
 
 **已裁（2026-09-16）：选 B——开 scoped 复权片。** 复权片 plan：[plan-exdiv-refprice-2026-09-16.md](plan-exdiv-refprice-2026-09-16.md)；v2 切片 D 挂本片合入后执行。
+
+> **口径脚注（2026-09-16）**：本文数字为 **修正前口径**（E-R6 除权日参考价修正落地前引擎）。假止损消失 ≠ 亏损全额回收；切片 D 回收上界约 +35~125 万（≈0.01–0.025pp）。见 [engine-ashare-correctness.md](engine-ashare-correctness.md) E-R6 / [plan-exdiv-refprice-2026-09-16.md](plan-exdiv-refprice-2026-09-16.md)。
