@@ -137,6 +137,18 @@ def chase_explained(st: SimState) -> int:
     )
 
 
+def rescale_position(pos: Position, k: float) -> None:
+    """Scale open-lot cost/peak into D-day price domain (ex-div day once).
+
+    peak_hm / shares / pending_exit / reserved are untouched (X-R1).
+    """
+    factor = float(k)
+    if factor <= 0:
+        return
+    pos.cost = float(pos.cost) * factor
+    pos.peak = float(pos.peak) * factor
+
+
 def resolve_limit_prices(
     code: str, prev_close: float, name: str = ""
 ) -> Optional[tuple[float, float]]:
