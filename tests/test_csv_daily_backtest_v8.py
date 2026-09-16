@@ -206,10 +206,15 @@ def test_summarize_v8_params():
     st.equity_curve = [("20251103", 21_000_000.0)]
     text = summarize(st, 21_000_000.0, "20251103", "20251103", engine="csv_daily_v8")
     assert "止损 30%" in text
-    assert "基础止盈 15%" in text
-    assert "0%<涨幅≤15% 回撤到+2%" in text
-    assert "涨幅>120%" in text
+    assert "涨幅比例回撤阶梯" in text
+    assert "arm=6%/15%/50%/100%" in text
+    assert "keep=30%/60%/70%/80%" in text
+    assert "档2底+2%" in text
+    assert "档3全局底+15%" in text
+    assert "T+1止盈豁免" in text
     assert "T+5+" not in text
+    assert "基础止盈 15%" not in text
+    assert "涨幅>120%" not in text
 
 
 def test_held_name_skips_without_adding_lot():

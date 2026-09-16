@@ -1,9 +1,10 @@
-"""策略 8（金榕元交易回测）卖点纯函数。
+"""策略 8（金榕元交易回测）卖点纯函数 — 规则 v2。
 
-止损 30 个点（30%）。止盈以持仓最高价相对买入价的涨幅分档，回撤到
-对应绝对涨幅触发；0% < 涨幅 ≤ 15% 回撤到
-买入价×1.02；涨幅 > 120% 时改为「最高价回撤 20%」。
-买侧（尾盘涨停、T+1 09:45 追买、资金模式）由共享引擎与策略书管理。
+止损 30%。止盈为涨幅比例回撤阶梯：档位用价格比较
+（peak vs cost×(1+arm)），g≥15% 起全局底 cost×1.15；
+T+1（n_days<2）只评止损不评止盈；峰值从 T+1 累计。
+共同前置 px≥cost。档 1 在 g→0 时线→cost，允许保本乃至费用后微亏退出。
+买侧由共享引擎与策略书管理；同码可加仓（独立 lot，单码单日上限 2 笔）。
 """
 
 from __future__ import annotations
@@ -15,29 +16,13 @@ ALLOW_ADD = True
 PEAK_GAP_MIN = 0
 
 STOP_PCT = 0.30
-PROFIT_BASE = 0.15
-SMALL_FLOOR = 0.02
-PEAK_DD_PCT = 0.20
-PEAK_DD_ARM = 1.20
 
-# (lo exclusive, hi inclusive, floor gain). 涨幅 > 120% 走峰回撤，无地板档。
-BANDS: tuple[tuple[float, float, float], ...] = (
-    (0.0, PROFIT_BASE, SMALL_FLOOR),
-    (0.15, 0.40, 0.15),
-    (0.40, 0.60, 0.30),
-    (0.60, 0.80, 0.50),
-    (0.80, 1.00, 0.70),
-    (1.00, 1.20, 0.90),
-)
-
-
-def band_floor(peak_ret: float) -> Optional[float]:
-    """峰值涨幅所在档的止盈地板；未上涨或已过 120% 返回 None。"""
-    peak_ret = float(peak_ret)
-    for lo, hi, floor in BANDS:
-        if lo < peak_ret <= hi:
-            return float(floor)
-    return None
+# arm 上界：档1 <6%、档2 <15%、档3 ≤50%、档4 ≤100%、档5 >100%
+BAND_ARMS: tuple[float, ...] = (0.06, 0.15, 0.50, 1.00)
+# keep 比例：档1/3/4/5（档2 走绝对底）
+BAND_KEEPS: tuple[float, ...] = (0.30, 0.60, 0.70, 0.80)
+BAND2_ABS_MULT = 1.02
+BAND3_GLOBAL_MULT = 1.15
 
 
 def stop_hits(px: float, cost: float, stop_pct: float = STOP_PCT) -> bool:
@@ -46,20 +31,39 @@ def stop_hits(px: float, cost: float, stop_pct: float = STOP_PCT) -> bool:
     return float(px) / float(cost) - 1.0 <= -float(stop_pct)
 
 
-def peak_drawdown_hits(
-    px: float,
-    cost: float,
-    peak: float,
-    *,
-    arm: float = PEAK_DD_ARM,
-    dd_pct: float = PEAK_DD_PCT,
-) -> bool:
-    """涨幅 > 120% 且现价 <= 最高价 * (1-20%)。"""
-    if cost <= 0 or px <= 0 or peak <= 0:
-        return False
-    if float(peak) <= float(cost) * (1.0 + float(arm)):
-        return False
-    return float(px) <= float(peak) * (1.0 - float(dd_pct))
+def band_of(cost: float, peak: float) -> Optional[int]:
+    """峰值所在档 1..5；peak≤cost 返回 None。
+
+    价格比较（plan §1）：(0,6%) / [6%,15%) / [15%,50%] / (50%,100%] / (100%,∞)。
+    """
+    c = float(cost)
+    p = float(peak)
+    if c <= 0 or p <= c:
+        return None
+    if p < c * (1.0 + BAND_ARMS[0]):
+        return 1
+    if p < c * (1.0 + BAND_ARMS[1]):
+        return 2
+    if p <= c * (1.0 + BAND_ARMS[2]):
+        return 3
+    if p <= c * (1.0 + BAND_ARMS[3]):
+        return 4
+    return 5
+
+
+def trigger_line(cost: float, peak: float, band: int) -> float:
+    """档位触发线（px ≤ 线则止盈）。"""
+    c = float(cost)
+    p = float(peak)
+    if band == 1:
+        return c + BAND_KEEPS[0] * (p - c)
+    if band == 2:
+        return c * BAND2_ABS_MULT
+    if band == 3:
+        return max(c * BAND3_GLOBAL_MULT, c + BAND_KEEPS[1] * (p - c))
+    if band == 4:
+        return c + BAND_KEEPS[2] * (p - c)
+    return c + BAND_KEEPS[3] * (p - c)
 
 
 def take_profit_reason(
@@ -70,30 +74,33 @@ def take_profit_reason(
 ) -> Optional[str]:
     """触发止盈则返回 reason（供 CSV `_sell` 使用）。
 
-    分档与峰回撤同时成立时记分档。触发价 < 成本不止盈。
+    n_days<2（T+1）不评估止盈。px<cost 不止盈。reason=`trail:band:{1..5}`。
     """
-    del n_days
+    if int(n_days) < 2:
+        return None
     if cost <= 0 or px <= 0 or peak <= 0:
         return None
     if float(px) < float(cost):
         return None
-    peak_ret = float(peak) / float(cost) - 1.0
-    floor = band_floor(peak_ret)
-    if floor is not None and float(px) <= float(cost) * (1.0 + float(floor)):
-        return f"trail:band:{int(round(floor * 100))}"
-    if peak_drawdown_hits(px, cost, peak):
-        return "trail:peak_dd"
+    band = band_of(cost, peak)
+    if band is None:
+        return None
+    line = trigger_line(cost, peak, band)
+    if float(px) <= line:
+        return f"trail:band:{band}"
     return None
 
 
 HELP_LOCK = """
-策略 8 卖点（--strategy version8）：
-  止损 30 个点。止盈按峰值涨幅分档：
-        0% < 涨幅 ≤ 15%→ 回撤到买入价×1.02；
-        之后 15/30/50/70/90；涨幅 > 120% 回撤到最高价×80%。
-  per_name（默认）：每股票预算 100 万，已持仓跳过、不加仓（含追买）。
-  daily_quota 历史复跑路径：已持继续买，各笔 lot 独立算成本/峰值/止损止盈；
-        由策略书属性选择，无全局 CLI 模式开关。
+策略 8 卖点（--strategy version8）规则 v2：
+  止损 30 个点（T+1 起）。止盈按峰值涨幅比例回撤阶梯（价格比较分档）：
+        (0,6%)→保留涨幅 30%（回撤 70%；g→0 线→cost，允许保本/费用后微亏）；
+        [6%,15%)→买入价×1.02；
+        [15%,50%]→max(买入价×1.15, 保留涨幅 60%)；
+        (50%,100%]→保留 70%；>100%→保留 80%。
+  T+1（持仓第 1 个交易日）只评止损不评止盈；峰值从 T+1 累计。
+  per_name（默认）：每股票预算 100 万；同码可加仓（独立 lot，单码单日上限 2 笔：
+        chase 9:45 + 池买 14:55）；现金不足记 skip_cash。
   跌停：任何卖因成交前跌停则 defer，次日再评（不只 stop_loss）。
   落盘：backtest_output/csv_{daily|minute}_v8_{start}_{end}/
 """
@@ -102,7 +109,7 @@ HELP_LOCK = """
 def record_strategy8_params(st, *, stop_pct: float = STOP_PCT) -> None:
     st.stats["sell_book"] = BOOK_TAG
     st.stats["stop_pct"] = float(stop_pct)
-    st.stats["profit_base"] = PROFIT_BASE
-    st.stats["small_floor"] = SMALL_FLOOR
-    st.stats["peak_dd_pct"] = PEAK_DD_PCT
-    st.stats["peak_dd_arm"] = PEAK_DD_ARM
+    st.stats["band_arms"] = list(BAND_ARMS)
+    st.stats["band_keeps"] = list(BAND_KEEPS)
+    st.stats["band2_abs_mult"] = float(BAND2_ABS_MULT)
+    st.stats["band3_global_mult"] = float(BAND3_GLOBAL_MULT)
