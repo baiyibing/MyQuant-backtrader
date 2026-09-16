@@ -1,7 +1,7 @@
 # 交接 · 除权日参考价修正片 实施（Codex 接手）
 
 > 日期：2026-09-16
-> 状态：**plan v1.1 已评审（READY）；待人裁 GO（PX-1–PX-7，全部建议「是」）后本交接生效**。
+> 状态：✅ **PX GO / implementing**（人裁 2026-09-16：PX-1…PX-7 全部「是」）。本交接生效；切片 A/B/C 由 Codex 本地实施，D 宿主-only。
 > 权威对象：[plan-exdiv-refprice-2026-09-16.md](plan-exdiv-refprice-2026-09-16.md)（v1.1）。
 > 评审链（施工图）：[zcode-facts](../architecture/reviews/2026-09-16/plan-exdiv-refprice/zcode-facts.md)（5 触点精确行号锚 + 数据层契约）/ [zcode-arch](../architecture/reviews/2026-09-16/plan-exdiv-refprice/zcode-arch.md)（**边界向量 T1–T16** + E-R5 收窄措辞 + 残留声明）/ [merge-consensus](../architecture/reviews/2026-09-16/plan-exdiv-refprice/merge-consensus.md)。
 > 分支：从当时 master 开 `feat/exdiv-refprice`；A/B 分 commit；**与 PR #81（v8 v2）同文件不同区域，后合者 rebase**。
