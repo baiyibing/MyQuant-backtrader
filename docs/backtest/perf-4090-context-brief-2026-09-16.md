@@ -43,6 +43,20 @@ PR #57 = Opus 5 仓库自分析（[repo-analysis-opus5-next-2026-09-15.md](repo-
 - 量级：#54 场景全程 1.2s；D 烟测宿主实测（2026-09-16，本机 F 湖、master `a606070`）：**daily 全窗 18.7s、minute 全窗 ~90s**——单次回测分钟级，GPU 化无收益。
 - 新证据持续强化：D 烟测后「分钟回测慢」的假设进一步存疑，PR #60 的 S0 判定门大概率判停（"不值得"是合法产出）。
 
+**D 烟测事实卡**（[PR #62](https://github.com/baiyibing/MyQuant-backtrader/pull/62)，merge `b748b37`；运行于代码态 `a606070`、2026-09-16 本机 F 湖、按 M-R8 顺序先 daily 后分钟）：
+
+| 项 | 结果 |
+|----|------|
+| daily per_name 全窗（20251023–20260909） | 期末 -28.65%，最大回撤 -37.57%，**18.7s**（加载 12.5s+模拟 4.7s） |
+| minute per_name 全窗 | 期末 -23.31%，最大回撤 -28.50%，**~90s**（分钟湖 44.8s+模拟 17.5s） |
+| 同 sizing 对照 | 末日分钟比日线 **+7.49%**（卖点时钟归因，caption 有效；分钟锚定回撤 810 次 vs 日线 215 次） |
+| 引擎自检 | 两引擎 `sizing=per_name\|name_budget=1M`；加仓恒 0；`chase_buy_fail_shares=0` |
+| 观测项 | skip_cash 3,972/3,546（名义 ~39 亿）；**宽度>21 现金上限天数 104/215（48%）**；止损滑出 n=41、中位 -30.00%、最差 -35.21% |
+| 基线保护 | 切前分钟工件复制为 `csv_minute_v8_20251023_20260909_preswitch_dailyquota`（跨 sizing 仅 lot 级对照：272 lots×99.9 万 vs 3,438 lots×4.1 万） |
+| 未跑 | P1 有/无武装 A/B（武装变体代码已删，需 scratch 补丁，后置非阻塞） |
+
+数字全文见 [money-modes-v8-pername-smoke-2026-09-16.md](money-modes-v8-pername-smoke-2026-09-16.md)「宿主补跑」节。
+
 ### 2.3 判定矩阵（负载 → 工具）
 
 | 负载 | 4090 适合度 | 正确工具 |
@@ -96,7 +110,7 @@ Qlib 回测快**不靠 numba/GPU/编译内核**，靠四件事全压在向量化
 | 项 | 状态 | 下一步 |
 |----|------|--------|
 | #58 退场 / #61 资金管理 / #62 收口 | ✅ 已合入归档（`e89d1b8`/`a606070`/`b748b37`） | 无 |
-| D 宿主烟测 | ✅ 已补跑（[烟测短记](money-modes-v8-pername-smoke-2026-09-16.md) 宿主节） | P1 有/无武装 A/B 后置（需 scratch 补丁） |
+| D 宿主烟测 | ✅ 已补跑（PR #62，merge `b748b37`；[烟测短记](money-modes-v8-pername-smoke-2026-09-16.md) 宿主节，事实卡见本简报 §2.2） | P1 有/无武装 A/B 后置（需 scratch 补丁） |
 | **PR #60（GPU plan）** | 📄 draft 待评审 | 多 agent 评审 → 人裁 P1–P3 → 若批 S0（高配机/本机只读实测） |
 | #57 的 WP2（宿主门禁 cookbook）/ WP4（R11 de-dup） | ⬜ 未开工，**不被 #60 覆盖** | 随时可做（docs PR 组） |
 | #57 的 WP1(1)（prev-close/close-history 缓存） | ⬜ 未开工 | S0 数字支持时随 S1 做 |
