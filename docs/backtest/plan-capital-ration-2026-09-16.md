@@ -1,7 +1,7 @@
 # Plan：资金配给显式化 NP1（先测量探针，后可选 `--ration`）
 
-> **落盘**：2026-09-16。**v1.1**。
-> **状态**：✅ **P1 GO，B 已实施**。切片 A（只读探针）已合入；切片 B 实施 `--ration {file_order,seeded_shuffle}`，默认 `file_order` 保持原行为。
+> **落盘**：2026-09-16。**v1.2**。
+> **状态**：✅ **P1/P2 闭环**。B 已实施；宿主 seed NAV 序方差=**宽**（见 [capital-ration-seed-nav-results-2026-09-16.md](capital-ration-seed-nav-results-2026-09-16.md)）；使用纪律已写回。无进一步动作项。
 > **风险档**：**中风险**（B 触及 `run_pool_buys_day`）；data-free 回归与 strategy_books byte-identical golden 为合入门。
 > **业务源**：[strategic-analysis-opus5-next-2026-09-16.md](strategic-analysis-opus5-next-2026-09-16.md) §6 NP1 / §5 D1；宿主证据 [money-modes-v8-pername-smoke-2026-09-16.md](money-modes-v8-pername-smoke-2026-09-16.md)（5,064 名次 → 271 成交；宽度>21 天 104/215 = 48%）。
 > **工作流**：走 [Codex 交接工作流](workflow-codex-handoff.md)。2026-09-16 人裁 **P1=GO for B**，P2 锁为仅 `file_order` / `seeded_shuffle`。
@@ -136,12 +136,13 @@ Slice B（已 GO）：--ration {file_order,seeded_shuffle}；默认 file_order =
 
 ## 9. 修订程序
 
-改 R-\* 须改本文并升版本。B 已按 P1/P2 人裁实施；扩充枚举或改变默认序必须另行修订并重新 GO。
+改 R-\* 须改本文并升版本。B 已按 P1/P2 人裁实施且宿主 seed 验证闭环；扩充枚举或改变默认序必须另行修订并重新 GO。
 
 ## 10. Changelog
 
 - **v1.0**（2026-09-16）：初稿。切片 A=只读探针（本 PR）；B=`--ration` 后人裁。硬锁 R-1…R-8；Qlib TopkDropout 仅分层镜子。
 - **v1.1**（2026-09-16）：P1 GO for B；P2 锁双枚举。实施逐日稳定 `seeded_shuffle`，默认 `file_order` 不变。宿主仍欠 3–5 个 seed 的 NAV smoke，属非 merge gate。
+- **v1.2**（2026-09-16）：宿主 seed NAV 完成 — 序方差=**宽**（NAV 极差 15.8%；file_order 为本窗最差）；使用纪律见 seed-nav-results §4。**P1/P2 闭环**；无进一步动作项。
 
 ---
 
@@ -150,4 +151,4 @@ Slice B（已 GO）：--ration {file_order,seeded_shuffle}；默认 file_order =
 | 切片 | 状态 | commit | 备注 |
 |------|------|--------|------|
 | A · 只读归因探针 | ✅ 本 PR | `592d40c` | data-free 探针 + 测试；引擎零 diff；B 仍待 GO |
-| B · `--ration` | ✅ 已实施（P1 GO） | `d04b11b` | 双枚举；SHA-256 `(seed,date)` 逐日派生；golden 绿。宿主 3–5 seed NAV smoke 待做，非 merge gate |
+| B · `--ration` | ✅ 已实施 + 宿主 seed 验证 | `d04b11b` | 双枚举；SHA-256 `(seed,date)` 逐日派生；golden 绿。宿主 seed NAV：**序方差=宽**（15.8% NAV 极差；file_order 最差）；使用纪律见 [capital-ration-seed-nav-results-2026-09-16.md](capital-ration-seed-nav-results-2026-09-16.md)。**P1/P2 闭环** |
