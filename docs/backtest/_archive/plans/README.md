@@ -9,7 +9,7 @@ Completed / absorbed `plan-*.md` files moved here on 2026-09-15 so
 | `plan-cerebro-retire-2026-09-16.md` | 已实施（PR #58 / merge e89d1b8；复核 PASS，树内 backtrader 零命中） |
 | `plan-unify-csv-strategies-1-8-2026-09-12.md` | A–E 已合；U-R\* 卖点契约仍有效，撮合句以 [engine-ashare-correctness.md](../../engine-ashare-correctness.md) E-R\* 为准 |
 | `plan-strategy7-turtle-csv-minute-2026-09-11.md` | A–D 已合 master；E 真名单一窗本机已跑 |
-| `plan-pool-pipeline-r0r1-2026-09-12.md` | R0/R1 已合 #21 |
+| `plan-pool-pipeline-r0r1-2026-09-12.md` | R0/R1 的 **P-R2/P-R3/P-R4/P-R6 已实现**（PR #21），不是 TODO。代码锚点：[`csv_pool.load_pool_names_by_day`](../../../../backtest/research/csv_pool.py)；[日线加载](../../../../backtest/research/csv_daily_backtest.py)约 L225–252 丢 `volume==0`；[分钟加载](../../../../backtest/research/csv_minute_backtest.py)约 L165–207 丢当日总 `volume==0`；[`scripts/data/r0_positions_to_pool.py`](../../../../scripts/data/r0_positions_to_pool.py) |
 | `plan-pool-pipeline-r2r5-2026-09-12.md` | 已实施（本仓 #24 / MyQuant #2） |
 | `plan-qlib-train-r3-2026-09-12.md` | 已实施（本仓 #25 / MyQuant #3） |
 | `plan-m5-list-attribution-2026-09-13.md` | 工具链已合 #27；C 本机补跑已合 #28 |

@@ -5,7 +5,7 @@
 - **执行者鉴权与出处**：本机 `/home/box/.local/bin/cursor-agent -p` + `--model claude-opus-5-thinking-high`；已用 **User API Key（`CURSOR_API_KEY`）**，调用前 **已 `unset CURSOR_AUTH_TOKEN`**（Origin-scoped token 会让 Agent 端点返回 `permission_denied`）。**这是 local Opus 5 真跑，不是 CloudAgent，也不是先前鉴权失败后的替补稿**（先前替补稿见 §Appendix「稿系」）。
 - **分析 tip**：工作树 `HEAD = ad0c4ba`（`docs/opus5-repo-analysis-next` 分支；parent1 = `36b7ffc` 先前替补稿 commit，parent2 = `origin/master = e06e1a9`）。相对先前稿的 `8793fd5`：master 已前进到 `e06e1a9`（本分支 ahead 5 = 4 个 master commit + 1 个 merge commit）。
 - **SHA 取证方式（须知）**：Opus 本跑 shell 被环境策略拦截，未能执行 `git log`；SHA 读自 `.git` refs。落盘时由执行助手补全 `8793fd5..e06e1a9` 四条 commit（见 §10），并核对了行号 / gate 数 / R0/R1 双份文档。**分析对象 tip 仍为 `ad0c4ba`（= `36b7ffc` ⊕ `e06e1a9`）**；本文件落盘 commit 会更新 HEAD，但不改变分析基线。
-- **Parents（本次实际 Read）**：[brainstorm-overview-2026-09-15.md](brainstorm-overview-2026-09-15.md) · [plan-hygiene-backlog-2026-09-15.md](plan-hygiene-backlog-2026-09-15.md) · [plan-brainstorm-next-heavy-2026-09-15.md](plan-brainstorm-next-heavy-2026-09-15.md) · [repo-analysis-vs-brainstorm-2026-09-15.md](repo-analysis-vs-brainstorm-2026-09-15.md)（#52） · [repo-analysis-opus5-next-2026-09-15.md](repo-analysis-opus5-next-2026-09-15.md)（`8793fd5` 替补稿，WP1–WP5） · [minute-simulate-profile-results-2026-09-15.md](minute-simulate-profile-results-2026-09-15.md)（#54） · [plan-pool-pipeline-r0r1-2026-09-12.md](plan-pool-pipeline-r0r1-2026-09-12.md) · [engine-positioning-ssot.md](engine-positioning-ssot.md) · [pool-csv-contract.md](pool-csv-contract.md) · [chip/h14-d1-minute-chip-profile-results-2026-09-15.md](chip/h14-d1-minute-chip-profile-results-2026-09-15.md)
+- **Parents（本次实际 Read）**：[brainstorm-overview-2026-09-15.md](brainstorm-overview-2026-09-15.md) · [plan-hygiene-backlog-2026-09-15.md](plan-hygiene-backlog-2026-09-15.md) · [plan-brainstorm-next-heavy-2026-09-15.md](plan-brainstorm-next-heavy-2026-09-15.md) · [repo-analysis-vs-brainstorm-2026-09-15.md](repo-analysis-vs-brainstorm-2026-09-15.md)（#52） · [repo-analysis-opus5-next-2026-09-15.md](repo-analysis-opus5-next-2026-09-15.md)（`8793fd5` 替补稿，WP1–WP5） · [minute-simulate-profile-results-2026-09-15.md](minute-simulate-profile-results-2026-09-15.md)（#54） · [plan-pool-pipeline-r0r1-2026-09-12.md](_archive/plans/plan-pool-pipeline-r0r1-2026-09-12.md) · [engine-positioning-ssot.md](engine-positioning-ssot.md) · [pool-csv-contract.md](pool-csv-contract.md) · [chip/h14-d1-minute-chip-profile-results-2026-09-15.md](chip/h14-d1-minute-chip-profile-results-2026-09-15.md)
 
 **G 禁区（继承，本文不挑战）**：改 6/8 卖点；重开 `--asof`；PortAna 定胜负；缺行 fail-closed→跳过；日线↔分钟卖环 big-bang 合并；物理删除 Cerebro；本仓复刻 MyQuant CYQ feeder；本仓复刻 LEBS / 真栈；CloudAgent 作为交付路径。
 
@@ -208,6 +208,8 @@ run-manifest 写端            oskh_factors.chip（可选 numba）   trade_decis
 ---
 
 ## 7. 下一步改进方案 WP1–WP5
+
+**状态刷新（2026-09-16）：WP4 + WP2 已落地本分支（本 PR）**：R11 root 保留兼容指针、inventory later 钉清、[9 个宿主湖门禁 cookbook](host-lake-gates-cookbook-2026-09-16.md)；下文保留采纳时的分析与建议。
 
 **编号说明**：保持与 `8793fd5` 稿 WP1–WP5 **完全连贯**，不改编号。唯一变动是 **WP4 扩容**（从「inventory later 再钉」扩为「docs SSOT 收口：inventory later + R0/R1 重复副本 de-dup」），理由：新合入的 `plan-pool-pipeline-r0r1` 在实现层已完成（PR #21，§2.3 四条锁均有代码证据），**没有任何实现工作可插**，只剩一个纯 docs 的重复项；为它单开 WP6 会把「一次 docs PR 能收的事」拆成两包，且会让「R0/R1 是新工作面」的误读固化。
 

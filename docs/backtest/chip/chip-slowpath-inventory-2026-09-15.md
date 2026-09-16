@@ -100,6 +100,9 @@ Python `oskh_factors.chip` + `qlib_cost.cyq*` 仍是**研究 / 对照 / 短窗 c
 
 **H15 注：** `minute_chip_distribution` 已 optional numba（Python 默认）；`hybrid` / `calc_curpdf` 仍 leave。
 
+`hybrid` / `calc_curpdf` **leave until 产品吞吐需要**；仅在真实产品窗口实测表明它们成为吞吐瓶颈时重开。
+依据 [H14/D1](h14-d1-minute-chip-profile-results-2026-09-15.md)：合成 microbench 的 hybrid ~1.01 ms、`calc_curpdf` × N ~0.69 ms、已 numba 的 `calc_cumpdf` ~0.021 ms；这些数字不代替产品端到端证据。
+
 **明确不在本表扩写：** 向量化成交核 `scan_held_day` / daily sell index（主题 A / H5–H8）——与 chip/TR 正交。
 
 ---

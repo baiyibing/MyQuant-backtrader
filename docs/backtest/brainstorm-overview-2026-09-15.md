@@ -55,6 +55,8 @@
 
 ## 下一步（若继续）
 
+**WP4 → WP2 已做（本 PR）**：R11 root 指针、inventory later 钉清与 [9 个宿主湖门禁 cookbook](host-lake-gates-cookbook-2026-09-16.md) 已落地；下述 WP4/WP2 建议已完成。
+
 队列头：**run-manifest 硬接**（需产品点头，另开片）。  
 有序建议见 [repo-analysis-opus5-next-2026-09-15.md](repo-analysis-opus5-next-2026-09-15.md) §7–§8（WP1–WP5；无痛点时优先 **WP4 docs SSOT/de-dup** 或 **WP2 host 湖门禁 cookbook**；分钟窗痛点再开 WP1）。  
 其它可选项：C list-quality golden fixture（WP3）；inventory hybrid/curpdf later（并入 WP4）。  

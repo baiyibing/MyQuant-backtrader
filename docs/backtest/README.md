@@ -60,6 +60,8 @@ R5 的 `--start/--end` 必须跟导出的首末文件名走：H0 / `pred_minus_o
 
 **CI contract gates（无 F 湖 / repo-only）：** `.github/workflows/python-tests.yml` 在 `pip` 前跑 `verify_oskh_data_contract.py`、`verify_data_path_ssot.py`（扫 `oskh_data` / `oskh_factors` / `scripts` / `common`）、`verify_no_hardcoded_machine_paths.py`、`verify_tr_bridge_import_ssot.py`（H12）。chip / TR / L2 等需湖门禁不进 CI。清单见 [plan-h10-ci-path-gates-2026-09-15.md](plan-h10-ci-path-gates-2026-09-15.md) · [plan-h12-ci-tr-bridge-gate-2026-09-15.md](plan-h12-ci-tr-bridge-gate-2026-09-15.md)。
 
+**宿主湖门禁（9 个，host-only）：** purpose、跑法、数据要求与退出语义见 [host-lake-gates-cookbook-2026-09-16.md](host-lake-gates-cookbook-2026-09-16.md)；权威入口为 `scripts/gates/`。
+
 ## 1.3：LEBS 与 MockQMT（不在本仓跑）
 
 要和 Paper 同源的扫描、真栈验收，去 **OSkhQuant1.3**：
@@ -83,6 +85,7 @@ Cerebro / Rolling 已退场（2026-09-16）；chip / ma_chip 对照产物为静�
 | 名单 CSV 契约（as-of = 买入日 T；H9/H16 list-quality CLI，双目录严格校验） | [pool-csv-contract.md](pool-csv-contract.md#list-quality-reporter-h9--h16) |
 | **CI path-SSOT / contract gates（H10；无湖）** | [plan-h10-ci-path-gates-2026-09-15.md](plan-h10-ci-path-gates-2026-09-15.md) · workflow `python-tests.yml` |
 | **CI TR bridge import gate（H12；无湖）** | [plan-h12-ci-tr-bridge-gate-2026-09-15.md](plan-h12-ci-tr-bridge-gate-2026-09-15.md) · `verify_tr_bridge_import_ssot.py` |
+| **宿主湖门禁 cookbook（WP2；9 个 host-only）** | [host-lake-gates-cookbook-2026-09-16.md](host-lake-gates-cookbook-2026-09-16.md) |
 | **Chip / TR slow-path inventory（H11；Theme D 软）** | [chip/chip-slowpath-inventory-2026-09-15.md](chip/chip-slowpath-inventory-2026-09-15.md) · [plan-h11-chip-slowpath-inventory-2026-09-15.md](plan-h11-chip-slowpath-inventory-2026-09-15.md) |
 | **CYQ / TR 产品边界（H13）** | [plan-h13-cyq-tr-boundary-2026-09-15.md](plan-h13-cyq-tr-boundary-2026-09-15.md) · inventory §E：MyQuant numba `winner_ratio` feeder ≠ 本仓 Rust TR Store |
 | **D1 minute/hybrid chip profile（H14）** | [plan-h14-d1-minute-chip-profile-2026-09-15.md](plan-h14-d1-minute-chip-profile-2026-09-15.md) · [chip/h14-d1-minute-chip-profile-results-2026-09-15.md](chip/h14-d1-minute-chip-profile-results-2026-09-15.md) · `bench_minute_chip_hotpath.py` |
