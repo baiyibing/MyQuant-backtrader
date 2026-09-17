@@ -109,11 +109,14 @@ def apply_csv_strategy(strategy: str, **kwargs) -> dict:
     hooks["name"] = book.name
     hooks.setdefault("force_sell_hm", None)
     hooks.setdefault("buy_gate", None)
+    hooks.setdefault("add_gate", None)
+    hooks.setdefault("allow_new_name", None)
     hooks.setdefault("sell_gate", None)
     hooks.setdefault("reserve_limit_up", False)
     hooks.setdefault("daily_same_bar_prefixes", ("open_board",))
     hooks.setdefault("planned_for_day", None)
     hooks.setdefault("bind_opening_held", None)
+    hooks.setdefault("name_lot_budget", None)
     hooks.setdefault("cash_deploy_frac", None)
     hooks.setdefault("qlib_limit_pct", None)
     hooks.setdefault("limit_up_chase", True)
@@ -166,7 +169,7 @@ def add_strategy6_ratio_args(ap: argparse.ArgumentParser) -> None:
         "--stop-pct",
         type=float,
         default=None,
-        help="stop-loss fraction override (v6 0.06, v8 0.30, v9 0.08)",
+        help="stop-loss fraction override (v6 0.06, v8 0.10, v9 0.08)",
     )
     ap.add_argument(
         "--profit-base",
@@ -536,6 +539,7 @@ def _apply_version8(
     stop_pct: Optional[float] = None,
     take_profit=None,
     record_params=None,
+    index_block_new=None,
     **_,
 ) -> dict:
     resolved = strategy8_rules.STOP_PCT if stop_pct is None else float(stop_pct)
@@ -549,6 +553,9 @@ def _apply_version8(
             strategy8_rules.take_profit_reason if take_profit is None else take_profit
         ),
         "record_params": record_params if record_params is not None else _rec,
+        "add_gate": strategy8_rules.may_add,
+        "name_lot_budget": strategy8_rules.lot_budget,
+        "allow_new_name": strategy8_rules.allow_new_name_from_gate(index_block_new),
     }
 
 

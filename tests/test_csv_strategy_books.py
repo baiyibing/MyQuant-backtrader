@@ -40,6 +40,7 @@ def test_registered_books_are_explicit():
     assert get_book("version5").peak_gap_min == 0
     assert get_book("version6").allow_add is False
     assert get_book("version8").allow_add is True
+    assert get_book("version8").peak_gap_min == 15
     assert get_book("version9").allow_add is False
     assert get_book("version10").allow_add is False
     assert engine_book("v6") == "v6"
