@@ -345,13 +345,13 @@ def _result(inst, ymd, hm, price, shares, held, reason, *, trade):
 
 
 def _validate_spec(spec):
-    if spec.rule not in (0, 1, 2, 3, 4):
+    if spec.rule not in (0, 1, 2, 3, 4, 5):
         raise ValueError(f"unknown rule {spec.rule}")
     if spec.rule and (spec.n is None or spec.n < 1):
         raise ValueError("N must be positive")
     if spec.rule == 3 and spec.y is None:
         raise ValueError("trailing requires Y")
-    if spec.rule == 4 and spec.y is None:
+    if spec.rule in (4, 5) and spec.y is None:
         raise ValueError("livermore requires stop Y")
 
 
@@ -466,10 +466,11 @@ def _first_hit(path, spec, *, lp, tol):
     n = path.close.size
     if n == 0:
         return None
-    sl_on = spec.rule in (2, 4) and spec.y is not None
+    sl_on = spec.rule in (2, 4, 5) and spec.y is not None
     tp_on = spec.rule in (2, 4) and spec.x is not None
     trail_on = spec.rule == 3
-    live_on = spec.rule == 4
+    live_on = spec.rule in (4, 5)
+    bands_on = spec.rule == 4 and spec.x is None
     expire_on = spec.rule in (1, 2, 3)
     ev = np.zeros(n, dtype=np.int8)
     fill = path.close.copy()
@@ -485,7 +486,7 @@ def _first_hit(path, spec, *, lp, tol):
         stale = (path.held >= spec.n) & (peak < path.cost * (1.0 + s8.BAND_ARMS[0]))
         ev[stale] = 5
         fill[stale] = path.close[stale]
-        if spec.x is None:
+        if bands_on:
             line = _v8_band_line(path.cost, peak)
             band = (
                 (path.close >= path.cost)
@@ -598,7 +599,7 @@ def _evaluate_exit_modeb_ref(inst, spec, minutes, sessions, prev_by, *, end, tol
     cost = peak = mark_price = float(inst.buy_price)
     shares = float(modea._lot_shares(cost))
     mark_day, mark_hm, mark_held = inst.list_date, None, 0
-    sl_on = spec.rule in (2, 4) and spec.y is not None
+    sl_on = spec.rule in (2, 4, 5) and spec.y is not None
     tp_on = spec.rule in (2, 4) and spec.x is not None
     for i in range(buy_i + 1, len(sessions)):
         ymd = sessions[i]
@@ -640,7 +641,7 @@ def _evaluate_exit_modeb_ref(inst, spec, minutes, sessions, prev_by, *, end, tol
                 reason = "trailing"
             elif spec.rule == 4 and spec.x is None:
                 reason = s8.take_profit_reason(close, cost, peak, i - buy_i)
-            elif spec.rule == 4 and i - buy_i >= spec.n and s8.never_armed(cost, peak):
+            elif spec.rule in (4, 5) and i - buy_i >= spec.n and s8.never_armed(cost, peak):
                 reason = "force_sell:stale"
             if reason is None and spec.rule in (1, 2, 3) and i - buy_i >= spec.n and j == len(rows) - 1:
                 reason, fill = "n_expire", close
@@ -687,7 +688,7 @@ DEFAULT_OUT_DIR = Path("backtest_output/unified_exit_modeb")
 
 
 def iter_grid():
-    """P1=A narrow cells plus two Livermore path arms (same book, all names)."""
+    """P1=A narrow cells plus Livermore L1/L2/L3 path arms (same book, all names)."""
     cells = [s for s in modea.iter_grid(include_anchor_hold_end=True)
              if s.rule == 0 or (s.rule == 1 and s.n == 1)
              or (s.rule == 2 and s.x in (5, 7, 10)
@@ -695,6 +696,7 @@ def iter_grid():
     cells.extend((
         modea.StrategySpec(4, s8.STALE_DAYS, 10, 10),
         modea.StrategySpec(4, s8.STALE_DAYS, None, 10),
+        modea.StrategySpec(5, s8.STALE_DAYS, None, 10),
     ))
     return cells
 
@@ -956,7 +958,7 @@ def run_modeb(
         meta={"mode": "B", "price_domain": "none daily entry / minute open-gap then close trigger and fill",
               "scan": "numpy first-hit; path shared across specs",
               "pack": load_status.get("pack"), "minute_cache": load_status.get("cache"),
-              "grid": "P1=A narrow (18 r2 + N=1) + livermore L1/L2", "oracle": "Q38=A 分钟可成交 close 事后上界；仅排除跌停分钟；不模拟更早失败卖出",
+              "grid": "P1=A narrow (18 r2 + N=1) + livermore L1/L2/L3", "oracle": "Q38=A 分钟可成交 close 事后上界；仅排除跌停分钟；不模拟更早失败卖出",
               "start": start, "end": end, "cash_pool": cash_pool, "tol": tol,
               "minute_coverage": coverage, "exdiv": "cost/peak *= k; shares /= k; no cash dividend"},
     )

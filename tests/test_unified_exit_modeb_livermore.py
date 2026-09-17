@@ -10,6 +10,7 @@ SESS = [f"202510{d:02d}" for d in range(23, 32)]  # 23..31 → 9 calendar labels
 INST = a.Instance(CODE, "synthetic", SESS[0], 100., True)
 L1 = a.StrategySpec(4, 8, 10, 10)
 L2 = a.StrategySpec(4, 8, None, 10)
+L3 = a.StrategySpec(5, 8, None, 10)
 
 
 def frames(rows):
@@ -31,6 +32,7 @@ def run(rows, spec, **kw):
 def test_labels_are_marketwide_not_per_name():
     assert L1.label() == "livermore_l1_x10_stale8_y10"
     assert L2.label() == "livermore_l2_stale8_y10"
+    assert L3.label() == "livermore_l3_stale8_y10"
     assert L1.label() == a.StrategySpec(4, 8, 10, 10).label()
 
 
@@ -81,6 +83,8 @@ def test_fast_matches_ref_livermore():
         ([(1, 600, 107, 107, 100, 107)] + [(d, 600, 104, 104, 103, 104) for d in range(2, 9)], L1),
         ([(1, 600, 107, 107, 100, 107), (2, 600, 101.5, 101.5, 101, 101.5)], L2),
         ([(1, 600, 111, 111, 100, 111)], L1),
+        ([(1, 600, 111, 111, 100, 111)] + [(d, 600, 108, 108, 107, 108) for d in range(2, 9)], L3),
+        ([(d, 600, 100, 101, 99, 100) for d in range(1, 9)], L3),
     ]
     for rows, spec in cases:
         fast = run(rows, spec, impl="fast")
@@ -88,6 +92,23 @@ def test_fast_matches_ref_livermore():
         assert (fast.reason, fast.sell_price, fast.sell_date, fast.is_trade) == (
             ref.reason, ref.sell_price, ref.sell_date, ref.is_trade
         )
+
+
+def test_l3_lets_armed_run_past_ten_and_band2():
+    rows = [(1, 600, 111, 111, 100, 111)]
+    rows += [(d, 600, 108, 108, 107, 108) for d in range(2, 9)]
+    er = run(rows, L3)
+    assert er.reason == "mark_end"
+    assert er.sell_price == 108
+    assert run(rows, L1).reason == "take_profit"
+    assert run([(1, 600, 107, 107, 100, 107), (2, 600, 101.5, 101.5, 101, 101.5)], L2).reason == "trail:band:2"
+    assert run([(1, 600, 107, 107, 100, 107), (2, 600, 101.5, 101.5, 101, 101.5)], L3).reason == "mark_end"
+
+
+def test_l3_still_stales_unarmed():
+    rows = [(d, 600, 100, 101, 99, 100) for d in range(1, 9)]
+    er = run(rows, L3)
+    assert er.reason == "force_sell:stale" and er.hold_sessions == 8
 
 
 def test_l2_reason_matches_v8_function():
