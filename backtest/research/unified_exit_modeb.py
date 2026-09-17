@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping, Optional, Sequence
 
+import numpy as np
 import pandas as pd
 
 from backtest.research import unified_exit_modea as modea
@@ -17,6 +18,7 @@ from backtest.research.exdiv_map import load_exdiv_ratios
 from backtest.research.csv_minute_backtest import (
     AM_OPEN, AM_CLOSE, PM_OPEN, PM_CLOSE, MINUTE_LAKE_END, load_minute_bars,
 )
+from backtest.research.market_layer import limit_pct
 from common.infra.data_root import resolve_period_root
 
 
@@ -80,27 +82,76 @@ def _previous_refs(daily, symbol, exdiv):
     return refs
 
 
+class _Packed:
+    """Per-symbol session arrays. ``slices[ymd] = (start, end)`` into the arrays."""
+
+    __slots__ = ("hm", "open", "close", "slices")
+
+    def __init__(self, hm, open_, close, slices):
+        self.hm = hm
+        self.open = open_
+        self.close = close
+        self.slices = slices
+
+
 class PreparedMinutes:
-    """Run-local grouped tuples, shared by every grid cell without frame mutation."""
+    """Run-local numpy minutes. Tuple ``days`` stays lazy for the ref scanner."""
 
     def __init__(self, bars):
-        self.days = {}
+        self.packed = {}
+        self._days = None
         for symbol, frame in bars.items():
             frame = session_minutes(frame)
             if frame.empty:
-                self.days[symbol] = {}
+                self.packed[symbol] = None
                 continue
             if "open" not in frame.columns:
                 frame = frame.copy()
                 frame["open"] = frame["close"]
-            self.days[symbol] = {
-                ymd: list(
-                    day[["hm", "open", "high", "low", "close"]].itertuples(
-                        index=False, name=None
+            ymd = frame["ymd"].to_numpy()
+            n = len(ymd)
+            change = np.empty(n, dtype=bool)
+            change[0] = True
+            change[1:] = ymd[1:] != ymd[:-1]
+            starts = np.flatnonzero(change)
+            stops = np.append(starts[1:], n)
+            self.packed[symbol] = _Packed(
+                frame["hm"].to_numpy(dtype=np.int32, copy=False),
+                frame["open"].to_numpy(dtype=np.float64, copy=False),
+                frame["close"].to_numpy(dtype=np.float64, copy=False),
+                {str(ymd[i]): (int(i), int(j)) for i, j in zip(starts, stops)},
+            )
+
+    @property
+    def days(self):
+        if self._days is None:
+            self._days = {}
+            for symbol, pk in self.packed.items():
+                if pk is None:
+                    self._days[symbol] = {}
+                    continue
+                self._days[symbol] = {
+                    ymd: list(
+                        zip(
+                            pk.hm[s:e].tolist(),
+                            pk.open[s:e].tolist(),
+                            pk.open[s:e].tolist(),
+                            pk.close[s:e].tolist(),
+                            pk.close[s:e].tolist(),
+                        )
                     )
-                )
-                for ymd, day in frame.groupby("ymd", sort=False)
-            }
+                    for ymd, (s, e) in pk.slices.items()
+                }
+        return self._days
+
+    def last_close(self, symbol, ymd):
+        pk = self.packed.get(symbol)
+        if pk is None:
+            return None
+        sl = pk.slices.get(ymd)
+        if sl is None:
+            return None
+        return float(pk.close[sl[1] - 1])
 
 
 def _prepare_minutes(bars):
@@ -120,25 +171,208 @@ def _result(inst, ymd, hm, price, shares, held, reason, *, trade):
     return ExitResult(ymd, price, reason, pnl / buy_cost, pnl, shares, held, trade, hm)
 
 
-def evaluate_exit_modeb(inst, spec, daily_bars, minute_bars, sessions, *,
-                        end=modea.DEFAULT_END, tol=modea.DEFAULT_TOL, exdiv=None):
-    """Open-gap then close triggers and fills; high/low never fire.
-
-    Aligns with the minute strategy-8 book: gap-through at open, otherwise the
-    minute close. N counts market sessions. A blocked fill prevents all further
-    sells that day (Q7). Buy-day minutes never affect triggers or the peak.
-    """
-    if not inst.opened:
-        raise ValueError("evaluate_exit_modeb requires an opened instance")
+def _validate_spec(spec):
     if spec.rule not in (0, 1, 2, 3):
         raise ValueError(f"unknown rule {spec.rule}")
     if spec.rule and (spec.n is None or spec.n < 1):
         raise ValueError("N must be positive")
     if spec.rule == 3 and spec.y is None:
         raise ValueError("trailing requires Y")
+
+
+@dataclass
+class _Path:
+    ymd: np.ndarray
+    hm: np.ndarray
+    open: np.ndarray
+    close: np.ndarray
+    cost: np.ndarray
+    shares: np.ndarray
+    held: np.ndarray
+    prev: np.ndarray
+    is_last: np.ndarray
+    day_id: np.ndarray
+    mark_day: str
+    mark_hm: int | None
+    mark_price: float
+    mark_held: int
+    mark_shares: float
+
+
+_EMPTY = np.array((), dtype=np.float64)
+
+
+def _instance_path(inst, minutes, sessions, prev_by, *, end, exdiv):
+    """One T+1..end path: shared by every spec on this instance."""
+    buy_i = modea._session_index(sessions, inst.list_date)
+    cost = mark_price = float(inst.buy_price)
+    shares = float(modea._lot_shares(cost))
+    mark_day, mark_hm, mark_held = inst.list_date, None, 0
+    pk = minutes.packed.get(inst.symbol)
+    events = (exdiv or {}).get(inst.symbol, {})
+    chunks = []
+    day_no = 0
+    for i in range(buy_i + 1, len(sessions)):
+        ymd = sessions[i]
+        if ymd > end:
+            break
+        k = events.get(ymd, 1.0)
+        cost *= k
+        shares /= k
+        mark_price *= k
+        sl = None if pk is None else pk.slices.get(ymd)
+        if sl is None:
+            continue
+        s, e = sl
+        n = e - s
+        last = np.zeros(n, dtype=bool)
+        last[-1] = True
+        prev = float(prev_by[ymd]) if prev_by.get(ymd) is not None else 0.0
+        chunks.append((
+            np.full(n, ymd, dtype=object),
+            pk.hm[s:e],
+            pk.open[s:e],
+            pk.close[s:e],
+            np.full(n, cost, dtype=np.float64),
+            np.full(n, shares, dtype=np.float64),
+            np.full(n, i - buy_i, dtype=np.int32),
+            np.full(n, prev, dtype=np.float64),
+            last,
+            np.full(n, day_no, dtype=np.int32),
+        ))
+        mark_day, mark_hm, mark_price, mark_held = ymd, int(pk.hm[e - 1]), float(pk.close[e - 1]), i - buy_i
+        day_no += 1
+    if not chunks:
+        return _Path(
+            np.array((), dtype=object), np.array((), dtype=np.int32),
+            _EMPTY, _EMPTY, _EMPTY, _EMPTY,
+            np.array((), dtype=np.int32), _EMPTY,
+            np.array((), dtype=bool), np.array((), dtype=np.int32),
+            mark_day, mark_hm, mark_price, mark_held, shares,
+        )
+    cols = [np.concatenate([c[j] for c in chunks]) for j in range(10)]
+    return _Path(*cols, mark_day, mark_hm, mark_price, mark_held, shares)
+
+
+def _ld_mask(price, prev, lp, tol):
+    if lp is None:
+        return np.zeros(price.shape, dtype=bool)
+    safe = np.where(prev > 0, prev, 1.0)
+    return (prev > 0) & ((price / safe - 1.0) <= -(lp - tol))
+
+
+def _first_hit(path, spec, *, lp, tol):
+    n = path.close.size
+    if n == 0:
+        return None
+    sl_on = spec.rule == 2 and spec.y is not None
+    tp_on = spec.rule == 2 and spec.x is not None
+    trail_on = spec.rule == 3
+    expire_on = bool(spec.rule)
+    ev = np.zeros(n, dtype=np.int8)
+    fill = path.close.copy()
+    if expire_on:
+        ev[(path.held >= spec.n) & path.is_last] = 4
+    if trail_on:
+        scale_rel = path.cost / path.cost[0]
+        acc = np.maximum.accumulate(path.close / scale_rel)
+        peak = scale_rel * np.maximum(path.cost[0], acc)
+        ev[path.close < peak * (1.0 - spec.y / 100.0)] = 3
+        fill[ev == 3] = path.close[ev == 3]
+    if tp_on:
+        hit = path.close >= path.cost * (1.0 + spec.x / 100.0)
+        ev[hit] = 2
+        fill[hit] = path.close[hit]
+    if sl_on:
+        hit = path.close <= path.cost * (1.0 - spec.y / 100.0)
+        ev[hit] = 1
+        fill[hit] = path.close[hit]
+    if tp_on:
+        hit = path.open >= path.cost * (1.0 + spec.x / 100.0)
+        ev[hit] = 2
+        fill[hit] = path.open[hit]
+    if sl_on:
+        hit = path.open <= path.cost * (1.0 - spec.y / 100.0)
+        ev[hit] = 1
+        fill[hit] = path.open[hit]
+    open_ld = _ld_mask(path.open, path.prev, lp, tol)
+    fill_ld = _ld_mask(fill, path.prev, lp, tol)
+    blocker = open_ld | ((ev > 0) & fill_ld)
+    prev_cum = np.empty(n, dtype=np.int32)
+    prev_cum[0] = 0
+    if n > 1:
+        prev_cum[1:] = np.cumsum(blocker.astype(np.int32))[:-1]
+    starts = np.flatnonzero(np.concatenate(([True], path.day_id[1:] != path.day_id[:-1])))
+    already = prev_cum > prev_cum[starts[path.day_id]]
+    sell = (ev > 0) & ~open_ld & ~fill_ld & ~already
+    if not sell.any():
+        return None
+    i = int(np.flatnonzero(sell)[0])
+    reason = ("", "stop_loss", "take_profit", "trailing", "n_expire")[int(ev[i])]
+    return i, reason, float(fill[i])
+
+
+def _exit_from_path(inst, spec, path, *, tol, lp=None):
+    if lp is None:
+        lp = limit_pct(inst.symbol, inst.name)
+    hit = _first_hit(path, spec, lp=lp, tol=tol)
+    if hit is None:
+        return _result(
+            inst, path.mark_day, path.mark_hm, path.mark_price, path.mark_shares,
+            path.mark_held, "mark_end", trade=False,
+        )
+    i, reason, fill = hit
+    return _result(
+        inst, str(path.ymd[i]), int(path.hm[i]), fill, float(path.shares[i]),
+        int(path.held[i]), reason, trade=True,
+    )
+
+
+def _oracle_from_path(inst, path, *, tol, lp=None):
+    n = path.close.size
+    if n == 0:
+        return None
+    if lp is None:
+        lp = limit_pct(inst.symbol, inst.name)
+    buy_cost = modea._lot_shares(inst.buy_price) * inst.buy_price * (1 + modea.COMMISSION)
+    pnl = path.shares * path.close * (1 - modea.COMMISSION) - buy_cost
+    pnl = np.where(_ld_mask(path.close, path.prev, lp, tol), -np.inf, pnl)
+    i = int(np.argmax(pnl))
+    if not np.isfinite(pnl[i]):
+        return None
+    return _result(
+        inst, str(path.ymd[i]), int(path.hm[i]), float(path.close[i]),
+        float(path.shares[i]), int(path.held[i]), "oracle", trade=True,
+    )
+
+
+def evaluate_exit_modeb(inst, spec, daily_bars, minute_bars, sessions, *,
+                        end=modea.DEFAULT_END, tol=modea.DEFAULT_TOL, exdiv=None,
+                        impl="fast"):
+    """Open-gap then close triggers and fills; high/low never fire.
+
+    Aligns with the minute strategy-8 book: gap-through at open, otherwise the
+    minute close. N counts market sessions. A blocked fill prevents all further
+    sells that day (Q7). Buy-day minutes never affect triggers or the peak.
+    ``impl="ref"`` keeps the original day/minute Python loop for parity tests.
+    """
+    if not inst.opened:
+        raise ValueError("evaluate_exit_modeb requires an opened instance")
+    _validate_spec(spec)
     daily = modea._prepare_bars(daily_bars)
+    minutes = _prepare_minutes(minute_bars)
     prev_by = _previous_refs(daily, inst.symbol, exdiv) if inst.symbol in daily else {}
-    days = _prepare_minutes(minute_bars).days.get(inst.symbol, {})
+    if impl == "ref":
+        return _evaluate_exit_modeb_ref(
+            inst, spec, minutes, sessions, prev_by, end=end, tol=tol, exdiv=exdiv
+        )
+    path = _instance_path(inst, minutes, sessions, prev_by, end=end, exdiv=exdiv)
+    return _exit_from_path(inst, spec, path, tol=tol)
+
+
+def _evaluate_exit_modeb_ref(inst, spec, minutes, sessions, prev_by, *, end, tol, exdiv):
+    """Scalar reference: same book as the numpy first-hit scanner."""
+    days = minutes.days.get(inst.symbol, {})
     buy_i = modea._session_index(sessions, inst.list_date)
     cost = peak = mark_price = float(inst.buy_price)
     shares = float(modea._lot_shares(cost))
@@ -150,7 +384,6 @@ def evaluate_exit_modeb(inst, spec, daily_bars, minute_bars, sessions, *,
         if ymd > end:
             break
         k = (exdiv or {}).get(inst.symbol, {}).get(ymd, 1.0)
-        # E-R6 + Q29=B, local to this research module. No lot re-rounding.
         cost *= k
         peak *= k
         shares /= k
@@ -200,12 +433,28 @@ def evaluate_exit_modeb(inst, spec, daily_bars, minute_bars, sessions, *,
 
 
 def evaluate_matrix(instances, specs, daily_bars, minute_bars, sessions, **kwargs):
+    end = kwargs.get("end", modea.DEFAULT_END)
+    tol = kwargs.get("tol", modea.DEFAULT_TOL)
+    exdiv = kwargs.get("exdiv")
     daily = modea._prepare_bars(daily_bars)
     minutes = _prepare_minutes(minute_bars)
-    return {spec.label(): {
-        modea.instance_key(inst): evaluate_exit_modeb(inst, spec, daily, minutes, sessions, **kwargs)
-        for inst in modea.opened_instances(instances)
-    } for spec in specs}
+    for spec in specs:
+        _validate_spec(spec)
+    prev_cache = {}
+    out = {spec.label(): {} for spec in specs}
+    for inst in modea.opened_instances(instances):
+        if inst.symbol not in prev_cache:
+            prev_cache[inst.symbol] = (
+                _previous_refs(daily, inst.symbol, exdiv) if inst.symbol in daily else {}
+            )
+        path = _instance_path(
+            inst, minutes, sessions, prev_cache[inst.symbol], end=end, exdiv=exdiv
+        )
+        key = modea.instance_key(inst)
+        lp = limit_pct(inst.symbol, inst.name)
+        for spec in specs:
+            out[spec.label()][key] = _exit_from_path(inst, spec, path, tol=tol, lp=lp)
+    return out
 
 
 # Slice D: all accounting stays local; only price-independent Mode A helpers reuse.
@@ -232,26 +481,11 @@ def oracle_exits(instances, daily_bars, minute_bars, sessions, *,
     out = {}
     for inst in modea.opened_instances(instances):
         prev_by = _previous_refs(daily, inst.symbol, exdiv) if inst.symbol in daily else {}
-        shares = float(modea._lot_shares(inst.buy_price))
-        buy_i = modea._session_index(sessions, inst.list_date)
-        best = None
-        for i in range(buy_i + 1, len(sessions)):
-            day = sessions[i]
-            if day > end:
-                break
-            shares /= (exdiv or {}).get(inst.symbol, {}).get(day, 1.0)
-            for hm, _opn, _high, _low, close in minutes.days.get(inst.symbol, {}).get(day, []):
-                prev = prev_by.get(day)
-                if prev is not None and prev > 0 and modea._is_limit_down(
-                        close, prev, inst.symbol, inst.name, tol=tol):
-                    continue
-                candidate = _result(inst, day, int(hm), close, shares, i-buy_i,
-                                    "oracle", trade=True)
-                if best is None or candidate.pnl > best.pnl:
-                    best = candidate
+        path = _instance_path(inst, minutes, sessions, prev_by, end=end, exdiv=exdiv)
+        lp = limit_pct(inst.symbol, inst.name)
+        best = _oracle_from_path(inst, path, tol=tol, lp=lp)
         if best is None:
-            best = evaluate_exit_modeb(inst, modea.StrategySpec(0, None), daily,
-                                      minutes, sessions, end=end, tol=tol, exdiv=exdiv)
+            best = _exit_from_path(inst, modea.StrategySpec(0, None), path, tol=tol, lp=lp)
         out[modea.instance_key(inst)] = best
     return out
 
@@ -296,9 +530,9 @@ def build_daily_equity(instances, exits, minute_bars, sessions, *,
                 cash += er.shares * er.sell_price * (1 - modea.COMMISSION)
                 del held[key]
                 continue
-            bars = minutes.days.get(inst.symbol, {}).get(day, [])
-            if bars:
-                price = bars[-1][-1]
+            last = minutes.last_close(inst.symbol, day)
+            if last is not None:
+                price = last
             held[key] = (inst, shares, price)
         for inst in buys.get(day, []):
             shares = float(modea._lot_shares(inst.buy_price))
@@ -489,6 +723,7 @@ def run_modeb(
         anchors,
         robustness,
         meta={"mode": "B", "price_domain": "none daily entry / minute open-gap then close trigger and fill",
+              "scan": "numpy first-hit; path shared across specs",
               "grid": "P1=A narrow (18 r2 cells + N=1)", "oracle": "Q38=A 分钟可成交 close 事后上界；仅排除跌停分钟；不模拟更早失败卖出",
               "start": start, "end": end, "cash_pool": cash_pool, "tol": tol,
               "minute_coverage": coverage, "exdiv": "cost/peak *= k; shares /= k; no cash dividend"},

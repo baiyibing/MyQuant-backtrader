@@ -88,6 +88,7 @@ def test_pipeline_reports_robustness_and_isolation(tmp_path):
     summary = json.loads((out / 'summary.json').read_text())
     assert summary['meta']['mode'] == 'B'
     assert 'open-gap' in summary['meta']['price_domain']
+    assert 'numpy first-hit' in summary['meta']['scan']
     assert 'Q38=A' in summary['meta']['oracle']
     assert summary['meta']['minute_coverage']['covered_codes'] == 1
     assert (out / 'ranking.csv').exists()
