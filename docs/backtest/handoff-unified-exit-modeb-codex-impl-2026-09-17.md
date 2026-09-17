@@ -19,8 +19,8 @@ plan 头部已为「✅ 已人裁 GO」；A–D 已合 #95。本交接不重开�
 复制 plan **R\***（摘要）+ 已裁 P\*：
 
 1. **R1**：新代码只落 `unified_exit_modeb.py` + `run_unified_exit_modeb.py`。复用 Mode A 装配/实例键/网格枚举/报告形状。**禁止**改 `csv_ledger.rescale_position` 使 1–6/8 的 shares 跟着 ÷k。
-2. **R2**：买 = none 日线 close；触发 = 1m high/low；成交 = 该分钟 close。禁止 front 日线与 none 分钟混用。
-3. **R3**：同根分钟 TP&SL 双触 → **先止损**。
+2. **R2**：买 = none 日线 close；触发/成交 = 1m open 缺口，否则 1m close。high/low 不触发。禁止 front 日线与 none 分钟混用。（2026-09-17 改口；H/L 时代 E 数字不得混比。）
+3. **R3**：同根先评开盘缺口、再评收盘；止损优先于止盈。开盘已成交则不再看收盘。
 4. **R4**：除权 E-R6 + `shares/=k` **仅 Mode B 模块内**（Q29=B）；现金红利不入账。
 5. **R5**：网格/锚线/稳健性对等 Mode A（P1=A 窄网格）。**Mode B 不测** r2 N=1≡r1（Q37=A）；改测盘中先触发非等价反例。Mode A 等价性不动。
 6. **R6**：CI data-free；全网格宿主-only（prefer 4090）；无硬编码盘符。
@@ -66,13 +66,13 @@ plan 头部已为「✅ 已人裁 GO」；A–D 已合 #95。本交接不重开�
 
 ---
 
-## 2. 切片 B · 退出求值器（1m high/low + close 成交）
+## 2. 切片 B · 退出求值器（1m open 缺口 + close 触价/成交）
 
 **步骤**
 
 1. 新 `evaluate_exit_modeb`（名可调整）：按市场交易日推进 N（Q32）；日内按分钟序扫描。
-2. 触发：`high >= buy×(1+X%)` / `low <= buy×(1−Y%)` / trailing 用分钟 close 更新 peak；**成交价 = 该分钟 close**。
-3. **同根双触 → 先止损**（R3）。
+2. 触发：先 `open` 缺口（止损先于止盈），再 `close` 触价（止损先于止盈）；trailing 用分钟 close 更新 peak。缺口成交价 = 该分钟 open，否则 = 该分钟 close。**high/low 不触发**。
+3. **同根先开盘后收盘、止损优先**（R3）。开盘已成交则不再看收盘。
 4. T+1：买入日整日不可卖。
 5. 跌停：用当日（或该分钟）相对昨收的跌停判定；触发日若跌停则**不卖**，下一交易日再评（提案 Q7）。
 6. 停牌 / 无分钟 K：冻仓；N 按市场日推进；到期遇无 K 顺延到复牌首个有 K 日（Q32）。

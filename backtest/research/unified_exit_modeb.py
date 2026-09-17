@@ -87,10 +87,20 @@ class PreparedMinutes:
         self.days = {}
         for symbol, frame in bars.items():
             frame = session_minutes(frame)
+            if frame.empty:
+                self.days[symbol] = {}
+                continue
+            if "open" not in frame.columns:
+                frame = frame.copy()
+                frame["open"] = frame["close"]
             self.days[symbol] = {
-                ymd: list(day[["hm", "high", "low", "close"]].itertuples(index=False, name=None))
+                ymd: list(
+                    day[["hm", "open", "high", "low", "close"]].itertuples(
+                        index=False, name=None
+                    )
+                )
                 for ymd, day in frame.groupby("ymd", sort=False)
-            } if not frame.empty else {}
+            }
 
 
 def _prepare_minutes(bars):
@@ -112,11 +122,11 @@ def _result(inst, ymd, hm, price, shares, held, reason, *, trade):
 
 def evaluate_exit_modeb(inst, spec, daily_bars, minute_bars, sessions, *,
                         end=modea.DEFAULT_END, tol=modea.DEFAULT_TOL, exdiv=None):
-    """SL-first high/low triggers; minute close fills; expiry at last session K.
+    """Open-gap then close triggers and fills; high/low never fire.
 
-    N counts market sessions. A blocked fill prevents all further sells that day,
-    and rules are evaluated afresh next session (Q7). Buy-day minutes precede
-    the daily-close entry and must never affect triggers or the trailing peak.
+    Aligns with the minute strategy-8 book: gap-through at open, otherwise the
+    minute close. N counts market sessions. A blocked fill prevents all further
+    sells that day (Q7). Buy-day minutes never affect triggers or the peak.
     """
     if not inst.opened:
         raise ValueError("evaluate_exit_modeb requires an opened instance")
@@ -133,6 +143,8 @@ def evaluate_exit_modeb(inst, spec, daily_bars, minute_bars, sessions, *,
     cost = peak = mark_price = float(inst.buy_price)
     shares = float(modea._lot_shares(cost))
     mark_day, mark_hm, mark_held = inst.list_date, None, 0
+    sl_on = spec.rule == 2 and spec.y is not None
+    tp_on = spec.rule == 2 and spec.x is not None
     for i in range(buy_i + 1, len(sessions)):
         ymd = sessions[i]
         if ymd > end:
@@ -143,30 +155,47 @@ def evaluate_exit_modeb(inst, spec, daily_bars, minute_bars, sessions, *,
         peak *= k
         shares /= k
         mark_price *= k
+        sl_line = cost * (1 - spec.y / 100) if sl_on else None
+        tp_line = cost * (1 + spec.x / 100) if tp_on else None
         rows = days.get(ymd, [])
         blocked = False
-        for j, (hm, high, low, close) in enumerate(rows):
+        prev = prev_by.get(ymd)
+        for j, (hm, opn, _high, _low, close) in enumerate(rows):
             mark_day, mark_hm, mark_price, mark_held = ymd, int(hm), close, i - buy_i
             peak = max(peak, close)
             if blocked:
                 continue
+            if (
+                prev is not None
+                and prev > 0
+                and modea._is_limit_down(opn, prev, inst.symbol, inst.name, tol=tol)
+            ):
+                blocked = True
+                continue
             reason = None
-            if spec.rule == 2:
-                if spec.y is not None and low <= cost * (1 - spec.y / 100):
-                    reason = "stop_loss"
-                elif spec.x is not None and high >= cost * (1 + spec.x / 100):
-                    reason = "take_profit"
+            fill = close
+            if sl_on and opn <= sl_line:
+                reason, fill = "stop_loss", opn
+            elif tp_on and opn >= tp_line:
+                reason, fill = "take_profit", opn
+            elif sl_on and close <= sl_line:
+                reason, fill = "stop_loss", close
+            elif tp_on and close >= tp_line:
+                reason, fill = "take_profit", close
             elif spec.rule == 3 and close < peak * (1 - spec.y / 100):
                 reason = "trailing"
             if reason is None and spec.rule and i - buy_i >= spec.n and j == len(rows) - 1:
-                reason = "n_expire"
+                reason, fill = "n_expire", close
             if reason is None:
                 continue
-            prev = prev_by.get(ymd)
-            if prev is not None and prev > 0 and modea._is_limit_down(close, prev, inst.symbol, inst.name, tol=tol):
+            if (
+                prev is not None
+                and prev > 0
+                and modea._is_limit_down(fill, prev, inst.symbol, inst.name, tol=tol)
+            ):
                 blocked = True
                 continue
-            return _result(inst, ymd, int(hm), close, shares, i - buy_i, reason, trade=True)
+            return _result(inst, ymd, int(hm), fill, shares, i - buy_i, reason, trade=True)
     return _result(inst, mark_day, mark_hm, mark_price, shares, mark_held, "mark_end", trade=False)
 
 
@@ -211,7 +240,7 @@ def oracle_exits(instances, daily_bars, minute_bars, sessions, *,
             if day > end:
                 break
             shares /= (exdiv or {}).get(inst.symbol, {}).get(day, 1.0)
-            for hm, high, low, close in minutes.days.get(inst.symbol, {}).get(day, []):
+            for hm, _opn, _high, _low, close in minutes.days.get(inst.symbol, {}).get(day, []):
                 prev = prev_by.get(day)
                 if prev is not None and prev > 0 and modea._is_limit_down(
                         close, prev, inst.symbol, inst.name, tol=tol):
@@ -269,7 +298,7 @@ def build_daily_equity(instances, exits, minute_bars, sessions, *,
                 continue
             bars = minutes.days.get(inst.symbol, {}).get(day, [])
             if bars:
-                price = bars[-1][3]
+                price = bars[-1][-1]
             held[key] = (inst, shares, price)
         for inst in buys.get(day, []):
             shares = float(modea._lot_shares(inst.buy_price))
@@ -459,7 +488,7 @@ def run_modeb(
         instances,
         anchors,
         robustness,
-        meta={"mode": "B", "price_domain": "none daily entry / minute high-low trigger / minute close fill",
+        meta={"mode": "B", "price_domain": "none daily entry / minute open-gap then close trigger and fill",
               "grid": "P1=A narrow (18 r2 cells + N=1)", "oracle": "Q38=A 分钟可成交 close 事后上界；仅排除跌停分钟；不模拟更早失败卖出",
               "start": start, "end": end, "cash_pool": cash_pool, "tol": tol,
               "minute_coverage": coverage, "exdiv": "cost/peak *= k; shares /= k; no cash dividend"},

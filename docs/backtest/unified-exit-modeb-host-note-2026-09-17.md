@@ -6,7 +6,7 @@
 > **本次代码 tip / 机器 / 内存**：TBD。
 > **数据版本 / resolver 路径 / 缓存 meta**：TBD；预期缓存 key `minute_none_20251013_20260909`，实际 hit：TBD。
 > **命令 / 起止时间 / 退出码 / 耗时 / 峰值内存**：TBD。
-> **口径**：P1=A 窄网格；none 日线 close 买入、分钟 high/low 触发、分钟 close 成交；11 亿基数。Mode A/B 不混排。
+> **口径**：P1=A 窄网格；none 日线 close 买入、分钟 open 缺口再 close 触价/成交（high/low 不触发）；11 亿基数。Mode A/B 不混排。H/L 时代宿主数字不得与本口径混比。
 
 ## 1. Sanity 对照（待跑）
 

@@ -87,6 +87,7 @@ def test_pipeline_reports_robustness_and_isolation(tmp_path):
     assert robust['plateau'] and robust['board'] and robust['month'] and robust['next_open_buy']
     summary = json.loads((out / 'summary.json').read_text())
     assert summary['meta']['mode'] == 'B'
+    assert 'open-gap' in summary['meta']['price_domain']
     assert 'Q38=A' in summary['meta']['oracle']
     assert summary['meta']['minute_coverage']['covered_codes'] == 1
     assert (out / 'ranking.csv').exists()
