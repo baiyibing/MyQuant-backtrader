@@ -44,6 +44,10 @@ D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_daily_backtest.py ^
 D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_minute_backtest_v7.py ^
   --start 20260804 --end 20260909 ^
   --pool-dir E:\PycharmProjects\OSkhQuant1.3\stock_pool_turtle
+
+# 统一卖出规则网格 · 模式 A（前复权日线；名义现金池 11 亿；宿主真数据见 host-runbook）
+D:\anaconda3\envs\vanna312\python.exe scripts/research/run_unified_exit_modea.py ^
+  --pool-dir stock_pool --start 20251023 --end 20260909
 ```
 
 R5 的 `--start/--end` 必须跟导出的首末文件名走：H0 / `pred_minus_one` 常没有 `20260302.csv`，最后一个 pred 日不写文件。无名称的 ST 按代码前缀使用 10% / 20% / 30% 档，不按 5%；该例只验管道，NAV / 涨跌停桶不是模型结论。细则见 [R2/R5 计划](_archive/plans/plan-pool-pipeline-r2r5-2026-09-12.md)与[名单 CSV 契约](pool-csv-contract.md)。

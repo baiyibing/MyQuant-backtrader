@@ -1,7 +1,7 @@
 # 交接 · 统一卖出规则网格 · 模式 A 实施（Codex 接手）
 
 > 日期：2026-09-17
-> 状态：**🟡 待 Codex 接手**（A/B/C 未开工）。
+> 状态：**🟢 A/B/C 已实现**（合入门）；切片 D 仍宿主-only。
 > 权威对象：[stock-backtest-unified-exit-proposal-2026-09-17.md](stock-backtest-unified-exit-proposal-2026-09-17.md)（Q1–Q35 全锁定；口径以 §一核心约束表 + §十二速查为入口，实现规格见 §二/§三/§四，数据事实见 §9.7）。
 > 前置：本 PR（#88）合并——Codex 需要其中的提案文档与 `unified_exit_precheck.py`（接口用法参考）。
 > 分支：从合并后 master 开 `feat/unified-exit-modea`；A/B/C 分 commit。
@@ -64,6 +64,6 @@ D:\anaconda3\envs\vanna312\python.exe -m pytest -q tests/
 
 ## 6. 完成标记（Codex 填）
 
-- A/B/C：分支 `feat/unified-exit-modea`，commit `____`。
-- pytest：`____ passed / ____ skipped`。
-- STOP 记（遇到的口径歧义、与提案冲突处，逐条列出）：`____`。
+- A/B/C：分支 `feat/unified-exit-modea`，commits A=`e5b9c50` / B=`331d410` / C=Slice-C tip on this branch。
+- pytest：`700 passed / 3 skipped`。
+- STOP 记：无（Q1–Q35 覆盖本轮边界；未新开 Q36）。
