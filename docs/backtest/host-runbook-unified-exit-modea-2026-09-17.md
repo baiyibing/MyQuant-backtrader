@@ -1,7 +1,7 @@
 # 模式 A · 宿主跑数 runbook（统一卖出规则网格）
 
 > **日期**：2026-09-17
-> **状态**：📋 **host-only — NOT done in PR**。合入门只含切片 A/B/C；合并后由宿主本机执行（Codex VM 无 F 湖）。
+> **状态**：✅ **宿主已完成 2026-09-17**（短记：[unified-exit-modea-host-note-2026-09-17.md](unified-exit-modea-host-note-2026-09-17.md)）。
 > **权威**：[提案](stock-backtest-unified-exit-proposal-2026-09-17.md) §四/§十二；[handoff](handoff-unified-exit-modea-codex-impl-2026-09-17.md) §4。
 > **前置**：PR #88（提案 + 预检脚本）与 `feat/unified-exit-modea` 均已合 master。
 
