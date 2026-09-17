@@ -1,7 +1,7 @@
 # Plan：统一卖出规则网格 · 模式 B（分钟触发，2026-09-17）
 
 > **落盘**：2026-09-17。**v1.1**（docs-only；本 PR 不写 Mode B Python）。
-> **状态**：✅ **已人裁 GO**（2026-09-17；P1=A / P2=A / P3=A；P4/P5 锁）。合入后 tip 回填 commit hash。**可开** `feat/unified-exit-modeb` 交 Codex。
+> **状态**：✅ **已人裁 GO**（2026-09-17；P1=A / P2=A / P3=A；P4/P5 锁）。本裁 commit `0ce1db5`。**可开** `feat/unified-exit-modeb` 交 Codex。
 > **风险档**：**NAV 影响研究模块**——独立 `unified_exit_modeb`，与策略 1–6/8/9/10 书及 v6/v8 分钟净值**隔离**；不改引擎 `rescale_position` 语义。
 > **业务源**：[stock-backtest-unified-exit-proposal-2026-09-17.md](stock-backtest-unified-exit-proposal-2026-09-17.md)（§一 Mode B 行 / §四 / §9.5 Q29=B / §十二速查）；Mode A 宿主短记 [unified-exit-modea-host-note-2026-09-17.md](unified-exit-modea-host-note-2026-09-17.md) §5（oracle 缺口证 Mode B 优先级；perf #92 已合）。
 > **工作流**：走 [Codex 交接工作流](workflow-codex-handoff.md)。人裁后改头部为「✅ 已人裁 GO（commit hash）」再开 `feat/unified-exit-modeb`。
