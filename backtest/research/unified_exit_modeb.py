@@ -5,12 +5,14 @@ Research only. Mode A and the shared trading ledger remain unchanged.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 import pandas as pd
 
 from backtest.research import unified_exit_modea as modea
 from backtest.research.csv_daily_loader import warmup_start
+from backtest.research.exdiv_map import load_exdiv_ratios
 from backtest.research.csv_minute_backtest import MINUTE_LAKE_END, load_minute_bars
 from common.infra.data_root import resolve_period_root
 
@@ -52,9 +54,27 @@ def session_minutes(df):
     return out.sort_values(["ymd", "hm"], kind="stable")
 
 
-def assemble_instances(pool_dir, sessions, bars, *, tol=modea.DEFAULT_TOL):
+def assemble_instances(pool_dir, sessions, bars, *, tol=modea.DEFAULT_TOL, exdiv=None):
     """Mode A identity/filter contract with explicitly supplied none daily bars."""
-    return modea.assemble_instances(pool_dir, sessions, bars, tol=tol)
+    prepared = modea._PreparedBars(bars)
+    for symbol in prepared:
+        prepared.prev_maps[symbol] = _previous_refs(prepared, symbol, exdiv)
+    return modea.assemble_instances(pool_dir, sessions, prepared, tol=tol)
+
+
+def _previous_refs(daily, symbol, exdiv):
+    """Map the prior raw daily close across intervening ex dates (including halts)."""
+    closes = daily.closes(symbol)
+    ordered = sorted(closes)
+    events = (exdiv or {}).get(symbol, {})
+    refs = {}
+    for previous, current in zip(ordered, ordered[1:]):
+        ref = closes[previous]
+        for day, k in events.items():
+            if previous < day <= current:
+                ref *= k
+        refs[current] = ref
+    return refs
 
 
 class PreparedMinutes:
@@ -74,9 +94,6 @@ def _prepare_minutes(bars):
     return bars if isinstance(bars, PreparedMinutes) else PreparedMinutes(bars)
 
 
-from dataclasses import dataclass
-
-
 @dataclass(frozen=True)
 class ExitResult(modea.ExitResult):
     shares: float
@@ -91,7 +108,7 @@ def _result(inst, ymd, hm, price, shares, held, reason, *, trade):
 
 
 def evaluate_exit_modeb(inst, spec, daily_bars, minute_bars, sessions, *,
-                        end=modea.DEFAULT_END, tol=modea.DEFAULT_TOL):
+                        end=modea.DEFAULT_END, tol=modea.DEFAULT_TOL, exdiv=None):
     """SL-first high/low triggers; minute close fills; expiry at last session K.
 
     N counts market sessions. A blocked fill prevents all further sells that day,
@@ -107,7 +124,7 @@ def evaluate_exit_modeb(inst, spec, daily_bars, minute_bars, sessions, *,
     if spec.rule == 3 and spec.y is None:
         raise ValueError("trailing requires Y")
     daily = modea._prepare_bars(daily_bars)
-    prev_by = daily.previous(inst.symbol) if inst.symbol in daily else {}
+    prev_by = _previous_refs(daily, inst.symbol, exdiv) if inst.symbol in daily else {}
     days = _prepare_minutes(minute_bars).days.get(inst.symbol, {})
     buy_i = modea._session_index(sessions, inst.list_date)
     cost = peak = mark_price = float(inst.buy_price)
@@ -117,6 +134,12 @@ def evaluate_exit_modeb(inst, spec, daily_bars, minute_bars, sessions, *,
         ymd = sessions[i]
         if ymd > end:
             break
+        k = (exdiv or {}).get(inst.symbol, {}).get(ymd, 1.0)
+        # E-R6 + Q29=B, local to this research module. No lot re-rounding.
+        cost *= k
+        peak *= k
+        shares /= k
+        mark_price *= k
         rows = days.get(ymd, [])
         blocked = False
         for j, (hm, high, low, close) in enumerate(rows):
