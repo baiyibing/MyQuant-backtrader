@@ -116,8 +116,15 @@ def load_qlib_bin_daily_bars(
     cal = load_qlib_calendar(root)
     pos = {d: i for i, d in enumerate(cal)}
     start_iso, end_iso = _ymd_to_iso(start), _ymd_to_iso(end)
-    if start_iso not in pos or end_iso not in pos:
-        raise SystemExit(f"qlib calendar missing {start_iso} or {end_iso} under {root}")
+    if start_iso not in pos:
+        nxt = next((d for d in cal if d >= start_iso), None)
+        if nxt is None:
+            raise SystemExit(
+                f"qlib calendar missing {start_iso} or later under {root}"
+            )
+        start_iso = nxt
+    if end_iso not in pos:
+        raise SystemExit(f"qlib calendar missing {end_iso} under {root}")
     i0, i1 = pos[start_iso], pos[end_iso]
     out: dict[str, pd.DataFrame] = {}
     codes_list = sorted(codes)

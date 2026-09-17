@@ -22,6 +22,7 @@ from backtest.research import (
     strategy9_rules,
     strategy10_rules,
     strategy_topk_dropout_rules,
+    strategy_topk_score_exit_rules,
 )
 from backtest.research.csv_pool import is_repo_stock_pool
 
@@ -35,6 +36,7 @@ HELP_LOCK_V8 = strategy8_rules.HELP_LOCK
 HELP_LOCK_V9 = strategy9_rules.HELP_LOCK
 HELP_LOCK_V10 = strategy10_rules.HELP_LOCK
 HELP_LOCK_TOPK = strategy_topk_dropout_rules.HELP_LOCK
+HELP_LOCK_SCORE_EXIT = strategy_topk_score_exit_rules.HELP_LOCK
 
 FORBIDDEN_DEFAULT_STOCK_POOL = frozenset({"version9", "version10"})
 
@@ -699,6 +701,81 @@ def _apply_topk_dropout(
     }
 
 
+def _apply_topk_score_exit(
+    *,
+    stop_pct: Optional[float] = None,
+    take_profit=None,
+    record_params=None,
+    scores_by_day: Optional[dict] = None,
+    topk: Optional[int] = None,
+    n_drop: Optional[int] = None,
+    eligible_buy=None,
+    **_,
+) -> dict:
+    if not scores_by_day:
+        raise SystemExit(
+            "topk_score_exit fail-closed: scores_by_day required "
+            "(pass --pred-csv or --scores-dir)"
+        )
+    topk_i = (
+        strategy_topk_score_exit_rules.DEFAULT_TOPK if topk is None else int(topk)
+    )
+    n_drop_i = (
+        strategy_topk_score_exit_rules.DEFAULT_N_DROP if n_drop is None else int(n_drop)
+    )
+    if stop_pct is None:
+        resolved_stop = strategy_topk_score_exit_rules.STOP_PCT
+    elif float(stop_pct) == 0:
+        resolved_stop = None
+    else:
+        resolved_stop = float(stop_pct)
+
+    day_state: dict = {"ds": None, "opening_held": ()}
+
+    def _tp(*args):
+        del args
+        return None
+
+    def _rec(st):
+        strategy_topk_score_exit_rules.record_topk_score_exit_params(
+            st, stop_pct=resolved_stop, topk=topk_i, n_drop=n_drop_i
+        )
+
+    return {
+        "stop_pct": resolved_stop,
+        "take_profit": _tp if take_profit is None else take_profit,
+        "record_params": _rec if record_params is None else record_params,
+        "sell_gate": strategy_topk_score_exit_rules.make_sell_gate(
+            scores_by_day=scores_by_day,
+            topk=topk_i,
+            n_drop=n_drop_i,
+            day_state=day_state,
+        ),
+        "planned_for_day": strategy_topk_score_exit_rules.make_planned_for_day(
+            scores_by_day=scores_by_day,
+            topk=topk_i,
+            n_drop=n_drop_i,
+            day_state=day_state,
+            eligible_buy=eligible_buy,
+        ),
+        "bind_opening_held": strategy_topk_score_exit_rules.make_bind_opening_held(
+            day_state,
+            scores_by_day,
+            topk_i,
+            n_drop_i,
+        ),
+        "daily_same_bar_prefixes": strategy_topk_score_exit_rules.SAME_BAR_PREFIXES,
+        "cash_deploy_frac": strategy_topk_score_exit_rules.QLIB_CASH_DEPLOY,
+        "qlib_limit_pct": strategy_topk_score_exit_rules.QLIB_LIMIT_PCT,
+        "limit_up_chase": False,
+        "limit_down_pending": False,
+        "forbid_all_trade_at_limit": True,
+        "buy_gate": None,
+        "force_sell_hm": None,
+        "reserve_limit_up": False,
+    }
+
+
 def _run_kwargs_topk_dropout(args) -> dict:
     from backtest.research.topk_dropout_scores import load_scores_from_args
 
@@ -740,6 +817,12 @@ def _run_kwargs_topk_dropout(args) -> dict:
         )
     if bool(getattr(args, "return_threshold_filter", False)):
         out["return_threshold_filter"] = True
+    return out
+
+
+def _run_kwargs_topk_score_exit(args) -> dict:
+    out = _run_kwargs_topk_dropout(args)
+    out["strategy"] = "topk_score_exit"
     return out
 
 
@@ -865,5 +948,17 @@ register(
         help_lock=strategy_topk_dropout_rules.HELP_LOCK,
         apply=_apply_topk_dropout,
         run_kwargs=_run_kwargs_topk_dropout,
+    )
+)
+register(
+    CsvStrategyBook(
+        name="topk_score_exit",
+        tag=strategy_topk_score_exit_rules.BOOK_TAG,
+        aliases=("topk_score_exit",),
+        allow_add=strategy_topk_score_exit_rules.ALLOW_ADD,
+        peak_gap_min=strategy_topk_score_exit_rules.PEAK_GAP_MIN,
+        help_lock=strategy_topk_score_exit_rules.HELP_LOCK,
+        apply=_apply_topk_score_exit,
+        run_kwargs=_run_kwargs_topk_score_exit,
     )
 )

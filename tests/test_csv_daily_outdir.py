@@ -5,6 +5,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 import backtest.research.csv_daily_backtest as sim
 from backtest.research.csv_ledger import SimState
 
@@ -66,3 +68,23 @@ def test_cli_omitted_out_dir_keeps_legacy_layout(tmp_path: Path, monkeypatch):
     assert (out / "summary.txt").is_file()
     assert (out / "daily_equity.csv").is_file()
     assert (out / "trades.csv").is_file()
+
+
+def test_cli_refuses_existing_out_dir(tmp_path: Path, monkeypatch):
+    dest = tmp_path / "occupied"
+    dest.mkdir()
+    (dest / "summary.txt").write_text("old", encoding="utf-8")
+    monkeypatch.setattr(sim, "run", lambda *a, **k: (_ for _ in ()).throw(AssertionError("ran")))
+    with pytest.raises(SystemExit, match="refuse overwrite"):
+        sim.main(
+            [
+                "--strategy",
+                "version6",
+                "--start",
+                "20260303",
+                "--end",
+                "20260323",
+                "--out-dir",
+                str(dest),
+            ]
+        )

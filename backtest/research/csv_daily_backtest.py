@@ -651,6 +651,14 @@ def main(argv: Optional[list] = None) -> int:
     )
     args = ap.parse_args(argv if argv is not None else None)
     pool_dir = resolve_research_pool_dir(args.strategy, args.pool_dir, repo=REPO)
+    book = engine_book(args.strategy)
+    out_dir = resolve_csv_daily_out_dir(
+        args.out_dir, book=book, start=args.start, end=args.end
+    )
+    if out_dir.exists() and any(out_dir.iterdir()):
+        raise SystemExit(
+            f"refuse overwrite existing {out_dir}; pick a new stamp directory"
+        )
 
     st = run(
         args.start,
@@ -667,14 +675,11 @@ def main(argv: Optional[list] = None) -> int:
         min_cost=QLIB_MIN_COST if args.qlib_cost else None,
         **csv_run_kwargs_from_args(args),
     )
-    book = engine_book(args.strategy)
     engine = f"csv_daily_{book}"
     text = summarize(st, args.cash_total, args.start, args.end, engine=engine)
     print(text)
     write_run_artifacts(
-        resolve_csv_daily_out_dir(
-            args.out_dir, book=book, start=args.start, end=args.end
-        ),
+        out_dir,
         st,
         text,
         help_lock_for(args.strategy),

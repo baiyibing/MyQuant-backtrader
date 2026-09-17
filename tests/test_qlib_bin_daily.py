@@ -50,6 +50,27 @@ def test_load_qlib_bin_daily_bars_reads_close(tmp_path):
     assert list(df["open"]) == [8290.0, 8270.0]
 
 
+def test_load_qlib_bin_snaps_start_to_next_calendar_day(tmp_path):
+    cal = tmp_path / "calendars"
+    cal.mkdir()
+    (cal / "day.txt").write_text("2026-01-05\n2026-01-06\n2026-01-07\n", encoding="utf-8")
+    feat = tmp_path / "features" / "sh600519"
+    _write_bin(feat / "close.day.bin", 0, [8322.0, 8300.0, 8280.0])
+    _write_bin(feat / "open.day.bin", 0, [8310.0, 8290.0, 8270.0])
+    _write_bin(feat / "high.day.bin", 0, [8330.0, 8310.0, 8290.0])
+    _write_bin(feat / "low.day.bin", 0, [8300.0, 8280.0, 8260.0])
+
+    got = load_qlib_bin_daily_bars(
+        {"600519.SH"}, "20260104", "20260107", qlib_root=tmp_path, workers=1
+    )
+    df = got["600519.SH"]
+    assert list(df.index) == [
+        pd.Timestamp("2026-01-05"),
+        pd.Timestamp("2026-01-06"),
+        pd.Timestamp("2026-01-07"),
+    ]
+
+
 def test_read_qlib_bin_respects_ref_start(tmp_path):
     p = tmp_path / "close.day.bin"
     _write_bin(p, 2, [1.0, 2.0, 3.0])
