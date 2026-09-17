@@ -77,11 +77,13 @@ def test_pipeline_reports_robustness_and_isolation(tmp_path):
     minutes = {CODE: pd.DataFrame({'ymd': sessions, 'hm': [900]*5,
                                    'high': [100]*5, 'low': [100]*5, 'close': [100]*5})}
     out = tmp_path / 'unified_exit_modeb'
-    result = b.run_modeb(pool, sessions=sessions, bars=bars, minute_bars=minutes, exdiv={}, out_dir=out)
+    result = b.run_modeb(pool, sessions=sessions, bars=bars, minute_bars=minutes,
+                         exdiv={}, out_dir=out, index_block={})
     assert len([s for s in b.iter_grid() if s.rule == 2]) == 18
     assert len([s for s in b.iter_grid() if s.rule == 4]) == 2
     assert len([s for s in b.iter_grid() if s.rule == 5]) == 1
-    assert len(result['ranked']) == 22
+    assert len([s for s in b.iter_grid() if s.rule == 6]) == 1
+    assert len(result['ranked']) == 23
     assert set(result['anchors']) == {'anchor_hold_end', 'r1_n1', 'oracle', 'delist_zero'}
     robust = result['robustness']
     assert len(robust['half_windows']['h1']) == len(robust['half_windows']['h2']) == 20
@@ -104,6 +106,6 @@ def test_pipeline_reports_robustness_and_isolation(tmp_path):
 
 def test_cli_help_and_default_directory():
     run = subprocess.run([sys.executable, 'scripts/research/run_unified_exit_modeb.py', '--help'],
-                          capture_output=True, text=True, check=True)
+                          capture_output=True, text=True, encoding='utf-8', check=True)
     assert '模式 B' in run.stdout and '窄网格' in run.stdout
     assert b.DEFAULT_OUT_DIR.as_posix() == 'backtest_output/unified_exit_modeb'

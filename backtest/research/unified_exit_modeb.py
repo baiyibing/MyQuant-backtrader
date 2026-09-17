@@ -21,7 +21,7 @@ from backtest.research.csv_minute_backtest import (
     AM_OPEN, AM_CLOSE, PM_OPEN, PM_CLOSE, MINUTE_LAKE_END, CACHE_ROOT,
     load_minute_bars,
 )
-from backtest.research.market_layer import limit_pct
+from backtest.research.market_layer import as_date, limit_pct
 from backtest.research import strategy8_rules as s8
 from common.infra.data_root import resolve_period_root
 
@@ -345,7 +345,7 @@ def _result(inst, ymd, hm, price, shares, held, reason, *, trade):
 
 
 def _validate_spec(spec):
-    if spec.rule not in (0, 1, 2, 3, 4, 5):
+    if spec.rule not in (0, 1, 2, 3, 4, 5, 6):
         raise ValueError(f"unknown rule {spec.rule}")
     if spec.rule and (spec.n is None or spec.n < 1):
         raise ValueError("N must be positive")
@@ -353,6 +353,23 @@ def _validate_spec(spec):
         raise ValueError("trailing requires Y")
     if spec.rule in (4, 5) and spec.y is None:
         raise ValueError("livermore requires stop Y")
+    if spec.rule == 6 and spec.x is None:
+        raise ValueError("sse overlay requires take-profit X")
+
+
+def _block_ymd(index_block):
+    """Map a v8 ``block_new`` table to YYYYMMDD; missing sessions do not block."""
+    if not index_block:
+        return {}
+    return {modea.date_to_ymd(as_date(key)): bool(flag) for key, flag in index_block.items()}
+
+
+def load_sse_ma10_block_ymd(start, end, *, root=None):
+    """Load the locked SSE gate. Prior closes only; same table for every name."""
+    from backtest.research.csv_minute_backtest_v7 import load_index_daily
+
+    closes = load_index_daily(modea.ymd_to_date(start), modea.ymd_to_date(end), root=root)
+    return _block_ymd(s8.build_sse_ma10_block_new(closes))
 
 
 @dataclass
@@ -459,19 +476,23 @@ def _v8_band_line(cost, peak):
     return line
 
 
-_REASON = ("", "stop_loss", "take_profit", "trailing", "n_expire", "force_sell:stale", "trail:band")
+_REASON = (
+    "", "stop_loss", "take_profit", "trailing", "n_expire",
+    "force_sell:stale", "trail:band", "force_sell:sse_ma10",
+)
 
 
-def _first_hit(path, spec, *, lp, tol):
+def _first_hit(path, spec, *, lp, tol, index_block=None):
     n = path.close.size
     if n == 0:
         return None
-    sl_on = spec.rule in (2, 4, 5) and spec.y is not None
-    tp_on = spec.rule in (2, 4) and spec.x is not None
+    sl_on = spec.rule in (2, 4, 5, 6) and spec.y is not None
+    tp_on = spec.rule in (2, 4, 6) and spec.x is not None
     trail_on = spec.rule == 3
     live_on = spec.rule in (4, 5)
     bands_on = spec.rule == 4 and spec.x is None
-    expire_on = spec.rule in (1, 2, 3)
+    expire_on = spec.rule in (1, 2, 3, 6)
+    index_on = spec.rule == 6
     ev = np.zeros(n, dtype=np.int8)
     fill = path.close.copy()
     peak = None
@@ -503,6 +524,13 @@ def _first_hit(path, spec, *, lp, tol):
         hit = path.close <= path.cost * (1.0 - spec.y / 100.0)
         ev[hit] = 1
         fill[hit] = path.close[hit]
+    if index_on and index_block:
+        blocked = np.fromiter(
+            (bool(index_block.get(str(ymd), False)) for ymd in path.ymd),
+            dtype=bool, count=n,
+        )
+        ev[blocked] = 7
+        fill[blocked] = path.open[blocked]
     if tp_on:
         hit = path.open >= path.cost * (1.0 + spec.x / 100.0)
         ev[hit] = 2
@@ -534,10 +562,10 @@ def _first_hit(path, spec, *, lp, tol):
     return i, reason, float(fill[i])
 
 
-def _exit_from_path(inst, spec, path, *, tol, lp=None):
+def _exit_from_path(inst, spec, path, *, tol, lp=None, index_block=None):
     if lp is None:
         lp = limit_pct(inst.symbol, inst.name)
-    hit = _first_hit(path, spec, lp=lp, tol=tol)
+    hit = _first_hit(path, spec, lp=lp, tol=tol, index_block=index_block)
     if hit is None:
         return _result(
             inst, path.mark_day, path.mark_hm, path.mark_price, path.mark_shares,
@@ -570,7 +598,7 @@ def _oracle_from_path(inst, path, *, tol, lp=None):
 
 def evaluate_exit_modeb(inst, spec, daily_bars, minute_bars, sessions, *,
                         end=modea.DEFAULT_END, tol=modea.DEFAULT_TOL, exdiv=None,
-                        impl="fast"):
+                        impl="fast", index_block=None):
     """Open-gap then close triggers and fills; high/low never fire.
 
     Aligns with the minute strategy-8 book: gap-through at open, otherwise the
@@ -584,23 +612,27 @@ def evaluate_exit_modeb(inst, spec, daily_bars, minute_bars, sessions, *,
     daily = modea._prepare_bars(daily_bars)
     minutes = _prepare_minutes(minute_bars)
     prev_by = _previous_refs(daily, inst.symbol, exdiv) if inst.symbol in daily else {}
+    block = _block_ymd(index_block)
     if impl == "ref":
         return _evaluate_exit_modeb_ref(
-            inst, spec, minutes, sessions, prev_by, end=end, tol=tol, exdiv=exdiv
+            inst, spec, minutes, sessions, prev_by, end=end, tol=tol, exdiv=exdiv,
+            index_block=block,
         )
     path = _instance_path(inst, minutes, sessions, prev_by, end=end, exdiv=exdiv)
-    return _exit_from_path(inst, spec, path, tol=tol)
+    return _exit_from_path(inst, spec, path, tol=tol, index_block=block)
 
 
-def _evaluate_exit_modeb_ref(inst, spec, minutes, sessions, prev_by, *, end, tol, exdiv):
+def _evaluate_exit_modeb_ref(inst, spec, minutes, sessions, prev_by, *, end, tol, exdiv,
+                             index_block=None):
     """Scalar reference: same book as the numpy first-hit scanner."""
     days = minutes.days.get(inst.symbol, {})
     buy_i = modea._session_index(sessions, inst.list_date)
     cost = peak = mark_price = float(inst.buy_price)
     shares = float(modea._lot_shares(cost))
     mark_day, mark_hm, mark_held = inst.list_date, None, 0
-    sl_on = spec.rule in (2, 4, 5) and spec.y is not None
-    tp_on = spec.rule in (2, 4) and spec.x is not None
+    sl_on = spec.rule in (2, 4, 5, 6) and spec.y is not None
+    tp_on = spec.rule in (2, 4, 6) and spec.x is not None
+    block = index_block or {}
     for i in range(buy_i + 1, len(sessions)):
         ymd = sessions[i]
         if ymd > end:
@@ -633,6 +665,8 @@ def _evaluate_exit_modeb_ref(inst, spec, minutes, sessions, prev_by, *, end, tol
                 reason, fill = "stop_loss", opn
             elif tp_on and opn >= tp_line:
                 reason, fill = "take_profit", opn
+            elif spec.rule == 6 and block.get(ymd):
+                reason, fill = "force_sell:sse_ma10", opn
             elif sl_on and close <= sl_line:
                 reason, fill = "stop_loss", close
             elif tp_on and close >= tp_line:
@@ -643,7 +677,7 @@ def _evaluate_exit_modeb_ref(inst, spec, minutes, sessions, prev_by, *, end, tol
                 reason = s8.take_profit_reason(close, cost, peak, i - buy_i)
             elif spec.rule in (4, 5) and i - buy_i >= spec.n and s8.never_armed(cost, peak):
                 reason = "force_sell:stale"
-            if reason is None and spec.rule in (1, 2, 3) and i - buy_i >= spec.n and j == len(rows) - 1:
+            if reason is None and spec.rule in (1, 2, 3, 6) and i - buy_i >= spec.n and j == len(rows) - 1:
                 reason, fill = "n_expire", close
             if reason is None:
                 continue
@@ -662,6 +696,7 @@ def evaluate_matrix(instances, specs, daily_bars, minute_bars, sessions, **kwarg
     end = kwargs.get("end", modea.DEFAULT_END)
     tol = kwargs.get("tol", modea.DEFAULT_TOL)
     exdiv = kwargs.get("exdiv")
+    block = _block_ymd(kwargs.get("index_block"))
     daily = modea._prepare_bars(daily_bars)
     minutes = _prepare_minutes(minute_bars)
     for spec in specs:
@@ -679,7 +714,9 @@ def evaluate_matrix(instances, specs, daily_bars, minute_bars, sessions, **kwarg
         key = modea.instance_key(inst)
         lp = limit_pct(inst.symbol, inst.name)
         for spec in specs:
-            out[spec.label()][key] = _exit_from_path(inst, spec, path, tol=tol, lp=lp)
+            out[spec.label()][key] = _exit_from_path(
+                inst, spec, path, tol=tol, lp=lp, index_block=block,
+            )
     return out
 
 
@@ -688,7 +725,7 @@ DEFAULT_OUT_DIR = Path("backtest_output/unified_exit_modeb")
 
 
 def iter_grid():
-    """P1=A narrow cells plus Livermore L1/L2/L3 path arms (same book, all names)."""
+    """P1=A narrow cells plus Livermore path arms and the SSE MA10 overlay."""
     cells = [s for s in modea.iter_grid(include_anchor_hold_end=True)
              if s.rule == 0 or (s.rule == 1 and s.n == 1)
              or (s.rule == 2 and s.x in (5, 7, 10)
@@ -697,6 +734,7 @@ def iter_grid():
         modea.StrategySpec(4, s8.STALE_DAYS, 10, 10),
         modea.StrategySpec(4, s8.STALE_DAYS, None, 10),
         modea.StrategySpec(5, s8.STALE_DAYS, None, 10),
+        modea.StrategySpec(6, 10, 10, None),
     ))
     return cells
 
@@ -836,6 +874,7 @@ def run_modeb(
     workers: int = 8,
     out_dir: Path = DEFAULT_OUT_DIR,
     cash_pool: float = modea.CASH_POOL,
+    index_block=None,
 ) -> dict:
     """Mode B narrow-grid pipeline: assemble → matrix → aggregate → reports."""
     out_dir = _validate_out_dir(out_dir)
@@ -858,7 +897,14 @@ def run_modeb(
                                minute_bars, start=start, end=end)
     minutes = _prepare_minutes(minute_bars)
     specs = iter_grid()
-    matrix = evaluate_matrix(instances, specs, bar_map, minutes, sess, end=end, tol=tol, exdiv=exdiv)
+    if index_block is None:
+        index_block = load_sse_ma10_block_ymd(start, end)
+    else:
+        index_block = _block_ymd(index_block)
+    matrix = evaluate_matrix(
+        instances, specs, bar_map, minutes, sess,
+        end=end, tol=tol, exdiv=exdiv, index_block=index_block,
+    )
 
     # Oracle + delist sensitivity overlays
     matrix["oracle"] = oracle_exits(instances, bar_map, minutes, sess, end=end, tol=tol, exdiv=exdiv)
@@ -940,7 +986,10 @@ def run_modeb(
     sens_specs = [s for s in specs if s.label() in {m.label for m in ranked[:5]} or s.label() == "r1_n1"]
     if not sens_specs:
         sens_specs = [modea.StrategySpec(1, 1)]
-    sens_matrix = evaluate_matrix(sens_inst, sens_specs, bar_map, minutes, sess, end=end, tol=tol, exdiv=exdiv)
+    sens_matrix = evaluate_matrix(
+        sens_inst, sens_specs, bar_map, minutes, sess,
+        end=end, tol=tol, exdiv=exdiv, index_block=index_block,
+    )
     robustness["next_open_buy"] = [
         modea.metrics_to_row(
             aggregate_strategy(lab, sens_inst, ex, minutes, sess, cash_pool=cash_pool, exdiv=exdiv)
@@ -958,7 +1007,9 @@ def run_modeb(
         meta={"mode": "B", "price_domain": "none daily entry / minute open-gap then close trigger and fill",
               "scan": "numpy first-hit; path shared across specs",
               "pack": load_status.get("pack"), "minute_cache": load_status.get("cache"),
-              "grid": "P1=A narrow (18 r2 + N=1) + livermore L1/L2/L3", "oracle": "Q38=A 分钟可成交 close 事后上界；仅排除跌停分钟；不模拟更早失败卖出",
+              "grid": "P1=A narrow (18 r2 + N=1) + livermore L1/L2/L3 + sse_ma10 overlay",
+              "index_gate": "v8 SSE 000001.SH MA10 two-below, next session, all names",
+              "oracle": "Q38=A 分钟可成交 close 事后上界；仅排除跌停分钟；不模拟更早失败卖出",
               "start": start, "end": end, "cash_pool": cash_pool, "tol": tol,
               "minute_coverage": coverage, "exdiv": "cost/peak *= k; shares /= k; no cash dividend"},
     )
