@@ -1,6 +1,7 @@
 # 交接 · 统一卖出规则网格 · 模式 B 实施（Codex 接手）
 
 > 日期：2026-09-17
+> 实施状态：**A–C 已提交，D 因 Q38 STOP 待人裁**（2026-09-17；见提案 §十 Q38）。
 > 状态：✅ **已人裁 GO**（2026-09-17；P1=A 窄网格 / P2=A 宿主smoke→4090 / P3=A exdiv_map）。以 plan v1.1 为准，**可开工**。
 > 权威对象：[plan-unified-exit-modeb-2026-09-17.md](plan-unified-exit-modeb-2026-09-17.md) v1.0；口径母本 [stock-backtest-unified-exit-proposal-2026-09-17.md](stock-backtest-unified-exit-proposal-2026-09-17.md)（§一 Mode B / §9.5 Q29=B / §十二）。
 > 前置：Mode A 已合（含 perf #92）；master tip 撰写时 `e018924`。
@@ -81,7 +82,7 @@ plan 头部已为「✅ 已人裁 GO」。从当时 master 开 `feat/unified-exi
 
 - 同根 TP&SL → reason=stop、价=该分钟 close。
 - 仅 TP / 仅 SL / trailing。
-- N=1：r2 各组 ≡ r1_n1（同日同价）。
+- N=1：按 Q37=A 测 r2 盘中提前成交与 r1_n1 末分钟成交的非等价反例；Mode A 等价测试不动。
 - 跌停顺延；halt 冻 peak；买入日不触发。
 - 无早退出 hold_end 锚。
 
@@ -100,7 +101,7 @@ plan 头部已为「✅ 已人裁 GO」。从当时 master 开 `feat/unified-exi
 
 **测试**
 
-- 大送转级 k≈0.5：市值对齐、止损阈值随 cost 缩放、shares 减半。
+- 大送转级 k≈0.5：市值对齐、止损阈值随 cost 缩放、shares 翻倍（shares/=k）。
 - 派息级小 k；无事件码路径不变。
 - 断言 `inspect.getsource(csv_ledger.rescale_position)` 仍含 shares untouched / 或 git diff 引擎文件为空。
 
@@ -145,10 +146,11 @@ D:\anaconda3\envs\vanna312\python.exe -m pytest -q tests/
 
 ## 7. 完成标记（Codex 填；GO 后）
 
-- [ ] 人裁 GO 已写回 plan（hash：____）
-- [ ] A · 分钟装载 + 覆盖 helper + fixtures
-- [ ] B · 分钟退出求值器 + SL-first 向量
-- [ ] C · E-R6 + shares/=k（或 P3=B 边界文档）
+- [x] 人裁 GO 已写回 plan（`0ce1db5`；Q36/Q37/cache 补裁 `d65442b`）
+- [x] A · 分钟装载 + 覆盖 helper + fixtures（`2482072`）
+- [x] B · 分钟退出求值器 + SL-first 向量（`3550c38`）
+- [x] C · E-R6 + shares/=k（P3=A；`c3506bc`）
 - [ ] D · 聚合 / CLI / README
 - [ ] E · 宿主网格（host-only；另短记）
-- [x] STOP / 新开 Q36+：提案 §十 Q36（Mode B 到期末分钟口径）、Q37（N=1 等价性与盘中触发冲突），2026-09-17 待人裁；A–D 暂停，尚未创建实现 commit。
+- [x] STOP / 新开 Q38：oracle「剔除跌停日」的分钟候选粒度待人裁；D 暂停。Q36/Q37 已裁且实现。
+- 验证：显式 Linux vanna312 环境，Mode A + Mode B 合成测试 71 passed；Mode A / csv_ledger diff 为空。CI 同口径全套 733 passed / 2 skipped / 24 deselected；四项 data-free gates 通过；UTF-8 无 BOM、NUL=0。宿主 E 未执行。

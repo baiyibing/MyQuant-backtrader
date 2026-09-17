@@ -1,6 +1,7 @@
 # Plan：统一卖出规则网格 · 模式 B（分钟触发，2026-09-17）
 
 > **落盘**：2026-09-17。**v1.1**（docs-only；本 PR 不写 Mode B Python）。
+> **实施进度**：A–C 已提交（`2482072` / `3550c38` / `c3506bc`）；D 因提案 §十 **Q38 oracle 跌停排除粒度** STOP，待人裁；尚未完成实现合入门。
 > **状态**：✅ **已人裁 GO**（2026-09-17；P1=A / P2=A / P3=A；P4/P5 锁）。本裁 commit `0ce1db5`。**可开** `feat/unified-exit-modeb` 交 Codex。
 > **风险档**：**NAV 影响研究模块**——独立 `unified_exit_modeb`，与策略 1–6/8/9/10 书及 v6/v8 分钟净值**隔离**；不改引擎 `rescale_position` 语义。
 > **业务源**：[stock-backtest-unified-exit-proposal-2026-09-17.md](stock-backtest-unified-exit-proposal-2026-09-17.md)（§一 Mode B 行 / §四 / §9.5 Q29=B / §十二速查）；Mode A 宿主短记 [unified-exit-modea-host-note-2026-09-17.md](unified-exit-modea-host-note-2026-09-17.md) §5（oracle 缺口证 Mode B 优先级；perf #92 已合）。
@@ -95,7 +96,7 @@ GO 后：feat/unified-exit-modeb · 切片 A–D 合入门；E = 宿主全/窄�
 | 切片 | 做什么 | 完成定义（DoD） |
 |------|--------|-----------------|
 | **A · 分钟装载与覆盖** | 经现成 `load_minute_bars` / `bar_cache` 读 `period=1m/dividend_type=none`；合成 fixture 单测；可选覆盖率 helper（Mode A 实开码 ∩ 分钟可得） | data-free pytest 绿；无硬编码盘符；覆盖 helper 不进 CI 湖门禁 |
-| **B · 分钟退出求值器** | 1m high/low 触发 + close 成交；同根 SL-first；T+1 / 跌停顺延 / 停牌冻仓按**分钟适配**（N 仍按市场交易日）；买入侧仍用 none 日线 close + 涨停不买不追 | 合成向量表（含同根双触、跌停分钟、halt）全绿；N=1 与 r1 等价断言 |
+| **B · 分钟退出求值器** | 1m high/low 触发 + close 成交；同根 SL-first；T+1 / 跌停顺延 / 停牌冻仓按**分钟适配**（N 仍按市场交易日）；买入侧仍用 none 日线 close + 涨停不买不追 | 合成向量表（含同根双触、跌停分钟、halt）全绿；Q37=A 的 N=1 盘中先触发非等价反例；Mode A 测试不动 |
 | **C · E-R6 + shares/=k** | 仅 Mode B 路径：除权日 cost/peak ×k 且 shares/=k；接 `load_exdiv_ratios`（若 P3=A）；现金红利不入账 | 合成除权 fixture（大送转 / 派息级 / 无事件）绿；断言引擎 `rescale_position` **未被改**（或 diff 零） |
 | **D · 聚合 / 锚线 / 稳健性 + CLI** | 复用 Mode A 报告形状（总收益率基数 11 亿、四锚线、Q34 四件套）；CLI `run_unified_exit_modeb.py`；产出 `backtest_output/unified_exit_modeb/`；README / AGENTS 一行 | pytest 聚合口径绿；HELP 中文；与 Mode A 目录隔离 |
 | **E · 宿主跑数**（**非合入门**） | 按 P1/P2：窄或全网格 + 短记；**不在实现 PR 勾选完成** | 短记落 `docs/backtest/`；数字产物不入库 |
