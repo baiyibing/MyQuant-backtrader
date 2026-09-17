@@ -130,9 +130,13 @@ def allow_new_name_from_gate(
 
 def load_sse_ma10_block_new(start: str, end: str, *, root=None) -> dict[date, bool]:
     """从指数日线湖装载上证收盘并生成停买表。"""
-    from backtest.research.csv_daily_loader import load_index_daily_closes
+    from backtest.research.csv_minute_backtest_v7 import load_index_daily
 
-    closes = load_index_daily_closes(start, end, symbol=INDEX_SYMBOL, root=root)
+    def _ymd(value) -> date:
+        text = str(value).replace("-", "")[:8]
+        return date(int(text[:4]), int(text[4:6]), int(text[6:8]))
+
+    closes = load_index_daily(_ymd(start), _ymd(end), root=root)
     return build_sse_ma10_block_new(closes)
 
 

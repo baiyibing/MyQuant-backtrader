@@ -38,6 +38,8 @@ def _empty_stats() -> dict:
         "chase_pending_eod": 0,
         "chase_skip_held": 0,
         "skip_held": 0,
+        "skip_index_gate": 0,
+        "skip_add_loser": 0,
         "add_lots": 0,
         "skip_no_bar": 0,
         "skip_buy_gate": 0,
