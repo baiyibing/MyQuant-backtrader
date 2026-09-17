@@ -21,11 +21,12 @@ plan 头部已为「✅ 已人裁 GO」。从当时 master 开 `feat/unified-exi
 2. **R2**：买 = none 日线 close；触发 = 1m high/low；成交 = 该分钟 close。禁止 front 日线与 none 分钟混用。
 3. **R3**：同根分钟 TP&SL 双触 → **先止损**。
 4. **R4**：除权 E-R6 + `shares/=k` **仅 Mode B 模块内**（Q29=B）；现金红利不入账。
-5. **R5**：网格/锚线/稳健性对等 Mode A（除非 P\* 另裁）；N=1 的 r2↔r1 等价性仍要测。
+5. **R5**：网格/锚线/稳健性对等 Mode A（P1=A 窄网格）。**Mode B 不测** r2 N=1≡r1（Q37=A）；改测盘中先触发非等价反例。Mode A 等价性不动。
 6. **R6**：CI data-free；全网格宿主-only（prefer 4090）；无硬编码盘符。
 7. **R7**：不 import qlib；不复活 backtrader / Cerebro。
 8. **P4 锁**：A/B 报告分目录，永不混排 NAV 表。
 9. **P\* 已裁**：P1=A 冠军族（r2 X∈{5,7,10} Y∈{5,10,∞} N∈{8,10}）+ 四锚线；P2=A 宿主 smoke→4090；P3=A `ex_date_index`+`exdiv_map`；P4/P5 锁。
+12. **Q36=A / Q37=A**（2026-09-17）。**Cache**：复用 warmup 起点 `minute_none_20251013_20260909`（超集），勿重建字面 20251023 key。
 10. 发现提案未覆盖边界 → **停下回写提案 §十（Q36+）**，不自裁。
 11. 新文件 UTF-8 无 BOM、NUL=0；验证命令用 vanna312 全路径。
 
@@ -150,4 +151,4 @@ D:\anaconda3\envs\vanna312\python.exe -m pytest -q tests/
 - [ ] C · E-R6 + shares/=k（或 P3=B 边界文档）
 - [ ] D · 聚合 / CLI / README
 - [ ] E · 宿主网格（host-only；另短记）
-- [ ] STOP / 新开 Q36+：____（无则写无）
+- [x] STOP / 新开 Q36+：提案 §十 Q36（Mode B 到期末分钟口径）、Q37（N=1 等价性与盘中触发冲突），2026-09-17 待人裁；A–D 暂停，尚未创建实现 commit。

@@ -43,7 +43,7 @@ GO 后：feat/unified-exit-modeb · 切片 A–D 合入门；E = 宿主全/窄�
 | **R2** | 价格域：**买 = none 日线 close**；**触发 = 1m high/low**；**成交 = 该分钟 close**。禁止 front 日线与 none 分钟混用同一判定链。 |
 | **R3** | 同根分钟同时触 TP 与 SL → **先止损**（Mode B only；Mode A close-only 不会双触）。 |
 | **R4** | 除权：Mode B 路径内 E-R6 式 **cost/peak ×k 且 shares/=k**（Q29=B）；现金红利仍不入账。缩放逻辑**只写在 Mode B 网格模块**，不回写引擎 ledger。 |
-| **R5** | 网格轴 / 锚线 / 稳健性四件套与 Mode A **对等**，除非某条 P\* 另裁。规则 2 的 N=1 与规则 1 的 N=1 **等价性**在 Mode B 仍应成立（同日同价成交语义下）。 |
+| **R5** | 网格轴 / 锚线 / 稳健性四件套与 Mode A **对等**（P1=A 时默认窄网格）。**Mode B 不要求** r2 N=1 ≡ r1_n1（Q37=A：盘中可先成交）；Mode A 等价性不变。 |
 | **R6** | 默认 CI **data-free**（合成 fixture）；全量/窄网格 **宿主-only**（优先 4090）；禁止硬编码盘符 / cwd `stock_data/` 字面量；湖路径只经 resolvers。 |
 | **R7** | 不 import qlib；不复活 backtrader / Cerebro / Rolling / Qlib PortAnaRecord。 |
 
@@ -64,6 +64,14 @@ GO 后：feat/unified-exit-modeb · 切片 A–D 合入门；E = 宿主全/窄�
 | **P5** | Smoke vs 业务网格 | **已锁**：分钟 cache/覆盖可先做；业务 Mode B 网格在 GO+impl 之后。 |
 
 注（Grok #93 nit）：Mode A 短记 **4167 是实开实例数**，不是码数；跌停「日线收盘 vs 该分钟」以提案 Q7 为准——Mode B 卖出日若触跌停则当日不卖、下一交易日再评（分钟路径按交易日重评，不自创新语义）。
+
+### 3.1 实施补裁（2026-09-17 · Q36/Q37 + cache）
+
+| # | 裁决 |
+|---|------|
+| **Q36** | **A**：到期用当日最后一根 session 分钟 close；无分钟 K 顺延；不回退日线 close |
+| **Q37** | **A**：Mode B 取消 N=1 等价；保留盘中先触发；测试用非等价反例 |
+| **Cache** | 沿用 `csv_minute_backtest` warmup 起点 cache key（现成 `20251013` 超集）；不强制重建 `20251023` 字面 key |
 
 ---
 
