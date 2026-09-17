@@ -177,3 +177,120 @@ def test_run_modea_end_to_end_synthetic(tmp_path: Path):
     assert len(result["ranked"]) >= 8
     assert "anchor_hold_end" in result["anchors"]
     assert result["anchors"]["oracle"].total_return >= result["anchors"]["r1_n1"].total_return
+
+
+def _metric(label: str, total_return: float) -> m.StrategyMetrics:
+    return m.StrategyMetrics(
+        label, 1, total_return, 0.0, 0.0, 0.0, None, 0.0, 0.0, 0.0, 0.0, 0.0, 1
+    )
+
+
+@pytest.mark.parametrize(
+    "label,neighbor,expected_gap",
+    [
+        ("r3_y10_n10", "r3_y5_n10", 0.005),  # same N
+        ("r3_y2p5_n1", "r3_y2p5_n20", 0.005),  # same finite Y
+        ("r3_yinf_n1", "r3_yinf_n10", 0.0),  # infinity is not a Y family
+        ("r3_y10_n1", "r3_y5_n10", 0.0),  # exact N, not prefix
+        ("r3_y10_n10", "r2_x5_y10_n10", 0.0),  # separate rule families
+        ("r2_x5_y10_n1", "r2_x5_y20_n10", 0.005),  # existing X family
+        ("r2_x5_y10_n1", "r2_x10_y10_n20", 0.005),  # existing Y family
+        ("r2_xinf_yinf_n1", "r2_x5_y5_n1", 0.005),  # existing N family
+    ],
+)
+def test_plateau_neighbor_families(label, neighbor, expected_gap):
+    rows = m.neighborhood_plateau_flags(
+        [_metric(label, 0.10), _metric(neighbor, 0.095)], top_n=1
+    )
+    assert len(rows) == 1
+    assert rows[0]["label"] == label
+    assert rows[0]["island"] is False
+    assert rows[0]["neighbor_gap"] == pytest.approx(expected_gap)
+
+
+def test_plateau_r3_top20_island_and_r1_skipped():
+    ranked = [_metric(f"r1_n{n}", 0.5) for n in range(1, 17)]
+    ranked += [_metric("r3_y10_n10", 0.10), _metric("r3_y5_n10", 0.08)]
+    assert m.neighborhood_plateau_flags(ranked, top_n=16) == []
+    rows = m.neighborhood_plateau_flags(ranked)
+    assert rows[0]["label"] == "r3_y10_n10"
+    assert rows[0]["island"] is True
+    assert rows[0]["neighbor_gap"] == pytest.approx(0.02)
+    assert all(row["label"].startswith("r3_") for row in rows)
+
+
+def test_plateau_scans_only_first_eight_ranked_family_members():
+    # Deliberately place a better ninth member last to detect scanning past the cap.
+    ranked = [_metric("r3_y10_n10", 0.10)]
+    ranked += [_metric(f"r3_y{y}_n10", 0.08) for y in range(1, 9)]
+    ranked += [_metric("r3_y20_n10", 0.099)]
+    rows = m.neighborhood_plateau_flags(ranked, top_n=1)
+    assert rows[0]["island"] is True
+    assert rows[0]["neighbor_gap"] == pytest.approx(0.02)
+
+
+@pytest.mark.parametrize("index_kind", ["datetime", "date", "timezone"])
+def test_vectorized_close_map_matches_scalar_dates(index_kind):
+    # Unsorted and repeated dates retain the old last-row-wins behavior.
+    index = pd.to_datetime(["2025-11-04", "2025-11-03", "2025-11-04"])
+    if index_kind == "date":
+        index = pd.Index(index.date)
+    elif index_kind == "timezone":
+        index = index.tz_localize("Asia/Shanghai")
+    frame = pd.DataFrame({"close": [10.1, 10.0, 10.2]}, index=index)
+    expected = {m.date_to_ymd(d): float(c) for d, c in zip(index, frame["close"])}
+    assert m._bar_close_map(frame) == expected
+    assert m._bar_close_map(frame.iloc[:0]) == {}
+
+
+def test_run_cache_exact_outputs_and_freshness(tmp_path, monkeypatch):
+    sessions = ["20251103", "20251104", "20251105", "20260407", "20260408", "20260409"]
+    pool = tmp_path / "pool"
+    for ymd in (sessions[0], sessions[1], sessions[3]):
+        _write_pool(pool, ymd, [("600000", "A"), ("300001", "B")])
+    bars = {
+        "600000.SH": _frame(sessions, [10.0, 10.3, 9.0, 9.1, 9.5, 9.2]),
+        # Missing bar and early stop exercise suspension and delisting overlays.
+        "300001.SZ": _frame([sessions[i] for i in (0, 1, 3, 4)], [20.0, 20.4, 19.0, 19.5]),
+    }
+    before = {symbol: frame.copy(deep=True) for symbol, frame in bars.items()}
+    original_map = m._bar_close_map
+    calls = []
+
+    def counted_map(frame):
+        calls.append(id(frame))
+        return original_map(frame)
+
+    monkeypatch.setattr(m, "_bar_close_map", counted_map)
+
+    def run(output):
+        return m.run_modea(
+            pool, start=sessions[0], end=sessions[-1], sessions=sessions,
+            bars=bars, out_dir=output, cash_pool=5_000_000.0,
+        )
+
+    cached_dir = tmp_path / "cached"
+    run(cached_dir)
+    assert sorted(calls) == sorted(id(frame) for frame in bars.values())
+    for symbol, frame in bars.items():
+        pd.testing.assert_frame_equal(frame, before[symbol])
+        assert frame.attrs == {}
+
+    # Reference path rebuilds maps for each consumer using scalar date formatting.
+    with monkeypatch.context() as reference:
+        reference.setattr(m, "_prepare_bars", lambda frames: m._PreparedBars(frames))
+        reference.setattr(m, "_bar_close_map", lambda frame: {
+            m.date_to_ymd(d): float(c) for d, c in zip(frame.index, frame["close"])
+        })
+        reference_dir = tmp_path / "reference"
+        run(reference_dir)
+    for filename in ("ranking.csv", "summary.json", "instance_detail_top.csv"):
+        assert (cached_dir / filename).read_bytes() == (reference_dir / filename).read_bytes()
+
+    # A new run after an in-place source edit must rebuild each symbol's map.
+    bars["600000.SH"].loc[pd.Timestamp(sessions[-1]), "close"] = 10.0
+    calls.clear()
+    fresh_dir = tmp_path / "fresh"
+    run(fresh_dir)
+    assert sorted(calls) == sorted(id(frame) for frame in bars.values())
+    assert (fresh_dir / "summary.json").read_bytes() != (cached_dir / "summary.json").read_bytes()
