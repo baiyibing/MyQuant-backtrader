@@ -84,7 +84,7 @@ Mode A 宿主短记：实开 **4167**（封板 795 + 超幅度 99 跳过）。�
 现在（可做）     : 分钟湖可达 + bar_cache + 覆盖率 + 墙钟
 人裁 GO          : plan 头部 ✅
 实现 PR 合入     : unified_exit_modeb A–D
-之后才做         : Mode B 窄/全网格 + 研究短记（另开 host-runbook）
+之后才做         : Mode B P1=A 窄网格 + 研究短记（A–D 已合 #95；E 待跑，见下方业务 runbook）
 ```
 
-**一句话给确认人**：分钟 smoke 现在就可以做；Mode B 业务网格等 GO + 实现之后。
+**之后才做**：[Mode B 切片 E 业务 runbook](host-runbook-unified-exit-modeb-2026-09-17.md)。分钟 smoke 已完成，GO + A–D 实现已合 #95；业务 E 尚未执行，缓存沿用短记确认的 `minute_none_20251013_20260909`，不重建本篇旧示例的字面 `20251023` key。

@@ -93,7 +93,7 @@ Cerebro / Rolling 已退场（2026-09-16）；chip / ma_chip 对照产物为静�
 | 名单 CSV 契约（as-of = 买入日 T；H9/H16 list-quality CLI，双目录严格校验） | [pool-csv-contract.md](pool-csv-contract.md#list-quality-reporter-h9--h16) |
 | **NP1 资金配给探针（只读；A 探针 / B `--ration` 待 GO）** | [plan-capital-ration-2026-09-16.md](plan-capital-ration-2026-09-16.md) · `scripts/research/report_capital_ration.py --trades <trades.csv> --pool-dir <pool>` |
 | **NP2 除权持仓命中（只读；主源 ex_date_index；裁决人裁）** | [plan-exdiv-hold-hits-np2-2026-09-16.md](plan-exdiv-hold-hits-np2-2026-09-16.md) · [host runbook](exdiv-hold-hits-np2-host-runbook-2026-09-16.md) · `scripts/research/report_exdiv_hold_hits.py` |
-| **统一卖出网格 · 模式 B（分钟；A–D 已实现，PR #95 待审）** | [plan-unified-exit-modeb-2026-09-17.md](plan-unified-exit-modeb-2026-09-17.md) · [handoff](handoff-unified-exit-modeb-codex-impl-2026-09-17.md) · [分钟就绪 smoke](host-runbook-unified-exit-modeb-smoke-2026-09-17.md) |
+| **统一卖出网格 · 模式 B（分钟；A–D 已合 #95，宿主 E 待跑）** | [plan-unified-exit-modeb-2026-09-17.md](plan-unified-exit-modeb-2026-09-17.md) · [handoff](handoff-unified-exit-modeb-codex-impl-2026-09-17.md) · [分钟就绪 smoke](host-runbook-unified-exit-modeb-smoke-2026-09-17.md) · [E 业务 runbook](host-runbook-unified-exit-modeb-2026-09-17.md) |
 | **CI path-SSOT / contract gates（H10；无湖）** | [plan-h10-ci-path-gates-2026-09-15.md](plan-h10-ci-path-gates-2026-09-15.md) · workflow `python-tests.yml` |
 | **CI TR bridge import gate（H12；无湖）** | [plan-h12-ci-tr-bridge-gate-2026-09-15.md](plan-h12-ci-tr-bridge-gate-2026-09-15.md) · `verify_tr_bridge_import_ssot.py` |
 | **宿主湖门禁 cookbook（WP2；9 个 host-only）** | [host-lake-gates-cookbook-2026-09-16.md](host-lake-gates-cookbook-2026-09-16.md) |
