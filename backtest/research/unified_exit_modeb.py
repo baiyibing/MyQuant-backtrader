@@ -5,6 +5,8 @@ Research only. Mode A and the shared trading ledger remain unchanged.
 """
 from __future__ import annotations
 
+import json
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping, Optional, Sequence
@@ -16,7 +18,8 @@ from backtest.research import unified_exit_modea as modea
 from backtest.research.csv_daily_loader import warmup_start
 from backtest.research.exdiv_map import load_exdiv_ratios
 from backtest.research.csv_minute_backtest import (
-    AM_OPEN, AM_CLOSE, PM_OPEN, PM_CLOSE, MINUTE_LAKE_END, load_minute_bars,
+    AM_OPEN, AM_CLOSE, PM_OPEN, PM_CLOSE, MINUTE_LAKE_END, CACHE_ROOT,
+    load_minute_bars,
 )
 from backtest.research.market_layer import limit_pct
 from common.infra.data_root import resolve_period_root
@@ -36,14 +39,41 @@ def load_monitor_bars(codes, start=modea.DEFAULT_START, end=modea.DEFAULT_END,
                             cache_dir=cache_dir, status=status)
 
 
+def load_prepared_minutes(codes, start=modea.DEFAULT_START, end=modea.DEFAULT_END,
+                          *, workers=16, cache_dir=None, status=None):
+    """Prefer the Mode B mmap pack; otherwise parquet/lake then write the pack."""
+    warm = warmup_start(start, days=10)
+    wanted = set(codes)
+    pack = modeb_pack_dir(warm, end, cache_dir)
+    if _pack_covers(pack, wanted):
+        if status is not None:
+            status["cache"] = "pack"
+            status["pack"] = "hit"
+        return PreparedMinutes.from_mmap(pack, wanted)
+    frames = load_monitor_bars(
+        wanted, start, end, workers=workers, cache_dir=cache_dir, status=status
+    )
+    prepared = PreparedMinutes(frames)
+    write_modeb_pack(prepared, pack, start=warm, end=end)
+    if status is not None:
+        status["pack"] = "write"
+    return prepared
+
+
 def minute_coverage(codes, bars, *, start=modea.DEFAULT_START, end=modea.DEFAULT_END):
     """Count unique requested codes with session minutes inside the run window."""
     wanted = set(codes)
     found = set()
-    for code in wanted & bars.keys():
-        df = session_minutes(bars[code])
-        if not df.empty and df["ymd"].between(start, end).any():
-            found.add(code)
+    if isinstance(bars, PreparedMinutes):
+        for code in wanted:
+            pk = bars.packed.get(code)
+            if pk is not None and any(start <= ymd <= end for ymd in pk.slices):
+                found.add(code)
+    else:
+        for code in wanted & bars.keys():
+            df = session_minutes(bars[code])
+            if not df.empty and df["ymd"].between(start, end).any():
+                found.add(code)
     return {"requested_codes": len(wanted), "covered_codes": len(found),
             "missing_codes": sorted(wanted - found), "minute_lake_end": MINUTE_LAKE_END}
 
@@ -82,15 +112,50 @@ def _previous_refs(daily, symbol, exdiv):
     return refs
 
 
+PACK_VERSION = 1
+
+
+def modeb_pack_dir(start, end, cache_dir=None) -> Path:
+    root = Path(cache_dir) if cache_dir is not None else CACHE_ROOT
+    return root / f"modeb_pack_{start}_{end}"
+
+
+def _slices_from_ymd(ymd):
+    n = len(ymd)
+    if n == 0:
+        return {}
+    change = np.empty(n, dtype=bool)
+    change[0] = True
+    change[1:] = ymd[1:] != ymd[:-1]
+    starts = np.flatnonzero(change)
+    stops = np.append(starts[1:], n)
+    return {f"{int(ymd[i]):08d}": (int(i), int(j)) for i, j in zip(starts, stops)}
+
+
+def _pack_covers(pack_dir: Path, codes) -> bool:
+    meta_path = Path(pack_dir) / "meta.json"
+    if not meta_path.is_file():
+        return False
+    try:
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    if meta.get("version") != PACK_VERSION:
+        return False
+    have = meta.get("symbols") or {}
+    return all(code in have for code in codes)
+
+
 class _Packed:
     """Per-symbol session arrays. ``slices[ymd] = (start, end)`` into the arrays."""
 
-    __slots__ = ("hm", "open", "close", "slices")
+    __slots__ = ("hm", "open", "close", "ymd", "slices")
 
-    def __init__(self, hm, open_, close, slices):
+    def __init__(self, hm, open_, close, ymd, slices):
         self.hm = hm
         self.open = open_
         self.close = close
+        self.ymd = ymd
         self.slices = slices
 
 
@@ -100,6 +165,7 @@ class PreparedMinutes:
     def __init__(self, bars):
         self.packed = {}
         self._days = None
+        self._mmkeep = ()
         for symbol, frame in bars.items():
             frame = session_minutes(frame)
             if frame.empty:
@@ -108,19 +174,125 @@ class PreparedMinutes:
             if "open" not in frame.columns:
                 frame = frame.copy()
                 frame["open"] = frame["close"]
-            ymd = frame["ymd"].to_numpy()
-            n = len(ymd)
-            change = np.empty(n, dtype=bool)
-            change[0] = True
-            change[1:] = ymd[1:] != ymd[:-1]
-            starts = np.flatnonzero(change)
-            stops = np.append(starts[1:], n)
+            ymd = frame["ymd"].to_numpy().astype("U8").astype(np.int32)
             self.packed[symbol] = _Packed(
                 frame["hm"].to_numpy(dtype=np.int32, copy=False),
                 frame["open"].to_numpy(dtype=np.float64, copy=False),
                 frame["close"].to_numpy(dtype=np.float64, copy=False),
-                {str(ymd[i]): (int(i), int(j)) for i, j in zip(starts, stops)},
+                ymd,
+                _slices_from_ymd(ymd),
             )
+
+    @classmethod
+    def from_mmap(cls, pack_dir, codes=None):
+        root = Path(pack_dir)
+        meta = json.loads((root / "meta.json").read_text(encoding="utf-8"))
+        n = int(meta["n_rows"])
+        keep = (
+            np.memmap(root / "hm.i32", dtype=np.int32, mode="r", shape=(n,)),
+            np.memmap(root / "open.f64", dtype=np.float64, mode="r", shape=(n,)),
+            np.memmap(root / "close.f64", dtype=np.float64, mode="r", shape=(n,)),
+            np.memmap(root / "ymd.i32", dtype=np.int32, mode="r", shape=(n,)),
+        )
+        hm, opn, close, ymd = keep
+        obj = cls.__new__(cls)
+        obj.packed = {}
+        obj._days = None
+        obj._mmkeep = keep
+        want = meta["symbols"] if codes is None else {c: meta["symbols"][c] for c in codes}
+        for symbol, (s, e) in want.items():
+            if s == e:
+                obj.packed[symbol] = None
+                continue
+            y = ymd[s:e]
+            obj.packed[symbol] = _Packed(hm[s:e], opn[s:e], close[s:e], y, _slices_from_ymd(y))
+        return obj
+
+    @property
+    def days(self):
+        if self._days is None:
+            self._days = {}
+            for symbol, pk in self.packed.items():
+                if pk is None:
+                    self._days[symbol] = {}
+                    continue
+                self._days[symbol] = {
+                    ymd: list(
+                        zip(
+                            pk.hm[s:e].tolist(),
+                            pk.open[s:e].tolist(),
+                            pk.open[s:e].tolist(),
+                            pk.close[s:e].tolist(),
+                            pk.close[s:e].tolist(),
+                        )
+                    )
+                    for ymd, (s, e) in pk.slices.items()
+                }
+        return self._days
+
+    def last_close(self, symbol, ymd):
+        pk = self.packed.get(symbol)
+        if pk is None:
+            return None
+        sl = pk.slices.get(ymd)
+        if sl is None:
+            return None
+        return float(pk.close[sl[1] - 1])
+
+
+def write_modeb_pack(minutes: PreparedMinutes, pack_dir, *, start, end):
+    """Sidecar mmap pack: session-filtered hm/open/close/ymd. Not the parquet cache."""
+    root = Path(pack_dir)
+    tmp = root.with_name(root.name + ".tmp")
+    if tmp.exists():
+        shutil.rmtree(tmp)
+    tmp.mkdir(parents=True)
+    symbols = sorted(minutes.packed)
+    offsets = {}
+    chunks = []
+    cursor = 0
+    for symbol in symbols:
+        pk = minutes.packed[symbol]
+        if pk is None:
+            offsets[symbol] = [cursor, cursor]
+            continue
+        n = int(pk.hm.size)
+        offsets[symbol] = [cursor, cursor + n]
+        chunks.append(pk)
+        cursor += n
+    n_rows = cursor
+    files = (
+        ("hm.i32", np.int32, "hm"),
+        ("open.f64", np.float64, "open"),
+        ("close.f64", np.float64, "close"),
+        ("ymd.i32", np.int32, "ymd"),
+    )
+    for name, dtype, attr in files:
+        mm = np.memmap(tmp / name, dtype=dtype, mode="w+", shape=(n_rows,))
+        pos = 0
+        for pk in chunks:
+            arr = np.asarray(getattr(pk, attr), dtype=dtype)
+            mm[pos:pos + arr.size] = arr
+            pos += arr.size
+        mm.flush()
+        del mm
+    meta = {
+        "version": PACK_VERSION,
+        "start": start,
+        "end": end,
+        "n_rows": n_rows,
+        "symbols": offsets,
+        "session_filtered": True,
+        "columns": ["hm", "open", "close", "ymd"],
+    }
+    (tmp / "meta.json").write_text(
+        json.dumps(meta, ensure_ascii=False, separators=(",", ":")),
+        encoding="utf-8",
+    )
+    if root.exists():
+        shutil.rmtree(root)
+    tmp.rename(root)
+    return root
 
     @property
     def days(self):
@@ -617,10 +789,11 @@ def run_modeb(
     if exdiv is None:
         exdiv = load_exdiv_ratios(codes, warmup_start(start, days=20), end)
     instances = assemble_instances(Path(pool_dir), sess, bar_map, tol=tol, exdiv=exdiv)
+    load_status = {}
     if minute_bars is None:
-        minute_bars = load_monitor_bars(
+        minute_bars = load_prepared_minutes(
             {i.symbol for i in modea.opened_instances(instances)}, start, end,
-            workers=workers, cache_dir=cache_dir)
+            workers=workers, cache_dir=cache_dir, status=load_status)
     coverage = minute_coverage({i.symbol for i in modea.opened_instances(instances)},
                                minute_bars, start=start, end=end)
     minutes = _prepare_minutes(minute_bars)
@@ -724,6 +897,7 @@ def run_modeb(
         robustness,
         meta={"mode": "B", "price_domain": "none daily entry / minute open-gap then close trigger and fill",
               "scan": "numpy first-hit; path shared across specs",
+              "pack": load_status.get("pack"), "minute_cache": load_status.get("cache"),
               "grid": "P1=A narrow (18 r2 cells + N=1)", "oracle": "Q38=A 分钟可成交 close 事后上界；仅排除跌停分钟；不模拟更早失败卖出",
               "start": start, "end": end, "cash_pool": cash_pool, "tol": tol,
               "minute_coverage": coverage, "exdiv": "cost/peak *= k; shares /= k; no cash dividend"},
