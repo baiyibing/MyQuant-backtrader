@@ -12,7 +12,7 @@ from tests.test_unified_exit_modeb_exit import CODE, INST, SESS, daily, frames
 @pytest.mark.parametrize("k", [0.5, 0.98, 0.73])
 def test_exdiv_value_thresholds_and_fractional_shares(k):
     bars = daily((100., 100 * k, 100 * k, 100 * k))
-    minutes = frames([(1, 1000, 101*k, 99*k, 100*k)])
+    minutes = frames([(1, 600, 101*k, 99*k, 100*k)])
     er = b.evaluate_exit_modeb(INST, a.StrategySpec(2, 3, 5, 5), bars, minutes, SESS,
                               end=SESS[-1], exdiv={CODE: {SESS[1]: k}})
     assert er.reason == "mark_end"
@@ -24,7 +24,7 @@ def test_exdiv_value_thresholds_and_fractional_shares(k):
 
 def test_exdiv_scales_peak_and_reference_before_fill():
     bars = daily((100., 104., 52., 52.))
-    minutes = frames([(1, 1000, 106, 100, 104), (2, 1000, 53, 49, 49.3)])
+    minutes = frames([(1, 600, 106, 100, 104), (2, 600, 53, 49, 49.3)])
     er = b.evaluate_exit_modeb(INST, a.StrategySpec(3, 3, y=5), bars, minutes, SESS,
                               end=SESS[-1], exdiv={CODE: {SESS[2]: .5}})
     assert er.reason == "trailing" and er.sell_date == SESS[2]
@@ -54,7 +54,7 @@ def test_event_loader_noise_band_and_no_event_unchanged(tmp_path):
     pd.DataFrame({"stock_code": [CODE]*2, "ex_date": SESS[1:3]}).to_parquet(ex)
     ratios = b.load_exdiv_ratios([CODE], SESS[0], SESS[-1], adj_factor_path=adj, ex_date_index_path=ex)
     assert ratios == {CODE: {SESS[2]: .5}}
-    args = (INST, a.StrategySpec(1, 1), daily(), frames([(1, 1500, 101, 99, 100)]), SESS)
+    args = (INST, a.StrategySpec(1, 1), daily(), frames([(1, 900, 101, 99, 100)]), SESS)
     assert b.evaluate_exit_modeb(*args) == b.evaluate_exit_modeb(*args, exdiv={})
 
 

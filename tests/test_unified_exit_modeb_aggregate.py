@@ -11,8 +11,8 @@ from tests.test_unified_exit_modeb_exit import CODE, INST, SESS, daily, frames
 
 
 def test_oracle_q38_keeps_same_day_before_and_after_blocked_minute():
-    for rows, hm in [([(1, 1000, 110, 109, 110), (1, 1100, 90, 90, 90)], 1000),
-                     ([(1, 1000, 90, 90, 90), (1, 1100, 110, 109, 110)], 1100)]:
+    for rows, hm in [([(1, 600, 110, 109, 110), (1, 660, 90, 90, 90)], 600),
+                     ([(1, 600, 90, 90, 90), (1, 660, 110, 109, 110)], 660)]:
         er = b.oracle_exits([INST], daily(), frames(rows), SESS)[a.instance_key(INST)]
         assert (er.reason, er.sell_price, er.sell_hm) == ('oracle', 110, hm)
 
@@ -20,10 +20,10 @@ def test_oracle_q38_keeps_same_day_before_and_after_blocked_minute():
 def test_oracle_compares_rescaled_proceeds_and_falls_back():
     exdiv = {CODE: {SESS[2]: .5}}
     bars = daily((100, 100, 50, 50))
-    minutes = frames([(1, 1000, 105, 105, 105), (2, 1000, 55, 55, 55)])
+    minutes = frames([(1, 600, 105, 105, 105), (2, 600, 55, 55, 55)])
     er = b.oracle_exits([INST], bars, minutes, SESS, exdiv=exdiv)[a.instance_key(INST)]
     assert er.sell_date == SESS[2] and er.shares == 20000
-    fallback = b.oracle_exits([INST], daily(), frames([(1, 1000, 90, 90, 90)]), SESS)
+    fallback = b.oracle_exits([INST], daily(), frames([(1, 600, 90, 90, 90)]), SESS)
     assert fallback[a.instance_key(INST)].reason == 'mark_end'
     assert not fallback[a.instance_key(INST)].is_trade
 
@@ -31,8 +31,8 @@ def test_oracle_compares_rescaled_proceeds_and_falls_back():
 def test_equity_exdiv_drawdown_and_sell_before_buy():
     second = a.Instance(CODE, 'synthetic', SESS[2], 50., True)
     instances = [INST, second]
-    minutes = frames([(1, 1500, 110, 110, 110), (2, 1500, 50, 50, 50),
-                      (3, 1500, 55, 55, 55)])
+    minutes = frames([(1, 900, 110, 110, 110), (2, 900, 50, 50, 50),
+                      (3, 900, 55, 55, 55)])
     events = {CODE: {SESS[2]: .5}}
     exits = b.evaluate_matrix(instances, [a.StrategySpec(1, 2)], daily(), minutes,
                               SESS, end=SESS[-1], exdiv=events)['r1_n2']
@@ -49,7 +49,7 @@ def test_equity_exdiv_drawdown_and_sell_before_buy():
 
 
 def test_halt_exdiv_and_delist_changes_only_final_value():
-    minutes = frames([(1, 1500, 100, 100, 100)])
+    minutes = frames([(1, 900, 100, 100, 100)])
     events = {CODE: {SESS[2]: .73}}
     key = a.instance_key(INST)
     hold = b.evaluate_matrix([INST], [a.StrategySpec(0, None)], daily(), minutes,
@@ -74,7 +74,7 @@ def test_pipeline_reports_robustness_and_isolation(tmp_path):
         (pool / f'{day}.csv').write_text(f'code,name\n{CODE},synthetic\n', encoding='utf-8')
     bars = {CODE: pd.DataFrame({'open': [100]*5, 'close': [100]*5},
                                index=pd.to_datetime(sessions))}
-    minutes = {CODE: pd.DataFrame({'ymd': sessions, 'hm': [1500]*5,
+    minutes = {CODE: pd.DataFrame({'ymd': sessions, 'hm': [900]*5,
                                    'high': [100]*5, 'low': [100]*5, 'close': [100]*5})}
     out = tmp_path / 'unified_exit_modeb'
     result = b.run_modeb(pool, sessions=sessions, bars=bars, minute_bars=minutes, exdiv={}, out_dir=out)
@@ -92,7 +92,7 @@ def test_pipeline_reports_robustness_and_isolation(tmp_path):
     assert (out / 'ranking.csv').exists()
     detail = pd.read_csv(out / 'instance_detail_top.csv')
     assert 'sell_hm' in detail.columns
-    assert set(detail.loc[detail.is_trade, 'sell_hm']) == {1500}
+    assert set(detail.loc[detail.is_trade, 'sell_hm']) == {900}
     assert not (tmp_path / 'unified_exit_modea').exists()
     with pytest.raises(ValueError, match='Mode B'):
         b.run_modeb(pool, out_dir=tmp_path / 'unified_exit_modea' / 'nested')

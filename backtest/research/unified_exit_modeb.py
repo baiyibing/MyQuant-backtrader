@@ -14,7 +14,9 @@ import pandas as pd
 from backtest.research import unified_exit_modea as modea
 from backtest.research.csv_daily_loader import warmup_start
 from backtest.research.exdiv_map import load_exdiv_ratios
-from backtest.research.csv_minute_backtest import MINUTE_LAKE_END, load_minute_bars
+from backtest.research.csv_minute_backtest import (
+    AM_OPEN, AM_CLOSE, PM_OPEN, PM_CLOSE, MINUTE_LAKE_END, load_minute_bars,
+)
 from common.infra.data_root import resolve_period_root
 
 
@@ -45,11 +47,11 @@ def minute_coverage(codes, bars, *, start=modea.DEFAULT_START, end=modea.DEFAULT
 
 
 def session_minutes(df):
-    """Return chronological regular-session rows; exclude auctions/off-session K."""
+    """Return session rows with lake/cache hm in minutes since midnight, not HHMM."""
     if df.empty:
         return df
     hm = df["hm"]
-    mask = hm.between(930, 1130) | hm.between(1300, 1500)
+    mask = hm.between(AM_OPEN, AM_CLOSE) | hm.between(PM_OPEN, PM_CLOSE)
     out = df.loc[mask].copy()
     out["ymd"] = out["ymd"].astype(str)
     return out.sort_values(["ymd", "hm"], kind="stable")
