@@ -1,23 +1,21 @@
 # 交接 · 统一卖出规则网格 · 模式 B 实施（Codex 接手）
 
 > 日期：2026-09-17
-> 状态：⏳ **待人裁 GO**（plan 头部尚未「✅ 已人裁 GO」）。**若本交接随 docs PR 先合 master，仍禁止开工**——以 plan 状态为准。
+> 状态：✅ **已人裁 GO**（2026-09-17；P1=A 窄网格 / P2=A 宿主smoke→4090 / P3=A exdiv_map）。以 plan v1.1 为准，**可开工**。
 > 权威对象：[plan-unified-exit-modeb-2026-09-17.md](plan-unified-exit-modeb-2026-09-17.md) v1.0；口径母本 [stock-backtest-unified-exit-proposal-2026-09-17.md](stock-backtest-unified-exit-proposal-2026-09-17.md)（§一 Mode B / §9.5 Q29=B / §十二）。
 > 前置：Mode A 已合（含 perf #92）；master tip 撰写时 `e018924`。
 > 分支（**仅 GO 后**）：从当时 master 开 `feat/unified-exit-modeb`；切片 A/B/C/D 分 commit。
 > 宿主数据就绪（可先做）：[host-runbook-unified-exit-modeb-smoke-2026-09-17.md](host-runbook-unified-exit-modeb-smoke-2026-09-17.md)。业务网格 runbook **GO+impl 后另开**（非本交接合入门）。
 
-## ⛔ 开工闸
+## ✅ 开工闸
 
-**do not start Codex coding until plan header says 已人裁 GO.**
-
-若 plan 仍为「⏳ 待人裁 GO」：本文件仅施工图预览。P1–P5 未裁 = 编码禁止。
+plan 头部已为「✅ 已人裁 GO」。从当时 master 开 `feat/unified-exit-modeb`，按切片 A→D 实施。
 
 ---
 
 ## 0. 硬边界（勿越）
 
-复制 plan **R\***（摘要）；P\* 未裁前整节视为 **pending**：
+复制 plan **R\***（摘要）+ 已裁 P\*：
 
 1. **R1**：新代码只落 `unified_exit_modeb.py` + `run_unified_exit_modeb.py`。复用 Mode A 装配/实例键/网格枚举/报告形状。**禁止**改 `csv_ledger.rescale_position` 使 1–6/8 的 shares 跟着 ÷k。
 2. **R2**：买 = none 日线 close；触发 = 1m high/low；成交 = 该分钟 close。禁止 front 日线与 none 分钟混用。
@@ -27,7 +25,7 @@
 6. **R6**：CI data-free；全网格宿主-only（prefer 4090）；无硬编码盘符。
 7. **R7**：不 import qlib；不复活 backtrader / Cerebro。
 8. **P4 锁**：A/B 报告分目录，永不混排 NAV 表。
-9. **P\* pending**：P1 范围 / P2 跑机 / P3 除权数据源 / P5 就绪≠业务网格 —— 默认建议见 plan §3，**等人裁**。
+9. **P\* 已裁**：P1=A 冠军族（r2 X∈{5,7,10} Y∈{5,10,∞} N∈{8,10}）+ 四锚线；P2=A 宿主 smoke→4090；P3=A `ex_date_index`+`exdiv_map`；P4/P5 锁。
 10. 发现提案未覆盖边界 → **停下回写提案 §十（Q36+）**，不自裁。
 11. 新文件 UTF-8 无 BOM、NUL=0；验证命令用 vanna312 全路径。
 

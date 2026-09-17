@@ -1,11 +1,11 @@
 # Plan：统一卖出规则网格 · 模式 B（分钟触发，2026-09-17）
 
-> **落盘**：2026-09-17。**v1.0**（docs-only；本 PR 不写 Mode B Python）。
-> **状态**：⏳ **待人裁 GO**（P1–P5 未裁；**GO 前禁止编码**）。
+> **落盘**：2026-09-17。**v1.1**（docs-only；本 PR 不写 Mode B Python）。
+> **状态**：✅ **已人裁 GO**（2026-09-17；P1=A / P2=A / P3=A；P4/P5 锁）。合入后 tip 回填 commit hash。**可开** `feat/unified-exit-modeb` 交 Codex。
 > **风险档**：**NAV 影响研究模块**——独立 `unified_exit_modeb`，与策略 1–6/8/9/10 书及 v6/v8 分钟净值**隔离**；不改引擎 `rescale_position` 语义。
 > **业务源**：[stock-backtest-unified-exit-proposal-2026-09-17.md](stock-backtest-unified-exit-proposal-2026-09-17.md)（§一 Mode B 行 / §四 / §9.5 Q29=B / §十二速查）；Mode A 宿主短记 [unified-exit-modea-host-note-2026-09-17.md](unified-exit-modea-host-note-2026-09-17.md) §5（oracle 缺口证 Mode B 优先级；perf #92 已合）。
 > **工作流**：走 [Codex 交接工作流](workflow-codex-handoff.md)。人裁后改头部为「✅ 已人裁 GO（commit hash）」再开 `feat/unified-exit-modeb`。
-> **交接草稿**（GO 前仅作施工图预览，**勿开工**）：[handoff-unified-exit-modeb-codex-impl-2026-09-17.md](handoff-unified-exit-modeb-codex-impl-2026-09-17.md)。
+> **交接**（已 GO，可开工）：[handoff-unified-exit-modeb-codex-impl-2026-09-17.md](handoff-unified-exit-modeb-codex-impl-2026-09-17.md)。
 > **数据就绪（可先做、不依赖 Mode B 代码）**：[host-runbook-unified-exit-modeb-smoke-2026-09-17.md](host-runbook-unified-exit-modeb-smoke-2026-09-17.md)。
 > **基线 tip**：`e018924`（`origin/master`，含 Mode A + perf #92）。
 
@@ -51,17 +51,19 @@ GO 后：feat/unified-exit-modeb · 切片 A–D 合入门；E = 宿主全/窄�
 
 ---
 
-## 3. 人裁点（P\* · 必须问；下列为建议默认）
+## 3. 人裁点（P\* · 2026-09-17 已裁）
 
-> 状态：⏳ **全部待裁**。下列「建议」仅供确认人一票否决；未裁 = **禁止编码**。
+> 状态：✅ **已裁**。确认人采纳建议默认。
 
-| # | 问题 | 选项 | **建议** |
-|---|------|------|----------|
-| **P1** | 首船网格范围 | A= 冠军族 + 锚线（窄网格）；B= 全量 280 如 Mode A；C= 其他 | **建议 A**（分钟成本 ≈ ×240；先证盘中边际再全扫） |
-| **P2** | 全量/窄矩阵跑在哪 | A= 宿主 F 湖先 smoke，再迁 4090；B= 仅 4090；C= VM | **建议 A**（先验证 cache/覆盖，再重算） |
-| **P3** | E-R6+shares/=k 数据源 | A= `ex_date_index` + 现成 `exdiv_map.load_exdiv_ratios`；B= 暂缓除权缩放（文档记已知边界）；C= 其他 | **建议 A**（提案 Q29=B；湖已有） |
-| **P4** | A vs B 排名 | — | **已锁为 R**：分目录、不混表（见上） |
-| **P5** | Smoke vs 业务网格 | — | **宿主可立刻做分钟 cache 构建 + 覆盖率**（见 smoke runbook；**不依赖 Mode B 代码**）。**业务 Mode B 网格仅在「人裁 GO + 实现合入」之后** |
+| # | 问题 | **裁决** |
+|---|------|----------|
+| **P1** | 首船网格范围 | **A**：冠军族 + 锚线（窄网格）。冠军族点名（Mode A 短记）：`r2` × X∈{5,7,10} × Y∈{5,10,∞} × N∈{8,10}，另加四锚线（hold_end / N=1 / oracle / delist_zero）。全量 280 后置。 |
+| **P2** | 矩阵跑在哪 | **A**：宿主 F 湖先 smoke（cache/覆盖），窄网格可先宿主；重算迁 4090。 |
+| **P3** | E-R6+shares/=k 数据源 | **A**：`ex_date_index` + `exdiv_map.load_exdiv_ratios`。 |
+| **P4** | A vs B 排名 | **已锁为 R**：分目录、不混表。 |
+| **P5** | Smoke vs 业务网格 | **已锁**：分钟 cache/覆盖可先做；业务 Mode B 网格在 GO+impl 之后。 |
+
+注（Grok #93 nit）：Mode A 短记 **4167 是实开实例数**，不是码数；跌停「日线收盘 vs 该分钟」以提案 Q7 为准——Mode B 卖出日若触跌停则当日不卖、下一交易日再评（分钟路径按交易日重评，不自创新语义）。
 
 ---
 
