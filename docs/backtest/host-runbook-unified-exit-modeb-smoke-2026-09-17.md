@@ -1,7 +1,7 @@
 # 模式 B · 宿主分钟数据就绪 runbook（smoke；无需 Mode B 代码）
 
 > **日期**：2026-09-17
-> **状态**：可与 Mode B **编码并行**——本 runbook **只做数据就绪**，**不是** Mode B 网格结果。
+> **状态**：✅ **宿主数据就绪已完成 2026-09-17**（短记：[unified-exit-modeb-minute-ready-2026-09-17.md](unified-exit-modeb-minute-ready-2026-09-17.md)；cache key 偏差见短记 §2）。可与 Mode B **编码并行**——本 runbook **只做数据就绪**，**不是** Mode B 网格结果。
 > **权威**：提案 §9.1–9.2（分钟 none / `MINUTE_LAKE_END` / `bar_cache`）；plan [plan-unified-exit-modeb-2026-09-17.md](plan-unified-exit-modeb-2026-09-17.md) P5。
 > **前置**：宿主能解析 F 湖（`F:\stock_data\.authority` 等，以本机 AGENTS 为准）；仓库 tip ≥ Mode A 合入（`e018924`+）。
 
