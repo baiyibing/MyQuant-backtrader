@@ -55,3 +55,99 @@ def session_minutes(df):
 def assemble_instances(pool_dir, sessions, bars, *, tol=modea.DEFAULT_TOL):
     """Mode A identity/filter contract with explicitly supplied none daily bars."""
     return modea.assemble_instances(pool_dir, sessions, bars, tol=tol)
+
+
+class PreparedMinutes:
+    """Run-local grouped tuples, shared by every grid cell without frame mutation."""
+
+    def __init__(self, bars):
+        self.days = {}
+        for symbol, frame in bars.items():
+            frame = session_minutes(frame)
+            self.days[symbol] = {
+                ymd: list(day[["hm", "high", "low", "close"]].itertuples(index=False, name=None))
+                for ymd, day in frame.groupby("ymd", sort=False)
+            } if not frame.empty else {}
+
+
+def _prepare_minutes(bars):
+    return bars if isinstance(bars, PreparedMinutes) else PreparedMinutes(bars)
+
+
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class ExitResult(modea.ExitResult):
+    shares: float
+    sell_hm: int | None = None
+
+
+def _result(inst, ymd, hm, price, shares, held, reason, *, trade):
+    buy_cost = modea._lot_shares(inst.buy_price) * inst.buy_price * (1 + modea.COMMISSION)
+    proceeds = shares * price * (1 - modea.COMMISSION if trade else 1)
+    pnl = proceeds - buy_cost
+    return ExitResult(ymd, price, reason, pnl / buy_cost, pnl, shares, held, trade, hm)
+
+
+def evaluate_exit_modeb(inst, spec, daily_bars, minute_bars, sessions, *,
+                        end=modea.DEFAULT_END, tol=modea.DEFAULT_TOL):
+    """SL-first high/low triggers; minute close fills; expiry at last session K.
+
+    N counts market sessions. A blocked fill prevents all further sells that day,
+    and rules are evaluated afresh next session (Q7). Buy-day minutes precede
+    the daily-close entry and must never affect triggers or the trailing peak.
+    """
+    if not inst.opened:
+        raise ValueError("evaluate_exit_modeb requires an opened instance")
+    if spec.rule not in (0, 1, 2, 3):
+        raise ValueError(f"unknown rule {spec.rule}")
+    if spec.rule and (spec.n is None or spec.n < 1):
+        raise ValueError("N must be positive")
+    if spec.rule == 3 and spec.y is None:
+        raise ValueError("trailing requires Y")
+    daily = modea._prepare_bars(daily_bars)
+    prev_by = daily.previous(inst.symbol) if inst.symbol in daily else {}
+    days = _prepare_minutes(minute_bars).days.get(inst.symbol, {})
+    buy_i = modea._session_index(sessions, inst.list_date)
+    cost = peak = mark_price = float(inst.buy_price)
+    shares = float(modea._lot_shares(cost))
+    mark_day, mark_hm, mark_held = inst.list_date, None, 0
+    for i in range(buy_i + 1, len(sessions)):
+        ymd = sessions[i]
+        if ymd > end:
+            break
+        rows = days.get(ymd, [])
+        blocked = False
+        for j, (hm, high, low, close) in enumerate(rows):
+            mark_day, mark_hm, mark_price, mark_held = ymd, int(hm), close, i - buy_i
+            peak = max(peak, close)
+            if blocked:
+                continue
+            reason = None
+            if spec.rule == 2:
+                if spec.y is not None and low <= cost * (1 - spec.y / 100):
+                    reason = "stop_loss"
+                elif spec.x is not None and high >= cost * (1 + spec.x / 100):
+                    reason = "take_profit"
+            elif spec.rule == 3 and close < peak * (1 - spec.y / 100):
+                reason = "trailing"
+            if reason is None and spec.rule and i - buy_i >= spec.n and j == len(rows) - 1:
+                reason = "n_expire"
+            if reason is None:
+                continue
+            prev = prev_by.get(ymd)
+            if prev is not None and prev > 0 and modea._is_limit_down(close, prev, inst.symbol, inst.name, tol=tol):
+                blocked = True
+                continue
+            return _result(inst, ymd, int(hm), close, shares, i - buy_i, reason, trade=True)
+    return _result(inst, mark_day, mark_hm, mark_price, shares, mark_held, "mark_end", trade=False)
+
+
+def evaluate_matrix(instances, specs, daily_bars, minute_bars, sessions, **kwargs):
+    daily = modea._prepare_bars(daily_bars)
+    minutes = _prepare_minutes(minute_bars)
+    return {spec.label(): {
+        modea.instance_key(inst): evaluate_exit_modeb(inst, spec, daily, minutes, sessions, **kwargs)
+        for inst in modea.opened_instances(instances)
+    } for spec in specs}
