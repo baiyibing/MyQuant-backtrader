@@ -108,6 +108,7 @@ from backtest.research.csv_pool import (  # noqa: E402
     load_pool_names_by_day,
 )
 from backtest.research.market_layer import (  # noqa: E402
+    as_date,
     limit_pct,
     limit_prices,
     round_fen,
@@ -122,6 +123,7 @@ from backtest.research.csv_daily_loader import (  # noqa: E402
     warmup_start,
     warn_stale_period_env,
 )
+from backtest.research.strategy8_rules import load_sse_ma10_block_new  # noqa: E402
 
 # 仅测试：pin 策略书/账本/市场层符号，供测试面属性引用（N-R9）；非引擎转发。
 _ = (
@@ -149,6 +151,7 @@ _ = (
     round_fen,
 )
 from common.infra.data_root import resolve_period_root  # noqa: E402
+
 HELP_LOCK = """
 日线近似口径（相对分钟保真版的唯一失真来源）：
   买入：池 CSV 当日候选、收盘价成交（分钟版 14:55≈收盘）；买价达到或超过
@@ -163,7 +166,7 @@ HELP_LOCK = """
   档位：主板 10% / 创科 20%（含 302、689）/ 北交 30%；名单第二列 ST/*ST=5%。
         未知板块且无 ST 名 → skip_unknown_board，不交易。
   止盈 / 峰值：见下方对应策略书。峰值从 T+1 起用当日 high 更新；T+0 固定为买入价。
-        v8：T+1 只评止损不评止盈；日线收盘评估、次日开盘离场（隔夜间隔已 ≥ 15 分钟）。
+        v8：T+1 起评止盈；日线收盘评估、次日开盘离场（隔夜间隔已 ≥ 15 分钟）。
   买侧：尾盘涨停不买。T+1 用收盘>开盘近似分钟 09:45 市价>开盘 → 收盘追买；
         否则弃买。追买日无 K 保留 pending 到下一有 K 日（仍只评一次）。
         成交价用收盘（相对 09:45 的失真）。
@@ -193,7 +196,6 @@ def help_lock_for(strategy: str, *, shared: str = HELP_LOCK) -> str:
 _limit_prices = resolve_limit_prices
 
 
-
 def simulate(
     bars: dict[str, pd.DataFrame],
     pool_days: dict[str, list[str]],
@@ -220,6 +222,7 @@ def simulate(
     topk=None,
     n_drop=None,
     eligible_buy=None,
+    index_block_new=None,
 ) -> SimState:
     """核心日循环。bars/pool_days 可由测试注入；run() 负责从湖与 CSV 加载。
 
@@ -242,10 +245,13 @@ def simulate(
         topk=topk,
         n_drop=n_drop,
         eligible_buy=eligible_buy,
+        index_block_new=index_block_new,
     )
     stop_pct = hooks["stop_pct"]
     take_profit = hooks["take_profit"]
     buy_gate = hooks.get("buy_gate")
+    add_gate = hooks.get("add_gate")
+    allow_new_name = hooks.get("allow_new_name")
     sell_gate = hooks.get("sell_gate")
     calendar = build_calendar(bars, start, end)
 
@@ -377,6 +383,8 @@ def simulate(
             quotes_for=_chase_quotes_for,
             exdiv=exdiv,
             ds=ds,
+            add_gate=add_gate,
+            allow_new_name=allow_new_name,
         )
 
         def _pool_quote_for(code: str):
@@ -406,6 +414,9 @@ def simulate(
             ration_seed=hooks.get("ration_seed", 0),
             exdiv=exdiv,
             planned_for_day=hooks.get("planned_for_day"),
+            add_gate=add_gate,
+            allow_new_name=allow_new_name,
+            name_lot_budget=hooks.get("name_lot_budget"),
         )
 
         append_equity_and_eod_marks(
@@ -447,7 +458,9 @@ def run(
     warn_stale_period_env()
     t_pool = time.perf_counter()
     actual_pool_dir = resolve_research_pool_dir(strategy, pool_dir, repo=REPO)
-    pool_days = load_pool_day_map(actual_pool_dir, start, end, key="ymd", empty_in_map=False)
+    pool_days = load_pool_day_map(
+        actual_pool_dir, start, end, key="ymd", empty_in_map=False
+    )
     pool_names_by_day = load_pool_names_by_day(actual_pool_dir, start, end)
     t_pool = time.perf_counter() - t_pool
     if not pool_days:
@@ -473,6 +486,14 @@ def run(
     )
     skipped: dict[str, int] = {}
     exdiv = load_exdiv_ratios(all_codes, start, end, skipped_out=skipped)
+    index_block_new = None
+    if normalize_csv_strategy(strategy) == "version8":
+        index_block_new = load_sse_ma10_block_new(start, end)
+        missing = [ds for ds in pool_days if as_date(ds) not in index_block_new]
+        if missing:
+            raise SystemExit(
+                f"SSE MA10 gate missing {len(missing)} pool sessions: {missing[:5]}"
+            )
     t_sim = time.perf_counter()
     st = simulate(
         bars,
@@ -498,6 +519,7 @@ def run(
         topk=topk,
         n_drop=n_drop,
         eligible_buy=eligible_buy,
+        index_block_new=index_block_new,
     )
     if skipped.get("exdiv_skipped_no_factor"):
         st.stats["exdiv_skipped_no_factor"] = int(skipped["exdiv_skipped_no_factor"])

@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+from datetime import date
 from typing import Optional
 
 import numpy as np
@@ -19,8 +20,9 @@ import pyarrow.compute as pc
 import pyarrow.parquet as pq
 
 from backtest.research.csv_common import WARMUP_DAYS, _progress
-from backtest.research.market_layer import utc_ms_range
-from common.infra.data_root import resolve_period_root
+from backtest.research.market_layer import as_date, utc_ms_range
+from common.infra.data_root import resolve_index_daily_root, resolve_period_root
+from oskh_data.lake_kind import classify_daily_lake_kind
 from oskh_data.symbol_format import to_partition_key
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -33,8 +35,10 @@ _PERIOD_ENV_KEYS = (
     "OSKH_SOURCE_PARQUET_ROOT",
 )
 
+
 def warmup_start(start: str, days: int = WARMUP_DAYS) -> str:
     return (pd.Timestamp(start) - pd.Timedelta(days=int(days))).strftime("%Y%m%d")
+
 
 def warn_stale_period_env() -> None:
     hit = [k for k in _PERIOD_ENV_KEYS if os.environ.get(k)]
@@ -71,11 +75,7 @@ def _read_one_daily(
             "high": table["high"].to_numpy(),
             "low": table["low"].to_numpy(),
             "close": table["close"].to_numpy(),
-            **(
-                {"_volume": table["volume"].to_numpy()}
-                if has_volume
-                else {}
-            ),
+            **({"_volume": table["volume"].to_numpy()} if has_volume else {}),
         },
         index=idx,
     ).astype(np.float64)
@@ -83,6 +83,7 @@ def _read_one_daily(
     if has_volume:
         out = out.loc[out["_volume"] != 0].drop(columns="_volume")
     return out if not out.empty else None
+
 
 def load_daily_bars(
     codes: set[str], start: str, end: str, *, workers: int = 16
@@ -110,3 +111,54 @@ def load_daily_bars(
                 out[code] = df
     return out
 
+
+def load_index_daily_closes(
+    start: str,
+    end: str,
+    *,
+    symbol: str = "000001.SH",
+    root: Optional[Path] = None,
+    preload_sessions: int = 11,
+) -> dict[date, float]:
+    """Load SSE (or locked index) daily closes with warmup sessions before start.
+
+    Returns ``{session: close}`` covering ``preload_sessions`` prior trading
+    days plus ``[start, end]``. Does not import strategy engines.
+    """
+    if classify_daily_lake_kind(symbol) != "index":
+        raise ValueError(f"not an index daily-lake symbol: {symbol}")
+    start_d = as_date(start)
+    end_d = as_date(end)
+    directory = (
+        (root or resolve_index_daily_root())
+        / "dividend_type=none"
+        / f"symbol={to_partition_key(symbol)}"
+    )
+    files = sorted(directory.glob("*.parquet"))
+    if not files:
+        raise FileNotFoundError(f"missing index daily partition: {directory}")
+    frame = pd.concat((pd.read_parquet(path) for path in files), ignore_index=True)
+    day_column = next(
+        (name for name in ("date", "datetime", "timestamp", "time") if name in frame),
+        None,
+    )
+    if day_column is None or "close" not in frame:
+        raise ValueError("index daily parquet requires a date/time column and close")
+    closes: dict[date, float] = {}
+    for raw_day, raw_close in zip(frame[day_column], frame["close"]):
+        day = as_date(raw_day)
+        if day <= end_d:
+            closes[day] = float(raw_close)
+    sessions = sorted(closes)
+    window = [day for day in sessions if start_d <= day <= end_d]
+    preload = [day for day in sessions if day < start_d][-int(preload_sessions) :]
+    required = preload + window
+    if len(preload) < int(preload_sessions) or not window:
+        raise ValueError(
+            "index daily data lacks 11 preload sessions or the requested window"
+        )
+    if any(closes[day] <= 0 for day in required):
+        raise ValueError(
+            "index closes must be positive in preload and requested window"
+        )
+    return {day: closes[day] for day in required}

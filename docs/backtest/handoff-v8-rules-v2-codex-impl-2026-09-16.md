@@ -1,7 +1,7 @@
 # 交接 · v8 规则 v2 实施（Codex 接手）
 
 > 日期：2026-09-16
-> 状态：**✅ A/B/C 已完成**（Codex 本机实施）。分支 `feat/v8-rules-v2`；A=`241b607` B=`5176cab` C=tip；**切片 D 仍挂 E-R5 复核结论后**。
+> 状态：**✅ A/B/C 已完成**；**切片 D 宿主已完成 2026-09-16**（[短记](v8-rules-v2-slice-d-host-note-2026-09-16.md)）。分支 `feat/v8-rules-v2` 已合 master。
 > 权威对象：[plan-v8-rules-v2-2026-09-16.md](plan-v8-rules-v2-2026-09-16.md)（v1.1）。
 > 评审链：[zcode-facts](../architecture/reviews/2026-09-16/plan-v8-rules-v2/zcode-facts.md)（含**断言翻转全清单 §4**——切片 B 唯一权威清单）/ [zcode-arch](../architecture/reviews/2026-09-16/plan-v8-rules-v2/zcode-arch.md)（含**边界测试向量表**——切片 A 必收 #6/#10/#14/#16/#20/#21/#22）/ [merge-consensus](../architecture/reviews/2026-09-16/plan-v8-rules-v2/merge-consensus.md)。
 > 分支：从当时 master 开 `feat/v8-rules-v2`；A/B 分 commit。
@@ -44,6 +44,6 @@ D:\anaconda3\envs\vanna312\python.exe -m pytest -q tests/
 
 ## 6. 完成标记（Codex）
 
-- A/B/C 已合入本分支（未 merge master）；D 未做。
+- A/B/C 已合 master；D 宿主短记已落（`days==1` trail 59.3%→0%；日线 `skip_cash=522`）。
 - pytest：665 passed / 3 skipped（vanna312）。
 - STOP 记：facts §4b `:88-93` 期望卖日 `20251106@11.80` 与引擎推演不符（实际 `20251107@11.7 trail:band:3`）；arch 向量 #6/#10/#22 部分期望与 plan §1 价式开闭冲突，单测以 plan §1 为准并注释。facts 未列的 np3 summarize / exdiv T5 golden 已在 C 一并翻转。

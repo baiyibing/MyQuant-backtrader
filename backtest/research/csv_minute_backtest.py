@@ -58,7 +58,8 @@ from backtest.research.csv_common import (  # noqa: E402
     _pool_names_asof,
     _progress,
 )
-from backtest.research.market_layer import utc_ms_range  # noqa: E402
+from backtest.research.market_layer import as_date, utc_ms_range  # noqa: E402
+from backtest.research.strategy8_rules import load_sse_ma10_block_new  # noqa: E402
 from backtest.research.csv_pool import (  # noqa: E402
     load_pool_day_map,
     load_pool_names_by_day,
@@ -120,8 +121,8 @@ HELP_LOCK = """
         （含 trail / profit_take / force / ma_signal / open_board，不只 stop_loss）。
   停牌：冻仓；净值用最近有 K 的 close。
   止盈 / 峰值：见下方对应策略书。峰值用 bar high，现价用 close。
-        策略 6 触价 bar 与创新高 bar 间隔不能 < 15 分钟（=15 允许；隔夜/午休 gap<0 视为满足）。
-        盘中触线按该分钟 close 走。v8：T+1 只评止损不评止盈。
+        策略 6 / 8 触价 bar 与创新高 bar 间隔不能 < 15 分钟（=15 允许；隔夜/午休 gap<0 视为满足）。
+        盘中触线按该分钟 close 走。v8：T+1 起评止盈。
   T+0：不可卖；峰值固定为买入价，14:55 之后的 high 不计入。峰值从 T+1 起算。
   资金 / T+1 / force_min / 佣金：与 csv_daily_backtest 相同。
         资金模式见策略书（v8=每股预算）；per_name 现金不足（含佣金）整笔 skip_cash。
@@ -206,11 +207,7 @@ def _read_one_minute(
             "close": table["close"].to_numpy()[keep],
             "ymd": utc.strftime("%Y%m%d"),
             "hm": hm.to_numpy()[keep],
-            **(
-                {"_volume": table["volume"].to_numpy()[keep]}
-                if has_volume
-                else {}
-            ),
+            **({"_volume": table["volume"].to_numpy()[keep]} if has_volume else {}),
         },
         index=utc.tz_localize(None),
     ).astype(
@@ -818,6 +815,7 @@ def simulate(
     topk=None,
     n_drop=None,
     eligible_buy=None,
+    index_block_new=None,
 ) -> SimState:
     hooks = prepare_strategy_hooks(
         strategy,
@@ -835,10 +833,13 @@ def simulate(
         topk=topk,
         n_drop=n_drop,
         eligible_buy=eligible_buy,
+        index_block_new=index_block_new,
     )
     stop_pct = hooks["stop_pct"]
     take_profit = hooks["take_profit"]
     buy_gate = hooks.get("buy_gate")
+    add_gate = hooks.get("add_gate")
+    allow_new_name = hooks.get("allow_new_name")
     sell_gate = hooks.get("sell_gate")
     peak_gap_min = int(hooks["peak_gap_min"])
     force_sell_hm = hooks.get("force_sell_hm")
@@ -923,7 +924,9 @@ def simulate(
                     sell_gate=sell_gate,
                     gate_code=code,
                     gate_day=day,
-                    daily_closes_ending_yesterday=prev_rows["close"].astype(float).tolist(),
+                    daily_closes_ending_yesterday=prev_rows["close"]
+                    .astype(float)
+                    .tolist(),
                     force_sell_hm=force_sell_hm,
                     reserve_limit_up=reserve_limit_up,
                     limit_up=limit_up,
@@ -970,6 +973,8 @@ def simulate(
             quotes_for=_chase_quotes_for,
             exdiv=exdiv,
             ds=ds,
+            add_gate=add_gate,
+            allow_new_name=allow_new_name,
         )
 
         def _pool_quote_for(code: str):
@@ -1007,6 +1012,9 @@ def simulate(
             ration_seed=hooks.get("ration_seed", 0),
             exdiv=exdiv,
             planned_for_day=hooks.get("planned_for_day"),
+            add_gate=add_gate,
+            allow_new_name=allow_new_name,
+            name_lot_budget=hooks.get("name_lot_budget"),
         )
 
         append_equity_and_eod_marks(
@@ -1056,7 +1064,9 @@ def run(
         )
     t_pool = time.perf_counter()
     actual_pool_dir = resolve_research_pool_dir(strategy, pool_dir, repo=REPO)
-    pool_days = load_pool_day_map(actual_pool_dir, start, end, key="ymd", empty_in_map=False)
+    pool_days = load_pool_day_map(
+        actual_pool_dir, start, end, key="ymd", empty_in_map=False
+    )
     pool_names_by_day = load_pool_names_by_day(actual_pool_dir, start, end)
     t_pool = time.perf_counter() - t_pool
     if not pool_days:
@@ -1094,6 +1104,14 @@ def run(
     )
     skipped: dict[str, int] = {}
     exdiv = load_exdiv_ratios(all_codes, start, end, skipped_out=skipped)
+    index_block_new = None
+    if normalize_csv_strategy(strategy) == "version8":
+        index_block_new = load_sse_ma10_block_new(start, end)
+        missing = [ds for ds in pool_days if as_date(ds) not in index_block_new]
+        if missing:
+            raise SystemExit(
+                f"SSE MA10 gate missing {len(missing)} pool sessions: {missing[:5]}"
+            )
     t_sim = time.perf_counter()
     st = simulate(
         minute,
@@ -1120,6 +1138,7 @@ def run(
         topk=topk,
         n_drop=n_drop,
         eligible_buy=eligible_buy,
+        index_block_new=index_block_new,
     )
     if skipped.get("exdiv_skipped_no_factor"):
         st.stats["exdiv_skipped_no_factor"] = int(skipped["exdiv_skipped_no_factor"])

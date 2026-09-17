@@ -76,13 +76,13 @@ def test_scan_small_band_disarmed_tp_when_peak_only_1pct():
         peak_gap_min=0,
         take_profit=take_profit_reason,
     )
-    assert idx == -1  # T+1 止盈豁免
+    assert idx == -1  # 峰值 +1%，升档 0–6% 不回撤
 
 
 def test_scan_small_band_tp_on_close():
-    o = np.array([10.50, 10.30])
-    h = np.array([10.60, 10.35])
-    c = np.array([10.55, 10.199])
+    o = np.array([10.40, 10.30])
+    h = np.array([10.61, 10.35])
+    c = np.array([10.45, 10.19])
     idx, px, reason, _, _ = sim.scan_held_day(
         o,
         h,
@@ -97,7 +97,9 @@ def test_scan_small_band_tp_on_close():
         peak_gap_min=0,
         take_profit=take_profit_reason,
     )
-    assert idx == -1  # T+1 止盈豁免
+    assert idx == 1
+    assert reason == "trail:band:2"
+    assert px == pytest.approx(10.19)
 
 
 def test_scan_band_tp_on_close():
@@ -118,7 +120,9 @@ def test_scan_band_tp_on_close():
         peak_gap_min=0,
         take_profit=take_profit_reason,
     )
-    assert idx == -1  # T+1 止盈豁免
+    assert idx == 1
+    assert reason == "trail:band:3"
+    assert px == pytest.approx(11.489)
 
 
 def test_scan_peak_dd():
@@ -139,7 +143,9 @@ def test_scan_peak_dd():
         peak_gap_min=0,
         take_profit=take_profit_reason,
     )
-    assert idx == -1  # T+1 止盈豁免（peak_dd 退役）
+    assert idx == 1
+    assert reason == "trail:band:5"
+    assert px == pytest.approx(23.90)
 
 
 def _day(date: str, rows: list[tuple]) -> pd.DataFrame:
@@ -256,17 +262,17 @@ def test_simulate_held_name_adds_second_lot():
     assert st6.stats["skip_held"] == 1
 
 
-def test_scan_peak_cross_15pct_tightens_to_global_floor():
-    """向量 #21 minute scan：反弹抬 peak 跨 15% 后按全局底 +15% 评。"""
-    o = np.array([11.45, 11.42])
-    h = np.array([11.49, 11.51])  # peak 11.49→11.51 跨入三档
-    c = np.array([11.45, 11.40])
+def test_scan_peak_cross_20pct_locks_to_abs_floor():
+    """向量 #21 minute scan：反弹抬 peak 跨 20% 后按档3 底 +15% / keep60% 评。"""
+    o = np.array([11.90, 11.90])
+    h = np.array([11.99, 12.01])
+    c = np.array([11.90, 11.49])
     idx, px, reason, peak, _ = sim.scan_held_day(
         o,
         h,
         c,
         cost=10.0,
-        peak=11.49,
+        peak=11.99,
         n_days=2,
         can_sell=True,
         stop_pct=0.30,
@@ -277,6 +283,56 @@ def test_scan_peak_cross_15pct_tightens_to_global_floor():
     )
     assert idx == 1
     assert reason == "trail:band:3"
-    assert px == pytest.approx(11.40)
-    assert peak == pytest.approx(11.51)
+    assert px == pytest.approx(11.49)
+    assert peak == pytest.approx(12.01)
 
+
+def test_scan_peak_gap_15_blocks_until_15_minutes():
+    o = np.array([10.50, 10.30, 10.25])
+    h = np.array([10.80, 10.35, 10.30])
+    c = np.array([10.15, 10.15, 10.15])
+    hm = np.array([570, 580, 585])  # 09:30 / 09:40 / 09:45
+    idx, px, reason, _, _ = sim.scan_held_day(
+        o,
+        h,
+        c,
+        cost=10.0,
+        peak=10.0,
+        n_days=1,
+        can_sell=True,
+        stop_pct=0.30,
+        profit_base=0.15,
+        trail_ratio=0.0,
+        hm=hm,
+        peak_gap_min=15,
+        take_profit=take_profit_reason,
+    )
+    assert idx == 2
+    assert reason == "trail:band:2"
+    assert px == pytest.approx(10.15)
+
+
+def test_scan_peak_gap_overnight_is_open():
+    o = np.array([10.15])
+    h = np.array([10.20])
+    c = np.array([10.15])
+    hm = np.array([570])
+    idx, px, reason, _, _ = sim.scan_held_day(
+        o,
+        h,
+        c,
+        cost=10.0,
+        peak=10.80,
+        n_days=2,
+        can_sell=True,
+        stop_pct=0.30,
+        profit_base=0.15,
+        trail_ratio=0.0,
+        hm=hm,
+        peak_hm=14 * 60 + 55,
+        peak_gap_min=15,
+        take_profit=take_profit_reason,
+    )
+    assert idx == 0
+    assert reason == "trail:band:2"
+    assert px == pytest.approx(10.15)

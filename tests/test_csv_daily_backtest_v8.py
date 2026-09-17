@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from datetime import date
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -41,7 +43,7 @@ def test_t1_no_sell_on_entry_day():
     rows = {
         "600000.SH": [
             (10.2, 10.3, 6.0, 10.0),
-            (9.85, 9.90, 6.90, 9.60),
+            (9.85, 9.90, 8.80, 9.60),
             (9.4, 9.5, 9.2, 9.3),
             (9.3, 9.4, 9.1, 9.2),
             (9.2, 9.3, 9.0, 9.1),
@@ -49,15 +51,11 @@ def test_t1_no_sell_on_entry_day():
     }
     st = _run({"20251103": ["600000.SH"]}, _bars(DAYS, rows))
     assert st.stats["buys"] == 1
-    sells = [t for t in st.trades if t["side"] == "SELL"]
-    assert st.stats["defer_sell_limit_down"] >= 1
-    assert sells[0]["date"] == "20251105"
-    assert sells[0]["reason"] == "stop_loss:touch"
-    assert sells[0]["price"] == pytest.approx(9.4)
+    assert not [t for t in st.trades if t["side"] == "SELL" and t["date"] == "20251103"]
 
 
-def test_gap_open_stop_30pct():
-    # 创业板 20% 板：D1 未到 30% 止损；D2 跌停顺延；D3 跌破止损且未跌停。
+def test_gap_open_stop_20pct():
+    # 创业板 20% 板：D2 开盘即跌停触及 20% 止损并顺延；D3 再跌停；D4 打开后 gap_open。
     rows = {
         "300001.SZ": [
             (10.2, 10.3, 9.4, 10.0),
@@ -72,14 +70,14 @@ def test_gap_open_stop_30pct():
     assert sell["reason"] == "stop_loss:gap_open"
     assert sell["date"] == "20251106"
     assert sell["price"] == pytest.approx(6.90)
-    assert st.stats["defer_sell_limit_down"] == 1
+    assert st.stats["defer_sell_limit_down"] == 2
 
 
 def test_band_tp_exits_next_open():
     rows = {
         "600000.SH": [
             (10.0, 10.1, 9.95, 10.0),
-            (12.0, 13.0, 11.8, 11.489),  # 峰值 +30%，收盘回撤到 +15% 下
+            (12.0, 13.0, 11.8, 11.489),  # 峰值 +30% 档3，线=max(keep60%, +15%)=11.80
             (11.80, 11.90, 11.70, 11.85),
             (11.8, 11.9, 11.6, 11.7),
             (11.7, 11.8, 11.5, 11.6),
@@ -88,18 +86,17 @@ def test_band_tp_exits_next_open():
     st = _run({"20251103": ["600000.SH"]}, _bars(DAYS, rows))
     assert st.stats["sell_trail"] == 1
     sell = [t for t in st.trades if t["side"] == "SELL"][0]
-    # T+1 不评；T+2 close 11.85 > 档3线 11.80；T+3 close 11.7 触发 → 次日开盘离场
-    # facts §4b 写 20251106@11.80 与引擎推演不符，以代码为准（STOP 已记）。
+    # T+1 已评：close 11.489 ≤ 档3线 11.50 → 次日开盘离场
     assert sell["reason"] == "trail:band:3"
-    assert sell["date"] == "20251107"
-    assert sell["price"] == pytest.approx(11.7)
+    assert sell["date"] == "20251105"
+    assert sell["price"] == pytest.approx(11.80)
 
 
 def test_small_band_tp_exits_next_open():
     rows = {
         "600000.SH": [
             (10.0, 10.1, 9.95, 10.0),
-            (10.8, 11.0, 10.1, 10.199),  # 峰值 +10%，收盘回撤到 +2% 下
+            (10.8, 10.90, 10.1, 10.199),  # 峰值 +9% 二档，线=+2%
             (10.15, 10.20, 10.10, 10.12),
             (10.1, 10.2, 10.0, 10.05),
             (10.0, 10.1, 9.9, 10.0),
@@ -109,26 +106,41 @@ def test_small_band_tp_exits_next_open():
     assert st.stats["sell_trail"] == 1
     sell = [t for t in st.trades if t["side"] == "SELL"][0]
     assert sell["reason"] == "trail:band:2"
-    assert sell["date"] == "20251106"
-    assert sell["price"] == pytest.approx(10.10)
+    assert sell["date"] == "20251105"
+    assert sell["price"] == pytest.approx(10.15)
 
 
-def test_disarmed_tp_when_peak_only_1pct():
+def test_band1_0_3_dead_holds():
     rows = {
         "600000.SH": [
             (10.0, 10.1, 9.95, 10.0),
-            (10.05, 10.10, 10.00, 10.05),
-            (10.04, 10.08, 10.00, 10.04),
-            (10.03, 10.06, 9.99, 10.03),
-            (10.02, 10.05, 9.99, 10.02),
+            (10.20, 10.30, 10.00, 10.08),
+            (10.05, 10.10, 10.00, 10.06),
+            (10.04, 10.08, 10.00, 10.05),
+            (10.03, 10.06, 10.00, 10.04),
         ]
     }
     st = _run({"20251103": ["600000.SH"]}, _bars(DAYS, rows))
-    assert st.stats["sell_trail"] == 1
-    sell = [t for t in st.trades if t["side"] == "SELL"][0]
-    assert sell["date"] == "20251107"
-    assert sell["reason"] == "trail:band:1"
-    assert sell["price"] == pytest.approx(10.02)
+    # 峰值 +3% 不评档位回撤
+    assert st.stats["sell_trail"] == 0
+    assert not [t for t in st.trades if t["side"] == "SELL"]
+    assert st.stats["sell_stop"] == 0
+
+
+def test_band1_3_6_dead_until_6pct_holds():
+    rows = {
+        "600000.SH": [
+            (10.0, 10.1, 9.95, 10.0),
+            (10.40, 10.49, 10.00, 10.19),
+            (10.18, 10.22, 10.15, 10.20),
+            (10.16, 10.20, 10.12, 10.15),
+            (10.14, 10.18, 10.10, 10.12),
+        ]
+    }
+    st = _run({"20251103": ["600000.SH"]}, _bars(DAYS, rows))
+    # 峰值 +4.9% 未过 +6% 关键点，不评档位回撤
+    assert st.stats["sell_trail"] == 0
+    assert not [t for t in st.trades if t["side"] == "SELL"]
     assert st.stats["sell_stop"] == 0
 
 
@@ -136,19 +148,16 @@ def test_no_tp_when_small_band_still_above_2pct():
     rows = {
         "600000.SH": [
             (10.0, 10.1, 9.95, 10.0),
-            (11.0, 11.50, 10.8, 11.40),
-            (11.4, 11.5, 11.3, 11.4),
-            (11.3, 11.4, 11.2, 11.3),
-            (11.2, 11.3, 11.1, 11.2),
+            (10.8, 10.90, 10.6, 10.80),
+            (10.75, 10.80, 10.70, 10.75),
+            (10.70, 10.75, 10.65, 10.70),
+            (10.68, 10.72, 10.64, 10.68),
         ]
     }
     st = _run({"20251103": ["600000.SH"]}, _bars(DAYS, rows))
-    # g=15% 价式落三档；T+2 起按全局底 1.15 触发
-    assert st.stats["sell_trail"] == 1
-    sell = [t for t in st.trades if t["side"] == "SELL"][0]
-    assert sell["reason"] == "trail:band:3"
-    assert sell["date"] == "20251106"
-    assert sell["price"] == pytest.approx(11.30)
+    # 峰值 +9% 二档，线=+2%；收盘都在 10.20 上
+    assert st.stats["sell_trail"] == 0
+    assert not [t for t in st.trades if t["side"] == "SELL"]
     assert st.stats["sell_stop"] == 0
 
 
@@ -212,13 +221,26 @@ def test_summarize_v8_params():
     record_strategy8_params(st)
     st.equity_curve = [("20251103", 21_000_000.0)]
     text = summarize(st, 21_000_000.0, "20251103", "20251103", engine="csv_daily_v8")
-    assert "止损 30%" in text
+    assert "止损 10%" in text
     assert "涨幅比例回撤阶梯" in text
     assert "arm=6%/15%/50%/100%" in text
-    assert "keep=30%/60%/70%/80%" in text
+    assert "keep=60%/70%/80%" in text
     assert "档2底+2%" in text
     assert "档3全局底+15%" in text
-    assert "T+1止盈豁免" in text
+    assert "T+1可止盈" in text
+    assert "峰值间隔15分钟" in text
+    assert "升档0-6%不回撤" in text
+    assert "档1无1.01底" in text
+    assert "无成本回撤离场" in text
+    assert "8日未武装清仓" in text
+    assert "试探50%加仓须+3%" in text
+    assert "只加赢家" in text
+    assert "上证十日线两日下方停开新仓且已持不可加" in text
+    assert "档1须+1%" not in text
+    assert "20日未武装清仓" not in text
+    assert "0-3%回撤70%" not in text
+    assert "档3底+5%" not in text
+    assert "T+1止盈豁免" not in text
     assert "T+5+" not in text
     assert "基础止盈 15%" not in text
     assert "涨幅>120%" not in text
@@ -229,9 +251,9 @@ def test_held_name_adds_second_lot():
         "600000.SH": [
             (10.0, 10.1, 9.95, 10.0),
             (10.2, 10.5, 10.1, 10.3),
-            (10.8, 11.1, 10.7, 11.0),
-            (10.5, 10.6, 8.50, 10.50),
-            (10.0, 10.1, 9.8, 9.9),
+            (10.8, 10.80, 10.7, 10.79),
+            (10.55, 10.65, 10.50, 10.55),
+            (10.55, 10.65, 10.50, 10.55),
         ]
     }
     pool = {"20251103": ["600000.SH"], "20251105": ["600000.SH"]}
@@ -251,21 +273,108 @@ def test_held_name_adds_second_lot():
     assert st6.stats["add_lots"] == 0
 
 
-def test_peak_cross_15pct_tightens_to_global_floor():
-    """向量 #21 daily simulate：反弹抬 peak 跨 15% 后按全局底 +15% 评。"""
+def test_held_loser_skips_add():
     rows = {
         "600000.SH": [
-            (10.0, 10.1, 9.95, 10.0),       # D0 买入
-            (11.0, 11.49, 10.9, 11.45),     # T+1 peak=11.49 二档；止盈豁免
-            (11.42, 11.51, 11.30, 11.40),   # T+2 peak→11.51 三档线 11.5；close 触
-            (11.30, 11.40, 11.20, 11.25),   # 次日开盘离场
-            (11.2, 11.3, 11.1, 11.2),
+            (10.0, 10.1, 9.95, 10.0),
+            (9.70, 9.80, 9.50, 9.60),
+            (9.50, 9.60, 9.45, 9.50),
+            (9.48, 9.55, 9.45, 9.48),
+            (9.47, 9.52, 9.45, 9.47),
+        ]
+    }
+    pool = {"20251103": ["600000.SH"], "20251105": ["600000.SH"]}
+    st = _run(pool, bars=_bars(DAYS, rows))
+    buys = [t for t in st.trades if t["side"] == "BUY"]
+    assert len(buys) == 1
+    assert st.stats["add_lots"] == 0
+    assert st.stats["skip_add_loser"] == 1
+
+
+def test_no_giveback_holds_above_10pct_stop():
+    rows = {
+        "600000.SH": [
+            (10.0, 10.1, 9.95, 10.0),
+            (9.80, 9.90, 9.60, 9.70),
+            (9.40, 9.50, 9.20, 9.30),
+            (9.30, 9.40, 9.15, 9.25),
+            (9.25, 9.35, 9.10, 9.20),
+        ]
+    }
+    st = _run({"20251103": ["600000.SH"]}, _bars(DAYS, rows))
+    assert st.stats["sell_force"] == 0
+    assert st.stats["sell_stop"] == 0
+    assert not [t for t in st.trades if t["side"] == "SELL"]
+
+
+def test_peak_cross_20pct_locks_to_abs_floor():
+    """向量 #21 daily simulate：反弹抬 peak 跨 20% 后按档3 底 +15% 评。"""
+    rows = {
+        "600000.SH": [
+            (10.0, 10.1, 9.95, 10.0),
+            (11.8, 11.99, 11.5, 11.80),
+            (11.90, 12.01, 11.70, 11.80),
+            (11.40, 11.60, 11.30, 11.49),
+            (11.40, 11.50, 11.30, 11.40),
         ]
     }
     st = _run({"20251103": ["600000.SH"]}, _bars(DAYS, rows))
     assert st.stats["sell_trail"] == 1
     sell = [t for t in st.trades if t["side"] == "SELL"][0]
     assert sell["reason"] == "trail:band:3"
-    assert sell["date"] == "20251106"
-    assert sell["price"] == pytest.approx(11.30)
+    assert sell["date"] == "20251107"
+    assert sell["price"] == pytest.approx(11.40)
 
+
+def test_index_gate_blocks_new_name_and_add():
+    rows = {
+        "600000.SH": [
+            (10.0, 10.1, 9.95, 10.0),
+            (10.2, 10.5, 10.1, 10.3),
+            (10.8, 10.80, 10.7, 10.79),
+            (10.55, 10.65, 10.50, 10.55),
+            (10.55, 10.65, 10.50, 10.55),
+        ],
+        "600001.SH": [
+            (10.0, 10.1, 9.95, 10.0),
+            (10.2, 10.5, 10.1, 10.3),
+            (10.8, 10.80, 10.7, 10.79),
+            (10.55, 10.65, 10.50, 10.55),
+            (10.55, 10.65, 10.50, 10.55),
+        ],
+    }
+    gate = {
+        date(2025, 11, 3): False,
+        date(2025, 11, 4): False,
+        date(2025, 11, 5): True,
+        date(2025, 11, 6): True,
+        date(2025, 11, 7): False,
+    }
+    pool = {
+        "20251103": ["600000.SH"],
+        "20251105": ["600000.SH", "600001.SH"],
+    }
+    st = _run(pool, _bars(DAYS, rows), index_block_new=gate)
+    buys = [t for t in st.trades if t["side"] == "BUY"]
+    assert [t["code"] for t in buys] == ["600000.SH"]
+    assert st.stats["add_lots"] == 0
+    assert st.stats["skip_index_gate"] == 2
+    assert "600001.SH" not in st.positions
+    assert [p.lot_id for p in st.positions["600000.SH"]] == [0]
+
+
+def test_index_gate_blocks_first_buy():
+    rows = {
+        "600000.SH": [
+            (10.0, 10.1, 9.95, 10.0),
+            (10.2, 10.5, 10.1, 10.3),
+            (10.8, 10.80, 10.7, 10.79),
+            (10.55, 10.65, 10.50, 10.55),
+            (10.55, 10.65, 10.50, 10.55),
+        ]
+    }
+    gate = {date(2025, 11, d): True for d in (3, 4, 5, 6, 7)}
+    st = _run({"20251103": ["600000.SH"]}, _bars(DAYS, rows), index_block_new=gate)
+    assert st.stats["buys"] == 0
+    assert st.stats["skip_index_gate"] == 1
+    assert not st.positions

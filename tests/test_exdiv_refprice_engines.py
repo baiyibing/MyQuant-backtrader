@@ -23,7 +23,9 @@ EXDIV_HALF = {"600000.SH": {"20251105": 0.5}}
 EXDIV_MILD = {"600000.SH": {"20251105": 0.90}}
 
 
-def _daily_bars(rows: dict[str, list[tuple]], days: list[str] = DAYS, start_offset: int = 1):
+def _daily_bars(
+    rows: dict[str, list[tuple]], days: list[str] = DAYS, start_offset: int = 1
+):
     out = {}
     idx = pd.to_datetime(days)
     for code, r in rows.items():
@@ -65,7 +67,9 @@ def _minute_day(date: str, rows: list[tuple]) -> pd.DataFrame:
     return minute._annotate(df)
 
 
-def _minute_daily(dates: list[str], ohlc: list[tuple], prev: float = 10.0) -> pd.DataFrame:
+def _minute_daily(
+    dates: list[str], ohlc: list[tuple], prev: float = 10.0
+) -> pd.DataFrame:
     pre = pd.Timestamp(dates[0]) - pd.Timedelta(days=2)
     idx = pd.DatetimeIndex([pre] + [pd.Timestamp(d) for d in dates])
     return pd.DataFrame(
@@ -224,7 +228,7 @@ def test_t5_band_consistency_v8():
         CODE: [
             (10.0, 10.2, 9.9, 10.0),
             (11.5, 12.0, 11.0, 11.8),
-            (5.80, 5.90, 5.60, 5.70),
+            (5.80, 5.90, 5.60, 5.20),
             (5.70, 5.80, 5.60, 5.75),
             (5.75, 5.85, 5.70, 5.80),
         ]
@@ -293,7 +297,9 @@ def test_t9_pool_buy_limit_up_uses_mapped_band():
     assert st.stats["skip_limit_up"] == 1
     # Chase may fill later days; day-of pool buy must not execute.
     pool_buys = [
-        t for t in st.trades if t["side"] == "BUY" and t["reason"] == "pool" and t["date"] == "20251105"
+        t
+        for t in st.trades
+        if t["side"] == "BUY" and t["reason"] == "pool" and t["date"] == "20251105"
     ]
     assert pool_buys == []
 
@@ -314,7 +320,9 @@ def test_t11_halt_resume_day_applies_scale():
     exdiv = {"600000.SH": {"20251106": 0.90}}
     st_false = _daily_run({"20251103": [CODE]}, bars, exdiv=None)
     assert any(
-        t["reason"] == "stop_loss:gap_open" for t in st_false.trades if t["side"] == "SELL"
+        t["reason"] == "stop_loss:gap_open"
+        for t in st_false.trades
+        if t["side"] == "SELL"
     )
     st = _daily_run({"20251103": [CODE]}, bars, exdiv=exdiv)
     assert not any(
@@ -335,7 +343,10 @@ def test_t15_empty_exdiv_trades_match_baseline():
     }
     bars = _daily_bars(rows)
     pool = {"20251103": [CODE]}
-    assert _daily_run(pool, bars, exdiv=None).trades == _daily_run(pool, bars, exdiv={}).trades
+    assert (
+        _daily_run(pool, bars, exdiv=None).trades
+        == _daily_run(pool, bars, exdiv={}).trades
+    )
 
 
 def test_t16_equity_still_marks_raw_close_on_ex_day():
@@ -356,14 +367,24 @@ def test_t16_equity_still_marks_raw_close_on_ex_day():
 
 def test_t1_minute_false_gap_open_disappears():
     dates = ["2025-11-03", "2025-11-04", "2025-11-05"]
-    m0 = _minute_day("2025-11-03", [(930, 10.0, 10.0, 9.9, 10.0), (1455, 10.0, 10.0, 9.9, 10.0)])
-    m1 = _minute_day("2025-11-04", [(930, 10.0, 10.0, 9.9, 10.0), (1455, 10.0, 10.0, 9.9, 10.0)])
-    m2 = _minute_day("2025-11-05", [(930, 9.50, 9.55, 9.40, 9.50), (1455, 9.55, 9.60, 9.45, 9.55)])
+    m0 = _minute_day(
+        "2025-11-03", [(930, 10.0, 10.0, 9.9, 10.0), (1455, 10.0, 10.0, 9.9, 10.0)]
+    )
+    m1 = _minute_day(
+        "2025-11-04", [(930, 10.0, 10.0, 9.9, 10.0), (1455, 10.0, 10.0, 9.9, 10.0)]
+    )
+    m2 = _minute_day(
+        "2025-11-05", [(930, 9.50, 9.55, 9.40, 9.50), (1455, 9.55, 9.60, 9.45, 9.55)]
+    )
     minute_bars = {CODE: pd.concat([m0, m1, m2])}
     daily_bars = {
         CODE: _minute_daily(
             dates,
-            [(10.0, 10.0, 9.9, 10.0), (10.0, 10.0, 9.9, 10.0), (9.50, 9.60, 9.40, 9.55)],
+            [
+                (10.0, 10.0, 9.9, 10.0),
+                (10.0, 10.0, 9.9, 10.0),
+                (9.50, 9.60, 9.40, 9.55),
+            ],
         )
     }
     pool = {"20251103": [CODE]}
@@ -371,7 +392,9 @@ def test_t1_minute_false_gap_open_disappears():
         minute_bars, daily_bars, pool, "20251103", "20251105", strategy="version1"
     )
     assert any(
-        t["reason"] == "stop_loss:gap_open" for t in st_false.trades if t["side"] == "SELL"
+        t["reason"] == "stop_loss:gap_open"
+        for t in st_false.trades
+        if t["side"] == "SELL"
     )
     st = minute.simulate(
         minute_bars,

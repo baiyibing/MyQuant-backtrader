@@ -26,11 +26,12 @@ def test_summarize_deterministic_full_text_golden() -> None:
     st.stats["buys"] = 2
     st.stats["skip_limit_up"] = 1
     st.stats["sell_book"] = "v8"
-    st.stats["stop_pct"] = 0.30
+    st.stats["stop_pct"] = 0.06
     st.stats["band_arms"] = [0.06, 0.15, 0.50, 1.00]
     st.stats["band_keeps"] = [0.30, 0.60, 0.70, 0.80]
     st.stats["band2_abs_mult"] = 1.02
     st.stats["band3_global_mult"] = 1.15
+    st.stats["band1_min_mult"] = 1.01
     st.stats["sizing"] = "per_name"
     st.stats["name_budget"] = 1_000_000.0
     st.stats["skip_cash"] = 1
@@ -52,7 +53,7 @@ def test_summarize_deterministic_full_text_golden() -> None:
             "  总收益率(全资金): +0.48%",
             "  动用资金收益率: +10.00%",
             "  最大回撤: 0.00%",
-            "  参数: 止损 30% | 涨幅比例回撤阶梯 arm=6%/15%/50%/100% keep=30%/60%/70%/80% | 档2底+2% | 档3全局底+15% | T+1止盈豁免",
+            "  参数: 止损 6% | 涨幅比例回撤阶梯 arm=6%/15%/50%/100% keep=30%/60%/70%/80% | 档2底+2% | 档3全局底+15% | T+1止盈豁免 | 档1须+1% | 成本下-10%离场 | 20日未武装清仓 | 只加赢家 | 上证十日线两日下方停开新仓",
             "  买入 2 | 涨停跳过 1 | 追买 0 | 弃买 0 | 已持跳过 0 | 加仓 0",
             "  涨停分解: 追买 0 | 弃买 0 | 追买日仍涨停 0 | 缺行情 0 | 末日未追 0 | "
             "覆盖 0 | 买失败 0 | 追买已持跳过 0 | 合计 0 / 涨停跳过 1",
@@ -60,7 +61,8 @@ def test_summarize_deterministic_full_text_golden() -> None:
             "  跌停顺延卖出 0 | 补充资金 0",
             "  日线加载 10 | 池天数 2",
             "  sizing=per_name | name_budget=1,000,000 | skip_cash=1 | "
-            "skip_cash_notional=500,000 | chase_buy_fail_cash=0 | chase_buy_fail_shares=0",
+            "skip_cash_notional=500,000 | chase_buy_fail_cash=0 | chase_buy_fail_shares=0 | "
+            "skip_add_loser=0 | skip_index_gate=0",
             "  ration=file_order | ration_seed=0",
         ]
     )
@@ -105,7 +107,10 @@ def test_maybe_compare_daily_peer_caption(tmp_path: Path) -> None:
 
 
 def test_warn_stale_period_env_monkeypatch(monkeypatch, capsys) -> None:
-    from backtest.research.csv_daily_loader import _PERIOD_ENV_KEYS, warn_stale_period_env
+    from backtest.research.csv_daily_loader import (
+        _PERIOD_ENV_KEYS,
+        warn_stale_period_env,
+    )
 
     for k in _PERIOD_ENV_KEYS:
         monkeypatch.delenv(k, raising=False)
@@ -118,4 +123,3 @@ def test_warn_stale_period_env_monkeypatch(monkeypatch, capsys) -> None:
     assert "OSKH_PERIOD_1D_ROOT" in out
     assert "lake may ignore" in out
     assert ".authority" in out
-

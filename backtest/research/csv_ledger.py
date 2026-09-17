@@ -38,6 +38,8 @@ def _empty_stats() -> dict:
         "add_lots": 0,
         "skip_no_bar": 0,
         "skip_buy_gate": 0,
+        "skip_add_loser": 0,
+        "skip_index_gate": 0,
         "skip_sma_warmup": 0,
         "sell_stop": 0,
         "sell_trail": 0,
@@ -111,7 +113,9 @@ def chase_decision(open_px: float, px: float, limit_up: float) -> str:
     return "abandon"
 
 
-def queue_limit_up_chase(st: SimState, pending_chase: dict, code: str, per: float, sig_idx: int) -> None:
+def queue_limit_up_chase(
+    st: SimState, pending_chase: dict, code: str, per: float, sig_idx: int
+) -> None:
     st.stats["skip_limit_up"] += 1
     if code in pending_chase:
         st.stats["chase_overwrite"] += 1

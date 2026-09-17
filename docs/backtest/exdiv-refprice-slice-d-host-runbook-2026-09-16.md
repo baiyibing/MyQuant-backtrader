@@ -1,7 +1,7 @@
 # 切片 D · 宿主验证 runbook（exdiv refprice）
 
 > **日期**：2026-09-16。
-> **状态**：📋 **host-only — NOT done in PR**。合入门不含本片；A/B/C 合入后由宿主本机执行。
+> **状态**：✅ **宿主已完成 2026-09-16**（短记：[exdiv-refprice-slice-d-host-note-2026-09-16.md](exdiv-refprice-slice-d-host-note-2026-09-16.md)）。合入门仍不含本片。
 > **权威**： [plan-exdiv-refprice-2026-09-16.md](plan-exdiv-refprice-2026-09-16.md) §4 D；[handoff](handoff-exdiv-refprice-codex-impl-2026-09-16.md) §4。
 
 ## 0. 硬边界

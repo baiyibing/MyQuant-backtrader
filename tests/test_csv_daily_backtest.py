@@ -62,12 +62,17 @@ def _v4_bars(prior_closes, rows):
     prior_idx = pd.bdate_range(end="2025-10-31", periods=len(prior_closes))
     trade_idx = pd.to_datetime(DAYS[: len(rows)])
     closes = list(prior_closes) + [r[3] for r in rows]
-    return {"600000.SH": pd.DataFrame({
-        "open": list(prior_closes) + [r[0] for r in rows],
-        "high": list(prior_closes) + [r[1] for r in rows],
-        "low": list(prior_closes) + [r[2] for r in rows],
-        "close": closes,
-    }, index=prior_idx.append(trade_idx)).astype(np.float64)}
+    return {
+        "600000.SH": pd.DataFrame(
+            {
+                "open": list(prior_closes) + [r[0] for r in rows],
+                "high": list(prior_closes) + [r[1] for r in rows],
+                "low": list(prior_closes) + [r[2] for r in rows],
+                "close": closes,
+            },
+            index=prior_idx.append(trade_idx),
+        ).astype(np.float64)
+    }
 
 
 def test_read_one_daily_drops_zero_volume_rows(tmp_path):
@@ -120,7 +125,9 @@ def test_read_one_daily_without_volume_keeps_original_behavior(tmp_path):
 
 def test_strategy4_sma10_blocks_buy_and_counts_gate():
     bars = _v4_bars([10.0] * 10, [(9.0, 9.0, 9.0, 9.0)])
-    st = sim.simulate(bars, {"20251103": ["600000.SH"]}, "20251103", "20251103", strategy="version4")
+    st = sim.simulate(
+        bars, {"20251103": ["600000.SH"]}, "20251103", "20251103", strategy="version4"
+    )
     assert st.stats["buys"] == 0
     assert st.stats["skip_buy_gate"] == 1
     assert st.stats["skip_sma_warmup"] == 0
@@ -128,7 +135,9 @@ def test_strategy4_sma10_blocks_buy_and_counts_gate():
 
 def test_strategy4_starved_sma10_counts_warmup():
     bars = _v4_bars([10.0] * 9, [(10.0, 10.0, 10.0, 10.0)])
-    st = sim.simulate(bars, {"20251103": ["600000.SH"]}, "20251103", "20251103", strategy="version4")
+    st = sim.simulate(
+        bars, {"20251103": ["600000.SH"]}, "20251103", "20251103", strategy="version4"
+    )
     assert st.stats["skip_buy_gate"] == 1
     assert st.stats["skip_sma_warmup"] == 1
 
@@ -136,7 +145,9 @@ def test_strategy4_starved_sma10_counts_warmup():
 def test_strategy4_ma5_break_becomes_next_open_exit():
     rows = [(10, 10, 10, 10), (10, 10, 9, 9), (9.1, 9.1, 9.1, 9.1)]
     bars = _v4_bars([10.0] * 10, rows)
-    st = sim.simulate(bars, {"20251103": ["600000.SH"]}, "20251103", "20251105", strategy="version4")
+    st = sim.simulate(
+        bars, {"20251103": ["600000.SH"]}, "20251103", "20251105", strategy="version4"
+    )
     sells = [trade for trade in st.trades if trade["side"] == "SELL"]
     assert sells[0]["date"] == "20251105"
     assert sells[0]["price"] == pytest.approx(9.1)
@@ -213,9 +224,7 @@ def test_none_stop_short_circuits_even_after_price_halves(monkeypatch):
     rows = {"600000.SH": [(10, 10, 10, 10)] + [(5, 5, 5, 5)] * 4}
     st = _run({"20251103": ["600000.SH"]}, _bars(DAYS, rows))
     assert not [
-        trade
-        for trade in st.trades
-        if trade.get("reason", "").startswith("stop_loss:")
+        trade for trade in st.trades if trade.get("reason", "").startswith("stop_loss:")
     ]
     assert "止损 关闭" in artifacts.summarize(st, 21_000_000, "20251103", "20251107")
 
@@ -244,13 +253,15 @@ def test_strategy5_daily_target_sells_next_open_without_force_reason():
 
 
 def test_strategy3_daily_limit_up_close_suppresses_twenty_percent_target():
-    rows = {"300001.SZ": [
-        (10.0, 10.0, 10.0, 10.0),
-        (12.0, 12.0, 12.0, 12.0),
-        (14.4, 14.4, 14.4, 14.4),
-        (17.28, 17.28, 17.28, 17.28),
-        (20.74, 20.74, 20.74, 20.74),
-    ]}
+    rows = {
+        "300001.SZ": [
+            (10.0, 10.0, 10.0, 10.0),
+            (12.0, 12.0, 12.0, 12.0),
+            (14.4, 14.4, 14.4, 14.4),
+            (17.28, 17.28, 17.28, 17.28),
+            (20.74, 20.74, 20.74, 20.74),
+        ]
+    }
     st = _run({"20251103": ["300001.SZ"]}, _bars(DAYS, rows), strategy="version3")
     assert not [trade for trade in st.trades if trade["side"] == "SELL"]
     assert st.positions["300001.SZ"][0].reserved is True
@@ -258,13 +269,15 @@ def test_strategy3_daily_limit_up_close_suppresses_twenty_percent_target():
 
 
 def test_strategy3_daily_open_board_sells_same_close():
-    rows = {"300001.SZ": [
-        (10.0, 10.0, 10.0, 10.0),
-        (12.0, 12.0, 10.8, 11.8),
-        (11.8, 11.8, 11.8, 11.8),
-        (11.8, 11.8, 11.8, 11.8),
-        (11.8, 11.8, 11.8, 11.8),
-    ]}
+    rows = {
+        "300001.SZ": [
+            (10.0, 10.0, 10.0, 10.0),
+            (12.0, 12.0, 10.8, 11.8),
+            (11.8, 11.8, 11.8, 11.8),
+            (11.8, 11.8, 11.8, 11.8),
+            (11.8, 11.8, 11.8, 11.8),
+        ]
+    }
     st = _run({"20251103": ["300001.SZ"]}, _bars(DAYS, rows), strategy="version3")
     sell = [trade for trade in st.trades if trade["side"] == "SELL"][0]
     assert sell["date"] == "20251104"
@@ -273,14 +286,16 @@ def test_strategy3_daily_open_board_sells_same_close():
 
 
 def test_strategy3_daily_open_board_limit_down_defers_to_next_open():
-    rows = {"300001.SZ": [
-        (10.0, 10.0, 10.0, 10.0),
-        # Synthetic low keeps the earlier stop clock from winning this U-R20 case.
-        (12.0, 12.0, 10.0, 8.0),
-        (8.2, 8.2, 8.2, 8.2),
-        (8.2, 8.2, 8.2, 8.2),
-        (8.2, 8.2, 8.2, 8.2),
-    ]}
+    rows = {
+        "300001.SZ": [
+            (10.0, 10.0, 10.0, 10.0),
+            # Synthetic low keeps the earlier stop clock from winning this U-R20 case.
+            (12.0, 12.0, 10.0, 8.0),
+            (8.2, 8.2, 8.2, 8.2),
+            (8.2, 8.2, 8.2, 8.2),
+            (8.2, 8.2, 8.2, 8.2),
+        ]
+    }
     st = _run({"20251103": ["300001.SZ"]}, _bars(DAYS, rows), strategy="version3")
     sell = [trade for trade in st.trades if trade["side"] == "SELL"][0]
     assert sell["date"] == "20251105"
@@ -322,7 +337,7 @@ def test_csv_strategy_version8_uses_shared_engine():
     kw = sim.csv_run_kwargs_from_args(args)
     assert kw["strategy"] == "version8"
     hooks = sim.apply_csv_strategy(**kw)
-    assert hooks["stop_pct"] == pytest.approx(0.30)
+    assert hooks["stop_pct"] == pytest.approx(0.20)
     assert hooks["take_profit"] is not None
     assert hooks["allow_add"] is True
     assert hooks["sizing"] == "per_name"
@@ -745,7 +760,9 @@ def test_load_pool_days_reads_utf8_without_qmt_logger(tmp_path):
 
     p = tmp_path / "20251103.csv"
     p.write_text("000001,平安银行\n600000,浦发银行\n", encoding="utf-8", newline="\n")
-    days = load_pool_day_map(tmp_path, "20251103", "20251103", key="ymd", empty_in_map=False)
+    days = load_pool_day_map(
+        tmp_path, "20251103", "20251103", key="ymd", empty_in_map=False
+    )
     assert days["20251103"] == ["000001.SZ", "600000.SH"]
 
 
@@ -843,7 +860,11 @@ def test_st_name_uses_five_percent_limit_up():
     bars = _bars(DAYS, rows)
     pool = {"20251103": ["600000.SH"]}
     blocked = sim.simulate(
-        bars, pool, "20251103", "20251107", strategy="version6",
+        bars,
+        pool,
+        "20251103",
+        "20251107",
+        strategy="version6",
         pool_names={"600000.SH": "*ST 宁科"},
     )
     assert blocked.stats["skip_limit_up"] == 1
@@ -966,9 +987,7 @@ def test_zero_volume_placeholder_day_cannot_sell_or_buy_and_marks_last_close(
         ),
     )
     held = loader._read_one_daily("600000.SH", tmp_path, "20251031", "20251104")
-    candidate = loader._read_one_daily(
-        "600001.SH", tmp_path, "20251031", "20251104"
-    )
+    candidate = loader._read_one_daily("600001.SH", tmp_path, "20251031", "20251104")
     assert held is not None and candidate is not None
     calendar_anchor = pd.DataFrame(
         {
@@ -995,8 +1014,7 @@ def test_zero_volume_placeholder_day_cannot_sell_or_buy_and_marks_last_close(
 
     assert not any(trade["side"] == "SELL" for trade in st.trades)
     assert not any(
-        trade["side"] == "BUY" and trade["code"] == "600001.SH"
-        for trade in st.trades
+        trade["side"] == "BUY" and trade["code"] == "600001.SH" for trade in st.trades
     )
     assert st.stats["skip_no_bar"] == 1
     pos = st.positions["600000.SH"][0]
@@ -1011,9 +1029,7 @@ def test_zero_volume_placeholder_chase_day_stays_pending(tmp_path):
         "600000.SH",
         pd.DataFrame(
             {
-                "time": _daily_time_ms(
-                    "2025-10-31", "2025-11-03", "2025-11-04"
-                ),
+                "time": _daily_time_ms("2025-10-31", "2025-11-03", "2025-11-04"),
                 "open": [10.0, 10.5, 11.0],
                 "high": [10.0, 11.0, 11.0],
                 "low": [10.0, 10.5, 10.0],

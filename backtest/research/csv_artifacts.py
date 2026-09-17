@@ -46,16 +46,102 @@ def summarize(
         else "关闭"
     )
     if st.stats.get("sell_book") == "v8":
-        arms = st.stats.get("band_arms", [0.06, 0.15, 0.50, 1.00])
-        keeps = st.stats.get("band_keeps", [0.30, 0.60, 0.70, 0.80])
+        arms = st.stats.get("band_arms", [0.05, 0.20, 0.60])
+        keeps = st.stats.get("band_keeps", [0.30, 0.40])
         b2 = float(st.stats.get("band2_abs_mult", 1.02))
-        b3 = float(st.stats.get("band3_global_mult", 1.15))
+        b3_abs = st.stats.get("band3_abs_mult")
+        b4_abs = st.stats.get("band4_abs_mult")
+        b3_global = float(st.stats.get("band3_global_mult", 1.15))
         arms_txt = "/".join(f"{float(a):.0%}" for a in arms)
         keeps_txt = "/".join(f"{float(k):.0%}" for k in keeps)
+        t1_txt = "T+1可止盈" if st.stats.get("t1_trail") else "T+1止盈豁免"
+        gap_n = int(st.stats.get("peak_gap_min", 0) or 0)
+        gap_txt = f" | 峰值间隔{gap_n}分钟" if gap_n > 0 else ""
+        trail_min = float(st.stats.get("band_trail_min_mult", 0) or 0)
+        trail_min_txt = (
+            f" | 升档0-{trail_min - 1.0:.0%}不回撤" if trail_min > 1.0 else ""
+        )
+        if st.stats.get("band3_low_floor_mult") is not None:
+            lo3 = float(st.stats["band3_low_floor_mult"])
+            hi3 = float(st.stats.get("band3_high_floor_mult", 1.15))
+            k3 = 1.0 - float(st.stats.get("band3_keep", 0.60))
+            lo4 = float(st.stats.get("band4_low_floor_mult", 1.40))
+            k4 = 1.0 - float(st.stats.get("band4_keep", 0.70))
+            k5 = 1.0 - float(st.stats.get("band5_keep", 0.80))
+            if st.stats.get("band1_mid_floor_mult") is not None:
+                b1m = float(st.stats["band1_mid_floor_mult"])
+                b2lo = float(st.stats.get("band2_low_floor_mult", 1.04))
+                b2mid = float(st.stats.get("band2_mid_floor_mult", 1.06))
+                if trail_min > 1.0:
+                    dead_pct = f"{trail_min - 1.0:.0%}".rstrip("%")
+                    low_txt = (
+                        f"| 档1 0-{dead_pct}%不回撤/{dead_pct}-6%底+{b1m - 1.0:.0%} "
+                        f"| 档2 6-9%底+{b2lo - 1.0:.0%}/9-12%底+{b2mid - 1.0:.0%} "
+                    )
+                else:
+                    low_txt = (
+                        f"| 档1 0-3%回撤70%/3-6%底+{b1m - 1.0:.0%} "
+                        f"| 档2 6-9%底+{b2lo - 1.0:.0%}/9-12%底+{b2mid - 1.0:.0%} "
+                    )
+            else:
+                low_txt = f"| 档2底+{b2 - 1.0:.0%} "
+            band_floor_txt = (
+                f"{low_txt}"
+                f"| 档3[15-20)底+{lo3 - 1.0:.0%}/[20-50)底+{hi3 - 1.0:.0%}/回撤{k3:.0%} "
+                f"| 档4[50-60)底+{lo4 - 1.0:.0%}/[60-100)回撤{k4:.0%} "
+                f"| 档5回撤{k5:.0%}"
+            )
+        elif st.stats.get("band3_floor_mult") is not None:
+            u3 = float(st.stats.get("band3_unarmed_mult", 1.10))
+            f3 = float(st.stats["band3_floor_mult"])
+            u4 = float(st.stats.get("band4_unarmed_mult", 1.40))
+            k4 = float(st.stats.get("band4_keep", 0.70))
+            band_floor_txt = (
+                f"| 档2底+{b2 - 1.0:.0%} | 档3未触发底+{u3 - 1.0:.0%}/已触发底+{f3 - 1.0:.0%} "
+                f"| 档4未触发底+{u4 - 1.0:.0%}/keep{k4:.0%}"
+            )
+        elif b3_abs is not None:
+            b3 = float(b3_abs)
+            b4 = float(b4_abs) if b4_abs is not None else 1.10
+            band_floor_txt = (
+                f"| 档2底+{b2 - 1.0:.0%} | 档3底+{b3 - 1.0:.0%} | 档4底+{b4 - 1.0:.0%}"
+            )
+        else:
+            band_floor_txt = f"| 档2底+{b2 - 1.0:.0%} | 档3全局底+{b3_global - 1.0:.0%}"
+        if "band1_min_mult" in st.stats:
+            b1_min = float(st.stats.get("band1_min_mult") or 0)
+        else:
+            b1_min = 1.01
+        b1_min_txt = (
+            f" | 档1须+{b1_min - 1.0:.0%}" if b1_min > 1.0 else " | 档1无1.01底"
+        )
+        if "giveback_mult" in st.stats:
+            gb = float(st.stats.get("giveback_mult") or 0)
+            gb_txt = f" | 成本下{gb - 1.0:.0%}离场" if gb > 0 else " | 无成本回撤离场"
+        else:
+            gb_txt = " | 成本下-10%离场"
+        if "stale_days" in st.stats:
+            stale_n = int(st.stats.get("stale_days") or 0)
+            stale_txt = f" | {stale_n}日未武装清仓" if stale_n > 0 else " | 无僵持清仓"
+        else:
+            stale_txt = " | 20日未武装清仓"
+        gate_txt = (
+            " | 上证十日线两日下方停开新仓且已持不可加"
+            if st.stats.get("index_blocks_add")
+            else " | 上证十日线两日下方停开新仓"
+        )
+        probe = float(st.stats.get("probe_frac") or 0)
+        add_arm = float(st.stats.get("add_peak_mult") or 0)
+        probe_txt = (
+            f" | 试探{probe:.0%}加仓须+{add_arm - 1.0:.0%}"
+            if probe > 0 and add_arm > 1.0
+            else ""
+        )
         lines.append(
             f"  参数: 止损 {stop_text} | 涨幅比例回撤阶梯 arm={arms_txt} "
-            f"keep={keeps_txt} | 档2底+{b2 - 1.0:.0%} | 档3全局底+{b3 - 1.0:.0%} "
-            f"| T+1止盈豁免"
+            f"keep={keeps_txt} {band_floor_txt} "
+            f"| {t1_txt}{gap_txt}{trail_min_txt}{b1_min_txt}"
+            f"{gb_txt}{stale_txt}{probe_txt} | 只加赢家{gate_txt}"
         )
     elif st.stats.get("sell_book") == "v9":
         lines.append(
@@ -97,7 +183,9 @@ def summarize(
             f"skip_cash={st.stats.get('skip_cash', 0)} | "
             f"skip_cash_notional={st.stats.get('skip_cash_notional', 0):,.0f} | "
             f"chase_buy_fail_cash={st.stats.get('chase_buy_fail_cash', 0)} | "
-            f"chase_buy_fail_shares={st.stats.get('chase_buy_fail_shares', 0)}"
+            f"chase_buy_fail_shares={st.stats.get('chase_buy_fail_shares', 0)} | "
+            f"skip_add_loser={st.stats.get('skip_add_loser', 0)} | "
+            f"skip_index_gate={st.stats.get('skip_index_gate', 0)}"
         )
     if "ration" in st.stats:
         lines.append(
@@ -237,4 +325,3 @@ def maybe_compare_daily(
     return format_equity_compare(
         this_curve, peer, this_label=this_label, peer_label=peer_label
     )
-

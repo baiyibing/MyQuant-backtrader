@@ -116,8 +116,13 @@ def run_chase_due_day(
     quotes_for: ChaseQuotesFn,
     exdiv: Optional[dict] = None,
     ds: Optional[str] = None,
+    add_gate=None,
+    allow_new_name=None,
 ) -> None:
-    """T+1 chase for due codes; ``quotes_for`` supplies open/buy/prev closes."""
+    """T+1 chase for due codes; ``quotes_for`` supplies open/buy/prev closes.
+
+    ``allow_new_name(day)`` is False → skip chase for both new names and adds.
+    """
     due = [c for c, (_per, sig) in pending_chase.items() if day_i > sig]
     for code in due:
         per_ch, _sig = pending_chase[code]
@@ -125,6 +130,10 @@ def run_chase_due_day(
             pending_chase.pop(code)
             st.stats["skip_held"] += 1
             st.stats["chase_skip_held"] += 1
+            continue
+        if callable(allow_new_name) and not allow_new_name(day):
+            pending_chase.pop(code)
+            st.stats["skip_index_gate"] = int(st.stats.get("skip_index_gate", 0)) + 1
             continue
         quoted = quotes_for(code)
         if quoted is None:
@@ -154,6 +163,13 @@ def run_chase_due_day(
             st.stats["skip_buy_gate"] += 1
             if len(closes) < 10:
                 st.stats["skip_sma_warmup"] += 1
+            continue
+        if (
+            code in st.positions
+            and callable(add_gate)
+            and not add_gate(st.positions[code], buy_px)
+        ):
+            st.stats["skip_add_loser"] = int(st.stats.get("skip_add_loser", 0)) + 1
             continue
         quota_used = st.daily_quota_used
         if not execute_buy(st, code, buy_px, per_ch, day_i, day, reason="chase:T+1"):
@@ -185,25 +201,34 @@ def run_pool_buys_day(
     ration_seed: int = 0,
     exdiv: Optional[dict] = None,
     planned_for_day=None,
+    add_gate=None,
+    allow_new_name=None,
+    name_lot_budget=None,
 ) -> None:
     """Pool buys for ``ds``; ``buy_quote_for`` supplies buy price + prev closes.
 
     ``planned_for_day(ds, held_codes)`` is optional (default None). When set, its
     return replaces the pool file list before capital ration — old books unchanged.
+    ``allow_new_name(day)`` is False → skip every pool buy that day (new and add).
     """
     raw = list(pool_days.get(ds, []))
     if callable(planned_for_day):
         held_codes = list(st.positions.keys())
         raw = list(planned_for_day(ds, held_codes))
-    planned = apply_capital_ration(
-        raw, ration=ration, ration_seed=ration_seed, ds=ds
-    )
+    planned = apply_capital_ration(raw, ration=ration, ration_seed=ration_seed, ds=ds)
     if not planned:
         return
-    per = name_budget if sizing == "per_name" else min(daily_quota, st.cash) / len(planned)
+    per = (
+        name_budget
+        if sizing == "per_name"
+        else min(daily_quota, st.cash) / len(planned)
+    )
     for code in planned:
         if code in st.positions and not allow_add:
             st.stats["skip_held"] += 1
+            continue
+        if callable(allow_new_name) and not allow_new_name(day):
+            st.stats["skip_index_gate"] = int(st.stats.get("skip_index_gate", 0)) + 1
             continue
         quoted = buy_quote_for(code)
         if quoted is None:
@@ -223,23 +248,38 @@ def run_pool_buys_day(
             st.stats["skip_unknown_board"] += 1
             continue
         limit_up, _ = limits
+        lots_now = st.positions.get(code, [])
+        per_use = (
+            float(name_lot_budget(name_budget, lots_now))
+            if sizing == "per_name" and callable(name_lot_budget)
+            else per
+        )
         if hit_limit_up(px, limit_up):
-            queue_limit_up_chase(st, pending_chase, code, per, day_i)
+            queue_limit_up_chase(st, pending_chase, code, per_use, day_i)
             continue
         if callable(buy_gate) and not buy_gate(code, px, day, closes):
             st.stats["skip_buy_gate"] += 1
             if len(closes) < 10:
                 st.stats["skip_sma_warmup"] += 1
             continue
+        if (
+            code in st.positions
+            and callable(add_gate)
+            and not add_gate(st.positions[code], px)
+        ):
+            st.stats["skip_add_loser"] = int(st.stats.get("skip_add_loser", 0)) + 1
+            continue
         if sizing == "per_name":
-            shares, _ = _buy_size(per, px)
+            shares, _ = _buy_size(per_use, px)
             notional = shares * px
             if notional + notional * COMMISSION > st.cash:
                 st.stats["skip_cash"] = st.stats.setdefault("skip_cash", 0) + 1
-                st.stats["skip_cash_notional"] = st.stats.setdefault("skip_cash_notional", 0.0) + per
+                st.stats["skip_cash_notional"] = (
+                    st.stats.setdefault("skip_cash_notional", 0.0) + per_use
+                )
                 continue
             quota_used = st.daily_quota_used
-            execute_buy(st, code, px, per, day_i, day, reason="pool")
+            execute_buy(st, code, px, per_use, day_i, day, reason="pool")
             # Ledger's daily_quota_used is vestigial, not per_name enforcement.
             st.daily_quota_used = quota_used
         else:
