@@ -237,10 +237,251 @@ def opened_instances(instances: Sequence[Instance]) -> list[Instance]:
     return [inst for inst in instances if inst.opened]
 
 
+
 def instance_key(inst: Instance) -> str:
     return f"{inst.symbol}|{inst.list_date}"
 
 
+# ---------------------------------------------------------------------------
+# Slice B — exit evaluator (instance × strategy matrix)
+# ---------------------------------------------------------------------------
+
+RULE1_NS = (1, 2, 3, 5, 8, 10, 15, 20)
+RULE2_XS = (2.0, 3.0, 5.0, 7.0, 10.0, 15.0, None)  # None = no take-profit
+RULE2_YS = (2.0, 3.0, 5.0, 7.0, 10.0, None)  # None = no stop-loss
+RULE2_NS = (1, 3, 5, 8, 10, 15)
+RULE3_YS = (3.0, 5.0, 8.0, 10.0, 15.0)
+RULE3_NS = (5, 10, 15, 20)
+
+
+@dataclass(frozen=True)
+class StrategySpec:
+    """One grid cell. ``x``/``y`` are percent points (2.0 = 2%); None = unset.
+
+    ``n`` is max hold in market sessions after buy (Q32). ``n is None`` = hold
+    to window end (anchor ①, no TP/SL).
+    """
+
+    rule: int  # 1 | 2 | 3 | 0 (anchor hold-to-end)
+    n: Optional[int]
+    x: Optional[float] = None
+    y: Optional[float] = None
+
+    def label(self) -> str:
+        def _fmt(v: Optional[float]) -> str:
+            if v is None:
+                return "inf"
+            if float(v).is_integer():
+                return str(int(v))
+            return str(v).replace(".", "p")
+
+        if self.rule == 0:
+            return "anchor_hold_end"
+        if self.rule == 1:
+            return f"r1_n{self.n}"
+        if self.rule == 2:
+            return f"r2_x{_fmt(self.x)}_y{_fmt(self.y)}_n{self.n}"
+        if self.rule == 3:
+            return f"r3_y{_fmt(self.y)}_n{self.n}"
+        raise ValueError(f"unknown rule {self.rule}")
+
+
+def iter_grid(*, include_anchor_hold_end: bool = False) -> list[StrategySpec]:
+    """Full Mode A grid: 8 + 252 + 20 = 280 (+ optional hold-to-end anchor)."""
+    specs: list[StrategySpec] = []
+    if include_anchor_hold_end:
+        specs.append(StrategySpec(rule=0, n=None, x=None, y=None))
+    for n in RULE1_NS:
+        specs.append(StrategySpec(rule=1, n=n))
+    for x in RULE2_XS:
+        for y in RULE2_YS:
+            for n in RULE2_NS:
+                specs.append(StrategySpec(rule=2, n=n, x=x, y=y))
+    for y in RULE3_YS:
+        for n in RULE3_NS:
+            specs.append(StrategySpec(rule=3, n=n, y=y))
+    return specs
+
+
+@dataclass(frozen=True)
+class ExitResult:
+    sell_date: str  # trade date or mark date
+    sell_price: float
+    reason: str  # n_expire | take_profit | stop_loss | trailing | mark_end
+    return_pct: float
+    pnl: float
+    shares: int
+    hold_sessions: int  # market sessions buy→sell/mark (Q32)
+    is_trade: bool
+
+
+def _price_return(buy_price: float, sell_price: float, *, is_trade: bool) -> tuple[int, float, float]:
+    shares = _lot_shares(buy_price)
+    buy_cost = shares * buy_price * (1.0 + COMMISSION)
+    if is_trade:
+        proceeds = shares * sell_price * (1.0 - COMMISSION)
+    else:
+        proceeds = shares * sell_price  # mark-to-market, no sell fill
+    pnl = proceeds - buy_cost
+    ret = pnl / buy_cost if buy_cost else 0.0
+    return shares, pnl, ret
+
+
+def _session_index(sessions: Sequence[str], ymd: str) -> int:
+    try:
+        return list(sessions).index(ymd)
+    except ValueError as exc:
+        raise ValueError(f"list_date {ymd} not in session calendar") from exc
+
+
+def evaluate_exit(
+    inst: Instance,
+    spec: StrategySpec,
+    bars: Mapping[str, pd.DataFrame],
+    sessions: Sequence[str],
+    *,
+    end: str = DEFAULT_END,
+    tol: float = DEFAULT_TOL,
+) -> ExitResult:
+    """Evaluate one (instance × strategy) exit on front daily closes.
+
+    Semantics (proposal §2/§4, Q32):
+    - T+1: buy day not sellable.
+    - N counts market sessions after buy; expiry on a no-K day postpones to the
+      first later session that has a bar.
+    - Limit-down close: do not sell; re-check next session.
+    - Halt / no K: freeze (no trigger, peak frozen, N still advances).
+    - Rule 3: peak = max(buy_price, closes incl. buy day); buy day peak-only;
+      sellable day updates peak then tests close < peak×(1−Y%).
+    - Window end / early bar stop: mark last available close, no trade (Q12/Q33).
+    """
+    if not inst.opened:
+        raise ValueError("evaluate_exit requires an opened instance")
+    df = bars.get(inst.symbol)
+    if df is None or df.empty:
+        raise ValueError(f"missing bars for {inst.symbol}")
+
+    close_by = _bar_close_map(df)
+    ordered_bars = sorted(close_by)
+    prev_by: dict[str, float] = {}
+    for i, y in enumerate(ordered_bars):
+        if i > 0:
+            prev_by[y] = close_by[ordered_bars[i - 1]]
+
+    buy_i = _session_index(sessions, inst.list_date)
+    end_i = _session_index(sessions, end) if end in sessions else len(sessions) - 1
+    # Peak seeds at buy price; buy-day close (usually equal) may lift it.
+    peak = float(inst.buy_price)
+    if inst.list_date in close_by:
+        peak = max(peak, close_by[inst.list_date])
+
+    def _try_finish(ymd: str, close: float, reason: str) -> Optional[ExitResult]:
+        prev = prev_by.get(ymd)
+        if prev is not None and prev > 0 and _is_limit_down(
+            close, prev, inst.symbol, inst.name, tol=tol
+        ):
+            return None  # postpone
+        sell_i = _session_index(sessions, ymd)
+        shares, pnl, ret = _price_return(inst.buy_price, close, is_trade=True)
+        return ExitResult(
+            sell_date=ymd,
+            sell_price=close,
+            reason=reason,
+            return_pct=ret,
+            pnl=pnl,
+            shares=shares,
+            hold_sessions=sell_i - buy_i,
+            is_trade=True,
+        )
+
+    for i in range(buy_i + 1, end_i + 1):
+        ymd = sessions[i]
+        market_held = i - buy_i  # 1 on first session after buy (= N=1 day)
+        if ymd not in close_by:
+            continue  # halt: freeze peak, N already advanced via market_held
+        close = close_by[ymd]
+
+        triggered = False
+        reason = ""
+
+        if spec.rule == 0:
+            # Hold to end — never trigger inside the loop.
+            pass
+        elif spec.rule == 1:
+            assert spec.n is not None
+            if market_held >= spec.n:
+                triggered, reason = True, "n_expire"
+        elif spec.rule == 2:
+            assert spec.n is not None
+            if spec.x is not None and close >= inst.buy_price * (1.0 + spec.x / 100.0):
+                triggered, reason = True, "take_profit"
+            elif spec.y is not None and close <= inst.buy_price * (1.0 - spec.y / 100.0):
+                triggered, reason = True, "stop_loss"
+            elif market_held >= spec.n:
+                triggered, reason = True, "n_expire"
+        elif spec.rule == 3:
+            assert spec.n is not None and spec.y is not None
+            peak = max(peak, close)  # update then test
+            if close < peak * (1.0 - spec.y / 100.0):
+                triggered, reason = True, "trailing"
+            elif market_held >= spec.n:
+                triggered, reason = True, "n_expire"
+        else:
+            raise ValueError(f"unknown rule {spec.rule}")
+
+        if triggered:
+            done = _try_finish(ymd, close, reason)
+            if done is not None:
+                return done
+            # limit-down postpone: keep looping
+
+    # Mark at last available close on or before window end (Q12 / Q33).
+    mark_ymd = None
+    for y in reversed(sessions[: end_i + 1]):
+        if y in close_by and y >= inst.list_date:
+            mark_ymd = y
+            break
+    if mark_ymd is None:
+        # Should not happen for opened instances (buy day had a bar).
+        mark_ymd = inst.list_date
+        mark_px = float(inst.buy_price)
+    else:
+        mark_px = close_by[mark_ymd]
+    mark_i = _session_index(sessions, mark_ymd)
+    shares, pnl, ret = _price_return(inst.buy_price, mark_px, is_trade=False)
+    return ExitResult(
+        sell_date=mark_ymd,
+        sell_price=mark_px,
+        reason="mark_end",
+        return_pct=ret,
+        pnl=pnl,
+        shares=shares,
+        hold_sessions=mark_i - buy_i,
+        is_trade=False,
+    )
+
+
+def evaluate_matrix(
+    instances: Sequence[Instance],
+    specs: Sequence[StrategySpec],
+    bars: Mapping[str, pd.DataFrame],
+    sessions: Sequence[str],
+    *,
+    end: str = DEFAULT_END,
+    tol: float = DEFAULT_TOL,
+) -> dict[str, dict[str, ExitResult]]:
+    """Return ``{strategy_label: {instance_key: ExitResult}}`` for opened lots."""
+    opened = opened_instances(instances)
+    out: dict[str, dict[str, ExitResult]] = {}
+    for spec in specs:
+        label = spec.label()
+        bucket: dict[str, ExitResult] = {}
+        for inst in opened:
+            bucket[instance_key(inst)] = evaluate_exit(
+                inst, spec, bars, sessions, end=end, tol=tol
+            )
+        out[label] = bucket
+    return out
 
 def main(argv: Optional[list[str]] = None) -> int:
     """CLI: Slice A prints assembly counts; B/C extend this entry."""
