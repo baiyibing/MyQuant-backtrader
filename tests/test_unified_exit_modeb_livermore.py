@@ -1,5 +1,4 @@
 import pandas as pd
-import pytest
 
 from backtest.research import strategy8_rules as s8
 from backtest.research import unified_exit_modea as a
