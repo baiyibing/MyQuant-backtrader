@@ -1,7 +1,7 @@
 # 交接 · 统一卖出规则网格 · 模式 B 实施（Codex 接手）
 
 > 日期：2026-09-17
-> 实施状态：**A–C 已提交，D 因 Q38 STOP 待人裁**（2026-09-17；见提案 §十 Q38）。
+> 实施状态：**A–D 已实现，PR #95 待审；宿主 E 未执行**（2026-09-17；见提案 §十 Q38）。
 > 状态：✅ **已人裁 GO**（2026-09-17；P1=A 窄网格 / P2=A 宿主smoke→4090 / P3=A exdiv_map）。以 plan v1.1 为准，**可开工**。
 > 权威对象：[plan-unified-exit-modeb-2026-09-17.md](plan-unified-exit-modeb-2026-09-17.md) v1.0；口径母本 [stock-backtest-unified-exit-proposal-2026-09-17.md](stock-backtest-unified-exit-proposal-2026-09-17.md)（§一 Mode B / §9.5 Q29=B / §十二）。
 > 前置：Mode A 已合（含 perf #92）；master tip 撰写时 `e018924`。
@@ -151,7 +151,7 @@ D:\anaconda3\envs\vanna312\python.exe -m pytest -q tests/
 - [x] A · 分钟装载 + 覆盖 helper + fixtures（`2482072`）
 - [x] B · 分钟退出求值器 + SL-first 向量（`3550c38`）
 - [x] C · E-R6 + shares/=k（P3=A；`c3506bc`）
-- [ ] D · 聚合 / CLI / README
+- [x] D · 聚合 / 四锚线 / 稳健性四件套 / CLI / README（P1=A；Q38=A）
 - [ ] E · 宿主网格（host-only；另短记）
-- [x] STOP / 新开 Q38：oracle「剔除跌停日」的分钟候选粒度待人裁；D 暂停。Q36/Q37 已裁且实现。
-- 验证：显式 Linux vanna312 环境，Mode A + Mode B 合成测试 71 passed；Mode A / csv_ledger diff 为空。CI 同口径全套 733 passed / 2 skipped / 24 deselected；四项 data-free gates 通过；UTF-8 无 BOM、NUL=0。宿主 E 未执行。
+- [x] Q38=A 已人裁并实现：仅排除跌停分钟，不模拟更早失败卖出；实际规则 Q7 不变。Q36/Q37 已裁且实现。
+- 验证：显式 Linux vanna312 环境，Mode A + Mode B 合成测试 77 passed；Mode A / csv_ledger diff 为空。CI 同口径全套 739 passed / 2 skipped / 24 deselected；四项 data-free gates 通过；UTF-8 无 BOM、NUL=0。宿主 E 未执行。

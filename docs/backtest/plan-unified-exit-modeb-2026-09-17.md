@@ -1,7 +1,7 @@
 # Plan：统一卖出规则网格 · 模式 B（分钟触发，2026-09-17）
 
 > **落盘**：2026-09-17。**v1.1**（docs-only；本 PR 不写 Mode B Python）。
-> **实施进度**：A–C 已提交（`2482072` / `3550c38` / `c3506bc`）；**Q38=A 已裁**（仅排除跌停分钟）；D 进行中（聚合/CLI）。
+> **实施进度**：A–D 已实现（PR #95 待审，未合并）；Q38=A 已落实分钟 oracle。D 含 P1=A 窄网格、聚合、四锚线、稳健性四件套及 CLI；宿主 E 未执行。
 > **状态**：✅ **已人裁 GO**（2026-09-17；P1=A / P2=A / P3=A；P4/P5 锁）。本裁 commit `0ce1db5`。**可开** `feat/unified-exit-modeb` 交 Codex。
 > **风险档**：**NAV 影响研究模块**——独立 `unified_exit_modeb`，与策略 1–6/8/9/10 书及 v6/v8 分钟净值**隔离**；不改引擎 `rescale_position` 语义。
 > **业务源**：[stock-backtest-unified-exit-proposal-2026-09-17.md](stock-backtest-unified-exit-proposal-2026-09-17.md)（§一 Mode B 行 / §四 / §9.5 Q29=B / §十二速查）；Mode A 宿主短记 [unified-exit-modea-host-note-2026-09-17.md](unified-exit-modea-host-note-2026-09-17.md) §5（oracle 缺口证 Mode B 优先级；perf #92 已合）。
@@ -72,6 +72,7 @@ GO 后：feat/unified-exit-modeb · 切片 A–D 合入门；E = 宿主全/窄�
 |---|------|
 | **Q36** | **A**：到期用当日最后一根 session 分钟 close；无分钟 K 顺延；不回退日线 close |
 | **Q37** | **A**：Mode B 取消 N=1 等价；保留盘中先触发；测试用非等价反例 |
+| **Q38** | **A**：oracle 仅排除跌停分钟 close；同日其他分钟可候选；不模拟更早失败卖出 |
 | **Cache** | 沿用 `csv_minute_backtest` warmup 起点 cache key（现成 `20251013` 超集）；不强制重建 `20251023` 字面 key |
 | **Q38** | **A**：oracle 仅排除跌停分钟 close；同日其他分钟仍可候选 |
 
