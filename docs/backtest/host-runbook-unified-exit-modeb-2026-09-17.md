@@ -1,7 +1,7 @@
 # 模式 B · 宿主业务网格 runbook（统一卖出规则网格，切片 E）
 
 > **日期**：2026-09-17
-> **状态**：⏳ **宿主未跑 / 待切片 E**。A–D 已合 PR #95（master `8db98de`）；本篇只交付跑数步骤，不代表 E 完成。
+> **状态**：✅ **E 已跑（Q39）**。回填见 [Mode B 宿主短记](unified-exit-modeb-host-note-2026-09-17.md)。A–D 已合 PR #95（master `8db98de`）。
 > **权威**：[plan](plan-unified-exit-modeb-2026-09-17.md) P1–P5 / Q36–Q38 / cache 补裁；[handoff](handoff-unified-exit-modeb-codex-impl-2026-09-17.md)；[提案](stock-backtest-unified-exit-proposal-2026-09-17.md) Mode B / Q7 / Q12 / Q29 / Q32。
 > **前置记录**：[分钟就绪短记](unified-exit-modeb-minute-ready-2026-09-17.md)（smoke 已完成）；**回填位置**：[Mode B 宿主短记模板](unified-exit-modeb-host-note-2026-09-17.md)。
 

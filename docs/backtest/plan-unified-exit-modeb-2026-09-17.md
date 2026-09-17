@@ -1,11 +1,11 @@
 # Plan：统一卖出规则网格 · 模式 B（分钟触发，2026-09-17）
 
 > **落盘**：2026-09-17。**v1.1**（docs-only；本 PR 不写 Mode B Python）。
-> **实施进度**：✅ A–D 已合 PR #95（master `8db98de`）；Q38=A 已落实分钟 oracle。D 含 P1=A 窄网格、聚合、四锚线、稳健性四件套及 CLI；**Q39**：价域改为分钟 open/close（废止 high/low 触发）。⏳ 宿主 E 须按 Q39 **重跑**，H/L 时代数字不得混比。见 [E 业务 runbook](host-runbook-unified-exit-modeb-2026-09-17.md)。
-> **状态**：✅ **已人裁 GO**（2026-09-17；P1=A / P2=A / P3=A；P4/P5 锁）。本裁 commit `0ce1db5`。A–D 编码已闭环；Q39 改口后 E 保持开放。
+> **实施进度**：✅ A–D 已合 PR #95（master `8db98de`）；Q38=A 已落实分钟 oracle。D 含 P1=A 窄网格、聚合、四锚线、稳健性四件套及 CLI；**Q39**：价域改为分钟 open/close（废止 high/low 触发）。✅ 宿主 E 已按 Q39 重跑（tip `63c9a43`）；H/L 时代数字不得混比。见 [E 短记](unified-exit-modeb-host-note-2026-09-17.md)、[甲/乙短记](livermore-jia-yi-host-note-2026-09-17.md)。
+> **状态**：✅ **已人裁 GO**（2026-09-17；P1=A / P2=A / P3=A；P4/P5 锁）。本裁 commit `0ce1db5`。A–D 编码已闭环；Q39 E 已回填。
 > **风险档**：**NAV 影响研究模块**——独立 `unified_exit_modeb`，与策略 1–6/8/9/10 书及 v6/v8 分钟净值**隔离**；不改引擎 `rescale_position` 语义。
 > **业务源**：[stock-backtest-unified-exit-proposal-2026-09-17.md](stock-backtest-unified-exit-proposal-2026-09-17.md)（§一 Mode B 行 / §四 / §9.5 Q29=B / §十二速查）；Mode A 宿主短记 [unified-exit-modea-host-note-2026-09-17.md](unified-exit-modea-host-note-2026-09-17.md) §5（oracle 缺口证 Mode B 优先级；perf #92 已合）。
-> **工作流**：走 [Codex 交接工作流](workflow-codex-handoff.md)。GO → A–D 实现合入已完成；下一步为宿主 E。
+> **工作流**：走 [Codex 交接工作流](workflow-codex-handoff.md)。GO → A–D 实现合入已完成；Q39 宿主 E 已回填。
 > **交接**（A–D 已完成）：[handoff-unified-exit-modeb-codex-impl-2026-09-17.md](handoff-unified-exit-modeb-codex-impl-2026-09-17.md)。
 > **数据就绪（可先做、不依赖 Mode B 代码）**：[host-runbook-unified-exit-modeb-smoke-2026-09-17.md](host-runbook-unified-exit-modeb-smoke-2026-09-17.md)。
 > **基线 tip**：`e018924`（`origin/master`，含 Mode A + perf #92）。

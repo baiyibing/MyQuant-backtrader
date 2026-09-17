@@ -1,81 +1,84 @@
-# 模式 B · 宿主跑数短记（统一卖出规则网格，切片 E；待回填）
+# 模式 B · 宿主跑数短记（统一卖出规则网格，切片 E）
 
-> **模板日期**：2026-09-17；实际运行日期：TBD。
-> **状态**：⏳ **宿主未跑**。本文件是空白模板，不是 E 完成记录。
-> **runbook**：[host-runbook-unified-exit-modeb-2026-09-17.md](host-runbook-unified-exit-modeb-2026-09-17.md)；A–D 实现已合 PR #95（`8db98de`）。
-> **本次代码 tip / 机器 / 内存**：TBD。
-> **数据版本 / resolver 路径 / 缓存 meta**：TBD；预期缓存 key `minute_none_20251013_20260909`，实际 hit：TBD。
-> **命令 / 起止时间 / 退出码 / 耗时 / 峰值内存**：TBD。
-> **口径**：P1=A 窄网格；none 日线 close 买入、分钟 open 缺口再 close 触价/成交（high/low 不触发）；11 亿基数。Mode A/B 不混排。H/L 时代宿主数字不得与本口径混比。
+> **日期**：2026-09-17。权威网格 tip `63c9a43`（Q39 + L1/L2/L3 + 上证叠加）。
+> **状态**：✅ **E 已在本机跑完**。H/L 时代数字不得与本口径混比。
+> **runbook**：[host-runbook-unified-exit-modeb-2026-09-17.md](host-runbook-unified-exit-modeb-2026-09-17.md)；A–D 已合 PR #95（`8db98de`）。甲/乙并列结论见 [livermore-jia-yi-host-note-2026-09-17.md](livermore-jia-yi-host-note-2026-09-17.md)。
+> **机器**：本机高配宿主；湖 `OSKH_SOURCE_PARQUET_ROOT` → `E:\stock_data`（指数 `index/period=1d`，000001 日线已由人工修复为正值）。
+> **缓存**：key `minute_none_20251013_20260909`；权威跑 mmap `pack=hit`。
+> **命令**：`run_unified_exit_modeb.py --start 20251023 --end 20260909 --pool-dir stock_pool --cache-dir backtest_output/bar_cache --out-dir backtest_output/unified_exit_modeb/host_e_q39_sse_ma10`。退出码 0。墙钟约 3.7–5.5 分钟（pack hit）；首次 Q39 写 pack 约 4 分 43 秒。
+> **口径**：P1=A 窄网格 + 甲路径臂；none 日线 close 买入、分钟 open 缺口再 close 触价/成交（high/low 不触发）；11 亿基数。Mode A/B 不混排。
 
-## 1. Sanity 对照（待跑）
+## 1. Sanity 对照
 
-| 项 | 核对口径 | 实测 | 判定 / 差异原因 |
-|----|----------|------|-----------------|
-| 名单实例 / 跳过买入 / 实开 | none 买入域；与 A 按实例键追差 | TBD | TBD |
-| distinct 实开码 / 分钟覆盖 / 缺码 | 本次 B 码集，不复用 A 覆盖结论 | TBD | TBD |
-| 缓存 | warmup 超集 key；hit | TBD | TBD |
-| 网格 / 锚线 | 排名 19 行；四锚线 | TBD | TBD |
-| 受冻 / 期末估值 / delist_zero | Q12 / Q33；未平仓不强卖 | TBD | TBD |
-| 峰值并发资金 | 触 11 亿须显著标记 | TBD | TBD |
-| 分钟成交 / 缺 K / 跌停 | Q7 / Q32 / Q36；末 session close；缺分钟顺延 | TBD | TBD |
-| N=1 / oracle | Q37 不要求等价；Q38 仅排除跌停分钟 close | TBD | TBD |
-| 除权缩放 | Q29 cost/peak ×k、shares ÷k；无现金红利 | TBD | TBD |
+| 项 | 核对口径 | 实测 | 判定 |
+|----|----------|------|------|
+| 实开 / 覆盖 | none 买入域 | n_opened=4169；分钟 2080/2080 | 通过 |
+| 缓存 | warmup 超集 key | pack=hit（权威跑） | 通过 |
+| 网格 / 锚线 | 18 r2 + r1_n1 + L1/L2/L3 + 上证叠加 = 23 排名行；四锚线 | 23；四锚齐全 | 通过 |
+| 峰值并发 | 触 11 亿须标记 | 冠军 4.25 亿；L3 10.65 亿（接近池顶，已标） | 冠军未触顶 |
+| 分钟成交 | Q7 / Q36；open 再 close | 明细 `sell_hm` 为分钟序 | 通过 |
+| N=1 / oracle | Q37 不要求等价；Q38 仅排除跌停分钟 | r1_n1 −0.75%；oracle +143.86% | 通过 |
+| 除权 | Q29 cost/peak ×k、shares ÷k | meta 已写 | 通过 |
 
-## 2. 结果摘要（仅 Mode B；全部待回填）
+## 2. 结果摘要（仅 Mode B · Q39）
 
-**四锚线**：
+**四锚线**（4169 笔）：
 
 | 锚 | 总收益率 | 每实例均值 | 胜率 | 最大回撤 | 平均持有 |
 |----|----------|------------|------|----------|----------|
-| anchor_hold_end | TBD | TBD | TBD | TBD | TBD |
-| r1_n1 | TBD | TBD | TBD | TBD | TBD |
-| oracle（分钟可成交 close 事后上界） | TBD | TBD | TBD | TBD | TBD |
-| delist_zero | TBD | TBD | TBD | TBD | TBD |
+| anchor_hold_end | −24.50% | −6.46% | 27.0% | 73.9% | 140.8 日 |
+| r1_n1 | −0.75% | −0.20% | 41.4% | 0.89% | 1.02 日 |
+| oracle（分钟可成交 close 事后上界） | +143.86% | +37.97% | 96.0% | 7.53% | 44.3 日 |
+| delist_zero | −25.29% | −6.67% | 26.9% | 73.9% | 140.8 日 |
 
-**Top 5**：
+oracle 峰值 15.28 亿，是上界，不进排名。
 
-| 名次 | 参数标签 | 总收益率 | 峰值并发资金 | 备注 |
-|------|----------|----------|--------------|------|
-| 1 | TBD | TBD | TBD | TBD |
-| 2 | TBD | TBD | TBD | TBD |
-| 3 | TBD | TBD | TBD | TBD |
-| 4 | TBD | TBD | TBD | TBD |
-| 5 | TBD | TBD | TBD | TBD |
+**Top 5 + 甲路径臂**：
 
-**稳健性四件套**：
+| 名次 | 参数标签 | 总收益率 | 胜率 | 持仓 | 峰值并发资金 |
+|------|----------|----------|------|------|--------------|
+| 1 | `r2_x10_yinf_n10` | **+2.05%** | 51.1% | 8.05 日 | 4.25 亿 |
+| 2 | `r2_x10_y10_n10` | +1.94% | 49.5% | 6.95 日 | 3.86 亿 |
+| 3 | `r2_x10_yinf_n8` | +1.83% | 50.3% | 6.72 日 | 3.49 亿 |
+| 4 | `livermore_l2_stale8_y10` | +1.79% | 54.5% | 6.29 日 | 3.56 亿 |
+| 8 | `r2_x10_yinf_n10_sse_ma10` | +1.41% | 43.7% | 4.38 日 | 3.83 亿 |
+| 11 | `livermore_l1_x10_stale8_y10` | +1.21% | 46.9% | 7.36 日 | 3.85 亿 |
+| 末 | `livermore_l3_stale8_y10` | −11.89% | 16.7% | 30.8 日 | 10.65 亿 |
+
+冠军明细：止盈 1490 / 到期 2643 / 期末未平 36。
+
+**稳健性四件套**（冠军标签上）：
 
 | 项 | 结果 | 解读 |
 |----|------|------|
-| 半窗（19 行窄网格勿仅看 top20 交集） | TBD | TBD |
-| 邻域平台（仅本次窄网格范围） | TBD | TBD |
-| 板块 + 按月 | TBD | TBD |
-| 次日开盘买（top5 + r1_n1） | TBD | TBD |
+| 半窗 | top20 交集 18；h1 上冠军仍第一（+1.95%，n=3088） | 窄网格勿只看交集个数 |
+| 邻域平台 | 冠军 `island=false`，邻域差约 0.11pp | 不是孤点 |
+| 板块 + 按月 | 创业板均值高于主板；月度有正有负 | 描述性，不改书 |
+| 次日开盘买 | 已出 top5 + r1_n1 敏感表 | 不替代主结论 |
 
 ## 3. 研究结论（模式 B）
 
-TBD。与 [Mode A 短记](unified-exit-modea-host-note-2026-09-17.md) 仅作独立文字比较：价域、入场实例集合及分钟退出差异须先说明，不拼接 A/B NAV / 总收益率排名表，不预设 B 优于 A。
+Q39 后冠军仍是扁平 `r2_x10_yinf_n10`（+2.05%）。甲路径臂不能抬总收益。与 Mode A 只作文比较：价域与入场集合不同，不拼接 A/B 收益表。
 
-## 4. Nits / 异常与 STOP 项
+H/L 时代 `host_e_20260917` 冠军约 +2.01% 是另一本价域，已作废对照。
 
-| 问题 / 样本 | 影响 | 处置 / 是否阻挡结论 |
-|-------------|------|---------------------|
-| TBD | TBD | TBD |
+## 4. Nits / 异常
 
-TBD 表示尚未检查，不表示「无异常」。
+| 问题 / 样本 | 影响 | 处置 |
+|-------------|------|------|
+| 首跑遇 000001 日线全零 | 指数日历加载失败 | 人工修复后重跑；不造数 |
+| PowerShell `>` 日志曾写成 UTF-16 | 仅日志编码 | 改用 Python UTF-8 写 log |
+| `test_cli_help` 曾因 GBK 读 stdout 抖动 | 测试，不影响 E | 已指定 `encoding=utf-8` |
+| L3 峰值 10.65 亿接近 11 亿池 | 该臂本身不可用 | 已记录，不改现金池 |
 
-## 5. 后续建议与 E 完成证据
+## 5. E 完成证据
 
-后续研究建议：TBD（宿主结果出来后再写，不在此重开 A–D 编码）。
+产物目录（不入库）：`backtest_output/unified_exit_modeb/host_e_q39_sse_ma10/`。
 
-| 证据 | 宿主实际路径 / 留痕 |
-|------|---------------------|
-| ranking.csv | TBD |
-| instance_detail_top.csv（含 sell_hm） | TBD |
-| summary.json（含 robustness 四件套） | TBD |
-| 命令日志 / cache hit / 墙钟与内存 | TBD |
+| 证据 | 路径 |
+|------|------|
+| ranking.csv / summary.json / instance_detail_top.csv | 上述目录 |
+| 同冠军、少一臂的中间跑 | `host_e_q39_livermore/`、`host_e_q39_l3/` |
 
-- [ ] 宿主运行结束，报告完整，sanity 与异常已说明。
-- [ ] 本短记已回填真实数字与运行信息；后续单独确认 E 完成。
-
-**本 docs PR 不勾选以上两项；数字产物不入库。**
+- [x] 宿主运行结束，sanity 与异常已说明。
+- [x] 本短记已回填 Q39 真实数字；E 完成。
