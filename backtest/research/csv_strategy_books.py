@@ -114,6 +114,11 @@ def apply_csv_strategy(strategy: str, **kwargs) -> dict:
     hooks.setdefault("daily_same_bar_prefixes", ("open_board",))
     hooks.setdefault("planned_for_day", None)
     hooks.setdefault("bind_opening_held", None)
+    hooks.setdefault("cash_deploy_frac", None)
+    hooks.setdefault("qlib_limit_pct", None)
+    hooks.setdefault("limit_up_chase", True)
+    hooks.setdefault("limit_down_pending", True)
+    hooks.setdefault("forbid_all_trade_at_limit", False)
     if hooks.get("take_profit") is None:
         raise RuntimeError(f"{book.name} book missing take_profit")
     if hooks.get("record_params") is None:
@@ -245,6 +250,14 @@ def add_topk_dropout_args(ap: argparse.ArgumentParser) -> None:
         type=int,
         default=60,
         help="topk_dropout: listing age trading days when calendar given (default 60)",
+    )
+    ap.add_argument(
+        "--return-threshold-filter",
+        action="store_true",
+        help=(
+            "topk_dropout: skip new buys whose 5-session close return > 15%% "
+            "(T-1 vs T-6, loaded daily close). Independent of ST/age."
+        ),
     )
 
 
@@ -625,9 +638,11 @@ def _apply_topk_dropout(
     n_drop_i = (
         strategy_topk_dropout_rules.DEFAULT_N_DROP if n_drop is None else int(n_drop)
     )
-    # BT-A: STOP_PCT is None. BT-C sets book default 0.10; CLI --stop-pct may override.
+    # Omit → book default 0.10. Explicit 0 → no stop (arm 0 / qlib align).
     if stop_pct is None:
         resolved_stop = strategy_topk_dropout_rules.STOP_PCT
+    elif float(stop_pct) == 0:
+        resolved_stop = None
     else:
         resolved_stop = float(stop_pct)
 
@@ -656,11 +671,21 @@ def _apply_topk_dropout(
             scores_by_day=scores_by_day,
             topk=topk_i,
             n_drop=n_drop_i,
+            day_state=day_state,
             eligible_buy=eligible_buy,
         ),
         "bind_opening_held": strategy_topk_dropout_rules.make_bind_opening_held(
-            day_state
+            day_state,
+            scores_by_day,
+            topk_i,
+            n_drop_i,
         ),
+        "daily_same_bar_prefixes": strategy_topk_dropout_rules.SAME_BAR_PREFIXES,
+        "cash_deploy_frac": strategy_topk_dropout_rules.QLIB_CASH_DEPLOY,
+        "qlib_limit_pct": strategy_topk_dropout_rules.QLIB_LIMIT_PCT,
+        "limit_up_chase": False,
+        "limit_down_pending": False,
+        "forbid_all_trade_at_limit": True,
         "buy_gate": None,
         "force_sell_hm": None,
         "reserve_limit_up": False,
@@ -675,12 +700,15 @@ def _run_kwargs_topk_dropout(args) -> dict:
         scores_dir=getattr(args, "scores_dir", None),
     )
     stop = getattr(args, "stop_pct", None)
-    if stop is not None and not 0 < float(stop) < 1:
-        raise SystemExit(f"--stop-pct must be in (0, 1), got {stop}")
-    # When CLI omits --stop-pct, use book STOP_PCT (None in BT-A, 0.10 after BT-C).
-    resolved_stop = (
-        strategy_topk_dropout_rules.STOP_PCT if stop is None else float(stop)
-    )
+    if stop is not None and float(stop) != 0 and not 0 < float(stop) < 1:
+        raise SystemExit(f"--stop-pct must be in (0, 1) or 0 to disable, got {stop}")
+    # Omit → book 0.10. --stop-pct 0 stays 0 (apply disables).
+    if stop is None:
+        resolved_stop = strategy_topk_dropout_rules.STOP_PCT
+    elif float(stop) == 0:
+        resolved_stop = 0.0
+    else:
+        resolved_stop = float(stop)
     topk = int(getattr(args, "topk", strategy_topk_dropout_rules.DEFAULT_TOPK))
     n_drop = int(getattr(args, "n_drop", strategy_topk_dropout_rules.DEFAULT_N_DROP))
     if topk < 0 or n_drop < 0:
@@ -703,6 +731,8 @@ def _run_kwargs_topk_dropout(args) -> dict:
             age_map_file=age_map,
             age_days=age_days,
         )
+    if bool(getattr(args, "return_threshold_filter", False)):
+        out["return_threshold_filter"] = True
     return out
 
 

@@ -63,6 +63,25 @@ def _named_limits(code: str, prev_close: float, names: dict[str, str]):
     return resolve_limit_prices(code, prev_close, names.get(code, ""))
 
 
+def qlib_limit_prices(prev_close: float, pct: float = 0.095) -> tuple[float, float]:
+    """qlib Exchange LT_FLT: abs($change) >= pct → not tradable (one band, all boards)."""
+    p = float(prev_close)
+    band = float(pct)
+    return p * (1.0 + band), p * (1.0 - band)
+
+
+def book_limit_prices(
+    code: str,
+    prev_close: float,
+    names: dict[str, str],
+    *,
+    qlib_limit_pct: Optional[float] = None,
+):
+    if qlib_limit_pct is not None:
+        return qlib_limit_prices(prev_close, float(qlib_limit_pct))
+    return _named_limits(code, prev_close, names)
+
+
 def _pool_names_asof(
     pool_names: Optional[dict[str, str]],
     pool_names_by_day: Optional[dict[str, dict[str, str]]],

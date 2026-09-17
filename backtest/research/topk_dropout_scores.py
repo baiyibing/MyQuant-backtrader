@@ -33,6 +33,9 @@ def _bare_or_canon(raw: str) -> Optional[str]:
     text = str(raw or "").strip().strip('"').strip("'").upper()
     if not text:
         return None
+    # pandas read_csv turns 000048 into int 48; pad so SZ/BJ leading zeros survive.
+    if re.fullmatch(r"\d{1,6}", text):
+        text = text.zfill(6)
     # Already canonical?
     if re.fullmatch(r"\d{6}\.(SH|SZ|BJ)", text):
         return text
@@ -91,7 +94,7 @@ def load_scores_dir(path: Path | str) -> dict[str, dict[str, float]]:
         if len(digits) < 8:
             continue
         ds = digits[:8]
-        df = pd.read_csv(csv_path)
+        df = pd.read_csv(csv_path, dtype=str)
         by_day[ds] = _frame_to_score_map(df)
     if not by_day:
         raise FileNotFoundError(f"no YYYYMMDD.csv scores under {root}")
@@ -108,7 +111,7 @@ def load_pred_csv(path: Path | str) -> dict[str, dict[str, float]]:
     p = Path(path)
     if not p.is_file():
         raise FileNotFoundError(f"pred-csv not found: {p}")
-    df = pd.read_csv(p)
+    df = pd.read_csv(p, dtype=str)
     date_col = _pick_col(df.columns, _DATE_COL_CANDIDATES)
     if date_col is None:
         raise ValueError(f"pred-csv missing date column: {p}")
@@ -153,6 +156,18 @@ def load_scores_from_args(
     raise SystemExit(
         "topk_dropout requires --pred-csv or --scores-dir (fail-closed; no silent pool-only)"
     )
+
+
+def codes_from_scores(
+    scores_by_day: Mapping[str, Mapping[str, float]] | None,
+) -> set[str]:
+    """Union of canonical codes across score days (for lake load, not just TopK pool)."""
+    if not scores_by_day:
+        return set()
+    out: set[str] = set()
+    for day_map in scores_by_day.values():
+        out.update(day_map)
+    return out
 
 
 def require_day_scores(

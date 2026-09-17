@@ -16,6 +16,9 @@ from backtest.research.market_layer import limit_prices
 
 DEFAULT_TOTAL_CASH = 21_000_000.0
 COMMISSION = 0.001
+QLIB_OPEN_COST = 0.0005
+QLIB_CLOSE_COST = 0.0015
+QLIB_MIN_COST = 5.0
 PEAK_GAP_MIN = 15
 CHASE_HM = 9 * 60 + 45
 LIMIT_EPS = 0.001
@@ -76,6 +79,20 @@ class SimState:
     trades: list = field(default_factory=list)
     equity_curve: list = field(default_factory=list)
     stats: dict = field(default_factory=_empty_stats)
+    buy_cost_rate: float = COMMISSION
+    sell_cost_rate: float = COMMISSION
+    min_cost: float = 0.0
+
+
+def trade_commission(notional: float, rate: float, min_cost: float = 0.0) -> float:
+    """qlib-style: max(notional * rate, min_cost) when min_cost > 0."""
+    if notional <= 0 or rate < 0:
+        return 0.0
+    fee = float(notional) * float(rate)
+    floor = float(min_cost)
+    if floor > 0:
+        return max(fee, floor)
+    return fee
 
 
 def _ymd(ts) -> str:
@@ -200,14 +217,14 @@ def execute_buy(
     *,
     reason: str = "pool",
 ) -> bool:
-    """常规/追买共用：整百股 + force_min + 0.1% 佣金。成功返回 True。"""
+    """常规/追买共用：整百股 + force_min + 账本佣金。成功返回 True。"""
     if px <= 0:
         return False
     shares, supp = _buy_size(per, px)
     if shares <= 0:
         return False
     notional = shares * px
-    comm = notional * COMMISSION
+    comm = trade_commission(notional, st.buy_cost_rate, st.min_cost)
     if notional + comm > st.cash:
         return False
     st.cash -= notional + comm
@@ -240,7 +257,7 @@ def execute_buy(
 
 def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str) -> None:
     notional = pos.shares * px
-    comm = notional * COMMISSION
+    comm = trade_commission(notional, st.sell_cost_rate, st.min_cost)
     st.cash += notional - comm
     st.trades.append(
         {

@@ -118,6 +118,60 @@ def test_read_one_daily_without_volume_keeps_original_behavior(tmp_path):
     assert list(got["close"]) == [10.0, 10.1]
 
 
+def test_load_daily_bars_reads_requested_dividend_type(tmp_path, monkeypatch):
+    period_root = tmp_path / "period=1d"
+    front = period_root / "dividend_type=front"
+    _write_daily_lake_frame(
+        front,
+        "600000.SH",
+        pd.DataFrame(
+            {
+                "time": _daily_time_ms("2025-11-03"),
+                "open": [12.0],
+                "high": [12.1],
+                "low": [11.9],
+                "close": [12.0],
+            }
+        ),
+    )
+    monkeypatch.setattr(loader, "resolve_period_root", lambda _period: period_root)
+    got = loader.load_daily_bars(
+        {"600000.SH"}, "20251103", "20251103", workers=1, dividend_type="front"
+    )
+    assert list(got["600000.SH"]["close"]) == [12.0]
+    with pytest.raises(ValueError, match="dividend_type"):
+        loader.load_daily_bars(
+            {"600000.SH"}, "20251103", "20251103", workers=1, dividend_type="qfq"
+        )
+
+
+def test_load_daily_bars_daily_root_overrides_ssot(tmp_path):
+    hive = tmp_path / "qlib_hfq_1d"
+    back = hive / "dividend_type=back"
+    _write_daily_lake_frame(
+        back,
+        "600519.SH",
+        pd.DataFrame(
+            {
+                "time": _daily_time_ms("2025-11-03"),
+                "open": [8000.0],
+                "high": [8100.0],
+                "low": [7900.0],
+                "close": [8050.0],
+            }
+        ),
+    )
+    got = loader.load_daily_bars(
+        {"600519.SH"},
+        "20251103",
+        "20251103",
+        workers=1,
+        dividend_type="back",
+        daily_root=hive,
+    )
+    assert list(got["600519.SH"]["close"]) == [8050.0]
+
+
 def test_strategy4_sma10_blocks_buy_and_counts_gate():
     bars = _v4_bars([10.0] * 10, [(9.0, 9.0, 9.0, 9.0)])
     st = sim.simulate(bars, {"20251103": ["600000.SH"]}, "20251103", "20251103", strategy="version4")

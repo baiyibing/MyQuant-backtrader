@@ -3,8 +3,9 @@
 
 完整滚动投资流程（分钟 Cerebro 链）的日线近似版：同口径的 CSV 每日买入名单、
 每日 100 万常规额度、补充资金、T+1、涨跌停拦截、全局 2100 万资金池。必须
-`--strategy` 必须从已注册策略中显式指定，无缺省。数据用不复权日线（与分钟链
-adjust_type='none' 对齐）；佣金 0.1% 双边（与 broker.setcommission(0.001)
+`--strategy` 必须从已注册策略中显式指定，无缺省。数据默认不复权日线（``--dividend-type none``，与分钟链
+adjust_type='none' 对齐）；``front`` / ``back`` 改读对应湖分区。``--qlib-data-root`` 则直接读 qlib
+``features/*.day.bin``（$close 后复权，不 import qlib）。佣金 0.1% 双边（与 broker.setcommission(0.001)
 对齐），无最低佣金。
 
 用法：
@@ -63,6 +64,9 @@ from backtest.research.csv_ledger import (  # noqa: E402
     DEFAULT_TOTAL_CASH,
     LIMIT_EPS,
     PEAK_GAP_MIN,
+    QLIB_CLOSE_COST,
+    QLIB_MIN_COST,
+    QLIB_OPEN_COST,
     Position,
     SimState,
     _at_limit,
@@ -90,6 +94,7 @@ from backtest.research.csv_common import (  # noqa: E402
     DEFAULT_DAILY_QUOTA,
     STRATEGY4_CALENDAR_SLACK_DAYS,
     WARMUP_DAYS,
+    book_limit_prices,
     build_calendar,
     day_bar_and_prev_closes,
     _named_limits,
@@ -170,7 +175,8 @@ HELP_LOCK = """
   停牌：冻仓；净值用最近有 K 的 close，不用成本价冒充。
   资金：2100 万全局池；daily_quota 每日 100 万均分，per_name 每码 --name-budget；
         per_name 现金不足（含佣金）整笔 skip_cash、不缩量；不足 100 股用补充资金补足
-        （force_min，自主池、不占额度）；佣金 0.1% 双边无最低。
+        （force_min，自主池、不占额度）；佣金默认 0.1% 双边无最低；
+        --qlib-cost 改为开 5bp / 平 15bp / 最低 5（对齐 qlib PortAna）。
   配给：--ration file_order 保持 CSV 行序；seeded_shuffle 用 --ration-seed 与日期
         经 SHA-256 派生逐日稳定乱序；追买沿该次名单遍历产生的排队顺序。
   复权：E-R6 除权日参考价修正 — 持仓期除权日一次性缩放 open lot 的 cost/peak，
@@ -220,6 +226,9 @@ def simulate(
     topk=None,
     n_drop=None,
     eligible_buy=None,
+    buy_cost_rate: Optional[float] = None,
+    sell_cost_rate: Optional[float] = None,
+    min_cost: Optional[float] = None,
 ) -> SimState:
     """核心日循环。bars/pool_days 可由测试注入；run() 负责从湖与 CSV 加载。
 
@@ -257,9 +266,22 @@ def simulate(
         pool_names=pool_names,
         pool_names_by_day=pool_names_by_day,
     )
+    if buy_cost_rate is not None:
+        st.buy_cost_rate = float(buy_cost_rate)
+    if sell_cost_rate is not None:
+        st.sell_cost_rate = float(sell_cost_rate)
+    if min_cost is not None:
+        st.min_cost = float(min_cost)
+    st.stats["buy_cost_rate"] = st.buy_cost_rate
+    st.stats["sell_cost_rate"] = st.sell_cost_rate
+    st.stats["min_cost"] = st.min_cost
     allow_add = bool(hooks["allow_add"])
     reserve_limit_up = bool(hooks.get("reserve_limit_up"))
     daily_same_bar_prefixes = tuple(hooks.get("daily_same_bar_prefixes", ()))
+    qlib_limit_pct = hooks.get("qlib_limit_pct")
+    limit_up_chase = bool(hooks.get("limit_up_chase", True))
+    limit_down_pending = bool(hooks.get("limit_down_pending", True))
+    forbid_all_trade_at_limit = bool(hooks.get("forbid_all_trade_at_limit", False))
 
     for i, day in enumerate(calendar):
         ds = _ymd(day)
@@ -290,7 +312,9 @@ def simulate(
                 st.stats["exdiv_prev_close_mapped"] = (
                     int(st.stats.get("exdiv_prev_close_mapped", 0)) + 1
                 )
-            limits = _named_limits(code, prev_close, names)
+            limits = book_limit_prices(
+                code, prev_close, names, qlib_limit_pct=qlib_limit_pct
+            )
             if limits is None:
                 st.stats["skip_unknown_board"] += 1
                 continue
@@ -325,7 +349,8 @@ def simulate(
                         if float(row["low"]) <= trigger:
                             if hit_limit_down(trigger, limit_down):
                                 st.stats["defer_sell_limit_down"] += 1
-                                pos.pending_exit = "stop_loss:touch"
+                                if limit_down_pending:
+                                    pos.pending_exit = "stop_loss:touch"
                             else:
                                 _sell(st, code, pos, trigger, day, "stop_loss:touch")
                             continue
@@ -350,11 +375,25 @@ def simulate(
                             reason.startswith(prefix)
                             for prefix in daily_same_bar_prefixes
                         )
-                        if same_bar and not hit_limit_down(close, limit_down):
+                        at_up = hit_limit_up(close, limit_up)
+                        at_down = hit_limit_down(close, limit_down)
+                        blocked = (
+                            (at_up or at_down)
+                            if forbid_all_trade_at_limit
+                            else at_down
+                        )
+                        if blocked:
+                            st.stats["skip_limit_sell"] = (
+                                int(st.stats.get("skip_limit_sell", 0)) + 1
+                            )
+                            if limit_down_pending:
+                                if same_bar or at_down:
+                                    st.stats["defer_sell_limit_down"] += 1
+                                pos.pending_exit = reason
+                            continue
+                        if same_bar:
                             _sell(st, code, pos, close, day, reason)
                         else:
-                            if same_bar or hit_limit_down(close, limit_down):
-                                st.stats["defer_sell_limit_down"] += 1
                             pos.pending_exit = reason
 
         def _chase_quotes_for(code: str):
@@ -377,6 +416,7 @@ def simulate(
             quotes_for=_chase_quotes_for,
             exdiv=exdiv,
             ds=ds,
+            qlib_limit_pct=qlib_limit_pct,
         )
 
         def _pool_quote_for(code: str):
@@ -406,6 +446,10 @@ def simulate(
             ration_seed=hooks.get("ration_seed", 0),
             exdiv=exdiv,
             planned_for_day=hooks.get("planned_for_day"),
+            cash_deploy_frac=hooks.get("cash_deploy_frac"),
+            qlib_limit_pct=qlib_limit_pct,
+            limit_up_chase=limit_up_chase,
+            forbid_all_trade_at_limit=forbid_all_trade_at_limit,
         )
 
         append_equity_and_eod_marks(
@@ -443,6 +487,13 @@ def run(
     topk=None,
     n_drop=None,
     eligible_buy=None,
+    return_threshold_filter: bool = False,
+    dividend_type: str = "none",
+    daily_root: Optional[Path] = None,
+    qlib_data_root: Optional[Path] = None,
+    buy_cost_rate: Optional[float] = None,
+    sell_cost_rate: Optional[float] = None,
+    min_cost: Optional[float] = None,
 ) -> SimState:
     warn_stale_period_env()
     t_pool = time.perf_counter()
@@ -453,26 +504,58 @@ def run(
     if not pool_days:
         raise SystemExit(f"no pool CSVs in [{start}, {end}] under {actual_pool_dir}")
     all_codes = {c for codes in pool_days.values() for c in codes}
+    from backtest.research.topk_dropout_scores import codes_from_scores
+
+    all_codes |= codes_from_scores(scores_by_day)
     load_start = warmup_start(
         start,
         STRATEGY4_CALENDAR_SLACK_DAYS
         if normalize_csv_strategy(strategy) == "version4"
-        else WARMUP_DAYS,
+        else (20 if return_threshold_filter else WARMUP_DAYS),
     )
+    use_qlib_bins = qlib_data_root is not None
     print(
         f"loading daily bars: {len(all_codes)} codes, {load_start}..{end}; "
-        f"pool {min(pool_days)}..{max(pool_days)} ({len(pool_days)} days)",
+        f"pool {min(pool_days)}..{max(pool_days)} ({len(pool_days)} days); "
+        + (
+            f"qlib_bins={qlib_data_root}"
+            if use_qlib_bins
+            else f"dividend_type={dividend_type}"
+            + (f"; daily_root={daily_root}" if daily_root is not None else "")
+        ),
         flush=True,
     )
     t_daily = time.perf_counter()
-    bars = load_daily_bars(all_codes, load_start, end, workers=workers)
+    if use_qlib_bins:
+        from backtest.research.qlib_bin_daily import load_qlib_bin_daily_bars
+
+        bars = load_qlib_bin_daily_bars(
+            all_codes, load_start, end, qlib_root=qlib_data_root, workers=workers
+        )
+    else:
+        bars = load_daily_bars(
+            all_codes,
+            load_start,
+            end,
+            workers=workers,
+            dividend_type=dividend_type,
+            daily_root=daily_root,
+        )
     t_daily = time.perf_counter() - t_daily
     print(
         f"loaded {len(bars)}/{len(all_codes)} daily series, {len(pool_days)} pool days",
         flush=True,
     )
+    if return_threshold_filter:
+        from backtest.research.topk_dropout_eligibility import with_return_threshold
+
+        eligible_buy = with_return_threshold(eligible_buy, bars)
     skipped: dict[str, int] = {}
-    exdiv = load_exdiv_ratios(all_codes, start, end, skipped_out=skipped)
+    # lake none only: E-R6 remap. front/back/qlib $close already continuous.
+    if use_qlib_bins or str(dividend_type or "none").strip().lower() != "none":
+        exdiv = None
+    else:
+        exdiv = load_exdiv_ratios(all_codes, start, end, skipped_out=skipped)
     t_sim = time.perf_counter()
     st = simulate(
         bars,
@@ -498,6 +581,9 @@ def run(
         topk=topk,
         n_drop=n_drop,
         eligible_buy=eligible_buy,
+        buy_cost_rate=buy_cost_rate,
+        sell_cost_rate=sell_cost_rate,
+        min_cost=min_cost,
     )
     if skipped.get("exdiv_skipped_no_factor"):
         st.stats["exdiv_skipped_no_factor"] = int(skipped["exdiv_skipped_no_factor"])
@@ -540,6 +626,29 @@ def main(argv: Optional[list] = None) -> int:
         default=None,
         help="artifact directory; default backtest_output/csv_daily_{book}_{start}_{end}/",
     )
+    ap.add_argument(
+        "--dividend-type",
+        choices=("none", "front", "back"),
+        default="none",
+        help="daily lake adjust (default none). front/back skip E-R6 exdiv remap.",
+    )
+    ap.add_argument(
+        "--daily-root",
+        type=Path,
+        default=None,
+        help="override 1d hive root (contains dividend_type=*). default: path-SSOT lake.",
+    )
+    ap.add_argument(
+        "--qlib-data-root",
+        type=Path,
+        default=None,
+        help="read qlib features/*.day.bin ($close 后复权). does not import qlib; skips lake.",
+    )
+    ap.add_argument(
+        "--qlib-cost",
+        action="store_true",
+        help="align fees with qlib: buy 5bp / sell 15bp / min 5 (default is 10bp both sides, no floor).",
+    )
     args = ap.parse_args(argv if argv is not None else None)
     pool_dir = resolve_research_pool_dir(args.strategy, args.pool_dir, repo=REPO)
 
@@ -550,6 +659,12 @@ def main(argv: Optional[list] = None) -> int:
         daily_quota=args.daily_quota,
         workers=args.workers,
         pool_dir=pool_dir,
+        dividend_type=args.dividend_type,
+        daily_root=args.daily_root,
+        qlib_data_root=args.qlib_data_root,
+        buy_cost_rate=QLIB_OPEN_COST if args.qlib_cost else None,
+        sell_cost_rate=QLIB_CLOSE_COST if args.qlib_cost else None,
+        min_cost=QLIB_MIN_COST if args.qlib_cost else None,
         **csv_run_kwargs_from_args(args),
     )
     book = engine_book(args.strategy)

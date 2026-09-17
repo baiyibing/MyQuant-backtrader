@@ -14,13 +14,17 @@ from typing import Callable, Optional
 
 import pandas as pd
 
-from backtest.research.csv_common import _named_limits, _pool_names_asof
+from backtest.research.csv_common import (
+    _pool_names_asof,
+    book_limit_prices,
+)
 from backtest.research.csv_ledger import (
     SimState,
-    COMMISSION,
     _buy_size,
     chase_decision,
     execute_buy,
+    trade_commission,
+    hit_limit_down,
     hit_limit_up,
     market_close_mark,
     queue_limit_up_chase,
@@ -116,6 +120,7 @@ def run_chase_due_day(
     quotes_for: ChaseQuotesFn,
     exdiv: Optional[dict] = None,
     ds: Optional[str] = None,
+    qlib_limit_pct: Optional[float] = None,
 ) -> None:
     """T+1 chase for due codes; ``quotes_for`` supplies open/buy/prev closes."""
     due = [c for c, (_per, sig) in pending_chase.items() if day_i > sig]
@@ -138,7 +143,9 @@ def run_chase_due_day(
             st.stats["exdiv_prev_close_mapped"] = (
                 int(st.stats.get("exdiv_prev_close_mapped", 0)) + 1
             )
-        limits = _named_limits(code, prev_close, names)
+        limits = book_limit_prices(
+            code, prev_close, names, qlib_limit_pct=qlib_limit_pct
+        )
         if limits is None:
             st.stats["skip_unknown_board"] += 1
             continue
@@ -185,6 +192,10 @@ def run_pool_buys_day(
     ration_seed: int = 0,
     exdiv: Optional[dict] = None,
     planned_for_day=None,
+    cash_deploy_frac: Optional[float] = None,
+    qlib_limit_pct: Optional[float] = None,
+    limit_up_chase: bool = True,
+    forbid_all_trade_at_limit: bool = False,
 ) -> None:
     """Pool buys for ``ds``; ``buy_quote_for`` supplies buy price + prev closes.
 
@@ -200,7 +211,13 @@ def run_pool_buys_day(
     )
     if not planned:
         return
-    per = name_budget if sizing == "per_name" else min(daily_quota, st.cash) / len(planned)
+    if sizing == "per_name":
+        per = name_budget
+    else:
+        frac = 1.0 if cash_deploy_frac is None else float(cash_deploy_frac)
+        if not 0 < frac <= 1:
+            raise ValueError(f"cash_deploy_frac must be in (0, 1], got {cash_deploy_frac!r}")
+        per = min(daily_quota, st.cash) * frac / len(planned)
     for code in planned:
         if code in st.positions and not allow_add:
             st.stats["skip_held"] += 1
@@ -218,13 +235,21 @@ def run_pool_buys_day(
             st.stats["exdiv_prev_close_mapped"] = (
                 int(st.stats.get("exdiv_prev_close_mapped", 0)) + 1
             )
-        limits = _named_limits(code, prev_close, names)
+        limits = book_limit_prices(
+            code, prev_close, names, qlib_limit_pct=qlib_limit_pct
+        )
         if limits is None:
             st.stats["skip_unknown_board"] += 1
             continue
-        limit_up, _ = limits
-        if hit_limit_up(px, limit_up):
-            queue_limit_up_chase(st, pending_chase, code, per, day_i)
+        limit_up, limit_down = limits
+        blocked = hit_limit_up(px, limit_up) or (
+            forbid_all_trade_at_limit and hit_limit_down(px, limit_down)
+        )
+        if blocked:
+            if limit_up_chase:
+                queue_limit_up_chase(st, pending_chase, code, per, day_i)
+            else:
+                st.stats["skip_limit_up"] += 1
             continue
         if callable(buy_gate) and not buy_gate(code, px, day, closes):
             st.stats["skip_buy_gate"] += 1
@@ -234,7 +259,7 @@ def run_pool_buys_day(
         if sizing == "per_name":
             shares, _ = _buy_size(per, px)
             notional = shares * px
-            if notional + notional * COMMISSION > st.cash:
+            if notional + trade_commission(notional, st.buy_cost_rate, st.min_cost) > st.cash:
                 st.stats["skip_cash"] = st.stats.setdefault("skip_cash", 0) + 1
                 st.stats["skip_cash_notional"] = st.stats.setdefault("skip_cash_notional", 0.0) + per
                 continue

@@ -53,6 +53,7 @@ from backtest.research.csv_common import (  # noqa: E402
     DEFAULT_DAILY_QUOTA,
     STRATEGY4_CALENDAR_SLACK_DAYS,
     WARMUP_DAYS,
+    book_limit_prices,
     build_calendar,
     _named_limits,
     _pool_names_asof,
@@ -854,6 +855,9 @@ def simulate(
         pool_names_by_day=pool_names_by_day,
     )
     allow_add = bool(hooks["allow_add"])
+    qlib_limit_pct = hooks.get("qlib_limit_pct")
+    limit_up_chase = bool(hooks.get("limit_up_chase", True))
+    forbid_all_trade_at_limit = bool(hooks.get("forbid_all_trade_at_limit", False))
     day_spans = {code: build_day_spans(df) for code, df in minute_bars.items()}
 
     for i, day in enumerate(calendar):
@@ -891,7 +895,9 @@ def simulate(
                 st.stats["exdiv_prev_close_mapped"] = (
                     int(st.stats.get("exdiv_prev_close_mapped", 0)) + 1
                 )
-            limits = _named_limits(code, prev_close, names)
+            limits = book_limit_prices(
+                code, prev_close, names, qlib_limit_pct=qlib_limit_pct
+            )
             if limits is None:
                 st.stats["skip_unknown_board"] += 1
                 continue
@@ -970,6 +976,7 @@ def simulate(
             quotes_for=_chase_quotes_for,
             exdiv=exdiv,
             ds=ds,
+            qlib_limit_pct=qlib_limit_pct,
         )
 
         def _pool_quote_for(code: str):
@@ -1007,6 +1014,10 @@ def simulate(
             ration_seed=hooks.get("ration_seed", 0),
             exdiv=exdiv,
             planned_for_day=hooks.get("planned_for_day"),
+            cash_deploy_frac=hooks.get("cash_deploy_frac"),
+            qlib_limit_pct=qlib_limit_pct,
+            limit_up_chase=limit_up_chase,
+            forbid_all_trade_at_limit=forbid_all_trade_at_limit,
         )
 
         append_equity_and_eod_marks(
@@ -1046,6 +1057,7 @@ def run(
     topk=None,
     n_drop=None,
     eligible_buy=None,
+    return_threshold_filter: bool = False,
 ) -> SimState:
     warn_stale_period_env()
     if end > MINUTE_LAKE_END:
@@ -1062,11 +1074,14 @@ def run(
     if not pool_days:
         raise SystemExit(f"no pool CSVs in [{start}, {end}] under {actual_pool_dir}")
     all_codes = {c for codes in pool_days.values() for c in codes}
+    from backtest.research.topk_dropout_scores import codes_from_scores
+
+    all_codes |= codes_from_scores(scores_by_day)
     load_start = warmup_start(
         start,
         STRATEGY4_CALENDAR_SLACK_DAYS
         if normalize_csv_strategy(strategy) == "version4"
-        else WARMUP_DAYS,
+        else (20 if return_threshold_filter else WARMUP_DAYS),
     )
     print(
         f"loading daily+minute: {len(all_codes)} codes, {load_start}..{end}; "
@@ -1092,6 +1107,10 @@ def run(
         f"loaded daily {len(daily)} / minute {len(minute)} / pool days {len(pool_days)}",
         flush=True,
     )
+    if return_threshold_filter:
+        from backtest.research.topk_dropout_eligibility import with_return_threshold
+
+        eligible_buy = with_return_threshold(eligible_buy, daily)
     skipped: dict[str, int] = {}
     exdiv = load_exdiv_ratios(all_codes, start, end, skipped_out=skipped)
     t_sim = time.perf_counter()

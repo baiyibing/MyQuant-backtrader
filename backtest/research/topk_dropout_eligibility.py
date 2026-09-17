@@ -29,7 +29,11 @@ def _ymd(value) -> str:
 
 
 def load_st_daily_by_day(path: Path | str) -> dict[date, set[str]]:
-    """st_daily.parquet → {date: {canonical code}} for rows with is_st."""
+    """st_daily.parquet → {date: {canonical code}} for rows with is_st.
+
+    Same contract as MyQuant ``BuyEligibilityFilter`` + ``--st-daily-file``:
+    parquet ``is_st`` only; do not read ``st_coverage.json``.
+    """
     p = Path(path)
     if not p.is_file():
         raise FileNotFoundError(f"st-daily-file not found: {p}")
@@ -91,12 +95,11 @@ def load_age_min_buy_ymd(
             continue
         idx = cal_pos.get(start_ymd)
         if idx is None:
-            # start not on calendar: keep as-is (do not invent future)
-            out[code] = start_ymd
+            # 日历之前的老股保持原日期；日历之后或无法对齐 → 窗内不可买
+            out[code] = "99991231" if cal and start_ymd > cal[-1] else start_ymd
             continue
         j = idx + int(age_days)
         if j >= len(cal):
-            # not yet eligible within known calendar
             out[code] = "99991231"
         else:
             out[code] = cal[j]
@@ -165,3 +168,71 @@ def make_eligible_buy(
         return True
 
     return eligible_buy
+
+
+def with_return_threshold(
+    eligible_buy: EligibleBuyFn | None,
+    bars: Mapping[str, pd.DataFrame],
+    *,
+    lookback_days: int = 5,
+    max_return_threshold: float = 0.15,
+    calendar_ymd: Sequence[str] | None = None,
+) -> EligibleBuyFn:
+    """Block new buys whose close[T-1]/close[T-(lookback+1)]-1 exceeds threshold.
+
+    Same endpoints as MyQuant ``TopkDropoutStrategyWithFilter`` (T-1 vs T-6
+    for lookback=5). Missing closes pass (qlib treats missing as -inf ≤ 15%).
+    Does not force-sell names already held.
+    """
+    if lookback_days <= 0 or max_return_threshold < 0:
+        return eligible_buy if eligible_buy is not None else (lambda _c, _d: True)
+
+    if calendar_ymd is not None:
+        cal = [str(x) for x in calendar_ymd]
+    else:
+        dates: set[str] = set()
+        for df in bars.values():
+            if df is None or df.empty:
+                continue
+            for ts in df.index:
+                dates.add(pd.Timestamp(ts).strftime("%Y%m%d"))
+        cal = sorted(dates)
+    pos = {d: i for i, d in enumerate(cal)}
+
+    def _close(code: str, ymd: str) -> float | None:
+        c = _bare_or_canon(code) or str(code)
+        df = bars.get(c)
+        if df is None:
+            df = bars.get(code)
+        if df is None or df.empty:
+            return None
+        ts = pd.Timestamp(ymd)
+        if ts not in df.index:
+            return None
+        val = df.loc[ts, "close"]
+        if hasattr(val, "iloc"):
+            val = val.iloc[-1]
+        try:
+            px = float(val)
+        except (TypeError, ValueError):
+            return None
+        if px != px or px <= 0:  # NaN
+            return None
+        return px
+
+    def gated(code: str, buy_date: str) -> bool:
+        if eligible_buy is not None and not eligible_buy(code, buy_date):
+            return False
+        ds = _ymd(buy_date)
+        i = pos.get(ds)
+        if i is None or i < lookback_days + 1:
+            return True
+        end_d = cal[i - 1]
+        start_d = cal[i - (lookback_days + 1)]
+        c0 = _close(code, start_d)
+        c1 = _close(code, end_d)
+        if c0 is None or c1 is None:
+            return True
+        return (c1 / c0 - 1.0) <= float(max_return_threshold)
+
+    return gated
