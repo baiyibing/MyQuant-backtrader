@@ -483,12 +483,622 @@ def evaluate_matrix(
         out[label] = bucket
     return out
 
+
+# ---------------------------------------------------------------------------
+# Slice C — aggregation, anchors, robustness, reports
+# ---------------------------------------------------------------------------
+
+@dataclass
+class StrategyMetrics:
+    label: str
+    n_instances: int
+    total_return: float
+    annualized: float
+    max_drawdown: float
+    win_rate: float
+    profit_factor: Optional[float]
+    avg_hold_sessions: float
+    mean_return_pct: float
+    median_return_pct: float
+    total_pnl: float
+    peak_concurrent_capital: float
+    peak_concurrent_lots: int
+
+
+def _annualize(total_return: float) -> float:
+    return (1.0 + total_return) ** (365.0 / float(WINDOW_CALENDAR_DAYS)) - 1.0
+
+
+def _profit_factor(pnls: Sequence[float]) -> Optional[float]:
+    gains = sum(p for p in pnls if p > 0)
+    losses = sum(p for p in pnls if p < 0)
+    if losses == 0:
+        return None if gains == 0 else float("inf")
+    return gains / abs(losses)
+
+
+def _last_close_on_or_before(
+    close_by: Mapping[str, float], ymd: str, sessions: Sequence[str]
+) -> Optional[float]:
+    if ymd in close_by:
+        return close_by[ymd]
+    for y in reversed(list(sessions)):
+        if y <= ymd and y in close_by:
+            return close_by[y]
+    return None
+
+
+def build_daily_equity(
+    instances: Sequence[Instance],
+    exits: Mapping[str, ExitResult],
+    bars: Mapping[str, pd.DataFrame],
+    sessions: Sequence[str],
+    *,
+    cash_pool: float = CASH_POOL,
+) -> tuple[list[dict], int, float]:
+    """Replay sells-then-buys; return (equity_rows, peak_lots, peak_capital).
+
+    Mark-to-market uses each symbol's last available close on/before the day.
+    """
+    opened = opened_instances(instances)
+    by_key = {instance_key(i): i for i in opened}
+    buys_on: dict[str, list[Instance]] = {}
+    for inst in opened:
+        buys_on.setdefault(inst.list_date, []).append(inst)
+    sells_on: dict[str, list[tuple[Instance, ExitResult]]] = {}
+    for key, er in exits.items():
+        if not er.is_trade:
+            continue
+        inst = by_key[key]
+        sells_on.setdefault(er.sell_date, []).append((inst, er))
+
+    close_maps = {sym: _bar_close_map(df) for sym, df in bars.items()}
+    cash = float(cash_pool)
+    # key -> shares
+    held: dict[str, int] = {}
+    equity_rows: list[dict] = []
+    peak_lots = 0
+    peak_cap = 0.0
+
+    for ymd in sessions:
+        for inst, er in sells_on.get(ymd, []):
+            key = instance_key(inst)
+            if key not in held:
+                continue
+            cash += er.shares * er.sell_price * (1.0 - COMMISSION)
+            del held[key]
+        for inst in buys_on.get(ymd, []):
+            key = instance_key(inst)
+            er = exits[key]
+            cash -= er.shares * inst.buy_price * (1.0 + COMMISSION)
+            held[key] = er.shares
+        mtm = 0.0
+        for key, shares in held.items():
+            inst = by_key[key]
+            px = _last_close_on_or_before(
+                close_maps.get(inst.symbol, {}), ymd, sessions
+            )
+            if px is None:
+                px = inst.buy_price
+            mtm += shares * px
+        equity = cash + mtm
+        lots = len(held)
+        cap = lots * LOT_NOTIONAL
+        if lots > peak_lots:
+            peak_lots = lots
+        if cap > peak_cap:
+            peak_cap = cap
+        equity_rows.append(
+            {"date": ymd, "equity": equity, "cash": cash, "lots": lots, "mtm": mtm}
+        )
+    return equity_rows, peak_lots, peak_cap
+
+
+def _max_drawdown(equity_rows: Sequence[Mapping]) -> float:
+    peak = None
+    max_dd = 0.0
+    for row in equity_rows:
+        eq = float(row["equity"])
+        peak = eq if peak is None else max(peak, eq)
+        if peak > 0:
+            dd = (peak - eq) / peak
+            if dd > max_dd:
+                max_dd = dd
+    return max_dd
+
+
+def aggregate_strategy(
+    label: str,
+    instances: Sequence[Instance],
+    exits: Mapping[str, ExitResult],
+    bars: Mapping[str, pd.DataFrame],
+    sessions: Sequence[str],
+    *,
+    cash_pool: float = CASH_POOL,
+) -> StrategyMetrics:
+    opened = opened_instances(instances)
+    rets = [exits[instance_key(i)].return_pct for i in opened]
+    pnls = [exits[instance_key(i)].pnl for i in opened]
+    holds = [exits[instance_key(i)].hold_sessions for i in opened]
+    equity_rows, peak_lots, peak_cap = build_daily_equity(
+        opened, exits, bars, sessions, cash_pool=cash_pool
+    )
+    final_eq = float(equity_rows[-1]["equity"]) if equity_rows else cash_pool
+    total_return = (final_eq - cash_pool) / cash_pool
+    wins = sum(1 for r in rets if r > 0)
+    n = len(opened)
+    return StrategyMetrics(
+        label=label,
+        n_instances=n,
+        total_return=total_return,
+        annualized=_annualize(total_return),
+        max_drawdown=_max_drawdown(equity_rows),
+        win_rate=(wins / n) if n else 0.0,
+        profit_factor=_profit_factor(pnls),
+        avg_hold_sessions=(sum(holds) / n) if n else 0.0,
+        mean_return_pct=(sum(rets) / n) if n else 0.0,
+        median_return_pct=float(sorted(rets)[n // 2]) if n else 0.0,
+        total_pnl=sum(pnls),
+        peak_concurrent_capital=peak_cap,
+        peak_concurrent_lots=peak_lots,
+    )
+
+
+def rank_strategies(metrics: Sequence[StrategyMetrics]) -> list[StrategyMetrics]:
+    return sorted(metrics, key=lambda m: m.total_return, reverse=True)
+
+
+def oracle_exits(
+    instances: Sequence[Instance],
+    bars: Mapping[str, pd.DataFrame],
+    sessions: Sequence[str],
+    *,
+    end: str = DEFAULT_END,
+    tol: float = DEFAULT_TOL,
+) -> dict[str, ExitResult]:
+    """Per-instance best T+1..end close excluding limit-down days (non-tradable)."""
+    out: dict[str, ExitResult] = {}
+    for inst in opened_instances(instances):
+        df = bars[inst.symbol]
+        close_by = _bar_close_map(df)
+        ordered = sorted(close_by)
+        prev_by = {ordered[i]: close_by[ordered[i - 1]] for i in range(1, len(ordered))}
+        buy_i = _session_index(sessions, inst.list_date)
+        end_i = _session_index(sessions, end) if end in sessions else len(sessions) - 1
+        best: Optional[ExitResult] = None
+        for i in range(buy_i + 1, end_i + 1):
+            ymd = sessions[i]
+            if ymd not in close_by:
+                continue
+            close = close_by[ymd]
+            prev = prev_by.get(ymd)
+            if prev is not None and prev > 0 and _is_limit_down(
+                close, prev, inst.symbol, inst.name, tol=tol
+            ):
+                continue
+            shares, pnl, ret = _price_return(inst.buy_price, close, is_trade=True)
+            cand = ExitResult(
+                sell_date=ymd,
+                sell_price=close,
+                reason="oracle",
+                return_pct=ret,
+                pnl=pnl,
+                shares=shares,
+                hold_sessions=i - buy_i,
+                is_trade=True,
+            )
+            if best is None or cand.return_pct > best.return_pct:
+                best = cand
+        if best is None:
+            # Fall back to mark_end path via hold-to-end evaluator
+            best = evaluate_exit(
+                inst, StrategySpec(0, None), bars, sessions, end=end, tol=tol
+            )
+        out[instance_key(inst)] = best
+    return out
+
+
+def delisting_zero_exits(
+    instances: Sequence[Instance],
+    exits: Mapping[str, ExitResult],
+    sessions: Sequence[str],
+    *,
+    end: str = DEFAULT_END,
+) -> dict[str, ExitResult]:
+    """Q33 sensitivity: early-stop mark_end lots valued at 0 (full buy-cost loss)."""
+    out = dict(exits)
+    for inst in opened_instances(instances):
+        key = instance_key(inst)
+        er = exits[key]
+        if er.reason == "mark_end" and er.sell_date < end:
+            shares = er.shares
+            buy_cost = shares * inst.buy_price * (1.0 + COMMISSION)
+            out[key] = ExitResult(
+                sell_date=er.sell_date,
+                sell_price=0.0,
+                reason="mark_end_zero",
+                return_pct=-1.0,
+                pnl=-buy_cost,
+                shares=shares,
+                hold_sessions=er.hold_sessions,
+                is_trade=False,
+            )
+    return out
+
+
+def next_open_buy_instances(
+    instances: Sequence[Instance],
+    bars: Mapping[str, pd.DataFrame],
+    sessions: Sequence[str],
+) -> list[Instance]:
+    """Q34④: replace buy_price with next session open; shift list_date to that day."""
+    out: list[Instance] = []
+    for inst in instances:
+        if not inst.opened:
+            out.append(inst)
+            continue
+        df = bars.get(inst.symbol)
+        if df is None:
+            out.append(Instance(inst.symbol, inst.name, inst.list_date, 0.0, False, "no_bar"))
+            continue
+        open_by = {
+            date_to_ymd(idx): float(o) for idx, o in zip(df.index, df["open"])
+        }
+        buy_i = _session_index(sessions, inst.list_date)
+        shifted = None
+        for ymd in sessions[buy_i + 1 :]:
+            if ymd in open_by and open_by[ymd] > 0:
+                shifted = ymd
+                break
+        if shifted is None:
+            out.append(
+                Instance(inst.symbol, inst.name, inst.list_date, 0.0, False, "no_bar")
+            )
+            continue
+        px = open_by[shifted]
+        if _lot_shares(px) < 100:
+            out.append(
+                Instance(inst.symbol, inst.name, shifted, px, False, "shares_zero")
+            )
+            continue
+        out.append(Instance(inst.symbol, inst.name, shifted, px, True, None))
+    return out
+
+
+def board_bucket(code: str) -> str:
+    from backtest.research.market_layer import board_limit_pct
+
+    lp = board_limit_pct(code)
+    if lp == 0.10:
+        return "main"
+    if lp == 0.20:
+        return "chinext_star"
+    if lp == 0.30:
+        return "bse"
+    return "unknown"
+
+
+def half_window_split(
+    start: str = DEFAULT_START, end: str = DEFAULT_END
+) -> tuple[str, str, str, str]:
+    """Return (h1_start, h1_end, h2_start, h2_end) per Q34 locked dates."""
+    return "20251023", "20260404", "20260407", "20260909"
+
+
+def filter_instances_by_list_date(
+    instances: Sequence[Instance], start: str, end: str
+) -> list[Instance]:
+    return [i for i in instances if start <= i.list_date <= end]
+
+
+def neighborhood_plateau_flags(
+    ranked: Sequence[StrategyMetrics], *, top_n: int = 20
+) -> list[dict]:
+    """Flag rule-2 top cells whose 1-step neighbors are far below (island alert)."""
+    rows = []
+    for m in ranked[:top_n]:
+        if not m.label.startswith("r2_"):
+            continue
+        # r2_x{X}_y{Y}_n{N}
+        parts = m.label.split("_")
+        try:
+            x_s, y_s, n_s = parts[1][1:], parts[2][1:], parts[3][1:]
+            x = None if x_s == "inf" else float(x_s.replace("p", "."))
+            y = None if y_s == "inf" else float(y_s.replace("p", "."))
+            n = int(n_s)
+        except (IndexError, ValueError):
+            continue
+        # Collect ranked labels sharing the same N or nearby x/y family.
+        family = [
+            o for o in ranked
+            if o.label.startswith("r2_") and o.label != m.label
+            and (
+                f"_n{n}" in o.label
+                or (x is not None and f"x{_fmt_grid(x)}" in o.label)
+                or (y is not None and f"y{_fmt_grid(y)}" in o.label)
+            )
+        ][:8]
+        if not family:
+            rows.append({"label": m.label, "island": False, "neighbor_gap": 0.0})
+            continue
+        best_nb = max(o.total_return for o in family)
+        gap = m.total_return - best_nb
+        rows.append(
+            {
+                "label": m.label,
+                "island": gap > 0.01,  # >1pp vs best scanned neighbor family
+                "neighbor_gap": gap,
+            }
+        )
+    return rows
+
+
+def _fmt_grid(v: float) -> str:
+    if float(v).is_integer():
+        return str(int(v))
+    return str(v).replace(".", "p")
+
+
+def stratify_mean_returns(
+    instances: Sequence[Instance],
+    exits: Mapping[str, ExitResult],
+    *,
+    by: str = "board",
+) -> dict[str, float]:
+    buckets: dict[str, list[float]] = {}
+    for inst in opened_instances(instances):
+        er = exits[instance_key(inst)]
+        if by == "board":
+            key = board_bucket(inst.symbol)
+        elif by == "month":
+            key = inst.list_date[:6]
+        else:
+            raise ValueError(by)
+        buckets.setdefault(key, []).append(er.return_pct)
+    return {k: (sum(v) / len(v) if v else 0.0) for k, v in sorted(buckets.items())}
+
+
+def metrics_to_row(m: StrategyMetrics) -> dict:
+    pf = m.profit_factor
+    return {
+        "label": m.label,
+        "n_instances": m.n_instances,
+        "total_return": m.total_return,
+        "annualized": m.annualized,
+        "max_drawdown": m.max_drawdown,
+        "win_rate": m.win_rate,
+        "profit_factor": (None if pf is None else (None if pf == float("inf") else pf)),
+        "profit_factor_inf": pf == float("inf"),
+        "avg_hold_sessions": m.avg_hold_sessions,
+        "mean_return_pct": m.mean_return_pct,
+        "median_return_pct": m.median_return_pct,
+        "total_pnl": m.total_pnl,
+        "peak_concurrent_capital": m.peak_concurrent_capital,
+        "peak_concurrent_lots": m.peak_concurrent_lots,
+    }
+
+
+def write_reports(
+    out_dir: Path,
+    ranked: Sequence[StrategyMetrics],
+    matrix: Mapping[str, Mapping[str, ExitResult]],
+    instances: Sequence[Instance],
+    anchors: Mapping[str, StrategyMetrics],
+    robustness: Mapping[str, object],
+    *,
+    meta: Optional[dict] = None,
+) -> None:
+    import csv
+    import json
+
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    rank_path = out_dir / "ranking.csv"
+    with rank_path.open("w", encoding="utf-8", newline="") as fh:
+        rows = [metrics_to_row(m) for m in ranked]
+        if rows:
+            w = csv.DictWriter(fh, fieldnames=list(rows[0].keys()))
+            w.writeheader()
+            w.writerows(rows)
+
+    # Instance detail for top label + anchors (compact)
+    detail_path = out_dir / "instance_detail_top.csv"
+    top_label = ranked[0].label if ranked else None
+    with detail_path.open("w", encoding="utf-8", newline="") as fh:
+        fields = [
+            "strategy",
+            "instance_key",
+            "symbol",
+            "list_date",
+            "buy_price",
+            "sell_date",
+            "sell_price",
+            "reason",
+            "return_pct",
+            "pnl",
+            "shares",
+            "hold_sessions",
+            "is_trade",
+        ]
+        w = csv.DictWriter(fh, fieldnames=fields)
+        w.writeheader()
+        labels_to_dump = []
+        if top_label:
+            labels_to_dump.append(top_label)
+        for a in ("anchor_hold_end", "r1_n1", "oracle", "delist_zero"):
+            if a in matrix:
+                labels_to_dump.append(a)
+        by_key = {instance_key(i): i for i in opened_instances(instances)}
+        for lab in labels_to_dump:
+            for key, er in matrix.get(lab, {}).items():
+                inst = by_key[key]
+                w.writerow(
+                    {
+                        "strategy": lab,
+                        "instance_key": key,
+                        "symbol": inst.symbol,
+                        "list_date": inst.list_date,
+                        "buy_price": inst.buy_price,
+                        "sell_date": er.sell_date,
+                        "sell_price": er.sell_price,
+                        "reason": er.reason,
+                        "return_pct": er.return_pct,
+                        "pnl": er.pnl,
+                        "shares": er.shares,
+                        "hold_sessions": er.hold_sessions,
+                        "is_trade": er.is_trade,
+                    }
+                )
+
+    summary = {
+        "meta": meta or {},
+        "top20": [metrics_to_row(m) for m in ranked[:20]],
+        "anchors": {k: metrics_to_row(v) for k, v in anchors.items()},
+        "robustness": robustness,
+        "n_strategies": len(ranked),
+        "n_opened": len(opened_instances(instances)),
+    }
+    (out_dir / "summary.json").write_text(
+        json.dumps(summary, ensure_ascii=True, indent=1, default=str),
+        encoding="utf-8",
+    )
+
+
+def run_modea(
+    pool_dir: Path,
+    *,
+    start: str = DEFAULT_START,
+    end: str = DEFAULT_END,
+    front_root: Optional[Path] = None,
+    sessions: Optional[Sequence[str]] = None,
+    bars: Optional[Mapping[str, pd.DataFrame]] = None,
+    tol: float = DEFAULT_TOL,
+    workers: int = 8,
+    out_dir: Path = Path("backtest_output/unified_exit_modea"),
+    cash_pool: float = CASH_POOL,
+) -> dict:
+    """Full Mode A pipeline: assemble → matrix → aggregate → reports."""
+    sess = load_session_calendar(start, end, sessions=sessions)
+    pool_rows = iterate_pool_entries(Path(pool_dir), sess)
+    codes = sorted({c for c, _n, _y in pool_rows})
+    bar_map = load_front_bars(
+        codes, start, end, front_root=front_root, workers=workers, bars=bars
+    )
+    instances = assemble_instances(Path(pool_dir), sess, bar_map, tol=tol)
+    specs = iter_grid(include_anchor_hold_end=True)
+    matrix = evaluate_matrix(instances, specs, bar_map, sess, end=end, tol=tol)
+
+    # Oracle + delist sensitivity overlays
+    matrix["oracle"] = oracle_exits(instances, bar_map, sess, end=end, tol=tol)
+    hold_label = "anchor_hold_end"
+    matrix["delist_zero"] = delisting_zero_exits(
+        instances, matrix[hold_label], sess, end=end
+    )
+
+    metrics = [
+        aggregate_strategy(lab, instances, exits, bar_map, sess, cash_pool=cash_pool)
+        for lab, exits in matrix.items()
+        if lab not in ("oracle", "delist_zero", "anchor_hold_end")
+    ]
+    ranked = rank_strategies(metrics)
+    anchors = {
+        "anchor_hold_end": aggregate_strategy(
+            hold_label, instances, matrix[hold_label], bar_map, sess, cash_pool=cash_pool
+        ),
+        "r1_n1": next(m for m in ranked if m.label == "r1_n1"),
+        "oracle": aggregate_strategy(
+            "oracle", instances, matrix["oracle"], bar_map, sess, cash_pool=cash_pool
+        ),
+        "delist_zero": aggregate_strategy(
+            "delist_zero",
+            instances,
+            matrix["delist_zero"],
+            bar_map,
+            sess,
+            cash_pool=cash_pool,
+        ),
+    }
+
+    # Robustness ① half windows
+    h1s, h1e, h2s, h2e = half_window_split(start, end)
+    robustness: dict = {"half_windows": {}, "board": {}, "month": {}, "plateau": []}
+    for tag, s0, s1 in (("h1", h1s, h1e), ("h2", h2s, h2e)):
+        sub = filter_instances_by_list_date(instances, s0, s1)
+        # Re-aggregate existing exits on the subset (same sell paths)
+        sub_metrics = []
+        for lab in [m.label for m in ranked[:50]]:  # top-50 family enough for rank compare
+            if lab not in matrix:
+                continue
+            sub_exits = {
+                instance_key(i): matrix[lab][instance_key(i)]
+                for i in opened_instances(sub)
+                if instance_key(i) in matrix[lab]
+            }
+            if not sub_exits:
+                continue
+            # Equity curve on full sessions but only subset instances
+            sub_metrics.append(
+                aggregate_strategy(lab, sub, sub_exits, bar_map, sess, cash_pool=cash_pool)
+            )
+        robustness["half_windows"][tag] = [
+            metrics_to_row(x) for x in rank_strategies(sub_metrics)[:20]
+        ]
+
+    # top20 name consistency
+    h1_labs = [r["label"] for r in robustness["half_windows"].get("h1", [])]
+    h2_labs = [r["label"] for r in robustness["half_windows"].get("h2", [])]
+    robustness["half_windows"]["top20_overlap"] = len(set(h1_labs) & set(h2_labs))
+
+    # ② plateau
+    robustness["plateau"] = neighborhood_plateau_flags(ranked, top_n=20)
+
+    # ③ board / month on best label
+    if ranked:
+        best = ranked[0].label
+        robustness["board"] = stratify_mean_returns(instances, matrix[best], by="board")
+        robustness["month"] = stratify_mean_returns(instances, matrix[best], by="month")
+
+    # ④ next-open buy sensitivity (rebuild matrix for top specs + r1_n1 only — cost control)
+    sens_inst = next_open_buy_instances(instances, bar_map, sess)
+    sens_specs = [s for s in specs if s.label() in {m.label for m in ranked[:5]} or s.label() == "r1_n1"]
+    if not sens_specs:
+        sens_specs = [StrategySpec(1, 1)]
+    sens_matrix = evaluate_matrix(sens_inst, sens_specs, bar_map, sess, end=end, tol=tol)
+    robustness["next_open_buy"] = [
+        metrics_to_row(
+            aggregate_strategy(lab, sens_inst, ex, bar_map, sess, cash_pool=cash_pool)
+        )
+        for lab, ex in sens_matrix.items()
+    ]
+
+    write_reports(
+        out_dir,
+        ranked,
+        matrix,
+        instances,
+        anchors,
+        robustness,
+        meta={"start": start, "end": end, "cash_pool": cash_pool, "tol": tol},
+    )
+    return {
+        "ranked": ranked,
+        "anchors": anchors,
+        "robustness": robustness,
+        "instances": instances,
+        "matrix": matrix,
+        "sessions": sess,
+    }
+
+
 def main(argv: Optional[list[str]] = None) -> int:
-    """CLI: Slice A prints assembly counts; B/C extend this entry."""
+    """CLI: assemble-only or full Mode A grid (Slices A/B/C)."""
     import argparse
     import json
 
-    ap = argparse.ArgumentParser(description="unified-exit Mode A (front daily grid)")
+    ap = argparse.ArgumentParser(
+        description="统一卖出规则网格 · 模式 A（前复权日线；名义现金池 11 亿）"
+    )
     ap.add_argument("--start", default=DEFAULT_START)
     ap.add_argument("--end", default=DEFAULT_END)
     ap.add_argument("--pool-dir", type=Path, default=Path("stock_pool"))
@@ -503,40 +1113,64 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap.add_argument(
         "--stage",
         choices=("assemble", "all"),
-        default="assemble",
-        help="assemble = instances only (Slice A); all = full grid (Slices B/C)",
+        default="all",
+        help="assemble = instances only; all = grid + reports",
     )
     args = ap.parse_args(argv)
 
-    sessions = load_session_calendar(args.start, args.end)
-    pool_rows = iterate_pool_entries(args.pool_dir, sessions)
-    codes = sorted({c for c, _n, _y in pool_rows})
-    bars = load_front_bars(
-        codes, args.start, args.end, front_root=args.front_root, workers=args.workers
+    if args.stage == "assemble":
+        sessions = load_session_calendar(args.start, args.end)
+        pool_rows = iterate_pool_entries(args.pool_dir, sessions)
+        codes = sorted({c for c, _n, _y in pool_rows})
+        bars = load_front_bars(
+            codes,
+            args.start,
+            args.end,
+            front_root=args.front_root,
+            workers=args.workers,
+        )
+        instances = assemble_instances(args.pool_dir, sessions, bars, tol=args.tol)
+        opened = opened_instances(instances)
+        summary = {
+            "stage": "assemble",
+            "start": args.start,
+            "end": args.end,
+            "sessions": len(sessions),
+            "pool_rows": len(pool_rows),
+            "instances": len(instances),
+            "opened": len(opened),
+            "skipped": {
+                reason: sum(1 for i in instances if i.skip_reason == reason)
+                for reason in sorted({i.skip_reason for i in instances if i.skip_reason})
+            },
+        }
+        args.out_dir.mkdir(parents=True, exist_ok=True)
+        (args.out_dir / "assemble_summary.json").write_text(
+            json.dumps(summary, ensure_ascii=True, indent=1), encoding="utf-8"
+        )
+        print(
+            f"[assemble] sessions={summary['sessions']} rows={summary['pool_rows']} "
+            f"opened={summary['opened']} skipped={summary['skipped']}"
+        )
+        return 0
+
+    result = run_modea(
+        args.pool_dir,
+        start=args.start,
+        end=args.end,
+        front_root=args.front_root,
+        tol=args.tol,
+        workers=args.workers,
+        out_dir=args.out_dir,
     )
-    instances = assemble_instances(args.pool_dir, sessions, bars, tol=args.tol)
-    opened = opened_instances(instances)
-    summary = {
-        "stage": "assemble",
-        "start": args.start,
-        "end": args.end,
-        "sessions": len(sessions),
-        "pool_rows": len(pool_rows),
-        "instances": len(instances),
-        "opened": len(opened),
-        "skipped": {
-            reason: sum(1 for i in instances if i.skip_reason == reason)
-            for reason in sorted({i.skip_reason for i in instances if i.skip_reason})
-        },
-    }
-    args.out_dir.mkdir(parents=True, exist_ok=True)
-    (args.out_dir / "assemble_summary.json").write_text(
-        json.dumps(summary, ensure_ascii=True, indent=1), encoding="utf-8"
-    )
+    top = result["ranked"][:5]
     print(
-        f"[assemble] sessions={summary['sessions']} rows={summary['pool_rows']} "
-        f"opened={summary['opened']} skipped={summary['skipped']}"
+        f"[modea] opened={len(opened_instances(result['instances']))} "
+        f"strategies={len(result['ranked'])} out={args.out_dir}"
     )
-    if args.stage != "assemble":
-        print("[warn] stage=all requires Slices B/C; falling back to assemble-only")
+    for i, m in enumerate(top, 1):
+        print(
+            f"  #{i} {m.label} total_return={m.total_return:.4%} "
+            f"mean_ret={m.mean_return_pct:.4%} peak_lots={m.peak_concurrent_lots}"
+        )
     return 0

@@ -5,6 +5,7 @@
 > **自检（同日）**：对过 §一 ↔ §十，修了过期句和笔误；已锁定速查见文末。代码仍未写。
 > **2026-09-17 晚（外部 agent 评审修订）**：多视角评审后修订正文（纪要见 §十三）；新开 Q30–Q35 待确认（§十末）；只读数据预检已跑、结果见 §9.7（**预检不改行情、不跑网格**）。事实性修正两处：模式 A「同根 K 先止损」为死规则（§四）、有效组合数 260→213（§三）。
 > **同日晚些（确认人两条指示）**：预检脚本入仓（`backtest/research/unified_exit_precheck.py` + CLI）；缺 2 天名单（20260525、20260605）定性为「当天无名单」。
+> **实现（2026-09-17）**：Mode A 切片 A/B/C 已在 `feat/unified-exit-modea` 落地（`unified_exit_modea.py`）；切片 D 仍宿主-only。
 > **交接（同日）**：实现已交 Codex——[handoff-unified-exit-modea-codex-impl-2026-09-17.md](handoff-unified-exit-modea-codex-impl-2026-09-17.md)（切片 A 装配 / B 退出求值 / C 聚合报告，合成数据单测，无 F 湖环境可做）；真数据跑数回宿主——[host-runbook-unified-exit-modea-2026-09-17.md](host-runbook-unified-exit-modea-2026-09-17.md)。
 > **Q30–Q35 已全部确认（同日晚，逐条过）**：Q30=A 总收益率第一排序、名义现金池 **11 亿**（Q15 相应修订）；Q31=A trailing stop 进第一阶段（+20 组，有效 233）；Q32=A N 按市场交易日、到期停牌顺延；Q33=B 冻仓主口径 + 按 0 敏感性；Q34=A 稳健性四件套必做；Q35=D 不做精确复现、接受 front 分区每日刷新漂移。正文与 §十二 速查已回写。
 
