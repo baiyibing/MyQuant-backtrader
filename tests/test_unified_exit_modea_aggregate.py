@@ -128,6 +128,11 @@ def test_delist_zero_sensitivity():
     assert er.reason == "mark_end_zero"
     assert er.sell_price == 0.0
     assert er.return_pct == -1.0
+    # Q33 BLOCK fix: ranking metrics must move vs hold-to-end (MTM→0).
+    hold = m.aggregate_strategy("hold", [inst], base, bars, SESSIONS)
+    zero = m.aggregate_strategy("delist_zero", [inst], sens, bars, SESSIONS)
+    assert zero.total_return < hold.total_return
+    assert zero.max_drawdown >= hold.max_drawdown
 
 
 def test_next_open_buy_shifts_price(tmp_path: Path):

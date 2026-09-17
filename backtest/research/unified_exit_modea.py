@@ -539,6 +539,9 @@ def build_daily_equity(
     """Replay sells-then-buys; return (equity_rows, peak_lots, peak_capital).
 
     Mark-to-market uses each symbol's last available close on/before the day.
+
+    Q33 ``mark_end_zero`` lots stay unsold (``is_trade=False``) but contribute
+    **0** to MTM so total_return / max_drawdown move vs hold-to-end.
     """
     opened = opened_instances(instances)
     by_key = {instance_key(i): i for i in opened}
@@ -574,6 +577,10 @@ def build_daily_equity(
             held[key] = er.shares
         mtm = 0.0
         for key, shares in held.items():
+            er = exits.get(key)
+            # Q33 sensitivity: frozen lot valued at 0 (no sell fill / commission).
+            if er is not None and er.reason == "mark_end_zero":
+                continue
             inst = by_key[key]
             px = _last_close_on_or_before(
                 close_maps.get(inst.symbol, {}), ymd, sessions
@@ -766,13 +773,17 @@ def next_open_buy_instances(
 
 
 def board_bucket(code: str) -> str:
+    """Q34③ board strata: main / chinext / star / bse (prefix, not limit %)."""
     from backtest.research.market_layer import board_limit_pct
 
+    num = code.split(".", 1)[0]
+    if num.startswith(("300", "301", "302")):
+        return "chinext"
+    if num.startswith(("688", "689")):
+        return "star"
     lp = board_limit_pct(code)
     if lp == 0.10:
         return "main"
-    if lp == 0.20:
-        return "chinext_star"
     if lp == 0.30:
         return "bse"
     return "unknown"
@@ -809,13 +820,14 @@ def neighborhood_plateau_flags(
         except (IndexError, ValueError):
             continue
         # Collect ranked labels sharing the same N or nearby x/y family.
+        # Use endswith for N so "_n1" does not match "_n10" / "_n15".
         family = [
             o for o in ranked
             if o.label.startswith("r2_") and o.label != m.label
             and (
-                f"_n{n}" in o.label
-                or (x is not None and f"x{_fmt_grid(x)}" in o.label)
-                or (y is not None and f"y{_fmt_grid(y)}" in o.label)
+                o.label.endswith(f"_n{n}")
+                or (x is not None and f"_x{_fmt_grid(x)}_" in o.label)
+                or (y is not None and f"_y{_fmt_grid(y)}_" in o.label)
             )
         ][:8]
         if not family:
@@ -1027,9 +1039,14 @@ def run_modea(
         sub = filter_instances_by_list_date(instances, s0, s1)
         # Re-aggregate existing exits on the subset (same sell paths)
         sub_metrics = []
-        for lab in [m.label for m in ranked[:50]]:  # top-50 family enough for rank compare
-            if lab not in matrix:
-                continue
+        # Full 280 labels (excl. anchors) so half-window top20 is not truncated
+        # by full-window ranked[:50] (Q34①).
+        half_labs = [
+            lab
+            for lab in matrix
+            if lab not in ("oracle", "delist_zero", "anchor_hold_end")
+        ]
+        for lab in half_labs:
             sub_exits = {
                 instance_key(i): matrix[lab][instance_key(i)]
                 for i in opened_instances(sub)
