@@ -303,7 +303,7 @@ class StrategySpec:
     to window end (anchor ①, no TP/SL).
     """
 
-    rule: int  # 1 | 2 | 3 | 0 (anchor hold-to-end)
+    rule: int  # 1 | 2 | 3 | 0 (anchor) | 4 (Mode B Livermore path, unused by A)
     n: Optional[int]
     x: Optional[float] = None
     y: Optional[float] = None
@@ -324,6 +324,10 @@ class StrategySpec:
             return f"r2_x{_fmt(self.x)}_y{_fmt(self.y)}_n{self.n}"
         if self.rule == 3:
             return f"r3_y{_fmt(self.y)}_n{self.n}"
+        if self.rule == 4:
+            if self.x is None:
+                return f"livermore_l2_stale{self.n}_y{_fmt(self.y)}"
+            return f"livermore_l1_x{_fmt(self.x)}_stale{self.n}_y{_fmt(self.y)}"
         raise ValueError(f"unknown rule {self.rule}")
 
 

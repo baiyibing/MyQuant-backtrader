@@ -22,6 +22,7 @@ from backtest.research.csv_minute_backtest import (
     load_minute_bars,
 )
 from backtest.research.market_layer import limit_pct
+from backtest.research import strategy8_rules as s8
 from common.infra.data_root import resolve_period_root
 
 
@@ -344,12 +345,14 @@ def _result(inst, ymd, hm, price, shares, held, reason, *, trade):
 
 
 def _validate_spec(spec):
-    if spec.rule not in (0, 1, 2, 3):
+    if spec.rule not in (0, 1, 2, 3, 4):
         raise ValueError(f"unknown rule {spec.rule}")
     if spec.rule and (spec.n is None or spec.n < 1):
         raise ValueError("N must be positive")
     if spec.rule == 3 and spec.y is None:
         raise ValueError("trailing requires Y")
+    if spec.rule == 4 and spec.y is None:
+        raise ValueError("livermore requires stop Y")
 
 
 @dataclass
@@ -433,24 +436,64 @@ def _ld_mask(price, prev, lp, tol):
     return (prev > 0) & ((price / safe - 1.0) <= -(lp - tol))
 
 
+def _close_peak(path):
+    """Running peak from minute close after the same daily k as cost (Q39)."""
+    scale_rel = path.cost / path.cost[0]
+    acc = np.maximum.accumulate(path.close / scale_rel)
+    return scale_rel * np.maximum(path.cost[0], acc)
+
+
+def _v8_band_line(cost, peak):
+    line = np.full(cost.shape, np.inf)
+    m2 = (peak >= cost * (1.0 + s8.BAND_ARMS[0])) & (peak < cost * (1.0 + s8.BAND_ARMS[1]))
+    m3 = (peak >= cost * (1.0 + s8.BAND_ARMS[1])) & (peak < cost * (1.0 + s8.BAND_ARMS[2]))
+    m4 = (peak >= cost * (1.0 + s8.BAND_ARMS[2])) & (peak < cost * (1.0 + s8.BAND_ARMS[3]))
+    m5 = peak >= cost * (1.0 + s8.BAND_ARMS[3])
+    line[m2] = cost[m2] * s8.BAND2_ABS_MULT
+    line[m3] = np.maximum(
+        cost[m3] * s8.BAND3_GLOBAL_MULT,
+        cost[m3] + s8.BAND3_KEEP * (peak[m3] - cost[m3]),
+    )
+    line[m4] = cost[m4] + s8.BAND4_KEEP * (peak[m4] - cost[m4])
+    line[m5] = cost[m5] + s8.BAND5_KEEP * (peak[m5] - cost[m5])
+    return line
+
+
+_REASON = ("", "stop_loss", "take_profit", "trailing", "n_expire", "force_sell:stale", "trail:band")
+
+
 def _first_hit(path, spec, *, lp, tol):
     n = path.close.size
     if n == 0:
         return None
-    sl_on = spec.rule == 2 and spec.y is not None
-    tp_on = spec.rule == 2 and spec.x is not None
+    sl_on = spec.rule in (2, 4) and spec.y is not None
+    tp_on = spec.rule in (2, 4) and spec.x is not None
     trail_on = spec.rule == 3
-    expire_on = bool(spec.rule)
+    live_on = spec.rule == 4
+    expire_on = spec.rule in (1, 2, 3)
     ev = np.zeros(n, dtype=np.int8)
     fill = path.close.copy()
+    peak = None
+    if trail_on or live_on:
+        peak = _close_peak(path)
     if expire_on:
         ev[(path.held >= spec.n) & path.is_last] = 4
     if trail_on:
-        scale_rel = path.cost / path.cost[0]
-        acc = np.maximum.accumulate(path.close / scale_rel)
-        peak = scale_rel * np.maximum(path.cost[0], acc)
         ev[path.close < peak * (1.0 - spec.y / 100.0)] = 3
         fill[ev == 3] = path.close[ev == 3]
+    if live_on:
+        stale = (path.held >= spec.n) & (peak < path.cost * (1.0 + s8.BAND_ARMS[0]))
+        ev[stale] = 5
+        fill[stale] = path.close[stale]
+        if spec.x is None:
+            line = _v8_band_line(path.cost, peak)
+            band = (
+                (path.close >= path.cost)
+                & (peak > path.cost * s8.BAND_TRAIL_MIN_MULT)
+                & (path.close <= line)
+            )
+            ev[band] = 6
+            fill[band] = path.close[band]
     if tp_on:
         hit = path.close >= path.cost * (1.0 + spec.x / 100.0)
         ev[hit] = 2
@@ -480,7 +523,13 @@ def _first_hit(path, spec, *, lp, tol):
     if not sell.any():
         return None
     i = int(np.flatnonzero(sell)[0])
-    reason = ("", "stop_loss", "take_profit", "trailing", "n_expire")[int(ev[i])]
+    code = int(ev[i])
+    if code == 6:
+        reason = s8.take_profit_reason(
+            float(path.close[i]), float(path.cost[i]), float(peak[i]), int(path.held[i])
+        ) or "trail:band"
+    else:
+        reason = _REASON[code]
     return i, reason, float(fill[i])
 
 
@@ -549,8 +598,8 @@ def _evaluate_exit_modeb_ref(inst, spec, minutes, sessions, prev_by, *, end, tol
     cost = peak = mark_price = float(inst.buy_price)
     shares = float(modea._lot_shares(cost))
     mark_day, mark_hm, mark_held = inst.list_date, None, 0
-    sl_on = spec.rule == 2 and spec.y is not None
-    tp_on = spec.rule == 2 and spec.x is not None
+    sl_on = spec.rule in (2, 4) and spec.y is not None
+    tp_on = spec.rule in (2, 4) and spec.x is not None
     for i in range(buy_i + 1, len(sessions)):
         ymd = sessions[i]
         if ymd > end:
@@ -589,7 +638,11 @@ def _evaluate_exit_modeb_ref(inst, spec, minutes, sessions, prev_by, *, end, tol
                 reason, fill = "take_profit", close
             elif spec.rule == 3 and close < peak * (1 - spec.y / 100):
                 reason = "trailing"
-            if reason is None and spec.rule and i - buy_i >= spec.n and j == len(rows) - 1:
+            elif spec.rule == 4 and spec.x is None:
+                reason = s8.take_profit_reason(close, cost, peak, i - buy_i)
+            elif spec.rule == 4 and i - buy_i >= spec.n and s8.never_armed(cost, peak):
+                reason = "force_sell:stale"
+            if reason is None and spec.rule in (1, 2, 3) and i - buy_i >= spec.n and j == len(rows) - 1:
                 reason, fill = "n_expire", close
             if reason is None:
                 continue
@@ -634,11 +687,16 @@ DEFAULT_OUT_DIR = Path("backtest_output/unified_exit_modeb")
 
 
 def iter_grid():
-    """P1=A: eighteen champion-family cells plus hold-end and N=1 anchors."""
-    return [s for s in modea.iter_grid(include_anchor_hold_end=True)
-            if s.rule == 0 or (s.rule == 1 and s.n == 1)
-            or (s.rule == 2 and s.x in (5, 7, 10)
-                and s.y in (5, 10, None) and s.n in (8, 10))]
+    """P1=A narrow cells plus two Livermore path arms (same book, all names)."""
+    cells = [s for s in modea.iter_grid(include_anchor_hold_end=True)
+             if s.rule == 0 or (s.rule == 1 and s.n == 1)
+             or (s.rule == 2 and s.x in (5, 7, 10)
+                 and s.y in (5, 10, None) and s.n in (8, 10))]
+    cells.extend((
+        modea.StrategySpec(4, s8.STALE_DAYS, 10, 10),
+        modea.StrategySpec(4, s8.STALE_DAYS, None, 10),
+    ))
+    return cells
 
 
 def oracle_exits(instances, daily_bars, minute_bars, sessions, *,
@@ -898,7 +956,7 @@ def run_modeb(
         meta={"mode": "B", "price_domain": "none daily entry / minute open-gap then close trigger and fill",
               "scan": "numpy first-hit; path shared across specs",
               "pack": load_status.get("pack"), "minute_cache": load_status.get("cache"),
-              "grid": "P1=A narrow (18 r2 cells + N=1)", "oracle": "Q38=A 分钟可成交 close 事后上界；仅排除跌停分钟；不模拟更早失败卖出",
+              "grid": "P1=A narrow (18 r2 + N=1) + livermore L1/L2", "oracle": "Q38=A 分钟可成交 close 事后上界；仅排除跌停分钟；不模拟更早失败卖出",
               "start": start, "end": end, "cash_pool": cash_pool, "tol": tol,
               "minute_coverage": coverage, "exdiv": "cost/peak *= k; shares /= k; no cash dividend"},
     )

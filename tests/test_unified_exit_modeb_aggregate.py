@@ -79,11 +79,12 @@ def test_pipeline_reports_robustness_and_isolation(tmp_path):
     out = tmp_path / 'unified_exit_modeb'
     result = b.run_modeb(pool, sessions=sessions, bars=bars, minute_bars=minutes, exdiv={}, out_dir=out)
     assert len([s for s in b.iter_grid() if s.rule == 2]) == 18
-    assert len(result['ranked']) == 19
+    assert len([s for s in b.iter_grid() if s.rule == 4]) == 2
+    assert len(result['ranked']) == 21
     assert set(result['anchors']) == {'anchor_hold_end', 'r1_n1', 'oracle', 'delist_zero'}
     robust = result['robustness']
-    assert len(robust['half_windows']['h1']) == len(robust['half_windows']['h2']) == 19
-    assert robust['half_windows']['top20_overlap'] == 19
+    assert len(robust['half_windows']['h1']) == len(robust['half_windows']['h2']) == 20
+    assert robust['half_windows']['top20_overlap'] == 20
     assert robust['plateau'] and robust['board'] and robust['month'] and robust['next_open_buy']
     summary = json.loads((out / 'summary.json').read_text())
     assert summary['meta']['mode'] == 'B'
