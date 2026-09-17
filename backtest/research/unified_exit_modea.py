@@ -805,15 +805,18 @@ def filter_instances_by_list_date(
 def neighborhood_plateau_flags(
     ranked: Sequence[StrategyMetrics], *, top_n: int = 20
 ) -> list[dict]:
-    """Flag rule-2 top cells whose 1-step neighbors are far below (island alert)."""
+    """Flag rule-2/3 top cells far above their ranked neighbor family."""
     rows = []
     for m in ranked[:top_n]:
-        if not m.label.startswith("r2_"):
+        if not m.label.startswith(("r2_", "r3_")):
             continue
-        # r2_x{X}_y{Y}_n{N}
+        # r2_x{X}_y{Y}_n{N} or r3_y{Y}_n{N}; r1 remains excluded.
         parts = m.label.split("_")
         try:
-            x_s, y_s, n_s = parts[1][1:], parts[2][1:], parts[3][1:]
+            if parts[0] == "r2":
+                x_s, y_s, n_s = parts[1][1:], parts[2][1:], parts[3][1:]
+            else:
+                x_s, y_s, n_s = "inf", parts[1][1:], parts[2][1:]
             x = None if x_s == "inf" else float(x_s.replace("p", "."))
             y = None if y_s == "inf" else float(y_s.replace("p", "."))
             n = int(n_s)
@@ -823,7 +826,7 @@ def neighborhood_plateau_flags(
         # Use endswith for N so "_n1" does not match "_n10" / "_n15".
         family = [
             o for o in ranked
-            if o.label.startswith("r2_") and o.label != m.label
+            if o.label.startswith(parts[0] + "_") and o.label != m.label
             and (
                 o.label.endswith(f"_n{n}")
                 or (x is not None and f"_x{_fmt_grid(x)}_" in o.label)
