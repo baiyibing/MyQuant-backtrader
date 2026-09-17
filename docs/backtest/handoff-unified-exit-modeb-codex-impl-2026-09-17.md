@@ -1,16 +1,16 @@
 # 交接 · 统一卖出规则网格 · 模式 B 实施（Codex 接手）
 
 > 日期：2026-09-17
-> 实施状态：**A–D 已实现，PR #95 待审；宿主 E 未执行**（2026-09-17；见提案 §十 Q38）。
-> 状态：✅ **已人裁 GO**（2026-09-17；P1=A 窄网格 / P2=A 宿主smoke→4090 / P3=A exdiv_map）。以 plan v1.1 为准，**可开工**。
+> 实施状态：**✅ A–D 已合 PR #95（master `8db98de`）；⏳ 宿主 E 未执行**（2026-09-17；见提案 §十 Q38）。
+> 状态：✅ **已人裁 GO**（2026-09-17；P1=A 窄网格 / P2=A 宿主smoke→4090 / P3=A exdiv_map）。以 plan v1.1 为准，A–D 编码已完成，不重开。
 > 权威对象：[plan-unified-exit-modeb-2026-09-17.md](plan-unified-exit-modeb-2026-09-17.md) v1.0；口径母本 [stock-backtest-unified-exit-proposal-2026-09-17.md](stock-backtest-unified-exit-proposal-2026-09-17.md)（§一 Mode B / §9.5 Q29=B / §十二）。
 > 前置：Mode A 已合（含 perf #92）；master tip 撰写时 `e018924`。
-> 分支（**仅 GO 后**）：从当时 master 开 `feat/unified-exit-modeb`；切片 A/B/C/D 分 commit。
-> 宿主数据就绪（可先做）：[host-runbook-unified-exit-modeb-smoke-2026-09-17.md](host-runbook-unified-exit-modeb-smoke-2026-09-17.md)。业务网格 runbook **GO+impl 后另开**（非本交接合入门）。
+> 实现分支（历史）：`feat/unified-exit-modeb` 已通过 #95 合入；下文 A–D 步骤保留为实施记录，补裁以头部 plan 与完成标记为准。
+> 宿主数据就绪（已完成）：[smoke runbook](host-runbook-unified-exit-modeb-smoke-2026-09-17.md)。下一步：[E 业务 runbook](host-runbook-unified-exit-modeb-2026-09-17.md)（非本交接合入门）。
 
 ## ✅ 开工闸
 
-plan 头部已为「✅ 已人裁 GO」。从当时 master 开 `feat/unified-exit-modeb`，按切片 A→D 实施。
+plan 头部已为「✅ 已人裁 GO」；A–D 已合 #95。本交接不重开编码，剩余 E 按独立宿主 runbook 执行。
 
 ---
 
@@ -129,7 +129,7 @@ plan 头部已为「✅ 已人裁 GO」。从当时 master 开 `feat/unified-exi
 
 ## 5. 切片 E · 宿主业务网格（非合入门）
 
-- 按 P1（窄 vs 全）与 P2（F 湖 smoke → 4090）执行；短记另落。
+- 按 [E 业务 runbook](host-runbook-unified-exit-modeb-2026-09-17.md) 执行 P1=A 默认窄网格，优先高配 / 4090；回填 [宿主短记](unified-exit-modeb-host-note-2026-09-17.md)，当前仍未跑。
 - **实现 PR / CI 不得勾选本切片完成。**
 - 数据就绪步骤见 smoke runbook（可与编码并行，但**不是** Mode B 网格结果）。
 
@@ -152,6 +152,6 @@ D:\anaconda3\envs\vanna312\python.exe -m pytest -q tests/
 - [x] B · 分钟退出求值器 + SL-first 向量（`3550c38`）
 - [x] C · E-R6 + shares/=k（P3=A；`c3506bc`）
 - [x] D · 聚合 / 四锚线 / 稳健性四件套 / CLI / README（P1=A；Q38=A）
-- [ ] E · 宿主网格（host-only；另短记）
+- [ ] E · 宿主网格（host-only；[runbook](host-runbook-unified-exit-modeb-2026-09-17.md)；待跑 / 待回填短记）
 - [x] Q38=A 已人裁并实现：仅排除跌停分钟，不模拟更早失败卖出；实际规则 Q7 不变。Q36/Q37 已裁且实现。
 - 验证：显式 Linux vanna312 环境，Mode A + Mode B 合成测试 77 passed；Mode A / csv_ledger diff 为空。CI 同口径全套 739 passed / 2 skipped / 24 deselected；四项 data-free gates 通过；UTF-8 无 BOM、NUL=0。宿主 E 未执行。
