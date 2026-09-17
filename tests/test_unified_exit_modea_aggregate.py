@@ -227,3 +227,70 @@ def test_plateau_scans_only_first_eight_ranked_family_members():
     rows = m.neighborhood_plateau_flags(ranked, top_n=1)
     assert rows[0]["island"] is True
     assert rows[0]["neighbor_gap"] == pytest.approx(0.02)
+
+
+@pytest.mark.parametrize("index_kind", ["datetime", "date", "timezone"])
+def test_vectorized_close_map_matches_scalar_dates(index_kind):
+    # Unsorted and repeated dates retain the old last-row-wins behavior.
+    index = pd.to_datetime(["2025-11-04", "2025-11-03", "2025-11-04"])
+    if index_kind == "date":
+        index = pd.Index(index.date)
+    elif index_kind == "timezone":
+        index = index.tz_localize("Asia/Shanghai")
+    frame = pd.DataFrame({"close": [10.1, 10.0, 10.2]}, index=index)
+    expected = {m.date_to_ymd(d): float(c) for d, c in zip(index, frame["close"])}
+    assert m._bar_close_map(frame) == expected
+    assert m._bar_close_map(frame.iloc[:0]) == {}
+
+
+def test_run_cache_exact_outputs_and_freshness(tmp_path, monkeypatch):
+    sessions = ["20251103", "20251104", "20251105", "20260407", "20260408", "20260409"]
+    pool = tmp_path / "pool"
+    for ymd in (sessions[0], sessions[1], sessions[3]):
+        _write_pool(pool, ymd, [("600000", "A"), ("300001", "B")])
+    bars = {
+        "600000.SH": _frame(sessions, [10.0, 10.3, 9.0, 9.1, 9.5, 9.2]),
+        # Missing bar and early stop exercise suspension and delisting overlays.
+        "300001.SZ": _frame([sessions[i] for i in (0, 1, 3, 4)], [20.0, 20.4, 19.0, 19.5]),
+    }
+    before = {symbol: frame.copy(deep=True) for symbol, frame in bars.items()}
+    original_map = m._bar_close_map
+    calls = []
+
+    def counted_map(frame):
+        calls.append(id(frame))
+        return original_map(frame)
+
+    monkeypatch.setattr(m, "_bar_close_map", counted_map)
+
+    def run(output):
+        return m.run_modea(
+            pool, start=sessions[0], end=sessions[-1], sessions=sessions,
+            bars=bars, out_dir=output, cash_pool=5_000_000.0,
+        )
+
+    cached_dir = tmp_path / "cached"
+    run(cached_dir)
+    assert sorted(calls) == sorted(id(frame) for frame in bars.values())
+    for symbol, frame in bars.items():
+        pd.testing.assert_frame_equal(frame, before[symbol])
+        assert frame.attrs == {}
+
+    # Reference path rebuilds maps for each consumer using scalar date formatting.
+    with monkeypatch.context() as reference:
+        reference.setattr(m, "_prepare_bars", lambda frames: m._PreparedBars(frames))
+        reference.setattr(m, "_bar_close_map", lambda frame: {
+            m.date_to_ymd(d): float(c) for d, c in zip(frame.index, frame["close"])
+        })
+        reference_dir = tmp_path / "reference"
+        run(reference_dir)
+    for filename in ("ranking.csv", "summary.json", "instance_detail_top.csv"):
+        assert (cached_dir / filename).read_bytes() == (reference_dir / filename).read_bytes()
+
+    # A new run after an in-place source edit must rebuild each symbol's map.
+    bars["600000.SH"].loc[pd.Timestamp(sessions[-1]), "close"] = 10.0
+    calls.clear()
+    fresh_dir = tmp_path / "fresh"
+    run(fresh_dir)
+    assert sorted(calls) == sorted(id(frame) for frame in bars.values())
+    assert (fresh_dir / "summary.json").read_bytes() != (cached_dir / "summary.json").read_bytes()

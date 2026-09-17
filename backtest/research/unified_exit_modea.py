@@ -121,7 +121,47 @@ class Instance:
 
 
 def _bar_close_map(df: pd.DataFrame) -> dict[str, float]:
-    return {date_to_ymd(idx): float(close) for idx, close in zip(df.index, df["close"])}
+    return dict(zip(pd.DatetimeIndex(df.index).strftime("%Y%m%d"), map(float, df["close"])))
+
+
+class _PreparedBars(dict[str, pd.DataFrame]):
+    """Run-local price maps; source frames must stay unchanged during a run.
+
+    No DataFrame attributes or global cache: a later run sees edited input bars.
+    Lazy columns also preserve support for close-only frames in exit evaluation.
+    """
+
+    def __init__(self, bars: Mapping[str, pd.DataFrame]):
+        super().__init__(bars)
+        self.close_maps: dict[str, dict[str, float]] = {}
+        self.prev_maps: dict[str, dict[str, float]] = {}
+        self.open_maps: dict[str, dict[str, float]] = {}
+
+    def closes(self, symbol: str) -> dict[str, float]:
+        if symbol not in self.close_maps:
+            self.close_maps[symbol] = _bar_close_map(self[symbol])
+        return self.close_maps[symbol]
+
+    def previous(self, symbol: str) -> dict[str, float]:
+        if symbol not in self.prev_maps:
+            closes = self.closes(symbol)
+            ordered = sorted(closes)
+            self.prev_maps[symbol] = {
+                y: closes[prev] for prev, y in zip(ordered, ordered[1:])
+            }
+        return self.prev_maps[symbol]
+
+    def opens(self, symbol: str) -> dict[str, float]:
+        if symbol not in self.open_maps:
+            df = self[symbol]
+            self.open_maps[symbol] = dict(
+                zip(pd.DatetimeIndex(df.index).strftime("%Y%m%d"), map(float, df["open"]))
+            )
+        return self.open_maps[symbol]
+
+
+def _prepare_bars(bars: Mapping[str, pd.DataFrame]) -> _PreparedBars:
+    return bars if isinstance(bars, _PreparedBars) else _PreparedBars(bars)
 
 
 def _prev_close_on(df: pd.DataFrame, ymd: str) -> Optional[float]:
@@ -204,13 +244,14 @@ def assemble_instances(
     unknown board → skip; shares round-down to 0 → skip.
     Buy price = list-day front close. prev_close = prior bar in series (cross halt).
     """
+    bars = _prepare_bars(bars)
     out: list[Instance] = []
     for symbol, name, ymd in iterate_pool_entries(pool_dir, sessions):
         df = bars.get(symbol)
         if df is None or df.empty:
             out.append(Instance(symbol, name, ymd, 0.0, False, "no_bar"))
             continue
-        closes = _bar_close_map(df)
+        closes = bars.closes(symbol)
         if ymd not in closes:
             out.append(Instance(symbol, name, ymd, 0.0, False, "no_bar"))
             continue
@@ -219,7 +260,7 @@ def assemble_instances(
         if lp is None:
             out.append(Instance(symbol, name, ymd, buy_price, False, "unknown_board"))
             continue
-        prev = _prev_close_on(df, ymd)
+        prev = bars.previous(symbol).get(ymd)
         if prev is None or prev <= 0:
             # No prior bar to judge limit-up — still allow buy (first bar in series).
             prev = None
@@ -361,12 +402,9 @@ def evaluate_exit(
     if df is None or df.empty:
         raise ValueError(f"missing bars for {inst.symbol}")
 
-    close_by = _bar_close_map(df)
-    ordered_bars = sorted(close_by)
-    prev_by: dict[str, float] = {}
-    for i, y in enumerate(ordered_bars):
-        if i > 0:
-            prev_by[y] = close_by[ordered_bars[i - 1]]
+    bars = _prepare_bars(bars)
+    close_by = bars.closes(inst.symbol)
+    prev_by = bars.previous(inst.symbol)
 
     buy_i = _session_index(sessions, inst.list_date)
     end_i = _session_index(sessions, end) if end in sessions else len(sessions) - 1
@@ -471,6 +509,7 @@ def evaluate_matrix(
     tol: float = DEFAULT_TOL,
 ) -> dict[str, dict[str, ExitResult]]:
     """Return ``{strategy_label: {instance_key: ExitResult}}`` for opened lots."""
+    bars = _prepare_bars(bars)
     opened = opened_instances(instances)
     out: dict[str, dict[str, ExitResult]] = {}
     for spec in specs:
@@ -555,7 +594,8 @@ def build_daily_equity(
         inst = by_key[key]
         sells_on.setdefault(er.sell_date, []).append((inst, er))
 
-    close_maps = {sym: _bar_close_map(df) for sym, df in bars.items()}
+    bars = _prepare_bars(bars)
+    close_maps = {sym: bars.closes(sym) for sym in bars}
     cash = float(cash_pool)
     # key -> shares
     held: dict[str, int] = {}
@@ -664,12 +704,11 @@ def oracle_exits(
     tol: float = DEFAULT_TOL,
 ) -> dict[str, ExitResult]:
     """Per-instance best T+1..end close excluding limit-down days (non-tradable)."""
+    bars = _prepare_bars(bars)
     out: dict[str, ExitResult] = {}
     for inst in opened_instances(instances):
-        df = bars[inst.symbol]
-        close_by = _bar_close_map(df)
-        ordered = sorted(close_by)
-        prev_by = {ordered[i]: close_by[ordered[i - 1]] for i in range(1, len(ordered))}
+        close_by = bars.closes(inst.symbol)
+        prev_by = bars.previous(inst.symbol)
         buy_i = _session_index(sessions, inst.list_date)
         end_i = _session_index(sessions, end) if end in sessions else len(sessions) - 1
         best: Optional[ExitResult] = None
@@ -739,6 +778,7 @@ def next_open_buy_instances(
     sessions: Sequence[str],
 ) -> list[Instance]:
     """Q34④: replace buy_price with next session open; shift list_date to that day."""
+    bars = _prepare_bars(bars)
     out: list[Instance] = []
     for inst in instances:
         if not inst.opened:
@@ -748,9 +788,7 @@ def next_open_buy_instances(
         if df is None:
             out.append(Instance(inst.symbol, inst.name, inst.list_date, 0.0, False, "no_bar"))
             continue
-        open_by = {
-            date_to_ymd(idx): float(o) for idx, o in zip(df.index, df["open"])
-        }
+        open_by = bars.opens(inst.symbol)
         buy_i = _session_index(sessions, inst.list_date)
         shifted = None
         for ymd in sessions[buy_i + 1 :]:
@@ -1000,6 +1038,7 @@ def run_modea(
     bar_map = load_front_bars(
         codes, start, end, front_root=front_root, workers=workers, bars=bars
     )
+    bar_map = _prepare_bars(bar_map)
     instances = assemble_instances(Path(pool_dir), sess, bar_map, tol=tol)
     specs = iter_grid(include_anchor_hold_end=True)
     matrix = evaluate_matrix(instances, specs, bar_map, sess, end=end, tol=tol)
