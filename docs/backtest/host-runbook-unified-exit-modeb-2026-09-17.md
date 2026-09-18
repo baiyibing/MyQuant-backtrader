@@ -1,9 +1,9 @@
 # 模式 B · 宿主业务网格 runbook（统一卖出规则网格，切片 E）
 
 > **日期**：2026-09-17
-> **状态**：✅ **宿主已完成 2026-09-17**（短记：[unified-exit-modeb-host-note-2026-09-17.md](unified-exit-modeb-host-note-2026-09-17.md)）。A–D 已合 PR #95（master `8db98de`）。
+> **状态**：✅ **E 已跑（Q39）**。回填见 [Mode B 宿主短记](unified-exit-modeb-host-note-2026-09-17.md)。A–D 已合 PR #95（master `8db98de`）。
 > **权威**：[plan](plan-unified-exit-modeb-2026-09-17.md) P1–P5 / Q36–Q38 / cache 补裁；[handoff](handoff-unified-exit-modeb-codex-impl-2026-09-17.md)；[提案](stock-backtest-unified-exit-proposal-2026-09-17.md) Mode B / Q7 / Q12 / Q29 / Q32。
-> **前置记录**：[分钟就绪短记](unified-exit-modeb-minute-ready-2026-09-17.md)（smoke 已完成）；**短记**：[Mode B 宿主短记](unified-exit-modeb-host-note-2026-09-17.md)。
+> **前置记录**：[分钟就绪短记](unified-exit-modeb-minute-ready-2026-09-17.md)（smoke 已完成）；**回填位置**：[Mode B 宿主短记模板](unified-exit-modeb-host-note-2026-09-17.md)。
 
 ## 0. 硬边界与机器
 
@@ -68,11 +68,11 @@ D:\anaconda3\envs\vanna312\python.exe scripts/research/run_unified_exit_modeb.py
 
 ## 3. Sanity 与比较清单
 
-- [ ] `summary.json`：`meta.mode=B`，价域为 **none 日线 close 买入 → 分钟 high/low 触发 → 该分钟 close 成交**；窗口正确，名义现金池 11 亿；每笔目标 100 万、整百股、双边佣金 0.1%、无印花税。
+- [ ] `summary.json`：`meta.mode=B`，价域为 **none 日线 close 买入 → 分钟 open 缺口再 close 触价/成交**（high/low 不触发）；窗口正确，名义现金池 11 亿；每笔目标 100 万、整百股、双边佣金 0.1%、无印花税。
 - [ ] stdout `n_strategies=19`，四锚线齐全；`n_opened` 与明细按实例键去重后的实开数一致（明细跨策略重复，不能直接数总行数）。记录实开实例数与 distinct 码数，分清两者。
 - [ ] 复核 `meta.minute_coverage` 的 requested / covered / missing；smoke 的 2080/2080 属于 Mode A 实开码覆盖，不能代替本次 B 覆盖。缺码 / 无 session 分钟须列原因。
 - [ ] 与 A 比较名单装配、实开 / 跳过、受冻及峰值并发。**B 买入价域是 none close，A 是 front close**；封板判断、整百股数量和实开数可能不同，按实例键追差，不强制对齐 4167。A 的 max 904 lots / 9.04 亿仅作基线；B 实测触 11 亿须显著标记，不直接套 A 上界。
-- [ ] 抽查明细 `sell_hm` / `sell_price`：生产 session 过滤使用 `hour*60+minute`（570–690 / 780–900），不是 HHMM（#95，`9c39c90`）。买入日不可卖；同分钟双触先止损；成交用 close，不用阈值价。
+- [ ] 抽查明细 `sell_hm` / `sell_price`：生产 session 过滤使用 `hour*60+minute`（570–690 / 780–900），不是 HHMM（#95，`9c39c90`）。买入日不可卖；同分钟先评开盘缺口再评收盘、止损优先；缺口成交用 open，否则用 close；影线（仅 high/low 穿阈）不得成交。
 - [ ] **Q7 / Q32 / Q36**：N 按市场交易日推进；实际规则卖出遇跌停则当日阻挡、下一交易日重评。到期无更早成交时用当日最后一根 session 分钟 close；缺尾用实际末根，当日无分钟则顺延，不回退日线 close。
 - [ ] **Q37**：B 不要求 r2 N=1 ≡ r1_n1，盘中先触发可不同价；默认窄网格也不含 r2 N=1。勿照抄 A 的 42/42 等价验收。
 - [ ] **Q38**：oracle 为「分钟可成交 close 事后上界」，从 T+1 起仅排除跌停分钟 close，同日其他分钟可候选，不模拟更早失败卖出；实际规则仍遵守 Q7。
@@ -89,4 +89,4 @@ A 短记中的冠军 +1.50%、hold_end −24.36%、oracle +129.64% 是 **A 已�
 | `backtest_output/unified_exit_modeb/instance_detail_top.csv` | 冠军 + 四锚线明细，含 `sell_hm` |
 | `backtest_output/unified_exit_modeb/summary.json` | meta / top20 / anchors / n_opened / n_strategies；稳健性四件套在 `robustness` 内，无独立第四文件 |
 
-若用了运行子目录，短记写实际路径。宿主跑完后回填 [短记](unified-exit-modeb-host-note-2026-09-17.md)：实际日期 / 代码 tip / 机器 / 数据与缓存版本 / 命令 / 耗时内存 / sanity / B 独立结果 / 异常与结论。**短记 + 报告产物齐全且异常已说明** 后记录 E 完成。数字产物不入库。
+若用了运行子目录，短记写实际路径。宿主跑完后回填 [短记模板](unified-exit-modeb-host-note-2026-09-17.md)：实际日期 / 代码 tip / 机器 / 数据与缓存版本 / 命令 / 耗时内存 / sanity / B 独立结果 / 异常与结论。**短记 + 报告产物齐全且异常已说明**，才另行记录 E 完成；本 PR 中短记保持「⏳ 宿主未跑」，所有 B 数字 TBD。

@@ -77,16 +77,22 @@ def test_pipeline_reports_robustness_and_isolation(tmp_path):
     minutes = {CODE: pd.DataFrame({'ymd': sessions, 'hm': [900]*5,
                                    'high': [100]*5, 'low': [100]*5, 'close': [100]*5})}
     out = tmp_path / 'unified_exit_modeb'
-    result = b.run_modeb(pool, sessions=sessions, bars=bars, minute_bars=minutes, exdiv={}, out_dir=out)
+    result = b.run_modeb(pool, sessions=sessions, bars=bars, minute_bars=minutes,
+                         exdiv={}, out_dir=out, index_block={})
     assert len([s for s in b.iter_grid() if s.rule == 2]) == 18
-    assert len(result['ranked']) == 19
+    assert len([s for s in b.iter_grid() if s.rule == 4]) == 2
+    assert len([s for s in b.iter_grid() if s.rule == 5]) == 1
+    assert len([s for s in b.iter_grid() if s.rule == 6]) == 1
+    assert len(result['ranked']) == 23
     assert set(result['anchors']) == {'anchor_hold_end', 'r1_n1', 'oracle', 'delist_zero'}
     robust = result['robustness']
-    assert len(robust['half_windows']['h1']) == len(robust['half_windows']['h2']) == 19
-    assert robust['half_windows']['top20_overlap'] == 19
+    assert len(robust['half_windows']['h1']) == len(robust['half_windows']['h2']) == 20
+    assert robust['half_windows']['top20_overlap'] == 20
     assert robust['plateau'] and robust['board'] and robust['month'] and robust['next_open_buy']
     summary = json.loads((out / 'summary.json').read_text())
     assert summary['meta']['mode'] == 'B'
+    assert 'open-gap' in summary['meta']['price_domain']
+    assert 'numpy first-hit' in summary['meta']['scan']
     assert 'Q38=A' in summary['meta']['oracle']
     assert summary['meta']['minute_coverage']['covered_codes'] == 1
     assert (out / 'ranking.csv').exists()
@@ -100,6 +106,6 @@ def test_pipeline_reports_robustness_and_isolation(tmp_path):
 
 def test_cli_help_and_default_directory():
     run = subprocess.run([sys.executable, 'scripts/research/run_unified_exit_modeb.py', '--help'],
-                          capture_output=True, text=True, check=True)
+                          capture_output=True, text=True, encoding='utf-8', check=True)
     assert '模式 B' in run.stdout and '窄网格' in run.stdout
     assert b.DEFAULT_OUT_DIR.as_posix() == 'backtest_output/unified_exit_modeb'

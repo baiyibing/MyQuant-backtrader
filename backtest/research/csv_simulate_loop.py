@@ -121,6 +121,8 @@ def run_chase_due_day(
     exdiv: Optional[dict] = None,
     ds: Optional[str] = None,
     qlib_limit_pct: Optional[float] = None,
+    allow_new_name=None,
+    add_gate=None,
 ) -> None:
     """T+1 chase for due codes; ``quotes_for`` supplies open/buy/prev closes."""
     due = [c for c, (_per, sig) in pending_chase.items() if day_i > sig]
@@ -130,6 +132,10 @@ def run_chase_due_day(
             pending_chase.pop(code)
             st.stats["skip_held"] += 1
             st.stats["chase_skip_held"] += 1
+            continue
+        if callable(allow_new_name) and not allow_new_name(day):
+            pending_chase.pop(code)
+            st.stats["skip_index_gate"] += 1
             continue
         quoted = quotes_for(code)
         if quoted is None:
@@ -161,6 +167,10 @@ def run_chase_due_day(
             st.stats["skip_buy_gate"] += 1
             if len(closes) < 10:
                 st.stats["skip_sma_warmup"] += 1
+            continue
+        lots = st.positions.get(code, [])
+        if lots and callable(add_gate) and not add_gate(lots, buy_px):
+            st.stats["skip_add_loser"] += 1
             continue
         quota_used = st.daily_quota_used
         if not execute_buy(st, code, buy_px, per_ch, day_i, day, reason="chase:T+1"):
@@ -196,6 +206,9 @@ def run_pool_buys_day(
     qlib_limit_pct: Optional[float] = None,
     limit_up_chase: bool = True,
     forbid_all_trade_at_limit: bool = False,
+    allow_new_name=None,
+    add_gate=None,
+    name_lot_budget=None,
 ) -> None:
     """Pool buys for ``ds``; ``buy_quote_for`` supplies buy price + prev closes.
 
@@ -221,6 +234,9 @@ def run_pool_buys_day(
     for code in planned:
         if code in st.positions and not allow_add:
             st.stats["skip_held"] += 1
+            continue
+        if callable(allow_new_name) and not allow_new_name(day):
+            st.stats["skip_index_gate"] += 1
             continue
         quoted = buy_quote_for(code)
         if quoted is None:
@@ -256,6 +272,12 @@ def run_pool_buys_day(
             if len(closes) < 10:
                 st.stats["skip_sma_warmup"] += 1
             continue
+        lots = st.positions.get(code, [])
+        if lots and callable(add_gate) and not add_gate(lots, px):
+            st.stats["skip_add_loser"] += 1
+            continue
+        if sizing == "per_name" and callable(name_lot_budget):
+            per = float(name_lot_budget(name_budget, lots))
         if sizing == "per_name":
             shares, _ = _buy_size(per, px)
             notional = shares * px

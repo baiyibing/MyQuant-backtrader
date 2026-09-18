@@ -1,11 +1,11 @@
 # Plan：统一卖出规则网格 · 模式 B（分钟触发，2026-09-17）
 
 > **落盘**：2026-09-17。**v1.1**（docs-only；本 PR 不写 Mode B Python）。
-> **实施进度**：✅ A–D 已合 PR #95（master `8db98de`）；Q38=A 已落实分钟 oracle。D 含 P1=A 窄网格、聚合、四锚线、稳健性四件套及 CLI；⏳ 宿主 E 未执行，见 [E 业务 runbook](host-runbook-unified-exit-modeb-2026-09-17.md)。
-> **状态**：✅ **已人裁 GO**（2026-09-17；P1=A / P2=A / P3=A；P4/P5 锁）。本裁 commit `0ce1db5`。A–D 编码已闭环，E 保持开放。
+> **实施进度**：✅ A–D 已合 PR #95（master `8db98de`）；Q38=A 已落实分钟 oracle。D 含 P1=A 窄网格、聚合、四锚线、稳健性四件套及 CLI；**Q39**：价域改为分钟 open/close（废止 high/low 触发）。✅ 宿主 E 已按 Q39 重跑（tip `63c9a43`）；H/L 时代数字不得混比。见 [E 短记](unified-exit-modeb-host-note-2026-09-17.md)、[甲/乙短记](livermore-jia-yi-host-note-2026-09-17.md)。
+> **状态**：✅ **已人裁 GO**（2026-09-17；P1=A / P2=A / P3=A；P4/P5 锁）。本裁 commit `0ce1db5`。A–D 编码已闭环；Q39 E 已回填。
 > **风险档**：**NAV 影响研究模块**——独立 `unified_exit_modeb`，与策略 1–6/8/9/10 书及 v6/v8 分钟净值**隔离**；不改引擎 `rescale_position` 语义。
 > **业务源**：[stock-backtest-unified-exit-proposal-2026-09-17.md](stock-backtest-unified-exit-proposal-2026-09-17.md)（§一 Mode B 行 / §四 / §9.5 Q29=B / §十二速查）；Mode A 宿主短记 [unified-exit-modea-host-note-2026-09-17.md](unified-exit-modea-host-note-2026-09-17.md) §5（oracle 缺口证 Mode B 优先级；perf #92 已合）。
-> **工作流**：走 [Codex 交接工作流](workflow-codex-handoff.md)。GO → A–D 实现合入已完成；下一步为宿主 E。
+> **工作流**：走 [Codex 交接工作流](workflow-codex-handoff.md)。GO → A–D 实现合入已完成；Q39 宿主 E 已回填。
 > **交接**（A–D 已完成）：[handoff-unified-exit-modeb-codex-impl-2026-09-17.md](handoff-unified-exit-modeb-codex-impl-2026-09-17.md)。
 > **数据就绪（可先做、不依赖 Mode B 代码）**：[host-runbook-unified-exit-modeb-smoke-2026-09-17.md](host-runbook-unified-exit-modeb-smoke-2026-09-17.md)。
 > **基线 tip**：`e018924`（`origin/master`，含 Mode A + perf #92）。
@@ -14,7 +14,7 @@
 
 ## 0. 一句话
 
-在 Mode A 已跑通的「实例 × 策略」矩阵框架上，补 **模式 B**：买入 = 名单日 **none 日线 close**；监控 = **不复权 1 分钟 high/low**；成交 = **触发那根分钟的 close**；同根双触 **先止损**；除权日在 **本网格模块内** 做 E-R6（cost/peak ×k）**且** `shares /= k`（Q29=B）；**不改** `csv_ledger.rescale_position`（1–6/8 仍只动 cost/peak）。窗口 / 现金池 / 佣金 / 名单与 Mode A 同口径；报告目录与 Mode A **永不混排**。
+在 Mode A 已跑通的「实例 × 策略」矩阵框架上，补 **模式 B**：买入 = 名单日 **none 日线 close**；监控 = **不复权 1 分钟 open（缺口）再 close（触价）**；成交 = **缺口用该分钟 open，否则用该分钟 close**；high/low **不触发**；同根先评开盘再评收盘、**止损优先于止盈**；除权日在 **本网格模块内** 做 E-R6（cost/peak ×k）**且** `shares /= k`（Q29=B）；**不改** `csv_ledger.rescale_position`（1–6/8 仍只动 cost/peak）。窗口 / 现金池 / 佣金 / 名单与 Mode A 同口径；报告目录与 Mode A **永不混排**。
 
 ```text
 本 PR：docs only（plan + handoff + 可选宿主分钟就绪 runbook）
@@ -41,8 +41,8 @@ GO 后：feat/unified-exit-modeb · 切片 A–D 合入门；E = 宿主全/窄�
 | # | 规则 |
 |---|------|
 | **R1** | 独立模块 `backtest/research/unified_exit_modeb.py` + CLI `scripts/research/run_unified_exit_modeb.py`。尽量复用 Mode A 的装配 / 实例身份 / 网格枚举 / 报告形状。**禁止**为策略 1–6/8 去改 `csv_ledger.rescale_position` 的 shares 语义（X-R1 保持）。 |
-| **R2** | 价格域：**买 = none 日线 close**；**触发 = 1m high/low**；**成交 = 该分钟 close**。禁止 front 日线与 none 分钟混用同一判定链。 |
-| **R3** | 同根分钟同时触 TP 与 SL → **先止损**（Mode B only；Mode A close-only 不会双触）。 |
+| **R2** | 价格域：**买 = none 日线 close**；**触发/成交 = 1m open 缺口，否则 1m close**（对齐分钟策略 8 / 行业惯例）。**high/low 不触发、不成交**。禁止 front 日线与 none 分钟混用同一判定链。（2026-09-17 人裁改口：废止原「high/low 触发 + close 成交」；H/L 时代宿主 E 数字不得与本口径混比。） |
+| **R3** | 同根分钟：先评开盘缺口（止损先于止盈），再评收盘（止损先于止盈）。开盘已成交则不再看收盘。Mode A close-only 仍无双触。 |
 | **R4** | 除权：Mode B 路径内 E-R6 式 **cost/peak ×k 且 shares/=k**（Q29=B）；现金红利仍不入账。缩放逻辑**只写在 Mode B 网格模块**，不回写引擎 ledger。 |
 | **R5** | 网格轴 / 锚线 / 稳健性四件套与 Mode A **对等**（P1=A 时默认窄网格）。**Mode B 不要求** r2 N=1 ≡ r1_n1（Q37=A：盘中可先成交）；Mode A 等价性不变。 |
 | **R6** | 默认 CI **data-free**（合成 fixture）；全量/窄网格 **宿主-only**（优先 4090）；禁止硬编码盘符 / cwd `stock_data/` 字面量；湖路径只经 resolvers。 |
@@ -98,7 +98,7 @@ GO 后：feat/unified-exit-modeb · 切片 A–D 合入门；E = 宿主全/窄�
 | 切片 | 做什么 | 完成定义（DoD） |
 |------|--------|-----------------|
 | **A · 分钟装载与覆盖** | 经现成 `load_minute_bars` / `bar_cache` 读 `period=1m/dividend_type=none`；合成 fixture 单测；可选覆盖率 helper（Mode A 实开码 ∩ 分钟可得） | data-free pytest 绿；无硬编码盘符；覆盖 helper 不进 CI 湖门禁 |
-| **B · 分钟退出求值器** | 1m high/low 触发 + close 成交；同根 SL-first；T+1 / 跌停顺延 / 停牌冻仓按**分钟适配**（N 仍按市场交易日）；买入侧仍用 none 日线 close + 涨停不买不追 | 合成向量表（含同根双触、跌停分钟、halt）全绿；Q37=A 的 N=1 盘中先触发非等价反例；Mode A 测试不动 |
+| **B · 分钟退出求值器** | 1m open 缺口 + close 触价/成交；high/low 不触发；同根先开盘后收盘、止损优先；T+1 / 跌停顺延 / 停牌冻仓按**分钟适配**（N 仍按市场交易日）；买入侧仍用 none 日线 close + 涨停不买不追 | 合成向量表（含开盘缺口、影线不触发、跌停分钟、halt）全绿；Q37=A 的 N=1 盘中先触发非等价反例；Mode A 测试不动 |
 | **C · E-R6 + shares/=k** | 仅 Mode B 路径：除权日 cost/peak ×k 且 shares/=k；接 `load_exdiv_ratios`（若 P3=A）；现金红利不入账 | 合成除权 fixture（大送转 / 派息级 / 无事件）绿；断言引擎 `rescale_position` **未被改**（或 diff 零） |
 | **D · 聚合 / 锚线 / 稳健性 + CLI** | 复用 Mode A 报告形状（总收益率基数 11 亿、四锚线、Q34 四件套）；CLI `run_unified_exit_modeb.py`；产出 `backtest_output/unified_exit_modeb/`；README / AGENTS 一行 | pytest 聚合口径绿；HELP 中文；与 Mode A 目录隔离 |
 | **E · 宿主跑数**（**非合入门**） | 按 P1/P2：窄或全网格 + 短记；**不在实现 PR 勾选完成** | 短记落 `docs/backtest/`；数字产物不入库 |
@@ -142,7 +142,7 @@ D:\anaconda3\envs\vanna312\python.exe -m pytest -q tests/   # 含 Mode B 新测
 |----|------|
 | 窗口 | 20251023–20260909；`MINUTE_LAKE_END=20260909` |
 | 名单 | `stock_pool/YYYYMMDD.csv`；缺 2 天 = 当天无名单 |
-| 买 / 卖 | 买=名单日 **none** 日线 close；卖=触发分钟 **close**；触发看 1m high/low |
+| 买 / 卖 | 买=名单日 **none** 日线 close；卖=分钟 **open 缺口或 close 触价**；high/low 不触发 |
 | 钱 | 每笔目标 100 万；整百股；名义现金池 **11 亿**；佣金 0.1%；**无印花税**；卖出回池 |
 | 交易所 | T+1；停牌冻仓；涨停不买不追；跌停延期；**同根先止损** |
 | 除权 | none + E-R6 + **shares÷k**（仅本网格）；现金红利不入账 |
