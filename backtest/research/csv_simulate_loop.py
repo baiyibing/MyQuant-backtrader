@@ -14,6 +14,7 @@ from typing import Callable, Optional
 
 import pandas as pd
 
+from backtest.research.ashare_session import skip_buy_at_limit
 from backtest.research.csv_common import (
     _pool_names_asof,
     book_limit_prices,
@@ -25,7 +26,6 @@ from backtest.research.csv_ledger import (
     execute_buy,
     trade_commission,
     hit_limit_down,
-    hit_limit_up,
     market_close_mark,
     queue_limit_up_chase,
 )
@@ -156,7 +156,10 @@ def run_chase_due_day(
             st.stats["skip_unknown_board"] += 1
             continue
         limit_up, _ = limits
-        decision = chase_decision(open_px, buy_px, limit_up)
+        decision = (
+            "limit" if skip_buy_at_limit(buy_px, limits)
+            else chase_decision(open_px, buy_px, limit_up)
+        )
         if decision == "limit":
             st.stats["chase_skip_limit"] += 1
             continue
@@ -258,7 +261,7 @@ def run_pool_buys_day(
             st.stats["skip_unknown_board"] += 1
             continue
         limit_up, limit_down = limits
-        blocked = hit_limit_up(px, limit_up) or (
+        blocked = skip_buy_at_limit(px, limits) or (
             forbid_all_trade_at_limit and hit_limit_down(px, limit_down)
         )
         if blocked:

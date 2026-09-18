@@ -9,16 +9,32 @@
 ```
 market_layer.py     叶子：时间 / limit_pct / limit_prices(Decimal HALF_UP) / round_fen
 ashare_session.py   日线/分钟共用微结构：ST 档、官方 none 昨收+E-R6、涨跌停命中、T+1
-ashare_bars.py      日线/分钟共用行情：湖 parquet 与 qlib bin（不 import qlib）
+ashare_bars.py      日线/分钟共用行情：湖统一 load_minute_ohlc 书帧；qlib bin 保留私有 compact 链（不 import qlib）
 ashare_fees.py      日线/分钟共用费率：默认双边 10bp；qlib PortAna 5/15bp+最低5
 csv_pool.py         名单 + 名称列（ST）
 csv_ledger.py       Position / SimState / execute_buy / _sell / 追买桶（命中函数转调 ashare_session）
 csv_daily_backtest  simulate + 日线加载 + CLI
 csv_minute_backtest scan_held_day + CLI；分钟/日线加载转调 ashare_bars
-csv_minute_backtest_v7  独立仓位机；微结构只走 ashare_session
+csv_minute_backtest_v7  独立仓位机；微结构只走 ashare_session；_day_frame_records 按 (b) 切书帧/compact
 ```
 
 7 不进 BOOKS，不 import 6/8 `SimState`。
+
+`bars_from_pool` → `load_session_bars` 保留：湖源整窗调用 `load_minute_ohlc(use_cache=False)`，
+v7 / topk 共用 `_load_cli_bars`，只将所需日切片转成 records。帧契约 **(b)**：书帧 `ymd` /
+DatetimeIndex，qlib_1min 的私有 `_load_minute_compact` 链仍用 `date`；compact 湖分支仅留作冻结对照，
+生产调用归零。新策略复用加载、涨跌停与费率模块，不另写实现。
+
+读取器字节级冻结；保留书帧新成交，七类预期迁移与其余漂移的 STOP 边界见
+[plan §5.1](plan-ashare-engine-refactor-2026-09-18.md#51-切片-a-预期迁移人裁-2026-09-18)。
+已知限制仍在：书引擎 cache 无新鲜度守卫，加载线程池无 timeout；v7 小名单窗不读写共享 cache。
+
+T+1 在书引擎原调用点将 `calendar[entry_idx]` 映射为日期后调用 `t1_sellable`；卖点仍用
+联合日历下标差 `n_days`，分钟扫描器仅收到布尔 `can_sell`，两个扫描内核保持冻结。
+买卖门复用 `skip_buy_at_limit` / `defer_sell_at_limit`；双账本及填单函数契约保留。
+已知分叉继续记录：书侧无昨收/未知板块先冻仓；v7 卖侧这两支 `limits=None` 仍放行，
+加仓侧同样保留现状，ST 名称仍按窗末名平铺而非 PIT。日线 `open_board` 当日收盘成交，
+其余 `pending_exit` 下一可成交日开盘；不在本轮改变时点或参考价之外的股数。
 
 ## 2. 现锁（E-R\*）
 

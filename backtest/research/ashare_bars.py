@@ -199,7 +199,7 @@ def _read_lake_minute(symbol: str, start: date, end: date):
     return None if compacted.empty else compacted
 
 
-def load_minute_compact(
+def _load_minute_compact(
     symbols: Iterable[str],
     start: date | str,
     end: date | str,
@@ -208,7 +208,7 @@ def load_minute_compact(
     qlib_root: Path | str | None = None,
     workers: int = 16,
 ) -> dict[str, object]:
-    """Compact minute frames for v7: ``date, hm, open, high, close``."""
+    """Private compact source for qlib_1min and frozen lake comparisons."""
     kind = _check_source(source, MINUTE_SOURCES, "minute")
     codes = _canonical_symbols(symbols)
     if not codes:
@@ -257,15 +257,21 @@ def load_session_bars(
     daily_root: Path | str | None = None,
     workers: int = 16,
 ) -> SessionBars:
-    """One call for a matcher: minute fills + daily 昨收 map."""
+    """Minute fills + daily 昨收; lake uses book frames, bin stays compact."""
     minute_kind = _check_source(minute_source, MINUTE_SOURCES, "minute")
     daily_kind = _check_source(daily_source, DAILY_SOURCES, "daily")
     codes = _canonical_symbols(symbols)
     if not codes:
         return SessionBars({}, {}, minute_kind, daily_kind)
-    minute = load_minute_compact(
-        codes, start, end, source=minute_kind, qlib_root=qlib_1min_root, workers=workers
-    )
+    if minute_kind == "lake":
+        # Pool windows must not read/overwrite the shared, window-only cache.
+        minute = load_minute_ohlc(
+            codes, _as_ymd(start), _as_ymd(end), workers=workers, use_cache=False
+        )
+    else:
+        minute = _load_minute_compact(
+            codes, start, end, source=minute_kind, qlib_root=qlib_1min_root, workers=workers
+        )
     daily_close = load_daily_closes(
         codes,
         start,

@@ -6,6 +6,9 @@
 > 前置：PR [#104](https://github.com/baiyibing/MyQuant-backtrader/pull/104)（`ashare_*`）**已合入 master**（`a61b1ad`）。
 > 工作流：[workflow-codex-handoff.md](workflow-codex-handoff.md) 第 4 步定稿；第 3 步人裁已做（2026-09-18）。
 > 基线：`origin/master` `a61b1ad`（#104 + #105 已合）；`ashare_*` 符号以 #104 `28c4ce2` 为准，行号漂移以符号名为准。
+> **短注**：本轮两处措辞修订关闭 2026-09-18 Opus 5 实施前红旗（R-1 漂移一律 STOP + R-2 numba 调用点锁定），不表示引擎重构已实施。下一行人裁把 R-1 收窄：该 fixture 族七类为预期迁移，七类之外仍 STOP。
+> 本轮另两处措辞关闭 2026-09-18 Opus 5 复审红旗 N-1（冻结 `read_lake_minute_ohlc`）与 N-2（切片 A 写死比对物），不表示引擎重构已实施。
+> **人裁（2026-09-18 · 切片 A 填价）**：书帧读取器的新成交是**保留结果**，不是缺陷。同一合成 fixture 族（源 parquet SHA 不变、源文件均含 `low`）上，干净窗加①–⑥共七类实测差异是**预期迁移**。**禁止**改 `read_lake_minute_ohlc` 去追回 compact 旧成交。该七类之外的 reason 计数或 trades 价格漂移仍是 **STOP**，须问人。干净窗必须仍一致。读取器现状锁与 numba 内核锁（`can_sell=` 仅 `csv_minute_backtest.py:618`；日线 `n_days >= 1` 仅 `csv_daily_backtest.py:327,334`；两内核字节级不动）不放宽。
 
 ## ⛔ 开工闸
 
@@ -69,7 +72,30 @@ codex exec --dangerously-bypass-approvals-and-sandbox \
 4. 新策略不得再写湖/bin 加载、涨跌停、佣金。
 5. 回写 `engine-ashare-correctness.md` 模块表。
 
-**测试**：v7 合成窗 reason 计数**与 trades 价格列**对齐改造前（允许漂移必须 STOP）；**非空 bar 计数 > 0**（防空切片假绿）+ topk 合成窗非空；1–10 / Mode B 填价与 reason 不动（cache 写路径允许变）。
+**测试**：numba 内核锁不因本切片放宽（`can_sell=` 只在 `csv_minute_backtest.py:618`；日线 `n_days >= 1` 只在 `csv_daily_backtest.py:327,334`；`_scan_held_day_numba_trail` 与 `scan_held_day_python` 字节级不动）。`read_lake_minute_ohlc` 的现状行为（单 `data.parquet`、`low` 为必需列、`_in_session` 过滤、`duplicated(keep="last")` 去重、整日零量丢弃）为**现状锁，字节级不动**。禁止改这只共用读取器来追回 compact 旧成交，也禁止改它来让 ④⑤⑥ 产出非空书帧。
+
+**预期迁移（该 fixture 族，不得另造数字）**：对照物仍是私有化后的 compact 链，或同一 fixture 上落盘的改造前 records；结果侧采用书帧读取器。compact → 书帧：
+
+| 类 | rows | reason | prices |
+|---|---|---|---|
+| clean | 2→2 | 不变（buy:trial=1, stop:trial_a090=1） | [100, 89] → [100, 89] |
+| ① 盘外时间戳 | 3→2 | stop 1→0 | [100, 90] → [100] |
+| ② 整日 volume=0 | 2→1 | buy+stop → skip_no_1455 | [100, 89] → null |
+| ③ 重复时间戳 | 3→2 | 不变 | [100, 89] → [102, 89]（买价 100→102，因 `duplicated(keep="last")`） |
+| ④ 仅多 part | 2→0 | buy+stop → skip_no_1455 | [100, 89] → null |
+| ⑤ compact 输出无 `low`（源含 `low`） | 3→1 | buy+stop → skip_no_1455 | [100, 89] → null |
+| ⑥ `data.parquet` 另加 part | 2→1 | stop 1→0 | [100, 89] → [100] |
+
+这七行是本 fixture 族的预期迁移，不是待修缺陷。**除此以外**的任何 reason 计数漂移，或任何 trades 价格列漂移，仍是 **STOP**，必须问人，不得自行放行。干净窗必须仍与上表 clean 行一致。实现 PR **不得**以「新测试全绿」代替上述比对；绿测不豁免七类之外的漂移。合成窗必须包含以下六类 fixture 行型，缺一类即不算覆盖：
+
+1. 盘外时间戳（out-of-session timestamps；书帧 `_in_session` 会滤，compact 不过滤）。
+2. `volume = 0` 的整日（书帧丢零量日）。
+3. 重复时间戳（书帧 `duplicated(keep="last")` 去重，compact 不去重）。
+4. 多 part parquet 文件（预期为书帧 `None` 或少行，不是待修缺陷）。
+5. compact 的输出帧没有 `low`（`_compact_minute_frame` 的输出不含 `low`），不是源 parquet「缺 `low` 列」；**禁止构造缺 `low` 源文件**。
+6. 书帧 vs compact 的文件集差异：书帧只读单个 `data.parquet`，compact 用目录 `glob("*.parquet")`（预期为书帧 `None` 或少行，不是待修缺陷）。
+
+类型 ④⑤⑥ 的预期仍是书帧返回 `None` 或少行（实测即上表，不是待修缺陷）。①–③的 reason/价格差同样是上表已裁定的预期迁移，不得再当成缺陷去改读取器。规整、藏掉上述任一行型的合成窗不得判绿；**非空 bar 计数 > 0**（以及为防空切片假绿而设的非空门）只对干净 symbol 生效，不适用于预期为 `None` 或少行的 ④⑤⑥；topk 合成窗非空仍只针对干净路径。1–10 / Mode B 填价与 reason 相对**同一基线**不动（cache 写路径允许变）。
 
 **DoD**：pytest 绿；无盘符字面量。
 
@@ -82,7 +108,8 @@ codex exec --dangerously-bypass-approvals-and-sandbox \
 1. T+1 一律 `ashare_session.t1_sellable(buy_date, session)`。
 2. 1–10 `entry_idx` 映射为日历日（映射只服务 T+1 谓词与日期打印）；**`n_days` 仍按联合日历下标计数**（禁按个股有 K 日数重建），**不改**卖点公式。
 3. 谓词落点=**现有调用点**（simulate 环 / v7 事件环）统一 `t1_sellable` / `skip_buy_at_limit` / `defer_sell_at_limit`；**不改** `execute_buy` / `_sell` / v7 `_buy` / `_sell_lots` 填单契约（现状不含谓词，也不塞进去）；书侧 `limits is None` **先拒**（fail-closed）；`hit_limit_*` 保留给 reserve/open_board/forbid_all/qlib 带内。
-4. v7 的 `stage` / `entry_A` / 加仓阶梯留在 v7。
+4. **T+1 谓词只允许加在这两个现有调用/判定点**：`backtest/research/csv_minute_backtest.py:618` 的 `scan_held_day(..., can_sell=(n_days >= 1))` 中 `can_sell=` 实参；`backtest/research/csv_daily_backtest.py:327,334` 的 `pos.pending_exit and n_days >= 1` 与 `if n_days >= 1` 日线判定点。`_scan_held_day_numba_trail` 与 `scan_held_day_python` 两个内核的内部守卫必须字节级不动：前者 `n_days < 1`（`:174`）及 `limit_down > 0.0`（`:183,203`），后者 `n_days < 1`（`:269`）及 `limit_down > 0`（`:278,316`）；禁止把 `date` 对象传进 `@njit`，平价锁为 `tests/test_scan_held_day_numba_parity.py`。
+5. v7 的 `stage` / `entry_A` / 加仓阶梯留在 v7。
 
 **测试**：日线 + 分钟 + v7 各 1 条 T+1 拒卖、涨停 skip、跌停 defer；**None-limits 卖侧向量两支（无昨收 + 未知板块）记录现状行为**（v7 现状 fail-open 放行，不改，Q40+ 另裁）；日线卖出时点两支（`open_board` 同 bar 当日收 vs 其余 `pending_exit` 次日开）。P1=A 时 golden 指涉物 = tests 合成 golden + 宿主改造前短窗 trades/summary 基线先落盘。`rescale_position` diff 空或仍 shares untouched。
 
@@ -122,7 +149,7 @@ D:\anaconda3\envs\vanna312\python.exe -m pytest -q tests/
 
 - [x] 人裁 GO 已写回 plan（hash：`72178b7`，2026-09-18 · A/A/C/A/A）
 - [x] #104 已合入实施底（`a61b1ad`）
-- [ ] A · 一帧分钟
-- [ ] B · T+1/涨跌停谓词统一（P1=A；双账本保留）
-- [ ] C · 围栏 + 入口
+- [x] A · 一帧分钟（帧契约 b；七类迁移断言与原 parquet SHA 对照通过）
+- [x] B · T+1/涨跌停谓词统一（P1=A；双账本保留；日历映射/None 两支回归通过）
+- [x] C · 围栏 + 入口（固定 11+4 热路径与 plan 字节一致；旧 CLI / HELP_LOCK 保留）
 - [ ] D · 宿主对照（host-only；实现 PR 不勾）

@@ -7,9 +7,9 @@ import pandas as pd
 import pytest
 
 from backtest.research.ashare_bars import (
+    _load_minute_compact,
     bars_from_pool,
     load_daily_ohlc,
-    load_minute_compact,
     load_session_bars,
 )
 
@@ -23,13 +23,13 @@ def _write_bin(path: Path, ref: int, values: list[float]) -> None:
 
 def test_unknown_source_is_rejected():
     with pytest.raises(ValueError, match="minute source"):
-        load_minute_compact(["000001.SZ"], date(2026, 1, 6), date(2026, 1, 7), source="csv")
+        _load_minute_compact(["000001.SZ"], date(2026, 1, 6), date(2026, 1, 7), source="csv")
     with pytest.raises(ValueError, match="daily source"):
         load_daily_ohlc(["000001.SZ"], "20260106", "20260107", source="yahoo")
 
 
 def test_empty_symbols_and_empty_pool_return_empty():
-    assert load_minute_compact([], date(2026, 1, 6), date(2026, 1, 7)) == {}
+    assert _load_minute_compact([], date(2026, 1, 6), date(2026, 1, 7)) == {}
     bars = bars_from_pool({}, date(2026, 1, 6), date(2026, 1, 7))
     assert bars.minute == {}
     assert bars.daily_close == {}
@@ -47,9 +47,9 @@ def test_load_session_bars_qlib_1min_and_require_root(tmp_path):
     _write_bin(feat / "high.1min.bin", 0, [10.1, 11.1])
 
     with pytest.raises(ValueError, match="qlib_root"):
-        load_minute_compact(["000739.SZ"], date(2026, 1, 6), date(2026, 1, 7), source="qlib_1min")
+        _load_minute_compact(["000739.SZ"], date(2026, 1, 6), date(2026, 1, 7), source="qlib_1min")
 
-    minute = load_minute_compact(
+    minute = _load_minute_compact(
         ["000739.SZ"], date(2026, 1, 6), date(2026, 1, 7), source="qlib_1min", qlib_root=tmp_path
     )
     assert list(minute["000739.SZ"]["close"]) == [10.0, 11.0]
@@ -71,6 +71,15 @@ def test_load_session_bars_qlib_1min_and_require_root(tmp_path):
     assert session.daily_source == "qlib_day"
     assert "000739.SZ" in session.minute
     assert session.daily_close["000739.SZ"][date(2026, 1, 7)] == 11.0
+    pooled = bars_from_pool(
+        {date(2026, 1, 6): ["000739.SZ"]}, date(2026, 1, 6), date(2026, 1, 7),
+        minute_source="qlib_1min", qlib_1min_root=tmp_path,
+        daily_source="qlib_day", qlib_day_root=tmp_path,
+    )
+    from backtest.research.csv_minute_backtest_v7 import _day_frame_records
+
+    assert "date" in pooled.minute["000739.SZ"].columns
+    assert [r["close"] for r in _day_frame_records(pooled.minute["000739.SZ"], date(2026, 1, 6))] == [10.0]
 
 
 def test_load_daily_ohlc_qlib_day(tmp_path):

@@ -4,6 +4,8 @@
 
 三件引擎怎么分工：[`docs/backtest/engine-positioning-ssot.md`](docs/backtest/engine-positioning-ssot.md)。成交核（档位 / 全卖因跌停 / Decimal 涨跌停价 / E-R6 除权日参考价修正）：[`docs/backtest/engine-ashare-correctness.md`](docs/backtest/engine-ashare-correctness.md)。名单 CSV 契约：[`docs/backtest/pool-csv-contract.md`](docs/backtest/pool-csv-contract.md)。Qlib 回测停用；Cerebro / Rolling 已退场（2026-09-16）。本仓没有 `backtest/lebs/`。
 
+三仓回测不做重：MyQuant 出信号，本仓向量化研究，1.3 执行验收；LEBS 只在 1.3，且 LEBS ≠ MockQMT 真栈。本仓无 `python -m backtest.lebs` 入口。
+
 Seeded from OSkhQuant slim snapshot at `5d41252`。S2（2026-09-09）之后本仓收研究面；交易栈只留 `oskh_factors` chip/bridge 微包。
 
 ## Layout
@@ -41,6 +43,8 @@ D:\anaconda3\envs\vanna312\python.exe -m pip install -r requirements.txt
 ```
 
 ## Run research backtest
+
+旧 CSV CLI 保留为真身（P5=A），HELP_LOCK 不变；本轮不新增薄包装。v7 / topk 的湖分钟行情共用 `ashare_bars` 书帧，qlib_1min 源仍保留。施工边界见 [撮合核收口 plan §0.3 / §5](docs/backtest/plan-ashare-engine-refactor-2026-09-18.md)。
 
 必须 `--strategy version1|…|version6|version8|version9|version10`。7 不在 choices，必须走独立入口并传 `--pool-dir`。9 / 10 在 choices 里，但也必须 `--pool-dir`（`export_strategy9_pool.py` / `export_ta_pool.py`），拒绝 `stock_pool/`。`stock_pool/` 是 6/8 可变默认，不是实验快照；可复现跑用 `exports/`（见 [pool-csv-contract](docs/backtest/pool-csv-contract.md)）。数据经 `oskh_data` / `resolve_period_root`（有 `F:\stock_data\.authority` 时跟 F 盘）。
 
