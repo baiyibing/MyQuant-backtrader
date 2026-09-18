@@ -1,12 +1,12 @@
 # Plan：向量化 A 股撮合核收口（2026-09-18）
 
 > **落盘**：2026-09-18。**v1.3**（docs-only；本 PR 不写 Python）。v1.1 补 §0.3；v1.2 回填三路对抗勘误（[adversarial-errata.md](../architecture/reviews/2026-09-18/plan-ashare-engine-refactor/adversarial-errata.md) E-01..E-16）；v1.3 回填三席多模型评审（[merge-consensus.md](../architecture/reviews/2026-09-18/plan-ashare-engine-refactor-2026-09-18/merge-consensus.md) MC-1..MC-9）。
-> **状态**：⏳ **待人裁 GO**（P1–P5 未裁；**GO 前禁止编码**）。
+> **状态**：✅ **已人裁 GO**（2026-09-18 · **P1=A / P2=A / P3=C / P4=A / P5=A** · v1.3 @ `72178b7`）。实施走 [Codex 交接工作流](workflow-codex-handoff.md) 第 5 步。
 > **风险档**：**引擎结构**——默认不改 1–10 / v7 成交数字。P2 若打开印花、除权改股、成交量上限，研究 NAV 作废并另开对照货币；未裁前当禁区。
 > **业务源**：[engine-positioning-ssot.md](engine-positioning-ssot.md)（三件引擎）；[engine-ashare-correctness.md](engine-ashare-correctness.md)（E-R1–E-R6）；[pool-csv-contract.md](pool-csv-contract.md)；MyQuant [`docs/plan-three-repo-roadmap-2026-09-12.md`](../../../../MyQuant/docs/plan-three-repo-roadmap-2026-09-12.md) §1–§2；1.3 [`docs/backtest/backtest-architecture-ssot.md`](../../../../OSkhQuant1.3/docs/backtest/backtest-architecture-ssot.md)（只管辖 1.3）。
 > **前置**：PR [#104](https://github.com/baiyibing/MyQuant-backtrader/pull/104)（`ashare_session` / `ashare_bars` / `ashare_fees`）**已合入 master**（`a61b1ad`，同 tip 含本 docs PR #105）。实施底 = 该 tip 起的 master。
 > **工作流**：走 [Codex 交接工作流](workflow-codex-handoff.md)。
-> **交接草稿**：[handoff-ashare-engine-refactor-codex-impl-2026-09-18.md](handoff-ashare-engine-refactor-codex-impl-2026-09-18.md)（plan 头部未 ✅ 已人裁 GO **禁止开工**）。
+> **交接**：[handoff-ashare-engine-refactor-codex-impl-2026-09-18.md](handoff-ashare-engine-refactor-codex-impl-2026-09-18.md)（已随 GO 刷新，为 Codex 施工图）。
 > **基线 tip**：`origin/master` `a61b1ad`（#104 + #105 已合）；`ashare_*` 符号以 #104 `28c4ce2` 为准，行号漂移以符号名为准。
 
 ---
@@ -154,6 +154,8 @@ CSV 回测不准去改那四条海龟线。LEBS 里禁止重写本仓 6/8/7。
 | **P5** | 统一 `bt run` CLI | **A**：旧 CLI 保留为真身；本轮最多薄包装，不改 HELP_LOCK | **A** 薄包装；**B** 本轮不碰 CLI；**C** 换入口并改 HELP_LOCK（需另锁文案） |
 
 未裁 = 实施按建议默认执行仍须头部先改成 ✅ 已人裁 GO。合本 docs PR ≠ 实施 GO。
+
+> **已人裁（2026-09-18）**：**P1=A**（谓词统一，双账本保留）· **P2=A** · **P3=C** · **P4=A** · **P5=A**。P2/P3/P4 若开工另开 plan。
 
 ---
 

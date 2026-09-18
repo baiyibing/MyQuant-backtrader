@@ -1,15 +1,15 @@
 # 交接 · 向量化 A 股撮合核收口（Codex 接手）
 
 > 日期：2026-09-18
-> 状态：⏳ **待人裁 GO**。plan 头部未改为「✅ 已人裁 GO（hash）」**禁止开工**。随本 docs PR 先合 master 仍禁止写撮合 Python。
+> 状态：✅ **已人裁 GO**（2026-09-18 · P1–P5 = A/A/C/A/A · plan v1.3 @ `72178b7`）。**可以开工**：从 master 开 `feat/ashare-engine-refactor`，切片 A→B→C 分 commit；遇 plan 未覆盖语义 → STOP Q40+，不自裁。
 > 权威对象：[plan-ashare-engine-refactor-2026-09-18.md](plan-ashare-engine-refactor-2026-09-18.md) **v1.3**（勘误依据 [adversarial-errata.md](../architecture/reviews/2026-09-18/plan-ashare-engine-refactor/adversarial-errata.md) + 多模型共识 [merge-consensus.md](../architecture/reviews/2026-09-18/plan-ashare-engine-refactor-2026-09-18/merge-consensus.md)）。
 > 前置：PR [#104](https://github.com/baiyibing/MyQuant-backtrader/pull/104)（`ashare_*`）**已合入 master**（`a61b1ad`）。
-> 工作流：[workflow-codex-handoff.md](workflow-codex-handoff.md) 第 4 步草稿；第 3 步人裁未做。
+> 工作流：[workflow-codex-handoff.md](workflow-codex-handoff.md) 第 4 步定稿；第 3 步人裁已做（2026-09-18）。
 > 基线：`origin/master` `a61b1ad`（#104 + #105 已合）；`ashare_*` 符号以 #104 `28c4ce2` 为准，行号漂移以符号名为准。
 
 ## ⛔ 开工闸
 
-**do not start Codex coding until** plan 头部写明 ✅ 已人裁 GO（commit hash）。#104 已合（`a61b1ad`），本闸只剩人裁一半。本文件随 docs PR 入库 ≠ 实施许可。
+**两闸均已过（2026-09-18）**：plan 头部 ✅ 已人裁 GO（v1.3 @ `72178b7`，P1–P5 = A/A/C/A/A）；#104 已合（`a61b1ad`）。实施按本文件切片执行；遇 plan 未覆盖语义 → **STOP Q40+**，不自裁。
 
 ---
 
@@ -105,8 +105,8 @@ D:\anaconda3\envs\vanna312\python.exe -m pytest -q tests/
 
 ## 6. 完成标记（Codex 填；仅 GO 后）
 
-- [ ] 人裁 GO 已写回 plan（hash：____）
-- [ ] #104 已合入实施底
+- [x] 人裁 GO 已写回 plan（hash：`72178b7`，2026-09-18 · A/A/C/A/A）
+- [x] #104 已合入实施底（`a61b1ad`）
 - [ ] A · 一帧分钟
 - [ ] B · T+1/涨跌停谓词统一（P1=A；双账本保留）
 - [ ] C · 围栏 + 入口
