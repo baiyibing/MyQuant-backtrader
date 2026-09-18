@@ -4,6 +4,8 @@ Standalone research-face fork (see [README.md](README.md)). Since migration S2 (
 
 **成交引擎定位**：本仓 = 向量化。1.3 = LEBS + MockQMT 真栈。Qlib PortAnaRecord 停用；Cerebro / Rolling 已退场（2026-09-16）。见 [`docs/backtest/engine-positioning-ssot.md`](docs/backtest/engine-positioning-ssot.md)。成交核（档位 / 全卖因跌停 / Decimal 涨跌停价）见 [`docs/backtest/engine-ashare-correctness.md`](docs/backtest/engine-ashare-correctness.md)。入口命令见 [`docs/backtest/README.md`](docs/backtest/README.md)。
 
+三仓回测不做重：MyQuant 出信号，本仓向量化研究，1.3 执行验收；LEBS 只在 1.3，且 LEBS ≠ MockQMT 真栈。本仓无 `python -m backtest.lebs` 入口。旧 CSV CLI 保留真身，HELP_LOCK 不变（P5=A）。
+
 ## Research entries
 
 - 1/2/3/4/5/6/8/9/10 日线：`backtest/research/csv_daily_backtest.py --strategy version1|…|version6|version8|version9|version10`
@@ -16,7 +18,7 @@ Standalone research-face fork (see [README.md](README.md)). Since migration S2 (
 - 统一卖出规则网格 · 模式 B：`scripts/research/run_unified_exit_modeb.py`（默认 P1=A 窄网格；Q38=A 分钟 oracle；产出独立目录 `backtest_output/unified_exit_modeb/`）。
 - 名单：`backtest/research/csv_pool.py`（与 1.3 `lebs/csv/universe.py` 同口径）
 - 不要 `python -m backtest.lebs`（包不在本仓；LEBS 只在 1.3，且 LEBS ≠ 真栈）。Cerebro 已退场，禁止复活。
-- 向量化撮合核收口 plan（⏳ 待人裁 GO，勿编码）：`docs/backtest/plan-ashare-engine-refactor-2026-09-18.md` §0.3
+- 向量化撮合核收口 plan（已人裁 GO：A/A/C/A/A；范围 A→B→C，D 后置）：`docs/backtest/plan-ashare-engine-refactor-2026-09-18.md` §0.3 / §5。热路径固定清单由 `tests/test_ashare_simulate_import_fence.py` 锁定，禁止扩成 research 全目录扫描。
 - Cerebro / Rolling 已退场（2026-09-16）；chip / ma_chip 对照产物为静态档案，代码路径已删。ma_chip 默认归档；version11 CSV 移植须另开计划并重裁成交时点语义。
 - presets 与 1.3 契约：`tests/test_presets_cross_repo_snapshot.py`（勿静默漂移）。
 

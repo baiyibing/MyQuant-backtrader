@@ -151,5 +151,5 @@ D:\anaconda3\envs\vanna312\python.exe -m pytest -q tests/
 - [x] #104 已合入实施底（`a61b1ad`）
 - [x] A · 一帧分钟（帧契约 b；七类迁移断言与原 parquet SHA 对照通过）
 - [x] B · T+1/涨跌停谓词统一（P1=A；双账本保留；日历映射/None 两支回归通过）
-- [ ] C · 围栏 + 入口
+- [x] C · 围栏 + 入口（固定 11+4 热路径与 plan 字节一致；旧 CLI / HELP_LOCK 保留）
 - [ ] D · 宿主对照（host-only；实现 PR 不勾）
