@@ -1,0 +1,4 @@
+path=docs/backtest/plan-ashare-engine-refactor-2026-09-18.md
+git_sha=47f0eb1
+content_sha256_16=40856b1a30bad0f9
+reviewed_at=2026-09-18

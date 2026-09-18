@@ -1,19 +1,19 @@
 # Plan：向量化 A 股撮合核收口（2026-09-18）
 
-> **落盘**：2026-09-18。**v1.1**（docs-only；本 PR 不写 Python）。v1.1 补 §0.3：1.3 内 LEBS 与真栈分轨、LEBS 两条产品线、选哪一件。
-> **状态**：⏳ **待人裁 GO**（P1–P5 未裁；**GO 前禁止编码**）。
+> **落盘**：2026-09-18。**v1.3**（docs-only；本 PR 不写 Python）。v1.1 补 §0.3；v1.2 回填三路对抗勘误（[adversarial-errata.md](../architecture/reviews/2026-09-18/plan-ashare-engine-refactor/adversarial-errata.md) E-01..E-16）；v1.3 回填三席多模型评审（[merge-consensus.md](../architecture/reviews/2026-09-18/plan-ashare-engine-refactor-2026-09-18/merge-consensus.md) MC-1..MC-9）。
+> **状态**：✅ **已人裁 GO**（2026-09-18 · **P1=A / P2=A / P3=C / P4=A / P5=A** · v1.3 @ `72178b7`）。实施走 [Codex 交接工作流](workflow-codex-handoff.md) 第 5 步。
 > **风险档**：**引擎结构**——默认不改 1–10 / v7 成交数字。P2 若打开印花、除权改股、成交量上限，研究 NAV 作废并另开对照货币；未裁前当禁区。
 > **业务源**：[engine-positioning-ssot.md](engine-positioning-ssot.md)（三件引擎）；[engine-ashare-correctness.md](engine-ashare-correctness.md)（E-R1–E-R6）；[pool-csv-contract.md](pool-csv-contract.md)；MyQuant [`docs/plan-three-repo-roadmap-2026-09-12.md`](../../../../MyQuant/docs/plan-three-repo-roadmap-2026-09-12.md) §1–§2；1.3 [`docs/backtest/backtest-architecture-ssot.md`](../../../../OSkhQuant1.3/docs/backtest/backtest-architecture-ssot.md)（只管辖 1.3）。
-> **前置**：PR [#104](https://github.com/baiyibing/MyQuant-backtrader/pull/104)（`ashare_session` / `ashare_bars` / `ashare_fees`）。未合入则实施分支以 #104 merge 后的 master 为底，不把本 plan 叠在未合代码上开工。
+> **前置**：PR [#104](https://github.com/baiyibing/MyQuant-backtrader/pull/104)（`ashare_session` / `ashare_bars` / `ashare_fees`）**已合入 master**（`a61b1ad`，同 tip 含本 docs PR #105）。实施底 = 该 tip 起的 master。
 > **工作流**：走 [Codex 交接工作流](workflow-codex-handoff.md)。
-> **交接草稿**：[handoff-ashare-engine-refactor-codex-impl-2026-09-18.md](handoff-ashare-engine-refactor-codex-impl-2026-09-18.md)（plan 头部未 ✅ 已人裁 GO **禁止开工**）。
-> **基线 tip**：`origin/master` `4a3e5fe`（#103）；`ashare_*` 符号以 #104 `28c4ce2` 为准，行号漂移以符号名为准。
+> **交接**：[handoff-ashare-engine-refactor-codex-impl-2026-09-18.md](handoff-ashare-engine-refactor-codex-impl-2026-09-18.md)（已随 GO 刷新，为 Codex 施工图）。
+> **基线 tip**：`origin/master` `a61b1ad`（#104 + #105 已合）；`ashare_*` 符号以 #104 `28c4ce2` 为准，行号漂移以符号名为准。
 
 ---
 
 ## 0. 一句话
 
-把本仓**已经抽出的** session / bars / fees 收成唯一向量化撮合核：策略只发意图，引擎只答能不能成交。三仓各自保留自己的回测，**不合引擎、不对净值、不把别人的回测再写一遍**。
+把本仓**已经抽出的** session / bars / fees 收成唯一向量化撮合核：策略只发意图，引擎只答能不能成交。**第一船（P1=A）交付 = 谓词与加载 SSOT 收口，双账本保留（§3/§5）**。三仓各自保留自己的回测，**不合引擎、不对净值、不把别人的回测再写一遍**。
 
 ```text
 本 PR：docs only（plan + handoff + README/AGENTS 入口）
@@ -113,11 +113,13 @@ CSV 回测不准去改那四条海龟线。LEBS 里禁止重写本仓 6/8/7。
 |------|------|
 | 三件引擎分工已锁；Cerebro / PortAna 已退场 | [engine-positioning-ssot.md](engine-positioning-ssot.md) |
 | NP3 分层倒置已合（#78）：daily/minute 双入口 + 共享核 | [handoff-np3-engine-layering](handoff-np3-engine-layering-codex-impl-2026-09-16.md)；`csv_common` / `csv_ledger` / `csv_artifacts` / `csv_daily_loader` |
-| session / bars / fees 已抽（#104，待合） | `ashare_session.py` / `ashare_bars.py` / `ashare_fees.py`；[engine-ashare-correctness.md](engine-ashare-correctness.md) §1 |
+| session / bars / fees 已抽（#104，已合 `a61b1ad`） | `ashare_session.py` / `ashare_bars.py` / `ashare_fees.py`；[engine-ashare-correctness.md](engine-ashare-correctness.md) §1 |
 | E-R1–E-R6 成交锁 | 同上 §2。E-R6 **只改参考价**，shares / 现金红利不动 |
 | 名单契约 + ST 名称 as-of | [pool-csv-contract.md](pool-csv-contract.md) |
 | 分钟 cache 已迁入 `ashare_bars` | `load_minute_ohlc` / `minute_cache_path`；v7 另有 compact 帧 |
 | 1–10 账本 ≠ v7 账本 | `csv_ledger.Position.entry_idx` vs `csv_minute_backtest_v7.Lot.buy_date` |
+| v7 涨跌停 / T+1 已调 `ashare_session`（#104 后既成） | `csv_minute_backtest_v7.py` import `ashare_*`；切片 B 对 v7 是防回归 |
+| 1–10 分钟加载经别名 | `load_minute_bars = load_minute_ohlc`（`ashare_bars.py`）；调用点 `csv_minute_backtest.py` |
 | Mode B 除权 `shares/=k` **只在网格模块** | [plan-unified-exit-modeb](plan-unified-exit-modeb-2026-09-17.md) R1/R4；**禁止**回写 `rescale_position` |
 | MyQuant 出名单管道已通 | `export_daily_pool.py`；R2/R5 已合。本仓只消费 CSV |
 | 1.3 第一方回测只有 LEBS；真栈是验收，不是第二套研究引擎 | 1.3 `backtest-architecture-ssot.md` §1 / §3；本仓 positioning §3.2–§3.3 |
@@ -145,13 +147,15 @@ CSV 回测不准去改那四条海龟线。LEBS 里禁止重写本仓 6/8/7。
 
 | # | 问题 | 建议默认 | 选项 |
 |---|------|----------|------|
-| **P1** | GO 后第一船 | **A**：只做唯一账本（切片 A–B），不开发费/除权/量限 | **A** 账本先收口；**B** 先做 CLI/报告；**C** 先开发费 |
-| **P2** | 研究费率要不要印花+过户+最低 | **A**：默认仍 10bp；`--fees full` 才对齐 `trade_fee_policy` **口径**（抄常数，不 import live） | **A** 开关默认关；**B** 改默认（重写 golden，另开对照）；**C** 本轮不做 |
+| **P1** | GO 后第一船 | **A**：只做谓词统一（切片 A–B）——T+1/涨跌停谓词与 `entry_idx` 日历映射收口；**双账本保留**（csv_ledger 与 v7 Lot 不合并），不开发费/除权/量限 | **A** 谓词统一先收口；**B** 先做 CLI/报告；**C** 先开发费 |
+| **P2** | 研究费率要不要印花+过户+最低 | **A**：默认仍 10bp；`--fees full` 才对齐 `trade_fee_policy` **口径**（抄常数，不 import live；**近似**——`FeeSchedule` 表达不了沪市过户按码/豁免前缀/最低过户，errata E-11；旗名另开 plan 时定，**不得与现网 `--qlib-cost` 并存双 SSOT**） | **A** 开关默认关；**B** 改默认（重写 golden，另开对照）；**C** 本轮不做 |
 | **P3** | E-R6 残留（shares / 现金红利 / ST PIT 档位） | **C**：本轮不做；分钟若成主研究面再按 E-R5 重开条件另开 plan | **A** 本轮改股数；**B** 只接 ST PIT 档位（消费湖，不当选股）；**C** 全部后置 |
 | **P4** | 成交量上限（大资金乐观成交） | **A**：本轮不做；5 亿账户另开探针 | **A** 后置；**B** 默认关的 `--volume-cap`；**C** 默认开 |
 | **P5** | 统一 `bt run` CLI | **A**：旧 CLI 保留为真身；本轮最多薄包装，不改 HELP_LOCK | **A** 薄包装；**B** 本轮不碰 CLI；**C** 换入口并改 HELP_LOCK（需另锁文案） |
 
 未裁 = 实施按建议默认执行仍须头部先改成 ✅ 已人裁 GO。合本 docs PR ≠ 实施 GO。
+
+> **已人裁（2026-09-18）**：**P1=A**（谓词统一，双账本保留）· **P2=A** · **P3=C** · **P4=A** · **P5=A**。P2/P3/P4 若开工另开 plan。
 
 ---
 
@@ -167,6 +171,7 @@ CSV 回测不准去改那四条海龟线。LEBS 里禁止重写本仓 6/8/7。
 | 改 MyQuant 三仓路线图正文（除非人裁要回写一行指针） | 本票只落本仓 docs |
 | 复活 Cerebro；import qlib；接 Qlib Exchange | R2 |
 | 把 v7 推进 BOOKS；用 `simulate_v7` 跑 Alpha158 | positioning §3.1 |
+| 合并 Mode A 网格持仓跟踪（`unified_exit_modea.Instance`，第三套） | 网格模块自持，非本船 |
 | 改 `rescale_position` 使 1–6/8 shares/=k | X-R1 / Mode B R1 |
 | 改策略书止损/加仓数字、改 v7 阶梯 | 本票是引擎收口，不是调参 |
 | 默认改 `COMMISSION=0.001` 或打开印花 | 未裁 P2；会废全部历史 NAV |
@@ -180,9 +185,9 @@ CSV 回测不准去改那四条海龟线。LEBS 里禁止重写本仓 6/8/7。
 
 | 切片 | 做什么 | 完成定义（DoD） |
 |------|--------|-----------------|
-| **A · 一帧分钟 + 禁复制** | v7 改走 `load_minute_ohlc`（书格式）按日切片；删除或降为私有的 compact 双帧。新策略禁止再写加载 / 涨停 / 佣金。文档：engine-ashare-correctness 模块表跟上 | data-free 测：v7 合成窗 reason 计数与改造前一致（或列出允许漂移并 STOP）；1–10 / Mode B 测不动；无盘符字面量 |
-| **B · 唯一 lot 日历（P1=A）** | T+1 只认 `buy_date < session`。1–10 的 `entry_idx` **映射到日历日**，不改卖点公式。`execute_buy` / `_sell` / v7 `_buy` / `_sell_lots` 的涨跌停与 T+1 **只调** `ashare_session`。v7 的 `Lot` 策略字段（stage / entry_A）留在 v7 | 合成：T+1 拒卖、涨停 skip、跌停 defer 日线+分钟+v7 各至少 1 条；`csv_ledger.rescale_position` diff 空或仍 shares untouched；策略书 golden 字节级（P1=A 时） |
-| **C · 围栏 + 入口文档** | import 围栏：simulate 热路径 AST 不得 import qlib / `trade_fee_policy` / LEBS。README / AGENTS 一句「三仓回测不做重」。旧 CLI 保留（P5=A） | `tests/test_research_face_imports.py`（或新文件）绿；HELP_LOCK 不改（除非 P5=C） |
+| **A · 一帧分钟 + 禁复制** | v7 **默认湖路径**改走 `load_minute_ohlc`：整载 `(start,end)` 后按日切片；禁逐日调 loader、禁全市场 flatten。**帧契约三选一写死（MC-1）**：(a) 复用 1–10 `_slice_day`；(b) `_day_frame_records` 认书帧 `ymd`/DatetimeIndex；(c) 薄适配层——书帧无 `date` 列，按字面换即 `KeyError`。**topk 共用 v7 `_load_cli_bars`，非独立链（MC-4）**：`_load_cli_bars` 的 lake/qlib_1min 分叉写死，topk 湖路径跟 v7 适配走。**v7 湖路径 `use_cache=False`（MC-5）**：cache 键仅 `(start,end)`，小名单先写会被大名单命中走缺码整读合并——禁止 v7 覆写共享 cache。compact **降为模块私有并保留 qlib_1min 源与 `bars_from_pool` 链**。新策略禁止再写加载 / 涨停 / 佣金。文档：engine-ashare-correctness 模块表跟上 | data-free 测：v7 合成窗 reason 计数**与 trades 价格列**均与改造前一致（双加载器六差异：文件集/列/盘中过滤/去重/E-R4 零量日/cache——任一触发漂移 → 列允许漂移并 STOP）；**非空 bar 计数 > 0**（防空切片假绿）+ **topk 合成窗非空**；缺码路径给 data-free fixture（mock 行数上限，非仅口头 6.6GB）；1–10 / Mode B **填价与 reason 不动，cache 写路径允许变**；已知限制记录：cache 无新鲜度守卫、加载线程池无 timeout；无盘符字面量 |
+| **B · 谓词统一（P1=A；双账本保留）** | T+1 只认 `buy_date < session`。1–10 的 `entry_idx` **映射到日历日**：映射只服务 T+1 谓词与日期打印；**`n_days` 一律仍按联合日历下标计数**（禁止按个股自身有 K 日数重建）。**谓词落点=现有调用点（MC-6）**：T+1/买卖闸在 simulate 环与 v7 事件环的**调用点**统一走 `t1_sellable` / `skip_buy_at_limit` / `defer_sell_at_limit`；**不改** `execute_buy` / `_sell` / v7 `_buy` / `_sell_lots` 填单契约（现状不含谓词，也不塞进去）；书侧保持 `limits is None` **先拒**（fail-closed，`skip_unknown_board`/冻仓）；`hit_limit_*` 保留给 `reserve_limit_up` / `open_board` / `forbid_all_trade_at_limit` / qlib 带内判定，不替换。v7 的 `Lot` 策略字段（stage / entry_A）留在 v7。**已知留存分叉不改（Q40+ 另裁）**：v7 卖/加仓侧 limits=None（**无昨收或未知板块两支**）谓词放行=fail-open（书引擎冻结拒卖）；v7 ST 名称平铺取窗末名非 PIT | 合成：T+1 拒卖、涨停 skip、跌停 defer 日线+分钟+v7 各至少 1 条；**None-limits 卖侧向量覆盖无昨收+未知板块两支**（记录现状行为）；日线卖出时点两支：`open_board` 同 bar 当日收 vs 其余 `pending_exit` 次日开；`csv_ledger.rescale_position` diff 空或仍 shares untouched；**golden 指涉物** = tests 内合成 golden + 宿主**改造前**短窗 trades/summary 基线先落盘（host 步骤）；切片 D reason 桶映射落 tests 内 dict（1–10 前缀分类计数器 vs v7 自由字符串，给示例键值） |
+| **C · 围栏 + 入口文档** | import 围栏：simulate 热路径 AST 不得 import qlib / `trade_fee_policy` / LEBS。**热路径=枚举清单**：`csv_daily_backtest` / `csv_minute_backtest` / `csv_minute_backtest_v7` / `csv_ledger` / `csv_simulate_loop` / `csv_common` / `csv_strategy_books` / `ashare_session` / `ashare_bars` / `ashare_fees` / `unified_exit_modeb`，**加传递一层：`csv_daily_loader` / `csv_pool` / `market_layer` / `exdiv_map`**（禁 rglob 全 `research/` 目录——`research/engine.py` 现存 `trade_fee_policy` import，其处置连同 `legacy/engine.py` 另开卫生票）。README / AGENTS 一句「三仓回测不做重」。旧 CLI 保留（P5=A） | 围栏测锚点（MC-7）：新文件 `tests/test_ashare_simulate_import_fence.py` + `SIMULATE_HOT_PATH` 常量表与本清单**字节级一致**；HELP_LOCK 不改（除非 P5=C） |
 | **D · 宿主对照**（**非合入门**） | 同窗 1–10 与 v7 各一短跑，比 reason 桶，不比与 LEBS/PortAna 的 NAV | 短记落 `docs/backtest/`；数字产物不入库；实现 PR 不勾选 |
 
 P2/P3/P4 若裁成「做」，**另开 plan**，不塞进本船 A–C。
@@ -207,13 +212,16 @@ D:\anaconda3\envs\vanna312\python.exe -m pytest -q tests/
 
 | 文件 | 动作 |
 |------|------|
-| `backtest/research/ashare_bars.py` | v7 改用书格式；compact 降级或删 |
+| `backtest/research/ashare_bars.py` | v7 湖路径改书格式（帧适配见 §5-A 三选一）；compact 降为**模块私有并保留**（qlib_1min 源 + `bars_from_pool` 链，**不删**） |
 | `backtest/research/csv_minute_backtest_v7.py` | 加载改切片；Lot 策略字段保留 |
 | `backtest/research/csv_ledger.py` | T+1 用日历日；**不改** `rescale_position` shares |
 | `backtest/research/ashare_session.py` / `ashare_fees.py` | 只读复用，除非测试缺口 |
 | `backtest/research/csv_daily_backtest.py` / `csv_minute_backtest.py` | 尽量只改调用，不改书行为 |
 | `tests/test_ashare_*.py` / `test_csv_minute_backtest_v7.py` / ledger 测 | 更新 + 新合成向量 |
 | `docs/backtest/engine-ashare-correctness.md` / `README.md` / `AGENTS.md` | 模块表 + 三仓不做重一句 |
+| `backtest/research/csv_simulate_loop.py` / `csv_common.py` / `csv_strategy_books.py` | `entry_idx` 赋值（`execute_buy(day_i)`）与 `n_days` 消费所在；只改调用，**不改计数口径** |
+| `backtest/research/qlib_bin_1min.py` + topk_app 脚本 | qlib_1min 源经 compact 链共存；topk **共用 v7 `_load_cli_bars`**（改 v7 湖路径=改 topk 湖帧，DoD 含 topk 合成窗非空）；topk 文件本身**不改** |
+| `backtest/research/engine.py` / `backtest/legacy/engine.py` | `trade_fee_policy` import 处置**另开卫生票**，不塞本船 |
 | `unified_exit_modeb.py` / `*_rules.py` / 1.3 / MyQuant | **不改** |
 
 ---
@@ -254,5 +262,7 @@ MyQuant  训练/IC → export_daily_pool → YYYYMMDD.csv
 
 | 版本 | 日期 | 变更 |
 |------|------|------|
+| v1.3 | 2026-09-18 | 回填三席多模型评审 merge-consensus MC-1..MC-9：切片 A 钉 v7 帧契约三选一 / topk 共用 `_load_cli_bars` / v7 湖路径 `use_cache=False` / 非空 bar 计数门；切片 B 谓词落点改为**调用点**（不改填单契约、书侧 None 先拒、`hit_limit_*` 保留）、None-limits 两支、卖出时点两支；切片 C 围栏加传递一层 + 测试锚点（`test_ashare_simulate_import_fence.py`）；§7 compact「不删」对齐、topk 行改述；§0/P2/§4 补句；handoff 全量同步 |
+| v1.2 | 2026-09-18 | 回填三路对抗评审勘误 E-01..E-16（[adversarial-errata.md](../architecture/reviews/2026-09-18/plan-ashare-engine-refactor/adversarial-errata.md)）：P1=A 改述为谓词统一（双账本保留）；切片 A 补价格列/内存门/qlib_1min+topk 链处置；切片 B 钉 n_days 联合日历口径、None-limits 与 ST 非 PIT 留存分叉、golden 指涉物；切片 C 围栏改枚举清单；§7 补 simulate_loop/common/books 落点；基线刷新 `a61b1ad` |
 | v1.1 | 2026-09-18 | 补 §0.3：LEBS 只在 1.3、LEBS≠真栈、海龟/旧 CSV 分轨、选哪一件四行、策略 7≠turtle |
 | v1.0 | 2026-09-18 | 首版 docs-only：三仓回测守界、R1–R9、P1–P5（建议默认）、切片 A–D；状态 ⏳ 待人裁 GO |

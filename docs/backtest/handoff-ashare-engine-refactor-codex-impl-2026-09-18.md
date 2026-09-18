@@ -1,15 +1,30 @@
 # 交接 · 向量化 A 股撮合核收口（Codex 接手）
 
 > 日期：2026-09-18
-> 状态：⏳ **待人裁 GO**。plan 头部未改为「✅ 已人裁 GO（hash）」**禁止开工**。随本 docs PR 先合 master 仍禁止写撮合 Python。
-> 权威对象：[plan-ashare-engine-refactor-2026-09-18.md](plan-ashare-engine-refactor-2026-09-18.md) **v1.1**。
-> 前置：PR [#104](https://github.com/baiyibing/MyQuant-backtrader/pull/104)（`ashare_*`）。未合则实施底用 #104 merge 后的 master，不叠未合分支。
-> 工作流：[workflow-codex-handoff.md](workflow-codex-handoff.md) 第 4 步草稿；第 3 步人裁未做。
-> 基线：`origin/master` `4a3e5fe`；`ashare_*` 符号以 #104 `28c4ce2` 为准，行号漂移以符号名为准。
+> 状态：✅ **已人裁 GO**（2026-09-18 · P1–P5 = A/A/C/A/A · plan v1.3 @ `72178b7`）。**可以开工**：从 master 开 `feat/ashare-engine-refactor`，切片 A→B→C 分 commit；遇 plan 未覆盖语义 → STOP Q40+，不自裁。
+> 权威对象：[plan-ashare-engine-refactor-2026-09-18.md](plan-ashare-engine-refactor-2026-09-18.md) **v1.3**（勘误依据 [adversarial-errata.md](../architecture/reviews/2026-09-18/plan-ashare-engine-refactor/adversarial-errata.md) + 多模型共识 [merge-consensus.md](../architecture/reviews/2026-09-18/plan-ashare-engine-refactor-2026-09-18/merge-consensus.md)）。
+> 前置：PR [#104](https://github.com/baiyibing/MyQuant-backtrader/pull/104)（`ashare_*`）**已合入 master**（`a61b1ad`）。
+> 工作流：[workflow-codex-handoff.md](workflow-codex-handoff.md) 第 4 步定稿；第 3 步人裁已做（2026-09-18）。
+> 基线：`origin/master` `a61b1ad`（#104 + #105 已合）；`ashare_*` 符号以 #104 `28c4ce2` 为准，行号漂移以符号名为准。
 
 ## ⛔ 开工闸
 
-**do not start Codex coding until** plan 头部写明 ✅ 已人裁 GO（commit hash）**并且** #104 已合（或底已含等价 `ashare_session` / `ashare_bars` / `ashare_fees`）。本文件随 docs PR 入库 ≠ 实施许可。
+**两闸均已过（2026-09-18）**：plan 头部 ✅ 已人裁 GO（v1.3 @ `72178b7`，P1–P5 = A/A/C/A/A）；#104 已合（`a61b1ad`）。实施按本文件切片执行；遇 plan 未覆盖语义 → **STOP Q40+**，不自裁。
+
+---
+
+## 实施前审核 + Codex 启动（宿主环境执行，**非本机**；模型已人裁写死，勿换档）
+
+1. **Cursor opus5 实施前审核**（人裁 2026-09-18：`claude-opus-5`；本机 Cursor CLI 无 claude 系，须宿主环境跑）。prompt 已入库：[opus5-preimpl-prompt.txt](../architecture/reviews/2026-09-18/plan-ashare-engine-refactor-2026-09-18/opus5-preimpl-prompt.txt)，产物写同目录 `opus5-preimpl-review.md`。判据：**无 🔴 才进第 2 步**；有 🔴 → 回写 plan / 本 handoff 后重审，不带病开工。
+2. **Codex 无头实施**（工作流第 5 步原文口径）：本 PR 合入 master 后，`git checkout master && git pull && git checkout -b feat/ashare-engine-refactor`，然后：
+
+```bash
+codex exec --dangerously-bypass-approvals-and-sandbox \
+  -m gpt-5.1-codex-max -c model_reasoning_effort=xhigh \
+  "按 docs/backtest/handoff-ashare-engine-refactor-codex-impl-2026-09-18.md 实施切片 A→B→C，分 commit；遇 plan 未覆盖语义 STOP 问人，不自裁"
+```
+
+   full-auto 配置（`approval_policy=never` + `sandbox_mode=workspace-write`）见 1.3 `docs/prompts/prompt-codex-config-fullauto.md`；模型 = **最高档**（写死 `gpt-5.1-codex-max`；当日无此档名取可用最高 codex-max 档）。切片 A/B 分 commit；实施后走工作流第 6 步缺陷优先复核、第 7 步回写 plan「✅ 已实施（PR #N）」。
 
 ---
 
@@ -39,7 +54,7 @@
 | `FeeSchedule` / `DEFAULT_SCHEDULE` / `BILATERAL_10BP` | `ashare_fees.py:35` / `:55` / `:53` |
 | 书引擎 `Position.entry_idx` / `rescale_position`（shares untouched） | `csv_ledger.py:66-76` / `:141-150` |
 | v7 `Lot.buy_date` / `Position.stage` | `csv_minute_backtest_v7.py:61-77` |
-| 1–10 分钟加载 | `csv_minute_backtest.py` → `ashare_bars.load_minute_ohlc` |
+| 1–10 分钟加载 | `csv_minute_backtest.py` → **别名** `load_minute_bars = load_minute_ohlc`（`ashare_bars.py`）；按字面搜 `load_minute_ohlc` 调用点会落空 |
 | Mode B 除权只在网格 | `unified_exit_modeb.py`；**勿改** ledger shares |
 
 ---
@@ -48,27 +63,28 @@
 
 **步骤**
 
-1. v7 加载改为 `load_minute_ohlc`（DatetimeIndex 书格式），按日切片；不要全市场 flatten。
-2. `load_minute_compact` 删除或改为模块私有且零生产调用。
-3. 新策略不得再写湖/bin 加载、涨跌停、佣金。
-4. 回写 `engine-ashare-correctness.md` 模块表。
+1. v7 **默认湖路径**改为 `load_minute_ohlc`（DatetimeIndex 书格式）：整载 `(start,end)` 后按日切片；禁逐日调 loader、禁全市场 flatten；**`use_cache=False`**（共享 cache 键仅 `(start,end)`——禁 v7 小名单覆写大名单窗 cache）；缺码路径不得整仓物化（实测 6.6–6.7GB，data-free fixture 验收）。
+2. **帧契约三选一写死**：书帧无 `date` 列、`_day_frame_records` 现按 `frame["date"]` 切片，按字面换即 `KeyError`——(a) 复用 1–10 `_slice_day`；(b) `_day_frame_records` 认 `ymd`/DatetimeIndex；(c) 薄适配层。**topk 共用 v7 `_load_cli_bars`**（非独立链）：湖路径跟 v7 适配走，DoD 含 topk 合成窗非空。
+3. `load_minute_compact` 降为模块私有；**保留 qlib_1min 源与 `bars_from_pool` 链**（`load_minute_ohlc` 无 source 参数，直接删除断 v7 `--minute-source qlib_1min`）；湖生产调用归零。连带 `load_session_bars` / `bars_from_pool` 处置写明。
+4. 新策略不得再写湖/bin 加载、涨跌停、佣金。
+5. 回写 `engine-ashare-correctness.md` 模块表。
 
-**测试**：v7 合成窗 reason 计数对齐改造前（允许漂移必须 STOP）；1–10 / Mode B 测不动。
+**测试**：v7 合成窗 reason 计数**与 trades 价格列**对齐改造前（允许漂移必须 STOP）；**非空 bar 计数 > 0**（防空切片假绿）+ topk 合成窗非空；1–10 / Mode B 填价与 reason 不动（cache 写路径允许变）。
 
 **DoD**：pytest 绿；无盘符字面量。
 
 ---
 
-## 2. 切片 B · 唯一 lot 日历（仅 P1=A 且已 GO）
+## 2. 切片 B · T+1/涨跌停谓词统一（仅 P1=A 且已 GO；双账本保留）
 
 **步骤**
 
 1. T+1 一律 `ashare_session.t1_sellable(buy_date, session)`。
-2. 1–10 `entry_idx` 映射为日历日，**不改**卖点公式。
-3. `execute_buy` / `_sell` / v7 `_buy` / `_sell_lots` 的涨跌停只调 `skip_buy_at_limit` / `defer_sell_at_limit`。
+2. 1–10 `entry_idx` 映射为日历日（映射只服务 T+1 谓词与日期打印）；**`n_days` 仍按联合日历下标计数**（禁按个股有 K 日数重建），**不改**卖点公式。
+3. 谓词落点=**现有调用点**（simulate 环 / v7 事件环）统一 `t1_sellable` / `skip_buy_at_limit` / `defer_sell_at_limit`；**不改** `execute_buy` / `_sell` / v7 `_buy` / `_sell_lots` 填单契约（现状不含谓词，也不塞进去）；书侧 `limits is None` **先拒**（fail-closed）；`hit_limit_*` 保留给 reserve/open_board/forbid_all/qlib 带内。
 4. v7 的 `stage` / `entry_A` / 加仓阶梯留在 v7。
 
-**测试**：日线 + 分钟 + v7 各 1 条 T+1 拒卖、涨停 skip、跌停 defer。P1=A 时策略书 golden 字节级。`rescale_position` diff 空或仍 shares untouched。
+**测试**：日线 + 分钟 + v7 各 1 条 T+1 拒卖、涨停 skip、跌停 defer；**None-limits 卖侧向量两支（无昨收 + 未知板块）记录现状行为**（v7 现状 fail-open 放行，不改，Q40+ 另裁）；日线卖出时点两支（`open_board` 同 bar 当日收 vs 其余 `pending_exit` 次日开）。P1=A 时 golden 指涉物 = tests 合成 golden + 宿主改造前短窗 trades/summary 基线先落盘。`rescale_position` diff 空或仍 shares untouched。
 
 **DoD**：同上；不碰 Mode B `shares/=k`。
 
@@ -78,7 +94,7 @@
 
 **步骤**
 
-1. simulate 热路径 AST：不得 import `qlib` / `trade_fee_policy` / `backtest.lebs`。
+1. simulate 热路径 AST：不得 import `qlib` / `trade_fee_policy` / `backtest.lebs`。热路径 = plan §5-C 枚举清单（11 文件 + 传递一层 `csv_daily_loader` / `csv_pool` / `market_layer` / `exdiv_map`），**非 rglob**；测试锚点 `tests/test_ashare_simulate_import_fence.py` + `SIMULATE_HOT_PATH` 常量与清单**字节级一致**。
 2. README / AGENTS 写清：LEBS 只在 1.3；本仓无 `python -m backtest.lebs`。
 3. P5=A：旧 CLI 真身保留；不改 HELP_LOCK。
 
@@ -104,9 +120,9 @@ D:\anaconda3\envs\vanna312\python.exe -m pytest -q tests/
 
 ## 6. 完成标记（Codex 填；仅 GO 后）
 
-- [ ] 人裁 GO 已写回 plan（hash：____）
-- [ ] #104 已合入实施底
+- [x] 人裁 GO 已写回 plan（hash：`72178b7`，2026-09-18 · A/A/C/A/A）
+- [x] #104 已合入实施底（`a61b1ad`）
 - [ ] A · 一帧分钟
-- [ ] B · 唯一 lot 日历（P1=A）
+- [ ] B · T+1/涨跌停谓词统一（P1=A；双账本保留）
 - [ ] C · 围栏 + 入口
 - [ ] D · 宿主对照（host-only；实现 PR 不勾）
