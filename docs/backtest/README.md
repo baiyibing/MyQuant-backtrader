@@ -79,13 +79,14 @@ R5 的 `--start/--end` 必须跟导出的首末文件名走：H0 / `pred_minus_o
 
 ## 1.3：LEBS 与 MockQMT（不在本仓跑）
 
-要和 Paper 同源的扫描、真栈验收，去 **OSkhQuant1.3**：
+要和 Paper 同源的扫描、真栈验收，去 **OSkhQuant1.3**（本仓没有 `backtest/lebs/`）：
 
-- 研究：`python -m backtest.lebs`（`--strategy turtle` 或 `csv_v1..csv_v5`）
-- 验收：`run_mock_turtle_stack_scenario.py` + `--parity`
+- 研究扫描：`python -m backtest.lebs`（`--strategy turtle` 吃 `stock_pool_turtle/`，与 Paper 同源决策核；或 `csv_v1..csv_v5` 旧 CSV 轨，**不是**本仓 1–10 / 策略 7）
+- 验收：`run_mock_turtle_stack_scenario.py` + `--parity`（真栈；**不用 LEBS 净值代替签字**）
 - SSOT：1.3 `docs/backtest/backtest-architecture-ssot.md`（只管辖 1.3，不描述本仓向量化）
+- 四件怎么选、LEBS ≠ 真栈：本仓 [plan-ashare-engine-refactor-2026-09-18.md](plan-ashare-engine-refactor-2026-09-18.md) §0.3
 
-本仓不复刻 LEBS / MockQMT，也不承诺和它们净值对齐。
+本仓不复刻 LEBS / MockQMT，也不承诺和它们净值对齐。策略 7（金榕元）≠ LEBS turtle ≠ Paper 海龟。
 
 ## Cerebro（已退场，2026-09-16）
 
@@ -97,6 +98,7 @@ Cerebro / Rolling 已退场（2026-09-16）；chip / ma_chip 对照产物为静�
 |------|------|
 | **★ 三件引擎定位（本仓 + 1.3）** | [engine-positioning-ssot.md](engine-positioning-ssot.md) |
 | **★ 向量化成交核（A 股档位 / 跌停 / 停牌）** | [engine-ashare-correctness.md](engine-ashare-correctness.md) |
+| **向量化撮合核收口（⏳ 待人裁 GO — 见 plan，勿编码）** | [plan-ashare-engine-refactor-2026-09-18.md](plan-ashare-engine-refactor-2026-09-18.md) · [handoff](handoff-ashare-engine-refactor-codex-impl-2026-09-18.md) |
 | 名单 CSV 契约（as-of = 买入日 T；H9/H16 list-quality CLI，双目录严格校验） | [pool-csv-contract.md](pool-csv-contract.md#list-quality-reporter-h9--h16) |
 | **NP1 资金配给探针（只读；A 探针 / B `--ration` 待 GO）** | [plan-capital-ration-2026-09-16.md](plan-capital-ration-2026-09-16.md) · `scripts/research/report_capital_ration.py --trades <trades.csv> --pool-dir <pool>` |
 | **NP2 除权持仓命中（只读；主源 ex_date_index；裁决人裁）** | [plan-exdiv-hold-hits-np2-2026-09-16.md](plan-exdiv-hold-hits-np2-2026-09-16.md) · [host runbook](exdiv-hold-hits-np2-host-runbook-2026-09-16.md) · `scripts/research/report_exdiv_hold_hits.py` |

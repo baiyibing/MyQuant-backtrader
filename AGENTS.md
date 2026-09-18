@@ -15,7 +15,8 @@ Standalone research-face fork (see [README.md](README.md)). Since migration S2 (
 - 统一卖出规则网格 · 模式 A：`scripts/research/run_unified_exit_modea.py`（库 `backtest/research/unified_exit_modea.py`；产出 `backtest_output/unified_exit_modea/`；提案 `docs/backtest/stock-backtest-unified-exit-proposal-2026-09-17.md`）
 - 统一卖出规则网格 · 模式 B：`scripts/research/run_unified_exit_modeb.py`（默认 P1=A 窄网格；Q38=A 分钟 oracle；产出独立目录 `backtest_output/unified_exit_modeb/`）。
 - 名单：`backtest/research/csv_pool.py`（与 1.3 `lebs/csv/universe.py` 同口径）
-- 不要 `python -m backtest.lebs`（包不在本仓）。Cerebro 已退场，禁止复活。
+- 不要 `python -m backtest.lebs`（包不在本仓；LEBS 只在 1.3，且 LEBS ≠ 真栈）。Cerebro 已退场，禁止复活。
+- 向量化撮合核收口 plan（⏳ 待人裁 GO，勿编码）：`docs/backtest/plan-ashare-engine-refactor-2026-09-18.md` §0.3
 - Cerebro / Rolling 已退场（2026-09-16）；chip / ma_chip 对照产物为静态档案，代码路径已删。ma_chip 默认归档；version11 CSV 移植须另开计划并重裁成交时点语义。
 - presets 与 1.3 契约：`tests/test_presets_cross_repo_snapshot.py`（勿静默漂移）。
 
