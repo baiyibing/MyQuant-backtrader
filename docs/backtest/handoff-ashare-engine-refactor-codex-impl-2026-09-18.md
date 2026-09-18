@@ -7,6 +7,7 @@
 > 工作流：[workflow-codex-handoff.md](workflow-codex-handoff.md) 第 4 步定稿；第 3 步人裁已做（2026-09-18）。
 > 基线：`origin/master` `a61b1ad`（#104 + #105 已合）；`ashare_*` 符号以 #104 `28c4ce2` 为准，行号漂移以符号名为准。
 > **短注**：本轮两处措辞修订关闭 2026-09-18 Opus 5 实施前红旗（R-1 漂移一律 STOP + R-2 numba 调用点锁定），不表示引擎重构已实施。
+> 本轮另两处措辞关闭 2026-09-18 Opus 5 复审红旗 N-1（冻结 `read_lake_minute_ohlc`）与 N-2（切片 A 写死比对物），不表示引擎重构已实施。
 
 ## ⛔ 开工闸
 
@@ -70,16 +71,18 @@ codex exec --dangerously-bypass-approvals-and-sandbox \
 4. 新策略不得再写湖/bin 加载、涨跌停、佣金。
 5. 回写 `engine-ashare-correctness.md` 模块表。
 
-**测试**：任何 reason 计数漂移，或任何 trades 价格列漂移，都是 **STOP**。实施者不得自行放行任何一列价格。合成窗必须包含以下六类 fixture 行型，缺一类即不算覆盖：
+**测试**：`read_lake_minute_ohlc` 的现状行为（单 `data.parquet`、`low` 为必需列、`_in_session` 过滤、`duplicated(keep="last")` 去重、整日零量丢弃）为**现状锁，字节级不动**。禁止改这只共用读取器来让 ④⑤⑥ 产出非空书帧。
+
+同一 fixture 上，基线是**私有化后的 compact 链**，或**落盘的改造前 records**；逐窗比 reason 计数与 trades 价格列。相对**该基线**，任何 reason 计数漂移，或任何 trades 价格列漂移，都是 **STOP**。实施者不得自行放行任何一列价格。v7 若与该基线不同，动作是 **STOP 问人**，不得接受新数字；实现 PR **不得**以「新测试全绿」代替上述 A/B 比对。合成窗必须包含以下六类 fixture 行型，缺一类即不算覆盖：
 
 1. 盘外时间戳（out-of-session timestamps；书帧 `_in_session` 会滤，compact 不过滤）。
 2. `volume = 0` 的整日（书帧丢零量日）。
 3. 重复时间戳（书帧 `duplicated(keep="last")` 去重，compact 不去重）。
-4. 多 part parquet 文件。
-5. 缺 `low` 列（compact `_compact_minute_frame` 没有 `low`）。
-6. 书帧 vs compact 的文件集差异：书帧只读单个 `data.parquet`，compact 用目录 `glob("*.parquet")`。
+4. 多 part parquet 文件（预期为书帧 `None` 或少行，不是待修缺陷）。
+5. compact 的输出帧没有 `low`（`_compact_minute_frame` 的输出不含 `low`），不是源 parquet「缺 `low` 列」；**禁止构造缺 `low` 源文件**。
+6. 书帧 vs compact 的文件集差异：书帧只读单个 `data.parquet`，compact 用目录 `glob("*.parquet")`（预期为书帧 `None` 或少行，不是待修缺陷）。
 
-规整、藏掉上述任一行型的合成窗不得判绿；另须 **非空 bar 计数 > 0**（防空切片假绿）+ topk 合成窗非空；1–10 / Mode B 填价与 reason 不动（cache 写路径允许变）。
+类型 ④⑤⑥ 的预期就是书帧返回 `None` 或少行；这是被断言的差异，不是待修的缺陷。规整、藏掉上述任一行型的合成窗不得判绿；**非空 bar 计数 > 0**（以及为防空切片假绿而设的非空门）只对干净 symbol 生效，不适用于预期为 `None` 或少行的 ④⑤⑥；topk 合成窗非空仍只针对干净路径。1–10 / Mode B 填价与 reason 相对**同一基线**不动（cache 写路径允许变）。
 
 **DoD**：pytest 绿；无盘符字面量。
 
