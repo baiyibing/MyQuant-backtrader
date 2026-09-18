@@ -13,6 +13,7 @@ Seeded from OSkhQuant slim snapshot at `5d41252`。S2（2026-09-09）之后本�
 | `backtest/research/csv_daily_backtest.py` | 向量化日线（策略 1/2/3/4/5/6/8/9/10 策略书） |
 | `backtest/research/csv_minute_backtest.py` | 向量化分钟（策略 1/2/3/4/5/6/8/9/10） |
 | `backtest/research/csv_minute_backtest_v7.py` | 策略 7 金榕元仓位机（独立） |
+| `backtest/research/csv_minute_backtest_topk_app_dropout.py` | 新策略 topk_app_dropout（不改策略 7） |
 | `backtest/research/csv_ledger.py` | 6/8 共用账本（Position / 买卖 / 追买桶） |
 | `backtest/research/market_layer.py` | 涨跌停档位与 Decimal 涨跌停价 |
 | `backtest/research/csv_pool.py` | 名单 CSV：裸六位码 → canonical |

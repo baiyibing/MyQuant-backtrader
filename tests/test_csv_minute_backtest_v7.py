@@ -54,68 +54,57 @@ def index_closes(values):
 
 
 def test_7_trial_bought_at_1455_cannot_stop_same_day_but_can_next_day():
-    minutes = {SYMBOL: [bar(D1, 895, 100), bar(D1, 896, 95), bar(D2, 570, 95)]}
-    state = simulate_v7(minutes, daily(), {D1: [SYMBOL]}, [D1, D2])
+    minutes = {SYMBOL: [bar(D1, 895, 100), bar(D1, 896, 89), bar(D2, 570, 89)]}
+    path_daily = {SYMBOL: {date(2026, 8, 31): 100.0, D1: 98.0}}
+    state = simulate_v7(minutes, path_daily, {D1: [SYMBOL]}, [D1, D2])
     assert reasons(state).count("buy:trial") == 1
-    assert reasons(state).count("stop:trial_a096") == 1
-    sell = next(t for t in state.trades if t["reason"] == "stop:trial_a096")
+    assert reasons(state).count("stop:trial_a090") == 1
+    sell = next(t for t in state.trades if t["reason"] == "stop:trial_a090")
     assert sell["date"] == D2.isoformat()
 
 
-def test_8_prior_trial_can_chop_same_day_add_but_new_lots_are_t_plus_one():
-    minutes = {SYMBOL: [bar(D1, 895, 100), bar(D2, 570, 104), bar(D2, 571, 99), bar(D2, 572, 99)]}
-    state = simulate_v7(minutes, daily(), {D1: [SYMBOL]}, [D1, D2])
+def test_8_four_clears_on_avg095_add_only_in_1445_1455():
+    morning = simulate_v7(
+        {SYMBOL: [bar(D1, 895, 100), bar(D2, 570, 104)]},
+        daily(), {D1: [SYMBOL]}, [D1, D2],
+    )
+    assert "buy:add_a104" not in reasons(morning)
+    assert morning.positions[SYMBOL].stage == "trial"
+
+    minutes = {SYMBOL: [bar(D1, 895, 100), bar(D2, 885, 104), bar(D3, 570, 96)]}
+    state = simulate_v7(minutes, daily(), {D1: [SYMBOL]}, [D1, D2, D3])
     assert "buy:add_a104" in reasons(state)
-    assert "stop:chop_trial_a099" in reasons(state)
-    assert "stop:three_a1_096" not in reasons(state)
-    assert state.positions[SYMBOL].stage == "three_after_chop"
-    assert state.positions[SYMBOL].shares > 0
+    assert "stop:four_avg095" in reasons(state)
+    assert state.positions == {}
 
-    same_day = simulate_v7({SYMBOL: [bar(D1, 895, 100), bar(D1, 896, 104), bar(D1, 897, 99)]},
-                           daily(), {D1: [SYMBOL]}, [D1])
-    assert "buy:add_a104" in reasons(same_day)
-    assert "stop:chop_trial_a099" not in reasons(same_day)
+    after_window = simulate_v7(
+        {SYMBOL: [bar(D1, 895, 100), bar(D1, 896, 104)]},
+        daily(), {D1: [SYMBOL]}, [D1],
+    )
+    assert "buy:add_a104" not in reasons(after_window)
+    assert after_window.positions[SYMBOL].stage == "trial"
 
 
-def test_8_chop_next_minute_three_stop_cascades_only_when_residual_is_sellable():
+def test_8_ladder_reaches_full_then_avg098_clears():
     minutes = {SYMBOL: [
         bar(D1, 895, 100),
-        bar(D2, 570, 104),
-        bar(D3, 570, 99),
-        bar(D3, 571, 99),
+        bar(D2, 885, 104),
+        bar(D2, 888, 108),
+        bar(D2, 891, 112),
+        bar(D2, 895, 116),
+        bar(D3, 570, 105),
     ]}
-    state = simulate_v7(minutes, daily(), {D1: [SYMBOL]}, [D1, D2, D3])
+    path_daily = {SYMBOL: {date(2026, 8, 31): 100.0, D1: 110.0, D2: 108.0}}
+    state = simulate_v7(minutes, path_daily, {D1: [SYMBOL]}, [D1, D2, D3])
     assert reasons(state) == [
         "buy:trial",
         "buy:add_a104",
-        "stop:chop_trial_a099",
-        "stop:three_a1_096",
+        "buy:add_a108",
+        "buy:add_a112",
+        "buy:add_a116",
+        "stop:full_avg098",
     ]
     assert state.positions == {}
-    chop, clear = state.trades[-2:]
-    assert chop["date"] == clear["date"] == D3.isoformat()
-    assert chop["hm"] == 570
-    assert clear["hm"] == 571
-
-
-def test_8_full_chop_readd_path_reaches_nine_with_locked_reasons():
-    minutes = {SYMBOL: [
-        bar(D1, 895, 100),
-        bar(D2, 570, 104),
-        bar(D2, 571, 99),
-        bar(D2, 572, 108.16),
-        bar(D2, 573, 114.40),
-    ]}
-    path_daily = {SYMBOL: {date(2026, 8, 31): 100.0, D1: 107.0}}
-    state = simulate_v7(minutes, path_daily, {D1: [SYMBOL]}, [D1, D2])
-    assert reasons(state) == [
-        "buy:trial",
-        "buy:add_a104",
-        "stop:chop_trial_a099",
-        "buy:readd_a1_104",
-        "buy:readd_a1_110",
-    ]
-    assert state.positions[SYMBOL].stage == "nine"
 
 
 def test_9_exact_1455_limit_up_and_open_limit_down_rules():
@@ -130,7 +119,7 @@ def test_9_exact_1455_limit_up_and_open_limit_down_rules():
     stopped = simulate_v7({SYMBOL: [bar(D1, 895, 100), bar(D2, 570, 90, open=90)]},
                           daily(), {D1: [SYMBOL]}, [D1, D2])
     assert "defer_limit_down" in reasons(stopped)
-    assert "stop:trial_a096" not in reasons(stopped)
+    assert "stop:trial_a090" not in reasons(stopped)
     assert stopped.positions[SYMBOL].shares > 0
 
 
@@ -150,29 +139,32 @@ def test_10_index_gate_blocks_new_open_but_does_not_freeze_existing_stop():
     # then make the following gate output blocked while the held lot remains sellable.
     held_index = index_closes([100.0] * 10 + [101.0, 90.0, 89.0, 88.0])
     open_day, stop_day = sorted(held_index)[11], sorted(held_index)[13]
-    stock_daily = {SYMBOL: {open_day - timedelta(days=1): 100.0, open_day: 100.0}}
+    stock_daily = {SYMBOL: {open_day - timedelta(days=1): 100.0, open_day: 98.0}}
     stopped = simulate_v7(
-        {SYMBOL: [bar(open_day, 895, 100), bar(stop_day, 570, 95)]},
+        {SYMBOL: [bar(open_day, 895, 100), bar(stop_day, 570, 89)]},
         stock_daily, {open_day: [SYMBOL]}, held_index, start=open_day, end=stop_day,
     )
     assert "buy:trial" in reasons(stopped)
-    assert "stop:trial_a096" in reasons(stopped)
+    assert "stop:trial_a090" in reasons(stopped)
 
 
 def test_10_timer_exit_locks_same_day_reopen_and_short_index_fails():
-    index = index_closes([100.0] * 17)
+    index = index_closes([100.0] * 22)
     sessions = sorted(index)[11:]
-    open_day, timer_day = sessions[0], sessions[5]
+    open_day, timer_day = sessions[0], sessions[10]
     stock_daily = {SYMBOL: {open_day - timedelta(days=1): 100.0, open_day: 100.0,
                             timer_day - timedelta(days=1): 100.0}}
     state = simulate_v7(
         {SYMBOL: [bar(open_day, 895, 100), bar(timer_day, 570, 100),
-                  bar(timer_day, 895, 100)]},
+                  bar(timer_day, 895, 100), bar(timer_day, 900, 101)]},
         stock_daily, {open_day: [SYMBOL], timer_day: [SYMBOL]}, index,
         start=open_day, end=timer_day,
     )
-    assert reasons(state).count("exit:timer5") == 1
+    assert reasons(state).count("exit:timer10") == 1
     assert reasons(state).count("buy:trial") == 1
+    timer = next(t for t in state.trades if t["reason"] == "exit:timer10")
+    assert timer["hm"] == 900
+    assert timer["price"] == 101
     assert state.positions == {}
 
     with pytest.raises(ValueError, match="11 warmup"):

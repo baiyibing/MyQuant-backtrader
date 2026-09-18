@@ -29,6 +29,7 @@ def test_registered_books_are_explicit():
         "version9",
         "version10",
         "topk_dropout",
+        "topk_score_exit",
     )
     assert get_book("version1").allow_add is False
     assert get_book("version1").peak_gap_min == 0

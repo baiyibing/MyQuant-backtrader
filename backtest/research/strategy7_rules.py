@@ -15,10 +15,19 @@ from typing import Mapping, Sequence
 
 
 TRIAL = "trial"
-SEVEN_NORMAL = "seven_normal"
-THREE_AFTER_CHOP = "three_after_chop"
-SEVEN_AFTER_READD = "seven_after_readd"
-NINE = "nine"
+FOUR = "four"
+SIX = "six"
+EIGHT = "eight"
+FULL = "full"
+TRIAL_FRACTION = 0.20
+ADD_FRACTION = 0.20
+ADD_HM_START = 14 * 60 + 45  # 14:45
+ADD_HM_END = 14 * 60 + 55    # 14:55 inclusive
+TIMER_SESSIONS = 10
+
+
+def in_add_window(hm: int) -> bool:
+    return ADD_HM_START <= int(hm) <= ADD_HM_END
 
 
 @dataclass(frozen=True)
@@ -40,17 +49,15 @@ def stop_decision(
     if min(entry_a, average_cost) <= 0:
         raise ValueError("entry and average cost must be positive")
     if stage == TRIAL:
-        return RuleDecision("dump_trial", entry_a * 0.96, 1.0)
-    if stage == SEVEN_NORMAL and trial_lot_present:
-        return RuleDecision("chop_trial", entry_a * 0.99, 4.0 / 7.0)
-    if stage == THREE_AFTER_CHOP:
-        if add1_a1 is None or add1_a1 <= 0:
-            raise ValueError("three_after_chop requires a positive add1_a1")
-        return RuleDecision("clear_three", add1_a1 * 0.96, 1.0)
-    if stage == SEVEN_AFTER_READD:
-        return RuleDecision("none")
-    if stage == NINE:
-        return RuleDecision("clear_nine", average_cost * 1.01, 1.0)
+        return RuleDecision("dump_trial", entry_a * 0.90, 1.0)
+    if stage == FOUR:
+        return RuleDecision("clear_four", average_cost * 0.95, 1.0)
+    if stage == SIX:
+        return RuleDecision("clear_six", average_cost * 0.965, 1.0)
+    if stage == EIGHT:
+        return RuleDecision("clear_eight", average_cost * 0.975, 1.0)
+    if stage == FULL:
+        return RuleDecision("clear_full", average_cost * 0.98, 1.0)
     return RuleDecision("none")
 
 
@@ -64,23 +71,17 @@ def ladder_decision(
     """Choose at most one add action; jump-to-nine has priority over +3 then +2."""
     if price <= 0 or entry_a <= 0:
         raise ValueError("price and entry_a must be positive")
-    if stage == TRIAL:
-        if price >= entry_a * 1.10:
-            return RuleDecision("jump_nine", entry_a * 1.10, 0.50)
-        if price >= entry_a * 1.04:
-            return RuleDecision("add_a104", entry_a * 1.04, 0.30)
-    elif stage == SEVEN_NORMAL and price >= entry_a * 1.10:
-        return RuleDecision("add_a110", entry_a * 1.10, 0.20)
-    elif stage == THREE_AFTER_CHOP:
-        if add1_a1 is None or add1_a1 <= 0:
-            raise ValueError("three_after_chop requires a positive add1_a1")
-        if price >= add1_a1 * 1.04:
-            return RuleDecision("readd_a1_104", add1_a1 * 1.04, 0.40)
-    elif stage == SEVEN_AFTER_READD:
-        if add1_a1 is None or add1_a1 <= 0:
-            raise ValueError("seven_after_readd requires a positive add1_a1")
-        if price >= add1_a1 * 1.10:
-            return RuleDecision("readd_a1_110", add1_a1 * 1.10, 0.20)
+    def reached(mult: float) -> bool:
+        return price + 1e-9 >= entry_a * mult
+
+    if stage == TRIAL and reached(1.04):
+        return RuleDecision("add_a104", entry_a * 1.04, ADD_FRACTION)
+    if stage == FOUR and reached(1.08):
+        return RuleDecision("add_a108", entry_a * 1.08, ADD_FRACTION)
+    if stage == SIX and reached(1.12):
+        return RuleDecision("add_a112", entry_a * 1.12, ADD_FRACTION)
+    if stage == EIGHT and reached(1.16):
+        return RuleDecision("add_a116", entry_a * 1.16, ADD_FRACTION)
     return RuleDecision("none")
 
 
@@ -115,33 +116,33 @@ def drawdown_threshold(peak_gain: float) -> float:
 
 
 def drawdown_tp_triggered(stage: str, *, price: float, peak: float, cost: float) -> bool:
-    if stage != NINE or cost <= 0 or peak <= cost:
+    if stage != FULL or cost <= 0 or peak <= cost:
         return False
     profit_drawdown = (peak - price) / (peak - cost)
     return profit_drawdown >= drawdown_threshold((peak - cost) / cost)
 
 
 def timer_due(sessions: Sequence[date], anchor: date, today: date, stage: str) -> bool:
-    """The anchor is day 0; clearing is due from the fifth later session's open."""
-    if stage == NINE:
+    """The anchor is day 0; trial-only clear is due from the 10th later session close."""
+    if stage != TRIAL:
         return False
     try:
         anchor_index = sessions.index(anchor)
         today_index = sessions.index(today)
     except ValueError as exc:
         raise ValueError("anchor and today must be trading sessions") from exc
-    return today_index - anchor_index >= 5
+    return today_index - anchor_index >= TIMER_SESSIONS
 
 
 def next_add_target(stage: str, *, entry_a: float, add1_a1: float | None = None) -> float | None:
     if stage == TRIAL:
         return entry_a * 1.04
-    if stage == SEVEN_NORMAL:
-        return entry_a * 1.10
-    if stage in (THREE_AFTER_CHOP, SEVEN_AFTER_READD):
-        if add1_a1 is None or add1_a1 <= 0:
-            raise ValueError(f"{stage} requires a positive add1_a1")
-        return add1_a1 * (1.04 if stage == THREE_AFTER_CHOP else 1.10)
+    if stage == FOUR:
+        return entry_a * 1.08
+    if stage == SIX:
+        return entry_a * 1.12
+    if stage == EIGHT:
+        return entry_a * 1.16
     return None
 
 
