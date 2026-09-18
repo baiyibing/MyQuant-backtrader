@@ -16,6 +16,7 @@ csv_ledger.py       Position / SimState / execute_buy / _sell / 追买桶（命�
 csv_daily_backtest  simulate + 日线加载 + CLI
 csv_minute_backtest scan_held_day + CLI；分钟/日线加载转调 ashare_bars
 csv_minute_backtest_v7  独立仓位机；微结构只走 ashare_session；_day_frame_records 按 (b) 切书帧/compact
+ashare_fill_clock.py    命名叶子：SessionPhase / FillPriceRule；不接线、不选价
 ```
 
 7 不进 BOOKS，不 import 6/8 `SimState`。
@@ -33,8 +34,23 @@ T+1 在书引擎原调用点将 `calendar[entry_idx]` 映射为日期后调用 `
 联合日历下标差 `n_days`，分钟扫描器仅收到布尔 `can_sell`，两个扫描内核保持冻结。
 买卖门复用 `skip_buy_at_limit` / `defer_sell_at_limit`；双账本及填单函数契约保留。
 已知分叉继续记录：书侧无昨收/未知板块先冻仓；v7 卖侧这两支 `limits=None` 仍放行，
-加仓侧同样保留现状，ST 名称仍按窗末名平铺而非 PIT。日线 `open_board` 当日收盘成交，
-其余 `pending_exit` 下一可成交日开盘；不在本轮改变时点或参考价之外的股数。
+加仓侧同样保留现状，ST 名称仍按窗末名平铺而非 PIT。日线 `stop_loss:gap_open` = 触发当日 open；`daily_stop_touch_at_trigger` = 触发当日 trigger；命中 `daily_same_bar_prefixes` 且通过涨跌停门才按当日 close；只有确实写入 `pending_exit` 的 reason 才下一可卖日 open。不在本轮改变时点或参考价之外的股数。
+
+现状成交时钟（只命名，不改价）。限定：扫描窗口标签 / 非全量 / 不含 v7。`closing_call`（14:57–15:00，含端点）是当前扫描窗口标签：`_in_session` 接受这些 bar，扫描若到达仍按旧分支处理；不是交易所忠实集合竞价撮合，也不证明所有路径在该段成交。下表不是全量选价器：same-bar 前缀不只有 `open_board`（还可含 `topk_drop` / `model_exit`），策略 9 的证明夹具不能单独证明 open/close。v7 另有首 bar open / 严格 14:55 / 最后一根 close，未纳入本表。读取器、两个分钟扫描内核、双账本、E-R1–E-R6 与价格数字未变。
+
+| 符号 | 现行为 |
+|------|--------|
+| 池买·日线 | 文件名日 T 的 close，不是 T+1 open |
+| 池买·分钟 | T 日 14:55 close；缺 14:55 才用 `[14:30, 14:55]` 最后一根 close；不是 T+1 open |
+| 追买·日线 | 通过持仓门与指数门后，可报价日 close；`quoted is None` 保留 pending；reason 仍为 `chase:T+1` |
+| 追买·分钟 | 可报价日 09:45 close；缺 bar 才用既有 `≤09:45` fallback；reason 仍为 `chase:T+1` |
+| `continuous` / `closing_call` | 扫描窗口标签，不是过滤器，不是交易所忠实 closing-call 撮合 |
+| `daily_open_board_same_close` | 命中 `daily_same_bar_prefixes` 且通过涨跌停门才按当日 close |
+| `daily_stop_gap_open` | 日线 `stop_loss:gap_open` = 触发当日 open |
+| `daily_stop_touch_at_trigger` | 触发当日 trigger |
+| `daily_pending_next_open` | 只有确实写入 `pending_exit` 的 reason 才下一可卖日 open |
+| `minute_gap_open` | 分钟 gap-stop 用该 bar open |
+| `minute_trigger_bar_close` | 分钟其余触价用该 bar close |
 
 ## 2. 现锁（E-R\*）
 

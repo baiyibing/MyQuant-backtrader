@@ -44,7 +44,8 @@ def forbidden_imports(source, package="backtest.research"):
         for name in names:
             if (name == "qlib" or name.startswith("qlib.")
                     or "trade_fee_policy" in name.split(".")
-                    or name == "backtest.lebs" or name.startswith("backtest.lebs.")):
+                    or name == "backtest.lebs" or name.startswith("backtest.lebs.")
+                    or "ashare_fill_clock" in name.split(".")):
                 violations.append((node.lineno, name))
     return violations
 
@@ -77,6 +78,18 @@ def test_simulate_import_fence(name):
 ])
 def test_fence_rejects_aliases_relative_and_local_imports(source):
     assert forbidden_imports(source)
+
+
+def test_fence_rejects_fill_clock_bare_and_qualified_imports():
+    assert forbidden_imports("import ashare_fill_clock")
+    assert forbidden_imports("from ashare_fill_clock import SessionPhase")
+    assert forbidden_imports("import backtest.research.ashare_fill_clock")
+    assert forbidden_imports(
+        "from backtest.research.ashare_fill_clock import FillPriceRule"
+    )
+    assert forbidden_imports("from backtest.research import ashare_fill_clock")
+    assert forbidden_imports("from .ashare_fill_clock import session_phase")
+    assert forbidden_imports("from . import ashare_fill_clock")
 
 
 def test_bin_readers_and_research_fees_are_allowed():
