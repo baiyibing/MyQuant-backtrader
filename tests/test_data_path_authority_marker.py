@@ -12,6 +12,7 @@ import pytest
 
 from common.infra.data_root import (
     AUTHORITY_MARKER_NAME,
+    authority_hint_roots,
     find_authority_marker,
     reset_authority_fallback_warnings,
     resolve_l2_parquet_root,
@@ -162,6 +163,12 @@ def test_resolve_staging_dir_uses_f_container(
     monkeypatch.delenv("TURNOVER_RESIST_DATA_DIR", raising=False)
     monkeypatch.delenv("TURNOVER_RESIST_STAGING_DIR", raising=False)
     assert resolve_staging_dir() == _isolate_authority_hint / "tr_staging"
+
+
+def test_authority_hint_roots_probe_f_then_e(monkeypatch):
+    monkeypatch.delenv("OSKH_AUTHORITY_HINT_ROOT", raising=False)
+    hints = [p.as_posix().rstrip("/") for p in authority_hint_roots()]
+    assert hints == ["F:/stock_data", "E:/stock_data"]
 
 
 def test_authority_warning_latched_once(monkeypatch, _isolate_authority_hint):

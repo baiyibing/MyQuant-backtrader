@@ -109,6 +109,11 @@ def test_warn_stale_period_env_monkeypatch(monkeypatch, capsys) -> None:
 
     for k in _PERIOD_ENV_KEYS:
         monkeypatch.delenv(k, raising=False)
+    monkeypatch.delenv("OSKH_SOURCE_PARQUET_ROOT", raising=False)
+    warn_stale_period_env()
+    assert capsys.readouterr().out == ""
+
+    monkeypatch.setenv("OSKH_SOURCE_PARQUET_ROOT", "/tmp/lake")
     warn_stale_period_env()
     assert capsys.readouterr().out == ""
 
@@ -116,6 +121,8 @@ def test_warn_stale_period_env_monkeypatch(monkeypatch, capsys) -> None:
     warn_stale_period_env()
     out = capsys.readouterr().out
     assert "OSKH_PERIOD_1D_ROOT" in out
-    assert "lake may ignore" in out
+    assert "leftover PERIOD_*" in out
     assert ".authority" in out
+    assert "CONFLICT" in out
+    assert "lesson 58" in out
 

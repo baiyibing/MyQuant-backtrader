@@ -8,8 +8,9 @@ Two containers — do not mix:
   ``etf/period=1d``): ``resolve_parquet_container()`` /
   ``resolve_period_root()`` / ``resolve_index_daily_root()`` /
   ``resolve_etf_daily_root()`` / ``resolve_source_parquet()``. With
-  ``F:/stock_data/.authority`` and no env, this resolves to F (unset env is
-  not a rollback).
+  ``F:/stock_data/.authority`` or ``E:/stock_data/.authority`` and no env,
+  this follows the first marker (F then E; lesson 58). Unset env is not a
+  rollback.
 * E workspace (duckdb, exp, skip JSON, stale marker):
   ``resolve_e_stock_data_container()`` / ``OSKH_DATA_ROOT``.
 * TR bar input + ``tr_staging/`` share the parquet container (F when authority
@@ -25,7 +26,8 @@ from pathlib import Path
 from typing import Iterable, Optional, Set
 
 AUTHORITY_MARKER_NAME = ".authority"
-_DEFAULT_AUTHORITY_HINTS = (Path("F:/stock_data"),)
+# Probe only (existence of ``.authority``). Order: win11-dev F, then paper/test E.
+_DEFAULT_AUTHORITY_HINTS = (Path("F:/stock_data"), Path("E:/stock_data"))
 _AUTHORITY_WARNED: Set[str] = set()
 
 
@@ -70,8 +72,9 @@ def resolve_data_root(
 def authority_hint_roots() -> tuple[Path, ...]:
     """Roots that may hold the path-SSOT ``.authority`` marker (plan D7).
 
-    Production default is ``F:/stock_data``. Tests may monkeypatch this
-    function or set ``OSKH_AUTHORITY_HINT_ROOT`` (not a product env).
+    Default probes ``F:/stock_data`` then ``E:/stock_data`` (lesson 58).
+    Tests may monkeypatch this function or set ``OSKH_AUTHORITY_HINT_ROOT``
+    (not a product env).
     """
     raw = str(os.environ.get("OSKH_AUTHORITY_HINT_ROOT") or "").strip()
     if raw:
@@ -131,8 +134,9 @@ def resolve_parquet_container(*, explicit_root: Optional[str] = None) -> Path:
     Priority:
     1) explicit_root
     2) ``OSKH_SOURCE_PARQUET_ROOT``
-    3) ``<authority_marker_parent>`` when ``F:/stock_data/.authority`` (or hint) exists
-    4) ``resolve_e_stock_data_container()`` (E default when no marker)
+    3) ``<authority_marker_parent>`` when a hint ``.authority`` exists
+       (``F:/stock_data`` then ``E:/stock_data``)
+    4) ``resolve_e_stock_data_container()`` (E workspace default when no marker)
     """
     if explicit_root:
         return Path(explicit_root)

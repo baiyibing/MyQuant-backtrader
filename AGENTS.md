@@ -40,12 +40,12 @@ Keep: `backtest/` (incl. `research/` + `research/chip/`), `oskh_data/`, `l2_anal
 
 Do not reintroduce live trading packages (`live_trading`, `executor_stream`, `redis_stream_bridge`, `stream_monitor`, `oskh_db`, full `strategy_config`).
 
-Consume only. All external downloads and vendor merges live in OSkhQuant1.3. This fork only reads the F lake.
+Consume only. All external downloads and vendor merges live in OSkhQuant1.3. This fork only reads the parquet lake (F or E).
 
 ## Data disks (do not mix)
 
-- **Parquet** (hive-split v1.5 three trees `stock/period=1d|1m` · `index/period=1d` · `etf/period=1d`, loose adj/float parquet, TR bars, `tr_staging/`): `resolve_parquet_container()` / `resolve_period_root()` / `resolve_index_daily_root()` / `resolve_etf_daily_root()` / `resolve_source_parquet()` / `resolve_turnover_resist_parquet_root()`. With `F:\\stock_data\\.authority` and no env, this is F. Unset env is not a rollback. Index/ETF roots never read `OSKH_PERIOD_1D_ROOT`.
-- **E workspace** (duckdb, exp, skip JSON, stale marker): `resolve_e_stock_data_container()` / `OSKH_DATA_ROOT`.
+- **Parquet** (hive-split v1.5 three trees `stock/period=1d|1m` · `index/period=1d` · `etf/period=1d`, loose adj/float parquet, TR bars, `tr_staging/`): `resolve_parquet_container()` / `resolve_period_root()` / `resolve_index_daily_root()` / `resolve_etf_daily_root()` / `resolve_source_parquet()` / `resolve_turnover_resist_parquet_root()`. One-key: `OSKH_SOURCE_PARQUET_ROOT` (test host `E:\\stock_data`). No env: first `.authority` on `F:\\stock_data` then `E:\\stock_data` (lesson 58). Unset env is not a rollback. Leftover `OSKH_PERIOD_*` overrides the one-key and is a conflict. Index/ETF roots never read `OSKH_PERIOD_1D_ROOT`.
+- **E workspace** (duckdb, exp, skip JSON, stale marker): `resolve_e_stock_data_container()` / `OSKH_DATA_ROOT`. Do not set `OSKH_DATA_ROOT` to the parquet lake.
 - `TURNOVER_RESIST_DATA_DIR` is opt-in rollback to an old E path; default follows the parquet container.
 - This fork is read-only for market bars. New code must use resolvers, not cwd `stock_data/` literals.
 - **CI data-free gates** (no F lake): `verify_oskh_data_contract.py`, `verify_data_path_ssot.py`, `verify_no_hardcoded_machine_paths.py`, `verify_tr_bridge_import_ssot.py` in `.github/workflows/python-tests.yml` before pip. See `docs/backtest/plan-h10-ci-path-gates-2026-09-15.md` · `docs/backtest/plan-h12-ci-tr-bridge-gate-2026-09-15.md`.
