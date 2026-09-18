@@ -1,9 +1,9 @@
 # 模式 B · 宿主业务网格 runbook（统一卖出规则网格，切片 E）
 
 > **日期**：2026-09-17
-> **状态**：⏳ **宿主未跑 / 待切片 E**。A–D 已合 PR #95（master `8db98de`）；本篇只交付跑数步骤，不代表 E 完成。
+> **状态**：✅ **宿主已完成 2026-09-17**（短记：[unified-exit-modeb-host-note-2026-09-17.md](unified-exit-modeb-host-note-2026-09-17.md)）。A–D 已合 PR #95（master `8db98de`）。
 > **权威**：[plan](plan-unified-exit-modeb-2026-09-17.md) P1–P5 / Q36–Q38 / cache 补裁；[handoff](handoff-unified-exit-modeb-codex-impl-2026-09-17.md)；[提案](stock-backtest-unified-exit-proposal-2026-09-17.md) Mode B / Q7 / Q12 / Q29 / Q32。
-> **前置记录**：[分钟就绪短记](unified-exit-modeb-minute-ready-2026-09-17.md)（smoke 已完成）；**回填位置**：[Mode B 宿主短记模板](unified-exit-modeb-host-note-2026-09-17.md)。
+> **前置记录**：[分钟就绪短记](unified-exit-modeb-minute-ready-2026-09-17.md)（smoke 已完成）；**短记**：[Mode B 宿主短记](unified-exit-modeb-host-note-2026-09-17.md)。
 
 ## 0. 硬边界与机器
 
@@ -89,4 +89,4 @@ A 短记中的冠军 +1.50%、hold_end −24.36%、oracle +129.64% 是 **A 已�
 | `backtest_output/unified_exit_modeb/instance_detail_top.csv` | 冠军 + 四锚线明细，含 `sell_hm` |
 | `backtest_output/unified_exit_modeb/summary.json` | meta / top20 / anchors / n_opened / n_strategies；稳健性四件套在 `robustness` 内，无独立第四文件 |
 
-若用了运行子目录，短记写实际路径。宿主跑完后回填 [短记模板](unified-exit-modeb-host-note-2026-09-17.md)：实际日期 / 代码 tip / 机器 / 数据与缓存版本 / 命令 / 耗时内存 / sanity / B 独立结果 / 异常与结论。**短记 + 报告产物齐全且异常已说明**，才另行记录 E 完成；本 PR 中短记保持「⏳ 宿主未跑」，所有 B 数字 TBD。
+若用了运行子目录，短记写实际路径。宿主跑完后回填 [短记](unified-exit-modeb-host-note-2026-09-17.md)：实际日期 / 代码 tip / 机器 / 数据与缓存版本 / 命令 / 耗时内存 / sanity / B 独立结果 / 异常与结论。**短记 + 报告产物齐全且异常已说明** 后记录 E 完成。数字产物不入库。

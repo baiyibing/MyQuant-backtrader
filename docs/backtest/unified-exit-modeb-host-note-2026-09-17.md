@@ -1,81 +1,89 @@
-# 模式 B · 宿主跑数短记（统一卖出规则网格，切片 E；待回填）
+# 模式 B · 宿主跑数短记（统一卖出规则网格，切片 E）
 
-> **模板日期**：2026-09-17；实际运行日期：TBD。
-> **状态**：⏳ **宿主未跑**。本文件是空白模板，不是 E 完成记录。
-> **runbook**：[host-runbook-unified-exit-modeb-2026-09-17.md](host-runbook-unified-exit-modeb-2026-09-17.md)；A–D 实现已合 PR #95（`8db98de`）。
-> **本次代码 tip / 机器 / 内存**：TBD。
-> **数据版本 / resolver 路径 / 缓存 meta**：TBD；预期缓存 key `minute_none_20251013_20260909`，实际 hit：TBD。
-> **命令 / 起止时间 / 退出码 / 耗时 / 峰值内存**：TBD。
+> **日期**：2026-09-17
+> **状态**：✅ **宿主已完成**（切片 E）。runbook：[host-runbook-unified-exit-modeb-2026-09-17.md](host-runbook-unified-exit-modeb-2026-09-17.md)；A–D 实现 = PR #95（`8db98de`）；本次 tip `aef9c93`（含 #89/#96，ancestor of `8db98de`）。
+> **机器 / 环境**：本机高配宿主；`vanna312`；`OSKH_SOURCE_PARQUET_ROOT=E:\stock_data`（指数走同容器 `index/period=1d`，未用 scratch 日历）。
+> **数据 / 缓存**：E 湖 `stock/period=1d|1m` + `index/period=1d` none。首次无 cache，本跑新建 `backtest_output/bar_cache/minute_none_20251013_20260909.parquet`（2080 码、112,625,325 行、1.57GB）。
+> **命令**：`run_unified_exit_modeb.py --start 20251023 --end 20260909 --pool-dir stock_pool --workers 16 --cache-dir backtest_output/bar_cache --out-dir backtest_output/unified_exit_modeb/host_e_20260917`
+> **起止 / 退出 / 耗时**：2026-09-17 18:51:59 → 19:32:12（+08），exit **0**，墙钟 **40m13s**。峰值 RSS 未采样。
 > **口径**：P1=A 窄网格；none 日线 close 买入、分钟 high/low 触发、分钟 close 成交；11 亿基数。Mode A/B 不混排。
 
-## 1. Sanity 对照（待跑）
+## 1. Sanity 对照
 
 | 项 | 核对口径 | 实测 | 判定 / 差异原因 |
 |----|----------|------|-----------------|
-| 名单实例 / 跳过买入 / 实开 | none 买入域；与 A 按实例键追差 | TBD | TBD |
-| distinct 实开码 / 分钟覆盖 / 缺码 | 本次 B 码集，不复用 A 覆盖结论 | TBD | TBD |
-| 缓存 | warmup 超集 key；hit | TBD | TBD |
-| 网格 / 锚线 | 排名 19 行；四锚线 | TBD | TBD |
-| 受冻 / 期末估值 / delist_zero | Q12 / Q33；未平仓不强卖 | TBD | TBD |
-| 峰值并发资金 | 触 11 亿须显著标记 | TBD | TBD |
-| 分钟成交 / 缺 K / 跌停 | Q7 / Q32 / Q36；末 session close；缺分钟顺延 | TBD | TBD |
-| N=1 / oracle | Q37 不要求等价；Q38 仅排除跌停分钟 close | TBD | TBD |
-| 除权缩放 | Q29 cost/peak ×k、shares ÷k；无现金红利 | TBD | TBD |
+| 名单实例 / 跳过买入 / 实开 | none 买入域；与 A 按实例键追差 | 实开 **4169**；summary 未落装配跳过明细 | ✅ 实开较 A 的 4167 **+2**（none vs front 价域，不强制对齐） |
+| distinct 实开码 / 分钟覆盖 / 缺码 | 本次 B 码集 | 覆盖 **2080/2080**，`missing_codes=[]`；明细 distinct 码 2080 | ✅ |
+| 缓存 | warmup 超集 key；hit | 本跑 **miss→write** `minute_none_20251013_20260909` | ✅ 本机原先无该 key，只扫一次湖 |
+| 网格 / 锚线 | 排名 19 行；四锚线 | `n_strategies=19`；四锚线齐全 | ✅ |
+| 受冻 / 期末估值 / delist_zero | Q12 / Q33；未平仓不强卖 | hold_end **−24.50%** vs delist_zero **−25.29%**（**−0.79pp**）；明细 `mark_end_zero=8` | ✅ 与 A 的 −0.79pp 同量级，不是同一账 |
+| 峰值并发资金 | 触 11 亿须显著标记 | 冠军族 r2 max **418 lots / 4.18 亿**；**oracle 1528 lots / 15.28 亿**；hold_end 4169 lots / 41.69 亿（全持有机械峰值） | ✅ r2 未触 11 亿；**oracle / hold_end 超过，已标记** |
+| 分钟成交 / 缺 K / 跌停 | Q7 / Q32 / Q36；session hm | 明细 `sell_hm` 仅 **570–900**，窗外 0；样本 570/571/598/810/900 | ✅ 湖分钟单位，不是 HHMM |
+| N=1 / oracle | Q37 不要求等价；Q38 | 窄网格无 r2 N=1；oracle **+143.86%** / 胜率 96.0% | ✅ |
+| 除权缩放 | Q29 仅 B 模块内 | meta `cost/peak *= k; shares /= k; no cash dividend` | ✅ 本跑未另抽 k 样本 |
 
-## 2. 结果摘要（仅 Mode B；全部待回填）
+## 2. 结果摘要（仅 Mode B）
 
-**四锚线**：
+**四锚线**（4169 实例，基数 11 亿）：
 
 | 锚 | 总收益率 | 每实例均值 | 胜率 | 最大回撤 | 平均持有 |
 |----|----------|------------|------|----------|----------|
-| anchor_hold_end | TBD | TBD | TBD | TBD | TBD |
-| r1_n1 | TBD | TBD | TBD | TBD | TBD |
-| oracle（分钟可成交 close 事后上界） | TBD | TBD | TBD | TBD | TBD |
-| delist_zero | TBD | TBD | TBD | TBD | TBD |
+| anchor_hold_end | **−24.50%** | −6.46% | 27.0% | 73.9% | 140.8 日 |
+| r1_n1 | −0.72% | −0.19% | 41.4% | 0.9% | 1.0 |
+| oracle（分钟可成交 close 事后上界） | **+143.86%** | +38.0% | 96.0% | 7.5% | 44.3 |
+| delist_zero | −25.29% | −6.67% | 26.9% | 73.9% | 140.8 |
 
 **Top 5**：
 
 | 名次 | 参数标签 | 总收益率 | 峰值并发资金 | 备注 |
 |------|----------|----------|--------------|------|
-| 1 | TBD | TBD | TBD | TBD |
-| 2 | TBD | TBD | TBD | TBD |
-| 3 | TBD | TBD | TBD | TBD |
-| 4 | TBD | TBD | TBD | TBD |
-| 5 | TBD | TBD | TBD | TBD |
+| 1 | `r2_x10_yinf_n10` | **+2.01%** | 4.18 亿 | 止盈 10% / 无止损 / N=10 |
+| 2 | `r2_x10_y10_n10` | +1.97% | 3.76 亿 | |
+| 3 | `r2_x10_yinf_n8` | +1.79% | 3.45 亿 | |
+| 4 | `r2_x10_y10_n8` | +1.68% | 3.20 亿 | |
+| 5 | `r2_x7_yinf_n10` | +1.53% | 3.71 亿 | |
+| 19 | `r1_n1` | −0.72% | 0.75 亿 | 排名末行，亦是锚线 |
+
+18 组 r2 全部为正；紧止损 y5 族垫底但仍 ≥ +0.10%。
 
 **稳健性四件套**：
 
 | 项 | 结果 | 解读 |
 |----|------|------|
-| 半窗（19 行窄网格勿仅看 top20 交集） | TBD | TBD |
-| 邻域平台（仅本次窄网格范围） | TBD | TBD |
-| 板块 + 按月 | TBD | TBD |
-| 次日开盘买（top5 + r1_n1） | TBD | TBD |
+| 半窗 | `top20_overlap=19`（只有 19 个可排标签）。h1 top1=`r2_x10_yinf_n10`；h2 top1=`r2_x10_y10_n10`。h1 偏 yinf，h2 偏 y10 | 交集满员**不能**当「名次稳定」。x10 族两半窗都在前排；精确 Y 不稳 |
+| 邻域平台 | 18 个 r2 均 `island=False`；冠军邻域 gap +0.04pp | 窄网格内无孤峰 |
+| 板块 + 按月 | 创业板均收益 0.65% vs 主板 0.47%；按月 5 正 7 负（最差 202607 −3.5%，最好 202604 +3.0%） | 市况依赖与 A 同向，不作跨模式表 |
+| 次日开盘买 | 冠军族换开盘买后 +2.27%～+3.08%，高于收盘买的 +1.53%～+2.01%；`r1_n1` 亦转正（+0.77%） | 与 A 一样：收盘买更贵，不是前视偏高 |
 
 ## 3. 研究结论（模式 B）
 
-TBD。与 [Mode A 短记](unified-exit-modea-host-note-2026-09-17.md) 仅作独立文字比较：价域、入场实例集合及分钟退出差异须先说明，不拼接 A/B NAV / 总收益率排名表，不预设 B 优于 A。
+1. **名单池子持有到期末仍大幅亏损**（−24.5%）；固定 r2 网格都在减亏，最好 **+2.01%**（回撤 1.8%、胜率 51.7%）。
+2. **统一固定参数离分钟 oracle 仍极远**：冠军 +2.01% vs oracle +143.86%，提取率 ≈ 1.4%。盘中触发相对日线网格有正贡献，但远未吃到可成交上界。
+3. 与 [Mode A 短记](unified-exit-modea-host-note-2026-09-17.md) **只作文案对照**：A 是 front close 入场、日线退出；B 是 none close 入场、分钟退出。实开 4169 vs 4167，不要拼 NAV / 总收益率排名。方向上都是「持有亏、固定规则小正、oracle 两位数到三位数、次日开盘买更好」。
+4. 业务上：窄网格冠军族仍是 **止盈 10% ×（无止损或 10% 止损）× N=8/10**；不要把半窗满交集读成参数已锁死。
 
 ## 4. Nits / 异常与 STOP 项
 
 | 问题 / 样本 | 影响 | 处置 / 是否阻挡结论 |
 |-------------|------|---------------------|
-| TBD | TBD | TBD |
+| 本机启动前 `E:\stock_data\index\...\000001_SH` 日线曾全 0；人修湖后再跑 | 第一轮日历失败，本轮用修好的日线 | 不挡。未写回湖、未用 scratch 日历 |
+| 装配跳过（封板 / 超幅度）未进 `summary.json` | 无法在短记复述 795+99 这类拆分 | 不挡；只报实开 4169 |
+| 峰值 RSS 未采样 | 缺内存数字 | 不挡；分钟驻留量级与 smoke（约 6–7GB 解析）同级 |
+| oracle / hold_end 峰值资金 > 11 亿 | 敏感性/全持有路径，不是 r2 冠军路径 | 已显著标记；不据此改现金池 |
+| `top20_overlap=19` | 窄网格只有 19 行 | 已按 runbook 结合名次解读，不报「半窗稳定」 |
 
-TBD 表示尚未检查，不表示「无异常」。
+无 STOP。
 
 ## 5. 后续建议与 E 完成证据
 
-后续研究建议：TBD（宿主结果出来后再写，不在此重开 A–D 编码）。
+后续：条件化 / 第二阶段规则才有机会靠近 oracle；不要为了「加强卖出」去改 Qlib PortAna。数字产物不入库。
 
 | 证据 | 宿主实际路径 / 留痕 |
 |------|---------------------|
-| ranking.csv | TBD |
-| instance_detail_top.csv（含 sell_hm） | TBD |
-| summary.json（含 robustness 四件套） | TBD |
-| 命令日志 / cache hit / 墙钟与内存 | TBD |
+| ranking.csv | `backtest_output/unified_exit_modeb/host_e_20260917/ranking.csv` |
+| instance_detail_top.csv（含 sell_hm） | 同目录；冠军 + 四锚线，20845 行 |
+| summary.json（含 robustness 四件套） | 同目录 |
+| 命令日志 / cache / 墙钟 | `run.log` / `run_meta.txt`；cache `backtest_output/bar_cache/minute_none_20251013_20260909.parquet` |
 
-- [ ] 宿主运行结束，报告完整，sanity 与异常已说明。
-- [ ] 本短记已回填真实数字与运行信息；后续单独确认 E 完成。
-
-**本 docs PR 不勾选以上两项；数字产物不入库。**
+- [x] 宿主运行结束，报告完整，sanity 与异常已说明。
+- [x] 本短记已回填真实数字与运行信息；E 完成。
