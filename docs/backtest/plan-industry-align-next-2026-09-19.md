@@ -1,9 +1,10 @@
 # Plan: industry-align next (fill gates fork, zero-change default) (2026-09-19)
 
-> **Status**: Draft for human cut (docs-only planning ship; not implemented).
+> **Status**: Draft v0.2 for human cut (**adversarial errata backfilled**, docs-only planning ship; not implemented, not-GO).
 > **Main ship (single theme)**: Contractualize A-share fill gates fork (`limits`, halt/zero-volume, ST name) between book-engine and v7 paths, with default **zero behavior change**.
 > **IMPLEMENTATION_BASE (fact anchor)**: `41f3d11a34c665cc8a21b3e1d351b9e06b0466b5` (full 40-char SHA of `origin/master` at authoring time, and branch `HEAD` before this docs commit).
 > **Business sources read**: `engine-positioning-ssot.md`, `engine-ashare-correctness.md`, `plan-industry-align-refactor-2026-09-18.md`, `plan-hygiene-backlog-2026-09-15.md`, `workflow-codex-handoff.md`.
+> **Adversarial review note**: Three-lane review was BLOCKING; accepted host errata E-01..E-05 are incorporated in this v0.2 draft.
 
 ---
 
@@ -44,8 +45,10 @@ This ship makes that fork executable as contract (anchors + tests + docs), witho
 | Contract area | Existing tests to reuse/extend |
 |---|---|
 | T+1 eligibility | `tests/test_ashare_session.py:15-18`, `tests/test_ashare_simulate_predicates.py:87` |
+| Existing sell-side `limits=None` fork pin | `tests/test_ashare_simulate_predicates.py:119-134` (`test_none_limits_sell_side_records_existing_split`) |
 | ST / board gating | `tests/test_csv_daily_backtest.py:883`, `:901`, `:925`, `:950`; `tests/test_csv_minute_backtest_v7.py:202` |
-| Halt / zero-K freeze semantics | `tests/test_csv_daily_backtest.py:964`, `tests/test_daily_mark_cache.py:30-36` |
+| Halt / zero-volume freeze + no-trade semantics | `tests/test_csv_daily_backtest.py:990+` (`test_zero_volume_placeholder_day_cannot_sell_or_buy_and_marks_last_close`) |
+| Halt mark/equity semantics (mark only) | `tests/test_csv_daily_backtest.py:964`, `tests/test_daily_mark_cache.py:30-36` |
 | Deferred cuts source (#112 context) | `docs/backtest/plan-industry-align-refactor-2026-09-18.md:129-132` (P1..P4) |
 
 ---
@@ -98,12 +101,15 @@ No P* is reopened by this docs-only ship.
 **Change scope**
 - Add/extend tests that pin path-fork behavior for:
   - book early reject on `limits=None`,
+  - reuse/extend `test_none_limits_sell_side_records_existing_split` as sell-side baseline pin,
   - v7 first-entry reject on `priced is None`,
-  - v7 held-path "gate pass != guaranteed fill".
+  - v7 held-path (sell and **add**) `limits=None` gate-pass semantics,
+  - post-gate non-fill outcomes (cash/eligibility failures) as separate assertions.
 
 **DoD**
 - New/updated tests are data-free and deterministic.
 - Tests prove both state layers: interception vs actual fill outcome.
+- Slice A explicitly pins v7 held **add-side**: `limits=None` is not intercepted at gate layer, and a post-gate add failure is asserted as "not a fill" (F-R4).
 - No production Python files changed.
 
 ### Slice B (commit B): docs as-built synchronization
@@ -149,13 +155,13 @@ python3 -m pytest -q -m "not production and not benchmark" \
   tests/test_csv_minute_backtest_v7.py \
   tests/test_daily_mark_cache.py
 
-# 2) Common package contract gates (runbook required)
-python3 scripts/run_common_package_contract_gates.py
+# 2) Data-free contract gates (real scripts under scripts/gates)
+python3 scripts/gates/verify_oskh_data_contract.py
+python3 scripts/gates/verify_data_path_ssot.py
+python3 scripts/gates/verify_no_hardcoded_machine_paths.py
+python3 scripts/gates/verify_tr_bridge_import_ssot.py
 
-# 3) Stream execution bundle (run only if touched scope requires it)
-# python3 scripts/run_stream_execution_contract_bundle.py
-
-# 4) Freeze check: production files unchanged
+# 3) Freeze check: production files unchanged
 git diff --exit-code "$IMPLEMENTATION_BASE" HEAD -- \
   backtest/research/ashare_session.py \
   backtest/research/csv_daily_backtest.py \
@@ -184,6 +190,9 @@ Pass criteria:
 | `backtest/research/csv_minute_backtest_v7.py` | v7 fork behavior (entry/held paths) |
 | `backtest/research/csv_simulate_loop.py` | shared chase/pool gate handling |
 | `backtest/research/ashare_session.py` | gate predicate primitives |
+| `backtest/research/market_layer.py` | limit/ST leaf semantics used by gate computations |
+| `backtest/research/csv_common.py` | shared `book_limit_prices` and calendar helpers on engine path |
+| `backtest/research/csv_daily_loader.py` | zero-volume placeholder day filtering feeding freeze/no-trade behavior |
 | `backtest/research/csv_ledger.py` | fill bookkeeping contracts |
 | `backtest/research/ashare_bars.py` | session/bars boundary assumptions |
 | `backtest/research/ashare_fees.py` | fee baseline untouched in this ship |
@@ -208,4 +217,11 @@ Only docs + data-free tests may change unless a human cut explicitly reopens beh
 2. Human confirms P1-P4 remain deferred (default A).
 3. Implement only slices A->B->C with per-commit DoD.
 4. If any production behavior change appears necessary, stop and open a new P* cut first.
+
+---
+
+## 11) Changelog
+
+- **v0.2 (2026-09-19)**: Backfilled adversarial host errata E-01..E-05: replaced ghost gate scripts with real `scripts/gates/*` checks; corrected halt/zero-volume freeze anchors; added sell-side `limits=None` reuse pin reference; expanded frozen production table with verified on-path helpers (`market_layer.py`, `csv_common.py`, `csv_daily_loader.py`); and made Slice A DoD explicitly pin v7 held add-side fail-open plus gate-pass-vs-fill separation.
+- **v0.1 (2026-09-19)**: Initial draft.
 
