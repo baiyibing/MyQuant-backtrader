@@ -181,3 +181,38 @@ def test_cli_empty_pool_is_legal_and_missing_pool_is_system_exit(tmp_path, monke
     monkeypatch.delenv("OSKH_TURTLE_POOL_DIR", raising=False)
     with pytest.raises(SystemExit):
         main(["--start", "20260901", "--end", "20260902"])
+
+
+def test_exdiv_maps_official_prev_close_for_limit_up():
+    minutes = {SYMBOL: [bar(D1, 895, 10.45)]}
+    path_daily = {SYMBOL: {date(2026, 8, 31): 10.0}}
+    mapped = simulate_v7(
+        minutes, path_daily, {D1: [SYMBOL]}, [D1],
+        exdiv={SYMBOL: {D1.strftime("%Y%m%d"): 0.95}},
+    )
+    assert "skip_limit_up" in reasons(mapped)
+    assert "buy:trial" not in reasons(mapped)
+    raw = simulate_v7(minutes, path_daily, {D1: [SYMBOL]}, [D1])
+    assert "buy:trial" in reasons(raw)
+
+
+def test_st_name_uses_five_percent_limit():
+    minutes = {SYMBOL: [bar(D1, 895, 105)]}
+    path_daily = {SYMBOL: {date(2026, 8, 31): 100.0}}
+    st = simulate_v7(minutes, path_daily, {D1: [SYMBOL]}, [D1], names={SYMBOL: "*ST甲"})
+    assert "skip_limit_up" in reasons(st)
+    board = simulate_v7(minutes, path_daily, {D1: [SYMBOL]}, [D1])
+    assert "buy:trial" in reasons(board)
+
+
+def test_exdiv_rescales_trial_stop_into_none_domain():
+    minutes = {SYMBOL: [bar(D1, 895, 100), bar(D2, 570, 48)]}
+    path_daily = {SYMBOL: {date(2026, 8, 31): 100.0, D1: 50.0}}
+    mapped = simulate_v7(
+        minutes, path_daily, {D1: [SYMBOL]}, [D1, D2],
+        exdiv={SYMBOL: {D2.strftime("%Y%m%d"): 0.5}},
+    )
+    assert "buy:trial" in reasons(mapped)
+    assert "stop:trial_a090" not in reasons(mapped)
+    raw = simulate_v7(minutes, path_daily, {D1: [SYMBOL]}, [D1, D2])
+    assert "stop:trial_a090" in reasons(raw)

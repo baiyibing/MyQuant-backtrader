@@ -18,6 +18,7 @@ from typing import Sequence
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from backtest.research.ashare_session import load_limit_context
 from backtest.research.csv_minute_backtest_v7 import (
     _load_cli_bars,
     load_index_daily,
@@ -145,6 +146,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         index_closes = load_index_daily(start, end)
     else:
         index_closes = []
+    name_dir = args.pool_dir or args.app_pool_dir
+    symbols = {symbol for values in pools.values() for symbol in values}
+    exdiv, names = load_limit_context(name_dir, symbols, start, end)
     state = simulate_v7(
         minute,
         daily,
@@ -153,6 +157,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         cash_total=args.cash_total,
         start=start,
         end=end,
+        exdiv=exdiv,
+        names=names,
     )
     output = Path(
         args.output_dir
