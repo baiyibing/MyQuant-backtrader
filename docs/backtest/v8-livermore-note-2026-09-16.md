@@ -56,3 +56,7 @@ D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_minute_backtest.py ^
 ```
 
 未改 1–6/9/10，未改 E-R1–E-R6 成交核。
+
+## 2026-09-17 复现
+
+买环补接试探 / 只加赢家 / 上证门后（tip `3f2de46`），同窗分钟复现 **509,583,402.58 / +1.92%**，买入 3099 / 加仓 260 / skip_index_gate 1545 / skip_add_loser 54。与上表笔数对齐，净值差约 1.4 万。半接钩的 +2.95% 跑作废。甲/乙分账见 [livermore-jia-yi-host-note-2026-09-17.md](livermore-jia-yi-host-note-2026-09-17.md)。不覆写 `_v8_livermore` 归档。

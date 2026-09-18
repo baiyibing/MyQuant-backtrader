@@ -819,6 +819,7 @@ def simulate(
     topk=None,
     n_drop=None,
     eligible_buy=None,
+    index_block_new=None,
 ) -> SimState:
     hooks = prepare_strategy_hooks(
         strategy,
@@ -836,6 +837,7 @@ def simulate(
         topk=topk,
         n_drop=n_drop,
         eligible_buy=eligible_buy,
+        index_block_new=index_block_new,
     )
     stop_pct = hooks["stop_pct"]
     take_profit = hooks["take_profit"]
@@ -977,6 +979,8 @@ def simulate(
             exdiv=exdiv,
             ds=ds,
             qlib_limit_pct=qlib_limit_pct,
+            allow_new_name=hooks.get("allow_new_name"),
+            add_gate=hooks.get("add_gate"),
         )
 
         def _pool_quote_for(code: str):
@@ -1018,6 +1022,9 @@ def simulate(
             qlib_limit_pct=qlib_limit_pct,
             limit_up_chase=limit_up_chase,
             forbid_all_trade_at_limit=forbid_all_trade_at_limit,
+            allow_new_name=hooks.get("allow_new_name"),
+            add_gate=hooks.get("add_gate"),
+            name_lot_budget=hooks.get("name_lot_budget"),
         )
 
         append_equity_and_eod_marks(
@@ -1113,6 +1120,11 @@ def run(
         eligible_buy = with_return_threshold(eligible_buy, daily)
     skipped: dict[str, int] = {}
     exdiv = load_exdiv_ratios(all_codes, start, end, skipped_out=skipped)
+    index_block_new = None
+    if normalize_csv_strategy(strategy) == "version8":
+        from backtest.research.strategy8_rules import load_sse_ma10_block_new
+
+        index_block_new = load_sse_ma10_block_new(start, end)
     t_sim = time.perf_counter()
     st = simulate(
         minute,
@@ -1139,6 +1151,7 @@ def run(
         topk=topk,
         n_drop=n_drop,
         eligible_buy=eligible_buy,
+        index_block_new=index_block_new,
     )
     if skipped.get("exdiv_skipped_no_factor"):
         st.stats["exdiv_skipped_no_factor"] = int(skipped["exdiv_skipped_no_factor"])

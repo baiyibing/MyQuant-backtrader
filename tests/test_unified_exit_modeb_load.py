@@ -31,6 +31,26 @@ def test_cache_miss_hit_subset_and_partial_preserve(tmp_path, monkeypatch):
     assert set(minute.read_minute_cache(path, None)) == {"600998.SH", "600997.SH", "600996.SH"}
 
 
+def test_mmap_pack_write_hit_and_matches_frames(tmp_path, monkeypatch):
+    def lake(codes, start, end, **kw):
+        return {c: minute_frame() for c in codes}
+
+    monkeypatch.setattr(minute, "_load_minute_from_lake", lake)
+    status = {}
+    first = b.load_prepared_minutes({"600998.SH"}, cache_dir=tmp_path, status=status)
+    assert status["pack"] == "write" and status["cache"] == "miss"
+    pack = tmp_path / "modeb_pack_20251013_20260909"
+    assert (pack / "meta.json").is_file()
+    assert (pack / "open.f64").is_file()
+    second = b.load_prepared_minutes({"600998.SH"}, cache_dir=tmp_path, status=status)
+    assert status["cache"] == "pack" and status["pack"] == "hit"
+    assert isinstance(first, b.PreparedMinutes) and isinstance(second, b.PreparedMinutes)
+    assert first.last_close("600998.SH", "20251024") == 10.0
+    assert second.last_close("600998.SH", "20251024") == 10.0
+    assert b.minute_coverage(["600998.SH"], second)["covered_codes"] == 1
+    assert second._mmkeep and second.packed["600998.SH"].open.base is not None
+
+
 def test_coverage():
     assert b.minute_coverage({"600998.SH"}, {})["missing_codes"] == ["600998.SH"]
     report = b.minute_coverage(["600998.SH"] * 2, {"600998.SH": minute_frame()})

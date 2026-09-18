@@ -11,6 +11,7 @@ from backtest.research.csv_ledger import (
     trade_commission,
 )
 from backtest.research.qlib_bin_daily import (
+    calendar_slice,
     load_qlib_bin_daily_bars,
     qlib_inst_dir,
     read_qlib_bin,
@@ -34,7 +35,9 @@ def test_qlib_inst_dir_maps_dot_and_qlib():
 def test_load_qlib_bin_daily_bars_reads_close(tmp_path):
     cal = tmp_path / "calendars"
     cal.mkdir()
-    (cal / "day.txt").write_text("2026-01-05\n2026-01-06\n2026-01-07\n", encoding="utf-8")
+    (cal / "day.txt").write_text(
+        "2026-01-05\n2026-01-06\n2026-01-07\n", encoding="utf-8"
+    )
     feat = tmp_path / "features" / "sh600519"
     _write_bin(feat / "close.day.bin", 0, [8322.0, 8300.0, 8280.0])
     _write_bin(feat / "open.day.bin", 0, [8310.0, 8290.0, 8270.0])
@@ -79,6 +82,44 @@ def test_read_qlib_bin_respects_ref_start(tmp_path):
     assert list(s.values) == [1.0, 2.0, 3.0]
 
 
+def test_calendar_slice_clamps_weekend_bounds():
+    cal = ["2026-01-05", "2026-01-06", "2026-01-07"]
+    assert calendar_slice(cal, "2026-01-04", "2026-01-07") == (0, 2)
+    assert calendar_slice(cal, "2026-01-05", "2026-01-10") == (0, 2)
+    assert calendar_slice(cal, "2026-01-06", "2026-01-06") == (1, 1)
+
+
+def test_calendar_slice_rejects_empty_overlap():
+    cal = ["2026-01-05", "2026-01-06", "2026-01-07"]
+    with pytest.raises(SystemExit, match="qlib calendar missing"):
+        calendar_slice(cal, "2026-01-08", "2026-01-10")
+    with pytest.raises(SystemExit, match="qlib calendar missing"):
+        calendar_slice(cal, "2025-12-01", "2025-12-31")
+
+
+def test_load_qlib_bin_daily_bars_clamps_non_trading_start(tmp_path):
+    cal = tmp_path / "calendars"
+    cal.mkdir()
+    (cal / "day.txt").write_text(
+        "2026-01-05\n2026-01-06\n2026-01-07\n", encoding="utf-8"
+    )
+    feat = tmp_path / "features" / "sh600519"
+    _write_bin(feat / "close.day.bin", 0, [8322.0, 8300.0, 8280.0])
+    _write_bin(feat / "open.day.bin", 0, [8310.0, 8290.0, 8270.0])
+    _write_bin(feat / "high.day.bin", 0, [8330.0, 8310.0, 8290.0])
+    _write_bin(feat / "low.day.bin", 0, [8300.0, 8280.0, 8260.0])
+
+    got = load_qlib_bin_daily_bars(
+        {"600519.SH"}, "20260104", "20260110", qlib_root=tmp_path, workers=1
+    )
+    df = got["600519.SH"]
+    assert list(df.index) == [
+        pd.Timestamp("2026-01-05"),
+        pd.Timestamp("2026-01-06"),
+        pd.Timestamp("2026-01-07"),
+    ]
+
+
 def test_trade_commission_qlib_floor_and_default():
     assert trade_commission(1_000_000, 0.0005, 5.0) == 500.0
     assert trade_commission(1_000, 0.0005, 5.0) == 5.0
@@ -86,7 +127,9 @@ def test_trade_commission_qlib_floor_and_default():
 
 
 def test_execute_buy_uses_qlib_open_cost():
-    st = SimState(cash=2_000_000.0, buy_cost_rate=0.0005, sell_cost_rate=0.0015, min_cost=5.0)
+    st = SimState(
+        cash=2_000_000.0, buy_cost_rate=0.0005, sell_cost_rate=0.0015, min_cost=5.0
+    )
     assert execute_buy(st, "600000.SH", 10.0, 1_000_000.0, 0, "20260106")
     assert st.trades[0]["commission"] == pytest.approx(500.0)
     assert st.cash == pytest.approx(2_000_000.0 - 1_000_000.0 - 500.0)

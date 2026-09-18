@@ -229,6 +229,7 @@ def simulate(
     buy_cost_rate: Optional[float] = None,
     sell_cost_rate: Optional[float] = None,
     min_cost: Optional[float] = None,
+    index_block_new=None,
 ) -> SimState:
     """核心日循环。bars/pool_days 可由测试注入；run() 负责从湖与 CSV 加载。
 
@@ -251,6 +252,7 @@ def simulate(
         topk=topk,
         n_drop=n_drop,
         eligible_buy=eligible_buy,
+        index_block_new=index_block_new,
     )
     stop_pct = hooks["stop_pct"]
     take_profit = hooks["take_profit"]
@@ -417,6 +419,8 @@ def simulate(
             exdiv=exdiv,
             ds=ds,
             qlib_limit_pct=qlib_limit_pct,
+            allow_new_name=hooks.get("allow_new_name"),
+            add_gate=hooks.get("add_gate"),
         )
 
         def _pool_quote_for(code: str):
@@ -450,6 +454,9 @@ def simulate(
             qlib_limit_pct=qlib_limit_pct,
             limit_up_chase=limit_up_chase,
             forbid_all_trade_at_limit=forbid_all_trade_at_limit,
+            allow_new_name=hooks.get("allow_new_name"),
+            add_gate=hooks.get("add_gate"),
+            name_lot_budget=hooks.get("name_lot_budget"),
         )
 
         append_equity_and_eod_marks(
@@ -556,6 +563,11 @@ def run(
         exdiv = None
     else:
         exdiv = load_exdiv_ratios(all_codes, start, end, skipped_out=skipped)
+    index_block_new = None
+    if normalize_csv_strategy(strategy) == "version8":
+        from backtest.research.strategy8_rules import load_sse_ma10_block_new
+
+        index_block_new = load_sse_ma10_block_new(start, end)
     t_sim = time.perf_counter()
     st = simulate(
         bars,
@@ -584,6 +596,7 @@ def run(
         buy_cost_rate=buy_cost_rate,
         sell_cost_rate=sell_cost_rate,
         min_cost=min_cost,
+        index_block_new=index_block_new,
     )
     if skipped.get("exdiv_skipped_no_factor"):
         st.stats["exdiv_skipped_no_factor"] = int(skipped["exdiv_skipped_no_factor"])
