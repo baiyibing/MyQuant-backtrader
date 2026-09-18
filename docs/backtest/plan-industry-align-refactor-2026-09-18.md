@@ -1,7 +1,7 @@
 # Plan：研究成交时钟显式化（fill clock）（2026-09-18）
 
-> **落盘**：2026-09-18。**v0.6**（2026-09-19 docs-only GO 回写；更新 plan、新建 handoff 并纳入 r4 共识，不写 Python、不运行测试或回测）。
-> **状态**：✅ **已人裁 GO（2026-09-19 · P1–P4 = A/A/A/A @ `746dbccd7f14a8c862f8bd6db407294ddca01732`）**。可以按切片 A→B→C 实施；**GO 不等于交易所撮合已建模**，也不表示集合竞价已建模或已正确。
+> **落盘**：2026-09-18。**v0.7**（2026-09-19 docs-only GO 回写；更新 plan、新建 handoff 并纳入 r4 共识，不写 Python、不运行测试或回测）。
+> **状态**：✅ **已实施（PR [#112](https://github.com/baiyibing/MyQuant-backtrader/pull/112) · merge 后 master）**。P1–P4=A/A/A/A；切片 A→B→C 已合入。行为零变化命名叶子 + data-free 契约 + as-built 回写。
 > **风险档**：**引擎结构 / 成交语义高敏**——目标是把既有决策、会话、价格规则命名并用 data-free 测试锁住；默认成交价、股数、reason、NAV 与产物契约必须为零变化。
 > **业务源**：[引擎定位 SSOT](engine-positioning-ssot.md) · [A 股正确性 as-built](engine-ashare-correctness.md) · [Pool CSV contract](pool-csv-contract.md) · [#108 前置 plan](plan-ashare-engine-refactor-2026-09-18.md) · [PR #108](https://github.com/baiyibing/MyQuant-backtrader/pull/108)。
 > **事实锚**：本 plan 的代码事实与引用行号核对基线为 `origin/master` `c44da87`（Merge PR #108）；本分支 `docs/industry-align-refactor-2026-09-18`。**实施 diff 基线另见 §7 / §9 / §11：`IMPLEMENTATION_BASE` 为 `c44da87b01ebcc6a68633307eba0fce48940f403`（2026-09-19 的 origin/master tip）；GO 时核对，master 未变则沿用此值，变了则替换为当时完整 40 位 SHA 并记录于 handoff。禁止填不可达对象，禁止用 `git merge-base HEAD origin/master` 现算 SHA。**
@@ -419,6 +419,7 @@ rg -n '[A-Za-z]:[\\\\/]' backtest/research/ashare_fill_clock.py tests/test_ashar
 
 | 版本 | 日期 | 变更 |
 |------|------|------|
+| v0.7 | 2026-09-19 | 已实施：PR #112 合入切片 A–C；行为零变化。 |
 | v0.6 | 2026-09-19 | docs-only GO 回写：采纳 r4 共识，P1–P4 已裁 A/A/A/A；核对 origin/master tip 与 base 对象仍为 `c44da87b01ebcc6a68633307eba0fce48940f403`；新增实施 handoff，黄项留于 handoff 切片 B，切片技术正文不改；GO 不等于交易所撮合已建模；不写 Python、不运行测试或回测 |
 | v0.5 | 2026-09-19 | 消化 r3 共识两条：实施基线改为 `c44da87b01ebcc6a68633307eba0fce48940f403`（当日 origin/master tip），GO 时核对 master，变了则替换为当时完整 40 位 SHA；禁止不可达对象与 merge-base 现算，祖先检查前加 commit 对象存在校验；改正策略 5 的 T+1 / 跌停条件及 E3，共识一并纳入；不改代码、不新增测试、不升级黄项、不标 GO |
 | v0.4 | 2026-09-18 | 消化 r2 共识两条：追买缺报价保留 pending 补持仓 / 指数准入条件，夹具保留联合日历 T+1；§9 改 CI 同构 bash 主合同，要求固定完整 IMPLEMENTATION_BASE（r2 未指定 SHA；值由 v0.5 按 r3 更正），Windows 仅作别名；共识一并纳入，不改代码、不标 GO |
