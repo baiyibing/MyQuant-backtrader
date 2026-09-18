@@ -149,7 +149,7 @@ D:\anaconda3\envs\vanna312\python.exe -m pytest -q tests/
 
 - [x] 人裁 GO 已写回 plan（hash：`72178b7`，2026-09-18 · A/A/C/A/A）
 - [x] #104 已合入实施底（`a61b1ad`）
-- [ ] A · 一帧分钟
+- [x] A · 一帧分钟（帧契约 b；七类迁移断言与原 parquet SHA 对照通过）
 - [ ] B · T+1/涨跌停谓词统一（P1=A；双账本保留）
 - [ ] C · 围栏 + 入口
 - [ ] D · 宿主对照（host-only；实现 PR 不勾）

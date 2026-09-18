@@ -258,7 +258,14 @@ def _is_frame_map(minute_bars: Any) -> bool:
 def _day_frame_records(frame: Any, day: date) -> list[dict[str, Any]]:
     if frame is None or getattr(frame, "empty", True):
         return []
-    sl = frame.loc[frame["date"] == day]
+    # Slice A frame contract (b): accept book ymd/DatetimeIndex here;
+    # qlib_1min keeps its compact date column. Materialize only the needed day.
+    if "ymd" in frame.columns:
+        sl = frame.loc[frame["ymd"] == day.strftime("%Y%m%d")]
+    elif "date" in frame.columns:
+        sl = frame.loc[frame["date"] == day]
+    else:
+        sl = frame.loc[frame.index.date == day]
     if sl.empty:
         return []
     return sl.to_dict("records")
@@ -481,6 +488,8 @@ def _load_cli_bars(
     daily_source: str = "lake",
     qlib_day_root: Path | None = None,
 ) -> tuple[dict, dict]:
+    # Shared with topk: bars_from_pool/load_session_bars dispatches lake to
+    # one book-frame window (cache off), qlib_1min to the private compact path.
     bars = bars_from_pool(
         pool_days,
         start,
