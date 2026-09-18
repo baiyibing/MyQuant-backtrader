@@ -6,8 +6,7 @@
   ``000001.SZ`` 股票的分类陷阱、裸码 unknown fail-closed）
 - ``resolve_index_daily_root`` / ``resolve_etf_daily_root``：env 覆盖 +
   **不读 ``OSKH_PERIOD_1D_ROOT``**（plan F6 env 劫持回归）
-- ``resolve_period_root`` 默认 ``stock/period=*``（新根优先 · 仅旧根存在时
-  短暂回落 · 双双不存在指向新根）
+- ``resolve_period_root`` 默认 ``stock/period=*``（不探测旧 ``container/period=*``）
 - ``_file_path`` 三树路由（指数 none-only · unknown fail-closed · ETF/指数
   不进股票树）
 - ETF reader 路径不受 ``OSKH_PERIOD_1D_ROOT`` 劫持（显式 base 隔离语义保留）
@@ -133,12 +132,12 @@ def test_period_root_default_prefers_stock_tree(_isolate_lake_env) -> None:
 
 
 @pytest.mark.filterwarnings("ignore::UserWarning")
-def test_period_root_default_legacy_fallback(_isolate_lake_env) -> None:
+def test_period_root_does_not_guess_legacy_layout(_isolate_lake_env) -> None:
     from common.infra.data_root import resolve_period_root
 
     container = _isolate_lake_env
-    (container / "period=1d").mkdir(parents=True)  # 仅旧根（E 回退点 / 未搬盘容器）
-    assert resolve_period_root("1d") == container / "period=1d"
+    (container / "period=1d").mkdir(parents=True)  # 仅旧根也不得改指向
+    assert resolve_period_root("1d") == container / "stock" / "period=1d"
 
 
 @pytest.mark.filterwarnings("ignore::UserWarning")

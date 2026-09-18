@@ -12,6 +12,7 @@ import pytest
 
 from common.infra.data_root import (
     AUTHORITY_MARKER_NAME,
+    UnconfiguredDataRootError,
     find_authority_marker,
     reset_authority_fallback_warnings,
     resolve_l2_parquet_root,
@@ -77,8 +78,22 @@ def test_period_no_warn_when_env_set(monkeypatch, _isolate_authority_hint, tmp_p
 
 def test_period_no_warn_when_marker_absent(monkeypatch, _isolate_authority_hint):
     monkeypatch.delenv("OSKH_PERIOD_1D_ROOT", raising=False)
-    with _no_user_warning():
+    with pytest.raises(UnconfiguredDataRootError, match="OSKH_SOURCE_PARQUET_ROOT"):
         resolve_period_root("1d")
+
+
+def test_parquet_container_raises_when_unconfigured(monkeypatch, tmp_path):
+    monkeypatch.delenv("OSKH_SOURCE_PARQUET_ROOT", raising=False)
+    monkeypatch.delenv("OSKH_AUTHORITY_HINT_ROOT", raising=False)
+    with pytest.raises(UnconfiguredDataRootError, match="do not guess"):
+        resolve_parquet_container()
+
+
+def test_authority_hint_empty_without_env(monkeypatch):
+    from common.infra.data_root import authority_hint_roots
+
+    monkeypatch.delenv("OSKH_AUTHORITY_HINT_ROOT", raising=False)
+    assert authority_hint_roots() == ()
 
 
 def test_period_base_kwarg_skips_authority_warn(
