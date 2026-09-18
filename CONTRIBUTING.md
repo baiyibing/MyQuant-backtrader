@@ -4,7 +4,7 @@
 
 ## 研究入口与数据
 
-- 日线 / 分钟使用 `backtest/research/csv_daily_backtest.py` / `csv_minute_backtest.py`；策略 7 使用独立的 `csv_minute_backtest_v7.py`。参数与名单要求见 [回测专题](docs/backtest/README.md)。
+- 日线 / 分钟使用 `backtest/research/csv_daily_backtest.py` / `csv_minute_backtest.py`；策略 7 使用独立的 `csv_minute_backtest_v7.py`；`topk_app_dropout` 使用独立的 `csv_minute_backtest_topk_app_dropout.py`（不改策略 7）。参数与名单要求见 [回测专题](docs/backtest/README.md)。
 - 行情只读 F 湖；下载与 vendor 合并在 OSkhQuant1.3。路径使用 resolver，遵守 [AGENTS.md 的盘符分层](AGENTS.md#data-disks-do-not-mix)，不要写死 cwd `stock_data/`；E 盘工作区与 F 湖分开。
 
 ## 不要做

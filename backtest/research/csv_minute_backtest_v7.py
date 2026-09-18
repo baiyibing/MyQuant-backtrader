@@ -25,12 +25,14 @@ from backtest.research.market_layer import (
     limit_prices,
 )
 from backtest.research.strategy7_rules import (
-    NINE,
-    SEVEN_AFTER_READD,
-    SEVEN_NORMAL,
-    THREE_AFTER_CHOP,
+    EIGHT,
+    FOUR,
+    FULL,
+    SIX,
     TRIAL,
+    TRIAL_FRACTION,
     build_index_gate,
+    in_add_window,
     ladder_decision,
     stop_decision,
     timer_due,
@@ -265,9 +267,8 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
             previous = _previous_close(closes.get(symbol, {}), day)
             limits = limit_prices(symbol, previous) if previous is not None else None
             first = True
-            chopped_hm: int | None = None
             open_checked = False
-            for row in records:
+            for row_index, row in enumerate(records):
                 hm = int(row["hm"])
                 open_px = float(row.get("open", row["close"]))
                 close_px = float(row["close"])
@@ -275,44 +276,34 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
                 last_prices[symbol] = close_px
                 position = state.positions.get(symbol)
                 if position is not None:
-                    if (first and position.last_add_date is not None
-                            and timer_due(calendar, position.last_add_date, day, position.stage)):
-                        if limits is not None and open_px <= limits[1]:
-                            _event(state, day, symbol, hm, "defer", 0, open_px, "defer_limit_down")
-                        elif _sell_lots(state, position, day, hm, open_px, "exit:timer5"):
-                            if symbol not in state.positions:
-                                cleared_today.add(symbol)
-                        position = state.positions.get(symbol)
-                    if position is None:
-                        first = False
-                        continue
                     position.peak = max(position.peak, high_px)
                     decision = stop_decision(position.stage, entry_a=position.entry_A,
-                                             average_cost=position.avg_cost,
-                                             add1_a1=position.add1_A1,
-                                             trial_lot_present=any(l.kind == "trial" for l in position.lots))
+                                             average_cost=position.avg_cost)
                     check_px = open_px if first and decision.line is not None and open_px <= decision.line else close_px
                     if decision.line is not None and check_px <= decision.line:
                         if limits is not None and check_px <= limits[1]:
                             _event(state, day, symbol, hm, "defer", 0, check_px, "defer_limit_down")
-                        elif decision.action == "chop_trial":
-                            if _sell_lots(state, position, day, hm, check_px, "stop:chop_trial_a099", kind="trial"):
-                                position.stage = THREE_AFTER_CHOP
-                                chopped_hm = hm
-                        elif decision.action == "clear_three" and chopped_hm != hm:
-                            _sell_lots(state, position, day, hm, check_px, "stop:three_a1_096")
                         else:
-                            reason = "stop:trial_a096" if decision.action == "dump_trial" else "stop:nine_avg101"
-                            _sell_lots(state, position, day, hm, check_px, reason)
+                            reasons_stop = {
+                                "dump_trial": "stop:trial_a090",
+                                "clear_four": "stop:four_avg095",
+                                "clear_six": "stop:six_avg0965",
+                                "clear_eight": "stop:eight_avg0975",
+                                "clear_full": "stop:full_avg098",
+                            }
+                            _sell_lots(state, position, day, hm, check_px,
+                                       reasons_stop.get(decision.action, f"stop:{decision.action}"))
                     if symbol not in state.positions:
                         cleared_today.add(symbol)
                     position = state.positions.get(symbol)
-                    if position is not None:
-                        ladder = ladder_decision(position.stage, close_px, entry_a=position.entry_A,
-                                                 add1_a1=position.add1_A1)
-                        reasons = {"add_a104": "buy:add_a104", "add_a110": "buy:add_a110",
-                                   "jump_nine": "buy:jump_nine", "readd_a1_104": "buy:readd_a1_104",
-                                   "readd_a1_110": "buy:readd_a1_110"}
+                    if position is not None and in_add_window(hm):
+                        ladder = ladder_decision(position.stage, close_px, entry_a=position.entry_A)
+                        reasons = {
+                            "add_a104": "buy:add_a104",
+                            "add_a108": "buy:add_a108",
+                            "add_a112": "buy:add_a112",
+                            "add_a116": "buy:add_a116",
+                        }
                         if ladder.action != "none":
                             if limits is not None and close_px >= limits[0]:
                                 _event(state, day, symbol, hm, "skip", 0, close_px, "skip_limit_up")
@@ -321,11 +312,13 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
                             elif _buy(state, position, symbol, day, hm, close_px, ladder.fraction,
                                       reasons[ladder.action], ladder.action):
                                 if ladder.action == "add_a104":
-                                    position.add1_A1, position.stage = close_px, SEVEN_NORMAL
-                                elif ladder.action in ("jump_nine", "add_a110", "readd_a1_110"):
-                                    position.stage = NINE
-                                elif ladder.action == "readd_a1_104":
-                                    position.stage = SEVEN_AFTER_READD
+                                    position.stage = FOUR
+                                elif ladder.action == "add_a108":
+                                    position.stage = SIX
+                                elif ladder.action == "add_a112":
+                                    position.stage = EIGHT
+                                elif ladder.action == "add_a116":
+                                    position.stage = FULL
                 if (hm == 895 and symbol in pools.get(day, []) and symbol not in state.positions
                         and symbol not in cleared_today):
                     open_checked = True
@@ -342,7 +335,16 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
                             if close_px >= upper:
                                 _event(state, day, symbol, hm, "skip", 0, close_px, "skip_limit_up")
                             elif close_px > lower:
-                                _buy(state, None, symbol, day, hm, close_px, 0.40, "buy:trial", "trial")
+                                _buy(state, None, symbol, day, hm, close_px, TRIAL_FRACTION, "buy:trial", "trial")
+                if row_index == len(records) - 1:
+                    position = state.positions.get(symbol)
+                    if (position is not None and position.last_add_date is not None
+                            and timer_due(calendar, position.last_add_date, day, position.stage)):
+                        if limits is not None and close_px <= limits[1]:
+                            _event(state, day, symbol, hm, "defer", 0, close_px, "defer_limit_down")
+                        elif _sell_lots(state, position, day, hm, close_px, "exit:timer10"):
+                            if symbol not in state.positions:
+                                cleared_today.add(symbol)
                 first = False
 
             if symbol in pools.get(day, []) and symbol not in state.positions and not open_checked:

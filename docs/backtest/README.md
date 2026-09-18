@@ -45,6 +45,11 @@ D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_minute_backtest_v7.p
   --start 20260804 --end 20260909 ^
   --pool-dir E:\PycharmProjects\OSkhQuant1.3\stock_pool_turtle
 
+# topk_app_dropout（新策略，不改策略 7）：app ∩ qlib Top50 才开新仓
+D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_minute_backtest_topk_app_dropout.py ^
+  --start 20260106 --end 20260909 --cash-total 500000000 ^
+  --app-pool-dir <app YYYYMMDD.csv dir> --pred <MyQuant pred.csv> --topk 50
+
 # 统一卖出规则网格 · 模式 A（前复权日线；名义现金池 11 亿；宿主真数据见 host-runbook）
 D:\anaconda3\envs\vanna312\python.exe scripts/research/run_unified_exit_modea.py ^
   --pool-dir stock_pool --start 20251023 --end 20260909
@@ -56,7 +61,7 @@ D:\anaconda3\envs\vanna312\python.exe scripts/research/run_unified_exit_modeb.py
 
 R5 的 `--start/--end` 必须跟导出的首末文件名走：H0 / `pred_minus_one` 常没有 `20260302.csv`，最后一个 pred 日不写文件。无名称的 ST 按代码前缀使用 10% / 20% / 30% 档，不按 5%；该例只验管道，NAV / 涨跌停桶不是模型结论。细则见 [R2/R5 计划](_archive/plans/plan-pool-pipeline-r2r5-2026-09-12.md)与[名单 CSV 契约](pool-csv-contract.md)。
 
-落盘：`backtest_output/csv_daily_{book}_{start}_{end}/`、`csv_minute_{book}_{start}_{end}/`、`csv_minute_v7_{start}_{end}/`（`summary.txt`、`daily_equity.csv`、`trades.csv`）。日线可用 `--out-dir` 改目录（M5 三列必须显式指定，见 [m5-list-attribution-2026-03.md](m5-list-attribution-2026-03.md)）。
+落盘：`backtest_output/csv_daily_{book}_{start}_{end}/`、`csv_minute_{book}_{start}_{end}/`、`csv_minute_v7_{start}_{end}/`、`csv_minute_topk_app_dropout_{start}_{end}/`（`summary.txt`、`daily_equity.csv`、`trades.csv`）。日线可用 `--out-dir` 改目录（M5 三列必须显式指定，见 [m5-list-attribution-2026-03.md](m5-list-attribution-2026-03.md)）。
 
 **策略 8（利弗莫尔宿主包）**：默认 `per_name`，每股票 100 万（`--name-budget` 可覆盖），首笔 50 万试探、峰值≥+3% 且只加赢家时可再加 50 万。止损 10%；0–6% 不评档位回撤；档2 [6%,15%) 买价×1.02；档3 [15%,50%) max(买价×1.15, 保留 60%)；档4 保留 70%；档5 保留 80%。T+1 起评止盈，分钟回撤须距峰值 ≥15 分钟。满 8 个交易日且峰值从未到 +6% 僵持清仓。上证连续两日收于十日线下则停开新仓且已持不可加。现金不足支付整笔股款与佣金时记 `skip_cash`，按名单行序先到先得、不缩量。小预算不足 100 股时仍补足 100 股，现金不足则跳过。策略 1–6/9/10 保持 `daily_quota` 日额度均分。详见 [plan-v8-rules-v2-2026-09-16.md](plan-v8-rules-v2-2026-09-16.md)（规则 v2 基线已合入；本宿主包在其上锁定利弗莫尔参数）。宿主短记：[v8-livermore-note-2026-09-16.md](v8-livermore-note-2026-09-16.md)、[v8-sse-ma10-gate-note-2026-09-16.md](v8-sse-ma10-gate-note-2026-09-16.md)、[v8-stop-tp-opt-note-2026-09-16.md](v8-stop-tp-opt-note-2026-09-16.md)。归档勿覆盖 `_v8_3` / `_v8_livermore` 输出目录。
 

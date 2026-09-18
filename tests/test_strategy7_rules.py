@@ -4,15 +4,21 @@ from datetime import date, timedelta
 import pytest
 
 from backtest.research.strategy7_rules import (
-    NINE,
-    SEVEN_AFTER_READD,
-    SEVEN_NORMAL,
-    THREE_AFTER_CHOP,
+    ADD_FRACTION,
+    ADD_HM_END,
+    ADD_HM_START,
+    EIGHT,
+    FOUR,
+    FULL,
+    SIX,
+    TIMER_SESSIONS,
     TRIAL,
+    TRIAL_FRACTION,
     alternate_tp_decision,
     build_index_gate,
     drawdown_threshold,
     drawdown_tp_triggered,
+    in_add_window,
     ladder_decision,
     next_add_target,
     stop_decision,
@@ -22,40 +28,38 @@ from backtest.research.strategy7_rules import (
 
 
 def test_1_locked_stop_lines_and_actions():
-    assert stop_decision(TRIAL, entry_a=100, average_cost=100).line == pytest.approx(96)
-    seven = stop_decision(SEVEN_NORMAL, entry_a=100, average_cost=102, trial_lot_present=True)
-    assert (seven.action, seven.line, seven.fraction) == pytest.approx(("chop_trial", 99, 4 / 7))
-    nine = stop_decision(NINE, entry_a=100, average_cost=108)
-    assert nine.action == "clear_nine"
-    assert nine.line == pytest.approx(109.08)
+    assert TRIAL_FRACTION == pytest.approx(0.20)
+    assert ADD_FRACTION == pytest.approx(0.20)
+    trial = stop_decision(TRIAL, entry_a=100, average_cost=100)
+    assert (trial.action, trial.line) == ("dump_trial", pytest.approx(90))
+    four = stop_decision(FOUR, entry_a=100, average_cost=102)
+    assert (four.action, four.line) == ("clear_four", pytest.approx(96.9))
+    six = stop_decision(SIX, entry_a=100, average_cost=104)
+    assert (six.action, six.line) == ("clear_six", pytest.approx(100.36))
+    eight = stop_decision(EIGHT, entry_a=100, average_cost=106)
+    assert (eight.action, eight.line) == ("clear_eight", pytest.approx(103.35))
+    full = stop_decision(FULL, entry_a=100, average_cost=108)
+    assert (full.action, full.line) == ("clear_full", pytest.approx(105.84))
 
 
-def test_2_chop_readd_paths_and_no_invented_stops():
-    add1 = ladder_decision(TRIAL, 104, entry_a=100)
-    assert add1.action == "add_a104"
-    chop = stop_decision(SEVEN_NORMAL, entry_a=100, average_cost=101.7)
-    assert chop.action == "chop_trial"
-    assert chop.line == pytest.approx(99)
-    # A price below avg*0.99 but above A*0.99 must not cause a full clear.
-    assert 99 < 100.2 < 101.7 * 0.99
-    assert chop.action != "clear_nine"
-
-    readd = ladder_decision(THREE_AFTER_CHOP, 104 * 1.04, entry_a=100, add1_a1=104)
-    assert readd.action == "readd_a1_104"
-    assert stop_decision(SEVEN_AFTER_READD, entry_a=100, average_cost=104, add1_a1=104).action == "none"
-    # H-R12: even a crash after 3a creates no new stop band.
-    assert stop_decision(SEVEN_AFTER_READD, entry_a=100, average_cost=104, add1_a1=104).line is None
-    final_add = ladder_decision(SEVEN_AFTER_READD, 104 * 1.10, entry_a=100, add1_a1=104)
-    assert final_add.action == "readd_a1_110"
-
-    clear_three = stop_decision(THREE_AFTER_CHOP, entry_a=100, average_cost=104, add1_a1=104)
-    assert (clear_three.action, clear_three.line) == ("clear_three", pytest.approx(99.84))
+def test_2_ladder_is_next_rung_only():
+    assert ladder_decision(TRIAL, 104, entry_a=100).action == "add_a104"
+    assert ladder_decision(TRIAL, 104, entry_a=100).fraction == pytest.approx(0.20)
+    assert ladder_decision(FOUR, 108, entry_a=100).action == "add_a108"
+    assert ladder_decision(SIX, 112, entry_a=100).action == "add_a112"
+    assert ladder_decision(EIGHT, 116, entry_a=100).action == "add_a116"
+    assert ladder_decision(FULL, 120, entry_a=100).action == "none"
+    assert next_add_target(TRIAL, entry_a=100) == pytest.approx(104)
+    assert next_add_target(FOUR, entry_a=100) == pytest.approx(108)
+    assert next_add_target(SIX, entry_a=100) == pytest.approx(112)
+    assert next_add_target(EIGHT, entry_a=100) == pytest.approx(116)
+    assert next_add_target(FULL, entry_a=100) is None
 
 
-def test_3_gap_goes_directly_to_one_jump_nine_action():
-    decision = ladder_decision(TRIAL, 112, entry_a=100)
-    assert decision.action == "jump_nine"
-    assert decision.fraction == pytest.approx(0.50)
+def test_3_gap_from_trial_still_only_adds_first_rung():
+    decision = ladder_decision(TRIAL, 116, entry_a=100)
+    assert decision.action == "add_a104"
+    assert decision.fraction == pytest.approx(0.20)
 
 
 def test_4_alternate_bands_and_three_drawdown_thresholds():
@@ -65,25 +69,30 @@ def test_4_alternate_bands_and_three_drawdown_thresholds():
     assert drawdown_threshold(0.20) == pytest.approx(0.50)
     assert drawdown_threshold(0.21) == pytest.approx(0.40)
     assert drawdown_threshold(0.51) == pytest.approx(0.20)
-    assert drawdown_tp_triggered(NINE, price=110, peak=120, cost=100)
-    assert not drawdown_tp_triggered(SEVEN_NORMAL, price=110, peak=120, cost=100)
+    assert drawdown_tp_triggered(FULL, price=110, peak=120, cost=100)
+    assert not drawdown_tp_triggered(SIX, price=110, peak=120, cost=100)
 
 
-def test_5_timer_day_zero_nine_disabled_and_chop_target():
-    sessions = [date(2026, 9, 1) + timedelta(days=i) for i in range(8)]
-    assert not timer_due(sessions, sessions[0], sessions[4], TRIAL)
-    assert timer_due(sessions, sessions[0], sessions[5], TRIAL)
-    assert not timer_due(sessions, sessions[0], sessions[7], NINE)
-    assert next_add_target(THREE_AFTER_CHOP, entry_a=100, add1_a1=104) == pytest.approx(108.16)
+def test_5_timer_day_zero_only_trial():
+    sessions = [date(2026, 9, 1) + timedelta(days=i) for i in range(12)]
+    assert TIMER_SESSIONS == 10
+    assert not timer_due(sessions, sessions[0], sessions[9], TRIAL)
+    assert timer_due(sessions, sessions[0], sessions[10], TRIAL)
+    assert not timer_due(sessions, sessions[0], sessions[10], FOUR)
+    assert not timer_due(sessions, sessions[0], sessions[10], SIX)
+    assert not timer_due(sessions, sessions[0], sessions[10], EIGHT)
+    assert not timer_due(sessions, sessions[0], sessions[10], FULL)
+    assert ADD_HM_START == 885
+    assert ADD_HM_END == 895
+    assert in_add_window(885) and in_add_window(895)
+    assert not in_add_window(884) and not in_add_window(896)
 
 
 def test_6_index_gate_is_lagged_blocks_and_recovers_next_session():
     days = [date(2026, 8, 1) + timedelta(days=i) for i in range(15)]
     values = [100.0] * 9 + [90.0, 89.0, 120.0, 120.0, 120.0, 120.0]
     gate = build_index_gate(dict(zip(days, values)))
-    # Day 10's second weak close is only known after that close: day 11 blocks.
     assert gate[days[11]] is True
-    # Recovery close on day 11 cannot affect that day's gate, only day 12.
     assert gate[days[12]] is False
     changed_today = values.copy()
     changed_today[12] = 1.0
