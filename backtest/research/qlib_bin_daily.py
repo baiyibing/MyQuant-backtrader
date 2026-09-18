@@ -59,7 +59,9 @@ def load_qlib_calendar(qlib_root: Path | str) -> list[str]:
     path = Path(qlib_root) / "calendars" / "day.txt"
     if not path.is_file():
         raise FileNotFoundError(f"qlib calendar missing: {path}")
-    return [ln.strip() for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    return [
+        ln.strip() for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()
+    ]
 
 
 def _ymd_to_iso(ymd: str) -> str:
@@ -67,6 +69,19 @@ def _ymd_to_iso(ymd: str) -> str:
     if len(digits) < 8:
         raise ValueError(f"cannot parse YYYYMMDD: {ymd!r}")
     return f"{digits[:4]}-{digits[4:6]}-{digits[6:8]}"
+
+
+def calendar_slice(cal: list[str], start_iso: str, end_iso: str) -> tuple[int, int]:
+    """Clamp ``[start, end]`` onto trading days: first ``>= start``, last ``<= end``."""
+    i0 = next((i for i, d in enumerate(cal) if d >= start_iso), None)
+    i1 = None
+    for i in range(len(cal) - 1, -1, -1):
+        if cal[i] <= end_iso:
+            i1 = i
+            break
+    if i0 is None or i1 is None or i0 > i1:
+        raise SystemExit(f"qlib calendar missing {start_iso} or {end_iso}")
+    return i0, i1
 
 
 def _read_one(
@@ -114,11 +129,11 @@ def load_qlib_bin_daily_bars(
     if not feat.is_dir():
         raise FileNotFoundError(f"qlib features missing: {feat}")
     cal = load_qlib_calendar(root)
-    pos = {d: i for i, d in enumerate(cal)}
     start_iso, end_iso = _ymd_to_iso(start), _ymd_to_iso(end)
-    if start_iso not in pos or end_iso not in pos:
-        raise SystemExit(f"qlib calendar missing {start_iso} or {end_iso} under {root}")
-    i0, i1 = pos[start_iso], pos[end_iso]
+    try:
+        i0, i1 = calendar_slice(cal, start_iso, end_iso)
+    except SystemExit as exc:
+        raise SystemExit(f"{exc} under {root}") from exc
     out: dict[str, pd.DataFrame] = {}
     codes_list = sorted(codes)
     n = max(1, int(workers))
