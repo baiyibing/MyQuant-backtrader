@@ -8,8 +8,9 @@
 > **工作流**：走 [Codex 交接工作流](workflow-codex-handoff.md)。
 > **交接**：[handoff-ashare-engine-refactor-codex-impl-2026-09-18.md](handoff-ashare-engine-refactor-codex-impl-2026-09-18.md)（已随 GO 刷新，为 Codex 施工图）。
 > **基线 tip**：`origin/master` `a61b1ad`（#104 + #105 已合）；`ashare_*` 符号以 #104 `28c4ce2` 为准，行号漂移以符号名为准。
-> **短注**：本轮两处措辞修订关闭 2026-09-18 Opus 5 实施前红旗（R-1 漂移一律 STOP + R-2 numba 调用点锁定），不表示引擎重构已实施。
+> **短注**：本轮两处措辞修订关闭 2026-09-18 Opus 5 实施前红旗（R-1 漂移一律 STOP + R-2 numba 调用点锁定），不表示引擎重构已实施。下一行人裁把 R-1 收窄：该 fixture 族七类为预期迁移，七类之外仍 STOP。
 > 本轮另两处措辞关闭 2026-09-18 Opus 5 复审红旗 N-1（冻结 `read_lake_minute_ohlc`）与 N-2（切片 A 写死比对物），不表示引擎重构已实施。
+> **人裁（2026-09-18 · 切片 A 填价）**：书帧读取器的新成交是**保留结果**，不是缺陷。同一合成 fixture 族（源 parquet SHA 不变、源文件均含 `low`）上，干净窗加①–⑥共七类实测差异是**预期迁移**。**禁止**改 `read_lake_minute_ohlc` 去追回 compact 旧成交。该七类之外的 reason 计数或 trades 价格漂移仍是 **STOP**，须问人。干净窗必须仍一致。读取器现状锁与 numba 内核锁（`can_sell=` 仅 `csv_minute_backtest.py:618`；日线 `n_days >= 1` 仅 `csv_daily_backtest.py:327,334`；两内核字节级不动）不放宽。
 
 ---
 
@@ -187,10 +188,29 @@ CSV 回测不准去改那四条海龟线。LEBS 里禁止重写本仓 6/8/7。
 
 | 切片 | 做什么 | 完成定义（DoD） |
 |------|--------|-----------------|
-| **A · 一帧分钟 + 禁复制** | v7 **默认湖路径**改走 `load_minute_ohlc`：整载 `(start,end)` 后按日切片；禁逐日调 loader、禁全市场 flatten。**帧契约三选一写死（MC-1）**：(a) 复用 1–10 `_slice_day`；(b) `_day_frame_records` 认书帧 `ymd`/DatetimeIndex；(c) 薄适配层——书帧无 `date` 列，按字面换即 `KeyError`。**topk 共用 v7 `_load_cli_bars`，非独立链（MC-4）**：`_load_cli_bars` 的 lake/qlib_1min 分叉写死，topk 湖路径跟 v7 适配走。**v7 湖路径 `use_cache=False`（MC-5）**：cache 键仅 `(start,end)`，小名单先写会被大名单命中走缺码整读合并——禁止 v7 覆写共享 cache。compact **降为模块私有并保留 qlib_1min 源与 `bars_from_pool` 链**。新策略禁止再写加载 / 涨停 / 佣金。文档：engine-ashare-correctness 模块表跟上 | data-free 测：`read_lake_minute_ohlc` 的现状行为（单 `data.parquet`、`low` 为必需列、`_in_session` 过滤、`duplicated(keep="last")` 去重、整日零量丢弃）为**现状锁，字节级不动**；禁止改这只共用读取器来让 ④⑤⑥ 产出非空书帧。同一 fixture 上，基线是**私有化后的 compact 链**，或**落盘的改造前 records**；逐窗比 reason 计数与 trades 价格列。相对**该基线**，任何 reason 计数漂移，或任何 trades 价格列漂移，都是 **STOP**；实施者不得自行放行任何一列价格。v7 若与该基线不同，动作是 **STOP 问人**，不得接受新数字；实现 PR **不得**以「新测试全绿」代替上述 A/B 比对。合成窗必须包含以下六类 fixture 行型，缺一类即不算覆盖：①盘外时间戳（out-of-session timestamps；书帧 `_in_session` 会滤，compact 不过滤）；②`volume = 0` 的整日（书帧丢零量日）；③重复时间戳（书帧 `duplicated(keep="last")` 去重，compact 不去重）；④多 part parquet 文件（预期为书帧 `None` 或少行，不是待修缺陷）；⑤compact 的输出帧没有 `low`（`_compact_minute_frame` 的输出不含 `low`），不是源 parquet「缺 `low` 列」；**禁止构造缺 `low` 源文件**；⑥书帧 vs compact 的文件集差异（书帧只读单个 `data.parquet`，compact 用目录 `glob("*.parquet")`；预期为书帧 `None` 或少行，不是待修缺陷）。类型 ④⑤⑥ 的预期就是书帧返回 `None` 或少行；这是被断言的差异，不是待修的缺陷。规整、藏掉上述任一行型的合成窗不得判绿；**非空 bar 计数 > 0**（以及为防空切片假绿而设的非空门）只对干净 symbol 生效，不适用于预期为 `None` 或少行的 ④⑤⑥；**topk 合成窗非空**仍只针对干净路径；缺码路径给 data-free fixture（mock 行数上限，非仅口头 6.6GB）；1–10 / Mode B **填价与 reason 相对同一基线不动，cache 写路径允许变**；已知限制记录：cache 无新鲜度守卫、加载线程池无 timeout；无盘符字面量 |
+| **A · 一帧分钟 + 禁复制** | v7 **默认湖路径**改走 `load_minute_ohlc`：整载 `(start,end)` 后按日切片；禁逐日调 loader、禁全市场 flatten。**帧契约三选一写死（MC-1）**：(a) 复用 1–10 `_slice_day`；(b) `_day_frame_records` 认书帧 `ymd`/DatetimeIndex；(c) 薄适配层——书帧无 `date` 列，按字面换即 `KeyError`。**topk 共用 v7 `_load_cli_bars`，非独立链（MC-4）**：`_load_cli_bars` 的 lake/qlib_1min 分叉写死，topk 湖路径跟 v7 适配走。**v7 湖路径 `use_cache=False`（MC-5）**：cache 键仅 `(start,end)`，小名单先写会被大名单命中走缺码整读合并——禁止 v7 覆写共享 cache。compact **降为模块私有并保留 qlib_1min 源与 `bars_from_pool` 链**。新策略禁止再写加载 / 涨停 / 佣金。文档：engine-ashare-correctness 模块表跟上 | data-free 测：`read_lake_minute_ohlc` 的现状行为（单 `data.parquet`、`low` 为必需列、`_in_session` 过滤、`duplicated(keep="last")` 去重、整日零量丢弃）为**现状锁，字节级不动**；禁止改这只共用读取器来追回 compact 旧成交，也禁止改它来让 ④⑤⑥ 产出非空书帧。同一 fixture 上，基线是**私有化后的 compact 链**，或**落盘的改造前 records**；逐窗比 reason 计数与 trades 价格列。**人裁（2026-09-18）**：书帧读取器的新成交是保留结果。§5.1 七类实测差异（干净窗仍一致，外加①–⑥）是该 fixture 族的**预期迁移**，不是缺陷；**该七类之外**的任何 reason 计数漂移或任何 trades 价格列漂移仍是 **STOP**，须问人，不得自行放行。实现 PR **不得**以「新测试全绿」代替上述比对；绿测不豁免七类之外的漂移。合成窗必须包含以下六类 fixture 行型，缺一类即不算覆盖：①盘外时间戳（out-of-session timestamps；书帧 `_in_session` 会滤，compact 不过滤）；②`volume = 0` 的整日（书帧丢零量日）；③重复时间戳（书帧 `duplicated(keep="last")` 去重，compact 不去重）；④多 part parquet 文件（预期为书帧 `None` 或少行，不是待修缺陷）；⑤compact 的输出帧没有 `low`（`_compact_minute_frame` 的输出不含 `low`），不是源 parquet「缺 `low` 列」；**禁止构造缺 `low` 源文件**；⑥书帧 vs compact 的文件集差异（书帧只读单个 `data.parquet`，compact 用目录 `glob("*.parquet")`；预期为书帧 `None` 或少行，不是待修缺陷）。类型 ④⑤⑥ 的预期仍是书帧返回 `None` 或少行（实测数字见 §5.1，不是待修缺陷）。①–③的已测 reason/价格差同样是预期迁移，不得再当成缺陷去改读取器。规整、藏掉上述任一行型的合成窗不得判绿；**非空 bar 计数 > 0**（以及为防空切片假绿而设的非空门）只对干净 symbol 生效，不适用于预期为 `None` 或少行的 ④⑤⑥；**topk 合成窗非空**仍只针对干净路径；缺码路径给 data-free fixture（mock 行数上限，非仅口头 6.6GB）；1–10 / Mode B **填价与 reason 相对同一基线不动，cache 写路径允许变**；已知限制记录：cache 无新鲜度守卫、加载线程池无 timeout；无盘符字面量 |
 | **B · 谓词统一（P1=A；双账本保留）** | T+1 只认 `buy_date < session`。1–10 的 `entry_idx` **映射到日历日**：映射只服务 T+1 谓词与日期打印；**`n_days` 一律仍按联合日历下标计数**（禁止按个股自身有 K 日数重建）。**谓词落点=现有调用点（MC-6）**：T+1/买卖闸在 simulate 环与 v7 事件环的**调用点**统一走 `t1_sellable` / `skip_buy_at_limit` / `defer_sell_at_limit`；**T+1 谓词只允许加在这两个现有调用/判定点**：①`backtest/research/csv_minute_backtest.py:618` 的 `scan_held_day(..., can_sell=(n_days >= 1))` 中 `can_sell=` 实参；②`backtest/research/csv_daily_backtest.py:327,334` 的 `pos.pending_exit and n_days >= 1` 与 `if n_days >= 1` 日线判定点。`_scan_held_day_numba_trail` 与 `scan_held_day_python` 两个内核的内部守卫必须字节级不动：前者 `n_days < 1`（`:174`）及 `limit_down > 0.0`（`:183,203`），后者 `n_days < 1`（`:269`）及 `limit_down > 0`（`:278,316`）；禁止把 `date` 对象传进 `@njit`，平价锁为 `tests/test_scan_held_day_numba_parity.py`。**不改** `execute_buy` / `_sell` / v7 `_buy` / `_sell_lots` 填单契约（现状不含谓词，也不塞进去）；书侧保持 `limits is None` **先拒**（fail-closed，`skip_unknown_board`/冻仓）；`hit_limit_*` 保留给 `reserve_limit_up` / `open_board` / `forbid_all_trade_at_limit` / qlib 带内判定，不替换。v7 的 `Lot` 策略字段（stage / entry_A）留在 v7。**已知留存分叉不改（Q40+ 另裁）**：v7 卖/加仓侧 limits=None（**无昨收或未知板块两支**）谓词放行=fail-open（书引擎冻结拒卖）；v7 ST 名称平铺取窗末名非 PIT | 合成：T+1 拒卖、涨停 skip、跌停 defer 日线+分钟+v7 各至少 1 条；**None-limits 卖侧向量覆盖无昨收+未知板块两支**（记录现状行为）；日线卖出时点两支：`open_board` 同 bar 当日收 vs 其余 `pending_exit` 次日开；`csv_ledger.rescale_position` diff 空或仍 shares untouched；**golden 指涉物** = tests 内合成 golden + 宿主**改造前**短窗 trades/summary 基线先落盘（host 步骤）；切片 D reason 桶映射落 tests 内 dict（1–10 前缀分类计数器 vs v7 自由字符串，给示例键值） |
 | **C · 围栏 + 入口文档** | import 围栏：simulate 热路径 AST 不得 import qlib / `trade_fee_policy` / LEBS。**热路径=枚举清单**：`csv_daily_backtest` / `csv_minute_backtest` / `csv_minute_backtest_v7` / `csv_ledger` / `csv_simulate_loop` / `csv_common` / `csv_strategy_books` / `ashare_session` / `ashare_bars` / `ashare_fees` / `unified_exit_modeb`，**加传递一层：`csv_daily_loader` / `csv_pool` / `market_layer` / `exdiv_map`**（禁 rglob 全 `research/` 目录——`research/engine.py` 现存 `trade_fee_policy` import，其处置连同 `legacy/engine.py` 另开卫生票）。README / AGENTS 一句「三仓回测不做重」。旧 CLI 保留（P5=A） | 围栏测锚点（MC-7）：新文件 `tests/test_ashare_simulate_import_fence.py` + `SIMULATE_HOT_PATH` 常量表与本清单**字节级一致**；HELP_LOCK 不改（除非 P5=C） |
 | **D · 宿主对照**（**非合入门**） | 同窗 1–10 与 v7 各一短跑，比 reason 桶，不比与 LEBS/PortAna 的 NAV | 短记落 `docs/backtest/`；数字产物不入库；实现 PR 不勾选 |
+
+
+### 5.1 切片 A 预期迁移（人裁 2026-09-18）
+
+书帧读取器的新成交是**保留结果**。`read_lake_minute_ohlc` 字节级冻结（单 `data.parquet`、`low` 必需、`_in_session`、`duplicated(keep="last")`、丢整日零量），**不得**改它去追回 compact 旧成交。numba 内核锁不放宽：`can_sell=` 仅 `csv_minute_backtest.py:618`；日线 `n_days >= 1` 仅 `csv_daily_backtest.py:327,334`；`_scan_held_day_numba_trail` 与 `scan_held_day_python` 字节级不动。
+
+同一合成 fixture 族（源 parquet SHA 不变、源文件均含 `low`）。对照物是私有化后的 compact 链，或同一 fixture 上落盘的改造前 records。下列七行是 compact → 书帧的**预期迁移**，不是缺陷。不得另造数字。
+
+| 类 | rows | reason | prices |
+|---|---|---|---|
+| clean | 2→2 | 不变（buy:trial=1, stop:trial_a090=1） | [100, 89] → [100, 89] |
+| ① 盘外时间戳 | 3→2 | stop 1→0 | [100, 90] → [100] |
+| ② 整日 volume=0 | 2→1 | buy+stop → skip_no_1455 | [100, 89] → null |
+| ③ 重复时间戳 | 3→2 | 不变 | [100, 89] → [102, 89]（买价 100→102，因 `duplicated(keep="last")`） |
+| ④ 仅多 part | 2→0 | buy+stop → skip_no_1455 | [100, 89] → null |
+| ⑤ compact 输出无 `low`（源含 `low`；禁止构造缺 `low` 源文件） | 3→1 | buy+stop → skip_no_1455 | [100, 89] → null |
+| ⑥ `data.parquet` 另加 part | 2→1 | stop 1→0 | [100, 89] → [100] |
+
+**该七类之外**的任何 reason 计数漂移，或任何 trades 价格列漂移，仍是 **STOP**，必须问人。干净窗必须仍与上表 clean 行一致。类型 ④⑤⑥ 预期仍是 `None` 或少行。非空 bar 门只对干净 symbol。
 
 P2/P3/P4 若裁成「做」，**另开 plan**，不塞进本船 A–C。
 
@@ -264,6 +284,7 @@ MyQuant  训练/IC → export_daily_pool → YYYYMMDD.csv
 
 | 版本 | 日期 | 变更 |
 |------|------|------|
+| v1.4 | 2026-09-18 | 人裁切片 A 验收：书帧成交为保留结果；同族 fixture 七类实测差异（干净窗 + ①–⑥）为预期迁移，不是缺陷；七类之外的 reason/价格漂移仍 STOP 问人。不改 `read_lake_minute_ohlc`，不放宽 numba 内核锁 |
 | v1.3 | 2026-09-18 | 回填三席多模型评审 merge-consensus MC-1..MC-9：切片 A 钉 v7 帧契约三选一 / topk 共用 `_load_cli_bars` / v7 湖路径 `use_cache=False` / 非空 bar 计数门；切片 B 谓词落点改为**调用点**（不改填单契约、书侧 None 先拒、`hit_limit_*` 保留）、None-limits 两支、卖出时点两支；切片 C 围栏加传递一层 + 测试锚点（`test_ashare_simulate_import_fence.py`）；§7 compact「不删」对齐、topk 行改述；§0/P2/§4 补句；handoff 全量同步 |
 | v1.2 | 2026-09-18 | 回填三路对抗评审勘误 E-01..E-16（[adversarial-errata.md](../architecture/reviews/2026-09-18/plan-ashare-engine-refactor/adversarial-errata.md)）：P1=A 改述为谓词统一（双账本保留）；切片 A 补价格列/内存门/qlib_1min+topk 链处置；切片 B 钉 n_days 联合日历口径、None-limits 与 ST 非 PIT 留存分叉、golden 指涉物；切片 C 围栏改枚举清单；§7 补 simulate_loop/common/books 落点；基线刷新 `a61b1ad` |
 | v1.1 | 2026-09-18 | 补 §0.3：LEBS 只在 1.3、LEBS≠真栈、海龟/旧 CSV 分轨、选哪一件四行、策略 7≠turtle |
