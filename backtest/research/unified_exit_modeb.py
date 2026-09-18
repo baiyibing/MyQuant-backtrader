@@ -880,6 +880,7 @@ def run_modeb(
     out_dir: Path = DEFAULT_OUT_DIR,
     cash_pool: float = modea.CASH_POOL,
     index_block=None,
+    industry_map=None,
 ) -> dict:
     """Mode B narrow-grid pipeline: assemble → matrix → aggregate → reports."""
     out_dir = _validate_out_dir(out_dir)
@@ -985,6 +986,10 @@ def run_modeb(
         best = ranked[0].label
         robustness["board"] = modea.stratify_mean_returns(instances, matrix[best], by="board")
         robustness["month"] = modea.stratify_mean_returns(instances, matrix[best], by="month")
+        if industry_map is not None:
+            robustness["industry"] = modea.stratify_mean_returns(
+                instances, matrix[best], by="industry", industry_map=industry_map
+            )
 
     # ④ next-open buy sensitivity (rebuild matrix for top specs + r1_n1 only — cost control)
     sens_inst = modea.next_open_buy_instances(instances, bar_map, sess)
@@ -1042,12 +1047,22 @@ def main(argv=None):
     ap.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR, help="Mode B 独立报告目录")
     ap.add_argument("--tol", type=float, default=modea.DEFAULT_TOL, help="涨跌停容差")
     ap.add_argument("--workers", type=int, default=8, help="读取线程数")
+    ap.add_argument(
+        "--industry",
+        action="store_true",
+        help="按申万一级分层稳健性；湖表缺失则报错",
+    )
     args = ap.parse_args(argv)
     try:
         _validate_out_dir(args.out_dir)
     except ValueError as exc:
         ap.error(str(exc))
-    result = run_modeb(**vars(args))
+    kwargs = vars(args)
+    if kwargs.pop("industry"):
+        from oskh_data.industry_sw_l1 import load_industry_map
+
+        kwargs["industry_map"] = load_industry_map()
+    result = run_modeb(**kwargs)
     print(json.dumps({"mode": "B", "n_opened": len(modea.opened_instances(result["instances"])),
                       "n_strategies": len(result["ranked"]), "out_dir": str(args.out_dir)},
                      ensure_ascii=False))

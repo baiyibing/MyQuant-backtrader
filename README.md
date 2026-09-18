@@ -46,7 +46,7 @@ D:\anaconda3\envs\vanna312\python.exe -m pip install -r requirements.txt
 
 旧 CSV CLI 保留为真身（P5=A），HELP_LOCK 不变；本轮不新增薄包装。v7 / topk 的湖分钟行情共用 `ashare_bars` 书帧，qlib_1min 源仍保留。施工边界见 [撮合核收口 plan §0.3 / §5](docs/backtest/plan-ashare-engine-refactor-2026-09-18.md)。
 
-必须 `--strategy version1|…|version6|version8|version9|version10`。7 不在 choices，必须走独立入口并传 `--pool-dir`。9 / 10 在 choices 里，但也必须 `--pool-dir`（`export_strategy9_pool.py` / `export_ta_pool.py`），拒绝 `stock_pool/`。`stock_pool/` 是 6/8 可变默认，不是实验快照；可复现跑用 `exports/`（见 [pool-csv-contract](docs/backtest/pool-csv-contract.md)）。数据经 `oskh_data` / `resolve_period_root`（有 `F:\stock_data\.authority` 时跟 F 盘）。
+必须 `--strategy version1|…|version6|version8|version9|version10`。7 不在 choices，必须走独立入口并传 `--pool-dir`。9 / 10 在 choices 里，但也必须 `--pool-dir`（`export_strategy9_pool.py` / `export_ta_pool.py`），拒绝 `stock_pool/`。`stock_pool/` 是 6/8 可变默认，不是实验快照；可复现跑用 `exports/`（见 [pool-csv-contract](docs/backtest/pool-csv-contract.md)）。数据经 `oskh_data` / `resolve_period_root`（须设定 `OSKH_SOURCE_PARQUET_ROOT`；未设定或文件缺失即报错）。
 
 ```powershell
 D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_daily_backtest.py --strategy version6 --start 20251023 --end 20260909

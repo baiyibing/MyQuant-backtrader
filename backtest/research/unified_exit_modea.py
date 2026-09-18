@@ -905,6 +905,7 @@ def stratify_mean_returns(
     exits: Mapping[str, ExitResult],
     *,
     by: str = "board",
+    industry_map: Mapping[str, str] | None = None,
 ) -> dict[str, float]:
     buckets: dict[str, list[float]] = {}
     for inst in opened_instances(instances):
@@ -913,6 +914,12 @@ def stratify_mean_returns(
             key = board_bucket(inst.symbol)
         elif by == "month":
             key = inst.list_date[:6]
+        elif by == "industry":
+            from oskh_data.industry_sw_l1 import industry_bucket_for_stock
+
+            if industry_map is None:
+                raise ValueError("industry stratification requires industry_map")
+            key = industry_bucket_for_stock(inst.symbol, industry_map)
         else:
             raise ValueError(by)
         buckets.setdefault(key, []).append(er.return_pct)
@@ -1038,6 +1045,7 @@ def run_modea(
     workers: int = 8,
     out_dir: Path = Path("backtest_output/unified_exit_modea"),
     cash_pool: float = CASH_POOL,
+    industry_map: Mapping[str, str] | None = None,
 ) -> dict:
     """Full Mode A pipeline: assemble → matrix → aggregate → reports."""
     sess = load_session_calendar(start, end, sessions=sessions)
@@ -1125,6 +1133,10 @@ def run_modea(
         best = ranked[0].label
         robustness["board"] = stratify_mean_returns(instances, matrix[best], by="board")
         robustness["month"] = stratify_mean_returns(instances, matrix[best], by="month")
+        if industry_map is not None:
+            robustness["industry"] = stratify_mean_returns(
+                instances, matrix[best], by="industry", industry_map=industry_map
+            )
 
     # ④ next-open buy sensitivity (rebuild matrix for top specs + r1_n1 only — cost control)
     sens_inst = next_open_buy_instances(instances, bar_map, sess)
@@ -1183,6 +1195,11 @@ def main(argv: Optional[list[str]] = None) -> int:
         default="all",
         help="assemble = instances only; all = grid + reports",
     )
+    ap.add_argument(
+        "--industry",
+        action="store_true",
+        help="Stratify robustness by 申万一级; raises if lake maps are missing",
+    )
     args = ap.parse_args(argv)
 
     if args.stage == "assemble":
@@ -1221,6 +1238,11 @@ def main(argv: Optional[list[str]] = None) -> int:
         )
         return 0
 
+    industry_map = None
+    if args.industry:
+        from oskh_data.industry_sw_l1 import load_industry_map
+
+        industry_map = load_industry_map()
     result = run_modea(
         args.pool_dir,
         start=args.start,
@@ -1229,6 +1251,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         tol=args.tol,
         workers=args.workers,
         out_dir=args.out_dir,
+        industry_map=industry_map,
     )
     top = result["ranked"][:5]
     print(

@@ -40,14 +40,16 @@ Keep: `backtest/` (incl. `research/` + `research/chip/`), `oskh_data/`, `l2_anal
 
 Do not reintroduce live trading packages (`live_trading`, `executor_stream`, `redis_stream_bridge`, `stream_monitor`, `oskh_db`, full `strategy_config`).
 
-Consume only. All external downloads and vendor merges live in OSkhQuant1.3. This fork only reads the F lake.
+Consume only. All external downloads and vendor merges live in OSkhQuant1.3. This fork only reads the configured lake.
 
 ## Data disks (do not mix)
 
-- **Parquet** (hive-split v1.5 three trees `stock/period=1d|1m` · `index/period=1d` · `etf/period=1d`, loose adj/float parquet, TR bars, `tr_staging/`): `resolve_parquet_container()` / `resolve_period_root()` / `resolve_index_daily_root()` / `resolve_etf_daily_root()` / `resolve_source_parquet()` / `resolve_turnover_resist_parquet_root()`. With `F:\\stock_data\\.authority` and no env, this is F. Unset env is not a rollback. Index/ETF roots never read `OSKH_PERIOD_1D_ROOT`.
-- **E workspace** (duckdb, exp, skip JSON, stale marker): `resolve_e_stock_data_container()` / `OSKH_DATA_ROOT`.
-- `TURNOVER_RESIST_DATA_DIR` is opt-in rollback to an old E path; default follows the parquet container.
+- **不要猜数据在哪**：没设定 `OSKH_SOURCE_PARQUET_ROOT`（或 `OSKH_AUTHORITY_HINT_ROOT` + `.authority`）、文件不存在，就报错。禁止写死 E:/F:、禁止探测盘符、禁止缺失时返回空表假装没数据。
+- **Parquet** (hive-split v1.5 three trees `stock/period=1d|1m` · `index/period=1d` · `etf/period=1d`, loose adj/float parquet, TR bars, `tr_staging/`): `resolve_parquet_container()` / `resolve_period_root()` / `resolve_index_daily_root()` / `resolve_etf_daily_root()` / `resolve_source_parquet()` / `resolve_turnover_resist_parquet_root()`. Index/ETF roots never read `OSKH_PERIOD_1D_ROOT`.
+- **Workspace** (duckdb, exp, skip JSON, stale marker): `resolve_e_stock_data_container()` / `OSKH_DATA_ROOT`.
+- `TURNOVER_RESIST_DATA_DIR` is opt-in rollback to an old workspace path; default follows the parquet container.
 - This fork is read-only for market bars. New code must use resolvers, not cwd `stock_data/` literals.
+- **申万一级（只消费）**：`oskh_data/industry_sw_l1.py` 读 `vendor_wind_sw_l1/` 下的 `sw_l1_map.csv` / `wind_l1_map.csv`（两份都要有）。采集与 merge 只在 1.3。Mode A/B 用 `--industry` 才分层，缺表即失败。
 - **CI data-free gates** (no F lake): `verify_oskh_data_contract.py`, `verify_data_path_ssot.py`, `verify_no_hardcoded_machine_paths.py`, `verify_tr_bridge_import_ssot.py` in `.github/workflows/python-tests.yml` before pip. See `docs/backtest/plan-h10-ci-path-gates-2026-09-15.md` · `docs/backtest/plan-h12-ci-tr-bridge-gate-2026-09-15.md`.
 
 ## Encoding

@@ -27,8 +27,12 @@ from oskh_data.pandas_typing import normalize_timestamp
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, REPO)
 
-DEFAULT_SNAPSHOT_PATH = str(resolve_source_parquet("float_shares.parquet"))
-DEFAULT_HISTORY_PATH = str(resolve_parquet_container() / "float_shares_history.parquet")
+def _default_snapshot_path() -> str:
+    return str(resolve_source_parquet("float_shares.parquet"))
+
+
+def _default_history_path() -> str:
+    return str(resolve_parquet_container() / "float_shares_history.parquet")
 
 
 def business_days(start_date: str, end_date: str) -> List[pd.Timestamp]:
@@ -65,8 +69,8 @@ def main() -> None:
     )
     parser.add_argument("--start-date", required=True, help="YYYY-MM-DD")
     parser.add_argument("--end-date", required=True, help="YYYY-MM-DD")
-    parser.add_argument("--snapshot-path", default=DEFAULT_SNAPSHOT_PATH)
-    parser.add_argument("--history-output", default=DEFAULT_HISTORY_PATH)
+    parser.add_argument("--snapshot-path", default=None)
+    parser.add_argument("--history-output", default=None)
     parser.add_argument("--replace", action="store_true", help="replace output instead of merge")
     parser.add_argument("--max-stocks", type=int, default=0, help="limit to first N stocks (0=all)")
     parser.add_argument("--codes", default=None, help="comma-separated stock codes")
@@ -77,7 +81,9 @@ def main() -> None:
     if end_ts < start_ts:
         raise ValueError("end-date must be >= start-date")
 
-    snapshot_df = pd.read_parquet(args.snapshot_path)
+    snapshot_path = args.snapshot_path or _default_snapshot_path()
+    history_output = args.history_output or _default_history_path()
+    snapshot_df = pd.read_parquet(snapshot_path)
     snapshot_df = snapshot_df.dropna(subset=["stock_code"]).copy()
 
     if args.codes:
@@ -95,13 +101,13 @@ def main() -> None:
         print("[ERROR] no rows generated")
         sys.exit(1)
 
-    if args.replace or (not os.path.exists(args.history_output)):
+    if args.replace or (not os.path.exists(history_output)):
         merged = incoming
     else:
-        existing = pd.read_parquet(args.history_output)
+        existing = pd.read_parquet(history_output)
         merged = merge_history(existing, incoming)
 
-    out = Path(args.history_output)
+    out = Path(history_output)
     out.parent.mkdir(parents=True, exist_ok=True)
     merged.to_parquet(str(out), index=False)
 
@@ -112,14 +118,14 @@ def main() -> None:
     ).copy()
     latest["updated_at"] = pd.Timestamp.now().isoformat()
     latest = latest.sort_values(by="stock_code").reset_index(drop=True)  # pyright: ignore[reportCallIssue]
-    latest.to_parquet(args.snapshot_path, index=False)
+    latest.to_parquet(snapshot_path, index=False)
 
     print(f"source: snapshot")
     print(f"rows_incoming: {len(incoming)}")
     print(f"rows_history: {len(merged)}")
     print(f"date_range: {pd.to_datetime(merged['date']).min().date()} ~ {latest_date.date()}")
-    print(f"saved_history: {args.history_output}")
-    print(f"saved_snapshot: {args.snapshot_path}")
+    print(f"saved_history: {history_output}")
+    print(f"saved_snapshot: {snapshot_path}")
 
 
 if __name__ == "__main__":
