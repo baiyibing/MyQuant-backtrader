@@ -13,6 +13,21 @@
 
 ---
 
+## 实施前审核 + Codex 启动（宿主环境执行，**非本机**；模型已人裁写死，勿换档）
+
+1. **Cursor opus5 实施前审核**（人裁 2026-09-18：`claude-opus-5`；本机 Cursor CLI 无 claude 系，须宿主环境跑）。prompt 已入库：[opus5-preimpl-prompt.txt](../architecture/reviews/2026-09-18/plan-ashare-engine-refactor-2026-09-18/opus5-preimpl-prompt.txt)，产物写同目录 `opus5-preimpl-review.md`。判据：**无 🔴 才进第 2 步**；有 🔴 → 回写 plan / 本 handoff 后重审，不带病开工。
+2. **Codex 无头实施**（工作流第 5 步原文口径）：本 PR 合入 master 后，`git checkout master && git pull && git checkout -b feat/ashare-engine-refactor`，然后：
+
+```bash
+codex exec --dangerously-bypass-approvals-and-sandbox \
+  -m gpt-5.1-codex-max -c model_reasoning_effort=xhigh \
+  "按 docs/backtest/handoff-ashare-engine-refactor-codex-impl-2026-09-18.md 实施切片 A→B→C，分 commit；遇 plan 未覆盖语义 STOP 问人，不自裁"
+```
+
+   full-auto 配置（`approval_policy=never` + `sandbox_mode=workspace-write`）见 1.3 `docs/prompts/prompt-codex-config-fullauto.md`；模型 = **最高档**（写死 `gpt-5.1-codex-max`；当日无此档名取可用最高 codex-max 档）。切片 A/B 分 commit；实施后走工作流第 6 步缺陷优先复核、第 7 步回写 plan「✅ 已实施（PR #N）」。
+
+---
+
 ## 0. 硬边界（勿越）
 
 复制 plan **R\*** + §0.3：

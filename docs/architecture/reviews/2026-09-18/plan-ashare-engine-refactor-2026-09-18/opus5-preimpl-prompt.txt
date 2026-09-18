@@ -1,0 +1,19 @@
+你是实施前审核（pre-implementation gate，对应 workflow-codex-handoff 第 5 步开工前最后一道）。
+
+【对象】
+- docs/backtest/plan-ashare-engine-refactor-2026-09-18.md（v1.3，已人裁 GO：P1=A/P2=A/P3=C/P4=A/P5=A）
+- docs/backtest/handoff-ashare-engine-refactor-codex-impl-2026-09-18.md（Codex 施工图）
+
+【唯一标准】Codex（无头实施代理）能否照 handoff 无歧义、不越界、不改成交数字地开工。
+
+【必查】
+1. 双 SSOT：handoff 与 plan v1.3 是否同步无冲突（术语、切片定义、围栏清单、DoD、检查清单）。
+2. 可执行性：每切片步骤/代码锚点/DoD 是否可执行——对照实际代码抽验 file:line（锚点表符号是否存在、行号漂移以符号为准）。
+3. GO 回写一致性：plan 头部 ✅ 与 §3 已人裁行、handoff 头部/闸/清单是否互证一致（hash 72178b7、A/A/C/A/A）。
+4. 红灯：任何会让 Codex ①改 1–10/v7 成交数字（n_days 口径、None-limits 方向、fill 契约、费率默认）②测试假绿（空切片、golden 无指涉物）③越 R1–R9（import qlib/trade_fee_policy/LEBS、改 rescale_position shares、动 Mode B）的指令或歧义。
+5. 已知留存分叉清单（v7 卖侧 fail-open、ST 非 PIT、cache 无新鲜度）是否足以防 Codex 「顺手修掉」。
+
+【硬约束】
+- 只输出评审意见；绝对不要修改、创建、删除任何文件，不要运行任何写操作。
+- 证据 `file:line` + 最多 5 行片段；意见本体 ≤200 行；时间紧优先 🔴 与总评。
+- 输出格式：🔴 必须修（开工前） / 🟡 应修（可随首切片带上） / 🟢 可选 / ✅ 已就绪；每条带 file:line；末尾一句总评 + 「可开工 / 不可开工」。
