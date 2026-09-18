@@ -12,16 +12,19 @@ from typing import Optional
 
 import pandas as pd
 
+from backtest.research.ashare_fees import (
+    COMMISSION,
+    QLIB_CLOSE_COST,
+    QLIB_MIN_COST,
+    QLIB_OPEN_COST,
+    trade_commission,
+)
+from backtest.research.ashare_session import LIMIT_EPS, hit_limit_down, hit_limit_up
 from backtest.research.market_layer import limit_prices
 
 DEFAULT_TOTAL_CASH = 21_000_000.0
-COMMISSION = 0.001
-QLIB_OPEN_COST = 0.0005
-QLIB_CLOSE_COST = 0.0015
-QLIB_MIN_COST = 5.0
 PEAK_GAP_MIN = 15
 CHASE_HM = 9 * 60 + 45
-LIMIT_EPS = 0.001
 
 
 def _empty_stats() -> dict:
@@ -86,17 +89,6 @@ class SimState:
     min_cost: float = 0.0
 
 
-def trade_commission(notional: float, rate: float, min_cost: float = 0.0) -> float:
-    """qlib-style: max(notional * rate, min_cost) when min_cost > 0."""
-    if notional <= 0 or rate < 0:
-        return 0.0
-    fee = float(notional) * float(rate)
-    floor = float(min_cost)
-    if floor > 0:
-        return max(fee, floor)
-    return fee
-
-
 def _ymd(ts) -> str:
     return pd.Timestamp(ts).strftime("%Y%m%d")
 
@@ -104,16 +96,6 @@ def _ymd(ts) -> str:
 def _at_limit(price: float, limit: float) -> bool:
     """价格≈等于涨/跌停价。买入拦截请用 hit_limit_up（含越过涨停价）。"""
     return abs(price - limit) <= LIMIT_EPS
-
-
-def hit_limit_up(price: float, limit_up: float) -> bool:
-    """买价达到或超过涨停价则不可买（含舍入导致买价高于算出的涨停价）。"""
-    return float(price) + LIMIT_EPS >= float(limit_up)
-
-
-def hit_limit_down(price: float, limit_down: float) -> bool:
-    """卖价达到或低于跌停价则不可卖。"""
-    return float(price) - LIMIT_EPS <= float(limit_down)
 
 
 def peak_gap_blocks(gap, peak_gap_min: int = PEAK_GAP_MIN) -> bool:

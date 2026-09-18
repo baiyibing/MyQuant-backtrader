@@ -11,6 +11,7 @@ import argparse
 import csv
 import os
 import sys
+import time
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from pathlib import Path
@@ -19,10 +20,11 @@ from typing import Any, Iterable, Mapping, Sequence
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from backtest.research.ashare_bars import bars_from_pool
+from backtest.research.ashare_fees import DEFAULT_SCHEDULE, FeeSchedule
 from backtest.research.market_layer import (
     as_date as _as_date,
     as_datetime as _as_datetime,
-    limit_prices,
 )
 from backtest.research.strategy7_rules import (
     EIGHT,
@@ -38,15 +40,20 @@ from backtest.research.strategy7_rules import (
     timer_due,
     validate_index_symbol,
 )
+from backtest.research.ashare_session import (
+    defer_sell_at_limit,
+    k_for,
+    load_limit_context,
+    session_limit_prices,
+    session_prev_close,
+    skip_buy_at_limit,
+    t1_sellable,
+)
 from backtest.research.csv_pool import load_pool_day_map
-from common.infra.data_root import resolve_index_daily_root, resolve_period_root
+from common.infra.data_root import resolve_index_daily_root
 from oskh_data.lake_kind import classify_daily_lake_kind
 from oskh_data.symbol_format import to_canonical_symbol, to_partition_key
 
-# Decimal HALF_UP SSOT; 1.65×10% 跌停钉 1.49（不再用本地 float 1.48）。
-_limit_prices = limit_prices
-
-COMMISSION = 0.001
 NAME_BUDGET = 1_000_000.0
 
 
@@ -174,9 +181,16 @@ def _pool(pool_days: Mapping[Any, Sequence[str]] | None) -> dict[date, list[str]
     }
 
 
-def _previous_close(closes: Mapping[date, float], today: date) -> float | None:
-    prior = [day for day in closes if day < today]
-    return float(closes[max(prior)]) if prior else None
+def _rescale_position(position: Position, k: float) -> None:
+    factor = float(k)
+    if factor <= 0:
+        return
+    position.entry_A *= factor
+    position.avg_cost *= factor
+    position.peak *= factor
+    if position.add1_A1 is not None:
+        position.add1_A1 *= factor
+    position.lots = [Lot(lot.shares, lot.buy_date, lot.price * factor, lot.kind) for lot in position.lots]
 
 
 def _event(state: SimResult, day: date, symbol: str, hm: int | None, side: str, shares: int,
@@ -186,10 +200,11 @@ def _event(state: SimResult, day: date, symbol: str, hm: int | None, side: str, 
 
 
 def _buy(state: SimResult, position: Position | None, symbol: str, day: date, hm: int,
-         price: float, fraction: float, reason: str, kind: str) -> Position | None:
+         price: float, fraction: float, reason: str, kind: str,
+         fee: FeeSchedule = DEFAULT_SCHEDULE) -> Position | None:
     target = NAME_BUDGET * fraction
     shares = int(target / price / 100) * 100
-    cost = shares * price * (1 + COMMISSION)
+    cost = fee.debit_buy(shares * price)
     if shares <= 0 or cost > state.cash:
         _event(state, day, symbol, hm, "skip", 0, price, "skip_cash")
         return None
@@ -206,21 +221,25 @@ def _buy(state: SimResult, position: Position | None, symbol: str, day: date, hm
 
 
 def _sell_lots(state: SimResult, position: Position, day: date, hm: int, price: float,
-               reason: str, *, kind: str | None = None) -> int:
-    wanted = sum(lot.shares for lot in position.lots if lot.buy_date < day and (kind is None or lot.kind == kind))
+               reason: str, *, kind: str | None = None,
+               fee: FeeSchedule = DEFAULT_SCHEDULE) -> int:
+    wanted = sum(
+        lot.shares for lot in position.lots
+        if t1_sellable(lot.buy_date, day) and (kind is None or lot.kind == kind)
+    )
     if wanted <= 0:
         return 0
     remaining = wanted
     kept: list[Lot] = []
     for lot in position.lots:
-        eligible = lot.buy_date < day and (kind is None or lot.kind == kind)
+        eligible = t1_sellable(lot.buy_date, day) and (kind is None or lot.kind == kind)
         take = min(lot.shares, remaining) if eligible else 0
         if lot.shares > take:
             kept.append(Lot(lot.shares - take, lot.buy_date, lot.price, lot.kind))
         remaining -= take
     sold = wanted - remaining
     position.lots = kept
-    state.cash += sold * price * (1 - COMMISSION)
+    state.cash += fee.credit_sell(sold * price)
     _event(state, day, position.symbol, hm, "sell", sold, price, reason)
     if position.shares:
         position.avg_cost = sum(l.price * l.shares for l in position.lots) / position.shares
@@ -229,11 +248,31 @@ def _sell_lots(state: SimResult, position: Position, day: date, hm: int, price: 
     return sold
 
 
+def _is_frame_map(minute_bars: Any) -> bool:
+    if not isinstance(minute_bars, Mapping) or not minute_bars:
+        return False
+    sample = next(iter(minute_bars.values()))
+    return hasattr(sample, "loc") and hasattr(sample, "columns")
+
+
+def _day_frame_records(frame: Any, day: date) -> list[dict[str, Any]]:
+    if frame is None or getattr(frame, "empty", True):
+        return []
+    sl = frame.loc[frame["date"] == day]
+    if sl.empty:
+        return []
+    return sl.to_dict("records")
+
+
 def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Sequence[str]] | None,
                 index_days: Any = None, *, cash_total: float = 21_000_000.0,
-                start: Any = None, end: Any = None) -> SimResult:
+                start: Any = None, end: Any = None,
+                exdiv: Mapping[str, Mapping[str, float]] | None = None,
+                names: Mapping[str, str] | None = None,
+                fee: FeeSchedule = DEFAULT_SCHEDULE) -> SimResult:
     """Run the matcher; an index date->close mapping enables the new-open gate."""
-    minutes = _minute_records(minute_bars)
+    frames = minute_bars if _is_frame_map(minute_bars) else None
+    minutes = {} if frames is not None else _minute_records(minute_bars)
     closes = _daily_closes(daily_bars)
     pools = _pool(pool_days)
     state = SimResult(float(cash_total))
@@ -256,16 +295,28 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
     last_prices: dict[str, float] = {}
     for day in calendar:
         cleared_today: set[str] = set()
-        symbols_today = minutes.get(day, {})
-        ordered = list(dict.fromkeys(pools.get(day, []) + list(state.positions) + list(symbols_today)))
+        needed = list(dict.fromkeys(pools.get(day, []) + list(state.positions)))
+        if frames is not None:
+            symbols_today = {symbol: rows for symbol in needed
+                             if (rows := _day_frame_records(frames.get(symbol), day))}
+            ordered = needed
+        else:
+            symbols_today = minutes.get(day, {})
+            ordered = list(dict.fromkeys(needed + list(symbols_today)))
         for symbol in ordered:
             records = symbols_today.get(symbol, [])
             if not records:
                 if symbol in pools.get(day, []):
                     _event(state, day, symbol, None, "skip", 0, None, "skip_no_1455")
                 continue
-            previous = _previous_close(closes.get(symbol, {}), day)
-            limits = limit_prices(symbol, previous) if previous is not None else None
+            ymd = day.strftime("%Y%m%d")
+            factor = k_for(exdiv, symbol, ymd)
+            position = state.positions.get(symbol)
+            if factor is not None and position is not None:
+                _rescale_position(position, factor)
+            name = (names or {}).get(symbol, "")
+            previous = session_prev_close(closes.get(symbol, {}), day, symbol, exdiv)
+            limits = session_limit_prices(symbol, previous, name)
             first = True
             open_checked = False
             for row_index, row in enumerate(records):
@@ -281,7 +332,7 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
                                              average_cost=position.avg_cost)
                     check_px = open_px if first and decision.line is not None and open_px <= decision.line else close_px
                     if decision.line is not None and check_px <= decision.line:
-                        if limits is not None and check_px <= limits[1]:
+                        if defer_sell_at_limit(check_px, limits):
                             _event(state, day, symbol, hm, "defer", 0, check_px, "defer_limit_down")
                         else:
                             reasons_stop = {
@@ -292,7 +343,8 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
                                 "clear_full": "stop:full_avg098",
                             }
                             _sell_lots(state, position, day, hm, check_px,
-                                       reasons_stop.get(decision.action, f"stop:{decision.action}"))
+                                       reasons_stop.get(decision.action, f"stop:{decision.action}"),
+                                       fee=fee)
                     if symbol not in state.positions:
                         cleared_today.add(symbol)
                     position = state.positions.get(symbol)
@@ -305,12 +357,12 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
                             "add_a116": "buy:add_a116",
                         }
                         if ladder.action != "none":
-                            if limits is not None and close_px >= limits[0]:
+                            if skip_buy_at_limit(close_px, limits):
                                 _event(state, day, symbol, hm, "skip", 0, close_px, "skip_limit_up")
-                            elif limits is not None and close_px <= limits[1]:
+                            elif defer_sell_at_limit(close_px, limits):
                                 pass
                             elif _buy(state, position, symbol, day, hm, close_px, ladder.fraction,
-                                      reasons[ladder.action], ladder.action):
+                                      reasons[ladder.action], ladder.action, fee=fee):
                                 if ladder.action == "add_a104":
                                     position.stage = FOUR
                                 elif ladder.action == "add_a108":
@@ -327,22 +379,22 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
                     elif previous is None:
                         _event(state, day, symbol, hm, "skip", 0, close_px, "skip_no_prev_close")
                     else:
-                        priced = limit_prices(symbol, previous)
+                        priced = session_limit_prices(symbol, previous, name)
                         if priced is None:
                             _event(state, day, symbol, hm, "skip", 0, close_px, "skip_unknown_board")
                         else:
-                            upper, lower = priced
-                            if close_px >= upper:
+                            if skip_buy_at_limit(close_px, priced):
                                 _event(state, day, symbol, hm, "skip", 0, close_px, "skip_limit_up")
-                            elif close_px > lower:
-                                _buy(state, None, symbol, day, hm, close_px, TRIAL_FRACTION, "buy:trial", "trial")
+                            elif not defer_sell_at_limit(close_px, priced):
+                                _buy(state, None, symbol, day, hm, close_px, TRIAL_FRACTION, "buy:trial", "trial",
+                                     fee=fee)
                 if row_index == len(records) - 1:
                     position = state.positions.get(symbol)
                     if (position is not None and position.last_add_date is not None
                             and timer_due(calendar, position.last_add_date, day, position.stage)):
-                        if limits is not None and close_px <= limits[1]:
+                        if defer_sell_at_limit(close_px, limits):
                             _event(state, day, symbol, hm, "defer", 0, close_px, "defer_limit_down")
-                        elif _sell_lots(state, position, day, hm, close_px, "exit:timer10"):
+                        elif _sell_lots(state, position, day, hm, close_px, "exit:timer10", fee=fee):
                             if symbol not in state.positions:
                                 cleared_today.add(symbol)
                 first = False
@@ -419,23 +471,26 @@ def load_pool_days(pool_dir: Path, start: date, end: date) -> dict[date, list[st
     return load_pool_day_map(pool_dir, start, end, key="date", empty_in_map=True)
 
 
-def _load_cli_bars(pool_days: Mapping[date, Sequence[str]], start: date, end: date) -> tuple[dict, dict]:
-    """Minimal none-adjusted parquet loader; empty pools intentionally touch no lake."""
-    if not pool_days:
-        return {}, {}
-    import pandas as pd
-
-    symbols = list(dict.fromkeys(symbol for values in pool_days.values() for symbol in values))
-    minute: dict[str, list[dict[str, Any]]] = {}
-    daily: dict[str, list[dict[str, Any]]] = {}
-    for symbol in symbols:
-        for period, target in (("1m", minute), ("1d", daily)):
-            directory = resolve_period_root(period) / "dividend_type=none" / f"symbol={to_partition_key(symbol)}"
-            files = sorted(directory.glob("*.parquet"))
-            if files:
-                frame = pd.concat((pd.read_parquet(path) for path in files), ignore_index=True)
-                target[symbol] = frame.to_dict("records")
-    return minute, daily
+def _load_cli_bars(
+    pool_days: Mapping[date, Sequence[str]],
+    start: date,
+    end: date,
+    *,
+    minute_source: str = "lake",
+    qlib_1min_root: Path | None = None,
+    daily_source: str = "lake",
+    qlib_day_root: Path | None = None,
+) -> tuple[dict, dict]:
+    bars = bars_from_pool(
+        pool_days,
+        start,
+        end,
+        minute_source=minute_source,
+        daily_source=daily_source,
+        qlib_1min_root=qlib_1min_root,
+        qlib_day_root=qlib_day_root,
+    )
+    return bars.minute, bars.daily_close
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -445,6 +500,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--pool-dir")
     parser.add_argument("--cash-total", type=float, default=21_000_000.0)
     parser.add_argument("--output-dir")
+    parser.add_argument("--minute-source", choices=("lake", "qlib_1min"), default="lake")
+    parser.add_argument("--daily-source", choices=("lake", "qlib_day"), default="lake")
+    parser.add_argument(
+        "--qlib-1min-root",
+        help="qlib my_data_1min root; implies --minute-source qlib_1min",
+    )
+    parser.add_argument("--qlib-day-root", help="qlib daily bin root for --daily-source qlib_day")
     return parser
 
 
@@ -456,17 +518,41 @@ def main(argv: Sequence[str] | None = None) -> int:
     start, end = _as_date(args.start), _as_date(args.end)
     if end < start:
         raise SystemExit("--end must be on or after --start")
-    pools = load_pool_days(Path(pool_value), start, end)
-    minute, daily = _load_cli_bars(pools, start, end)
+    pool_dir = Path(pool_value)
+    pools = load_pool_days(pool_dir, start, end)
+    minute_source = "qlib_1min" if args.qlib_1min_root else args.minute_source
+    load_t0 = time.perf_counter()
+    minute, daily = _load_cli_bars(
+        pools,
+        start,
+        end,
+        minute_source=minute_source,
+        qlib_1min_root=Path(args.qlib_1min_root) if args.qlib_1min_root else None,
+        daily_source=args.daily_source,
+        qlib_day_root=Path(args.qlib_day_root) if args.qlib_day_root else None,
+    )
+    source = f"minute={minute_source} daily={args.daily_source}"
+    load_s = time.perf_counter() - load_t0
+    symbols = {symbol for values in pools.values() for symbol in values}
+    exdiv, names = load_limit_context(pool_dir, symbols, start, end)
+    print(
+        f"loaded {source}: minute_names={len(minute)} daily_names={len(daily)} "
+        f"exdiv_names={len(exdiv)} st_names={sum(1 for n in names.values() if n)} "
+        f"in {load_s:.2f}s",
+        flush=True,
+    )
     if pools:
         index_closes = load_index_daily(start, end)
     else:
         index_closes = [start + timedelta(days=n) for n in range((end - start).days + 1)]
+    sim_t0 = time.perf_counter()
     state = simulate_v7(minute, daily, pools, index_closes, cash_total=args.cash_total,
-                        start=start, end=end)
+                        start=start, end=end, exdiv=exdiv, names=names)
+    sim_s = time.perf_counter() - sim_t0
     output = Path(args.output_dir or f"backtest_output/csv_minute_v7_{args.start}_{args.end}")
     write_run_artifacts(state, output)
     print(summarize_v7(state), end="")
+    print(f"timing load={load_s:.2f}s simulate={sim_s:.2f}s total={load_s + sim_s:.2f}s", flush=True)
     return 0
 
 

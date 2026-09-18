@@ -17,8 +17,13 @@ import pandas as pd
 from backtest.research import unified_exit_modea as modea
 from backtest.research.csv_daily_loader import warmup_start
 from backtest.research.exdiv_map import load_exdiv_ratios
-from backtest.research.csv_minute_backtest import (
-    AM_OPEN, AM_CLOSE, PM_OPEN, PM_CLOSE, MINUTE_LAKE_END, CACHE_ROOT,
+from backtest.research.ashare_bars import (
+    AM_CLOSE,
+    AM_OPEN,
+    CACHE_ROOT,
+    MINUTE_LAKE_END,
+    PM_CLOSE,
+    PM_OPEN,
     load_minute_bars,
 )
 from backtest.research.market_layer import as_date, limit_pct

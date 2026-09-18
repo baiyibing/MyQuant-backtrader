@@ -14,18 +14,14 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import sys
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
 import numpy as np
 import pandas as pd
-import pyarrow as pa
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, REPO)
@@ -59,7 +55,6 @@ from backtest.research.csv_common import (  # noqa: E402
     _pool_names_asof,
     _progress,
 )
-from backtest.research.market_layer import utc_ms_range  # noqa: E402
 from backtest.research.csv_pool import (  # noqa: E402
     load_pool_day_map,
     load_pool_names_by_day,
@@ -83,17 +78,26 @@ from backtest.research.csv_artifacts import (  # noqa: E402
     summarize,
     write_run_artifacts,
 )
+from backtest.research.ashare_bars import (  # noqa: E402
+    AM_CLOSE,
+    AM_OPEN,
+    CACHE_ROOT,
+    MINUTE_LAKE_END,
+    PM_CLOSE,
+    PM_OPEN,
+    annotate_session as _annotate,
+    load_daily_ohlc,
+    load_minute_bars,
+    load_minute_from_lake as _load_minute_from_lake,
+    minute_cache_path,
+    read_lake_minute_ohlc as _read_one_minute,
+    read_minute_cache,
+    write_minute_cache,
+)
 from backtest.research.csv_daily_loader import (  # noqa: E402
-    load_daily_bars,
     warn_stale_period_env,
     warmup_start,
 )
-
-# 2026-09-11 实测：F 盘 period=1m 最后一根交易日（抽样 50 只含 000001，无 20260910）。
-MINUTE_LAKE_END = "20260909"
-import pyarrow.compute as pc  # noqa: E402
-import pyarrow.parquet as pq  # noqa: E402
-from common.infra.data_root import resolve_period_root  # noqa: E402
 from oskh_data.symbol_format import to_partition_key  # noqa: E402
 from backtest.research.strategy3_rules import reserve_step_minute  # noqa: E402
 from backtest.research.csv_simulate_loop import (  # noqa: E402
@@ -105,8 +109,6 @@ from backtest.research.csv_simulate_loop import (  # noqa: E402
 )
 
 BUY_HM = 14 * 60 + 55
-AM_OPEN, AM_CLOSE = 9 * 60 + 30, 11 * 60 + 30
-PM_OPEN, PM_CLOSE = 13 * 60, 15 * 60
 
 HELP_LOCK = """
 分钟向量化口径（相对 Cerebro 保真版：无事件总线，同公式逐分钟扫描）：
@@ -132,316 +134,11 @@ HELP_LOCK = """
         并将当日 prev_close→档位换算点映射到 D 域；成交价/净值/股数仍 none。
         非除权日与 ≤0.5% 噪声带见 E-R5 收窄声明（engine-ashare-correctness.md）。
   窗口：分钟湖目前到 2026-05-25；要「→今天」用日线版。
-  加载：time 毫秒先切片再转 datetime（避免对整段 8 万行 strftime）；文件仍是单
-        row group，磁盘还是整文件读，但 CPU 从「全历史转换」降到「窗口转换」。
-  缓存：窗口分钟条写入 backtest_output/bar_cache/（E 盘，已 annotated）。默认
-        命中直接读缓存；缺码再补湖并回写。--no-cache 跳过；--rebuild-cache 重做。
+  加载 / 缓存：走 ashare_bars.load_minute_ohlc（湖 parquet 或命中 bar_cache）。
+        --no-cache 跳过；--rebuild-cache 重做。
   落盘：与日线同三件套；若已有同策略 csv_daily_{book}_{start}_* 净值，summary 末尾附对照。
   策略：必须显式指定已注册 --strategy（无缺省）。共用引擎，策略书换卖点与加仓。
 """
-
-CACHE_ROOT = Path(REPO) / "backtest_output" / "bar_cache"
-_CACHE_SCHEMA = pa.schema(
-    [
-        ("symbol", pa.string()),
-        ("time", pa.timestamp("ns")),
-        ("open", pa.float64()),
-        ("high", pa.float64()),
-        ("low", pa.float64()),
-        ("close", pa.float64()),
-        ("ymd", pa.string()),
-        ("hm", pa.int64()),
-    ]
-)
-
-
-def _session_index(idx) -> pd.DatetimeIndex:
-    t = pd.DatetimeIndex(idx)
-    if t.tz is not None:
-        t = t.tz_convert("UTC").tz_localize(None)
-    return t
-
-
-def _in_session(hm: np.ndarray) -> np.ndarray:
-    return ((hm >= AM_OPEN) & (hm <= AM_CLOSE)) | ((hm >= PM_OPEN) & (hm <= PM_CLOSE))
-
-
-def _annotate(df: pd.DataFrame) -> pd.DataFrame:
-    out = df.copy()
-    idx = _session_index(out.index)
-    out.index = idx
-    out["ymd"] = idx.strftime("%Y%m%d")
-    out["hm"] = idx.hour * 60 + idx.minute
-    return out.loc[_in_session(out["hm"].to_numpy())]
-
-
-def _read_one_minute(
-    code: str, root: Path, start: str, end: str
-) -> Optional[pd.DataFrame]:
-    path = root / f"symbol={to_partition_key(code)}" / "data.parquet"
-    if not path.is_file():
-        return None
-    t0, t1 = utc_ms_range(start, end)
-    try:
-        columns = ["time", "open", "high", "low", "close"]
-        has_volume = "volume" in pq.read_schema(path).names
-        table = pq.read_table(
-            path, columns=columns + (["volume"] if has_volume else [])
-        )
-        table = table.filter((pc.field("time") >= t0) & (pc.field("time") <= t1))
-    except Exception:
-        return None
-    if table.num_rows == 0:
-        return None
-    utc = pd.to_datetime(table["time"].to_numpy(), unit="ms", utc=True)
-    hm = utc.hour * 60 + utc.minute
-    keep = _in_session(hm.to_numpy())
-    if not bool(keep.any()):
-        return None
-    utc = utc[keep]
-    out = pd.DataFrame(
-        {
-            "open": table["open"].to_numpy()[keep],
-            "high": table["high"].to_numpy()[keep],
-            "low": table["low"].to_numpy()[keep],
-            "close": table["close"].to_numpy()[keep],
-            "ymd": utc.strftime("%Y%m%d"),
-            "hm": hm.to_numpy()[keep],
-            **(
-                {"_volume": table["volume"].to_numpy()[keep]}
-                if has_volume
-                else {}
-            ),
-        },
-        index=utc.tz_localize(None),
-    ).astype(
-        {
-            "open": np.float64,
-            "high": np.float64,
-            "low": np.float64,
-            "close": np.float64,
-            "hm": np.int64,
-        }
-    )
-    out = out[~out.index.duplicated(keep="last")].sort_index()
-    if has_volume:
-        day_volume = out.groupby("ymd")["_volume"].transform("sum")
-        out = out.loc[day_volume != 0].drop(columns="_volume")
-    return out if not out.empty else None
-
-
-def minute_cache_path(start: str, end: str, cache_dir: Optional[Path] = None) -> Path:
-    root = Path(cache_dir) if cache_dir is not None else CACHE_ROOT
-    return root / f"minute_none_{start}_{end}.parquet"
-
-
-def write_minute_cache(
-    bars: dict[str, pd.DataFrame],
-    start: str,
-    end: str,
-    cache_dir: Optional[Path] = None,
-) -> Path:
-    path = minute_cache_path(start, end, cache_dir)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".parquet.tmp")
-    if tmp.exists():
-        tmp.unlink()
-    writer = None
-    n_rows = 0
-    n_sym = 0
-    total_sym = sum(1 for df in bars.values() if df is not None and not df.empty)
-    try:
-        for code, df in bars.items():
-            if df is None or df.empty:
-                continue
-            chunk = df.reset_index()
-            time_col = chunk.columns[0]
-            chunk = chunk.rename(columns={time_col: "time"})
-            chunk.insert(0, "symbol", code)
-            chunk["time"] = pd.to_datetime(chunk["time"])
-            chunk["ymd"] = chunk["ymd"].astype(str)
-            chunk["hm"] = chunk["hm"].astype(np.int64)
-            table = pa.Table.from_pandas(
-                chunk[["symbol", "time", "open", "high", "low", "close", "ymd", "hm"]],
-                schema=_CACHE_SCHEMA,
-                preserve_index=False,
-            )
-            if writer is None:
-                writer = pq.ParquetWriter(tmp, _CACHE_SCHEMA, compression="zstd")
-            writer.write_table(table)
-            n_rows += table.num_rows
-            n_sym += 1
-            _progress(n_sym, total_sym, "minute cache write", every=400)
-        if writer is not None:
-            writer.close()
-            writer = None
-            tmp.replace(path)
-        elif tmp.exists():
-            tmp.unlink()
-    finally:
-        if writer is not None:
-            writer.close()
-            if tmp.exists():
-                tmp.unlink()
-    meta = path.with_suffix(".json")
-    meta.write_text(
-        json.dumps(
-            {
-                "start": start,
-                "end": end,
-                "n_symbols": len(bars),
-                "n_rows": n_rows,
-                "created_utc": datetime.now(timezone.utc).isoformat(),
-            },
-            ensure_ascii=False,
-            indent=2,
-        )
-        + "\n",
-        encoding="utf-8",
-        newline="\n",
-    )
-    print(f"wrote minute cache {path} symbols={len(bars)} rows={n_rows}", flush=True)
-    return path
-
-
-def _frame_from_cache_group(g: pd.DataFrame) -> pd.DataFrame:
-    frame = g.drop(columns=["symbol"])
-    frame.index = pd.DatetimeIndex(frame.pop("time"))
-    frame["hm"] = frame["hm"].astype(np.int64, copy=False)
-    if not frame.index.is_monotonic_increasing:
-        frame = frame.sort_index()
-    return frame
-
-
-def read_minute_cache(
-    path: Path, codes: Optional[set[str]] = None
-) -> dict[str, pd.DataFrame]:
-    """按 row group 读（写入时一码一组），避免整表 to_pandas 顶满内存。"""
-    print(f"reading minute cache {path}", flush=True)
-    pf = pq.ParquetFile(path)
-    want = set(codes) if codes else None
-    out: dict[str, pd.DataFrame] = {}
-    n_rows = 0
-    n_rg = pf.num_row_groups
-    for i in range(n_rg):
-        table = pf.read_row_group(i)
-        if table.num_rows == 0:
-            continue
-        uniq = pc.unique(table.column("symbol"))
-        if len(uniq) == 1:
-            code = uniq[0].as_py()
-            if want is not None and code not in want:
-                continue
-            key = str(code)
-            df = table.to_pandas()
-            n_rows += len(df)
-            frame = _frame_from_cache_group(df)
-            if key in out:
-                merged = pd.concat([out[key], frame])
-                out[key] = (
-                    merged
-                    if merged.index.is_monotonic_increasing
-                    else merged.sort_index()
-                )
-            else:
-                out[key] = frame
-        else:
-            if want is not None:
-                table = table.filter(pc.field("symbol").isin(sorted(want)))
-                if table.num_rows == 0:
-                    continue
-            df = table.to_pandas()
-            n_rows += len(df)
-            for code, g in df.groupby("symbol", sort=False):
-                frame = _frame_from_cache_group(g)
-                key = str(code)
-                if key in out:
-                    merged = pd.concat([out[key], frame])
-                    out[key] = (
-                        merged
-                        if merged.index.is_monotonic_increasing
-                        else merged.sort_index()
-                    )
-                else:
-                    out[key] = frame
-        if (i + 1) == n_rg or (i + 1) % 400 == 0:
-            print(f"minute cache rg {i + 1}/{n_rg} symbols={len(out)}", flush=True)
-    print(f"minute cache rows={n_rows}", flush=True)
-    return out
-
-
-def _load_minute_from_lake(
-    codes: set[str], start: str, end: str, *, workers: int = 16
-) -> dict[str, pd.DataFrame]:
-    root = resolve_period_root("1m") / "dividend_type=none"
-    out: dict[str, pd.DataFrame] = {}
-    if not codes:
-        return out
-    with ThreadPoolExecutor(max_workers=max(1, int(workers))) as pool:
-        futs = {
-            pool.submit(_read_one_minute, c, root, start, end): c for c in sorted(codes)
-        }
-        done = 0
-        total = len(futs)
-        for fut in as_completed(futs):
-            done += 1
-            _progress(done, total, "minute lake")
-            code = futs[fut]
-            try:
-                df = fut.result()
-            except Exception:
-                continue
-            if df is not None and not df.empty:
-                out[code] = df
-    return out
-
-
-def load_minute_bars(
-    codes: set[str],
-    start: str,
-    end: str,
-    *,
-    workers: int = 16,
-    use_cache: bool = True,
-    rebuild_cache: bool = False,
-    cache_dir: Optional[Path] = None,
-    status: Optional[dict] = None,
-) -> dict[str, pd.DataFrame]:
-    want = set(codes)
-    path = minute_cache_path(start, end, cache_dir)
-    cached: dict[str, pd.DataFrame] = {}
-    had_file = path.is_file()
-    if use_cache and had_file and not rebuild_cache:
-        print(f"minute cache hit {path}", flush=True)
-        cached = read_minute_cache(path, want)
-    missing = want - set(cached)
-    if missing:
-        print(
-            f"minute lake load {len(missing)} codes ({len(cached)} cached)", flush=True
-        )
-        fresh = _load_minute_from_lake(missing, start, end, workers=workers)
-        cached.update(fresh)
-        if use_cache and fresh:
-            merged = cached
-            if path.is_file() and not rebuild_cache:
-                # 保留缓存里本次未请求的旧码，避免子集请求冲掉全量
-                old = read_minute_cache(path, None)
-                old.update(cached)
-                merged = old
-            write_minute_cache(merged, start, end, cache_dir)
-    if status is not None:
-        if not use_cache:
-            status["cache"] = "off"
-        elif rebuild_cache:
-            status["cache"] = "rebuild"
-        elif had_file and not missing:
-            status["cache"] = "hit"
-        elif had_file:
-            status["cache"] = "partial"
-        else:
-            status["cache"] = "miss"
-    return {c: cached[c] for c in want if c in cached}
-
 
 _LIMIT_EPS = 0.001  # mirror csv_ledger.LIMIT_EPS for numba core
 
@@ -1096,7 +793,7 @@ def run(
         flush=True,
     )
     t_daily = time.perf_counter()
-    daily = load_daily_bars(all_codes, load_start, end, workers=workers)
+    daily = load_daily_ohlc(all_codes, load_start, end, workers=workers)
     t_daily = time.perf_counter() - t_daily
     cache_status: dict = {}
     t_minute = time.perf_counter()

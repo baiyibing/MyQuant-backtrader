@@ -18,6 +18,7 @@ from typing import Iterable, Mapping, Optional, Sequence
 
 import pandas as pd
 
+from backtest.research.ashare_fees import COMMISSION
 from backtest.research.csv_daily_loader import _read_one_daily, warmup_start
 from backtest.research.csv_pool import parse_pool_csv_entries
 from backtest.research.market_layer import limit_pct
@@ -28,7 +29,6 @@ DEFAULT_END = "20260909"
 DEFAULT_TOL = 0.002
 LOT_NOTIONAL = 1_000_000.0
 CASH_POOL = 1_100_000_000.0
-COMMISSION = 0.001
 WINDOW_CALENDAR_DAYS = 322  # 20251023–20260909 inclusive calendar span for annualization
 
 

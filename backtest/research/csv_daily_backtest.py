@@ -122,8 +122,8 @@ from backtest.research.csv_artifacts import (  # noqa: E402
     summarize,
     write_run_artifacts,
 )
+from backtest.research.ashare_bars import load_daily_ohlc
 from backtest.research.csv_daily_loader import (  # noqa: E402
-    load_daily_bars,
     warmup_start,
     warn_stale_period_env,
 )
@@ -533,21 +533,16 @@ def run(
         flush=True,
     )
     t_daily = time.perf_counter()
-    if use_qlib_bins:
-        from backtest.research.qlib_bin_daily import load_qlib_bin_daily_bars
-
-        bars = load_qlib_bin_daily_bars(
-            all_codes, load_start, end, qlib_root=qlib_data_root, workers=workers
-        )
-    else:
-        bars = load_daily_bars(
-            all_codes,
-            load_start,
-            end,
-            workers=workers,
-            dividend_type=dividend_type,
-            daily_root=daily_root,
-        )
+    bars = load_daily_ohlc(
+        all_codes,
+        load_start,
+        end,
+        source="qlib_day" if use_qlib_bins else "lake",
+        qlib_root=qlib_data_root,
+        workers=workers,
+        dividend_type=dividend_type,
+        daily_root=daily_root,
+    )
     t_daily = time.perf_counter() - t_daily
     print(
         f"loaded {len(bars)}/{len(all_codes)} daily series, {len(pool_days)} pool days",

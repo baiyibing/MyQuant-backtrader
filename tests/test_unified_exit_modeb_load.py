@@ -1,6 +1,7 @@
 """Data-free Mode B loading fixtures; all symbols are invented."""
 import pandas as pd
 
+from backtest.research import ashare_bars as bars
 from backtest.research import csv_minute_backtest as minute
 from backtest.research import unified_exit_modeb as b
 
@@ -16,7 +17,7 @@ def test_cache_miss_hit_subset_and_partial_preserve(tmp_path, monkeypatch):
     def lake(codes, start, end, **kw):
         calls.append((codes, start, end))
         return {c: minute_frame() for c in codes}
-    monkeypatch.setattr(minute, "_load_minute_from_lake", lake)
+    monkeypatch.setattr(bars, "load_minute_from_lake", lake)
     status = {}
     b.load_monitor_bars({"600998.SH", "600997.SH"}, cache_dir=tmp_path, status=status)
     assert status["cache"] == "miss"
@@ -35,7 +36,7 @@ def test_mmap_pack_write_hit_and_matches_frames(tmp_path, monkeypatch):
     def lake(codes, start, end, **kw):
         return {c: minute_frame() for c in codes}
 
-    monkeypatch.setattr(minute, "_load_minute_from_lake", lake)
+    monkeypatch.setattr(bars, "load_minute_from_lake", lake)
     status = {}
     first = b.load_prepared_minutes({"600998.SH"}, cache_dir=tmp_path, status=status)
     assert status["pack"] == "write" and status["cache"] == "miss"
@@ -68,7 +69,7 @@ def test_session_minutes_matches_production_annotation():
     raw["ymd"] = raw.index.strftime("%Y%m%d")
     raw["hm"] = raw.index.hour * 60 + raw.index.minute
     got = b.session_minutes(raw)
-    pd.testing.assert_frame_equal(got, minute._annotate(raw))
+    pd.testing.assert_frame_equal(got, bars.annotate_session(raw))
     assert got["hm"].tolist() == [570, 600, 690, 780, 900]
     for hm in (570, 900):
         assert b.minute_coverage(["600998.SH"], {
