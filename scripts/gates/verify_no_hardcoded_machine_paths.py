@@ -2,13 +2,15 @@
 # -*- coding: utf-8 -*-
 """Gate: block machine-local path hardcodes outside the allowlisted fallback.
 
-Data-free / repo-only — safe for CI without ``F:\\stock_data``.
+Data-free / repo-only — safe for CI without a parquet lake.
 
 Scans production packages, ``scripts/**/*.py``, and ``tests/**/*.py`` for:
 
 - ``E:\\PycharmProjects`` / ``E:/PycharmProjects``
 - ``C:\\Users\\Thinkpad`` / ``C:/Users/Thinkpad``
 - ``D:\\anaconda3`` / ``D:/anaconda3`` (except allowlisted files)
+- ``E:/stock_data`` / ``F:/stock_data`` (data containers; use resolvers)
+- ``E:/data/parquet`` / ``E:/rust-targets``
 
 Docstrings and ``#`` comments are ignored. Production packages must stay at 0 hits.
 
@@ -33,6 +35,9 @@ _PATTERNS = (
     re.compile(r"E:[/\\]+PycharmProjects", re.I),
     re.compile(r"C:[/\\]+Users[/\\]+Thinkpad", re.I),
     re.compile(r"D:[/\\]+anaconda3", re.I),
+    re.compile(r"[EF]:[/\\]+stock_data", re.I),
+    re.compile(r"E:[/\\]+data[/\\]+parquet", re.I),
+    re.compile(r"E:[/\\]+rust-targets", re.I),
 )
 
 # Slim research-face packages (no live_trading / oskh_db / executor_stream).

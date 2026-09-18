@@ -4,9 +4,9 @@
 
 Legacy sources (first existing wins for listing; merge for migrate):
   - ``{OSKH_DATA_ROOT or repo}/stock_data/tr_staging``
-  - ``E:/data/parquet/tr_staging``
+  - ``TURNOVER_RESIST_STAGING_DIR`` when set
 
-Target (SSOT): ``resolve_tr_staging_dir()`` → typically ``F:/stock_data/tr_staging``.
+Target (SSOT): ``resolve_tr_staging_dir()``.
 
 Usage:
   python scripts/ops/verify_tr_staging_migration.py
@@ -41,12 +41,16 @@ class FileStat:
 
 
 def _legacy_staging_dirs() -> List[Path]:
+    import os
+
     repo_staging = REPO / "stock_data" / "tr_staging"
     candidates = [
         repo_staging,
         resolve_data_root() / "stock_data" / "tr_staging",
-        Path("E:/data/parquet/tr_staging"),
     ]
+    env_legacy = str(os.environ.get("TURNOVER_RESIST_STAGING_DIR") or "").strip()
+    if env_legacy:
+        candidates.append(Path(env_legacy))
     out: List[Path] = []
     seen: set[str] = set()
     for p in candidates:

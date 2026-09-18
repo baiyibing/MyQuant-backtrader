@@ -26,7 +26,7 @@ def default_parquet_root() -> Path:
     """L2 tick parquet root under market-data tree (not ``data/`` business DBs).
 
     Single source: delegates to ``resolve_l2_parquet_root()`` which honors
-    ``OSKH_L2_PARQUET_ROOT`` env var (L2-specific override, e.g. ``F:\\stock_data\\l2_parquet``)
+    ``OSKH_L2_PARQUET_ROOT`` env var (L2-specific override, ``<container>/l2_parquet``)
     and falls back to ``{resolve_data_root()}/stock_data/l2_parquet`` (``OSKH_DATA_ROOT``).
     """
     return resolve_l2_parquet_root()

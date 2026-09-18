@@ -7,15 +7,14 @@ Two containers — do not mix:
   three trees ``stock/period=1d/1m`` · ``index/period=1d`` ·
   ``etf/period=1d``): ``resolve_parquet_container()`` /
   ``resolve_period_root()`` / ``resolve_index_daily_root()`` /
-  ``resolve_etf_daily_root()`` / ``resolve_source_parquet()``. With
-  ``F:/stock_data/.authority`` or ``E:/stock_data/.authority`` and no env,
-  this follows the first marker (F then E; lesson 58). Unset env is not a
-  rollback.
-* E workspace (duckdb, exp, skip JSON, stale marker):
+  ``resolve_etf_daily_root()`` / ``resolve_source_parquet()``. Set
+  ``OSKH_SOURCE_PARQUET_ROOT`` (or ``OSKH_AUTHORITY_HINT_ROOT`` for a
+  ``.authority`` parent). No baked drive letters. Unset env is not a rollback.
+* Workspace (duckdb, exp, skip JSON, stale marker):
   ``resolve_e_stock_data_container()`` / ``OSKH_DATA_ROOT``.
-* TR bar input + ``tr_staging/`` share the parquet container (F when authority
-  exists): ``resolve_turnover_resist_parquet_root()`` /
-  ``resolve_tr_staging_dir()``. ``TURNOVER_RESIST_DATA_DIR`` is opt-in rollback.
+* TR bar input + ``tr_staging/`` share the parquet container:
+  ``resolve_turnover_resist_parquet_root()`` / ``resolve_tr_staging_dir()``.
+  ``TURNOVER_RESIST_DATA_DIR`` is opt-in rollback.
 """
 
 from __future__ import annotations
@@ -26,8 +25,6 @@ from pathlib import Path
 from typing import Iterable, Optional, Set
 
 AUTHORITY_MARKER_NAME = ".authority"
-# Probe only (existence of ``.authority``). Order: win11-dev F, then paper/test E.
-_DEFAULT_AUTHORITY_HINTS = (Path("F:/stock_data"), Path("E:/stock_data"))
 _AUTHORITY_WARNED: Set[str] = set()
 
 
@@ -72,14 +69,13 @@ def resolve_data_root(
 def authority_hint_roots() -> tuple[Path, ...]:
     """Roots that may hold the path-SSOT ``.authority`` marker (plan D7).
 
-    Default probes ``F:/stock_data`` then ``E:/stock_data`` (lesson 58).
-    Tests may monkeypatch this function or set ``OSKH_AUTHORITY_HINT_ROOT``
-    (not a product env).
+    Only ``OSKH_AUTHORITY_HINT_ROOT`` (``os.pathsep``-separated). No baked
+    drive letters. Tests may monkeypatch this function.
     """
     raw = str(os.environ.get("OSKH_AUTHORITY_HINT_ROOT") or "").strip()
-    if raw:
-        return (Path(raw),)
-    return _DEFAULT_AUTHORITY_HINTS
+    if not raw:
+        return ()
+    return tuple(Path(part.strip()) for part in raw.split(os.pathsep) if part.strip())
 
 
 def find_authority_marker(hints: Optional[Iterable[Path]] = None) -> Optional[Path]:
@@ -99,7 +95,7 @@ def reset_authority_fallback_warnings() -> None:
 def resolve_e_stock_data_container(*, explicit_root: Optional[str] = None) -> Path:
     """E workspace ``stock_data/`` (duckdb / exp / skip JSON / stale marker).
 
-    Always under ``OSKH_DATA_ROOT``; does not follow the F parquet authority flip.
+    Always under ``OSKH_DATA_ROOT``; does not follow the parquet authority flip.
     """
     return resolve_data_root(explicit_root=explicit_root) / "stock_data"
 
@@ -124,7 +120,7 @@ def resolve_turnover_resist_parquet_root(*, explicit_root: Optional[str] = None)
 
 
 def resolve_tr_staging_dir(*, explicit_root: Optional[str] = None) -> Path:
-    """Yearly TR backfill staging parquet (same F container as canonical)."""
+    """Yearly TR backfill staging parquet (same container as canonical)."""
     return resolve_turnover_resist_parquet_root(explicit_root=explicit_root) / "tr_staging"
 
 
@@ -134,9 +130,8 @@ def resolve_parquet_container(*, explicit_root: Optional[str] = None) -> Path:
     Priority:
     1) explicit_root
     2) ``OSKH_SOURCE_PARQUET_ROOT``
-    3) ``<authority_marker_parent>`` when a hint ``.authority`` exists
-       (``F:/stock_data`` then ``E:/stock_data``)
-    4) ``resolve_e_stock_data_container()`` (E workspace default when no marker)
+    3) ``<authority_marker_parent>`` when ``OSKH_AUTHORITY_HINT_ROOT`` has ``.authority``
+    4) ``resolve_e_stock_data_container()`` (workspace default when no marker)
     """
     if explicit_root:
         return Path(explicit_root)
@@ -163,7 +158,7 @@ def _warn_authority_env_missing(*, env_key: str, resolved: Path) -> None:
     warnings.warn(
         f"path-SSOT authority marker present at {marker} but {env_key} is unset; "
         f"using {resolved} from marker parent. Set {env_key} explicitly to silence, "
-        f"or set it to the E path to roll back. Unset alone is not a rollback.",
+        f"or set it to the workspace path to roll back. Unset alone is not a rollback.",
         UserWarning,
         stacklevel=3,
     )
@@ -174,7 +169,7 @@ def resolve_l2_parquet_root(*, explicit_root: Optional[str] = None) -> Path:
 
     Priority:
     1) explicit_root argument
-    2) ``OSKH_L2_PARQUET_ROOT`` env var (L2-specific override; e.g. ``F:\\stock_data\\l2_parquet``)
+    2) ``OSKH_L2_PARQUET_ROOT`` env var (L2-specific override; ``<container>/l2_parquet``)
     3) ``resolve_parquet_container() / "l2_parquet"``
 
     Returns the path without checking existence (callers decide).
@@ -204,7 +199,7 @@ def resolve_period_root(
     Priority:
     1) explicit_root argument
     2) ``OSKH_PERIOD_{PERIOD}_ROOT`` env var (period-specific override; e.g.
-       ``OSKH_PERIOD_1M_ROOT=F:\\stock_data\\stock\\period=1m``)
+       ``OSKH_PERIOD_1M_ROOT=<container>/stock/period=1m``)
     3) ``base / f"period={period}"`` if ``base`` given
     4) ``resolve_parquet_container() / "stock" / f"period={period}"``
        (hive-split v1.5 three trees; briefly falls back to the old
@@ -283,8 +278,8 @@ def resolve_source_parquet(
 
     Priority（与 ``resolve_period_root`` 同型）:
     1) explicit_root 参数（罕见；= 含文件族的容器目录）
-    2) ``OSKH_SOURCE_PARQUET_ROOT`` env var（容器目录覆盖，如 ``F:/stock_data``）
-    3) ``resolve_parquet_container()``（权威 marker 或 E 默认）
+    2) ``OSKH_SOURCE_PARQUET_ROOT`` env var（容器目录覆盖）
+    3) ``resolve_parquet_container()``（权威 marker 或工作区默认）
 
     不检查存在性（调用方 fail-visible：FileNotFoundError 带路径）。
     """

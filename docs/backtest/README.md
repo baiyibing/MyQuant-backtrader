@@ -71,7 +71,7 @@ R5 的 `--start/--end` 必须跟导出的首末文件名走：H0 / `pred_minus_o
 
 规则与闸：策略 7 见 [plan-strategy7-turtle-csv-minute-2026-09-11.md](_archive/plans/plan-strategy7-turtle-csv-minute-2026-09-11.md)。6/8 口径写在各自 CLI 的 help lock。成交核（档位 / 全卖因跌停 / Decimal 涨跌停价 / 停牌净值）见 [engine-ashare-correctness.md](engine-ashare-correctness.md)。名单 as-of 与 ST 名称列见 [pool-csv-contract.md](pool-csv-contract.md)。
 
-数据：只读 F 湖 parquet（有 `F:\stock_data\.authority` 且勿残留 `OSKH_PERIOD_*`）。细则见根 `AGENTS.md`。
+数据：只读 parquet 湖（一键 `OSKH_SOURCE_PARQUET_ROOT`，勿残留 `OSKH_PERIOD_*`，勿写死盘符）。细则见根 `AGENTS.md`。
 
 **CI contract gates（无 F 湖 / repo-only）：** `.github/workflows/python-tests.yml` 在 `pip` 前跑 `verify_oskh_data_contract.py`、`verify_data_path_ssot.py`（扫 `oskh_data` / `oskh_factors` / `scripts` / `common`）、`verify_no_hardcoded_machine_paths.py`、`verify_tr_bridge_import_ssot.py`（H12）。chip / TR / L2 等需湖门禁不进 CI。清单见 [plan-h10-ci-path-gates-2026-09-15.md](plan-h10-ci-path-gates-2026-09-15.md) · [plan-h12-ci-tr-bridge-gate-2026-09-15.md](plan-h12-ci-tr-bridge-gate-2026-09-15.md)。
 
