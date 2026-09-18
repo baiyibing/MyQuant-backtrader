@@ -1,7 +1,7 @@
 # 交接 · 研究成交时钟显式化（Codex 接手）
 
 > 日期：2026-09-19。
-> 状态：✅ **已人裁 GO（2026-09-19 · P1–P4 = A/A/A/A）**；plan v0.6。用户原话「同意你的建议」= 采纳 r4 共识建议。可以按切片 A→B→C 实施；尚未实施。
+> 状态：✅ **已人裁 GO（2026-09-19 · P1–P4 = A/A/A/A @ `746dbccd7f14a8c862f8bd6db407294ddca01732`）**；plan v0.6。用户原话「同意你的建议」= 采纳 r4 共识建议。可以按切片 A→B→C 实施；尚未实施。
 > 权威 plan：[plan-industry-align-refactor-2026-09-18.md](plan-industry-align-refactor-2026-09-18.md)；评审依据：[r4 merge-consensus.md](../architecture/reviews/2026-09-18/plan-industry-align-refactor-2026-09-18-r4/merge-consensus.md)。
 > **IMPLEMENTATION_BASE=c44da87b01ebcc6a68633307eba0fce48940f403**（2026-09-19 已 fetch 核对的 origin/master tip，commit 对象存在）。
 > 实施分支：`feat/industry-align-refactor`；当前 `docs/industry-align-refactor-2026-09-18` 仅提交文档。
