@@ -1,0 +1,23 @@
+{
+  "plan": {
+    "cursor-auto": {
+      "content_sha256_16": "40856b1a30bad0f9",
+      "git_sha": "47f0eb1",
+      "path": "docs/backtest/plan-ashare-engine-refactor-2026-09-18.md",
+      "reviewed_at": "2026-09-18"
+    },
+    "cursor-composer-2.5-fast": {
+      "content_sha256_16": "40856b1a30bad0f9",
+      "git_sha": "47f0eb1",
+      "path": "docs/backtest/plan-ashare-engine-refactor-2026-09-18.md",
+      "reviewed_at": "2026-09-18"
+    },
+    "cursor-cursor-grok-4.6-xhigh-fast": {
+      "content_sha256_16": "40856b1a30bad0f9",
+      "git_sha": "47f0eb1",
+      "path": "docs/backtest/plan-ashare-engine-refactor-2026-09-18.md",
+      "reviewed_at": "2026-09-18"
+    }
+  },
+  "schema_version": 1
+}
