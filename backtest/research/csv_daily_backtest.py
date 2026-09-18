@@ -90,6 +90,7 @@ from backtest.research.exdiv_map import (  # noqa: E402
     load_exdiv_ratios,
     mapped_prev_close,
 )
+from backtest.research.ashare_session import defer_sell_at_limit, t1_sellable  # noqa: E402
 from backtest.research.csv_common import (  # noqa: E402
     DEFAULT_DAILY_QUOTA,
     STRATEGY4_CALENDAR_SLACK_DAYS,
@@ -324,19 +325,20 @@ def simulate(
             for pos in list(st.positions.get(code, [])):
                 n_days = i - pos.entry_idx  # 持仓交易日数（买入日=0）
 
-                if pos.pending_exit and n_days >= 1:
-                    if hit_limit_down(float(row["open"]), limit_down):
+                # Date mapping serves T+1 only; sell rules keep union-calendar n_days.
+                if pos.pending_exit and t1_sellable(calendar[pos.entry_idx].date(), day.date()):
+                    if defer_sell_at_limit(float(row["open"]), limits):
                         st.stats["defer_sell_limit_down"] += 1
                     else:
                         _sell(st, code, pos, float(row["open"]), day, pos.pending_exit)
                     continue
 
-                if n_days >= 1:
+                if t1_sellable(calendar[pos.entry_idx].date(), day.date()):
                     stop_enabled = isinstance(stop_pct, float) and 0 < stop_pct < 1
                     if stop_enabled:
                         trigger = pos.cost * (1.0 - stop_pct)
                         if float(row["open"]) <= trigger:
-                            if hit_limit_down(float(row["open"]), limit_down):
+                            if defer_sell_at_limit(float(row["open"]), limits):
                                 st.stats["defer_sell_limit_down"] += 1
                             else:
                                 _sell(
@@ -349,7 +351,7 @@ def simulate(
                                 )
                             continue
                         if float(row["low"]) <= trigger:
-                            if hit_limit_down(trigger, limit_down):
+                            if defer_sell_at_limit(trigger, limits):
                                 st.stats["defer_sell_limit_down"] += 1
                                 if limit_down_pending:
                                     pos.pending_exit = "stop_loss:touch"
@@ -382,7 +384,7 @@ def simulate(
                         blocked = (
                             (at_up or at_down)
                             if forbid_all_trade_at_limit
-                            else at_down
+                            else defer_sell_at_limit(close, limits)
                         )
                         if blocked:
                             st.stats["skip_limit_sell"] = (

@@ -29,6 +29,13 @@ DatetimeIndex，qlib_1min 的私有 `_load_minute_compact` 链仍用 `date`；co
 [plan §5.1](plan-ashare-engine-refactor-2026-09-18.md#51-切片-a-预期迁移人裁-2026-09-18)。
 已知限制仍在：书引擎 cache 无新鲜度守卫，加载线程池无 timeout；v7 小名单窗不读写共享 cache。
 
+T+1 在书引擎原调用点将 `calendar[entry_idx]` 映射为日期后调用 `t1_sellable`；卖点仍用
+联合日历下标差 `n_days`，分钟扫描器仅收到布尔 `can_sell`，两个扫描内核保持冻结。
+买卖门复用 `skip_buy_at_limit` / `defer_sell_at_limit`；双账本及填单函数契约保留。
+已知分叉继续记录：书侧无昨收/未知板块先冻仓；v7 卖侧这两支 `limits=None` 仍放行，
+加仓侧同样保留现状，ST 名称仍按窗末名平铺而非 PIT。日线 `open_board` 当日收盘成交，
+其余 `pending_exit` 下一可成交日开盘；不在本轮改变时点或参考价之外的股数。
+
 ## 2. 现锁（E-R\*）
 
 | ID | 现行为 | 作废的旧锁 |

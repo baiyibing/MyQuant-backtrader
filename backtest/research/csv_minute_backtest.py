@@ -45,6 +45,7 @@ from backtest.research.csv_ledger import (  # noqa: E402
 )
 
 from backtest.research.exdiv_map import k_for, load_exdiv_ratios, mapped_prev_close  # noqa: E402
+from backtest.research.ashare_session import defer_sell_at_limit, t1_sellable  # noqa: E402
 from backtest.research.csv_common import (  # noqa: E402
     DEFAULT_DAILY_QUOTA,
     STRATEGY4_CALENDAR_SLACK_DAYS,
@@ -607,6 +608,7 @@ def simulate(
             hm = day_m["hm"].to_numpy(np.int64)
             for pos in list(st.positions.get(code, [])):
                 n_days = i - pos.entry_idx
+                # Resolve dates here; only the eligibility bool reaches the scanner.
                 reserve_state = {"reserved": bool(pos.reserved)}
                 idx, px, reason, new_peak, new_peak_hm = scan_held_day(
                     o,
@@ -615,7 +617,7 @@ def simulate(
                     cost=pos.cost,
                     peak=pos.peak,
                     n_days=n_days,
-                    can_sell=(n_days >= 1),
+                    can_sell=t1_sellable(calendar[pos.entry_idx].date(), day.date()),
                     stop_pct=stop_pct,
                     profit_base=profit_base if profit_base is not None else 0.0,
                     trail_ratio=0.0,
@@ -641,8 +643,8 @@ def simulate(
                 if idx >= 0:
                     fill_open = float(o[idx])
                     if limit_down > 0 and (
-                        hit_limit_down(fill_open, limit_down)
-                        or hit_limit_down(float(px), limit_down)
+                        defer_sell_at_limit(fill_open, limits)
+                        or defer_sell_at_limit(float(px), limits)
                     ):
                         st.stats["defer_sell_limit_down"] += 1
                         continue
