@@ -1,12 +1,12 @@
 # Plan：研究成交时钟显式化（fill clock）（2026-09-18）
 
-> **落盘**：2026-09-18。**v0.5**（2026-09-19 docs-only 勘误；本次只改本 plan 并纳入 r3 共识，不写 Python / 测试）。
-> **状态**：⏳ **待评审 / 待人裁 GO**。合本 docs PR ≠ 实施 GO；P\* 未裁前禁止编码。
+> **落盘**：2026-09-18。**v0.6**（2026-09-19 docs-only GO 回写；更新 plan、新建 handoff 并纳入 r4 共识，不写 Python、不运行测试或回测）。
+> **状态**：✅ **已人裁 GO（2026-09-19 · P1–P4 = A/A/A/A）**。可以按切片 A→B→C 实施；**GO 不等于交易所撮合已建模**，也不表示集合竞价已建模或已正确。
 > **风险档**：**引擎结构 / 成交语义高敏**——目标是把既有决策、会话、价格规则命名并用 data-free 测试锁住；默认成交价、股数、reason、NAV 与产物契约必须为零变化。
 > **业务源**：[引擎定位 SSOT](engine-positioning-ssot.md) · [A 股正确性 as-built](engine-ashare-correctness.md) · [Pool CSV contract](pool-csv-contract.md) · [#108 前置 plan](plan-ashare-engine-refactor-2026-09-18.md) · [PR #108](https://github.com/baiyibing/MyQuant-backtrader/pull/108)。
 > **事实锚**：本 plan 的代码事实与引用行号核对基线为 `origin/master` `c44da87`（Merge PR #108）；本分支 `docs/industry-align-refactor-2026-09-18`。**实施 diff 基线另见 §7 / §9 / §11：`IMPLEMENTATION_BASE` 为 `c44da87b01ebcc6a68633307eba0fce48940f403`（2026-09-19 的 origin/master tip）；GO 时核对，master 未变则沿用此值，变了则替换为当时完整 40 位 SHA 并记录于 handoff。禁止填不可达对象，禁止用 `git merge-base HEAD origin/master` 现算 SHA。**
-> **工作流**：本文件是 [Codex 交接工作流](workflow-codex-handoff.md) **第 1 步（Plan 起草）**；评审规则见 [multi-ai-review-workflow.md](../engineering/multi-ai-review-workflow.md)。本次起草不运行 multi-agent review。
-> **短注**：这是提案，不是编码，也不是修复 14:57–15:00 成交行为的授权。v0.1 的价格规则与“现有成交窗口”表述已由 §12 勘误；不得拿旧句起草实现测试。
+> **工作流**：[Codex 交接工作流](workflow-codex-handoff.md) 第 3 步人裁已完成；第 4 步见 [实施 handoff](handoff-industry-align-refactor-codex-impl-2026-09-18.md)。依据 [r4 共识](../architecture/reviews/2026-09-18/plan-industry-align-refactor-2026-09-18-r4/merge-consensus.md)，2026-09-19 用户原话「同意你的建议」= 采纳 P1–P4 全 A。
+> **短注**：这是 docs-only GO 回写，尚未实施，也不是修复 14:57–15:00 成交行为的授权。v0.1 的价格规则与“现有成交窗口”表述已由 §12 勘误；不得拿旧句起草实现测试。
 
 ---
 
@@ -122,16 +122,16 @@ PR #108 已回答「**能不能成交**」；本 plan 只把仍散落在书引�
 
 ---
 
-## 5. 人裁点（P\* · 未裁 = 禁止编码）
+## 5. 人裁点（P\* · 2026-09-19 已裁 A/A/A/A）
 
-| ID | 问题 | 建议默认 | 选项与后果 |
+| ID | 问题 | 人裁结果（2026-09-19） | 选项与后果 |
 |----|------|----------|------------|
-| **P1** | GO 后是否只加当前扫描窗口的相位标签与测试、成交价完全不变？ | **A** | **A**：只命名 / 测试，`_in_session`、扫描器与既有取价均不改；A **不表示**集合竞价撮合已建模、已正确或“match existing exchange session”。**B**：分钟触价跳过 14:57–14:59。**C**：分钟触价跳过 14:57–15:00。若选 B/C，立即停止，先修订 plan；禁止在本 A–C 切片直接改扫描器。 |
-| **P2** | 是否给 `trades.csv` 增加 `session_phase` / `price_rule` 列？ | **A：否** | **A**：本轮只在代码命名、测试与文档中可见，产物 schema 不漂移；**不加列不等于成交天然未变**，仍须由 F-R8/F-R9 冻结与反向 import 围栏证明。**B**：新增列；须停止并另裁 schema、下游快照和兼容性，不进当前切片。 |
-| **P3** | 旧 P2/P3/P4 与已知 v7 分叉是否继续后置？ | **A：确认后置** | **A**：印花、改股 / 现金红利 / ST PIT、成交量上限、v7 `limits=None` fail-open、v7 ST 非 PIT 全部不进本船。**B**：不确认；停止并分别开 plan，不得扩写本船。 |
-| **P4** | 15:00 bar 的“触价资格”与“官方收盘 / 标记价用途”是否分开裁？ | **A：分开；本轮两者都不改** | **A**：即使未来排除触价，也不得自动排除 15:00 的收盘 / 标记用途。**B**：二者联动改变；须先补行情时间戳证据、估值影响与独立 plan。P1=C 不自动回答 P4。 |
+| **P1** | GO 后是否只加当前扫描窗口的相位标签与测试、成交价完全不变？ | **已裁 A**（2026-09-19） | **A**：只命名 / 测试，`_in_session`、扫描器与既有取价均不改；A **不表示**集合竞价撮合已建模、已正确或“match existing exchange session”。**B**：分钟触价跳过 14:57–14:59。**C**：分钟触价跳过 14:57–15:00。若选 B/C，立即停止，先修订 plan；禁止在本 A–C 切片直接改扫描器。 |
+| **P2** | 是否给 `trades.csv` 增加 `session_phase` / `price_rule` 列？ | **已裁 A：否**（2026-09-19） | **A**：本轮只在代码命名、测试与文档中可见，产物 schema 不漂移；**不加列不等于成交天然未变**，仍须由 F-R8/F-R9 冻结与反向 import 围栏证明。**B**：新增列；须停止并另裁 schema、下游快照和兼容性，不进当前切片。 |
+| **P3** | 旧 P2/P3/P4 与已知 v7 分叉是否继续后置？ | **已裁 A：确认后置**（2026-09-19） | **A**：印花、改股 / 现金红利 / ST PIT、成交量上限、v7 `limits=None` fail-open、v7 ST 非 PIT 全部不进本船。**B**：不确认；停止并分别开 plan，不得扩写本船。 |
+| **P4** | 15:00 bar 的“触价资格”与“官方收盘 / 标记价用途”是否分开裁？ | **已裁 A：分开；本轮两者都不改**（2026-09-19） | **A**：即使未来排除触价，也不得自动排除 15:00 的收盘 / 标记用途。**B**：二者联动改变；须先补行情时间戳证据、估值影响与独立 plan。P1=C 不自动回答 P4。 |
 
-人裁建议为 **P1=A / P2=A / P3=A / P4=A**。头部状态实际回写为「已人裁 GO（commit hash）」之前，即使建议默认无人反对，也仍视为未裁。
+2026-09-19 人裁：用户原话「同意你的建议」，采纳 r4 共识建议，**P1=A / P2=A / P3=A / P4=A，已人裁 GO**。授权按切片 A→B→C 实施；本次只回写文档，未覆盖语义仍须 STOP 问人。
 
 ---
 
@@ -419,6 +419,7 @@ rg -n '[A-Za-z]:[\\\\/]' backtest/research/ashare_fill_clock.py tests/test_ashar
 
 | 版本 | 日期 | 变更 |
 |------|------|------|
+| v0.6 | 2026-09-19 | docs-only GO 回写：采纳 r4 共识，P1–P4 已裁 A/A/A/A；核对 origin/master tip 与 base 对象仍为 `c44da87b01ebcc6a68633307eba0fce48940f403`；新增实施 handoff，黄项留于 handoff 切片 B，切片技术正文不改；GO 不等于交易所撮合已建模；不写 Python、不运行测试或回测 |
 | v0.5 | 2026-09-19 | 消化 r3 共识两条：实施基线改为 `c44da87b01ebcc6a68633307eba0fce48940f403`（当日 origin/master tip），GO 时核对 master，变了则替换为当时完整 40 位 SHA；禁止不可达对象与 merge-base 现算，祖先检查前加 commit 对象存在校验；改正策略 5 的 T+1 / 跌停条件及 E3，共识一并纳入；不改代码、不新增测试、不升级黄项、不标 GO |
 | v0.4 | 2026-09-18 | 消化 r2 共识两条：追买缺报价保留 pending 补持仓 / 指数准入条件，夹具保留联合日历 T+1；§9 改 CI 同构 bash 主合同，要求固定完整 IMPLEMENTATION_BASE（r2 未指定 SHA；值由 v0.5 按 r3 更正），Windows 仅作别名；共识一并纳入，不改代码、不标 GO |
 | v0.3 | 2026-09-18 | 回填主持共识 H1–H4：追买缺报价跨 session 保留 pending、切片 C 强制重写 as-built 错句、`open_board` 复用触及涨停后开板夹具、冻结基线改为 handoff 固定完整 SHA + 提交后 / 工作区双门；P1–P4 建议默认不动，不新开 P5，不标 GO |
