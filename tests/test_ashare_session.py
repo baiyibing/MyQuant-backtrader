@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 from datetime import date
 
+import pytest
+
 from backtest.research.ashare_session import (
     defer_sell_at_limit,
     hit_limit_down,
@@ -42,3 +44,27 @@ def test_skip_buy_and_defer_sell_use_shared_hits():
     assert hit_limit_down(9.0, 9.0)
     assert not defer_sell_at_limit(9.1, limits)
     assert not skip_buy_at_limit(11.0, None)
+
+
+@pytest.mark.parametrize("raw,mapped,limits", [
+    (10.0, 5.0, (5.50, 4.50)), (3.30, 1.65, (1.82, 1.49)),
+])
+def test_d2_mapped_return_flows_into_decimal_limits(raw, mapped, limits):
+    # MC-6: main board; no float multiplication/rounding bypass for the band.
+    previous = session_prev_close(
+        {date(2026, 8, 31): raw, date(2026, 9, 1): 999.0},
+        date(2026, 9, 1), "600000.SH", {"600000.SH": {"20260901": 0.5}},
+    )
+    assert previous == mapped
+    assert session_limit_prices("600000.SH", previous) == limits
+    assert skip_buy_at_limit(limits[0], limits)
+    assert defer_sell_at_limit(limits[1], limits)
+
+
+def test_d2_no_previous_close_retains_none_policy():
+    previous = session_prev_close({}, date(2026, 9, 1), "600000.SH", None)
+    assert previous is None
+    limits = session_limit_prices("600000.SH", previous)
+    assert limits is None
+    assert not skip_buy_at_limit(10.0, limits)
+    assert not defer_sell_at_limit(10.0, limits)

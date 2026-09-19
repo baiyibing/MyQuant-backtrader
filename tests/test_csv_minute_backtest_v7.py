@@ -1,8 +1,11 @@
 # -*- coding: utf-8 -*-
 from datetime import date, timedelta
+from dataclasses import asdict
 
 import pytest
 
+import backtest.research.csv_minute_backtest_v7 as v7
+from backtest.research.ashare_session import session_limit_prices, session_prev_close
 from backtest.research.ashare_session import flatten_pool_names
 from backtest.research.csv_minute_backtest_v7 import (
     _as_date,
@@ -293,6 +296,8 @@ def test_v7_names_flatten_uses_window_end_name_for_earlier_day():
 
 
 def test_exdiv_rescales_trial_stop_into_none_domain():
+    # Historical wiring vector: D1 minute=100 vs daily=50 is mixed-domain.
+    # The d2 public vectors below independently pin same-domain held state.
     minutes = {SYMBOL: [bar(D1, 895, 100), bar(D2, 570, 48)]}
     path_daily = {SYMBOL: {date(2026, 8, 31): 100.0, D1: 50.0}}
     mapped = simulate_v7(
@@ -303,3 +308,90 @@ def test_exdiv_rescales_trial_stop_into_none_domain():
     assert "stop:trial_a090" not in reasons(mapped)
     raw = simulate_v7(minutes, path_daily, {D1: [SYMBOL]}, [D1, D2])
     assert "stop:trial_a090" in reasons(raw)
+
+
+@pytest.mark.parametrize("k", [0.5, 1.2])
+def test_d2_v7_helper_full_field_scope_including_compat_add1(k):
+    # add1_A1 is a compatibility branch, not assigned by natural public adds.
+    pos = v7.Position(SYMBOL, 10, stage="four", add1_A1=10.4,
+                      lots=[v7.Lot(100, D1, 10, "trial"), v7.Lot(200, D2, 10.4, "add_a104")],
+                      avg_cost=10.2, peak=12, last_add_date=D2)
+    before = asdict(pos)
+    v7._rescale_position(pos, k)
+    expected = {**before, **{key: before[key] * k
+                            for key in ("entry_A", "avg_cost", "peak", "add1_A1")},
+                "lots": [{**lot, "price": lot["price"] * k} for lot in before["lots"]]}
+    assert asdict(pos) == expected
+    assert pos.shares == 300
+
+
+def test_d2_v7_public_multilot_fields_once_and_economic_delta(monkeypatch):
+    minutes = {SYMBOL: [bar(D1, 895, 10), bar(D1, 900, 10),
+                        bar(D2, 885, 10.4), bar(D2, 900, 10.4),
+                        bar(D3, 570, 5.2), bar(D3, 900, 5.2)]}
+    closes = {SYMBOL: {D1 - timedelta(days=1): 10, D1: 10, D2: 10.4, D3: 5.2}}
+    before = simulate_v7(minutes, closes, {D1: [SYMBOL]}, [D1, D2])
+    assert reasons(before) == ["buy:trial", "buy:add_a104"]
+    snapshots = []
+    real = v7._rescale_position
+
+    def observe(pos, k):
+        old = asdict(pos)
+        real(pos, k)
+        snapshots.append((old, asdict(pos)))
+
+    monkeypatch.setattr(v7, "_rescale_position", observe)
+    after = simulate_v7(minutes, closes, {D1: [SYMBOL]}, [D1, D2, D3],
+                        exdiv={SYMBOL: {"20260903": 0.5}})
+    assert len(snapshots) == 1
+    old, scaled = snapshots[0]
+    assert old == asdict(before.positions[SYMBOL])
+    for key in ("entry_A", "avg_cost", "peak"):
+        assert scaled[key] == old[key] * 0.5
+    assert scaled["add1_A1"] is None  # Natural add does not assign the compat field.
+    assert scaled["lots"] == [{**lot, "price": lot["price"] * 0.5} for lot in old["lots"]]
+    assert asdict(after.positions[SYMBOL]) == scaled  # No second scale during scan.
+    shares = before.positions[SYMBOL].shares
+    assert after.positions[SYMBOL].shares == shares and after.cash == before.cash
+    assert after.trades == before.trades
+    assert before.equity_curve[-1]["equity"] - after.equity_curve[-1]["equity"] == pytest.approx(shares * 5.2)
+    previous = session_prev_close(closes[SYMBOL], D3, SYMBOL, {SYMBOL: {"20260903": 0.5}})
+    assert previous == 5.2
+    assert session_limit_prices(SYMBOL, previous) == (5.72, 4.68)
+
+
+def test_d2_v7_exday_add_then_stop_sells_only_old_lot():
+    closes = {SYMBOL: {D1 - timedelta(days=1): 10, D1: 10, D2: 4.8}}
+    exdiv = {SYMBOL: {"20260902": 0.5}}
+    # Same-domain D1 close=10; event-day raw prices 5 / 5.2 / 4.8.
+    prefix = [bar(D1, 895, 10), bar(D1, 900, 10), bar(D2, 570, 5)]
+    held = simulate_v7({SYMBOL: prefix}, closes, {D1: [SYMBOL]}, [D1, D2], exdiv=exdiv)
+    state = simulate_v7(
+        {SYMBOL: prefix + [bar(D2, 885, 5.2), bar(D2, 886, 4.8)]},
+        closes, {D1: [SYMBOL]}, [D1, D2], exdiv=exdiv,
+    )
+    assert held.positions[SYMBOL].entry_A == held.positions[SYMBOL].avg_cost == 5
+    assert reasons(state) == ["buy:trial", "buy:add_a104", "stop:four_avg095"]
+    buy, add, sell = state.trades
+    assert sell["date"] == D2.isoformat() and sell["hm"] == 886 and sell["price"] == 4.8
+    assert sell["shares"] == buy["shares"]  # T+1: the event-day add is ineligible.
+    pos = state.positions[SYMBOL]
+    assert pos.entry_A == 5 and pos.avg_cost == 5.2 and pos.peak == 5.2
+    assert pos.add1_A1 is None
+    assert [asdict(lot) for lot in pos.lots] == [
+        {"shares": add["shares"], "buy_date": D2, "price": 5.2, "kind": "add_a104"},
+    ]
+    expected_cash = (held.cash - v7.DEFAULT_SCHEDULE.debit_buy(add["shares"] * 5.2)
+                     + v7.DEFAULT_SCHEDULE.credit_sell(sell["shares"] * 4.8))
+    assert state.cash == pytest.approx(expected_cash)  # Only actual fills change cash.
+
+
+def test_d2_v7_new_trial_on_exday_is_not_rescaled():
+    state = simulate_v7(
+        {SYMBOL: [bar(D1, 895, 5), bar(D1, 900, 5)]},
+        {SYMBOL: {D1 - timedelta(days=1): 10, D1: 5}}, {D1: [SYMBOL]}, [D1],
+        exdiv={SYMBOL: {"20260901": 0.5}},
+    )
+    assert reasons(state) == ["buy:trial"]
+    pos = state.positions[SYMBOL]
+    assert pos.entry_A == pos.avg_cost == pos.peak == pos.lots[0].price == 5
