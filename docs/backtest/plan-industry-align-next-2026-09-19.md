@@ -1,10 +1,10 @@
 # Plan: industry-align next (fill gates fork, zero-change default) (2026-09-19)
 
-> **Status**: Draft v0.2 for human cut (**adversarial errata backfilled**, docs-only planning ship; not implemented, not-GO).
+> **Status**: Draft **v0.3** for human cut (**r1 merge-consensus backfilled**, docs-only planning ship; not implemented, not human-GO).
 > **Main ship (single theme)**: Contractualize A-share fill gates fork (`limits`, halt/zero-volume, ST name) between book-engine and v7 paths, with default **zero behavior change**.
 > **IMPLEMENTATION_BASE (fact anchor)**: `41f3d11a34c665cc8a21b3e1d351b9e06b0466b5` (full 40-char SHA of `origin/master` at authoring time, and branch `HEAD` before this docs commit).
 > **Business sources read**: `engine-positioning-ssot.md`, `engine-ashare-correctness.md`, `plan-industry-align-refactor-2026-09-18.md`, `plan-hygiene-backlog-2026-09-15.md`, `workflow-codex-handoff.md`.
-> **Adversarial review note**: Three-lane review was BLOCKING; accepted host errata E-01..E-05 are incorporated in this v0.2 draft.
+> **Adversarial review note**: Three-lane review was BLOCKING; accepted host errata E-01..E-05 were backfilled in v0.2, and r1 merge-consensus MC-1..MC-5 are backfilled in this v0.3 draft.
 
 ---
 
@@ -70,14 +70,14 @@ This ship makes that fork executable as contract (anchors + tests + docs), witho
 
 ---
 
-## 4) P* human cuts (default recommendation: keep deferred / separate ship)
+## 4) P* human cuts (default recommendation: confirm prior deferral / separate ship)
 
 | ID | Decision point | Default recommendation |
 |---|---|---|
-| **P1** | #112 deferred `B/C` options that would change 14:57 fill behavior | **A = keep deferred** (separate ship) |
-| **P2** | #112 deferred trades output columns (`session_phase` / `price_rule`) | **A = keep deferred** |
-| **P3** | #112 deferred fees and ST PIT semantics changes | **A = keep deferred** |
-| **P4** | #112 deferred touch-trigger vs mark coupling changes | **A = keep deferred** |
+| **P1** | #112 deferred `B/C` options that would change 14:57 fill behavior | **A = confirm prior deferral** (separate ship) |
+| **P2** | #112 deferred trades output columns (`session_phase` / `price_rule`) | **A = confirm prior deferral** |
+| **P3** | #112 deferred fees and ST PIT semantics changes | **A = confirm prior deferral** |
+| **P4** | #112 deferred touch-trigger vs mark coupling changes | **A = confirm prior deferral** |
 
 No P* is reopened by this docs-only ship.
 
@@ -106,10 +106,22 @@ No P* is reopened by this docs-only ship.
   - v7 held-path (sell and **add**) `limits=None` gate-pass semantics,
   - post-gate non-fill outcomes (cash/eligibility failures) as separate assertions.
 
+**Fork checklist (must be explicit, data-free, zero behavior change)**
+
+1. **ST name cross-day retained fork**
+   - Book side as-of resolver remains monotonic by day (`backtest/research/csv_common.py:85-107`) and consumed per session day (`backtest/research/csv_daily_backtest.py:291`; `backtest/research/csv_minute_backtest.py:565`).
+   - v7 retains window-end flatten behavior from pool names (`backtest/research/ashare_session.py:81-85`, `:97`; loaded by `backtest/research/csv_minute_backtest_v7.py:546`, consumed as a flat `name` map at `:324`).
+   - Reuse/add contract tests: `tests/test_csv_daily_backtest.py:909` and `:935` for book as-of behavior; add v7 cross-day name contract test to pin retained non-PIT fork.
+2. **Zero-volume / missing-bar retained fork**
+   - Daily loader filter: `_read_one_daily` drops zero-volume rows (`backtest/research/csv_daily_loader.py:83-84`), covered by `tests/test_csv_daily_backtest.py:73` and freeze/no-trade cases at `:990+`.
+   - Minute loader filter: lake minute reader drops whole zero-volume days (`backtest/research/ashare_bars.py:369-371`), covered by `tests/test_csv_minute_backtest.py:27`.
+   - Simulator no-bar freeze path remains distinct from loader filtering: book minute skips when day slice missing (`backtest/research/csv_minute_backtest.py:577-579`); v7 no-record path emits `skip_no_1455` for pool entry (`backtest/research/csv_minute_backtest_v7.py:315-317`, `:410-411`; covered by `tests/test_csv_minute_backtest_v7.py:110-113`).
+
 **DoD**
 - New/updated tests are data-free and deterministic.
 - Tests prove both state layers: interception vs actual fill outcome.
 - Slice A explicitly pins v7 held **add-side**: `limits=None` is not intercepted at gate layer, and a post-gate add failure is asserted as "not a fill" (F-R4).
+- v7 held-add test landing uses **public** `simulate_v7` call path (not only private `_buy`); assert (a) gate not intercepted and (b) post-gate `skip_cash` / no-fill. If `tests/test_ashare_simulate_predicates.py` helper `run(..., **kwargs)` v7 branch drops kwargs (`:66-72`), adjust in tests-only or call `simulate_v7` directly.
 - No production Python files changed.
 
 ### Slice B (commit B): docs as-built synchronization
@@ -141,19 +153,27 @@ No P* is reopened by this docs-only ship.
 Use Linux/bash commands aligned with CI intent and the contract-gates runbook sequence:
 
 ```bash
+set -euo pipefail
+
 # 0) Base integrity
 IMPLEMENTATION_BASE=41f3d11a34c665cc8a21b3e1d351b9e06b0466b5
 [[ "$IMPLEMENTATION_BASE" =~ ^[0-9a-f]{40}$ ]]
 git cat-file -e "$IMPLEMENTATION_BASE^{commit}"
 git merge-base --is-ancestor "$IMPLEMENTATION_BASE" HEAD
 
+# CI-equivalent prerequisite:
+# - Use a controlled Python 3.12 environment with pytest and repo deps installed.
+# - Bare system python without pytest does not constitute a plan failure.
+
 # 1) Targeted quick tests (only touched contract tests, data-free)
 python3 -m pytest -q -m "not production and not benchmark" \
   tests/test_ashare_session.py \
   tests/test_ashare_simulate_predicates.py \
   tests/test_csv_daily_backtest.py \
+  tests/test_csv_minute_backtest.py \
   tests/test_csv_minute_backtest_v7.py \
-  tests/test_daily_mark_cache.py
+  tests/test_daily_mark_cache.py \
+  tests/test_ashare_simulate_import_fence.py
 
 # 2) Data-free contract gates (real scripts under scripts/gates)
 python3 scripts/gates/verify_oskh_data_contract.py
@@ -161,17 +181,28 @@ python3 scripts/gates/verify_data_path_ssot.py
 python3 scripts/gates/verify_no_hardcoded_machine_paths.py
 python3 scripts/gates/verify_tr_bridge_import_ssot.py
 
-# 3) Freeze check: production files unchanged
-git diff --exit-code "$IMPLEMENTATION_BASE" HEAD -- \
-  backtest/research/ashare_session.py \
+# 3) Freeze check: production files unchanged (must match §8 exactly)
+FROZEN_PRODUCTION_FILES=(
   backtest/research/csv_daily_backtest.py \
   backtest/research/csv_minute_backtest.py \
   backtest/research/csv_minute_backtest_v7.py \
   backtest/research/csv_simulate_loop.py \
+  backtest/research/ashare_session.py \
+  backtest/research/market_layer.py \
+  backtest/research/csv_common.py \
+  backtest/research/csv_daily_loader.py \
   backtest/research/csv_ledger.py \
-  backtest/research/strategy5_rules.py \
   backtest/research/ashare_bars.py \
-  backtest/research/ashare_fees.py
+  backtest/research/ashare_fees.py \
+  backtest/research/strategy5_rules.py
+)
+
+git diff --exit-code "$IMPLEMENTATION_BASE" HEAD -- "${FROZEN_PRODUCTION_FILES[@]}"
+git diff --exit-code -- "${FROZEN_PRODUCTION_FILES[@]}"
+git diff --cached --exit-code -- "${FROZEN_PRODUCTION_FILES[@]}"
+
+# Optional guardrail: base->HEAD changed paths should stay in docs + named contract tests.
+# git diff --name-only "$IMPLEMENTATION_BASE" HEAD
 ```
 
 Pass criteria:
@@ -199,6 +230,7 @@ Pass criteria:
 | `backtest/research/strategy5_rules.py` | force-sell timing stays as-built |
 
 Only docs + data-free tests may change unless a human cut explicitly reopens behavior.
+`FROZEN_PRODUCTION_FILES` in §7 must stay byte-identical to this table.
 
 ---
 
@@ -222,6 +254,7 @@ Only docs + data-free tests may change unless a human cut explicitly reopens beh
 
 ## 11) Changelog
 
+- **v0.3 (2026-09-19)**: Backfilled r1 merge-consensus MC-1..MC-5: unified §7 freeze commands with §8 via one `FROZEN_PRODUCTION_FILES` array (including `market_layer.py`/`csv_common.py`/`csv_daily_loader.py` plus worktree + staged diff checks), expanded Slice A with explicit ST-name cross-day and zero-volume/missing-bar retained-fork checklist, pinned v7 held-add test landing on public `simulate_v7` with gate-pass-vs-fill assertions, added CI-equivalent pytest environment prerequisite wording, and clarified P1-P4 wording as confirming prior deferral A (not reopening #112).
 - **v0.2 (2026-09-19)**: Backfilled adversarial host errata E-01..E-05: replaced ghost gate scripts with real `scripts/gates/*` checks; corrected halt/zero-volume freeze anchors; added sell-side `limits=None` reuse pin reference; expanded frozen production table with verified on-path helpers (`market_layer.py`, `csv_common.py`, `csv_daily_loader.py`); and made Slice A DoD explicitly pin v7 held add-side fail-open plus gate-pass-vs-fill separation.
 - **v0.1 (2026-09-19)**: Initial draft.
 
