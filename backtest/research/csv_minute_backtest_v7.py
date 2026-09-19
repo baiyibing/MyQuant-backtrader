@@ -22,6 +22,7 @@ if __package__ in (None, ""):
 
 from backtest.research.ashare_bars import bars_from_pool
 from backtest.research.ashare_fees import DEFAULT_SCHEDULE, FeeSchedule
+from backtest.research.ashare_volume_cap import VolumeCap, VolumeLookup
 from backtest.research.market_layer import (
     as_date as _as_date,
     as_datetime as _as_datetime,
@@ -87,6 +88,7 @@ class SimResult:
     positions: dict[str, Position] = field(default_factory=dict)
     trades: list[dict[str, Any]] = field(default_factory=list)
     equity_curve: list[dict[str, Any]] = field(default_factory=list)
+    volume_cap: VolumeCap | None = field(default=None, repr=False, compare=False)
 
 
 def _record_stamp(record: Mapping[str, Any]) -> Any:
@@ -211,6 +213,13 @@ def _buy(state: SimResult, position: Position | None, symbol: str, day: date, hm
     if shares <= 0 or cost > state.cash:
         _event(state, day, symbol, hm, "skip", 0, price, "skip_cash")
         return None
+    if state.volume_cap is not None:
+        key = (symbol, day.strftime("%Y%m%d"), hm)
+        shares, skip = state.volume_cap.clamp(key, hm, shares, buy=True)
+        if not shares:
+            _event(state, day, symbol, hm, "skip", 0, price, skip)
+            return None
+        cost = fee.debit_buy(shares * price)
     state.cash -= cost
     if position is None:
         position = Position(symbol=symbol, entry_A=price, last_add_date=day)
@@ -220,18 +229,26 @@ def _buy(state: SimResult, position: Position | None, symbol: str, day: date, hm
     position.lots.append(Lot(shares, day, price, kind))
     position.last_add_date = day
     _event(state, day, symbol, hm, "buy", shares, price, reason)
+    if state.volume_cap is not None:
+        state.volume_cap.consume(key, shares)
     return position
 
 
 def _sell_lots(state: SimResult, position: Position, day: date, hm: int, price: float,
                reason: str, *, kind: str | None = None,
-               fee: FeeSchedule = DEFAULT_SCHEDULE) -> int:
+               fee: FeeSchedule = DEFAULT_SCHEDULE, at: int | None = None) -> int:
     wanted = sum(
         lot.shares for lot in position.lots
         if t1_sellable(lot.buy_date, day) and (kind is None or lot.kind == kind)
     )
     if wanted <= 0:
         return 0
+    if state.volume_cap is not None:
+        key = (position.symbol, day.strftime("%Y%m%d"), hm)
+        wanted, skip = state.volume_cap.clamp(key, hm if at is None else at, wanted)
+        if not wanted:
+            _event(state, day, position.symbol, hm, "skip", 0, price, skip)
+            return 0
     remaining = wanted
     kept: list[Lot] = []
     for lot in position.lots:
@@ -244,6 +261,8 @@ def _sell_lots(state: SimResult, position: Position, day: date, hm: int, price: 
     position.lots = kept
     state.cash += fee.credit_sell(sold * price)
     _event(state, day, position.symbol, hm, "sell", sold, price, reason)
+    if state.volume_cap is not None:
+        state.volume_cap.consume(key, sold)
     if position.shares:
         position.avg_cost = sum(l.price * l.shares for l in position.lots) / position.shares
     else:
@@ -279,13 +298,21 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
                 start: Any = None, end: Any = None,
                 exdiv: Mapping[str, Mapping[str, float]] | None = None,
                 names: Mapping[str, str] | None = None,
-                fee: FeeSchedule = DEFAULT_SCHEDULE) -> SimResult:
-    """Run the matcher; an index date->close mapping enables the new-open gate."""
+                fee: FeeSchedule = DEFAULT_SCHEDULE,
+                participation_rate: float | None = None,
+                volume_for_bucket: VolumeLookup | None = None) -> SimResult:
+    """Run the matcher; optional cap uses caller-attested completed minutes.
+
+    Same-bar close capacity is a completed-bar approximation. Gap opens cannot
+    use that bucket. An index date->close mapping enables the new-open gate.
+    """
     frames = minute_bars if _is_frame_map(minute_bars) else None
     minutes = {} if frames is not None else _minute_records(minute_bars)
     closes = _daily_closes(daily_bars)
     pools = _pool(pool_days)
     state = SimResult(float(cash_total))
+    if participation_rate is not None:
+        state.volume_cap = VolumeCap(participation_rate, volume_for_bucket)
     gate: dict[date, bool] = {}
     if isinstance(index_days, Mapping):
         index_closes = {_as_date(day): float(close) for day, close in index_days.items()}
@@ -357,7 +384,9 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
                             }
                             _sell_lots(state, position, day, hm, check_px,
                                        reasons_stop.get(decision.action, f"stop:{decision.action}"),
-                                       fee=fee)
+                                       fee=fee,
+                                       **({"at": hm - 1 if first and open_px <= decision.line else hm}
+                                          if state.volume_cap is not None else {}))
                     if symbol not in state.positions:
                         cleared_today.add(symbol)
                     position = state.positions.get(symbol)

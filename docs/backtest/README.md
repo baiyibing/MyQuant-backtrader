@@ -10,9 +10,9 @@
 
 ST 名称时间合同：[engine-ashare-correctness §2.2](engine-ashare-correctness.md#22-p3-δ3-st-name-as-of--v7-flatten-forkhuman-go-aaa)；[P3 δ3 plan / data-free pins 与冻结证明](plan-industry-align-p3-d3-st-pit-2026-09-19.md)。Human GO A/A/A 保留书侧日期 as-of / v7 窗口末名平铺分叉，生产不变；决策时刻可得性 PIT 仍未证。
 
-`limits=None` 合同：[engine-ashare-correctness §2.3](engine-ashare-correctness.md#23-p3-δ4-v7-limitsnone-contracthuman-go-cba)；[P3 δ4 plan / data-free pins 与冻结证明](plan-industry-align-p3-d4-v7-limits-none-2026-09-19.md)。Human GO **C/B/A 的 production fail-closed 已落地**：v7 held stop/add/timer 无有效档位均拒绝交易尝试，复用无昨收/未知板块 skip reason；首开与书侧拒绝保持。peak/mark/参考价缩放仍可更新，无 policy 开关；δ5/δ6 生产未启动。
+`limits=None` 合同：[engine-ashare-correctness §2.3](engine-ashare-correctness.md#23-p3-δ4-v7-limitsnone-contracthuman-go-cba)；[P3 δ4 plan / data-free pins 与冻结证明](plan-industry-align-p3-d4-v7-limits-none-2026-09-19.md)。Human GO **C/B/A 的 production fail-closed 已落地**：v7 held stop/add/timer 无有效档位均拒绝交易尝试，复用无昨收/未知板块 skip reason；首开与书侧拒绝保持。peak/mark/参考价缩放仍可更新，无 policy 开关；δ5 production cap 见下；δ6 production economics 未启动。
 
-成交量参与率设计：[engine-ashare-correctness §2.4](engine-ashare-correctness.md#24-p3-δ5-volume-participation-cap-designhuman-go-b)；[P3 δ5 plan / 文档验收与冻结证明](plan-industry-align-p3-d5-volume-cap-2026-09-19.md)。Human GO B 仅落设计候选与 D1–D7 文档算术 oracle；书/v7 仍无 participation cap，零量过滤不等于 cap。本轮无新增测试，生产冻结；接线须另裁 `.1=C`。
+成交量参与率生产合同：[engine-ashare-correctness §2.4](engine-ashare-correctness.md#24-p3-δ5-volume-participation-cap-productionhuman-go-caaa)；[P3 δ5 plan / 生产验收与冻结证明](plan-industry-align-p3-d5-volume-cap-2026-09-19.md)。Human GO **C/A/A/A production volume-cap 已落地**：分钟书 `simulate` / `simulate_v7` 显式传 `participation_rate` 与带单位/`available_at` 的桶容量即可启用；默认 None 保持基线。共享买卖预算、partial与不可用拒绝已有生产测试；same-bar整桶为完成bar容量近似，开盘不借未来/EOD量。日线容量、loader/CLI均未接；无数据迁移，revert即可回滚。δ6 production economics NOT started，须host合并本PR后才准备下一刀。
 
 除权经济残留与 oracle：[engine-ashare-correctness §2.5](engine-ashare-correctness.md#25-p3-δ6-ex-div-economics-residualhuman-go-a账本可选-b-docs)；[P3 δ6 plan / data-free pins 与冻结证明](plan-industry-align-p3-d6-exdiv-economics-2026-09-19.md)。Human GO A + 可选账本 B docs；book/v7 原股数/现金与 raw-mark NAV 残留保留，B3–B6 仅设计。Mode B fractional shares 不证明经济残留已关；生产增股/入账/NAV 须另裁 C，本轮未授权，**must-cut-C=NO**。
 

@@ -112,6 +112,8 @@ from backtest.research.csv_simulate_loop import (  # noqa: E402
     run_step_adds_day,
 )
 
+from backtest.research.ashare_volume_cap import VolumeCap, VolumeLookup  # noqa: E402
+
 BUY_HM = 14 * 60 + 55
 
 HELP_LOCK = """
@@ -531,7 +533,10 @@ def simulate(
     n_drop=None,
     eligible_buy=None,
     index_block_new=None,
+    participation_rate: float | None = None,
+    volume_for_bucket: VolumeLookup | None = None,
 ) -> SimState:
+    """Opt-in cap uses caller-attested completed minutes; daily volume is unused."""
     hooks = prepare_strategy_hooks(
         strategy,
         stop_pct=stop_pct,
@@ -568,6 +573,8 @@ def simulate(
         pool_names=pool_names,
         pool_names_by_day=pool_names_by_day,
     )
+    if participation_rate is not None:
+        st.volume_cap = VolumeCap(participation_rate, volume_for_bucket)
     allow_add = bool(hooks["allow_add"])
     qlib_limit_pct = hooks.get("qlib_limit_pct")
     limit_up_chase = bool(hooks.get("limit_up_chase", True))
@@ -667,7 +674,26 @@ def simulate(
                     ):
                         st.stats["defer_sell_limit_down"] += 1
                         continue
-                    _sell(st, code, pos, px, day, reason)
+                    volume_kwargs = {}
+                    if st.volume_cap is not None:
+                        bucket = int(hm[idx])
+                        volume_kwargs = {"bucket_id": bucket, "day_i": i,
+                                         "at": bucket - 1 if reason == "stop_loss:gap_open" else bucket}
+                    _sell(st, code, pos, px, day, reason, **volume_kwargs)
+
+        def _volume_bucket_for(code: str, target: int, earliest: int):
+            # Mirror the quote helpers' exact/fallback row, never a later bucket.
+            frame = _slice_day(minute_bars[code], day_spans.get(code, {}), ds)
+            if frame is None:
+                return None
+            hit = frame.loc[frame["hm"] == target]
+            if not hit.empty:
+                return int(hit["hm"].iloc[0])
+            eligible = frame.loc[(frame["hm"] >= earliest) & (frame["hm"] <= target)]
+            return None if eligible.empty else int(eligible["hm"].iloc[-1])
+
+        chase_volume = (lambda code: _volume_bucket_for(code, CHASE_HM, AM_OPEN))
+        pool_volume = (lambda code: _volume_bucket_for(code, BUY_HM, 14 * 60 + 30))
 
         def _chase_quotes_for(code: str):
             mdf = minute_bars.get(code)
@@ -694,6 +720,7 @@ def simulate(
             allow_add=allow_add,
             buy_gate=buy_gate,
             quotes_for=_chase_quotes_for,
+            volume_bucket_for=chase_volume if st.volume_cap is not None else None,
             exdiv=exdiv,
             ds=ds,
             qlib_limit_pct=qlib_limit_pct,
@@ -731,6 +758,7 @@ def simulate(
             allow_add=allow_add,
             buy_gate=buy_gate,
             buy_quote_for=_pool_quote_for,
+            volume_bucket_for=pool_volume if st.volume_cap is not None else None,
             sizing=hooks.get("sizing", "daily_quota"),
             name_budget=hooks.get("name_budget", 1_000_000.0),
             ration=hooks.get("ration", "file_order"),
@@ -753,6 +781,7 @@ def simulate(
             ds=ds,
             names=names,
             buy_quote_for=_pool_quote_for,
+            volume_bucket_for=pool_volume if st.volume_cap is not None else None,
             sizing=hooks.get("sizing", "daily_quota"),
             name_budget=hooks.get("name_budget", 1_000_000.0),
             exdiv=exdiv,
