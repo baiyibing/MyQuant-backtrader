@@ -295,6 +295,36 @@ def test_v7_names_flatten_uses_window_end_name_for_earlier_day():
     assert "skip_limit_up" in reasons(forked)
 
 
+def test_d3_v7_unst_window_extension_changes_earlier_fill(tmp_path):
+    from backtest.research.csv_pool import load_pool_names_by_day
+
+    for day, text in [(D1, "600000,*ST 浦发\n"), (D2, "600000,浦发\n"),
+                      (D3, "000001,平安\n")]:
+        (tmp_path / f"{day:%Y%m%d}.csv").write_text(text, encoding="utf-8")
+    minutes = {SYMBOL: [bar(D1, 895, 105)]}
+    path_daily = {SYMBOL: {date(2026, 8, 31): 100}}
+    states = []
+    for end, expected_name, expected_limits in [
+        (D1, "*ST 浦发", (105, 95)), (D3, "浦发", (110, 90)),
+    ]:
+        names = flatten_pool_names(load_pool_names_by_day(tmp_path, D1, end))
+        assert names[SYMBOL] == expected_name
+        assert session_limit_prices(SYMBOL, 100, names[SYMBOL]) == expected_limits
+        states.append(simulate_v7(
+            minutes, path_daily, {D1: [SYMBOL]}, [D1, D2, D3],
+            start=D1, end=end, names=names, cash_total=21_000_000,
+        ))
+    short, extended = states
+    assert reasons(short) == ["skip_limit_up"]
+    assert short.positions == {} and short.cash == 21_000_000
+    assert reasons(extended) == ["buy:trial"]
+    trade = extended.trades[0]
+    assert (trade["date"], trade["price"]) == (D1.isoformat(), 105)
+    assert trade["shares"] > 0
+    assert extended.positions[SYMBOL].shares == trade["shares"]
+    assert extended.cash < short.cash
+
+
 def test_exdiv_rescales_trial_stop_into_none_domain():
     # Historical wiring vector: D1 minute=100 vs daily=50 is mixed-domain.
     # The d2 public vectors below independently pin same-domain held state.
