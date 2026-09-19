@@ -1,0 +1,4 @@
+path=docs/backtest/plan-industry-align-next-2026-09-19.md
+git_sha=f9335d8
+content_sha256_16=a54d425bdf0a16b3
+reviewed_at=2026-09-19
