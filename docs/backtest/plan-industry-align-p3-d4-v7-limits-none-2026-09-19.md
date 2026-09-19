@@ -1,6 +1,6 @@
 # Plan: industry-align P3 δ4 v7 limits=None contract (2026-09-19)
 
-> **Status**: **v0.4 · production fail-closed landed · Slice A→B→C 已通过（§8.4） · Human GO C/B/A（2026-09-19，Asia/Shanghai）**。仅 v7 held stop/add/timer 新增 None 早拒；共享门函数、书侧、首开及其它生产路径冻结。实现与验收完成；feat commit `3503f6f4d479cb13a0615d3d01be4fa7b877d81e` 已落地（host 补提交），由 host 推送/开 PR。
+> **Status**: **v0.4 · production fail-closed landed · Slice A→B→C 已通过（§8.4） · Human GO C/B/A（2026-09-19，Asia/Shanghai）**。仅 v7 held stop/add/timer 新增 None 早拒；共享门函数、书侧、首开及其它生产路径冻结。实现与验收完成；feat commit `0975e572d2d35f5bc92d1f5db5ccf433c80dd65f` 已落地（host 补提交），由 host 推送/开 PR。
 > **Main ship / 单行范围**: `limits=None`（无昨收 / 未知板块）时拒绝所有交易尝试；复用 source reason，不冻结 peak / last_prices / mark / 除权参考价缩放。
 > **IMPLEMENTATION_BASE**: `073538d4486a07a71f561631c3f274ffa06eeecb`（#128 merge tip，post δ6 docs；本 feat 起点已由 `git rev-parse HEAD` 核实）。历史 A 基线与验收见 changelog，不用于本轮冻结证明。
 > **Human GO recorded**: **P3δ4.1=C、P3δ4.2=B、P3δ4.3=A**；仅本刀覆盖旧 A/A/A freeze，授权独立 fail-closed 生产行为 PR；不授权显式 policy / schema。P1/P2/P4 继续挂起；δ5/δ6 生产未启动。
@@ -279,11 +279,11 @@ Human GO **P3δ4.1=C / P3δ4.2=B / P3δ4.3=A**；固定 IMPLEMENTATION_BASE / �
 | §8.2 四个 repo-only gates | 全部 PASS；path SSOT 7 hits / 0 violations，TR bridge 2 consumers | 0 |
 | §8.1 全路径白名单、UTF-8/BOM/NUL、whitespace | PASS；仅 v7 + 四 docs + 两 tests；UTF-8、BOM=0、NUL=0 | 0 |
 | §8.3 production allowlist / §9 冻结 / 全仓其它生产 Python | **PROD_ALLOWLIST_OK**；生产仅 v7 三处 None 检查；20 个冻结文件四种 diff 为空，session 也零 diff；§9 非例外行原文/顺序不变 | 0 |
-| `git add <七个变更文件> && git commit -m 'feat(p3-d4): limits=None fail-closed production (Human GO C/B/A)'` | **PASS（host）**：清除 stale `index.lock` 后提交成功；Feat SHA `3503f6f4d479cb13a0615d3d01be4fa7b877d81e` | 0 |
+| `git add <七个变更文件> && git commit -m 'feat(p3-d4): limits=None fail-closed production (Human GO C/B/A)'` | **PASS（host）**：清除 stale `index.lock` 后提交成功；Feat SHA `0975e572d2d35f5bc92d1f5db5ccf433c80dd65f` | 0 |
 
 两组 suite 合计 **233 passed**（195+38），5 个新增/更新函数的 26 例包含其中，不重复计数。五文件 suite 有 2 条既有 `ashare_bars.py:503` pandas copy 参数弃用 warning；未改生产压警告。未新增 skip/xfail，未用常量 gate 替代真实门，也不以 mark/peak 代替 fill 断言。结果只覆盖定向 data-free 验收，不代表全量 CI 或历史收益回测。
 
-本 C cut 仅改 v7 held stop/add/timer 的 None 交易尝试，使用既有 skip 事件区分无昨收 / 未知板块。首开、书侧、Decimal limit-hit helper、费用、除权经济语义不变；**δ5/δ6 production NOT started**，P1/P2/P4 继续 deferred。Host 已提交 Feat SHA `3503f6f4d479cb13a0615d3d01be4fa7b877d81e`；由 host 推送并开 PR。
+本 C cut 仅改 v7 held stop/add/timer 的 None 交易尝试，使用既有 skip 事件区分无昨收 / 未知板块。首开、书侧、Decimal limit-hit helper、费用、除权经济语义不变；**δ5/δ6 production NOT started**，P1/P2/P4 继续 deferred。Host 已提交 Feat SHA `0975e572d2d35f5bc92d1f5db5ccf433c80dd65f`；由 host 推送并开 PR。
 
 ## 9) Production file table（C cut 两个授权例外；其它零 diff）
 
@@ -317,7 +317,7 @@ Human GO **P3δ4.1=C / P3δ4.2=B / P3δ4.3=A**；固定 IMPLEMENTATION_BASE / �
 
 ## 10) Changelog
 
-- **v0.4 (2026-09-19，Asia/Shanghai)**：新 Human GO **C/B/A** 覆盖旧 A/A/A 的本刀生产冻结；固定 base 刷新为 #128 merge `073538d4486a07a71f561631c3f274ffa06eeecb`。v7 held stop/add/timer 对 None 显式 fail-closed，复用无昨收/未知板块 skip reason；共享门不变，参考价/peak/mark 可更新。更新 3 个旧测试函数、新增 2 个函数，共 26 例、净增 4；实际命令与冻结结果见 §8.4。四 docs 同步，实现已验收；host 补提交 Feat SHA `3503f6f4d479cb13a0615d3d01be4fa7b877d81e`；δ5/δ6 生产未启动，P1/P2/P4 deferred。
+- **v0.4 (2026-09-19，Asia/Shanghai)**：新 Human GO **C/B/A** 覆盖旧 A/A/A 的本刀生产冻结；固定 base 刷新为 #128 merge `073538d4486a07a71f561631c3f274ffa06eeecb`。v7 held stop/add/timer 对 None 显式 fail-closed，复用无昨收/未知板块 skip reason；共享门不变，参考价/peak/mark 可更新。更新 3 个旧测试函数、新增 2 个函数，共 26 例、净增 4；实际命令与冻结结果见 §8.4。四 docs 同步，实现已验收；host 补提交 Feat SHA `0975e572d2d35f5bc92d1f5db5ccf433c80dd65f`；δ5/δ6 生产未启动，P1/P2/P4 deferred。
 
 - **v0.3 (2026-09-19，Asia/Shanghai)**：按 Human GO A/A/A 完成 Slice A→B→C；基线刷新为 post #125 `844919481f12a220fdf3c411d9be09583b2d7984`，保留历史 proposal 基线。engine SSOT §2.3 / README 记录 None 双来源、首开/held stop-add-timer 分叉与 MC-1 named-band 前提；四个既有测试文件新增/增强 7 函数、35 定向例（净增 26），B1–B5 映射见 §7。§8.4 记录 191+38 passed、四 gates、七路径白名单、编码与 22 文件/全 research/全仓生产 Python 零 diff。保留 §9 原表与未提交交付，未实施 fail-closed 或显式 policy。
 - **v0.2 (2026-09-19，Asia/Shanghai)**：录入 Human GO P3δ4.1/4.2/4.3=A/A/A，授权后续 Slice A→B→C 契约+data-free pins；fail-closed/显式 policy 改造另裁，生产冻结，P1/P2/P4 继续挂起。保留 MC-1 勘误；本次未实施 slices、未新增/执行测试，基线、白名单、冻结表与 §8 命令不变。
