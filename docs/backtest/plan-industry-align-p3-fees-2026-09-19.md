@@ -1,10 +1,11 @@
 # Plan: industry-align P3 delta1 fee contract (2026-09-19)
 
-> **Status**: Proposed v0.2 (errata-applied docs-only ship for #112 deferred P3). No production Python edits in this PR.
-> **Main ship (single implementable ship this round)**: **delta1** - research fee contract + stamp-tax boundary clarity for CSV daily/minute engines.
-> **IMPLEMENTATION_BASE (origin/master full SHA after fetch)**: `c65b10dd6d26342bd9ec1cbed5465d875f82470f`.
-> **Host intent lock**: Explicitly park **P1** (14:57 fill window), **P2** (trades columns), **P4** (touch<->mark coupling) this round.
+> **Status**: Proposed **v0.3** (host-parallel Codex adversarial r2 errata-applied; docs-only). Independent 3-lane `codex exec` completed; see review record. No production Python edits in this PR.
+> **Main ship (single implementable ship this round)**: **delta1** — research fee contract + stamp-tax boundary clarity for CSV daily/minute engines.
+> **IMPLEMENTATION_BASE (origin/master full SHA after fetch)**: `9e2e9eb774345d0d0bf6075192739780a3f0ee47`.
+> **Host intent lock**: Explicitly park **P1** (14:57 fill window), **P2** (trades columns), **P4** (touch↔mark coupling) this round.
 > **Default recommendation**: zero behavior change (document as-built; add/extend data-free tests only).
+> **Adversarial r2 record**: [codex-adv-r2](../architecture/reviews/2026-09-19/plan-industry-align-p3-fees-codex-adv-r2/) — host errata E-r2-01..06; lanes dissent-steelman / domain-safety / pattern-evidence (all rc=0).
 
 ---
 
@@ -59,6 +60,22 @@ This is the existing boundary to preserve: research fee SSOT stays local to `bac
 
 ---
 
+
+## 2.4) Floor / min-charge unit (as-built; E-r2-02)
+
+Document, do not unify in δ1:
+
+| Path | Charge unit (as-built) | Implication |
+|------|------------------------|-------------|
+| Shared book ledger sell/buy via `trade_commission` | Per ledger call / lot path as wired today | Two lots can pay floor twice |
+| v7 path accepting `FeeSchedule` | Prefer documenting aggregate-vs-per-call from current call sites | Same rates may not match book total |
+
+Slice B must include a **two-lot numeric oracle** that locks the *documented* as-built totals (not a forced cross-engine equality).
+
+## 2.5) Cash-gate observability (E-r2-04)
+
+Fees participate in cash sufficiency before a fill on shared/v7 paths. δ1 documents this path dependence; it does **not** add trades.csv commission columns or change fill prices. Acceptance may assert in-memory cash/commission oracles; artifact schema stays frozen unless a later human cut reopens P2.
+
 ## 3) Delta roadmap table (P3 split; exactly one main ship selected)
 
 | Delta ship | Scope summary | This PR |
@@ -98,6 +115,7 @@ This is the existing boundary to preserve: research fee SSOT stays local to `bac
 
 ## 6) Non-goals (explicitly parked this round)
 
+- **E-R6 vs old P3 economics (E-r2-05):** E-R6 covers reference-price rescale only; shares/cash-dividend / economic NAV residuals remain deferred — do not describe them as already closed by E-R6.
 - **No P1** changes: do not edit 14:57 fill window behavior.
 - **No P2** changes: do not add `trades.csv` columns.
 - **No P4** changes: do not couple/decouple touch-trigger and marking semantics in runtime code.
@@ -118,11 +136,17 @@ This is the existing boundary to preserve: research fee SSOT stays local to `bac
 
 ### Slice B (data-free contract tests)
 
+Prior adversarial E-03 / quick predicate pins are **not** sufficient fee-wiring proof (**E-r2-01**).
+
 - Extend/add tests to pin:
   - default schedule identity (`DEFAULT_SCHEDULE is BILATERAL_10BP`),
   - formula parity on buy/sell charge points used by ledger/shared loop,
-  - daily qlib-cost override wiring remains explicit and opt-in,
-  - daily/minute/v7 asymmetry remains explicit (book paths reject unknown-board limits while v7 keeps existing held-path fail-open behavior) via `tests/test_ashare_simulate_predicates.py`.
+  - **daily** opt-in qlib-cost override actually reaches charge sites (two-state),
+  - **minute** path inherits documented SimState/default rates,
+  - **v7** custom `FeeSchedule` pass-through on buy/sell/simulate,
+  - **floor charge unit** two-lot oracle per §2.4 (as-built totals),
+  - cash-gate interaction oracle where cheap to assert in-memory (**E-r2-04**).
+- Limit/predicate asymmetry tests may remain, but must not be labeled as fee-wiring closure.
 - Keep all tests synthetic/data-free; no lake reads.
 
 ### Slice C (acceptance + freeze proof)
@@ -141,7 +165,7 @@ Notes:
 ```bash
 set -euo pipefail
 
-IMPLEMENTATION_BASE=c65b10dd6d26342bd9ec1cbed5465d875f82470f
+IMPLEMENTATION_BASE=9e2e9eb774345d0d0bf6075192739780a3f0ee47
 [[ "$IMPLEMENTATION_BASE" =~ ^[0-9a-f]{40}$ ]]
 git fetch origin master
 CURRENT_MASTER="$(git rev-parse origin/master)"
@@ -210,6 +234,8 @@ Pass criteria:
 
 Default editable surface for delta1: docs + data-free tests only.
 
+**Freeze claim scope (E-r2-03):** zero-diff on the listed production files proves only those paths are untouched. It does **not** by itself prove P1 session-window or unrelated loader filters are immutable. P1/P2/P4 stay parked; do not widen this ship to edit them. Optional acceptance: path-allowlist that new commits only touch docs/ + data-free tests/ + the listed freeze set.
+
 ---
 
 ## 10) Short OSS analogy table (analogy only, not behavior evidence)
@@ -223,5 +249,6 @@ Default editable surface for delta1: docs + data-free tests only.
 
 ## 11) Changelog
 
+- **v0.3 (2026-09-19)**: Host-parallel Codex adversarial r2 (dissent-steelman / domain-safety / pattern-evidence, all rc=0). Backfilled E-r2-01..06: reopen fee-wiring Slice B requirements; document floor charge unit; narrow freeze claim; cash-gate observability; E-R6 residual wording; refresh `IMPLEMENTATION_BASE` to current master tip. Record: [codex-adv-r2](../architecture/reviews/2026-09-19/plan-industry-align-p3-fees-codex-adv-r2/). No production/test code edits; no backtests.
 - **v0.2 (2026-09-19)**: Applied adversarial errata E-01..E-05: removed ghost acceptance scripts in §8, tightened stamp-tax boundary wording to commission-only as-built research booking, added asymmetry pin test to quick suite, hardened `IMPLEMENTATION_BASE` tip check against fetched `origin/master`, and expanded freeze file set for P1/P2/P4 lock safety.
 - **v0.1 (2026-09-19)**: Initial docs-only P3 delta1 plan. Selects exactly one main ship (fee contract), parks P1/P2/P4, sets explicit `IMPLEMENTATION_BASE`, and defines data-free acceptance/freeze protocol.
