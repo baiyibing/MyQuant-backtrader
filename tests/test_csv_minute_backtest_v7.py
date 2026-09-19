@@ -260,17 +260,92 @@ def test_st_name_uses_five_percent_limit():
     assert "buy:trial" in reasons(board)
 
 
-def test_first_entry_unknown_board_rejects_trial_buy():
-    code = "999999.SZ"
+@pytest.mark.parametrize("cause,reason", [
+    ("no_previous_close", "skip_no_prev_close"),
+    ("unknown_board", "skip_unknown_board"),
+])
+def test_first_entry_none_limits_rejects_trial_buy(cause, reason):
+    code = "999999.SZ" if cause == "unknown_board" else SYMBOL
+    closes = {D1: 100} if cause == "no_previous_close" else {D1 - timedelta(days=1): 100}
+    previous = session_prev_close(closes, D1, code, None)
+    assert previous == (None if cause == "no_previous_close" else 100)
+    assert session_limit_prices(code, previous) is None
+    # A session list disables the index gate; the exact 14:55 record reaches entry.
     state = simulate_v7(
         {code: [bar(D1, 895, 100)]},
-        {code: {date(2026, 8, 31): 100.0}},
+        {code: closes},
         {D1: [code]},
         [D1],
     )
-    assert "skip_unknown_board" in reasons(state)
-    assert "buy:trial" not in reasons(state)
-    assert code not in state.positions
+    assert state.trades == [{"date": D1.isoformat(), "symbol": code, "hm": 895,
+                             "side": "skip", "shares": 0, "price": 100,
+                             "reason": reason}]
+    assert state.positions == {} and state.cash == 21_000_000
+
+
+@pytest.mark.parametrize("cause", ["no_previous_close", "unknown_board"])
+@pytest.mark.parametrize("outcome", ["sellable", "t0", "no_records"])
+def test_d4_timer_none_limits_respects_t1_and_records(cause, outcome, monkeypatch):
+    code = "999999.SZ" if cause == "unknown_board" else SYMBOL
+    sessions = [D1 + timedelta(days=n) for n in range(11)]
+    timer_day = sessions[-1]
+    closes = ({timer_day: 101} if cause == "no_previous_close"
+              else {timer_day - timedelta(days=1): 100, timer_day: 101})
+    previous = session_prev_close(closes, timer_day, code, None)
+    assert previous == (None if cause == "no_previous_close" else 100)
+    assert session_limit_prices(code, previous) is None
+    # Public simulate has no initial-position argument. Seed only that dependency.
+    # For t0, an old timer anchor with a same-day lot is a constructed held state,
+    # not a claim that natural trial entry can create this combination.
+    buy_date = timer_day if outcome == "t0" else D1
+    position = v7.Position(code, 100, avg_cost=100, peak=100, last_add_date=D1,
+                           lots=[v7.Lot(100, buy_date, 100, "trial")])
+    before = asdict(position)
+    result_type = v7.SimResult
+    monkeypatch.setattr(v7, "SimResult", lambda cash: result_type(cash, positions={code: position}))
+    assert v7.timer_due(sessions, D1, timer_day, position.stage) is True
+    timer_calls, gate_calls = [], []
+    real_timer, real_gate = v7.timer_due, v7.defer_sell_at_limit
+
+    def observe_timer(calendar, anchor, day, stage):
+        due = real_timer(calendar, anchor, day, stage)
+        timer_calls.append((day, due))
+        return due
+
+    def observe_gate(price, limits):
+        blocked = real_gate(price, limits)
+        gate_calls.append((price, limits, blocked))
+        return blocked
+
+    monkeypatch.setattr(v7, "timer_due", observe_timer)
+    monkeypatch.setattr(v7, "defer_sell_at_limit", observe_gate)
+    # Prices avoid stop and add. Only the final record is the timer fill clock.
+    records = ([] if outcome == "no_records" else
+               [bar(timer_day, 570, 100), bar(timer_day, 895, 100), bar(timer_day, 900, 101)])
+    state = simulate_v7({code: records}, {code: closes}, {timer_day: [code]}, sessions,
+                        cash_total=2_000)
+    assert len(state.equity_curve) == 11
+    if outcome == "no_records":
+        assert timer_calls == [] and gate_calls == []
+        assert state.trades == [{"date": timer_day.isoformat(), "symbol": code, "hm": None,
+                                 "side": "skip", "shares": 0, "price": None,
+                                 "reason": "skip_no_1455"}]
+        assert asdict(state.positions[code]) == before and state.cash == 2_000
+        assert state.equity_curve[-1]["holdings"] == 10_000
+    else:
+        assert timer_calls == [(timer_day, True)]
+        assert gate_calls == [(101, None, False)]
+        if outcome == "sellable":
+            assert state.trades == [{"date": timer_day.isoformat(), "symbol": code, "hm": 900,
+                                     "side": "sell", "shares": 100, "price": 101,
+                                     "reason": "exit:timer10"}]
+            assert state.positions == {}
+            assert state.cash == pytest.approx(2_000 + 10_100 - 10.1)
+            assert state.equity_curve[-1]["holdings"] == 0
+        else:
+            assert state.trades == [] and state.cash == 2_000
+            assert asdict(state.positions[code]) == {**before, "peak": 101}
+            assert state.equity_curve[-1]["holdings"] == 10_100
 
 
 def test_v7_names_flatten_uses_window_end_name_for_earlier_day():

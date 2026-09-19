@@ -37,14 +37,20 @@ def test_session_prev_close_maps_exdiv_then_limit_band():
 
 
 def test_skip_buy_and_defer_sell_use_shared_hits():
-    limits = (11.0, 9.0)
-    assert skip_buy_at_limit(11.0, limits)
-    assert hit_limit_up(11.0, 11.0)
-    assert not skip_buy_at_limit(10.9, limits)
-    assert defer_sell_at_limit(9.0, limits)
-    assert hit_limit_down(9.0, 9.0)
-    assert not defer_sell_at_limit(9.1, limits)
-    assert not skip_buy_at_limit(11.0, None)
+    # Real Decimal HALF_UP calculation: 1.65 * 1.1/0.9 -> 1.82/1.49.
+    limits = session_limit_prices("600000.SH", 1.65)
+    assert limits == (1.82, 1.49)
+    for price in (1.82, 1.83):
+        assert skip_buy_at_limit(price, limits)
+        assert hit_limit_up(price, limits[0])
+    for price in (1.49, 1.48):
+        assert defer_sell_at_limit(price, limits)
+        assert hit_limit_down(price, limits[1])
+    assert not skip_buy_at_limit(1.81, limits)
+    assert not defer_sell_at_limit(1.50, limits)
+    for price in (1.48, 1.49, 1.82, 1.83):
+        assert not skip_buy_at_limit(price, None)
+        assert not defer_sell_at_limit(price, None)
 
 
 @pytest.mark.parametrize("raw,mapped,limits", [

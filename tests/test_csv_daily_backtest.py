@@ -915,6 +915,61 @@ def test_unknown_board_skips_buy():
     assert st.stats["buys"] == 0
 
 
+@pytest.mark.parametrize("context", ["no_previous_close", "unknown_board", "known_board"])
+@pytest.mark.parametrize("cash", [1_205, 1_204.99], ids=["exact-floor-cash", "one-fen-short"])
+def test_d4_step_none_limits_rejects_before_floor_cash_gate(context, cash, monkeypatch):
+    code = "999999.SZ" if context == "unknown_board" else "600000.SH"
+    day = "20251103"
+    prices = [12] if context == "no_previous_close" else [11.5, 12]
+    dates = [day] if context == "no_previous_close" else ["20251031", day]
+    bars = {code: pd.DataFrame({key: prices for key in ("open", "high", "low", "close")},
+                               index=pd.to_datetime(dates), dtype=float)}
+    real_init, real_step = sim.init_sim_state, sim.run_step_adds_day
+    steps = []
+
+    def seed_held(*args, **kwargs):
+        state, pending, names = real_init(*args, **kwargs)
+        # Synthetic same-day parent isolates step from held sells. No pool/chase.
+        state.positions[code] = [sim.Position(code, 100, 10, 0, 10)]
+        return state, pending, names
+
+    def observe_step(state, **kwargs):
+        assert kwargs["qlib_limit_pct"] is None  # Named-band premise, not fixed qlib band.
+        assert kwargs["sizing"] == "per_name"
+        assert kwargs["step_add"](state.positions[code], 12) is True
+        before = state.stats["skip_unknown_board"]
+        real_step(state, **kwargs)
+        steps.append((before, state.stats["skip_unknown_board"]))
+
+    monkeypatch.setattr(sim, "init_sim_state", seed_held)
+    monkeypatch.setattr(sim, "run_step_adds_day", observe_step)
+    state = sim.simulate(bars, {}, day, day, strategy="version8", name_budget=1_200,
+                         total_cash=cash, buy_cost_rate=0.0005, min_cost=5)
+    assert steps == ([(1, 2)] if context == "unknown_board" else [(0, 0)])
+    assert state.positions[code][0] == sim.Position(code, 100, 10, 0, 10)
+    assert state.stats["pool_days"] == 0 and state.stats["chase_buy"] == 0
+    assert state.stats["skip_limit_up"] == state.stats["skip_buy_gate"] == 0
+    assert state.daily_quota_used == 0
+    fills = [t for t in state.trades if t["side"] in ("BUY", "SELL")]
+    filled = context == "known_board" and cash == 1_205
+    assert state.stats["buys"] == state.stats["add_lots"] == int(filled)
+    assert state.stats.get("skip_cash", 0) == int(context == "known_board" and not filled)
+    if filled:
+        assert fills == [{"date": day, "code": code, "side": "BUY", "price": 12,
+                          "shares": 100, "notional": 1_200, "commission": 5,
+                          "reason": "add:step20", "lot": 1}]
+        assert state.positions[code][1] == sim.Position(code, 100, 12, 0, 12,
+                                                       lot_id=1, is_step=True)
+        assert state.cash == 0
+    else:
+        assert fills == [] and state.cash == cash
+        assert state.positions[code] == [sim.Position(code, 100, 10, 0, 10)]
+    marks = [t for t in state.trades if t["side"] == "EOD_MARK"]
+    assert len(marks) == 1 + int(filled)
+    assert all(t["shares"] == 100 and t["price"] == 12 for t in marks)
+    assert state.equity_curve[-1][1] == state.cash + 1_200 * (1 + int(filled))
+
+
 def test_st_name_uses_five_percent_limit_up():
     rows = {
         "600000.SH": [
