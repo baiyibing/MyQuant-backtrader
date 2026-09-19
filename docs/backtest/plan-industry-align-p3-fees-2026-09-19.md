@@ -1,7 +1,7 @@
 # Plan: industry-align P3 delta1 fee contract (2026-09-19)
 
-> **Status**: Proposed (docs-only ship for #112 deferred P3). No production Python edits in this PR.
-> **Main ship (single implementable ship this round)**: **delta1** - research fee / stamp-tax explicit contract for CSV daily/minute engines.
+> **Status**: Proposed v0.2 (errata-applied docs-only ship for #112 deferred P3). No production Python edits in this PR.
+> **Main ship (single implementable ship this round)**: **delta1** - research fee contract + stamp-tax boundary clarity for CSV daily/minute engines.
 > **IMPLEMENTATION_BASE (origin/master full SHA after fetch)**: `c65b10dd6d26342bd9ec1cbed5465d875f82470f`.
 > **Host intent lock**: Explicitly park **P1** (14:57 fill window), **P2** (trades columns), **P4** (touch<->mark coupling) this round.
 > **Default recommendation**: zero behavior change (document as-built; add/extend data-free tests only).
@@ -10,7 +10,7 @@
 
 ## 0) One-line scope
 
-Make research-engine fee semantics explicit and testable (FeeSchedule / defaults / asymmetry / floor behavior), while keeping current fill prices, reasons, shares, and NAV behavior unchanged by default.
+Make research-engine fee semantics explicit and testable (FeeSchedule / defaults / asymmetry / floor behavior), while keeping current fill prices, reasons, shares, and NAV behavior unchanged by default and keeping stamp/transfer outside research hot path.
 
 ---
 
@@ -63,7 +63,7 @@ This is the existing boundary to preserve: research fee SSOT stays local to `bac
 
 | Delta ship | Scope summary | This PR |
 |---|---|---|
-| **delta1 (main ship this round)** | Research fee / stamp-tax explicit contract: `FeeSchedule`, `BILATERAL_10BP`, `QLIB_PORTANA`, `trade_commission`, and daily/minute/v7 consumption map | **YES (plan only)** |
+| **delta1 (main ship this round)** | Research fee contract + stamp-tax boundary clarity: `FeeSchedule`, `BILATERAL_10BP`, `QLIB_PORTANA`, `trade_commission`, and daily/minute/v7 consumption map | **YES (plan only)** |
 | delta2 | Ex-div / lot-cost rescale as-built contract refinements (note E-R6 already covers core behavior; do not redo) | **NOT this PR** |
 | delta3 | ST PIT alignment (book as-of vs v7 window-end semantics) | **NOT this PR** |
 | delta4 | v7 `limits=None` fail-open policy changes (already contractualized in next plan) | **NOT this PR** |
@@ -78,7 +78,7 @@ This is the existing boundary to preserve: research fee SSOT stays local to `bac
 | **F-R1** | Docs/tests only by default; no production behavior change to fill price, reason, shares, NAV. |
 | **F-R2** | Keep research default as current unless a later human cut reopens it (`BILATERAL_10BP` remains default). |
 | **F-R3** | Document current buy/sell asymmetry and min-floor behavior exactly as built; do not silently normalize schedules across engines. |
-| **F-R4** | Do not invent a new stamp-tax booking line unless code already has it on research path; document current placement semantics only. |
+| **F-R4** | Research path remains commission-only booking at current call sites; do not invent a separate stamp-tax runtime booking line. |
 | **F-R5** | Preserve boundary: no `trade_fee_policy` import into research simulate hot path. |
 | **F-R6** | Keep P1/P2/P4 out-of-scope in this ship; no 14:57 eligibility changes, no `trades.csv` schema changes, no touch<->mark coupling edits. |
 | **F-R7** | Keep all gates data-free for this ship; no backtests and no lake-dependent validation requirements. |
@@ -91,7 +91,7 @@ This is the existing boundary to preserve: research fee SSOT stays local to `bac
 | ID | Decision point | Default recommendation | As-built evidence to preserve |
 |---|---|---|---|
 | **P3.1** | Research default schedule: keep bilateral 10bp vs move default to qlib PortAna 5/15bp+min5 | **A = keep current `BILATERAL_10BP` default** | `ashare_fees.py:53-55`, `engine-ashare-correctness.md:13` |
-| **P3.2** | Stamp tax modeling: separate explicit line vs folded into existing sell-side rate semantics | **A = document current as-built, do not add new stamp line** | Ledger charges via shared `trade_commission` at buy/sell call-sites (`csv_ledger.py:211`, `:244`) |
+| **P3.2** | Stamp-tax boundary wording in research docs (explicit line vs boundary-only contract text) | **A = boundary-only wording; keep as-built commission booking and no new stamp line** | `ashare_fees.py:9-10`; ledger charges via shared `trade_commission` at buy/sell call-sites (`csv_ledger.py:211`, `:244`) |
 | **P3.3** | Boundary enforcement: live broker fee policy vs research fee SSOT | **A = keep strict fence (no hot-path import)** | `test_ashare_simulate_import_fence.py:46-48`, `:70-76` |
 
 ---
@@ -121,7 +121,8 @@ This is the existing boundary to preserve: research fee SSOT stays local to `bac
 - Extend/add tests to pin:
   - default schedule identity (`DEFAULT_SCHEDULE is BILATERAL_10BP`),
   - formula parity on buy/sell charge points used by ledger/shared loop,
-  - daily qlib-cost override wiring remains explicit and opt-in.
+  - daily qlib-cost override wiring remains explicit and opt-in,
+  - daily/minute/v7 asymmetry remains explicit (book paths reject unknown-board limits while v7 keeps existing held-path fail-open behavior) via `tests/test_ashare_simulate_predicates.py`.
 - Keep all tests synthetic/data-free; no lake reads.
 
 ### Slice C (acceptance + freeze proof)
@@ -142,13 +143,21 @@ set -euo pipefail
 
 IMPLEMENTATION_BASE=c65b10dd6d26342bd9ec1cbed5465d875f82470f
 [[ "$IMPLEMENTATION_BASE" =~ ^[0-9a-f]{40}$ ]]
+git fetch origin master
+CURRENT_MASTER="$(git rev-parse origin/master)"
+[[ "$CURRENT_MASTER" =~ ^[0-9a-f]{40}$ ]]
+if [[ "$CURRENT_MASTER" != "$IMPLEMENTATION_BASE" ]]; then
+  echo "origin/master moved to $CURRENT_MASTER; keep IMPLEMENTATION_BASE pinned and document drift before changing it."
+  exit 1
+fi
 git cat-file -e "$IMPLEMENTATION_BASE^{commit}"
 git merge-base --is-ancestor "$IMPLEMENTATION_BASE" HEAD
 
 # 1) Targeted quick tests (delta1 contract surface, data-free)
 python3 -m pytest -q -m "not production and not benchmark" \
   tests/test_ashare_fees.py \
-  tests/test_ashare_simulate_import_fence.py
+  tests/test_ashare_simulate_import_fence.py \
+  tests/test_ashare_simulate_predicates.py
 
 # 2) Contract gates (runbook-aligned real scripts)
 python3 scripts/gates/verify_oskh_data_contract.py
@@ -156,13 +165,7 @@ python3 scripts/gates/verify_data_path_ssot.py
 python3 scripts/gates/verify_no_hardcoded_machine_paths.py
 python3 scripts/gates/verify_tr_bridge_import_ssot.py
 
-# 3) Common package gates bundle
-python3 scripts/run_common_package_contract_gates.py
-
-# 4) Stream execution bundle (run only when scope requires by runbook)
-python3 scripts/run_stream_execution_contract_bundle.py
-
-# 5) Production freeze proof
+# 3) Production freeze proof
 FROZEN_PRODUCTION_FILES=(
   backtest/research/ashare_fees.py
   backtest/research/csv_ledger.py
@@ -170,6 +173,10 @@ FROZEN_PRODUCTION_FILES=(
   backtest/research/csv_daily_backtest.py
   backtest/research/csv_minute_backtest.py
   backtest/research/csv_minute_backtest_v7.py
+  backtest/research/ashare_session.py
+  backtest/research/market_layer.py
+  backtest/research/csv_common.py
+  backtest/research/csv_artifacts.py
 )
 
 git diff --exit-code "$IMPLEMENTATION_BASE" HEAD -- "${FROZEN_PRODUCTION_FILES[@]}"
@@ -181,6 +188,7 @@ Pass criteria:
 
 - All executed commands exit with code 0.
 - No backtests are run.
+- No ghost script names are invoked.
 - Production freeze diffs remain zero unless a new human cut reopens behavior.
 
 ---
@@ -195,6 +203,10 @@ Pass criteria:
 | `backtest/research/csv_daily_backtest.py` | Daily qlib-cost override wiring and simulate behavior. |
 | `backtest/research/csv_minute_backtest.py` | Minute path should continue inheriting ledger defaults unless reopened. |
 | `backtest/research/csv_minute_backtest_v7.py` | Explicit `FeeSchedule` default usage on v7 path. |
+| `backtest/research/ashare_session.py` | T+1/limit predicates and session semantics must stay unchanged in delta1. |
+| `backtest/research/market_layer.py` | Board/ST limit-band SSOT; unknown-board `None` behavior must not drift. |
+| `backtest/research/csv_common.py` | Shared book-path limit wrapper semantics should remain unchanged. |
+| `backtest/research/csv_artifacts.py` | Keep `trades.csv` schema untouched (P2 lock). |
 
 Default editable surface for delta1: docs + data-free tests only.
 
@@ -211,4 +223,5 @@ Default editable surface for delta1: docs + data-free tests only.
 
 ## 11) Changelog
 
+- **v0.2 (2026-09-19)**: Applied adversarial errata E-01..E-05: removed ghost acceptance scripts in §8, tightened stamp-tax boundary wording to commission-only as-built research booking, added asymmetry pin test to quick suite, hardened `IMPLEMENTATION_BASE` tip check against fetched `origin/master`, and expanded freeze file set for P1/P2/P4 lock safety.
 - **v0.1 (2026-09-19)**: Initial docs-only P3 delta1 plan. Selects exactly one main ship (fee contract), parks P1/P2/P4, sets explicit `IMPLEMENTATION_BASE`, and defines data-free acceptance/freeze protocol.
