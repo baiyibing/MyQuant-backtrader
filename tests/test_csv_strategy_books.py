@@ -39,7 +39,7 @@ def test_registered_books_are_explicit():
     assert get_book("version4").peak_gap_min == 0
     assert get_book("version5").allow_add is False
     assert get_book("version5").peak_gap_min == 0
-    assert get_book("version6").allow_add is False
+    assert get_book("version6").allow_add is True
     assert get_book("version8").allow_add is True
     assert get_book("version8").peak_gap_min == 15
     assert get_book("version9").allow_add is False
@@ -73,11 +73,13 @@ def test_apply_version6_is_not_a_silent_fallback():
     hooks = apply_csv_strategy("version6")
     assert hooks["name"] == "version6"
     assert hooks["book"] == "v6"
-    assert hooks["allow_add"] is False
+    assert hooks["allow_add"] is True
     assert hooks["take_profit"] is not None
-    assert hooks["stop_pct"] == pytest.approx(0.06)
-    assert hooks["take_profit"](10.218, 10.0, 10.50, 1) == "trail:T+1"
-    assert hooks["take_profit"](10.222, 10.0, 10.50, 1) is None
+    assert hooks["stop_pct"] == pytest.approx(0.02)
+    assert hooks["take_profit"](10.15, 10.0, 10.50, 0) is None
+    assert hooks["take_profit"](10.15, 10.0, 10.50, 1) == "trail:band:lt6"
+    assert hooks["take_profit"](10.151, 10.0, 10.50, 1) is None
+    assert hooks["take_profit"](10.30, 10.0, 10.60, 1) == "trail:band:ge6"
 
 
 def test_apply_version5_has_no_stop_and_has_minute_clock():
@@ -192,8 +194,14 @@ def test_early_book_run_kwargs_stop_override(strategy):
 def per_name_hooks(monkeypatch):
     from dataclasses import replace
 
-    monkeypatch.setitem(BOOKS, "version8", replace(BOOKS["version8"], sizing="per_name"))
-    return apply_csv_strategy("version8")
+    monkeypatch.setitem(
+        BOOKS,
+        "version8",
+        replace(BOOKS["version8"], sizing="per_name", allow_add=True),
+    )
+    hooks = apply_csv_strategy("version8")
+    hooks["add_gate"] = lambda _lots, _px: True
+    return hooks
 
 
 def _money_state(hooks, cash=21_000_000):
@@ -203,18 +211,36 @@ def _money_state(hooks, cash=21_000_000):
 
 
 def _pool_buy(
-    st, hooks, codes, *, day_i=0, px=10, prev=10, pending=None,
-    ration="file_order", ration_seed=0, ds="20251103",
+    st,
+    hooks,
+    codes,
+    *,
+    day_i=0,
+    px=10,
+    prev=10,
+    pending=None,
+    ration="file_order",
+    ration_seed=0,
+    ds="20251103",
 ):
     from backtest.research.csv_simulate_loop import run_pool_buys_day
 
     run_pool_buys_day(
-        st, {} if pending is None else pending, day_i=day_i, day="2025-11-03",
-        ds=ds, pool_days={ds: codes}, daily_quota=1_000_000,
-        names={}, allow_add=hooks["allow_add"], buy_gate=None,
-        buy_quote_for=lambda code: (px, [prev]), sizing=hooks["sizing"],
+        st,
+        {} if pending is None else pending,
+        day_i=day_i,
+        day="2025-11-03",
+        ds=ds,
+        pool_days={ds: codes},
+        daily_quota=1_000_000,
+        names={},
+        allow_add=hooks["allow_add"],
+        buy_gate=None,
+        buy_quote_for=lambda code: (px, [prev]),
+        sizing=hooks["sizing"],
         name_budget=hooks["name_budget"],
-        ration=ration, ration_seed=ration_seed,
+        ration=ration,
+        ration_seed=ration_seed,
     )
 
 
@@ -228,8 +254,11 @@ def test_seeded_shuffle_is_stable_per_day_and_changes_cash_allocation(per_name_h
 
     shuffled_state = _money_state(per_name_hooks, 1_500_000)
     _pool_buy(
-        shuffled_state, per_name_hooks, codes,
-        ration="seeded_shuffle", ration_seed=0,
+        shuffled_state,
+        per_name_hooks,
+        codes,
+        ration="seeded_shuffle",
+        ration_seed=0,
     )
     assert [t["code"] for t in shuffled_state.trades] == ["600002.SH"]
 
@@ -284,11 +313,19 @@ def test_per_name_adds_held_code_as_new_lot(per_name_hooks):
 
 
 def test_per_name_force_min_cli_budget(per_name_hooks, tmp_path):
-    from backtest.research.csv_strategy_books import add_csv_backtest_common_args, csv_run_kwargs_from_args
+    from backtest.research.csv_strategy_books import (
+        add_csv_backtest_common_args,
+        csv_run_kwargs_from_args,
+    )
 
     ap = argparse.ArgumentParser()
-    add_csv_backtest_common_args(ap, repo=tmp_path, end_default="20260909",
-                                cash_total_default=21_000_000, daily_quota_default=1_000_000)
+    add_csv_backtest_common_args(
+        ap,
+        repo=tmp_path,
+        end_default="20260909",
+        cash_total_default=21_000_000,
+        daily_quota_default=1_000_000,
+    )
     args = ap.parse_args(["--strategy", "version8", "--name-budget", "3000"])
     hooks = apply_csv_strategy(**csv_run_kwargs_from_args(args))
     st = _money_state(hooks)
@@ -314,9 +351,16 @@ def test_per_name_chase_budget_and_terminal_outcomes(per_name_hooks, outcome):
         st.cash = 500_000
     elif outcome == "shares":
         pending["600000.SH"] = (0, 0)
-    run_chase_due_day(st, pending, day_i=1, day="2025-11-04", names={},
-                      allow_add=per_name_hooks["allow_add"], buy_gate=None,
-                      quotes_for=lambda code: (9.9, 10, [10]))
+    run_chase_due_day(
+        st,
+        pending,
+        day_i=1,
+        day="2025-11-04",
+        names={},
+        allow_add=per_name_hooks["allow_add"],
+        buy_gate=None,
+        quotes_for=lambda code: (9.9, 10, [10]),
+    )
     assert not pending
     assert st.daily_quota_used == 0
     if outcome == "held":
@@ -331,21 +375,36 @@ def test_per_name_chase_budget_and_terminal_outcomes(per_name_hooks, outcome):
         assert st.stats["chase_buy_fail_cash"] + st.stats["chase_buy_fail_shares"] == 1
 
 
-@pytest.mark.parametrize("strategy", ["version1", "version6"])
+@pytest.mark.parametrize("strategy", ["version1"])
 def test_daily_quota_trades_byte_identical(strategy):
-    """Anchors captured at 9f4303c, before slice A; never regenerate pre_er1."""
+    """Anchors captured at 9f4303c, before slice A; never regenerate pre_er1.
+
+    version6 已改为名单加仓 + 两档回撤，不再对照这份旧 golden。
+    """
     from pathlib import Path
     import runpy
     import pandas as pd
 
     fixture = Path(__file__).parent / "fixtures"
     helpers = runpy.run_path(str(fixture / "csv_engine_pre_er1/generate_snapshot.py"))
-    rows = {c: [(10,10.1,9.95,10), (10.4,10.6,10.2,10.45),
-                (10.3,10.5,10,10.05), (10,10.1,9.7,9.8), (9.8,9.9,9.6,9.7)]
-            for c in ("600000.SH", "000001.SZ")}
-    st = helpers["_run"](strategy, rows, {"20251103": list(rows), "20251104": list(rows)})
+    rows = {
+        c: [
+            (10, 10.1, 9.95, 10),
+            (10.4, 10.6, 10.2, 10.45),
+            (10.3, 10.5, 10, 10.05),
+            (10, 10.1, 9.7, 9.8),
+            (9.8, 9.9, 9.6, 9.7),
+        ]
+        for c in ("600000.SH", "000001.SZ")
+    }
+    st = helpers["_run"](
+        strategy, rows, {"20251103": list(rows), "20251104": list(rows)}
+    )
     actual = pd.DataFrame(st.trades).to_csv(index=False).encode("utf-8")
-    assert actual == (fixture / "money_modes_daily_quota" / f"{strategy}_trades.csv").read_bytes()
+    assert (
+        actual
+        == (fixture / "money_modes_daily_quota" / f"{strategy}_trades.csv").read_bytes()
+    )
     assert apply_csv_strategy(strategy, name_budget=3000)["name_budget"] == 1_000_000
     assert st.stats["sizing"] == "daily_quota"
 
@@ -364,8 +423,13 @@ def test_v8_daily_quota_history_keeps_allow_add(monkeypatch):
     from dataclasses import replace
 
     assert BOOKS["version8"].sizing == "per_name"
-    monkeypatch.setitem(BOOKS, "version8", replace(BOOKS["version8"], sizing="daily_quota"))
+    monkeypatch.setitem(
+        BOOKS,
+        "version8",
+        replace(BOOKS["version8"], sizing="daily_quota", allow_add=True),
+    )
     hooks = apply_csv_strategy("version8", stop_pct=0.20)
+    hooks["add_gate"] = lambda _lots, _px: True
     assert hooks["allow_add"] is True
     assert hooks["stop_pct"] == 0.20
     st = _money_state(hooks)

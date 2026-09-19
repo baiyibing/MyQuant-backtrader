@@ -1,171 +1,140 @@
 # -*- coding: utf-8 -*-
-"""策略 8 卖点纯函数。"""
+"""策略 8 卖点纯函数（stop10-max101-80-gap15-reserve-stale8 包）。"""
 
 from __future__ import annotations
 
-import pytest
-
 from datetime import date, timedelta
 
+import pytest
+
 from backtest.research.strategy8_rules import (
-    BAND1_MIN_MULT,
-    BAND_TRAIL_MIN_MULT,
+    ADD_STEP,
+    ALLOW_ADD,
+    DEFER_LIMIT_UP,
+    FLOOR_MULT,
+    KEEP_FRAC,
+    STALE_UNARMED_ONLY,
+    UNARMED_STOP_PCT,
     GIVEBACK_MULT,
+    INDEX_BLOCKS_ADD,
+    INDEX_GATE_ON,
     PEAK_GAP_MIN,
+    RESERVE_LIMIT_UP,
     STALE_DAYS,
     STOP_PCT,
+    TP_MIN_DAYS,
     allow_new_name_from_gate,
-    band_of,
     build_sse_ma10_block_new,
+    is_cyb_star_board,
     lot_budget,
     may_add,
-    never_armed,
+    step_add_due,
     stop_hits,
     take_profit_reason,
-    trigger_line,
+    trail_line,
 )
 
 COST = 10.0
 
 
-def _tp(px: float, peak: float, n_days: int = 2):
-    return take_profit_reason(px, COST, peak, n_days)
-
-
-def test_stop_hits_10pct():
+def test_book_constants():
     assert STOP_PCT == pytest.approx(0.10)
+    assert FLOOR_MULT == pytest.approx(1.01)
+    assert KEEP_FRAC == pytest.approx(0.80)
     assert PEAK_GAP_MIN == 15
-    assert BAND_TRAIL_MIN_MULT == pytest.approx(1.06)
-    assert BAND1_MIN_MULT == pytest.approx(0.0)
-    assert GIVEBACK_MULT == pytest.approx(0.0)
+    assert TP_MIN_DAYS == 1
     assert STALE_DAYS == 8
-    assert not stop_hits(9.011, 10.0)
-    assert stop_hits(8.989, 10.0)
-    assert not stop_hits(8.989, 10.0, stop_pct=0.11)
+    assert STALE_UNARMED_ONLY is False
+    assert UNARMED_STOP_PCT == pytest.approx(0.0)
+    assert ALLOW_ADD is True
+    assert INDEX_BLOCKS_ADD is False
+    assert INDEX_GATE_ON is True
+    assert GIVEBACK_MULT == pytest.approx(0.0)
+    assert ADD_STEP == pytest.approx(0.20)
+    assert RESERVE_LIMIT_UP is True
+    assert DEFER_LIMIT_UP is False
+    assert not stop_hits(9.01, 10.0)
+    assert stop_hits(8.99, 10.0)
 
 
-def test_band_of_price_compare_boundaries():
-    assert band_of(COST, 10.00) is None
-    assert band_of(COST, 10.59) == 1
-    assert band_of(COST, 10.61) == 2
-    assert band_of(COST, 11.49) == 2
-    assert band_of(COST, 11.50) == 3
-    assert band_of(COST, 14.99) == 3
-    assert band_of(COST, 15.00) == 4
-    assert band_of(COST, 19.99) == 4
-    assert band_of(COST, 20.00) == 5
-    assert band_of(COST, 30.00) == 5
+def test_stop_10_from_t1():
+    assert stop_hits(8.99, COST)
+    assert not stop_hits(9.01, COST)
+    assert take_profit_reason(8.99, COST, 12.00, 1) is None
 
 
-def test_vector_1_g_le_0_and_below_cost():
-    assert _tp(10.50, 10.00) is None
-    assert _tp(9.50, 10.00) is None
+def test_unarmed_below_floor_does_not_trail():
+    assert take_profit_reason(10.00, COST, 10.00, 0) is None
+    assert take_profit_reason(10.00, COST, 10.00, 1) is None
+    assert take_profit_reason(10.05, COST, 10.05, 1) is None
+    assert take_profit_reason(10.09, COST, 10.09, 1) is None
 
 
-def test_vector_0_6pct_no_band_trail():
-    assert _tp(10.09, 10.30) is None
-    assert _tp(10.20, 10.59) is None
-    assert _tp(10.00, 10.60) is None
-    assert band_of(COST, 10.59) == 1
+def test_just_armed_at_floor_exits():
+    assert take_profit_reason(10.10, COST, 10.10, 1) == "trail:max101_80"
+    assert trail_line(COST, 10.10) == pytest.approx(10.10)
 
 
-def test_vector_7_cross_6pct_to_band2_floor_2pct():
-    assert band_of(COST, 10.61) == 2
-    assert trigger_line(COST, 10.61, 2) == pytest.approx(10.20)
-    assert _tp(10.19, 10.61) == "trail:band:2"
-    assert _tp(10.21, 10.61) is None
+def test_keep80_after_runup():
+    # peak 12 → line = max(10.10, 10+1.6) = 11.60
+    assert trail_line(COST, 12.00) == pytest.approx(11.60)
+    assert take_profit_reason(11.61, COST, 12.00, 1) is None
+    assert take_profit_reason(11.60, COST, 12.00, 1) == "trail:max101_80"
+    assert take_profit_reason(11.00, COST, 12.00, 1) == "trail:max101_80"
 
 
-def test_vector_9_band2_plus_2pct():
-    assert trigger_line(COST, 10.80, 2) == pytest.approx(10.20)
-    assert trigger_line(COST, 11.49, 2) == pytest.approx(10.20)
-    assert _tp(10.21, 11.49) is None
-    assert _tp(10.20, 11.49) == "trail:band:2"
+def test_stale_at_8_when_unarmed():
+    assert take_profit_reason(10.05, COST, 10.05, 7) is None
+    assert take_profit_reason(10.05, COST, 10.05, 8) == "force_sell:stale"
 
 
-def test_vector_10_band3_global_15_keep60():
-    assert band_of(COST, 11.50) == 3
-    assert trigger_line(COST, 11.50, 3) == pytest.approx(11.50)
-    assert _tp(11.50, 11.50) == "trail:band:3"
-    assert _tp(11.51, 11.50) is None
-    assert trigger_line(COST, 12.00, 3) == pytest.approx(11.50)
-    assert trigger_line(COST, 13.00, 3) == pytest.approx(11.80)
-    assert _tp(11.80, 13.00) == "trail:band:3"
-    assert _tp(11.81, 13.00) is None
+def test_trail_beats_stale():
+    assert take_profit_reason(11.60, COST, 12.00, 8) == "trail:max101_80"
+    assert take_profit_reason(10.10, COST, 10.10, 8) == "trail:max101_80"
 
 
-def test_vector_14_band4_keep70():
-    assert band_of(COST, 15.00) == 4
-    assert trigger_line(COST, 15.00, 4) == pytest.approx(13.50)
-    assert _tp(13.50, 15.00) == "trail:band:4"
-    assert _tp(13.51, 15.00) is None
-    assert trigger_line(COST, 16.00, 4) == pytest.approx(14.20)
+def test_cyb_star_board():
+    assert is_cyb_star_board("300001.SZ")
+    assert is_cyb_star_board("688001.SH")
+    assert not is_cyb_star_board("600000.SH")
+    assert not is_cyb_star_board("002001.SZ")
 
 
-def test_vector_16_band5_keep80():
-    assert band_of(COST, 20.00) == 5
-    assert trigger_line(COST, 20.00, 5) == pytest.approx(18.00)
-    assert _tp(18.00, 20.00) == "trail:band:5"
-    assert _tp(18.01, 20.00) is None
+def test_lot_budget_is_full_name_budget():
+    assert lot_budget(1_000_000.0, []) == pytest.approx(1_000_000.0)
 
 
-def test_vector_19_below_cost_guard_across_bands():
-    assert _tp(9.90, 12.00) is None
-
-
-def test_vector_20_t0_blocked_t1_trails():
-    assert take_profit_reason(25.0, COST, 30.0, 0) is None
-    assert take_profit_reason(26.00, COST, 30.0, 1) == "trail:band:5"
-    assert take_profit_reason(26.01, COST, 30.0, 1) is None
-
-
-def test_vector_21_unit_peak_cross_15pct():
-    assert band_of(COST, 11.49) == 2
-    assert trigger_line(COST, 11.49, 2) == pytest.approx(10.20)
-    assert band_of(COST, 11.50) == 3
-    assert trigger_line(COST, 11.50, 3) == pytest.approx(11.50)
-    assert _tp(11.49, 11.50) == "trail:band:3"
-
-
-def test_take_profit_below_cost_is_none():
-    assert _tp(9.95, 13.0) is None
-    assert _tp(8.00, 10.00) is None
-
-
-def test_stale_8_never_armed():
-    assert never_armed(COST, 10.59)
-    assert not never_armed(COST, 10.61)
-    assert take_profit_reason(10.26, COST, 10.50, 7) is None
-    assert take_profit_reason(10.26, COST, 10.50, 8) == "force_sell:stale"
-    assert take_profit_reason(10.21, COST, 10.61, 8) is None
-
-
-def test_lot_budget_probe_then_add():
-    assert lot_budget(1_000_000.0, []) == pytest.approx(500_000.0)
-    assert lot_budget(1_000_000.0, [object()]) == pytest.approx(500_000.0)
-
-
-def test_may_add_only_winners_after_plus_3pct():
+def test_may_add_list_even_loser():
     class _P:
-        def __init__(self, cost, peak=None):
+        def __init__(self, cost):
             self.cost = cost
-            self.peak = cost if peak is None else peak
 
-    assert may_add([], 9.0)
-    assert not may_add([_P(10.0)], 10.5)
-    assert may_add([_P(10.0, 10.30)], 10.5)
-    assert not may_add([_P(10.0, 10.30)], 9.9)
-    assert not may_add([_P(10.0, 10.30), _P(11.0, 11.40)], 10.5)
+    assert not may_add([], 9.0)
+    assert may_add([_P(10.0)], 9.90)
+    assert may_add([_P(10.0)], 11.00)
 
 
-def test_sse_ma10_gate_is_lagged_and_allow_new_name_maps_it():
+def test_step_add_due_on_20pct():
+    class _P:
+        def __init__(self, cost, lot_id=0, is_step=False):
+            self.cost = cost
+            self.lot_id = lot_id
+            self.is_step = is_step
+
+    lot0 = _P(10.0, lot_id=0)
+    assert not step_add_due([lot0], 11.99)
+    assert step_add_due([lot0], 12.00)
+    assert not step_add_due([lot0, _P(12.0, lot_id=1, is_step=True)], 13.99)
+    assert step_add_due([lot0, _P(12.0, lot_id=1, is_step=True)], 14.00)
+
+
+def test_index_gate_helper_wires_when_on():
     days = [date(2026, 8, 1) + timedelta(days=i) for i in range(15)]
     values = [100.0] * 9 + [90.0, 89.0, 120.0, 120.0, 120.0, 120.0]
     gate = build_sse_ma10_block_new(dict(zip(days, values)))
     assert gate[days[11]] is True
-    assert gate[days[12]] is False
-    allow = allow_new_name_from_gate(gate)
-    assert allow(days[11]) is False
-    assert allow("20260813") is True
+    fn = allow_new_name_from_gate(gate)
+    assert fn is not None
+    assert fn(days[11]) is False
+    assert fn(days[0]) is True
     assert allow_new_name_from_gate(None) is None
-    assert allow_new_name_from_gate({})(days[0]) is True

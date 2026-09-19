@@ -9,13 +9,13 @@ import pytest
 
 import backtest.research.csv_minute_backtest as sim
 from backtest.research.csv_ledger import chase_explained
-from backtest.research.strategy8_rules import take_profit_reason
+from backtest.research.strategy8_rules import STOP_PCT, take_profit_reason
 
 
-def test_scan_gap_open_stop_30pct():
-    o = np.array([6.90, 7.00])
-    h = np.array([7.00, 7.10])
-    c = np.array([6.95, 7.05])
+def test_scan_touch_stop_10pct_from_t1():
+    o = np.array([9.20, 9.30])
+    h = np.array([9.30, 9.40])
+    c = np.array([8.99, 9.20])
     idx, px, reason, _, _ = sim.scan_held_day(
         o,
         h,
@@ -24,7 +24,30 @@ def test_scan_gap_open_stop_30pct():
         peak=10.0,
         n_days=1,
         can_sell=True,
-        stop_pct=0.30,
+        stop_pct=STOP_PCT,
+        profit_base=0.15,
+        trail_ratio=0.0,
+        peak_gap_min=0,
+        take_profit=take_profit_reason,
+    )
+    assert idx == 0
+    assert reason == "stop_loss:touch"
+    assert px == pytest.approx(8.99)
+
+
+def test_scan_gap_open_stop_10pct():
+    o = np.array([8.90, 9.00])
+    h = np.array([9.00, 9.10])
+    c = np.array([8.95, 9.05])
+    idx, px, reason, _, _ = sim.scan_held_day(
+        o,
+        h,
+        c,
+        cost=10.0,
+        peak=10.0,
+        n_days=1,
+        can_sell=True,
+        stop_pct=STOP_PCT,
         profit_base=0.15,
         trail_ratio=0.0,
         peak_gap_min=0,
@@ -32,7 +55,7 @@ def test_scan_gap_open_stop_30pct():
     )
     assert idx == 0
     assert reason == "stop_loss:gap_open"
-    assert px == pytest.approx(6.90)
+    assert px == pytest.approx(8.90)
 
 
 def test_scan_no_sell_when_t0():
@@ -47,7 +70,7 @@ def test_scan_no_sell_when_t0():
         peak=10.0,
         n_days=0,
         can_sell=False,
-        stop_pct=0.30,
+        stop_pct=STOP_PCT,
         profit_base=0.15,
         trail_ratio=0.0,
         peak_gap_min=0,
@@ -58,10 +81,32 @@ def test_scan_no_sell_when_t0():
     assert peak == pytest.approx(10.0)
 
 
-def test_scan_small_band_disarmed_tp_when_peak_only_1pct():
-    o = np.array([10.05, 10.04])
-    h = np.array([10.10, 10.06])
-    c = np.array([10.08, 10.05])
+def test_scan_unarmed_below_floor():
+    o = np.array([10.02, 10.03])
+    h = np.array([10.05, 10.06])
+    c = np.array([10.04, 10.05])
+    idx, _, reason, _, _ = sim.scan_held_day(
+        o,
+        h,
+        c,
+        cost=10.0,
+        peak=10.0,
+        n_days=1,
+        can_sell=True,
+        stop_pct=STOP_PCT,
+        profit_base=0.15,
+        trail_ratio=0.0,
+        peak_gap_min=0,
+        take_profit=take_profit_reason,
+    )
+    assert idx == -1
+    assert reason == ""
+
+
+def test_scan_trail_keep80_on_close():
+    o = np.array([11.80, 11.70])
+    h = np.array([12.00, 11.75])
+    c = np.array([11.80, 11.55])
     idx, px, reason, _, _ = sim.scan_held_day(
         o,
         h,
@@ -70,19 +115,21 @@ def test_scan_small_band_disarmed_tp_when_peak_only_1pct():
         peak=10.0,
         n_days=1,
         can_sell=True,
-        stop_pct=0.30,
+        stop_pct=STOP_PCT,
         profit_base=0.15,
         trail_ratio=0.0,
         peak_gap_min=0,
         take_profit=take_profit_reason,
     )
-    assert idx == -1  # T+1 止盈豁免
+    assert idx == 1
+    assert reason == "trail:max101_80"
+    assert px == pytest.approx(11.55)
 
 
-def test_scan_small_band_tp_on_close():
-    o = np.array([10.50, 10.30])
-    h = np.array([10.60, 10.35])
-    c = np.array([10.55, 10.199])
+def test_scan_peak_gap_15_blocks_then_fires():
+    o = np.array([11.80, 11.50, 11.50])
+    h = np.array([12.00, 11.55, 11.55])
+    c = np.array([11.50, 11.50, 11.50])
     idx, px, reason, _, _ = sim.scan_held_day(
         o,
         h,
@@ -91,57 +138,107 @@ def test_scan_small_band_tp_on_close():
         peak=10.0,
         n_days=1,
         can_sell=True,
-        stop_pct=0.30,
-        profit_base=0.15,
+        stop_pct=STOP_PCT,
+        profit_base=0.0,
         trail_ratio=0.0,
-        peak_gap_min=0,
+        hm=np.array([570, 580, 585]),
+        peak_gap_min=15,
         take_profit=take_profit_reason,
     )
-    assert idx == -1  # T+1 止盈豁免
+    assert idx == 2
+    assert reason == "trail:max101_80"
+    assert px == pytest.approx(11.50)
 
 
-@pytest.mark.skip(reason="Livermore T+1 trail on; master fixture expects T+1 exempt")
-def test_scan_band_tp_on_close():
-    o = np.array([12.80, 12.00])
-    h = np.array([13.00, 12.10])
-    c = np.array([12.90, 11.489])
+def test_scan_limit_up_reserves_then_open_board():
+    hooks = sim.apply_csv_strategy("version8")
     idx, px, reason, _, _ = sim.scan_held_day(
-        o,
-        h,
-        c,
+        np.array([11.0, 10.90]),
+        np.array([11.0, 10.95]),
+        np.array([11.0, 10.90]),
         cost=10.0,
         peak=10.0,
         n_days=1,
         can_sell=True,
-        stop_pct=0.30,
-        profit_base=0.15,
+        stop_pct=hooks["stop_pct"],
+        profit_base=0.0,
         trail_ratio=0.0,
+        hm=np.array([575, 581]),
         peak_gap_min=0,
-        take_profit=take_profit_reason,
+        take_profit=hooks["take_profit"],
+        gate_code="600000.SH",
+        reserve_limit_up=True,
+        defer_limit_up=False,
+        limit_up=11.0,
     )
-    assert idx == -1  # T+1 止盈豁免
+    assert idx == 1
+    assert reason == "open_board"
+    assert px == pytest.approx(10.90)
 
 
-@pytest.mark.skip(reason="Livermore T+1 trail on; master fixture expects T+1 exempt")
-def test_scan_peak_dd():
-    o = np.array([29.0, 24.0])
-    h = np.array([30.0, 24.2])
-    c = np.array([29.5, 23.90])
-    idx, px, reason, _, _ = sim.scan_held_day(
-        o,
-        h,
-        c,
+def test_scan_still_limit_up_after_window_holds():
+    hooks = sim.apply_csv_strategy("version8")
+    idx, _, reason, _, _ = sim.scan_held_day(
+        np.array([11.0, 11.0]),
+        np.array([11.0, 11.0]),
+        np.array([11.0, 11.0]),
         cost=10.0,
         peak=10.0,
         n_days=1,
         can_sell=True,
-        stop_pct=0.30,
+        stop_pct=hooks["stop_pct"],
+        profit_base=0.0,
+        trail_ratio=0.0,
+        hm=np.array([575, 581]),
+        peak_gap_min=0,
+        take_profit=hooks["take_profit"],
+        gate_code="600000.SH",
+        reserve_limit_up=True,
+        defer_limit_up=False,
+        limit_up=11.0,
+    )
+    assert idx == -1
+    assert reason == ""
+
+
+def test_scan_stale_8():
+    idx, px, reason, _, _ = sim.scan_held_day(
+        np.array([10.02]),
+        np.array([10.05]),
+        np.array([10.03]),
+        cost=10.0,
+        peak=10.05,
+        n_days=8,
+        can_sell=True,
+        stop_pct=STOP_PCT,
         profit_base=0.15,
         trail_ratio=0.0,
         peak_gap_min=0,
         take_profit=take_profit_reason,
     )
-    assert idx == -1  # T+1 止盈豁免（peak_dd 退役）
+    assert idx == 0
+    assert reason == "force_sell:stale"
+    assert px == pytest.approx(10.03)
+
+
+def test_scan_trail_beats_stale():
+    idx, px, reason, _, _ = sim.scan_held_day(
+        np.array([11.60]),
+        np.array([11.70]),
+        np.array([11.60]),
+        cost=10.0,
+        peak=12.00,
+        n_days=8,
+        can_sell=True,
+        stop_pct=STOP_PCT,
+        profit_base=0.15,
+        trail_ratio=0.0,
+        peak_gap_min=0,
+        take_profit=take_profit_reason,
+    )
+    assert idx == 0
+    assert reason == "trail:max101_80"
+    assert px == pytest.approx(11.60)
 
 
 def _day(date: str, rows: list[tuple]) -> pd.DataFrame:
@@ -231,7 +328,7 @@ def test_simulate_limit_up_abandons_when_945_below_open():
     assert chase_explained(st) == st.stats["skip_limit_up"]
 
 
-def test_simulate_held_name_adds_second_lot():
+def test_simulate_held_name_adds_second_lot_below_cost():
     dates = ["2025-11-03", "2025-11-04"]
     m = _day(
         "2025-11-03", [(930, 10.0, 10.1, 9.95, 10.0), (1455, 10.0, 10.05, 9.98, 10.0)]
@@ -239,46 +336,34 @@ def test_simulate_held_name_adds_second_lot():
     m2 = _day(
         "2025-11-04",
         [
-            (930, 10.20, 10.30, 10.10, 10.25),
-            (1455, 10.40, 10.50, 10.35, 10.45),
+            (930, 9.85, 9.95, 9.82, 9.88),
+            (1455, 9.90, 9.95, 9.85, 9.90),
         ],
     )
     minute = {"600000.SH": pd.concat([m, m2])}
-    daily = {"600000.SH": _daily(dates, [10.0, 10.45])}
+    daily = {"600000.SH": _daily(dates, [10.0, 9.90])}
     pool = {"20251103": ["600000.SH"], "20251104": ["600000.SH"]}
     st = sim.simulate(minute, daily, pool, "20251103", "20251104", strategy="version8")
     buys = [t for t in st.trades if t["side"] == "BUY"]
     assert [t["lot"] for t in buys] == [0, 1]
-    assert buys[0]["price"] == pytest.approx(10.0)
     assert st.stats["add_lots"] == 1
     assert st.stats["skip_held"] == 0
 
-    st6 = sim.simulate(minute, daily, pool, "20251103", "20251104", strategy="version6")
-    assert st6.stats["buys"] == 1
-    assert st6.stats["skip_held"] == 1
 
-
-def test_scan_peak_cross_15pct_tightens_to_global_floor():
-    """向量 #21 minute scan：反弹抬 peak 跨 15% 后按全局底 +15% 评。"""
-    o = np.array([11.45, 11.42])
-    h = np.array([11.49, 11.51])  # peak 11.49→11.51 跨入三档
-    c = np.array([11.45, 11.40])
-    idx, px, reason, peak, _ = sim.scan_held_day(
-        o,
-        h,
-        c,
-        cost=10.0,
-        peak=11.49,
-        n_days=2,
-        can_sell=True,
-        stop_pct=0.30,
-        profit_base=0.15,
-        trail_ratio=0.0,
-        peak_gap_min=0,
-        take_profit=take_profit_reason,
+def test_simulate_held_name_adds_when_below_target():
+    dates = ["2025-11-03", "2025-11-04"]
+    m = _day(
+        "2025-11-03", [(930, 10.0, 10.1, 9.95, 10.0), (1455, 10.0, 10.05, 9.98, 10.0)]
     )
-    assert idx == 1
-    assert reason == "trail:band:3"
-    assert px == pytest.approx(11.40)
-    assert peak == pytest.approx(11.51)
-
+    m2 = _day(
+        "2025-11-04",
+        [(930, 10.02, 10.05, 10.00, 10.03), (1455, 10.03, 10.06, 10.00, 10.04)],
+    )
+    minute = {"600000.SH": pd.concat([m, m2])}
+    daily = {"600000.SH": _daily(dates, [10.0, 10.04])}
+    pool = {"20251103": ["600000.SH"], "20251104": ["600000.SH"]}
+    st = sim.simulate(minute, daily, pool, "20251103", "20251104", strategy="version8")
+    buys = [t for t in st.trades if t["side"] == "BUY"]
+    assert [t["lot"] for t in buys] == [0, 1]
+    assert st.stats["add_lots"] == 1
+    assert st.stats["skip_held"] == 0

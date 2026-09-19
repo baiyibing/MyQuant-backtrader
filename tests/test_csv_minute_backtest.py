@@ -523,7 +523,11 @@ def test_pool_name_asof_normal_then_st_and_by_day_beats_flat_map(monkeypatch):
     from dataclasses import replace
     from backtest.research.csv_strategy_books import BOOKS
 
-    monkeypatch.setitem(BOOKS, "version8", replace(BOOKS["version8"], sizing="daily_quota"))
+    monkeypatch.setitem(
+        BOOKS,
+        "version8",
+        replace(BOOKS["version8"], sizing="daily_quota", allow_add=True),
+    )
     dates = ["2025-11-03", "2025-11-04"]
     m0 = _day(
         dates[0],

@@ -1,6 +1,6 @@
 import pandas as pd
 
-from backtest.research import strategy8_rules as s8
+from backtest.research import livermore_exit_rules as s8
 from backtest.research import unified_exit_modea as a
 from backtest.research import unified_exit_modeb as b
 
@@ -111,7 +111,7 @@ def test_l3_still_stales_unarmed():
     assert er.reason == "force_sell:stale" and er.hold_sessions == 8
 
 
-def test_l2_reason_matches_v8_function():
+def test_l2_reason_matches_frozen_livermore():
     cost, peak, px = 100.0, 107.0, 101.5
     assert s8.take_profit_reason(px, cost, peak, 2) == "trail:band:2"
     assert s8.never_armed(100.0, 105.0)

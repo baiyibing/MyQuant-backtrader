@@ -100,7 +100,8 @@ def apply_csv_strategy(strategy: str, **kwargs) -> dict:
     hooks = dict(book.apply(**kwargs))
     hooks["sizing"] = book.sizing
     hooks["name_budget"] = (
-        float(name_budget) if book.sizing == "per_name" and name_budget is not None
+        float(name_budget)
+        if book.sizing == "per_name" and name_budget is not None
         else book.name_budget
     )
     hooks["ration"] = ration
@@ -113,12 +114,15 @@ def apply_csv_strategy(strategy: str, **kwargs) -> dict:
     hooks.setdefault("buy_gate", None)
     hooks.setdefault("add_gate", None)
     hooks.setdefault("allow_new_name", None)
+    hooks.setdefault("index_blocks_add", True)
     hooks.setdefault("sell_gate", None)
     hooks.setdefault("reserve_limit_up", False)
+    hooks.setdefault("defer_limit_up", False)
     hooks.setdefault("daily_same_bar_prefixes", ("open_board",))
     hooks.setdefault("planned_for_day", None)
     hooks.setdefault("bind_opening_held", None)
     hooks.setdefault("name_lot_budget", None)
+    hooks.setdefault("step_add", None)
     hooks.setdefault("cash_deploy_frac", None)
     hooks.setdefault("qlib_limit_pct", None)
     hooks.setdefault("limit_up_chase", True)
@@ -136,7 +140,12 @@ def apply_csv_strategy(strategy: str, **kwargs) -> dict:
         st.stats["name_budget"] = hooks["name_budget"]
         st.stats["ration"] = hooks["ration"]
         st.stats["ration_seed"] = hooks["ration_seed"]
-        for key in ("skip_cash", "skip_cash_notional", "chase_buy_fail_cash", "chase_buy_fail_shares"):
+        for key in (
+            "skip_cash",
+            "skip_cash_notional",
+            "chase_buy_fail_cash",
+            "chase_buy_fail_shares",
+        ):
             st.stats.setdefault(key, 0)
 
     hooks["record_params"] = record_money_params
@@ -171,7 +180,7 @@ def add_strategy6_ratio_args(ap: argparse.ArgumentParser) -> None:
         "--stop-pct",
         type=float,
         default=None,
-        help="stop-loss fraction override (v6 0.06, v8 0.10, v9 0.08)",
+        help="stop-loss fraction override (v6 0.06, v8 0.20, v9 0.08)",
     )
     ap.add_argument(
         "--profit-base",
@@ -209,7 +218,6 @@ def add_strategy6_ratio_args(ap: argparse.ArgumentParser) -> None:
         default=strategy6_rules.TIER_DEFAULT,
         help=f"version6 T+5+ retain ratio (default {strategy6_rules.TIER_DEFAULT:g})",
     )
-
 
 
 def add_topk_dropout_args(ap: argparse.ArgumentParser) -> None:
@@ -290,13 +298,24 @@ def add_csv_backtest_common_args(
         ap.add_argument("--end", default=end_default, help=end_help)
     ap.add_argument("--cash-total", type=float, default=cash_total_default)
     ap.add_argument("--daily-quota", type=float, default=daily_quota_default)
-    ap.add_argument("--name-budget", type=float, default=1_000_000.0,
-                    help="per-name budget; effective only for per_name strategy books")
-    ap.add_argument("--ration", choices=("file_order", "seeded_shuffle"),
-                    default="file_order",
-                    help="capital-ration order (default: file_order)")
-    ap.add_argument("--ration-seed", type=int, default=0,
-                    help="base seed for seeded_shuffle; derived independently per date")
+    ap.add_argument(
+        "--name-budget",
+        type=float,
+        default=1_000_000.0,
+        help="per-name budget; effective only for per_name strategy books",
+    )
+    ap.add_argument(
+        "--ration",
+        choices=("file_order", "seeded_shuffle"),
+        default="file_order",
+        help="capital-ration order (default: file_order)",
+    )
+    ap.add_argument(
+        "--ration-seed",
+        type=int,
+        default=0,
+        help="base seed for seeded_shuffle; derived independently per date",
+    )
     ap.add_argument("--workers", type=int, default=workers_default)
     ap.add_argument("--pool-dir", type=Path, default=Path(repo) / "stock_pool")
     add_csv_strategy_arg(ap)
@@ -506,24 +525,14 @@ def _apply_version6(
     tier_default: Optional[float] = None,
     **_,
 ) -> dict:
+    del profit_base, tiers, tier_default
     resolved_stop = strategy6_rules.STOP_PCT if stop_pct is None else float(stop_pct)
-    pb = strategy6_rules.PROFIT_BASE if profit_base is None else float(profit_base)
-    tier_map = dict(tiers or strategy6_rules.TIERS)
-    td = strategy6_rules.TIER_DEFAULT if tier_default is None else float(tier_default)
 
     def _tp(px, cost, peak, n_days=1):
-        return strategy6_rules.take_profit_reason(
-            px, cost, peak, n_days, profit_base=pb, tiers=tier_map, tier_default=td
-        )
+        return strategy6_rules.take_profit_reason(px, cost, peak, n_days)
 
     def _rec(st):
-        strategy6_rules.record_strategy6_params(
-            st,
-            stop_pct=resolved_stop,
-            profit_base=pb,
-            tiers=tier_map,
-            tier_default=td,
-        )
+        strategy6_rules.record_strategy6_params(st, stop_pct=resolved_stop)
 
     return {
         "stop_pct": resolved_stop,
@@ -556,8 +565,15 @@ def _apply_version8(
         ),
         "record_params": record_params if record_params is not None else _rec,
         "add_gate": strategy8_rules.may_add,
+        "step_add": (
+            strategy8_rules.step_add_due if strategy8_rules.ADD_STEP > 0 else None
+        ),
         "name_lot_budget": strategy8_rules.lot_budget,
         "allow_new_name": strategy8_rules.allow_new_name_from_gate(index_block_new),
+        "index_blocks_add": strategy8_rules.INDEX_BLOCKS_ADD,
+        "reserve_limit_up": strategy8_rules.RESERVE_LIMIT_UP,
+        "defer_limit_up": strategy8_rules.DEFER_LIMIT_UP,
+        "daily_same_bar_prefixes": ("open_board",),
     }
 
 
@@ -600,25 +616,30 @@ def _apply_version10(
     tier_default: Optional[float] = None,
     **_,
 ) -> dict:
-    hooks = _apply_version6(
-        stop_pct=stop_pct,
-        take_profit=take_profit,
-        record_params=record_params,
-        profit_base=profit_base,
-        tiers=tiers,
-        tier_default=tier_default,
-    )
-    if record_params is not None:
-        return hooks
-    inner = hooks["record_params"]
+    resolved_stop = strategy10_rules.STOP_PCT if stop_pct is None else float(stop_pct)
+    pb = strategy10_rules.PROFIT_BASE if profit_base is None else float(profit_base)
+    tier_map = dict(tiers or strategy10_rules.TIERS)
+    td = strategy10_rules.TIER_DEFAULT if tier_default is None else float(tier_default)
+
+    def _tp(px, cost, peak, n_days=1):
+        return strategy10_rules.take_profit_reason(
+            px, cost, peak, n_days, profit_base=pb, tiers=tier_map, tier_default=td
+        )
 
     def _rec(st):
-        inner(st)
-        st.stats["sell_book"] = strategy10_rules.BOOK_TAG
-        st.stats["sell_logic"] = "version6"
+        strategy10_rules.record_strategy10_params(
+            st,
+            stop_pct=resolved_stop,
+            profit_base=pb,
+            tiers=tier_map,
+            tier_default=td,
+        )
 
-    hooks["record_params"] = _rec
-    return hooks
+    return {
+        "stop_pct": resolved_stop,
+        "take_profit": take_profit if take_profit is not None else _tp,
+        "record_params": record_params if record_params is not None else _rec,
+    }
 
 
 def _run_kwargs_version10(args) -> dict:
@@ -641,9 +662,7 @@ def _apply_topk_dropout(
             "topk_dropout fail-closed: scores_by_day required "
             "(pass --pred-csv or --scores-dir)"
         )
-    topk_i = (
-        strategy_topk_dropout_rules.DEFAULT_TOPK if topk is None else int(topk)
-    )
+    topk_i = strategy_topk_dropout_rules.DEFAULT_TOPK if topk is None else int(topk)
     n_drop_i = (
         strategy_topk_dropout_rules.DEFAULT_N_DROP if n_drop is None else int(n_drop)
     )

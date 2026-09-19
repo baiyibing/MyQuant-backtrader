@@ -302,7 +302,7 @@ def test_version6_keeps_limit_up_chase_hook():
 
 def test_version6_golden_stop_pct_unchanged():
     hooks = apply_csv_strategy("version6")
-    assert hooks["stop_pct"] == pytest.approx(0.06)
+    assert hooks["stop_pct"] == pytest.approx(0.02)
     assert BOOKS["version6"].name == "version6"
 
 

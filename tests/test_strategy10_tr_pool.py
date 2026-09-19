@@ -186,12 +186,15 @@ def test_version10_reuses_version6_sells_and_refuses_stock_pool(tmp_path):
     hooks10 = apply_csv_strategy("version10")
     assert hooks10["name"] == "version10"
     assert hooks10["book"] == "v10"
-    assert hooks10["stop_pct"] == hooks6["stop_pct"]
+    assert hooks10["stop_pct"] == pytest.approx(0.06)
+    assert hooks6["stop_pct"] == pytest.approx(0.02)
     assert hooks10["allow_add"] is False
+    assert hooks6["allow_add"] is True
     assert hooks10["peak_gap_min"] == hooks6["peak_gap_min"]
-    assert hooks10["take_profit"](10.218, 10.0, 10.50, 1) == hooks6["take_profit"](
-        10.218, 10.0, 10.50, 1
-    )
+    assert hooks10["take_profit"](10.218, 10.0, 10.50, 1) == "trail:T+1"
+    assert hooks10["take_profit"](10.222, 10.0, 10.50, 1) is None
+    assert hooks6["take_profit"](10.15, 10.0, 10.50, 1) == "trail:band:lt6"
+    assert hooks6["take_profit"](10.15, 10.0, 10.50, 0) is None
     repo = tmp_path / "repo"
     (repo / "stock_pool").mkdir(parents=True)
     with pytest.raises(SystemExit, match="stock_pool"):

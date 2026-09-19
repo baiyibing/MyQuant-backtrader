@@ -62,12 +62,17 @@ def _v4_bars(prior_closes, rows):
     prior_idx = pd.bdate_range(end="2025-10-31", periods=len(prior_closes))
     trade_idx = pd.to_datetime(DAYS[: len(rows)])
     closes = list(prior_closes) + [r[3] for r in rows]
-    return {"600000.SH": pd.DataFrame({
-        "open": list(prior_closes) + [r[0] for r in rows],
-        "high": list(prior_closes) + [r[1] for r in rows],
-        "low": list(prior_closes) + [r[2] for r in rows],
-        "close": closes,
-    }, index=prior_idx.append(trade_idx)).astype(np.float64)}
+    return {
+        "600000.SH": pd.DataFrame(
+            {
+                "open": list(prior_closes) + [r[0] for r in rows],
+                "high": list(prior_closes) + [r[1] for r in rows],
+                "low": list(prior_closes) + [r[2] for r in rows],
+                "close": closes,
+            },
+            index=prior_idx.append(trade_idx),
+        ).astype(np.float64)
+    }
 
 
 def test_read_one_daily_drops_zero_volume_rows(tmp_path):
@@ -174,7 +179,9 @@ def test_load_daily_bars_daily_root_overrides_ssot(tmp_path):
 
 def test_strategy4_sma10_blocks_buy_and_counts_gate():
     bars = _v4_bars([10.0] * 10, [(9.0, 9.0, 9.0, 9.0)])
-    st = sim.simulate(bars, {"20251103": ["600000.SH"]}, "20251103", "20251103", strategy="version4")
+    st = sim.simulate(
+        bars, {"20251103": ["600000.SH"]}, "20251103", "20251103", strategy="version4"
+    )
     assert st.stats["buys"] == 0
     assert st.stats["skip_buy_gate"] == 1
     assert st.stats["skip_sma_warmup"] == 0
@@ -182,7 +189,9 @@ def test_strategy4_sma10_blocks_buy_and_counts_gate():
 
 def test_strategy4_starved_sma10_counts_warmup():
     bars = _v4_bars([10.0] * 9, [(10.0, 10.0, 10.0, 10.0)])
-    st = sim.simulate(bars, {"20251103": ["600000.SH"]}, "20251103", "20251103", strategy="version4")
+    st = sim.simulate(
+        bars, {"20251103": ["600000.SH"]}, "20251103", "20251103", strategy="version4"
+    )
     assert st.stats["skip_buy_gate"] == 1
     assert st.stats["skip_sma_warmup"] == 1
 
@@ -190,7 +199,9 @@ def test_strategy4_starved_sma10_counts_warmup():
 def test_strategy4_ma5_break_becomes_next_open_exit():
     rows = [(10, 10, 10, 10), (10, 10, 9, 9), (9.1, 9.1, 9.1, 9.1)]
     bars = _v4_bars([10.0] * 10, rows)
-    st = sim.simulate(bars, {"20251103": ["600000.SH"]}, "20251103", "20251105", strategy="version4")
+    st = sim.simulate(
+        bars, {"20251103": ["600000.SH"]}, "20251103", "20251105", strategy="version4"
+    )
     sells = [trade for trade in st.trades if trade["side"] == "SELL"]
     assert sells[0]["date"] == "20251105"
     assert sells[0]["price"] == pytest.approx(9.1)
@@ -267,9 +278,7 @@ def test_none_stop_short_circuits_even_after_price_halves(monkeypatch):
     rows = {"600000.SH": [(10, 10, 10, 10)] + [(5, 5, 5, 5)] * 4}
     st = _run({"20251103": ["600000.SH"]}, _bars(DAYS, rows))
     assert not [
-        trade
-        for trade in st.trades
-        if trade.get("reason", "").startswith("stop_loss:")
+        trade for trade in st.trades if trade.get("reason", "").startswith("stop_loss:")
     ]
     assert "止损 关闭" in artifacts.summarize(st, 21_000_000, "20251103", "20251107")
 
@@ -298,13 +307,15 @@ def test_strategy5_daily_target_sells_next_open_without_force_reason():
 
 
 def test_strategy3_daily_limit_up_close_suppresses_twenty_percent_target():
-    rows = {"300001.SZ": [
-        (10.0, 10.0, 10.0, 10.0),
-        (12.0, 12.0, 12.0, 12.0),
-        (14.4, 14.4, 14.4, 14.4),
-        (17.28, 17.28, 17.28, 17.28),
-        (20.74, 20.74, 20.74, 20.74),
-    ]}
+    rows = {
+        "300001.SZ": [
+            (10.0, 10.0, 10.0, 10.0),
+            (12.0, 12.0, 12.0, 12.0),
+            (14.4, 14.4, 14.4, 14.4),
+            (17.28, 17.28, 17.28, 17.28),
+            (20.74, 20.74, 20.74, 20.74),
+        ]
+    }
     st = _run({"20251103": ["300001.SZ"]}, _bars(DAYS, rows), strategy="version3")
     assert not [trade for trade in st.trades if trade["side"] == "SELL"]
     assert st.positions["300001.SZ"][0].reserved is True
@@ -312,13 +323,15 @@ def test_strategy3_daily_limit_up_close_suppresses_twenty_percent_target():
 
 
 def test_strategy3_daily_open_board_sells_same_close():
-    rows = {"300001.SZ": [
-        (10.0, 10.0, 10.0, 10.0),
-        (12.0, 12.0, 10.8, 11.8),
-        (11.8, 11.8, 11.8, 11.8),
-        (11.8, 11.8, 11.8, 11.8),
-        (11.8, 11.8, 11.8, 11.8),
-    ]}
+    rows = {
+        "300001.SZ": [
+            (10.0, 10.0, 10.0, 10.0),
+            (12.0, 12.0, 10.8, 11.8),
+            (11.8, 11.8, 11.8, 11.8),
+            (11.8, 11.8, 11.8, 11.8),
+            (11.8, 11.8, 11.8, 11.8),
+        ]
+    }
     st = _run({"20251103": ["300001.SZ"]}, _bars(DAYS, rows), strategy="version3")
     sell = [trade for trade in st.trades if trade["side"] == "SELL"][0]
     assert sell["date"] == "20251104"
@@ -327,14 +340,16 @@ def test_strategy3_daily_open_board_sells_same_close():
 
 
 def test_strategy3_daily_open_board_limit_down_defers_to_next_open():
-    rows = {"300001.SZ": [
-        (10.0, 10.0, 10.0, 10.0),
-        # Synthetic low keeps the earlier stop clock from winning this U-R20 case.
-        (12.0, 12.0, 10.0, 8.0),
-        (8.2, 8.2, 8.2, 8.2),
-        (8.2, 8.2, 8.2, 8.2),
-        (8.2, 8.2, 8.2, 8.2),
-    ]}
+    rows = {
+        "300001.SZ": [
+            (10.0, 10.0, 10.0, 10.0),
+            # Synthetic low keeps the earlier stop clock from winning this U-R20 case.
+            (12.0, 12.0, 10.0, 8.0),
+            (8.2, 8.2, 8.2, 8.2),
+            (8.2, 8.2, 8.2, 8.2),
+            (8.2, 8.2, 8.2, 8.2),
+        ]
+    }
     st = _run({"20251103": ["300001.SZ"]}, _bars(DAYS, rows), strategy="version3")
     sell = [trade for trade in st.trades if trade["side"] == "SELL"][0]
     assert sell["date"] == "20251105"
@@ -379,6 +394,7 @@ def test_csv_strategy_version8_uses_shared_engine():
     assert hooks["stop_pct"] == pytest.approx(0.10)
     assert hooks["take_profit"] is not None
     assert hooks["allow_add"] is True
+    assert hooks["peak_gap_min"] == 15
     assert hooks["sizing"] == "per_name"
     assert hooks["name_budget"] == 1_000_000
     assert hooks["book"] == "v8"
@@ -418,46 +434,40 @@ def test_gap_open_stop_fills_at_open():
     assert sell["price"] == pytest.approx(9.4)
 
 
-def test_trail_t1_fires_and_exits_next_open():
+def test_trail_lt6_fires_from_t1_next_open():
     rows = {
         "600000.SH": [
             (10.0, 10.1, 9.95, 10.0),
-            (10.05, 10.50, 10.0, 10.218),  # 锚 1% 后超额 1.18% <= T+1 档 1.20% → 触发
-            (10.33, 10.35, 10.2, 10.25),
-            (10.2, 10.3, 10.1, 10.2),
-            (10.2, 10.25, 10.1, 10.15),
+            (10.05, 10.50, 10.0, 10.14),  # T+1 线 10.15 → pending
+            (10.20, 10.25, 10.10, 10.14),
+            (10.20, 10.25, 10.10, 10.18),
+            (10.15, 10.20, 10.10, 10.12),
         ]
     }
     st = _run({"20251103": ["600000.SH"]}, _bars(DAYS, rows))
     assert st.stats["sell_trail"] == 1
     sell = [t for t in st.trades if t["side"] == "SELL"][0]
-    assert sell["reason"] == "trail:T+1"
+    assert sell["reason"] == "trail:band:lt6"
     assert sell["date"] == "20251105"
-    assert sell["price"] == pytest.approx(10.33)
+    assert sell["price"] == pytest.approx(10.20)
 
 
-def test_trail_t2_fires_when_above_t1_threshold():
-    # 峰值 10.50（锚 1% 后超额 4%）：T+1 线超额 2%→10.30；T+2 线超额 1.6%→10.26
+def test_trail_ge6_fires_from_t1_next_open():
     rows = {
         "600000.SH": [
             (10.0, 10.1, 9.95, 10.0),
-            (10.05, 10.50, 10.0, 10.302),  # T+1 超额 2.02% > 2.00% → 不触发
-            (10.34, 10.40, 10.30, 10.258),  # T+2 超额 1.58% <= 1.60% → 触发
-            (10.30, 10.32, 10.20, 10.22),
+            (10.05, 10.60, 10.0, 10.29),  # T+1 线 10.30 → pending
+            (10.32, 10.40, 10.20, 10.30),
+            (10.28, 10.32, 10.20, 10.22),
             (10.20, 10.25, 10.10, 10.15),
         ]
     }
-    st = _run(
-        {"20251103": ["600000.SH"]},
-        _bars(DAYS, rows),
-        tiers={1: 0.50, 2: 0.40},
-        tier_default=0.30,
-    )
+    st = _run({"20251103": ["600000.SH"]}, _bars(DAYS, rows))
     assert st.stats["sell_trail"] == 1
     sell = [t for t in st.trades if t["side"] == "SELL"][0]
-    assert sell["reason"] == "trail:T+2"
-    assert sell["date"] == "20251106"
-    assert sell["price"] == pytest.approx(10.30)
+    assert sell["reason"] == "trail:band:ge6"
+    assert sell["date"] == "20251105"
+    assert sell["price"] == pytest.approx(10.32)
 
 
 def test_no_trail_when_close_below_cost():
@@ -465,7 +475,7 @@ def test_no_trail_when_close_below_cost():
     rows = {
         "600000.SH": [
             (10.0, 10.1, 9.95, 10.0),
-            (10.05, 10.50, 9.80, 9.95),  # T+1 收盘 < 成本，公式会火但不止盈
+            (10.05, 10.50, 9.85, 9.95),  # T+1 收盘 < 成本，公式会火但不止盈；低点避开 2% 止损
             (10.40, 10.45, 10.30, 10.40),  # 之后站上各档线
             (10.40, 10.45, 10.30, 10.40),
             (10.40, 10.45, 10.30, 10.40),
@@ -490,8 +500,8 @@ def test_no_trail_when_peak_not_above_1pct_anchor():
     rows = {
         "600000.SH": [
             (10.0, 10.05, 9.98, 10.0),
-            (10.02, 10.009, 10.0, 10.005),  # 峰值未过 +1%
-            (10.03, 10.006, 9.9, 9.95),
+            (10.02, 10.009, 10.0, 10.005),  # 微涨；T+1 线约 10.003，不触
+            (10.03, 10.006, 9.9, 9.95),  # 现价 < 成本，不止盈
             (9.95, 10.0, 9.85, 9.9),
             (9.9, 9.95, 9.81, 9.85),
         ]
@@ -503,21 +513,40 @@ def test_no_trail_when_peak_not_above_1pct_anchor():
 
 def test_entry_day_high_does_not_set_peak():
     # D0 high=10.50 发生在收盘买入之前，不得计入峰值。
-    # 若误用 D0 high：D1 close=10.005 相对 10.50 会立刻触发锚定回撤。
-    # 正确：峰值从 10.0 起，后续 high 未过 +1% 锚 → 不止盈。
+    # 若误用 D0 high：T+2 相对 10.50 的 70% 回撤线 10.15，收盘 10.008 会止盈。
+    # 正确：峰值从 10.0 起，T+1 高 10.009，线约 10.003，收盘 10.008 不触发。
     rows = {
         "600000.SH": [
             (10.0, 10.50, 9.95, 10.0),
-            (10.00, 10.009, 9.99, 10.005),
-            (10.00, 10.008, 9.99, 10.002),
-            (10.00, 10.007, 9.99, 10.001),
-            (10.00, 10.006, 9.99, 10.000),
+            (10.00, 10.009, 9.99, 10.008),
+            (10.00, 10.008, 9.99, 10.008),
+            (10.00, 10.007, 9.99, 10.008),
+            (10.00, 10.006, 9.99, 10.008),
         ]
     }
     st = _run({"20251103": ["600000.SH"]}, _bars(DAYS, rows))
     assert st.stats["sell_trail"] == 0
     assert st.stats["sell_pos_trail"] == 0
     assert any(t["side"] == "EOD_MARK" for t in st.trades)
+
+
+def test_held_name_adds_second_lot():
+    rows = {
+        "600000.SH": [
+            (10.0, 10.1, 9.95, 10.0),
+            (10.2, 10.5, 10.1, 10.3),
+            (9.90, 9.95, 9.85, 9.88),
+            (10.5, 10.6, 9.50, 10.50),
+            (10.0, 10.1, 9.8, 9.9),
+        ]
+    }
+    pool = {"20251103": ["600000.SH"], "20251105": ["600000.SH"]}
+    st = _run(pool, _bars(DAYS, rows))
+    buys = [t for t in st.trades if t["side"] == "BUY"]
+    assert [t["lot"] for t in buys] == [0, 1]
+    assert buys[1]["price"] == pytest.approx(9.88)
+    assert st.stats["add_lots"] == 1
+    assert st.stats["skip_held"] == 0
 
 
 def test_limit_up_close_skips_then_abandons_when_close_below_open():
@@ -799,7 +828,9 @@ def test_load_pool_days_reads_utf8_without_qmt_logger(tmp_path):
 
     p = tmp_path / "20251103.csv"
     p.write_text("000001,平安银行\n600000,浦发银行\n", encoding="utf-8", newline="\n")
-    days = load_pool_day_map(tmp_path, "20251103", "20251103", key="ymd", empty_in_map=False)
+    days = load_pool_day_map(
+        tmp_path, "20251103", "20251103", key="ymd", empty_in_map=False
+    )
     assert days["20251103"] == ["000001.SZ", "600000.SH"]
 
 
@@ -897,7 +928,11 @@ def test_st_name_uses_five_percent_limit_up():
     bars = _bars(DAYS, rows)
     pool = {"20251103": ["600000.SH"]}
     blocked = sim.simulate(
-        bars, pool, "20251103", "20251107", strategy="version6",
+        bars,
+        pool,
+        "20251103",
+        "20251107",
+        strategy="version6",
         pool_names={"600000.SH": "*ST 宁科"},
     )
     assert blocked.stats["skip_limit_up"] == 1
@@ -1020,9 +1055,7 @@ def test_zero_volume_placeholder_day_cannot_sell_or_buy_and_marks_last_close(
         ),
     )
     held = loader._read_one_daily("600000.SH", tmp_path, "20251031", "20251104")
-    candidate = loader._read_one_daily(
-        "600001.SH", tmp_path, "20251031", "20251104"
-    )
+    candidate = loader._read_one_daily("600001.SH", tmp_path, "20251031", "20251104")
     assert held is not None and candidate is not None
     # Loader-side filter: zero-volume placeholder rows are removed before simulate().
     assert pd.Timestamp("2025-11-04") not in held.index
@@ -1052,8 +1085,7 @@ def test_zero_volume_placeholder_day_cannot_sell_or_buy_and_marks_last_close(
 
     assert not any(trade["side"] == "SELL" for trade in st.trades)
     assert not any(
-        trade["side"] == "BUY" and trade["code"] == "600001.SH"
-        for trade in st.trades
+        trade["side"] == "BUY" and trade["code"] == "600001.SH" for trade in st.trades
     )
     assert st.stats["skip_no_bar"] == 1
     pos = st.positions["600000.SH"][0]
@@ -1068,9 +1100,7 @@ def test_zero_volume_placeholder_chase_day_stays_pending(tmp_path):
         "600000.SH",
         pd.DataFrame(
             {
-                "time": _daily_time_ms(
-                    "2025-10-31", "2025-11-03", "2025-11-04"
-                ),
+                "time": _daily_time_ms("2025-10-31", "2025-11-03", "2025-11-04"),
                 "open": [10.0, 10.5, 11.0],
                 "high": [10.0, 11.0, 11.0],
                 "low": [10.0, 10.5, 10.0],

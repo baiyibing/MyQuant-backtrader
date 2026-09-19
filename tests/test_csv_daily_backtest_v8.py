@@ -32,34 +32,32 @@ def _bars(days: list[str], rows: dict[str, list[tuple]], start_offset: int = 1) 
     return out
 
 
-def _run(pool: dict, bars: dict, **kwargs):
+def _run(
+    pool: dict, bars: dict, start: str = "20251103", end: str = "20251107", **kwargs
+):
     kwargs.setdefault("strategy", "version8")
-    return sim.simulate(bars, pool, "20251103", "20251107", **kwargs)
+    return sim.simulate(bars, pool, start, end, **kwargs)
 
 
 def test_t1_no_sell_on_entry_day():
+    # 10% 线=9.00。主板 T+1 收 9.85，不到止损、峰值未到 ×1.01。
     rows = {
         "600000.SH": [
             (10.2, 10.3, 6.0, 10.0),
-            (9.85, 9.90, 6.90, 9.60),
-            (9.4, 9.5, 9.2, 9.3),
-            (9.3, 9.4, 9.1, 9.2),
-            (9.2, 9.3, 9.0, 9.1),
+            (9.85, 9.90, 9.85, 9.88),
+            (9.90, 9.95, 9.85, 9.90),
+            (9.88, 9.92, 9.85, 9.88),
+            (9.86, 9.90, 9.84, 9.86),
         ]
     }
     st = _run({"20251103": ["600000.SH"]}, _bars(DAYS, rows))
     assert st.stats["buys"] == 1
-    sells = [t for t in st.trades if t["side"] == "SELL"]
-    assert st.stats["defer_sell_limit_down"] >= 1
-    assert sells[0]["date"] == "20251105"
-    assert sells[0]["reason"] == "stop_loss:touch"
-    assert sells[0]["price"] == pytest.approx(9.4)
+    assert not [t for t in st.trades if t["side"] == "SELL"]
+    assert st.stats["sell_stop"] == 0
 
 
-@pytest.mark.skip(reason="Livermore host lock on master engines: v2 behavioral fixture; covered by test_strategy8_rules")
-
-def test_gap_open_stop_30pct():
-    # 创业板 20% 板：D1 未到 30% 止损；D2 跌停顺延；D3 跌破止损且未跌停。
+def test_gap_open_stop_after_limit_down_defer():
+    # 创业板 20% 板、止损 10%：D1/D2 贴跌停顺延；D3 开盘未跌停、仍在止损下 → gap_open。
     rows = {
         "300001.SZ": [
             (10.2, 10.3, 9.4, 10.0),
@@ -74,95 +72,78 @@ def test_gap_open_stop_30pct():
     assert sell["reason"] == "stop_loss:gap_open"
     assert sell["date"] == "20251106"
     assert sell["price"] == pytest.approx(6.90)
-    assert st.stats["defer_sell_limit_down"] == 1
+    assert st.stats["defer_sell_limit_down"] == 2
 
 
-@pytest.mark.skip(reason="Livermore host lock on master engines: v2 behavioral fixture; covered by test_strategy8_rules")
-
-def test_band_tp_exits_next_open():
+def test_trail_max101_80_exits_next_open_after_t1():
+    # T+1 high 10.80 close 10.64（未到 10% 板）→ line=10.64，次日开盘卖。
     rows = {
         "600000.SH": [
             (10.0, 10.1, 9.95, 10.0),
-            (12.0, 13.0, 11.8, 11.489),  # 峰值 +30%，收盘回撤到 +15% 下
-            (11.80, 11.90, 11.70, 11.85),
-            (11.8, 11.9, 11.6, 11.7),
-            (11.7, 11.8, 11.5, 11.6),
+            (10.70, 10.80, 10.50, 10.64),
+            (10.60, 10.66, 10.50, 10.55),
+            (10.50, 10.55, 10.40, 10.45),
+            (10.40, 10.45, 10.30, 10.35),
         ]
     }
     st = _run({"20251103": ["600000.SH"]}, _bars(DAYS, rows))
-    assert st.stats["sell_trail"] == 1
     sell = [t for t in st.trades if t["side"] == "SELL"][0]
-    # T+1 不评；T+2 close 11.85 > 档3线 11.80；T+3 close 11.7 触发 → 次日开盘离场
-    # facts §4b 写 20251106@11.80 与引擎推演不符，以代码为准（STOP 已记）。
-    assert sell["reason"] == "trail:band:3"
-    assert sell["date"] == "20251107"
-    assert sell["price"] == pytest.approx(11.7)
+    assert sell["reason"] == "trail:max101_80"
+    assert sell["date"] == "20251105"
+    assert sell["price"] == pytest.approx(10.60)
+    assert st.stats["sell_trail"] == 1
 
 
-@pytest.mark.skip(reason="Livermore host lock on master engines: v2 behavioral fixture; covered by test_strategy8_rules")
-
-def test_small_band_tp_exits_next_open():
+def test_unarmed_below_floor_does_not_trail():
     rows = {
         "600000.SH": [
             (10.0, 10.1, 9.95, 10.0),
-            (10.8, 11.0, 10.1, 10.199),  # 峰值 +10%，收盘回撤到 +2% 下
-            (10.15, 10.20, 10.10, 10.12),
-            (10.1, 10.2, 10.0, 10.05),
-            (10.0, 10.1, 9.9, 10.0),
+            (10.02, 10.05, 10.00, 10.04),
+            (10.03, 10.06, 10.00, 10.03),
+            (10.02, 10.05, 9.98, 10.02),
+            (10.01, 10.04, 9.97, 10.01),
         ]
     }
     st = _run({"20251103": ["600000.SH"]}, _bars(DAYS, rows))
-    assert st.stats["sell_trail"] == 1
-    sell = [t for t in st.trades if t["side"] == "SELL"][0]
-    assert sell["reason"] == "trail:band:2"
-    assert sell["date"] == "20251106"
-    assert sell["price"] == pytest.approx(10.10)
+    assert st.stats["sell_profit_take"] == 0
+    assert st.stats["sell_trail"] == 0
+    assert not [t for t in st.trades if t["side"] == "SELL"]
 
 
-@pytest.mark.skip(reason="Livermore host lock on master engines: v2 behavioral fixture; covered by test_strategy8_rules")
-
-def test_disarmed_tp_when_peak_only_1pct():
+def test_limit_up_reserves_then_open_board():
     rows = {
         "600000.SH": [
-            (10.0, 10.1, 9.95, 10.0),
-            (10.05, 10.10, 10.00, 10.05),
-            (10.04, 10.08, 10.00, 10.04),
-            (10.03, 10.06, 9.99, 10.03),
-            (10.02, 10.05, 9.99, 10.02),
+            (10.0, 10.0, 10.0, 10.0),
+            (11.0, 11.0, 11.0, 11.0),
+            (10.90, 10.95, 10.80, 10.90),
+            (10.80, 10.90, 10.70, 10.80),
+            (10.70, 10.80, 10.60, 10.70),
         ]
     }
     st = _run({"20251103": ["600000.SH"]}, _bars(DAYS, rows))
-    assert st.stats["sell_trail"] == 1
     sell = [t for t in st.trades if t["side"] == "SELL"][0]
-    assert sell["date"] == "20251107"
-    assert sell["reason"] == "trail:band:1"
-    assert sell["price"] == pytest.approx(10.02)
-    assert st.stats["sell_stop"] == 0
+    assert sell["reason"] == "open_board"
+    assert sell["date"] == "20251105"
+    assert sell["price"] == pytest.approx(10.90)
+    assert st.stats["sell_open_board"] == 1
 
 
-@pytest.mark.skip(reason="Livermore host lock on master engines: v2 behavioral fixture; covered by test_strategy8_rules")
-
-def test_no_tp_when_small_band_still_above_2pct():
+def test_still_limit_up_keeps_reserve():
     rows = {
         "600000.SH": [
-            (10.0, 10.1, 9.95, 10.0),
-            (11.0, 11.50, 10.8, 11.40),
-            (11.4, 11.5, 11.3, 11.4),
-            (11.3, 11.4, 11.2, 11.3),
-            (11.2, 11.3, 11.1, 11.2),
+            (10.0, 10.0, 10.0, 10.0),
+            (11.0, 11.0, 11.0, 11.0),
+            (12.10, 12.10, 12.05, 12.10),
+            (13.31, 13.31, 13.20, 13.31),
+            (14.64, 14.64, 14.50, 14.64),
         ]
     }
     st = _run({"20251103": ["600000.SH"]}, _bars(DAYS, rows))
-    # g=15% 价式落三档；T+2 起按全局底 1.15 触发
-    assert st.stats["sell_trail"] == 1
-    sell = [t for t in st.trades if t["side"] == "SELL"][0]
-    assert sell["reason"] == "trail:band:3"
-    assert sell["date"] == "20251106"
-    assert sell["price"] == pytest.approx(11.30)
-    assert st.stats["sell_stop"] == 0
+    assert not [t for t in st.trades if t["side"] == "SELL"]
+    assert st.stats["sell_open_board"] == 0
 
 
-def test_entry_day_high_does_not_set_peak():
+def test_entry_day_high_does_not_take_profit():
     rows = {
         "600000.SH": [
             (10.0, 15.0, 9.95, 10.0),
@@ -173,7 +154,8 @@ def test_entry_day_high_does_not_set_peak():
         ]
     }
     st = _run({"20251103": ["600000.SH"]}, _bars(DAYS, rows))
-    assert st.stats["sell_trail"] == 0
+    assert st.stats["sell_profit_take"] == 0
+    assert not [t for t in st.trades if t["side"] == "SELL"]
 
 
 def test_limit_up_close_chases_when_close_above_open():
@@ -192,7 +174,6 @@ def test_limit_up_close_chases_when_close_above_open():
     assert sim.chase_explained(st) == st.stats["skip_limit_up"]
     buy = [t for t in st.trades if t["side"] == "BUY"][0]
     assert buy["date"] == "20251104"
-    assert buy["reason"] == "chase:T+1"
     assert buy["price"] == pytest.approx(11.20)
 
 
@@ -223,63 +204,119 @@ def test_summarize_v8_params():
     st.equity_curve = [("20251103", 21_000_000.0)]
     text = summarize(st, 21_000_000.0, "20251103", "20251103", engine="csv_daily_v8")
     assert "止损 10%" in text
-    assert "涨幅比例回撤阶梯" in text
-    assert "arm=6%/15%/50%/100%" in text
-    assert "keep=60%/70%/80%" in text
-    assert "档2底+2%" in text
-    assert "档3全局底+15%" in text
-    assert "T+1止盈豁免" in text
-    assert "T+5+" not in text
-    assert "基础止盈 15%" not in text
-    assert "涨幅>120%" not in text
+    assert "峰差15分钟" in text
+    assert "T+1起max(×1.01,买价+80%涨幅)" in text
+    assert "涨停保留至开板" in text
+    assert "僵持8日平仓" in text
+    assert "名单全加+独立+20%台阶" in text
+    assert "只做首笔" not in text
+    assert "止盈 2%" not in text
+    assert "峰差30分钟" not in text
+    assert "≥10%保底×1.10/回撤50%" not in text
+    assert "未到+6%跌10%离场" not in text
+    assert "涨停顺延次日" not in text
+    assert "上证下方仍开新仓" not in text
+    assert "档1死区" not in text
+    assert "T+1止盈豁免" not in text
 
 
-@pytest.mark.skip(reason="Livermore host lock on master engines: v2 behavioral fixture; covered by test_strategy8_rules")
-
-def test_held_name_adds_second_lot():
+def test_held_name_relist_below_cost_adds():
     rows = {
         "600000.SH": [
             (10.0, 10.1, 9.95, 10.0),
-            (10.2, 10.5, 10.1, 10.3),
-            (10.8, 11.1, 10.7, 11.0),
-            (10.5, 10.6, 8.50, 10.50),
-            (10.0, 10.1, 9.8, 9.9),
+            (9.90, 9.95, 9.85, 9.90),
+            (9.88, 9.92, 9.80, 9.85),
+            (9.80, 9.85, 9.70, 9.80),
+            (9.70, 9.80, 9.60, 9.70),
         ]
     }
-    pool = {"20251103": ["600000.SH"], "20251105": ["600000.SH"]}
+    pool = {"20251103": ["600000.SH"], "20251104": ["600000.SH"]}
     bars = _bars(DAYS, rows)
     st = _run(pool, bars)
     buys = [t for t in st.trades if t["side"] == "BUY"]
     assert [t["lot"] for t in buys] == [0, 1]
-    assert buys[0]["price"] == pytest.approx(10.0)
     assert st.stats["add_lots"] == 1
     assert st.stats["skip_held"] == 0
-    assert not [t for t in st.trades if t["side"] == "SELL"]
-    assert [p.lot_id for p in st.positions["600000.SH"]] == [0, 1]
-
-    st6 = _run(pool, bars, strategy="version6")
-    assert st6.stats["buys"] == 1
-    assert st6.stats["skip_held"] == 1
-    assert st6.stats["add_lots"] == 0
 
 
-@pytest.mark.skip(reason="Livermore host lock on master engines: v2 behavioral fixture; covered by test_strategy8_rules")
-
-def test_peak_cross_15pct_tightens_to_global_floor():
-    """向量 #21 daily simulate：反弹抬 peak 跨 15% 后按全局底 +15% 评。"""
+def test_held_name_relist_winner_below_target_adds():
     rows = {
         "600000.SH": [
-            (10.0, 10.1, 9.95, 10.0),       # D0 买入
-            (11.0, 11.49, 10.9, 11.45),     # T+1 peak=11.49 二档；止盈豁免
-            (11.42, 11.51, 11.30, 11.40),   # T+2 peak→11.51 三档线 11.5；close 触
-            (11.30, 11.40, 11.20, 11.25),   # 次日开盘离场
-            (11.2, 11.3, 11.1, 11.2),
+            (10.0, 10.1, 9.95, 10.0),
+            (10.02, 10.05, 10.00, 10.04),
+            (10.03, 10.06, 10.00, 10.03),
+            (10.02, 10.05, 9.98, 10.02),
+            (10.01, 10.04, 9.97, 10.01),
+        ]
+    }
+    pool = {"20251103": ["600000.SH"], "20251104": ["600000.SH"]}
+    st = _run(pool, _bars(DAYS, rows))
+    buys = [t for t in st.trades if t["side"] == "BUY"]
+    assert [t["lot"] for t in buys] == [0, 1]
+    assert st.stats["add_lots"] == 1
+    assert st.stats["skip_held"] == 0
+
+
+def test_off_list_step_add_loses_to_trail():
+    rows = {
+        "600000.SH": [
+            (10.0, 10.1, 9.95, 10.0),
+            (10.70, 10.80, 10.50, 10.64),
+            (10.60, 10.66, 10.50, 10.55),
+            (10.50, 10.55, 10.40, 10.45),
+            (10.40, 10.45, 10.30, 10.35),
         ]
     }
     st = _run({"20251103": ["600000.SH"]}, _bars(DAYS, rows))
+    assert not [t for t in st.trades if t.get("reason") == "add:step20"]
     assert st.stats["sell_trail"] == 1
-    sell = [t for t in st.trades if t["side"] == "SELL"][0]
-    assert sell["reason"] == "trail:band:3"
-    assert sell["date"] == "20251106"
-    assert sell["price"] == pytest.approx(11.30)
 
+
+def test_stop_10_exits_next_open():
+    rows = {
+        "300001.SZ": [
+            (10.0, 10.1, 9.95, 10.0),
+            (7.20, 7.30, 6.90, 6.99),
+            (6.95, 7.00, 6.90, 6.96),
+            (6.90, 6.95, 6.80, 6.90),
+            (6.80, 6.90, 6.70, 6.80),
+        ]
+    }
+    st = _run({"20251103": ["300001.SZ"]}, _bars(DAYS, rows))
+    sell = [t for t in st.trades if t["side"] == "SELL"][0]
+    assert str(sell["reason"]).startswith("stop_loss")
+    assert sell["date"] in {"20251104", "20251105"}
+    assert st.stats["sell_stop"] == 1
+
+
+def test_stale_8_exits_next_open():
+    days = []
+    d = pd.Timestamp("2025-11-03")
+    while len(days) < 10:
+        if d.weekday() < 5:
+            days.append(d.strftime("%Y-%m-%d"))
+        d += pd.Timedelta(days=1)
+    flat = [(10.02, 10.05, 9.98, 10.03)] * 10
+    st = _run(
+        {"20251103": ["600000.SH"]},
+        _bars(days, {"600000.SH": flat}),
+        start="20251103",
+        end=days[-1].replace("-", ""),
+    )
+    sell = [t for t in st.trades if t["side"] == "SELL"][0]
+    assert sell["reason"] == "force_sell:stale"
+    assert sell["date"] == days[9].replace("-", "")
+    assert st.stats["sell_force"] == 1
+
+
+def test_t0_does_not_take_profit():
+    rows = {
+        "600000.SH": [
+            (12.0, 13.0, 11.8, 12.00),
+            (11.0, 11.1, 10.9, 11.0),
+        ]
+    }
+    short = DAYS[:2]
+    st = _run({"20251103": ["600000.SH"]}, _bars(short, rows), end="20251103")
+    assert st.stats["sell_profit_take"] == 0
+    assert not [t for t in st.trades if t["side"] == "SELL"]

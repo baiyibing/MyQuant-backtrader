@@ -108,6 +108,7 @@ from backtest.research.csv_simulate_loop import (  # noqa: E402
     prepare_strategy_hooks,
     run_chase_due_day,
     run_pool_buys_day,
+    run_step_adds_day,
 )
 from backtest.research.csv_pool import (  # noqa: E402
     load_pool_day_map,
@@ -155,6 +156,7 @@ _ = (
     round_fen,
 )
 from common.infra.data_root import resolve_period_root  # noqa: E402
+
 HELP_LOCK = """
 日线近似口径（相对分钟保真版的唯一失真来源）：
   买入：池 CSV 当日候选、收盘价成交（分钟版 14:55≈收盘）；买价达到或超过
@@ -198,7 +200,6 @@ def help_lock_for(strategy: str, *, shared: str = HELP_LOCK) -> str:
 
 
 _limit_prices = resolve_limit_prices
-
 
 
 def simulate(
@@ -280,6 +281,7 @@ def simulate(
     st.stats["min_cost"] = st.min_cost
     allow_add = bool(hooks["allow_add"])
     reserve_limit_up = bool(hooks.get("reserve_limit_up"))
+    defer_limit_up = bool(hooks.get("defer_limit_up"))
     daily_same_bar_prefixes = tuple(hooks.get("daily_same_bar_prefixes", ()))
     qlib_limit_pct = hooks.get("qlib_limit_pct")
     limit_up_chase = bool(hooks.get("limit_up_chase", True))
@@ -323,6 +325,8 @@ def simulate(
                 continue
             limit_up, limit_down = limits
             for pos in list(st.positions.get(code, [])):
+                if getattr(pos, "ride_with", None) is not None:
+                    continue
                 n_days = i - pos.entry_idx  # 持仓交易日数（买入日=0）
 
                 # Date mapping serves T+1 only; sell rules keep union-calendar n_days.
@@ -361,6 +365,8 @@ def simulate(
 
                     pos.peak = max(pos.peak, float(row["high"]))
                     close = float(row["close"])
+                    if defer_limit_up and hit_limit_up(close, limit_up):
+                        continue
                     if reserve_limit_up and hit_limit_up(float(row["open"]), limit_up):
                         pos.reserved = True
                     if reserve_limit_up and pos.reserved:
@@ -423,6 +429,7 @@ def simulate(
             qlib_limit_pct=qlib_limit_pct,
             allow_new_name=hooks.get("allow_new_name"),
             add_gate=hooks.get("add_gate"),
+            index_blocks_add=hooks.get("index_blocks_add", True),
         )
 
         def _pool_quote_for(code: str):
@@ -459,6 +466,23 @@ def simulate(
             allow_new_name=hooks.get("allow_new_name"),
             add_gate=hooks.get("add_gate"),
             name_lot_budget=hooks.get("name_lot_budget"),
+            index_blocks_add=hooks.get("index_blocks_add", True),
+        )
+        run_step_adds_day(
+            st,
+            day_i=i,
+            day=day,
+            ds=ds,
+            names=names,
+            buy_quote_for=_pool_quote_for,
+            sizing=hooks.get("sizing", "daily_quota"),
+            name_budget=hooks.get("name_budget", 1_000_000.0),
+            exdiv=exdiv,
+            qlib_limit_pct=qlib_limit_pct,
+            forbid_all_trade_at_limit=forbid_all_trade_at_limit,
+            buy_gate=buy_gate,
+            name_lot_budget=hooks.get("name_lot_budget"),
+            step_add=hooks.get("step_add"),
         )
 
         append_equity_and_eod_marks(
@@ -507,7 +531,9 @@ def run(
     warn_stale_period_env()
     t_pool = time.perf_counter()
     actual_pool_dir = resolve_research_pool_dir(strategy, pool_dir, repo=REPO)
-    pool_days = load_pool_day_map(actual_pool_dir, start, end, key="ymd", empty_in_map=False)
+    pool_days = load_pool_day_map(
+        actual_pool_dir, start, end, key="ymd", empty_in_map=False
+    )
     pool_names_by_day = load_pool_names_by_day(actual_pool_dir, start, end)
     t_pool = time.perf_counter() - t_pool
     if not pool_days:
@@ -562,9 +588,13 @@ def run(
         exdiv = load_exdiv_ratios(all_codes, start, end, skipped_out=skipped)
     index_block_new = None
     if normalize_csv_strategy(strategy) == "version8":
-        from backtest.research.strategy8_rules import load_sse_ma10_block_new
+        from backtest.research.strategy8_rules import (
+            INDEX_GATE_ON,
+            load_sse_ma10_block_new,
+        )
 
-        index_block_new = load_sse_ma10_block_new(start, end)
+        if INDEX_GATE_ON:
+            index_block_new = load_sse_ma10_block_new(start, end)
     t_sim = time.perf_counter()
     st = simulate(
         bars,

@@ -123,6 +123,7 @@ def run_chase_due_day(
     qlib_limit_pct: Optional[float] = None,
     allow_new_name=None,
     add_gate=None,
+    index_blocks_add: bool = True,
 ) -> None:
     """T+1 chase for due codes; ``quotes_for`` supplies open/buy/prev closes."""
     due = [c for c, (_per, sig) in pending_chase.items() if day_i > sig]
@@ -134,9 +135,10 @@ def run_chase_due_day(
             st.stats["chase_skip_held"] += 1
             continue
         if callable(allow_new_name) and not allow_new_name(day):
-            pending_chase.pop(code)
-            st.stats["skip_index_gate"] += 1
-            continue
+            if not (code in st.positions and not index_blocks_add):
+                pending_chase.pop(code)
+                st.stats["skip_index_gate"] += 1
+                continue
         quoted = quotes_for(code)
         if quoted is None:
             # Missing bar / quotes / prev closes: keep pending for a later day.
@@ -212,6 +214,7 @@ def run_pool_buys_day(
     allow_new_name=None,
     add_gate=None,
     name_lot_budget=None,
+    index_blocks_add: bool = True,
 ) -> None:
     """Pool buys for ``ds``; ``buy_quote_for`` supplies buy price + prev closes.
 
@@ -222,9 +225,7 @@ def run_pool_buys_day(
     if callable(planned_for_day):
         held_codes = list(st.positions.keys())
         raw = list(planned_for_day(ds, held_codes))
-    planned = apply_capital_ration(
-        raw, ration=ration, ration_seed=ration_seed, ds=ds
-    )
+    planned = apply_capital_ration(raw, ration=ration, ration_seed=ration_seed, ds=ds)
     if not planned:
         return
     if sizing == "per_name":
@@ -232,15 +233,18 @@ def run_pool_buys_day(
     else:
         frac = 1.0 if cash_deploy_frac is None else float(cash_deploy_frac)
         if not 0 < frac <= 1:
-            raise ValueError(f"cash_deploy_frac must be in (0, 1], got {cash_deploy_frac!r}")
+            raise ValueError(
+                f"cash_deploy_frac must be in (0, 1], got {cash_deploy_frac!r}"
+            )
         per = min(daily_quota, st.cash) * frac / len(planned)
     for code in planned:
         if code in st.positions and not allow_add:
             st.stats["skip_held"] += 1
             continue
         if callable(allow_new_name) and not allow_new_name(day):
-            st.stats["skip_index_gate"] += 1
-            continue
+            if not (code in st.positions and not index_blocks_add):
+                st.stats["skip_index_gate"] += 1
+                continue
         quoted = buy_quote_for(code)
         if quoted is None:
             st.stats["skip_no_bar"] += 1
@@ -284,9 +288,14 @@ def run_pool_buys_day(
         if sizing == "per_name":
             shares, _ = _buy_size(per, px)
             notional = shares * px
-            if notional + trade_commission(notional, st.buy_cost_rate, st.min_cost) > st.cash:
+            if (
+                notional + trade_commission(notional, st.buy_cost_rate, st.min_cost)
+                > st.cash
+            ):
                 st.stats["skip_cash"] = st.stats.setdefault("skip_cash", 0) + 1
-                st.stats["skip_cash_notional"] = st.stats.setdefault("skip_cash_notional", 0.0) + per
+                st.stats["skip_cash_notional"] = (
+                    st.stats.setdefault("skip_cash_notional", 0.0) + per
+                )
                 continue
             quota_used = st.daily_quota_used
             execute_buy(st, code, px, per, day_i, day, reason="pool")
@@ -294,6 +303,78 @@ def run_pool_buys_day(
             st.daily_quota_used = quota_used
         else:
             execute_buy(st, code, px, per, day_i, day, reason="pool")
+
+
+def run_step_adds_day(
+    st: SimState,
+    *,
+    day_i: int,
+    day,
+    ds: str,
+    names: dict[str, str],
+    buy_quote_for: PoolQuoteFn,
+    sizing: str = "daily_quota",
+    name_budget: float = 1_000_000.0,
+    exdiv: Optional[dict] = None,
+    qlib_limit_pct: Optional[float] = None,
+    forbid_all_trade_at_limit: bool = False,
+    buy_gate=None,
+    name_lot_budget=None,
+    step_add=None,
+) -> None:
+    """Off-list held scan: at most one +20% rider per name per day."""
+    if not callable(step_add) or sizing != "per_name":
+        return
+    for code in list(st.positions.keys()):
+        lots = st.positions.get(code) or []
+        if not lots:
+            continue
+        quoted = buy_quote_for(code)
+        if quoted is None:
+            continue
+        px, closes = quoted
+        if not closes or float(px) <= 0:
+            continue
+        if not step_add(lots, px):
+            continue
+        prev_close, did_map = mapped_prev_close(exdiv, code, ds, float(closes[-1]))
+        if did_map:
+            st.stats["exdiv_prev_close_mapped"] = (
+                int(st.stats.get("exdiv_prev_close_mapped", 0)) + 1
+            )
+        limits = book_limit_prices(
+            code, prev_close, names, qlib_limit_pct=qlib_limit_pct
+        )
+        if limits is None:
+            st.stats["skip_unknown_board"] += 1
+            continue
+        limit_up, limit_down = limits
+        blocked = hit_limit_up(px, limit_up) or (
+            forbid_all_trade_at_limit and hit_limit_down(px, limit_down)
+        )
+        if blocked:
+            st.stats["skip_limit_up"] += 1
+            continue
+        if callable(buy_gate) and not buy_gate(code, px, day, closes):
+            st.stats["skip_buy_gate"] += 1
+            continue
+        per = float(name_budget)
+        if callable(name_lot_budget):
+            per = float(name_lot_budget(name_budget, lots))
+        shares, _ = _buy_size(per, px)
+        notional = shares * px
+        if (
+            notional + trade_commission(notional, st.buy_cost_rate, st.min_cost)
+            > st.cash
+        ):
+            st.stats["skip_cash"] = int(st.stats.get("skip_cash", 0)) + 1
+            st.stats["skip_cash_notional"] = (
+                float(st.stats.get("skip_cash_notional", 0.0)) + per
+            )
+            continue
+        quota_used = st.daily_quota_used
+        execute_buy(st, code, px, per, day_i, day, reason="add:step20", is_step=True)
+        st.daily_quota_used = quota_used
 
 
 def append_equity_and_eod_marks(

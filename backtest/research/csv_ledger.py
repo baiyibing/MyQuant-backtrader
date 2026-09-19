@@ -73,6 +73,8 @@ class Position:
     lot_id: int = 0  # 同码多笔：各自成本/峰值
     pending_exit: str = ""  # 日线止盈：次日开盘离场原因
     reserved: bool = False  # 策略 3 涨停保留状态；分钟引擎复用本类
+    ride_with: Optional[int] = None  # 跟单：不评卖，父 lot 成交时同价同因出
+    is_step: bool = False  # +20% 独立台阶，不占名单加仓、不跟父 lot 同出
 
 
 @dataclass
@@ -112,7 +114,9 @@ def chase_decision(open_px: float, px: float, limit_up: float) -> str:
     return "abandon"
 
 
-def queue_limit_up_chase(st: SimState, pending_chase: dict, code: str, per: float, sig_idx: int) -> None:
+def queue_limit_up_chase(
+    st: SimState, pending_chase: dict, code: str, per: float, sig_idx: int
+) -> None:
     st.stats["skip_limit_up"] += 1
     if code in pending_chase:
         st.stats["chase_overwrite"] += 1
@@ -200,6 +204,8 @@ def execute_buy(
     day,
     *,
     reason: str = "pool",
+    ride_with: Optional[int] = None,
+    is_step: bool = False,
 ) -> bool:
     """常规/追买共用：整百股 + force_min + 账本佣金。成功返回 True。"""
     if px <= 0:
@@ -217,7 +223,18 @@ def execute_buy(
     st.stats["invested_notional"] += notional
     lots = st.positions.setdefault(code, [])
     lot_id = lots[-1].lot_id + 1 if lots else 0
-    lots.append(Position(code, shares, px, entry_idx, px, lot_id=lot_id))
+    lots.append(
+        Position(
+            code,
+            shares,
+            px,
+            entry_idx,
+            px,
+            lot_id=lot_id,
+            ride_with=ride_with,
+            is_step=bool(is_step) or reason == "add:step20",
+        )
+    )
     st.trades.append(
         {
             "date": _ymd(day),
@@ -274,3 +291,12 @@ def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str) -
     st.positions[code] = [p for p in lots if p is not pos]
     if not st.positions[code]:
         del st.positions[code]
+    if getattr(pos, "ride_with", None) is not None:
+        return
+    riders = [
+        p
+        for p in (st.positions.get(code) or [])
+        if getattr(p, "ride_with", None) == pos.lot_id
+    ]
+    for child in riders:
+        _sell(st, code, child, px, day, reason)

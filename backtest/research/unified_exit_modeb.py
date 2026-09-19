@@ -27,7 +27,8 @@ from backtest.research.ashare_bars import (
     load_minute_bars,
 )
 from backtest.research.market_layer import as_date, limit_pct
-from backtest.research import strategy8_rules as s8
+from backtest.research import livermore_exit_rules as s8
+from backtest.research.strategy8_rules import build_sse_ma10_block_new
 from common.infra.data_root import resolve_period_root
 
 
@@ -378,7 +379,7 @@ def load_sse_ma10_block_ymd(start, end, *, root=None):
     from backtest.research.csv_minute_backtest_v7 import load_index_daily
 
     closes = load_index_daily(modea.ymd_to_date(start), modea.ymd_to_date(end), root=root)
-    return _block_ymd(s8.build_sse_ma10_block_new(closes))
+    return _block_ymd(build_sse_ma10_block_new(closes))
 
 
 @dataclass

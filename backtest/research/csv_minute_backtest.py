@@ -107,6 +107,7 @@ from backtest.research.csv_simulate_loop import (  # noqa: E402
     prepare_strategy_hooks,
     run_chase_due_day,
     run_pool_buys_day,
+    run_step_adds_day,
 )
 
 BUY_HM = 14 * 60 + 55
@@ -253,6 +254,7 @@ def scan_held_day_python(
     daily_closes_ending_yesterday=None,
     force_sell_hm: Optional[int] = None,
     reserve_limit_up: bool = False,
+    defer_limit_up: bool = False,
     limit_up: float = 0.0,
     reserved: bool = False,
     reserve_state: Optional[dict] = None,
@@ -264,6 +266,8 @@ def scan_held_day_python(
     new_peak = float(peak)
     new_peak_hm = int(peak_hm)
     current_reserved = bool(reserved)
+    lu_today = False
+    defer_lu = bool(defer_limit_up)
     n = int(len(c))
     for i in range(n):
         # T+0 不卖、不更新峰值（历史最高价从 T+1 起算）
@@ -283,6 +287,10 @@ def scan_held_day_python(
         ret = px_close / cost - 1.0
         if stop_enabled and ret <= -stop_pct:
             return i, px_close, "stop_loss:touch", new_peak, new_peak_hm
+        if defer_lu and limit_up > 0 and hit_limit_up(px_close, limit_up):
+            lu_today = True
+        if defer_lu and lu_today:
+            continue
         if reserve_limit_up:
             is_limit_up = limit_up > 0 and hit_limit_up(px_close, limit_up)
             current_reserved, reserve_reason = reserve_step_minute(
@@ -344,6 +352,7 @@ def scan_held_day(
     daily_closes_ending_yesterday=None,
     force_sell_hm: Optional[int] = None,
     reserve_limit_up: bool = False,
+    defer_limit_up: bool = False,
     limit_up: float = 0.0,
     reserved: bool = False,
     reserve_state: Optional[dict] = None,
@@ -361,6 +370,7 @@ def scan_held_day(
         and sell_gate is None
         and take_profit is None
         and not reserve_limit_up
+        and not defer_limit_up
         and reserve_state is None
     )
     if can_offload:
@@ -425,6 +435,7 @@ def scan_held_day(
         daily_closes_ending_yesterday=daily_closes_ending_yesterday,
         force_sell_hm=force_sell_hm,
         reserve_limit_up=reserve_limit_up,
+        defer_limit_up=defer_limit_up,
         limit_up=limit_up,
         reserved=reserved,
         reserve_state=reserve_state,
@@ -544,6 +555,7 @@ def simulate(
     peak_gap_min = int(hooks["peak_gap_min"])
     force_sell_hm = hooks.get("force_sell_hm")
     reserve_limit_up = bool(hooks.get("reserve_limit_up"))
+    defer_limit_up = bool(hooks.get("defer_limit_up"))
     calendar = build_calendar(daily_bars, start, end)
 
     st, pending_chase, names_asof = init_sim_state(
@@ -607,6 +619,8 @@ def simulate(
             c = day_m["close"].to_numpy(np.float64)
             hm = day_m["hm"].to_numpy(np.int64)
             for pos in list(st.positions.get(code, [])):
+                if getattr(pos, "ride_with", None) is not None:
+                    continue
                 n_days = i - pos.entry_idx
                 # Resolve dates here; only the eligibility bool reaches the scanner.
                 reserve_state = {"reserved": bool(pos.reserved)}
@@ -630,9 +644,12 @@ def simulate(
                     sell_gate=sell_gate,
                     gate_code=code,
                     gate_day=day,
-                    daily_closes_ending_yesterday=prev_rows["close"].astype(float).tolist(),
+                    daily_closes_ending_yesterday=prev_rows["close"]
+                    .astype(float)
+                    .tolist(),
                     force_sell_hm=force_sell_hm,
                     reserve_limit_up=reserve_limit_up,
+                    defer_limit_up=defer_limit_up,
                     limit_up=limit_up,
                     reserved=bool(pos.reserved),
                     reserve_state=reserve_state,
@@ -680,6 +697,7 @@ def simulate(
             qlib_limit_pct=qlib_limit_pct,
             allow_new_name=hooks.get("allow_new_name"),
             add_gate=hooks.get("add_gate"),
+            index_blocks_add=hooks.get("index_blocks_add", True),
         )
 
         def _pool_quote_for(code: str):
@@ -724,6 +742,23 @@ def simulate(
             allow_new_name=hooks.get("allow_new_name"),
             add_gate=hooks.get("add_gate"),
             name_lot_budget=hooks.get("name_lot_budget"),
+            index_blocks_add=hooks.get("index_blocks_add", True),
+        )
+        run_step_adds_day(
+            st,
+            day_i=i,
+            day=day,
+            ds=ds,
+            names=names,
+            buy_quote_for=_pool_quote_for,
+            sizing=hooks.get("sizing", "daily_quota"),
+            name_budget=hooks.get("name_budget", 1_000_000.0),
+            exdiv=exdiv,
+            qlib_limit_pct=qlib_limit_pct,
+            forbid_all_trade_at_limit=forbid_all_trade_at_limit,
+            buy_gate=buy_gate,
+            name_lot_budget=hooks.get("name_lot_budget"),
+            step_add=hooks.get("step_add"),
         )
 
         append_equity_and_eod_marks(
@@ -774,7 +809,9 @@ def run(
         )
     t_pool = time.perf_counter()
     actual_pool_dir = resolve_research_pool_dir(strategy, pool_dir, repo=REPO)
-    pool_days = load_pool_day_map(actual_pool_dir, start, end, key="ymd", empty_in_map=False)
+    pool_days = load_pool_day_map(
+        actual_pool_dir, start, end, key="ymd", empty_in_map=False
+    )
     pool_names_by_day = load_pool_names_by_day(actual_pool_dir, start, end)
     t_pool = time.perf_counter() - t_pool
     if not pool_days:
@@ -821,9 +858,13 @@ def run(
     exdiv = load_exdiv_ratios(all_codes, start, end, skipped_out=skipped)
     index_block_new = None
     if normalize_csv_strategy(strategy) == "version8":
-        from backtest.research.strategy8_rules import load_sse_ma10_block_new
+        from backtest.research.strategy8_rules import (
+            INDEX_GATE_ON,
+            load_sse_ma10_block_new,
+        )
 
-        index_block_new = load_sse_ma10_block_new(start, end)
+        if INDEX_GATE_ON:
+            index_block_new = load_sse_ma10_block_new(start, end)
     t_sim = time.perf_counter()
     st = simulate(
         minute,

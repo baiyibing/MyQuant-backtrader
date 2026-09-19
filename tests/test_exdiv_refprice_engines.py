@@ -23,7 +23,9 @@ EXDIV_HALF = {"600000.SH": {"20251105": 0.5}}
 EXDIV_MILD = {"600000.SH": {"20251105": 0.90}}
 
 
-def _daily_bars(rows: dict[str, list[tuple]], days: list[str] = DAYS, start_offset: int = 1):
+def _daily_bars(
+    rows: dict[str, list[tuple]], days: list[str] = DAYS, start_offset: int = 1
+):
     out = {}
     idx = pd.to_datetime(days)
     for code, r in rows.items():
@@ -65,7 +67,9 @@ def _minute_day(date: str, rows: list[tuple]) -> pd.DataFrame:
     return minute._annotate(df)
 
 
-def _minute_daily(dates: list[str], ohlc: list[tuple], prev: float = 10.0) -> pd.DataFrame:
+def _minute_daily(
+    dates: list[str], ohlc: list[tuple], prev: float = 10.0
+) -> pd.DataFrame:
     pre = pd.Timestamp(dates[0]) - pd.Timedelta(days=2)
     idx = pd.DatetimeIndex([pre] + [pd.Timestamp(d) for d in dates])
     return pd.DataFrame(
@@ -117,10 +121,9 @@ def test_t1_false_gap_open_stop_disappears_v1():
 
 
 def test_t1_false_gap_open_stop_disappears_v8():
-    # v8 stop 30%: trigger=7. Need open in (9.0, 7]? empty. Use open below 7 but
-    # above mapped limit — with k=0.5 mapped limit_down=4.5, open=5.05:
+    # v8 stop 30%: trigger=7. Use open 5.05 below unmapped limit_down 9.0:
     # unmapped: open 5.05 <= limit_down 9.0 → DEFER (not gap_open) under E-R1.
-    # Mapped: cost=5 trigger=3.5, open 5.05 → no stop.
+    # Mapped k=0.5: cost=5 trigger=3.5, open 5.05 → no stop.
     rows = {
         CODE: [
             (10.0, 10.2, 9.9, 10.0),
@@ -219,21 +222,28 @@ def test_t4_touch_stop_fill_price_in_d_domain():
     assert sells[0]["price"] == pytest.approx(4.9)
 
 
-def test_t5_band_consistency_v8():
+def test_t5_target_consistency_v8():
+    from backtest.research.strategy8_rules import take_profit_reason
+
     rows = {
         CODE: [
             (10.0, 10.2, 9.9, 10.0),
-            (11.5, 12.0, 11.0, 11.8),
-            (5.80, 5.90, 5.60, 5.70),
-            (5.70, 5.80, 5.60, 5.75),
-            (5.75, 5.85, 5.70, 5.80),
+            (10.02, 10.05, 10.00, 10.03),
+            (5.01, 5.04, 5.00, 5.02),
+            (5.01, 5.03, 5.00, 5.02),
+            (5.01, 5.03, 5.00, 5.01),
         ]
     }
     st = _daily_run(
         {"20251103": [CODE]}, _daily_bars(rows), strategy="version8", exdiv=EXDIV_HALF
     )
-    sells = [t for t in st.trades if t["side"] == "SELL"]
-    assert sells and sells[0]["reason"] == "trail:band:3"
+    lots = st.positions.get(CODE) or []
+    assert lots, f"T+2 keeps the lot below the mapped 1.01 floor; trades={st.trades}"
+    assert lots[0].cost == pytest.approx(5.0)
+    assert take_profit_reason(5.04, 5.0, 5.04, 1) is None
+    assert take_profit_reason(5.05, 5.0, 5.05, 1) == "trail:max101_80"
+    assert take_profit_reason(5.04, 5.0, 5.04, 8) == "force_sell:stale"
+    assert not [t for t in st.trades if t["side"] == "SELL"]
 
 
 def test_t6_buy_day_exdiv_no_double_scale():
@@ -293,7 +303,9 @@ def test_t9_pool_buy_limit_up_uses_mapped_band():
     assert st.stats["skip_limit_up"] == 1
     # Chase may fill later days; day-of pool buy must not execute.
     pool_buys = [
-        t for t in st.trades if t["side"] == "BUY" and t["reason"] == "pool" and t["date"] == "20251105"
+        t
+        for t in st.trades
+        if t["side"] == "BUY" and t["reason"] == "pool" and t["date"] == "20251105"
     ]
     assert pool_buys == []
 
@@ -314,7 +326,9 @@ def test_t11_halt_resume_day_applies_scale():
     exdiv = {"600000.SH": {"20251106": 0.90}}
     st_false = _daily_run({"20251103": [CODE]}, bars, exdiv=None)
     assert any(
-        t["reason"] == "stop_loss:gap_open" for t in st_false.trades if t["side"] == "SELL"
+        t["reason"] == "stop_loss:gap_open"
+        for t in st_false.trades
+        if t["side"] == "SELL"
     )
     st = _daily_run({"20251103": [CODE]}, bars, exdiv=exdiv)
     assert not any(
@@ -335,7 +349,10 @@ def test_t15_empty_exdiv_trades_match_baseline():
     }
     bars = _daily_bars(rows)
     pool = {"20251103": [CODE]}
-    assert _daily_run(pool, bars, exdiv=None).trades == _daily_run(pool, bars, exdiv={}).trades
+    assert (
+        _daily_run(pool, bars, exdiv=None).trades
+        == _daily_run(pool, bars, exdiv={}).trades
+    )
 
 
 def test_t16_equity_still_marks_raw_close_on_ex_day():
@@ -356,14 +373,24 @@ def test_t16_equity_still_marks_raw_close_on_ex_day():
 
 def test_t1_minute_false_gap_open_disappears():
     dates = ["2025-11-03", "2025-11-04", "2025-11-05"]
-    m0 = _minute_day("2025-11-03", [(930, 10.0, 10.0, 9.9, 10.0), (1455, 10.0, 10.0, 9.9, 10.0)])
-    m1 = _minute_day("2025-11-04", [(930, 10.0, 10.0, 9.9, 10.0), (1455, 10.0, 10.0, 9.9, 10.0)])
-    m2 = _minute_day("2025-11-05", [(930, 9.50, 9.55, 9.40, 9.50), (1455, 9.55, 9.60, 9.45, 9.55)])
+    m0 = _minute_day(
+        "2025-11-03", [(930, 10.0, 10.0, 9.9, 10.0), (1455, 10.0, 10.0, 9.9, 10.0)]
+    )
+    m1 = _minute_day(
+        "2025-11-04", [(930, 10.0, 10.0, 9.9, 10.0), (1455, 10.0, 10.0, 9.9, 10.0)]
+    )
+    m2 = _minute_day(
+        "2025-11-05", [(930, 9.50, 9.55, 9.40, 9.50), (1455, 9.55, 9.60, 9.45, 9.55)]
+    )
     minute_bars = {CODE: pd.concat([m0, m1, m2])}
     daily_bars = {
         CODE: _minute_daily(
             dates,
-            [(10.0, 10.0, 9.9, 10.0), (10.0, 10.0, 9.9, 10.0), (9.50, 9.60, 9.40, 9.55)],
+            [
+                (10.0, 10.0, 9.9, 10.0),
+                (10.0, 10.0, 9.9, 10.0),
+                (9.50, 9.60, 9.40, 9.55),
+            ],
         )
     }
     pool = {"20251103": [CODE]}
@@ -371,7 +398,9 @@ def test_t1_minute_false_gap_open_disappears():
         minute_bars, daily_bars, pool, "20251103", "20251105", strategy="version1"
     )
     assert any(
-        t["reason"] == "stop_loss:gap_open" for t in st_false.trades if t["side"] == "SELL"
+        t["reason"] == "stop_loss:gap_open"
+        for t in st_false.trades
+        if t["side"] == "SELL"
     )
     st = minute.simulate(
         minute_bars,

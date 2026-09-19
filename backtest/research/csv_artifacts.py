@@ -46,21 +46,147 @@ def summarize(
         else "关闭"
     )
     if st.stats.get("sell_book") == "v8":
-        arms = st.stats.get("band_arms", [0.06, 0.15, 0.50, 1.00])
-        keeps = st.stats.get("band_keeps", [0.30, 0.60, 0.70, 0.80])
-        b2 = float(st.stats.get("band2_abs_mult", 1.02))
-        b3 = float(st.stats.get("band3_global_mult", 1.15))
-        arms_txt = "/".join(f"{float(a):.0%}" for a in arms)
-        keeps_txt = "/".join(f"{float(k):.0%}" for k in keeps)
-        lines.append(
-            f"  参数: 止损 {stop_text} | 涨幅比例回撤阶梯 arm={arms_txt} "
-            f"keep={keeps_txt} | 档2底+{b2 - 1.0:.0%} | 档3全局底+{b3 - 1.0:.0%} "
-            f"| T+1止盈豁免"
-        )
+        tp_min = st.stats.get("tp_min_days")
+        if st.stats.get("max101_80"):
+            extra = ["T+1起max(×1.01,买价+80%涨幅)"]
+            gap = int(st.stats.get("peak_gap_min") or 0)
+            if gap >= 15:
+                extra.insert(0, "峰差15分钟")
+            if st.stats.get("reserve_limit_up"):
+                extra.append("涨停保留至开板")
+            stale_n = int(st.stats.get("stale_days") or 0)
+            if stale_n > 0:
+                extra.append(f"僵持{stale_n}日平仓")
+            if st.stats.get("index_gate_on") is False:
+                extra.append("上证下方仍开新仓")
+            if st.stats.get("allow_add") and float(st.stats.get("add_step") or 0) > 0:
+                extra.append("名单全加+独立+20%台阶")
+            elif st.stats.get("allow_add"):
+                extra.append("名单全加")
+            else:
+                extra.append("只做首笔")
+            lines.append(
+                "  参数: 止损 " + stop_text + "".join(f" | {bit}" for bit in extra)
+            )
+        elif st.stats.get("keep50_floor110"):
+            extra = ["≥10%保底×1.10/回撤50%"]
+            gap = int(st.stats.get("peak_gap_min") or 0)
+            if gap >= 30:
+                extra.insert(0, "峰差30分钟")
+            elif gap >= 15:
+                extra.insert(0, "峰差15分钟")
+            if st.stats.get("floor20_mult"):
+                extra.append("≥20%保底×1.20/回撤50%")
+            if st.stats.get("floor6_mult"):
+                extra.append("6%–10%保底×1.02")
+            if st.stats.get("floor4_mult"):
+                extra.append("4%–6%保底×1.01")
+            if float(st.stats.get("unarmed_stop_pct") or 0) > 0:
+                extra.append("未到+6%跌10%离场")
+            stale_n = int(st.stats.get("stale_days") or 0)
+            if st.stats.get("stale_unarmed_only") and stale_n > 0:
+                extra.append(f"僵持{stale_n}日仅未到+6%")
+            elif stale_n >= 30:
+                extra.append("僵持30日")
+            elif stale_n >= 20:
+                extra.append("僵持20日")
+            if st.stats.get("defer_limit_up"):
+                extra.append("涨停顺延次日")
+            if st.stats.get("index_gate_on") is False:
+                extra.append("上证下方仍开新仓")
+            extra.append("只做首笔")
+            lines.append(
+                "  参数: 止损 " + stop_text + "".join(f" | {bit}" for bit in extra)
+            )
+        elif st.stats.get("profit_target") and not st.stats.get("bands6"):
+            extra = []
+            if st.stats.get("floor_mult") and st.stats.get("floor_arm"):
+                extra.append(
+                    f"{float(st.stats['floor_arm']):.0%}–"
+                    f"{float(st.stats['floor_end']):.0%}保底"
+                    f"×{float(st.stats['floor_mult']):.2f}"
+                )
+            if st.stats.get("defer_limit_up"):
+                extra.append("创/科涨停顺延次日")
+            if st.stats.get("reserve_limit_up"):
+                extra.append("涨停保留至开板")
+            stale_n = int(st.stats.get("stale_days") or 0)
+            if stale_n > 0:
+                extra.append(f"僵持{stale_n}日平仓")
+            if st.stats.get("index_gate_on") is False:
+                extra.append("上证下方仍开新仓")
+            if st.stats.get("allow_add") and float(st.stats.get("add_step") or 0) > 0:
+                extra.append("名单全加+独立+20%台阶")
+            elif st.stats.get("allow_add"):
+                extra.append("名单全加")
+            else:
+                extra.append("只做首笔")
+            lines.append(
+                "  参数: 止损 "
+                + stop_text
+                + " | 止盈 "
+                + f"{float(st.stats['profit_target']):.0%}"
+                + "".join(f" | {bit}" for bit in extra)
+            )
+        elif st.stats.get("bands6"):
+            lines.append(
+                f"  参数: 止损 {stop_text} | 档1死区<3% keep50/底1.01 | "
+                f"档2 max(×1.04, keep60) | 档3 max(×1.10, keep60) | "
+                f"档4 max(×1.20, keep70) | 档5 max(×1.50, keep80) | "
+                f"档6 max(×1.80, keep80) | 名单全加+独立+20%台阶 | T+1止盈豁免 | "
+                f"僵持{int(st.stats.get('stale_days', 30))}日"
+            )
+        elif st.stats.get("blend_keep20"):
+            lines.append(
+                f"  参数: 止损 {stop_text} | 档1死区<3% keep20/底1.01 | "
+                f"档2 只×1.02 | 档3 max(×1.15, keep60) | "
+                f"档4 keep70 | 档5 keep80 | "
+                f"加仓名单再现+独立+20%台阶 | "
+                f"T+3只评止损 | 僵持{int(st.stats.get('stale_days', 30))}日"
+            )
+        elif tp_min and int(tp_min) >= 4:
+            lines.append(
+                f"  参数: 止损 {stop_text} | T4 档 keep20/40 档7底1.35 档8底1.60 | "
+                f"止盈满{int(tp_min)}日 | 僵持{int(st.stats.get('stale_days', 20))}日 | 加仓上一笔×1.2"
+            )
+        elif st.stats.get("band_split"):
+            lines.append(
+                f"  参数: 止损 {stop_text} | 档1死区<3% keep30/底1.01 | "
+                f"档2 keep30 底1.02/1.03@9% | 档3 keep60 底1.10/1.15@30% | "
+                f"档4 keep50 底1.35/1.50@70% | 档5 keep70 | "
+                f"加仓名单再现 | T+1止盈豁免"
+            )
+        else:
+            arms = st.stats.get("band_arms", [0.06, 0.15, 0.50, 1.00])
+            keeps = st.stats.get("band_keeps", [0.30, 0.60, 0.70, 0.80])
+            b2 = float(st.stats.get("band2_abs_mult", 1.02))
+            b3 = float(st.stats.get("band3_global_mult", 1.15))
+            arms_txt = "/".join(f"{float(a):.0%}" for a in arms)
+            keeps_txt = "/".join(f"{float(k):.0%}" for k in keeps)
+            extra = ""
+            if st.stats.get("band4_floor") is not None:
+                extra = (
+                    f" | 档7 max({float(st.stats['band4_floor']):.2f},"
+                    f"{float(st.stats.get('band_keeps', [0, 0, 0.50])[2]):.0%})"
+                    f" | 档8 max({float(st.stats.get('band5_floor', 1.60)):.2f},"
+                    f"{float(st.stats.get('band_keeps', [0, 0, 0, 0.60])[3]):.0%})"
+                )
+            lines.append(
+                f"  参数: 止损 {stop_text} | 涨幅比例回撤阶梯 arm={arms_txt} "
+                f"keep={keeps_txt} | 档2底+{b2 - 1.0:.0%} | 档3全局底+{b3 - 1.0:.0%} "
+                f"| T+1止盈豁免{extra}"
+            )
     elif st.stats.get("sell_book") == "v9":
         lines.append(
             f"  参数: 止损 {stop_text} | 满持有 "
             f"{int(st.stats.get('max_hold', 20))} 日 force_sell"
+        )
+    elif st.stats.get("v6_dd_bands"):
+        lines.append(
+            f"  参数: 止损 {stop_text} | T+1起评止盈 | "
+            f"<6%回撤{float(st.stats.get('dd_lt6', 0.70)):.0%} | "
+            f"≥6%回撤{float(st.stats.get('dd_ge6', 0.50)):.0%} | "
+            f"加仓名单再现"
         )
     elif st.stats.get("sell_book") in {"v6", "v10"} or "trail_t1" in st.stats:
         lines.append(
@@ -247,4 +373,3 @@ def maybe_compare_daily(
     return format_equity_compare(
         this_curve, peer, this_label=this_label, peer_label=peer_label
     )
-

@@ -36,9 +36,14 @@ def test_as_date_reads_lake_utc_millis_and_yyyymmdd():
 
 
 def bar(day, hm, close, open=None):
-    return {"date": day, "hm": hm, "open": close if open is None else open,
-            "high": max(close, close if open is None else open), "low": min(close, close if open is None else open),
-            "close": close}
+    return {
+        "date": day,
+        "hm": hm,
+        "open": close if open is None else open,
+        "high": max(close, close if open is None else open),
+        "low": min(close, close if open is None else open),
+        "close": close,
+    }
 
 
 def reasons(state):
@@ -51,7 +56,28 @@ def daily():
 
 def index_closes(values):
     first = date(2026, 8, 17)
-    return {first + timedelta(days=offset): value for offset, value in enumerate(values)}
+    return {
+        first + timedelta(days=offset): value for offset, value in enumerate(values)
+    }
+
+
+def test_symbol_frame_path_buys_at_1455():
+    import pandas as pd
+
+    idx = pd.DatetimeIndex([pd.Timestamp("2026-09-01 14:55:00")])
+    frame = pd.DataFrame(
+        {
+            "open": [100.0],
+            "high": [100.0],
+            "low": [100.0],
+            "close": [100.0],
+            "ymd": [20260901],
+            "hm": [895],
+        },
+        index=idx,
+    )
+    state = simulate_v7({SYMBOL: frame}, daily(), {D1: [SYMBOL]}, [D1])
+    assert reasons(state).count("buy:trial") == 1
 
 
 def test_7_trial_bought_at_1455_cannot_stop_same_day_but_can_next_day():
@@ -117,8 +143,12 @@ def test_9_exact_1455_limit_up_and_open_limit_down_rules():
     assert "skip_limit_up" in reasons(limit_up)
     assert "buy:trial" not in reasons(limit_up)
 
-    stopped = simulate_v7({SYMBOL: [bar(D1, 895, 100), bar(D2, 570, 90, open=90)]},
-                          daily(), {D1: [SYMBOL]}, [D1, D2])
+    stopped = simulate_v7(
+        {SYMBOL: [bar(D1, 895, 100), bar(D2, 570, 90, open=90)]},
+        daily(),
+        {D1: [SYMBOL]},
+        [D1, D2],
+    )
     assert "defer_limit_down" in reasons(stopped)
     assert "stop:trial_a090" not in reasons(stopped)
     assert stopped.positions[SYMBOL].shares > 0
@@ -130,8 +160,12 @@ def test_10_index_gate_blocks_new_open_but_does_not_freeze_existing_stop():
     stock_daily = {SYMBOL: {gate_day - timedelta(days=1): 100.0, gate_day: 100.0}}
 
     blocked = simulate_v7(
-        {SYMBOL: [bar(gate_day, 895, 100)]}, stock_daily,
-        {gate_day: [SYMBOL]}, index, start=gate_day, end=gate_day,
+        {SYMBOL: [bar(gate_day, 895, 100)]},
+        stock_daily,
+        {gate_day: [SYMBOL]},
+        index,
+        start=gate_day,
+        end=gate_day,
     )
     assert "buy:trial" not in reasons(blocked)
     assert "skip_index_gate" in reasons(blocked)
@@ -174,10 +208,27 @@ def test_10_timer_exit_locks_same_day_reopen_and_short_index_fails():
 
 def test_cli_empty_pool_is_legal_and_missing_pool_is_system_exit(tmp_path, monkeypatch):
     out = tmp_path / "out"
-    assert main(["--start", "20260901", "--end", "20260902", "--pool-dir", str(tmp_path),
-                 "--output-dir", str(out)]) == 0
+    assert (
+        main(
+            [
+                "--start",
+                "20260901",
+                "--end",
+                "20260902",
+                "--pool-dir",
+                str(tmp_path),
+                "--output-dir",
+                str(out),
+            ]
+        )
+        == 0
+    )
     assert (out / "summary.txt").read_text(encoding="utf-8").find("trades=0") >= 0
-    assert {path.name for path in out.iterdir()} == {"summary.txt", "daily_equity.csv", "trades.csv"}
+    assert {path.name for path in out.iterdir()} == {
+        "summary.txt",
+        "daily_equity.csv",
+        "trades.csv",
+    }
 
     monkeypatch.delenv("OSKH_TURTLE_POOL_DIR", raising=False)
     with pytest.raises(SystemExit):

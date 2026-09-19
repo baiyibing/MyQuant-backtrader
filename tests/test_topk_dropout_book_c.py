@@ -1,4 +1,4 @@
-"""BT-C: topk_dropout stop_pct=0.10; version6 remains ~0.06; no trail."""
+"""BT-C: topk_dropout stop_pct=0.10; version6 remains ~0.02; no trail."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from backtest.research.csv_strategy_books import apply_csv_strategy
 
 def test_topk_stop_pct_is_ten_percent_not_v6():
     assert strategy_topk_dropout_rules.STOP_PCT == pytest.approx(0.10)
-    assert strategy6_rules.STOP_PCT == pytest.approx(0.06)
+    assert strategy6_rules.STOP_PCT == pytest.approx(0.02)
     hooks = apply_csv_strategy(
         "topk_dropout",
         scores_by_day={"20260106": {"600000.SH": 1.0}},
@@ -23,7 +23,7 @@ def test_topk_stop_pct_is_ten_percent_not_v6():
     assert hooks["take_profit"](10.0, 10.0, 12.0, 2) is None
 
     v6 = apply_csv_strategy("version6")
-    assert v6["stop_pct"] == pytest.approx(0.06)
+    assert v6["stop_pct"] == pytest.approx(0.02)
 
 
 def test_stop_pct_zero_disables_stop():

@@ -162,7 +162,10 @@ def _daily_closes(daily_bars: Any) -> dict[str, dict[date, float]]:
     if isinstance(daily_bars, Mapping):
         for symbol, records in daily_bars.items():
             canonical = to_canonical_symbol(str(symbol))
-            if isinstance(records, Mapping) and "close" not in records:
+            if hasattr(records, "empty") and hasattr(records, "columns") and "close" in getattr(records, "columns", ()):
+                for ts, close in records["close"].items():
+                    out.setdefault(canonical, {})[_as_date(ts)] = float(close)
+            elif isinstance(records, Mapping) and "close" not in records:
                 for day, close in records.items():
                     out.setdefault(canonical, {})[_as_date(day)] = float(close)
             else:
@@ -453,10 +456,32 @@ def load_index_daily(start: date, end: date, *, symbol: str = "000001.SH",
 
 
 def summarize_v7(state: SimResult) -> str:
+    from collections import Counter
+
     buys = sum(row["side"] == "buy" for row in state.trades)
     sells = sum(row["side"] == "sell" for row in state.trades)
     equity = state.equity_curve[-1]["equity"] if state.equity_curve else state.cash
-    return f"Strategy 7\ntrades={buys + sells}\nbuys={buys}\nsells={sells}\nfinal_equity={equity:.2f}\n"
+    start_eq = state.equity_curve[0]["equity"] if state.equity_curve else state.cash
+    peak = start_eq
+    max_dd = 0.0
+    for row in state.equity_curve:
+        value = float(row["equity"])
+        peak = max(peak, value)
+        if peak > 0:
+            max_dd = min(max_dd, value / peak - 1.0)
+    ret = equity / start_eq - 1.0 if start_eq else 0.0
+    reasons = Counter(str(row["reason"]) for row in state.trades)
+    reason_line = " ".join(f"{name}={count}" for name, count in sorted(reasons.items()))
+    return (
+        f"Strategy 7\n"
+        f"trades={buys + sells}\n"
+        f"buys={buys}\n"
+        f"sells={sells}\n"
+        f"final_equity={equity:.2f}\n"
+        f"return={ret:.2%}\n"
+        f"max_dd={max_dd:.2%}\n"
+        f"reasons: {reason_line}\n"
+    )
 
 
 def write_run_artifacts(state: SimResult, output_dir: Path) -> None:
