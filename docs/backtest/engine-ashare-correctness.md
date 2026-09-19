@@ -50,21 +50,20 @@ DatetimeIndex，qlib_1min 的私有 `_load_minute_compact` 链仍用 `date`；co
 T+1 在书引擎原调用点将 `calendar[entry_idx]` 映射为日期后调用 `t1_sellable`；卖点仍用
 联合日历下标差 `n_days`，分钟扫描器仅收到布尔 `can_sell`，两个扫描内核保持冻结。
 买卖门复用 `skip_buy_at_limit` / `defer_sell_at_limit`；双账本及填单函数契约保留。
-已知分叉继续记录：书侧无昨收/未知板块先冻仓；v7 卖侧这两支 `limits=None` 仍放行，
-加仓侧同样保留现状，ST 名称仍按窗末名平铺而非 PIT。日线 `stop_loss:gap_open` = 触发当日 open；`daily_stop_touch_at_trigger` = 触发当日 trigger；命中 `daily_same_bar_prefixes` 且通过涨跌停门才按当日 close；只有确实写入 `pending_exit` 的 reason 才下一可卖日 open。不在本轮改变时点或参考价之外的股数。
+δ4 Human GO C/B/A 已将 v7 held stop/add/timer 的 `limits=None` 改为显式拒绝，书侧/首开原有拒绝保持（§2.3）；仅阻断交易尝试，参考价/peak/mark 仍可更新。ST 名称仍按窗末名平铺而非 PIT。日线 `stop_loss:gap_open` = 触发当日 open；`daily_stop_touch_at_trigger` = 触发当日 trigger；命中 `daily_same_bar_prefixes` 且通过涨跌停门才按当日 close；只有确实写入 `pending_exit` 的 reason 才下一可卖日 open。不在本轮改变时点或参考价之外的股数。
 
-### 2.1 fill-gates retained fork（as-built 合同，不做行为统一）
+### 2.1 fill-gates as-built（δ4 None 拒绝已按 C/B/A 更新）
 
 | 主题 | 书引擎（daily/minute + shared loop） | v7 路径 |
 |---|---|---|
-| `limits is None`（未知板块/无昨收） | 早拒：持仓循环直接 `skip_unknown_board` 并 `continue`（`csv_daily_backtest.py:321-323`，`csv_minute_backtest.py:601-603`）；共享买侧/追买环同样早拒（`csv_simulate_loop.py:155-157`, `:260-261`）。 | 首开仓分支会拒绝未知板块（`csv_minute_backtest_v7.py:389-391`）；但已持仓卖/加仓门函数是 fail-open（`ashare_session.py:73-78` + v7 调用点 `csv_minute_backtest_v7.py:342-373`）。 |
+| `limits is None`（未知板块/无昨收） | 默认 named-band 下早拒：缺昨收在上游退出，有昨收但未知板块则 `skip_unknown_board` + continue（`csv_daily_backtest.py:300-327`，`csv_minute_backtest.py:586-618`）；共享买侧/追买/step 同样早拒（详见 §2.3）。 | 首开保持拒绝；held stop/add/timer 在交易点显式拒绝 None，复用 `skip_no_prev_close` / `skip_unknown_board`（`csv_minute_backtest_v7.py:345-347`、`:373-375`、`:411-413`）。门函数本身仍是 None⇒False，不能据此放行交易。 |
 | “门未拦截” vs “真实成交” | 明确区分；例如持仓门后仍可能不成交。 | 同样明确区分：加仓门未拦截时仍可能在 `_buy` 里 `skip_cash` 不成交（`csv_minute_backtest_v7.py:209-210`）。 |
 | ST 名称跨日语义 | 书引擎按日 as-of 单调更新（`csv_common.py:85-107`；消费点 `csv_daily_backtest.py:291` / `csv_minute_backtest.py:565`）。 | v7 使用窗口扁平名（`ashare_session.py:81-85`, `:97`；消费点 `csv_minute_backtest_v7.py:324`）。 |
 | 零量/缺 bar 语义 | loader 先过滤零量占位，再进入“无 bar 不交易/按 last close 估值”路径（`csv_daily_loader.py:83-84` + `tests/test_csv_daily_backtest.py:990+`）。 | 缺关键分钟记录走 no-fill（如 `skip_no_1455`），不代表交易被门拦截。 |
 
 注意：
-- 上表是 **as-built fork 合同**，用于防止静默漂移，不代表本轮引入新成交模型。
-- 有 fail-open 的地方保持 fail-open；不得在未开新人裁切片时擅自改成 fail-closed。
+- 上表是 **as-built 合同**；本轮只按 δ4 Human GO C/B/A 将 v7 held None 改为 fail-closed，其它分叉冻结。
+- #126 的 A/A/A held fail-open 合同已由本 C cut 覆盖；不新增 policy 开关，不改变涨跌停命中含义。
 - OSS 只可类比术语，不可作为本仓行为证据；行为证据必须来自本仓锚点与测试。
 - #112 延后项：14:57 行为（P1）、trades 新列（P2）、ST PIT（δ3）、touch↔mark 耦合（P4）继续延后。费率 **行为** 冻结（P3.1/2/3=A）；δ1 只做合同文档 + data-free 接线测，不改生产扣费。
 
@@ -168,27 +167,27 @@ ST 正则为 `(?:\*ST|(?<![A-Za-z])ST)`（`re.IGNORECASE`）；`WEST` 这样的�
 
 **日期 as-of ≠ 决策时刻可得性 PIT 证明。** 名单日期不证明该文件在当日决策前已发布；当前输入没有 `available_at` / 修订版本过滤，供应方完整历史 PIT 仍未证。δ3 不修 v7 ST PIT，也不替 δ2 关闭因子可得性或经济残留。P1/P2/P4 继续 deferred；δ4–δ6 不随本刀自动获授权，生产改造须各自独立人裁。
 
-## 2.3 P3 δ4 v7 limits=None contract（Human GO A/A/A）
+## 2.3 P3 δ4 v7 limits=None contract（Human GO C/B/A）
 
-实施基线为 `844919481f12a220fdf3c411d9be09583b2d7984`（post #125，含 δ3）。P3δ4.1/4.2/4.3=A/A/A 只授权现状契约与 data-free pins，**生产 Python 零 diff**。测试映射与验收/冻结证明见 [δ4 plan §7–9](plan-industry-align-p3-d4-v7-limits-none-2026-09-19.md)。本 GO **不授权 fail-closed、显式 policy 开关或生产 gate 改造**；政策变更必须另立 P3δ4.1=C 的生产案。Slice C 验收不是人裁选项 C。
+实施基线为 `073538d4486a07a71f561631c3f274ffa06eeecb`（#128 merge，post δ6 docs）。**P3δ4.1=C / P3δ4.2=B / P3δ4.3=A：production fail-closed 已落地**，只改 v7 held stop/add/timer 的 None 交易尝试；复用现有事件与 reason，不增加 CLI/policy/schema。此前 #126 的 A/A/A 首开拒绝 / held fail-open 合同由本 C cut 覆盖，历史保留在 [δ4 plan changelog](plan-industry-align-p3-d4-v7-limits-none-2026-09-19.md#10-changelog)。测试与冻结证明见 [δ4 plan §7–9](plan-industry-align-p3-d4-v7-limits-none-2026-09-19.md)。
 
-`limits=None` 表示没有可用档位，不能推断标的依法无涨跌幅限制。两个来源分别是：没有 today 之前的 close；有昨收但未知板块且名称未命中 ST。ST 名称先返回 5%，所以未知代码不必然得到 None；NaN/Inf、零/负昨收不由本刀扩展分类。以下 file:line 已按固定基线重新阅读核实：
+`limits=None` 表示没有可用档位，不能推断标的依法无涨跌幅限制。两个来源分别是：没有 today 之前的 close；有昨收但未知板块且名称未命中 ST。ST 名称先返回 5%，所以未知代码不必然得到 None；NaN/Inf、零/负昨收不由本刀扩展分类。以下 file:line 已按本 C cut 编辑后的源码核实：
 
 | 路径 / 前提 | as-built 合同 | 源码锚点（均在 `backtest/research/`） |
 |---|---|---|
-| None 来源 / 门函数 | 无昨收返回 None；未知非 ST 板块返回 None。`skip_buy_at_limit` / `defer_sell_at_limit` 遇 None 都是 False，仅表示此门不拦截；有档位时仍用 Decimal HALF_UP 到分并拦截上下限 | `ashare_session.py:44-78`；`market_layer.py:43-84` |
+| None 来源 / 门函数 | 无昨收返回 None；未知非 ST 板块返回 None。`skip_buy_at_limit` / `defer_sell_at_limit` 遇 None 都是 False，仅表示未命中涨跌停，v7 调用点先拒绝 None；有档位时仍用 Decimal HALF_UP 到分并拦截上下限 | `ashare_session.py:44-78`；`market_layer.py:43-84` |
 | 书 held daily/minute，默认 named-band | 缺昨收在档位计算前退出；有昨收但档位 None 在 lot 卖出循环前 `skip_unknown_board`。这不保证全会话字段不变 | `csv_common.py:22-45`；`csv_daily_backtest.py:300-327`；`csv_minute_backtest.py:586-618` |
 | named-band 前提 / MC-1 | `qlib_limit_pct is None` 才按名称/板块计算；显式固定 band 绕过该判断，未知非 ST 前缀仍可有档位。本刀书侧 pins 断言真实 hooks 的值为 None，不能把早拒结论泛化到固定 band | `csv_common.py:73-82`；消费点 `csv_daily_backtest.py:320-321`、`csv_minute_backtest.py:612-614`；接线 `csv_strategy_books.py:127`、`:713`、`:788` |
 | 书 chase / pool / step | 有报价/昨收，且到达各自档位分支后，None 均早拒。step 无昨收先退，不能记成已触发 None gate；step 的未知板块计数与 held 扫描计数须分开 | `csv_simulate_loop.py:143-160`、`:249-267`、`:333-350` |
-| v7 14:55 首开 | index gate 在前；缺昨收 `skip_no_prev_close`；有昨收而档位 None 为 `skip_unknown_board`，均不建立 trial lot | `csv_minute_backtest_v7.py:384-400` |
-| v7 held stop | 策略 stop 满足后，None 不 defer，继续尝试卖出；仍受 lot 的 T+1 约束 | `csv_minute_backtest_v7.py:341-357`、`:226-251` |
-| v7 held add | 时窗/ladder 满足后，None 不触发两道档位拦截；整百股、含费现金足够才买入并更新 stage / last_add_date，现金不足仅记 `skip_cash` | `csv_minute_backtest_v7.py:361-383`、`:205-223` |
-| v7 timer | 最后一根 record 且真实 `timer_due=True` 时，None 不 defer；T+1 可卖才有 `exit:timer10` 和现金流，无可卖 lot 则无卖单、现金/lot 不变 | `csv_minute_backtest_v7.py:401-409`、`:226-251` |
-| 无 records / mark | v7 无 records 在档位和 timer 前退出，池内可记 `skip_no_1455`；末日估值仍执行。书有昨收时可先缩放参考价再拒绝未知板块，随后仍按行情 mark | `csv_minute_backtest_v7.py:316-329`、`:416-418`；`csv_daily_backtest.py:307-325`；`csv_minute_backtest.py:597-617`；`csv_simulate_loop.py:381-420` |
+| v7 14:55 首开 | index gate 在前；缺昨收 `skip_no_prev_close`；有昨收而档位 None 为 `skip_unknown_board`，均不建立 trial lot | `csv_minute_backtest_v7.py:390-406` |
+| v7 held stop | 策略 stop 满足后，None 显式 skip，不调用 `_sell_lots`；T1/T0 均无卖单及成交现金/lot 变更 | `csv_minute_backtest_v7.py:341-360` |
+| v7 held add | 时窗/ladder 满足后，None 显式 skip，不调用 `_buy`；现金充足/不足均不买，stage / last_add_date / lot / cash 不因尝试改变 | `csv_minute_backtest_v7.py:364-389` |
+| v7 timer | 最后一根 record 且真实 `timer_due=True` 时，None 显式 skip，不调用 `_sell_lots`；可卖/T0 均无卖单、现金/lot 不因尝试改变 | `csv_minute_backtest_v7.py:407-418` |
+| 无 records / mark | v7 无 records 在档位和 timer 前退出，池内可记 `skip_no_1455`；末日估值仍执行。书有昨收时可先缩放参考价再拒绝未知板块，随后仍按行情 mark | `csv_minute_backtest_v7.py:316-329`、`:425-427`；`csv_daily_backtest.py:307-325`；`csv_minute_backtest.py:597-617`；`csv_simulate_loop.py:381-420` |
 
-门未拦截、尝试交易、实际 fill 分层验收。fill 以真实 BUY/SELL、股数、lot 与含费现金变化为证据；`EOD_MARK`、peak/last_prices、参考价缩放均不能冒充成交。None 首开拒绝与 held stop/add/timer 的 fail-open 分叉保持；无 records 也不会因门放行产生 bar。
+门未拦截、尝试交易、实际 fill 分层验收。fill 以真实 BUY/SELL、股数、lot 与含费现金变化为证据；`EOD_MARK`、peak/last_prices、参考价缩放均不能冒充成交。三个 held 交易点按 `previous is None` 记 `skip_no_prev_close`，否则记 `skip_unknown_board`；均 side=skip、shares=0，不误记涨停/跌停原因。仅在策略产生交易尝试时拒绝，不做整日冻结；peak / last_prices / equity mark / exdiv rescale 仍可更新。无 records 不造 bar，保持 `skip_no_1455`。真实档位的上下限、T+1、现金、fee floor 与填单保持原行为。
 
-测试只用内存或 tmp_path，通过公开 `simulate` / `simulate_v7` 进入目标分支。held 初态由测试注入，未知板块持仓、旧 timer anchor 配同日 lot 都是构造向量，不宣称自然首开可达。timer 向量避开 stop/add，用 session list 隔离 index gate；spy 透传真实 timer/档位门。书 step 用真实 version8 hooks、空 pool，分别观察 held 与 step 的拒绝计数；已知板块对照锁住 100 股 × 12、5 元 floor、1205 元精确成交 / 少一分钱拒绝。δ1/δ2/δ3 生产合同、P1/P2/P4 与其它 δ 的独立授权边界保持。
+测试只用内存或 tmp_path，通过公开 `simulate` / `simulate_v7` 进入目标分支。held 初态由测试注入，未知板块持仓、旧 timer anchor 配同日 lot 都是构造向量，不宣称自然首开可达。timer 向量避开 stop/add，用 session list 隔离 index gate；spy 透传真实 timer/档位门，None 早拒时不调用 limit-down 门。stop/add/timer 双来源都断言无成交、无现金/股数变更；add 另用实档位证明精确现金可成交、少一分钱 skip_cash，rescale 单独证明仅参考价变更。书 step 用真实 version8 hooks、空 pool，分别观察 held 与 step 的拒绝计数；已知板块对照锁住 100 股 × 12、5 元 floor、1205 元精确成交 / 少一分钱拒绝。δ1/δ2/δ3 生产合同保持，P1/P2/P4 继续 deferred；δ5 volume-cap wiring / δ6 production economics 未启动。
 
 ## 2.4 P3 δ5 volume participation cap design（Human GO B）
 

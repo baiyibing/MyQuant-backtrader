@@ -342,7 +342,10 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
                                              average_cost=position.avg_cost)
                     check_px = open_px if first and decision.line is not None and open_px <= decision.line else close_px
                     if decision.line is not None and check_px <= decision.line:
-                        if defer_sell_at_limit(check_px, limits):
+                        if limits is None:
+                            _event(state, day, symbol, hm, "skip", 0, check_px,
+                                   "skip_no_prev_close" if previous is None else "skip_unknown_board")
+                        elif defer_sell_at_limit(check_px, limits):
                             _event(state, day, symbol, hm, "defer", 0, check_px, "defer_limit_down")
                         else:
                             reasons_stop = {
@@ -367,7 +370,10 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
                             "add_a116": "buy:add_a116",
                         }
                         if ladder.action != "none":
-                            if skip_buy_at_limit(close_px, limits):
+                            if limits is None:
+                                _event(state, day, symbol, hm, "skip", 0, close_px,
+                                       "skip_no_prev_close" if previous is None else "skip_unknown_board")
+                            elif skip_buy_at_limit(close_px, limits):
                                 _event(state, day, symbol, hm, "skip", 0, close_px, "skip_limit_up")
                             elif defer_sell_at_limit(close_px, limits):
                                 pass
@@ -402,7 +408,10 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
                     position = state.positions.get(symbol)
                     if (position is not None and position.last_add_date is not None
                             and timer_due(calendar, position.last_add_date, day, position.stage)):
-                        if defer_sell_at_limit(close_px, limits):
+                        if limits is None:
+                            _event(state, day, symbol, hm, "skip", 0, close_px,
+                                   "skip_no_prev_close" if previous is None else "skip_unknown_board")
+                        elif defer_sell_at_limit(close_px, limits):
                             _event(state, day, symbol, hm, "defer", 0, close_px, "defer_limit_down")
                         elif _sell_lots(state, position, day, hm, close_px, "exit:timer10", fee=fee):
                             if symbol not in state.positions:

@@ -129,7 +129,7 @@ def test_limit_down_defers_then_sells_on_later_session(engine, monkeypatch):
 @pytest.mark.parametrize("cause", ["no_previous_close", "unknown_board"])
 @pytest.mark.parametrize("engine", ["daily", "minute", "v7"])
 @pytest.mark.parametrize("sellable", [True, False], ids=["t1", "t0"])
-def test_none_limits_sell_side_records_existing_split(engine, cause, sellable, monkeypatch):
+def test_none_limits_sell_side_rejects_trade_attempts(engine, cause, sellable, monkeypatch):
     code = UNKNOWN if cause == "unknown_board" else CODE
     prices = {D1: 89} if cause == "no_previous_close" else {D0: 100, D1: 89}
     previous = session_prev_close(prices, D1, code, None)
@@ -140,16 +140,11 @@ def test_none_limits_sell_side_records_existing_split(engine, cause, sellable, m
     buy_date, entry_idx = (D0, 0) if sellable else (D1, 1)
     seed(monkeypatch, engine, code, buy_date, entry_idx=entry_idx)
     state = run(engine, prices, D0, D1, code=code, anchor=[D0, D1])
-    if engine == "v7" and sellable:
-        assert [(t["reason"], t["price"], t["shares"]) for t in sells(state)] == [
-            ("stop:trial_a090", 89, 100),
-        ]
-        assert code not in state.positions
-        assert state.cash == pytest.approx(21_000_000 + 8_900 - 8.9)
-        assert state.equity_curve[-1]["holdings"] == 0
-    elif engine == "v7":
-        # The real stop/gate chain runs, but T+1 leaves lots and cash intact.
-        assert state.trades == [] and state.cash == 21_000_000
+    if engine == "v7":
+        reason = "skip_no_prev_close" if cause == "no_previous_close" else "skip_unknown_board"
+        assert state.trades == [{"date": D1.isoformat(), "symbol": code, "hm": 895,
+                                 "side": "skip", "shares": 0, "price": 89, "reason": reason}]
+        assert state.cash == 21_000_000
         pos = state.positions[code]
         assert pos.lots == [v7.Lot(100, buy_date, 100, "trial")]
         assert pos.shares == 100 and pos.stage == "trial" and pos.avg_cost == 100
@@ -225,7 +220,7 @@ def test_none_limits_chase_path_rejects_unknown_board_in_shared_loop():
 
 @pytest.mark.parametrize("cause", ["no_previous_close", "unknown_board"])
 @pytest.mark.parametrize("cash", [197_797.6, 197_797.59], ids=["exact-cash", "one-fen-short"])
-def test_v7_held_add_none_limits_cash_controls_fill(cause, cash, monkeypatch):
+def test_v7_held_add_none_limits_rejects_regardless_of_cash(cause, cash, monkeypatch):
     code = UNKNOWN if cause == "unknown_board" else CODE
     closes = {D1: 104} if cause == "no_previous_close" else {D0: 100, D1: 104}
     previous = session_prev_close(closes, D1, code, None)
@@ -240,6 +235,27 @@ def test_v7_held_add_none_limits_cash_controls_fill(cause, cash, monkeypatch):
         [D1],
         start=D1,
         end=D1,
+        cash_total=cash,
+    )
+    pos = state.positions[code]
+    reason = "skip_no_prev_close" if cause == "no_previous_close" else "skip_unknown_board"
+    assert state.trades == [{"date": D1.isoformat(), "symbol": code, "hm": 895,
+                             "side": "skip", "shares": 0, "price": 104, "reason": reason}]
+    assert asdict(pos) == asdict(v7.Position(
+        code, 100, avg_cost=100, peak=104, lots=[v7.Lot(100, D0, 100, "trial")],
+    ))
+    assert state.cash == cash
+    assert state.equity_curve[-1]["holdings"] == 10_400
+    assert state.equity_curve[-1]["equity"] == cash + 10_400
+
+
+@pytest.mark.parametrize("cash", [197_797.6, 197_797.59], ids=["exact-cash", "one-fen-short"])
+def test_v7_held_add_real_limits_cash_controls_fill(cash, monkeypatch):
+    code = CODE
+    assert session_limit_prices(code, 100) == (110, 90)
+    seed(monkeypatch, "v7", code, D0)
+    state = v7.simulate_v7(
+        {code: minutes({D1: 104.0})}, {code: {D0: 100, D1: 104}}, {}, [D1],
         cash_total=cash,
     )
     pos = state.positions[code]
@@ -264,6 +280,24 @@ def test_v7_held_add_none_limits_cash_controls_fill(cause, cash, monkeypatch):
         ))
         assert state.cash == cash
     assert state.equity_curve[-1]["holdings"] == pos.shares * 104
+
+
+@pytest.mark.parametrize("cause", ["no_previous_close", "unknown_board"])
+def test_d4_v7_none_limits_rescale_and_mark_are_not_fills(cause, monkeypatch):
+    code = UNKNOWN if cause == "unknown_board" else CODE
+    prices = {D1: 89} if cause == "no_previous_close" else {D0: 100, D1: 89}
+    seed(monkeypatch, "v7", code, D0)
+    state = run("v7", prices, D1, D1, code=code, anchor=[D1],
+                exdiv={code: {f"{D1:%Y%m%d}": 1.2}})
+    reason = "skip_no_prev_close" if cause == "no_previous_close" else "skip_unknown_board"
+    assert state.trades == [{"date": D1.isoformat(), "symbol": code, "hm": 895,
+                             "side": "skip", "shares": 0, "price": 89, "reason": reason}]
+    assert asdict(state.positions[code]) == asdict(v7.Position(
+        code, 120, avg_cost=120, peak=89, lots=[v7.Lot(100, D0, 120, "trial")],
+    ))
+    assert state.cash == 21_000_000
+    assert state.equity_curve[-1]["holdings"] == 8_900
+    assert state.equity_curve[-1]["equity"] == state.cash + 8_900
 
 
 @pytest.mark.parametrize("engine", ["daily", "minute"])

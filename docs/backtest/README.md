@@ -10,7 +10,7 @@
 
 ST 名称时间合同：[engine-ashare-correctness §2.2](engine-ashare-correctness.md#22-p3-δ3-st-name-as-of--v7-flatten-forkhuman-go-aaa)；[P3 δ3 plan / data-free pins 与冻结证明](plan-industry-align-p3-d3-st-pit-2026-09-19.md)。Human GO A/A/A 保留书侧日期 as-of / v7 窗口末名平铺分叉，生产不变；决策时刻可得性 PIT 仍未证。
 
-`limits=None` 合同：[engine-ashare-correctness §2.3](engine-ashare-correctness.md#23-p3-δ4-v7-limitsnone-contracthuman-go-aaa)；[P3 δ4 plan / data-free pins 与冻结证明](plan-industry-align-p3-d4-v7-limits-none-2026-09-19.md)。Human GO A/A/A 保留 v7 首开拒绝 / held stop-add-timer fail-open 分叉；书侧早拒限默认 named-band 前提。生产不变，fail-closed 须另裁 C。
+`limits=None` 合同：[engine-ashare-correctness §2.3](engine-ashare-correctness.md#23-p3-δ4-v7-limitsnone-contracthuman-go-cba)；[P3 δ4 plan / data-free pins 与冻结证明](plan-industry-align-p3-d4-v7-limits-none-2026-09-19.md)。Human GO **C/B/A 的 production fail-closed 已落地**：v7 held stop/add/timer 无有效档位均拒绝交易尝试，复用无昨收/未知板块 skip reason；首开与书侧拒绝保持。peak/mark/参考价缩放仍可更新，无 policy 开关；δ5/δ6 生产未启动。
 
 成交量参与率设计：[engine-ashare-correctness §2.4](engine-ashare-correctness.md#24-p3-δ5-volume-participation-cap-designhuman-go-b)；[P3 δ5 plan / 文档验收与冻结证明](plan-industry-align-p3-d5-volume-cap-2026-09-19.md)。Human GO B 仅落设计候选与 D1–D7 文档算术 oracle；书/v7 仍无 participation cap，零量过滤不等于 cap。本轮无新增测试，生产冻结；接线须另裁 `.1=C`。
 

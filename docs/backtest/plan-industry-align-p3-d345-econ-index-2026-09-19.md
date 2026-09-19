@@ -9,7 +9,7 @@ v0.2 GO 记录（历史；当前进度见顶部与各 plan）：**合并 PR #124
 | 顺序 / plan | 主要决定 | 已录入 Human GO / 生产边界 |
 |---|---|---|
 | 1. [δ3 ST PIT](plan-industry-align-p3-d3-st-pit-2026-09-19.md) | 书名单日期 as-of vs v7 窗口末次名称；先固定名字→档位→门→fill | δ3=A：契约 + data-free pins，不改生产 |
-| 2. [δ4 v7 limits=None](plan-industry-align-p3-d4-v7-limits-none-2026-09-19.md) | 无昨收/未知板块，首开拒绝 vs held stop/add/timer 不拦截 | δ4=A：先契约化；fail-closed 另裁 |
+| 2. [δ4 v7 limits=None](plan-industry-align-p3-d4-v7-limits-none-2026-09-19.md) | 无昨收/未知板块：首开保持拒绝，held stop/add/timer 显式 fail-closed | 新 Human GO C/B/A：生产 fail-closed 已落地，覆盖此前 δ4=A；复用 reason、无开关；验收见 δ4 §8.4 |
 | 3. [δ5 participation cap](plan-industry-align-p3-d5-volume-cap-2026-09-19.md) | volume 单位/可得性、共享预算、部分成交与费用/lot 状态 | δ5=B：只设计，不接生产 cap |
 | 4. [δ6 exdiv economics](plan-industry-align-p3-d6-exdiv-economics-2026-09-19.md) | 送转权益/现金红利/应收与到账/NAV 守恒 | δ6=A：残留+oracle；账本可选 B；**生产增股/入账/NAV 须另裁 C，本轮不授权** |
 
