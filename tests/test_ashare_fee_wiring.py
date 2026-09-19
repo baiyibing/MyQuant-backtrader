@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """P3 δ1 Slice B: research fee-wiring contract pins (data-free / synthetic only).
 
 Landing file for plan-industry-align-p3-fees §7 Slice B / §8 (MC-1).
@@ -8,13 +7,15 @@ are side evidence, not wiring closure.
 
 from __future__ import annotations
 
-from datetime import date
 from copy import deepcopy
+from datetime import date
 
 import numpy as np
 import pandas as pd
 import pytest
 
+import backtest.research.csv_daily_backtest as daily_sim
+import backtest.research.csv_minute_backtest as minute_sim
 from backtest.research.ashare_fees import (
     BILATERAL_10BP,
     COMMISSION,
@@ -26,8 +27,6 @@ from backtest.research.ashare_fees import (
     QLIB_PORTANA,
     trade_commission,
 )
-import backtest.research.csv_daily_backtest as daily_sim
-import backtest.research.csv_minute_backtest as minute_sim
 from backtest.research.csv_ledger import (
     Position as BookPosition,
     SimState,
@@ -44,7 +43,6 @@ from backtest.research.csv_minute_backtest_v7 import (
     simulate_v7,
 )
 from backtest.research.csv_simulate_loop import trade_commission as loop_trade_commission
-
 
 CODE = "600000.SH"
 DAYS = ["2025-11-03", "2025-11-04", "2025-11-05"]
@@ -84,7 +82,9 @@ def _minute_day(date_s: str, rows: list[tuple]) -> pd.DataFrame:
     return minute_sim._annotate(df)
 
 
-def _minute_daily(dates: list[str], closes: list[float], prev: float = 10.0) -> pd.DataFrame:
+def _minute_daily(
+    dates: list[str], closes: list[float], prev: float = 10.0
+) -> pd.DataFrame:
     pre = pd.Timestamp(dates[0]) - pd.Timedelta(days=2)
     idx = pd.DatetimeIndex([pre] + [pd.Timestamp(d) for d in dates])
     px = [prev] + list(closes)
@@ -120,7 +120,9 @@ def test_formula_parity_at_ledger_and_loop_charge_sites():
     assert ledger_trade_commission is trade_commission
     assert loop_trade_commission is trade_commission
 
-    st = SimState(cash=2_000.0, buy_cost_rate=COMMISSION, sell_cost_rate=COMMISSION, min_cost=0.0)
+    st = SimState(
+        cash=2_000.0, buy_cost_rate=COMMISSION, sell_cost_rate=COMMISSION, min_cost=0.0
+    )
     assert execute_buy(st, CODE, 10.0, 1_000.0, 0, "20251103")
     buy = st.trades[0]
     assert buy["commission"] == pytest.approx(
@@ -241,9 +243,7 @@ def test_v7_custom_fee_schedule_passthrough_without_monkeypatch():
     assert pos is not None
     assert state_buy.cash == pytest.approx(1_000_000.0 - expected_debit)
 
-    st_portana = simulate_v7(
-        minutes, daily, {D1: [CODE]}, [D1], fee=QLIB_PORTANA
-    )
+    st_portana = simulate_v7(minutes, daily, {D1: [CODE]}, [D1], fee=QLIB_PORTANA)
     assert st_portana.cash == pytest.approx(
         21_000_000.0 - QLIB_PORTANA.debit_buy(2000 * 100.0)
     )
@@ -299,10 +299,24 @@ def test_floor_unit_two_lot_oracle_portana_schedule():
     ]
     v7_two.positions[CODE] = pos2
     _sell_lots(
-        v7_two, pos2, date(2025, 11, 4), 895, 10.0, "force", kind="trial", fee=QLIB_PORTANA
+        v7_two,
+        pos2,
+        date(2025, 11, 4),
+        895,
+        10.0,
+        "force",
+        kind="trial",
+        fee=QLIB_PORTANA,
     )
     _sell_lots(
-        v7_two, pos2, date(2025, 11, 4), 896, 10.0, "force", kind="add", fee=QLIB_PORTANA
+        v7_two,
+        pos2,
+        date(2025, 11, 4),
+        896,
+        10.0,
+        "force",
+        kind="add",
+        fee=QLIB_PORTANA,
     )
     assert v7_two.cash == pytest.approx(1990.0)
 
@@ -322,9 +336,7 @@ def test_floor_unit_two_lot_oracle_portana_schedule():
         Lot(100, date(2025, 11, 3), 10.0, "trial"),
     ]
     v7_bi.positions[CODE] = pos_bi
-    _sell_lots(
-        v7_bi, pos_bi, date(2025, 11, 4), 895, 10.0, "force", fee=BILATERAL_10BP
-    )
+    _sell_lots(v7_bi, pos_bi, date(2025, 11, 4), 895, 10.0, "force", fee=BILATERAL_10BP)
     assert sum(t["commission"] for t in bilateral_book.trades) == pytest.approx(2.0)
     assert bilateral_book.cash == pytest.approx(1998.0)
     assert v7_bi.cash == pytest.approx(1998.0)

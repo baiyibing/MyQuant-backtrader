@@ -238,6 +238,19 @@ Pass criteria:
 - No ghost script names are invoked.
 - Production freeze diffs remain zero unless a new human cut reopens behavior.
 
+### Slice C run record (2026-09-19, feat branch)
+
+| Step | Result |
+|---|---|
+| `IMPLEMENTATION_BASE` | `fa4d448d8446a9959217c5431eeb7c8d59c0d722` (ancestor of HEAD) |
+| 1a `test_ashare_fees` + `test_ashare_fee_wiring` | **10 passed**, exit 0 |
+| 1b fence + predicates | **50 passed**, exit 0 |
+| `verify_oskh_data_contract.py` | exit 0 |
+| `verify_data_path_ssot.py` | exit 0 |
+| `verify_no_hardcoded_machine_paths.py` | exit 0 |
+| `verify_tr_bridge_import_ssot.py` | exit 0 |
+| Freeze `git diff --exit-code` vs IMPLEMENTATION_BASE / WT / index on §9 ten files | **all exit 0** |
+
 ---
 
 ## 9) Frozen production file table (delta1 default)
