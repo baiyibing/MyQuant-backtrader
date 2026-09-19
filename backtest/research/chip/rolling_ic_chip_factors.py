@@ -43,7 +43,8 @@ def _get_reader():
     if _reader is None:
         _reader = StockDataReader()
     return _reader
-FLOAT_SHARES_PATH = str(resolve_source_parquet("float_shares.parquet"))
+def _float_shares_path() -> str:
+    return str(resolve_source_parquet("float_shares.parquet"))
 OUTPUT_DIR = os.path.join(REPO, "backtest_output")
 WINDOW = 80
 TURNOVER_WINDOW = 60
@@ -144,7 +145,7 @@ def main():
     reader = StockDataReader()
 
     # ── 标的 ──
-    fs_all = pd.read_parquet(FLOAT_SHARES_PATH)
+    fs_all = pd.read_parquet(_float_shares_path())
     rng = np.random.RandomState(42)
     codes = list(rng.choice(fs_all["stock_code"].tolist(),
                             size=min(args.stocks, len(fs_all)), replace=False))

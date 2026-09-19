@@ -7,7 +7,7 @@ from typing import Optional
 
 import duckdb
 
-from common.infra.data_root import resolve_source_parquet
+from common.infra.data_root import UnconfiguredDataRootError, resolve_source_parquet
 
 
 def default_adj_factor_path() -> Path:
@@ -27,8 +27,14 @@ def register_ref_views(
     so board-limit templates stay correct on ex-dividend dates (plan §6 #4).
     ``cumulative_adj_factor`` also joins for front-adjusted prices (``Price * factor``).
     """
-    path = Path(adj_factor_path) if adj_factor_path else default_adj_factor_path()
     registered = {"l2_adj_factor": False, "l2_prev_close": False}
+    if adj_factor_path is None:
+        try:
+            path = default_adj_factor_path()
+        except UnconfiguredDataRootError:
+            return registered
+    else:
+        path = Path(adj_factor_path)
     if not path.is_file():
         return registered
     pq = path.resolve().as_posix()

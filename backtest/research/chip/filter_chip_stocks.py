@@ -38,7 +38,8 @@ from oskh_factors.price_bb import bb_position
 from qlib_cost import cyq
 from oskh_data import StockDataReader
 
-FLOAT_SHARES_PATH = str(resolve_source_parquet("float_shares.parquet"))
+def _float_shares_path() -> str:
+    return str(resolve_source_parquet("float_shares.parquet"))
 OUTPUT_DIR = os.path.join(REPO, "backtest_output")
 WINDOW_DAYS = 80
 FLOAT_SHARES_COVERAGE_THRESHOLD = 0.95
@@ -174,12 +175,13 @@ def main():
         sys.exit(1)
 
     # float_shares 覆盖度检查
-    if not os.path.exists(FLOAT_SHARES_PATH):
-        print(f"[ERROR] float_shares 文件不存在: {FLOAT_SHARES_PATH}")
+    fs_path = _float_shares_path()
+    if not os.path.exists(fs_path):
+        print(f"[ERROR] float_shares 文件不存在: {fs_path}")
         print("请先运行: python oskh_data/float_shares.py")
         sys.exit(1)
 
-    fs_df = pd.read_parquet(FLOAT_SHARES_PATH)
+    fs_df = pd.read_parquet(fs_path)
     valid_fs_codes = set(fs_df.loc[fs_df["float_shares"] > 0, "stock_code"].tolist())
     coverage = len(valid_fs_codes) / len(market_codes) if market_codes else 0
     print(f"float_shares 有效覆盖: {len(valid_fs_codes)}/{len(market_codes)} = {coverage:.2%}")

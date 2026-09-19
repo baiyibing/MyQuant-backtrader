@@ -33,6 +33,10 @@ from common.infra.data_root import resolve_period_root
 
 def load_none_bars(codes, start, end, *, none_root=None, workers=8, bars=None):
     """Reuse daily I/O only, explicitly selecting the unadjusted price domain."""
+    if bars is not None:
+        return modea.load_front_bars(
+            codes, start, end, front_root=none_root, workers=workers, bars=bars
+        )
     root = Path(none_root) if none_root is not None else resolve_period_root("1d") / "dividend_type=none"
     return modea.load_front_bars(codes, start, end, front_root=root, workers=workers, bars=bars)
 
