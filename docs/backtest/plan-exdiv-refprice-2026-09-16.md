@@ -1,7 +1,7 @@
 # Plan：除权日参考价修正片（scoped；E-R6 落地 + E-R5 收窄）
 
 > **落盘**：2026-09-16。**v1.1**（2026-09-16 两路评审修订，见 changelog §10）。
-> **状态**：✅ **A/B/C 已落地（PR）；切片 D 宿主-only 未做**（人裁 2026-09-16：PX-1…PX-7 全部「是」）。评审记录：[zcode-facts](../architecture/reviews/2026-09-16/plan-exdiv-refprice/zcode-facts.md) / [zcode-arch](../architecture/reviews/2026-09-16/plan-exdiv-refprice/zcode-arch.md) / [merge-consensus](../architecture/reviews/2026-09-16/plan-exdiv-refprice/merge-consensus.md)。
+> **状态**：✅ **A/B/C 已落地（PR）；切片 D 宿主已完成 2026-09-16**（[短记](exdiv-refprice-slice-d-host-note-2026-09-16.md)；人裁 2026-09-16：PX-1…PX-7 全部「是」）。评审记录：[zcode-facts](../architecture/reviews/2026-09-16/plan-exdiv-refprice/zcode-facts.md) / [zcode-arch](../architecture/reviews/2026-09-16/plan-exdiv-refprice/zcode-arch.md) / [merge-consensus](../architecture/reviews/2026-09-16/plan-exdiv-refprice/merge-consensus.md)。
 > **风险档**：**L2**（正确性行为变更：v1–v6、v8–v10 在除权日的 limit/止损/trail/买侧涨停拦截判定变化；成交价与净值估值语义不变）。
 > **工作流**：走 [Codex 交接工作流](workflow-codex-handoff.md)。
 > **裁决源**：[er5-recheck-5e8-note](er5-recheck-5e8-note-2026-09-16.md)（人裁 2026-09-16 选 B）；[survey-exdiv-adj-data-prep](survey-exdiv-adj-data-prep-2026-09-16.md) **C2 设计锁（主源层级，本 v1.1 已改回遵守）**。
@@ -41,7 +41,7 @@ k = cum[prev_row] / cum[D_row]        # 行到行 LAG（禁日历 D-1：停牌�
 
 ### 1.3 已声明的残留（E-R6 三句，评审 🔴-2 定稿）
 
-1. **跨除权 lot 的 trades pnl/净值含 (1−k) 结构性失真**：送转不增股、现金分红不入账、估值 raw close——本片只修触发参考，**不回收历史假止损的已实现亏损**（5 笔 -196 万的回收上界仅 +35~125 万 ≈ 0.01–0.025pp，切片 D 预写防误读）；
+1. **跨除权 lot 的 trades pnl/净值含 (1−k) 结构性失真**：送转不增股、现金分红不入账、估值 raw close——本片只修触发参考，**不回收历史假止损的已实现亏损**（5 笔 -196 万的回收上界仅 +35~125 万 ≈ 0.01–0.025pp；宿主 D 实测净值 +4.5 万，见短记）；
 2. **v4 SMA 门（buy_gate/sell_gate 的 closes 序列）除权日不换域**（假 ma_signal/假拒，历史行为保留，另开微片再裁——PX-5）；
 3. **噪声带 ≤0.5% 不修正**：止损触发距离/止盈地板偏移 ≤0.5pp，低价股档位边缘可差 1 分。
 
@@ -84,7 +84,7 @@ k = cum[prev_row] / cum[D_row]        # 行到行 LAG（禁日历 D-1：停牌�
 | **A · 数据层** | `exdiv_map.py`（事件门 ∪ 兜底、LAG 行比、warmup 窗、缺失空 map）+ 单测（复用 `test_exdiv_hold_hits.py:137-163` 合成 parquet 模式；日期列双兼容 str/datetime 经 `normalize_date`） | data-free pytest 绿；CI 零影响 |
 | **B · 引擎接入** | 5 触点 + `rescale_position`（csv_ledger 纯函数）+ `simulate(exdiv=)` 布线 + 三个 stats 条件打印 + 合成除权 fixture 单测（**评审向量 T1–T16**，必收 T1/T3/T4/T5/T8/T9/T11/T14/T15） | 全量 pytest 绿（含 np3_layering golden）；v1/v6 golden 绿；空 map 下 fixture 窗 trades 与 master 逐字节一致 |
 | **C · 文档** | E-R6 + E-R5 收窄（评审措辞）+ HELP_LOCK×2 + README 一句 + **三份历史文档加「修正前口径」脚注**（er5-recheck / np2-host-note / 资金短记）+ 本 plan 回写 | review |
-| **D · 宿主验证**（非合入门） | v1 规则重跑 5 亿分钟：预期止损 149→**~120–144**（下界 144=5 笔假止损消失；混合带部分转持有）、总亏损回收**上界 +35~125 万（≈0.01–0.025pp）**——短记预写防「12% 回收」误读；对照 research_false_stops 前后 | 短记落 docs；完成后**放行 v2 切片 D** |
+| **D · 宿主验证**（非合入门） | v1 规则重跑 5 亿分钟：预期止损 149→**~120–144**、回收上界 +35~125 万（≈0.01–0.025pp）；对照 research_false_stops | ✅ 2026-09-16：[exdiv-refprice-slice-d-host-note-2026-09-16.md](exdiv-refprice-slice-d-host-note-2026-09-16.md)。实测止损 **149→143**、净值 **+4.5 万（≈0.009pp）**、已平仓 lot +27 万；五笔假 `gap_open` 原事件消失。已放行 v2 切片 D。 |
 
 ## 5. 验证命令
 
@@ -120,6 +120,7 @@ D:\anaconda3\envs\vanna312\python.exe -m pytest -q tests/
 
 ## 9. Changelog
 
+- **v1.1+D**（2026-09-16）：宿主切片 D 完成（v8-v1 隔离重跑；止损 149→143，NAV +4.5 万）。短记见上。
 - **v1.1+impl**（2026-09-16）：切片 A/B/C 落地（exdiv_map + 引擎 5 触点 + E-R6/E-R5 文档）；D 宿主验证另记。
 - **v1.1+GO**（2026-09-16）：人裁 PX-1…PX-7 全部「是」；状态 → ✅ PX GO / implementing。
 - **v1.1**（2026-09-16，两路评审）：检测门改回 survey C2（ex_date_index 主 ∪ 跳变>1e-2 兜底，PX-4）；补 pool 买侧档位映射（第 5 触点，T9）；simulate 布线锁 `exdiv=None` 参数（防 golden 湖依赖）；k 改行到行 LAG（停牌跨度）；读窗含 warmup；cost/peak 落点定稿 ledger 纯函数 `rescale_position`；E-R6 残留三句 + 回收上界预写（PX-6）；v7 不接（PX-7）+ 假成交消失断言；stats 三键条件打印；验证命令修正（OSKH_SOURCE_PARQUET_ROOT）；v2 冲突面措辞改「同文件不同区域」。

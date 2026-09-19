@@ -46,6 +46,8 @@ def _empty_stats() -> dict:
         "add_lots": 0,
         "skip_no_bar": 0,
         "skip_buy_gate": 0,
+        "skip_add_loser": 0,
+        "skip_index_gate": 0,
         "skip_sma_warmup": 0,
         "sell_stop": 0,
         "sell_trail": 0,
