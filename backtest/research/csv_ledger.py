@@ -21,6 +21,7 @@ from backtest.research.ashare_fees import (
 )
 from backtest.research.ashare_session import LIMIT_EPS, hit_limit_down, hit_limit_up
 from backtest.research.ashare_volume_cap import VolumeCap
+from backtest.research.ashare_exdiv_economics import ExDivEconomics
 from backtest.research.market_layer import limit_prices
 
 DEFAULT_TOTAL_CASH = 21_000_000.0
@@ -93,6 +94,7 @@ class SimState:
     sell_cost_rate: float = COMMISSION
     min_cost: float = 0.0
     volume_cap: VolumeCap | None = field(default=None, repr=False, compare=False)
+    exdiv_economics: ExDivEconomics | None = field(default=None, repr=False, compare=False)
 
 
 def _ymd(ts) -> str:
@@ -156,6 +158,33 @@ def rescale_position(pos: Position, k: float) -> None:
         return
     pos.cost = float(pos.cost) * factor
     pos.peak = float(pos.peak) * factor
+
+
+def apply_exdiv_economics(st: SimState, code: str, ds: str) -> None:
+    """Ex-date snapshot before scan/buys; keep refs and lot identity unchanged.
+
+    Bonus shares join their source lot, with a separate list-date T+1 lock.
+    They are marked from ex-date, including shares awaiting a later listing.
+    """
+    account = st.exdiv_economics
+    if account is None:
+        return
+    lots = st.positions.get(code, [])
+    entitlement = account.entitle(code, ds, [p.shares for p in lots])
+    if entitlement is None:
+        return
+    for pos, added in zip(lots, entitlement.bonus_shares):
+        if added:
+            pos.shares += added
+            date = entitlement.list_date
+            locks = account.bonus_locks.setdefault(id(pos), {})
+            locks[date] = locks.get(date, 0) + added
+    st.cash += account.settle(ds)  # pay_date == ex_date is allowed
+
+
+def _locked_bonus(account: ExDivEconomics, pos: Position, ds: str) -> int:
+    # Same strict date ordering as t1_sellable; a later list_date stays locked.
+    return sum(q for acquired, q in account.bonus_locks.get(id(pos), {}).items() if ds <= acquired)
 
 
 def resolve_limit_prices(
@@ -285,6 +314,23 @@ def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str, *
           bucket_id: int | None = None, at: int | None = None,
           day_i: int | None = None) -> None:
     shares = pos.shares
+    if st.exdiv_economics is not None:
+        ds = _ymd(day)
+        group = [pos] + [p for p in st.positions.get(code, [])
+                         if p.ride_with == pos.lot_id and p is not pos]
+        # Linked exits remain atomic; wait for all bonus shares to unlock.
+        if (len(group) > 1 or pos.ride_with is not None) and any(
+            _locked_bonus(st.exdiv_economics, p, ds) for p in group
+        ):
+            st.stats["exdiv_econ_defer_linked_t1"] = st.stats.get("exdiv_econ_defer_linked_t1", 0) + 1
+            return
+        shares -= _locked_bonus(st.exdiv_economics, pos, ds)
+        if st.volume_cap is not None and pos.pending_exit and shares < pos.shares:
+            # δ5 pending exits are all-or-none, including when bonus is locked.
+            st.stats["exdiv_econ_defer_pending_t1"] = st.stats.get("exdiv_econ_defer_pending_t1", 0) + 1
+            return
+        if shares <= 0:
+            return
     if st.volume_cap is not None:
         # Linked exits stay atomic: no orphan riders or new pending queues.
         group = [pos] + [p for p in st.positions.get(code, [])
@@ -297,7 +343,7 @@ def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str, *
             _volume_skip(st, code, px, day, "skip_volume_cap:t1", bucket_id)
             return
         key = (code, _ymd(day), bucket_id)
-        wanted = sum(p.shares for p in group)
+        wanted = shares if len(group) == 1 else sum(p.shares for p in group)
         allocated, skip = st.volume_cap.clamp(
             key, bucket_id if at is None else at, wanted,
             atomic=len(group) > 1 or pos.ride_with is not None or bool(pos.pending_exit),
@@ -338,7 +384,12 @@ def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str, *
         st.stats["sell_pos_trail"] += 1
     if st.volume_cap is not None:
         st.volume_cap.consume(key, shares)
+    if st.volume_cap is not None or st.exdiv_economics is not None:
         pos.shares -= shares
+        if st.exdiv_economics is not None:
+            locks = st.exdiv_economics.bonus_locks.pop(id(pos), {})
+            if pos.shares and (locked := {d: q for d, q in locks.items() if ds <= d}):
+                st.exdiv_economics.bonus_locks[id(pos)] = locked
         if pos.shares:
             return
     lots = st.positions.get(code) or []

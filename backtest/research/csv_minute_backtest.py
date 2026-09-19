@@ -42,7 +42,10 @@ from backtest.research.csv_ledger import (  # noqa: E402
     _sell,
     _ymd,
     rescale_position,
+    apply_exdiv_economics,
 )
+
+from backtest.research.ashare_exdiv_economics import EconomicLookup, ExDivEconomics
 
 from backtest.research.exdiv_map import k_for, load_exdiv_ratios, mapped_prev_close  # noqa: E402
 from backtest.research.ashare_session import defer_sell_at_limit, t1_sellable  # noqa: E402
@@ -528,6 +531,7 @@ def simulate(
     pool_names: Optional[dict[str, str]] = None,
     pool_names_by_day: Optional[dict[str, dict[str, str]]] = None,
     exdiv: Optional[dict] = None,
+    exdiv_economics: EconomicLookup | None = None,
     scores_by_day=None,
     topk=None,
     n_drop=None,
@@ -536,7 +540,11 @@ def simulate(
     participation_rate: float | None = None,
     volume_for_bucket: VolumeLookup | None = None,
 ) -> SimState:
-    """Opt-in cap uses caller-attested completed minutes; daily volume is unused."""
+    """Opt-in cap uses caller-attested completed minutes; daily volume is unused.
+
+    exdiv_economics is an explicit (symbol, YYYYMMDD) -> ExDivEvent lookup for
+    raw bars. None retains the baseline; E-R6 ratios never imply entitlements.
+    """
     hooks = prepare_strategy_hooks(
         strategy,
         stop_pct=stop_pct,
@@ -575,6 +583,8 @@ def simulate(
     )
     if participation_rate is not None:
         st.volume_cap = VolumeCap(participation_rate, volume_for_bucket)
+    if exdiv_economics is not None:
+        st.exdiv_economics = ExDivEconomics(exdiv_economics, st.stats)
     allow_add = bool(hooks["allow_add"])
     qlib_limit_pct = hooks.get("qlib_limit_pct")
     limit_up_chase = bool(hooks.get("limit_up_chase", True))
@@ -583,6 +593,8 @@ def simulate(
 
     for i, day in enumerate(calendar):
         ds = _ymd(day)
+        if st.exdiv_economics is not None:
+            st.cash += st.exdiv_economics.settle(ds)
         names = names_asof(ds)
         st.daily_quota_used = 0.0
 
@@ -601,6 +613,7 @@ def simulate(
             prev_rows = _previous_rows(ddf, day)
             if prev_rows.empty:
                 continue
+            apply_exdiv_economics(st, code, ds)
             # E-R6: rescale before scan_held_day; never between scan and peak writeback.
             kk = k_for(exdiv, code, ds)
             if kk is not None:

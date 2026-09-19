@@ -1,290 +1,185 @@
-# Plan: industry-align P3 δ6 ex-div economics / NAV residual (2026-09-19)
+# Plan: industry-align P3 δ6 production ex-div economics (2026-09-19)
 
-> **Status**: **v0.3 · Slice A→B→C completed / passed · Human GO P3δ6.1=A（2026-09-19，Asia/Shanghai）**：残留+oracle，含可选账本 B docs；生产冻结。**生产选项 C 未授权、未实施；经济残留 NOT closed；must-cut-C=NO。** Slice C 仅验收，不是生产人裁 C；本次结果见 §8.4。
-> **Main ship / 单行范围**: 按 Human GO A 固定 δ2/E-R6 deferred 的送转增股、现金红利入账和 NAV 经济残留/oracle；账本设计可选 B，仅文档，不改生产。
-> **IMPLEMENTATION_BASE**: `3668e256abec1258759b99a72e3b3c17d082e75c`（本 worktree `git rev-parse HEAD` 已核实；#127 merge，post δ5）。原 proposal 基线 `1049b904bdd818dbb79f51f1830a008c8f83b141`（post #123）仅作历史记录；§2 锚点已对新固定基线复核。
-> **Human GO recorded**: **P3δ6.1=A**；账本设计可选 **B（仅 docs）**。**只有另裁显式 C 才批准另案生产经济变更；本轮未授权 C，禁止生产 shares/cash/NAV 修改。** 其余设计候选见 §5；P1/P2/P4 继续挂起。
-> **前序**: [δ1 fees](plan-industry-align-p3-fees-2026-09-19.md)、[δ2 exdiv contract](plan-industry-align-p3-d2-exdiv-2026-09-19.md)、[E-R6 原计划](plan-exdiv-refprice-2026-09-16.md)、[engine SSOT](engine-ashare-correctness.md)、[next fill gates](plan-industry-align-next-2026-09-19.md)；[四刀索引](plan-industry-align-p3-d345-econ-index-2026-09-19.md)。
-
----
+> **Status**: **v0.4 · production economics landed · Human GO C/A/B/B/A**（2026-09-19，Asia/Shanghai）。本刀的 must-cut-C 已满足；economics-off 保留旧残留，economics-on 的显式事件守恒经 public APIs 验收，见 §8.4。
+> **IMPLEMENTATION_BASE**: `f145ffdec5e378c9092d3f8b990f104979d89141`（#130 merge tip，δ5 volume-cap production；开工时 HEAD 与指定分支已核对）。
+> **Human GO**: **P3δ6.1=C / .2=A / .3=B / .4=B / .5=A**，覆盖 #128 的 A 残留+oracle / B docs 冻结，**仅对本刀生效**。历史 A 记录保留于 §10。
+> **交付**: `/workspace/wt-p3-d6-exdiv-econ-prod`，分支 `feat/industry-align-p3-d6-exdiv-econ-prod`；提交到本地分支，由 host push/PR。本刀串行，不开子代理。
+> **前序**: [δ1 fees](plan-industry-align-p3-fees-2026-09-19.md)、[δ2 reference](plan-industry-align-p3-d2-exdiv-2026-09-19.md)、[δ5 cap](plan-industry-align-p3-d5-volume-cap-2026-09-19.md)、[engine SSOT](engine-ashare-correctness.md)。
 
 ## 0) One-line scope
 
-区分触发参考价与经济权益，写清当前未增股/未入现金的残留、可验收经济 oracle 与未来账本候选；本轮 Human GO A 仅授权残留+oracle，账本设计可选 B docs，不表示生产经济残留已修复。
+为 daily/minute book 与 v7 的公开模拟接口提供显式、默认关闭的送转增股、现金应收/到账与 NAV 接线；保留独立 E-R6 参考价缩放。无 CLI/loader/湖事件源接线。
 
 ## 1) Why now
 
-δ2 已在 post #123 固定参考价缩放、事件门、入口差异和 raw mark 残留；E-R6 的作用是减少触发参考错域，**没有完成送转股数、现金分红与经济 NAV**。本刀承接其明确留下的经济面，而非 redo E-R6。另一个研究路径 Mode B 有 `shares /= k` 的 fractional-shares 近似，容易被误用为全仓总回报账本已经存在的证据；必须把这条边界和真正经济事件数据的缺口先写清。
+E-R6 只把 cost/peak 等参考量映射到除权价域，不能补偿原股数与 raw mark 的经济差额。#128 只固定残留和设计 oracle；本次新 Human GO C 批准独立生产变更。k 无法识别 b/c，因此本次由调用者提供完整事件，既不从 k 推算权益，也不采集/合并数据。
 
-## 2) Verified as-built anchors（本 IMPLEMENTATION_BASE 的 file:line）
+## 2) Production anchors（本次编辑后的 file:line）
 
-### 2.1 当前书 / v7 经济状态
-
-| 合同项 | 已核实行为 | 锚点 |
+| 面 | 生产落点 | 合同 |
 |---|---|---|
-| E-R6 map | `k=prev_cum/cum`，输出 code/day/ratio；以有效因子 LAG 和事件/噪声门筛选，不输出登记/到账/新增股明细 | `backtest/research/exdiv_map.py:233-239`、`:288-319` |
-| 书 lot | shares 是 int；rescale 只乘 cost/peak，其它 lot 元数据不改 | `backtest/research/csv_ledger.py:68-79`、`:147-156` |
-| 书现金流 | 买入扣成交额+佣金，卖出加成交额−佣金；缩放不调用现金分红入账 | `backtest/research/csv_ledger.py:215-225`、`:261-276` |
-| 书 NAV | equity=cash+各 lot 原股数×**传入 bars 的**当日/最近历史 close（函数不做 raw 域认证）；**仅默认 none/raw 入口**下该 close 才是 raw mark 残留；无行情才回落 cost；EOD_MARK 仅标记、佣金0。混域（front/back/qlib_day）估值域随入口，见 δ2 分源合同与本刀 §2.3 | `backtest/research/csv_ledger.py:165-184`；`backtest/research/csv_simulate_loop.py:381-421` |
-| v7 lot | `_rescale_position` 乘 entry_A/avg_cost/peak/非空 add1_A1/lot.price；保持 lot.shares/buy_date/kind | `backtest/research/csv_minute_backtest_v7.py:60-81`、`:187-196` |
-| v7 现金与 NAV | 现金只在该买卖记账路径变化；会话末 holdings=原股数×last_prices，缺值才 avg_cost fallback | `backtest/research/csv_minute_backtest_v7.py:205-251`、`:416-418` |
-| 缩放时机 | 书有相应 bar/昨收后，v7 有 records 后，先缩放事件日已有仓，再扫描；不是通用事件账本 | `backtest/research/csv_daily_backtest.py:300-327`；`backtest/research/csv_minute_backtest.py:586-636`；`backtest/research/csv_minute_backtest_v7.py:316-340` |
-| 已有经济残留 pins | 100 股小 oracle、双书公开 raw mark 股数/现金不补偿、v7 自然多 lot 的快照差额 | `tests/test_exdiv_refprice_engines.py:554-579`；`tests/test_csv_minute_backtest_v7.py:433-465`（均为 IMPLEMENTATION_BASE 行号；具名映射见 §7） |
+| 输入/独立账 | `backtest/research/ashare_exdiv_economics.py:19`、`:61`、`:85`、`:127` | frozen ExDivEvent、一次性资格快照、event_id 去重、应收与结算 |
+| book 参考/权益 | `backtest/research/csv_ledger.py:151`、`:163`、`:313` | rescale 原实现不变；增股不动 refs；卖出过滤新股限售量 |
+| daily public | `backtest/research/csv_daily_backtest.py:208`、`:302`、`:317` | session start 到账；原 bar/昨收门后权益→参考缩放→卖出扫描 |
+| minute public | `backtest/research/csv_minute_backtest.py:511`、`:597`、`:616` | 原 daily/minute/昨收门后同序处理；原扫描/成交时点不变 |
+| book NAV | `backtest/research/csv_simulate_loop.py:411` | cash + shares×传入 mark + outstanding receivables |
+| v7 public | `backtest/research/csv_minute_backtest_v7.py:191`、`:203`、`:315`、`:359`、`:379`、`:483` | records 门后权益→原 rescale→扫描；独立 bonus lots；NAV 加应收 |
+| v7 可卖量 | `backtest/research/csv_minute_backtest_v7.py:256` | 原 `_sell_lots` / t1_sellable 原样处理 list_date bonus lot |
 
-### 2.2 Mode B 是独立近似，不能关闭本刀
+**economics-off**（省略参数或 None）仍保持原股数、现金、lot、trades、stats 与 NAV 残留；byte snapshots 钉住本固定 base 的公开输出。Position 字段与 trades.csv schema 不变；SimState/SimResult 新增可空的运行内经济账句柄。`exdiv` 仍独立控制参考价，不挂经济账也可继续 rescale。
 
-| 事实 | 证据 | 允许的结论 |
-|---|---|---|
-| Mode B instance path 对事件做 cost/mark×k、shares÷k，使用 float shares，缺分钟时也先调整 | `backtest/research/unified_exit_modeb.py:407-427` | 这是 Mode B 自己的价值缩放近似；不证明书/v7 同样增股 |
-| Mode B equity 路径也按 k 调 shares/mark，现金仍走买卖；元数据明确 `no cash dividend` | 同文件 `:788-824`、`:1029` | 没有逐笔现金红利、应收/实收、登记日权利账闭环 |
-| fractional shares 与 shared ledger 不增股并存 | `tests/test_unified_exit_modeb_exdiv.py:13-22`、`:61-64` | 可回归“两个模型分叉”，不能宣称真实权益或本仓经济残留已关闭 |
+## 3) Deferred boundaries
 
-一个 k 无法唯一分解现金分红、送转、配股等事件。将 `q/k` 当真实送转股数、同时再计现金红利可能重复补偿。Mode B 夹具绿灯、代数市值不变、未验证的收益提升都不构成本刀完成证据；本次冻结 Mode A/B，不改它们的历史定义。
+P1/P2/P4 继续 deferred。δ4 fail-closed 与 δ5 cap 已在基线落地，本次仅组合使用，不重开语义。Mode A/B 生产零 diff；Mode B 的 float `shares /= k` 是独立近似，没有移植。
 
-### 2.3 已关 / 仍钉 / deferred
+δ2 因子 PIT/修订、恢复日错域、噪声门、SMA/qlib 混域与 rescale helper 非幂等均未修复。实际事件数据、税费/负债、经济成本分配、登记日资格与权益修订/跨运行重放不在本刀；不能声称真实全市场总回报或历史收益已校正。
 
-| 面 | 当前状态 | δ6 处理 |
-|---|---|---|
-| E-R6 参考价修正 | 事件落日/价格域一致且可处理时，缩放已有参考并映射昨收；δ2 已 pin | 保留已关面，不 redo、不称所有域均安全 |
-| 原股数/原现金 raw NAV 残留 | 基线已有明确数值 pin | A：继续文档化并扩展必要 oracle |
-| 送转权益、登记资格、到账/上市、现金分红、NAV 含应收 | deferred 的经济面 | **已人裁 A，账本可选 B docs**；不实施生产，C 须另裁且本轮不授权 |
-| 因子恢复日错域、缺 bar 不回放、helper 非幂等、原始因子可得性/修订 PIT | δ2 已揭示，未关闭 | 保留独立残留；新经济账不能假设旧 map 已满足这些保证 |
-| 小额事件噪声门、v4 SMA 原始序列、minute/v7 qlib_day 混域 | 未关闭 | 不随本刀默认修；经济事件不能直接沿用会漏现金的小噪声过滤 |
-| 历史收益/假止损回收 | 本次未测 | 不量化改善、不称已追回历史损失 |
+## 4) F-R* hard locks（C cut 适用）
 
-## 3) Delta roadmap
-
-| 刀 | 基线/路线 | 与 δ6 的关系 |
-|---|---|---|
-| δ1 fees | 基线已含；生产冻结 | 股数/现金变化会影响后续成交费用；公司行动不是 BUY/SELL，不自动套佣金 |
-| δ2 exdiv reference | 基线已含；参考价合同已关、经济 deferred | **δ6 只打开经济面**，不抹掉 δ2 的受限结论 |
-| [δ3 ST PIT](plan-industry-align-p3-d3-st-pit-2026-09-19.md) | #125 已落契约/pins；生产冻结 | ST 日期 PIT 与经济事件登记/可得时间是两个合同 |
-| [δ4 limits-none](plan-industry-align-p3-d4-v7-limits-none-2026-09-19.md) | #126 已落契约/pins；生产冻结 | 不以改经济账统一 None 政策 |
-| [δ5 volume-cap](plan-industry-align-p3-d5-volume-cap-2026-09-19.md) | #127 已落设计，仍 design-only | 新增权益/现金不是市场成交，不消耗 volume budget；若生产并行改造须重核组合合同 |
-| **δ6 economics** | **本文件：Human GO A；账本可选 B docs；C 未授权** | 具备事件证据/账本设计/迁移方案并另裁显式 C 后方可实施生产案 |
-
-## 4) F-R* hard locks
-
-| ID | 硬锁 |
+| ID | 合同 |
 |---|---|
-| **F-R1** | 本次仅 §8.1 docs + tests；A/B 都不改生产 Python、shares、现金、NAV、参考价、trades 或 CLI。 |
-| **F-R2** | δ2/E-R6 只修参考价；送转不增股/分红不入现金的书/v7 经济残留不能写成已关。 |
-| **F-R3** | Mode B fractional shares、factor-only 代数守恒与未验证收益均不是经济残留关闭证据。 |
-| **F-R4** | `k` 不是现金红利或送转比例；不能由因子跳变/噪声门反推完整经济事件，不双计 q/k + 红利。 |
-| **F-R5** | 必须区分登记权益、除权参考、到账现金、新股可卖；T+1/新股可卖日期不可由 rescale 自动推定。 |
-| **F-R6** | NAV 守恒 oracle 必须隔离市场价格变动、手续费、税费、外部资金流；应收转现金不产生二次收益。 |
-| **F-R7** | 成本参考与经济成本账分离；helper 重复调用不幂等的现状不改，新账如设计去重须独立事件键/版本。 |
-| **F-R8** | P1/P2/P4、δ1/δ2 当前行为、ST/limits/cap 分叉保持；C 不能顺手重开它们。 |
-| **F-R9** | A/B 只用内存/tmp_path data-free oracle，无湖、回测、外部下载/merge；仅消费上游，缺数据合同先报缺口。 |
-| **F-R10** | §9 超集冻结与全路径白名单同时生效；不复活 live/LEBS/MockQMT/Cerebro/PortAnaRecord，不扩大热路径 import fence。 |
+| F-R1 | 仅 §8.1 allowlist；生产仅六文件，§9 的五个旧文件为本次明确例外。 |
+| F-R2 | E-R6 cost/peak×k 独立；经济层不改 refs、不 shares/=k。默认关闭保留 δ2 残留。 |
+| F-R3 | Mode B 近似与代数 oracle 不能替代 public 生产权益守恒测试。 |
+| F-R4 | k 不是 b/c；缺失、invalid 输入不发明权益。 |
+| F-R5 | ex_date 锁 q；新股 list_date/ex_date 为取得日，严格后续 session 才可卖。 |
+| F-R6 | 守恒 fixture 隔离额外市场变化/税费/外部流；应收→现金不产生第二次收益。 |
+| F-R7 | 新账按 event_id 幂等；旧 rescale helper 非幂等不变，不宣称持久恢复或修订支持。 |
+| F-R8 | 不改 P1/P2/P4、ST PIT、fee 数字/公式、limit/volume-cap 语义。 |
+| F-R9 | 内存/tmp_path、指定 Python；无湖、CLI backtest、网络/下载、子代理；固定 SIMULATE_HOT_PATH enum 不扩展。 |
+| F-R10 | §9 其它行及 allowlist 外全路径零 diff；不复活 live/LEBS/MockQMT/Cerebro/PortAnaRecord。 |
 
-## 5) P* human cuts（Human GO .1=A 已录入；账本可选 B docs；非 C）
+## 5) Human cuts（当前有效 C/A/B/B/A）
 
-> **Human GO recorded 2026-09-19 (Asia/Shanghai):** P3δ6.1=A — δ6=A：残留+oracle；账本可选 B；**生产增股/入账/NAV 须另裁 C，本轮不授权**。A 授权后续残留契约与 data-free oracle pins；可选账本 B 仅限设计文档，**明确不是 `.1=C`，本轮禁止生产 shares/cash/NAV 修改**。P1/P2/P4 继续挂起。
-
-### 5.1 主裁决：经济面交付层级
-
-| ID | A | B | C | 本轮人裁 |
-|---|---|---|---|---|
-| **P3δ6.1** ✅ Human GO 2026-09-19 | **继续只文档化残留 + oracle pins**，生产零行为变更 | **设计账本但不改生产**，补事件/权益/现金/NAV 状态表 | **批准生产行为变更（增股/入账/NAV）**；需独立实施计划/PR 与完整验收 | **A**；账本可选 **B（仅 docs）**。**明确非 C，本轮不授权** |
-
-本轮 Human GO 已正式录入 A（账本可选 B，仅 docs），未给任何生产经济变更授权。后续选择 C 必须另行人裁，把裁决日期、范围、前置证据与允许修改的路径写入新实施记录。本次 Slice C 是验收阶段，绝不替代这里的人裁选项 C；§5.2 仍是设计候选，不能从次级选项推导生产授权。
-
-### 5.2 B/C 设计时需要补齐的决策
-
-| ID / 决策 | A | B | C | 推荐与依赖 |
-|---|---|---|---|---|
-| **P3δ6.2：事件源** | 列缺口；要求上游显式事件明细与 PIT/版本证据后才实现 | 仅设计因子近似账户，明确非真实权益 | 采纳经验证的逐事件合同，进入消费接线设计 | **A**；禁止本仓新增采集/合并 |
-| **P3δ6.3：权益/现金/NAV** | 保留基线残留 oracle | 设计 record→entitled/receivable→payable/listed→cash/tradable 分层状态 | 选择有充分数据支持的其它记账时点，列 NAV 差异 | **A** 随 .1=A；.1=B 时推荐 **B**，仍无生产授权 |
-| **P3δ6.4：股数与零碎股** | 记录整股现状/零碎规则缺口，不以 q/k 自动生成 | 设计独立 entitlement 精度及上市可卖数量，零碎/现金替代显式规则 | 批准具体新股可卖/零碎处置行为 | **A**；设计时可 B；C 还需 .1=C |
-| **P3δ6.5：报告与兼容** | 保持现有 trades/equity schema | 设计独立公司行动账/对账视图，不改 trades | 实施产物变更；涉及既有 trades 新列须明确重开 P2 | **A** 随 .1=A；设计时 B |
-
-任何次级 C 不独立授权生产；`.1=C` 也不能绕过尚未解决的数据、税费、可卖、迁移等前提。默认没有自动触发 NP2/宿主重跑；如以后需经验测量或触及 engine SSOT 的 E-R5 重开条件，另立宿主任务与人裁，本次不运行。
-
-## 6) Non-goals
-
-- A/B 不实现增股、现金分红入账、应收账款、NAV 改写、除权事件补发或新 tax/fee 分录。
-- 不由 `k` 反推送转比例，不把 Mode B 的 q/k 移植到书/v7，不把它称真实总回报。
-- 不修 δ2 因子 PIT/错域、噪声带、SMA、入口域差异；不撤销历史真实 SELL、不追回假止损。
-- 不开展收益、税法、交易所日期规则或真实事件数据核验，不跑回测/湖/探针，不报收益改善。
-- 不改 v7 stage/首开时间、T+1、ST/limits、fee floor、capacity；P1/P2/P4 继续挂起。
-
-## 7) Slices A → B → C（本次完成；Human GO A + 可选账本 B docs）
-
-§5 Human GO A 的残留合同与 data-free oracle、可选 B 账本设计文档已落地；Slice C 验收记录见 §8.4。新增测试仅局部算术设计 oracle 与现有 public simulate 残留，不实现测试侧事件账本；B6 生命周期仅文档。生产选项 C 未授权、未实施。
-
-### Slice A：残留合同与候选经济账（已落文档）
-
-先写清两套量：触发参考 `cost_ref/peak_ref` 与经济账 `entitlement/receivable/cash/quantity/cost_basis`。以下字段/流程仅为 B 设计候选，**不是现有 dataclass/API**。
-
-| 候选合同 | 必须回答的问题 |
-|---|---|
-| 事件身份 | code、event_id、revision、available_at、record_date、ex_date、pay_date、list_date；每旧股现金 c、新增比例 b、金额税前/税后口径与来源，缺失不得猜 |
-| 权益快照 | 在已裁登记时点锁定 eligible lots/数量；登记后卖出是否保留权利、除权日新买是否无权按夹具前提明确；新股上市/可卖独立建模 |
-| 状态与顺序 | 候选 record→entitled；ex 按约定确认新股权利/应收；pay 应收转现金；list 新股权利转股份/可卖量。会话内与交易/mark 顺序 pending，不假定 ex/pay/list 同日；转股/到账前后只计一次 |
-| 重放与修订 | 事件键幂等、部分入账恢复、修订冲销/差额、跨停牌/无 bar 日处理；旧 rescale 无去重状态不能充当新账事件处理器 |
-| 金额精度 | 股数和权益精度、分币舍入及残差账户、gross/net/tax 明细；税规则未核实，不从 δ1 代理佣金推导 |
-| NAV 对账 | cash + tradable/nontradable shares 的已定义估值 + receivables − liabilities；不得丢应收或到账时双计；原价/复权价域需显式验证 |
-| 成本与产物 | 经济成本分配与触发参考成本分离；公司行动不是成交，不复用 BUY/SELL/EOD_MARK 伪造现金流；先设计独立账，不本刀改 schema |
-
-DoD：A 只承诺残留/oracle；B 在文档完成状态表、缺数据项与迁移风险，未解决项显式 pending。单靠 E-R6 map 不足以实现上述账本。以后的 C 还需独立生产 slices、版本/重算/回滚合同，不能把本节当成可直接开写代码的授权。
-
-### Slice B：data-free pins / design-only oracle（本次实际映射）
-
-以下用受控经济夹具，**设无市场额外涨跌、无税费/外部资金流，事件资格由夹具给定**；不是实际登记、税务或交易所公式认证。简化送转+派现情况下，旧股 q、旧价 P、每旧股派现 c、新增比例 b，理论除权价 `P_ex=(P−c)/(1+b)`；以经济权益完整计量可得 `q×P = q×(1+b)×P_ex + q×c`。不能把这个受限等式用于任意公司行动或直接从 k 求 b/c。
-
-| Pin | 数值输入 / 预期 | 实际函数名、落点与证明边界 |
+| ID | Human GO | 生产合同 |
 |---|---|---|
-| B1 基线残留 | 100 股，cost=10，peak=12，cash=2000；k=.5、raw 10→5：参考5/6，仍100股/cash2000，equity3000→2500，非 SELL | `tests/test_exdiv_refprice_engines.py::test_d2_economic_residual_small_oracle`；复用不改，1例 |
-| B2 public book raw mark | daily/minute 原股数/现金不变，equity delta=q×raw 价差，无 SELL | 同文件 `test_d2_public_book_raw_mark_keeps_shares_and_cash`；复用不改，2例 |
-| B2b v7 基线 | 自然首开→加仓快照；多 lot 仅缩放一次，股数/现金/交易保持，差额=q×raw 价差 | `tests/test_csv_minute_backtest_v7.py::test_d2_v7_public_multilot_fields_once_and_economic_delta`；复用不改，1例 |
-| B3 纯送转设计 | q=100、P=10、b=1、c=0、cash=2000：200股×5+2000=3000；上市前旧股+新股权利只计一次；as-built 仍2500 | `tests/test_exdiv_refprice_engines.py::test_d6_design_only_pure_bonus_equity_oracle`；新增1例纯算术，生产反例复用 B1/B2，无虚构权益 API |
-| B4 纯现金/到账设计 | q=100、P=10、c=1、b=0：ex 日900+2000+应收100=3000；pay 日900+现金2100+应收0=3000；public book 两日仍2900、原100股/2000现金 | 同文件 `test_d6_design_only_cash_receivable_to_pay_vs_raw_residual`；新增2例 daily/minute；初始3001覆盖事件前买入默认佣金1，事件起点现金2000/equity3000；事件期间无费用/额外市场变动/外部流，设计转账仅局部变量 |
-| B5 混合 + 不可识别性 | b=1、c=1：200股×4.5+2000+应收100=3000；q/k 再加红利则3100。k=.9 可来自纯现金 c=1 或纯送转 b=1/9，权益结构不同 | 同文件 `test_d6_design_only_mixed_bonus_cash_equity_oracle` / `test_d6_design_only_k_non_identifiability`；新增各1例，分数只证明代数歧义 |
-| B6 生命周期 | 夹具约定登记持100股；登记后卖出保留已锁权益，除权日新买无权；重复 event_id 不重复记账，无 bar 也按事件时序处理 | **仅文档设计 oracle，0例新增生命周期测试**。反向残留复用 `test_d2_book_multilot_field_scope_and_non_idempotence` / `test_d2_missing_event_bar_is_not_replayed_on_resume`；它们不证明设计生命周期已实现 |
-| B7 模型边界/费用 | Mode B q/k 与 book 原股数并存；公司行动设计不伪造 SELL/EOD_MARK 现金，不收交易佣金 | `tests/test_unified_exit_modeb_exdiv.py::test_exdiv_value_thresholds_and_fractional_shares` / `test_shared_ledger_shares_contract_untouched`，复用不改（3+1例）；B4 事件期间0费用/无 SELL（此前真实 BUY 佣金1）。随后真成交继续 δ1；`tests/test_ashare_fee_wiring.py::test_floor_unit_two_lot_oracle_portana_schedule` 只引用，未在本次重跑 |
-| B8 事件输入残留 | 噪声门、因子恢复日落键、缺当日 bar 不回放继续存在；日期前缀不证明 available_at | `tests/test_unified_exit_modeb_exdiv.py::test_event_loader_noise_band_and_no_event_unchanged`；`tests/test_exdiv_refprice_engines.py::test_d2_real_loader_recovery_day_wrong_domain_residual` / `test_d2_missing_event_bar_is_not_replayed_on_resume`；复用不改（1+2+3例），最后3例与 B6 重叠，不累加。完整经济源/PIT 仍 deferred |
+| P3δ6.1 | **C** | 独立生产增股/入账/NAV wiring；本次 must-cut-C satisfied |
+| P3δ6.2 | **A** | caller-supplied 显式经济事件；不从 k 猜 b/c，无湖采集/merge |
+| P3δ6.3 | **B** | ex 日锁 eligible q、加股并开应收；pay 日应收转现金；同日 pay 可立即到账 |
+| P3δ6.4 | **B** | 每个现存 lot `floor(q*b)` 整数新股；零碎余数丢弃，不做现金替代 |
+| P3δ6.5 | **A** | 不改 trades.csv schema；公司行动不是 BUY/SELL，不收 δ1 佣金；运行内 stats 可诊断 |
 
-本次净增 **4 个 design_only 函数 / 5 例**（B3=1、B4=2、B5=2）；B1/B2/B2b 与 B7/B8 均复用。B6 的事件生命周期、去重/修订/无 bar 入账只落设计要求；不借现有反例宣称支持。纯现金即便落在 E-R6 ≤0.5% 噪声带也可能有经济权利，新账不能沿用参考价噪声门跳过权益；本次不改 loader。守恒隔离事件跳变，不要求真实市场每日 NAV 不变；税费/费用/市场变化须显式调节。
+### 5.1 Explicit API
 
-### Slice C：残留/设计验收与生产出口
+```python
+from backtest.research.ashare_exdiv_economics import ExDivEvent
 
-已执行 §8 data-free 定向检查，基线 pins 与 design-only oracle 覆盖分别记录于 §8.4；§9 冻结零 diff。A/B 通过只能称残留已明确或账本设计已验收。**经济残留关闭**必须另有 `.1=C`、事件明细证据、双账本真实 public 入口的增股/应收/实收/NAV 对账与迁移验收；本 PR 不宣称这些成果。
-
-## 8) Linux/CI isomorphic acceptance（本次实际命令与结果）
-
-### 8.1 基线、docs/tests 全路径白名单、编码与 whitespace
-
-从仓库根目录用 Bash 执行。`IMPLEMENTATION_BASE` 是本 worktree 起点的 `git rev-parse HEAD` 实测值；以下重新解析同一固定 commit，不跟随移动的 master、不推算 merge-base。将来实施分支若换基线，须在人裁/实施记录中重新用 `git rev-parse` 写全 SHA，并保留此 proposal 的历史锚点。
-
-```bash
-set -euo pipefail
-IMPLEMENTATION_BASE="$(git rev-parse --verify '3668e256abec1258759b99a72e3b3c17d082e75c^{commit}')"
-[[ "$IMPLEMENTATION_BASE" =~ ^[0-9a-f]{40}$ ]]
-git merge-base --is-ancestor "$IMPLEMENTATION_BASE" HEAD
-P3_ALLOWED_FILES=(
-  docs/backtest/engine-ashare-correctness.md
-  docs/backtest/README.md
-  docs/backtest/plan-industry-align-p3-d6-exdiv-economics-2026-09-19.md
-  docs/backtest/plan-industry-align-p3-d345-econ-index-2026-09-19.md
-  tests/test_exdiv_refprice_engines.py
-)
-P3_AUDIT_DIR="$(mktemp -d)"
-trap 'rm -rf -- "$P3_AUDIT_DIR"' EXIT
-git diff --name-only "$IMPLEMENTATION_BASE" HEAD > "$P3_AUDIT_DIR/head"
-git diff --name-only > "$P3_AUDIT_DIR/worktree"
-git diff --cached --name-only > "$P3_AUDIT_DIR/index"
-git ls-files --others --exclude-standard > "$P3_AUDIT_DIR/untracked"
-sort -u "$P3_AUDIT_DIR/head" "$P3_AUDIT_DIR/worktree" \
-  "$P3_AUDIT_DIR/index" "$P3_AUDIT_DIR/untracked" > "$P3_AUDIT_DIR/paths"
-while IFS= read -r path; do
-  p3_allowed=false
-  for allowed in "${P3_ALLOWED_FILES[@]}"; do
-    if [[ "$path" == "$allowed" ]]; then p3_allowed=true; break; fi
-  done
-  if [[ "$p3_allowed" != true ]]; then
-    printf 'OUT OF SCOPE: %s\n' "$path"; exit 1
-  fi
-done < "$P3_AUDIT_DIR/paths"
-for path in "${P3_ALLOWED_FILES[@]}"; do
-  test -f "$path"
-  perl -MEncode=decode,FB_CROAK -e '
-    local $/; open my $fh, "<:raw", $ARGV[0] or die $!;
-    my $raw = <$fh>; die "BOM\n" if substr($raw,0,3) eq "\xEF\xBB\xBF";
-    my $nul = () = $raw =~ /\x00/g; die "NUL=$nul\n" if $nul;
-    decode("UTF-8", $raw, FB_CROAK);
-    print "$ARGV[0]: UTF-8 OK; BOM=0; NUL=0\n";
-  ' "$path"
-done
-git diff --check "$IMPLEMENTATION_BASE" HEAD
-git diff --check
-git diff --cached --check
-for path in "${P3_ALLOWED_FILES[@]}"; do
-  p3_ws_rc=0
-  git diff --no-index --check /dev/null "$path" > "$P3_AUDIT_DIR/whitespace" || p3_ws_rc=$?
-  if [[ "$p3_ws_rc" -gt 1 || -s "$P3_AUDIT_DIR/whitespace" ]]; then
-    cat "$P3_AUDIT_DIR/whitespace"; exit 1
-  fi
-done
+events = {
+    ("600000.SH", "20260902"): ExDivEvent(
+        event_id="600000.SH:20260902:fixture-1",
+        bonus_ratio=1, cash_div_per_share=1,
+        ex_date="20260902", pay_date="20260903",
+    ),
+}
+# daily.simulate(..., exdiv_economics=events)
+# minute.simulate(..., exdiv_economics=events)
+# v7.simulate_v7(..., exdiv_economics=events)
 ```
 
-最后的循环覆盖尚未跟踪的新文档；no-index 正常内容差异可返回 1，故同时要求 rc≤1 且 whitespace 诊断为空，不能简单忽略所有非零退出码。全路径审计覆盖 base→HEAD、staged、unstaged、untracked，不靠一张有限冻结表推断其它路径安全。**本次白名单收窄为实际触及的四 docs + 一个 tests 文件；其它生产 Python、tests、CI、数据均禁止修改**。v7 / Mode B pins 原样复用，仅运行不编辑。
+支持 Mapping `(engine_symbol, YYYYMMDD) -> ExDivEvent | None` 或 callable `(symbol, ds) -> ExDivEvent | None`。值须为 ExDivEvent，不接受未验证 dict；event_id 是运行内跨股票唯一的非空字符串。b/c 为有限非负 numeric（float/Decimal，整数也可），日期为有效 YYYYMMDD，ex_date 须等于查询日，pay/list 不早于 ex，list_date 默认 ex_date。数据与 raw bars 的经济一致性由调用者负责，函数不认证价格域；CLI 不自动启用。
 
-### 8.2 Slice B/C：data-free 定向测试
+lookup None 返回表示当日无事件；LookupError 也视为缺失。错误类型、负数、非有限值、非法日期/日期顺序等跳过并计 `exdiv_econ_invalid_event`，不部分入账；调用者 callback 的其它错误直接抛出。明确事件不受 E-R6 k 存在性/噪声门限制。
 
-用户明确指定解释器 `/tmp/industry-align-venv/bin/python`（覆盖通用解析顺序）；不回落系统 Python，不安装依赖。仅内存/tmp_path；既有入口接线测试采用 I/O stub / 空临时池，不启动 CLI 回测、宿主回测或访问湖/网络。复用 CI marker 排除 production/benchmark；本次范围是以下三个完整文件，不代表全量 CI。必需 pin 被 skip 不算通过。
+### 5.2 Ordering / lifecycle
+
+1. 每个模拟 session 开始先结算已开应收；pay_date 非模拟 session 时，在首个 `session >= pay_date` 到账。即使已卖空或该股票当天无 bar，权益仍存活。若 pay_date 晚于模拟窗口，末日保留应收，不提前支付。
+2. 已持仓 symbol 通过既有处理门后，ex_date 一次快照所有现存 lot 的 q；此后当日买入无该次权益。book 要当日日线/昨收，minute book 还要当日分钟；v7 要 records，继承它原有 rescale 前置条件。
+3. 每 lot 加 `floor(q*b)`，开总应收 `sum(q)*c`，同日 pay 立即转换。**先权益、后原 E-R6 rescale、再 scan**；新旧股仅一次计量，cost/peak/entry_A/avg_cost 等仍只由参考路径乘 k。
+4. 缺 ex-day bar/前置条件不回放到后续日期。event_id 只允许应用一次；本刀无冲销/修订、持久化、跨运行恢复。截止日仍持应收纳入 NAV。
+
+book 新股并入原 Position，用经济账中按 lot identity 保存的 list-date 限售量过滤 `_sell`；保持 lot 数、entry_idx、ride/step 身份和原成本参考。独立 lot 可卖原股、保留限售新股；随后卖出规则照旧重新评估（daily 原 pending 保持），不新增退出队列。存在跟单链接时，在任一相关 bonus 仍限售时整组暂缓，计 `exdiv_econ_defer_linked_t1`，避免父/子孤立；解锁后沿用既有整组退出/容量规则。cap-on 的 pending 退出也必须等待全部新股解锁，计 `exdiv_econ_defer_pending_t1`，继续保持 δ5 的整笔语义。
+
+v7 每个旧 lot 追加 `kind="exdiv_bonus"` 的 entitlement lot，复制 source lot.price，buy_date=list_date；既有 t1_sellable 自然保护新股，stage/last_add_date 不因公司行动更新。floor 按各引擎当时的 lot 划分执行，多次送转后不保证不同 lot 划分产生相同零碎舍弃量。
+
+### 5.3 NAV / precision / diagnostics
+
+NAV = cash + 全部已确认股份（含尚不可卖新股）×mark + receivables − liabilities；本刀无产生负债的事件，liabilities=0。新股从 ex_date 确认并按原始 mark 估值，未来 list_date 仅延后可卖，不另重复记一个股权资产。book 仍用当日/最近历史 close（无行情才 cost fallback），v7 仍用 last_prices/avg_cost fallback。
+
+b/c 经 Decimal 字符串转整数比率；整股 floor 不依赖 Decimal context 精度。gross 进入既有 float 现金账，不新设分币舍入/税务规则；碎股直接舍弃，因此非整数 q*b 的夹具允许相应价值损失，不能强行要求3000守恒。
+
+诊断在 `state.exdiv_economics.stats`，book 同时反映到 `state.stats`：events、bonus_shares、cash_entitled、cash_posted、receivable_open、invalid_event、duplicate_event（均带 `exdiv_econ_` 前缀）。`receivable_open` 是当前金额，posted/entitled 是累计金额。公司行动不调用 volume clamp/consume，不写交易行、不收佣金；随后真实成交照旧调用 δ1 费用。
+
+## 6) Migration / rollback
+
+默认 economics-off 是部署安全开关，保持旧残留；显式提供经济 lookup 才启用。没有数据或产物 schema 迁移，无持久账恢复承诺。回滚为 revert 本 PR，或调用者撤掉 exdiv_economics 参数后重新模拟。无历史收益/宿主回测结论。
+
+## 7) Slices A → B → C（生产验收）
+
+Slice A 更新本 plan / engine §2.5 / README，记录 C/A/B/B/A 与冻结例外。Slice B 为真实 helper/public simulate 接线及测试，保留 #128 全部 design_only 与 δ2 residual pins。Slice C 运行 §8、检查差异范围、提交本地分支，不 push/PR。
+
+| 验收面 | 生产证据（tests/） |
+|---|---|
+| B3 纯送转 | `test_ashare_exdiv_economics.py::test_ledger_b3_b4_b5_conserve_without_reference_share_inflate`；`test_exdiv_refprice_engines.py::test_d6_public_book_production_conservation`；`test_csv_minute_backtest_v7.py::test_d6_v7_production_conservation_and_pay_without_symbol_bar`：100→200，raw10→5，cash2000，NAV3000 |
+| B4 现金 | 同上三入口/ledger：ex 日100股×9+cash2000+recv100=3000，pay 日cash2100/recv0，NAV3000 |
+| B5 混合 | 同上：200×4.5+2000+100=3000；明确不使用 q/k，不得到3100 |
+| 幂等/整股/输入 | `test_integer_floor_per_lot_and_idempotent_snapshot`、`test_same_day_payment_and_duplicate_id_across_lookup_dates`、`test_invalid_event_is_diagnosed_without_partial_state`、`test_missing_none_and_callable_lookup_and_no_k_inference` |
+| 默认 invariance | `test_d6_book_off_byte_snapshot_matches_f145ffde`（daily/minute × 有无 k）、`test_d6_v7_off_byte_snapshot_matches_f145ffde`；基线 archive 独立运行产出6个 SHA256，比较 cash/positions/lots/trades/equity/book stats；省略/None/空 lookup 一致 |
+| 生命周期/T+1 | book `test_d6_book_missing_ex_bar_is_not_replayed`、`test_d6_book_cash_event_without_k_and_pay_after_exit`、`test_d6_book_public_bonus_t1_and_following_sale`、`test_d6_book_exday_pool_add_has_no_entitlement`；v7 `test_d6_v7_multilot_eligible_snapshot_and_no_entitlement_for_new_trial` |
+| volume/fee 组合 | ledger `test_book_t1_listing_partial_exit_and_real_trade_fees`（cap on/off、future list_date）、`test_book_linked_exit_waits_for_bonus_t1_without_orphaning_rider`、`test_cap_pending_exit_stays_atomic_while_bonus_is_locked`；v7 `test_d6_v7_bonus_t1_and_cap_consumes_only_real_fills`；δ1 wiring 与 δ5 suite 全绿 |
+| 旧残留/独立模型 | 原 `test_d2_economic_residual_small_oracle`、public book raw-mark、v7 multilot、design_only B3–B5 均原样保留；Mode B suite 原样运行，不能把其近似视为本刀实现 |
+
+## 8) Linux/CI isomorphic acceptance
+
+### 8.1 固定基线 / actual allowlist
+
+基线固定为 `f145ffdec5e378c9092d3f8b990f104979d89141`；审计覆盖 base→HEAD、index/worktree 及 untracked。实际仅以下12路径可变，UTF-8 无 BOM/NUL，`git diff --check` 清洁：
+
+- 生产：`backtest/research/ashare_exdiv_economics.py`（新增）、`csv_ledger.py`、`csv_daily_backtest.py`、`csv_minute_backtest.py`、`csv_minute_backtest_v7.py`、`csv_simulate_loop.py`（以上均在 `backtest/research/`）。
+- 文档：`docs/backtest/plan-industry-align-p3-d6-exdiv-economics-2026-09-19.md`、`docs/backtest/engine-ashare-correctness.md`、`docs/backtest/README.md`。
+- 测试：`tests/test_ashare_exdiv_economics.py`（新增）、`tests/test_exdiv_refprice_engines.py`、`tests/test_csv_minute_backtest_v7.py`。
+
+### 8.2 实际测试命令
+
+使用用户指定 `/tmp/industry-align-venv/bin/python`，不安装依赖；内存/tmp_path，现有入口测试只运行 stub，不启动真实 CLI backtest。8个指定完整套件，加上受 `_sell` 接线影响的 δ1 wiring：
 
 ```bash
-set -euo pipefail
-/tmp/industry-align-venv/bin/python -c 'import sys, pytest, pandas, numpy, pyarrow; assert sys.version_info[:2] == (3, 12); print(sys.executable); print(sys.version)'
 /tmp/industry-align-venv/bin/python -m pytest -q -m 'not production and not benchmark' \
+  tests/test_ashare_exdiv_economics.py \
   tests/test_exdiv_refprice_engines.py \
+  tests/test_csv_daily_backtest.py \
+  tests/test_csv_minute_backtest.py \
   tests/test_csv_minute_backtest_v7.py \
-  tests/test_unified_exit_modeb_exdiv.py
+  tests/test_ashare_volume_cap.py \
+  tests/test_ashare_simulate_import_fence.py \
+  tests/test_unified_exit_modeb_exdiv.py \
+  tests/test_ashare_fee_wiring.py
 ```
 
-本次不扩跑 δ1 fees、map/session 全文件、import fence 或四个 repo gates；这些路径均未修改，不能挪用前序成绩。本次实际计数与未覆盖的 B6 生命周期边界见 §8.4。
+### 8.3 Freeze proof
 
-### 8.3 默认生产冻结（本次及未来 A/B；与 §9 逐项相同）
-
-先执行 §8.1 设置固定 base。保留 δ1 十文件、δ2 十七文件全部项目，再扩展名称/策略/Mode A/B 边界，共 **22** 个；这不改变旧 plan 的历史冻结结论。
+§9 原22行保留，五行获本 C cut 限定例外：csv_ledger、csv_simulate_loop（仅应收 mark）、csv_daily_backtest、csv_minute_backtest、csv_minute_backtest_v7。新增 ashare_exdiv_economics 是本刀专用 helper，不扩 SIMULATE_HOT_PATH。**其余17行零 diff**；另核 ashare_volume_cap、import-fence 测试、CI、其它全仓路径均零 diff。
 
 ```bash
-FROZEN_PRODUCTION_FILES=(
-  backtest/research/ashare_fees.py
-  backtest/research/csv_ledger.py
-  backtest/research/csv_simulate_loop.py
-  backtest/research/csv_daily_backtest.py
-  backtest/research/csv_minute_backtest.py
-  backtest/research/csv_minute_backtest_v7.py
-  backtest/research/ashare_session.py
-  backtest/research/market_layer.py
-  backtest/research/csv_common.py
-  backtest/research/csv_artifacts.py
-  backtest/research/exdiv_map.py
-  backtest/research/exdiv_hold_hits.py
-  backtest/research/ashare_bars.py
-  backtest/research/csv_daily_loader.py
-  backtest/research/ashare_fill_clock.py
-  backtest/research/qlib_bin_daily.py
-  backtest/research/qlib_bin_1min.py
-  backtest/research/csv_pool.py
-  backtest/research/csv_strategy_books.py
-  backtest/research/strategy5_rules.py
-  backtest/research/unified_exit_modea.py
-  backtest/research/unified_exit_modeb.py
-)
-for path in "${FROZEN_PRODUCTION_FILES[@]}"; do test -f "$path"; done
-git diff --exit-code "$IMPLEMENTATION_BASE" -- backtest/research/
-git diff --exit-code "$IMPLEMENTATION_BASE" -- '*.py' ':(exclude)tests/**'
-git diff --exit-code "$IMPLEMENTATION_BASE" -- "${FROZEN_PRODUCTION_FILES[@]}"
-git diff --exit-code "$IMPLEMENTATION_BASE" HEAD -- "${FROZEN_PRODUCTION_FILES[@]}"
-git diff --exit-code -- "${FROZEN_PRODUCTION_FILES[@]}"
-git diff --cached --exit-code -- "${FROZEN_PRODUCTION_FILES[@]}"
+BASE=f145ffdec5e378c9092d3f8b990f104979d89141
+git diff --name-status "$BASE" -- backtest/research/
+git diff --exit-code "$BASE" -- backtest/research/ \
+  ':(exclude)backtest/research/ashare_exdiv_economics.py' \
+  ':(exclude)backtest/research/csv_ledger.py' \
+  ':(exclude)backtest/research/csv_simulate_loop.py' \
+  ':(exclude)backtest/research/csv_daily_backtest.py' \
+  ':(exclude)backtest/research/csv_minute_backtest.py' \
+  ':(exclude)backtest/research/csv_minute_backtest_v7.py'
+git diff --exit-code "$BASE" -- tests/test_ashare_simulate_import_fence.py .github/
+git diff --check "$BASE"
 ```
 
 ### 8.4 本次运行记录与验收范围
 
-HEAD / 固定 IMPLEMENTATION_BASE 均为 `3668e256abec1258759b99a72e3b3c17d082e75c`；受测对象为本 feat 的**未提交工作区**，无实现 commit。2026-09-19（Asia/Shanghai），在 `/workspace/wt-p3-d6-exdiv-econ-feat`、Linux / CPython **3.12.13**、指定解释器 `/tmp/industry-align-venv/bin/python` 执行。无依赖安装、网络或湖访问。
+2026-09-19（Asia/Shanghai），Linux / CPython **3.12.13**，指定工作树/分支。受测对象为本地提交前的完整实现；最终 feat SHA 由交付回报给出，避免文档自引用。无湖/网络/下载/依赖安装/真实 CLI 回测。
 
-| 命令 / 检查 | 本次结果 | exit |
+| 命令 / 检查 | 结果 | exit |
 |---|---|---|
-| §8.1 固定基线祖先、五路径白名单（base→HEAD/index/worktree/untracked）、UTF-8/BOM/NUL/whitespace | **PASS：仅四 docs + 一个 tests**；全部 UTF-8、BOM=0、NUL=0，whitespace clean；无 staged/untracked 变更 | 0 |
-| §8.2 指定 Python 的依赖/版本检查 | CPython 3.12.13；pytest/pandas/numpy/pyarrow 导入成功 | 0 |
-| §8.2 同下方完整 pytest 命令（首轮，夹具修正前） | 84 passed / 1 failed；minute public simulate 不接受费用 kwargs，夹具误用被捕获；未改生产 | 1 |
-| §8.2 `/tmp/industry-align-venv/bin/python -m pytest -q -m 'not production and not benchmark' tests/test_exdiv_refprice_engines.py tests/test_csv_minute_backtest_v7.py tests/test_unified_exit_modeb_exdiv.py`（修正后） | **85 passed / 0 failed / 0 skipped，0.96s**；既有80例 + 新增5例，无 warning；三个完整文件 | 0 |
-| `git diff --exit-code 3668e256abec1258759b99a72e3b3c17d082e75c -- backtest/research/` | **PASS：全部 research 零 diff** | 0 |
-| §8.3 `git diff --exit-code "$IMPLEMENTATION_BASE" -- '*.py' ':(exclude)tests/**'` | **PASS：全仓非测试 Python 零 diff** | 0 |
-| §8.3 22 文件四种冻结 diff；数组 / §9 表逐项同序、表行对基线 | **PASS**；四种 diff 均为空，22行冻结表与基线原文一致；v7 / Mode B 测试文件也零 diff | 0 |
-| 静态锚点/具名测试/本地链接/命令块核对 | **PASS**；§2 的22处 file:line 范围、14个测试函数名、四份变更文档118个本地链接/片段；3个 Bash 块语法有效，§8.1/§8.3 逐字执行；既有测试函数 AST 未改 | 0 |
+| §8.2 完整命令，含费用 wiring | **339 passed / 0 failed / 0 skipped，2 warnings，1.94s** | 0 |
+| 基线独立 byte snapshots | 通过 `git archive` 提取指定40位 base，在独立临时目录执行既有公开 fixture；6个输出 hash 均由新增回归匹配 | 0 |
+| 保留测试 | δ2 residual / design_only 原函数 AST 不变；δ1 wiring、δ4/v7、δ5 cap、Mode B、import fence 均通过 | 0 |
+| §8.1 allowlist / encoding / whitespace | **PASS：12路径白名单，UTF-8/BOM=0/NUL=0，whitespace clean** | 0 |
+| §8.3 research / §9 remaining freeze / CI | **PASS：六个授权生产文件；原22行保留、五行明确例外、其余17行零 diff；cap/fence/CI 零 diff** | 0 |
 
-新增 B3–B5 共4个 design_only 函数/5例；B1/B2/B2b 原有残留4例、B7 Mode B 边界4例、B8 输入残留6例均原样复用；B6 仅文档设计，相关负例不算生命周期支持，也不重复累加 B8。无新增 skip/xfail，不改守恒期望来关闭残留。
+两条 warning 来自未改动 `ashare_bars.py:503` 的 pandas copy 参数弃用，不是新 skip。开发阶段的失败已解决：初版给 Position 加字段破坏既有 δ5 字节快照，现改为运行内独立锁量；v7 夹具最初误认 trial fraction，现以 `1000 / TRIAL_FRACTION` 固定100股，不改策略/费率。最终339为单次完整结果，不累加开发运行次数；新增54例，既有285例（含7例费用）。
 
-首轮失败仅修正新 B4 夹具：保留两个 public simulate 的默认10bp，初始3001支付事件前买入佣金1后，现金2000、equity3000；随后事件/设计 pay 日无交易费用，as-built 仍2900。设计应收/到账仅局部算术，不传入生产。最终85例是一次完整 suite 结果，首轮84例不重复累加，也不代表全量 CI 或宿主回测。
+**production economics landed；Human GO C/A/B/B/A；must-cut-C satisfied。** 守恒仅对明确事件/受控 raw fixture 成立；默认旧经济残留、缺 bar 不回放和其它 §3 边界继续保留。回滚无 schema/data 迁移，提交后由 host 发布。
 
-**Slice A→B→C passed；Human GO A + 可选账本 B docs；生产 Python 零 diff；经济残留 NOT closed；must-cut-C=NO（must cut C? NO）。** 生产选项 C 未实施、未授权；未来增股/入账/应收/NAV 改造须独立 `.1=C`、真实事件证据与迁移验收。P1/P2/P4 继续 deferred，δ5 仍 design-only。本轮不提交、不推送、不开 PR。
-
-## 9) Frozen production file table（δ1/δ2 超集；默认零 diff）
+## 9) Frozen production file table（原22行保留；本 C cut 例外见 §8.3）
 
 | File | 冻结理由 / 来源 |
 |---|---|
@@ -311,10 +206,12 @@ HEAD / 固定 IMPLEMENTATION_BASE 均为 `3668e256abec1258759b99a72e3b3c17d082e7
 | `backtest/research/unified_exit_modea.py` | 新扩展：独立研究网格合同，不统一到 CSV 账本 |
 | `backtest/research/unified_exit_modeb.py` | 新扩展：fractional-shares 近似保持独立，不借用作经济闭环 |
 
-本表与 §8.3 数组的路径/顺序必须一致，22 行保留 IMPLEMENTATION_BASE 原文。§8.3 另查全部 research / 全仓非测试 Python 零 diff；§8.1 五路径白名单禁止实际 docs/tests 以外的任何生产、测试、CI 或数据修改。不扩大固定热路径 import-fence 测试的扫描面。
-
+表内 csv_ledger / csv_simulate_loop / csv_daily_backtest / csv_minute_backtest / csv_minute_backtest_v7 五行仅在本次 δ6 allowlist 内解冻；其它17行相对 IMPLEMENTATION_BASE 必须零 diff。此例外不更改 δ1/δ2 历史验收结论，表行原文保留。
 
 ## 10) Changelog
+
+- **v0.4 (2026-09-19，Asia/Shanghai)**：新 Human GO **P3δ6.1=C / .2=A / .3=B / .4=B / .5=A** 覆盖 #128 的 A 残留+oracle 冻结，仅为本刀授权独立生产权益/NAV。固定 IMPLEMENTATION_BASE 为 #130 `f145ffdec5e378c9092d3f8b990f104979d89141`，接线显式事件、整股 floor、ex 应收/pay 现金、T+1、独立 E-R6；默认 off 与旧 pins 保留。§7–8 改为生产验收，§9 五行例外、其它冻结。生产经济落地，P1/P2/P4 继续 deferred，revert 无迁移；仅本地提交，不 push/PR。
+
 
 - **v0.3 (2026-09-19，Asia/Shanghai)**：按 Human GO A + 可选账本 B docs 完成 Slice A→B→C；基线刷新为 #127 merge `3668e256abec1258759b99a72e3b3c17d082e75c`，复核 §2 锚点并更正 v7 pin 行号。engine SSOT §2.5 / README 落残留、B3–B6 设计 oracle 与账本候选；复用 δ2/Mode B pins，仅新增4个 design_only 函数/5例。§8.4 记录 **85 passed**、五路径审计与22文件/全 research/非测试 Python 冻结证明，保留 §9 原表；经济残留未关闭，C 未授权/未实施，未提交交付。
 

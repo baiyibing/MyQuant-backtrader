@@ -83,8 +83,11 @@ from backtest.research.csv_ledger import (  # noqa: E402
     peak_gap_blocks,
     queue_limit_up_chase,
     rescale_position,
+    apply_exdiv_economics,
     resolve_limit_prices,
 )
+from backtest.research.ashare_exdiv_economics import EconomicLookup, ExDivEconomics
+
 from backtest.research.exdiv_map import (  # noqa: E402
     k_for,
     load_exdiv_ratios,
@@ -224,6 +227,7 @@ def simulate(
     pool_names: Optional[dict[str, str]] = None,
     pool_names_by_day: Optional[dict[str, dict[str, str]]] = None,
     exdiv: Optional[dict] = None,
+    exdiv_economics: EconomicLookup | None = None,
     scores_by_day=None,
     topk=None,
     n_drop=None,
@@ -236,6 +240,8 @@ def simulate(
     """核心日循环。bars/pool_days 可由测试注入；run() 负责从湖与 CSV 加载。
 
     strategy 必填；take_profit(...) 仍可显式覆盖。
+    exdiv_economics 显式接收 (engine_symbol, YYYYMMDD) -> ExDivEvent；
+    默认 None 保留原行为，事件配合 raw bars 使用，不从 exdiv 的 k 推断权益。
     """
     del pos_trail
     hooks = prepare_strategy_hooks(
@@ -279,6 +285,8 @@ def simulate(
     st.stats["buy_cost_rate"] = st.buy_cost_rate
     st.stats["sell_cost_rate"] = st.sell_cost_rate
     st.stats["min_cost"] = st.min_cost
+    if exdiv_economics is not None:
+        st.exdiv_economics = ExDivEconomics(exdiv_economics, st.stats)
     allow_add = bool(hooks["allow_add"])
     reserve_limit_up = bool(hooks.get("reserve_limit_up"))
     defer_limit_up = bool(hooks.get("defer_limit_up"))
@@ -290,6 +298,8 @@ def simulate(
 
     for i, day in enumerate(calendar):
         ds = _ymd(day)
+        if st.exdiv_economics is not None:
+            st.cash += st.exdiv_economics.settle(ds)
         names = names_asof(ds)
         st.daily_quota_used = 0.0  # 每个交易日开盘重置常规额度
 
@@ -304,6 +314,7 @@ def simulate(
             if got is None:
                 continue
             row, closes = got
+            apply_exdiv_economics(st, code, ds)
             # E-R6: rescale open lots then map prev_close before limits / lot loop.
             kk = k_for(exdiv, code, ds)
             if kk is not None:

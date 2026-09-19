@@ -51,6 +51,7 @@ from backtest.research.ashare_session import (
     t1_sellable,
 )
 from backtest.research.csv_pool import load_pool_day_map
+from backtest.research.ashare_exdiv_economics import EconomicLookup, ExDivEconomics
 from common.infra.data_root import resolve_index_daily_root
 from oskh_data.lake_kind import classify_daily_lake_kind
 from oskh_data.symbol_format import to_canonical_symbol, to_partition_key
@@ -89,6 +90,7 @@ class SimResult:
     trades: list[dict[str, Any]] = field(default_factory=list)
     equity_curve: list[dict[str, Any]] = field(default_factory=list)
     volume_cap: VolumeCap | None = field(default=None, repr=False, compare=False)
+    exdiv_economics: ExDivEconomics | None = field(default=None, repr=False, compare=False)
 
 
 def _record_stamp(record: Mapping[str, Any]) -> Any:
@@ -198,6 +200,23 @@ def _rescale_position(position: Position, k: float) -> None:
     position.lots = [Lot(lot.shares, lot.buy_date, lot.price * factor, lot.kind) for lot in position.lots]
 
 
+def _apply_exdiv_economics(state: SimResult, position: Position, ds: str) -> None:
+    account = state.exdiv_economics
+    if account is None:
+        return
+    lots = list(position.lots)
+    entitlement = account.entitle(position.symbol, ds, [lot.shares for lot in lots])
+    if entitlement is None:
+        return
+    # Separate entitlement lots reuse the source reference price; buy_date is
+    # list_date, so the existing t1_sellable gate protects all new shares.
+    position.lots.extend(
+        Lot(added, _as_date(entitlement.list_date), lot.price, "exdiv_bonus")
+        for lot, added in zip(lots, entitlement.bonus_shares) if added
+    )
+    state.cash += account.settle(ds)
+
+
 def _event(state: SimResult, day: date, symbol: str, hm: int | None, side: str, shares: int,
            price: float | None, reason: str) -> None:
     state.trades.append({"date": day.isoformat(), "symbol": symbol, "hm": hm, "side": side,
@@ -297,6 +316,7 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
                 index_days: Any = None, *, cash_total: float = 21_000_000.0,
                 start: Any = None, end: Any = None,
                 exdiv: Mapping[str, Mapping[str, float]] | None = None,
+                exdiv_economics: EconomicLookup | None = None,
                 names: Mapping[str, str] | None = None,
                 fee: FeeSchedule = DEFAULT_SCHEDULE,
                 participation_rate: float | None = None,
@@ -305,12 +325,16 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
 
     Same-bar close capacity is a completed-bar approximation. Gap opens cannot
     use that bucket. An index date->close mapping enables the new-open gate.
+    exdiv_economics accepts explicit ExDivEvents for raw bars; None retains the
+    baseline. Bonus lots acquire list_date and use the existing T+1 predicate.
     """
     frames = minute_bars if _is_frame_map(minute_bars) else None
     minutes = {} if frames is not None else _minute_records(minute_bars)
     closes = _daily_closes(daily_bars)
     pools = _pool(pool_days)
     state = SimResult(float(cash_total))
+    if exdiv_economics is not None:
+        state.exdiv_economics = ExDivEconomics(exdiv_economics)
     if participation_rate is not None:
         state.volume_cap = VolumeCap(participation_rate, volume_for_bucket)
     gate: dict[date, bool] = {}
@@ -331,6 +355,8 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
 
     last_prices: dict[str, float] = {}
     for day in calendar:
+        if state.exdiv_economics is not None:
+            state.cash += state.exdiv_economics.settle(day.strftime("%Y%m%d"))
         cleared_today: set[str] = set()
         needed = list(dict.fromkeys(pools.get(day, []) + list(state.positions)))
         if frames is not None:
@@ -349,6 +375,8 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
             ymd = day.strftime("%Y%m%d")
             factor = k_for(exdiv, symbol, ymd)
             position = state.positions.get(symbol)
+            if position is not None:
+                _apply_exdiv_economics(state, position, ymd)
             if factor is not None and position is not None:
                 _rescale_position(position, factor)
             name = (names or {}).get(symbol, "")
@@ -452,8 +480,11 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
                     _event(state, day, symbol, None, "skip", 0, None, "skip_no_1455")
 
         holdings = sum(pos.shares * last_prices.get(symbol, pos.avg_cost) for symbol, pos in state.positions.items())
+        equity = state.cash + holdings
+        if state.exdiv_economics is not None:
+            equity += state.exdiv_economics.receivable_total
         state.equity_curve.append({"date": day.isoformat(), "cash": state.cash,
-                                   "holdings": holdings, "equity": state.cash + holdings})
+                                   "holdings": holdings, "equity": equity})
     return state
 
 

@@ -775,3 +775,118 @@ def test_d6_design_only_k_non_identifiability():
         structures.append((shares, receivable))
     assert structures == [(100, 100), (Fraction(1000, 9), 0)]
     assert structures[0] != structures[1]  # No real fractional-share entitlement claim.
+
+
+@pytest.mark.parametrize("engine", [daily, minute], ids=["daily", "minute"])
+@pytest.mark.parametrize("bonus,cash,price", [(1, 0, 5), (0, 1, 9), (1, 1, 4.5)])
+def test_d6_public_book_production_conservation(engine, bonus, cash, price):
+    from backtest.research.ashare_exdiv_economics import ExDivEvent
+
+    events = {(CODE, "20251105"): ExDivEvent("rights", bonus, cash, "20251105", "20251106")}
+    args = dict(exdiv={CODE: {"20251105": price / 10}}, total_cash=3001,
+                daily_quota=1000, name_budget=1000, exdiv_economics=events)
+    on_ex = _d2_book_run(engine, [10, 10, price], **args)
+    pos, = on_ex.positions[CODE]
+    assert (pos.shares, pos.cost, pos.peak, on_ex.cash) == (100 * (1 + bonus), price, price, 2000)
+    assert on_ex.exdiv_economics.receivable_total == 100 * cash
+    assert [value for _, value in on_ex.equity_curve] == [3000] * 3
+    paid = _d2_book_run(engine, [10, 10, price, price], **args)
+    assert paid.cash == 2000 + 100 * cash and paid.exdiv_economics.receivable_total == 0
+    assert [value for _, value in paid.equity_curve] == [3000] * 4
+    assert [(t["side"], t["commission"]) for t in paid.trades] == [("BUY", 1), ("EOD_MARK", 0)]
+    assert paid.stats["exdiv_adjusted_lots"] == 1
+
+
+@pytest.mark.parametrize("engine", [daily, minute], ids=["daily", "minute"])
+def test_d6_book_empty_invalid_lookup_does_not_invent_from_k(engine):
+    kwargs = dict(exdiv=EXDIV_HALF, total_cash=3001, daily_quota=1000)
+    off = _d2_book_run(engine, [10, 10, 5], **kwargs)
+    for events in (None, {}, lambda *_: None, {(CODE, "20251105"): {"bonus_ratio": 1}}):
+        state = _d2_book_run(engine, [10, 10, 5], exdiv_economics=events, **kwargs)
+        assert state.positions == off.positions
+        assert (state.cash, state.equity_curve, state.trades) == (off.cash, off.equity_curve, off.trades)
+        assert state.stats.get("exdiv_econ_invalid_event", 0) == int(isinstance(events, dict) and bool(events))
+
+
+@pytest.mark.parametrize("engine,missing", [(daily, "daily"), (minute, "daily"), (minute, "minute")])
+def test_d6_book_missing_ex_bar_is_not_replayed(engine, missing):
+    from backtest.research.ashare_exdiv_economics import ExDivEvent
+
+    state = _d2_book_run(
+        engine, [10, 10, 5, 5], missing=missing, stop_pct=0.0, exdiv=EXDIV_HALF,
+        exdiv_economics={(CODE, "20251105"): ExDivEvent("rights", 1, 1, "20251105", "20251106")},
+        total_cash=3001, daily_quota=1000,
+    )
+    assert (state.positions[CODE][0].shares, state.cash) == (100, 2000)
+    assert state.exdiv_economics.applied_ids == set()
+
+
+@pytest.mark.parametrize("engine", [daily, minute], ids=["daily", "minute"])
+def test_d6_book_cash_event_without_k_and_pay_after_exit(engine):
+    from backtest.research.ashare_exdiv_economics import ExDivEvent
+
+    # Small explicit cash event works without any reference-map event/noise gate.
+    # Next-day price decline exits the old shares; pay_date still posts to cash.
+    state = _d2_book_run(
+        engine, [10, 10, 9.99, 9.7, 9.7], total_cash=3001, daily_quota=1000,
+        exdiv_economics={(CODE, "20251105"): ExDivEvent("cash", 0, .01, "20251105", "20251107")},
+    )
+    assert not state.positions
+    assert state.stats.get("exdiv_adjusted_lots", 0) == 0
+    assert state.cash == pytest.approx(2970.03)  # 2000 + 970 - .97 + 1
+    assert state.exdiv_economics.receivable_total == 0
+    assert state.equity_curve[2][1] == 3000
+    assert state.equity_curve[-1][1] == state.equity_curve[-2][1]
+    assert [t["side"] for t in state.trades] == ["BUY", "SELL"]
+
+
+@pytest.mark.parametrize("engine", [daily, minute], ids=["daily", "minute"])
+@pytest.mark.parametrize("factor", [None, EXDIV_HALF])
+def test_d6_book_off_byte_snapshot_matches_f145ffde(engine, factor):
+    import hashlib
+    import json
+
+    # Captured by executing the unchanged public fixture in git archive of the
+    # frozen f145ffdec5e378c9092d3f8b990f104979d89141, not from this implementation.
+    expected = {
+        (daily, False): "20a97d90be33cc8dbc34b8c0b5004376152661035c3b7d8743558e34e33c8991",
+        (daily, True): "94b16d1ef2f56f37aea13527cf4f0c7b7e4639ca0660bc94e27e071611ee6db7",
+        (minute, False): "5c308169a43a15fab0b4b07c244fbbb0d1eb43f7ae15f732159f3e19998c3dff",
+        (minute, True): "ade98e9b042d7633adb5f3477fae3056a6ed4213746c2c99b563423f6d323482",
+    }
+    for kwargs in ({}, {"exdiv_economics": None}, {"exdiv_economics": {}}):
+        state = _d2_book_run(engine, [10, 10, 5], exdiv=factor,
+                             total_cash=3001, daily_quota=1000, **kwargs)
+        snapshot = {"cash": state.cash, "positions": {k: [asdict(p) for p in v]
+                    for k, v in state.positions.items()}, "trades": state.trades,
+                    "equity": state.equity_curve, "stats": state.stats}
+        assert hashlib.sha256(json.dumps(snapshot, sort_keys=True).encode()).hexdigest() == expected[engine, bool(factor)]
+
+
+@pytest.mark.parametrize("engine", [daily, minute], ids=["daily", "minute"])
+def test_d6_book_public_bonus_t1_and_following_sale(engine):
+    from backtest.research.ashare_exdiv_economics import ExDivEvent
+
+    args = dict(exdiv=EXDIV_HALF, total_cash=3001, daily_quota=1000,
+                exdiv_economics={(CODE, "20251105"): ExDivEvent("bonus", 1, 0, "20251105", "20251105")})
+    on_ex = _d2_book_run(engine, [10, 10, 4.8], **args)
+    assert on_ex.positions[CODE][0].shares == 100
+    assert [(t["shares"], t["commission"]) for t in on_ex.trades if t["side"] == "SELL"] == [(100, .48)]
+    after = _d2_book_run(engine, [10, 10, 4.8, 4.8], **args)
+    assert not after.positions
+    assert [(t["date"], t["shares"]) for t in after.trades if t["side"] == "SELL"] == [
+        ("20251105", 100), ("20251106", 100)]
+    assert after.cash == pytest.approx(2959.04)
+
+
+@pytest.mark.parametrize("engine", [daily, minute], ids=["daily", "minute"])
+def test_d6_book_exday_pool_add_has_no_entitlement(engine):
+    from backtest.research.ashare_exdiv_economics import ExDivEvent
+
+    state = _d2_book_run(
+        engine, [10, 10, 5], strategy="version8", pool={"20251103": [CODE], "20251105": [CODE]},
+        name_budget=1000, exdiv=EXDIV_HALF,
+        exdiv_economics={(CODE, "20251105"): ExDivEvent("bonus", 1, 0, "20251105", "20251105")},
+    )
+    assert [(p.entry_idx, p.shares) for p in state.positions[CODE]] == [(0, 200), (2, 200)]
+    assert state.stats["exdiv_econ_bonus_shares"] == 100
