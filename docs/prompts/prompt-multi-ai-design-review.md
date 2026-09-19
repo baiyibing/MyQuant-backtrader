@@ -7,12 +7,15 @@
 `<方案>` = `docs/` 里已落盘的 plan 路径。
 
 编排器：`scripts/run/run_multi_ai_review.py`  
-Runbook：`docs/engineering/multi-ai-review-workflow.md`
+Runbook：`docs/engineering/multi-ai-review-workflow.md`  
+对抗三路（Codex）：`scripts/run/run_codex_adversarial_lanes.py`
 
 ## 步骤
 
 1. 若只有口头方案，先起草 `docs/backtest/plan-<topic>-<date>.md`。
 2. 复杂取舍先跑 `docs/prompts/prompt-adversarial-subagent-review.md` 三路对抗，回填 plan。
+   - **必须**宿主机并行独立进程（推荐 `run_codex_adversarial_lanes.py`）。
+   - **禁止**在单个 Codex 会话内 spawn/套娃 `codex exec`（见对抗提示词「编排硬规则」）。
 3. fan-out：
 
 ```powershell

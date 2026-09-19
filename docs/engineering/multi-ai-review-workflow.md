@@ -21,11 +21,23 @@ D:\anaconda3\envs\vanna312\python.exe scripts/run/run_multi_ai_review.py `
 
 ## 主笔侧对抗层（fan-out 前）
 
-按 `docs/prompts/prompt-adversarial-subagent-review.md` 开 3 路 Task：
+按 `docs/prompts/prompt-adversarial-subagent-review.md` 开 3 路：
 
 - `dissent-steelman`
 - `domain-safety`
 - `pattern-evidence`
+
+**编排**：宿主机并行独立进程，推荐：
+
+```bash
+python3 scripts/run/run_codex_adversarial_lanes.py \
+  --plan docs/backtest/plan-xxx.md \
+  --out-dir docs/architecture/reviews/$(date +%F)/plan-xxx-codex-adv
+```
+
+`run_multi_ai_review.py` 的 fan-out 同样是「每家 CLI 一个子进程」，不要改成会话内套娃。
+
+**禁止**（2026-09-19 本机复现）：在一个 Codex/`codex exec` 会话里再 `collaboration.spawn_agent` 或再套 `codex exec`。外层 bwrap 只读挂载 `/` 且常 `--unshare-net`，内层写 `~/.codex` 会 `Read-only file system (os error 30)`；`CODEX_HOME=/tmp` 仍可能因断网挂起。失败路必须标「host 代拟 / 不计独立票」。
 
 对抗草案不计独立票。回填 plan 后再 fan-out。
 
