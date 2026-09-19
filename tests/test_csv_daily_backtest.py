@@ -1024,6 +1024,9 @@ def test_zero_volume_placeholder_day_cannot_sell_or_buy_and_marks_last_close(
         "600001.SH", tmp_path, "20251031", "20251104"
     )
     assert held is not None and candidate is not None
+    # Loader-side filter: zero-volume placeholder rows are removed before simulate().
+    assert pd.Timestamp("2025-11-04") not in held.index
+    assert pd.Timestamp("2025-11-04") not in candidate.index
     calendar_anchor = pd.DataFrame(
         {
             "open": [1.0, 1.0],

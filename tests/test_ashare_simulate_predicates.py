@@ -9,7 +9,8 @@ from backtest.research import csv_daily_backtest as daily
 from backtest.research import csv_minute_backtest as minute
 from backtest.research import csv_minute_backtest_v7 as v7
 from backtest.research.ashare_session import t1_sellable
-from backtest.research.csv_ledger import Position
+from backtest.research.csv_ledger import Position, SimState
+from backtest.research.csv_simulate_loop import run_chase_due_day
 
 
 CODE = "600000.SH"  # All bars/positions in this module are synthetic.
@@ -132,6 +133,62 @@ def test_none_limits_sell_side_records_existing_split(engine, cause, monkeypatch
         assert sells(state) == [] and state.positions[code][0].shares == 100
         if cause == "unknown_board":
             assert state.stats["skip_unknown_board"] == 1
+
+
+@pytest.mark.parametrize("engine", ["daily", "minute"])
+def test_none_limits_buy_side_records_unknown_board_in_book_paths(engine):
+    state = run(
+        engine,
+        {D0: 100, D1: 100},
+        D1,
+        D1,
+        code=UNKNOWN,
+        pool={D1: [UNKNOWN]},
+        anchor=[D0, D1],
+    )
+    assert state.stats["skip_unknown_board"] == 1
+    assert state.stats["buys"] == 0
+    assert state.positions == {}
+
+
+def test_none_limits_chase_path_rejects_unknown_board_in_shared_loop():
+    state = SimState(cash=21_000_000.0)
+    pending_chase = {UNKNOWN: (1_000_000.0, 0)}
+    run_chase_due_day(
+        state,
+        pending_chase,
+        day_i=1,
+        day=pd.Timestamp(D1),
+        names={},
+        allow_add=False,
+        buy_gate=None,
+        quotes_for=lambda _code: (10.0, 10.1, [10.0]),
+    )
+    assert pending_chase == {}
+    assert state.stats["skip_unknown_board"] == 1
+    assert state.stats["chase_buy"] == 0
+    assert state.trades == []
+
+
+def test_v7_held_add_none_limits_gate_passes_then_cash_skip(monkeypatch):
+    seed(monkeypatch, "v7", UNKNOWN, D0)
+    state = v7.simulate_v7(
+        {UNKNOWN: minutes({D1: 104.0})},
+        {UNKNOWN: {D0: 100.0}},
+        {},
+        [D1],
+        start=D1,
+        end=D1,
+        cash_total=10.0,
+    )
+    reasons = [trade["reason"] for trade in state.trades]
+    # F-R4: gate-pass (no intercept reason) is distinct from eventual no-fill.
+    assert "skip_unknown_board" not in reasons
+    assert "skip_limit_up" not in reasons
+    assert "defer_limit_down" not in reasons
+    assert "skip_cash" in reasons
+    assert not any(reason.startswith("buy:add_") for reason in reasons)
+    assert state.positions[UNKNOWN].shares == 100
 
 
 @pytest.mark.parametrize("engine", ["daily", "minute"])
