@@ -33,7 +33,7 @@ ashare_fill_clock.py    命名叶子：SessionPhase / FillPriceRule；不接线�
 | qlib PortAna | `QLIB_PORTANA` = 买 5bp / 卖 15bp / min 5；日线 CLI `--qlib-cost` 经 `simulate(..., buy_cost_rate=..., sell_cost_rate=..., min_cost=...)` 写入 `SimState`（opt-in） |
 | 分钟路径 | `csv_minute_backtest.simulate` **无**费率 kwargs；继承 `SimState` 默认 |
 | v7 路径 | `_buy` / `_sell_lots` / `simulate_v7(..., fee=FeeSchedule=DEFAULT_SCHEDULE)` 显式透传 |
-| 扣费粒度 | **每次函数调用**（非按标的/按日）。书 `_sell`×2 lot 可两次触 floor；v7 一次 `_sell_lots` 聚合名义后一次 `credit_sell`（§2.4 两 lot oracle：PortAna 下书 10/+1990 vs v7 一次 5/+1995） |
+| 扣费粒度 | **每次函数调用**（非按标的/按日）。书 `_sell`×2 lot 可两次触 floor；v7 一次 `_sell_lots` 聚合名义后一次 `credit_sell`（δ1 plan §2.4 两 lot oracle：PortAna 下书 10/+1990 vs v7 一次 5/+1995） |
 | 印花/过户边界 | 研究热路径 **仅佣金记账**（代理口径，≠ 现行印花税账单）；禁止未来在 ledger 再加印花行造成双重计入。真券商印花+过户留在 live `trade_fee_policy`，**不得** import 进 simulate 热路径 |
 | 产物列 | 书 `trades[].commission` 已有且写入 `trades.csv`；v7 `_event` **无** commission 列。δ1 不改 schema、不给 v7 补列。`EOD_MARK` 的 `commission:0` 不是卖出扣费 |
 | 非 CSV 接线证据 | `unified_exit_modea` 线性近似与 `research/engine.py` 占位 **不是** 书/v7 费率接线证据（parked） |
@@ -189,6 +189,53 @@ ST 正则为 `(?:\*ST|(?<![A-Za-z])ST)`（`re.IGNORECASE`）；`WEST` 这样的�
 门未拦截、尝试交易、实际 fill 分层验收。fill 以真实 BUY/SELL、股数、lot 与含费现金变化为证据；`EOD_MARK`、peak/last_prices、参考价缩放均不能冒充成交。None 首开拒绝与 held stop/add/timer 的 fail-open 分叉保持；无 records 也不会因门放行产生 bar。
 
 测试只用内存或 tmp_path，通过公开 `simulate` / `simulate_v7` 进入目标分支。held 初态由测试注入，未知板块持仓、旧 timer anchor 配同日 lot 都是构造向量，不宣称自然首开可达。timer 向量避开 stop/add，用 session list 隔离 index gate；spy 透传真实 timer/档位门。书 step 用真实 version8 hooks、空 pool，分别观察 held 与 step 的拒绝计数；已知板块对照锁住 100 股 × 12、5 元 floor、1205 元精确成交 / 少一分钱拒绝。δ1/δ2/δ3 生产合同、P1/P2/P4 与其它 δ 的独立授权边界保持。
+
+## 2.4 P3 δ5 volume participation cap design（Human GO B）
+
+实施基线为 `e0250efb2fae42e4e7f38a9585b1b4e95a1529bc`（post #126，含 δ4）。**Human GO P3δ5.1=B 只授权设计文档，不授权生产 cap 接线；本节候选不是 as-built，也不是生产默认值。** P3δ5.2/5.3/5.4 仍是 B 下设计候选，未单独裁决；任何 matcher / loader 变更须另裁 `.1=C`。本次 Slice A 与 Slice C 文档验收完成，Slice B 跳过，未新增/修改/执行测试。计划与冻结证明见 [δ5 plan §2 / §7–9](plan-industry-align-p3-d5-volume-cap-2026-09-19.md)。
+
+**As-built：书/v7 没有 participation cap。** 以下锚点已从固定 IMPLEMENTATION_BASE 重新阅读，范围限这些 CSV 撮合路径，不推断全仓其它研究模型：
+
+| 路径 | 已核实行为 | 源码锚点（均在 `backtest/research/`） |
+|---|---|---|
+| 书买量 / 记账 | `_buy_size` 按预算取整百股，不足一手可补足 100；`execute_buy` 通过含佣金现金门后建 lot；`_sell` 按该 Position 全部 shares 记账。无 volume 入参 | `csv_ledger.py:187-197`、`:200-258`、`:261-276` |
+| chase / pool / step | 买量由预算、价格、现金决定；`apply_capital_ration` 调整资金分配顺序，**capital ration ≠ market participation** | `csv_simulate_loop.py:79-90`、`:181-189`、`:287-306`、`:362-378` |
+| v7 买卖量 | `_buy` 按 `NAME_BUDGET×fraction` 向下整百；`_sell_lots` 汇总满足 T+1/kind 的数量；没有 volume 参数或市场容量预算 | `csv_minute_backtest_v7.py:57`、`:205-251` |
+| 日线 loader | 可选读取 volume，过滤 `volume==0` 占位 K 后丢 `_volume`；缺列沿用旧路径 | `csv_daily_loader.py:69-96` |
+| 湖分钟 loader | 可选读取 volume，按会话内记录的日汇总去掉整日零量后丢 `_volume`；不是逐分钟零量拒绝 | `ashare_bars.py:343-371` |
+| qlib_1min | 读 open/high/close，输出 date/hm/open/high/close；无 volume 列 | `qlib_bin_1min.py:34-65` |
+| 书持仓分钟扫描 | 传入 open/high/close/hm 与规则/资格参数；无容量预算 | `csv_minute_backtest.py:619-642` |
+
+**设计候选矩阵（design / not as-built / not production default）：** 与 [δ5 plan §2.2](plan-industry-align-p3-d5-volume-cap-2026-09-19.md) 同口径；没有新增参数、列、默认比例或部分成交实现。
+
+| 维度 | 推荐候选 | 尚须明确的边界 |
+|---|---|---|
+| 单位与域 | `V` 为该证券、该容量桶、raw 域的**增量股数**；单调累计量须先转换；保留 source/unit/时间元数据 | 不把手/金额/累计 volume 直接当股；不能从成交额猜单位，不对真实源自动猜测 |
+| 时间可得性 | volume 仅可用于其已知之后的决策；优先设计已完成且有 available_at 的分钟桶 | 同 bar close 成交若使用整根成交量，只能称完成 bar 容量近似；开盘/盘中触发绝不能读取整日终值或未来 bar |
+| 预算键 | 单次模拟内 `(symbol, session, bucket)` 共用一份容量；买卖双向合计占用，所有 pool/chase/step/held lot 共用 | 两个独立研究 run 不合并；日线与分钟容量不能叠加算两遍；side 独立预算是另一政策 |
+| 容量公式 | `B=floor(p×V)`，`0<=p<=1`，以股计；`R=max(0,B-used)` | p 无本刀生产默认/经验推荐；示例 10% 只是算术夹具；使用明确十进制定点避免浮点边界误差 |
+| 成交上限 | 先满足现有时点、ST/limits/T+1/资金门；实际 `q_fill<=min(q_requested,q_eligible,R)`，买入再按整手向下取整 | 凑一手不得突破 cap；资金不足时不扣容量；不得为了消耗容量改变成交价/提前成交 |
+| 使用与释放 | 仅成功记账的实际股数增加 used；失败、纯 mark、价格/资格拒绝不占用；桶切换重置 | 如以后引入预留/并发，要再设计原子预留释放；本刀不增加订单服务 |
+| 缺失与零值 | cap 启用后的候选：缺失/负数/非有限/单位未认证为 unavailable，拒绝该次尝试并可诊断；V=0 是有效零容量 | cap 未启用仍保持基线；不能新增静默无限容量 fallback；现有无 volume 路径不受本次影响 |
+| 残量与状态 | 候选保留未成交持仓；买单未成部分在桶结束失效，不新建隐式跨桶队列 | 卖出 partial 后 stop/timer/pending 如何续行、ride_with/step 份额、v7 stage 何时跃迁必须逐项裁定 |
+
+日线 close、daily gap-open/trigger、分钟 bar 内触发与 v7 14:55 的时间合同不同，完整日 volume 不能接遍所有入口。只能取得事后量时须标“事后容量近似”，不能声称因果可交易；不能为取得 volume 擅自把 fill 推到下一根。源单位、可得时刻与 partial-fill 状态迁移仍须未来独立设计/裁定，不能以本节文档落地声称已具备生产接线条件。
+
+**D1–D7 文档算术 oracle（document arithmetic oracles；仅候选模型，未接线、未转成测试）：**
+
+| Oracle | 输入与明确前提 | 应满足的合同 |
+|---|---|---|
+| D1 整手与资金 | p=0.10，V=2500 股，used=0，买请求 500 股，现金充足，整手=100 | B=250、实际买 200、R=50；第二个买请求不能由 force-min 再买 100 |
+| D2 跨路径共享 | 同桶两笔买请求各 200，B=300，先 A 后 B，现金充足 | 成交 200+100，总量=300；调换次序可换受配者但不能改变总预算；重复访问不得重置 |
+| D3 拒绝不消耗 | B=300；先资金不足/limit 拒绝，再合格买 200 | 首次 used=0、无新增 lot/费用；第二次后 used=200 |
+| D4 部分卖与 T+1 | 老 lot=300、今买 lot=200；候选可卖只含老 lot；R=200 | 卖 200 后留下老 100+新 200；T+1 禁卖的新 lot 不因 cap 可卖；费用仅按实际卖量 |
+| D5 零/缺与桶边界 | p=0 或 V=0；另有 volume 缺失；随后到新桶 | 零容量不成交；缺失按候选 unavailable 拒绝并独立诊断；新桶仅用自身量，不累借未来量 |
+| D6 时间前缀 | 相同截至 t 的已完成桶，追加 t 后巨大 volume | t 之前所有分配/成交不得改变；全日终量不能代替此证明 |
+| D7 fee floor | 显式 sell=15bp/min5，100 股×10 两笔 vs 合并 200 股×10 | 逐次两笔费用=10，合并一次=5；遵守 δ1 调用粒度，不承诺切碎交易后费用不变 |
+
+D4 使用整百可卖量隔离零碎股争议；买入整手不等于未来卖出/公司行动碎股必须整百，碎股处置与 δ6 仍待裁。D7 只展示既有费用公式的算术，不证明 partial fill 已实现。未来生产证明须走真实 public simulate 的触发→预算→记账链；本轮无 B1–B4 pins，也没有“容量已关闭”的验收结论。
+
+**零量过滤 ≠ participation cap；Human GO B 不授权生产 cap。** P1/P2/P4 继续 deferred，δ1–δ4 当前语义保持；matcher、loader volume 保留、容量参数、预算或 partial fill 均须另裁 `.1=C`。Slice C 本次仅文档审计 + 冻结证明，不是生产选项 C；**must cut C? NO**。
 
 ## 3. 对照货币
 
