@@ -1,6 +1,7 @@
 """Shared gates at simulate call sites; preserve each ledger's known behavior."""
 
 from datetime import date
+from dataclasses import replace
 
 import pandas as pd
 import pytest
@@ -8,9 +9,15 @@ import pytest
 from backtest.research import csv_daily_backtest as daily
 from backtest.research import csv_minute_backtest as minute
 from backtest.research import csv_minute_backtest_v7 as v7
-from backtest.research.ashare_session import t1_sellable
+from backtest.research.ashare_session import (
+    defer_sell_at_limit,
+    flatten_pool_names,
+    skip_buy_at_limit,
+    t1_sellable,
+)
 from backtest.research.csv_ledger import Position, SimState
 from backtest.research.csv_simulate_loop import run_chase_due_day
+from backtest.research.csv_strategy_books import BOOKS
 
 
 CODE = "600000.SH"  # All bars/positions in this module are synthetic.
@@ -68,7 +75,7 @@ def run(engine, prices, start, end, *, code=CODE, pool=None, anchor=None, **kwar
         return v7.simulate_v7(
             {code: minutes({d: px for d, px in prices.items() if start <= d <= end})},
             {code: prices}, pool, list(anchor or sorted(d for d in prices if start <= d <= end)),
-            start=start, end=end,
+            start=start, end=end, **kwargs,
         )
     bars = {code: frames(prices)}
     if anchor:
@@ -218,3 +225,109 @@ def test_calendar_mapping_keeps_union_hold_count_across_missing_bar(engine, monk
 def test_reason_bucket_examples_keep_two_ledgers_explicit():
     assert REASON_BUCKET_EXAMPLES["book"]["stop_loss:touch"] == REASON_BUCKET_EXAMPLES["v7"]["stop:trial_a090"]
     assert REASON_BUCKET_EXAMPLES["book"]["defer_sell_limit_down"] == REASON_BUCKET_EXAMPLES["v7"]["defer_limit_down"]
+
+
+@pytest.mark.parametrize("engine", ["daily", "minute", "v7"])
+@pytest.mark.parametrize("action", ["sell", "add"])
+def test_d3_held_name_chain_sell_and_add_bands(engine, action, monkeypatch):
+    seed(monkeypatch, engine, CODE, D0)
+    # Enable the same historical book add path used by the minute name pin.
+    # There is no index/buy gate, cash is ample, and sell lots predate D2/D3.
+    if action == "add" and engine != "v7":
+        monkeypatch.setitem(BOOKS, "version6", replace(BOOKS["version6"], allow_add=True))
+    name_chain = {
+        D0.strftime("%Y%m%d"): {CODE: "浦发"},
+        D1.strftime("%Y%m%d"): {CODE: "*ST 浦发"},
+        D2.strftime("%Y%m%d"): {ANCHOR: "其它名"},
+        D3.strftime("%Y%m%d"): {CODE: "浦发"},
+    }
+    prices = ({D0: 100, D1: 94, D2: 89, D3: 89} if action == "sell"
+              else {D0: 100, D1: 100, D2: 105, D3: 105})
+    pool = {D2: [CODE], D3: [CODE]} if action == "add" else {}
+    observed = []
+    module = {"daily": daily, "minute": minute, "v7": v7}[engine]
+    binding = "session_limit_prices" if engine == "v7" else "book_limit_prices"
+    real_limits = getattr(module, binding)
+
+    def observe(code, previous, names, **kwargs):
+        limits = real_limits(code, previous, names, **kwargs)
+        name = names if engine == "v7" else names.get(code, "")
+        observed.append((previous, name, limits))  # Snapshot, never retain the mutable resolver map.
+        return limits
+
+    monkeypatch.setattr(module, binding, observe)
+    states, bands = [], []
+    for end in (D2, D3):
+        names = {day: values for day, values in name_chain.items() if day <= f"{end:%Y%m%d}"}
+        kwargs = ({"names": flatten_pool_names(names), "cash_total": 21_000_000}
+                  if engine == "v7" else {"pool_names_by_day": names, "total_cash": 21_000_000})
+        states.append(run(engine, prices, D0, end, pool=pool, **kwargs))
+        bands.append(observed[:])
+        observed.clear()
+    short, extended = states
+    previous = 94 if action == "sell" else 100
+    st_limits = (98.7, 89.3) if action == "sell" else (105, 95)
+    assert (previous, "*ST 浦发", st_limits) in bands[0]
+    gate = defer_sell_at_limit if action == "sell" else skip_buy_at_limit
+    assert gate(prices[D2], st_limits)  # Intercept is asserted separately from no fill.
+    held_shares = (short.positions[CODE].shares if engine == "v7"
+                   else sum(pos.shares for pos in short.positions[CODE]))
+    assert held_shares == 100
+    assert short.cash == 21_000_000
+    assert not [t for t in short.trades if t["side"].lower() in ("buy", "sell")]
+
+    if engine == "v7":
+        # A longer window flattens the later normal name into the earlier held decision.
+        normal_limits = (103.4, 84.6) if action == "sell" else (110, 90)
+        assert (previous, "浦发", normal_limits) in bands[1]
+        assert not gate(prices[D2], normal_limits)
+        expected_day = D2
+        assert ("defer_limit_down" if action == "sell" else "skip_limit_up") in [
+            t["reason"] for t in short.trades
+        ]
+    else:
+        assert (previous, "*ST 浦发", st_limits) in bands[1]
+        normal_limits = (97.9, 80.1) if action == "sell" else (115.5, 94.5)
+        assert (prices[D2], "浦发", normal_limits) in bands[1]
+        assert not gate(prices[D3], normal_limits)
+        expected_day = D3
+        if action == "add":
+            assert short.stats["skip_limit_up"] == 1
+        elif engine == "daily":
+            assert short.stats["defer_sell_limit_down"] > 0
+        # The minute scanner intercepts internally; its outer defer counter stays zero.
+    side = "sell" if action == "sell" else "buy"
+    fills = [t for t in extended.trades if t["side"].lower() == side]
+    assert len(fills) == 1
+    assert fills[0]["date"].replace("-", "") == f"{expected_day:%Y%m%d}"
+    assert fills[0]["price"] == prices[expected_day]
+    assert fills[0]["shares"] > 0
+    if action == "sell":
+        assert CODE not in extended.positions
+        assert extended.cash > short.cash
+    else:
+        assert extended.cash < short.cash
+
+
+@pytest.mark.parametrize("engine", ["daily", "minute", "v7"])
+@pytest.mark.parametrize("price,blocked", [(105, True), (104, False)])
+def test_d3_unknown_board_st_reaches_limit_gate_and_fill(engine, price, blocked):
+    names = {UNKNOWN: "*ST甲"}
+    kwargs = {"names": names} if engine == "v7" else {"pool_names": names}
+    state = run(engine, {D0: 100, D1: price}, D1, D1,
+                code=UNKNOWN, pool={D1: [UNKNOWN]}, **kwargs)
+    fills = [t for t in state.trades if t["side"].lower() == "buy"]
+    if engine == "v7":
+        reasons = [t["reason"] for t in state.trades]
+        assert "skip_unknown_board" not in reasons
+        assert ("skip_limit_up" in reasons) is blocked
+    else:
+        assert state.stats["skip_unknown_board"] == 0
+        assert state.stats["skip_limit_up"] == int(blocked)
+    if blocked:
+        assert fills == [] and state.positions == {}
+        assert state.cash == 21_000_000
+    else:
+        assert len(fills) == 1
+        assert fills[0]["price"] == 104 and fills[0]["shares"] > 0
+        assert UNKNOWN in state.positions

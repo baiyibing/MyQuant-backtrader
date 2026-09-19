@@ -989,6 +989,61 @@ def test_pool_name_asof_future_st_does_not_change_earlier_limit():
     assert st.stats["skip_limit_up"] == 0
 
 
+@pytest.mark.parametrize("first,later,blocked", [
+    ("*ST 浦发", "浦发", True),
+    ("浦发", "*ST 浦发", False),
+])
+def test_d3_daily_name_prefix_consistency_both_rename_directions(first, later, blocked):
+    code = "600000.SH"
+    bars = _bars(DAYS[:2], {code: [(10.5,) * 4, (10.5,) * 4]})
+    # Scale the existing helper's warmup too: previous=100, first decision=105.
+    bars[code] *= 10
+    prefix_names = {"20251103": {code: first}}
+    states = []
+    for end, names in [
+        ("20251103", prefix_names),
+        ("20251104", {"20251104": {code: later}, **prefix_names}),
+    ]:
+        states.append(sim.simulate(
+            bars, {"20251103": [code]}, "20251103", end,
+            strategy="version6", total_cash=21_000_000,
+            pool_names={code: later}, pool_names_by_day=names,
+        ))
+    prefix, extended = states
+    assert prefix.stats["skip_limit_up"] == int(blocked)
+    assert prefix.stats["buys"] == int(not blocked)
+    # EOD_MARK belongs to the chosen window end, not to an executed decision.
+    first_trades = [t for t in extended.trades
+                    if t["date"] == "20251103" and t["side"] in ("BUY", "SELL")]
+    assert first_trades == [t for t in prefix.trades if t["side"] in ("BUY", "SELL")]
+    assert extended.equity_curve[:1] == prefix.equity_curve
+    assert bool(first_trades) is not blocked
+    if not blocked:
+        assert first_trades[0]["side"] == "BUY"
+        assert first_trades[0]["price"] == 105
+        assert first_trades[0]["shares"] > 0
+    else:
+        assert prefix.positions == {}
+        assert prefix.cash == 21_000_000
+
+
+def test_d3_daily_empty_by_day_beats_flat_st_name():
+    code = "600000.SH"
+    bars = _bars(DAYS[:1], {code: [(10.5,) * 4]})
+    states = [sim.simulate(
+        bars, {"20251103": [code]}, "20251103", "20251103",
+        strategy="version6", total_cash=21_000_000,
+        pool_names={code: "*ST 浦发"}, pool_names_by_day=names,
+    ) for names in (None, {})]
+    flat, empty = states
+    assert flat.stats["skip_limit_up"] == 1
+    assert flat.trades == [] and flat.positions == {}
+    assert empty.stats["skip_limit_up"] == 0
+    assert empty.stats["buys"] == 1
+    assert empty.trades[0]["price"] == 10.5
+    assert empty.positions[code][0].shares > 0
+
+
 def test_bj_thirty_percent_allows_close_that_would_be_ten_percent_limit():
     rows = {"920014.BJ": [(12.5, 12.5, 12.4, 12.5)] * 5}
     st = _run({"20251103": ["920014.BJ"]}, _bars(DAYS, rows))

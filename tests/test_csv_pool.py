@@ -2,6 +2,7 @@ from pathlib import Path
 
 from datetime import date
 
+from backtest.research.ashare_session import flatten_pool_names, session_limit_prices
 from backtest.research.csv_pool import (
     load_pool_day_map,
     load_pool_names_by_day,
@@ -106,4 +107,29 @@ def test_load_pool_names_by_day_keeps_dates_and_non_empty_names(tmp_path: Path):
     assert names == {
         "20260804": {"600000.SH": "浦发"},
         "20260805": {"600000.SH": "*ST 浦发", "920014.BJ": "倍益康"},
+    }
+
+
+def test_d3_loader_window_and_empty_name_do_not_emit_unst(tmp_path: Path):
+    for day, rows in {
+        "20260803": "600000,窗前普通名\n600001,*ST 仅窗前\n",
+        "20260804": "600000,*ST 浦发\n",
+        "20260805": "600000,   \n000001,平安\n",
+        "20260806": "600000,窗后摘帽名\n",
+    }.items():
+        (tmp_path / f"{day}.csv").write_text(rows, encoding="utf-8")
+
+    names = load_pool_names_by_day(tmp_path, "20260804", "20260805")
+    assert names == {
+        "20260804": {"600000.SH": "*ST 浦发"},
+        "20260805": {"000001.SZ": "平安"},
+    }
+    assert load_pool_names_by_day(tmp_path, date(2026, 8, 4), date(2026, 8, 5)) == names
+    # The real loader emits no clearing event; the code need not be named on the last day.
+    flattened = flatten_pool_names(names)
+    assert flattened == {"600000.SH": "*ST 浦发", "000001.SZ": "平安"}
+    assert session_limit_prices("600000.SH", 100, flattened["600000.SH"]) == (105, 95)
+    # Moving start forward does not preload the prior ST observation.
+    assert load_pool_names_by_day(tmp_path, "20260805", "20260805") == {
+        "20260805": {"000001.SZ": "平安"},
     }

@@ -141,6 +141,33 @@ v7 非空 `add1_A1` 仅由人工 Position 验证兼容分支，公开自然加�
 
 验收仅扩展 plan §7 的四个既有测试文件。B1–B6 分别覆盖事件门、书顺序、v7 分叉、昨收档位、经济残留、入口矩阵；既有混域 v7 trial-stop 向量只作为布线证据，新增同域 held 向量独立验证缩放/档位/成交（E-d2-06）。入口测仅 pytest 内完全 stub 的 `run()`/`main(argv)`，没有 CLI 回测、湖访问或产物回测；book writer 位于 main，v7 writer/index/bars 全 stub，非空 pool 保留 context 加载链。
 
+## 2.2 P3 δ3 ST name as-of / v7 flatten fork（Human GO A/A/A）
+
+实施基线为 `cce17f319ead5c64a202632c3665b4eeb3e3e7a5`（post #124）。P3δ3.1/3.2/3.3=A/A/A 只授权本节契约与 data-free pins，**生产行为不变**。真实测试映射、验收与生产冻结证明见 [δ3 plan §7.1 / §8.4 / §9](plan-industry-align-p3-d3-st-pit-2026-09-19.md)。以下是源码 as-built，不是交易所规则认证。
+
+| 消费层 | 固定合同 | 已复核 file:line |
+|---|---|---|
+| CSV 输入 | 名称取第二列；同文件代码去重保留首次。`load_pool_names_by_day` 只读闭区间 start/end 内文件，只输出非空名；不预载窗口前历史 | `backtest/research/csv_pool.py:53-68`、`:161-182` |
+| 书 daily/minute | `pool_names_by_day is None` 才用 flat map；即使 `{}` 也优先于 flat。从空 `last_seen` 起步，按日期排序，消费 `date <= ds` 的非空名，缺名继承 | `backtest/research/csv_common.py:85-108` |
+| 书接线 | shared loop 创建 resolver；daily/minute 每会话取名；两个 `run()` 均加载并传 by-day 名称 | `backtest/research/csv_simulate_loop.py:96-109`；`csv_daily_backtest.py:291-293`、`:537`、`:617`；`csv_minute_backtest.py:577-579`、`:821`、`:913`（均在 `backtest/research/`） |
+| v7 保留分叉 | `flatten_pool_names` 按日期排序后 `dict.update`；context 平铺 start/end 窗口。`simulate_v7(names=...)` 无 by-day 参数，各会话使用同一 map | `backtest/research/ashare_session.py:81-100`；`backtest/research/csv_minute_backtest_v7.py:277-282`、`:327-329`、`:571`、`:583-584` |
+| 名字→档位 | 正则识别 ST / *ST，忽略大小写；命中 **先返回 5%**，再考虑板块回退。已知板块缺名可回落板块档位，未知板块非 ST 为 None；ST 命中甚至先于未知板块。价格以 Decimal HALF_UP 到分 | `backtest/research/market_layer.py:15`、`:34-36`、`:57-84` |
+| 书例外 | 显式 `qlib_limit_pct` 使用固定 band，绕过 named limits。δ3 书 ST pins 使用默认 `qlib_limit_pct=None` 路径 | `backtest/research/csv_common.py:73-82` |
+
+ST 正则为 `(?:\*ST|(?<![A-Za-z])ST)`（`re.IGNORECASE`）；`WEST` 这样的拉丁词不命中。
+
+书 resolver 的游标只向前，适用于现有递增会话循环；它不是任意日期回查 API，返回的可变字典也不是独立历史快照。v7 的“窗口末名”是**该代码在输入窗口内最后一次出现的名称**，不要求代码在窗口末日出现；**窗口末名 ≠ 全历史最新名称**。真实 loader 会过滤空名，空白行不发出摘帽/退市/清空事件；直接向 `flatten_pool_names` 传含 `""` 的字典则会覆盖旧名，两种输入边界保持原样。
+
+| 合成主板：昨收 100，早日买价 105 | 书默认 named-band | v7 窗口平铺 |
+|---|---|---|
+| 早日普通名，晚日 *ST | 早日 110/90，资金等其它门满足可买 | 早日 105/95，`skip_limit_up` |
+| 早日 *ST，晚日普通名 | 早日仍 105/95，首买被拦 | 早日 110/90，其它门满足可买 |
+| 晚日缺名/空名（真实 loader） | 继承早日非空名 | 保留窗口内最后非空名 |
+
+相同初态与名称前缀下，书侧追加未来名不改早日 BUY/SELL 与权益；窗口末 `EOD_MARK` 是报告记录，不作为真实成交比较。v7 延长窗口则可改变早日名字、档位与成交。持仓卖出/加仓也消费这条名称链；pins 观察真实档位调用，并把拦截与 fill 分开断言，明确资金充足、卖出 lot 满足 T+1。未知名称、未知板块和 ST 命中分别设例；`limits=None` 的 predicate 放行本身不能证明会成交。
+
+**日期 as-of ≠ 决策时刻可得性 PIT 证明。** 名单日期不证明该文件在当日决策前已发布；当前输入没有 `available_at` / 修订版本过滤，供应方完整历史 PIT 仍未证。δ3 不修 v7 ST PIT，也不替 δ2 关闭因子可得性或经济残留。P1/P2/P4 继续 deferred；δ4–δ6 不随本刀自动获授权，生产改造须各自独立人裁。
+
 ## 3. 对照货币
 
 6/8 历史净值会因 E-R1 变少卖。对照看 **reason / 可卖 / 涨跌停**，不是旧 `daily_equity.csv`。改前合成窗快照：`tests/fixtures/csv_engine_pre_er1/`。

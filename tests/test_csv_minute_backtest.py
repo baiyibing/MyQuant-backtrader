@@ -556,6 +556,90 @@ def test_pool_name_asof_normal_then_st_and_by_day_beats_flat_map(monkeypatch):
     assert st.stats["skip_limit_up"] == 1
 
 
+@pytest.mark.parametrize("first,later,blocked", [
+    ("*ST 浦发", "浦发", True),
+    ("浦发", "*ST 浦发", False),
+])
+def test_d3_minute_name_prefix_consistency_both_rename_directions(first, later, blocked):
+    code = "600000.SH"
+    dates = ["2025-11-03", "2025-11-04"]
+    minute = {code: pd.concat([
+        _day(day, [(930, 105, 105, 105, 105), (1455, 105, 105, 105, 105)])
+        for day in dates
+    ])}
+    daily = {code: _daily(dates, [105, 105], prev=100)}
+    prefix_names = {"20251103": {code: first}}
+    states = []
+    for end, names in [
+        ("20251103", prefix_names),
+        ("20251104", {"20251104": {code: later}, **prefix_names}),
+    ]:
+        states.append(sim.simulate(
+            minute, daily, {"20251103": [code]}, "20251103", end,
+            strategy="version6", total_cash=21_000_000,
+            pool_names={code: later}, pool_names_by_day=names,
+        ))
+    prefix, extended = states
+    assert prefix.stats["skip_limit_up"] == int(blocked)
+    assert prefix.stats["buys"] == int(not blocked)
+    # EOD_MARK belongs to the chosen window end, not to an executed decision.
+    first_trades = [t for t in extended.trades
+                    if t["date"] == "20251103" and t["side"] in ("BUY", "SELL")]
+    assert first_trades == [t for t in prefix.trades if t["side"] in ("BUY", "SELL")]
+    assert extended.equity_curve[:1] == prefix.equity_curve
+    assert bool(first_trades) is not blocked
+    if not blocked:
+        assert first_trades[0]["side"] == "BUY"
+        assert first_trades[0]["price"] == 105
+        assert first_trades[0]["shares"] > 0
+    else:
+        assert prefix.positions == {}
+        assert prefix.cash == 21_000_000
+
+
+def test_d3_minute_empty_by_day_beats_flat_st_name():
+    code = "600000.SH"
+    minute = {code: _day("2025-11-03", [(1455, 105, 105, 105, 105)])}
+    daily = {code: _daily(["2025-11-03"], [105], prev=100)}
+    states = [sim.simulate(
+        minute, daily, {"20251103": [code]}, "20251103", "20251103",
+        strategy="version6", total_cash=21_000_000,
+        pool_names={code: "*ST 浦发"}, pool_names_by_day=names,
+    ) for names in (None, {})]
+    flat, empty = states
+    assert flat.stats["skip_limit_up"] == 1
+    assert flat.trades == [] and flat.positions == {}
+    assert empty.stats["skip_limit_up"] == 0
+    assert empty.stats["buys"] == 1
+    assert empty.trades[0]["price"] == 105
+    assert empty.positions[code][0].shares > 0
+
+
+@pytest.mark.parametrize("missing_row", ["", "600000,   \n"])
+def test_d3_minute_missing_name_inherits_through_real_loader(tmp_path, missing_row):
+    from backtest.research.csv_pool import load_pool_names_by_day
+
+    code = "600000.SH"
+    (tmp_path / "20251103.csv").write_text("600000,*ST 浦发\n", encoding="utf-8")
+    (tmp_path / "20251104.csv").write_text(missing_row + "000001,平安\n", encoding="utf-8")
+    names = load_pool_names_by_day(tmp_path, "20251103", "20251104")
+    assert code not in names["20251104"]
+    dates = ["2025-11-03", "2025-11-04"]
+    state = sim.simulate(
+        {code: pd.concat([
+            _day(dates[0], [(1455, 100, 100, 100, 100)]),
+            _day(dates[1], [(1455, 105, 105, 105, 105)]),
+        ])},
+        {code: _daily(dates, [100, 105], prev=100)},
+        {"20251104": [code]}, "20251103", "20251104",
+        strategy="version6", total_cash=21_000_000, pool_names_by_day=names,
+    )
+    assert state.stats["skip_limit_up"] == 1
+    assert state.stats["buys"] == 0
+    assert state.trades == [] and state.positions == {}
+    assert state.cash == 21_000_000
+
+
 def test_t0_after_buy_high_does_not_set_peak():
     # 14:55 买 10.00，随后 high=10.50。若把 T+0 高点当峰值，T+1 close=10.10 会锚定回撤。
     dates = ["2025-11-03", "2025-11-04"]

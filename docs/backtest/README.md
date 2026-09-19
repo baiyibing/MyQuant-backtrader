@@ -8,6 +8,8 @@
 
 除权参考价 SSOT：[engine-ashare-correctness §2.1](engine-ashare-correctness.md#21-p3-δ2-除权参考价契约human-go-aaaaa)；[P3 δ2 plan / data-free 验收 §8](plan-industry-align-p3-d2-exdiv-2026-09-19.md)。Human GO A/A/A/A/A 仅收口契约与 pins，送转不增股、现金红利不入账、NAV 经济残留继续 deferred。
 
+ST 名称时间合同：[engine-ashare-correctness §2.2](engine-ashare-correctness.md#22-p3-δ3-st-name-as-of--v7-flatten-forkhuman-go-aaa)；[P3 δ3 plan / data-free pins 与冻结证明](plan-industry-align-p3-d3-st-pit-2026-09-19.md)。Human GO A/A/A 保留书侧日期 as-of / v7 窗口末名平铺分叉，生产不变；决策时刻可得性 PIT 仍未证。
+
 > **🔴 CLI 价格域风险：日线 `--qlib-data-root` 跳过 E-R6，不等于分钟 `--qlib-day-root` 跳过。** minute/v7 的 `daily=qlib_day` 仍加载并传递除权 map；这是已记录的危险组合。`qlib_day` 后复权与 `qlib_1min` none 是不同约定，读取器不认证真实 dump 域。δ2 保持现状，不新增跳过或拒绝逻辑；`--qlib-cost` 只管费率。
 
 名单：`YYYYMMDD.csv`，首列裸六位码，`parse_pool_csv` 补交易所后缀。缺日 / 空文件 = 当日不买。6/8 默认读本仓 **可变** `stock_pool/`（不是快照）；实验/冻结跑用 `exports/` + `--pool-dir`；7 / **9** / **10** 必须 `--pool-dir`，9/10 拒绝 `stock_pool/`。生命周期 SSOT：[pool-csv-contract.md](pool-csv-contract.md)#lifecycle-ssot-stock_pool-vs-exports。

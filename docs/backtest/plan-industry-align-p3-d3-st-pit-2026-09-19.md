@@ -1,8 +1,8 @@
 # Plan: industry-align P3 δ3 ST PIT contract (2026-09-19)
 
-> **Status**: **v0.2 · docs-only · Human GO A/A/A recorded 2026-09-19（Asia/Shanghai）**：P3δ3.1/3.2/3.3=A；授权后续 Slice A→B→C docs + data-free pins，生产冻结。本次仅录入 GO，未实施本 plan 的未来 slices，未新增/执行测试。
-> **Main ship / 单行范围**: 契约化书侧按名单日期 as-of 与 v7 窗口末次名称平铺的 ST 分叉；默认未来只做 docs + data-free pins，生产零行为变更。
-> **IMPLEMENTATION_BASE**: `1049b904bdd818dbb79f51f1830a008c8f83b141`（本 worktree 起点，已由 `git rev-parse HEAD` 核实全 40 字符；post #123，含 δ1 + δ2）。
+> **Status**: **v0.3 · Slice A→B→C 已通过（§8.4） · Human GO A/A/A（2026-09-19，Asia/Shanghai）**。本 feat 仅三份 docs + §7 六个既有 data-free 测试文件；生产 Python 对 IMPLEMENTATION_BASE 零 diff，保留未提交工作区交付。
+> **Main ship / 单行范围**: 契约化书侧按名单日期 as-of 与 v7 窗口末次名称平铺的 ST 分叉；本 feat 只做 docs + data-free pins，生产零行为变更。
+> **IMPLEMENTATION_BASE**: `cce17f319ead5c64a202632c3665b4eeb3e3e7a5`（本 feat worktree 起点，已由 `git rev-parse HEAD` 核实；post #124，含 δ1/δ2 与 δ3 Human GO）。历史 proposal 基线 `1049b904bdd818dbb79f51f1830a008c8f83b141` 仅保留沿革，不用于本 feat 冻结证明。
 > **Human GO recorded**: **P3δ3.1=A、P3δ3.2=A、P3δ3.3=A**；契约 + data-free pins，不改生产，不授权 v7 ST PIT 改造。既有 P1/P2/P4 继续挂起。
 > **前序**: [δ1 fee contract](plan-industry-align-p3-fees-2026-09-19.md)、[δ2 exdiv contract](plan-industry-align-p3-d2-exdiv-2026-09-19.md)、[fill-gates next](plan-industry-align-next-2026-09-19.md)、[engine SSOT](engine-ashare-correctness.md)；[四刀索引](plan-industry-align-p3-d345-econ-index-2026-09-19.md)。
 
@@ -30,14 +30,14 @@
 | v7 消费 | `simulate_v7(names=...)` 无 by-day 参数；每会话取同一 flat map 名，算档位；CLI 经 context 传入 | `backtest/research/csv_minute_backtest_v7.py:277-282`、`:327-329`、`:571`、`:583-584` |
 | ST 与板块 | 正则识别 ST / *ST；名称命中优先返回 5%，否则按代码板块；未知非 ST 可得 None；Decimal 半分向上到分 | `backtest/research/market_layer.py:15`、`:34-36`、`:57-84` |
 | 书档位例外 | 显式 `qlib_limit_pct` 走固定 band，绕过 named limits。ST pins 必须使用默认 named-band 路径 | `backtest/research/csv_common.py:73-82` |
-| 已有书侧 pins | 日期/非空名 loader；daily 缺名继承与未来 ST 不改早日；minute by-day 优先于 flat | `tests/test_csv_pool.py:96`；`tests/test_csv_daily_backtest.py:944`、`:969`；`tests/test_csv_minute_backtest.py:521` |
+| 已有书侧 pins（当前测试行号） | 日期/非空名 loader；daily 缺名继承与未来 ST 不改早日；minute by-day 优先于 flat | `tests/test_csv_pool.py:97`；`tests/test_csv_daily_backtest.py:944`、`:969`；`tests/test_csv_minute_backtest.py:521` |
 | 已有 v7 pins | 5% 门、窗口末名反向影响早日首开仓 | `tests/test_csv_minute_backtest_v7.py:254`、`:276` |
 
 ### 2.1 时间合同与最小反例
 
 “窗末名”精确指**该代码在输入窗口内最后一次出现的名称**，不要求末日有该代码。名单 loader 不读 start 之前的历史；无可用名的已知主板代码回落板块档位。书 resolver 的游标只向前：它适用于现有递增会话循环，既不是任意日期可回查服务，也不保证返回的可变字典快照独立。`pool_names_by_day={}` 仍优先于 flat map，不能解释为空时自动 fallback。
 
-正常 loader 已过滤空名，故窗口内空白行不会清除旧名；直接给 `flatten_pool_names` 注入含空字符串的字典时，`dict.update` 会覆盖为 `""`。未来 pin 必须区分真实 loader 输入合同和 helper 直传边界，不能为统一二者偷偷改实现。
+正常 loader 已过滤空名，故窗口内空白行不会清除旧名；直接给 `flatten_pool_names` 注入含空字符串的字典时，`dict.update` 会覆盖为 `""`。§7.1 pins 分别覆盖真实 loader 输入合同和 helper 直传边界，保持两者实现不变。
 
 | 合成夹具（主板 `600000.SH`、昨收 100、早日 14:55 close 105） | 书默认 named-band | v7 |
 |---|---|---|
@@ -52,7 +52,7 @@
 | 面 | 当前状态 | δ3 处理 |
 |---|---|---|
 | ST 识别、Decimal 档位与书/v7 入口分叉 | 已有代码与若干 pins | 复用，不重复实施 |
-| 两种改名方向、缺名、空 by-day、窗口前缀敏感性、held 档位消费 | 现状可解释；专门组合覆盖仍需盘点/补 pin | 默认仅契约与未来 data-free pins |
+| 两种改名方向、缺名、空 by-day、窗口前缀敏感性、held 档位消费 | 既有覆盖复用；新增组合见 §7.1 | 本 feat 契约与 data-free pins；验收见 §8.4 |
 | v7 改为逐日取名 | deferred，可能改变买卖与 NAV | 需 P3δ3.1=C，另开生产实施案 |
 | 权威名称事件流、可得时间/修订 PIT、窗口前预载规则 | 未证 / deferred | B 可设计，不能写“PIT 已修好” |
 | 14:57、产物列、touch↔mark | 既有 P1/P2/P4 挂起 | 本刀不重开 |
@@ -72,20 +72,20 @@
 
 | ID | 硬锁 |
 |---|---|
-| **F-R1** | 本 PR 仅五份 Markdown；默认未来 docs + data-free pins。生产价格/reason/shares/cash/NAV/CLI 均零变更。 |
+| **F-R1** | 本 feat 仅 §8.1 白名单三份 Markdown + 六个既有测试文件。生产 Python、配置/依赖/CI 均不改；价格/reason/shares/cash/NAV/CLI 零变更。 |
 | **F-R2** | 书 by-day 优先、单调游标、缺名继承、v7 窗口平铺保持原样；不得自动统一。 |
 | **F-R3** | 日期 as-of ≠ 决策时刻可得性证明；窗口末名 ≠ 全历史最新名称。 |
 | **F-R4** | pin 分清名字、档位、拦截、真实成交四层；资金/T+1/其它门仍决定是否成交。 |
 | **F-R5** | ST 优先于板块的 as-built 与 qlib band 例外照实记录；不重新解释真实交易所政策。 |
 | **F-R6** | δ1/δ2 保持；P1/P2/P4 挂起；δ4–δ6 不随 δ3 默认获批。 |
-| **F-R7** | 所有未来夹具用内存或 tmp_path；不跑 CLI/宿主回测，不读湖，不下载/采集名称数据。 |
+| **F-R7** | 所有新增夹具用内存或 tmp_path；不跑 CLI/宿主回测，不读湖，不下载/采集名称数据。 |
 | **F-R8** | 固定 §8/§9 生产冻结超集；热路径 import fence 仍为既有枚举，不扩成目录扫描。 |
 | **F-R9** | 不引入 LEBS/MockQMT/live、Cerebro、PortAnaRecord；只属于本仓向量化研究。 |
 | **F-R10** | C 只在新的人裁记录、明确生产差异与独立实施 PR 后生效；本 plan 发布不构成 C。 |
 
 ## 5) P* human cuts（Human GO A/A/A 已录入）
 
-> **Human GO recorded 2026-09-19 (Asia/Shanghai):** P3δ3.1=A、P3δ3.2=A、P3δ3.3=A — δ3=A：契约 + data-free pins，不改生产。授权后续 Slice A→B→C docs/tests；本次未实施，B/C 人裁选项未采纳，生产保持冻结。
+> **Human GO recorded 2026-09-19 (Asia/Shanghai):** P3δ3.1=A、P3δ3.2=A、P3δ3.3=A — δ3=A：契约 + data-free pins，不改生产。本 feat 实施 Slice A→B→C docs/tests；B/C 人裁选项未采纳，生产保持冻结。
 
 本表 ID 是 δ3 局部编号，不能覆盖 next plan 的 P1/P2/P4；“Slice C 验收”也不是“人裁选项 C”。
 
@@ -95,7 +95,7 @@
 | **P3δ3.2：输入时间证据** ✅ Human GO 2026-09-19 | 声明仅名单日期 as-of，可得性未证 | 设计 effective date / available_at / revision 及上游证据要求 | 有真实证据后批准新数据合同与消费接线 | **A** |
 | **P3δ3.3：缺名/窗口初态** ✅ Human GO 2026-09-19 | 保留非空名继承、窗口内输入与 helper 差异 | 设计缺名 unknown/前置快照等候选规则 | 批准改变缺名/预载/回退行为并列受影响入口 | **A** |
 
-任何 C 都须先核实 B 级输入合同、列出迁移前后真值表与生产路径，再另开人裁/实施案。只选 B 不授权采集外部数据、增加参数或替换名称 resolver。本轮 A/A/A 已正式录入；合并 #124 后先推进 δ3 契约/pins feat，本次仅记录 GO。
+任何 C 都须先核实 B 级输入合同、列出迁移前后真值表与生产路径，再另开人裁/实施案。只选 B 不授权采集外部数据、增加参数或替换名称 resolver。本轮在 post #124 固定基线上按 A/A/A 实施 δ3 契约/pins。
 
 ## 6) Non-goals
 
@@ -104,46 +104,67 @@
 - 不改 pool 1–10 BOOKS 注册、不改 v7 池来源、不接 L2，不跑收益对比。
 - 不借本刀关闭 δ2 因子恢复日错域、可得性、噪声带、v4 SMA 或 δ6 经济残留。
 
-## 7) Slices A → B → C（未来路径；本次未实施）
+## 7) Slices A → B → C（本 feat：契约、pins、验收）
 
-§5 Human GO A/A/A 已授权本节未来 docs + data-free pins 及验收；所有生产冻结。下面的设计 B 分支仅为未采纳的候选，不随本次 A 获授权。
+§5 Human GO A/A/A 已授权本节 docs + data-free pins 及验收；所有生产冻结。设计 B 分支仅为未采纳的候选，不随本次 A 获授权。
 
 ### Slice A：证据合同与输入矩阵
 
-复核 §2，按人裁结果把“名单日期”和“决策可得时刻”拆开写入合同。DoD：两种改名方向、缺名、直传/loader、窗口起点、qlib band 例外齐全；状态仍准确标注，所有生产冻结。若选设计 B，只在文档增加候选数据模型。
+复核 §2，按人裁结果把“名单日期”和“决策可得时刻”拆开写入 [engine SSOT §2.2](engine-ashare-correctness.md#22-p3-δ3-st-name-as-of--v7-flatten-forkhuman-go-aaa)，README 链接同一合同。DoD：两种改名方向、缺名、直传/loader、窗口起点、单调游标、qlib band 例外齐全；状态准确标注，所有生产冻结。
 
-### Slice B：data-free pins（真实已有文件；下表新增项均尚未落地）
+### Slice B：data-free pins（复用既有文件；实际新增映射见 §7.1）
 
-| Pin | 既有落点 / 复用证据 | 未来验收断言 |
+| Pin | 既有落点 / 复用证据 | 本次验收断言 |
 |---|---|---|
 | B1 输入时间 | `tests/test_csv_pool.py`，现有 `test_load_pool_names_by_day_keeps_dates_and_non_empty_names` | 双日期/空名/窗口边界；缺名不产生摘帽事件；显式 tmp_path |
 | B2 书 as-of | `tests/test_csv_daily_backtest.py`、`tests/test_csv_minute_backtest.py`；§2 列出的已有 tests | 双向改名、缺名继承、空 by-day 优先、追加未来名的前缀一致性；用 public simulate 观察档位及真实买卖，不仅 helper |
 | B3 v7 retained fork | `tests/test_csv_minute_backtest_v7.py`，现有 `test_v7_names_flatten_uses_window_end_name_for_earlier_day` | 增补摘帽方向与窗长变化；105 对应 5%/10% 两态；保留资金充足/T+1 控制条件 |
 | B4 held 与边界 | `tests/test_ashare_session.py`、`tests/test_ashare_simulate_predicates.py` | 同一名称链作用于持仓 sell/add 档位；名字未知、板块未知、ST 命中独立设例；拦截与 fill 分断言 |
 
-DoD：复用已覆盖项，仅补真缺口；返回可变字典需拍快照后比较。v7 CLI context 链如需 pin，应 stub exdiv/bars/index/writer，仅用临时名单，不误调用湖。未来测试名在实施时命名，本计划不冒充它们已经存在。
+DoD：复用已覆盖项，仅补真缺口；返回可变字典需拍快照后比较。本次新增测试仅公开 `load_pool_names_by_day` / `flatten_pool_names` / `session_limit_prices` / `simulate` / `simulate_v7` 的合成调用；没有 CLI context 回测。held fixture 沿用既有 `seed` 注入少量持仓，observer 调真实档位函数并保存名称值，不持有 resolver 可变字典引用。
 
 ### Slice C：验收与冻结证明
 
-实际执行 §8 的未来 data-free 命令并记录命令、exit、覆盖 pin；§9 零 diff。完成仅表示分叉合同验收，不表示 ST PIT 生产修复。若需要 C 级生产改造，停止默认路径并提交独立人裁/实施计划。
+实际执行 §8 的 data-free 命令并记录命令、exit、覆盖 pin；§9 零 diff。完成仅表示分叉合同验收，不表示 ST PIT 生产修复。若需要 C 级生产改造，须提交独立人裁/实施计划。
 
-## 8) Linux/CI isomorphic acceptance（真实命令；区分本次 docs 与未来 pins）
+### 7.1 实际 pins 与覆盖映射
 
-### 8.1 本次 docs-only：基线、全路径、编码与 whitespace
+新增 **11 个测试函数 / 29 个参数化用例**；以下均为完整真实函数名，位于 B1–B4 指定的六个既有测试文件。其余 **145** 个既有用例保留并同批回归，不复制日线缺名继承、普通名→ST 或基础 v7 5% 门的已有断言。
 
-从仓库根目录用 Bash 执行。`IMPLEMENTATION_BASE` 是本 worktree 起点的 `git rev-parse HEAD` 实测值；以下重新解析同一固定 commit，不跟随移动的 master、不推算 merge-base。将来实施分支若换基线，须在人裁/实施记录中重新用 `git rev-parse` 写全 SHA，并保留此 proposal 的历史锚点。
+| Pin / 文件 | 新增测试函数 | 用例数 / 验收含义 |
+|---|---|---|
+| B1 / `tests/test_csv_pool.py` | `test_d3_loader_window_and_empty_name_do_not_emit_unst` | 1；闭区间双日期、字符串/date 窗口、空名不发清空事件、窗口前不预载、窗口后摘帽不流入、末日缺代码仍保留旧名 |
+| B2 / `tests/test_csv_daily_backtest.py` | `test_d3_daily_name_prefix_consistency_both_rename_directions`、`test_d3_daily_empty_by_day_beats_flat_st_name` | 2+1；两方向追加未来名，真实早日成交/权益前缀一致；`{}` 优先于 flat ST，而 None 才 fallback |
+| B2 / `tests/test_csv_minute_backtest.py` | `test_d3_minute_name_prefix_consistency_both_rename_directions`、`test_d3_minute_empty_by_day_beats_flat_st_name`、`test_d3_minute_missing_name_inherits_through_real_loader` | 2+1+2；对应分钟入口；tmp_path 真实 loader 的缺行/空白名均继承 ST，105/100 门阻止首次买入 |
+| B3 / `tests/test_csv_minute_backtest_v7.py` | `test_d3_v7_unst_window_extension_changes_earlier_fill` | 1；真实 loader 短窗 ST→长窗普通名，且末日缺该代码；早日价格 105 从 skip 变成真实 trial fill，档位/股数/现金分别断言 |
+| B4 / `tests/test_ashare_session.py` | `test_d3_name_and_board_boundaries`、`test_d3_direct_flatten_empty_name_clears_unlike_loader` | 6+1；缺名主板、未知板块普通名、ST 优先未知/20%/30% 板块、WEST 不命中；直传空名覆盖与 loader 合同分开 |
+| B4 / `tests/test_ashare_simulate_predicates.py` | `test_d3_held_name_chain_sell_and_add_bands`、`test_d3_unknown_board_st_reaches_limit_gate_and_fill` | 6+6；三引擎 × held sell/add 共用“普通→ST→缺名→普通”名称链；真实档位 spy、gate 与 fill 独立断言。未知板块 ST 在 105 拦截、104 真实买入 |
+
+所有新增书侧用例使用默认 named-band，资金充足；held 卖出 lot 在决策前已持有，满足 T+1；书加仓用 `monkeypatch` 临时启用既有 `allow_add` 路径，测试后恢复。minute 扫描器内拦截不保证外层 `defer_sell_limit_down` 增加，沿用现有分叉，不为计数改生产。前缀一致性比较 BUY/SELL 与早日权益，末窗 `EOD_MARK` 不算成交。旧 daily `test_pool_name_asof_missing_held_code_falls_back_to_yesterday`、minute `test_pool_name_asof_normal_then_st_and_by_day_beats_flat_map`、v7 `test_v7_names_flatten_uses_window_end_name_for_earlier_day` 继续作为复用证据。
+
+这些 pins 只固定合成日期合同，不证明数据发布时刻/历史修订 PIT；v7 日期分叉、P1/P2/P4、δ2 因子可得性与经济残留仍 deferred。qlib 固定 band 例外通过 §2 源码合同记录，本次不改该路径。
+
+## 8) Linux/CI isomorphic acceptance（本 feat 的真实命令）
+
+### 8.1 基线、九路径白名单、编码与 whitespace
+
+从仓库根目录用 Bash 执行。`IMPLEMENTATION_BASE` 是本 feat worktree 起点的 `git rev-parse HEAD` 实测值；以下重新解析同一固定 commit，不跟随移动的 master、不推算 merge-base。proposal 历史锚点见页首，不用于本轮冻结。
 
 ```bash
 set -euo pipefail
-IMPLEMENTATION_BASE="$(git rev-parse --verify '1049b904bdd818dbb79f51f1830a008c8f83b141^{commit}')"
+IMPLEMENTATION_BASE="$(git rev-parse --verify 'cce17f319ead5c64a202632c3665b4eeb3e3e7a5^{commit}')"
 [[ "$IMPLEMENTATION_BASE" =~ ^[0-9a-f]{40}$ ]]
 git merge-base --is-ancestor "$IMPLEMENTATION_BASE" HEAD
-P3_DOCS=(
+P3_ALLOWED=(
   docs/backtest/plan-industry-align-p3-d3-st-pit-2026-09-19.md
-  docs/backtest/plan-industry-align-p3-d4-v7-limits-none-2026-09-19.md
-  docs/backtest/plan-industry-align-p3-d5-volume-cap-2026-09-19.md
-  docs/backtest/plan-industry-align-p3-d6-exdiv-economics-2026-09-19.md
-  docs/backtest/plan-industry-align-p3-d345-econ-index-2026-09-19.md
+  docs/backtest/engine-ashare-correctness.md
+  docs/backtest/README.md
+  tests/test_csv_pool.py
+  tests/test_csv_daily_backtest.py
+  tests/test_csv_minute_backtest.py
+  tests/test_csv_minute_backtest_v7.py
+  tests/test_ashare_session.py
+  tests/test_ashare_simulate_predicates.py
 )
 P3_AUDIT_DIR="$(mktemp -d)"
 trap 'rm -rf -- "$P3_AUDIT_DIR"' EXIT
@@ -155,14 +176,14 @@ sort -u "$P3_AUDIT_DIR/head" "$P3_AUDIT_DIR/worktree" \
   "$P3_AUDIT_DIR/index" "$P3_AUDIT_DIR/untracked" > "$P3_AUDIT_DIR/paths"
 while IFS= read -r path; do
   p3_allowed=false
-  for doc in "${P3_DOCS[@]}"; do
-    if [[ "$path" == "$doc" ]]; then p3_allowed=true; break; fi
+  for allowed_path in "${P3_ALLOWED[@]}"; do
+    if [[ "$path" == "$allowed_path" ]]; then p3_allowed=true; break; fi
   done
   if [[ "$p3_allowed" != true ]]; then
     printf 'OUT OF SCOPE: %s\n' "$path"; exit 1
   fi
 done < "$P3_AUDIT_DIR/paths"
-for path in "${P3_DOCS[@]}"; do
+for path in "${P3_ALLOWED[@]}"; do
   test -f "$path"
   perl -MEncode=decode,FB_CROAK -e '
     local $/; open my $fh, "<:raw", $ARGV[0] or die $!;
@@ -175,7 +196,7 @@ done
 git diff --check "$IMPLEMENTATION_BASE" HEAD
 git diff --check
 git diff --cached --check
-for path in "${P3_DOCS[@]}"; do
+for path in "${P3_ALLOWED[@]}"; do
   p3_ws_rc=0
   git diff --no-index --check /dev/null "$path" > "$P3_AUDIT_DIR/whitespace" || p3_ws_rc=$?
   if [[ "$p3_ws_rc" -gt 1 || -s "$P3_AUDIT_DIR/whitespace" ]]; then
@@ -184,18 +205,17 @@ for path in "${P3_DOCS[@]}"; do
 done
 ```
 
-最后的循环覆盖尚未跟踪的新文档；no-index 正常内容差异可返回 1，故同时要求 rc≤1 且 whitespace 诊断为空，不能简单忽略所有非零退出码。全路径审计覆盖 base→HEAD、staged、unstaged、untracked，不靠一张有限冻结表推断其它路径安全。未来 tests-only 实施时必须先在新实施记录中批准/列出 §7 实际测试落点并收窄更新白名单；**本次五文档白名单不允许任何 tests/Python 修改**。
+最后的循环也覆盖未跟踪文本；no-index 正常内容差异可返回 1，故同时要求 rc≤1 且 whitespace 诊断为空，不能简单忽略所有非零退出码。全路径审计覆盖 base→HEAD、staged、unstaged、untracked，不靠一张有限冻结表推断其它路径安全。本次 Human GO 与实施指令仅允许上述三份 docs + 六个既有 tests，**不允许任何生产 Python 或其它路径修改**。
 
-### 8.2 未来 Slice B/C：真实 data-free tests / gates（本 PR 不执行）
+### 8.2 Slice B/C：真实 data-free tests / gates
 
-以下仅在未来获准的合同/pins 刀执行；本次不会以“现有测试存在”冒报“本次测试已通过”。CI 同构依据为 `.github/workflows/python-tests.yml:27-43`、`:49-56` 的受控 Python 3.12、四个 repo-only gates 与 pytest marker；这是定向合同验收，不代表全量 CI 或宿主回测。
+本次按 Human GO 执行下列命令，结果单列 §8.4。CI 同构依据为 `.github/workflows/python-tests.yml:27-43`、`:49-56` 的受控 Python 3.12、四个 repo-only gates 与 pytest marker；这是定向合同验收，不代表全量 CI 或宿主回测。
 
-遵循 AGENTS 解释器顺序：`OSKH_MERGE_PYTHON` → `VANNA312_PYTHON` → `VANNA311_PYTHON`。Linux 先显式指定已准备好的项目/CI 3.12 解释器；未设置时本命令失败，不偷偷回落系统 python/pip。Windows 默认解释器由现有 `scripts/_script_bootstrap.py` 的 `resolve_oskh_python` 管理，本命令不探测盘符、不安装依赖。
+实施指令显式指定 Linux 已准备好的 `/tmp/industry-align-venv/bin/python`（3.12）；本轮不回落系统 python/pip、不安装依赖、不探测数据路径。
 
 ```bash
 set -euo pipefail
-P3_CONTRACT_PYTHON="${OSKH_MERGE_PYTHON:-${VANNA312_PYTHON:-${VANNA311_PYTHON:-}}}"
-: "${P3_CONTRACT_PYTHON:?Set OSKH_MERGE_PYTHON to a controlled Python 3.12 executable}"
+P3_CONTRACT_PYTHON=/tmp/industry-align-venv/bin/python
 [[ -x "$P3_CONTRACT_PYTHON" ]]
 "$P3_CONTRACT_PYTHON" -c 'import sys, pytest, pandas, numpy, pyarrow; assert sys.version_info[:2] == (3, 12); print(sys.executable)'
 "$P3_CONTRACT_PYTHON" scripts/gates/verify_oskh_data_contract.py
@@ -203,7 +223,7 @@ P3_CONTRACT_PYTHON="${OSKH_MERGE_PYTHON:-${VANNA312_PYTHON:-${VANNA311_PYTHON:-}
 "$P3_CONTRACT_PYTHON" scripts/gates/verify_no_hardcoded_machine_paths.py
 "$P3_CONTRACT_PYTHON" scripts/gates/verify_tr_bridge_import_ssot.py
 
-# §7 实际既有落点文件；新增 pin 完成后，逐项记录实际执行结果。
+# §7 实际既有落点文件；完整执行，包含新增 pins 与既有回归。
 "$P3_CONTRACT_PYTHON" -m pytest -q -m "not production and not benchmark" \
   tests/test_csv_pool.py \
   tests/test_csv_daily_backtest.py \
@@ -219,9 +239,9 @@ P3_CONTRACT_PYTHON="${OSKH_MERGE_PYTHON:-${VANNA312_PYTHON:-${VANNA311_PYTHON:-}
   tests/test_ashare_fee_wiring.py
 ```
 
-所有 gate/test 路径在本基线真实存在；无新造验收脚本。未来只允许合成内存 `simulate` / `simulate_v7` 单元向量或显式 tmp_path/I/O stub，不允许 CLI/宿主回测、湖访问和以真实行情输出为验收。本次连这些合成 tests 也不运行。缺环境依赖记阻塞；必需 pin 被 skip 不算通过；只跑旧测试不能声称 §7 待补组合已覆盖。
+所有 gate/test 路径在本基线真实存在；无新造仓内验收脚本。新增测试只使用合成内存 `simulate` / `simulate_v7` 单元向量或显式 tmp_path；既有 CLI 空池测试仅 pytest 内 stub I/O。没有 CLI/宿主回测、湖访问或真实行情输出验收。缺环境依赖记阻塞；必需 pin 被 skip 不算通过；只跑旧测试不能声称 §7 新组合已覆盖。
 
-### 8.3 默认生产冻结（本次及未来 A/B；与 §9 逐项相同）
+### 8.3 默认生产冻结（本次及未来 A/B；数组与 §9 逐项相同）
 
 先执行 §8.1 设置固定 base。保留 δ1 十文件、δ2 十七文件全部项目，再扩展名称/策略/Mode A/B 边界，共 **22** 个；这不改变旧 plan 的历史冻结结论。
 
@@ -251,15 +271,36 @@ FROZEN_PRODUCTION_FILES=(
   backtest/research/unified_exit_modeb.py
 )
 for path in "${FROZEN_PRODUCTION_FILES[@]}"; do test -f "$path"; done
+git diff --exit-code "$IMPLEMENTATION_BASE" -- backtest/research/
+git diff --exit-code "$IMPLEMENTATION_BASE" -- '*.py' ':(exclude)tests/**'
 git diff --exit-code "$IMPLEMENTATION_BASE" -- "${FROZEN_PRODUCTION_FILES[@]}"
 git diff --exit-code "$IMPLEMENTATION_BASE" HEAD -- "${FROZEN_PRODUCTION_FILES[@]}"
 git diff --exit-code -- "${FROZEN_PRODUCTION_FILES[@]}"
 git diff --cached --exit-code -- "${FROZEN_PRODUCTION_FILES[@]}"
 ```
 
-### 8.4 验收结论的范围
+### 8.4 本次运行记录与验收范围
 
-本 PR 只可记录 docs 路径、UTF-8/BOM/NUL、whitespace、锚点/链接/真实文件名、冻结数组与表一致性；未运行 §8.2、未新增测试、未实施 §7。将来 Slice C 要另填“commit / 基线 / 环境 / 命令 / exit / 实际 pin / skip / 冻结结果”，不得挪用 δ1/δ2 的历史 passed 数。默认 A/B 全部生产零 diff；如需 C，必须另立明确生产范围和验收合同，不能删除本冻结检查来假装默认路径仍通过。
+验证 HEAD / 固定 IMPLEMENTATION_BASE 均为 `cce17f319ead5c64a202632c3665b4eeb3e3e7a5`；受测代码为本 feat 的**未提交工作区**，没有虚构实现 commit。2026-09-19（Asia/Shanghai），在 `/workspace/wt-p3-d3-st-pit-feat`、Linux / CPython **3.12.13** 上执行；显式解释器 `/tmp/industry-align-venv/bin/python`，没有依赖安装、网络或湖访问。
+
+| 命令 / 检查 | 本次结果 | exit |
+|---|---|---|
+| §8.1 固定基线祖先、九路径白名单（HEAD/index/worktree/untracked）、编码、whitespace | PASS；仅三份 docs + 六个既有 tests；UTF-8、BOM=0、NUL=0 | 0 |
+| §8.2 `"$P3_CONTRACT_PYTHON" -c 'import sys, pytest, pandas, numpy, pyarrow; assert sys.version_info[:2] == (3, 12); print(sys.executable)'`（实跑同时打印版本） | CPython 3.12.13；依赖导入成功 | 0 |
+| `/tmp/industry-align-venv/bin/python scripts/gates/verify_oskh_data_contract.py` | OK | 0 |
+| `/tmp/industry-align-venv/bin/python scripts/gates/verify_data_path_ssot.py` | 7 hits、0 violations | 0 |
+| `/tmp/industry-align-venv/bin/python scripts/gates/verify_no_hardcoded_machine_paths.py` | OK | 0 |
+| `/tmp/industry-align-venv/bin/python scripts/gates/verify_tr_bridge_import_ssot.py` | OK，2 consumers | 0 |
+| §8.2 `/tmp/industry-align-venv/bin/python -m pytest -q -m 'not production and not benchmark'` + 六个完整测试文件（路径逐项如上） | **174 passed / 0 skipped**；新增 **11 函数 / 29 用例**，既有 145 用例；B1=1、B2=8、B3=1、B4=19 | 0 |
+| §8.2 同一 pytest 命令 + `test_ashare_simulate_import_fence.py` / `test_ashare_fees.py` / `test_ashare_fee_wiring.py` | **38 passed / 0 skipped** | 0 |
+| §8.3 `git diff --exit-code "$IMPLEMENTATION_BASE" -- backtest/research/` | **PASS：全部 research 生产文件零 diff** | 0 |
+| §8.3 `git diff --exit-code "$IMPLEMENTATION_BASE" -- '*.py' ':(exclude)tests/**'` | **PASS：全仓测试目录外 Python 零 diff** | 0 |
+| §8.3 四种冻结 diff（base→worktree、base→HEAD、unstaged、staged） | **22 冻结文件零 diff** | 0 |
+| §8.3 数组 / §9 表逐项与顺序核对；原表行对基线比对；§7.1 函数名与 AST 核对 | PASS；22 路径一致、原冻结表行保持原文、11 个真实新增函数均已映射 | 0 |
+
+定向验收共 **212 passed**，不代表全量 CI 或宿主回测。六文件 suite 的 2 条 warning 来自既有 `ashare_bars.py:503` pandas `copy` 参数弃用，不改生产压警告。首轮仅新增 pins 试跑为 27 passed / 2 failed：短窗多一条末日 `EOD_MARK` 导致前缀比较失败；修正夹具断言为真实 BUY/SELL + 早日权益后，完整六文件 174 passed。没有生产修复、skip/xfail 或以门放行冒充真实成交。
+
+Slice A→B→C 验收完成只表示分叉合同与 data-free pins 通过：Human GO A/A/A、全部生产 Python 零 diff。决策时刻可得性 PIT 未证、v7 日期分叉保持，P1/P2/P4 及 δ4–δ6 的独立授权边界不变；本轮不提交、推送或开/合 PR。
 
 ## 9) Frozen production file table（δ1/δ2 超集；默认零 diff）
 
@@ -288,10 +329,11 @@ git diff --cached --exit-code -- "${FROZEN_PRODUCTION_FILES[@]}"
 | `backtest/research/unified_exit_modea.py` | 新扩展：独立研究网格合同，不统一到 CSV 账本 |
 | `backtest/research/unified_exit_modeb.py` | 新扩展：fractional-shares 近似保持独立，不借用作经济闭环 |
 
-本表与 §8.3 数组的路径/顺序必须一致。表内零 diff 只证明这些文件；§8.1 的全路径白名单另行禁止其它生产与测试修改。不能以本表未列出为理由修改任何 Python、测试、CI 或数据文件；不扩大固定热路径 import-fence 测试的扫描面。
+本表与 §8.3 数组的路径/顺序必须一致。表内零 diff 只证明这些文件；§8.3 另查全部 `backtest/research/`，§8.1 全路径白名单禁止九路径以外的生产、测试、CI 或数据修改。不能以本表未列出为理由改生产；不扩大固定热路径 import-fence 测试的扫描面。
 
 
 ## 10) Changelog
 
+- **v0.3 (2026-09-19，Asia/Shanghai)**：按 Human GO A/A/A 实施 Slice A→B→C；实施基线刷新为 post #124 `cce17f319ead5c64a202632c3665b4eeb3e3e7a5`，proposal 基线留作历史。engine SSOT §2.2 / README 落 ST 日期 as-of 与 v7 窗末平铺合同，六个既有测试文件新增 11 函数 / 29 用例，B1–B4 映射见 §7.1。§8.4 记录 174+38 passed、四 gates、九路径白名单、编码与 22 文件/全 research/全仓生产 Python 零 diff；§9 原冻结表不改。保留未提交交付，不改生产、不把日期顺序宣称为完整 PIT。
 - **v0.2 (2026-09-19，Asia/Shanghai)**：录入 Human GO P3δ3.1/3.2/3.3=A/A/A，授权后续 Slice A→B→C 契约+data-free pins；生产冻结，P1/P2/P4 继续挂起。仅更新 GO 记录，未实施 slices、未新增/执行测试，未改 `IMPLEMENTATION_BASE`、白名单、冻结表或 §8 命令。
 - **v0.1 (2026-09-19)**：从 post #123 基线重核 ST 真实接线与既有测试；提出 δ3 A/B/C、人裁默认 A、未来 slices 与冻结超集。只新增 plan，未实施生产/测试变化，未执行回测/湖或宣称 PIT 已关闭。

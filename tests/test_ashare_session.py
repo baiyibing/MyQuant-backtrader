@@ -5,6 +5,7 @@ import pytest
 
 from backtest.research.ashare_session import (
     defer_sell_at_limit,
+    flatten_pool_names,
     hit_limit_down,
     hit_limit_up,
     session_limit_prices,
@@ -68,3 +69,29 @@ def test_d2_no_previous_close_retains_none_policy():
     assert limits is None
     assert not skip_buy_at_limit(10.0, limits)
     assert not defer_sell_at_limit(10.0, limits)
+
+
+@pytest.mark.parametrize("code,name,expected", [
+    pytest.param("600000.SH", "", (110, 90), id="unknown-name-known-board"),
+    pytest.param("999999.SZ", "普通名", None, id="unknown-board-normal-name"),
+    pytest.param("999999.SZ", "*ST甲", (105, 95), id="st-before-unknown-board"),
+    pytest.param("300001.SZ", "ST甲", (105, 95), id="st-before-twenty-percent"),
+    pytest.param("920014.BJ", "*st甲", (105, 95), id="st-before-thirty-percent"),
+    pytest.param("600000.SH", "WEST", (110, 90), id="latin-token-not-st"),
+])
+def test_d3_name_and_board_boundaries(code, name, expected):
+    limits = session_limit_prices(code, 100, name)
+    assert limits == expected
+    # Predicate pass is not a fill claim (in particular when limits is None).
+    assert skip_buy_at_limit(105, limits) is (expected == (105, 95))
+    assert defer_sell_at_limit(95, limits) is (expected == (105, 95))
+
+
+def test_d3_direct_flatten_empty_name_clears_unlike_loader():
+    # Direct helper callers can supply an empty string; the real loader filters it.
+    names = flatten_pool_names({
+        "20260902": {"600000.SH": ""},
+        "20260901": {"600000.SH": "*ST甲"},
+    })
+    assert names == {"600000.SH": ""}
+    assert session_limit_prices("600000.SH", 100, names["600000.SH"]) == (110, 90)
