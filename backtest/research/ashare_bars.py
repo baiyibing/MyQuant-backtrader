@@ -594,6 +594,36 @@ def load_minute_ohlc(
     return {code: cached[code] for code in want if code in cached}
 
 
+def book_frames_from_compact(minute: Mapping[str, object]) -> dict:
+    """Compact qlib_1min frames → book engine frames (DatetimeIndex + ymd/hm)."""
+    import numpy as np
+    import pandas as pd
+
+    out: dict = {}
+    for code, frame in minute.items():
+        if frame is None or getattr(frame, "empty", True):
+            continue
+        dates = pd.to_datetime(frame["date"])
+        hm = np.asarray(frame["hm"], dtype=np.int64)
+        idx = dates + pd.to_timedelta(hm // 60, unit="h") + pd.to_timedelta(hm % 60, unit="m")
+        close = np.asarray(frame["close"], dtype=np.float64)
+        high = np.asarray(frame["high"], dtype=np.float64) if "high" in frame.columns else close
+        open_ = np.asarray(frame["open"], dtype=np.float64) if "open" in frame.columns else close
+        low = np.asarray(frame["low"], dtype=np.float64) if "low" in frame.columns else high
+        out[str(code)] = pd.DataFrame(
+            {
+                "open": open_,
+                "high": high,
+                "low": low,
+                "close": close,
+                "ymd": pd.DatetimeIndex(dates).strftime("%Y%m%d").to_numpy(),
+                "hm": hm,
+            },
+            index=pd.DatetimeIndex(idx),
+        )
+    return out
+
+
 load_minute_bars = load_minute_ohlc
 _annotate = annotate_session
 _read_one_minute = read_lake_minute_ohlc
