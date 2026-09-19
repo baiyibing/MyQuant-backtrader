@@ -1,0 +1,29 @@
+{
+  "plan": {
+    "codex": {
+      "content_sha256_16": "4ae2b396cf00be14",
+      "git_sha": "482b2ec",
+      "path": "docs/backtest/plan-industry-align-p3-d2-exdiv-2026-09-19.md",
+      "reviewed_at": "2026-09-19"
+    },
+    "cursor-auto": {
+      "content_sha256_16": "4ae2b396cf00be14",
+      "git_sha": "482b2ec",
+      "path": "docs/backtest/plan-industry-align-p3-d2-exdiv-2026-09-19.md",
+      "reviewed_at": "2026-09-19"
+    },
+    "cursor-kimi-k3-high": {
+      "content_sha256_16": "4ae2b396cf00be14",
+      "git_sha": "482b2ec",
+      "path": "docs/backtest/plan-industry-align-p3-d2-exdiv-2026-09-19.md",
+      "reviewed_at": "2026-09-19"
+    },
+    "grok": {
+      "content_sha256_16": "4ae2b396cf00be14",
+      "git_sha": "482b2ec",
+      "path": "docs/backtest/plan-industry-align-p3-d2-exdiv-2026-09-19.md",
+      "reviewed_at": "2026-09-19"
+    }
+  },
+  "schema_version": 1
+}

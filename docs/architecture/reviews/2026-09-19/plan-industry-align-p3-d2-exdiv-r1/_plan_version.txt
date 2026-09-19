@@ -1,0 +1,4 @@
+path=docs/backtest/plan-industry-align-p3-d2-exdiv-2026-09-19.md
+git_sha=482b2ec
+content_sha256_16=4ae2b396cf00be14
+reviewed_at=2026-09-19

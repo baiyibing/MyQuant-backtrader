@@ -1,11 +1,12 @@
 # Plan: industry-align P3 δ2 ex-div / lot-cost rescale contract (2026-09-19)
 
-> **Status**: **v0.2 · docs-only plan / 待人裁**（host-parallel Codex adversarial r1 勘误已回填）。本 PR 仅提交本计划 + adv-r1 评审记录；未实施 Slice B 测试或 Slice C 验收，不代表 A→B→C 已交付。
+> **Status**: **v0.2.1 · docs-only plan / 待人裁**（classic multi-ai fan-out r1 勘误已回填；P3δ2.1–2.5=A/A/A/A/A 为 **working assumption / pending human GO**，非已录入人裁）。本 PR 提交本计划 + adv-r1 + classic-r1（四路 md + merge-consensus）；未实施 Slice A/B/C，不代表 docs/tests 交付完成。
 > **Main ship / 单行范围**: 仅 #112 P3 **δ2**：细化已落地 E-R6 的除权事件、lot 参考价重标定与经济残留契约，规划未来 data-free pins；默认 **零生产行为变更**。
 > **IMPLEMENTATION_BASE（本 worktree 分支起点，已用 `git rev-parse` 核对全 40 字符 SHA）**: `1ad010cca013afe8186f20275cbdcca71e500823`。
 > **前序**: [δ1 fee plan v0.3.3](plan-industry-align-p3-fees-2026-09-19.md) / PR #121 已合；本基线即其 merge commit。δ1 人裁与研究费率 SSOT、冻结表继续有效。
-> **Host intent lock**: P1（14:57）、P2（trades 列）、P4（touch↔mark）及 δ3/δ4/δ5 全部挂起。§5 五项仅为 δ2 后续人裁，推荐全 A，**尚未获得实施 GO**。
+> **Host intent lock**: P1（14:57）、P2（trades 列）、P4（touch↔mark）及 δ3/δ4/δ5 全部挂起。§5 五项仅为 δ2 后续人裁，推荐全 A；当前为 **working assumption / pending human GO**（用户跳过 cut widget，勿写成已录入 GO）。
 > **Adversarial r1 record**: [codex-adv-r1](../architecture/reviews/2026-09-19/plan-industry-align-p3-d2-exdiv-codex-adv-r1/) — host errata E-d2-01..09；lanes dissent-steelman / domain-safety / pattern-evidence（all rc=0）。
+> **Classic fan-out r1**: [plan-industry-align-p3-d2-exdiv-r1](../architecture/reviews/2026-09-19/plan-industry-align-p3-d2-exdiv-r1/) — codex/kimi/auto/grok rc=0；host [merge-consensus](../architecture/reviews/2026-09-19/plan-industry-align-p3-d2-exdiv-r1/merge-consensus.md) **GO-WITH-NITS**（MC-1..MC-7 → v0.2.1）。
 
 ---
 
@@ -63,7 +64,7 @@
 
 有效因子约束来自 loader；直接给 `simulate(..., exdiv=...)` 注入任意 map 不是同样强度的输入校验（`k_for` / `mapped_prev_close` 仅排除非正数/NaN）。未来契约夹具使用有效有限 k，不借本刀添加数据清洗策略。
 
-**因子恢复日与行情域错配（E-d2-01，as-built 残留）**：有效因子前行与昨收前行不是同一时间锚点。若除权日因子缺失/无效被 loader 跳过、下一日因子恢复，loader 可将有限 k 写到恢复日；此时昨收与除权日新买 lot 可能已在新价格域，却再乘一次 k。这与“停牌日键不回放”不同——行情可以连续、k 有限有效，错域仍可发生。分别验证因子 LAG 与手工同日 map 的模拟接线，不能关闭此残留。“已映射到 D 域”仅在**事件落日与行情域一致、且作用于事件日已持有 lot / 对应昨收**的前提下成立；未来 B1–B4 须规划经真实 `load_exdiv_rates` 输出再交给公开模拟器的跨日合成链（观察 map 日期、旧/新 lot cost、昨收档位、恢复前真实 SELL），按现状 pin 残留，修复另案。
+**因子恢复日与行情域错配（E-d2-01，as-built 残留）**：有效因子前行与昨收前行不是同一时间锚点。若除权日因子缺失/无效被 loader 跳过、下一日因子恢复，loader 可将有限 k 写到恢复日；此时昨收与除权日新买 lot 可能已在新价格域，却再乘一次 k。这与“停牌日键不回放”不同——行情可以连续、k 有限有效，错域仍可发生。分别验证因子 LAG 与手工同日 map 的模拟接线，不能关闭此残留。“已映射到 D 域”仅在**事件落日与行情域一致、且作用于事件日已持有 lot / 对应昨收**的前提下成立；未来 B1–B4 须规划经真实 `load_exdiv_ratios` 输出再交给公开模拟器的跨日合成链（观察 map 日期、旧/新 lot cost、昨收档位、恢复前真实 SELL），按现状 pin 残留，修复另案。
 
 **决策时刻可得性 vs 日期顺序（E-d2-02，未关闭面）**：日期 LAG / “不读取 D 之后的因子行”成立，**不等于**证明 `F_D` 在开盘/扫描前对决策者可得，也不等于历史因子版本与当时一致。仓内因子构造以当日观测比值等为依据，loader 无 as-of/版本过滤。δ2 将后者标为**未证 / 历史观测近似**，不写入“未来函数已排除”。合成前缀一致性 pin（截断到 D vs 追加 D 后数据）只能约束 loader 日期语义，不能证明原始数据 PIT；关闭后者须另案取得可得时间/版本证据。该项属于 δ2 因子输入时间语义，**不能**仅用 δ3“ST PIT 已挂起”代替说明。
 
@@ -145,7 +146,7 @@ P1/P2/P4 不并入此表任何 δ2 切片；旧 P3 经济行为调整也未因�
 
 ## 5) P* human cuts（仅 δ2，全部待裁；默认推荐 A/A/A/A/A）
 
-这里 **A = 保持 as-built，本刀只契约化 + 未来 data-free pins**。B/C 仅供后续选择，不包含在本 PR 或默认实施授权内；任一 B/C 都须先更新范围、生产冻结与验收方案，不能顺带实施。旧 P1–P4 与 δ1 P3.1/2/3 不重裁。adversarial r1（E-d2-01..09）均为文档/验收定义回填，**不强制**将任一项人裁从 A 重开到 B/C；人裁仍待录入，本 v0.2 不冒充 GO。
+这里 **A = 保持 as-built，本刀只契约化 + 未来 data-free pins**。B/C 仅供后续选择，不包含在本 PR 或默认实施授权内；任一 B/C 都须先更新范围、生产冻结与验收方案，不能顺带实施。旧 P1–P4 与 δ1 P3.1/2/3 不重裁。adversarial r1（E-d2-01..09）与 classic fan-out r1（MC-1..MC-7）均为文档/验收定义回填，**不强制**将任一项人裁从 A 重开到 B/C；当前 **working assumption A/A/A/A/A / pending human GO**（用户跳过 cut widget），本 v0.2.1 **不**写入「人裁 GO 已录入」。P3δ2.5 混域活风险按 MC-7：维持 A + B6 危险组合必测 + Slice A CLI/README 红字；入口 fail-closed 须人裁改口到 B 另案，本刀不改生产。
 
 | ID | 人裁点 | A（推荐） | B | C |
 |---|---|---|---|---|
@@ -165,12 +166,14 @@ P1/P2/P4 不并入此表任何 δ2 切片；旧 P3 经济行为调整也未因�
 - 不重做 δ1，不改费率/最小费用粒度/印花税记账，不用 Mode A/B 的不同经济模型替换本刀。
 - 不改 P1（14:57）、P2（任何新 trades 列）、P4（touch↔mark）；δ3/δ4/δ5 全挂起。
 - 本 PR 不实施测试、不运行回测/湖，不宣称未来 B/C 已验收，不新建虚构 review 记录或占位脚本。
+- 不涉及盈筹率 / `cyqk`（仓内无 `backtest/chip_indicator.py`；筹码研究码在 `backtest/research/chip/`，0–1 阈）。
+- 不把「分钟 `--qlib-day-root`」误写成与「日线 `--qlib-data-root` 跳过 E-R6」同义；混域组合只文档化/pin，不本刀补入口跳过。
 
 ---
 
 ## 7) Slices A → B → C（未来实施路径，非本 PR 实施清单）
 
-前置：§5 后续人裁录入。本 PR 提供 **v0.2** 可审计划（含 adv-r1 勘误回填）；下面每片均为未来动作。
+前置：§5 后续人裁录入。本 PR 提供 **v0.2.1** 可审计划（含 adv-r1 + classic-r1 勘误回填）；下面每片均为未来动作；实施前置仍是正式人裁 GO。
 
 ### Slice A — 合同文字与证据收口
 
@@ -181,12 +184,12 @@ P1/P2/P4 不并入此表任何 δ2 切片；旧 P3 经济行为调整也未因�
 
 | Pin | 未来着陆文件（均已存在） | 必须验收的行为 |
 |---|---|---|
-| B1 事件门与 k | `tests/test_exdiv_map.py` | §2.2 四格、两个阈值等号/两侧、0.8% 有/无事件、k<1/k>1、有效行 LAG/warmup、缺 ex fallback；合成 parquet 显式 tmp_path，绝不走真实 resolver。可选：截断到 D vs 追加 D 后数据的前缀一致性、无前行不得向后借因子（仍不证原始 PIT，E-d2-02）。跨日因子恢复链见 B2 观察点（E-d2-01） |
-| B2 缩放范围与顺序 | `tests/test_exdiv_refprice_engines.py` | 多 lot 的 cost/peak ×k，其余字段保留；公开 daily/minute `simulate` 证明老 lot 仅一次、新买不重乘、连续事件复合；保留 helper 非幂等事实；缺 bar 前置分支不伪装成递延补偿。**明列台阶加仓（step）路径**与两引擎 exdiv 传参：至少“映射后命中涨停而阻止 step”及“允许 step 时新 lot 保持当日原始成交 cost”（E-d2-05）；勿用普通 pool 买代替 step 来源。规划经真实 `load_exdiv_rates`→公开模拟器的因子恢复日错配链，按现状 pin 残留（E-d2-01） |
+| B1 事件门与 k | `tests/test_exdiv_map.py` | §2.2 四格、两个阈值等号/两侧、0.8% 有/无事件、k<1/k>1、有效行 LAG/warmup、缺 ex fallback；合成 parquet 经真实 `load_exdiv_ratios(..., adj_factor_path=..., ex_date_index_path=...)` **两路径皆显式 tmp_path**（MC-2），绝不走真实 resolver——只传其一仍会回落 `resolve_source_parquet`。可选：截断到 D vs 追加 D 后数据的前缀一致性、无前行不得向后借因子（仍不证原始 PIT，E-d2-02）。跨日因子恢复链见 B2 观察点（E-d2-01） |
+| B2 缩放范围与顺序 | `tests/test_exdiv_refprice_engines.py` | 多 lot 的 cost/peak ×k，其余字段保留；公开 daily/minute `simulate` 证明老 lot 仅一次、新买不重乘、连续事件复合；保留 helper 非幂等事实；缺 bar 前置分支不伪装成递延补偿。**明列台阶加仓（step）路径**与两引擎 exdiv 传参：至少“映射后命中涨停而阻止 step”及“允许 step 时新 lot 保持当日原始成交 cost”（E-d2-05）；勿用普通 pool 买代替 step 来源。规划经真实 `load_exdiv_ratios`→公开模拟器的因子恢复日错配链，按现状 pin 残留（E-d2-01）。**另（MC-5）**：公开日线 pin「pending_exit × 除权日」——D−1 收盘写 pending → D 除权后正常开盘成交 / 开盘跌停续 defer；断言 reason、raw 开盘价、原股数与不重复缩放（字段保留 ≠ 成交顺序）。因子恢复链调用须双路径显式（同 B1/MC-2） |
 | B3 v7 保留分叉 | `tests/test_csv_minute_backtest_v7.py` | **两层证明（E-d2-03）**：（1）helper 人工 Position，含非空 `add1_A1` 的字段/不变量矩阵，标注兼容分支与注入限度；（2）公开 `simulate_v7` 钉自然可达的 entry_A/avg_cost/peak/Lot.price、扫描前一次性、新买/加仓、原股数/现金。非空 `add1_A1` 禁写“已验证自然加仓赋值”。另：除权日老/新 lot 混持后同日 stop 只卖老 lot 的 T+1 pin（E-d2-07）；自洽 held 夹具替换/补充混域 trial-stop 模板（E-d2-06） |
-| B4 昨收到档位 | `tests/test_ashare_session.py`、`tests/test_exdiv_refprice_engines.py` | 保留直观例 `raw_prev=10,k=0.5→5→(5.50,4.50)`；**增补** `raw_prev=3.30,k=0.5→1.65→(1.82,1.49)`，mapped 返回值必须送入真实档位函数（E-d2-04）。复用 held/chase/pool，**并明列 step**（E-d2-05）；保持 Decimal 档位与 `limits=None` 现状 |
-| B5 经济残留 | `tests/test_exdiv_refprice_engines.py`、`tests/test_csv_minute_backtest_v7.py` | §2.4 数值 oracle；参考字段变、股数现金不因事件变，raw mark 仍有跳变；不把 EOD_MARK 当真实 SELL 或给 v7 加产物列。将“股数/红利缺失造成的经济残留”与“错域导致的错误触发、旧成交不能靠后续 rescale 撤销”（E-d2-01）分开断言 |
-| B6 价格域入口 | `tests/test_exdiv_refprice_engines.py` | 对 daily `run()` 的 lake none/front/back/**`qlib_day`** 四态隔离所有 I/O：stub bars/pool、map loader、simulate、artifact writer；捕获 exdiv 参数与 loader 调用。minute/v7：明确 `daily_source∈{lake,qlib_day}` × `minute_source∈{lake,qlib_1min}` 的受控接线预期——**当前各组合仍加载/传递 map**（E-d2-08）；只记录现状，不宣称域一致，不改生产补齐跳过 |
+| B4 昨收到档位 | `tests/test_ashare_session.py`、`tests/test_exdiv_refprice_engines.py` | 保留直观例 `raw_prev=10,k=0.5→5→(5.50,4.50)`；**增补** `raw_prev=3.30,k=0.5→1.65→(1.82,1.49)`，mapped 返回值必须送入真实档位函数（E-d2-04）。复用 held/chase/pool，**并明列 step**（E-d2-05）；保持 Decimal 档位与 `limits=None` 现状。**MC-6**：半分链钉主板 `code="600000.SH"`（同 1.65 在创科/ST 档位不同）；mapped 返回值必须送入真实 `session_limit_prices`/`limit_prices`；**禁止** `round_fen(mapped*0.9)` 等 float 旁路（`1.65*0.9`→1.48 ≠ 1.49）。书 step 涨停向量用默认书（`qlib_limit_pct=None`→Decimal），勿拿 topk float 书当档位 oracle |
+| B5 经济残留 | `tests/test_exdiv_refprice_engines.py`、`tests/test_csv_minute_backtest_v7.py` | §2.4 数值 oracle；参考字段变、股数现金不因事件变，raw mark 仍有跳变；不把 EOD_MARK 当真实 SELL 或给 v7 加产物列。将“股数/红利缺失造成的经济残留”与“错域导致的错误触发、旧成交不能靠后续 rescale 撤销”（E-d2-01）分开断言。**MC-4**：§2.4 小数值（100 股/cost=10/cash=2000）用于书 helper / 公开 `simulate`；公开 `simulate_v7` 无 Position 注入，试仓≈`NAME_BUDGET×0.2`，改用事件前快照比 Δ（股数/现金不变、raw mark 差额）；勿把小数值初态直接当 v7 公开可达状态 |
+| B6 价格域入口 | `tests/test_exdiv_refprice_engines.py` | 对 daily `run()` 的 lake none/front/back/**`qlib_day`** 四态隔离所有 I/O：stub bars/pool、map loader、simulate、artifact writer；捕获 exdiv 参数与 loader 调用。minute/v7：明确 `daily_source∈{lake,qlib_day}` × `minute_source∈{lake,qlib_1min}` 的受控接线预期——**当前各组合仍加载/传递 map**（E-d2-08）；只记录现状，不宣称域一致，不改生产补齐跳过。**MC-3/MC-7**：逐入口 patch **消费模块绑定名**——daily/minute 测公开 `run()`（minute 传 `use_cache=False`；stub bars/pool/`load_exdiv_ratios`/simulate；产物 writer 在 `main()` 不在 `run()`）；v7 无 `run()`，测 `main(argv)` 时 stub `_load_cli_bars`/`bars_from_pool`、`load_index_daily`、writer，保留 `load_limit_context` 调用链、非空合成 pool（空 codes 不调 loader）。**危险组合必测**：`daily=qlib_day` × 仍加载 map（现状期望=仍加载，不是「已安全」）；Slice A 在 CLI help / `docs/backtest/README.md` 写红字：日线 `--qlib-data-root` 跳过 ≠ 分钟 `--qlib-day-root` 跳过 |
 
 DoD：新增 pins 与既有测试互补；只有 pytest 内存/临时夹具，无 CLI 回测。不能只断言 helper 乘法就宣布 daily/minute/v7 接线闭合；不能只跑 fees/fence 就宣布 δ2 通过。若 B 暴露真实缺陷，记录事实并按 F-R11 留待另案，默认冻结不变。
 
@@ -287,7 +290,7 @@ git diff --cached --name-only
 git ls-files --others --exclude-standard
 ```
 
-路径通过条件：本 PR 仅本 plan 与 `docs/architecture/reviews/2026-09-19/plan-industry-align-p3-d2-exdiv-codex-adv-r1/`（lanes / errata / host summary；可省略超大 stderr）；未来 A/B/C 仅本 plan、`docs/backtest/engine-ashare-correctness.md`、`docs/backtest/README.md` 与 B1–B6 四个具名测试文件。§8.2 费率/fence 回归只跑不改。任何其它路径变化先解释来源，不计作本刀通过；严禁用“冻结表未列出”授权修改其它生产文件。未来每个变更 `.md` 也要执行 UTF-8/BOM/NUL 检查，`.py` 同要求。
+路径通过条件：本 PR 仅本 plan、`docs/architecture/reviews/2026-09-19/plan-industry-align-p3-d2-exdiv-codex-adv-r1/`（lanes / errata / host summary；可省略超大 stderr）、与 `docs/architecture/reviews/2026-09-19/plan-industry-align-p3-d2-exdiv-r1/`（四路 md + merge-consensus + host slot；可省略 `_parallel/` 与超大 stderr）；未来 A/B/C 仅本 plan、`docs/backtest/engine-ashare-correctness.md`、`docs/backtest/README.md` 与 B1–B6 四个具名测试文件。§8.2 费率/fence 回归只跑不改。任何其它路径变化先解释来源，不计作本刀通过；严禁用“冻结表未列出”授权修改其它生产文件。未来每个变更 `.md` 也要执行 UTF-8/BOM/NUL 检查，`.py` 同要求。
 
 当前验收状态：**仅 plan 编写与静态核验阶段；未来 Slice B/C 未实施、未运行**。实际提交时的静态检查结论在 PR body 记录。
 
@@ -328,5 +331,6 @@ git ls-files --others --exclude-standard
 
 ## 11) Changelog
 
+- **v0.2.1 (2026-09-19)**：Classic multi-ai fan-out r1（codex / cursor-kimi-k3-high / cursor-auto / grok，all rc=0；host=claude 空槽）勘误回填 MC-1..MC-7：`load_exdiv_rates`→`load_exdiv_ratios`（禁止别名）；B1 双路径显式 tmp；B2 pending_exit×除权；B4 钉 `600000.SH`+禁 float 旁路；B5 helper/v7 分层 oracle；B6 逐入口 stub + `qlib_day`×map 危险组合；P3δ2.*=A 为 working assumption / pending human GO；Non-goals 排除 cyqk 与分钟 `--qlib-day-root` 误读；§8.3 路径白名单纳入 classic-r1。共识 **GO-WITH-NITS**。记录：[p3-d2-exdiv-r1](../architecture/reviews/2026-09-19/plan-industry-align-p3-d2-exdiv-r1/)。无生产/测试代码修改，无回测/湖读取，未实施 Slice A/B/C。
 - **v0.2 (2026-09-19)**：Host-parallel Codex adversarial r1（dissent-steelman / domain-safety / pattern-evidence，all rc=0）勘误回填 E-d2-01..09：因子恢复日错域残留与“映射到 D 域”前提收窄；决策时刻 PIT 未证；B3 helper/公开可达分层与混持 T+1；B4 Decimal 半分边界；step 加仓接线观察点；v7 trial-stop 夹具限度；`qlib_day`≠`qlib_1min` 与 B6 源组合矩阵；v7 接线沿革短注。人裁默认仍 A/A/A/A/A，无强制重开。`IMPLEMENTATION_BASE` 保持全 40 字符 `1ad010cca013afe8186f20275cbdcca71e500823`。记录：[codex-adv-r1](../architecture/reviews/2026-09-19/plan-industry-align-p3-d2-exdiv-codex-adv-r1/)。无生产/测试代码修改，无回测/湖读取。
 - **v0.1 (2026-09-19)**：首次 docs-only δ2 plan；基线经 `git rev-parse HEAD` 核对为 `1ad010cca013afe8186f20275cbdcca71e500823`（PR #121 merge）。只承接 δ1 roadmap 的除权契约细化；列出 E-R6 已关面/经济残留、书与 v7 字段分叉、daily 连续域跳过的入口边界、五项待人裁 A/B/C、未来 A→B→C/data-free 验收与 δ1 超集冻结表。无生产/测试代码修改，无回测/湖读取，B/C 尚未实施。
