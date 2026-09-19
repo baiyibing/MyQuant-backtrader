@@ -1,0 +1,25 @@
+{
+  "review": "plan-industry-align-p3-d345-econ-r1",
+  "pr": 124,
+  "branch": "docs/industry-align-p3-d345-econ",
+  "review_base_head": "1e9994e88a67d0f5f651953fa7ad0e57b59a3677",
+  "implementation_base": "1049b904bdd818dbb79f51f1830a008c8f83b141",
+  "consensus": "GO-WITH-NITS",
+  "adversarial": [
+    "dissent-steelman",
+    "domain-safety",
+    "pattern-evidence"
+  ],
+  "fanout": [
+    "codex",
+    "cursor-kimi-k3-high",
+    "cursor-auto",
+    "grok"
+  ],
+  "host_slot": "claude",
+  "errata": [
+    "MC-1 δ4 named-band",
+    "MC-2 δ6 raw close"
+  ],
+  "pre_errata_head": "1e9994e88a67d0f5f651953fa7ad0e57b59a3677"
+}
