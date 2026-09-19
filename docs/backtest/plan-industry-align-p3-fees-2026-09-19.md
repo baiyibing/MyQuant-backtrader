@@ -1,11 +1,13 @@
 # Plan: industry-align P3 delta1 fee contract (2026-09-19)
 
-> **Status**: Proposed **v0.3.2** + **human GO 2026-09-19**: P3.1/P3.2/P3.3 = **A/A/A** (keep defaults). Multi-ai r1 consensus GO-WITH-NITS; MC-1/MC-2 errata applied. Docs-only until Slice A/B/C. No production Python edits in this PR.
+> **Status**: **δ1 Slice A→B→C ship (v0.3.3)** — docs + data-free fee-wiring tests. Human GO 2026-09-19: P3.1/P3.2/P3.3 = **A/A/A**. Multi-ai r1 GO-WITH-NITS (MC-1/MC-2). **No production Python behavior changes**; freeze set zero-diff vs IMPLEMENTATION_BASE.
 > **Main ship (single implementable ship this round)**: **delta1** — research fee contract + stamp-tax boundary clarity for CSV daily/minute engines.
-> **IMPLEMENTATION_BASE (origin/master full SHA after fetch)**: `f548cc2ff808e7ecd5357e4d3786a62c76d8f8c5`.
+> **IMPLEMENTATION_BASE (origin/master full SHA after fetch at branch start)**: `fa4d448d8446a9959217c5431eeb7c8d59c0d722`.
 > **Host intent lock**: Explicitly park **P1** (14:57 fill window), **P2** (trades columns), **P4** (touch↔mark coupling) this round.
 > **Default recommendation**: zero behavior change (document as-built; add/extend data-free tests only).
 > **Adversarial r2 record**: [codex-adv-r2](../architecture/reviews/2026-09-19/plan-industry-align-p3-fees-codex-adv-r2/) — host errata E-r2-01..06; lanes dissent-steelman / domain-safety / pattern-evidence (all rc=0).
+> **r1 consensus**: [plan-industry-align-p3-fees-r1/merge-consensus.md](../architecture/reviews/2026-09-19/plan-industry-align-p3-fees-r1/merge-consensus.md).
+> **Slice B landing**: `tests/test_ashare_fee_wiring.py` (plus formula `tests/test_ashare_fees.py`).
 
 ---
 
@@ -33,22 +35,24 @@ So this round chooses only one main implementable ship: **delta1 fee contract**,
 
 | Contract item | As-built anchor |
 |---|---|
-| Fee formula function | `backtest/research/ashare_fees.py:24` `trade_commission(notional, rate, min_cost)` |
-| Structured schedule type | `backtest/research/ashare_fees.py:34` `FeeSchedule` |
+| Fee formula function | `backtest/research/ashare_fees.py:23` `trade_commission(notional, rate, min_cost)` |
+| Structured schedule type | `backtest/research/ashare_fees.py:35` `FeeSchedule` |
 | Research default schedule | `backtest/research/ashare_fees.py:53` `BILATERAL_10BP = FeeSchedule(COMMISSION, COMMISSION, 0.0)` |
 | qlib PortAna schedule | `backtest/research/ashare_fees.py:54` `QLIB_PORTANA = FeeSchedule(QLIB_OPEN_COST, QLIB_CLOSE_COST, QLIB_MIN_COST)` |
 | Module default pointer | `backtest/research/ashare_fees.py:55` `DEFAULT_SCHEDULE = BILATERAL_10BP` |
-| Existing unit tests | `tests/test_ashare_fees.py:10-24` |
+| Book SimState fee floats | `backtest/research/csv_ledger.py:91-93` `(COMMISSION, COMMISSION, 0.0)` |
+| Formula unit tests | `tests/test_ashare_fees.py` |
+| Fee-wiring landing tests | `tests/test_ashare_fee_wiring.py` (MC-1) |
 
 ### 2.2 How CSV engines consume this today
 
 | Path | As-built behavior | Anchors |
 |---|---|---|
-| Daily engine runtime override path | Daily supports optional qlib-cost override (buy 5bp / sell 15bp / min 5) and writes rates into `SimState` when provided | `backtest/research/csv_daily_backtest.py:230-232`, `:272-280`, `:658-660`, `:683-685` |
-| Minute engine default path | Minute `simulate` initializes state via shared loop and does not set fee override knobs in this file; fee rates come from `SimState` defaults | `backtest/research/csv_minute_backtest.py:549`; `backtest/research/csv_simulate_loop.py:102`; `backtest/research/csv_ledger.py:87-89` |
-| Ledger charge points (daily/minute shared) | Commission is charged in shared buy/sell ledger paths via `trade_commission` | `backtest/research/csv_ledger.py:15-20`, `:211`, `:244` |
-| Per-name pool cash precheck uses same formula | Shared loop precheck uses `trade_commission` for cash sufficiency | `backtest/research/csv_simulate_loop.py:27`, `:287-289` |
-| v7 explicit typed fee schedule | v7 imports `DEFAULT_SCHEDULE, FeeSchedule`, and buy/sell/simulate accept `fee: FeeSchedule = DEFAULT_SCHEDULE` | `backtest/research/csv_minute_backtest_v7.py:24`, `:204`, `:225`, `:279` |
+| Daily engine runtime override path | Daily supports optional qlib-cost override (buy 5bp / sell 15bp / min 5) and writes rates into `SimState` when provided | `backtest/research/csv_daily_backtest.py:231-233`, `:273-281`, `:688-715` |
+| Minute engine default path | Minute `simulate` initializes state via shared loop and does not set fee override knobs in this file; fee rates come from `SimState` defaults | `backtest/research/csv_minute_backtest.py:507+`; `backtest/research/csv_simulate_loop.py:102`; `backtest/research/csv_ledger.py:91-93` |
+| Ledger charge points (daily/minute shared) | Commission is charged in shared buy/sell ledger paths via `trade_commission` | `backtest/research/csv_ledger.py:15-20`, `:219`, `:263` |
+| Per-name pool cash precheck uses same formula | Shared loop precheck uses `trade_commission` for cash sufficiency | `backtest/research/csv_simulate_loop.py:27`, `:288-300` |
+| v7 explicit typed fee schedule | v7 imports `DEFAULT_SCHEDULE, FeeSchedule`, and buy/sell/simulate accept `fee: FeeSchedule = DEFAULT_SCHEDULE` | `backtest/research/csv_minute_backtest_v7.py:24`, `:206-210`, `:226-228`, `:277-282` |
 
 ### 2.3 Boundary: live broker fee policy must stay out of research hot path
 
@@ -90,7 +94,7 @@ Fees participate in cash sufficiency before a fill on shared/v7 paths. δ1 docum
 
 | Delta ship | Scope summary | This PR |
 |---|---|---|
-| **delta1 (main ship this round)** | Research fee contract + stamp-tax boundary clarity: `FeeSchedule`, `BILATERAL_10BP`, `QLIB_PORTANA`, `trade_commission`, and daily/minute/v7 consumption map | **YES (plan only)** |
+| **delta1 (main ship this round)** | Research fee contract + stamp-tax boundary clarity: `FeeSchedule`, `BILATERAL_10BP`, `QLIB_PORTANA`, `trade_commission`, and daily/minute/v7 consumption map | **YES (this PR: docs + data-free tests)** |
 | delta2 | Ex-div / lot-cost rescale as-built contract refinements (note E-R6 already covers core behavior; do not redo) | **NOT this PR** |
 | delta3 | ST PIT alignment (book as-of vs v7 window-end semantics) | **NOT this PR** |
 | delta4 | v7 `limits=None` fail-open policy changes (already contractualized in next plan) | **NOT this PR** |
@@ -135,22 +139,24 @@ Fees participate in cash sufficiency before a fill on shared/v7 paths. δ1 docum
 - No ex-div behavioral redesign.
 - No volume participation cap implementation.
 - No backtest execution in this ship.
+- **MC-6:** Research rates are a **proxy commission schedule**, not the live stamp-tax bill; do not document PortAna sell 15bp as a proven in-repo “5bp+10bp stamp” decomposition, and do not add a second stamp booking line later without a human cut.
+- **MC-7:** `unified_exit_modea` linear fee approx and `backtest/research/engine.py` placeholders are **not** CSV book/v7 wiring evidence; keep them parked outside δ1 acceptance.
 
 ---
 
-## 7) Slices A -> B -> C for delta1 (future implementation path, not this docs-only PR)
+## 7) Slices A -> B -> C for delta1 (**this ship**)
 
 ### Slice A (contract text + anchor consolidation)
 
-- Consolidate fee contract table in backtest docs (as-built defaults, asymmetry, floor behavior).
-- Add explicit "research-only fee SSOT boundary" paragraph with import-fence anchors.
+- Consolidate fee contract table in backtest docs (as-built defaults, asymmetry, floor behavior) → `engine-ashare-correctness.md` §1.1 + README SSOT row.
+- Add explicit "research-only fee SSOT boundary" paragraph with import-fence anchors (MC-6 proxy wording; MC-7 parked non-CSV paths).
 - No Python production edits.
 
 ### Slice B (data-free contract tests)
 
 Prior adversarial E-03 / quick predicate pins are **not** sufficient fee-wiring proof (**E-r2-01** / **MC-1**).
 
-**Test landing (pick one; must appear in §8):** extend `tests/test_ashare_fees.py` **or** add `tests/test_ashare_fee_wiring.py`. Private `_sell` / `_buy` may be imported for local numeric oracles, but cannot replace public `simulate` / `simulate_v7` wiring pins.
+**Test landing (in §8):** `tests/test_ashare_fee_wiring.py` (+ formula `tests/test_ashare_fees.py`). Private `_sell` / `_buy` may be imported for local numeric oracles, but cannot replace public `simulate` / `simulate_v7` wiring pins.
 
 - Extend/add tests to pin:
   - **dual default pointers:** `DEFAULT_SCHEDULE is BILATERAL_10BP` (v7/module) **and** `SimState()` `(buy_cost_rate, sell_cost_rate, min_cost) == (COMMISSION, COMMISSION, 0.0)` with numeric parity to the schedule (book/minute do **not** read `FeeSchedule` objects),
@@ -173,21 +179,19 @@ Prior adversarial E-03 / quick predicate pins are **not** sufficient fee-wiring 
 ## 8) Linux/CI isomorphic acceptance (real scripts only; data-free)
 
 Notes:
-- This docs-only PR does not execute these commands.
-- When delta1 implementation runs, use real scripts only (no ghost script names).
+- δ1 Slice C executes these commands on the feat branch.
+- Use real scripts only (no ghost script names).
+- `IMPLEMENTATION_BASE` is the full 40-char SHA of `origin/master` at branch start (`git rev-parse`); do not hand-type hex.
 
 ```bash
 set -euo pipefail
 
-IMPLEMENTATION_BASE=f548cc2ff808e7ecd5357e4d3786a62c76d8f8c5
+IMPLEMENTATION_BASE=fa4d448d8446a9959217c5431eeb7c8d59c0d722
 [[ "$IMPLEMENTATION_BASE" =~ ^[0-9a-f]{40}$ ]]
 git fetch origin master
 CURRENT_MASTER="$(git rev-parse origin/master)"
 [[ "$CURRENT_MASTER" =~ ^[0-9a-f]{40}$ ]]
-if [[ "$CURRENT_MASTER" != "$IMPLEMENTATION_BASE" ]]; then
-  echo "origin/master moved to $CURRENT_MASTER; keep IMPLEMENTATION_BASE pinned and document drift before changing it."
-  exit 1
-fi
+# Tip may move after branch start; freeze proof still pins the branch-start SHA above.
 git cat-file -e "$IMPLEMENTATION_BASE^{commit}"
 git merge-base --is-ancestor "$IMPLEMENTATION_BASE" HEAD
 
@@ -196,7 +200,6 @@ git merge-base --is-ancestor "$IMPLEMENTATION_BASE" HEAD
 python3 -m pytest -q -m "not production and not benchmark" \
   tests/test_ashare_fees.py \
   tests/test_ashare_fee_wiring.py
-# If wiring pins live only in test_ashare_fees.py, drop the second path; do not omit wiring coverage.
 # 1b) Fence + predicate side evidence (NOT labeled fee-wiring closure)
 python3 -m pytest -q -m "not production and not benchmark" \
   tests/test_ashare_simulate_import_fence.py \
@@ -269,6 +272,7 @@ Default editable surface for delta1: docs + data-free tests only.
 
 ## 11) Changelog
 
+- **v0.3.3 (2026-09-19)**: δ1 Slice A→B→C ship. Refresh `IMPLEMENTATION_BASE` to branch-start `origin/master` tip `fa4d448d8446a9959217c5431eeb7c8d59c0d722`. Docs: correctness §1.1 + README SSOT; MC-6/MC-7 nits in §6. Tests: add `tests/test_ashare_fee_wiring.py` (MC-1 wiring + MC-2 floor oracle + cash-gate). §8 commands list real landing file. Production freeze set unchanged (zero diff).
 - **v0.3.2 (2026-09-19)**: Multi-ai r1 host consensus GO-WITH-NITS. MC-1: §8 must run Slice B fee-wiring landing file; predicates/fence are side evidence; allow synthetic simulate under F-R7. MC-2: lock §2.4 two-lot numeric oracle (book 10/1990 vs v7-one-call 5/1995 under QLIB_PORTANA). Dual default pointers + §2.5 as-built commission-column wording. Human A/A/A unchanged; no production edits. Record: [plan-industry-align-p3-fees-r1](../architecture/reviews/2026-09-19/plan-industry-align-p3-fees-r1/).
 - **v0.3.1 (2026-09-19)**: Human GO on P3.1/P3.2/P3.3 = A/A/A; refresh `IMPLEMENTATION_BASE` to post-PR #119 master tip; start classic multi-ai fan-out.
 - **v0.3 (2026-09-19)**: Host-parallel Codex adversarial r2 (dissent-steelman / domain-safety / pattern-evidence, all rc=0). Backfilled E-r2-01..06: reopen fee-wiring Slice B requirements; document floor charge unit; narrow freeze claim; cash-gate observability; E-R6 residual wording; refresh `IMPLEMENTATION_BASE` to current master tip. Record: [codex-adv-r2](../architecture/reviews/2026-09-19/plan-industry-align-p3-fees-codex-adv-r2/). No production/test code edits; no backtests.

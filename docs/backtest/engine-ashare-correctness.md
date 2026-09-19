@@ -10,16 +10,33 @@
 market_layer.py     叶子：时间 / limit_pct / limit_prices(Decimal HALF_UP) / round_fen
 ashare_session.py   日线/分钟共用微结构：ST 档、官方 none 昨收+E-R6、涨跌停命中、T+1
 ashare_bars.py      日线/分钟共用行情：湖统一 load_minute_ohlc 书帧；qlib bin 保留私有 compact 链（不 import qlib）
-ashare_fees.py      日线/分钟共用费率：默认双边 10bp；qlib PortAna 5/15bp+最低5
+ashare_fees.py      日线/分钟共用费率 SSOT：默认双边 10bp；qlib PortAna 5/15bp+最低5（见 §1.1）
 csv_pool.py         名单 + 名称列（ST）
 csv_ledger.py       Position / SimState / execute_buy / _sell / 追买桶（命中函数转调 ashare_session）
-csv_daily_backtest  simulate + 日线加载 + CLI
-csv_minute_backtest scan_held_day + CLI；分钟/日线加载转调 ashare_bars
-csv_minute_backtest_v7  独立仓位机；微结构只走 ashare_session；_day_frame_records 按 (b) 切书帧/compact
+csv_daily_backtest  simulate + 日线加载 + CLI（可选 `--qlib-cost` → SimState 费率覆写）
+csv_minute_backtest scan_held_day + CLI；分钟/日线加载转调 ashare_bars（继承 SimState 默认费率）
+csv_minute_backtest_v7  独立仓位机；显式 `FeeSchedule`；微结构只走 ashare_session；_day_frame_records 按 (b) 切书帧/compact
 ashare_fill_clock.py    命名叶子：SessionPhase / FillPriceRule；不接线、不选价
 ```
 
 7 不进 BOOKS，不 import 6/8 `SimState`。
+
+### 1.1 研究费率合同（P3 δ1 as-built；docs/tests only）
+
+计划 SSOT：[plan-industry-align-p3-fees-2026-09-19.md](plan-industry-align-p3-fees-2026-09-19.md)（人裁 P3.1/P3.2/P3.3=A/A/A）。接线测：`tests/test_ashare_fee_wiring.py`（MC-1）；公式测：`tests/test_ashare_fees.py`；fence：`tests/test_ashare_simulate_import_fence.py`（旁证，非接线闭合）。
+
+| 合同项 | As-built |
+|---|---|
+| 公式 | `ashare_fees.trade_commission(notional, rate, min_cost)`；`min_cost>0` 时 `max(fee, floor)` |
+| 模块默认指针 | `DEFAULT_SCHEDULE is BILATERAL_10BP`（双边 10bp，`min_cost=0`） |
+| 书/分钟默认指针 | `SimState()` 三 float：`(buy_cost_rate, sell_cost_rate, min_cost) == (COMMISSION, COMMISSION, 0.0)`；**不**读 `FeeSchedule` 对象 |
+| qlib PortAna | `QLIB_PORTANA` = 买 5bp / 卖 15bp / min 5；日线 CLI `--qlib-cost` 经 `simulate(..., buy_cost_rate=..., sell_cost_rate=..., min_cost=...)` 写入 `SimState`（opt-in） |
+| 分钟路径 | `csv_minute_backtest.simulate` **无**费率 kwargs；继承 `SimState` 默认 |
+| v7 路径 | `_buy` / `_sell_lots` / `simulate_v7(..., fee=FeeSchedule=DEFAULT_SCHEDULE)` 显式透传 |
+| 扣费粒度 | **每次函数调用**（非按标的/按日）。书 `_sell`×2 lot 可两次触 floor；v7 一次 `_sell_lots` 聚合名义后一次 `credit_sell`（§2.4 两 lot oracle：PortAna 下书 10/+1990 vs v7 一次 5/+1995） |
+| 印花/过户边界 | 研究热路径 **仅佣金记账**（代理口径，≠ 现行印花税账单）；禁止未来在 ledger 再加印花行造成双重计入。真券商印花+过户留在 live `trade_fee_policy`，**不得** import 进 simulate 热路径 |
+| 产物列 | 书 `trades[].commission` 已有且写入 `trades.csv`；v7 `_event` **无** commission 列。δ1 不改 schema、不给 v7 补列。`EOD_MARK` 的 `commission:0` 不是卖出扣费 |
+| 非 CSV 接线证据 | `unified_exit_modea` 线性近似与 `research/engine.py` 占位 **不是** 书/v7 费率接线证据（parked） |
 
 `bars_from_pool` → `load_session_bars` 保留：湖源整窗调用 `load_minute_ohlc(use_cache=False)`，
 v7 / topk 共用 `_load_cli_bars`，只将所需日切片转成 records。帧契约 **(b)**：书帧 `ymd` /
@@ -49,7 +66,7 @@ T+1 在书引擎原调用点将 `calendar[entry_idx]` 映射为日期后调用 `
 - 上表是 **as-built fork 合同**，用于防止静默漂移，不代表本轮引入新成交模型。
 - 有 fail-open 的地方保持 fail-open；不得在未开新人裁切片时擅自改成 fail-closed。
 - OSS 只可类比术语，不可作为本仓行为证据；行为证据必须来自本仓锚点与测试。
-- #112 延后项（14:57 行为、trades 列、fees/ST PIT、touch↔mark 耦合）继续延后，不在本合同船内重开。
+- #112 延后项：14:57 行为（P1）、trades 新列（P2）、ST PIT（δ3）、touch↔mark 耦合（P4）继续延后。费率 **行为** 冻结（P3.1/2/3=A）；δ1 只做合同文档 + data-free 接线测，不改生产扣费。
 
 现状成交时钟（只命名，不改价）。限定：扫描窗口标签 / 非全量 / 不含 v7。`closing_call`（14:57–15:00，含端点）是当前扫描窗口标签：`_in_session` 接受这些 bar，扫描若到达仍按旧分支处理；不是交易所忠实集合竞价撮合，也不证明所有路径在该段成交。下表不是全量选价器：same-bar 前缀不只有 `open_board`（还可含 `topk_drop` / `model_exit`），策略 9 的证明夹具不能单独证明 open/close。v7 另有首 bar open / 严格 14:55 / 最后一根 close，未纳入本表。读取器、两个分钟扫描内核、双账本、E-R1–E-R6 与价格数字未变。
 
