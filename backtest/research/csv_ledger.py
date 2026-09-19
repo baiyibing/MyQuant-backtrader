@@ -20,6 +20,7 @@ from backtest.research.ashare_fees import (
     trade_commission,
 )
 from backtest.research.ashare_session import LIMIT_EPS, hit_limit_down, hit_limit_up
+from backtest.research.ashare_volume_cap import VolumeCap
 from backtest.research.market_layer import limit_prices
 
 DEFAULT_TOTAL_CASH = 21_000_000.0
@@ -91,6 +92,7 @@ class SimState:
     buy_cost_rate: float = COMMISSION
     sell_cost_rate: float = COMMISSION
     min_cost: float = 0.0
+    volume_cap: VolumeCap | None = field(default=None, repr=False, compare=False)
 
 
 def _ymd(ts) -> str:
@@ -208,6 +210,7 @@ def execute_buy(
     reason: str = "pool",
     ride_with: Optional[int] = None,
     is_step: bool = False,
+    bucket_id: int | None = None,
 ) -> bool:
     """常规/追买共用：整百股 + force_min + 账本佣金。成功返回 True。"""
     if px <= 0:
@@ -219,6 +222,15 @@ def execute_buy(
     comm = trade_commission(notional, st.buy_cost_rate, st.min_cost)
     if notional + comm > st.cash:
         return False
+    if st.volume_cap is not None:
+        key = (code, _ymd(day), bucket_id)
+        shares, skip = st.volume_cap.clamp(key, bucket_id, shares, buy=True)
+        if not shares:
+            _volume_skip(st, code, px, day, skip, bucket_id)
+            return False
+        notional = shares * px
+        comm = trade_commission(notional, st.buy_cost_rate, st.min_cost)
+        supp = max(0.0, notional - per)
     st.cash -= notional + comm
     st.daily_quota_used += min(per, notional)
     st.stats["supplementary_used"] += supp
@@ -255,11 +267,46 @@ def execute_buy(
         st.stats["add_lots"] += 1
     if reason.startswith("chase"):
         st.stats["chase_buy"] += 1
+    if st.volume_cap is not None:
+        st.volume_cap.consume(key, shares)
     return True
 
 
-def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str) -> None:
-    notional = pos.shares * px
+def _volume_skip(st: SimState, code: str, px: float, day, reason: str,
+                 bucket_id: int | None) -> None:
+    family = reason.split(":", 1)[0]
+    st.stats[family] = int(st.stats.get(family, 0)) + 1
+    st.trades.append({"date": _ymd(day), "code": code, "side": "SKIP",
+                      "price": px, "shares": 0, "notional": 0.0,
+                      "commission": 0.0, "reason": reason, "bucket": bucket_id})
+
+
+def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str, *,
+          bucket_id: int | None = None, at: int | None = None,
+          day_i: int | None = None) -> None:
+    shares = pos.shares
+    if st.volume_cap is not None:
+        # Linked exits stay atomic: no orphan riders or new pending queues.
+        group = [pos] + [p for p in st.positions.get(code, [])
+                         if p.ride_with == pos.lot_id and p is not pos]
+        child_ids = {p.lot_id for p in group if p is not pos}
+        if any(p.ride_with in child_ids for p in st.positions.get(code, [])):
+            _volume_skip(st, code, px, day, "skip_volume_cap:unsupported_ride_tree", bucket_id)
+            return
+        if day_i is None or any(p.entry_idx >= day_i for p in group):
+            _volume_skip(st, code, px, day, "skip_volume_cap:t1", bucket_id)
+            return
+        key = (code, _ymd(day), bucket_id)
+        wanted = sum(p.shares for p in group)
+        allocated, skip = st.volume_cap.clamp(
+            key, bucket_id if at is None else at, wanted,
+            atomic=len(group) > 1 or pos.ride_with is not None or bool(pos.pending_exit),
+        )
+        if not allocated:
+            _volume_skip(st, code, px, day, skip, bucket_id)
+            return
+        shares = min(shares, allocated)
+    notional = shares * px
     comm = trade_commission(notional, st.sell_cost_rate, st.min_cost)
     st.cash += notional - comm
     st.trades.append(
@@ -268,7 +315,7 @@ def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str) -
             "code": code,
             "side": "SELL",
             "price": px,
-            "shares": pos.shares,
+            "shares": shares,
             "notional": notional,
             "commission": comm,
             "reason": reason,
@@ -289,6 +336,11 @@ def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str) -
         st.stats["sell_ma"] += 1
     else:
         st.stats["sell_pos_trail"] += 1
+    if st.volume_cap is not None:
+        st.volume_cap.consume(key, shares)
+        pos.shares -= shares
+        if pos.shares:
+            return
     lots = st.positions.get(code) or []
     st.positions[code] = [p for p in lots if p is not pos]
     if not st.positions[code]:
@@ -301,4 +353,5 @@ def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str) -
         if getattr(p, "ride_with", None) == pos.lot_id
     ]
     for child in riders:
-        _sell(st, code, child, px, day, reason)
+        _sell(st, code, child, px, day, reason,
+              bucket_id=bucket_id, at=at, day_i=day_i)

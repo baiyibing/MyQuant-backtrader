@@ -1,297 +1,215 @@
-# Plan: industry-align P3 δ5 volume participation cap design (2026-09-19)
+# Plan: industry-align P3 δ5 volume participation cap production (2026-09-19)
 
-> **Status**: **v0.3 · design docs landed · Slice A（+C docs acceptance）完成（§8.4） · Human GO P3δ5.1=B（2026-09-19，Asia/Shanghai）**：只设计，不接生产 cap；未授权 `.1=C`。本 feat 仅三份 docs；Slice B SKIPPED，未新增/修改/执行测试，生产对固定基线零 diff，保留未提交工作区交付。
-> **Main ship / 单行范围**: 成交量 participation cap 的数据、时间、预算与部分成交候选合同及 D1–D7 文档算术 oracle 已落 engine SSOT §2.4 / README；当前无 participation cap，生产不变。
-> **IMPLEMENTATION_BASE**: `e0250efb2fae42e4e7f38a9585b1b4e95a1529bc`（本 feat worktree 起点，已由 `git rev-parse HEAD` 核对全 40 字符；post #126，含 δ4）。历史 proposal 基线 `1049b904bdd818dbb79f51f1830a008c8f83b141` 仅保留沿革，不用于本 feat 冻结证明。
-> **Human GO recorded**: **P3δ5.1=B（只设计）**；授权设计文档落地，其它项按 §5 推荐保留为 B 下的设计候选，不视为已裁生产政策。生产 cap 接线未授权；P1/P2/P4 继续挂起。
-> **前序**: [δ1 fees](plan-industry-align-p3-fees-2026-09-19.md)、[δ2 exdiv](plan-industry-align-p3-d2-exdiv-2026-09-19.md)、[next fill gates](plan-industry-align-next-2026-09-19.md)、[engine SSOT](engine-ashare-correctness.md)；[四刀索引](plan-industry-align-p3-d345-econ-index-2026-09-19.md)。
-
----
+> **Status**: **v0.4 · production volume-cap landed · Human GO C/A/A/A**；Slice A/B/C 完成，验收见 §8.4。此刀独立实施 δ5；δ6 production economics NOT started。
+> **Main ship / 单行范围**: 分钟书 `simulate` 与 `simulate_v7` 可显式启用共享成交量预算，允许部分成交；默认 cap off = as-built。
+> **IMPLEMENTATION_BASE**: `7428a1a89e309c5f5cbc21eab6eda2e38448c6cd`（#129 merge tip，δ4 fail-closed；worktree 起点实测 40 字符）。不跟随移动分支或推算 merge-base。
+> **Human GO recorded 2026-09-19 (Asia/Shanghai)**: **P3δ5.1=C / P3δ5.2=A / P3δ5.3=A / P3δ5.4=A**。本次新授权覆盖 #127 的 B design-only freeze，仅限下列生产例外；P1/P2/P4 deferred。
+> **前序**: [δ1 fees](plan-industry-align-p3-fees-2026-09-19.md)、[δ2 exdiv](plan-industry-align-p3-d2-exdiv-2026-09-19.md)、[δ4 fail-closed](plan-industry-align-p3-d4-v7-limits-none-2026-09-19.md)、[engine SSOT §2.4](engine-ashare-correctness.md#24-p3-δ5-volume-participation-cap-productionhuman-go-caaa)。历史 B 见 §10。
 
 ## 0) One-line scope
 
-为未来容量约束建立可证伪的输入/预算/成交/剩余量合同与 data-free oracle，明确“零量过滤已有、按成交量限额尚无”；本次只交文档，不增加生产撮合参数、成交量列或部分成交。
+只接生产 volume participation cap；不改 fill clock、ST PIT、费用 schedule、除权权益 shares/cash/NAV，不接湖或 CLI 容量参数。调用方提供已认证语义的合成/外部容量查询，loader schema 保持原样。
 
 ## 1) Why now
 
-δ1 已固定佣金调用粒度；δ2 已固定参考价换域但保留原股数。容量门若切碎成交，会影响 fee floor、T+1 lot、跟单/台阶、pending 与 NAV，不能视作一个局部 `min(shares, volume)` 修补。现有分钟帧还丢弃 volume，本刀必须先设计可得时间与数据单位，再决定是否值得另开生产案。这里只陈述仓内模型边界，不提供真实市场容量或收益估计。
+新 Human GO C 授权独立生产刀。容量门必须与双账本的费用调用粒度、T+1、lot、stage、pending/ride_with/step 一起闭环；本刀以真实公开入口和 ledger helpers 的内存测试验收，不提供真实市场容量或收益估计。
 
-## 2) Verified as-built anchors（以本 IMPLEMENTATION_BASE 为准）
+## 2) Baseline / production boundary and freeze exceptions
 
-以下按 `git show e0250efb2fae42e4e7f38a9585b1b4e95a1529bc:<path>` 重新阅读核实；既有测试仅作源码锚点，本轮不运行、不新增或修改。落地合同见 [engine SSOT §2.4](engine-ashare-correctness.md#24-p3-δ5-volume-participation-cap-designhuman-go-b)。
+基线书 `execute_buy` 依预算整百/force-min/现金门建 lot，`_sell` 全卖一个 Position；v7 `_buy` 按 fraction 整百，`_sell_lots` 汇总 T+1/kind 可卖量。两者均无市场成交量预算。日线与分钟 loader 已有可选零量过滤，随后丢 volume；已有零量过滤不等于 participation cap。
 
-| 合同项 | 已核实行为 | file:line |
+**§9 的 C-cut 例外仅四行**：`csv_ledger.py`、`csv_simulate_loop.py`、`csv_minute_backtest.py`、`csv_minute_backtest_v7.py`；另新增 `ashare_volume_cap.py`。这些文件只允许 δ5 接线；§9 其它 **18 行全部零 diff vs IMPLEMENTATION_BASE**。日线入口、所有 loader、费用/档位/策略 hooks、P1 时钟与 import-fence 枚举不变。完整全路径白名单见 §8.1，不能仅靠有限冻结表放宽其它文件。
+
+### 2.1 Current entry contract
+
+| 入口 / 模块 | Cap off | Cap on / 落点 |
 |---|---|---|
-| 书买量 | `_buy_size(per_quota, price)` 按预算取整百股；不足一手可由补充资金凑 100；无 volume 入参 | `backtest/research/csv_ledger.py:187-197` |
-| 书成交记账 | `execute_buy` 检查含佣金现金后建 lot；`_sell` 按该 Position 全部 shares 记一笔 | `backtest/research/csv_ledger.py:200-258`、`:261-276` |
-| 共享买路径 | chase/pool/step 以预算、价格、现金决定量；`apply_capital_ration` 是资金分配次序，不是市场参与率 | `backtest/research/csv_simulate_loop.py:79-90`、`:181-189`、`:287-306`、`:362-378` |
-| v7 买卖量 | `_buy` 为 NAME_BUDGET×fraction 后向下整百；`_sell_lots` 汇总符合 T+1/kind 的数量；没有 volume 参数 | `backtest/research/csv_minute_backtest_v7.py:57`、`:205-251` |
-| 日线 volume | 可选读取 volume，用零量剔除占位 K，随即丢 `_volume`；缺列保持旧路径 | `backtest/research/csv_daily_loader.py:69-96` |
-| 湖分钟 volume | 可选读入，按会话内记录的日汇总去掉整日零量，随后丢 `_volume`；并非逐分钟零量拒绝 | `backtest/research/ashare_bars.py:343-371` |
-| qlib 分钟帧 | 读取 open/high/close，输出 date/hm/open/high/close；该路径没有 volume 列 | `backtest/research/qlib_bin_1min.py:34-65` |
-| 持仓分钟扫描 | 输入数组 open/high/close/hm 与规则参数；此处无容量预算 | `backtest/research/csv_minute_backtest.py:619-642` |
-| 日线/分钟 loader pins | 零量、有/无 volume 两种路径已覆盖 | `tests/test_csv_daily_backtest.py:78`、`:101`；`tests/test_csv_minute_backtest.py:27`、`:56` |
-| 现有资金/多 lot pins | quota 等分/逐日重置、已有名加 lot | `tests/test_csv_daily_backtest.py:533`、`:612`、`:643`；费率用 `tests/test_ashare_fee_wiring.py` |
+| 分钟书 `simulate` | 原参数默认；成交/现金/lots/统计/mark 与基线一致 | `participation_rate=None`、`volume_for_bucket=None` 新 kwargs；启用时建单 run VolumeCap，绑定实际 quote/scan bar |
+| v7 `simulate_v7` | 原结果、费用/stage/stop/timer | 相同两 kwargs；每个 buy/sell/timer 访问当前 hm 同一预算 |
+| 书共享 chase/pool/step | 原顺序、门和资金规则 | `volume_bucket_for(code)` 只传 bucket；不改 hooks/BOOKS |
+| 日线 `simulate`、run/CLI 与 loaders | 冻结 | **日线容量未接，deferred**；不把 EOD volume 伪装成盘中容量；无 CLI 默认参与率 |
+| `ashare_volume_cap.py` | 不创建对象、不查询 volume | 只依赖标准库的预算 helper；不扩大 SIMULATE_HOT_PATH |
 
-当前缺少的是本表 CSV 书/v7 撮合路径的**市场成交量预算**。不据此断言全仓所有其它研究模型都没有 volume，也不把 `has_volume` 读取成功等同于单位、复权域、累计/增量语义已认证。日线与分钟源的列结构不同；只靠在买量函数加一个参数不能完成接线。
+### 2.2 Production contract matrix（C/A/A/A）
 
-### 2.1 已关 / 仍钉 / deferred
-
-| 面 | 基线状态 | 本刀处理 |
+| 维度 | 已落生产合同 | 边界 |
 |---|---|---|
-| 预算整手、含费资金门、T+1、零量占位过滤 | 已有实现/pins | 保留，不改成 participation cap 的证明 |
-| 正成交量大小对当前撮合量无约束 | 上表接线可见；专门量变不变性 pins 可补 | 已记录源码合同；pins 仅未来候选，本轮不加 |
-| 成交量单位、可得时刻、消费帧、预算归属 | 合同尚缺 | 本刀设计供人裁，不对真实湖做认证 |
-| 部分成交、残量、费用重算、lot/state 迁移 | 未实现 | 提出独立 oracle；生产须 C |
-| 价格冲击/排队与实际可成交概率 | 未建模/未证 | 不随 cap 关闭 |
+| 单位与域 | `BucketVolume(shares, available_at, unit="raw_shares_incremental")`；shares 必须非负整数，排除 bool；明确 raw 域增量**股数** | 必须由调用方认证来源和单位；裸 int/float、手/金额/累计量不自动转换，不读湖认证；未知输入拒绝 |
+| 时间可得性 | key=`(engine symbol, YYYYMMDD, hm)`，hm 是该会话分钟桶 close 标签；`available_at` 为同会话 minute-of-day 整数，须 `hm <= available_at <= attempt_at < 1440` | 与现有会话钟点一致（不做 UTC→CST 换钟）。若源标签代表 bar 开始，应提供真实较晚 available_at，该标签处会拒绝；不可倒填可得时刻 |
+| 完成 bar 近似 | close 成交使用对应完整分钟桶，明确 **completed-bar capacity approximation** | 开盘价触发使用 `attempt_at=hm-1`，桶未完成，lookup 前 unavailable 拒绝；本刀不改成交时点、不寻找前桶补容量。没有 EOD/future fallback |
+| 预算键 | 单 run `(symbol, session, bucket)` 双向共用，所有 pool/chase/step/held lots 共用 | 维持既有路径/lot 遍历顺序，未实现按时间排序的新撮合循环；两个 run 不共享。每键首次 lookup 固定快照（含缺失）；重复访问不重置 |
+| 容量公式 | `B=floor(p*V)`，`R=max(0,B-used)`；p 由 `Decimal(str(p))` 转精确整数比后 int 乘除 | `None` 唯一表示关闭；有限 `0<=p<=1`，无生产默认 rate；p=0 是启用且零容量。0.10 仅测试夹具 |
+| 成交上限 | 现有价格、名称/limits、T+1、现金门先过，再 `min(requested, eligible, R)`；买量向下整百 | 原请求含费现金不足仍整笔拒绝，不用 partial 绕过原现金门；force-min 不突破 R；卖出可剩整股零头，不创造公司行动权益 |
+| 消耗与诊断 | 成功记账后只扣实际 shares；纯 mark / cash / limit / T+1 拒绝扣 0 | `skip_volume_unavailable:<detail>` 为缺失/单位/数值/可得时间失败；`skip_volume_cap:<detail>` 为零量/耗尽/原子退出不足（helper T+1 防线也在此族） |
+| 残量 | 买剩余失效，不产生跨桶订单；卖出保留原 lot 的剩余 shares | pending / ride_with / step 见 §2.4；不增加 live 队列、预留或并发订单服务 |
 
-### 2.2 候选合同（仅设计；不是 as-built / 不是新增默认值）
+`volume_for_bucket` 可为 mapping，或 `lookup(symbol, session_yyyymmdd, bucket_hm)` callable。返回 `BucketVolume | None`；缺 key/LookupError 视为 missing；其它 provider 异常显式传播，不吞掉程序错误。book symbol 沿入口原标识，v7 使用既有 canonical symbol。无隐式 schema/unit 默认；调用方没有可信容量时应返回 None。这个类型是调用方语义声明，不是自动数据源认证。
 
-| 维度 | 推荐候选 | 尚须明确的边界 |
+书买价回退（pool/step ≤14:55、chase ≤09:45）使用**实际报价行**的 hm，不能借目标时刻或后续 volume。日线容量保持 deferred；即使将来接日量也只能另标 ex-post capacity approximation，不能成为盘中因果容量。这里不重裁 P1，也不声称既有全日扫描顺序等于真实事件栈。
+
+### 2.3 D1–D7 production oracles
+
+| Oracle | 已测真实路径 | 断言 |
 |---|---|---|
-| 单位与域 | `V` 为该证券、该容量桶、raw 域的**增量股数**；单调累计量须先转换；保留 source/unit/时间元数据 | 不把手/金额/累计 volume 直接当股；不能从成交额猜单位，不对真实源自动猜测 |
-| 时间可得性 | volume 仅可用于其已知之后的决策；优先设计已完成且有 available_at 的分钟桶 | 同 bar close 成交若使用整根成交量，只能称完成 bar 容量近似；开盘/盘中触发绝不能读取整日终值或未来 bar |
-| 预算键 | 单次模拟内 `(symbol, session, bucket)` 共用一份容量；买卖双向合计占用，所有 pool/chase/step/held lot 共用 | 两个独立研究 run 不合并；日线与分钟容量不能叠加算两遍；side 独立预算是另一政策 |
-| 容量公式 | `B=floor(p×V)`，`0<=p<=1`，以股计；`R=max(0,B-used)` | p 无本刀生产默认/经验推荐；示例 10% 只是算术夹具；使用明确十进制定点避免浮点边界误差 |
-| 成交上限 | 先满足现有时点、ST/limits/T+1/资金门；实际 `q_fill<=min(q_requested,q_eligible,R)`，买入再按整手向下取整 | 凑一手不得突破 cap；资金不足时不扣容量；不得为了消耗容量改变成交价/提前成交 |
-| 使用与释放 | 仅成功记账的实际股数增加 used；失败、纯 mark、价格/资格拒绝不占用；桶切换重置 | 如以后引入预留/并发，要再设计原子预留释放；本刀不增加订单服务 |
-| 缺失与零值 | cap 启用后的候选：缺失/负数/非有限/单位未认证为 unavailable，拒绝该次尝试并可诊断；V=0 是有效零容量 | cap 未启用仍保持基线；不能新增静默无限容量 fallback；现有无 volume 路径不受本次影响 |
-| 残量与状态 | 候选保留未成交持仓；买单未成部分在桶结束失效，不新建隐式跨桶队列 | 卖出 partial 后 stop/timer/pending 如何续行、ride_with/step 份额、v7 stage 何时跃迁必须逐项裁定 |
+| D1 整手/资金 | public book + execute_buy | p=.10,V=2500，原请求500→200，R=50，force-min 再买100失败；费用/lot/mark 以200为准 |
+| D2 共享 | 真实 pool/chase helpers 双顺序；public book pool+step | B=300 两路径分配200+100；共享 key；step lot 只有实际100 |
+| D3 拒绝不扣 | 书 cash/limits 与 v7 cash/T+1/kind | lookup/used 均不动；后续合格请求仍能用原预算 |
+| D4 partial/T+1 | public book sell、public v7 buy/add/stop + book ledger | old300/new200，卖200后 old100/new200；avg_cost、entry/stage/date 保留正确 |
+| D5 零/缺/桶 | 两 public matcher 参数矩阵 + ledger | V=0 为 cap skip；缺/负/非有限/浮点/未认证 unit/时间为 unavailable；换桶不借、回访不重置 |
+| D6 前缀 | public v7 顺序桶、book quote fallback、双入口 gap open | 改后桶巨量不改前缀分配；只读实际 quote 桶；开盘不读未完成桶 |
+| D7 floor | 真实书 `_sell`、v7 `_sell_lots` + δ1 fee helper | 100股×10 两个书调用收5+5；v7 一次聚合200股收5；同桶先买100再卖200总耗300 |
 
-日线 close、daily gap-open/trigger、分钟 bar 内触发和 v7 14:55 是不同时间合同；本刀没有授权用一个完整日 volume 接遍全部入口。若只能拿到事后成交量，设计必须标“事后容量近似”，不能宣称因果可交易。δ5 的可得时刻与 P1 成交窗口分开，不能为拿到 volume 把 fill 推到下一根而不重裁。
+此外：三公开入口的 cap-off 序列化快照 SHA-256 固定于本 IMPLEMENTATION_BASE（用 `git show` 装入冻结模块取得），volume=0/1/10^12/NaN 均逐字节匹配；启用前不调用 provider。该快照覆盖成交、现金、lots、equity 与书统计/配额，不把新增内部 `volume_cap` 对象序列化成旧输出。
 
-### 2.3 文档算术 oracle（document arithmetic oracles；候选模型，未接线、未转成测试）
+### 2.4 Partial-fill mini state table
 
-| Oracle | 输入与明确前提 | 应满足的合同 |
+| 路径 | 成功 partial 后 | 拒绝 / 下一次评估 |
 |---|---|---|
-| D1 整手与资金 | p=0.10，V=2500 股，used=0，买请求 500 股，现金充足，整手=100 | B=250、实际买 200、R=50；第二个买请求不能由 force-min 再买 100 |
-| D2 跨路径共享 | 同桶两笔买请求各 200，B=300，先 A 后 B，现金充足 | 成交 200+100，总量=300；调换次序可换受配者但不能改变总预算；重复访问不得重置 |
-| D3 拒绝不消耗 | B=300；先资金不足/limit 拒绝，再合格买 200 | 首次 used=0、无新增 lot/费用；第二次后 used=200 |
-| D4 部分卖与 T+1 | 老 lot=300、今买 lot=200；候选可卖只含老 lot；R=200 | 卖 200 后留下老 100+新 200；T+1 禁卖的新 lot 不因 cap 可卖；费用仅按实际卖量 |
-| D5 零/缺与桶边界 | p=0 或 V=0；另有 volume 缺失；随后到新桶 | 零容量不成交；缺失按候选 unavailable 拒绝并独立诊断；新桶仅用自身量，不累借未来量 |
-| D6 时间前缀 | 相同截至 t 的已完成桶，追加 t 后巨大 volume | t 之前所有分配/成交不得改变；全日终量不能代替此证明 |
-| D7 fee floor | 显式 sell=15bp/min5，100 股×10 两笔 vs 合并 200 股×10 | 逐次两笔费用=10，合并一次=5；遵守 δ1 调用粒度，不承诺切碎交易后费用不变 |
+| book `execute_buy` | lot.shares=实际 filled；cash/quota/supplement/commission 按 filled 重算 | 剩余请求作废；不创建 pending/ride queue |
+| book `_sell` 普通 lot | 原 Position.shares 减实际 sold；cost/entry/peak/reserved/is_step 保留，清零才删除 | 既有每 lot 每日首次 scan 触发只尝试一次；余仓/容量拒绝留到后续 session 原策略重评，不额外扫描本日后桶 |
+| book `pending_exit` / `ride_with` 关联退出 | 保留原子退出：关联组全部 T+1 可卖且 R 足够才整组成交；每 lot 原费用粒度 | 不足整组则整组拒绝、0扣量、pending原因/父子关系不变；不允许 orphan rider，不创造跨桶队列；嵌套ride树在父lot记账前以 `skip_volume_cap:unsupported_ride_tree` 整组拒绝 |
+| book chase / step | chase 成功 partial 沿原路径结束；step append 实际 filled 的独立 is_step lot | cap 拒绝 chase 记 `chase_buy_fail_volume`，不误记 cash；原无bar pending 保留规则不动。step成功后按原 lot计数；失败由原条件未来重评，不存剩余数量 |
+| v7 `_buy` | append 实际 filled lot，按 filled 更新 avg_cost；`last_add_date` 与原成功逻辑一致 | 只有真实成功 buy 才按原 ladder 规则推进 stage；0 fill 不推进。partial成功也推进一次，不追加剩余档位订单 |
+| v7 `_sell_lots` | wanted先以R裁剪，再按原 lots顺序/KIND/T+1 扣股；按实际总卖额单次收费 | 同日lot保持不可卖；剩余 lot buy_date/price/kind 不变，avg_cost重算；stage/timer anchor不重置，下一个原触发可重评 |
 
-买入整手不代表所有未来卖出/公司行动零碎股都必须整百。D4 特意使用整百可卖量隔离争议；零碎股处置与 δ6 衔接，仍待裁。D1–D7 的数字是设计 oracle，不是计划已接到撮合器的证明；要证生产必须走真实 public simulate 的触发→预算→记账链。
+所有卖出份额仍是整数股；cap不强制卖出整百。这里不实现 δ6 的权益、拆股或公司行动零碎股政策。
+
+### 2.5 Migration / rollback
+
+部署默认 `participation_rate=None`，cap off = old behavior，不创建“无限 cap”对象或标签。仅明确 rate 的调用启用失败关闭容量。无 schema/data migration；rollback = revert 本 PR。只提交到指定分支，host 负责 merge；**Ready for δ6 only after host merges this PR**，当前 δ6 production NOT started。
 
 ## 3) Delta roadmap
 
-| 刀 | 状态 / 顺序 | 与 δ5 的关系 |
+| 刀 | 状态 | 本刀边界 |
 |---|---|---|
-| δ1 fees | 基线已含 | partial fill 会改变 min-floor 次数；不可静默合并计费 |
-| δ2 exdiv reference | 基线已含，经济未关 | raw price/volume 单位与事件映射必须分开 |
-| [δ3 ST PIT](plan-industry-align-p3-d3-st-pit-2026-09-19.md) | #125 契约/pins 已含于基线 | 不在容量设计中重取名字 |
-| [δ4 limits-none](plan-industry-align-p3-d4-v7-limits-none-2026-09-19.md) | #126 契约/pins 已含于基线 | 档位可用性与 volume 可用性是不同门 |
-| **δ5 volume-cap** | **本文件：Human GO B，Slice A + C 文档验收完成；B 跳过** | 生产需另裁 `.1=C`，本轮不授权，未承诺上线顺序/日期 |
-| [δ6 economics](plan-industry-align-p3-d6-exdiv-economics-2026-09-19.md) | Human GO A 残留+oracle，账本可选 B docs | 新增权益/零碎股不会自动扩大市场容量；两者同时实施需重新核定组合合同 |
+| δ1/δ2 | 基线已有 | 不改 fee schedule / 参考价换域；partial 仅按实际成交额沿原收费调用 |
+| δ3/δ4 | ST PIT pins / δ4 fail-closed 已在 #129 | 不重取名称、不放宽 limits=None |
+| δ5 | C/A/A/A production landed | 本文及 §8.4 定向验收；等待 host 合并 |
+| δ6 | **production NOT started** | 本刀合并后才可准备下一刀；现有 docs/oracle 不扩成经济账本 |
 
 ## 4) F-R* hard locks
 
 | ID | 硬锁 |
 |---|---|
-| **F-R1** | 本 feat 仅 §8.1 白名单三份 Markdown；所有生产 Python、tests、配置/依赖/CI 均不改，不增加撮合/loader/CLI/容量参数或行为。 |
-| **F-R2** | 已有零量过滤 ≠ participation cap；不得把设计 oracle、历史容量/收益推测写成已实现。 |
-| **F-R3** | 必须显式单位、价格域、累计/增量、时间可得性；不猜源、不读湖认证。 |
-| **F-R4** | 任何未来 cap 预算必须定义跨路径/lot/side 归属；真实成交才消耗，不能一 lot 重置一份。 |
-| **F-R5** | cap 不越过价格/limits/T+1/现金门，不以 force-min 突破；Mark 不消耗成交容量。 |
-| **F-R6** | partial fill 触及手续费、v7 stage、pending/ride_with/step 时必须显式设计并另裁；不能 silent 改成交。 |
-| **F-R7** | P1/P2/P4 挂起；δ1/δ2、δ3/δ4 当前语义不变；未授权改 fill 时点以迁就 volume。 |
-| **F-R8** | future pins 仅合成内存/tmp_path；当前不跑测试/回测/湖；不造新 vendor feeder。 |
-| **F-R9** | §9 是 δ1/δ2 超集；全部生产受路径白名单约束，既有 import fence 固定枚举不扩大。 |
-| **F-R10** | 不接 L2/live/LEBS/MockQMT，不复活 Cerebro/PortAnaRecord；模型限于研究向量化。 |
+| F-R1 | 只允许 §8.1 九路径；生产例外限定 §2，其余 vs 固定 base 零 diff |
+| F-R2 | 零量过滤不等于 cap；不宣称真实湖容量认证或收益 |
+| F-R3 | unit/raw/incremental/available_at 显式，禁止猜源、日终或未来量 |
+| F-R4 | 单 run symbol/session/bucket 跨 side/path/lot 共享；实际成交才扣 |
+| F-R5 | 既有门先行，force-min 不破 cap，mark 不扣容量 |
+| F-R6 | partial 状态按 §2.4；原子 pending/ride 失败保留整组，无隐式残量队列 |
+| F-R7 | P1/P2/P4 deferred；δ1–δ4 及 exdiv economics 不扩范围 |
+| F-R8 | tests仅内存/tmp_path；禁止湖/CLI回测/网络/download |
+| F-R9 | §9 保留22行；仅4个既有例外+1新helper；SIMULATE_HOT_PATH 枚举不扩大 |
+| F-R10 | 不接 L2/live/LEBS/MockQMT、不复活 Cerebro/PortAnaRecord；无嵌套 Codex/agent |
 
-## 5) P* human cuts（Human GO .1=B；其余推荐仍为设计候选）
+## 5) P* human cuts（当前 C/A/A/A）
 
-> **Human GO recorded 2026-09-19 (Asia/Shanghai):** P3δ5.1=B — δ5=B：只设计，不接生产 cap。授权设计文档落地；P3δ5.2/5.3/5.4 的推荐保持为 B 下候选，未单独裁决。**本轮没有 `.1=C`，不授权生产 cap 接线或撮合变更。**
+| ID | Human GO 2026-09-19 | 已实施 |
+|---|---|---|
+| P3δ5.1 | **C**：独立生产 cap wiring PR | 覆盖先前 B design-only freeze，仅限本 allowlist |
+| P3δ5.2 | **A**：completed minute + available_at | same-bar close 标完成bar容量近似；open/future/EOD 不借量 |
+| P3δ5.3 | **A**：共享双向预算，允许 partial | 两账本实际成交扣量；原子关联退出例外已显式固定 |
+| P3δ5.4 | **A**：invalid/unavailable reject + diagnosis | 缺失/负/非有限/未认证单位拒绝；V=0 有效零容量 |
 
-| ID / 决策 | A | B | C | 本轮人裁 / 设计推荐 |
-|---|---|---|---|---|
-| **P3δ5.1：交付层级** ✅ Human GO 2026-09-19 | 只记录当前无 cap + pins | 设计数据/预算/状态合同 + oracle，生产不变 | 独立批准生产接线/撮合变更 | **B（只设计）** |
-| **P3δ5.2：时间模型** | 先设计完成分钟桶，标明可得时刻与近似 | 先做事后日容量诊断设计，不约束盘中 fill | 设计下一桶执行/逐笔模型；涉及 fill 时点须重裁 P1 | **A**，不能当作已认证数据 |
-| **P3δ5.3：预算与成交形态** | 共用 symbol/bucket 双向预算、允许部分成交的候选 | 同预算，但整笔不满足则拒绝 | side/路径拆预算的其它明确政策 | **A**，state/费用待设计完才能申请 .1=C |
-| **P3δ5.4：缺失/无效 volume** | cap 启用时 unavailable 拒绝并诊断 | 只诊断、不限量的观察模式 | 显式 fallback 政策，必须列所有来源/默认 | **A**（仅候选）；cap 关闭沿用基线 |
-
-选择其它行的 A/B/C 不独立授权代码变化；生产必须 `.1=C` 并具备完整数据源合同、部分成交状态表、迁移/回滚与真实入口 pins。比例 p 尚待未来用例/数据证据裁定；本次不猜 5%/10% 为生产默认。
+不选择生产 rate；0.10 仅算术夹具。#127 B 历史与 proposal 基线保留在 §10，不再作为本 C cut 的全生产冻结指令。
 
 ## 6) Non-goals
 
-- 不加 capacity 参数、volume 传输列/缓存、不改 loader、不修改资金配额或整手规则。
-- 不实现冲击成本、滑点、订单簿排队、跨策略实盘容量共享，不把 cap 当成真实执行验收。
-- 不改 v7 stage/stop、书 lot/ride_with/pending、费用 floor、T+1、P1/P2/P4。
-- 不跑容量扫描、回测、湖、L2，不下载数据，不选最佳参与率，不报告未验证收益。
+无 δ6 生产经济、费用数字变化、ST PIT/fill-clock 变更、订单簿/冲击模型、容量扫描/实盘承诺。日线 cap、loader volume retention、CLI flags 均 deferred。不得修改 market_layer、unified_exit、策略 hooks、CI 或 import-fence enum。
 
-## 7) Slices A → B → C（本 feat：A + C docs 完成；B SKIPPED）
+## 7) Slices A → B → C（production acceptance）
 
-本轮 Human GO B 仅授权设计文档落地，D1–D7 保留为文档算术 oracle；Slice A 与 Slice C 的文档审计/冻结证明已完成。下面测试落点和 §8.2 data-free 命令只保留为后续候选，**Slice B SKIPPED，no tests added**。任何生产 cap 接线或 matcher/loader 变更仍须另裁 `.1=C`，本轮没有此授权；Slice C 验收不等于生产选项 C。
-
-### Slice A：数据与状态设计（文档已落地）
-
-§2 的源码锚点已按固定基线复核；§2.2 八维候选矩阵与 §2.3 D1–D7 已落 [engine SSOT §2.4](engine-ashare-correctness.md#24-p3-δ5-volume-participation-cap-designhuman-go-b)，[README](README.md) 增加设计入口。DoD：as-built / design / production default 明确区分，现有无 cap 与零量过滤不混同，全部生产冻结。逐入口数据源的单位/可得时刻认证、双账本 partial 后的 stage/stop/timer/pending/ride_with/step 状态迁移、零碎股与迁移/回滚仍是未来 `.1=C` 的前置设计缺口，不随本次文档落地关闭。
-
-### Slice B：SKIPPED（本轮未授权测试；以下 B1–B4 仅未来候选）
-
-| Pin | 真实已有文件 | 未来验收边界 |
+| Slice | 完成内容 | DoD |
 |---|---|---|
-| B1 loader 现状 | `tests/test_csv_daily_backtest.py`、`tests/test_csv_minute_backtest.py`、`tests/test_ashare_bars.py` | 复用零量/缺 volume pins；临时正量小/大只改 volume，记录过滤及输出列现状；不偷加列 |
-| B2 无 cap 的 public 接线 | `tests/test_csv_daily_backtest.py`、`tests/test_csv_minute_backtest.py`、`tests/test_csv_minute_backtest_v7.py` | 相同价格/名单/预算，正量大小变化不改变当前成交；逐笔对比 shares/cash/reason，明确证明“无 cap” |
-| B3 数量与资格 | `tests/test_ashare_simulate_predicates.py`、`tests/test_csv_minute_backtest_v7.py` | 复用 T+1/现金/held 多 lot 证据；D1–D6 若做人造账本 oracle，必须独立标 design-only，不能 mock 生产后称 cap 已接线 |
-| B4 费用粒度 | `tests/test_ashare_fees.py`、`tests/test_ashare_fee_wiring.py` | 复用 D7 真实费用计算/双账本粒度，不复制费率算法；没有 partial-fill 生产接线闭环前不声明容量已实现 |
+| A | Human GO C/A/A/A、输入/时间/共享/状态/迁移合同、engine §2.4 / README | 明确 cap-off as-built 与 cap-on、完成bar近似、实际生产例外 |
+| B | `tests/test_ashare_volume_cap.py` 的公开入口 + ledger/helper pins | D1–D7、off快照、partial stage/T+1、原子组、时间前缀均验证生产 |
+| C | §8.2 指定pytest + §8.3 全路径/冻结/编码检查 | §8.4 记录结果，commit留分支；不推送/开PR |
 
-设计选择 B 可以把 D1–D6 保留为文档算术表，或在人裁允许的后续 tests-only 刀加入独立参考模型；无论哪种，不能让“模型自己的函数测自己”代替 public matcher 验收。实施 C 必须另列生产落点与真实 cap 集成 pins，本表不是它的替代计划。
+## 8) Acceptance（Linux / controlled Python 3.12）
 
-### Slice C：设计验收与冻结（docs acceptance 已完成）
+### 8.1 Actual production / docs / tests allowlist
 
-仅执行 §8.1 文档审计与 §8.3 冻结检查，结果见 §8.4；§8.2 **NOT run**。DoD：三 docs 全路径白名单、UTF-8/BOM/NUL、whitespace 与 §9 / 全 research / 全 Python / tests 零 diff 均 PASS。D1–D7 只是文档候选，不代表生产容量门已实现；**must cut C? NO**。
-
-## 8) Linux/CI isomorphic acceptance（真实命令；区分本次 docs 与未来 pins）
-
-### 8.1 本次 docs-only：基线、全路径、编码与 whitespace
-
-从仓库根目录用 Bash 执行。`IMPLEMENTATION_BASE` 是本 feat worktree 起点的 `git rev-parse HEAD` 实测值；以下重新解析同一固定 commit，不跟随移动的 master、不推算 merge-base。proposal 历史锚点见页首，不用于本轮冻结。
-
-```bash
-set -euo pipefail
-IMPLEMENTATION_BASE="$(git rev-parse --verify 'e0250efb2fae42e4e7f38a9585b1b4e95a1529bc^{commit}')"
-[[ "$IMPLEMENTATION_BASE" =~ ^[0-9a-f]{40}$ ]]
-git merge-base --is-ancestor "$IMPLEMENTATION_BASE" HEAD
-P3_DOCS=(
-  docs/backtest/plan-industry-align-p3-d5-volume-cap-2026-09-19.md
-  docs/backtest/engine-ashare-correctness.md
-  docs/backtest/README.md
-)
-P3_AUDIT_DIR="$(mktemp -d)"
-trap 'rm -- "$P3_AUDIT_DIR"/{head,worktree,index,untracked,paths,whitespace}; rmdir -- "$P3_AUDIT_DIR"' EXIT
-git diff --name-only "$IMPLEMENTATION_BASE" HEAD > "$P3_AUDIT_DIR/head"
-git diff --name-only > "$P3_AUDIT_DIR/worktree"
-git diff --cached --name-only > "$P3_AUDIT_DIR/index"
-git ls-files --others --exclude-standard > "$P3_AUDIT_DIR/untracked"
-sort -u "$P3_AUDIT_DIR/head" "$P3_AUDIT_DIR/worktree" \
-  "$P3_AUDIT_DIR/index" "$P3_AUDIT_DIR/untracked" > "$P3_AUDIT_DIR/paths"
-while IFS= read -r path; do
-  p3_allowed=false
-  for doc in "${P3_DOCS[@]}"; do
-    if [[ "$path" == "$doc" ]]; then p3_allowed=true; break; fi
-  done
-  if [[ "$p3_allowed" != true ]]; then
-    printf 'OUT OF SCOPE: %s\n' "$path"; exit 1
-  fi
-done < "$P3_AUDIT_DIR/paths"
-for path in "${P3_DOCS[@]}"; do
-  test -f "$path"
-  perl -MEncode=decode,FB_CROAK -e '
-    local $/; open my $fh, "<:raw", $ARGV[0] or die $!;
-    my $raw = <$fh>; die "BOM\n" if substr($raw,0,3) eq "\xEF\xBB\xBF";
-    my $nul = () = $raw =~ /\x00/g; die "NUL=$nul\n" if $nul;
-    decode("UTF-8", $raw, FB_CROAK);
-    print "$ARGV[0]: UTF-8 OK; BOM=0; NUL=0\n";
-  ' "$path"
-done
-git diff --check "$IMPLEMENTATION_BASE" -- "${P3_DOCS[@]}"
-git diff --check "$IMPLEMENTATION_BASE" HEAD
-git diff --check
-git diff --cached --check
-for path in "${P3_DOCS[@]}"; do
-  p3_ws_rc=0
-  git diff --no-index --check /dev/null "$path" > "$P3_AUDIT_DIR/whitespace" || p3_ws_rc=$?
-  if [[ "$p3_ws_rc" -gt 1 || -s "$P3_AUDIT_DIR/whitespace" ]]; then
-    cat "$P3_AUDIT_DIR/whitespace"; exit 1
-  fi
-done
+```text
+backtest/research/ashare_volume_cap.py
+backtest/research/csv_ledger.py
+backtest/research/csv_simulate_loop.py
+backtest/research/csv_minute_backtest.py
+backtest/research/csv_minute_backtest_v7.py
+docs/backtest/plan-industry-align-p3-d5-volume-cap-2026-09-19.md
+docs/backtest/engine-ashare-correctness.md
+docs/backtest/README.md
+tests/test_ashare_volume_cap.py
 ```
 
-最后的循环覆盖完整文件（含尚未跟踪文档）；no-index 正常内容差异可返回 1，故同时要求 rc≤1 且 whitespace 诊断为空，不能简单忽略所有非零退出码。全路径审计覆盖 base→HEAD、staged、unstaged、untracked，不靠一张有限冻结表推断其它路径安全。白名单收窄为实际触及的 **三 docs**，d345 索引未改；**本轮不允许任何 tests/Python 修改**。未来 tests-only 必须另获授权并在新的实施记录中列明路径，本轮不得扩白名单。
-
-### 8.2 未来 Slice B/C：真实 data-free tests / gates（本 PR 不执行）
-
-以下仅在未来获准的合同/pins 刀执行；本次不会以“现有测试存在”冒报“本次测试已通过”。CI 同构依据为 `.github/workflows/python-tests.yml:27-43`、`:49-56` 的受控 Python 3.12、四个 repo-only gates 与 pytest marker；这是定向合同验收，不代表全量 CI 或宿主回测。
-
-遵循 AGENTS 解释器顺序：`OSKH_MERGE_PYTHON` → `VANNA312_PYTHON` → `VANNA311_PYTHON`。Linux 先显式指定已准备好的项目/CI 3.12 解释器；未设置时本命令失败，不偷偷回落系统 python/pip。Windows 默认解释器由现有 `scripts/_script_bootstrap.py` 的 `resolve_oskh_python` 管理，本命令不探测盘符、不安装依赖。
+### 8.2 Tests（实际执行）
 
 ```bash
-set -euo pipefail
-P3_CONTRACT_PYTHON="${OSKH_MERGE_PYTHON:-${VANNA312_PYTHON:-${VANNA311_PYTHON:-}}}"
-: "${P3_CONTRACT_PYTHON:?Set OSKH_MERGE_PYTHON to a controlled Python 3.12 executable}"
-[[ -x "$P3_CONTRACT_PYTHON" ]]
-"$P3_CONTRACT_PYTHON" -c 'import sys, pytest, pandas, numpy, pyarrow; assert sys.version_info[:2] == (3, 12); print(sys.executable)'
-"$P3_CONTRACT_PYTHON" scripts/gates/verify_oskh_data_contract.py
-"$P3_CONTRACT_PYTHON" scripts/gates/verify_data_path_ssot.py
-"$P3_CONTRACT_PYTHON" scripts/gates/verify_no_hardcoded_machine_paths.py
-"$P3_CONTRACT_PYTHON" scripts/gates/verify_tr_bridge_import_ssot.py
-
-# §7 实际既有落点文件；新增 pin 完成后，逐项记录实际执行结果。
-"$P3_CONTRACT_PYTHON" -m pytest -q -m "not production and not benchmark" \
+/tmp/industry-align-venv/bin/python -m pytest -q -m 'not production and not benchmark' \
+  tests/test_ashare_volume_cap.py \
   tests/test_csv_daily_backtest.py \
   tests/test_csv_minute_backtest.py \
-  tests/test_ashare_bars.py \
   tests/test_csv_minute_backtest_v7.py \
-  tests/test_ashare_simulate_predicates.py
-
-# 固定热路径边界与 δ1 回归，不能单独替代本刀 pins。
-"$P3_CONTRACT_PYTHON" -m pytest -q -m "not production and not benchmark" \
+  tests/test_ashare_simulate_predicates.py \
   tests/test_ashare_simulate_import_fence.py \
   tests/test_ashare_fees.py \
   tests/test_ashare_fee_wiring.py
 ```
 
-所有 gate/test 路径在本基线真实存在；无新造验收脚本。未来只允许合成内存 `simulate` / `simulate_v7` 单元向量或显式 tmp_path/I/O stub，不允许 CLI/宿主回测、湖访问和以真实行情输出为验收。本次连这些合成 tests 也不运行。缺环境依赖记阻塞；必需 pin 被 skip 不算通过；只跑旧测试不能声称 §7 待补组合已覆盖。
+全部 fixture 内存/tmp_path；没有湖、CLI backtest、网络、download/安装。此定向验收不等于全量 CI。
 
-### 8.3 默认生产冻结（本次及未来 A/B；与 §9 逐项相同）
+### 8.3 Freeze proof / encoding
 
-先执行 §8.1 设置固定 base。保留 δ1 十文件、δ2 十七文件全部项目，再扩展名称/策略/Mode A/B 边界，共 **22** 个；这不改变旧 plan 的历史冻结结论。
+以下从 repo 根目录运行；包含新增未跟踪文件，commit 前后均可复核。
 
 ```bash
-FROZEN_PRODUCTION_FILES=(
-  backtest/research/ashare_fees.py
-  backtest/research/csv_ledger.py
-  backtest/research/csv_simulate_loop.py
-  backtest/research/csv_daily_backtest.py
-  backtest/research/csv_minute_backtest.py
-  backtest/research/csv_minute_backtest_v7.py
-  backtest/research/ashare_session.py
-  backtest/research/market_layer.py
-  backtest/research/csv_common.py
-  backtest/research/csv_artifacts.py
-  backtest/research/exdiv_map.py
-  backtest/research/exdiv_hold_hits.py
-  backtest/research/ashare_bars.py
-  backtest/research/csv_daily_loader.py
-  backtest/research/ashare_fill_clock.py
-  backtest/research/qlib_bin_daily.py
-  backtest/research/qlib_bin_1min.py
-  backtest/research/csv_pool.py
-  backtest/research/csv_strategy_books.py
-  backtest/research/strategy5_rules.py
-  backtest/research/unified_exit_modea.py
-  backtest/research/unified_exit_modeb.py
-)
-for path in "${FROZEN_PRODUCTION_FILES[@]}"; do test -f "$path"; done
-git diff --exit-code "$IMPLEMENTATION_BASE" -- backtest/research/
-git diff --exit-code "$IMPLEMENTATION_BASE" -- '*.py'
-git diff --exit-code "$IMPLEMENTATION_BASE" -- tests/
-git diff --exit-code "$IMPLEMENTATION_BASE" -- "${FROZEN_PRODUCTION_FILES[@]}"
-git diff --exit-code "$IMPLEMENTATION_BASE" HEAD -- "${FROZEN_PRODUCTION_FILES[@]}"
-git diff --exit-code -- "${FROZEN_PRODUCTION_FILES[@]}"
-git diff --cached --exit-code -- "${FROZEN_PRODUCTION_FILES[@]}"
+set -euo pipefail
+BASE=7428a1a89e309c5f5cbc21eab6eda2e38448c6cd
+git merge-base --is-ancestor "$BASE" HEAD
+git diff --name-only "$BASE" -- backtest/research/
+git diff --name-status "$BASE"
+git diff --check "$BASE"
+/tmp/industry-align-venv/bin/python - <<'AUDIT'
+from pathlib import Path
+import re
+import subprocess
+base = '7428a1a89e309c5f5cbc21eab6eda2e38448c6cd'
+plan = Path('docs/backtest/plan-industry-align-p3-d5-volume-cap-2026-09-19.md').read_text()
+allowed = set(plan.split('```text\n', 1)[1].split('```', 1)[0].splitlines())
+changed = set(subprocess.check_output(['git', 'diff', '--name-only', base], text=True).splitlines())
+changed.update(subprocess.check_output(['git', 'ls-files', '--others', '--exclude-standard'], text=True).splitlines())
+assert changed <= allowed, changed - allowed
+production = {p for p in allowed if p.startswith('backtest/research/')}
+pattern = re.compile(r'^(?:' + '|'.join(re.escape(p) for p in sorted(production)) + r')$')
+assert all(pattern.fullmatch(p) for p in changed if p.startswith('backtest/research/'))
+rows = re.findall(r'^\| `(backtest/research/[^`]+)` \|', plan.split('## 9)', 1)[1], re.M)
+assert len(rows) == 22
+frozen = [p for p in rows if p not in production]
+assert len(frozen) == 18
+subprocess.run(['git', 'diff', '--exit-code', base, '--', *frozen], check=True)
+for name in sorted(changed):
+    raw = Path(name).read_bytes()
+    raw.decode('utf-8')
+    assert not raw.startswith(bytes.fromhex('efbbbf')) and raw.count(b'\x00') == 0, name
+print('PASS: allowlist, production regex, 18 frozen rows, UTF-8; BOM=0; NUL=0')
+AUDIT
 ```
 
-### 8.4 本次运行记录与验收范围
+### 8.4 Results（Human GO C/A/A/A）
 
-验证 HEAD / 固定 IMPLEMENTATION_BASE 均为 `e0250efb2fae42e4e7f38a9585b1b4e95a1529bc`；验收对象为本 feat 的**未提交工作区文档**，没有实现 commit。2026-09-19（Asia/Shanghai），在 `/workspace/wt-p3-d5-volume-cap-feat`、Linux / Bash / Git / Perl Encode 上执行文档审计；未运行 Python/pytest/gates，未安装依赖，无网络、回测或湖访问。
+2026-09-19，worktree `/workspace/wt-p3-d5-volume-cap-prod`，分支 `feat/industry-align-p3-d5-volume-cap-prod`；HEAD 起点实测为固定 #129 基线。解释器 `/tmp/industry-align-venv/bin/python`（3.12.13）。
 
-| 命令 / 检查 | 本次结果 | exit |
-|---|---|---|
-| §8.1 固定基线祖先、全路径白名单（base→HEAD/index/worktree/untracked） | **PASS：仅三 docs**（本 plan、engine correctness、README）；无其它路径、无 staged/untracked 变更 | 0 |
-| §8.1 UTF-8 严格解码 / BOM / NUL / whitespace | **PASS：三 docs UTF-8、BOM=0、NUL=0**；`git diff --check`（含 base / staged / unstaged）与完整文件 whitespace 检查均 clean | 0 |
-| §2 `git show <IMPLEMENTATION_BASE>:<path>` 源码锚点复核 | 已重新阅读书/v7 数量记账、共享买路径、三 loader/帧与分钟扫描；既有测试锚点只读 | 0 |
-| 文档静态核对；§8.1 / §8.3 命令块逐字提取与 `bash -n` | PASS；八维矩阵、D1–D7 与 engine §2.4 一致；20 个 §2 file:line 范围、15 个相关本地链接与新 §2.4 片段有效；两个命令块执行均成功 | 0 |
-| §8.3 `git diff --exit-code "$IMPLEMENTATION_BASE" -- backtest/research/` | **PASS：对固定基线全部 research 零 diff** | 0 |
-| §8.3 `git diff --exit-code "$IMPLEMENTATION_BASE" -- '*.py'` / `-- tests/` | **PASS：全仓 Python（含 tests）及测试目录零 diff** | 0 |
-| §8.3 22 文件四种冻结 diff；数组 / §9 表逐项与顺序、表行对基线 | PASS；四种 diff 均为空，22 文件数组/表同序，§9 表行与基线原文一致 | 0 |
-| §8.2 tests / gates；Slice B B1–B4 | **NOT run / SKIPPED；no tests added，既有测试亦未修改**；D1–D7 仅文档算术 oracle，无新增 pins | — |
+| 验收 | 结果 |
+|---|---|
+| §8.2 指定八测试文件 | **282 passed, 2 warnings in 1.53s（exit 0）**；旧 δ1–δ4 / import-fence 同跑，无skip/deselected；两条既有 `ashare_bars.py:503` pandas `copy` 弃用警告 |
+| 新 volume-cap tests | **25个新test函数 / 62个参数化cases全部PASS**；其余220项既有回归PASS；D1–D7 真实入口/helpers、off基线快照、原子状态与时间门 |
+| 基线字节快照来源 | 冻结 `git show 7428a1a…` 的 ledger/loop/daily/minute/v7 模块，四种 volume 的每入口 SHA一致；新 cap-off 与其匹配 |
+| §8.3 allowlist / freeze | **PASS（exit 0）**：仅5个生产文件（helper/ledger/loop/minute/v7）；§9其余18行与所有非白名单路径零diff；原22行表逐字一致 |
+| 编码 / whitespace | **PASS（exit 0）**：全部9路径UTF-8、BOM=0、NUL=0；`git diff --check BASE` clean；§8.3命令提取后 `bash -n` 与实际执行均PASS；engine §2.4 file:line锚点有效 |
+| 未执行范围 | 无湖/CLI backtest/网络/download/agent；未跑全量 CI、未实施 δ6 生产经济 |
 
-本轮只验收设计文档与生产冻结，不引用 δ1–δ4 的历史 passed 数，不声称 D1–D7 已接 public matcher。Human GO B 不授权生产 cap；P3δ5.2/5.3/5.4 仍为候选，P1/P2/P4 继续 deferred。**must cut C? NO**；未来任何 matcher/loader/容量参数/预算/partial-fill 变更须另裁 `.1=C` 并补齐数据/状态/迁移合同与真实入口 pins。本轮不提交、推送或开 PR。
+交付 commit 留本分支，host 推送/开PR/合并；δ6 production NOT started，只有 host 合并本PR后才能准备 δ6。
 
-## 9) Frozen production file table（δ1/δ2 超集；默认零 diff）
+## 9) Frozen production file table（保留22行；本 C cut 仅 §2 的4行例外）
 
 | File | 冻结理由 / 来源 |
 |---|---|
@@ -318,10 +236,11 @@ git diff --cached --exit-code -- "${FROZEN_PRODUCTION_FILES[@]}"
 | `backtest/research/unified_exit_modea.py` | 新扩展：独立研究网格合同，不统一到 CSV 账本 |
 | `backtest/research/unified_exit_modeb.py` | 新扩展：fractional-shares 近似保持独立，不借用作经济闭环 |
 
-本表与 §8.3 数组的路径/顺序必须一致。表内零 diff 只证明这些文件；§8.3 另查全部 `backtest/research/`、全仓 Python（含 tests）与 `tests/`，§8.1 三 docs 全路径白名单禁止任何其它生产、测试、CI 或数据修改。不能以本表未列出为理由改生产；不扩大固定热路径 import-fence 测试的扫描面。
-
+§2 的四行例外仅允许 δ5；其余18行严格零diff。新增 helper 由 §8.1 单独授权；此表不扩大 import-fence 枚举，也不授权表外任何改动。
 
 ## 10) Changelog
+
+- **v0.4 (2026-09-19，Asia/Shanghai)**：NEW Human GO **P3δ5.1=C / .2=A / .3=A / .4=A** 覆盖 #127 B freeze；IMPLEMENTATION_BASE 刷新为 #129 `7428a1a89e309c5f5cbc21eab6eda2e38448c6cd`。分钟书/v7 production opt-in cap、完成桶 available_at、共享预算、partial 与原子关联组、诊断和迁移/回滚落地；新增生产测试并与 δ1–δ4 合跑，§8.4 记录验收，提交留分支。日线/loader/CLI 不接，P1/P2/P4 deferred，δ6 production NOT started。
 
 - **v0.3 (2026-09-19，Asia/Shanghai)**：按 Human GO P3δ5.1=B 落设计文档，Slice A + C docs acceptance 完成，Slice B SKIPPED；基线刷新为 post #126 `e0250efb2fae42e4e7f38a9585b1b4e95a1529bc`，proposal 基线留作历史。复核 §2 源码锚点；engine SSOT §2.4 / README 收录无 cap 现状、八维设计矩阵与 D1–D7 文档算术 oracle。白名单收窄为三 docs，保留 §9 原 22 文件冻结表；§8.4 记录文档审计与冻结证明，§8.2 NOT run，无新增/修改测试或 pins。P3δ5.2/5.3/5.4 仍候选，未授权 `.1=C`，生产不变，保留未提交交付。
 - **v0.2 (2026-09-19，Asia/Shanghai)**：录入 Human GO P3δ5.1=B，只设计、不接生产 cap；§5 其余推荐仍是 B 下设计候选，无 `.1=C` 授权，P1/P2/P4 继续挂起。本次仅更新 GO 记录，未实施 slices、未新增/执行测试，生产、基线、白名单、冻结表与 §8 命令不变。

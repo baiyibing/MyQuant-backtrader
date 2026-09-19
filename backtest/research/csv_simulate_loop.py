@@ -125,6 +125,7 @@ def run_chase_due_day(
     allow_new_name=None,
     add_gate=None,
     index_blocks_add: bool = True,
+    volume_bucket_for: Callable[[str], int | None] | None = None,
 ) -> None:
     """T+1 chase for due codes; ``quotes_for`` supplies open/buy/prev closes."""
     due = [c for c, (_per, sig) in pending_chase.items() if day_i > sig]
@@ -179,10 +180,19 @@ def run_chase_due_day(
             st.stats["skip_add_loser"] += 1
             continue
         quota_used = st.daily_quota_used
-        if not execute_buy(st, code, buy_px, per_ch, day_i, day, reason="chase:T+1"):
+        volume_kwargs = ({"bucket_id": volume_bucket_for(code)}
+                         if volume_bucket_for is not None else {})
+        volume_skips = sum(int(st.stats.get(k, 0)) for k in
+                           ("skip_volume_cap", "skip_volume_unavailable"))
+        if not execute_buy(st, code, buy_px, per_ch, day_i, day,
+                           reason="chase:T+1", **volume_kwargs):
             st.stats["chase_buy_fail"] += 1
             shares, _ = _buy_size(per_ch, buy_px)
-            key = "chase_buy_fail_shares" if shares <= 0 else "chase_buy_fail_cash"
+            if sum(int(st.stats.get(k, 0)) for k in
+                   ("skip_volume_cap", "skip_volume_unavailable")) > volume_skips:
+                key = "chase_buy_fail_volume"
+            else:
+                key = "chase_buy_fail_shares" if shares <= 0 else "chase_buy_fail_cash"
             st.stats[key] = st.stats.setdefault(key, 0) + 1
         if st.stats.get("sizing") == "per_name":
             # daily_quota_used is vestigial; per_name never consumes a day quota.
@@ -216,6 +226,7 @@ def run_pool_buys_day(
     add_gate=None,
     name_lot_budget=None,
     index_blocks_add: bool = True,
+    volume_bucket_for: Callable[[str], int | None] | None = None,
 ) -> None:
     """Pool buys for ``ds``; ``buy_quote_for`` supplies buy price + prev closes.
 
@@ -286,6 +297,8 @@ def run_pool_buys_day(
             continue
         if sizing == "per_name" and callable(name_lot_budget):
             per = float(name_lot_budget(name_budget, lots))
+        volume_kwargs = ({"bucket_id": volume_bucket_for(code)}
+                         if volume_bucket_for is not None else {})
         if sizing == "per_name":
             shares, _ = _buy_size(per, px)
             notional = shares * px
@@ -299,11 +312,11 @@ def run_pool_buys_day(
                 )
                 continue
             quota_used = st.daily_quota_used
-            execute_buy(st, code, px, per, day_i, day, reason="pool")
+            execute_buy(st, code, px, per, day_i, day, reason="pool", **volume_kwargs)
             # Ledger's daily_quota_used is vestigial, not per_name enforcement.
             st.daily_quota_used = quota_used
         else:
-            execute_buy(st, code, px, per, day_i, day, reason="pool")
+            execute_buy(st, code, px, per, day_i, day, reason="pool", **volume_kwargs)
 
 
 def run_step_adds_day(
@@ -322,6 +335,7 @@ def run_step_adds_day(
     buy_gate=None,
     name_lot_budget=None,
     step_add=None,
+    volume_bucket_for: Callable[[str], int | None] | None = None,
 ) -> None:
     """Off-list held scan: at most one +20% rider per name per day."""
     if not callable(step_add) or sizing != "per_name":
@@ -374,7 +388,10 @@ def run_step_adds_day(
             )
             continue
         quota_used = st.daily_quota_used
-        execute_buy(st, code, px, per, day_i, day, reason="add:step20", is_step=True)
+        volume_kwargs = ({"bucket_id": volume_bucket_for(code)}
+                         if volume_bucket_for is not None else {})
+        execute_buy(st, code, px, per, day_i, day, reason="add:step20", is_step=True,
+                    **volume_kwargs)
         st.daily_quota_used = quota_used
 
 
