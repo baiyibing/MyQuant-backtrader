@@ -25,6 +25,7 @@
 
 ## 坑位（累积）
 
+- **对抗/多路评审不要 Codex 套娃**（2026-09-19）：三路对抗与多 agent fan-out 必须由**宿主机**起独立 `codex exec` / CLI 子进程（`scripts/run/run_codex_adversarial_lanes.py`、`scripts/run/run_multi_ai_review.py`）。在单个 Codex 会话内 `spawn_agent` 或再套 `codex exec` 会因外层 bwrap 只读 `/` + `--unshare-net` 失败（`os error 30` / 断网挂起）。细则见 `docs/prompts/prompt-adversarial-subagent-review.md`「编排硬规则」。
 - **堆叠 PR 的 base 分支被删会连带关闭上层 PR**（实例：#59 base=`feat/cerebro-retire`，#58 合并删分支后 GitHub 自动关闭 #59，内容 rebase 后重开为 #61）。规则：前置 PR 合并后**立即确认上层 PR 存活**；重开时 rebase、并在 plan/交接文档回填新 PR 号。
 
 ## 历史用例

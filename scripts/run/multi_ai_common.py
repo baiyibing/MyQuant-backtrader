@@ -22,6 +22,11 @@ importlib 复用 period_verify，传递复用本模块（含 run_agent）。
   HOME/USERPROFILE，避免鉴权失效）。官方：cursor.com/docs/cli/reference/configuration。
 
 关联：docs/engineering/multi-ai-review-workflow.md（runbook）
+
+Codex 对抗三路请用 ``scripts/run/run_codex_adversarial_lanes.py``（宿主机并行独立
+``codex exec``）。**禁止**在单个 Codex 会话内再套 ``codex exec`` / collab spawn：
+外层 bwrap 只读挂载 + 常断网，内层会 ``Read-only file system (os error 30)`` 或挂起
+（2026-09-19 本机复现；见 ``docs/prompts/prompt-adversarial-subagent-review.md``）。
 """
 
 from __future__ import annotations
