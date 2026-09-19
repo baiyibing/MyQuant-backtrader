@@ -36,6 +36,21 @@ T+1 在书引擎原调用点将 `calendar[entry_idx]` 映射为日期后调用 `
 已知分叉继续记录：书侧无昨收/未知板块先冻仓；v7 卖侧这两支 `limits=None` 仍放行，
 加仓侧同样保留现状，ST 名称仍按窗末名平铺而非 PIT。日线 `stop_loss:gap_open` = 触发当日 open；`daily_stop_touch_at_trigger` = 触发当日 trigger；命中 `daily_same_bar_prefixes` 且通过涨跌停门才按当日 close；只有确实写入 `pending_exit` 的 reason 才下一可卖日 open。不在本轮改变时点或参考价之外的股数。
 
+### 2.1 fill-gates retained fork（as-built 合同，不做行为统一）
+
+| 主题 | 书引擎（daily/minute + shared loop） | v7 路径 |
+|---|---|---|
+| `limits is None`（未知板块/无昨收） | 早拒：持仓循环直接 `skip_unknown_board` 并 `continue`（`csv_daily_backtest.py:321-323`，`csv_minute_backtest.py:601-603`）；共享买侧/追买环同样早拒（`csv_simulate_loop.py:155-157`, `:260-261`）。 | 首开仓分支会拒绝未知板块（`csv_minute_backtest_v7.py:389-391`）；但已持仓卖/加仓门函数是 fail-open（`ashare_session.py:73-78` + v7 调用点 `csv_minute_backtest_v7.py:342-373`）。 |
+| “门未拦截” vs “真实成交” | 明确区分；例如持仓门后仍可能不成交。 | 同样明确区分：加仓门未拦截时仍可能在 `_buy` 里 `skip_cash` 不成交（`csv_minute_backtest_v7.py:209-210`）。 |
+| ST 名称跨日语义 | 书引擎按日 as-of 单调更新（`csv_common.py:85-107`；消费点 `csv_daily_backtest.py:291` / `csv_minute_backtest.py:565`）。 | v7 使用窗口扁平名（`ashare_session.py:81-85`, `:97`；消费点 `csv_minute_backtest_v7.py:324`）。 |
+| 零量/缺 bar 语义 | loader 先过滤零量占位，再进入“无 bar 不交易/按 last close 估值”路径（`csv_daily_loader.py:83-84` + `tests/test_csv_daily_backtest.py:990+`）。 | 缺关键分钟记录走 no-fill（如 `skip_no_1455`），不代表交易被门拦截。 |
+
+注意：
+- 上表是 **as-built fork 合同**，用于防止静默漂移，不代表本轮引入新成交模型。
+- 有 fail-open 的地方保持 fail-open；不得在未开新人裁切片时擅自改成 fail-closed。
+- OSS 只可类比术语，不可作为本仓行为证据；行为证据必须来自本仓锚点与测试。
+- #112 延后项（14:57 行为、trades 列、fees/ST PIT、touch↔mark 耦合）继续延后，不在本合同船内重开。
+
 现状成交时钟（只命名，不改价）。限定：扫描窗口标签 / 非全量 / 不含 v7。`closing_call`（14:57–15:00，含端点）是当前扫描窗口标签：`_in_session` 接受这些 bar，扫描若到达仍按旧分支处理；不是交易所忠实集合竞价撮合，也不证明所有路径在该段成交。下表不是全量选价器：same-bar 前缀不只有 `open_board`（还可含 `topk_drop` / `model_exit`），策略 9 的证明夹具不能单独证明 open/close。v7 另有首 bar open / 严格 14:55 / 最后一根 close，未纳入本表。读取器、两个分钟扫描内核、双账本、E-R1–E-R6 与价格数字未变。
 
 | 符号 | 现行为 |

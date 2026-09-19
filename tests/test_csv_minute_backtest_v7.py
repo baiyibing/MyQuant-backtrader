@@ -3,6 +3,7 @@ from datetime import date, timedelta
 
 import pytest
 
+from backtest.research.ashare_session import flatten_pool_names
 from backtest.research.csv_minute_backtest_v7 import (
     _as_date,
     _as_datetime,
@@ -203,6 +204,41 @@ def test_st_name_uses_five_percent_limit():
     assert "skip_limit_up" in reasons(st)
     board = simulate_v7(minutes, path_daily, {D1: [SYMBOL]}, [D1])
     assert "buy:trial" in reasons(board)
+
+
+def test_first_entry_unknown_board_rejects_trial_buy():
+    code = "999999.SZ"
+    state = simulate_v7(
+        {code: [bar(D1, 895, 100)]},
+        {code: {date(2026, 8, 31): 100.0}},
+        {D1: [code]},
+        [D1],
+    )
+    assert "skip_unknown_board" in reasons(state)
+    assert "buy:trial" not in reasons(state)
+    assert code not in state.positions
+
+
+def test_v7_names_flatten_uses_window_end_name_for_earlier_day():
+    minutes = {SYMBOL: [bar(D1, 895, 105)]}
+    path_daily = {SYMBOL: {date(2026, 8, 31): 100.0, D1: 100.0}}
+    baseline = simulate_v7(minutes, path_daily, {D1: [SYMBOL]}, [D1, D2])
+    flattened = flatten_pool_names(
+        {
+            D1.strftime("%Y%m%d"): {SYMBOL: "浦发银行"},
+            D2.strftime("%Y%m%d"): {SYMBOL: "*ST 浦发"},
+        }
+    )
+    forked = simulate_v7(
+        minutes,
+        path_daily,
+        {D1: [SYMBOL]},
+        [D1, D2],
+        names=flattened,
+    )
+    assert "buy:trial" in reasons(baseline)
+    assert "buy:trial" not in reasons(forked)
+    assert "skip_limit_up" in reasons(forked)
 
 
 def test_exdiv_rescales_trial_stop_into_none_domain():

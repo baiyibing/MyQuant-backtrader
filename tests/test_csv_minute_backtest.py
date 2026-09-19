@@ -659,6 +659,35 @@ def test_simulate_uses_day_spans_same_as_loc():
     assert st.stats["sell_stop"] == 1
 
 
+def test_simulate_missing_day_slice_freezes_held_position():
+    dates = ["2025-11-03", "2025-11-04"]
+    held_day = _day(
+        "2025-11-03",
+        [(930, 10.0, 10.1, 9.9, 10.0), (1455, 10.0, 10.0, 10.0, 10.0)],
+    )
+    anchor = pd.concat(
+        [
+            _day("2025-11-03", [(930, 1.0, 1.0, 1.0, 1.0), (1455, 1.0, 1.0, 1.0, 1.0)]),
+            _day("2025-11-04", [(930, 1.0, 1.0, 1.0, 1.0), (1455, 1.0, 1.0, 1.0, 1.0)]),
+        ]
+    )
+    st = sim.simulate(
+        {"600000.SH": held_day, "000001.SZ": anchor},
+        {
+            "600000.SH": _daily(dates, [10.0, 9.0]),
+            "000001.SZ": _daily(dates, [1.0, 1.0], prev=1.0),
+        },
+        {"20251103": ["600000.SH"]},
+        "20251103",
+        "20251104",
+        strategy="version6",
+        stop_pct=0.02,
+    )
+    assert st.stats["buys"] == 1
+    assert not any(trade["side"] == "SELL" for trade in st.trades)
+    assert "600000.SH" in st.positions
+
+
 def test_simulate_trail_defers_at_limit_down_close_then_resells():
     dates = ["2025-11-03", "2025-11-04", "2025-11-05", "2025-11-06"]
     m0 = _day(
