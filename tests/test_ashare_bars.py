@@ -9,6 +9,7 @@ import pytest
 from backtest.research.ashare_bars import (
     _load_minute_compact,
     bars_from_pool,
+    book_frames_from_compact,
     load_daily_ohlc,
     load_session_bars,
 )
@@ -96,3 +97,23 @@ def test_load_daily_ohlc_qlib_day(tmp_path):
     )
     assert list(frames["600519.SH"]["close"]) == [100.0, 101.0]
     assert list(frames["600519.SH"].index) == [pd.Timestamp("2026-01-06"), pd.Timestamp("2026-01-07")]
+
+
+def test_book_frames_from_compact_adds_ymd_index():
+    compact = pd.DataFrame(
+        {
+            "date": [date(2026, 1, 6), date(2026, 1, 6)],
+            "hm": [9 * 60 + 30, 14 * 60 + 55],
+            "open": [10.0, 10.5],
+            "high": [10.2, 10.6],
+            "close": [10.1, 10.4],
+        }
+    )
+    book = book_frames_from_compact({"600000.SH": compact})
+    frame = book["600000.SH"]
+    assert list(frame["ymd"]) == ["20260106", "20260106"]
+    assert list(frame["hm"]) == [570, 895]
+    assert list(frame.index) == [
+        pd.Timestamp("2026-01-06 09:30:00"),
+        pd.Timestamp("2026-01-06 14:55:00"),
+    ]

@@ -87,6 +87,7 @@ from backtest.research.ashare_bars import (  # noqa: E402
     PM_CLOSE,
     PM_OPEN,
     annotate_session as _annotate,
+    book_frames_from_compact,
     load_daily_ohlc,
     load_minute_bars,
     load_minute_from_lake as _load_minute_from_lake,
@@ -94,6 +95,7 @@ from backtest.research.ashare_bars import (  # noqa: E402
     read_lake_minute_ohlc as _read_one_minute,
     read_minute_cache,
     write_minute_cache,
+    _load_minute_compact,
 )
 from backtest.research.csv_daily_loader import (  # noqa: E402
     warn_stale_period_env,
@@ -764,9 +766,13 @@ def run(
     n_drop=None,
     eligible_buy=None,
     return_threshold_filter: bool = False,
+    minute_source: str = "lake",
+    daily_source: str = "lake",
+    qlib_1min_root: Optional[Path] = None,
+    qlib_day_root: Optional[Path] = None,
 ) -> SimState:
     warn_stale_period_env()
-    if end > MINUTE_LAKE_END:
+    if minute_source == "lake" and end > MINUTE_LAKE_END:
         print(
             f"[warn] --end {end} past minute lake {MINUTE_LAKE_END}; "
             "bars after that date are missing, use daily engine to reach today",
@@ -795,19 +801,38 @@ def run(
         flush=True,
     )
     t_daily = time.perf_counter()
-    daily = load_daily_ohlc(all_codes, load_start, end, workers=workers)
-    t_daily = time.perf_counter() - t_daily
-    cache_status: dict = {}
-    t_minute = time.perf_counter()
-    minute = load_minute_bars(
+    daily = load_daily_ohlc(
         all_codes,
         load_start,
         end,
+        source=daily_source,
+        qlib_root=qlib_day_root,
         workers=workers,
-        use_cache=use_cache,
-        rebuild_cache=rebuild_cache,
-        status=cache_status,
     )
+    t_daily = time.perf_counter() - t_daily
+    cache_status: dict = {}
+    t_minute = time.perf_counter()
+    if minute_source == "qlib_1min":
+        compact = _load_minute_compact(
+            all_codes,
+            load_start,
+            end,
+            source="qlib_1min",
+            qlib_root=qlib_1min_root,
+            workers=workers,
+        )
+        minute = book_frames_from_compact(compact)
+        cache_status["cache"] = "qlib_1min"
+    else:
+        minute = load_minute_bars(
+            all_codes,
+            load_start,
+            end,
+            workers=workers,
+            use_cache=use_cache,
+            rebuild_cache=rebuild_cache,
+            status=cache_status,
+        )
     t_minute = time.perf_counter() - t_minute
     print(
         f"loaded daily {len(daily)} / minute {len(minute)} / pool days {len(pool_days)}",
@@ -883,8 +908,23 @@ def main(argv: Optional[list] = None) -> int:
     ap.add_argument(
         "--rebuild-cache", action="store_true", help="reload lake and rewrite cache"
     )
+    ap.add_argument("--minute-source", choices=("lake", "qlib_1min"), default="lake")
+    ap.add_argument("--daily-source", choices=("lake", "qlib_day"), default="lake")
+    ap.add_argument(
+        "--qlib-1min-root",
+        help="qlib my_data_1min root; implies --minute-source qlib_1min",
+    )
+    ap.add_argument("--qlib-day-root", help="qlib daily bin root for --daily-source qlib_day")
+    ap.add_argument(
+        "--out-dir",
+        type=Path,
+        default=None,
+        help="artifact directory; default backtest_output/csv_minute_{book}_{start}_{end}",
+    )
     args = ap.parse_args(argv if argv is not None else None)
     pool_dir = resolve_research_pool_dir(args.strategy, args.pool_dir, repo=REPO)
+    minute_source = "qlib_1min" if args.qlib_1min_root else args.minute_source
+    daily_source = "qlib_day" if args.qlib_day_root else args.daily_source
 
     st = run(
         args.start,
@@ -895,6 +935,10 @@ def main(argv: Optional[list] = None) -> int:
         pool_dir=pool_dir,
         use_cache=not args.no_cache,
         rebuild_cache=args.rebuild_cache,
+        minute_source=minute_source,
+        daily_source=daily_source,
+        qlib_1min_root=Path(args.qlib_1min_root) if args.qlib_1min_root else None,
+        qlib_day_root=Path(args.qlib_day_root) if args.qlib_day_root else None,
         **csv_run_kwargs_from_args(args),
     )
     book = engine_book(args.strategy)
@@ -907,8 +951,11 @@ def main(argv: Optional[list] = None) -> int:
         text = text + "\n" + cmp
     print(text)
     tag = f"{engine}_{args.start}_{args.end}"
+    out_dir = Path(args.out_dir) if args.out_dir else Path(REPO) / "backtest_output" / tag
+    if out_dir.exists() and any(out_dir.iterdir()):
+        raise SystemExit(f"refuse overwrite existing {out_dir}; pick a new stamp directory")
     write_run_artifacts(
-        Path(REPO) / "backtest_output" / tag,
+        out_dir,
         st,
         text,
         help_lock_for(args.strategy, shared=HELP_LOCK),
