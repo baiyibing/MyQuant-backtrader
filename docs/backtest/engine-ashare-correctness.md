@@ -187,7 +187,7 @@ ST 正则为 `(?:\*ST|(?<![A-Za-z])ST)`（`re.IGNORECASE`）；`WEST` 这样的�
 
 门未拦截、尝试交易、实际 fill 分层验收。fill 以真实 BUY/SELL、股数、lot 与含费现金变化为证据；`EOD_MARK`、peak/last_prices、参考价缩放均不能冒充成交。三个 held 交易点按 `previous is None` 记 `skip_no_prev_close`，否则记 `skip_unknown_board`；均 side=skip、shares=0，不误记涨停/跌停原因。仅在策略产生交易尝试时拒绝，不做整日冻结；peak / last_prices / equity mark / exdiv rescale 仍可更新。无 records 不造 bar，保持 `skip_no_1455`。真实档位的上下限、T+1、现金、fee floor 与填单保持原行为。
 
-测试只用内存或 tmp_path，通过公开 `simulate` / `simulate_v7` 进入目标分支。held 初态由测试注入，未知板块持仓、旧 timer anchor 配同日 lot 都是构造向量，不宣称自然首开可达。timer 向量避开 stop/add，用 session list 隔离 index gate；spy 透传真实 timer/档位门，None 早拒时不调用 limit-down 门。stop/add/timer 双来源都断言无成交、无现金/股数变更；add 另用实档位证明精确现金可成交、少一分钱 skip_cash，rescale 单独证明仅参考价变更。书 step 用真实 version8 hooks、空 pool，分别观察 held 与 step 的拒绝计数；已知板块对照锁住 100 股 × 12、5 元 floor、1205 元精确成交 / 少一分钱拒绝。δ1/δ2/δ3 生产合同保持，P1/P2/P4 继续 deferred；δ5 volume-cap production 见 §2.4；δ6 production economics 未启动。
+测试只用内存或 tmp_path，通过公开 `simulate` / `simulate_v7` 进入目标分支。held 初态由测试注入，未知板块持仓、旧 timer anchor 配同日 lot 都是构造向量，不宣称自然首开可达。timer 向量避开 stop/add，用 session list 隔离 index gate；spy 透传真实 timer/档位门，None 早拒时不调用 limit-down 门。stop/add/timer 双来源都断言无成交、无现金/股数变更；add 另用实档位证明精确现金可成交、少一分钱 skip_cash，rescale 单独证明仅参考价变更。书 step 用真实 version8 hooks、空 pool，分别观察 held 与 step 的拒绝计数；已知板块对照锁住 100 股 × 12、5 元 floor、1205 元精确成交 / 少一分钱拒绝。δ1/δ2/δ3 生产合同保持，P1/P2/P4 继续 deferred；δ5 volume-cap production 见 §2.4；δ6 production economics 见 §2.5。
 
 ## 2.4 P3 δ5 volume participation cap production（Human GO C/A/A/A）
 
@@ -221,47 +221,39 @@ ST 正则为 `(?:\*ST|(?<![A-Za-z])ST)`（`re.IGNORECASE`）；`WEST` 这样的�
 
 生产证据在 `tests/test_ashare_volume_cap.py`：D1（500→200、R50不能force-min）、D2（真实pool/chase双顺序与public pool+step共享）、D3（cash/limit/T+1不扣）、D4（public双账本partial，old100+new200残仓）、D5（零/缺/单位/时间失败与桶隔离）、D6（v7时间前缀、book fallback、双入口开盘拒绝）、D7（partial fee floor调用粒度）。三public入口cap-off快照与固定基线逐字节比较，volume=0/1/10^12/NaN不改变原成交/现金/lots/equity/书统计。测试不访问湖，不模拟一套独立公式冒充生产接线。
 
-**Migration / rollback**：默认cap off可直接部署；只有显式rate启用新门；无schema/data migration，回滚为revert本PR。仅5个生产文件例外，§9其余冻结与固定import-fence保持。P1/P2/P4 deferred，**δ6 production economics NOT started；Ready for δ6 only after host merges this PR**。
+**Migration / rollback**：默认cap off可直接部署；只有显式rate启用新门；无schema/data migration，回滚为revert本PR。仅5个生产文件例外，§9其余冻结与固定import-fence保持。P1/P2/P4 deferred，δ6 production economics 已在 #130 之后独立落地，见 §2.5。
 
-## 2.5 P3 δ6 ex-div economics residual（Human GO A；账本可选 B docs）
+## 2.5 P3 δ6 ex-div economics production（Human GO C/A/B/B/A）
 
-实施基线为 `3668e256abec1258759b99a72e3b3c17d082e75c`（#127 merge，post δ5）。**Human GO P3δ6.1=A 仅授权残留合同 + data-free oracle；本节同时落可选账本 B 设计文档，不是生产 API。** 实际 pins、验收与冻结证明见 [δ6 plan §7–9](plan-industry-align-p3-d6-exdiv-economics-2026-09-19.md)。Slice A→B→C 是文档/测试/验收阶段，生产人裁选项 C 未授权、未实施。
+固定实施基线 `f145ffdec5e378c9092d3f8b990f104979d89141`（#130，δ5 production）。**P3δ6.1=C / .2=A / .3=B / .4=B / .5=A：生产 economics 已落地，must-cut-C satisfied。** 新 GO 覆盖 #128 的残留+oracle A 冻结，仅授权本独立 cut。完整输入/顺序/边界、生产 pins、迁移和冻结证明见 [δ6 plan §5–9](plan-industry-align-p3-d6-exdiv-economics-2026-09-19.md)。
 
-**As-built residual（锚点已对固定基线复核）：**
+**默认关闭。** daily/minute `simulate` 与 `simulate_v7` 接受 `exdiv_economics=None`；默认原 shares/cash/lots/trades/equity 保持，原 δ2 raw-mark 经济残留继续可见。启用时传 `(engine_symbol, YYYYMMDD) -> ExDivEvent | None` mapping 或 `(symbol, ds)` callable；只消费调用者明确提供的事件，无生产默认事件、CLI/loader/湖采集或 merge。输入用于 raw 价格域，调用者负责一致性。
 
-| 面 | 现状与边界 | 基线 file:line |
+| 合同面 | Economics-on 行为 | 本次 file:line（`backtest/research/`） |
 |---|---|---|
-| E-R6 map / refs | `k=prev_cum/cum`，只输出 code/day/ratio，经有效因子 LAG、事件与噪声门筛选；book/v7 仅消费比率来缩放价格参考，没有登记权益、到账或新增股明细 | `backtest/research/exdiv_map.py:233-239`、`:288-319`；`backtest/research/csv_ledger.py:147-156` |
-| book shares / cash | lot.shares 为 int；缩放只改 cost/peak。买入扣成交额+佣金、卖出加成交额−佣金；除权缩放保持原股数/原现金 | `backtest/research/csv_ledger.py:68-79`、`:215-225`、`:261-276` |
-| book NAV | cash + 原股数×传入 bars 当日/最近历史 close；无行情才回落 cost。函数不认证价格域，**仅 none/raw 入口下称 raw-mark 残留**；EOD_MARK 只标记、佣金0，不是 SELL | `backtest/research/csv_ledger.py:165-184`；`backtest/research/csv_simulate_loop.py:381-421` |
-| v7 shares / cash / NAV | 缩放 entry_A/avg_cost/peak/非空 add1_A1/lot.price，lot.shares/buy_date/kind 保持；现金仍走买卖，会话末原股数×last_prices（缺值才 avg_cost fallback） | `backtest/research/csv_minute_backtest_v7.py:60-81`、`:187-196`、`:205-251`、`:416-418` |
-| 事件时机 | book 须有 bar/昨收，v7 须有 records，才在扫描前缩放已有仓；不是无行情日也处理的通用事件账本 | `backtest/research/csv_daily_backtest.py:300-327`；`backtest/research/csv_minute_backtest.py:586-636`；`backtest/research/csv_minute_backtest_v7.py:316-340` |
-| Mode B 独立近似 | float shares÷k、cost/mark×k，缺分钟仍先调整；equity 路径同样缩放，元数据明确 `no cash dividend`。这不证明 book/v7 已补偿，也不证明真实权益闭环 | `backtest/research/unified_exit_modeb.py:407-427`、`:788-824`、`:1029` |
+| 显式事件 | frozen ExDivEvent：非空且运行内跨股票唯一 event_id，有限非负 bonus_ratio=b / cash_div_per_share=c，ex_date/pay_date，list_date 默认 ex_date；日期 YYYYMMDD，pay/list 不早于 ex | `ashare_exdiv_economics.py:19`、`:85` |
+| 资格/整股 | ex_date 在原处理门后锁定各已有 lot 的 q，逐 lot 加 floor(q*b)，丢弃零碎余数；当日随后新买不参与 | `csv_ledger.py:163`；`csv_minute_backtest_v7.py:203` |
+| 时序 | session start 先结算已开应收；通过原 bar/prev_close 门后，权益→原参考缩放→scan；v7 保留原 records 门，不额外要求昨收才能记权益 | `csv_daily_backtest.py:302`、`:317`；`csv_minute_backtest.py:597`、`:616`；`csv_minute_backtest_v7.py:359`、`:379` |
+| 现金 | ex 日开 sum(q)*c 应收；pay_date 当日/首个后续模拟 session 转现金一次，同日 ex/pay 可立即到账；卖空/该股票无 bar 不丢应收 | `ashare_exdiv_economics.py:85`、`:127` |
+| NAV | cash + 全部股份×原 mark + receivables − liabilities；本刀无负债事件，liabilities=0。新股从 ex 日确认估值，未来 list_date 只影响可卖；到账不重复计收益 | `csv_simulate_loop.py:411`；`csv_minute_backtest_v7.py:483` |
+| book T+1 | 新股并入原 Position，在独立账保存 list_date 限售量；独立 lot 可先卖原股，新股在 list_date 后的 session 可卖。跟单组遇 bonus 限售整组暂缓，避免 orphan rider；cap-on pending 同样等新股解锁后才允许整笔退出；无新增退出队列 | `csv_ledger.py:163`、`:185`、`:313` |
+| v7 T+1 | 每旧 lot 追加 kind=exdiv_bonus、buy_date=list_date 的新 lot，沿用原 t1_sellable；复制 lot.price，stage/last_add_date 不因公司行动更新 | `csv_minute_backtest_v7.py:203`、`:256` |
+| refs 独立 | book cost/peak、v7 entry_A/avg_cost/peak/add1_A1/lot.price 仍只由 E-R6 ×k；经济层不动 refs，绝不 shares/=k | `csv_ledger.py:151`；`csv_minute_backtest_v7.py:191` |
+| 交易/兼容 | 公司行动无 BUY/SELL、无佣金、不消耗 volume；后续真实成交仍调用 δ1。trades/equity CSV schema 不变，独立账户及 stats 可查看应收 | `csv_ledger.py:163`、`:313`；`ashare_exdiv_economics.py:61` |
 
-**复用真实残留 pins。** `tests/test_exdiv_refprice_engines.py::test_d2_economic_residual_small_oracle` 固定 100 股、cost=10、peak=12、cash=2000，经 k=.5 后参考5/6、仍100股/现金2000，raw 10→5 时 equity 3000→2500，只有 EOD_MARK；`test_d2_public_book_raw_mark_keeps_shares_and_cash` 从 daily/minute 公开 simulate 固定原股数/现金、差额=q×raw 价差、无 SELL。`tests/test_csv_minute_backtest_v7.py::test_d2_v7_public_multilot_fields_once_and_economic_delta` 从自然首开/加仓快照验证 v7 多 lot 只缩放一次、股数/现金/交易不变及同一经济差额。Mode B 的 `test_exdiv_value_thresholds_and_fractional_shares` 与 `test_shared_ledger_shares_contract_untouched` 保留两模型分叉；不重复造覆盖，不把绿灯当经济残留关闭。
+None lookup 是无事件；错误对象/非有限或负数/非法日期跳过并记 `exdiv_econ_invalid_event`，绝不由 k 补造。event_id 已应用则 no-op 并记 duplicate_event；旧 rescale helper 非幂等依旧。b/c 转精确整数比做股数 floor，金额入既有 float 现金账，税前夹具单位，无税务/分币新规则。经济 lookup 不受 k 的存在性/噪声门约束。
 
-**B3–B6 design-only oracles（不是 as-built）：** 假设登记资格由夹具给定、无额外市场涨跌/税费/外部资金流。旧股 q、旧价 P、每旧股派现 c、新增比例 b 下，简化理论价 `P_ex=(P−c)/(1+b)`，`q×P=q×(1+b)×P_ex+q×c`；不是现实税务或交易所日期规则认证。
+**Production B3–B5：** `test_ashare_exdiv_economics.py::test_ledger_b3_b4_b5_conserve_without_reference_share_inflate`、`test_exdiv_refprice_engines.py::test_d6_public_book_production_conservation`、`test_csv_minute_backtest_v7.py::test_d6_v7_production_conservation_and_pay_without_symbol_bar` 均调用真实账本/公开引擎。初始买入费用由3001启动现金覆盖，事件起点 q100/P10/cash2000：
 
-| Pin | 设计输入与对账 | 落点 / 限制 |
+| Pin | ex 日 | pay 日 |
 |---|---|---|
-| B3 纯送转 | q=100、P=10、b=1、c=0、cash=2000；200股×5+2000=3000。上市前100旧股+100新股权利只计一次；as-built 仍100股/2000现金/equity2500 | `test_d6_design_only_pure_bonus_equity_oracle`；纯算术，生产残留复用 B1/B2 |
-| B4 纯现金 / receivable→pay | q=100、P=10、c=1、b=0；ex 日900股值+2000现金+100应收=3000；pay 日900+2100现金+0应收=3000，到账不生第二次收益 | `test_d6_design_only_cash_receivable_to_pay_vs_raw_residual`；设计转账仅局部算术，daily/minute 公开入口仍100股/现金2000/equity2900，无应收补偿或到账 |
-| B5 混合 / k 不可识别 | b=1、c=1：200股×4.5+2000+100应收=3000；若用 q/k 再加红利则3100，重复补偿。k=.9 既可来自纯现金 c=1，也可来自纯送转 b=1/9，权益结构不同 | `test_d6_design_only_mixed_bonus_cash_equity_oracle`、`test_d6_design_only_k_non_identifiability`；精确分数仅证明代数歧义，不授权真实零碎股 |
-| B6 生命周期 | 夹具约定登记时持100股；登记后卖出仍保留已锁权利，除权日新买无该权利。重复 event_id 不重记，停牌/无 bar 仍按独立事件时序处理，修订须冲销/差额对账 | **仅文档设计 oracle，无新增生命周期测试或处理器**。已有缺 bar 不回放/非幂等 pins 保持 as-built，不能宣称支持该生命周期 |
+| B3 b=1/c=0 | shares200×5 + cash2000 = NAV3000；refs×.5 | 不产生额外现金 |
+| B4 b=0/c=1 | shares100×9 + cash2000 + recv100 = NAV3000 | cash2100、recv0、NAV3000 |
+| B5 b=1/c=1 | shares200×4.5 + cash2000 + recv100 = NAV3000 | cash2100、recv0、NAV3000；不用 q/k，避免3100双计 |
 
-**可选账本 B 候选状态表（design / not production API；未决规则 pending）：** 触发参考 `cost_ref/peak_ref` 与经济 `entitlement/receivable/cash/quantity/cost_basis` 必须分离。
+守恒限于整数权益、无额外市场变化/税费/外部流的受控 fixture；零碎舍弃会留下对应价值差额。保留原 `test_d2_economic_residual_small_oracle`（off时3000→2500）、public book raw-mark 与 v7 multilot residual；#128 `design_only` 函数原样保留为历史代数/默认-off对照。新增6个基线输出 SHA256 覆盖三公开路径有无 k，证明默认兼容；新增 T+1/到账/多 lot/invalid/idempotence/cap 组合 pins 见 plan §7。
 
-| 候选合同 | 设计约束与尚缺证据 |
-|---|---|
-| event id / source | code、event_id、revision、available_at、record/ex/pay/list_date、每旧股 c/b、gross/net/tax 与来源；缺项不得从 k 或噪声门猜出。事件明细/PIT 合同 pending，仅消费上游 |
-| entitlement snapshot | 在另裁登记时点锁 eligible lots/数量；登记后卖出、除权日买入、新股上市/可卖各自显式；资格与零碎股规则 pending |
-| state order | record→entitled；ex 时按约定确认新股权利/应收并估值；pay 将应收转现金；list 将新股权利转股份/可卖量。会话内与交易/mark 顺序待裁；ex/pay/list 不假定同日，权利与到账不得双计 |
-| replay / revision | 独立事件键幂等、部分入账恢复、版本修订冲销/差额与无 bar 日处理；旧 rescale 无去重状态，不能充当新账处理器。重算/回滚与迁移合同 pending |
-| precision | 独立股数/权益精度、分币舍入、残差账户、gross/net/tax；不能从 δ1 代理佣金推导税规则，精度与税规则 pending |
-| NAV reconcile | cash + 可交易/不可交易股份或尚未转股权利的已定义估值 + receivables − liabilities；转股/到账前后只计一次，价格域须验证；市场/税费/外部流单列调节 |
-| cost / artifacts | 经济成本分配与触发参考成本分离；独立公司行动账/对账视图，不复用 BUY/SELL/EOD_MARK 伪造现金或佣金；当前 trades/equity schema 不变，迁移/产物版本 pending |
-
-**经济残留 NOT closed；must-cut-C=NO（must cut C? NO）。** 生产 shares/cash/NAV、增股/入账/应收和 Mode B `shares/=k` 移植均未实施；这些行为需要另立显式 `.1=C` 的生产案，本轮未授权。P1/P2/P4 继续 deferred，δ5 独立 production cap 见 §2.4；δ2 因子 PIT/恢复日错域、噪声门、缺 bar 不回放等残留也未关闭。
+**边界与回滚：** ex 日缺原前置 bar 条件不处理、不补发；已开应收在后续 session 独立到账。没有 record_date/PIT/版本修订/冲销/跨运行恢复支持；δ2 错域与旧 helper 非幂等未关闭。Mode B float shares÷k 仍独立冻结，不移植。默认 off 可部署；撤掉 lookup 可关闭，revert 本 PR 可回滚，无 schema/data migration。P1/P2/P4 与 δ4/δ5 语义保持。
 
 ## 3. 对照货币
 

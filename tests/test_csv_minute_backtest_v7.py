@@ -496,3 +496,102 @@ def test_d2_v7_new_trial_on_exday_is_not_rescaled():
     assert reasons(state) == ["buy:trial"]
     pos = state.positions[SYMBOL]
     assert pos.entry_A == pos.avg_cost == pos.peak == pos.lots[0].price == 5
+
+
+@pytest.mark.parametrize("bonus,cash,price", [(1, 0, 5), (0, 1, 9), (1, 1, 4.5)])
+def test_d6_v7_production_conservation_and_pay_without_symbol_bar(monkeypatch, bonus, cash, price):
+    from backtest.research.ashare_exdiv_economics import ExDivEvent
+
+    monkeypatch.setattr(v7, "NAME_BUDGET", 1000 / v7.TRIAL_FRACTION)  # trial=1000 => 100 shares
+    minutes = {SYMBOL: [bar(D1, 895, 10), bar(D2, 570, price)]}
+    closes = {SYMBOL: {D1 - timedelta(days=1): 10, D1: 10, D2: price}}
+    event = ExDivEvent("rights", bonus, cash, "20260902", "20260903")
+    kwargs = dict(cash_total=3001, exdiv={SYMBOL: {"20260902": price / 10}},
+                  exdiv_economics={(SYMBOL, "20260902"): event})
+    on_ex = simulate_v7(minutes, closes, {D1: [SYMBOL]}, [D1, D2], **kwargs)
+    pos = on_ex.positions[SYMBOL]
+    assert pos.shares == 100 * (1 + bonus)
+    assert (pos.entry_A, pos.avg_cost, pos.peak, on_ex.cash) == (price, price, price, 2000)
+    assert on_ex.exdiv_economics.receivable_total == 100 * cash
+    assert [p["equity"] for p in on_ex.equity_curve] == [3000, 3000]
+    paid = simulate_v7(minutes, closes, {D1: [SYMBOL]}, [D1, D2, D3], **kwargs)
+    assert (paid.cash, paid.exdiv_economics.receivable_total) == (2000 + 100 * cash, 0)
+    assert [p["equity"] for p in paid.equity_curve] == [3000] * 3
+    assert paid.trades == on_ex.trades and reasons(paid) == ["buy:trial"]
+    if bonus:
+        assert [(lot.shares, lot.buy_date, lot.kind) for lot in pos.lots] == [
+            (100, D1, "trial"), (100, D2, "exdiv_bonus")]
+
+
+def test_d6_v7_bonus_t1_and_cap_consumes_only_real_fills(monkeypatch):
+    from backtest.research.ashare_exdiv_economics import ExDivEvent
+    from backtest.research.ashare_volume_cap import BucketVolume
+
+    monkeypatch.setattr(v7, "NAME_BUDGET", 1000 / v7.TRIAL_FRACTION)
+    event = ExDivEvent("bonus", 1, 0, "20260902", "20260902")
+    minutes = {SYMBOL: [bar(D1, 895, 10), bar(D2, 570, 5),
+                         bar(D2, 571, 4.4), bar(D3, 570, 4.4)]}
+    closes = {SYMBOL: {D1 - timedelta(days=1): 10, D1: 10, D2: 4.4}}
+    # ST band/limits semantics unchanged; use 20% board for a tradable stop below 4.5.
+    symbol = "300001.SZ"
+    minutes = {symbol: minutes[SYMBOL]}
+    closes = {symbol: closes[SYMBOL]}
+    volumes = {(symbol, ds, hm): BucketVolume(100, hm, "raw_shares_incremental")
+               for ds, hm in [("20260901", 895), ("20260902", 571), ("20260903", 570)]}
+    kwargs = dict(cash_total=3001, exdiv={symbol: {"20260902": .5}},
+                  exdiv_economics={(symbol, "20260902"): event},
+                  participation_rate=1, volume_for_bucket=volumes)
+    on_ex = simulate_v7(minutes, closes, {D1: [symbol]}, [D1, D2], **kwargs)
+    assert on_ex.positions[symbol].shares == 100
+    assert on_ex.positions[symbol].lots[0].kind == "exdiv_bonus"
+    assert [t["shares"] for t in on_ex.trades if t["side"] == "sell"] == [100]
+    assert on_ex.volume_cap.used == {(symbol, "20260901", 895): 100, (symbol, "20260902", 571): 100}
+    # An opening stop cannot borrow completed-bar capacity (δ5 remains intact).
+    assert any(t["reason"] == "skip_volume_unavailable:bucket_not_completed"
+               for t in simulate_v7(minutes, closes, {D1: [symbol]}, [D1, D2, D3], **kwargs).trades)
+    uncapped = {k: v for k, v in kwargs.items() if k not in ("participation_rate", "volume_for_bucket")}
+    paid = simulate_v7(minutes, closes, {D1: [symbol]}, [D1, D2, D3], **uncapped)
+    assert not paid.positions
+    assert [t["shares"] for t in paid.trades if t["side"] == "sell"] == [100, 100]
+    assert paid.cash == pytest.approx(2879.12)  # buy fee=1; each sell fee=.44
+
+
+@pytest.mark.parametrize("factor", [None, {SYMBOL: {"20260902": .5}}])
+def test_d6_v7_off_byte_snapshot_matches_f145ffde(factor):
+    import hashlib
+    import json
+
+    # Generated independently in an archive of the frozen implementation base.
+    expected = {False: "376d4c877a3bfad5d856bb373b48882be5e902c311fb4824a23143dfafb2fece",
+                True: "6b8b1e8191112916644f82eb79cc3cb2bb87c03f00f7c12f629d112fcda6a02c"}
+    for kwargs in ({}, {"exdiv_economics": None}, {"exdiv_economics": {}},
+                   {"exdiv_economics": lambda *_: None}):
+        state = simulate_v7({SYMBOL: [bar(D1, 895, 10), bar(D2, 570, 5)]},
+                            {SYMBOL: {D1 - timedelta(days=1): 10, D1: 10}},
+                            {D1: [SYMBOL]}, [D1, D2], exdiv=factor, **kwargs)
+        snapshot = {"cash": state.cash, "positions": {k: asdict(v) for k, v in state.positions.items()},
+                    "trades": state.trades, "equity": state.equity_curve}
+        assert hashlib.sha256(json.dumps(snapshot, sort_keys=True, default=str).encode()).hexdigest() == expected[bool(factor)]
+
+
+def test_d6_v7_multilot_eligible_snapshot_and_no_entitlement_for_new_trial():
+    from backtest.research.ashare_exdiv_economics import ExDivEvent
+
+    minutes = {SYMBOL: [bar(D1, 895, 10), bar(D2, 885, 10.4), bar(D3, 570, 5.2)]}
+    closes = {SYMBOL: {D1 - timedelta(days=1): 10, D1: 10, D2: 10.4}}
+    before = simulate_v7(minutes, closes, {D1: [SYMBOL]}, [D1, D2])
+    event = ExDivEvent("multilot", 1, 0, "20260903", "20260903")
+    after = simulate_v7(minutes, closes, {D1: [SYMBOL]}, [D1, D2, D3],
+                        exdiv={SYMBOL: {"20260903": .5}}, exdiv_economics={(SYMBOL, "20260903"): event})
+    old = before.positions[SYMBOL]
+    pos = after.positions[SYMBOL]
+    assert len(old.lots) == 2 and len(pos.lots) == 4
+    assert [p.shares for p in pos.lots] == [p.shares for p in old.lots] * 2
+    assert (pos.entry_A, pos.avg_cost, pos.peak) == (old.entry_A * .5, old.avg_cost * .5, old.peak * .5)
+    assert after.cash == before.cash and after.trades == before.trades
+    assert after.equity_curve[-1]["equity"] == before.equity_curve[-1]["equity"]
+    same_day = ExDivEvent("new", 1, 1, "20260901", "20260901")
+    fresh = simulate_v7(minutes, closes, {D1: [SYMBOL]}, [D1],
+                        exdiv_economics={(SYMBOL, "20260901"): same_day})
+    assert fresh.exdiv_economics.applied_ids == set()
+    assert len(fresh.positions[SYMBOL].lots) == 1

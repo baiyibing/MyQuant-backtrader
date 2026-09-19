@@ -409,6 +409,8 @@ def append_equity_and_eod_marks(
     close for every lot; ``pos.cost`` only when no on/prior bar exists.
     """
     eq = st.cash
+    if st.exdiv_economics is not None:
+        eq += st.exdiv_economics.receivable_total
     # code -> market close, or None => use per-lot cost fallback
     mark_by_code: dict[str, Optional[float]] = {}
     for code, lots in st.positions.items():
