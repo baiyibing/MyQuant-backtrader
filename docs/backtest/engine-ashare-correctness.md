@@ -93,11 +93,53 @@ T+1 在书引擎原调用点将 `calendar[entry_idx]` 映射为日期后调用 `
 | **E-R3** | 市场层只留 Decimal `limit_prices`。v7 改 import。`1.65×10%` 跌停 = **1.49**。禁止 `round()` 银行家舍入。 | U-R10/U-R30「v7 留本地 float」 |
 | **E-R4** | 停牌仍冻仓。加载侧丢弃零量占位 K（日线 `volume==0`；分钟整日 `sum(volume)==0`），**等价于当日无 K**，复用同一条冻仓 / pending / `last_close_mark` 路径，不建第二套停牌状态机。净值用最近有 K 的 close，不用 `pos.cost`。追买日无 K **保留 pending** 到下一有 K 日（有 K 后仍只评一次）。 | U-R27「追买 pop 作废 / 净值标成本」 |
 | **E-R5（收窄 2026-09-16）** | csv 日线/分钟链成交与估值全程 `dividend_type=none`；**除权日**（事件判定见 E-R6）的 cost/peak/涨跌停参考价已按 E-R6 修正。残留近似三句：①跳变 ≤0.5% 的小额分红（窗内约 1,372 起）不修正——止损触发距离/止盈地板偏移 ≤0.5pp，低价股档位边缘可差 1 分；②跨除权持有 lot 的成交与净值按原始价×原始股数记账（送转不增股、分红不入账），trades pnl 与净值含 (1−k) 结构性失真（见 E-R6 残留声明）；③v4 SMA 门用截至昨收的原始 closes，除权日不换域（假 ma_signal/buy_gate 拒，历史行为保留）。21M 口径历史数字（命中 daily 8.1% / minute 2.0%）与 5 亿口径 149 笔止损为**修正前口径**。证据：[np2-exdiv-hold-hits-host-note-2026-09-16.md](np2-exdiv-hold-hits-host-note-2026-09-16.md) + [survey-exdiv-adj-data-prep-2026-09-16.md](survey-exdiv-adj-data-prep-2026-09-16.md) + [plan-exdiv-refprice-2026-09-16.md](plan-exdiv-refprice-2026-09-16.md)。 | 无（E-R5 原「不对除权调整」整条收窄；非 U-R 重开） |
-| **E-R6** | **除权日参考价修正**（v1–v10、v7）：事件= `ex_date_index` 主 ∪ 因子跳变 >1e-2 兜底；k=因子行比 LAG；除权日一次性缩放 open lot 的 cost/peak，并将当日 prev_close→档位换算点映射到 D 域。成交价、净值估值、shares、佣金、T+1、chase 判定逻辑、现金红利入账均不动。残留声明：①跨除权 lot 的 trades pnl/净值含 (1−k) 结构性失真——本片只修触发参考，**不回收**历史假止损已实现亏损（5 笔 −196 万的回收上界仅 +35~125 万 ≈ 0.01–0.025pp，切片 D 宿主验证）；②v4 SMA 门除权日不换域；③噪声带 ≤0.5% 不修正。日线/分钟共用 `ashare_session`；书引擎 `simulate(..., exdiv=None)`，仅 `run()` 加载。 | 无（新人裁锁；承接 E-R5 选项 B） |
+| **E-R6** | **除权日参考价修正**（v1–v10、v7）：事件= `ex_date_index` 主 ∪ 因子跳变 >1e-2 兜底；k=因子行比 LAG；在事件落日与行情域一致且可处理时，扫描前缩放当时已持有参考价（书 cost/peak；v7 字段见 §2.1），并将对应 prev_close→档位换算点映射到 D 域；缺 bar/因子恢复残留见 §2.1。成交价、净值估值、shares、佣金、T+1、chase 判定逻辑、现金红利入账均不动。残留声明：①跨除权 lot 的 trades pnl/净值含 (1−k) 结构性失真——本片只修触发参考，**不回收**历史假止损已实现亏损（5 笔 −196 万的回收上界仅 +35~125 万 ≈ 0.01–0.025pp，切片 D 宿主验证）；②v4 SMA 门除权日不换域；③噪声带 ≤0.5% 不修正。日线/分钟共用 `ashare_session`；内存引擎默认 `exdiv=None`；书由 `run()` 加载，v7 由 `main()` 经 context 加载；daily 连续域跳过与 minute/v7 差异见 §2.1。 | 无（新人裁锁；承接 E-R5 选项 B） |
 
 不重开：费率 0.1% 双边、7 不进书、不改 `presets.py`。Cerebro / Rolling **已退场**（见 [engine-positioning-ssot.md](engine-positioning-ssot.md)），禁止复活——旧稿「不删 Cerebro」作废。
 
 **E-R5 重开条件**（噪声带/残留面；触发即重跑 NP2 探针再裁）：①止损档收紧至 <10% 或 trail 地板整体上调；②名单池切到高分红/高送转风格；③分钟链成为主研究面；④任何 NAV 对比结论差距落在 <1% 量级时。见 host-note §3。**E-R6 切片 D**（宿主 5 亿重跑）完成后放行 v8 规则 v2 切片 D。
+
+## 2.1 P3 δ2 除权参考价契约（Human GO A/A/A/A/A）
+
+实施基线为 `7c049c63ed441a17156b4476f3974bb86ab57fa9`（post #122）。本节细化 E-R6 的 as-built 适用条件；生产行为不变。计划、评审映射与 data-free 验收命令见 [δ2 plan §7–8](plan-industry-align-p3-d2-exdiv-2026-09-19.md)。原 E-R6 人裁不含 v7；v7 接线来自后续 shared-session 改造，本节记录当前分叉，不改写历史授权（E-d2-09）。
+
+**事件门与 k。** 真实加载符号是 `exdiv_map.load_exdiv_ratios`（MC-1，无 rates/factors 别名）。读窗向前 10 个自然日；过滤非正数、NaN、Inf，按日期取前一有效因子行 `F_prev`，不是日历 D−1。令 `j=abs(F_D-F_prev)/F_prev`，有限有效的 `k=F_prev/F_D` 可小于或大于 1：
+
+| 当日 ex 行 | 因子相对跳变 j | 是否输出 k |
+|---|---|---|
+| 有 | `j <= 0.005` | 否（噪声带含等号） |
+| 有 | `j > 0.005` | 是 |
+| 无 | `j <= 0.01` | 否（含 0.5%–1%） |
+| 无 | `j > 0.01` | 是（因子跳变兜底） |
+
+噪声带衡量 j，不是 `abs(1-k)`；比较保留现有 float，无新增容差。事件枚举不保证有可用因子/LAG。双路径都显式指向临时夹具才隔离 resolver（MC-2）；根路径解析错误仍会抛出。路径解析后缺 adj 才警告并返回空 map，缺 ex index 降为跳变兜底，不能外推成未配置根也静默无数据。`exdiv_skipped_no_factor` 不是完整审计计数。
+
+**字段与顺序。** 正常逐日循环在扫描前缩放当时已持有的参考字段，然后映射昨收、计算档位、执行卖出/买入；不是 helper 幂等性。重复调 helper 会重复相乘，多事件累计 `k1×k2`。书路径当日新买/step lot 和 v7 当日新开/加仓在这次 pass 后建立，不再乘当天 k。
+
+| 路径 | 缩放字段 | 保留字段 / 前置条件 |
+|---|---|---|
+| 书 daily/minute | 各 lot `cost`、`peak` | shares、entry_idx、peak_hm、lot_id、pending_exit、reserved、ride_with、is_step；daily 要当日 K 与先前 closes，minute 还要当日分钟切片 |
+| v7 | `entry_A`、`avg_cost`、`peak`、非空 `add1_A1`、各 `Lot.price` | shares、buy_date、kind、stage、last_add_date；有当日 records 才缩放 |
+
+v7 非空 `add1_A1` 仅由人工 Position 验证兼容分支，公开自然加仓不赋值（E-d2-03）；公开路径另证可达字段、混持 T+1、加仓后同日 stop 仅卖老 lot（E-d2-07）。pending_exit 先经缩放与新档位，再按 raw 开盘价成交或跌停续 defer（MC-5）。held/chase/pool/**step** 均消费映射昨收（E-d2-05）；真实 Decimal 链须用主板 `600000.SH`：`10×0.5→5→(5.50,4.50)`、`3.30×0.5→1.65→(1.82,1.49)`，不可用 float 自算档位替代（E-d2-04/MC-6）。
+
+**已关闭面与未关闭面。** 事件落日与行情域一致、且作用于事件日存量 lot / 对应昨收时，E-R6 修正触发参考错域；不复权整条行情。缺 bar 分支在缩放前、map 只查当日键，停牌日事件没有通用补缩放队列。因子缺行/无效后恢复可能把 k 落到行情已经换域的恢复日，重乘新域昨收及缺行日新 lot；恢复前真实 SELL 也不会被撤销（E-d2-01）。日期 LAG 与合成前缀一致性不证明当日因子在决策时刻可得，原始因子 as-of/版本 PIT 仍**未证 / 历史观测近似**（E-d2-02）。
+
+送转不增股、分红不入现金、raw mark 不获经济补偿：隔离其它交易，100 股、cost=10、peak=12、cash=2000、k=0.5 后，cost=5、peak=6，仍 100 股和 cash=2000；raw close 10→5 时权益 3000→2500。500 是该特例差额，`1-k` 不是所有组合收益误差的固定百分比。公开 v7 无 Position 注入，小数值 oracle 只用于书/helper；v7 用事件前快照核对股数/现金及 raw mark 差额（MC-4）。EOD_MARK 不是 SELL。经济残留、v4 SMA 原始序列和原有噪声带继续 deferred；P1/P2/P4、δ3+ 不在本刀。
+
+**价格域只保证到具体入口（E-d2-08/MC-3/MC-7）。**
+
+| 入口 | as-built exdiv 接线 |
+|---|---|
+| daily `run()` lake none | 加载 map |
+| daily `run()` front/back 或 `--qlib-data-root`（`qlib_day`） | `exdiv=None`，跳过加载 |
+| book minute `run()` | daily=lake/qlib_day × minute=lake/qlib_1min 四组合均加载、传 map |
+| v7 `main()` | 同四组合经真实 `load_limit_context` 加载、传 map；helper 无 source 参数 |
+| 内存 `simulate` / `simulate_v7` | 默认 exdiv=None；不认证行情复权域，调用方负责域与 map 一致 |
+
+> **🔴 CLI 域风险：日线 `--qlib-data-root` 跳过 E-R6，不等于分钟 `--qlib-day-root` 跳过。minute/v7 的 `daily=qlib_day` × map 仍是危险组合，pins 证明现状传参，不证明混域安全。** `qlib_day` 的后复权声明与 `qlib_1min` 的 none 声明不同，读取器不认证真实 dump 域；`--qlib-cost` 仅是费率开关。Human GO A 保持这些入口差异，统一跳过或拒绝混域须另案。
+
+验收仅扩展 plan §7 的四个既有测试文件。B1–B6 分别覆盖事件门、书顺序、v7 分叉、昨收档位、经济残留、入口矩阵；既有混域 v7 trial-stop 向量只作为布线证据，新增同域 held 向量独立验证缩放/档位/成交（E-d2-06）。入口测仅 pytest 内完全 stub 的 `run()`/`main(argv)`，没有 CLI 回测、湖访问或产物回测；book writer 位于 main，v7 writer/index/bars 全 stub，非空 pool 保留 context 加载链。
 
 ## 3. 对照货币
 

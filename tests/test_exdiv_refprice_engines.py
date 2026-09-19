@@ -3,12 +3,18 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict
+from types import SimpleNamespace
+from unittest.mock import Mock
+
 import numpy as np
 import pandas as pd
 import pytest
 
 import backtest.research.csv_daily_backtest as daily
 import backtest.research.csv_minute_backtest as minute
+import backtest.research.csv_minute_backtest_v7 as v7
+from backtest.research import ashare_session, exdiv_map
 from backtest.research.csv_artifacts import summarize
 from backtest.research.csv_ledger import Position, SimState, rescale_position
 from backtest.research.market_layer import limit_prices
@@ -425,3 +431,275 @@ def test_summarize_omits_zero_exdiv_stats():
     assert "除权" not in summarize(st, 21_000_000.0, "20251103", "20251103")
     st.stats["exdiv_adjusted_lots"] = 2
     assert "除权缩放 lots 2" in summarize(st, 21_000_000.0, "20251103", "20251103")
+
+
+def _d2_book_run(engine, prices, *, pool=None, missing=None, exdiv=None, **kwargs):
+    """Same-domain flat bars; strategy overrides are explicit in each pin."""
+    dates = DAYS[:len(prices)]
+    rows = [(px, px, px, px) for px in prices]
+    bars = {CODE: _minute_daily(dates, rows)}
+    minutes = {CODE: pd.concat([
+        _minute_day(day, [(930, *row), (1455, *row)])
+        for day, row in zip(dates, rows)
+    ])}
+    if missing == "daily":
+        bars[CODE] = bars[CODE].drop(pd.Timestamp(DAYS[2]))
+    elif missing == "minute":
+        minutes[CODE] = minutes[CODE].loc[minutes[CODE]["ymd"] != "20251105"]
+    kwargs.setdefault("strategy", "version1")
+    kwargs.setdefault("take_profit", lambda *args: None)
+    pool = {"20251103": [CODE]} if pool is None else pool
+    args = (bars,) if engine is daily else (minutes, bars)
+    return engine.simulate(*args, pool, "20251103", dates[-1].replace("-", ""),
+                           exdiv=exdiv, **kwargs)
+
+
+def test_d2_book_multilot_field_scope_and_non_idempotence():
+    lots = [
+        Position(CODE, 100, 10, 0, 12, peak_hm=575, pending_exit="trail:test",
+                 reserved=True, ride_with=7),
+        Position(CODE, 200, 11, 1, 13, lot_id=1, is_step=True),
+    ]
+    for lot in lots:
+        before = asdict(lot)
+        rescale_position(lot, 0.5)
+        assert asdict(lot) == {**before, "cost": before["cost"] * 0.5,
+                              "peak": before["peak"] * 0.5}
+        rescale_position(lot, 0.5)
+        assert lot.cost == before["cost"] * 0.25  # No helper dedup state.
+
+
+@pytest.mark.parametrize("engine", [daily, minute], ids=["daily", "minute"])
+def test_d2_book_once_per_event_and_new_lot_not_rescaled(engine, monkeypatch):
+    calls = []
+    real = engine.rescale_position
+
+    def observe(pos, k):
+        calls.append((pos.entry_idx, pos.cost, k))
+        real(pos, k)
+
+    monkeypatch.setattr(engine, "rescale_position", observe)
+    st = _d2_book_run(
+        engine, [10, 10, 5, 4, 4], strategy="version8",
+        pool={"20251103": [CODE], "20251105": [CODE]},
+        exdiv={CODE: {"20251105": 0.5, "20251106": 0.8}},
+    )
+    assert calls == [(0, 10, 0.5), (0, 5, 0.8), (2, 5, 0.8)]
+    assert [lot.cost for lot in st.positions[CODE]] == [4, 4]
+    assert [lot.peak for lot in st.positions[CODE]] == [4, 4]
+    assert st.stats["exdiv_adjusted_lots"] == 3
+    assert [(t["date"], t["price"]) for t in st.trades if t["side"] == "BUY"] == [
+        ("20251103", 10), ("20251105", 5),
+    ]
+    assert not [t for t in st.trades if t["side"] == "SELL"]
+
+
+@pytest.mark.parametrize("engine,missing", [(daily, "daily"), (minute, "daily"),
+                                            (minute, "minute")])
+def test_d2_missing_event_bar_is_not_replayed_on_resume(engine, missing):
+    st = _d2_book_run(engine, [10, 10, 5, 5], missing=missing, exdiv=EXDIV_HALF,
+                      stop_pct=0.0)
+    assert st.positions[CODE][0].cost == 10
+    assert st.stats.get("exdiv_adjusted_lots", 0) == 0
+
+
+@pytest.mark.parametrize("engine", [daily, minute], ids=["daily", "minute"])
+@pytest.mark.parametrize("event_px,blocked", [(6.02, True), (6.0, False)])
+def test_d2_step_uses_mapped_band_and_new_raw_cost(engine, event_px, blocked):
+    # v8 is a default Decimal book, no qlib_limit_pct override. Off-list step only.
+    # Prior session stays below limit-up, avoiding the separate open-board exit.
+    st = _d2_book_run(engine, [10, 10.95, event_px], strategy="version8", exdiv=EXDIV_HALF)
+    assert limit_prices(CODE, 5.475) == (6.02, 4.93)
+    step = [t for t in st.trades if t["side"] == "BUY" and t["reason"] == "add:step20"]
+    assert bool(step) is not blocked
+    assert st.positions[CODE][0].cost == 5
+    assert st.stats["exdiv_adjusted_lots"] == 1
+    if blocked:
+        assert len(st.positions[CODE]) == 1
+        assert st.stats["skip_limit_up"] == 1
+    else:
+        assert len(step) == 1 and step[0]["price"] == event_px
+        added = st.positions[CODE][1]
+        assert added.is_step and added.cost == event_px and added.entry_idx == 2
+
+
+@pytest.mark.parametrize("event_open", [5.0, 4.5], ids=["fill", "limit-down-defer"])
+def test_d2_pending_exit_precedes_scan_after_exdiv(event_open, monkeypatch):
+    snapshots = []
+    real = daily.rescale_position
+
+    def observe(pos, k):
+        before = asdict(pos)
+        real(pos, k)
+        snapshots.append((before, asdict(pos)))
+
+    monkeypatch.setattr(daily, "rescale_position", observe)
+    # Public take_profit callback writes pending at D-1 close, not injected state.
+    st = _d2_book_run(daily, [10, 10, event_open, 4.6], exdiv=EXDIV_HALF,
+                      take_profit=lambda px, cost, peak, n: "trail:d2" if n == 1 else None)
+    before, after = snapshots.pop()
+    assert not snapshots
+    assert before["pending_exit"] == after["pending_exit"] == "trail:d2"
+    assert (before["cost"], after["cost"], after["peak"]) == (10, 5, 5)
+    buy = next(t for t in st.trades if t["side"] == "BUY")
+    sells = [t for t in st.trades if t["side"] == "SELL"]
+    assert len(sells) == 1
+    sell = sells[0]
+    assert sell["reason"] == "trail:d2" and sell["shares"] == buy["shares"]
+    assert sell["date"] == ("20251105" if event_open == 5 else "20251106")
+    assert sell["price"] == (event_open if event_open == 5 else 4.6)
+    assert st.stats["defer_sell_limit_down"] == (0 if event_open == 5 else 1)
+
+
+def test_d2_economic_residual_small_oracle():
+    from backtest.research.csv_simulate_loop import append_equity_and_eod_marks
+
+    pos = Position(CODE, 100, 10, 0, 12)
+    st = SimState(cash=2000, positions={CODE: [pos]})
+    bars = {CODE: _minute_daily(DAYS[:2], [(10, 10, 10, 10), (5, 5, 5, 5)])}
+    for index, day in enumerate(pd.to_datetime(DAYS[:2])):
+        if index:
+            rescale_position(pos, 0.5)
+        append_equity_and_eod_marks(st, ds=day.strftime("%Y%m%d"), day=day,
+                                   calendar_last=pd.Timestamp(DAYS[1]), mark_bars=bars)
+    assert (pos.cost, pos.peak, pos.shares, st.cash) == (5, 6, 100, 2000)
+    assert st.equity_curve == [("20251103", 3000), ("20251104", 2500)]
+    assert [t["side"] for t in st.trades] == ["EOD_MARK"]
+
+
+@pytest.mark.parametrize("engine", [daily, minute], ids=["daily", "minute"])
+def test_d2_public_book_raw_mark_keeps_shares_and_cash(engine):
+    before = _d2_book_run(engine, [10, 10])
+    after = _d2_book_run(engine, [10, 10, 5], exdiv=EXDIV_HALF)
+    shares = before.positions[CODE][0].shares
+    assert after.positions[CODE][0].shares == shares
+    assert after.cash == before.cash
+    assert after.positions[CODE][0].cost == after.positions[CODE][0].peak == 5
+    assert before.equity_curve[-1][1] - after.equity_curve[-1][1] == shares * 5
+    assert not [t for t in after.trades if t["side"] == "SELL"]
+
+
+@pytest.mark.parametrize("engine", [daily, minute], ids=["daily", "minute"])
+def test_d2_real_loader_recovery_day_wrong_domain_residual(tmp_path, monkeypatch, engine):
+    def forbidden(*args, **kwargs):
+        pytest.fail("both loader paths must be explicit temporary fixtures")
+
+    monkeypatch.setattr(exdiv_map, "resolve_source_parquet", forbidden)
+    adj, ex = tmp_path / "adj.parquet", tmp_path / "ex.parquet"
+    pd.DataFrame({"date": ["20251103", "20251104", "20251105"],
+                  "stock_code": [CODE] * 3,
+                  "cumulative_adj_factor": [1.0, np.nan, 1.0 / 0.95]}).to_parquet(adj)
+    pd.DataFrame({"stock_code": [CODE], "ex_date": ["20251104"]}).to_parquet(ex)
+    ratios = exdiv_map.load_exdiv_ratios([CODE], "20251103", "20251105",
+                                       adj_factor_path=adj, ex_date_index_path=ex)
+    assert ratios == {CODE: {"20251105": pytest.approx(0.95)}}
+    seen_previous = []
+    real = engine.book_limit_prices
+
+    def observe(code, previous, *args, **kwargs):
+        seen_previous.append(previous)
+        return real(code, previous, *args, **kwargs)
+
+    monkeypatch.setattr(engine, "book_limit_prices", observe)
+    held = _d2_book_run(engine, [10, 9.5, 9.5], strategy="version8", exdiv=ratios,
+                       pool={"20251103": [CODE], "20251104": [CODE]})
+    assert [p.cost for p in held.positions[CODE]] == pytest.approx([9.5, 9.025])
+    assert seen_previous[-1] == pytest.approx(9.025)  # Already-new-domain 9.5 × k.
+    sold = _d2_book_run(engine, [10, 9.5, 9.5], exdiv=ratios)
+    sells = [t for t in sold.trades if t["side"] == "SELL"]
+    assert len(sells) == 1
+    assert (sells[0]["date"], sells[0]["reason"], sells[0]["price"]) == (
+        "20251104", "stop_loss:gap_open", 9.5,
+    )
+    assert not sold.positions  # Later rescale cannot undo a real SELL.
+
+
+def _d2_stub_book_entry(monkeypatch, module, tmp_path):
+    pool = {"20251103": [CODE]}
+    monkeypatch.setattr(module, "warn_stale_period_env", Mock())
+    monkeypatch.setattr(module, "resolve_research_pool_dir", Mock(return_value=tmp_path))
+    monkeypatch.setattr(module, "load_pool_day_map", Mock(return_value=pool))
+    monkeypatch.setattr(module, "load_pool_names_by_day", Mock(return_value={}))
+    bars = {CODE: _minute_daily(DAYS[:1], [(10, 10, 10, 10)])}
+    load_bars = Mock(return_value=bars)
+    loader = Mock(return_value=EXDIV_HALF)
+    simulate = Mock(return_value=SimState())
+    writer = Mock(side_effect=AssertionError("run() must not write artifacts"))
+    monkeypatch.setattr(module, "load_daily_ohlc", load_bars)
+    monkeypatch.setattr(module, "load_exdiv_ratios", loader)
+    monkeypatch.setattr(module, "simulate", simulate)
+    monkeypatch.setattr(module, "write_run_artifacts", writer)
+    return load_bars, loader, simulate, writer
+
+
+@pytest.mark.parametrize("domain", ["none", "front", "back", "qlib_day"])
+def test_d2_daily_run_price_domain_skip_matrix(tmp_path, monkeypatch, domain):
+    bars, loader, simulate, writer = _d2_stub_book_entry(monkeypatch, daily, tmp_path)
+    kwargs = {"qlib_data_root": tmp_path} if domain == "qlib_day" else {"dividend_type": domain}
+    daily.run("20251103", "20251105", strategy="version1", pool_dir=tmp_path, **kwargs)
+    assert bars.call_args.kwargs["source"] == ("qlib_day" if domain == "qlib_day" else "lake")
+    assert bars.call_args.kwargs["dividend_type"] == ("none" if domain == "qlib_day" else domain)
+    assert simulate.call_args.kwargs["exdiv"] is (EXDIV_HALF if domain == "none" else None)
+    assert loader.call_count == (1 if domain == "none" else 0)
+    if domain == "none":
+        assert loader.call_args.args == ({CODE}, "20251103", "20251105")
+    writer.assert_not_called()
+
+
+@pytest.mark.parametrize("daily_source", ["lake", "qlib_day"])
+@pytest.mark.parametrize("minute_source", ["lake", "qlib_1min"])
+def test_d2_minute_run_still_loads_map_in_all_source_combinations(
+    tmp_path, monkeypatch, daily_source, minute_source
+):
+    bars, loader, simulate, writer = _d2_stub_book_entry(monkeypatch, minute, tmp_path)
+    load_minute = Mock(return_value={CODE: object()})
+    compact = Mock(return_value={CODE: object()})
+    convert = Mock(return_value={CODE: object()})
+    monkeypatch.setattr(minute, "load_minute_bars", load_minute)
+    monkeypatch.setattr(minute, "_load_minute_compact", compact)
+    monkeypatch.setattr(minute, "book_frames_from_compact", convert)
+    minute.run("20251103", "20251105", strategy="version1", pool_dir=tmp_path,
+               use_cache=False, daily_source=daily_source, minute_source=minute_source,
+               qlib_day_root=tmp_path, qlib_1min_root=tmp_path)
+    assert bars.call_args.kwargs["source"] == daily_source
+    if minute_source == "lake":
+        assert load_minute.call_args.kwargs["use_cache"] is False
+        compact.assert_not_called()
+    else:
+        assert compact.call_args.kwargs["source"] == "qlib_1min"
+        convert.assert_called_once_with(compact.return_value)
+        load_minute.assert_not_called()
+    loader.assert_called_once()
+    assert loader.call_args.args == ({CODE}, "20251103", "20251105")
+    assert simulate.call_args.kwargs["exdiv"] is EXDIV_HALF  # Includes hazardous qlib_day.
+    writer.assert_not_called()
+
+
+@pytest.mark.parametrize("daily_source", ["lake", "qlib_day"])
+@pytest.mark.parametrize("minute_source", ["lake", "qlib_1min"])
+def test_d2_v7_main_keeps_real_context_chain_with_nonempty_pool(
+    tmp_path, monkeypatch, daily_source, minute_source
+):
+    start = pd.Timestamp(DAYS[0]).date()
+    monkeypatch.setattr(v7, "load_pool_days", Mock(return_value={start: [CODE]}))
+    bars = Mock(return_value=SimpleNamespace(minute={CODE: []}, daily_close={CODE: {}}))
+    monkeypatch.setattr(v7, "bars_from_pool", bars)  # Keep _load_cli_bars as well.
+    loader = Mock(return_value=EXDIV_HALF)
+    monkeypatch.setattr(ashare_session, "load_exdiv_ratios", loader)
+    monkeypatch.setattr(ashare_session, "load_pool_names_by_day", Mock(return_value={}))
+    index = Mock(return_value=[start])
+    monkeypatch.setattr(v7, "load_index_daily", index)
+    simulate = Mock(return_value=v7.SimResult(21_000_000.0))
+    monkeypatch.setattr(v7, "simulate_v7", simulate)
+    writer = Mock()
+    monkeypatch.setattr(v7, "write_run_artifacts", writer)
+    assert v7.main(["--start", "20251103", "--end", "20251105", "--pool-dir", str(tmp_path),
+                    "--output-dir", str(tmp_path / "out"), "--daily-source", daily_source,
+                    "--minute-source", minute_source]) == 0
+    assert bars.call_args.kwargs["daily_source"] == daily_source
+    assert bars.call_args.kwargs["minute_source"] == minute_source
+    loader.assert_called_once_with([CODE], "20251103", "20251105")
+    index.assert_called_once()
+    assert simulate.call_args.kwargs["exdiv"] is EXDIV_HALF
+    writer.assert_called_once()
+    assert not (tmp_path / "out").exists()
