@@ -237,6 +237,46 @@ D4 使用整百可卖量隔离零碎股争议；买入整手不等于未来卖�
 
 **零量过滤 ≠ participation cap；Human GO B 不授权生产 cap。** P1/P2/P4 继续 deferred，δ1–δ4 当前语义保持；matcher、loader volume 保留、容量参数、预算或 partial fill 均须另裁 `.1=C`。Slice C 本次仅文档审计 + 冻结证明，不是生产选项 C；**must cut C? NO**。
 
+## 2.5 P3 δ6 ex-div economics residual（Human GO A；账本可选 B docs）
+
+实施基线为 `3668e256abec1258759b99a72e3b3c17d082e75c`（#127 merge，post δ5）。**Human GO P3δ6.1=A 仅授权残留合同 + data-free oracle；本节同时落可选账本 B 设计文档，不是生产 API。** 实际 pins、验收与冻结证明见 [δ6 plan §7–9](plan-industry-align-p3-d6-exdiv-economics-2026-09-19.md)。Slice A→B→C 是文档/测试/验收阶段，生产人裁选项 C 未授权、未实施。
+
+**As-built residual（锚点已对固定基线复核）：**
+
+| 面 | 现状与边界 | 基线 file:line |
+|---|---|---|
+| E-R6 map / refs | `k=prev_cum/cum`，只输出 code/day/ratio，经有效因子 LAG、事件与噪声门筛选；book/v7 仅消费比率来缩放价格参考，没有登记权益、到账或新增股明细 | `backtest/research/exdiv_map.py:233-239`、`:288-319`；`backtest/research/csv_ledger.py:147-156` |
+| book shares / cash | lot.shares 为 int；缩放只改 cost/peak。买入扣成交额+佣金、卖出加成交额−佣金；除权缩放保持原股数/原现金 | `backtest/research/csv_ledger.py:68-79`、`:215-225`、`:261-276` |
+| book NAV | cash + 原股数×传入 bars 当日/最近历史 close；无行情才回落 cost。函数不认证价格域，**仅 none/raw 入口下称 raw-mark 残留**；EOD_MARK 只标记、佣金0，不是 SELL | `backtest/research/csv_ledger.py:165-184`；`backtest/research/csv_simulate_loop.py:381-421` |
+| v7 shares / cash / NAV | 缩放 entry_A/avg_cost/peak/非空 add1_A1/lot.price，lot.shares/buy_date/kind 保持；现金仍走买卖，会话末原股数×last_prices（缺值才 avg_cost fallback） | `backtest/research/csv_minute_backtest_v7.py:60-81`、`:187-196`、`:205-251`、`:416-418` |
+| 事件时机 | book 须有 bar/昨收，v7 须有 records，才在扫描前缩放已有仓；不是无行情日也处理的通用事件账本 | `backtest/research/csv_daily_backtest.py:300-327`；`backtest/research/csv_minute_backtest.py:586-636`；`backtest/research/csv_minute_backtest_v7.py:316-340` |
+| Mode B 独立近似 | float shares÷k、cost/mark×k，缺分钟仍先调整；equity 路径同样缩放，元数据明确 `no cash dividend`。这不证明 book/v7 已补偿，也不证明真实权益闭环 | `backtest/research/unified_exit_modeb.py:407-427`、`:788-824`、`:1029` |
+
+**复用真实残留 pins。** `tests/test_exdiv_refprice_engines.py::test_d2_economic_residual_small_oracle` 固定 100 股、cost=10、peak=12、cash=2000，经 k=.5 后参考5/6、仍100股/现金2000，raw 10→5 时 equity 3000→2500，只有 EOD_MARK；`test_d2_public_book_raw_mark_keeps_shares_and_cash` 从 daily/minute 公开 simulate 固定原股数/现金、差额=q×raw 价差、无 SELL。`tests/test_csv_minute_backtest_v7.py::test_d2_v7_public_multilot_fields_once_and_economic_delta` 从自然首开/加仓快照验证 v7 多 lot 只缩放一次、股数/现金/交易不变及同一经济差额。Mode B 的 `test_exdiv_value_thresholds_and_fractional_shares` 与 `test_shared_ledger_shares_contract_untouched` 保留两模型分叉；不重复造覆盖，不把绿灯当经济残留关闭。
+
+**B3–B6 design-only oracles（不是 as-built）：** 假设登记资格由夹具给定、无额外市场涨跌/税费/外部资金流。旧股 q、旧价 P、每旧股派现 c、新增比例 b 下，简化理论价 `P_ex=(P−c)/(1+b)`，`q×P=q×(1+b)×P_ex+q×c`；不是现实税务或交易所日期规则认证。
+
+| Pin | 设计输入与对账 | 落点 / 限制 |
+|---|---|---|
+| B3 纯送转 | q=100、P=10、b=1、c=0、cash=2000；200股×5+2000=3000。上市前100旧股+100新股权利只计一次；as-built 仍100股/2000现金/equity2500 | `test_d6_design_only_pure_bonus_equity_oracle`；纯算术，生产残留复用 B1/B2 |
+| B4 纯现金 / receivable→pay | q=100、P=10、c=1、b=0；ex 日900股值+2000现金+100应收=3000；pay 日900+2100现金+0应收=3000，到账不生第二次收益 | `test_d6_design_only_cash_receivable_to_pay_vs_raw_residual`；设计转账仅局部算术，daily/minute 公开入口仍100股/现金2000/equity2900，无应收补偿或到账 |
+| B5 混合 / k 不可识别 | b=1、c=1：200股×4.5+2000+100应收=3000；若用 q/k 再加红利则3100，重复补偿。k=.9 既可来自纯现金 c=1，也可来自纯送转 b=1/9，权益结构不同 | `test_d6_design_only_mixed_bonus_cash_equity_oracle`、`test_d6_design_only_k_non_identifiability`；精确分数仅证明代数歧义，不授权真实零碎股 |
+| B6 生命周期 | 夹具约定登记时持100股；登记后卖出仍保留已锁权利，除权日新买无该权利。重复 event_id 不重记，停牌/无 bar 仍按独立事件时序处理，修订须冲销/差额对账 | **仅文档设计 oracle，无新增生命周期测试或处理器**。已有缺 bar 不回放/非幂等 pins 保持 as-built，不能宣称支持该生命周期 |
+
+**可选账本 B 候选状态表（design / not production API；未决规则 pending）：** 触发参考 `cost_ref/peak_ref` 与经济 `entitlement/receivable/cash/quantity/cost_basis` 必须分离。
+
+| 候选合同 | 设计约束与尚缺证据 |
+|---|---|
+| event id / source | code、event_id、revision、available_at、record/ex/pay/list_date、每旧股 c/b、gross/net/tax 与来源；缺项不得从 k 或噪声门猜出。事件明细/PIT 合同 pending，仅消费上游 |
+| entitlement snapshot | 在另裁登记时点锁 eligible lots/数量；登记后卖出、除权日买入、新股上市/可卖各自显式；资格与零碎股规则 pending |
+| state order | record→entitled；ex 时按约定确认新股权利/应收并估值；pay 将应收转现金；list 将新股权利转股份/可卖量。会话内与交易/mark 顺序待裁；ex/pay/list 不假定同日，权利与到账不得双计 |
+| replay / revision | 独立事件键幂等、部分入账恢复、版本修订冲销/差额与无 bar 日处理；旧 rescale 无去重状态，不能充当新账处理器。重算/回滚与迁移合同 pending |
+| precision | 独立股数/权益精度、分币舍入、残差账户、gross/net/tax；不能从 δ1 代理佣金推导税规则，精度与税规则 pending |
+| NAV reconcile | cash + 可交易/不可交易股份或尚未转股权利的已定义估值 + receivables − liabilities；转股/到账前后只计一次，价格域须验证；市场/税费/外部流单列调节 |
+| cost / artifacts | 经济成本分配与触发参考成本分离；独立公司行动账/对账视图，不复用 BUY/SELL/EOD_MARK 伪造现金或佣金；当前 trades/equity schema 不变，迁移/产物版本 pending |
+
+**经济残留 NOT closed；must-cut-C=NO（must cut C? NO）。** 生产 shares/cash/NAV、增股/入账/应收和 Mode B `shares/=k` 移植均未实施；这些行为需要另立显式 `.1=C` 的生产案，本轮未授权。P1/P2/P4 继续 deferred，δ5 仍 design-only；δ2 因子 PIT/恢复日错域、噪声门、缺 bar 不回放等残留也未关闭。
+
 ## 3. 对照货币
 
 6/8 历史净值会因 E-R1 变少卖。对照看 **reason / 可卖 / 涨跌停**，不是旧 `daily_equity.csv`。改前合成窗快照：`tests/fixtures/csv_engine_pre_er1/`。

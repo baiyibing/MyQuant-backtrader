@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+from fractions import Fraction
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -703,3 +704,74 @@ def test_d2_v7_main_keeps_real_context_chain_with_nonempty_pool(
     assert simulate.call_args.kwargs["exdiv"] is EXDIV_HALF
     writer.assert_called_once()
     assert not (tmp_path / "out").exists()
+
+
+def test_d6_design_only_pure_bonus_equity_oracle():
+    """δ6_design_oracle B3: arithmetic only; no production entitlement API."""
+    q, price, cash, bonus, dividend = 100, 10, 2000, 1, 0
+    ex_price = (price - dividend) / (1 + bonus)
+    new_rights = q * bonus
+    design_equity = cash + (q + new_rights) * ex_price
+    assert ex_price / price == 0.5
+    assert (q + new_rights, cash, design_equity) == (200, 2000, 3000)
+    # Before listing, the new rights replace the new shares in valuation.
+    assert cash + q * ex_price + new_rights * ex_price == design_equity
+    # As-built 100-share/2000-cash residual is pinned by the existing d2 oracle.
+    assert cash + q * ex_price == 2500 < design_equity
+
+
+@pytest.mark.parametrize("engine", [daily, minute], ids=["daily", "minute"])
+def test_d6_design_only_cash_receivable_to_pay_vs_raw_residual(engine):
+    """δ6_design_oracle B4: design transfer conserves NAV; public books do not post it."""
+    q, price, cash, dividend, bonus = 100, 10, 2000, 1, 0
+    ex_price = (price - dividend) / (1 + bonus)
+    receivable = q * dividend
+    design_ex_equity = cash + q * ex_price + receivable
+    paid_cash, paid_receivable = cash + receivable, 0
+    assert (ex_price, receivable, design_ex_equity) == (9, 100, 3000)
+    assert (paid_cash, paid_receivable) == (2100, 0)
+    assert paid_cash + q * ex_price + paid_receivable == design_ex_equity
+
+    # Day 3 is ex-date; day 4 is the design pay-date only. Production receives
+    # its existing ratio map, which carries neither receivables nor pay events.
+    # Default 10bp charges 1 on the prior 1000 buy. Start with 3001 so the
+    # event oracle begins after that fee, with exactly 2000 cash / 3000 equity.
+    state = _d2_book_run(
+        engine, [price, price, ex_price, ex_price],
+        exdiv={CODE: {"20251105": ex_price / price}},
+        total_cash=3001, daily_quota=1000, name_budget=1000,
+    )
+    lot, = state.positions[CODE]
+    assert (lot.shares, lot.cost, state.cash) == (q, ex_price, cash)
+    assert state.equity_curve[:2] == [("20251103", 3000), ("20251104", 3000)]
+    assert state.equity_curve[2:] == [("20251105", 2900), ("20251106", 2900)]
+    assert design_ex_equity - state.equity_curve[-1][1] == receivable
+    assert [trade["side"] for trade in state.trades] == ["BUY", "EOD_MARK"]
+    assert [trade["commission"] for trade in state.trades] == [1, 0]
+
+
+def test_d6_design_only_mixed_bonus_cash_equity_oracle():
+    """δ6_design_oracle B5: mixed rights need explicit b/c, not q/k plus cash."""
+    q, price, cash, bonus, dividend = 100, 10, 2000, 1, 1
+    ex_price = Fraction(price - dividend, 1 + bonus)
+    design_shares, receivable = q * (1 + bonus), q * dividend
+    assert (design_shares, ex_price, receivable) == (200, Fraction(9, 2), 100)
+    assert cash + design_shares * ex_price + receivable == 3000
+    k = ex_price / price
+    assert q / k != design_shares
+    # q/k already preserves pre-event stock value; adding cash rights double counts.
+    assert cash + (q / k) * ex_price + receivable == 3100
+
+
+def test_d6_design_only_k_non_identifiability():
+    """δ6_design_oracle B5: identical k cannot identify cash versus bonus rights."""
+    q, price, cash = 100, 10, 2000
+    structures = []
+    for bonus, dividend in [(Fraction(0), Fraction(1)), (Fraction(1, 9), Fraction(0))]:
+        ex_price = (price - dividend) / (1 + bonus)
+        shares, receivable = q * (1 + bonus), q * dividend
+        assert ex_price == 9 and ex_price / price == Fraction(9, 10)
+        assert cash + shares * ex_price + receivable == 3000
+        structures.append((shares, receivable))
+    assert structures == [(100, 100), (Fraction(1000, 9), 0)]
+    assert structures[0] != structures[1]  # No real fractional-share entitlement claim.

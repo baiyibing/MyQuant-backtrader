@@ -14,6 +14,8 @@ ST 名称时间合同：[engine-ashare-correctness §2.2](engine-ashare-correctn
 
 成交量参与率设计：[engine-ashare-correctness §2.4](engine-ashare-correctness.md#24-p3-δ5-volume-participation-cap-designhuman-go-b)；[P3 δ5 plan / 文档验收与冻结证明](plan-industry-align-p3-d5-volume-cap-2026-09-19.md)。Human GO B 仅落设计候选与 D1–D7 文档算术 oracle；书/v7 仍无 participation cap，零量过滤不等于 cap。本轮无新增测试，生产冻结；接线须另裁 `.1=C`。
 
+除权经济残留与 oracle：[engine-ashare-correctness §2.5](engine-ashare-correctness.md#25-p3-δ6-ex-div-economics-residualhuman-go-a账本可选-b-docs)；[P3 δ6 plan / data-free pins 与冻结证明](plan-industry-align-p3-d6-exdiv-economics-2026-09-19.md)。Human GO A + 可选账本 B docs；book/v7 原股数/现金与 raw-mark NAV 残留保留，B3–B6 仅设计。Mode B fractional shares 不证明经济残留已关；生产增股/入账/NAV 须另裁 C，本轮未授权，**must-cut-C=NO**。
+
 > **🔴 CLI 价格域风险：日线 `--qlib-data-root` 跳过 E-R6，不等于分钟 `--qlib-day-root` 跳过。** minute/v7 的 `daily=qlib_day` 仍加载并传递除权 map；这是已记录的危险组合。`qlib_day` 后复权与 `qlib_1min` none 是不同约定，读取器不认证真实 dump 域。δ2 保持现状，不新增跳过或拒绝逻辑；`--qlib-cost` 只管费率。
 
 名单：`YYYYMMDD.csv`，首列裸六位码，`parse_pool_csv` 补交易所后缀。缺日 / 空文件 = 当日不买。6/8 默认读本仓 **可变** `stock_pool/`（不是快照）；实验/冻结跑用 `exports/` + `--pool-dir`；7 / **9** / **10** 必须 `--pool-dir`，9/10 拒绝 `stock_pool/`。生命周期 SSOT：[pool-csv-contract.md](pool-csv-contract.md)#lifecycle-ssot-stock_pool-vs-exports。
