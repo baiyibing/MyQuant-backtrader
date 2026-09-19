@@ -100,6 +100,7 @@ Cerebro / Rolling 已退场（2026-09-16）；chip / ma_chip 对照产物为静�
 |------|------|
 | **★ 三件引擎定位（本仓 + 1.3）** | [engine-positioning-ssot.md](engine-positioning-ssot.md) |
 | **★ 向量化成交核（A 股档位 / 跌停 / 停牌）** | [engine-ashare-correctness.md](engine-ashare-correctness.md) |
+| **P3 δ1 研究费率合同（docs/tests；生产冻结）** | [plan-industry-align-p3-fees-2026-09-19.md](plan-industry-align-p3-fees-2026-09-19.md) · correctness §1.1 · `tests/test_ashare_fee_wiring.py` · r1 [merge-consensus](../architecture/reviews/2026-09-19/plan-industry-align-p3-fees-r1/merge-consensus.md) |
 | **向量化撮合核收口（⏳ 待人裁 GO — 见 plan，勿编码）** | [plan-ashare-engine-refactor-2026-09-18.md](plan-ashare-engine-refactor-2026-09-18.md) · [handoff](handoff-ashare-engine-refactor-codex-impl-2026-09-18.md) |
 | 名单 CSV 契约（as-of = 买入日 T；H9/H16 list-quality CLI，双目录严格校验） | [pool-csv-contract.md](pool-csv-contract.md#list-quality-reporter-h9--h16) |
 | **NP1 资金配给探针（只读；A 探针 / B `--ration` 待 GO）** | [plan-capital-ration-2026-09-16.md](plan-capital-ration-2026-09-16.md) · `scripts/research/report_capital_ration.py --trades <trades.csv> --pool-dir <pool>` |
