@@ -216,9 +216,16 @@ def _file_path(
         period_root = resolve_index_daily_root()
     elif kind == "etf":
         period_root = resolve_etf_daily_root()
-    # path-SSOT D2：env / F authority 胜 base_dir；无 marker 且无 env 时 legacy base_dir。
+    # path-SSOT D2 / lesson 58:
+    # PERIOD_1D or F/E .authority → resolver (env/marker wins).
+    # SOURCE set, no PERIOD_1D, no marker → {SOURCE}/stock/period=1d
+    # (test machine; do not fall back to --base-dir empty tree).
+    # else legacy base_dir/period=1d (unit tests / empty checkout).
     elif find_authority_marker() is None and not os.environ.get("OSKH_PERIOD_1D_ROOT"):
-        period_root = resolve_period_root("1d", base=base_dir)
+        if str(os.environ.get("OSKH_SOURCE_PARQUET_ROOT") or "").strip():
+            period_root = resolve_period_root("1d")
+        else:
+            period_root = resolve_period_root("1d", base=base_dir)
     else:
         period_root = resolve_period_root("1d")
     d = period_root / f"dividend_type={adjust_type}" / f"symbol={part}"

@@ -24,7 +24,12 @@ from pathlib import Path
 
 _HERE = Path(__file__).resolve()
 REPO = _HERE.parents[2] if _HERE.parent.name in {"gates", "diagnostics", "data", "research", "tr"} else _HERE.parents[1]
-RUST_EXE = Path("E:/rust-targets/release/turnover-resist.exe")
+
+
+def _rust_exe() -> Path:
+    from oskh_factors.bridge.turnover_resist import _find_exe
+
+    return _find_exe()
 RE_TIMING = re.compile(
     r"\[Timing\]\s+setup=([0-9.]+)s\s+capital=([0-9.]+)s\s+compute=([0-9.]+)s\s+sort\+csv=([0-9.]+)s\s+total=([0-9.]+)s"
 )
@@ -53,7 +58,7 @@ def benchmark_cli(runs: int = 3, date: str = "20260525") -> dict:
     for i in range(runs):
         out_csv = REPO / "backtest_output" / f"_bench_cli_{i}.csv"
         cmd = [
-            str(RUST_EXE),
+            str(_rust_exe()),
             "--date", date,
             "--window", "80",
             "--step", "0.01",

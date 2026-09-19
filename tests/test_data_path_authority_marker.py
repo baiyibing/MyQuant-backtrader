@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 import warnings
 from contextlib import contextmanager
 from pathlib import Path
@@ -177,6 +178,18 @@ def test_resolve_staging_dir_uses_f_container(
     monkeypatch.delenv("TURNOVER_RESIST_DATA_DIR", raising=False)
     monkeypatch.delenv("TURNOVER_RESIST_STAGING_DIR", raising=False)
     assert resolve_staging_dir() == _isolate_authority_hint / "tr_staging"
+
+
+def test_authority_hint_roots_default_empty(monkeypatch):
+    monkeypatch.delenv("OSKH_AUTHORITY_HINT_ROOT", raising=False)
+    assert authority_hint_roots() == ()
+
+
+def test_authority_hint_roots_from_env_pathsep(monkeypatch, tmp_path):
+    first = tmp_path / "lake_a"
+    second = tmp_path / "lake_b"
+    monkeypatch.setenv("OSKH_AUTHORITY_HINT_ROOT", os.pathsep.join((str(first), str(second))))
+    assert authority_hint_roots() == (first, second)
 
 
 def test_authority_warning_latched_once(monkeypatch, _isolate_authority_hint):

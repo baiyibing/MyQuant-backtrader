@@ -28,8 +28,30 @@ def test_file_path_env_wins_over_base(monkeypatch, tmp_path):
     assert got == read_side
 
 
+def test_file_path_source_root_without_period_env(monkeypatch, tmp_path):
+    """Test-machine one-key: SOURCE alone must not write the repo empty tree (lesson 58)."""
+    monkeypatch.delenv("OSKH_PERIOD_1D_ROOT", raising=False)
+    monkeypatch.setattr(
+        "common.infra.data_root.find_authority_marker", lambda: None
+    )
+    source = tmp_path / "E_stock"
+    repo = tmp_path / "repo_stock_data"
+    monkeypatch.setenv("OSKH_SOURCE_PARQUET_ROOT", str(source))
+    got = _file_path(repo, "none", "000001.SZ")
+    assert got == (
+        source
+        / "stock"
+        / "period=1d"
+        / "dividend_type=none"
+        / "symbol=000001_SZ"
+        / "data.parquet"
+    )
+    assert "repo_stock_data" not in got.parts
+
+
 def test_file_path_legacy_equivalence_without_env(monkeypatch, tmp_path):
     monkeypatch.delenv("OSKH_PERIOD_1D_ROOT", raising=False)
+    monkeypatch.delenv("OSKH_SOURCE_PARQUET_ROOT", raising=False)
     monkeypatch.setattr(
         "common.infra.data_root.find_authority_marker", lambda: None
     )

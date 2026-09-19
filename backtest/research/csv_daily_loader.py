@@ -25,12 +25,13 @@ from oskh_data.symbol_format import to_partition_key
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
+# Leftover fine-grained overrides. OSKH_SOURCE_PARQUET_ROOT is the one-key
+# product env (lesson 58) and is not stale by itself.
 _PERIOD_ENV_KEYS = (
     "OSKH_PERIOD_1D_ROOT",
     "OSKH_PERIOD_1M_ROOT",
     "OSKH_INDEX_DAILY_ROOT",
     "OSKH_ETF_DAILY_ROOT",
-    "OSKH_SOURCE_PARQUET_ROOT",
 )
 
 def warmup_start(start: str, days: int = WARMUP_DAYS) -> str:
@@ -40,9 +41,20 @@ def warn_stale_period_env() -> None:
     hit = [k for k in _PERIOD_ENV_KEYS if os.environ.get(k)]
     if hit:
         print(
-            f"[warn] {', '.join(hit)} is set; lake may ignore F:\\stock_data\\.authority",
+            f"[warn] {', '.join(hit)} is set; leftover PERIOD_* may ignore "
+            f".authority and OSKH_SOURCE_PARQUET_ROOT (lesson 58)",
             flush=True,
         )
+    source = str(os.environ.get("OSKH_SOURCE_PARQUET_ROOT") or "").strip()
+    period = str(os.environ.get("OSKH_PERIOD_1D_ROOT") or "").strip()
+    if source and period:
+        expected = (Path(source) / "stock" / "period=1d").resolve()
+        if Path(period).resolve() != expected:
+            print(
+                f"[warn] CONFLICT OSKH_PERIOD_1D_ROOT={period} != {expected} "
+                f"from SOURCE (lesson 58)",
+                flush=True,
+            )
 
 
 def _read_one_daily(

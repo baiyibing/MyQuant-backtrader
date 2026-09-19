@@ -193,8 +193,8 @@ def modify_file_path_advanced(original_path):
 
 # 使用示例
 if __name__ == "__main__":
-    # xls_file = r"E:\PycharmProjects\OSkhQuant1.3\stock_pool\APPDATA\20251023.xls"  # 替换为实际文件路径
-    # csv_file = r"E:\PycharmProjects\OSkhQuant1.3\stock_pool\20251023.csv"  # 替换为实际文件路径
+    # xls_file = r"<pool>/APPDATA/<yyyymmdd>.xls"
+    # csv_file = r"<pool>/<yyyymmdd>.csv"
     # compare_stock_files(xls_file, csv_file)
 
     from pathlib import Path

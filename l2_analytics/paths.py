@@ -7,7 +7,7 @@ Canonical day layout (v5.9+), under the market-data tree (not ``data/`` DBs):
   ``<l2_root>/date=YYYY-MM-DD/cluster_agg.parquet``
 
 ``<l2_root>`` resolved by ``resolve_l2_parquet_root()``: ``OSKH_L2_PARQUET_ROOT`` env var
-(L2-specific override, e.g. ``F:\\stock_data\\l2_parquet``) else ``resolve_data_root()/stock_data/l2_parquet``.
+(L2-specific override, ``<container>/l2_parquet``) else ``resolve_parquet_container()/l2_parquet``.
 
 Legacy flat parts (``{date}.part-NNNN.{main,order}.parquet``) remain readable
 via ``db.connect`` during migration.

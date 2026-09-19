@@ -10,7 +10,7 @@ plan-main v22 Phase A1 交付项：替代 CLI subprocess.run 调用，
 
     results = compute_turnover_resist(
         date="20260606",
-        # data_dir 默认 resolve_parquet_container()（F parquet）；DuckDB 仍在 E
+        # data_dir 默认 resolve_parquet_container()；DuckDB 仍在工作区
     )
     # returns list[dict] with keys: stock_code, stock_name, date, close,
     #   cyqk_T, cyqk_T_1, profit_chip_diff, turnover, turnover_resistance,
@@ -207,9 +207,9 @@ def _find_exe() -> Path:
     """Locate the turnover-resist.exe binary.
 
     Checks (in order):
-      1. TURNOVER_RESIST_EXE env var
-      2. E:/rust-targets/release/turnover-resist.exe
-      3. E:/rust-targets/release-fast/turnover-resist.exe
+      1. TURNOVER_RESIST_EXE
+      2. CARGO_TARGET_DIR / release[-fast] / turnover-resist.exe
+      3. repo ``turnover-resist/target/release[-fast]/turnover-resist.exe``
     """
     import os
 
@@ -218,15 +218,21 @@ def _find_exe() -> Path:
         p = Path(env)
         if p.is_file():
             return p
-    candidates = [
-        Path("E:/rust-targets/release/turnover-resist.exe"),
-        Path("E:/rust-targets/release-fast/turnover-resist.exe"),
-    ]
-    for p in candidates:
-        if p.is_file():
-            return p
+    repo = Path(__file__).resolve().parents[2]
+    names = ("turnover-resist.exe", "turnover-resist")
+    roots: list[Path] = []
+    cargo_target = str(os.getenv("CARGO_TARGET_DIR") or "").strip()
+    if cargo_target:
+        roots.append(Path(cargo_target))
+    roots.append(repo / "turnover-resist" / "target")
+    for root in roots:
+        for profile in ("release", "release-fast"):
+            for name in names:
+                p = root / profile / name
+                if p.is_file():
+                    return p
     raise FileNotFoundError(
-        "turnover-resist.exe not found. Set TURNOVER_RESIST_EXE env var "
+        "turnover-resist.exe not found. Set TURNOVER_RESIST_EXE or CARGO_TARGET_DIR, "
         "or build with: cd turnover-resist && cargo build --release"
     )
 

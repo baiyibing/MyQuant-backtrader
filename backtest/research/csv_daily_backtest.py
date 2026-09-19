@@ -190,7 +190,7 @@ HELP_LOCK = """
         （缺日不买）。分钟湖若短于 --end，用日线版接到今天。
   落盘：缺省 backtest_output/csv_daily_{book}_{start}_{end}/ 三件套 summary.txt、
         daily_equity.csv、trades.csv（与分钟版同结构）。--out-dir 指定则写入该目录。
-  环境：勿残留 OSKH_PERIOD_* ；有 F:\\stock_data\\.authority 时跟权威盘。
+  环境：一键 OSKH_SOURCE_PARQUET_ROOT；勿残留 OSKH_PERIOD_*（lesson 58）。
   策略：必须显式指定已注册 --strategy（无缺省）。共用引擎，策略书换卖点与加仓。
 """
 

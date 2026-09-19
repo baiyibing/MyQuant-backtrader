@@ -102,7 +102,7 @@ def reset_authority_fallback_warnings() -> None:
 def resolve_e_stock_data_container(*, explicit_root: Optional[str] = None) -> Path:
     """E workspace ``stock_data/`` (duckdb / exp / skip JSON / stale marker).
 
-    Always under ``OSKH_DATA_ROOT``; does not follow the F parquet authority flip.
+    Always under ``OSKH_DATA_ROOT``; does not follow the parquet authority flip.
     """
     return resolve_data_root(explicit_root=explicit_root) / "stock_data"
 
@@ -127,7 +127,7 @@ def resolve_turnover_resist_parquet_root(*, explicit_root: Optional[str] = None)
 
 
 def resolve_tr_staging_dir(*, explicit_root: Optional[str] = None) -> Path:
-    """Yearly TR backfill staging parquet (same F container as canonical)."""
+    """Yearly TR backfill staging parquet (same container as canonical)."""
     return resolve_turnover_resist_parquet_root(explicit_root=explicit_root) / "tr_staging"
 
 
@@ -171,7 +171,7 @@ def _warn_authority_env_missing(*, env_key: str, resolved: Path) -> None:
     warnings.warn(
         f"path-SSOT authority marker present at {marker} but {env_key} is unset; "
         f"using {resolved} from marker parent. Set {env_key} explicitly to silence, "
-        f"or set it to the E path to roll back. Unset alone is not a rollback.",
+        f"or set it to the workspace path to roll back. Unset alone is not a rollback.",
         UserWarning,
         stacklevel=3,
     )
@@ -182,7 +182,7 @@ def resolve_l2_parquet_root(*, explicit_root: Optional[str] = None) -> Path:
 
     Priority:
     1) explicit_root argument
-    2) ``OSKH_L2_PARQUET_ROOT`` env var (L2-specific override; e.g. ``F:\\stock_data\\l2_parquet``)
+    2) ``OSKH_L2_PARQUET_ROOT`` env var (L2-specific override; ``<container>/l2_parquet``)
     3) ``resolve_parquet_container() / "l2_parquet"``
 
     Returns the path without checking existence (callers decide).
@@ -212,7 +212,7 @@ def resolve_period_root(
     Priority:
     1) explicit_root argument
     2) ``OSKH_PERIOD_{PERIOD}_ROOT`` env var (period-specific override; e.g.
-       ``OSKH_PERIOD_1M_ROOT=F:\\stock_data\\stock\\period=1m``)
+       ``OSKH_PERIOD_1M_ROOT=<container>/stock/period=1m``)
     3) ``base / f"period={period}"`` if ``base`` given
     4) ``resolve_parquet_container() / "stock" / f"period={period}"``
        (hive-split v1.5). Do not probe a legacy ``container/period=`` layout.
