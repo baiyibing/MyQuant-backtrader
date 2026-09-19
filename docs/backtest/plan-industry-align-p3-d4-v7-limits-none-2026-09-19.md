@@ -1,6 +1,6 @@
 # Plan: industry-align P3 δ4 v7 limits=None contract (2026-09-19)
 
-> **Status**: **v0.1 · docs-only proposal · 人裁待定**。本 PR 只提交四份后续 plan 与索引；未来 Slice A→B→C 尚未实施，未新增/执行测试。
+> **Status**: **v0.1.1 · docs-only proposal · 人裁待定**。本 PR 只提交四份后续 plan 与索引；未来 Slice A→B→C 尚未实施，未新增/执行测试。
 > **Main ship / 单行范围**: 先契约化 v7 `limits=None` 的 held sell/add fail-open 与首开仓拒绝分叉；改 fail-closed 或引入显式策略必须另行人裁。
 > **IMPLEMENTATION_BASE**: `1049b904bdd818dbb79f51f1830a008c8f83b141`（已用本 worktree `git rev-parse HEAD` 核对，全 40 字符；post #123，含 δ1 + δ2）。
 > **Default recommendation**: **P3δ4.1=A、P3δ4.2=A、P3δ4.3=A**，未来 docs + data-free pins，生产冻结；尚非 Human GO。P1/P2/P4 继续挂起。
@@ -35,8 +35,9 @@ None 是“没有可用档位”，不是已证明该标的依法无涨跌幅限
 
 | 路径 | as-built 的 None 处理 | 后续结果 / 锚点 |
 |---|---|---|
-| 书 daily held | 无昨收在 helper 前置条件冻结；未知板块在 lots 卖出循环前 `skip_unknown_board` + continue | `backtest/research/csv_common.py:22-45`；`backtest/research/csv_daily_backtest.py:300-327` |
-| 书 minute held | 缺日线/分钟/昨收先 continue；有昨收但 limits=None 再 `skip_unknown_board` | `backtest/research/csv_minute_backtest.py:586-618` |
+| 书 daily held（**默认 named-band**：`qlib_limit_pct is None`、非 ST） | 无昨收在 helper 前置条件冻结；**仅当算得 `limits is None`** 时，未知板块在 lots 卖出循环前 `skip_unknown_board` + continue | `backtest/research/csv_common.py:22-45`、`:73-82`；`backtest/research/csv_daily_backtest.py:300-327` |
+| 书 minute held（同默认 named-band 前提） | 缺日线/分钟/昨收先 continue；有昨收但 **`limits is None`** 再 `skip_unknown_board` | `backtest/research/csv_minute_backtest.py:586-618` |
+| 书固定 band 例外（不进本刀 None 早拒） | 显式 `qlib_limit_pct` 走固定比例档位，绕过 named/板块判断；未知非 ST 前缀仍可有档位，**不**进入 `skip_unknown_board`。本刀 pins 须显式 `qlib_limit_pct=None`；不改 topk/BOOKS | `backtest/research/csv_common.py:80-82`；消费点 `csv_daily_backtest.py:320-321`、`csv_minute_backtest.py:612-614`；接线 `csv_strategy_books.py:713`、`:788`；对照 δ3 `:32` |
 | 书 chase/pool/step | 档位 None 时早拒；不能只列 pool 代表全部加仓 | `backtest/research/csv_simulate_loop.py:150-160`、`:257-267`、`:341-350` |
 | v7 14:55 首开仓 | index gate 更早；无昨收 `skip_no_prev_close`；priced=None `skip_unknown_board`；正常档位还过上下限与现金门 | `backtest/research/csv_minute_backtest_v7.py:384-400` |
 | v7 held stop | 先满足策略 stop；None 不触发 defer，继续 `_sell_lots` | `backtest/research/csv_minute_backtest_v7.py:341-357`；仍受 T+1 限制 |
@@ -287,4 +288,5 @@ git diff --cached --exit-code -- "${FROZEN_PRODUCTION_FILES[@]}"
 
 ## 10) Changelog
 
+- **v0.1.1 (2026-09-19)**：r1 勘误——§2 书侧未知板块早拒收窄为默认 named-band；增固定 `qlib_limit_pct` 对照行（见 reviews `plan-industry-align-p3-d345-econ-r1` MC-1）。
 - **v0.1 (2026-09-19)**：post #123 逐行核实 None 双来源及首开/held stop/add/timer 分叉，复用真实已有 pins；提出待人裁政策设计与未来验收，默认生产冻结。仅文档，无生产/测试修改、无回测/湖，未实施 fail-closed 或显式策略。

@@ -1,6 +1,6 @@
 # Plan: industry-align P3 δ6 ex-div economics / NAV residual (2026-09-19)
 
-> **Status**: **v0.1 · docs-only proposal · 经济行为人裁待定**。本 PR 只写四份后续 plan 与索引；未来 Slice A→B→C 未实施，未新增/执行测试。
+> **Status**: **v0.1.1 · docs-only proposal · 经济行为人裁待定**。本 PR 只写四份后续 plan 与索引；未来 Slice A→B→C 未实施，未新增/执行测试。
 > **Main ship / 单行范围**: 打开 δ2/E-R6 deferred 的送转增股、现金红利入账和 NAV 经济守恒面供人裁；默认先固定残留/oracle 或设计账本，不改生产。
 > **IMPLEMENTATION_BASE**: `1049b904bdd818dbb79f51f1830a008c8f83b141`（本 worktree `git rev-parse HEAD` 已核实全 40 字符；post #123，含 δ1 + δ2）。
 > **Default recommendation**: **P3δ6.1=A**；需要账本设计可选 **B**。**只有显式人裁 C 才批准另案生产经济变更；本次绝不选 C 实施。** 其余选择见 §5；P1/P2/P4 挂起。
@@ -25,7 +25,7 @@
 | E-R6 map | `k=prev_cum/cum`，输出 code/day/ratio；以有效因子 LAG 和事件/噪声门筛选，不输出登记/到账/新增股明细 | `backtest/research/exdiv_map.py:233-239`、`:288-319` |
 | 书 lot | shares 是 int；rescale 只乘 cost/peak，其它 lot 元数据不改 | `backtest/research/csv_ledger.py:68-79`、`:147-156` |
 | 书现金流 | 买入扣成交额+佣金，卖出加成交额−佣金；缩放不调用现金分红入账 | `backtest/research/csv_ledger.py:215-225`、`:261-276` |
-| 书 NAV | equity=cash+各 lot 原股数×当日/最近历史 raw close；无行情才回落 cost；EOD_MARK 仅标记、佣金0 | `backtest/research/csv_ledger.py:165-184`；`backtest/research/csv_simulate_loop.py:381-421` |
+| 书 NAV | equity=cash+各 lot 原股数×**传入 bars 的**当日/最近历史 close（函数不做 raw 域认证）；**仅默认 none/raw 入口**下该 close 才是 raw mark 残留；无行情才回落 cost；EOD_MARK 仅标记、佣金0。混域（front/back/qlib_day）估值域随入口，见 δ2 分源合同与本刀 `:52` | `backtest/research/csv_ledger.py:165-184`；`backtest/research/csv_simulate_loop.py:381-421` |
 | v7 lot | `_rescale_position` 乘 entry_A/avg_cost/peak/非空 add1_A1/lot.price；保持 lot.shares/buy_date/kind | `backtest/research/csv_minute_backtest_v7.py:60-81`、`:187-196` |
 | v7 现金与 NAV | 现金只在该买卖记账路径变化；会话末 holdings=原股数×last_prices，缺值才 avg_cost fallback | `backtest/research/csv_minute_backtest_v7.py:205-251`、`:416-418` |
 | 缩放时机 | 书有相应 bar/昨收后，v7 有 records 后，先缩放事件日已有仓，再扫描；不是通用事件账本 | `backtest/research/csv_daily_backtest.py:300-327`；`backtest/research/csv_minute_backtest.py:586-636`；`backtest/research/csv_minute_backtest_v7.py:316-340` |
@@ -311,4 +311,5 @@ git diff --cached --exit-code -- "${FROZEN_PRODUCTION_FILES[@]}"
 
 ## 10) Changelog
 
+- **v0.1.1 (2026-09-19)**：r1 勘误——§2 书 NAV 收窄为「传入 close；none/raw 才是 raw mark」（见 reviews `plan-industry-align-p3-d345-econ-r1` MC-2）。
 - **v0.1 (2026-09-19)**：post #123 核实 δ2/E-R6 仅参考价与书/v7 原股数/现金残留，隔离 Mode B fractional-shares 近似；打开经济 deferred 面，提出必须人裁 A/B/C（默认 A，可 B）、生命周期设计与纯送转/现金/混合 NAV oracle。仅 docs，无生产/测试修改、无回测/湖，经济残留未关闭、C 未授权。

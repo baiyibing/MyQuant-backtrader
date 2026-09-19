@@ -1,0 +1,4 @@
+path=docs/backtest/plan-industry-align-p3-d345-econ-index-2026-09-19.md
+git_sha=005f02d
+content_sha256_16=6255e9fe59dc0702
+reviewed_at=2026-09-19
