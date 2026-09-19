@@ -1,16 +1,16 @@
 # Plan: industry-align P3 δ6 ex-div economics / NAV residual (2026-09-19)
 
-> **Status**: **v0.1.1 · docs-only proposal · 经济行为人裁待定**。本 PR 只写四份后续 plan 与索引；未来 Slice A→B→C 未实施，未新增/执行测试。
-> **Main ship / 单行范围**: 打开 δ2/E-R6 deferred 的送转增股、现金红利入账和 NAV 经济守恒面供人裁；默认先固定残留/oracle 或设计账本，不改生产。
+> **Status**: **v0.2 · docs-only · Human GO P3δ6.1=A recorded 2026-09-19（Asia/Shanghai）**：残留+oracle；账本可选 B，仅 docs。**明确不是 C：生产增股/入账/NAV 须另裁 C，本轮不授权且禁止修改。** 本次仅录入 GO，未来 Slice A→B→C 未实施，未新增/执行测试。
+> **Main ship / 单行范围**: 按 Human GO A 固定 δ2/E-R6 deferred 的送转增股、现金红利入账和 NAV 经济残留/oracle；账本设计可选 B，仅文档，不改生产。
 > **IMPLEMENTATION_BASE**: `1049b904bdd818dbb79f51f1830a008c8f83b141`（本 worktree `git rev-parse HEAD` 已核实全 40 字符；post #123，含 δ1 + δ2）。
-> **Default recommendation**: **P3δ6.1=A**；需要账本设计可选 **B**。**只有显式人裁 C 才批准另案生产经济变更；本次绝不选 C 实施。** 其余选择见 §5；P1/P2/P4 挂起。
+> **Human GO recorded**: **P3δ6.1=A**；账本设计可选 **B（仅 docs）**。**只有另裁显式 C 才批准另案生产经济变更；本轮未授权 C，禁止生产 shares/cash/NAV 修改。** 其余设计候选见 §5；P1/P2/P4 继续挂起。
 > **前序**: [δ1 fees](plan-industry-align-p3-fees-2026-09-19.md)、[δ2 exdiv contract](plan-industry-align-p3-d2-exdiv-2026-09-19.md)、[E-R6 原计划](plan-exdiv-refprice-2026-09-16.md)、[engine SSOT](engine-ashare-correctness.md)、[next fill gates](plan-industry-align-next-2026-09-19.md)；[四刀索引](plan-industry-align-p3-d345-econ-index-2026-09-19.md)。
 
 ---
 
 ## 0) One-line scope
 
-区分触发参考价与经济权益，写清当前未增股/未入现金的残留、可验收经济 oracle 与未来账本候选；本 plan 的发布只是打开 deferred 讨论面，不表示生产经济残留已修复。
+区分触发参考价与经济权益，写清当前未增股/未入现金的残留、可验收经济 oracle 与未来账本候选；本轮 Human GO A 仅授权残留+oracle，账本设计可选 B docs，不表示生产经济残留已修复。
 
 ## 1) Why now
 
@@ -47,7 +47,7 @@
 |---|---|---|
 | E-R6 参考价修正 | 事件落日/价格域一致且可处理时，缩放已有参考并映射昨收；δ2 已 pin | 保留已关面，不 redo、不称所有域均安全 |
 | 原股数/原现金 raw NAV 残留 | 基线已有明确数值 pin | A：继续文档化并扩展必要 oracle |
-| 送转权益、登记资格、到账/上市、现金分红、NAV 含应收 | deferred 的经济面 | **本刀打开供人裁**；A 不实施，B 只设计，C 另案生产 |
+| 送转权益、登记资格、到账/上市、现金分红、NAV 含应收 | deferred 的经济面 | **已人裁 A，账本可选 B docs**；不实施生产，C 须另裁且本轮不授权 |
 | 因子恢复日错域、缺 bar 不回放、helper 非幂等、原始因子可得性/修订 PIT | δ2 已揭示，未关闭 | 保留独立残留；新经济账不能假设旧 map 已满足这些保证 |
 | 小额事件噪声门、v4 SMA 原始序列、minute/v7 qlib_day 混域 | 未关闭 | 不随本刀默认修；经济事件不能直接沿用会漏现金的小噪声过滤 |
 | 历史收益/假止损回收 | 本次未测 | 不量化改善、不称已追回历史损失 |
@@ -61,7 +61,7 @@
 | [δ3 ST PIT](plan-industry-align-p3-d3-st-pit-2026-09-19.md) | 建议先契约 | ST 日期 PIT 与经济事件登记/可得时间是两个合同 |
 | [δ4 limits-none](plan-industry-align-p3-d4-v7-limits-none-2026-09-19.md) | 建议接着契约 | 不以改经济账统一 None 政策 |
 | [δ5 volume-cap](plan-industry-align-p3-d5-volume-cap-2026-09-19.md) | 先做设计 | 新增权益/现金不是市场成交，不消耗 volume budget；若生产并行改造须重核组合合同 |
-| **δ6 economics** | **本文件：A/B 推荐；C 未授权** | 具备事件证据/账本设计/迁移方案后方可提交生产案 |
+| **δ6 economics** | **本文件：Human GO A；账本可选 B docs；C 未授权** | 具备事件证据/账本设计/迁移方案并另裁显式 C 后方可实施生产案 |
 
 ## 4) F-R* hard locks
 
@@ -78,15 +78,17 @@
 | **F-R9** | A/B 只用内存/tmp_path data-free oracle，无湖、回测、外部下载/merge；仅消费上游，缺数据合同先报缺口。 |
 | **F-R10** | §9 超集冻结与全路径白名单同时生效；不复活 live/LEBS/MockQMT/Cerebro/PortAnaRecord，不扩大热路径 import fence。 |
 
-## 5) P* human cuts（必须显式记录，当前 pending）
+## 5) P* human cuts（Human GO .1=A 已录入；账本可选 B docs；非 C）
+
+> **Human GO recorded 2026-09-19 (Asia/Shanghai):** P3δ6.1=A — δ6=A：残留+oracle；账本可选 B；**生产增股/入账/NAV 须另裁 C，本轮不授权**。A 授权后续残留契约与 data-free oracle pins；可选账本 B 仅限设计文档，**明确不是 `.1=C`，本轮禁止生产 shares/cash/NAV 修改**。P1/P2/P4 继续挂起。
 
 ### 5.1 主裁决：经济面交付层级
 
-| ID | A | B | C | 推荐 |
+| ID | A | B | C | 本轮人裁 |
 |---|---|---|---|---|
-| **P3δ6.1** | **继续只文档化残留 + oracle pins**，生产零行为变更 | **设计账本但不改生产**，补事件/权益/现金/NAV 状态表 | **批准生产行为变更（增股/入账/NAV）**；需独立实施计划/PR 与完整验收 | **A**；希望先明确账本时选 **B**。**不默认 C** |
+| **P3δ6.1** ✅ Human GO 2026-09-19 | **继续只文档化残留 + oracle pins**，生产零行为变更 | **设计账本但不改生产**，补事件/权益/现金/NAV 状态表 | **批准生产行为变更（增股/入账/NAV）**；需独立实施计划/PR 与完整验收 | **A**；账本可选 **B（仅 docs）**。**明确非 C，本轮不授权** |
 
-本 PR 已获 docs 编写/发布授权，不需要为默认提案再等人裁；但未给任何生产经济变更授权。后续选择 C 必须把裁决日期、范围、前置证据与允许修改的路径写入新实施记录。未来 Slice C 是验收阶段，绝不替代这里的人裁选项 C。
+本轮 Human GO 已正式录入 A（账本可选 B，仅 docs），未给任何生产经济变更授权。后续选择 C 必须另行人裁，把裁决日期、范围、前置证据与允许修改的路径写入新实施记录。未来 Slice C 是验收阶段，绝不替代这里的人裁选项 C；§5.2 仍是设计候选，不能从次级选项推导生产授权。
 
 ### 5.2 B/C 设计时需要补齐的决策
 
@@ -108,6 +110,8 @@
 - 不改 v7 stage/首开时间、T+1、ST/limits、fee floor、capacity；P1/P2/P4 继续挂起。
 
 ## 7) Slices A → B → C（未来路径；按 A/B 人裁默认生产冻结）
+
+§5 Human GO A 授权后续残留+oracle；可选 B 仅授权账本设计文档。未来 Slice C 只验收残留/设计，生产选项 C 未授权；B 下的账本参考模型测试仍是后续候选，不由本次可选 docs B 自动授权。本次所有 slices 均未实施。
 
 ### Slice A：残留合同与候选经济账
 
@@ -311,5 +315,6 @@ git diff --cached --exit-code -- "${FROZEN_PRODUCTION_FILES[@]}"
 
 ## 10) Changelog
 
+- **v0.2 (2026-09-19，Asia/Shanghai)**：录入 Human GO P3δ6.1=A（残留+oracle），账本设计可选 B 且仅 docs；明确非 C，生产增股/入账/NAV 须另裁显式 C，本轮不授权且禁止修改。P1/P2/P4 继续挂起，保留 MC-2 勘误；未实施 slices、未新增/执行测试，经济残留未关闭，基线、白名单、冻结表与 §8 命令不变。
 - **v0.1.1 (2026-09-19)**：r1 勘误——§2 书 NAV 收窄为「传入 close；none/raw 才是 raw mark」（见 reviews `plan-industry-align-p3-d345-econ-r1` MC-2）。
 - **v0.1 (2026-09-19)**：post #123 核实 δ2/E-R6 仅参考价与书/v7 原股数/现金残留，隔离 Mode B fractional-shares 近似；打开经济 deferred 面，提出必须人裁 A/B/C（默认 A，可 B）、生命周期设计与纯送转/现金/混合 NAV oracle。仅 docs，无生产/测试修改、无回测/湖，经济残留未关闭、C 未授权。

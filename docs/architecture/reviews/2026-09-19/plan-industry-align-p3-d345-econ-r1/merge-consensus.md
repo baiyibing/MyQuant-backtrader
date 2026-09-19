@@ -1,10 +1,11 @@
 # merge-consensus — plan-industry-align-p3-d345-econ r1
 
 > 日期：2026-09-19（Asia/Shanghai）  
-> 对象：PR [#124](https://github.com/baiyibing/MyQuant-backtrader/pull/124) 五份 docs @ HEAD `1e9994e`（勘误后见本轮 errata commit）  
+> 对象：PR [#124](https://github.com/baiyibing/MyQuant-backtrader/pull/124) 五份 docs；原评审 HEAD `1e9994e`，本次 Human GO 对应勘误后 tip `7eeb475`（`7eeb47588c3f3ec37e4e15dd7703c89ff84bd23a`）
 > `IMPLEMENTATION_BASE=1049b904bdd818dbb79f51f1830a008c8f83b141`（short `1049b90`）  
-> 工作假设（**pending human GO**，非已录入人裁）：δ3=A，δ4=A，δ5=B(design)，δ6=A（ledger 可选 B；生产 shares/cash/NAV 须显式 C）  
+> **Status：已人裁 GO / Human GO recorded 2026-09-19（Asia/Shanghai）**：δ3=A，δ4=A，δ5=B(design)，δ6=A（ledger 可选 B，仅 docs；生产 shares/cash/NAV 须另裁显式 C，**本轮不授权**）；P1/P2/P4 继续挂起。完整权威 cut 表见下文。
 > 对抗前置：[adv-r1-summary.md](./adv-r1-summary.md)（三路 host-parallel `codex exec` · `gpt-6-astra` · `xhigh`；rc=0）  
+> 人裁短笺：[human-go-2026-09-19.md](./human-go-2026-09-19.md)
 > Classic fan-out：codex / cursor-kimi-k3-high / cursor-auto / grok（claude=host 空槽）  
 > 计票：**证据裁决，不投票**。host 对全部 🔴 亲验。
 
@@ -23,9 +24,11 @@
 | grok | **GO-WITH-NITS** | 🔴 R1+R2；Y1–Y7 Linux/CLI/可达性等 |
 | claude | host 空槽 | 见 `claude.md`；不计独立票 |
 
-**主持综合**：主船（docs-only、默认 A/A/B/A、冻结、δ6 C 闸门、P1/P2/P4 deferred）事实成立；**无生产冻结泄漏、无 Mode B 经济已关误报、无 P1–P4 重开**。唯一须在人裁引用前落地的 as-built 勘误为 **MC-1 / MC-2**（多席共指且 host 亲验）。对抗 DS-1..6 与 fan-out 黄项记入 Slice B / § notes，**不挡** docs 人裁入口，也**不授权**编码。
+**主持综合（评审时历史结论）**：主船（docs-only、默认 A/A/B/A、冻结、δ6 C 闸门、P1/P2/P4 deferred）事实成立；**无生产冻结泄漏、无 Mode B 经济已关误报、无 P1–P4 重开**。唯一须在人裁引用前落地的 as-built 勘误为 **MC-1 / MC-2**（多席共指且 host 亲验）。对抗 DS-1..6 与 fan-out 黄项记入 Slice B / § notes，**不挡** docs 人裁入口，也**不授权**编码。
 
 **共识标签：GO-WITH-NITS**
+
+本次 Human GO 在该评审历史之上正式记录；后续授权以本文已录入 cut 表为准，GO-WITH-NITS 及 MC-1/MC-2 勘误记录保留。下文历史「ACCEPT→Slice B」仅记录评审交接，不把 δ5 设计 B 或 δ6 可选账本 B 扩成测试/生产接线授权。
 
 ---
 
@@ -66,33 +69,33 @@
 
 ---
 
-## 推荐人裁表（工作假设；**pending human GO**）
+## 已录入人裁 GO 表（权威裁决；2026-09-19，Asia/Shanghai）
 
-| ID | 建议 | 边界 |
-|----|------|------|
-| **δ3** | **A** | 契约+未来 pins；不修 v7 PIT；接线 pin 进 Slice B DoD |
-| **δ4** | **A** | 已收窄 named-band；fail-closed/policy 须另案 `.1=C` |
-| **δ5** | **B（仅设计）** | 不接生产 cap；`.3` 部分成交待状态表后再裁；P1 继续挂起 |
-| **δ6** | **A**；账本清晰可选 **B** | 生产增股/入账/NAV **必须显式 `.1=C` + 独立实施 PR** |
-| **P1 / P2 / P4** | **继续 deferred** | 不重开 14:57 / trades 列 / touch↔mark |
+| ID | 权威 Human GO（原文） |
+|---|---|
+| **δ3** | δ3=A：契约 + data-free pins，不改生产 |
+| **δ4** | δ4=A：先契约化；fail-closed 另裁 |
+| **δ5** | δ5=B：只设计，不接生产 cap |
+| **δ6** | δ6=A：残留+oracle；账本可选 B；**生产增股/入账/NAV 须另裁 C，本轮不授权** |
+| **P1 / P2 / P4** | P1/P2/P4 继续挂起 |
 
-头部回写「已人裁 GO（commit hash）」之前，仍视为未裁。**未裁不得开 feat、不得写生产 Python。**
+局部编号落点：P3δ3.1/3.2/3.3=A/A/A，P3δ4.1/4.2/4.3=A/A/A，P3δ5.1=B，P3δ6.1=A。δ5 其它 §5 推荐仍是 B 下设计候选；δ6 账本可选 B **仅 docs**。δ3 接线 pin 仍进未来 Slice B DoD；δ4 named-band 勘误保留，fail-closed/policy 须另裁 `.1=C`。**所有生产选项 C 均未授权，禁止生产 Python 修改。**
 
 ---
 
-## 是否可进人裁
+## 是否可进人裁 / 当前合并与实施资格
 
-**可以（GO-WITH-NITS）**，条件：
+**已人裁 GO，docs PR #124 可合并；评审历史共识仍为 GO-WITH-NITS。**
 
-1. 本轮 review 产物 + MC-1/MC-2 勘误已在分支上（见 errata commit）。  
-2. **人裁正式录入** δ3/δ4/δ5/δ6（或明示改口）后，再考虑未来 Slice A→B（仍 docs/tests-only，除非显式 C）。  
-3. 合 docs PR ≠ 授权生产；§9 22 文件在默认 A/B 下保持零行为变更。  
-4. **不合并 #124 于本任务**；不开 feat/impl PR。
+1. MC-1/MC-2 勘误已在本次 GO 对应 tip `7eeb475`；历史 review 与勘误表保留。
+2. 合并 #124 后，δ3/δ4 的未来 feat **Slice A→B（并至验收 Slice C）已获 docs + data-free pins 授权**，仅契约化、生产冻结，尚未实施。
+3. δ5 仅设计文档落地；δ6 A 残留+oracle，账本可选 B 仅 docs。**生产 cap、增股/入账/NAV 及其它生产选项 C 均未授权**；P1/P2/P4 继续挂起，§9 22 文件冻结不变，禁止生产 Python 修改。
+4. 本任务仅记录 GO：不执行 #124 合并、不开 feat/impl 分支或 PR，不修改/运行测试。`IMPLEMENTATION_BASE` 仍为 `1049b904bdd818dbb79f51f1830a008c8f83b141`，待 #124 合并、后续 feat 分支刷新时再记录新基线；不扩白名单、冻结表或 §8 命令。
 
 ---
 
 ## 下一动作
 
-1. **等人裁** cut widget / 正式 GO。  
-2. 人裁 GO 前：**禁止编码**；黄项写入各刀 Slice B / § notes 即可，不必再开 r2 fan-out（🔴 已回填可验证）。  
-3. 不回复 BT；不嵌套 codex-in-codex；无 cloud 实施。
+1. **先合并 #124，再推进 feat δ3 契约+data-free pins**；后续 feat 分支刷新基线时记录完整 SHA，本次不改 `IMPLEMENTATION_BASE`。
+2. δ3/δ4 按已授权 Slice A→B→C 完成契约/pins/验收，生产冻结；δ5 只设计，δ6 A 残留+oracle（账本可选 B，仅 docs）。**不实施任何生产 C，不写生产 Python。** 黄项按此授权边界承接，不必再开 r2 fan-out。
+3. 本次只录入人裁，不执行上述后续动作、不运行 pytest/回测/湖；不回复 BT，不嵌套 codex-in-codex，无 cloud 实施。

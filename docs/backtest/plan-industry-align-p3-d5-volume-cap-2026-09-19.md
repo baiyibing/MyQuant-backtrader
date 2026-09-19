@@ -1,9 +1,9 @@
 # Plan: industry-align P3 δ5 volume participation cap design (2026-09-19)
 
-> **Status**: **v0.1 · docs-only design proposal · 人裁待定**。本 PR 只写四份 plan 与索引；未新增/执行测试，未实施未来 slices 或生产容量门。
+> **Status**: **v0.2 · docs-only design · Human GO P3δ5.1=B recorded 2026-09-19（Asia/Shanghai）**：只设计，不接生产 cap；未授权 `.1=C`。本次仅录入 GO，未新增/执行测试，未实施未来 slices 或生产容量门。
 > **Main ship / 单行范围**: 设计成交量 participation cap 的数据、时间、预算与部分成交合同，并保留当前无 participation cap 的基线；默认本刀不改生产撮合。
 > **IMPLEMENTATION_BASE**: `1049b904bdd818dbb79f51f1830a008c8f83b141`（本 worktree 起点，已由 `git rev-parse HEAD` 核对全 40 字符；post #123，含 δ1 + δ2）。
-> **Default recommendation**: **P3δ5.1=B（只设计）**；其它项按 §5 推荐形成候选合同，均未获生产 GO。P1/P2/P4 挂起。
+> **Human GO recorded**: **P3δ5.1=B（只设计）**；授权设计文档落地，其它项按 §5 推荐保留为 B 下的设计候选，不视为已裁生产政策。生产 cap 接线未授权；P1/P2/P4 继续挂起。
 > **前序**: [δ1 fees](plan-industry-align-p3-fees-2026-09-19.md)、[δ2 exdiv](plan-industry-align-p3-d2-exdiv-2026-09-19.md)、[next fill gates](plan-industry-align-next-2026-09-19.md)、[engine SSOT](engine-ashare-correctness.md)；[四刀索引](plan-industry-align-p3-d345-econ-index-2026-09-19.md)。
 
 ---
@@ -80,8 +80,8 @@
 | δ2 exdiv reference | 基线已含，经济未关 | raw price/volume 单位与事件映射必须分开 |
 | [δ3 ST PIT](plan-industry-align-p3-d3-st-pit-2026-09-19.md) | 建议先契约 | 不在容量设计中重取名字 |
 | [δ4 limits-none](plan-industry-align-p3-d4-v7-limits-none-2026-09-19.md) | 建议第二步契约 | 档位可用性与 volume 可用性是不同门 |
-| **δ5 volume-cap** | **本文件：设计为主，推荐 B** | 生产需另案 C，未承诺上线顺序/日期 |
-| [δ6 economics](plan-industry-align-p3-d6-exdiv-economics-2026-09-19.md) | 随后经济人裁 | 新增权益/零碎股不会自动扩大市场容量；两者同时实施需重新核定组合合同 |
+| **δ5 volume-cap** | **本文件：Human GO B，仅设计落地** | 生产需另裁 C，本轮不授权，未承诺上线顺序/日期 |
+| [δ6 economics](plan-industry-align-p3-d6-exdiv-economics-2026-09-19.md) | Human GO A 残留+oracle，账本可选 B docs | 新增权益/零碎股不会自动扩大市场容量；两者同时实施需重新核定组合合同 |
 
 ## 4) F-R* hard locks
 
@@ -98,11 +98,13 @@
 | **F-R9** | §9 是 δ1/δ2 超集；全部生产受路径白名单约束，既有 import fence 固定枚举不扩大。 |
 | **F-R10** | 不接 L2/live/LEBS/MockQMT，不复活 Cerebro/PortAnaRecord；模型限于研究向量化。 |
 
-## 5) P* human cuts（推荐是设计建议，不是生产授权）
+## 5) P* human cuts（Human GO .1=B；其余推荐仍为设计候选）
 
-| ID / 决策 | A | B | C | 推荐 |
+> **Human GO recorded 2026-09-19 (Asia/Shanghai):** P3δ5.1=B — δ5=B：只设计，不接生产 cap。授权设计文档落地；P3δ5.2/5.3/5.4 的推荐保持为 B 下候选，未单独裁决。**本轮没有 `.1=C`，不授权生产 cap 接线或撮合变更。**
+
+| ID / 决策 | A | B | C | 本轮人裁 / 设计推荐 |
 |---|---|---|---|---|
-| **P3δ5.1：交付层级** | 只记录当前无 cap + pins | 设计数据/预算/状态合同 + oracle，生产不变 | 独立批准生产接线/撮合变更 | **B** |
+| **P3δ5.1：交付层级** ✅ Human GO 2026-09-19 | 只记录当前无 cap + pins | 设计数据/预算/状态合同 + oracle，生产不变 | 独立批准生产接线/撮合变更 | **B（只设计）** |
 | **P3δ5.2：时间模型** | 先设计完成分钟桶，标明可得时刻与近似 | 先做事后日容量诊断设计，不约束盘中 fill | 设计下一桶执行/逐笔模型；涉及 fill 时点须重裁 P1 | **A**，不能当作已认证数据 |
 | **P3δ5.3：预算与成交形态** | 共用 symbol/bucket 双向预算、允许部分成交的候选 | 同预算，但整笔不满足则拒绝 | side/路径拆预算的其它明确政策 | **A**，state/费用待设计完才能申请 .1=C |
 | **P3δ5.4：缺失/无效 volume** | cap 启用时 unavailable 拒绝并诊断 | 只诊断、不限量的观察模式 | 显式 fallback 政策，必须列所有来源/默认 | **A**（仅候选）；cap 关闭沿用基线 |
@@ -117,6 +119,8 @@
 - 不跑容量扫描、回测、湖、L2，不下载数据，不选最佳参与率，不报告未验证收益。
 
 ## 7) Slices A → B → C（未来路径；默认设计/合同，非生产实施）
+
+本轮 Human GO B 仅授权设计文档落地，D1–D7 可作为文档 oracle；下面测试落点和 data-free 命令保留为后续候选，未授权本轮修改/执行测试。任何生产 cap 接线仍须另裁 `.1=C`，本次未实施任何 slice。
 
 ### Slice A：数据与状态设计
 
@@ -302,4 +306,5 @@ git diff --cached --exit-code -- "${FROZEN_PRODUCTION_FILES[@]}"
 
 ## 10) Changelog
 
+- **v0.2 (2026-09-19，Asia/Shanghai)**：录入 Human GO P3δ5.1=B，只设计、不接生产 cap；§5 其余推荐仍是 B 下设计候选，无 `.1=C` 授权，P1/P2/P4 继续挂起。本次仅更新 GO 记录，未实施 slices、未新增/执行测试，生产、基线、白名单、冻结表与 §8 命令不变。
 - **v0.1 (2026-09-19)**：post #123 核实数量/资金接线、可选 volume 过滤和分钟帧丢列；新增设计合同、D1–D7 oracle 与待裁 A/B/C，推荐只设计 B。无生产/测试修改、无回测/湖、无 participation cap 上线或收益结论。

@@ -1,9 +1,9 @@
 # Plan: industry-align P3 δ3 ST PIT contract (2026-09-19)
 
-> **Status**: **v0.1 · docs-only proposal · 人裁待定**。本 PR 只提交四份后续 plan 与索引；未实施本 plan 的未来 Slice A→B→C，未新增/执行测试。
+> **Status**: **v0.2 · docs-only · Human GO A/A/A recorded 2026-09-19（Asia/Shanghai）**：P3δ3.1/3.2/3.3=A；授权后续 Slice A→B→C docs + data-free pins，生产冻结。本次仅录入 GO，未实施本 plan 的未来 slices，未新增/执行测试。
 > **Main ship / 单行范围**: 契约化书侧按名单日期 as-of 与 v7 窗口末次名称平铺的 ST 分叉；默认未来只做 docs + data-free pins，生产零行为变更。
 > **IMPLEMENTATION_BASE**: `1049b904bdd818dbb79f51f1830a008c8f83b141`（本 worktree 起点，已由 `git rev-parse HEAD` 核实全 40 字符；post #123，含 δ1 + δ2）。
-> **Default recommendation**: **P3δ3.1=A、P3δ3.2=A、P3δ3.3=A**；推荐不是 Human GO。既有 P1/P2/P4 继续挂起。
+> **Human GO recorded**: **P3δ3.1=A、P3δ3.2=A、P3δ3.3=A**；契约 + data-free pins，不改生产，不授权 v7 ST PIT 改造。既有 P1/P2/P4 继续挂起。
 > **前序**: [δ1 fee contract](plan-industry-align-p3-fees-2026-09-19.md)、[δ2 exdiv contract](plan-industry-align-p3-d2-exdiv-2026-09-19.md)、[fill-gates next](plan-industry-align-next-2026-09-19.md)、[engine SSOT](engine-ashare-correctness.md)；[四刀索引](plan-industry-align-p3-d345-econ-index-2026-09-19.md)。
 
 ---
@@ -63,10 +63,10 @@
 |---|---|---|
 | δ1 fees | post #123 基线已含合同/pins，生产费率冻结 | ST 变化不能掩盖现金门与 floor 差异 |
 | δ2 exdiv reference | 合同/pins 已含；仅参考价 | 保留 mapped prev_close、因子 PIT/经济残留 |
-| **δ3 ST PIT** | **本文件：默认 A，先写契约** | 先判明名字→档位，再讨论 δ4 |
+| **δ3 ST PIT** | **本文件：Human GO A，契约+data-free pins** | 先判明名字→档位，再讨论 δ4 |
 | [δ4 limits-none](plan-industry-align-p3-d4-v7-limits-none-2026-09-19.md) | 独立决策 | 不把 ST 未知名等同于 `limits=None` |
 | [δ5 volume-cap](plan-industry-align-p3-d5-volume-cap-2026-09-19.md) | 设计/契约 | 不借容量门改 ST 或交易时点 |
-| [δ6 economics](plan-industry-align-p3-d6-exdiv-economics-2026-09-19.md) | 打开 deferred 经济面供人裁 | 与 ST 证据分离；生产需该刀显式 C |
+| [δ6 economics](plan-industry-align-p3-d6-exdiv-economics-2026-09-19.md) | Human GO A 残留+oracle，账本可选 B docs | 与 ST 证据分离；生产需该刀另裁显式 C，本轮不授权 |
 
 ## 4) F-R* hard locks
 
@@ -83,17 +83,19 @@
 | **F-R9** | 不引入 LEBS/MockQMT/live、Cerebro、PortAnaRecord；只属于本仓向量化研究。 |
 | **F-R10** | C 只在新的人裁记录、明确生产差异与独立实施 PR 后生效；本 plan 发布不构成 C。 |
 
-## 5) P* human cuts（A/B/C；推荐默认，尚未裁决）
+## 5) P* human cuts（Human GO A/A/A 已录入）
+
+> **Human GO recorded 2026-09-19 (Asia/Shanghai):** P3δ3.1=A、P3δ3.2=A、P3δ3.3=A — δ3=A：契约 + data-free pins，不改生产。授权后续 Slice A→B→C docs/tests；本次未实施，B/C 人裁选项未采纳，生产保持冻结。
 
 本表 ID 是 δ3 局部编号，不能覆盖 next plan 的 P1/P2/P4；“Slice C 验收”也不是“人裁选项 C”。
 
-| ID / 决策 | A | B | C | 推荐 |
+| ID / 决策 | A | B | C | 本轮人裁 |
 |---|---|---|---|---|
-| **P3δ3.1：交付层级** | 记录分叉 + data-free pins；生产零行为变更 | 设计 v7 as-of 输入/迁移合同，仍不改生产 | 单独批准 v7 ST PIT 生产改造；明确历史结果可变 | **A** |
-| **P3δ3.2：输入时间证据** | 声明仅名单日期 as-of，可得性未证 | 设计 effective date / available_at / revision 及上游证据要求 | 有真实证据后批准新数据合同与消费接线 | **A**；欲深化证据可 B |
-| **P3δ3.3：缺名/窗口初态** | 保留非空名继承、窗口内输入与 helper 差异 | 设计缺名 unknown/前置快照等候选规则 | 批准改变缺名/预载/回退行为并列受影响入口 | **A** |
+| **P3δ3.1：交付层级** ✅ Human GO 2026-09-19 | 记录分叉 + data-free pins；生产零行为变更 | 设计 v7 as-of 输入/迁移合同，仍不改生产 | 单独批准 v7 ST PIT 生产改造；明确历史结果可变 | **A** |
+| **P3δ3.2：输入时间证据** ✅ Human GO 2026-09-19 | 声明仅名单日期 as-of，可得性未证 | 设计 effective date / available_at / revision 及上游证据要求 | 有真实证据后批准新数据合同与消费接线 | **A** |
+| **P3δ3.3：缺名/窗口初态** ✅ Human GO 2026-09-19 | 保留非空名继承、窗口内输入与 helper 差异 | 设计缺名 unknown/前置快照等候选规则 | 批准改变缺名/预载/回退行为并列受影响入口 | **A** |
 
-任何 C 都须先核实 B 级输入合同、列出迁移前后真值表与生产路径，再另开实施案。只选 B 不授权采集外部数据、增加参数或替换名称 resolver。本轮无需等这些人裁即可交付已授权的 docs PR。
+任何 C 都须先核实 B 级输入合同、列出迁移前后真值表与生产路径，再另开人裁/实施案。只选 B 不授权采集外部数据、增加参数或替换名称 resolver。本轮 A/A/A 已正式录入；合并 #124 后先推进 δ3 契约/pins feat，本次仅记录 GO。
 
 ## 6) Non-goals
 
@@ -103,6 +105,8 @@
 - 不借本刀关闭 δ2 因子恢复日错域、可得性、噪声带、v4 SMA 或 δ6 经济残留。
 
 ## 7) Slices A → B → C（未来路径；本次未实施）
+
+§5 Human GO A/A/A 已授权本节未来 docs + data-free pins 及验收；所有生产冻结。下面的设计 B 分支仅为未采纳的候选，不随本次 A 获授权。
 
 ### Slice A：证据合同与输入矩阵
 
@@ -289,4 +293,5 @@ git diff --cached --exit-code -- "${FROZEN_PRODUCTION_FILES[@]}"
 
 ## 10) Changelog
 
+- **v0.2 (2026-09-19，Asia/Shanghai)**：录入 Human GO P3δ3.1/3.2/3.3=A/A/A，授权后续 Slice A→B→C 契约+data-free pins；生产冻结，P1/P2/P4 继续挂起。仅更新 GO 记录，未实施 slices、未新增/执行测试，未改 `IMPLEMENTATION_BASE`、白名单、冻结表或 §8 命令。
 - **v0.1 (2026-09-19)**：从 post #123 基线重核 ST 真实接线与既有测试；提出 δ3 A/B/C、人裁默认 A、未来 slices 与冻结超集。只新增 plan，未实施生产/测试变化，未执行回测/湖或宣称 PIT 已关闭。

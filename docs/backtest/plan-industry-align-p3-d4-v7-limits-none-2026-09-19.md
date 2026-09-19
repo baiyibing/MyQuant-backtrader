@@ -1,9 +1,9 @@
 # Plan: industry-align P3 δ4 v7 limits=None contract (2026-09-19)
 
-> **Status**: **v0.1.1 · docs-only proposal · 人裁待定**。本 PR 只提交四份后续 plan 与索引；未来 Slice A→B→C 尚未实施，未新增/执行测试。
+> **Status**: **v0.2 · docs-only · Human GO A/A/A recorded 2026-09-19（Asia/Shanghai）**：P3δ4.1/4.2/4.3=A；授权后续 Slice A→B→C 契约+data-free pins，生产冻结；fail-closed 另裁。本次仅录入 GO，未来 slices 尚未实施，未新增/执行测试。
 > **Main ship / 单行范围**: 先契约化 v7 `limits=None` 的 held sell/add fail-open 与首开仓拒绝分叉；改 fail-closed 或引入显式策略必须另行人裁。
 > **IMPLEMENTATION_BASE**: `1049b904bdd818dbb79f51f1830a008c8f83b141`（已用本 worktree `git rev-parse HEAD` 核对，全 40 字符；post #123，含 δ1 + δ2）。
-> **Default recommendation**: **P3δ4.1=A、P3δ4.2=A、P3δ4.3=A**，未来 docs + data-free pins，生产冻结；尚非 Human GO。P1/P2/P4 继续挂起。
+> **Human GO recorded**: **P3δ4.1=A、P3δ4.2=A、P3δ4.3=A**；先契约化，fail-closed/显式 policy 生产改造均须另裁，不在本次 GO 内。P1/P2/P4 继续挂起。
 > **前序**: [δ1 fees](plan-industry-align-p3-fees-2026-09-19.md)、[δ2 exdiv](plan-industry-align-p3-d2-exdiv-2026-09-19.md)、[next fill gates](plan-industry-align-next-2026-09-19.md)、[engine SSOT](engine-ashare-correctness.md)；[四刀索引](plan-industry-align-p3-d345-econ-index-2026-09-19.md)。
 
 ---
@@ -65,9 +65,9 @@ None 是“没有可用档位”，不是已证明该标的依法无涨跌幅限
 | δ1 fees | 基线已含合同/pins；生产冻结 | pass→现金不足或成交的断言仍按原 FeeSchedule |
 | δ2 exdiv reference | 基线已含；只参考价 | 不改 previous 映射、事件落日、经济账 |
 | [δ3 ST PIT](plan-industry-align-p3-d3-st-pit-2026-09-19.md) | 建议先契约化 | 名称/ST 能改变 None 来源；禁止连带统一 |
-| **δ4 limits-none** | **本文件：先 A 契约/pins** | 政策改造独立 C |
+| **δ4 limits-none** | **本文件：Human GO A，契约/pins** | 政策改造须另裁独立 C，本轮不授权 |
 | [δ5 volume-cap](plan-industry-align-p3-d5-volume-cap-2026-09-19.md) | 后续设计 | 无容量 ≠ 无档位，不复用 None 当通用放行符 |
-| [δ6 economics](plan-industry-align-p3-d6-exdiv-economics-2026-09-19.md) | 后续经济人裁 | 不借 gate 修复增股/入账或宣称 NAV 正确 |
+| [δ6 economics](plan-industry-align-p3-d6-exdiv-economics-2026-09-19.md) | Human GO A 残留+oracle，账本可选 B docs | 不借 gate 修复增股/入账或宣称 NAV 正确 |
 
 ## 4) F-R* hard locks
 
@@ -84,13 +84,15 @@ None 是“没有可用档位”，不是已证明该标的依法无涨跌幅限
 | **F-R9** | §9 为 δ1/δ2 冻结超集，全部生产仍受 docs-only 白名单约束；import fence 不扩目录。 |
 | **F-R10** | 向量化研究定位不变，不复活 LEBS/live/Cerebro/PortAnaRecord。 |
 
-## 5) P* human cuts（待裁；默认推荐 A）
+## 5) P* human cuts（Human GO A/A/A 已录入）
 
-| ID / 决策 | A | B | C | 推荐 |
+> **Human GO recorded 2026-09-19 (Asia/Shanghai):** P3δ4.1=A、P3δ4.2=A、P3δ4.3=A — δ4=A：先契约化；fail-closed 另裁。授权后续 Slice A→B→C docs + data-free pins；保留首开/held 分叉，生产冻结，fail-closed/显式 policy 不在本次 GO 内。
+
+| ID / 决策 | A | B | C | 本轮人裁 |
 |---|---|---|---|---|
-| **P3δ4.1：交付层级** | 只合同化 as-built + pins | 设计显式 policy 与迁移真值表，生产不变 | 批准独立生产行为改造 PR | **A** |
-| **P3δ4.2：未来 None 政策** | 保留现有首开/held 分叉 | 候选 fail-closed：无有效档位的交易尝试均拒绝；先设计状态/reason | 候选显式策略：逐来源/路径给出开关、默认及序列化合同 | **A**；B/C 仅选方向，须另有 .1=C 才可生产实施 |
-| **P3δ4.3：可观测性** | 复用现有 counters/events + 内存断言 | 文档设计更细原因分类，不改输出 | 批准改事件/产物 schema；若涉及 P2 必须同时明确重开 P2 | **A** |
+| **P3δ4.1：交付层级** ✅ Human GO 2026-09-19 | 只合同化 as-built + pins | 设计显式 policy 与迁移真值表，生产不变 | 批准独立生产行为改造 PR | **A** |
+| **P3δ4.2：未来 None 政策** ✅ Human GO 2026-09-19 | 保留现有首开/held 分叉 | 候选 fail-closed：无有效档位的交易尝试均拒绝；先设计状态/reason | 候选显式策略：逐来源/路径给出开关、默认及序列化合同 | **A**；B/C 未采纳，须另有 .1=C 才可生产实施 |
+| **P3δ4.3：可观测性** ✅ Human GO 2026-09-19 | 复用现有 counters/events + 内存断言 | 文档设计更细原因分类，不改输出 | 批准改事件/产物 schema；若涉及 P2 必须同时明确重开 P2 | **A** |
 
 `.2=B/C` 不是运行参数现已存在，也不是独立的生产授权。若选 `.1=C`，仍须写清各来源、stop/add/timer 的结果、T+1/资金失败时状态、缺 bar 标记、默认值与迁移/回滚范围；不得把 fail-closed 定义为“整天所有字段完全冻结”。P1/P2/P4 的旧 A 是继续延后，不是对新接口的授权。
 
@@ -102,6 +104,8 @@ None 是“没有可用档位”，不是已证明该标的依法无涨跌幅限
 - 不运行历史收益比较，不把拦截更多等同于更真实/更盈利，不关闭除权经济残留。
 
 ## 7) Slices A → B → C（未来路径；本次未实施）
+
+§5 Human GO A/A/A 已授权本节未来契约+data-free pins 及验收，生产冻结；设计 B 和生产 C 均未采纳。验收 Slice C 不构成 fail-closed 授权。
 
 ### Slice A：as-built 真值表收口
 
@@ -288,5 +292,6 @@ git diff --cached --exit-code -- "${FROZEN_PRODUCTION_FILES[@]}"
 
 ## 10) Changelog
 
+- **v0.2 (2026-09-19，Asia/Shanghai)**：录入 Human GO P3δ4.1/4.2/4.3=A/A/A，授权后续 Slice A→B→C 契约+data-free pins；fail-closed/显式 policy 改造另裁，生产冻结，P1/P2/P4 继续挂起。保留 MC-1 勘误；本次未实施 slices、未新增/执行测试，基线、白名单、冻结表与 §8 命令不变。
 - **v0.1.1 (2026-09-19)**：r1 勘误——§2 书侧未知板块早拒收窄为默认 named-band；增固定 `qlib_limit_pct` 对照行（见 reviews `plan-industry-align-p3-d345-econ-r1` MC-1）。
 - **v0.1 (2026-09-19)**：post #123 逐行核实 None 双来源及首开/held stop/add/timer 分叉，复用真实已有 pins；提出待人裁政策设计与未来验收，默认生产冻结。仅文档，无生产/测试修改、无回测/湖，未实施 fail-closed 或显式策略。
