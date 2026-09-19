@@ -1,0 +1,29 @@
+{
+  "plan": {
+    "codex": {
+      "content_sha256_16": "41d518743279e081",
+      "git_sha": "3f7ade8",
+      "path": "docs/backtest/plan-industry-align-p3-fees-2026-09-19.md",
+      "reviewed_at": "2026-09-19"
+    },
+    "cursor-auto": {
+      "content_sha256_16": "41d518743279e081",
+      "git_sha": "3f7ade8",
+      "path": "docs/backtest/plan-industry-align-p3-fees-2026-09-19.md",
+      "reviewed_at": "2026-09-19"
+    },
+    "cursor-kimi-k3-high": {
+      "content_sha256_16": "41d518743279e081",
+      "git_sha": "3f7ade8",
+      "path": "docs/backtest/plan-industry-align-p3-fees-2026-09-19.md",
+      "reviewed_at": "2026-09-19"
+    },
+    "grok": {
+      "content_sha256_16": "41d518743279e081",
+      "git_sha": "3f7ade8",
+      "path": "docs/backtest/plan-industry-align-p3-fees-2026-09-19.md",
+      "reviewed_at": "2026-09-19"
+    }
+  },
+  "schema_version": 1
+}

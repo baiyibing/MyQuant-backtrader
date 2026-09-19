@@ -1,0 +1,4 @@
+path=docs/backtest/plan-industry-align-p3-fees-2026-09-19.md
+git_sha=3f7ade8
+content_sha256_16=41d518743279e081
+reviewed_at=2026-09-19
