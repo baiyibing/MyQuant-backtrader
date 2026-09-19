@@ -14,6 +14,7 @@ import pytest
 from common.infra.data_root import (
     AUTHORITY_MARKER_NAME,
     UnconfiguredDataRootError,
+    authority_hint_roots,
     find_authority_marker,
     reset_authority_fallback_warnings,
     resolve_l2_parquet_root,

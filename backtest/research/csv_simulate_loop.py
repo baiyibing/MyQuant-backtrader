@@ -26,6 +26,7 @@ from backtest.research.csv_ledger import (
     execute_buy,
     trade_commission,
     hit_limit_down,
+    hit_limit_up,
     market_close_mark,
     queue_limit_up_chase,
 )

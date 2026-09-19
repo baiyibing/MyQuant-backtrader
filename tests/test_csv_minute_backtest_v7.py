@@ -71,7 +71,7 @@ def test_symbol_frame_path_buys_at_1455():
             "high": [100.0],
             "low": [100.0],
             "close": [100.0],
-            "ymd": [20260901],
+            "ymd": ["20260901"],
             "hm": [895],
         },
         index=idx,
