@@ -334,18 +334,14 @@ def test_d4_timer_none_limits_respects_t1_and_records(cause, outcome, monkeypatc
         assert state.equity_curve[-1]["holdings"] == 10_000
     else:
         assert timer_calls == [(timer_day, True)]
-        assert gate_calls == [(101, None, False)]
-        if outcome == "sellable":
-            assert state.trades == [{"date": timer_day.isoformat(), "symbol": code, "hm": 900,
-                                     "side": "sell", "shares": 100, "price": 101,
-                                     "reason": "exit:timer10"}]
-            assert state.positions == {}
-            assert state.cash == pytest.approx(2_000 + 10_100 - 10.1)
-            assert state.equity_curve[-1]["holdings"] == 0
-        else:
-            assert state.trades == [] and state.cash == 2_000
-            assert asdict(state.positions[code]) == {**before, "peak": 101}
-            assert state.equity_curve[-1]["holdings"] == 10_100
+        assert gate_calls == []  # None rejects before the limit-down predicate.
+        reason = "skip_no_prev_close" if cause == "no_previous_close" else "skip_unknown_board"
+        assert state.trades == [{"date": timer_day.isoformat(), "symbol": code, "hm": 900,
+                                 "side": "skip", "shares": 0, "price": 101, "reason": reason}]
+        assert state.cash == 2_000
+        assert asdict(state.positions[code]) == {**before, "peak": 101}
+        assert state.equity_curve[-1]["holdings"] == 10_100
+        assert state.equity_curve[-1]["equity"] == 12_100
 
 
 def test_v7_names_flatten_uses_window_end_name_for_earlier_day():
