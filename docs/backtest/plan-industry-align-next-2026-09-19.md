@@ -1,6 +1,6 @@
 # Plan: industry-align next (fill gates fork, zero-change default) (2026-09-19)
 
-> **Status**: Draft **v0.3** for human cut (**r1 merge-consensus backfilled**, docs-only planning ship; not implemented, not human-GO).
+> **Status**: ✅ **Human GO (2026-09-19)** — P1–P4 = **A/A/A/A** (keep deferred). v0.3 + r1 merge-consensus backfilled. Docs ship may merge; feat implementation = slices A→B→C only (docs + data-free contract tests; production freeze). Not yet implemented.
 > **Main ship (single theme)**: Contractualize A-share fill gates fork (`limits`, halt/zero-volume, ST name) between book-engine and v7 paths, with default **zero behavior change**.
 > **IMPLEMENTATION_BASE (fact anchor)**: `41f3d11a34c665cc8a21b3e1d351b9e06b0466b5` (full 40-char SHA of `origin/master` at authoring time, and branch `HEAD` before this docs commit).
 > **Business sources read**: `engine-positioning-ssot.md`, `engine-ashare-correctness.md`, `plan-industry-align-refactor-2026-09-18.md`, `plan-hygiene-backlog-2026-09-15.md`, `workflow-codex-handoff.md`.
@@ -246,7 +246,7 @@ Only docs + data-free tests may change unless a human cut explicitly reopens beh
 ## 10) Execution protocol
 
 1. Keep this docs plan as the authority for the next implementation ship.
-2. Human confirms P1-P4 remain deferred (default A).
+2. Human confirmed P1-P4 = A/A/A/A (2026-09-19, keep deferred).
 3. Implement only slices A->B->C with per-commit DoD.
 4. If any production behavior change appears necessary, stop and open a new P* cut first.
 
@@ -254,6 +254,7 @@ Only docs + data-free tests may change unless a human cut explicitly reopens beh
 
 ## 11) Changelog
 
+- **v0.3-GO (2026-09-19)**: Human cut recorded: P1–P4 = A/A/A/A (keep deferred). Docs GO; feat A→B→C authorized under production freeze.
 - **v0.3 (2026-09-19)**: Backfilled r1 merge-consensus MC-1..MC-5: unified §7 freeze commands with §8 via one `FROZEN_PRODUCTION_FILES` array (including `market_layer.py`/`csv_common.py`/`csv_daily_loader.py` plus worktree + staged diff checks), expanded Slice A with explicit ST-name cross-day and zero-volume/missing-bar retained-fork checklist, pinned v7 held-add test landing on public `simulate_v7` with gate-pass-vs-fill assertions, added CI-equivalent pytest environment prerequisite wording, and clarified P1-P4 wording as confirming prior deferral A (not reopening #112).
 - **v0.2 (2026-09-19)**: Backfilled adversarial host errata E-01..E-05: replaced ghost gate scripts with real `scripts/gates/*` checks; corrected halt/zero-volume freeze anchors; added sell-side `limits=None` reuse pin reference; expanded frozen production table with verified on-path helpers (`market_layer.py`, `csv_common.py`, `csv_daily_loader.py`); and made Slice A DoD explicitly pin v7 held add-side fail-open plus gate-pass-vs-fill separation.
 - **v0.1 (2026-09-19)**: Initial draft.
