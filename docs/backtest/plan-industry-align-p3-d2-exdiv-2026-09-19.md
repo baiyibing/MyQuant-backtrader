@@ -1,6 +1,6 @@
 # Plan: industry-align P3 δ2 ex-div / lot-cost rescale contract (2026-09-19)
 
-> **Status**: **v0.3 · Slice A/B 已实施，Slice C 结果见 §8.4 · Human GO A/A/A/A/A**。本 feat 仅 docs + 四个既有 data-free 测试文件，生产 Python 零 diff。
+> **Status**: **v0.3 · Slice A→B→C 已通过（§8.4） · Human GO A/A/A/A/A**。本 feat 仅 docs + 四个既有 data-free 测试文件，生产 Python 零 diff。
 > **Main ship / 单行范围**: 仅 #112 P3 **δ2**：细化已落地 E-R6 的除权事件、lot 参考价重标定与经济残留契约，固定 as-built；不 redo E-R6。
 > **IMPLEMENTATION_BASE（本 feat worktree 起点，已用 `git rev-parse HEAD` 核对全 40 字符 SHA）**: `7c049c63ed441a17156b4476f3974bb86ab57fa9`（post PR #122 merge）。
 > **前序**: [δ1 fee plan v0.3.3](plan-industry-align-p3-fees-2026-09-19.md) / PR #121 已合；#122 合入 δ2 plan 与评审。历史 plan/review 基线 `1ad010cca013afe8186f20275cbdcca71e500823` 保留作沿革，不能用于本 feat 冻结证明。
@@ -341,7 +341,24 @@ printf 'Frozen production and seven-path allowlist: PASS\n'
 
 ### 8.4 本次运行记录
 
-待记录最终验证 commit 与静态检查。已执行 §8.2：四个 repo-only gates exit 0；除权四文件 **114 passed / 0 skipped**；δ1 fees/wiring/fence **38 passed / 0 skipped**，两条 pytest 均 exit 0。环境 Linux / CPython 3.12.13，显式解释器 `/tmp/industry-align-venv/bin/python`。没有湖访问、外部下载或 CLI/宿主回测；所有入口调用仅 pytest 内 stub。首次 step 夹具触发既有 v8 open-board 分支，调整前日 raw 价为未涨停的 10.95 后隔离 step；没有生产修复。
+验证代码 commit：`b02bd734e25d0d36895326bbde29b6c8ea854e39`；固定 IMPLEMENTATION_BASE：`7c049c63ed441a17156b4476f3974bb86ab57fa9`。2026-09-19 在 Linux / CPython **3.12.13**、显式解释器 `/tmp/industry-align-venv/bin/python` 上，从已提交副本逐字执行 §8 的四段 Bash；没有依赖安装。后续验收记录提交只改本文，不改受测代码。
+
+| 命令 / 检查 | 本次结果 | exit |
+|---|---|---|
+| §8.1 基线祖先、七文件 UTF-8/BOM/NUL、三种 whitespace diff | PASS；全部 UTF-8，BOM=0、NUL=0 | 0 |
+| §8.2 环境断言 / pytest,pandas,numpy,pyarrow 导入 | CPython 3.12.13 | 0 |
+| `verify_oskh_data_contract.py` | OK | 0 |
+| `verify_data_path_ssot.py` | 7 hits、0 violations | 0 |
+| `verify_no_hardcoded_machine_paths.py` | OK | 0 |
+| `verify_tr_bridge_import_ssot.py` | OK，2 consumers | 0 |
+| §8.2 除权四文件 pytest | **114 passed / 0 skipped** | 0 |
+| §8.2 δ1 fees/wiring/fence pytest | **38 passed / 0 skipped** | 0 |
+| §8.3 `git diff --exit-code "$IMPLEMENTATION_BASE" -- "${FROZEN_PRODUCTION_FILES[@]}"`（另核 HEAD、index、worktree） | **17 冻结文件零 diff**；数组与 §9 表逐项相等 | 0 |
+| §8.3 全路径白名单审计（含未跟踪文件） | 仅三份 docs + 四个既有 tests；所有生产 Python 零 diff | 0 |
+
+以上是定向合同验收，不代表 CI 全量 suite 或湖/宿主回测。新增入口测均在 pytest 内 stub；既有空池入口测只写 tmp_path 空产物。B1–B6 无跳过必需 pin，DEFER 边界见 §7.1。首轮 step 夹具意外触发既有 v8 open-board 分支，调整前日 raw 价为未涨停的 10.95 后隔离 step；没有生产修复。
+
+发布环境备注：源 worktree `/workspace/wt-p3-d2-exdiv-feat` 的共享 Git 元数据只读，`git add` 无法创建 index.lock。七个文件原样复制到可写 `/tmp/p3-d2-exdiv-publish`，从相同基线/分支提交并执行上述验收；源 worktree 保留相同内容。此限制不改变实现基线、冻结检查或发布分支。
 
 ---
 
