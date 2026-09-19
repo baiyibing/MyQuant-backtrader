@@ -1,6 +1,6 @@
 # Plan: industry-align P3 δ2 ex-div / lot-cost rescale contract (2026-09-19)
 
-> **Status**: **v0.2.1 · docs-only plan / 待人裁**（classic multi-ai fan-out r1 勘误已回填；P3δ2.1–2.5=A/A/A/A/A 为 **working assumption / pending human GO**，非已录入人裁）。本 PR 提交本计划 + adv-r1 + classic-r1（四路 md + merge-consensus）；未实施 Slice A/B/C，不代表 docs/tests 交付完成。
+> **Status**: **v0.2.2 · docs-only plan / 人裁 GO A/A/A/A/A · 可进 Slice A→B→C**（classic multi-ai fan-out r1 勘误已回填；P3δ2.1–2.5=A/A/A/A/A 为 **working assumption / pending human GO**，非已录入人裁）。本 PR 提交本计划 + adv-r1 + classic-r1（四路 md + merge-consensus）；未实施 Slice A/B/C，不代表 docs/tests 交付完成。
 > **Main ship / 单行范围**: 仅 #112 P3 **δ2**：细化已落地 E-R6 的除权事件、lot 参考价重标定与经济残留契约，规划未来 data-free pins；默认 **零生产行为变更**。
 > **IMPLEMENTATION_BASE（本 worktree 分支起点，已用 `git rev-parse` 核对全 40 字符 SHA）**: `1ad010cca013afe8186f20275cbdcca71e500823`。
 > **前序**: [δ1 fee plan v0.3.3](plan-industry-align-p3-fees-2026-09-19.md) / PR #121 已合；本基线即其 merge commit。δ1 人裁与研究费率 SSOT、冻结表继续有效。
