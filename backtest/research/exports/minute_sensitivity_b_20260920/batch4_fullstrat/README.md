@@ -1,9 +1,10 @@
-# batch4_fullstrat · 全策略 NAV / DD / 引擎内排名
+# batch4_fullstrat exports (4090 execute 2026-09-20)
 
-只读研究导出。数值由 4090 在 `--execute` 后填入；VM 仅 stubs / DATA_GAP。
+Status: **EXECUTED_PARTIAL**. Book 7/9 + v7 baseline filled; ModeB + fullstrat clock/slip axes = DATA_GAP.
 
-- 设计：`docs/backtest/reviews/design-minute-sensitivity-b-batch4-fullstrat-2026-09-20.md`
-- 结果桩：`docs/backtest/reviews/results-minute-sensitivity-b-batch4-fullstrat-2026-09-20.md`
-- Book / v7 / Mode B **分列**；禁止跨引擎优劣表
-- clock 交换与 slip 全策略轴：**DATA_GAP**（无 research-only hook）
-- 费用：`DEFAULT_SCHEDULE` / Mode B 双边 10bp；单轴矩阵见 `matrix.csv`
+- Window: 20260825–20260909
+- HEAD: `93406f357e6c3e5ca695a15d43af106f8ee5e558`
+- Fee: BILATERAL_10BP; production_C frozen
+- Results doc: `docs/backtest/reviews/results-minute-sensitivity-b-batch4-fullstrat-2026-09-20.md`
+
+Do not cross-rank engines; do not paste local-event bp into NAV cells.
