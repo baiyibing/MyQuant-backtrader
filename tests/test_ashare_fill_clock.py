@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """Data-free contracts for the fill-clock naming leaf.
 
+Human GO P1=A closure (2026-09-20): scan-window labels only, no real
+closing call auction model; session/fill eligibility stays as-built.
 FillPriceRule names six existing book-engine paths. That set is not an
 exhaustive price selector and does not cover v7.
 """
@@ -8,7 +10,9 @@ exhaustive price selector and does not cover v7.
 from __future__ import annotations
 
 import ast
+import io
 import sys
+import tokenize
 from importlib.util import resolve_name
 
 import numpy as np
@@ -37,6 +41,14 @@ BOUND_NAMES = ("AM_OPEN", "AM_CLOSE", "PM_OPEN", "PM_CLOSE")
 BARS_MODULE = "backtest.research.ashare_bars"
 PACKAGE = "backtest.research"
 SCAN_WINDOW_NOTE = "标签描述当前扫描窗口，不是交易所忠实 closing-call 撮合"
+PHASE_FILTER_NAMES = {"closing_call", "session_phase", "CLOSING_CALL_OPEN", "SessionPhase"}
+# Existing time comparisons only; no 14:57 (897 minutes) auction-policy cutoff.
+AS_BUILT_SCAN_HM_COMPARISONS = {
+    "hm is not None",
+    "new_peak_hm >= 0",
+    "force_sell_hm is not None",
+    "cur_hm >= int(force_sell_hm)",
+}
 # FillPriceRule 是具名路径，不是全量选价器，不含 v7。
 NAMED_PRICE_RULES = (
     "daily_open_board_same_close",
@@ -52,6 +64,37 @@ ANCHOR = "000001.SZ"
 
 def _leaf_source() -> str:
     return LEAF.read_text(encoding="utf-8")
+
+
+def _phase_filter_references(source: str) -> set[str]:
+    """Reject phase names (including imports/attributes) and exact string labels.
+
+    Comments and prose docstrings may document P1=A without becoming filters.
+    """
+    names = {
+        token.string
+        for token in tokenize.generate_tokens(io.StringIO(source).readline)
+        if token.type == tokenize.NAME
+    }
+    strings = {
+        node.value
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.Constant) and isinstance(node.value, str)
+    }
+    return PHASE_FILTER_NAMES & (names | strings)
+
+
+def _scan_hm_comparisons(tree: ast.AST) -> set[str]:
+    """Pin direct hm comparisons without interpreting prices or executing code."""
+    return {
+        ast.unparse(node)
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Compare)
+        and any(
+            isinstance(part, ast.Name) and (part.id == "hm" or part.id.endswith("_hm"))
+            for part in ast.walk(node)
+        )
+    }
 
 
 def _resolved_from(node: ast.ImportFrom) -> str:
@@ -226,7 +269,7 @@ def _t1_row(log, ymd: str = "20251104"):
 
 
 def test_fill_clock_bounds_import_only_ashare_bars():
-    # 14:57 is a new phase label, not a new session end or fill window.
+    # Human GO P1=A closure (2026-09-20): 14:57 remains a label only.
     source = _leaf_source()
     assert _bound_import_problems(source) == []
     assert clock.AM_OPEN == bars.AM_OPEN
@@ -239,18 +282,59 @@ def test_fill_clock_bounds_import_only_ashare_bars():
 
 
 def test_session_phase_labels_current_scan_window():
-    # 标签描述当前扫描窗口，不是交易所忠实 closing-call 撮合
+    # Human GO P1=A closure (2026-09-20): 标签描述当前扫描窗口，不是交易所忠实 closing-call 撮合。
     for hm in (9 * 60 + 24, 11 * 60 + 31, 12 * 60 + 59, 15 * 60 + 1):
         with pytest.raises(ValueError):
             clock.session_phase(hm)
     for hm in (9 * 60 + 30, 11 * 60 + 30, 13 * 60, 14 * 60 + 56):
         assert clock.session_phase(hm) == clock.SessionPhase.continuous, SCAN_WINDOW_NOTE
         assert clock.session_phase(hm) == "continuous", SCAN_WINDOW_NOTE
-    for hm in (14 * 60 + 57, 15 * 60):
+    for hm in range(14 * 60 + 57, 15 * 60 + 1):
         assert clock.session_phase(hm) == clock.SessionPhase.closing_call, SCAN_WINDOW_NOTE
         assert clock.session_phase(hm) == "closing_call", SCAN_WINDOW_NOTE
-    accepted = np.asarray(_in_session([14 * 60 + 57, 15 * 60]))
-    assert bool(accepted[0]) and bool(accepted[1]), SCAN_WINDOW_NOTE
+    accepted = np.asarray(_in_session(list(range(14 * 60 + 57, 15 * 60 + 1))))
+    assert accepted.all(), SCAN_WINDOW_NOTE
+
+
+@pytest.mark.parametrize("name", SIMULATE_HOT_PATH)
+def test_simulate_hot_path_has_no_phase_filter_identifiers(name):
+    # Human GO P1=A closure: fixed list includes ashare_bars; never rglob research.
+    path = ROOT / "backtest" / "research" / f"{name}.py"
+    assert _phase_filter_references(path.read_text(encoding="utf-8")) == set(), name
+
+
+@pytest.mark.parametrize("source", [
+    "if session_phase(hm):\n    pass",
+    "if clock.SessionPhase.closing_call == phase:\n    pass",
+    "if cur_hm >= CLOSING_CALL_OPEN:\n    pass",
+    "from policy import session_phase as phase",
+    "if phase == 'closing_call':\n    pass",
+])
+def test_phase_filter_pin_rejects_names_aliases_and_string_labels(source):
+    assert _phase_filter_references(source)
+
+
+def test_scan_held_day_python_hm_comparisons_stay_as_built():
+    # Human GO P1=A closure (2026-09-20): no B/C cutoff, no new eligibility.
+    path = ROOT / "backtest" / "research" / "csv_minute_backtest.py"
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    scan = next(
+        node for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "scan_held_day_python"
+    )
+    assert _scan_hm_comparisons(scan) == AS_BUILT_SCAN_HM_COMPARISONS
+
+
+@pytest.mark.parametrize("condition", [
+    "cur_hm >= 897",
+    "cur_hm >= 14 * 60 + 57",
+    "14 * 60 + 57 <= cur_hm <= 14 * 60 + 59",
+    "14 * 60 + 57 <= cur_hm <= 15 * 60",
+    "hm[i] < 14 * 60 + 57",
+])
+def test_scan_hm_pin_rejects_b_c_style_comparisons(condition):
+    tree = ast.parse(f"if {condition}:\n    pass")
+    assert _scan_hm_comparisons(tree) - AS_BUILT_SCAN_HM_COMPARISONS
 
 
 def test_pool_file_day_is_decision_and_buy_day(tmp_path):

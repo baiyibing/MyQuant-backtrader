@@ -1,8 +1,9 @@
 # Plan: industry-align next (fill gates fork, zero-change default) (2026-09-19)
 
-> **Status**: ✅ **Human GO (2026-09-19)** — P1–P4 = **A/A/A/A** (keep deferred). v0.3 + r1 merge-consensus backfilled. Feat implementation = slices A→B→C only (docs + data-free contract tests; production freeze). **Implemented-when-merged**.
+> **Status**: ✅ **Human GO P1=A closure (2026-09-20 Asia/Shanghai)** — **P1 closed as A**, superseding its 2026-09-19 keep-deferred status. P2/P4 remain deferred; P3 δ contracts/production cuts retain their separate authority. This closure ships docs SSOT + data-free contract tests only; production behavior stays as-built.
 > **Main ship (single theme)**: Contractualize A-share fill gates fork (`limits`, halt/zero-volume, ST name) between book-engine and v7 paths, with default **zero behavior change**.
 > **IMPLEMENTATION_BASE (fact anchor)**: `f46004d3bf3c9aa8314c5c3d0adcdebd730d9822` (full 40-char SHA of `origin/master` at implementation start).
+> **P1=A closure base (2026-09-20)**: `41f8df331ed25aad4616bde56c77ddb7025c91ee`; all production Python must remain zero-diff against this base. The prior fact anchor and slices below describe the original fill-gates ship.
 > **Business sources read**: `engine-positioning-ssot.md`, `engine-ashare-correctness.md`, `plan-industry-align-refactor-2026-09-18.md`, `plan-hygiene-backlog-2026-09-15.md`, `workflow-codex-handoff.md`.
 > **Adversarial review note**: Three-lane review was BLOCKING; accepted host errata E-01..E-05 were backfilled in v0.2, and r1 merge-consensus MC-1..MC-5 are backfilled in this v0.3 draft.
 
@@ -64,22 +65,22 @@ This ship makes that fork executable as contract (anchors + tests + docs), witho
 | **F-R5** | No Python production code edits by default. Allowed scope: docs + data-free contract tests only. |
 | **F-R6** | No backtests, no lake reads, no production markers; CI checks must stay data-free. |
 | **F-R7** | Do not fix/reinterpret ST PIT naming behavior in this ship; document as current fork. |
-| **F-R8** | Keep deferred #112 cuts as separate ships unless explicitly reopened by human cut (default = keep deferred). |
+| **F-R8** | P1 is formally closed as A (2026-09-20): labels/tests/docs only, no fill-policy change. P2/P4 remain deferred; P3 δ cuts retain their separate authority and are not reopened here. |
 | **F-R9** | Do not reintroduce Cerebro, qlib PortAna/Exchange, or cross-stack imports as "evidence". |
 | **F-R10** | `IMPLEMENTATION_BASE` for any implementation branch must be explicit full 40-char SHA from `origin/master` tip; no inferred base via merge-base. |
 
 ---
 
-## 4) P* human cuts (default recommendation: confirm prior deferral / separate ship)
+## 4) P* human cuts (P1 closed as A, 2026-09-20)
 
-| ID | Decision point | Default recommendation |
+| ID | Decision point | Human decision / current status |
 |---|---|---|
-| **P1** | #112 deferred `B/C` options that would change 14:57 fill behavior | **A = confirm prior deferral** (separate ship) |
-| **P2** | #112 deferred trades output columns (`session_phase` / `price_rule`) | **A = confirm prior deferral** |
-| **P3** | #112 deferred fees and ST PIT semantics changes | **A = confirm prior deferral** |
-| **P4** | #112 deferred touch-trigger vs mark coupling changes | **A = confirm prior deferral** |
+| **P1** | Formal closure of the #112 fill-clock deferral | **Human GO: closed as A (2026-09-20)**. No real closing call auction model; `closing_call` / 14:57–15:00 are scan-window labels only. `_in_session`, scanners and fill eligibility stay as-built. **B** (minute touch skips 14:57–14:59) and **C** (skips 14:57–15:00) production behavior are **not authorized and forbidden this round**; expanding fill eligibility into those windows is also forbidden. |
+| **P2** | #112 deferred trades output columns (`session_phase` / `price_rule`) | **A = keep deferred**, unchanged |
+| **P3** | #112 deferred fees and ST PIT semantics changes | Original 2026-09-19 **A = keep deferred**; subsequent δ decisions are recorded separately in [engine correctness](engine-ashare-correctness.md). No δ production C merge is reopened here. |
+| **P4** | #112 deferred touch-trigger vs mark coupling changes | **A = keep deferred**, unchanged |
 
-No P* is reopened by this docs-only ship.
+P1 closes the 2026-09-19 keep-deferred stance as A; it does not reopen production behavior. P2/P4 remain deferred. Closure authority also appears in [fill-clock plan §5](plan-industry-align-refactor-2026-09-18.md) and [engine correctness](engine-ashare-correctness.md). Deliverable: docs SSOT + data-free pins in `tests/test_ashare_fill_clock.py`; retain the fixed `SIMULATE_HOT_PATH` import fence, add explicit phase-identifier absence and as-built scanner hm-comparison pins. No production Python edits, lake reads, backtests or production markers.
 
 ---
 
@@ -246,7 +247,7 @@ Only docs + data-free tests may change unless a human cut explicitly reopens beh
 ## 10) Execution protocol
 
 1. Keep this docs plan as the authority for the next implementation ship.
-2. Human confirmed P1-P4 = A/A/A/A (2026-09-19, keep deferred).
+2. Human confirmed P1-P4 = A/A/A/A (2026-09-19, keep deferred); **P1 formally closed as A on 2026-09-20**, with P2/P4 still deferred. This closure uses the new base above and only the docs/test scope in §4; original slices above do not authorize new production behavior.
 3. Implement only slices A->B->C with per-commit DoD.
 4. If any production behavior change appears necessary, stop and open a new P* cut first.
 
@@ -254,9 +255,9 @@ Only docs + data-free tests may change unless a human cut explicitly reopens beh
 
 ## 11) Changelog
 
+- **v0.4-P1-A-closure (2026-09-20 Asia/Shanghai)**: Human GO P1=A formally closes the 2026-09-19 fill-clock keep-deferred stance. No real closing call auction model; 14:57–15:00 / `closing_call` remain scan-window labels, with `_in_session` and fill eligibility as-built. B/C production filters and expansion into those windows are forbidden this round. Docs SSOT + data-free contracts only, zero production Python diff against `41f8df331ed25aad4616bde56c77ddb7025c91ee`; P2/P4 remain deferred and δ production C merges are not reopened.
 - **v0.3-impl (2026-09-19)**: Implementation-start refresh: `IMPLEMENTATION_BASE` moved to `f46004d3bf3c9aa8314c5c3d0adcdebd730d9822` (current `origin/master` tip at execution start); status marked `Implemented-when-merged`.
 - **v0.3-GO (2026-09-19)**: Human cut recorded: P1–P4 = A/A/A/A (keep deferred). Docs GO; feat A→B→C authorized under production freeze.
 - **v0.3 (2026-09-19)**: Backfilled r1 merge-consensus MC-1..MC-5: unified §7 freeze commands with §8 via one `FROZEN_PRODUCTION_FILES` array (including `market_layer.py`/`csv_common.py`/`csv_daily_loader.py` plus worktree + staged diff checks), expanded Slice A with explicit ST-name cross-day and zero-volume/missing-bar retained-fork checklist, pinned v7 held-add test landing on public `simulate_v7` with gate-pass-vs-fill assertions, added CI-equivalent pytest environment prerequisite wording, and clarified P1-P4 wording as confirming prior deferral A (not reopening #112).
 - **v0.2 (2026-09-19)**: Backfilled adversarial host errata E-01..E-05: replaced ghost gate scripts with real `scripts/gates/*` checks; corrected halt/zero-volume freeze anchors; added sell-side `limits=None` reuse pin reference; expanded frozen production table with verified on-path helpers (`market_layer.py`, `csv_common.py`, `csv_daily_loader.py`); and made Slice A DoD explicitly pin v7 held add-side fail-open plus gate-pass-vs-fill separation.
 - **v0.1 (2026-09-19)**: Initial draft.
-
