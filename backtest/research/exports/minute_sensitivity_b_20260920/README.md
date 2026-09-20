@@ -101,3 +101,19 @@ D:\anaconda3\envs\vanna312\python.exe scripts\research\run_minute_sensitivity_b.
   --start 20260916 --end 20260918 `
   --output-dir backtest\research\exports\minute_sensitivity_b_20260920\batch3_modeb-rerun
 ```
+
+
+## 第四批（batch4 · 全策略 NAV / DD / 引擎内排名）
+
+- [设计](../../../../docs/backtest/reviews/design-minute-sensitivity-b-batch4-fullstrat-2026-09-20.md)
+- [结果桩](../../../../docs/backtest/reviews/results-minute-sensitivity-b-batch4-fullstrat-2026-09-20.md)
+- 输出目录：[batch4_fullstrat/](batch4_fullstrat/)
+- harness：`scripts/research/run_minute_sensitivity_b_batch4_fullstrat.py`
+- 默认可填：默认时钟 + `DEFAULT_SCHEDULE`；clock/slip 全策略轴 **DATA_GAP**
+- Book / v7 / Mode B **分列**；Mode B 入场=`aggregated_from_1min_none_lineage`
+- VM：`--emit-stubs` / `--dry-run`；4090：`--execute --qlib-1min-root …`
+
+```bash
+/tmp/industry-align-venv/bin/python scripts/research/run_minute_sensitivity_b_batch4_fullstrat.py --emit-stubs --force
+/tmp/industry-align-venv/bin/python scripts/research/run_minute_sensitivity_b_batch4_fullstrat.py --dry-run
+```

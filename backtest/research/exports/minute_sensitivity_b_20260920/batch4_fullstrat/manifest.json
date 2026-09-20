@@ -1,0 +1,91 @@
+{
+  "batch": 4,
+  "mode": "fullstrat",
+  "status": "EXECUTED_PARTIAL_OR_FULL",
+  "base_tip": "ac1fa97",
+  "production_C": "frozen",
+  "fee_schedule": "DEFAULT_SCHEDULE=BILATERAL_10BP",
+  "bar_label_semantics": "lake_index_is_bar_start_wallclock",
+  "access_preference": "qlib_bin_1min_then_oskh_parquet_1m",
+  "date_window": {
+    "start": "20260825",
+    "end": "20260909",
+    "format": "YYYYMMDD"
+  },
+  "vs_batch2": "expanded days+pool_union vs 3d×5 symbols; batch2 window lacked pool CSVs",
+  "matrix": [
+    {
+      "cell_id": "baseline_default_clock_fee",
+      "clock": "production_default",
+      "slip_bp_per_side": 0,
+      "book": "FILLABLE",
+      "v7": "FILLABLE",
+      "modeb": "FILLABLE",
+      "note": "default clock + DEFAULT_SCHEDULE; honest fullstrat NAV"
+    },
+    {
+      "cell_id": "clock_next_open_fullstrat",
+      "clock": "next_tradable_open_research",
+      "slip_bp_per_side": 0,
+      "book": "DATA_GAP",
+      "v7": "DATA_GAP",
+      "modeb": "DATA_GAP",
+      "note": "no research-only fullstrat clock hook without production_C"
+    },
+    {
+      "cell_id": "slip_5bp_fullstrat",
+      "clock": "production_default",
+      "slip_bp_per_side": 5,
+      "book": "DATA_GAP",
+      "v7": "DATA_GAP",
+      "modeb": "DATA_GAP",
+      "note": "no research-only fullstrat slip hook; local-event bp not portfolio NAV"
+    },
+    {
+      "cell_id": "slip_10bp_fullstrat",
+      "clock": "production_default",
+      "slip_bp_per_side": 10,
+      "book": "DATA_GAP",
+      "v7": "DATA_GAP",
+      "modeb": "DATA_GAP",
+      "note": "no research-only fullstrat slip hook"
+    },
+    {
+      "cell_id": "slip_20bp_fullstrat",
+      "clock": "production_default",
+      "slip_bp_per_side": 20,
+      "book": "DATA_GAP",
+      "v7": "DATA_GAP",
+      "modeb": "DATA_GAP",
+      "note": "no research-only fullstrat slip hook"
+    }
+  ],
+  "separate_engines": true,
+  "forbid_cross_engine_nav_rank": true,
+  "local_event_bp_into_nav": "FORBIDDEN",
+  "book_strategies": [
+    "version1",
+    "version2",
+    "version3",
+    "version4",
+    "version5",
+    "version6",
+    "version8",
+    "version9",
+    "version10"
+  ],
+  "modeb_daily_entry_source": "aggregated_from_1min_none_lineage",
+  "emitted_at": "2026-09-20T20:50:19+08:00",
+  "git_head": "93406f357e6c3e5ca695a15d43af106f8ee5e558",
+  "qlib_1min_root": "C:\\Users\\wangc\\.qlib\\qlib_data\\my_data_1min",
+  "pool_dir": "stock_pool",
+  "engines": [
+    "book",
+    "modeb",
+    "v7"
+  ],
+  "book_ok": 7,
+  "v7_ok": 1,
+  "modeb_ok": 0,
+  "executed_at": "2026-09-20T20:50:19+08:00"
+}

@@ -1,0 +1,16 @@
+cell_id,engine,clock,slip_bp_per_side,fee_schedule,fill_status,nav,total_return,max_drawdown,within_engine_rank,note
+baseline_default_clock_fee,Book,production_default,0,DEFAULT_SCHEDULE=BILATERAL_10BP,FILLED,21104115.65,0.005,-0.0139,1,default clock + DEFAULT_SCHEDULE; honest fullstrat NAV
+baseline_default_clock_fee,v7,production_default,0,DEFAULT_SCHEDULE=BILATERAL_10BP,FILLED,20895023.51,-0.005,-0.0087,1,default clock + DEFAULT_SCHEDULE; honest fullstrat NAV
+baseline_default_clock_fee,ModeB,production_default,0,DEFAULT_SCHEDULE=BILATERAL_10BP,FILLABLE,,,,,default clock + DEFAULT_SCHEDULE; honest fullstrat NAV
+clock_next_open_fullstrat,Book,next_tradable_open_research,0,DEFAULT_SCHEDULE=BILATERAL_10BP,DATA_GAP,,,,,no research-only fullstrat clock hook without production_C
+clock_next_open_fullstrat,v7,next_tradable_open_research,0,DEFAULT_SCHEDULE=BILATERAL_10BP,DATA_GAP,,,,,no research-only fullstrat clock hook without production_C
+clock_next_open_fullstrat,ModeB,next_tradable_open_research,0,DEFAULT_SCHEDULE=BILATERAL_10BP,DATA_GAP,,,,,no research-only fullstrat clock hook without production_C
+slip_5bp_fullstrat,Book,production_default,5,DEFAULT_SCHEDULE=BILATERAL_10BP,DATA_GAP,,,,,no research-only fullstrat slip hook; local-event bp not portfolio NAV
+slip_5bp_fullstrat,v7,production_default,5,DEFAULT_SCHEDULE=BILATERAL_10BP,DATA_GAP,,,,,no research-only fullstrat slip hook; local-event bp not portfolio NAV
+slip_5bp_fullstrat,ModeB,production_default,5,DEFAULT_SCHEDULE=BILATERAL_10BP,DATA_GAP,,,,,no research-only fullstrat slip hook; local-event bp not portfolio NAV
+slip_10bp_fullstrat,Book,production_default,10,DEFAULT_SCHEDULE=BILATERAL_10BP,DATA_GAP,,,,,no research-only fullstrat slip hook
+slip_10bp_fullstrat,v7,production_default,10,DEFAULT_SCHEDULE=BILATERAL_10BP,DATA_GAP,,,,,no research-only fullstrat slip hook
+slip_10bp_fullstrat,ModeB,production_default,10,DEFAULT_SCHEDULE=BILATERAL_10BP,DATA_GAP,,,,,no research-only fullstrat slip hook
+slip_20bp_fullstrat,Book,production_default,20,DEFAULT_SCHEDULE=BILATERAL_10BP,DATA_GAP,,,,,no research-only fullstrat slip hook
+slip_20bp_fullstrat,v7,production_default,20,DEFAULT_SCHEDULE=BILATERAL_10BP,DATA_GAP,,,,,no research-only fullstrat slip hook
+slip_20bp_fullstrat,ModeB,production_default,20,DEFAULT_SCHEDULE=BILATERAL_10BP,DATA_GAP,,,,,no research-only fullstrat slip hook

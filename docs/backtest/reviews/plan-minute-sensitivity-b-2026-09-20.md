@@ -56,3 +56,14 @@
 ## 7. 第三批（batch3 / modeb）指针
 
 Mode B clock 轴（`next_tradable_open`）：补齐 batch2 的 `ModeB NOT_RUN`。入场为 **同一 none 1min 帧聚合的日收**（`daily_entry_source=aggregated_from_1min_none_lineage`），**禁止** qlib `my_data` day.bin（后复权）。Q39 基线 `StrategySpec(2,10,5,5)`；oracle 硬标签 `EX_POST_UPPER_BOUND_NOT_EXECUTABLE`，不得并入可执行汇总。产物目录：`backtest/research/exports/minute_sensitivity_b_20260920/batch3_modeb/`（4090 已写入；结果见 [results-minute-sensitivity-b-batch3-modeb-2026-09-20.md](results-minute-sensitivity-b-batch3-modeb-2026-09-20.md)）。生产 C 仍冻结。
+
+
+## 8. 第四批（batch4 / fullstrat）指针
+
+全策略 NAV / 最大回撤 / 引擎内排名：在 **默认时钟 + DEFAULT_SCHEDULE** 下用既有 Book/v7/Mode B runner 填补 batch1–3 的 DATA_GAP；扩展窗提案 `20260825`–`20260909`（pool∩`MINUTE_LAKE_END`）。全策略 clock 交换与 slip 轴无 research-only hook → **DATA_GAP**（禁止静默 production fork）。Book/v7/Mode B 分列；禁止跨引擎优劣与局部 bp→NAV。设计 / 结果桩 / harness：
+
+- [设计](design-minute-sensitivity-b-batch4-fullstrat-2026-09-20.md)
+- [结果桩](results-minute-sensitivity-b-batch4-fullstrat-2026-09-20.md)
+- `scripts/research/run_minute_sensitivity_b_batch4_fullstrat.py`
+- 导出：`backtest/research/exports/minute_sensitivity_b_20260920/batch4_fullstrat/`
+

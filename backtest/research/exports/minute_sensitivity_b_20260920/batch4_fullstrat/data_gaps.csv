@@ -1,0 +1,8 @@
+item,status,evidence
+fullstrat_clock_swap,DATA_GAP,no research-only fullstrat clock hook; production_C frozen
+fullstrat_slip_axis,DATA_GAP,no research-only fullstrat slip CLI; local-event bp must not fill NAV
+cross_engine_nav_superiority,FORBIDDEN,Book/v7/ModeB reported in separate columns only
+batch2_local_event_bp_as_portfolio_nav,FORBIDDEN,local-only deltas remain local-only
+qlib_my_data_day_bin_modeb_entry,DATA_GAP,Mode B entry must be aggregated_from_1min_none_lineage
+stock_pool_publish_time,DATA_GAP,pool CSV has code/name only; filename date not availability proof
+window_vs_batch2,PROPOSED,expanded 20260825..20260909 (pool∩MINUTE_LAKE_END); batch2 was 20260916..18×5 symbols
