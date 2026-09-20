@@ -551,8 +551,14 @@ def data_gaps() -> list[dict]:
 
 
 def source_hashes() -> dict:
-    return {f"backtest/research/{name}.py": hashlib.sha256(
-        (ROOT / f"backtest/research/{name}.py").read_bytes()).hexdigest() for name in SOURCE_NAMES}
+    # Compare as git blobs would: normalize CRLF so Windows working trees with
+    # autocrlf do not false-fail the production BASE fence.
+    return {
+        f"backtest/research/{name}.py": hashlib.sha256(
+            (ROOT / f"backtest/research/{name}.py").read_bytes().replace(b"\r\n", b"\n")
+        ).hexdigest()
+        for name in SOURCE_NAMES
+    }
 
 
 def write_csv(path: Path, rows: list[dict], fields=()) -> None:
