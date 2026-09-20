@@ -692,7 +692,13 @@ def simulate(
                         bucket = int(hm[idx])
                         volume_kwargs = {"bucket_id": bucket, "day_i": i,
                                          "at": bucket - 1 if reason == "stop_loss:gap_open" else bucket}
-                    _sell(st, code, pos, px, day, reason, **volume_kwargs)
+                    # P2=B names only these two stop paths; other fills stay unlabeled.
+                    price_rule = {
+                        "stop_loss:gap_open": "minute_gap_open",
+                        "stop_loss:touch": "minute_trigger_bar_close",
+                    }.get(reason, "")
+                    _sell(st, code, pos, px, day, reason, **volume_kwargs,
+                          hm=int(hm[idx]) if price_rule else None, price_rule=price_rule)
 
         def _volume_bucket_for(code: str, target: int, earliest: int):
             # Mirror the quote helpers' exact/fallback row, never a later bucket.

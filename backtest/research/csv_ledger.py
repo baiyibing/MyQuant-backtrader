@@ -19,6 +19,7 @@ from backtest.research.ashare_fees import (
     QLIB_OPEN_COST,
     trade_commission,
 )
+from backtest.research.ashare_fill_clock import session_phase as _session_phase
 from backtest.research.ashare_session import LIMIT_EPS, hit_limit_down, hit_limit_up
 from backtest.research.ashare_volume_cap import VolumeCap
 from backtest.research.ashare_exdiv_economics import ExDivEconomics
@@ -289,6 +290,8 @@ def execute_buy(
             "commission": comm,
             "reason": reason,
             "lot": lot_id,
+            "session_phase": "",
+            "price_rule": "",
         }
     )
     st.stats["buys"] += 1
@@ -307,12 +310,14 @@ def _volume_skip(st: SimState, code: str, px: float, day, reason: str,
     st.stats[family] = int(st.stats.get(family, 0)) + 1
     st.trades.append({"date": _ymd(day), "code": code, "side": "SKIP",
                       "price": px, "shares": 0, "notional": 0.0,
-                      "commission": 0.0, "reason": reason, "bucket": bucket_id})
+                      "commission": 0.0, "reason": reason, "bucket": bucket_id,
+                      "session_phase": "", "price_rule": ""})
 
 
 def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str, *,
           bucket_id: int | None = None, at: int | None = None,
-          day_i: int | None = None) -> None:
+          day_i: int | None = None, hm: int | None = None,
+          session_phase: str = "", price_rule: str = "") -> None:
     shares = pos.shares
     if st.exdiv_economics is not None:
         ds = _ymd(day)
@@ -355,6 +360,12 @@ def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str, *
     notional = shares * px
     comm = trade_commission(notional, st.sell_cost_rate, st.min_cost)
     st.cash += notional - comm
+    # Human GO P2=B: annotate only after fill eligibility/price/size are settled.
+    if hm is not None and not session_phase:
+        try:
+            session_phase = _session_phase(hm).value
+        except ValueError:
+            pass  # Unknown phase must never reject an otherwise valid fill.
     st.trades.append(
         {
             "date": _ymd(day),
@@ -366,6 +377,8 @@ def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str, *
             "commission": comm,
             "reason": reason,
             "lot": pos.lot_id,
+            "session_phase": session_phase,
+            "price_rule": price_rule,
         }
     )
     if reason.startswith("stop_loss"):
@@ -405,4 +418,5 @@ def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str, *
     ]
     for child in riders:
         _sell(st, code, child, px, day, reason,
-              bucket_id=bucket_id, at=at, day_i=day_i)
+              bucket_id=bucket_id, at=at, day_i=day_i, hm=hm,
+              session_phase=session_phase, price_rule=price_rule)

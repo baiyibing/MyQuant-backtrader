@@ -437,5 +437,7 @@ def append_equity_and_eod_marks(
                         "notional": pos.shares * last,
                         "commission": 0.0,
                         "lot": pos.lot_id,
+                        "session_phase": "",
+                        "price_rule": "",
                     }
                 )
