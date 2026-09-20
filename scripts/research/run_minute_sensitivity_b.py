@@ -755,7 +755,9 @@ def lake_baseline(*, engine, symbol, day, hm, frame, previous, anchor, stage,
         state.positions[symbol] = position
         decision = ladder_decision(stage, price, entry_a=entry)
         stop = stop_decision(stage, entry_a=entry, average_cost=entry)
-        action = decision.action if in_add_window(hm) else "outside_add_window"
+        # Lake index is bar START; close is available at hm+1 wall clock,
+        # which is what production ADD_HM_START/END (14:45–14:55) mean.
+        action = decision.action if in_add_window(hm + 1) else "outside_add_window"
         reason = action
         if price <= stop.line:
             reason = "stop_gate_blocks_add"
@@ -1071,7 +1073,7 @@ def run_lake(output: Path, *, symbols=None, start="20260916", end="20260918",
     for symbol in symbols:
         for day in dates:
             specs = [("Book", 585, "pending_chase")]
-            specs += [("v7", hm, stage) for hm in (884, 885, 895) for stage in STAGES]
+            specs += [("v7", hm, stage) for hm in (884, 885, 894) for stage in STAGES]
             for engine, hm, stage in specs:
                 row, attempts, cap = lake_event(frames.get(symbol), engine=engine, symbol=symbol,
                                                day=day, hm=hm, stage=stage)
