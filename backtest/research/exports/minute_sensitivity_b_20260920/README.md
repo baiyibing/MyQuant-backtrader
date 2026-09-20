@@ -4,7 +4,7 @@
 
 - [实验计划](../../../../docs/backtest/reviews/plan-minute-sensitivity-b-2026-09-20.md)
 - [第一批结果与逐笔解释](../../../../docs/backtest/reviews/results-minute-sensitivity-b-batch1-2026-09-20.md)
-- [第二批结果（真实分钟 · stub）](../../../../docs/backtest/reviews/results-minute-sensitivity-b-batch2-2026-09-20.md)
+- [第二批结果（真实分钟 · 4090 lake）](../../../../docs/backtest/reviews/results-minute-sensitivity-b-batch2-2026-09-20.md)
 - [研究脚本](../../../../scripts/research/run_minute_sensitivity_b.py)
 - [局部证据验证](verify_harness.py)
 - [首批 manifest](batch1/manifest.json)
@@ -22,19 +22,27 @@
 
 
 
-## 第二批（batch2 · 真实分钟 · PENDING_4090_RUN）
+## 第二批（batch2 · 真实分钟 · 4090 已跑）
 
-- [第二批结果 stub](../../../../docs/backtest/reviews/results-minute-sensitivity-b-batch2-2026-09-20.md)
-- 输出目录：`batch2/`（必须尚不存在；首次在 4090 创建）
+- [第二批结果](../../../../docs/backtest/reviews/results-minute-sensitivity-b-batch2-2026-09-20.md)
+- 输出目录：[batch2/](batch2/)（含 `manifest.json`、`clock_*.csv`、`cost_sensitivity.csv`、`capacity.csv`、`data_gaps.csv`、`minute_frames.csv`、`modeb_baseline.csv`）
+- 跑批 HEAD：`38f19d5`；`lake_read_status=READ_OK`；`access=qlib_bin_1min`
 - 血缘：`source=parquet_lineage`；访问优先 `qlib_bin_1min`（`C:\Users\wangc\.qlib\qlib_data\my_data_1min`），回退 `oskh_parquet_1m`（`E:\stock_data`）。**同一分钟序列**，不是对立数据集。`my_data`/`cn_data` 仅日频，勿用于分钟轴。**无 F: 湖**。
 - bar 标签：湖/ bin index = **START** 墙钟（异于 batch1 合成 END）。
+- 符号/窗口：`000021.SZ,002025.SZ,600000.SH,600007.SH,600276.SH`；`20260916`–`20260918`
+- 全策略 NAV/DD/rank：**DATA_GAP**（数值空白）
+
+复跑（新目录；勿覆盖已提交的 `batch2/`）：
 
 ```powershell
 $env:OSKH_SOURCE_PARQUET_ROOT='E:\stock_data'
 cd D:\PycharmProjects\MyQuant-backtrader
 git fetch github
 git checkout research/minute-sensitivity-b-batch2-lake
-D:\anaconda3\envs\vanna312\python.exe scripts\research\run_minute_sensitivity_b.py --mode lake --output-dir backtest\research\exports\minute_sensitivity_b_20260920\batch2
+D:\anaconda3\envs\vanna312\python.exe scripts\research\run_minute_sensitivity_b.py `
+  --mode lake `
+  --symbols 000021.SZ,002025.SZ,600000.SH,600007.SH,600276.SH `
+  --output-dir backtest\research\exports\minute_sensitivity_b_20260920\batch2-rerun
 ```
 
 可选：`--qlib-1min-root C:\Users\wangc\.qlib\qlib_data\my_data_1min` 或 `$env:QLIB_1MIN_ROOT=...`。

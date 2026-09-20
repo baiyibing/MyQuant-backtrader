@@ -1,0 +1,4 @@
+engine,scope,clock_status,requested_events,evaluated_events,data_gap_events,baseline_fills,next_fills,common_fills,status_match_rate,matched_fill_rate,same_price_rate,mean_price_diff_bp,production_replay,full_replay_status,full_strategy_nav,full_strategy_return,max_drawdown,strategy_rank,strategy_rank_delta
+Book,local event sensitivity not strategy claim,LOCAL_EVENTS_COMPLETE,15,15,0,8,8,8,1.0,1.0,0.125,8.998229012699976,DATA_GAP,DATA_GAP,,,,,
+v7,local event sensitivity not strategy claim,LOCAL_EVENTS_COMPLETE,180,180,0,35,35,35,1.0,1.0,0.08571428571428572,-1.0546276882532621,DATA_GAP,DATA_GAP,,,,,
+ModeB,local event sensitivity not strategy claim,NOT_RUN,,,,,,,,,,,DATA_GAP,DATA_GAP,,,,,
