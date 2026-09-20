@@ -700,7 +700,8 @@ def publication_gaps() -> list[dict]:
              evidence="No audited generated_at/available_at chain; no external search")]
 
 
-def validate_lake_frame(frame: pd.DataFrame, start: str, end: str) -> None:
+def validate_lake_frame(frame: pd.DataFrame, start: str, end: str, *,
+                        lookback_start: str | None = None) -> None:
     if not isinstance(frame.index, pd.DatetimeIndex) or frame.index.tz is not None:
         raise ValueError("Expected naive lake wall-clock DatetimeIndex; no timezone conversion inferred")
     if frame.index.has_duplicates or not frame.index.is_monotonic_increasing:
@@ -714,8 +715,11 @@ def validate_lake_frame(frame: pd.DataFrame, start: str, end: str) -> None:
             or (frame["low"] > frame[["open", "close"]].min(axis=1)).any()):
         raise ValueError("Inconsistent lake OHLC envelope")
     labels = frame.index.strftime("%Y%m%d")
-    if not ((labels >= start) & (labels <= end)).all():
-        raise ValueError("Lake reader returned bars outside the requested window")
+    floor = lookback_start or start
+    if not ((labels >= floor) & (labels <= end)).all():
+        raise ValueError("Lake reader returned bars outside the lookback+event window")
+    if not ((labels >= start) & (labels <= end)).any():
+        raise ValueError("Lake reader returned no bars inside the requested event window")
     if not (frame["ymd"].to_numpy() == labels).all() or not (
             frame["hm"].to_numpy() == frame.index.hour * 60 + frame.index.minute).all():
         raise ValueError("Lake hm/ymd disagrees with START wall-clock index")
@@ -1041,7 +1045,8 @@ def run_lake(output: Path, *, symbols=None, start="20260916", end="20260918",
             try:
                 if frame is None or frame.empty:
                     raise ValueError("Missing/unreadable/filtered symbol window; reader gives no detailed failure")
-                validate_lake_frame(frame, start, end)
+                lookback = (datetime.strptime(start, "%Y%m%d").date() - timedelta(days=10)).strftime("%Y%m%d")
+                validate_lake_frame(frame, start, end, lookback_start=lookback)
             except (ValueError, KeyError, TypeError) as exc:
                 gaps.append(dict(item="symbol_window", symbol=symbol, status="DATA_GAP",
                                  evidence=str(exc), access=access))
