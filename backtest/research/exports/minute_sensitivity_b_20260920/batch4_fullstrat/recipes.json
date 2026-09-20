@@ -1,0 +1,34 @@
+{
+  "qlib_1min_root": "C:\\Users\\wangc\\.qlib\\qlib_data\\my_data_1min",
+  "lake_parquet": "E:\\stock_data",
+  "book_example": [
+    "python backtest/research/csv_minute_backtest.py",
+    "--strategy version1",
+    "--start 20260825",
+    "--end 20260909",
+    "--minute-source qlib_1min",
+    "--qlib-1min-root <QLIB_1MIN_ROOT>",
+    "--pool-dir stock_pool",
+    "--out-dir backtest_output/batch4_book_v1_<stamp>"
+  ],
+  "v7_example": [
+    "python backtest/research/csv_minute_backtest_v7.py",
+    "--start 20260825",
+    "--end 20260909",
+    "--pool-dir stock_pool",
+    "--minute-source qlib_1min",
+    "--qlib-1min-root <QLIB_1MIN_ROOT>",
+    "--output-dir backtest_output/batch4_v7_<stamp>"
+  ],
+  "modeb_note": "Prefer harness --execute --engines modeb (library inject aggregated 1min none entry). Raw run_unified_exit_modeb.py --none-root may use lake none daily; do not use qlib day.bin 后复权 for entry.",
+  "harness_execute": [
+    "python scripts/research/run_minute_sensitivity_b_batch4_fullstrat.py",
+    "--execute",
+    "--start 20260825",
+    "--end 20260909",
+    "--qlib-1min-root <QLIB_1MIN_ROOT>",
+    "--pool-dir stock_pool",
+    "--output-dir backtest/research/exports/minute_sensitivity_b_20260920/batch4_fullstrat",
+    "--force"
+  ]
+}

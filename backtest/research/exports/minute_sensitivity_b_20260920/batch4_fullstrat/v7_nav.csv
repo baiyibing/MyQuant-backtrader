@@ -1,0 +1,2 @@
+engine,strategy,cell_id,clock,slip_bp_per_side,fee_schedule,start,end,access,bar_label_semantics,daily_entry_source,final_equity,total_return,max_drawdown,within_engine_rank,status,artifact_dir,note
+v7,strategy7,baseline_default_clock_fee,production_default,0,DEFAULT_SCHEDULE=BILATERAL_10BP,20260825,20260909,qlib_bin_1min,lake_index_is_bar_start_wallclock,n/a_v7_turtle,,,,1,DATA_GAP,,await_4090_default_clock_run
