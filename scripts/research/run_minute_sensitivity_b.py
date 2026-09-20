@@ -972,10 +972,13 @@ def load_minute_frames(symbols: list[str], start: str, end: str, *,
             compact = load_qlib_bin_1min_bars(symbols, start_d, end_d, qlib_root=chosen, workers=4)
             frames = {code: normalize_book_frame(frame)
                       for code, frame in book_frames_from_compact(compact).items()}
-            # Restrict to requested window (loader may preload prior days).
+            # Keep a short pre-window lookback for limit/anchor refs
+            # (prev calendar-day 15:00 and prior 09:30). Event evaluation still
+            # keys off signal days inside [start, end]; do not strip preload.
+            lookback = (start_d - timedelta(days=10)).strftime("%Y%m%d")
             clipped = {}
             for code, frame in frames.items():
-                keep = (frame["ymd"] >= start) & (frame["ymd"] <= end)
+                keep = (frame["ymd"] >= lookback) & (frame["ymd"] <= end)
                 clipped[code] = frame.loc[keep]
             inventory.append(dict(access="qlib_bin_1min", qlib_root=str(chosen),
                                   status="PRESENT", symbols=sorted(clipped)))
@@ -1007,7 +1010,8 @@ def load_minute_frames(symbols: list[str], start: str, end: str, *,
         except OSError as exc:
             inventory.append(dict(symbol=symbol, path=str(path), status="DATA_GAP",
                                   error=str(exc), access="oskh_parquet_1m"))
-    loaded = load_minute_from_lake(symbols, start, end, lake_root=lake_root)
+    lookback = (start_d - timedelta(days=10)).strftime("%Y%m%d")
+    loaded = load_minute_from_lake(symbols, lookback, end, lake_root=lake_root)
     frames = {symbol: normalize_book_frame(frame) for symbol, frame in loaded.items()
               if frame is not None and not frame.empty}
     inventory = gaps_extra + inventory
