@@ -1,0 +1,103 @@
+{
+  "base": "f2fe15124ffbc62d3c0526fc90fed78d014b1bb1",
+  "batch": 3,
+  "mode": "modeb",
+  "git_head": "0d348720e52bdfcd76e298a2d0c161246fff5406",
+  "status": "DATA_GAP",
+  "lake_read_status": "READ_OK",
+  "scope": "Mode B local exit clock sensitivity not strategy claim",
+  "production_replay": "DATA_GAP",
+  "production_C": "frozen",
+  "source": "parquet_lineage",
+  "access": "qlib_bin_1min",
+  "access_preference": "qlib_bin_1min_then_oskh_parquet_1m",
+  "daily_entry_source": "aggregated_from_1min_none_lineage",
+  "OSKH_SOURCE_PARQUET_ROOT": "E:\\stock_data",
+  "OSKH_AUTHORITY_HINT_ROOT": "unset",
+  "OSKH_PERIOD_1M_ROOT": "unset",
+  "QLIB_1MIN_ROOT": "C:\\Users\\wangc\\.qlib\\qlib_data\\my_data_1min",
+  "qlib_1min_root": "C:\\Users\\wangc\\.qlib\\qlib_data\\my_data_1min",
+  "default_qlib_1min_root": "C:\\Users\\wangc\\.qlib\\qlib_data\\my_data_1min",
+  "resolved_1m_root": null,
+  "lake_root": null,
+  "symbols": [
+    "000021.SZ",
+    "002025.SZ",
+    "600000.SH",
+    "600007.SH",
+    "600276.SH"
+  ],
+  "date_window": {
+    "start": "20260916",
+    "end": "20260918",
+    "format": "YYYYMMDD"
+  },
+  "bar_label_semantics": "lake_index_is_bar_start_wallclock",
+  "timezone": "Asia/Shanghai",
+  "entry_rule": "one Instance per symbol x covered session day in [start,end] that has at least one later covered session day <= end (T+1+ exit path); buy_price = last-minute close aggregated from the same none 1min frames (not qlib my_data day.bin)",
+  "next_open_rule": "next_tradable_open: first same-calendar-day continuous-session bar.start >= submit; submit = decision_at + 1ms; expires at that calendar day end (batch2 next_open spirit; no overnight inference). open_gap decision_at = fill bar START; close decision_at = fill bar START + 1m",
+  "modeb_spec": "r2_x5_y5_n10",
+  "oracle_label": "EX_POST_UPPER_BOUND_NOT_EXECUTABLE",
+  "oracle_note": "Never fold oracle into executable Mode B clock summary stats",
+  "fee": "modea.COMMISSION bilateral 10bp; Mode B production linear rate",
+  "note_same_dataset": "qlib_bin is derived materialization of parquet lake; not a competing universe",
+  "note_no_book_v7_nav_compare": "Do not compare Mode B total NAV to Book/v7 as engine superiority",
+  "python": "3.12.13 | packaged by Anaconda, Inc. | (main, Jul  9 2026, 14:26:47) [MSC v.1942 64 bit (AMD64)]",
+  "pandas": "2.3.3",
+  "numpy": "2.3.5",
+  "checked_sources_match_base": true,
+  "source_hashes_before": {
+    "backtest/research/csv_minute_backtest.py": "30ddb7b03b3050ac1fa7c534f0664772d8e6d4f8b5f68e3d1ab6f2e11909a96c",
+    "backtest/research/csv_minute_backtest_v7.py": "ad3565581719d5cff0bd80fbfafeff89e9252ee12f17977ea326d69c3f4981c2",
+    "backtest/research/unified_exit_modea.py": "c45628cc81dda413ffd2447cbe43af12a5db524cf162e112207fa450744ea493",
+    "backtest/research/unified_exit_modeb.py": "d5e27d50850de5e24b27930e713e0fb90753d0de8ba70e75485600873e24d302",
+    "backtest/research/csv_ledger.py": "ef056ba641cd5436bbcfb84255f1349bb437de394f6e45f96db0b9985707fbfa",
+    "backtest/research/csv_simulate_loop.py": "c7d5e35c41c910009970f2c27bbd32999d450a0a9df7e5b4668bb5c5811b4fa8",
+    "backtest/research/ashare_fees.py": "f0c1c5fa8a1aa254ac7423ea3d6a2e28cbb16f90f64f6ec1579ac9f20514f2d5",
+    "backtest/research/ashare_volume_cap.py": "f54e5ef8665c13767113a5ecf9086ac079616b5559cf478fc5b381aa385c980f",
+    "backtest/research/ashare_fill_clock.py": "c5b478bf3c6535a1fb3c6a884dd4b85ac51afd8663ed0d4d7fbf1349c419cfbe",
+    "backtest/research/ashare_session.py": "04e6758f63d80eedb3c032c5f87123141ac8e625a42859b275d5a27fd592c086",
+    "backtest/research/strategy7_rules.py": "eaeaf9f3c194db4d6e002230807302266a6116174be947952f504ef895d71fc9"
+  },
+  "source_hashes_after": {
+    "backtest/research/csv_minute_backtest.py": "30ddb7b03b3050ac1fa7c534f0664772d8e6d4f8b5f68e3d1ab6f2e11909a96c",
+    "backtest/research/csv_minute_backtest_v7.py": "ad3565581719d5cff0bd80fbfafeff89e9252ee12f17977ea326d69c3f4981c2",
+    "backtest/research/unified_exit_modea.py": "c45628cc81dda413ffd2447cbe43af12a5db524cf162e112207fa450744ea493",
+    "backtest/research/unified_exit_modeb.py": "d5e27d50850de5e24b27930e713e0fb90753d0de8ba70e75485600873e24d302",
+    "backtest/research/csv_ledger.py": "ef056ba641cd5436bbcfb84255f1349bb437de394f6e45f96db0b9985707fbfa",
+    "backtest/research/csv_simulate_loop.py": "c7d5e35c41c910009970f2c27bbd32999d450a0a9df7e5b4668bb5c5811b4fa8",
+    "backtest/research/ashare_fees.py": "f0c1c5fa8a1aa254ac7423ea3d6a2e28cbb16f90f64f6ec1579ac9f20514f2d5",
+    "backtest/research/ashare_volume_cap.py": "f54e5ef8665c13767113a5ecf9086ac079616b5559cf478fc5b381aa385c980f",
+    "backtest/research/ashare_fill_clock.py": "c5b478bf3c6535a1fb3c6a884dd4b85ac51afd8663ed0d4d7fbf1349c419cfbe",
+    "backtest/research/ashare_session.py": "04e6758f63d80eedb3c032c5f87123141ac8e625a42859b275d5a27fd592c086",
+    "backtest/research/strategy7_rules.py": "eaeaf9f3c194db4d6e002230807302266a6116174be947952f504ef895d71fc9"
+  },
+  "reader_source_hashes": {
+    "backtest/research/ashare_bars.py": "d45b52c90c0aaf0ef4d4c7ea8aab9ca53014c0774f762656f9cd483fe1bbc547",
+    "common/infra/data_root.py": "fa2663eace78475a5e2a5ff2b2292e1802eee8fed0d157c86e7fb619d8e77b83",
+    "backtest/research/qlib_bin_1min.py": "c096a4b1eab093bf53ecf35ff10bacf9e2ccc9af36f9c63f4927e28efa21a51f",
+    "backtest/research/unified_exit_modeb.py": "62bb3e48afcf7841948399c267c4bb08ec32e4decf369964f95e8d404e708f6e"
+  },
+  "harness_sha256": "153bae369dcec868f012d55e27305ac8a83baa1a1f538cb256f70ca8256ef177",
+  "input_files": [
+    {
+      "access": "qlib_bin_1min",
+      "qlib_root": "C:\\Users\\wangc\\.qlib\\qlib_data\\my_data_1min",
+      "status": "PRESENT",
+      "symbols": [
+        "000021.SZ",
+        "002025.SZ",
+        "600000.SH",
+        "600007.SH",
+        "600276.SH"
+      ]
+    }
+  ],
+  "input_provenance": "qlib bin or parquet source; daily entry aggregated from same 1min none frames",
+  "files": {
+    "modeb_clock_summary.csv": "e6dff01e687a434d0fff9cc5056b5cf3fadf855575d43263374876cd34050e62",
+    "modeb_clock_trades.csv": "e687d8e2869a204696c3a64332c15b5958ca467082586dedc8f681ac178fe432",
+    "modeb_data_gaps.csv": "c4719a251d9cf5432414115991d84091d6fc51019e7e329c9f7089a6f0dba655",
+    "modeb_oracle.csv": "af830fd0764f5e24f4bf227e5976cd3e2d277343f5751042c5ea0db37438e263"
+  }
+}

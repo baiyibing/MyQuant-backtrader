@@ -67,7 +67,7 @@ Book/v7 均为注入状态局部事件：Book pending 1 万元现金预算；v7 
 
 | 项 | 状态 |
 |---|---|
-| clock / 日线入场 / 实例日历 | `NOT_RUN` |
+| clock / 日线入场 / 实例日历 | `NOT_RUN`（本批发运时；clock 现见 [batch3 Mode B](results-minute-sensitivity-b-batch3-modeb-2026-09-20.md)） |
 | `modeb_baseline.csv` | 单行占位：status=`NOT_RUN`，NAV/DD/rank 空白 |
 | production_replay | DATA_GAP |
 
