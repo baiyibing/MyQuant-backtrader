@@ -1,12 +1,13 @@
 # Plan：研究成交时钟显式化（fill clock）（2026-09-18）
 
-> **落盘**：2026-09-18。**v0.8**（2026-09-20 Asia/Shanghai，Human GO P1=A 正式关闭；docs SSOT + data-free 契约，生产行为零变化）。
-> **状态**：✅ #112 切片 A→B→C 已合入；**P1 closed as A（2026-09-20）**。**Human GO P2=B（2026-09-20，Asia/Shanghai）** 授权书 trades 的 `session_phase` / `price_rule` 两列，仅覆盖旧 P2=A 的 schema 禁令；P4 继续延后。
+> **落盘**：2026-09-18。**v0.10**（2026-09-20 Asia/Shanghai，Human GO P4=A formal closure；docs SSOT + data-free 契约，生产行为零变化）。
+> **状态**：✅ #112 切片 A→B→C 已合入；**P4 closed as A（2026-09-20）**：touch eligibility 与 official close / NAV mark 独立裁决，两轴保持 as-built，本轮禁止 B 联动改变。**P1 stays closed as A；P2 stays B**（书 trades 的 `session_phase` / `price_rule` 两列），均不重开。
+> **P4 收口基线**：`IMPLEMENTATION_BASE=9b9bd71ae1315f7a8c13d8126a638fabe5a021e8`（post P2 #134）。本船只改 docs + data-free tests，全部生产 Python 相对该基线零 diff；下文 #112 / P1 / P2 的旧基线保留为历史记录。
 > **风险档**：**引擎结构 / 成交语义高敏**——目标是把既有决策、会话、价格规则命名并用 data-free 测试锁住；默认成交价、股数、reason、NAV 与产物契约必须为零变化。
 > **业务源**：[引擎定位 SSOT](engine-positioning-ssot.md) · [A 股正确性 as-built](engine-ashare-correctness.md) · [Pool CSV contract](pool-csv-contract.md) · [#108 前置 plan](plan-ashare-engine-refactor-2026-09-18.md) · [PR #108](https://github.com/baiyibing/MyQuant-backtrader/pull/108)。
 > **事实锚**：本 plan 的代码事实与引用行号核对基线为 `origin/master` `c44da87`（Merge PR #108）；本分支 `docs/industry-align-refactor-2026-09-18`。**实施 diff 基线另见 §7 / §9 / §11：`IMPLEMENTATION_BASE` 为 `c44da87b01ebcc6a68633307eba0fce48940f403`（2026-09-19 的 origin/master tip）；GO 时核对，master 未变则沿用此值，变了则替换为当时完整 40 位 SHA 并记录于 handoff。禁止填不可达对象，禁止用 `git merge-base HEAD origin/master` 现算 SHA。**
 > **工作流**：[Codex 交接工作流](workflow-codex-handoff.md) 第 3 步人裁已完成；第 4 步见 [实施 handoff](handoff-industry-align-refactor-codex-impl-2026-09-18.md)。依据 [r4 共识](../architecture/reviews/2026-09-18/plan-industry-align-refactor-2026-09-18-r4/merge-consensus.md)，2026-09-19 用户原话「同意你的建议」= 采纳 P1–P4 全 A。
-> **短注**：#112 命名叶子已实施；本次正式关闭 2026-09-19 的 P1 keep deferred 立场为 A，只补文档与测试，禁止本轮 B/C 或扩大 14:57–15:00 成交资格的生产改动。v0.1 的价格规则与“现有成交窗口”表述已由 §12 勘误；不得拿旧句起草实现测试。
+> **短注**：#112 命名叶子、P1=A 收口和 P2=B 标签列已实施；本次以 P4 closed as A 正式替代“已裁 A / keep deferred”的软措辞。15:00 touch 不联动禁用，15:00 close / mark 不裁掉；P1=C 不自动回答 P4。v0.1 的价格规则与“现有成交窗口”表述已由 §12 勘误；不得拿旧句起草实现测试。
 
 ---
 
@@ -87,7 +88,7 @@ PR #108 已回答「**能不能成交**」；本 plan 只把仍散落在书引�
 | 分钟缺口止损 | 开盘已破阈值取该 bar open | `csv_minute_backtest.scan_held_day_python` `:277-285`；numba 同义分支 `:182-190` |
 | 分钟其余触价 | 止损触价、sell gate、止盈 / trail、force 均取该分钟 close | `scan_held_day_python` `:283-319`；最终 `_sell` 调用 `csv_minute_backtest.simulate` `:643-651` |
 | v7 | 独立价格路径：仅首 bar 可能用 open，其后用 close；池买严格 `hm==895`，缺则 `skip_no_1455`；计时退出用当日最后一根 close。它不在本 plan 的书引擎价格短表内 | `csv_minute_backtest_v7.py:327-340/381-411/398-404` |
-| EOD 标记 | `append_equity_and_eod_marks` 用日线 `market_close_mark` 写权益与期末 `side=EOD_MARK`。这是估值标记，不并入上述三条买路径；P4 继续把触价资格与 15:00 标记分开 | `csv_simulate_loop.py:299-339`；`csv_ledger.py:159-172` `market_close_mark`；`csv_minute_backtest.py:729-735` |
+| EOD 标记 | `append_equity_and_eod_marks` 用日线 `market_close_mark` 写权益与期末 `side=EOD_MARK`。这是估值标记，不并入上述三条买路径；P4 closed as A，触价资格与 15:00 close / mark 独立，两轴保持 as-built | `csv_simulate_loop.py:299-339`；`csv_ledger.py:159-172` `market_close_mark`；`csv_minute_backtest.py:729-735` |
 
 ---
 
@@ -109,6 +110,7 @@ PR #108 已回答「**能不能成交**」；本 plan 只把仍散落在书引�
 | **F-R12** | #108 已知分叉保持：书侧无昨收 / 未知板块先拒；v7 卖侧 `limits=None` fail-open；v7 ST 名称按窗末平铺、非 PIT。v7 整文件冻结且不纳入本 plan 的书引擎价格短表；不得写成涨跌停或价格规则已收口。默认**不动**，只能经 P3 另票。 |
 | **F-R13** | 旧 plan P2（印花开关）、P3（改股 / 现金红利 / ST PIT）、P4（成交量上限）继续后置；本 plan 不重新设计费率或参与率。 |
 | **F-R14** | 任何未覆盖语义都必须停下新增 P\* / 修订本文；未裁不得编码，合本 docs PR 也不构成 GO。 |
+| **F-R15** | **Human GO P4=A closure（2026-09-20）**：触价资格与官方收盘 / NAV mark 独立裁决，两轴保持 as-built，不加联动过滤。未来即使 P1 收窄触价（含假设 P1=C），也不得自动排除 15:00 close / mark；本轮 **P4=B 禁止**。仅 docs + data-free pins，全部生产 Python 相对 P4 收口基线零 diff；P1=A / P2=B 不重开。 |
 
 ---
 
@@ -122,28 +124,32 @@ PR #108 已回答「**能不能成交**」；本 plan 只把仍散落在书引�
 
 ---
 
-## 5. 人裁点（P\* · 2026-09-19 已裁 A/A/A/A；2026-09-20 P1=A 正式关闭）
+## 5. 人裁点（P\* · 2026-09-20 P1=A / P4=A 正式关闭；P2=B 保持）
 
 | ID | 问题 | 人裁结果 | 选项与后果 |
 |----|------|----------|------------|
 | **P1** | 是否正式关闭 fill-clock 延后项，保持当前扫描窗口标签与既有成交行为？ | **Human GO：closed as A**（2026-09-20 Asia/Shanghai；承接 2026-09-19 A） | **A**：仅标签 / 测试 / 文档；研究核不建模真实收盘集合竞价，`_in_session`、扫描器与成交资格 / 取价保持 as-built。**B**：分钟触价跳过 14:57–14:59。**C**：分钟触价跳过 14:57–15:00。**B/C 生产行为本轮未获授权，禁止落地**；也禁止扩大这些窗口的成交资格。 |
 | **P2** | 是否给 `trades.csv` 增加 `session_phase` / `price_rule` 列？ | **Human GO P2=B（2026-09-20）** | **B = 新增两列**，同时覆盖书内存 trades；旧 A（2026-09-19，不加列）仅在这两列的 schema 范围被 supersede。词汇复用 `SessionPhase` / `FillPriceRule`，未知或未命名路径留空；不改经济/资格，不改 v7，不引入 P4。下游仍只要求旧列，允许未知列。 |
 | **P3** | 旧 P2/P3/P4 与已知 v7 分叉是否继续后置？ | **已裁 A：确认后置**（2026-09-19） | **A**：印花、改股 / 现金红利 / ST PIT、成交量上限、v7 `limits=None` fail-open、v7 ST 非 PIT 全部不进本船。**B**：不确认；停止并分别开 plan，不得扩写本船。 |
-| **P4** | 15:00 bar 的“触价资格”与“官方收盘 / 标记价用途”是否分开裁？ | **已裁 A：分开；本轮两者都不改**（2026-09-19） | **A**：即使未来排除触价，也不得自动排除 15:00 的收盘 / 标记用途。**B**：二者联动改变；须先补行情时间戳证据、估值影响与独立 plan。P1=C 不自动回答 P4。 |
+| **P4** | 15:00 bar 的“触价资格”与“官方收盘 / NAV mark 用途”是否分开裁？ | **Human GO P4=A formal closure：closed as A（2026-09-20 Asia/Shanghai）**，正式替代“已裁 A / keep deferred” | **A**：两轴独立裁决，本轮两者都不改；即使未来收窄触价，也不得自动排除 15:00 close / mark。**P1=C 不自动回答 P4**。**B（联动改变）本轮禁止**；未来须另开 plan，补行情时间戳证据、估值影响并独立人裁。 |
 
 2026-09-19 人裁：用户原话「同意你的建议」，采纳 r4 共识建议，**P1=A / P2=A / P3=A / P4=A，已人裁 GO**。当时授权按切片 A→B→C 实施；该次 GO 仅回写文档，随后 #112 已实施。未覆盖语义仍须 STOP 问人。
 
-**2026-09-20 Human GO P1=A closure**：正式关闭 [next plan §4](plan-industry-align-next-2026-09-19.md#4-p-human-cuts-p1-closed-as-a-2026-09-20) 的 P1 keep deferred 记录；交付仅 docs SSOT + data-free 契约。此次 `IMPLEMENTATION_BASE=41f8df331ed25aad4616bde56c77ddb7025c91ee`，全部生产 Python（含命名叶子、Python/numba 扫描器与 fill-window eligibility）相对该基线零 diff。`SIMULATE_HOT_PATH` 固定清单（已含 `ashare_bars`）不扩容；测试补标签标识符禁入热路径及 `scan_held_day_python` 的 hm 比较契约。P2/P4 继续延后；δ 生产 C 合并仅按 [as-built](engine-ashare-correctness.md) 交叉引用，不重开。
+**2026-09-20 Human GO P1=A closure**：正式关闭 [next plan §4](plan-industry-align-next-2026-09-19.md#4-p-human-cuts-p1-closed-as-a-2026-09-20) 的 P1 keep deferred 记录；交付仅 docs SSOT + data-free 契约。该次 `IMPLEMENTATION_BASE=41f8df331ed25aad4616bde56c77ddb7025c91ee`，全部生产 Python（含命名叶子、Python/numba 扫描器与 fill-window eligibility）相对该基线零 diff。`SIMULATE_HOT_PATH` 固定清单（已含 `ashare_bars`）不扩容；测试补标签标识符禁入热路径及 `scan_held_day_python` 的 hm 比较契约。后续 P2=B、P4 closed as A 见下文；δ 生产 C 合并仅按 [as-built](engine-ashare-correctness.md) 交叉引用，不重开。
 
 ---
 
-**2026-09-20 Human GO P2=B**：`IMPLEMENTATION_BASE=40a5df1e4792f3b884c2cbac4da8486ff21a07a2`（post P1 #133）。本节新裁决覆盖下文原 #112 切片/冻结表中的“不接 trades / 热路径全部禁叶子”限制，仅限上述写入标签；其它冻结仍有效。六个具名路径保留 price/shares/reason oracle；14:57 不新增过滤或放行，P4 touch↔mark 仍 deferred。具体 schema/兼容合同见 [engine correctness · P2](engine-ashare-correctness.md#p2-trades-标签列human-go-b2026-09-20)。
+**2026-09-20 Human GO P2=B**：`IMPLEMENTATION_BASE=40a5df1e4792f3b884c2cbac4da8486ff21a07a2`（post P1 #133）。本节裁决覆盖下文原 #112 切片/冻结表中的“不接 trades / 热路径全部禁叶子”限制，仅限上述写入标签；其它冻结仍有效。六个具名路径保留 price/shares/reason oracle；14:57 不新增过滤或放行，P4 已 closed as A，两轴保持 as-built，不加联动过滤。具体 schema/兼容合同见 [engine correctness · P2](engine-ashare-correctness.md#p2-trades-标签列human-go-b2026-09-20)。
+
+**2026-09-20 Human GO P4=A closure**：`IMPLEMENTATION_BASE=9b9bd71ae1315f7a8c13d8126a638fabe5a021e8`（post P2 #134）。只交付 docs SSOT + data-free 合同，全部生产 Python 零 diff。分钟扫描仍可按既有资格到达 15:00；书 `market_close_mark` / `append_equity_and_eod_marks` / `EOD_MARK` 继续使用日线 close（停牌取 prior close，无 on/prior bar 才逐 lot 回落 cost），不以 `session_phase`、`closing_call` 或 minute hm touch 门跳过估值。P1=A、P2=B 保持；不改 scanner、`_in_session`、命名叶子、标签接线或经济语义。
+
+机械验收：`tests/test_p4_touch_mark_separation.py` 用 AST 锁 mark 函数与日/分钟调用点、固定热路径的无联动过滤，并以合成行情证明分钟缺失 / 15:00 存在均不改变日线 mark；`tests/test_daily_mark_cache.py` 锁 on-day / prior / lot-cost 与 EOD_MARK。同时运行既有 P1/P2 pins 与 import fence；不读湖、不跑宿主回测。下文 §7–§11 为原实施记录，不授权本次新增生产改动。
 
 ## 6. 非目标
 
 | 不做 | 原因 / 边界 |
 |------|-------------|
-| 改 14:57–15:00 的成交资格、成交价或收盘标记 | P1 已正式关闭为 A（2026-09-20），P4 继续延后；本船只命名当前扫描窗口，不建模真实收盘集合竞价 |
+| 改 14:57–15:00 的成交资格、成交价或收盘标记 | P1=A、P4 closed as A（2026-09-20）；touch / close-mark 两轴保持 as-built，不加联动过滤，本轮 P4=B 禁止；不建模真实收盘集合竞价 |
 | 给模拟环加新成交调度器、订单对象或事件总线 | 本仓是向量化扫描；不仿 LEBS / OMS |
 | 改日线 gap-stop / touch-trigger / same-bar / `pending_exit` 时点，或改分钟 open / close 取价 | F-R6；会改 trades 与 NAV |
 | 无关 trades / summary schema 或相位计数 | P2=B 仅授权书 `session_phase` / `price_rule` 两列；其它列、计数、v7 schema 与经济/资格改变仍是非目标 |
@@ -364,7 +370,7 @@ rg -n '[A-Za-z]:[\\\\/]' backtest/research/ashare_fill_clock.py tests/test_ashar
 
 ## 11. 修订程序
 
-以下为 #112 原始实施流程的历史记录；其 GO 与实施已完成。2026-09-20 的 P1=A 正式关闭以 §5 为准，仅 docs + tests，使用 §5 的本次基线；不重启以下待裁流程。
+以下为 #112 原始实施流程的历史记录；其 GO 与实施已完成。2026-09-20 的 P4=A 正式关闭以 §5 为准，仅 docs + tests，使用 §5 的 P4 收口基线；P1=A / P2=B 保持，不重启以下待裁流程。
 
 1. 当前只合本 plan；保持状态「⏳ 待评审 / 待人裁 GO」。合 docs PR 不触发实施。
 2. 后续按工作流评审并逐条裁 P1–P4；证据裁决，不以多数票替代语义选择。
@@ -399,7 +405,7 @@ rg -n '[A-Za-z]:[\\\\/]' backtest/research/ashare_fill_clock.py tests/test_ashar
 | **R1** | 2026-09-18 对抗评审：异议 | same-bar 不只 `open_board`：默认 `csv_strategy_books.py:118`；topk 分别在 `strategy_topk_dropout_rules.py:25`、`strategy_topk_score_exit_rules.py:25` 增加 `topk_drop` / `model_exit`，接线在 `csv_strategy_books.py:692/767`。`csv_daily_backtest.py:378-399` 命中前缀才按当日 close；`:382-396` 涨跌停门可阻止成交且不一定 pending | 价格枚举 / 短表明确非全量；`open_board` 复用既有 `300001.SZ` 夹具：T+1 open 必须触及涨停才进入 reserved，收盘开板且非跌停才按当日 close 成交；踩涨跌停门可能不成交或转 pending。不另造无涨跌停触碰的 OHLC，不为变绿修改 `simulate` |
 | **R2** | 2026-09-18 对抗评审：异议、领域安全 | v7 不适用书引擎价格表：`csv_minute_backtest_v7.py:327-340` 仅首 bar 可用 open；`:381-411` 严格 `hm==895`，缺则 `skip_no_1455`；`:398-404` 计时退出用最后一根 close。`limits=None` 卖侧仍 fail-open | F-R12 与整文件冻结维持；短表写“不含 v7”，不得称涨跌停 / 取价已收口 |
 | **R3** | 2026-09-18 对抗评审：异议 | 策略 9 在 `strategy9_rules.py:4/25` 写 `force_sell:max_hold` 收盘记账、次日开盘离场；默认 same-bar 前缀不含 `force_sell`。`tests/test_strategy9_book.py:92-117` 卖出日与 reason 可证，但 OHLC 全为 10.0，不能单独证明价来自 open 而非 close；分钟 `force_sell:time` 才是当根 close（`csv_minute_backtest.py:316-319`） | 只记录枚举非全量，不新开策略 9 切片 |
-| **R4** | 2026-09-18 对抗评审：异议 | `csv_simulate_loop.py:299-339` `append_equity_and_eod_marks` 写权益与 `side=EOD_MARK`；价格由 `csv_ledger.py:159-172` `market_close_mark` 提供，分钟 `simulate` 在 `csv_minute_backtest.py:729-735` 传日线 bars | 冻结该函数；不把 EOD 标记并成第四只产品买钟，不声称三条买路径锁住 NAV。P4 继续分开触价资格与 15:00 标记，本轮都不改 |
+| **R4** | 2026-09-18 对抗评审：异议 | `csv_simulate_loop.py:299-339` `append_equity_and_eod_marks` 写权益与 `side=EOD_MARK`；价格由 `csv_ledger.py:159-172` `market_close_mark` 提供，分钟 `simulate` 在 `csv_minute_backtest.py:729-735` 传日线 bars | 冻结该函数；不把 EOD 标记并成第四只产品买钟，不声称三条买路径锁住 NAV。P4 closed as A，触价资格与 15:00 close / mark 独立，两轴保持 as-built，不加联动过滤 |
 | **R5** | 2026-09-18 对抗评审：异议、领域安全 | **未核实并保持未核实**：湖 parquet 是否实际有 14:58/14:59/15:00 bar，及 `time` 是否会话钟点标成 UTC。代码 `ashare_bars.py:350-352` 会接受相应 hm，有 bar 才进入 `_in_session` | 不读湖，不在 plan 中宣称已有这些真实 bar；只陈述代码路径条件 |
 | **R6** | 2026-09-18 对抗评审：领域安全 | winner-ratio 单位、印花与成交量上限不属于 fill clock | 不采纳扩大范围；F-R13 与非目标维持，避免把未纳入误读成漏审或已修复 |
 | **R7** | 2026-09-18 对抗评审：模式 | v0.1 §8 把 vn.py、backtrader cheat-on-close、RQAlpha、Qlib 写成每片的开源对照。模式评审认为这些名字是装饰，删掉不改变 A/B/C，且不得因此放宽 qlib / Cerebro 禁令 | 同意工具名不是设计依据；§8 改为仓内锚点并保留禁令原文（E6）。不把收掉类比读成授权 vendor 或改成交 |
@@ -425,6 +431,7 @@ rg -n '[A-Za-z]:[\\\\/]' backtest/research/ashare_fill_clock.py tests/test_ashar
 
 | 版本 | 日期 | 变更 |
 |------|------|------|
+| v0.10 | 2026-09-20 | **Human GO P4=A closure**：P4 closed as A，正式替代“已裁 A / keep deferred”；touch eligibility ≠ official close / NAV mark，两轴保持 as-built；P1=C 不自动回答 P4，本轮 B 联动改变禁止。P1 stays A、P2 stays B；仅 docs + data-free pins，全部生产 Python 相对 `9b9bd71ae1315f7a8c13d8126a638fabe5a021e8` 零 diff。下列 deferred 措辞仅记录当时状态。 |
 | v0.9 | 2026-09-20 | Human GO P2=B：仅新增书 trades 两个标签列，覆盖旧 P2=A schema 禁令；写入点 allowlist、六路径 oracle 与旧列兼容；P1 保持 A、P4 deferred，禁止经济/资格变化。 |
 | v0.8 | 2026-09-20 | Human GO P1=A closure：正式关闭 fill-clock 延后项；无真实收盘集合竞价模型，14:57–15:00 仅扫描窗口标签，`_in_session` / 成交资格保持 as-built；禁止本轮 B/C 与扩大窗口的生产改动。仅 docs + data-free 契约，生产冻结基线 `41f8df331ed25aad4616bde56c77ddb7025c91ee`；P2/P4 继续延后，δ 生产 C 不重开。 |
 | v0.7 | 2026-09-19 | 已实施：PR #112 合入切片 A–C；行为零变化。 |
