@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Human GO B: synthetic, read-only event sensitivity; never a strategy replay."""
+"""Human GO B: synthetic/lake read-only event sensitivity; never a strategy replay."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ import json
 import math
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 
@@ -27,6 +28,8 @@ from backtest.research import csv_minute_backtest_v7 as v7
 from backtest.research import unified_exit_modea as modea
 from backtest.research import unified_exit_modeb as modeb
 from backtest.research.ashare_fees import BILATERAL_10BP, FeeSchedule
+from backtest.research.ashare_bars import book_frames_from_compact, load_minute_from_lake
+from backtest.research.qlib_bin_1min import load_qlib_bin_1min_bars
 from backtest.research.ashare_session import (
     defer_sell_at_limit, session_limit_prices, skip_buy_at_limit, t1_sellable,
 )
@@ -193,7 +196,8 @@ def baseline(case: Case, cap: VolumeCap | None = None) -> dict:
 
 def next_open(*, engine: str, side: str, decision_at: datetime, candidates: list[Bar],
               previous_by_day: dict[date, float], shares: int, cash: float,
-              buy_day: date = PREV_DAY, cap: VolumeCap | None = None) -> tuple[dict, list[dict]]:
+              buy_day: date = PREV_DAY, cap: VolumeCap | None = None,
+              symbol: str = SYMBOL, sessions=SESSIONS) -> tuple[dict, list[dict]]:
     """Frozen order: chronological first eligible open, no close/volume lookahead."""
     submit = decision_at + timedelta(milliseconds=1)
     attempts = []
@@ -202,14 +206,14 @@ def next_open(*, engine: str, side: str, decision_at: datetime, candidates: list
         start_hm = bar.start.hour * 60 + bar.start.minute
         if bar.start < submit:
             why = "before_submit"
-        elif bar.day not in SESSIONS:
+        elif bar.day not in sessions:
             why = "outside_fixture_calendar"
         elif not (570 <= start_hm < 690 or 780 <= start_hm < 897):
             why = "outside_continuous_session"
         elif side == "sell" and not t1_sellable(buy_day, bar.day):
             why = "t1_locked"
         else:
-            limits = session_limit_prices(SYMBOL, previous_by_day.get(bar.day))
+            limits = session_limit_prices(symbol, previous_by_day.get(bar.day))
             if limits is None:
                 why = "missing_limit_reference"
             elif side == "buy" and skip_buy_at_limit(bar.open, limits):
@@ -221,15 +225,16 @@ def next_open(*, engine: str, side: str, decision_at: datetime, candidates: list
             why = "cash_reject_terminal"
         if not why and cap is not None:
             # This open cannot spend the bar's future completed volume.
-            filled, why = cap.clamp((SYMBOL, bar.day.strftime("%Y%m%d"), bar.hm),
-                                    bar.hm - 1, shares, buy=side == "buy")
+            end_hm = bar.end.hour * 60 + bar.end.minute
+            filled, why = cap.clamp((symbol, bar.day.strftime("%Y%m%d"), end_hm),
+                                    start_hm, shares, buy=side == "buy")
         attempts.append(dict(candidate_start=bar.start, candidate_end=bar.end,
                              submit_at=submit, candidate_px=bar.open,
                              previous_close=previous_by_day.get(bar.day),
                              outcome=why or "FILLED", candidate_shares=filled if not why else 0))
         if not why:
             if cap is not None:
-                cap.consume((SYMBOL, bar.day.strftime("%Y%m%d"), bar.hm), filled)
+                cap.consume((symbol, bar.day.strftime("%Y%m%d"), end_hm), filled)
             delta = (BILATERAL_10BP.debit_buy(filled * bar.open) if side == "buy"
                      else -BILATERAL_10BP.credit_sell(filled * bar.open))
             return dict(status="FILLED", fill_px=bar.open, fill_at=bar.start,
@@ -550,8 +555,8 @@ def source_hashes() -> dict:
         (ROOT / f"backtest/research/{name}.py").read_bytes()).hexdigest() for name in SOURCE_NAMES}
 
 
-def write_csv(path: Path, rows: list[dict]) -> None:
-    fields = list(dict.fromkeys(k for row in rows for k in row))
+def write_csv(path: Path, rows: list[dict], fields=()) -> None:
+    fields = list(dict.fromkeys([*fields, *(k for row in rows for k in row)]))
     with path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields, lineterminator="\n")
         writer.writeheader()
@@ -578,15 +583,20 @@ def summaries(rows: list[dict]) -> list[dict]:
     return out
 
 
-def run(output: Path) -> dict:
-    # Fail closed before any output mutation; never reuse baseline/artifact dirs.
-    if output.exists():
-        raise FileExistsError(f"Refusing to overwrite output directory: {output}")
+def check_source_fence() -> dict:
     before = source_hashes()
     for path, digest in before.items():
         base_bytes = subprocess.check_output(["git", "show", f"{BASE}:{path}"], cwd=ROOT)
         if hashlib.sha256(base_bytes).hexdigest() != digest:
             raise ValueError(f"Production source differs from experiment BASE: {path}")
+    return before
+
+
+def run(output: Path) -> dict:
+    # Fail closed before any output mutation; never reuse baseline/artifact dirs.
+    if output.exists():
+        raise FileExistsError(f"Refusing to overwrite output directory: {output}")
+    before = check_source_fence()
     cases = fixtures()
     clocks, audits = clock_rows(cases)
     mb = modeb_baselines()
@@ -624,11 +634,517 @@ def run(output: Path) -> dict:
     return dict(output=str(output), rows={k: len(v) for k, v in payloads.items()}, status="DATA_GAP_SYNTHETIC_BATCH_COMPLETE")
 
 
+LAKE_SCOPE = "local event sensitivity not strategy claim"
+LAKE_LABEL = "lake_index_is_bar_start_wallclock"
+DEFAULT_QLIB_1MIN_ROOT = Path(r"C:\Users\wangc\.qlib\qlib_data\my_data_1min")
+SOURCE_LINEAGE = "parquet_lineage"
+STAGES = ("trial", "four", "six", "eight")
+FULL_GAPS = dict(production_replay="DATA_GAP", full_replay_status="DATA_GAP",
+                 full_strategy_nav=None, full_strategy_return=None,
+                 max_drawdown=None, strategy_rank=None, strategy_rank_delta=None)
+
+
+@dataclass(frozen=True)
+class LakeBar(Bar):
+    # Deliberately separate from batch1's END labels. Never subtract one minute.
+    @property
+    def start(self) -> datetime:
+        return stamp(self.day, self.hm)
+
+    @property
+    def end(self) -> datetime:
+        return self.start + timedelta(minutes=1)
+
+
+def lake_dates(start: str, end: str) -> list[date]:
+    if not all(re.fullmatch(r"\d{8}", x) for x in (start, end)):
+        raise ValueError("Lake dates must be YYYYMMDD, without hyphens")
+    first, last = (datetime.strptime(x, "%Y%m%d").date() for x in (start, end))
+    if first > last:
+        raise ValueError("--start must be <= --end")
+    # Calendar dates, not an invented trading calendar; absent days become gaps.
+    return [first + timedelta(days=i) for i in range((last - first).days + 1)]
+
+
+def lake_symbols(values: list[str] | None) -> list[str]:
+    symbols = sorted({s.strip().upper() for value in (values or [SYMBOL])
+                      for s in value.split(",")})
+    if not symbols or any(not re.fullmatch(r"\d{6}\.(SH|SZ|BJ)", s) for s in symbols):
+        raise ValueError("--symbols requires canonical symbols, e.g. 600000.SH")
+    return symbols
+
+
+def publication_gaps() -> list[dict]:
+    """Inspect repository CSV headers only; filenames/mtime are never PIT evidence."""
+    samples = []
+    tokens = ("published_at", "publication_timestamp", "generated_at", "available_at")
+    for path in sorted((ROOT / "stock_pool").glob("*.csv"))[:20]:
+        if path.is_symlink():
+            continue
+        try:
+            with path.open(encoding="utf-8-sig", newline="") as handle:
+                header = next(csv.reader(handle), [])
+            samples.append(dict(path=str(path.relative_to(ROOT)), columns=len(header),
+                                timestamp_columns=[c for c in header if c.strip().lower() in tokens]))
+        except (OSError, UnicodeError, csv.Error) as exc:
+            samples.append(dict(path=str(path.relative_to(ROOT)), error=str(exc)))
+    return [dict(item="pool_availability", status="DATA_GAP", evidence=json.dumps(
+        samples, ensure_ascii=False), reason="header_sample_only_no_audited_publication_chain"),
+        dict(item="factor_availability", status="DATA_GAP",
+             evidence="No audited generated_at/available_at chain; no external search")]
+
+
+def validate_lake_frame(frame: pd.DataFrame, start: str, end: str) -> None:
+    if not isinstance(frame.index, pd.DatetimeIndex) or frame.index.tz is not None:
+        raise ValueError("Expected naive lake wall-clock DatetimeIndex; no timezone conversion inferred")
+    if frame.index.has_duplicates or not frame.index.is_monotonic_increasing:
+        raise ValueError("Lake frame must have unique chronological timestamps")
+    if frame.index.hasnans or not (frame.index == frame.index.floor("min")).all():
+        raise ValueError("Lake frame has missing/non-minute labels")
+    prices = frame[["open", "high", "low", "close"]].to_numpy(dtype=float)
+    if not np.isfinite(prices).all() or not (prices > 0).all():
+        raise ValueError("Lake OHLC must be finite and positive")
+    if ((frame["high"] < frame[["open", "close"]].max(axis=1)).any()
+            or (frame["low"] > frame[["open", "close"]].min(axis=1)).any()):
+        raise ValueError("Inconsistent lake OHLC envelope")
+    labels = frame.index.strftime("%Y%m%d")
+    if not ((labels >= start) & (labels <= end)).all():
+        raise ValueError("Lake reader returned bars outside the requested window")
+    if not (frame["ymd"].to_numpy() == labels).all() or not (
+            frame["hm"].to_numpy() == frame.index.hour * 60 + frame.index.minute).all():
+        raise ValueError("Lake hm/ymd disagrees with START wall-clock index")
+
+
+def lake_baseline(*, engine, symbol, day, hm, frame, previous, anchor, stage,
+                  cap=None) -> dict:
+    """Original decision/ledger calls on real prices, with declared injected state."""
+    price = float(frame.loc[stamp(day, hm), "close"])
+    limits = session_limit_prices(symbol, previous)
+    if limits is None:
+        return dict(status="DATA_GAP", reason="unknown_board_or_limit_reference",
+                    shares=None, fill_px=None, cash_after=None, action=None)
+    if engine == "Book":
+        quotes = book._chase_quotes(frame.loc[frame.index <= stamp(day, hm)])
+        state = SimState(cash=1_000_000., volume_cap=cap)
+        action = book.chase_decision(*quotes, limits[0])
+        run_chase_due_day(state, {symbol: (10_000., 0)}, day_i=1, day=pd.Timestamp(day),
+                          names={}, allow_add=False, buy_gate=None,
+                          quotes_for=lambda _: (*quotes, [previous]),
+                          volume_bucket_for=lambda _: hm + 1)
+        trades = [t for t in state.trades if t["side"] == "BUY"]
+        reason = (state.trades[-1]["reason"] if state.trades else
+                  "limit" if state.stats["chase_skip_limit"] else
+                  "abandon" if state.stats["chase_abandon"] else "buy_failed")
+    else:
+        anchor_at, entry = anchor
+        state = v7.SimResult(1_000_000., volume_cap=cap)
+        # All stages are counterfactual independent snapshots, not inferred history.
+        position = v7.Position(symbol, entry, stage=stage, avg_cost=entry, peak=entry,
+                               lots=[v7.Lot(100, anchor_at.date(), entry, "injected_anchor")],
+                               last_add_date=anchor_at.date())
+        state.positions[symbol] = position
+        decision = ladder_decision(stage, price, entry_a=entry)
+        stop = stop_decision(stage, entry_a=entry, average_cost=entry)
+        action = decision.action if in_add_window(hm) else "outside_add_window"
+        reason = action
+        if price <= stop.line:
+            reason = "stop_gate_blocks_add"
+        elif action.startswith("add_"):
+            if skip_buy_at_limit(price, limits):
+                reason = "limit_up"
+            elif defer_sell_at_limit(price, limits):
+                reason = "limit_down"
+            else:
+                # Ledger's integer bucket is completed time; signal hm stays START.
+                v7._buy(state, position, symbol, day, hm + 1, price,
+                        decision.fraction, "buy:" + action, action)
+                reason = state.trades[-1]["reason"]
+        trades = [t for t in state.trades if t["side"] == "buy"]
+    return dict(status="FILLED" if trades else "NO_FILL", reason=reason, action=action,
+                shares=int(trades[-1]["shares"]) if trades else 0,
+                fill_px=float(trades[-1]["price"]) if trades else None,
+                cash_after=state.cash)
+
+
+def lake_event(frame, *, engine, symbol, day, hm, stage) -> tuple[dict, list[dict], list[dict]]:
+    quote = stamp(day, hm)
+    available = quote + timedelta(minutes=1)
+    previous_at = stamp(day - timedelta(days=1), 900)
+    row = dict(engine=engine, case_id=f"{symbol}_{day:%Y%m%d}_{hm}_{stage}", symbol=symbol,
+               date=day, scope=LAKE_SCOPE, axis="clock", source="oskh_parquet_none",
+               stage=stage, signal_hm=hm, bar_label_semantics=LAKE_LABEL,
+               quote_at=quote, close_available_at=available, decision_at=available,
+               submit_at=available + timedelta(milliseconds=1), decision_px=None,
+               limit_reference_at=previous_at, limit_reference_px=None,
+               limit_reference_kind="previous_calendar_day_1500_minute_close_proxy_not_official_daily",
+               injected_entry_a=None, injected_anchor_at=None,
+               injected_lot_shares=100 if engine == "v7" else None,
+               injected_cash=1_000_000., baseline_status="DATA_GAP", baseline_reason=None,
+               baseline_fill_at=None, baseline_fill_px=None, baseline_shares=None,
+               baseline_cash_after=None, next_status="DATA_GAP", next_reason=None,
+               next_fill_at=None, next_fill_px=None, next_shares=None, next_cash_after=None,
+               matched_fill=None, status_match=None, same_price=None, price_diff=None,
+               price_diff_bp=None, fixed_exit_day=day + timedelta(days=1), fixed_exit_px=None,
+               exit_mark_at=None, local_pair_status="DATA_GAP",
+               baseline_local_pnl=None, next_local_pnl=None, baseline_local_return=None,
+               next_local_return=None, local_pnl_delta=None, local_return_delta_bp=None,
+               baseline_local_rank=None, next_local_rank=None, local_rank_delta=None, **FULL_GAPS)
+    missing = []
+    if frame is None:
+        missing.append("missing_or_unreadable_symbol_window")
+    else:
+        if quote not in frame.index:
+            missing.append("missing_required_signal_bar_no_fallback")
+        else:
+            row["decision_px"] = float(frame.at[quote, "close"])
+        if stamp(day, 570) not in frame.index:
+            missing.append("missing_0930_open")
+        if previous_at not in frame.index:
+            missing.append("missing_previous_calendar_day_1500_reference")
+        else:
+            row["limit_reference_px"] = float(frame.at[previous_at, "close"])
+        anchors = frame.loc[(frame["hm"] == 570) & (frame.index < stamp(day, 0))]
+        if engine == "v7" and anchors.empty:
+            missing.append("missing_prior_date_0930_entry_anchor")
+    capacities = []
+    if missing:
+        row["baseline_reason"] = row["next_reason"] = ";".join(missing)
+        attempts = []
+    else:
+        anchor = ((anchors.index[0].to_pydatetime(), float(anchors.iloc[0]["open"]))
+                  if engine == "v7" else None)
+        if anchor:
+            row.update(injected_anchor_at=anchor[0], injected_entry_a=anchor[1])
+        day_frame = frame.loc[frame["ymd"] == day.strftime("%Y%m%d")]
+        kwargs = dict(engine=engine, symbol=symbol, day=day, hm=hm, frame=day_frame,
+                      previous=row["limit_reference_px"], anchor=anchor, stage=stage)
+        base = lake_baseline(**kwargs)
+        row.update(action=base["action"], baseline_status=base["status"], baseline_reason=base["reason"],
+                   baseline_fill_px=base["fill_px"], baseline_shares=base["shares"],
+                   baseline_cash_after=base["cash_after"],
+                   baseline_fill_at=available if base["shares"] else None)
+        if base["shares"]:
+            # Order lifetime ends this calendar day; no overnight session inference.
+            candidates = [LakeBar(day, int(r.hm), float(r.open), float(r.close))
+                          for r in day_frame.loc[day_frame.index > quote].itertuples()]
+            alt, attempts = next_open(engine=engine, side="buy", decision_at=available,
+                                      candidates=candidates, previous_by_day={day: row["limit_reference_px"]},
+                                      shares=base["shares"], cash=1_000_000., symbol=symbol, sessions=(day,))
+        else:
+            alt, attempts = dict(status=base["status"], reason="no_baseline_order",
+                                 fill_at=None, fill_px=None, shares=base["shares"],
+                                 cash_after=base["cash_after"]), []
+        row.update({"next_" + k: v for k, v in alt.items()})
+        if base["status"] != "DATA_GAP":
+            common = bool(base["shares"] and alt["shares"])
+            row.update(matched_fill=common, status_match=bool(base["shares"]) == bool(alt["shares"]))
+            if common:
+                row.update(same_price=math.isclose(base["fill_px"], alt["fill_px"], abs_tol=1e-9),
+                           price_diff=alt["fill_px"] - base["fill_px"],
+                           price_diff_bp=(alt["fill_px"] / base["fill_px"] - 1) * 10_000)
+        # A predeclared next-calendar-day 14:55 close price pair, never an exit replay.
+        exit_at = stamp(day + timedelta(days=1), 895)
+        if exit_at in frame.index and base["shares"]:
+            exit_px = float(frame.at[exit_at, "close"])
+            old = economics(base["fill_px"], exit_px, base["shares"])
+            row.update(fixed_exit_px=exit_px, exit_mark_at=exit_at,
+                       local_pair_status="PRICE_PAIR_ONLY_NOT_EXECUTED_EXIT",
+                       baseline_local_pnl=old["net_pnl"], baseline_local_return=old["net_return"])
+            if row["matched_fill"]:
+                new = economics(alt["fill_px"], exit_px, alt["shares"])
+                row.update(next_local_pnl=new["net_pnl"], next_local_return=new["net_return"],
+                           local_pnl_delta=new["net_pnl"] - old["net_pnl"],
+                           local_return_delta_bp=(new["net_return"] - old["net_return"]) * 10_000)
+        elif not base["shares"] and base["status"] != "DATA_GAP":
+            row["local_pair_status"] = "NO_FILL"
+        # A missing/untyped volume lookup is intentional, never fabricated shares.
+        capped = lake_baseline(**kwargs, cap=VolumeCap(.1, {}))
+        capacities = [dict(cap_on=False, participation_rate=None, **base),
+                      dict(cap_on=True, participation_rate=.1, **capped)]
+    if not capacities:
+        capacities = [dict(cap_on=enabled, participation_rate=.1 if enabled else None,
+                           status="DATA_GAP", reason=row["baseline_reason"], shares=None,
+                           fill_px=None, cash_after=None) for enabled in (False, True)]
+    capacities = [dict(engine=engine, case_id=row["case_id"], symbol=symbol, scope=LAKE_SCOPE,
+                       axis="capacity_close", volume_status="DATA_GAP", raw_volume=None,
+                       volume_unit=None, available_at=None, bucket=hm + 1,
+                       note="reader_drops_volume_no_audited_units_or_availability",
+                       **c, **FULL_GAPS) for c in capacities]
+    return row, [dict(engine=engine, case_id=row["case_id"], symbol=symbol, **a) for a in attempts], capacities
+
+
+def lake_cost_rows(clocks: list[dict]) -> list[dict]:
+    rows = []
+    scenarios = [("slippage", "BILATERAL_10BP", bp) for bp in (0, 5, 10, 20)]
+    scenarios += [("fee", scheme, 0) for scheme in
+                  ("BILATERAL_10BP", "REPLACE_COMMISSION_3BP_MIN5_STAMP_SELL5BP")]
+    for r in clocks:
+        paired = r["local_pair_status"] == "PRICE_PAIR_ONLY_NOT_EXECUTED_EXIT"
+        for axis, scheme, bp in scenarios:
+            econ = economics(r["baseline_fill_px"], r["fixed_exit_px"], r["baseline_shares"],
+                             slip_bp=bp, scheme=scheme) if paired else {}
+            rows.append(dict(engine=r["engine"], case_id=r["case_id"], scope=LAKE_SCOPE,
+                             axis=axis, scheme=scheme, slip_per_side_bp=bp,
+                             status=r["local_pair_status"], shares=r["baseline_shares"],
+                             buy_px=None, sell_px=None, buy_fee=None, sell_fee=None, stamp_fee=None,
+                             net_pnl=None, net_return=None, **FULL_GAPS))
+            rows[-1].update(econ, pnl_delta=(econ["net_pnl"] - r["baseline_local_pnl"] if paired else None),
+                            return_delta_bp=((econ["net_return"] - r["baseline_local_return"]) * 10_000
+                                             if paired else None))
+    rows.append(dict(engine="ModeB", scope=LAKE_SCOPE, status="NOT_RUN", **FULL_GAPS))
+    return rows
+
+
+def lake_summaries(clocks: list[dict]) -> list[dict]:
+    rows = []
+    for engine in ("Book", "v7"):
+        group = [r for r in clocks if r["engine"] == engine]
+        valid = [r for r in group if r["baseline_status"] != "DATA_GAP"]
+        base = [r for r in valid if r["baseline_shares"]]
+        common = [r for r in valid if r["matched_fill"]]
+        rows.append(dict(engine=engine, scope=LAKE_SCOPE,
+                         clock_status="LOCAL_EVENTS_COMPLETE" if len(valid) == len(group) else "DATA_GAP",
+                         requested_events=len(group), evaluated_events=len(valid),
+                         data_gap_events=len(group) - len(valid),
+                         baseline_fills=len(base) if valid else None,
+                         next_fills=sum(bool(r["next_shares"]) for r in valid) if valid else None,
+                         common_fills=len(common) if valid else None,
+                         status_match_rate=sum(r["status_match"] for r in valid) / len(valid) if valid else None,
+                         matched_fill_rate=len(common) / len(base) if base else None,
+                         same_price_rate=sum(r["same_price"] for r in common) / len(common) if common else None,
+                         mean_price_diff_bp=np.mean([r["price_diff_bp"] for r in common]) if common else None,
+                         **FULL_GAPS))
+    rows.append(dict(engine="ModeB", scope=LAKE_SCOPE, clock_status="NOT_RUN", **FULL_GAPS))
+    return rows
+
+
+
+def resolve_qlib_1min_root(explicit: Path | str | None = None) -> Path | None:
+    """Prefer explicit CLI, then env; never invent alternate drive letters."""
+    candidates = []
+    if explicit is not None:
+        candidates.append(Path(explicit))
+    for key in ("QLIB_1MIN_ROOT", "OSKH_QLIB_1MIN_ROOT"):
+        value = os.environ.get(key)
+        if value:
+            candidates.append(Path(value))
+    candidates.append(DEFAULT_QLIB_1MIN_ROOT)
+    for root in candidates:
+        cal = root / "calendars" / "1min.txt"
+        feat = root / "features"
+        if cal.is_file() and feat.is_dir():
+            return root
+    return None
+
+
+def normalize_book_frame(frame: pd.DataFrame) -> pd.DataFrame:
+    """Ensure book-engine OHLC envelope; qlib compact often omits low."""
+    out = frame.copy()
+    oc_min = out[["open", "close"]].min(axis=1)
+    oc_max = out[["open", "close"]].max(axis=1)
+    low = out["low"] if "low" in out.columns else oc_min
+    high = out["high"] if "high" in out.columns else oc_max
+    out["low"] = np.minimum(low.to_numpy(dtype=float), oc_min.to_numpy(dtype=float))
+    out["high"] = np.maximum(high.to_numpy(dtype=float), oc_max.to_numpy(dtype=float))
+    return out
+
+
+def load_minute_frames(symbols: list[str], start: str, end: str, *,
+                       qlib_root: Path | str | None = None
+                       ) -> tuple[dict, str | None, Path | None, Path | None, Path | None, list[dict]]:
+    """Same parquet lineage; prefer qlib 1min bin I/O, fall back to OSKH parquet.
+
+    Returns frames, access, qlib_root_used, period_root, lake_root, inventory.
+    """
+    gaps_extra: list[dict] = []
+    inventory: list[dict] = []
+    start_d = datetime.strptime(start, "%Y%m%d").date()
+    end_d = datetime.strptime(end, "%Y%m%d").date()
+    chosen = resolve_qlib_1min_root(qlib_root)
+    if chosen is not None:
+        try:
+            compact = load_qlib_bin_1min_bars(symbols, start_d, end_d, qlib_root=chosen, workers=4)
+            frames = {code: normalize_book_frame(frame)
+                      for code, frame in book_frames_from_compact(compact).items()}
+            # Restrict to requested window (loader may preload prior days).
+            clipped = {}
+            for code, frame in frames.items():
+                keep = (frame["ymd"] >= start) & (frame["ymd"] <= end)
+                clipped[code] = frame.loc[keep]
+            inventory.append(dict(access="qlib_bin_1min", qlib_root=str(chosen),
+                                  status="PRESENT", symbols=sorted(clipped)))
+            return clipped, "qlib_bin_1min", chosen, None, None, inventory
+        except (OSError, ValueError, SystemExit, RuntimeError) as exc:
+            gaps_extra.append(dict(item="qlib_bin_1min_load", status="DATA_GAP",
+                                   evidence=f"{type(exc).__name__}: {exc}; falling_back_to_parquet"))
+
+    period_root = lake_root = None
+    try:
+        period_root = resolve_period_root("1m")
+        lake_root = period_root / "dividend_type=none"
+        if not period_root.is_dir() or not lake_root.is_dir():
+            raise FileNotFoundError(f"Configured minute/none directory does not exist: {lake_root}")
+    except (RuntimeError, ValueError, OSError) as exc:
+        inventory.extend(gaps_extra)
+        inventory.append(dict(access="oskh_parquet_1m", status="DATA_GAP",
+                              evidence=f"{type(exc).__name__}: {exc}"))
+        return {}, None, chosen, period_root, lake_root, inventory
+
+    from backtest.research.ashare_bars import to_partition_key
+    for symbol in symbols:
+        path = lake_root / f"symbol={to_partition_key(symbol)}" / "data.parquet"
+        try:
+            stat = path.stat()
+            inventory.append(dict(symbol=symbol, path=str(path), size=stat.st_size,
+                                  mtime_ns=stat.st_mtime_ns, status="PRESENT",
+                                  access="oskh_parquet_1m"))
+        except OSError as exc:
+            inventory.append(dict(symbol=symbol, path=str(path), status="DATA_GAP",
+                                  error=str(exc), access="oskh_parquet_1m"))
+    loaded = load_minute_from_lake(symbols, start, end, lake_root=lake_root)
+    frames = {symbol: normalize_book_frame(frame) for symbol, frame in loaded.items()
+              if frame is not None and not frame.empty}
+    inventory = gaps_extra + inventory
+    return frames, "oskh_parquet_1m", chosen, period_root, lake_root, inventory
+
+
+def run_lake(output: Path, *, symbols=None, start="20260916", end="20260918",
+             qlib_1min_root: Path | str | None = None) -> dict:
+    if output.exists() or output.is_symlink():
+        raise FileExistsError(f"Refusing to overwrite output directory: {output}")
+    dates, symbols = lake_dates(start, end), lake_symbols(symbols)
+    before = check_source_fence()  # Fatal drift is never downgraded to DATA_GAP.
+    reader_sources = {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest() for name in
+                      ("backtest/research/ashare_bars.py", "common/infra/data_root.py",
+                       "backtest/research/qlib_bin_1min.py")}
+    gaps, publication = [], publication_gaps()
+    frames, access, qlib_used, period_root, lake_root, inventory = load_minute_frames(
+        symbols, start, end, qlib_root=qlib_1min_root)
+    lake_status = "DATA_GAP"
+    if access is None:
+        gaps.append(dict(item="production_minute_source", status="DATA_GAP",
+                         evidence="qlib_bin_1min unavailable and parquet resolver/root missing; no drive probing",
+                         inventory=json.dumps(inventory, ensure_ascii=False)))
+    else:
+        for symbol in symbols:
+            frame = frames.get(symbol)
+            try:
+                if frame is None or frame.empty:
+                    raise ValueError("Missing/unreadable/filtered symbol window; reader gives no detailed failure")
+                validate_lake_frame(frame, start, end)
+            except (ValueError, KeyError, TypeError) as exc:
+                gaps.append(dict(item="symbol_window", symbol=symbol, status="DATA_GAP",
+                                 evidence=str(exc), access=access))
+                frames.pop(symbol, None)
+            else:
+                frames[symbol] = frame
+        # Parquet integrity: size/mtime unchanged after read.
+        if access == "oskh_parquet_1m":
+            for item in inventory:
+                if item.get("status") == "PRESENT" and "path" in item:
+                    stat = Path(item["path"]).stat()
+                    if (stat.st_size, stat.st_mtime_ns) != (item["size"], item["mtime_ns"]):
+                        raise RuntimeError(f"Lake source changed while reading: {item['path']}")
+        lake_status = "READ_OK" if len(frames) == len(symbols) else "DATA_GAP"
+    gaps = publication + gaps
+    gaps.extend(dict(item=item, status="DATA_GAP", evidence=evidence) for item, evidence in (
+        ("real_volume_and_units", "OHLC path drops or lacks attested incremental shares/available_at"),
+        ("official_limit_reference_and_corporate_actions", "Uses prior calendar-date 15:00 minute close proxy only; no official daily/name/ST/exdiv validation"),
+        ("closed_cash_path_daily_marks_corporate_actions", "Independent injected events; no strategy NAV/DD/rank"),
+        ("modeb_replay", "NOT_RUN; daily entry, instance calendar and clock not replayed")))
+    clocks, audits, capacities = [], [], []
+    for symbol in symbols:
+        for day in dates:
+            specs = [("Book", 585, "pending_chase")]
+            specs += [("v7", hm, stage) for hm in (884, 885, 895) for stage in STAGES]
+            for engine, hm, stage in specs:
+                row, attempts, cap = lake_event(frames.get(symbol), engine=engine, symbol=symbol,
+                                               day=day, hm=hm, stage=stage)
+                row["source"] = access or "unavailable"
+                row["source_lineage"] = SOURCE_LINEAGE
+                clocks.append(row)
+                audits.extend(attempts)
+                capacities.extend(cap)
+                if row["baseline_status"] == "DATA_GAP" or row["local_pair_status"] == "DATA_GAP":
+                    gaps.append(dict(item="event", engine=engine, case_id=row["case_id"], status="DATA_GAP",
+                                     evidence=row["baseline_reason"] if row["baseline_status"] == "DATA_GAP"
+                                     else "missing_next_calendar_day_1455_exit_mark"))
+    snapshots = [dict(symbol=symbol, bar_start=at, bar_end=at + timedelta(minutes=1),
+                      bar_label_semantics=LAKE_LABEL, access=access, source_lineage=SOURCE_LINEAGE, **r)
+                 for symbol, frame in sorted(frames.items())
+                 for at, r in frame.to_dict("index").items()]
+    if not snapshots:
+        snapshots = [dict(symbol=s, status="DATA_GAP", bar_start=None, bar_end=None,
+                          open=None, high=None, low=None, close=None) for s in symbols]
+    payloads = {"clock_trades.csv": clocks, "clock_candidates.csv": audits,
+                "clock_summary.csv": lake_summaries(clocks), "cost_sensitivity.csv": lake_cost_rows(clocks),
+                "capacity.csv": capacities, "minute_frames.csv": snapshots, "data_gaps.csv": gaps,
+                "modeb_baseline.csv": [dict(engine="ModeB", status="NOT_RUN", clock_status="NOT_RUN",
+                                             scope=LAKE_SCOPE, **FULL_GAPS)]}
+    if source_hashes() != before or any(hashlib.sha256((ROOT / p).read_bytes()).hexdigest() != digest
+                                       for p, digest in reader_sources.items()):
+        raise RuntimeError("Production source changed during run")
+    output.mkdir(parents=True, exist_ok=False)
+    for filename, rows in payloads.items():
+        fields = ("engine", "case_id", "symbol", "candidate_start", "candidate_end", "submit_at",
+                  "candidate_px", "previous_close", "outcome", "candidate_shares") if filename == "clock_candidates.csv" else ()
+        write_csv(output / filename, rows, fields)
+    manifest = dict(base=BASE, batch=2, mode="lake", git_head=subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(), status="DATA_GAP",
+        lake_read_status=lake_status, scope=LAKE_SCOPE, production_replay="DATA_GAP",
+        source=SOURCE_LINEAGE, access=access, access_preference="qlib_bin_1min_then_oskh_parquet_1m",
+        OSKH_SOURCE_PARQUET_ROOT=os.environ.get("OSKH_SOURCE_PARQUET_ROOT") or "unset",
+        OSKH_AUTHORITY_HINT_ROOT=os.environ.get("OSKH_AUTHORITY_HINT_ROOT") or "unset",
+        OSKH_PERIOD_1M_ROOT=os.environ.get("OSKH_PERIOD_1M_ROOT") or "unset",
+        QLIB_1MIN_ROOT=os.environ.get("QLIB_1MIN_ROOT") or os.environ.get("OSKH_QLIB_1MIN_ROOT") or "unset",
+        qlib_1min_root=str(qlib_used) if qlib_used is not None else None,
+        default_qlib_1min_root=str(DEFAULT_QLIB_1MIN_ROOT),
+        resolved_1m_root=str(period_root) if period_root is not None else None,
+        lake_root=str(lake_root) if lake_root is not None else None, symbols=symbols,
+        date_window=dict(start=start, end=end, format="YYYYMMDD"),
+        bar_label_semantics=LAKE_LABEL, timezone="Asia/Shanghai",
+        bar_label_evidence="4090 operator verified 600000.SH 20260916/17/18: hm585=09:45 START; qlib 1min bins dumped from none-adjusted 1m lake",
+        note_same_dataset="qlib_bin is derived materialization of parquet lake; not a competing universe",
+        close_available="bar.start + 1 minute", submit="close_available + 1 millisecond",
+        next_open="first same-date continuous-session bar.start >= submit; expires at day end",
+        same_close="original helper price; bookkeeping timestamp at close_available; no live fill assertion",
+        injected_state="Book pending 10000 cash budget; v7 four independent stages, 100-share lot at earliest prior-date 09:30 real open; cash=1000000/event; gates pre-passed except local rules",
+        limit_reference="prior calendar-date 15:00 minute close proxy; missing is DATA_GAP; no official daily/ST/exdiv claim",
+        cost_exit="next calendar-date 14:55 close, predetermined price-only pair; no executable exit claim",
+        volume_cap="separate p=0.1 scenario with unavailable typed volume, no fabricated volume",
+        local_rank="NOT_RUN", quantities="clock/cost frozen from original baseline ledger",
+        python=sys.version, pandas=pd.__version__, numpy=np.__version__,
+        checked_sources_match_base=True, source_hashes_before=before, source_hashes_after=source_hashes(),
+        reader_source_hashes=reader_sources,
+        harness_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+        input_files=inventory, input_provenance="qlib bin or parquet source; no full partition hash; no drive letter probing",
+        files={p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(output.iterdir())})
+    (output / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return dict(output=str(output), status="DATA_GAP", lake_read_status=lake_status, access=access,
+                rows={k: len(v) for k, v in payloads.items()})
+
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-dir", type=Path, required=True, help="New, non-existing artifact directory")
+    parser.add_argument("--mode", choices=("synthetic", "lake"), default=None,
+                        help="Default: synthetic; --batch 2 selects lake (minute event batch)")
+    parser.add_argument("--batch", choices=(1, 2), type=int)
+    parser.add_argument("--symbols", action="append", help="Repeatable or comma-separated; default 600000.SH")
+    parser.add_argument("--start", default="20260916", help="Minute window start YYYYMMDD")
+    parser.add_argument("--end", default="20260918", help="Minute window end YYYYMMDD")
+    parser.add_argument("--qlib-1min-root", type=Path, default=None,
+                        help="Preferred qlib 1min bin root (default 4090 my_data_1min; env QLIB_1MIN_ROOT)")
     args = parser.parse_args()
-    print(json.dumps(run(args.output_dir), ensure_ascii=False, indent=2))
+    alias = {1: "synthetic", 2: "lake"}.get(args.batch)
+    if alias and args.mode and args.mode != alias:
+        parser.error("--batch and --mode disagree")
+    mode = args.mode or alias or "synthetic"
+    result = (run_lake(args.output_dir, symbols=args.symbols, start=args.start, end=args.end,
+                       qlib_1min_root=args.qlib_1min_root)
+              if mode == "lake" else run(args.output_dir))
+    print(json.dumps(result, ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":
