@@ -1,12 +1,12 @@
 # Plan：研究成交时钟显式化（fill clock）（2026-09-18）
 
-> **落盘**：2026-09-18。**v0.7**（2026-09-19 docs-only GO 回写；更新 plan、新建 handoff 并纳入 r4 共识，不写 Python、不运行测试或回测）。
-> **状态**：✅ **已实施（PR [#112](https://github.com/baiyibing/MyQuant-backtrader/pull/112) · merge 后 master）**。P1–P4=A/A/A/A；切片 A→B→C 已合入。行为零变化命名叶子 + data-free 契约 + as-built 回写。
+> **落盘**：2026-09-18。**v0.8**（2026-09-20 Asia/Shanghai，Human GO P1=A 正式关闭；docs SSOT + data-free 契约，生产行为零变化）。
+> **状态**：✅ **已实施（PR [#112](https://github.com/baiyibing/MyQuant-backtrader/pull/112) · merge 后 master）**。P1–P4=A/A/A/A；切片 A→B→C 已合入。**P1 closed as A（2026-09-20）**；P2/P4 继续延后。
 > **风险档**：**引擎结构 / 成交语义高敏**——目标是把既有决策、会话、价格规则命名并用 data-free 测试锁住；默认成交价、股数、reason、NAV 与产物契约必须为零变化。
 > **业务源**：[引擎定位 SSOT](engine-positioning-ssot.md) · [A 股正确性 as-built](engine-ashare-correctness.md) · [Pool CSV contract](pool-csv-contract.md) · [#108 前置 plan](plan-ashare-engine-refactor-2026-09-18.md) · [PR #108](https://github.com/baiyibing/MyQuant-backtrader/pull/108)。
 > **事实锚**：本 plan 的代码事实与引用行号核对基线为 `origin/master` `c44da87`（Merge PR #108）；本分支 `docs/industry-align-refactor-2026-09-18`。**实施 diff 基线另见 §7 / §9 / §11：`IMPLEMENTATION_BASE` 为 `c44da87b01ebcc6a68633307eba0fce48940f403`（2026-09-19 的 origin/master tip）；GO 时核对，master 未变则沿用此值，变了则替换为当时完整 40 位 SHA 并记录于 handoff。禁止填不可达对象，禁止用 `git merge-base HEAD origin/master` 现算 SHA。**
 > **工作流**：[Codex 交接工作流](workflow-codex-handoff.md) 第 3 步人裁已完成；第 4 步见 [实施 handoff](handoff-industry-align-refactor-codex-impl-2026-09-18.md)。依据 [r4 共识](../architecture/reviews/2026-09-18/plan-industry-align-refactor-2026-09-18-r4/merge-consensus.md)，2026-09-19 用户原话「同意你的建议」= 采纳 P1–P4 全 A。
-> **短注**：这是 docs-only GO 回写，尚未实施，也不是修复 14:57–15:00 成交行为的授权。v0.1 的价格规则与“现有成交窗口”表述已由 §12 勘误；不得拿旧句起草实现测试。
+> **短注**：#112 命名叶子已实施；本次正式关闭 2026-09-19 的 P1 keep deferred 立场为 A，只补文档与测试，禁止本轮 B/C 或扩大 14:57–15:00 成交资格的生产改动。v0.1 的价格规则与“现有成交窗口”表述已由 §12 勘误；不得拿旧句起草实现测试。
 
 ---
 
@@ -99,7 +99,7 @@ PR #108 已回答「**能不能成交**」；本 plan 只把仍散落在书引�
 | **F-R2** | PR #108 已落地的切片 A–C 不重做：一帧分钟、T+1 / 涨跌停谓词、import 围栏、冻结读取器、numba 内核锁、双账本与旧 CLI 均保持。 |
 | **F-R3** | **不重开 E-R1–E-R6。** T+1 继续走 `t1_sellable`；涨跌停继续走现有谓词；E-R5/E-R6 只动参考价，shares 与现金红利不动；Mode B `shares/=k` 不回写 `rescale_position`。 |
 | **F-R4** | 决策时钟分路径锁：池买·日线=T 日 close；池买·分钟=T 日 14:55 close，缺 14:55 才用 `[14:30, 14:55]` 最后一根 close；追买自信号日后的下一联合日历 session 起尝试；已持仓且不允许加仓先 pop，`allow_new_name` 失败先 pop 并计 `skip_index_gate`，均在 `quotes_for` 之前；只有通过持仓门和指数门后 `quoted is None` 才继续 pending 到后续可报价 session，再取该日的日线 close，或分钟 09:45 close（缺 bar 才用既有 `≤09:45` fallback），reason 即使晚于 T+1 仍为 `chase:T+1`。不得把**池买**改成 T+1 open，也不得把追买写成固定次日、该可报价日 open、尚未发生或与池买同一只钟。 |
-| **F-R5** | 会话标签锁：`closing_call = hm ∈ [14:57, 15:00]` 是拟新增的**当前扫描窗口标签**；`_in_session` 接受这些 bar，扫描若实际到达仍按既有分支处理，但这不宣称交易所收盘集合竞价撮合已建模 / 已正确，也不宣称所有路径已有统一成交窗口。`session_phase` 不是过滤器，不改变扫描或成交资格；B/C 仍须另裁。 |
+| **F-R5** | 会话标签锁：`closing_call = hm ∈ [14:57, 15:00]` 仅是**当前扫描窗口标签**；研究核不建模真实收盘集合竞价。`_in_session` 接受这些 bar，扫描若实际到达仍按既有分支处理，不代表所有路径已有统一成交窗口。**Human GO P1=A closed（2026-09-20）**：`session_phase` 不是过滤器，扫描与成交资格保持 as-built；本轮 B/C 生产行为未获授权、禁止落地，也禁止扩大该时段成交资格。 |
 | **F-R6** | 价格规则锁是**具名路径而非全量选价器**：日线 `stop_loss:gap_open` = 触发当日 open；`daily_stop_touch_at_trigger` = 触发当日 trigger；命中 `daily_same_bar_prefixes` 且通过涨跌停门才按当日 close；只有确实写入 `pending_exit` 的 reason 才下一可卖日 open。分钟 gap-stop 用该 bar open、其余触价用该 bar close。v7 不在此短表。新叶子只命名，不替换 `simulate` / `scan_held_day`。 |
 | **F-R7** | 默认费率仍为 `BILATERAL_10BP`；7 不进 BOOKS；双账本不合并；旧 CLI / HELP_LOCK 不变。 |
 | **F-R8** | 实施结果不得改变成交价、股数、reason 值或计数、NAV、`trades.csv` 列、`summary` 快照、HELP_LOCK、`read_lake_minute_ohlc` 字节、`load_minute_ohlc` 行为、两个分钟扫描内核字节、`run_chase_due_day` / `append_equity_and_eod_marks` 或 `strategy5_rules.FORCE_SELL_HM`。任何此类选择只准进入 P\* 并先修订 plan。 |
@@ -122,16 +122,18 @@ PR #108 已回答「**能不能成交**」；本 plan 只把仍散落在书引�
 
 ---
 
-## 5. 人裁点（P\* · 2026-09-19 已裁 A/A/A/A）
+## 5. 人裁点（P\* · 2026-09-19 已裁 A/A/A/A；2026-09-20 P1=A 正式关闭）
 
-| ID | 问题 | 人裁结果（2026-09-19） | 选项与后果 |
+| ID | 问题 | 人裁结果 | 选项与后果 |
 |----|------|----------|------------|
-| **P1** | GO 后是否只加当前扫描窗口的相位标签与测试、成交价完全不变？ | **已裁 A**（2026-09-19） | **A**：只命名 / 测试，`_in_session`、扫描器与既有取价均不改；A **不表示**集合竞价撮合已建模、已正确或“match existing exchange session”。**B**：分钟触价跳过 14:57–14:59。**C**：分钟触价跳过 14:57–15:00。若选 B/C，立即停止，先修订 plan；禁止在本 A–C 切片直接改扫描器。 |
+| **P1** | 是否正式关闭 fill-clock 延后项，保持当前扫描窗口标签与既有成交行为？ | **Human GO：closed as A**（2026-09-20 Asia/Shanghai；承接 2026-09-19 A） | **A**：仅标签 / 测试 / 文档；研究核不建模真实收盘集合竞价，`_in_session`、扫描器与成交资格 / 取价保持 as-built。**B**：分钟触价跳过 14:57–14:59。**C**：分钟触价跳过 14:57–15:00。**B/C 生产行为本轮未获授权，禁止落地**；也禁止扩大这些窗口的成交资格。 |
 | **P2** | 是否给 `trades.csv` 增加 `session_phase` / `price_rule` 列？ | **已裁 A：否**（2026-09-19） | **A**：本轮只在代码命名、测试与文档中可见，产物 schema 不漂移；**不加列不等于成交天然未变**，仍须由 F-R8/F-R9 冻结与反向 import 围栏证明。**B**：新增列；须停止并另裁 schema、下游快照和兼容性，不进当前切片。 |
 | **P3** | 旧 P2/P3/P4 与已知 v7 分叉是否继续后置？ | **已裁 A：确认后置**（2026-09-19） | **A**：印花、改股 / 现金红利 / ST PIT、成交量上限、v7 `limits=None` fail-open、v7 ST 非 PIT 全部不进本船。**B**：不确认；停止并分别开 plan，不得扩写本船。 |
 | **P4** | 15:00 bar 的“触价资格”与“官方收盘 / 标记价用途”是否分开裁？ | **已裁 A：分开；本轮两者都不改**（2026-09-19） | **A**：即使未来排除触价，也不得自动排除 15:00 的收盘 / 标记用途。**B**：二者联动改变；须先补行情时间戳证据、估值影响与独立 plan。P1=C 不自动回答 P4。 |
 
-2026-09-19 人裁：用户原话「同意你的建议」，采纳 r4 共识建议，**P1=A / P2=A / P3=A / P4=A，已人裁 GO**。授权按切片 A→B→C 实施；本次只回写文档，未覆盖语义仍须 STOP 问人。
+2026-09-19 人裁：用户原话「同意你的建议」，采纳 r4 共识建议，**P1=A / P2=A / P3=A / P4=A，已人裁 GO**。当时授权按切片 A→B→C 实施；该次 GO 仅回写文档，随后 #112 已实施。未覆盖语义仍须 STOP 问人。
+
+**2026-09-20 Human GO P1=A closure**：正式关闭 [next plan §4](plan-industry-align-next-2026-09-19.md#4-p-human-cuts-p1-closed-as-a-2026-09-20) 的 P1 keep deferred 记录；交付仅 docs SSOT + data-free 契约。此次 `IMPLEMENTATION_BASE=41f8df331ed25aad4616bde56c77ddb7025c91ee`，全部生产 Python（含命名叶子、Python/numba 扫描器与 fill-window eligibility）相对该基线零 diff。`SIMULATE_HOT_PATH` 固定清单（已含 `ashare_bars`）不扩容；测试补标签标识符禁入热路径及 `scan_held_day_python` 的 hm 比较契约。P2/P4 继续延后；δ 生产 C 合并仅按 [as-built](engine-ashare-correctness.md) 交叉引用，不重开。
 
 ---
 
@@ -139,10 +141,10 @@ PR #108 已回答「**能不能成交**」；本 plan 只把仍散落在书引�
 
 | 不做 | 原因 / 边界 |
 |------|-------------|
-| 改 14:57–15:00 的成交资格、成交价或收盘标记 | P1 / P4 未裁；本船只命名当前扫描窗口，不宣称已实现交易所撮合 |
+| 改 14:57–15:00 的成交资格、成交价或收盘标记 | P1 已正式关闭为 A（2026-09-20），P4 继续延后；本船只命名当前扫描窗口，不建模真实收盘集合竞价 |
 | 给模拟环加新成交调度器、订单对象或事件总线 | 本仓是向量化扫描；不仿 LEBS / OMS |
 | 改日线 gap-stop / touch-trigger / same-bar / `pending_exit` 时点，或改分钟 open / close 取价 | F-R6；会改 trades 与 NAV |
-| 给 `trades.csv` / summary 加列或相位计数 | P2 建议否；避免产物契约漂移 |
+| 给 `trades.csv` / summary 加列或相位计数 | P2=A，新增列继续延后；避免产物契约漂移 |
 | 改 MyQuant 训练 / 名单导出；改 1.3 LEBS / MockQMT / `trade_decision` | 三仓分工不重叠 |
 | import qlib，恢复 PortAna / Exchange，复活 Cerebro / Rolling | 已停用 / 已退场；不借行业参照搬框架 |
 | 复制 vn.py OMS / CTP、RQAlpha 撮合器、backtrader Cerebro | 本仓只取公开实践中的“显式命名”原则 |
@@ -360,6 +362,8 @@ rg -n '[A-Za-z]:[\\\\/]' backtest/research/ashare_fill_clock.py tests/test_ashar
 
 ## 11. 修订程序
 
+以下为 #112 原始实施流程的历史记录；其 GO 与实施已完成。2026-09-20 的 P1=A 正式关闭以 §5 为准，仅 docs + tests，使用 §5 的本次基线；不重启以下待裁流程。
+
 1. 当前只合本 plan；保持状态「⏳ 待评审 / 待人裁 GO」。合 docs PR 不触发实施。
 2. 后续按工作流评审并逐条裁 P1–P4；证据裁决，不以多数票替代语义选择。
 3. 若 P1≠A、P2=B、P3=B 或 P4=B，停止原切片，先修订范围、冻结面与 DoD；不得沿用“行为不变”的风险档直接编码。
@@ -380,7 +384,7 @@ rg -n '[A-Za-z]:[\\\\/]' backtest/research/ashare_fill_clock.py tests/test_ashar
 |----|------|----------------|---------------------|-------------|--------------|
 | **E1** | 2026-09-18 对抗评审：异议、领域安全、模式 | §0 / F-R6 / §7.1–§7.3 把日线价压成 `open_board` same-close 与“其余 pending next-open”；§7.2 又要求“非 same-bar reason”全部下一 open | `csv_daily_backtest.py:165-166` HELP；`:336-351` gap 当日 open；`:338-359` touch 当日 trigger；`tests/test_csv_daily_backtest.py:200-217` 价 9.8、`:405-418` 价 9.4；`tests/test_exdiv_refprice_engines.py:203-219` 价 4.9、bar close 5.10 | 接受。新增 `daily_stop_gap_open` 与 **`daily_stop_touch_at_trigger`**；`daily_pending_next_open` 只指已写入 `pending_exit` 的 reason。不得改 `simulate`、不得改旧 9.8 / 9.4 断言、不新开除权切片 | §0、§2.1、F-R6、§7.1–§7.3、§10 |
 | **E2** | 2026-09-18 对抗评审：异议 | §0 / F-R4 用“当日尾盘或收盘”描述一只决策钟；§7.2 的“14:55 或 fallback”可被宽松夹具绕过；冻结表漏 `csv_simulate_loop.py` | 日线池买 `csv_daily_backtest.py:428-435`；分钟池买 `csv_minute_backtest.py:112/469-476`；日线追买 `:403-410`；分钟追买 `csv_minute_backtest.py:479-490`；`csv_ledger.py:27/106-112`；`csv_simulate_loop.py:144/179`；热路径清单 `tests/test_ashare_simulate_import_fence.py:13-29` | 接受。点名池买·日线、池买·分钟、追买·日线、追买·分钟三类路径（追买内含两个不同取价）；F-R4 只继续禁止把**池买**改 T+1 open。分钟夹具必须用不同价的 14:55 / 15:00 bar；另测缺 14:55 fallback；冻结追买与 EOD 落点。追买成交日不固定为次日，其完整合同以 H1 为准 | §0、§2.1、F-R4/F-R8、§7.2、冻结表、§9、§10、§12.3 H1 |
-| **E3** | 2026-09-18 对抗评审：异议、领域安全、模式 | §1.3 / F-R5 / P1 / §7.2–§7.3 把 `[14:57,15:00]` 写成现有成交窗口，并用 `match_existing_session` 命名测试 | `strategy5_rules.py:16` `FORCE_SELL_HM=14:50`；`csv_minute_backtest.py:270-281/316-319` 满足 T+1 且该 bar 不是跌停时可以在 14:50 返回，否则继续扫（开盘跌停提前 `continue`，强卖时 close 跌停也 `continue`）；`:469-476` 池买截止 14:55；`ashare_bars.py:27-28/302-306/350-352` 只证明 bar 被接受；`l2_analytics/etl_day.py:118-119` 与 `tests/test_l2_etl.py:121` 只提供 14:57 标签分界 | 接受领域安全对“不得暗示集合竞价已正确”的警告；**不同意模式评审把“现有成交窗口”这一半也判为成立**。F-R5“标签不是过滤器”保留；14:57 改称新扫描窗口标签，不是统一既有成交窗口或交易所撮合。P1 默认仍 A，B/C 仍待人裁且本切片不落地 | §0、§1.3、§2.1、F-R5/F-R10、P1、§7.1–§7.3、冻结表、§8、§10 |
+| **E3** | 2026-09-18 对抗评审：异议、领域安全、模式 | §1.3 / F-R5 / P1 / §7.2–§7.3 把 `[14:57,15:00]` 写成现有成交窗口，并用 `match_existing_session` 命名测试 | `strategy5_rules.py:16` `FORCE_SELL_HM=14:50`；`csv_minute_backtest.py:270-281/316-319` 满足 T+1 且该 bar 不是跌停时可以在 14:50 返回，否则继续扫（开盘跌停提前 `continue`，强卖时 close 跌停也 `continue`）；`:469-476` 池买截止 14:55；`ashare_bars.py:27-28/302-306/350-352` 只证明 bar 被接受；`l2_analytics/etl_day.py:118-119` 与 `tests/test_l2_etl.py:121` 只提供 14:57 标签分界 | 接受领域安全对“不得暗示集合竞价已正确”的警告；**不同意模式评审把“现有成交窗口”这一半也判为成立**。F-R5“标签不是过滤器”保留；14:57 改称新扫描窗口标签，不是统一既有成交窗口或交易所撮合。当时 P1 建议 A；现已由 §5 的 2026-09-20 Human GO 正式关闭为 A，本轮 B/C 生产行为禁止落地 | §0、§1.3、§2.1、F-R5/F-R10、P1、§7.1–§7.3、冻结表、§8、§10 |
 | **E4** | 2026-09-18 对抗评审：模式 | F-R9 / §7.1 要叶子“仅标准库”并本地定义四个会话整数，§7.2 只做相等测试 | `ashare_bars.py:27-28` 是四常量真源；现有消费方 `csv_minute_backtest.py:82-88`、`unified_exit_modeb.py:20-27` 均 import | 接受。叶子只读 import 这四个名字，禁止本地再定义；`CLOSING_CALL_OPEN` 可在叶子新增但只作标签。AST 证明来源与无本地赋值；其它本仓 / 第三方 import 仍禁，`ashare_bars.py` 仍冻结 | F-R9、§7.1、§7.2、§10 |
 | **E5** | 2026-09-18 对抗评审：领域安全、模式 | §7.1 / §9 只用 `rg` 保证叶子不进 simulate；v0.1 又整文件冻结围栏测试，导致不能加机械拒绝 | `tests/test_ashare_simulate_import_fence.py:13-29` 热路径含 `csv_simulate_loop`；`:32-48` 现只拒 qlib / `trade_fee_policy` / `backtest.lebs` | 接受。`SIMULATE_HOT_PATH` 元组逐字节保持 #108 清单，叶子不追加进去；只在 `forbidden_imports` 增加裸名 / 全限定叶子拒绝并加测试。`rg` 降为补充。动机：P2=A 不加列不能阻止将来用 `closing_call` 做 `continue` 改价；本切片不授权该过滤器 | F-R9、P2、§7.1–§7.2、冻结表、§9、§10 |
 | **E6** | 2026-09-18 对抗评审：异议、领域安全、模式 | 对抗评审要求勘误不得借机放宽既有禁令 | `engine-positioning-ssot.md`；`engine-ashare-correctness.md`；`ashare_fees.py:53-55`；`tests/test_ashare_simulate_import_fence.py:13-29` | **维持**：不 import qlib；不复活 Cerebro / Rolling / PortAna / Exchange；不合并本仓、MyQuant、LEBS、实盘栈，且 LEBS ≠ 实盘栈、本仓无 `backtest/lebs/`；不以本仓 NAV 对 LEBS / 实盘 / PortAna；不重做 #108；不编辑 `read_lake_minute_ohlc`、numba / Python 扫描内核字节；不重开 E-R1–E-R6；`BILATERAL_10BP`、双账本、7 不进 BOOKS 均维持。相位标签不得升格为会话对齐成功 | F-R1–F-R3、F-R7–F-R13、§6、§8、冻结表 |
@@ -419,6 +423,7 @@ rg -n '[A-Za-z]:[\\\\/]' backtest/research/ashare_fill_clock.py tests/test_ashar
 
 | 版本 | 日期 | 变更 |
 |------|------|------|
+| v0.8 | 2026-09-20 | Human GO P1=A closure：正式关闭 fill-clock 延后项；无真实收盘集合竞价模型，14:57–15:00 仅扫描窗口标签，`_in_session` / 成交资格保持 as-built；禁止本轮 B/C 与扩大窗口的生产改动。仅 docs + data-free 契约，生产冻结基线 `41f8df331ed25aad4616bde56c77ddb7025c91ee`；P2/P4 继续延后，δ 生产 C 不重开。 |
 | v0.7 | 2026-09-19 | 已实施：PR #112 合入切片 A–C；行为零变化。 |
 | v0.6 | 2026-09-19 | docs-only GO 回写：采纳 r4 共识，P1–P4 已裁 A/A/A/A；核对 origin/master tip 与 base 对象仍为 `c44da87b01ebcc6a68633307eba0fce48940f403`；新增实施 handoff，黄项留于 handoff 切片 B，切片技术正文不改；GO 不等于交易所撮合已建模；不写 Python、不运行测试或回测 |
 | v0.5 | 2026-09-19 | 消化 r3 共识两条：实施基线改为 `c44da87b01ebcc6a68633307eba0fce48940f403`（当日 origin/master tip），GO 时核对 master，变了则替换为当时完整 40 位 SHA；禁止不可达对象与 merge-base 现算，祖先检查前加 commit 对象存在校验；改正策略 5 的 T+1 / 跌停条件及 E3，共识一并纳入；不改代码、不新增测试、不升级黄项、不标 GO |
