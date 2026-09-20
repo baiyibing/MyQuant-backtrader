@@ -957,7 +957,8 @@ def test_d4_step_none_limits_rejects_before_floor_cash_gate(context, cash, monke
     if filled:
         assert fills == [{"date": day, "code": code, "side": "BUY", "price": 12,
                           "shares": 100, "notional": 1_200, "commission": 5,
-                          "reason": "add:step20", "lot": 1}]
+                          "reason": "add:step20", "lot": 1,
+                          "session_phase": "", "price_rule": ""}]
         assert state.positions[code][1] == sim.Position(code, 100, 12, 0, 12,
                                                        lot_id=1, is_step=True)
         assert state.cash == 0

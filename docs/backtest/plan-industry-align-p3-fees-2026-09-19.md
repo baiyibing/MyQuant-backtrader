@@ -1,5 +1,6 @@
 # Plan: industry-align P3 delta1 fee contract (2026-09-19)
 
+> **状态交叉引用（2026-09-20）**：Human GO P2=B 仅授权书 trades 的 `session_phase` / `price_rule` 两列，覆盖本文历史 P2 延后记录；P1 已 closed as A，P4 仍 deferred，本文 δ 合同不重开。见 [schema SSOT](engine-ashare-correctness.md#p2-trades-标签列human-go-b2026-09-20)。
 > **Status**: **δ1 Slice A→B→C ship (v0.3.3)** — docs + data-free fee-wiring tests. Human GO 2026-09-19: P3.1/P3.2/P3.3 = **A/A/A**. Multi-ai r1 GO-WITH-NITS (MC-1/MC-2). **No production Python behavior changes**; freeze set zero-diff vs IMPLEMENTATION_BASE.
 > **Main ship (single implementable ship this round)**: **delta1** — research fee contract + stamp-tax boundary clarity for CSV daily/minute engines.
 > **IMPLEMENTATION_BASE (origin/master full SHA after fetch at branch start)**: `fa4d448d8446a9959217c5431eeb7c8d59c0d722`.

@@ -1,5 +1,6 @@
 # Plan: industry-align P3 δ2 ex-div / lot-cost rescale contract (2026-09-19)
 
+> **状态交叉引用（2026-09-20）**：Human GO P2=B 仅授权书 trades 的 `session_phase` / `price_rule` 两列，覆盖本文历史 P2 延后记录；P1 已 closed as A，P4 仍 deferred，本文 δ 合同不重开。见 [schema SSOT](engine-ashare-correctness.md#p2-trades-标签列human-go-b2026-09-20)。
 > **Status**: **v0.3 · Slice A→B→C 已通过（§8.4） · Human GO A/A/A/A/A**。本 feat 仅 docs + 四个既有 data-free 测试文件，生产 Python 零 diff。
 > **Main ship / 单行范围**: 仅 #112 P3 **δ2**：细化已落地 E-R6 的除权事件、lot 参考价重标定与经济残留契约，固定 as-built；不 redo E-R6。
 > **IMPLEMENTATION_BASE（本 feat worktree 起点，已用 `git rev-parse HEAD` 核对全 40 字符 SHA）**: `7c049c63ed441a17156b4476f3974bb86ab57fa9`（post PR #122 merge）。

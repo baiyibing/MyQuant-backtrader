@@ -86,9 +86,10 @@ def _snapshot(state):
 
 
 @pytest.mark.parametrize("engine", ["daily", "book", "v7"])
-def test_cap_off_byte_snapshot_matches_7428a1a_and_ignores_volume(engine):
-    # Frozen outputs generated from IMPLEMENTATION_BASE, not the new matcher.
-    expected = {"daily": "45292d1ca1c32ed4bb4f3e96b724651d0b46a280d7e8d289369f9fcf679353b7", "book": "19dad01bb3c350da5bbe02599972ec046a4c523e70f868ec54aa6e08c9af4527", "v7": "2d3c71db7e90c4286271d4a5470235511314a05adb13fc6c54ca323e7f8044ee"}
+def test_cap_off_byte_snapshot_with_p2_b_labels_and_ignores_volume(engine):
+    # Human GO P2=B: update only book hashes for additive labels. Removing those
+    # two keys reproduces the original 7428a1a snapshot hashes; v7 is unchanged.
+    expected = {"daily": "2904e7498b35e44738badb66fe29b347885e0cc46b970badfa3cb092c2b8fd35", "book": "9220b16459f230f1cbee909f1cae5eae93b28574fc19b0711f26c13a62af0dbf", "v7": "2d3c71db7e90c4286271d4a5470235511314a05adb13fc6c54ca323e7f8044ee"}
 
     def forbidden_lookup(*_):
         pytest.fail("cap off must not consult the volume provider")

@@ -65,7 +65,7 @@ T+1 在书引擎原调用点将 `calendar[entry_idx]` 映射为日期后调用 `
 - 上表是 **as-built 合同**；本轮只按 δ4 Human GO C/B/A 将 v7 held None 改为 fail-closed，其它分叉冻结。
 - #126 的 A/A/A held fail-open 合同已由本 C cut 覆盖；不新增 policy 开关，不改变涨跌停命中含义。
 - OSS 只可类比术语，不可作为本仓行为证据；行为证据必须来自本仓锚点与测试。
-- #112 P1 **closed as A（2026-09-20）**，成交时钟合同见下节；trades 新列（P2）、ST PIT（δ3）、touch↔mark 耦合（P4）继续延后。费率 **行为** 冻结（P3.1/2/3=A）；δ1 只做合同文档 + data-free 接线测，不改生产扣费。
+- #112 P1 **closed as A（2026-09-20）**，成交时钟合同见下节；P2=B 两列标签已授权（见下节）；ST PIT（δ3）、touch↔mark 耦合（P4）继续延后。费率 **行为** 冻结（P3.1/2/3=A）；δ1 只做合同文档 + data-free 接线测，不改生产扣费。
 
 ### P1 成交时钟合同（Human GO closed as A，2026-09-20）
 
@@ -73,7 +73,7 @@ T+1 在书引擎原调用点将 `calendar[entry_idx]` 映射为日期后调用 `
 
 `closing_call`（14:57–15:00，含端点）仅是当前扫描窗口标签。`_in_session` 仍接受 14:57 和 15:00，`annotate_session`、Python/numba 扫描器与各路径成交资格保持 as-built；扫描若到达仍按既有分支处理，不证明所有路径在该段成交。`ashare_fill_clock.py` 保持命名叶子，不接入扫描器或 fill filter。**本轮禁止 B（分钟触价跳过 14:57–14:59）或 C（跳过 14:57–15:00）生产行为，也禁止扩大这些窗口的成交资格。**
 
-冻结基线 `41f8df331ed25aad4616bde56c77ddb7025c91ee`：本次全部生产 Python 零 diff。`tests/test_ashare_fill_clock.py` 用 data-free 契约锁标签、会话端点、固定 `SIMULATE_HOT_PATH`（已含 `ashare_bars`）无相位标识符、`scan_held_day_python` 的既有 hm 比较；import 围栏继续禁止热路径导入命名叶子。P2（产物新列）/P4（触价与 mark 耦合）继续延后；δ 生产 C 合并沿用各自合同，本次不重开。
+P1 收口基线 `41f8df331ed25aad4616bde56c77ddb7025c91ee` 当时全部生产 Python 零 diff。后续 Human GO P2=B 仅增加写入标签：固定 `SIMULATE_HOT_PATH` 不变，`csv_ledger` 是唯一允许导入命名叶子的写入模块；扫描器继续禁止相位标识符/过滤，`scan_held_day_python` 的既有 hm 比较保持。P4 继续延后，δ 生产 C 合同不重开。
 
 现状成交时钟（只命名，不改价）。下表限定：扫描窗口标签 / 非全量 / 不含 v7。它不是全量选价器：same-bar 前缀不只有 `open_board`（还可含 `topk_drop` / `model_exit`），策略 9 的证明夹具不能单独证明 open/close。v7 另有首 bar open / 严格 14:55 / 最后一根 close，未纳入本表。读取器、两个分钟扫描内核、双账本、E-R1–E-R6 与价格数字在本次 P1=A 收口中保持不变。
 
@@ -84,12 +84,24 @@ T+1 在书引擎原调用点将 `calendar[entry_idx]` 映射为日期后调用 `
 | 追买·日线 | 通过持仓门与指数门后，可报价日 close；`quoted is None` 保留 pending；reason 仍为 `chase:T+1` |
 | 追买·分钟 | 可报价日 09:45 close；缺 bar 才用既有 `≤09:45` fallback；reason 仍为 `chase:T+1` |
 | `continuous` / `closing_call` | 扫描窗口标签，不是过滤器，不是交易所忠实 closing-call 撮合 |
-| `daily_open_board_same_close` | 命中 `daily_same_bar_prefixes` 且通过涨跌停门才按当日 close |
+| `daily_open_board_same_close` | `open_board` 命中 `daily_same_bar_prefixes` 且通过涨跌停门才按当日 close；其它 same-bar reason 不冒用该标签 |
 | `daily_stop_gap_open` | 日线 `stop_loss:gap_open` = 触发当日 open |
 | `daily_stop_touch_at_trigger` | 触发当日 trigger |
 | `daily_pending_next_open` | 只有确实写入 `pending_exit` 的 reason 才下一可卖日 open |
 | `minute_gap_open` | 分钟 gap-stop 用该 bar open |
-| `minute_trigger_bar_close` | 分钟其余触价用该 bar close |
+| `minute_trigger_bar_close` | 分钟 `stop_loss:touch` 用该 bar close；trail / profit_take / force_sell 等不在具名集合 |
+
+### P2 trades 标签列（Human GO B，2026-09-20）
+
+**Human GO P2=B** 仅覆盖旧 P2=A 的两列 schema 禁令。基线 `40a5df1e4792f3b884c2cbac4da8486ff21a07a2`（post P1 #133）；书 `execute_buy` / `_sell` / `_volume_skip` / EOD_MARK 的每个 trade 字典追加 `session_phase`、`price_rule`，由 `write_run_artifacts` 自然写入 CSV。v7 `_event` schema 不变。
+
+词汇 SSOT 是 `ashare_fill_clock.SessionPhase` / `FillPriceRule`：相位为 `continuous` / `closing_call` / `""`；价格规则仅上表六个枚举值或 `""`。日线四个具名卖出路径标 `price_rule`，无分钟时间的相位留空；分钟 gap-stop / stop-touch 在成交写入点分别标 `minute_gap_open` / `minute_trigger_bar_close`，由已选 bar 的 hm 推导相位。盘外 hm 推导失败只留空，不能改变成交资格。BUY / SKIP / EOD_MARK 与其它未命名卖出路径两列留空；实际走日线 pending-next-open 的卖出按该具名路径标记（包括 trail / profit_take 等 pending reason）。关联 lot 跟随父成交标签。
+
+标签不参与价格、数量、费用、成交量门、除权权益、现金或 NAV 计算；扫描器不以相位过滤。14:57 行为及资格保持 P1=A，**P4 touch↔mark 仍 deferred**，不建模真实 closing-call auction。
+
+**Schema changelog / forward compatibility（2026-09-20）**：书 `trades.csv` 新增 `session_phase`、`price_rule`，旧列和旧必需列集合保持不变。下游须容忍未知列或按所需列子集读取；例如 `exdiv_hold_hits` 仍只要求 `date/code/side/reason/lot`，不得将新列设为必需。空字符串表示未知/不适用，未标价格规则不代表未成交。live `money_modes_daily_quota/version1_trades.csv` golden 只追加这两列，pre_er1 历史锚点不重生成。
+
+`test_ashare_volume_cap` / `test_exdiv_refprice_engines` 的 live cap-off / economics-off 书快照哈希随新列更新，仍比较完整输出；剔除两列后已核对与原 `7428a1a` / `f145ffde` 快照哈希一致，v7 哈希原样保留。
 
 ## 2. 现锁（E-R\*）
 
@@ -173,7 +185,7 @@ ST 正则为 `(?:\*ST|(?<![A-Za-z])ST)`（`re.IGNORECASE`）；`WEST` 这样的�
 
 相同初态与名称前缀下，书侧追加未来名不改早日 BUY/SELL 与权益；窗口末 `EOD_MARK` 是报告记录，不作为真实成交比较。v7 延长窗口则可改变早日名字、档位与成交。持仓卖出/加仓也消费这条名称链；pins 观察真实档位调用，并把拦截与 fill 分开断言，明确资金充足、卖出 lot 满足 T+1。未知名称、未知板块和 ST 命中分别设例；`limits=None` 的 predicate 放行本身不能证明会成交。
 
-**日期 as-of ≠ 决策时刻可得性 PIT 证明。** 名单日期不证明该文件在当日决策前已发布；当前输入没有 `available_at` / 修订版本过滤，供应方完整历史 PIT 仍未证。δ3 不修 v7 ST PIT，也不替 δ2 关闭因子可得性或经济残留。P1 已 closed as A（2026-09-20，见成交时钟合同），P2/P4 继续 deferred；δ4–δ6 不随本刀自动获授权，生产改造须各自独立人裁。
+**日期 as-of ≠ 决策时刻可得性 PIT 证明。** 名单日期不证明该文件在当日决策前已发布；当前输入没有 `available_at` / 修订版本过滤，供应方完整历史 PIT 仍未证。δ3 不修 v7 ST PIT，也不替 δ2 关闭因子可得性或经济残留。P1 已 closed as A（2026-09-20，见成交时钟合同），P2=B 标签列见上节，P4 继续 deferred；δ4–δ6 不随本刀自动获授权，生产改造须各自独立人裁。
 
 ## 2.3 P3 δ4 v7 limits=None contract（Human GO C/B/A）
 
@@ -195,7 +207,7 @@ ST 正则为 `(?:\*ST|(?<![A-Za-z])ST)`（`re.IGNORECASE`）；`WEST` 这样的�
 
 门未拦截、尝试交易、实际 fill 分层验收。fill 以真实 BUY/SELL、股数、lot 与含费现金变化为证据；`EOD_MARK`、peak/last_prices、参考价缩放均不能冒充成交。三个 held 交易点按 `previous is None` 记 `skip_no_prev_close`，否则记 `skip_unknown_board`；均 side=skip、shares=0，不误记涨停/跌停原因。仅在策略产生交易尝试时拒绝，不做整日冻结；peak / last_prices / equity mark / exdiv rescale 仍可更新。无 records 不造 bar，保持 `skip_no_1455`。真实档位的上下限、T+1、现金、fee floor 与填单保持原行为。
 
-测试只用内存或 tmp_path，通过公开 `simulate` / `simulate_v7` 进入目标分支。held 初态由测试注入，未知板块持仓、旧 timer anchor 配同日 lot 都是构造向量，不宣称自然首开可达。timer 向量避开 stop/add，用 session list 隔离 index gate；spy 透传真实 timer/档位门，None 早拒时不调用 limit-down 门。stop/add/timer 双来源都断言无成交、无现金/股数变更；add 另用实档位证明精确现金可成交、少一分钱 skip_cash，rescale 单独证明仅参考价变更。书 step 用真实 version8 hooks、空 pool，分别观察 held 与 step 的拒绝计数；已知板块对照锁住 100 股 × 12、5 元 floor、1205 元精确成交 / 少一分钱拒绝。δ1/δ2/δ3 生产合同保持，P1 已 closed as A（2026-09-20），P2/P4 继续 deferred；δ5 volume-cap production 见 §2.4；δ6 production economics 见 §2.5。
+测试只用内存或 tmp_path，通过公开 `simulate` / `simulate_v7` 进入目标分支。held 初态由测试注入，未知板块持仓、旧 timer anchor 配同日 lot 都是构造向量，不宣称自然首开可达。timer 向量避开 stop/add，用 session list 隔离 index gate；spy 透传真实 timer/档位门，None 早拒时不调用 limit-down 门。stop/add/timer 双来源都断言无成交、无现金/股数变更；add 另用实档位证明精确现金可成交、少一分钱 skip_cash，rescale 单独证明仅参考价变更。书 step 用真实 version8 hooks、空 pool，分别观察 held 与 step 的拒绝计数；已知板块对照锁住 100 股 × 12、5 元 floor、1205 元精确成交 / 少一分钱拒绝。δ1/δ2/δ3 生产合同保持，P1 已 closed as A（2026-09-20），P2=B 标签列见上节，P4 继续 deferred；δ5 volume-cap production 见 §2.4；δ6 production economics 见 §2.5。
 
 ## 2.4 P3 δ5 volume participation cap production（Human GO C/A/A/A）
 
@@ -229,7 +241,7 @@ ST 正则为 `(?:\*ST|(?<![A-Za-z])ST)`（`re.IGNORECASE`）；`WEST` 这样的�
 
 生产证据在 `tests/test_ashare_volume_cap.py`：D1（500→200、R50不能force-min）、D2（真实pool/chase双顺序与public pool+step共享）、D3（cash/limit/T+1不扣）、D4（public双账本partial，old100+new200残仓）、D5（零/缺/单位/时间失败与桶隔离）、D6（v7时间前缀、book fallback、双入口开盘拒绝）、D7（partial fee floor调用粒度）。三public入口cap-off快照与固定基线逐字节比较，volume=0/1/10^12/NaN不改变原成交/现金/lots/equity/书统计。测试不访问湖，不模拟一套独立公式冒充生产接线。
 
-**Migration / rollback**：默认cap off可直接部署；只有显式rate启用新门；无schema/data migration，回滚为revert本PR。仅5个生产文件例外，§9其余冻结与固定import-fence保持。P1 已 closed as A（2026-09-20），P2/P4 deferred；δ6 production economics 已在 #130 之后独立落地，见 §2.5。
+**Migration / rollback**：默认cap off可直接部署；只有显式rate启用新门；无schema/data migration，回滚为revert本PR。仅5个生产文件例外，§9其余冻结与固定import-fence保持。P1 已 closed as A（2026-09-20），P2=B 标签列见上节，P4 deferred；δ6 production economics 已在 #130 之后独立落地，见 §2.5。
 
 ## 2.5 P3 δ6 ex-div economics production（Human GO C/A/B/B/A）
 
@@ -247,7 +259,7 @@ ST 正则为 `(?:\*ST|(?<![A-Za-z])ST)`（`re.IGNORECASE`）；`WEST` 这样的�
 | book T+1 | 新股并入原 Position，在独立账保存 list_date 限售量；独立 lot 可先卖原股，新股在 list_date 后的 session 可卖。跟单组遇 bonus 限售整组暂缓，避免 orphan rider；cap-on pending 同样等新股解锁后才允许整笔退出；无新增退出队列 | `csv_ledger.py:163`、`:185`、`:313` |
 | v7 T+1 | 每旧 lot 追加 kind=exdiv_bonus、buy_date=list_date 的新 lot，沿用原 t1_sellable；复制 lot.price，stage/last_add_date 不因公司行动更新 | `csv_minute_backtest_v7.py:203`、`:256` |
 | refs 独立 | book cost/peak、v7 entry_A/avg_cost/peak/add1_A1/lot.price 仍只由 E-R6 ×k；经济层不动 refs，绝不 shares/=k | `csv_ledger.py:151`；`csv_minute_backtest_v7.py:191` |
-| 交易/兼容 | 公司行动无 BUY/SELL、无佣金、不消耗 volume；后续真实成交仍调用 δ1。trades/equity CSV schema 不变，独立账户及 stats 可查看应收 | `csv_ledger.py:163`、`:313`；`ashare_exdiv_economics.py:61` |
+| 交易/兼容 | 公司行动无 BUY/SELL、无佣金、不消耗 volume；后续真实成交仍调用 δ1。δ6 本身不改 trades/equity CSV schema；后续 P2=B 两列见上节。独立账户及 stats 可查看应收 | `csv_ledger.py:163`、`:313`；`ashare_exdiv_economics.py:61` |
 
 None lookup 是无事件；错误对象/非有限或负数/非法日期跳过并记 `exdiv_econ_invalid_event`，绝不由 k 补造。event_id 已应用则 no-op 并记 duplicate_event；旧 rescale helper 非幂等依旧。b/c 转精确整数比做股数 floor，金额入既有 float 现金账，税前夹具单位，无税务/分币新规则。经济 lookup 不受 k 的存在性/噪声门约束。
 

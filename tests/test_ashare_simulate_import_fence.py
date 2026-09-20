@@ -1,4 +1,8 @@
-"""The plan's explicit simulate boundary, including exactly one dependency layer."""
+"""The plan's explicit simulate boundary, including exactly one dependency layer.
+
+Human GO P2=B permits fill-clock imports only in the ledger write path for
+trade labeling, not scheduling. Scanners retain the ban; the fixed list stays.
+"""
 
 import ast
 from importlib.util import resolve_name
@@ -28,8 +32,11 @@ SIMULATE_HOT_PATH = (
     "exdiv_map",
 )
 
+# P2=B annotation only. Do not grant the minute engine/scanners this exception.
+FILL_CLOCK_WRITE_PATHS = frozenset({"csv_ledger"})
 
-def forbidden_imports(source, package="backtest.research"):
+
+def forbidden_imports(source, package="backtest.research", *, module_name=""):
     violations = []
     for node in ast.walk(ast.parse(source)):
         if isinstance(node, ast.Import):
@@ -45,7 +52,8 @@ def forbidden_imports(source, package="backtest.research"):
             if (name == "qlib" or name.startswith("qlib.")
                     or "trade_fee_policy" in name.split(".")
                     or name == "backtest.lebs" or name.startswith("backtest.lebs.")
-                    or "ashare_fill_clock" in name.split(".")):
+                    or ("ashare_fill_clock" in name.split(".")
+                        and module_name not in FILL_CLOCK_WRITE_PATHS)):
                 violations.append((node.lineno, name))
     return violations
 
@@ -61,7 +69,7 @@ def test_hot_path_list_matches_plan_bytes():
 @pytest.mark.parametrize("name", SIMULATE_HOT_PATH)
 def test_simulate_import_fence(name):
     path = ROOT / "backtest/research" / f"{name}.py"
-    assert forbidden_imports(path.read_text(encoding="utf-8")) == [], str(path)
+    assert forbidden_imports(path.read_text(encoding="utf-8"), module_name=name) == [], str(path)
 
 
 @pytest.mark.parametrize("source", [
@@ -90,6 +98,22 @@ def test_fence_rejects_fill_clock_bare_and_qualified_imports():
     assert forbidden_imports("from backtest.research import ashare_fill_clock")
     assert forbidden_imports("from .ashare_fill_clock import session_phase")
     assert forbidden_imports("from . import ashare_fill_clock")
+
+
+@pytest.mark.parametrize("name", SIMULATE_HOT_PATH)
+def test_fill_clock_exception_is_only_for_ledger_labels(name):
+    assert FILL_CLOCK_WRITE_PATHS == {"csv_ledger"}
+    for source in (
+        "import ashare_fill_clock as clock",
+        "from backtest.research.ashare_fill_clock import session_phase as phase",
+        "from . import ashare_fill_clock",
+        "from .ashare_fill_clock import SessionPhase",
+    ):
+        assert bool(forbidden_imports(source, module_name=name)) == (name != "csv_ledger")
+    # No exception for external execution/fee engines, even in the writer.
+    assert forbidden_imports("import qlib", module_name=name)
+    assert forbidden_imports("from trade_decision import trade_fee_policy", module_name=name)
+    assert forbidden_imports("from backtest import lebs", module_name=name)
 
 
 def test_bin_readers_and_research_fees_are_allowed():

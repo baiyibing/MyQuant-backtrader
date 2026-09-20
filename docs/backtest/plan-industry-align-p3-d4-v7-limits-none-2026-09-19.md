@@ -1,5 +1,6 @@
 # Plan: industry-align P3 δ4 v7 limits=None contract (2026-09-19)
 
+> **状态交叉引用（2026-09-20）**：Human GO P2=B 仅授权书 trades 的 `session_phase` / `price_rule` 两列，覆盖本文历史 P2 延后记录；P1 已 closed as A，P4 仍 deferred，本文 δ 合同不重开。见 [schema SSOT](engine-ashare-correctness.md#p2-trades-标签列human-go-b2026-09-20)。
 > **Status**: **v0.4 · production fail-closed landed · Slice A→B→C 已通过（§8.4） · Human GO C/B/A（2026-09-19，Asia/Shanghai）**。仅 v7 held stop/add/timer 新增 None 早拒；共享门函数、书侧、首开及其它生产路径冻结。实现与验收完成；feat commit `0975e572d2d35f5bc92d1f5db5ccf433c80dd65f` 已落地（host 补提交），由 host 推送/开 PR。
 > **Main ship / 单行范围**: `limits=None`（无昨收 / 未知板块）时拒绝所有交易尝试；复用 source reason，不冻结 peak / last_prices / mark / 除权参考价缩放。
 > **IMPLEMENTATION_BASE**: `073538d4486a07a71f561631c3f274ffa06eeecb`（#128 merge tip，post δ6 docs；本 feat 起点已由 `git rev-parse HEAD` 核实）。历史 A 基线与验收见 changelog，不用于本轮冻结证明。

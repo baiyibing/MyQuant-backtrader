@@ -345,7 +345,8 @@ def simulate(
                     if defer_sell_at_limit(float(row["open"]), limits):
                         st.stats["defer_sell_limit_down"] += 1
                     else:
-                        _sell(st, code, pos, float(row["open"]), day, pos.pending_exit)
+                        _sell(st, code, pos, float(row["open"]), day, pos.pending_exit,
+                              price_rule="daily_pending_next_open")
                     continue
 
                 if t1_sellable(calendar[pos.entry_idx].date(), day.date()):
@@ -363,6 +364,7 @@ def simulate(
                                     float(row["open"]),
                                     day,
                                     "stop_loss:gap_open",
+                                    price_rule="daily_stop_gap_open",
                                 )
                             continue
                         if float(row["low"]) <= trigger:
@@ -371,7 +373,8 @@ def simulate(
                                 if limit_down_pending:
                                     pos.pending_exit = "stop_loss:touch"
                             else:
-                                _sell(st, code, pos, trigger, day, "stop_loss:touch")
+                                _sell(st, code, pos, trigger, day, "stop_loss:touch",
+                                      price_rule="daily_stop_touch_at_trigger")
                             continue
 
                     pos.peak = max(pos.peak, float(row["high"]))
@@ -413,7 +416,9 @@ def simulate(
                                 pos.pending_exit = reason
                             continue
                         if same_bar:
-                            _sell(st, code, pos, close, day, reason)
+                            _sell(st, code, pos, close, day, reason,
+                                  price_rule="daily_open_board_same_close"
+                                  if reason.startswith("open_board") else "")
                         else:
                             pos.pending_exit = reason
 

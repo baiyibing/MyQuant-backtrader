@@ -1,5 +1,5 @@
-date,code,side,price,shares,notional,commission,reason,lot
-20251103,600000.SH,BUY,10.0,50000,500000.0,500.0,pool,0
-20251103,000001.SZ,BUY,10.0,50000,500000.0,500.0,pool,0
-20251106,600000.SH,SELL,10.0,50000,500000.0,500.0,profit_take:drawdown:50,0
-20251106,000001.SZ,SELL,10.0,50000,500000.0,500.0,profit_take:drawdown:50,0
+date,code,side,price,shares,notional,commission,reason,lot,session_phase,price_rule
+20251103,600000.SH,BUY,10.0,50000,500000.0,500.0,pool,0,,
+20251103,000001.SZ,BUY,10.0,50000,500000.0,500.0,pool,0,,
+20251106,600000.SH,SELL,10.0,50000,500000.0,500.0,profit_take:drawdown:50,0,,daily_pending_next_open
+20251106,000001.SZ,SELL,10.0,50000,500000.0,500.0,profit_take:drawdown:50,0,,daily_pending_next_open

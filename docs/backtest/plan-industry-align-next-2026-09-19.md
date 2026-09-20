@@ -1,9 +1,10 @@
 # Plan: industry-align next (fill gates fork, zero-change default) (2026-09-19)
 
-> **Status**: ✅ **Human GO P1=A closure (2026-09-20 Asia/Shanghai)** — **P1 closed as A**, superseding its 2026-09-19 keep-deferred status. P2/P4 remain deferred; P3 δ contracts/production cuts retain their separate authority. This closure ships docs SSOT + data-free contract tests only; production behavior stays as-built.
+> **Status**: **Human GO P2=B (2026-09-20 Asia/Shanghai): B = add book trades columns `session_phase` / `price_rule`**, superseding P2=A for these schema columns only. **P1 stays closed as A**; P4 remains deferred. P3 δ authority is unchanged; prices, shares, eligibility, cash and NAV stay as-built.
 > **Main ship (single theme)**: Contractualize A-share fill gates fork (`limits`, halt/zero-volume, ST name) between book-engine and v7 paths, with default **zero behavior change**.
 > **IMPLEMENTATION_BASE (fact anchor)**: `f46004d3bf3c9aa8314c5c3d0adcdebd730d9822` (full 40-char SHA of `origin/master` at implementation start).
-> **P1=A closure base (2026-09-20)**: `41f8df331ed25aad4616bde56c77ddb7025c91ee`; all production Python must remain zero-diff against this base. The prior fact anchor and slices below describe the original fill-gates ship.
+> **P1=A closure base (2026-09-20)**: `41f8df331ed25aad4616bde56c77ddb7025c91ee`; the P1 closure shipped zero production Python diff against this base. The prior fact anchor and slices below describe the original fill-gates ship.
+> **P2=B implementation base (2026-09-20)**: `40a5df1e4792f3b884c2cbac4da8486ff21a07a2` (post P1 #133). Only book trade label wiring is authorized; original slice freezes below remain historical.
 > **Business sources read**: `engine-positioning-ssot.md`, `engine-ashare-correctness.md`, `plan-industry-align-refactor-2026-09-18.md`, `plan-hygiene-backlog-2026-09-15.md`, `workflow-codex-handoff.md`.
 > **Adversarial review note**: Three-lane review was BLOCKING; accepted host errata E-01..E-05 were backfilled in v0.2, and r1 merge-consensus MC-1..MC-5 are backfilled in this v0.3 draft.
 
@@ -62,10 +63,10 @@ This ship makes that fork executable as contract (anchors + tests + docs), witho
 | **F-R2** | Keep PR #108 and #112 implemented behavior intact; do not reopen fill-clock behavior. |
 | **F-R3** | Preserve existing fail-open/fail-closed mix exactly where it already exists (including v7 `limits=None` held-path behavior and ST-name semantics). |
 | **F-R4** | Distinguish and test two states explicitly: **(a) gate did not intercept** vs **(b) trade filled**. Never collapse them. |
-| **F-R5** | No Python production code edits by default. Allowed scope: docs + data-free contract tests only. |
+| **F-R5** | Original ship: docs + data-free contracts only. Human GO P2=B adds the sole production exception: book trade label wiring under §4; all other production behavior stays frozen. |
 | **F-R6** | No backtests, no lake reads, no production markers; CI checks must stay data-free. |
 | **F-R7** | Do not fix/reinterpret ST PIT naming behavior in this ship; document as current fork. |
-| **F-R8** | P1 is formally closed as A (2026-09-20): labels/tests/docs only, no fill-policy change. P2/P4 remain deferred; P3 δ cuts retain their separate authority and are not reopened here. |
+| **F-R8** | P1 remains closed as A: no fill-policy change. Human GO P2=B (2026-09-20) permits only the two book trades label columns; unrelated schema/economics changes remain forbidden. P4 stays deferred; P3 δ cuts are not reopened. |
 | **F-R9** | Do not reintroduce Cerebro, qlib PortAna/Exchange, or cross-stack imports as "evidence". |
 | **F-R10** | `IMPLEMENTATION_BASE` for any implementation branch must be explicit full 40-char SHA from `origin/master` tip; no inferred base via merge-base. |
 
@@ -76,18 +77,18 @@ This ship makes that fork executable as contract (anchors + tests + docs), witho
 | ID | Decision point | Human decision / current status |
 |---|---|---|
 | **P1** | Formal closure of the #112 fill-clock deferral | **Human GO: closed as A (2026-09-20)**. No real closing call auction model; `closing_call` / 14:57–15:00 are scan-window labels only. `_in_session`, scanners and fill eligibility stay as-built. **B** (minute touch skips 14:57–14:59) and **C** (skips 14:57–15:00) production behavior are **not authorized and forbidden this round**; expanding fill eligibility into those windows is also forbidden. |
-| **P2** | #112 deferred trades output columns (`session_phase` / `price_rule`) | **A = keep deferred**, unchanged |
+| **P2** | Book trades output columns (`session_phase` / `price_rule`) | **Human GO P2=B: B = add trades columns (2026-09-20)**. Supersedes prior A only for these two additive columns in memory and CSV. Use fill-clock enum values or empty strings; retain old reader requirements, all economics/eligibility, and v7 `_event` schema. |
 | **P3** | #112 deferred fees and ST PIT semantics changes | Original 2026-09-19 **A = keep deferred**; subsequent δ decisions are recorded separately in [engine correctness](engine-ashare-correctness.md). No δ production C merge is reopened here. |
 | **P4** | #112 deferred touch-trigger vs mark coupling changes | **A = keep deferred**, unchanged |
 
-P1 closes the 2026-09-19 keep-deferred stance as A; it does not reopen production behavior. P2/P4 remain deferred. Closure authority also appears in [fill-clock plan §5](plan-industry-align-refactor-2026-09-18.md) and [engine correctness](engine-ashare-correctness.md). Deliverable: docs SSOT + data-free pins in `tests/test_ashare_fill_clock.py`; retain the fixed `SIMULATE_HOT_PATH` import fence, add explicit phase-identifier absence and as-built scanner hm-comparison pins. No production Python edits, lake reads, backtests or production markers.
+P1 remains closed as A; P4 touch↔mark coupling remains deferred. Human GO P2=B authorizes label-only wiring in book ledger/EOD writers and daily/minute sell calls. The fixed `SIMULATE_HOT_PATH` stays unchanged: only `csv_ledger` may import the naming leaf for annotation; scanners still forbid phase filters. Tests pin the six price/shares/reason oracles, 14:57 eligibility, enum values, CSV headers and old-column reader compatibility. See [fill-clock plan §5](plan-industry-align-refactor-2026-09-18.md) and [engine schema contract](engine-ashare-correctness.md#p2-trades-标签列human-go-b2026-09-20). No lake reads or host backtests.
 
 ---
 
 ## 5) Non-goals
 
 - No production behavior change.
-- No Python runtime path edits in `backtest/research/*.py`.
+- No runtime edits beyond P2=B book trade label wiring; no unrelated schema changes.
 - No fill-clock reopen, no new 14:57 execution policy.
 - No "fix" of v7 ST naming or `limits=None` semantics.
 - No backtest execution.
@@ -247,13 +248,15 @@ Only docs + data-free tests may change unless a human cut explicitly reopens beh
 ## 10) Execution protocol
 
 1. Keep this docs plan as the authority for the next implementation ship.
-2. Human confirmed P1-P4 = A/A/A/A (2026-09-19, keep deferred); **P1 formally closed as A on 2026-09-20**, with P2/P4 still deferred. This closure uses the new base above and only the docs/test scope in §4; original slices above do not authorize new production behavior.
+2. Human confirmed P1-P4 = A/A/A/A on 2026-09-19. P1 closed as A on 2026-09-20; subsequent Human GO P2=B on 2026-09-20 supersedes only the two-column schema prohibition. P4 remains deferred; §4 and the dedicated P2 base govern this label-only cut.
 3. Implement only slices A->B->C with per-commit DoD.
 4. If any production behavior change appears necessary, stop and open a new P* cut first.
 
 ---
 
 ## 11) Changelog
+
+- **v0.5-P2-B (2026-09-20 Asia/Shanghai)**: Human GO P2=B adds book trades `session_phase` / `price_rule` only; old required columns remain compatible, write-path import allowlist only. P1 stays closed as A; P4 deferred; no price, shares, reason, eligibility, NAV/cash or v7 schema change.
 
 - **v0.4-P1-A-closure (2026-09-20 Asia/Shanghai)**: Human GO P1=A formally closes the 2026-09-19 fill-clock keep-deferred stance. No real closing call auction model; 14:57–15:00 / `closing_call` remain scan-window labels, with `_in_session` and fill eligibility as-built. B/C production filters and expansion into those windows are forbidden this round. Docs SSOT + data-free contracts only, zero production Python diff against `41f8df331ed25aad4616bde56c77ddb7025c91ee`; P2/P4 remain deferred and δ production C merges are not reopened.
 - **v0.3-impl (2026-09-19)**: Implementation-start refresh: `IMPLEMENTATION_BASE` moved to `f46004d3bf3c9aa8314c5c3d0adcdebd730d9822` (current `origin/master` tip at execution start); status marked `Implemented-when-merged`.
