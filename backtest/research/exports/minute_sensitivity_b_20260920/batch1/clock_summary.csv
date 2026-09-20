@@ -1,0 +1,4 @@
+engine,scope,events,baseline_fills,next_fills,common_fills,status_match_rate,matched_fill_rate,same_price_rate,mean_local_return_delta_bp,changed_local_ranks,max_drawdown,strategy_rank,full_strategy_return,full_replay_status,clock_status,oracle
+Book,SYNTHETIC_LOCAL_PRICE_ONLY_NOT_STRATEGY_REPLAY,12,10,7,7,0.75,0.7,0.14285714285714285,-126.738986659433,7,,,,DATA_GAP,,
+v7,SYNTHETIC_LOCAL_PRICE_ONLY_NOT_STRATEGY_REPLAY,14,12,10,10,0.8571428571428571,0.8333333333333334,0.1,-72.83464866445864,10,,,,DATA_GAP,,
+ModeB,SYNTHETIC_LOCAL_PRICE_ONLY_NOT_STRATEGY_REPLAY,,,,,,,,,,,,,DATA_GAP,NOT_RUN_BATCH1,EX_POST_UPPER_BOUND_NOT_EXECUTABLE

@@ -1,0 +1,7 @@
+item,status,evidence,env_configured
+production_minute_lake,DATA_GAP,"UnconfiguredDataRootError: Parquet lake root is not configured. Set OSKH_SOURCE_PARQUET_ROOT to the lake container, or OSKH_AUTHORITY_HINT_ROOT to a directory that contains a .authority marker. Resolvers do not guess E:/F:.","{""OSKH_AUTHORITY_HINT_ROOT"": false, ""OSKH_PERIOD_1M_ROOT"": false, ""OSKH_SOURCE_PARQUET_ROOT"": false}"
+pool_availability,DATA_GAP,"stock_pool/20260909.csv sampled: 2 columns, code/name only; no publication timestamp; not a full upstream audit",
+factor_availability,DATA_GAP,no audited generated_at/available_at chain,
+real_bar_timestamp_semantics,DATA_GAP,"fixture end labels are constructed, not audited lake labels",
+real_volume_and_units,DATA_GAP,synthetic shares/available_at only; handoff fixtures are not market coverage,
+closed_cash_path_daily_marks_corporate_actions,DATA_GAP,event order and frozen quantity only; no full strategy replay,

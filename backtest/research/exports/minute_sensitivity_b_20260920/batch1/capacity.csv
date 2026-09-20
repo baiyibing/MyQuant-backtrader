@@ -1,0 +1,17 @@
+engine,case_id,axis,scope,cap_on,participation_rate,raw_volume,volume_unit,available_at,bucket,at,status,reason,shares,fill_px,cash_after,action
+Book,enough,capacity_close,SYNTHETIC_LOCAL_PRICE_ONLY_NOT_STRATEGY_REPLAY,False,,1000000,raw_shares_incremental,585,585,585,FILLED,chase:T+1,900,10.2,990810.82,buy
+Book,enough,capacity_close,SYNTHETIC_LOCAL_PRICE_ONLY_NOT_STRATEGY_REPLAY,True,0.1,1000000,raw_shares_incremental,585,585,585,FILLED,chase:T+1,900,10.2,990810.82,buy
+Book,partial,capacity_close,SYNTHETIC_LOCAL_PRICE_ONLY_NOT_STRATEGY_REPLAY,False,,3500,raw_shares_incremental,585,585,585,FILLED,chase:T+1,900,10.2,990810.82,buy
+Book,partial,capacity_close,SYNTHETIC_LOCAL_PRICE_ONLY_NOT_STRATEGY_REPLAY,True,0.1,3500,raw_shares_incremental,585,585,585,FILLED,chase:T+1,300,10.2,996936.94,buy
+Book,missing,capacity_close,SYNTHETIC_LOCAL_PRICE_ONLY_NOT_STRATEGY_REPLAY,False,,,,,585,585,FILLED,chase:T+1,900,10.2,990810.82,buy
+Book,missing,capacity_close,SYNTHETIC_LOCAL_PRICE_ONLY_NOT_STRATEGY_REPLAY,True,0.1,,,,585,585,NO_FILL,skip_volume_unavailable:missing_or_untyped,0,,1000000.0,buy
+Book,late,capacity_close,SYNTHETIC_LOCAL_PRICE_ONLY_NOT_STRATEGY_REPLAY,False,,1000000,raw_shares_incremental,586,585,585,FILLED,chase:T+1,900,10.2,990810.82,buy
+Book,late,capacity_close,SYNTHETIC_LOCAL_PRICE_ONLY_NOT_STRATEGY_REPLAY,True,0.1,1000000,raw_shares_incremental,586,585,585,NO_FILL,skip_volume_unavailable:available_at,0,,1000000.0,buy
+v7,enough,capacity_close,SYNTHETIC_LOCAL_PRICE_ONLY_NOT_STRATEGY_REPLAY,False,,1000000,raw_shares_incremental,885,885,885,FILLED,buy:add_a104,19200,10.4,800120.3200000001,add_a104
+v7,enough,capacity_close,SYNTHETIC_LOCAL_PRICE_ONLY_NOT_STRATEGY_REPLAY,True,0.1,1000000,raw_shares_incremental,885,885,885,FILLED,buy:add_a104,19200,10.4,800120.3200000001,add_a104
+v7,partial,capacity_close,SYNTHETIC_LOCAL_PRICE_ONLY_NOT_STRATEGY_REPLAY,False,,3500,raw_shares_incremental,885,885,885,FILLED,buy:add_a104,19200,10.4,800120.3200000001,add_a104
+v7,partial,capacity_close,SYNTHETIC_LOCAL_PRICE_ONLY_NOT_STRATEGY_REPLAY,True,0.1,3500,raw_shares_incremental,885,885,885,FILLED,buy:add_a104,300,10.4,996876.88,add_a104
+v7,missing,capacity_close,SYNTHETIC_LOCAL_PRICE_ONLY_NOT_STRATEGY_REPLAY,False,,,,,885,885,FILLED,buy:add_a104,19200,10.4,800120.3200000001,add_a104
+v7,missing,capacity_close,SYNTHETIC_LOCAL_PRICE_ONLY_NOT_STRATEGY_REPLAY,True,0.1,,,,885,885,NO_FILL,skip_volume_unavailable:missing_or_untyped,0,,1000000.0,add_a104
+v7,late,capacity_close,SYNTHETIC_LOCAL_PRICE_ONLY_NOT_STRATEGY_REPLAY,False,,1000000,raw_shares_incremental,886,885,885,FILLED,buy:add_a104,19200,10.4,800120.3200000001,add_a104
+v7,late,capacity_close,SYNTHETIC_LOCAL_PRICE_ONLY_NOT_STRATEGY_REPLAY,True,0.1,1000000,raw_shares_incremental,886,885,885,NO_FILL,skip_volume_unavailable:available_at,0,,1000000.0,add_a104

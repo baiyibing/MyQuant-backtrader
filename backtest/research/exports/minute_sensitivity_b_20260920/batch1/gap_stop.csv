@@ -1,0 +1,5 @@
+engine,case_id,axis,scope,cap_on,participation_rate,trigger,candidate_px,shares,fill_px,reason,cash_after,bucket,at,available_at,raw_volume,volume_unit
+Book,protective_first_open,gap_open_capacity,SYNTHETIC_LOCAL_PRICE_ONLY_NOT_STRATEGY_REPLAY,False,,9.5,9.4,1000,9.4,stop_loss:gap_open,9390.6,571,570,571,100000,raw_shares_incremental
+Book,protective_first_open,gap_open_capacity,SYNTHETIC_LOCAL_PRICE_ONLY_NOT_STRATEGY_REPLAY,True,0.1,9.5,9.4,0,,skip_volume_unavailable:bucket_not_completed,0.0,571,570,571,100000,raw_shares_incremental
+v7,protective_first_open,gap_open_capacity,SYNTHETIC_LOCAL_PRICE_ONLY_NOT_STRATEGY_REPLAY,False,,9.5,9.4,1000,9.4,stop:four_avg095,9390.6,571,570,571,100000,raw_shares_incremental
+v7,protective_first_open,gap_open_capacity,SYNTHETIC_LOCAL_PRICE_ONLY_NOT_STRATEGY_REPLAY,True,0.1,9.5,9.4,0,,skip_volume_unavailable:bucket_not_completed,0.0,571,570,571,100000,raw_shares_incremental
