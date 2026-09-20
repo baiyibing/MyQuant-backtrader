@@ -1,5 +1,6 @@
 # Plan: industry-align P3 δ3 ST PIT contract (2026-09-19)
 
+> **状态交叉引用（2026-09-20）**：Human GO P2=B 仅授权书 trades 的 `session_phase` / `price_rule` 两列，覆盖本文历史 P2 延后记录；P1 已 closed as A，P4 仍 deferred，本文 δ 合同不重开。见 [schema SSOT](engine-ashare-correctness.md#p2-trades-标签列human-go-b2026-09-20)。
 > **Status**: **v0.3 · Slice A→B→C 已通过（§8.4） · Human GO A/A/A（2026-09-19，Asia/Shanghai）**。本 feat 仅三份 docs + §7 六个既有 data-free 测试文件；生产 Python 对 IMPLEMENTATION_BASE 零 diff，保留未提交工作区交付。
 > **Main ship / 单行范围**: 契约化书侧按名单日期 as-of 与 v7 窗口末次名称平铺的 ST 分叉；本 feat 只做 docs + data-free pins，生产零行为变更。
 > **IMPLEMENTATION_BASE**: `cce17f319ead5c64a202632c3665b4eeb3e3e7a5`（本 feat worktree 起点，已由 `git rev-parse HEAD` 核实；post #124，含 δ1/δ2 与 δ3 Human GO）。历史 proposal 基线 `1049b904bdd818dbb79f51f1830a008c8f83b141` 仅保留沿革，不用于本 feat 冻结证明。

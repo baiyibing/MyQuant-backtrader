@@ -1,5 +1,6 @@
 # Plan: industry-align P3 δ6 production ex-div economics (2026-09-19)
 
+> **状态交叉引用（2026-09-20）**：Human GO P2=B 仅授权书 trades 的 `session_phase` / `price_rule` 两列，覆盖本文历史 P2 延后记录；P1 已 closed as A，P4 仍 deferred，本文 δ 合同不重开。见 [schema SSOT](engine-ashare-correctness.md#p2-trades-标签列human-go-b2026-09-20)。
 > **Status**: **v0.4 · production economics landed · Human GO C/A/B/B/A**（2026-09-19，Asia/Shanghai）。本刀的 must-cut-C 已满足；economics-off 保留旧残留，economics-on 的显式事件守恒经 public APIs 验收，见 §8.4。
 > **IMPLEMENTATION_BASE**: `f145ffdec5e378c9092d3f8b990f104979d89141`（#130 merge tip，δ5 volume-cap production；开工时 HEAD 与指定分支已核对）。
 > **Human GO**: **P3δ6.1=C / .2=A / .3=B / .4=B / .5=A**，覆盖 #128 的 A 残留+oracle / B docs 冻结，**仅对本刀生效**。历史 A 记录保留于 §10。

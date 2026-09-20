@@ -1,5 +1,6 @@
 # Plan: industry-align P3 δ5 volume participation cap production (2026-09-19)
 
+> **状态交叉引用（2026-09-20）**：Human GO P2=B 仅授权书 trades 的 `session_phase` / `price_rule` 两列，覆盖本文历史 P2 延后记录；P1 已 closed as A，P4 仍 deferred，本文 δ 合同不重开。见 [schema SSOT](engine-ashare-correctness.md#p2-trades-标签列human-go-b2026-09-20)。
 > **Status**: **v0.4 · production volume-cap landed · Human GO C/A/A/A**；Slice A/B/C 完成，验收见 §8.4。此刀独立实施 δ5；δ6 production economics NOT started。
 > **Main ship / 单行范围**: 分钟书 `simulate` 与 `simulate_v7` 可显式启用共享成交量预算，允许部分成交；默认 cap off = as-built。
 > **IMPLEMENTATION_BASE**: `7428a1a89e309c5f5cbc21eab6eda2e38448c6cd`（#129 merge tip，δ4 fail-closed；worktree 起点实测 40 字符）。不跟随移动分支或推算 merge-base。

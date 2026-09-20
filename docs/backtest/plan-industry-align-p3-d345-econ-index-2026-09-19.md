@@ -1,5 +1,6 @@
 # Index: industry-align P3 δ3–δ6 follow-up plans (2026-09-19)
 
+> **状态交叉引用（2026-09-20）**：Human GO P2=B 仅授权书 trades 的 `session_phase` / `price_rule` 两列，覆盖本文历史 P2 延后记录；P1 已 closed as A，P4 仍 deferred，本文 δ 合同不重开。见 [schema SSOT](engine-ashare-correctness.md#p2-trades-标签列human-go-b2026-09-20)。
 > **Status**: **v0.3 · δ6 Slice A→B→C passed（2026-09-19，Asia/Shanghai）**：δ3/#125、δ4/#126 契约/pins 已落，δ5/#127 仍 design-only；δ6 在 post #127 固定基线上完成残留+oracle 与可选账本 B docs，生产 Python 零 diff、经济残留未关闭、C 未授权/未实施。P1/P2/P4 继续挂起；本次未提交，详见 [δ6 §8.4](plan-industry-align-p3-d6-exdiv-economics-2026-09-19.md#84-本次运行记录与验收范围)。
 > **原提案 IMPLEMENTATION_BASE（历史）**: `1049b904bdd818dbb79f51f1830a008c8f83b141`，本 worktree 起点已用 `git rev-parse HEAD` 核实（全 40 字符；post #123，含 δ1 fee + δ2 exdiv reference contract）。
 > **v0.2 GO 记录范围（历史）**: 仅下列四份独立 plan、本索引与 [r1 merge-consensus](../architecture/reviews/2026-09-19/plan-industry-align-p3-d345-econ-r1/merge-consensus.md)；不改生产/测试代码，不跑测试、回测或湖，不使用云端代理/嵌套 Codex。
