@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Human GO B: synthetic, read-only event sensitivity; never a strategy replay."""
+"""Human GO B: synthetic/lake read-only event sensitivity; never a strategy replay."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ import json
 import math
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 
@@ -27,6 +28,8 @@ from backtest.research import csv_minute_backtest_v7 as v7
 from backtest.research import unified_exit_modea as modea
 from backtest.research import unified_exit_modeb as modeb
 from backtest.research.ashare_fees import BILATERAL_10BP, FeeSchedule
+from backtest.research.ashare_bars import book_frames_from_compact, load_minute_from_lake
+from backtest.research.qlib_bin_1min import load_qlib_bin_1min_bars
 from backtest.research.ashare_session import (
     defer_sell_at_limit, session_limit_prices, skip_buy_at_limit, t1_sellable,
 )
@@ -193,7 +196,8 @@ def baseline(case: Case, cap: VolumeCap | None = None) -> dict:
 
 def next_open(*, engine: str, side: str, decision_at: datetime, candidates: list[Bar],
               previous_by_day: dict[date, float], shares: int, cash: float,
-              buy_day: date = PREV_DAY, cap: VolumeCap | None = None) -> tuple[dict, list[dict]]:
+              buy_day: date = PREV_DAY, cap: VolumeCap | None = None,
+              symbol: str = SYMBOL, sessions=SESSIONS) -> tuple[dict, list[dict]]:
     """Frozen order: chronological first eligible open, no close/volume lookahead."""
     submit = decision_at + timedelta(milliseconds=1)
     attempts = []
@@ -202,14 +206,14 @@ def next_open(*, engine: str, side: str, decision_at: datetime, candidates: list
         start_hm = bar.start.hour * 60 + bar.start.minute
         if bar.start < submit:
             why = "before_submit"
-        elif bar.day not in SESSIONS:
+        elif bar.day not in sessions:
             why = "outside_fixture_calendar"
         elif not (570 <= start_hm < 690 or 780 <= start_hm < 897):
             why = "outside_continuous_session"
         elif side == "sell" and not t1_sellable(buy_day, bar.day):
             why = "t1_locked"
         else:
-            limits = session_limit_prices(SYMBOL, previous_by_day.get(bar.day))
+            limits = session_limit_prices(symbol, previous_by_day.get(bar.day))
             if limits is None:
                 why = "missing_limit_reference"
             elif side == "buy" and skip_buy_at_limit(bar.open, limits):
@@ -221,15 +225,16 @@ def next_open(*, engine: str, side: str, decision_at: datetime, candidates: list
             why = "cash_reject_terminal"
         if not why and cap is not None:
             # This open cannot spend the bar's future completed volume.
-            filled, why = cap.clamp((SYMBOL, bar.day.strftime("%Y%m%d"), bar.hm),
-                                    bar.hm - 1, shares, buy=side == "buy")
+            end_hm = bar.end.hour * 60 + bar.end.minute
+            filled, why = cap.clamp((symbol, bar.day.strftime("%Y%m%d"), end_hm),
+                                    start_hm, shares, buy=side == "buy")
         attempts.append(dict(candidate_start=bar.start, candidate_end=bar.end,
                              submit_at=submit, candidate_px=bar.open,
                              previous_close=previous_by_day.get(bar.day),
                              outcome=why or "FILLED", candidate_shares=filled if not why else 0))
         if not why:
             if cap is not None:
-                cap.consume((SYMBOL, bar.day.strftime("%Y%m%d"), bar.hm), filled)
+                cap.consume((symbol, bar.day.strftime("%Y%m%d"), end_hm), filled)
             delta = (BILATERAL_10BP.debit_buy(filled * bar.open) if side == "buy"
                      else -BILATERAL_10BP.credit_sell(filled * bar.open))
             return dict(status="FILLED", fill_px=bar.open, fill_at=bar.start,
@@ -546,12 +551,18 @@ def data_gaps() -> list[dict]:
 
 
 def source_hashes() -> dict:
-    return {f"backtest/research/{name}.py": hashlib.sha256(
-        (ROOT / f"backtest/research/{name}.py").read_bytes()).hexdigest() for name in SOURCE_NAMES}
+    # Compare as git blobs would: normalize CRLF so Windows working trees with
+    # autocrlf do not false-fail the production BASE fence.
+    return {
+        f"backtest/research/{name}.py": hashlib.sha256(
+            (ROOT / f"backtest/research/{name}.py").read_bytes().replace(b"\r\n", b"\n")
+        ).hexdigest()
+        for name in SOURCE_NAMES
+    }
 
 
-def write_csv(path: Path, rows: list[dict]) -> None:
-    fields = list(dict.fromkeys(k for row in rows for k in row))
+def write_csv(path: Path, rows: list[dict], fields=()) -> None:
+    fields = list(dict.fromkeys([*fields, *(k for row in rows for k in row)]))
     with path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields, lineterminator="\n")
         writer.writeheader()
@@ -578,15 +589,20 @@ def summaries(rows: list[dict]) -> list[dict]:
     return out
 
 
-def run(output: Path) -> dict:
-    # Fail closed before any output mutation; never reuse baseline/artifact dirs.
-    if output.exists():
-        raise FileExistsError(f"Refusing to overwrite output directory: {output}")
+def check_source_fence() -> dict:
     before = source_hashes()
     for path, digest in before.items():
         base_bytes = subprocess.check_output(["git", "show", f"{BASE}:{path}"], cwd=ROOT)
         if hashlib.sha256(base_bytes).hexdigest() != digest:
             raise ValueError(f"Production source differs from experiment BASE: {path}")
+    return before
+
+
+def run(output: Path) -> dict:
+    # Fail closed before any output mutation; never reuse baseline/artifact dirs.
+    if output.exists():
+        raise FileExistsError(f"Refusing to overwrite output directory: {output}")
+    before = check_source_fence()
     cases = fixtures()
     clocks, audits = clock_rows(cases)
     mb = modeb_baselines()
@@ -624,11 +640,938 @@ def run(output: Path) -> dict:
     return dict(output=str(output), rows={k: len(v) for k, v in payloads.items()}, status="DATA_GAP_SYNTHETIC_BATCH_COMPLETE")
 
 
+LAKE_SCOPE = "local event sensitivity not strategy claim"
+LAKE_LABEL = "lake_index_is_bar_start_wallclock"
+DEFAULT_QLIB_1MIN_ROOT = Path(r"C:\Users\wangc\.qlib\qlib_data\my_data_1min")
+SOURCE_LINEAGE = "parquet_lineage"
+STAGES = ("trial", "four", "six", "eight")
+FULL_GAPS = dict(production_replay="DATA_GAP", full_replay_status="DATA_GAP",
+                 full_strategy_nav=None, full_strategy_return=None,
+                 max_drawdown=None, strategy_rank=None, strategy_rank_delta=None)
+
+
+@dataclass(frozen=True)
+class LakeBar(Bar):
+    # Deliberately separate from batch1's END labels. Never subtract one minute.
+    @property
+    def start(self) -> datetime:
+        return stamp(self.day, self.hm)
+
+    @property
+    def end(self) -> datetime:
+        return self.start + timedelta(minutes=1)
+
+
+def lake_dates(start: str, end: str) -> list[date]:
+    if not all(re.fullmatch(r"\d{8}", x) for x in (start, end)):
+        raise ValueError("Lake dates must be YYYYMMDD, without hyphens")
+    first, last = (datetime.strptime(x, "%Y%m%d").date() for x in (start, end))
+    if first > last:
+        raise ValueError("--start must be <= --end")
+    # Calendar dates, not an invented trading calendar; absent days become gaps.
+    return [first + timedelta(days=i) for i in range((last - first).days + 1)]
+
+
+def lake_symbols(values: list[str] | None) -> list[str]:
+    symbols = sorted({s.strip().upper() for value in (values or [SYMBOL])
+                      for s in value.split(",")})
+    if not symbols or any(not re.fullmatch(r"\d{6}\.(SH|SZ|BJ)", s) for s in symbols):
+        raise ValueError("--symbols requires canonical symbols, e.g. 600000.SH")
+    return symbols
+
+
+def publication_gaps() -> list[dict]:
+    """Inspect repository CSV headers only; filenames/mtime are never PIT evidence."""
+    samples = []
+    tokens = ("published_at", "publication_timestamp", "generated_at", "available_at")
+    for path in sorted((ROOT / "stock_pool").glob("*.csv"))[:20]:
+        if path.is_symlink():
+            continue
+        try:
+            with path.open(encoding="utf-8-sig", newline="") as handle:
+                header = next(csv.reader(handle), [])
+            samples.append(dict(path=str(path.relative_to(ROOT)), columns=len(header),
+                                timestamp_columns=[c for c in header if c.strip().lower() in tokens]))
+        except (OSError, UnicodeError, csv.Error) as exc:
+            samples.append(dict(path=str(path.relative_to(ROOT)), error=str(exc)))
+    return [dict(item="pool_availability", status="DATA_GAP", evidence=json.dumps(
+        samples, ensure_ascii=False), reason="header_sample_only_no_audited_publication_chain"),
+        dict(item="factor_availability", status="DATA_GAP",
+             evidence="No audited generated_at/available_at chain; no external search")]
+
+
+def validate_lake_frame(frame: pd.DataFrame, start: str, end: str, *,
+                        lookback_start: str | None = None) -> None:
+    if not isinstance(frame.index, pd.DatetimeIndex) or frame.index.tz is not None:
+        raise ValueError("Expected naive lake wall-clock DatetimeIndex; no timezone conversion inferred")
+    if frame.index.has_duplicates or not frame.index.is_monotonic_increasing:
+        raise ValueError("Lake frame must have unique chronological timestamps")
+    if frame.index.hasnans or not (frame.index == frame.index.floor("min")).all():
+        raise ValueError("Lake frame has missing/non-minute labels")
+    prices = frame[["open", "high", "low", "close"]].to_numpy(dtype=float)
+    if not np.isfinite(prices).all() or not (prices > 0).all():
+        raise ValueError("Lake OHLC must be finite and positive")
+    if ((frame["high"] < frame[["open", "close"]].max(axis=1)).any()
+            or (frame["low"] > frame[["open", "close"]].min(axis=1)).any()):
+        raise ValueError("Inconsistent lake OHLC envelope")
+    labels = frame.index.strftime("%Y%m%d")
+    floor = lookback_start or start
+    if not ((labels >= floor) & (labels <= end)).all():
+        raise ValueError("Lake reader returned bars outside the lookback+event window")
+    if not ((labels >= start) & (labels <= end)).any():
+        raise ValueError("Lake reader returned no bars inside the requested event window")
+    if not (frame["ymd"].to_numpy() == labels).all() or not (
+            frame["hm"].to_numpy() == frame.index.hour * 60 + frame.index.minute).all():
+        raise ValueError("Lake hm/ymd disagrees with START wall-clock index")
+
+
+def lake_baseline(*, engine, symbol, day, hm, frame, previous, anchor, stage,
+                  cap=None) -> dict:
+    """Original decision/ledger calls on real prices, with declared injected state."""
+    price = float(frame.loc[stamp(day, hm), "close"])
+    limits = session_limit_prices(symbol, previous)
+    if limits is None:
+        return dict(status="DATA_GAP", reason="unknown_board_or_limit_reference",
+                    shares=None, fill_px=None, cash_after=None, action=None)
+    if engine == "Book":
+        quotes = book._chase_quotes(frame.loc[frame.index <= stamp(day, hm)])
+        state = SimState(cash=1_000_000., volume_cap=cap)
+        action = book.chase_decision(*quotes, limits[0])
+        run_chase_due_day(state, {symbol: (10_000., 0)}, day_i=1, day=pd.Timestamp(day),
+                          names={}, allow_add=False, buy_gate=None,
+                          quotes_for=lambda _: (*quotes, [previous]),
+                          volume_bucket_for=lambda _: hm + 1)
+        trades = [t for t in state.trades if t["side"] == "BUY"]
+        reason = (state.trades[-1]["reason"] if state.trades else
+                  "limit" if state.stats["chase_skip_limit"] else
+                  "abandon" if state.stats["chase_abandon"] else "buy_failed")
+    else:
+        anchor_at, entry = anchor
+        state = v7.SimResult(1_000_000., volume_cap=cap)
+        # All stages are counterfactual independent snapshots, not inferred history.
+        position = v7.Position(symbol, entry, stage=stage, avg_cost=entry, peak=entry,
+                               lots=[v7.Lot(100, anchor_at.date(), entry, "injected_anchor")],
+                               last_add_date=anchor_at.date())
+        state.positions[symbol] = position
+        decision = ladder_decision(stage, price, entry_a=entry)
+        stop = stop_decision(stage, entry_a=entry, average_cost=entry)
+        # Lake index is bar START; close is available at hm+1 wall clock,
+        # which is what production ADD_HM_START/END (14:45–14:55) mean.
+        action = decision.action if in_add_window(hm + 1) else "outside_add_window"
+        reason = action
+        if price <= stop.line:
+            reason = "stop_gate_blocks_add"
+        elif action.startswith("add_"):
+            if skip_buy_at_limit(price, limits):
+                reason = "limit_up"
+            elif defer_sell_at_limit(price, limits):
+                reason = "limit_down"
+            else:
+                # Ledger's integer bucket is completed time; signal hm stays START.
+                v7._buy(state, position, symbol, day, hm + 1, price,
+                        decision.fraction, "buy:" + action, action)
+                reason = state.trades[-1]["reason"]
+        trades = [t for t in state.trades if t["side"] == "buy"]
+    return dict(status="FILLED" if trades else "NO_FILL", reason=reason, action=action,
+                shares=int(trades[-1]["shares"]) if trades else 0,
+                fill_px=float(trades[-1]["price"]) if trades else None,
+                cash_after=state.cash)
+
+
+def lake_event(frame, *, engine, symbol, day, hm, stage) -> tuple[dict, list[dict], list[dict]]:
+    quote = stamp(day, hm)
+    available = quote + timedelta(minutes=1)
+    previous_at = stamp(day - timedelta(days=1), 900)
+    row = dict(engine=engine, case_id=f"{symbol}_{day:%Y%m%d}_{hm}_{stage}", symbol=symbol,
+               date=day, scope=LAKE_SCOPE, axis="clock", source="oskh_parquet_none",
+               stage=stage, signal_hm=hm, bar_label_semantics=LAKE_LABEL,
+               quote_at=quote, close_available_at=available, decision_at=available,
+               submit_at=available + timedelta(milliseconds=1), decision_px=None,
+               limit_reference_at=previous_at, limit_reference_px=None,
+               limit_reference_kind="previous_calendar_day_1500_minute_close_proxy_not_official_daily",
+               injected_entry_a=None, injected_anchor_at=None,
+               injected_lot_shares=100 if engine == "v7" else None,
+               injected_cash=1_000_000., baseline_status="DATA_GAP", baseline_reason=None,
+               baseline_fill_at=None, baseline_fill_px=None, baseline_shares=None,
+               baseline_cash_after=None, next_status="DATA_GAP", next_reason=None,
+               next_fill_at=None, next_fill_px=None, next_shares=None, next_cash_after=None,
+               matched_fill=None, status_match=None, same_price=None, price_diff=None,
+               price_diff_bp=None, fixed_exit_day=day + timedelta(days=1), fixed_exit_px=None,
+               exit_mark_at=None, local_pair_status="DATA_GAP",
+               baseline_local_pnl=None, next_local_pnl=None, baseline_local_return=None,
+               next_local_return=None, local_pnl_delta=None, local_return_delta_bp=None,
+               baseline_local_rank=None, next_local_rank=None, local_rank_delta=None, **FULL_GAPS)
+    missing = []
+    if frame is None:
+        missing.append("missing_or_unreadable_symbol_window")
+    else:
+        if quote not in frame.index:
+            missing.append("missing_required_signal_bar_no_fallback")
+        else:
+            row["decision_px"] = float(frame.at[quote, "close"])
+        if stamp(day, 570) not in frame.index:
+            missing.append("missing_0930_open")
+        if previous_at not in frame.index:
+            missing.append("missing_previous_calendar_day_1500_reference")
+        else:
+            row["limit_reference_px"] = float(frame.at[previous_at, "close"])
+        anchors = frame.loc[(frame["hm"] == 570) & (frame.index < stamp(day, 0))]
+        if engine == "v7" and anchors.empty:
+            missing.append("missing_prior_date_0930_entry_anchor")
+    capacities = []
+    if missing:
+        row["baseline_reason"] = row["next_reason"] = ";".join(missing)
+        attempts = []
+    else:
+        anchor = ((anchors.index[0].to_pydatetime(), float(anchors.iloc[0]["open"]))
+                  if engine == "v7" else None)
+        if anchor:
+            row.update(injected_anchor_at=anchor[0], injected_entry_a=anchor[1])
+        day_frame = frame.loc[frame["ymd"] == day.strftime("%Y%m%d")]
+        kwargs = dict(engine=engine, symbol=symbol, day=day, hm=hm, frame=day_frame,
+                      previous=row["limit_reference_px"], anchor=anchor, stage=stage)
+        base = lake_baseline(**kwargs)
+        row.update(action=base["action"], baseline_status=base["status"], baseline_reason=base["reason"],
+                   baseline_fill_px=base["fill_px"], baseline_shares=base["shares"],
+                   baseline_cash_after=base["cash_after"],
+                   baseline_fill_at=available if base["shares"] else None)
+        if base["shares"]:
+            # Order lifetime ends this calendar day; no overnight session inference.
+            candidates = [LakeBar(day, int(r.hm), float(r.open), float(r.close))
+                          for r in day_frame.loc[day_frame.index > quote].itertuples()]
+            alt, attempts = next_open(engine=engine, side="buy", decision_at=available,
+                                      candidates=candidates, previous_by_day={day: row["limit_reference_px"]},
+                                      shares=base["shares"], cash=1_000_000., symbol=symbol, sessions=(day,))
+        else:
+            alt, attempts = dict(status=base["status"], reason="no_baseline_order",
+                                 fill_at=None, fill_px=None, shares=base["shares"],
+                                 cash_after=base["cash_after"]), []
+        row.update({"next_" + k: v for k, v in alt.items()})
+        if base["status"] != "DATA_GAP":
+            common = bool(base["shares"] and alt["shares"])
+            row.update(matched_fill=common, status_match=bool(base["shares"]) == bool(alt["shares"]))
+            if common:
+                row.update(same_price=math.isclose(base["fill_px"], alt["fill_px"], abs_tol=1e-9),
+                           price_diff=alt["fill_px"] - base["fill_px"],
+                           price_diff_bp=(alt["fill_px"] / base["fill_px"] - 1) * 10_000)
+        # A predeclared next-calendar-day 14:55 close price pair, never an exit replay.
+        exit_at = stamp(day + timedelta(days=1), 895)
+        if exit_at in frame.index and base["shares"]:
+            exit_px = float(frame.at[exit_at, "close"])
+            old = economics(base["fill_px"], exit_px, base["shares"])
+            row.update(fixed_exit_px=exit_px, exit_mark_at=exit_at,
+                       local_pair_status="PRICE_PAIR_ONLY_NOT_EXECUTED_EXIT",
+                       baseline_local_pnl=old["net_pnl"], baseline_local_return=old["net_return"])
+            if row["matched_fill"]:
+                new = economics(alt["fill_px"], exit_px, alt["shares"])
+                row.update(next_local_pnl=new["net_pnl"], next_local_return=new["net_return"],
+                           local_pnl_delta=new["net_pnl"] - old["net_pnl"],
+                           local_return_delta_bp=(new["net_return"] - old["net_return"]) * 10_000)
+        elif not base["shares"] and base["status"] != "DATA_GAP":
+            row["local_pair_status"] = "NO_FILL"
+        # A missing/untyped volume lookup is intentional, never fabricated shares.
+        capped = lake_baseline(**kwargs, cap=VolumeCap(.1, {}))
+        capacities = [dict(cap_on=False, participation_rate=None, **base),
+                      dict(cap_on=True, participation_rate=.1, **capped)]
+    if not capacities:
+        capacities = [dict(cap_on=enabled, participation_rate=.1 if enabled else None,
+                           status="DATA_GAP", reason=row["baseline_reason"], shares=None,
+                           fill_px=None, cash_after=None) for enabled in (False, True)]
+    capacities = [dict(engine=engine, case_id=row["case_id"], symbol=symbol, scope=LAKE_SCOPE,
+                       axis="capacity_close", volume_status="DATA_GAP", raw_volume=None,
+                       volume_unit=None, available_at=None, bucket=hm + 1,
+                       note="reader_drops_volume_no_audited_units_or_availability",
+                       **c, **FULL_GAPS) for c in capacities]
+    return row, [dict(engine=engine, case_id=row["case_id"], symbol=symbol, **a) for a in attempts], capacities
+
+
+def lake_cost_rows(clocks: list[dict]) -> list[dict]:
+    rows = []
+    scenarios = [("slippage", "BILATERAL_10BP", bp) for bp in (0, 5, 10, 20)]
+    scenarios += [("fee", scheme, 0) for scheme in
+                  ("BILATERAL_10BP", "REPLACE_COMMISSION_3BP_MIN5_STAMP_SELL5BP")]
+    for r in clocks:
+        paired = r["local_pair_status"] == "PRICE_PAIR_ONLY_NOT_EXECUTED_EXIT"
+        for axis, scheme, bp in scenarios:
+            econ = economics(r["baseline_fill_px"], r["fixed_exit_px"], r["baseline_shares"],
+                             slip_bp=bp, scheme=scheme) if paired else {}
+            rows.append(dict(engine=r["engine"], case_id=r["case_id"], scope=LAKE_SCOPE,
+                             axis=axis, scheme=scheme, slip_per_side_bp=bp,
+                             status=r["local_pair_status"], shares=r["baseline_shares"],
+                             buy_px=None, sell_px=None, buy_fee=None, sell_fee=None, stamp_fee=None,
+                             net_pnl=None, net_return=None, **FULL_GAPS))
+            rows[-1].update(econ, pnl_delta=(econ["net_pnl"] - r["baseline_local_pnl"] if paired else None),
+                            return_delta_bp=((econ["net_return"] - r["baseline_local_return"]) * 10_000
+                                             if paired else None))
+    rows.append(dict(engine="ModeB", scope=LAKE_SCOPE, status="NOT_RUN", **FULL_GAPS))
+    return rows
+
+
+def lake_summaries(clocks: list[dict]) -> list[dict]:
+    rows = []
+    for engine in ("Book", "v7"):
+        group = [r for r in clocks if r["engine"] == engine]
+        valid = [r for r in group if r["baseline_status"] != "DATA_GAP"]
+        base = [r for r in valid if r["baseline_shares"]]
+        common = [r for r in valid if r["matched_fill"]]
+        rows.append(dict(engine=engine, scope=LAKE_SCOPE,
+                         clock_status="LOCAL_EVENTS_COMPLETE" if len(valid) == len(group) else "DATA_GAP",
+                         requested_events=len(group), evaluated_events=len(valid),
+                         data_gap_events=len(group) - len(valid),
+                         baseline_fills=len(base) if valid else None,
+                         next_fills=sum(bool(r["next_shares"]) for r in valid) if valid else None,
+                         common_fills=len(common) if valid else None,
+                         status_match_rate=sum(r["status_match"] for r in valid) / len(valid) if valid else None,
+                         matched_fill_rate=len(common) / len(base) if base else None,
+                         same_price_rate=sum(r["same_price"] for r in common) / len(common) if common else None,
+                         mean_price_diff_bp=np.mean([r["price_diff_bp"] for r in common]) if common else None,
+                         **FULL_GAPS))
+    rows.append(dict(engine="ModeB", scope=LAKE_SCOPE, clock_status="NOT_RUN", **FULL_GAPS))
+    return rows
+
+
+
+def resolve_qlib_1min_root(explicit: Path | str | None = None) -> Path | None:
+    """Prefer explicit CLI, then env; never invent alternate drive letters."""
+    candidates = []
+    if explicit is not None:
+        candidates.append(Path(explicit))
+    for key in ("QLIB_1MIN_ROOT", "OSKH_QLIB_1MIN_ROOT"):
+        value = os.environ.get(key)
+        if value:
+            candidates.append(Path(value))
+    candidates.append(DEFAULT_QLIB_1MIN_ROOT)
+    for root in candidates:
+        cal = root / "calendars" / "1min.txt"
+        feat = root / "features"
+        if cal.is_file() and feat.is_dir():
+            return root
+    return None
+
+
+def normalize_book_frame(frame: pd.DataFrame) -> pd.DataFrame:
+    """Ensure book-engine OHLC envelope; qlib compact often omits low."""
+    out = frame.copy()
+    oc_min = out[["open", "close"]].min(axis=1)
+    oc_max = out[["open", "close"]].max(axis=1)
+    low = out["low"] if "low" in out.columns else oc_min
+    high = out["high"] if "high" in out.columns else oc_max
+    out["low"] = np.minimum(low.to_numpy(dtype=float), oc_min.to_numpy(dtype=float))
+    out["high"] = np.maximum(high.to_numpy(dtype=float), oc_max.to_numpy(dtype=float))
+    return out
+
+
+def load_minute_frames(symbols: list[str], start: str, end: str, *,
+                       qlib_root: Path | str | None = None
+                       ) -> tuple[dict, str | None, Path | None, Path | None, Path | None, list[dict]]:
+    """Same parquet lineage; prefer qlib 1min bin I/O, fall back to OSKH parquet.
+
+    Returns frames, access, qlib_root_used, period_root, lake_root, inventory.
+    """
+    gaps_extra: list[dict] = []
+    inventory: list[dict] = []
+    start_d = datetime.strptime(start, "%Y%m%d").date()
+    end_d = datetime.strptime(end, "%Y%m%d").date()
+    chosen = resolve_qlib_1min_root(qlib_root)
+    if chosen is not None:
+        try:
+            compact = load_qlib_bin_1min_bars(symbols, start_d, end_d, qlib_root=chosen, workers=4)
+            frames = {code: normalize_book_frame(frame)
+                      for code, frame in book_frames_from_compact(compact).items()}
+            # Keep a short pre-window lookback for limit/anchor refs
+            # (prev calendar-day 15:00 and prior 09:30). Event evaluation still
+            # keys off signal days inside [start, end]; do not strip preload.
+            lookback = (start_d - timedelta(days=10)).strftime("%Y%m%d")
+            clipped = {}
+            for code, frame in frames.items():
+                keep = (frame["ymd"] >= lookback) & (frame["ymd"] <= end)
+                clipped[code] = frame.loc[keep]
+            inventory.append(dict(access="qlib_bin_1min", qlib_root=str(chosen),
+                                  status="PRESENT", symbols=sorted(clipped)))
+            return clipped, "qlib_bin_1min", chosen, None, None, inventory
+        except (OSError, ValueError, SystemExit, RuntimeError) as exc:
+            gaps_extra.append(dict(item="qlib_bin_1min_load", status="DATA_GAP",
+                                   evidence=f"{type(exc).__name__}: {exc}; falling_back_to_parquet"))
+
+    period_root = lake_root = None
+    try:
+        period_root = resolve_period_root("1m")
+        lake_root = period_root / "dividend_type=none"
+        if not period_root.is_dir() or not lake_root.is_dir():
+            raise FileNotFoundError(f"Configured minute/none directory does not exist: {lake_root}")
+    except (RuntimeError, ValueError, OSError) as exc:
+        inventory.extend(gaps_extra)
+        inventory.append(dict(access="oskh_parquet_1m", status="DATA_GAP",
+                              evidence=f"{type(exc).__name__}: {exc}"))
+        return {}, None, chosen, period_root, lake_root, inventory
+
+    from backtest.research.ashare_bars import to_partition_key
+    for symbol in symbols:
+        path = lake_root / f"symbol={to_partition_key(symbol)}" / "data.parquet"
+        try:
+            stat = path.stat()
+            inventory.append(dict(symbol=symbol, path=str(path), size=stat.st_size,
+                                  mtime_ns=stat.st_mtime_ns, status="PRESENT",
+                                  access="oskh_parquet_1m"))
+        except OSError as exc:
+            inventory.append(dict(symbol=symbol, path=str(path), status="DATA_GAP",
+                                  error=str(exc), access="oskh_parquet_1m"))
+    lookback = (start_d - timedelta(days=10)).strftime("%Y%m%d")
+    loaded = load_minute_from_lake(symbols, lookback, end, lake_root=lake_root)
+    frames = {symbol: normalize_book_frame(frame) for symbol, frame in loaded.items()
+              if frame is not None and not frame.empty}
+    inventory = gaps_extra + inventory
+    return frames, "oskh_parquet_1m", chosen, period_root, lake_root, inventory
+
+
+def run_lake(output: Path, *, symbols=None, start="20260916", end="20260918",
+             qlib_1min_root: Path | str | None = None) -> dict:
+    if output.exists() or output.is_symlink():
+        raise FileExistsError(f"Refusing to overwrite output directory: {output}")
+    dates, symbols = lake_dates(start, end), lake_symbols(symbols)
+    before = check_source_fence()  # Fatal drift is never downgraded to DATA_GAP.
+    reader_sources = {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest() for name in
+                      ("backtest/research/ashare_bars.py", "common/infra/data_root.py",
+                       "backtest/research/qlib_bin_1min.py")}
+    gaps, publication = [], publication_gaps()
+    frames, access, qlib_used, period_root, lake_root, inventory = load_minute_frames(
+        symbols, start, end, qlib_root=qlib_1min_root)
+    lake_status = "DATA_GAP"
+    if access is None:
+        gaps.append(dict(item="production_minute_source", status="DATA_GAP",
+                         evidence="qlib_bin_1min unavailable and parquet resolver/root missing; no drive probing",
+                         inventory=json.dumps(inventory, ensure_ascii=False)))
+    else:
+        for symbol in symbols:
+            frame = frames.get(symbol)
+            try:
+                if frame is None or frame.empty:
+                    raise ValueError("Missing/unreadable/filtered symbol window; reader gives no detailed failure")
+                lookback = (datetime.strptime(start, "%Y%m%d").date() - timedelta(days=10)).strftime("%Y%m%d")
+                validate_lake_frame(frame, start, end, lookback_start=lookback)
+            except (ValueError, KeyError, TypeError) as exc:
+                gaps.append(dict(item="symbol_window", symbol=symbol, status="DATA_GAP",
+                                 evidence=str(exc), access=access))
+                frames.pop(symbol, None)
+            else:
+                frames[symbol] = frame
+        # Parquet integrity: size/mtime unchanged after read.
+        if access == "oskh_parquet_1m":
+            for item in inventory:
+                if item.get("status") == "PRESENT" and "path" in item:
+                    stat = Path(item["path"]).stat()
+                    if (stat.st_size, stat.st_mtime_ns) != (item["size"], item["mtime_ns"]):
+                        raise RuntimeError(f"Lake source changed while reading: {item['path']}")
+        lake_status = "READ_OK" if len(frames) == len(symbols) else "DATA_GAP"
+    gaps = publication + gaps
+    gaps.extend(dict(item=item, status="DATA_GAP", evidence=evidence) for item, evidence in (
+        ("real_volume_and_units", "OHLC path drops or lacks attested incremental shares/available_at"),
+        ("official_limit_reference_and_corporate_actions", "Uses prior calendar-date 15:00 minute close proxy only; no official daily/name/ST/exdiv validation"),
+        ("closed_cash_path_daily_marks_corporate_actions", "Independent injected events; no strategy NAV/DD/rank"),
+        ("modeb_replay", "NOT_RUN; daily entry, instance calendar and clock not replayed")))
+    clocks, audits, capacities = [], [], []
+    for symbol in symbols:
+        for day in dates:
+            specs = [("Book", 585, "pending_chase")]
+            specs += [("v7", hm, stage) for hm in (884, 885, 894) for stage in STAGES]
+            for engine, hm, stage in specs:
+                row, attempts, cap = lake_event(frames.get(symbol), engine=engine, symbol=symbol,
+                                               day=day, hm=hm, stage=stage)
+                row["source"] = access or "unavailable"
+                row["source_lineage"] = SOURCE_LINEAGE
+                clocks.append(row)
+                audits.extend(attempts)
+                capacities.extend(cap)
+                if row["baseline_status"] == "DATA_GAP" or row["local_pair_status"] == "DATA_GAP":
+                    gaps.append(dict(item="event", engine=engine, case_id=row["case_id"], status="DATA_GAP",
+                                     evidence=row["baseline_reason"] if row["baseline_status"] == "DATA_GAP"
+                                     else "missing_next_calendar_day_1455_exit_mark"))
+    snapshots = [dict(symbol=symbol, bar_start=at, bar_end=at + timedelta(minutes=1),
+                      bar_label_semantics=LAKE_LABEL, access=access, source_lineage=SOURCE_LINEAGE, **r)
+                 for symbol, frame in sorted(frames.items())
+                 for at, r in frame.to_dict("index").items()]
+    if not snapshots:
+        snapshots = [dict(symbol=s, status="DATA_GAP", bar_start=None, bar_end=None,
+                          open=None, high=None, low=None, close=None) for s in symbols]
+    payloads = {"clock_trades.csv": clocks, "clock_candidates.csv": audits,
+                "clock_summary.csv": lake_summaries(clocks), "cost_sensitivity.csv": lake_cost_rows(clocks),
+                "capacity.csv": capacities, "minute_frames.csv": snapshots, "data_gaps.csv": gaps,
+                "modeb_baseline.csv": [dict(engine="ModeB", status="NOT_RUN", clock_status="NOT_RUN",
+                                             scope=LAKE_SCOPE, **FULL_GAPS)]}
+    if source_hashes() != before or any(hashlib.sha256((ROOT / p).read_bytes()).hexdigest() != digest
+                                       for p, digest in reader_sources.items()):
+        raise RuntimeError("Production source changed during run")
+    output.mkdir(parents=True, exist_ok=False)
+    for filename, rows in payloads.items():
+        fields = ("engine", "case_id", "symbol", "candidate_start", "candidate_end", "submit_at",
+                  "candidate_px", "previous_close", "outcome", "candidate_shares") if filename == "clock_candidates.csv" else ()
+        write_csv(output / filename, rows, fields)
+    manifest = dict(base=BASE, batch=2, mode="lake", git_head=subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(), status="DATA_GAP",
+        lake_read_status=lake_status, scope=LAKE_SCOPE, production_replay="DATA_GAP",
+        source=SOURCE_LINEAGE, access=access, access_preference="qlib_bin_1min_then_oskh_parquet_1m",
+        OSKH_SOURCE_PARQUET_ROOT=os.environ.get("OSKH_SOURCE_PARQUET_ROOT") or "unset",
+        OSKH_AUTHORITY_HINT_ROOT=os.environ.get("OSKH_AUTHORITY_HINT_ROOT") or "unset",
+        OSKH_PERIOD_1M_ROOT=os.environ.get("OSKH_PERIOD_1M_ROOT") or "unset",
+        QLIB_1MIN_ROOT=os.environ.get("QLIB_1MIN_ROOT") or os.environ.get("OSKH_QLIB_1MIN_ROOT") or "unset",
+        qlib_1min_root=str(qlib_used) if qlib_used is not None else None,
+        default_qlib_1min_root=str(DEFAULT_QLIB_1MIN_ROOT),
+        resolved_1m_root=str(period_root) if period_root is not None else None,
+        lake_root=str(lake_root) if lake_root is not None else None, symbols=symbols,
+        date_window=dict(start=start, end=end, format="YYYYMMDD"),
+        bar_label_semantics=LAKE_LABEL, timezone="Asia/Shanghai",
+        bar_label_evidence="4090 operator verified 600000.SH 20260916/17/18: hm585=09:45 START; qlib 1min bins dumped from none-adjusted 1m lake",
+        note_same_dataset="qlib_bin is derived materialization of parquet lake; not a competing universe",
+        close_available="bar.start + 1 minute", submit="close_available + 1 millisecond",
+        next_open="first same-date continuous-session bar.start >= submit; expires at day end",
+        same_close="original helper price; bookkeeping timestamp at close_available; no live fill assertion",
+        injected_state="Book pending 10000 cash budget; v7 four independent stages, 100-share lot at earliest prior-date 09:30 real open; cash=1000000/event; gates pre-passed except local rules",
+        limit_reference="prior calendar-date 15:00 minute close proxy; missing is DATA_GAP; no official daily/ST/exdiv claim",
+        cost_exit="next calendar-date 14:55 close, predetermined price-only pair; no executable exit claim",
+        volume_cap="separate p=0.1 scenario with unavailable typed volume, no fabricated volume",
+        local_rank="NOT_RUN", quantities="clock/cost frozen from original baseline ledger",
+        python=sys.version, pandas=pd.__version__, numpy=np.__version__,
+        checked_sources_match_base=True, source_hashes_before=before, source_hashes_after=source_hashes(),
+        reader_source_hashes=reader_sources,
+        harness_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+        input_files=inventory, input_provenance="qlib bin or parquet source; no full partition hash; no drive letter probing",
+        files={p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(output.iterdir())})
+    (output / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return dict(output=str(output), status="DATA_GAP", lake_read_status=lake_status, access=access,
+                rows={k: len(v) for k, v in payloads.items()})
+
+# ---------------------------------------------------------------------------
+# Batch 3 / Mode B clock axis (read-only; fills batch2 ModeB NOT_RUN gap)
+# ---------------------------------------------------------------------------
+
+BATCH2_SYMBOLS = ["000021.SZ", "002025.SZ", "600000.SH", "600007.SH", "600276.SH"]
+MODEB_SPEC = modea.StrategySpec(rule=2, n=10, x=5, y=5)
+MODEB_SCOPE = "Mode B local exit clock sensitivity not strategy claim"
+ORACLE_LABEL = "EX_POST_UPPER_BOUND_NOT_EXECUTABLE"
+MODEB_ENTRY_RULE = (
+    "one Instance per symbol x covered session day in [start,end] that has at least "
+    "one later covered session day <= end (T+1+ exit path); buy_price = last-minute "
+    "close aggregated from the same none 1min frames (not qlib my_data day.bin)"
+)
+MODEB_NEXT_OPEN_RULE = (
+    "next_tradable_open: first same-calendar-day continuous-session bar.start >= "
+    "submit; submit = decision_at + 1ms; expires at that calendar day end "
+    "(batch2 next_open spirit; no overnight inference). "
+    "open_gap decision_at = fill bar START; close decision_at = fill bar START + 1m"
+)
+
+
+def aggregate_daily_from_1min_none(frame: pd.DataFrame) -> pd.DataFrame | None:
+    """Session none daily OHLC from the same 1min none lineage (last close = day close)."""
+    if frame is None or frame.empty or "ymd" not in frame.columns:
+        return None
+    rows = []
+    for ymd, group in frame.groupby("ymd", sort=True):
+        group = group.sort_index()
+        if group.empty:
+            continue
+        opn = float(group.iloc[0]["open"])
+        close = float(group.iloc[-1]["close"])
+        high = float(group["high"].max()) if "high" in group.columns else max(opn, close)
+        low = float(group["low"].min()) if "low" in group.columns else min(opn, close)
+        rows.append(dict(open=opn, high=high, low=low, close=close,
+                         ymd=str(ymd),
+                         index=pd.Timestamp(datetime.strptime(str(ymd), "%Y%m%d"))))
+    if not rows:
+        return None
+    out = pd.DataFrame(rows).set_index("index").sort_index()
+    out.index.name = None
+    return out[["open", "high", "low", "close"]]
+
+
+def modeb_session_ymds(frame: pd.DataFrame) -> list[str]:
+    """Sorted unique session ymds present in the minute frame (after session filter)."""
+    sess = modeb.session_minutes(frame)
+    if sess.empty:
+        return []
+    return sorted({str(y) for y in sess["ymd"].tolist()})
+
+
+def modeb_fee_economics(entry_px: float, exit_px: float, shares: float, *, trade: bool) -> dict:
+    """Mode B bilateral 10bp via modea.COMMISSION (same as evaluate_exit_modeb)."""
+    buy_cost = float(shares) * float(entry_px) * (1.0 + modea.COMMISSION)
+    proceeds = float(shares) * float(exit_px) * ((1.0 - modea.COMMISSION) if trade else 1.0)
+    pnl = proceeds - buy_cost
+    return dict(buy_cost=buy_cost, proceeds=proceeds, net_pnl=pnl,
+                net_return=(pnl / buy_cost) if buy_cost else None)
+
+
+def classify_modeb_trigger_path(result, frame: pd.DataFrame) -> str:
+    """Q39 as-built: open-gap then close; high/low never fire."""
+    if result is None or not getattr(result, "is_trade", False):
+        return "none"
+    sell_ymd = str(result.sell_date)
+    sell_hm = result.sell_hm
+    if sell_hm is None:
+        return "other"
+    day = frame.loc[frame["ymd"].astype(str) == sell_ymd]
+    if day.empty:
+        return "other"
+    hit = day.loc[day["hm"].astype(int) == int(sell_hm)]
+    if hit.empty:
+        return "other"
+    opn = float(hit.iloc[0]["open"])
+    close = float(hit.iloc[0]["close"])
+    px = float(result.sell_price)
+    if math.isclose(px, opn, abs_tol=1e-9, rel_tol=0):
+        return "open_gap"
+    if math.isclose(px, close, abs_tol=1e-9, rel_tol=0):
+        return "close"
+    return "other"
+
+
+def modeb_decision_at(trigger_path: str, sell_day: date, sell_hm: int) -> datetime | None:
+    if trigger_path == "open_gap":
+        return stamp(sell_day, int(sell_hm))
+    if trigger_path == "close":
+        return stamp(sell_day, int(sell_hm)) + timedelta(minutes=1)
+    return None
+
+
+def modeb_entry_days(sessions: list[str], start: str, end: str) -> list[str]:
+    """Entry days inside window with at least one later session day for exits."""
+    in_window = [y for y in sessions if start <= y <= end]
+    out = []
+    for i, ymd in enumerate(in_window):
+        if any(later > ymd for later in sessions if later <= end):
+            out.append(ymd)
+    return out
+
+
+def modeb_clock_for_result(*, symbol: str, entry_ymd: str, entry_px: float, result,
+                           frame: pd.DataFrame, trigger_path: str) -> tuple[dict, list[dict]]:
+    """Apply next_tradable_open axis to a baseline Mode B exit."""
+    gaps_note = []
+    base_trade = bool(result.is_trade)
+    base_econ = modeb_fee_economics(entry_px, result.sell_price, result.shares, trade=base_trade)
+    row = dict(
+        engine="ModeB", case_id=f"{symbol}_{entry_ymd}", symbol=symbol, entry_ymd=entry_ymd,
+        entry_px=entry_px, daily_entry_source="aggregated_from_1min_none_lineage",
+        scope=MODEB_SCOPE, axis="clock_next_tradable_open",
+        bar_label_semantics=LAKE_LABEL, spec=MODEB_SPEC.label(),
+        baseline_reason=result.reason, baseline_fill_px=result.sell_price,
+        baseline_fill_hm=result.sell_hm, baseline_fill_ymd=result.sell_date,
+        baseline_held=result.hold_sessions, baseline_is_trade=base_trade,
+        baseline_shares=result.shares, trigger_path=trigger_path,
+        baseline_local_pnl=base_econ["net_pnl"], baseline_local_return=base_econ["net_return"],
+        decision_at=None, submit_at=None, next_status=None, next_reason=None,
+        next_fill_at=None, next_fill_px=None, next_fill_hm=None, next_shares=None,
+        matched_fill=None, status_match=None, same_price=None, price_diff=None,
+        price_diff_bp=None, next_local_pnl=None, next_local_return=None,
+        local_pnl_delta=None, local_return_delta_bp=None, **FULL_GAPS,
+    )
+    if not base_trade or trigger_path in ("none", "other"):
+        row.update(next_status="NO_FILL" if not base_trade else "DATA_GAP",
+                   next_reason=("no_baseline_trade" if not base_trade
+                                else f"no_clock_for_trigger_path={trigger_path}"))
+        row["matched_fill"] = False
+        row["status_match"] = not base_trade
+        return row, gaps_note
+
+    sell_day = datetime.strptime(str(result.sell_date), "%Y%m%d").date()
+    decision = modeb_decision_at(trigger_path, sell_day, int(result.sell_hm))
+    row["decision_at"] = decision
+    row["submit_at"] = decision + timedelta(milliseconds=1)
+    day_frame = frame.loc[frame["ymd"].astype(str) == str(result.sell_date)]
+    candidates = [LakeBar(sell_day, int(r.hm), float(r.open), float(r.close))
+                  for r in day_frame.itertuples()]
+    # Limit ref: prior session day last close from same frame (honest proxy).
+    prior = frame.loc[frame["ymd"].astype(str) < str(result.sell_date)]
+    prev_px = float(prior.iloc[-1]["close"]) if not prior.empty else None
+    previous_by_day = {sell_day: prev_px} if prev_px is not None else {}
+    entry_day = datetime.strptime(entry_ymd, "%Y%m%d").date()
+    alt, attempts = next_open(
+        engine="ModeB", side="sell", decision_at=decision, candidates=candidates,
+        previous_by_day=previous_by_day, shares=int(result.shares),
+        cash=0.0, buy_day=entry_day, symbol=symbol, sessions=(sell_day,),
+    )
+    row.update(next_status=alt["status"], next_reason=alt["reason"],
+               next_fill_at=alt["fill_at"], next_fill_px=alt["fill_px"],
+               next_shares=alt["shares"],
+               next_fill_hm=(alt["fill_at"].hour * 60 + alt["fill_at"].minute
+                             if alt["fill_at"] is not None else None))
+    common = bool(base_trade and alt["shares"])
+    row.update(matched_fill=common,
+               status_match=bool(base_trade) == bool(alt["shares"]))
+    if common:
+        row.update(same_price=math.isclose(result.sell_price, alt["fill_px"], abs_tol=1e-9),
+                   price_diff=alt["fill_px"] - result.sell_price,
+                   price_diff_bp=(alt["fill_px"] / result.sell_price - 1) * 10_000)
+        new = modeb_fee_economics(entry_px, alt["fill_px"], alt["shares"], trade=True)
+        row.update(next_local_pnl=new["net_pnl"], next_local_return=new["net_return"],
+                   local_pnl_delta=new["net_pnl"] - base_econ["net_pnl"],
+                   local_return_delta_bp=(new["net_return"] - base_econ["net_return"]) * 10_000)
+    elif base_trade and not alt["shares"]:
+        gaps_note.append(dict(item="modeb_next_open", symbol=symbol, entry_ymd=entry_ymd,
+                              status="NO_FILL", evidence=alt["reason"],
+                              trigger_path=trigger_path))
+    return row, gaps_note
+
+
+def modeb_evaluate_instance(symbol: str, name: str, entry_ymd: str, entry_px: float,
+                            daily: dict, minutes: dict, sessions: list[str], end: str
+                            ) -> tuple[object, object | None, str]:
+    """Baseline Q39 fast (+ ref parity) and optional oracle on the same path."""
+    inst = modea.Instance(symbol, name, entry_ymd, float(entry_px), True)
+    args = (inst, MODEB_SPEC, daily, minutes, sessions)
+    fast = modeb.evaluate_exit_modeb(*args, end=end, impl="fast")
+    ref = modeb.evaluate_exit_modeb(*args, end=end, impl="ref")
+    if fast != ref:
+        raise AssertionError(f"Mode B fast/ref parity failed for {symbol}|{entry_ymd}: {fast} vs {ref}")
+    oracle = None
+    try:
+        oracle_map = modeb.oracle_exits([inst], daily, minutes, sessions, end=end)
+        oracle = oracle_map.get(modea.instance_key(inst))
+    except Exception as exc:  # noqa: BLE001 — research path; record evidence, never invent
+        oracle = None
+        return fast, None, f"{type(exc).__name__}: {exc}"
+    return fast, oracle, ""
+
+
+def modeb_summaries(trades: list[dict]) -> list[dict]:
+    valid = [r for r in trades if r.get("case_id")]
+    traded = [r for r in valid if r.get("baseline_is_trade")]
+    common = [r for r in traded if r.get("matched_fill")]
+    deltas = [r["local_return_delta_bp"] for r in common
+              if r.get("local_return_delta_bp") is not None]
+    if not valid:
+        status = "DATA_GAP"
+    elif any(r.get("baseline_reason") for r in valid):
+        status = "LOCAL_EVENTS_COMPLETE"
+    else:
+        status = "DATA_GAP"
+    return [dict(
+        engine="ModeB", scope=MODEB_SCOPE, clock_status=status,
+        requested_instances=len(trades), evaluated_instances=len(valid),
+        baseline_trades=len(traded), next_fills=sum(bool(r.get("next_shares")) for r in traded),
+        common_fills=len(common),
+        status_match_rate=(sum(bool(r.get("status_match")) for r in traded) / len(traded)
+                           if traded else None),
+        matched_fill_rate=(len(common) / len(traded) if traded else None),
+        same_price_rate=(sum(bool(r.get("same_price")) for r in common) / len(common)
+                         if common else None),
+        mean_local_return_delta_bp=(float(np.mean(deltas)) if deltas else None),
+        trigger_path_open_gap=sum(r.get("trigger_path") == "open_gap" for r in traded),
+        trigger_path_close=sum(r.get("trigger_path") == "close" for r in traded),
+        trigger_path_other=sum(r.get("trigger_path") == "other" for r in traded),
+        trigger_path_none=sum(r.get("trigger_path") == "none" for r in valid
+                              if not r.get("baseline_is_trade")),
+        oracle="separate_modeb_oracle_csv_EX_POST_UPPER_BOUND_NOT_EXECUTABLE",
+        **FULL_GAPS,
+    )]
+
+
+def run_modeb(output: Path, *, symbols=None, start="20260916", end="20260918",
+              qlib_1min_root: Path | str | None = None) -> dict:
+    """Batch 3 Mode B clock axis; independent export dir; production C frozen."""
+    if output.exists() or output.is_symlink():
+        raise FileExistsError(f"Refusing to overwrite output directory: {output}")
+    dates = lake_dates(start, end)
+    symbols = lake_symbols(symbols if symbols is not None else [",".join(BATCH2_SYMBOLS)])
+    before = check_source_fence()
+    reader_sources = {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest() for name in
+                      ("backtest/research/ashare_bars.py", "common/infra/data_root.py",
+                       "backtest/research/qlib_bin_1min.py",
+                       "backtest/research/unified_exit_modeb.py")}
+    gaps = list(publication_gaps())
+    frames, access, qlib_used, period_root, lake_root, inventory = load_minute_frames(
+        symbols, start, end, qlib_root=qlib_1min_root)
+    lake_status = "DATA_GAP"
+    if access is None:
+        gaps.append(dict(item="production_minute_source", status="DATA_GAP",
+                         evidence="qlib_bin_1min unavailable and parquet resolver/root missing; no drive probing",
+                         inventory=json.dumps(inventory, ensure_ascii=False)))
+    else:
+        for symbol in symbols:
+            frame = frames.get(symbol)
+            try:
+                if frame is None or frame.empty:
+                    raise ValueError("Missing/unreadable/filtered symbol window")
+                lookback = (datetime.strptime(start, "%Y%m%d").date() - timedelta(days=10)).strftime("%Y%m%d")
+                validate_lake_frame(frame, start, end, lookback_start=lookback)
+            except (ValueError, KeyError, TypeError) as exc:
+                gaps.append(dict(item="symbol_window", symbol=symbol, status="DATA_GAP",
+                                 evidence=str(exc), access=access))
+                frames.pop(symbol, None)
+        if access == "oskh_parquet_1m":
+            for item in inventory:
+                if item.get("status") == "PRESENT" and "path" in item:
+                    stat = Path(item["path"]).stat()
+                    if (stat.st_size, stat.st_mtime_ns) != (item["size"], item["mtime_ns"]):
+                        raise RuntimeError(f"Lake source changed while reading: {item['path']}")
+        lake_status = "READ_OK" if len(frames) == len(symbols) else "DATA_GAP"
+    gaps.extend(dict(item=item, status="DATA_GAP", evidence=evidence) for item, evidence in (
+        ("qlib_my_data_day_bin_entry", "Forbidden for Mode B entry; use aggregated_from_1min_none_lineage only"),
+        ("official_limit_reference_and_corporate_actions",
+         "Mode B prev refs from aggregated 1min daily closes; no official daily/ST/exdiv validation"),
+        ("closed_cash_path_daily_marks_corporate_actions",
+         "Independent Mode B instances; no strategy NAV/DD/rank; do not compare to Book/v7"),
+        ("production_C", "frozen; research harness only"),
+    ))
+
+    trades, oracle_rows = [], []
+    for symbol in symbols:
+        frame = frames.get(symbol)
+        if frame is None or frame.empty:
+            gaps.append(dict(item="modeb_instance", symbol=symbol, status="DATA_GAP",
+                             evidence="no_minute_frame"))
+            continue
+        daily_one = aggregate_daily_from_1min_none(frame)
+        if daily_one is None or daily_one.empty:
+            gaps.append(dict(item="modeb_daily_entry", symbol=symbol, status="DATA_GAP",
+                             evidence="aggregation_failed_no_invented_prices",
+                             daily_entry_source="aggregated_from_1min_none_lineage"))
+            continue
+        sessions = modeb_session_ymds(frame)
+        if not sessions:
+            gaps.append(dict(item="modeb_sessions", symbol=symbol, status="DATA_GAP",
+                             evidence="no_session_minutes"))
+            continue
+        entries = modeb_entry_days(sessions, start, end)
+        if not entries:
+            gaps.append(dict(item="modeb_entry_days", symbol=symbol, status="DATA_GAP",
+                             evidence="no_entry_day_with_later_session_in_window",
+                             sessions=json.dumps(sessions)))
+            continue
+        daily = {symbol: daily_one}
+        minutes = {symbol: frame}
+        closes = {pd.Timestamp(idx).strftime("%Y%m%d"): float(row.close)
+                  for idx, row in daily_one.iterrows()}
+        for entry_ymd in entries:
+            entry_px = closes.get(entry_ymd)
+            if entry_px is None or not (entry_px > 0 and math.isfinite(entry_px)):
+                gaps.append(dict(item="modeb_daily_entry", symbol=symbol, entry_ymd=entry_ymd,
+                                 status="DATA_GAP",
+                                 evidence="missing_aggregated_none_close_no_invented_prices",
+                                 daily_entry_source="aggregated_from_1min_none_lineage"))
+                continue
+            name = symbol  # non-ST name proxy; board limit from code
+            try:
+                result, oracle, oracle_err = modeb_evaluate_instance(
+                    symbol, name, entry_ymd, entry_px, daily, minutes, sessions, end)
+            except Exception as exc:  # noqa: BLE001
+                gaps.append(dict(item="modeb_evaluate", symbol=symbol, entry_ymd=entry_ymd,
+                                 status="DATA_GAP", evidence=f"{type(exc).__name__}: {exc}"))
+                continue
+            trigger_path = classify_modeb_trigger_path(result, frame)
+            trade_row, extra_gaps = modeb_clock_for_result(
+                symbol=symbol, entry_ymd=entry_ymd, entry_px=entry_px, result=result,
+                frame=frame, trigger_path=trigger_path)
+            trade_row.update(source=access or "unavailable", source_lineage=SOURCE_LINEAGE,
+                             sessions_used=len(sessions), parity_fast_ref="PASS")
+            trades.append(trade_row)
+            gaps.extend(extra_gaps)
+            if oracle is None:
+                oracle_rows.append(dict(
+                    engine="ModeB", case_id=f"{symbol}_{entry_ymd}", symbol=symbol,
+                    entry_ymd=entry_ymd, status="DATA_GAP",
+                    label=ORACLE_LABEL, executable="NEVER",
+                    evidence=oracle_err or "oracle_exits_returned_none",
+                    **FULL_GAPS))
+            else:
+                oe = modeb_fee_economics(entry_px, oracle.sell_price, oracle.shares,
+                                         trade=bool(oracle.is_trade))
+                oracle_rows.append(dict(
+                    engine="ModeB", case_id=f"{symbol}_{entry_ymd}", symbol=symbol,
+                    entry_ymd=entry_ymd, status="COMPUTED",
+                    label=ORACLE_LABEL, executable="NEVER",
+                    reason=oracle.reason, fill_px=oracle.sell_price, fill_hm=oracle.sell_hm,
+                    fill_ymd=oracle.sell_date, held=oracle.hold_sessions,
+                    shares=oracle.shares, is_trade=oracle.is_trade,
+                    ex_post_local_pnl=oe["net_pnl"], ex_post_local_return=oe["net_return"],
+                    note="ex-post upper bound only; excluded from executable Mode B clock summary",
+                    **FULL_GAPS))
+
+    if not trades and not oracle_rows:
+        # Honest stubs so artifacts exist even on full DATA_GAP hosts.
+        trades = [dict(engine="ModeB", status="DATA_GAP", clock_status="DATA_GAP",
+                       scope=MODEB_SCOPE, **FULL_GAPS)]
+        oracle_rows = [dict(engine="ModeB", status="DATA_GAP", label=ORACLE_LABEL,
+                            executable="NEVER", evidence="no_instances_evaluated", **FULL_GAPS)]
+
+    payloads = {
+        "modeb_clock_trades.csv": trades,
+        "modeb_clock_summary.csv": modeb_summaries(trades),
+        "modeb_oracle.csv": oracle_rows,
+        "modeb_data_gaps.csv": gaps,
+    }
+    if source_hashes() != before or any(
+            hashlib.sha256((ROOT / p).read_bytes()).hexdigest() != digest
+            for p, digest in reader_sources.items()):
+        raise RuntimeError("Production source changed during run")
+    output.mkdir(parents=True, exist_ok=False)
+    for filename, rows in payloads.items():
+        write_csv(output / filename, rows)
+    manifest = dict(
+        base=BASE, batch=3, mode="modeb",
+        git_head=subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
+        status="DATA_GAP", lake_read_status=lake_status, scope=MODEB_SCOPE,
+        production_replay="DATA_GAP", production_C="frozen",
+        source=SOURCE_LINEAGE, access=access,
+        access_preference="qlib_bin_1min_then_oskh_parquet_1m",
+        daily_entry_source="aggregated_from_1min_none_lineage",
+        OSKH_SOURCE_PARQUET_ROOT=os.environ.get("OSKH_SOURCE_PARQUET_ROOT") or "unset",
+        OSKH_AUTHORITY_HINT_ROOT=os.environ.get("OSKH_AUTHORITY_HINT_ROOT") or "unset",
+        OSKH_PERIOD_1M_ROOT=os.environ.get("OSKH_PERIOD_1M_ROOT") or "unset",
+        QLIB_1MIN_ROOT=os.environ.get("QLIB_1MIN_ROOT") or os.environ.get("OSKH_QLIB_1MIN_ROOT") or "unset",
+        qlib_1min_root=str(qlib_used) if qlib_used is not None else None,
+        default_qlib_1min_root=str(DEFAULT_QLIB_1MIN_ROOT),
+        resolved_1m_root=str(period_root) if period_root is not None else None,
+        lake_root=str(lake_root) if lake_root is not None else None,
+        symbols=symbols, date_window=dict(start=start, end=end, format="YYYYMMDD"),
+        bar_label_semantics=LAKE_LABEL, timezone="Asia/Shanghai",
+        entry_rule=MODEB_ENTRY_RULE, next_open_rule=MODEB_NEXT_OPEN_RULE,
+        modeb_spec=MODEB_SPEC.label(),
+        oracle_label=ORACLE_LABEL,
+        oracle_note="Never fold oracle into executable Mode B clock summary stats",
+        fee="modea.COMMISSION bilateral 10bp; Mode B production linear rate",
+        note_same_dataset="qlib_bin is derived materialization of parquet lake; not a competing universe",
+        note_no_book_v7_nav_compare="Do not compare Mode B total NAV to Book/v7 as engine superiority",
+        python=sys.version, pandas=pd.__version__, numpy=np.__version__,
+        checked_sources_match_base=True, source_hashes_before=before,
+        source_hashes_after=source_hashes(), reader_source_hashes=reader_sources,
+        harness_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+        input_files=inventory,
+        input_provenance="qlib bin or parquet source; daily entry aggregated from same 1min none frames",
+        files={p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(output.iterdir())},
+    )
+    (output / "manifest.json").write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return dict(output=str(output), status="DATA_GAP", lake_read_status=lake_status, access=access,
+                batch=3, mode="modeb", rows={k: len(v) for k, v in payloads.items()})
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-dir", type=Path, required=True, help="New, non-existing artifact directory")
+    parser.add_argument("--mode", choices=("synthetic", "lake", "modeb"), default=None,
+                        help="Default: synthetic; --batch 2=lake; --batch 3=modeb")
+    parser.add_argument("--batch", choices=(1, 2, 3), type=int)
+    parser.add_argument("--symbols", action="append",
+                        help="Repeatable or comma-separated; modeb default matches batch2 five symbols")
+    parser.add_argument("--start", default="20260916", help="Minute window start YYYYMMDD")
+    parser.add_argument("--end", default="20260918", help="Minute window end YYYYMMDD")
+    parser.add_argument("--qlib-1min-root", type=Path, default=None,
+                        help="Preferred qlib 1min bin root (default 4090 my_data_1min; env QLIB_1MIN_ROOT)")
     args = parser.parse_args()
-    print(json.dumps(run(args.output_dir), ensure_ascii=False, indent=2))
+    alias = {1: "synthetic", 2: "lake", 3: "modeb"}.get(args.batch)
+    if alias and args.mode and args.mode != alias:
+        parser.error("--batch and --mode disagree")
+    mode = args.mode or alias or "synthetic"
+    if mode == "lake":
+        result = run_lake(args.output_dir, symbols=args.symbols, start=args.start, end=args.end,
+                          qlib_1min_root=args.qlib_1min_root)
+    elif mode == "modeb":
+        result = run_modeb(args.output_dir, symbols=args.symbols, start=args.start, end=args.end,
+                           qlib_1min_root=args.qlib_1min_root)
+    else:
+        result = run(args.output_dir)
+    print(json.dumps(result, ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":

@@ -1,0 +1,23 @@
+item,status,evidence,reason,engine,case_id
+pool_availability,DATA_GAP,"[{""path"": ""stock_pool\\20251023.csv"", ""columns"": 2, ""timestamp_columns"": []}, {""path"": ""stock_pool\\20251024.csv"", ""columns"": 2, ""timestamp_columns"": []}, {""path"": ""stock_pool\\20251027.csv"", ""columns"": 2, ""timestamp_columns"": []}, {""path"": ""stock_pool\\20251028.csv"", ""columns"": 2, ""timestamp_columns"": []}, {""path"": ""stock_pool\\20251029.csv"", ""columns"": 2, ""timestamp_columns"": []}, {""path"": ""stock_pool\\20251030.csv"", ""columns"": 2, ""timestamp_columns"": []}, {""path"": ""stock_pool\\20251031.csv"", ""columns"": 2, ""timestamp_columns"": []}, {""path"": ""stock_pool\\20251103.csv"", ""columns"": 2, ""timestamp_columns"": []}, {""path"": ""stock_pool\\20251104.csv"", ""columns"": 2, ""timestamp_columns"": []}, {""path"": ""stock_pool\\20251105.csv"", ""columns"": 2, ""timestamp_columns"": []}, {""path"": ""stock_pool\\20251106.csv"", ""columns"": 2, ""timestamp_columns"": []}, {""path"": ""stock_pool\\20251107.csv"", ""columns"": 2, ""timestamp_columns"": []}, {""path"": ""stock_pool\\20251110.csv"", ""columns"": 2, ""timestamp_columns"": []}, {""path"": ""stock_pool\\20251111.csv"", ""columns"": 2, ""timestamp_columns"": []}, {""path"": ""stock_pool\\20251112.csv"", ""columns"": 2, ""timestamp_columns"": []}, {""path"": ""stock_pool\\20251113.csv"", ""columns"": 2, ""timestamp_columns"": []}, {""path"": ""stock_pool\\20251114.csv"", ""columns"": 2, ""timestamp_columns"": []}, {""path"": ""stock_pool\\20251117.csv"", ""columns"": 2, ""timestamp_columns"": []}, {""path"": ""stock_pool\\20251118.csv"", ""columns"": 2, ""timestamp_columns"": []}, {""path"": ""stock_pool\\20251119.csv"", ""columns"": 2, ""timestamp_columns"": []}]",header_sample_only_no_audited_publication_chain,,
+factor_availability,DATA_GAP,No audited generated_at/available_at chain; no external search,,,
+real_volume_and_units,DATA_GAP,OHLC path drops or lacks attested incremental shares/available_at,,,
+official_limit_reference_and_corporate_actions,DATA_GAP,Uses prior calendar-date 15:00 minute close proxy only; no official daily/name/ST/exdiv validation,,,
+closed_cash_path_daily_marks_corporate_actions,DATA_GAP,Independent injected events; no strategy NAV/DD/rank,,,
+modeb_replay,DATA_GAP,"NOT_RUN; daily entry, instance calendar and clock not replayed",,,
+event,DATA_GAP,missing_next_calendar_day_1455_exit_mark,,v7,000021.SZ_20260918_884_trial
+event,DATA_GAP,missing_next_calendar_day_1455_exit_mark,,v7,000021.SZ_20260918_885_trial
+event,DATA_GAP,missing_next_calendar_day_1455_exit_mark,,v7,000021.SZ_20260918_894_trial
+event,DATA_GAP,missing_next_calendar_day_1455_exit_mark,,v7,002025.SZ_20260918_884_trial
+event,DATA_GAP,missing_next_calendar_day_1455_exit_mark,,v7,002025.SZ_20260918_884_four
+event,DATA_GAP,missing_next_calendar_day_1455_exit_mark,,v7,002025.SZ_20260918_884_six
+event,DATA_GAP,missing_next_calendar_day_1455_exit_mark,,v7,002025.SZ_20260918_885_trial
+event,DATA_GAP,missing_next_calendar_day_1455_exit_mark,,v7,002025.SZ_20260918_885_four
+event,DATA_GAP,missing_next_calendar_day_1455_exit_mark,,v7,002025.SZ_20260918_885_six
+event,DATA_GAP,missing_next_calendar_day_1455_exit_mark,,v7,002025.SZ_20260918_894_trial
+event,DATA_GAP,missing_next_calendar_day_1455_exit_mark,,v7,002025.SZ_20260918_894_four
+event,DATA_GAP,missing_next_calendar_day_1455_exit_mark,,v7,002025.SZ_20260918_894_six
+event,DATA_GAP,missing_next_calendar_day_1455_exit_mark,,v7,600007.SH_20260918_884_trial
+event,DATA_GAP,missing_next_calendar_day_1455_exit_mark,,v7,600007.SH_20260918_885_trial
+event,DATA_GAP,missing_next_calendar_day_1455_exit_mark,,v7,600007.SH_20260918_894_trial
+event,DATA_GAP,missing_next_calendar_day_1455_exit_mark,,Book,600276.SH_20260918_585_pending_chase

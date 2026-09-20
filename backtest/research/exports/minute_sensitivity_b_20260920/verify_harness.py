@@ -2,9 +2,14 @@
 
 from dataclasses import replace
 from datetime import timedelta
+import csv
+import hashlib
+import json
 from pathlib import Path
+import subprocess
 import sys
 
+import pandas as pd
 import pytest
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -164,3 +169,306 @@ def test_output_is_reproducible_and_refuses_overwrite(tmp_path):
         assert b"\x00" not in path.read_bytes()
         assert b"\r" not in path.read_bytes()
         assert not path.read_bytes().startswith(b"\xef\xbb\xbf")
+
+
+def read_rows(path):
+    with path.open(encoding="utf-8", newline="") as handle:
+        return list(csv.DictReader(handle))
+
+
+def clear_lake_env(monkeypatch):
+    for key in ("OSKH_SOURCE_PARQUET_ROOT", "OSKH_AUTHORITY_HINT_ROOT", "OSKH_PERIOD_1M_ROOT",
+                "QLIB_1MIN_ROOT", "OSKH_QLIB_1MIN_ROOT"):
+        monkeypatch.delenv(key, raising=False)
+
+
+def assert_full_gaps(output):
+    for filename in ("clock_trades.csv", "clock_summary.csv", "cost_sensitivity.csv",
+                     "capacity.csv", "modeb_baseline.csv"):
+        for row in read_rows(output / filename):
+            assert row["production_replay"] == "DATA_GAP"
+            for field in ("full_strategy_nav", "full_strategy_return", "max_drawdown",
+                          "strategy_rank", "strategy_rank_delta"):
+                assert row[field] == ""
+
+
+@pytest.mark.parametrize("configured", [False, True])
+def test_lake_unset_or_nonexistent_root_writes_gaps_and_refuses_overwrite(tmp_path, monkeypatch, configured):
+    clear_lake_env(monkeypatch)
+    if configured:
+        monkeypatch.setenv("OSKH_SOURCE_PARQUET_ROOT", str(tmp_path / "missing_lake"))
+    output = tmp_path / "gaps"
+    result = h.run_lake(output)
+    assert result["status"] == result["lake_read_status"] == "DATA_GAP"
+    manifest = json.loads((output / "manifest.json").read_text())
+    assert manifest["base"] == "f2fe15124ffbc62d3c0526fc90fed78d014b1bb1"
+    assert manifest["bar_label_semantics"] == "lake_index_is_bar_start_wallclock"
+    assert manifest["source"] == "parquet_lineage"
+    assert manifest["access"] in (None, "qlib_bin_1min", "oskh_parquet_1m")
+    assert manifest["access_preference"] == "qlib_bin_1min_then_oskh_parquet_1m"
+    assert bool(manifest["resolved_1m_root"]) == configured
+    assert (manifest["OSKH_SOURCE_PARQUET_ROOT"] != "unset") == configured
+    assert set(manifest["source_hashes_before"]) == set(h.source_hashes())
+    assert manifest["source_hashes_before"] == manifest["source_hashes_after"]
+    for row in read_rows(output / "clock_trades.csv"):
+        assert row["baseline_status"] == row["next_status"] == "DATA_GAP"
+        for field in ("decision_px", "baseline_fill_px", "next_fill_px", "baseline_shares",
+                      "next_shares", "baseline_local_pnl", "next_local_return", "local_rank_delta"):
+            assert row[field] == ""
+    assert not read_rows(output / "clock_candidates.csv")
+    assert_full_gaps(output)
+    with pytest.raises(FileExistsError):
+        h.run_lake(output)
+    for name, digest in manifest["files"].items():
+        data = (output / name).read_bytes()
+        assert hashlib.sha256(data).hexdigest() == digest
+        assert b"\x00" not in data and not data.startswith(b"\xef\xbb\xbf")
+
+
+def test_lake_start_clock_frozen_order_rejects_close_available_open():
+    day = h.DAY
+    bars = [h.LakeBar(day, 586, 21.1, 999.), h.LakeBar(day, 587, 21.2, 1.)]
+    args = dict(engine="Book", side="buy", decision_at=h.stamp(day, 586), candidates=bars,
+                previous_by_day={day: 21.}, shares=100, cash=100_000.,
+                symbol="600000.SH", sessions=(day,))
+    result, attempts = h.next_open(**args)
+    assert bars[0].start == h.stamp(day, 586)
+    assert bars[0].end == h.stamp(day, 587)
+    assert attempts[0]["outcome"] == "before_submit"
+    assert result["fill_at"] == h.stamp(day, 587) and result["fill_px"] == 21.2
+    assert result["shares"] == 100
+    changed = dict(args, candidates=[replace(b, close=123.) for b in bars])
+    assert h.next_open(**changed) == (result, attempts)
+    capped, _ = h.next_open(**args, cap=h.VolumeCap(.1, {
+        ("600000.SH", day.strftime("%Y%m%d"), 588): h.BucketVolume(100_000, 588, "raw_shares_incremental")}))
+    assert capped["reason"] == "skip_volume_unavailable:bucket_not_completed"
+
+
+def write_test_parquet(container):
+    """Constructed test input ONLY. Never committed/exported as a 4090 sample."""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+    from oskh_data.symbol_format import to_partition_key
+    path = container / "stock/period=1m/dividend_type=none" / f"symbol={to_partition_key(h.SYMBOL)}" / "data.parquet"
+    path.parent.mkdir(parents=True)
+    rows = []
+    for day in (h.PREV_DAY, h.DAY, h.NEXT_DAY):
+        for hm, op, close in ((570, 20., 20.5), (585, 20.8, 21.), (586, 21.1, 21.15),
+                              (587, 21.2, 21.25), (884, 21.1, 21.2), (885, 21.1, 21.2),
+                              (886, 21.25, 21.3), (887, 21.3, 21.4), (895, 21.3, 21.4),
+                              (896, 21.45, 21.5), (897, 21.5, 21.5), (900, 21.5, 21.5)):
+            rows.append(dict(time=pd.Timestamp(h.stamp(day, hm), tz="UTC").value // 1_000_000,
+                             open=op, close=close, high=max(op, close), low=min(op, close), volume=100_000))
+    pq.write_table(pa.Table.from_pylist(rows), path)
+    return path
+
+
+def test_lake_actual_reader_on_temporary_parquet_no_production_monkeypatch(tmp_path, monkeypatch):
+    clear_lake_env(monkeypatch)
+    container = tmp_path / "constructed_test_input_not_production"
+    path = write_test_parquet(container)
+    before = path.read_bytes()
+    monkeypatch.setenv("OSKH_SOURCE_PARQUET_ROOT", str(container))
+    output = tmp_path / "output"
+    h.run_lake(output, symbols=[h.SYMBOL])
+    assert path.read_bytes() == before
+    manifest = json.loads((output / "manifest.json").read_text())
+    assert manifest["lake_read_status"] == "READ_OK"
+    assert manifest["input_files"][0]["size"] == len(before)
+    clocks = read_rows(output / "clock_trades.csv")
+    book = next(r for r in clocks if r["engine"] == "Book" and r["date"] == "2026-09-17")
+    assert book["baseline_fill_px"] == "21.0"
+    assert book["baseline_fill_at"] == "2026-09-17 09:46:00"
+    assert book["submit_at"] == "2026-09-17 09:46:00.001000"
+    assert book["next_fill_at"] == "2026-09-17 09:47:00"
+    assert book["next_fill_px"] == "21.2"
+    assert book["next_shares"] == book["baseline_shares"]
+    trial = next(r for r in clocks if r["engine"] == "v7" and r["date"] == "2026-09-17"
+                 and r["stage"] == "trial" and r["signal_hm"] == "885")
+    assert trial["baseline_status"] == trial["next_status"] == "FILLED"
+    assert trial["injected_entry_a"] == "20.0" and trial["next_fill_px"] == "21.3"
+    assert trial["next_shares"] == trial["baseline_shares"]
+    for r in clocks:
+        if r["date"] == "2026-09-16":
+            assert r["baseline_status"] == "DATA_GAP"  # no invented prior close
+        if r["date"] == "2026-09-18" and r["baseline_status"] == "FILLED":
+            assert r["local_pair_status"] == "DATA_GAP"  # no fabricated future mark
+        if (r["engine"] == "v7" and r["date"] == "2026-09-17" and r["signal_hm"] == "884"
+                and r["stage"] == "trial"):
+            # START label: window check uses hm+1; 884→885=14:45 is inside ADD window.
+            assert r["baseline_status"] == "FILLED"
+            assert str(r["baseline_reason"]).startswith("buy:add_")
+        assert r["local_rank_delta"] == ""
+    capacities = [r for r in read_rows(output / "capacity.csv") if r["case_id"] == trial["case_id"]]
+    assert [r["shares"] for r in capacities] == [trial["baseline_shares"], "0"]
+    assert capacities[1]["reason"] == "skip_volume_unavailable:missing_or_untyped"
+    assert all(r["volume_status"] == "DATA_GAP" and r["raw_volume"] == "" for r in capacities)
+    costs = [r for r in read_rows(output / "cost_sensitivity.csv")
+             if r["case_id"] == book["case_id"] and r["axis"] == "slippage"]
+    pnl = [float(r["net_pnl"]) for r in costs]
+    assert pnl == sorted(pnl, reverse=True) and len(set(pnl)) == 4
+    assert_full_gaps(output)
+
+
+def test_lake_missing_partition_and_corrupt_partition_are_visible(tmp_path, monkeypatch):
+    clear_lake_env(monkeypatch)
+    container = tmp_path / "bad_input"
+    path = write_test_parquet(container)
+    path.write_bytes(b"explicitly invalid test parquet")
+    monkeypatch.setenv("OSKH_SOURCE_PARQUET_ROOT", str(container))
+    output = tmp_path / "output"
+    h.run_lake(output, symbols=["600000.SH,000001.SZ"])
+    manifest = json.loads((output / "manifest.json").read_text())
+    assert manifest["lake_read_status"] == "DATA_GAP"
+    assert len([r for r in read_rows(output / "data_gaps.csv") if r["item"] == "symbol_window"]) == 2
+    assert all(r["baseline_status"] == "DATA_GAP" for r in read_rows(output / "clock_trades.csv"))
+    assert_full_gaps(output)
+
+
+def test_lake_cli_batch_alias_dates_and_conflicts(tmp_path, monkeypatch):
+    clear_lake_env(monkeypatch)
+    script = ROOT / "scripts/research/run_minute_sensitivity_b.py"
+    output = tmp_path / "alias"
+    run = subprocess.run([sys.executable, str(script), "--batch", "2", "--output-dir", str(output),
+                          "--symbols", "600000.SH,000001.SZ", "--symbols", "600000.SH"],
+                         capture_output=True, text=True)
+    assert run.returncode == 0, run.stderr
+    assert json.loads((output / "manifest.json").read_text())["symbols"] == ["000001.SZ", "600000.SH"]
+    for options in (("--mode", "synthetic", "--batch", "2"),
+                    ("--mode", "lake", "--start", "2026-09-16"),
+                    ("--mode", "lake", "--start", "20260919", "--end", "20260918")):
+        bad = subprocess.run([sys.executable, str(script), "--output-dir", str(tmp_path / "bad"), *options],
+                             capture_output=True, text=True)
+        assert bad.returncode != 0 and not (tmp_path / "bad").exists()
+
+
+def test_lake_source_fence_is_fatal_before_artifacts(tmp_path, monkeypatch):
+    hashes = h.source_hashes()
+    hashes[next(iter(hashes))] = "0" * 64
+    # Only the research harness evidence hook is replaced; production is untouched.
+    monkeypatch.setattr(h, "source_hashes", lambda: hashes)
+    for run in (h.run, h.run_lake, h.run_modeb):
+        with pytest.raises(ValueError, match="Production source differs"):
+            run(tmp_path / "must_not_exist")
+        assert not (tmp_path / "must_not_exist").exists()
+
+
+def _modeb_synth_frame(path_kind: str):
+    """Constructed START-labeled minutes for Mode B clock unit checks only."""
+    from datetime import date
+
+    symbol = h.SYMBOL
+    prev, day, nxt = h.PREV_DAY, h.DAY, h.NEXT_DAY
+
+    def rows_for(d, bars):
+        out = []
+        for hm, opn, close in bars:
+            bar = h.LakeBar(d, hm, opn, close)
+            out.append(dict(date=d, hm=hm, open=opn, close=close, high=max(opn, close),
+                            low=min(opn, close), bar_start=bar.start, bar_end=bar.end,
+                            ymd=d.strftime("%Y%m%d"), _idx=bar.start))
+        return out
+
+    rows = rows_for(prev, [(570, 10.0, 10.0), (895, 10.0, 10.0)])
+    rows += rows_for(day, [(570, 10.0, 10.0), (895, 10.0, 10.0)])
+    if path_kind == "open_gap":
+        rows += rows_for(nxt, [(570, 9.4, 9.35), (571, 9.35, 9.3), (585, 9.3, 9.2)])
+    else:
+        rows += rows_for(nxt, [(570, 10.1, 10.1), (585, 10.2, 10.6),
+                               (586, 10.65, 10.7), (587, 10.7, 10.7)])
+    frame = pd.DataFrame(rows).set_index("_idx").sort_index()
+    return symbol, frame
+
+
+def test_modeb_open_gap_vs_close_classification_and_next_open():
+    from backtest.research import unified_exit_modea as modea
+    from backtest.research import unified_exit_modeb as modeb
+
+    for kind, expect_path in (("open_gap", "open_gap"), ("close", "close")):
+        symbol, frame = _modeb_synth_frame(kind)
+        daily = {symbol: h.aggregate_daily_from_1min_none(frame)}
+        sessions = h.modeb_session_ymds(frame)
+        assert "20260917" in h.modeb_entry_days(sessions, "20260916", "20260918")
+        inst = modea.Instance(symbol, "合成", "20260917", 10.0, True)
+        result = modeb.evaluate_exit_modeb(
+            inst, h.MODEB_SPEC, daily, {symbol: frame}, sessions, end="20260918")
+        assert result == modeb.evaluate_exit_modeb(
+            inst, h.MODEB_SPEC, daily, {symbol: frame}, sessions, end="20260918", impl="ref")
+        path = h.classify_modeb_trigger_path(result, frame)
+        assert path == expect_path
+        row, _ = h.modeb_clock_for_result(
+            symbol=symbol, entry_ymd="20260917", entry_px=10.0, result=result,
+            frame=frame, trigger_path=path)
+        assert row["trigger_path"] == expect_path
+        assert row["next_status"] == "FILLED" and row["matched_fill"]
+        if path == "close":
+            # close at hm=585 START → decision 09:46 → next open 09:47
+            assert row["decision_at"] == h.stamp(h.NEXT_DAY, 586)
+            assert row["next_fill_at"] == h.stamp(h.NEXT_DAY, 587)
+            assert row["next_fill_px"] == 10.7
+        else:
+            # open-gap at 09:30 → same bar before_submit → next 09:31 open
+            assert row["decision_at"] == h.stamp(h.NEXT_DAY, 570)
+            assert row["next_fill_at"] == h.stamp(h.NEXT_DAY, 571)
+            assert row["next_fill_px"] == 9.35
+
+
+def test_modeb_oracle_labeled_non_executable_and_excluded_from_summary():
+    from backtest.research import unified_exit_modea as modea
+    from backtest.research import unified_exit_modeb as modeb
+
+    symbol, frame = _modeb_synth_frame("close")
+    daily = {symbol: h.aggregate_daily_from_1min_none(frame)}
+    sessions = h.modeb_session_ymds(frame)
+    inst = modea.Instance(symbol, "合成", "20260917", 10.0, True)
+    oracle_map = modeb.oracle_exits([inst], daily, {symbol: frame}, sessions, end="20260918")
+    oracle = oracle_map[modea.instance_key(inst)]
+    assert oracle.reason == "oracle"
+    assert h.ORACLE_LABEL == "EX_POST_UPPER_BOUND_NOT_EXECUTABLE"
+    # Summary must not fold oracle PnL into executable clock stats.
+    result = modeb.evaluate_exit_modeb(
+        inst, h.MODEB_SPEC, daily, {symbol: frame}, sessions, end="20260918")
+    trade, _ = h.modeb_clock_for_result(
+        symbol=symbol, entry_ymd="20260917", entry_px=10.0, result=result,
+        frame=frame, trigger_path=h.classify_modeb_trigger_path(result, frame))
+    summary = h.modeb_summaries([trade])[0]
+    assert "EX_POST_UPPER_BOUND_NOT_EXECUTABLE" in summary["oracle"]
+    # Executable clock delta uses baseline/next fills only — never oracle sell_price as input.
+    assert trade["baseline_fill_px"] == result.sell_price
+    assert summary["mean_local_return_delta_bp"] == (
+        (trade["next_local_return"] - trade["baseline_local_return"]) * 10_000)
+    oracle_ret = h.modeb_fee_economics(10.0, oracle.sell_price, oracle.shares, trade=True)["net_return"]
+    assert summary["mean_local_return_delta_bp"] != pytest.approx(oracle_ret * 10_000)
+    assert summary.get("full_strategy_nav") is None
+
+
+def test_modeb_run_refuses_overwrite_and_cli_batch3_alias(tmp_path, monkeypatch):
+    clear_lake_env(monkeypatch)
+    monkeypatch.setattr(h, "DEFAULT_QLIB_1MIN_ROOT", tmp_path / "missing_qlib")
+    output = tmp_path / "batch3"
+    result = h.run_modeb(output, symbols=[h.SYMBOL])
+    assert result["batch"] == 3 and result["mode"] == "modeb"
+    manifest = json.loads((output / "manifest.json").read_text())
+    assert manifest["batch"] == 3 and manifest["mode"] == "modeb"
+    assert manifest["daily_entry_source"] == "aggregated_from_1min_none_lineage"
+    assert manifest["production_C"] == "frozen"
+    assert manifest["oracle_label"] == h.ORACLE_LABEL
+    for name in ("modeb_clock_trades.csv", "modeb_clock_summary.csv",
+                 "modeb_oracle.csv", "modeb_data_gaps.csv"):
+        assert (output / name).is_file()
+    oracle_rows = read_rows(output / "modeb_oracle.csv")
+    assert oracle_rows and oracle_rows[0]["label"] == h.ORACLE_LABEL
+    assert oracle_rows[0]["executable"] == "NEVER"
+    with pytest.raises(FileExistsError):
+        h.run_modeb(output, symbols=[h.SYMBOL])
+    script = ROOT / "scripts/research/run_minute_sensitivity_b.py"
+    cli = tmp_path / "cli"
+    run = subprocess.run([sys.executable, str(script), "--batch", "3", "--mode", "modeb",
+                          "--output-dir", str(cli), "--symbols", "600000.SH"],
+                         capture_output=True, text=True)
+    assert run.returncode == 0, run.stderr
+    assert json.loads((cli / "manifest.json").read_text())["symbols"] == ["600000.SH"]
+    bad = subprocess.run([sys.executable, str(script), "--batch", "3", "--mode", "lake",
+                          "--output-dir", str(tmp_path / "bad")],
+                         capture_output=True, text=True)
+    assert bad.returncode != 0 and not (tmp_path / "bad").exists()

@@ -1,0 +1,108 @@
+{
+  "base": "f2fe15124ffbc62d3c0526fc90fed78d014b1bb1",
+  "batch": 2,
+  "mode": "lake",
+  "git_head": "38f19d5ad360ab3c5a79321bea8a93622f0e8061",
+  "status": "DATA_GAP",
+  "lake_read_status": "READ_OK",
+  "scope": "local event sensitivity not strategy claim",
+  "production_replay": "DATA_GAP",
+  "source": "parquet_lineage",
+  "access": "qlib_bin_1min",
+  "access_preference": "qlib_bin_1min_then_oskh_parquet_1m",
+  "OSKH_SOURCE_PARQUET_ROOT": "E:\\stock_data",
+  "OSKH_AUTHORITY_HINT_ROOT": "unset",
+  "OSKH_PERIOD_1M_ROOT": "unset",
+  "QLIB_1MIN_ROOT": "C:\\Users\\wangc\\.qlib\\qlib_data\\my_data_1min",
+  "qlib_1min_root": "C:\\Users\\wangc\\.qlib\\qlib_data\\my_data_1min",
+  "default_qlib_1min_root": "C:\\Users\\wangc\\.qlib\\qlib_data\\my_data_1min",
+  "resolved_1m_root": null,
+  "lake_root": null,
+  "symbols": [
+    "000021.SZ",
+    "002025.SZ",
+    "600000.SH",
+    "600007.SH",
+    "600276.SH"
+  ],
+  "date_window": {
+    "start": "20260916",
+    "end": "20260918",
+    "format": "YYYYMMDD"
+  },
+  "bar_label_semantics": "lake_index_is_bar_start_wallclock",
+  "timezone": "Asia/Shanghai",
+  "bar_label_evidence": "4090 operator verified 600000.SH 20260916/17/18: hm585=09:45 START; qlib 1min bins dumped from none-adjusted 1m lake",
+  "note_same_dataset": "qlib_bin is derived materialization of parquet lake; not a competing universe",
+  "close_available": "bar.start + 1 minute",
+  "submit": "close_available + 1 millisecond",
+  "next_open": "first same-date continuous-session bar.start >= submit; expires at day end",
+  "same_close": "original helper price; bookkeeping timestamp at close_available; no live fill assertion",
+  "injected_state": "Book pending 10000 cash budget; v7 four independent stages, 100-share lot at earliest prior-date 09:30 real open; cash=1000000/event; gates pre-passed except local rules",
+  "limit_reference": "prior calendar-date 15:00 minute close proxy; missing is DATA_GAP; no official daily/ST/exdiv claim",
+  "cost_exit": "next calendar-date 14:55 close, predetermined price-only pair; no executable exit claim",
+  "volume_cap": "separate p=0.1 scenario with unavailable typed volume, no fabricated volume",
+  "local_rank": "NOT_RUN",
+  "quantities": "clock/cost frozen from original baseline ledger",
+  "python": "3.12.13 | packaged by Anaconda, Inc. | (main, Jul  9 2026, 14:26:47) [MSC v.1942 64 bit (AMD64)]",
+  "pandas": "2.3.3",
+  "numpy": "2.3.5",
+  "checked_sources_match_base": true,
+  "source_hashes_before": {
+    "backtest/research/csv_minute_backtest.py": "30ddb7b03b3050ac1fa7c534f0664772d8e6d4f8b5f68e3d1ab6f2e11909a96c",
+    "backtest/research/csv_minute_backtest_v7.py": "ad3565581719d5cff0bd80fbfafeff89e9252ee12f17977ea326d69c3f4981c2",
+    "backtest/research/unified_exit_modea.py": "c45628cc81dda413ffd2447cbe43af12a5db524cf162e112207fa450744ea493",
+    "backtest/research/unified_exit_modeb.py": "d5e27d50850de5e24b27930e713e0fb90753d0de8ba70e75485600873e24d302",
+    "backtest/research/csv_ledger.py": "ef056ba641cd5436bbcfb84255f1349bb437de394f6e45f96db0b9985707fbfa",
+    "backtest/research/csv_simulate_loop.py": "c7d5e35c41c910009970f2c27bbd32999d450a0a9df7e5b4668bb5c5811b4fa8",
+    "backtest/research/ashare_fees.py": "f0c1c5fa8a1aa254ac7423ea3d6a2e28cbb16f90f64f6ec1579ac9f20514f2d5",
+    "backtest/research/ashare_volume_cap.py": "f54e5ef8665c13767113a5ecf9086ac079616b5559cf478fc5b381aa385c980f",
+    "backtest/research/ashare_fill_clock.py": "c5b478bf3c6535a1fb3c6a884dd4b85ac51afd8663ed0d4d7fbf1349c419cfbe",
+    "backtest/research/ashare_session.py": "04e6758f63d80eedb3c032c5f87123141ac8e625a42859b275d5a27fd592c086",
+    "backtest/research/strategy7_rules.py": "eaeaf9f3c194db4d6e002230807302266a6116174be947952f504ef895d71fc9"
+  },
+  "source_hashes_after": {
+    "backtest/research/csv_minute_backtest.py": "30ddb7b03b3050ac1fa7c534f0664772d8e6d4f8b5f68e3d1ab6f2e11909a96c",
+    "backtest/research/csv_minute_backtest_v7.py": "ad3565581719d5cff0bd80fbfafeff89e9252ee12f17977ea326d69c3f4981c2",
+    "backtest/research/unified_exit_modea.py": "c45628cc81dda413ffd2447cbe43af12a5db524cf162e112207fa450744ea493",
+    "backtest/research/unified_exit_modeb.py": "d5e27d50850de5e24b27930e713e0fb90753d0de8ba70e75485600873e24d302",
+    "backtest/research/csv_ledger.py": "ef056ba641cd5436bbcfb84255f1349bb437de394f6e45f96db0b9985707fbfa",
+    "backtest/research/csv_simulate_loop.py": "c7d5e35c41c910009970f2c27bbd32999d450a0a9df7e5b4668bb5c5811b4fa8",
+    "backtest/research/ashare_fees.py": "f0c1c5fa8a1aa254ac7423ea3d6a2e28cbb16f90f64f6ec1579ac9f20514f2d5",
+    "backtest/research/ashare_volume_cap.py": "f54e5ef8665c13767113a5ecf9086ac079616b5559cf478fc5b381aa385c980f",
+    "backtest/research/ashare_fill_clock.py": "c5b478bf3c6535a1fb3c6a884dd4b85ac51afd8663ed0d4d7fbf1349c419cfbe",
+    "backtest/research/ashare_session.py": "04e6758f63d80eedb3c032c5f87123141ac8e625a42859b275d5a27fd592c086",
+    "backtest/research/strategy7_rules.py": "eaeaf9f3c194db4d6e002230807302266a6116174be947952f504ef895d71fc9"
+  },
+  "reader_source_hashes": {
+    "backtest/research/ashare_bars.py": "d45b52c90c0aaf0ef4d4c7ea8aab9ca53014c0774f762656f9cd483fe1bbc547",
+    "common/infra/data_root.py": "fa2663eace78475a5e2a5ff2b2292e1802eee8fed0d157c86e7fb619d8e77b83",
+    "backtest/research/qlib_bin_1min.py": "c096a4b1eab093bf53ecf35ff10bacf9e2ccc9af36f9c63f4927e28efa21a51f"
+  },
+  "harness_sha256": "6378706b0d508132acb3c8bcd2abe0575de3c42136322a9c76c0c87c62763576",
+  "input_files": [
+    {
+      "access": "qlib_bin_1min",
+      "qlib_root": "C:\\Users\\wangc\\.qlib\\qlib_data\\my_data_1min",
+      "status": "PRESENT",
+      "symbols": [
+        "000021.SZ",
+        "002025.SZ",
+        "600000.SH",
+        "600007.SH",
+        "600276.SH"
+      ]
+    }
+  ],
+  "input_provenance": "qlib bin or parquet source; no full partition hash; no drive letter probing",
+  "files": {
+    "capacity.csv": "17bb892c6b43a19e20b8c3941e2c7f88bf7cc8cc866b8f6b4d3dde613170fb83",
+    "clock_candidates.csv": "927b5c3201853ce7250ef4b8aebb0f81b1870858df2770ea56599fbf0b0a6c0b",
+    "clock_summary.csv": "fcb0a14be46309a5f79ceec32fd792fd9bcafc92dfdef400a0c2e1649f042562",
+    "clock_trades.csv": "a1ea07e2d0fdac96daf2625853edb265025cd5d5f36edebde730a8bbfc661011",
+    "cost_sensitivity.csv": "040507ec90cc6e702f59b05f79abd858de3e02a5933881a308051288d0d275f7",
+    "data_gaps.csv": "fb1d9575c056ff90ba9d7fb9ee93b5efa988a24eeac442f9e63290bb3be121df",
+    "minute_frames.csv": "bdb4e37e14f730ed58a1d82ee801c57cc5d51ad82457b0a17b57f9b8013a3d66",
+    "modeb_baseline.csv": "65f6bb981513575a525c5293f69969d5f869b8cddceb7792389c16e48d740f4c"
+  }
+}
