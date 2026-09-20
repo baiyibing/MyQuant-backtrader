@@ -75,3 +75,23 @@ Clock 内费用固定双边 10bp/min=0、cap off、slippage=0；替代组冻结�
 滑点每边 0/5/10/20bp 未校准，均保留 10bp 佣金代理。费用轴的 `REPLACE_COMMISSION_3BP_MIN5_STAMP_SELL5BP` 是用每次调用万三、最低 5 元、卖出 5bp 印花**假设替换**双边代理，不双重扣 10bp，不包含过户等其他项，也不验证当前法律或账户合同。Mode B 的最低费只存在于研究逐笔算术叠层，生产 Mode B 仍是线性费率。本批不建议生产默认。
 
 本批没有改变生产文件、CLI、默认参数、成交核或 import fence 固定清单；`verify_harness.py` 显式 opt-in，仅验证该研究工具及其证据，不写生产新 pin。13 项研究验证、253 项既有相关测试及 4 项 data-free gate 的结果见结果文档。
+
+
+## 第三批（batch3 · Mode B clock · PENDING_4090_RUN）
+
+- [第三批结果占位](../../../../docs/backtest/reviews/results-minute-sensitivity-b-batch3-modeb-2026-09-20.md)
+- 输出目录：`batch3_modeb/`（须新建；勿覆盖）
+- CLI：`--batch 3` / `--mode modeb`；符号/窗口对齐 batch2；`daily_entry_source=aggregated_from_1min_none_lineage`
+- 产物：`modeb_clock_trades.csv` / `modeb_clock_summary.csv` / `modeb_oracle.csv` / `modeb_data_gaps.csv` / `manifest.json`
+- oracle：`EX_POST_UPPER_BOUND_NOT_EXECUTABLE`；不与 Book/v7 NAV 比引擎优劣
+
+```powershell
+$env:OSKH_SOURCE_PARQUET_ROOT='E:\stock_data'
+$env:QLIB_1MIN_ROOT='C:\Users\wangc\.qlib\qlib_data\my_data_1min'
+cd D:\PycharmProjects\MyQuant-backtrader
+git checkout research/minute-sensitivity-b-batch2-lake
+D:\anaconda3\envs\vanna312\python.exe scripts\research\run_minute_sensitivity_b.py `
+  --batch 3 --mode modeb `
+  --symbols 000021.SZ,002025.SZ,600000.SH,600007.SH,600276.SH `
+  --output-dir backtest\research\exports\minute_sensitivity_b_20260920\batch3_modeb
+```

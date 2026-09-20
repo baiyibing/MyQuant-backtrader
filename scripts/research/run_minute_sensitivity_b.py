@@ -1140,27 +1140,437 @@ def run_lake(output: Path, *, symbols=None, start="20260916", end="20260918",
     return dict(output=str(output), status="DATA_GAP", lake_read_status=lake_status, access=access,
                 rows={k: len(v) for k, v in payloads.items()})
 
+# ---------------------------------------------------------------------------
+# Batch 3 / Mode B clock axis (read-only; fills batch2 ModeB NOT_RUN gap)
+# ---------------------------------------------------------------------------
+
+BATCH2_SYMBOLS = ["000021.SZ", "002025.SZ", "600000.SH", "600007.SH", "600276.SH"]
+MODEB_SPEC = modea.StrategySpec(rule=2, n=10, x=5, y=5)
+MODEB_SCOPE = "Mode B local exit clock sensitivity not strategy claim"
+ORACLE_LABEL = "EX_POST_UPPER_BOUND_NOT_EXECUTABLE"
+MODEB_ENTRY_RULE = (
+    "one Instance per symbol x covered session day in [start,end] that has at least "
+    "one later covered session day <= end (T+1+ exit path); buy_price = last-minute "
+    "close aggregated from the same none 1min frames (not qlib my_data day.bin)"
+)
+MODEB_NEXT_OPEN_RULE = (
+    "next_tradable_open: first same-calendar-day continuous-session bar.start >= "
+    "submit; submit = decision_at + 1ms; expires at that calendar day end "
+    "(batch2 next_open spirit; no overnight inference). "
+    "open_gap decision_at = fill bar START; close decision_at = fill bar START + 1m"
+)
+
+
+def aggregate_daily_from_1min_none(frame: pd.DataFrame) -> pd.DataFrame | None:
+    """Session none daily OHLC from the same 1min none lineage (last close = day close)."""
+    if frame is None or frame.empty or "ymd" not in frame.columns:
+        return None
+    rows = []
+    for ymd, group in frame.groupby("ymd", sort=True):
+        group = group.sort_index()
+        if group.empty:
+            continue
+        opn = float(group.iloc[0]["open"])
+        close = float(group.iloc[-1]["close"])
+        high = float(group["high"].max()) if "high" in group.columns else max(opn, close)
+        low = float(group["low"].min()) if "low" in group.columns else min(opn, close)
+        rows.append(dict(open=opn, high=high, low=low, close=close,
+                         ymd=str(ymd),
+                         index=pd.Timestamp(datetime.strptime(str(ymd), "%Y%m%d"))))
+    if not rows:
+        return None
+    out = pd.DataFrame(rows).set_index("index").sort_index()
+    out.index.name = None
+    return out[["open", "high", "low", "close"]]
+
+
+def modeb_session_ymds(frame: pd.DataFrame) -> list[str]:
+    """Sorted unique session ymds present in the minute frame (after session filter)."""
+    sess = modeb.session_minutes(frame)
+    if sess.empty:
+        return []
+    return sorted({str(y) for y in sess["ymd"].tolist()})
+
+
+def modeb_fee_economics(entry_px: float, exit_px: float, shares: float, *, trade: bool) -> dict:
+    """Mode B bilateral 10bp via modea.COMMISSION (same as evaluate_exit_modeb)."""
+    buy_cost = float(shares) * float(entry_px) * (1.0 + modea.COMMISSION)
+    proceeds = float(shares) * float(exit_px) * ((1.0 - modea.COMMISSION) if trade else 1.0)
+    pnl = proceeds - buy_cost
+    return dict(buy_cost=buy_cost, proceeds=proceeds, net_pnl=pnl,
+                net_return=(pnl / buy_cost) if buy_cost else None)
+
+
+def classify_modeb_trigger_path(result, frame: pd.DataFrame) -> str:
+    """Q39 as-built: open-gap then close; high/low never fire."""
+    if result is None or not getattr(result, "is_trade", False):
+        return "none"
+    sell_ymd = str(result.sell_date)
+    sell_hm = result.sell_hm
+    if sell_hm is None:
+        return "other"
+    day = frame.loc[frame["ymd"].astype(str) == sell_ymd]
+    if day.empty:
+        return "other"
+    hit = day.loc[day["hm"].astype(int) == int(sell_hm)]
+    if hit.empty:
+        return "other"
+    opn = float(hit.iloc[0]["open"])
+    close = float(hit.iloc[0]["close"])
+    px = float(result.sell_price)
+    if math.isclose(px, opn, abs_tol=1e-9, rel_tol=0):
+        return "open_gap"
+    if math.isclose(px, close, abs_tol=1e-9, rel_tol=0):
+        return "close"
+    return "other"
+
+
+def modeb_decision_at(trigger_path: str, sell_day: date, sell_hm: int) -> datetime | None:
+    if trigger_path == "open_gap":
+        return stamp(sell_day, int(sell_hm))
+    if trigger_path == "close":
+        return stamp(sell_day, int(sell_hm)) + timedelta(minutes=1)
+    return None
+
+
+def modeb_entry_days(sessions: list[str], start: str, end: str) -> list[str]:
+    """Entry days inside window with at least one later session day for exits."""
+    in_window = [y for y in sessions if start <= y <= end]
+    out = []
+    for i, ymd in enumerate(in_window):
+        if any(later > ymd for later in sessions if later <= end):
+            out.append(ymd)
+    return out
+
+
+def modeb_clock_for_result(*, symbol: str, entry_ymd: str, entry_px: float, result,
+                           frame: pd.DataFrame, trigger_path: str) -> tuple[dict, list[dict]]:
+    """Apply next_tradable_open axis to a baseline Mode B exit."""
+    gaps_note = []
+    base_trade = bool(result.is_trade)
+    base_econ = modeb_fee_economics(entry_px, result.sell_price, result.shares, trade=base_trade)
+    row = dict(
+        engine="ModeB", case_id=f"{symbol}_{entry_ymd}", symbol=symbol, entry_ymd=entry_ymd,
+        entry_px=entry_px, daily_entry_source="aggregated_from_1min_none_lineage",
+        scope=MODEB_SCOPE, axis="clock_next_tradable_open",
+        bar_label_semantics=LAKE_LABEL, spec=MODEB_SPEC.label(),
+        baseline_reason=result.reason, baseline_fill_px=result.sell_price,
+        baseline_fill_hm=result.sell_hm, baseline_fill_ymd=result.sell_date,
+        baseline_held=result.hold_sessions, baseline_is_trade=base_trade,
+        baseline_shares=result.shares, trigger_path=trigger_path,
+        baseline_local_pnl=base_econ["net_pnl"], baseline_local_return=base_econ["net_return"],
+        decision_at=None, submit_at=None, next_status=None, next_reason=None,
+        next_fill_at=None, next_fill_px=None, next_fill_hm=None, next_shares=None,
+        matched_fill=None, status_match=None, same_price=None, price_diff=None,
+        price_diff_bp=None, next_local_pnl=None, next_local_return=None,
+        local_pnl_delta=None, local_return_delta_bp=None, **FULL_GAPS,
+    )
+    if not base_trade or trigger_path in ("none", "other"):
+        row.update(next_status="NO_FILL" if not base_trade else "DATA_GAP",
+                   next_reason=("no_baseline_trade" if not base_trade
+                                else f"no_clock_for_trigger_path={trigger_path}"))
+        row["matched_fill"] = False
+        row["status_match"] = not base_trade
+        return row, gaps_note
+
+    sell_day = datetime.strptime(str(result.sell_date), "%Y%m%d").date()
+    decision = modeb_decision_at(trigger_path, sell_day, int(result.sell_hm))
+    row["decision_at"] = decision
+    row["submit_at"] = decision + timedelta(milliseconds=1)
+    day_frame = frame.loc[frame["ymd"].astype(str) == str(result.sell_date)]
+    candidates = [LakeBar(sell_day, int(r.hm), float(r.open), float(r.close))
+                  for r in day_frame.itertuples()]
+    # Limit ref: prior session day last close from same frame (honest proxy).
+    prior = frame.loc[frame["ymd"].astype(str) < str(result.sell_date)]
+    prev_px = float(prior.iloc[-1]["close"]) if not prior.empty else None
+    previous_by_day = {sell_day: prev_px} if prev_px is not None else {}
+    entry_day = datetime.strptime(entry_ymd, "%Y%m%d").date()
+    alt, attempts = next_open(
+        engine="ModeB", side="sell", decision_at=decision, candidates=candidates,
+        previous_by_day=previous_by_day, shares=int(result.shares),
+        cash=0.0, buy_day=entry_day, symbol=symbol, sessions=(sell_day,),
+    )
+    row.update(next_status=alt["status"], next_reason=alt["reason"],
+               next_fill_at=alt["fill_at"], next_fill_px=alt["fill_px"],
+               next_shares=alt["shares"],
+               next_fill_hm=(alt["fill_at"].hour * 60 + alt["fill_at"].minute
+                             if alt["fill_at"] is not None else None))
+    common = bool(base_trade and alt["shares"])
+    row.update(matched_fill=common,
+               status_match=bool(base_trade) == bool(alt["shares"]))
+    if common:
+        row.update(same_price=math.isclose(result.sell_price, alt["fill_px"], abs_tol=1e-9),
+                   price_diff=alt["fill_px"] - result.sell_price,
+                   price_diff_bp=(alt["fill_px"] / result.sell_price - 1) * 10_000)
+        new = modeb_fee_economics(entry_px, alt["fill_px"], alt["shares"], trade=True)
+        row.update(next_local_pnl=new["net_pnl"], next_local_return=new["net_return"],
+                   local_pnl_delta=new["net_pnl"] - base_econ["net_pnl"],
+                   local_return_delta_bp=(new["net_return"] - base_econ["net_return"]) * 10_000)
+    elif base_trade and not alt["shares"]:
+        gaps_note.append(dict(item="modeb_next_open", symbol=symbol, entry_ymd=entry_ymd,
+                              status="NO_FILL", evidence=alt["reason"],
+                              trigger_path=trigger_path))
+    return row, gaps_note
+
+
+def modeb_evaluate_instance(symbol: str, name: str, entry_ymd: str, entry_px: float,
+                            daily: dict, minutes: dict, sessions: list[str], end: str
+                            ) -> tuple[object, object | None, str]:
+    """Baseline Q39 fast (+ ref parity) and optional oracle on the same path."""
+    inst = modea.Instance(symbol, name, entry_ymd, float(entry_px), True)
+    args = (inst, MODEB_SPEC, daily, minutes, sessions)
+    fast = modeb.evaluate_exit_modeb(*args, end=end, impl="fast")
+    ref = modeb.evaluate_exit_modeb(*args, end=end, impl="ref")
+    if fast != ref:
+        raise AssertionError(f"Mode B fast/ref parity failed for {symbol}|{entry_ymd}: {fast} vs {ref}")
+    oracle = None
+    try:
+        oracle_map = modeb.oracle_exits([inst], daily, minutes, sessions, end=end)
+        oracle = oracle_map.get(modea.instance_key(inst))
+    except Exception as exc:  # noqa: BLE001 — research path; record evidence, never invent
+        oracle = None
+        return fast, None, f"{type(exc).__name__}: {exc}"
+    return fast, oracle, ""
+
+
+def modeb_summaries(trades: list[dict]) -> list[dict]:
+    valid = [r for r in trades if r.get("case_id")]
+    traded = [r for r in valid if r.get("baseline_is_trade")]
+    common = [r for r in traded if r.get("matched_fill")]
+    deltas = [r["local_return_delta_bp"] for r in common
+              if r.get("local_return_delta_bp") is not None]
+    if not valid:
+        status = "DATA_GAP"
+    elif any(r.get("baseline_reason") for r in valid):
+        status = "LOCAL_EVENTS_COMPLETE"
+    else:
+        status = "DATA_GAP"
+    return [dict(
+        engine="ModeB", scope=MODEB_SCOPE, clock_status=status,
+        requested_instances=len(trades), evaluated_instances=len(valid),
+        baseline_trades=len(traded), next_fills=sum(bool(r.get("next_shares")) for r in traded),
+        common_fills=len(common),
+        status_match_rate=(sum(bool(r.get("status_match")) for r in traded) / len(traded)
+                           if traded else None),
+        matched_fill_rate=(len(common) / len(traded) if traded else None),
+        same_price_rate=(sum(bool(r.get("same_price")) for r in common) / len(common)
+                         if common else None),
+        mean_local_return_delta_bp=(float(np.mean(deltas)) if deltas else None),
+        trigger_path_open_gap=sum(r.get("trigger_path") == "open_gap" for r in traded),
+        trigger_path_close=sum(r.get("trigger_path") == "close" for r in traded),
+        trigger_path_other=sum(r.get("trigger_path") == "other" for r in traded),
+        trigger_path_none=sum(r.get("trigger_path") == "none" for r in valid
+                              if not r.get("baseline_is_trade")),
+        oracle="separate_modeb_oracle_csv_EX_POST_UPPER_BOUND_NOT_EXECUTABLE",
+        **FULL_GAPS,
+    )]
+
+
+def run_modeb(output: Path, *, symbols=None, start="20260916", end="20260918",
+              qlib_1min_root: Path | str | None = None) -> dict:
+    """Batch 3 Mode B clock axis; independent export dir; production C frozen."""
+    if output.exists() or output.is_symlink():
+        raise FileExistsError(f"Refusing to overwrite output directory: {output}")
+    dates = lake_dates(start, end)
+    symbols = lake_symbols(symbols if symbols is not None else [",".join(BATCH2_SYMBOLS)])
+    before = check_source_fence()
+    reader_sources = {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest() for name in
+                      ("backtest/research/ashare_bars.py", "common/infra/data_root.py",
+                       "backtest/research/qlib_bin_1min.py",
+                       "backtest/research/unified_exit_modeb.py")}
+    gaps = list(publication_gaps())
+    frames, access, qlib_used, period_root, lake_root, inventory = load_minute_frames(
+        symbols, start, end, qlib_root=qlib_1min_root)
+    lake_status = "DATA_GAP"
+    if access is None:
+        gaps.append(dict(item="production_minute_source", status="DATA_GAP",
+                         evidence="qlib_bin_1min unavailable and parquet resolver/root missing; no drive probing",
+                         inventory=json.dumps(inventory, ensure_ascii=False)))
+    else:
+        for symbol in symbols:
+            frame = frames.get(symbol)
+            try:
+                if frame is None or frame.empty:
+                    raise ValueError("Missing/unreadable/filtered symbol window")
+                lookback = (datetime.strptime(start, "%Y%m%d").date() - timedelta(days=10)).strftime("%Y%m%d")
+                validate_lake_frame(frame, start, end, lookback_start=lookback)
+            except (ValueError, KeyError, TypeError) as exc:
+                gaps.append(dict(item="symbol_window", symbol=symbol, status="DATA_GAP",
+                                 evidence=str(exc), access=access))
+                frames.pop(symbol, None)
+        if access == "oskh_parquet_1m":
+            for item in inventory:
+                if item.get("status") == "PRESENT" and "path" in item:
+                    stat = Path(item["path"]).stat()
+                    if (stat.st_size, stat.st_mtime_ns) != (item["size"], item["mtime_ns"]):
+                        raise RuntimeError(f"Lake source changed while reading: {item['path']}")
+        lake_status = "READ_OK" if len(frames) == len(symbols) else "DATA_GAP"
+    gaps.extend(dict(item=item, status="DATA_GAP", evidence=evidence) for item, evidence in (
+        ("qlib_my_data_day_bin_entry", "Forbidden for Mode B entry; use aggregated_from_1min_none_lineage only"),
+        ("official_limit_reference_and_corporate_actions",
+         "Mode B prev refs from aggregated 1min daily closes; no official daily/ST/exdiv validation"),
+        ("closed_cash_path_daily_marks_corporate_actions",
+         "Independent Mode B instances; no strategy NAV/DD/rank; do not compare to Book/v7"),
+        ("production_C", "frozen; research harness only"),
+    ))
+
+    trades, oracle_rows = [], []
+    for symbol in symbols:
+        frame = frames.get(symbol)
+        if frame is None or frame.empty:
+            gaps.append(dict(item="modeb_instance", symbol=symbol, status="DATA_GAP",
+                             evidence="no_minute_frame"))
+            continue
+        daily_one = aggregate_daily_from_1min_none(frame)
+        if daily_one is None or daily_one.empty:
+            gaps.append(dict(item="modeb_daily_entry", symbol=symbol, status="DATA_GAP",
+                             evidence="aggregation_failed_no_invented_prices",
+                             daily_entry_source="aggregated_from_1min_none_lineage"))
+            continue
+        sessions = modeb_session_ymds(frame)
+        if not sessions:
+            gaps.append(dict(item="modeb_sessions", symbol=symbol, status="DATA_GAP",
+                             evidence="no_session_minutes"))
+            continue
+        entries = modeb_entry_days(sessions, start, end)
+        if not entries:
+            gaps.append(dict(item="modeb_entry_days", symbol=symbol, status="DATA_GAP",
+                             evidence="no_entry_day_with_later_session_in_window",
+                             sessions=json.dumps(sessions)))
+            continue
+        daily = {symbol: daily_one}
+        minutes = {symbol: frame}
+        closes = {pd.Timestamp(idx).strftime("%Y%m%d"): float(row.close)
+                  for idx, row in daily_one.iterrows()}
+        for entry_ymd in entries:
+            entry_px = closes.get(entry_ymd)
+            if entry_px is None or not (entry_px > 0 and math.isfinite(entry_px)):
+                gaps.append(dict(item="modeb_daily_entry", symbol=symbol, entry_ymd=entry_ymd,
+                                 status="DATA_GAP",
+                                 evidence="missing_aggregated_none_close_no_invented_prices",
+                                 daily_entry_source="aggregated_from_1min_none_lineage"))
+                continue
+            name = symbol  # non-ST name proxy; board limit from code
+            try:
+                result, oracle, oracle_err = modeb_evaluate_instance(
+                    symbol, name, entry_ymd, entry_px, daily, minutes, sessions, end)
+            except Exception as exc:  # noqa: BLE001
+                gaps.append(dict(item="modeb_evaluate", symbol=symbol, entry_ymd=entry_ymd,
+                                 status="DATA_GAP", evidence=f"{type(exc).__name__}: {exc}"))
+                continue
+            trigger_path = classify_modeb_trigger_path(result, frame)
+            trade_row, extra_gaps = modeb_clock_for_result(
+                symbol=symbol, entry_ymd=entry_ymd, entry_px=entry_px, result=result,
+                frame=frame, trigger_path=trigger_path)
+            trade_row.update(source=access or "unavailable", source_lineage=SOURCE_LINEAGE,
+                             sessions_used=len(sessions), parity_fast_ref="PASS")
+            trades.append(trade_row)
+            gaps.extend(extra_gaps)
+            if oracle is None:
+                oracle_rows.append(dict(
+                    engine="ModeB", case_id=f"{symbol}_{entry_ymd}", symbol=symbol,
+                    entry_ymd=entry_ymd, status="DATA_GAP",
+                    label=ORACLE_LABEL, executable="NEVER",
+                    evidence=oracle_err or "oracle_exits_returned_none",
+                    **FULL_GAPS))
+            else:
+                oe = modeb_fee_economics(entry_px, oracle.sell_price, oracle.shares,
+                                         trade=bool(oracle.is_trade))
+                oracle_rows.append(dict(
+                    engine="ModeB", case_id=f"{symbol}_{entry_ymd}", symbol=symbol,
+                    entry_ymd=entry_ymd, status="COMPUTED",
+                    label=ORACLE_LABEL, executable="NEVER",
+                    reason=oracle.reason, fill_px=oracle.sell_price, fill_hm=oracle.sell_hm,
+                    fill_ymd=oracle.sell_date, held=oracle.hold_sessions,
+                    shares=oracle.shares, is_trade=oracle.is_trade,
+                    ex_post_local_pnl=oe["net_pnl"], ex_post_local_return=oe["net_return"],
+                    note="ex-post upper bound only; excluded from executable Mode B clock summary",
+                    **FULL_GAPS))
+
+    if not trades and not oracle_rows:
+        # Honest stubs so artifacts exist even on full DATA_GAP hosts.
+        trades = [dict(engine="ModeB", status="DATA_GAP", clock_status="DATA_GAP",
+                       scope=MODEB_SCOPE, **FULL_GAPS)]
+        oracle_rows = [dict(engine="ModeB", status="DATA_GAP", label=ORACLE_LABEL,
+                            executable="NEVER", evidence="no_instances_evaluated", **FULL_GAPS)]
+
+    payloads = {
+        "modeb_clock_trades.csv": trades,
+        "modeb_clock_summary.csv": modeb_summaries(trades),
+        "modeb_oracle.csv": oracle_rows,
+        "modeb_data_gaps.csv": gaps,
+    }
+    if source_hashes() != before or any(
+            hashlib.sha256((ROOT / p).read_bytes()).hexdigest() != digest
+            for p, digest in reader_sources.items()):
+        raise RuntimeError("Production source changed during run")
+    output.mkdir(parents=True, exist_ok=False)
+    for filename, rows in payloads.items():
+        write_csv(output / filename, rows)
+    manifest = dict(
+        base=BASE, batch=3, mode="modeb",
+        git_head=subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
+        status="DATA_GAP", lake_read_status=lake_status, scope=MODEB_SCOPE,
+        production_replay="DATA_GAP", production_C="frozen",
+        source=SOURCE_LINEAGE, access=access,
+        access_preference="qlib_bin_1min_then_oskh_parquet_1m",
+        daily_entry_source="aggregated_from_1min_none_lineage",
+        OSKH_SOURCE_PARQUET_ROOT=os.environ.get("OSKH_SOURCE_PARQUET_ROOT") or "unset",
+        OSKH_AUTHORITY_HINT_ROOT=os.environ.get("OSKH_AUTHORITY_HINT_ROOT") or "unset",
+        OSKH_PERIOD_1M_ROOT=os.environ.get("OSKH_PERIOD_1M_ROOT") or "unset",
+        QLIB_1MIN_ROOT=os.environ.get("QLIB_1MIN_ROOT") or os.environ.get("OSKH_QLIB_1MIN_ROOT") or "unset",
+        qlib_1min_root=str(qlib_used) if qlib_used is not None else None,
+        default_qlib_1min_root=str(DEFAULT_QLIB_1MIN_ROOT),
+        resolved_1m_root=str(period_root) if period_root is not None else None,
+        lake_root=str(lake_root) if lake_root is not None else None,
+        symbols=symbols, date_window=dict(start=start, end=end, format="YYYYMMDD"),
+        bar_label_semantics=LAKE_LABEL, timezone="Asia/Shanghai",
+        entry_rule=MODEB_ENTRY_RULE, next_open_rule=MODEB_NEXT_OPEN_RULE,
+        modeb_spec=MODEB_SPEC.label(),
+        oracle_label=ORACLE_LABEL,
+        oracle_note="Never fold oracle into executable Mode B clock summary stats",
+        fee="modea.COMMISSION bilateral 10bp; Mode B production linear rate",
+        note_same_dataset="qlib_bin is derived materialization of parquet lake; not a competing universe",
+        note_no_book_v7_nav_compare="Do not compare Mode B total NAV to Book/v7 as engine superiority",
+        python=sys.version, pandas=pd.__version__, numpy=np.__version__,
+        checked_sources_match_base=True, source_hashes_before=before,
+        source_hashes_after=source_hashes(), reader_source_hashes=reader_sources,
+        harness_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+        input_files=inventory,
+        input_provenance="qlib bin or parquet source; daily entry aggregated from same 1min none frames",
+        files={p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(output.iterdir())},
+    )
+    (output / "manifest.json").write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return dict(output=str(output), status="DATA_GAP", lake_read_status=lake_status, access=access,
+                batch=3, mode="modeb", rows={k: len(v) for k, v in payloads.items()})
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-dir", type=Path, required=True, help="New, non-existing artifact directory")
-    parser.add_argument("--mode", choices=("synthetic", "lake"), default=None,
-                        help="Default: synthetic; --batch 2 selects lake (minute event batch)")
-    parser.add_argument("--batch", choices=(1, 2), type=int)
-    parser.add_argument("--symbols", action="append", help="Repeatable or comma-separated; default 600000.SH")
+    parser.add_argument("--mode", choices=("synthetic", "lake", "modeb"), default=None,
+                        help="Default: synthetic; --batch 2=lake; --batch 3=modeb")
+    parser.add_argument("--batch", choices=(1, 2, 3), type=int)
+    parser.add_argument("--symbols", action="append",
+                        help="Repeatable or comma-separated; modeb default matches batch2 five symbols")
     parser.add_argument("--start", default="20260916", help="Minute window start YYYYMMDD")
     parser.add_argument("--end", default="20260918", help="Minute window end YYYYMMDD")
     parser.add_argument("--qlib-1min-root", type=Path, default=None,
                         help="Preferred qlib 1min bin root (default 4090 my_data_1min; env QLIB_1MIN_ROOT)")
     args = parser.parse_args()
-    alias = {1: "synthetic", 2: "lake"}.get(args.batch)
+    alias = {1: "synthetic", 2: "lake", 3: "modeb"}.get(args.batch)
     if alias and args.mode and args.mode != alias:
         parser.error("--batch and --mode disagree")
     mode = args.mode or alias or "synthetic"
-    result = (run_lake(args.output_dir, symbols=args.symbols, start=args.start, end=args.end,
-                       qlib_1min_root=args.qlib_1min_root)
-              if mode == "lake" else run(args.output_dir))
+    if mode == "lake":
+        result = run_lake(args.output_dir, symbols=args.symbols, start=args.start, end=args.end,
+                          qlib_1min_root=args.qlib_1min_root)
+    elif mode == "modeb":
+        result = run_modeb(args.output_dir, symbols=args.symbols, start=args.start, end=args.end,
+                           qlib_1min_root=args.qlib_1min_root)
+    else:
+        result = run(args.output_dir)
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 

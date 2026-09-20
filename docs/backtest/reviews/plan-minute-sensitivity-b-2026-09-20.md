@@ -51,3 +51,8 @@
 ## 6. 第二批（batch2）指针
 
 真实分钟事件轴：同一 `parquet_lineage`；优先 qlib `my_data_1min` bin，回退 OSKH parquet `E:\stock_data`。结果与 RUNBOOK 见 [results-minute-sensitivity-b-batch2-2026-09-20.md](results-minute-sensitivity-b-batch2-2026-09-20.md)。生产热路径仍冻结。
+
+
+## 7. 第三批（batch3 / modeb）指针
+
+Mode B clock 轴（`next_tradable_open`）：补齐 batch2 的 `ModeB NOT_RUN`。入场为 **同一 none 1min 帧聚合的日收**（`daily_entry_source=aggregated_from_1min_none_lineage`），**禁止** qlib `my_data` day.bin（后复权）。Q39 基线 `StrategySpec(2,10,5,5)`；oracle 硬标签 `EX_POST_UPPER_BOUND_NOT_EXECUTABLE`，不得并入可执行汇总。产物目录建议：`backtest/research/exports/minute_sensitivity_b_20260920/batch3_modeb/`。结果与 4090 RUNBOOK 见 [results-minute-sensitivity-b-batch3-modeb-2026-09-20.md](results-minute-sensitivity-b-batch3-modeb-2026-09-20.md)。生产 C 仍冻结。

@@ -293,8 +293,11 @@ def test_lake_actual_reader_on_temporary_parquet_no_production_monkeypatch(tmp_p
             assert r["baseline_status"] == "DATA_GAP"  # no invented prior close
         if r["date"] == "2026-09-18" and r["baseline_status"] == "FILLED":
             assert r["local_pair_status"] == "DATA_GAP"  # no fabricated future mark
-        if r["engine"] == "v7" and r["date"] == "2026-09-17" and r["signal_hm"] == "884":
-            assert r["baseline_reason"] == "outside_add_window"
+        if (r["engine"] == "v7" and r["date"] == "2026-09-17" and r["signal_hm"] == "884"
+                and r["stage"] == "trial"):
+            # START label: window check uses hm+1; 884→885=14:45 is inside ADD window.
+            assert r["baseline_status"] == "FILLED"
+            assert str(r["baseline_reason"]).startswith("buy:add_")
         assert r["local_rank_delta"] == ""
     capacities = [r for r in read_rows(output / "capacity.csv") if r["case_id"] == trial["case_id"]]
     assert [r["shares"] for r in capacities] == [trial["baseline_shares"], "0"]
@@ -344,7 +347,128 @@ def test_lake_source_fence_is_fatal_before_artifacts(tmp_path, monkeypatch):
     hashes[next(iter(hashes))] = "0" * 64
     # Only the research harness evidence hook is replaced; production is untouched.
     monkeypatch.setattr(h, "source_hashes", lambda: hashes)
-    for run in (h.run, h.run_lake):
+    for run in (h.run, h.run_lake, h.run_modeb):
         with pytest.raises(ValueError, match="Production source differs"):
             run(tmp_path / "must_not_exist")
         assert not (tmp_path / "must_not_exist").exists()
+
+
+def _modeb_synth_frame(path_kind: str):
+    """Constructed START-labeled minutes for Mode B clock unit checks only."""
+    from datetime import date
+
+    symbol = h.SYMBOL
+    prev, day, nxt = h.PREV_DAY, h.DAY, h.NEXT_DAY
+
+    def rows_for(d, bars):
+        out = []
+        for hm, opn, close in bars:
+            bar = h.LakeBar(d, hm, opn, close)
+            out.append(dict(date=d, hm=hm, open=opn, close=close, high=max(opn, close),
+                            low=min(opn, close), bar_start=bar.start, bar_end=bar.end,
+                            ymd=d.strftime("%Y%m%d"), _idx=bar.start))
+        return out
+
+    rows = rows_for(prev, [(570, 10.0, 10.0), (895, 10.0, 10.0)])
+    rows += rows_for(day, [(570, 10.0, 10.0), (895, 10.0, 10.0)])
+    if path_kind == "open_gap":
+        rows += rows_for(nxt, [(570, 9.4, 9.35), (571, 9.35, 9.3), (585, 9.3, 9.2)])
+    else:
+        rows += rows_for(nxt, [(570, 10.1, 10.1), (585, 10.2, 10.6),
+                               (586, 10.65, 10.7), (587, 10.7, 10.7)])
+    frame = pd.DataFrame(rows).set_index("_idx").sort_index()
+    return symbol, frame
+
+
+def test_modeb_open_gap_vs_close_classification_and_next_open():
+    from backtest.research import unified_exit_modea as modea
+    from backtest.research import unified_exit_modeb as modeb
+
+    for kind, expect_path in (("open_gap", "open_gap"), ("close", "close")):
+        symbol, frame = _modeb_synth_frame(kind)
+        daily = {symbol: h.aggregate_daily_from_1min_none(frame)}
+        sessions = h.modeb_session_ymds(frame)
+        assert "20260917" in h.modeb_entry_days(sessions, "20260916", "20260918")
+        inst = modea.Instance(symbol, "合成", "20260917", 10.0, True)
+        result = modeb.evaluate_exit_modeb(
+            inst, h.MODEB_SPEC, daily, {symbol: frame}, sessions, end="20260918")
+        assert result == modeb.evaluate_exit_modeb(
+            inst, h.MODEB_SPEC, daily, {symbol: frame}, sessions, end="20260918", impl="ref")
+        path = h.classify_modeb_trigger_path(result, frame)
+        assert path == expect_path
+        row, _ = h.modeb_clock_for_result(
+            symbol=symbol, entry_ymd="20260917", entry_px=10.0, result=result,
+            frame=frame, trigger_path=path)
+        assert row["trigger_path"] == expect_path
+        assert row["next_status"] == "FILLED" and row["matched_fill"]
+        if path == "close":
+            # close at hm=585 START → decision 09:46 → next open 09:47
+            assert row["decision_at"] == h.stamp(h.NEXT_DAY, 586)
+            assert row["next_fill_at"] == h.stamp(h.NEXT_DAY, 587)
+            assert row["next_fill_px"] == 10.7
+        else:
+            # open-gap at 09:30 → same bar before_submit → next 09:31 open
+            assert row["decision_at"] == h.stamp(h.NEXT_DAY, 570)
+            assert row["next_fill_at"] == h.stamp(h.NEXT_DAY, 571)
+            assert row["next_fill_px"] == 9.35
+
+
+def test_modeb_oracle_labeled_non_executable_and_excluded_from_summary():
+    from backtest.research import unified_exit_modea as modea
+    from backtest.research import unified_exit_modeb as modeb
+
+    symbol, frame = _modeb_synth_frame("close")
+    daily = {symbol: h.aggregate_daily_from_1min_none(frame)}
+    sessions = h.modeb_session_ymds(frame)
+    inst = modea.Instance(symbol, "合成", "20260917", 10.0, True)
+    oracle_map = modeb.oracle_exits([inst], daily, {symbol: frame}, sessions, end="20260918")
+    oracle = oracle_map[modea.instance_key(inst)]
+    assert oracle.reason == "oracle"
+    assert h.ORACLE_LABEL == "EX_POST_UPPER_BOUND_NOT_EXECUTABLE"
+    # Summary must not fold oracle PnL into executable clock stats.
+    result = modeb.evaluate_exit_modeb(
+        inst, h.MODEB_SPEC, daily, {symbol: frame}, sessions, end="20260918")
+    trade, _ = h.modeb_clock_for_result(
+        symbol=symbol, entry_ymd="20260917", entry_px=10.0, result=result,
+        frame=frame, trigger_path=h.classify_modeb_trigger_path(result, frame))
+    summary = h.modeb_summaries([trade])[0]
+    assert "EX_POST_UPPER_BOUND_NOT_EXECUTABLE" in summary["oracle"]
+    # Executable clock delta uses baseline/next fills only — never oracle sell_price as input.
+    assert trade["baseline_fill_px"] == result.sell_price
+    assert summary["mean_local_return_delta_bp"] == (
+        (trade["next_local_return"] - trade["baseline_local_return"]) * 10_000)
+    oracle_ret = h.modeb_fee_economics(10.0, oracle.sell_price, oracle.shares, trade=True)["net_return"]
+    assert summary["mean_local_return_delta_bp"] != pytest.approx(oracle_ret * 10_000)
+    assert summary.get("full_strategy_nav") is None
+
+
+def test_modeb_run_refuses_overwrite_and_cli_batch3_alias(tmp_path, monkeypatch):
+    clear_lake_env(monkeypatch)
+    monkeypatch.setattr(h, "DEFAULT_QLIB_1MIN_ROOT", tmp_path / "missing_qlib")
+    output = tmp_path / "batch3"
+    result = h.run_modeb(output, symbols=[h.SYMBOL])
+    assert result["batch"] == 3 and result["mode"] == "modeb"
+    manifest = json.loads((output / "manifest.json").read_text())
+    assert manifest["batch"] == 3 and manifest["mode"] == "modeb"
+    assert manifest["daily_entry_source"] == "aggregated_from_1min_none_lineage"
+    assert manifest["production_C"] == "frozen"
+    assert manifest["oracle_label"] == h.ORACLE_LABEL
+    for name in ("modeb_clock_trades.csv", "modeb_clock_summary.csv",
+                 "modeb_oracle.csv", "modeb_data_gaps.csv"):
+        assert (output / name).is_file()
+    oracle_rows = read_rows(output / "modeb_oracle.csv")
+    assert oracle_rows and oracle_rows[0]["label"] == h.ORACLE_LABEL
+    assert oracle_rows[0]["executable"] == "NEVER"
+    with pytest.raises(FileExistsError):
+        h.run_modeb(output, symbols=[h.SYMBOL])
+    script = ROOT / "scripts/research/run_minute_sensitivity_b.py"
+    cli = tmp_path / "cli"
+    run = subprocess.run([sys.executable, str(script), "--batch", "3", "--mode", "modeb",
+                          "--output-dir", str(cli), "--symbols", "600000.SH"],
+                         capture_output=True, text=True)
+    assert run.returncode == 0, run.stderr
+    assert json.loads((cli / "manifest.json").read_text())["symbols"] == ["600000.SH"]
+    bad = subprocess.run([sys.executable, str(script), "--batch", "3", "--mode", "lake",
+                          "--output-dir", str(tmp_path / "bad")],
+                         capture_output=True, text=True)
+    assert bad.returncode != 0 and not (tmp_path / "bad").exists()
