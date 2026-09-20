@@ -1,6 +1,8 @@
 # 人裁卡：敏感结论 → 要不要动默认（2026-09-20）
 
-**范围：只读 Human GO B；生产 C 冻结。** 依据合并 PR [#136](https://github.com/baiyibing/MyQuant-backtrader/pull/136)–[#140](https://github.com/baiyibing/MyQuant-backtrader/pull/140)。BASE `f2fe151…`（#136 合入）。本卡 **docs-only**，不改生产 fill/scan/fee/defaults/CLI。本轮 **不预选 C**。
+**范围：只读 Human GO B；生产 C 冻结。** 依据合并 PR [#136](https://github.com/baiyibing/MyQuant-backtrader/pull/136)–[#140](https://github.com/baiyibing/MyQuant-backtrader/pull/140)。BASE `f2fe151…`（#136 合入）。本卡 **docs-only**，不改生产 fill/scan/fee/defaults/CLI。
+
+**人裁锁定（2026-09-20）：Human GO A — 继续只读扩样。** 不预选 / 未选 C；生产 fill/scan/fee/defaults/CLI 仍冻。下一刀：batch4 扩窗全策略只读补 NAV/DD/rank（能算则算，缺证标 DATA_GAP）。
 
 ## 1. 背景与范围
 
@@ -35,14 +37,15 @@
 
 | 选项 | 含义 | 本轮状态 |
 |---|---|---|
-| **A. 继续只读扩样** | 扩窗 / 扩票 / 补全策略 NAV·DD·rank（仍只读 B） | 可选 |
-| **B. 暂不动默认** | 维持生产 fill / scan / fee / defaults / CLI | 可选 |
-| **C. 开行为变更** | 须**分路径**另开计划（书追买钟、v7 加仓钟、Mode B 退出钟、费用/滑点/容量分别裁） | **本轮禁止自动选**；须另行人裁 |
+| **A. 继续只读扩样** | 扩窗 / 扩票 / 补全策略 NAV·DD·rank（仍只读 B） | **已锁定 · Human GO A** |
+| **B. 暂不动默认** | 维持生产 fill / scan / fee / defaults / CLI | 未选（生产默认仍冻，见 A 后果） |
+| **C. 开行为变更** | 须**分路径**另开计划（书追买钟、v7 加仓钟、Mode B 退出钟、费用/滑点/容量分别裁） | **未选**；本轮禁止自动选；须另行人裁 |
 
-## 6. 建议下一刀（建议非裁决）
+## 6. 人裁结论与下一刀
 
-**建议（非裁决）：B，或 A→再裁。**  
-在全策略 NAV/DD/rank 仍为 DATA_GAP、Mode B 仅 2 笔可执行样本的前提下，**不足以**授权 C。若人侧要加压证据，优先 A（扩窗/扩票 + 闭环 NAV），再回头看是否动默认；否则选 B 冻结生产，保留高风险路径备忘。
+**人裁锁定：A（继续只读扩样）。** 记录于 #141；生产 fill/scan/fee/defaults/CLI **仍冻**；**未选 C**。
+
+下一刀（仍只读 B）：扩窗/扩票全策略重放，分列 Book / v7 / Mode B，补 NAV / 最大回撤 / 策略排名（能算则算，缺证标 DATA_GAP）；同一费用基线；一次只变时钟或滑点一轴。局部 bp 仍不得外推为改默认依据。
 
 ## 7. 引用
 
