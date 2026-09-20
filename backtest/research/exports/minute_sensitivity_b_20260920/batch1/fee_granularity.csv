@@ -1,0 +1,5 @@
+engine,scheme,scope,sell_calls,total_sell_notional,sell_commission,assumed_stamp,note
+Book,BILATERAL_10BP,SYNTHETIC_LOCAL_PRICE_ONLY_NOT_STRATEGY_REPLAY,2,2000.0,2.0,0.0,synthetic_two_100_share_lots_same_price
+v7,BILATERAL_10BP,SYNTHETIC_LOCAL_PRICE_ONLY_NOT_STRATEGY_REPLAY,1,2000.0,2.0,0.0,synthetic_two_100_share_lots_same_price
+Book,REPLACE_COMMISSION_3BP_MIN5_STAMP_SELL5BP,SYNTHETIC_LOCAL_PRICE_ONLY_NOT_STRATEGY_REPLAY,2,2000.0,10.0,1.0,synthetic_two_100_share_lots_same_price
+v7,REPLACE_COMMISSION_3BP_MIN5_STAMP_SELL5BP,SYNTHETIC_LOCAL_PRICE_ONLY_NOT_STRATEGY_REPLAY,1,2000.0,5.0,1.0,synthetic_two_100_share_lots_same_price

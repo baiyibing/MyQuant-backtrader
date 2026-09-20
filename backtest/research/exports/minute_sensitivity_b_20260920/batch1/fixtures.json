@@ -1,0 +1,626 @@
+[
+  {
+    "engine": "Book",
+    "case_id": "up",
+    "decision_hm": 585,
+    "price": 10.2,
+    "candidates": [
+      {
+        "day": "2026-09-17",
+        "hm": 586,
+        "open": 10.25,
+        "close": 10.25
+      },
+      {
+        "day": "2026-09-17",
+        "hm": 587,
+        "open": 10.6,
+        "close": 10.6
+      }
+    ],
+    "stage": "trial",
+    "quote_hm": null,
+    "previous": 10.0,
+    "cash": 1000000.0,
+    "exit_price": 10.7,
+    "exit_day": "2026-09-21",
+    "entry_a": 10.0,
+    "notes": ""
+  },
+  {
+    "engine": "Book",
+    "case_id": "down",
+    "decision_hm": 585,
+    "price": 10.2,
+    "candidates": [
+      {
+        "day": "2026-09-17",
+        "hm": 586,
+        "open": 10.25,
+        "close": 10.25
+      },
+      {
+        "day": "2026-09-17",
+        "hm": 587,
+        "open": 9.9,
+        "close": 9.9
+      }
+    ],
+    "stage": "trial",
+    "quote_hm": null,
+    "previous": 10.0,
+    "cash": 1000000.0,
+    "exit_price": 10.5,
+    "exit_day": "2026-09-21",
+    "entry_a": 10.0,
+    "notes": ""
+  },
+  {
+    "engine": "Book",
+    "case_id": "unchanged_price",
+    "decision_hm": 585,
+    "price": 10.2,
+    "candidates": [
+      {
+        "day": "2026-09-17",
+        "hm": 587,
+        "open": 10.2,
+        "close": 10.2
+      }
+    ],
+    "stage": "trial",
+    "quote_hm": null,
+    "previous": 10.0,
+    "cash": 1000000.0,
+    "exit_price": 10.7,
+    "exit_day": "2026-09-21",
+    "entry_a": 10.0,
+    "notes": ""
+  },
+  {
+    "engine": "Book",
+    "case_id": "fallback_0943",
+    "decision_hm": 585,
+    "price": 10.2,
+    "candidates": [
+      {
+        "day": "2026-09-17",
+        "hm": 586,
+        "open": 10.25,
+        "close": 10.25
+      },
+      {
+        "day": "2026-09-17",
+        "hm": 587,
+        "open": 10.3,
+        "close": 10.3
+      }
+    ],
+    "stage": "trial",
+    "quote_hm": 583,
+    "previous": 10.0,
+    "cash": 1000000.0,
+    "exit_price": 10.7,
+    "exit_day": "2026-09-21",
+    "entry_a": 10.0,
+    "notes": ""
+  },
+  {
+    "engine": "Book",
+    "case_id": "missing_bar",
+    "decision_hm": 585,
+    "price": 10.2,
+    "candidates": [
+      {
+        "day": "2026-09-17",
+        "hm": 591,
+        "open": 10.4,
+        "close": 10.4
+      }
+    ],
+    "stage": "trial",
+    "quote_hm": null,
+    "previous": 10.0,
+    "cash": 1000000.0,
+    "exit_price": 10.7,
+    "exit_day": "2026-09-21",
+    "entry_a": 10.0,
+    "notes": ""
+  },
+  {
+    "engine": "Book",
+    "case_id": "limit_release",
+    "decision_hm": 585,
+    "price": 10.2,
+    "candidates": [
+      {
+        "day": "2026-09-17",
+        "hm": 587,
+        "open": 11.0,
+        "close": 11.0
+      },
+      {
+        "day": "2026-09-17",
+        "hm": 588,
+        "open": 10.5,
+        "close": 10.5
+      }
+    ],
+    "stage": "trial",
+    "quote_hm": null,
+    "previous": 10.0,
+    "cash": 1000000.0,
+    "exit_price": 10.7,
+    "exit_day": "2026-09-21",
+    "entry_a": 10.0,
+    "notes": ""
+  },
+  {
+    "engine": "Book",
+    "case_id": "limit_exhausted",
+    "decision_hm": 585,
+    "price": 10.2,
+    "candidates": [
+      {
+        "day": "2026-09-17",
+        "hm": 587,
+        "open": 11.0,
+        "close": 11.0
+      },
+      {
+        "day": "2026-09-17",
+        "hm": 588,
+        "open": 11.0,
+        "close": 11.0
+      }
+    ],
+    "stage": "trial",
+    "quote_hm": null,
+    "previous": 10.0,
+    "cash": 1000000.0,
+    "exit_price": 10.7,
+    "exit_day": "2026-09-21",
+    "entry_a": 10.0,
+    "notes": ""
+  },
+  {
+    "engine": "Book",
+    "case_id": "overnight",
+    "decision_hm": 585,
+    "price": 10.2,
+    "candidates": [
+      {
+        "day": "2026-09-18",
+        "hm": 571,
+        "open": 10.4,
+        "close": 10.4
+      }
+    ],
+    "stage": "trial",
+    "quote_hm": null,
+    "previous": 10.0,
+    "cash": 1000000.0,
+    "exit_price": 10.7,
+    "exit_day": "2026-09-21",
+    "entry_a": 10.0,
+    "notes": ""
+  },
+  {
+    "engine": "Book",
+    "case_id": "cash_reject",
+    "decision_hm": 585,
+    "price": 10.2,
+    "candidates": [
+      {
+        "day": "2026-09-17",
+        "hm": 587,
+        "open": 10.5,
+        "close": 10.5
+      }
+    ],
+    "stage": "trial",
+    "quote_hm": null,
+    "previous": 10.0,
+    "cash": 9250,
+    "exit_price": 10.7,
+    "exit_day": "2026-09-21",
+    "entry_a": 10.0,
+    "notes": ""
+  },
+  {
+    "engine": "Book",
+    "case_id": "no_next_bar",
+    "decision_hm": 585,
+    "price": 10.2,
+    "candidates": [],
+    "stage": "trial",
+    "quote_hm": null,
+    "previous": 10.0,
+    "cash": 1000000.0,
+    "exit_price": 10.7,
+    "exit_day": "2026-09-21",
+    "entry_a": 10.0,
+    "notes": ""
+  },
+  {
+    "engine": "Book",
+    "case_id": "abandon",
+    "decision_hm": 585,
+    "price": 9.9,
+    "candidates": [
+      {
+        "day": "2026-09-17",
+        "hm": 587,
+        "open": 10.1,
+        "close": 10.1
+      }
+    ],
+    "stage": "trial",
+    "quote_hm": null,
+    "previous": 10.0,
+    "cash": 1000000.0,
+    "exit_price": 10.7,
+    "exit_day": "2026-09-21",
+    "entry_a": 10.0,
+    "notes": ""
+  },
+  {
+    "engine": "Book",
+    "case_id": "decision_limit",
+    "decision_hm": 585,
+    "price": 11.0,
+    "candidates": [
+      {
+        "day": "2026-09-17",
+        "hm": 587,
+        "open": 10.5,
+        "close": 10.5
+      }
+    ],
+    "stage": "trial",
+    "quote_hm": null,
+    "previous": 10.0,
+    "cash": 1000000.0,
+    "exit_price": 10.7,
+    "exit_day": "2026-09-21",
+    "entry_a": 10.0,
+    "notes": ""
+  },
+  {
+    "engine": "v7",
+    "case_id": "trial_add",
+    "decision_hm": 885,
+    "price": 10.4,
+    "candidates": [
+      {
+        "day": "2026-09-17",
+        "hm": 886,
+        "open": 10.4,
+        "close": 10.4
+      },
+      {
+        "day": "2026-09-17",
+        "hm": 887,
+        "open": 10.6,
+        "close": 10.6
+      }
+    ],
+    "stage": "trial",
+    "quote_hm": null,
+    "previous": 10.4,
+    "cash": 1000000.0,
+    "exit_price": 10.9,
+    "exit_day": "2026-09-21",
+    "entry_a": 10.0,
+    "notes": ""
+  },
+  {
+    "engine": "v7",
+    "case_id": "four_add",
+    "decision_hm": 885,
+    "price": 10.8,
+    "candidates": [
+      {
+        "day": "2026-09-17",
+        "hm": 886,
+        "open": 10.8,
+        "close": 10.8
+      },
+      {
+        "day": "2026-09-17",
+        "hm": 887,
+        "open": 11.0,
+        "close": 11.0
+      }
+    ],
+    "stage": "four",
+    "quote_hm": null,
+    "previous": 10.8,
+    "cash": 1000000.0,
+    "exit_price": 11.3,
+    "exit_day": "2026-09-21",
+    "entry_a": 10.0,
+    "notes": ""
+  },
+  {
+    "engine": "v7",
+    "case_id": "six_add",
+    "decision_hm": 885,
+    "price": 11.2,
+    "candidates": [
+      {
+        "day": "2026-09-17",
+        "hm": 886,
+        "open": 11.2,
+        "close": 11.2
+      },
+      {
+        "day": "2026-09-17",
+        "hm": 887,
+        "open": 11.399999999999999,
+        "close": 11.399999999999999
+      }
+    ],
+    "stage": "six",
+    "quote_hm": null,
+    "previous": 11.2,
+    "cash": 1000000.0,
+    "exit_price": 11.7,
+    "exit_day": "2026-09-21",
+    "entry_a": 10.0,
+    "notes": ""
+  },
+  {
+    "engine": "v7",
+    "case_id": "eight_add",
+    "decision_hm": 885,
+    "price": 11.6,
+    "candidates": [
+      {
+        "day": "2026-09-17",
+        "hm": 886,
+        "open": 11.6,
+        "close": 11.6
+      },
+      {
+        "day": "2026-09-17",
+        "hm": 887,
+        "open": 11.799999999999999,
+        "close": 11.799999999999999
+      }
+    ],
+    "stage": "eight",
+    "quote_hm": null,
+    "previous": 11.6,
+    "cash": 1000000.0,
+    "exit_price": 12.1,
+    "exit_day": "2026-09-21",
+    "entry_a": 10.0,
+    "notes": ""
+  },
+  {
+    "engine": "v7",
+    "case_id": "down",
+    "decision_hm": 885,
+    "price": 10.4,
+    "candidates": [
+      {
+        "day": "2026-09-17",
+        "hm": 887,
+        "open": 10.1,
+        "close": 10.1
+      }
+    ],
+    "stage": "trial",
+    "quote_hm": null,
+    "previous": 10.0,
+    "cash": 1000000.0,
+    "exit_price": 10.8,
+    "exit_day": "2026-09-21",
+    "entry_a": 10.0,
+    "notes": ""
+  },
+  {
+    "engine": "v7",
+    "case_id": "unchanged_price",
+    "decision_hm": 885,
+    "price": 10.4,
+    "candidates": [
+      {
+        "day": "2026-09-17",
+        "hm": 887,
+        "open": 10.4,
+        "close": 10.4
+      }
+    ],
+    "stage": "trial",
+    "quote_hm": null,
+    "previous": 10.0,
+    "cash": 1000000.0,
+    "exit_price": 10.7,
+    "exit_day": "2026-09-21",
+    "entry_a": 10.0,
+    "notes": ""
+  },
+  {
+    "engine": "v7",
+    "case_id": "missing_bar",
+    "decision_hm": 885,
+    "price": 10.4,
+    "candidates": [
+      {
+        "day": "2026-09-17",
+        "hm": 891,
+        "open": 10.5,
+        "close": 10.5
+      }
+    ],
+    "stage": "trial",
+    "quote_hm": null,
+    "previous": 10.0,
+    "cash": 1000000.0,
+    "exit_price": 10.7,
+    "exit_day": "2026-09-21",
+    "entry_a": 10.0,
+    "notes": ""
+  },
+  {
+    "engine": "v7",
+    "case_id": "overnight",
+    "decision_hm": 895,
+    "price": 10.4,
+    "candidates": [
+      {
+        "day": "2026-09-18",
+        "hm": 571,
+        "open": 10.6,
+        "close": 10.6
+      }
+    ],
+    "stage": "trial",
+    "quote_hm": null,
+    "previous": 10.0,
+    "cash": 1000000.0,
+    "exit_price": 10.7,
+    "exit_day": "2026-09-21",
+    "entry_a": 10.0,
+    "notes": ""
+  },
+  {
+    "engine": "v7",
+    "case_id": "limit_release",
+    "decision_hm": 885,
+    "price": 10.4,
+    "candidates": [
+      {
+        "day": "2026-09-17",
+        "hm": 887,
+        "open": 11.0,
+        "close": 11.0
+      },
+      {
+        "day": "2026-09-17",
+        "hm": 888,
+        "open": 10.5,
+        "close": 10.5
+      }
+    ],
+    "stage": "trial",
+    "quote_hm": null,
+    "previous": 10.0,
+    "cash": 1000000.0,
+    "exit_price": 10.7,
+    "exit_day": "2026-09-21",
+    "entry_a": 10.0,
+    "notes": ""
+  },
+  {
+    "engine": "v7",
+    "case_id": "limit_down_release",
+    "decision_hm": 885,
+    "price": 10.4,
+    "candidates": [
+      {
+        "day": "2026-09-17",
+        "hm": 887,
+        "open": 9.0,
+        "close": 9.0
+      },
+      {
+        "day": "2026-09-17",
+        "hm": 888,
+        "open": 10.3,
+        "close": 10.3
+      }
+    ],
+    "stage": "trial",
+    "quote_hm": null,
+    "previous": 10.0,
+    "cash": 1000000.0,
+    "exit_price": 10.7,
+    "exit_day": "2026-09-21",
+    "entry_a": 10.0,
+    "notes": ""
+  },
+  {
+    "engine": "v7",
+    "case_id": "limit_exhausted",
+    "decision_hm": 885,
+    "price": 10.4,
+    "candidates": [
+      {
+        "day": "2026-09-17",
+        "hm": 887,
+        "open": 11.0,
+        "close": 11.0
+      }
+    ],
+    "stage": "trial",
+    "quote_hm": null,
+    "previous": 10.0,
+    "cash": 1000000.0,
+    "exit_price": 10.7,
+    "exit_day": "2026-09-21",
+    "entry_a": 10.0,
+    "notes": ""
+  },
+  {
+    "engine": "v7",
+    "case_id": "no_next_bar",
+    "decision_hm": 885,
+    "price": 10.4,
+    "candidates": [],
+    "stage": "trial",
+    "quote_hm": null,
+    "previous": 10.0,
+    "cash": 1000000.0,
+    "exit_price": 10.7,
+    "exit_day": "2026-09-21",
+    "entry_a": 10.0,
+    "notes": ""
+  },
+  {
+    "engine": "v7",
+    "case_id": "no_signal",
+    "decision_hm": 885,
+    "price": 10.3,
+    "candidates": [
+      {
+        "day": "2026-09-17",
+        "hm": 887,
+        "open": 10.4,
+        "close": 10.4
+      }
+    ],
+    "stage": "trial",
+    "quote_hm": null,
+    "previous": 10.0,
+    "cash": 1000000.0,
+    "exit_price": 10.7,
+    "exit_day": "2026-09-21",
+    "entry_a": 10.0,
+    "notes": ""
+  },
+  {
+    "engine": "v7",
+    "case_id": "outside_add_window",
+    "decision_hm": 884,
+    "price": 10.4,
+    "candidates": [
+      {
+        "day": "2026-09-17",
+        "hm": 887,
+        "open": 10.4,
+        "close": 10.4
+      }
+    ],
+    "stage": "trial",
+    "quote_hm": null,
+    "previous": 10.0,
+    "cash": 1000000.0,
+    "exit_price": 10.7,
+    "exit_day": "2026-09-21",
+    "entry_a": 10.0,
+    "notes": ""
+  }
+]
