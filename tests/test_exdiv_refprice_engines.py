@@ -842,17 +842,17 @@ def test_d6_book_cash_event_without_k_and_pay_after_exit(engine):
 
 @pytest.mark.parametrize("engine", [daily, minute], ids=["daily", "minute"])
 @pytest.mark.parametrize("factor", [None, EXDIV_HALF])
-def test_d6_book_off_byte_snapshot_matches_f145ffde(engine, factor):
+def test_d6_book_off_byte_snapshot_with_p2_b_labels(engine, factor):
     import hashlib
     import json
 
-    # Captured by executing the unchanged public fixture in git archive of the
-    # frozen f145ffdec5e378c9092d3f8b990f104979d89141, not from this implementation.
+    # Human GO P2=B: full book snapshots gain only the two label keys.
+    # Removing them reproduces the original frozen f145ffde hashes exactly.
     expected = {
-        (daily, False): "20a97d90be33cc8dbc34b8c0b5004376152661035c3b7d8743558e34e33c8991",
-        (daily, True): "94b16d1ef2f56f37aea13527cf4f0c7b7e4639ca0660bc94e27e071611ee6db7",
-        (minute, False): "5c308169a43a15fab0b4b07c244fbbb0d1eb43f7ae15f732159f3e19998c3dff",
-        (minute, True): "ade98e9b042d7633adb5f3477fae3056a6ed4213746c2c99b563423f6d323482",
+        (daily, False): "42554d791ff405f3f90fd186eea84f0713e34925e73b29fe01f733893e00c3b8",
+        (daily, True): "4b27fbaa6cf3d060016f258145f9290b4fb08b6e02f21b053afb2279177cb163",
+        (minute, False): "2dbed1ca050c17d552683e49ea23d5db532072de137dbdae1e8e12cbd2b391a4",
+        (minute, True): "b128ee6a2b616da77942622f2b31c14cd1842eee9574d12fe8a4c5524b708ad9",
     }
     for kwargs in ({}, {"exdiv_economics": None}, {"exdiv_economics": {}}):
         state = _d2_book_run(engine, [10, 10, 5], exdiv=factor,

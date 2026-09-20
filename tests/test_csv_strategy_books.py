@@ -380,6 +380,7 @@ def test_daily_quota_trades_byte_identical(strategy):
     """Anchors captured at 9f4303c, before slice A; never regenerate pre_er1.
 
     version6 已改为名单加仓 + 两档回撤，不再对照这份旧 golden。
+    Human GO P2=B 只给 live version1 golden 追加标签列；旧列逐字节不变。
     """
     from pathlib import Path
     import runpy

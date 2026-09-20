@@ -5,6 +5,7 @@ Human GO P1=A closure (2026-09-20): scan-window labels only, no real
 closing call auction model; session/fill eligibility stays as-built.
 FillPriceRule names six existing book-engine paths. That set is not an
 exhaustive price selector and does not cover v7.
+Human GO P2=B adds trade labels at write sites only; P1 eligibility stays A.
 """
 
 from __future__ import annotations
@@ -41,7 +42,9 @@ BOUND_NAMES = ("AM_OPEN", "AM_CLOSE", "PM_OPEN", "PM_CLOSE")
 BARS_MODULE = "backtest.research.ashare_bars"
 PACKAGE = "backtest.research"
 SCAN_WINDOW_NOTE = "标签描述当前扫描窗口，不是交易所忠实 closing-call 撮合"
-PHASE_FILTER_NAMES = {"closing_call", "session_phase", "CLOSING_CALL_OPEN", "SessionPhase"}
+PHASE_FILTER_NAMES = {"continuous", "closing_call", "session_phase", "CLOSING_CALL_OPEN", "SessionPhase"}
+# Only these trade writers may contain phase labels. Scanners remain forbidden.
+PHASE_LABEL_WRITE_PATHS = {"csv_ledger", "csv_simulate_loop"}
 # Existing time comparisons only; no 14:57 (897 minutes) auction-policy cutoff.
 AS_BUILT_SCAN_HM_COMPARISONS = {
     "hm is not None",
@@ -231,6 +234,19 @@ def _sells(st):
     return [trade for trade in st.trades if trade["side"] == "SELL"]
 
 
+def _assert_book_labels(st, rule, phase=""):
+    assert {t["session_phase"] for t in st.trades} <= {"", *(p.value for p in clock.SessionPhase)}
+    assert {t["price_rule"] for t in st.trades} <= {"", *(p.value for p in clock.FillPriceRule)}
+    buy, sell = _buys(st)[0], _sells(st)[0]
+    # Baseline six-path fixtures all buy/sell the same 100,000 shares at cost 10.
+    assert buy["price"] == pytest.approx(10.0)
+    assert buy["reason"] == "pool"
+    assert buy["shares"] == sell["shares"] == 100_000
+    assert buy["session_phase"] == buy["price_rule"] == ""
+    assert sell["session_phase"] == phase
+    assert sell["price_rule"] == rule.value
+
+
 def _watch_chase(monkeypatch, engine):
     """Wrap run_chase_due_day; record the production quotes callback and pending."""
     real = run_chase_due_day
@@ -296,9 +312,9 @@ def test_session_phase_labels_current_scan_window():
     assert accepted.all(), SCAN_WINDOW_NOTE
 
 
-@pytest.mark.parametrize("name", SIMULATE_HOT_PATH)
+@pytest.mark.parametrize("name", [n for n in SIMULATE_HOT_PATH if n not in PHASE_LABEL_WRITE_PATHS])
 def test_simulate_hot_path_has_no_phase_filter_identifiers(name):
-    # Human GO P1=A closure: fixed list includes ashare_bars; never rglob research.
+    # P2=B narrows only write sites; P1=A still bans phase names in all scanners.
     path = ROOT / "backtest" / "research" / f"{name}.py"
     assert _phase_filter_references(path.read_text(encoding="utf-8")) == set(), name
 
@@ -633,6 +649,7 @@ def test_daily_open_board_rule_uses_same_day_close():
     assert sell["price"] != pytest.approx(12.0)
     assert sell["reason"] == "open_board"
     assert clock.FillPriceRule.daily_open_board_same_close == "daily_open_board_same_close"
+    _assert_book_labels(st, clock.FillPriceRule.daily_open_board_same_close)
 
 
 def test_daily_stop_gap_rule_uses_same_day_open():
@@ -659,6 +676,7 @@ def test_daily_stop_gap_rule_uses_same_day_open():
     assert sell["price"] != pytest.approx(9.35)
     assert sell["price"] != pytest.approx(9.3)
     assert clock.FillPriceRule.daily_stop_gap_open == "daily_stop_gap_open"
+    _assert_book_labels(st, clock.FillPriceRule.daily_stop_gap_open)
 
 
 def test_daily_stop_touch_rule_uses_same_day_trigger():
@@ -685,6 +703,7 @@ def test_daily_stop_touch_rule_uses_same_day_trigger():
     assert sell["price"] != pytest.approx(9.60)
     assert sell["price"] != pytest.approx(9.4)
     assert clock.FillPriceRule.daily_stop_touch_at_trigger == "daily_stop_touch_at_trigger"
+    _assert_book_labels(st, clock.FillPriceRule.daily_stop_touch_at_trigger)
 
 
 def test_daily_pending_exit_rule_uses_next_session_open():
@@ -715,6 +734,7 @@ def test_daily_pending_exit_rule_uses_next_session_open():
     assert sell["price"] == pytest.approx(9.1)
     assert sell["price"] != pytest.approx(9.0)
     assert clock.FillPriceRule.daily_pending_next_open == "daily_pending_next_open"
+    _assert_book_labels(st, clock.FillPriceRule.daily_pending_next_open)
 
 
 def test_minute_gap_stop_rule_uses_bar_open():
@@ -779,7 +799,7 @@ def test_fill_clock_leaf_imports_only_allowed_bounds():
         assert _leaf_import_problems(snippet) or _bound_import_problems(snippet), snippet
 
 
-def test_simulate_hot_path_forbids_fill_clock_import():
+def test_simulate_hot_path_forbids_fill_clock_import_except_writer():
     test_hot_path_list_matches_plan_bytes()
     assert "ashare_fill_clock" not in SIMULATE_HOT_PATH
     sources = [
@@ -795,4 +815,4 @@ def test_simulate_hot_path_forbids_fill_clock_import():
         assert forbidden_imports(source), source
     for name in SIMULATE_HOT_PATH:
         path = ROOT / "backtest" / "research" / f"{name}.py"
-        assert forbidden_imports(path.read_text(encoding="utf-8")) == [], name
+        assert forbidden_imports(path.read_text(encoding="utf-8"), module_name=name) == [], name

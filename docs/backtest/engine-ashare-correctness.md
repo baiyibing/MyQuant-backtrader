@@ -101,6 +101,8 @@ P1 收口基线 `41f8df331ed25aad4616bde56c77ddb7025c91ee` 当时全部生产 Py
 
 **Schema changelog / forward compatibility（2026-09-20）**：书 `trades.csv` 新增 `session_phase`、`price_rule`，旧列和旧必需列集合保持不变。下游须容忍未知列或按所需列子集读取；例如 `exdiv_hold_hits` 仍只要求 `date/code/side/reason/lot`，不得将新列设为必需。空字符串表示未知/不适用，未标价格规则不代表未成交。live `money_modes_daily_quota/version1_trades.csv` golden 只追加这两列，pre_er1 历史锚点不重生成。
 
+`test_ashare_volume_cap` / `test_exdiv_refprice_engines` 的 live cap-off / economics-off 书快照哈希随新列更新，仍比较完整输出；剔除两列后已核对与原 `7428a1a` / `f145ffde` 快照哈希一致，v7 哈希原样保留。
+
 ## 2. 现锁（E-R\*）
 
 | ID | 现行为 | 作废的旧锁 |
@@ -257,7 +259,7 @@ ST 正则为 `(?:\*ST|(?<![A-Za-z])ST)`（`re.IGNORECASE`）；`WEST` 这样的�
 | book T+1 | 新股并入原 Position，在独立账保存 list_date 限售量；独立 lot 可先卖原股，新股在 list_date 后的 session 可卖。跟单组遇 bonus 限售整组暂缓，避免 orphan rider；cap-on pending 同样等新股解锁后才允许整笔退出；无新增退出队列 | `csv_ledger.py:163`、`:185`、`:313` |
 | v7 T+1 | 每旧 lot 追加 kind=exdiv_bonus、buy_date=list_date 的新 lot，沿用原 t1_sellable；复制 lot.price，stage/last_add_date 不因公司行动更新 | `csv_minute_backtest_v7.py:203`、`:256` |
 | refs 独立 | book cost/peak、v7 entry_A/avg_cost/peak/add1_A1/lot.price 仍只由 E-R6 ×k；经济层不动 refs，绝不 shares/=k | `csv_ledger.py:151`；`csv_minute_backtest_v7.py:191` |
-| 交易/兼容 | 公司行动无 BUY/SELL、无佣金、不消耗 volume；后续真实成交仍调用 δ1。trades/equity CSV schema 不变，独立账户及 stats 可查看应收 | `csv_ledger.py:163`、`:313`；`ashare_exdiv_economics.py:61` |
+| 交易/兼容 | 公司行动无 BUY/SELL、无佣金、不消耗 volume；后续真实成交仍调用 δ1。δ6 本身不改 trades/equity CSV schema；后续 P2=B 两列见上节。独立账户及 stats 可查看应收 | `csv_ledger.py:163`、`:313`；`ashare_exdiv_economics.py:61` |
 
 None lookup 是无事件；错误对象/非有限或负数/非法日期跳过并记 `exdiv_econ_invalid_event`，绝不由 k 补造。event_id 已应用则 no-op 并记 duplicate_event；旧 rescale helper 非幂等依旧。b/c 转精确整数比做股数 floor，金额入既有 float 现金账，税前夹具单位，无税务/分币新规则。经济 lookup 不受 k 的存在性/噪声门约束。
 

@@ -63,7 +63,7 @@ This ship makes that fork executable as contract (anchors + tests + docs), witho
 | **F-R2** | Keep PR #108 and #112 implemented behavior intact; do not reopen fill-clock behavior. |
 | **F-R3** | Preserve existing fail-open/fail-closed mix exactly where it already exists (including v7 `limits=None` held-path behavior and ST-name semantics). |
 | **F-R4** | Distinguish and test two states explicitly: **(a) gate did not intercept** vs **(b) trade filled**. Never collapse them. |
-| **F-R5** | No Python production code edits by default. Allowed scope: docs + data-free contract tests only. |
+| **F-R5** | Original ship: docs + data-free contracts only. Human GO P2=B adds the sole production exception: book trade label wiring under §4; all other production behavior stays frozen. |
 | **F-R6** | No backtests, no lake reads, no production markers; CI checks must stay data-free. |
 | **F-R7** | Do not fix/reinterpret ST PIT naming behavior in this ship; document as current fork. |
 | **F-R8** | P1 remains closed as A: no fill-policy change. Human GO P2=B (2026-09-20) permits only the two book trades label columns; unrelated schema/economics changes remain forbidden. P4 stays deferred; P3 δ cuts are not reopened. |
