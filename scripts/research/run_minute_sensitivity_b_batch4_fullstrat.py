@@ -292,7 +292,7 @@ def emit_stubs(out_dir: Path, *, start: str, end: str, force: bool) -> dict[str,
 
     recipes = {
         "qlib_1min_root": str(DEFAULT_QLIB_1MIN_ROOT),
-        "lake_parquet": r"E:\stock_data",
+        "lake_parquet": os.environ.get("OSKH_SOURCE_PARQUET_ROOT", "<OSKH_SOURCE_PARQUET_ROOT>"),
         "book_example": [
             "python backtest/research/csv_minute_backtest.py",
             "--strategy version1",
