@@ -4,6 +4,14 @@
 - **评审链**：对抗层 F1–F8 → 四稿 [consensus V1–V17](../architecture/reviews/2026-09-21/plan-version11-machip-csv/merge-consensus.md) → 人裁全按建议
 - **前置**：**ma_infra 已合入（PR #150）是切片 A 开工门槛**；实施 PR 基于 master `d75f9c9`
 
+## 续作状态（2026-09-21）
+
+- docs-first 两裁决：`4729628`；A 纯规则 / 两段 FSM：`e560a44`；B 导出器、显式 prefix 周线与 public asof 股本薄壳已实现，data-free pins 通过。
+- 导出产物布局：`--out-dir/pool/YYYYMMDD.csv`，引擎应传 `--pool-dir <out-dir>/pool`；`rejected.csv` 与 `manifest.json` 放 `out-dir`，不混进严格只允许日期 CSV 的池目录。已有非空池拒绝覆盖，避免重跑残留旧日期信号。
+- **C 已解阻，待注册 / 接线**：[显式人裁 A](https://github.com/baiyibing/MyQuant-backtrader/pull/152#issuecomment-5756590614) 覆盖此前 STOP。保留 [δ5 §2.2](plan-industry-align-p3-d5-volume-cap-2026-09-19.md) 严格可得性：开盘 `attempt_at=hm-1`，`VolumeCap.clamp` 要求 `bucket <= at`；09:30 桶未完成则买 skip / pending 卖 defer。否决 v11 同分钟完整量仍按开盘价成交的例外，不改既有书 / 生产 cap 默认。C 必须新增 data-free 开盘未完成桶 skip/defer pin。
+- B 稳定化门禁：规则 / 导出器 / ma_infra / 注册表合计 **106 passed**；A/B touched Python ruff 全绿。解释器显式使用 `/workspace/vanna312/bin/python3`。
+- `apply()` 显式 `limit_up_chase=False` 与 chase pending 为空的**引擎级**回归仍待 C，不能用 A 的 record 参数 pin 替代。AGENTS.md 的“已移植”回写、双引擎 `--strategy 11 --help` 同样待 C；plan 未标全量完成。未跑宿主湖 / Rust pyd / 静态档案对照（D）。
+
 ## §0 硬边界（人裁已定，勿越）
 
 ### 2026-09-21 续作人裁（优先于 plan 旧措辞）
@@ -11,6 +19,7 @@
 - **契约日**：D 是原信号日；T 是该股**严格晚于 D** 的首个有 bar 交易日（不是 on/after D），且 D→T ≤4 自然日。stale 始终从原 D 起算；超限不写池，`rejected.csv` 记 `skip_buy(stale)` 与原 D。信号仅使用 ≤T−1 数据，文件名为 T，不能采用 export9 的 ≤T 口径。
 - **周线 = A / prefix-equivalent**：每个 D 的结果等价于先截断至 D，再重算周线。`ma_infra` 必须提供**显式 opt-in**（参数或独立 helper）；默认 series 的全历史 backward alignment 保持不变，禁止把逐日 asof 偷藏进默认 API。data-free pin 同时证明默认行为不变、opt-in 等价于 truncate-then-call。下文“序列件、禁逐日 *_asof”指调用导出器时仍用 series；周线必须显式选择 prefix 路径。
 - **硬坑仍有效**：`apply()` 返回 dict 显式包含 `limit_up_chase=False`；回归同时 pin flag=False 与 chase pending 为空，防止调用方 `hooks.setdefault("limit_up_chase", True)` 开启追买。
+- **volume / 09:30 = A**：沿用 `bucket <= at`；开盘未完成桶买 skip / pending 卖 defer，禁止同分钟完成量近似开盘成交；不改 cap 或既有书默认。无 cap 时沿原可选容量合同成交。
 - 对 plan 的覆盖见其“2026-09-21 续作覆盖”：严格晚于 D 覆盖任何 on/after 措辞；prefix 周线覆盖将整段历史默认 backward alignment 当成逐 D 信号的解释。本轮先提交本文档与 plan，再实施 A/B/C。
 
 1. **信号价域 = front**（V1）：导出器 `dividend_type="front"` 装载信号序列；执行侧引擎现行（none + `mapped_prev_close`）；manifest 记 adjust_type。
