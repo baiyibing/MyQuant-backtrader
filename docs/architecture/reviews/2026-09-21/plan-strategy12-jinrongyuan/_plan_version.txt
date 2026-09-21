@@ -1,0 +1,4 @@
+path=E:/PycharmProjects/MyQuant-backtrader/docs/backtest/plan-strategy12-jinrongyuan-2026-09-21.md
+git_sha=<untracked>
+content_sha256_16=e640ce3bf49a2c40
+reviewed_at=2026-09-21
