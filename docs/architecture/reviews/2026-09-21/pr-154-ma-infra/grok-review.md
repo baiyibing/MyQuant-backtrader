@@ -6,8 +6,8 @@
 > 权威：[handoff-ma-infra-codex-impl-2026-09-21.md](../../../../backtest/handoff-ma-infra-codex-impl-2026-09-21.md) §0 · [plan-ma-infra-shared-2026-09-21.md](../../../../backtest/plan-ma-infra-shared-2026-09-21.md) v1.0 GO · [merge-consensus C1–C12](../plan-ma-infra-shared/merge-consensus.md)
 > HEAD：`213ee123b49bb5b720cde97d9575ba0f40b07e1d`
 > merge-base vs `origin/master`：`9f0c4b921254d8bcf4160f59f0f36b78631f2baa`（#150 交接文档）
-> GitHub：`MERGEABLE` / `CLEAN` / draft / `pytest-and-gates` **SUCCESS**（[run 35568232438](https://github.com/baiyibing/MyQuant-backtrader/actions/runs/35568232438) @ `213ee12`）
-> 本核 **未 merge**。保持 draft。
+> GitHub（评审开始时）：draft / `MERGEABLE` / `CLEAN` / `pytest-and-gates` **SUCCESS**（[run 35568232438](https://github.com/baiyibing/MyQuant-backtrader/actions/runs/35568232438) @ `213ee12`）
+> 本核 **未 merge**。评审进行中 #154 于 2026-09-21 06:29:20Z 合入 `master`（`32b78b1`，实现 tip 仍是 `213ee12`）。本文件改走后续 draft [#155](https://github.com/baiyibing/MyQuant-backtrader/pull/155)。
 
 ---
 
@@ -116,14 +116,14 @@ handoff 清单（差分 / 数值 / 边界 / 等长 / 尾部拼接 / 周线三条
 
 ## 建议动作（是否可合）
 
-**可以合（仍保持 draft，本核不点 merge / 不改 ready）。** 不要为 nit-1/2/3 重写八件或动 BOOKS/引擎。
+**实现可合（评审开始时的结论）。** #154 已在评审中途合入；本核未点 merge。不要为 nit-1/2/3 重写八件或动 BOOKS/引擎。
 
 合入时（文档卫生，可另点或跟本票）：
 
 1. plan 页眉 PR 号改为 **#154**。
 2. v11/s12 实施时按 nit-3 截断再 asof。
 
-本核 **未 merge、未改业务代码**；只落本评审文件。
+本核 **未 merge、未改业务代码**；只落本评审文件（#155）。
 
 ---
 
