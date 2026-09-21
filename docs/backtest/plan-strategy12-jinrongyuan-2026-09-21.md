@@ -3,7 +3,7 @@
 > **Status**: **v0.2 · draft（未评审；P1 已预裁，其余 GO 前禁编码）**。风险档：**中高**——新增引擎级「部分减仓 + 买回」记账能力，触及股数/现金流不变量；书侧为全新策略书，无历史基线可对照。
 > **业务源**：`E:\PycharmProjects\OSkhQuant1.3\docs\bucket_policy\金榕元交易回测策略--0921-策略12.docx`（金榕元系列第 4 版；前三版 0911/0913/0916 → 策略 8。原名"策略11"，2026-09-21 用户裁决改为 12，docx 已同步改名）。
 > **Main ship / 单行范围**：策略 12 = 策略 8 买侧骨架（尾盘涨停 T+1 9:45 确认追买、名单全加、+20% 台阶、per_name 100 万）+ 全新均线出场（昨收 MA5 破线减仓 50% 且收复买回；昨收 MA10 下方 10% 止损且站回买回）。
-> **前序**：[workflow-codex-handoff.md](workflow-codex-handoff.md)（本 plan 走 Codex 交接工作流）、[engine-ashare-correctness.md](engine-ashare-correctness.md)（成交核 SSOT）、[plan-v8-rules-v2-2026-09-16.md](_archive/plans/plan-v8-rules-v2-2026-09-16.md)（v8 书先例）。
+> **前序**：[workflow-codex-handoff.md](workflow-codex-handoff.md)（本 plan 走 Codex 交接工作流）、[engine-ashare-correctness.md](engine-ashare-correctness.md)（成交核 SSOT）、[plan-ma-infra-shared-2026-09-21.md](plan-ma-infra-shared-2026-09-21.md)（**前置：共享均线基础设施，本 plan 实施时直接消费**）、[plan-v8-rules-v2-2026-09-16.md](_archive/plans/plan-v8-rules-v2-2026-09-16.md)（v8 书先例）。
 
 ---
 
@@ -53,6 +53,7 @@
 | **R5** | 新增 reason / trades 标签须带 `ma12:` 前缀区分既有 reason；不改既有 trades schema 列。 |
 | **R6** | 文本 UTF-8 无 BOM、NUL=0；新文件 ruff 零告警；数据一律走 resolvers（AGENTS.md 数据盘纪律）。 |
 | **R7** | `version11` 编号维持 AGENTS.md 既有预留（ma_chip CSV 移植）；本书一律 `version12`，不占 11。 |
+| **R8** | MA 一律消费共享基础设施 [ma_infra](plan-ma-infra-shared-2026-09-21.md)（`sma_asof`/`sma_live`）；书内不自写均线。 |
 
 ## 5) P\* 人裁点（评审重点；各附建议）
 
@@ -79,7 +80,7 @@
 
 | 刀 | 内容 | 完成定义（DoD） |
 |---|---|---|
-| **A** | `backtest/research/strategy12_rules.py` 纯函数：`sma_asof` 复用、`stop_line(ma10)`、`de_risk_signal(px, closes)`、`reclaim_signal(px, closes)`、`take_profit_reason=None`、HELP_LOCK、record 函数；`tests/test_strategy12_rules.py` data-free pin | 纯函数无引擎 import；边界（历史不足 5/10 根、px≤0）返回 None 有 pin |
+| **A** | `backtest/research/strategy12_rules.py` 纯函数：**消费 [ma_infra](plan-ma-infra-shared-2026-09-21.md) 的 `sma_asof`/`sma_live`**、`stop_line(ma10)`、`de_risk_signal(px, closes)`、`reclaim_signal(px, closes)`、`take_profit_reason=None`、HELP_LOCK、record 函数；`tests/test_strategy12_rules.py` data-free pin | 纯函数无引擎 import；边界（历史不足 5/10 根、px≤0）返回 None 有 pin |
 | **B** | 引擎 share 级部分卖出：书钩子 `partial_sell_gate(code, px, day, closes) -> Optional[tuple[str, float]]`（reason, fraction）；卖出路径支持按股数跨 lot FIFO；默认 None 时行为与 HEAD 逐字节等价 | 新 pin：部分卖后 lot.shares/cash/trades 正确、整百股取整、既有全量测试零变更全绿 |
 | **C** | 买回引擎 + 注册：`buy_back_gate` 钩子 + 每码 reduced/stopped 股数状态 + 资金/T+1/涨跌停门接线；`version12` 注册（别名 `12/v12/version12`，per_name 100 万，HELP_LOCK 进 epilog）；AGENTS.md Research entries 增行 | 引擎级测试：减仓→收复→买回、止损→站回→买回、skip_cash、与 chase/pool/step 共存；`--strategy 12 --help` 冒烟 |
 | **D** | 冒烟回测 runbook：daily + minute 各跑 20251023–20260909 窗，与 v8/8.1/8.2/8.3 五点对比；结果记 reviews 目录（数字不 commit，exports 约定除外） | runbook 文档 + data_gaps 清单；无生产代码 diff |
