@@ -8,6 +8,8 @@
 
 **人裁回填（2026-09-21）：latch = A，只有周期锁。** 同一 MA5 下方周期只减仓一次；成功收复并买回后立即重新武装，同一交易日再次跌破 MA5 允许再次减仓（示例 step 3 可卖）。**不得叠加「每通道每日一次」或任何 once-per-day 日锁**。此裁定覆盖 plan P11 的每日 latch 表述，HELP_LOCK 与测试必须钉死同日收复后可再次减仓。
 
+**人裁回填（2026-09-21）：residual = 2，保留不足 100 股的买回记忆。** 成功收复并重新武装后，MA5 减仓（reduced）与 MA10 止损（stopped）两个通道的买回记忆残余 `<100` 股均保留，合入各自下一轮减仓/止损的记忆与买回数量。边界（bt 默认）：若 `memory < 100` 且本轮没有买入，满足收复条件也必须保留残余并令 `latched=False`，立即重新武装。**禁止「记忆归零才重新武装」**；本裁定与 latch=A 一起覆盖 plan P4/P11 的「清零」措辞，不能把残余清掉或当作重入门槛。Memory、HELP_LOCK 与纯函数/引擎测试须同时覆盖双通道的部分买回残余、下一轮合并，以及不足一手且无买入的收复。
+
 1. γ 三触点：`execute_buy(..., shares_override=None)`（记账 `per=notional`）；重构 `csv_ledger.py:400-411` 卖出分支（`pos.shares -= shares` 提到条件外、非零余股保留 lot、空 lot 才删）；书侧 exdiv 缩放回调（opt-in）。**不改 BOOKS 注册表既有书、零其它引擎 diff**。
 2. **S1 守恒不变量**：部分卖后 `Σ lot.shares` 与 cash 变动守恒（实验证明默认路径现状会静默丢股——修复它就是本刀核心）。
 3. 部分卖顺序：**is_step 先卖、中间层 lot_id 升序、lot0 最后且保留 ≥100 股**（P13；保台阶锚 `strategy8_rules.py:61-64`）。
@@ -25,7 +27,7 @@
 
 **锚点**：`backtest/research/strategy4_rules.py:30-41`（sell_gate/buy_gate 签名先例）；`ma_infra.py`（`sma_asof`/`sma_live`）。
 **步骤**：消费 ma_infra；`de_risk_signal(px, closes)`（px < 昨收 MA5 → 触发）、`reclaim_signal(px, closes)`（px ≥ MA5）、`stop_line(ma10)=ma10*0.90`、`exit_plan(code,px,day,closes,lots)->(reason,shares)|None`（含 latch/t1_sellable/is_step 先卖/lot0 保底逻辑的纯函数部分）、`buyback_plan(...)->int`；HELP_LOCK（价域/latch/上限/费用偏差/chase 等值边界/容量不整百声明）；record 函数。
-**测试**：`tests/test_strategy12_rules.py` data-free——MA 不足 5/10 根→None、latch A（成功收复后同日第二次减仓允许，无日锁）、50% 取整、lot0 保底、顺序。
+**测试**：`tests/test_strategy12_rules.py` data-free——MA 不足 5/10 根→None、latch A（成功收复后同日第二次减仓允许，无日锁）、residual=2（reduced/stopped 部分买回余股保留并再武装、下一轮合并；不足 100 股且无买入仍收复再武装）、50% 取整、lot0 保底、顺序。
 
 ## 切片 B：引擎面（可与 A 并行）
 
