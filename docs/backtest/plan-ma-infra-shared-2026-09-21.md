@@ -1,6 +1,6 @@
 # Plan: 共享均线基础设施 ma_infra（2026-09-21）
 
-> **Status**: **v0.2 · draft（已吸收四稿外部评审 merge-consensus；P1–P4 待人裁，GO 前禁编码）**。风险档：**刀 A 中**（周线 asof 键与布林 σ 直接构成 version11 买卖条件）；**刀 B 低**（零行为重构）。共识裁决：[merge-consensus](../architecture/reviews/2026-09-21/plan-ma-infra-shared/merge-consensus.md)（codex/kimi/cursor/claude 四稿收敛 C1–C12）。
+> **Status**: **v1.0 · ✅ 已人裁 GO（2026-09-21，Asia/Shanghai；P1–P4 全按共识裁定）**。风险档：**刀 A 中**（周线 asof 键与布林 σ 直接构成 version11 买卖条件）；**刀 B 低**（零行为重构）。评审链：四稿 fan-out [merge-consensus C1–C12](../architecture/reviews/2026-09-21/plan-ma-infra-shared/merge-consensus.md) → 人裁 GO。实施走 [Codex 交接工作流](workflow-codex-handoff.md)（handoff 文档见 §8 尾注）。
 > **业务源**：用户 2026-09-21 指示「几个策略都需要 MA，作为基础设施，不要分别实现」。消费方：策略 4（SMA5/10 闸，现存）、[strategy12](plan-strategy12-jinrongyuan-2026-09-21.md)（MA5/10 减仓买回，起草中）、[version11 ma_chip](plan-version11-machip-csv-2026-09-21.md)（MA20/60 + 20 周线 + 布林中轨，起草中）。
 > **Main ship / 单行范围**：新建 `backtest/research/ma_infra.py` 作为全仓均线 SSOT（asof 标量 / 序列 / 盘中实时 / 布林 / 周线换算），策略 4 迁移为 re-export（行为零变更），后续书一律消费本模块。
 > **前序**：[workflow-codex-handoff.md](workflow-codex-handoff.md)。
@@ -54,10 +54,10 @@ weekly_sma_asof(dates, closes, n_weeks) -> Optional[float]          # 只 backwa
 
 | ID | 问题 | 建议 |
 |---|---|---|
-| **P1 API 面** | §2 八件是否齐套？EMA/WMA 现在要不要？ | 八件（含 C3 序列件）；`sma_live` 为 strategy12 P2-B **预留**（P2-B 未裁前无消费方，人裁顺序先裁 strategy12 P2，C11）；EMA/WMA 有消费方再加（YAGNI）。 |
-| **P2 批量实现** | `sma_series` 纯 Python 前缀和 vs pandas rolling | 纯 Python 前缀和 O(n)；全市场导出器若慢再补 `*_frame` pandas 件（本刀不做）。 |
-| **P3 strategy4 迁移深度** | 只 re-export，还是连 `buy_gate`/`sell_gate` 内调用一并改写？ | 只 re-export + import 改向；gate 逻辑不动（最小 diff，pins 全在）。 |
-| **P4 位置** | `backtest/research/ma_infra.py` vs `oskh_factors/` | research——三个消费方两个在 `backtest/research` 书侧；oskh_factors 是因子库，职责不同。 |
+| **P1 API 面** | §2 八件是否齐套？EMA/WMA 现在要不要？ | **✅ 已裁（2026-09-21）**：八件；`sma_live` 为 strategy12 P2-B 预留；EMA/WMA 不做。 |
+| **P2 批量实现** | `sma_series` 纯 Python 前缀和 vs pandas rolling | **✅ 已裁（2026-09-21）**：纯 Python 前缀和/增量（实测快 2.3×）；`*_frame` 本刀不做。 |
+| **P3 strategy4 迁移深度** | 只 re-export，还是连 `buy_gate`/`sell_gate` 内调用一并改写？ | **✅ 已裁（2026-09-21）**：删本地 def + re-export；gate 函数体零 diff（C6）。 |
+| **P4 位置** | `backtest/research/ma_infra.py` vs `oskh_factors/` | **✅ 已裁（2026-09-21）**：`backtest/research/ma_infra.py`。 |
 
 ## 5) 非目标
 
