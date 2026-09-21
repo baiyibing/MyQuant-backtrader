@@ -101,6 +101,8 @@ def init_sim_state(
 ) -> tuple[SimState, dict[str, tuple[float, int]], Callable[[str], dict[str, str]]]:
     """SimState + pending_chase + names_asof after strategy hooks are applied."""
     st = SimState(cash=float(total_cash))
+    st.book_on_buy = hooks.get("on_buy")
+    st.book_on_exdiv = hooks.get("on_exdiv")
     hooks["record_params"](st)
     st.stats["bars_loaded"] = int(bars_loaded)
     st.stats["pool_days"] = len(pool_days)
@@ -393,6 +395,61 @@ def run_step_adds_day(
         execute_buy(st, code, px, per, day_i, day, reason="add:step20", is_step=True,
                     **volume_kwargs)
         st.daily_quota_used = quota_used
+
+
+def run_buybacks_day(
+    st: SimState,
+    *,
+    day_i: int,
+    day,
+    ds: str,
+    names: dict[str, str],
+    codes,
+    buy_quote_for: PoolQuoteFn,
+    buyback_plan=None,
+    on_reclaim=None,
+    exdiv: Optional[dict] = None,
+    qlib_limit_pct: Optional[float] = None,
+    volume_bucket_for: Callable[[str], int | None] | None = None,
+) -> None:
+    """Fourth buy cause; ordinary ledger fills bounded by each channel's memory.
+
+    A zero-sized qualified reclaim is delivered too: residual=2 re-arms dust
+    without a buy. Cash is checked at the call site, before the capacity gate.
+    """
+    if not callable(buyback_plan):
+        return
+    for code in list(codes):
+        quoted = buy_quote_for(code)
+        if quoted is None:
+            continue
+        px, closes = quoted
+        if not closes or px <= 0:
+            continue
+        for reason, shares in buyback_plan(st, code, px, day, closes):
+            if not shares:
+                on_reclaim(st, code, reason, 0)
+                continue
+            prev, _ = mapped_prev_close(exdiv, code, ds, float(closes[-1]))
+            limits = book_limit_prices(code, prev, names, qlib_limit_pct=qlib_limit_pct)
+            if limits is None:
+                st.stats["skip_unknown_board"] += 1
+                continue
+            if skip_buy_at_limit(px, limits):
+                st.stats["skip_limit_up"] += 1
+                continue
+            notional = shares * px
+            if notional + trade_commission(notional, st.buy_cost_rate, st.min_cost) > st.cash:
+                st.stats["skip_cash"] = st.stats.get("skip_cash", 0) + 1
+                st.stats["skip_cash_notional"] = st.stats.get("skip_cash_notional", 0.0) + notional
+                continue
+            quota_used = st.daily_quota_used
+            volume_kwargs = ({"bucket_id": volume_bucket_for(code)}
+                             if volume_bucket_for is not None else {})
+            if execute_buy(st, code, px, notional, day_i, day, reason=reason,
+                           shares_override=shares, **volume_kwargs):
+                on_reclaim(st, code, reason, st.trades[-1]["shares"])
+            st.daily_quota_used = quota_used
 
 
 def append_equity_and_eod_marks(

@@ -82,7 +82,8 @@ class ExDivEconomics:
         key = "exdiv_econ_" + name
         self.stats[key] = self.stats.get(key, 0) + value
 
-    def entitle(self, symbol: str, ds: str, quantities: Sequence[int]) -> Entitlement | None:
+    def entitle(self, symbol: str, ds: str, quantities: Sequence[int], *,
+                on_event: Callable[[ExDivEvent], None] | None = None) -> Entitlement | None:
         """Snapshot all pre-scan lots together; no share/cost mutations here."""
         if not callable(self.lookup) and not isinstance(self.lookup, Mapping):
             self._count("invalid_event")
@@ -113,7 +114,7 @@ class ExDivEconomics:
         if event.event_id in self.applied_ids:
             self._count("duplicate_event")
             return None
-        if not quantities:
+        if not quantities and on_event is None:
             return None
         self.applied_ids.add(event.event_id)
         if gross:
@@ -122,6 +123,8 @@ class ExDivEconomics:
         self._count("bonus_shares", sum(additions))
         self._count("cash_entitled", gross)
         self.stats["exdiv_econ_receivable_open"] = self.receivable_total
+        if on_event is not None:
+            on_event(event)  # Validated, deduplicated; also covers flat buyback memory.
         return Entitlement(additions, list_date)
 
     def settle(self, ds: str) -> float:
