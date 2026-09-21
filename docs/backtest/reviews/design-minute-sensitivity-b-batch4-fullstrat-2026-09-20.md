@@ -64,12 +64,12 @@ Option 2 授权在研究边界内解除「无 hook」限制。§9 的 H2 + Q2 �
 | cell_id | clock | slip | Book NAV/DD/rank | v7 NAV/DD | Mode B NAV/DD/rank |
 |---|---|---|---|---|---|
 | `baseline_default_clock_fee` | 生产默认 | 0 / DEFAULT_SCHEDULE | **4090 可填** | **4090 可填** | **4090 可填** |
-| `clock_next_open_fullstrat` | next-open 研究交换 | 0 | **DATA_GAP** | **DATA_GAP** | **DATA_GAP** |
-| `slip_5bp_fullstrat` | 生产默认 | 5bp/边 | **DATA_GAP** | **DATA_GAP** | **DATA_GAP** |
-| `slip_10bp_fullstrat` | 生产默认 | 10bp/边 | **DATA_GAP** | **DATA_GAP** | **DATA_GAP** |
-| `slip_20bp_fullstrat` | 生产默认 | 20bp/边 | **DATA_GAP** | **DATA_GAP** | **DATA_GAP** |
+| `clock_next_open_fullstrat` | next-open 研究交换 | 0 | **FILLED**（Slice D · [results §11](results-minute-sensitivity-b-batch4-fullstrat-2026-09-20.md#11-slice-d--fullstrat-clockslip-hooks-4090--2026-09-21)） | **FILLED**（§11） | **FILLED**（§11） |
+| `slip_5bp_fullstrat` | 生产默认 | 5bp/边 | **FILLED**（§11） | **FILLED**（§11） | **FILLED**（§11） |
+| `slip_10bp_fullstrat` | 生产默认 | 10bp/边 | **FILLED**（§11） | **FILLED**（§11） | **FILLED**（§11） |
+| `slip_20bp_fullstrat` | 生产默认 | 20bp/边 | **FILLED**（§11） | **FILLED**（§11） | **FILLED**（§11） |
 
-同一 `cell_id` 内不得同时改 clock 与 slip。局部事件 Δbp **不得**写入上表数值列。
+同一 `cell_id` 内不得同时改 clock 与 slip。局部事件 Δbp **不得**写入上表数值列。Slice D 基线故意不在 D 矩阵；数字见 [addendum](addendum-batch4-slice-d-fullstrat-hooks-2026-09-21.md)。Research-only；`production_C=frozen`；禁止跨引擎 NAV 排名。
 
 ---
 
