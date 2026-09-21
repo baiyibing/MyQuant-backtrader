@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Optional
 
+from backtest.research.ma_infra import sma_asof
+
 BOOK_TAG = "v4"
 ALLOW_ADD = False
 PEAK_GAP_MIN = 0
@@ -18,13 +20,6 @@ HELP_LOCK = """
   SMA5 历史不足时冻仓不卖；尾盘涨停后的追买也须通过 buy_gate。
   追买日的“昨收”包含信号日收盘（不是 bug）；不使用 chip_indicator/StockDataReader。
 """
-
-
-def sma_asof(closes: list[float], n: int) -> Optional[float]:
-    n = int(n)
-    if n <= 0 or len(closes) < n:
-        return None
-    return sum(float(x) for x in closes[-n:]) / n
 
 
 def buy_gate(code, px, day, daily_closes_ending_yesterday) -> bool:

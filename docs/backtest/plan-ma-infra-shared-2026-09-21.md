@@ -1,6 +1,7 @@
 # Plan: 共享均线基础设施 ma_infra（2026-09-21）
 
-> **Status**: **v1.0 · ✅ 已人裁 GO（2026-09-21，Asia/Shanghai；P1–P4 全按共识裁定）**。风险档：**刀 A 中**（周线 asof 键与布林 σ 直接构成 version11 买卖条件）；**刀 B 低**（零行为重构）。评审链：四稿 fan-out [merge-consensus C1–C12](../architecture/reviews/2026-09-21/plan-ma-infra-shared/merge-consensus.md) → 人裁 GO。实施走 [Codex 交接工作流](workflow-codex-handoff.md)（handoff 文档见 §8 尾注）。
+> **Status**: **v1.0 · ✅ 已实施（本 PR #150）**（2026-09-21，Asia/Shanghai；P1–P4 全按共识裁定）。风险档：**刀 A 中**（周线 asof 键与布林 σ 直接构成 version11 买卖条件）；**刀 B 低**（零行为重构）。评审链：四稿 fan-out [merge-consensus C1–C12](../architecture/reviews/2026-09-21/plan-ma-infra-shared/merge-consensus.md) → 人裁 GO。实施走 [Codex 交接工作流](workflow-codex-handoff.md)（handoff 文档见 §8 尾注）。
+> **交付说明**：#150 在实施开始前已于 2026-09-21 06:06:14 UTC 合并，所含仅交接文档 `9f0c4b9`。实现为 `feat/ma-infra` 后续切片 A/B 提交，须由后续 PR 评审合入；此处“已实施”不表示代码已入 master。门禁与宿主差异见 [handoff 完成记录](handoff-ma-infra-codex-impl-2026-09-21.md#完成记录2026-09-21)。
 > **业务源**：用户 2026-09-21 指示「几个策略都需要 MA，作为基础设施，不要分别实现」。消费方：策略 4（SMA5/10 闸，现存）、[strategy12](plan-strategy12-jinrongyuan-2026-09-21.md)（MA5/10 减仓买回，起草中）、[version11 ma_chip](plan-version11-machip-csv-2026-09-21.md)（MA20/60 + 20 周线 + 布林中轨，起草中）。
 > **Main ship / 单行范围**：新建 `backtest/research/ma_infra.py` 作为全仓均线 SSOT（asof 标量 / 序列 / 盘中实时 / 布林 / 周线换算），策略 4 迁移为 re-export（行为零变更），后续书一律消费本模块。
 > **前序**：[workflow-codex-handoff.md](workflow-codex-handoff.md)。
