@@ -192,25 +192,10 @@ Slice B pins：晚 14:55 START 入场 UNFILLED（无 baseline 回退）；买卖
 
 先提交本完整裁定文档，再实施代码。发现**新的**语义分叉仍须 PR comment + stop；本裁定已解决的晚入场 / 同日到期 / 卖单次日重评不再作为停点。`production_C=frozen`，不动 #151/#152 contested files，不 merge。
 
-### Slice B 新语义停点：提交股数与成交价定量
+### 提交股数合同与 cash pin
 
-完整人裁的四条保持绑定。接线检查发现一个独立于订单生命周期的问题：**全组合买单在信号价定量后冻结股数，还是在 next-open / slip 成交价重新定量？**
+复用既有 `next_open` 的固定股数 / terminal cash reject 合同：按**本次研究组合**的信号状态、信号价计算提交股数，之后 clock / slip 只改执行价，费用按执行名义金额重算。不能将执行价传回预算 sizer 缩股；不能复制历史 baseline 交易清单。实际成交更新现金、成本、lot 和后续策略状态。
 
-- `scripts/research/run_minute_sensitivity_b.py::next_open` 接收既定 `shares`，首个合格 open 若含费现金不足，返回 `UNFILLED/cash_reject_terminal`，不缩股。
-- `csv_ledger.py::execute_buy` 则调用 `_buy_size(per, px)`；若直接将 next-open / slip 价格传给账本，会用新价格重新计算整百股。
-- plan §1 的「固定基线股数」明确限于独立局部事件，且声明无再投资 / 后续策略信号重放；不能直接把历史 baseline 成交清单保留到本次 FULL 组合。
-- 买入股数也决定实际成本、剩余现金、后续信号、T+1 lots 和 NAV。仅验证公式 `buy*(1+s)` / `sell*(1-s)` 及 post-impact fees，不能证明这两条路径等价。
+Data-free pin：额度 10,000、现金 10,050、信号价 10 → 1,000 股；下一 eligible open 10.1，含费支出 10,110.10，必须 `UNFILLED/cash_reject_terminal`，现金保持 10,050。`execute_buy(px=10.1, per=10000)` 会重新定量成 900 股，这是适配器必须避免的行为。相同固定股数合同适用于 slip 5/10/20bp。
 
-**Data-free 现有函数复现（2026-09-21，无湖、无源文件修改）：** `Book`，当日 `20260917`，信号可得 `09:46`，候选 START `09:47`，昨收 `10`，信号价 `10`，open `10.1`，额度 `10,000`，现金 `10,050`。限价 / 同日 / 连续竞价门均通过。
-
-| 路径 | 股数 | 含费买入支出 | 结果 |
-|---|---:|---:|---|
-| 信号价 `_buy_size(10000, 10)` → `next_open(shares=1000, cash=10050)` | 1,000 | 10,110.10 | `UNFILLED/cash_reject_terminal`，现金仍 10,050 |
-| `execute_buy(px=10.1, per=10000)` | 900 | 9,099.09 | `FILLED`，现金 950.91 |
-
-需明确的研究合同：
-
-- **Q1（建议）**：按本研究组合的实时信号状态 / 信号价定量，提交后固定股数；clock / slip 改执行价，费用按新名义金额算，含费现金不足按既有 `next_open` terminal reject。后续策略仍使用实际成交更新的组合；不是复制 baseline 交易清单。
-- **Q2**：保持预算，按实际执行价重新定量整百股；clock / slip 轴明确包含 sizing 反馈，需要独立研究成交适配，不能声称直接复用固定股数 `next_open` 合同。
-
-本次未选择 Q1/Q2。遵守“新的语义分叉 → PR comment + stop”，停止 Slice B 实现；无 helper / hooks / pins 提交，能力状态仍 `DATA_GAP`，不提前标 `FILLABLE`，新增数字留空。Book 全日卖出先于追买、v7 按标的逐日循环也要求在接线时按实际成交时刻更新现金；此处不以未来卖出现金让上述拒单通过。
+Grok 核对后纠正先前 `dde7a6f` 的停点判断：固定股数已经由 `next_open` 合同及单价格轴约束给定，不需要新的人裁；Slice B 继续实施。日内现金按实际成交时刻更新，未来卖出不能资助更早的买单。

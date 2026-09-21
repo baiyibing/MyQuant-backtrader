@@ -79,4 +79,4 @@ Mode B clock 轴（`next_tradable_open`）：补齐 batch2 的 `ModeB NOT_RUN`�
 
 先提交完整裁定文档，再写代码；pins 覆盖晚 14:55 START 入场未成交、买卖同日到期、卖单过期后次日重评（不 sticky）、clock XOR slip、post-impact fees 与基线等价。hooks 和 pins 通过后矩阵能力改 `FILLABLE`，数字留空至合并后 4090。跑指定 pytest / ruff / help gates，若 Grok CLI 可用则核后评论 #156；push 并打印 log，**不 merge**。新的语义分叉仍 PR comment + stop。
 
-**Slice B 接线检查停点（2026-09-21）**：完整 FULL cut 已先提交 `f96a3dc`。新发现 signal-size 冻结与 fill-price 重定量产生不同成交 / NAV，详见设计 §9「提交股数与成交价定量」的现有函数复现。Q1（建议：研究实时信号定量后固定股数，受冲击含费现金不足 terminal reject）/ Q2（成交价重定量）尚无人裁；按新分叉 stop，B 未实施、矩阵仍 DATA_GAP。不重开已经确定的全覆盖 / 同日到期 / 卖单次日策略重评。
+**提交股数合同已由既有 next_open 明确**：按本次组合信号定量后固定股数，clock / slip 只交换执行价及含费现金；不足则 terminal reject，不按执行价缩股。Grok 复核纠正 `dde7a6f` 的误停判断，B 继续；10→10.1 / 1,000 股 / 现金 10,050 的拒单案例纳入 pins。
