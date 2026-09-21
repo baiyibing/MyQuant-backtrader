@@ -80,3 +80,6 @@ Mode B clock 轴（`next_tradable_open`）：补齐 batch2 的 `ModeB NOT_RUN`�
 先提交完整裁定文档，再写代码；pins 覆盖晚 14:55 START 入场未成交、买卖同日到期、卖单过期后次日重评（不 sticky）、clock XOR slip、post-impact fees 与基线等价。hooks 和 pins 通过后矩阵能力改 `FILLABLE`，数字留空至合并后 4090。跑指定 pytest / ruff / help gates，若 Grok CLI 可用则核后评论 #156；push 并打印 log，**不 merge**。新的语义分叉仍 PR comment + stop。
 
 **最新绑定 Q2**：覆盖 `40afca4` / `dde7a6f` 的 Q1 固定股数合同及停点叙述。信号定量为暂定值；next-open / slip 成交价重新执行整手 sizer，再按实际成交时现金与费用判断。预算 10,000 / 现金 10,050 / 信号 10 → 暂定 1,000；open 10.1 → 900 股成交、现金 950.91。固定 1,000 后 `cash_reject_terminal` 是排除的反例。完整 H2 与卖单次日重评不变。
+
+
+**Slice B 已实现（Q2 + H2）**：研究 helper、各引擎独立 adapter、固定 `--cells` 及每 cell 产物隔离已接线；默认零参数直接委托原引擎。data-free pins 已通过，矩阵能力为 `FILLABLE`，历史导出未改，新增数值仍待合并后 4090。新语义分叉仍 comment + stop；本轮不 merge。

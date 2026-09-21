@@ -6,7 +6,7 @@
 
 BASE tip：`ac1fa97`（Merge #140 / `origin/master`）。
 
-**2026-09-21 Human GO option 2**：批准新增 research-only fullstrat clock/slip hooks；实施基线 `32b78b1`，分支 `research/batch4-fullstrat-clock-slip-hooks`。Human cut A 仍成立：read-only expand，no behavior C；`production_C=frozen`。A（文档）与 B（实现及 data-free pins）分 commit；完成后只开 draft PR，不 merge。发现语义分叉须 PR comment + stop，不能自行裁定。完整人裁已于 #156 确认：**H2 + 未成交卖单到期后次日策略重评**，取代此前 sell pending 桩；B 可继续实施，详见 §9。能力状态待实现和 pins 通过后再更新。
+**2026-09-21 Human GO option 2**：批准新增 research-only fullstrat clock/slip hooks；实施基线 `32b78b1`，分支 `research/batch4-fullstrat-clock-slip-hooks`。Human cut A 仍成立：read-only expand，no behavior C；`production_C=frozen`。A（文档）与 B（实现及 data-free pins）分 commit；完成后只开 draft PR，不 merge。发现语义分叉须 PR comment + stop，不能自行裁定。完整人裁已于 #156 确认：**H2 + 未成交卖单到期后次日策略重评**，取代此前 sell pending 桩；B 可继续实施，详见 §9。Q2 已覆盖 Q1；Slice B hooks 与 data-free pins 已落地，能力 `FILLABLE`，数字待合并后 4090。
 
 ---
 
@@ -16,18 +16,18 @@ BASE tip：`ac1fa97`（Merge #140 / `origin/master`）。
 |---|---|---|---|
 | **默认时钟 + DEFAULT_SCHEDULE** 全策略 NAV / return / maxDD | **可填**（既有 CLI，`--minute-source qlib_1min`） | **可填**（同上） | **可填**（研究 harness 库调用：入场=同 1min none 聚合日收；分钟=同一 qlib_1min；**禁止** `my_data` day.bin 后复权入场） |
 | **引擎内排名** | **可填**（同窗口多卖点书 version1–6,8–10 按 return 排序；不含 topk_*） | N/A（单策略；`within_engine_rank=1` 仅自指） | **可填**（`ranking.csv` / 网格 `StrategyMetrics.total_return`） |
-| **全策略 clock 交换**（next-open 等） | **DATA_GAP** | **DATA_GAP** | **DATA_GAP** |
-| **全策略 slip 轴**（每边 5/10/20bp） | **DATA_GAP** | **DATA_GAP** | **DATA_GAP** |
+| **全策略 clock 交换**（H2 + Q2） | **FILLABLE** | **FILLABLE** | **FILLABLE** |
+| **全策略 slip 轴**（Q2，每边 5/10/20bp） | **FILLABLE** | **FILLABLE** | **FILLABLE** |
 | 跨引擎 NAV 优劣比较 | **禁止** | **禁止** | **禁止** |
 | 把 batch2/3 局部事件 bp Δ 贴进 NAV 格 | **禁止** | **禁止** | **禁止** |
 
-### 为何 clock / slip 全策略轴为 DATA_GAP（原批与当前实现）
+### 原批为何为 DATA_GAP（历史证据；Slice B 已增加研究 hook）
 
 - Book / v7 / Mode B 生产默认成交时钟与费率写死在引擎路径；CLI **无** research-only「全策略 clock 交换」或「全策略滑点」开关。
 - 若为填格而改 `ashare_fill_clock` / 默认 fee / 静默 fork 生产路径 → 触犯 **production_C frozen**。
 - batch2/3 的 local-event clock / cost 叠层**仅局部**，不得冒充组合 NAV。本批对这两轴显式留空，并仍交付**默认时钟**基线全策略 NAV（诚实填）。
 
-Option 2 授权在研究边界内解除「无 hook」限制；不表示 hook 已实现。§9 的合同经人裁、B 落地并通过 pins 后，四个 cell 才从 `DATA_GAP` 改为 `FILLABLE`；数值仍等待合并后的 4090 slice D。
+Option 2 授权在研究边界内解除「无 hook」限制。§9 的 H2 + Q2 已实现并通过 data-free pins，四个 cell 的能力转为 `FILLABLE`；数值仍等待合并后的 4090 slice D。
 
 ---
 
@@ -161,10 +161,10 @@ VM 无湖：`--dry-run` / `--emit-stubs` / `--help` 即可；不要求本地 qli
 | cell_id | clock_mode | slip_bp_per_side | hook 落地后的 Book / v7 / ModeB 能力状态 |
 |---|---|---:|---|
 | `baseline_default_clock_fee` | `production_default` | 0 | `FILLABLE`（基线路径不变） |
-| `clock_next_open_fullstrat` | `next_tradable_open_research` | 0 | `FILLABLE`，待实现及 pins |
-| `slip_5bp_fullstrat` | `production_default` | 5 | `FILLABLE`，待实现 |
-| `slip_10bp_fullstrat` | `production_default` | 10 | `FILLABLE`，待实现 |
-| `slip_20bp_fullstrat` | `production_default` | 20 | `FILLABLE`，待实现 |
+| `clock_next_open_fullstrat` | `next_tradable_open_research` | 0 | `FILLABLE`（H2 + Q2 pins 通过） |
+| `slip_5bp_fullstrat` | `production_default` | 5 | `FILLABLE`（Q2 pins 通过） |
+| `slip_10bp_fullstrat` | `production_default` | 10 | `FILLABLE`（Q2 pins 通过） |
+| `slip_20bp_fullstrat` | `production_default` | 20 | `FILLABLE`（Q2 pins 通过） |
 
 `FILLABLE` 仅代表研究 runner 有能力运行，不等于 `FILLED`。所有新增数值仍留空；slice D 为合并后 4090 执行，超出本 PR。实际缺行情、缺名单或运行失败仍保留带证据的 `DATA_GAP`。
 
@@ -198,4 +198,18 @@ Slice B pins：晚 14:55 START 入场 UNFILLED（无 baseline 回退）；买卖
 
 Q2 pin：预算 10,000、现金 10,050、信号价 10 → 暂定 1,000 股；next-open 10.1 → 重定量 900 股，费用 9.09，支出 9,099.09，现金 950.91。固定 1,000 股会因支出 10,110.10 拒单，是必须对照排除的 Q1 反例。slip 5/10/20bp 同样按实际成交价重定量。重定量后仍无足够现金可未成交；不隐式透支或改预算。
 
-H2 全部成交交换、严格同日到期、UNFILLED / 全现金合法、卖单到期清除并次日策略重评继续绑定。日内现金、持仓与阶段只在实际成交时更新，未来卖出不得资助更早买单。新语义分叉仍 PR comment + stop；Q2 已有明确人裁，无需重问。
+H2 全部成交交换、严格同日到期、UNFILLED / 全现金合法、卖单到期清除并次日策略重评继续绑定。clock 轴按日内事件排序，现金、持仓与阶段只在实际 eligible open 更新，未来卖出不得资助更早买单。slip 轴保留引擎默认决策/处理顺序，仅重算成交价、整手股数和含费账本。新语义分叉仍 PR comment + stop；Q2 已有明确人裁，无需重问。
+
+### Slice B 实现与隔离
+
+- `fullstrat_research_hooks.py`：显式配置、当日事件队列、START 可得时刻与 +1ms、连续竞价/限价/T+1；Q2 由回调在实际成交价调用引擎 sizer。
+- `fullstrat_research_book.py` / `fullstrat_research_v7.py`：单独研究重放循环，复用原策略 hooks/scanner/账本 primitives；Book pool/chase/step 与全部卖出、v7 trial/add/stop/timer 均覆盖。未成交卖单清除，实际持仓和已观测峰值留下。
+- `fullstrat_research_modeb.py`：日收入场同日无更晚 open 即未开仓，合法全现金；slip 在受冲击入场成本上重新评估退出，按受冲击卖价重算费用。入场日及后续缺分钟时，持仓按无冲击市场 close 估值并应用原 E-R6，不能把受冲击 fill price 当作 market mark。退出到期后以保留的行情历史重新评估后续 session，不续旧意图。oracle 不进入研究可执行矩阵。
+- `fullstrat_research_runners.py`：显式加载边界（沿用原 resolver / lake / qlib 读路径）；没有 module-global 替换/monkeypatch，没有生产入口反向依赖研究代码。受 #152 争用的 `csv_minute_backtest.py` / `csv_ledger.py` / `csv_simulate_loop.py` 均未改。
+- batch4 harness `--cells` 从固定矩阵选轴；默认仅 baseline。每个 cell 独立 `runner_artifacts/<cell_id>/`，记录 Q2/H2、参数与 git tip；实验目录已有产物即拒绝复用，`--force` 也不能将旧基线当实验。各引擎、各 cell 分别排名。
+- `production_default + 0` 直接调用原引擎；Book/v7 trades/equity bytes 及 ModeB ranking 对照通过。实验容量开关拒绝混入，capacity 仍为另轴。
+
+Data-free pins：`tests/test_fullstrat_research_hooks.py`。矩阵 `FILLABLE` 是实现能力；历史导出不重写，新增数值继续空白。
+
+
+研究循环额外对照：绕过默认委托，直接以零冲击调用 Book/v7 实验循环，经济 trades/equity 对齐原引擎；ModeB 实验零冲击全 ranking 对齐原引擎。两名单实例 pin 验证 ModeB 买日不卖（原 `_instance_path` 从 `buy_i+1` 开始）、T+1 卖出现金用于次日日收新入场；拒绝凭空加入 T+0 出场。每日 pool 预算保持一次分配，Q2 只在成交价重算整手股数，不重新分配该预算。
