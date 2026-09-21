@@ -3,7 +3,7 @@
 > **Status**: **v0.1 · draft（未评审、未人裁，GO 前禁编码）**。风险档：**中**——信号侧复用既有 chip/均线件；主要风险在成交时点语义重裁与 200 日筹码窗的数据装载。
 > **业务源**：[归档 plan-ma-chip-edge-strategy-2026-09-07.md](_archive/plans/plan-ma-chip-edge-strategy-2026-09-07.md) §2 锁定口径（Cerebro 原实现已随 2026-09-16 Cerebro 退场删除；对照产物为静态档案）；用户 2026-09-21 指示「把 ma_chip 移植也做完」。
 > **Main ship / 单行范围**：把 ma_chip_edge（均线+盈筹率边缘买入）移植到 CSV 向量化引擎为 `version11`：信号池导出器 + 卖点书 + 成交时点语义重裁；不复活 Cerebro。
-> **前序**：[workflow-codex-handoff.md](workflow-codex-handoff.md)、[engine-ashare-correctness.md](engine-ashare-correctness.md)、[strategy12 plan](plan-strategy12-jinrongyuan-2026-09-21.md)（同日另一书，互不依赖）。
+> **前序**：[workflow-codex-handoff.md](workflow-codex-handoff.md)、[engine-ashare-correctness.md](engine-ashare-correctness.md)、[plan-ma-infra-shared-2026-09-21.md](plan-ma-infra-shared-2026-09-21.md)（**前置：共享均线基础设施，本 plan 实施时直接消费**）、[strategy12 plan](plan-strategy12-jinrongyuan-2026-09-21.md)（同日另一书，互不依赖）。
 
 ---
 
@@ -51,6 +51,7 @@
 | **R5** | 池导出器拒绝默认 `stock_pool/`（9/10 先例）；数据走 resolvers，禁写死盘符。 |
 | **R6** | 时间因果：信号只含截至 D 的数据（PIT）；D-1 NaN ≠ 边缘，等号 fail-closed 沿用。 |
 | **R7** | UTF-8 无 BOM、NUL=0；新文件 ruff 零告警。 |
+| **R8** | MA/布林/周线一律消费共享基础设施 [ma_infra](plan-ma-infra-shared-2026-09-21.md)（`sma_asof`/`sma_series`/`bb_asof`/`weekly_sma_asof`）；导出器与书内不自写均线。 |
 
 ## 5) P\* 人裁点（评审重点；各附建议）
 
@@ -75,7 +76,7 @@
 
 | 刀 | 内容 | 完成定义（DoD） |
 |---|---|---|
-| **A** | `backtest/research/strategy11_rules.py` 纯函数：`edge_condition(closes, high, bb_upper, cyqk, weekly_ma)`、`exit_signal(t_close, prev_close, sma5)`、record/HELP_LOCK；`tests/test_strategy11_rules.py`（边缘/D-1 NaN/等号 fail-closed/买入日禁卖 pin） | 无引擎/chip import；归档 §2 逐条有 pin |
+| **A** | `backtest/research/strategy11_rules.py` 纯函数：**消费 [ma_infra](plan-ma-infra-shared-2026-09-21.md) 的 `sma_asof`/`sma_series`/`bb_asof`/`weekly_sma_asof`**；`edge_condition(closes, high, bb_upper, cyqk, weekly_ma)`、`exit_signal(t_close, prev_close, sma5)`、record/HELP_LOCK；`tests/test_strategy11_rules.py`（边缘/D-1 NaN/等号 fail-closed/买入日禁卖 pin） | 无引擎/chip import；归档 §2 逐条有 pin |
 | **B** | `scripts/data/export_strategy11_pool.py`：日线+周线+cyqk 200 日窗装载（复用 Rust `compute_cyqk_series` 与 TR store 缓存）、契约日 CSV、`--sample/--universe`、manifest | data-free 单测（合成 OHLC+股本）；拒绝 `stock_pool/`；`--help` 带 §2 要点 |
 | **C** | 引擎接线：买钟（按 P1 裁决）+ 卖书注册 `version11`（别名 `11/v11/version11`，`FORBIDDEN_DEFAULT_STOCK_POOL` 增项）+ AGENTS.md Research entries 增行、预留句改为「已移植（PR #N）」 | 引擎级测试：D+1 成交、skip FSM 映射、卖出日不重入；`--strategy 11 --help` 冒烟 |
 | **D** | 对照冒烟：seed=20240907 30 只同 universe vs 静态档案差异清单 + 全市场池一跑；结果记 reviews（数字不入库） | 差异清单三分类（成交价/费用/skip 语义）成文 |
