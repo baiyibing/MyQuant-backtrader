@@ -37,14 +37,32 @@
 
 ```bash
 # 单日增量（TR 截面 + TR BB）
-D:/anaconda3/envs/vanna311/python.exe scripts/data/compute_turnover_resistance_bands.py --date YYYYMMDD
+D:/anaconda3/envs/vanna311/python.exe scripts/tr/compute_turnover_resistance_bands.py --date YYYYMMDD
 
 # 仅补算 TR BB（Step 1-2 已完成）
-D:/anaconda3/envs/vanna311/python.exe scripts/data/compute_turnover_resistance_bands.py --date YYYYMMDD --backfill-bands-only
+D:/anaconda3/envs/vanna311/python.exe scripts/tr/compute_turnover_resistance_bands.py --date YYYYMMDD --backfill-bands-only
 
 # 历史回填（默认 60 日历日 walk-back，再批量 TR BB）
-D:/anaconda3/envs/vanna311/python.exe scripts/data/backfill_turnover_resistance_bands.py --end-date YYYYMMDD --days 60 --skip-existing
+D:/anaconda3/envs/vanna311/python.exe scripts/tr/backfill_turnover_resistance_bands.py --end-date YYYYMMDD --trading-days 60 --skip-existing
 ```
+
+### 4090 research window refresh (Strategy10 / Source-B)
+
+Host TR store stale or `tr_bb_*` all-NaN → `export_strategy10_pool.py` fail-closes on empty `require_bands=True` cross-section. Research-only helper (does **not** write `stock_pool/`, does **not** touch production fill/scan/fee):
+
+```bash
+python scripts/data/refresh_tr_store_window.py --start 20260825 --end 20260909 --store-parquet E:/stock_data/turnover_resistance_daily.parquet
+
+python scripts/data/export_strategy10_pool.py --start 20260825 --end 20260909 --out-dir D:/exports/s10_tr_bb1000_20260825_20260909 --store-parquet E:/stock_data/turnover_resistance_daily.parquet
+```
+
+Notes:
+
+- Prefer Rust path via `compute_turnover_resist` + `TurnoverResistanceStore` (imports existing libs; no production hot-path edits).
+- If `tr_bb_*` NaN on dates that already have TR rows: add `--bands-only` (widen `--start`/`--end` if needed).
+- Float / free-float files normally sit beside the lake (`E:/stock_data/float_shares.parquet`, `E:/stock_data/free_float_shares.parquet`). `full_market_canonical_resist.py` hard-codes cwd `stock_data/float_shares.parquet` — copy/symlink from `E:/stock_data/`, or pass `--float-shares` / `--free-float-shares`.
+- Non-zero exit if the window still has 0 days with `require_bands=True` rows after refresh.
+
 
 ## 源码
 
@@ -52,5 +70,6 @@ D:/anaconda3/envs/vanna311/python.exe scripts/data/backfill_turnover_resistance_
 |------|------|
 | `oskh_data/turnover_resistance_store.py` | Parquet UPSERT + 查询 + 批量 TR BB 写回 |
 | `backtest/chip_turnover_resistance_bands.py` | `tr_bollinger_bands()` / `compute_tr_bb_columns()` |
-| `scripts/data/compute_turnover_resistance_bands.py` | 盘后单日流水线 |
-| `scripts/data/backfill_turnover_resistance_bands.py` | 历史回填 |
+| `scripts/tr/compute_turnover_resistance_bands.py` | 盘后单日流水线 |
+| `scripts/tr/backfill_turnover_resistance_bands.py` | 历史回填 |
+| `scripts/data/refresh_tr_store_window.py` | Research-only 4090 窗口刷新 + TR BB（Strategy10） |
