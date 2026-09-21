@@ -31,13 +31,13 @@ from backtest.research.csv_ledger import (  # noqa: E402
     DEFAULT_TOTAL_CASH,
     PEAK_GAP_MIN,
     SimState,
-    chase_decision,
-    execute_buy,
+    chase_decision as chase_decision,
+    execute_buy as execute_buy,
     finish_pending_chase,
-    queue_limit_up_chase,
+    queue_limit_up_chase as queue_limit_up_chase,
     hit_limit_down,
     hit_limit_up,
-    last_close_mark,
+    last_close_mark as last_close_mark,
     peak_gap_blocks,
     _sell,
     _ymd,
@@ -45,7 +45,7 @@ from backtest.research.csv_ledger import (  # noqa: E402
     apply_exdiv_economics,
 )
 
-from backtest.research.ashare_exdiv_economics import EconomicLookup, ExDivEconomics
+from backtest.research.ashare_exdiv_economics import EconomicLookup, ExDivEconomics  # noqa: E402
 
 from backtest.research.exdiv_map import k_for, load_exdiv_ratios, mapped_prev_close  # noqa: E402
 from backtest.research.ashare_session import defer_sell_at_limit, t1_sellable  # noqa: E402
@@ -55,9 +55,9 @@ from backtest.research.csv_common import (  # noqa: E402
     WARMUP_DAYS,
     book_limit_prices,
     build_calendar,
-    _named_limits,
-    _pool_names_asof,
-    _progress,
+    _named_limits as _named_limits,
+    _pool_names_asof as _pool_names_asof,
+    _progress as _progress,
 )
 from backtest.research.csv_pool import (  # noqa: E402
     load_pool_day_map,
@@ -83,39 +83,43 @@ from backtest.research.csv_artifacts import (  # noqa: E402
     write_run_artifacts,
 )
 from backtest.research.ashare_bars import (  # noqa: E402
-    AM_CLOSE,
+    AM_CLOSE as AM_CLOSE,
     AM_OPEN,
-    CACHE_ROOT,
+    CACHE_ROOT as CACHE_ROOT,
     MINUTE_LAKE_END,
-    PM_CLOSE,
-    PM_OPEN,
+    PM_CLOSE as PM_CLOSE,
+    PM_OPEN as PM_OPEN,
     annotate_session as _annotate,
     book_frames_from_compact,
     load_daily_ohlc,
     load_minute_bars,
     load_minute_from_lake as _load_minute_from_lake,
-    minute_cache_path,
+    minute_cache_path as minute_cache_path,
     read_lake_minute_ohlc as _read_one_minute,
-    read_minute_cache,
-    write_minute_cache,
+    read_minute_cache as read_minute_cache,
+    write_minute_cache as write_minute_cache,
     _load_minute_compact,
 )
 from backtest.research.csv_daily_loader import (  # noqa: E402
     warn_stale_period_env,
     warmup_start,
 )
-from oskh_data.symbol_format import to_partition_key  # noqa: E402
+from oskh_data.symbol_format import to_partition_key as to_partition_key  # noqa: E402
 from backtest.research.strategy3_rules import reserve_step_minute  # noqa: E402
 from backtest.research.csv_simulate_loop import (  # noqa: E402
     append_equity_and_eod_marks,
     init_sim_state,
     prepare_strategy_hooks,
     run_chase_due_day,
+    run_eod_exits,
     run_pool_buys_day,
     run_step_adds_day,
 )
 
 from backtest.research.ashare_volume_cap import VolumeCap, VolumeLookup  # noqa: E402
+
+# Preserve historical loader aliases used by callers and tests.
+_ = (_annotate, _load_minute_from_lake, _read_one_minute)
 
 BUY_HM = 14 * 60 + 55
 
@@ -508,6 +512,12 @@ def _chase_quotes(day_df: pd.DataFrame) -> Optional[tuple[float, float]]:
     return open_px, float(early["close"].iloc[-1])
 
 
+def _open_quote_for(day_df: pd.DataFrame):
+    """Exact 09:30 first open; a missing opening bar never borrows a later row."""
+    hit = day_df.loc[day_df["hm"] == AM_OPEN]
+    return None if hit.empty else hit.iloc[0]
+
+
 def simulate(
     minute_bars: dict[str, pd.DataFrame],
     daily_bars: dict[str, pd.DataFrame],
@@ -589,10 +599,17 @@ def simulate(
     qlib_limit_pct = hooks.get("qlib_limit_pct")
     limit_up_chase = bool(hooks.get("limit_up_chase", True))
     forbid_all_trade_at_limit = bool(hooks.get("forbid_all_trade_at_limit", False))
+    minute_open = bool(hooks.get("minute_open"))
+    if minute_open:
+        for code, frame in minute_bars.items():
+            if "volume" not in frame:
+                raise ValueError(f"{hooks['name']} requires minute volume for {code}; use the lake volume path")
+    hold_modes = {}
     day_spans = {code: build_day_spans(df) for code, df in minute_bars.items()}
 
     for i, day in enumerate(calendar):
         ds = _ymd(day)
+        day_trade_start = len(st.trades)
         if st.exdiv_economics is not None:
             st.cash += st.exdiv_economics.settle(ds)
         names = names_asof(ds)
@@ -644,6 +661,31 @@ def simulate(
                 if getattr(pos, "ride_with", None) is not None:
                     continue
                 n_days = i - pos.entry_idx
+                if minute_open:
+                    # Only yesterday's pending EOD decision can sell, once at open.
+                    if not pos.pending_exit or not t1_sellable(calendar[pos.entry_idx].date(), day.date()):
+                        continue
+                    opening = _open_quote_for(day_m)
+                    if opening is None:
+                        continue
+                    px = float(opening["open"])
+                    volume = float(opening["volume"])
+                    if not np.isfinite(px) or px <= 0:
+                        continue
+                    if not np.isfinite(volume) or volume <= 0:
+                        st.stats["defer_sell_volume"] += 1
+                        continue
+                    if defer_sell_at_limit(px, limits):
+                        st.stats["defer_sell_limit_down"] += 1
+                        continue
+                    before = len(st.trades)
+                    _sell(st, code, pos, px, day, pos.pending_exit,
+                          bucket_id=AM_OPEN, at=AM_OPEN - 1, day_i=i,
+                          hm=AM_OPEN, price_rule="minute_pending_next_open")
+                    if any(t["side"] == "SKIP" and t["reason"].startswith("skip_volume")
+                           for t in st.trades[before:]):
+                        st.stats["defer_sell_volume"] += 1
+                    continue
                 # Resolve dates here; only the eligibility bool reaches the scanner.
                 reserve_state = {"reserved": bool(pos.reserved)}
                 idx, px, reason, new_peak, new_peak_hm = scan_held_day(
@@ -711,8 +753,11 @@ def simulate(
             eligible = frame.loc[(frame["hm"] >= earliest) & (frame["hm"] <= target)]
             return None if eligible.empty else int(eligible["hm"].iloc[-1])
 
-        chase_volume = (lambda code: _volume_bucket_for(code, CHASE_HM, AM_OPEN))
-        pool_volume = (lambda code: _volume_bucket_for(code, BUY_HM, 14 * 60 + 30))
+        def chase_volume(code):
+            return _volume_bucket_for(code, CHASE_HM, AM_OPEN)
+
+        def pool_volume(code):
+            return AM_OPEN if minute_open else _volume_bucket_for(code, BUY_HM, 14 * 60 + 30)
 
         def _chase_quotes_for(code: str):
             mdf = minute_bars.get(code)
@@ -759,12 +804,23 @@ def simulate(
             prev_rows = _previous_rows(ddf, day)
             if prev_rows.empty:
                 return None
-            px = _buy_px(day_m)
-            if px is None or px <= 0:
+            if minute_open:
+                opening = _open_quote_for(day_m)
+                if opening is None:
+                    return None
+                volume = float(opening["volume"])
+                if not np.isfinite(volume) or volume <= 0:
+                    st.stats["skip_buy_volume"] += 1
+                    return None
+                px = float(opening["open"])
+            else:
+                px = _buy_px(day_m)
+            if px is None or px <= 0 or (minute_open and not np.isfinite(px)):
                 return None
             closes = prev_rows["close"].astype(float).tolist()
             return px, closes
 
+        volume_skips = int(st.stats.get("skip_volume_unavailable", 0)) + int(st.stats.get("skip_volume_cap", 0))
         run_pool_buys_day(
             st,
             pending_chase,
@@ -778,6 +834,9 @@ def simulate(
             buy_gate=buy_gate,
             buy_quote_for=_pool_quote_for,
             volume_bucket_for=pool_volume if st.volume_cap is not None else None,
+            volume_at=AM_OPEN - 1 if minute_open else None,
+            sold_today={t["code"] for t in st.trades[day_trade_start:] if t["side"] == "SELL"}
+            if hooks.get("skip_sold_today") else None,
             sizing=hooks.get("sizing", "daily_quota"),
             name_budget=hooks.get("name_budget", 1_000_000.0),
             ration=hooks.get("ration", "file_order"),
@@ -793,6 +852,11 @@ def simulate(
             name_lot_budget=hooks.get("name_lot_budget"),
             index_blocks_add=hooks.get("index_blocks_add", True),
         )
+        if minute_open:
+            st.stats["skip_buy_volume"] += (
+                int(st.stats.get("skip_volume_unavailable", 0))
+                + int(st.stats.get("skip_volume_cap", 0)) - volume_skips
+            )
         run_step_adds_day(
             st,
             day_i=i,
@@ -811,6 +875,8 @@ def simulate(
             step_add=hooks.get("step_add"),
         )
 
+        run_eod_exits(st, day=day, ds=ds, bars=daily_bars, eod_exit=hooks.get("eod_exit"),
+                      hold_modes=hold_modes, exdiv=exdiv)
         append_equity_and_eod_marks(
             st,
             ds=ds,
@@ -855,6 +921,9 @@ def run(
     qlib_day_root: Optional[Path] = None,
 ) -> SimState:
     warn_stale_period_env()
+    volume_required = normalize_csv_strategy(strategy) == "version11"
+    if volume_required and minute_source != "lake":
+        raise ValueError("version11 requires lake minute volume; qlib_1min frames do not carry it")
     if minute_source == "lake" and end > MINUTE_LAKE_END:
         print(
             f"[warn] --end {end} past minute lake {MINUTE_LAKE_END}; "
@@ -917,6 +986,7 @@ def run(
             use_cache=use_cache,
             rebuild_cache=rebuild_cache,
             status=cache_status,
+            **({"include_volume": True} if volume_required else {}),
         )
     t_minute = time.perf_counter() - t_minute
     print(

@@ -14,12 +14,13 @@ Standalone research-face fork (see [README.md](README.md)). Since migration S2 (
 - topk_app_dropout（新策略，不改策略 7）：`backtest/research/csv_minute_backtest_topk_app_dropout.py`；名单可选先 `scripts/data/export_topk_app_dropout_pool.py`。禁止 `register` 进 1–10 BOOKS。
 - 9 底量超顶量：`scripts/data/export_strategy9_pool.py` 写名单，再 `--strategy version9 --pool-dir`（拒绝 `stock_pool/`）
 - 10 换手阻力 / 源 B：`scripts/data/export_ta_pool.py` 写名单（湖当日有 K；不做 TopK），再 `--strategy version10 --pool-dir`（卖点同 6；拒绝 `stock_pool/`）
+- 11 ma_chip（已移植，本 PR）：`scripts/data/export_strategy11_pool.py` 写 `<out-dir>/pool/`，再日线 / 分钟 `--strategy version11 --pool-dir <out-dir>/pool`（拒绝 `stock_pool/`）。D 后首 bar T 且 ≤4 自然日；周线显式 prefix；日线契约收盘 / 分钟 09:30 open；volume=A 未完成桶买 skip / pending 卖 defer，禁追买。分钟要求 lake volume 并绕过旧无量缓存；D 静态档案对照仍待跑。
 - 统一卖出规则网格 · 模式 A：`scripts/research/run_unified_exit_modea.py`（库 `backtest/research/unified_exit_modea.py`；产出 `backtest_output/unified_exit_modea/`；提案 `docs/backtest/stock-backtest-unified-exit-proposal-2026-09-17.md`）
 - 统一卖出规则网格 · 模式 B：`scripts/research/run_unified_exit_modeb.py`（默认 P1=A 窄网格；Q38=A 分钟 oracle；产出独立目录 `backtest_output/unified_exit_modeb/`）。
 - 名单：`backtest/research/csv_pool.py`（与 1.3 `lebs/csv/universe.py` 同口径）
 - 不要 `python -m backtest.lebs`（包不在本仓；LEBS 只在 1.3，且 LEBS ≠ 真栈）。Cerebro 已退场，禁止复活。
 - 向量化撮合核收口 plan（已人裁 GO：A/A/C/A/A；范围 A→B→C，D 后置）：`docs/backtest/plan-ashare-engine-refactor-2026-09-18.md` §0.3 / §5。热路径固定清单由 `tests/test_ashare_simulate_import_fence.py` 锁定，禁止扩成 research 全目录扫描。
-- Cerebro / Rolling 已退场（2026-09-16）；chip / ma_chip 对照产物为静态档案，代码路径已删。ma_chip 默认归档；version11 CSV 移植须另开计划并重裁成交时点语义。
+- Cerebro / Rolling 已退场（2026-09-16）；chip / ma_chip 对照产物为静态档案，代码路径已删。version11 CSV 已按 [独立计划](docs/backtest/plan-version11-machip-csv-2026-09-21.md) 移植（本 PR，A–C），成交时点与 volume=A 已人裁；框架验证非已验证多头，D 对照未完成。
 - presets 与 1.3 契约：`tests/test_presets_cross_repo_snapshot.py`（勿静默漂移）。
 
 ## Python

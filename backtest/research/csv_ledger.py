@@ -14,13 +14,13 @@ import pandas as pd
 
 from backtest.research.ashare_fees import (
     COMMISSION,
-    QLIB_CLOSE_COST,
-    QLIB_MIN_COST,
-    QLIB_OPEN_COST,
+    QLIB_CLOSE_COST as QLIB_CLOSE_COST,
+    QLIB_MIN_COST as QLIB_MIN_COST,
+    QLIB_OPEN_COST as QLIB_OPEN_COST,
     trade_commission,
 )
 from backtest.research.ashare_fill_clock import session_phase as _session_phase
-from backtest.research.ashare_session import LIMIT_EPS, hit_limit_down, hit_limit_up
+from backtest.research.ashare_session import LIMIT_EPS, hit_limit_down as hit_limit_down, hit_limit_up
 from backtest.research.ashare_volume_cap import VolumeCap
 from backtest.research.ashare_exdiv_economics import ExDivEconomics
 from backtest.research.market_layer import limit_prices
@@ -49,8 +49,6 @@ def _empty_stats() -> dict:
         "add_lots": 0,
         "skip_no_bar": 0,
         "skip_buy_gate": 0,
-        "skip_add_loser": 0,
-        "skip_index_gate": 0,
         "skip_sma_warmup": 0,
         "sell_stop": 0,
         "sell_trail": 0,
@@ -241,8 +239,9 @@ def execute_buy(
     ride_with: Optional[int] = None,
     is_step: bool = False,
     bucket_id: int | None = None,
+    at: int | None = None,
 ) -> bool:
-    """常规/追买共用：整百股 + force_min + 账本佣金。成功返回 True。"""
+    """常规/追买共用；open 调用方显式传 at，默认仍为 bucket 收盘。"""
     if px <= 0:
         return False
     shares, supp = _buy_size(per, px)
@@ -254,7 +253,9 @@ def execute_buy(
         return False
     if st.volume_cap is not None:
         key = (code, _ymd(day), bucket_id)
-        shares, skip = st.volume_cap.clamp(key, bucket_id, shares, buy=True)
+        shares, skip = st.volume_cap.clamp(
+            key, bucket_id if at is None else at, shares, buy=True,
+        )
         if not shares:
             _volume_skip(st, code, px, day, skip, bucket_id)
             return False

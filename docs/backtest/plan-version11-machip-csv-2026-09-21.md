@@ -1,7 +1,7 @@
 # Plan: version11 ma_chip CSV 移植（2026-09-21）
 
 > **Status**: **v1.0 · ✅ 已人裁 GO（2026-09-21，Asia/Shanghai）**——用户裁定 P0–P7 + V2/V9 **全按共识建议**：P0=a 框架移植先行（--help 印「非已验证多头」，全市场统计并行挂 strategy12 后）、P1=a/b 双跑分钟 09:30 为准（日线保持契约收盘）、P2=日线 pending_exit 原样、P3=独立导出器禁读 store cyqk_t、P4=seed-30 parity 主交付+消融轴对照、P5/P6/P7=沿归档、V2=契约日 T 该股首根 bar ≤4 自然日、V9=全市场滤 ST 排 688。
-> **实施进度（2026-09-21）**：A/B 已实现并有 data-free pins（稳定化门禁 106 passed）；C 开盘 volume 分叉已按显式人裁 **A / 严格可得性** 解阻，待注册和引擎回归；D 未跑。见 [handoff 续作状态](handoff-version11-codex-impl-2026-09-21.md) 与 [人裁确认](https://github.com/baiyibing/MyQuant-backtrader/pull/152#issuecomment-5756590614)。本行不代表整项已实施。
+> **实施进度（2026-09-21）**：**✅ 已实施（本 PR，A–C）**；B 已稳定化并先推送 `9133ca8`；C 已注册 / 双引擎接线并编码显式人裁 **volume=A / 严格可得性**。指定四文件 **84 passed**；全量 **1480 passed, 2 skipped, 24 deselected**；touched Python Ruff、四个 data-free 路径门禁、导出器 / 双 CLI help 全绿。**D 宿主湖 / Rust pyd / 静态档案与全市场对照未跑**，不代表整项 parity 已验收。见 [handoff 续作状态与硬坑](handoff-version11-codex-impl-2026-09-21.md) 与 [人裁确认](https://github.com/baiyibing/MyQuant-backtrader/pull/152#issuecomment-5756590614)。禁自动 merge。
 > **评审链**：主笔对抗层（F1–F8）→ 四稿 fan-out（codex/kimi/cursor/claude 全 rc=0，5 组实验）→ [merge-consensus V1–V17](../architecture/reviews/2026-09-21/plan-version11-machip-csv/merge-consensus.md)（分歧记录：宽派被严派反对，采严派全修）。实施走 [Codex 交接工作流](workflow-codex-handoff.md)（门槛：ma_infra PR #150 已合入）。
 > **业务源**：[归档 plan-ma-chip-edge-strategy-2026-09-07.md](_archive/plans/plan-ma-chip-edge-strategy-2026-09-07.md) §2 锁定口径（Cerebro 原实现已随 2026-09-16 Cerebro 退场删除；对照产物为静态档案）；用户 2026-09-21 指示「把 ma_chip 移植也做完」。
 > **Main ship / 单行范围**：把 ma_chip_edge（均线+盈筹率边缘买入）移植到 CSV 向量化引擎为 `version11`：信号池导出器 + 卖点书 + 成交时点语义重裁；不复活 Cerebro。

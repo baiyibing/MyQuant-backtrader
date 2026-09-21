@@ -6,11 +6,16 @@
 
 ## 续作状态（2026-09-21）
 
-- docs-first 两裁决：`4729628`；A 纯规则 / 两段 FSM：`e560a44`；B 导出器、显式 prefix 周线与 public asof 股本薄壳已实现，data-free pins 通过。
+- docs-first 两裁决：`4729628`；A 纯规则 / 两段 FSM：`e560a44`；B 稳定化与 volume A 文档：`9133ca8`（已先提交并推送）；**A–C ✅ 已实施（本 PR），D 未跑**。
 - 导出产物布局：`--out-dir/pool/YYYYMMDD.csv`，引擎应传 `--pool-dir <out-dir>/pool`；`rejected.csv` 与 `manifest.json` 放 `out-dir`，不混进严格只允许日期 CSV 的池目录。已有非空池拒绝覆盖，避免重跑残留旧日期信号。
-- **C 已解阻，待注册 / 接线**：[显式人裁 A](https://github.com/baiyibing/MyQuant-backtrader/pull/152#issuecomment-5756590614) 覆盖此前 STOP。保留 [δ5 §2.2](plan-industry-align-p3-d5-volume-cap-2026-09-19.md) 严格可得性：开盘 `attempt_at=hm-1`，`VolumeCap.clamp` 要求 `bucket <= at`；09:30 桶未完成则买 skip / pending 卖 defer。否决 v11 同分钟完整量仍按开盘价成交的例外，不改既有书 / 生产 cap 默认。C 必须新增 data-free 开盘未完成桶 skip/defer pin。
+- **C 已完成注册 / 双引擎接线**：[显式人裁 A](https://github.com/baiyibing/MyQuant-backtrader/pull/152#issuecomment-5756590614) 覆盖此前 STOP。保留 [δ5 §2.2](plan-industry-align-p3-d5-volume-cap-2026-09-19.md) 严格可得性：开盘 `attempt_at=569`、`bucket=570`，`VolumeCap.clamp` 要求 `bucket <= at`；09:30 桶未完成则买 skip / pending 卖 defer。`execute_buy(at=None)` 默认仍按 bucket 收盘，v11 显式传 569；`_sell` 沿用已有 at 参数。未改 cap 实现 / 默认，也未授权同分钟完整量近似。
 - B 稳定化门禁：规则 / 导出器 / ma_infra / 注册表合计 **106 passed**；A/B touched Python ruff 全绿。解释器显式使用 `/workspace/vanna312/bin/python3`。
-- `apply()` 显式 `limit_up_chase=False` 与 chase pending 为空的**引擎级**回归仍待 C，不能用 A 的 record 参数 pin 替代。AGENTS.md 的“已移植”回写、双引擎 `--strategy 11 --help` 同样待 C；plan 未标全量完成。未跑宿主湖 / Rust pyd / 静态档案对照（D）。
+- `apply()` 原始返回显式 `limit_up_chase=False`，两引擎实测涨停买被跳过后实际 chase dict 为空；EOD 钩子在买循环之后，SMA5 含 T，当日只写 pending，T+1 才可卖；sold-today 过滤阻止卖出日重入。日线沿既有 pending 开盘；分钟只取精确 09:30 首根 open，缺开盘 bar 不借后续分钟，跌停 / 零量 / cap 未完成均保持 pending 到次日。
+- **数据接线坑**：旧分钟 loader / cache 会丢 volume。v11 显式 `include_volume=True` 从配置湖读取，保留零量行供计数、绕过旧无量缓存；缺文件或量列即失败。当前 qlib_1min frame 不含 volume，v11 拒用；其他书的加载 / 缓存默认保持原样。
+- **容量结果解释**：按 A，启用 participation cap 时精确 09:30 open 无法使用同桶完成量，因此该买尝试会被消耗、已有 pending 卖继续等待；不能把零成交解释为无信号，也不能偷偷改到 09:31 / 收盘补成交。未启用 cap 时，正量开盘按原可选容量合同成交。
+- `tests/test_strategy11_engine.py` 已 pin 未完成桶买 skip / 卖 defer（查量回调不调用，现金 / 股数 / cap.used 不变）、两钟成交价、EOD 买日时序、两段 FSM、涨停 / 一字 / 零量 / 缺开盘、跌停 defer、sold-today、三别名与池篱笆。既有 cap-off 字节快照仍绿；HELP_LOCK 旧书未改。
+- **最终门禁**（显式 `/workspace/vanna312/bin/python3`）：指定四文件 **84 passed**；全量 `-m "not production and not benchmark" tests/` **1480 passed, 2 skipped, 24 deselected**（1 条既有非 canonical TR window 警告）；全部 touched Python Ruff 全绿；四个 data-free 路径/桥接门禁全绿；导出器及双引擎 `--strategy 11 --help` 冒烟通过；UTF-8 无 BOM、NUL=0。
+- AGENTS.md 已回写 A–C 移植状态。**未跑宿主湖 / Rust pyd / seed-30 静态档案与全市场敏感性（D）**，不宣称收益 / parity 已验收；不合并 PR。
 
 ## §0 硬边界（人裁已定，勿越）
 

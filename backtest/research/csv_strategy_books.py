@@ -24,6 +24,7 @@ from backtest.research import (
     strategy8_3_rules,
     strategy9_rules,
     strategy10_rules,
+    strategy11_rules,
     strategy_topk_dropout_rules,
     strategy_topk_score_exit_rules,
 )
@@ -44,7 +45,7 @@ HELP_LOCK_V10 = strategy10_rules.HELP_LOCK
 HELP_LOCK_TOPK = strategy_topk_dropout_rules.HELP_LOCK
 HELP_LOCK_SCORE_EXIT = strategy_topk_score_exit_rules.HELP_LOCK
 
-FORBIDDEN_DEFAULT_STOCK_POOL = frozenset({"version9", "version10"})
+FORBIDDEN_DEFAULT_STOCK_POOL = frozenset({"version9", "version10", "version11"})
 
 
 @dataclass(frozen=True)
@@ -162,6 +163,7 @@ def add_csv_strategy_arg(ap: argparse.ArgumentParser) -> None:
     names = csv_strategy_names()
     ap.add_argument(
         "--strategy",
+        type=normalize_csv_strategy,
         choices=names,
         required=True,
         help="required sell book (" + ", ".join(names) + "); no default",
@@ -364,15 +366,16 @@ def resolve_research_pool_dir(
     *,
     repo: str | Path,
 ) -> Path:
-    """1–6/8 default to ``stock_pool/``; version9/10 refuse that tree."""
+    """1–6/8 default to ``stock_pool/``; version9/10/11 refuse that tree."""
     name = normalize_csv_strategy(strategy)
     default = Path(repo) / "stock_pool"
     chosen = default if pool_dir is None else Path(pool_dir)
     if name in FORBIDDEN_DEFAULT_STOCK_POOL and is_repo_stock_pool(
         chosen, repo=Path(repo)
     ):
+        exporter = "export_strategy11_pool.py" if name == "version11" else "export_strategy9_pool.py"
         raise SystemExit(
-            f"{name} requires --pool-dir from export_strategy9_pool.py; "
+            f"{name} requires --pool-dir from {exporter}; "
             f"refusing stock_pool/: {chosen}"
         )
     return chosen
@@ -743,6 +746,24 @@ def _run_kwargs_version10(args) -> dict:
     return {"strategy": "version10", **strategy6_kwargs_from_args(args)}
 
 
+def _apply_version11(*, take_profit=None, record_params=None, **_) -> dict:
+    return {
+        "stop_pct": None,
+        "take_profit": strategy11_rules.take_profit_reason if take_profit is None else take_profit,
+        "record_params": strategy11_rules.record_strategy11_params if record_params is None else record_params,
+        "limit_up_chase": False,
+        "minute_open": True,
+        "eod_exit": strategy11_rules.eod_exit,
+        "skip_sold_today": True,
+    }
+
+
+def _run_kwargs_version11(args) -> dict:
+    if getattr(args, "stop_pct", None) is not None:
+        raise SystemExit("--stop-pct is not supported for version11")
+    return {"strategy": "version11"}
+
+
 def _apply_topk_dropout(
     *,
     stop_pct: Optional[float] = None,
@@ -1094,6 +1115,18 @@ register(
     )
 )
 
+register(
+    CsvStrategyBook(
+        name="version11",
+        tag=strategy11_rules.BOOK_TAG,
+        aliases=("11", "v11", "version11"),
+        allow_add=strategy11_rules.ALLOW_ADD,
+        peak_gap_min=strategy11_rules.PEAK_GAP_MIN,
+        help_lock=strategy11_rules.HELP_LOCK,
+        apply=_apply_version11,
+        run_kwargs=_run_kwargs_version11,
+    )
+)
 register(
     CsvStrategyBook(
         name="topk_dropout",

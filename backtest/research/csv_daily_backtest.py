@@ -21,14 +21,10 @@ import argparse
 import os
 import sys
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Optional
 
-import numpy as np
 import pandas as pd
-import pyarrow.compute as pc
-import pyarrow.parquet as pq
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, REPO)
@@ -38,8 +34,8 @@ from backtest.research.csv_strategy_books import (  # noqa: E402
     HELP_LOCK_V8,
     HELP_LOCK_V9,
     add_csv_backtest_common_args,
-    add_csv_strategy_arg,
-    add_strategy6_ratio_args,
+    add_csv_strategy_arg as add_csv_strategy_arg,
+    add_strategy6_ratio_args as add_strategy6_ratio_args,
     apply_csv_strategy,
     csv_run_kwargs_from_args,
     engine_book,
@@ -73,20 +69,20 @@ from backtest.research.csv_ledger import (  # noqa: E402
     _buy_size,
     _sell,
     _ymd,
-    chase_decision,
-    chase_explained,
-    execute_buy,
+    chase_decision as chase_decision,
+    chase_explained as chase_explained,
+    execute_buy as execute_buy,
     finish_pending_chase,
     hit_limit_down,
     hit_limit_up,
-    last_close_mark,
+    last_close_mark as last_close_mark,
     peak_gap_blocks,
-    queue_limit_up_chase,
+    queue_limit_up_chase as queue_limit_up_chase,
     rescale_position,
     apply_exdiv_economics,
     resolve_limit_prices,
 )
-from backtest.research.ashare_exdiv_economics import EconomicLookup, ExDivEconomics
+from backtest.research.ashare_exdiv_economics import EconomicLookup, ExDivEconomics  # noqa: E402
 
 from backtest.research.exdiv_map import (  # noqa: E402
     k_for,
@@ -101,15 +97,16 @@ from backtest.research.csv_common import (  # noqa: E402
     book_limit_prices,
     build_calendar,
     day_bar_and_prev_closes,
-    _named_limits,
-    _pool_names_asof,
-    _progress,
+    _named_limits as _named_limits,
+    _pool_names_asof as _pool_names_asof,
+    _progress as _progress,
 )
 from backtest.research.csv_simulate_loop import (  # noqa: E402
     append_equity_and_eod_marks,
     init_sim_state,
     prepare_strategy_hooks,
     run_chase_due_day,
+    run_eod_exits,
     run_pool_buys_day,
     run_step_adds_day,
 )
@@ -121,13 +118,13 @@ from backtest.research.market_layer import (  # noqa: E402
     limit_pct,
     limit_prices,
     round_fen,
-    utc_ms_range,
+    utc_ms_range as utc_ms_range,
 )
 from backtest.research.csv_artifacts import (  # noqa: E402
     summarize,
     write_run_artifacts,
 )
-from backtest.research.ashare_bars import load_daily_ohlc
+from backtest.research.ashare_bars import load_daily_ohlc  # noqa: E402
 from backtest.research.csv_daily_loader import (  # noqa: E402
     warmup_start,
     warn_stale_period_env,
@@ -158,7 +155,7 @@ _ = (
     limit_prices,
     round_fen,
 )
-from common.infra.data_root import resolve_period_root  # noqa: E402
+from common.infra.data_root import resolve_period_root as resolve_period_root  # noqa: E402
 
 HELP_LOCK = """
 日线近似口径（相对分钟保真版的唯一失真来源）：
@@ -295,9 +292,11 @@ def simulate(
     limit_up_chase = bool(hooks.get("limit_up_chase", True))
     limit_down_pending = bool(hooks.get("limit_down_pending", True))
     forbid_all_trade_at_limit = bool(hooks.get("forbid_all_trade_at_limit", False))
+    hold_modes = {}
 
     for i, day in enumerate(calendar):
         ds = _ymd(day)
+        day_trade_start = len(st.trades)
         if st.exdiv_economics is not None:
             st.cash += st.exdiv_economics.settle(ds)
         names = names_asof(ds)
@@ -483,6 +482,8 @@ def simulate(
             add_gate=hooks.get("add_gate"),
             name_lot_budget=hooks.get("name_lot_budget"),
             index_blocks_add=hooks.get("index_blocks_add", True),
+            sold_today={t["code"] for t in st.trades[day_trade_start:] if t["side"] == "SELL"}
+            if hooks.get("skip_sold_today") else None,
         )
         run_step_adds_day(
             st,
@@ -501,6 +502,8 @@ def simulate(
             step_add=hooks.get("step_add"),
         )
 
+        run_eod_exits(st, day=day, ds=ds, bars=bars, eod_exit=hooks.get("eod_exit"),
+                      hold_modes=hold_modes, exdiv=exdiv)
         append_equity_and_eod_marks(
             st,
             ds=ds,

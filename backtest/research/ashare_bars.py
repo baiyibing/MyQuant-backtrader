@@ -325,7 +325,7 @@ def annotate_session(frame):
     return out.loc[_in_session(out["hm"].to_numpy())]
 
 
-def read_lake_minute_ohlc(code: str, root: Path, start: str, end: str):
+def read_lake_minute_ohlc(code: str, root: Path, start: str, end: str, *, include_volume: bool = False):
     """Book-engine lake frame: DatetimeIndex + open/high/low/close/ymd/hm."""
     import numpy as np
     import pandas as pd
@@ -336,14 +336,20 @@ def read_lake_minute_ohlc(code: str, root: Path, start: str, end: str):
 
     path = Path(root) / f"symbol={to_partition_key(code)}" / "data.parquet"
     if not path.is_file():
+        if include_volume:
+            raise FileNotFoundError(path)
         return None
     t0, t1 = utc_ms_range(start, end)
     try:
         columns = ["time", "open", "high", "low", "close"]
         has_volume = "volume" in pq.read_schema(path).names
+        if include_volume and not has_volume:
+            raise ValueError(f"minute volume required: {path}")
         table = pq.read_table(path, columns=columns + (["volume"] if has_volume else []))
         table = table.filter((pc.field("time") >= t0) & (pc.field("time") <= t1))
     except Exception:
+        if include_volume:
+            raise
         return None
     if table.num_rows == 0:
         return None
@@ -366,13 +372,16 @@ def read_lake_minute_ohlc(code: str, root: Path, start: str, end: str):
         index=utc.tz_localize(None),
     ).astype({"open": np.float64, "high": np.float64, "low": np.float64, "close": np.float64, "hm": np.int64})
     out = out[~out.index.duplicated(keep="last")].sort_index()
-    if has_volume:
+    if include_volume:
+        out = out.rename(columns={"_volume": "volume"})
+    elif has_volume:
         day_volume = out.groupby("ymd")["_volume"].transform("sum")
         out = out.loc[day_volume != 0].drop(columns="_volume")
     return out if not out.empty else None
 
 
-def load_minute_from_lake(codes: set[str] | list[str], start: str, end: str, *, workers: int = 16, lake_root=None):
+def load_minute_from_lake(codes: set[str] | list[str], start: str, end: str, *, workers: int = 16,
+                          lake_root=None, include_volume: bool = False):
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
     from backtest.research.csv_common import _progress
@@ -384,7 +393,8 @@ def load_minute_from_lake(codes: set[str] | list[str], start: str, end: str, *, 
     if not wanted:
         return out
     with ThreadPoolExecutor(max_workers=max(1, int(workers))) as pool:
-        futs = {pool.submit(read_lake_minute_ohlc, code, root, start, end): code for code in wanted}
+        extra = {"include_volume": True} if include_volume else {}
+        futs = {pool.submit(read_lake_minute_ohlc, code, root, start, end, **extra): code for code in wanted}
         done = 0
         total = len(futs)
         for fut in as_completed(futs):
@@ -394,6 +404,8 @@ def load_minute_from_lake(codes: set[str] | list[str], start: str, end: str, *, 
             try:
                 frame = fut.result()
             except Exception:
+                if include_volume:
+                    raise
                 continue
             if frame is not None and not frame.empty:
                 out[code] = frame
@@ -559,8 +571,14 @@ def load_minute_ohlc(
     cache_dir: Optional[Path] = None,
     status: Optional[dict] = None,
     lake_root=None,
+    include_volume: bool = False,
 ) -> dict:
-    """Book 1–10 / Mode B frames. Cache lives here, not in the engine."""
+    """Book frames; opt-in volume bypasses the legacy volume-free cache."""
+    if include_volume:
+        if status is not None:
+            status["cache"] = "off:volume_required"
+        return load_minute_from_lake(codes, start, end, workers=workers,
+                                     lake_root=lake_root, include_volume=True)
     want = {to_canonical_symbol(str(code)) for code in codes}
     path = minute_cache_path(start, end, cache_dir)
     cached: dict = {}

@@ -25,10 +25,12 @@ HELP_LOCK = """
   front 信号仅用 ≤T-1 数据写 T 名单；周线显式 prefix-equivalent。
   D-1 NaN≠边缘/等号 fail-closed/买入日禁卖。
   a=日线契约收盘买；b=分钟 09:30 首根 open 买（以 b 为准）。
+  volume=A：可选 cap 保留 bucket<=at；开盘桶未完成则买 skip / pending 卖 defer。
   T 收盘≤昨收→下一交易日开盘卖；否则含 T 当评 close<SMA5（含今日）。
   卖→买→EOD 写 pending_exit；跌停卖延后；卖出日不重入。
   skip_buy 消耗信号；limit_up_chase=False；单票一笔；无止损覆盖。
   必须显式 --pool-dir，拒绝 stock_pool/。
+  分钟运行要求 lake 的 volume；绕过旧无量缓存，qlib_1min 缺量即失败。
   导出 skip_buy(stale)/skip_cyqk_grid/skip_cyqk_nan/skip_cyqk_error；
   manifest 记录 adjust_type=front 与 Rust pyd __file__、版本。
 """
@@ -95,6 +97,14 @@ def exit_signal(t_close, prev_close, sma5, *, hold_mode=INITIAL) -> ExitDecision
 def take_profit_reason(*_) -> None:
     """Intraday scanner does not evaluate version11's EOD exit FSM."""
     return None
+
+
+def eod_exit(closes, prev_close, hold_mode=None) -> ExitDecision:
+    """Engine hook: closes end at T, SMA5 includes T; no same-day sell."""
+    return exit_signal(
+        closes[-1], prev_close, sma_series(closes[-MA_EXIT:], MA_EXIT)[-1],
+        hold_mode=hold_mode or INITIAL,
+    )
 
 
 def record_strategy11_params(st) -> None:
