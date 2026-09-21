@@ -326,6 +326,12 @@ def test_minute_run_accepts_none_price_domain_and_uses_none_loader(monkeypatch, 
     assert st.stats["price_domain"] == "none"
 
 
+@pytest.mark.parametrize("book", ["version8", "version8_1", "version8_2", "version8_3"])
+def test_non_strategy12_minute_rejects_front_dividend_type(book):
+    with pytest.raises(ValueError, match="supported only by version12"):
+        minute.run("20251103", "20251103", strategy=book, dividend_type="front")
+
+
 @pytest.mark.parametrize("engine", [daily, minute])
 def test_front_loader_uses_matching_partitions_and_disables_er6(monkeypatch, tmp_path, engine):
     from common.infra import data_root
@@ -368,6 +374,8 @@ def test_front_loader_uses_matching_partitions_and_disables_er6(monkeypatch, tmp
     if engine is minute:
         assert st.stats["daily_signal_domain"] == "front"
         assert st.stats["minute_fill_domain"] == "front"
+        assert st.stats["price_domain"] == "front"
+    else:
         assert st.stats["price_domain"] == "front"
     assert fills(st)[0] == ("pool", 100000)
 

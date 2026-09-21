@@ -42,7 +42,7 @@
 
 ## 切片 D：冒烟 runbook
 
-daily+minute 各 20251023–20260909（front 价域命令写死）；与 v8/8.1/8.2/8.3 五点对比；结果记 reviews（数字不入库）；data_gaps 含价域声明。
+daily+minute 各 20251023–20260909（日线 front + 分钟 none 默认路径）；与 v8/8.1/8.2/8.3 五点对比；结果记 reviews（数字不入库）；data_gaps 含价域声明。
 
 ## 门禁 + 回写
 
@@ -65,9 +65,10 @@ D:\anaconda3\envs\vanna312\python.exe -m ruff check <触及文件>
   2. **Daily signals / MA / patterns:** use daily `dividend_type=front` (separate domain).
   3. **Intraday execution:** minute raw prices for fills.
   4. **Ex-div:** only via explicit economics / documented path — **no silent double adjustment** when mixing front daily signals with none minute fills.
+- 统计语义：`record_strategy12_params` 先记录策略层基线 `price_domain=front`（信号域）；分钟 `run()` 会在最终 stats 里把 `price_domain` 覆写为实际成交域（`none` 或 `front`）。
 - Slice D（日线）文档收口仅记路径：见 `docs/backtest/reviews/slice-d-daily-front-smoke-newtest_4090-2026-09-21.md`（不含 NAV/returns/parity 结论）。
 - Linux 验证解释器：`/tmp/ma-infra-venv/bin/python3`（Python 3.12.13）；最终 gates 结果回写 PR 评论。UTF-8 无 BOM，NUL=0。
-- D 实湖五点对比不在本轮 A→B→C 范围，尚未执行；需已配置且含 front 日线/分钟分区的湖。可用下列命令启动策略 12，不推断数据盘路径：
+- D 实湖五点对比不在本轮 A→B→C 范围，尚未执行；需已配置且含 front 日线分区（分钟默认 none，front 仅可选 fail-closed）的湖。可用下列命令启动策略 12，不推断数据盘路径：
 
 ```bash
 python3 backtest/research/csv_daily_backtest.py --strategy 12 --dividend-type front --start 20251023 --end 20260909
