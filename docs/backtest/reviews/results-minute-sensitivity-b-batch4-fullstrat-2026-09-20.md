@@ -104,6 +104,7 @@
 | `batch4_fullstrat/manifest.json` | 跑批元数据 |
 | `batch4_fullstrat_v9_s9bvot_20260921/book_nav.csv` | Book version9 基线（s9_bvot 池；FILLED） |
 | `batch4_fullstrat_v9_s9bvot_20260921/matrix.csv` | v9-only 矩阵 |
+| `batch4_fullstrat_v9_s9bvot_20260921/data_gaps.csv` | v9 FILLED / v10 DATA_GAP 登记 |
 | `batch4_fullstrat_v9_s9bvot_20260921/README.md` | 池策略 + 数字 + tip |
 | `batch4_fullstrat_v9_s9bvot_20260921/manifest.json` | tip/pool day counts / 数字元数据 |
 | 4090 runner 旁路 | `runner_artifacts/`（未全部入库；摘要 CSV 已入库） |
@@ -129,7 +130,6 @@ Import 根因与修见 [addendum](addendum-batch4-modeb-import-fix-2026-09-21.md
 - 仍 DATA_GAP：全策略 `clock_next_open` / `slip_*`；**version10**（需 strategy10 TR pool）。version9 已另戳回填（§9）
 
 `production_C=frozen`（本回填 docs-only；不改 fill/scan/fee/defaults/hot-path）。
-
 
 ---
 
