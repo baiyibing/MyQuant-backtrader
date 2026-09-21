@@ -1,8 +1,7 @@
 # Plan: version11 ma_chip CSV 移植（2026-09-21）
 
-> **Status**: **v0.4 · draft（已吸收四稿外部评审 merge-consensus V1–V17；P0–P7 + V2/V9 待人裁，GO 前禁编码）**。风险档：**中**——信号侧复用既有件；主要风险在价域、契约日 T 定义、cyqk 两层失败契约与网格上限。
-> **评审链**：主笔对抗层（F1–F8，两路环境受阻主笔代核）→ 四稿 fan-out（codex/kimi/cursor/claude 全 rc=0，5 组实验）→ [merge-consensus V1–V17](../architecture/reviews/2026-09-21/plan-version11-machip-csv/merge-consensus.md)。关键修正：§1 丢「价格 front」行（除权日假信号）、契约日 T=该股首根 bar 且 ≤4 自然日、R3/R8 周线互斥落地（C9）、删「t1_sellable 旁路」、cyqk 两层失败契约（逐窗 NaN+ValueError）、网格上限预检、asof 股本源 pin、R10 论据改述。分歧记录：claude「两处可 GO」被 cursor 反对，采严格派全修。
-> **对抗回填（2026-09-21）**：F1–F8——P0 必答、契约日 ≤T-1 写 T、R9 pin False、stale 导出器层、EOD 钩子、Rust skip。草案：[review-by-claude](../architecture/reviews/2026-09-21/plan-version11-machip-csv-2026-09-21-review-by-claude.md)。
+> **Status**: **v1.0 · ✅ 已人裁 GO（2026-09-21，Asia/Shanghai）**——用户裁定 P0–P7 + V2/V9 **全按共识建议**：P0=a 框架移植先行（--help 印「非已验证多头」，全市场统计并行挂 strategy12 后）、P1=a/b 双跑分钟 09:30 为准（日线保持契约收盘）、P2=日线 pending_exit 原样、P3=独立导出器禁读 store cyqk_t、P4=seed-30 parity 主交付+消融轴对照、P5/P6/P7=沿归档、V2=契约日 T 该股首根 bar ≤4 自然日、V9=全市场滤 ST 排 688。
+> **评审链**：主笔对抗层（F1–F8）→ 四稿 fan-out（codex/kimi/cursor/claude 全 rc=0，5 组实验）→ [merge-consensus V1–V17](../architecture/reviews/2026-09-21/plan-version11-machip-csv/merge-consensus.md)（分歧记录：宽派被严派反对，采严派全修）。实施走 [Codex 交接工作流](workflow-codex-handoff.md)（门槛：ma_infra PR #150 已合入）。
 > **业务源**：[归档 plan-ma-chip-edge-strategy-2026-09-07.md](_archive/plans/plan-ma-chip-edge-strategy-2026-09-07.md) §2 锁定口径（Cerebro 原实现已随 2026-09-16 Cerebro 退场删除；对照产物为静态档案）；用户 2026-09-21 指示「把 ma_chip 移植也做完」。
 > **Main ship / 单行范围**：把 ma_chip_edge（均线+盈筹率边缘买入）移植到 CSV 向量化引擎为 `version11`：信号池导出器 + 卖点书 + 成交时点语义重裁；不复活 Cerebro。
 > **前序**：[workflow-codex-handoff.md](workflow-codex-handoff.md)、[engine-ashare-correctness.md](engine-ashare-correctness.md)、[plan-ma-infra-shared-2026-09-21.md](plan-ma-infra-shared-2026-09-21.md)（**前置：共享均线基础设施，本 plan 实施时直接消费**）、[strategy12 plan](plan-strategy12-jinrongyuan-2026-09-21.md)（同日另一书，互不依赖）。
