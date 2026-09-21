@@ -1,6 +1,6 @@
 # 分钟敏感对照 B · 第四批结果（全策略 NAV / DD / 引擎内排名 · 2026-09-20）
 
-**状态：`EXECUTED_PARTIAL`（4090 `--execute` 已完成；ModeB 基线已于 2026-09-21 ModeB-only 重跑回填；Book **version9** 已于 2026-09-21 用 `export_strategy9_pool`→`s9_bvot` 池回填）。** Book version10 已于 2026-09-21 用 Source-B `s10_tr` 池回填（研究 universe=lake∩TR；见 §10）。Book、v7、ModeB 基线（`baseline_default_clock_fee`）已填；全策略 clock_next_open / slip_* 轴仍为 **DATA_GAP**。局部事件 bp（batch2/3）**禁止**粘贴进下表；**禁止**跨引擎比 NAV 论优劣；`production_C=frozen`。
+**状态：`EXECUTED_PARTIAL`（4090 `--execute` 已完成；ModeB 基线已于 2026-09-21 ModeB-only 重跑回填；Book **version9** 已于 2026-09-21 用 `export_strategy9_pool`→`s9_bvot` 池回填）。** Book version10 已于 2026-09-21 用 Source-B `s10_tr` 池回填（研究 universe=lake∩TR；见 §10）。Book、v7、ModeB 基线（`baseline_default_clock_fee`）已填；全策略 clock_next_open / slip_* 数值仍待合并后 4090；最新研究能力为 **FILLABLE（H2 + Q2）**，见下方 Slice B。局部事件 bp（batch2/3）**禁止**粘贴进下表；**禁止**跨引擎比 NAV 论优劣；`production_C=frozen`。
 
 依据：[设计](design-minute-sensitivity-b-batch4-fullstrat-2026-09-20.md)；[计划](plan-minute-sensitivity-b-2026-09-20.md)；导出 [batch4_fullstrat/](../../../backtest/research/exports/minute_sensitivity_b_20260920/batch4_fullstrat/)（Book v1–v8 / v7）；ModeB 基线重跑戳 `batch4_fullstrat_modeb_rerun_20260921`（4090 @ tip `a1e7dea`）；Book version9 戳 [`batch4_fullstrat_v9_s9bvot_20260921`](../../../backtest/research/exports/minute_sensitivity_b_20260920/batch4_fullstrat_v9_s9bvot_20260921/)（4090 @ tip `51e0195`，pool=`s9_bvot` **非** `stock_pool`；见 [addendum](addendum-batch4-v9-s9bvot-fill-2026-09-21.md)）。
 
@@ -27,7 +27,26 @@
 | `slip_10bp_fullstrat` | 默认 | 10bp/边 | DATA_GAP | DATA_GAP | DATA_GAP |
 | `slip_20bp_fullstrat` | 默认 | 20bp/边 | DATA_GAP | DATA_GAP | DATA_GAP |
 
-证据：`matrix.csv` / `data_gaps.csv`。clock/slip 全策略轴无 research-only 钩子；不改生产 C。
+证据：原执行戳 `matrix.csv` / `data_gaps.csv`。2026-09-21 **FULL HUMAN CUT 已齐（H2 + 卖单到期次日重评）**，取代此前 sell pending 桩，恢复 Slice B：全组合所有买卖 fill 换为研究 `next_tradable_open`；买卖严格同日到期；接受 `UNFILLED` / 全现金 NAV，绝不静默保留 baseline 入场；未成交卖单到期清除，下一交易日正常策略重新判断是否卖出，不保留退出意图等待。详见 [设计 §9](design-minute-sensitivity-b-batch4-fullstrat-2026-09-20.md#9-research-only-fullstrat-clockslip-hooks)。本次先提交完整裁定文档，再实施 hooks + pins；通过后能力状态转 `FILLABLE`，所有新增 clock/slip 数值继续留空，等待合并后的 4090 slice D。上表及既有导出是历史执行状态，不覆盖历史数字；`production_C=frozen`，不 merge。
+
+
+**Slice B 按最新 Q2 恢复**：`40afca4` / `dde7a6f` 的 Q1 固定股数及停点叙述已被人裁覆盖。信号股数暂定，next-open / slip 成交价重定量；10,000 预算 / 10,050 现金 / 信号 10 → 暂定 1,000，open 10.1 → 900 股成交、现金 950.91。固定股数后 `cash_reject_terminal` 是必须排除的反例。H2 与卖单到期次日重评继续绑定；新增数值待合并后 4090。
+
+历史验证（实现前）：本次 gates（显式 `/workspace/vanna312/bin/python3`；系统 python3 未装 pytest / ruff）：既有非 production / benchmark 测试 **1422 passed, 2 skipped, 24 deselected**（exit 0，24.78s），harness `--help` exit 0；新 hook pins 文件不存在，专项 pytest exit 4（未通过）。无 Python 改动，ruff 无 touched 目标。现有函数 sizing 复现、`git diff --check`、修改文档 UTF-8 / BOM=0 / NUL=0 通过。既有测试通过不代表尚未实现的 hooks 已验证。
+
+
+### Slice B（2026-09-21 · Q2 + H2；data-free）
+
+| cell | Book | v7 | ModeB | 新增 NAV / return / DD / rank |
+|---|---|---|---|---|
+| clock_next_open_fullstrat | FILLABLE | FILLABLE | FILLABLE | 空白，待合并后 4090 |
+| slip_5bp_fullstrat | FILLABLE | FILLABLE | FILLABLE | 空白，待合并后 4090 |
+| slip_10bp_fullstrat | FILLABLE | FILLABLE | FILLABLE | 空白，待合并后 4090 |
+| slip_20bp_fullstrat | FILLABLE | FILLABLE | FILLABLE | 空白，待合并后 4090 |
+
+Q2 已通过实际 adapter 对照：预算 10,000 / 现金 10,050，信号价 10 的暂定 1,000 股，在 open 10.1 重定量 900 股成交，余额 950.91；Q1 固定股数拒单不是 adapter 合同。H2 全部 fill 覆盖、START 14:55 当日到期、全现金 NAV、卖单到期清除与次日重评通过。零参数委托原引擎，production_C=frozen；#151/#152 contested files 和历史数字未改。
+
+验证环境：显式 PATH 选 `/workspace/vanna312/bin/python3`。专项 **48 passed**（0.99s）；全套 `-m "not production and not benchmark" tests/` **1475 passed, 2 skipped, 24 deselected**（22.76s；既有 TR window warning 1 条）；ruff touched Python、harness `--help`、diff/UTF-8/BOM=0/NUL=0 均通过。[Grok 复核通过](../../architecture/reviews/2026-09-21/pr-156-fullstrat-q2/grok.md)：初核 ModeB 同日卖出假设被原 T+1 路径与两名单现金回收 pin 排除；补齐无冲击市场 mark 后 focused follow-up **Approve**。没有执行 4090 数值跑批。
 
 ### 基线矩阵摘要行（默认时钟）
 

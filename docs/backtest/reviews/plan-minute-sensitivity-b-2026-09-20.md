@@ -2,6 +2,8 @@
 
 人裁：Human GO B，#136 合入后；BASE `f2fe15124ffbc62d3c0526fc90fed78d014b1bb1`。依据：[评估 SSOT §C](eval-minute-pitfall-vs-asbuilt-2026-09-20.md#c-收束与人裁选项)。本轮新增独立研究 harness 与产物，不重开 P1/P2/P3/P4 合同，不修改生产 fill、scan、fee、defaults、CLI、仓位或估值，不 monkeypatch，不覆盖基线，不 push 或开 PR。
 
+**2026-09-21 batch4 后续授权**：Human GO option 2 批准 research-only fullstrat clock/slip hooks，`production_C=frozen`，human cut A（read-only expand，no behavior C）不变。仅本次工作允许 A/B 分 commit 后 push 并开 draft PR，禁止 merge；语义分叉按要求 PR comment + stop。此授权取代上段对本次工作的「不 push 或开 PR」，不改变 batch1–3 的历史范围。完整裁定及 API 合同见 §9；此前 sell pending 桩已被取代。
+
 ## 1. 固定项与分列基线
 
 | 对象 | 生产基线锚点 | 本轮实验单位 |
@@ -67,3 +69,17 @@ Mode B clock 轴（`next_tradable_open`）：补齐 batch2 的 `ModeB NOT_RUN`�
 - `scripts/research/run_minute_sensitivity_b_batch4_fullstrat.py`
 - 导出：`backtest/research/exports/minute_sensitivity_b_20260920/batch4_fullstrat/`
 
+## 9. research-only fullstrat clock/slip hooks
+
+实施基线 `32b78b1`；分支 `research/batch4-fullstrat-clock-slip-hooks`。A 记录 GO/API/研究隔离合同；B 新增显式 `clock_mode ∈ {production_default,next_tradable_open_research}`、`slip_bp_per_side ∈ {0,5,10,20}` 及 harness 矩阵接线、data-free pins。clock XOR slip，基线仍为 production_default + 0；买乘 `(1+s)`、卖乘 `(1-s)`，费用按受冲击名义金额重算，`DEFAULT_SCHEDULE` 常量不变。
+
+能力状态只有在 hook 落地并通过验证后才转 `FILLABLE`；合并后的 4090 slice D 才填数值，本 PR 不执行 D、不 merge、不改 #151/#152 的 contested files。Book/v7/ModeB 仍分列，局部 bp 不进入 NAV。
+
+**FULL HUMAN CUT 已齐，B 恢复实施。** 替换全组合**所有买卖 fill** 为研究 `next_tradable_open`；买卖均严格同日到期；接受晚盘 `UNFILLED` 及全现金 NAV，绝不保留 baseline 入场。未成交卖单到期清除，保留实际持仓，**下一交易日正常策略重评是否卖出，不保留退出意图跨 session 等待**。此完整裁定取代此前 sell pending 桩。[设计 §9](design-minute-sensitivity-b-batch4-fullstrat-2026-09-20.md#9-research-only-fullstrat-clockslip-hooks) 为合同。
+
+先提交完整裁定文档，再写代码；pins 覆盖晚 14:55 START 入场未成交、买卖同日到期、卖单过期后次日重评（不 sticky）、clock XOR slip、post-impact fees 与基线等价。hooks 和 pins 通过后矩阵能力改 `FILLABLE`，数字留空至合并后 4090。跑指定 pytest / ruff / help gates，若 Grok CLI 可用则核后评论 #156；push 并打印 log，**不 merge**。新的语义分叉仍 PR comment + stop。
+
+**最新绑定 Q2**：覆盖 `40afca4` / `dde7a6f` 的 Q1 固定股数合同及停点叙述。信号定量为暂定值；next-open / slip 成交价重新执行整手 sizer，再按实际成交时现金与费用判断。预算 10,000 / 现金 10,050 / 信号 10 → 暂定 1,000；open 10.1 → 900 股成交、现金 950.91。固定 1,000 后 `cash_reject_terminal` 是排除的反例。完整 H2 与卖单次日重评不变。
+
+
+**Slice B 已实现（Q2 + H2）**：研究 helper、各引擎独立 adapter、固定 `--cells` 及每 cell 产物隔离已接线；默认零参数直接委托原引擎。data-free pins 已通过，矩阵能力为 `FILLABLE`，历史导出未改，新增数值仍待合并后 4090。新语义分叉仍 comment + stop；本轮不 merge。

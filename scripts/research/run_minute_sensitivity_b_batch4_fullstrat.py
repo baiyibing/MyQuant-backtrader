@@ -8,7 +8,7 @@ fill/scan/fee/default clock.
 
 VM-safe defaults: ``--dry-run`` / ``--emit-stubs`` / ``--help`` need no lake.
 ``--execute`` is for 4090 (qlib_1min + pool). One axis at a time: clock XOR slip;
-full-strategy clock-swap and slip cells stay DATA_GAP (no research-only hook).
+explicit research hooks implement H2 + Q2; numerical cells await 4090.
 
 See:
   docs/backtest/reviews/design-minute-sensitivity-b-batch4-fullstrat-2026-09-20.md
@@ -71,37 +71,37 @@ MATRIX_CELLS = (
         "cell_id": "clock_next_open_fullstrat",
         "clock": "next_tradable_open_research",
         "slip_bp_per_side": 0,
-        "book": "DATA_GAP",
-        "v7": "DATA_GAP",
-        "modeb": "DATA_GAP",
-        "note": "no research-only fullstrat clock hook without production_C",
+        "book": "FILLABLE",
+        "v7": "FILLABLE",
+        "modeb": "FILLABLE",
+        "note": "H2 all fills; same-day expiry; Q2 fill-price sizing; await post-merge 4090",
     },
     {
         "cell_id": "slip_5bp_fullstrat",
         "clock": CLOCK_DEFAULT,
         "slip_bp_per_side": 5,
-        "book": "DATA_GAP",
-        "v7": "DATA_GAP",
-        "modeb": "DATA_GAP",
-        "note": "no research-only fullstrat slip hook; local-event bp not portfolio NAV",
+        "book": "FILLABLE",
+        "v7": "FILLABLE",
+        "modeb": "FILLABLE",
+        "note": "Q2 fill-price sizing; post-impact fees; await post-merge 4090",
     },
     {
         "cell_id": "slip_10bp_fullstrat",
         "clock": CLOCK_DEFAULT,
         "slip_bp_per_side": 10,
-        "book": "DATA_GAP",
-        "v7": "DATA_GAP",
-        "modeb": "DATA_GAP",
-        "note": "no research-only fullstrat slip hook",
+        "book": "FILLABLE",
+        "v7": "FILLABLE",
+        "modeb": "FILLABLE",
+        "note": "Q2 fill-price sizing; post-impact fees; await post-merge 4090",
     },
     {
         "cell_id": "slip_20bp_fullstrat",
         "clock": CLOCK_DEFAULT,
         "slip_bp_per_side": 20,
-        "book": "DATA_GAP",
-        "v7": "DATA_GAP",
-        "modeb": "DATA_GAP",
-        "note": "no research-only fullstrat slip hook",
+        "book": "FILLABLE",
+        "v7": "FILLABLE",
+        "modeb": "FILLABLE",
+        "note": "Q2 fill-price sizing; post-impact fees; await post-merge 4090",
     },
 )
 
@@ -185,12 +185,12 @@ def data_gap_rows(start: str, end: str) -> list[dict[str, Any]]:
         {
             "item": "fullstrat_clock_swap",
             "status": "DATA_GAP",
-            "evidence": "no research-only fullstrat clock hook; production_C frozen",
+            "evidence": "H2 + Q2 hook FILLABLE; numerical results await post-merge 4090",
         },
         {
             "item": "fullstrat_slip_axis",
             "status": "DATA_GAP",
-            "evidence": "no research-only fullstrat slip CLI; local-event bp must not fill NAV",
+            "evidence": "Q2 slip hook FILLABLE; numerical results await post-merge 4090",
         },
         {
             "item": "cross_engine_nav_superiority",
@@ -247,7 +247,7 @@ def emit_stubs(out_dir: Path, *, start: str, end: str, force: bool) -> dict[str,
             strategy="strategy7",
             start=start,
             end=end,
-            within_engine_rank="1",
+            within_engine_rank=GAP,
             daily_entry_source="n/a_v7_turtle",
             note="await_4090_default_clock_run",
         )
@@ -292,7 +292,9 @@ def emit_stubs(out_dir: Path, *, start: str, end: str, force: bool) -> dict[str,
 
     recipes = {
         "qlib_1min_root": str(DEFAULT_QLIB_1MIN_ROOT),
-        "lake_parquet": os.environ.get("OSKH_SOURCE_PARQUET_ROOT", "<OSKH_SOURCE_PARQUET_ROOT>"),
+        "lake_parquet": os.environ.get(
+            "OSKH_SOURCE_PARQUET_ROOT", "<OSKH_SOURCE_PARQUET_ROOT>"
+        ),
         "book_example": [
             "python backtest/research/csv_minute_backtest.py",
             "--strategy version1",
@@ -336,7 +338,13 @@ def emit_stubs(out_dir: Path, *, start: str, end: str, force: bool) -> dict[str,
         "batch": 4,
         "mode": "fullstrat",
         "status": "STUB_AWAITING_4090",
-        "base_tip": "ac1fa97",
+        "base_tip": "32b78b1",
+        "research_contract": {
+            "sizing": "Q2",
+            "clock_coverage": "H2_all_fills",
+            "expiry": "same_day",
+            "sell_expiry": "next_session_reevaluate",
+        },
         "production_C": "frozen",
         "fee_schedule": FEE_SCHEDULE,
         "bar_label_semantics": BAR_LABEL,
@@ -361,11 +369,9 @@ def emit_stubs(out_dir: Path, *, start: str, end: str, force: bool) -> dict[str,
 
 def _git_head() -> str:
     try:
-        return (
-            subprocess.check_output(
-                ["git", "rev-parse", "HEAD"], cwd=REPO, text=True
-            ).strip()
-        )
+        return subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=REPO, text=True
+        ).strip()
     except (subprocess.CalledProcessError, FileNotFoundError):
         return "UNKNOWN"
 
@@ -378,7 +384,7 @@ def _write_readme(out_dir: Path) -> None:
 - 设计：`docs/backtest/reviews/design-minute-sensitivity-b-batch4-fullstrat-2026-09-20.md`
 - 结果桩：`docs/backtest/reviews/results-minute-sensitivity-b-batch4-fullstrat-2026-09-20.md`
 - Book / v7 / Mode B **分列**；禁止跨引擎优劣表
-- clock 交换与 slip 全策略轴：**DATA_GAP**（无 research-only hook）
+- clock 交换与 slip 全策略轴：**FILLABLE**（H2 + Q2；新增数值待合并后 4090）
 - 费用：`DEFAULT_SCHEDULE` / Mode B 双边 10bp；单轴矩阵见 `matrix.csv`
 """
     (out_dir / "README.md").write_text(text, encoding="utf-8")
@@ -413,7 +419,9 @@ def parse_v7_summary(text: str) -> dict[str, Any]:
     return out
 
 
-def metrics_from_daily_equity(path: Path, *, initial_cash: Optional[float] = None) -> dict[str, Any]:
+def metrics_from_daily_equity(
+    path: Path, *, initial_cash: Optional[float] = None
+) -> dict[str, Any]:
     if not path.is_file():
         return {}
     rows = list(csv.DictReader(path.open(encoding="utf-8")))
@@ -450,6 +458,79 @@ def rank_within(rows: list[dict[str, Any]], *, key: str = "total_return") -> Non
         rows[i]["within_engine_rank"] = rank
 
 
+def _run_research_portfolio(
+    engine, strategy, *, start, end, pool_dir, qlib_root, work_root, config
+):
+    """Fresh experimental artifacts with full-precision cash/equity metrics."""
+    out_dir = work_root / f"{engine.lower()}_{strategy}_{start}_{end}"
+    row = blank_nav_row(
+        engine=engine,
+        strategy=strategy,
+        start=start,
+        end=end,
+        clock=config.clock_mode,
+        slip_bp_per_side=config.slip_bp_per_side,
+        artifact_dir=str(out_dir),
+        daily_entry_source="n/a_book_pool_day_close_chase"
+        if engine == "Book"
+        else "n/a_v7_turtle",
+    )
+    try:
+        from backtest.research.fullstrat_research_runners import (
+            run_book_data,
+            run_v7_data,
+        )
+
+        if out_dir.exists() and any(out_dir.iterdir()):
+            raise ValueError(f"refuse reusing experimental artifacts: {out_dir}")
+        common = dict(
+            start=start,
+            end=end,
+            pool_dir=pool_dir,
+            clock_mode=config.clock_mode,
+            slip_bp_per_side=config.slip_bp_per_side,
+        )
+        if engine == "Book":
+            state = run_book_data(
+                strategy=strategy,
+                minute_source="qlib_1min",
+                qlib_1min_root=qlib_root,
+                **common,
+            )
+            equity = [dict(date=d, equity=value) for d, value in state.equity_curve]
+        else:
+            state = run_v7_data(qlib_root=qlib_root, **common)
+            equity = state.equity_curve
+        if not equity:
+            raise ValueError("empty session calendar; cannot infer NAV")
+        out_dir.mkdir(parents=True, exist_ok=True)
+        write_csv(out_dir / "daily_equity.csv", equity, list(equity[0]))
+        fields = list(dict.fromkeys(k for t in state.trades for k in t)) or [
+            "date",
+            "side",
+            "price",
+            "shares",
+        ]
+        write_csv(out_dir / "trades.csv", state.trades, fields)
+        (out_dir / "research_orders.json").write_text(
+            json.dumps(state.research_orders, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        row.update(
+            metrics_from_daily_equity(
+                out_dir / "daily_equity.csv", initial_cash=state.research_initial_cash
+            )
+        )
+        row.update(
+            status="OK",
+            note="H2_Q2_research_replay; UNFILLED and all-cash NAV valid",
+            within_engine_rank=1 if engine == "v7" else GAP,
+        )
+    except Exception as exc:
+        row.update(status="DATA_GAP", note=f"research_run_failed:{exc}")
+    return row
+
+
 def run_book(
     strategy: str,
     *,
@@ -458,13 +539,34 @@ def run_book(
     pool_dir: Path,
     qlib_root: Path,
     work_root: Path,
+    clock_mode: str = CLOCK_DEFAULT,
+    slip_bp_per_side: int = 0,
 ) -> dict[str, Any]:
+    from backtest.research.fullstrat_research_hooks import ResearchFillConfig
+
+    config = ResearchFillConfig(clock_mode, slip_bp_per_side)
+    if not config.baseline:
+        return _run_research_portfolio(
+            "Book",
+            strategy,
+            start=start,
+            end=end,
+            pool_dir=pool_dir,
+            qlib_root=qlib_root,
+            work_root=work_root,
+            config=config,
+        )
+
     out_dir = work_root / f"book_{strategy}_{start}_{end}"
     if out_dir.exists() and any(out_dir.iterdir()):
         # reuse parsed artifacts if present
         summary = out_dir / "summary.txt"
         equity = out_dir / "daily_equity.csv"
-        parsed = parse_book_summary(summary.read_text(encoding="utf-8")) if summary.is_file() else {}
+        parsed = (
+            parse_book_summary(summary.read_text(encoding="utf-8"))
+            if summary.is_file()
+            else {}
+        )
         if not parsed:
             parsed = metrics_from_daily_equity(equity)
         row = blank_nav_row(
@@ -477,7 +579,13 @@ def run_book(
             note="reused_existing_artifact" if parsed else "empty_artifact",
             daily_entry_source="n/a_book_pool_day_close_chase",
         )
-        row.update({k: parsed[k] for k in ("final_equity", "total_return", "max_drawdown") if k in parsed})
+        row.update(
+            {
+                k: parsed[k]
+                for k in ("final_equity", "total_return", "max_drawdown")
+                if k in parsed
+            }
+        )
         return row
 
     cmd = [
@@ -513,10 +621,20 @@ def run_book(
         end=end,
         artifact_dir=str(out_dir),
         status="OK" if ok else "DATA_GAP",
-        note=("ok" if ok else f"rc={proc.returncode}; stderr_tail={(proc.stderr or '')[-400:]}"),
+        note=(
+            "ok"
+            if ok
+            else f"rc={proc.returncode}; stderr_tail={(proc.stderr or '')[-400:]}"
+        ),
         daily_entry_source="n/a_book_pool_day_close_chase",
     )
-    row.update({k: parsed[k] for k in ("final_equity", "total_return", "max_drawdown") if k in parsed})
+    row.update(
+        {
+            k: parsed[k]
+            for k in ("final_equity", "total_return", "max_drawdown")
+            if k in parsed
+        }
+    )
     return row
 
 
@@ -527,11 +645,32 @@ def run_v7(
     pool_dir: Path,
     qlib_root: Path,
     work_root: Path,
+    clock_mode: str = CLOCK_DEFAULT,
+    slip_bp_per_side: int = 0,
 ) -> dict[str, Any]:
+    from backtest.research.fullstrat_research_hooks import ResearchFillConfig
+
+    config = ResearchFillConfig(clock_mode, slip_bp_per_side)
+    if not config.baseline:
+        return _run_research_portfolio(
+            "v7",
+            "strategy7",
+            start=start,
+            end=end,
+            pool_dir=pool_dir,
+            qlib_root=qlib_root,
+            work_root=work_root,
+            config=config,
+        )
+
     out_dir = work_root / f"v7_{start}_{end}"
     if out_dir.exists() and any(out_dir.iterdir()):
         summary = out_dir / "summary.txt"
-        parsed = parse_v7_summary(summary.read_text(encoding="utf-8")) if summary.is_file() else {}
+        parsed = (
+            parse_v7_summary(summary.read_text(encoding="utf-8"))
+            if summary.is_file()
+            else {}
+        )
         if not parsed:
             parsed = metrics_from_daily_equity(out_dir / "daily_equity.csv")
         row = blank_nav_row(
@@ -545,7 +684,13 @@ def run_v7(
             note="reused_existing_artifact" if parsed else "empty_artifact",
             daily_entry_source="n/a_v7_turtle",
         )
-        row.update({k: parsed[k] for k in ("final_equity", "total_return", "max_drawdown") if k in parsed})
+        row.update(
+            {
+                k: parsed[k]
+                for k in ("final_equity", "total_return", "max_drawdown")
+                if k in parsed
+            }
+        )
         return row
 
     cmd = [
@@ -566,7 +711,11 @@ def run_v7(
     ]
     proc = subprocess.run(cmd, cwd=REPO, capture_output=True, text=True)
     summary_path = out_dir / "summary.txt"
-    parsed = parse_v7_summary(summary_path.read_text(encoding="utf-8")) if summary_path.is_file() else {}
+    parsed = (
+        parse_v7_summary(summary_path.read_text(encoding="utf-8"))
+        if summary_path.is_file()
+        else {}
+    )
     if not parsed:
         parsed = metrics_from_daily_equity(out_dir / "daily_equity.csv")
     ok = proc.returncode == 0 and bool(parsed)
@@ -578,16 +727,24 @@ def run_v7(
         within_engine_rank=1 if ok else GAP,
         artifact_dir=str(out_dir),
         status="OK" if ok else "DATA_GAP",
-        note=("ok" if ok else f"rc={proc.returncode}; stderr_tail={(proc.stderr or '')[-400:]}"),
+        note=(
+            "ok"
+            if ok
+            else f"rc={proc.returncode}; stderr_tail={(proc.stderr or '')[-400:]}"
+        ),
         daily_entry_source="n/a_v7_turtle",
     )
-    row.update({k: parsed[k] for k in ("final_equity", "total_return", "max_drawdown") if k in parsed})
+    row.update(
+        {
+            k: parsed[k]
+            for k in ("final_equity", "total_return", "max_drawdown")
+            if k in parsed
+        }
+    )
     return row
 
 
 def _qlib_frames_to_modeb_minutes(compact: dict[str, Any]) -> dict[str, Any]:
-    import pandas as pd
-
     out: dict[str, Any] = {}
     for symbol, frame in compact.items():
         if frame is None or getattr(frame, "empty", True):
@@ -596,11 +753,15 @@ def _qlib_frames_to_modeb_minutes(compact: dict[str, Any]) -> dict[str, Any]:
         if "ymd" not in df.columns:
             if "date" in df.columns:
                 df["ymd"] = df["date"].map(
-                    lambda d: d.strftime("%Y%m%d") if hasattr(d, "strftime") else str(d).replace("-", "")[:8]
+                    lambda d: d.strftime("%Y%m%d")
+                    if hasattr(d, "strftime")
+                    else str(d).replace("-", "")[:8]
                 )
             else:
                 continue
-        keep = [c for c in ("hm", "open", "high", "low", "close", "ymd") if c in df.columns]
+        keep = [
+            c for c in ("hm", "open", "high", "low", "close", "ymd") if c in df.columns
+        ]
         out[symbol] = df[keep]
     return out
 
@@ -618,11 +779,13 @@ def _daily_bars_from_minutes(minute: dict[str, Any]) -> dict[str, Any]:
             group = group.sort_values("hm")
             opn = float(group.iloc[0]["open"])
             close = float(group.iloc[-1]["close"])
-            high = float(group["high"].max()) if "high" in group.columns else max(opn, close)
+            high = (
+                float(group["high"].max())
+                if "high" in group.columns
+                else max(opn, close)
+            )
             low = (
-                float(group["low"].min())
-                if "low" in group.columns
-                else min(opn, close)
+                float(group["low"].min()) if "low" in group.columns else min(opn, close)
             )
             idx = pd.Timestamp(datetime.strptime(str(ymd), "%Y%m%d"))
             rows.append(
@@ -649,7 +812,13 @@ def run_modeb_library(
     pool_dir: Path,
     qlib_root: Path,
     work_root: Path,
+    clock_mode: str = CLOCK_DEFAULT,
+    slip_bp_per_side: int = 0,
 ) -> dict[str, Any]:
+    from backtest.research.fullstrat_research_hooks import ResearchFillConfig
+
+    ResearchFillConfig(clock_mode, slip_bp_per_side)
+
     """Mode B via library API with entry aggregated from same 1min none lineage."""
     out_dir = work_root / f"modeb_{start}_{end}"
     row = blank_nav_row(
@@ -666,7 +835,7 @@ def run_modeb_library(
         return row
     try:
         from backtest.research.qlib_bin_1min import load_qlib_bin_1min_bars
-        from backtest.research.unified_exit_modeb import run_modeb
+        from backtest.research.fullstrat_research_hooks import run_modeb
         from backtest.research.csv_pool import load_pool_day_map
     except Exception as exc:  # pragma: no cover - import env
         row["note"] = f"import_failed:{exc}"
@@ -684,7 +853,9 @@ def run_modeb_library(
         row["note"] = "empty_pool_window"
         return row
     try:
-        compact = load_qlib_bin_1min_bars(set(codes), start_d, end_d, qlib_root=qlib_root, workers=8)
+        compact = load_qlib_bin_1min_bars(
+            set(codes), start_d, end_d, qlib_root=qlib_root, workers=8
+        )
     except Exception as exc:
         row["note"] = f"qlib_load_failed:{exc}"
         return row
@@ -702,6 +873,8 @@ def run_modeb_library(
             minute_bars=minutes,
             out_dir=out_dir,
             workers=8,
+            clock_mode=clock_mode,
+            slip_bp_per_side=slip_bp_per_side,
         )
     except Exception as exc:
         row["note"] = f"run_modeb_failed:{exc}"
@@ -745,165 +918,124 @@ def run_modeb_library(
             if top_r.get("total_return") not in (None, ""):
                 row["total_return"] = float(top_r["total_return"])
                 if cash_pool is not None:
-                    row["final_equity"] = cash_pool * (1.0 + float(top_r["total_return"]))
+                    row["final_equity"] = cash_pool * (
+                        1.0 + float(top_r["total_return"])
+                    )
             if top_r.get("max_drawdown") not in (None, ""):
                 row["max_drawdown"] = float(top_r["max_drawdown"])
     # Copy ranking into export root for separate Mode B rank table
     if ranking_path.is_file():
-        dest = work_root.parent / "modeb_rank_full.csv"
+        dest = work_root / "modeb_rank_full.csv"
         dest.write_text(ranking_path.read_text(encoding="utf-8"), encoding="utf-8")
     return row
 
 
+def selected_cells(value):
+    from backtest.research.fullstrat_research_hooks import ResearchFillConfig
+
+    for cell in MATRIX_CELLS:
+        ResearchFillConfig(cell["clock"], cell["slip_bp_per_side"])
+    names = set(value.split(","))
+    known = {c["cell_id"] for c in MATRIX_CELLS}
+    if not names or not names <= known:
+        raise ValueError(f"unknown cells: {sorted(names - known)}")
+    return [c for c in MATRIX_CELLS if c["cell_id"] in names]
+
+
 def execute(
-    *,
-    start: str,
-    end: str,
-    pool_dir: Path,
-    qlib_root: Path,
-    out_dir: Path,
-    engines: set[str],
-    strategies: tuple[str, ...],
-    force: bool,
-) -> dict[str, Any]:
-    out_dir.mkdir(parents=True, exist_ok=True)
-    work_root = out_dir / "runner_artifacts"
-    work_root.mkdir(parents=True, exist_ok=True)
-
-    book_rows: list[dict[str, Any]] = []
-    if "book" in engines:
-        for strategy in strategies:
-            book_rows.append(
-                run_book(
-                    strategy,
-                    start=start,
-                    end=end,
-                    pool_dir=pool_dir,
-                    qlib_root=qlib_root,
-                    work_root=work_root,
+    *, start, end, pool_dir, qlib_root, out_dir, engines, strategies, force, cells=None
+):
+    cells = cells or selected_cells("baseline_default_clock_fee")
+    _ensure_new_or_empty(out_dir, allow_existing=force)
+    rows = {"Book": [], "v7": [], "ModeB": []}
+    for cell in cells:
+        work_root = out_dir / "runner_artifacts" / cell["cell_id"]
+        work_root.mkdir(parents=True, exist_ok=True)
+        provenance = dict(
+            cell_id=cell["cell_id"],
+            clock_mode=cell["clock"],
+            slip_bp_per_side=cell["slip_bp_per_side"],
+            sizing="Q2",
+            coverage="H2_all_fills",
+            expiry="same_day",
+            sell_expiry="next_session_reevaluate",
+            production_C="frozen",
+            git_head=_git_head(),
+            start=start,
+            end=end,
+            pool_dir=str(pool_dir),
+            qlib_root=str(qlib_root),
+        )
+        # Experimental artifacts must never be silently reused, even with --force.
+        if cell["cell_id"] != "baseline_default_clock_fee" and any(work_root.iterdir()):
+            raise ValueError(f"choose a fresh research output directory: {work_root}")
+        (work_root / "research_config.json").write_text(
+            json.dumps(provenance, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        common = dict(
+            start=start,
+            end=end,
+            pool_dir=pool_dir,
+            qlib_root=qlib_root,
+            work_root=work_root,
+            clock_mode=cell["clock"],
+            slip_bp_per_side=cell["slip_bp_per_side"],
+        )
+        by_cell = {"Book": [], "v7": [], "ModeB": []}
+        if "book" in engines:
+            by_cell["Book"] = [run_book(strategy, **common) for strategy in strategies]
+            rank_within(by_cell["Book"])
+        if "v7" in engines:
+            by_cell["v7"] = [run_v7(**common)]
+        if "modeb" in engines:
+            by_cell["ModeB"] = [run_modeb_library(**common)]
+        for engine, result in by_cell.items():
+            for row in result:
+                row.update(
+                    cell_id=cell["cell_id"],
+                    clock=cell["clock"],
+                    slip_bp_per_side=cell["slip_bp_per_side"],
                 )
-            )
-        rank_within(book_rows)
-    else:
-        book_rows = [
-            blank_nav_row(
-                engine="Book",
-                strategy=s,
-                start=start,
-                end=end,
-                note="engine_skipped",
-                daily_entry_source="n/a_book_pool_day_close_chase",
-            )
-            for s in strategies
-        ]
-
-    if "v7" in engines:
-        v7_rows = [
-            run_v7(
-                start=start,
-                end=end,
-                pool_dir=pool_dir,
-                qlib_root=qlib_root,
-                work_root=work_root,
-            )
-        ]
-    else:
-        v7_rows = [
-            blank_nav_row(
-                engine="v7",
-                strategy="strategy7",
-                start=start,
-                end=end,
-                note="engine_skipped",
-                daily_entry_source="n/a_v7_turtle",
-            )
-        ]
-
-    if "modeb" in engines:
-        modeb_rows = [
-            run_modeb_library(
-                start=start,
-                end=end,
-                pool_dir=pool_dir,
-                qlib_root=qlib_root,
-                work_root=work_root,
-            )
-        ]
-    else:
-        modeb_rows = [
-            blank_nav_row(
-                engine="ModeB",
-                strategy="grid",
-                start=start,
-                end=end,
-                daily_entry_source="aggregated_from_1min_none_lineage",
-                note="engine_skipped",
-            )
-        ]
-
-    # Always rewrite matrix with DATA_GAP for non-baseline cells
+            rows[engine].extend(result)
     emit_stubs(out_dir, start=start, end=end, force=True)
-    nav_fields = list(blank_nav_row().keys())
-    write_csv(out_dir / "book_nav.csv", book_rows, nav_fields)
-    write_csv(out_dir / "v7_nav.csv", v7_rows, nav_fields)
-    write_csv(out_dir / "modeb_nav.csv", modeb_rows, nav_fields)
-
-    # Fill baseline matrix numeric cells from results (separate engines)
+    for engine, filename in (
+        ("Book", "book_nav.csv"),
+        ("v7", "v7_nav.csv"),
+        ("ModeB", "modeb_nav.csv"),
+    ):
+        write_csv(out_dir / filename, rows[engine], list(blank_nav_row()))
     matrix = matrix_rows()
-    by_engine = {
-        "Book": next((r for r in book_rows if r.get("status") == "OK"), None),
-        "v7": next((r for r in v7_rows if r.get("status") == "OK"), None),
-        "ModeB": next((r for r in modeb_rows if r.get("status") == "OK"), None),
-    }
-    # For Book baseline matrix cell, use best within-engine return if any OK
-    ok_books = [r for r in book_rows if r.get("status") == "OK"]
-    if ok_books:
-        by_engine["Book"] = max(ok_books, key=lambda r: float(r["total_return"]))
-
     for cell in matrix:
-        if cell["cell_id"] != "baseline_default_clock_fee":
-            continue
-        src = by_engine.get(cell["engine"])
-        if not src:
-            continue
-        cell["nav"] = src.get("final_equity", GAP)
-        cell["total_return"] = src.get("total_return", GAP)
-        cell["max_drawdown"] = src.get("max_drawdown", GAP)
-        cell["within_engine_rank"] = src.get("within_engine_rank", GAP)
-        cell["fill_status"] = "FILLED"
-
-    write_csv(
-        out_dir / "matrix.csv",
-        matrix,
-        [
-            "cell_id",
-            "engine",
-            "clock",
-            "slip_bp_per_side",
-            "fee_schedule",
-            "fill_status",
-            "nav",
-            "total_return",
-            "max_drawdown",
-            "within_engine_rank",
-            "note",
-        ],
-    )
-
+        matches = [r for r in rows[cell["engine"]] if r["cell_id"] == cell["cell_id"]]
+        ok = [r for r in matches if r["status"] == "OK"]
+        if ok:
+            top = max(ok, key=lambda r: float(r["total_return"]))
+            cell.update(
+                nav=top["final_equity"],
+                total_return=top["total_return"],
+                max_drawdown=top["max_drawdown"],
+                within_engine_rank=top["within_engine_rank"],
+                fill_status="FILLED",
+            )
+        elif matches:
+            cell.update(
+                fill_status="DATA_GAP", note="; ".join(r["note"] for r in matches)
+            )
+    write_csv(out_dir / "matrix.csv", matrix, list(matrix[0]))
     manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
     manifest.update(
-        {
-            "status": "EXECUTED_PARTIAL_OR_FULL",
-            "qlib_1min_root": str(qlib_root),
-            "pool_dir": str(pool_dir),
-            "engines": sorted(engines),
-            "book_ok": sum(1 for r in book_rows if r.get("status") == "OK"),
-            "v7_ok": sum(1 for r in v7_rows if r.get("status") == "OK"),
-            "modeb_ok": sum(1 for r in modeb_rows if r.get("status") == "OK"),
-            "git_head": _git_head(),
-            "executed_at": datetime.now().astimezone().isoformat(timespec="seconds"),
-        }
+        status="EXECUTED_PARTIAL_OR_FULL",
+        cells=[c["cell_id"] for c in cells],
+        pool_dir=str(pool_dir),
+        qlib_1min_root=str(qlib_root),
+        engines=sorted(engines),
+        sizing="Q2",
+        coverage="H2_all_fills",
+        sell_expiry="next_session_reevaluate",
     )
+    for engine, name in (("Book", "book_ok"), ("v7", "v7_ok"), ("ModeB", "modeb_ok")):
+        manifest[name] = sum(r["status"] == "OK" for r in rows[engine])
     (out_dir / "manifest.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
@@ -914,8 +1046,13 @@ def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
         description=(
             "Batch4 fullstrat NAV/DD/rank research harness "
-            "(default clock fillable; clock/slip fullstrat = DATA_GAP)"
+            "(H2 + Q2 research hooks; clock XOR slip; production_C frozen)"
         )
+    )
+    ap.add_argument(
+        "--cells",
+        default="baseline_default_clock_fee",
+        help="comma subset of fixed matrix cell_id values; one axis per cell",
     )
     ap.add_argument("--start", default=DEFAULT_START)
     ap.add_argument("--end", default=DEFAULT_END)
@@ -947,14 +1084,21 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="run existing runners / Mode B library path (4090)",
     )
-    ap.add_argument("--force", action="store_true", help="allow rewriting output-dir stubs")
+    ap.add_argument(
+        "--force", action="store_true", help="allow rewriting output-dir stubs"
+    )
     return ap
 
 
 def main(argv: Optional[list[str]] = None) -> int:
     args = build_parser().parse_args(argv)
+    cells = selected_cells(args.cells)
     engines = {e.strip().lower() for e in args.engines.split(",") if e.strip()}
     strategies = tuple(s.strip() for s in args.strategies.split(",") if s.strip())
+    if not engines or not engines <= {"book", "v7", "modeb"}:
+        raise ValueError("engines must be a nonempty subset of book,v7,modeb")
+    if not strategies or not set(strategies) <= set(BOOK_STRATEGIES):
+        raise ValueError("strategies must belong to the batch4 Book matrix")
 
     if args.dry_run and not args.emit_stubs and not args.execute:
         print(
@@ -963,10 +1107,10 @@ def main(argv: Optional[list[str]] = None) -> int:
                     "mode": "dry-run",
                     "window": {"start": args.start, "end": args.end},
                     "fee_schedule": FEE_SCHEDULE,
-                    "matrix": MATRIX_CELLS,
+                    "matrix": cells,
                     "book_strategies": list(strategies),
                     "production_C": "frozen",
-                    "note": "clock/slip fullstrat cells DATA_GAP; baseline default clock FILLABLE",
+                    "note": "H2 + Q2 hooks FILLABLE; numbers await post-merge 4090",
                 },
                 ensure_ascii=False,
                 indent=2,
@@ -978,10 +1122,21 @@ def main(argv: Optional[list[str]] = None) -> int:
         # default VM path: emit stubs
         if not args.execute:
             manifest = emit_stubs(
-                args.output_dir, start=args.start, end=args.end, force=args.force or args.emit_stubs
+                args.output_dir,
+                start=args.start,
+                end=args.end,
+                force=args.force or args.emit_stubs,
             )
-            print(json.dumps({"mode": "emit-stubs", "manifest_status": manifest["status"],
-                              "output_dir": str(args.output_dir)}, ensure_ascii=False))
+            print(
+                json.dumps(
+                    {
+                        "mode": "emit-stubs",
+                        "manifest_status": manifest["status"],
+                        "output_dir": str(args.output_dir),
+                    },
+                    ensure_ascii=False,
+                )
+            )
             if not args.execute:
                 return 0
 
@@ -997,7 +1152,9 @@ def main(argv: Optional[list[str]] = None) -> int:
                     "evidence": f"missing path {args.qlib_1min_root}",
                 }
             )
-            write_csv(args.output_dir / "data_gaps.csv", gaps, ["item", "status", "evidence"])
+            write_csv(
+                args.output_dir / "data_gaps.csv", gaps, ["item", "status", "evidence"]
+            )
             print(
                 json.dumps(
                     {
@@ -1019,8 +1176,13 @@ def main(argv: Optional[list[str]] = None) -> int:
             engines=engines,
             strategies=strategies,
             force=args.force,
+            cells=cells,
         )
-        print(json.dumps({"mode": "execute", "manifest": manifest}, ensure_ascii=False, indent=2))
+        print(
+            json.dumps(
+                {"mode": "execute", "manifest": manifest}, ensure_ascii=False, indent=2
+            )
+        )
         return 0
 
     return 0
