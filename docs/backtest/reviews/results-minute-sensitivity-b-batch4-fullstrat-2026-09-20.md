@@ -27,7 +27,7 @@
 | `slip_10bp_fullstrat` | 默认 | 10bp/边 | DATA_GAP | DATA_GAP | DATA_GAP |
 | `slip_20bp_fullstrat` | 默认 | 20bp/边 | DATA_GAP | DATA_GAP | DATA_GAP |
 
-证据：`matrix.csv` / `data_gaps.csv`。clock/slip 全策略轴无 research-only 钩子；不改生产 C。
+证据：原执行戳 `matrix.csv` / `data_gaps.csv`。2026-09-21 Human GO option 2 已授权研究专用 hook，但实现因 [设计 §9 的时钟语义分叉](design-minute-sensitivity-b-batch4-fullstrat-2026-09-20.md#9-research-only-fullstrat-clockslip-hooks) 暂停；现有代码尚无这些 hook，矩阵仍是 `DATA_GAP`。hook 落地后能力状态才转 `FILLABLE`，所有 clock/slip 数值继续留空，等待合并后的 4090 rerun（slice D，不在本 PR）。已有基线结果及历史导出不覆盖；human cut A 仍成立，`production_C=frozen`。
 
 ### 基线矩阵摘要行（默认时钟）
 

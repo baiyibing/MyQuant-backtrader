@@ -2,6 +2,8 @@
 
 人裁：Human GO B，#136 合入后；BASE `f2fe15124ffbc62d3c0526fc90fed78d014b1bb1`。依据：[评估 SSOT §C](eval-minute-pitfall-vs-asbuilt-2026-09-20.md#c-收束与人裁选项)。本轮新增独立研究 harness 与产物，不重开 P1/P2/P3/P4 合同，不修改生产 fill、scan、fee、defaults、CLI、仓位或估值，不 monkeypatch，不覆盖基线，不 push 或开 PR。
 
+**2026-09-21 batch4 后续授权**：Human GO option 2 批准 research-only fullstrat clock/slip hooks，`production_C=frozen`，human cut A（read-only expand，no behavior C）不变。仅本次工作允许 A/B 分 commit 后 push 并开 draft PR，禁止 merge；语义分叉按要求 PR comment + stop。此授权取代上段对本次工作的「不 push 或开 PR」，不改变 batch1–3 的历史范围。当前语义阻塞及候选 API 见 §9。
+
 ## 1. 固定项与分列基线
 
 | 对象 | 生产基线锚点 | 本轮实验单位 |
@@ -67,3 +69,10 @@ Mode B clock 轴（`next_tradable_open`）：补齐 batch2 的 `ModeB NOT_RUN`�
 - `scripts/research/run_minute_sensitivity_b_batch4_fullstrat.py`
 - 导出：`backtest/research/exports/minute_sensitivity_b_20260920/batch4_fullstrat/`
 
+## 9. research-only fullstrat clock/slip hooks
+
+实施基线 `32b78b1`；分支 `research/batch4-fullstrat-clock-slip-hooks`。A 记录 GO/API/研究隔离合同；B 新增显式 `clock_mode ∈ {production_default,next_tradable_open_research}`、`slip_bp_per_side ∈ {0,5,10,20}` 及 harness 矩阵接线、data-free pins。clock XOR slip，基线仍为 production_default + 0；买乘 `(1+s)`、卖乘 `(1-s)`，费用按受冲击名义金额重算，`DEFAULT_SCHEDULE` 常量不变。
+
+能力状态只有在 hook 落地并通过验证后才转 `FILLABLE`；合并后的 4090 slice D 才填数值，本 PR 不执行 D、不 merge、不改 #151/#152 的 contested files。Book/v7/ModeB 仍分列，局部 bp 不进入 NAV。
+
+**当前停点：A 文档，B 未实施。** START 14:55 close 的延迟委托不能在原同日连续竞价候选内成交；ModeB 日收入场也无后续同日候选，局部探针没有定义组合到期订单的后续生命周期。严格遵守「semantic forks → PR comment + stop」；[设计 §9](design-minute-sensitivity-b-batch4-fullstrat-2026-09-20.md#9-research-only-fullstrat-clockslip-hooks) 列出 H1（局部成交范围、组合重放）/ H2（全部成交、同日到期）/ H3（全部成交、跨 session pending）供人裁。未选择、不提前承诺 B 完成或矩阵可填。

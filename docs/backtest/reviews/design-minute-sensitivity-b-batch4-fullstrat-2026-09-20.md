@@ -6,6 +6,8 @@
 
 BASE tip：`ac1fa97`（Merge #140 / `origin/master`）。
 
+**2026-09-21 Human GO option 2**：批准新增 research-only fullstrat clock/slip hooks；实施基线 `32b78b1`，分支 `research/batch4-fullstrat-clock-slip-hooks`。Human cut A 仍成立：read-only expand，no behavior C；`production_C=frozen`。A（文档）与 B（实现及 data-free pins）分 commit；完成后只开 draft PR，不 merge。发现语义分叉须 PR comment + stop，不能自行裁定。当前 **A 已记录，B 因 §9 的时钟语义分叉暂停**；尚未落地 hook，现有矩阵状态不变。
+
 ---
 
 ## 1. 能算 vs 必须 DATA_GAP
@@ -19,11 +21,13 @@ BASE tip：`ac1fa97`（Merge #140 / `origin/master`）。
 | 跨引擎 NAV 优劣比较 | **禁止** | **禁止** | **禁止** |
 | 把 batch2/3 局部事件 bp Δ 贴进 NAV 格 | **禁止** | **禁止** | **禁止** |
 
-### 为何 clock / slip 全策略轴为 DATA_GAP
+### 为何 clock / slip 全策略轴为 DATA_GAP（原批与当前实现）
 
 - Book / v7 / Mode B 生产默认成交时钟与费率写死在引擎路径；CLI **无** research-only「全策略 clock 交换」或「全策略滑点」开关。
 - 若为填格而改 `ashare_fill_clock` / 默认 fee / 静默 fork 生产路径 → 触犯 **production_C frozen**。
 - batch2/3 的 local-event clock / cost 叠层**仅局部**，不得冒充组合 NAV。本批对这两轴显式留空，并仍交付**默认时钟**基线全策略 NAV（诚实填）。
+
+Option 2 授权在研究边界内解除「无 hook」限制；不表示 hook 已实现。§9 的合同经人裁、B 落地并通过 pins 后，四个 cell 才从 `DATA_GAP` 改为 `FILLABLE`；数值仍等待合并后的 4090 slice D。
 
 ---
 
@@ -139,3 +143,48 @@ VM 无湖：`--dry-run` / `--emit-stubs` / `--help` 即可；不要求本地 qli
 | 导出 | `backtest/research/exports/minute_sensitivity_b_20260920/batch4_fullstrat/`（matrix / stubs / manifest） |
 
 生产 Python **零行为变更**；仅 docs + research harness + 导出桩。
+
+---
+
+## 9. research-only fullstrat clock/slip hooks
+
+### 已授权边界与拟定 API（尚未实现）
+
+- 新 helper：`backtest/research/fullstrat_research_hooks.py`；batch4 harness 的 `run_book` / `run_v7` / `run_modeb_library` 显式传 `clock_mode="production_default"`、`slip_bp_per_side=0`。不增加生产 CLI 开关，不使用隐式环境开关或全局默认替换。
+- `clock_mode ∈ {production_default, next_tradable_open_research}`；`slip_bp_per_side ∈ {0,5,10,20}`。非默认 clock 与非零 slip 同时出现必须拒绝，运行前校验整个矩阵。
+- harness 可提供 `--cells <comma-separated cell_id>` 选择固定矩阵子集；每个 cell 的 kwargs 来自矩阵，不允许任意组合。既有 Book/v7 CLI 默认及 ModeB 默认库调用保留原路径；`production_default + 0` 的 trades/equity 须逐字节等价。
+- clock 研究交换复用 `next_tradable_open` 的可得时刻、`decision_at + 1ms`、连续竞价、涨跌停、现金与实际买日 T+1 门。**全策略覆盖哪些成交、到期后持仓如何继续，见下方人裁项；不得从局部探针推定。**
+- slip：`s = slip_bp_per_side / 10000`，买价 `buy * (1+s)`、卖价 `sell * (1-s)`；按受冲击名义金额重算每边费用。真实成交、现金、持仓及逐日估值重放后生成组合 NAV；未卖持仓的 market mark 不伪装成受冲击卖出。不把 local-event Δbp 贴入 NAV。
+- 不修改 `ashare_fill_clock` 的默认语义或 `DEFAULT_SCHEDULE` 常量；Book/v7 仍以 `BILATERAL_10BP` 为费用基线，ModeB 仍用原双边 10bp 合同。优先隔离到新研究 helper；不编辑 #151/#152 的 `strategy11*`、`strategy12*`、`csv_ledger.py` 买卖实现。
+- 各 cell 使用独立 artifact 目录及参数来源记录，避免基线缓存被当作实验结果。Book / v7 / ModeB 分文件，排名仅在同引擎同 cell 内；ModeB oracle 不进入可执行 NAV/rank。
+
+| cell_id | clock_mode | slip_bp_per_side | hook 落地后的 Book / v7 / ModeB 能力状态 |
+|---|---|---:|---|
+| `baseline_default_clock_fee` | `production_default` | 0 | `FILLABLE`（基线路径不变） |
+| `clock_next_open_fullstrat` | `next_tradable_open_research` | 0 | `FILLABLE`，待人裁及实现 |
+| `slip_5bp_fullstrat` | `production_default` | 5 | `FILLABLE`，待实现 |
+| `slip_10bp_fullstrat` | `production_default` | 10 | `FILLABLE`，待实现 |
+| `slip_20bp_fullstrat` | `production_default` | 20 | `FILLABLE`，待实现 |
+
+`FILLABLE` 仅代表研究 runner 有能力运行，不等于 `FILLED`。所有新增数值仍留空；slice D 为合并后 4090 执行，超出本 PR。实际缺行情、缺名单或运行失败仍保留带证据的 `DATA_GAP`。
+
+### 实施前语义分叉：晚盘入场与未成交订单生命周期
+
+代码证据（`32b78b1`）：
+
+1. `scripts/research/run_minute_sensitivity_b.py::LakeBar` 使用 START 标签；`next_open` 要求 `bar.start >= decision_at + 1ms`，只接收上午 `[09:30,11:30)`、下午 `[13:00,14:57)`。`lake_event` / `MODEB_NEXT_OPEN_RULE` 的真实湖探针只给当日候选，订单当日到期；batch1 合成隔夜 fixture 另有显式跨日 session，不是 batch2/3 的湖合同。
+2. `csv_minute_backtest.py::simulate` 的 pool 买入取 `BUY_HM=14:55` close；v7 `simulate_v7` 在 `hm==895` 用 close 开 trial。若该报价为 START 14:55，则 close 于 14:56 可得、14:56:00.001 提交。14:56 open 早于提交，14:57 及之后被连续竞价门拒绝。Book 精确 14:55 pool 买入与 v7 trial 在严格同日规则下均无候选；Book 更早 fallback 报价须另按其可得时刻处理，不能以此证明正常入场可成交。
+3. ModeB `assemble_instances` 用同一 none 1min 聚合的日收作为入场价；batch3 只交换 **退出**，没有定义把日收入场改到哪个后续 session。把 clock 扩到入场且保持同日到期，将没有入场候选。
+4. v7 `_buy` 成功后，调用方立即推进 `position.stage`；Book 当日卖出扫描先于 chase/pool 买入。仅替换未来成交价或 fee 对象不能实现延迟到下一 session 的资金、lot、stage、T+1 和日终 NAV。ModeB 局部 `UNFILLED` 也没有说明全策略剩余窗口内如何恢复退出评估。
+
+data-free 复核：提取现有 `stamp` / `Bar` / `LakeBar` / `next_open` AST 原定义执行（不改源文件、不读湖）；Book/v7 14:56 决策，候选 14:56–15:00，实际返回 `UNFILLED`，拒绝序列为 `before_submit`、随后四个 `outside_continuous_session`。ModeB 日收后无候选返回 `UNFILLED/no_candidate`。
+
+**需人裁的选择；本次未选择任何一项：**
+
+| 选项 | 明确的实验合同及影响 |
+|---|---|
+| H1：沿用局部轴覆盖范围，重放完整组合 | 只交换 Book chase / v7 add / ModeB exit；普通 pool/trial/ModeB entry 保持默认。可产生组合 NAV，但必须标明是这些成交路径的 clock 敏感性，不声称全部成交换钟。 |
+| H2：全部成交换钟，严格同日到期 | pool/trial/ModeB entry 同样交换；接受晚盘无候选导致的未开仓及可能全现金 NAV，不偷偷保留基线入场。 |
+| H3：全部成交换钟，订单跨 session 保留 | 显式扩展 batch2/3 合同；需要研究 pending-order 状态机，定义资金预留/同现金竞争、实际成交后阶段迁移、取消/重评及窗末未成交。不能靠 fee/price wrapper 冒充。 |
+
+H1/H2 仍需明确：卖单到期后，剩余持仓在次日重新评估策略，还是保留退出意图继续等待；局部 `UNFILLED` 本身没有此合同。人裁前不实现 B、不把矩阵改为 `FILLABLE`，按本次指令在 draft PR comment 列出上述选项并停止。
