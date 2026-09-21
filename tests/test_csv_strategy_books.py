@@ -31,6 +31,7 @@ def test_registered_books_are_explicit():
         "version8_3",
         "version9",
         "version10",
+        "version12",
         "topk_dropout",
         "topk_score_exit",
     )

@@ -1,6 +1,6 @@
 # Plan: strategy 12 金榕元均线减仓书（2026-09-21）
 
-> **Status**: **v1.0 · ✅ 已人裁 GO（2026-09-21，Asia/Shanghai）**——用户裁定 P2–P13 **全按共识建议**；四个二选一由主持按评审倾向定案：P6 不加闸（P11 latch 天然限流，HELP_LOCK 声明理论上限）、P8 默认 `stock_pool/`（8 先例）、P9④ 新买入（池/chase）**清零**该码双记忆（防双重仓位）、P13 减仓保留 lot0 ≥100 股（保台阶锚）。
+> **Status**: **v1.0 · ✅ 已实施（本 PR #151，切片 A/B/C；未合并）**。2026-09-21 本轮范围为 A→B→C；D 实湖五点对比尚未执行。原人裁 GO：用户裁定 P2–P13 **全按共识建议**；四个二选一由主持按评审倾向定案：P6 不加闸（HELP_LOCK 声明理论上限）、P8 默认 `stock_pool/`（8 先例）、P9④ 新买入（池/chase）**清零**该码双记忆（防双重仓位）、P13 减仓保留 lot0 ≥100 股（保台阶锚）。
 > **后续人裁 A（2026-09-21）**：P11 的每日 latch 表述已废止；只有下方周期锁，成功收复并买回后立即再武装，同日可再次减仓，不叠加日锁。以 [handoff §0](handoff-strategy12-codex-impl-2026-09-21.md#0-硬边界人裁已定勿越) 为准。
 > **后续人裁 residual=2（2026-09-21）**：成功收复后 reduced/stopped 双通道均保留 `<100` 股买回记忆，合入各自下一轮；即使本轮无买入，`memory<100` 时满足收复条件仍保留残余并再武装。禁止等待记忆归零才再武装；覆盖 P4/P11「清零」措辞。详见 handoff §0。
 > **评审链**：主笔对抗层（F1–F8）→ 四稿 fan-out（codex/kimi/cursor/claude 全 rc=0，2 组实验）→ [merge-consensus S1–S19](../architecture/reviews/2026-09-21/plan-strategy12-jinrongyuan/merge-consensus.md)。关键修正：默认路径部分卖静默丢股、v8 wiring 三键绕过 sell_gate、P9④ 改记忆股数上限、价域 front、减仓 latch、台阶单调记忆、14:55 假先例。实施走 [Codex 交接工作流](workflow-codex-handoff.md)（门槛：ma_infra PR #150 已合入；实施 PR 交 VM codex）。
@@ -111,8 +111,11 @@ D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_daily_backtest.py --
 
 ## 9) 代码落点
 
-- 新：`backtest/research/strategy12_rules.py`、`tests/test_strategy12_rules.py`、（B/C）`tests/test_partial_sell.py`、`tests/test_strategy12_engine.py`
+- 新：`backtest/research/strategy12_rules.py`（纯函数）、`backtest/research/strategy12_engine.py`（书侧日线/分钟编排）、`tests/test_strategy12_rules.py`、`tests/test_partial_sell.py`、`tests/test_strategy12_engine.py`、`tests/fixtures/strategy12_default_outputs.json`（12 本既有书两引擎的改前 CSV 字节指纹）
 - 改：`backtest/research/csv_ledger.py`（部分卖 helper + 状态字段）、`csv_simulate_loop.py`（钩子消费）、`csv_daily_backtest.py` / `csv_minute_backtest.py`（钩子传递）、`csv_strategy_books.py`（注册）、`tests/test_csv_strategy_books.py`（清单 pin）、`AGENTS.md`（Research entries 增 version12 行）
+- exdiv 第三触点：`ashare_exdiv_economics.py:entitle` 增 opt-in 有效事件回调，经校验/去重后通知书侧，覆盖已空仓但仍有 stopped 记忆的代码；默认不通知、不新增 flat entitlement。
+- P10 实施采用「新增参数」路径：日线/分钟均显式 `--dividend-type front`，分钟日线与分钟 K 同读对应 front 湖分区，不混用 none 缓存或 qlib bin；缺分区/缺代码即失败；两入口均不加载 E-R6 remap。MA10 预热使用 22 个日历日 slack。
+- 状态挂 `st.book_state`；部分卖成交量由 `_sell` 返回并更新记忆。日线独立部分卖队列，分钟按时间推进，`scan_held_day` 仍为 5-tuple，数量走 `exit_state`。两引擎保留唯一、无条件的每日估值调用点。
 
 ## 10) 修订程序
 

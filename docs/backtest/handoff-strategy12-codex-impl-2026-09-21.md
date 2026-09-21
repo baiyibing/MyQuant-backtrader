@@ -53,3 +53,18 @@ D:\anaconda3\envs\vanna312\python.exe -m ruff check <触及文件>
 ```
 
 完成后：plan 头部回写「✅ 已实施（本 PR）」；遇语义分叉（尤其 latch 边界、exdiv 缩放取整）**停下来在 PR 评论列明，不自裁**。
+
+## 实施回填（PR #151，2026-09-21）
+
+- 本轮 A/B/C 已实施；未合并。docs-first residual=2：`fa20f04`；A：`9fa8b27`；B：`86a2880`；C 为本次状态机/注册提交。
+- **S1 fixed = yes**：扣股在 volume_cap/exdiv 条件外，非零余仓保留，空 lot 才删；默认路径、容量、locked bonus、现金与持仓守恒均有 pin。
+- **latch=A + residual=2**：双通道按实际成交累加/扣减，整百买回完成留下的 `<100` 股保留并再武装；无买入的合格收复也再武装；下一轮合并，不等待记忆归零。MA5 周期锁限制减仓；MA10 止损仍清理全部可卖股份，不因尚有止损记忆而跳过。
+- `strategy12_engine.py` 持有书侧编排，状态在 `st.book_state`；同日减仓/买回按分钟时间推进，买回股份受 T+1；池/chase 成功成交清双记忆，台阶计数不随存活 lot 减少。既有 12 本书日线/分钟 trades/equity 与改前 `9fa8b27` 的 CSV 字节指纹一致。
+- 价域采用新增参数方案：两个入口都用 `--strategy 12 --dividend-type front`；日线与分钟均读配置湖的 front 分区，缺失即报错。分钟不使用 none 缓存或 qlib 价域；E-R6 自动关闭；送转经济事件仍仅显式 `exdiv_economics` 开启。
+- Linux 验证解释器：`/tmp/ma-infra-venv/bin/python3`（Python 3.12.13）；最终 gates 结果回写 PR 评论。UTF-8 无 BOM，NUL=0。
+- D 实湖五点对比不在本轮 A→B→C 范围，尚未执行；需已配置且含 front 日线/分钟分区的湖。可用下列命令启动策略 12，不推断数据盘路径：
+
+```bash
+python3 backtest/research/csv_daily_backtest.py --strategy 12 --dividend-type front --start 20251023 --end 20260909
+python3 backtest/research/csv_minute_backtest.py --strategy 12 --dividend-type front --start 20251023 --end 20260909
+```

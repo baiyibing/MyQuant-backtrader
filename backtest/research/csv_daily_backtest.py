@@ -86,7 +86,7 @@ from backtest.research.csv_ledger import (  # noqa: E402
     apply_exdiv_economics,
     resolve_limit_prices,
 )
-from backtest.research.ashare_exdiv_economics import EconomicLookup, ExDivEconomics
+from backtest.research.ashare_exdiv_economics import EconomicLookup, ExDivEconomics  # noqa: E402
 
 from backtest.research.exdiv_map import (  # noqa: E402
     k_for,
@@ -127,7 +127,7 @@ from backtest.research.csv_artifacts import (  # noqa: E402
     summarize,
     write_run_artifacts,
 )
-from backtest.research.ashare_bars import load_daily_ohlc
+from backtest.research.ashare_bars import load_daily_ohlc  # noqa: E402
 from backtest.research.csv_daily_loader import (  # noqa: E402
     warmup_start,
     warn_stale_period_env,
@@ -159,6 +159,27 @@ _ = (
     round_fen,
 )
 from common.infra.data_root import resolve_period_root  # noqa: E402
+
+# Preserve the existing engine/test import surface (N-R9).
+_ = (
+    ThreadPoolExecutor,
+    _named_limits,
+    _pool_names_asof,
+    _progress,
+    add_csv_strategy_arg,
+    add_strategy6_ratio_args,
+    as_completed,
+    chase_decision,
+    chase_explained,
+    execute_buy,
+    last_close_mark,
+    np,
+    pc,
+    pq,
+    queue_limit_up_chase,
+    resolve_period_root,
+    utc_ms_range,
+)
 
 HELP_LOCK = """
 日线近似口径（相对分钟保真版的唯一失真来源）：
@@ -303,203 +324,209 @@ def simulate(
         names = names_asof(ds)
         st.daily_quota_used = 0.0  # 每个交易日开盘重置常规额度
 
-        bind_opening = hooks.get("bind_opening_held")
-        if callable(bind_opening):
-            bind_opening(ds, list(st.positions.keys()))
-
-        for code in list(st.positions):
-            if code not in bars:
-                continue
-            got = day_bar_and_prev_closes(bars[code], day)
-            if got is None:
-                continue
-            row, closes = got
-            apply_exdiv_economics(st, code, ds)
-            # E-R6: rescale open lots then map prev_close before limits / lot loop.
-            kk = k_for(exdiv, code, ds)
-            if kk is not None:
-                for pos in list(st.positions.get(code, [])):
-                    rescale_position(pos, kk)
-                    st.stats["exdiv_adjusted_lots"] = (
-                        int(st.stats.get("exdiv_adjusted_lots", 0)) + 1
-                    )
-            prev_close, did_map = mapped_prev_close(exdiv, code, ds, float(closes[-1]))
-            if did_map:
-                st.stats["exdiv_prev_close_mapped"] = (
-                    int(st.stats.get("exdiv_prev_close_mapped", 0)) + 1
-                )
-            limits = book_limit_prices(
-                code, prev_close, names, qlib_limit_pct=qlib_limit_pct
+        if callable(hooks.get("run_daily_day")):
+            hooks["run_daily_day"](
+                st, pending_chase, hooks=hooks, bars=bars, pool_days=pool_days,
+                day_i=i, day=day, ds=ds, names=names, daily_quota=daily_quota, exdiv=exdiv,
             )
-            if limits is None:
-                st.stats["skip_unknown_board"] += 1
-                continue
-            limit_up, limit_down = limits
-            for pos in list(st.positions.get(code, [])):
-                if getattr(pos, "ride_with", None) is not None:
+        else:
+            bind_opening = hooks.get("bind_opening_held")
+            if callable(bind_opening):
+                bind_opening(ds, list(st.positions.keys()))
+
+            for code in list(st.positions):
+                if code not in bars:
                     continue
-                n_days = i - pos.entry_idx  # 持仓交易日数（买入日=0）
-
-                # Date mapping serves T+1 only; sell rules keep union-calendar n_days.
-                if pos.pending_exit and t1_sellable(calendar[pos.entry_idx].date(), day.date()):
-                    if defer_sell_at_limit(float(row["open"]), limits):
-                        st.stats["defer_sell_limit_down"] += 1
-                    else:
-                        _sell(st, code, pos, float(row["open"]), day, pos.pending_exit,
-                              price_rule="daily_pending_next_open")
+                got = day_bar_and_prev_closes(bars[code], day)
+                if got is None:
                     continue
-
-                if t1_sellable(calendar[pos.entry_idx].date(), day.date()):
-                    stop_enabled = isinstance(stop_pct, float) and 0 < stop_pct < 1
-                    if stop_enabled:
-                        trigger = pos.cost * (1.0 - stop_pct)
-                        if float(row["open"]) <= trigger:
-                            if defer_sell_at_limit(float(row["open"]), limits):
-                                st.stats["defer_sell_limit_down"] += 1
-                            else:
-                                _sell(
-                                    st,
-                                    code,
-                                    pos,
-                                    float(row["open"]),
-                                    day,
-                                    "stop_loss:gap_open",
-                                    price_rule="daily_stop_gap_open",
-                                )
-                            continue
-                        if float(row["low"]) <= trigger:
-                            if defer_sell_at_limit(trigger, limits):
-                                st.stats["defer_sell_limit_down"] += 1
-                                if limit_down_pending:
-                                    pos.pending_exit = "stop_loss:touch"
-                            else:
-                                _sell(st, code, pos, trigger, day, "stop_loss:touch",
-                                      price_rule="daily_stop_touch_at_trigger")
-                            continue
-
-                    pos.peak = max(pos.peak, float(row["high"]))
-                    close = float(row["close"])
-                    if defer_limit_up and hit_limit_up(close, limit_up):
+                row, closes = got
+                apply_exdiv_economics(st, code, ds)
+                # E-R6: rescale open lots then map prev_close before limits / lot loop.
+                kk = k_for(exdiv, code, ds)
+                if kk is not None:
+                    for pos in list(st.positions.get(code, [])):
+                        rescale_position(pos, kk)
+                        st.stats["exdiv_adjusted_lots"] = (
+                            int(st.stats.get("exdiv_adjusted_lots", 0)) + 1
+                        )
+                prev_close, did_map = mapped_prev_close(exdiv, code, ds, float(closes[-1]))
+                if did_map:
+                    st.stats["exdiv_prev_close_mapped"] = (
+                        int(st.stats.get("exdiv_prev_close_mapped", 0)) + 1
+                    )
+                limits = book_limit_prices(
+                    code, prev_close, names, qlib_limit_pct=qlib_limit_pct
+                )
+                if limits is None:
+                    st.stats["skip_unknown_board"] += 1
+                    continue
+                limit_up, limit_down = limits
+                for pos in list(st.positions.get(code, [])):
+                    if getattr(pos, "ride_with", None) is not None:
                         continue
-                    if reserve_limit_up and hit_limit_up(float(row["open"]), limit_up):
-                        pos.reserved = True
-                    if reserve_limit_up and pos.reserved:
-                        if hit_limit_up(close, limit_up):
-                            continue
-                        pos.reserved = False
-                        reason = "open_board"
-                    else:
-                        reason = (
-                            sell_gate(code, close, day, closes)
-                            if callable(sell_gate)
-                            else take_profit(close, pos.cost, pos.peak, n_days)
-                        )
-                    if reason:
-                        same_bar = any(
-                            reason.startswith(prefix)
-                            for prefix in daily_same_bar_prefixes
-                        )
-                        at_up = hit_limit_up(close, limit_up)
-                        at_down = hit_limit_down(close, limit_down)
-                        blocked = (
-                            (at_up or at_down)
-                            if forbid_all_trade_at_limit
-                            else defer_sell_at_limit(close, limits)
-                        )
-                        if blocked:
-                            st.stats["skip_limit_sell"] = (
-                                int(st.stats.get("skip_limit_sell", 0)) + 1
-                            )
-                            if limit_down_pending:
-                                if same_bar or at_down:
-                                    st.stats["defer_sell_limit_down"] += 1
-                                pos.pending_exit = reason
-                            continue
-                        if same_bar:
-                            _sell(st, code, pos, close, day, reason,
-                                  price_rule="daily_open_board_same_close"
-                                  if reason.startswith("open_board") else "")
+                    n_days = i - pos.entry_idx  # 持仓交易日数（买入日=0）
+
+                    # Date mapping serves T+1 only; sell rules keep union-calendar n_days.
+                    if pos.pending_exit and t1_sellable(calendar[pos.entry_idx].date(), day.date()):
+                        if defer_sell_at_limit(float(row["open"]), limits):
+                            st.stats["defer_sell_limit_down"] += 1
                         else:
-                            pos.pending_exit = reason
+                            _sell(st, code, pos, float(row["open"]), day, pos.pending_exit,
+                                  price_rule="daily_pending_next_open")
+                        continue
 
-        def _chase_quotes_for(code: str):
-            if code not in bars:
-                return None
-            got = day_bar_and_prev_closes(bars[code], day)
-            if got is None:
-                return None
-            row, closes = got
-            return float(row["open"]), float(row["close"]), closes
+                    if t1_sellable(calendar[pos.entry_idx].date(), day.date()):
+                        stop_enabled = isinstance(stop_pct, float) and 0 < stop_pct < 1
+                        if stop_enabled:
+                            trigger = pos.cost * (1.0 - stop_pct)
+                            if float(row["open"]) <= trigger:
+                                if defer_sell_at_limit(float(row["open"]), limits):
+                                    st.stats["defer_sell_limit_down"] += 1
+                                else:
+                                    _sell(
+                                        st,
+                                        code,
+                                        pos,
+                                        float(row["open"]),
+                                        day,
+                                        "stop_loss:gap_open",
+                                        price_rule="daily_stop_gap_open",
+                                    )
+                                continue
+                            if float(row["low"]) <= trigger:
+                                if defer_sell_at_limit(trigger, limits):
+                                    st.stats["defer_sell_limit_down"] += 1
+                                    if limit_down_pending:
+                                        pos.pending_exit = "stop_loss:touch"
+                                else:
+                                    _sell(st, code, pos, trigger, day, "stop_loss:touch",
+                                          price_rule="daily_stop_touch_at_trigger")
+                                continue
 
-        run_chase_due_day(
-            st,
-            pending_chase,
-            day_i=i,
-            day=day,
-            names=names,
-            allow_add=allow_add,
-            buy_gate=buy_gate,
-            quotes_for=_chase_quotes_for,
-            exdiv=exdiv,
-            ds=ds,
-            qlib_limit_pct=qlib_limit_pct,
-            allow_new_name=hooks.get("allow_new_name"),
-            add_gate=hooks.get("add_gate"),
-            index_blocks_add=hooks.get("index_blocks_add", True),
-        )
+                        pos.peak = max(pos.peak, float(row["high"]))
+                        close = float(row["close"])
+                        if defer_limit_up and hit_limit_up(close, limit_up):
+                            continue
+                        if reserve_limit_up and hit_limit_up(float(row["open"]), limit_up):
+                            pos.reserved = True
+                        if reserve_limit_up and pos.reserved:
+                            if hit_limit_up(close, limit_up):
+                                continue
+                            pos.reserved = False
+                            reason = "open_board"
+                        else:
+                            reason = (
+                                sell_gate(code, close, day, closes)
+                                if callable(sell_gate)
+                                else take_profit(close, pos.cost, pos.peak, n_days)
+                            )
+                        if reason:
+                            same_bar = any(
+                                reason.startswith(prefix)
+                                for prefix in daily_same_bar_prefixes
+                            )
+                            at_up = hit_limit_up(close, limit_up)
+                            at_down = hit_limit_down(close, limit_down)
+                            blocked = (
+                                (at_up or at_down)
+                                if forbid_all_trade_at_limit
+                                else defer_sell_at_limit(close, limits)
+                            )
+                            if blocked:
+                                st.stats["skip_limit_sell"] = (
+                                    int(st.stats.get("skip_limit_sell", 0)) + 1
+                                )
+                                if limit_down_pending:
+                                    if same_bar or at_down:
+                                        st.stats["defer_sell_limit_down"] += 1
+                                    pos.pending_exit = reason
+                                continue
+                            if same_bar:
+                                _sell(st, code, pos, close, day, reason,
+                                      price_rule="daily_open_board_same_close"
+                                      if reason.startswith("open_board") else "")
+                            else:
+                                pos.pending_exit = reason
 
-        def _pool_quote_for(code: str):
-            if code not in bars:
-                return None
-            got = day_bar_and_prev_closes(bars[code], day)
-            if got is None:
-                return None
-            row, closes = got
-            return float(row["close"]), closes
+            def _chase_quotes_for(code: str):
+                if code not in bars:
+                    return None
+                got = day_bar_and_prev_closes(bars[code], day)
+                if got is None:
+                    return None
+                row, closes = got
+                return float(row["open"]), float(row["close"]), closes
 
-        run_pool_buys_day(
-            st,
-            pending_chase,
-            day_i=i,
-            day=day,
-            ds=ds,
-            pool_days=pool_days,
-            daily_quota=daily_quota,
-            names=names,
-            allow_add=allow_add,
-            buy_gate=buy_gate,
-            buy_quote_for=_pool_quote_for,
-            sizing=hooks.get("sizing", "daily_quota"),
-            name_budget=hooks.get("name_budget", 1_000_000.0),
-            ration=hooks.get("ration", "file_order"),
-            ration_seed=hooks.get("ration_seed", 0),
-            exdiv=exdiv,
-            planned_for_day=hooks.get("planned_for_day"),
-            cash_deploy_frac=hooks.get("cash_deploy_frac"),
-            qlib_limit_pct=qlib_limit_pct,
-            limit_up_chase=limit_up_chase,
-            forbid_all_trade_at_limit=forbid_all_trade_at_limit,
-            allow_new_name=hooks.get("allow_new_name"),
-            add_gate=hooks.get("add_gate"),
-            name_lot_budget=hooks.get("name_lot_budget"),
-            index_blocks_add=hooks.get("index_blocks_add", True),
-        )
-        run_step_adds_day(
-            st,
-            day_i=i,
-            day=day,
-            ds=ds,
-            names=names,
-            buy_quote_for=_pool_quote_for,
-            sizing=hooks.get("sizing", "daily_quota"),
-            name_budget=hooks.get("name_budget", 1_000_000.0),
-            exdiv=exdiv,
-            qlib_limit_pct=qlib_limit_pct,
-            forbid_all_trade_at_limit=forbid_all_trade_at_limit,
-            buy_gate=buy_gate,
-            name_lot_budget=hooks.get("name_lot_budget"),
-            step_add=hooks.get("step_add"),
-        )
+            run_chase_due_day(
+                st,
+                pending_chase,
+                day_i=i,
+                day=day,
+                names=names,
+                allow_add=allow_add,
+                buy_gate=buy_gate,
+                quotes_for=_chase_quotes_for,
+                exdiv=exdiv,
+                ds=ds,
+                qlib_limit_pct=qlib_limit_pct,
+                allow_new_name=hooks.get("allow_new_name"),
+                add_gate=hooks.get("add_gate"),
+                index_blocks_add=hooks.get("index_blocks_add", True),
+            )
+
+            def _pool_quote_for(code: str):
+                if code not in bars:
+                    return None
+                got = day_bar_and_prev_closes(bars[code], day)
+                if got is None:
+                    return None
+                row, closes = got
+                return float(row["close"]), closes
+
+            run_pool_buys_day(
+                st,
+                pending_chase,
+                day_i=i,
+                day=day,
+                ds=ds,
+                pool_days=pool_days,
+                daily_quota=daily_quota,
+                names=names,
+                allow_add=allow_add,
+                buy_gate=buy_gate,
+                buy_quote_for=_pool_quote_for,
+                sizing=hooks.get("sizing", "daily_quota"),
+                name_budget=hooks.get("name_budget", 1_000_000.0),
+                ration=hooks.get("ration", "file_order"),
+                ration_seed=hooks.get("ration_seed", 0),
+                exdiv=exdiv,
+                planned_for_day=hooks.get("planned_for_day"),
+                cash_deploy_frac=hooks.get("cash_deploy_frac"),
+                qlib_limit_pct=qlib_limit_pct,
+                limit_up_chase=limit_up_chase,
+                forbid_all_trade_at_limit=forbid_all_trade_at_limit,
+                allow_new_name=hooks.get("allow_new_name"),
+                add_gate=hooks.get("add_gate"),
+                name_lot_budget=hooks.get("name_lot_budget"),
+                index_blocks_add=hooks.get("index_blocks_add", True),
+            )
+            run_step_adds_day(
+                st,
+                day_i=i,
+                day=day,
+                ds=ds,
+                names=names,
+                buy_quote_for=_pool_quote_for,
+                sizing=hooks.get("sizing", "daily_quota"),
+                name_budget=hooks.get("name_budget", 1_000_000.0),
+                exdiv=exdiv,
+                qlib_limit_pct=qlib_limit_pct,
+                forbid_all_trade_at_limit=forbid_all_trade_at_limit,
+                buy_gate=buy_gate,
+                name_lot_budget=hooks.get("name_lot_budget"),
+                step_add=hooks.get("step_add"),
+            )
 
         append_equity_and_eod_marks(
             st,
@@ -545,6 +572,10 @@ def run(
     min_cost: Optional[float] = None,
 ) -> SimState:
     warn_stale_period_env()
+    if normalize_csv_strategy(strategy) == "version12" and (
+        dividend_type != "front" or qlib_data_root is not None
+    ):
+        raise ValueError("version12 requires lake --dividend-type front")
     t_pool = time.perf_counter()
     actual_pool_dir = resolve_research_pool_dir(strategy, pool_dir, repo=REPO)
     pool_days = load_pool_day_map(
@@ -561,10 +592,14 @@ def run(
     load_start = warmup_start(
         start,
         STRATEGY4_CALENDAR_SLACK_DAYS
-        if normalize_csv_strategy(strategy) == "version4"
+        if normalize_csv_strategy(strategy) in ("version4", "version12")
         else (20 if return_threshold_filter else WARMUP_DAYS),
     )
     use_qlib_bins = qlib_data_root is not None
+    if normalize_csv_strategy(strategy) == "version12":
+        front_root = (Path(daily_root) if daily_root is not None else resolve_period_root("1d")) / "dividend_type=front"
+        if not front_root.is_dir():
+            raise FileNotFoundError(f"missing front daily partition: {front_root}")
     print(
         f"loading daily bars: {len(all_codes)} codes, {load_start}..{end}; "
         f"pool {min(pool_days)}..{max(pool_days)} ({len(pool_days)} days); "
@@ -587,6 +622,8 @@ def run(
         dividend_type=dividend_type,
         daily_root=daily_root,
     )
+    if normalize_csv_strategy(strategy) == "version12" and (missing := all_codes - bars.keys()):
+        raise ValueError(f"missing front daily bars for strategy12: {sorted(missing)}")
     t_daily = time.perf_counter() - t_daily
     print(
         f"loaded {len(bars)}/{len(all_codes)} daily series, {len(pool_days)} pool days",

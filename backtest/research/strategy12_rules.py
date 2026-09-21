@@ -159,7 +159,8 @@ def take_profit_reason(*_args) -> None:
 
 HELP_LOCK = """
 策略 12 金榕元均线减仓书（--strategy version12；12/v12 别名）：
-  价域 front；MA5/MA10 序列严格截至昨收，现价不混入均线。
+  价域 front；日线/分钟均用 --dividend-type front，分钟两种周期同读 front 湖分区。
+  不混用 none 分钟缓存或 qlib 价域；缺分区/缺代码行情即失败。MA 序列严格截至昨收。
   分钟逐根 close 评估、当根成交；日线收盘评估、次日开盘卖。
   MA10×0.90 下方先止损；MA5 下方减 t1_sellable 的 50%，floor100。
   is_step 先卖、中间 lot_id 升序、lot0 最后且减仓保留至少 100 股。
