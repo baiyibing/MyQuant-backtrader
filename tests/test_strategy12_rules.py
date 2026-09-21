@@ -102,5 +102,18 @@ def test_step_count_does_not_depend_on_surviving_step_lots():
 
 
 def test_help_pins_human_cuts():
-    for text in ("latch=A", "residual=2", "无每日锁", "memory<100", "reduced/stopped", "禁止等归零", "front", "px==open", "5+", "最低佣金"):
+    for text in (
+        "latch=A",
+        "residual=2",
+        "无每日锁",
+        "memory<100",
+        "reduced/stopped",
+        "禁止等归零",
+        "分钟成交域默认 none",
+        "front",
+        "禁止静默双重调整",
+        "px==open",
+        "5+",
+        "最低佣金",
+    ):
         assert text in r.HELP_LOCK

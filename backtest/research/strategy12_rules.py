@@ -159,8 +159,12 @@ def take_profit_reason(*_args) -> None:
 
 HELP_LOCK = """
 策略 12 金榕元均线减仓书（--strategy version12；12/v12 别名）：
-  价域 front；日线/分钟均用 --dividend-type front，分钟两种周期同读 front 湖分区。
-  不混用 none 分钟缓存或 qlib 价域；缺分区/缺代码行情即失败。MA 序列严格截至昨收。
+  人裁（#151 follow-up，LOCKED）行业约定：
+  1) 分钟成交域默认 none（--dividend-type none）；front 仅可选且缺 1m/front 时 fail-closed。
+  2) 日线信号域（MA/形态）固定用 daily dividend_type=front。
+  3) 分钟成交仍用分钟原始价（none 域）。
+  4) 除权只走显式 economics/文档路径；front 日线 + none 分钟下禁止静默双重调整。
+  front 缺分区/缺代码行情即失败。MA 序列严格截至昨收。
   分钟逐根 close 评估、当根成交；日线收盘评估、次日开盘卖。
   MA10×0.90 下方先止损；MA5 下方减 t1_sellable 的 50%，floor100。
   is_step 先卖、中间 lot_id 升序、lot0 最后且减仓保留至少 100 股。
@@ -183,6 +187,8 @@ HELP_LOCK = """
 
 
 def record_strategy12_params(st) -> None:
+    # price_domain here documents strategy-level signal-domain baseline ("front").
+    # Minute run() stamps the realized fill domain after dividend_type routing.
     st.stats.update(sell_book=BOOK_TAG, stop_pct=None, allow_add=True,
                     peak_gap_min=0, index_gate_on=False, add_step=ADD_STEP,
                     latch="A", residual=2, price_domain="front")

@@ -281,10 +281,56 @@ def test_new_cli_aliases_do_not_expand_existing_book_cli_contract():
         parser.parse_args(["--strategy", "13"])
 
 
-@pytest.mark.parametrize("engine", [daily, minute])
-def test_run_rejects_wrong_price_domain_before_data_reads(engine):
+def test_daily_run_rejects_wrong_price_domain_before_data_reads():
     with pytest.raises(ValueError, match="front"):
-        engine.run("20251103", "20251104", strategy="12")
+        daily.run("20251103", "20251104", strategy="12")
+
+
+def test_minute_run_accepts_none_price_domain_and_uses_none_loader(monkeypatch, tmp_path):
+    from common.infra import data_root
+
+    mins, days, _ = bars_for([[(895, 10)]])
+    tmp_root = tmp_path / "lake"
+    (tmp_root / "1d" / "dividend_type=front").mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(data_root, "resolve_period_root", lambda period: tmp_root / period)
+    monkeypatch.setattr(minute, "load_pool_day_map", lambda *a, **kw: {"20251103": [CODE]})
+    monkeypatch.setattr(minute, "load_pool_names_by_day", lambda *a, **kw: {})
+    seen = {"daily_kwargs": None, "minute_kwargs": None, "exdiv_loaded": False}
+
+    def daily_load(*_args, **kwargs):
+        seen["daily_kwargs"] = kwargs
+        return days
+
+    def minute_load(*_args, **kwargs):
+        seen["minute_kwargs"] = kwargs
+        return mins
+
+    def exdiv_load(*_args, **_kwargs):
+        seen["exdiv_loaded"] = True
+        return {}
+
+    monkeypatch.setattr(minute, "load_daily_ohlc", daily_load)
+    monkeypatch.setattr(minute, "load_minute_bars", minute_load)
+    monkeypatch.setattr(minute, "load_exdiv_ratios", exdiv_load)
+
+    def forbid_front_loader(*_args, **_kwargs):
+        raise AssertionError("front minute loader must not be used for dividend_type=none")
+
+    monkeypatch.setattr(minute, "_load_minute_from_lake", forbid_front_loader)
+    st = minute.run("20251103", "20251103", strategy="12", dividend_type="none")
+    assert seen["daily_kwargs"] is not None
+    assert seen["daily_kwargs"]["dividend_type"] == "front"
+    assert seen["minute_kwargs"] is not None and "lake_root" not in seen["minute_kwargs"]
+    assert seen["exdiv_loaded"] is False
+    assert st.stats["daily_signal_domain"] == "front"
+    assert st.stats["minute_fill_domain"] == "none"
+    assert st.stats["price_domain"] == "none"
+
+
+@pytest.mark.parametrize("book", ["version8", "version8_1", "version8_2", "version8_3"])
+def test_non_strategy12_minute_rejects_front_dividend_type(book):
+    with pytest.raises(ValueError, match="supported only by version12"):
+        minute.run("20251103", "20251103", strategy=book, dividend_type="front")
 
 
 @pytest.mark.parametrize("engine", [daily, minute])
@@ -326,7 +372,12 @@ def test_front_loader_uses_matching_partitions_and_disables_er6(monkeypatch, tmp
         monkeypatch.setattr(engine, "_load_minute_from_lake", minute_load)
     st = engine.run("20251103", "20251103", strategy="12", dividend_type="front")
     assert captured["exdiv"] is None
-    assert st.stats["price_domain"] == "front"
+    if engine is minute:
+        assert st.stats["daily_signal_domain"] == "front"
+        assert st.stats["minute_fill_domain"] == "front"
+        assert st.stats["price_domain"] == "front"
+    else:
+        assert st.stats["price_domain"] == "front"
     assert fills(st)[0] == ("pool", 100000)
 
 
@@ -341,6 +392,20 @@ def test_front_missing_partition_fails_instead_of_empty_data(monkeypatch, tmp_pa
     monkeypatch.setattr(engine, "load_pool_names_by_day", lambda *a, **kw: {})
     with pytest.raises(FileNotFoundError, match="front daily partition"):
         engine.run("20251103", "20251103", strategy="12", dividend_type="front")
+
+
+def test_minute_front_missing_minute_partition_fails_closed(monkeypatch, tmp_path):
+    from common.infra import data_root
+
+    _, days, _ = bars_for([[(895, 10)]])
+    (tmp_path / "1d" / "dividend_type=front").mkdir(parents=True)
+    monkeypatch.setattr(data_root, "resolve_period_root", lambda period: tmp_path / period)
+    monkeypatch.setattr(minute, "load_pool_day_map", lambda *a, **kw: {"20251103": [CODE]})
+    monkeypatch.setattr(minute, "load_pool_names_by_day", lambda *a, **kw: {})
+    monkeypatch.setattr(minute, "load_daily_ohlc", lambda *_a, **_kw: days)
+
+    with pytest.raises(FileNotFoundError, match="missing front minute partition"):
+        minute.run("20251103", "20251103", strategy="12", dividend_type="front")
 
 
 def test_locked_bonus_is_excluded_from_reduction_base_and_fill_memory():

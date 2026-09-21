@@ -42,7 +42,7 @@
 
 ## 切片 D：冒烟 runbook
 
-daily+minute 各 20251023–20260909（front 价域命令写死）；与 v8/8.1/8.2/8.3 五点对比；结果记 reviews（数字不入库）；data_gaps 含价域声明。
+daily+minute 各 20251023–20260909（日线 front + 分钟 none 默认路径）；与 v8/8.1/8.2/8.3 五点对比；结果记 reviews（数字不入库）；data_gaps 含价域声明。
 
 ## 门禁 + 回写
 
@@ -60,11 +60,18 @@ D:\anaconda3\envs\vanna312\python.exe -m ruff check <触及文件>
 - **S1 fixed = yes**：扣股在 volume_cap/exdiv 条件外，非零余仓保留，空 lot 才删；默认路径、容量、locked bonus、现金与持仓守恒均有 pin。
 - **latch=A + residual=2**：双通道按实际成交累加/扣减，整百买回完成留下的 `<100` 股保留并再武装；无买入的合格收复也再武装；下一轮合并，不等待记忆归零。MA5 周期锁限制减仓；MA10 止损仍清理全部可卖股份，不因尚有止损记忆而跳过。
 - `strategy12_engine.py` 持有书侧编排，状态在 `st.book_state`；同日减仓/买回按分钟时间推进，买回股份受 T+1；池/chase 成功成交清双记忆，台阶计数不随存活 lot 减少。既有 12 本书日线/分钟 trades/equity 与改前 `9fa8b27` 的 CSV 字节指纹一致。
-- 价域采用新增参数方案：两个入口都用 `--strategy 12 --dividend-type front`；日线与分钟均读配置湖的 front 分区，缺失即报错。分钟不使用 none 缓存或 qlib 价域；E-R6 自动关闭；送转经济事件仍仅显式 `exdiv_economics` 开启。
+- 跟进人裁（#151 follow-up，LOCKED）行业约定（原文）：
+  1. **Minute lake / fills:** `dividend_type=none` only (raw). version12 minute MUST accept `--dividend-type none`. Do NOT require `1m/front`. v8/8_1/8_2/8_3 stay none-only (unchanged).
+  2. **Daily signals / MA / patterns:** use daily `dividend_type=front` (separate domain).
+  3. **Intraday execution:** minute raw prices for fills.
+  4. **Ex-div:** only via explicit economics / documented path — **no silent double adjustment** when mixing front daily signals with none minute fills.
+- 统计语义：`record_strategy12_params` 先记录策略层基线 `price_domain=front`（信号域）；分钟 `run()` 会在最终 stats 里把 `price_domain` 覆写为实际成交域（`none` 或 `front`）。
+- Slice D（日线）文档收口仅记路径：见 `docs/backtest/reviews/slice-d-daily-front-smoke-newtest_4090-2026-09-21.md`（不含 NAV/returns/parity 结论）。
 - Linux 验证解释器：`/tmp/ma-infra-venv/bin/python3`（Python 3.12.13）；最终 gates 结果回写 PR 评论。UTF-8 无 BOM，NUL=0。
-- D 实湖五点对比不在本轮 A→B→C 范围，尚未执行；需已配置且含 front 日线/分钟分区的湖。可用下列命令启动策略 12，不推断数据盘路径：
+- D 实湖五点对比不在本轮 A→B→C 范围，尚未执行；需已配置且含 front 日线分区（分钟默认 none，front 仅可选 fail-closed）的湖。可用下列命令启动策略 12，不推断数据盘路径：
 
 ```bash
 python3 backtest/research/csv_daily_backtest.py --strategy 12 --dividend-type front --start 20251023 --end 20260909
-python3 backtest/research/csv_minute_backtest.py --strategy 12 --dividend-type front --start 20251023 --end 20260909
+# #151 follow-up default/research path: minute none (front optional fail-closed)
+python3 backtest/research/csv_minute_backtest.py --strategy 12 --dividend-type none --start 20251023 --end 20260909
 ```

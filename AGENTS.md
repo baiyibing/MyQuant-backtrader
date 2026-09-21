@@ -11,7 +11,7 @@ Standalone research-face fork (see [README.md](README.md)). Since migration S2 (
 - 1/2/3/4/5/6/8/9/10 日线：`backtest/research/csv_daily_backtest.py --strategy version1|…|version6|version8|version9|version10`
 - 1/2/3/4/5/6/8/9/10 分钟：`backtest/research/csv_minute_backtest.py --strategy version1|…|version6|version8|version9|version10`
 - 7 金榕元：`backtest/research/csv_minute_backtest_v7.py`（`--pool-dir` 必填，不回落 `stock_pool/`）
-- 12 金榕元均线减仓书：日线/分钟统一 CSV 入口 `--strategy version12 --dividend-type front`（别名 `12/v12`；默认 `stock_pool/`，与 7 独立入口及必填池分工不同）。MA5 周期减仓/买回 + MA10 止损/买回；latch=A、residual=2。
+- 12 金榕元均线减仓书：CSV 入口 `--strategy version12`（别名 `12/v12`）；#151 follow-up 行业约定：分钟湖/成交域默认 raw `--dividend-type none`（front 仅可选 fail-closed，缺 1m/front 分区即失败），日线信号域固定 `front`，盘中成交继续分钟 raw，除权仅走显式 economics/文档路径（禁止 front 日线 + none 分钟下静默双重调整）。默认 `stock_pool/`，与 7 独立入口及必填池分工不同。MA5 周期减仓/买回 + MA10 止损/买回；latch=A、residual=2。
 - topk_app_dropout（新策略，不改策略 7）：`backtest/research/csv_minute_backtest_topk_app_dropout.py`；名单可选先 `scripts/data/export_topk_app_dropout_pool.py`。禁止 `register` 进 1–10 BOOKS。
 - 9 底量超顶量：`scripts/data/export_strategy9_pool.py` 写名单，再 `--strategy version9 --pool-dir`（拒绝 `stock_pool/`）
 - 10 换手阻力 / 源 B：`scripts/data/export_ta_pool.py` 写名单（湖当日有 K；不做 TopK），再 `--strategy version10 --pool-dir`（卖点同 6；拒绝 `stock_pool/`）
