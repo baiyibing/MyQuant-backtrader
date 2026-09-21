@@ -107,3 +107,10 @@
 1. research-only 修 ModeB `load_pool_day_map` 导入后重跑 ModeB 基线格。
 2. version9/10：提供 strategy9 pool 或从矩阵剔除并标 NOT_APPLICABLE。
 3. 全策略 clock/slip 轴：仅当存在**明确 research-only** 钩子时再开；否则保持 DATA_GAP。
+
+
+---
+
+## 8. Follow-up stub（2026-09-21 · import fix pending 4090 ModeB re-run）
+
+ModeB `DATA_GAP` 根因已确认并为 **research-only import 路径错误**（`csv_common` → 应为 `csv_pool.load_pool_day_map`）；见 [addendum](addendum-batch4-modeb-import-fix-2026-09-21.md)。本文件表格中的 ModeB NAV 仍留空，**禁止编造**；合并后由 parent 在 4090 以 `--engines modeb` 重跑基线格并回填。`production_C=frozen`。
