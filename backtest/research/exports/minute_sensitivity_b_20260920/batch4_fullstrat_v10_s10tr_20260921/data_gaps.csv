@@ -1,0 +1,7 @@
+item,status,evidence
+book_version10_baseline,FILLED,verified 4090; Source-B resist_tr_bb_1000 via export_strategy10_pool path; lake ∩ TR cross-section then fail_closed; final_equity=21025809.91
+book_version9_baseline,FILLED,previously filled in #145; separate s9_bvot stamp; not rerun or re-ranked here
+fullstrat_clock_swap,DATA_GAP,no research-only fullstrat clock hook; production_C frozen
+fullstrat_slip_axis,DATA_GAP,no research-only fullstrat slip CLI
+cross_engine_nav_superiority,FORBIDDEN,Book/v7/ModeB separate; forbid cross-engine rank
+stock_pool_for_version10,FORBIDDEN,never stock_pool/; host path D:\exports\s10_tr_bb1000_20260825_20260909

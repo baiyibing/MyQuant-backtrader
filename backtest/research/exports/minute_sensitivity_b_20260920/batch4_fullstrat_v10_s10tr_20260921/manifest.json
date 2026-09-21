@@ -1,0 +1,52 @@
+{
+  "batch": 4,
+  "mode": "fullstrat_v10_s10tr",
+  "status": "EXECUTED_V10_BASELINE_FILLED",
+  "base_tip": null,
+  "production_C": "frozen",
+  "fee_schedule": "DEFAULT_SCHEDULE=BILATERAL_10BP",
+  "bar_label_semantics": "lake_index_is_bar_start_wallclock",
+  "access": "qlib_bin_1min",
+  "date_window": {
+    "start": "20260825",
+    "end": "20260909",
+    "format": "YYYYMMDD"
+  },
+  "engines": [
+    "book"
+  ],
+  "strategies": [
+    "version10"
+  ],
+  "cell_id": "baseline_default_clock_fee",
+  "clock": "production_default",
+  "slip_bp_per_side": 0,
+  "pool_dir_host": "D:\\exports\\s10_tr_bb1000_20260825_20260909",
+  "pool_policy": "Source-B resist_tr_bb_1000 via export_strategy10_pool path; stock CLI full lake universe failed closed (lake ⊃ TR cross-section; missing 000001.SZ on 20260825); research one-shot universe=lake ∩ TR cross-section then fail_closed filter; no production change; never stock_pool/; host-local path outside repo",
+  "pool_day_name_counts": {
+    "20260825": 19,
+    "20260826": 16,
+    "20260827": 6,
+    "20260828": 7,
+    "20260831": 8,
+    "20260901": 9,
+    "20260902": 3,
+    "20260903": 4,
+    "20260904": 10,
+    "20260907": 5,
+    "20260908": 13,
+    "20260909": 15
+  },
+  "pool_name_occurrences_total": 115,
+  "pool_day_csv_count": 12,
+  "book_ok": 1,
+  "final_equity": 21025809.91,
+  "total_return": 0.0012,
+  "max_drawdown": -0.0006,
+  "within_engine_rank": 1,
+  "forbid_cross_engine_nav_rank": true,
+  "version10": "OK_baseline_filled_v10_only_stamp",
+  "csv_source": "recreated_from_verified_4090_numbers_zip_unavailable_on_vm",
+  "results_doc": "docs/backtest/reviews/results-minute-sensitivity-b-batch4-fullstrat-2026-09-20.md",
+  "addendum": "docs/backtest/reviews/addendum-batch4-v10-s10tr-fill-2026-09-21.md"
+}
