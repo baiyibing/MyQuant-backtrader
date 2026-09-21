@@ -667,7 +667,7 @@ def run_modeb_library(
     try:
         from backtest.research.qlib_bin_1min import load_qlib_bin_1min_bars
         from backtest.research.unified_exit_modeb import run_modeb
-        from backtest.research.csv_common import load_pool_day_map
+        from backtest.research.csv_pool import load_pool_day_map
     except Exception as exc:  # pragma: no cover - import env
         row["note"] = f"import_failed:{exc}"
         return row
