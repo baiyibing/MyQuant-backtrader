@@ -6,11 +6,18 @@
 
 ## §0 硬边界（人裁已定，勿越）
 
+### 2026-09-21 续作人裁（优先于 plan 旧措辞）
+
+- **契约日**：D 是原信号日；T 是该股**严格晚于 D** 的首个有 bar 交易日（不是 on/after D），且 D→T ≤4 自然日。stale 始终从原 D 起算；超限不写池，`rejected.csv` 记 `skip_buy(stale)` 与原 D。信号仅使用 ≤T−1 数据，文件名为 T，不能采用 export9 的 ≤T 口径。
+- **周线 = A / prefix-equivalent**：每个 D 的结果等价于先截断至 D，再重算周线。`ma_infra` 必须提供**显式 opt-in**（参数或独立 helper）；默认 series 的全历史 backward alignment 保持不变，禁止把逐日 asof 偷藏进默认 API。data-free pin 同时证明默认行为不变、opt-in 等价于 truncate-then-call。下文“序列件、禁逐日 *_asof”指调用导出器时仍用 series；周线必须显式选择 prefix 路径。
+- **硬坑仍有效**：`apply()` 返回 dict 显式包含 `limit_up_chase=False`；回归同时 pin flag=False 与 chase pending 为空，防止调用方 `hooks.setdefault("limit_up_chase", True)` 开启追买。
+- 对 plan 的覆盖见其“2026-09-21 续作覆盖”：严格晚于 D 覆盖任何 on/after 措辞；prefix 周线覆盖将整段历史默认 backward alignment 当成逐 D 信号的解释。本轮先提交本文档与 plan，再实施 A/B/C。
+
 1. **信号价域 = front**（V1）：导出器 `dividend_type="front"` 装载信号序列；执行侧引擎现行（none + `mapped_prev_close`）；manifest 记 adjust_type。
 2. **契约日 T**（V2）：= 该股 D 后**首根有 bar** 的交易日且 D→T ≤4 自然日；超限不写池，`rejected.csv` 记 `skip_buy(stale)` + 原信号日 D；**导出器按 ≤T-1 计算写入 T**（勿照搬 export9 的 ≤T 买即用）。
 3. **cyqk 一律 `turnover_resist.compute_cyqk_series(window=200)` 现算**：两层失败契约（窗内坏日→该窗 NaN→该日该码 skip；长度不等→`PyValueError`→按码捕获 skip+计数）；**网格预检** `窗口内 (max(high)-min(low))/step > 250k` → skip+计数；**禁读 store `cyqk_t`/store 布林**（window=1000 世界）；不换算法、不复活 Cerebro。
 4. **asof 股本**（V7）：`free_float_shares.parquet.circulating_capital` 逐日 backward asof；在 `oskh_factors/bridge/turnover_resist` 加 public 薄壳；**禁 `date=None` 快照（前视）**。
-5. **MA/布林/周线一律 ma_infra 序列件**（`sma_series`/`bb_series`/`weekly_sma_series`，禁逐日 `*_asof`）；周线走 ma_infra（C9），`_daily_to_weekly` 不外露。
+5. **MA/布林/周线一律 ma_infra 序列件**（`sma_series`/`bb_series`/`weekly_sma_series`，禁逐日 `*_asof`）；周线显式 opt-in prefix-equivalent，默认 series 不变（2026-09-21 续作人裁）；`_daily_to_weekly` 不外露。
 6. **R9**：`apply()` 返回值必须含 `"limit_up_chase": False`（setdefault 默认 True 会 T+2 追买且 pending 30 天不过期——实验实锤）；`take_profit/record_params` 必返（缺则 RuntimeError）。
 7. **全市场模式滤 ST + 排 688**（V9；无名称列时 ST 按前缀错走 10% 档）；seed-30 模式沿归档不做 ST。板块：沪 60 排 688 / 深 000-003 / 创 300-301。
 8. 导出器前置剔 volume==0 bar（export9 `:126` 先例）；统计窗（2024-01-01）前 edge 置假在导出器层。

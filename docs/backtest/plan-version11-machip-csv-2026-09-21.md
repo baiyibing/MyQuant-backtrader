@@ -10,6 +10,14 @@
 
 ## 0) One-line scope
 
+### 2026-09-21 续作覆盖（binding；docs-first）
+
+1. **契约日覆盖 V2 / §1 / 切片 B**：D 为原信号日，T 为该股**严格晚于 D** 的首个有 bar 交易日；任何 on/after D 解释均作废。D→T ≤4 自然日；stale 从原 D 起算，超限无池行，`rejected.csv` 保留 `skip_buy(stale)` 和原 D。导出器只用 ≤T−1 数据计算，写 T 文件。
+2. **周线覆盖 R8 / P7 / 切片 A、B**：逐 D 采用 A / prefix-equivalent，即先截 ≤D 再重算（含末端未完成周）。`ma_infra` 新增显式 opt-in；现有默认 series 全历史 backward alignment **不变**。导出器调用显式 prefix series，不在默认 API 内隐藏逐日 asof。data-free 测试必须 pin 默认不变及 opt-in 与 truncate-then-call 等价。
+3. **R9 不变**：`apply()` 返回 dict 必须显式含 `limit_up_chase=False`；flag=False、chase pending 为空两项回归必过。
+
+此节与 [更新 handoff](handoff-version11-codex-impl-2026-09-21.md) 优先于下方历史措辞；先独立提交文档，再写代码。
+
 `version11` = ma_chip_edge 移植：`export_strategy11_pool.py` 按「T-1 四条件边缘 + 盈筹率>0.70」写契约日池 CSV（9/10 导出器先例），引擎按名单买；卖点书实现「买入日收阴→次日开盘卖 / 收阳→破 SMA5 次日开盘卖」；D+1 开盘成交语义在 CSV 时钟上重裁（P1）。
 
 ## 1) 规则转录（归档 plan §2，已锁定口径）
