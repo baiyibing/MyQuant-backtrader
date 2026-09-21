@@ -168,6 +168,11 @@ HELP_LOCK = """
         --no-cache 跳过；--rebuild-cache 重做。
   落盘：与日线同三件套；若已有同策略 csv_daily_{book}_{start}_* 净值，summary 末尾附对照。
   策略：必须显式指定已注册 --strategy（无缺省）。共用引擎，策略书换卖点与加仓。
+        strategy12 人裁（#151 option 2）约定：
+        1) 分钟成交域默认 none（--dividend-type none）；front 仅可选且缺 1m/front 时 fail-closed。
+        2) 日线信号域固定 front（MA/形态来自 1d/front）。
+        3) 分钟成交仍用分钟原始价（none 域）；
+        4) 除权只走显式 economics/文档路径，禁止与 front 日线信号形成静默双重调整。
 """
 
 _LIMIT_EPS = 0.001  # mirror csv_ledger.LIMIT_EPS for numba core
@@ -902,9 +907,12 @@ def run(
     qlib_day_root: Optional[Path] = None,
     dividend_type: str = "none",
 ) -> SimState:
-    if normalize_csv_strategy(strategy) == "version12":
-        if dividend_type != "front" or minute_source != "lake" or daily_source != "lake":
-            raise ValueError("version12 requires lake daily/minute --dividend-type front")
+    book = normalize_csv_strategy(strategy)
+    if book == "version12":
+        if dividend_type not in ("none", "front") or minute_source != "lake" or daily_source != "lake":
+            raise ValueError(
+                "version12 minute requires lake daily/minute and --dividend-type none|front"
+            )
     elif dividend_type != "none":
         raise ValueError("minute --dividend-type front is supported only by version12")
     warn_stale_period_env()
@@ -930,7 +938,7 @@ def run(
     load_start = warmup_start(
         start,
         STRATEGY4_CALENDAR_SLACK_DAYS
-        if normalize_csv_strategy(strategy) in ("version4", "version12")
+        if book in ("version4", "version12")
         else (20 if return_threshold_filter else WARMUP_DAYS),
     )
     print(
@@ -939,7 +947,8 @@ def run(
         flush=True,
     )
     t_daily = time.perf_counter()
-    if dividend_type == "front":
+    daily_domain_front = (book == "version12") or (dividend_type == "front")
+    if daily_domain_front:
         from common.infra.data_root import resolve_period_root
 
         front_daily_root = resolve_period_root("1d") / "dividend_type=front"
@@ -952,9 +961,9 @@ def run(
         source=daily_source,
         qlib_root=qlib_day_root,
         workers=workers,
-        **({"dividend_type": "front"} if dividend_type == "front" else {}),
+        **({"dividend_type": "front"} if daily_domain_front else {}),
     )
-    if dividend_type == "front" and (missing := all_codes - daily.keys()):
+    if book == "version12" and (missing := all_codes - daily.keys()):
         raise ValueError(f"missing front daily bars for strategy12: {sorted(missing)}")
     t_daily = time.perf_counter() - t_daily
     cache_status: dict = {}
@@ -1000,8 +1009,13 @@ def run(
 
         eligible_buy = with_return_threshold(eligible_buy, daily)
     skipped: dict[str, int] = {}
-    exdiv = (None if dividend_type == "front"
-             else load_exdiv_ratios(all_codes, start, end, skipped_out=skipped))
+    # Human cut #151 option 2: mixed-domain strategy12 (daily front + minute none)
+    # must avoid silent ex-div double adjustment. Keep ex-div explicit-only there.
+    exdiv = (
+        None
+        if (book == "version12" or dividend_type == "front")
+        else load_exdiv_ratios(all_codes, start, end, skipped_out=skipped)
+    )
     index_block_new = None
     gate_book = normalize_csv_strategy(strategy)
     if gate_book in ("version8", "version8_3"):
@@ -1049,6 +1063,10 @@ def run(
     st.stats["t_sim_s"] = time.perf_counter() - t_sim
     st.stats["cache"] = cache_status.get("cache", "")
     st.stats["codes_missing"] = max(0, len(all_codes) - min(len(daily), len(minute)))
+    if book == "version12":
+        st.stats["daily_signal_domain"] = "front"
+        st.stats["minute_fill_domain"] = dividend_type
+        st.stats["price_domain"] = dividend_type
     return st
 
 
@@ -1075,7 +1093,7 @@ def main(argv: Optional[list] = None) -> int:
     ap.add_argument("--minute-source", choices=("lake", "qlib_1min"), default="lake")
     ap.add_argument("--daily-source", choices=("lake", "qlib_day"), default="lake")
     ap.add_argument("--dividend-type", choices=("none", "front"), default="none",
-                    help="version12 requires front for both daily and minute lake prices")
+                    help="version12 minute fills allow none/front; daily signals fixed to 1d/front")
     ap.add_argument(
         "--qlib-1min-root",
         help="qlib my_data_1min root; implies --minute-source qlib_1min",
