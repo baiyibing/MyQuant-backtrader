@@ -1,0 +1,7 @@
+item,status,evidence
+book_version9_baseline,FILLED,4090 @ tip 51e0195; pool export_strategy9_pool -> s9_bvot_20260825_20260909; final_equity=21053316.65
+book_version10_baseline,DATA_GAP,version10 needs export_strategy10_pool (TR pool); out of scope this stamp; do not claim v10 filled
+fullstrat_clock_swap,DATA_GAP,no research-only fullstrat clock hook; production_C frozen
+fullstrat_slip_axis,DATA_GAP,no research-only fullstrat slip CLI
+cross_engine_nav_superiority,FORBIDDEN,Book/v7/ModeB separate; forbid cross-engine rank
+stock_pool_for_version9,FORBIDDEN,export_strategy9_pool refuses stock_pool/; host path D:\exports\s9_bvot_20260825_20260909
