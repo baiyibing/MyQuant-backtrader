@@ -8,19 +8,21 @@ two simulate loops stay thin. This module must not import either engine.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from numbers import Integral
 from typing import Optional
 
 import pandas as pd
 
 from backtest.research.ashare_fees import (
     COMMISSION,
-    QLIB_CLOSE_COST,
-    QLIB_MIN_COST,
-    QLIB_OPEN_COST,
+    QLIB_CLOSE_COST as QLIB_CLOSE_COST,
+    QLIB_MIN_COST as QLIB_MIN_COST,
+    QLIB_OPEN_COST as QLIB_OPEN_COST,
     trade_commission,
 )
 from backtest.research.ashare_fill_clock import session_phase as _session_phase
-from backtest.research.ashare_session import LIMIT_EPS, hit_limit_down, hit_limit_up
+from backtest.research.ashare_session import LIMIT_EPS, hit_limit_up
+from backtest.research.ashare_session import hit_limit_down as hit_limit_down
 from backtest.research.ashare_volume_cap import VolumeCap
 from backtest.research.ashare_exdiv_economics import ExDivEconomics
 from backtest.research.market_layer import limit_prices
@@ -49,8 +51,6 @@ def _empty_stats() -> dict:
         "add_lots": 0,
         "skip_no_bar": 0,
         "skip_buy_gate": 0,
-        "skip_add_loser": 0,
-        "skip_index_gate": 0,
         "skip_sma_warmup": 0,
         "sell_stop": 0,
         "sell_trail": 0,
@@ -96,6 +96,9 @@ class SimState:
     min_cost: float = 0.0
     volume_cap: VolumeCap | None = field(default=None, repr=False, compare=False)
     exdiv_economics: ExDivEconomics | None = field(default=None, repr=False, compare=False)
+    book_state: dict = field(default_factory=dict, repr=False, compare=False)
+    book_on_buy: object = field(default=None, repr=False, compare=False)
+    book_on_exdiv: object = field(default=None, repr=False, compare=False)
 
 
 def _ymd(ts) -> str:
@@ -171,7 +174,9 @@ def apply_exdiv_economics(st: SimState, code: str, ds: str) -> None:
     if account is None:
         return
     lots = st.positions.get(code, [])
-    entitlement = account.entitle(code, ds, [p.shares for p in lots])
+    callback = ({"on_event": lambda event: st.book_on_exdiv(st, code, event)}
+                if callable(st.book_on_exdiv) else {})
+    entitlement = account.entitle(code, ds, [p.shares for p in lots], **callback)
     if entitlement is None:
         return
     for pos, added in zip(lots, entitlement.bonus_shares):
@@ -241,11 +246,18 @@ def execute_buy(
     ride_with: Optional[int] = None,
     is_step: bool = False,
     bucket_id: int | None = None,
+    shares_override: int | None = None,
 ) -> bool:
     """常规/追买共用：整百股 + force_min + 账本佣金。成功返回 True。"""
     if px <= 0:
         return False
-    shares, supp = _buy_size(per, px)
+    if shares_override is None:
+        shares, supp = _buy_size(per, px)
+    else:
+        if isinstance(shares_override, bool) or not isinstance(shares_override, Integral):
+            raise ValueError("shares_override must be an integer share count")
+        shares, supp = max(0, int(shares_override)) // 100 * 100, 0.0
+        per = shares * px
     if shares <= 0:
         return False
     notional = shares * px
@@ -260,6 +272,8 @@ def execute_buy(
             return False
         notional = shares * px
         comm = trade_commission(notional, st.buy_cost_rate, st.min_cost)
+        if shares_override is not None:
+            per = notional
         supp = max(0.0, notional - per)
     st.cash -= notional + comm
     st.daily_quota_used += min(per, notional)
@@ -301,6 +315,8 @@ def execute_buy(
         st.stats["chase_buy"] += 1
     if st.volume_cap is not None:
         st.volume_cap.consume(key, shares)
+    if callable(st.book_on_buy):
+        st.book_on_buy(st, code, reason, shares)
     return True
 
 
@@ -317,8 +333,14 @@ def _volume_skip(st: SimState, code: str, px: float, day, reason: str,
 def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str, *,
           bucket_id: int | None = None, at: int | None = None,
           day_i: int | None = None, hm: int | None = None,
-          session_phase: str = "", price_rule: str = "") -> None:
+          session_phase: str = "", price_rule: str = "",
+          wanted_shares: int | None = None) -> int:
     shares = pos.shares
+    if wanted_shares is not None:
+        if isinstance(wanted_shares, bool) or not isinstance(wanted_shares, Integral):
+            raise ValueError("wanted_shares must be an integer share count")
+        if day_i is None or pos.entry_idx >= day_i or wanted_shares <= 0:
+            return 0
     if st.exdiv_economics is not None:
         ds = _ymd(day)
         group = [pos] + [p for p in st.positions.get(code, [])
@@ -328,14 +350,18 @@ def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str, *
             _locked_bonus(st.exdiv_economics, p, ds) for p in group
         ):
             st.stats["exdiv_econ_defer_linked_t1"] = st.stats.get("exdiv_econ_defer_linked_t1", 0) + 1
-            return
+            return 0
         shares -= _locked_bonus(st.exdiv_economics, pos, ds)
         if st.volume_cap is not None and pos.pending_exit and shares < pos.shares:
             # δ5 pending exits are all-or-none, including when bonus is locked.
             st.stats["exdiv_econ_defer_pending_t1"] = st.stats.get("exdiv_econ_defer_pending_t1", 0) + 1
-            return
+            return 0
         if shares <= 0:
-            return
+            return 0
+    if wanted_shares is not None:
+        shares = min(shares, int(wanted_shares))
+    if shares <= 0:
+        return 0
     if st.volume_cap is not None:
         # Linked exits stay atomic: no orphan riders or new pending queues.
         group = [pos] + [p for p in st.positions.get(code, [])
@@ -343,10 +369,10 @@ def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str, *
         child_ids = {p.lot_id for p in group if p is not pos}
         if any(p.ride_with in child_ids for p in st.positions.get(code, [])):
             _volume_skip(st, code, px, day, "skip_volume_cap:unsupported_ride_tree", bucket_id)
-            return
+            return 0
         if day_i is None or any(p.entry_idx >= day_i for p in group):
             _volume_skip(st, code, px, day, "skip_volume_cap:t1", bucket_id)
-            return
+            return 0
         key = (code, _ymd(day), bucket_id)
         wanted = shares if len(group) == 1 else sum(p.shares for p in group)
         allocated, skip = st.volume_cap.clamp(
@@ -355,7 +381,7 @@ def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str, *
         )
         if not allocated:
             _volume_skip(st, code, px, day, skip, bucket_id)
-            return
+            return 0
         shares = min(shares, allocated)
     notional = shares * px
     comm = trade_commission(notional, st.sell_cost_rate, st.min_cost)
@@ -397,20 +423,20 @@ def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str, *
         st.stats["sell_pos_trail"] += 1
     if st.volume_cap is not None:
         st.volume_cap.consume(key, shares)
-    if st.volume_cap is not None or st.exdiv_economics is not None:
-        pos.shares -= shares
-        if st.exdiv_economics is not None:
-            locks = st.exdiv_economics.bonus_locks.pop(id(pos), {})
-            if pos.shares and (locked := {d: q for d, q in locks.items() if ds <= d}):
-                st.exdiv_economics.bonus_locks[id(pos)] = locked
-        if pos.shares:
-            return
+    # S1: every booked sell decrements shares, including the default path.
+    pos.shares -= shares
+    if st.exdiv_economics is not None:
+        locks = st.exdiv_economics.bonus_locks.pop(id(pos), {})
+        if pos.shares and (locked := {d: q for d, q in locks.items() if ds <= d}):
+            st.exdiv_economics.bonus_locks[id(pos)] = locked
+    if pos.shares:
+        return shares
     lots = st.positions.get(code) or []
     st.positions[code] = [p for p in lots if p is not pos]
     if not st.positions[code]:
         del st.positions[code]
     if getattr(pos, "ride_with", None) is not None:
-        return
+        return shares
     riders = [
         p
         for p in (st.positions.get(code) or [])
@@ -420,3 +446,4 @@ def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str, *
         _sell(st, code, child, px, day, reason,
               bucket_id=bucket_id, at=at, day_i=day_i, hm=hm,
               session_phase=session_phase, price_rule=price_rule)
+    return shares

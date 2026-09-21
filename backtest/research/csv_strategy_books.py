@@ -24,6 +24,7 @@ from backtest.research import (
     strategy8_3_rules,
     strategy9_rules,
     strategy10_rules,
+    strategy12_rules,
     strategy_topk_dropout_rules,
     strategy_topk_score_exit_rules,
 )
@@ -129,6 +130,13 @@ def apply_csv_strategy(strategy: str, **kwargs) -> dict:
     hooks.setdefault("bind_opening_held", None)
     hooks.setdefault("name_lot_budget", None)
     hooks.setdefault("step_add", None)
+    hooks.setdefault("exit_plan", None)
+    hooks.setdefault("buyback_plan", None)
+    hooks.setdefault("on_reclaim", None)
+    hooks.setdefault("on_buy", None)
+    hooks.setdefault("on_exdiv", None)
+    hooks.setdefault("run_daily_day", None)
+    hooks.setdefault("run_minute_day", None)
     hooks.setdefault("cash_deploy_frac", None)
     hooks.setdefault("qlib_limit_pct", None)
     hooks.setdefault("limit_up_chase", True)
@@ -163,6 +171,7 @@ def add_csv_strategy_arg(ap: argparse.ArgumentParser) -> None:
     ap.add_argument(
         "--strategy",
         choices=names,
+        type=lambda value: "version12" if value in ("12", "v12") else value,
         required=True,
         help="required sell book (" + ", ".join(names) + "); no default",
     )
@@ -549,6 +558,33 @@ def _apply_version6(
 
 def _run_kwargs_version6(args) -> dict:
     return {"strategy": "version6", **strategy6_kwargs_from_args(args)}
+
+
+def _apply_version12(**_) -> dict:
+    from backtest.research import strategy12_engine
+
+    return {
+        "stop_pct": None,
+        "take_profit": strategy12_rules.take_profit_reason,
+        "record_params": strategy12_rules.record_strategy12_params,
+        "reserve_limit_up": False,
+        "defer_limit_up": False,
+        "daily_same_bar_prefixes": (),
+        "index_blocks_add": False,
+        "exit_plan": strategy12_engine.plan_exit,
+        "buyback_plan": strategy12_engine.plan_buybacks,
+        "on_reclaim": strategy12_engine.on_reclaim,
+        "on_buy": strategy12_engine.on_buy,
+        "on_exdiv": strategy12_engine.on_exdiv,
+        "run_daily_day": strategy12_engine.run_daily_day,
+        "run_minute_day": strategy12_engine.run_minute_day,
+    }
+
+
+def _run_kwargs_version12(args) -> dict:
+    if getattr(args, "stop_pct", None) is not None:
+        raise SystemExit("--stop-pct is not supported by version12 (book MA10 stop)")
+    return {"strategy": "version12"}
 
 
 def _apply_version8(
@@ -1094,6 +1130,20 @@ register(
     )
 )
 
+register(
+    CsvStrategyBook(
+        name="version12",
+        tag=strategy12_rules.BOOK_TAG,
+        aliases=("12", "v12", "version12"),
+        allow_add=True,
+        peak_gap_min=0,
+        help_lock=strategy12_rules.HELP_LOCK,
+        apply=_apply_version12,
+        run_kwargs=_run_kwargs_version12,
+        sizing="per_name",
+        name_budget=1_000_000.0,
+    )
+)
 register(
     CsvStrategyBook(
         name="topk_dropout",

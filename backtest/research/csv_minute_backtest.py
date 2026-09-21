@@ -45,7 +45,7 @@ from backtest.research.csv_ledger import (  # noqa: E402
     apply_exdiv_economics,
 )
 
-from backtest.research.ashare_exdiv_economics import EconomicLookup, ExDivEconomics
+from backtest.research.ashare_exdiv_economics import EconomicLookup, ExDivEconomics  # noqa: E402
 
 from backtest.research.exdiv_map import k_for, load_exdiv_ratios, mapped_prev_close  # noqa: E402
 from backtest.research.ashare_session import defer_sell_at_limit, t1_sellable  # noqa: E402
@@ -118,6 +118,27 @@ from backtest.research.csv_simulate_loop import (  # noqa: E402
 from backtest.research.ashare_volume_cap import VolumeCap, VolumeLookup  # noqa: E402
 
 BUY_HM = 14 * 60 + 55
+
+# Preserve the existing engine/test import surface (N-R9).
+_ = (
+    AM_CLOSE,
+    CACHE_ROOT,
+    PM_CLOSE,
+    PM_OPEN,
+    _annotate,
+    _named_limits,
+    _pool_names_asof,
+    _progress,
+    _read_one_minute,
+    chase_decision,
+    execute_buy,
+    last_close_mark,
+    minute_cache_path,
+    queue_limit_up_chase,
+    read_minute_cache,
+    to_partition_key,
+    write_minute_cache,
+)
 
 HELP_LOCK = """
 分钟向量化口径（相对 Cerebro 保真版：无事件总线，同公式逐分钟扫描）：
@@ -265,6 +286,8 @@ def scan_held_day_python(
     limit_up: float = 0.0,
     reserved: bool = False,
     reserve_state: Optional[dict] = None,
+    exit_plan=None,
+    exit_state: Optional[dict] = None,
 ) -> tuple[int, float, str, float, int]:
     """Python reference implementation of the minute sell scan."""
     del pos_trail  # reserved for future; kept for API parity with callers
@@ -313,7 +336,16 @@ def scan_held_day_python(
             cur_hm - new_peak_hm, peak_gap_min
         )
         if not peak_blocked:
-            if callable(sell_gate):
+            if callable(exit_plan):
+                plan = exit_plan(gate_code, px_close, gate_day,
+                                 daily_closes_ending_yesterday or [])
+                if plan is not None:
+                    reason, shares = plan
+                    if exit_state is None:
+                        raise ValueError("partial exit_plan requires exit_state out-param")
+                    exit_state["shares"] = shares
+                    return i, px_close, reason, new_peak, new_peak_hm
+            elif callable(sell_gate):
                 reason = sell_gate(
                     gate_code,
                     px_close,
@@ -364,6 +396,8 @@ def scan_held_day(
     reserved: bool = False,
     reserve_state: Optional[dict] = None,
     use_numba: Optional[bool] = None,
+    exit_plan=None,
+    exit_state: Optional[dict] = None,
 ) -> tuple[int, float, str, float, int]:
     """逐分钟扫描。返回 (idx, px, reason, new_peak, new_peak_hm)。
 
@@ -379,6 +413,7 @@ def scan_held_day(
         and not reserve_limit_up
         and not defer_limit_up
         and reserve_state is None
+        and exit_plan is None
     )
     if can_offload:
         o64 = np.asarray(o, dtype=np.float64)
@@ -446,6 +481,8 @@ def scan_held_day(
         limit_up=limit_up,
         reserved=reserved,
         reserve_state=reserve_state,
+        exit_plan=exit_plan,
+        exit_state=exit_state,
     )
 
 
@@ -598,218 +635,228 @@ def simulate(
         names = names_asof(ds)
         st.daily_quota_used = 0.0
 
-        bind_opening = hooks.get("bind_opening_held")
-        if callable(bind_opening):
-            bind_opening(ds, list(st.positions.keys()))
+        if callable(hooks.get("run_minute_day")):
+            hooks["run_minute_day"](
+                st, pending_chase, hooks=hooks, minute_bars=minute_bars,
+                daily_bars=daily_bars, pool_days=pool_days, day_i=i, day=day,
+                ds=ds, names=names, daily_quota=daily_quota, exdiv=exdiv,
+                slice_day=lambda code, date: _slice_day(
+                    minute_bars[code], day_spans.get(code, {}), date),
+                scan=scan_held_day,
+            )
+        else:
+            bind_opening = hooks.get("bind_opening_held")
+            if callable(bind_opening):
+                bind_opening(ds, list(st.positions.keys()))
 
-        for code in list(st.positions):
-            mdf = minute_bars.get(code)
-            ddf = daily_bars.get(code)
-            if mdf is None or ddf is None or day not in ddf.index:
-                continue
-            day_m = _slice_day(mdf, day_spans.get(code, {}), ds)
-            if day_m is None:
-                continue
-            prev_rows = _previous_rows(ddf, day)
-            if prev_rows.empty:
-                continue
-            apply_exdiv_economics(st, code, ds)
-            # E-R6: rescale before scan_held_day; never between scan and peak writeback.
-            kk = k_for(exdiv, code, ds)
-            if kk is not None:
-                for pos in list(st.positions.get(code, [])):
-                    rescale_position(pos, kk)
-                    st.stats["exdiv_adjusted_lots"] = (
-                        int(st.stats.get("exdiv_adjusted_lots", 0)) + 1
-                    )
-            prev_close, did_map = mapped_prev_close(
-                exdiv, code, ds, float(prev_rows.iloc[-1]["close"])
-            )
-            if did_map:
-                st.stats["exdiv_prev_close_mapped"] = (
-                    int(st.stats.get("exdiv_prev_close_mapped", 0)) + 1
-                )
-            limits = book_limit_prices(
-                code, prev_close, names, qlib_limit_pct=qlib_limit_pct
-            )
-            if limits is None:
-                st.stats["skip_unknown_board"] += 1
-                continue
-            limit_up, limit_down = limits
-            o = day_m["open"].to_numpy(np.float64)
-            h = day_m["high"].to_numpy(np.float64)
-            c = day_m["close"].to_numpy(np.float64)
-            hm = day_m["hm"].to_numpy(np.int64)
-            for pos in list(st.positions.get(code, [])):
-                if getattr(pos, "ride_with", None) is not None:
+            for code in list(st.positions):
+                mdf = minute_bars.get(code)
+                ddf = daily_bars.get(code)
+                if mdf is None or ddf is None or day not in ddf.index:
                     continue
-                n_days = i - pos.entry_idx
-                # Resolve dates here; only the eligibility bool reaches the scanner.
-                reserve_state = {"reserved": bool(pos.reserved)}
-                idx, px, reason, new_peak, new_peak_hm = scan_held_day(
-                    o,
-                    h,
-                    c,
-                    cost=pos.cost,
-                    peak=pos.peak,
-                    n_days=n_days,
-                    can_sell=t1_sellable(calendar[pos.entry_idx].date(), day.date()),
-                    stop_pct=stop_pct,
-                    profit_base=profit_base if profit_base is not None else 0.0,
-                    trail_ratio=0.0,
-                    pos_trail=pos_trail,
-                    limit_down=limit_down,
-                    hm=hm,
-                    peak_hm=int(pos.peak_hm),
-                    peak_gap_min=peak_gap_min,
-                    take_profit=take_profit,
-                    sell_gate=sell_gate,
-                    gate_code=code,
-                    gate_day=day,
-                    daily_closes_ending_yesterday=prev_rows["close"]
-                    .astype(float)
-                    .tolist(),
-                    force_sell_hm=force_sell_hm,
-                    reserve_limit_up=reserve_limit_up,
-                    defer_limit_up=defer_limit_up,
-                    limit_up=limit_up,
-                    reserved=bool(pos.reserved),
-                    reserve_state=reserve_state,
+                day_m = _slice_day(mdf, day_spans.get(code, {}), ds)
+                if day_m is None:
+                    continue
+                prev_rows = _previous_rows(ddf, day)
+                if prev_rows.empty:
+                    continue
+                apply_exdiv_economics(st, code, ds)
+                # E-R6: rescale before scan_held_day; never between scan and peak writeback.
+                kk = k_for(exdiv, code, ds)
+                if kk is not None:
+                    for pos in list(st.positions.get(code, [])):
+                        rescale_position(pos, kk)
+                        st.stats["exdiv_adjusted_lots"] = (
+                            int(st.stats.get("exdiv_adjusted_lots", 0)) + 1
+                        )
+                prev_close, did_map = mapped_prev_close(
+                    exdiv, code, ds, float(prev_rows.iloc[-1]["close"])
                 )
-                pos.peak = new_peak
-                pos.peak_hm = new_peak_hm
-                pos.reserved = bool(reserve_state["reserved"])
-                if idx >= 0:
-                    fill_open = float(o[idx])
-                    if limit_down > 0 and (
-                        defer_sell_at_limit(fill_open, limits)
-                        or defer_sell_at_limit(float(px), limits)
-                    ):
-                        st.stats["defer_sell_limit_down"] += 1
+                if did_map:
+                    st.stats["exdiv_prev_close_mapped"] = (
+                        int(st.stats.get("exdiv_prev_close_mapped", 0)) + 1
+                    )
+                limits = book_limit_prices(
+                    code, prev_close, names, qlib_limit_pct=qlib_limit_pct
+                )
+                if limits is None:
+                    st.stats["skip_unknown_board"] += 1
+                    continue
+                limit_up, limit_down = limits
+                o = day_m["open"].to_numpy(np.float64)
+                h = day_m["high"].to_numpy(np.float64)
+                c = day_m["close"].to_numpy(np.float64)
+                hm = day_m["hm"].to_numpy(np.int64)
+                for pos in list(st.positions.get(code, [])):
+                    if getattr(pos, "ride_with", None) is not None:
                         continue
-                    volume_kwargs = {}
-                    if st.volume_cap is not None:
-                        bucket = int(hm[idx])
-                        volume_kwargs = {"bucket_id": bucket, "day_i": i,
-                                         "at": bucket - 1 if reason == "stop_loss:gap_open" else bucket}
-                    # P2=B names only these two stop paths; other fills stay unlabeled.
-                    price_rule = {
-                        "stop_loss:gap_open": "minute_gap_open",
-                        "stop_loss:touch": "minute_trigger_bar_close",
-                    }.get(reason, "")
-                    _sell(st, code, pos, px, day, reason, **volume_kwargs,
-                          hm=int(hm[idx]) if price_rule else None, price_rule=price_rule)
+                    n_days = i - pos.entry_idx
+                    # Resolve dates here; only the eligibility bool reaches the scanner.
+                    reserve_state = {"reserved": bool(pos.reserved)}
+                    idx, px, reason, new_peak, new_peak_hm = scan_held_day(
+                        o,
+                        h,
+                        c,
+                        cost=pos.cost,
+                        peak=pos.peak,
+                        n_days=n_days,
+                        can_sell=t1_sellable(calendar[pos.entry_idx].date(), day.date()),
+                        stop_pct=stop_pct,
+                        profit_base=profit_base if profit_base is not None else 0.0,
+                        trail_ratio=0.0,
+                        pos_trail=pos_trail,
+                        limit_down=limit_down,
+                        hm=hm,
+                        peak_hm=int(pos.peak_hm),
+                        peak_gap_min=peak_gap_min,
+                        take_profit=take_profit,
+                        sell_gate=sell_gate,
+                        gate_code=code,
+                        gate_day=day,
+                        daily_closes_ending_yesterday=prev_rows["close"]
+                        .astype(float)
+                        .tolist(),
+                        force_sell_hm=force_sell_hm,
+                        reserve_limit_up=reserve_limit_up,
+                        defer_limit_up=defer_limit_up,
+                        limit_up=limit_up,
+                        reserved=bool(pos.reserved),
+                        reserve_state=reserve_state,
+                    )
+                    pos.peak = new_peak
+                    pos.peak_hm = new_peak_hm
+                    pos.reserved = bool(reserve_state["reserved"])
+                    if idx >= 0:
+                        fill_open = float(o[idx])
+                        if limit_down > 0 and (
+                            defer_sell_at_limit(fill_open, limits)
+                            or defer_sell_at_limit(float(px), limits)
+                        ):
+                            st.stats["defer_sell_limit_down"] += 1
+                            continue
+                        volume_kwargs = {}
+                        if st.volume_cap is not None:
+                            bucket = int(hm[idx])
+                            volume_kwargs = {"bucket_id": bucket, "day_i": i,
+                                             "at": bucket - 1 if reason == "stop_loss:gap_open" else bucket}
+                        # P2=B names only these two stop paths; other fills stay unlabeled.
+                        price_rule = {
+                            "stop_loss:gap_open": "minute_gap_open",
+                            "stop_loss:touch": "minute_trigger_bar_close",
+                        }.get(reason, "")
+                        _sell(st, code, pos, px, day, reason, **volume_kwargs,
+                              hm=int(hm[idx]) if price_rule else None, price_rule=price_rule)
 
-        def _volume_bucket_for(code: str, target: int, earliest: int):
-            # Mirror the quote helpers' exact/fallback row, never a later bucket.
-            frame = _slice_day(minute_bars[code], day_spans.get(code, {}), ds)
-            if frame is None:
-                return None
-            hit = frame.loc[frame["hm"] == target]
-            if not hit.empty:
-                return int(hit["hm"].iloc[0])
-            eligible = frame.loc[(frame["hm"] >= earliest) & (frame["hm"] <= target)]
-            return None if eligible.empty else int(eligible["hm"].iloc[-1])
+            def _volume_bucket_for(code: str, target: int, earliest: int):
+                # Mirror the quote helpers' exact/fallback row, never a later bucket.
+                frame = _slice_day(minute_bars[code], day_spans.get(code, {}), ds)
+                if frame is None:
+                    return None
+                hit = frame.loc[frame["hm"] == target]
+                if not hit.empty:
+                    return int(hit["hm"].iloc[0])
+                eligible = frame.loc[(frame["hm"] >= earliest) & (frame["hm"] <= target)]
+                return None if eligible.empty else int(eligible["hm"].iloc[-1])
 
-        chase_volume = (lambda code: _volume_bucket_for(code, CHASE_HM, AM_OPEN))
-        pool_volume = (lambda code: _volume_bucket_for(code, BUY_HM, 14 * 60 + 30))
+            chase_volume = (lambda code: _volume_bucket_for(code, CHASE_HM, AM_OPEN))  # noqa: E731
+            pool_volume = (lambda code: _volume_bucket_for(code, BUY_HM, 14 * 60 + 30))  # noqa: E731
 
-        def _chase_quotes_for(code: str):
-            mdf = minute_bars.get(code)
-            ddf = daily_bars.get(code)
-            if mdf is None or ddf is None or day not in ddf.index:
-                return None
-            day_m = _slice_day(mdf, day_spans.get(code, {}), ds)
-            quotes = _chase_quotes(day_m) if day_m is not None else None
-            if quotes is None:
-                return None
-            open_px, px = quotes
-            prev_rows = _previous_rows(ddf, day)
-            if prev_rows.empty:
-                return None
-            closes = prev_rows["close"].astype(float).tolist()
-            return open_px, px, closes
+            def _chase_quotes_for(code: str):
+                mdf = minute_bars.get(code)
+                ddf = daily_bars.get(code)
+                if mdf is None or ddf is None or day not in ddf.index:
+                    return None
+                day_m = _slice_day(mdf, day_spans.get(code, {}), ds)
+                quotes = _chase_quotes(day_m) if day_m is not None else None
+                if quotes is None:
+                    return None
+                open_px, px = quotes
+                prev_rows = _previous_rows(ddf, day)
+                if prev_rows.empty:
+                    return None
+                closes = prev_rows["close"].astype(float).tolist()
+                return open_px, px, closes
 
-        run_chase_due_day(
-            st,
-            pending_chase,
-            day_i=i,
-            day=day,
-            names=names,
-            allow_add=allow_add,
-            buy_gate=buy_gate,
-            quotes_for=_chase_quotes_for,
-            volume_bucket_for=chase_volume if st.volume_cap is not None else None,
-            exdiv=exdiv,
-            ds=ds,
-            qlib_limit_pct=qlib_limit_pct,
-            allow_new_name=hooks.get("allow_new_name"),
-            add_gate=hooks.get("add_gate"),
-            index_blocks_add=hooks.get("index_blocks_add", True),
-        )
+            run_chase_due_day(
+                st,
+                pending_chase,
+                day_i=i,
+                day=day,
+                names=names,
+                allow_add=allow_add,
+                buy_gate=buy_gate,
+                quotes_for=_chase_quotes_for,
+                volume_bucket_for=chase_volume if st.volume_cap is not None else None,
+                exdiv=exdiv,
+                ds=ds,
+                qlib_limit_pct=qlib_limit_pct,
+                allow_new_name=hooks.get("allow_new_name"),
+                add_gate=hooks.get("add_gate"),
+                index_blocks_add=hooks.get("index_blocks_add", True),
+            )
 
-        def _pool_quote_for(code: str):
-            mdf = minute_bars.get(code)
-            ddf = daily_bars.get(code)
-            if mdf is None or ddf is None or day not in ddf.index:
-                return None
-            day_m = _slice_day(mdf, day_spans.get(code, {}), ds)
-            if day_m is None:
-                return None
-            prev_rows = _previous_rows(ddf, day)
-            if prev_rows.empty:
-                return None
-            px = _buy_px(day_m)
-            if px is None or px <= 0:
-                return None
-            closes = prev_rows["close"].astype(float).tolist()
-            return px, closes
+            def _pool_quote_for(code: str):
+                mdf = minute_bars.get(code)
+                ddf = daily_bars.get(code)
+                if mdf is None or ddf is None or day not in ddf.index:
+                    return None
+                day_m = _slice_day(mdf, day_spans.get(code, {}), ds)
+                if day_m is None:
+                    return None
+                prev_rows = _previous_rows(ddf, day)
+                if prev_rows.empty:
+                    return None
+                px = _buy_px(day_m)
+                if px is None or px <= 0:
+                    return None
+                closes = prev_rows["close"].astype(float).tolist()
+                return px, closes
 
-        run_pool_buys_day(
-            st,
-            pending_chase,
-            day_i=i,
-            day=day,
-            ds=ds,
-            pool_days=pool_days,
-            daily_quota=daily_quota,
-            names=names,
-            allow_add=allow_add,
-            buy_gate=buy_gate,
-            buy_quote_for=_pool_quote_for,
-            volume_bucket_for=pool_volume if st.volume_cap is not None else None,
-            sizing=hooks.get("sizing", "daily_quota"),
-            name_budget=hooks.get("name_budget", 1_000_000.0),
-            ration=hooks.get("ration", "file_order"),
-            ration_seed=hooks.get("ration_seed", 0),
-            exdiv=exdiv,
-            planned_for_day=hooks.get("planned_for_day"),
-            cash_deploy_frac=hooks.get("cash_deploy_frac"),
-            qlib_limit_pct=qlib_limit_pct,
-            limit_up_chase=limit_up_chase,
-            forbid_all_trade_at_limit=forbid_all_trade_at_limit,
-            allow_new_name=hooks.get("allow_new_name"),
-            add_gate=hooks.get("add_gate"),
-            name_lot_budget=hooks.get("name_lot_budget"),
-            index_blocks_add=hooks.get("index_blocks_add", True),
-        )
-        run_step_adds_day(
-            st,
-            day_i=i,
-            day=day,
-            ds=ds,
-            names=names,
-            buy_quote_for=_pool_quote_for,
-            volume_bucket_for=pool_volume if st.volume_cap is not None else None,
-            sizing=hooks.get("sizing", "daily_quota"),
-            name_budget=hooks.get("name_budget", 1_000_000.0),
-            exdiv=exdiv,
-            qlib_limit_pct=qlib_limit_pct,
-            forbid_all_trade_at_limit=forbid_all_trade_at_limit,
-            buy_gate=buy_gate,
-            name_lot_budget=hooks.get("name_lot_budget"),
-            step_add=hooks.get("step_add"),
-        )
+            run_pool_buys_day(
+                st,
+                pending_chase,
+                day_i=i,
+                day=day,
+                ds=ds,
+                pool_days=pool_days,
+                daily_quota=daily_quota,
+                names=names,
+                allow_add=allow_add,
+                buy_gate=buy_gate,
+                buy_quote_for=_pool_quote_for,
+                volume_bucket_for=pool_volume if st.volume_cap is not None else None,
+                sizing=hooks.get("sizing", "daily_quota"),
+                name_budget=hooks.get("name_budget", 1_000_000.0),
+                ration=hooks.get("ration", "file_order"),
+                ration_seed=hooks.get("ration_seed", 0),
+                exdiv=exdiv,
+                planned_for_day=hooks.get("planned_for_day"),
+                cash_deploy_frac=hooks.get("cash_deploy_frac"),
+                qlib_limit_pct=qlib_limit_pct,
+                limit_up_chase=limit_up_chase,
+                forbid_all_trade_at_limit=forbid_all_trade_at_limit,
+                allow_new_name=hooks.get("allow_new_name"),
+                add_gate=hooks.get("add_gate"),
+                name_lot_budget=hooks.get("name_lot_budget"),
+                index_blocks_add=hooks.get("index_blocks_add", True),
+            )
+            run_step_adds_day(
+                st,
+                day_i=i,
+                day=day,
+                ds=ds,
+                names=names,
+                buy_quote_for=_pool_quote_for,
+                volume_bucket_for=pool_volume if st.volume_cap is not None else None,
+                sizing=hooks.get("sizing", "daily_quota"),
+                name_budget=hooks.get("name_budget", 1_000_000.0),
+                exdiv=exdiv,
+                qlib_limit_pct=qlib_limit_pct,
+                forbid_all_trade_at_limit=forbid_all_trade_at_limit,
+                buy_gate=buy_gate,
+                name_lot_budget=hooks.get("name_lot_budget"),
+                step_add=hooks.get("step_add"),
+            )
 
         append_equity_and_eod_marks(
             st,
@@ -853,7 +900,13 @@ def run(
     daily_source: str = "lake",
     qlib_1min_root: Optional[Path] = None,
     qlib_day_root: Optional[Path] = None,
+    dividend_type: str = "none",
 ) -> SimState:
+    if normalize_csv_strategy(strategy) == "version12":
+        if dividend_type != "front" or minute_source != "lake" or daily_source != "lake":
+            raise ValueError("version12 requires lake daily/minute --dividend-type front")
+    elif dividend_type != "none":
+        raise ValueError("minute --dividend-type front is supported only by version12")
     warn_stale_period_env()
     if minute_source == "lake" and end > MINUTE_LAKE_END:
         print(
@@ -877,7 +930,7 @@ def run(
     load_start = warmup_start(
         start,
         STRATEGY4_CALENDAR_SLACK_DAYS
-        if normalize_csv_strategy(strategy) == "version4"
+        if normalize_csv_strategy(strategy) in ("version4", "version12")
         else (20 if return_threshold_filter else WARMUP_DAYS),
     )
     print(
@@ -886,6 +939,12 @@ def run(
         flush=True,
     )
     t_daily = time.perf_counter()
+    if dividend_type == "front":
+        from common.infra.data_root import resolve_period_root
+
+        front_daily_root = resolve_period_root("1d") / "dividend_type=front"
+        if not front_daily_root.is_dir():
+            raise FileNotFoundError(f"missing front daily partition: {front_daily_root}")
     daily = load_daily_ohlc(
         all_codes,
         load_start,
@@ -893,11 +952,24 @@ def run(
         source=daily_source,
         qlib_root=qlib_day_root,
         workers=workers,
+        **({"dividend_type": "front"} if dividend_type == "front" else {}),
     )
+    if dividend_type == "front" and (missing := all_codes - daily.keys()):
+        raise ValueError(f"missing front daily bars for strategy12: {sorted(missing)}")
     t_daily = time.perf_counter() - t_daily
     cache_status: dict = {}
     t_minute = time.perf_counter()
-    if minute_source == "qlib_1min":
+    if dividend_type == "front":
+        root = resolve_period_root("1m") / "dividend_type=front"
+        if not root.is_dir():
+            raise FileNotFoundError(f"missing front minute partition: {root}")
+        # The existing window cache is none-domain; read the configured front tree.
+        minute = _load_minute_from_lake(all_codes, load_start, end, workers=workers,
+                                        lake_root=root)
+        if missing := all_codes - minute.keys():
+            raise ValueError(f"missing front minute bars for strategy12: {sorted(missing)} under {root}")
+        cache_status["cache"] = "front_uncached"
+    elif minute_source == "qlib_1min":
         compact = _load_minute_compact(
             all_codes,
             load_start,
@@ -928,7 +1000,8 @@ def run(
 
         eligible_buy = with_return_threshold(eligible_buy, daily)
     skipped: dict[str, int] = {}
-    exdiv = load_exdiv_ratios(all_codes, start, end, skipped_out=skipped)
+    exdiv = (None if dividend_type == "front"
+             else load_exdiv_ratios(all_codes, start, end, skipped_out=skipped))
     index_block_new = None
     gate_book = normalize_csv_strategy(strategy)
     if gate_book in ("version8", "version8_3"):
@@ -1001,6 +1074,8 @@ def main(argv: Optional[list] = None) -> int:
     )
     ap.add_argument("--minute-source", choices=("lake", "qlib_1min"), default="lake")
     ap.add_argument("--daily-source", choices=("lake", "qlib_day"), default="lake")
+    ap.add_argument("--dividend-type", choices=("none", "front"), default="none",
+                    help="version12 requires front for both daily and minute lake prices")
     ap.add_argument(
         "--qlib-1min-root",
         help="qlib my_data_1min root; implies --minute-source qlib_1min",
@@ -1028,6 +1103,7 @@ def main(argv: Optional[list] = None) -> int:
         rebuild_cache=args.rebuild_cache,
         minute_source=minute_source,
         daily_source=daily_source,
+        dividend_type=args.dividend_type,
         qlib_1min_root=Path(args.qlib_1min_root) if args.qlib_1min_root else None,
         qlib_day_root=Path(args.qlib_day_root) if args.qlib_day_root else None,
         **csv_run_kwargs_from_args(args),
