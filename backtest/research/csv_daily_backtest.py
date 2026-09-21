@@ -603,13 +603,15 @@ def run(
     else:
         exdiv = load_exdiv_ratios(all_codes, start, end, skipped_out=skipped)
     index_block_new = None
-    if normalize_csv_strategy(strategy) == "version8":
+    gate_book = normalize_csv_strategy(strategy)
+    if gate_book in ("version8", "version8_3"):
         from backtest.research.strategy8_rules import (
             INDEX_GATE_ON,
             load_sse_ma10_block_new,
         )
 
-        if INDEX_GATE_ON:
+        # 8.3 冻结包闸门无条件开（历史年代无开关，默认即开）。
+        if INDEX_GATE_ON or gate_book == "version8_3":
             index_block_new = load_sse_ma10_block_new(start, end)
     t_sim = time.perf_counter()
     st = simulate(
