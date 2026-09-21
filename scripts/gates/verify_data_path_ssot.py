@@ -30,6 +30,9 @@ _ALLOWLIST: Dict[str, Tuple[str, int]] = {
     "common/infra/data_root.py": ("SSOT_RESOLVER", 3),
     # Legacy cleanup helper joins period= under an explicit base_dir argument.
     "common/infra/qmt_utils_adv.py": ("LEGACY_PERIOD_JOIN", 1),
+    # Research host helper: docstring/help mention lake hive period=1d +
+    # turnover_resistance_daily.parquet labels (not production path joins).
+    "scripts/data/refresh_tr_store_window.py": ("RESEARCH_HOST_HELPER", 2),
 }
 
 _PATTERNS: List[Pattern[str]] = [
