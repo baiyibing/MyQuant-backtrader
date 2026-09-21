@@ -62,12 +62,13 @@ Mode B clock 轴（`next_tradable_open`）：补齐 batch2 的 `ModeB NOT_RUN`�
 
 ## 8. 第四批（batch4 / fullstrat）指针
 
-全策略 NAV / 最大回撤 / 引擎内排名：在 **默认时钟 + DEFAULT_SCHEDULE** 下用既有 Book/v7/Mode B runner 填补 batch1–3 的 DATA_GAP；扩展窗提案 `20260825`–`20260909`（pool∩`MINUTE_LAKE_END`）。全策略 clock 交换与 slip 轴无 research-only hook → **DATA_GAP**（禁止静默 production fork）。Book/v7/Mode B 分列；禁止跨引擎优劣与局部 bp→NAV。设计 / 结果桩 / harness：
+全策略 NAV / 最大回撤 / 引擎内排名：在 **默认时钟 + DEFAULT_SCHEDULE** 下用既有 Book/v7/Mode B runner 填补 batch1–3 的 DATA_GAP；扩展窗提案 `20260825`–`20260909`（pool∩`MINUTE_LAKE_END`）。全策略 clock 交换与 slip 轴：#156 research-only hooks 已合并；**Slice D 4090 数字已回填**（[results §11](results-minute-sensitivity-b-batch4-fullstrat-2026-09-20.md#11-slice-d--fullstrat-clockslip-hooks-4090--2026-09-21) / [addendum](addendum-batch4-slice-d-fullstrat-hooks-2026-09-21.md)；戳 `batch4_fullstrat_hooks_d_20260921b`）。Book/v7/Mode B 分列；禁止跨引擎优劣与局部 bp→NAV；`production_C=frozen`。设计 / 结果 / harness：
 
 - [设计](design-minute-sensitivity-b-batch4-fullstrat-2026-09-20.md)
 - [结果桩](results-minute-sensitivity-b-batch4-fullstrat-2026-09-20.md)
 - `scripts/research/run_minute_sensitivity_b_batch4_fullstrat.py`
 - 导出：`backtest/research/exports/minute_sensitivity_b_20260920/batch4_fullstrat/`
+- Slice D：`backtest/research/exports/minute_sensitivity_b_20260920/batch4_fullstrat_hooks_d_20260921b/`
 
 ## 9. research-only fullstrat clock/slip hooks
 
@@ -82,4 +83,4 @@ Mode B clock 轴（`next_tradable_open`）：补齐 batch2 的 `ModeB NOT_RUN`�
 **最新绑定 Q2**：覆盖 `40afca4` / `dde7a6f` 的 Q1 固定股数合同及停点叙述。信号定量为暂定值；next-open / slip 成交价重新执行整手 sizer，再按实际成交时现金与费用判断。预算 10,000 / 现金 10,050 / 信号 10 → 暂定 1,000；open 10.1 → 900 股成交、现金 950.91。固定 1,000 后 `cash_reject_terminal` 是排除的反例。完整 H2 与卖单次日重评不变。
 
 
-**Slice B 已实现（Q2 + H2）**：研究 helper、各引擎独立 adapter、固定 `--cells` 及每 cell 产物隔离已接线；默认零参数直接委托原引擎。data-free pins 已通过，矩阵能力为 `FILLABLE`，历史导出未改，新增数值仍待合并后 4090。新语义分叉仍 comment + stop；本轮不 merge。
+**Slice B 已实现（Q2 + H2）**：研究 helper、各引擎独立 adapter、固定 `--cells` 及每 cell 产物隔离已接线；默认零参数直接委托原引擎。data-free pins 已通过，矩阵能力为 `FILLABLE`。**Slice D 4090 数值已回填**（见 results §11）；历史基线导出未改。新语义分叉仍 comment + stop；docs 回填 PR **不 merge**（需 human/bt tip）。

@@ -1,8 +1,8 @@
 # 分钟敏感对照 B · 第四批结果（全策略 NAV / DD / 引擎内排名 · 2026-09-20）
 
-**状态：`EXECUTED_PARTIAL`（4090 `--execute` 已完成；ModeB 基线已于 2026-09-21 ModeB-only 重跑回填；Book **version9** 已于 2026-09-21 用 `export_strategy9_pool`→`s9_bvot` 池回填）。** Book version10 已于 2026-09-21 用 Source-B `s10_tr` 池回填（研究 universe=lake∩TR；见 §10）。Book、v7、ModeB 基线（`baseline_default_clock_fee`）已填；全策略 clock_next_open / slip_* 数值仍待合并后 4090；最新研究能力为 **FILLABLE（H2 + Q2）**，见下方 Slice B。局部事件 bp（batch2/3）**禁止**粘贴进下表；**禁止**跨引擎比 NAV 论优劣；`production_C=frozen`。
+**状态：`EXECUTED_PARTIAL` → Slice D clock/slip 已于 2026-09-21 4090 回填。** ModeB 基线、Book version9（`s9_bvot`）、Book version10（`s10_tr`）基线此前已填；**Slice D**（`clock_next_open_fullstrat` / `slip_{5,10,20}bp_fullstrat`；**基线故意不在本 D 矩阵**）已由 host 戳 `batch4_fullstrat_hooks_d_20260921b` 回填（见 §11 / [addendum](addendum-batch4-slice-d-fullstrat-hooks-2026-09-21.md)）。Research-only（H2+Q2）；局部事件 bp（batch2/3）**禁止**粘贴进下表；**禁止**跨引擎比 NAV 论优劣；`production_C=frozen`；**无 human/bt tip 勿 merge**。
 
-依据：[设计](design-minute-sensitivity-b-batch4-fullstrat-2026-09-20.md)；[计划](plan-minute-sensitivity-b-2026-09-20.md)；导出 [batch4_fullstrat/](../../../backtest/research/exports/minute_sensitivity_b_20260920/batch4_fullstrat/)（Book v1–v8 / v7）；ModeB 基线重跑戳 `batch4_fullstrat_modeb_rerun_20260921`（4090 @ tip `a1e7dea`）；Book version9 戳 [`batch4_fullstrat_v9_s9bvot_20260921`](../../../backtest/research/exports/minute_sensitivity_b_20260920/batch4_fullstrat_v9_s9bvot_20260921/)（4090 @ tip `51e0195`，pool=`s9_bvot` **非** `stock_pool`；见 [addendum](addendum-batch4-v9-s9bvot-fill-2026-09-21.md)）。
+依据：[设计](design-minute-sensitivity-b-batch4-fullstrat-2026-09-20.md)；[计划](plan-minute-sensitivity-b-2026-09-20.md)；导出 [batch4_fullstrat/](../../../backtest/research/exports/minute_sensitivity_b_20260920/batch4_fullstrat/)（Book v1–v8 / v7）；ModeB 基线重跑戳 `batch4_fullstrat_modeb_rerun_20260921`（4090 @ tip `a1e7dea`）；Book version9 戳 [`batch4_fullstrat_v9_s9bvot_20260921`](../../../backtest/research/exports/minute_sensitivity_b_20260920/batch4_fullstrat_v9_s9bvot_20260921/)（4090 @ tip `51e0195`，pool=`s9_bvot` **非** `stock_pool`；见 [addendum](addendum-batch4-v9-s9bvot-fill-2026-09-21.md)）；Slice D 戳 [`batch4_fullstrat_hooks_d_20260921b`](../../../backtest/research/exports/minute_sensitivity_b_20260920/batch4_fullstrat_hooks_d_20260921b/)（manifest `git_head=3931dfd`）。
 
 | 项 | 取值 |
 |---|---|
@@ -22,12 +22,12 @@
 | cell_id | clock | slip | Book | v7 | ModeB |
 |---|---|---|---|---|---|
 | `baseline_default_clock_fee` | 生产默认 | 0 | **FILLED**（引擎内 #1 = version8） | **FILLED** | **FILLED**（引擎内 #1 = livermore_l2_stale8_y10；`modeb_ok=1`） |
-| `clock_next_open_fullstrat` | next-open | 0 | DATA_GAP | DATA_GAP | DATA_GAP |
-| `slip_5bp_fullstrat` | 默认 | 5bp/边 | DATA_GAP | DATA_GAP | DATA_GAP |
-| `slip_10bp_fullstrat` | 默认 | 10bp/边 | DATA_GAP | DATA_GAP | DATA_GAP |
-| `slip_20bp_fullstrat` | 默认 | 20bp/边 | DATA_GAP | DATA_GAP | DATA_GAP |
+| `clock_next_open_fullstrat` | next-open | 0 | **FILLED**（Slice D · §11；core `book_ok` 内 #1 = version8） | **FILLED**（§11；全现金 NAV 合法） | **FILLED**（§11；顶行 `r1_n1`，全现金） |
+| `slip_5bp_fullstrat` | 默认 | 5bp/边 | **FILLED**（§11；#1 = version8） | **FILLED**（§11） | **FILLED**（§11；顶行 `livermore_l2_stale8_y10`） |
+| `slip_10bp_fullstrat` | 默认 | 10bp/边 | **FILLED**（§11；#1 = version8） | **FILLED**（§11） | **FILLED**（§11；顶行 `r2_x5_yinf_n8`） |
+| `slip_20bp_fullstrat` | 默认 | 20bp/边 | **FILLED**（§11；#1 = version5） | **FILLED**（§11） | **FILLED**（§11；顶行 `r2_x10_yinf_n10`） |
 
-证据：原执行戳 `matrix.csv` / `data_gaps.csv`。2026-09-21 **FULL HUMAN CUT 已齐（H2 + 卖单到期次日重评）**，取代此前 sell pending 桩，恢复 Slice B：全组合所有买卖 fill 换为研究 `next_tradable_open`；买卖严格同日到期；接受 `UNFILLED` / 全现金 NAV，绝不静默保留 baseline 入场；未成交卖单到期清除，下一交易日正常策略重新判断是否卖出，不保留退出意图等待。详见 [设计 §9](design-minute-sensitivity-b-batch4-fullstrat-2026-09-20.md#9-research-only-fullstrat-clockslip-hooks)。本次先提交完整裁定文档，再实施 hooks + pins；通过后能力状态转 `FILLABLE`，所有新增 clock/slip 数值继续留空，等待合并后的 4090 slice D。上表及既有导出是历史执行状态，不覆盖历史数字；`production_C=frozen`，不 merge。
+证据：基线仍见原执行戳 `matrix.csv` / `data_gaps.csv`。Slice D 数字见 host `D:\exports\batch4_fullstrat_hooks_d_20260921b\` 与仓内 [`batch4_fullstrat_hooks_d_20260921b`](../../../backtest/research/exports/minute_sensitivity_b_20260920/batch4_fullstrat_hooks_d_20260921b/)（manifest `git_head=3931dfd33ea7146f7dcf3ba5fa06a4bbc96b7c18`，`emitted_at=2026-09-21T16:23:44+08:00`；`book_ok=28` / `v7_ok=4` / `modeb_ok=4`）。2026-09-21 **FULL HUMAN CUT（H2 + 卖单到期次日重评）** 与 #156 hooks 已合并；本表 clock/slip 列为 Slice D 回填，**不覆盖**基线 NAV。Research-only；`production_C=frozen`；**无 human/bt tip 勿 merge**。
 
 
 **Slice B 按最新 Q2 恢复**：`40afca4` / `dde7a6f` 的 Q1 固定股数及停点叙述已被人裁覆盖。信号股数暂定，next-open / slip 成交价重定量；10,000 预算 / 10,050 现金 / 信号 10 → 暂定 1,000，open 10.1 → 900 股成交、现金 950.91。固定股数后 `cash_reject_terminal` 是必须排除的反例。H2 与卖单到期次日重评继续绑定；新增数值待合并后 4090。
@@ -39,10 +39,10 @@
 
 | cell | Book | v7 | ModeB | 新增 NAV / return / DD / rank |
 |---|---|---|---|---|
-| clock_next_open_fullstrat | FILLABLE | FILLABLE | FILLABLE | 空白，待合并后 4090 |
-| slip_5bp_fullstrat | FILLABLE | FILLABLE | FILLABLE | 空白，待合并后 4090 |
-| slip_10bp_fullstrat | FILLABLE | FILLABLE | FILLABLE | 空白，待合并后 4090 |
-| slip_20bp_fullstrat | FILLABLE | FILLABLE | FILLABLE | 空白，待合并后 4090 |
+| clock_next_open_fullstrat | FILLED（§11） | FILLED（§11） | FILLED（§11） | Slice D 4090 已回填 |
+| slip_5bp_fullstrat | FILLED（§11） | FILLED（§11） | FILLED（§11） | Slice D 4090 已回填 |
+| slip_10bp_fullstrat | FILLED（§11） | FILLED（§11） | FILLED（§11） | Slice D 4090 已回填 |
+| slip_20bp_fullstrat | FILLED（§11） | FILLED（§11） | FILLED（§11） | Slice D 4090 已回填 |
 
 Q2 已通过实际 adapter 对照：预算 10,000 / 现金 10,050，信号价 10 的暂定 1,000 股，在 open 10.1 重定量 900 股成交，余额 950.91；Q1 固定股数拒单不是 adapter 合同。H2 全部 fill 覆盖、START 14:55 当日到期、全现金 NAV、卖单到期清除与次日重评通过。零参数委托原引擎，production_C=frozen；#151/#152 contested files 和历史数字未改。
 
@@ -103,9 +103,9 @@ Q2 已通过实际 adapter 对照：预算 10,000 / 现金 10,050，信号价 10
 ## 5. 硬禁令（本批重申）
 
 1. 局部事件 bp ≠ 组合 NAV；batch2/3 数字不得填入上表。
-2. Book / v7 / ModeB **分列**；禁止用本批 NAV 宣称引擎优劣。
-3. 全策略 clock 交换 / slip 轴无钩子 → DATA_GAP；不得为填格改生产 fill/scan/fee。
-4. `production_C=frozen`。
+2. Book / v7 / ModeB **分列**；禁止用本批 NAV 宣称引擎优劣（**forbid cross-engine NAV rank**）。
+3. Slice D clock/slip 数字仅来自 research-only hooks（#156 · H2+Q2）；不得为填格改生产 fill/scan/fee；基线格与 D 格分列，禁止混排论优劣。
+4. `production_C=frozen`；docs/research-exports 回填 **无 human/bt tip 勿 merge**。
 
 ---
 
@@ -131,6 +131,11 @@ Q2 已通过实际 adapter 对照：预算 10,000 / 现金 10,050，信号价 10
 | `batch4_fullstrat_v10_s10tr_20260921/data_gaps.csv` | v10 基线回填 / 剩余缺口 |
 | `batch4_fullstrat_v10_s10tr_20260921/README.md` | 池策略、lake∩TR universe、主机产物引用 |
 | `batch4_fullstrat_v10_s10tr_20260921/manifest.json` | pool day counts / 数字元数据；未提供运行 tip |
+| `batch4_fullstrat_hooks_d_20260921b/core/{book,modeb,v7}_nav.csv` | Slice D core（28+4+4 OK） |
+| `batch4_fullstrat_hooks_d_20260921b/core/manifest.json` | Slice D tip / cells / counts |
+| `batch4_fullstrat_hooks_d_20260921b/v9/book_nav.csv` | Slice D Book version9（4 OK） |
+| `batch4_fullstrat_hooks_d_20260921b/v10/book_nav.csv` | Slice D Book version10（4 OK） |
+| `batch4_fullstrat_hooks_d_20260921b/README.md` | Slice D 戳说明 |
 | 4090 runner 旁路 | `runner_artifacts/`（未全部入库；摘要 CSV 已入库） |
 
 ---
@@ -139,7 +144,7 @@ Q2 已通过实际 adapter 对照：预算 10,000 / 现金 10,050，信号价 10
 
 1. ModeB 基线格已由 4090 ModeB-only 重跑回填（见 §4 / §8）；import 修复合入后无需再为同一 DATA_GAP 重跑。
 2. Book **version9** 已由 `s9_bvot` 池回填（见 §2 / §9）；**version10** 已由 Source-B `s10_tr` 池回填（见 §2 / §10；研究 universe=lake∩TR 后 fail_closed）。
-3. 全策略 clock_next_open / slip_* 轴：仅当存在**明确 research-only** 钩子时再开；否则保持 DATA_GAP。
+3. 全策略 clock_next_open / slip_* 轴：**Slice D 已回填**（§11）；v9/v10 池上 ModeB/v7 仍为 **N/A**（未跑，勿编造）。人裁是否采纳研究钩子进生产 **不在本 docs PR 范围**；`production_C=frozen`。
 
 
 ---
@@ -151,7 +156,7 @@ Import 根因与修见 [addendum](addendum-batch4-modeb-import-fix-2026-09-21.md
 - 引擎 ModeB；策略 `livermore_l2_stale8_y10`；cell `baseline_default_clock_fee`
 - `final_equity=1099605762.3151746`；`total_return=-0.0003583978952958367`（−0.03584%）；`max_drawdown=0.0006438975472074711`（0.06439%，harness 原样不翻号）；status OK；`modeb_ok=1`
 - Book/v7 在本 ModeB-only 跑为 `engine_skipped`：**不空白** §1–§3 中来自 #142 的 Book/v7 数字
-- 仍 DATA_GAP：全策略 `clock_next_open` / `slip_*`。version9 / version10 已另戳回填（§9 / §10）
+- 仍 DATA_GAP（历史句）：当时全策略 `clock_next_open` / `slip_*` 未跑。**现已由 Slice D §11 回填**（不含本 ModeB-only 戳）。version9 / version10 基线已另戳回填（§9 / §10）
 
 `production_C=frozen`（本回填 docs-only；不改 fill/scan/fee/defaults/hot-path）。
 
@@ -167,7 +172,7 @@ Import 根因与修见 [addendum](addendum-batch4-modeb-import-fix-2026-09-21.md
 - pool = **s9_bvot 导出**，**不是** `stock_pool`；主机路径在仓外（`/exports/` gitignore）；策略与 day counts 写在本戳 README / addendum，不提交 live CSV
 - **保留** §2 中 #142 stock_pool Book v1–v8 与 §4 ModeB 数字，不空白、不跨池重排、**禁止跨引擎排名**
 - **version10 ≠ s9**：不属于本 v9 戳；现已由独立 Source-B `s10_tr` 戳回填（§10）
-- 全策略 `clock_next_open` / `slip_*` 仍 DATA_GAP
+- 全策略 `clock_next_open` / `slip_*`：本 v9 基线戳当时仍 DATA_GAP；**Slice D 已用独立戳回填 Book v9（§11）**；本戳 ModeB/v7 仍 N/A
 
 `production_C=frozen`（本回填 docs + research exports only；不改 fill/scan/fee/defaults/hot-path）。
 
@@ -224,5 +229,167 @@ TR context already merged: [#146 refresh_tr_store_window](https://github.com/bai
 4090 TR store through `20260909`; bands via vectorized path. Context only;
 these changes are not repeated here.
 
-全策略 `clock_next_open` / `slip_*` 仍 **DATA_GAP**。
+全策略 `clock_next_open` / `slip_*`：本 v10 基线戳当时仍 **DATA_GAP**；**Slice D 已用独立戳回填 Book v10（§11）**；本戳 ModeB/v7 仍 N/A。
 `production_C=frozen`（docs + research exports only；不改 production Python / fill / scan / fee / defaults / hot-path）。
+
+
+## 11. Slice D · fullstrat clock/slip hooks（4090 · 2026-09-21）
+
+依据：[addendum](addendum-batch4-slice-d-fullstrat-hooks-2026-09-21.md)；仓内戳 [`batch4_fullstrat_hooks_d_20260921b`](../../../backtest/research/exports/minute_sensitivity_b_20260920/batch4_fullstrat_hooks_d_20260921b/)；host `D:\exports\batch4_fullstrat_hooks_d_20260921b\{core,v9,v10}\`。
+
+| field | value |
+|---|---|
+| window | `20260825`–`20260909` |
+| cells（D 矩阵；**不含** baseline） | `clock_next_open_fullstrat`, `slip_5bp_fullstrat`, `slip_10bp_fullstrat`, `slip_20bp_fullstrat` |
+| `git_head` | `3931dfd33ea7146f7dcf3ba5fa06a4bbc96b7c18` |
+| `base_tip` | `32b78b1` |
+| `emitted_at` | `2026-09-21T16:23:44+08:00` |
+| contract | Q2 · H2 all fills · same-day expiry · sell = next-session reevaluate |
+| fee / access / bar | `DEFAULT_SCHEDULE=BILATERAL_10BP` · `qlib_bin_1min` · `lake_index_is_bar_start_wallclock` |
+| core counts | `book_ok=28`, `v7_ok=4`, `modeb_ok=4` |
+
+Research-only；**禁止跨引擎 NAV 排名**；`production_C=frozen`；**无 human/bt tip 勿 merge**。基线 §1–§4 数字保持不动。ModeB / v7 在 v9、v10 池戳上为 **N/A**（未提供，勿编造）。
+
+显示用 ±% 仅为阅读辅助；**权威数字以 CSV raw 为准**（下列 raw 与仓内/附件 CSV 逐字一致）。
+
+### 11.1 Book core（v1–6,8 · `stock_pool`）
+
+来源：`core/book_nav.csv`。排名仅在**同一 cell** 的 Book 内。初始资金口径 ≈21,000,000。
+
+#### `clock_next_open_fullstrat`（next_tradable_open_research · slip=0）
+
+| strategy | final_equity | total_return | max_drawdown | rank | status |
+|---|---:|---:|---:|---:|---|
+| version8 | 21,071,791.04 | +0.34% | −0.36% | 1 | OK |
+| version5 | 21,013,776.85 | +0.07% | −0.09% | 2 | OK |
+| version4 | 20,994,909.75 | −0.02% | −0.07% | 3 | OK |
+| version6 | 20,981,349.32 | −0.09% | −0.19% | 4 | OK |
+| version1 | 20,972,310.38 | −0.13% | −0.19% | 5 | OK |
+| version2 | 20,972,310.38 | −0.13% | −0.19% | 6 | OK |
+| version3 | 20,967,799.93 | −0.15% | −0.20% | 7 | OK |
+
+CSV raw (`final_equity` / `total_return` / `max_drawdown`):
+
+- `version8`: `21071791.042886786` / `0.0034186210898470293` / `-0.0035541350767059887`
+- `version5`: `21013776.850259136` / `0.0006560404885302962` / `-0.0008749628257169739`
+- `version4`: `20994909.748654984` / `-0.00024239292119121458` / `-0.0007417137360712367`
+- `version6`: `20981349.319986414` / `-0.0008881276196945898` / `-0.0018538758828717805`
+- `version1`: `20972310.38213241` / `-0.0013185532317899762` / `-0.0018538758828717805`
+- `version2`: `20972310.38213241` / `-0.0013185532317899762` / `-0.0018538758828717805`
+- `version3`: `20967799.92921054` / `-0.0015333367042600354` / `-0.002041862955380558`
+
+#### `slip_5bp_fullstrat`（production_default · 5bp/边）
+
+| strategy | final_equity | total_return | max_drawdown | rank | status |
+|---|---:|---:|---:|---:|---|
+| version8 | 21,012,239.08 | +0.06% | −1.44% | 1 | OK |
+| version5 | 20,946,338.31 | −0.26% | −0.33% | 2 | OK |
+| version3 | 20,908,508.71 | −0.44% | −0.52% | 3 | OK |
+| version2 | 20,878,927.14 | −0.58% | −0.58% | 4 | OK |
+| version1 | 20,873,867.74 | −0.60% | −0.60% | 5 | OK |
+| version6 | 20,867,190.97 | −0.63% | −0.63% | 6 | OK |
+| version4 | 20,834,182.57 | −0.79% | −0.91% | 7 | OK |
+
+CSV raw (`final_equity` / `total_return` / `max_drawdown`):
+
+- `version8`: `21012239.076016523` / `0.0005828131436440565` / `-0.014362400711979695`
+- `version5`: `20946338.31381574` / `-0.0025553183897266685` / `-0.0032524375984869236`
+- `version3`: `20908508.711721376` / `-0.004356728013267808` / `-0.00522249076826975`
+- `version2`: `20878927.143883403` / `-0.005765374100790366` / `-0.005765374100790366`
+- `version1`: `20873867.739176` / `-0.0060062981344761734` / `-0.0060062981344761734`
+- `version6`: `20867190.9720343` / `-0.00632423942693805` / `-0.00632423942693805`
+- `version4`: `20834182.566045094` / `-0.007896068283566926` / `-0.009136966173710848`
+
+#### `slip_10bp_fullstrat`（production_default · 10bp/边）
+
+| strategy | final_equity | total_return | max_drawdown | rank | status |
+|---|---:|---:|---:|---:|---|
+| version8 | 20,978,705.14 | −0.10% | −1.55% | 1 | OK |
+| version5 | 20,938,235.83 | −0.29% | −0.36% | 2 | OK |
+| version3 | 20,902,966.38 | −0.46% | −0.55% | 3 | OK |
+| version2 | 20,881,537.25 | −0.56% | −0.58% | 4 | OK |
+| version1 | 20,876,348.64 | −0.59% | −0.59% | 5 | OK |
+| version6 | 20,859,550.63 | −0.67% | −0.67% | 6 | OK |
+| version4 | 20,825,902.80 | −0.83% | −0.94% | 7 | OK |
+
+CSV raw (`final_equity` / `total_return` / `max_drawdown`):
+
+- `version8`: `20978705.140148398` / `-0.0010140409453144317` / `-0.015502953642770656`
+- `version5`: `20938235.831498545` / `-0.002941150881021648` / `-0.003553149141185541`
+- `version3`: `20902966.381140105` / `-0.0046206485171378375` / `-0.0054583809928409055`
+- `version2`: `20881537.2487978` / `-0.005641083390580892` / `-0.00578401490240521`
+- `version1`: `20876348.644286595` / `-0.005888159795876424` / `-0.005888159795876424`
+- `version6`: `20859550.62560806` / `-0.006688065447235214` / `-0.006688065447235214`
+- `version4`: `20825902.797022957` / `-0.008290342998906741` / `-0.009377059009711974`
+
+#### `slip_20bp_fullstrat`（production_default · 20bp/边）
+
+| strategy | final_equity | total_return | max_drawdown | rank | status |
+|---|---:|---:|---:|---:|---|
+| version5 | 20,921,101.68 | −0.38% | −0.42% | 1 | OK |
+| version8 | 20,917,861.14 | −0.39% | −1.75% | 2 | OK |
+| version3 | 20,887,369.43 | −0.54% | −0.60% | 3 | OK |
+| version2 | 20,861,301.07 | −0.66% | −0.66% | 4 | OK |
+| version1 | 20,856,183.45 | −0.68% | −0.68% | 5 | OK |
+| version6 | 20,837,218.69 | −0.78% | −0.78% | 6 | OK |
+| version4 | 20,809,652.69 | −0.91% | −0.98% | 7 | OK |
+
+CSV raw (`final_equity` / `total_return` / `max_drawdown`):
+
+- `version5`: `20921101.680346306` / `-0.0037570628406520257` / `-0.004163294174819643`
+- `version8`: `20917861.14228833` / `-0.003911374176746141` / `-0.017485629018997195`
+- `version3`: `20887369.43167953` / `-0.0053633603962129905` / `-0.0060342215384124875`
+- `version2`: `20861301.06601609` / `-0.0066047111420910465` / `-0.006614210276836285`
+- `version1`: `20856183.454757694` / `-0.006848406916300287` / `-0.006848406916300287`
+- `version6`: `20837218.68677925` / `-0.007751491105750019` / `-0.007751491105750019`
+- `version4`: `20809652.69445548` / `-0.009064157406881934` / `-0.009844053655299723`
+
+### 11.2 v7 core（strategy7）
+
+来源：`core/v7_nav.csv`。`clock_next_open` 全现金 NAV（H2：UNFILLED / all-cash 合法）。下表为 CSV **raw**（勿改写）。
+
+| cell_id | strategy | final_equity | total_return | max_drawdown | rank | status |
+|---|---|---:|---:|---:|---:|---|
+| clock_next_open_fullstrat | strategy7 | 21000000.0 | 0.0 | 0.0 | 1 | OK |
+| slip_5bp_fullstrat | strategy7 | 20888926.133852407 | -0.005289231721313903 | -0.008953602946315087 | 1 | OK |
+| slip_10bp_fullstrat | strategy7 | 20882857.42749297 | -0.005578217738430036 | -0.009217363990877359 | 1 | OK |
+| slip_20bp_fullstrat | strategy7 | 20883082.720336474 | -0.00556748950778696 | -0.008826469560831107 | 1 | OK |
+
+### 11.3 ModeB core
+
+来源：`core/modeb_nav.csv`。每格一行 = 网格内 `total_return` 最高（oracle 排除）；`daily_entry_source=aggregated_from_1min_none_lineage`。DD 按 harness 原样（不翻号）。**禁止**与 Book/v7 比 NAV。下表为 CSV **raw**。
+
+| cell_id | strategy | final_equity | total_return | max_drawdown | rank | status |
+|---|---|---:|---:|---:|---:|---|
+| clock_next_open_fullstrat | r1_n1 | 1100000000.0 | 0.0 | 0.0 | 1 | OK |
+| slip_5bp_fullstrat | livermore_l2_stale8_y10 | 1099568890.0783827 | -0.0003919181105611541 | 0.0006548533980148803 | 1 | OK |
+| slip_10bp_fullstrat | r2_x5_yinf_n8 | 1099544407.5191047 | -0.0004141749826320735 | 0.0005723236028580957 | 1 | OK |
+| slip_20bp_fullstrat | r2_x10_yinf_n10 | 1099473750.7751617 | -0.0004784083862165971 | 0.0007887034726634252 | 1 | OK |
+
+### 11.4 Book version9（`s9_bvot` 池戳 · 不与 stock_pool 重排）
+
+来源：`v9/book_nav.csv`。ModeB/v7：**N/A**。下表为 CSV **raw**（`clock_next_open` 全现金合法）。
+
+| cell_id | strategy | final_equity | total_return | max_drawdown | rank | status |
+|---|---|---:|---:|---:|---:|---|
+| clock_next_open_fullstrat | version9 | 21000000.0 | 0.0 | 0.0 | 1 | OK |
+| slip_5bp_fullstrat | version9 | 21051530.530446403 | 0.002453834783161968 | -0.001964193052529928 | 1 | OK |
+| slip_10bp_fullstrat | version9 | 21049802.365745895 | 0.002371541225995033 | -0.0019968267374191884 | 1 | OK |
+| slip_20bp_fullstrat | version9 | 21046420.56548216 | 0.0022105031181980372 | -0.0020598449692958987 | 1 | OK |
+
+### 11.5 Book version10（`s10_tr` 池戳 · lake∩TR · 不与 stock_pool/v9 重排）
+
+来源：`v10/book_nav.csv`。ModeB/v7：**N/A**。下表为 CSV **raw**。
+
+| cell_id | strategy | final_equity | total_return | max_drawdown | rank | status |
+|---|---|---:|---:|---:|---:|---|
+| clock_next_open_fullstrat | version10 | 21000193.269587517 | 9.203313691363846e-06 | -3.2660913105164724e-06 | 1 | OK |
+| slip_5bp_fullstrat | version10 | 21015696.33937717 | 0.0007474447322461941 | -0.0014266530880640005 | 1 | OK |
+| slip_10bp_fullstrat | version10 | 21008914.105951127 | 0.00042448123576788177 | -0.0015216375303468421 | 1 | OK |
+| slip_20bp_fullstrat | version10 | 20997829.485809036 | -0.0001033578186173667 | -0.0017479036136753834 | 1 | OK |
+
+### 11.6 范围声明
+
+- 本 PR：**docs + research exports only**；无 production Python / fill / scan / fee / defaults / hot-path 改动。
+- 数字仅转录权威 CSV；未在本 VM 重跑回测。
+- Draft only — **do not merge without human/bt tip**.
