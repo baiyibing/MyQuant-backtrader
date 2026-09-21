@@ -4,6 +4,7 @@
 - **Plan**：[plan-ma-infra-shared-2026-09-21.md](plan-ma-infra-shared-2026-09-21.md) **v1.0 已人裁 GO**（merge commit `029b24c`；P1–P4 全按共识裁定）
 - **评审链**：四稿 fan-out（codex/kimi/cursor/claude，全 rc=0）→ [merge-consensus C1–C12](../architecture/reviews/2026-09-21/plan-ma-infra-shared/merge-consensus.md) → 人裁 GO（对抗层按 runbook §A「可不启用」跳过——低风险纯函数）
 - **实施基线**：`feat/ma-infra` 分支自 master `029b24c` 切出
+- **状态**：✅ 实施与门禁完成（2026-09-21；PR #150 后续 `feat/ma-infra` 提交，尚未合并实现）。
 
 ## §0 硬边界（人裁已定，勿越）
 
@@ -66,3 +67,11 @@ D:\anaconda3\envs\vanna312\python.exe -m ruff check backtest/research/ma_infra.p
 
 - 完成后：plan 头部改「✅ 已实施（PR #N）」；本文件标完成；宿主复核 diff（缺陷优先）后开 PR。
 - 遇 plan 未覆盖的语义分叉（尤其周线分桶边界、NaN 周）：**停下来问人，不自裁**。
+
+## 完成记录（2026-09-21）
+
+- **宿主/交付差异优先**：#150 已在实施开始前于 06:06:14 UTC 合并，仅含交接文档 `9f0c4b9`；实现继续落在指定 `feat/ma-infra` 分支，另由后续 PR 评审，实施者未执行 merge。VM 默认 Python 3.13 缺 pytest，使用独立 `/tmp/ma-infra-venv`（Python 3.12.13）。首次安装的 Ruff 0.16.8 默认规则要求修改既有种子/策略 4；对齐评审实测 Ruff 0.12.0 后原命令通过，未改 lint 配置或策略行为。
+- **切片 A**：八个标准库 API + 46 项 data-free pins；`sma_asof` 与种子源码逐字一致；pandas 差分覆盖节假短周、空周、跨年/周六分桶、末端周、NaN 周和乱序/重复日期。`python3 -m pytest -q tests/test_ma_infra.py` → **46 passed**；切片 A Ruff → **All checks passed**。
+- **切片 B**：仅新增 import + 删除本地 `sma_asof`；源码直接比对确认 `buy_gate` / `sell_gate` 等其余部分逐字不变。定向三文件门禁 → **77 passed**；完整 `-m "not production and not benchmark" tests/` → **1420 passed, 4 skipped, 24 deselected**；三文件 Ruff → **All checks passed**。
+- **文本/范围**：所有触及 `.py` / `.md` 均 UTF-8、无 BOM、NUL=0；零 `oskh_factors`、BOOKS、引擎、成交/扫描/费用/默认值/热路径 diff。未发现本次范围内的引擎缺陷或未裁语义分叉。
+- **既有告警**：全量门禁有 9 条告警（8 条 pandas `copy` 弃用，1 条非 canonical TR 窗口）；切片 B 前后均相同，未修改这些范围外路径。
