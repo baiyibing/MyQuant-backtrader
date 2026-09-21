@@ -1,6 +1,7 @@
 # Plan: strategy 12 金榕元均线减仓书（2026-09-21）
 
 > **Status**: **v1.0 · ✅ 已人裁 GO（2026-09-21，Asia/Shanghai）**——用户裁定 P2–P13 **全按共识建议**；四个二选一由主持按评审倾向定案：P6 不加闸（P11 latch 天然限流，HELP_LOCK 声明理论上限）、P8 默认 `stock_pool/`（8 先例）、P9④ 新买入（池/chase）**清零**该码双记忆（防双重仓位）、P13 减仓保留 lot0 ≥100 股（保台阶锚）。
+> **后续人裁 A（2026-09-21）**：P11 的每日 latch 表述已废止；只有下方周期锁，成功收复并买回后立即再武装，同日可再次减仓，不叠加日锁。以 [handoff §0](handoff-strategy12-codex-impl-2026-09-21.md#0-硬边界人裁已定勿越) 为准。
 > **评审链**：主笔对抗层（F1–F8）→ 四稿 fan-out（codex/kimi/cursor/claude 全 rc=0，2 组实验）→ [merge-consensus S1–S19](../architecture/reviews/2026-09-21/plan-strategy12-jinrongyuan/merge-consensus.md)。关键修正：默认路径部分卖静默丢股、v8 wiring 三键绕过 sell_gate、P9④ 改记忆股数上限、价域 front、减仓 latch、台阶单调记忆、14:55 假先例。实施走 [Codex 交接工作流](workflow-codex-handoff.md)（门槛：ma_infra PR #150 已合入；实施 PR 交 VM codex）。
 > **业务源**：`E:\PycharmProjects\OSkhQuant1.3\docs\bucket_policy\金榕元交易回测策略--0921-策略12.docx`（金榕元系列第 4 版；前三版 0911/0913/0916 → 策略 8。原名"策略11"，2026-09-21 用户裁决改为 12，docx 已同步改名）。
 > **Main ship / 单行范围**：策略 12 = 策略 8 买侧骨架（尾盘涨停 T+1 9:45 确认追买、名单全加、+20% 台阶、per_name 100 万）+ 全新均线出场（昨收 MA5 破线减仓 50% 且收复买回；昨收 MA10 下方 10% 止损且站回买回）。
