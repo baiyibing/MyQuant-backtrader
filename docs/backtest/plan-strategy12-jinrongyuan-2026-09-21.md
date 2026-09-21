@@ -1,8 +1,7 @@
 # Plan: strategy 12 金榕元均线减仓书（2026-09-21）
 
-> **Status**: **v0.5 · draft（已吸收四稿外部评审 merge-consensus S1–S19；P1 已预裁，P2–P13 待人裁，GO 前禁编码）**。风险档：**中高**——部分减仓 + 买回记账触及股数/现金流不变量；书侧全新，无历史基线。四稿总评一致「不可进实现」，v0.5 已把卖/买回收成可编码契约。
-> **评审链**：主笔对抗层（F1–F8）→ 四稿 fan-out（codex/kimi/cursor/claude 全 rc=0，含 2 组实验）→ [merge-consensus S1–S19](../architecture/reviews/2026-09-21/plan-strategy12-jinrongyuan/merge-consensus.md)。关键修正：默认路径部分卖**静默丢股**（实验实锤）、v8 wiring 三键绕过 sell_gate、P9④ 市值帽饿死买回（药方改记忆股数上限）、价域未定（除权日假止损算例）、减仓环内重入 latch、台阶计数单调记忆、14:55 假先例纠正。
-> **对抗回填（2026-09-21）**：F1–F8——is_step 先卖、lot0 最后；γ 最小引擎面；R3 措辞；P5 双记忆；P9 四锁。草案：[review-by-claude](../architecture/reviews/2026-09-21/plan-strategy12-jinrongyuan-2026-09-21-review-by-claude.md)。
+> **Status**: **v1.0 · ✅ 已人裁 GO（2026-09-21，Asia/Shanghai）**——用户裁定 P2–P13 **全按共识建议**；四个二选一由主持按评审倾向定案：P6 不加闸（P11 latch 天然限流，HELP_LOCK 声明理论上限）、P8 默认 `stock_pool/`（8 先例）、P9④ 新买入（池/chase）**清零**该码双记忆（防双重仓位）、P13 减仓保留 lot0 ≥100 股（保台阶锚）。
+> **评审链**：主笔对抗层（F1–F8）→ 四稿 fan-out（codex/kimi/cursor/claude 全 rc=0，2 组实验）→ [merge-consensus S1–S19](../architecture/reviews/2026-09-21/plan-strategy12-jinrongyuan/merge-consensus.md)。关键修正：默认路径部分卖静默丢股、v8 wiring 三键绕过 sell_gate、P9④ 改记忆股数上限、价域 front、减仓 latch、台阶单调记忆、14:55 假先例。实施走 [Codex 交接工作流](workflow-codex-handoff.md)（门槛：ma_infra PR #150 已合入；实施 PR 交 VM codex）。
 > **业务源**：`E:\PycharmProjects\OSkhQuant1.3\docs\bucket_policy\金榕元交易回测策略--0921-策略12.docx`（金榕元系列第 4 版；前三版 0911/0913/0916 → 策略 8。原名"策略11"，2026-09-21 用户裁决改为 12，docx 已同步改名）。
 > **Main ship / 单行范围**：策略 12 = 策略 8 买侧骨架（尾盘涨停 T+1 9:45 确认追买、名单全加、+20% 台阶、per_name 100 万）+ 全新均线出场（昨收 MA5 破线减仓 50% 且收复买回；昨收 MA10 下方 10% 止损且站回买回）。
 > **前序**：[workflow-codex-handoff.md](workflow-codex-handoff.md)（本 plan 走 Codex 交接工作流）、[engine-ashare-correctness.md](engine-ashare-correctness.md)（成交核 SSOT，含 E-R5③/E-R6② 价域条款）、[plan-ma-infra-shared-2026-09-21.md](plan-ma-infra-shared-2026-09-21.md)（**前置：v1.0 已 GO、PR #150**；本书切片 A 开工门槛=ma_infra 已合入）、[plan-v8-rules-v2-2026-09-16.md](plan-v8-rules-v2-2026-09-16.md)（v8 书先例）。
