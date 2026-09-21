@@ -27,7 +27,8 @@
 | `slip_10bp_fullstrat` | 默认 | 10bp/边 | DATA_GAP | DATA_GAP | DATA_GAP |
 | `slip_20bp_fullstrat` | 默认 | 20bp/边 | DATA_GAP | DATA_GAP | DATA_GAP |
 
-证据：原执行戳 `matrix.csv` / `data_gaps.csv`。2026-09-21 Human GO option 2 已授权研究专用 hook，但实现因 [设计 §9 的时钟语义分叉](design-minute-sensitivity-b-batch4-fullstrat-2026-09-20.md#9-research-only-fullstrat-clockslip-hooks) 暂停；现有代码尚无这些 hook，矩阵仍是 `DATA_GAP`。hook 落地后能力状态才转 `FILLABLE`，所有 clock/slip 数值继续留空，等待合并后的 4090 rerun（slice D，不在本 PR）。已有基线结果及历史导出不覆盖；human cut A 仍成立，`production_C=frozen`。
+证据：原执行戳 `matrix.csv` / `data_gaps.csv`。2026-09-21 **FULL HUMAN CUT 已齐（H2 + 卖单到期次日重评）**，取代此前 sell pending 桩，恢复 Slice B：全组合所有买卖 fill 换为研究 `next_tradable_open`；买卖严格同日到期；接受 `UNFILLED` / 全现金 NAV，绝不静默保留 baseline 入场；未成交卖单到期清除，下一交易日正常策略重新判断是否卖出，不保留退出意图等待。详见 [设计 §9](design-minute-sensitivity-b-batch4-fullstrat-2026-09-20.md#9-research-only-fullstrat-clockslip-hooks)。本次先提交完整裁定文档，再实施 hooks + pins；通过后能力状态转 `FILLABLE`，所有新增 clock/slip 数值继续留空，等待合并后的 4090 slice D。上表及既有导出是历史执行状态，不覆盖历史数字；`production_C=frozen`，不 merge。
+
 
 ### 基线矩阵摘要行（默认时钟）
 
