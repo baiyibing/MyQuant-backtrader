@@ -1,0 +1,6 @@
+cell_id,engine,clock,slip_bp_per_side,fee_schedule,fill_status,nav,total_return,max_drawdown,within_engine_rank,note
+baseline_default_clock_fee,Book,production_default,0,DEFAULT_SCHEDULE=BILATERAL_10BP,FILLED,21053316.65,0.0025,-0.0019,1,version9-only; pool=s9_bvot export_strategy9_pool; tip 51e0195
+clock_next_open_fullstrat,Book,next_tradable_open_research,0,DEFAULT_SCHEDULE=BILATERAL_10BP,DATA_GAP,,,,,no research-only fullstrat clock hook without production_C
+slip_5bp_fullstrat,Book,production_default,5,DEFAULT_SCHEDULE=BILATERAL_10BP,DATA_GAP,,,,,no research-only fullstrat slip hook
+slip_10bp_fullstrat,Book,production_default,10,DEFAULT_SCHEDULE=BILATERAL_10BP,DATA_GAP,,,,,no research-only fullstrat slip hook
+slip_20bp_fullstrat,Book,production_default,20,DEFAULT_SCHEDULE=BILATERAL_10BP,DATA_GAP,,,,,no research-only fullstrat slip hook
