@@ -46,7 +46,7 @@
 
 Q2 已通过实际 adapter 对照：预算 10,000 / 现金 10,050，信号价 10 的暂定 1,000 股，在 open 10.1 重定量 900 股成交，余额 950.91；Q1 固定股数拒单不是 adapter 合同。H2 全部 fill 覆盖、START 14:55 当日到期、全现金 NAV、卖单到期清除与次日重评通过。零参数委托原引擎，production_C=frozen；#151/#152 contested files 和历史数字未改。
 
-验证环境：显式 PATH 选 `/workspace/vanna312/bin/python3`。专项 **48 passed**（0.99s）；全套 `-m "not production and not benchmark" tests/` **1475 passed, 2 skipped, 24 deselected**（22.76s；既有 TR window warning 1 条）；ruff touched Python、harness `--help`、diff/UTF-8/BOM=0/NUL=0 均通过。Grok 结果待核后记录。没有执行 4090 数值跑批。
+验证环境：显式 PATH 选 `/workspace/vanna312/bin/python3`。专项 **48 passed**（0.99s）；全套 `-m "not production and not benchmark" tests/` **1475 passed, 2 skipped, 24 deselected**（22.76s；既有 TR window warning 1 条）；ruff touched Python、harness `--help`、diff/UTF-8/BOM=0/NUL=0 均通过。[Grok 复核通过](../../architecture/reviews/2026-09-21/pr-156-fullstrat-q2/grok.md)：初核 ModeB 同日卖出假设被原 T+1 路径与两名单现金回收 pin 排除；补齐无冲击市场 mark 后 focused follow-up **Approve**。没有执行 4090 数值跑批。
 
 ### 基线矩阵摘要行（默认时钟）
 
