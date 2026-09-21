@@ -67,6 +67,48 @@ def _load_ffi_module() -> Any:
 # Public API
 # ---------------------------------------------------------------------------
 
+def circulating_capital_asof(stock_code: str, dates, *, history=None):
+    """Daily backward-asof circulating_capital; never fall back to a snapshot.
+
+    Missing/nonpositive per-day values stay NaN for Rust's window-local failure
+    contract. A missing file or malformed table fails visibly. ``history`` is
+    an optional preloaded free_float_shares table for batch research callers.
+    """
+    import numpy as np
+    import pandas as pd
+
+    from common.infra.data_root import resolve_source_parquet
+
+    if dates is None:
+        raise ValueError("explicit asof dates are required; date=None is forbidden")
+    if history is None:
+        history = pd.read_parquet(resolve_source_parquet("free_float_shares.parquet"))
+    required = {"stock_code", "m_timetag", "circulating_capital"}
+    if not required.issubset(history.columns):
+        raise ValueError(f"free_float_shares missing columns: {sorted(required - set(history.columns))}")
+    # Normalize both merge keys to datetime64[ns] so CI pandas (strict ms vs us)
+    # does not raise MergeError on free_float history vs caller dates.
+    target = pd.DataFrame({
+        "day": pd.to_datetime(pd.DatetimeIndex(dates).normalize()).astype("datetime64[ns]"),
+    })
+    if target["day"].isna().any():
+        raise ValueError("asof dates must not contain NaT")
+    target["order"] = np.arange(len(target))
+    subset = history.loc[history["stock_code"] == stock_code,
+                         ["m_timetag", "circulating_capital"]].copy()
+    if subset.empty or target.empty:
+        return np.full(len(target), np.nan)
+    subset["day"] = pd.to_datetime(subset.pop("m_timetag")).dt.normalize().astype("datetime64[ns]")
+    if subset["day"].isna().any():
+        raise ValueError("free_float_shares m_timetag contains NaT")
+    subset = subset.sort_values("day", kind="stable").drop_duplicates("day", keep="last")
+    merged = pd.merge_asof(target.sort_values("day"), subset, on="day", direction="backward")
+    values = pd.to_numeric(merged.sort_values("order")["circulating_capital"],
+                           errors="raise").to_numpy(dtype=float, copy=True)
+    values[~np.isfinite(values) | (values <= 0)] = np.nan
+    return values
+
+
 def compute_turnover_resist(
     date: str,
     *,

@@ -18,6 +18,7 @@ from backtest.research.ashare_session import skip_buy_at_limit
 from backtest.research.csv_common import (
     _pool_names_asof,
     book_limit_prices,
+    day_bar_and_prev_closes,
 )
 from backtest.research.csv_ledger import (
     SimState,
@@ -229,6 +230,8 @@ def run_pool_buys_day(
     name_lot_budget=None,
     index_blocks_add: bool = True,
     volume_bucket_for: Callable[[str], int | None] | None = None,
+    volume_at: int | None = None,
+    sold_today: set[str] | None = None,
 ) -> None:
     """Pool buys for ``ds``; ``buy_quote_for`` supplies buy price + prev closes.
 
@@ -239,6 +242,9 @@ def run_pool_buys_day(
     if callable(planned_for_day):
         held_codes = list(st.positions.keys())
         raw = list(planned_for_day(ds, held_codes))
+    if sold_today:
+        st.stats["skip_sold_today"] += sum(code in sold_today for code in raw)
+        raw = [code for code in raw if code not in sold_today]
     planned = apply_capital_ration(raw, ration=ration, ration_seed=ration_seed, ds=ds)
     if not planned:
         return
@@ -301,6 +307,8 @@ def run_pool_buys_day(
             per = float(name_lot_budget(name_budget, lots))
         volume_kwargs = ({"bucket_id": volume_bucket_for(code)}
                          if volume_bucket_for is not None else {})
+        if volume_at is not None:
+            volume_kwargs["at"] = volume_at
         if sizing == "per_name":
             shares, _ = _buy_size(per, px)
             notional = shares * px
@@ -450,6 +458,33 @@ def run_buybacks_day(
                            shares_override=shares, **volume_kwargs):
                 on_reclaim(st, code, reason, st.trades[-1]["shares"])
             st.daily_quota_used = quota_used
+
+
+def run_eod_exits(st, *, day, ds, bars, eod_exit, hold_modes, exdiv=None):
+    """Evaluate opt-in book exits after buys; only schedule the next open.
+
+    Keep book state outside Position so existing ledger snapshots stay identical.
+    The entry index and lot identify each holding across sells and re-entries.
+    """
+    if not callable(eod_exit):
+        return
+    live = set()
+    for code, lots in st.positions.items():
+        got = day_bar_and_prev_closes(bars[code], day) if code in bars else None
+        for pos in lots:
+            key = (code, pos.entry_idx, pos.lot_id)
+            live.add(key)
+            if got is None or pos.pending_exit:
+                continue
+            row, closes = got
+            previous, _ = mapped_prev_close(exdiv, code, ds, closes[-1])
+            decision = eod_exit(closes + [float(row["close"])], previous,
+                                hold_modes.get(key))
+            hold_modes[key] = decision.hold_mode
+            if decision.reason:
+                pos.pending_exit = decision.reason
+    for key in hold_modes.keys() - live:
+        del hold_modes[key]
 
 
 def append_equity_and_eod_marks(

@@ -1,6 +1,7 @@
 # Plan: version11 ma_chip CSV 移植（2026-09-21）
 
 > **Status**: **v1.0 · ✅ 已人裁 GO（2026-09-21，Asia/Shanghai）**——用户裁定 P0–P7 + V2/V9 **全按共识建议**：P0=a 框架移植先行（--help 印「非已验证多头」，全市场统计并行挂 strategy12 后）、P1=a/b 双跑分钟 09:30 为准（日线保持契约收盘）、P2=日线 pending_exit 原样、P3=独立导出器禁读 store cyqk_t、P4=seed-30 parity 主交付+消融轴对照、P5/P6/P7=沿归档、V2=契约日 T 该股首根 bar ≤4 自然日、V9=全市场滤 ST 排 688。
+> **实施进度（2026-09-21）**：**✅ 已实施（本 PR，A–C）**；B 已稳定化并先推送 `9133ca8`；C 已注册 / 双引擎接线并编码显式人裁 **volume=A / 严格可得性**。指定四文件 **84 passed**；全量 **1480 passed, 2 skipped, 24 deselected**；touched Python Ruff、四个 data-free 路径门禁、导出器 / 双 CLI help 全绿。**D 尝试 STOP（非 smoke 完成）**：box-scoped executor 无法路由到 `newtest_4090`；静态档案在 box/git 未找到（详 [slice-d review](reviews/slice-d-version11-seed30-universe-2026-09-21.md)）。**不宣称**宿主湖/Rust pyd/seed-30/全市场对照或收益/parity。见 [handoff](handoff-version11-codex-impl-2026-09-21.md) 与 [人裁确认](https://github.com/baiyibing/MyQuant-backtrader/pull/152#issuecomment-5756590614)。禁自动 merge。 tip `c9b4380`。
 > **评审链**：主笔对抗层（F1–F8）→ 四稿 fan-out（codex/kimi/cursor/claude 全 rc=0，5 组实验）→ [merge-consensus V1–V17](../architecture/reviews/2026-09-21/plan-version11-machip-csv/merge-consensus.md)（分歧记录：宽派被严派反对，采严派全修）。实施走 [Codex 交接工作流](workflow-codex-handoff.md)（门槛：ma_infra PR #150 已合入）。
 > **业务源**：[归档 plan-ma-chip-edge-strategy-2026-09-07.md](_archive/plans/plan-ma-chip-edge-strategy-2026-09-07.md) §2 锁定口径（Cerebro 原实现已随 2026-09-16 Cerebro 退场删除；对照产物为静态档案）；用户 2026-09-21 指示「把 ma_chip 移植也做完」。
 > **Main ship / 单行范围**：把 ma_chip_edge（均线+盈筹率边缘买入）移植到 CSV 向量化引擎为 `version11`：信号池导出器 + 卖点书 + 成交时点语义重裁；不复活 Cerebro。
@@ -9,6 +10,15 @@
 ---
 
 ## 0) One-line scope
+
+### 2026-09-21 续作覆盖（binding；docs-first）
+
+1. **契约日覆盖 V2 / §1 / 切片 B**：D 为原信号日，T 为该股**严格晚于 D** 的首个有 bar 交易日；任何 on/after D 解释均作废。D→T ≤4 自然日；stale 从原 D 起算，超限无池行，`rejected.csv` 保留 `skip_buy(stale)` 和原 D。导出器只用 ≤T−1 数据计算，写 T 文件。
+2. **周线覆盖 R8 / P7 / 切片 A、B**：逐 D 采用 A / prefix-equivalent，即先截 ≤D 再重算（含末端未完成周）。`ma_infra` 新增显式 opt-in；现有默认 series 全历史 backward alignment **不变**。导出器调用显式 prefix series，不在默认 API 内隐藏逐日 asof。data-free 测试必须 pin 默认不变及 opt-in 与 truncate-then-call 等价。
+3. **R9 不变**：`apply()` 返回 dict 必须显式含 `limit_up_chase=False`；flag=False、chase pending 为空两项回归必过。
+4. **volume / 09:30 = A**：保留 P3 δ5 严格可得性，开盘 `attempt_at=hm-1`、`bucket <= at`；09:30 桶未完成则买 skip / pending 卖 defer。否决 v11 同分钟完成量仍按开盘价成交例外；既有书与生产 cap 默认不变，新增 data-free skip/defer pin。
+
+此节与 [更新 handoff](handoff-version11-codex-impl-2026-09-21.md) 优先于下方历史措辞；先独立提交文档，再写代码。
 
 `version11` = ma_chip_edge 移植：`export_strategy11_pool.py` 按「T-1 四条件边缘 + 盈筹率>0.70」写契约日池 CSV（9/10 导出器先例），引擎按名单买；卖点书实现「买入日收阴→次日开盘卖 / 收阳→破 SMA5 次日开盘卖」；D+1 开盘成交语义在 CSV 时钟上重裁（P1）。
 
