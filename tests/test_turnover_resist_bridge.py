@@ -80,3 +80,50 @@ class TestBridgeRespectsPreferFfi:
                 data_dir="Z:/nonexistent",
                 prefer_ffi=False,
             )
+
+
+class TestCliBomCsv:
+    def test_cli_compute_reads_utf8_bom_stock_code(self, tmp_path, monkeypatch):
+        """Rust CLI writes UTF-8 BOM CSV; bridge must keep fieldname stock_code."""
+        import subprocess
+        from pathlib import Path as P
+
+        from oskh_factors.bridge import turnover_resist as tr
+
+        date = "20260825"
+        data_dir = tmp_path
+        out = data_dir / f"_turnover_resist_{date}.csv"
+        # Simulate Rust CLI UTF-8 BOM header (utf-8-sig write).
+        out.write_text(
+            "stock_code,stock_name,date,close,turnover_resistance\n"
+            "000001.SZ,PingAn,20260825,10.5,0.42\n",
+            encoding="utf-8-sig",
+        )
+        assert out.read_bytes()[:3] == b"\xef\xbb\xbf"
+
+        monkeypatch.setattr(tr, "_find_exe", lambda: P("/fake/turnover-resist"))
+
+        class _Proc:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+
+        monkeypatch.setattr(subprocess, "run", lambda *a, **k: _Proc())
+
+        rows = tr._cli_compute(
+            date=date,
+            data_dir=str(data_dir),
+            window=1000,
+            step=0.01,
+            sort_by="circulating",
+            free_float_policy="warn-zero",
+            target_date_policy="strict",
+            bb_ddof=1,
+            max_grid_points=250_000,
+        )
+        assert len(rows) == 1
+        assert "stock_code" in rows[0]
+        assert rows[0]["stock_code"] == "000001.SZ"
+        assert "\ufeffstock_code" not in rows[0]
+        assert rows[0]["close"] == 10.5
+        assert rows[0]["turnover_resistance"] == 0.42

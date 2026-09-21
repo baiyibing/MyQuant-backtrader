@@ -172,7 +172,15 @@ def _cli_compute(**kwargs: Any) -> List[Dict[str, Any]]:
     ]
 
     _log.info("Running CLI: %s", " ".join(cmd))
-    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+    # Force UTF-8 pipes on Windows (default locale may be gbk and blow up on CLI logs).
+    proc = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=300,
+    )
     if proc.returncode != 0:
         raise RuntimeError(
             f"turnover-resist CLI failed (exit {proc.returncode}):\n"
@@ -182,8 +190,16 @@ def _cli_compute(**kwargs: Any) -> List[Dict[str, Any]]:
     import csv
 
     results: List[Dict[str, Any]] = []
-    with open(output_path, encoding="utf-8", newline="") as fh:
+    # Rust CLI writes UTF-8 BOM CSV; utf-8-sig strips BOM so fieldnames stay "stock_code"
+    # (plain utf-8 yields "\ufeffstock_code" → normalize_ffi_row raises "FFI row missing stock_code").
+    with open(output_path, encoding="utf-8-sig", newline="") as fh:
         for row in csv.DictReader(fh):
+            # Defense-in-depth: strip any residual BOM on keys.
+            if any(isinstance(k, str) and k.startswith("\ufeff") for k in row):
+                row = {
+                    (k.lstrip("\ufeff") if isinstance(k, str) else k): v
+                    for k, v in row.items()
+                }
             for key in (
                 "close", "cyqk_T", "cyqk_T_1", "profit_chip_diff",
                 "turnover", "turnover_resistance", "turnover_free",
