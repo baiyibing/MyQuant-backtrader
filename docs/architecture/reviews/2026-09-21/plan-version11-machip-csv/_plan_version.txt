@@ -1,0 +1,4 @@
+path=E:/PycharmProjects/MyQuant-backtrader/docs/backtest/plan-version11-machip-csv-2026-09-21.md
+git_sha=<untracked>
+content_sha256_16=c0d39d298ac5548a
+reviewed_at=2026-09-21
