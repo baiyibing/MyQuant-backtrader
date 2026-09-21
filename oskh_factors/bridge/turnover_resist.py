@@ -86,7 +86,11 @@ def circulating_capital_asof(stock_code: str, dates, *, history=None):
     required = {"stock_code", "m_timetag", "circulating_capital"}
     if not required.issubset(history.columns):
         raise ValueError(f"free_float_shares missing columns: {sorted(required - set(history.columns))}")
-    target = pd.DataFrame({"day": pd.DatetimeIndex(dates).normalize()})
+    # Normalize both merge keys to datetime64[ns] so CI pandas (strict ms vs us)
+    # does not raise MergeError on free_float history vs caller dates.
+    target = pd.DataFrame({
+        "day": pd.to_datetime(pd.DatetimeIndex(dates).normalize()).astype("datetime64[ns]"),
+    })
     if target["day"].isna().any():
         raise ValueError("asof dates must not contain NaT")
     target["order"] = np.arange(len(target))
@@ -94,13 +98,13 @@ def circulating_capital_asof(stock_code: str, dates, *, history=None):
                          ["m_timetag", "circulating_capital"]].copy()
     if subset.empty or target.empty:
         return np.full(len(target), np.nan)
-    subset["day"] = pd.to_datetime(subset.pop("m_timetag")).dt.normalize()
+    subset["day"] = pd.to_datetime(subset.pop("m_timetag")).dt.normalize().astype("datetime64[ns]")
     if subset["day"].isna().any():
         raise ValueError("free_float_shares m_timetag contains NaT")
     subset = subset.sort_values("day", kind="stable").drop_duplicates("day", keep="last")
     merged = pd.merge_asof(target.sort_values("day"), subset, on="day", direction="backward")
     values = pd.to_numeric(merged.sort_values("order")["circulating_capital"],
-                           errors="raise").to_numpy(dtype=float)
+                           errors="raise").to_numpy(dtype=float, copy=True)
     values[~np.isfinite(values) | (values <= 0)] = np.nan
     return values
 

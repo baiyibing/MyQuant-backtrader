@@ -138,7 +138,8 @@ def compute_signals(frame, shares, compute_cyqk):
     window = rules.CYQK_WINDOW
     span = (frame["high"].rolling(window, min_periods=1).max()
             - frame["low"].rolling(window, min_periods=1).min()) / STEP
-    grid = (span > MAX_GRID_POINTS).to_numpy()
+    # Copy: pandas/numpy may hand back a read-only view (CI FAIL: assignment destination is read-only).
+    grid = np.array((span > MAX_GRID_POINTS).to_numpy(), dtype=bool, copy=True)
     grid[:window - 1] = False
     cyqk = np.full(n, np.nan)
     i = window - 1
