@@ -19,6 +19,9 @@ from backtest.research import (
     strategy5_rules,
     strategy6_rules,
     strategy8_rules,
+    strategy8_1_rules,
+    strategy8_2_rules,
+    strategy8_3_rules,
     strategy9_rules,
     strategy10_rules,
     strategy_topk_dropout_rules,
@@ -33,6 +36,9 @@ HELP_LOCK_V4 = strategy4_rules.HELP_LOCK
 HELP_LOCK_V5 = strategy5_rules.HELP_LOCK
 HELP_LOCK_V6 = strategy6_rules.HELP_LOCK
 HELP_LOCK_V8 = strategy8_rules.HELP_LOCK
+HELP_LOCK_V8_1 = strategy8_1_rules.HELP_LOCK
+HELP_LOCK_V8_2 = strategy8_2_rules.HELP_LOCK
+HELP_LOCK_V8_3 = strategy8_3_rules.HELP_LOCK
 HELP_LOCK_V9 = strategy9_rules.HELP_LOCK
 HELP_LOCK_V10 = strategy10_rules.HELP_LOCK
 HELP_LOCK_TOPK = strategy_topk_dropout_rules.HELP_LOCK
@@ -584,6 +590,97 @@ def _run_kwargs_version8(args) -> dict:
     return {"strategy": "version8", "stop_pct": stop}
 
 
+def _apply_version8_1(
+    *,
+    stop_pct: Optional[float] = None,
+    take_profit=None,
+    record_params=None,
+    **_,
+) -> dict:
+    resolved = strategy8_1_rules.STOP_PCT if stop_pct is None else float(stop_pct)
+
+    def _tp(px, cost, peak, n_days=1):
+        return strategy8_1_rules.take_profit_reason(px, cost, peak, n_days)
+
+    def _rec(st):
+        strategy8_1_rules.record_strategy8_1_params(st, stop_pct=resolved)
+
+    return {
+        "stop_pct": resolved,
+        "take_profit": take_profit if take_profit is not None else _tp,
+        "record_params": record_params if record_params is not None else _rec,
+    }
+
+
+def _run_kwargs_version8_1(args) -> dict:
+    stop = getattr(args, "stop_pct", None)
+    if stop is not None and not 0 < float(stop) < 1:
+        raise SystemExit(f"--stop-pct must be in (0, 1), got {stop}")
+    return {"strategy": "version8_1", "stop_pct": stop}
+
+
+def _apply_version8_2(
+    *,
+    stop_pct: Optional[float] = None,
+    take_profit=None,
+    record_params=None,
+    **_,
+) -> dict:
+    resolved = strategy8_2_rules.STOP_PCT if stop_pct is None else float(stop_pct)
+
+    def _tp(px, cost, peak, n_days=1):
+        return strategy8_2_rules.take_profit_reason(px, cost, peak, n_days)
+
+    def _rec(st):
+        strategy8_2_rules.record_strategy8_2_params(st, stop_pct=resolved)
+
+    return {
+        "stop_pct": resolved,
+        "take_profit": take_profit if take_profit is not None else _tp,
+        "record_params": record_params if record_params is not None else _rec,
+    }
+
+
+def _run_kwargs_version8_2(args) -> dict:
+    stop = getattr(args, "stop_pct", None)
+    if stop is not None and not 0 < float(stop) < 1:
+        raise SystemExit(f"--stop-pct must be in (0, 1), got {stop}")
+    return {"strategy": "version8_2", "stop_pct": stop}
+
+
+def _apply_version8_3(
+    *,
+    stop_pct: Optional[float] = None,
+    take_profit=None,
+    record_params=None,
+    index_block_new=None,
+    **_,
+) -> dict:
+    resolved = strategy8_3_rules.STOP_PCT if stop_pct is None else float(stop_pct)
+
+    def _rec(st):
+        strategy8_3_rules.record_strategy8_3_params(st, stop_pct=resolved)
+
+    return {
+        "stop_pct": resolved,
+        "take_profit": (
+            strategy8_3_rules.take_profit_reason if take_profit is None else take_profit
+        ),
+        "record_params": record_params if record_params is not None else _rec,
+        "add_gate": strategy8_3_rules.may_add,
+        "name_lot_budget": strategy8_3_rules.lot_budget,
+        "allow_new_name": strategy8_3_rules.allow_new_name_from_gate(index_block_new),
+        "index_blocks_add": strategy8_3_rules.INDEX_BLOCKS_ADD,
+    }
+
+
+def _run_kwargs_version8_3(args) -> dict:
+    stop = getattr(args, "stop_pct", None)
+    if stop is not None and not 0 < float(stop) < 1:
+        raise SystemExit(f"--stop-pct must be in (0, 1), got {stop}")
+    return {"strategy": "version8_3", "stop_pct": stop}
+
+
 def _apply_version9(
     *, stop_pct: Optional[float] = None, take_profit=None, record_params=None, **_
 ) -> dict:
@@ -930,6 +1027,46 @@ register(
         help_lock=strategy8_rules.HELP_LOCK,
         apply=_apply_version8,
         run_kwargs=_run_kwargs_version8,
+    )
+)
+register(
+    CsvStrategyBook(
+        name="version8_1",
+        tag=strategy8_1_rules.BOOK_TAG,
+        aliases=("8.1", "8_1", "v8.1", "v8_1", "version8_1"),
+        allow_add=strategy8_1_rules.ALLOW_ADD,
+        peak_gap_min=strategy8_1_rules.PEAK_GAP_MIN,
+        help_lock=strategy8_1_rules.HELP_LOCK,
+        apply=_apply_version8_1,
+        run_kwargs=_run_kwargs_version8_1,
+    )
+)
+register(
+    CsvStrategyBook(
+        name="version8_2",
+        sizing="per_name",
+        name_budget=1_000_000.0,
+        tag=strategy8_2_rules.BOOK_TAG,
+        aliases=("8.2", "8_2", "v8.2", "v8_2", "version8_2"),
+        allow_add=strategy8_2_rules.ALLOW_ADD,
+        peak_gap_min=strategy8_2_rules.PEAK_GAP_MIN,
+        help_lock=strategy8_2_rules.HELP_LOCK,
+        apply=_apply_version8_2,
+        run_kwargs=_run_kwargs_version8_2,
+    )
+)
+register(
+    CsvStrategyBook(
+        name="version8_3",
+        sizing="per_name",
+        name_budget=1_000_000.0,
+        tag=strategy8_3_rules.BOOK_TAG,
+        aliases=("8.3", "8_3", "v8.3", "v8_3", "version8_3"),
+        allow_add=strategy8_3_rules.ALLOW_ADD,
+        peak_gap_min=strategy8_3_rules.PEAK_GAP_MIN,
+        help_lock=strategy8_3_rules.HELP_LOCK,
+        apply=_apply_version8_3,
+        run_kwargs=_run_kwargs_version8_3,
     )
 )
 register(
