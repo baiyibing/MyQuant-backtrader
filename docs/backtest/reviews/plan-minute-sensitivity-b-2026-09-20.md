@@ -78,3 +78,5 @@ Mode B clock 轴（`next_tradable_open`）：补齐 batch2 的 `ModeB NOT_RUN`�
 **FULL HUMAN CUT 已齐，B 恢复实施。** 替换全组合**所有买卖 fill** 为研究 `next_tradable_open`；买卖均严格同日到期；接受晚盘 `UNFILLED` 及全现金 NAV，绝不保留 baseline 入场。未成交卖单到期清除，保留实际持仓，**下一交易日正常策略重评是否卖出，不保留退出意图跨 session 等待**。此完整裁定取代此前 sell pending 桩。[设计 §9](design-minute-sensitivity-b-batch4-fullstrat-2026-09-20.md#9-research-only-fullstrat-clockslip-hooks) 为合同。
 
 先提交完整裁定文档，再写代码；pins 覆盖晚 14:55 START 入场未成交、买卖同日到期、卖单过期后次日重评（不 sticky）、clock XOR slip、post-impact fees 与基线等价。hooks 和 pins 通过后矩阵能力改 `FILLABLE`，数字留空至合并后 4090。跑指定 pytest / ruff / help gates，若 Grok CLI 可用则核后评论 #156；push 并打印 log，**不 merge**。新的语义分叉仍 PR comment + stop。
+
+**Slice B 接线检查停点（2026-09-21）**：完整 FULL cut 已先提交 `f96a3dc`。新发现 signal-size 冻结与 fill-price 重定量产生不同成交 / NAV，详见设计 §9「提交股数与成交价定量」的现有函数复现。Q1（建议：研究实时信号定量后固定股数，受冲击含费现金不足 terminal reject）/ Q2（成交价重定量）尚无人裁；按新分叉 stop，B 未实施、矩阵仍 DATA_GAP。不重开已经确定的全覆盖 / 同日到期 / 卖单次日策略重评。

@@ -30,6 +30,12 @@
 证据：原执行戳 `matrix.csv` / `data_gaps.csv`。2026-09-21 **FULL HUMAN CUT 已齐（H2 + 卖单到期次日重评）**，取代此前 sell pending 桩，恢复 Slice B：全组合所有买卖 fill 换为研究 `next_tradable_open`；买卖严格同日到期；接受 `UNFILLED` / 全现金 NAV，绝不静默保留 baseline 入场；未成交卖单到期清除，下一交易日正常策略重新判断是否卖出，不保留退出意图等待。详见 [设计 §9](design-minute-sensitivity-b-batch4-fullstrat-2026-09-20.md#9-research-only-fullstrat-clockslip-hooks)。本次先提交完整裁定文档，再实施 hooks + pins；通过后能力状态转 `FILLABLE`，所有新增 clock/slip 数值继续留空，等待合并后的 4090 slice D。上表及既有导出是历史执行状态，不覆盖历史数字；`production_C=frozen`，不 merge。
 
 
+**Slice B 新停点（2026-09-21）**：完整裁定文档已单独提交 `f96a3dc`；检查现有 `next_open` 与 Book `execute_buy` 后，复现了「固定信号股数 → UNFILLED」与「按执行价重新定量 → 成交 900 股」的差异（额度 10,000、现金 10,050、信号价 10、open 10.1）。买单数量合同 Q1/Q2 见设计 §9；按新语义分叉 PR comment + stop，hooks / pins 尚未实施。矩阵能力暂不转 FILLABLE；历史结果不变，新 clock/slip 数字保持空白。
+
+
+本次 gates（显式 `/workspace/vanna312/bin/python3`；系统 python3 未装 pytest / ruff）：既有非 production / benchmark 测试 **1422 passed, 2 skipped, 24 deselected**（exit 0，24.78s），harness `--help` exit 0；新 hook pins 文件不存在，专项 pytest exit 4（未通过）。无 Python 改动，ruff 无 touched 目标。现有函数 sizing 复现、`git diff --check`、修改文档 UTF-8 / BOM=0 / NUL=0 通过。既有测试通过不代表尚未实现的 hooks 已验证。
+
+
 ### 基线矩阵摘要行（默认时钟）
 
 | 引擎 | fill | NAV | total_return | max_drawdown | within_engine_rank |
