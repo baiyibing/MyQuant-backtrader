@@ -48,4 +48,3 @@ The slip mark fix is a real research-only defect, and the new accounting is the 
 The other prior notes are addressed: expiry is not `skip_cash`; ModeB artifacts are per cell; stub `base_tip` is `32b78b1`; `initial_cash` is the simulated pool; Book/v7 economic trade+equity pins and ModeB full ranking pins exist. Q2 lot-from-fill, H2, expiry, and Q33 `mark_end_zero` (only on the last session, and not in ranked cells) stay in their existing bounds. Research `build_daily_equity` omits the Q33 last-day drop; that is not a new experimental-loop hole while rule 0 / `delist_zero` stay out of rank.
 
 Keep `production_C` frozen, do not merge, and do not publish numbers until post-merge 4090. 48 hook tests plus the post-fix gate are the merge bar for this research path.
-
