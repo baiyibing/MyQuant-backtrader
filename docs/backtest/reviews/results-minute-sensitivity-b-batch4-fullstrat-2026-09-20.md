@@ -30,9 +30,9 @@
 证据：原执行戳 `matrix.csv` / `data_gaps.csv`。2026-09-21 **FULL HUMAN CUT 已齐（H2 + 卖单到期次日重评）**，取代此前 sell pending 桩，恢复 Slice B：全组合所有买卖 fill 换为研究 `next_tradable_open`；买卖严格同日到期；接受 `UNFILLED` / 全现金 NAV，绝不静默保留 baseline 入场；未成交卖单到期清除，下一交易日正常策略重新判断是否卖出，不保留退出意图等待。详见 [设计 §9](design-minute-sensitivity-b-batch4-fullstrat-2026-09-20.md#9-research-only-fullstrat-clockslip-hooks)。本次先提交完整裁定文档，再实施 hooks + pins；通过后能力状态转 `FILLABLE`，所有新增 clock/slip 数值继续留空，等待合并后的 4090 slice D。上表及既有导出是历史执行状态，不覆盖历史数字；`production_C=frozen`，不 merge。
 
 
-**Slice B 恢复**：Grok 复核纠正 `dde7a6f` 的定量误停判断。既有 `next_open` 合同已经固定本次信号股数；成交价重定量是适配错误，无需新裁定。10→10.1、1,000 股、现金 10,050 的 `UNFILLED/cash_reject_terminal` 纳入 pins；不重新请求人裁。
+**Slice B 按最新 Q2 恢复**：`40afca4` / `dde7a6f` 的 Q1 固定股数及停点叙述已被人裁覆盖。信号股数暂定，next-open / slip 成交价重定量；10,000 预算 / 10,050 现金 / 信号 10 → 暂定 1,000，open 10.1 → 900 股成交、现金 950.91。固定股数后 `cash_reject_terminal` 是必须排除的反例。H2 与卖单到期次日重评继续绑定；新增数值待合并后 4090。
 
-本次 gates（显式 `/workspace/vanna312/bin/python3`；系统 python3 未装 pytest / ruff）：既有非 production / benchmark 测试 **1422 passed, 2 skipped, 24 deselected**（exit 0，24.78s），harness `--help` exit 0；新 hook pins 文件不存在，专项 pytest exit 4（未通过）。无 Python 改动，ruff 无 touched 目标。现有函数 sizing 复现、`git diff --check`、修改文档 UTF-8 / BOM=0 / NUL=0 通过。既有测试通过不代表尚未实现的 hooks 已验证。
+历史验证（实现前）：本次 gates（显式 `/workspace/vanna312/bin/python3`；系统 python3 未装 pytest / ruff）：既有非 production / benchmark 测试 **1422 passed, 2 skipped, 24 deselected**（exit 0，24.78s），harness `--help` exit 0；新 hook pins 文件不存在，专项 pytest exit 4（未通过）。无 Python 改动，ruff 无 touched 目标。现有函数 sizing 复现、`git diff --check`、修改文档 UTF-8 / BOM=0 / NUL=0 通过。既有测试通过不代表尚未实现的 hooks 已验证。
 
 
 ### 基线矩阵摘要行（默认时钟）

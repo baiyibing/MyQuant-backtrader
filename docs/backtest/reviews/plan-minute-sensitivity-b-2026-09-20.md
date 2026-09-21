@@ -79,4 +79,4 @@ Mode B clock 轴（`next_tradable_open`）：补齐 batch2 的 `ModeB NOT_RUN`�
 
 先提交完整裁定文档，再写代码；pins 覆盖晚 14:55 START 入场未成交、买卖同日到期、卖单过期后次日重评（不 sticky）、clock XOR slip、post-impact fees 与基线等价。hooks 和 pins 通过后矩阵能力改 `FILLABLE`，数字留空至合并后 4090。跑指定 pytest / ruff / help gates，若 Grok CLI 可用则核后评论 #156；push 并打印 log，**不 merge**。新的语义分叉仍 PR comment + stop。
 
-**提交股数合同已由既有 next_open 明确**：按本次组合信号定量后固定股数，clock / slip 只交换执行价及含费现金；不足则 terminal reject，不按执行价缩股。Grok 复核纠正 `dde7a6f` 的误停判断，B 继续；10→10.1 / 1,000 股 / 现金 10,050 的拒单案例纳入 pins。
+**最新绑定 Q2**：覆盖 `40afca4` / `dde7a6f` 的 Q1 固定股数合同及停点叙述。信号定量为暂定值；next-open / slip 成交价重新执行整手 sizer，再按实际成交时现金与费用判断。预算 10,000 / 现金 10,050 / 信号 10 → 暂定 1,000；open 10.1 → 900 股成交、现金 950.91。固定 1,000 后 `cash_reject_terminal` 是排除的反例。完整 H2 与卖单次日重评不变。
