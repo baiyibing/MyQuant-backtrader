@@ -1,0 +1,4 @@
+path=E:/PycharmProjects/MyQuant-backtrader/docs/backtest/plan-ma-infra-shared-2026-09-21.md
+git_sha=<untracked>
+content_sha256_16=43b772080e34be1a
+reviewed_at=2026-09-21
