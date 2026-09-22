@@ -2,6 +2,8 @@
 
 本仓研究入口是**向量化**，不是 LEBS，也不是 Cerebro。
 
+**研究问题总入口**（三份主名单 × 人工改书 / 机器网格 / 分数轮换；策略 1–12、Mode A/B、TopK 怎么挂）：**[research-backtest-entry.md](research-backtest-entry.md)**。下面是命令与 SSOT 表。
+
 三件成交引擎（本仓向量化 / 1.3 LEBS / 1.3 MockQMT）怎么分工：见 **[engine-positioning-ssot.md](engine-positioning-ssot.md)**。Qlib `PortAnaRecord` 停用；Cerebro / Rolling 已退场（2026-09-16）。本仓没有 `backtest/lebs/`。
 
 ## 本仓研究入口（向量化）
@@ -110,8 +112,11 @@ Cerebro / Rolling 已退场（2026-09-16）；chip / ma_chip 对照产物为静�
 
 | 主题 | 文档 |
 |------|------|
+| **★ 研究问题总入口（名单 × 搜法 × 策略号）** | [research-backtest-entry.md](research-backtest-entry.md) |
 | **★ 三件引擎定位（本仓 + 1.3）** | [engine-positioning-ssot.md](engine-positioning-ssot.md) |
 | **★ 向量化成交核（A 股档位 / 跌停 / 停牌）** | [engine-ashare-correctness.md](engine-ashare-correctness.md) |
+| **联合仓库 TopK 回测（讨论中，未编码 GO）** | [topk-joint-research-tracker-2026-09-22.md](topk-joint-research-tracker-2026-09-22.md) · [#164](https://github.com/baiyibing/MyQuant-backtrader/issues/164) · overlay 默认已冻结：[plan-topk-dropout-overlay-2026-09-16.md](plan-topk-dropout-overlay-2026-09-16.md) |
+| **joint-return-v1（Grok Bot/4090 意图回放；≠ topk_dropout）** | [joint-return-frozen-explicit-price.md](joint-return-frozen-explicit-price.md) · 交接 [handoff-joint-return-qlib-to-bt-2026-09-22.md](handoff-joint-return-qlib-to-bt-2026-09-22.md) · 归类 [research-backtest-entry.md](research-backtest-entry.md) §5 |
 | **P3 δ1 研究费率合同（docs/tests；生产冻结）** | [plan-industry-align-p3-fees-2026-09-19.md](plan-industry-align-p3-fees-2026-09-19.md) · correctness §1.1 · `tests/test_ashare_fee_wiring.py` · r1 [merge-consensus](../architecture/reviews/2026-09-19/plan-industry-align-p3-fees-r1/merge-consensus.md) |
 | **向量化撮合核收口（⏳ 待人裁 GO — 见 plan，勿编码）** | [plan-ashare-engine-refactor-2026-09-18.md](plan-ashare-engine-refactor-2026-09-18.md) · [handoff](handoff-ashare-engine-refactor-codex-impl-2026-09-18.md) |
 | 名单 CSV 契约（as-of = 买入日 T；H9/H16 list-quality CLI，双目录严格校验） | [pool-csv-contract.md](pool-csv-contract.md#list-quality-reporter-h9--h16) |

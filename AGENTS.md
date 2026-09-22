@@ -2,16 +2,19 @@
 
 Standalone research-face fork (see [README.md](README.md)). Since migration S2 (2026-09-09) this repo owns the research face; OSkhQuant1.3 stays the trading stack and keeps only the `oskh_factors` chip/bridge micropackage.
 
-**成交引擎定位**：本仓 = 向量化。1.3 = LEBS + MockQMT 真栈。Qlib PortAnaRecord 停用；Cerebro / Rolling 已退场（2026-09-16）。见 [`docs/backtest/engine-positioning-ssot.md`](docs/backtest/engine-positioning-ssot.md)。成交核（档位 / 全卖因跌停 / Decimal 涨跌停价）见 [`docs/backtest/engine-ashare-correctness.md`](docs/backtest/engine-ashare-correctness.md)。入口命令见 [`docs/backtest/README.md`](docs/backtest/README.md)。
+**成交引擎定位**：本仓 = 向量化。1.3 = LEBS + MockQMT 真栈。Qlib PortAnaRecord 停用；Cerebro / Rolling 已退场（2026-09-16）。见 [`docs/backtest/engine-positioning-ssot.md`](docs/backtest/engine-positioning-ssot.md)。成交核（档位 / 全卖因跌停 / Decimal 涨跌停价）见 [`docs/backtest/engine-ashare-correctness.md`](docs/backtest/engine-ashare-correctness.md)。研究问题地图（三份名单 × 收益最大化）见 [`docs/backtest/research-backtest-entry.md`](docs/backtest/research-backtest-entry.md)。入口命令见 [`docs/backtest/README.md`](docs/backtest/README.md)。
 
 三仓回测不做重：MyQuant 出信号，本仓向量化研究，1.3 执行验收；LEBS 只在 1.3，且 LEBS ≠ MockQMT 真栈。本仓无 `python -m backtest.lebs` 入口。旧 CSV CLI 保留真身，HELP_LOCK 不变（P5=A）。
 
 ## Research entries
 
+- 总入口（`stock_pool` / qlib pred / 海龟名单 × 人工书 / 网格 / TopK）：[`docs/backtest/research-backtest-entry.md`](docs/backtest/research-backtest-entry.md)
 - 1/2/3/4/5/6/8/9/10 日线：`backtest/research/csv_daily_backtest.py --strategy version1|…|version6|version8|version9|version10`
 - 1/2/3/4/5/6/8/9/10 分钟：`backtest/research/csv_minute_backtest.py --strategy version1|…|version6|version8|version9|version10`
 - 7 金榕元：`backtest/research/csv_minute_backtest_v7.py`（`--pool-dir` 必填，不回落 `stock_pool/`）
 - 12 金榕元均线减仓书：CSV 入口 `--strategy version12`（别名 `12/v12`）；#151 follow-up 行业约定：分钟湖/成交域默认 raw `--dividend-type none`（front 仅可选 fail-closed，缺 1m/front 分区即失败），日线信号域固定 `front`，盘中成交继续分钟 raw，除权仅走显式 economics/文档路径（禁止 front 日线 + none 分钟下静默双重调整）。默认 `stock_pool/`，与 7 独立入口及必填池分工不同。MA5 周期减仓/买回 + MA10 止损/买回；latch=A、residual=2。
+- topk_dropout 联合研究（MyQuant 出分，本仓日线/分钟入口切换；持续改进用开关不复制书）：问题记录 [`docs/backtest/topk-joint-research-tracker-2026-09-22.md`](docs/backtest/topk-joint-research-tracker-2026-09-22.md) · [#164](https://github.com/baiyibing/MyQuant-backtrader/issues/164)。未人裁 GO 前不改默认触价止损。overlay 已落地：`--strategy topk_dropout`。
+- joint-return-v1（qlib 出冻结意图，bt 主管成交/NAV 与 Mode B 真湖）：交接 [`docs/backtest/handoff-joint-return-qlib-to-bt-2026-09-22.md`](docs/backtest/handoff-joint-return-qlib-to-bt-2026-09-22.md)。当前 `NOT_READY_FOR_MODE_B`；4090 重出时钟 pack 后再派 P-BASE。归类 [`docs/backtest/research-backtest-entry.md`](docs/backtest/research-backtest-entry.md) §5.6。
 - topk_app_dropout（新策略，不改策略 7）：`backtest/research/csv_minute_backtest_topk_app_dropout.py`；名单可选先 `scripts/data/export_topk_app_dropout_pool.py`。禁止 `register` 进 1–10 BOOKS。
 - 9 底量超顶量：`scripts/data/export_strategy9_pool.py` 写名单，再 `--strategy version9 --pool-dir`（拒绝 `stock_pool/`）
 - 10 换手阻力 / 源 B：`scripts/data/export_ta_pool.py` 写名单（湖当日有 K；不做 TopK），再 `--strategy version10 --pool-dir`（卖点同 6；拒绝 `stock_pool/`）

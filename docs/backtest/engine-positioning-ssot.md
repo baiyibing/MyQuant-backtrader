@@ -1,7 +1,7 @@
 # SSOT：三件成交引擎怎么分工
 
 - 日期：2026-09-16
-- 状态：v2（Cerebro 全局退场）。定位文档，不是排期。路线图见 MyQuant `docs/plan-three-repo-roadmap-2026-09-12.md`。本仓入口命令：同目录 `README.md`（U1，2026-09-12）。
+- 状态：v2（Cerebro 全局退场）。定位文档，不是排期。路线图见 MyQuant `docs/plan-three-repo-roadmap-2026-09-12.md`。本仓入口命令：同目录 `README.md`（U1，2026-09-12）。研究问题地图：同目录 `research-backtest-entry.md`。
 - 涉及：MyQuant / MyQuant-backtrader（本仓）/ OSkhQuant1.3
 
 Qlib `PortAnaRecord` 停用。Cerebro / Rolling 已退场（2026-09-16）。chip / ma_chip 对照产物为静态档案，代码路径已删。留下三件，问的不是同一个问题，不要合成一台，也不要互相当对照净值。

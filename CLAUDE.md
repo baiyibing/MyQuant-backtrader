@@ -15,4 +15,4 @@ D:\anaconda3\envs\vanna312\python.exe -m pytest -q
 
 ## Docs
 
-Backtest / chip / data docs live under `docs/backtest/`.
+Backtest / chip / data docs live under `docs/backtest/`. Research map (pools × strategies × Mode A/B / TopK): [docs/backtest/research-backtest-entry.md](docs/backtest/research-backtest-entry.md).
