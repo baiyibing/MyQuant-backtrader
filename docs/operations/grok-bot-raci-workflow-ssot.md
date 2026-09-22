@@ -122,11 +122,17 @@ MyQuant  →  MyQuant-backtrader  →  OSkhQuant1.3
 
 （PR 合入前可用分支：`docs/grok-bot-raci-workflow` / [#163](https://github.com/baiyibing/MyQuant-backtrader/pull/163)。）
 
-## 8. 待定（尚未当面锁死）
+## 8. 跨仓 handoff 回执（薄约定）
 
-| 项 | 状态 |
-|---|---|
-| handoff 回执固定字段（STATUS / INPUT_BLOCKED / 数字栏等） | **待定** |
+下游吃完上游 **handoff 目录**之后，必须回写一份固定样子的结果说明（可落在 handoff 内的 `RESULT.md` 或等价文件），让上游不用猜。先锁薄版，够对齐即可；真跑两三次后再加列。
+
+必含五条：
+
+1. **STATUS**：`OK` / `INPUT_BLOCKED` / `FAILED` / `NOT_RUN` 四选一  
+2. **一句话摘要**  
+3. **blocker**（非 `OK` 时必填：缺什么、在哪条路径）  
+4. **关键数字**（有则写：覆盖率、turnover、净超额等；没有则写 `N/A`）  
+5. **落盘路径**（RESULT / 日志相对 handoff 目录的路径）
 
 （4090 排队、跨仓只指针且单正文：已锁，见上文。）
 
@@ -141,6 +147,7 @@ MyQuant  →  MyQuant-backtrader  →  OSkhQuant1.3
 - [ ] 是否只有一把 PR / 一个分支在干活？
 - [ ] 需要 4090 时，是否由 **正在干这活的 bot** 派 4090bot，且按接收顺序排队？
 - [ ] Codex 是否只开 PR；CI 绿 + 核过关后，才人裁合？
+- [ ] 跨仓下游是否已按 §8 写回执（STATUS / 摘要 / blocker / 数字 / 路径）？
 
 ## 10. 修订
 
@@ -150,3 +157,4 @@ MyQuant  →  MyQuant-backtrader  →  OSkhQuant1.3
 | 2026-09-22 | 4090 并发：按任务接收顺序排队 |
 | 2026-09-22 | 跨仓只指针；并入 1.3 CLI SSOT 指针说明 |
 | 2026-09-22 | **合并为唯一正文**：CLI 流水线/模型钉并入本文；1.3 / MQ 只指针、不另写 SSOT |
+| 2026-09-22 | 跨仓 handoff 回执薄约定（STATUS / 摘要 / blocker / 数字 / 路径） |
