@@ -5,9 +5,11 @@
 > 生效：2026-09-22（用户当面逐条裁定）  
 >
 > **分工**：本文锁 **角色 / 仓 Owner / 跨仓边界 / handoff 工作流 / 4090 派活**。  
-> CLI 默认流水线与模型钉见 OSkhQuant1.3  
-> [`OSkhQuant1.3/docs/operations/agent-cli-workflow-ssot.md`](https://github.com/baiyibing/OSkhQuant1.3/blob/master/docs/operations/agent-cli-workflow-ssot.md)  
-> （Codex `gpt-6-astra` → Grok CLI `grok-4.7` → CI 绿 → 合）。  
+> **不镜像**：MyQuant / OSkhQuant1.3 **只放指针**到本文，不复制全文。  
+> CLI 默认流水线与模型钉（**亦为 Grok Bot 专用**）见 OSkhQuant1.3：  
+> [`docs/operations/agent-cli-workflow-ssot.md`](https://github.com/baiyibing/OSkhQuant1.3/blob/master/docs/operations/agent-cli-workflow-ssot.md)  
+> （已链 `docs/operations/README.md`、`linux-ci-02-agent-cli-setup.md`；跟踪 PR [#1078](https://github.com/baiyibing/OSkhQuant1.3/pull/1078)）。  
+> 流水线摘要：Codex `gpt-6-astra` → Grok CLI `grok-4.7` → CI 绿 → 合。  
 > 物理机发起 → 主管接手的七步手续见本仓  
 > [`docs/backtest/workflow-codex-handoff.md`](../backtest/workflow-codex-handoff.md)。
 
@@ -72,15 +74,26 @@ MyQuant  →  MyQuant-backtrader  →  OSkhQuant1.3
 - **并发**：多个 bot 同时需要 4090 时，按**任务接收顺序**排队（先接到的先跑）。
 
 
-## 6. 待定（尚未当面锁死）
+## 6. 跨仓文档关系（只指针）
+
+| 文档 | 仓 | 关系 |
+|---|---|---|
+| 本文（RACI / handoff / 4090 派活） | MyQuant-backtrader | **权威正文** |
+| [`agent-cli-workflow-ssot.md`](https://github.com/baiyibing/OSkhQuant1.3/blob/master/docs/operations/agent-cli-workflow-ssot.md) | OSkhQuant1.3 | CLI / 模型钉权威；**Grok Bot 专用**；他仓指针引用，不镜像 |
+| MyQuant 侧 | MyQuant | 需要时 **只加指针** 到本文与 1.3 CLI SSOT，不复制全文 |
+
+1.3 CLI SSOT 文首已写明：仅 Grok Bot 协作链路适用；人类本地 IDE、非 Bot 调度的助手/云端默认流程、普通 CI/运维 runbook **不适用**。
+
+## 7. 待定（尚未当面锁死）
+
 
 | 项 | 状态 |
 |---|---|
 | 两 bot 同时需要 4090 时的排队 / 互斥 | **已锁**：按**任务接收顺序**排队（先接到的先跑） |
 | handoff 回执固定字段（STATUS / INPUT_BLOCKED / 数字栏等） | **待定** |
-| 本文是否在 MyQuant / OSkhQuant1.3 各放一份镜像或仅指针 | **待定**（本仓已落；跨仓同步另裁） |
+| 本文是否在 MyQuant / OSkhQuant1.3 各放一份镜像或仅指针 | **已锁**：**只指针、不镜像**（他仓链到本文；本文链到 1.3 CLI SSOT / #1078） |
 
-## 7. 检查清单（开跨仓或本仓刀前）
+## 8. 检查清单（开跨仓或本仓刀前）
 
 - [ ] 当前是否确属 Grok Bot 协作？
 - [ ] 本刀 Owner 是否正确（本仓 → bt）？
@@ -90,9 +103,10 @@ MyQuant  →  MyQuant-backtrader  →  OSkhQuant1.3
 - [ ] 需要 4090 时，是否由 **正在干这活的 bot** 派 4090bot？
 - [ ] Codex 是否只开 PR；合入是否等人裁？
 
-## 8. 修订
+## 9. 修订
 
 | 日期 | 变更 |
 |---|---|
 | 2026-09-22 | 初版：仓 Owner、无 Doer、三仓链、handoff 角色落点、物理机/agent 不限定、4090 派活「谁干谁派」、待定项 |
 | 2026-09-22 | 4090 并发：按任务接收顺序排队 |
+| 2026-09-22 | 跨仓文档：只指针不镜像；并入 1.3 CLI SSOT / #1078 指针与 Grok Bot 专用说明 |
