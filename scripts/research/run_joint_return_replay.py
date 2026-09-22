@@ -1,4 +1,4 @@
-"""Explicit-file CLI for joint-return R1 synthetic minute replay; no lake access."""
+"""Explicit-file CLI for joint-return R1 synthetic/frozen minute replay; no lake access."""
 from __future__ import annotations
 
 import sys

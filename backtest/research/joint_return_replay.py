@@ -1,4 +1,4 @@
-"""Isolated joint-return R1 replay; explicit synthetic MQ bundle + minute JSON only.
+"""Isolated joint-return R1 replay; explicit synthetic or frozen MQ bundle + minute JSON only.
 
 Wire lock: MQ #92 contract.md SHA256 CONTRACT_HASH. The incoming BT base is the
 R0 contract's base; IMPLEMENTATION_BASE_BT records the separately authorized R1
@@ -41,7 +41,13 @@ marks and before any fills; no-attempt days use prior close NAV. Missing final
 minutes retain the last known mark with its actual timestamp and STALE_MARK.
 Initial NAV is included in the drawdown high-water mark. P-BASE is replayed
 independently with the same fill/input even when only P-CHASE is requested.
-All outputs remain SYNTHETIC_ONLY; real returns/PIT/coverage remain blocked.
+Synthetic outputs remain SYNTHETIC_ONLY: synthetic green != real return.
+Frozen control-only 50/5 packs use a separate contract pin and --bars with
+kind=frozen_explicit, content_sha256, metadata.contract_hash and metadata.source.
+Only P-BASE / M-LAG is enabled for frozen packs. M-REF is INPUT_BLOCKED because
+sessions.json reference_price=1.0 placeholders are not market prices. Intents
+and quantities are never rewritten. Frozen replay is research, not host source
+or PIT acceptance. No Qlib root discovery/reader is implemented in this adapter.
 """
 from __future__ import annotations
 
@@ -60,6 +66,7 @@ import shutil
 
 SCHEMA_VERSION = "joint-return-v1"
 CONTRACT_HASH = "dfa020d2c01e6cfe6612f09be2d569294ff94d82fd1ede5cea61a41d74a81737"
+FROZEN_CONTRACT_HASH = "9ee8cc3c63c1e7a0910c777c9a58fa4b884a89a853586a65363dc818b54cfe41"
 BASE_MQ = "4e4368b274ada2e27da5902f7420aa5a8ae5950c"
 CONTRACT_BASE_BT = "1049b904bdd818dbb79f51f1830a008c8f83b141"
 IMPLEMENTATION_BASE_BT = "073538d4486a07a71f561631c3f274ffa06eeecb"
@@ -187,7 +194,7 @@ def csv_bytes(rows, columns):
     return stream.getvalue().encode("utf-8")
 
 
-def read_csv(raw, columns):
+def read_csv(raw, columns, *, frozen=False):
     require(not raw.startswith(b"\xef\xbb\xbf") and b"\0" not in raw, "BOM/NUL forbidden")
     try:
         reader = csv.reader(io.StringIO(raw.decode("utf-8"), newline=""), strict=True)
@@ -195,7 +202,24 @@ def read_csv(raw, columns):
         rows = []
         for cells in reader:
             require(len(cells) == len(columns), "CSV row width drift", "CONTRACT_MISMATCH")
-            values = [load_json_bytes(v.encode()) for v in cells]
+            values = []
+            for column, cell in zip(columns, cells):
+                value = load_json_bytes(cell.encode())
+                # Some frozen exports JSON-encode a scalar twice. Decode only
+                # valid nested JSON; content/intent hashes still bind exact types.
+                if frozen and isinstance(value, str) and (
+                    value.startswith('"') or column in {
+                        "target_weight", "original_target_quantity", "reference_price",
+                        "score", "anti_rank", "t0_median",
+                    }
+                ):
+                    try:
+                        nested = load_json_bytes(value.encode())
+                    except ReplayError:
+                        pass
+                    else:
+                        value = nested
+                values.append(value)
             require(all(not isinstance(v, (dict, list)) for v in values), "CSV cells must be JSON scalars")
             rows.append(dict(zip(columns, values)))
         return rows
@@ -240,11 +264,11 @@ def validate_intents(rows):
     require(rows == sort_intents(rows), "intent order drift", "CONTRACT_MISMATCH")
 
 
-def validate_state(state):
+def validate_state(state, *, topk=10):
     fields(state, ("cash", "positions", "quantity_unit", "native_stop"), "state")
     num(state["cash"], "cash")
     require(state["quantity_unit"] == "share" and state["native_stop"] == "N/A", "state units/stops drift")
-    require(isinstance(state["positions"], dict) and len(state["positions"]) <= 10, "position count")
+    require(isinstance(state["positions"], dict) and len(state["positions"]) <= topk, "position count")
     lots = set()
     for inst, p in state["positions"].items():
         text_value(inst, "instrument")
@@ -257,32 +281,50 @@ def validate_state(state):
 
 
 def validate_manifest(m, rows):
+    frozen = m.get("kind") == "frozen"
+    arms = ("P-BASE",) if frozen else ARMS
+    contract = FROZEN_CONTRACT_HASH if frozen else CONTRACT_HASH
+    topk, n_drop = (50, 5) if frozen else (10, 3)
+    plan_source = "backtest_rule_intents" if frozen else "frozen_original_intents"
     fields(m, ("schema_version", "run_id", "kind", "status", "input_status", "metadata", "snapshot",
                "contract_hash", "intent_hash", "arm_intent_hashes", "artifacts", "reference_states",
                "initial_state", "pairing", "input_raw_hashes_verified", "execution_status", "return_status"), "manifest")
-    require(m["schema_version"] == SCHEMA_VERSION and m["contract_hash"] == CONTRACT_HASH,
-            "frozen contract hash/version drift", "CONTRACT_MISMATCH")
+    require(m["schema_version"] == SCHEMA_VERSION and m["contract_hash"] == contract,
+            "real inputs/frozen contract hash/version drift", "CONTRACT_MISMATCH")
     require(re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,95}", m["run_id"] or ""), "unsafe run_id")
-    require(m["kind"] == "synthetic" and m["status"] == "MQ_DATA_FREE_PASS"
-            and m["input_status"] == "SYNTHETIC_ONLY", "real inputs require host P-REF/raw/PIT/coverage acceptance")
+    if frozen:
+        require(m["status"] == m["input_status"] == "INPUT_BLOCKED"
+                and m.get("portfolio_status") == "PORTFOLIO_CONSTRAINTS_PASS"
+                and m.get("scores_mode") == "control_only", "frozen control-only portfolio not ready")
+    else:
+        require(m["kind"] == "synthetic" and m["status"] == "MQ_DATA_FREE_PASS"
+                and m["input_status"] == "SYNTHETIC_ONLY", "real inputs require host P-REF/raw/PIT/coverage acceptance")
     require(m["execution_status"] == "NOT_RUN" and m["input_raw_hashes_verified"] is False,
             "MQ R1 provenance status drift", "CONTRACT_MISMATCH")
-    require(m["pairing"] == {"arms": list(ARMS), "fills": list(FILL_MODES), "bt_acceptance": "NOT_RUN"},
+    require(m["pairing"] == {"arms": list(arms), "fills": list(FILL_MODES), "bt_acceptance": "NOT_RUN"},
             "pairing drift", "CONTRACT_MISMATCH")
     md = m["metadata"]
-    fields(md, ("code_shas", "implementation_bases", "contract_hash", "pred_recorder_id", "candidate_recorder_id",
-                "sidecar_sha256", "generated_at", "window", "calendar", "timezone", "price_domain", "strategy",
+    fields(md, ("code_shas", "implementation_bases", "contract_hash", "pred_recorder_id", "generated_at", "window", "calendar", "timezone", "price_domain", "strategy",
                 "fees", "risk_budget", "valuation_version", "benchmark_version", "order_policy", "quantity_policy", "inputs"), "metadata")
     require(md["implementation_bases"] == {"MQ": BASE_MQ, "BT": CONTRACT_BASE_BT},
             "incoming R0 implementation bases drift", "CONTRACT_MISMATCH")
     fields(md["code_shas"], ("MQ", "BT"), "code_shas")
     for value in md["code_shas"].values():
         sha(value, 40)
-    require(md["contract_hash"] == CONTRACT_HASH, "metadata contract hash drift", "CONTRACT_MISMATCH")
-    require(md["pred_recorder_id"] == "8a061ea428e04bb3a199a485ade49d0e"
-            and md["candidate_recorder_id"] == "d03e8ffcb6d14668b4d6fc2b192bc8c7"
-            and md["sidecar_sha256"] == "27320f8b7f6de3854802f97325f682039732470ce387f21bc9cd6c3083b7b348",
-            "frozen source identity drift", "CONTRACT_MISMATCH")
+    require(md["contract_hash"] == contract, "metadata contract hash drift", "CONTRACT_MISMATCH")
+    if frozen:
+        require(md.get("scores_mode") == "control_only" and md.get("arms", ["P-BASE"]) == ["P-BASE"]
+                and md.get("candidate_recorder_id") is None and md.get("sidecar_sha256") is None,
+                "frozen deferred inputs/arms drift", "CONTRACT_MISMATCH")
+        require(md["pred_recorder_id"] == "8a061ea428e04bb3a199a485ade49d0e",
+                "frozen recorder identity drift", "CONTRACT_MISMATCH")
+        require(md["valuation_version"] == "research-none-mark-v1", "frozen valuation drift", "CONTRACT_MISMATCH")
+    else:
+        fields(md, ("candidate_recorder_id", "sidecar_sha256"), "metadata")
+        require(md["pred_recorder_id"] == "8a061ea428e04bb3a199a485ade49d0e"
+                and md["candidate_recorder_id"] == "d03e8ffcb6d14668b4d6fc2b192bc8c7"
+                and md["sidecar_sha256"] == "27320f8b7f6de3854802f97325f682039732470ce387f21bc9cd6c3083b7b348",
+                "frozen source identity drift", "CONTRACT_MISMATCH")
     stamp(md["generated_at"])
     require(md["timezone"] == "Asia/Shanghai" and md["price_domain"] == "none", "time/price domain drift", "SEMANTICS_BLOCKED")
     cal = md["calendar"]
@@ -294,9 +336,9 @@ def validate_manifest(m, rows):
         text_value(md[k], k)
     s = md["strategy"]
     fields(s, ("topk", "n_drop", "source", "native_stop", "eligibility_version", "eligibility_rules"), "strategy")
-    require(s["topk"] == 10 and s["n_drop"] == 3 and s["source"] == "frozen_original_intents"
+    require(s["topk"] == topk and s["n_drop"] == n_drop and s["source"] == plan_source
             and s["native_stop"] == "N/A" and bool(s["eligibility_version"])
-            and isinstance(s["eligibility_rules"], dict) and bool(s["eligibility_rules"]), "frozen 10/3 strategy drift")
+            and isinstance(s["eligibility_rules"], dict) and bool(s["eligibility_rules"]), "frozen 10/3 or 50/5 strategy drift")
     require(md["order_policy"] == ORDER_POLICY and md["quantity_policy"] == {
         "unit": "share", "buy_lot": 100, "sell": "FULL_LOT_EXIT", "corporate_actions": "EXPLICIT_ONLY"}, "policy drift")
     require(num(md["risk_budget"], "risk budget") <= 1, "risk budget above one")
@@ -308,43 +350,44 @@ def validate_manifest(m, rows):
         num(f[k], k)
     fields(m["snapshot"], ("uri", "raw_sha256", "content_sha256", "raw_verified"), "snapshot")
     require(m["snapshot"]["raw_verified"] is True, "MQ snapshot was not verified")
-    for source in [m["snapshot"]] + [md["inputs"].get(k, {}) for k in ("scores", "initial_state", "plans", "pref")]:
+    for source in [m["snapshot"]] + [md["inputs"].get(k, {}) for k in (("scores", "initial_state", "plans") if frozen else ("scores", "initial_state", "plans", "pref"))]:
         fields(source, ("uri", "raw_sha256", "content_sha256"), "source")
         text_value(source["uri"], "source URI")
         sha(source["raw_sha256"])
         sha(source["content_sha256"])
-    validate_state(m["initial_state"])
+    validate_state(m["initial_state"], topk=topk)
     require(content_hash(m["initial_state"]) == md["inputs"]["initial_state"]["content_sha256"],
             "initial state hash drift", "CONTRACT_MISMATCH")
+    require(not frozen or all(r["arm_id"] == "P-BASE" for r in rows), "frozen supports P-BASE only")
     validate_intents(rows)
     require(m["intent_hash"] == content_hash(rows), "intent table hash drift", "CONTRACT_MISMATCH")
-    for arm in ARMS:
+    for arm in arms:
         require(m["arm_intent_hashes"].get(arm) == content_hash([r for r in rows if r["arm_id"] == arm]),
                 "arm hash drift", "CONTRACT_MISMATCH")
     # Verify immutable reference chains and bind every intent back to its plan;
     # no selection, sizing or reference recursion is rerun on the BT side.
-    histories, prior = {}, {a: m["initial_state"] for a in ARMS}
+    histories, prior = {}, {a: m["initial_state"] for a in arms}
     require(isinstance(m["reference_states"], list), "reference history required")
     for h in m["reference_states"]:
         fields(h, ("date", "arm_id", "before", "after", "before_hash", "after_hash", "source_plan",
                    "reference_nav", "target_turnover", "initial_build"), "history")
         key = (h["date"], h["arm_id"])
-        require(key not in histories and h["arm_id"] in ARMS, "duplicate/invalid reference history")
+        require(key not in histories and h["arm_id"] in arms, "duplicate/invalid reference history")
         histories[key] = h
-    require(set(histories) == {(d, a) for d in cal for a in ARMS}, "reference arm-days missing/extra")
+    require(set(histories) == {(d, a) for d in cal for a in arms}, "reference arm-days missing/extra")
     plans = {}
     for d in cal:
-        for a in ARMS:
+        for a in arms:
             h = histories[d, a]
-            validate_state(h["before"])
-            validate_state(h["after"])
+            validate_state(h["before"], topk=topk)
+            validate_state(h["after"], topk=topk)
             require(h["before_hash"] == content_hash(h["before"]) == content_hash(prior[a])
                     and h["after_hash"] == content_hash(h["after"]), "reference chain drift", "CONTRACT_MISMATCH")
             p = h["source_plan"]
             fields(p, ("date", "arm_id", "pre_state_hash", "source", "corporate_actions", "sells", "buy_candidates",
                        "marks", "mark_at", "decision_at", "available_at", "effective_at", "expires_at"), "source plan")
             require((p["date"], p["arm_id"]) == (d, a) and p["pre_state_hash"] == h["before_hash"]
-                    and p["source"] == "frozen_original_intents", "source plan drift", "CONTRACT_MISMATCH")
+                    and p["source"] == plan_source, "source plan drift", "CONTRACT_MISMATCH")
             require(p["corporate_actions"] == [], "MQ corporate actions not supported", "SEMANTICS_BLOCKED")
             require(stamp(p["decision_at"]).date().isoformat() == d, "plan decision date drift", "CONTRACT_MISMATCH")
             num(h["reference_nav"], "reference NAV", positive=True)
@@ -381,6 +424,10 @@ def validate_manifest(m, rows):
 
 def load_bundle(intents_path):
     path = Path(intents_path)
+    if path.is_dir():
+        path = path / "intents.csv"
+    elif path.name == "manifest.json":
+        path = path.with_name("intents.csv")
     raw_manifest = read_bytes(path.parent / "manifest.json")
     m = load_json_bytes(raw_manifest)
     fields(m, ("artifacts",), "manifest")
@@ -390,13 +437,14 @@ def load_bundle(intents_path):
         declared = m["artifacts"].get(name, {})
         require(declared.get("raw_sha256") == raw_hash(raw),
                 f"{name}: raw/content hash drift", "CONTRACT_MISMATCH")
-        product = read_csv(raw, columns) if columns else load_json_bytes(raw)
+        product = read_csv(raw, columns, frozen=m.get("kind") == "frozen") if columns else load_json_bytes(raw)
         require(declared == {"raw_sha256": raw_hash(raw), "content_sha256": content_hash(product)},
                 f"{name}: raw/content hash drift", "CONTRACT_MISMATCH")
         products[name] = product
     rows = products["intents.csv"]
     validate_manifest(m, rows)
-    require(products["pref_check.json"].get("status") == "SYNTHETIC_PASS", "MQ P-REF has not passed")
+    expected_pref = "NOT_RUN" if m["kind"] == "frozen" else "SYNTHETIC_PASS"
+    require(products["pref_check.json"].get("status") == expected_pref, "MQ P-REF status drift")
     return m, rows, {"manifest_raw_sha256": raw_hash(raw_manifest), "manifest_content_sha256": content_hash(m)}
 
 
@@ -404,7 +452,12 @@ def validate_bars(bundle, m, intents):
     fields(bundle, ("schema_version", "kind", "metadata", "bars", "corporate_actions", "content_sha256"), "bars snapshot")
     require(bundle["content_sha256"] == content_hash({k: v for k, v in bundle.items() if k != "content_sha256"}),
             "bars content hash drift", "CONTRACT_MISMATCH")
-    require(bundle["schema_version"] == SCHEMA_VERSION and bundle["kind"] == "synthetic", "only synthetic bars accepted")
+    frozen = m["kind"] == "frozen"
+    require(bundle["schema_version"] == SCHEMA_VERSION
+            and bundle["kind"] == ("frozen_explicit" if frozen else "synthetic"), "price source kind mismatch")
+    if frozen:
+        require(bundle["metadata"].get("contract_hash") == FROZEN_CONTRACT_HASH,
+                "bars contract hash drift", "CONTRACT_MISMATCH")
     md = bundle["metadata"]
     fields(md, ("calendar", "timezone", "price_domain", "bar_label", "interval_seconds", "sessions",
                 "session_source", "initial_at", "initial_lots", "corporate_actions_complete", "source"), "minute metadata")
@@ -511,6 +564,14 @@ def validate_bars(bundle, m, intents):
         for r in intents:
             if r["instrument"] == e["instrument"] and stamp(r["reference_price_at"]) == effective:
                 raise ReplayError("SEMANTICS_BLOCKED", "quantity snapshot at event boundary is ambiguous")
+    if frozen:
+        # Deliberately conservative: every symbol in the frozen universe must
+        # have explicit evidence for every declared session minute, suspended
+        # minutes included. Never manufacture missing bars or stale success.
+        expected = len(opportunities) * len(mapping)
+        coverage = dict(expected_symbol_minutes=expected, observed_symbol_minutes=len(bars),
+                        missing_symbol_minutes=expected - len(bars))
+        require(len(bars) == expected, f"explicit price coverage incomplete: {coverage}")
     return opportunities, ends, bars, closes
 
 
@@ -551,7 +612,7 @@ class _Replay:
             self.seen_lots.add(p["lot_id"])
         self.start_nav = self.nav()
         require(self.start_nav > 0, "initial NAV denominator must be positive")
-        self.pair = dict(run_id=m["run_id"], contract_hash=CONTRACT_HASH, arm_id=arm,
+        self.pair = dict(run_id=m["run_id"], contract_hash=m["contract_hash"], arm_id=arm,
                          arm_intent_hash=m["arm_intent_hashes"][arm], fill_id=fill_mode)
         for r in rows:
             if r["arm_id"] != arm:
@@ -930,10 +991,14 @@ def replay(m, intents, bars, *, arm, fill_mode):
     """Pure validated replay. An arm selection never substitutes its state for BASE.
 
     All inputs are immutable. Use load_bundle/run_replay for disk hash checks;
-    this entry validates manifest/content identities for synthetic unit vectors.
+    this entry validates manifest/content identities for both input paths.
     """
     require(arm in (*ARMS, "all") and fill_mode in (*FILL_MODES, "all"), "unknown arm/fill")
     validate_manifest(m, intents)
+    if m["kind"] == "frozen":
+        require(arm == "P-BASE", "frozen supports P-BASE only; P-CHASE/weak/Mode B INPUT_BLOCKED")
+        require(fill_mode == "M-LAG", "frozen M-REF INPUT_BLOCKED: sessions reference_price placeholders forbidden")
+    require(bars is not None, "explicit --bars price source required; no sessions.json price fallback")
     validated = validate_bars(bars, m, intents)
     chosen_arms = ARMS if arm == "all" else (arm,)
     modes = FILL_MODES if fill_mode == "all" else (fill_mode,)
@@ -949,7 +1014,7 @@ def replay(m, intents, bars, *, arm, fill_mode):
                          net_return_difference=d["net_return"] - b["net_return"])
             for key in output:
                 output[key].extend(product[key])
-    output["summary"] = dict(schema_version=SCHEMA_VERSION, run_id=m["run_id"], contract_hash=CONTRACT_HASH,
+    output["summary"] = dict(schema_version=SCHEMA_VERSION, run_id=m["run_id"], contract_hash=m["contract_hash"],
         status="BT_DATA_FREE_PASS", input_status="SYNTHETIC_ONLY", execution_status="SYNTHETIC_RUN",
         return_status="待实测", real_execution_status="INPUT_BLOCKED",
         input_code_shas=m["metadata"]["code_shas"], input_implementation_bases=m["metadata"]["implementation_bases"],
@@ -966,6 +1031,10 @@ def replay(m, intents, bars, *, arm, fill_mode):
             "share conversion is not cash-dividend total return; real source/PIT/action completeness remain unverified",
             "R1 synthetic results do not establish real return, slippage, Sharpe or paired uncertainty",
         ])
+    if m["kind"] == "frozen":
+        output["summary"].update(status="BT_RESEARCH_REPLAY_PASS", input_status="FROZEN_EXPLICIT",
+                                 execution_status="RESEARCH_RUN", mq_input_status=m["input_status"],
+                                 deferred_arms={k: "INPUT_BLOCKED" for k in ("P-CHASE", "weak", "Mode B")})
     return plain(output)
 
 
@@ -991,6 +1060,7 @@ def run_replay(intents_path, bars_path, *, arm, fill_mode, out):
     rejected, even if empty. No source URI in MQ metadata is dereferenced.
     """
     m, intents, provenance = load_bundle(intents_path)
+    require(bars_path is not None, "explicit --bars price source required; no sessions.json price fallback")
     raw = read_bytes(bars_path)
     bars = load_json_bytes(raw)
     product = replay(m, intents, bars, arm=arm, fill_mode=fill_mode)
@@ -1021,9 +1091,9 @@ def run_replay(intents_path, bars_path, *, arm, fill_mode, out):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="Isolated synthetic R1 replay; frozen MQ bundle + explicit minute JSON")
-    parser.add_argument("--intents", type=Path, required=True, help="MQ intents.csv; manifest and companion artifacts adjacent")
-    parser.add_argument("--bars", type=Path, required=True, help="explicit synthetic minute JSON (schema in module docstring)")
+    parser = argparse.ArgumentParser(description="Research replay: synthetic or frozen control-only MQ pack + explicit minute JSON")
+    parser.add_argument("--intents", type=Path, required=True, help="explicit MQ intents.csv, directory or manifest.json; companion artifacts adjacent")
+    parser.add_argument("--bars", type=Path, help="explicit synthetic or frozen_explicit minute JSON with content hash/provenance; absent => INPUT_BLOCKED; no Qlib auto-discovery")
     parser.add_argument("--arm", choices=(*ARMS, "all"), required=True)
     parser.add_argument("--fill-mode", choices=(*FILL_MODES, "all"), required=True)
     parser.add_argument("--out", type=Path, required=True, help="final backtest_output/joint-return-v1/<run_id> directory")
@@ -1033,5 +1103,7 @@ def main(argv=None):
     except (ReplayError, OSError, KeyError, TypeError, AttributeError) as exc:
         print(canonical_bytes({"status": getattr(exc, "status", "INPUT_BLOCKED"), "detail": str(exc)}).decode())
         return 2
-    print(canonical_bytes({"status": "BT_DATA_FREE_PASS", "input_status": "SYNTHETIC_ONLY", "summary": str(path / "summary.json")}).decode())
+    summary = load_json_bytes(read_bytes(path / "summary.json"))
+    print(canonical_bytes({"status": summary["status"], "input_status": summary["input_status"],
+                          "summary": str(path / "summary.json")}).decode())
     return 0

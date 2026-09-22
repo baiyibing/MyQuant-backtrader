@@ -669,3 +669,126 @@ def test_zero_nav_and_bar_content_tampering_block_without_outputs():
     b["bars"][0]["open"] = 11
     with pytest.raises(jr.ReplayError, match="bars content hash drift"):
         jr.replay(m, rows, b, arm="P-BASE", fill_mode="M-LAG")
+
+
+def frozen_bundle(*, state=None):
+    """Tiny fixture of the control-only MQ wire format, NOT real 4090 data."""
+    m, rows = bundle([spec(arm="P-BASE", reference_price=1)], state=state)
+    m.update(kind="frozen", run_id="frozen-fixture", contract_hash=jr.FROZEN_CONTRACT_HASH,
+             status="INPUT_BLOCKED", input_status="INPUT_BLOCKED", scores_mode="control_only",
+             portfolio_status="PORTFOLIO_CONSTRAINTS_PASS")
+    md = m["metadata"]
+    md.update(contract_hash=jr.FROZEN_CONTRACT_HASH, scores_mode="control_only", arms=["P-BASE"],
+              valuation_version="research-none-mark-v1")
+    md.pop("candidate_recorder_id")
+    md.pop("sidecar_sha256")
+    md["inputs"].pop("pref")
+    md["strategy"].update(topk=50, n_drop=5, source="backtest_rule_intents")
+    m["pairing"]["arms"] = ["P-BASE"]
+    m["reference_states"] = [h for h in m["reference_states"] if h["arm_id"] == "P-BASE"]
+    for h in m["reference_states"]:
+        plan = h["source_plan"]
+        old_hash = jr.content_hash(plan)
+        plan["source"] = "backtest_rule_intents"
+        for row in rows:
+            if row["source_plan_hash"] == old_hash:
+                row["source_plan_hash"] = jr.content_hash(plan)
+                row["intent_id"] = jr.content_hash({k: v for k, v in row.items() if k != "intent_id"})
+    rows = jr.sort_intents(rows)
+    m["intent_hash"] = jr.content_hash(rows)
+    m["arm_intent_hashes"] = {"P-BASE": jr.content_hash(rows)}
+    bars = minute_bars(m, rows, price=11)
+    bars["kind"] = "frozen_explicit"
+    bars["metadata"].update(contract_hash=jr.FROZEN_CONTRACT_HASH,
+                            source="fixture://explicit-prices-not-real-4090")
+    return m, rows, seal(bars)
+
+
+def write_frozen_bundle(tmp_path, m, rows, *, extra_quotes=False):
+    path = write_bundle(tmp_path, m, rows)
+    pref = {"status": "NOT_RUN", "reason": "control_only: anti/universe/labels deferred", "numeric_scope": []}
+    raw = jr.canonical_bytes(pref) + b"\n"
+    (path.parent / "pref_check.json").write_bytes(raw)
+    m["artifacts"]["pref_check.json"] = dict(raw_sha256=jr.raw_hash(raw), content_sha256=jr.content_hash(pref))
+    if extra_quotes:
+        # Additional JSON quoting inside CSV quoting, including numeric cells.
+        quoted = [{k: json.dumps(v) for k, v in r.items()} for r in rows]
+        raw = jr.csv_bytes(quoted, jr.INTENT_FIELDS)
+        path.write_bytes(raw)
+        m["artifacts"]["intents.csv"]["raw_sha256"] = jr.raw_hash(raw)
+    (path.parent / "manifest.json").write_bytes(jr.canonical_bytes(m))
+    return path
+
+
+@pytest.mark.parametrize("entry", ["intents.csv", "manifest.json", "."])
+@pytest.mark.parametrize("extra_quotes", [False, True])
+def test_frozen_explicit_file_replay_preserves_intents_and_hashes(tmp_path, entry, extra_quotes):
+    m, rows, bars = frozen_bundle()
+    original = deepcopy(rows)
+    path = write_frozen_bundle(tmp_path, m, rows, extra_quotes=extra_quotes)
+    prices = tmp_path / "prices.json"
+    prices.write_bytes(jr.canonical_bytes(bars))
+    out = tmp_path / "bt" / m["run_id"]
+    jr.run_replay(path.parent / entry, prices, arm="P-BASE", fill_mode="M-LAG", out=out)
+    summary = json.loads((out / "summary.json").read_text())
+    assert summary["status"] == "BT_RESEARCH_REPLAY_PASS"
+    assert summary["contract_hash"] == jr.FROZEN_CONTRACT_HASH
+    assert summary["mq_input_status"] == summary["real_execution_status"] == "INPUT_BLOCKED"
+    assert summary["return_status"] == "待实测"
+    assert set(p.name for p in out.iterdir()) == {"orders.csv", "fills.csv", "daily_nav.csv", "summary.json"}
+    with (out / "fills.csv").open() as stream:
+        fills = [{k: json.loads(v) for k, v in row.items()} for row in csv.DictReader(stream)]
+    assert fills[0]["price"] == 11  # Never sessions/reference placeholder 1.0.
+    assert fills[0]["contract_hash"] == jr.FROZEN_CONTRACT_HASH
+    assert {k: fills[0][k] for k in jr.INTENT_FIELDS} == original[0]
+    assert rows == original
+
+
+def test_frozen_missing_prices_cli_is_input_blocked(tmp_path, capsys):
+    m, rows, _ = frozen_bundle()
+    path = write_frozen_bundle(tmp_path, m, rows)
+    out = tmp_path / m["run_id"]
+    assert jr.main(["--intents", str(path), "--arm", "P-BASE", "--fill-mode", "M-LAG", "--out", str(out)]) == 2
+    assert "INPUT_BLOCKED" in capsys.readouterr().out
+    assert not out.exists()
+
+
+@pytest.mark.parametrize("arm,mode", [("P-CHASE", "M-LAG"), ("all", "M-LAG"),
+                                      ("P-BASE", "M-REF"), ("P-BASE", "all")])
+def test_frozen_deferred_arms_and_placeholder_reference_blocked(arm, mode):
+    m, rows, bars = frozen_bundle()
+    with pytest.raises(jr.ReplayError, match="INPUT_BLOCKED"):
+        jr.replay(m, rows, bars, arm=arm, fill_mode=mode)
+
+
+@pytest.mark.parametrize("target", ["manifest", "metadata", "bars"])
+def test_frozen_cannot_mix_synthetic_contract(target):
+    m, rows, bars = frozen_bundle()
+    obj = {"manifest": m, "metadata": m["metadata"], "bars": bars["metadata"]}[target]
+    obj["contract_hash"] = jr.CONTRACT_HASH
+    with pytest.raises(jr.ReplayError, match="CONTRACT_MISMATCH.*contract hash"):
+        run(m, rows, bars)
+
+
+def test_frozen_price_coverage_fails_closed_with_counts():
+    m, rows, bars = frozen_bundle()
+    bars["bars"].pop()
+    with pytest.raises(jr.ReplayError, match="INPUT_BLOCKED.*missing_symbol_minutes.*1"):
+        run(m, rows, bars)
+
+
+def test_frozen_prices_need_provenance_hash_and_matching_kind():
+    m, rows, bars = frozen_bundle()
+    for mutate in (lambda b: b["metadata"].pop("source"), lambda b: b.update(kind="synthetic")):
+        bad = deepcopy(bars)
+        mutate(bad)
+        with pytest.raises(jr.ReplayError):
+            run(m, rows, bad)
+    bars["bars"][0]["open"] = 12
+    with pytest.raises(jr.ReplayError, match="bars content hash drift"):
+        jr.replay(m, rows, bars, arm="P-BASE", fill_mode="M-LAG")
+
+
+def test_frozen_state_supports_fifty_positions():
+    m, rows, bars = frozen_bundle(state=initial(**{f"S{i}": 100 for i in range(49)}))
+    assert len(stats(run(m, rows, bars))["ending_positions"]) == 50
