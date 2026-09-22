@@ -21,7 +21,7 @@
 | 9/22 早 | 4090 | 组合约束审计 **PASS**（墙钟约 7.2h）。产物：`MyQuant/runs/joint_return_4090_20260920_pr95/portfolio/joint-return-control-only-50-5/`。换手 / 回撤 / 净超额 **NOT_RUN**（这步本来就不出成交） |
 | 9/22 | bt | **BT #162** 合入：冻结 `--bars` 适配。全集回放因分钟覆盖 **INPUT_BLOCKED**（缺 3,575,860 symbol-minute：9 无 bin + 150 窗内后上市） |
 | 9/22 | 人裁 | 按存活期/宇宙收窄：留 **614** 满窗，丢 9+150 |
-| 9/22 | 4090 | 收窄导 bars + P-BASE（M-LAG）回放：`BT_RESEARCH_REPLAY_PASS`，但 **1891 意图 / 0 成交**（EXPIRED 1881、NOT_AVAILABLE 1891）。换手/回撤/净超额全是 **0**，不能当有效收益 |
+| 9/22 | 4090 | 收窄导 bars + P-BASE（M-LAG）回放：`BT_RESEARCH_REPLAY_PASS`，但 **1891 意图 / 0 成交**（status：EXPIRED 1881 / WAITING 10；reason：NOT_AVAILABLE 10）。换手/回撤/净超额全是 **0**，不能当有效收益 |
 | 9/22 | bt 只读核 | **BUG_ALIGNMENT**，不是预期空仓。意图 `available=effective=当日 15:03`、`expires=当日 16:00`；M-LAG 要会话内且 **严格晚于** `available_at` 的 open；当日最后 open≈15:00 → 空窗口。收窄和 bars 没问题 |
 | 9/22 | qlib | **MQ #97** → `1c1fe43`（Grok GO）：`next_session_clocks` 可把 available/effective 打到次日 09:30。**合同 hash 变了**（新 `c6b85b9b…`），旧冻结包不可复用 |
 | 现在 | 4090 | **只重出** `narrow_clock_20260922` pack（排在 s12 分钟五本后面），**先不回放**。目录里目前只有 `metadata.json` / `sessions.json` / `execution-calendar.json`，**还没有** intents/constraints/manifest |
@@ -82,7 +82,7 @@ Mode B 真湖：M-REF / M-LAG 分钟成交敏感，用真湖 `--bars`，不造 b
 
 - 状态：`BT_RESEARCH_REPLAY_PASS` + `return_status=待实测` + `real_execution_status=INPUT_BLOCKED`
 - 意图 1891；成交 0；`nav_start=nav_end=1e8`；turnover / max_drawdown / net_excess = **0.0**
-- 订单原因：EXPIRED 1881、NOT_AVAILABLE 1891；WAITING 10
+- 订单：status EXPIRED 1881 / WAITING 10；status_reason EXPIRED 1881 / NOT_AVAILABLE 10（orders.csv 实测）
 - **VERDICT：BUG_ALIGNMENT**（意图时钟），不是资金/容量/收窄失败
 - 覆盖 missing=0（相对收窄宇宙）
 
