@@ -24,5 +24,5 @@ It intentionally makes **no NAV / returns / parity claims**.
 
 ## Follow-up status
 
-- Minute Slice D remains pending this follow-up PR.
-- Locked convention for pending minute run: `--dividend-type none` (with daily signals in `front` domain).
+- Minute Slice D paths/numbers are recorded in the [minute five-book backfill](slice-d-minute-five-book-20260922c-2026-09-22.md), stamp `20260922c`.
+- The minute run used `--dividend-type none` (with daily signals in `front` domain).
