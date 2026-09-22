@@ -3,6 +3,8 @@
 > **用途**：本仓把一份已人裁 GO 的 plan 交给 Codex 无头实施的标准化流程。本文是**薄指针**，权威细则住 MyQuant（1.3）；本仓只锁命名约定与七步顺序。
 > **命名**：中文「Codex 交接工作流」／slug `codex-impl-handoff`。plan 里写「走 [Codex 交接工作流](workflow-codex-handoff.md)」即指本文。
 
+> **角色落点**：物理机 agent 发起 → 仓主管 bot 接手 → Codex → Grok 核，见 [`../operations/grok-bot-raci-workflow-ssot.md`](../operations/grok-bot-raci-workflow-ssot.md)。
+
 ## 七步
 
 1. **Plan 起草**：dated plan 文档 `docs/backtest/plan-<slug>-<YYYY-MM-DD>.md`。必含：状态/风险档头、业务源、现状锚点（禁止重做已落地项）、现锁 `R*` 规则、人裁点 `P*`、非目标、切片（分 commit、带完成定义）、验证命令、代码落点、修订程序。
