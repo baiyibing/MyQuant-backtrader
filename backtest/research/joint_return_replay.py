@@ -756,6 +756,8 @@ class _Replay:
         self.calendar = m["metadata"]["calendar"]
         self.cash = num(m["initial_state"]["cash"], "cash")
         self.positions, self.marks, self.orders, self.fills, self.daily = {}, {}, [], [], []
+        # Private replay indexes: never add cached clocks to serialized orders.
+        self._order_clocks, self._eligible_candidates = {}, {}
         self.seen_lots = set()
         self.fees = {k: num(m["metadata"]["fees"][k], k) for k in ("buy_rate", "sell_rate", "minimum")}
         for inst, p in m["initial_state"]["positions"].items():
@@ -780,6 +782,8 @@ class _Replay:
                     cumulative_fee=Decimal(0), factor=Decimal(1), legal_execution_at=None, actual_fill_at=None, last_fill_price=None,
                     last_attempt_at=None, limit_down_day=None, deferred_until=None, deferred_expiry=False, deferred_beyond_window=False,
                     superseded_by=None, quantity_events=[], transitions=[], reject_after_partial=None))
+                o = self.orders[-1]
+                self._order_clocks[o["order_id"]] = (o, stamp(r["effective_at"]), stamp(r["available_at"]))
                 self.audit(self.orders[-1], "CREATED", "NOT_AVAILABLE", stamp(r["decision_at"]))
                 self.audit(self.orders[-1], "WAITING", "NOT_AVAILABLE", stamp(r["decision_at"]))
         self.timings.count("orders", len(self.orders))
@@ -796,10 +800,23 @@ class _Replay:
         return p["quantity"] if p and p["acquired_at"].date() < t.date() else Decimal(0)
 
     def audit(self, o, status, reason, t, **detail):
+        if status != o["status"]:
+            if status in TERMINAL or status == "CREATED":
+                self._eligible_candidates.pop(o["order_id"], None)
+            else:
+                self._eligible_candidates[o["order_id"]] = self._order_clocks[o["order_id"]]
         o["status"], o["reason"] = status, reason
         o["transitions"].append(dict(at=t, status=status, reason=reason, **detail))
         if status in ("EXPIRED", "CANCELLED", "REJECTED"):
             o["cancelled_quantity"] = o["remaining_quantity"]
+
+    def eligible_orders(self, t):
+        # WAITING includes future arrivals. Keep both clock gates, including
+        # M-LAG's strict boundary. audit also restores candidates on activation.
+        day, lag = t.date(), self.fill_mode == "M-LAG"
+        return [o for o, effective, available in self._eligible_candidates.values()
+                if t >= effective and (t > available if lag else t >= available)
+                and o["limit_down_day"] != day]
 
     def snapshot_order(self, o, t):
         r = o["intent"]
@@ -1043,15 +1060,7 @@ class _Replay:
                         if not bar["suspended"]:
                             self.marks[inst] = (_bar_number(bar, "open", "open"), t, [])
                 with timings.phase("eligible_scan"):
-                    eligible = []
-                    for o in self.orders:
-                        r = o["intent"]
-                        available = stamp(r["available_at"])
-                        if (o["status"] not in TERMINAL and o["status"] != "CREATED"
-                                and t >= stamp(r["effective_at"])
-                                and (t > available if self.fill_mode == "M-LAG" else t >= available)
-                                and o["limit_down_day"] != t.date()):
-                            eligible.append(o)
+                    eligible = self.eligible_orders(t)
                     if eligible and day not in pre_nav:
                         pre_nav[day], first_attempt[day] = self.nav(), t
                         require(pre_nav[day] > 0, "pre-rebalance NAV denominator must be positive")
