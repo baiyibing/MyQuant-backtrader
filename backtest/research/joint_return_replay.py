@@ -56,7 +56,6 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter, defaultdict
-from contextlib import contextmanager
 from copy import deepcopy
 import csv
 from datetime import datetime, timedelta
@@ -71,31 +70,80 @@ import sys
 from time import perf_counter
 
 
+class _NoSpan:
+    """Shared disabled span: no allocation and no clock read on the default path."""
+
+    __slots__ = ()
+
+    def __enter__(self):
+        return None
+
+    def __exit__(self, *exc):
+        return False
+
+
+_NO_SPAN = _NoSpan()
+
+
+class _Span:
+    """Enabled span; its flat key is the dotted path of the enclosing spans."""
+
+    __slots__ = ("timings", "name", "key", "started")
+
+    def __init__(self, timings, name):
+        self.timings, self.name = timings, name
+
+    def __enter__(self):
+        stack = self.timings.stack
+        self.key = ".".join((*stack, self.name)) if stack else self.name
+        stack.append(self.name)
+        self.started = perf_counter()
+        return self
+
+    def __exit__(self, *exc):
+        elapsed = perf_counter() - self.started
+        self.timings.stack.pop()
+        seconds = self.timings.seconds
+        seconds[self.key] = seconds.get(self.key, 0.0) + elapsed
+        return False
+
+
 class _PhaseTimings:
-    """Opt-in research wall clock; never part of replay artifacts or identities."""
+    """Opt-in research wall clock; never part of replay artifacts or identities.
+
+    Spans nest: a child's reported key is ``parent.child``, and a parent's
+    seconds already contain its children. Sibling top-level spans stay disjoint.
+    Counters are reported under a reserved ``counts.`` key prefix.
+    """
 
     def __init__(self, enabled=False):
         self.enabled = enabled
         self.seconds = {}
+        self.counts = {}
+        self.stack = []
         self.started = perf_counter() if enabled else None
 
-    @contextmanager
     def phase(self, name):
-        if not self.enabled:
-            yield
-            return
-        started = perf_counter()
-        try:
-            yield
-        finally:
-            self.seconds[name] = self.seconds.get(name, 0.0) + perf_counter() - started
+        return _Span(self, name) if self.enabled else _NO_SPAN
 
-    def report(self):
+    def count(self, name, amount=1):
+        """Cheap loop-shape evidence; never a per-cell timer."""
         if self.enabled:
-            total = perf_counter() - self.started
-            values = {name: round(seconds, 6) for name, seconds in self.seconds.items()}
-            values["total_seconds"] = round(total, 6)
+            key = ".".join((*self.stack, name)) if self.stack else name
+            self.counts[key] = self.counts.get(key, 0) + amount
+
+    def values(self):
+        values = {name: round(seconds, 6) for name, seconds in self.seconds.items()}
+        values.update(("counts." + name, count) for name, count in self.counts.items())
+        values["total_seconds"] = round(perf_counter() - self.started, 6)
+        return values
+
+    def report(self, json_path=None):
+        if self.enabled:
+            values = self.values()
             print("research phase timings (seconds): " + json.dumps(values), file=sys.stderr)
+            if json_path is not None:
+                Path(json_path).write_bytes(canonical_bytes(values) + b"\n")
 
 SCHEMA_VERSION = "joint-return-v1"
 CONTRACT_HASH = "dfa020d2c01e6cfe6612f09be2d569294ff94d82fd1ede5cea61a41d74a81737"
@@ -313,7 +361,8 @@ def validate_state(state, *, topk=10):
         lots.add(p["lot_id"])
 
 
-def validate_manifest(m, rows):
+def validate_manifest(m, rows, _timings=None):
+    timings = _timings if _timings is not None else _PhaseTimings()
     frozen = m.get("kind") == "frozen"
     arms = ("P-BASE",) if frozen else ARMS
     contract = FROZEN_CONTRACT_HASH if frozen else CONTRACT_HASH
@@ -392,96 +441,108 @@ def validate_manifest(m, rows):
     require(content_hash(m["initial_state"]) == md["inputs"]["initial_state"]["content_sha256"],
             "initial state hash drift", "CONTRACT_MISMATCH")
     require(not frozen or all(r["arm_id"] == "P-BASE" for r in rows), "frozen supports P-BASE only")
-    validate_intents(rows)
-    require(m["intent_hash"] == content_hash(rows), "intent table hash drift", "CONTRACT_MISMATCH")
-    for arm in arms:
-        require(m["arm_intent_hashes"].get(arm) == content_hash([r for r in rows if r["arm_id"] == arm]),
-                "arm hash drift", "CONTRACT_MISMATCH")
+    with timings.phase("intents"):
+        validate_intents(rows)
+        require(m["intent_hash"] == content_hash(rows), "intent table hash drift", "CONTRACT_MISMATCH")
+        for arm in arms:
+            require(m["arm_intent_hashes"].get(arm) == content_hash([r for r in rows if r["arm_id"] == arm]),
+                    "arm hash drift", "CONTRACT_MISMATCH")
     # Verify immutable reference chains and bind every intent back to its plan;
     # no selection, sizing or reference recursion is rerun on the BT side.
-    histories, prior = {}, {a: m["initial_state"] for a in arms}
-    require(isinstance(m["reference_states"], list), "reference history required")
-    for h in m["reference_states"]:
-        fields(h, ("date", "arm_id", "before", "after", "before_hash", "after_hash", "source_plan",
-                   "reference_nav", "target_turnover", "initial_build"), "history")
-        key = (h["date"], h["arm_id"])
-        require(key not in histories and h["arm_id"] in arms, "duplicate/invalid reference history")
-        histories[key] = h
-    require(set(histories) == {(d, a) for d in cal for a in arms}, "reference arm-days missing/extra")
-    plans = {}
-    for d in cal:
-        for a in arms:
-            h = histories[d, a]
-            validate_state(h["before"], topk=topk)
-            validate_state(h["after"], topk=topk)
-            require(h["before_hash"] == content_hash(h["before"]) == content_hash(prior[a])
-                    and h["after_hash"] == content_hash(h["after"]), "reference chain drift", "CONTRACT_MISMATCH")
-            p = h["source_plan"]
-            fields(p, ("date", "arm_id", "pre_state_hash", "source", "corporate_actions", "sells", "buy_candidates",
-                       "marks", "mark_at", "decision_at", "available_at", "effective_at", "expires_at"), "source plan")
-            require((p["date"], p["arm_id"]) == (d, a) and p["pre_state_hash"] == h["before_hash"]
-                    and p["source"] == plan_source, "source plan drift", "CONTRACT_MISMATCH")
-            require(p["corporate_actions"] == [], "MQ corporate actions not supported", "SEMANTICS_BLOCKED")
-            require(stamp(p["decision_at"]).date().isoformat() == d, "plan decision date drift", "CONTRACT_MISMATCH")
-            num(h["reference_nav"], "reference NAV", positive=True)
-            num(h["target_turnover"], "target turnover")
-            require(type(h["initial_build"]) is bool, "initial build marker missing")
-            plans[a, content_hash(p)] = p
-            prior[a] = h["after"]
-    for r in rows:
-        p = plans.get((r["arm_id"], r["source_plan_hash"]))
-        require(p is not None and r["reference_state_hash"] == p["pre_state_hash"], "intent plan binding drift", "CONTRACT_MISMATCH")
-        require(all(r[k] == p[k] for k in ("decision_at", "available_at", "effective_at", "expires_at")), "plan clock drift", "CONTRACT_MISMATCH")
-        candidates = p["sells"] if r["side"] == "SELL" else p["buy_candidates"]
-        candidate = next((c for c in candidates if c["instrument"] == r["instrument"]), None)
-        require(candidate is not None, "intent not in frozen candidates", "CONTRACT_MISMATCH")
-        keys = ("execution_symbol", "instance_id", "lot_id", "target_weight", "original_target_quantity",
-                "quantity_unit", "quantity_conversion", "reference_price", "reference_price_at")
-        require(all(candidate.get(k) == r[k] for k in keys), "frozen quantity/identity drift", "CONTRACT_MISMATCH")
-        require(candidate.get("approved" if r["side"] == "SELL" else "eligible") is True,
-                "intent not authorized by frozen plan", "CONTRACT_MISMATCH")
-        require(p["marks"].get(r["instrument"]) == r["reference_price"] and p["mark_at"] == r["reference_price_at"],
-                "reference mark drift", "CONTRACT_MISMATCH")
-        h = histories[p["date"], r["arm_id"]]
-        if r["side"] == "SELL":
-            held = h["before"]["positions"].get(r["instrument"], {})
-            require(all(held.get(k) == r[k] for k in ("lot_id", "instance_id"))
-                    and held.get("quantity") == r["original_target_quantity"],
-                    "frozen SELL is not the full reference lot", "CONTRACT_MISMATCH")
-        else:
-            budget = num(r["target_weight"], "weight") * num(h["reference_nav"], "reference NAV")
-            expected = ((budget + EPS) / (num(r["reference_price"], "reference price") * 100)).to_integral_value(rounding=ROUND_FLOOR) * 100
-            require(expected == num(r["original_target_quantity"], "quantity"),
-                    "frozen BUY quantity/weight conversion drift", "CONTRACT_MISMATCH")
+    with timings.phase("reference_states"):
+        histories, prior = {}, {a: m["initial_state"] for a in arms}
+        require(isinstance(m["reference_states"], list), "reference history required")
+        for h in m["reference_states"]:
+            fields(h, ("date", "arm_id", "before", "after", "before_hash", "after_hash", "source_plan",
+                       "reference_nav", "target_turnover", "initial_build"), "history")
+            key = (h["date"], h["arm_id"])
+            require(key not in histories and h["arm_id"] in arms, "duplicate/invalid reference history")
+            histories[key] = h
+        require(set(histories) == {(d, a) for d in cal for a in arms}, "reference arm-days missing/extra")
+        plans = {}
+        for d in cal:
+            for a in arms:
+                h = histories[d, a]
+                validate_state(h["before"], topk=topk)
+                validate_state(h["after"], topk=topk)
+                require(h["before_hash"] == content_hash(h["before"]) == content_hash(prior[a])
+                        and h["after_hash"] == content_hash(h["after"]), "reference chain drift", "CONTRACT_MISMATCH")
+                p = h["source_plan"]
+                fields(p, ("date", "arm_id", "pre_state_hash", "source", "corporate_actions", "sells", "buy_candidates",
+                           "marks", "mark_at", "decision_at", "available_at", "effective_at", "expires_at"), "source plan")
+                require((p["date"], p["arm_id"]) == (d, a) and p["pre_state_hash"] == h["before_hash"]
+                        and p["source"] == plan_source, "source plan drift", "CONTRACT_MISMATCH")
+                require(p["corporate_actions"] == [], "MQ corporate actions not supported", "SEMANTICS_BLOCKED")
+                require(stamp(p["decision_at"]).date().isoformat() == d, "plan decision date drift", "CONTRACT_MISMATCH")
+                num(h["reference_nav"], "reference NAV", positive=True)
+                num(h["target_turnover"], "target turnover")
+                require(type(h["initial_build"]) is bool, "initial build marker missing")
+                plans[a, content_hash(p)] = p
+                prior[a] = h["after"]
+    timings.count("reference_arm_days", len(histories))
+    with timings.phase("intent_plan_binding"):
+        for r in rows:
+            p = plans.get((r["arm_id"], r["source_plan_hash"]))
+            require(p is not None and r["reference_state_hash"] == p["pre_state_hash"], "intent plan binding drift", "CONTRACT_MISMATCH")
+            require(all(r[k] == p[k] for k in ("decision_at", "available_at", "effective_at", "expires_at")), "plan clock drift", "CONTRACT_MISMATCH")
+            candidates = p["sells"] if r["side"] == "SELL" else p["buy_candidates"]
+            candidate = next((c for c in candidates if c["instrument"] == r["instrument"]), None)
+            require(candidate is not None, "intent not in frozen candidates", "CONTRACT_MISMATCH")
+            keys = ("execution_symbol", "instance_id", "lot_id", "target_weight", "original_target_quantity",
+                    "quantity_unit", "quantity_conversion", "reference_price", "reference_price_at")
+            require(all(candidate.get(k) == r[k] for k in keys), "frozen quantity/identity drift", "CONTRACT_MISMATCH")
+            require(candidate.get("approved" if r["side"] == "SELL" else "eligible") is True,
+                    "intent not authorized by frozen plan", "CONTRACT_MISMATCH")
+            require(p["marks"].get(r["instrument"]) == r["reference_price"] and p["mark_at"] == r["reference_price_at"],
+                    "reference mark drift", "CONTRACT_MISMATCH")
+            h = histories[p["date"], r["arm_id"]]
+            if r["side"] == "SELL":
+                held = h["before"]["positions"].get(r["instrument"], {})
+                require(all(held.get(k) == r[k] for k in ("lot_id", "instance_id"))
+                        and held.get("quantity") == r["original_target_quantity"],
+                        "frozen SELL is not the full reference lot", "CONTRACT_MISMATCH")
+            else:
+                budget = num(r["target_weight"], "weight") * num(h["reference_nav"], "reference NAV")
+                expected = ((budget + EPS) / (num(r["reference_price"], "reference price") * 100)).to_integral_value(rounding=ROUND_FLOOR) * 100
+                require(expected == num(r["original_target_quantity"], "quantity"),
+                        "frozen BUY quantity/weight conversion drift", "CONTRACT_MISMATCH")
+    timings.count("bound_intents", len(rows))
 
 
-def load_bundle(intents_path):
+def load_bundle(intents_path, _timings=None):
+    timings = _timings if _timings is not None else _PhaseTimings()
     path = Path(intents_path)
     if path.is_dir():
         path = path / "intents.csv"
     elif path.name == "manifest.json":
         path = path.with_name("intents.csv")
-    raw_manifest = read_bytes(path.parent / "manifest.json")
+    with timings.phase("read_inputs"):
+        raw_manifest = read_bytes(path.parent / "manifest.json")
     m = load_json_bytes(raw_manifest)
     fields(m, ("artifacts",), "manifest")
     products = {}
     for name, columns in (("intents.csv", INTENT_FIELDS), ("constraints.csv", CONSTRAINT_FIELDS), ("pref_check.json", None)):
-        raw = read_bytes(path if name == "intents.csv" else path.parent / name)
+        with timings.phase("read_inputs"):
+            raw = read_bytes(path if name == "intents.csv" else path.parent / name)
         declared = m["artifacts"].get(name, {})
         require(declared.get("raw_sha256") == raw_hash(raw),
                 f"{name}: raw/content hash drift", "CONTRACT_MISMATCH")
-        product = read_csv(raw, columns, frozen=m.get("kind") == "frozen") if columns else load_json_bytes(raw)
+        with timings.phase("parse_artifacts"):
+            product = read_csv(raw, columns, frozen=m.get("kind") == "frozen") if columns else load_json_bytes(raw)
         require(declared == {"raw_sha256": raw_hash(raw), "content_sha256": content_hash(product)},
                 f"{name}: raw/content hash drift", "CONTRACT_MISMATCH")
         products[name] = product
     rows = products["intents.csv"]
-    validate_manifest(m, rows)
+    timings.count("intent_rows", len(rows))
+    with timings.phase("validate_manifest"):
+        validate_manifest(m, rows, timings)
     expected_pref = "NOT_RUN" if m["kind"] == "frozen" else "SYNTHETIC_PASS"
     require(products["pref_check.json"].get("status") == expected_pref, "MQ P-REF status drift")
     return m, rows, {"manifest_raw_sha256": raw_hash(raw_manifest), "manifest_content_sha256": content_hash(m)}
 
 
-def _validate_bar_metadata(bundle, m, intents):
+def _validate_bar_metadata(bundle, m, intents, _timings=None):
+    timings = _timings if _timings is not None else _PhaseTimings()
     frozen = m["kind"] == "frozen"
     require(bundle["schema_version"] == SCHEMA_VERSION
             and bundle["kind"] == ("frozen_explicit" if frozen else "synthetic"), "price source kind mismatch")
@@ -501,21 +562,23 @@ def _validate_bar_metadata(bundle, m, intents):
     cal = md["calendar"]
     require(isinstance(md["sessions"], dict) and set(md["sessions"]) == set(cal), "session calendar incomplete")
     opportunities, ends = {}, {}
-    for day in cal:
-        intervals = md["sessions"][day]
-        require(isinstance(intervals, list) and bool(intervals), "session endpoints missing")
-        previous = None
-        for interval in intervals:
-            require(isinstance(interval, list) and len(interval) == 2, "session needs open/end")
-            start, end = map(stamp, interval)
-            require(start.date().isoformat() == day == end.date().isoformat() and start < end
-                    and start.second == end.second == 0 and (previous is None or previous <= start), "session endpoints/order invalid")
-            t = start
-            while t < end:
-                opportunities[t] = day
-                t += timedelta(seconds=60)
-            previous = end
-        ends[day] = previous
+    with timings.phase("sessions"):
+        for day in cal:
+            intervals = md["sessions"][day]
+            require(isinstance(intervals, list) and bool(intervals), "session endpoints missing")
+            previous = None
+            for interval in intervals:
+                require(isinstance(interval, list) and len(interval) == 2, "session needs open/end")
+                start, end = map(stamp, interval)
+                require(start.date().isoformat() == day == end.date().isoformat() and start < end
+                        and start.second == end.second == 0 and (previous is None or previous <= start), "session endpoints/order invalid")
+                t = start
+                while t < end:
+                    opportunities[t] = day
+                    t += timedelta(seconds=60)
+                previous = end
+            ends[day] = previous
+    timings.count("session_minutes", len(opportunities))
     initial_at = stamp(md["initial_at"])
     require(initial_at < min(opportunities), "initial valuation must precede first session")
     for r in intents:
@@ -583,11 +646,14 @@ def _validate_bar_events(bundle, intents, opportunities, ends, mapping):
                 raise ReplayError("SEMANTICS_BLOCKED", "quantity snapshot at event boundary is ambiguous")
 
 
-def validate_bars(bundle, m, intents):
+def validate_bars(bundle, m, intents, _timings=None):
+    timings = _timings if _timings is not None else _PhaseTimings()
     fields(bundle, ("schema_version", "kind", "metadata", "bars", "corporate_actions", "content_sha256"), "bars snapshot")
-    require(bundle["content_sha256"] == content_hash({k: v for k, v in bundle.items() if k != "content_sha256"}),
-            "bars content hash drift", "CONTRACT_MISMATCH")
-    opportunities, ends, mapping = _validate_bar_metadata(bundle, m, intents)
+    with timings.phase("seal"):
+        require(bundle["content_sha256"] == content_hash({k: v for k, v in bundle.items() if k != "content_sha256"}),
+                "bars content hash drift", "CONTRACT_MISMATCH")
+    with timings.phase("metadata"):
+        opportunities, ends, mapping = _validate_bar_metadata(bundle, m, intents, timings)
     md = bundle["metadata"]
     frozen = m["kind"] == "frozen"
 
@@ -597,25 +663,28 @@ def validate_bars(bundle, m, intents):
 
     require(isinstance(bundle["bars"], list), "bars must be explicit list")
     bars, closes = {}, defaultdict(list)
-    for raw in bundle["bars"]:
-        fields(raw, ("instrument", "execution_symbol", "timestamp", "open", "close", "limit_up", "limit_down", "suspended", "capacity"), "minute bar")
-        inst = raw["instrument"]
-        require(inst in mapping, "bar instrument not in input intent/initial universe")
-        symbol(inst, raw["execution_symbol"])
-        t = stamp(raw["timestamp"])
-        if md["bar_label"] == "CLOSE_TIME":
-            t -= timedelta(seconds=60)
-        require(t in opportunities, "bar outside frozen session endpoints")
-        require((t, inst) not in bars, "duplicate minute bar")
-        for k in ("open", "close", "limit_up", "limit_down"):
-            num(raw[k], k, positive=True)
-        require(raw["limit_down"] <= min(raw["open"], raw["close"])
-                <= max(raw["open"], raw["close"]) <= raw["limit_up"], "bar outside explicit price limits")
-        require(type(raw["suspended"]) is bool, "suspension evidence missing")
-        num(raw["capacity"], "capacity")
-        bars[t, inst] = raw
-        closes[t + timedelta(seconds=60)].append(raw)
-    _validate_bar_events(bundle, intents, opportunities, ends, mapping)
+    with timings.phase("bars_scan"):
+        for raw in bundle["bars"]:
+            fields(raw, ("instrument", "execution_symbol", "timestamp", "open", "close", "limit_up", "limit_down", "suspended", "capacity"), "minute bar")
+            inst = raw["instrument"]
+            require(inst in mapping, "bar instrument not in input intent/initial universe")
+            symbol(inst, raw["execution_symbol"])
+            t = stamp(raw["timestamp"])
+            if md["bar_label"] == "CLOSE_TIME":
+                t -= timedelta(seconds=60)
+            require(t in opportunities, "bar outside frozen session endpoints")
+            require((t, inst) not in bars, "duplicate minute bar")
+            for k in ("open", "close", "limit_up", "limit_down"):
+                num(raw[k], k, positive=True)
+            require(raw["limit_down"] <= min(raw["open"], raw["close"])
+                    <= max(raw["open"], raw["close"]) <= raw["limit_up"], "bar outside explicit price limits")
+            require(type(raw["suspended"]) is bool, "suspension evidence missing")
+            num(raw["capacity"], "capacity")
+            bars[t, inst] = raw
+            closes[t + timedelta(seconds=60)].append(raw)
+    timings.count("bar_rows", len(bars))
+    with timings.phase("events"):
+        _validate_bar_events(bundle, intents, opportunities, ends, mapping)
     if frozen:
         # Deliberately conservative: every symbol in the frozen universe must
         # have explicit evidence for every declared session minute, suspended
@@ -668,18 +737,20 @@ def _bar_number(bar, column, name):
 
 
 class _Replay:
-    def __init__(self, m, rows, bundle, arm, fill_mode, validated):
+    def __init__(self, m, rows, bundle, arm, fill_mode, validated, _timings=None):
+        self.timings = _timings if _timings is not None else _PhaseTimings()
         self.m, self.arm, self.fill_mode = m, arm, fill_mode
         self.opportunities, self.ends, self.bars, self.closes = validated
-        if hasattr(self.bars, "bars_at"):
-            self.bars_at = self.bars.bars_at
-            self.bar_days = self.bars.bar_days
-        else:
-            self.bars_at = defaultdict(dict)
-            self.bar_days = set()
-            for (t, inst), bar in self.bars.items():
-                self.bars_at[t][inst] = bar
-                self.bar_days.add((t.date().isoformat(), inst))
+        with self.timings.phase("init_bars_index"):
+            if hasattr(self.bars, "bars_at"):
+                self.bars_at = self.bars.bars_at
+                self.bar_days = self.bars.bar_days
+            else:
+                self.bars_at = defaultdict(dict)
+                self.bar_days = set()
+                for (t, inst), bar in self.bars.items():
+                    self.bars_at[t][inst] = bar
+                    self.bar_days.add((t.date().isoformat(), inst))
         self.events = bundle["corporate_actions"]
         self.md = bundle["metadata"]
         self.calendar = m["metadata"]["calendar"]
@@ -698,18 +769,20 @@ class _Replay:
         require(self.start_nav > 0, "initial NAV denominator must be positive")
         self.pair = dict(run_id=m["run_id"], contract_hash=m["contract_hash"], arm_id=arm,
                          arm_intent_hash=m["arm_intent_hashes"][arm], fill_id=fill_mode)
-        for r in rows:
-            if r["arm_id"] != arm:
-                continue
-            q = num(r["original_target_quantity"], "order quantity")
-            self.orders.append(dict(intent=deepcopy(r), order_id=content_hash({**self.pair, "intent_id": r["intent_id"]}),
-                status="CREATED", reason="NOT_AVAILABLE", current_quantity=q, cumulative_filled_quantity=Decimal(0),
-                remaining_quantity=q, cancelled_quantity=Decimal(0), cumulative_notional=Decimal(0),
-                cumulative_fee=Decimal(0), factor=Decimal(1), legal_execution_at=None, actual_fill_at=None, last_fill_price=None,
-                last_attempt_at=None, limit_down_day=None, deferred_until=None, deferred_expiry=False, deferred_beyond_window=False,
-                superseded_by=None, quantity_events=[], transitions=[], reject_after_partial=None))
-            self.audit(self.orders[-1], "CREATED", "NOT_AVAILABLE", stamp(r["decision_at"]))
-            self.audit(self.orders[-1], "WAITING", "NOT_AVAILABLE", stamp(r["decision_at"]))
+        with self.timings.phase("init_orders"):
+            for r in rows:
+                if r["arm_id"] != arm:
+                    continue
+                q = num(r["original_target_quantity"], "order quantity")
+                self.orders.append(dict(intent=deepcopy(r), order_id=content_hash({**self.pair, "intent_id": r["intent_id"]}),
+                    status="CREATED", reason="NOT_AVAILABLE", current_quantity=q, cumulative_filled_quantity=Decimal(0),
+                    remaining_quantity=q, cancelled_quantity=Decimal(0), cumulative_notional=Decimal(0),
+                    cumulative_fee=Decimal(0), factor=Decimal(1), legal_execution_at=None, actual_fill_at=None, last_fill_price=None,
+                    last_attempt_at=None, limit_down_day=None, deferred_until=None, deferred_expiry=False, deferred_beyond_window=False,
+                    superseded_by=None, quantity_events=[], transitions=[], reject_after_partial=None))
+                self.audit(self.orders[-1], "CREATED", "NOT_AVAILABLE", stamp(r["decision_at"]))
+                self.audit(self.orders[-1], "WAITING", "NOT_AVAILABLE", stamp(r["decision_at"]))
+        self.timings.count("orders", len(self.orders))
         self.order_by_id = {o["intent"]["intent_id"]: o for o in self.orders}
 
     def nav(self):
@@ -928,79 +1001,95 @@ class _Replay:
         return capacity - quantity if self.fill_mode == "M-LAG" else capacity
 
     def run(self):
-        events_at, arrivals = defaultdict(list), defaultdict(list)
-        timeline = set(self.opportunities) | set(self.closes) | set(self.ends.values())
-        last = max(self.ends.values())
-        for e in self.events:
-            events_at[stamp(e["effective_at"])].append(e)
-            timeline.add(stamp(e["effective_at"]))
-        for o in self.orders:
-            r = o["intent"]
-            a, x = stamp(r["available_at"]), stamp(r["expires_at"])
-            arrivals[a].append(o)
-            if a <= last:
-                timeline.add(a)
-            if x <= last:
-                timeline.add(x)
+        # Spans below accumulate across the whole timeline; naming them once
+        # keeps the opt-in path out of per-minute string formatting.
+        timings = self.timings
+        with timings.phase("timeline_build"):
+            events_at, arrivals = defaultdict(list), defaultdict(list)
+            timeline = set(self.opportunities) | set(self.closes) | set(self.ends.values())
+            last = max(self.ends.values())
+            for e in self.events:
+                events_at[stamp(e["effective_at"])].append(e)
+                timeline.add(stamp(e["effective_at"]))
+            for o in self.orders:
+                r = o["intent"]
+                a, x = stamp(r["available_at"]), stamp(r["expires_at"])
+                arrivals[a].append(o)
+                if a <= last:
+                    timeline.add(a)
+                if x <= last:
+                    timeline.add(x)
+            timeline = sorted(timeline)
+        timings.count("timeline_points", len(timeline))
         prior_nav = self.start_nav
         pre_nav, first_attempt = {}, {}
-        for t in sorted(timeline):
+        for t in timeline:
             day = t.date().isoformat()
-            for bar in self.closes.get(t, []):
-                if not bar["suspended"]:
-                    self.marks[bar["instrument"]] = (_bar_number(bar, "close", "close"), t, [])
-            for e in events_at.get(t, []):
-                self.convert(e, t)
-            for o in self.orders:
-                self.expire(o, t)
-            for o in sorted(arrivals.get(t, []), key=lambda x: (x["intent"]["side"] != "SELL", x["intent"]["intent_id"])):
-                self.activate(o, t)
+            with timings.phase("marks"):
+                for bar in self.closes.get(t, []):
+                    if not bar["suspended"]:
+                        self.marks[bar["instrument"]] = (_bar_number(bar, "close", "close"), t, [])
+            with timings.phase("lifecycle"):
+                for e in events_at.get(t, []):
+                    self.convert(e, t)
+                for o in self.orders:
+                    self.expire(o, t)
+                for o in sorted(arrivals.get(t, []), key=lambda x: (x["intent"]["side"] != "SELL", x["intent"]["intent_id"])):
+                    self.activate(o, t)
             if t in self.opportunities:
                 # All simultaneous open marks are visible before SELL-first fills.
-                for inst, bar in self.bars_at.get(t, {}).items():
-                    if not bar["suspended"]:
-                        self.marks[inst] = (_bar_number(bar, "open", "open"), t, [])
-                eligible = []
-                for o in self.orders:
-                    r = o["intent"]
-                    available = stamp(r["available_at"])
-                    if (o["status"] not in TERMINAL and o["status"] != "CREATED"
-                            and t >= stamp(r["effective_at"])
-                            and (t > available if self.fill_mode == "M-LAG" else t >= available)
-                            and o["limit_down_day"] != t.date()):
-                        eligible.append(o)
-                if eligible and day not in pre_nav:
-                    pre_nav[day], first_attempt[day] = self.nav(), t
-                    require(pre_nav[day] > 0, "pre-rebalance NAV denominator must be positive")
-                capacity = {inst: _bar_number(bar, "capacity", "capacity") for inst, bar in self.bars_at.get(t, {}).items()}
-                for o in sorted(eligible, key=lambda x: (x["intent"]["side"] != "SELL", x["intent"]["intent_id"])):
-                    inst = o["intent"]["instrument"]
-                    capacity[inst] = self.attempt(o, self.bars.get((t, inst)), t, capacity.get(inst, Decimal(0)))
+                with timings.phase("marks"):
+                    for inst, bar in self.bars_at.get(t, {}).items():
+                        if not bar["suspended"]:
+                            self.marks[inst] = (_bar_number(bar, "open", "open"), t, [])
+                with timings.phase("eligible_scan"):
+                    eligible = []
+                    for o in self.orders:
+                        r = o["intent"]
+                        available = stamp(r["available_at"])
+                        if (o["status"] not in TERMINAL and o["status"] != "CREATED"
+                                and t >= stamp(r["effective_at"])
+                                and (t > available if self.fill_mode == "M-LAG" else t >= available)
+                                and o["limit_down_day"] != t.date()):
+                            eligible.append(o)
+                    if eligible and day not in pre_nav:
+                        pre_nav[day], first_attempt[day] = self.nav(), t
+                        require(pre_nav[day] > 0, "pre-rebalance NAV denominator must be positive")
+                with timings.phase("attempts"):
+                    capacity = {inst: _bar_number(bar, "capacity", "capacity") for inst, bar in self.bars_at.get(t, {}).items()}
+                    for o in sorted(eligible, key=lambda x: (x["intent"]["side"] != "SELL", x["intent"]["intent_id"])):
+                        inst = o["intent"]["instrument"]
+                        capacity[inst] = self.attempt(o, self.bars.get((t, inst)), t, capacity.get(inst, Decimal(0)))
+                timings.count("attempts", len(eligible))
             if day in self.ends and t == self.ends[day]:
-                nav = self.nav()
-                require(prior_nav > 0 and nav > 0, "daily NAV denominator must be positive")
-                fills = [f for f in self.fills if f["actual_fill_at"].date().isoformat() == day]
-                buy = sum((f["notional"] for f in fills if f["side"] == "BUY"), Decimal(0))
-                sell = sum((f["notional"] for f in fills if f["side"] == "SELL"), Decimal(0))
-                fees = sum((f["fee"] for f in fills), Decimal(0))
-                denominator = pre_nav.get(day, prior_nav)
-                positions = []
-                for lot, p in sorted(self.positions.items()):
-                    price, at, conversions = self.marks[p["instrument"]]
-                    positions.append({**deepcopy(p), "lot_id": lot, "mark_price": price, "last_valuation_at": at,
-                                      "stale": at < t, "mark_quantity_events": conversions,
-                                      "sellable_quantity": self.sellable(lot, t)})
-                self.daily.append({**self.pair, "date": day, "event": "MARK", "nav": nav,
-                    "nav_previous": prior_nav, "net_return": nav / prior_nav - 1,
-                    "cash": self.cash, "positions_value": nav - self.cash, "positions": positions,
-                    "buy_notional": buy, "sell_notional": sell, "two_sided_notional": buy + sell,
-                    "fees": fees, "turnover": (buy + sell) / (2 * denominator), "turnover_denominator": denominator,
-                    "pre_rebalance_at": first_attempt.get(day), "stale_marks": sum(p["stale"] for p in positions),
-                    "last_valuation_at": min((p["last_valuation_at"] for p in positions), default=None),
-                    "mark_at": t, "price_domain": "none"})
-                prior_nav = nav
+                with timings.phase("daily_mark"):
+                    nav = self.nav()
+                    require(prior_nav > 0 and nav > 0, "daily NAV denominator must be positive")
+                    fills = [f for f in self.fills if f["actual_fill_at"].date().isoformat() == day]
+                    buy = sum((f["notional"] for f in fills if f["side"] == "BUY"), Decimal(0))
+                    sell = sum((f["notional"] for f in fills if f["side"] == "SELL"), Decimal(0))
+                    fees = sum((f["fee"] for f in fills), Decimal(0))
+                    denominator = pre_nav.get(day, prior_nav)
+                    positions = []
+                    for lot, p in sorted(self.positions.items()):
+                        price, at, conversions = self.marks[p["instrument"]]
+                        positions.append({**deepcopy(p), "lot_id": lot, "mark_price": price, "last_valuation_at": at,
+                                          "stale": at < t, "mark_quantity_events": conversions,
+                                          "sellable_quantity": self.sellable(lot, t)})
+                    self.daily.append({**self.pair, "date": day, "event": "MARK", "nav": nav,
+                        "nav_previous": prior_nav, "net_return": nav / prior_nav - 1,
+                        "cash": self.cash, "positions_value": nav - self.cash, "positions": positions,
+                        "buy_notional": buy, "sell_notional": sell, "two_sided_notional": buy + sell,
+                        "fees": fees, "turnover": (buy + sell) / (2 * denominator), "turnover_denominator": denominator,
+                        "pre_rebalance_at": first_attempt.get(day), "stale_marks": sum(p["stale"] for p in positions),
+                        "last_valuation_at": min((p["last_valuation_at"] for p in positions), default=None),
+                        "mark_at": t, "price_domain": "none"})
+                    prior_nav = nav
         require(len(self.daily) == len(self.calendar), "incomplete NAV calendar")
-        return dict(orders=[self.snapshot_order(o, last) for o in self.orders], fills=self.fills,
+        timings.count("fills", len(self.fills))
+        with timings.phase("snapshot_orders"):
+            orders = [self.snapshot_order(o, last) for o in self.orders]
+        return dict(orders=orders, fills=self.fills,
                     daily_nav=self.daily, nav_start=self.start_nav)
 
 
@@ -1082,7 +1171,8 @@ def replay(m, intents, bars, *, arm, fill_mode, validate_version="v1", _timings=
     """
     timings = _timings if _timings is not None else _PhaseTimings()
     require(arm in (*ARMS, "all") and fill_mode in (*FILL_MODES, "all"), "unknown arm/fill")
-    validate_manifest(m, intents)
+    with timings.phase("validate_manifest"):
+        validate_manifest(m, intents, timings)
     if m["kind"] == "frozen":
         require(arm == "P-BASE", "frozen supports P-BASE only; P-CHASE/weak INPUT_BLOCKED")
     require(bars is not None, "explicit --bars price source required; no sessions.json price fallback")
@@ -1093,7 +1183,7 @@ def replay(m, intents, bars, *, arm, fill_mode, validate_version="v1", _timings=
         bars, validated = validate_pack_replay(bars, m, intents, timings)
     elif validate_version == "v1":
         with timings.phase("validate_bars"):
-            validated = validate_bars(bars, m, intents)
+            validated = validate_bars(bars, m, intents, timings)
     else:
         from backtest.research.joint_return_validate_v2 import validate_json_replay
         validated = validate_json_replay(bars, m, intents, timings)
@@ -1106,14 +1196,15 @@ def replay(m, intents, bars, *, arm, fill_mode, validate_version="v1", _timings=
     summaries = []
     for mode in modes:
         with timings.phase(f"replay_{mode}_P-BASE"):
-            base = _Replay(m, intents, bars, "P-BASE", mode, validated).run()
+            base = _Replay(m, intents, bars, "P-BASE", mode, validated, timings).run()
         for chosen in chosen_arms:
             if chosen == "P-BASE":
                 product = base
             else:
                 with timings.phase(f"replay_{mode}_{chosen}"):
-                    product = _Replay(m, intents, bars, chosen, mode, validated).run()
-            summaries.append(_summary(m, product, base, chosen, mode))
+                    product = _Replay(m, intents, bars, chosen, mode, validated, timings).run()
+            with timings.phase(f"summary_{mode}_{chosen}"):
+                summaries.append(_summary(m, product, base, chosen, mode))
             for d, b in zip(product["daily_nav"], base["daily_nav"]):
                 d.update(benchmark_nav=b["nav"], benchmark_net_return=b["net_return"],
                          net_return_difference=d["net_return"] - b["net_return"])
@@ -1145,7 +1236,8 @@ def replay(m, intents, bars, *, arm, fill_mode, validate_version="v1", _timings=
             output["summary"]["semantics"].append(
                 "Frozen M-REF uses explicit lake mark evidence at reference_price_at; "
                 "intent reference_price is preserved for identity only; source truth is unverified")
-    return plain(output)
+    with timings.phase("plain_output"):
+        return plain(output)
 
 
 # Empty tables still have stable headers. Nonempty tables preserve all intent
@@ -1163,15 +1255,25 @@ NAV_COLUMNS = ("run_id", "contract_hash", "arm_id", "arm_intent_hash", "fill_id"
     "price_domain", "benchmark_nav", "benchmark_net_return", "net_return_difference")
 
 
-def run_replay(intents_path, bars_path, *, arm, fill_mode, out, profile_timings=False, validate_version="v1"):
+def run_replay(intents_path, bars_path, *, arm, fill_mode, out, profile_timings=False, validate_version="v1",
+               profile_timings_json=None):
     """Write the four-file run only after all validation and replay succeed.
 
     summary.json is written last as completion marker. Existing directories are
     rejected, even if empty. No source URI in MQ metadata is dereferenced.
+    ``profile_timings_json`` is a research sidecar outside the run directory; it
+    enables profiling and is never one of the four artifacts.
     """
-    timings = _PhaseTimings(profile_timings)
+    timings = _PhaseTimings(profile_timings or profile_timings_json is not None)
+    if profile_timings_json is not None:
+        # Checked before any work, so a bad sidecar path never follows a
+        # successful run with a failure receipt.
+        sidecar = Path(profile_timings_json)
+        require(not sidecar.resolve().is_relative_to(Path(out).resolve()),
+                "--profile-timings-json must stay outside the run directory", "OUTPUT_BLOCKED")
+        require(sidecar.parent.is_dir(), "--profile-timings-json parent directory must exist", "OUTPUT_BLOCKED")
     with timings.phase("bundle_load"):
-        m, intents, provenance = load_bundle(intents_path)
+        m, intents, provenance = load_bundle(intents_path, timings)
     require(bars_path is not None, "explicit --bars price source required; no sessions.json price fallback")
     pack_input = Path(bars_path).is_dir()
     if pack_input:
@@ -1189,32 +1291,35 @@ def run_replay(intents_path, bars_path, *, arm, fill_mode, out, profile_timings=
     require(path.name == m["run_id"], "--out must be the final directory named by MQ run_id")
     require(not path.exists(), "output directory already exists", "OUTPUT_BLOCKED")
     with timings.phase("write_artifacts"):
-        data = {name + ".csv": csv_bytes(product[name], columns) for name, columns in
-                (("orders", ORDER_COLUMNS), ("fills", FILL_COLUMNS), ("daily_nav", NAV_COLUMNS))}
-        summary = product["summary"]
-        bars_identity = load_json_bytes(raw) if pack_input else bars
-        summary["inputs"] = {**provenance, "bars_raw_sha256": raw_hash(raw), "bars_content_sha256": content_hash(bars_identity),
-                             "input_raw_hashes_verified": False, "snapshot_verification": "MQ_DECLARATION_ONLY"}
-        if pack_input:
-            summary["inputs"]["bars_seal_mode"] = "byte"
-            summary["inputs"]["bars_identity"] = "MANIFEST (raw/content); payload hash in manifest"
-            summary["inputs"]["bars_payload_raw_sha256"] = bars_identity["bars_payload_raw_sha256"]
-        summary["artifacts"] = {k: {"raw_sha256": raw_hash(v), "content_sha256": content_hash(product[k[:-4]])}
-                                for k, v in data.items()}
-        # Hash the exact executing adapter bytes as well as retaining input code
-        # SHAs. This identifies pre-commit synthetic runs without claiming that an
-        # input fixture's baseline SHA is the actual BT implementation commit.
-        summary["replay_source_sha256"] = raw_hash(Path(__file__).read_bytes())
-        data["summary.json"] = canonical_bytes(summary) + b"\n"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.mkdir(exist_ok=False)
-        try:
-            for name, value in data.items():
-                (path / name).write_bytes(value)
-        except OSError:
-            shutil.rmtree(path)
-            raise
-    timings.report()
+        with timings.phase("serialize_tables"):
+            data = {name + ".csv": csv_bytes(product[name], columns) for name, columns in
+                    (("orders", ORDER_COLUMNS), ("fills", FILL_COLUMNS), ("daily_nav", NAV_COLUMNS))}
+        with timings.phase("summary_hashes"):
+            summary = product["summary"]
+            bars_identity = load_json_bytes(raw) if pack_input else bars
+            summary["inputs"] = {**provenance, "bars_raw_sha256": raw_hash(raw), "bars_content_sha256": content_hash(bars_identity),
+                                 "input_raw_hashes_verified": False, "snapshot_verification": "MQ_DECLARATION_ONLY"}
+            if pack_input:
+                summary["inputs"]["bars_seal_mode"] = "byte"
+                summary["inputs"]["bars_identity"] = "MANIFEST (raw/content); payload hash in manifest"
+                summary["inputs"]["bars_payload_raw_sha256"] = bars_identity["bars_payload_raw_sha256"]
+            summary["artifacts"] = {k: {"raw_sha256": raw_hash(v), "content_sha256": content_hash(product[k[:-4]])}
+                                    for k, v in data.items()}
+            # Hash the exact executing adapter bytes as well as retaining input code
+            # SHAs. This identifies pre-commit synthetic runs without claiming that an
+            # input fixture's baseline SHA is the actual BT implementation commit.
+            summary["replay_source_sha256"] = raw_hash(Path(__file__).read_bytes())
+            data["summary.json"] = canonical_bytes(summary) + b"\n"
+        with timings.phase("write_files"):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.mkdir(exist_ok=False)
+            try:
+                for name, value in data.items():
+                    (path / name).write_bytes(value)
+            except OSError:
+                shutil.rmtree(path)
+                raise
+    timings.report(profile_timings_json)
     return path
 
 
@@ -1228,11 +1333,14 @@ def main(argv=None):
     parser.add_argument("--validate-version", choices=("v1", "v2"), default="v1",
                         help="research opt-in dense validation; default v1; v2 uses sealed JSON or bin directly to panel")
     parser.add_argument("--profile-timings", action="store_true",
-                        help="research-only phase wall-clock seconds on stderr; artifacts unchanged")
+                        help="research-only nested phase wall-clock seconds on stderr; artifacts unchanged")
+    parser.add_argument("--profile-timings-json", type=Path,
+                        help="also write the same timing object here (implies --profile-timings); must stay outside --out")
     args = parser.parse_args(argv)
     try:
         path = run_replay(args.intents, args.bars, arm=args.arm, fill_mode=args.fill_mode,
-                          out=args.out, profile_timings=args.profile_timings, validate_version=args.validate_version)
+                          out=args.out, profile_timings=args.profile_timings, validate_version=args.validate_version,
+                          profile_timings_json=args.profile_timings_json)
     except (ReplayError, OSError, KeyError, TypeError, AttributeError) as exc:
         print(canonical_bytes({"status": getattr(exc, "status", "INPUT_BLOCKED"), "detail": str(exc)}).decode())
         return 2

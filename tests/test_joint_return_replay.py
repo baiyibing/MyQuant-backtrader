@@ -949,20 +949,67 @@ def test_phase_timings_cli_preserves_artifact_bytes_and_completion_marker(tmp_pa
     prefix = "research phase timings (seconds): "
     assert output.err.startswith(prefix) and len(output.err.splitlines()) == 1
     timings = json.loads(output.err.removeprefix(prefix))
-    expected = {"bundle_load", "bars_read", "bars_json_parse", "validate_bars", "write_artifacts"}
+    expected = {"bundle_load", "bars_read", "bars_json_parse", "validate_manifest",
+                "validate_bars", "plain_output", "write_artifacts"}
     modes = jr.FILL_MODES if mode == "all" else (mode,)
     arms = jr.ARMS if arm in ("all", "P-CHASE") else ("P-BASE",)
     expected.update(f"replay_{fill}_{chosen}" for fill in modes for chosen in arms)
+    expected.update(f"summary_{fill}_{chosen}" for fill in modes
+                    for chosen in (jr.ARMS if arm == "all" else (arm,)))
     if kind == "frozen" and "M-REF" in modes:
         expected.add("validate_reference_marks")
-    assert set(timings) == expected | {"total_seconds"}
+    top_level = {key for key in timings if "." not in key} - {"total_seconds"}
+    assert top_level == expected
     assert all(value >= 0 for value in timings.values())
-    # All named phases are disjoint. Allow six-decimal reporting roundoff.
+    # Top-level phases are disjoint; children are contained in their parent.
+    # Allow six-decimal reporting roundoff.
     assert timings["total_seconds"] > 0
     assert timings["total_seconds"] + 1e-5 >= sum(timings[key] for key in expected)
+    for child in ("bundle_load.read_inputs", "bundle_load.parse_artifacts",
+                  "bundle_load.validate_manifest", "validate_manifest.intents",
+                  "validate_manifest.reference_states", "validate_manifest.intent_plan_binding",
+                  "validate_bars.seal", "validate_bars.metadata",
+                  "validate_bars.metadata.sessions", "validate_bars.bars_scan",
+                  "validate_bars.events", "write_artifacts.serialize_tables",
+                  "write_artifacts.summary_hashes", "write_artifacts.write_files",
+                  *(f"replay_{fill}_{chosen}.{name}" for fill in modes for chosen in arms
+                    for name in ("init_bars_index", "init_orders", "timeline_build", "marks",
+                                 "lifecycle", "eligible_scan", "attempts", "daily_mark",
+                                 "snapshot_orders"))):
+        parent, _, _ = child.rpartition(".")
+        assert child in timings, child
+        assert timings[parent] + 1e-5 >= timings[child], child
+    assert timings["counts.bundle_load.intent_rows"] == len(rows)
+    for fill in modes:
+        for chosen in arms:
+            scope = f"counts.replay_{fill}_{chosen}"
+            assert timings[f"{scope}.timeline_points"] > 0
+            assert timings[f"{scope}.orders"] == sum(r["arm_id"] == chosen for r in rows)
+            assert timings[f"{scope}.attempts"] >= timings[f"{scope}.fills"] >= 0
     assert written == ["orders.csv", "fills.csv", "daily_nav.csv", "summary.json"]
     assert {file.name: file.read_bytes() for file in profiled.iterdir()} == {
         file.name: file.read_bytes() for file in baseline.iterdir()}
+
+
+def test_profile_timings_json_sidecar_matches_stderr_and_stays_outside_out(tmp_path, capsys):
+    m, rows = bundle([spec()])
+    bars = tmp_path / "bars.json"
+    bars.write_bytes(jr.canonical_bytes(seal(minute_bars(m, rows))))
+    path = write_bundle(tmp_path, m, rows)
+    out = tmp_path / "sidecar" / m["run_id"]
+    args = ["--intents", str(path), "--bars", str(bars), "--arm", "P-BASE", "--fill-mode", "M-LAG"]
+    sidecar = tmp_path / "timings.json"
+    # The sidecar alone enables profiling; --profile-timings stays optional.
+    assert jr.main([*args, "--out", str(out), "--profile-timings-json", str(sidecar)]) == 0
+    reported = capsys.readouterr().err.removeprefix("research phase timings (seconds): ")
+    assert json.loads(sidecar.read_bytes()) == json.loads(reported)
+    assert sorted(file.name for file in out.iterdir()) == [
+        "daily_nav.csv", "fills.csv", "orders.csv", "summary.json"]
+    inside = tmp_path / "blocked" / m["run_id"]
+    assert jr.main([*args, "--out", str(inside), "--profile-timings-json",
+                    str(inside / "research_phase_timings.json")]) == 2
+    assert json.loads(capsys.readouterr().out)["status"] == "OUTPUT_BLOCKED"
+    assert not inside.exists()
 
 
 @pytest.mark.parametrize("label", ["OPEN_TIME", "CLOSE_TIME"])
@@ -1063,6 +1110,11 @@ def test_v2_cli_timings_and_artifact_parity(tmp_path, capsys, monkeypatch):
     timings = json.loads(capsys.readouterr().err.removeprefix("research phase timings (seconds): "))
     assert "validate_bars" not in timings
     assert {"validate_seal", "validate_metadata", "validate_panel_load", "validate_panel_scan"} <= timings.keys()
+    assert {"validate_metadata.bar_metadata", "validate_metadata.bar_metadata.sessions",
+            "validate_metadata.bar_events", "validate_panel_load.json_rows",
+            "validate_panel_scan.axes", "validate_panel_scan.cells"} <= timings.keys()
+    assert timings["counts.validate_panel_load.bar_rows"] == len(minute_bars(m, rows)["bars"])
+    assert timings["counts.validate_panel_scan.panel_cells"] > 0
     assert all(t >= 0 for t in timings.values())
     for name in ("orders.csv", "fills.csv", "daily_nav.csv"):
         assert (baseline / name).read_bytes() == (output / name).read_bytes()
@@ -1122,6 +1174,37 @@ def test_v2_pack_format_fail_closed(tmp_path, fmt, fault):
     (root / "MANIFEST.json").write_bytes(jr.canonical_bytes(manifest))
     with pytest.raises(jr.ReplayError, match="INPUT_BLOCKED.*format"):
         validate_pack_replay(root, m, rows, jr._PhaseTimings())
+
+
+@pytest.mark.parametrize("fmt", ["qlib_bin", "parquet", "arrow_ipc"])
+def test_v2_pack_reader_spans_default_off(tmp_path, capsys, monkeypatch, fmt):
+    m, rows = bundle([spec(inst="SH600519")])
+    path = write_bundle(tmp_path, m, rows)
+    root = sealed_bin_pack(tmp_path, minute_bars(m, rows), fmt)
+    args = ["--intents", str(path), "--bars", str(root), "--arm", "P-BASE",
+            "--fill-mode", "M-LAG", "--validate-version", "v2"]
+    baseline = tmp_path / "quiet" / m["run_id"]
+
+    def unexpected_clock():
+        pytest.fail("disabled profiling must not read the clock")
+
+    with monkeypatch.context() as disabled:
+        disabled.setattr(jr, "perf_counter", unexpected_clock)
+        assert jr.main([*args, "--out", str(baseline)]) == 0
+    assert capsys.readouterr().err == ""
+
+    profiled = tmp_path / "profiled" / m["run_id"]
+    assert jr.main([*args, "--out", str(profiled), "--profile-timings"]) == 0
+    timings = json.loads(capsys.readouterr().err.removeprefix("research phase timings (seconds): "))
+    decode = {"qlib_bin": {"validate_panel_load.pack_decode.assemble",
+                           "counts.validate_panel_load.decoded_instruments"},
+              }.get(fmt, {"validate_panel_load.pack_assemble",
+                          "counts.validate_panel_load.decoded_rows"})
+    assert {"validate_panel_load.pack_axes", "validate_panel_load.pack_decode",
+            "validate_seal", "validate_panel_scan.cells"} | decode <= timings.keys()
+    assert timings["validate_panel_load"] + 1e-5 >= timings["validate_panel_load.pack_decode"]
+    assert {file.name: file.read_bytes() for file in profiled.iterdir()} == {
+        file.name: file.read_bytes() for file in baseline.iterdir()}
 
 
 @pytest.mark.parametrize("label", ["OPEN_TIME", "CLOSE_TIME"])

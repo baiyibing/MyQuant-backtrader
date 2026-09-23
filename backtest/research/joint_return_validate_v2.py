@@ -8,7 +8,6 @@ pass, including limit ties; distinct decimal literals may round to the same floa
 High/low are optional passthrough evidence, never synthesized.
 """
 from collections.abc import Mapping as MappingABC
-from contextlib import nullcontext
 from dataclasses import dataclass
 from datetime import timedelta
 from decimal import Decimal
@@ -18,7 +17,9 @@ from typing import Mapping
 
 import numpy as np
 
-from backtest.research.joint_return_replay import ReplayError, content_hash, require, stamp
+from backtest.research.joint_return_replay import (
+    ReplayError, _PhaseTimings, content_hash, require, stamp,
+)
 
 COLUMNS = ("open", "close", "limit_up", "limit_down", "capacity", "suspended")
 OPTIONAL = ("high", "low")
@@ -129,8 +130,8 @@ def validate_bars_v2(panel, manifest, *, payload_root, metadata,
     caller; table hash, when supplied, additionally binds the loaded projection.
     """
     require(enabled is True, "validate-v2 research default off", "SEMANTICS_BLOCKED")
-    phase = _timings.phase if _timings is not None else lambda name: nullcontext()
-    with phase("validate_seal"):
+    timings = _timings if _timings is not None else _PhaseTimings()
+    with timings.phase("validate_seal"):
         if seal_mode == "byte":
             _verify_seal(payload_root, manifest, metadata, corporate_actions)
         else:
@@ -143,29 +144,32 @@ def validate_bars_v2(panel, manifest, *, payload_root, metadata,
     require(isinstance(corporate_actions, list), "corporate_actions must be a list")
     require(seal_mode == "canonical_json" or not corporate_actions,
             "K1 corporate-action semantics deferred", "SEMANTICS_BLOCKED")
-    with phase("validate_panel_scan"):
-        return _scan_panel(panel, manifest or {})
+    with timings.phase("validate_panel_scan"):
+        return _scan_panel(panel, manifest or {}, timings)
 
 
-def _scan_panel(panel, manifest):
-    require(type(panel.n_minutes) is int and panel.n_minutes > 0, "invalid n_minutes")
-    inst = panel.instruments
-    symbols = panel.execution_symbols
-    require(bool(inst) and all(isinstance(x, str) and x for x in inst), "invalid instruments")
-    require(tuple(sorted(set(inst))) == tuple(inst), "instruments must be sorted and unique")
-    require(len(symbols) == len(inst) and all(isinstance(x, str) and x for x in symbols)
-            and len(set(symbols)) == len(symbols), "execution mapping drift/collision", "SEMANTICS_BLOCKED")
-    require(len(panel.minute_iso) == panel.n_minutes, "minute axis coverage incomplete")
-    minutes = tuple(stamp(t) for t in panel.minute_iso)
-    require(all(t.second == 0 for t in minutes)
-            and all(a < b for a, b in zip(minutes, minutes[1:])), "minute axis order/alignment invalid")
-    require(set(COLUMNS) <= set(panel.columns) <= set(COLUMNS + OPTIONAL), "panel columns missing/extra")
-    for name, column in panel.columns.items():
-        require(isinstance(column, np.ndarray) and column.shape == panel.shape,
-                f"{name}: dense coverage shape mismatch")
-        expected = np.dtype("uint8" if name == "suspended" else "float64")
-        require(column.dtype == expected, f"{name}: expected {expected}")
-    require(panel.size == panel.n_minutes * len(inst), "dense coverage incomplete")
+def _scan_panel(panel, manifest, _timings=None):
+    timings = _timings if _timings is not None else _PhaseTimings()
+    with timings.phase("axes"):
+        require(type(panel.n_minutes) is int and panel.n_minutes > 0, "invalid n_minutes")
+        inst = panel.instruments
+        symbols = panel.execution_symbols
+        require(bool(inst) and all(isinstance(x, str) and x for x in inst), "invalid instruments")
+        require(tuple(sorted(set(inst))) == tuple(inst), "instruments must be sorted and unique")
+        require(len(symbols) == len(inst) and all(isinstance(x, str) and x for x in symbols)
+                and len(set(symbols)) == len(symbols), "execution mapping drift/collision", "SEMANTICS_BLOCKED")
+        require(len(panel.minute_iso) == panel.n_minutes, "minute axis coverage incomplete")
+        minutes = tuple(stamp(t) for t in panel.minute_iso)
+        require(all(t.second == 0 for t in minutes)
+                and all(a < b for a, b in zip(minutes, minutes[1:])), "minute axis order/alignment invalid")
+        require(set(COLUMNS) <= set(panel.columns) <= set(COLUMNS + OPTIONAL), "panel columns missing/extra")
+        for name, column in panel.columns.items():
+            require(isinstance(column, np.ndarray) and column.shape == panel.shape,
+                    f"{name}: dense coverage shape mismatch")
+            expected = np.dtype("uint8" if name == "suspended" else "float64")
+            require(column.dtype == expected, f"{name}: expected {expected}")
+        require(panel.size == panel.n_minutes * len(inst), "dense coverage incomplete")
+    timings.count("panel_cells", panel.size)
 
     def check_cells(ok, detail):
         if not np.all(ok):
@@ -179,17 +183,19 @@ def _scan_panel(panel, manifest):
                 and panel.validity.dtype == np.dtype("bool"), "invalid coverage bitmap")
         check_cells(panel.validity, "dense coverage hole")
     if "bars_table_sha256" in manifest:
-        require(panel_table_sha256(panel) == manifest["bars_table_sha256"],
-                "bars table hash drift", "CONTRACT_MISMATCH")
-    cols = panel.columns
-    for name in ("open", "close", "limit_up", "limit_down") + OPTIONAL:
-        if name in cols:
-            check_cells(np.isfinite(cols[name]) & (cols[name] > 0), f"{name} nonfinite/nonpositive")
-    check_cells(np.isfinite(cols["capacity"]) & (cols["capacity"] >= 0), "invalid capacity")
-    check_cells((cols["suspended"] == 0) | (cols["suspended"] == 1), "invalid suspended")
-    for name in ("open", "close"):
-        check_cells((cols["limit_down"] <= cols[name]) & (cols[name] <= cols["limit_up"]),
-                    f"{name} outside explicit price limits")
+        with timings.phase("table_sha256"):
+            require(panel_table_sha256(panel) == manifest["bars_table_sha256"],
+                    "bars table hash drift", "CONTRACT_MISMATCH")
+    with timings.phase("cells"):
+        cols = panel.columns
+        for name in ("open", "close", "limit_up", "limit_down") + OPTIONAL:
+            if name in cols:
+                check_cells(np.isfinite(cols[name]) & (cols[name] > 0), f"{name} nonfinite/nonpositive")
+        check_cells(np.isfinite(cols["capacity"]) & (cols["capacity"] >= 0), "invalid capacity")
+        check_cells((cols["suspended"] == 0) | (cols["suspended"] == 1), "invalid suspended")
+        for name in ("open", "close"):
+            check_cells((cols["limit_down"] <= cols[name]) & (cols[name] <= cols["limit_up"]),
+                        f"{name} outside explicit price limits")
     return ValidatedPanel(panel)
 
 
@@ -265,8 +271,10 @@ def validate_json_replay(bundle, m, intents, timings):
     fields(bundle, ("schema_version", "kind", "metadata", "bars",
                     "corporate_actions", "content_sha256"), "bars snapshot")
     with timings.phase("validate_metadata"):
-        opportunities, ends, mapping = _validate_bar_metadata(bundle, m, intents)
-        _validate_bar_events(bundle, intents, opportunities, ends, mapping)
+        with timings.phase("bar_metadata"):
+            opportunities, ends, mapping = _validate_bar_metadata(bundle, m, intents, timings)
+        with timings.phase("bar_events"):
+            _validate_bar_events(bundle, intents, opportunities, ends, mapping)
     with timings.phase("validate_panel_load"):
         require(isinstance(bundle["bars"], list), "bars must be explicit list")
         instruments = tuple(sorted(mapping))
@@ -279,25 +287,27 @@ def validate_json_replay(bundle, m, intents, timings):
                    for k in names}
         valid = np.zeros(shape, dtype=bool)
         shift = timedelta(seconds=60 if bundle["metadata"]["bar_label"] == "CLOSE_TIME" else 0)
-        for raw in bundle["bars"]:
-            fields(raw, ("instrument", "execution_symbol", "timestamp", *names), "minute bar")
-            inst = raw["instrument"]
-            require(inst in ii, "bar instrument not in input intent/initial universe")
-            require(raw["execution_symbol"] == mapping[inst],
-                    "minute execution mapping drift/collision", "SEMANTICS_BLOCKED")
-            t = stamp(raw["timestamp"]) - shift
-            require(t in mi, "bar outside frozen session endpoints")
-            cell = mi[t], ii[inst]
-            require(not valid[cell], "duplicate minute bar")
-            require(type(raw["suspended"]) is bool, "suspension evidence missing")
-            for k in names:
-                if k != "suspended":
-                    require(type(raw[k]) in (int, float), f"{k}: finite number required")
-                try:
-                    columns[k][cell] = raw[k]
-                except (OverflowError, ValueError) as exc:
-                    raise ReplayError("INPUT_BLOCKED", f"{k}: invalid number") from exc
-            valid[cell] = True
+        with timings.phase("json_rows"):
+            for raw in bundle["bars"]:
+                fields(raw, ("instrument", "execution_symbol", "timestamp", *names), "minute bar")
+                inst = raw["instrument"]
+                require(inst in ii, "bar instrument not in input intent/initial universe")
+                require(raw["execution_symbol"] == mapping[inst],
+                        "minute execution mapping drift/collision", "SEMANTICS_BLOCKED")
+                t = stamp(raw["timestamp"]) - shift
+                require(t in mi, "bar outside frozen session endpoints")
+                cell = mi[t], ii[inst]
+                require(not valid[cell], "duplicate minute bar")
+                require(type(raw["suspended"]) is bool, "suspension evidence missing")
+                for k in names:
+                    if k != "suspended":
+                        require(type(raw[k]) in (int, float), f"{k}: finite number required")
+                    try:
+                        columns[k][cell] = raw[k]
+                    except (OverflowError, ValueError) as exc:
+                        raise ReplayError("INPUT_BLOCKED", f"{k}: invalid number") from exc
+                valid[cell] = True
+        timings.count("bar_rows", len(bundle["bars"]))
         panel = DensePanel(columns, len(minutes), instruments,
                            tuple(mapping[i] for i in instruments),
                            tuple(t.isoformat(timespec="seconds") for t in minutes), valid)
@@ -348,10 +358,11 @@ def validate_pack_replay(pack_root, m, intents, timings):
             and required_files <= set(files),
             "MANIFEST payload_files must cover decoded axes/features", "CONTRACT_MISMATCH")
     with timings.phase("validate_metadata"):
-        opportunities, ends, mapping = _validate_bar_metadata(bundle, m, intents)
+        with timings.phase("bar_metadata"):
+            opportunities, ends, mapping = _validate_bar_metadata(bundle, m, intents, timings)
     with timings.phase("validate_panel_load"):
         try:
-            panel = reader(root)
+            panel = reader(root, _timings=timings)
         except (ValueError, OSError, KeyError, TypeError) as exc:
             raise ReplayError("INPUT_BLOCKED", f"invalid {fmt} pack: {exc}") from exc
     require(panel.instruments == tuple(sorted(mapping))
