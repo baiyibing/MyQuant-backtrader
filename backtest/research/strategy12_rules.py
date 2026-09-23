@@ -105,15 +105,18 @@ def allocate_exit(lots, shares: int, *, keep_anchor: bool) -> list[tuple[int, in
     return result
 
 
-def clamp_exit(lots, orders) -> list[tuple[int, int]]:
-    """Re-anchor an allocation on its own lots; post-plan lots stay untouched."""
+def clamp_exit(lots, orders, *, keep_anchor: bool) -> list[tuple[int, int]]:
+    """Clamp planned lots to current capacity, retaining lot0's derisk floor."""
     by_id = {lot.lot_id: lot for lot in lots}
     result = []
     for lot_id, shares in orders:
         lot = by_id.get(lot_id)
         if lot is None:
             continue
-        amount = min(int(shares), max(0, min(lot.shares, lot.sellable)))
+        available = max(0, min(lot.shares, lot.sellable))
+        if keep_anchor and lot_id == 0:
+            available = min(available, max(0, lot.shares - 100))
+        amount = min(int(shares), available)
         if amount:
             result.append((lot_id, amount))
     return result

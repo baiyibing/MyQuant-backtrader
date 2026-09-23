@@ -46,12 +46,26 @@ def test_clamp_exit_keeps_the_planned_lots_and_ignores_post_plan_adds():
     planned = r.allocate_exit([r.SellLot(0, 1000, 1000)], 500, keep_anchor=True)
     assert planned == [(0, 500)]
     later = [r.SellLot(0, 1000, 1000), r.SellLot(1, 1000, 1000), r.SellLot(2, 300, 300, True)]
-    assert r.clamp_exit(later, planned) == [(0, 500)]
-    assert r.clamp_exit([r.SellLot(0, 200, 200), r.SellLot(1, 1000, 1000)], planned) == [(0, 200)]
-    assert r.clamp_exit([r.SellLot(1, 1000, 1000)], planned) == []
+    assert r.clamp_exit(later, planned, keep_anchor=True) == [(0, 500)]
+    assert r.clamp_exit([r.SellLot(0, 200, 200)], planned, keep_anchor=True) == [(0, 100)]
+    assert r.clamp_exit([r.SellLot(1, 1000, 1000)], planned, keep_anchor=True) == []
     mem = r.Memory()
     mem.sold(0)
     assert mem == r.Memory()
+
+
+@pytest.mark.parametrize("lot_id,shares,sellable,keep_anchor,expected", [
+    (0, 200, 200, True, [(0, 100)]),
+    (0, 200, 50, True, [(0, 50)]),
+    (0, 100, 100, True, []),
+    (0, 50, 50, True, []),
+    (0, 200, 200, False, [(0, 200)]),
+    (1, 200, 200, True, [(1, 200)]),
+])
+def test_clamp_exit_reapplies_derisk_anchor_but_stop_and_other_lots_can_clear(
+        lot_id, shares, sellable, keep_anchor, expected):
+    assert r.clamp_exit([r.SellLot(lot_id, shares, sellable)], [(lot_id, 500)],
+                        keep_anchor=keep_anchor) == expected
 
 
 @pytest.mark.parametrize("channel", ["reduced", "stopped"])

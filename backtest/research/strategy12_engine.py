@@ -103,7 +103,7 @@ def fill_exit(st, code, px, day, *, day_i, ds, plan, limits, open_px,
         return 0
     reason, wanted, planned = plan[0], plan[1], plan[2] if len(plan) > 2 else None
     lots = sell_lots(st, code, day_i, ds)
-    orders = (rules.clamp_exit(lots, planned) if planned is not None
+    orders = (rules.clamp_exit(lots, planned, keep_anchor=reason == rules.REDUCE) if planned is not None
               else rules.allocate_exit(lots, wanted, keep_anchor=reason == rules.REDUCE))
     filled = 0
     for lot_id, shares in orders:
