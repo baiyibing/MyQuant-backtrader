@@ -53,7 +53,9 @@
 
 - **Bot VM 仍是主执行面**：在 Bot VM 上调度 Codex / Grok / Cursor agent / Kimi / Claude 时，**优先 headless**（非交互）：例如 `grok --prompt-file … --output-format plain`、`agent -p`/`--print`、`--output-format plain|json`、Codex `exec` / 非交互标志等。
 - **已注册物理机同样适用**：当 bot 在任意已注册物理机（`newtest_4090`、`LAPTOP-75JKCBED`、zcode 主机等）上调度 agent CLI 时，也 **优先 headless**（非交互标志），口径与 Bot VM 相同——不限 4090。
-- 托管实现与核验默认不要挂交互式 TUI；交互仅在排障且用户明示时用。
+- **headless = 默认执行面**（Bot 托管的实现 / 核验 / 导出 / 回放）：默认走非交互标志，不挂 TUI。
+- **交互 TUI = 调试面**：仅当用户明示要看逐步轨迹或点批准时用；**禁止**把「半交互」当默认。
+- **登录 / SSO / 2FA / 付费墙**：不是 headless 能扛的，走人工或桌面交接（`request_box_help` / 人在机前）。
 - §6 的 4090bot runner（湖 / Windows / Cursor→Grok 4.7）是物理机 headless 的**一例**；本条覆盖 **全部**已注册物理机上的 agent CLI，不只 4090。
 
 **一般不用**：Cursor Cloud Agents（云端 agent）。已误开则取消，改道 VM CLI。
@@ -152,7 +154,7 @@ MyQuant  →  MyQuant-backtrader  →  OSkhQuant1.3
 - [ ] 跨仓是否只经 handoff 目录，未直接改对方业务仓？
 - [ ] 若走 `codex-impl-handoff`：发起方是否为物理机 agent，接手是否为仓主管？
 - [ ] 实现是否走 `codex … -m gpt-6-astra`？核是否走 `grok … -m grok-4.7`？
-- [ ] Bot VM **与**已注册物理机上的 agent CLI 是否均 headless（非交互）调用？
+- [ ] 执行面（Bot VM **与**已注册物理机 agent CLI）是否均 headless？交互 TUI 是否仅用户明示调试？
 - [ ] 是否只有一把 PR / 一个分支在干活？
 - [ ] 需要 4090 时，是否由 **正在干这活的 bot** 派 4090bot，且按接收顺序排队？
 - [ ] Codex 是否只开 PR；CI 绿 + 核过关后，才人裁合？
@@ -167,4 +169,4 @@ MyQuant  →  MyQuant-backtrader  →  OSkhQuant1.3
 | 2026-09-22 | 跨仓只指针；并入 1.3 CLI SSOT 指针说明 |
 | 2026-09-22 | **合并为唯一正文**：CLI 流水线/模型钉并入本文；1.3 / MQ 只指针、不另写 SSOT |
 | 2026-09-22 | 跨仓 handoff 回执薄约定（STATUS / 摘要 / blocker / 数字 / 路径） |
-| 2026-09-23 | Bot VM agent CLI 优先 headless（非交互）；同日修订：已注册物理机上 bot 调度的 agent CLI 亦优先 headless（不限 4090） |
+| 2026-09-23 | Bot VM agent CLI 优先 headless（非交互）；同日修订：已注册物理机上 bot 调度的 agent CLI 亦优先 headless（不限 4090）；再订：headless=默认执行面、交互 TUI=调试面（仅用户明示）、登录/SSO/2FA/付费墙走人交接 |
