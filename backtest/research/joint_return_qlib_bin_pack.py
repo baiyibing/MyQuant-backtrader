@@ -1,6 +1,6 @@
 """Timing-only Mode B pack I/O; float32 is NOT a Decimal seal authority.
 
-No replay loader hook. Sidecars remain JSON values; source content_sha256 is
+Direct bin-to-panel research ingest is available for opt-in v2. Sidecars remain JSON values; source content_sha256 is
 intentionally not copied onto the lossy reconstruction. Never synthesize high/low.
 """
 
@@ -136,6 +136,22 @@ def read_pack(pack_root: str | Path) -> dict:
     Required bins must be complete; absent optional cells are never invented.
     """
     root = Path(pack_root)
+    manifest, timestamps, index = _pack_axes(root)
+    bars = []
+    for inst, symbol, columns in _pack_columns(root, timestamps, index):
+        for i, timestamp in enumerate(timestamps):
+            bar = dict(instrument=inst, execution_symbol=symbol, timestamp=timestamp)
+            for name, values in columns.items():
+                if not np.isnan(values[i]):
+                    bar[name] = bool(values[i]) if name == "suspended" else float(values[i])
+            bars.append(bar)
+    bars.sort(key=lambda row: (row["timestamp"], row["instrument"]))
+    return dict(schema_version=SCHEMA_VERSION, kind=manifest["kind"],
+                metadata=_read_json(root / "metadata.json"), bars=bars,
+                corporate_actions=_read_json(root / "corporate_actions.json"))
+
+
+def _pack_axes(root):
     manifest = _read_json(root / "MANIFEST.json")
     if (manifest["format"], manifest["format_version"], manifest["schema_version"]) != (
         "qlib_bin", FORMAT_VERSION, SCHEMA_VERSION
@@ -153,7 +169,11 @@ def read_pack(pack_root: str | Path) -> dict:
             or manifest["n_opportunity_minutes"] != len(calendar)
             or manifest["n_rows"] != len(calendar) * len(index)):
         raise ValueError("pack counts/density mismatch")
-    bars = []
+    return manifest, timestamps, index
+
+
+def _pack_columns(root, timestamps, index):
+    """Yield one instrument's checked arrays; never construct bar records."""
     seen_folders, seen_symbols = set(), set()
     for inst, entry in sorted(index.items()):
         dirname = qlib_inst_dir(inst)
@@ -175,24 +195,43 @@ def read_pack(pack_root: str | Path) -> dict:
                 if path.exists():
                     raise ValueError("unindexed feature bin")
                 continue
-            if not path.is_file() or path.stat().st_size != 4 * (len(calendar) + 1):
+            if not path.is_file() or path.stat().st_size != 4 * (len(timestamps) + 1):
                 raise ValueError(f"missing/truncated feature bin: {path}")
             with path.open("rb") as stream:
                 if stream.read(4) != np.array([0], dtype="<f4").tobytes():
                     raise ValueError("pack bin ref must be zero")
-            values = read_qlib_bin(path, 0, len(calendar) - 1).to_numpy()
+            values = read_qlib_bin(path, 0, len(timestamps) - 1).to_numpy()
             if np.isinf(values).any() or (name in REQUIRED and np.isnan(values).any()):
                 raise ValueError("invalid nonfinite feature")
             if name == "suspended" and not np.isin(values, [0, 1]).all():
                 raise ValueError("suspended bin must contain 0/1")
             columns[name] = values
-        for i, timestamp in enumerate(timestamps):
-            bar = dict(instrument=inst, execution_symbol=symbol, timestamp=timestamp)
-            for name, values in columns.items():
-                if not np.isnan(values[i]):
-                    bar[name] = bool(values[i]) if name == "suspended" else float(values[i])
-            bars.append(bar)
-    bars.sort(key=lambda row: (row["timestamp"], row["instrument"]))
-    return dict(schema_version=SCHEMA_VERSION, kind=manifest["kind"],
-                metadata=_read_json(root / "metadata.json"), bars=bars,
-                corporate_actions=_read_json(root / "corporate_actions.json"))
+        yield inst, symbol, columns
+
+
+def read_pack_panel(pack_root: str | Path):
+    """Decode marks-v1 directly to float64/uint8 DensePanel (no bar dicts).
+
+    This is a reader, not seal certification. CLOSE_TIME labels shift -60s;
+    replay separately proves session coverage and the byte seal. Missing optional
+    cells remain NaN (v2 validation rejects partial extrema), never synthesized.
+    Required bins are dense, so no validity bitmap allocation is needed.
+    """
+    from backtest.research.joint_return_validate_v2 import (
+        COLUMNS, DensePanel, minute_axis_from_labels,
+    )
+    root = Path(pack_root)
+    _, timestamps, index = _pack_axes(root)
+    metadata = _read_json(root / "metadata.json")
+    minutes = minute_axis_from_labels(timestamps, bar_label=metadata.get("bar_label"))
+    instruments = tuple(sorted(index))
+    shape = len(minutes), len(instruments)
+    columns = {name: np.empty(shape, dtype="uint8" if name == "suspended" else "float64")
+               for name in COLUMNS}
+    for j, (_, _, values) in enumerate(_pack_columns(root, timestamps, index)):
+        for name, column in values.items():
+            if name not in columns:
+                columns[name] = np.full(shape, np.nan, dtype="float64")
+            columns[name][:, j] = column
+    return DensePanel(columns, len(minutes), instruments,
+                      tuple(index[i]["execution_symbol"] for i in instruments), minutes)

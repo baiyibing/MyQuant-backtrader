@@ -1087,7 +1087,11 @@ def replay(m, intents, bars, *, arm, fill_mode, validate_version="v1", _timings=
         require(arm == "P-BASE", "frozen supports P-BASE only; P-CHASE/weak INPUT_BLOCKED")
     require(bars is not None, "explicit --bars price source required; no sessions.json price fallback")
     require(validate_version in ("v1", "v2"), "unknown validate version")
-    if validate_version == "v1":
+    if isinstance(bars, (str, Path)):
+        require(validate_version == "v2", "pack root requires --validate-version v2")
+        from backtest.research.joint_return_validate_v2 import validate_pack_replay
+        bars, validated = validate_pack_replay(bars, m, intents, timings)
+    elif validate_version == "v1":
         with timings.phase("validate_bars"):
             validated = validate_bars(bars, m, intents)
     else:
@@ -1169,10 +1173,17 @@ def run_replay(intents_path, bars_path, *, arm, fill_mode, out, profile_timings=
     with timings.phase("bundle_load"):
         m, intents, provenance = load_bundle(intents_path)
     require(bars_path is not None, "explicit --bars price source required; no sessions.json price fallback")
-    with timings.phase("bars_read"):
-        raw = read_bytes(bars_path)
-    with timings.phase("bars_json_parse"):
-        bars = load_json_bytes(raw)
+    pack_input = Path(bars_path).is_dir()
+    if pack_input:
+        require(validate_version == "v2", "pack root requires --validate-version v2")
+        bars = Path(bars_path)
+        with timings.phase("bars_read"):
+            raw = read_bytes(bars / "MANIFEST.json")
+    else:
+        with timings.phase("bars_read"):
+            raw = read_bytes(bars_path)
+        with timings.phase("bars_json_parse"):
+            bars = load_json_bytes(raw)
     product = replay(m, intents, bars, arm=arm, fill_mode=fill_mode, validate_version=validate_version, _timings=timings)
     path = Path(out)
     require(path.name == m["run_id"], "--out must be the final directory named by MQ run_id")
@@ -1181,8 +1192,13 @@ def run_replay(intents_path, bars_path, *, arm, fill_mode, out, profile_timings=
         data = {name + ".csv": csv_bytes(product[name], columns) for name, columns in
                 (("orders", ORDER_COLUMNS), ("fills", FILL_COLUMNS), ("daily_nav", NAV_COLUMNS))}
         summary = product["summary"]
-        summary["inputs"] = {**provenance, "bars_raw_sha256": raw_hash(raw), "bars_content_sha256": content_hash(bars),
+        bars_identity = load_json_bytes(raw) if pack_input else bars
+        summary["inputs"] = {**provenance, "bars_raw_sha256": raw_hash(raw), "bars_content_sha256": content_hash(bars_identity),
                              "input_raw_hashes_verified": False, "snapshot_verification": "MQ_DECLARATION_ONLY"}
+        if pack_input:
+            summary["inputs"]["bars_seal_mode"] = "byte"
+            summary["inputs"]["bars_identity"] = "MANIFEST (raw/content); payload hash in manifest"
+            summary["inputs"]["bars_payload_raw_sha256"] = bars_identity["bars_payload_raw_sha256"]
         summary["artifacts"] = {k: {"raw_sha256": raw_hash(v), "content_sha256": content_hash(product[k[:-4]])}
                                 for k, v in data.items()}
         # Hash the exact executing adapter bytes as well as retaining input code
@@ -1203,14 +1219,14 @@ def run_replay(intents_path, bars_path, *, arm, fill_mode, out, profile_timings=
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="Research replay: synthetic or frozen control-only MQ pack + explicit minute JSON")
+    parser = argparse.ArgumentParser(description="Research replay: synthetic or frozen control-only MQ pack + explicit minute JSON or opt-in v2 bin pack")
     parser.add_argument("--intents", type=Path, required=True, help="explicit MQ intents.csv, directory or manifest.json; companion artifacts adjacent")
-    parser.add_argument("--bars", type=Path, help="explicit synthetic or frozen_explicit minute JSON with content hash/provenance; absent => INPUT_BLOCKED; no Qlib auto-discovery")
+    parser.add_argument("--bars", type=Path, help="explicit minute JSON, or byte-sealed qlib_bin marks-v1 pack directory with v2; absent => INPUT_BLOCKED; no Qlib auto-discovery")
     parser.add_argument("--arm", choices=(*ARMS, "all"), required=True)
     parser.add_argument("--fill-mode", choices=(*FILL_MODES, "all"), required=True)
     parser.add_argument("--out", type=Path, required=True, help="final backtest_output/joint-return-v1/<run_id> directory")
     parser.add_argument("--validate-version", choices=("v1", "v2"), default="v1",
-                        help="research opt-in dense validation; default v1; v2 uses sealed JSON to panel")
+                        help="research opt-in dense validation; default v1; v2 uses sealed JSON or bin directly to panel")
     parser.add_argument("--profile-timings", action="store_true",
                         help="research-only phase wall-clock seconds on stderr; artifacts unchanged")
     args = parser.parse_args(argv)

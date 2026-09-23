@@ -131,3 +131,57 @@ def test_json_path_and_no_overwrite(tmp_path, bundle):
     assert len(pack.read_pack(root)["bars"]) == 6
     with pytest.raises(FileExistsError):
         pack.write_pack(source, root)
+
+
+@pytest.mark.parametrize("label", ["OPEN_TIME", "CLOSE_TIME"])
+@pytest.mark.parametrize("extrema", ["full", "absent", "partial"])
+def test_panel_direct_parity(tmp_path, bundle, monkeypatch, label, extrema):
+    from backtest.research.joint_return_validate_v2 import DensePanel, minute_axis_from_labels
+    bundle["metadata"]["bar_label"] = label
+    if extrema == "absent":
+        for row in bundle["bars"]:
+            row.pop("high")
+            row.pop("low")
+    elif extrema == "partial":
+        for row in bundle["bars"]:
+            if row["instrument"] == "SH600519":
+                row.pop("high")
+        bundle["bars"][0].pop("low")
+    root = pack.write_pack(bundle, tmp_path / "pack")
+    slow = pack.read_pack(root)["bars"]
+    monkeypatch.setattr(pack, "read_pack", lambda *a: pytest.fail("materialized rows"))
+    panel = pack.read_pack_panel(root)
+    assert isinstance(panel, DensePanel) and panel.shape == (3, 2)
+    assert panel.validity is None
+    assert panel.instruments == ("SH600519", "SZ000001")
+    assert panel.execution_symbols == ("600519.SH", "000001.SZ")
+    assert panel.minute_iso == minute_axis_from_labels(
+        sorted({r["timestamp"] for r in slow}), bar_label=label)
+    assert set(panel.columns) == {k for k in pack.REQUIRED + pack.OPTIONAL
+                                  if any(k in r for r in slow)}
+    for name, column in panel.columns.items():
+        assert column.dtype == np.dtype("uint8" if name == "suspended" else "float64")
+        expected = np.array([r.get(name, np.nan) for r in slow]).reshape(panel.shape)
+        np.testing.assert_array_equal(column, expected)
+    for reader in (pack.read_pack_panel, pack._pack_columns, pack._pack_axes):
+        tree = ast.parse(inspect.getsource(reader))
+        assert not [n for n in ast.walk(tree) if isinstance(n, ast.Attribute) and n.attr == "append"]
+
+
+@pytest.mark.parametrize("problem", ["missing", "truncated", "header", "suspended", "nan", "optional_missing"])
+def test_panel_corrupt_bin_rejected(tmp_path, bundle, problem):
+    bundle["metadata"]["bar_label"] = "OPEN_TIME"
+    root = pack.write_pack(bundle, tmp_path / "pack")
+    path = root / "qlib_bin/features/sh600519/suspended.1min.bin"
+    if problem == "missing":
+        path.unlink()
+    elif problem == "optional_missing":
+        path.with_name("high.1min.bin").unlink()
+    elif problem == "truncated":
+        path.write_bytes(path.read_bytes()[:-4])
+    else:
+        values = np.fromfile(path, dtype="<f4")
+        values[0 if problem == "header" else 1] = np.nan if problem == "nan" else 2
+        path.write_bytes(values.tobytes())
+    with pytest.raises(ValueError):
+        pack.read_pack_panel(root)

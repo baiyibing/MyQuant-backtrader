@@ -1081,3 +1081,73 @@ def test_v2_adapter_keeps_only_axes_and_ephemeral_cells():
     assert view.get((jr.stamp(ts()), "A")) is not cell
     assert not hasattr(cell, "__dict__") or "bars" not in vars(cell)
     assert view.validated.panel.columns["open"].shape == (12, 1)
+
+
+def sealed_bin_pack(tmp_path, bars):
+    """Test-only byte seal; production timing writer deliberately remains unsealed."""
+    import hashlib
+    from backtest.research import joint_return_qlib_bin_pack as pack
+    root = pack.write_pack(bars, tmp_path / "pack")
+    manifest = json.loads((root / "MANIFEST.json").read_text())
+    files = sorted(["index/instruments.json", "qlib_bin/calendars/1min.txt"] +
+                   [p.relative_to(root).as_posix() for p in root.rglob("*.bin")], reverse=True)
+    manifest.update(payload_files=files,
+                    bars_payload_raw_sha256=hashlib.sha256(b"".join((root / p).read_bytes() for p in files)).hexdigest(),
+                    metadata_content_sha256=jr.content_hash(bars["metadata"]),
+                    corporate_actions_content_sha256=jr.content_hash(bars["corporate_actions"]))
+    (root / "MANIFEST.json").write_bytes(jr.canonical_bytes(manifest))
+    return root
+
+
+@pytest.mark.parametrize("label", ["OPEN_TIME", "CLOSE_TIME"])
+def test_v2_bin_cli_matches_materialized(tmp_path, monkeypatch, label):
+    from backtest.research import joint_return_qlib_bin_pack as pack
+    m, rows = bundle([spec(inst="SH600519")])
+    path = write_bundle(tmp_path, m, rows)
+    bars = minute_bars(m, rows, price=10.12)
+    bars["metadata"]["bar_label"] = label
+    if label == "CLOSE_TIME":
+        for row in bars["bars"]:
+            row["timestamp"] = (jr.stamp(row["timestamp"]) + timedelta(minutes=1)).isoformat()
+    root = sealed_bin_pack(tmp_path, bars)
+    # Compare the same decoded float32 values, not pre-quantization JSON prices.
+    slow = seal(pack.read_pack(root))
+    expected = jr.replay(m, rows, slow, arm="P-BASE", fill_mode="all", validate_version="v2")
+    monkeypatch.setattr(pack, "read_pack", lambda *a: pytest.fail("legacy row loader"))
+    out = tmp_path / "out" / m["run_id"]
+    args = ["--intents", str(path), "--bars", str(root), "--arm", "P-BASE", "--fill-mode", "all", "--out", str(out)]
+    assert jr.main([*args, "--validate-version", "v2"]) == 0
+    for name, columns in (("orders", jr.ORDER_COLUMNS), ("fills", jr.FILL_COLUMNS), ("daily_nav", jr.NAV_COLUMNS)):
+        assert (out / f"{name}.csv").read_bytes() == jr.csv_bytes(expected[name], columns)
+    summary = json.loads((out / "summary.json").read_text())
+    assert summary["inputs"]["bars_seal_mode"] == "byte"
+    assert jr.main(args) == 2  # default remains v1; no implicit pack opt-in
+
+
+@pytest.mark.parametrize("fault", ["unsealed", "order", "axes_unsealed", "session", "mapping", "events", "payload"])
+def test_v2_bin_replay_fail_closed(tmp_path, fault):
+    m, rows = bundle([spec(inst="SH600519")])
+    bars = minute_bars(m, rows)
+    if fault == "session":
+        bars["bars"].pop()
+    if fault == "mapping":
+        for row in bars["bars"]:
+            row["execution_symbol"] = "wrong"
+    if fault == "events":
+        bars["corporate_actions"] = [{"event_id": "deferred"}]
+    root = sealed_bin_pack(tmp_path, bars)
+    manifest = json.loads((root / "MANIFEST.json").read_text())
+    if fault == "unsealed":
+        del manifest["payload_files"]
+    elif fault == "order":
+        manifest["payload_files"].reverse()
+    elif fault == "axes_unsealed":
+        manifest["payload_files"].remove("index/instruments.json")
+    elif fault == "payload":
+        with (root / "qlib_bin/features/sh600519/open.1min.bin").open("r+b") as stream:
+            stream.seek(4)
+            import struct
+            stream.write(struct.pack("<f", 12))
+    (root / "MANIFEST.json").write_bytes(jr.canonical_bytes(manifest))
+    with pytest.raises(jr.ReplayError):
+        jr.replay(m, rows, root, arm="P-BASE", fill_mode="all", validate_version="v2")
