@@ -77,12 +77,67 @@ def test_exact_bin_parity(tmp_path, bundle, monkeypatch, fmt, label, extrema, so
         write(source, root, fmt)
 
 
+def assert_no_row_conversion(source):
+    # Check all reader-side helpers, including future ones. Only these write-only
+    # functions may stage/construct records; the reader may not call them.
+    writers = {"_write", "write_pack_parquet", "write_pack_arrow"}
+    forbidden = writers | {"append", "extend", "to_pylist", "to_pydict", "to_pandas",
+                           "read_pack", "read_pack_panel", "write_pack", "validate_json_replay"}
+    for function in ast.parse(source).body:
+        if not isinstance(function, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            continue
+        if function.name in writers:
+            continue
+        for node in ast.walk(function):
+            name = node.attr if isinstance(node, ast.Attribute) else node.id if isinstance(node, ast.Name) else None
+            assert name not in forbidden, f"{function.name}: forbidden row API {name}"
+            # Empty column maps are allowed; populated dicts/comprehensions could
+            # rebuild bars, including inside a list/generator comprehension.
+            assert not isinstance(node, ast.DictComp), f"{function.name}: dict comprehension"
+            assert not isinstance(node, ast.Dict) or not node.keys, f"{function.name}: populated dict"
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "dict":
+                # The one shared layout helper returns only pinned path names.
+                assert (function.name == "_paths" and not node.args
+                        and {kw.arg for kw in node.keywords} == {
+                            "metadata", "corporate_actions", "bars", "index", "minutes"
+                        }), f"{function.name}: dict constructor"
+
+
 def test_no_row_conversion():
-    tree = ast.parse(inspect.getsource(pack.read_columnar_panel))
-    forbidden = {"append", "to_pylist", "to_pydict", "to_pandas", "read_pack", "validate_json_replay"}
-    assert not [n for n in ast.walk(tree)
-                if (isinstance(n, ast.Attribute) and n.attr in forbidden)
-                or (isinstance(n, ast.Name) and n.id in forbidden)]
+    assert_no_row_conversion(inspect.getsource(pack))
+
+
+@pytest.mark.parametrize("expression", [
+    "table.to_pylist()", "table.to_pydict()", "table.to_pandas()",
+    "bin_pack.read_pack(root)", "read_pack(root)", "_write(source, root, fmt)",
+    '{"open": value}', "dict(open=value)", "dict(pairs)",
+    '[{"open": value} for value in values]', "{key: value for key, value in pairs}",
+])
+def test_no_row_conversion_catches_reader_helpers(expression):
+    source = inspect.getsource(pack) + f"\n\ndef _future_reader_helper():\n    return {expression}\n"
+    with pytest.raises(AssertionError, match="_future_reader_helper"):
+        assert_no_row_conversion(source)
+
+
+@pytest.mark.parametrize("missing", ["instrument", *bin_pack.REQUIRED])
+def test_writer_rejects_partial_columns(tmp_path, bundle, monkeypatch, fmt, missing):
+    bundle["metadata"]["bar_label"] = "OPEN_TIME"
+    source = bin_pack.write_pack(bundle, tmp_path / "bin")
+    pack_columns = bin_pack._pack_columns
+
+    def partial_columns(*args):
+        for j, (inst, symbol, columns) in enumerate(pack_columns(*args)):
+            if j == 1:
+                if missing == "instrument":
+                    return
+                columns.pop(missing)
+            yield inst, symbol, columns
+
+    monkeypatch.setattr(bin_pack, "_pack_columns", partial_columns)
+    target = tmp_path / "twin"
+    with pytest.raises(ValueError, match="required feature coverage"):
+        write(source, target, fmt)
+    assert not target.exists()
 
 
 @pytest.mark.parametrize("fault", ["missing", "truncated", "count", "version", "labels", "mapping",

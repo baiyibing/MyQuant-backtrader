@@ -322,6 +322,8 @@ def validate_pack_replay(pack_root, m, intents, timings):
 
     root = Path(pack_root)
     manifest = _read_json(root / "MANIFEST.json")
+    fmt = manifest.get("format")
+    require(isinstance(fmt, str) and fmt, "MANIFEST format must be a nonempty string")
     bundle = dict(schema_version=manifest["schema_version"], kind=manifest["kind"],
                   metadata=_read_json(root / "metadata.json"),
                   corporate_actions=_read_json(root / "corporate_actions.json"),
@@ -329,7 +331,7 @@ def validate_pack_replay(pack_root, m, intents, timings):
     # Pin every decoded payload, including the calendar and instrument mapping.
     # The manifest supplies hash order; set membership here never invents it.
     index = _read_json(root / "index/instruments.json")
-    if manifest["format"] == "qlib_bin":
+    if fmt == "qlib_bin":
         reader = read_pack_panel
         required_files = {"qlib_bin/calendars/1min.txt", "index/instruments.json"}
         for inst, entry in index.items():
@@ -337,9 +339,9 @@ def validate_pack_replay(pack_root, m, intents, timings):
                 required_files.add(f"qlib_bin/features/{qlib_inst_dir(inst)}/{name}.1min.bin")
     else:
         from backtest.research.joint_return_columnar_pack import FORMATS, read_columnar_panel
-        require(manifest["format"] in FORMATS, "unsupported pack format", "CONTRACT_MISMATCH")
+        require(fmt in FORMATS, "unsupported pack format", "CONTRACT_MISMATCH")
         reader = read_columnar_panel
-        required_files = {FORMATS[manifest["format"]][1], "index/instruments.json",
+        required_files = {FORMATS[fmt][1], "index/instruments.json",
                           "index/minutes.json"}
     files = manifest.get("payload_files")
     require(isinstance(files, list) and all(isinstance(p, str) for p in files)
@@ -351,7 +353,7 @@ def validate_pack_replay(pack_root, m, intents, timings):
         try:
             panel = reader(root)
         except (ValueError, OSError, KeyError, TypeError) as exc:
-            raise ReplayError("INPUT_BLOCKED", f"invalid {manifest['format']} pack: {exc}") from exc
+            raise ReplayError("INPUT_BLOCKED", f"invalid {fmt} pack: {exc}") from exc
     require(panel.instruments == tuple(sorted(mapping))
             and panel.execution_symbols == tuple(mapping[i] for i in panel.instruments),
             "minute execution mapping drift/collision", "SEMANTICS_BLOCKED")

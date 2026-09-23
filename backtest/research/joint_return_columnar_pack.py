@@ -57,9 +57,14 @@ def _write(source, pack_root, fmt):
                   if any(k in entry["features"] for entry in index.values()))
     columns = {k: np.full(shape, 0 if k == "suspended" else np.nan,
                          dtype="uint8" if k == "suspended" else "float32") for k in names}
+    written = {k: np.zeros(shape[1], dtype=bool) for k in bin_pack.REQUIRED}
     for j, (_, _, values) in enumerate(bin_pack._pack_columns(source, timestamps, index)):
         for k, values_k in values.items():
             columns[k][:, j] = values_k
+            if k in written:
+                written[k][j] = True
+    if not all(coverage.all() for coverage in written.values()):
+        raise ValueError("incomplete required feature coverage from bin pack")
     arrays = dict(minute_i=np.repeat(np.arange(shape[0], dtype="uint32"), shape[1]),
                   inst_i=np.tile(np.arange(shape[1], dtype="uint32"), shape[0]))
     arrays.update({k: v.reshape(-1) for k, v in columns.items()})

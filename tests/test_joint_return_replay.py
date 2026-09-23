@@ -1097,6 +1097,8 @@ def sealed_bin_pack(tmp_path, bars, fmt="qlib_bin"):
         files = sorted(["index/instruments.json", "qlib_bin/calendars/1min.txt"] +
                        [p.relative_to(root).as_posix() for p in root.rglob("*.bin")], reverse=True)
     else:
+        # Test-only hash order, not a production dual-write contract. Research
+        # twin writers remain unsealed and emit neither payload_files nor hashes.
         files = [manifest["paths"]["bars"], "index/minutes.json", "index/instruments.json"]
     manifest.update(payload_files=files,
                     bars_payload_raw_sha256=hashlib.sha256(b"".join((root / p).read_bytes() for p in files)).hexdigest(),
@@ -1104,6 +1106,22 @@ def sealed_bin_pack(tmp_path, bars, fmt="qlib_bin"):
                     corporate_actions_content_sha256=jr.content_hash(bars["corporate_actions"]))
     (root / "MANIFEST.json").write_bytes(jr.canonical_bytes(manifest))
     return root
+
+
+@pytest.mark.parametrize("fmt", ["qlib_bin", "parquet", "arrow_ipc"])
+@pytest.mark.parametrize("fault", ["missing", "null"])
+def test_v2_pack_format_fail_closed(tmp_path, fmt, fault):
+    from backtest.research.joint_return_validate_v2 import validate_pack_replay
+    m, rows = bundle([spec(inst="SH600519")])
+    root = sealed_bin_pack(tmp_path, minute_bars(m, rows), fmt)
+    manifest = json.loads((root / "MANIFEST.json").read_text())
+    if fault == "missing":
+        del manifest["format"]
+    else:
+        manifest["format"] = None
+    (root / "MANIFEST.json").write_bytes(jr.canonical_bytes(manifest))
+    with pytest.raises(jr.ReplayError, match="INPUT_BLOCKED.*format"):
+        validate_pack_replay(root, m, rows, jr._PhaseTimings())
 
 
 @pytest.mark.parametrize("label", ["OPEN_TIME", "CLOSE_TIME"])
