@@ -59,85 +59,82 @@ def state():
     return st, hooks
 
 
-def test_minute_cycle_rearms_same_day_and_new_buys_remain_t1_locked():
-    st = minute_run([(600, 9.9), (601, 10), (602, 9.9), (603, 10),
-                     (604, 8.9), (605, 10), (606, 8.9)])
-    assert fills(st) == [("pool", 1000), (rules.REDUCE, 500), (rules.RECLAIM5, 500),
-                         (rules.REDUCE, 200), (rules.RECLAIM5, 200),
-                         (rules.STOP, 300), (rules.RECLAIM10, 300)]
-    assert sum(p.shares for p in st.positions[CODE]) == 1000
-    assert all(p.entry_idx == 1 for p in st.positions[CODE])
-    assert book.memory_for(st, CODE).reduced == rules.Memory()
+def test_minute_stop_does_not_buy_back_when_price_returns_to_the_first_fill():
+    st = minute_run([(600, 9.9), (601, 8.9), (602, 10), (603, 8.9)])
+    assert fills(st) == [("pool", 1000), (rules.STOP, 1000)]
+    assert CODE not in st.positions
+    assert book.memory_for(st, CODE).first_px == 10
+    assert book.memory_for(st, CODE).stopped == rules.Memory(1000, True)
+
+
+def test_price_under_first_fill_does_not_buy_back_the_stop():
+    st = minute_run([(600, 8.9)], extra_days=[[(600, 9.5)]])
+    assert fills(st) == [("pool", 1000), (rules.STOP, 1000)]
+    assert CODE not in st.positions
+    assert book.memory_for(st, CODE).stopped == rules.Memory(1000, True)
+
+
+def test_capacity_limited_stop_is_not_bought_back():
+    st = minute_run([(600, 8.9), (601, 10.1)], caps=[150, 100])
+    assert fills(st) == [("pool", 1000), (rules.STOP, 150)]
+    assert book.memory_for(st, CODE).stopped == rules.Memory(150, True)
+
+
+def test_stop_dust_below_100_is_not_bought():
+    st = minute_run([(600, 8.9), (601, 10.1)], caps=[50, 1000])
+    assert fills(st) == [("pool", 1000), (rules.STOP, 50)]
+    assert book.memory_for(st, CODE).stopped == rules.Memory(50, True)
+
+
+def test_hold20_sells_only_the_aged_lot_below_10pct_and_does_not_arm_buyback():
+    st, _ = state()
+    st.positions[CODE] = [
+        Position(CODE, 1000, 10, -20, 10),
+        Position(CODE, 400, 11, 0, 11, lot_id=1),
+    ]
+    assert book.plan_exit(st, CODE, 11, "20251104", [10.] * 10, day_i=0, ds="20251104") is None
+    assert book.plan_exit(st, CODE, 10.99, "20251104", [10.] * 10, day_i=0, ds="20251104") == (
+        rules.HOLD20, 1000)
+    plan = book.plan_exit(st, CODE, 10.5, "20251104", [10.] * 10, day_i=0, ds="20251104")
+    assert plan == (rules.HOLD20, 1000)
+    assert book.fill_exit(st, CODE, 10.5, "20251104", day_i=0, ds="20251104", plan=plan,
+                          limits=(12., 8.), open_px=10.5) == 1000
+    assert [p.lot_id for p in st.positions[CODE]] == [1]
     assert book.memory_for(st, CODE).stopped == rules.Memory()
 
 
-@pytest.mark.parametrize("channel,px,reason,reclaim", [
-    ("reduced", 9.9, rules.REDUCE, rules.RECLAIM5),
-    ("stopped", 8.9, rules.STOP, rules.RECLAIM10),
-])
-def test_capacity_residual_retained_rearmed_then_merged(channel, px, reason, reclaim):
-    first = minute_run([(600, px), (601, 10)], caps=[150, 100])
-    mem = getattr(book.memory_for(first, CODE), channel)
-    assert (mem.shares, mem.latched) == (50, False)
-    assert fills(first) == [("pool", 1000), (reason, 150), (reclaim, 100)]
-    full = minute_run([(600, px), (601, 10), (602, px), (603, 10)], caps=[150, 100, 250, 300])
-    assert fills(full) == [("pool", 1000), (reason, 150), (reclaim, 100),
-                           (reason, 250), (reclaim, 300)]
-    assert getattr(book.memory_for(full, CODE), channel) == rules.Memory()
-    assert sum(p.shares for p in full.positions[CODE]) == 1000
+def test_ma5_dip_does_not_sell():
+    st = minute_run([(600, 10.1)], extra_days=[[(600, 10.1)], [(600, 10.1)]])
+    assert fills(st) == [("pool", 1000)]
+    assert book.memory_for(st, CODE).stopped == rules.Memory()
 
 
-@pytest.mark.parametrize("channel,px,reason", [("reduced", 9.9, rules.REDUCE),
-                                              ("stopped", 8.9, rules.STOP)])
-def test_residual_below100_qualified_reclaim_without_buy(channel, px, reason):
-    first = minute_run([(600, px), (601, 10)], caps=[50, 1000])
-    mem = getattr(book.memory_for(first, CODE), channel)
-    assert (mem.shares, mem.latched) == (50, False)
-    assert fills(first) == [("pool", 1000), (reason, 50)]
-    full = minute_run([(600, px), (601, 10), (602, px)], caps=[50, 1000, 50])
-    assert getattr(book.memory_for(full, CODE), channel).shares == 100
-    assert fills(full)[-1] == (reason, 50)
+def test_stop_does_not_spend_cash_buying_back():
+    st = minute_run([(600, 8.9), (601, 10)], total_cash=10010)
+    assert fills(st) == [("pool", 1000), (rules.STOP, 1000)]
+    assert st.stats["skip_cash"] == 0
+    assert book.memory_for(st, CODE).stopped == rules.Memory(1000, True)
 
 
-def test_uninterrupted_below_cycle_does_not_reduce_again_on_later_days():
-    st = minute_run([(600, 9.9)], extra_days=[[(600, 9.9)], [(600, 9.9)]])
-    assert fills(st) == [("pool", 1000), (rules.REDUCE, 500)]
-    assert book.memory_for(st, CODE).reduced == rules.Memory(500, True)
+def test_later_bars_do_not_buy_back_a_capacity_limited_stop():
+    st = minute_run([(600, 8.9), (601, 10.1), (602, 10.1)], caps=[500, 0, 200])
+    assert fills(st) == [("pool", 1000), (rules.STOP, 500)]
+    assert book.memory_for(st, CODE).stopped == rules.Memory(500, True)
+    assert rules.RECLAIM_FIRST not in {reason for reason, _ in fills(st)}
 
 
-def test_stopped_memory_survives_flat_position_until_later_day_reclaim():
-    st = minute_run([(600, 8.9)], extra_days=[[(600, 10)]])
-    assert fills(st) == [("pool", 1000), (rules.STOP, 1000), (rules.RECLAIM10, 1000)]
-    assert st.positions[CODE][0].entry_idx == 2
-
-
-def test_insufficient_cash_keeps_memory_and_latch():
-    st = minute_run([(600, 9.9), (601, 10)], total_cash=10010)
-    assert fills(st) == [("pool", 1000), (rules.REDUCE, 500)]
-    assert st.stats["skip_cash"] == 1
-    assert st.stats["skip_cash_notional"] == 5000
-    assert book.memory_for(st, CODE).reduced == rules.Memory(500, True)
-
-
-def test_cash_retry_and_capacity_failure_do_not_rearm_early():
-    st = minute_run([(600, 9.9), (601, 10), (602, 10)], caps=[500, 0, 200])
-    assert fills(st)[-1] == (rules.RECLAIM5, 200)
-    assert book.memory_for(st, CODE).reduced == rules.Memory(300, True)
-    assert st.stats["skip_volume_cap"] == 1
-
-
-def test_pool_fill_clears_both_memories_before_same_clock_buyback():
+def test_pool_fill_clears_stop_memory_before_same_clock_buyback():
     st = minute_run([(600, 9.9), (601, 8.9), (895, 10)],
                     pool={"20251103": [CODE], "20251104": [CODE]})
-    assert fills(st) == [("pool", 1000), (rules.REDUCE, 500), (rules.STOP, 500), ("pool", 1000)]
-    assert book.memory_for(st, CODE).reduced == rules.Memory()
+    assert fills(st) == [("pool", 1000), (rules.STOP, 1000), ("pool", 1000)]
+    assert book.memory_for(st, CODE).first_px == 10
     assert book.memory_for(st, CODE).stopped == rules.Memory()
 
 
-def test_dual_channels_reclaim_independently_after_same_day_stop():
+def test_same_day_return_to_the_first_price_does_not_buy_back():
     st = minute_run([(600, 9.9), (601, 8.9), (602, 10)])
-    assert fills(st) == [("pool", 1000), (rules.REDUCE, 500), (rules.STOP, 500),
-                         (rules.RECLAIM5, 500), (rules.RECLAIM10, 500)]
+    assert fills(st) == [("pool", 1000), (rules.STOP, 1000)]
+    assert book.memory_for(st, CODE).stopped == rules.Memory(1000, True)
 
 
 def test_chase_and_pool_use_existing_clocks_and_chase_resets_memory():
@@ -166,11 +163,12 @@ def test_step_counter_remains_monotonic_after_step_lot_is_sold():
     assert book.memory_for(st, CODE).steps == 1
     step = st.positions[CODE][-1]
     assert step.is_step
-    plan = book.plan_exit(st, CODE, 9.9, "20251105", [10.] * 10, day_i=2, ds="20251105")
-    assert plan == (rules.REDUCE, 900)
-    assert book.fill_exit(st, CODE, 9.9, "20251105", day_i=2, ds="20251105", plan=plan,
-                          limits=(12., 8.), open_px=9.9) == 900
-    assert step not in st.positions[CODE]
+    assert book.plan_exit(st, CODE, 10.1, "20251105", [10.] * 10, day_i=2, ds="20251105") is None
+    plan = book.plan_exit(st, CODE, 8.9, "20251105", [10.] * 10, day_i=2, ds="20251105")
+    assert plan[0] == rules.STOP
+    assert book.fill_exit(st, CODE, 8.9, "20251105", day_i=2, ds="20251105", plan=plan,
+                          limits=(12., 8.), open_px=8.9) == plan[1]
+    assert CODE not in st.positions
     run_step_adds_day(st, **kwargs)
     assert len([t for t in st.trades if t["side"] == "BUY"]) == 2
     assert book.memory_for(st, CODE).steps == 1
@@ -191,7 +189,7 @@ def test_exdiv_scaling_is_explicit_deduplicated_and_covers_flat_memory(monkeypat
         return st, pending, names
 
     monkeypatch.setattr(engine, "init_sim_state", seeded)
-    mins, days, dates = bars_for([[(600, 9.8), (601, 9.8)]], daily_closes=[9.8])
+    mins, days, dates = bars_for([[(600, 10.2), (601, 10.2)]], daily_closes=[10.2])
     event = ExDivEvent("s12-bonus", .5, 0, "20251103", "20251103", "20251105")
     args = (days, {}, "20251103", "20251103") if engine is daily else (mins, days, {}, "20251103", "20251103")
     baseline = engine.simulate(*args, strategy="12")
@@ -207,64 +205,64 @@ def test_exdiv_scaling_is_explicit_deduplicated_and_covers_flat_memory(monkeypat
         assert book.sell_lots(st, CODE, 0, "20251103")[0].sellable == 1000
 
 
-def test_buyback_limit_up_preserves_whole_lot_memory():
+def test_closed_buyback_plan_does_not_touch_limit_up_or_memory():
     st, hooks = state()
-    book.memory_for(st, CODE).reduced.sold(500)
+    mem = book.memory_for(st, CODE)
+    mem.first_px = 10
+    mem.stopped.sold(500)
     run_buybacks_day(st, day_i=1, day="20251104", ds="20251104", names={}, codes=[CODE],
                      buy_quote_for=lambda code: (12, [10.] * 10),
                      buyback_plan=hooks["buyback_plan"], on_reclaim=hooks["on_reclaim"])
-    assert not st.trades and st.stats["skip_limit_up"] == 1
-    assert book.memory_for(st, CODE).reduced == rules.Memory(500, True)
+    assert not st.trades and st.stats["skip_limit_up"] == 0
+    assert book.memory_for(st, CODE).stopped == rules.Memory(500, True)
 
 
-def test_daily_signal_uses_next_open_and_reclaims_at_close():
-    _, bars, dates = bars_for([[(895, 10)], [(895, 9.9)], [(895, 10)]], daily_closes=[10, 9.9, 10])
+def test_daily_signal_uses_next_open_and_does_not_buy_back():
+    _, bars, dates = bars_for([[(895, 10)], [(895, 8.9)], [(895, 10)]], daily_closes=[10, 8.9, 10])
     bars[CODE].loc[dates[2], "open"] = 9.8
     st = daily.simulate(bars, {"20251103": [CODE]}, "20251103", "20251105",
                         strategy="12", name_budget=10000)
-    assert fills(st) == [("pool", 1000), (rules.REDUCE, 500), (rules.RECLAIM5, 500)]
+    assert fills(st) == [("pool", 1000), (rules.STOP, 1000)]
     sale = next(t for t in st.trades if t["side"] == "SELL")
     assert (sale["date"], sale["price"], sale["price_rule"]) == ("20251105", 9.8, "daily_pending_next_open")
-    assert all(not p.pending_exit for p in st.positions[CODE])
+    assert CODE not in st.positions
 
 
 def test_daily_limit_down_defers_independent_partial_queue():
-    _, bars, dates = bars_for([[(895, 10)], [(895, 9.9)], [(895, 9.9)], [(895, 10)]],
-                              daily_closes=[10, 9.9, 9.9, 10])
-    bars[CODE].loc[dates[2], "open"] = 7.92
-    bars[CODE].loc[dates[3], "open"] = 9.8
+    _, bars, dates = bars_for([[(895, 10)], [(895, 8.9)], [(895, 8.9)], [(895, 9.5)]],
+                              daily_closes=[10, 8.9, 8.9, 9.5])
+    bars[CODE].loc[dates[2], "open"] = 7.12
+    bars[CODE].loc[dates[3], "open"] = 8.8
     st = daily.simulate(bars, {"20251103": [CODE]}, "20251103", "20251106",
                         strategy="12", name_budget=10000)
-    assert fills(st) == [("pool", 1000), (rules.REDUCE, 500), (rules.RECLAIM5, 500)]
+    assert fills(st) == [("pool", 1000), (rules.STOP, 1000)]
     sale = next(t for t in st.trades if t["side"] == "SELL")
     assert sale["date"] == "20251106" and st.stats["defer_sell_limit_down"] == 1
 
 
 def test_daily_deferred_derisk_sells_signal_time_lot_not_the_same_day_add():
-    _, bars, dates = bars_for([[(895, 10)], [(895, 9.9)], [(895, 9.9)]],
-                              daily_closes=[10, 9.9, 9.9])
-    bars[CODE].loc[dates[2], "open"] = 9.8
+    _, bars, dates = bars_for([[(895, 10.1)], [(895, 10.1)], [(895, 10.1)]],
+                              daily_closes=[10.1, 10.1, 10.1])
+    bars[CODE].loc[dates[2], "open"] = 10.1
     st = daily.simulate(bars, {"20251103": [CODE], "20251104": [CODE]},
                         "20251103", "20251105", strategy="12", name_budget=10000)
-    assert fills(st) == [("pool", 1000), ("pool", 1000), (rules.REDUCE, 500)]
-    assert {p.lot_id: p.shares for p in st.positions[CODE]} == {0: 500, 1: 1000}
-    assert book.memory_for(st, CODE).reduced == rules.Memory(500, True)
-
-
-def test_daily_deferred_stop_clears_signal_time_lot_and_keeps_the_add():
-    _, bars, dates = bars_for([[(895, 10)], [(895, 8.9)], [(895, 10)]],
-                              daily_closes=[10, 8.9, 10])
-    bars[CODE].loc[dates[2], "open"] = 8.9
-    st = daily.simulate(bars, {"20251103": [CODE], "20251104": [CODE]},
-                        "20251103", "20251105", strategy="12", name_budget=10000)
-    assert fills(st) == [("pool", 1000), ("pool", 1100), (rules.STOP, 1000),
-                         (rules.RECLAIM10, 1000)]
-    assert {p.lot_id: p.shares for p in st.positions[CODE]} == {1: 1100, 2: 1000}
+    assert fills(st) == [("pool", 900), ("pool", 900)]
+    assert {p.lot_id: p.shares for p in st.positions[CODE]} == {0: 900, 1: 900}
     assert book.memory_for(st, CODE).stopped == rules.Memory()
 
 
+def test_daily_deferred_stop_clears_signal_time_lot_and_keeps_the_add():
+    _, bars, dates = bars_for([[(895, 10)], [(895, 8.9)], [(895, 9.5)]],
+                              daily_closes=[10, 8.9, 9.5])
+    bars[CODE].loc[dates[2], "open"] = 8.9
+    st = daily.simulate(bars, {"20251103": [CODE], "20251104": [CODE]},
+                        "20251103", "20251105", strategy="12", name_budget=10000)
+    assert fills(st) == [("pool", 1000), ("pool", 1100), (rules.STOP, 1000)]
+    assert {p.lot_id: p.shares for p in st.positions[CODE]} == {1: 1100}
+    assert book.memory_for(st, CODE).stopped == rules.Memory(1000, True)
+
+
 @pytest.mark.parametrize("px,reason,channel,sold,chased,remaining", [
-    (9.9, rules.REDUCE, "reduced", 500, 1000, {0: 500, 1: 1000}),
     (8.9, rules.STOP, "stopped", 1000, 1100, {1: 1100}),
 ])
 def test_daily_deferred_exit_keeps_same_day_chase_lot(
@@ -296,24 +294,26 @@ def test_daily_deferred_derisk_keeps_same_day_step_lot(monkeypatch):
         st, pending, names = real_init(*args, **kwargs)
         # An older low-cost holding can step up while close remains below MA5.
         # Buying at 7 then jumping straight to 9 would block at daily limit-up.
-        st.positions[CODE] = [Position(CODE, 1400, 7, -1, 10)]
+        st.positions[CODE] = [Position(CODE, 1400, 8.5, -1, 10)]
         return st, pending, names
 
     monkeypatch.setattr(daily, "init_sim_state", seeded)
-    _, bars, _ = bars_for([[(895, 9)], [(895, 9)]], daily_closes=[9, 9])
+    # 10.20 is one 20% step above the 8.50 anchor and stays above yesterday's MA10.
+    _, bars, _ = bars_for([[(895, 10.20)], [(895, 10.20)]], daily_closes=[10.20, 10.20])
     queued = daily.simulate(bars, {}, "20251103", "20251103",
-                            strategy="12", name_budget=10000)
-    assert fills(queued) == [("add:step20", 1100)]
-    assert queued.book_state["partial_exits"][CODE] == (rules.REDUCE, 700, [(0, 700)])
-    assert {p.lot_id: p.shares for p in queued.positions[CODE]} == {0: 1400, 1: 1100}
-    assert book.memory_for(queued, CODE).reduced == rules.Memory()
+                            strategy="12", name_budget=10000,
+                            index_block_new={pd.Timestamp("20251103").date(): True})
+    assert fills(queued) == [("add:step20", 900)]
+    assert CODE not in queued.book_state.get("partial_exits", {})
+    assert {p.lot_id: p.shares for p in queued.positions[CODE]} == {0: 1400, 1: 900}
 
     st = daily.simulate(bars, {}, "20251103", "20251104",
-                        strategy="12", name_budget=10000)
-    assert fills(st) == [("add:step20", 1100), (rules.REDUCE, 700)]
-    assert {p.lot_id: p.shares for p in st.positions[CODE]} == {0: 700, 1: 1100}
+                        strategy="12", name_budget=10000,
+                        index_block_new={pd.Timestamp("20251103").date(): True,
+                                         pd.Timestamp("20251104").date(): True})
+    assert fills(st) == [("add:step20", 900)]
+    assert {p.lot_id: p.shares for p in st.positions[CODE]} == {0: 1400, 1: 900}
     assert st.positions[CODE][-1].is_step
-    assert book.memory_for(st, CODE).reduced == rules.Memory(700, True)
     assert book.memory_for(st, CODE).steps == 1
 
 
@@ -352,11 +352,47 @@ def test_scanner_keeps_five_tuple_and_reports_partial_size_out_param():
     assert out == {"shares": 500}
 
 
+def test_sse_gate_blocks_new_names_and_keeps_held_adds_and_steps():
+    mins, days, dates = bars_for([[(895, 10.)], [(895, 10.5)]])
+    blocked = dates[1].date()
+    held = minute.simulate(
+        mins, days, {"20251103": [CODE], "20251104": [CODE]},
+        "20251103", "20251104", strategy="12", name_budget=10000,
+        index_block_new={blocked: True},
+    )
+    assert [reason for reason, _shares in fills(held)] == ["pool", "pool"]
+    assert held.stats["skip_index_gate"] == 0
+
+    fresh = minute.simulate(
+        mins, days, {"20251104": [CODE]},
+        "20251103", "20251104", strategy="12", name_budget=10000,
+        index_block_new={blocked: True},
+    )
+    assert fills(fresh) == []
+    assert fresh.stats["skip_index_gate"] >= 1
+
+    chase_mins, chase_days, chase_dates = bars_for([[(895, 12.)], [(570, 10.), (585, 10.1)]])
+    chased = minute.simulate(
+        chase_mins, chase_days, {"20251103": [CODE]},
+        "20251103", "20251104", strategy="12", name_budget=10000,
+        index_block_new={chase_dates[1].date(): True},
+    )
+    assert fills(chased) == []
+    assert chased.stats["chase_buy"] == 0
+    assert chased.stats["skip_index_gate"] >= 1
+
+    hooks = apply_csv_strategy("12", index_block_new={blocked: True})
+    assert hooks["index_blocks_add"] is False
+    assert hooks["allow_new_name"](blocked) is False
+    assert hooks["allow_new_name"](dates[0].date()) is True
+
+
 def test_memory_is_per_run_and_wiring_does_not_inherit_v8_exits():
-    st1 = minute_run([(600, 9.9)])
-    st2 = minute_run([(600, 10)])
-    assert book.memory_for(st1, CODE).reduced.shares == 500
-    assert book.memory_for(st2, CODE).reduced.shares == 0
+    st1 = minute_run([(600, 10.1)])
+    st2 = minute_run([(600, 10.1)])
+    assert book.memory_for(st1, CODE).stopped.shares == 0
+    assert book.memory_for(st1, CODE).first_px == 10
+    assert book.memory_for(st2, CODE).stopped.shares == 0
     hooks = apply_csv_strategy("version12")
     assert hooks["take_profit"](1, 2, 3, 4) is None
     assert hooks["stop_pct"] is None
@@ -518,27 +554,28 @@ def test_locked_bonus_is_excluded_from_reduction_base_and_fill_memory():
     st.positions[CODE] = [pos]
     st.exdiv_economics = ExDivEconomics({})
     st.exdiv_economics.bonus_locks[id(pos)] = {"20251105": 500}
-    plan = book.plan_exit(st, CODE, 9.9, "20251104", [10.] * 10, day_i=1, ds="20251104")
-    assert plan == (rules.REDUCE, 500)
-    assert book.fill_exit(st, CODE, 9.9, "20251104", day_i=1, ds="20251104", plan=plan,
-                          limits=(12., 8.), open_px=9.9) == 500
-    assert book.memory_for(st, CODE).reduced.shares == 500
-    assert pos.shares == 1000
+    plan = book.plan_exit(st, CODE, 8.9, "20251104", [10.] * 10, day_i=1, ds="20251104")
+    assert plan == (rules.STOP, 1000)
+    assert book.fill_exit(st, CODE, 8.9, "20251104", day_i=1, ds="20251104", plan=plan,
+                          limits=(12., 8.), open_px=8.9) == 1000
+    assert book.memory_for(st, CODE).stopped.shares == 1000
+    assert pos.shares == 500
 
 
-@pytest.mark.parametrize("channel", ["reduced", "stopped"])
-def test_daily_sub100_no_buy_qualified_reclaim_rearms_without_clearing(monkeypatch, channel):
+def test_daily_sub100_stop_memory_is_not_bought_at_the_first_price(monkeypatch):
     real_init = daily.init_sim_state
 
     def seeded(*args, **kwargs):
         st, pending, names = real_init(*args, **kwargs)
-        getattr(book.memory_for(st, CODE), channel).sold(50)
+        mem = book.memory_for(st, CODE)
+        mem.first_px = 10
+        mem.stopped.sold(50)
         return st, pending, names
 
     monkeypatch.setattr(daily, "init_sim_state", seeded)
     _, bars, _ = bars_for([[(895, 10)]])
     st = daily.simulate(bars, {}, "20251103", "20251103", strategy="12")
-    assert getattr(book.memory_for(st, CODE), channel) == rules.Memory(50, False)
+    assert book.memory_for(st, CODE).stopped == rules.Memory(50, True)
     assert fills(st) == []
 
 
@@ -556,6 +593,6 @@ def test_daily_stop_keeps_odd_residual_and_merges_next_stop(monkeypatch):
     bars[CODE].loc[dates[1], "open"] = 8.8
     bars[CODE].loc[dates[3], "open"] = 8.8
     st = daily.simulate(bars, {}, "20251103", "20251106", strategy="12")
-    assert fills(st) == [(rules.STOP, 1050), (rules.RECLAIM10, 1000),
-                         (rules.STOP, 1000), (rules.RECLAIM10, 1000)]
-    assert book.memory_for(st, CODE).stopped == rules.Memory(50, False)
+    assert fills(st) == [(rules.STOP, 1050)]
+    assert book.memory_for(st, CODE).stopped == rules.Memory(1050, True)
+    assert CODE not in st.positions

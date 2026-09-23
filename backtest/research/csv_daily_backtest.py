@@ -669,7 +669,15 @@ def run(
         exdiv = load_exdiv_ratios(all_codes, start, end, skipped_out=skipped)
     index_block_new = None
     gate_book = normalize_csv_strategy(strategy)
-    if gate_book == "version8_4":
+    if gate_book == "version12":
+        from backtest.research.strategy12_rules import (
+            INDEX_GATE_ON,
+            load_sse_ma10_block_new,
+        )
+
+        if INDEX_GATE_ON:
+            index_block_new = load_sse_ma10_block_new(start, end)
+    elif gate_book == "version8_4":
         from backtest.research.strategy8_4_rules import (
             INDEX_GATE_ON,
             load_sse_ma10_block_new,

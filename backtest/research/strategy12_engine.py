@@ -37,6 +37,10 @@ def on_buy(st, code, reason, shares) -> None:
     if shares <= 0:
         return
     mem = memory_for(st, code)
+    if mem.first_px is None:
+        lots = st.positions.get(code) or []
+        if lots and float(lots[-1].cost) > 0:
+            mem.first_px = float(lots[-1].cost)
     if reason == "pool" or reason.startswith("chase"):
         mem.fresh_buy()
     elif reason == "add:step20":
@@ -57,7 +61,10 @@ def sell_lots(st, code, day_i, ds) -> list[rules.SellLot]:
         available = pos.shares if pos.entry_idx < day_i else 0
         if st.exdiv_economics is not None:
             available = max(0, available - _locked_bonus(st.exdiv_economics, pos, ds))
-        result.append(rules.SellLot(pos.lot_id, pos.shares, available, pos.is_step))
+        result.append(rules.SellLot(
+            pos.lot_id, pos.shares, available, pos.is_step,
+            n_days=day_i - pos.entry_idx, cost=float(pos.cost),
+        ))
     return result
 
 
@@ -67,33 +74,32 @@ def plan_exit(st, code, px, day, closes, *, day_i, ds):
 
 
 def plan_buybacks(st, code, px, day, closes):
-    del day
-    mem = memory_for(st, code)
-    plans = []
-    for channel in ("reduced", "stopped"):
-        item = getattr(mem, channel)
-        if not item.shares and not item.latched:
-            continue
-        reason = rules.reclaim_signal(px, closes, channel=channel)
-        if reason:
-            plans.append((reason, rules.buyback_plan(px, closes, item, channel=channel)))
-    return plans
+    """Stop buyback is closed. Price returning to the first fill buys nothing."""
+    del st, code, px, day, closes
+    return []
 
 
 def on_reclaim(st, code, reason, shares):
+    if reason == rules.RECLAIM_FIRST:
+        memory_for(st, code).stopped.reclaimed(shares)
+        return
     channel = "reduced" if reason == rules.RECLAIM5 else "stopped"
     getattr(memory_for(st, code), channel).reclaimed(shares)
 
 
-def queue_exit(st, code, plan, *, day_i, ds):
+def queue_exit(st, code, plan, *, day_i, ds, px=None):
     """Pin a deferred daily exit to the lots sellable when the close signalled.
 
     Without this the next open re-allocates onto pool/chase/step lots bought
     after the signal, leaving the measured lot held and the cycle latched.
     """
-    reason, wanted = plan
-    return reason, wanted, rules.allocate_exit(sell_lots(st, code, day_i, ds), wanted,
-                                               keep_anchor=reason == rules.REDUCE)
+    reason, wanted = plan[0], plan[1]
+    lots = sell_lots(st, code, day_i, ds)
+    if reason == rules.HOLD20:
+        pinned = rules.hold20_orders(lots, 0.0 if px is None else px)
+    else:
+        pinned = rules.allocate_exit(lots, wanted, keep_anchor=reason == rules.REDUCE)
+    return reason, wanted, pinned
 
 
 def fill_exit(st, code, px, day, *, day_i, ds, plan, limits, open_px,
@@ -103,6 +109,8 @@ def fill_exit(st, code, px, day, *, day_i, ds, plan, limits, open_px,
         return 0
     reason, wanted, planned = plan[0], plan[1], plan[2] if len(plan) > 2 else None
     lots = sell_lots(st, code, day_i, ds)
+    if reason == rules.HOLD20 and planned is None:
+        planned = rules.hold20_orders(lots, px)
     orders = (rules.clamp_exit(lots, planned, keep_anchor=reason == rules.REDUCE) if planned is not None
               else rules.allocate_exit(lots, wanted, keep_anchor=reason == rules.REDUCE))
     filled = 0
@@ -110,8 +118,10 @@ def fill_exit(st, code, px, day, *, day_i, ds, plan, limits, open_px,
         pos = next(p for p in st.positions[code] if p.lot_id == lot_id)
         filled += _sell(st, code, pos, px, day, reason, wanted_shares=shares,
                         day_i=day_i, bucket_id=bucket_id, price_rule=price_rule)
-    channel = "reduced" if reason == rules.REDUCE else "stopped"
-    getattr(memory_for(st, code), channel).sold(filled)
+    if reason == rules.STOP:
+        memory_for(st, code).stopped.sold(filled)
+    elif reason == rules.REDUCE:
+        memory_for(st, code).reduced.sold(filled)
     return filled
 
 
@@ -141,6 +151,8 @@ def _normal_buys(st, pending_chase, *, hooks, day_i, day, ds, names, pool_days,
     run_chase_due_day(st, pending_chase, day_i=day_i, day=day, ds=ds,
                       names=names, allow_add=True, buy_gate=None,
                       quotes_for=chase_quote, exdiv=exdiv,
+                      allow_new_name=hooks.get("allow_new_name"),
+                      index_blocks_add=bool(hooks.get("index_blocks_add", False)),
                       volume_bucket_for=volume_bucket_for)
     run_pool_buys_day(st, pending_chase, day_i=day_i, day=day, ds=ds,
                       pool_days=pool_days, daily_quota=daily_quota,
@@ -149,6 +161,8 @@ def _normal_buys(st, pending_chase, *, hooks, day_i, day, ds, names, pool_days,
                       name_budget=hooks["name_budget"], exdiv=exdiv,
                       ration=hooks["ration"] if ration is None else ration,
                       ration_seed=hooks["ration_seed"],
+                      allow_new_name=hooks.get("allow_new_name"),
+                      index_blocks_add=bool(hooks.get("index_blocks_add", False)),
                       volume_bucket_for=volume_bucket_for)
     run_step_adds_day(st, day_i=day_i, day=day, ds=ds, names=names,
                       buy_quote_for=pool_quote, sizing="per_name",
@@ -189,7 +203,9 @@ def run_daily_day(st, pending_chase, *, hooks, bars, pool_days, day_i, day,
         plan = hooks["exit_plan"](st, code, float(row["close"]), day, closes,
                                   day_i=day_i, ds=ds)
         if plan is not None and (code not in pending or plan[0] == rules.STOP):
-            pending[code] = queue_exit(st, code, plan, day_i=day_i, ds=ds)
+            pending[code] = queue_exit(
+                st, code, plan, day_i=day_i, ds=ds, px=float(row["close"]),
+            )
 
     def quote(code):
         frame = bars.get(code)

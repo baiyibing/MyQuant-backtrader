@@ -29,17 +29,19 @@ def test_ma_boundaries_and_stop_priority():
     lots = [r.SellLot(0, 1000, 1000)]
     assert r.de_risk_signal(10, [10] * 10) is None
     assert r.reclaim_signal(10, [10] * 10) == r.RECLAIM5
-    assert r.exit_plan("x", 9, None, [10] * 10, lots, memory=mem) == (r.REDUCE, 500)
+    line = r.stop_line(10)
+    assert r.exit_plan("x", line + 0.01, None, [10] * 10, lots, memory=mem) is None
+    assert r.exit_plan("x", line, None, [10] * 10, lots, memory=mem) == (r.STOP, 1000)
     assert r.exit_plan("x", 8.99, None, [10] * 10, lots, memory=mem) == (r.STOP, 1000)
 
 
 def test_t1_sellable_base_rounding_order_and_anchor():
     lots = [r.SellLot(0, 250, 250), r.SellLot(1, 300, 300),
             r.SellLot(2, 200, 200, True), r.SellLot(3, 900, 0)]
-    assert r.exit_plan("x", 9.9, None, [10] * 10, lots, memory=r.CodeMemory()) == (r.REDUCE, 300)
+    assert r.exit_plan("x", 10.1, None, [10] * 10, lots, memory=r.CodeMemory()) is None
     assert r.allocate_exit(lots, 300, keep_anchor=True) == [(2, 200), (1, 100)]
     assert r.allocate_exit(lots, 1000, keep_anchor=True) == [(2, 200), (1, 300), (0, 150)]
-    assert r.exit_plan("x", 9.9, None, [10] * 10, [r.SellLot(0, 100, 100)], memory=r.CodeMemory()) is None
+    assert r.exit_plan("x", 10.1, None, [10] * 10, [r.SellLot(0, 100, 100)], memory=r.CodeMemory()) is None
 
 
 def test_clamp_exit_keeps_the_planned_lots_and_ignores_post_plan_adds():
@@ -68,39 +70,43 @@ def test_clamp_exit_reapplies_derisk_anchor_but_stop_and_other_lots_can_clear(
                         keep_anchor=keep_anchor) == expected
 
 
-@pytest.mark.parametrize("channel", ["reduced", "stopped"])
-def test_partial_buyback_preserves_residual_rearms_and_merges_next_round(channel):
-    code = r.CodeMemory()
-    mem = getattr(code, channel)
-    mem.sold(150)
-    assert mem.latched
-    assert r.buyback_plan(10, [10] * 10, mem, channel=channel) == 100
-    mem.reclaimed(100)
-    assert (mem.shares, mem.latched) == (50, False)
-    mem.sold(250)
-    assert mem.shares == 300
-    assert r.buyback_plan(10, [10] * 10, mem, channel=channel) == 300
+def test_stop_buyback_is_closed_even_at_the_first_fill():
+    stopped = r.Memory()
+    stopped.sold(150)
+    assert r.buyback_plan(10, [10] * 10, stopped, channel="stopped") == 0
+    assert r.stop_buyback_shares(9.99, 10, stopped) == 0
+    assert r.stop_buyback_shares(10, 10, stopped) == 0
+    assert (stopped.shares, stopped.latched) == (150, True)
 
 
-@pytest.mark.parametrize("channel", ["reduced", "stopped"])
-def test_sub100_no_buy_qualified_reclaim_preserves_and_rearms(channel):
+def test_partial_reclaim_keeps_dust_on_the_memory_type():
+    stopped = r.Memory()
+    stopped.sold(150)
+    stopped.reclaimed(100)
+    assert (stopped.shares, stopped.latched) == (50, False)
+    assert r.stop_buyback_shares(10, 10, stopped) == 0
+
+
+def test_sub100_stop_memory_is_not_bought_back():
     mem = r.Memory()
     mem.sold(50)
-    assert r.reclaim_signal(10, [10] * 10, channel=channel)
-    assert r.buyback_plan(10, [10] * 10, mem, channel=channel) == 0
-    mem.reclaimed()
-    assert (mem.shares, mem.latched) == (50, False)
+    assert r.stop_buyback_shares(10, 10, mem) == 0
+    assert (mem.shares, mem.latched) == (50, True)
 
 
-def test_cycle_only_same_day_rederisk_and_partial_fill_stays_pending():
-    mem = r.CodeMemory()
-    mem.reduced.sold(500)
-    lots = [r.SellLot(0, 500, 500), r.SellLot(1, 500, 0)]
-    assert r.exit_plan("x", 9.9, "20251104", [10] * 10, lots, memory=mem) is None
-    mem.reduced.reclaimed(200)
-    assert mem.reduced.latched  # Still a whole-lot buyback outstanding.
-    mem.reduced.reclaimed(300)
-    assert r.exit_plan("x", 9.9, "20251104", [10] * 10, lots, memory=mem) == (r.REDUCE, 200)
+def test_hold20_clears_gains_below_10pct_and_keeps_exact_10pct():
+    lots = [
+        r.SellLot(0, 1000, 1000, n_days=20, cost=10),
+        r.SellLot(1, 400, 400, n_days=19, cost=10),
+        r.SellLot(2, 300, 300, n_days=20, cost=9),
+        r.SellLot(3, 200, 0, n_days=20, cost=12),
+    ]
+    assert r.hold20_orders(lots, 9) == [(0, 1000), (2, 300)]
+    assert r.hold20_orders(lots, 10) == [(0, 1000)]
+    assert r.hold20_orders(lots, 10.99) == [(0, 1000)]
+    assert r.hold20_orders(lots, 11) == []
+    assert r.exit_plan("x", 10.05, None, [10] * 10, lots, memory=r.CodeMemory()) == (r.HOLD20, 1000)
+    assert r.exit_plan("x", 9, None, [10] * 10, lots, memory=r.CodeMemory())[0] == r.STOP
 
 
 def test_channels_independent_and_fresh_buy_clears_both():
@@ -125,6 +131,14 @@ def test_step_count_does_not_depend_on_surviving_step_lots():
     lots = [SimpleNamespace(lot_id=0, cost=10)]
     assert not r.step_add_due(lots, 12, memory=mem)
     assert r.step_add_due(lots, 14, memory=mem)
+    assert not r.step_add_due([], 14, memory=r.CodeMemory(first_px=10))
+    held = r.CodeMemory(steps=1, first_px=10)
+    step_only = [SimpleNamespace(lot_id=1, cost=12)]
+    assert not r.step_add_due(step_only, 12, memory=held)
+    assert r.step_add_due(step_only, 14, memory=held)
+    # A later lot-0 cost does not replace the first fill.
+    assert r.step_add_due([SimpleNamespace(lot_id=0, cost=20)], 12,
+                          memory=r.CodeMemory(first_px=10))
 
 
 def test_help_pins_human_cuts():
@@ -141,5 +155,8 @@ def test_help_pins_human_cuts():
         "px==open",
         "5+",
         "最低佣金",
+        "force_sell:hold20_below10",
+        "000001.SH",
+        "skip_index_gate",
     ):
         assert text in r.HELP_LOCK

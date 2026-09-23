@@ -645,7 +645,7 @@ def _run_kwargs_version6(args) -> dict:
     return {"strategy": "version6", **strategy6_kwargs_from_args(args)}
 
 
-def _apply_version12(**_) -> dict:
+def _apply_version12(*, index_block_new=None, **_) -> dict:
     from backtest.research import strategy12_engine
 
     return {
@@ -655,7 +655,8 @@ def _apply_version12(**_) -> dict:
         "reserve_limit_up": False,
         "defer_limit_up": False,
         "daily_same_bar_prefixes": (),
-        "index_blocks_add": False,
+        "allow_new_name": strategy12_rules.allow_new_name_from_gate(index_block_new),
+        "index_blocks_add": strategy12_rules.INDEX_BLOCKS_ADD,
         "exit_plan": strategy12_engine.plan_exit,
         "buyback_plan": strategy12_engine.plan_buybacks,
         "on_reclaim": strategy12_engine.on_reclaim,

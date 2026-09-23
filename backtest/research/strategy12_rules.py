@@ -7,19 +7,33 @@ T+1/bonus-filtered sellable lots and owns the per-run Memory instances.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import date
 from decimal import Decimal
 from math import isfinite
+from typing import Callable, Mapping, Optional
 
 from backtest.research.ma_infra import sma_asof
+from backtest.research.market_layer import as_date
+from backtest.research.strategy7_rules import build_index_gate
 
 BOOK_TAG = "v12"
 ALLOW_ADD = True
 PEAK_GAP_MIN = 0
 ADD_STEP = 0.20
+STOP_FACTOR = 1.0
 REDUCE = "ma_signal:MA5-derisk"
 STOP = "ma_signal:MA10-stop"
 RECLAIM5 = "ma_signal:MA5-reclaim"
 RECLAIM10 = "ma_signal:MA10-reclaim"
+RECLAIM_FIRST = "reclaim:first_px"
+HOLD20 = "force_sell:hold20_below10"
+HOLD_DAYS = 20
+HOLD_GAIN = 0.10
+INDEX_SYMBOL = "000001.SH"
+INDEX_MA = 10
+INDEX_BELOW_SESSIONS = 2
+INDEX_BLOCKS_ADD = False
+INDEX_GATE_ON = True
 
 
 @dataclass
@@ -52,9 +66,10 @@ class CodeMemory:
     reduced: Memory = field(default_factory=Memory)
     stopped: Memory = field(default_factory=Memory)
     steps: int = 0  # Monotonic, independent of surviving is_step lots.
+    first_px: float | None = None  # First fill. Later adds do not replace it.
 
     def fresh_buy(self) -> None:
-        """Successful pool/chase buys cancel both outstanding buyback channels."""
+        """Pool/chase cancels unrecovered stop shares. The first price stays."""
         self.reduced = Memory()
         self.stopped = Memory()
 
@@ -65,6 +80,8 @@ class SellLot:
     shares: int
     sellable: int  # Caller has applied T+1 and subtracted locked bonus shares.
     is_step: bool = False
+    n_days: int = 0  # Buy day is 0, same clock as T+N.
+    cost: float = 0.0
 
 
 def _ma(closes, n: int) -> float | None:
@@ -73,7 +90,7 @@ def _ma(closes, n: int) -> float | None:
 
 
 def stop_line(ma10: float | None) -> float | None:
-    return ma10 * 0.90 if ma10 is not None and ma10 > 0 else None
+    return ma10 * STOP_FACTOR if ma10 is not None and ma10 > 0 else None
 
 
 def de_risk_signal(px: float, closes) -> str | None:
@@ -122,24 +139,80 @@ def clamp_exit(lots, orders, *, keep_anchor: bool) -> list[tuple[int, int]]:
     return result
 
 
+def hold20_orders(lots, px: float) -> list[tuple[int, int]]:
+    """Lots held 20 trading days whose gain is below 10%. Exactly +10% stays.
+
+    Gain is (px - cost) / cost on that lot. Cost 10 clears at 10.99 and stays at 11.00.
+    """
+    if not isfinite(px) or px <= 0:
+        return []
+    orders = []
+    for lot in lots:
+        available = max(0, min(lot.shares, lot.sellable))
+        if (
+            available
+            and lot.n_days >= HOLD_DAYS
+            and lot.cost > 0
+            and px < lot.cost * (1.0 + HOLD_GAIN)
+        ):
+            orders.append((lot.lot_id, available))
+    return orders
+
+
 def exit_plan(code, px, day, closes, lots, *, memory: CodeMemory) -> tuple[str, int] | None:
-    del code, day
+    del code, day, memory
     available = sum(max(0, min(lot.shares, lot.sellable)) for lot in lots)
     line = stop_line(_ma(closes, 10))
-    if line is not None and 0 < px < line and available:
+    # Inclusive: yesterday MA10=10 triggers at 10.00, not only below it.
+    if line is not None and 0 < px <= line and available:
         return STOP, available
-    if memory.reduced.latched or not de_risk_signal(px, closes):
-        return None
-    wanted = available // 200 * 100
-    capacity = sum(q for _, q in allocate_exit(lots, wanted, keep_anchor=True))
-    wanted = capacity // 100 * 100
-    return (REDUCE, wanted) if wanted else None
+    orders = hold20_orders(lots, px)
+    wanted = sum(shares for _, shares in orders)
+    return (HOLD20, wanted) if wanted else None
+
+
+def stop_buyback_shares(px: float, first_px: float | None, stopped: Memory) -> int:
+    """Stop buyback is closed. Returning to the first fill does not resize an order."""
+    del px, first_px, stopped
+    return 0
 
 
 def buyback_plan(px, closes, memory: Memory, *, channel: str = "reduced") -> int:
-    if not reclaim_signal(px, closes, channel=channel):
-        return 0
-    return memory.shares // 100 * 100
+    """MA5 buyback and stop buyback are both closed."""
+    del px, closes, memory, channel
+    return 0
+
+
+def build_sse_ma10_block_new(
+    closes: Mapping[date, float], *, symbol: str = INDEX_SYMBOL
+) -> dict[date, bool]:
+    """上证连续两日收于十日线下 → 次日（第三日）起 `True`=停买新票。"""
+    return build_index_gate(closes, symbol=symbol)
+
+
+def allow_new_name_from_gate(
+    block_new: Optional[Mapping[date, bool]],
+) -> Optional[Callable]:
+    """`allow_new_name(day) -> bool`。关闸只挡未持仓的新开，已持仓加仓不挡。"""
+    if not INDEX_GATE_ON or block_new is None:
+        return None
+
+    def allow(day) -> bool:
+        return not bool(block_new.get(as_date(day), False))
+
+    return allow
+
+
+def load_sse_ma10_block_new(start: str, end: str, *, root=None) -> dict[date, bool]:
+    """从指数日线湖装载上证收盘并生成停买表。缺数据即失败。"""
+    from backtest.research.csv_minute_backtest_v7 import load_index_daily
+
+    def _ymd(value) -> date:
+        text = str(value).replace("-", "")[:8]
+        return date(int(text[:4]), int(text[4:6]), int(text[6:8]))
+
+    closes = load_index_daily(_ymd(start), _ymd(end), root=root)
+    return build_sse_ma10_block_new(closes)
 
 
 def scale_memory(memory: CodeMemory, share_factor) -> dict[str, float]:
@@ -163,10 +236,21 @@ def scale_memory(memory: CodeMemory, share_factor) -> dict[str, float]:
 
 
 def step_add_due(lots, px: float, *, memory: CodeMemory) -> bool:
-    parent = next((lot for lot in lots if lot.lot_id == 0), None)
-    if parent is None or parent.cost <= 0 or not isfinite(px) or px <= 0:
+    """One more 20% step only while shares are still held.
+
+    The anchor is the first fill. Later adds do not replace it. The step count
+    never decreases, so a flat name does not buy a step and a later re-entry
+    does not restart the count.
+    """
+    if not lots or not isfinite(px) or px <= 0:
         return False
-    allowed = int((px / parent.cost - 1.0) / ADD_STEP + 1e-12)
+    anchor = memory.first_px
+    if anchor is None or not isfinite(anchor) or anchor <= 0:
+        parent = next((lot for lot in lots if lot.lot_id == 0), None)
+        anchor = float(parent.cost) if parent is not None else None
+    if anchor is None or not isfinite(anchor) or anchor <= 0:
+        return False
+    allowed = int((px / anchor - 1.0) / ADD_STEP + 1e-12)
     return allowed > memory.steps
 
 
@@ -184,17 +268,25 @@ HELP_LOCK = """
   front 缺分区/缺代码行情即失败。MA 序列严格截至昨收。
   分钟逐根 close 评估、当根成交；日线收盘评估、次日开盘卖。
   日线排队卖单锁定信号收盘当时可卖的 lot；信号后同日池/追买/台阶新仓不顶替。
-  MA10×0.90 下方先止损；MA5 下方减 t1_sellable 的 50%，floor100。
-  is_step 先卖、中间 lot_id 升序、lot0 最后且减仓保留至少 100 股。
-  latch=A：只有周期锁；成功收复后立即再武装，同日可再次减仓，无每日锁。
-  residual=2：reduced/stopped 两通道均保留 <100 股买回残余，合入下一轮。
-  memory<100 且无买入时，合格 reclaim 也保留残余并 re-arm；禁止等归零。
-  买回分别要求现价 >= 昨收 MA5/MA10，上限为对应记忆，整百股，按实际成交扣减。
-  买回仍过涨跌停、费用、容量门；当日买回股份 T+1 才可卖，现金不足 skip_cash。
-  池/chase 成功新买清零双记忆；台阶计数单调，不因卖掉 is_step lot 而重加。
-  per_name 每笔默认 100 万，名单再现输赢都加，+20% 台阶；无上证闸。
-  单码单日买向不加闸：池 1 + chase 1 + 台阶 N + 双通道买回，可能 5+ 笔；
-  周期可同日重复，买回总笔数没有每日上限。chase px==open 时 abandon。
+  价格判断以日线均线为准，序列严格截至昨收。5 日线减仓关闭，不再按 MA5 卖出或买回。
+  现价 ≤ 昨收 MA10 先止损（含等于；昨收 MA10=10 元时现价到 10.00 元即止损），卖掉可卖股。
+  止损买回关闭：价格回到第一次成交价也不再买回止损卖出的股份。
+  持有满 20 个交易日且该 lot 涨幅低于 10% 清仓：买入日为 0，n_days>=20，每个 lot 用自己的成本。
+  涨幅 = (现价-成本)/成本。涨幅 < 10% 卖可卖股；正好 +10% 不清。成本 10 元时 10.99 清、11.00 留。
+  原因 force_sell:hold20_below10。这笔不买回。同一根已触及止损线时仍算止损。
+  名单再现：池或追买先成交并清掉尚未买回的止损股数。reduced/stopped 记忆仍在。
+  residual=2 / memory<100 / 禁止等归零 只留在减仓记忆类型上；5 日减仓关闭后不再触发。无每日锁。
+  latch=A 不再驱动卖出。
+  池/chase 成功新买清零止损记忆但保留第一次买入价；台阶计数单调，不因卖掉 is_step lot 而重加。
+  per_name 每笔默认 100 万，名单再现输赢都加。
+  台阶：相对第一笔成交价每上涨 20% 且当时仍持仓，加一笔 100 万。仓位卖光不加。
+  第一笔成交价不因台阶或后来的名单加仓而改变。台阶次数只增不减，每天每只最多一笔。
+  上证闸：000001.SH 日线收盘，十日线截至昨收。连续两日都收在各自十日线下方，次日起停买新票；
+  任一日收盘 >= 当日十日线，再下一日恢复开新仓。只低一日不关闸。缺指数数据则失败。
+  关闸只挡未持仓的池买入和追买，记 skip_index_gate，被挡的追买不再留到下一天。
+  已持仓的名单加仓、追买加仓和 +20% 台阶照常。止损和 20 日清仓不受闸影响。
+  单码单日买向：池 1 + chase 1 + 台阶 N，可能 5+ 笔。
+  chase px==open 时 abandon。
   50% 是计划上限，容量/locked bonus 可使实际卖量不整百；记忆只计实际成交。
   多 lot 分拆卖单会重复最低佣金，可能高估费用；研究费用模型不含印花税。
   送转仅显式 exdiv_economics 开启时按股数倍数缩放，floor100 + 残余 stats；
@@ -208,5 +300,5 @@ def record_strategy12_params(st) -> None:
     # price_domain here documents strategy-level signal-domain baseline ("front").
     # Minute run() stamps the realized fill domain after dividend_type routing.
     st.stats.update(sell_book=BOOK_TAG, stop_pct=None, allow_add=True,
-                    peak_gap_min=0, index_gate_on=False, add_step=ADD_STEP,
+                    peak_gap_min=0, index_gate_on=True, add_step=ADD_STEP,
                     latch="A", residual=2, price_domain="front")
