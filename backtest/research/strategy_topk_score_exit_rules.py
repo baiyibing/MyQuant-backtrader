@@ -31,7 +31,9 @@ HELP_LOCK = """
   禁止先 SX0 再重跑 dropout。额外空位按全日 scores sidecar 降序补到 topk。
   缺分/非有限分不触发 SX0。score==0 计入非正。不得买回当日 sell_sx0。
   可买入其他 score<=0 的股票。无 ST/年龄/15%/buy-state 新闸。
-  --stop-pct 0 关闭止损。成交核（涨跌停/停牌/整手/费用）不变。
+  拒绝 --buy-state-file（不要静默继承 topk_dropout 买点旁路）。
+  --stop-pct 0 关闭止损。--stop-fill 与 topk_dropout 相同（分钟拒绝 close）。
+  成交核（涨跌停/停牌/整手/费用）不变。
 """
 
 
@@ -46,11 +48,13 @@ def record_topk_score_exit_params(
     stop_pct: Optional[float],
     topk: int,
     n_drop: int,
+    stop_fill: str = "touch",
 ) -> None:
     st.stats["sell_book"] = BOOK_TAG
     st.stats["stop_pct"] = stop_pct
     st.stats["topk"] = int(topk)
     st.stats["n_drop"] = int(n_drop)
+    st.stats["stop_fill"] = str(stop_fill)
     st.stats.setdefault("sx0_planned", 0)
     st.stats.setdefault("sx0_also_bottom_planned", 0)
     st.stats.setdefault("sx0_extra_buy_planned", 0)
@@ -132,8 +136,10 @@ def make_planned_for_day(
     n_drop: int,
     day_state: dict,
     eligible_buy=None,
+    keep_vacancy: bool = False,
 ):
     def planned_for_day(ds: str, held_codes: Sequence[str]) -> list[str]:
+        planned_for_day.slot_count = None
         scores = scores_by_day.get(ds)
         if scores is None:
             raise RuntimeError(
@@ -142,28 +148,35 @@ def make_planned_for_day(
         if day_state.get("ds") == ds and "plan" in day_state:
             buy = list(day_state["plan"].buy)
         else:
-            plan = decide_topk_score_exit(
-                held_codes, scores, topk=topk, n_drop=n_drop
-            )
+            plan = decide_topk_score_exit(held_codes, scores, topk=topk, n_drop=n_drop)
             buy = list(plan.buy)
         if eligible_buy is None:
             return list(buy)
-        held_set = set(held_codes)
         sx0_set = (
             set(day_state["plan"].sell_sx0)
             if day_state.get("ds") == ds and "plan" in day_state
             else set()
         )
+        if keep_vacancy:
+            from backtest.research.strategy_topk_dropout_rules import _vacancy_buys
+
+            kept, slots = _vacancy_buys(
+                buy,
+                ds,
+                scores,
+                held_codes,
+                eligible_buy,
+                extra_skip=tuple(sx0_set),
+            )
+            planned_for_day.slot_count = slots
+            return kept
+        held_set = set(held_codes)
         need = len(buy)
         out: list[str] = []
         from backtest.research.topk_dropout_rules import sort_by_score_desc
 
         candidates = sort_by_score_desc(
-            [
-                c
-                for c in scores.keys()
-                if c not in held_set and c not in sx0_set
-            ],
+            [c for c in scores.keys() if c not in held_set and c not in sx0_set],
             scores,
         )
         for code in candidates:

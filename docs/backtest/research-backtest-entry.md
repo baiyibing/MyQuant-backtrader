@@ -213,6 +213,7 @@ qlib 昨天盯的是 **MQ 组合约束真数**，不是 BT 的 #149/#151/#156。
 | Mode B | `scripts/research/run_unified_exit_modeb.py --pool-dir stock_pool …` |
 | joint-return 冻结回放 | `scripts/research/run_joint_return_replay.py --intents … --bars … --arm P-BASE --fill-mode M-LAG`（见 [frozen-explicit-price](joint-return-frozen-explicit-price.md)） |
 | 名单质量对照 | `scripts/research/report_pool_list_quality.py` |
+| 已跑完的 CSV 盘后人工分析包 | `scripts/research/export_csv_human_analysis.py --run-dir <run>`；提示词 [prompt-csv-human-analysis.md](prompt-csv-human-analysis.md) |
 
 Python：`D:\anaconda3\envs\vanna312\python.exe`（或 `OSKH_MERGE_PYTHON` / `VANNA312_PYTHON`）。湖路径必须已设定 `OSKH_SOURCE_PARQUET_ROOT`，缺失即报错，不猜盘符。
 
@@ -248,6 +249,7 @@ Python：`D:\anaconda3\envs\vanna312\python.exe`（或 `OSKH_MERGE_PYTHON` / `VA
 | **本页（问题地图）** | 本文 |
 | 命令与 SSOT 表 | [README.md](README.md) |
 | 名单 CSV 契约 | [pool-csv-contract.md](pool-csv-contract.md) |
+| CSV 盘后人工分析（固定包） | [prompt-csv-human-analysis.md](prompt-csv-human-analysis.md) |
 | 引擎定位 | [engine-positioning-ssot.md](engine-positioning-ssot.md) |
 | 成交核 | [engine-ashare-correctness.md](engine-ashare-correctness.md) |
 | stock_pool 机器网格 | [stock-backtest-unified-exit-proposal-2026-09-17.md](stock-backtest-unified-exit-proposal-2026-09-17.md) · Mode B [plan-unified-exit-modeb-2026-09-17.md](plan-unified-exit-modeb-2026-09-17.md) |

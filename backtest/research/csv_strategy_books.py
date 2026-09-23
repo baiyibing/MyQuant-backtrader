@@ -47,6 +47,10 @@ HELP_LOCK_TOPK = strategy_topk_dropout_rules.HELP_LOCK
 HELP_LOCK_SCORE_EXIT = strategy_topk_score_exit_rules.HELP_LOCK
 
 FORBIDDEN_DEFAULT_STOCK_POOL = frozenset({"version9", "version10", "version11"})
+STOP_FILL_TOUCH = "touch"
+STOP_FILL_CLOSE = "close"
+STOP_FILL_ALLOWED = (STOP_FILL_TOUCH, STOP_FILL_CLOSE)
+STOP_FILL_CLOSE_BOOKS = frozenset({"topk_dropout", "topk_score_exit"})
 
 
 @dataclass(frozen=True)
@@ -143,6 +147,7 @@ def apply_csv_strategy(strategy: str, **kwargs) -> dict:
     hooks.setdefault("limit_up_chase", True)
     hooks.setdefault("limit_down_pending", True)
     hooks.setdefault("forbid_all_trade_at_limit", False)
+    hooks.setdefault("stop_fill", STOP_FILL_TOUCH)
     if hooks.get("take_profit") is None:
         raise RuntimeError(f"{book.name} book missing take_profit")
     if hooks.get("record_params") is None:
@@ -288,6 +293,56 @@ def add_topk_dropout_args(ap: argparse.ArgumentParser) -> None:
             "(T-1 vs T-6, loaded daily close). Independent of ST/age."
         ),
     )
+    ap.add_argument(
+        "--stop-fill",
+        choices=STOP_FILL_ALLOWED,
+        default=STOP_FILL_TOUCH,
+        help=(
+            "topk_dropout daily stop fill: touch=gap_open/low trigger (default); "
+            "close=EOD close (minute refuses close)"
+        ),
+    )
+    ap.add_argument(
+        "--buy-state-file",
+        type=Path,
+        default=None,
+        help=(
+            "topk_dropout: MyQuant sidecar (close/ma20/ma60/winratio=$winratio); "
+            "new buys only; score_exit refuses"
+        ),
+    )
+    ap.add_argument(
+        "--buy-state-rule",
+        choices=("oral", "above-ma20", "above-ma20-week20", "above-ma5-ma20-week20"),
+        default="oral",
+        help=(
+            "topk_dropout buy-state predicate. oral keeps the winratio dip OR "
+            "close>MA20. above-ma20 turns the dip off and keeps close>MA20 only. "
+            "above-ma20-week20 also requires close > qlib's 20-week mean "
+            "(first session of each week). above-ma5-ma20-week20 also requires "
+            "close > the stock's own 5-day mean (5 closes ending that day). "
+            "Computed from loaded daily closes, so minute fills can use the same gates. "
+            "Requires --buy-state-file. Minute still refuses --stop-fill close."
+        ),
+    )
+    ap.add_argument(
+        "--index-ma5-gate",
+        action="store_true",
+        help=(
+            "topk_dropout: block every new buy on T when 000001.SH close on "
+            "the previous session is below its 5-day mean. One index for all "
+            "names. Default off."
+        ),
+    )
+    ap.add_argument(
+        "--keep-buy-vacancy",
+        action="store_true",
+        help=(
+            "topk: if a name on the original buy list fails a buy gate, leave "
+            "the seat empty. Do not walk down the score list. Size off the "
+            "original list so that cash stays unspent. Default off."
+        ),
+    )
 
 
 def add_csv_backtest_common_args(
@@ -381,7 +436,11 @@ def resolve_research_pool_dir(
     if name in FORBIDDEN_DEFAULT_STOCK_POOL and is_repo_stock_pool(
         chosen, repo=Path(repo)
     ):
-        exporter = "export_strategy11_pool.py" if name == "version11" else "export_strategy9_pool.py"
+        exporter = (
+            "export_strategy11_pool.py"
+            if name == "version11"
+            else "export_strategy9_pool.py"
+        )
         raise SystemExit(
             f"{name} requires --pool-dir from {exporter}; "
             f"refusing stock_pool/: {chosen}"
@@ -389,8 +448,25 @@ def resolve_research_pool_dir(
     return chosen
 
 
+def resolve_stop_fill(raw) -> str:
+    if raw is None or str(raw).strip() == "":
+        return STOP_FILL_TOUCH
+    v = str(raw).strip().lower()
+    if v not in STOP_FILL_ALLOWED:
+        raise SystemExit(f"--stop-fill must be touch or close, got {raw}")
+    return v
+
+
 def csv_run_kwargs_from_args(args) -> dict:
     name = normalize_csv_strategy(getattr(args, "strategy", "") or "")
+    fill_s = getattr(args, "stop_fill", None)
+    fill_s = None if fill_s is None else str(fill_s).strip().lower()
+    if fill_s == "":
+        fill_s = None
+    if fill_s is not None and fill_s not in STOP_FILL_ALLOWED:
+        raise SystemExit(f"--stop-fill must be touch or close, got {fill_s}")
+    if fill_s == STOP_FILL_CLOSE and name not in STOP_FILL_CLOSE_BOOKS:
+        raise SystemExit("--stop-fill close is only for topk_dropout / topk_score_exit")
     kwargs = get_book(name).run_kwargs(args)
     kwargs["ration"] = getattr(args, "ration", "file_order")
     kwargs["ration_seed"] = int(getattr(args, "ration_seed", 0))
@@ -784,8 +860,12 @@ def _run_kwargs_version10(args) -> dict:
 def _apply_version11(*, take_profit=None, record_params=None, **_) -> dict:
     return {
         "stop_pct": None,
-        "take_profit": strategy11_rules.take_profit_reason if take_profit is None else take_profit,
-        "record_params": strategy11_rules.record_strategy11_params if record_params is None else record_params,
+        "take_profit": strategy11_rules.take_profit_reason
+        if take_profit is None
+        else take_profit,
+        "record_params": strategy11_rules.record_strategy11_params
+        if record_params is None
+        else record_params,
         "limit_up_chase": False,
         "minute_open": True,
         "eod_exit": strategy11_rules.eod_exit,
@@ -808,6 +888,8 @@ def _apply_topk_dropout(
     topk: Optional[int] = None,
     n_drop: Optional[int] = None,
     eligible_buy=None,
+    stop_fill=None,
+    keep_buy_vacancy: bool = False,
     **_,
 ) -> dict:
     if not scores_by_day:
@@ -826,6 +908,7 @@ def _apply_topk_dropout(
         resolved_stop = None
     else:
         resolved_stop = float(stop_pct)
+    resolved_fill = resolve_stop_fill(stop_fill)
 
     day_state: dict = {"ds": None, "opening_held": ()}
 
@@ -835,11 +918,16 @@ def _apply_topk_dropout(
 
     def _rec(st):
         strategy_topk_dropout_rules.record_topk_dropout_params(
-            st, stop_pct=resolved_stop, topk=topk_i, n_drop=n_drop_i
+            st,
+            stop_pct=resolved_stop,
+            topk=topk_i,
+            n_drop=n_drop_i,
+            stop_fill=resolved_fill,
         )
 
     return {
         "stop_pct": resolved_stop,
+        "stop_fill": resolved_fill,
         "take_profit": _tp if take_profit is None else take_profit,
         "record_params": _rec if record_params is None else record_params,
         "sell_gate": strategy_topk_dropout_rules.make_sell_gate(
@@ -854,6 +942,7 @@ def _apply_topk_dropout(
             n_drop=n_drop_i,
             day_state=day_state,
             eligible_buy=eligible_buy,
+            keep_vacancy=keep_buy_vacancy,
         ),
         "bind_opening_held": strategy_topk_dropout_rules.make_bind_opening_held(
             day_state,
@@ -882,6 +971,8 @@ def _apply_topk_score_exit(
     topk: Optional[int] = None,
     n_drop: Optional[int] = None,
     eligible_buy=None,
+    stop_fill=None,
+    keep_buy_vacancy: bool = False,
     **_,
 ) -> dict:
     if not scores_by_day:
@@ -889,9 +980,7 @@ def _apply_topk_score_exit(
             "topk_score_exit fail-closed: scores_by_day required "
             "(pass --pred-csv or --scores-dir)"
         )
-    topk_i = (
-        strategy_topk_score_exit_rules.DEFAULT_TOPK if topk is None else int(topk)
-    )
+    topk_i = strategy_topk_score_exit_rules.DEFAULT_TOPK if topk is None else int(topk)
     n_drop_i = (
         strategy_topk_score_exit_rules.DEFAULT_N_DROP if n_drop is None else int(n_drop)
     )
@@ -901,6 +990,7 @@ def _apply_topk_score_exit(
         resolved_stop = None
     else:
         resolved_stop = float(stop_pct)
+    resolved_fill = resolve_stop_fill(stop_fill)
 
     day_state: dict = {"ds": None, "opening_held": ()}
 
@@ -910,11 +1000,16 @@ def _apply_topk_score_exit(
 
     def _rec(st):
         strategy_topk_score_exit_rules.record_topk_score_exit_params(
-            st, stop_pct=resolved_stop, topk=topk_i, n_drop=n_drop_i
+            st,
+            stop_pct=resolved_stop,
+            topk=topk_i,
+            n_drop=n_drop_i,
+            stop_fill=resolved_fill,
         )
 
     return {
         "stop_pct": resolved_stop,
+        "stop_fill": resolved_fill,
         "take_profit": _tp if take_profit is None else take_profit,
         "record_params": _rec if record_params is None else record_params,
         "sell_gate": strategy_topk_score_exit_rules.make_sell_gate(
@@ -929,6 +1024,7 @@ def _apply_topk_score_exit(
             n_drop=n_drop_i,
             day_state=day_state,
             eligible_buy=eligible_buy,
+            keep_vacancy=keep_buy_vacancy,
         ),
         "bind_opening_held": strategy_topk_score_exit_rules.make_bind_opening_held(
             day_state,
@@ -950,6 +1046,18 @@ def _apply_topk_score_exit(
 
 def _run_kwargs_topk_dropout(args) -> dict:
     from backtest.research.topk_dropout_scores import load_scores_from_args
+
+    buy_rule = str(getattr(args, "buy_state_rule", "oral") or "oral")
+    if (
+        buy_rule
+        in (
+            "above-ma20",
+            "above-ma20-week20",
+            "above-ma5-ma20-week20",
+        )
+        and getattr(args, "buy_state_file", None) is None
+    ):
+        raise SystemExit(f"--buy-state-rule {buy_rule} requires --buy-state-file")
 
     scores_by_day = load_scores_from_args(
         pred_csv=getattr(args, "pred_csv", None),
@@ -975,28 +1083,47 @@ def _run_kwargs_topk_dropout(args) -> dict:
         "topk": topk,
         "n_drop": n_drop,
         "stop_pct": resolved_stop,
+        "stop_fill": resolve_stop_fill(getattr(args, "stop_fill", None)),
     }
     st_daily = getattr(args, "st_daily_file", None)
     age_map = getattr(args, "age_map_file", None)
     age_days = int(getattr(args, "age_days", 60))
-    if st_daily is not None or age_map is not None:
+    buy_state = getattr(args, "buy_state_file", None)
+    buy_state_rule = str(getattr(args, "buy_state_rule", "oral") or "oral")
+    index_ma5 = bool(getattr(args, "index_ma5_gate", False))
+    if (
+        st_daily is not None
+        or age_map is not None
+        or buy_state is not None
+        or index_ma5
+    ):
         from backtest.research.topk_dropout_eligibility import make_eligible_buy
 
         out["eligible_buy"] = make_eligible_buy(
             st_daily_file=st_daily,
             age_map_file=age_map,
             age_days=age_days,
+            buy_state_file=buy_state,
+            index_ma5_gate=index_ma5,
+            buy_state_rule=buy_state_rule,
         )
+    if buy_state_rule in ("above-ma20-week20", "above-ma5-ma20-week20"):
+        out["week_ma_gate"] = True
+    if buy_state_rule == "above-ma5-ma20-week20":
+        out["ma5_gate"] = True
+    if bool(getattr(args, "keep_buy_vacancy", False)):
+        out["keep_buy_vacancy"] = True
     if bool(getattr(args, "return_threshold_filter", False)):
         out["return_threshold_filter"] = True
     return out
 
 
 def _run_kwargs_topk_score_exit(args) -> dict:
+    if getattr(args, "buy_state_file", None) is not None:
+        raise SystemExit("topk_score_exit refuses --buy-state-file; use topk_dropout")
     out = _run_kwargs_topk_dropout(args)
     out["strategy"] = "topk_score_exit"
     return out
-
 
 
 register(

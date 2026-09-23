@@ -1,7 +1,7 @@
 # 联合仓库 TopK 回测 · 问题记录
 
 - 日期：2026-09-22
-- 状态：**讨论中，未人裁 GO 编码**。本页只记两仓分工、已有基线、会话共识与待裁点。不要把本页当实施任务书。
+- 状态：**讨论中**。Q1–Q4 / Q6 / Q7 已裁；`--stop-fill` 与 `--buy-state-file` 已落地，默认关。不要把本页当「改默认成交」任务书。
 - 范围：MyQuant 出分 / 买闸；本仓 `topk_dropout` 向量化成交。不复活 PortAna 当产品；不改线上 10/3。
 - GitHub 问题：[#164](https://github.com/baiyibing/MyQuant-backtrader/issues/164)（本仓此前无专题 issue）。
 
@@ -36,7 +36,8 @@ MyQuant 负责全日截面分和（可选）买点资格；本仓用同一本策
 MyQuant                         MyQuant-backtrader
 全日截面分 + 日 TopK CSV   →    csv_daily_backtest.py  或  csv_minute_backtest.py
 买闸源：buy_eligibility.py      --strategy topk_dropout
-CYQ winner_ratio 湖（H13）      开关：--stop-pct / 拟 --stop-fill / ST / 年龄 / 拟买点
+CYQ winner_ratio 湖（H13）      开关：--stop-pct / --stop-fill / ST / 年龄 /
+$winratio 旁路（联合买点）      --buy-state-file（默认关；盈筹=$winratio）
 ```
 
 ---
@@ -60,7 +61,10 @@ Qlib `PortAnaRecord` **停用当产品**；本仓 Cerebro 退场。早期「联�
 - MyQuant 只交 **全日截面分**（`pred_minus_one`：买入日 T 用 pred[T−1]）+ 便利 TopK 池。
 - 本仓新书 `topk_dropout` 对着**引擎当前持仓**现算 qlib 同款淘汰，不是「今日 CSV 没有就清仓」。
 - ST / 年龄挡新开、沿序补（BT-B）；10% 开仓价止损是额外卖（BT-C），空位次日再补。
-- 硬边界：不 `import qlib`、n_drop 不进成交核、不改 v6/v8、**不对 PortAna NAV 判胜负（R-7）**、当时 **不开买点闸（R-8）**。
+- 硬边界（**目的 ≠ 手段**）：
+  - **目的**：成交引擎不要绑回 qlib 运行时（`qlib.init` / handler / `Exchange` / `PortAnaRecord` / `qlib.contrib.strategy`）。三仓里本仓只做向量化成交；PortAna 停用当产品（R-7）。
+  - **手段**：simulate 热路径不 `import qlib`（围栏 `test_ashare_simulate_import_fence.py`）；n_drop 不进成交核；不改 v6/v8。读 `$close` bin、对齐 `Mean($close, n)` / TopkDropout **算法语义**，用 numpy/纯函数即可。
+  - 当时 **不开买点闸（R-8）** 是另一条产品冻结，与「均线能不能用 qlib Mean 语义」不是一件事。
 
 研究上仍要和 qlib 纸面账对得上数字，于是 09-17 做了 **arm0 日线对齐片**（[#87](https://github.com/baiyibing/MyQuant-backtrader/pull/87)，评审 [pr-87-topk-arm0-qlib-align](../architecture/reviews/2026-09-17/pr-87-topk-arm0-qlib-align/grok-review.md)）：同一把尺子读 qlib `$close` bin、`--qlib-cost`、9.5% 统一板、`risk_degree=0.95`、dropout 当日收盘（`topk_drop` same-bar）、`--stop-pct 0`。这不是把 PortAna 做成第四台引擎。
 
@@ -76,7 +80,7 @@ Qlib `PortAnaRecord` **停用当产品**；本仓 Cerebro 退场。早期「联�
 
 | 层 | 要对的 | 不要当成已经对齐 |
 |---|---|---|
-| **算法** | qlib `TopkDropout` 的 top/bottom / `n_drop` / 对**实仓**现算 | 「今日池文件没有的全卖」；`export_next_day_pool.plan_rebalance` 满仓近似 |
+| **算法** | qlib `TopkDropout` 的 top/bottom / `n_drop` / 对**实仓**现算；买点均线对齐 `Mean($close, 20/60)` | 「今日池文件没有的全卖」；在成交核 `import qlib` 才算用了 qlib 算法 |
 | **研究尺子（arm0 / 年化账）** | 价 = qlib `$close` 后复权 bin；费 = 买 5bp / 卖 15bp / 最低 5；涨跌停 |Δ|≥9.5% 当日买卖都不做；现金部署 0.95；代码键 `000608.SZ`；ST 只认当日 `is_st`；年龄满 60 交易日；缺分 `(-score, code)`；整手向下 | 湖 `none`/`front` 价；双边 10bp 无最低；板块 10/20/30；qlib 官方 `+0.1` 抬一手 |
 | **产品 / 线上** | 无。向量化回答「这份名单按规则怎么成交」 | PortAna 当对照基准或上线依据；用 50/5 改 10/3；本仓净值对 1.3 真栈 |
 
@@ -121,7 +125,7 @@ asof：**文件名 = 买入日 T，内容 = pred[T−1]**（`pred_minus_one`）�
 | 打分、pred、TopK 导出 | MyQuant | `export_daily_pool.py`（`pred_minus_one`）；全日分 sidecar | 本仓重训、覆盖 `8a061ea4` |
 | TopkDropout 轮换 | 本仓策略书 | `decide_topk_dropout`；对**实仓**现算 | 成交核里复刻 n_drop；读 `live_pool/*sell.csv` |
 | ST PIT / 上市年龄 | 本仓 CLI 可选 | `--st-daily-file` / `--age-map-file` / `--age-days`（默认 60） | 持仓变 ST 强制卖（另立项） |
-| 买点（均线 / 盈筹） | MyQuant 闸；本仓尚未接 | `buy_eligibility.py` + `--buy-state-filter` | overlay **R-8**：当时明确不开；现要接须另裁 |
+| 买点（均线 / 盈筹） | MyQuant 算旁路；本仓查表 | `export_topk_buy_state_sidecar.py` + `--buy-state-file` | 成交热路径不 `import qlib`；默认 MQ `--buy-state-filter` 不翻 |
 | 止损阈值 | 本仓 | `--stop-pct`；书默认 0.10；`0` 关闭 | 拿 v6 的 `--stop-pct` 冒充本需求 |
 | 止损价域 | 日线触价；分钟逐 bar close | 见 §6.5 | 改默认去迁就新实验 |
 | 执行验收 | OSkhQuant1.3 | LEBS / MockQMT | 本仓承诺与真栈净值对齐 |
@@ -136,10 +140,10 @@ CYQ 全日 `winner_ratio` feeder 留在 MyQuant（H13）。本仓 Rust 是 TR/St
 
 | # | 口述 | 现况 | 缺口 |
 |---|---|---|---|
-| 1 | 双均线下且盈筹率 &lt;10%，**或**站上 MA20 | MyQuant `--buy-state-filter`。条件 2 另有 **MA5 斜率 ≥ −30°**（通达信 ATAN） | 本仓未接。条件 2 是否带斜率 **待裁** |
+| 1 | 双均线下且盈筹率 &lt;10%，**或**站上 MA20 | **Q2/Q4 已裁并落地**：条件 2 只认 `close > MA20`；盈筹 = `$winratio`。本仓 `--buy-state-file` 查表 | 默认不传=不滤（年化 N6 仍关）。MQ 现码 `--buy-state-filter` 仍是 `legacy`（MA5 斜率 + CYQ/Quantile），不改训练默认 |
 | 2 | ST 不能买 | 本仓 `--st-daily-file`，只挡新开 | 路径与 PIT 文件要显式传；口径须是「只认当日 is_st」，不要静默并回静态黑名单 |
 | 3 | 上市 ≥60 交易日 | 本仓 `--age-map-file` `--age-days 60` | 无日历时文件值须已是最早可买日；溢出 fail-closed |
-| 4 | 收盘价相对开仓价 −10% 止损 | 本仓默认是日线 **跳空开盘 / 最低触触发价**；qlib 路径无此止损 | **收盘成交尚未做**（拟 `--stop-fill close`，默认不动） |
+| 4 | 收盘价相对开仓价 −10% 止损 | 默认仍是日线 **跳空 / 最低触触发价** | **已落地** `--stop-fill close`：按日终收盘卖。Q7 恰跌停仍成交；Q6 止损先于 dropout。分钟拒绝 `close` |
 
 没有一本 version1–12 把四条打成一套。对得上的组合是：**qlib 风格 TopkDropout + 买闸 + 本仓止损**。
 
@@ -174,13 +178,14 @@ MyQuant [2026-09-17-annual-lift-status-handoff.md](../../../MyQuant/docs/reviews
 | MQ-A 全日分导出 | MyQuant | `export_daily_pool.py`；`scores/YYYYMMDD.csv`，文件名=买入日 |
 | BT-A 轮换书 | 本仓 | `topk_dropout_rules.py` `decide_topk_dropout`；`strategy_topk_dropout_rules.py`；`csv_strategy_books.py` `register` 名 `topk_dropout`（别名 `topk` / `version_topk`） |
 | 分数加载 | 本仓 | `topk_dropout_scores.py`（`dtype=str` + zfill；`--pred-csv` / `--scores-dir`） |
-| BT-B 新开闸 | 本仓 | `topk_dropout_eligibility.py`；CLI `--st-daily-file` / `--age-map-file` / `--age-days` / `--return-threshold-filter` |
+| BT-B 新开闸 | 本仓 | `topk_dropout_eligibility.py`；CLI `--st-daily-file` / `--age-map-file` / `--age-days` / `--return-threshold-filter` / `--buy-state-file` |
+| 联合买点旁路 | MyQuant 算、本仓查 | MQ `export_topk_buy_state_sidecar.py`（`$close` / `Mean(20/60)` / `$winratio`）；BT `buy_state_oral_ok` |
 | BT-C 止损阈值 | 本仓 | 书默认 `STOP_PCT=0.10`；`--stop-pct 0` 关闭。成交价域见 §6.5，**不是**收盘 |
 | arm0 日线对齐 | 本仓 #87 | `qlib_bin_daily.py`；`--qlib-data-root`；`--qlib-cost`；topk 书 9.5% 板、`cash_deploy_frac=0.95`、`topk_drop` same-bar |
-| data-free 单测 | 本仓 | `tests/test_topk_dropout_rules.py`、`test_topk_dropout_book_a.py` / `_b.py` / `_c.py` |
+| data-free 单测 | 本仓 | `tests/test_topk_dropout_rules.py`、`test_topk_dropout_book_a.py` / `_b.py` / `_c.py`、`test_topk_buy_state.py` |
 | HELP_LOCK | 本仓 | `strategy_topk_dropout_rules.py`（CLI `--help` 尾部） |
 
-**还没落地：** `--stop-fill`；本仓 `--buy-state`；分钟侧 `--qlib-cost` / `--qlib-data-root`；分钟日终止损。
+**还没落地：** 分钟侧 `--qlib-cost` / `--qlib-data-root`；分钟日终止损。
 
 ### 6.5 现有实现：日线 vs 分钟（as-built）
 
@@ -193,7 +198,7 @@ MyQuant [2026-09-17-annual-lift-status-handoff.md](../../../MyQuant/docs/reviews
 | 买成交 | 当日 **日线收盘** | 当日 **14:55 分钟收盘**（湖时钟标成 UTC=CST） |
 | dropout 卖 | `topk_drop` **same-bar 收盘**（不是次日开盘 pending） | `sell_gate` 在扫描中命中后，按**那一根分钟 close** 卖 |
 | 止损（`--stop-pct`∈(0,1)，默认 0.10） | ① 开盘 ≤ `cost×(1-p)` → `stop_loss:gap_open` 按开盘；② 否则 **最低价**碰到触发价 → `stop_loss:touch` **按触发价** | ① 开盘 ≤ 触发价 → `gap_open` 按开盘（`minute_gap_open`）；② 否则 **每一根** `close/cost-1 ≤ -p` → `touch` 按该根 close（`minute_trigger_bar_close`） |
-| 止损相对 dropout | 先评止损，再评 `sell_gate` | 扫描里同样先 gap/止损，再 `sell_gate` |
+| 止损相对 dropout | 先评止损，再评 `sell_gate`。**Q6：收盘臂同样止损先** | 扫描里同样先 gap/止损，再 `sell_gate` |
 | T+1 | 买入当日不卖 | 同；T+0 不更新峰值 |
 | 涨跌停 | 统一 \|Δ\|≥9.5%；买卖都不做；不追买；跌停不挂次日开盘（`limit_down_pending=False`） | 同书钩子；开盘已跌停则该根跳过 |
 | 价源 | 默认湖；也可 qlib bin（§6.6） | 默认湖 1m；也可 `--qlib-1min-root`。日线辅助 `--qlib-day-root` **≠** 日线 `--qlib-data-root` |
@@ -213,7 +218,7 @@ MyQuant [2026-09-17-annual-lift-status-handoff.md](../../../MyQuant/docs/reviews
 
 #### 日线 `csv_daily_backtest.py`
 
-二选一，`--qlib-data-root` 一旦给出就 **跳过湖**（不 import qlib）：
+二选一，`--qlib-data-root` 一旦给出就 **跳过湖**。读的是 qlib 的 `$close` 文件，**不是**把 qlib 包挂进成交循环：
 
 | 价源 | 怎么开 | 价是什么 | 除权 |
 |---|---|---|---|
@@ -287,7 +292,7 @@ python backtest/research/csv_daily_backtest.py --strategy topk_dropout ^
 | `--workers` | 16 | |
 | `--out-dir` | `backtest_output/csv_{daily\|minute}_topk_dropout_{start}_{end}/` | 目录已存在且非空则 **拒绝覆盖**，换戳 |
 
-产物三件套：`summary.txt` / `daily_equity.csv` / `trades.csv`。对照看脚本 + 价源 + `--qlib-cost` + `--stop-pct` + 闸文件，不要只看策略名。
+产物三件套：`summary.txt` / `daily_equity.csv` / `trades.csv`。对照看脚本 + 价源 + `--qlib-cost` + `--stop-pct` + 闸文件，不要只看策略名。盘后人工看成交走固定包：`scripts/research/export_csv_human_analysis.py --run-dir <该目录>`，提示词 [prompt-csv-human-analysis.md](prompt-csv-human-analysis.md)。
 
 预热：默认向前 10 个交易日加载日线；开 `--return-threshold-filter` 则 20 日。warmup 日期必须落在 qlib `day.txt` 内，否则 SystemExit。
 
@@ -364,18 +369,24 @@ BT-B：`eligible_buy` 只过滤**新开**；不够 `len(buy)` 则沿未持仓分
 
 ---
 
-## 7. 会话共识（2026-09-22，尚未编码）
+## 7. 会话共识（2026-09-22）
 
 1. **不拆多本** `topk_dropout` / 不新开 `topk_dropout_close` / 不叫 version11。冲突来自改默认成交，不是共用一书。
 2. **持续改进用开关**，并写进 HELP_LOCK 与本页。买点、ST、年龄、止损阈值、止损价域都是轴，不是新书。另开书的条件：买池或卖因变了（已有反例：`topk_app_dropout`、`topk_score_exit`）。
 3. **默认止损价域保持触价**（`touch`）：旧扫参、BT-C 单测、HELP_LOCK 都不翻。
-4. **下一刀实验先日线收盘止损**：拟 `--stop-fill close`。T+1 后只看当日日线收盘是否 ≤ `cost×(1-p)`，是则按收盘卖；不先吃跳空、不按盘中最低触发价卖。
+4. **日线 `--stop-fill close`**：T+1 后只看当日日线收盘是否 ≤ `cost×(1-p)`，是则按收盘卖；不先吃跳空、不按盘中最低触发价卖。默认 `touch` 不翻。分钟入口拒绝 `close`。
 5. **日线 / 分钟用入口切换，不加 `--freq`**：
    - 日线：`backtest/research/csv_daily_backtest.py --strategy topk_dropout`
    - 分钟：`backtest/research/csv_minute_backtest.py --strategy topk_dropout`
 6. **`close` 在两套引擎不是同一句话。** 分钟现扫描已是「开盘跳空 + 每根分钟 close」。日线 `close` = 日终收盘一判。在分钟语义单独立项之前，分钟入口遇到 `--stop-fill close` 应 **拒绝**，不要静默当成逐 bar close。若以后要分钟日终，另取值（例如 `eod_close`），不要把日线的 `close` 偷运过去。
 7. 产出目录本来就分家：`csv_daily_topk_dropout_*` vs `csv_minute_topk_dropout_*`。对照看 **脚本 + `--stop-fill` + `--stop-pct` + 闸文件**，不要只看策略名。
 8. 不复活 PortAna 当产品判据；50/5 研究账不改线上 10/3。
+9. **买点条件 2 不要 MA5 斜率**（Q2）：只认 `close > MA20`。MyQuant 现码带斜率的 `--buy-state-filter` 标 `legacy`，不进本配方、不改线上默认。
+10. **收盘止损遇跌停仍成交**（Q7）：拟 `--stop-fill close` 时，触发日收盘即使恰跌停，也按该收盘价卖出。不 skip、不 pending 到次日。这是本配方的研究约定，不是把默认触价/arm0 的涨跌停拒单改掉。
+11. **同日止损先于 dropout**（Q6）：收盘臂与现核一样，先止损再 `sell_gate`。同日只卖一次，reason 走止损。
+
+12. **买点旁路在 MyQuant 算、本仓查表**（Q3）：`export_topk_buy_state_sidecar.py` 写 close/MA20/MA60/`$winratio`；BT `--buy-state-file` 只查表。成交热路径不 `import qlib`。默认不传=不滤。
+13. **盈筹用券商 `$winratio`**（Q4）：不是 CYQ parquet，也不做 250 日 Quantile 代理。这会改 0.10 买集，与旧闸不可混比。`topk_score_exit` 拒绝 `--buy-state-file`。
 
 拟跑（编码后）：
 
@@ -391,19 +402,19 @@ BT-B：`eligible_buy` 只过滤**新开**；不够 `len(buy)` 则沿未持仓分
 
 | ID | 问 | 选项 / 备注 |
 |---|---|---|
-| Q1 | `--stop-fill` 取值名 | `touch`（默认）/ `close`（日线收盘）。分钟日终是否另开 `eod_close` |
-| Q2 | 买点条件 2 | 口述「站上 MA20」vs 现码「MA20 **且** MA5 斜率 ≥ −30°」 |
-| Q3 | 买点接到哪 | 本仓 `--buy-state` 复述 vs 继续只在 MyQuant 滤完再导出。overlay R-8 当时禁开；年化 N6 买点继续关 |
-| Q4 | 盈筹数据 | MyQuant CYQ parquet `winner_ratio`；缺表时 250 日收盘分位代理是否仍允许 |
+| Q1 | `--stop-fill` 取值名 | **已裁（2026-09-22）**：`touch`（默认）/ `close`（仅日线）。`close` = 日终收盘止损，使日线买/卖/止损都看 close（买与 dropout 本已收盘）。分钟对 `close` **拒绝**。分钟日终若要做，另取值，不复用 `close` |
+| Q2 | 买点条件 2 | **已裁（2026-09-22）**：**不要 MA5 斜率**。条件 2 = `close > MA20`。现码带斜率的闸标 `legacy`，不进本配方、不改线上/年化默认 |
+| Q3 | 买点接到哪 | **已裁（2026-09-22）**：MyQuant qlib 写旁路；本仓 `--buy-state-file` 查表。不在 simulate 热路径 `import qlib`。默认关（N6 / overlay R-8 训练默认不翻） |
+| Q4 | 盈筹数据 | **已裁（2026-09-22）**：券商 `$winratio`（bins）。不用 CYQ `winner_ratio` parquet，不用 Quantile 代理 |
 | Q5 | 价域 | 继续 qlib `$close` bin（年化账尺子）vs 湖 `none`/`front`。两套不能混比 |
-| Q6 | 收盘止损与 dropout 同日 | 现核止损先于 `sell_gate`。收盘臂是否仍止损优先 |
-| Q7 | 跌停 | 收盘恰跌停：defer 还是记 skip。topk 书 `limit_down_pending=False` |
+| Q6 | 收盘止损与 dropout 同日 | **已裁（2026-09-22）**：**止损先**。与现核一致：先评止损（收盘臂按日终收盘），再评 `sell_gate` / dropout。同日只出一笔卖，reason 记止损 |
+| Q7 | 跌停 | **已裁（2026-09-22）**：收盘止损臂上，收盘恰跌停 **仍按该收盘价成交**。不 defer、不记 skip。只约束拟 `--stop-fill close`；默认触价核与 arm0「涨跌停当日买卖都不做」不翻。书的 `limit_down_pending=False` 仍表示不把未成交卖挂到次日开盘 |
 | Q8 | 本次是否同时开 ST/年龄 | 年化 A 格还叠了 5 日涨幅&gt;15% 挡。四条口述未提这条 |
 | Q9 | 窗与 pred | 是否沿用 `c5f4bccd` 2026 窗，还是回到年化账 `8a061ea4` |
 | Q10 | `--cash-total` | 默认 2100 万 vs 年化 1e8。对照必须同本金 |
-| Q11 | 闸做在哪边 | MyQuant 导出默认不过闸。若 MQ 先滤再导出，BT 不要默默再滤同一层 |
+| Q11 | 闸做在哪边 | **随 Q3**：分数导出仍不过闸；买点用独立 sidecar，BT 只查表。不要 MQ `--buy-state-filter` 滤完分数再让 BT 滤同一层 |
 
-编码门槛：至少 Q1、Q6、Q7 对人；Q2/Q3 在接买点之前对人；对照实验先钉 Q5/Q9/Q10。未 GO 前不改 `csv_daily_backtest.py` 止损核。
+编码门槛：Q1/Q3/Q4/Q6/Q7 已裁（`--stop-fill close` 仅日线；买点旁路 + `$winratio`；止损先；收盘跌停仍成交）。对照实验先钉 Q5/Q9/Q10。
 
 ---
 
@@ -430,8 +441,11 @@ BT-B：`eligible_buy` 只过滤**新开**；不够 `len(buy)` 则沿未持仓分
 | `--start` `--end` `--cash-total` `--daily-quota` `--workers` `--out-dir` | 各入口缺省 | ✓ | ✓ | 窗与资金。日线默认 start `20251023` end `20260909`，**年化窗须改** |
 | `--no-cache` `--rebuild-cache` | 用缓存 | — | ✓ | 分钟窗缓存 |
 | `--ration` / `--name-budget` | file_order / 100 万 | 共用旗 | 共用旗 | topk 非 per_name；买序不是 CSV 行序 |
-| **拟 `--stop-fill`** | 现核=触价 | 未编码 | 未编码 | 见 §7；分钟 `close` 须拒绝 |
-| **拟 `--buy-state`** | 关 | 未编码 | 未编码 | Q2/Q3 |
+| **`--stop-fill`** | 默认 `touch` | 日线 `close` 已落地 | 拒绝 `close` | 见 Q1；`--stop-fill close` 只改止损成交 |
+| **`--buy-state-file`** | 不传=不滤 | ✓ | ✓ | 见 Q3/Q4；新开；(close&lt;MA20 且 close&lt;MA60 且 `$winratio`&lt;0.10) 或 close&gt;MA20。`topk_score_exit` 拒绝 |
+| **`--buy-state-rule`** | `oral` | ✓ | ✓ | `above-ma20` 关掉盈筹抄底，只留 close&gt;MA20。`above-ma20-week20` 再要求 close&gt;qlib 20 周均线（每周第一个交易日收盘的 20 期均值；用日线收盘算，分钟成交也可挂这道闸）。`above-ma5-ma20-week20` 再要求 close&gt;个股 5 日均线（含当日的 5 根收盘均值）。须配 `--buy-state-file` |
+| **`--index-ma5-gate`** | 关 | ✓ | ✓ | 新开。全市场只看上证 000001.SH。信号日收盘 &lt; MA5 → 次日所有新开不买 |
+| **`--keep-buy-vacancy`** | 关 | ✓ | ✓ | 原买名单没过闸则空着，不按分数往下补。资金仍按原名单只数分，空位留现金 |
 
 ### 9.1 MyQuant 侧（出分 / 闸，不是本仓 CLI）
 
@@ -443,18 +457,25 @@ python my_scripts/export_daily_pool.py --pred <csv> --topk 50 --asof pred_minus_
 
 写出每日 TopK 裸码 + `scores/YYYYMMDD.csv` 全日分。拒绝写进 `stock_pool/`。
 
+```text
+python my_scripts/export_topk_buy_state_sidecar.py --qlib-dir ~/.qlib/qlib_data/my_data \
+  --start 2026-01-06 --end 2026-09-14 --out exports/buy_state_winratio.parquet
+```
+
+写出 `trade_date,code,close,ma20,ma60,winratio`。盈筹列是 `$winratio`，不是 CYQ。NaN 行丢弃；BT 缺行 fail-closed。
+
 买闸在训练/重回测上，默认全关，见 `buy_eligibility.py`：
 
 | 开关 | 默认 | 含义 |
 |---|---|---|
-| `--buy-state-filter` | 关 | 双均线下且盈筹&lt;10%，**或**站上 MA20 **且** MA5 斜率 ≥ −30°。年化 N6：50/5 继续关 |
+| `--buy-state-filter` | 关 | 现码：双均线下且盈筹&lt;10%，**或**站上 MA20 **且** MA5 斜率 ≥ −30°（`legacy`）。**本配方 Q2：条件 2 无斜率**。年化 N6：50/5 继续关 |
 | `--st-filter` | 关（导出不过） | 有 `st_daily.parquet` 时只认当日 `is_st`，与 BT 相同 |
 | `--age-filter` | 关 | 上市不足 `age_days`（默认 60） |
 | 5 日涨幅 15% | 策略层可选 | 与买点独立；BT 对应 `--return-threshold-filter` |
 
-盈筹优先 CYQ parquet `winner_ratio`；未命中回退 250 日收盘 10% 分位。本仓不重做 feeder（H13）。
+盈筹：联合配方用 `$winratio`（Q4）。现码 `--buy-state-filter` 仍优先 CYQ parquet `winner_ratio`，未命中回退 250 日收盘 10% 分位——那是 `legacy`，不进本配方。本仓不重做 CYQ feeder（H13）。
 
-`custom_train_backtest.py` / 线上 10/3 **不要**为本页打开这些闸去改默认训练。本仓接买点须另裁 Q2/Q3，避免 MQ 滤完 BT 再滤。
+`custom_train_backtest.py` / 线上 10/3 **不要**为本页打开这些闸去改默认训练。Q3 已裁：MQ 出旁路、BT 查表，避免 MQ 滤完 BT 再滤同一层。Q2：联合旁路条件 2 不写 MA5 斜率。
 
 年化 / 联合对账惯用（只日线 qlib bin）：
 
@@ -462,6 +483,8 @@ python my_scripts/export_daily_pool.py --pred <csv> --topk 50 --asof pred_minus_
 csv_daily_backtest.py --strategy topk_dropout --pred-csv <MyQuant pred>
   --qlib-data-root <my_data> --qlib-cost --stop-pct 0
   [--st-daily-file ...] [--age-map-file ...] [--return-threshold-filter]
+  [--buy-state-file exports/buy_state_winratio.parquet]
+  [--stop-fill close]
 ```
 
 默认可改走数据湖（不传 `--qlib-data-root`）。分钟默认同样是湖；qlib 1min/day 见 §6.6。分钟没有 `--qlib-cost`，不要用分钟入口冒充年化尺子。
@@ -475,7 +498,7 @@ csv_daily_backtest.py --strategy topk_dropout --pred-csv <MyQuant pred>
 - 分钟 `--stop-fill close` 静默复用逐 bar close。
 - 用 PortAna NAV 判本页胜负；用 50/5 研究账改线上 10/3。
 - 把 Mode B / v8 分钟止损网格当成 TopK 联合轮换的同一条线。
-- 本仓重做 CYQ `winner_ratio` feeder。
+- 在成交热路径 `import qlib` 去挂 `init` / Exchange / PortAna（禁的是运行时，不是 `Mean($close)` 语义；买点均线对已加载 `$close` 滚动即可）。
 - 把 §3 里的假高峰（丢前导零 / 前复权 / 旧 ST）写进候选。
 - 把湖 `none` / 湖 `front` / qlib `$close` 的净值合成一张表当同一把尺子。
 - 默认 2100 万本金去对年化 1e8 的格。
@@ -512,4 +535,9 @@ csv_daily_backtest.py --strategy topk_dropout --pred-csv <MyQuant pred>
 | 2026-09-22 | §6.9 补 Mode A/B 白话：统一卖出网格的日线/分钟两种成交，不是策略号。 |
 | 2026-09-22 | §6.9：v8 与 Mode A/B 同属 `stock_pool` 收益最大化；总图 [research-backtest-entry.md](research-backtest-entry.md)。 |
 | 2026-09-22 | §6.9：joint-return-v1 = Grok Bot/4090 意图回放，不是本页 CSV 书。 |
-| 2026-09-22 | 入口页 §5.5 收录 9/21 BT 经手账（#149/#151/#152/#156/#158/#159；#160/#161 次日已合）。 |
+| 2026-09-22 | **Q2 人裁**：买点条件 2 不要 MA5 斜率，只认站上 MA20。现码带斜率闸当 `legacy`。 |
+| 2026-09-22 | **Q7 人裁**：收盘止损臂上收盘恰跌停仍按收盘价成交。 |
+| 2026-09-22 | **Q6 人裁**：收盘止损与当日 dropout 止损先（与现核一致）。 |
+| 2026-09-22 | **Q1 人裁并落地**：`--stop-fill touch\|close`；日线 close 止损；分钟拒绝 close。 |
+| 2026-09-22 | 写清禁 `import qlib`：**目的**是成交核不绑 qlib 运行时；**手段**是热路径不 import。对齐 `Mean($close)` 不是破例。 |
+| 2026-09-22 | **Q3/Q4 人裁并落地**：MyQuant 旁路 `$close`/`Mean(20/60)`/`$winratio`；BT `--buy-state-file` 查表。score_exit 拒绝此旗。MQ `--buy-state-filter` 默认不翻。 |

@@ -229,10 +229,12 @@ def simulate(
     topk=None,
     n_drop=None,
     eligible_buy=None,
+    keep_buy_vacancy: bool = False,
     buy_cost_rate: Optional[float] = None,
     sell_cost_rate: Optional[float] = None,
     min_cost: Optional[float] = None,
     index_block_new=None,
+    stop_fill: Optional[str] = None,
 ) -> SimState:
     """核心日循环。bars/pool_days 可由测试注入；run() 负责从湖与 CSV 加载。
 
@@ -257,9 +259,14 @@ def simulate(
         topk=topk,
         n_drop=n_drop,
         eligible_buy=eligible_buy,
+        keep_buy_vacancy=keep_buy_vacancy,
         index_block_new=index_block_new,
+        stop_fill=stop_fill,
     )
     stop_pct = hooks["stop_pct"]
+    stop_fill = str(hooks.get("stop_fill") or "touch").strip().lower()
+    if stop_fill not in ("touch", "close"):
+        raise SystemExit(f"--stop-fill must be touch or close, got {stop_fill}")
     take_profit = hooks["take_profit"]
     buy_gate = hooks.get("buy_gate")
     sell_gate = hooks.get("sell_gate")
@@ -356,9 +363,22 @@ def simulate(
 
                     if t1_sellable(calendar[pos.entry_idx].date(), day.date()):
                         stop_enabled = isinstance(stop_pct, float) and 0 < stop_pct < 1
+                        close = float(row["close"])
                         if stop_enabled:
                             trigger = pos.cost * (1.0 - stop_pct)
-                            if float(row["open"]) <= trigger:
+                            if stop_fill == "close":
+                                if close <= trigger:
+                                    _sell(
+                                        st,
+                                        code,
+                                        pos,
+                                        close,
+                                        day,
+                                        "stop_loss:close",
+                                        price_rule="daily_stop_close",
+                                    )
+                                    continue
+                            elif float(row["open"]) <= trigger:
                                 if defer_sell_at_limit(float(row["open"]), limits):
                                     st.stats["defer_sell_limit_down"] += 1
                                 else:
@@ -372,7 +392,7 @@ def simulate(
                                         price_rule="daily_stop_gap_open",
                                     )
                                 continue
-                            if float(row["low"]) <= trigger:
+                            elif float(row["low"]) <= trigger:
                                 if defer_sell_at_limit(trigger, limits):
                                     st.stats["defer_sell_limit_down"] += 1
                                     if limit_down_pending:
@@ -383,7 +403,6 @@ def simulate(
                                 continue
 
                         pos.peak = max(pos.peak, float(row["high"]))
-                        close = float(row["close"])
                         if defer_limit_up and hit_limit_up(close, limit_up):
                             continue
                         if reserve_limit_up and hit_limit_up(float(row["open"]), limit_up):
@@ -546,12 +565,16 @@ def run(
     n_drop=None,
     eligible_buy=None,
     return_threshold_filter: bool = False,
+    week_ma_gate: bool = False,
+    ma5_gate: bool = False,
+    keep_buy_vacancy: bool = False,
     dividend_type: str = "none",
     daily_root: Optional[Path] = None,
     qlib_data_root: Optional[Path] = None,
     buy_cost_rate: Optional[float] = None,
     sell_cost_rate: Optional[float] = None,
     min_cost: Optional[float] = None,
+    stop_fill: Optional[str] = None,
 ) -> SimState:
     warn_stale_period_env()
     if normalize_csv_strategy(strategy) == "version12" and (
@@ -571,12 +594,16 @@ def run(
     from backtest.research.topk_dropout_scores import codes_from_scores
 
     all_codes |= codes_from_scores(scores_by_day)
-    load_start = warmup_start(
-        start,
+    warm_days = (
         STRATEGY4_CALENDAR_SLACK_DAYS
         if normalize_csv_strategy(strategy) in ("version4", "version12")
-        else (20 if return_threshold_filter else WARMUP_DAYS),
+        else (20 if return_threshold_filter else WARMUP_DAYS)
     )
+    if week_ma_gate:
+        from backtest.research.topk_dropout_eligibility import WEEK_MA_WARMUP_DAYS
+
+        warm_days = max(warm_days, WEEK_MA_WARMUP_DAYS)
+    load_start = warmup_start(start, warm_days)
     use_qlib_bins = qlib_data_root is not None
     if normalize_csv_strategy(strategy) == "version12":
         front_root = (Path(daily_root) if daily_root is not None else resolve_period_root("1d")) / "dividend_type=front"
@@ -611,6 +638,14 @@ def run(
         f"loaded {len(bars)}/{len(all_codes)} daily series, {len(pool_days)} pool days",
         flush=True,
     )
+    if week_ma_gate:
+        from backtest.research.topk_dropout_eligibility import with_week_ma_gate
+
+        eligible_buy = with_week_ma_gate(eligible_buy, bars)
+    if ma5_gate:
+        from backtest.research.topk_dropout_eligibility import with_ma5_gate
+
+        eligible_buy = with_ma5_gate(eligible_buy, bars)
     if return_threshold_filter:
         from backtest.research.topk_dropout_eligibility import with_return_threshold
 
@@ -657,10 +692,12 @@ def run(
         topk=topk,
         n_drop=n_drop,
         eligible_buy=eligible_buy,
+        keep_buy_vacancy=keep_buy_vacancy,
         buy_cost_rate=buy_cost_rate,
         sell_cost_rate=sell_cost_rate,
         min_cost=min_cost,
         index_block_new=index_block_new,
+        stop_fill=stop_fill,
     )
     if skipped.get("exdiv_skipped_no_factor"):
         st.stats["exdiv_skipped_no_factor"] = int(skipped["exdiv_skipped_no_factor"])

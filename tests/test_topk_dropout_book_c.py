@@ -118,3 +118,207 @@ def test_load_scores_dir_keeps_leading_zeros(tmp_path):
     assert "000048.SZ" in got and got["000048.SZ"] == pytest.approx(0.11)
     assert "000608.SZ" in got and got["000608.SZ"] == pytest.approx(0.57)
     assert "600179.SH" in got
+
+
+def _close_fill_days():
+    idx = pd.DatetimeIndex(
+        [
+            pd.Timestamp("2026-01-05"),
+            pd.Timestamp("2026-01-06"),
+            pd.Timestamp("2026-01-07"),
+            pd.Timestamp("2026-01-08"),
+        ]
+    )
+    days = ["20260105", "20260106", "20260107", "20260108"]
+    names = {d: {"600000.SH": "测试", "600001.SH": "对照"} for d in days}
+    return idx, days, names
+
+
+def test_help_lock_mentions_stop_fill_close():
+    assert "--stop-fill" in strategy_topk_dropout_rules.HELP_LOCK
+    assert "stop_loss:close" in strategy_topk_dropout_rules.HELP_LOCK
+
+
+def test_daily_stop_fill_close_ignores_gap_open():
+    """Open 9.4 would gap-stop at 5%; close 9.8 stays above trigger → no stop."""
+    idx, days, names = _close_fill_days()
+    bars = {
+        "600000.SH": pd.DataFrame(
+            {
+                "open": [10.0, 10.0, 9.4, 9.5],
+                "high": [10.5, 10.2, 9.9, 9.7],
+                "low": [9.8, 9.9, 9.3, 9.4],
+                "close": [10.0, 10.0, 9.8, 9.6],
+                "volume": [1e6, 1e6, 1e6, 1e6],
+            },
+            index=idx,
+        ),
+    }
+    pool = {d: (["600000.SH"] if d == "20260105" else []) for d in days}
+    scores = {d: {"600000.SH": 1.0, "600001.SH": 0.1} for d in days}
+    st = simulate(
+        bars,
+        pool,
+        "20260105",
+        "20260108",
+        total_cash=2_000_000,
+        daily_quota=1_000_000,
+        strategy="topk_dropout",
+        scores_by_day=scores,
+        topk=1,
+        n_drop=1,
+        stop_pct=0.05,
+        stop_fill="close",
+        pool_names_by_day=names,
+    )
+    sells = [t for t in st.trades if t["side"] == "SELL"]
+    assert all(not str(t["reason"]).startswith("stop_loss") for t in sells), sells
+    assert st.stats.get("stop_fill") == "close"
+
+
+def test_daily_stop_fill_close_sells_at_close_not_touch():
+    """Low stays above trigger so touch would not fire; close 9.4 does."""
+    idx, days, names = _close_fill_days()
+    bars = {
+        "600000.SH": pd.DataFrame(
+            {
+                "open": [10.0, 10.0, 9.8, 9.5],
+                "high": [10.5, 10.2, 9.9, 9.7],
+                "low": [9.8, 9.9, 9.7, 9.4],
+                "close": [10.0, 10.0, 9.4, 9.6],
+                "volume": [1e6, 1e6, 1e6, 1e6],
+            },
+            index=idx,
+        ),
+    }
+    pool = {d: (["600000.SH"] if d == "20260105" else []) for d in days}
+    scores = {d: {"600000.SH": 1.0, "600001.SH": 0.1} for d in days}
+    st = simulate(
+        bars,
+        pool,
+        "20260105",
+        "20260108",
+        total_cash=2_000_000,
+        daily_quota=1_000_000,
+        strategy="topk_dropout",
+        scores_by_day=scores,
+        topk=1,
+        n_drop=1,
+        stop_pct=0.05,
+        stop_fill="close",
+        pool_names_by_day=names,
+    )
+    sells = [t for t in st.trades if t["side"] == "SELL"]
+    assert sells, st.trades
+    assert sells[0]["reason"] == "stop_loss:close"
+    assert sells[0]["price"] == pytest.approx(9.4)
+    assert sells[0]["price_rule"] == "daily_stop_close"
+
+
+def test_daily_stop_fill_close_fills_at_limit_down():
+    idx, days, names = _close_fill_days()
+    bars = {
+        "600000.SH": pd.DataFrame(
+            {
+                "open": [10.0, 10.0, 9.0, 9.1],
+                "high": [10.5, 10.2, 9.0, 9.2],
+                "low": [9.8, 9.9, 9.0, 9.0],
+                "close": [10.0, 10.0, 9.0, 9.1],
+                "volume": [1e6, 1e6, 1e6, 1e6],
+            },
+            index=idx,
+        ),
+    }
+    pool = {d: (["600000.SH"] if d == "20260105" else []) for d in days}
+    scores = {d: {"600000.SH": 1.0, "600001.SH": 0.1} for d in days}
+    st = simulate(
+        bars,
+        pool,
+        "20260105",
+        "20260108",
+        total_cash=2_000_000,
+        daily_quota=1_000_000,
+        strategy="topk_dropout",
+        scores_by_day=scores,
+        topk=1,
+        n_drop=1,
+        stop_pct=0.05,
+        stop_fill="close",
+        pool_names_by_day=names,
+    )
+    sells = [t for t in st.trades if t["side"] == "SELL"]
+    assert sells, st.trades
+    assert sells[0]["reason"] == "stop_loss:close"
+    assert sells[0]["price"] == pytest.approx(9.0)
+
+
+def test_daily_stop_fill_close_beats_same_day_dropout():
+    idx, days, names = _close_fill_days()
+    ohlc = {
+        "open": [10.0, 10.0, 9.8, 9.5],
+        "high": [10.5, 10.2, 9.9, 9.7],
+        "low": [9.8, 9.9, 9.7, 9.4],
+        "close": [10.0, 10.0, 9.4, 9.6],
+        "volume": [1e6, 1e6, 1e6, 1e6],
+    }
+    bars = {
+        "600000.SH": pd.DataFrame(ohlc, index=idx),
+        "600001.SH": pd.DataFrame(
+            {k: ([10.0] * 4 if k != "volume" else [1e6] * 4) for k in ohlc},
+            index=idx,
+        ),
+    }
+    pool = {d: ["600000.SH"] if d == "20260105" else [] for d in days}
+    scores = {
+        "20260105": {"600000.SH": 1.0, "600001.SH": 0.1},
+        "20260106": {"600000.SH": 1.0, "600001.SH": 0.1},
+        "20260107": {"600000.SH": 0.1, "600001.SH": 1.0},
+        "20260108": {"600000.SH": 0.1, "600001.SH": 1.0},
+    }
+    st = simulate(
+        bars,
+        pool,
+        "20260105",
+        "20260108",
+        total_cash=2_000_000,
+        daily_quota=1_000_000,
+        strategy="topk_dropout",
+        scores_by_day=scores,
+        topk=1,
+        n_drop=1,
+        stop_pct=0.05,
+        stop_fill="close",
+        pool_names_by_day=names,
+    )
+    sells = [t for t in st.trades if t["side"] == "SELL" and t["code"] == "600000.SH"]
+    assert sells, st.trades
+    assert sells[0]["reason"] == "stop_loss:close"
+    assert not any(str(t["reason"]).startswith("topk_drop") for t in sells)
+
+
+def test_minute_refuses_stop_fill_close():
+    from backtest.research.csv_minute_backtest import simulate as minute_simulate
+
+    with pytest.raises(SystemExit, match="minute entry refuses"):
+        minute_simulate(
+            {},
+            {},
+            {},
+            "20260106",
+            "20260108",
+            strategy="topk_dropout",
+            scores_by_day={"20260106": {"600000.SH": 1.0}},
+            topk=1,
+            n_drop=1,
+            stop_fill="close",
+        )
+
+
+def test_stop_fill_close_rejected_for_version6():
+    import argparse
+
+    from backtest.research.csv_strategy_books import csv_run_kwargs_from_args
+
+    ns = argparse.Namespace(strategy="version6", stop_fill="close", stop_pct=None)
+    with pytest.raises(SystemExit, match="only for topk_dropout"):
+        csv_run_kwargs_from_args(ns)

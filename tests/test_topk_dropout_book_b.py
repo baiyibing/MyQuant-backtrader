@@ -43,6 +43,66 @@ def test_walk_down_skips_st_first_candidate():
     assert len(planned) == len(raw_buy)
 
 
+def test_keep_vacancy_st_still_refills_the_list():
+    day = "20260106"
+    scores = {
+        "600000.SH": 10.0,
+        "600001.SH": 9.0,
+        "600010.SH": 8.0,
+        "600011.SH": 7.0,
+    }
+    held = ["600000.SH", "600001.SH"]
+    raw_buy, _sell = decide_topk_dropout(held, scores, topk=3, n_drop=1)
+    eligible = make_eligible_buy(
+        st_by_day={date(2026, 1, 6): {"600010.SH"}},
+    )
+    hooks = apply_csv_strategy(
+        "topk_dropout",
+        scores_by_day={day: scores},
+        topk=3,
+        n_drop=1,
+        eligible_buy=eligible,
+        keep_buy_vacancy=True,
+    )
+    planned_for_day = hooks["planned_for_day"]
+    planned = planned_for_day(day, held)
+    assert planned[0] == "600011.SH"
+    assert "600010.SH" not in planned
+    assert len(planned) == len(raw_buy)
+    assert planned_for_day.slot_count == len(raw_buy)
+
+
+def test_keep_vacancy_ma_gate_leaves_the_seat_empty():
+    day = "20260106"
+    scores = {
+        "600000.SH": 10.0,
+        "600001.SH": 9.0,
+        "600010.SH": 8.0,
+        "600011.SH": 7.0,
+    }
+    held = ["600000.SH", "600001.SH"]
+    raw_buy, _sell = decide_topk_dropout(held, scores, topk=3, n_drop=1)
+    eligible = make_eligible_buy(
+        buy_state_by_key={
+            ("600010.SH", day): (9.0, 10.0, 11.0, 0.5),
+            ("600011.SH", day): (12.0, 10.0, 11.0, 0.5),
+        },
+        buy_state_rule="above-ma20",
+    )
+    hooks = apply_csv_strategy(
+        "topk_dropout",
+        scores_by_day={day: scores},
+        topk=3,
+        n_drop=1,
+        eligible_buy=eligible,
+        keep_buy_vacancy=True,
+    )
+    planned_for_day = hooks["planned_for_day"]
+    planned = planned_for_day(day, held)
+    assert planned == []
+    assert planned_for_day.slot_count == len(raw_buy)
+
+
 def test_age_gate_blocks_young_name():
     day = "20260106"
     scores = {
