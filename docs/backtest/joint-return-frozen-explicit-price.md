@@ -105,3 +105,31 @@ return_status=待实测. The fixture tests prove adapter behavior, not real retu
 raw-source verification, PIT, full trading costs or corporate-action economics.
 Production_C and all production paths remain frozen. Do not merge without
 bt/human review: CI green first, then bt merges.
+
+## Research-only 阶段计时（2026-09-23）
+
+在原回放命令追加 `--profile-timings` 即开启；默认关闭，不读计时时钟、
+不增加日志或产物。Python 入口对应 `run_replay(..., profile_timings=True)`。
+仅用于 joint-return / Mode B 的「先测再加速」研究决策，不改变成交语义、
+时钟边界、容量切片、fees 或 Decimal 结果；未引入 orjson / Rust / 并行。
+
+成功回放后 stderr 输出一行 `research phase timings (seconds): {…}`，
+JSON 数值均为单调墙钟 `perf_counter` 秒数，保留六位小数：
+
+- `bundle_load`：manifest、intents 及伴随文件装载与原有校验。
+- `bars_read`：显式 bars 文件字节读取。
+- `bars_json_parse`：UTF-8 解码、stdlib JSON 解析及原有重复键检查。
+- `validate_bars`：bars 合同/内容/覆盖校验。
+- `validate_reference_marks`：仅 frozen M-REF（含 `all`）记录独立 mark 校验。
+- `replay_<fill_mode>_<arm>`：各次 `_Replay(...)` 构造（含索引）与 `.run()`；
+  例如 `replay_M-REF_P-BASE`、`replay_M-LAG_P-BASE`。`--fill-mode all`
+  分别记账；仅选 P-CHASE 时仍记录实际执行的 P-BASE 基准，基准复用不重复计时。
+- `write_artifacts`：CSV/summary 序列化、产物与输入审计哈希、建目录及写出，
+  包括最后的 summary.json 写入。
+- `total_seconds`：从 `run_replay` 入口到全部产物写完的总耗时；包含上述不重叠阶段，
+  以及阶段间 manifest 复核、汇总等开销。不包含 CLI 参数解析、末尾读取 summary
+  与打印回执/计时行，因此不要求等于各阶段之和。
+
+不写 timings.json，也不向 summary 注入计时字段。四份产物、stdout 成功回执
+及既有合同不变，summary.json 仍最后写、仍是完成标记。失败沿用原错误路径，
+不输出成功计时摘要。data-free 测试只验证计时覆盖与产物一致性，不代表真湖耗时。
