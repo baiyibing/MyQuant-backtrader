@@ -1,0 +1,14 @@
+---
+description: Strategy edits stay on the current book until a new version is approved
+alwaysApply: true
+---
+
+# 策略版本：未批准不开新书
+
+改策略规则时，**默认改当前正在迭代的那一本**，不要自行注册下一个版本号。
+
+开新版本（新的 `strategyN_rules.py`、新的 `version8_x` / `versionN` 注册）必须先有用户对「开新版本」的明确批准。未批准前，规则改在旧版本上，并在该版本上跑回测。
+
+- 「批准实施 / 批准执行」只授权按已锁定的规则改程序并回测，落在**当前书**上。
+- 只有用户明确同意开新版本，才新增书、别名和 HELP_LOCK。
+- 已落地的 `8.1`–`8.6` 不要为了这条回溯合并。下一刀未另批前，改 `version8_6`。

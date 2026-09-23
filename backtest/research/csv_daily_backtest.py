@@ -294,6 +294,7 @@ def simulate(
     allow_add = bool(hooks["allow_add"])
     reserve_limit_up = bool(hooks.get("reserve_limit_up"))
     defer_limit_up = bool(hooks.get("defer_limit_up"))
+    close_clear = hooks.get("close_clear")
     daily_same_bar_prefixes = tuple(hooks.get("daily_same_bar_prefixes", ()))
     qlib_limit_pct = hooks.get("qlib_limit_pct")
     limit_up_chase = bool(hooks.get("limit_up_chase", True))
@@ -418,6 +419,8 @@ def simulate(
                                 if callable(sell_gate)
                                 else take_profit(close, pos.cost, pos.peak, n_days)
                             )
+                        if not reason and callable(close_clear):
+                            reason = close_clear(pos.cost, pos.peak, n_days)
                         if reason:
                             same_bar = any(
                                 reason.startswith(prefix)
@@ -434,7 +437,15 @@ def simulate(
                                 st.stats["skip_limit_sell"] = (
                                     int(st.stats.get("skip_limit_sell", 0)) + 1
                                 )
-                                if limit_down_pending:
+                                if str(reason).startswith(
+                                    (
+                                        "force_sell:t1_close",
+                                        "force_sell:t2_close",
+                                        "force_sell:t4_close",
+                                    )
+                                ):
+                                    st.stats["defer_sell_limit_down"] += 1
+                                elif limit_down_pending:
                                     if same_bar or at_down:
                                         st.stats["defer_sell_limit_down"] += 1
                                     pos.pending_exit = reason
@@ -658,7 +669,31 @@ def run(
         exdiv = load_exdiv_ratios(all_codes, start, end, skipped_out=skipped)
     index_block_new = None
     gate_book = normalize_csv_strategy(strategy)
-    if gate_book in ("version8", "version8_3"):
+    if gate_book == "version8_4":
+        from backtest.research.strategy8_4_rules import (
+            INDEX_GATE_ON,
+            load_sse_ma10_block_new,
+        )
+
+        if INDEX_GATE_ON:
+            index_block_new = load_sse_ma10_block_new(start, end)
+    elif gate_book == "version8_5":
+        from backtest.research.strategy8_5_rules import (
+            INDEX_GATE_ON,
+            load_sse_ma10_block_new,
+        )
+
+        if INDEX_GATE_ON:
+            index_block_new = load_sse_ma10_block_new(start, end)
+    elif gate_book == "version8_6":
+        from backtest.research.strategy8_6_rules import (
+            INDEX_GATE_ON,
+            load_sse_ma10_block_new,
+        )
+
+        if INDEX_GATE_ON:
+            index_block_new = load_sse_ma10_block_new(start, end)
+    elif gate_book in ("version8", "version8_3"):
         from backtest.research.strategy8_rules import (
             INDEX_GATE_ON,
             load_sse_ma10_block_new,
