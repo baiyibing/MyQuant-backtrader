@@ -481,10 +481,7 @@ def load_bundle(intents_path):
     return m, rows, {"manifest_raw_sha256": raw_hash(raw_manifest), "manifest_content_sha256": content_hash(m)}
 
 
-def validate_bars(bundle, m, intents):
-    fields(bundle, ("schema_version", "kind", "metadata", "bars", "corporate_actions", "content_sha256"), "bars snapshot")
-    require(bundle["content_sha256"] == content_hash({k: v for k, v in bundle.items() if k != "content_sha256"}),
-            "bars content hash drift", "CONTRACT_MISMATCH")
+def _validate_bar_metadata(bundle, m, intents):
     frozen = m["kind"] == "frozen"
     require(bundle["schema_version"] == SCHEMA_VERSION
             and bundle["kind"] == ("frozen_explicit" if frozen else "synthetic"), "price source kind mismatch")
@@ -546,26 +543,13 @@ def validate_bars(bundle, m, intents):
         num(entry["mark_price"], "initial mark", positive=True)
         symbol(inst, entry["execution_symbol"])
     require(set(md["initial_lots"]) == lot_ids, "initial lot evidence missing/extra")
-    require(isinstance(bundle["bars"], list), "bars must be explicit list")
-    bars, closes = {}, defaultdict(list)
-    for raw in bundle["bars"]:
-        fields(raw, ("instrument", "execution_symbol", "timestamp", "open", "close", "limit_up", "limit_down", "suspended", "capacity"), "minute bar")
-        inst = raw["instrument"]
-        require(inst in mapping, "bar instrument not in input intent/initial universe")
-        symbol(inst, raw["execution_symbol"])
-        t = stamp(raw["timestamp"])
-        if md["bar_label"] == "CLOSE_TIME":
-            t -= timedelta(seconds=60)
-        require(t in opportunities, "bar outside frozen session endpoints")
-        require((t, inst) not in bars, "duplicate minute bar")
-        for k in ("open", "close", "limit_up", "limit_down"):
-            num(raw[k], k, positive=True)
-        require(raw["limit_down"] <= min(raw["open"], raw["close"])
-                <= max(raw["open"], raw["close"]) <= raw["limit_up"], "bar outside explicit price limits")
-        require(type(raw["suspended"]) is bool, "suspension evidence missing")
-        num(raw["capacity"], "capacity")
-        bars[t, inst] = raw
-        closes[t + timedelta(seconds=60)].append(raw)
+    return opportunities, ends, mapping
+
+
+def _validate_bar_events(bundle, intents, opportunities, ends, mapping):
+    md = bundle["metadata"]
+    initial_at = stamp(md["initial_at"])
+    cal = md["calendar"]
     events = bundle["corporate_actions"]
     require(isinstance(events, list), "quantity events must be explicit list")
     seen, previous = set(), None
@@ -597,6 +581,41 @@ def validate_bars(bundle, m, intents):
         for r in intents:
             if r["instrument"] == e["instrument"] and stamp(r["reference_price_at"]) == effective:
                 raise ReplayError("SEMANTICS_BLOCKED", "quantity snapshot at event boundary is ambiguous")
+
+
+def validate_bars(bundle, m, intents):
+    fields(bundle, ("schema_version", "kind", "metadata", "bars", "corporate_actions", "content_sha256"), "bars snapshot")
+    require(bundle["content_sha256"] == content_hash({k: v for k, v in bundle.items() if k != "content_sha256"}),
+            "bars content hash drift", "CONTRACT_MISMATCH")
+    opportunities, ends, mapping = _validate_bar_metadata(bundle, m, intents)
+    md = bundle["metadata"]
+    frozen = m["kind"] == "frozen"
+
+    def symbol(inst, value):
+        text_value(value, "execution symbol")
+        require(mapping[inst] == value, "minute execution mapping drift/collision", "SEMANTICS_BLOCKED")
+
+    require(isinstance(bundle["bars"], list), "bars must be explicit list")
+    bars, closes = {}, defaultdict(list)
+    for raw in bundle["bars"]:
+        fields(raw, ("instrument", "execution_symbol", "timestamp", "open", "close", "limit_up", "limit_down", "suspended", "capacity"), "minute bar")
+        inst = raw["instrument"]
+        require(inst in mapping, "bar instrument not in input intent/initial universe")
+        symbol(inst, raw["execution_symbol"])
+        t = stamp(raw["timestamp"])
+        if md["bar_label"] == "CLOSE_TIME":
+            t -= timedelta(seconds=60)
+        require(t in opportunities, "bar outside frozen session endpoints")
+        require((t, inst) not in bars, "duplicate minute bar")
+        for k in ("open", "close", "limit_up", "limit_down"):
+            num(raw[k], k, positive=True)
+        require(raw["limit_down"] <= min(raw["open"], raw["close"])
+                <= max(raw["open"], raw["close"]) <= raw["limit_up"], "bar outside explicit price limits")
+        require(type(raw["suspended"]) is bool, "suspension evidence missing")
+        num(raw["capacity"], "capacity")
+        bars[t, inst] = raw
+        closes[t + timedelta(seconds=60)].append(raw)
+    _validate_bar_events(bundle, intents, opportunities, ends, mapping)
     if frozen:
         # Deliberately conservative: every symbol in the frozen universe must
         # have explicit evidence for every declared session minute, suspended
@@ -641,15 +660,26 @@ def plain(value):
     return value
 
 
+def _bar_number(bar, column, name):
+    """Representation boundary; validated panels supply lazy Decimal cells."""
+    if hasattr(bar, "decimal"):
+        return bar.decimal(column)
+    return num(bar[column], name)
+
+
 class _Replay:
     def __init__(self, m, rows, bundle, arm, fill_mode, validated):
         self.m, self.arm, self.fill_mode = m, arm, fill_mode
         self.opportunities, self.ends, self.bars, self.closes = validated
-        self.bars_at = defaultdict(dict)
-        self.bar_days = set()
-        for (t, inst), bar in self.bars.items():
-            self.bars_at[t][inst] = bar
-            self.bar_days.add((t.date().isoformat(), inst))
+        if hasattr(self.bars, "bars_at"):
+            self.bars_at = self.bars.bars_at
+            self.bar_days = self.bars.bar_days
+        else:
+            self.bars_at = defaultdict(dict)
+            self.bar_days = set()
+            for (t, inst), bar in self.bars.items():
+                self.bars_at[t][inst] = bar
+                self.bar_days.add((t.date().isoformat(), inst))
         self.events = bundle["corporate_actions"]
         self.md = bundle["metadata"]
         self.calendar = m["metadata"]["calendar"]
@@ -789,11 +819,11 @@ class _Replay:
             # This day's first limit-down attempt froze further attempts. The
             # next market session rechecks the unchanged original intent.
             return capacity
-        market_price = num(bar["open"], "open")
-        if r["side"] == "BUY" and market_price >= num(bar["limit_up"], "limit up"):
+        market_price = _bar_number(bar, "open", "open")
+        if r["side"] == "BUY" and market_price >= _bar_number(bar, "limit_up", "limit up"):
             self.audit(o, state, "LIMIT_UP", t)
             return capacity
-        if r["side"] == "SELL" and market_price <= num(bar["limit_down"], "limit down"):
+        if r["side"] == "SELL" and market_price <= _bar_number(bar, "limit_down", "limit down"):
             o["limit_down_day"] = t.date()
             self.audit(o, state, "LIMIT_DOWN", t)
             return capacity
@@ -918,7 +948,7 @@ class _Replay:
             day = t.date().isoformat()
             for bar in self.closes.get(t, []):
                 if not bar["suspended"]:
-                    self.marks[bar["instrument"]] = (num(bar["close"], "close"), t, [])
+                    self.marks[bar["instrument"]] = (_bar_number(bar, "close", "close"), t, [])
             for e in events_at.get(t, []):
                 self.convert(e, t)
             for o in self.orders:
@@ -929,7 +959,7 @@ class _Replay:
                 # All simultaneous open marks are visible before SELL-first fills.
                 for inst, bar in self.bars_at.get(t, {}).items():
                     if not bar["suspended"]:
-                        self.marks[inst] = (num(bar["open"], "open"), t, [])
+                        self.marks[inst] = (_bar_number(bar, "open", "open"), t, [])
                 eligible = []
                 for o in self.orders:
                     r = o["intent"]
@@ -942,7 +972,7 @@ class _Replay:
                 if eligible and day not in pre_nav:
                     pre_nav[day], first_attempt[day] = self.nav(), t
                     require(pre_nav[day] > 0, "pre-rebalance NAV denominator must be positive")
-                capacity = {inst: num(bar["capacity"], "capacity") for inst, bar in self.bars_at.get(t, {}).items()}
+                capacity = {inst: _bar_number(bar, "capacity", "capacity") for inst, bar in self.bars_at.get(t, {}).items()}
                 for o in sorted(eligible, key=lambda x: (x["intent"]["side"] != "SELL", x["intent"]["intent_id"])):
                     inst = o["intent"]["instrument"]
                     capacity[inst] = self.attempt(o, self.bars.get((t, inst)), t, capacity.get(inst, Decimal(0)))
@@ -1044,7 +1074,7 @@ def _summary(m, product, base, arm, fill_mode):
         "undefined_exposures": {"low_anti_weight": None, "industry_concentration": None, "size_tail": None}}
 
 
-def replay(m, intents, bars, *, arm, fill_mode, _timings=None):
+def replay(m, intents, bars, *, arm, fill_mode, validate_version="v1", _timings=None):
     """Pure validated replay. An arm selection never substitutes its state for BASE.
 
     All inputs are immutable. Use load_bundle/run_replay for disk hash checks;
@@ -1056,8 +1086,17 @@ def replay(m, intents, bars, *, arm, fill_mode, _timings=None):
     if m["kind"] == "frozen":
         require(arm == "P-BASE", "frozen supports P-BASE only; P-CHASE/weak INPUT_BLOCKED")
     require(bars is not None, "explicit --bars price source required; no sessions.json price fallback")
-    with timings.phase("validate_bars"):
-        validated = validate_bars(bars, m, intents)
+    require(validate_version in ("v1", "v2"), "unknown validate version")
+    if isinstance(bars, (str, Path)):
+        require(validate_version == "v2", "pack root requires --validate-version v2")
+        from backtest.research.joint_return_validate_v2 import validate_pack_replay
+        bars, validated = validate_pack_replay(bars, m, intents, timings)
+    elif validate_version == "v1":
+        with timings.phase("validate_bars"):
+            validated = validate_bars(bars, m, intents)
+    else:
+        from backtest.research.joint_return_validate_v2 import validate_json_replay
+        validated = validate_json_replay(bars, m, intents, timings)
     if m["kind"] == "frozen" and fill_mode in ("M-REF", "all"):
         with timings.phase("validate_reference_marks"):
             validate_reference_marks(bars, intents)
@@ -1124,7 +1163,7 @@ NAV_COLUMNS = ("run_id", "contract_hash", "arm_id", "arm_intent_hash", "fill_id"
     "price_domain", "benchmark_nav", "benchmark_net_return", "net_return_difference")
 
 
-def run_replay(intents_path, bars_path, *, arm, fill_mode, out, profile_timings=False):
+def run_replay(intents_path, bars_path, *, arm, fill_mode, out, profile_timings=False, validate_version="v1"):
     """Write the four-file run only after all validation and replay succeed.
 
     summary.json is written last as completion marker. Existing directories are
@@ -1134,11 +1173,18 @@ def run_replay(intents_path, bars_path, *, arm, fill_mode, out, profile_timings=
     with timings.phase("bundle_load"):
         m, intents, provenance = load_bundle(intents_path)
     require(bars_path is not None, "explicit --bars price source required; no sessions.json price fallback")
-    with timings.phase("bars_read"):
-        raw = read_bytes(bars_path)
-    with timings.phase("bars_json_parse"):
-        bars = load_json_bytes(raw)
-    product = replay(m, intents, bars, arm=arm, fill_mode=fill_mode, _timings=timings)
+    pack_input = Path(bars_path).is_dir()
+    if pack_input:
+        require(validate_version == "v2", "pack root requires --validate-version v2")
+        bars = Path(bars_path)
+        with timings.phase("bars_read"):
+            raw = read_bytes(bars / "MANIFEST.json")
+    else:
+        with timings.phase("bars_read"):
+            raw = read_bytes(bars_path)
+        with timings.phase("bars_json_parse"):
+            bars = load_json_bytes(raw)
+    product = replay(m, intents, bars, arm=arm, fill_mode=fill_mode, validate_version=validate_version, _timings=timings)
     path = Path(out)
     require(path.name == m["run_id"], "--out must be the final directory named by MQ run_id")
     require(not path.exists(), "output directory already exists", "OUTPUT_BLOCKED")
@@ -1146,8 +1192,13 @@ def run_replay(intents_path, bars_path, *, arm, fill_mode, out, profile_timings=
         data = {name + ".csv": csv_bytes(product[name], columns) for name, columns in
                 (("orders", ORDER_COLUMNS), ("fills", FILL_COLUMNS), ("daily_nav", NAV_COLUMNS))}
         summary = product["summary"]
-        summary["inputs"] = {**provenance, "bars_raw_sha256": raw_hash(raw), "bars_content_sha256": content_hash(bars),
+        bars_identity = load_json_bytes(raw) if pack_input else bars
+        summary["inputs"] = {**provenance, "bars_raw_sha256": raw_hash(raw), "bars_content_sha256": content_hash(bars_identity),
                              "input_raw_hashes_verified": False, "snapshot_verification": "MQ_DECLARATION_ONLY"}
+        if pack_input:
+            summary["inputs"]["bars_seal_mode"] = "byte"
+            summary["inputs"]["bars_identity"] = "MANIFEST (raw/content); payload hash in manifest"
+            summary["inputs"]["bars_payload_raw_sha256"] = bars_identity["bars_payload_raw_sha256"]
         summary["artifacts"] = {k: {"raw_sha256": raw_hash(v), "content_sha256": content_hash(product[k[:-4]])}
                                 for k, v in data.items()}
         # Hash the exact executing adapter bytes as well as retaining input code
@@ -1168,18 +1219,20 @@ def run_replay(intents_path, bars_path, *, arm, fill_mode, out, profile_timings=
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="Research replay: synthetic or frozen control-only MQ pack + explicit minute JSON")
+    parser = argparse.ArgumentParser(description="Research replay: synthetic or frozen control-only MQ pack + explicit minute JSON or opt-in v2 bin/Arrow/Parquet pack")
     parser.add_argument("--intents", type=Path, required=True, help="explicit MQ intents.csv, directory or manifest.json; companion artifacts adjacent")
-    parser.add_argument("--bars", type=Path, help="explicit synthetic or frozen_explicit minute JSON with content hash/provenance; absent => INPUT_BLOCKED; no Qlib auto-discovery")
+    parser.add_argument("--bars", type=Path, help="explicit minute JSON, or byte-sealed qlib_bin/Arrow IPC/Parquet pack directory with v2; absent => INPUT_BLOCKED; no Qlib auto-discovery")
     parser.add_argument("--arm", choices=(*ARMS, "all"), required=True)
     parser.add_argument("--fill-mode", choices=(*FILL_MODES, "all"), required=True)
     parser.add_argument("--out", type=Path, required=True, help="final backtest_output/joint-return-v1/<run_id> directory")
+    parser.add_argument("--validate-version", choices=("v1", "v2"), default="v1",
+                        help="research opt-in dense validation; default v1; v2 uses sealed JSON or bin directly to panel")
     parser.add_argument("--profile-timings", action="store_true",
                         help="research-only phase wall-clock seconds on stderr; artifacts unchanged")
     args = parser.parse_args(argv)
     try:
         path = run_replay(args.intents, args.bars, arm=args.arm, fill_mode=args.fill_mode,
-                          out=args.out, profile_timings=args.profile_timings)
+                          out=args.out, profile_timings=args.profile_timings, validate_version=args.validate_version)
     except (ReplayError, OSError, KeyError, TypeError, AttributeError) as exc:
         print(canonical_bytes({"status": getattr(exc, "status", "INPUT_BLOCKED"), "detail": str(exc)}).decode())
         return 2
