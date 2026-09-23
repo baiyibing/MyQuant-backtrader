@@ -118,6 +118,7 @@ from backtest.research.csv_simulate_loop import (  # noqa: E402
 from backtest.research.ashare_volume_cap import VolumeCap, VolumeLookup  # noqa: E402
 
 BUY_HM = 14 * 60 + 55
+CLOSE_CLEAR_HM = 15 * 60
 
 HELP_LOCK = """
 分钟向量化口径（相对 Cerebro 保真版：无事件总线，同公式逐分钟扫描）：
@@ -265,6 +266,7 @@ def scan_held_day_python(
     limit_up: float = 0.0,
     reserved: bool = False,
     reserve_state: Optional[dict] = None,
+    close_clear=None,
 ) -> tuple[int, float, str, float, int]:
     """Python reference implementation of the minute sell scan."""
     del pos_trail  # reserved for future; kept for API parity with callers
@@ -275,6 +277,7 @@ def scan_held_day_python(
     current_reserved = bool(reserved)
     lu_today = False
     defer_lu = bool(defer_limit_up)
+    saw_close_hm = False
     n = int(len(c))
     for i in range(n):
         # T+0 不卖、不更新峰值（历史最高价从 T+1 起算）
@@ -285,6 +288,8 @@ def scan_held_day_python(
         if hi > new_peak:
             new_peak = hi
             new_peak_hm = cur_hm
+        if cur_hm == CLOSE_CLEAR_HM:
+            saw_close_hm = True
         px_open = float(o[i])
         px_close = float(c[i])
         if limit_down > 0 and hit_limit_down(px_open, limit_down):
@@ -332,6 +337,27 @@ def scan_held_day_python(
             if limit_down > 0 and hit_limit_down(px_close, limit_down):
                 continue
             return i, px_close, "force_sell:time", new_peak, new_peak_hm
+        if (
+            close_clear is not None
+            and cur_hm == CLOSE_CLEAR_HM
+            and not (limit_down > 0 and hit_limit_down(px_close, limit_down))
+        ):
+            clear_reason = close_clear(cost, new_peak, n_days)
+            if clear_reason:
+                return i, px_close, clear_reason, new_peak, new_peak_hm
+    if (
+        close_clear is not None
+        and not saw_close_hm
+        and can_sell
+        and n_days >= 1
+        and n > 0
+    ):
+        last = n - 1
+        last_close = float(c[last])
+        if not (limit_down > 0 and hit_limit_down(last_close, limit_down)):
+            clear_reason = close_clear(cost, new_peak, n_days)
+            if clear_reason:
+                return last, last_close, clear_reason, new_peak, new_peak_hm
     return -1, float("nan"), "", new_peak, new_peak_hm
 
 
@@ -363,6 +389,7 @@ def scan_held_day(
     limit_up: float = 0.0,
     reserved: bool = False,
     reserve_state: Optional[dict] = None,
+    close_clear=None,
     use_numba: Optional[bool] = None,
 ) -> tuple[int, float, str, float, int]:
     """逐分钟扫描。返回 (idx, px, reason, new_peak, new_peak_hm)。
@@ -376,6 +403,7 @@ def scan_held_day(
         and _NUMBA_SCAN_AVAILABLE
         and sell_gate is None
         and take_profit is None
+        and close_clear is None
         and not reserve_limit_up
         and not defer_limit_up
         and reserve_state is None
@@ -446,6 +474,7 @@ def scan_held_day(
         limit_up=limit_up,
         reserved=reserved,
         reserve_state=reserve_state,
+        close_clear=close_clear,
     )
 
 
@@ -569,6 +598,7 @@ def simulate(
     sell_gate = hooks.get("sell_gate")
     peak_gap_min = int(hooks["peak_gap_min"])
     force_sell_hm = hooks.get("force_sell_hm")
+    close_clear = hooks.get("close_clear")
     reserve_limit_up = bool(hooks.get("reserve_limit_up"))
     defer_limit_up = bool(hooks.get("defer_limit_up"))
     calendar = build_calendar(daily_bars, start, end)
@@ -675,6 +705,7 @@ def simulate(
                     limit_up=limit_up,
                     reserved=bool(pos.reserved),
                     reserve_state=reserve_state,
+                    close_clear=close_clear,
                 )
                 pos.peak = new_peak
                 pos.peak_hm = new_peak_hm
@@ -690,15 +721,29 @@ def simulate(
                     volume_kwargs = {}
                     if st.volume_cap is not None:
                         bucket = int(hm[idx])
-                        volume_kwargs = {"bucket_id": bucket, "day_i": i,
-                                         "at": bucket - 1 if reason == "stop_loss:gap_open" else bucket}
+                        volume_kwargs = {
+                            "bucket_id": bucket,
+                            "day_i": i,
+                            "at": bucket - 1
+                            if reason == "stop_loss:gap_open"
+                            else bucket,
+                        }
                     # P2=B names only these two stop paths; other fills stay unlabeled.
                     price_rule = {
                         "stop_loss:gap_open": "minute_gap_open",
                         "stop_loss:touch": "minute_trigger_bar_close",
                     }.get(reason, "")
-                    _sell(st, code, pos, px, day, reason, **volume_kwargs,
-                          hm=int(hm[idx]) if price_rule else None, price_rule=price_rule)
+                    _sell(
+                        st,
+                        code,
+                        pos,
+                        px,
+                        day,
+                        reason,
+                        **volume_kwargs,
+                        hm=int(hm[idx]) if price_rule else None,
+                        price_rule=price_rule,
+                    )
 
         def _volume_bucket_for(code: str, target: int, earliest: int):
             # Mirror the quote helpers' exact/fallback row, never a later bucket.
@@ -711,8 +756,8 @@ def simulate(
             eligible = frame.loc[(frame["hm"] >= earliest) & (frame["hm"] <= target)]
             return None if eligible.empty else int(eligible["hm"].iloc[-1])
 
-        chase_volume = (lambda code: _volume_bucket_for(code, CHASE_HM, AM_OPEN))
-        pool_volume = (lambda code: _volume_bucket_for(code, BUY_HM, 14 * 60 + 30))
+        chase_volume = lambda code: _volume_bucket_for(code, CHASE_HM, AM_OPEN)
+        pool_volume = lambda code: _volume_bucket_for(code, BUY_HM, 14 * 60 + 30)
 
         def _chase_quotes_for(code: str):
             mdf = minute_bars.get(code)
@@ -931,7 +976,31 @@ def run(
     exdiv = load_exdiv_ratios(all_codes, start, end, skipped_out=skipped)
     index_block_new = None
     gate_book = normalize_csv_strategy(strategy)
-    if gate_book in ("version8", "version8_3"):
+    if gate_book == "version8_4":
+        from backtest.research.strategy8_4_rules import (
+            INDEX_GATE_ON,
+            load_sse_ma10_block_new,
+        )
+
+        if INDEX_GATE_ON:
+            index_block_new = load_sse_ma10_block_new(start, end)
+    elif gate_book == "version8_5":
+        from backtest.research.strategy8_5_rules import (
+            INDEX_GATE_ON,
+            load_sse_ma10_block_new,
+        )
+
+        if INDEX_GATE_ON:
+            index_block_new = load_sse_ma10_block_new(start, end)
+    elif gate_book == "version8_6":
+        from backtest.research.strategy8_6_rules import (
+            INDEX_GATE_ON,
+            load_sse_ma10_block_new,
+        )
+
+        if INDEX_GATE_ON:
+            index_block_new = load_sse_ma10_block_new(start, end)
+    elif gate_book in ("version8", "version8_3"):
         from backtest.research.strategy8_rules import (
             INDEX_GATE_ON,
             load_sse_ma10_block_new,
@@ -1005,7 +1074,9 @@ def main(argv: Optional[list] = None) -> int:
         "--qlib-1min-root",
         help="qlib my_data_1min root; implies --minute-source qlib_1min",
     )
-    ap.add_argument("--qlib-day-root", help="qlib daily bin root for --daily-source qlib_day")
+    ap.add_argument(
+        "--qlib-day-root", help="qlib daily bin root for --daily-source qlib_day"
+    )
     ap.add_argument(
         "--out-dir",
         type=Path,
@@ -1042,9 +1113,13 @@ def main(argv: Optional[list] = None) -> int:
         text = text + "\n" + cmp
     print(text)
     tag = f"{engine}_{args.start}_{args.end}"
-    out_dir = Path(args.out_dir) if args.out_dir else Path(REPO) / "backtest_output" / tag
+    out_dir = (
+        Path(args.out_dir) if args.out_dir else Path(REPO) / "backtest_output" / tag
+    )
     if out_dir.exists() and any(out_dir.iterdir()):
-        raise SystemExit(f"refuse overwrite existing {out_dir}; pick a new stamp directory")
+        raise SystemExit(
+            f"refuse overwrite existing {out_dir}; pick a new stamp directory"
+        )
     write_run_artifacts(
         out_dir,
         st,

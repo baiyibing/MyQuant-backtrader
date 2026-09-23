@@ -22,6 +22,9 @@ from backtest.research import (
     strategy8_1_rules,
     strategy8_2_rules,
     strategy8_3_rules,
+    strategy8_4_rules,
+    strategy8_5_rules,
+    strategy8_6_rules,
     strategy9_rules,
     strategy10_rules,
     strategy_topk_dropout_rules,
@@ -39,6 +42,9 @@ HELP_LOCK_V8 = strategy8_rules.HELP_LOCK
 HELP_LOCK_V8_1 = strategy8_1_rules.HELP_LOCK
 HELP_LOCK_V8_2 = strategy8_2_rules.HELP_LOCK
 HELP_LOCK_V8_3 = strategy8_3_rules.HELP_LOCK
+HELP_LOCK_V8_4 = strategy8_4_rules.HELP_LOCK
+HELP_LOCK_V8_5 = strategy8_5_rules.HELP_LOCK
+HELP_LOCK_V8_6 = strategy8_6_rules.HELP_LOCK
 HELP_LOCK_V9 = strategy9_rules.HELP_LOCK
 HELP_LOCK_V10 = strategy10_rules.HELP_LOCK
 HELP_LOCK_TOPK = strategy_topk_dropout_rules.HELP_LOCK
@@ -117,6 +123,7 @@ def apply_csv_strategy(strategy: str, **kwargs) -> dict:
     hooks["book"] = book.tag
     hooks["name"] = book.name
     hooks.setdefault("force_sell_hm", None)
+    hooks.setdefault("close_clear", None)
     hooks.setdefault("buy_gate", None)
     hooks.setdefault("add_gate", None)
     hooks.setdefault("allow_new_name", None)
@@ -681,6 +688,123 @@ def _run_kwargs_version8_3(args) -> dict:
     return {"strategy": "version8_3", "stop_pct": stop}
 
 
+def _apply_version8_4(
+    *,
+    stop_pct: Optional[float] = None,
+    take_profit=None,
+    record_params=None,
+    index_block_new=None,
+    **_,
+) -> dict:
+    resolved = strategy8_4_rules.STOP_PCT if stop_pct is None else float(stop_pct)
+
+    def _rec(st):
+        strategy8_4_rules.record_strategy8_4_params(st, stop_pct=resolved)
+
+    return {
+        "stop_pct": resolved,
+        "take_profit": (
+            strategy8_4_rules.take_profit_reason if take_profit is None else take_profit
+        ),
+        "record_params": record_params if record_params is not None else _rec,
+        "add_gate": strategy8_4_rules.may_add,
+        "step_add": (
+            strategy8_4_rules.step_add_due if strategy8_4_rules.ADD_STEP > 0 else None
+        ),
+        "name_lot_budget": strategy8_4_rules.lot_budget,
+        "allow_new_name": strategy8_4_rules.allow_new_name_from_gate(index_block_new),
+        "index_blocks_add": strategy8_4_rules.INDEX_BLOCKS_ADD,
+        "reserve_limit_up": strategy8_4_rules.RESERVE_LIMIT_UP,
+        "defer_limit_up": strategy8_4_rules.DEFER_LIMIT_UP,
+        "daily_same_bar_prefixes": ("open_board",),
+    }
+
+
+def _run_kwargs_version8_4(args) -> dict:
+    stop = getattr(args, "stop_pct", None)
+    if stop is not None and not 0 < float(stop) < 1:
+        raise SystemExit(f"--stop-pct must be in (0, 1), got {stop}")
+    return {"strategy": "version8_4", "stop_pct": stop}
+
+
+def _apply_version8_5(
+    *,
+    stop_pct: Optional[float] = None,
+    take_profit=None,
+    record_params=None,
+    index_block_new=None,
+    **_,
+) -> dict:
+    resolved = strategy8_5_rules.STOP_PCT if stop_pct is None else float(stop_pct)
+
+    def _rec(st):
+        strategy8_5_rules.record_strategy8_5_params(st, stop_pct=resolved)
+
+    return {
+        "stop_pct": resolved,
+        "take_profit": (
+            strategy8_5_rules.take_profit_reason if take_profit is None else take_profit
+        ),
+        "record_params": record_params if record_params is not None else _rec,
+        "add_gate": strategy8_5_rules.may_add,
+        "step_add": (
+            strategy8_5_rules.step_add_due if strategy8_5_rules.ADD_STEP > 0 else None
+        ),
+        "name_lot_budget": strategy8_5_rules.lot_budget,
+        "allow_new_name": strategy8_5_rules.allow_new_name_from_gate(index_block_new),
+        "index_blocks_add": strategy8_5_rules.INDEX_BLOCKS_ADD,
+        "reserve_limit_up": strategy8_5_rules.RESERVE_LIMIT_UP,
+        "defer_limit_up": strategy8_5_rules.DEFER_LIMIT_UP,
+        "close_clear": strategy8_5_rules.t4_close_reason,
+        "daily_same_bar_prefixes": strategy8_5_rules.SAME_BAR_PREFIXES,
+    }
+
+
+def _run_kwargs_version8_5(args) -> dict:
+    stop = getattr(args, "stop_pct", None)
+    if stop is not None and not 0 < float(stop) < 1:
+        raise SystemExit(f"--stop-pct must be in (0, 1), got {stop}")
+    return {"strategy": "version8_5", "stop_pct": stop}
+
+
+def _apply_version8_6(
+    *,
+    stop_pct: Optional[float] = None,
+    take_profit=None,
+    record_params=None,
+    index_block_new=None,
+    **_,
+) -> dict:
+    resolved = strategy8_6_rules.STOP_PCT if stop_pct is None else float(stop_pct)
+
+    def _rec(st):
+        strategy8_6_rules.record_strategy8_6_params(st, stop_pct=resolved)
+
+    return {
+        "stop_pct": resolved,
+        "take_profit": (
+            strategy8_6_rules.take_profit_reason if take_profit is None else take_profit
+        ),
+        "record_params": record_params if record_params is not None else _rec,
+        "add_gate": strategy8_6_rules.may_add,
+        "step_add": None,
+        "name_lot_budget": strategy8_6_rules.lot_budget,
+        "allow_new_name": strategy8_6_rules.allow_new_name_from_gate(index_block_new),
+        "index_blocks_add": strategy8_6_rules.INDEX_BLOCKS_ADD,
+        "reserve_limit_up": strategy8_6_rules.RESERVE_LIMIT_UP,
+        "defer_limit_up": strategy8_6_rules.DEFER_LIMIT_UP,
+        "close_clear": strategy8_6_rules.t1_close_reason,
+        "daily_same_bar_prefixes": strategy8_6_rules.SAME_BAR_PREFIXES,
+    }
+
+
+def _run_kwargs_version8_6(args) -> dict:
+    stop = getattr(args, "stop_pct", None)
+    if stop is not None and not 0 < float(stop) < 1:
+        raise SystemExit(f"--stop-pct must be in (0, 1), got {stop}")
+    return {"strategy": "version8_6", "stop_pct": stop}
+
+
 def _apply_version9(
     *, stop_pct: Optional[float] = None, take_profit=None, record_params=None, **_
 ) -> dict:
@@ -833,9 +957,7 @@ def _apply_topk_score_exit(
             "topk_score_exit fail-closed: scores_by_day required "
             "(pass --pred-csv or --scores-dir)"
         )
-    topk_i = (
-        strategy_topk_score_exit_rules.DEFAULT_TOPK if topk is None else int(topk)
-    )
+    topk_i = strategy_topk_score_exit_rules.DEFAULT_TOPK if topk is None else int(topk)
     n_drop_i = (
         strategy_topk_score_exit_rules.DEFAULT_N_DROP if n_drop is None else int(n_drop)
     )
@@ -940,7 +1062,6 @@ def _run_kwargs_topk_score_exit(args) -> dict:
     out = _run_kwargs_topk_dropout(args)
     out["strategy"] = "topk_score_exit"
     return out
-
 
 
 register(
@@ -1067,6 +1188,48 @@ register(
         help_lock=strategy8_3_rules.HELP_LOCK,
         apply=_apply_version8_3,
         run_kwargs=_run_kwargs_version8_3,
+    )
+)
+register(
+    CsvStrategyBook(
+        name="version8_4",
+        sizing="per_name",
+        name_budget=1_000_000.0,
+        tag=strategy8_4_rules.BOOK_TAG,
+        aliases=("8.4", "8_4", "v8.4", "v8_4", "version8_4"),
+        allow_add=strategy8_4_rules.ALLOW_ADD,
+        peak_gap_min=strategy8_4_rules.PEAK_GAP_MIN,
+        help_lock=strategy8_4_rules.HELP_LOCK,
+        apply=_apply_version8_4,
+        run_kwargs=_run_kwargs_version8_4,
+    )
+)
+register(
+    CsvStrategyBook(
+        name="version8_5",
+        sizing="per_name",
+        name_budget=1_000_000.0,
+        tag=strategy8_5_rules.BOOK_TAG,
+        aliases=("8.5", "8_5", "v8.5", "v8_5", "version8_5"),
+        allow_add=strategy8_5_rules.ALLOW_ADD,
+        peak_gap_min=strategy8_5_rules.PEAK_GAP_MIN,
+        help_lock=strategy8_5_rules.HELP_LOCK,
+        apply=_apply_version8_5,
+        run_kwargs=_run_kwargs_version8_5,
+    )
+)
+register(
+    CsvStrategyBook(
+        name="version8_6",
+        sizing="per_name",
+        name_budget=1_000_000.0,
+        tag=strategy8_6_rules.BOOK_TAG,
+        aliases=("8.6", "8_6", "v8.6", "v8_6", "version8_6"),
+        allow_add=strategy8_6_rules.ALLOW_ADD,
+        peak_gap_min=strategy8_6_rules.PEAK_GAP_MIN,
+        help_lock=strategy8_6_rules.HELP_LOCK,
+        apply=_apply_version8_6,
+        run_kwargs=_run_kwargs_version8_6,
     )
 )
 register(

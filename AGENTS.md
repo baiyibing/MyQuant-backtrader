@@ -21,6 +21,7 @@ Standalone research-face fork (see [README.md](README.md)). Since migration S2 (
 - 向量化撮合核收口 plan（已人裁 GO：A/A/C/A/A；范围 A→B→C，D 后置）：`docs/backtest/plan-ashare-engine-refactor-2026-09-18.md` §0.3 / §5。热路径固定清单由 `tests/test_ashare_simulate_import_fence.py` 锁定，禁止扩成 research 全目录扫描。
 - Cerebro / Rolling 已退场（2026-09-16）；chip / ma_chip 对照产物为静态档案，代码路径已删。ma_chip 默认归档；version11 CSV 移植须另开计划并重裁成交时点语义。
 - presets 与 1.3 契约：`tests/test_presets_cross_repo_snapshot.py`（勿静默漂移）。
+- 策略改规则默认改当前书，不开下一个版本号。开新版本（新 `strategyN_rules.py` / 新 `version8_x` 注册）须用户明确批准；未批准前改旧版本。已落地的 8.1–8.6 不回溯合并。
 
 ## Python
 
