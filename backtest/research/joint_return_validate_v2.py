@@ -1,4 +1,4 @@
-"""Opt-in research validation and JSON/bin replay adapters; default remains v1.
+"""Opt-in research validation and JSON/pack replay adapters; default remains v1.
 
 Axes are prebuilt from sessions, with sorted intent/initial-universe instruments.
 When converting bar labels to minute indices, CLOSE_TIME shifts by -60 seconds,
@@ -310,7 +310,7 @@ def validate_json_replay(bundle, m, intents, timings):
 
 
 def validate_pack_replay(pack_root, m, intents, timings):
-    """Byte-sealed marks-v1 -> panel -> lazy replay; no row materialization.
+    """Byte-sealed bin/columnar pack -> panel -> lazy replay; no row materialization.
 
     Timing-only packs without pinned payload hashes fail closed. Byte-mode
     corporate actions remain deferred, as in validate_bars_v2.
@@ -322,6 +322,8 @@ def validate_pack_replay(pack_root, m, intents, timings):
 
     root = Path(pack_root)
     manifest = _read_json(root / "MANIFEST.json")
+    fmt = manifest.get("format")
+    require(isinstance(fmt, str) and fmt, "MANIFEST format must be a nonempty string")
     bundle = dict(schema_version=manifest["schema_version"], kind=manifest["kind"],
                   metadata=_read_json(root / "metadata.json"),
                   corporate_actions=_read_json(root / "corporate_actions.json"),
@@ -329,21 +331,29 @@ def validate_pack_replay(pack_root, m, intents, timings):
     # Pin every decoded payload, including the calendar and instrument mapping.
     # The manifest supplies hash order; set membership here never invents it.
     index = _read_json(root / "index/instruments.json")
-    required_files = {"qlib_bin/calendars/1min.txt", "index/instruments.json"}
-    for inst, entry in index.items():
-        for name in entry["features"]:
-            required_files.add(f"qlib_bin/features/{qlib_inst_dir(inst)}/{name}.1min.bin")
+    if fmt == "qlib_bin":
+        reader = read_pack_panel
+        required_files = {"qlib_bin/calendars/1min.txt", "index/instruments.json"}
+        for inst, entry in index.items():
+            for name in entry["features"]:
+                required_files.add(f"qlib_bin/features/{qlib_inst_dir(inst)}/{name}.1min.bin")
+    else:
+        from backtest.research.joint_return_columnar_pack import FORMATS, read_columnar_panel
+        require(fmt in FORMATS, "unsupported pack format", "CONTRACT_MISMATCH")
+        reader = read_columnar_panel
+        required_files = {FORMATS[fmt][1], "index/instruments.json",
+                          "index/minutes.json"}
     files = manifest.get("payload_files")
     require(isinstance(files, list) and all(isinstance(p, str) for p in files)
             and required_files <= set(files),
-            "MANIFEST payload_files must cover decoded axes/bins", "CONTRACT_MISMATCH")
+            "MANIFEST payload_files must cover decoded axes/features", "CONTRACT_MISMATCH")
     with timings.phase("validate_metadata"):
         opportunities, ends, mapping = _validate_bar_metadata(bundle, m, intents)
     with timings.phase("validate_panel_load"):
         try:
-            panel = read_pack_panel(root)
-        except ValueError as exc:
-            raise ReplayError("INPUT_BLOCKED", f"invalid qlib_bin pack: {exc}") from exc
+            panel = reader(root)
+        except (ValueError, OSError, KeyError, TypeError) as exc:
+            raise ReplayError("INPUT_BLOCKED", f"invalid {fmt} pack: {exc}") from exc
     require(panel.instruments == tuple(sorted(mapping))
             and panel.execution_symbols == tuple(mapping[i] for i in panel.instruments),
             "minute execution mapping drift/collision", "SEMANTICS_BLOCKED")

@@ -1083,14 +1083,23 @@ def test_v2_adapter_keeps_only_axes_and_ephemeral_cells():
     assert view.validated.panel.columns["open"].shape == (12, 1)
 
 
-def sealed_bin_pack(tmp_path, bars):
+def sealed_bin_pack(tmp_path, bars, fmt="qlib_bin"):
     """Test-only byte seal; production timing writer deliberately remains unsealed."""
     import hashlib
     from backtest.research import joint_return_qlib_bin_pack as pack
     root = pack.write_pack(bars, tmp_path / "pack")
+    if fmt != "qlib_bin":
+        from backtest.research.joint_return_columnar_pack import write_pack_arrow, write_pack_parquet
+        writer = write_pack_arrow if fmt == "arrow_ipc" else write_pack_parquet
+        root = writer(root, tmp_path / "twin")
     manifest = json.loads((root / "MANIFEST.json").read_text())
-    files = sorted(["index/instruments.json", "qlib_bin/calendars/1min.txt"] +
-                   [p.relative_to(root).as_posix() for p in root.rglob("*.bin")], reverse=True)
+    if fmt == "qlib_bin":
+        files = sorted(["index/instruments.json", "qlib_bin/calendars/1min.txt"] +
+                       [p.relative_to(root).as_posix() for p in root.rglob("*.bin")], reverse=True)
+    else:
+        # Test-only hash order, not a production dual-write contract. Research
+        # twin writers remain unsealed and emit neither payload_files nor hashes.
+        files = [manifest["paths"]["bars"], "index/minutes.json", "index/instruments.json"]
     manifest.update(payload_files=files,
                     bars_payload_raw_sha256=hashlib.sha256(b"".join((root / p).read_bytes() for p in files)).hexdigest(),
                     metadata_content_sha256=jr.content_hash(bars["metadata"]),
@@ -1099,8 +1108,25 @@ def sealed_bin_pack(tmp_path, bars):
     return root
 
 
+@pytest.mark.parametrize("fmt", ["qlib_bin", "parquet", "arrow_ipc"])
+@pytest.mark.parametrize("fault", ["missing", "null"])
+def test_v2_pack_format_fail_closed(tmp_path, fmt, fault):
+    from backtest.research.joint_return_validate_v2 import validate_pack_replay
+    m, rows = bundle([spec(inst="SH600519")])
+    root = sealed_bin_pack(tmp_path, minute_bars(m, rows), fmt)
+    manifest = json.loads((root / "MANIFEST.json").read_text())
+    if fault == "missing":
+        del manifest["format"]
+    else:
+        manifest["format"] = None
+    (root / "MANIFEST.json").write_bytes(jr.canonical_bytes(manifest))
+    with pytest.raises(jr.ReplayError, match="INPUT_BLOCKED.*format"):
+        validate_pack_replay(root, m, rows, jr._PhaseTimings())
+
+
 @pytest.mark.parametrize("label", ["OPEN_TIME", "CLOSE_TIME"])
-def test_v2_bin_cli_matches_materialized(tmp_path, monkeypatch, label):
+@pytest.mark.parametrize("fmt", ["qlib_bin", "parquet", "arrow_ipc"])
+def test_v2_bin_cli_matches_materialized(tmp_path, monkeypatch, label, fmt):
     from backtest.research import joint_return_qlib_bin_pack as pack
     m, rows = bundle([spec(inst="SH600519")])
     path = write_bundle(tmp_path, m, rows)
@@ -1109,9 +1135,9 @@ def test_v2_bin_cli_matches_materialized(tmp_path, monkeypatch, label):
     if label == "CLOSE_TIME":
         for row in bars["bars"]:
             row["timestamp"] = (jr.stamp(row["timestamp"]) + timedelta(minutes=1)).isoformat()
-    root = sealed_bin_pack(tmp_path, bars)
+    root = sealed_bin_pack(tmp_path, bars, fmt)
     # Compare the same decoded float32 values, not pre-quantization JSON prices.
-    slow = seal(pack.read_pack(root))
+    slow = seal(pack.read_pack(tmp_path / "pack"))
     expected = jr.replay(m, rows, slow, arm="P-BASE", fill_mode="all", validate_version="v2")
     monkeypatch.setattr(pack, "read_pack", lambda *a: pytest.fail("legacy row loader"))
     out = tmp_path / "out" / m["run_id"]
@@ -1148,6 +1174,30 @@ def test_v2_bin_replay_fail_closed(tmp_path, fault):
             stream.seek(4)
             import struct
             stream.write(struct.pack("<f", 12))
+    (root / "MANIFEST.json").write_bytes(jr.canonical_bytes(manifest))
+    with pytest.raises(jr.ReplayError):
+        jr.replay(m, rows, root, arm="P-BASE", fill_mode="all", validate_version="v2")
+
+
+@pytest.mark.parametrize("fmt", ["parquet", "arrow_ipc"])
+@pytest.mark.parametrize("fault", ["unsealed", "order", "axes_unsealed", "payload_unsealed", "payload", "metadata", "events"])
+def test_v2_columnar_seal_fail_closed(tmp_path, fmt, fault):
+    m, rows = bundle([spec(inst="SH600519")])
+    bars = minute_bars(m, rows)
+    root = sealed_bin_pack(tmp_path, bars, fmt)
+    manifest = json.loads((root / "MANIFEST.json").read_text())
+    if fault == "unsealed":
+        del manifest["payload_files"]
+    elif fault == "order":
+        manifest["payload_files"].reverse()
+    elif fault == "axes_unsealed":
+        manifest["payload_files"].remove("index/minutes.json")
+    elif fault == "payload_unsealed":
+        manifest["payload_files"].remove(manifest["paths"]["bars"])
+    elif fault == "payload":
+        manifest["bars_payload_raw_sha256"] = "0" * 64
+    else:
+        manifest[f"{'corporate_actions' if fault == 'events' else fault}_content_sha256"] = "0" * 64
     (root / "MANIFEST.json").write_bytes(jr.canonical_bytes(manifest))
     with pytest.raises(jr.ReplayError):
         jr.replay(m, rows, root, arm="P-BASE", fill_mode="all", validate_version="v2")

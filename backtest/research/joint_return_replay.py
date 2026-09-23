@@ -1219,9 +1219,9 @@ def run_replay(intents_path, bars_path, *, arm, fill_mode, out, profile_timings=
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="Research replay: synthetic or frozen control-only MQ pack + explicit minute JSON or opt-in v2 bin pack")
+    parser = argparse.ArgumentParser(description="Research replay: synthetic or frozen control-only MQ pack + explicit minute JSON or opt-in v2 bin/Arrow/Parquet pack")
     parser.add_argument("--intents", type=Path, required=True, help="explicit MQ intents.csv, directory or manifest.json; companion artifacts adjacent")
-    parser.add_argument("--bars", type=Path, help="explicit minute JSON, or byte-sealed qlib_bin marks-v1 pack directory with v2; absent => INPUT_BLOCKED; no Qlib auto-discovery")
+    parser.add_argument("--bars", type=Path, help="explicit minute JSON, or byte-sealed qlib_bin/Arrow IPC/Parquet pack directory with v2; absent => INPUT_BLOCKED; no Qlib auto-discovery")
     parser.add_argument("--arm", choices=(*ARMS, "all"), required=True)
     parser.add_argument("--fill-mode", choices=(*FILL_MODES, "all"), required=True)
     parser.add_argument("--out", type=Path, required=True, help="final backtest_output/joint-return-v1/<run_id> directory")
