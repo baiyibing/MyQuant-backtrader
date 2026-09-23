@@ -4,6 +4,7 @@
 > **命名**：中文「Codex 交接工作流」／slug `codex-impl-handoff`。plan 里写「走 [Codex 交接工作流](workflow-codex-handoff.md)」即指本文。
 
 > **角色落点**：物理机 agent 发起 → 仓主管 bot 接手 → Codex → Grok 核，见 [`../operations/grok-bot-raci-workflow-ssot.md`](../operations/grok-bot-raci-workflow-ssot.md)。
+> 人机沟通与研究复现词典：[`research-ops-glossary.md`](../operations/research-ops-glossary.md)。
 
 ## 七步
 
