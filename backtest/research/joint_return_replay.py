@@ -758,6 +758,7 @@ class _Replay:
         self.positions, self.marks, self.orders, self.fills, self.daily = {}, {}, [], [], []
         # Private replay indexes: never add cached clocks to serialized orders.
         self._order_clocks, self._eligible_candidates = {}, {}
+        self._order_positions = {}
         self.seen_lots = set()
         self.fees = {k: num(m["metadata"]["fees"][k], k) for k in ("buy_rate", "sell_rate", "minimum")}
         for inst, p in m["initial_state"]["positions"].items():
@@ -783,6 +784,7 @@ class _Replay:
                     last_attempt_at=None, limit_down_day=None, deferred_until=None, deferred_expiry=False, deferred_beyond_window=False,
                     superseded_by=None, quantity_events=[], transitions=[], reject_after_partial=None))
                 o = self.orders[-1]
+                self._order_positions[o["order_id"]] = len(self.orders) - 1
                 self._order_clocks[o["order_id"]] = (o, stamp(r["effective_at"]), stamp(r["available_at"]))
                 self.audit(self.orders[-1], "CREATED", "NOT_AVAILABLE", stamp(r["decision_at"]))
                 self.audit(self.orders[-1], "WAITING", "NOT_AVAILABLE", stamp(r["decision_at"]))
@@ -803,8 +805,15 @@ class _Replay:
         if status != o["status"]:
             if status in TERMINAL or status == "CREATED":
                 self._eligible_candidates.pop(o["order_id"], None)
-            else:
+            elif o["order_id"] not in self._eligible_candidates:
+                # New orders append in encounter order. Only an out-of-order
+                # reactivation needs to restore that order; scans stay linear
+                # in live candidates, without sorting on every opportunity.
+                last = next(reversed(self._eligible_candidates), None)
                 self._eligible_candidates[o["order_id"]] = self._order_clocks[o["order_id"]]
+                if last is not None and self._order_positions[last] > self._order_positions[o["order_id"]]:
+                    self._eligible_candidates = dict(sorted(
+                        self._eligible_candidates.items(), key=lambda item: self._order_positions[item[0]]))
         o["status"], o["reason"] = status, reason
         o["transitions"].append(dict(at=t, status=status, reason=reason, **detail))
         if status in ("EXPIRED", "CANCELLED", "REJECTED"):

@@ -1,5 +1,6 @@
 """Hand-computed data-free pins; no lake, network, PortAna or sibling dependency."""
 from copy import deepcopy
+import ast
 import csv
 from datetime import timedelta
 import json
@@ -1288,6 +1289,10 @@ def test_v2_columnar_seal_fail_closed(tmp_path, fmt, fault):
 
 def legacy_eligible_orders(engine, t):
     """Pre-acceleration eligibility predicate, independent of private indexes."""
+    # Exact parent 9b35d23 module comparisons (M-REF/M-LAG x v1/v2):
+    # /workspace/handoffs/joint_return_eligible_scan_20260924/benchmark.json
+    # and paired *-fills.{base,optimized}.json / *-daily_nav.{base,optimized}.json.
+    # These are external benchmark evidence, not a CI filesystem dependency.
     eligible = []
     for o in engine.orders:
         r = o["intent"]
@@ -1298,6 +1303,62 @@ def legacy_eligible_orders(engine, t):
                 and o["limit_down_day"] != t.date()):
             eligible.append(o)
     return eligible
+
+
+def test_replay_status_subscript_writes_are_audit_only():
+    tree = ast.parse(Path(jr.__file__).read_text(encoding="utf-8"))
+    replay = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "_Replay")
+    writes = []
+    for method in replay.body:
+        for node in ast.walk(method):
+            # Covers tuple/chained/annotated/augmented assignments and deletes,
+            # independent of the order variable's spelling.
+            if (isinstance(node, ast.Subscript) and isinstance(node.ctx, (ast.Store, ast.Del))
+                    and isinstance(node.slice, ast.Constant) and node.slice.value == "status"):
+                writes.append((getattr(method, "name", None), node.lineno))
+    assert writes, "guard must find the audit status write"
+    assert all(method == "audit" for method, _ in writes), writes
+
+
+@pytest.mark.parametrize("mode", jr.FILL_MODES)
+def test_eligible_index_preserves_encounter_order_after_reactivation(mode):
+    m, rows = bundle([spec("Z"), spec("A"), spec("M")])
+    bars = minute_bars(m, rows)
+    engine = jr._Replay(m, rows, bars, "P-BASE", mode, jr.validate_bars(bars, m, rows))
+    t = jr.stamp(ts(0, "09:31:00"))
+    for status in ("FILLED", "REJECTED", "EXPIRED", "CANCELLED", "CREATED"):
+        for order in engine.orders[:2]:
+            engine.audit(order, status, "test", t)
+            assert engine.eligible_orders(t) == legacy_eligible_orders(engine, t)
+        for order in reversed(engine.orders[:2]):
+            engine.audit(order, "WAITING", "test", t)
+            assert engine.eligible_orders(t) == legacy_eligible_orders(engine, t)
+        assert engine.eligible_orders(t) == engine.orders
+
+
+def assert_no_private_order_keys(value):
+    if isinstance(value, dict):
+        assert not {"_order_clocks", "_eligible_candidates", "_order_positions"}.intersection(value)
+        assert all(not key.startswith("_") for key in value), value.keys()
+        for child in value.values():
+            assert_no_private_order_keys(child)
+    elif isinstance(value, list):
+        for child in value:
+            assert_no_private_order_keys(child)
+
+
+@pytest.mark.parametrize("mode", jr.FILL_MODES)
+def test_order_snapshots_and_fills_exclude_private_indexes(mode):
+    m, rows = bundle([spec(quantity=200)])
+    bars = minute_bars(m, rows, capacity=100)
+    engine = jr._Replay(m, rows, bars, "P-BASE", mode, jr.validate_bars(bars, m, rows))
+    snap = engine.snapshot_order(engine.orders[0], jr.stamp(ts()))
+    assert_no_private_order_keys(snap)
+    result = engine.run()
+    assert result["orders"] and result["fills"]
+    for key in ("orders", "fills"):
+        assert_no_private_order_keys(result[key])
+        assert_no_private_order_keys(json.loads(jr.canonical_bytes(jr.plain(result[key]))))
 
 
 @pytest.mark.parametrize("mode", jr.FILL_MODES)
@@ -1362,7 +1423,7 @@ def test_eligible_index_replay_bytes_match_legacy(monkeypatch, mode, version, sc
 
     def checked(engine, t):
         actual, expected = optimized(engine, t), legacy_eligible_orders(engine, t)
-        assert sorted(o["order_id"] for o in actual) == sorted(o["order_id"] for o in expected)
+        assert actual == expected
         return actual
 
     monkeypatch.setattr(jr._Replay, "eligible_orders", checked)
