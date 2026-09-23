@@ -56,6 +56,7 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter, defaultdict
+from contextlib import contextmanager
 from copy import deepcopy
 import csv
 from datetime import datetime, timedelta
@@ -66,6 +67,35 @@ import json
 from pathlib import Path
 import re
 import shutil
+import sys
+from time import perf_counter
+
+
+class _PhaseTimings:
+    """Opt-in research wall clock; never part of replay artifacts or identities."""
+
+    def __init__(self, enabled=False):
+        self.enabled = enabled
+        self.seconds = {}
+        self.started = perf_counter() if enabled else None
+
+    @contextmanager
+    def phase(self, name):
+        if not self.enabled:
+            yield
+            return
+        started = perf_counter()
+        try:
+            yield
+        finally:
+            self.seconds[name] = self.seconds.get(name, 0.0) + perf_counter() - started
+
+    def report(self):
+        if self.enabled:
+            total = perf_counter() - self.started
+            values = {name: round(seconds, 6) for name, seconds in self.seconds.items()}
+            values["total_seconds"] = round(total, 6)
+            print("research phase timings (seconds): " + json.dumps(values), file=sys.stderr)
 
 SCHEMA_VERSION = "joint-return-v1"
 CONTRACT_HASH = "dfa020d2c01e6cfe6612f09be2d569294ff94d82fd1ede5cea61a41d74a81737"
@@ -1014,28 +1044,36 @@ def _summary(m, product, base, arm, fill_mode):
         "undefined_exposures": {"low_anti_weight": None, "industry_concentration": None, "size_tail": None}}
 
 
-def replay(m, intents, bars, *, arm, fill_mode):
+def replay(m, intents, bars, *, arm, fill_mode, _timings=None):
     """Pure validated replay. An arm selection never substitutes its state for BASE.
 
     All inputs are immutable. Use load_bundle/run_replay for disk hash checks;
     this entry validates manifest/content identities for both input paths.
     """
+    timings = _timings if _timings is not None else _PhaseTimings()
     require(arm in (*ARMS, "all") and fill_mode in (*FILL_MODES, "all"), "unknown arm/fill")
     validate_manifest(m, intents)
     if m["kind"] == "frozen":
         require(arm == "P-BASE", "frozen supports P-BASE only; P-CHASE/weak INPUT_BLOCKED")
     require(bars is not None, "explicit --bars price source required; no sessions.json price fallback")
-    validated = validate_bars(bars, m, intents)
+    with timings.phase("validate_bars"):
+        validated = validate_bars(bars, m, intents)
     if m["kind"] == "frozen" and fill_mode in ("M-REF", "all"):
-        validate_reference_marks(bars, intents)
+        with timings.phase("validate_reference_marks"):
+            validate_reference_marks(bars, intents)
     chosen_arms = ARMS if arm == "all" else (arm,)
     modes = FILL_MODES if fill_mode == "all" else (fill_mode,)
     output = {"orders": [], "fills": [], "daily_nav": []}
     summaries = []
     for mode in modes:
-        base = _Replay(m, intents, bars, "P-BASE", mode, validated).run()
+        with timings.phase(f"replay_{mode}_P-BASE"):
+            base = _Replay(m, intents, bars, "P-BASE", mode, validated).run()
         for chosen in chosen_arms:
-            product = base if chosen == "P-BASE" else _Replay(m, intents, bars, chosen, mode, validated).run()
+            if chosen == "P-BASE":
+                product = base
+            else:
+                with timings.phase(f"replay_{mode}_{chosen}"):
+                    product = _Replay(m, intents, bars, chosen, mode, validated).run()
             summaries.append(_summary(m, product, base, chosen, mode))
             for d, b in zip(product["daily_nav"], base["daily_nav"]):
                 d.update(benchmark_nav=b["nav"], benchmark_net_return=b["net_return"],
@@ -1086,40 +1124,46 @@ NAV_COLUMNS = ("run_id", "contract_hash", "arm_id", "arm_intent_hash", "fill_id"
     "price_domain", "benchmark_nav", "benchmark_net_return", "net_return_difference")
 
 
-def run_replay(intents_path, bars_path, *, arm, fill_mode, out):
+def run_replay(intents_path, bars_path, *, arm, fill_mode, out, profile_timings=False):
     """Write the four-file run only after all validation and replay succeed.
 
     summary.json is written last as completion marker. Existing directories are
     rejected, even if empty. No source URI in MQ metadata is dereferenced.
     """
-    m, intents, provenance = load_bundle(intents_path)
+    timings = _PhaseTimings(profile_timings)
+    with timings.phase("bundle_load"):
+        m, intents, provenance = load_bundle(intents_path)
     require(bars_path is not None, "explicit --bars price source required; no sessions.json price fallback")
-    raw = read_bytes(bars_path)
-    bars = load_json_bytes(raw)
-    product = replay(m, intents, bars, arm=arm, fill_mode=fill_mode)
+    with timings.phase("bars_read"):
+        raw = read_bytes(bars_path)
+    with timings.phase("bars_json_parse"):
+        bars = load_json_bytes(raw)
+    product = replay(m, intents, bars, arm=arm, fill_mode=fill_mode, _timings=timings)
     path = Path(out)
     require(path.name == m["run_id"], "--out must be the final directory named by MQ run_id")
     require(not path.exists(), "output directory already exists", "OUTPUT_BLOCKED")
-    data = {name + ".csv": csv_bytes(product[name], columns) for name, columns in
-            (("orders", ORDER_COLUMNS), ("fills", FILL_COLUMNS), ("daily_nav", NAV_COLUMNS))}
-    summary = product["summary"]
-    summary["inputs"] = {**provenance, "bars_raw_sha256": raw_hash(raw), "bars_content_sha256": content_hash(bars),
-                         "input_raw_hashes_verified": False, "snapshot_verification": "MQ_DECLARATION_ONLY"}
-    summary["artifacts"] = {k: {"raw_sha256": raw_hash(v), "content_sha256": content_hash(product[k[:-4]])}
-                            for k, v in data.items()}
-    # Hash the exact executing adapter bytes as well as retaining input code
-    # SHAs. This identifies pre-commit synthetic runs without claiming that an
-    # input fixture's baseline SHA is the actual BT implementation commit.
-    summary["replay_source_sha256"] = raw_hash(Path(__file__).read_bytes())
-    data["summary.json"] = canonical_bytes(summary) + b"\n"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.mkdir(exist_ok=False)
-    try:
-        for name, value in data.items():
-            (path / name).write_bytes(value)
-    except OSError:
-        shutil.rmtree(path)
-        raise
+    with timings.phase("write_artifacts"):
+        data = {name + ".csv": csv_bytes(product[name], columns) for name, columns in
+                (("orders", ORDER_COLUMNS), ("fills", FILL_COLUMNS), ("daily_nav", NAV_COLUMNS))}
+        summary = product["summary"]
+        summary["inputs"] = {**provenance, "bars_raw_sha256": raw_hash(raw), "bars_content_sha256": content_hash(bars),
+                             "input_raw_hashes_verified": False, "snapshot_verification": "MQ_DECLARATION_ONLY"}
+        summary["artifacts"] = {k: {"raw_sha256": raw_hash(v), "content_sha256": content_hash(product[k[:-4]])}
+                                for k, v in data.items()}
+        # Hash the exact executing adapter bytes as well as retaining input code
+        # SHAs. This identifies pre-commit synthetic runs without claiming that an
+        # input fixture's baseline SHA is the actual BT implementation commit.
+        summary["replay_source_sha256"] = raw_hash(Path(__file__).read_bytes())
+        data["summary.json"] = canonical_bytes(summary) + b"\n"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.mkdir(exist_ok=False)
+        try:
+            for name, value in data.items():
+                (path / name).write_bytes(value)
+        except OSError:
+            shutil.rmtree(path)
+            raise
+    timings.report()
     return path
 
 
@@ -1130,9 +1174,12 @@ def main(argv=None):
     parser.add_argument("--arm", choices=(*ARMS, "all"), required=True)
     parser.add_argument("--fill-mode", choices=(*FILL_MODES, "all"), required=True)
     parser.add_argument("--out", type=Path, required=True, help="final backtest_output/joint-return-v1/<run_id> directory")
+    parser.add_argument("--profile-timings", action="store_true",
+                        help="research-only phase wall-clock seconds on stderr; artifacts unchanged")
     args = parser.parse_args(argv)
     try:
-        path = run_replay(args.intents, args.bars, arm=args.arm, fill_mode=args.fill_mode, out=args.out)
+        path = run_replay(args.intents, args.bars, arm=args.arm, fill_mode=args.fill_mode,
+                          out=args.out, profile_timings=args.profile_timings)
     except (ReplayError, OSError, KeyError, TypeError, AttributeError) as exc:
         print(canonical_bytes({"status": getattr(exc, "status", "INPUT_BLOCKED"), "detail": str(exc)}).decode())
         return 2

@@ -899,3 +899,65 @@ def test_frozen_reference_mark_uses_original_quantity_epoch_for_conversion():
     assert fill["actual_fill_at"] == ts(1)
     assert fill["price"] == 5 and fill["executed_quantity"] == 200
     assert fill["notional"] == 1000 and fill["reference_price"] == 1
+
+
+@pytest.mark.parametrize("kind,arm,mode", [
+    ("synthetic", "all", "all"),
+    ("synthetic", "P-CHASE", "M-LAG"),
+    ("frozen", "P-BASE", "all"),
+    ("frozen", "P-BASE", "M-LAG"),
+])
+def test_phase_timings_cli_preserves_artifact_bytes_and_completion_marker(tmp_path, capsys, monkeypatch,
+                                                                         kind, arm, mode):
+    if kind == "frozen":
+        m, rows, bars = frozen_bundle()
+        bars["metadata"]["reference_marks"] = frozen_marks(rows)
+        path = write_frozen_bundle(tmp_path, m, rows)
+    else:
+        m, rows = bundle([spec()])
+        bars = minute_bars(m, rows)
+        path = write_bundle(tmp_path, m, rows)
+    prices = tmp_path / "prices.json"
+    prices.write_bytes(jr.canonical_bytes(seal(bars)))
+    args = ["--intents", str(path), "--bars", str(prices), "--arm", arm, "--fill-mode", mode]
+    baseline = tmp_path / "baseline" / m["run_id"]
+
+    def unexpected_clock():
+        pytest.fail("disabled profiling must not read the clock")
+
+    with monkeypatch.context() as disabled:
+        disabled.setattr(jr, "perf_counter", unexpected_clock)
+        assert jr.main([*args, "--out", str(baseline)]) == 0
+    baseline_output = capsys.readouterr()
+    assert baseline_output.err == ""
+
+    profiled = tmp_path / "profiled" / m["run_id"]
+    written = []
+    write_bytes = Path.write_bytes
+
+    def record_write(file, data):
+        written.append(file.name)
+        return write_bytes(file, data)
+
+    monkeypatch.setattr(Path, "write_bytes", record_write)
+    assert jr.main([*args, "--out", str(profiled), "--profile-timings"]) == 0
+    output = capsys.readouterr()
+    assert json.loads(output.out) == {**json.loads(baseline_output.out),
+                                    "summary": str(profiled / "summary.json")}
+    prefix = "research phase timings (seconds): "
+    assert output.err.startswith(prefix) and len(output.err.splitlines()) == 1
+    timings = json.loads(output.err.removeprefix(prefix))
+    expected = {"bundle_load", "bars_read", "bars_json_parse", "validate_bars", "write_artifacts"}
+    modes = jr.FILL_MODES if mode == "all" else (mode,)
+    arms = jr.ARMS if arm in ("all", "P-CHASE") else ("P-BASE",)
+    expected.update(f"replay_{fill}_{chosen}" for fill in modes for chosen in arms)
+    if kind == "frozen" and "M-REF" in modes:
+        expected.add("validate_reference_marks")
+    assert set(timings) == expected | {"total_seconds"}
+    assert all(value >= 0 for value in timings.values())
+    # All named phases are disjoint. Allow six-decimal reporting roundoff.
+    assert timings["total_seconds"] > 0
+    assert timings["total_seconds"] + 1e-5 >= sum(timings[key] for key in expected)
+    assert written == ["orders.csv", "fills.csv", "daily_nav.csv", "summary.json"]
+    assert {file.name: file.read_bytes() for file in profiled.iterdir()} == {
+        file.name: file.read_bytes() for file in baseline.iterdir()}
