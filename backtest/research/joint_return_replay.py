@@ -44,8 +44,11 @@ independently with the same fill/input even when only P-CHASE is requested.
 Synthetic outputs remain SYNTHETIC_ONLY: synthetic green != real return.
 Frozen control-only 50/5 packs use a separate contract pin and --bars with
 kind=frozen_explicit, content_sha256, metadata.contract_hash and metadata.source.
-Only P-BASE / M-LAG is enabled for frozen packs. M-REF is INPUT_BLOCKED because
-sessions.json reference_price=1.0 placeholders are not market prices. Intents
+Frozen P-BASE / M-REF additionally requires metadata.reference_marks keyed by
+intent_id: instrument, execution_symbol, mark_price, mark_at, price_domain=none,
+source_kind=lake_bar, source, source_sha256. Marks must share the intent's
+reference_price_at epoch; price 1.0 is conservatively forbidden. These separately
+hashed marks supply the research reference, never sessions placeholders. Intents
 and quantities are never rewritten. Frozen replay is research, not host source
 or PIT acceptance. No Qlib root discovery/reader is implemented in this adapter.
 """
@@ -575,6 +578,27 @@ def validate_bars(bundle, m, intents):
     return opportunities, ends, bars, closes
 
 
+def validate_reference_marks(bundle, intents):
+    """Validate explicit evidence, not source truth; never infer marks from sessions."""
+    marks = bundle["metadata"].get("reference_marks")
+    require(isinstance(marks, dict) and set(marks) == {r["intent_id"] for r in intents},
+            "M-REF requires explicit reference_marks for exactly every frozen intent")
+    for r in intents:
+        mark = marks[r["intent_id"]]
+        fields(mark, ("instrument", "execution_symbol", "mark_price", "mark_at",
+                      "price_domain", "source_kind", "source", "source_sha256"), "M-REF mark")
+        require(mark["instrument"] == r["instrument"]
+                and mark["execution_symbol"] == r["execution_symbol"], "M-REF mark symbol mismatch")
+        require(stamp(mark["mark_at"]) == stamp(r["reference_price_at"]),
+                "M-REF mark must match frozen reference epoch")
+        require(num(mark["mark_price"], "M-REF mark price", positive=True) != 1,
+                "M-REF mark price 1.0 placeholder forbidden")
+        require(mark["price_domain"] == "none" and mark["source_kind"] == "lake_bar",
+                "M-REF mark requires raw lake_bar evidence")
+        text_value(mark["source"], "M-REF mark source")
+        sha(mark["source_sha256"])
+
+
 def plain(value):
     if isinstance(value, Decimal):
         return float(value)
@@ -760,7 +784,10 @@ class _Replay:
             if (same_inst and not own_partial) or (r["lot_id"] in self.seen_lots and not own_partial):
                 self.audit(o, "REJECTED", "UNIT_MAPPING_BLOCKED", t)
                 return capacity
-        price = (num(r["reference_price"], "reference") / o["factor"]
+        reference = r["reference_price"]
+        if self.fill_mode == "M-REF" and self.m["kind"] == "frozen":
+            reference = self.md["reference_marks"][r["intent_id"]]["mark_price"]
+        price = (num(reference, "reference") / o["factor"]
                  if self.fill_mode == "M-REF" else market_price)
         quantity = o["remaining_quantity"] if self.fill_mode == "M-REF" else min(o["remaining_quantity"], capacity)
         if r["side"] == "SELL":
@@ -996,10 +1023,11 @@ def replay(m, intents, bars, *, arm, fill_mode):
     require(arm in (*ARMS, "all") and fill_mode in (*FILL_MODES, "all"), "unknown arm/fill")
     validate_manifest(m, intents)
     if m["kind"] == "frozen":
-        require(arm == "P-BASE", "frozen supports P-BASE only; P-CHASE/weak/Mode B INPUT_BLOCKED")
-        require(fill_mode == "M-LAG", "frozen M-REF INPUT_BLOCKED: sessions reference_price placeholders forbidden")
+        require(arm == "P-BASE", "frozen supports P-BASE only; P-CHASE/weak INPUT_BLOCKED")
     require(bars is not None, "explicit --bars price source required; no sessions.json price fallback")
     validated = validate_bars(bars, m, intents)
+    if m["kind"] == "frozen" and fill_mode in ("M-REF", "all"):
+        validate_reference_marks(bars, intents)
     chosen_arms = ARMS if arm == "all" else (arm,)
     modes = FILL_MODES if fill_mode == "all" else (fill_mode,)
     output = {"orders": [], "fills": [], "daily_nav": []}
@@ -1034,7 +1062,12 @@ def replay(m, intents, bars, *, arm, fill_mode):
     if m["kind"] == "frozen":
         output["summary"].update(status="BT_RESEARCH_REPLAY_PASS", input_status="FROZEN_EXPLICIT",
                                  execution_status="RESEARCH_RUN", mq_input_status=m["input_status"],
-                                 deferred_arms={k: "INPUT_BLOCKED" for k in ("P-CHASE", "weak", "Mode B")})
+                                 deferred_arms={k: "INPUT_BLOCKED" for k in ("P-CHASE", "weak")})
+        if "M-REF" in modes:
+            output["summary"]["reference_marks"] = deepcopy(bars["metadata"]["reference_marks"])
+            output["summary"]["semantics"].append(
+                "Frozen M-REF uses explicit lake mark evidence at reference_price_at; "
+                "intent reference_price is preserved for identity only; source truth is unverified")
     return plain(output)
 
 

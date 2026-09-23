@@ -23,14 +23,60 @@ session endpoints, initial lot marks/acquisition evidence and complete corporate
 actions. Hashes bind the supplied evidence; they do not certify source truth.
 No source URI is dereferenced. There is no lake search or bar fabrication.
 
-Frozen replay permits **P-BASE / M-LAG only**. M-REF is INPUT_BLOCKED: the host
-sessions.json contains market-wide reference_price=1.0 placeholders and cannot
-supply market reference prices. P-CHASE, weak and Mode B stay INPUT_BLOCKED.
+Frozen replay permits **P-BASE / M-LAG**, plus **P-BASE / M-REF** only with the
+explicit mark evidence below. P-CHASE and weak stay INPUT_BLOCKED.
 Missing explicit prices or any missing symbol/minute in the declared calendar
 for the intent/initial universe fails closed; the coverage error reports
 expected, observed and missing symbol-minute counts. This conservative coverage
 rule also requires explicit suspension evidence and may block a sparse host
 export. Do not fill those gaps with fabricated bars.
+
+## Mode B / M-REF（用户裁 2026-09-23）
+
+Mode B = **同一冻结包、同一宇宙/存活窗、同一显式 bars 的 M-REF vs M-LAG**。
+可用 `--arm P-BASE --fill-mode all` 一次产出两种成交模式；或分别指定
+`M-REF` / `M-LAG`，写入不同父目录下的同名 run_id。未扩 P-CHASE / weak。
+
+M-REF 必须在 `kind=frozen_explicit` 的 bars JSON 中另供
+`metadata.reference_marks`，键集合严格等于全部冻结 `intent_id`。每条示意：
+
+```json
+{
+  "instrument": "SH600000",
+  "execution_symbol": "600000.SH",
+  "mark_price": 10.25,
+  "mark_at": "2025-01-02T15:00:00+08:00",
+  "price_domain": "none",
+  "source_kind": "lake_bar",
+  "source": "显式导出的真实湖价来源及字段定位",
+  "source_sha256": "源证据原始字节的64位小写SHA256"
+}
+```
+
+导出方必须用真实湖价（可为 plan mark 对应的湖价），提供源证据定位与哈希；
+不能仅给 sessions 改标签。适配器校验每条标的/执行代码与 intent 相同、
+`mark_at` 严格等于 `reference_price_at`（因此不晚于 decision），
+raw 域 `none`、来源种类/非空定位/哈希格式及有限正数价格。
+mark 可早于成交日历；这支持前一交易日收盘参考，不拿次日 open 回填旧时点。
+完整 mark 映射由 bars 的 `content_sha256` 绑定，并原样记入 summary 便于审计。
+此处验证的是证据合同及内容完整性，**不联网核验源字节，不证明湖价真实性或 PIT**；
+真实来源仍需 4090 导出/回执验收。
+
+**禁止 sessions `reference_price=1.0` 充当市价或真实 mark。** 缺少独立 mark、
+覆盖不全、时点/标的/价格域错配均 INPUT_BLOCKED；独立 mark 为 1.0 也保守阻断
+（包括真实价格恰为 1.0 的情形，本刀不另开豁免）。只有 bars open/close、
+只有 plan marks 或非 1.0 的 intent reference_price，都不足以放行。
+M-LAG 不要求也不使用此映射，继续取合法分钟 open。
+
+原 intent / plan / 数量 / 身份哈希不改。冻结 M-REF 的研究成交价改取独立 mark，
+沿用原 `reference_price_at` 单位时期及显式公司行为换算；输出仍保留原始
+`reference_price`，实际成交价看 `price`，证据看 summary 的 `reference_marks`。
+M-REF 仍是假设参考价、理想流动性的敏感度对照，保留既有 T+1、停牌及方向涨跌停门，
+不是该参考时点的可执行收益。CLI 仍只吃显式 `--bars`，不读 `QLIB_1MIN_ROOT`，
+不造 bar，不改生产 fill kernel / CSV 引擎 / scanner / ledger。
+
+data-free fixture 只证明合同门和 M-LAG 回归，不证明真数；4475 fills 的既有
+P-BASE/M-LAG 真数仍为交接基线，本刀不派 4090、不宣称已完成真湖 Mode B 对照。
 
 4090 Windows cmd recipe (the price JSON must first be supplied on that host):
 

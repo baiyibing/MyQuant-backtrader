@@ -671,9 +671,9 @@ def test_zero_nav_and_bar_content_tampering_block_without_outputs():
         jr.replay(m, rows, b, arm="P-BASE", fill_mode="M-LAG")
 
 
-def frozen_bundle(*, state=None):
+def frozen_bundle(*, state=None, reference_price=1):
     """Tiny fixture of the control-only MQ wire format, NOT real 4090 data."""
-    m, rows = bundle([spec(arm="P-BASE", reference_price=1)], state=state)
+    m, rows = bundle([spec(arm="P-BASE", reference_price=reference_price)], state=state)
     m.update(kind="frozen", run_id="frozen-fixture", contract_hash=jr.FROZEN_CONTRACT_HASH,
              status="INPUT_BLOCKED", input_status="INPUT_BLOCKED", scores_mode="control_only",
              portfolio_status="PORTFOLIO_CONSTRAINTS_PASS")
@@ -744,11 +744,12 @@ def test_frozen_explicit_file_replay_preserves_intents_and_hashes(tmp_path, entr
     assert rows == original
 
 
-def test_frozen_missing_prices_cli_is_input_blocked(tmp_path, capsys):
+@pytest.mark.parametrize("mode", ["M-LAG", "M-REF"])
+def test_frozen_missing_prices_cli_is_input_blocked(tmp_path, capsys, mode):
     m, rows, _ = frozen_bundle()
     path = write_frozen_bundle(tmp_path, m, rows)
     out = tmp_path / m["run_id"]
-    assert jr.main(["--intents", str(path), "--arm", "P-BASE", "--fill-mode", "M-LAG", "--out", str(out)]) == 2
+    assert jr.main(["--intents", str(path), "--arm", "P-BASE", "--fill-mode", mode, "--out", str(out)]) == 2
     assert "INPUT_BLOCKED" in capsys.readouterr().out
     assert not out.exists()
 
@@ -792,3 +793,109 @@ def test_frozen_prices_need_provenance_hash_and_matching_kind():
 def test_frozen_state_supports_fifty_positions():
     m, rows, bars = frozen_bundle(state=initial(**{f"S{i}": 100 for i in range(49)}))
     assert len(stats(run(m, rows, bars))["ending_positions"]) == 50
+
+
+def frozen_marks(rows):
+    return {r["intent_id"]: dict(instrument=r["instrument"], execution_symbol=r["execution_symbol"],
+        mark_price=10, mark_at=r["reference_price_at"], price_domain="none", source_kind="lake_bar",
+        source="fixture://lake-mark-not-real-data", source_sha256=jr.raw_hash(b"fixture mark source"))
+        for r in rows}
+
+
+def test_frozen_modeb_cli_same_pack_preserves_identity_and_uses_explicit_marks(tmp_path):
+    m, rows, bars = frozen_bundle()
+    bars["metadata"]["reference_marks"] = frozen_marks(rows)
+    original = deepcopy((m, rows, bars))
+    pair = run(m, rows, bars, mode="all")
+    assert (m, rows, bars) == original
+    ref, lag = pair["fills"]
+    assert (ref["fill_id"], ref["price"], ref["actual_fill_at"]) == ("M-REF", 10, ts())
+    assert (lag["fill_id"], lag["price"], lag["actual_fill_at"]) == ("M-LAG", 11, ts(0, "09:31:00"))
+    for fill in (ref, lag):
+        assert {k: fill[k] for k in jr.INTENT_FIELDS} == rows[0]
+        assert fill["reference_price"] == 1  # Retained identity, never executed.
+    assert pair["summary"]["reference_marks"] == frozen_marks(rows)
+    assert pair["summary"]["deferred_arms"] == {"P-CHASE": "INPUT_BLOCKED", "weak": "INPUT_BLOCKED"}
+    without_marks = deepcopy(bars)
+    del without_marks["metadata"]["reference_marks"]
+    assert run(m, rows, bars)["fills"] == run(m, rows, without_marks)["fills"]
+    path = write_frozen_bundle(tmp_path, m, rows)
+    prices = tmp_path / "prices.json"
+    prices.write_bytes(jr.canonical_bytes(seal(bars)))
+    out = tmp_path / "bt" / m["run_id"]
+    assert jr.main(["--intents", str(path), "--bars", str(prices), "--arm", "P-BASE",
+                    "--fill-mode", "all", "--out", str(out)]) == 0
+    summary = json.loads((out / "summary.json").read_text())
+    assert summary["status"] == "BT_RESEARCH_REPLAY_PASS"
+    assert summary["reference_marks"] == frozen_marks(rows)
+    assert summary["inputs"]["bars_raw_sha256"] == jr.raw_hash(prices.read_bytes())
+
+
+@pytest.mark.parametrize("change", [
+    {"mark_price": 1.0}, {"mark_price": 0}, {"mark_price": -10}, {"mark_price": True},
+    {"mark_price": "10"}, {"mark_price": float("nan")},
+    {"mark_at": ts()}, {"mark_at": "invalid"}, {"instrument": "B"},
+    {"execution_symbol": "B.SYN"}, {"price_domain": "front"},
+    {"source_kind": "sessions"}, {"source": ""}, {"source_sha256": "bad"},
+])
+def test_frozen_mref_invalid_mark_evidence_blocks(change):
+    m, rows, bars = frozen_bundle()
+    marks = frozen_marks(rows)
+    marks[rows[0]["intent_id"]].update(change)
+    bars["metadata"]["reference_marks"] = marks
+    with pytest.raises(jr.ReplayError, match="INPUT_BLOCKED"):
+        run(m, rows, bars, mode="M-REF")
+
+
+@pytest.mark.parametrize("missing", ["mark_at", "mark_price", "source", "source_sha256"])
+def test_frozen_mref_incomplete_evidence_blocks(missing):
+    m, rows, bars = frozen_bundle()
+    bars["metadata"]["reference_marks"] = frozen_marks(rows)
+    del bars["metadata"]["reference_marks"][rows[0]["intent_id"]][missing]
+    with pytest.raises(jr.ReplayError, match="INPUT_BLOCKED.*M-REF mark"):
+        run(m, rows, bars, mode="M-REF")
+
+
+@pytest.mark.parametrize("marks", [None, {}, [], {"wrong-intent": {}}])
+def test_frozen_mref_missing_or_unbound_marks_cli_blocks_without_outputs(tmp_path, marks):
+    m, rows, bars = frozen_bundle()
+    bars["metadata"]["reference_marks"] = marks
+    path = write_frozen_bundle(tmp_path, m, rows)
+    prices = tmp_path / "prices.json"
+    prices.write_bytes(jr.canonical_bytes(seal(bars)))
+    out = tmp_path / m["run_id"]
+    assert jr.main(["--intents", str(path), "--bars", str(prices), "--arm", "P-BASE",
+                    "--fill-mode", "M-REF", "--out", str(out)]) == 2
+    assert not out.exists()
+
+
+def test_frozen_marks_do_not_unlock_deferred_arms_or_bypass_hash():
+    m, rows, bars = frozen_bundle()
+    bars["metadata"]["reference_marks"] = frozen_marks(rows)
+    for arm in ("P-CHASE", "weak", "all"):
+        with pytest.raises(jr.ReplayError, match="INPUT_BLOCKED"):
+            run(m, rows, bars, arm=arm, mode="M-REF")
+    with pytest.raises(jr.ReplayError, match="CONTRACT_MISMATCH.*bars content hash"):
+        jr.replay(m, rows, bars, arm="P-BASE", fill_mode="M-REF")
+
+
+def test_frozen_nonplaceholder_intent_and_plan_marks_are_not_source_evidence():
+    m, rows, bars = frozen_bundle(reference_price=10)
+    with pytest.raises(jr.ReplayError, match="INPUT_BLOCKED.*reference_marks"):
+        run(m, rows, bars, mode="M-REF")
+
+
+def test_frozen_reference_mark_uses_original_quantity_epoch_for_conversion():
+    m, rows, bars = frozen_bundle()
+    bars["metadata"]["reference_marks"] = frozen_marks(rows)
+    # Forward split: deferred 100-share intent becomes 200 shares at mark 5.
+    event = action()
+    event.update(factor=2, current_quantity=event["original_quantity"] * 2)
+    bars["corporate_actions"] = [event]
+    for bar in bars["bars"]:
+        if bar["timestamp"][:10] == DAYS[0]:
+            bar["suspended"] = True
+    fill = run(m, rows, bars, mode="M-REF")["fills"][0]
+    assert fill["actual_fill_at"] == ts(1)
+    assert fill["price"] == 5 and fill["executed_quantity"] == 200
+    assert fill["notional"] == 1000 and fill["reference_price"] == 1
