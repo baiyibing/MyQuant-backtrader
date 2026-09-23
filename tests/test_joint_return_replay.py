@@ -570,7 +570,9 @@ def test_replay_has_no_production_or_market_data_imports():
     source = Path(jr.__file__).read_text(encoding="utf-8")
     tree = ast.parse(source)
     imports = [n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)]
-    assert not any(n and n.startswith(("backtest", "oskh_data", "trade_decision", "qlib", "my_scripts")) for n in imports)
+    assert not any(n and n != "backtest.research.joint_return_validate_v2"
+                   and n.startswith(("backtest", "oskh_data", "trade_decision", "qlib", "my_scripts"))
+                   for n in imports)
     for path in (Path(jr.__file__), Path(__file__), Path(__file__).resolve().parents[1] / "scripts/research/run_joint_return_replay.py"):
         raw = path.read_bytes()
         assert b"\0" not in raw and not raw.startswith(b"\xef\xbb\xbf")
@@ -961,3 +963,121 @@ def test_phase_timings_cli_preserves_artifact_bytes_and_completion_marker(tmp_pa
     assert written == ["orders.csv", "fills.csv", "daily_nav.csv", "summary.json"]
     assert {file.name: file.read_bytes() for file in profiled.iterdir()} == {
         file.name: file.read_bytes() for file in baseline.iterdir()}
+
+
+@pytest.mark.parametrize("label", ["OPEN_TIME", "CLOSE_TIME"])
+@pytest.mark.parametrize("scenario", ["partial", "events", "frozen"])
+def test_v2_replay_lazy_decimal_and_bit_parity(monkeypatch, label, scenario):
+    from decimal import Decimal
+    from backtest.research import joint_return_validate_v2 as v2
+
+    if scenario == "frozen":
+        m, rows, bars = frozen_bundle()
+        bars["metadata"]["reference_marks"] = frozen_marks(rows)
+    elif scenario == "events":
+        m, rows = bundle([spec(quantity=200)])
+        bars = minute_bars(m, rows, capacity=0)
+        bars["corporate_actions"] = [action()]
+        for bar in bars["bars"]:
+            if bar["timestamp"] >= ts(1):
+                bar.update(capacity=100, open=20, close=20)
+    else:
+        m, rows = bundle([spec(quantity=200)], fees=dict(buy_rate=0.001, minimum=5))
+        bars = minute_bars(m, rows, price=10.25, capacity=100)
+        bars["bars"][0]["suspended"] = True
+    if label == "CLOSE_TIME":
+        bars["metadata"]["bar_label"] = label
+        for bar in bars["bars"]:
+            bar["timestamp"] = (jr.stamp(bar["timestamp"]) + timedelta(seconds=60)).isoformat()
+    seal(bars)
+    before = jr.canonical_bytes(bars)
+    expected = jr.replay(m, rows, bars, arm="P-BASE", fill_mode="all")
+    calls = []
+    original = v2.ValidatedPanel.bar_decimal
+
+    def decimal(self, column, minute_i, inst_i):
+        value = original(self, column, minute_i, inst_i)
+        assert isinstance(value, Decimal)
+        calls.append(column)
+        return value
+
+    monkeypatch.setattr(v2.ValidatedPanel, "bar_decimal", decimal)
+    monkeypatch.setattr(jr, "validate_bars", lambda *a: pytest.fail("v2 called v1 validate_bars"))
+    actual = jr.replay(m, rows, bars, arm="P-BASE", fill_mode="all", validate_version="v2")
+    assert actual["fills"]
+    assert {"open", "capacity", "close", "limit_up"} <= set(calls)
+    for key in ("fills", "orders", "daily_nav"):
+        assert jr.canonical_bytes(actual[key]) == jr.canonical_bytes(expected[key])
+    assert jr.canonical_bytes(bars) == before
+
+
+def test_default_validation_still_v1(monkeypatch):
+    from backtest.research import joint_return_validate_v2 as v2
+    m, rows = bundle([spec()])
+    monkeypatch.setattr(v2, "validate_json_replay", lambda *a: pytest.fail("default called v2"))
+    assert jr.replay(m, rows, minute_bars(m, rows), arm="P-BASE", fill_mode="M-LAG")["fills"]
+
+
+@pytest.mark.parametrize("fault,message", [
+    ("seal", "hash drift"), ("hole", "coverage hole"), ("duplicate", "duplicate minute"),
+    ("symbol", "mapping drift"), ("outside", "outside frozen session"),
+    ("limit", "outside explicit price limits"), ("suspended", "suspension evidence"),
+    ("event", "conversion mismatch"),
+])
+def test_v2_json_fail_closed(fault, message):
+    m, rows = bundle([spec()])
+    bars = minute_bars(m, rows)
+    if fault == "hole":
+        bars["bars"].pop()
+    elif fault == "duplicate":
+        bars["bars"].append(bars["bars"][0].copy())
+    elif fault == "symbol":
+        bars["bars"][0]["execution_symbol"] = "WRONG"
+    elif fault == "outside":
+        bars["bars"][0]["timestamp"] = ts(0, "08:00:00")
+    elif fault == "limit":
+        bars["bars"][0]["open"] = 101
+    elif fault == "suspended":
+        bars["bars"][0]["suspended"] = 1
+    elif fault == "event":
+        bars["corporate_actions"] = [{**action(), "factor": 2}]
+    seal(bars)
+    if fault == "seal":
+        bars["content_sha256"] = "0" * 64
+    with pytest.raises(jr.ReplayError, match=message):
+        jr.replay(m, rows, bars, arm="P-BASE", fill_mode="M-LAG", validate_version="v2")
+
+
+def test_v2_cli_timings_and_artifact_parity(tmp_path, capsys, monkeypatch):
+    m, rows = bundle([spec()])
+    path = write_bundle(tmp_path, m, rows)
+    bars = tmp_path / "bars.json"
+    bars.write_bytes(jr.canonical_bytes(minute_bars(m, rows)))
+    args = ["--intents", str(path), "--bars", str(bars), "--arm", "P-BASE", "--fill-mode", "all"]
+    baseline = tmp_path / "v1" / m["run_id"]
+    assert jr.main([*args, "--out", str(baseline)]) == 0
+    capsys.readouterr()
+    monkeypatch.setattr(jr, "validate_bars", lambda *a: pytest.fail("v2 called v1"))
+    output = tmp_path / "v2" / m["run_id"]
+    assert jr.main([*args, "--out", str(output), "--validate-version", "v2", "--profile-timings"]) == 0
+    timings = json.loads(capsys.readouterr().err.removeprefix("research phase timings (seconds): "))
+    assert "validate_bars" not in timings
+    assert {"validate_seal", "validate_metadata", "validate_panel_load", "validate_panel_scan"} <= timings.keys()
+    assert all(t >= 0 for t in timings.values())
+    for name in ("orders.csv", "fills.csv", "daily_nav.csv"):
+        assert (baseline / name).read_bytes() == (output / name).read_bytes()
+
+
+def test_v2_adapter_keeps_only_axes_and_ephemeral_cells():
+    from backtest.research import joint_return_validate_v2 as v2
+    m, rows = bundle([spec()])
+    bars = minute_bars(m, rows)
+    _, _, view, closes = v2.validate_json_replay(bars, m, rows, jr._PhaseTimings())
+    assert not isinstance(view, dict)
+    assert not isinstance(view.bars_at, dict)
+    assert not isinstance(closes, dict)
+    cell = view.get((jr.stamp(ts()), "A"))
+    assert isinstance(cell, v2._Cell)
+    assert view.get((jr.stamp(ts()), "A")) is not cell
+    assert not hasattr(cell, "__dict__") or "bars" not in vars(cell)
+    assert view.validated.panel.columns["open"].shape == (12, 1)

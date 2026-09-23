@@ -1,4 +1,4 @@
-"""Opt-in K1 research validation; never called by the production replay path.
+"""Opt-in research validation and K2 JSON replay adapter; default remains v1.
 
 Axes are prebuilt from sessions, with sorted intent/initial-universe instruments.
 When converting bar labels to minute indices, CLOSE_TIME shifts by -60 seconds,
@@ -7,6 +7,8 @@ Float64 comparisons are inclusive, without epsilon: equal represented values
 pass, including limit ties; distinct decimal literals may round to the same float.
 High/low are optional passthrough evidence, never synthesized.
 """
+from collections.abc import Mapping as MappingABC
+from contextlib import nullcontext
 from dataclasses import dataclass
 from datetime import timedelta
 from decimal import Decimal
@@ -116,18 +118,36 @@ def panel_table_sha256(panel):
 
 
 def validate_bars_v2(panel, manifest, *, payload_root, metadata,
-                     corporate_actions, enabled=False):
+                     corporate_actions, enabled=False, seal_mode="byte", bundle=None,
+                     _timings=None):
     """V0 seals, minimal V1 axes, V2 NumPy gates and V3 dense coverage.
 
-    Explicit opt-in only. V4 semantics are deferred: nonempty events fail closed.
+    Explicit opt-in only. Byte-mode V4 semantics remain deferred: events fail
+    closed. The canonical JSON replay adapter validates metadata/events using
+    shared v1 predicates before calling this panel validator.
     Payload decoding and its association with this prebuilt panel belong to the
     caller; table hash, when supplied, additionally binds the loaded projection.
     """
     require(enabled is True, "validate-v2 research default off", "SEMANTICS_BLOCKED")
-    _verify_seal(payload_root, manifest, metadata, corporate_actions)
+    phase = _timings.phase if _timings is not None else lambda name: nullcontext()
+    with phase("validate_seal"):
+        if seal_mode == "byte":
+            _verify_seal(payload_root, manifest, metadata, corporate_actions)
+        else:
+            require(seal_mode == "canonical_json" and isinstance(bundle, dict),
+                    "canonical JSON bundle required", "CONTRACT_MISMATCH")
+            require(bundle["content_sha256"] == content_hash(
+                {k: v for k, v in bundle.items() if k != "content_sha256"}),
+                "bars content hash drift", "CONTRACT_MISMATCH")
     require(isinstance(metadata, dict), "metadata must be an object")
     require(isinstance(corporate_actions, list), "corporate_actions must be a list")
-    require(not corporate_actions, "K1 corporate-action semantics deferred", "SEMANTICS_BLOCKED")
+    require(seal_mode == "canonical_json" or not corporate_actions,
+            "K1 corporate-action semantics deferred", "SEMANTICS_BLOCKED")
+    with phase("validate_panel_scan"):
+        return _scan_panel(panel, manifest or {})
+
+
+def _scan_panel(panel, manifest):
     require(type(panel.n_minutes) is int and panel.n_minutes > 0, "invalid n_minutes")
     inst = panel.instruments
     symbols = panel.execution_symbols
@@ -171,3 +191,119 @@ def validate_bars_v2(panel, manifest, *, payload_root, metadata,
         check_cells((cols["limit_down"] <= cols[name]) & (cols[name] <= cols["limit_up"]),
                     f"{name} outside explicit price limits")
     return ValidatedPanel(panel)
+
+
+class _Cell:
+    """Ephemeral fill view: no cached per-cell records or eager Decimals."""
+
+    def __init__(self, validated, minute_i, inst_i):
+        self.validated, self.minute_i, self.inst_i = validated, minute_i, inst_i
+
+    def __getitem__(self, key):
+        panel = self.validated.panel
+        if key == "instrument":
+            return panel.instruments[self.inst_i]
+        if key == "suspended":
+            return bool(panel.columns[key][self.minute_i, self.inst_i])
+        raise KeyError(key)
+
+    def decimal(self, key):
+        if key == "open":
+            return self.validated.bar_open(self.minute_i, self.inst_i)
+        if key == "capacity":
+            return self.validated.bar_capacity(self.minute_i, self.inst_i)
+        return self.validated.bar_decimal(key, self.minute_i, self.inst_i)
+
+
+class _LazyMapping(MappingABC):
+    def __init__(self, keys, getter):
+        self.keys_index, self.getter = keys, getter
+
+    def __iter__(self):
+        return iter(self.keys_index)
+
+    def __len__(self):
+        return len(self.keys_index)
+
+    def __getitem__(self, key):
+        if key not in self.keys_index:
+            raise KeyError(key)
+        return self.getter(key)
+
+
+class _PanelBars:
+    def __init__(self, validated, opportunities):
+        self.validated = validated
+        self.minutes = {t: i for i, t in enumerate(sorted(opportunities))}
+        self.instruments = {inst: i for i, inst in enumerate(validated.panel.instruments)}
+        self.bars_at = _LazyMapping(self.minutes, lambda t: _LazyMapping(
+            self.instruments, lambda inst: self.get((t, inst))))
+        self.closes = _LazyMapping(
+            {t + timedelta(seconds=60): i for t, i in self.minutes.items()},
+            lambda t: self.bars_at[t - timedelta(seconds=60)].values())
+        self.bar_days = {(day, inst) for day in set(opportunities.values())
+                         for inst in self.instruments}
+
+    def get(self, key, default=None):
+        t, inst = key
+        if t not in self.minutes or inst not in self.instruments:
+            return default
+        return _Cell(self.validated, self.minutes[t], self.instruments[inst])
+
+
+def validate_json_replay(bundle, m, intents, timings):
+    """One JSON-to-panel conversion, then vectorized validation and lazy access.
+
+    Caller-owned JSON is immutable and may remain alive; neither scan nor replay
+    references its bar records. Canonical seal still pays the JSON traversal.
+    Metadata/events share v1 predicates. Dense coverage is required even for
+    synthetic v2 inputs (sparse synthetic inputs remain supported only in v1).
+    """
+    from backtest.research.joint_return_replay import (
+        fields, _validate_bar_metadata, _validate_bar_events,
+    )
+    fields(bundle, ("schema_version", "kind", "metadata", "bars",
+                    "corporate_actions", "content_sha256"), "bars snapshot")
+    with timings.phase("validate_metadata"):
+        opportunities, ends, mapping = _validate_bar_metadata(bundle, m, intents)
+        _validate_bar_events(bundle, intents, opportunities, ends, mapping)
+    with timings.phase("validate_panel_load"):
+        require(isinstance(bundle["bars"], list), "bars must be explicit list")
+        instruments = tuple(sorted(mapping))
+        minutes = tuple(sorted(opportunities))
+        mi = {t: i for i, t in enumerate(minutes)}
+        ii = {inst: i for i, inst in enumerate(instruments)}
+        shape = (len(minutes), len(instruments))
+        names = COLUMNS + tuple(k for k in OPTIONAL if any(k in r for r in bundle["bars"]))
+        columns = {k: np.empty(shape, dtype="uint8" if k == "suspended" else "float64")
+                   for k in names}
+        valid = np.zeros(shape, dtype=bool)
+        shift = timedelta(seconds=60 if bundle["metadata"]["bar_label"] == "CLOSE_TIME" else 0)
+        for raw in bundle["bars"]:
+            fields(raw, ("instrument", "execution_symbol", "timestamp", *names), "minute bar")
+            inst = raw["instrument"]
+            require(inst in ii, "bar instrument not in input intent/initial universe")
+            require(raw["execution_symbol"] == mapping[inst],
+                    "minute execution mapping drift/collision", "SEMANTICS_BLOCKED")
+            t = stamp(raw["timestamp"]) - shift
+            require(t in mi, "bar outside frozen session endpoints")
+            cell = mi[t], ii[inst]
+            require(not valid[cell], "duplicate minute bar")
+            require(type(raw["suspended"]) is bool, "suspension evidence missing")
+            for k in names:
+                if k != "suspended":
+                    require(type(raw[k]) in (int, float), f"{k}: finite number required")
+                try:
+                    columns[k][cell] = raw[k]
+                except (OverflowError, ValueError) as exc:
+                    raise ReplayError("INPUT_BLOCKED", f"{k}: invalid number") from exc
+            valid[cell] = True
+        panel = DensePanel(columns, len(minutes), instruments,
+                           tuple(mapping[i] for i in instruments),
+                           tuple(t.isoformat(timespec="seconds") for t in minutes), valid)
+    validated = validate_bars_v2(
+        panel, None, payload_root=None, metadata=bundle["metadata"],
+        corporate_actions=bundle["corporate_actions"], enabled=True,
+        seal_mode="canonical_json", bundle=bundle, _timings=timings)
+    bars = _PanelBars(validated, opportunities)
+    return opportunities, ends, bars, bars.closes
