@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 
 from backtest.research.joint_return_replay import (
-    SCHEMA_VERSION, canonical_bytes, load_json_bytes,
+    SCHEMA_VERSION, _PhaseTimings, canonical_bytes, load_json_bytes,
 )
 from backtest.research.qlib_bin_1min import load_qlib_1min_calendar
 from backtest.research.qlib_bin_daily import qlib_inst_dir, read_qlib_bin
@@ -209,29 +209,37 @@ def _pack_columns(root, timestamps, index):
         yield inst, symbol, columns
 
 
-def read_pack_panel(pack_root: str | Path):
+def read_pack_panel(pack_root: str | Path, _timings=None):
     """Decode marks-v1 directly to float64/uint8 DensePanel (no bar dicts).
 
     This is a reader, not seal certification. CLOSE_TIME labels shift -60s;
     replay separately proves session coverage and the byte seal. Missing optional
     cells remain NaN (v2 validation rejects partial extrema), never synthesized.
     Required bins are dense, so no validity bitmap allocation is needed.
+    ``_timings`` is the research-only opt-in span sink; default off reads no clock.
     """
     from backtest.research.joint_return_validate_v2 import (
         COLUMNS, DensePanel, minute_axis_from_labels,
     )
+    timings = _timings if _timings is not None else _PhaseTimings()
     root = Path(pack_root)
-    _, timestamps, index = _pack_axes(root)
-    metadata = _read_json(root / "metadata.json")
-    minutes = minute_axis_from_labels(timestamps, bar_label=metadata.get("bar_label"))
+    with timings.phase("pack_axes"):
+        _, timestamps, index = _pack_axes(root)
+        metadata = _read_json(root / "metadata.json")
+        minutes = minute_axis_from_labels(timestamps, bar_label=metadata.get("bar_label"))
     instruments = tuple(sorted(index))
     shape = len(minutes), len(instruments)
     columns = {name: np.empty(shape, dtype="uint8" if name == "suspended" else "float64")
                for name in COLUMNS}
-    for j, (_, _, values) in enumerate(_pack_columns(root, timestamps, index)):
-        for name, column in values.items():
-            if name not in columns:
-                columns[name] = np.full(shape, np.nan, dtype="float64")
-            columns[name][:, j] = column
+    # The generator decodes one instrument per step, so the nested span isolates
+    # column assembly and leaves bin decode as the parent's remainder.
+    with timings.phase("pack_decode"):
+        for j, (_, _, values) in enumerate(_pack_columns(root, timestamps, index)):
+            with timings.phase("assemble"):
+                for name, column in values.items():
+                    if name not in columns:
+                        columns[name] = np.full(shape, np.nan, dtype="float64")
+                    columns[name][:, j] = column
+    timings.count("decoded_instruments", len(instruments))
     return DensePanel(columns, len(minutes), instruments,
                       tuple(index[i]["execution_symbol"] for i in instruments), minutes)

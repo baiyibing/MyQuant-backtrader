@@ -126,10 +126,61 @@ JSON 数值均为单调墙钟 `perf_counter` 秒数，保留六位小数：
   分别记账；仅选 P-CHASE 时仍记录实际执行的 P-BASE 基准，基准复用不重复计时。
 - `write_artifacts`：CSV/summary 序列化、产物与输入审计哈希、建目录及写出，
   包括最后的 summary.json 写入。
+- `validate_manifest`：`replay(...)` 入口对 manifest / intents 的二次校验
+  （`load_bundle` 里的那次记在 `bundle_load.validate_manifest`）。
+- `summary_<fill_mode>_<arm>`：`_summary(...)` 指标与月度切片汇总。
+- `plain_output`：Decimal / datetime → JSON 可写值的整树转换。
+- `write_artifacts`：CSV/summary 序列化、产物与输入审计哈希、建目录及写出，
+  包括最后的 summary.json 写入。
 - `total_seconds`：从 `run_replay` 入口到全部产物写完的总耗时；包含上述不重叠阶段，
   以及阶段间 manifest 复核、汇总等开销。不包含 CLI 参数解析、末尾读取 summary
   与打印回执/计时行，因此不要求等于各阶段之和。
 
-不写 timings.json，也不向 summary 注入计时字段。四份产物、stdout 成功回执
+不向 summary 注入计时字段。四份产物、stdout 成功回执
 及既有合同不变，summary.json 仍最后写、仍是完成标记。失败沿用原错误路径，
 不输出成功计时摘要。data-free 测试只验证计时覆盖与产物一致性，不代表真湖耗时。
+
+### 细粒度 span（2026-09-24）
+
+同一个 `--profile-timings` 现在给每个主要步骤都打了可嵌套埋点。子阶段的扁平键是
+`父.子`（可多层，如 `validate_bars.metadata.sessions`），**父阶段秒数已包含其子阶段**，
+所以只有顶层键（键名不含 `.`）彼此不重叠、可与 `total_seconds` 比较；子键只应与同一
+父键比较，不要跨层求和。循环形状证据走保留前缀 `counts.`（整数计数，非计时器），
+例如 `counts.replay_M-LAG_P-BASE.attempts`。
+
+`--profile-timings-json <path>` 会把 stderr 上同一个 JSON 对象另写一份到该路径
+（canonical JSON + 换行），并自动打开计时（无需再给 `--profile-timings`）。该路径
+必须在 `--out` 运行目录之外、父目录必须已存在，否则在跑之前就 `OUTPUT_BLOCKED`
+失败；它永远不是四份产物之一，也不进 summary。
+
+按落点分组的子 span：
+
+- `bundle_load.read_inputs` / `.parse_artifacts` / `.validate_manifest`：字节读取、
+  CSV/JSON 解析、manifest 校验；`.validate_manifest` 再分
+  `.intents`（逐条 intent 身份哈希）、`.reference_states`（参考状态链与 plan 收集）、
+  `.intent_plan_binding`（intent→plan 绑定与数量换算）。
+- `validate_bars.seal` / `.metadata`（内含 `.sessions` 分钟展开）/ `.bars_scan`（逐 bar
+  校验与索引）/ `.events`：v1 默认路径。
+- v2 JSON 路径：`validate_metadata.bar_metadata`（内含 `.sessions`）/ `.bar_events`；
+  `validate_panel_load.json_rows` 是 JSON `list[dict]` → DensePanel 的那一趟循环。
+- v2 pack 路径：`validate_panel_load.pack_axes`（日历/instrument 轴与 MANIFEST 计数）、
+  `.pack_decode`（qlib_bin mmap/decode，其中 `.pack_decode.assemble` 是列装配，
+  父阶段余量即 bin 解码）；Arrow/Parquet 为 `.pack_decode` + `.pack_assemble`。
+- `validate_panel_scan.axes` / `.table_sha256`（仅 MANIFEST 带 `bars_table_sha256` 时）
+  / `.cells`（NumPy 向量化 gate）。lazy cell 仍不逐 cell 计时。
+- `replay_<fill_mode>_<arm>.init_bars_index` / `.init_orders` / `.timeline_build` /
+  `.marks` / `.lifecycle` / `.eligible_scan` / `.attempts` / `.daily_mark` /
+  `.snapshot_orders`：分别对应索引构建、intent 入队、时间轴合并排序、开/收盘 mark、
+  事件转换+过期+激活、当分钟资格扫描、attempt/fill 记账、日终 MARK/NAV、订单写出准备。
+  循环内 span 按分钟累加，不逐 cell、不逐订单新建计时器。
+- `write_artifacts.serialize_tables` / `.summary_hashes` / `.write_files`。
+
+`counts.` 键：`bundle_load.intent_rows`、`…validate_manifest.reference_arm_days` /
+`.bound_intents`、`validate_bars.metadata.session_minutes`、`validate_bars.bar_rows`、
+`validate_panel_load.bar_rows` / `.decoded_instruments` / `.decoded_rows`、
+`validate_panel_scan.panel_cells`、`replay_….orders` / `.timeline_points` /
+`.attempts` / `.fills`。
+
+默认关闭时仍是**零** `perf_counter` 调用：`phase()` 返回共享的无状态空 span，不分配
+对象、不读时钟，`count()` 直接返回。埋点不改 fill / clock / fee / T+1 / limit /
+capacity 语义与产物字节；`--validate-version` 默认仍是 v1，seal 默认仍是 qlib_bin。

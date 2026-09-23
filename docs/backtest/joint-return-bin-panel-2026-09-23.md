@@ -26,6 +26,13 @@ Byte-mode corporate-action replay remains fail-closed pending its separate
 contract. Execution, fees, T+1, clocks and lazy Decimal access are unchanged.
 qlib_bin marks-v1 remains the storage format; Arrow is not the default seal.
 
+Research-only phase spans: `read_pack_panel` / `read_columnar_panel` accept an
+opt-in `_timings` sink and report `validate_panel_load.pack_axes` and
+`validate_panel_load.pack_decode` (bin decode remainder plus the nested
+`.pack_decode.assemble`; Arrow/Parquet use a sibling `.pack_assemble`). Default
+off reads no clock. Key table and `--profile-timings-json` live in
+[`joint-return-frozen-explicit-price.md`](joint-return-frozen-explicit-price.md).
+
 Tiny tests compare panel columns exactly to materialized float32-decoded rows,
 exercise both label conventions, corrupt inputs and seal failures, forbid the
 legacy reader on panel/replay paths, and compare replay CSV bytes. Full 4090
