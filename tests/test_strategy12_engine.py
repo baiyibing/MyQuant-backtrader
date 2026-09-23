@@ -240,6 +240,41 @@ def test_daily_limit_down_defers_independent_partial_queue():
     assert sale["date"] == "20251106" and st.stats["defer_sell_limit_down"] == 1
 
 
+def test_daily_deferred_derisk_sells_signal_time_lot_not_the_same_day_add():
+    _, bars, dates = bars_for([[(895, 10)], [(895, 9.9)], [(895, 9.9)]],
+                              daily_closes=[10, 9.9, 9.9])
+    bars[CODE].loc[dates[2], "open"] = 9.8
+    st = daily.simulate(bars, {"20251103": [CODE], "20251104": [CODE]},
+                        "20251103", "20251105", strategy="12", name_budget=10000)
+    assert fills(st) == [("pool", 1000), ("pool", 1000), (rules.REDUCE, 500)]
+    assert {p.lot_id: p.shares for p in st.positions[CODE]} == {0: 500, 1: 1000}
+    assert book.memory_for(st, CODE).reduced == rules.Memory(500, True)
+
+
+def test_daily_deferred_stop_clears_signal_time_lot_and_keeps_the_add():
+    _, bars, dates = bars_for([[(895, 10)], [(895, 8.9)], [(895, 10)]],
+                              daily_closes=[10, 8.9, 10])
+    bars[CODE].loc[dates[2], "open"] = 8.9
+    st = daily.simulate(bars, {"20251103": [CODE], "20251104": [CODE]},
+                        "20251103", "20251105", strategy="12", name_budget=10000)
+    assert fills(st) == [("pool", 1000), ("pool", 1100), (rules.STOP, 1000),
+                         (rules.RECLAIM10, 1000)]
+    assert {p.lot_id: p.shares for p in st.positions[CODE]} == {1: 1100, 2: 1000}
+    assert book.memory_for(st, CODE).stopped == rules.Memory()
+
+
+def test_queued_derisk_that_cannot_touch_its_lots_neither_fills_nor_latches():
+    st, _ = state()
+    st.positions[CODE] = [Position(CODE, 1000, 10, -1, 10)]
+    plan = book.queue_exit(st, CODE, (rules.REDUCE, 500), day_i=1, ds="20251104")
+    assert plan == (rules.REDUCE, 500, [(0, 500)])
+    st.positions[CODE] = [Position(CODE, 1000, 10, 0, 10, lot_id=1)]
+    assert book.fill_exit(st, CODE, 9.9, "20251104", day_i=1, ds="20251104", plan=plan,
+                          limits=(12., 8.), open_px=9.9) == 0
+    assert st.positions[CODE][0].shares == 1000
+    assert book.memory_for(st, CODE).reduced == rules.Memory()
+
+
 def test_scanner_keeps_five_tuple_and_reports_partial_size_out_param():
     out = {}
     result = minute.scan_held_day(np.array([9.9]), np.array([9.9]), np.array([9.9]),

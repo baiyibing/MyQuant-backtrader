@@ -105,6 +105,20 @@ def allocate_exit(lots, shares: int, *, keep_anchor: bool) -> list[tuple[int, in
     return result
 
 
+def clamp_exit(lots, orders) -> list[tuple[int, int]]:
+    """Re-anchor an allocation on its own lots; post-plan lots stay untouched."""
+    by_id = {lot.lot_id: lot for lot in lots}
+    result = []
+    for lot_id, shares in orders:
+        lot = by_id.get(lot_id)
+        if lot is None:
+            continue
+        amount = min(int(shares), max(0, min(lot.shares, lot.sellable)))
+        if amount:
+            result.append((lot_id, amount))
+    return result
+
+
 def exit_plan(code, px, day, closes, lots, *, memory: CodeMemory) -> tuple[str, int] | None:
     del code, day
     available = sum(max(0, min(lot.shares, lot.sellable)) for lot in lots)
@@ -166,6 +180,7 @@ HELP_LOCK = """
   4) 除权只走显式 economics/文档路径；front 日线 + none 分钟下禁止静默双重调整。
   front 缺分区/缺代码行情即失败。MA 序列严格截至昨收。
   分钟逐根 close 评估、当根成交；日线收盘评估、次日开盘卖。
+  日线排队卖单锁定信号收盘当时可卖的 lot；信号后同日池/追买/台阶新仓不顶替。
   MA10×0.90 下方先止损；MA5 下方减 t1_sellable 的 50%，floor100。
   is_step 先卖、中间 lot_id 升序、lot0 最后且减仓保留至少 100 股。
   latch=A：只有周期锁；成功收复后立即再武装，同日可再次减仓，无每日锁。

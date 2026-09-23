@@ -85,14 +85,26 @@ def on_reclaim(st, code, reason, shares):
     getattr(memory_for(st, code), channel).reclaimed(shares)
 
 
+def queue_exit(st, code, plan, *, day_i, ds):
+    """Pin a deferred daily exit to the lots sellable when the close signalled.
+
+    Without this the next open re-allocates onto pool/chase/step lots bought
+    after the signal, leaving the measured lot held and the cycle latched.
+    """
+    reason, wanted = plan
+    return reason, wanted, rules.allocate_exit(sell_lots(st, code, day_i, ds), wanted,
+                                               keep_anchor=reason == rules.REDUCE)
+
+
 def fill_exit(st, code, px, day, *, day_i, ds, plan, limits, open_px,
               bucket_id=None, price_rule="") -> int:
     if defer_sell_at_limit(open_px, limits) or defer_sell_at_limit(px, limits):
         st.stats["defer_sell_limit_down"] += 1
         return 0
-    reason, wanted = plan
-    orders = rules.allocate_exit(sell_lots(st, code, day_i, ds), wanted,
-                                 keep_anchor=reason == rules.REDUCE)
+    reason, wanted, planned = plan[0], plan[1], plan[2] if len(plan) > 2 else None
+    lots = sell_lots(st, code, day_i, ds)
+    orders = (rules.clamp_exit(lots, planned) if planned is not None
+              else rules.allocate_exit(lots, wanted, keep_anchor=reason == rules.REDUCE))
     filled = 0
     for lot_id, shares in orders:
         pos = next(p for p in st.positions[code] if p.lot_id == lot_id)
@@ -177,7 +189,7 @@ def run_daily_day(st, pending_chase, *, hooks, bars, pool_days, day_i, day,
         plan = hooks["exit_plan"](st, code, float(row["close"]), day, closes,
                                   day_i=day_i, ds=ds)
         if plan is not None and (code not in pending or plan[0] == rules.STOP):
-            pending[code] = plan
+            pending[code] = queue_exit(st, code, plan, day_i=day_i, ds=ds)
 
     def quote(code):
         frame = bars.get(code)
