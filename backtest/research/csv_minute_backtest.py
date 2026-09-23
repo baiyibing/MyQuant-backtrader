@@ -30,6 +30,9 @@ from backtest.research.csv_ledger import (  # noqa: E402
     CHASE_HM,
     DEFAULT_TOTAL_CASH,
     PEAK_GAP_MIN,
+    QLIB_CLOSE_COST,
+    QLIB_MIN_COST,
+    QLIB_OPEN_COST,
     SimState,
     chase_decision as chase_decision,
     execute_buy as execute_buy,
@@ -591,6 +594,11 @@ def simulate(
     index_block_new=None,
     participation_rate: float | None = None,
     volume_for_bucket: VolumeLookup | None = None,
+    stop_fill: Optional[str] = None,
+    keep_buy_vacancy: bool = False,
+    buy_cost_rate: Optional[float] = None,
+    sell_cost_rate: Optional[float] = None,
+    min_cost: Optional[float] = None,
 ) -> SimState:
     """Opt-in cap uses caller-attested completed minutes; daily volume is unused.
 
@@ -613,9 +621,19 @@ def simulate(
         topk=topk,
         n_drop=n_drop,
         eligible_buy=eligible_buy,
+        keep_buy_vacancy=keep_buy_vacancy,
         index_block_new=index_block_new,
+        stop_fill=stop_fill,
     )
     stop_pct = hooks["stop_pct"]
+    stop_fill = str(hooks.get("stop_fill") or "touch").strip().lower()
+    if stop_fill == "close":
+        raise SystemExit(
+            "--stop-fill close is daily EOD close only; "
+            "minute entry refuses it (bar close is not 当日收盘)"
+        )
+    if stop_fill != "touch":
+        raise SystemExit(f"--stop-fill must be touch or close, got {stop_fill}")
     take_profit = hooks["take_profit"]
     buy_gate = hooks.get("buy_gate")
     sell_gate = hooks.get("sell_gate")
@@ -633,6 +651,15 @@ def simulate(
         pool_names=pool_names,
         pool_names_by_day=pool_names_by_day,
     )
+    if buy_cost_rate is not None:
+        st.buy_cost_rate = float(buy_cost_rate)
+    if sell_cost_rate is not None:
+        st.sell_cost_rate = float(sell_cost_rate)
+    if min_cost is not None:
+        st.min_cost = float(min_cost)
+    st.stats["buy_cost_rate"] = st.buy_cost_rate
+    st.stats["sell_cost_rate"] = st.sell_cost_rate
+    st.stats["min_cost"] = st.min_cost
     if participation_rate is not None:
         st.volume_cap = VolumeCap(participation_rate, volume_for_bucket)
     if exdiv_economics is not None:
@@ -972,7 +999,19 @@ def run(
     qlib_1min_root: Optional[Path] = None,
     qlib_day_root: Optional[Path] = None,
     dividend_type: str = "none",
+    stop_fill: Optional[str] = None,
+    week_ma_gate: bool = False,
+    ma5_gate: bool = False,
+    keep_buy_vacancy: bool = False,
+    buy_cost_rate: Optional[float] = None,
+    sell_cost_rate: Optional[float] = None,
+    min_cost: Optional[float] = None,
 ) -> SimState:
+    if str(stop_fill or "").strip().lower() == "close":
+        raise SystemExit(
+            "--stop-fill close is daily EOD close only; "
+            "minute entry refuses it (bar close is not 当日收盘)"
+        )
     book = normalize_csv_strategy(strategy)
     if book == "version12":
         if dividend_type not in ("none", "front") or minute_source != "lake" or daily_source != "lake":
@@ -1004,12 +1043,18 @@ def run(
     from backtest.research.topk_dropout_scores import codes_from_scores
 
     all_codes |= codes_from_scores(scores_by_day)
-    load_start = warmup_start(
-        start,
+    warm_days = (
         STRATEGY4_CALENDAR_SLACK_DAYS
         if book in ("version4", "version12")
-        else (20 if return_threshold_filter else WARMUP_DAYS),
+        else (20 if return_threshold_filter else WARMUP_DAYS)
     )
+    if week_ma_gate:
+        from backtest.research.topk_dropout_eligibility import WEEK_MA_WARMUP_DAYS
+
+        warm_days = max(warm_days, WEEK_MA_WARMUP_DAYS)
+    load_start = warmup_start(start, warm_days)
+    # Week / stock MA5 only need daily history. Minute fills start on the first buy day.
+    minute_load_start = start if (week_ma_gate or ma5_gate) else load_start
     print(
         f"loading daily+minute: {len(all_codes)} codes, {load_start}..{end}; "
         f"pool {min(pool_days)}..{max(pool_days)} ({len(pool_days)} days)",
@@ -1042,15 +1087,16 @@ def run(
         if not root.is_dir():
             raise FileNotFoundError(f"missing front minute partition: {root}")
         # The existing window cache is none-domain; read the configured front tree.
-        minute = _load_minute_from_lake(all_codes, load_start, end, workers=workers,
-                                        lake_root=root)
+        minute = _load_minute_from_lake(
+            all_codes, minute_load_start, end, workers=workers, lake_root=root
+        )
         if missing := all_codes - minute.keys():
             raise ValueError(f"missing front minute bars for strategy12: {sorted(missing)} under {root}")
         cache_status["cache"] = "front_uncached"
     elif minute_source == "qlib_1min":
         compact = _load_minute_compact(
             all_codes,
-            load_start,
+            minute_load_start,
             end,
             source="qlib_1min",
             qlib_root=qlib_1min_root,
@@ -1061,7 +1107,7 @@ def run(
     else:
         minute = load_minute_bars(
             all_codes,
-            load_start,
+            minute_load_start,
             end,
             workers=workers,
             use_cache=use_cache,
@@ -1074,6 +1120,14 @@ def run(
         f"loaded daily {len(daily)} / minute {len(minute)} / pool days {len(pool_days)}",
         flush=True,
     )
+    if week_ma_gate:
+        from backtest.research.topk_dropout_eligibility import with_week_ma_gate
+
+        eligible_buy = with_week_ma_gate(eligible_buy, daily)
+    if ma5_gate:
+        from backtest.research.topk_dropout_eligibility import with_ma5_gate
+
+        eligible_buy = with_ma5_gate(eligible_buy, daily)
     if return_threshold_filter:
         from backtest.research.topk_dropout_eligibility import with_return_threshold
 
@@ -1123,7 +1177,12 @@ def run(
         topk=topk,
         n_drop=n_drop,
         eligible_buy=eligible_buy,
+        keep_buy_vacancy=keep_buy_vacancy,
         index_block_new=index_block_new,
+        stop_fill=stop_fill,
+        buy_cost_rate=buy_cost_rate,
+        sell_cost_rate=sell_cost_rate,
+        min_cost=min_cost,
     )
     if skipped.get("exdiv_skipped_no_factor"):
         st.stats["exdiv_skipped_no_factor"] = int(skipped["exdiv_skipped_no_factor"])
@@ -1170,6 +1229,11 @@ def main(argv: Optional[list] = None) -> int:
     )
     ap.add_argument("--qlib-day-root", help="qlib daily bin root for --daily-source qlib_day")
     ap.add_argument(
+        "--qlib-cost",
+        action="store_true",
+        help="align fees with qlib: buy 5bp / sell 15bp / min 5 (default is 10bp both sides, no floor).",
+    )
+    ap.add_argument(
         "--out-dir",
         type=Path,
         default=None,
@@ -1194,6 +1258,9 @@ def main(argv: Optional[list] = None) -> int:
         dividend_type=args.dividend_type,
         qlib_1min_root=Path(args.qlib_1min_root) if args.qlib_1min_root else None,
         qlib_day_root=Path(args.qlib_day_root) if args.qlib_day_root else None,
+        buy_cost_rate=QLIB_OPEN_COST if args.qlib_cost else None,
+        sell_cost_rate=QLIB_CLOSE_COST if args.qlib_cost else None,
+        min_cost=QLIB_MIN_COST if args.qlib_cost else None,
         **csv_run_kwargs_from_args(args),
     )
     book = engine_book(args.strategy)

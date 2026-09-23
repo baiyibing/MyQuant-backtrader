@@ -31,6 +31,7 @@ class FillPriceRule(str, Enum):
     daily_open_board_same_close = "daily_open_board_same_close"
     daily_stop_gap_open = "daily_stop_gap_open"
     daily_stop_touch_at_trigger = "daily_stop_touch_at_trigger"
+    daily_stop_close = "daily_stop_close"
     daily_pending_next_open = "daily_pending_next_open"
     minute_gap_open = "minute_gap_open"
     minute_trigger_bar_close = "minute_trigger_bar_close"

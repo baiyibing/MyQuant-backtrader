@@ -13,7 +13,7 @@ Standalone research-face fork (see [README.md](README.md)). Since migration S2 (
 - 1/2/3/4/5/6/8/9/10 分钟：`backtest/research/csv_minute_backtest.py --strategy version1|…|version6|version8|version9|version10`
 - 7 金榕元：`backtest/research/csv_minute_backtest_v7.py`（`--pool-dir` 必填，不回落 `stock_pool/`）
 - 12 金榕元均线减仓书：CSV 入口 `--strategy version12`（别名 `12/v12`）；#151 follow-up 行业约定：分钟湖/成交域默认 raw `--dividend-type none`（front 仅可选 fail-closed，缺 1m/front 分区即失败），日线信号域固定 `front`，盘中成交继续分钟 raw，除权仅走显式 economics/文档路径（禁止 front 日线 + none 分钟下静默双重调整）。默认 `stock_pool/`，与 7 独立入口及必填池分工不同。MA5 周期减仓/买回 + MA10 止损/买回；latch=A、residual=2。
-- topk_dropout 联合研究（MyQuant 出分，本仓日线/分钟入口切换；持续改进用开关不复制书）：问题记录 [`docs/backtest/topk-joint-research-tracker-2026-09-22.md`](docs/backtest/topk-joint-research-tracker-2026-09-22.md) · [#164](https://github.com/baiyibing/MyQuant-backtrader/issues/164)。未人裁 GO 前不改默认触价止损。overlay 已落地：`--strategy topk_dropout`。
+- topk_dropout 联合研究（MyQuant 出分，本仓日线/分钟入口切换；持续改进用开关不复制书）：问题记录 [`docs/backtest/topk-joint-research-tracker-2026-09-22.md`](docs/backtest/topk-joint-research-tracker-2026-09-22.md) · [#164](https://github.com/baiyibing/MyQuant-backtrader/issues/164)。未人裁 GO 前不改默认触价止损。overlay 已落地：`--strategy topk_dropout`。买点旁路：MyQuant `export_topk_buy_state_sidecar.py`（`$winratio`）→ 本仓 `--buy-state-file`（默认关；`topk_score_exit` 拒绝）。
 - joint-return-v1（qlib 出冻结意图，bt 主管成交/NAV 与 Mode B 真湖）：交接 [`docs/backtest/handoff-joint-return-qlib-to-bt-2026-09-22.md`](docs/backtest/handoff-joint-return-qlib-to-bt-2026-09-22.md)。当前 `NOT_READY_FOR_MODE_B`；4090 重出时钟 pack 后再派 P-BASE。归类 [`docs/backtest/research-backtest-entry.md`](docs/backtest/research-backtest-entry.md) §5.6。
 - topk_app_dropout（新策略，不改策略 7）：`backtest/research/csv_minute_backtest_topk_app_dropout.py`；名单可选先 `scripts/data/export_topk_app_dropout_pool.py`。禁止 `register` 进 1–10 BOOKS。
 - 9 底量超顶量：`scripts/data/export_strategy9_pool.py` 写名单，再 `--strategy version9 --pool-dir`（拒绝 `stock_pool/`）
@@ -21,6 +21,7 @@ Standalone research-face fork (see [README.md](README.md)). Since migration S2 (
 - 11 ma_chip（已移植，本 PR）：`scripts/data/export_strategy11_pool.py` 写 `<out-dir>/pool/`，再日线 / 分钟 `--strategy version11 --pool-dir <out-dir>/pool`（拒绝 `stock_pool/`）。D 后首 bar T 且 ≤4 自然日；周线显式 prefix；日线契约收盘 / 分钟 09:30 open；volume=A 未完成桶买 skip / pending 卖 defer，禁追买。分钟要求 lake volume 并绕过旧无量缓存；D 静态档案对照仍待跑。
 - 统一卖出规则网格 · 模式 A：`scripts/research/run_unified_exit_modea.py`（库 `backtest/research/unified_exit_modea.py`；产出 `backtest_output/unified_exit_modea/`；提案 `docs/backtest/stock-backtest-unified-exit-proposal-2026-09-17.md`）
 - 统一卖出规则网格 · 模式 B：`scripts/research/run_unified_exit_modeb.py`（默认 P1=A 窄网格；Q38=A 分钟 oracle；产出独立目录 `backtest_output/unified_exit_modeb/`）。
+- 盘后人工分析包（固定文件名，不重跑）：`scripts/research/export_csv_human_analysis.py --run-dir <backtest_output/…>`；提示词 [`docs/backtest/prompt-csv-human-analysis.md`](docs/backtest/prompt-csv-human-analysis.md)。不是 MyQuant PortAna 那套。
 - 名单：`backtest/research/csv_pool.py`（与 1.3 `lebs/csv/universe.py` 同口径）
 - 不要 `python -m backtest.lebs`（包不在本仓；LEBS 只在 1.3，且 LEBS ≠ 真栈）。Cerebro 已退场，禁止复活。
 - 向量化撮合核收口 plan（已人裁 GO：A/A/C/A/A；范围 A→B→C，D 后置）：`docs/backtest/plan-ashare-engine-refactor-2026-09-18.md` §0.3 / §5。热路径固定清单由 `tests/test_ashare_simulate_import_fence.py` 锁定，禁止扩成 research 全目录扫描。

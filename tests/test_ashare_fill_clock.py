@@ -3,7 +3,7 @@
 
 Human GO P1=A closure (2026-09-20): scan-window labels only, no real
 closing call auction model; session/fill eligibility stays as-built.
-FillPriceRule names six existing book-engine paths. That set is not an
+FillPriceRule names seven existing book-engine paths. That set is not an
 exhaustive price selector and does not cover v7.
 Human GO P2=B adds trade labels at write sites only; P1 eligibility stays A.
 """
@@ -57,6 +57,7 @@ NAMED_PRICE_RULES = (
     "daily_open_board_same_close",
     "daily_stop_gap_open",
     "daily_stop_touch_at_trigger",
+    "daily_stop_close",
     "daily_pending_next_open",
     "minute_gap_open",
     "minute_trigger_bar_close",

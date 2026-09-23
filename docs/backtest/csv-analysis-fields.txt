@@ -1,0 +1,190 @@
+CSV 回测盘后分析包 · 文件与字段说明
+配套：docs/backtest/prompt-csv-human-analysis.md
+导出：scripts/research/export_csv_human_analysis.py
+导出时会在本文件开头另写本次 run_dir 与窗口。
+
+人工先看 round_trips.csv，或 human_review.xlsx 里同名那张表。
+日期都是 YYYY-MM-DD。代码带交易所后缀，例如 600000.SH。
+没传打分、旁路、ST、年龄文件时，对应列为空。
+
+
+一、文件
+
+summary.json
+  整段对账：本金、首末日净值、盈亏、买卖笔数。
+
+nav_daily.csv
+  每个净值日一行。
+
+round_trips.csv
+  一笔开平一行（先买先卖配对）。期末没卖掉的也在，status=open_eod。
+
+trades_daily.csv
+  引擎每一笔 BUY / SELL / SKIP，拼上当天的打分和旁路。不含期末估值行。
+
+ledger_by_stock.csv
+  按股票的买、卖，以及期末未平的一条 hold。
+
+pnl_by_stock.csv
+  一只股票一行，把该票所有开平加总。按 total_pnl 从高到低排。
+
+positions_daily.csv
+  每个净值日收盘后还在仓里的票。
+
+daily_picks.csv
+  传了 --scores-dir 或 --pred-csv 才有。当日 TopK 对照有没有买上。
+
+human_review.xlsx
+  传了 --xlsx 才有。上面各表各一张，另加 meta。
+
+
+二、summary.json
+
+account          本金。从回测 summary.txt 的「期末净值 / 本金」读出。
+nav_first        首日净值。
+nav_last         末日净值。
+nav_delta        末日净值减本金。
+realized_pnl     已平仓盈亏合计。
+unrealized_pnl   期末持仓按 EOD_MARK 估的浮盈合计。
+pnl_total        realized_pnl + unrealized_pnl。
+pnl_nav_diff     pnl_total 减 nav_delta。接近 0 表示账对得上。
+days             净值天数。
+buys / sells     买入笔数 / 卖出笔数。
+round_trips      已平笔数。
+open_lots        期末仍持有的笔数。
+topk             导出时的 --topk。
+has_scores       是否拼了打分。
+has_buy_state    是否拼了买点旁路。
+
+
+三、round_trips.csv（主表）
+
+code                     股票。
+buy_date / sell_date     买入日 / 卖出日。未平仓的 sell_date 是估值末日。
+status                   closed=已卖；open_eod=期末还在仓。
+hold_trading_days        净值日历上，卖日序号减买日序号。买入当天是 0。
+sell_reason              卖因。例如 topk_drop:bottom、stop_loss:close；未平为 EOD_MARK。
+buy_price / sell_price   买入价 / 卖出价。未平的卖价是末日估值价。
+shares                   股数。
+buy_notional             买入金额（价×股）。
+sell_notional            卖出金额。未平为末日估值金额。
+buy_commission           买入佣金。
+sell_commission          卖出佣金。未平仓记 0。
+realized_pnl             已平：(卖出金额-卖出佣金)-(买入金额+买入佣金)。未平为空。
+mtm_pnl                  未平：末日估值金额-(买入金额+买入佣金)。已平为空。
+return_pct               该笔盈亏 / (买入金额+买入佣金)。
+buy_score / buy_rank     买入日全日截面分，以及全市场名次（1 最高）。
+buy_in_topk              buy_rank 小于等于 --topk。false 表示资格闸跳过后往下补的。
+sell_score / sell_rank   卖出日（或估值日）的分和名次。
+buy_sidecar_close        旁路在买入日的收盘。
+buy_ma20 / buy_ma60      买入日 MA20 / MA60。
+buy_winratio             买入日券商 $winratio（盈筹）。
+buy_close_minus_ma20     买入日收盘减 MA20。
+buy_close_minus_ma60     买入日收盘减 MA60。
+buy_close_over_ma20      买入日收盘相对 MA20 的涨跌幅。
+buy_close_over_ma60      买入日收盘相对 MA60 的涨跌幅。
+buy_cond1_below_ma_wr    收盘同时低于 MA20、MA60，且赢筹小于 0.10。
+buy_cond2_close_gt_ma20  收盘大于 MA20。
+buy_state_label          cond1_below_ma_and_wr_lt_0.10 或 cond2_close_gt_ma20。
+buy_state_ok             上面两条满足其一。
+buy_sidecar_hit          旁路在买入日有这一行。
+sell_sidecar_close       卖出日旁路收盘。
+sell_ma20 / sell_ma60    卖出日 MA20 / MA60。
+sell_winratio            卖出日 $winratio。
+is_st_buy_day            买入日该票是否在 ST 表里。
+min_buy_ymd              年龄表里的最早可买日，YYYYMMDD。
+age_ok                   买入日大于等于最早可买日。
+
+分数：--scores-dir 的文件名就是买入日，内容已经是前一交易日的预测，这里不再往前挪一天。
+买点两条与引擎一致，没有 MA5 斜率：
+  1) 收盘 < MA20 且 收盘 < MA60 且 $winratio < 0.10
+  2) 收盘 > MA20
+
+
+四、trades_daily.csv
+
+date, code, side, price, shares, notional, commission, reason
+  与回测 trades.csv 相同。side 为 BUY / SELL / SKIP。不含 EOD_MARK。
+
+score / score_rank       这一行当天的分和全市场名次。
+score_universe           当天有分的股票数。
+in_topk                  名次小于等于 --topk。
+is_st / min_buy_ymd / age_ok
+  这一行当天的 ST、最早可买日、年龄是否够。
+
+sidecar_close, ma20, ma60, winratio
+close_minus_ma20, close_minus_ma60, close_over_ma20, close_over_ma60
+cond1_below_ma_wr, cond2_close_gt_ma20, buy_state_label, buy_state_ok, sidecar_hit
+  这一行当天的旁路。卖出行上是卖出日，不是买入日。买入日对照看 round_trips 的 buy_* 列。
+
+
+五、ledger_by_stock.csv
+
+date / code              事件日、股票。
+event                    buy、sell，或期末未平的 hold。
+delta_amount             这笔股数。hold 为 0。
+amount_after             事件后该票剩余股数。
+price                    当日价。
+entry_price              该笔开仓价。
+trade_value              成交金额。
+est_cost                 这笔佣金。
+holding_days             卖出或估值相对买入日的交易日数。
+realized_pnl             这笔卖出的已实现。买和 hold 为 0。
+unrealized_pnl           只在期末 hold 上有浮盈。
+cum_realized_pnl         该票累计已实现。
+reason                   引擎卖因。hold 记 EOD_MARK。
+
+没有「每个持仓日一条 hold」。逐日持仓看 positions_daily.csv。
+
+
+六、pnl_by_stock.csv
+
+code                     股票。
+round_trips              已平笔数。
+open_lots                期末还在仓的笔数。
+wins / losses            只数已平。盈亏小于等于 0 算亏。
+realized_pnl             已实现合计。
+unrealized_pnl           期末浮盈合计。
+total_pnl                两者相加。
+total_entry_value        该票全部买入金额之和（不含佣金）。
+return_on_cost           total_pnl / total_entry_value。
+first_buy                最早买入日。
+last_exit                最晚卖出日或估值日。
+still_held               true 表示期末还有仓。
+
+
+七、positions_daily.csv
+
+date / code              净值日、股票。
+shares                   收盘后股数。
+price                    当天最后一笔成交价，或末日估值价。
+entry_price              这轮持仓第一笔买入价。
+market_value             股数乘 price。
+weight                   市值 / 当日净值。
+holding_days             从这轮第一笔买入算起的交易日数。
+                         同一天先全部卖掉再买回来，另起一轮。
+
+
+八、daily_picks.csv
+
+trade_date               买入日。只保留净值窗口内的日期。
+rank / code / score      全日名次、代码、分。
+held                     当天收盘是否在仓。
+action
+  new_buy         在 TopK 且当天买入
+  held            在 TopK 且在仓，但不是当天新开
+  missed          在 TopK 但没买上（涨停跳过 / 资格闸 / 现金 / 调仓惯性）
+  held_not_topk   在仓但不在当日 TopK
+
+TopK 之外、当天也不在仓的票不出现在这张表里。
+
+
+九、human_analysis.txt
+
+每次导出必写。总收益率、最大回撤、胜率、按卖因拆开。同目录还有 win_by_reason.csv，数字同时进 summary.json。
+
+总收益率(全资金)     末日净值 / 本金 - 1。
+最大回撤             净值 / 此前峰值 - 1 的最小值。记下出现日、峰值、谷值。
+已平仓胜率           realized_pnl > 0 的已平笔数 / 已平笔数。期末 open_eod 不计入。
+含期末浮盈           （已平胜 + mtm_pnl > 0 的未平笔）/ 全部开平笔数。
+按卖因               只统计已平。每行：卖因、笔数、胜率、已实现盈亏。

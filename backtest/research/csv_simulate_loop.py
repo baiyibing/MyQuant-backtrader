@@ -77,6 +77,18 @@ def prepare_strategy_hooks(
     )
 
 
+def _buy_denom(planned: list[str], planned_for_day) -> int:
+    """Vacancy mode sizes off the original buy list, so an empty seat stays cash."""
+    slots = (
+        getattr(planned_for_day, "slot_count", None)
+        if callable(planned_for_day)
+        else None
+    )
+    if slots:
+        return int(slots)
+    return len(planned)
+
+
 def apply_capital_ration(
     planned: list[str], *, ration: str, ration_seed: int, ds: str
 ) -> list[str]:
@@ -164,7 +176,8 @@ def run_chase_due_day(
             continue
         limit_up, _ = limits
         decision = (
-            "limit" if skip_buy_at_limit(buy_px, limits)
+            "limit"
+            if skip_buy_at_limit(buy_px, limits)
             else chase_decision(open_px, buy_px, limit_up)
         )
         if decision == "limit":
@@ -183,16 +196,27 @@ def run_chase_due_day(
             st.stats["skip_add_loser"] += 1
             continue
         quota_used = st.daily_quota_used
-        volume_kwargs = ({"bucket_id": volume_bucket_for(code)}
-                         if volume_bucket_for is not None else {})
-        volume_skips = sum(int(st.stats.get(k, 0)) for k in
-                           ("skip_volume_cap", "skip_volume_unavailable"))
-        if not execute_buy(st, code, buy_px, per_ch, day_i, day,
-                           reason="chase:T+1", **volume_kwargs):
+        volume_kwargs = (
+            {"bucket_id": volume_bucket_for(code)}
+            if volume_bucket_for is not None
+            else {}
+        )
+        volume_skips = sum(
+            int(st.stats.get(k, 0))
+            for k in ("skip_volume_cap", "skip_volume_unavailable")
+        )
+        if not execute_buy(
+            st, code, buy_px, per_ch, day_i, day, reason="chase:T+1", **volume_kwargs
+        ):
             st.stats["chase_buy_fail"] += 1
             shares, _ = _buy_size(per_ch, buy_px)
-            if sum(int(st.stats.get(k, 0)) for k in
-                   ("skip_volume_cap", "skip_volume_unavailable")) > volume_skips:
+            if (
+                sum(
+                    int(st.stats.get(k, 0))
+                    for k in ("skip_volume_cap", "skip_volume_unavailable")
+                )
+                > volume_skips
+            ):
                 key = "chase_buy_fail_volume"
             else:
                 key = "chase_buy_fail_shares" if shares <= 0 else "chase_buy_fail_cash"
@@ -256,7 +280,7 @@ def run_pool_buys_day(
             raise ValueError(
                 f"cash_deploy_frac must be in (0, 1], got {cash_deploy_frac!r}"
             )
-        per = min(daily_quota, st.cash) * frac / len(planned)
+        per = min(daily_quota, st.cash) * frac / _buy_denom(planned, planned_for_day)
     for code in planned:
         if code in st.positions and not allow_add:
             st.stats["skip_held"] += 1
@@ -305,8 +329,11 @@ def run_pool_buys_day(
             continue
         if sizing == "per_name" and callable(name_lot_budget):
             per = float(name_lot_budget(name_budget, lots))
-        volume_kwargs = ({"bucket_id": volume_bucket_for(code)}
-                         if volume_bucket_for is not None else {})
+        volume_kwargs = (
+            {"bucket_id": volume_bucket_for(code)}
+            if volume_bucket_for is not None
+            else {}
+        )
         if volume_at is not None:
             volume_kwargs["at"] = volume_at
         if sizing == "per_name":
@@ -398,10 +425,22 @@ def run_step_adds_day(
             )
             continue
         quota_used = st.daily_quota_used
-        volume_kwargs = ({"bucket_id": volume_bucket_for(code)}
-                         if volume_bucket_for is not None else {})
-        execute_buy(st, code, px, per, day_i, day, reason="add:step20", is_step=True,
-                    **volume_kwargs)
+        volume_kwargs = (
+            {"bucket_id": volume_bucket_for(code)}
+            if volume_bucket_for is not None
+            else {}
+        )
+        execute_buy(
+            st,
+            code,
+            px,
+            per,
+            day_i,
+            day,
+            reason="add:step20",
+            is_step=True,
+            **volume_kwargs,
+        )
         st.daily_quota_used = quota_used
 
 
@@ -447,15 +486,32 @@ def run_buybacks_day(
                 st.stats["skip_limit_up"] += 1
                 continue
             notional = shares * px
-            if notional + trade_commission(notional, st.buy_cost_rate, st.min_cost) > st.cash:
+            if (
+                notional + trade_commission(notional, st.buy_cost_rate, st.min_cost)
+                > st.cash
+            ):
                 st.stats["skip_cash"] = st.stats.get("skip_cash", 0) + 1
-                st.stats["skip_cash_notional"] = st.stats.get("skip_cash_notional", 0.0) + notional
+                st.stats["skip_cash_notional"] = (
+                    st.stats.get("skip_cash_notional", 0.0) + notional
+                )
                 continue
             quota_used = st.daily_quota_used
-            volume_kwargs = ({"bucket_id": volume_bucket_for(code)}
-                             if volume_bucket_for is not None else {})
-            if execute_buy(st, code, px, notional, day_i, day, reason=reason,
-                           shares_override=shares, **volume_kwargs):
+            volume_kwargs = (
+                {"bucket_id": volume_bucket_for(code)}
+                if volume_bucket_for is not None
+                else {}
+            )
+            if execute_buy(
+                st,
+                code,
+                px,
+                notional,
+                day_i,
+                day,
+                reason=reason,
+                shares_override=shares,
+                **volume_kwargs,
+            ):
                 on_reclaim(st, code, reason, st.trades[-1]["shares"])
             st.daily_quota_used = quota_used
 
@@ -478,8 +534,9 @@ def run_eod_exits(st, *, day, ds, bars, eod_exit, hold_modes, exdiv=None):
                 continue
             row, closes = got
             previous, _ = mapped_prev_close(exdiv, code, ds, closes[-1])
-            decision = eod_exit(closes + [float(row["close"])], previous,
-                                hold_modes.get(key))
+            decision = eod_exit(
+                closes + [float(row["close"])], previous, hold_modes.get(key)
+            )
             hold_modes[key] = decision.hold_mode
             if decision.reason:
                 pos.pending_exit = decision.reason
