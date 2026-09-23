@@ -263,6 +263,73 @@ def test_daily_deferred_stop_clears_signal_time_lot_and_keeps_the_add():
     assert book.memory_for(st, CODE).stopped == rules.Memory()
 
 
+@pytest.mark.parametrize("px,reason,channel,sold,chased,remaining", [
+    (9.9, rules.REDUCE, "reduced", 500, 1000, {0: 500, 1: 1000}),
+    (8.9, rules.STOP, "stopped", 1000, 1100, {1: 1100}),
+])
+def test_daily_deferred_exit_keeps_same_day_chase_lot(
+        px, reason, channel, sold, chased, remaining):
+    closes = [10, 12, px, px]
+    _, bars, dates = bars_for([[(895, close)] for close in closes], daily_closes=closes)
+    # The second pool appearance hits limit-up and queues a next-day chase.
+    bars[CODE].loc[dates[2], "open"] = px - .1
+    pool = {"20251103": [CODE], "20251104": [CODE]}
+    queued = daily.simulate(bars, pool, "20251103", "20251105",
+                            strategy="12", name_budget=10000)
+    assert fills(queued) == [("pool", 1000), ("chase:T+1", chased)]
+    assert queued.stats["chase_buy"] == 1
+    assert queued.book_state["partial_exits"][CODE] == (reason, sold, [(0, sold)])
+    assert getattr(book.memory_for(queued, CODE), channel) == rules.Memory()
+    assert {p.lot_id: p.shares for p in queued.positions[CODE]} == {0: 1000, 1: chased}
+
+    st = daily.simulate(bars, pool, "20251103", "20251106",
+                        strategy="12", name_budget=10000)
+    assert fills(st) == [("pool", 1000), ("chase:T+1", chased), (reason, sold)]
+    assert {p.lot_id: p.shares for p in st.positions[CODE]} == remaining
+    assert getattr(book.memory_for(st, CODE), channel) == rules.Memory(sold, True)
+
+
+def test_daily_deferred_derisk_keeps_same_day_step_lot(monkeypatch):
+    real_init = daily.init_sim_state
+
+    def seeded(*args, **kwargs):
+        st, pending, names = real_init(*args, **kwargs)
+        # An older low-cost holding can step up while close remains below MA5.
+        # Buying at 7 then jumping straight to 9 would block at daily limit-up.
+        st.positions[CODE] = [Position(CODE, 1400, 7, -1, 10)]
+        return st, pending, names
+
+    monkeypatch.setattr(daily, "init_sim_state", seeded)
+    _, bars, _ = bars_for([[(895, 9)], [(895, 9)]], daily_closes=[9, 9])
+    queued = daily.simulate(bars, {}, "20251103", "20251103",
+                            strategy="12", name_budget=10000)
+    assert fills(queued) == [("add:step20", 1100)]
+    assert queued.book_state["partial_exits"][CODE] == (rules.REDUCE, 700, [(0, 700)])
+    assert {p.lot_id: p.shares for p in queued.positions[CODE]} == {0: 1400, 1: 1100}
+    assert book.memory_for(queued, CODE).reduced == rules.Memory()
+
+    st = daily.simulate(bars, {}, "20251103", "20251104",
+                        strategy="12", name_budget=10000)
+    assert fills(st) == [("add:step20", 1100), (rules.REDUCE, 700)]
+    assert {p.lot_id: p.shares for p in st.positions[CODE]} == {0: 700, 1: 1100}
+    assert st.positions[CODE][-1].is_step
+    assert book.memory_for(st, CODE).reduced == rules.Memory(700, True)
+    assert book.memory_for(st, CODE).steps == 1
+
+
+@pytest.mark.parametrize("reason,sold,left", [(rules.REDUCE, 100, 100), (rules.STOP, 200, 0)])
+def test_daily_planned_fill_reapplies_anchor_only_for_derisk(reason, sold, left):
+    st, _ = state()
+    st.positions[CODE] = [Position(CODE, 1000, 10, -1, 10)]
+    plan = book.queue_exit(st, CODE, (reason, 500), day_i=1, ds="20251104")
+    st.positions[CODE][0].shares = 200
+    assert book.fill_exit(st, CODE, 9.9, "20251104", day_i=1, ds="20251104", plan=plan,
+                          limits=(12., 8.), open_px=9.9) == sold
+    assert sum(p.shares for p in st.positions.get(CODE, [])) == left
+    channel = "reduced" if reason == rules.REDUCE else "stopped"
+    assert getattr(book.memory_for(st, CODE), channel) == rules.Memory(sold, True)
+
+
 def test_queued_derisk_that_cannot_touch_its_lots_neither_fills_nor_latches():
     st, _ = state()
     st.positions[CODE] = [Position(CODE, 1000, 10, -1, 10)]
