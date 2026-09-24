@@ -1058,6 +1058,7 @@ class _Replay:
             p.setdefault("tranches", [{"quantity": p["quantity"], "acquired_at": p["acquired_at"]}])
             p["tranches"].append({"quantity": quantity, "acquired_at": t})
             p["quantity"] += quantity
+            qty_after = p["quantity"]
         else:
             self.cash += notional - fee
             p["quantity"] -= quantity
@@ -1069,9 +1070,10 @@ class _Replay:
                         tranche["quantity"] -= take
                         left -= take
                 require(left == 0, "internal T+1 tranche conservation", "CONTRACT_MISMATCH")
-            if p["quantity"] == 0:
+            qty_after = p["quantity"]
+            if qty_after == 0:
                 del self.positions[r["lot_id"]]
-        has_holding = bool(p["quantity"])
+        has_holding = bool(qty_after)
         if had_holding != has_holding:
             self._mark_holdings[r["instrument"]] += int(has_holding) - int(had_holding)
             self._refresh_mark_instrument(r["instrument"])

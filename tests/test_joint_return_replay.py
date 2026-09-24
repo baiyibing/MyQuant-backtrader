@@ -1598,6 +1598,57 @@ def test_live_marks_exact_tip_oracle(version, mode):
             assert jr.csv_bytes(before[key], columns) == jr.csv_bytes(after[key], columns)
 
 
+@pytest.mark.parametrize("lot_count", [1, 2])
+def test_live_marks_sell_to_flat_decrements_holdings(monkeypatch, lot_count):
+    specs = [spec("A", "SELL", day=1)]
+    if lot_count == 2:
+        specs.append(spec("A", "SELL", day=2, lot_id="lot-A-second"))
+    m, rows = bundle(specs, state=initial(A=100))
+    bars = minute_bars(m, rows)
+    engine = jr._Replay(m, rows, bars, "P-BASE", "M-LAG", jr.validate_bars(bars, m, rows))
+    assert engine._mark_holdings["A"] == 1
+    assert engine._mark_instruments == {"A"}
+    assert not engine._mark_ca
+    if lot_count == 2:
+        # The wire initial state holds one lot per instrument and BUY rejects
+        # an already-held name. Seed a second lot to pin engine-level counting.
+        engine.positions["lot-A-second"] = deepcopy(engine.positions["lot-A"])
+        engine.seen_lots.add("lot-A-second")
+        engine._mark_holdings["A"] += 1
+    attempt = engine.attempt
+    sold_lots = []
+
+    def checked(order, *args, **kwargs):
+        holdings_before = engine._mark_holdings["A"]
+        fill_count = len(engine.fills)
+        capacity = attempt(order, *args, **kwargs)
+        if order["intent"]["side"] == "SELL" and len(engine.fills) > fill_count:
+            lot_id = order["intent"]["lot_id"]
+            sold_lots.append(lot_id)
+            assert lot_id not in engine.positions
+            assert order["status"] == "FILLED"
+            assert order["transitions"][-1]["status"] == "FILLED"
+            assert engine.fills[-1]["lot_id"] == lot_id
+            assert engine.fills[-1]["executed_quantity"] == 100
+            remaining = lot_count - len(sold_lots)
+            assert holdings_before == remaining + 1
+            assert engine._mark_holdings["A"] == remaining
+            assert engine._mark_instruments == ({"A"} if remaining else set())
+            if remaining:
+                assert engine.positions["lot-A-second"]["quantity"] == 100
+            else:
+                assert engine._mark_orders["A"] == 0
+        return capacity
+
+    monkeypatch.setattr(engine, "attempt", checked)
+    result = engine.run()
+    assert sold_lots == ["lot-A", "lot-A-second"][:lot_count]
+    assert len([fill for fill in result["fills"] if fill["side"] == "SELL"]) == lot_count
+    assert not engine.positions
+    assert engine._mark_holdings["A"] == 0
+    assert not engine._mark_instruments
+
+
 def test_live_marks_rejected_names_drop_and_lazy_snapshot(monkeypatch):
     m, rows = bundle([spec("A", quantity=50)], state=initial(H=100))
     bars = minute_bars(m, rows)
