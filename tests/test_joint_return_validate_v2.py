@@ -151,3 +151,52 @@ def test_minimal_contracts(case, fault):
         manifest["corporate_actions_content_sha256"] = content_hash(kwargs["corporate_actions"])
     with pytest.raises(ReplayError):
         validate_bars_v2(panel, manifest, **kwargs)
+
+
+@pytest.mark.parametrize("column,mi,ii,message", [
+    ("bogus", 0, 0, "not a Decimal"), ("suspended", 0, 0, "not a Decimal"),
+    ("high", 0, 0, "absent bar column"), ("low", 0, 0, "absent bar column"),
+    ("open", -1, 0, "bar index outside"), ("open", 3, 0, "bar index outside"),
+    ("capacity", 0, -1, "bar index outside"), ("close", 0, 2, "bar index outside"),
+])
+def test_public_decimal_guards(case, column, mi, ii, message):
+    panel, manifest, kwargs = case
+    validated = validate_bars_v2(panel, manifest, **kwargs)
+    with pytest.raises(ReplayError, match=message):
+        validated.bar_decimal(column, mi, ii)
+    for accessor in (validated.bar_open, validated.bar_capacity):
+        with pytest.raises(ReplayError, match="bar index outside"):
+            accessor(-1, 0)
+
+
+@pytest.mark.parametrize("oracle_kind", ["public", "tip"])
+def test_trusted_decimal_representation_identity(case, oracle_kind, request, monkeypatch):
+    from backtest.research import joint_return_validate_v2 as v2
+    from backtest.research.joint_return_replay import _bar_number, stamp
+
+    panel, manifest, kwargs = case
+    # Adjacent float64 values, float32 promotion, small/large exponents,
+    # signed zero capacity and fractional capacity exercise the exact formula.
+    panel.columns["open"][:] = [[10.1, np.nextafter(10.1, np.inf)],
+                                 [np.float32(10.1), 9.0], [11.0, 10.123456789012345]]
+    panel.columns["capacity"][:] = [[0.0, -0.0], [1e-100, 1e20], [100.5, 123456789.0]]
+    panel.columns.update(high=np.full(panel.shape, 1e100), low=np.full(panel.shape, 1e-100))
+    del manifest["bars_table_sha256"]
+    validated = validate_bars_v2(panel, manifest, **kwargs)
+    oracle = validated
+    if oracle_kind == "tip":
+        _, tip = request.getfixturevalue("cheap_bar_tip_modules")
+        oracle = tip.validate_bars_v2(panel, manifest, **kwargs)
+    opportunities = {stamp(t): t[:10] for t in panel.minute_iso}
+    bars = v2._PanelBars(validated, opportunities)
+    for mi, t in enumerate(opportunities):
+        for ii, inst in enumerate(panel.instruments):
+            cell = bars.get((t, inst))
+            for column in (*v2.COLUMNS[:-1], *v2.OPTIONAL):
+                expected = oracle.bar_decimal(column, mi, ii)
+                assert _bar_number(cell, column, column).as_tuple() == expected.as_tuple()
+    # The trusted path must avoid public guards, even for open/capacity.
+    monkeypatch.setattr(v2, "require", lambda *a: pytest.fail("redundant cell guard"))
+    for column in (*v2.COLUMNS[:-1], *v2.OPTIONAL):
+        assert isinstance(cell.decimal(column), Decimal)
+    assert bars.get((stamp(panel.minute_iso[0]), "unknown")) is None
