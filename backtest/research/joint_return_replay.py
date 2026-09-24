@@ -790,6 +790,25 @@ class _Replay:
                 self.audit(self.orders[-1], "WAITING", "NOT_AVAILABLE", stamp(r["decision_at"]))
         self.timings.count("orders", len(self.orders))
         self.order_by_id = {o["intent"]["intent_id"]: o for o in self.orders}
+        # Fixed for the entire run: flat/future/terminal orders still expose
+        # marks in snapshots, and conversions can adjust carried stale marks.
+        self._mark_instruments = tuple(sorted(
+            set(m["initial_state"]["positions"])
+            | {o["intent"]["instrument"] for o in self.orders}
+            | {e["instrument"] for e in self.events}))
+
+    def update_marks(self, t, column):
+        # Both validators normalize bars to OPEN_TIME; a close is visible 60s
+        # later, including session ends. Lookup avoids full DensePanel axis
+        # iteration and lazy .items()/.values() cell/Decimal materialization.
+        bar_at = t - timedelta(seconds=60) if column == "close" else t
+        bars = self.bars_at.get(bar_at)
+        if bars is None:
+            return
+        for inst in self._mark_instruments:
+            bar = bars.get(inst)
+            if bar is not None and not bar["suspended"]:
+                self.marks[inst] = (_bar_number(bar, column, column), t, [])
 
     def nav(self):
         return self.cash + sum((p["quantity"] * self.marks[p["instrument"]][0]
@@ -1052,9 +1071,7 @@ class _Replay:
         for t in timeline:
             day = t.date().isoformat()
             with timings.phase("marks"):
-                for bar in self.closes.get(t, []):
-                    if not bar["suspended"]:
-                        self.marks[bar["instrument"]] = (_bar_number(bar, "close", "close"), t, [])
+                self.update_marks(t, "close")
             with timings.phase("lifecycle"):
                 for e in events_at.get(t, []):
                     self.convert(e, t)
@@ -1065,9 +1082,7 @@ class _Replay:
             if t in self.opportunities:
                 # All simultaneous open marks are visible before SELL-first fills.
                 with timings.phase("marks"):
-                    for inst, bar in self.bars_at.get(t, {}).items():
-                        if not bar["suspended"]:
-                            self.marks[inst] = (_bar_number(bar, "open", "open"), t, [])
+                    self.update_marks(t, "open")
                 with timings.phase("eligible_scan"):
                     eligible = self.eligible_orders(t)
                     if eligible and day not in pre_nav:

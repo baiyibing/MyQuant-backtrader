@@ -1437,3 +1437,133 @@ def test_eligible_index_replay_bytes_match_legacy(monkeypatch, mode, version, sc
     assert jr.canonical_bytes(actual) == jr.canonical_bytes(expected)
     assert actual_timings.counts == expected_timings.counts
     assert actual_timings.seconds.keys() == expected_timings.seconds.keys()
+
+
+def legacy_update_marks(engine, t, column):
+    """The two marks loops from 8cd01e7, without universe restriction."""
+    if column == "close":
+        for bar in engine.closes.get(t, []):
+            if not bar["suspended"]:
+                engine.marks[bar["instrument"]] = (jr._bar_number(bar, "close", "close"), t, [])
+    else:
+        for inst, bar in engine.bars_at.get(t, {}).items():
+            if not bar["suspended"]:
+                engine.marks[inst] = (jr._bar_number(bar, "open", "open"), t, [])
+
+
+def marks_fixture(scenario="flat"):
+    # H is held with no orders; U belongs only to another arm. A becomes flat
+    # on day 1, but its final order snapshot must still receive later marks.
+    m, rows = bundle([spec("A"), spec("A", "SELL", day=1),
+                      spec("U", arm=next(a for a in jr.ARMS if a != "P-BASE"))], state=initial(H=100),
+                     fees=dict(buy_rate=0.001, minimum=5))
+    bars = minute_bars(m, rows, price=10.25)
+    for bar in bars["bars"]:
+        bar["close"] = 11.125
+        if bar["timestamp"] >= ts(2):
+            bar["suspended"] = True
+    if scenario == "event_only":
+        bars["corporate_actions"] = [dict(action(), instrument="U")]
+    elif scenario == "events":
+        # Conversion while A is flat, followed by suspended opens: preserve
+        # the prior close timestamp and conversion history rather than reset.
+        bars["corporate_actions"] = [dict(action(), effective_at=ts(2))]
+    elif scenario == "sparse":
+        bars["bars"] = [b for b in bars["bars"] if b["timestamp"] != ts(0, "09:32:00")
+                        and not (b["instrument"] == "H" and b["timestamp"] >= ts(1))]
+    return m, rows, seal(bars)
+
+
+@pytest.mark.parametrize("mode", jr.FILL_MODES)
+@pytest.mark.parametrize("version,scenario", [
+    ("v1", "flat"), ("v2", "flat"), ("v1", "events"), ("v2", "events"),
+    ("v1", "sparse"), ("v1", "frozen"), ("v2", "frozen"), ("v2", "pack"),
+    ("v1", "event_only"), ("v2", "event_only"),
+])
+@pytest.mark.parametrize("label", ["OPEN_TIME", "CLOSE_TIME"])
+def test_marks_replay_bytes_match_full_axis(monkeypatch, tmp_path, mode, version, scenario, label):
+    if scenario == "pack":
+        m, rows = bundle([spec("SH600519"),
+                          spec("SZ000001", arm=next(a for a in jr.ARMS if a != "P-BASE"))],
+                         state=initial(SH600000=100))
+        bars = minute_bars(m, rows, price=10.25)
+    elif scenario == "frozen":
+        m, rows, bars = frozen_bundle()
+        bars["metadata"]["reference_marks"] = frozen_marks(rows)
+    else:
+        m, rows, bars = marks_fixture(scenario)
+    if label == "CLOSE_TIME":
+        bars["metadata"]["bar_label"] = label
+        for bar in bars["bars"]:
+            bar["timestamp"] = (jr.stamp(bar["timestamp"]) + timedelta(seconds=60)).isoformat()
+    seal(bars)
+    if scenario == "pack":
+        bars = sealed_bin_pack(tmp_path, bars)
+    optimized = jr._Replay.update_marks
+
+    def checked(engine, t, column):
+        before = deepcopy(engine.marks)
+        optimized(engine, t, column)
+        actual = engine.marks
+        engine.marks = before
+        legacy_update_marks(engine, t, column)
+        assert actual == {k: v for k, v in engine.marks.items() if k in engine._mark_instruments}
+        engine.marks = actual
+
+    monkeypatch.setattr(jr._Replay, "update_marks", checked)
+    actual_timings = jr._PhaseTimings(True)
+    actual = jr.replay(m, rows, bars, arm="P-BASE", fill_mode=mode,
+                       validate_version=version, _timings=actual_timings)
+    monkeypatch.setattr(jr._Replay, "update_marks", legacy_update_marks)
+    expected_timings = jr._PhaseTimings(True)
+    expected = jr.replay(m, rows, bars, arm="P-BASE", fill_mode=mode,
+                         validate_version=version, _timings=expected_timings)
+    assert jr.canonical_bytes(actual) == jr.canonical_bytes(expected)
+    assert actual_timings.counts == expected_timings.counts
+    assert actual_timings.seconds.keys() == expected_timings.seconds.keys()
+    assert any(key.endswith(".marks") for key in actual_timings.seconds)
+
+
+def test_marks_panel_looks_up_only_fixed_run_universe(monkeypatch):
+    from backtest.research import joint_return_validate_v2 as v2
+    distractors = {f"D{i:02d}" for i in range(24)}
+    other_arm = next(a for a in jr.ARMS if a != "P-BASE")
+    m, rows = bundle([spec("A"), spec("A", "SELL", day=1),
+                      *[spec(inst, arm=other_arm) for inst in sorted(distractors | {"U"})]],
+                     state=initial(cash=50000, H=100))
+    bars = minute_bars(m, rows, price=10.25)
+    # A corporate-action event includes U in this arm's mark universe.
+    bars["corporate_actions"] = [dict(action(), instrument="U")]
+    seal(bars)
+    validated = v2.validate_json_replay(bars, m, rows, jr._PhaseTimings())
+    assert set(validated[2].validated.panel.instruments) == {"A", "H", "U"} | distractors
+    engine = jr._Replay(m, rows, bars, "P-BASE", "M-LAG", validated)
+    assert set(engine._mark_instruments) == {"A", "H", "U"}
+    # Without the event, U and the distractors belong only to the other arm:
+    # they stay on the panel axis but must not enter this arm's marks.
+    bars["corporate_actions"] = []
+    seal(bars)
+    validated = v2.validate_json_replay(bars, m, rows, jr._PhaseTimings())
+    assert set(validated[2].validated.panel.instruments) == {"A", "H", "U"} | distractors
+    engine = jr._Replay(m, rows, bars, "P-BASE", "M-LAG", validated)
+    assert set(engine._mark_instruments) == {"A", "H"}
+    calls = []
+    decimal = v2.ValidatedPanel.bar_decimal
+
+    def tracked(panel, column, minute_i, inst_i):
+        calls.append((column, panel.panel.instruments[inst_i]))
+        return decimal(panel, column, minute_i, inst_i)
+
+    def forbidden(*args):
+        pytest.fail("marks materialized the full lazy panel mapping")
+
+    monkeypatch.setattr(v2.ValidatedPanel, "bar_decimal", tracked)
+    monkeypatch.setattr(v2._LazyMapping, "items", forbidden)
+    monkeypatch.setattr(v2._LazyMapping, "values", forbidden)
+    for t in sorted(set(engine.opportunities) | set(engine.closes)):
+        engine.update_marks(t, "close")
+        if t in engine.opportunities:
+            engine.update_marks(t, "open")
+    assert set(calls) == {(column, inst) for column in ("open", "close") for inst in ("A", "H")}
+    assert set(engine.marks) == {"A", "H"}
+    assert (distractors | {"U"}).isdisjoint(engine.marks)
