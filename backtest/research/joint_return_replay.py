@@ -756,7 +756,8 @@ class _Replay:
         self.calendar = m["metadata"]["calendar"]
         self.cash = num(m["initial_state"]["cash"], "cash")
         self.positions, self.marks, self.orders, self.fills, self.daily = {}, {}, [], [], []
-        # Private replay indexes: never add cached clocks to serialized orders.
+        # Private immutable clocks (order, effective, available, expires).
+        # Mutable Q36 deferred_until stays on the order; never serialize caches.
         self._order_clocks, self._eligible_candidates = {}, {}
         self._order_positions = {}
         self.seen_lots = set()
@@ -795,7 +796,8 @@ class _Replay:
                     superseded_by=None, quantity_events=[], transitions=[], reject_after_partial=None))
                 o = self.orders[-1]
                 self._order_positions[o["order_id"]] = len(self.orders) - 1
-                self._order_clocks[o["order_id"]] = (o, stamp(r["effective_at"]), stamp(r["available_at"]))
+                self._order_clocks[o["order_id"]] = (
+                    o, stamp(r["effective_at"]), stamp(r["available_at"]), stamp(r["expires_at"]))
                 self.audit(self.orders[-1], "CREATED", "NOT_AVAILABLE", stamp(r["decision_at"]))
                 self.audit(self.orders[-1], "WAITING", "NOT_AVAILABLE", stamp(r["decision_at"]))
         self.timings.count("orders", len(self.orders))
@@ -870,7 +872,7 @@ class _Replay:
                 # reactivation needs to restore that order; scans stay linear
                 # in live candidates, without sorting on every opportunity.
                 last = next(reversed(self._eligible_candidates), None)
-                self._eligible_candidates[o["order_id"]] = self._order_clocks[o["order_id"]]
+                self._eligible_candidates[o["order_id"]] = self._order_clocks[o["order_id"]][:3]
                 if last is not None and self._order_positions[last] > self._order_positions[o["order_id"]]:
                     self._eligible_candidates = dict(sorted(
                         self._eligible_candidates.items(), key=lambda item: self._order_positions[item[0]]))
@@ -937,7 +939,7 @@ class _Replay:
             s = old["intent"]
             if (old is not o and old["status"] not in TERMINAL and old["status"] != "CREATED"
                     and s["instrument"] == r["instrument"] and s["side"] != r["side"]
-                    and stamp(s["available_at"]) < t):
+                    and self._order_clocks[old["order_id"]][2] < t):
                 old["superseded_by"] = r["intent_id"]
                 self.audit(old, "CANCELLED", "SUPERSEDED", t, superseded_by=r["intent_id"])
         self.audit(o, "WAITING", "NOT_AVAILABLE", t)
@@ -946,7 +948,7 @@ class _Replay:
         if o["status"] in TERMINAL or o["status"] == "CREATED" or o["deferred_beyond_window"]:
             return
         r = o["intent"]
-        deadline = o["deferred_until"] or stamp(r["expires_at"])
+        deadline = o["deferred_until"] or self._order_clocks[o["order_id"]][3]
         if t < deadline:
             return
         expiry_day = deadline.date().isoformat()
@@ -1107,8 +1109,7 @@ class _Replay:
                 events_at[stamp(e["effective_at"])].append(e)
                 timeline.add(stamp(e["effective_at"]))
             for o in self.orders:
-                r = o["intent"]
-                a, x = stamp(r["available_at"]), stamp(r["expires_at"])
+                _, _, a, x = self._order_clocks[o["order_id"]]
                 arrivals[a].append(o)
                 if a <= last:
                     timeline.add(a)

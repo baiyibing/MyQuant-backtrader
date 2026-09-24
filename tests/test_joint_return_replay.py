@@ -1756,3 +1756,112 @@ def test_cheap_bar_decimal_replay_bytes(monkeypatch, request, mode, version, sce
     assert jr.canonical_bytes(actual) == jr.canonical_bytes(expected)
     for key, columns in (("fills", jr.FILL_COLUMNS), ("daily_nav", jr.NAV_COLUMNS)):
         assert jr.csv_bytes(actual[key], columns) == jr.csv_bytes(expected[key], columns)
+
+
+@pytest.fixture
+def lifecycle_tip_module(monkeypatch):
+    """Exact 4e8fddb replay (unchanged from 0df7697); v2 stays at #185."""
+    import importlib.util
+
+    path = Path("/workspace/handoffs/joint_return_lifecycle_clock_cache_20260924/baseline_joint_return_replay.py")
+    if not path.exists():
+        pytest.skip("exact 4e8fddb handoff module is not installed on this host")
+    assert jr.raw_hash(path.read_bytes()) == "d50256770cd485571c785db5f8d817fbcf124b6da3a5bdd1c48cce2ff92b88e5"
+    module_spec = importlib.util.spec_from_file_location("lifecycle_tip", path)
+    oracle = importlib.util.module_from_spec(module_spec)
+    monkeypatch.setitem(sys.modules, module_spec.name, oracle)
+    module_spec.loader.exec_module(oracle)
+    return oracle
+
+
+@pytest.mark.parametrize("mode", jr.FILL_MODES)
+@pytest.mark.parametrize("scenario,version", [
+    (scenario, version)
+    for scenario in ("flat", "events", "event_only", "expiry", "superseded", "deferred", "beyond_window")
+    for version in ("v1", "v2")
+    if version == "v1" or scenario not in ("deferred", "beyond_window")
+])
+def test_lifecycle_clock_cache_tip_bytes(lifecycle_tip_module, mode, scenario, version):
+    if scenario in ("flat", "events", "event_only"):
+        m, rows, bars = marks_fixture(scenario)
+    elif scenario in ("deferred", "beyond_window"):
+        m, rows = bundle([spec(side="SELL", reason="EXPIRY_EXIT", expires_at=ts(0, "09:34:00"))],
+                         state=initial(A=100))
+        bars = minute_bars(m, rows)
+        bars["bars"] = ([b for b in bars["bars"] if b["timestamp"] >= ts(2)]
+                        if scenario == "deferred" else [])
+    else:
+        specs = [spec(quantity=200)]
+        if scenario == "superseded":
+            specs.append(spec(side="SELL", quantity=200, day=1))
+        m, rows = bundle(specs, fees=dict(buy_rate=0.001, minimum=5))
+        bars = minute_bars(m, rows, capacity=0)
+        bars["bars"][1]["capacity"] = 100
+    seal(bars)
+    inputs = deepcopy((m, rows, bars))
+    actual = jr.replay(m, rows, bars, arm="P-BASE", fill_mode=mode, validate_version=version)
+    expected = lifecycle_tip_module.replay(m, rows, bars, arm="P-BASE", fill_mode=mode,
+                                          validate_version=version)
+    assert (m, rows, bars) == inputs
+    assert jr.canonical_bytes(actual) == jr.canonical_bytes(expected)
+    for key, columns in (("fills", jr.FILL_COLUMNS), ("daily_nav", jr.NAV_COLUMNS)):
+        assert jr.csv_bytes(actual[key], columns) == jr.csv_bytes(expected[key], columns)
+
+
+@pytest.mark.parametrize("reason", ["EXPIRY_EXIT", "ORIGINAL_10_3_SELL"])
+def test_lifecycle_cached_expiry_boundary_and_rolling_defer(monkeypatch, reason):
+    m, rows = bundle([spec(side="SELL", reason=reason, expires_at=ts(0, "09:34:00"))],
+                     state=initial(A=100))
+    bars = minute_bars(m, rows)
+    bars["bars"] = []
+    seal(bars)
+    engine = jr._Replay(m, rows, bars, "P-BASE", "M-LAG", jr.validate_bars(bars, m, rows))
+    order = engine.orders[0]
+    original = deepcopy(order["intent"])
+    deadline = jr.stamp(original["expires_at"])
+    monkeypatch.setattr(jr, "stamp", lambda *a: pytest.fail("expiry reparsed an immutable clock"))
+    engine.expire(order, deadline - timedelta(seconds=1))
+    assert order["status"] == "WAITING" and order["deferred_until"] is None
+    engine.expire(order, deadline)
+    if reason == "EXPIRY_EXIT":
+        for day in DAYS[1:]:
+            deferred = engine.ends[day]
+            assert order["deferred_until"] == deferred
+            count = len(order["transitions"])
+            engine.expire(order, deferred - timedelta(seconds=1))
+            assert len(order["transitions"]) == count
+            engine.expire(order, deferred)
+        assert order["deferred_beyond_window"] and order["deferred_until"] is None
+        count = len(order["transitions"])
+        engine.expire(order, deferred + timedelta(days=1))
+        assert len(order["transitions"]) == count
+    else:
+        assert order["status"] == "EXPIRED"
+    assert order["intent"] == original
+
+
+def test_lifecycle_cached_supersede_is_strictly_older(monkeypatch):
+    m, rows = bundle([spec(), spec(side="SELL", day=1)])
+    bars = minute_bars(m, rows)
+    engine = jr._Replay(m, rows, bars, "P-BASE", "M-REF", jr.validate_bars(bars, m, rows))
+    old, new = engine.orders
+    available = jr.stamp(old["intent"]["available_at"])
+    monkeypatch.setattr(jr, "stamp", lambda *a: pytest.fail("supersede reparsed an immutable clock"))
+    engine.activate(new, available)
+    assert old["status"] == "WAITING"
+    engine.activate(new, available + timedelta(seconds=1))
+    assert old["status"] == "CANCELLED"
+    assert old["superseded_by"] == new["intent"]["intent_id"]
+
+
+@pytest.mark.parametrize("bad", [None, "invalid", "2026-09-07T09:34:00+00:00", "2026-09-07T09:34:00.000+08:00"])
+def test_lifecycle_cache_rejects_invalid_expiry_at_enqueue(bad):
+    m, rows = bundle([spec()])
+    bars = minute_bars(m, rows)
+    validated = jr.validate_bars(bars, m, rows)
+    for row in rows:
+        row["expires_at"] = bad
+    with pytest.raises(jr.ReplayError):
+        jr._Replay(m, rows, bars, "P-BASE", "M-REF", validated)
+    with pytest.raises(jr.ReplayError):
+        jr.stamp(bad)
