@@ -804,7 +804,9 @@ class _Replay:
         self.order_by_id = {o["intent"]["intent_id"]: o for o in self.orders}
 
     def _refresh_mark_instrument(self, inst):
-        live = self._mark_holdings[inst] or self._mark_orders[inst] or inst in self._mark_ca
+        # Eager marks feed NAV (holdings) and CA conversions only; live-order
+        # names recover their mark at snapshot time via _backfill_mark replay.
+        live = bool(self._mark_holdings[inst]) or inst in self._mark_ca
         if live and inst not in self._mark_instruments:
             self._backfill_mark(inst)
             self._mark_instruments.add(inst)
@@ -821,13 +823,17 @@ class _Replay:
         retain the cached mark. CA instruments never leave the hot set.
         """
         stop = self._mark_checked.get(inst, 0)
+        self.timings.count("backfill_calls")
+        steps = 0
         for i in range(len(self._mark_sites) - 1, stop - 1, -1):
+            steps += 1
             t, column, bar_at = self._mark_sites[i]
             bars = self.bars_at.get(bar_at)
             bar = bars.get(inst) if bars is not None else None
             if bar is not None and not bar["suspended"]:
                 self.marks[inst] = (_bar_number(bar, column, column), t, [])
                 break
+        self.timings.count("backfill_scan_steps", steps)
         self._mark_checked[inst] = len(self._mark_sites)
 
     def update_marks(self, t, column):
