@@ -39,7 +39,9 @@ def legacy_outputs():
                             ("minute", lambda: minute({CODE: mins}, {CODE: bars}, pool, start, end, strategy=book))):
             st = run()
             out[f"{book}/{engine}"] = {
-                name: hashlib.sha256(pd.DataFrame(value).to_csv(index=False).encode("utf-8")).hexdigest()
+                # Golden bytes are LF-pinned: pandas to_csv defaults to
+                # os.linesep, which made the fixture platform-dependent.
+                name: hashlib.sha256(pd.DataFrame(value).to_csv(index=False, lineterminator="\n").encode("utf-8")).hexdigest()
                 for name, value in (("trades", st.trades), ("equity", st.equity_curve))
             }
     return out
