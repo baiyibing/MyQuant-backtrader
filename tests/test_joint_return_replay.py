@@ -1526,14 +1526,25 @@ def test_marks_replay_bytes_match_full_axis(monkeypatch, tmp_path, mode, version
 
 def test_marks_panel_looks_up_only_fixed_run_universe(monkeypatch):
     from backtest.research import joint_return_validate_v2 as v2
-    m, rows, bars = marks_fixture()
-    # An event-only instrument for this arm must also retain its carried mark.
+    distractors = {f"D{i:02d}" for i in range(24)}
+    other_arm = next(a for a in jr.ARMS if a != "P-BASE")
+    m, rows = bundle([spec("A"), spec("A", "SELL", day=1),
+                      *[spec(inst, arm=other_arm) for inst in sorted(distractors | {"U"})]],
+                     state=initial(cash=50000, H=100))
+    bars = minute_bars(m, rows, price=10.25)
+    # A corporate-action event includes U in this arm's mark universe.
     bars["corporate_actions"] = [dict(action(), instrument="U")]
     seal(bars)
     validated = v2.validate_json_replay(bars, m, rows, jr._PhaseTimings())
+    assert set(validated[2].validated.panel.instruments) == {"A", "H", "U"} | distractors
     engine = jr._Replay(m, rows, bars, "P-BASE", "M-LAG", validated)
     assert set(engine._mark_instruments) == {"A", "H", "U"}
+    # Without the event, U and the distractors belong only to the other arm:
+    # they stay on the panel axis but must not enter this arm's marks.
     bars["corporate_actions"] = []
+    seal(bars)
+    validated = v2.validate_json_replay(bars, m, rows, jr._PhaseTimings())
+    assert set(validated[2].validated.panel.instruments) == {"A", "H", "U"} | distractors
     engine = jr._Replay(m, rows, bars, "P-BASE", "M-LAG", validated)
     assert set(engine._mark_instruments) == {"A", "H"}
     calls = []
@@ -1553,6 +1564,6 @@ def test_marks_panel_looks_up_only_fixed_run_universe(monkeypatch):
         engine.update_marks(t, "close")
         if t in engine.opportunities:
             engine.update_marks(t, "open")
-    assert {inst for _, inst in calls} == {"A", "H"}
-    assert {column for column, _ in calls} == {"open", "close"}
-    assert "U" not in engine.marks
+    assert set(calls) == {(column, inst) for column in ("open", "close") for inst in ("A", "H")}
+    assert set(engine.marks) == {"A", "H"}
+    assert (distractors | {"U"}).isdisjoint(engine.marks)
