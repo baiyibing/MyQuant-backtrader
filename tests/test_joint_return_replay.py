@@ -359,6 +359,12 @@ def test_fill_records_freeze_transitions_and_quantity_events():
     assert "REJECTED" not in [tr["status"] for tr in f["transitions"]]
     assert o["quantity_events"]  # the split scaled the unfilled remainder
     assert f["quantity_events"] == []
+    # The copy is field-specific: any third mutable container in the snapshot
+    # must fail here instead of silently sharing live order state.
+    assert f["transitions"] is not o["transitions"]
+    assert f["quantity_events"] is not o["quantity_events"]
+    assert not ({id(v) for v in f.values() if isinstance(v, (list, dict))}
+                - {id(f["transitions"]), id(f["quantity_events"])})
 
 
 def test_oversell_actual_failed_buy_is_rejected_without_reference_ledger_reset():
