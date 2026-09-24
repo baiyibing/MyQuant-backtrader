@@ -269,6 +269,70 @@ def test_buy_limit_suspension_and_missing_bars_remain_in_denominator(blocked, re
     assert stats(out)["coverage"]["quantity_fill_rate"] == 0
 
 
+def test_live_only_order_mark_backfills_latest_bar_at_final_snapshot():
+    # Live-order names are not eagerly marked; their order snapshots must still
+    # read the latest valid bar through the processed-site replay.
+    m, rows = bundle([spec("B", "BUY", 100)])
+    b = minute_bars(m, rows)
+    per_day = {DAYS[0]: 21, DAYS[1]: 22, DAYS[2]: 23}
+    for v in b["bars"]:
+        price = per_day[v["timestamp"][:10]]
+        v.update(open=price, close=price, limit_up=price)
+    out = run(m, rows, b)
+    o = out["orders"][0]
+    assert o["status"] == "EXPIRED" and "LIMIT_UP" in reasons(o)
+    assert o["remaining_quantity"] == 100
+    assert o["last_valuation_price"] == 23
+    assert o["last_valuation_at"] == ts(2, "09:34:00")
+    assert o["valuation_stale"] is False
+
+
+def test_sold_out_fill_snapshot_mark_reads_same_minute_bar():
+    m, rows = bundle([spec(side="SELL", quantity=100)], state=initial(A=100))
+    out = run(m, rows, minute_bars(m, rows, price=11))
+    f = out["fills"][0]
+    assert f["actual_fill_at"] == ts(0, "09:31:00")
+    assert f["last_valuation_price"] == 11
+    assert f["last_valuation_at"] == f["actual_fill_at"]
+    assert f["valuation_stale"] is False
+    assert stats(out)["ending_positions"] == []
+
+
+def test_ca_hot_set_retains_converted_mark_for_never_held_instrument():
+    # The split lands on a name with no holding and no live order left; only
+    # the CA hot set keeps the converted mark for the expired order's snapshot.
+    m, rows = bundle([spec("C", "BUY", 100)])
+    b = minute_bars(m, rows)
+    b["bars"] = [v for v in b["bars"] if v["timestamp"][:10] == DAYS[0]]
+    for v in b["bars"]:
+        v.update(open=13, close=13, limit_up=13)
+    b["corporate_actions"] = [dict(event_id="split-c", instrument="C", available_at=ts(0, "16:00:00"),
+        effective_at=ts(1, "09:00:00"), from_unit="share", to_unit="share", original_quantity=100,
+        factor=0.5, current_quantity=50, source_hash="c" * 64, price_domain="none")]
+    out = run(m, rows, b)
+    o = out["orders"][0]
+    assert o["status"] == "EXPIRED" and o["original_target_quantity"] == 100
+    assert o["remaining_quantity"] == 50  # unfilled quantity scales with the split
+    assert o["last_valuation_price"] == 26  # 13 / 0.5 retained by the CA hot set
+    assert o["valuation_stale"] is True
+
+
+def test_mark_universe_and_backfill_counts_reflect_hot_set_only():
+    m, rows = bundle([spec("B", "BUY", 100)], state=initial(A=100))
+    b = minute_bars(m, rows)
+    for v in b["bars"]:
+        if v["instrument"] == "B":
+            v.update(open=100, close=100)  # B stays blocked at limit, never held
+    timings = jr._PhaseTimings(enabled=True)
+    jr.replay(m, rows, seal(deepcopy(b)), arm="P-BASE", fill_mode="M-LAG", _timings=timings)
+    sites = sum(v for k, v in timings.counts.items() if k.endswith(".mark_sites"))
+    samples = sum(v for k, v in timings.counts.items() if k.endswith(".mark_universe_samples"))
+    calls = sum(v for k, v in timings.counts.items() if k.endswith(".backfill_calls"))
+    steps = sum(v for k, v in timings.counts.items() if k.endswith(".backfill_scan_steps"))
+    assert sites > 0 and samples == sites  # only the held name stays eager
+    assert calls > 0 and steps >= calls    # B's snapshot went through site replay
+
+
 def test_cash_shortfall_rejected_or_clipped_in_whole_lots_with_fees():
     m, rows = bundle([spec(quantity=200)], state=initial(2005), fees={"minimum": 5})
     out = run(m, rows, minute_bars(m, rows, price=11))
@@ -1503,8 +1567,6 @@ def test_marks_replay_bytes_match_full_axis(monkeypatch, tmp_path, mode, version
 
     def checked(engine, t, column):
         expected_live = ({p["instrument"] for p in engine.positions.values() if p["quantity"]}
-                         | {o["intent"]["instrument"] for o in engine.orders
-                            if o["status"] not in jr.TERMINAL and o["status"] != "CREATED"}
                          | {e["instrument"] for e in engine.events})
         assert engine._mark_instruments == expected_live
         before = deepcopy(engine.marks)
@@ -1525,9 +1587,10 @@ def test_marks_replay_bytes_match_full_axis(monkeypatch, tmp_path, mode, version
     expected = jr.replay(m, rows, bars, arm="P-BASE", fill_mode=mode,
                          validate_version=version, _timings=expected_timings)
     assert jr.canonical_bytes(actual) == jr.canonical_bytes(expected)
-    # New cardinality counters are specific to the live update implementation.
-    assert {k: v for k, v in actual_timings.counts.items() if ".mark_" not in k} == {
-        k: v for k, v in expected_timings.counts.items() if ".mark_" not in k}
+    # Cardinality counters are specific to the live marks implementation.
+    mechanism = (".mark_", ".backfill_")
+    assert {k: v for k, v in actual_timings.counts.items() if not any(m in k for m in mechanism)} == {
+        k: v for k, v in expected_timings.counts.items() if not any(m in k for m in mechanism)}
     assert actual_timings.seconds.keys() == expected_timings.seconds.keys()
     assert any(key.endswith(".marks") for key in actual_timings.seconds)
 
@@ -1546,7 +1609,7 @@ def test_marks_panel_looks_up_only_live_run_universe(monkeypatch):
     validated = v2.validate_json_replay(bars, m, rows, jr._PhaseTimings())
     assert set(validated[2].validated.panel.instruments) == {"A", "H", "U"} | distractors
     engine = jr._Replay(m, rows, bars, "P-BASE", "M-LAG", validated)
-    assert set(engine._mark_instruments) == {"A", "H", "U"}
+    assert set(engine._mark_instruments) == {"H", "U"}
     # Without the event, U and the distractors belong only to the other arm:
     # they stay on the panel axis but must not enter this arm's marks.
     bars["corporate_actions"] = []
@@ -1554,7 +1617,7 @@ def test_marks_panel_looks_up_only_live_run_universe(monkeypatch):
     validated = v2.validate_json_replay(bars, m, rows, jr._PhaseTimings())
     assert set(validated[2].validated.panel.instruments) == {"A", "H", "U"} | distractors
     engine = jr._Replay(m, rows, bars, "P-BASE", "M-LAG", validated)
-    assert set(engine._mark_instruments) == {"A", "H"}
+    assert set(engine._mark_instruments) == {"H"}
     calls = []
     decimal = v2.ValidatedPanel._bar_decimal_unchecked
 
@@ -1572,8 +1635,8 @@ def test_marks_panel_looks_up_only_live_run_universe(monkeypatch):
         engine.update_marks(t, "close")
         if t in engine.opportunities:
             engine.update_marks(t, "open")
-    assert set(calls) == {(column, inst) for column in ("open", "close") for inst in ("A", "H")}
-    assert set(engine.marks) == {"A", "H"}
+    assert set(calls) == {(column, "H") for column in ("open", "close")}
+    assert set(engine.marks) == {"H"}
     assert (distractors | {"U"}).isdisjoint(engine.marks)
 
 
@@ -1662,9 +1725,9 @@ def test_live_marks_rejected_names_drop_and_lazy_snapshot(monkeypatch):
     def checked(t, column):
         if engine.orders[0]["status"] == "REJECTED":
             assert engine._mark_instruments == {"H"}
-            previous = engine.marks["A"]
+            previous = engine.marks.get("A")
             update(t, column)
-            assert engine.marks["A"] == previous
+            assert engine.marks.get("A") == previous
             rejected_ticks.append(t)
         else:
             update(t, column)
@@ -1678,7 +1741,7 @@ def test_live_marks_rejected_names_drop_and_lazy_snapshot(monkeypatch):
 
 @pytest.mark.parametrize("status", ["REJECTED", "EXPIRED", "CANCELLED", "FILLED", "CREATED"])
 def test_live_marks_reentry_backfills_stale_close_before_current_open(status):
-    m, rows = bundle([spec("A")])
+    m, rows = bundle([spec("A")], state=initial(A=100))
     bars = minute_bars(m, rows)
     for bar in bars["bars"]:
         if bar["timestamp"] == ts(0, "09:31:00"):
@@ -1690,13 +1753,21 @@ def test_live_marks_reentry_backfills_stale_close_before_current_open(status):
     order = engine.orders[0]
     engine.update_marks(jr.stamp(ts()), "open")
     engine.audit(order, status, "test", jr.stamp(ts()))
+    # Going flat drops the name from the hot set; its cached mark survives.
+    del engine.positions["lot-A"]
+    engine._mark_holdings["A"] -= 1
+    engine._refresh_mark_instrument("A")
     assert not engine._mark_instruments
     for clock in ("09:31:00", "09:32:00", "09:33:00"):
         t = jr.stamp(ts(0, clock))
         engine.update_marks(t, "close")
         engine.update_marks(t, "open")
     assert engine.marks["A"][0] == 10
-    engine.activate(order, t)
+    engine.positions["lot-A"] = dict(
+        instrument="A", instance_id="instance-A", quantity=jr.Decimal(100),
+        acquired_at=jr.stamp(ts()), execution_symbol="A.SYN", quantity_events=[])
+    engine._mark_holdings["A"] += 1
+    engine._refresh_mark_instrument("A")
     assert engine._mark_instruments == {"A"}
     assert engine.marks["A"] == (jr.Decimal(13), jr.stamp(ts(0, "09:32:00")), [])
     assert engine.snapshot_order(order, t)["valuation_stale"]
@@ -1707,7 +1778,7 @@ def test_live_marks_multiple_orders_holdings_and_ca_references():
     engine = jr._Replay(m, rows, bars, "P-BASE", "M-LAG", jr.validate_bars(bars, m, rows))
     assert engine._mark_orders["A"] == 2
     engine.audit(engine.orders[0], "REJECTED", "test", jr.stamp(ts()))
-    assert "A" in engine._mark_instruments
+    assert "A" not in engine._mark_instruments  # orders alone never join the hot set
     engine.audit(engine.orders[1], "CANCELLED", "test", jr.stamp(ts()))
     assert engine._mark_instruments == {"H", "U"}
     engine.audit(engine.orders[1], "CANCELLED", "test", jr.stamp(ts()))
