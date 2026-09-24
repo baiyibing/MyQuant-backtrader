@@ -1502,12 +1502,18 @@ def test_marks_replay_bytes_match_full_axis(monkeypatch, tmp_path, mode, version
     optimized = jr._Replay.update_marks
 
     def checked(engine, t, column):
+        expected_live = ({p["instrument"] for p in engine.positions.values() if p["quantity"]}
+                         | {o["intent"]["instrument"] for o in engine.orders
+                            if o["status"] not in jr.TERMINAL and o["status"] != "CREATED"}
+                         | {e["instrument"] for e in engine.events})
+        assert engine._mark_instruments == expected_live
         before = deepcopy(engine.marks)
         optimized(engine, t, column)
         actual = engine.marks
         engine.marks = before
         legacy_update_marks(engine, t, column)
-        assert actual == {k: v for k, v in engine.marks.items() if k in engine._mark_instruments}
+        assert {k: v for k, v in actual.items() if k in engine._mark_instruments} == {
+            k: v for k, v in engine.marks.items() if k in engine._mark_instruments}
         engine.marks = actual
 
     monkeypatch.setattr(jr._Replay, "update_marks", checked)
@@ -1519,12 +1525,14 @@ def test_marks_replay_bytes_match_full_axis(monkeypatch, tmp_path, mode, version
     expected = jr.replay(m, rows, bars, arm="P-BASE", fill_mode=mode,
                          validate_version=version, _timings=expected_timings)
     assert jr.canonical_bytes(actual) == jr.canonical_bytes(expected)
-    assert actual_timings.counts == expected_timings.counts
+    # New cardinality counters are specific to the live update implementation.
+    assert {k: v for k, v in actual_timings.counts.items() if ".mark_" not in k} == {
+        k: v for k, v in expected_timings.counts.items() if ".mark_" not in k}
     assert actual_timings.seconds.keys() == expected_timings.seconds.keys()
     assert any(key.endswith(".marks") for key in actual_timings.seconds)
 
 
-def test_marks_panel_looks_up_only_fixed_run_universe(monkeypatch):
+def test_marks_panel_looks_up_only_live_run_universe(monkeypatch):
     from backtest.research import joint_return_validate_v2 as v2
     distractors = {f"D{i:02d}" for i in range(24)}
     other_arm = next(a for a in jr.ARMS if a != "P-BASE")
@@ -1567,3 +1575,160 @@ def test_marks_panel_looks_up_only_fixed_run_universe(monkeypatch):
     assert set(calls) == {(column, inst) for column in ("open", "close") for inst in ("A", "H")}
     assert set(engine.marks) == {"A", "H"}
     assert (distractors | {"U"}).isdisjoint(engine.marks)
+
+
+@pytest.mark.parametrize("version", ["v1", "v2"])
+@pytest.mark.parametrize("mode", jr.FILL_MODES)
+def test_live_marks_exact_tip_oracle(version, mode):
+    """External exact-tip oracle; portable CI coverage is the full-axis test above."""
+    import importlib.util
+    path = Path("/workspace/handoffs/joint_return_marks_live_universe_20260924/baseline_joint_return_replay.py")
+    if not path.exists():
+        pytest.skip("exact 710687e handoff module is not installed on this host")
+    assert jr.raw_hash(path.read_bytes()) == "3ab427fa0c1b33ffdc9b2e8a73ea996c412165e0350f7fc630c4eadb887128db"
+    spec_ = importlib.util.spec_from_file_location("marks_tip_oracle", path)
+    oracle = importlib.util.module_from_spec(spec_)
+    spec_.loader.exec_module(oracle)
+    for scenario in ("flat", "events", "event_only"):
+        m, rows, bars = marks_fixture(scenario)
+        before = oracle.replay(m, rows, bars, arm="P-BASE", fill_mode=mode, validate_version=version)
+        after = jr.replay(m, rows, bars, arm="P-BASE", fill_mode=mode, validate_version=version)
+        assert jr.canonical_bytes(before) == jr.canonical_bytes(after)
+        for key, columns in (("fills", jr.FILL_COLUMNS), ("daily_nav", jr.NAV_COLUMNS)):
+            assert jr.csv_bytes(before[key], columns) == jr.csv_bytes(after[key], columns)
+
+
+@pytest.mark.parametrize("lot_count", [1, 2])
+def test_live_marks_sell_to_flat_decrements_holdings(monkeypatch, lot_count):
+    specs = [spec("A", "SELL", day=1)]
+    if lot_count == 2:
+        specs.append(spec("A", "SELL", day=2, lot_id="lot-A-second"))
+    m, rows = bundle(specs, state=initial(A=100))
+    bars = minute_bars(m, rows)
+    engine = jr._Replay(m, rows, bars, "P-BASE", "M-LAG", jr.validate_bars(bars, m, rows))
+    assert engine._mark_holdings["A"] == 1
+    assert engine._mark_instruments == {"A"}
+    assert not engine._mark_ca
+    if lot_count == 2:
+        # The wire initial state holds one lot per instrument and BUY rejects
+        # an already-held name. Seed a second lot to pin engine-level counting.
+        engine.positions["lot-A-second"] = deepcopy(engine.positions["lot-A"])
+        engine.seen_lots.add("lot-A-second")
+        engine._mark_holdings["A"] += 1
+    attempt = engine.attempt
+    sold_lots = []
+
+    def checked(order, *args, **kwargs):
+        holdings_before = engine._mark_holdings["A"]
+        fill_count = len(engine.fills)
+        capacity = attempt(order, *args, **kwargs)
+        if order["intent"]["side"] == "SELL" and len(engine.fills) > fill_count:
+            lot_id = order["intent"]["lot_id"]
+            sold_lots.append(lot_id)
+            assert lot_id not in engine.positions
+            assert order["status"] == "FILLED"
+            assert order["transitions"][-1]["status"] == "FILLED"
+            assert engine.fills[-1]["lot_id"] == lot_id
+            assert engine.fills[-1]["executed_quantity"] == 100
+            remaining = lot_count - len(sold_lots)
+            assert holdings_before == remaining + 1
+            assert engine._mark_holdings["A"] == remaining
+            assert engine._mark_instruments == ({"A"} if remaining else set())
+            if remaining:
+                assert engine.positions["lot-A-second"]["quantity"] == 100
+            else:
+                assert engine._mark_orders["A"] == 0
+        return capacity
+
+    monkeypatch.setattr(engine, "attempt", checked)
+    result = engine.run()
+    assert sold_lots == ["lot-A", "lot-A-second"][:lot_count]
+    assert len([fill for fill in result["fills"] if fill["side"] == "SELL"]) == lot_count
+    assert not engine.positions
+    assert engine._mark_holdings["A"] == 0
+    assert not engine._mark_instruments
+
+
+def test_live_marks_rejected_names_drop_and_lazy_snapshot(monkeypatch):
+    m, rows = bundle([spec("A", quantity=50)], state=initial(H=100))
+    bars = minute_bars(m, rows)
+    for bar in bars["bars"]:
+        bar["close"] = 12
+    seal(bars)
+    engine = jr._Replay(m, rows, bars, "P-BASE", "M-LAG", jr.validate_bars(bars, m, rows))
+    update = engine.update_marks
+    rejected_ticks = []
+
+    def checked(t, column):
+        if engine.orders[0]["status"] == "REJECTED":
+            assert engine._mark_instruments == {"H"}
+            previous = engine.marks["A"]
+            update(t, column)
+            assert engine.marks["A"] == previous
+            rejected_ticks.append(t)
+        else:
+            update(t, column)
+    monkeypatch.setattr(engine, "update_marks", checked)
+    result = engine.run()
+    assert rejected_ticks
+    assert result["orders"][0]["last_valuation_price"] == 12
+    assert result["orders"][0]["last_valuation_at"] == jr.stamp(ts(2, "09:34:00"))
+    assert engine._mark_instruments == {"H"}
+
+
+@pytest.mark.parametrize("status", ["REJECTED", "EXPIRED", "CANCELLED", "FILLED", "CREATED"])
+def test_live_marks_reentry_backfills_stale_close_before_current_open(status):
+    m, rows = bundle([spec("A")])
+    bars = minute_bars(m, rows)
+    for bar in bars["bars"]:
+        if bar["timestamp"] == ts(0, "09:31:00"):
+            bar.update(open=11, close=13)
+        elif bar["timestamp"] >= ts(0, "09:32:00"):
+            bar["suspended"] = True
+    seal(bars)
+    engine = jr._Replay(m, rows, bars, "P-BASE", "M-LAG", jr.validate_bars(bars, m, rows))
+    order = engine.orders[0]
+    engine.update_marks(jr.stamp(ts()), "open")
+    engine.audit(order, status, "test", jr.stamp(ts()))
+    assert not engine._mark_instruments
+    for clock in ("09:31:00", "09:32:00", "09:33:00"):
+        t = jr.stamp(ts(0, clock))
+        engine.update_marks(t, "close")
+        engine.update_marks(t, "open")
+    assert engine.marks["A"][0] == 10
+    engine.activate(order, t)
+    assert engine._mark_instruments == {"A"}
+    assert engine.marks["A"] == (jr.Decimal(13), jr.stamp(ts(0, "09:32:00")), [])
+    assert engine.snapshot_order(order, t)["valuation_stale"]
+
+
+def test_live_marks_multiple_orders_holdings_and_ca_references():
+    m, rows, bars = marks_fixture("event_only")
+    engine = jr._Replay(m, rows, bars, "P-BASE", "M-LAG", jr.validate_bars(bars, m, rows))
+    assert engine._mark_orders["A"] == 2
+    engine.audit(engine.orders[0], "REJECTED", "test", jr.stamp(ts()))
+    assert "A" in engine._mark_instruments
+    engine.audit(engine.orders[1], "CANCELLED", "test", jr.stamp(ts()))
+    assert engine._mark_instruments == {"H", "U"}
+    engine.audit(engine.orders[1], "CANCELLED", "test", jr.stamp(ts()))
+    assert engine._mark_orders["A"] == 0
+
+
+def test_live_marks_lazy_snapshot_observes_processed_site_and_caches(monkeypatch):
+    m, rows = bundle([spec("A")])
+    bars = minute_bars(m, rows)
+    for bar in bars["bars"]:
+        bar.update(open=11, close=13)
+    seal(bars)
+    engine = jr._Replay(m, rows, bars, "P-BASE", "M-LAG", jr.validate_bars(bars, m, rows))
+    order = engine.orders[0]
+    engine.audit(order, "REJECTED", "test", jr.stamp(ts()))
+    engine.update_marks(jr.stamp(ts()), "open")
+    t = jr.stamp(ts(0, "09:31:00"))
+    engine.update_marks(t, "close")
+    assert engine.snapshot_order(order, t)["last_valuation_price"] == 13
+    engine.update_marks(t, "open")
+    assert engine.snapshot_order(order, t)["last_valuation_price"] == 11
+    monkeypatch.setattr(jr, "_bar_number", lambda *a: pytest.fail("same-site snapshot repeated Decimal lookup"))
+    assert engine.snapshot_order(order, t)["last_valuation_price"] == 11
+    assert not engine._mark_instruments

@@ -768,6 +768,16 @@ class _Replay:
                 execution_symbol=evidence["execution_symbol"], quantity_events=[])
             self.marks[inst] = (num(evidence["mark_price"], "mark"), stamp(evidence["mark_at"]), [])
             self.seen_lots.add(p["lot_id"])
+        # Reference counts avoid scanning orders/positions on each mark tick.
+        # CA names stay hot so carried marks retain conversion history exactly.
+        self._mark_ca = {e["instrument"] for e in self.events}
+        self._mark_holdings = Counter(p["instrument"] for p in self.positions.values() if p["quantity"])
+        self._mark_orders = Counter()
+        self._mark_instruments = set(self._mark_holdings) | self._mark_ca
+        self._mark_universe_max = len(self._mark_instruments)
+        # Shared processed-site history preserves close-before-open visibility.
+        # Inactive names backfill only on re-entry/snapshot, never on each tick.
+        self._mark_sites, self._mark_checked = [], {}
         self.start_nav = self.nav()
         require(self.start_nav > 0, "initial NAV denominator must be positive")
         self.pair = dict(run_id=m["run_id"], contract_hash=m["contract_hash"], arm_id=arm,
@@ -790,21 +800,46 @@ class _Replay:
                 self.audit(self.orders[-1], "WAITING", "NOT_AVAILABLE", stamp(r["decision_at"]))
         self.timings.count("orders", len(self.orders))
         self.order_by_id = {o["intent"]["intent_id"]: o for o in self.orders}
-        # Fixed for the entire run: flat/future/terminal orders still expose
-        # marks in snapshots, and conversions can adjust carried stale marks.
-        self._mark_instruments = tuple(sorted(
-            set(m["initial_state"]["positions"])
-            | {o["intent"]["instrument"] for o in self.orders}
-            | {e["instrument"] for e in self.events}))
+
+    def _refresh_mark_instrument(self, inst):
+        live = self._mark_holdings[inst] or self._mark_orders[inst] or inst in self._mark_ca
+        if live and inst not in self._mark_instruments:
+            self._backfill_mark(inst)
+            self._mark_instruments.add(inst)
+            self._mark_universe_max = max(self._mark_universe_max, len(self._mark_instruments))
+        elif not live and inst in self._mark_instruments:
+            self._mark_instruments.remove(inst)
+            self._mark_checked[inst] = len(self._mark_sites)
+
+    def _backfill_mark(self, inst):
+        """Recover the fixed-universe mark without replaying inactive names hot.
+
+        Search only processed sites (not future panel cells or the current open
+        before lifecycle). The first valid site wins; missing/suspended sites
+        retain the cached mark. CA instruments never leave the hot set.
+        """
+        stop = self._mark_checked.get(inst, 0)
+        for i in range(len(self._mark_sites) - 1, stop - 1, -1):
+            t, column, bar_at = self._mark_sites[i]
+            bars = self.bars_at.get(bar_at)
+            bar = bars.get(inst) if bars is not None else None
+            if bar is not None and not bar["suspended"]:
+                self.marks[inst] = (_bar_number(bar, column, column), t, [])
+                break
+        self._mark_checked[inst] = len(self._mark_sites)
 
     def update_marks(self, t, column):
         # Both validators normalize bars to OPEN_TIME; a close is visible 60s
         # later, including session ends. Lookup avoids full DensePanel axis
         # iteration and lazy .items()/.values() cell/Decimal materialization.
         bar_at = t - timedelta(seconds=60) if column == "close" else t
+        self._mark_sites.append((t, column, bar_at))
+        self.timings.count("mark_sites")
+        self.timings.count("mark_universe_samples", len(self._mark_instruments))
         bars = self.bars_at.get(bar_at)
         if bars is None:
             return
+        self.timings.count("mark_updates", len(self._mark_instruments))
         for inst in self._mark_instruments:
             bar = bars.get(inst)
             if bar is not None and not bar["suspended"]:
@@ -822,6 +857,12 @@ class _Replay:
 
     def audit(self, o, status, reason, t, **detail):
         if status != o["status"]:
+            was_live = o["status"] not in TERMINAL and o["status"] != "CREATED"
+            is_live = status not in TERMINAL and status != "CREATED"
+            if was_live != is_live:
+                inst = o["intent"]["instrument"]
+                self._mark_orders[inst] += int(is_live) - int(was_live)
+                self._refresh_mark_instrument(inst)
             if status in TERMINAL or status == "CREATED":
                 self._eligible_candidates.pop(o["order_id"], None)
             elif o["order_id"] not in self._eligible_candidates:
@@ -849,6 +890,8 @@ class _Replay:
     def snapshot_order(self, o, t):
         r = o["intent"]
         p = self.positions.get(r["lot_id"])
+        if r["instrument"] not in self._mark_instruments:
+            self._backfill_mark(r["instrument"])
         mark = self.marks.get(r["instrument"])
         require(o["current_quantity"] == o["cumulative_filled_quantity"] + o["remaining_quantity"],
                 "internal quantity conservation", "CONTRACT_MISMATCH")
@@ -1002,6 +1045,7 @@ class _Replay:
             self.audit(o, "REJECTED", "CASH_INSUFFICIENT", t)
             return capacity
         cash_before = self.cash
+        had_holding = p is not None and bool(p["quantity"])
         if r["side"] == "BUY":
             self.cash -= notional + fee
             if p is None:
@@ -1014,6 +1058,7 @@ class _Replay:
             p.setdefault("tranches", [{"quantity": p["quantity"], "acquired_at": p["acquired_at"]}])
             p["tranches"].append({"quantity": quantity, "acquired_at": t})
             p["quantity"] += quantity
+            qty_after = p["quantity"]
         else:
             self.cash += notional - fee
             p["quantity"] -= quantity
@@ -1025,8 +1070,13 @@ class _Replay:
                         tranche["quantity"] -= take
                         left -= take
                 require(left == 0, "internal T+1 tranche conservation", "CONTRACT_MISMATCH")
-            if p["quantity"] == 0:
+            qty_after = p["quantity"]
+            if qty_after == 0:
                 del self.positions[r["lot_id"]]
+        has_holding = bool(qty_after)
+        if had_holding != has_holding:
+            self._mark_holdings[r["instrument"]] += int(has_holding) - int(had_holding)
+            self._refresh_mark_instrument(r["instrument"])
         if abs(self.cash) <= EPS:
             self.cash = Decimal(0)
         o["cumulative_filled_quantity"] += quantity
@@ -1120,6 +1170,7 @@ class _Replay:
                     prior_nav = nav
         require(len(self.daily) == len(self.calendar), "incomplete NAV calendar")
         timings.count("fills", len(self.fills))
+        timings.count("mark_universe_max", self._mark_universe_max)
         with timings.phase("snapshot_orders"):
             orders = [self.snapshot_order(o, last) for o in self.orders]
         return dict(orders=orders, fills=self.fills,
