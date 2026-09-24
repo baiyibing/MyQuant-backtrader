@@ -268,7 +268,11 @@ def summarize(
     return "\n".join(lines)
 
 
-def write_run_artifacts(out_dir: Path, st: SimState, text: str, help_lock: str) -> Path:
+def write_run_artifacts(
+    out_dir: Path, st: SimState, text: str, help_lock: str, *,
+    emit_run_manifest: bool = False, manifest_config: Optional[dict] = None,
+    signal_bundle_sha256: Optional[str] = None,
+) -> Path:
     """三件套：summary.txt / daily_equity.csv / trades.csv。"""
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -281,6 +285,21 @@ def write_run_artifacts(out_dir: Path, st: SimState, text: str, help_lock: str) 
     (out_dir / "summary.txt").write_text(
         text + "\n" + help_lock, encoding="utf-8", newline="\n"
     )
+    if emit_run_manifest:
+        from bt_contract.run_manifest import write_bt_run_manifest
+
+        if manifest_config is None:
+            raise ValueError("emit_run_manifest requires resolved manifest_config")
+        write_bt_run_manifest(
+            out_dir / "run-manifest.json",
+            strategy=manifest_config["strategy"],
+            dividend_type=manifest_config["dividend_type"],
+            fee_schedule="QLIB_PORTANA" if manifest_config.get("qlib_cost") else "BILATERAL_10BP",
+            participation_rate=manifest_config.get("participation_rate"),
+            signal_bundle_sha256=signal_bundle_sha256,
+            config=manifest_config,
+            artifacts=[out_dir / name for name in ("trades.csv", "daily_equity.csv", "summary.txt")],
+        )
     print(f"wrote {out_dir}", flush=True)
     return out_dir
 

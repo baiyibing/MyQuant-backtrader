@@ -1296,6 +1296,10 @@ def main(argv: Optional[list] = None) -> int:
         default=None,
         help="artifact directory; default backtest_output/csv_minute_{book}_{start}_{end}",
     )
+    ap.add_argument(
+        "--emit-run-manifest", action="store_true",
+        help="write myquant.bt-run/1 provenance (default off)",
+    )
     args = ap.parse_args(argv if argv is not None else None)
     pool_dir = resolve_research_pool_dir(args.strategy, args.pool_dir, repo=REPO)
     minute_source = "qlib_1min" if args.qlib_1min_root else args.minute_source
@@ -1342,6 +1346,12 @@ def main(argv: Optional[list] = None) -> int:
         st,
         text,
         help_lock_for(args.strategy, shared=HELP_LOCK),
+        emit_run_manifest=args.emit_run_manifest,
+        manifest_config=(
+            {**vars(args), "pool_dir": pool_dir, "out_dir": out_dir,
+             "minute_source": minute_source, "daily_source": daily_source}
+            if args.emit_run_manifest else None
+        ),
     )
     return 0
 

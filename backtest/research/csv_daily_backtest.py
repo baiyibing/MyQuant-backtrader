@@ -798,6 +798,10 @@ def main(argv: Optional[list] = None) -> int:
         action="store_true",
         help="align fees with qlib: buy 5bp / sell 15bp / min 5 (default is 10bp both sides, no floor).",
     )
+    ap.add_argument(
+        "--emit-run-manifest", action="store_true",
+        help="write myquant.bt-run/1 provenance (default off)",
+    )
     args = ap.parse_args(argv if argv is not None else None)
     pool_dir = resolve_research_pool_dir(args.strategy, args.pool_dir, repo=REPO)
     book = engine_book(args.strategy)
@@ -832,6 +836,11 @@ def main(argv: Optional[list] = None) -> int:
         st,
         text,
         help_lock_for(args.strategy),
+        emit_run_manifest=args.emit_run_manifest,
+        manifest_config=(
+            {**vars(args), "pool_dir": pool_dir, "out_dir": out_dir}
+            if args.emit_run_manifest else None
+        ),
     )
     return 0
 
