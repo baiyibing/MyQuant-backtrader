@@ -69,6 +69,15 @@ class ValidatedPanel:
     def bar_capacity(self, minute_i, inst_i):
         return self.bar_decimal("capacity", minute_i, inst_i)
 
+    def _bar_decimal_unchecked(self, column, minute_i, inst_i):
+        """Internal replay only: scanned columns and adapter-proven indices.
+
+        Public accessors retain their guards. Replay uses fixed numeric column
+        names on cells from _PanelBars after validation; borrowed arrays must
+        remain immutable for the lifetime of the view (DensePanel contract).
+        """
+        return Decimal(str(float(self.panel.columns[column][minute_i, inst_i])))
+
 
 def minute_axis_from_labels(labels, *, bar_label):
     """Normalize labels only; caller supplies/proves the session-derived axis."""
@@ -214,11 +223,7 @@ class _Cell:
         raise KeyError(key)
 
     def decimal(self, key):
-        if key == "open":
-            return self.validated.bar_open(self.minute_i, self.inst_i)
-        if key == "capacity":
-            return self.validated.bar_capacity(self.minute_i, self.inst_i)
-        return self.validated.bar_decimal(key, self.minute_i, self.inst_i)
+        return self.validated._bar_decimal_unchecked(key, self.minute_i, self.inst_i)
 
 
 class _LazyMapping(MappingABC):

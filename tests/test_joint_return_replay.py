@@ -1041,7 +1041,7 @@ def test_v2_replay_lazy_decimal_and_bit_parity(monkeypatch, label, scenario):
     before = jr.canonical_bytes(bars)
     expected = jr.replay(m, rows, bars, arm="P-BASE", fill_mode="all")
     calls = []
-    original = v2.ValidatedPanel.bar_decimal
+    original = v2.ValidatedPanel._bar_decimal_unchecked
 
     def decimal(self, column, minute_i, inst_i):
         value = original(self, column, minute_i, inst_i)
@@ -1049,7 +1049,7 @@ def test_v2_replay_lazy_decimal_and_bit_parity(monkeypatch, label, scenario):
         calls.append(column)
         return value
 
-    monkeypatch.setattr(v2.ValidatedPanel, "bar_decimal", decimal)
+    monkeypatch.setattr(v2.ValidatedPanel, "_bar_decimal_unchecked", decimal)
     monkeypatch.setattr(jr, "validate_bars", lambda *a: pytest.fail("v2 called v1 validate_bars"))
     actual = jr.replay(m, rows, bars, arm="P-BASE", fill_mode="all", validate_version="v2")
     assert actual["fills"]
@@ -1556,7 +1556,7 @@ def test_marks_panel_looks_up_only_live_run_universe(monkeypatch):
     engine = jr._Replay(m, rows, bars, "P-BASE", "M-LAG", validated)
     assert set(engine._mark_instruments) == {"A", "H"}
     calls = []
-    decimal = v2.ValidatedPanel.bar_decimal
+    decimal = v2.ValidatedPanel._bar_decimal_unchecked
 
     def tracked(panel, column, minute_i, inst_i):
         calls.append((column, panel.panel.instruments[inst_i]))
@@ -1565,7 +1565,7 @@ def test_marks_panel_looks_up_only_live_run_universe(monkeypatch):
     def forbidden(*args):
         pytest.fail("marks materialized the full lazy panel mapping")
 
-    monkeypatch.setattr(v2.ValidatedPanel, "bar_decimal", tracked)
+    monkeypatch.setattr(v2.ValidatedPanel, "_bar_decimal_unchecked", tracked)
     monkeypatch.setattr(v2._LazyMapping, "items", forbidden)
     monkeypatch.setattr(v2._LazyMapping, "values", forbidden)
     for t in sorted(set(engine.opportunities) | set(engine.closes)):
@@ -1732,3 +1732,27 @@ def test_live_marks_lazy_snapshot_observes_processed_site_and_caches(monkeypatch
     monkeypatch.setattr(jr, "_bar_number", lambda *a: pytest.fail("same-site snapshot repeated Decimal lookup"))
     assert engine.snapshot_order(order, t)["last_valuation_price"] == 11
     assert not engine._mark_instruments
+
+
+@pytest.mark.parametrize("mode", jr.FILL_MODES)
+@pytest.mark.parametrize("version", ["v1", "v2"])
+@pytest.mark.parametrize("scenario", ["flat", "events", "event_only"])
+@pytest.mark.parametrize("oracle_kind", ["checked", "tip"])
+def test_cheap_bar_decimal_replay_bytes(monkeypatch, request, mode, version, scenario, oracle_kind):
+    from backtest.research import joint_return_validate_v2 as v2
+
+    m, rows, bars = marks_fixture(scenario)
+    actual = jr.replay(m, rows, bars, arm="P-BASE", fill_mode=mode, validate_version=version)
+    oracle = jr
+    if oracle_kind == "tip":
+        oracle, tip_v2 = request.getfixturevalue("cheap_bar_tip_modules")
+        # Baseline replay imports its validator at runtime. Bind BOTH baseline
+        # modules: otherwise v2 parity would accidentally use the new cell path.
+        monkeypatch.setitem(sys.modules, "backtest.research.joint_return_validate_v2", tip_v2)
+    else:
+        monkeypatch.setattr(v2._Cell, "decimal", lambda cell, key:
+                            cell.validated.bar_decimal(key, cell.minute_i, cell.inst_i))
+    expected = oracle.replay(m, rows, bars, arm="P-BASE", fill_mode=mode, validate_version=version)
+    assert jr.canonical_bytes(actual) == jr.canonical_bytes(expected)
+    for key, columns in (("fills", jr.FILL_COLUMNS), ("daily_nav", jr.NAV_COLUMNS)):
+        assert jr.csv_bytes(actual[key], columns) == jr.csv_bytes(expected[key], columns)
