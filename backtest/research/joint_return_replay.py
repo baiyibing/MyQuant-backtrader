@@ -1140,10 +1140,16 @@ class _Replay:
                         pre_nav[day], first_attempt[day] = self.nav(), t
                         require(pre_nav[day] > 0, "pre-rebalance NAV denominator must be positive")
                 with timings.phase("attempts"):
-                    capacity = {inst: _bar_number(bar, "capacity", "capacity") for inst, bar in self.bars_at.get(t, {}).items()}
-                    for o in sorted(eligible, key=lambda x: (x["intent"]["side"] != "SELL", x["intent"]["intent_id"])):
-                        inst = o["intent"]["instrument"]
-                        capacity[inst] = self.attempt(o, self.bars.get((t, inst)), t, capacity.get(inst, Decimal(0)))
+                    if eligible:
+                        # One shared balance per attempted instrument, not the full panel axis.
+                        capacity = {}
+                        bars_now = self.bars_at.get(t, {})
+                        for inst in dict.fromkeys(o["intent"]["instrument"] for o in eligible):
+                            bar = bars_now.get(inst)
+                            capacity[inst] = _bar_number(bar, "capacity", "capacity") if bar is not None else Decimal(0)
+                        for o in sorted(eligible, key=lambda x: (x["intent"]["side"] != "SELL", x["intent"]["intent_id"])):
+                            inst = o["intent"]["instrument"]
+                            capacity[inst] = self.attempt(o, self.bars.get((t, inst)), t, capacity.get(inst, Decimal(0)))
                 timings.count("attempts", len(eligible))
             if day in self.ends and t == self.ends[day]:
                 with timings.phase("daily_mark"):

@@ -1865,3 +1865,126 @@ def test_lifecycle_cache_rejects_invalid_expiry_at_enqueue(bad):
         jr._Replay(m, rows, bars, "P-BASE", "M-REF", validated)
     with pytest.raises(jr.ReplayError):
         jr.stamp(bad)
+
+
+@pytest.fixture
+def capacity_tip_module(monkeypatch):
+    """Exact #186 replay; validator is unchanged by the capacity knife."""
+    import importlib.util
+
+    path = Path("/workspace/handoffs/joint_return_capacity_sparse_20260924/baseline_joint_return_replay.py")
+    if not path.exists():
+        pytest.skip("exact 0d4e72d handoff module is not installed on this host")
+    assert jr.raw_hash(path.read_bytes()) == "e04aa40382ffa860c81bbdd94de4cd857955b8426aa4dd720c55898f88bb1641"
+    module_spec = importlib.util.spec_from_file_location("capacity_tip", path)
+    oracle = importlib.util.module_from_spec(module_spec)
+    monkeypatch.setitem(sys.modules, module_spec.name, oracle)
+    module_spec.loader.exec_module(oracle)
+    return oracle
+
+
+def capacity_fixture(empty=False, missing=False):
+    other_arm = next(a for a in jr.ARMS if a != "P-BASE")
+    specs = [spec("U", arm=other_arm)]
+    if not empty:
+        specs += [spec("A", "SELL", quantity=200), spec("A", lot_id="replacement-A")]
+    m, rows = bundle(specs, state=initial(A=200, H=100))
+    bars = minute_bars(m, rows, capacity=100.5)
+    if missing:
+        bars["bars"] = [b for b in bars["bars"]
+                        if not (b["instrument"] == "A" and b["timestamp"] in (ts(), ts(0, "09:31:00")))]
+    return m, rows, seal(bars)
+
+
+@pytest.mark.parametrize("mode", jr.FILL_MODES)
+@pytest.mark.parametrize("version,scenario", [
+    (version, scenario) for version in ("v1", "v2")
+    for scenario in ("flat", "events", "event_only", "empty", "shared")
+] + [("v1", "missing")])
+def test_capacity_sparse_tip_bytes(capacity_tip_module, mode, version, scenario):
+    if scenario in ("flat", "events", "event_only"):
+        m, rows, bars = marks_fixture(scenario)
+    else:
+        m, rows, bars = capacity_fixture(empty=scenario == "empty", missing=scenario == "missing")
+    inputs = deepcopy((m, rows, bars))
+    expected = capacity_tip_module.replay(m, rows, bars, arm="P-BASE", fill_mode=mode,
+                                         validate_version=version)
+    for enabled in (False, True):
+        actual = jr.replay(m, rows, bars, arm="P-BASE", fill_mode=mode, validate_version=version,
+                           _timings=jr._PhaseTimings(enabled))
+        assert jr.canonical_bytes(actual) == jr.canonical_bytes(expected)
+        for key, columns in (("fills", jr.FILL_COLUMNS), ("daily_nav", jr.NAV_COLUMNS)):
+            assert jr.csv_bytes(actual[key], columns) == jr.csv_bytes(expected[key], columns)
+    assert (m, rows, bars) == inputs
+
+
+@pytest.mark.parametrize("mode", jr.FILL_MODES)
+@pytest.mark.parametrize("version,scenario", [
+    ("v1", "empty"), ("v2", "empty"), ("v1", "shared"), ("v2", "shared"), ("v1", "missing")])
+def test_capacity_sparse_reads_and_shared_balance(monkeypatch, mode, version, scenario):
+    from backtest.research import joint_return_validate_v2 as v2
+
+    m, rows, bars = capacity_fixture(empty=scenario == "empty", missing=scenario == "missing")
+    validated = (jr.validate_bars(bars, m, rows) if version == "v1" else
+                 v2.validate_json_replay(bars, m, rows, jr._PhaseTimings()))
+    engine = jr._Replay(m, rows, bars, "P-BASE", mode, validated)
+    eligible_orders, attempt, number = engine.eligible_orders, engine.attempt, jr._bar_number
+    ticks, reads, attempts = {}, {}, {}
+    current = None
+
+    def eligible(t):
+        nonlocal current
+        current = t
+        result = eligible_orders(t)
+        ticks[t] = sorted(result, key=lambda o: (o["intent"]["side"] != "SELL", o["intent"]["intent_id"]))
+        reads[t], attempts[t] = [], []
+        return result
+
+    def tracked(bar, column, name):
+        if column == "capacity":
+            reads[current].append(bar["instrument"])
+        return number(bar, column, name)
+
+    def checked(o, bar, t, capacity):
+        after = attempt(o, bar, t, capacity)
+        attempts[t].append((o, capacity, after))
+        return after
+
+    monkeypatch.setattr(engine, "eligible_orders", eligible)
+    monkeypatch.setattr(engine, "attempt", checked)
+    monkeypatch.setattr(jr, "_bar_number", tracked)
+    engine.run()
+    assert ticks and any(not orders for orders in ticks.values())
+    for t, orders in ticks.items():
+        expected_instruments = {o["intent"]["instrument"] for o in orders
+                                if engine.bars.get((t, o["intent"]["instrument"])) is not None}
+        assert set(reads[t]) == expected_instruments
+        assert len(reads[t]) == len(expected_instruments)
+        assert [o["order_id"] for o, _, _ in attempts[t]] == [o["order_id"] for o in orders]
+        balance = {}
+        for o, before, after in attempts[t]:
+            inst = o["intent"]["instrument"]
+            bar = engine.bars.get((t, inst))
+            initial_capacity = number(bar, "capacity", "capacity") if bar is not None else jr.Decimal(0)
+            assert before.as_tuple() == balance.get(inst, initial_capacity).as_tuple()
+            if mode == "M-REF":
+                assert after == before
+            balance[inst] = after
+    if scenario == "empty":
+        assert not any(reads.values()) and not any(attempts.values())
+    else:
+        shared = [calls for calls in attempts.values() if len(calls) == 2]
+        assert shared
+        assert all([o["intent"]["side"] for o, _, _ in calls] == ["SELL", "BUY"] for calls in shared)
+        if mode == "M-LAG":
+            assert any(before > after for calls in attempts.values() for _, before, after in calls)
+
+
+@pytest.mark.parametrize("version", ["v1", "v2"])
+def test_capacity_sparse_still_validates_unattempted_instrument(monkeypatch, version):
+    m, rows, bars = capacity_fixture(empty=True)
+    next(b for b in bars["bars"] if b["instrument"] == "U")["capacity"] = -1
+    seal(bars)
+    monkeypatch.setattr(jr._Replay, "run", lambda *a: pytest.fail("invalid capacity reached replay"))
+    with pytest.raises(jr.ReplayError, match="capacity"):
+        jr.replay(m, rows, bars, arm="P-BASE", fill_mode="M-LAG", validate_version=version)
