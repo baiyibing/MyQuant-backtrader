@@ -1098,7 +1098,11 @@ class _Replay:
         fill.update(fill_sequence=len(self.fills) + 1, actual_fill_at=t, price=price,
                     market_open=market_price, executed_quantity=quantity, notional=notional,
                     fee=fee, cash_before=cash_before, cash_after=self.cash)
-        self.fills.append(deepcopy(fill))
+        # The record shares only append-only lists with the live order; copy
+        # those two so later audit/convert appends cannot rewrite history.
+        fill["transitions"] = list(fill["transitions"])
+        fill["quantity_events"] = list(fill["quantity_events"])
+        self.fills.append(fill)
         if o["reject_after_partial"] and o["remaining_quantity"]:
             self.audit(o, "REJECTED", o["reject_after_partial"], t)
         return capacity - quantity if self.fill_mode == "M-LAG" else capacity
