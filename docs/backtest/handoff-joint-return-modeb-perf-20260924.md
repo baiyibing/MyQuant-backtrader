@@ -1,27 +1,27 @@
 # 交接：联合收益 Mode B 性能刀（2026-09-24）
 
-> **状态**：perf 刀 **#181–#187 已合入 master**；**#187 4090 B-only PASS**（tip `e827529`，wall ≈384.5s，−14.3% vs #186）。Grok Bot（bt）额度将尽，**本轮停工**；接手 agent 裁下一刀（marks 残差 / 暂停）或等额度恢复。  
-> **主管仓**：`baiyibing/MyQuant-backtrader` · Owner **bt**。Runner：**4090bot**。实现默认 **Codex gpt-6-astra**（Bot VM headless）；核改 **Grok CLI 4.7**；**人裁合**。一般不用 Cursor Cloud Agent。  
+> **状态**（2026-09-24 晚更新）：perf 刀 **#181–#187 已合入 master**，**#188（本交接文档）已合**（tip `be3ce4f`）。**marks 热集刀已开 = PR #189**（`perf/joint-return-marks-hotset`，CI PASS，4090 本地 plain 验收 **PASS**：wall 384.5→**254.1s / −33.9%**，fills/NAV/orders byte-identical，pytest 2083 绿）——**等 Grok 核（Bot 额度 ~2 天）→ 人裁合 → 合并 tip 4090 B-only 收尾**。**PR #190**（partial_sell LF golden 测试修复，CI PASS）待人合。Grok Bot 额度恢复前**不开新刀**。  
+> **主管仓**：`baiyibing/MyQuant-backtrader` · Owner **bt**。Runner：**4090bot**。实现默认 **Codex gpt-6-astra**（Bot VM headless）；核改 **Grok CLI 4.7**；**人裁合**。4090 物理机本机实现可走 zcode / kimi / codex / cursor:auto（2026-09-24 人裁放行）。  
 > **沟通格式**：【仓】【刀】【状态】【路径】【你需要做的】；术语见 [research-ops-glossary.md](../operations/research-ops-glossary.md)；RACI 见 [grok-bot-raci-workflow-ssot.md](../operations/grok-bot-raci-workflow-ssot.md)。
 
 生产 fill / fee / clock **边界** / Decimal **成交值** / seal 默认 / validate 默认 **不动**，除非人另开 GO。
 
 ---
 
-## 1. 现在停在哪
+## 1. 现在停在哪（2026-09-24 晚）
 
 | 项 | 值 |
 |----|----|
-| master tip（截至交接起草） | **`e827529`** — `#187` capacity sparse |
-| 最近量效 | **#187 4090 PASS**（见 §3.1） |
-| BRIEF | Bot VM `/workspace/handoffs/joint_return_capacity_sparse_20260924/BRIEF_4090_REBENCH.md` |
-| 期望 RECEIPT（4090） | `D:\PycharmProjects\MyQuant-backtrader\backtest_output\joint-return-v1-replay-panel-phase\RECEIPT_REPLAY_CAPACITY_SPARSE.md` |
-| 期望 out | `out-v2-pack-spans-capacity-sparse` · phase `phase_timings_B_capacity_sparse.json` |
-| 对照基线 | **#186** tip `0d4e72d`：wall ≈**448.57s** / total ≈446.79s；attempts LAG ≈**81.80s**；lifecycle ≈25.55/24.65；marks ≈80.30/74.36 |
-| fills/NAV 合约 SHA（#185 起未变，#186/#187 必须 byte-identical） | fills `d6d40bc4979d462582a8c53c34591cdcca6fafd123857da9d7053aa598fe3376` · daily_nav `2cf88d08b7f50c6c54cdcb8ba64a4fb96024262f988c18d8b025259d1c572685` |
-| 4090 结果 | **PASS** — 见 §3.1 |
+| master tip | **`be3ce4f`** — `#188`（本交接文档）；其业务树 = `e827529`（`#187`） |
+| 在飞 PR | **#189** marks 热集收缩（CI PASS · 本地验收 PASS，见下）· **#190** partial_sell LF golden 测试修复（CI PASS） |
+| 最近量效 | **#189 本地 plain B-only PASS**（未合）：wall **384.541→254.113（−33.9%）**；marks 80.64/73.09→**15.85/9.44**；热集均值 427.8/400.3→**81.0/47.5**；回填 ~3,980 次 / 1,549 步（近零） |
+| SPEC / 归因 / RECEIPT（4090 机） | `…\joint-return-v1-replay-panel-phase\`：`SPEC_REPLAY_MARKS_HOTSET_20260924.md` · `RECEIPT_REPLAY_MARKS_ATTRIB_CPROFILE_be3ce4f.md` · `RECEIPT_REPLAY_MARKS_HOTSET.md` |
+| 期望 out | `out-v2-pack-spans-marks-hotset` · phase `phase_timings_B_marks_hotset.json`（归因：`out-v2-pack-spans-be3ce4f-marks-cprofile` 等） |
+| 对照基线 | **#187** `e827529`：wall 384.541；marks 80.64/73.09；attempts LAG 49.17；lifecycle 26.05/24.44（#187 之前的 #186 基线见 §3.1） |
+| fills/NAV 合约 SHA（#185 起未变，各刀必须 byte-identical） | fills `d6d40bc4979d462582a8c53c34591cdcca6fafd123857da9d7053aa598fe3376` · daily_nav `2cf88d08b7f50c6c54cdcb8ba64a4fb96024262f988c18d8b025259d1c572685` |
+| 本地验收 | #189：**PASS**（三表 byte-identical；forbidden 201 条 0 变动；pin 恢复；pytest 2083 绿） |
 
-**不要做**：自动开下一刀；翻 seal（保持 **qlib_bin**）；翻 validate 默认（保持 **v1**，v2 仅 research opt-in）；复活 industry-align P1/P2/P4（#135 已关）；覆盖 #181–#186 outs。
+**不要做**：自动开下一刀；翻 seal（保持 **qlib_bin**）；翻 validate 默认（保持 **v1**，v2 仅 research opt-in）；复活 industry-align P1/P2/P4（#135 已关）；覆盖 #181–#187 及 marks 归因/验收 outs。
 
 ---
 
@@ -36,7 +36,9 @@
 | `0df7697` | #184 | marks live-universe | ~687 | mean live U ~428/400 |
 | `4e8fddb` | #185 | cheap trusted `_bar_decimal` | **~633** | marks ~79/73 |
 | `0d4e72d` | #186 | lifecycle immutable clock cache | **~449** | lifecycle ~118→~26（−78%）；wall −29% vs #185 |
-| `e827529` | #187 | eligible-instrument **capacity 稀疏读** | **PENDING 4090** | 机制：空 eligible 不建 map；只读 unique eligible；缺 bar→`Decimal(0)` |
+| `e827529` | #187 | eligible-instrument **capacity 稀疏读** | **~384.5** | attempts LAG 81.8→49.2（−39.9%）、REF 33.1→0.07；见 §3.1 |
+
+在飞（未合）：**#189** marks 热集收缩（live-orders 退出 eager，`perf/joint-return-marks-hotset`）——本地 4090 plain **254.1s（−33.9% vs #187）**；合并后以 tip 复跑收尾并计入本表。
 
 cProfile（#185 tip，归因用，**不可**与 plain wall 混算）：H-stamp ACCEPT → 先做 #186；H-cap PARTIAL → #187 收益可能远小于 attempts 全段 ~82s，近噪声则停。
 
@@ -69,15 +71,13 @@ cProfile（#185 tip，归因用，**不可**与 plain wall 混算）：H-stamp A
 
 ## 4. 下一刀候选（人裁后再开；无 GO 不开）
 
-证据：`/workspace/handoffs/joint_return_post185_hotspot_eval_20260924/EVAL.md`（排名曾先 capacity，后 lifecycle；lifecycle 已做）。
+证据：`/workspace/handoffs/joint_return_post185_hotspot_eval_20260924/EVAL.md`（Bot VM）+ 4090 机 `RECEIPT_REPLAY_MARKS_HOTSET.md`（#189 后剩余 top）。marks 残差刀已开（#189 在飞，见 §1）。
 
 | 优先级 | 刀 | 风险 | 说明 |
 |--------|-----|------|------|
-| 人裁 | marks 残差 **或暂停** | — | #187 已证实非噪声（−14% wall）；下一最大块是 **marks ~74–80s**；attempts LAG 仍 ~49s |
-| 若 attempts 仍大且 capacity 已瘦 | marks 少分配 / 批量索引专路 | LOW/MED | EVAL 刀 4；推测仅 5–25s；需新 profile |
-| defer | lifecycle due-expiry 调度 | MED/HIGH | lifecycle 已 ~25s；复杂度高 |
-| defer | deepcopy / snapshot 流 | MED | ROI 弱 |
-| 不做 | eligible_scan 再砍、seal/validate 默认翻转、改成交值 | — | 锁死 |
+| 人裁 | attempts LAG 再砍 / write_artifacts / **暂停** | — | #189 后 top：attempts LAG ~43s（deepcopy 主导，profiled cum 184.7s）· write_artifacts ~32s · plain_output ~27s · lifecycle ~27/25s |
+| defer | lifecycle due-expiry 调度 | MED/HIGH | 复杂度高 |
+| 不做 | eligible_scan 再砍、seal/validate 默认翻转、改成交值、marks 每样本再便宜化（热集收缩后 ROI 低） | — | 锁死 |
 
 ---
 
@@ -110,12 +110,13 @@ cProfile（#185 tip，归因用，**不可**与 plain wall 混算）：H-stamp A
 
 ---
 
-## 7. 接手清单（最小动作）
+## 7. 接手清单（最小动作，2026-09-24 晚刷新）
 
-1. §3.1 已填（#187 PASS）。若需原件向 4090bot 取 RECEIPT 路径。  
-2. 人裁：暂停 / marks 残差 / 再砍 attempts（用状态行 + widget）。**无 GO 不开刀。**  
-3. 实现路径：Owner（bt 或临时代班）排 Codex → Grok 核 → **人合** → 4090 B-only。  
-4. Grok Bot 额度约 **2 天后**恢复；额度外优先 4090bot / 他机 Codex，避免烧 Bot 配额做实现。
+1. ~~#187 RECEIPT~~ 已落地并复核（§3.1）。  
+2. ~~人裁下一刀~~ 已裁 **GO marks** → 已实现为 **PR #189**（含归因 SPEC/RECEIPT，见 §1）。  
+3. 进行中：**Grok 核 #189**（Bot 额度恢复后；PR body 已附核要点清单）→ **人裁合 #190 / #189** → 合并 tip 复跑 4090 B-only 写收尾 RECEIPT。  
+4. Grok Bot 额度约 **2 天后**恢复；额度外实现走 4090 物理机本机（zcode / kimi / codex / cursor:auto，2026-09-24 人裁放行；本机 codex 需 login，kimi 即用）。  
+5. 下一刀（§4）**无 GO 不开**。
 
 ---
 
@@ -123,6 +124,7 @@ cProfile（#185 tip，归因用，**不可**与 plain wall 混算）：H-stamp A
 
 - 路径：`docs/backtest/handoff-joint-return-modeb-perf-20260924.md`  
 - 起草：bt · 2026-09-24（额度停工交接）  
-- 更新规则：#187 RECEIPT 落地后改 §1/§3.1 状态行；下一刀 GO 后另开 SPEC，不在本文堆实现细节。
+- 更新：2026-09-24 晚 · 接手 agent（zcode，4090 机）——#188 合入、marks GO→#189（本地验收 PASS）、#190 开出后的状态行刷新；#189 合并 + tip 收尾后再次更新 §1/§2。  
+- 更新规则：RECEIPT 落地后改 §1 状态行；下一刀 GO 后另开 SPEC，不在本文堆实现细节。
 
 EXIT:0
