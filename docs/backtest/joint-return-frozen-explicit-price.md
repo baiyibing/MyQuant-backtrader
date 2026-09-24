@@ -5,9 +5,11 @@ P-BASE/P-CHASE, M-REF/M-LAG semantics stay unchanged. Its contract pin remains
 `dfa020d2c01e6cfe6612f09be2d569294ff94d82fd1ede5cea61a41d74a81737`.
 
 Frozen control-only 50/5 packs use the separate pin
-`9ee8cc3c63c1e7a0910c777c9a58fa4b884a89a853586a65363dc818b54cfe41`.
-Manifest and metadata must match that pin; explicit price metadata must also
-carry it. BT checks artifact bytes/content, intent identities, reference chains
+`c6b85b9b8fdb4799425980b98f51596ed5b4d3a9ca781092e06f81a0a14d11f7`
+(MQ #97 `next_session_clocks` contract, MQ tip recomputed 2026-09-24).
+The retired pin `9ee8cc3c…` only explains the 2026-09-22 zero-fill knife and
+is no longer accepted. Manifest and metadata must match the active pin;
+explicit price metadata must also carry it. BT checks artifact bytes/content, intent identities, reference chains
 and plan bindings without changing quantities or reference prices. CSV accepts
 one additional JSON quoting layer, then verifies decoded content hashes.
 `--intents` accepts intents.csv, its directory, or adjacent manifest.json.
