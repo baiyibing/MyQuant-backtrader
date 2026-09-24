@@ -33,7 +33,7 @@ E 步若仍 0 成交 → 停，回 qlib 查时钟，不交 Mode B（上游交接
 
 | 输入 | 路径（MyQuant 运行根 = `D:\PycharmProjects\MyQuant\runs\joint_return_4090_20260920_pr95`） | 凭据 |
 |------|------|------|
-| scores | `merged\scores.json` | merge-manifest 登记 content_sha256 `37e87390…` |
+| scores | `inputs\scores_carryforward.json` | **成功线自登记**：`rules\rule-manifest.json` 与最终 `snapshot.json` 的 `inputs.scores.uri` 均 = carryforward（content_sha256 `11903c5b…`）。`merged\scores.json`（`37e87390…`）是 scores-merge 步产物；pipeline 日志中对它的引用均为被取代的失败尝试。carryforward 满足 `rule_intents` held∈ranked（SOURCE_scores_carryforward.md），换成 merged 会使计划漂移、4475-fills 对账基线作废 |
 | initial_state | `inputs\initial_state.json` | `{"cash":1e8,…}` 实文件 |
 | sessions | `inputs\sessions.json` | SOURCE_sessions.md：research-explicit v2 |
 | metadata 模板 | `inputs\metadata.json` | — |
@@ -54,6 +54,10 @@ E 步若仍 0 成交 → 停，回 qlib 查时钟，不交 Mode B（上游交接
 3. 性能弧的 byte-identical 合约 SHA 属 CLOCK_PATCH-614 研究身份，**不约束**本专题新 pack 首跑；新 pack 首跑后另立自己的对账基线。
 4. 不混用 cProfile wall 与 plain 计时；物理机 CLI headless。
 
-## 6. 维护
+## 6. 勘误（2026-09-24 20:15）
+
+初版 §3 scores 行误写 `merged\scores.json`（引 merge 步 manifest），已按成功线自登记改为 `inputs\scores_carryforward.json`。该误写曾触发一次双执行器撞车（B 半成品被误判 scores 错误而隔离重跑），根因即本行。执行纪律补充：**B–C 全程本机（4090）只允许一个执行器**；重跑前先核 `wmic process` 与目录时间戳，避免第二执行器写入同一 `$Out`。
+
+## 7. 维护
 
 - 起草：bt（zcode，4090 机）· 2026-09-24 · 随 A–G 回填；G 完成后归档并改写状态行。
