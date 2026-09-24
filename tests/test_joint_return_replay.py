@@ -1,5 +1,6 @@
 """Hand-computed data-free pins; no lake, network, PortAna or sibling dependency."""
 from copy import deepcopy
+import ast
 import csv
 from datetime import timedelta
 import json
@@ -1284,3 +1285,155 @@ def test_v2_columnar_seal_fail_closed(tmp_path, fmt, fault):
     (root / "MANIFEST.json").write_bytes(jr.canonical_bytes(manifest))
     with pytest.raises(jr.ReplayError):
         jr.replay(m, rows, root, arm="P-BASE", fill_mode="all", validate_version="v2")
+
+
+def legacy_eligible_orders(engine, t):
+    """Pre-acceleration eligibility predicate, independent of private indexes."""
+    # Exact parent 9b35d23 module comparisons (M-REF/M-LAG x v1/v2):
+    # /workspace/handoffs/joint_return_eligible_scan_20260924/benchmark.json
+    # and paired *-fills.{base,optimized}.json / *-daily_nav.{base,optimized}.json.
+    # These are external benchmark evidence, not a CI filesystem dependency.
+    eligible = []
+    for o in engine.orders:
+        r = o["intent"]
+        available = jr.stamp(r["available_at"])
+        if (o["status"] not in jr.TERMINAL and o["status"] != "CREATED"
+                and t >= jr.stamp(r["effective_at"])
+                and (t > available if engine.fill_mode == "M-LAG" else t >= available)
+                and o["limit_down_day"] != t.date()):
+            eligible.append(o)
+    return eligible
+
+
+def test_replay_status_subscript_writes_are_audit_only():
+    tree = ast.parse(Path(jr.__file__).read_text(encoding="utf-8"))
+    replay = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "_Replay")
+    writes = []
+    for method in replay.body:
+        for node in ast.walk(method):
+            # Covers tuple/chained/annotated/augmented assignments and deletes,
+            # independent of the order variable's spelling.
+            if (isinstance(node, ast.Subscript) and isinstance(node.ctx, (ast.Store, ast.Del))
+                    and isinstance(node.slice, ast.Constant) and node.slice.value == "status"):
+                writes.append((getattr(method, "name", None), node.lineno))
+    assert writes, "guard must find the audit status write"
+    assert all(method == "audit" for method, _ in writes), writes
+
+
+@pytest.mark.parametrize("mode", jr.FILL_MODES)
+def test_eligible_index_preserves_encounter_order_after_reactivation(mode):
+    m, rows = bundle([spec("Z"), spec("A"), spec("M")])
+    bars = minute_bars(m, rows)
+    engine = jr._Replay(m, rows, bars, "P-BASE", mode, jr.validate_bars(bars, m, rows))
+    t = jr.stamp(ts(0, "09:31:00"))
+    for status in ("FILLED", "REJECTED", "EXPIRED", "CANCELLED", "CREATED"):
+        for order in engine.orders[:2]:
+            engine.audit(order, status, "test", t)
+            assert engine.eligible_orders(t) == legacy_eligible_orders(engine, t)
+        for order in reversed(engine.orders[:2]):
+            engine.audit(order, "WAITING", "test", t)
+            assert engine.eligible_orders(t) == legacy_eligible_orders(engine, t)
+        assert engine.eligible_orders(t) == engine.orders
+
+
+def assert_no_private_order_keys(value):
+    if isinstance(value, dict):
+        assert not {"_order_clocks", "_eligible_candidates", "_order_positions"}.intersection(value)
+        assert all(not key.startswith("_") for key in value), value.keys()
+        for child in value.values():
+            assert_no_private_order_keys(child)
+    elif isinstance(value, list):
+        for child in value:
+            assert_no_private_order_keys(child)
+
+
+@pytest.mark.parametrize("mode", jr.FILL_MODES)
+def test_order_snapshots_and_fills_exclude_private_indexes(mode):
+    m, rows = bundle([spec(quantity=200)])
+    bars = minute_bars(m, rows, capacity=100)
+    engine = jr._Replay(m, rows, bars, "P-BASE", mode, jr.validate_bars(bars, m, rows))
+    snap = engine.snapshot_order(engine.orders[0], jr.stamp(ts()))
+    assert_no_private_order_keys(snap)
+    result = engine.run()
+    assert result["orders"] and result["fills"]
+    for key in ("orders", "fills"):
+        assert_no_private_order_keys(result[key])
+        assert_no_private_order_keys(json.loads(jr.canonical_bytes(jr.plain(result[key]))))
+
+
+@pytest.mark.parametrize("mode", jr.FILL_MODES)
+@pytest.mark.parametrize("effective", ["09:29:00", "09:30:00", "09:31:00"])
+def test_eligible_index_matches_legacy_clock_and_status_edges(mode, effective, monkeypatch):
+    m, rows = bundle([spec(effective_at=ts(0, effective))])
+    bars = minute_bars(m, rows)
+    engine = jr._Replay(m, rows, bars, "P-BASE", mode, jr.validate_bars(bars, m, rows))
+    order = engine.orders[0]
+    points = [jr.stamp(ts(0, clock)) for clock in ("09:29:00", "09:30:00", "09:31:00", "09:32:00")]
+    points.append(jr.stamp(ts(1)))
+    # Repeated WAITING after a terminal state exercises lifecycle reactivation.
+    for status in ("CREATED", "WAITING", "ACTIVE", "PARTIAL", "FILLED", "WAITING",
+                   "REJECTED", "WAITING", "EXPIRED", "WAITING", "CANCELLED", "WAITING"):
+        engine.audit(order, status, "test", points[0])
+        assert bool(engine._eligible_candidates) == (status not in jr.TERMINAL and status != "CREATED")
+        for locked_day in (None, points[1].date()):
+            order["limit_down_day"] = locked_day
+            for t in points:
+                assert engine.eligible_orders(t) == legacy_eligible_orders(engine, t)
+    # Clock parsing must not return to the per-opportunity path.
+    monkeypatch.setattr(jr, "stamp", lambda *a: pytest.fail("eligible scan reparsed a clock"))
+    assert engine.eligible_orders(points[-1]) == [order]
+
+
+@pytest.mark.parametrize("mode", jr.FILL_MODES)
+@pytest.mark.parametrize("scenario,version", [
+    (scenario, version)
+    for scenario in ("partial", "limit_down", "superseded", "expiry", "deferred", "sell_first", "frozen")
+    for version in ("v1", "v2")
+    # v2 requires dense coverage; missing-session expiry is a v1-only input.
+    if scenario != "deferred" or version == "v1"
+])
+def test_eligible_index_replay_bytes_match_legacy(monkeypatch, mode, version, scenario):
+    if scenario == "frozen":
+        m, rows, bars = frozen_bundle()
+        bars["metadata"]["reference_marks"] = frozen_marks(rows)
+    elif scenario == "sell_first":
+        m, rows = bundle([spec("A"), spec("Z", "SELL")], state=initial(0, Z=100))
+        bars = minute_bars(m, rows)
+    elif scenario == "limit_down":
+        m, rows = bundle([spec(side="SELL")], state=initial(A=100))
+        bars = minute_bars(m, rows)
+        for bar in bars["bars"]:
+            if bar["timestamp"] in (ts(), ts(0, "09:31:00")):
+                bar.update(open=1, close=1)
+    elif scenario == "deferred":
+        m, rows = bundle([spec(side="SELL", reason="EXPIRY_EXIT", expires_at=ts(0, "09:34:00"))],
+                         state=initial(A=100))
+        bars = minute_bars(m, rows)
+        bars["bars"] = [bar for bar in bars["bars"] if bar["timestamp"] >= ts(1)]
+    else:
+        specs = [spec(quantity=200)]
+        if scenario == "superseded":
+            specs.append(spec(side="SELL", quantity=200, day=1))
+        m, rows = bundle(specs, fees=dict(buy_rate=0.001, minimum=5))
+        bars = minute_bars(m, rows, capacity=0 if scenario in ("expiry", "superseded") else 100)
+        if scenario == "superseded":
+            bars["bars"][1]["capacity"] = 100
+    seal(bars)
+    optimized = jr._Replay.eligible_orders
+
+    def checked(engine, t):
+        actual, expected = optimized(engine, t), legacy_eligible_orders(engine, t)
+        assert actual == expected
+        return actual
+
+    monkeypatch.setattr(jr._Replay, "eligible_orders", checked)
+    actual_timings = jr._PhaseTimings(True)
+    actual = jr.replay(m, rows, bars, arm="P-BASE", fill_mode=mode,
+                       validate_version=version, _timings=actual_timings)
+    monkeypatch.setattr(jr._Replay, "eligible_orders", legacy_eligible_orders)
+    expected_timings = jr._PhaseTimings(True)
+    expected = jr.replay(m, rows, bars, arm="P-BASE", fill_mode=mode,
+                         validate_version=version, _timings=expected_timings)
+    assert jr.canonical_bytes(actual) == jr.canonical_bytes(expected)
+    assert actual_timings.counts == expected_timings.counts
+    assert actual_timings.seconds.keys() == expected_timings.seconds.keys()
