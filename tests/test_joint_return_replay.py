@@ -346,6 +346,27 @@ def test_cash_shortfall_rejected_or_clipped_in_whole_lots_with_fees():
     assert not out["fills"] and out["orders"][0]["status_reason"] == "CASH_INSUFFICIENT"
 
 
+def test_fill_records_freeze_transitions_and_quantity_events():
+    # The stored fill shares append-only lists with the live order by design;
+    # later audit/convert appends must never rewrite the frozen record.
+    m, rows = bundle([spec(quantity=200)], state=initial(2005), fees={"minimum": 5})
+    b = minute_bars(m, rows, price=11)
+    b["corporate_actions"] = [action()]  # day-1 split scales the pending remainder
+    out = run(m, rows, b)
+    f, o = out["fills"][0], out["orders"][0]
+    assert f["executed_quantity"] == 100 and o["status"] == "REJECTED"
+    assert "REJECTED" in [tr["status"] for tr in o["transitions"]]
+    assert "REJECTED" not in [tr["status"] for tr in f["transitions"]]
+    assert o["quantity_events"]  # the split scaled the unfilled remainder
+    assert f["quantity_events"] == []
+    # The copy is field-specific: any third mutable container in the snapshot
+    # must fail here instead of silently sharing live order state.
+    assert f["transitions"] is not o["transitions"]
+    assert f["quantity_events"] is not o["quantity_events"]
+    assert not ({id(v) for v in f.values() if isinstance(v, (list, dict))}
+                - {id(f["transitions"]), id(f["quantity_events"])})
+
+
 def test_oversell_actual_failed_buy_is_rejected_without_reference_ledger_reset():
     m, rows = bundle([spec(quantity=200), spec(side="SELL", quantity=200, day=1)], state=initial(2000))
     b = minute_bars(m, rows, price=11)
