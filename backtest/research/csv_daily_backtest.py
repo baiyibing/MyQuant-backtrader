@@ -568,6 +568,7 @@ def run(
     pos_trail: float = POS_TRAIL,
     workers: int = 16,
     pool_dir: Optional[Path] = None,
+    require_signal_bundle: bool = False,
     strategy: str,
     take_profit=None,
     record_params=None,
@@ -594,6 +595,11 @@ def run(
         raise ValueError("version12 requires lake --dividend-type front")
     t_pool = time.perf_counter()
     actual_pool_dir = resolve_research_pool_dir(strategy, pool_dir, repo=REPO)
+    signal_bundle = None
+    if require_signal_bundle:
+        from backtest.research.csv_pool import require_signal_bundle as _require_signal_bundle
+
+        signal_bundle = _require_signal_bundle(actual_pool_dir)
     pool_days = load_pool_day_map(
         actual_pool_dir, start, end, key="ymd", empty_in_map=False
     )
@@ -740,6 +746,8 @@ def run(
     st.stats["t_daily_s"] = t_daily
     st.stats["t_sim_s"] = time.perf_counter() - t_sim
     st.stats["codes_missing"] = max(0, len(all_codes) - len(bars))
+    if signal_bundle is not None:
+        st.stats["signal_bundle_sha256"] = signal_bundle["bundle_sha256"]
     return st
 
 
@@ -802,6 +810,10 @@ def main(argv: Optional[list] = None) -> int:
         "--emit-run-manifest", action="store_true",
         help="write myquant.bt-run/1 provenance (default off)",
     )
+    ap.add_argument(
+        "--require-signal-bundle", action="store_true",
+        help="require a valid signal-bundle.json with matching CSV hashes (default off)",
+    )
     args = ap.parse_args(argv if argv is not None else None)
     pool_dir = resolve_research_pool_dir(args.strategy, args.pool_dir, repo=REPO)
     book = engine_book(args.strategy)
@@ -820,6 +832,7 @@ def main(argv: Optional[list] = None) -> int:
         daily_quota=args.daily_quota,
         workers=args.workers,
         pool_dir=pool_dir,
+        require_signal_bundle=args.require_signal_bundle,
         dividend_type=args.dividend_type,
         daily_root=args.daily_root,
         qlib_data_root=args.qlib_data_root,
@@ -837,6 +850,7 @@ def main(argv: Optional[list] = None) -> int:
         text,
         help_lock_for(args.strategy),
         emit_run_manifest=args.emit_run_manifest,
+        signal_bundle_sha256=st.stats.get("signal_bundle_sha256"),
         manifest_config=(
             {**vars(args), "pool_dir": pool_dir, "out_dir": out_dir}
             if args.emit_run_manifest else None

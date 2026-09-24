@@ -1017,6 +1017,7 @@ def run(
     use_cache: bool = True,
     rebuild_cache: bool = False,
     pool_dir: Optional[Path] = None,
+    require_signal_bundle: bool = False,
     strategy: str,
     take_profit=None,
     record_params=None,
@@ -1063,6 +1064,11 @@ def run(
         )
     t_pool = time.perf_counter()
     actual_pool_dir = resolve_research_pool_dir(strategy, pool_dir, repo=REPO)
+    signal_bundle = None
+    if require_signal_bundle:
+        from backtest.research.csv_pool import require_signal_bundle as _require_signal_bundle
+
+        signal_bundle = _require_signal_bundle(actual_pool_dir)
     pool_days = load_pool_day_map(
         actual_pool_dir, start, end, key="ymd", empty_in_map=False
     )
@@ -1247,6 +1253,8 @@ def run(
     st.stats["t_sim_s"] = time.perf_counter() - t_sim
     st.stats["cache"] = cache_status.get("cache", "")
     st.stats["codes_missing"] = max(0, len(all_codes) - min(len(daily), len(minute)))
+    if signal_bundle is not None:
+        st.stats["signal_bundle_sha256"] = signal_bundle["bundle_sha256"]
     if book == "version12":
         st.stats["daily_signal_domain"] = "front"
         st.stats["minute_fill_domain"] = dividend_type
@@ -1300,6 +1308,10 @@ def main(argv: Optional[list] = None) -> int:
         "--emit-run-manifest", action="store_true",
         help="write myquant.bt-run/1 provenance (default off)",
     )
+    ap.add_argument(
+        "--require-signal-bundle", action="store_true",
+        help="require a valid signal-bundle.json with matching CSV hashes (default off)",
+    )
     args = ap.parse_args(argv if argv is not None else None)
     pool_dir = resolve_research_pool_dir(args.strategy, args.pool_dir, repo=REPO)
     minute_source = "qlib_1min" if args.qlib_1min_root else args.minute_source
@@ -1312,6 +1324,7 @@ def main(argv: Optional[list] = None) -> int:
         daily_quota=args.daily_quota,
         workers=args.workers,
         pool_dir=pool_dir,
+        require_signal_bundle=args.require_signal_bundle,
         use_cache=not args.no_cache,
         rebuild_cache=args.rebuild_cache,
         minute_source=minute_source,
@@ -1347,6 +1360,7 @@ def main(argv: Optional[list] = None) -> int:
         text,
         help_lock_for(args.strategy, shared=HELP_LOCK),
         emit_run_manifest=args.emit_run_manifest,
+        signal_bundle_sha256=st.stats.get("signal_bundle_sha256"),
         manifest_config=(
             {**vars(args), "pool_dir": pool_dir, "out_dir": out_dir,
              "minute_source": minute_source, "daily_source": daily_source}
