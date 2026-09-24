@@ -323,14 +323,27 @@ def test_mark_universe_and_backfill_counts_reflect_hot_set_only():
     for v in b["bars"]:
         if v["instrument"] == "B":
             v.update(open=100, close=100)  # B stays blocked at limit, never held
+    sealed_bars = seal(b)
+    # Keep B in the validated input universe via the unselected arm, while
+    # P-BASE has no order intents in the control.
+    control_m, control_rows = bundle([spec("B", "BUY", 100, arm="P-CHASE")], state=initial(A=100))
+    control_timings = jr._PhaseTimings(enabled=True)
+    jr.replay(control_m, control_rows, deepcopy(sealed_bars), arm="P-BASE", fill_mode="M-LAG",
+              _timings=control_timings)
+    control_sites = sum(v for k, v in control_timings.counts.items() if k.endswith(".mark_sites"))
+    control_calls = sum(v for k, v in control_timings.counts.items() if k.endswith(".backfill_calls"))
     timings = jr._PhaseTimings(enabled=True)
-    jr.replay(m, rows, seal(deepcopy(b)), arm="P-BASE", fill_mode="M-LAG", _timings=timings)
+    jr.replay(m, rows, deepcopy(sealed_bars), arm="P-BASE", fill_mode="M-LAG", _timings=timings)
     sites = sum(v for k, v in timings.counts.items() if k.endswith(".mark_sites"))
     samples = sum(v for k, v in timings.counts.items() if k.endswith(".mark_universe_samples"))
     calls = sum(v for k, v in timings.counts.items() if k.endswith(".backfill_calls"))
     steps = sum(v for k, v in timings.counts.items() if k.endswith(".backfill_scan_steps"))
     assert sites > 0 and samples == sites  # only the held name stays eager
-    assert calls > 0 and steps >= calls    # B's snapshot went through site replay
+    assert sites == control_sites
+    # Both runs start with A held and use copies of the same sealed A/B bars.
+    # Only treatment has B's live order, so the extra calls establish its snapshot backfill.
+    assert calls > control_calls
+    assert steps >= calls
 
 
 def test_cash_shortfall_rejected_or_clipped_in_whole_lots_with_fees():
