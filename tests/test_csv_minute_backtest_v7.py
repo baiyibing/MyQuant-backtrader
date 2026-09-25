@@ -344,6 +344,71 @@ def test_d4_timer_none_limits_respects_t1_and_records(cause, outcome, monkeypatc
         assert state.equity_curve[-1]["equity"] == 12_100
 
 
+def test_asof_pool_name_ignores_future_st_and_keeps_empty_from_clearing():
+    from backtest.research.ashare_session import asof_pool_name
+
+    first, second, third = (day.strftime("%Y%m%d") for day in (D1, D2, D3))
+    names_by_day = {
+        second: {SYMBOL: "*ST 浦发"},
+        first: {SYMBOL: "浦发银行"},
+    }
+    assert asof_pool_name(names_by_day, first, SYMBOL) == "浦发银行"
+    assert asof_pool_name(names_by_day, second, SYMBOL) == "*ST 浦发"
+    assert asof_pool_name(names_by_day, "20260831", SYMBOL) == ""
+    assert asof_pool_name(names_by_day, second, "000001.SZ") == ""
+
+    empty_later = {
+        third: {"000001.SZ": "平安银行"},
+        second: {SYMBOL: ""},
+        first: {SYMBOL: "浦发银行"},
+    }
+    assert asof_pool_name(empty_later, second, SYMBOL) == "浦发银行"
+    assert asof_pool_name(empty_later, third, SYMBOL) == "浦发银行"
+
+
+def test_simulate_v7_asof_names_buy_early_day_that_flat_map_skips():
+    minutes = {SYMBOL: [bar(D1, 895, 105)]}
+    path_daily = {SYMBOL: {date(2026, 8, 31): 100.0, D1: 100.0}}
+    names_by_day = {
+        D1.strftime("%Y%m%d"): {SYMBOL: "浦发银行"},
+        D2.strftime("%Y%m%d"): {SYMBOL: "*ST 浦发"},
+    }
+    flattened = flatten_pool_names(names_by_day)
+    flat = simulate_v7(
+        minutes, path_daily, {D1: [SYMBOL]}, [D1, D2], names=flattened
+    )
+    assert "skip_limit_up" in reasons(flat)
+    assert "buy:trial" not in reasons(flat)
+
+    # Any explicitly supplied by-day mapping takes precedence, including {}.
+    for names, by_day in ((None, names_by_day), (flattened, names_by_day), (flattened, {})):
+        state = simulate_v7(
+            minutes,
+            path_daily,
+            {D1: [SYMBOL]},
+            [D1, D2],
+            names=names,
+            names_by_day=by_day,
+        )
+        early_reasons = [
+            trade["reason"] for trade in state.trades if trade["date"] == D1.isoformat()
+        ]
+        assert "buy:trial" in early_reasons
+        assert "skip_limit_up" not in early_reasons
+        assert state.positions[SYMBOL].shares > 0
+        assert state.cash < flat.cash
+
+
+def test_v7_cli_asof_pool_names_defaults_off(tmp_path):
+    argv = [
+        "--start", "20260901", "--end", "20260902", "--pool-dir", str(tmp_path)
+    ]
+    parser = v7.build_parser()
+
+    assert parser.parse_args(argv).asof_pool_names is False
+    assert parser.parse_args([*argv, "--asof-pool-names"]).asof_pool_names is True
+
+
 def test_v7_names_flatten_uses_window_end_name_for_earlier_day():
     minutes = {SYMBOL: [bar(D1, 895, 105)]}
     path_daily = {SYMBOL: {date(2026, 8, 31): 100.0, D1: 100.0}}

@@ -85,6 +85,20 @@ def flatten_pool_names(names_by_day: Mapping[str, Mapping[str, str]]) -> dict[st
     return names
 
 
+def asof_pool_name(
+    names_by_day: Mapping[str, Mapping[str, str]], ymd: str, symbol: str
+) -> str:
+    """Last non-empty pool name dated on or before the requested session."""
+    name = ""
+    for day in sorted(names_by_day):
+        if day > ymd:
+            break
+        observed = names_by_day[day].get(symbol, "")
+        if observed:
+            name = observed
+    return name
+
+
 def load_limit_context(
     pool_dir: Path | None,
     symbols: Iterable[str],
@@ -102,6 +116,7 @@ def load_limit_context(
 
 __all__ = [
     "LIMIT_EPS",
+    "asof_pool_name",
     "defer_sell_at_limit",
     "flatten_pool_names",
     "hit_limit_down",

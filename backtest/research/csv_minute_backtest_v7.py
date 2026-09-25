@@ -42,6 +42,7 @@ from backtest.research.strategy7_rules import (
     validate_index_symbol,
 )
 from backtest.research.ashare_session import (
+    asof_pool_name,
     defer_sell_at_limit,
     k_for,
     load_limit_context,
@@ -50,7 +51,7 @@ from backtest.research.ashare_session import (
     skip_buy_at_limit,
     t1_sellable,
 )
-from backtest.research.csv_pool import load_pool_day_map
+from backtest.research.csv_pool import load_pool_day_map, load_pool_names_by_day
 from backtest.research.ashare_exdiv_economics import EconomicLookup, ExDivEconomics
 from common.infra.data_root import resolve_index_daily_root
 from oskh_data.lake_kind import classify_daily_lake_kind
@@ -318,6 +319,7 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
                 exdiv: Mapping[str, Mapping[str, float]] | None = None,
                 exdiv_economics: EconomicLookup | None = None,
                 names: Mapping[str, str] | None = None,
+                names_by_day: Mapping[str, Mapping[str, str]] | None = None,
                 fee: FeeSchedule = DEFAULT_SCHEDULE,
                 participation_rate: float | None = None,
                 volume_for_bucket: VolumeLookup | None = None) -> SimResult:
@@ -379,7 +381,10 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
                 _apply_exdiv_economics(state, position, ymd)
             if factor is not None and position is not None:
                 _rescale_position(position, factor)
-            name = (names or {}).get(symbol, "")
+            if names_by_day is not None:
+                name = asof_pool_name(names_by_day, ymd, symbol)
+            else:
+                name = (names or {}).get(symbol, "")
             previous = session_prev_close(closes.get(symbol, {}), day, symbol, exdiv)
             limits = session_limit_prices(symbol, previous, name)
             first = True
@@ -601,6 +606,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--start", required=True)
     parser.add_argument("--end", required=True)
     parser.add_argument("--pool-dir")
+    parser.add_argument(
+        "--asof-pool-names", action="store_true",
+        help="use names as of each session (default off: uses the window-flat name)",
+    )
     parser.add_argument("--cash-total", type=float, default=21_000_000.0)
     parser.add_argument("--output-dir")
     parser.add_argument("--minute-source", choices=("lake", "qlib_1min"), default="lake")
@@ -638,6 +647,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     load_s = time.perf_counter() - load_t0
     symbols = {symbol for values in pools.values() for symbol in values}
     exdiv, names = load_limit_context(pool_dir, symbols, start, end)
+    names_by_day = (
+        load_pool_names_by_day(pool_dir, start, end) if args.asof_pool_names else None
+    )
     print(
         f"loaded {source}: minute_names={len(minute)} daily_names={len(daily)} "
         f"exdiv_names={len(exdiv)} st_names={sum(1 for n in names.values() if n)} "
@@ -650,7 +662,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         index_closes = [start + timedelta(days=n) for n in range((end - start).days + 1)]
     sim_t0 = time.perf_counter()
     state = simulate_v7(minute, daily, pools, index_closes, cash_total=args.cash_total,
-                        start=start, end=end, exdiv=exdiv, names=names)
+                        start=start, end=end, exdiv=exdiv,
+                        names=None if args.asof_pool_names else names,
+                        names_by_day=names_by_day)
     sim_s = time.perf_counter() - sim_t0
     output = Path(args.output_dir or f"backtest_output/csv_minute_v7_{args.start}_{args.end}")
     write_run_artifacts(state, output)
