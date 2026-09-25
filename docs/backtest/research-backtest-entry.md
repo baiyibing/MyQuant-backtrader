@@ -111,7 +111,7 @@
 | 名单 | MyQuant 冻结 pred（研究默认 **50/5**，不改线上 10/3）→ `intents.csv` + manifest。**没有** `YYYYMMDD.csv` 日池 |
 | 搜法 | MQ 先做**组合约束**（只开 P-BASE；chase / 弱信号 / anti / Mode B 分列堵住），本仓**不重新选票、不改数量**，只回放成交 |
 | 问什么 | 「信息有、组合没」：同一信号如何成仓；分钟延迟会不会把净超额吃掉。验收看换手 / 回撤 / 净超额，**不看 RankIC** |
-| 现在卡哪 | 约束 **PASS**；旧钟收窄回放 **0 成交**（BUG_ALIGNMENT：15:03/16:00 空窗口）。MQ #97 时钟已合。4090 **只重出** `narrow_clock_20260922` pack。**Mode B 停**，等 P-BASE 有真实成交后由 **bt 主管**开真湖 |
+| 现在卡哪 | **已通（2026-09-25）**：时钟 pack 合同级全量重生成收官（[handoff-joint-return-clock-regen-2026-09-24.md](handoff-joint-return-clock-regen-2026-09-24.md)）——P-BASE M-LAG **3631 fills / net +59.1%**，Mode B 真湖 M-REF 21 / M-LAG 3631 全 `BT_RESEARCH_REPLAY_PASS`，`NOT_READY_FOR_MODE_B` 解除。注意：跨重生成对账存在同分钟 intent_id 序 tie-break 方差（见该交接 §7 勘误） |
 
 不要把约束 PASS、旧钟 0 成交 NAV、或 `topk_dropout` CSV 书对一个数。
 
@@ -192,7 +192,7 @@ qlib 昨天盯的是 **MQ 组合约束真数**，不是 BT 的 #149/#151/#156。
 1. BT #162 冻结 `--bars` 已合。  
 2. 全集回放覆盖 INPUT_BLOCKED → 人裁收窄 614 满窗。  
 3. 收窄回放语义 PASS、**0 成交** → bt 定性 **BUG_ALIGNMENT**（15:03/16:00 空窗口）。  
-4. MQ #97 时钟已合 `1c1fe43`；合同 hash 变了；4090 **只重出** `narrow_clock_20260922`（尚未有 intents）。pack 齐了 **bt 派 4090 重跑 P-BASE**；有非零成交前 **不交 Mode B**。
+4. MQ #97 时钟已合 `1c1fe43`；合同 hash 变了；4090 **只重出** `narrow_clock_20260922`（尚未有 intents）。pack 齐了 **bt 派 4090 重跑 P-BASE**；有非零成交前 **不交 Mode B**。**（2026-09-25 收官：全量重生成 `narrow_clock_full_20260924` → P-BASE 3631 fills → Mode B 双刀 PASS，停牌解除；[handoff-joint-return-clock-regen-2026-09-24.md](handoff-joint-return-clock-regen-2026-09-24.md)）**
 
 正文：[handoff-joint-return-qlib-to-bt-2026-09-22.md](handoff-joint-return-qlib-to-bt-2026-09-22.md)。RACI 指针：MQ `docs/operations/grok-bot-raci-workflow.md`（SSOT 在本仓 operations，若分支未合入则以该指针为准）。
 

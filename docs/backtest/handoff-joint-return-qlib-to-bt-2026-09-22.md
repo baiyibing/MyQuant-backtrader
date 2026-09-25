@@ -1,6 +1,6 @@
 # 交接：qlib 联合收益 → BT（2026-09-22）
 
-> **状态**：`NOT_READY_FOR_MODE_B`。约束线已 PASS；收窄 P-BASE 回放语义绿但 **0 成交**（BUG_ALIGNMENT）；MQ #97 意图时钟已合；4090 **只重出 pack、先不回放**。pack 齐了再由 **bt 派 4090 重跑 P-BASE（M-LAG）**。Mode B 真湖在 P-BASE 有真实成交之前 **停**。  
+> **状态（2026-09-25 更新）**：~~`NOT_READY_FOR_MODE_B`~~ **已解除**。时钟 pack 已按派工单全量重生成（合同级，`narrow_clock_full_20260924`，见 [handoff-joint-return-clock-regen-2026-09-24.md](handoff-joint-return-clock-regen-2026-09-24.md)）；P-BASE M-LAG 3631 fills（净 +59.1%），Mode B 真湖 M-REF/M-LAG 双刀 `BT_RESEARCH_REPLAY_PASS`。本节以下为 9/22 时点历史记录，未改写。  
 > **主管**：成交/NAV 与 Mode B = **bt**。qlib 交 MQ 冻结意图。4090bot = 物理机 runner，由正在干活的 bot 派。  
 > **归类**：qlib 分家族 · 冻结意图回放；**不是** `--strategy topk_dropout`，**不是** `stock_pool` Mode A/B 网格。总图：[research-backtest-entry.md](research-backtest-entry.md) §5.1 / §5.6。
 
