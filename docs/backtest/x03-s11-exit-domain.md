@@ -40,7 +40,19 @@ bucket_id, volume_at, signal_domain, reference_price, mark_domain, flags
 
 日线 `hm/decision_hm/quote_hm=null`，实际阶段为买 EOD / 卖 open，不伪造分钟报价；分钟来自实际 09:30 行（570）。EOD 信号及状态另记，不能冒充成交。`report.json` 保留输入、参数、代码、OFF golden 与两腿原 CSV 字节哈希、首个 FSM/成交分歧、新增/消失成交、逐日现金/股数/NAV/mark 差异与归因。现金公式两侧分别 Decimal HALF_UP 到分核对，原始 float 保留；股数严格比较，未成交保持现金、持仓和量预算。容量默认关闭，因此量预算残差为零仅代表未启用预算，volume=A 另由下表测试覆盖。
 
-完整 OFF golden 基于 eff77f3，19 本×双钟 76 hash，加 v7 两 hash，每组真实买卖。`1d8799e`、`a2f2851` 是与 PR #202 相同来源的 cherry-pick 基线；本修复不重录 golden，不引入 #202 的 X-01 行为代码。两 PR 最终合并时共享补丁如遇 Git 上下文冲突，应只消除重复基线补丁，保留原 hash 与断言，再跑 79 个门禁，不择一重录。
+完整 OFF golden 基于 eff77f3，19 本×双钟 76 hash，加 v7 两 hash，每组真实买卖。`1d8799e`、`a2f2851` 是与 PR #202 相同来源的 cherry-pick 基线（#202 对应 `6f781cf`、`4c91e1a`）；本修复不重录 golden，不引入 #202 的 X-01 行为代码。
+
+2026-09-25 先 `git fetch origin`，再以本分支 head `7dbeb80` 预演。三份基线文件 `tests/fixtures/off_byte_baseline_eff77f3.json`、`tests/test_off_byte_baseline.py`、`scripts/research/generate_off_byte_baseline.py` 与 #202、#204 均完全一致；两次预演均无基线冲突，合并树保留原文件。
+
+- [#202](https://github.com/baiyibing/MyQuant-backtrader/pull/202)（X-01，`fix/x01-s12-price-domain`）当前 head `1e50ee1`：`git merge-tree --write-tree --merge-base=eff77f3 HEAD origin/fix/x01-s12-price-domain` 返回 1，仅 `backtest/research/csv_minute_backtest.py` 有五处接线冲突：
+  1. `simulate` 参数：X-03 的 `fix_s11_exit_domain` / `signal_bars_front` 与 X-01 的 `fix_s12_price_domain` / `s12_price_context`。
+  2. `simulate` 入口的两套校验守卫。
+  3. `run_eod_exits` 的 front 信号参数与随后插入的 `require_market_marks`。
+  4. `run` 参数：X-03 开关与 X-01 开关 / `s12_price_transform_file`。
+  5. 日线/分钟加载：X-01 把旧加载包入 `fix_s12_price_domain` 分支，X-03 在旧 `load_daily_ohlc` 后调用 `load_signal_bars_front`。
+- [#204](https://github.com/baiyibing/MyQuant-backtrader/pull/204)（X-02，`fix/x02-minute-cash-order`）head `ee65453`：`git merge-tree --write-tree --merge-base=eff77f3 HEAD origin/fix/x02-minute-cash-order` 同样返回 1，仅 `backtest/research/csv_minute_backtest.py` 有五处接线冲突：`simulate` 参数（X-03 开关/front 信号与 X-02 的 `fix_minute_cash_order` / `audit_sink`）、`simulate` 入口守卫、`run` 参数、CLI 参数注册（含 `--execution-audit-file`）、`main` 向 `run` 传参。
+
+两次预演中 `csv_simulate_loop.py` 均自动合并，`csv_daily_backtest.py`、`csv_artifacts.py` 均无冲突。与 #202 合并时保留 `fix_s11_exit_domain=False` 和 `fix_s12_price_domain=False`；与 #204 合并时保留 `fix_s11_exit_domain=False` 和 `fix_minute_cash_order=False`。后合者只在分钟入口做接线合并，保留原 golden 的 hash 与断言、不重录，再跑 OFF 79 与双方回归。这里只验证文本合并冲突，未实际 merge，也未验证 ON 交互；X-02×X-03 交互仍待两独立 PR 验收后另跑。
 
 ## M01–M18 回归对应
 
