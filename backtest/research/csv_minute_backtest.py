@@ -123,8 +123,8 @@ from backtest.research.csv_simulate_loop import (  # noqa: E402
 )
 
 from backtest.research.ashare_volume_cap import VolumeCap, VolumeLookup  # noqa: E402
-from backtest.research.minute_audit import audit_scope  # noqa: E402
-from backtest.research.minute_cash_order import run_chronological_day  # noqa: E402
+from backtest.research.minute_audit import audit_scope, write_audit
+from backtest.research.minute_cash_order import run_chronological_day
 
 # Preserve historical loader aliases used by callers and tests.
 _ = (_annotate, _load_minute_from_lake, _read_one_minute)
@@ -672,6 +672,8 @@ def simulate(
         )
     if fix_minute_cash_order and normalize_csv_strategy(strategy) == "version12":
         raise ValueError("--fix-minute-cash-order is not applicable to version12")
+    if audit_sink is not None and normalize_csv_strategy(strategy) == "version12":
+        raise ValueError("X-02 execution audit is not applicable to version12")
     hooks = prepare_strategy_hooks(
         strategy,
         stop_pct=stop_pct,
@@ -1119,6 +1121,7 @@ def run(
     s12_price_transform_file: Path | None = None,
     fix_s11_exit_domain: bool = False,
     fix_minute_cash_order: bool = False,
+    audit_sink=None,
 ) -> SimState:
     if fix_s11_exit_domain:
         if normalize_csv_strategy(strategy) != "version11":
@@ -1141,6 +1144,8 @@ def run(
         raise ValueError("--s12-price-transform-file requires --fix-s12-price-domain")
     if fix_minute_cash_order and book == "version12":
         raise ValueError("--fix-minute-cash-order is not applicable to version12")
+    if audit_sink is not None and book == "version12":
+        raise ValueError("X-02 execution audit is not applicable to version12")
     if book == "version12":
         if dividend_type not in ("none", "front") or minute_source != "lake" or daily_source != "lake":
             raise ValueError(
@@ -1373,6 +1378,7 @@ def run(
         **({"fix_s12_price_domain": True, "s12_price_context": s12_price_context}
            if fix_s12_price_domain else {}),
         fix_minute_cash_order=fix_minute_cash_order,
+        audit_sink=audit_sink,
     )
     if skipped.get("exdiv_skipped_no_factor"):
         st.stats["exdiv_skipped_no_factor"] = int(skipped["exdiv_skipped_no_factor"])
@@ -1385,6 +1391,11 @@ def run(
         fallback_order_clock="target_hm; capacity_uses_quote_bucket",
         stable_order="held_insertion_then_lot; original_ration_and_chase_queue",
     )
+    if book == "version12":
+        st.stats.update(cash_order_policy="strategy12_existing_minute_hook",
+                        same_hm_policy="strategy12_existing_sells_then_buys",
+                        fallback_order_clock="strategy12_existing_hook",
+                        stable_order="strategy12_existing_hook")
     st.stats["t_pool_s"] = t_pool
     st.stats["t_daily_s"] = t_daily
     st.stats["t_minute_s"] = t_minute
@@ -1481,11 +1492,13 @@ def main(argv: Optional[list] = None) -> int:
         "--fix-minute-cash-order", action="store_true",
         help="advance minute cash/holdings chronologically (default off; unavailable for version12)",
     )
+    ap.add_argument("--execution-audit-file", help="optional execution JSON sidecar; leaves CSVs unchanged")
     args = ap.parse_args(argv if argv is not None else None)
     pool_dir = resolve_research_pool_dir(args.strategy, args.pool_dir, repo=REPO)
     minute_source = "qlib_1min" if args.qlib_1min_root else args.minute_source
     daily_source = "qlib_day" if args.qlib_day_root else args.daily_source
 
+    audit = [] if args.execution_audit_file else None
     st = run(
         args.start,
         args.end,
@@ -1514,6 +1527,7 @@ def main(argv: Optional[list] = None) -> int:
         strict_pool=args.strict_pool,
         fix_s11_exit_domain=args.fix_s11_exit_domain,
         fix_minute_cash_order=args.fix_minute_cash_order,
+        audit_sink=audit,
         **csv_run_kwargs_from_args(args),
     )
     book = engine_book(args.strategy)
@@ -1548,7 +1562,7 @@ def main(argv: Optional[list] = None) -> int:
         ),
     )
     if normalize_csv_strategy(args.strategy) == "version12":
-        audit = (
+        price_domain_audit = (
             {key: st.stats[key] for key in (
                 "fix_s12_price_domain", "daily_signal_domain", "signal_comparison_domain",
                 "minute_fill_domain", "mark_domain", "reference_adjustment", "transform_model",
@@ -1575,8 +1589,11 @@ def main(argv: Optional[list] = None) -> int:
             }
         )
         (out_dir / "price_domain_audit.json").write_text(
-            json.dumps(audit, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+            json.dumps(price_domain_audit, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
         )
+    if args.execution_audit_file:
+        write_audit(args.execution_audit_file, audit, engine=engine,
+                    enabled=args.fix_minute_cash_order)
     return 0
 
 

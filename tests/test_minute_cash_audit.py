@@ -1,5 +1,6 @@
 """Audit uses actual invocation clocks and is observational only."""
 
+import json
 from dataclasses import asdict
 
 import pytest
@@ -40,3 +41,44 @@ def test_target_decision_clock_retains_earlier_quote_clock():
     assert trace[-1]["decision_hm"] == 895
     assert trace[-1]["quote_hm"] == 890
     assert trace[-1]["phase"] == "close"
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+def test_shared_cli_audit_sidecar_preserves_csv_surface(tmp_path, monkeypatch, enabled):
+    from backtest.research import csv_minute_backtest as minute
+    def frozen_run(*args, **kwargs):
+        return simulate(**chronological_case(), fix_minute_cash_order=kwargs["fix_minute_cash_order"],
+                        audit_sink=kwargs["audit_sink"])
+    monkeypatch.setattr(minute, "run", frozen_run)
+    monkeypatch.setattr(minute, "maybe_compare_daily", lambda *a, **kw: None)
+    output, audit = tmp_path / "out", tmp_path / "audit.json"
+    args = ["--strategy", "version8", "--start", "20251104", "--end", "20251105",
+            "--pool-dir", str(tmp_path), "--out-dir", str(output), "--execution-audit-file", str(audit)]
+    assert minute.main(args + (["--fix-minute-cash-order"] if enabled else [])) == 0
+    payload = json.loads(audit.read_text())
+    assert payload["fix_minute_cash_order"] is enabled
+    assert payload["order"] == "actual_invocation_order"
+    assert len(payload["events"]) == 3
+    assert "decision_hm" not in (output / "trades.csv").read_text().splitlines()[0]
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+def test_v7_cli_audit_and_run_config(tmp_path, monkeypatch, enabled):
+    from backtest.research import csv_minute_backtest_v7 as v7
+
+    from tests.test_v7_cash_chronology import chronological_case as v7_case
+    case = v7_case()
+    monkeypatch.setattr(v7, "load_pool_days", lambda *a: case["pool_days"])
+    monkeypatch.setattr(v7, "_load_cli_bars", lambda *a, **kw: (case["minute_bars"], case["daily_bars"]))
+    monkeypatch.setattr(v7, "load_limit_context", lambda *a: ({}, {}))
+    monkeypatch.setattr(v7, "load_index_daily", lambda *a: case["index_days"])
+    output, audit = tmp_path / "out", tmp_path / "audit.json"
+    args = ["--start", "20260901", "--end", "20260902", "--cash-total", "421000",
+            "--pool-dir", str(tmp_path), "--output-dir", str(output), "--execution-audit-file", str(audit)]
+    assert v7.main(args + (["--fix-minute-cash-order"] if enabled else [])) == 0
+    payload = json.loads(audit.read_text())
+    assert payload["fix_minute_cash_order"] is enabled
+    assert len(payload["events"]) == 4
+    config = json.loads((output / "run-config.json").read_text())
+    assert config["fix_minute_cash_order"] is enabled
+    assert "cash_before" not in (output / "trades.csv").read_text().splitlines()[0]

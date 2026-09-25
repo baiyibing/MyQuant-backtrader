@@ -4,8 +4,10 @@ Scopes describe the real caller's decision clock, including legacy out-of-order
 calls. Rows retain arrival order; the audit never sorts or recomputes cash.
 """
 
+import json
 from contextlib import contextmanager
 from contextvars import ContextVar
+from pathlib import Path
 
 _context = ContextVar("minute_execution_audit", default=None)
 
@@ -44,3 +46,14 @@ def record_rejection(state, code, day, reason, price=None):
     record_fill(state, {"date": day.strftime("%Y%m%d"), "code": code, "side": "SKIP",
                            "price": price, "shares": 0, "notional": 0., "commission": 0.,
                            "reason": reason}, state.cash)
+
+
+def write_audit(path, events, *, engine, enabled):
+    """Write an independent sidecar, with invocation order intact."""
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    payload = {"engine": engine, "fix_minute_cash_order": bool(enabled),
+               "order": "actual_invocation_order",
+               "cash_order_policy": "chronological" if enabled else "legacy",
+               "events": events}
+    target.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

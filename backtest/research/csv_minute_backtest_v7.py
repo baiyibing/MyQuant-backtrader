@@ -54,7 +54,7 @@ from backtest.research.ashare_session import (
 )
 from backtest.research.csv_pool import load_pool_day_map, load_pool_names_by_day
 from backtest.research.ashare_exdiv_economics import EconomicLookup, ExDivEconomics
-from backtest.research.minute_audit import audit_scope, record_fill
+from backtest.research.minute_audit import audit_scope, record_fill, write_audit
 from common.infra.data_root import resolve_index_daily_root
 from oskh_data.lake_kind import classify_daily_lake_kind
 from oskh_data.symbol_format import to_canonical_symbol, to_partition_key
@@ -798,6 +798,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--fix-minute-cash-order", action="store_true",
                         help="settle cash and positions chronologically (default off)")
+    parser.add_argument("--execution-audit-file", help="optional execution JSON sidecar; leaves CSVs unchanged")
     parser.add_argument("--cash-total", type=float, default=21_000_000.0)
     parser.add_argument("--output-dir")
     parser.add_argument("--minute-source", choices=("lake", "qlib_1min"), default="lake")
@@ -808,6 +809,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--qlib-day-root", help="qlib daily bin root for --daily-source qlib_day")
     return parser
+
+
+def write_run_config(output: Path, config: dict) -> None:
+    """Independent provenance writer; legacy CSV writer stays unchanged."""
+    output.mkdir(parents=True, exist_ok=True)
+    (output / "run-config.json").write_text(
+        json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -849,11 +858,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     else:
         index_closes = [start + timedelta(days=n) for n in range((end - start).days + 1)]
     sim_t0 = time.perf_counter()
+    audit = [] if args.execution_audit_file else None
     state = simulate_v7(minute, daily, pools, index_closes, cash_total=args.cash_total,
                         start=start, end=end, exdiv=exdiv,
                         names=None if args.asof_pool_names else names,
                         names_by_day=names_by_day,
-                        fix_minute_cash_order=args.fix_minute_cash_order)
+                        fix_minute_cash_order=args.fix_minute_cash_order, audit_sink=audit)
     sim_s = time.perf_counter() - sim_t0
     output = Path(args.output_dir or f"backtest_output/csv_minute_v7_{args.start}_{args.end}")
     write_run_artifacts(state, output)
@@ -865,9 +875,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         "fallback_order_clock": "exact_quote_only_no_chase",
         "stable_order": "pool_then_opening_held_then_input_symbols",
     }
-    (output / "run-config.json").write_text(
-        json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
+    write_run_config(output, config)
+    if args.execution_audit_file:
+        write_audit(args.execution_audit_file, audit, engine="csv_minute_v7",
+                    enabled=args.fix_minute_cash_order)
     print(summarize_v7(state), end="")
     print(f"timing load={load_s:.2f}s simulate={sim_s:.2f}s total={load_s + sim_s:.2f}s", flush=True)
     return 0
