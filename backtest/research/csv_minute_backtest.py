@@ -1038,6 +1038,7 @@ def run(
     buy_cost_rate: Optional[float] = None,
     sell_cost_rate: Optional[float] = None,
     min_cost: Optional[float] = None,
+    strict_pool: bool = False,
 ) -> SimState:
     if str(stop_fill or "").strip().lower() == "close":
         raise SystemExit(
@@ -1064,6 +1065,12 @@ def run(
         )
     t_pool = time.perf_counter()
     actual_pool_dir = resolve_research_pool_dir(strategy, pool_dir, repo=REPO)
+    if strict_pool:
+        from backtest.research.csv_pool import validate_pool_dir
+
+        failures = validate_pool_dir(actual_pool_dir)
+        if failures:
+            raise SystemExit("strict pool validation failed: " + "; ".join(failures[:8]))
     signal_bundle = None
     if require_signal_bundle:
         from backtest.research.csv_pool import require_signal_bundle as _require_signal_bundle
@@ -1312,6 +1319,10 @@ def main(argv: Optional[list] = None) -> int:
         "--require-signal-bundle", action="store_true",
         help="require a valid signal-bundle.json with matching CSV hashes (default off)",
     )
+    ap.add_argument(
+        "--strict-pool", action="store_true",
+        help="validate pool CSVs before loading bars (default off: permissive parser)",
+    )
     args = ap.parse_args(argv if argv is not None else None)
     pool_dir = resolve_research_pool_dir(args.strategy, args.pool_dir, repo=REPO)
     minute_source = "qlib_1min" if args.qlib_1min_root else args.minute_source
@@ -1335,6 +1346,7 @@ def main(argv: Optional[list] = None) -> int:
         buy_cost_rate=QLIB_OPEN_COST if args.qlib_cost else None,
         sell_cost_rate=QLIB_CLOSE_COST if args.qlib_cost else None,
         min_cost=QLIB_MIN_COST if args.qlib_cost else None,
+        strict_pool=args.strict_pool,
         **csv_run_kwargs_from_args(args),
     )
     book = engine_book(args.strategy)
