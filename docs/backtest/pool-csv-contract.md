@@ -26,7 +26,9 @@ empty or parse-empty files always mean “no buys”.
 **严格校验门**：`validate_pool_dir` 要求文件名为合法的 `YYYYMMDD.csv`，且
 每个数据行首列在去除空白和引号后恰好为六位数字。`SZ300190` 等带前缀单元格
 校验失败；宽松的 `_cell_to_bare`、`parse_pool_csv` 和
-`parse_pool_csv_entries` 仍接受这类输入。成交引擎的 `run()` 不调用严格校验。
+`parse_pool_csv_entries` 仍接受这类输入。默认情况下，成交引擎的 `run()` 不调用严格校验。
+日线 / 分钟 `run()` 仅在启用 `--strict-pool`（默认关闭，对应 `strict_pool=True`）时，
+才在加载名单和行情前调用 `validate_pool_dir`；校验失败即退出。
 
 The map representation intentionally differs by engine. Strategies 6/8/9/10 omit
 an empty file from their `YYYYMMDD`-keyed map (`empty_in_map=False`). Strategy 7
