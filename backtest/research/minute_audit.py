@@ -7,7 +7,6 @@ calls. Rows retain arrival order; the audit never sorts or recomputes cash.
 from contextlib import contextmanager
 from contextvars import ContextVar
 
-
 _context = ContextVar("minute_execution_audit", default=None)
 
 
@@ -36,3 +35,12 @@ def record_fill(state, trade, cash_before):
         sink(row)
     else:
         sink.append(row)
+
+
+def record_rejection(state, code, day, reason, price=None):
+    """An attempted order without a fill, kept outside the old trades table."""
+    if _context.get() is None or _context.get()[0] is None:
+        return
+    record_fill(state, {"date": day.strftime("%Y%m%d"), "code": code, "side": "SKIP",
+                           "price": price, "shares": 0, "notional": 0., "commission": 0.,
+                           "reason": reason}, state.cash)

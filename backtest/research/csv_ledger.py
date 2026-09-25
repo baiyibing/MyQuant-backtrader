@@ -25,7 +25,7 @@ from backtest.research.ashare_session import LIMIT_EPS, hit_limit_down as hit_li
 from backtest.research.ashare_volume_cap import VolumeCap
 from backtest.research.ashare_exdiv_economics import ExDivEconomics
 from backtest.research.market_layer import limit_prices
-from backtest.research.minute_audit import record_fill
+from backtest.research.minute_audit import record_fill, record_rejection
 
 DEFAULT_TOTAL_CASH = 21_000_000.0
 PEAK_GAP_MIN = 15
@@ -264,6 +264,7 @@ def execute_buy(
     notional = shares * px
     comm = trade_commission(notional, st.buy_cost_rate, st.min_cost)
     if notional + comm > st.cash:
+        record_rejection(st, code, day, "skip_cash", px)
         return False
     if st.volume_cap is not None:
         key = (code, _ymd(day), bucket_id)

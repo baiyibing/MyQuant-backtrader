@@ -1,6 +1,6 @@
 """Frozen two-name X-02 cash inversion, independent of a market lake."""
 
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal
 
 import pandas as pd
 
@@ -23,7 +23,7 @@ def chronological_case(sell_hm=899, buy_hm=895, gap_open=False):
         b: frame([("20251105", 570, 6., 6., 6., 6.),
                   ("20251105", buy_hm, 6., 6., 6., 6.)]),
     }
-    return dict(minute_bars=minute, daily_bars=daily,
-                pool_days={"20251104": [a], "20251105": [b]},
-                start="20251104", end="20251105", strategy="version8",
-                stop_pct=.05, total_cash=1001., name_budget=1000.)
+    return {"minute_bars": minute, "daily_bars": daily,
+                "pool_days": {"20251104": [a], "20251105": [b]},
+                "start": "20251104", "end": "20251105", "strategy": "version8",
+                "stop_pct": .05, "total_cash": 1001., "name_budget": 1000.}

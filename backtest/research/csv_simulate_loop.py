@@ -34,6 +34,7 @@ from backtest.research.csv_ledger import (
 )
 from backtest.research.csv_strategy_books import apply_csv_strategy
 from backtest.research.exdiv_map import mapped_prev_close
+from backtest.research.minute_audit import record_rejection
 
 # quotes_for(code) -> (open_px, buy_px, closes_ending_yesterday) or None to keep pending
 ChaseQuotesFn = Callable[[str], Optional[tuple[float, float, list[float]]]]
@@ -155,6 +156,7 @@ def run_chase_due_day(
             pending_chase.pop(code)
             st.stats["skip_held"] += 1
             st.stats["chase_skip_held"] += 1
+            record_rejection(st, code, day, "chase_skip_held")
             continue
         if callable(allow_new_name) and not allow_new_name(day):
             if not (code in st.positions and not index_blocks_add):
@@ -293,6 +295,7 @@ def run_pool_buys_day(
     for code in planned:
         if code in st.positions and not allow_add:
             st.stats["skip_held"] += 1
+            record_rejection(st, code, day, "skip_held")
             continue
         if callable(allow_new_name) and not allow_new_name(day):
             if not (code in st.positions and not index_blocks_add):
@@ -359,6 +362,7 @@ def run_pool_buys_day(
                 st.stats["skip_cash_notional"] = (
                     st.stats.setdefault("skip_cash_notional", 0.0) + per
                 )
+                record_rejection(st, code, day, "skip_cash", px)
                 continue
             quota_used = st.daily_quota_used
             execute_buy(st, code, px, per, day_i, day, reason="pool", **volume_kwargs)
@@ -439,6 +443,7 @@ def run_step_adds_day(
             st.stats["skip_cash_notional"] = (
                 float(st.stats.get("skip_cash_notional", 0.0)) + per
             )
+            record_rejection(st, code, day, "skip_cash", px)
             continue
         quota_used = st.daily_quota_used
         volume_kwargs = (
