@@ -10,7 +10,7 @@ ON 只接受 version11、raw lake 执行数据与独立 lake front 日线信号�
 
 ON 在第一笔成交前校验两域源文件、代码与窗口内实际历史：缺目录/代码/T/历史点、非有限或非正价格、非法 OHLC、重复日期、两域观察日期冲突均失败。采用保守合同，覆盖本次加载的完整预热窗口，而非仅截取末五根。旧 loader 不改；严格读取先于其静默去重/零量过滤。raw/front 零量过滤后的有效观察日期也必须一致，双方一致的停牌与单边丢失分开处理，不填造 bar。不因修退出重新导出池。这些检查与源字节 hash 只能证明本次消费数据的完整性/一致性，不能推定供应商完整快照或历史版本已验证。
 
-OFF 不额外读 front；旧 trades/equity 格式和 `st.stats` 不增键。域和源哈希元数据在外层 `run_metadata`；开启 `--emit-run-manifest` 后写独立 `run-metadata.json`，其 hash 纳入 `run-manifest.json` 的 artifacts，不改 `bt_contract` schema。`entry_signal_domain=front` 是 v11 exporter 的输入合同，外来 pool 必须另有出处证明，不能由 flag 替它背书。执行参考描述为 `legacy_none_reference_map`，并记录实际加载状态；它不是用户显式提供的公司行动权益。
+OFF 不额外读 front；X-03 不改变旧 trades/equity 格式，不向 `st.stats` 增键（master #205 的 `daily_quota` 保留）。域和源哈希元数据在外层 `run_metadata`；开启 `--emit-run-manifest` 后写独立 `run-metadata.json`，其 hash 纳入 `run-manifest.json` 的 artifacts，不改 `bt_contract` schema。`entry_signal_domain=front` 是 v11 exporter 的输入合同，外来 pool 必须另有出处证明，不能由 flag 替它背书。执行参考描述为 `legacy_none_reference_map`，并记录实际加载状态；它不是用户显式提供的公司行动权益。
 
 ## 合成回放
 
@@ -40,11 +40,11 @@ bucket_id, volume_at, signal_domain, reference_price, mark_domain, flags
 
 日线 `hm/decision_hm/quote_hm=null`，实际阶段为买 EOD / 卖 open，不伪造分钟报价；分钟来自实际 09:30 行（570）。EOD 信号及状态另记，不能冒充成交。`report.json` 保留输入、参数、代码、OFF golden 与两腿原 CSV 字节哈希、首个 FSM/成交分歧、新增/消失成交、逐日现金/股数/NAV/mark 差异与归因。现金公式两侧分别 Decimal HALF_UP 到分核对，原始 float 保留；股数严格比较，未成交保持现金、持仓和量预算。容量默认关闭，因此量预算残差为零仅代表未启用预算，volume=A 另由下表测试覆盖。
 
-完整 OFF golden 基于 eff77f3，19 本×双钟 76 hash，加 v7 两 hash，每组真实买卖。`1d8799e`、`a2f2851` 是与 PR #202 相同来源的 cherry-pick 基线（#202 对应 `6f781cf`、`4c91e1a`）；本修复不重录 golden，不引入 #202 的 X-01 行为代码。
+完整 OFF golden 基于 eff77f3，19 本×双钟 76 hash，加 v7 两 hash，每组真实买卖。2026-09-26 已 rebase 到 master `d681fbc`，其中已含 #202（X-01）、#205（capital pairing）和 #207（OFF 基线兼容）。基线完全来自 master（#202/#207）：旧 cherry-pick `1d8799e`、`a2f2851` 已丢弃，golden/hash 未重录或修改；#207 对 `daily_quota` 的接纳、跨 pandas 版本的 canonical 比较及 `pandas==3.0.6` 锁定保持原样。分钟入口同时保留 `fix_s12_price_domain=False` 与 `fix_s11_exit_domain=False` 的 CLI、参数、校验和元数据；X-01 strict snapshot 加载分支保持原样，X-03 在另一分支加载 raw 日线后独立调用 `load_signal_bars_front`。#205 的 quota 解析、summary 和 manifest 接线保留。最终验证结果见 PR / `result.md`。
 
-2026-09-25 先 `git fetch origin`，再以本分支 head `7dbeb80` 预演。三份基线文件 `tests/fixtures/off_byte_baseline_eff77f3.json`、`tests/test_off_byte_baseline.py`、`scripts/research/generate_off_byte_baseline.py` 与 #202、#204 均完全一致；两次预演均无基线冲突，合并树保留原文件。
+以下保留 2026-09-25 的历史预演记录（#202 接线现已完成，#204 的交互仍待后续验收）：先 `git fetch origin`，再以本分支 head `7dbeb80` 预演。三份基线文件 `tests/fixtures/off_byte_baseline_eff77f3.json`、`tests/test_off_byte_baseline.py`、`scripts/research/generate_off_byte_baseline.py` 与 #202、#204 均完全一致；两次预演均无基线冲突，合并树保留原文件。
 
-- [#202](https://github.com/baiyibing/MyQuant-backtrader/pull/202)（X-01，`fix/x01-s12-price-domain`）当前 head `1e50ee1`：`git merge-tree --write-tree --merge-base=eff77f3 HEAD origin/fix/x01-s12-price-domain` 返回 1，仅 `backtest/research/csv_minute_backtest.py` 有五处接线冲突：
+- [#202](https://github.com/baiyibing/MyQuant-backtrader/pull/202)（X-01，`fix/x01-s12-price-domain`）当时 head `1e50ee1`：`git merge-tree --write-tree --merge-base=eff77f3 HEAD origin/fix/x01-s12-price-domain` 返回 1，仅 `backtest/research/csv_minute_backtest.py` 有五处接线冲突：
   1. `simulate` 参数：X-03 的 `fix_s11_exit_domain` / `signal_bars_front` 与 X-01 的 `fix_s12_price_domain` / `s12_price_context`。
   2. `simulate` 入口的两套校验守卫。
   3. `run_eod_exits` 的 front 信号参数与随后插入的 `require_market_marks`。
@@ -52,7 +52,7 @@ bucket_id, volume_at, signal_domain, reference_price, mark_domain, flags
   5. 日线/分钟加载：X-01 把旧加载包入 `fix_s12_price_domain` 分支，X-03 在旧 `load_daily_ohlc` 后调用 `load_signal_bars_front`。
 - [#204](https://github.com/baiyibing/MyQuant-backtrader/pull/204)（X-02，`fix/x02-minute-cash-order`）head `ee65453`：`git merge-tree --write-tree --merge-base=eff77f3 HEAD origin/fix/x02-minute-cash-order` 同样返回 1，仅 `backtest/research/csv_minute_backtest.py` 有五处接线冲突：`simulate` 参数（X-03 开关/front 信号与 X-02 的 `fix_minute_cash_order` / `audit_sink`）、`simulate` 入口守卫、`run` 参数、CLI 参数注册（含 `--execution-audit-file`）、`main` 向 `run` 传参。
 
-两次预演中 `csv_simulate_loop.py` 均自动合并，`csv_daily_backtest.py`、`csv_artifacts.py` 均无冲突。与 #202 合并时保留 `fix_s11_exit_domain=False` 和 `fix_s12_price_domain=False`；与 #204 合并时保留 `fix_s11_exit_domain=False` 和 `fix_minute_cash_order=False`。后合者只在分钟入口做接线合并，保留原 golden 的 hash 与断言、不重录，再跑 OFF 79 与双方回归。这里只验证文本合并冲突，未实际 merge，也未验证 ON 交互；X-02×X-03 交互仍待两独立 PR 验收后另跑。
+当时两次预演中 `csv_simulate_loop.py` 均自动合并，`csv_daily_backtest.py`、`csv_artifacts.py` 均无冲突。与 #202 合并时保留 `fix_s11_exit_domain=False` 和 `fix_s12_price_domain=False`；与 #204 合并时保留 `fix_s11_exit_domain=False` 和 `fix_minute_cash_order=False`。后合者只在分钟入口做接线合并，保留原 golden 的 hash 与断言、不重录，再跑 OFF 79 与双方回归。上述历史预演只验证文本合并冲突，未实际 merge，也未验证 ON 交互；X-02×X-03 交互仍待两独立 PR 验收后另跑。
 
 ## M01–M18 回归对应
 
