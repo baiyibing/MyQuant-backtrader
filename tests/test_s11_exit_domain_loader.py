@@ -166,6 +166,29 @@ def test_memory_validation_includes_warmup_and_excludes_future_prices():
     domain.validate_signal_bars(raw, front, start=START, end="20240903")
 
 
+@pytest.mark.parametrize("engine_name", ["daily", "minute"])
+def test_future_index_interleaving_fails_before_engine_initialization(engine_name, monkeypatch):
+    from backtest.research import csv_daily_backtest, csv_minute_backtest
+
+    engine = csv_daily_backtest if engine_name == "daily" else csv_minute_backtest
+    raw = {CODE: frame()}
+    front = {CODE: (frame() * .9).iloc[[0, 2, 1]]}
+    # The <=START prefix alone is sorted; the original index is not safe for
+    # day_bar_and_prev_closes/searchsorted and must be rejected as a whole.
+    assert front[CODE].loc[:pd.Timestamp(START)].index.is_monotonic_increasing
+
+    def forbidden(*_args, **_kwargs):
+        pytest.fail("invalid full index must fail before account initialization")
+
+    monkeypatch.setattr(engine, "init_sim_state", forbidden)
+    minutes = frame().assign(volume=100., hm=570, ymd=frame().index.strftime("%Y%m%d"))
+    minutes.index += pd.Timedelta(minutes=570)
+    args = (raw,) if engine_name == "daily" else ({CODE: minutes}, raw)
+    with pytest.raises(ValueError, match="daily dates must be sorted"):
+        engine.simulate(*args, {START: [CODE]}, START, START, strategy="version11",
+                        fix_s11_exit_domain=True, signal_bars_front=front)
+
+
 @pytest.mark.parametrize("problem", ["duplicate", "nonfinite", "unsorted", "missing_code", "non_daily"])
 def test_memory_validation_fails_closed(problem):
     raw, front = {CODE: frame()}, {CODE: frame() * .9}

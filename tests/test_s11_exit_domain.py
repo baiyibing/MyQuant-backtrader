@@ -133,10 +133,12 @@ def test_hold_sma_equal_keeps_lot_and_true_break_sells_next_raw_open(engine, clo
 
 
 @pytest.mark.parametrize("engine", [daily, minute], ids=["daily", "minute"])
-@pytest.mark.parametrize("path", ["hold", "sma_break", "initial_exit"])
+@pytest.mark.parametrize("path", ["hold", "sma_equal", "sma_break", "initial_exit"])
 def test_entire_fsm_raw_fills_and_nav_are_invariant_to_front_anchor(engine, path, monkeypatch):
     raw, front = discontinuity()
-    if path == "sma_break":
+    if path == "sma_equal":
+        front = bars_from_closes([9.] * 4 + [9.5, 10., 9.375, 9.7])
+    elif path == "sma_break":
         front.loc[EX, PRICE_COLUMNS] = 8.5
     elif path == "initial_exit":
         front.loc[T, PRICE_COLUMNS] = 9.
@@ -152,7 +154,7 @@ def test_entire_fsm_raw_fills_and_nav_are_invariant_to_front_anchor(engine, path
     baseline = simulate(engine, raw, front, exdiv={CODE: {EX: .9}})
     baseline_decisions = list(decisions)
     assert [t["side"] for t in fills(baseline)] == (
-        ["BUY"] if path == "hold" else ["BUY", "SELL"]
+        ["BUY"] if path in ("hold", "sma_equal") else ["BUY", "SELL"]
     )
     for factor, offset in ((.37, 0.), (1.7, 2.3)):
         decisions.clear()
@@ -258,3 +260,55 @@ def test_reference_mapping_creates_no_rights_and_explicit_economics_applies_once
     assert fills(paid) == fills(off)
     assert money(sum(t["commission"] for t in paid.trades)) == Decimal("5.00")
     assert all(money(equity) == Decimal("99995.00") for _, equity in paid.equity_curve)
+
+
+@pytest.mark.parametrize("engine", [daily, minute], ids=["daily", "minute"])
+@pytest.mark.parametrize("defect", ["code", "today", "history", "nan", "duplicate", "extra_date"])
+def test_simulate_rejects_bad_front_before_any_account_or_fill(engine, defect, monkeypatch):
+    raw, front = discontinuity()
+    signal = {CODE: front}
+    if defect == "code":
+        signal.clear()
+    elif defect in ("today", "history"):
+        signal[CODE] = front.drop(pd.Timestamp(T) if defect == "today" else front.index[0])
+    elif defect == "nan":
+        front.loc[T, "close"] = np.nan
+    elif defect == "duplicate":
+        signal[CODE] = pd.concat([front, front.loc[[pd.Timestamp(T)]]]).sort_index()
+    elif defect == "extra_date":
+        signal[CODE] = front.rename(index={front.index[0]: pd.Timestamp("20240825")})
+
+    def forbidden(*_args, **_kwargs):
+        pytest.fail("bad front must fail before account initialization or first trade")
+
+    monkeypatch.setattr(engine, "init_sim_state", forbidden)
+    args = ({CODE: raw},) if engine is daily else (minute_bars(raw), {CODE: raw})
+    with pytest.raises(ValueError, match="s11 exit domain"):
+        engine.simulate(*args, {T: [CODE]}, T, NEXT, strategy="version11",
+                        fix_s11_exit_domain=True, signal_bars_front=signal)
+
+
+@pytest.mark.parametrize("engine", [daily, minute], ids=["daily", "minute"])
+@pytest.mark.parametrize("strategy,enabled,supplied", [
+    ("version1", True, True), ("version1", False, True),
+    ("version11", False, True), ("version11", True, False),
+])
+def test_simulate_rejects_signal_without_version11_and_on(engine, strategy, enabled, supplied):
+    raw, front = discontinuity()
+    args = ({CODE: raw},) if engine is daily else (minute_bars(raw), {CODE: raw})
+    with pytest.raises(ValueError, match="version11|signal_bars_front"):
+        engine.simulate(*args, {T: [CODE]}, T, NEXT, strategy=strategy,
+                        fix_s11_exit_domain=enabled,
+                        signal_bars_front={CODE: front} if supplied else None)
+
+
+@pytest.mark.parametrize("engine", [daily, minute], ids=["daily", "minute"])
+def test_explicit_off_keeps_legacy_trades_equity_positions_and_stats(engine):
+    raw, _ = discontinuity()
+    omitted = simulate(engine, raw, exdiv={CODE: {EX: .9}})
+    explicit = simulate(engine, raw, exdiv={CODE: {EX: .9}}, fix_s11_exit_domain=False)
+    assert (explicit.trades, explicit.cash, explicit.positions, explicit.equity_curve, explicit.stats) == (
+        omitted.trades, omitted.cash, omitted.positions, omitted.equity_curve, omitted.stats,
+    )
+    assert "fix_s11_exit_domain" not in explicit.stats
+    assert "exit_signal_domain" not in explicit.stats

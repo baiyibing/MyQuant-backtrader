@@ -44,6 +44,11 @@ def _checked_frame(frame, *, code, domain, path, end) -> pd.DataFrame:
         raise _error(code, domain, path, "daily bars require DatetimeIndex")
     if frame.index.hasnans or frame.index.tz is not None:
         raise _error(code, domain, path, "invalid daily dates; expected naive UTC dates")
+    # EOD uses searchsorted on the original supplied frame. Even a future row
+    # interleaved before T can change that search, so validate the full index.
+    # Price validity still belongs to the requested prefix below.
+    if not frame.index.is_monotonic_increasing:
+        raise _error(code, domain, path, "daily dates must be sorted")
     # A simulation prefix does not inspect later prices or count them as history.
     frame = frame.loc[frame.index <= pd.Timestamp(end)]
     if frame.empty:
@@ -54,8 +59,6 @@ def _checked_frame(frame, *, code, domain, path, end) -> pd.DataFrame:
     duplicate = frame.index.duplicated(keep=False)
     if duplicate.any():
         raise _error(code, domain, path, "duplicate daily date", frame.index[duplicate][0])
-    if not frame.index.is_monotonic_increasing:
-        raise _error(code, domain, path, "daily dates must be sorted")
     if "close" not in frame.columns:
         raise _error(code, domain, path, "missing close column")
     columns = [name for name in OHLC if name in frame.columns]
