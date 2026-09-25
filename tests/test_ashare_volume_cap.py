@@ -87,10 +87,11 @@ def _snapshot(state):
 
 @pytest.mark.parametrize("engine", ["daily", "book", "v7"])
 def test_cap_off_byte_snapshot_with_p2_b_labels_and_ignores_volume(engine):
-    # Human GO P2=B labels remain. b951bec adds minute fee stats only:
-    # buy_cost_rate, sell_cost_rate, min_cost. Removing those three reproduces
-    # the prior 9220b164 snapshot; daily/v7 and fill economics are unchanged.
-    expected = {"daily": "2904e7498b35e44738badb66fe29b347885e0cc46b970badfa3cb092c2b8fd35", "book": "4b6ccf7f48d6bdf3e01782ea505106b539b53752b667ab24bfa88db97381ede6", "v7": "2d3c71db7e90c4286271d4a5470235511314a05adb13fc6c54ca323e7f8044ee"}
+    # Human GO P2=B labels remain. b951bec adds minute fee stats only
+    # (buy/sell_cost_rate, min_cost); capital pairing adds stats["daily_quota"].
+    # Removing daily_quota reproduces the 2904e749/4b6ccf7f pins; removing the
+    # fee stats too reproduces the prior 9220b164 snapshot; fill economics unchanged.
+    expected = {"daily": "6b8975a899049fa694aedb60d5a68cf50dbd79db18f9ed131267d448f2e453d2", "book": "e33b5ed5120d82e9340d0f380796adbb8248d71eff22c3cd974ef2cd93305c0c", "v7": "2d3c71db7e90c4286271d4a5470235511314a05adb13fc6c54ca323e7f8044ee"}
 
     def forbidden_lookup(*_):
         pytest.fail("cap off must not consult the volume provider")

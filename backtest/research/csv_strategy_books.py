@@ -352,6 +352,27 @@ def add_topk_dropout_args(ap: argparse.ArgumentParser) -> None:
     )
 
 
+def resolve_daily_quota(
+    strategy: str,
+    requested: Optional[float],
+    *,
+    cash_total: float,
+    fallback_quota: float = 1_000_000.0,
+) -> float:
+    """Money-mode pairing (plan-capital-pairing-2026-09-25).
+
+    Explicit ``--daily-quota`` wins. Otherwise the default pairs with the
+    strategy family: the qlib topk books deploy available cash qlib-style
+    (quota = cash_total, then × risk_degree ÷ day's names); every other
+    book keeps the stock-pool heritage quota default.
+    """
+    if requested is not None:
+        return float(requested)
+    if normalize_csv_strategy(strategy) in ("topk_dropout", "topk_score_exit"):
+        return float(cash_total)
+    return float(fallback_quota)
+
+
 def add_csv_backtest_common_args(
     ap: argparse.ArgumentParser,
     *,
@@ -375,7 +396,16 @@ def add_csv_backtest_common_args(
     else:
         ap.add_argument("--end", default=end_default, help=end_help)
     ap.add_argument("--cash-total", type=float, default=cash_total_default)
-    ap.add_argument("--daily-quota", type=float, default=daily_quota_default)
+    ap.add_argument(
+        "--daily-quota",
+        type=float,
+        default=None,
+        help=(
+            "explicit per-day buy quota override; when omitted the default "
+            "pairs with the strategy family (topk family = cash_total qlib "
+            "risk-degree deploy; other books = 1,000,000/day stock-pool quota)"
+        ),
+    )
     ap.add_argument(
         "--name-budget",
         type=float,

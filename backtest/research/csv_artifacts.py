@@ -218,8 +218,13 @@ def summarize(
         ]
     )
     if "sizing" in st.stats:
+        quota_echo = (
+            f" | daily_quota={st.stats['daily_quota']:,.0f}"
+            if "daily_quota" in st.stats
+            else ""
+        )
         lines.append(
-            f"  sizing={st.stats['sizing']} | name_budget={st.stats['name_budget']:,.0f} | "
+            f"  sizing={st.stats['sizing']}{quota_echo} | name_budget={st.stats['name_budget']:,.0f} | "
             f"skip_cash={st.stats.get('skip_cash', 0)} | "
             f"skip_cash_notional={st.stats.get('skip_cash_notional', 0):,.0f} | "
             f"chase_buy_fail_cash={st.stats.get('chase_buy_fail_cash', 0)} | "
