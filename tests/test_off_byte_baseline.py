@@ -18,9 +18,18 @@ def test_off_byte_baseline_covers_current_registry_and_standalone_v7():
     assert expected["source"] == SOURCE
     assert len(BOOK_NAMES) == 19
     assert set(expected["books"]) == set(BOOK_NAMES) == set(BOOKS)
+    registered_cases = {(book, engine) for book in BOOKS for engine in ("daily", "minute")}
+    assert set(CASES) == registered_cases | {("version7", "minute")}
+    assert len(CASES) == len(expected["cases"]) == 39
     assert set(expected["cases"]) == {f"{book}/{engine}" for book, engine in CASES}
-    assert len(expected["cases"]) == 39
-    assert sum(len(case["sha256_csv_bytes"]) for case in expected["cases"].values()) == 78
+    for case in expected["cases"].values():
+        assert set(case["sha256_csv_bytes"]) == {"trades", "equity"}
+        assert set(case["library_sha256_csv_bytes"]) == {"trades", "equity"}
+        assert case["fill_counts"]["BUY"] > 0
+        assert case["fill_counts"]["SELL"] > 0
+    assert sum(len(expected["cases"][f"{book}/{engine}"]["sha256_csv_bytes"])
+               for book, engine in registered_cases) == 76
+    assert len(expected["cases"]["version7/minute"]["sha256_csv_bytes"]) == 2
 
 
 @pytest.mark.parametrize("explicit_false", [False, True], ids=["omitted", "explicit-off"])
@@ -28,6 +37,10 @@ def test_off_byte_baseline_covers_current_registry_and_standalone_v7():
 def test_off_byte_baseline_trades_equity_and_account(book, engine, explicit_false, tmp_path):
     expected = json.loads(GOLDEN.read_text(encoding="utf-8"))["cases"][f"{book}/{engine}"]
     actual = capture_case(book, engine, tmp_path, explicit_false=explicit_false)
+    assert actual["fill_counts"]["BUY"] > 0, (book, engine, "no real BUY")
+    assert actual["fill_counts"]["SELL"] > 0, (book, engine, "no real SELL")
+    assert len(actual["structured"]["fills"]) == sum(actual["fill_counts"].values())
+    assert all(row["shares"] > 0 and row["price"] > 0 for row in actual["structured"]["fills"])
     assert actual["sha256_csv_bytes"] == expected["sha256_csv_bytes"]
     assert actual["library_sha256_csv_bytes"] == expected["library_sha256_csv_bytes"]
     assert actual["fill_counts"] == expected["fill_counts"]
