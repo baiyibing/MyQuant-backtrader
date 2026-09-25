@@ -1,4 +1,4 @@
-"""Full registry OFF bytes, frozen on eff77f3 before any X-01 behavior change."""
+"""eff77f3 OFF bytes/account, plus the exact #205 daily_quota metadata echo."""
 
 import json
 
@@ -10,6 +10,7 @@ from scripts.research.generate_off_byte_baseline import (
     GOLDEN,
     SOURCE,
     capture_case,
+    post205_expected_case,
 )
 
 
@@ -36,6 +37,7 @@ def test_off_byte_baseline_covers_current_registry_and_standalone_v7():
 @pytest.mark.parametrize("book,engine", CASES, ids=[f"{book}-{engine}" for book, engine in CASES])
 def test_off_byte_baseline_trades_equity_and_account(book, engine, explicit_false, tmp_path):
     expected = json.loads(GOLDEN.read_text(encoding="utf-8"))["cases"][f"{book}/{engine}"]
+    expected = post205_expected_case(book, expected)
     actual = capture_case(book, engine, tmp_path, explicit_false=explicit_false)
     assert actual["fill_counts"]["BUY"] > 0, (book, engine, "no real BUY")
     assert actual["fill_counts"]["SELL"] > 0, (book, engine, "no real SELL")

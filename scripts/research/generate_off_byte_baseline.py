@@ -5,6 +5,8 @@ the shared pandas writer uses Linux LF and the standalone v7 csv writer CRLF.
 The independent library serialization explicitly pins those same line endings.
 Run this script with --check after implementation; generation refuses another
 HEAD or an existing golden, so updating a baseline cannot hide a regression.
+Checks retain the eff77f3 bytes/account contract and require the single #205
+metadata addition; see docs/backtest/off-byte-baseline-post205.md.
 """
 
 from __future__ import annotations
@@ -179,6 +181,26 @@ def capture_matrix(output_dir: Path, *, explicit_false: bool = False):
             for book, engine in CASES}
 
 
+def post205_expected_case(book: str, frozen_case: dict) -> dict:
+    """Require #205's quota echo while preserving every eff77f3 field/hash.
+
+    The frozen inputs explicitly pass daily_quota=1M to simulate (including
+    topk); CLI money-mode default resolution does not participate. Only the
+    shared engines added this stats key. v7's entire snapshot stays unchanged.
+    Build an expected copy instead of dropping metadata from the actual state,
+    so a missing/wrong quota or any other new stats key still fails comparison.
+    """
+    if book == "version7":
+        return frozen_case
+    structured = frozen_case["structured"]
+    stats = structured["stats"]
+    assert "daily_quota" not in stats, "The original eff77f3 golden must remain unchanged"
+    return {
+        **frozen_case,
+        "structured": {**structured, "stats": {**stats, "daily_quota": 1_000_000.0}},
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="Compare to the immutable golden")
@@ -192,7 +214,10 @@ def main():
     if args.check:
         expected = json.loads(GOLDEN.read_text(encoding="utf-8"))
         assert expected["source"] == SOURCE
-        assert cases == expected["cases"]
+        assert cases == {
+            key: post205_expected_case(key.split("/")[0], case)
+            for key, case in expected["cases"].items()
+        }
         print(f"PASS: 39 cases / 78 production CSV hashes; pandas={pd.__version__}")
         return
     payload = {
