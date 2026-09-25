@@ -9,6 +9,7 @@ limit / gate / sizing logic.
 from __future__ import annotations
 
 import hashlib
+import math
 import random
 from typing import Callable, Optional
 
@@ -141,6 +142,7 @@ def run_chase_due_day(
     add_gate=None,
     index_blocks_add: bool = True,
     volume_bucket_for: Callable[[str], int | None] | None = None,
+    reference_price_for: Callable[[str, str], float] | None = None,
 ) -> None:
     """T+1 chase for due codes; ``quotes_for`` supplies open/buy/prev closes."""
     due = [c for c, (_per, sig) in pending_chase.items() if day_i > sig]
@@ -163,7 +165,10 @@ def run_chase_due_day(
         open_px, buy_px, closes = quoted
         pending_chase.pop(code)
         ymd = ds if ds is not None else pd.Timestamp(day).strftime("%Y%m%d")
-        prev_close, did_map = mapped_prev_close(exdiv, code, ymd, float(closes[-1]))
+        if reference_price_for is None:
+            prev_close, did_map = mapped_prev_close(exdiv, code, ymd, float(closes[-1]))
+        else:
+            prev_close, did_map = reference_price_for(code, ymd), False
         if did_map:
             st.stats["exdiv_prev_close_mapped"] = (
                 int(st.stats.get("exdiv_prev_close_mapped", 0)) + 1
@@ -256,6 +261,7 @@ def run_pool_buys_day(
     volume_bucket_for: Callable[[str], int | None] | None = None,
     volume_at: int | None = None,
     sold_today: set[str] | None = None,
+    reference_price_for: Callable[[str, str], float] | None = None,
 ) -> None:
     """Pool buys for ``ds``; ``buy_quote_for`` supplies buy price + prev closes.
 
@@ -297,7 +303,10 @@ def run_pool_buys_day(
         if not closes:
             st.stats["skip_no_bar"] += 1
             continue
-        prev_close, did_map = mapped_prev_close(exdiv, code, ds, float(closes[-1]))
+        if reference_price_for is None:
+            prev_close, did_map = mapped_prev_close(exdiv, code, ds, float(closes[-1]))
+        else:
+            prev_close, did_map = reference_price_for(code, ds), False
         if did_map:
             st.stats["exdiv_prev_close_mapped"] = (
                 int(st.stats.get("exdiv_prev_close_mapped", 0)) + 1
@@ -373,6 +382,7 @@ def run_step_adds_day(
     name_lot_budget=None,
     step_add=None,
     volume_bucket_for: Callable[[str], int | None] | None = None,
+    reference_price_for: Callable[[str, str], float] | None = None,
 ) -> None:
     """Off-list held scan: at most one +20% rider per name per day."""
     if not callable(step_add) or sizing != "per_name":
@@ -389,7 +399,10 @@ def run_step_adds_day(
             continue
         if not step_add(lots, px):
             continue
-        prev_close, did_map = mapped_prev_close(exdiv, code, ds, float(closes[-1]))
+        if reference_price_for is None:
+            prev_close, did_map = mapped_prev_close(exdiv, code, ds, float(closes[-1]))
+        else:
+            prev_close, did_map = reference_price_for(code, ds), False
         if did_map:
             st.stats["exdiv_prev_close_mapped"] = (
                 int(st.stats.get("exdiv_prev_close_mapped", 0)) + 1
@@ -458,6 +471,7 @@ def run_buybacks_day(
     exdiv: Optional[dict] = None,
     qlib_limit_pct: Optional[float] = None,
     volume_bucket_for: Callable[[str], int | None] | None = None,
+    reference_price_for: Callable[[str, str], float] | None = None,
 ) -> None:
     """Fourth buy cause; ordinary ledger fills bounded by each channel's memory.
 
@@ -477,7 +491,10 @@ def run_buybacks_day(
             if not shares:
                 on_reclaim(st, code, reason, 0)
                 continue
-            prev, _ = mapped_prev_close(exdiv, code, ds, float(closes[-1]))
+            if reference_price_for is None:
+                prev, _ = mapped_prev_close(exdiv, code, ds, float(closes[-1]))
+            else:
+                prev = reference_price_for(code, ds)
             limits = book_limit_prices(code, prev, names, qlib_limit_pct=qlib_limit_pct)
             if limits is None:
                 st.stats["skip_unknown_board"] += 1
@@ -544,6 +561,24 @@ def run_eod_exits(st, *, day, ds, bars, eod_exit, hold_modes, exdiv=None):
         del hold_modes[key]
 
 
+def require_market_marks(
+    st: SimState,
+    *,
+    ds: str,
+    day,
+    mark_bars: dict[str, pd.DataFrame],
+    mark_source_for: Callable[[str], str] | None = None,
+) -> None:
+    """Validate all held marks before any equity/EOD writes, regardless of fills."""
+    for code, lots in st.positions.items():
+        if not lots:
+            continue
+        mark = market_close_mark(mark_bars.get(code), day)
+        if mark is None or not math.isfinite(mark) or mark <= 0:
+            source = mark_source_for(code) if mark_source_for is not None else "raw_daily"
+            raise ValueError(f"missing valid raw mark code={code} date={ds} domain=none path={source}")
+
+
 def append_equity_and_eod_marks(
     st: SimState,
     *,
@@ -551,12 +586,17 @@ def append_equity_and_eod_marks(
     day,
     calendar_last,
     mark_bars: dict[str, pd.DataFrame],
+    require_market_mark: bool = False,
+    mark_source_for: Callable[[str], str] | None = None,
 ) -> None:
     """Append equity point; on last calendar day emit EOD_MARK trades.
 
     Mark close is resolved once per code (not per lot): same data-driven
     close for every lot; ``pos.cost`` only when no on/prior bar exists.
     """
+    if require_market_mark:
+        require_market_marks(st, ds=ds, day=day, mark_bars=mark_bars,
+                             mark_source_for=mark_source_for)
     eq = st.cash
     if st.exdiv_economics is not None:
         eq += st.exdiv_economics.receivable_total
