@@ -236,6 +236,8 @@ def simulate(
     min_cost: Optional[float] = None,
     index_block_new=None,
     stop_fill: Optional[str] = None,
+    fix_s11_exit_domain: bool = False,
+    signal_bars_front: dict[str, pd.DataFrame] | None = None,
 ) -> SimState:
     """核心日循环。bars/pool_days 可由测试注入；run() 负责从湖与 CSV 加载。
 
@@ -244,6 +246,19 @@ def simulate(
     默认 None 保留原行为，事件配合 raw bars 使用，不从 exdiv 的 k 推断权益。
     """
     del pos_trail
+    if signal_bars_front is not None and not fix_s11_exit_domain:
+        raise ValueError("signal_bars_front requires version11 + fix_s11_exit_domain=True")
+    if fix_s11_exit_domain:
+        if normalize_csv_strategy(strategy) != "version11":
+            raise ValueError("fix_s11_exit_domain is supported only by version11")
+        if signal_bars_front is None:
+            raise ValueError("fix_s11_exit_domain requires independent signal_bars_front")
+        from backtest.research.s11_exit_domain import validate_signal_bars
+
+        validate_signal_bars(
+            bars, signal_bars_front, start=start, end=end,
+            required_codes={c for codes in pool_days.values() for c in codes},
+        )
     hooks = prepare_strategy_hooks(
         strategy,
         stop_pct=stop_pct,
@@ -541,7 +556,9 @@ def simulate(
             )
 
         run_eod_exits(st, day=day, ds=ds, bars=bars, eod_exit=hooks.get("eod_exit"),
-                      hold_modes=hold_modes, exdiv=exdiv)
+                      hold_modes=hold_modes, exdiv=exdiv,
+                      **({"signal_bars_front": signal_bars_front, "strategy": strategy,
+                          "fix_s11_exit_domain": True} if fix_s11_exit_domain else {}))
         append_equity_and_eod_marks(
             st,
             ds=ds,
@@ -590,7 +607,13 @@ def run(
     min_cost: Optional[float] = None,
     stop_fill: Optional[str] = None,
     strict_pool: bool = False,
+    fix_s11_exit_domain: bool = False,
 ) -> SimState:
+    if fix_s11_exit_domain:
+        if normalize_csv_strategy(strategy) != "version11":
+            raise ValueError("fix_s11_exit_domain is supported only by version11")
+        if (dividend_type != "none" or qlib_data_root is not None):
+            raise ValueError("fix_s11_exit_domain requires raw lake execution + independent lake front")
     warn_stale_period_env()
     if normalize_csv_strategy(strategy) == "version12" and (
         dividend_type != "front" or qlib_data_root is not None
@@ -659,6 +682,14 @@ def run(
     )
     if normalize_csv_strategy(strategy) == "version12" and (missing := all_codes - bars.keys()):
         raise ValueError(f"missing front daily bars for strategy12: {sorted(missing)}")
+    signal_bars_front = None
+    signal_sources = None
+    if fix_s11_exit_domain:
+        from backtest.research.s11_exit_domain import load_signal_bars_front
+
+        signal_bars_front, signal_sources = load_signal_bars_front(
+            bars, all_codes, load_start, end, daily_root=daily_root,
+        )
     t_daily = time.perf_counter() - t_daily
     print(
         f"loaded {len(bars)}/{len(all_codes)} daily series, {len(pool_days)} pool days",
@@ -737,6 +768,8 @@ def run(
         ration=ration,
         ration_seed=ration_seed,
         pool_names_by_day=pool_names_by_day,
+        **({"fix_s11_exit_domain": True, "signal_bars_front": signal_bars_front}
+           if fix_s11_exit_domain else {}),
         exdiv=exdiv,
         scores_by_day=scores_by_day,
         topk=topk,
@@ -757,6 +790,15 @@ def run(
     st.stats["codes_missing"] = max(0, len(all_codes) - len(bars))
     if signal_bundle is not None:
         st.stats["signal_bundle_sha256"] = signal_bundle["bundle_sha256"]
+    if normalize_csv_strategy(strategy) == "version11":
+        from backtest.research.s11_exit_domain import build_run_metadata
+
+        st.run_metadata = {"s11_exit_domain": build_run_metadata(
+            enabled=fix_s11_exit_domain,
+            execution_domain="qlib_adjusted" if use_qlib_bins else dividend_type,
+            daily_source="qlib_day" if use_qlib_bins else "lake",
+            exdiv=exdiv, source_metadata=signal_sources, raw_bars=bars,
+        )}
     return st
 
 
@@ -827,6 +869,10 @@ def main(argv: Optional[list] = None) -> int:
         "--strict-pool", action="store_true",
         help="validate pool CSVs before loading bars (default off: permissive parser)",
     )
+    ap.add_argument(
+        "--fix-s11-exit-domain", action="store_true",
+        help="version11 EOD exits use independent lake front; raw lake fills/marks (default OFF)",
+    )
     args = ap.parse_args(argv if argv is not None else None)
     pool_dir = resolve_research_pool_dir(args.strategy, args.pool_dir, repo=REPO)
     book = engine_book(args.strategy)
@@ -858,6 +904,7 @@ def main(argv: Optional[list] = None) -> int:
         sell_cost_rate=QLIB_CLOSE_COST if args.qlib_cost else None,
         min_cost=QLIB_MIN_COST if args.qlib_cost else None,
         strict_pool=args.strict_pool,
+        fix_s11_exit_domain=args.fix_s11_exit_domain,
         **csv_run_kwargs_from_args(args),
     )
     engine = f"csv_daily_{book}"
@@ -871,7 +918,8 @@ def main(argv: Optional[list] = None) -> int:
         emit_run_manifest=args.emit_run_manifest,
         signal_bundle_sha256=st.stats.get("signal_bundle_sha256"),
         manifest_config=(
-            {**vars(args), "pool_dir": pool_dir, "out_dir": out_dir}
+            {**vars(args), "pool_dir": pool_dir, "out_dir": out_dir,
+             **getattr(st, "run_metadata", {})}
             if args.emit_run_manifest else None
         ),
     )

@@ -291,10 +291,16 @@ def write_run_artifacts(
         text + "\n" + help_lock, encoding="utf-8", newline="\n"
     )
     if emit_run_manifest:
+        from bt_contract import canonical_json_bytes
         from bt_contract.run_manifest import write_bt_run_manifest
 
         if manifest_config is None:
             raise ValueError("emit_run_manifest requires resolved manifest_config")
+        metadata_paths = []
+        if metadata := getattr(st, "run_metadata", None):
+            metadata_path = out_dir / "run-metadata.json"
+            metadata_path.write_bytes(canonical_json_bytes(metadata))
+            metadata_paths.append(metadata_path)
         write_bt_run_manifest(
             out_dir / "run-manifest.json",
             strategy=manifest_config["strategy"],
@@ -303,7 +309,8 @@ def write_run_artifacts(
             participation_rate=manifest_config.get("participation_rate"),
             signal_bundle_sha256=signal_bundle_sha256,
             config=manifest_config,
-            artifacts=[out_dir / name for name in ("trades.csv", "daily_equity.csv", "summary.txt")],
+            artifacts=[out_dir / name for name in ("trades.csv", "daily_equity.csv", "summary.txt")]
+            + metadata_paths,
         )
     print(f"wrote {out_dir}", flush=True)
     return out_dir

@@ -633,6 +633,8 @@ def simulate(
     min_cost: Optional[float] = None,
     fix_s12_price_domain: bool = False,
     s12_price_context=None,
+    fix_s11_exit_domain: bool = False,
+    signal_bars_front: dict[str, pd.DataFrame] | None = None,
 ) -> SimState:
     """Opt-in cap uses caller-attested completed minutes; daily volume is unused.
 
@@ -651,6 +653,19 @@ def simulate(
         s12_price_context.validate_simulation(minute_bars, daily_bars, pool_days, start, end)
     elif s12_price_context is not None:
         raise ValueError("s12_price_context requires fix_s12_price_domain=True")
+    if signal_bars_front is not None and not fix_s11_exit_domain:
+        raise ValueError("signal_bars_front requires version11 + fix_s11_exit_domain=True")
+    if fix_s11_exit_domain:
+        if normalize_csv_strategy(strategy) != "version11":
+            raise ValueError("fix_s11_exit_domain is supported only by version11")
+        if signal_bars_front is None:
+            raise ValueError("fix_s11_exit_domain requires independent signal_bars_front")
+        from backtest.research.s11_exit_domain import validate_signal_bars
+
+        validate_signal_bars(
+            daily_bars, signal_bars_front, start=start, end=end,
+            required_codes={c for codes in pool_days.values() for c in codes},
+        )
     hooks = prepare_strategy_hooks(
         strategy,
         stop_pct=stop_pct,
@@ -1005,7 +1020,9 @@ def simulate(
             )
 
         run_eod_exits(st, day=day, ds=ds, bars=daily_bars, eod_exit=hooks.get("eod_exit"),
-                      hold_modes=hold_modes, exdiv=exdiv)
+                      hold_modes=hold_modes, exdiv=exdiv,
+                      **({"signal_bars_front": signal_bars_front, "strategy": strategy,
+                          "fix_s11_exit_domain": True} if fix_s11_exit_domain else {}))
         if fix_s12_price_domain:
             require_market_marks(
                 st, ds=ds, day=day, mark_bars=daily_bars,
@@ -1072,7 +1089,14 @@ def run(
     strict_pool: bool = False,
     fix_s12_price_domain: bool = False,
     s12_price_transform_file: Path | None = None,
+    fix_s11_exit_domain: bool = False,
 ) -> SimState:
+    if fix_s11_exit_domain:
+        if normalize_csv_strategy(strategy) != "version11":
+            raise ValueError("fix_s11_exit_domain is supported only by version11")
+        if (dividend_type != "none" or minute_source != "lake" or daily_source != "lake"
+            or qlib_1min_root is not None or qlib_day_root is not None):
+            raise ValueError("fix_s11_exit_domain requires raw lake execution + independent lake front")
     if str(stop_fill or "").strip().lower() == "close":
         raise SystemExit(
             "--stop-fill close is daily EOD close only; "
@@ -1144,6 +1168,8 @@ def run(
         f"pool {min(pool_days)}..{max(pool_days)} ({len(pool_days)} days)",
         flush=True,
     )
+    signal_bars_front = None
+    signal_sources = None
     s12_price_context = None
     if fix_s12_price_domain:
         from backtest.research.signal_price_domain import load_s12_price_context
@@ -1177,6 +1203,12 @@ def run(
         )
         if book == "version12" and (missing := all_codes - daily.keys()):
             raise ValueError(f"missing front daily bars for strategy12: {sorted(missing)}")
+        if fix_s11_exit_domain:
+            from backtest.research.s11_exit_domain import load_signal_bars_front
+
+            signal_bars_front, signal_sources = load_signal_bars_front(
+                daily, all_codes, load_start, end,
+            )
         t_daily = time.perf_counter() - t_daily
         cache_status: dict = {}
         t_minute = time.perf_counter()
@@ -1294,6 +1326,8 @@ def run(
         ration=ration,
         ration_seed=ration_seed,
         pool_names_by_day=pool_names_by_day,
+        **({"fix_s11_exit_domain": True, "signal_bars_front": signal_bars_front}
+           if fix_s11_exit_domain else {}),
         exdiv=exdiv,
         scores_by_day=scores_by_day,
         topk=topk,
@@ -1322,6 +1356,17 @@ def run(
         st.stats["daily_signal_domain"] = "front"
         st.stats["minute_fill_domain"] = dividend_type
         st.stats["price_domain"] = dividend_type
+    if book == "version11":
+        from backtest.research.s11_exit_domain import build_run_metadata
+
+        metadata = build_run_metadata(
+            enabled=fix_s11_exit_domain, execution_domain=dividend_type,
+            daily_source=daily_source, minute_source=minute_source,
+            exdiv=exdiv, source_metadata=signal_sources, raw_bars=daily,
+        )
+        if daily_source == "qlib_day":
+            metadata["mark_domain"] = "qlib_adjusted"
+        st.run_metadata = {"s11_exit_domain": metadata}
     return st
 
 
@@ -1387,6 +1432,10 @@ def main(argv: Optional[list] = None) -> int:
         "--strict-pool", action="store_true",
         help="validate pool CSVs before loading bars (default off: permissive parser)",
     )
+    ap.add_argument(
+        "--fix-s11-exit-domain", action="store_true",
+        help="version11 EOD exits use independent lake front; raw lake fills/marks (default OFF)",
+    )
     args = ap.parse_args(argv if argv is not None else None)
     pool_dir = resolve_research_pool_dir(args.strategy, args.pool_dir, repo=REPO)
     minute_source = "qlib_1min" if args.qlib_1min_root else args.minute_source
@@ -1418,6 +1467,7 @@ def main(argv: Optional[list] = None) -> int:
         sell_cost_rate=QLIB_CLOSE_COST if args.qlib_cost else None,
         min_cost=QLIB_MIN_COST if args.qlib_cost else None,
         strict_pool=args.strict_pool,
+        fix_s11_exit_domain=args.fix_s11_exit_domain,
         **csv_run_kwargs_from_args(args),
     )
     book = engine_book(args.strategy)
@@ -1446,7 +1496,8 @@ def main(argv: Optional[list] = None) -> int:
         signal_bundle_sha256=st.stats.get("signal_bundle_sha256"),
         manifest_config=(
             {**vars(args), "pool_dir": pool_dir, "out_dir": out_dir,
-             "minute_source": minute_source, "daily_source": daily_source}
+             "minute_source": minute_source, "daily_source": daily_source,
+             **getattr(st, "run_metadata", {})}
             if args.emit_run_manifest else None
         ),
     )
