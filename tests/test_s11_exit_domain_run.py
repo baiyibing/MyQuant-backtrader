@@ -1,11 +1,12 @@
 """X-03 public run/CLI routing, independent lake input, and OFF isolation."""
 
+import hashlib
+import json
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
-
 from backtest.research import csv_daily_backtest as daily
 from backtest.research import csv_minute_backtest as minute
 
@@ -45,7 +46,7 @@ def lake(tmp_path, monkeypatch):
     for engine in (daily, minute):
         monkeypatch.setattr(engine, "load_pool_day_map", lambda *a, **k: {START: [CODE]})
         monkeypatch.setattr(engine, "load_pool_names_by_day", lambda *a, **k: {})
-        monkeypatch.setattr(engine, "load_exdiv_ratios", lambda *a, **k: {(CODE, "20240903"): .9})
+        monkeypatch.setattr(engine, "load_exdiv_ratios", lambda *a, **k: {CODE: {"20240903": .9}})
     return pool, paths
 
 
@@ -160,3 +161,50 @@ def test_cli_help_advertises_default_off(engine, capsys):
         engine.main(["--strategy", "version11", "--help"])
     assert exc.value.code == 0
     assert "--fix-s11-exit-domain" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("engine", [daily, minute])
+@pytest.mark.parametrize("enabled", [False, True])
+def test_cli_writes_domain_metadata_outside_legacy_stats(engine, enabled, lake, tmp_path):
+    pool, paths = lake
+    out = tmp_path / "out"
+    args = ["--strategy", "version11", "--pool-dir", str(pool),
+            "--start", START, "--end", END, "--cash-total", "100000",
+            "--daily-quota", "5000", "--out-dir", str(out), "--emit-run-manifest"]
+    if enabled:
+        args.append("--fix-s11-exit-domain")
+    else:
+        paths["front"].unlink()
+    assert engine.main(args) == 0
+    manifest = json.loads((out / "run-manifest.json").read_text())
+    metadata_path = out / "run-metadata.json"
+    metadata = json.loads(metadata_path.read_text())["s11_exit_domain"]
+    assert any(row["path"] == metadata_path.as_posix()
+               and row["sha256"] == hashlib.sha256(metadata_path.read_bytes()).hexdigest()
+               for row in manifest["artifacts"])
+    assert metadata["fix_s11_exit_domain"] is enabled
+    assert metadata["exit_signal_domain"] == ("front" if enabled else "legacy_execution_bars")
+    assert metadata["execution_reference_policy"] == "legacy_none_reference_map"
+    assert metadata["execution_reference_map_loaded"] is True
+    assert metadata["signal_exdiv_remap"] is (not enabled)
+    assert metadata["entry_signal_domain"] == "front"
+    assert metadata["exit_sma_includes_today"] is True
+    if enabled:
+        sources = metadata["sources"]
+        assert len(sources["raw_sources_sha256"]) == len(sources["front_sources_sha256"]) == 64
+    else:
+        assert metadata["sources"] is None
+
+
+@pytest.mark.parametrize("domain", ["front", "back"])
+def test_off_daily_adjusted_metadata_reports_actual_domain(domain, lake):
+    pool, paths = lake
+    if domain == "back":
+        path = Path(str(paths["front"]).replace("dividend_type=front", "dividend_type=back"))
+        path.parent.mkdir(parents=True)
+        path.write_bytes(paths["front"].read_bytes())
+    state = run(daily, pool, dividend_type=domain)
+    metadata = state.run_metadata["s11_exit_domain"]
+    assert metadata["fill_domain"] == metadata["mark_domain"] == domain
+    assert metadata["signal_exdiv_remap"] is False
+    assert metadata["execution_reference_loader_called"] is False

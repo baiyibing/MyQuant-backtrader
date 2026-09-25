@@ -634,7 +634,7 @@ def simulate(
     fix_s12_price_domain: bool = False,
     s12_price_context=None,
     fix_s11_exit_domain: bool = False,
-    signal_bars_front: Optional[dict[str, pd.DataFrame]] = None,
+    signal_bars_front: dict[str, pd.DataFrame] | None = None,
 ) -> SimState:
     """Opt-in cap uses caller-attested completed minutes; daily volume is unused.
 
@@ -1356,6 +1356,17 @@ def run(
         st.stats["daily_signal_domain"] = "front"
         st.stats["minute_fill_domain"] = dividend_type
         st.stats["price_domain"] = dividend_type
+    if book == "version11":
+        from backtest.research.s11_exit_domain import build_run_metadata
+
+        metadata = build_run_metadata(
+            enabled=fix_s11_exit_domain, execution_domain=dividend_type,
+            daily_source=daily_source, minute_source=minute_source,
+            exdiv=exdiv, source_metadata=signal_sources, raw_bars=daily,
+        )
+        if daily_source == "qlib_day":
+            metadata["mark_domain"] = "qlib_adjusted"
+        st.run_metadata = {"s11_exit_domain": metadata}
     return st
 
 
@@ -1485,7 +1496,8 @@ def main(argv: Optional[list] = None) -> int:
         signal_bundle_sha256=st.stats.get("signal_bundle_sha256"),
         manifest_config=(
             {**vars(args), "pool_dir": pool_dir, "out_dir": out_dir,
-             "minute_source": minute_source, "daily_source": daily_source}
+             "minute_source": minute_source, "daily_source": daily_source,
+             **getattr(st, "run_metadata", {})}
             if args.emit_run_manifest else None
         ),
     )

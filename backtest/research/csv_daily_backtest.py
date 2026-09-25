@@ -237,7 +237,7 @@ def simulate(
     index_block_new=None,
     stop_fill: Optional[str] = None,
     fix_s11_exit_domain: bool = False,
-    signal_bars_front: Optional[dict[str, pd.DataFrame]] = None,
+    signal_bars_front: dict[str, pd.DataFrame] | None = None,
 ) -> SimState:
     """核心日循环。bars/pool_days 可由测试注入；run() 负责从湖与 CSV 加载。
 
@@ -790,6 +790,15 @@ def run(
     st.stats["codes_missing"] = max(0, len(all_codes) - len(bars))
     if signal_bundle is not None:
         st.stats["signal_bundle_sha256"] = signal_bundle["bundle_sha256"]
+    if normalize_csv_strategy(strategy) == "version11":
+        from backtest.research.s11_exit_domain import build_run_metadata
+
+        st.run_metadata = {"s11_exit_domain": build_run_metadata(
+            enabled=fix_s11_exit_domain,
+            execution_domain="qlib_adjusted" if use_qlib_bins else dividend_type,
+            daily_source="qlib_day" if use_qlib_bins else "lake",
+            exdiv=exdiv, source_metadata=signal_sources, raw_bars=bars,
+        )}
     return st
 
 
@@ -909,7 +918,8 @@ def main(argv: Optional[list] = None) -> int:
         emit_run_manifest=args.emit_run_manifest,
         signal_bundle_sha256=st.stats.get("signal_bundle_sha256"),
         manifest_config=(
-            {**vars(args), "pool_dir": pool_dir, "out_dir": out_dir}
+            {**vars(args), "pool_dir": pool_dir, "out_dir": out_dir,
+             **getattr(st, "run_metadata", {})}
             if args.emit_run_manifest else None
         ),
     )
