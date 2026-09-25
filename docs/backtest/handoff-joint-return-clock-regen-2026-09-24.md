@@ -63,6 +63,7 @@ E 步若仍 0 成交 → 停，回 qlib 查时钟，不交 Mode B（上游交接
 - 执行实录：B ~3min；C1 rule 6h21m；C2 freeze ~4min（两次秒级失败已修：freeze 用富字段 metadata + plans uri 逐字重登记）；C3 portfolio 5h58m（D 盘 ENOSOC 作废一轮后重跑）；收窄/回放见 §2 各步。
 - **同分钟 tie-break 方差（新发现）**：两包 intents 语义与序列逐位全等（仅 hash 血统不同）时，成交仍可漂移（3631 vs 4475）——根因是同分钟共享余额按 **intent_id 序** 瓜分（#187 语义契约），跨重生成 hash 不同 → day-1 部分成交拆分不同 → 持仓链蝴蝶效应。非引擎回归（旧包×新引擎复放 = 4475 整）。策略经济性对此稳健（net 59.1% vs 59.3%）。**建议**：MQ/BT 后续讨论把同分钟并列 tie-break 语义化（如 (instrument, qty) 序或轮转），否则跨包对账永远吃这个方差。
 - marks 跨包复用要点：`reference_marks` 按 intent_id 挂证，重映射需等长替换 1891 键 + 按引擎约定（`joint_return_replay.py:653`，`content_hash(bundle 去字段)`）重算 bars seal；bars `content_sha256` 是强校验，不能只改键不算 seal。
+- **bars 格式约定（2026-09-26 人裁，随本交接生效）**：此后 MQ 导出合同包的 bars **默认走 sealed qlib_bin pack**（`write_pack` + byte-seal），JSON 仅存档不用于回放热路径。已验证：合同级 614 pack 的 bin 版复放三表（fills/orders/daily_nav）与 JSON 版**逐字节一致**，全链 118s vs JSON 版 ~26min（13×）。回执 `backtest_output/joint-return-v1-contract-bin/RECEIPT_CONTRACT_BIN_SWITCH.md`；转换器 `MyQuant/runs/…/_convert_contract_bin_20260926.py`。MQ 侧导出待接（当前仍出 JSON，本仓先手动转）。
 
 ## 7. 维护
 
