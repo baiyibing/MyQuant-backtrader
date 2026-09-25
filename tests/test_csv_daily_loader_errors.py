@@ -81,7 +81,12 @@ def test_load_daily_bars_omits_missing_symbol_and_keeps_valid_sibling(tmp_path):
     )
 
     assert set(result) == {VALID_CODE}
-    pd.testing.assert_frame_equal(result[VALID_CODE], expected)
+    # pandas >=2.0 resolves to_datetime(unit="ms") to ns again on newer builds;
+    # compare in a fixed unit so the test is not pandas-patch-version fragile.
+    got = result[VALID_CODE].copy()
+    got.index = got.index.as_unit("ns")
+    expected.index = expected.index.as_unit("ns")
+    pd.testing.assert_frame_equal(got, expected)
 
 
 def test_load_daily_bars_corrupt_symbol_fails_closed(tmp_path):

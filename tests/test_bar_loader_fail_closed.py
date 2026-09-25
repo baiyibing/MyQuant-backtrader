@@ -137,7 +137,12 @@ def test_load_minute_from_lake_does_not_drop_corrupt_sibling(tmp_path):
     readable = ashare_bars.load_minute_from_lake(
         {CODE}, DAY, DAY, workers=1, lake_root=tmp_path, include_volume=False
     )
-    pd.testing.assert_frame_equal(readable[CODE], expected)
+    # pandas >=2.0 resolves to_datetime(unit="ms") to ns again on newer builds;
+    # compare in a fixed unit so the test is not pandas-patch-version fragile.
+    got = readable[CODE].copy()
+    got.index = got.index.as_unit("ns")
+    expected.index = expected.index.as_unit("ns")
+    pd.testing.assert_frame_equal(got, expected)
     path = _partition_file(tmp_path, OTHER_CODE)
     path.write_bytes(b"not a parquet")
 
