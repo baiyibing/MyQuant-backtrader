@@ -29,6 +29,15 @@ PM_OPEN, PM_CLOSE = 13 * 60, 15 * 60
 CACHE_ROOT = Path(__file__).resolve().parents[2] / "backtest_output" / "bar_cache"
 
 
+class MinuteBarReadError(RuntimeError):
+    """An existing minute partition could not be read."""
+
+    def __init__(self, code: str, path: Path) -> None:
+        self.code = code
+        self.path = path
+        super().__init__(f"failed to read minute bars for {code}: {path}")
+
+
 @dataclass(frozen=True)
 class SessionBars:
     minute: dict[str, object]
@@ -235,10 +244,7 @@ def _load_minute_compact(
             done += 1
             _progress(done, total, "lake 1m")
             code = futs[fut]
-            try:
-                frame = fut.result()
-            except Exception:
-                continue
+            frame = fut.result()
             if frame is not None and not getattr(frame, "empty", True):
                 out[code] = frame
     return out
@@ -347,10 +353,10 @@ def read_lake_minute_ohlc(code: str, root: Path, start: str, end: str, *, includ
             raise ValueError(f"minute volume required: {path}")
         table = pq.read_table(path, columns=columns + (["volume"] if has_volume else []))
         table = table.filter((pc.field("time") >= t0) & (pc.field("time") <= t1))
-    except Exception:
+    except Exception as exc:
         if include_volume:
             raise
-        return None
+        raise MinuteBarReadError(code, path) from exc
     if table.num_rows == 0:
         return None
     utc = pd.to_datetime(table["time"].to_numpy(), unit="ms", utc=True)
@@ -401,12 +407,7 @@ def load_minute_from_lake(codes: set[str] | list[str], start: str, end: str, *, 
             done += 1
             _progress(done, total, "minute lake")
             code = futs[fut]
-            try:
-                frame = fut.result()
-            except Exception:
-                if include_volume:
-                    raise
-                continue
+            frame = fut.result()
             if frame is not None and not frame.empty:
                 out[code] = frame
     return out
