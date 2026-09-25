@@ -536,24 +536,40 @@ def run_buybacks_day(
             st.daily_quota_used = quota_used
 
 
-def run_eod_exits(st, *, day, ds, bars, eod_exit, hold_modes, exdiv=None):
+def run_eod_exits(
+    st, *, day, ds, bars, eod_exit, hold_modes, exdiv=None,
+    signal_bars_front=None, strategy=None, fix_s11_exit_domain=False,
+):
     """Evaluate opt-in book exits after buys; only schedule the next open.
 
     Keep book state outside Position so existing ledger snapshots stay identical.
     The entry index and lot identify each holding across sells and re-entries.
     """
+    if signal_bars_front is not None or fix_s11_exit_domain:
+        from backtest.research.csv_strategy_books import normalize_csv_strategy
+
+        if (not fix_s11_exit_domain or signal_bars_front is None
+                or normalize_csv_strategy(strategy) != "version11"):
+            raise ValueError("signal_bars_front requires version11 + fix_s11_exit_domain=True")
     if not callable(eod_exit):
         return
     live = set()
     for code, lots in st.positions.items():
-        got = day_bar_and_prev_closes(bars[code], day) if code in bars else None
+        if signal_bars_front is None:
+            got = day_bar_and_prev_closes(bars[code], day) if code in bars else None
+        else:
+            got = day_bar_and_prev_closes(signal_bars_front[code], day)
         for pos in lots:
             key = (code, pos.entry_idx, pos.lot_id)
             live.add(key)
             if got is None or pos.pending_exit:
                 continue
             row, closes = got
-            previous, _ = mapped_prev_close(exdiv, code, ds, closes[-1])
+            if signal_bars_front is None:
+                previous, _ = mapped_prev_close(exdiv, code, ds, closes[-1])
+            else:
+                # INITIAL uses strictly pre-T front; only SMA's input appends T.
+                previous = closes[-1]
             decision = eod_exit(
                 closes + [float(row["close"])], previous, hold_modes.get(key)
             )

@@ -5,10 +5,10 @@ from decimal import ROUND_HALF_UP, Decimal
 import numpy as np
 import pandas as pd
 import pytest
-
 from backtest.research import csv_daily_backtest as daily
 from backtest.research import csv_minute_backtest as minute
-from backtest.research import strategy11_rules
+from backtest.research import csv_simulate_loop, strategy11_rules
+from backtest.research.ashare_exdiv_economics import ExDivEvent
 
 CODE = "600000.SH"
 T, EX, NEXT = "20240902", "20240903", "20240904"
@@ -112,3 +112,149 @@ def test_entry_exday_initial_uses_strict_front_previous_without_remapping(
     assert len(fills(state)) == 1 and fills(state)[0]["date"] == T
     assert state.positions[CODE][0].pending_exit == reason
     assert observed == [([9.] * 5 + [close], 9., None)]
+
+
+@pytest.mark.parametrize("engine", [daily, minute], ids=["daily", "minute"])
+@pytest.mark.parametrize("close,reason", [(9.375, ""), (9.365, "ma_signal:SMA5")])
+def test_hold_sma_equal_keeps_lot_and_true_break_sells_next_raw_open(engine, close, reason):
+    raw, _ = discontinuity()
+    front = bars_from_closes([9.] * 4 + [9.5, 10., close, 9.7])
+    state = simulate(engine, raw, front, end=EX, exdiv={CODE: {EX: .9}})
+    assert len(fills(state)) == 1
+    assert state.positions[CODE][0].pending_exit == reason
+    after = simulate(engine, raw, front, exdiv={CODE: {EX: .9}})
+    if reason:
+        assert [(t["date"], t["side"], t["price"]) for t in fills(after)][1:] == [
+            (NEXT, "SELL", 9.7),
+        ]
+        assert fills(after)[1]["reason"] == reason
+    else:
+        assert len(fills(after)) == 1 and after.positions[CODE][0].pending_exit == ""
+
+
+@pytest.mark.parametrize("engine", [daily, minute], ids=["daily", "minute"])
+@pytest.mark.parametrize("path", ["hold", "sma_break", "initial_exit"])
+def test_entire_fsm_raw_fills_and_nav_are_invariant_to_front_anchor(engine, path, monkeypatch):
+    raw, front = discontinuity()
+    if path == "sma_break":
+        front.loc[EX, PRICE_COLUMNS] = 8.5
+    elif path == "initial_exit":
+        front.loc[T, PRICE_COLUMNS] = 9.
+    original = strategy11_rules.eod_exit
+    decisions = []
+
+    def capture(*args, **kwargs):
+        decision = original(*args, **kwargs)
+        decisions.append((decision.hold_mode, decision.reason))
+        return decision
+
+    monkeypatch.setattr(strategy11_rules, "eod_exit", capture)
+    baseline = simulate(engine, raw, front, exdiv={CODE: {EX: .9}})
+    baseline_decisions = list(decisions)
+    assert [t["side"] for t in fills(baseline)] == (
+        ["BUY"] if path == "hold" else ["BUY", "SELL"]
+    )
+    for factor, offset in ((.37, 0.), (1.7, 2.3)):
+        decisions.clear()
+        transformed = front.copy()
+        transformed[PRICE_COLUMNS] = transformed[PRICE_COLUMNS] * factor + offset
+        state = simulate(engine, raw, transformed, exdiv={CODE: {EX: .9}})
+        assert decisions == baseline_decisions
+        assert (state.trades, state.cash, state.positions, state.equity_curve) == (
+            baseline.trades, baseline.cash, baseline.positions, baseline.equity_curve,
+        )
+
+
+@pytest.mark.parametrize("engine", [daily, minute], ids=["daily", "minute"])
+@pytest.mark.parametrize("cutoff", [T, EX])
+def test_future_front_and_raw_perturbation_cannot_change_prefix(engine, cutoff):
+    raw, front = discontinuity()
+    baseline = simulate(engine, raw, front, end=cutoff, exdiv={CODE: {EX: .9}})
+    changed_raw, changed_front = raw.copy(), front.copy()
+    future = changed_raw.index > pd.Timestamp(cutoff)
+    changed_raw.loc[future, PRICE_COLUMNS] *= 10
+    changed_front.loc[future, PRICE_COLUMNS] = changed_front.loc[future, PRICE_COLUMNS] * .37 + 4
+    state = simulate(engine, changed_raw, changed_front, end=cutoff, exdiv={CODE: {EX: .9}})
+    assert (state.trades, state.cash, state.positions, state.equity_curve) == (
+        baseline.trades, baseline.cash, baseline.positions, baseline.equity_curve,
+    )
+
+
+@pytest.mark.parametrize("engine", [daily, minute], ids=["daily", "minute"])
+def test_natural_sma_warmup_is_not_extended_or_filled_from_future(engine):
+    raw = bars_from_closes([10., 10.5, 9.45, 9.7], start="20240830")
+    front = bars_from_closes([9., 9.45, 9.1, 9.2], start="20240830")
+    state = simulate(engine, raw, front, exdiv={CODE: {EX: .9}})
+    # Only four genuine observations exist; lower HOLD closes are not INITIAL retests.
+    assert len(fills(state)) == 1
+    assert state.positions[CODE][0].pending_exit == ""
+
+
+@pytest.mark.parametrize("engine", [daily, minute], ids=["daily", "minute"])
+def test_exdiv_exec_reference_once_and_front_previous_never_remapped(engine, monkeypatch):
+    raw, front = discontinuity()
+    execution_map = engine.mapped_prev_close
+    execution_calls = []
+    signal_previous = []
+    original_eod = strategy11_rules.eod_exit
+
+    def capture_map(exdiv, code, day, previous):
+        result = execution_map(exdiv, code, day, previous)
+        if day == EX:
+            execution_calls.append((previous, result))
+        return result
+
+    def capture_eod(closes, previous, hold_mode=None):
+        signal_previous.append(previous)
+        return original_eod(closes, previous, hold_mode)
+
+    # This helper also maps pool references, but there is no EX-day pool here.
+    # A call during EX EOD would prove a forbidden second signal-domain map.
+    helper_map = csv_simulate_loop.mapped_prev_close
+
+    def guard_helper(exdiv, code, day, previous):
+        assert day != EX, "front EOD previous must never use execution exdiv mapping"
+        return helper_map(exdiv, code, day, previous)
+
+    monkeypatch.setattr(engine, "mapped_prev_close", capture_map)
+    monkeypatch.setattr(csv_simulate_loop, "mapped_prev_close", guard_helper)
+    monkeypatch.setattr(strategy11_rules, "eod_exit", capture_eod)
+    state = simulate(engine, raw, front, end=EX, exdiv={CODE: {EX: .9}})
+    assert len(execution_calls) == 1
+    assert execution_calls[0][0] == 10.5
+    assert execution_calls[0][1][0] == pytest.approx(9.45)
+    assert execution_calls[0][1][1] is True
+    assert signal_previous == [9., 9.45]
+    assert state.stats["exdiv_adjusted_lots"] == 1
+    assert state.stats["exdiv_prev_close_mapped"] == 1
+    lot, = state.positions[CODE]
+    assert lot.cost == pytest.approx((10.5 if engine is daily else 10.2) * .9)
+    assert lot.shares == 400
+
+
+@pytest.mark.parametrize("engine", [daily, minute], ids=["daily", "minute"])
+@pytest.mark.parametrize("bonus,cash,ex_price", [(0, 1., 9.), (1, 0., 5.), (1, 1., 4.5)])
+def test_reference_mapping_creates_no_rights_and_explicit_economics_applies_once(
+    engine, bonus, cash, ex_price,
+):
+    raw = bars_from_closes([9.9] * 5 + [10., ex_price, ex_price])
+    front = bars_from_closes([ex_price * .99] * 5 + [ex_price] * 3)
+    exdiv = {CODE: {EX: ex_price / 10.}}
+    off = simulate(engine, raw, front, exdiv=exdiv)
+    lot, = off.positions[CODE]
+    assert (lot.shares, money(off.cash)) == (500, Decimal("94995.00"))
+    assert off.exdiv_economics is None
+    assert money(off.equity_curve[-1][1]) == money(off.cash + 500 * ex_price)
+    events = {(CODE, EX): ExDivEvent("s11-rights", bonus, cash, EX, NEXT)}
+    on_ex = simulate(engine, raw, front, end=EX, exdiv=exdiv, exdiv_economics=events)
+    assert on_ex.exdiv_economics.receivable_total == 500 * cash
+    assert money(on_ex.cash) == Decimal("94995.00")
+    paid = simulate(engine, raw, front, exdiv=exdiv, exdiv_economics=events)
+    assert paid.positions[CODE][0].shares == 500 * (1 + bonus)
+    assert money(paid.cash) == money(94995 + 500 * cash)
+    assert paid.exdiv_economics.receivable_total == 0
+    assert paid.exdiv_economics.applied_ids == {"s11-rights"}
+    assert paid.stats["exdiv_adjusted_lots"] == 1
+    assert fills(paid) == fills(off)
+    assert money(sum(t["commission"] for t in paid.trades)) == Decimal("5.00")
+    assert all(money(equity) == Decimal("99995.00") for _, equity in paid.equity_curve)
