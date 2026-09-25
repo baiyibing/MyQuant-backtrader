@@ -25,6 +25,7 @@ from backtest.research.ashare_session import LIMIT_EPS, hit_limit_down as hit_li
 from backtest.research.ashare_volume_cap import VolumeCap
 from backtest.research.ashare_exdiv_economics import ExDivEconomics
 from backtest.research.market_layer import limit_prices
+from backtest.research.minute_audit import record_fill
 
 DEFAULT_TOTAL_CASH = 21_000_000.0
 PEAK_GAP_MIN = 15
@@ -277,6 +278,7 @@ def execute_buy(
         if shares_override is not None:
             per = notional
         supp = max(0.0, notional - per)
+    cash_before = st.cash
     st.cash -= notional + comm
     st.daily_quota_used += min(per, notional)
     st.stats["supplementary_used"] += supp
@@ -310,6 +312,7 @@ def execute_buy(
             "price_rule": "",
         }
     )
+    record_fill(st, st.trades[-1], cash_before)
     st.stats["buys"] += 1
     if lot_id > 0:
         st.stats["add_lots"] += 1
@@ -330,6 +333,7 @@ def _volume_skip(st: SimState, code: str, px: float, day, reason: str,
                       "price": px, "shares": 0, "notional": 0.0,
                       "commission": 0.0, "reason": reason, "bucket": bucket_id,
                       "session_phase": "", "price_rule": ""})
+    record_fill(st, st.trades[-1], st.cash)
 
 
 def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str, *,
@@ -387,6 +391,7 @@ def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str, *
         shares = min(shares, allocated)
     notional = shares * px
     comm = trade_commission(notional, st.sell_cost_rate, st.min_cost)
+    cash_before = st.cash
     st.cash += notional - comm
     # Human GO P2=B: annotate only after fill eligibility/price/size are settled.
     if hm is not None and not session_phase:
@@ -409,6 +414,7 @@ def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str, *
             "price_rule": price_rule,
         }
     )
+    record_fill(st, st.trades[-1], cash_before)
     if reason.startswith("stop_loss"):
         st.stats["sell_stop"] += 1
     elif reason.startswith("trail"):
