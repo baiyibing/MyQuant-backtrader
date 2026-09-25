@@ -176,14 +176,15 @@ def test_all_buy_routes_use_separate_rounded_raw_reference(channel, px, blocked)
         assert fills(run(None))  # old unrounded 1.014 computes the incorrect 1.12 limit
 
 
-@pytest.mark.parametrize("px,should_sell", [(.90, False), (.91, False), (.92, True)])
+@pytest.mark.parametrize("px,should_sell", [(.90, False), (.905, False), (.91, False), (.92, True)])
 def test_sell_uses_same_rounded_reference_at_limit_down_one_cent(monkeypatch, px, should_sell):
-    data = fixture(paths=[[(600, px)]], historical=1.014)
+    # 1.005 -> 1.01 -> limit down 0.91 blocks 0.905; unrounded 1.005 -> 0.90 would sell.
+    data = fixture(paths=[[(600, px)]], historical=1.005)
     original = minute.init_sim_state
 
     def seeded(*args, **kwargs):
         st, pending, names = original(*args, **kwargs)
-        st.positions[CODE] = [Position(CODE, 1000, 1.014, -1, 1.014)]
+        st.positions[CODE] = [Position(CODE, 1000, 1.005, -1, 1.005)]
         return st, pending, names
 
     monkeypatch.setattr(minute, "init_sim_state", seeded)
