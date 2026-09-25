@@ -42,6 +42,7 @@ from backtest.research.csv_strategy_books import (  # noqa: E402
     help_lock_all,
     help_lock_for as _help_lock_for,
     normalize_csv_strategy,
+    resolve_daily_quota,
     resolve_research_pool_dir,
     strategy6_kwargs_from_args,
 )
@@ -279,6 +280,7 @@ def simulate(
         pool_days=pool_days,
         pool_names=pool_names,
         pool_names_by_day=pool_names_by_day,
+        daily_quota=daily_quota,
     )
     if buy_cost_rate is not None:
         st.buy_cost_rate = float(buy_cost_rate)
@@ -840,7 +842,12 @@ def main(argv: Optional[list] = None) -> int:
         args.start,
         args.end,
         total_cash=args.cash_total,
-        daily_quota=args.daily_quota,
+        daily_quota=resolve_daily_quota(
+            args.strategy,
+            args.daily_quota,
+            cash_total=args.cash_total,
+            fallback_quota=DEFAULT_DAILY_QUOTA,
+        ),
         workers=args.workers,
         pool_dir=pool_dir,
         require_signal_bundle=args.require_signal_bundle,

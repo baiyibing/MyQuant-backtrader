@@ -155,7 +155,9 @@ def test_add_csv_backtest_common_args_defaults_and_end_help(tmp_path):
     assert ns.start == "20251023"
     assert ns.end == "20260909"
     assert ns.cash_total == DEFAULT_TOTAL_CASH
-    assert ns.daily_quota == 1_000_000.0
+    # CLI default is None; the money-mode pairing resolves it downstream
+    # (topk family = cash_total, other books = 1,000,000/day).
+    assert ns.daily_quota is None
     assert ns.ration == "file_order"
     assert ns.ration_seed == 0
     assert ns.workers == 16
@@ -447,3 +449,28 @@ def test_v8_daily_quota_history_keeps_allow_add(monkeypatch):
     assert st.stats["add_lots"] == 1
     assert st.stats["skip_held"] == 0
     assert [t["lot"] for t in st.trades] == [0, 1]
+
+
+def test_resolve_daily_quota_pairs_topk_family_with_cash():
+    from backtest.research.csv_strategy_books import resolve_daily_quota
+
+    assert resolve_daily_quota("topk_dropout", None, cash_total=1e8) == 1e8
+    assert resolve_daily_quota("topk", None, cash_total=5e7) == 5e7
+    assert resolve_daily_quota("topk_score_exit", None, cash_total=1e8) == 1e8
+
+
+def test_resolve_daily_quota_keeps_stock_pool_quota_default():
+    from backtest.research.csv_strategy_books import resolve_daily_quota
+
+    assert resolve_daily_quota("version8", None, cash_total=1e8) == 1_000_000.0
+    assert (
+        resolve_daily_quota("version12", None, cash_total=1e8, fallback_quota=2e6)
+        == 2e6
+    )
+
+
+def test_resolve_daily_quota_explicit_flag_wins():
+    from backtest.research.csv_strategy_books import resolve_daily_quota
+
+    assert resolve_daily_quota("topk_dropout", 2e6, cash_total=1e8) == 2e6
+    assert resolve_daily_quota("version8", 5e7, cash_total=1e8) == 5e7

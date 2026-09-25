@@ -846,15 +846,15 @@ def test_d6_book_off_byte_snapshot_with_p2_b_labels(engine, factor):
     import hashlib
     import json
 
-    # Human GO P2=B labels remain. b951bec adds minute fee stats only:
-    # buy_cost_rate, sell_cost_rate, min_cost. Removing them restores the prior
-    # minute hashes (2dbed1ca / b128ee6a). The flat-bar factor fixture now has
-    # identical daily/minute snapshots, including stats; routing is unchanged.
+    # Human GO P2=B labels remain. b951bec adds minute fee stats only
+    # (buy/sell_cost_rate, min_cost); capital pairing adds stats["daily_quota"].
+    # Removing daily_quota restores the 42554d79/4b27fbaa/1c60523a pins; routing
+    # unchanged. The flat-bar factor fixture keeps identical daily/minute snapshots.
     expected = {
-        (daily, False): "42554d791ff405f3f90fd186eea84f0713e34925e73b29fe01f733893e00c3b8",
-        (daily, True): "4b27fbaa6cf3d060016f258145f9290b4fb08b6e02f21b053afb2279177cb163",
-        (minute, False): "1c60523acf005bf76da625ba3a7836bae0a494da66112a3f1842d45669f70472",
-        (minute, True): "4b27fbaa6cf3d060016f258145f9290b4fb08b6e02f21b053afb2279177cb163",
+        (daily, False): "450705c0837614cba645109268da536f011d6baf7c36b570e8563c96e8cf3696",
+        (daily, True): "84094f2b3e6352eb3937922524da486672a6ecdabf16971a1222ec9b78159619",
+        (minute, False): "2639102c6d2de92d6c2e7a38952d5ba90a421865d23785a9c512fc4ebbc75c3a",
+        (minute, True): "84094f2b3e6352eb3937922524da486672a6ecdabf16971a1222ec9b78159619",
     }
     for kwargs in ({}, {"exdiv_economics": None}, {"exdiv_economics": {}}):
         state = _d2_book_run(engine, [10, 10, 5], exdiv=factor,

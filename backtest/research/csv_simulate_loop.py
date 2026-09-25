@@ -111,12 +111,15 @@ def init_sim_state(
     pool_days: dict,
     pool_names: Optional[dict[str, str]] = None,
     pool_names_by_day: Optional[dict[str, dict[str, str]]] = None,
+    daily_quota: Optional[float] = None,
 ) -> tuple[SimState, dict[str, tuple[float, int]], Callable[[str], dict[str, str]]]:
     """SimState + pending_chase + names_asof after strategy hooks are applied."""
     st = SimState(cash=float(total_cash))
     st.book_on_buy = hooks.get("on_buy")
     st.book_on_exdiv = hooks.get("on_exdiv")
     hooks["record_params"](st)
+    if daily_quota is not None:
+        st.stats["daily_quota"] = float(daily_quota)
     st.stats["bars_loaded"] = int(bars_loaded)
     st.stats["pool_days"] = len(pool_days)
     pending_chase: dict[str, tuple[float, int]] = {}

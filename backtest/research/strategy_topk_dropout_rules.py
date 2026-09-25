@@ -32,6 +32,8 @@ HELP_LOCK = """
   涨跌停贴近 qlib：统一 |Δ|≥9.5% 当日买卖都不做（forbid_all_trade_at_limit）；
   不按板块 10/20/30，不追买，跌停不挂次日开盘。6/8 原语义不动。
   新买额度 = min(日额度, 现金) * 0.95 / n_buy（qlib risk_degree）。
+  资金模式配对（plan-capital-pairing-2026-09-25）：本书族默认日额度 = --cash-total
+  （qlib 原生现金部署）；不传 --daily-quota 即是。显式 --daily-quota 覆盖。
   不是 version6：无 trail 止盈；默认 10% 开仓价止损（stop_loss:touch / gap_open），不改 v6 的 6%。
   日线买与 dropout 卖本就按收盘。--stop-fill touch|close（默认 touch）只改止损成交：
   close = 日终收盘 ≤ cost×(1-p) 则按该收盘卖（含恰跌停，Q7）；同日止损先于 dropout。
