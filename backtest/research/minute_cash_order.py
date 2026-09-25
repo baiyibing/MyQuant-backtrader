@@ -41,8 +41,9 @@ CLOSE_CLEAR_HM = 15 * 60
 class HeldMinuteCursor:
     """One lot's resumable equivalent of ``scan_held_day_python``.
 
-    Call open then close for each row in order. A returned candidate ends this
-    lot's scan, even if the outer limit/capacity gate rejects or partially fills.
+    For each hm, call every row's open then every row's close in row order.
+    A returned candidate ends this lot's scan, even if the outer limit/capacity
+    gate rejects or partially fills.
     """
 
     o: object
@@ -79,7 +80,7 @@ class HeldMinuteCursor:
     saw_close_hm: bool = field(default=False, init=False)
     first_exit_attempted: bool = field(default=False, init=False)
     is_true_day_last: bool = field(default=False, init=False)
-    _skip_bar: bool = field(default=False, init=False)
+    _open_state: dict[int, tuple[bool, float, int]] = field(default_factory=dict, init=False)
 
     def __post_init__(self):
         self.peak = float(self.peak)
@@ -107,11 +108,17 @@ class HeldMinuteCursor:
                 self.peak, self.peak_hm = hi, cur_hm
             if cur_hm == CLOSE_CLEAR_HM:
                 self.saw_close_hm = True
-            self._skip_bar = self.limit_down > 0 and hit_limit_down(px_open, self.limit_down)
-            if not self._skip_bar and stop_enabled and px_open <= self.cost * (1.0 - self.stop_pct):
+            skip_bar = self.limit_down > 0 and hit_limit_down(px_open, self.limit_down)
+            self._open_state[idx] = skip_bar, self.peak, self.peak_hm
+            if not skip_bar and stop_enabled and px_open <= self.cost * (1.0 - self.stop_pct):
                 return self._exit(idx, px_open, "stop_loss:gap_open")
             return None
-        if not self._skip_bar:
+        # All opens in this hm have already run. Each close uses only its own
+        # open's skip flag and peak, as in the row-wise scanner; later rows must
+        # not change an earlier row's close predicate or exit peak.
+        observed_peak = self.peak, self.peak_hm
+        skip_bar, self.peak, self.peak_hm = self._open_state.pop(idx)
+        if not skip_bar:
             event = self._close(idx, cur_hm, px_close, stop_enabled)
             if event is not None:
                 return event
@@ -126,6 +133,7 @@ class HeldMinuteCursor:
             reason = self.close_clear(self.cost, self.peak, self.n_days)
             if reason:
                 return self._exit(idx, px_close, reason)
+        self.peak, self.peak_hm = observed_peak
         return None
 
     def _close(self, idx, cur_hm, px_close, stop_enabled):

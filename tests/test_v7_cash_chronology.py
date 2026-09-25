@@ -197,6 +197,26 @@ def test_open_stop_volume_reject_is_not_retried_at_close_same_bar(monkeypatch):
     assert state.positions[A].shares == 20_000 and state.positions[A].peak == 10
 
 
+def test_duplicate_hm_open_rejection_stops_only_its_own_row(monkeypatch):
+    """The rejected first row is skipped at close; the second row can still sell."""
+    _seed(monkeypatch, {A: _position(A)})
+    volumes = {(A, "20260902", 570): BucketVolume(10_000, 570, "raw_shares_incremental")}
+    rows = []
+    state = v7.simulate_v7(
+        {A: [bar(D2, 570, 8.9, 9), bar(D2, 570, 8.8, 10)]},
+        {A: {D1: 9.5}}, {}, [D1, D2], cash_total=0,
+        participation_rate=1, volume_for_bucket=volumes, fix_minute_cash_order=True, audit_sink=rows,
+    )
+    assert [(r["phase"], r["shares"], r["price"]) for r in rows] == [
+        ("open", 0, 9), ("close", 10_000, 8.8),
+    ]
+    assert [r["reason"] for r in rows] == [
+        "skip_volume_unavailable:bucket_not_completed", "stop:trial_a090",
+    ]
+    assert state.positions[A].shares == 10_000
+    assert fen(state.cash) == Decimal("87912.00")
+
+
 def test_same_hm_cash_competition_keeps_original_pool_order():
     for symbols in ([A, B], [B, A]):
         state = v7.simulate_v7(

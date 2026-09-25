@@ -452,22 +452,6 @@ def force_on(monkeypatch):
     monkeypatch.setattr(minute, "simulate", enabled)
 
 
-def cursor_scan(o, h, c, **kwargs):
-    from backtest.research.minute_cash_order import HeldMinuteCursor
-
-    kwargs.pop("use_numba", None)
-    cursor = HeldMinuteCursor(o, h, c, **kwargs)
-    event = None
-    for idx in range(len(c)):
-        for phase in ("open", "close"):
-            result = cursor.advance(idx, phase)
-            if result is not None:
-                event = result
-        if event is not None:
-            break
-    return (*(event or (-1, float("nan"), "")), cursor.peak, cursor.peak_hm)
-
-
 @pytest.mark.parametrize(
     "case",
     [
@@ -572,6 +556,7 @@ def test_resumable_cursor_matches_whole_day_scanner(case):
 
 
 def test_close_proceeds_cannot_fund_same_minute_earlier_open_buy():
+    """Ledger/cursor unit check only; the scheduler is covered separately below."""
     from backtest.research.csv_ledger import SimState, _sell, execute_buy
     from backtest.research.minute_cash_order import HeldMinuteCursor
 
@@ -597,6 +582,62 @@ def test_close_proceeds_cannot_fund_same_minute_earlier_open_buy():
     _sell(state, A, old, px, pd.Timestamp(D2), reason, day_i=1)
     assert fen(state.cash) == Decimal("939.06")
     assert [(t["code"], t["side"]) for t in fills(state)] == [(A, "SELL")]
+
+
+def test_scheduler_close_proceeds_cannot_fund_same_minute_open_buy(monkeypatch):
+    """Inject an open-order callback while keeping real close exits and dispatch.
+
+    This is a synthetic mixed-phase fixture: v11's minute_open mode does not
+    create intraday close cursors. The scheduler must finish every holding's
+    open phase before it settles the first holding's close-phase sale.
+    """
+    from backtest.research import minute_cash_order as clock
+    from backtest.research.csv_ledger import SimState, execute_buy
+    from backtest.research.minute_audit import audit_scope
+
+    state = SimState(cash=0)
+    state.positions[A] = [Position(A, 100, 10, 0, 10)]
+    state.positions[C] = [Position(C, 100, 10, 0, 10)]
+    ms, ds = frames({A: [(D2, 570, 10, 10, 9.4)], C: [(D2, 570, 10, 10, 10)]})
+    phases, attempts, trace = [], [], []
+
+    class OpenOrderCursor(clock.HeldMinuteCursor):
+        def advance(self, idx, phase):
+            phases.append((self.gate_code, phase))
+            if self.gate_code == C and phase == "open":
+                with audit_scope(trace, decision_hm=570, quote_hm=570, phase="open"):
+                    cash_before = fen(state.cash)
+                    bought = execute_buy(state, B, 6, 1000, 1, pd.Timestamp(D2))
+                attempts.append((cash_before, bought))
+            return super().advance(idx, phase)
+
+    monkeypatch.setattr(clock, "HeldMinuteCursor", OpenOrderCursor)
+    clock.run_chronological_day(
+        state,
+        {},
+        hooks=minute.apply_csv_strategy("version8", stop_pct=0.05),
+        minute_bars=ms,
+        daily_bars=ds,
+        pool_days={},
+        day_i=1,
+        day=pd.Timestamp(D2),
+        ds=D2,
+        names={},
+        daily_quota=1000,
+        exdiv=None,
+        calendar=pd.to_datetime([D1, D2]),
+        slice_day=lambda code, date: ms[code].loc[ms[code]["ymd"] == date],
+        audit_sink=trace,
+    )
+    assert phases == [(A, "open"), (C, "open"), (A, "close"), (C, "close")]
+    assert attempts == [(Decimal("0.00"), False)]
+    assert [(t["code"], t["side"], t["reason"]) for t in fills(state)] == [
+        (A, "SELL", "stop_loss:touch")
+    ]
+    sell = next(t for t in trace if t["side"] == "SELL")
+    assert (sell["hm"], sell["phase"]) == (570, "close")
+    assert B not in state.positions
+    assert fen(state.cash) == Decimal("939.06")
 
 
 @pytest.mark.parametrize(
@@ -632,21 +673,58 @@ def test_strategy11_limit_up_no_chase_and_pending_volume_with_clock(monkeypatch)
     )
 
 
+@pytest.mark.parametrize("last_hm,can_buy", [(900, False), (896, False), (890, True)])
 @pytest.mark.parametrize(
-    "name",
-    [
-        "test_v8_5_minute_t4_sells_at_close_not_open",
-        "test_v8_5_minute_uses_last_bar_when_close_missing",
-        "test_v8_5_peak_gap_blocks_target_not_t4_clear",
-        "test_v8_6_minute_clears_on_t1_close",
-    ],
+    "strategy,n_days,reason",
+    [("version8_5", 4, "force_sell:t4_close"), ("version8_6", 1, "force_sell:t1_close")],
 )
-def test_close_clear_milestones_with_chronological_clock(name, monkeypatch):
-    from tests import test_strategy8_milestones as existing
-
-    force_on(monkeypatch)
-    monkeypatch.setattr(minute, "scan_held_day", cursor_scan)
-    getattr(existing, name)()
+def test_close_clear_milestones_with_chronological_clock(strategy, n_days, reason, last_hm, can_buy):
+    """The ON scheduler settles close_clear only at the true final close."""
+    calendar = pd.bdate_range(D1, periods=n_days + 1)
+    sell_day = calendar[-1].strftime("%Y%m%d")
+    ms, ds = frames(
+        {
+            A: [
+                (D1, 895, 10, 10, 10),
+                (sell_day, 570, 10, 10, 10),
+                (sell_day, 585, 10, 10, 10),
+                (sell_day, 885, 10, 10, 10),
+                (sell_day, last_hm, 10, 10.01, 9.4),
+            ],
+            B: [(sell_day, 895, 6, 6, 6)],
+        }
+    )
+    for code, px in ((A, 10), (B, 6)):
+        ds[code] = pd.DataFrame(
+            {"open": px, "high": px, "low": px, "close": px},
+            index=pd.DatetimeIndex([pd.Timestamp("20260831"), *calendar]),
+        )
+    trace = []
+    state = minute.simulate(
+        ms,
+        ds,
+        {D1: [A], sell_day: [B]},
+        D1,
+        sell_day,
+        strategy=strategy,
+        name_budget=1000,
+        total_cash=1001,
+        stop_pct=0.10,
+        fix_minute_cash_order=True,
+        audit_sink=trace,
+    )
+    assert [(t["code"], t["side"], t["reason"]) for t in fills(state)] == (
+        [(A, "BUY", "pool"), (A, "SELL", reason)] + ([(B, "BUY", "pool")] if can_buy else [])
+    )
+    sell = next(t for t in trace if t["side"] == "SELL")
+    assert (sell["hm"], sell["phase"]) == (last_hm, "close")
+    assert fen(sell["cash_after"]) == Decimal("939.06")
+    assert fen(state.cash) == Decimal("338.46" if can_buy else "939.06")
+    if can_buy:
+        buy = next(t for t in trace if t["code"] == B and t["side"] == "BUY")
+        assert (buy["hm"], buy["phase"]) == (895, "close")
+    else:
+        assert B not in state.positions
 
 
 @pytest.mark.parametrize(
