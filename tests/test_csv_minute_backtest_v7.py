@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 from datetime import date, timedelta
 from dataclasses import asdict
+from functools import partial
+import sys
 
 import pytest
 
@@ -20,6 +22,12 @@ SYMBOL = "600000.SH"
 D1 = date(2026, 9, 1)
 D2 = date(2026, 9, 2)
 D3 = date(2026, 9, 3)
+
+
+@pytest.fixture(params=[False, True], ids=["cash_order_off", "cash_order_on"])
+def cash_order_engine(request, monkeypatch):
+    monkeypatch.setattr(sys.modules[__name__], "simulate_v7",
+                        partial(v7.simulate_v7, fix_minute_cash_order=request.param))
 
 
 def test_load_pool_days_adds_exchange_suffix(tmp_path):
@@ -83,6 +91,7 @@ def test_symbol_frame_path_buys_at_1455():
     assert reasons(state).count("buy:trial") == 1
 
 
+@pytest.mark.usefixtures("cash_order_engine")
 def test_7_trial_bought_at_1455_cannot_stop_same_day_but_can_next_day():
     minutes = {SYMBOL: [bar(D1, 895, 100), bar(D1, 896, 89), bar(D2, 570, 89)]}
     path_daily = {SYMBOL: {date(2026, 8, 31): 100.0, D1: 98.0}}
@@ -93,6 +102,7 @@ def test_7_trial_bought_at_1455_cannot_stop_same_day_but_can_next_day():
     assert sell["date"] == D2.isoformat()
 
 
+@pytest.mark.usefixtures("cash_order_engine")
 def test_8_four_clears_on_avg095_add_only_in_1445_1455():
     morning = simulate_v7(
         {SYMBOL: [bar(D1, 895, 100), bar(D2, 570, 104)]},
@@ -115,6 +125,7 @@ def test_8_four_clears_on_avg095_add_only_in_1445_1455():
     assert after_window.positions[SYMBOL].stage == "trial"
 
 
+@pytest.mark.usefixtures("cash_order_engine")
 def test_8_ladder_reaches_full_then_avg098_clears():
     minutes = {SYMBOL: [
         bar(D1, 895, 100),
@@ -186,6 +197,7 @@ def test_10_index_gate_blocks_new_open_but_does_not_freeze_existing_stop():
     assert "stop:trial_a090" in reasons(stopped)
 
 
+@pytest.mark.usefixtures("cash_order_engine")
 def test_10_timer_exit_locks_same_day_reopen_and_short_index_fails():
     index = index_closes([100.0] * 22)
     sessions = sorted(index)[11:]
@@ -231,6 +243,7 @@ def test_cli_empty_pool_is_legal_and_missing_pool_is_system_exit(tmp_path, monke
         "summary.txt",
         "daily_equity.csv",
         "trades.csv",
+        "run-config.json",
     }
 
     monkeypatch.delenv("OSKH_TURTLE_POOL_DIR", raising=False)
@@ -285,6 +298,7 @@ def test_first_entry_none_limits_rejects_trial_buy(cause, reason):
 
 @pytest.mark.parametrize("cause", ["no_previous_close", "unknown_board"])
 @pytest.mark.parametrize("outcome", ["sellable", "t0", "no_records"])
+@pytest.mark.usefixtures("cash_order_engine")
 def test_d4_timer_none_limits_respects_t1_and_records(cause, outcome, monkeypatch):
     code = "999999.SZ" if cause == "unknown_board" else SYMBOL
     sessions = [D1 + timedelta(days=n) for n in range(11)]
@@ -491,6 +505,7 @@ def test_d2_v7_helper_full_field_scope_including_compat_add1(k):
     assert pos.shares == 300
 
 
+@pytest.mark.usefixtures("cash_order_engine")
 def test_d2_v7_public_multilot_fields_once_and_economic_delta(monkeypatch):
     minutes = {SYMBOL: [bar(D1, 895, 10), bar(D1, 900, 10),
                         bar(D2, 885, 10.4), bar(D2, 900, 10.4),
@@ -526,6 +541,7 @@ def test_d2_v7_public_multilot_fields_once_and_economic_delta(monkeypatch):
     assert session_limit_prices(SYMBOL, previous) == (5.72, 4.68)
 
 
+@pytest.mark.usefixtures("cash_order_engine")
 def test_d2_v7_exday_add_then_stop_sells_only_old_lot():
     closes = {SYMBOL: {D1 - timedelta(days=1): 10, D1: 10, D2: 4.8}}
     exdiv = {SYMBOL: {"20260902": 0.5}}
@@ -552,6 +568,7 @@ def test_d2_v7_exday_add_then_stop_sells_only_old_lot():
     assert state.cash == pytest.approx(expected_cash)  # Only actual fills change cash.
 
 
+@pytest.mark.usefixtures("cash_order_engine")
 def test_d2_v7_new_trial_on_exday_is_not_rescaled():
     state = simulate_v7(
         {SYMBOL: [bar(D1, 895, 5), bar(D1, 900, 5)]},
@@ -564,6 +581,7 @@ def test_d2_v7_new_trial_on_exday_is_not_rescaled():
 
 
 @pytest.mark.parametrize("bonus,cash,price", [(1, 0, 5), (0, 1, 9), (1, 1, 4.5)])
+@pytest.mark.usefixtures("cash_order_engine")
 def test_d6_v7_production_conservation_and_pay_without_symbol_bar(monkeypatch, bonus, cash, price):
     from backtest.research.ashare_exdiv_economics import ExDivEvent
 
@@ -588,6 +606,7 @@ def test_d6_v7_production_conservation_and_pay_without_symbol_bar(monkeypatch, b
             (100, D1, "trial"), (100, D2, "exdiv_bonus")]
 
 
+@pytest.mark.usefixtures("cash_order_engine")
 def test_d6_v7_bonus_t1_and_cap_consumes_only_real_fills(monkeypatch):
     from backtest.research.ashare_exdiv_economics import ExDivEvent
     from backtest.research.ashare_volume_cap import BucketVolume
@@ -639,6 +658,7 @@ def test_d6_v7_off_byte_snapshot_matches_f145ffde(factor):
         assert hashlib.sha256(json.dumps(snapshot, sort_keys=True, default=str).encode()).hexdigest() == expected[bool(factor)]
 
 
+@pytest.mark.usefixtures("cash_order_engine")
 def test_d6_v7_multilot_eligible_snapshot_and_no_entitlement_for_new_trial():
     from backtest.research.ashare_exdiv_economics import ExDivEvent
 

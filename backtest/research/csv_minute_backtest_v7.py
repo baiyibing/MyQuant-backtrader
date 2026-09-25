@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import os
 import sys
 import time
@@ -20,7 +21,7 @@ from typing import Any, Iterable, Mapping, Sequence
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from backtest.research.ashare_bars import bars_from_pool
+from backtest.research.ashare_bars import _in_session, bars_from_pool
 from backtest.research.ashare_fees import DEFAULT_SCHEDULE, FeeSchedule
 from backtest.research.ashare_volume_cap import VolumeCap, VolumeLookup
 from backtest.research.market_layer import (
@@ -53,6 +54,7 @@ from backtest.research.ashare_session import (
 )
 from backtest.research.csv_pool import load_pool_day_map, load_pool_names_by_day
 from backtest.research.ashare_exdiv_economics import EconomicLookup, ExDivEconomics
+from backtest.research.minute_audit import audit_scope, record_fill
 from common.infra.data_root import resolve_index_daily_root
 from oskh_data.lake_kind import classify_daily_lake_kind
 from oskh_data.symbol_format import to_canonical_symbol, to_partition_key
@@ -219,9 +221,17 @@ def _apply_exdiv_economics(state: SimResult, position: Position, ds: str) -> Non
 
 
 def _event(state: SimResult, day: date, symbol: str, hm: int | None, side: str, shares: int,
-           price: float | None, reason: str) -> None:
+           price: float | None, reason: str, *, cash_before: float | None = None) -> None:
     state.trades.append({"date": day.isoformat(), "symbol": symbol, "hm": hm, "side": side,
                          "shares": shares, "price": price, "reason": reason})
+    commission = 0.0
+    if cash_before is not None and price is not None:
+        if side == "buy":
+            commission = cash_before - state.cash - shares * price
+        elif side == "sell":
+            commission = shares * price - (state.cash - cash_before)
+    record_fill(state, {**state.trades[-1], "commission": commission},
+                state.cash if cash_before is None else cash_before)
 
 
 def _buy(state: SimResult, position: Position | None, symbol: str, day: date, hm: int,
@@ -240,6 +250,7 @@ def _buy(state: SimResult, position: Position | None, symbol: str, day: date, hm
             _event(state, day, symbol, hm, "skip", 0, price, skip)
             return None
         cost = fee.debit_buy(shares * price)
+    cash_before = state.cash
     state.cash -= cost
     if position is None:
         position = Position(symbol=symbol, entry_A=price, last_add_date=day)
@@ -248,7 +259,7 @@ def _buy(state: SimResult, position: Position | None, symbol: str, day: date, hm
     position.avg_cost = ((position.avg_cost * old_shares) + price * shares) / (old_shares + shares)
     position.lots.append(Lot(shares, day, price, kind))
     position.last_add_date = day
-    _event(state, day, symbol, hm, "buy", shares, price, reason)
+    _event(state, day, symbol, hm, "buy", shares, price, reason, cash_before=cash_before)
     if state.volume_cap is not None:
         state.volume_cap.consume(key, shares)
     return position
@@ -279,8 +290,9 @@ def _sell_lots(state: SimResult, position: Position, day: date, hm: int, price: 
         remaining -= take
     sold = wanted - remaining
     position.lots = kept
+    cash_before = state.cash
     state.cash += fee.credit_sell(sold * price)
-    _event(state, day, position.symbol, hm, "sell", sold, price, reason)
+    _event(state, day, position.symbol, hm, "sell", sold, price, reason, cash_before=cash_before)
     if state.volume_cap is not None:
         state.volume_cap.consume(key, sold)
     if position.shares:
@@ -313,6 +325,166 @@ def _day_frame_records(frame: Any, day: date) -> list[dict[str, Any]]:
     return sl.to_dict("records")
 
 
+@dataclass
+class _DayCursor:
+    symbol: str
+    records: list[dict[str, Any]]
+    previous: float | None
+    limits: tuple[float, float] | None
+    open_checked: bool = False
+
+
+def _run_chronological_day(
+    state: SimResult, day: date, calendar: Sequence[date],
+    symbols_today: Mapping[str, list[dict[str, Any]]], ordered: Sequence[str],
+    pool: Sequence[str], closes: Mapping[str, Mapping[date, float]],
+    last_prices: dict[str, float], cleared_today: set[str], *,
+    exdiv: Mapping[str, Mapping[str, float]] | None,
+    names: Mapping[str, str] | None,
+    names_by_day: Mapping[str, Mapping[str, str]] | None,
+    blocked_new: bool, fee: FeeSchedule, audit_sink: Any,
+) -> None:
+    """Merge v7 bars; timer decisions observe the completed buy phase.
+
+    Quote and decision clocks coincide: v7 has no target-minute fallback or
+    chase. Stable ties retain the legacy pool/held/input-symbol order. All daily
+    reference/economic work snapshots only positions held before any new buy.
+    Missing-bar entitlement behavior deliberately remains the legacy X-13 rule.
+    """
+    ymd = day.strftime("%Y%m%d")
+    cursors: list[_DayCursor] = []
+    by_hm: dict[int, list[tuple[_DayCursor, int, dict[str, Any]]]] = {}
+    for symbol in ordered:
+        source = symbols_today.get(symbol, [])
+        keep = _in_session([int(row["hm"]) for row in source])
+        records = [row for row, valid in zip(source, keep) if valid]
+        if not records:
+            if symbol in pool:
+                _event(state, day, symbol, None, "skip", 0, None, "skip_no_1455")
+            continue
+        position = state.positions.get(symbol)
+        if position is not None:
+            _apply_exdiv_economics(state, position, ymd)
+            factor = k_for(exdiv, symbol, ymd)
+            if factor is not None:
+                _rescale_position(position, factor)
+        name = (asof_pool_name(names_by_day, ymd, symbol) if names_by_day is not None
+                else (names or {}).get(symbol, ""))
+        previous = session_prev_close(closes.get(symbol, {}), day, symbol, exdiv)
+        cursor = _DayCursor(symbol, records, previous, session_limit_prices(symbol, previous, name))
+        cursors.append(cursor)
+        for index, row in enumerate(records):
+            by_hm.setdefault(int(row["hm"]), []).append((cursor, index, row))
+
+    for hm, rows in sorted(by_hm.items()):
+        # As in the original scanner, this bar's high is observed before its
+        # gap-open stop. It never advances a different, later minute.
+        for cursor, _, row in rows:
+            close_px = float(row["close"])
+            open_px = float(row.get("open", close_px))
+            last_prices[cursor.symbol] = close_px
+            position = state.positions.get(cursor.symbol)
+            if position is not None:
+                position.peak = max(position.peak, float(row.get("high", max(open_px, close_px))))
+
+        # Independent stop sells precede close buys. Opening fills settle first;
+        # the original first-row-only gap rule and completed-volume clock stay.
+        stopped_rows: set[tuple[str, int]] = set()
+        for phase in ("open", "close"):
+            for cursor, index, row in rows:
+                symbol = cursor.symbol
+                if (symbol, index) in stopped_rows:
+                    continue
+                position = state.positions.get(symbol)
+                if position is None:
+                    continue
+                decision = stop_decision(position.stage, entry_a=position.entry_A,
+                                         average_cost=position.avg_cost)
+                open_px, close_px = float(row.get("open", row["close"])), float(row["close"])
+                gap_open = index == 0 and decision.line is not None and open_px <= decision.line
+                if phase != ("open" if gap_open else "close"):
+                    continue
+                check_px = open_px if gap_open else close_px
+                if decision.line is None or check_px > decision.line:
+                    continue
+                stopped_rows.add((symbol, index))
+                with audit_scope(audit_sink, decision_hm=hm, phase=phase):
+                    if cursor.limits is None:
+                        _event(state, day, symbol, hm, "skip", 0, check_px,
+                               "skip_no_prev_close" if cursor.previous is None else "skip_unknown_board")
+                    elif defer_sell_at_limit(check_px, cursor.limits):
+                        _event(state, day, symbol, hm, "defer", 0, check_px, "defer_limit_down")
+                    else:
+                        reasons_stop = {
+                            "dump_trial": "stop:trial_a090", "clear_four": "stop:four_avg095",
+                            "clear_six": "stop:six_avg0965", "clear_eight": "stop:eight_avg0975",
+                            "clear_full": "stop:full_avg098",
+                        }
+                        _sell_lots(state, position, day, hm, check_px,
+                                   reasons_stop.get(decision.action, f"stop:{decision.action}"),
+                                   fee=fee, at=hm - 1 if gap_open else hm)
+                if symbol not in state.positions:
+                    cleared_today.add(symbol)
+
+        for cursor, _, row in rows:
+            symbol, close_px = cursor.symbol, float(row["close"])
+            with audit_scope(audit_sink, decision_hm=hm, phase="close"):
+                position = state.positions.get(symbol)
+                if position is not None and in_add_window(hm):
+                    ladder = ladder_decision(position.stage, close_px, entry_a=position.entry_A)
+                    if ladder.action != "none":
+                        if cursor.limits is None:
+                            _event(state, day, symbol, hm, "skip", 0, close_px,
+                                   "skip_no_prev_close" if cursor.previous is None else "skip_unknown_board")
+                        elif skip_buy_at_limit(close_px, cursor.limits):
+                            _event(state, day, symbol, hm, "skip", 0, close_px, "skip_limit_up")
+                        elif (not defer_sell_at_limit(close_px, cursor.limits)
+                              and _buy(state, position, symbol, day, hm, close_px, ladder.fraction,
+                                       f"buy:{ladder.action}", ladder.action, fee=fee)):
+                            position.stage = {"add_a104": FOUR, "add_a108": SIX,
+                                              "add_a112": EIGHT, "add_a116": FULL}[ladder.action]
+                if (hm == 895 and symbol in pool and symbol not in state.positions
+                        and symbol not in cleared_today):
+                    cursor.open_checked = True
+                    if blocked_new:
+                        _event(state, day, symbol, hm, "skip", 0, close_px, "skip_index_gate")
+                    elif cursor.previous is None:
+                        _event(state, day, symbol, hm, "skip", 0, close_px, "skip_no_prev_close")
+                    elif cursor.limits is None:
+                        _event(state, day, symbol, hm, "skip", 0, close_px, "skip_unknown_board")
+                    elif skip_buy_at_limit(close_px, cursor.limits):
+                        _event(state, day, symbol, hm, "skip", 0, close_px, "skip_limit_up")
+                    elif not defer_sell_at_limit(close_px, cursor.limits):
+                        _buy(state, None, symbol, day, hm, close_px, TRIAL_FRACTION,
+                             "buy:trial", "trial", fee=fee)
+
+        # The last-bar timer depends on last_add_date and stage AFTER all buys.
+        # Its proceeds never retry a failed buy in this hm.
+        for cursor, index, row in rows:
+            if index != len(cursor.records) - 1:
+                continue
+            symbol, close_px = cursor.symbol, float(row["close"])
+            position = state.positions.get(symbol)
+            if (position is None or position.last_add_date is None
+                    or not timer_due(calendar, position.last_add_date, day, position.stage)):
+                continue
+            with audit_scope(audit_sink, decision_hm=hm, phase="timer"):
+                if cursor.limits is None:
+                    _event(state, day, symbol, hm, "skip", 0, close_px,
+                           "skip_no_prev_close" if cursor.previous is None else "skip_unknown_board")
+                elif defer_sell_at_limit(close_px, cursor.limits):
+                    _event(state, day, symbol, hm, "defer", 0, close_px, "defer_limit_down")
+                elif (_sell_lots(state, position, day, hm, close_px, "exit:timer10", fee=fee)
+                      and symbol not in state.positions):
+                    cleared_today.add(symbol)
+
+    for cursor in cursors:
+        symbol = cursor.symbol
+        if (symbol in pool and symbol not in state.positions and not cursor.open_checked
+                and not any(int(row["hm"]) == 895 for row in cursor.records)):
+            _event(state, day, symbol, None, "skip", 0, None, "skip_no_1455")
+
+
 def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Sequence[str]] | None,
                 index_days: Any = None, *, cash_total: float = 21_000_000.0,
                 start: Any = None, end: Any = None,
@@ -322,7 +494,9 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
                 names_by_day: Mapping[str, Mapping[str, str]] | None = None,
                 fee: FeeSchedule = DEFAULT_SCHEDULE,
                 participation_rate: float | None = None,
-                volume_for_bucket: VolumeLookup | None = None) -> SimResult:
+                volume_for_bucket: VolumeLookup | None = None,
+                fix_minute_cash_order: bool = False,
+                audit_sink: Any = None) -> SimResult:
     """Run the matcher; optional cap uses caller-attested completed minutes.
 
     Same-bar close capacity is a completed-bar approximation. Gap opens cannot
@@ -368,121 +542,133 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
         else:
             symbols_today = minutes.get(day, {})
             ordered = list(dict.fromkeys(needed + list(symbols_today)))
-        for symbol in ordered:
-            records = symbols_today.get(symbol, [])
-            if not records:
-                if symbol in pools.get(day, []):
-                    _event(state, day, symbol, None, "skip", 0, None, "skip_no_1455")
-                continue
-            ymd = day.strftime("%Y%m%d")
-            factor = k_for(exdiv, symbol, ymd)
-            position = state.positions.get(symbol)
-            if position is not None:
-                _apply_exdiv_economics(state, position, ymd)
-            if factor is not None and position is not None:
-                _rescale_position(position, factor)
-            if names_by_day is not None:
-                name = asof_pool_name(names_by_day, ymd, symbol)
-            else:
-                name = (names or {}).get(symbol, "")
-            previous = session_prev_close(closes.get(symbol, {}), day, symbol, exdiv)
-            limits = session_limit_prices(symbol, previous, name)
-            first = True
-            open_checked = False
-            for row_index, row in enumerate(records):
-                hm = int(row["hm"])
-                open_px = float(row.get("open", row["close"]))
-                close_px = float(row["close"])
-                high_px = float(row.get("high", max(open_px, close_px)))
-                last_prices[symbol] = close_px
+        if fix_minute_cash_order:
+            _run_chronological_day(
+                state, day, calendar, symbols_today, ordered, pools.get(day, []),
+                closes, last_prices, cleared_today, exdiv=exdiv, names=names,
+                names_by_day=names_by_day, blocked_new=gate.get(day, False), fee=fee,
+                audit_sink=audit_sink,
+            )
+        else:
+            for symbol in ordered:
+                records = symbols_today.get(symbol, [])
+                if not records:
+                    if symbol in pools.get(day, []):
+                        _event(state, day, symbol, None, "skip", 0, None, "skip_no_1455")
+                    continue
+                ymd = day.strftime("%Y%m%d")
+                factor = k_for(exdiv, symbol, ymd)
                 position = state.positions.get(symbol)
                 if position is not None:
-                    position.peak = max(position.peak, high_px)
-                    decision = stop_decision(position.stage, entry_a=position.entry_A,
-                                             average_cost=position.avg_cost)
-                    check_px = open_px if first and decision.line is not None and open_px <= decision.line else close_px
-                    if decision.line is not None and check_px <= decision.line:
-                        if limits is None:
-                            _event(state, day, symbol, hm, "skip", 0, check_px,
-                                   "skip_no_prev_close" if previous is None else "skip_unknown_board")
-                        elif defer_sell_at_limit(check_px, limits):
-                            _event(state, day, symbol, hm, "defer", 0, check_px, "defer_limit_down")
-                        else:
-                            reasons_stop = {
-                                "dump_trial": "stop:trial_a090",
-                                "clear_four": "stop:four_avg095",
-                                "clear_six": "stop:six_avg0965",
-                                "clear_eight": "stop:eight_avg0975",
-                                "clear_full": "stop:full_avg098",
-                            }
-                            _sell_lots(state, position, day, hm, check_px,
-                                       reasons_stop.get(decision.action, f"stop:{decision.action}"),
-                                       fee=fee,
-                                       **({"at": hm - 1 if first and open_px <= decision.line else hm}
-                                          if state.volume_cap is not None else {}))
-                    if symbol not in state.positions:
-                        cleared_today.add(symbol)
-                    position = state.positions.get(symbol)
-                    if position is not None and in_add_window(hm):
-                        ladder = ladder_decision(position.stage, close_px, entry_a=position.entry_A)
-                        reasons = {
-                            "add_a104": "buy:add_a104",
-                            "add_a108": "buy:add_a108",
-                            "add_a112": "buy:add_a112",
-                            "add_a116": "buy:add_a116",
-                        }
-                        if ladder.action != "none":
-                            if limits is None:
-                                _event(state, day, symbol, hm, "skip", 0, close_px,
-                                       "skip_no_prev_close" if previous is None else "skip_unknown_board")
-                            elif skip_buy_at_limit(close_px, limits):
-                                _event(state, day, symbol, hm, "skip", 0, close_px, "skip_limit_up")
-                            elif defer_sell_at_limit(close_px, limits):
-                                pass
-                            elif _buy(state, position, symbol, day, hm, close_px, ladder.fraction,
-                                      reasons[ladder.action], ladder.action, fee=fee):
-                                if ladder.action == "add_a104":
-                                    position.stage = FOUR
-                                elif ladder.action == "add_a108":
-                                    position.stage = SIX
-                                elif ladder.action == "add_a112":
-                                    position.stage = EIGHT
-                                elif ladder.action == "add_a116":
-                                    position.stage = FULL
-                if (hm == 895 and symbol in pools.get(day, []) and symbol not in state.positions
-                        and symbol not in cleared_today):
-                    open_checked = True
-                    if gate.get(day, False):
-                        _event(state, day, symbol, hm, "skip", 0, close_px, "skip_index_gate")
-                    elif previous is None:
-                        _event(state, day, symbol, hm, "skip", 0, close_px, "skip_no_prev_close")
-                    else:
-                        priced = session_limit_prices(symbol, previous, name)
-                        if priced is None:
-                            _event(state, day, symbol, hm, "skip", 0, close_px, "skip_unknown_board")
-                        else:
-                            if skip_buy_at_limit(close_px, priced):
-                                _event(state, day, symbol, hm, "skip", 0, close_px, "skip_limit_up")
-                            elif not defer_sell_at_limit(close_px, priced):
-                                _buy(state, None, symbol, day, hm, close_px, TRIAL_FRACTION, "buy:trial", "trial",
-                                     fee=fee)
-                if row_index == len(records) - 1:
-                    position = state.positions.get(symbol)
-                    if (position is not None and position.last_add_date is not None
-                            and timer_due(calendar, position.last_add_date, day, position.stage)):
-                        if limits is None:
-                            _event(state, day, symbol, hm, "skip", 0, close_px,
-                                   "skip_no_prev_close" if previous is None else "skip_unknown_board")
-                        elif defer_sell_at_limit(close_px, limits):
-                            _event(state, day, symbol, hm, "defer", 0, close_px, "defer_limit_down")
-                        elif _sell_lots(state, position, day, hm, close_px, "exit:timer10", fee=fee):
+                    _apply_exdiv_economics(state, position, ymd)
+                if factor is not None and position is not None:
+                    _rescale_position(position, factor)
+                if names_by_day is not None:
+                    name = asof_pool_name(names_by_day, ymd, symbol)
+                else:
+                    name = (names or {}).get(symbol, "")
+                previous = session_prev_close(closes.get(symbol, {}), day, symbol, exdiv)
+                limits = session_limit_prices(symbol, previous, name)
+                first = True
+                open_checked = False
+                for row_index, row in enumerate(records):
+                    hm = int(row["hm"])
+                    with audit_scope(audit_sink, decision_hm=hm, phase="close"):
+                        open_px = float(row.get("open", row["close"]))
+                        close_px = float(row["close"])
+                        high_px = float(row.get("high", max(open_px, close_px)))
+                        last_prices[symbol] = close_px
+                        position = state.positions.get(symbol)
+                        if position is not None:
+                            position.peak = max(position.peak, high_px)
+                            decision = stop_decision(position.stage, entry_a=position.entry_A,
+                                                     average_cost=position.avg_cost)
+                            check_px = open_px if first and decision.line is not None and open_px <= decision.line else close_px
+                            if decision.line is not None and check_px <= decision.line:
+                                phase = "open" if first and open_px <= decision.line else "close"
+                                with audit_scope(audit_sink, decision_hm=hm, phase=phase):
+                                    if limits is None:
+                                        _event(state, day, symbol, hm, "skip", 0, check_px,
+                                               "skip_no_prev_close" if previous is None else "skip_unknown_board")
+                                    elif defer_sell_at_limit(check_px, limits):
+                                        _event(state, day, symbol, hm, "defer", 0, check_px, "defer_limit_down")
+                                    else:
+                                        reasons_stop = {
+                                            "dump_trial": "stop:trial_a090",
+                                            "clear_four": "stop:four_avg095",
+                                            "clear_six": "stop:six_avg0965",
+                                            "clear_eight": "stop:eight_avg0975",
+                                            "clear_full": "stop:full_avg098",
+                                        }
+                                        _sell_lots(state, position, day, hm, check_px,
+                                                   reasons_stop.get(decision.action, f"stop:{decision.action}"),
+                                                   fee=fee,
+                                                   **({"at": hm - 1 if first and open_px <= decision.line else hm}
+                                                      if state.volume_cap is not None else {}))
                             if symbol not in state.positions:
                                 cleared_today.add(symbol)
-                first = False
+                            position = state.positions.get(symbol)
+                            if position is not None and in_add_window(hm):
+                                ladder = ladder_decision(position.stage, close_px, entry_a=position.entry_A)
+                                reasons = {
+                                    "add_a104": "buy:add_a104",
+                                    "add_a108": "buy:add_a108",
+                                    "add_a112": "buy:add_a112",
+                                    "add_a116": "buy:add_a116",
+                                }
+                                if ladder.action != "none":
+                                    if limits is None:
+                                        _event(state, day, symbol, hm, "skip", 0, close_px,
+                                               "skip_no_prev_close" if previous is None else "skip_unknown_board")
+                                    elif skip_buy_at_limit(close_px, limits):
+                                        _event(state, day, symbol, hm, "skip", 0, close_px, "skip_limit_up")
+                                    elif defer_sell_at_limit(close_px, limits):
+                                        pass
+                                    elif _buy(state, position, symbol, day, hm, close_px, ladder.fraction,
+                                              reasons[ladder.action], ladder.action, fee=fee):
+                                        if ladder.action == "add_a104":
+                                            position.stage = FOUR
+                                        elif ladder.action == "add_a108":
+                                            position.stage = SIX
+                                        elif ladder.action == "add_a112":
+                                            position.stage = EIGHT
+                                        elif ladder.action == "add_a116":
+                                            position.stage = FULL
+                        if (hm == 895 and symbol in pools.get(day, []) and symbol not in state.positions
+                                and symbol not in cleared_today):
+                            open_checked = True
+                            if gate.get(day, False):
+                                _event(state, day, symbol, hm, "skip", 0, close_px, "skip_index_gate")
+                            elif previous is None:
+                                _event(state, day, symbol, hm, "skip", 0, close_px, "skip_no_prev_close")
+                            else:
+                                priced = session_limit_prices(symbol, previous, name)
+                                if priced is None:
+                                    _event(state, day, symbol, hm, "skip", 0, close_px, "skip_unknown_board")
+                                else:
+                                    if skip_buy_at_limit(close_px, priced):
+                                        _event(state, day, symbol, hm, "skip", 0, close_px, "skip_limit_up")
+                                    elif not defer_sell_at_limit(close_px, priced):
+                                        _buy(state, None, symbol, day, hm, close_px, TRIAL_FRACTION, "buy:trial", "trial",
+                                             fee=fee)
+                        with audit_scope(audit_sink, decision_hm=hm, phase="timer"):
+                            if row_index == len(records) - 1:
+                                position = state.positions.get(symbol)
+                                if (position is not None and position.last_add_date is not None
+                                        and timer_due(calendar, position.last_add_date, day, position.stage)):
+                                    if limits is None:
+                                        _event(state, day, symbol, hm, "skip", 0, close_px,
+                                               "skip_no_prev_close" if previous is None else "skip_unknown_board")
+                                    elif defer_sell_at_limit(close_px, limits):
+                                        _event(state, day, symbol, hm, "defer", 0, close_px, "defer_limit_down")
+                                    elif _sell_lots(state, position, day, hm, close_px, "exit:timer10", fee=fee):
+                                        if symbol not in state.positions:
+                                            cleared_today.add(symbol)
+                        first = False
 
-            if symbol in pools.get(day, []) and symbol not in state.positions and not open_checked:
-                if not any(int(row["hm"]) == 895 for row in records):
-                    _event(state, day, symbol, None, "skip", 0, None, "skip_no_1455")
+                if symbol in pools.get(day, []) and symbol not in state.positions and not open_checked:
+                    if not any(int(row["hm"]) == 895 for row in records):
+                        _event(state, day, symbol, None, "skip", 0, None, "skip_no_1455")
 
         holdings = sum(pos.shares * last_prices.get(symbol, pos.avg_cost) for symbol, pos in state.positions.items())
         equity = state.cash + holdings
@@ -610,6 +796,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--asof-pool-names", action="store_true",
         help="use names as of each session (default off: uses the window-flat name)",
     )
+    parser.add_argument("--fix-minute-cash-order", action="store_true",
+                        help="settle cash and positions chronologically (default off)")
     parser.add_argument("--cash-total", type=float, default=21_000_000.0)
     parser.add_argument("--output-dir")
     parser.add_argument("--minute-source", choices=("lake", "qlib_1min"), default="lake")
@@ -664,10 +852,22 @@ def main(argv: Sequence[str] | None = None) -> int:
     state = simulate_v7(minute, daily, pools, index_closes, cash_total=args.cash_total,
                         start=start, end=end, exdiv=exdiv,
                         names=None if args.asof_pool_names else names,
-                        names_by_day=names_by_day)
+                        names_by_day=names_by_day,
+                        fix_minute_cash_order=args.fix_minute_cash_order)
     sim_s = time.perf_counter() - sim_t0
     output = Path(args.output_dir or f"backtest_output/csv_minute_v7_{args.start}_{args.end}")
     write_run_artifacts(state, output)
+    config = {
+        **vars(args),
+        "cash_order_policy": "chronological" if args.fix_minute_cash_order else "legacy_symbol_day",
+        "same_hm_policy": ("open_stop_then_close_stop_then_buy_then_timer"
+                           if args.fix_minute_cash_order else "legacy_symbol_scan"),
+        "fallback_order_clock": "exact_quote_only_no_chase",
+        "stable_order": "pool_then_opening_held_then_input_symbols",
+    }
+    (output / "run-config.json").write_text(
+        json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
     print(summarize_v7(state), end="")
     print(f"timing load={load_s:.2f}s simulate={sim_s:.2f}s total={load_s + sim_s:.2f}s", flush=True)
     return 0
