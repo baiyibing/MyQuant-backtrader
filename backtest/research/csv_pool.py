@@ -73,6 +73,32 @@ def parse_pool_csv(path: Path) -> List[str]:
     return [code for code, _name in parse_pool_csv_entries(path)]
 
 
+def load_signal_bundle_if_present(pool_dir: Path) -> dict | None:
+    """Validate an explicitly requested sidecar and its CSV file hashes."""
+    import json
+
+    from bt_contract.signal_bundle import validate_signal_bundle
+
+    path = Path(pool_dir) / "signal-bundle.json"
+    try:
+        data = path.read_bytes()
+    except FileNotFoundError:
+        return None
+    bundle = json.loads(data)
+    validate_signal_bundle(bundle, files_root=pool_dir)
+    return bundle
+
+
+def require_signal_bundle(pool_dir: Path) -> dict:
+    """Fail closed for callers opting into the signal bundle contract."""
+    bundle = load_signal_bundle_if_present(pool_dir)
+    if bundle is None:
+        raise FileNotFoundError(
+            f"signal-bundle.json required but missing: {Path(pool_dir)}"
+        )
+    return bundle
+
+
 def is_repo_stock_pool(path: Path, *, repo: Path | None = None) -> bool:
     """True when ``path`` is the repo ``stock_pool/`` or a path inside it."""
     root = (
