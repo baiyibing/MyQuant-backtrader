@@ -436,10 +436,23 @@ def test_explicit_off_matches_omission_complete_state():
     assert "fix_minute_cash_order" not in explicit.stats
 
 
-def test_strategy12_explicitly_rejects_cash_order_flag():
+@pytest.mark.parametrize("fix_s12_price_domain", [False, True], ids=["x01-off", "x01-on"])
+def test_strategy12_explicitly_rejects_cash_order_flag(fix_s12_price_domain):
     ms, ds = frames({A: [(D1, 895, 10, 10, 10)]})
-    with pytest.raises((ValueError, SystemExit), match="(?i)(version12|strategy.?12|s12)"):
-        minute.simulate(ms, ds, {}, D1, D2, strategy="version12", fix_minute_cash_order=True)
+    with pytest.raises(ValueError, match="--fix-minute-cash-order is not applicable to version12"):
+        minute.simulate(
+            ms, ds, {}, D1, D2, strategy="version12", fix_minute_cash_order=True,
+            fix_s12_price_domain=fix_s12_price_domain,
+        )
+
+
+@pytest.mark.parametrize("fix_s12_price_domain", [False, True], ids=["x01-off", "x01-on"])
+def test_strategy12_run_rejects_cash_order_before_loading(tmp_path, fix_s12_price_domain):
+    with pytest.raises(ValueError, match="--fix-minute-cash-order is not applicable to version12"):
+        minute.run(
+            D1, D2, pool_dir=tmp_path, strategy="version12", fix_minute_cash_order=True,
+            fix_s12_price_domain=fix_s12_price_domain,
+        )
 
 
 def force_on(monkeypatch):
@@ -650,26 +663,28 @@ def test_scheduler_close_proceeds_cannot_fund_same_minute_open_buy(monkeypatch):
         "test_volume_a_unfinished_open_bucket_buy_skips_before_lookup",
     ],
 )
-def test_strategy11_contracts_with_chronological_clock(name, monkeypatch):
+@pytest.mark.parametrize("fix_s11_exit_domain", [False, True], ids=["x03-off", "x03-on"])
+def test_strategy11_contracts_with_chronological_clock(name, monkeypatch, fix_s11_exit_domain):
     from tests import test_strategy11_engine as existing
 
     force_on(monkeypatch)
     test = getattr(existing, name)
     if "engine" in test.__code__.co_varnames[: test.__code__.co_argcount]:
-        test(minute)
+        test(minute, fix_s11_exit_domain=fix_s11_exit_domain)
     else:
-        test()
+        test(fix_s11_exit_domain=fix_s11_exit_domain)
 
 
-def test_strategy11_limit_up_no_chase_and_pending_volume_with_clock(monkeypatch):
+@pytest.mark.parametrize("fix_s11_exit_domain", [False, True], ids=["x03-off", "x03-on"])
+def test_strategy11_limit_up_no_chase_and_pending_volume_with_clock(monkeypatch, fix_s11_exit_domain):
     from tests import test_strategy11_engine as existing
 
     force_on(monkeypatch)
     existing.test_limit_up_skip_consumes_signal_and_actual_chase_queue_stays_empty(
-        minute, monkeypatch
+        minute, monkeypatch, fix_s11_exit_domain=fix_s11_exit_domain,
     )
     existing.test_volume_a_unfinished_open_bucket_pending_sell_defers_preserves_position(
-        monkeypatch
+        monkeypatch, fix_s11_exit_domain=fix_s11_exit_domain,
     )
 
 

@@ -645,6 +645,10 @@ def simulate(
     exdiv_economics is an explicit (symbol, YYYYMMDD) -> ExDivEvent lookup for
     raw bars. None retains the baseline; E-R6 ratios never imply entitlements.
     """
+    if fix_minute_cash_order and normalize_csv_strategy(strategy) == "version12":
+        raise ValueError("--fix-minute-cash-order is not applicable to version12")
+    if audit_sink is not None and normalize_csv_strategy(strategy) == "version12":
+        raise ValueError("X-02 execution audit is not applicable to version12")
     if fix_s12_price_domain:
         from backtest.research.signal_price_domain import S12PriceContext
 
@@ -670,10 +674,6 @@ def simulate(
             daily_bars, signal_bars_front, start=start, end=end,
             required_codes={c for codes in pool_days.values() for c in codes},
         )
-    if fix_minute_cash_order and normalize_csv_strategy(strategy) == "version12":
-        raise ValueError("--fix-minute-cash-order is not applicable to version12")
-    if audit_sink is not None and normalize_csv_strategy(strategy) == "version12":
-        raise ValueError("X-02 execution audit is not applicable to version12")
     hooks = prepare_strategy_hooks(
         strategy,
         stop_pct=stop_pct,
