@@ -1,0 +1,196 @@
+{
+  "source": "eff77f375f5636e3e9659aa8fd753404035f2782",
+  "raw_golden_sha256": "3bfe51b6d3e20b665c3fed0449ebf8569988022719da275b7fcc9635a9988c6c",
+  "contract": {
+    "schema": 1,
+    "money_quantum": "1E-8",
+    "rounding": "ROUND_HALF_EVEN",
+    "money_fields": [
+      "cash",
+      "commission",
+      "equity",
+      "holdings",
+      "notional",
+      "price"
+    ],
+    "integer_fields": [
+      "hm",
+      "lot",
+      "shares"
+    ],
+    "text": "verbatim; preserve all columns and row/column order, including EOD_MARK",
+    "hash": "sha256 of UTF-8 JSON; ensure_ascii=False, sort_keys=True, separators=(',', ':')"
+  },
+  "captured_environment": {
+    "python": "3.12.14",
+    "pandas": "3.0.6",
+    "platform": "linux"
+  },
+  "provenance": {
+    "source_archive_sha256": "41bda9d98bdb3081d051d998ddde43e4cd9e0d0d46723f10cce471a06d292b5d",
+    "capture_harness_source": "fdb515892c393e3d3a9c6d0f4047afda2b789407",
+    "capture_harness_sha256": "8dd2d399cc42dfc346b675d1e8d95061c53de155e5e5e1b305a6aa641937da79",
+    "production_archive_files_verified_unchanged": 1356,
+    "case_mode_pairs_verified": 78,
+    "writer_and_library_raw_hashes_verified": 312,
+    "method": "Canonicalize complete eff77f3 CSVs only after original writer/library hashes match; preserve EOD_MARK rows; verify real fills/equity/cash against original structured golden."
+  },
+  "cases": {
+    "version1/daily": {
+      "trades": "6e253e249372b35f69bef2ecd7c7a088a44058999103e06ef8a23af9f0e0cb49",
+      "equity": "c25b395ba934ba75ed05c4c11f5d2d0b8a77a6f6b0e93b13aa18621ad2afa57f"
+    },
+    "version1/minute": {
+      "trades": "136d19c3bd481cee2dfcecede94d6fb29e78734661006c3fa708ab30dcc2b93f",
+      "equity": "02f3924cd9ef166fd58664d72ab6538fba03dc1b5d48c237e999678a1164af1e"
+    },
+    "version2/daily": {
+      "trades": "ff40cea6839b9e8cd638c2f0004c113f49b7a30c7eef105d4d4942cd02ae316e",
+      "equity": "b04bf12d69b64483fbe5264b83573eaa48e1431617bec57ca3ad6eb9ff307304"
+    },
+    "version2/minute": {
+      "trades": "4a9d52d99162fdccf2e5378271eaf1474b955446379ea522547d279fac2153bd",
+      "equity": "02f3924cd9ef166fd58664d72ab6538fba03dc1b5d48c237e999678a1164af1e"
+    },
+    "version3/daily": {
+      "trades": "78ff1a61e2746c19fc8f14fe8d47d085fe725b25b816f66f959684b3b77a6595",
+      "equity": "495f8397c1c40912cc2b7704b223d1c55cac8f223ce91a07a29ab8c9e91ed1e5"
+    },
+    "version3/minute": {
+      "trades": "732b3b56449d54629ed7de6ca9fcdbc9bbc75ae3e1a5dd17d9c3651192fb8e32",
+      "equity": "3575f366e4573d71bc27d3b4d8060699295b23ec0e8fc10fe6f06a40351faba9"
+    },
+    "version4/daily": {
+      "trades": "02037112ee4af250cf6899c30347a9b8797f30f1652c7434e626c5561003113d",
+      "equity": "440f1fef73a9677b47323ba944adf013d866191b57988cae185b92fa5005f330"
+    },
+    "version4/minute": {
+      "trades": "cee6eeae14e1fc608dc0f0fddea44707eb634a9805e0ee372522194730ae8241",
+      "equity": "c4705222b3f97ec4fdd45661c212d44b4d5cb390dafd3d406963004f494a23fc"
+    },
+    "version5/daily": {
+      "trades": "397d8cbfdf0f50e762642e3a8aaf4137c5e24a3031946d59662806fff3ac30fc",
+      "equity": "474ff4368cc313e30feb49ca02f4da44a432d43b62bcc936de3f0195e576b79a"
+    },
+    "version5/minute": {
+      "trades": "6bf1a673b517744f8f18467cae16117a79246c197b3058dcc3cb862ae478ad7b",
+      "equity": "d03ded11e972106778dd97d1b61f6f212b606de1e7d549d395b7f255c5f27140"
+    },
+    "version6/daily": {
+      "trades": "875365132ed7d4ed7b2f04e65d95734af9b40c34a68076effd5bea4659e2b850",
+      "equity": "0d7fec7d6e84f798e230c072d9b34a14bb2ed4ab105e7a13ac3f47b9a464658d"
+    },
+    "version6/minute": {
+      "trades": "43c2771d132fea6e84d31613fcd72c096d8ab6a508d33c3c6b229b1d1a7cc3a0",
+      "equity": "b4d599c79d985cc4265303c068c0a2f540be54cef59e284bab8404de53b5150d"
+    },
+    "version8/daily": {
+      "trades": "715df82f3dd161654098608348880178a532799523418a9b6998be0b791a85cb",
+      "equity": "474ff4368cc313e30feb49ca02f4da44a432d43b62bcc936de3f0195e576b79a"
+    },
+    "version8/minute": {
+      "trades": "eefbec32df571c5a8a9316a22503eb612bdd29e3b09e4dc642497a12045940dc",
+      "equity": "3cf8e62907289791b20e697d52d16b6c53dc1f6352be7398399478e371cbc353"
+    },
+    "version8_1/daily": {
+      "trades": "4aa0949bf3c9203564216afd7bdbbc711e34da322e4486b6391f8fd1a1e9335d",
+      "equity": "e6f70e9d8d6f19ca9a7afbaffd26fb448902c1ae2892423c1e61cdada94998f7"
+    },
+    "version8_1/minute": {
+      "trades": "5af9d33b171a1d6ed996d28ccef8cbd00db7f92c3558a7180ae38b73cfe9d7bd",
+      "equity": "e2f172ebc998134a639bbb08c6d10b9c1560a8f05ec89ae4ad645139a6c8e80f"
+    },
+    "version8_2/daily": {
+      "trades": "4aa0949bf3c9203564216afd7bdbbc711e34da322e4486b6391f8fd1a1e9335d",
+      "equity": "e6f70e9d8d6f19ca9a7afbaffd26fb448902c1ae2892423c1e61cdada94998f7"
+    },
+    "version8_2/minute": {
+      "trades": "5af9d33b171a1d6ed996d28ccef8cbd00db7f92c3558a7180ae38b73cfe9d7bd",
+      "equity": "e2f172ebc998134a639bbb08c6d10b9c1560a8f05ec89ae4ad645139a6c8e80f"
+    },
+    "version8_3/daily": {
+      "trades": "e333b7d9a590d1bffc0fc30fb95b2aefd3ee93ae2d1c3e09819dd3a9f6410f2a",
+      "equity": "9e0c983278cc76216b7441c5ca45ba16e01519f171066bacd41b105f3b9565ee"
+    },
+    "version8_3/minute": {
+      "trades": "6d3b010cc73b2cc14f496c69cb17fa77a3fff07df45bc8afc85e730da2cce94d",
+      "equity": "580e7fae7c4d04084e2f61b087775b2f60af3f19d1241856bd5950eaf41ade80"
+    },
+    "version8_4/daily": {
+      "trades": "c3391f62b25f8d56503b5d4731ad0df0f6e0eedcb111e5b37842bd4876141e4b",
+      "equity": "23222edef0860e264dea7553a73fc38bc85916942620e560d69032fc468613ae"
+    },
+    "version8_4/minute": {
+      "trades": "01937f980878b946b013b8ab0cc832ac09501d8796163afb118036739b7ceafc",
+      "equity": "c5db4d4f56df3ee8b761bd65e07fdb7ea4ac7b9787531c9a70bff2fe4ee0e262"
+    },
+    "version8_5/daily": {
+      "trades": "66226db21691c17805078d3f47669368a323916dc50f9aa906823181ca35c89a",
+      "equity": "c43db9ecb03060ceb9698e7b19db44e77403216f25cc50f837ba19c7d0e83c25"
+    },
+    "version8_5/minute": {
+      "trades": "d82f7d0c16a3223e208985cbb6b40271622d3a2d26d1b7ff8dbd05b93649c1e3",
+      "equity": "b7675ab73e090a0f742b61c3d03b6b0d39a7acc29b9516ef00180dc36be71334"
+    },
+    "version8_6/daily": {
+      "trades": "2943c15a9890f34affdd7f03ecdb25ffca267fdadcd7c3356c0d452daf13b5f2",
+      "equity": "474ff4368cc313e30feb49ca02f4da44a432d43b62bcc936de3f0195e576b79a"
+    },
+    "version8_6/minute": {
+      "trades": "9916d76431d623a3198b2e05ea8058b360832020cf76f2dd632d59a06438812c",
+      "equity": "3cf8e62907289791b20e697d52d16b6c53dc1f6352be7398399478e371cbc353"
+    },
+    "version9/daily": {
+      "trades": "7aec73efc90c1418507b03b7291d1e19ae6f066523113fc4810aa095eea178e9",
+      "equity": "3575f366e4573d71bc27d3b4d8060699295b23ec0e8fc10fe6f06a40351faba9"
+    },
+    "version9/minute": {
+      "trades": "732b3b56449d54629ed7de6ca9fcdbc9bbc75ae3e1a5dd17d9c3651192fb8e32",
+      "equity": "3575f366e4573d71bc27d3b4d8060699295b23ec0e8fc10fe6f06a40351faba9"
+    },
+    "version10/daily": {
+      "trades": "8a6a77c9eefd85f1e7b5679bb26a57b4234dda513949edeb89f3aa040fdb7658",
+      "equity": "c25b395ba934ba75ed05c4c11f5d2d0b8a77a6f6b0e93b13aa18621ad2afa57f"
+    },
+    "version10/minute": {
+      "trades": "d13ddeb6eb99e2c73b7268a70f347c47e0524029fd125d4a833503d2e8e21b0b",
+      "equity": "e92ae710c123fa80fe03e1b2870dc2a4d8e3d3070fa22e7d2d9210a838016dcf"
+    },
+    "version11/daily": {
+      "trades": "b6b6d3889cda8af44a39f988578994a7b1e6a4d5225a14665608e8127af83d43",
+      "equity": "ab8b99042617277291db236c17e544d1db11b42a2605eb5bf337c6b06e8fa5c7"
+    },
+    "version11/minute": {
+      "trades": "415a06c49fd23423ff85af1cc8ae07157c61209756fbf994baedb7efe293ba5b",
+      "equity": "0dc402a99a99f0470a7c1c7e1b049183f330780bc46870c85c88f29afeefef67"
+    },
+    "version12/daily": {
+      "trades": "a713b3354711fb8633a1c1df946ea57929446ccb74fff35382477b1d3b33c39f",
+      "equity": "b6d8fc7edf1c1a9c52b181b4feb0f94763d8ad2c1420b6142b12fa59c85c5ac0"
+    },
+    "version12/minute": {
+      "trades": "c0eeee6dc705a9db360a16bb541ab0bfd70e248524a6ac4acd160f71efc7a994",
+      "equity": "5aba03e82b9e0d07b78c2977a59043757c89cf97177b2a47c810cd41d0cbe390"
+    },
+    "topk_dropout/daily": {
+      "trades": "d47ef4211fa1083cb313fa4db556f5781a47f487b22ac2656de2630fc3e3e5c2",
+      "equity": "f2b77bda964b779d31b1276f3c9b4ab2a1ef32a92daa688dc14a30c7fe61546c"
+    },
+    "topk_dropout/minute": {
+      "trades": "dd8135104bb225e47ae9bd57864fb0d9dea4072a0549b9fca8eb6cee1a1e0d79",
+      "equity": "a060cd4c52cb757becf221955622ed37423433b5c7f75b0e8474afacc956c939"
+    },
+    "topk_score_exit/daily": {
+      "trades": "8c28f551c2d6e684e0ab92bbbfcc4b166852f9166576c4a6860a5bf9d1929e4e",
+      "equity": "f2b77bda964b779d31b1276f3c9b4ab2a1ef32a92daa688dc14a30c7fe61546c"
+    },
+    "topk_score_exit/minute": {
+      "trades": "eb7ceac30e20d51a499b427e7f1b791e6177cb74da8834cc90c5d5be369678b8",
+      "equity": "a060cd4c52cb757becf221955622ed37423433b5c7f75b0e8474afacc956c939"
+    },
+    "version7/minute": {
+      "trades": "b34faf7a2963674b3113ac1e3e3346d2fd16fa6bf23ec53ae00e59c6714e3106",
+      "equity": "84755b6faa93348883fdee1fbcafefba5ea50ca5b06b0a77a181ff60d0675fb1"
+    }
+  }
+}
