@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 import time
@@ -114,6 +115,7 @@ from backtest.research.csv_simulate_loop import (  # noqa: E402
     append_equity_and_eod_marks,
     init_sim_state,
     prepare_strategy_hooks,
+    require_market_marks,
     run_chase_due_day,
     run_eod_exits,
     run_pool_buys_day,
@@ -629,12 +631,26 @@ def simulate(
     buy_cost_rate: Optional[float] = None,
     sell_cost_rate: Optional[float] = None,
     min_cost: Optional[float] = None,
+    fix_s12_price_domain: bool = False,
+    s12_price_context=None,
 ) -> SimState:
     """Opt-in cap uses caller-attested completed minutes; daily volume is unused.
 
     exdiv_economics is an explicit (symbol, YYYYMMDD) -> ExDivEvent lookup for
     raw bars. None retains the baseline; E-R6 ratios never imply entitlements.
     """
+    if fix_s12_price_domain:
+        from backtest.research.signal_price_domain import S12PriceContext
+
+        if normalize_csv_strategy(strategy) != "version12":
+            raise ValueError("--fix-s12-price-domain applies only to version12")
+        if exdiv is not None:
+            raise ValueError("--fix-s12-price-domain requires exdiv=None (no double adjustment)")
+        if not isinstance(s12_price_context, S12PriceContext):
+            raise ValueError("--fix-s12-price-domain requires an explicit validated s12_price_context")
+        s12_price_context.validate_simulation(minute_bars, daily_bars, pool_days, start, end)
+    elif s12_price_context is not None:
+        raise ValueError("s12_price_context requires fix_s12_price_domain=True")
     hooks = prepare_strategy_hooks(
         strategy,
         stop_pct=stop_pct,
@@ -724,6 +740,7 @@ def simulate(
                 slice_day=lambda code, date: _slice_day(
                     minute_bars[code], day_spans.get(code, {}), date),
                 scan=scan_held_day,
+                **({"price_context": s12_price_context} if fix_s12_price_domain else {}),
             )
         else:
             bind_opening = hooks.get("bind_opening_held")
@@ -989,6 +1006,11 @@ def simulate(
 
         run_eod_exits(st, day=day, ds=ds, bars=daily_bars, eod_exit=hooks.get("eod_exit"),
                       hold_modes=hold_modes, exdiv=exdiv)
+        if fix_s12_price_domain:
+            require_market_marks(
+                st, ds=ds, day=day, mark_bars=daily_bars,
+                mark_source_for=s12_price_context.raw_path_for,
+            )
         append_equity_and_eod_marks(
             st,
             ds=ds,
@@ -998,6 +1020,13 @@ def simulate(
         )
 
     finish_pending_chase(st, pending_chase)
+    if fix_s12_price_domain:
+        st.stats.update(s12_price_context.metadata)
+        st.stats.update(
+            fix_s12_price_domain=True,
+            economics_enabled=exdiv_economics is not None,
+            total_return_complete=False,
+        )
     return st
 
 
@@ -1041,6 +1070,8 @@ def run(
     sell_cost_rate: Optional[float] = None,
     min_cost: Optional[float] = None,
     strict_pool: bool = False,
+    fix_s12_price_domain: bool = False,
+    s12_price_transform_file: Path | None = None,
 ) -> SimState:
     if str(stop_fill or "").strip().lower() == "close":
         raise SystemExit(
@@ -1048,6 +1079,13 @@ def run(
             "minute entry refuses it (bar close is not 当日收盘)"
         )
     book = normalize_csv_strategy(strategy)
+    if fix_s12_price_domain and (
+        book != "version12" or dividend_type != "none"
+        or minute_source != "lake" or daily_source != "lake"
+    ):
+        raise ValueError("--fix-s12-price-domain requires version12 + lake/lake + --dividend-type none")
+    if s12_price_transform_file is not None and not fix_s12_price_domain:
+        raise ValueError("--s12-price-transform-file requires --fix-s12-price-domain")
     if book == "version12":
         if dividend_type not in ("none", "front") or minute_source != "lake" or daily_source != "lake":
             raise ValueError(
@@ -1106,62 +1144,76 @@ def run(
         f"pool {min(pool_days)}..{max(pool_days)} ({len(pool_days)} days)",
         flush=True,
     )
-    t_daily = time.perf_counter()
-    daily_domain_front = (book == "version12") or (dividend_type == "front")
-    if daily_domain_front:
-        from common.infra.data_root import resolve_period_root
+    s12_price_context = None
+    if fix_s12_price_domain:
+        from backtest.research.signal_price_domain import load_s12_price_context
 
-        front_daily_root = resolve_period_root("1d") / "dividend_type=front"
-        if not front_daily_root.is_dir():
-            raise FileNotFoundError(f"missing front daily partition: {front_daily_root}")
-    daily = load_daily_ohlc(
-        all_codes,
-        load_start,
-        end,
-        source=daily_source,
-        qlib_root=qlib_day_root,
-        workers=workers,
-        **({"dividend_type": "front"} if daily_domain_front else {}),
-    )
-    if book == "version12" and (missing := all_codes - daily.keys()):
-        raise ValueError(f"missing front daily bars for strategy12: {sorted(missing)}")
-    t_daily = time.perf_counter() - t_daily
-    cache_status: dict = {}
-    t_minute = time.perf_counter()
-    if dividend_type == "front":
-        root = resolve_period_root("1m") / "dividend_type=front"
-        if not root.is_dir():
-            raise FileNotFoundError(f"missing front minute partition: {root}")
-        # The existing window cache is none-domain; read the configured front tree.
-        minute = _load_minute_from_lake(
-            all_codes, minute_load_start, end, workers=workers, lake_root=root
+        t_load = time.perf_counter()
+        s12_price_context, minute = load_s12_price_context(
+            all_codes, start, end, load_start=load_start,
+            transform_file=s12_price_transform_file,
         )
-        if missing := all_codes - minute.keys():
-            raise ValueError(f"missing front minute bars for strategy12: {sorted(missing)} under {root}")
-        cache_status["cache"] = "front_uncached"
-    elif minute_source == "qlib_1min":
-        compact = _load_minute_compact(
-            all_codes,
-            minute_load_start,
-            end,
-            source="qlib_1min",
-            qlib_root=qlib_1min_root,
-            workers=workers,
-        )
-        minute = book_frames_from_compact(compact)
-        cache_status["cache"] = "qlib_1min"
+        daily = s12_price_context.raw_daily
+        t_daily = time.perf_counter() - t_load
+        t_minute = 0.0  # strict snapshot reader validates all domains together
+        cache_status = {"cache": "s12_price_domain_uncached"}
     else:
-        minute = load_minute_bars(
+        t_daily = time.perf_counter()
+        daily_domain_front = (book == "version12") or (dividend_type == "front")
+        if daily_domain_front:
+            from common.infra.data_root import resolve_period_root
+
+            front_daily_root = resolve_period_root("1d") / "dividend_type=front"
+            if not front_daily_root.is_dir():
+                raise FileNotFoundError(f"missing front daily partition: {front_daily_root}")
+        daily = load_daily_ohlc(
             all_codes,
-            minute_load_start,
+            load_start,
             end,
+            source=daily_source,
+            qlib_root=qlib_day_root,
             workers=workers,
-            use_cache=use_cache,
-            rebuild_cache=rebuild_cache,
-            status=cache_status,
-            **({"include_volume": True} if volume_required else {}),
+            **({"dividend_type": "front"} if daily_domain_front else {}),
         )
-    t_minute = time.perf_counter() - t_minute
+        if book == "version12" and (missing := all_codes - daily.keys()):
+            raise ValueError(f"missing front daily bars for strategy12: {sorted(missing)}")
+        t_daily = time.perf_counter() - t_daily
+        cache_status: dict = {}
+        t_minute = time.perf_counter()
+        if dividend_type == "front":
+            root = resolve_period_root("1m") / "dividend_type=front"
+            if not root.is_dir():
+                raise FileNotFoundError(f"missing front minute partition: {root}")
+            # The existing window cache is none-domain; read the configured front tree.
+            minute = _load_minute_from_lake(
+                all_codes, minute_load_start, end, workers=workers, lake_root=root
+            )
+            if missing := all_codes - minute.keys():
+                raise ValueError(f"missing front minute bars for strategy12: {sorted(missing)} under {root}")
+            cache_status["cache"] = "front_uncached"
+        elif minute_source == "qlib_1min":
+            compact = _load_minute_compact(
+                all_codes,
+                minute_load_start,
+                end,
+                source="qlib_1min",
+                qlib_root=qlib_1min_root,
+                workers=workers,
+            )
+            minute = book_frames_from_compact(compact)
+            cache_status["cache"] = "qlib_1min"
+        else:
+            minute = load_minute_bars(
+                all_codes,
+                minute_load_start,
+                end,
+                workers=workers,
+                use_cache=use_cache,
+                rebuild_cache=rebuild_cache,
+                status=cache_status,
+                **({"include_volume": True} if volume_required else {}),
+            )
+        t_minute = time.perf_counter() - t_minute
     print(
         f"loaded daily {len(daily)} / minute {len(minute)} / pool days {len(pool_days)}",
         flush=True,
@@ -1253,6 +1305,8 @@ def run(
         buy_cost_rate=buy_cost_rate,
         sell_cost_rate=sell_cost_rate,
         min_cost=min_cost,
+        **({"fix_s12_price_domain": True, "s12_price_context": s12_price_context}
+           if fix_s12_price_domain else {}),
     )
     if skipped.get("exdiv_skipped_no_factor"):
         st.stats["exdiv_skipped_no_factor"] = int(skipped["exdiv_skipped_no_factor"])
@@ -1295,6 +1349,14 @@ def main(argv: Optional[list] = None) -> int:
     ap.add_argument("--daily-source", choices=("lake", "qlib_day"), default="lake")
     ap.add_argument("--dividend-type", choices=("none", "front"), default="none",
                     help="version12 minute fills allow none/front; daily signals fixed to 1d/front")
+    ap.add_argument(
+        "--fix-s12-price-domain", action="store_true",
+        help="X-01: strategy12 raw comparison/reference/mark; lake/lake + none only (default OFF)",
+    )
+    ap.add_argument(
+        "--s12-price-transform-file", type=Path,
+        help="read-only verified as-of affine price transforms; requires --fix-s12-price-domain",
+    )
     ap.add_argument(
         "--qlib-1min-root",
         help="qlib my_data_1min root; implies --minute-source qlib_1min",
@@ -1348,6 +1410,8 @@ def main(argv: Optional[list] = None) -> int:
         minute_source=minute_source,
         daily_source=daily_source,
         dividend_type=args.dividend_type,
+        fix_s12_price_domain=args.fix_s12_price_domain,
+        s12_price_transform_file=args.s12_price_transform_file,
         qlib_1min_root=Path(args.qlib_1min_root) if args.qlib_1min_root else None,
         qlib_day_root=Path(args.qlib_day_root) if args.qlib_day_root else None,
         buy_cost_rate=QLIB_OPEN_COST if args.qlib_cost else None,
@@ -1386,6 +1450,36 @@ def main(argv: Optional[list] = None) -> int:
             if args.emit_run_manifest else None
         ),
     )
+    if normalize_csv_strategy(args.strategy) == "version12":
+        audit = (
+            {key: st.stats[key] for key in (
+                "fix_s12_price_domain", "daily_signal_domain", "signal_comparison_domain",
+                "minute_fill_domain", "mark_domain", "reference_adjustment", "transform_model",
+                "implicit_exdiv_map", "economics_enabled", "nav_comparability",
+                "total_return_complete", "pit_anchor_validation", "source_hashes",
+                "validation_version", "cache_policy", "transform_metadata_sha256",
+                "transform_evidence_sha256", "source_snapshot_id", "source_file_hashes",
+                "source_paths", "provenance", "optional_factor", "input_absolute_tolerance",
+                "real_lake_precision_validated",
+            ) if key in st.stats}
+            if args.fix_s12_price_domain else {
+                "fix_s12_price_domain": False,
+                "daily_signal_domain": "front",
+                "signal_comparison_domain": "legacy_unconverted",
+                "minute_fill_domain": args.dividend_type,
+                "mark_domain": "front",
+                "implicit_exdiv_map": False,
+                "economics_enabled": False,
+                "total_return_complete": False,
+                "nav_comparability": (
+                    "invalid_mixed_price_domains" if args.dividend_type == "none"
+                    else "legacy_adjusted_account_not_raw_nav"
+                ),
+            }
+        )
+        (out_dir / "price_domain_audit.json").write_text(
+            json.dumps(audit, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
     return 0
 
 

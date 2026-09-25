@@ -125,8 +125,11 @@ def _prepare_day(st, codes, ds, exdiv):
                 st.stats["exdiv_adjusted_lots"] = st.stats.get("exdiv_adjusted_lots", 0) + 1
 
 
-def _limits(st, code, closes, ds, names, exdiv):
-    prev, mapped = mapped_prev_close(exdiv, code, ds, closes[-1])
+def _limits(st, code, closes, ds, names, exdiv, reference_price_for=None):
+    if reference_price_for is None:
+        prev, mapped = mapped_prev_close(exdiv, code, ds, closes[-1])
+    else:
+        prev, mapped = reference_price_for(code, ds), False
     if mapped:
         st.stats["exdiv_prev_close_mapped"] = st.stats.get("exdiv_prev_close_mapped", 0) + 1
     limits = book_limit_prices(code, prev, names)
@@ -137,11 +140,12 @@ def _limits(st, code, closes, ds, names, exdiv):
 
 def _normal_buys(st, pending_chase, *, hooks, day_i, day, ds, names, pool_days,
                  daily_quota, chase_quote, pool_quote, exdiv, volume_bucket_for=None,
-                 ration=None):
+                 ration=None, reference_price_for=None):
     run_chase_due_day(st, pending_chase, day_i=day_i, day=day, ds=ds,
                       names=names, allow_add=True, buy_gate=None,
                       quotes_for=chase_quote, exdiv=exdiv,
-                      volume_bucket_for=volume_bucket_for)
+                      volume_bucket_for=volume_bucket_for,
+                      reference_price_for=reference_price_for)
     run_pool_buys_day(st, pending_chase, day_i=day_i, day=day, ds=ds,
                       pool_days=pool_days, daily_quota=daily_quota,
                       names=names, allow_add=True, buy_gate=None,
@@ -149,20 +153,24 @@ def _normal_buys(st, pending_chase, *, hooks, day_i, day, ds, names, pool_days,
                       name_budget=hooks["name_budget"], exdiv=exdiv,
                       ration=hooks["ration"] if ration is None else ration,
                       ration_seed=hooks["ration_seed"],
-                      volume_bucket_for=volume_bucket_for)
+                      volume_bucket_for=volume_bucket_for,
+                      reference_price_for=reference_price_for)
     run_step_adds_day(st, day_i=day_i, day=day, ds=ds, names=names,
                       buy_quote_for=pool_quote, sizing="per_name",
                       name_budget=hooks["name_budget"], exdiv=exdiv,
                       step_add=lambda lots, px: rules.step_add_due(
                           lots, px, memory=memory_for(st, lots[0].code)),
-                      volume_bucket_for=volume_bucket_for)
+                      volume_bucket_for=volume_bucket_for,
+                      reference_price_for=reference_price_for)
 
 
-def _buybacks(st, *, hooks, day_i, day, ds, names, quote, exdiv, volume_bucket_for=None):
+def _buybacks(st, *, hooks, day_i, day, ds, names, quote, exdiv, volume_bucket_for=None,
+              reference_price_for=None):
     run_buybacks_day(st, day_i=day_i, day=day, ds=ds, names=names,
                      codes=memories(st), buy_quote_for=quote,
                      buyback_plan=hooks["buyback_plan"], on_reclaim=hooks["on_reclaim"],
-                     exdiv=exdiv, volume_bucket_for=volume_bucket_for)
+                     exdiv=exdiv, volume_bucket_for=volume_bucket_for,
+                      reference_price_for=reference_price_for)
 
 
 def run_daily_day(st, pending_chase, *, hooks, bars, pool_days, day_i, day,
@@ -208,12 +216,16 @@ def run_daily_day(st, pending_chase, *, hooks, bars, pool_days, day_i, day,
 
 
 def run_minute_day(st, pending_chase, *, hooks, minute_bars, daily_bars, pool_days,
-                   day_i, day, ds, names, daily_quota, exdiv, slice_day, scan):
+                   day_i, day, ds, names, daily_quota, exdiv, slice_day, scan,
+                   price_context=None):
     """Advance bars chronologically so reclaim re-arms within the same day.
 
     The scanner's existing 5-tuple is retained; shares use its exit_state
     out-param. Pool/chase/steps keep their existing exact/fallback quote clocks.
     """
+    if price_context is not None and exdiv is not None:
+        raise ValueError("X-01 price context requires exdiv=None (reference conversion occurs once)")
+    reference_price_for = None if price_context is None else price_context.reference_price_for
     opening_codes = list(dict.fromkeys([*st.positions, *memories(st)]))
     _prepare_day(st, opening_codes, ds, exdiv)
     planned = apply_capital_ration(list(pool_days.get(ds, [])), ration=hooks["ration"],
@@ -225,13 +237,17 @@ def run_minute_day(st, pending_chase, *, hooks, minute_bars, daily_bars, pool_da
         minute = minute_bars.get(code)
         if daily is None or minute is None or day not in daily.index:
             continue
-        prev = daily.loc[daily.index < day, "close"].astype(float).tolist()
+        prev = (
+            daily.loc[daily.index < day, "close"].astype(float).tolist()
+            if price_context is None
+            else price_context.previous_signal_closes_in_raw_domain(code, day)
+        )
         frame = slice_day(code, ds)
         if not prev or frame is None:
             continue
         frames[code] = {int(row.hm): row for row in frame.itertuples()}
         closes_by_code[code] = prev
-        limits_by_code[code] = _limits(st, code, prev, ds, names, exdiv)
+        limits_by_code[code] = _limits(st, code, prev, ds, names, exdiv, reference_price_for)
         times = list(frames[code])
         early = [hm for hm in times if 570 <= hm <= 585]
         late = [hm for hm in times if 870 <= hm <= 895]
@@ -285,6 +301,7 @@ def run_minute_day(st, pending_chase, *, hooks, minute_bars, daily_bars, pool_da
                      names=names, pool_days={ds: [c for c in planned if pool_at.get(c) == hm]},
                      daily_quota=daily_quota, chase_quote=chase_quote,
                      pool_quote=pool_quote, exdiv=exdiv, volume_bucket_for=bucket,
-                     ration="file_order")
+                     ration="file_order", reference_price_for=reference_price_for)
         _buybacks(st, hooks=hooks, day_i=day_i, day=day, ds=ds, names=names,
-                   quote=quote, exdiv=exdiv, volume_bucket_for=bucket)
+                   quote=quote, exdiv=exdiv, volume_bucket_for=bucket,
+                   reference_price_for=reference_price_for)
