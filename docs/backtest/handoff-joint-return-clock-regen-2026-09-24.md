@@ -1,6 +1,6 @@
 # 交接：joint-return-v1 时钟 pack 全量重生成 · NOT_READY_FOR_MODE_B 解除（2026-09-24）
 
-> **状态**：专题已开。步骤 A（BT 锁重指，本 PR）待人裁合；合入后 4090 跑 MQ §2/§3 全量重生成 → bt 核验 → P-BASE → Mode B → 解除停牌。上游交接：[handoff-joint-return-qlib-to-bt-2026-09-22.md](handoff-joint-return-qlib-to-bt-2026-09-22.md)。
+> **状态（2026-09-25 终版）**：**B–G 收官，`NOT_READY_FOR_MODE_B` 解除**。全量重生成 pack（合同 `c6b85b9b…`，code_shas MQ `b072cc3`/BT `2f79375`）→ 收窄 614/1891 → P-BASE M-LAG **3631 fills / net +59.1%** → Mode B 真湖 **M-REF 21 / M-LAG 3631** 全 `BT_RESEARCH_REPLAY_PASS`。实测账与过程回执：4090 机 `…\narrow_clock_full_20260924\RECEIPT_CLOCK_REGEN_FULL.md`。跨重生成 tie-break 方差见 §7。上游交接：[handoff-joint-return-qlib-to-bt-2026-09-22.md](handoff-joint-return-qlib-to-bt-2026-09-22.md)。
 > **主管**：bt（本仓）。qlib 出合同与时钟（MQ #97 已合 `1c1fe43`；MQ tip `b072cc3` 为其祖先，`contract_hash()` 复算仍 = `c6b85b9b…`）。4090bot = 本机 runner（newtest_4090）。
 > **前置已扫清**：Mode B 回放性能弧收官（wall 237.6s，[handoff-joint-return-modeb-perf-20260924.md](handoff-joint-return-modeb-perf-20260924.md)）。
 
@@ -57,6 +57,12 @@ E 步若仍 0 成交 → 停，回 qlib 查时钟，不交 Mode B（上游交接
 ## 6. 勘误（2026-09-24 20:15）
 
 初版 §3 scores 行误写 `merged\scores.json`（引 merge 步 manifest），已按成功线自登记改为 `inputs\scores_carryforward.json`。该误写曾触发一次双执行器撞车（B 半成品被误判 scores 错误而隔离重跑），根因即本行。执行纪律补充：**B–C 全程本机（4090）只允许一个执行器**；重跑前先核 `wmic process` 与目录时间戳，避免第二执行器写入同一 `$Out`。
+
+## 6b. 收官补遗（2026-09-25）
+
+- 执行实录：B ~3min；C1 rule 6h21m；C2 freeze ~4min（两次秒级失败已修：freeze 用富字段 metadata + plans uri 逐字重登记）；C3 portfolio 5h58m（D 盘 ENOSOC 作废一轮后重跑）；收窄/回放见 §2 各步。
+- **同分钟 tie-break 方差（新发现）**：两包 intents 语义与序列逐位全等（仅 hash 血统不同）时，成交仍可漂移（3631 vs 4475）——根因是同分钟共享余额按 **intent_id 序** 瓜分（#187 语义契约），跨重生成 hash 不同 → day-1 部分成交拆分不同 → 持仓链蝴蝶效应。非引擎回归（旧包×新引擎复放 = 4475 整）。策略经济性对此稳健（net 59.1% vs 59.3%）。**建议**：MQ/BT 后续讨论把同分钟并列 tie-break 语义化（如 (instrument, qty) 序或轮转），否则跨包对账永远吃这个方差。
+- marks 跨包复用要点：`reference_marks` 按 intent_id 挂证，重映射需等长替换 1891 键 + 按引擎约定（`joint_return_replay.py:653`，`content_hash(bundle 去字段)`）重算 bars seal；bars `content_sha256` 是强校验，不能只改键不算 seal。
 
 ## 7. 维护
 
