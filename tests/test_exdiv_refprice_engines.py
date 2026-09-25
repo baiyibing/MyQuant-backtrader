@@ -694,6 +694,8 @@ def test_d2_v7_main_keeps_real_context_chain_with_nonempty_pool(
     monkeypatch.setattr(v7, "simulate_v7", simulate)
     writer = Mock()
     monkeypatch.setattr(v7, "write_run_artifacts", writer)
+    config_writer = Mock()
+    monkeypatch.setattr(v7, "write_run_config", config_writer)
     assert v7.main(["--start", "20251103", "--end", "20251105", "--pool-dir", str(tmp_path),
                     "--output-dir", str(tmp_path / "out"), "--daily-source", daily_source,
                     "--minute-source", minute_source]) == 0
@@ -703,6 +705,10 @@ def test_d2_v7_main_keeps_real_context_chain_with_nonempty_pool(
     index.assert_called_once()
     assert simulate.call_args.kwargs["exdiv"] is EXDIV_HALF
     writer.assert_called_once()
+    config_writer.assert_called_once()
+    config = config_writer.call_args.args[1]
+    assert config["fix_minute_cash_order"] is False
+    assert config["cash_order_policy"] == "legacy_symbol_day"
     assert not (tmp_path / "out").exists()
 
 

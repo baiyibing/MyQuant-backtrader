@@ -123,6 +123,8 @@ from backtest.research.csv_simulate_loop import (  # noqa: E402
 )
 
 from backtest.research.ashare_volume_cap import VolumeCap, VolumeLookup  # noqa: E402
+from backtest.research.minute_audit import audit_scope, write_audit
+from backtest.research.minute_cash_order import run_chronological_day
 
 # Preserve historical loader aliases used by callers and tests.
 _ = (_annotate, _load_minute_from_lake, _read_one_minute)
@@ -635,12 +637,18 @@ def simulate(
     s12_price_context=None,
     fix_s11_exit_domain: bool = False,
     signal_bars_front: dict[str, pd.DataFrame] | None = None,
+    fix_minute_cash_order: bool = False,
+    audit_sink=None,
 ) -> SimState:
     """Opt-in cap uses caller-attested completed minutes; daily volume is unused.
 
     exdiv_economics is an explicit (symbol, YYYYMMDD) -> ExDivEvent lookup for
     raw bars. None retains the baseline; E-R6 ratios never imply entitlements.
     """
+    if fix_minute_cash_order and normalize_csv_strategy(strategy) == "version12":
+        raise ValueError("--fix-minute-cash-order is not applicable to version12")
+    if audit_sink is not None and normalize_csv_strategy(strategy) == "version12":
+        raise ValueError("X-02 execution audit is not applicable to version12")
     if fix_s12_price_domain:
         from backtest.research.signal_price_domain import S12PriceContext
 
@@ -757,6 +765,16 @@ def simulate(
                 scan=scan_held_day,
                 **({"price_context": s12_price_context} if fix_s12_price_domain else {}),
             )
+        elif fix_minute_cash_order:
+            run_chronological_day(
+                st, pending_chase, hooks=hooks, minute_bars=minute_bars,
+                daily_bars=daily_bars, pool_days=pool_days, day_i=i, day=day,
+                ds=ds, names=names, daily_quota=daily_quota, exdiv=exdiv,
+                calendar=calendar,
+                slice_day=lambda code, date: _slice_day(
+                    minute_bars[code], day_spans.get(code, {}), date),
+                profit_base=profit_base, pos_trail=pos_trail, audit_sink=audit_sink,
+            )
         else:
             bind_opening = hooks.get("bind_opening_held")
             if callable(bind_opening):
@@ -822,9 +840,10 @@ def simulate(
                             st.stats["defer_sell_limit_down"] += 1
                             continue
                         before = len(st.trades)
-                        _sell(st, code, pos, px, day, pos.pending_exit,
-                              bucket_id=AM_OPEN, at=AM_OPEN - 1, day_i=i,
-                              hm=AM_OPEN, price_rule="minute_pending_next_open")
+                        with audit_scope(audit_sink, decision_hm=AM_OPEN, phase="open", quote_hm=AM_OPEN):
+                            _sell(st, code, pos, px, day, pos.pending_exit,
+                                  bucket_id=AM_OPEN, at=AM_OPEN - 1, day_i=i,
+                                  hm=AM_OPEN, price_rule="minute_pending_next_open")
                         if any(t["side"] == "SKIP" and t["reason"].startswith("skip_volume")
                                for t in st.trades[before:]):
                             st.stats["defer_sell_volume"] += 1
@@ -883,11 +902,17 @@ def simulate(
                             "stop_loss:gap_open": "minute_gap_open",
                             "stop_loss:touch": "minute_trigger_bar_close",
                         }.get(reason, "")
-                        _sell(st, code, pos, px, day, reason, **volume_kwargs,
-                              hm=int(hm[idx]) if price_rule else None, price_rule=price_rule)
+                        with audit_scope(
+                            audit_sink, decision_hm=int(hm[idx]), quote_hm=int(hm[idx]),
+                            phase="open" if reason == "stop_loss:gap_open" else "close",
+                        ):
+                            _sell(st, code, pos, px, day, reason, **volume_kwargs,
+                                  hm=int(hm[idx]) if price_rule else None, price_rule=price_rule)
 
             def _volume_bucket_for(code: str, target: int, earliest: int):
                 # Mirror the quote helpers' exact/fallback row, never a later bucket.
+                if code not in minute_bars:
+                    return None
                 frame = _slice_day(minute_bars[code], day_spans.get(code, {}), ds)
                 if frame is None:
                     return None
@@ -919,23 +944,24 @@ def simulate(
                 closes = prev_rows["close"].astype(float).tolist()
                 return open_px, px, closes
 
-            run_chase_due_day(
-                st,
-                pending_chase,
-                day_i=i,
-                day=day,
-                names=names,
-                allow_add=allow_add,
-                buy_gate=buy_gate,
-                quotes_for=_chase_quotes_for,
-                volume_bucket_for=chase_volume if st.volume_cap is not None else None,
-                exdiv=exdiv,
-                ds=ds,
-                qlib_limit_pct=qlib_limit_pct,
-                allow_new_name=hooks.get("allow_new_name"),
-                add_gate=hooks.get("add_gate"),
-                index_blocks_add=hooks.get("index_blocks_add", True),
-            )
+            with audit_scope(audit_sink, decision_hm=CHASE_HM, phase="close", quote_for=chase_volume):
+                run_chase_due_day(
+                    st,
+                    pending_chase,
+                    day_i=i,
+                    day=day,
+                    names=names,
+                    allow_add=allow_add,
+                    buy_gate=buy_gate,
+                    quotes_for=_chase_quotes_for,
+                    volume_bucket_for=chase_volume if st.volume_cap is not None else None,
+                    exdiv=exdiv,
+                    ds=ds,
+                    qlib_limit_pct=qlib_limit_pct,
+                    allow_new_name=hooks.get("allow_new_name"),
+                    add_gate=hooks.get("add_gate"),
+                    index_blocks_add=hooks.get("index_blocks_add", True),
+                )
 
             def _pool_quote_for(code: str):
                 mdf = minute_bars.get(code)
@@ -965,59 +991,63 @@ def simulate(
                 return px, closes
 
             volume_skips = int(st.stats.get("skip_volume_unavailable", 0)) + int(st.stats.get("skip_volume_cap", 0))
-            run_pool_buys_day(
-                st,
-                pending_chase,
-                day_i=i,
-                day=day,
-                ds=ds,
-                pool_days=pool_days,
-                daily_quota=daily_quota,
-                names=names,
-                allow_add=allow_add,
-                buy_gate=buy_gate,
-                buy_quote_for=_pool_quote_for,
-                volume_bucket_for=pool_volume if st.volume_cap is not None else None,
-                volume_at=AM_OPEN - 1 if minute_open else None,
-                sold_today={t["code"] for t in st.trades[day_trade_start:] if t["side"] == "SELL"}
-                if hooks.get("skip_sold_today") else None,
-                sizing=hooks.get("sizing", "daily_quota"),
-                name_budget=hooks.get("name_budget", 1_000_000.0),
-                ration=hooks.get("ration", "file_order"),
-                ration_seed=hooks.get("ration_seed", 0),
-                exdiv=exdiv,
-                planned_for_day=hooks.get("planned_for_day"),
-                cash_deploy_frac=hooks.get("cash_deploy_frac"),
-                qlib_limit_pct=qlib_limit_pct,
-                limit_up_chase=limit_up_chase,
-                forbid_all_trade_at_limit=forbid_all_trade_at_limit,
-                allow_new_name=hooks.get("allow_new_name"),
-                add_gate=hooks.get("add_gate"),
-                name_lot_budget=hooks.get("name_lot_budget"),
-                index_blocks_add=hooks.get("index_blocks_add", True),
-            )
+            with audit_scope(audit_sink, decision_hm=AM_OPEN if minute_open else BUY_HM,
+                phase="open" if minute_open else "close", quote_for=pool_volume):
+                run_pool_buys_day(
+                    st,
+                    pending_chase,
+                    day_i=i,
+                    day=day,
+                    ds=ds,
+                    pool_days=pool_days,
+                    daily_quota=daily_quota,
+                    names=names,
+                    allow_add=allow_add,
+                    buy_gate=buy_gate,
+                    buy_quote_for=_pool_quote_for,
+                    volume_bucket_for=pool_volume if st.volume_cap is not None else None,
+                    volume_at=AM_OPEN - 1 if minute_open else None,
+                    sold_today={t["code"] for t in st.trades[day_trade_start:] if t["side"] == "SELL"}
+                    if hooks.get("skip_sold_today") else None,
+                    sizing=hooks.get("sizing", "daily_quota"),
+                    name_budget=hooks.get("name_budget", 1_000_000.0),
+                    ration=hooks.get("ration", "file_order"),
+                    ration_seed=hooks.get("ration_seed", 0),
+                    exdiv=exdiv,
+                    planned_for_day=hooks.get("planned_for_day"),
+                    cash_deploy_frac=hooks.get("cash_deploy_frac"),
+                    qlib_limit_pct=qlib_limit_pct,
+                    limit_up_chase=limit_up_chase,
+                    forbid_all_trade_at_limit=forbid_all_trade_at_limit,
+                    allow_new_name=hooks.get("allow_new_name"),
+                    add_gate=hooks.get("add_gate"),
+                    name_lot_budget=hooks.get("name_lot_budget"),
+                    index_blocks_add=hooks.get("index_blocks_add", True),
+                )
             if minute_open:
                 st.stats["skip_buy_volume"] += (
                     int(st.stats.get("skip_volume_unavailable", 0))
                     + int(st.stats.get("skip_volume_cap", 0)) - volume_skips
                 )
-            run_step_adds_day(
-                st,
-                day_i=i,
-                day=day,
-                ds=ds,
-                names=names,
-                buy_quote_for=_pool_quote_for,
-                volume_bucket_for=pool_volume if st.volume_cap is not None else None,
-                sizing=hooks.get("sizing", "daily_quota"),
-                name_budget=hooks.get("name_budget", 1_000_000.0),
-                exdiv=exdiv,
-                qlib_limit_pct=qlib_limit_pct,
-                forbid_all_trade_at_limit=forbid_all_trade_at_limit,
-                buy_gate=buy_gate,
-                name_lot_budget=hooks.get("name_lot_budget"),
-                step_add=hooks.get("step_add"),
-            )
+            with audit_scope(audit_sink, decision_hm=AM_OPEN if minute_open else BUY_HM,
+                phase="open" if minute_open else "close", quote_for=pool_volume):
+                run_step_adds_day(
+                    st,
+                    day_i=i,
+                    day=day,
+                    ds=ds,
+                    names=names,
+                    buy_quote_for=_pool_quote_for,
+                    volume_bucket_for=pool_volume if st.volume_cap is not None else None,
+                    sizing=hooks.get("sizing", "daily_quota"),
+                    name_budget=hooks.get("name_budget", 1_000_000.0),
+                    exdiv=exdiv,
+                    qlib_limit_pct=qlib_limit_pct,
+                    forbid_all_trade_at_limit=forbid_all_trade_at_limit,
+                    buy_gate=buy_gate,
+                    name_lot_budget=hooks.get("name_lot_budget"),
+                    step_add=hooks.get("step_add"),
+                )
 
         run_eod_exits(st, day=day, ds=ds, bars=daily_bars, eod_exit=hooks.get("eod_exit"),
                       hold_modes=hold_modes, exdiv=exdiv,
@@ -1090,6 +1120,8 @@ def run(
     fix_s12_price_domain: bool = False,
     s12_price_transform_file: Path | None = None,
     fix_s11_exit_domain: bool = False,
+    fix_minute_cash_order: bool = False,
+    audit_sink=None,
 ) -> SimState:
     if fix_s11_exit_domain:
         if normalize_csv_strategy(strategy) != "version11":
@@ -1110,6 +1142,10 @@ def run(
         raise ValueError("--fix-s12-price-domain requires version12 + lake/lake + --dividend-type none")
     if s12_price_transform_file is not None and not fix_s12_price_domain:
         raise ValueError("--s12-price-transform-file requires --fix-s12-price-domain")
+    if fix_minute_cash_order and book == "version12":
+        raise ValueError("--fix-minute-cash-order is not applicable to version12")
+    if audit_sink is not None and book == "version12":
+        raise ValueError("X-02 execution audit is not applicable to version12")
     if book == "version12":
         if dividend_type not in ("none", "front") or minute_source != "lake" or daily_source != "lake":
             raise ValueError(
@@ -1341,9 +1377,25 @@ def run(
         min_cost=min_cost,
         **({"fix_s12_price_domain": True, "s12_price_context": s12_price_context}
            if fix_s12_price_domain else {}),
+        fix_minute_cash_order=fix_minute_cash_order,
+        audit_sink=audit_sink,
     )
     if skipped.get("exdiv_skipped_no_factor"):
         st.stats["exdiv_skipped_no_factor"] = int(skipped["exdiv_skipped_no_factor"])
+    # Run-level provenance only: library simulate() OFF snapshots keep old keys.
+    st.stats.update(
+        fix_minute_cash_order=bool(fix_minute_cash_order),
+        cash_order_policy="chronological" if fix_minute_cash_order else "legacy_full_day_scan",
+        same_hm_policy=("open_before_close; independent_sells_before_buys"
+                        if fix_minute_cash_order else "legacy_full_day_scan_before_buys"),
+        fallback_order_clock="target_hm; capacity_uses_quote_bucket",
+        stable_order="held_insertion_then_lot; original_ration_and_chase_queue",
+    )
+    if book == "version12":
+        st.stats.update(cash_order_policy="strategy12_existing_minute_hook",
+                        same_hm_policy="strategy12_existing_sells_then_buys",
+                        fallback_order_clock="strategy12_existing_hook",
+                        stable_order="strategy12_existing_hook")
     st.stats["t_pool_s"] = t_pool
     st.stats["t_daily_s"] = t_daily
     st.stats["t_minute_s"] = t_minute
@@ -1436,11 +1488,17 @@ def main(argv: Optional[list] = None) -> int:
         "--fix-s11-exit-domain", action="store_true",
         help="version11 EOD exits use independent lake front; raw lake fills/marks (default OFF)",
     )
+    ap.add_argument(
+        "--fix-minute-cash-order", action="store_true",
+        help="advance minute cash/holdings chronologically (default off; unavailable for version12)",
+    )
+    ap.add_argument("--execution-audit-file", help="optional execution JSON sidecar; leaves CSVs unchanged")
     args = ap.parse_args(argv if argv is not None else None)
     pool_dir = resolve_research_pool_dir(args.strategy, args.pool_dir, repo=REPO)
     minute_source = "qlib_1min" if args.qlib_1min_root else args.minute_source
     daily_source = "qlib_day" if args.qlib_day_root else args.daily_source
 
+    audit = [] if args.execution_audit_file else None
     st = run(
         args.start,
         args.end,
@@ -1468,6 +1526,8 @@ def main(argv: Optional[list] = None) -> int:
         min_cost=QLIB_MIN_COST if args.qlib_cost else None,
         strict_pool=args.strict_pool,
         fix_s11_exit_domain=args.fix_s11_exit_domain,
+        fix_minute_cash_order=args.fix_minute_cash_order,
+        audit_sink=audit,
         **csv_run_kwargs_from_args(args),
     )
     book = engine_book(args.strategy)
@@ -1502,7 +1562,7 @@ def main(argv: Optional[list] = None) -> int:
         ),
     )
     if normalize_csv_strategy(args.strategy) == "version12":
-        audit = (
+        price_domain_audit = (
             {key: st.stats[key] for key in (
                 "fix_s12_price_domain", "daily_signal_domain", "signal_comparison_domain",
                 "minute_fill_domain", "mark_domain", "reference_adjustment", "transform_model",
@@ -1529,8 +1589,11 @@ def main(argv: Optional[list] = None) -> int:
             }
         )
         (out_dir / "price_domain_audit.json").write_text(
-            json.dumps(audit, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+            json.dumps(price_domain_audit, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
         )
+    if args.execution_audit_file:
+        write_audit(args.execution_audit_file, audit, engine=engine,
+                    enabled=args.fix_minute_cash_order)
     return 0
 
 
