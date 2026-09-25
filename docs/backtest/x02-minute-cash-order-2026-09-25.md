@@ -17,7 +17,7 @@
 
 ## 合成验证与 OFF 基线
 
-基线来自 master `eff77f3` 上 PR #202 的 `6d6d1fd`、`3028136`，已 cherry-pick；golden 未重录。19 本 × daily/minute × trades/equity 共 76 hash，另 v7 两个 hash，每组均含真实 BUY/SELL。测试同时核正式 writer、库层 CSV bytes、结构化成交/账户；省略和显式 False 分别运行。
+基线文件（eff77f3 字节 golden 与 canonical 摘要，经 #202/#205/#207 合入）与 master `4310fa8` 逐字节相同；分支上原先 cherry-pick 的 `6d6d1fd`、`3028136` 已在 rebase 时丢弃；golden 未重录。19 本 × daily/minute × trades/equity 共 76 hash，另 v7 两个 hash，每组均含真实 BUY/SELL。测试同时核正式 writer、库层 CSV bytes、结构化成交/账户；省略和显式 False 分别运行。
 
 ```bash
 ~/.venvs/bt-ci/bin/python -m pytest -p no:cacheprovider -q tests/test_off_byte_baseline.py
