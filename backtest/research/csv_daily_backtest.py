@@ -594,9 +594,9 @@ def simulate(
                         if reason:
                             if defer_sell_at_limit(close, limits):
                                 st.stats["defer_sell_limit_down"] += 1
-                                # This exit includes today's add, even when the
-                                # limit prevents selling any old shares now.
-                                pos.pending_exit = reason + "|t1_deferred"
+                                # The group remembers this exit day. Only lots
+                                # locked on that day receive the T+1 fill marker.
+                                pos.pending_exit = reason
                             else:
                                 _sell(st, code, pos, close, day, reason,
                                       day_i=i, price_rule="daily_group_after_add_close")

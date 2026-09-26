@@ -186,6 +186,37 @@ def test_books_are_separate_modules():
     assert "策略 10" in BOOKS["version10"].help_lock
 
 
+@pytest.mark.parametrize("strategy", [
+    "version8", "version8_2", "version8_3", "version8_4", "version8_5", "version8_6",
+])
+def test_s8_help_locks_independent_positions_group_exits_and_strict_cash(strategy):
+    help_lock = BOOKS[strategy].help_lock
+    for sentence in (
+        "名单每个代码+信号日期各开独立持仓（position_id）",
+        "后日再现是新仓",
+        "按持仓加权成本整体评估止损/止盈/trail/stale（成本不含佣金）",
+        "peak 初始为首买价，T+1 起跟踪行情，加仓不重置；stale 从首买日计算",
+        "退出卖出该持仓全部可卖股",
+        "今日新增股遵守 T+1，次交易日首个可卖时机按原卖因加 |t1_deferred 卖出",
+        "跌停仍顺延，已挂起退出的持仓不再加仓；不同信号日期持仓互不连带",
+        "任一买单所需现金（含费用）不足即 InsufficientCashError，停止回测",
+    ):
+        assert sentence in help_lock
+    assert "上限2笔" not in "".join(help_lock.split())
+    if strategy in ("version8", "version8_4", "version8_5"):
+        assert "相对各持仓自己的首笔成本每满 +20% 加 100 万；名单外也评" in help_lock
+        assert "每持仓每日最多一级" in help_lock
+        assert "成交后记录历史级数，step lot 卖出不回退；全部 lots 卖完即关闭" in help_lock
+    elif strategy == "version8_3":
+        assert "各首买 50 万试探，不受旧仓亏损或旧仓 add_gate 限制" in help_lock
+        assert "现价≥自身首笔成本且自身峰值≥自身首笔成本×1.03 时，补剩余 50 万一次" in help_lock
+        assert "与名单无关；分钟 14:55 扫描" in help_lock
+        assert "追买绑定原信号身份且预算固定为 50 万" in help_lock
+    else:
+        assert "无价格加仓，单 lot 沿用原退出规则" in help_lock
+        assert help_lock.count("追买保留原信号身份和预算") == 1
+
+
 @pytest.mark.parametrize("strategy", ["version1", "version2"])
 def test_early_book_run_kwargs_stop_override(strategy):
     book = get_book(strategy)

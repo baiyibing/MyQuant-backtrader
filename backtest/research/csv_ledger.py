@@ -101,6 +101,8 @@ class IndependentGroup:
     supplement_done: bool = False
     last_add_date: str = ""
     closed: bool = False
+    exit_day_idx: int | None = None
+    t1_deferred_bonus_lots: set[int] = field(default_factory=set)
 
 
 class IndependentExitPosition:
@@ -193,6 +195,11 @@ class IndependentExitPosition:
 
     @pending_exit.setter
     def pending_exit(self, value):
+        if value and not self.group.first_lot.pending_exit:
+            self.group.exit_day_idx = self.day_i
+        elif not value:
+            self.group.exit_day_idx = None
+            self.group.t1_deferred_bonus_lots.clear()
         self.group.first_lot.pending_exit = value
 
 
@@ -459,6 +466,12 @@ def execute_buy(
     policy = s8_policy(st)
     group = None
     if policy is not None:
+        if position_id is not None and (
+            not isinstance(position_id, str) or "@" not in position_id
+        ):
+            raise ValueError(
+                f"position_id must have the form code@entry_signal_date: {position_id!r}"
+            )
         entry_signal_date = entry_signal_date or (
             position_id.split("@", 1)[1] if position_id else _ymd(day)
         )
@@ -495,7 +508,8 @@ def execute_buy(
             key, bucket_id if at is None else at, shares, buy=True,
         )
         if not shares:
-            _volume_skip(st, code, px, day, skip, bucket_id)
+            _volume_skip(st, code, px, day, skip, bucket_id,
+                         position_id=position_id, entry_signal_date=entry_signal_date)
             return False
         notional = shares * px
         comm = trade_commission(notional, st.buy_cost_rate, st.min_cost)
@@ -565,13 +579,18 @@ def execute_buy(
 
 
 def _volume_skip(st: SimState, code: str, px: float, day, reason: str,
-                 bucket_id: int | None) -> None:
+                 bucket_id: int | None, *, position_id: str | None = None,
+                 entry_signal_date: str | None = None) -> None:
     family = reason.split(":", 1)[0]
     st.stats[family] = int(st.stats.get(family, 0)) + 1
+    identity = (
+        {"position_id": position_id, "entry_signal_date": entry_signal_date}
+        if s8_policy(st) is not None and position_id is not None else {}
+    )
     st.trades.append({"date": _ymd(day), "code": code, "side": "SKIP",
                       "price": px, "shares": 0, "notional": 0.0,
                       "commission": 0.0, "reason": reason, "bucket": bucket_id,
-                      "session_phase": "", "price_rule": ""})
+                      "session_phase": "", "price_rule": "", **identity})
     record_fill(st, st.trades[-1], st.cash)
 
 
@@ -621,10 +640,12 @@ def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str, *
                          if p.ride_with == pos.lot_id and p is not pos]
         child_ids = {p.lot_id for p in group if p is not pos}
         if any(p.ride_with in child_ids for p in st.positions.get(code, [])):
-            _volume_skip(st, code, px, day, "skip_volume_cap:unsupported_ride_tree", bucket_id)
+            _volume_skip(st, code, px, day, "skip_volume_cap:unsupported_ride_tree", bucket_id,
+                         **position_identity(pos))
             return 0
         if day_i is None or any(p.entry_idx >= day_i for p in group):
-            _volume_skip(st, code, px, day, "skip_volume_cap:t1", bucket_id)
+            _volume_skip(st, code, px, day, "skip_volume_cap:t1", bucket_id,
+                         **position_identity(pos))
             return 0
         key = (code, _ymd(day), bucket_id)
         wanted = shares if len(group) == 1 else sum(p.shares for p in group)
@@ -634,7 +655,7 @@ def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str, *
                     or (bool(pos.pending_exit) and not _group_exit)),
         )
         if not allocated:
-            _volume_skip(st, code, px, day, skip, bucket_id)
+            _volume_skip(st, code, px, day, skip, bucket_id, **position_identity(pos))
             return 0
         shares = min(shares, allocated)
     notional = shares * px
@@ -743,23 +764,26 @@ def _sell_s8_group(
             bucket_id=bucket_id, at=at, day_i=day_i, hm=hm,
             session_phase=session_phase, price_rule=price_rule,
         )
-    ds = _ymd(day)
-    locked_today = any(p.entry_idx >= day_i for p in lots)
+    pos.pending_exit = reason
+    if pos.group.exit_day_idx is None:
+        pos.group.exit_day_idx = day_i
     if st.exdiv_economics is not None:
-        locked_today = locked_today or any(
-            _locked_bonus(st.exdiv_economics, p, ds) for p in lots
+        pos.group.t1_deferred_bonus_lots.update(
+            p.lot_id for p in lots if _locked_bonus(st.exdiv_economics, p, _ymd(day))
         )
-    deferred_reason = reason
-    if locked_today and "|t1_deferred" not in deferred_reason:
-        deferred_reason += "|t1_deferred"
-    pos.pending_exit = deferred_reason
     sellable = [p for p in lots if p.entry_idx < day_i]
     if not sellable:
         return 0
     filled = 0
     for lot in sellable:
+        lot_reason = reason
+        if day_i > pos.group.exit_day_idx and (
+            lot.entry_idx >= pos.group.exit_day_idx
+            or lot.lot_id in pos.group.t1_deferred_bonus_lots
+        ):
+            lot_reason += "|t1_deferred"
         filled += _sell(
-            st, code, lot, px, day, reason,
+            st, code, lot, px, day, lot_reason,
             bucket_id=bucket_id, at=at, day_i=day_i, hm=hm,
             session_phase=session_phase, price_rule=price_rule, _group_exit=True,
         )

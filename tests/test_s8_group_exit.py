@@ -120,24 +120,34 @@ def test_t1_deferred_shares_keep_the_exit_reason_through_a_limit_down_day(mode):
     assert CODE not in st.positions
 
 
-def test_daily_add_close_limit_down_retains_t1_marker_for_the_new_shares():
+@pytest.mark.parametrize("later_prices", ([11.5], [9.22, 9.3], [9.22, 7.38, 7.5]))
+def test_daily_add_close_limit_down_marks_only_shares_locked_on_original_exit_day(later_prices):
     # Limit-up sessions leave the top-up unfilled. At the following limit-down
     # close the top-up changes the weighted cost and forms a new exit signal.
     # The whole order waits, including the shares acquired at that same close.
-    st = _run(
-        "daily", "version8_3", [10., 12., 14.4, 11.52, 11.5], [0],
-        take_profit=lambda _px, cost, _peak, _days: (
-            "trail:test_weighted" if cost > 10. else None
-        ),
-    )
+    reason = "trail:test_weighted"
+
+    def take_profit(_px, cost, _peak, _days):
+        return reason if cost > 10. else None
+
+    initial_prices = [10., 12., 14.4, 11.52]
+    pending = _run("daily", "version8_3", initial_prices, [0], take_profit=take_profit)
+    assert not _sells(pending)
+    assert exit_positions(pending, CODE)[0].pending_exit == reason
+
+    st = _run("daily", "version8_3", initial_prices + later_prices, [0], take_profit=take_profit)
     initial, add = _buys(st)
     assert add["date"] == _ds(3)
     assert add["reason"] == "add:confirm3"
     sells = _sells(st)
     assert len(sells) == 2
-    assert {t["date"] for t in sells} == {_ds(4)}
-    assert {t["price"] for t in sells} == {11.5}
-    assert {t["reason"] for t in sells} == {"trail:test_weighted|t1_deferred"}
+    assert {t["date"] for t in sells} == {_ds(3 + len(later_prices))}
+    assert {t["price"] for t in sells} == {later_prices[-1]}
+    # Additional limit-down days do not change which lot was T+1 locked at
+    # the original exit: old shares waited only because the price was blocked.
+    assert {t["lot"]: t["reason"] for t in sells} == {
+        initial["lot"]: reason, add["lot"]: reason + "|t1_deferred",
+    }
     assert {t["lot"]: t["shares"] for t in sells} == {
         initial["lot"]: initial["shares"], add["lot"]: add["shares"],
     }

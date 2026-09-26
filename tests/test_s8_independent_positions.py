@@ -170,8 +170,12 @@ def test_reappearance_passes_new_position_index_gate(mode, strategy):
 @pytest.mark.parametrize("mode", MODES)
 def test_two_costs_cross_their_own_twenty_percent_steps(mode, strategy):
     st = _run(mode, strategy, [10., 10.5, 12.1, 12.7], [0, 1], take_profit=_no_exit)
-    assert [(t["date"], t["position_id"]) for t in _buys(st, "add:step20")] == [
-        (_ds(2), _pid(0)), (_ds(3), _pid(1)),
+    assert [(t["price"], t["shares"]) for t in _buys(st, "pool")] == [
+        (10., 100_000), (10.5, 95_200),
+    ]
+    assert [(t["date"], t["position_id"], t["price"], t["shares"])
+            for t in _buys(st, "add:step20")] == [
+        (_ds(2), _pid(0), 12.1, 82_600), (_ds(3), _pid(1), 12.7, 78_700),
     ]
 
 
@@ -183,8 +187,9 @@ def test_first_position_exit_does_not_disable_second_position_steps(mode, strate
 
     st = _run(mode, strategy, [10., 10.5, 11., 12.7], [0, 1], take_profit=exit_first)
     assert [t["position_id"] for t in _sells(st)] == [_pid(0)]
-    assert [(t["date"], t["position_id"]) for t in _buys(st, "add:step20")] == [
-        (_ds(3), _pid(1)),
+    assert [(t["date"], t["position_id"], t["price"], t["shares"])
+            for t in _buys(st, "add:step20")] == [
+        (_ds(3), _pid(1), 12.7, 78_700),
     ]
 
 
@@ -198,6 +203,7 @@ def test_group_exit_closes_entry_and_step_without_resetting_executed_level(mode,
     steps = _buys(st, "add:step20")
     assert len(steps) == 1
     assert steps[0]["position_id"] == _pid(0)
+    assert (steps[0]["price"], steps[0]["shares"]) == (12.1, 82_600)
     assert len(_sells(st)) == 2
     assert {t["lot"] for t in _sells(st)} == {0, steps[0]["lot"]}
     assert {t["position_id"] for t in _sells(st)} == {steps[0]["position_id"]}
@@ -211,18 +217,25 @@ def test_executed_steps_survive_t1_partial_exit_and_pending_group_never_adds(str
     st, pending, hooks = _state(strategy)
     _pool(st, pending, hooks, 0, 10.)
     _step(st, hooks, 1, 12.1)
+    assert [(t["price"], t["shares"]) for t in _buys(st, "add:step20")] == [
+        (12.1, 82_600),
+    ]
     first, step = st.positions[CODE]
     group_pos = exit_positions(st, CODE, day_i=1)[0]
     _sell(st, CODE, group_pos, 12.1, DAYS[1], "profit_take:test", day_i=1)
     assert st.positions[CODE] == [step]
     assert first.shares == 0
-    assert group_pos.pending_exit == "profit_take:test|t1_deferred"
+    assert group_pos.pending_exit == "profit_take:test"
     _step(st, hooks, 2, 12.1)
     assert len(_buys(st, "add:step20")) == 1
     _step(st, hooks, 3, 14.1)
     assert len(_buys(st, "add:step20")) == 1
     assert group_pos.group.executed_steps == 1
     _sell(st, CODE, group_pos, 14.1, DAYS[3], group_pos.pending_exit, day_i=3)
+    assert [(t["lot"], t["reason"]) for t in _sells(st)] == [
+        (first.lot_id, "profit_take:test"),
+        (step.lot_id, "profit_take:test|t1_deferred"),
+    ]
     assert group_pos.group.closed
     assert CODE not in st.positions
 
@@ -235,8 +248,9 @@ def test_closed_group_cannot_reopen_at_higher_steps(strategy):
     pos = exit_positions(st, CODE, day_i=2)[0]
     _sell(st, CODE, pos, 12.1, DAYS[2], "profit_take:test_group", day_i=2)
     _step(st, hooks, 3, 14.1)
-    assert [(t["position_id"], t["price"]) for t in _buys(st, "add:step20")] == [
-        (_pid(0), 12.1),
+    assert [(t["position_id"], t["price"], t["shares"])
+            for t in _buys(st, "add:step20")] == [
+        (_pid(0), 12.1, 82_600),
     ]
     assert pos.group.closed
     assert CODE not in st.positions
@@ -248,8 +262,8 @@ def test_exdiv_scales_group_cost_and_preserves_first_cost_step_anchor(mode):
         mode, "version8", [10., 11., 12.1, 12.1, 12.1, 7.05], [0],
         take_profit=_no_exit, exdiv={CODE: {_ds(5): .5}},
     )
-    assert [(t["date"], t["price"]) for t in _buys(st, "add:step20")] == [
-        (_ds(2), 12.1), (_ds(5), 7.05),
+    assert [(t["date"], t["price"], t["shares"]) for t in _buys(st, "add:step20")] == [
+        (_ds(2), 12.1, 82_600), (_ds(5), 7.05, 141_800),
     ]
     assert not _sells(st)
     assert {p.position_id for p in st.positions[CODE]} == {_pid(0)}
@@ -270,6 +284,9 @@ def test_at_most_one_price_step_per_position_per_day(strategy):
     assert [t["position_id"] for t in _buys(st, "add:step20")] == [_pid(0), _pid(1)]
     _step(st, hooks, 3, 16.)
     assert len(_buys(st, "add:step20")) == 4
+    assert [(t["price"], t["shares"]) for t in _buys(st, "add:step20")] == [
+        (16., 62_500), (16., 62_500), (16., 62_500), (16., 62_500),
+    ]
 
 
 @pytest.mark.parametrize("mode", MODES)
@@ -347,6 +364,38 @@ def test_two_pending_signal_dates_chase_together_in_minute_engines(mode):
     assert all(t["reason"] == "chase:T+1" and t["date"] == _ds(2) for t in buys)
     assert all(t["shares"] == int(500_000 / 14.5 / 100) * 100 for t in buys)
     assert {p.entry_idx for p in st.positions[CODE]} == {2}
+    assert st.stats["chase_overwrite"] == 0
+    assert st.stats["chase_pending_eod"] == 0
+
+
+def test_two_pending_signal_dates_chase_together_in_daily_engine(monkeypatch):
+    # Daily chase and pool quotes both consume the same OHLC row. Inject one
+    # unavailable chase quote to exercise a retained queue while the next
+    # signal's close is known; queue creation and settlement stay in simulate.
+    run_chase = daily_engine.run_chase_due_day
+    pending_before_chase = {}
+
+    def with_one_missing_chase_quote(st, pending, **kwargs):
+        pending_before_chase[kwargs["ds"]] = dict(pending)
+        if kwargs["ds"] == _ds(1):
+            kwargs["quotes_for"] = lambda _code: None
+        return run_chase(st, pending, **kwargs)
+
+    monkeypatch.setattr(daily_engine, "run_chase_due_day", with_one_missing_chase_quote)
+    st = _run(
+        "daily", "version8_3", [12., 14.4, 14.5], [0, 1], prev_close=10.,
+        rows=[(12.,) * 4, (14.4,) * 4, (14.4, 14.5, 14.4, 14.5)],
+    )
+    assert pending_before_chase[_ds(2)] == {
+        _pid(0): (500_000, 0), _pid(1): (500_000, 1),
+    }
+    assert [(t["date"], t["position_id"], t["entry_signal_date"],
+             t["reason"], t["price"], t["shares"]) for t in _buys(st)] == [
+        (_ds(2), _pid(0), _ds(0), "chase:T+1", 14.5, 34_400),
+        (_ds(2), _pid(1), _ds(1), "chase:T+1", 14.5, 34_400),
+    ]
+    assert {p.entry_idx for p in st.positions[CODE]} == {2}
+    assert st.stats["chase_buy"] == 2
     assert st.stats["chase_overwrite"] == 0
     assert st.stats["chase_pending_eod"] == 0
 
