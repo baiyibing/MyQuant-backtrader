@@ -1,4 +1,4 @@
-"""#208 P1/P2 buy dispatch: fixed seats/budgets, session-open quotes, no substitutes.
+"""#208 P1/P2/P3 buy dispatch: fixed seats/budgets and opt-in limit handoff.
 
 The caller advances sells and these buys on the same minute clock. The legacy
 close path never constructs this dispatcher or adds its audit fields.
@@ -11,7 +11,7 @@ import math
 from pathlib import Path
 
 from backtest.research.ashare_bars import AM_OPEN, PM_CLOSE, _in_session
-from backtest.research.ashare_session import hit_limit_down
+from backtest.research.ashare_session import hit_limit_down, hit_limit_up
 from backtest.research.csv_common import book_limit_prices
 from backtest.research.csv_simulate_loop import (
     _buy_denom, apply_capital_ration, run_pool_buys_day,
@@ -20,12 +20,16 @@ from backtest.research.exdiv_map import mapped_prev_close
 from backtest.research.minute_audit import audit_scope
 
 
+CLOSE_BUY_HM = 14 * 60 + 55
+CLOSE_FALLBACK_START = 14 * 60 + 30
+
+
 VWAP_SLICE_CLOCKS = (9 * 60 + 35, 10 * 60 + 30, 11 * 60 + 30,
                      13 * 60, 14 * 60, 14 * 60 + 55)
 
 
 TOPK_EXEC_HELP_LOCK = """
-TopK minute execution (#208 P1/P2; topk_dropout only):
+TopK minute execution (#208 P1/P2/P3; topk_dropout only):
   --topk-exec close|open|intraday|vwap (default close; omitted = close).
   close: existing 14:55 close, last close in 14:30–14:55 if missing; reason=pool.
   open (opt-in): exact 09:30 open once; missing 09:30 skips, no later-row fallback.
@@ -46,19 +50,24 @@ TopK minute execution (#208 P1/P2; topk_dropout only):
   no borrow, no roll-forward; same-seat fills accumulate, reason=pool:vwap.
   Strict open >= limit_up skips a slice; completed volume before hm only.
   vwap x --limit-walkdown is refused until separate human GO defines partial-fill
-  handoff. P3 --limit-walkdown is not implemented (no such CLI flag).
+  handoff. --limit-walkdown (default OFF): first limit-up block hands whole q
+  to the next eligible frozen rank; close/open recurse at 14:55/09:30, intraday
+  only scans hm >= selection time. Cash/other failures never hand off.
+  Substitute fills: pool:walkdown:<exec>; counter walkdown_fills.
   Sell rules are unchanged. topk_score_exit is excluded.
 """
 
 
-def validate_topk_exec(mode, strategy):
+def validate_topk_exec(mode, strategy, limit_walkdown=False):
     if mode not in ("close", "open", "intraday", "vwap"):
         raise ValueError(f"unknown --topk-exec {mode!r}; choose close, open, intraday or vwap")
-    if mode != "close":
+    if mode == "vwap" and limit_walkdown:
+        raise ValueError("--topk-exec vwap x --limit-walkdown is refused")
+    if mode != "close" or limit_walkdown:
         from backtest.research.csv_strategy_books import normalize_csv_strategy
 
         if normalize_csv_strategy(strategy) != "topk_dropout":
-            raise ValueError("--topk-exec open/intraday/vwap applies only to topk_dropout (P1/P2)")
+            raise ValueError("--topk-exec open/intraday/vwap and --limit-walkdown apply only to topk_dropout")
 
 
 def parse_topk_exec(value):
@@ -75,11 +84,14 @@ class TopkMinuteBuys:
     """One day-valid order per original planned seat, settled by the caller."""
 
     def __init__(self, st, *, mode, hooks, previous_and_frame, open_quote_for,
-                 day_i, day, ds, names, daily_quota, exdiv, audit_sink=None):
+                 day_i, day, ds, names, daily_quota, exdiv, audit_sink=None,
+                 limit_walkdown=False, close_quote_for=None):
         self.st, self.mode, self.hooks = st, mode, hooks
         self.day_i, self.day, self.ds = day_i, day, ds
         self.names, self.daily_quota, self.exdiv = names, daily_quota, exdiv
         self.audit_sink = audit_sink
+        self.walkdown = limit_walkdown
+        self.quote_bars = {}
         planner = hooks["planned_for_day"]
         self.planned = apply_capital_ration(
             list(planner(ds, list(st.positions))), ration=hooks.get("ration", "file_order"),
@@ -95,7 +107,16 @@ class TopkMinuteBuys:
             self.slice_results = {code: [] for code in self.planned}
             self.spent = {code: 0. for code in self.planned}
             self.filled = set()
-        for code in self.planned:
+        codes = self.planned
+        if self.walkdown:
+            self.roster = planner.walkdown_roster(ds)
+            self.rank = {code: i for i, code in enumerate(self.roster)}
+            self.reserved = set(self.planned) | set(st.positions)
+            self.original = {code: code for code in self.planned}
+            self.selected = {code: CLOSE_BUY_HM if mode == "close" else AM_OPEN for code in self.planned}
+            self.active = dict(self.original)
+            codes = list(dict.fromkeys([*self.planned, *self.roster]))
+        for code in codes:
             got = previous_and_frame(code)
             if got is None:
                 self.missing.add(code)
@@ -111,6 +132,14 @@ class TopkMinuteBuys:
                 frame = frame.iloc[:0] if opening is None else opening.to_frame().T
             quotes = [(int(row.hm), float(row.open)) for row in frame.itertuples()
                       if math.isfinite(float(row.open)) and float(row.open) > 0]
+            if mode == "close":
+                px = close_quote_for(frame)
+                quotes = []
+                if px is not None and math.isfinite(px) and px > 0:
+                    hit = frame.loc[frame["hm"] == CLOSE_BUY_HM]
+                    late = frame.loc[frame["hm"].between(CLOSE_FALLBACK_START, CLOSE_BUY_HM)]
+                    self.quote_bars[code] = int((hit.iloc[0] if not hit.empty else late.iloc[-1])["hm"])
+                    quotes = [(CLOSE_BUY_HM, px)]
             if not quotes:
                 self.missing.add(code)
                 continue
@@ -139,6 +168,10 @@ class TopkMinuteBuys:
                    execution_hm=hm if row.get("side") == "BUY" else None,
                    quota=self.quota, allocation_cash=self.cash_basis,
                    denominator=self.denom, reason=reason, price=px, phase=phase)
+        if self.walkdown:
+            row.update(original_code=self.original[code],
+                       substitute_code=code if self.original[code] != code else None,
+                       selection_hm=self.selected[code])
         if self.mode == "vwap" and hm in VWAP_SLICE_CLOCKS and phase == "open":
             row.update(slice_index=VWAP_SLICE_CLOCKS.index(hm), slice_hm=hm,
                        slice_budget=self.quota / len(VWAP_SLICE_CLOCKS))
@@ -146,6 +179,9 @@ class TopkMinuteBuys:
         self.st.topk_exec_audit.append(row)
 
     def advance(self, hm):
+        if self.walkdown:
+            self.advance_walkdown(hm)
+            return
         if self.cash_basis is None:
             assert hm == AM_OPEN
             self.cash_basis = self.st.cash
@@ -181,6 +217,57 @@ class TopkMinuteBuys:
                 self.done.add(code)
                 quote_hm, px = self.last_quote[code]
                 self.record(code, hm, "limit_retry_expired", px=px, quote_hm=quote_hm, phase="close")
+
+    def advance_walkdown(self, hm):
+        start = CLOSE_BUY_HM if self.mode == "close" else AM_OPEN
+        if hm < start:
+            return
+        if self.cash_basis is None:
+            self.cash_basis = self.st.cash
+            self.quota = (min(self.daily_quota, self.cash_basis)
+                          * self.hooks["cash_deploy_frac"] / self.denom if self.denom else 0.)
+        quotes = {}
+        for code, px in self.events.get(hm, []):
+            quotes.setdefault(code, px)  # Stable first effective attempt, even for duplicate hm.
+        phase = "close" if self.mode == "close" else "open"
+        for original in self.planned:
+            code = self.active[original]
+            while code not in self.done:
+                px = quotes.get(code)
+                reason = ("skip_unknown_board" if code in self.unknown else
+                          "skip_no_bar" if code in self.missing else None)
+                if reason is None and px is None:
+                    if hm != PM_CLOSE:
+                        break  # Candidate can only use its next remaining session bar.
+                    reason = "skip_no_remaining_bar"
+                if reason:
+                    self.st.stats[reason] = self.st.stats.get(reason, 0) + 1
+                    self.record(code, hm, reason, phase=phase)
+                else:
+                    reason = self.attempt(code, hm, px)
+                self.done.add(code)
+                upper = (px is not None and code in self.limits and
+                         (hit_limit_up(px, self.limits[code][0]) if self.mode == "close"
+                          else px >= self.limits[code][0]))
+                # Only a real upper-limit rejection transfers the seat. The open
+                # contract also skips missing substitutes within an existing chain.
+                handoff = (reason == "skip_limit_up" and upper) or (
+                    self.mode == "open" and code != original and reason == "skip_no_bar")
+                if not handoff:
+                    break
+                candidate = next((c for c in self.roster
+                                  if self.rank[c] > self.rank[code]
+                                  and c not in self.reserved and c not in self.st.positions), None)
+                if candidate is None:
+                    self.record(code, hm, "walkdown_exhausted", phase=phase)
+                    break
+                self.reserved.add(candidate)
+                self.original[candidate] = original
+                self.seats[candidate] = self.seats[original]
+                self.selected[candidate] = hm
+                self.active[original] = candidate
+                self.record(candidate, hm, "walkdown_selected", phase=phase)
+                code = candidate
 
     def advance_vwap(self, hm):
         if hm in VWAP_SLICE_CLOCKS:
@@ -226,7 +313,12 @@ class TopkMinuteBuys:
                 self.audit_sink.append(row)
 
         before = self.st.stats.copy()
-        with audit_scope(capture, decision_hm=hm, quote_hm=hm, phase="open"):
+        phase = "close" if self.mode == "close" else "open"
+        quote_hm = self.quote_bars.get(code, hm)
+        substitute = self.walkdown and self.original[code] != code
+        buy_reason = (f"pool:walkdown:{self.mode}" if substitute else
+                      "pool" if self.mode == "close" else f"pool:{self.mode}")
+        with audit_scope(capture, decision_hm=hm, quote_hm=quote_hm, phase=phase):
             run_pool_buys_day(
                 self.st, {}, day_i=self.day_i, day=self.day, ds=self.ds,
                 pool_days={}, daily_quota=self.daily_quota, names=self.names,
@@ -239,10 +331,11 @@ class TopkMinuteBuys:
                 limit_up_chase=False,
                 forbid_all_trade_at_limit=self.hooks.get("forbid_all_trade_at_limit", False),
                 allow_new_name=self.hooks.get("allow_new_name"),
-                volume_bucket_for=(lambda _code: hm - 1 if self.mode == "vwap" else hm)
+                volume_bucket_for=(lambda _code: hm - 1 if self.mode == "vwap" else quote_hm)
                 if self.st.volume_cap is not None else None,
-                volume_at=hm - 1, buy_reason=f"pool:{self.mode}", buy_hm=hm,
-                strict_limit_up=True,
+                volume_at=hm if self.mode == "close" else hm - 1,
+                buy_reason=buy_reason, buy_hm=hm,
+                strict_limit_up=self.mode != "close",
                 **({"order_budget": min(self.quota / len(VWAP_SLICE_CLOCKS),
                                         max(0., self.quota - self.spent[code]))}
                    if self.mode == "vwap" else {}),
@@ -274,13 +367,18 @@ class TopkMinuteBuys:
             if event is not None and event["side"] == "BUY":
                 self.filled.add(code)
                 self.spent[code] += event["notional"]
-        self.record(code, hm, reason, px=px, quote_hm=hm, event=event)
+        if substitute and event is not None and event["side"] == "BUY":
+            self.st.stats["walkdown_fills"] += 1
+        self.record(code, hm, reason, px=px, quote_hm=quote_hm, event=event, phase=phase)
+        return reason
 
 
 def write_topk_exec_audit(out_dir, st):
     payload = {key: st.stats[key] for key in (
         "topk_exec", "limit_retry_fills", "limit_retry_expired",
     )}
+    if st.stats.get("limit_walkdown"):
+        payload.update(limit_walkdown=True, walkdown_fills=st.stats["walkdown_fills"])
     payload["events"] = st.topk_exec_audit
     (Path(out_dir) / "topk_execution.json").write_text(
         json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8",

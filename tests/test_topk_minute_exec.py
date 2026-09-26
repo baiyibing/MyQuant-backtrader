@@ -67,8 +67,9 @@ def write_close_products(target, state):
 
 @pytest.mark.parametrize("case,price", [("exact", 10.4), ("fallback", 10.3), ("empty", None)])
 @pytest.mark.parametrize("mode", [None, "close"])
-def test_close_matches_frozen_master_bytes(tmp_path, case, price, mode):
-    state = close_case(case, **({} if mode is None else {"topk_exec": mode}))
+@pytest.mark.parametrize("walkdown", [{}, {"limit_walkdown": False}])
+def test_close_matches_frozen_master_bytes(tmp_path, case, price, mode, walkdown):
+    state = close_case(case, **walkdown, **({} if mode is None else {"topk_exec": mode}))
     buys = [t for t in state.trades if t["date"] == D1 and t["side"] == "BUY"]
     assert [t["price"] for t in buys] == ([] if price is None else [price])
     assert all(t["reason"] == "pool" and "hm" not in t for t in buys)
@@ -263,7 +264,7 @@ def test_cli_help_and_rejections(capsys):
     assert "equal-notional fixed-clock TWAP-style" in help_text
     assert "no roll-forward" in help_text
     for args, message in [(["--topk-exec", "bad"], "unknown --topk-exec"),
-                          (["--limit-walkdown"], "unrecognized arguments")]:
+                          (["--topk-exec", "vwap", "--limit-walkdown"], "is refused")]:
         with pytest.raises(SystemExit) as exit:
             minute.main(["--strategy", "topk_dropout", *args])
         assert exit.value.code == 2
@@ -502,3 +503,211 @@ def test_vwap_cash_failure_continues_each_slice(monkeypatch):
     assert slices(st)[-1]["reason"] == "skip_cash"
     assert st.topk_exec_audit[-1]["reason"] == "pool:vwap"
     assert st.stats.get("skip_cash", 0) == 0
+
+
+@pytest.mark.parametrize("mode", ["close", "open", "intraday"])
+@pytest.mark.parametrize("vacancy", [False, True])
+def test_walkdown_whole_quota_recursion_dedupe_and_vacancy(mode, vacancy):
+    d, e = "600003.SH", "600004.SH"
+    hm = 895 if mode == "close" else 570
+    rows = {code: [(D1, hm, px, px)] for code, px in
+            [(A, 10.95), (B, 10.), (C, 10.95), (d, 10.), (e, 10.)]}
+    opts = dict(keep_buy_vacancy=True, eligible_buy=lambda code, _ds: code != B) if vacancy else {}
+    st = run_case(rows, topk_exec=mode, limit_walkdown=True, topk=2, **opts)
+    assert [t["code"] for t in buys(st)] == ([d] if vacancy else [d, B])
+    fill = next(row for row in st.topk_exec_audit if row.get("side") == "BUY")
+    assert (fill["original_code"], fill["substitute_code"], fill["seat"]) == (A, d, 0)
+    assert fill["quota"] == 47_500.
+    assert fill["denominator"] == 2
+    assert fill["notional"] == 47_000.  # q, not q/D; lot-rounded.
+    assert fill["reason"] == f"pool:walkdown:{mode}"
+    selected = [row["code"] for row in st.topk_exec_audit if row["reason"] == "walkdown_selected"]
+    assert selected == [C, d]
+    assert st.stats["walkdown_fills"] == 1
+    assert st.stats["limit_retry_fills"] == st.stats["limit_retry_expired"] == 0
+
+
+@pytest.mark.parametrize("mode", ["close", "open", "intraday"])
+def test_walkdown_exhaustion_and_seats_cannot_share_candidate(mode):
+    hm = 895 if mode == "close" else 570
+    st = run_case({code: [(D1, hm, 10.95, 10.95)] for code in (A, B, C)},
+                  topk=2, topk_exec=mode, limit_walkdown=True)
+    assert buys(st) == []
+    selected = [r["code"] for r in st.topk_exec_audit if r["reason"] == "walkdown_selected"]
+    assert selected == [C]
+    assert sum(r["reason"] == "walkdown_exhausted" for r in st.topk_exec_audit) == 2
+    assert st.stats["walkdown_fills"] == st.stats["limit_retry_expired"] == 0
+
+
+def test_walkdown_close_fallback_keeps_decision_and_quote_clocks_distinct():
+    st = run_case({A: [(D1, 895, 10., 10.95)], B: [(D1, 892, 9.5, 10.3)]},
+                  topk_exec="close", limit_walkdown=True)
+    assert [(t["code"], t["price"], t["hm"]) for t in buys(st)] == [(B, 10.3, 895)]
+    row = st.topk_exec_audit[-1]
+    assert (row["selection_hm"], row["decision_hm"], row["quote_hm"],
+            row["execution_hm"], row["phase"]) == (895, 895, 892, 895, "close")
+
+
+def test_walkdown_open_missing_substitute_skips_without_borrowing():
+    st = run_case({A: [(D1, 570, 10.95, 10.)], B: [(D1, 571, 10., 10.)],
+                   C: [(D1, 570, 10.2, 10.4)]}, topk_exec="open", limit_walkdown=True)
+    assert [(t["code"], t["price"], t["hm"]) for t in buys(st)] == [(C, 10.2, 570)]
+    assert any(r["code"] == B and r["reason"] == "skip_no_bar" for r in st.topk_exec_audit)
+
+
+@pytest.mark.parametrize("next_hm", [630, 631, 900, None])
+def test_walkdown_intraday_first_block_no_lookback_or_original_resurrection(next_hm):
+    substitute = [(D1, 570, 9.5, 10.)]
+    if next_hm is not None:
+        substitute.append((D1, next_hm, 10.2, 10.4))
+    st = run_case({A: [(D1, 630, 10.95, 10.), (D1, 632, 10., 10.)], B: substitute},
+                  topk_exec="intraday", limit_walkdown=True)
+    assert [(t["code"], t["hm"], t["price"]) for t in buys(st)] == (
+        [] if next_hm is None else [(B, next_hm, 10.2)])
+    assert st.stats["limit_retry_expired"] == st.stats["limit_retry_fills"] == 0
+    assert st.topk_exec_audit[-1]["selection_hm"] == 630
+    if next_hm is None:
+        assert st.topk_exec_audit[-1]["reason"] == "skip_no_remaining_bar"
+
+
+def test_walkdown_delayed_recursive_selection_uses_new_time():
+    st = run_case({A: [(D1, 630, 10.95, 10.)],
+                   B: [(D1, 631, 10.95, 10.)],
+                   C: [(D1, 630, 9.8, 10.), (D1, 632, 10.2, 10.)]},
+                  topk_exec="intraday", limit_walkdown=True)
+    assert [(t["code"], t["hm"]) for t in buys(st)] == [(C, 632)]
+    assert st.topk_exec_audit[-1]["selection_hm"] == 631
+
+
+@pytest.mark.parametrize("mode", ["close", "open", "intraday"])
+@pytest.mark.parametrize("failure", ["cash", "limit_down", "buy_gate", "volume"])
+def test_walkdown_non_limit_failure_ends_chain(monkeypatch, mode, failure):
+    from backtest.research.ashare_volume_cap import BucketVolume
+
+    hm = 895 if mode == "close" else 570
+    opts = {}
+    if failure == "cash":
+        opts["total_cash"] = 1000.
+    elif failure == "buy_gate":
+        original = minute.apply_csv_strategy
+        def apply(*args, **kwargs):
+            hooks = original(*args, **kwargs)
+            hooks["buy_gate"] = lambda *_: False
+            return hooks
+        monkeypatch.setattr(minute, "apply_csv_strategy", apply)
+    elif failure == "volume":
+        opts.update(participation_rate=1., volume_for_bucket={
+            (B, D1, hm): BucketVolume(100_000, hm + 1, "raw_shares_incremental")})
+    px = 9.05 if failure == "limit_down" else 10.
+    st = run_case({A: [(D1, hm, 10.95, 10.95)], B: [(D1, hm, px, px)],
+                   C: [(D1, hm, 10., 10.)]}, topk_exec=mode, limit_walkdown=True, **opts)
+    assert buys(st) == []
+    assert [r["code"] for r in st.topk_exec_audit if r["reason"] == "walkdown_selected"] == [B]
+    assert st.topk_exec_audit[-1]["reason"].startswith(
+        {"cash": "skip_cash", "limit_down": "skip_limit_down", "buy_gate": "skip_buy_gate",
+         "volume": "skip_volume"}[failure])
+    assert st.stats["walkdown_fills"] == st.stats["limit_retry_expired"] == 0
+
+
+@pytest.mark.parametrize("strategy,mode,message", [
+    ("topk_dropout", "vwap", "is refused"), ("topk_score_exit", "close", "only to topk_dropout"),
+    ("version6", "close", "only to topk_dropout"),
+])
+def test_walkdown_validation_before_load_and_cli(capsys, strategy, mode, message):
+    for api in (minute.run, lambda start, end, **kw: minute.simulate({}, {}, {}, start, end, **kw)):
+        with pytest.raises(ValueError, match=message):
+            api(D1, D1, strategy=strategy, topk_exec=mode, limit_walkdown=True)
+    with pytest.raises(SystemExit) as exc:
+        minute.main(["--strategy", strategy, "--topk-exec", mode, "--limit-walkdown"])
+    assert exc.value.code == 2
+    assert message in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("mode", ["close", "open", "intraday"])
+def test_walkdown_cli_opt_in_products(tmp_path, synthetic_loaders, mode, monkeypatch):
+    configs = []
+    original = minute.write_run_artifacts
+
+    def write(*args, **kwargs):
+        configs.append(kwargs["manifest_config"])
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(minute, "write_run_artifacts", write)
+    out = tmp_path / "walkdown"
+    assert minute.main(["--strategy", "topk_dropout", "--start", D1, "--end", D1,
+                        "--pool-dir", str(tmp_path), "--out-dir", str(out),
+                        "--topk-exec", mode, "--limit-walkdown", "--emit-run-manifest"]) == 0
+    audit = json.loads((out / "topk_execution.json").read_text())
+    assert audit["limit_walkdown"] is True
+    assert audit["walkdown_fills"] == 0
+    assert audit["limit_retry_expired"] == 0
+    assert configs[0]["limit_walkdown"] is True
+    assert configs[0]["topk_exec"] == mode
+
+
+@pytest.mark.parametrize("buy_hm,can_buy", [(629, False), (630, False), (631, True)])
+def test_walkdown_cash_at_actual_substitute_minute_not_future_close_sale(buy_hm, can_buy):
+    st = run_case(
+        {A: [(D1, 570, 10., 10.), (D2, 630, 10., 10.)],
+         B: [(D1, 570, 10., 10.), (D2, 570, 10.95, 10.)],
+         C: [(D1, 570, 10., 10.), (D2, buy_hm, 10., 10.)]},
+        scores={D1: {A: 3., B: 2., C: 1.}, D2: {A: 1., B: 3., C: 2.}},
+        topk_exec="intraday", limit_walkdown=True, total_cash=1500., daily_quota=1500., end=D2)
+    assert [t["code"] for t in buys(st)] == ([A, C] if can_buy else [A])
+    row = st.topk_exec_audit[-1]
+    assert row["quota"] == pytest.approx(499. * .95)
+    assert row["reason"] == ("pool:walkdown:intraday" if can_buy else "skip_cash")
+    assert st.stats["walkdown_fills"] == int(can_buy)
+
+
+@pytest.mark.parametrize("sale_hm,can_buy", [(894, True), (895, True), (896, False)])
+def test_walkdown_close_cash_does_not_preborrow_later_sale(sale_hm, can_buy):
+    st = run_case(
+        {A: [(D1, 895, 10., 10.), (D2, sale_hm, 10., 10.)],
+         B: [(D1, 895, 10., 10.), (D2, 895, 10., 10.95)],
+         C: [(D1, 895, 10., 10.), (D2, 895, 10., 10.)]},
+        scores={D1: {A: 3., B: 2., C: 1.}, D2: {A: 1., B: 3., C: 2.}},
+        topk_exec="close", limit_walkdown=True, total_cash=1500., daily_quota=1500., end=D2)
+    assert [t["code"] for t in buys(st)] == ([A, C] if can_buy else [A])
+    assert st.topk_exec_audit[-1]["reason"] == ("pool:walkdown:close" if can_buy else "skip_cash")
+
+
+def test_walkdown_eligibility_filters_roster_without_filling_other_vacancies():
+    d = "600003.SH"
+    st = run_case({code: [(D1, 570, px, px)] for code, px in
+                   [(A, 10.95), (B, 10.), (C, 10.), (d, 10.)]},
+                  topk_exec="open", limit_walkdown=True,
+                  eligible_buy=lambda code, _ds: code != B)
+    assert [t["code"] for t in buys(st)] == [C]
+    assert B not in {r["code"] for r in st.topk_exec_audit}
+    missing = run_case({A: [(D1, 571, 10., 10.)], B: [(D1, 570, 10., 10.)]},
+                       topk_exec="open", limit_walkdown=True)
+    assert buys(missing) == []
+    assert {r["code"] for r in missing.topk_exec_audit} == {A}
+
+
+def test_walkdown_cannot_select_current_holding_even_if_ranked_below_original():
+    st = run_case({A: [(D1, 570, 10., 10.), (D2, 631, 10., 10.)],
+                   B: [(D1, 570, 10., 10.), (D2, 570, 10.95, 10.)],
+                   C: [(D1, 570, 10., 10.), (D2, 570, 10., 10.)]},
+                  scores={D1: {A: 3., B: 2., C: 1.}, D2: {A: 2., B: 3., C: 1.}},
+                  topk_exec="intraday", limit_walkdown=True, end=D2)
+    assert [r["code"] for r in st.topk_exec_audit if r["reason"] == "walkdown_selected"] == [C]
+
+
+def test_walkdown_duplicate_minute_uses_first_effective_attempt():
+    st = run_case({A: [(D1, 570, 10.95, 10.), (D1, 570, 10., 10.)],
+                   B: [(D1, 570, 10.2, 10.)]}, topk_exec="intraday", limit_walkdown=True)
+    assert [t["code"] for t in buys(st)] == [B]
+    assert st.topk_exec_audit[0]["price"] == 10.95
+
+
+@pytest.mark.parametrize("mode", ["open", "intraday", "vwap"])
+def test_explicit_walkdown_off_preserves_opt_in_modes(mode):
+    rows = {A: [(D1, 570, 10.95, 10.)] + vwap_rows()}
+    implicit = run_case(rows, topk_exec=mode)
+    explicit = run_case(rows, topk_exec=mode, limit_walkdown=False)
+    assert implicit.trades == explicit.trades
+    assert implicit.stats == explicit.stats
+    assert implicit.topk_exec_audit == explicit.topk_exec_audit
+    assert "walkdown_fills" not in explicit.stats

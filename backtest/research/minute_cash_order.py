@@ -299,6 +299,7 @@ def run_chronological_day(
     tail_window_buy=False,
     tail_volume_unit="shares",
     topk_exec="close",
+    limit_walkdown=False,
 ):
     """Advance holdings and cash at (hm, open/close, existing stable order)."""
     if tail_window_buy:
@@ -461,11 +462,12 @@ def run_chronological_day(
         return px, closes
 
     topk_buys = None
-    if topk_exec != "close":
+    if topk_exec != "close" or limit_walkdown:
         from backtest.research.topk_minute_exec import TopkMinuteBuys
 
         topk_buys = TopkMinuteBuys(
             st, mode=topk_exec, hooks=hooks, previous_and_frame=previous_and_frame,
+            limit_walkdown=limit_walkdown, close_quote_for=_buy_px,
             open_quote_for=_open_quote_for, day_i=day_i, day=day, ds=ds,
             names=names, daily_quota=daily_quota, exdiv=exdiv, audit_sink=audit_sink,
         )
@@ -746,7 +748,7 @@ def run_chronological_day(
                         hm=at_hm if price_rule else None,
                         price_rule=price_rule,
                     )
-            if topk_buys is not None and phase == "open":
+            if topk_buys is not None and phase == ("close" if topk_exec == "close" else "open"):
                 topk_buys.advance(at_hm)
             if tail_window_buy and at_hm == TAIL_START and phase == "open":
                 with audit_scope(audit_sink, decision_hm=TAIL_START, phase="open", quote_hm=TAIL_START):
