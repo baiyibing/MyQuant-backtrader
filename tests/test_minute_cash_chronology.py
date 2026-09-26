@@ -9,7 +9,9 @@ import pytest
 from backtest.research import ashare_bars
 from backtest.research import csv_minute_backtest as minute
 from backtest.research.ashare_volume_cap import BucketVolume
-from backtest.research.csv_ledger import InsufficientCashError, Position
+from backtest.research.csv_ledger import (
+    IndependentGroup, IndependentPosition, InsufficientCashError, Position, s8_policy,
+)
 
 A, B, C = "600000.SH", "600001.SH", "600002.SH"
 D1, D2 = "20260901", "20260902"
@@ -152,7 +154,8 @@ def test_fallback_quote_does_not_backdate_decision_or_borrow_capacity(
     assert (B, D2, 585 if is_chase else 895) not in calls
 
 
-def test_chase_cannot_spend_afternoon_sale_and_does_not_retry(monkeypatch):
+@pytest.mark.parametrize("enabled", [False, True])
+def test_chase_cannot_spend_afternoon_sale_and_does_not_retry(monkeypatch, enabled):
     original = minute.init_sim_state
 
     def seed(*args, **kwargs):
@@ -165,12 +168,11 @@ def test_chase_cannot_spend_afternoon_sale_and_does_not_retry(monkeypatch):
         A: [(D1, 895, 10, 10, 10), (D2, 899, 10, 10, 9.4)],
         B: [(D1, 895, 6, 6, 6), (D2, 570, 5.9, 5.9, 5.9), (D2, 585, 6, 6, 6)],
     }
-    off = run_case(rows, pools={D1: [A]}, references={B: 6}, fix_minute_cash_order=False)
     trace = []
     with pytest.raises(InsufficientCashError) as exc:
-        run_case(rows, pools={D1: [A]}, references={B: 6}, audit_sink=trace)
+        run_case(rows, pools={D1: [A]}, references={B: 6},
+                 fix_minute_cash_order=enabled, audit_sink=trace)
     assert_insufficient_cash(exc.value)
-    assert fen(off.cash) == Decimal("338.46")
     assert [(t["code"], t["side"]) for t in trace] == [(A, "BUY")]
 
 
@@ -237,7 +239,7 @@ def test_partial_sale_only_credits_actual_shares_net_of_fee(min_cost, captured_s
     assert sum(t["side"] == "SELL" for t in trace) == 1
 
 
-def test_first_rejected_sell_attempt_does_not_retry_or_observe_later_high():
+def test_group_exit_retries_capacity_without_observing_later_high():
     looked_up = []
 
     def volume(code, date, hm):
@@ -250,9 +252,12 @@ def test_first_rejected_sell_attempt_does_not_retry_or_observe_later_high():
         participation_rate=1,
         volume_for_bucket=volume,
     )
-    assert [t["side"] for t in fills(state)] == ["BUY"]
-    assert state.positions[A][0].peak == 10
-    assert (A, D2, 896) not in looked_up
+    assert [t["side"] for t in fills(state)] == ["BUY", "SELL"]
+    assert fills(state)[-1]["price"] == 9.3
+    assert fills(state)[-1]["reason"] == "stop_loss:touch"
+    assert s8_policy(state)["groups"][f"{A}@{D1}"].first_lot.peak == 10
+    assert (A, D2, 896) in looked_up
+    assert A not in state.positions
 
 
 def test_future_sale_does_not_remove_held_before_pool(monkeypatch):
@@ -279,7 +284,11 @@ def test_partial_sale_funds_affordable_buy_and_preserves_trigger_high(monkeypatc
 
     def seed(*args, **kwargs):
         state, pending, names = original(*args, **kwargs)
-        state.positions[A] = [Position(A, 200, 10, 0, 10)]
+        position_id = f"{A}@{D1}"
+        pos = IndependentPosition(A, 200, 10, 0, 10,
+                                  position_id=position_id, entry_signal_date=D1)
+        state.positions[A] = [pos]
+        s8_policy(state)["groups"][position_id] = IndependentGroup(A, D1, 1000, pos)
         return state, pending, names
 
     monkeypatch.setattr(minute, "init_sim_state", seed)
@@ -303,9 +312,14 @@ def test_partial_sale_funds_affordable_buy_and_preserves_trigger_high(monkeypatc
     assert [(t["code"], t["side"], t["shares"]) for t in fills(state)] == [
         (A, "SELL", 150),
         (B, "BUY", 100),
+        (A, "SELL", 50),
     ]
-    assert fen(state.cash) == fen(1410 - max(1.41, min_cost) - 600 - max(0.6, min_cost))
-    assert (state.positions[A][0].shares, state.positions[A][0].peak) == (50, 13)
+    assert state.cash == pytest.approx(
+        1410 - max(1.41, min_cost) - 600 - max(0.6, min_cost)
+        + 465 - max(.465, min_cost)
+    )
+    assert A not in state.positions
+    assert s8_policy(state)["groups"][f"{A}@{D1}"].first_lot.peak == 13
 
 
 @pytest.mark.parametrize("gap_open", [False, True])

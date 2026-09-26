@@ -26,6 +26,7 @@ from backtest.research.csv_ledger import (
     SimState,
     _buy_size,
     chase_decision,
+    configure_s8,
     execute_buy,
     trade_commission,
     hit_limit_down,
@@ -124,6 +125,7 @@ def init_sim_state(
     st.book_on_buy = hooks.get("on_buy")
     st.book_on_exdiv = hooks.get("on_exdiv")
     hooks["record_params"](st)
+    configure_s8(st, hooks)
     if daily_quota is not None:
         st.stats["daily_quota"] = float(daily_quota)
     st.stats["bars_loaded"] = int(bars_loaded)
@@ -530,7 +532,7 @@ def _run_s8_price_adds_day(
             continue
         groups = list(s8_open_groups(st, code))
         for position_id, group in groups:
-            if group.last_add_date == ds:
+            if group.last_add_date == ds or group.first_lot.pending_exit:
                 continue
             cost = float(group.first_lot.cost)
             if cost <= 0:

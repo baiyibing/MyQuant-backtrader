@@ -74,6 +74,7 @@ from backtest.research.csv_ledger import (  # noqa: E402
     chase_explained as chase_explained,
     configure_s8,
     execute_buy as execute_buy,
+    exit_positions,
     finish_pending_chase,
     hit_limit_down,
     hit_limit_up,
@@ -369,7 +370,7 @@ def simulate(
                     st.stats["skip_unknown_board"] += 1
                     continue
                 limit_up, limit_down = limits
-                for pos in list(st.positions.get(code, [])):
+                for pos in exit_positions(st, code, i):
                     if getattr(pos, "ride_with", None) is not None:
                         continue
                     n_days = i - pos.entry_idx  # 持仓交易日数（买入日=0）
@@ -542,6 +543,7 @@ def simulate(
                 sold_today={t["code"] for t in st.trades[day_trade_start:] if t["side"] == "SELL"}
                 if hooks.get("skip_sold_today") else None,
             )
+            step_trade_start = len(st.trades)
             run_step_adds_day(
                 st,
                 day_i=i,
@@ -558,6 +560,46 @@ def simulate(
                 name_lot_budget=hooks.get("name_lot_budget"),
                 step_add=hooks.get("step_add"),
             )
+            # A price add changes the group's cost at this close. Re-evaluate
+            # only that group at the known close, never the pre-add daily low.
+            added = {
+                t["position_id"] for t in st.trades[step_trade_start:]
+                if t["side"] == "BUY" and t.get("position_id")
+            }
+            if added:
+                for code in list(st.positions):
+                    got = day_bar_and_prev_closes(bars[code], day) if code in bars else None
+                    if got is None:
+                        continue
+                    row, closes = got
+                    previous, _ = mapped_prev_close(exdiv, code, ds, float(closes[-1]))
+                    limits = book_limit_prices(code, previous, names, qlib_limit_pct=qlib_limit_pct)
+                    if limits is None:
+                        continue
+                    close = float(row["close"])
+                    for pos in exit_positions(st, code, i):
+                        if pos.position_id not in added or pos.entry_idx >= i or pos.pending_exit:
+                            continue
+                        reason = None
+                        if isinstance(stop_pct, float) and 0 < stop_pct < 1:
+                            if close <= pos.cost * (1.0 - stop_pct):
+                                reason = "stop_loss:close"
+                        if not reason:
+                            reason = (
+                                sell_gate(code, close, day, closes) if callable(sell_gate)
+                                else take_profit(close, pos.cost, pos.peak, i - pos.entry_idx)
+                            )
+                        if not reason and callable(close_clear):
+                            reason = close_clear(pos.cost, pos.peak, i - pos.entry_idx)
+                        if reason:
+                            if defer_sell_at_limit(close, limits):
+                                st.stats["defer_sell_limit_down"] += 1
+                                # This exit includes today's add, even when the
+                                # limit prevents selling any old shares now.
+                                pos.pending_exit = reason + "|t1_deferred"
+                            else:
+                                _sell(st, code, pos, close, day, reason,
+                                      day_i=i, price_rule="daily_group_after_add_close")
 
         run_eod_exits(st, day=day, ds=ds, bars=bars, eod_exit=hooks.get("eod_exit"),
                       hold_modes=hold_modes, exdiv=exdiv,

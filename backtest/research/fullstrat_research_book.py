@@ -58,6 +58,9 @@ def simulate(
         pool_names=pool_names,
         pool_names_by_day=pool_names_by_day,
     )
+    # This isolated experimental replay retains its original lot/clock model.
+    # Corrected independent groups belong to the public daily/minute engines.
+    st.book_state.pop("s8_independent", None)
     if exdiv_economics is not None:
         st.exdiv_economics = book.ExDivEconomics(exdiv_economics, st.stats)
     st.research_orders = []

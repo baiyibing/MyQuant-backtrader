@@ -231,15 +231,17 @@ def _pool_buy(
     pending=None,
     ration="file_order",
     ration_seed=0,
-    ds="20251103",
+    ds=None,
 ):
+    import pandas as pd
     from backtest.research.csv_simulate_loop import run_pool_buys_day
 
+    ds = ds or (pd.Timestamp("2025-11-03") + pd.offsets.BDay(day_i)).strftime("%Y%m%d")
     run_pool_buys_day(
         st,
         {} if pending is None else pending,
         day_i=day_i,
-        day="2025-11-03",
+        day=pd.Timestamp(ds),
         ds=ds,
         pool_days={ds: codes},
         daily_quota=1_000_000,
@@ -254,21 +256,44 @@ def _pool_buy(
     )
 
 
+def _assert_per_name_cash_error(error, *, date, code, needed, available):
+    from backtest.research.csv_ledger import InsufficientCashError
+
+    assert isinstance(error, InsufficientCashError)
+    assert error.date == date
+    assert error.code == code
+    assert error.needed == pytest.approx(needed)
+    assert error.available == pytest.approx(available)
+    assert error.shortfall == pytest.approx(needed - available)
+    for token in (date, code, "needed", "available", "shortfall"):
+        assert token in str(error)
+
+
 def test_seeded_shuffle_is_stable_per_day_and_changes_cash_allocation(per_name_hooks):
+    from backtest.research.csv_ledger import InsufficientCashError
     from backtest.research.csv_simulate_loop import apply_capital_ration
 
     codes = ["600000.SH", "000001.SZ", "000002.SZ", "600001.SH", "600002.SH"]
     file_state = _money_state(per_name_hooks, 1_500_000)
-    _pool_buy(file_state, per_name_hooks, codes)
+    with pytest.raises(InsufficientCashError) as caught:
+        _pool_buy(file_state, per_name_hooks, codes)
+    _assert_per_name_cash_error(
+        caught.value, date="20251103", code="000001.SZ", needed=1_001_000, available=499_000,
+    )
     assert [t["code"] for t in file_state.trades] == ["600000.SH"]
 
     shuffled_state = _money_state(per_name_hooks, 1_500_000)
-    _pool_buy(
-        shuffled_state,
-        per_name_hooks,
-        codes,
-        ration="seeded_shuffle",
-        ration_seed=0,
+    order = apply_capital_ration(codes, ration="seeded_shuffle", ration_seed=0, ds="20251103")
+    with pytest.raises(InsufficientCashError) as caught:
+        _pool_buy(
+            shuffled_state,
+            per_name_hooks,
+            codes,
+            ration="seeded_shuffle",
+            ration_seed=0,
+        )
+    _assert_per_name_cash_error(
+        caught.value, date="20251103", code=order[1], needed=1_001_000, available=499_000,
     )
     assert [t["code"] for t in shuffled_state.trades] == ["600002.SH"]
 
@@ -296,20 +321,31 @@ def test_per_name_each_code_gets_full_budget(per_name_hooks):
     assert st.stats["name_budget"] == 1_000_000
 
 
-def test_per_name_cash_short_skips_entire_second_order(per_name_hooks):
+def test_per_name_cash_short_raises_before_entire_second_order(per_name_hooks):
+    from backtest.research.csv_ledger import InsufficientCashError
+
     st = _money_state(per_name_hooks, 1_500_000)
-    _pool_buy(st, per_name_hooks, ["600000.SH", "000001.SZ"])
+    with pytest.raises(InsufficientCashError) as caught:
+        _pool_buy(st, per_name_hooks, ["600000.SH", "000001.SZ"])
+    _assert_per_name_cash_error(
+        caught.value, date="20251103", code="000001.SZ", needed=1_001_000, available=499_000,
+    )
     assert [t["code"] for t in st.trades] == ["600000.SH"]
-    assert st.stats["skip_cash"] == 1
-    assert st.stats["skip_cash_notional"] == pytest.approx(1_000_000)
+    assert st.stats["skip_cash"] == 0
     assert st.cash == pytest.approx(499_000)
 
 
-def test_per_name_commission_short_also_skips(per_name_hooks):
+def test_per_name_commission_short_also_raises(per_name_hooks):
+    from backtest.research.csv_ledger import InsufficientCashError
+
     st = _money_state(per_name_hooks, 1_000_000)
-    _pool_buy(st, per_name_hooks, ["600000.SH"])
+    with pytest.raises(InsufficientCashError) as caught:
+        _pool_buy(st, per_name_hooks, ["600000.SH"])
+    _assert_per_name_cash_error(
+        caught.value, date="20251103", code="600000.SH", needed=1_001_000, available=1_000_000,
+    )
     assert not st.trades
-    assert st.stats["skip_cash"] == 1
+    assert st.stats["skip_cash"] == 0
 
 
 def test_per_name_adds_held_code_as_new_lot(per_name_hooks):
@@ -318,8 +354,11 @@ def test_per_name_adds_held_code_as_new_lot(per_name_hooks):
     _pool_buy(st, per_name_hooks, ["600000.SH"])
     _pool_buy(st, per_name_hooks, ["600000.SH"], day_i=1)
     assert st.stats["skip_held"] == 0
-    assert st.stats["add_lots"] == 1
+    assert st.stats["add_lots"] == 0
     assert len(st.positions["600000.SH"]) == 2
+    assert [t["position_id"] for t in st.trades] == [
+        "600000.SH@20251103", "600000.SH@20251104",
+    ]
 
 
 def test_per_name_force_min_cli_budget(per_name_hooks, tmp_path):
@@ -348,34 +387,51 @@ def test_per_name_force_min_cli_budget(per_name_hooks, tmp_path):
 
 @pytest.mark.parametrize("outcome", ["held", "cash", "buy", "shares"])
 def test_per_name_chase_budget_and_terminal_outcomes(per_name_hooks, outcome):
+    from backtest.research.csv_ledger import InsufficientCashError
     from backtest.research.csv_simulate_loop import run_chase_due_day
 
     st = _money_state(per_name_hooks)
     pending = {}
     _pool_buy(st, per_name_hooks, ["600000.SH", "000001.SZ"], px=11, pending=pending)
-    assert pending == {"600000.SH": (1_000_000, 0), "000001.SZ": (1_000_000, 0)}
-    pending.pop("000001.SZ")
+    assert pending == {"600000.SH@20251103": (1_000_000, 0), "000001.SZ@20251103": (1_000_000, 0)}
+    pending.pop("000001.SZ@20251103")
     if outcome == "held":
-        _pool_buy(st, per_name_hooks, ["600000.SH"])
+        _pool_buy(st, per_name_hooks, ["600000.SH"], day_i=1)
     elif outcome == "cash":
         st.cash = 500_000
     elif outcome == "shares":
-        pending["600000.SH"] = (0, 0)
-    run_chase_due_day(
-        st,
-        pending,
-        day_i=1,
-        day="2025-11-04",
-        names={},
-        allow_add=per_name_hooks["allow_add"],
-        buy_gate=None,
-        quotes_for=lambda code: (9.9, 10, [10]),
-    )
+        pending["600000.SH@20251103"] = (0, 0)
+
+    def chase():
+        run_chase_due_day(
+            st,
+            pending,
+            day_i=1,
+            day="2025-11-04",
+            names={},
+            allow_add=per_name_hooks["allow_add"],
+            buy_gate=None,
+            quotes_for=lambda code: (9.9, 10, [10]),
+        )
+
+    if outcome == "cash":
+        with pytest.raises(InsufficientCashError) as caught:
+            chase()
+        _assert_per_name_cash_error(
+            caught.value, date="20251104", code="600000.SH", needed=1_001_000, available=500_000,
+        )
+        assert st.stats["chase_buy_fail_cash"] == 0
+        assert not st.trades
+        return
+    chase()
     assert not pending
     assert st.daily_quota_used == 0
     if outcome == "held":
         assert st.stats["chase_skip_held"] == 0
-        assert st.stats["add_lots"] == 1
+        assert st.stats["add_lots"] == 0
+        assert {t["position_id"] for t in st.trades} == {
+            "600000.SH@20251103", "600000.SH@20251104",
+        }
     elif outcome == "buy":
         assert st.stats["chase_buy"] == 1
         assert st.trades[0]["notional"] == 1_000_000

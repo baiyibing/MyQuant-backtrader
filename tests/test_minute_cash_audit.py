@@ -1,7 +1,6 @@
 """Audit uses actual invocation clocks and is observational only."""
 
 import json
-from dataclasses import asdict
 
 import pytest
 from backtest.research.csv_ledger import InsufficientCashError
@@ -14,35 +13,16 @@ from tests.test_minute_cash_chronology import assert_insufficient_cash
 @pytest.mark.parametrize("enabled", [False, True])
 def test_sidecar_preserves_state_and_records_real_clock_cash(enabled):
     trace = []
-    if enabled:
-        with pytest.raises(InsufficientCashError) as plain:
-            simulate(**chronological_case(), fix_minute_cash_order=True)
-        with pytest.raises(InsufficientCashError) as observed:
-            simulate(**chronological_case(), fix_minute_cash_order=True, audit_sink=trace)
-        assert_insufficient_cash(plain.value, date="20251105")
-        assert_insufficient_cash(observed.value, date="20251105")
-        assert vars(plain.value) == vars(observed.value)
-        assert [(row["decision_hm"], row["side"], row["cash_after"]) for row in trace] == [
-            (895, "BUY", 0)
-        ]
-        return
-    plain = simulate(**chronological_case(), fix_minute_cash_order=enabled)
-    observed = simulate(**chronological_case(), fix_minute_cash_order=enabled, audit_sink=trace)
-    assert asdict(observed) == asdict(plain)
-    assert "fix_minute_cash_order" not in observed.stats
-    assert len(trace) == 3
-    assert [(row["decision_hm"], row["side"]) for row in trace] == (
-        [(895, "BUY"), (895, "SKIP"), (899, "SELL")] if enabled
-        else [(895, "BUY"), (899, "SELL"), (895, "BUY")]
-    )
-    for row in trace:
-        amount = row["notional"]
-        expected = (row["cash_before"] - amount - row["commission"] if row["side"] == "BUY"
-                    else row["cash_before"] + amount - row["commission"])
-        assert money(row["cash_after"]) == money(expected)
-        assert money(row["cash_after"]) >= 0
-        assert row["hm"] == row["decision_hm"] == row["quote_hm"]
-        assert row["phase"] == "close"
+    with pytest.raises(InsufficientCashError) as plain:
+        simulate(**chronological_case(), fix_minute_cash_order=enabled)
+    with pytest.raises(InsufficientCashError) as observed:
+        simulate(**chronological_case(), fix_minute_cash_order=enabled, audit_sink=trace)
+    assert_insufficient_cash(plain.value, date="20251105")
+    assert_insufficient_cash(observed.value, date="20251105")
+    assert vars(plain.value) == vars(observed.value)
+    assert [(row["decision_hm"], row["side"], row["cash_after"]) for row in trace] == [
+        (895, "BUY", 0)
+    ]
 
 
 def test_target_decision_clock_retains_earlier_quote_clock():
@@ -68,19 +48,11 @@ def test_shared_cli_audit_sidecar_preserves_csv_surface(tmp_path, monkeypatch, e
     output, audit = tmp_path / "out", tmp_path / "audit.json"
     args = ["--strategy", "version8", "--start", "20251104", "--end", "20251105",
             "--pool-dir", str(tmp_path), "--out-dir", str(output), "--execution-audit-file", str(audit)]
-    if enabled:
-        with pytest.raises(InsufficientCashError) as exc:
-            minute.main(args + ["--fix-minute-cash-order"])
-        assert_insufficient_cash(exc.value, date="20251105")
-        assert not audit.exists()
-        assert not (output / "trades.csv").exists()
-        return
-    assert minute.main(args + (["--fix-minute-cash-order"] if enabled else [])) == 0
-    payload = json.loads(audit.read_text())
-    assert payload["fix_minute_cash_order"] is enabled
-    assert payload["order"] == "actual_invocation_order"
-    assert len(payload["events"]) == 3
-    assert "decision_hm" not in (output / "trades.csv").read_text().splitlines()[0]
+    with pytest.raises(InsufficientCashError) as exc:
+        minute.main(args + (["--fix-minute-cash-order"] if enabled else []))
+    assert_insufficient_cash(exc.value, date="20251105")
+    assert not audit.exists()
+    assert not (output / "trades.csv").exists()
 
 
 @pytest.mark.parametrize("enabled", [False, True])

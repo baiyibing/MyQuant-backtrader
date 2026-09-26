@@ -1,5 +1,5 @@
 {
-  "rule_revision": "s8-independent-positions-2026-09-26",
+  "rule_revision": "s8-independent-group-exits-2026-09-26",
   "historical_sha256": "2f578d6fe9e601ad84a94bb6a269e1b5193c51ca4dd908366022769f0e1f31c2",
   "captured_environment": {
     "pandas": "3.0.6"
@@ -22,12 +22,12 @@
       "equity": "337a7b4ee2e2224808974c6bbea47c4a57af89010eff8b339d7372bd106101db"
     },
     "version8_3/daily": {
-      "trades": "eba37c2b315eb8146ce36fa80d385a37c2f4fcdb0af6c2a3368e8524e2c124fd",
-      "equity": "030ddb9a24d7b3feffea4d03b1c613c6163f85485b20400f150a119284b199d7"
+      "trades": "7ac0b1091089d45ab653c840e8b83c91ccf254b5df1027c37197f9236bb81c33",
+      "equity": "d43451f470d447a75391518486a42de7fbb07b4a2d1a220e861ec15c312509a1"
     },
     "version8_3/minute": {
-      "trades": "e70b757c55d0eda72ebd5eac9c9a3cddf68eb7ba8ea160e58035cdda2f04204f",
-      "equity": "da46a7fb7e34408b51bc9c085b88d7342f16c6a8b2f26f28f44b539d14b8ff45"
+      "trades": "54012090c0afe84c7a111ee7aed527b5d06ec153ed55ebf45cb531bd461e0369",
+      "equity": "9f49464c8a6267a0f802282babc04e266c0237c7eff136c1686bbd7a2dd199a3"
     }
   }
 }

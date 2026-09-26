@@ -17,6 +17,7 @@ from backtest.research.csv_ledger import (
     InsufficientCashError,
     _sell,
     configure_s8,
+    exit_positions,
 )
 from backtest.research.csv_simulate_loop import (
     init_sim_state,
@@ -189,70 +190,74 @@ def test_first_position_exit_does_not_disable_second_position_steps(mode, strate
 
 @pytest.mark.parametrize("strategy", LADDER_BOOKS)
 @pytest.mark.parametrize("mode", MODES)
-def test_sold_step_does_not_reset_executed_level(mode, strategy):
-    def exit_step(_px, cost, _peak, n_days):
-        return "profit_take:test_step" if cost == 12.1 and n_days >= 1 else None
+def test_group_exit_closes_entry_and_step_without_resetting_executed_level(mode, strategy):
+    def exit_group(_px, _cost, _peak, n_days):
+        return "profit_take:test_group" if n_days >= 3 else None
 
-    st = _run(mode, strategy, [10., 11., 12.1, 12.1, 12.1], [0], take_profit=exit_step)
+    st = _run(mode, strategy, [10., 11., 12.1, 12.1, 12.1], [0], take_profit=exit_group)
     steps = _buys(st, "add:step20")
     assert len(steps) == 1
     assert steps[0]["position_id"] == _pid(0)
-    assert len(_sells(st)) == 1
-    assert _sells(st)[0]["lot"] == steps[0]["lot"]
-    assert _sells(st)[0]["position_id"] == steps[0]["position_id"]
+    assert len(_sells(st)) == 2
+    assert {t["lot"] for t in _sells(st)} == {0, steps[0]["lot"]}
+    assert {t["position_id"] for t in _sells(st)} == {steps[0]["position_id"]}
+    group = st.book_state["s8_independent"]["groups"][_pid(0)]
+    assert group.executed_steps == 1
+    assert group.closed
 
 
 @pytest.mark.parametrize("strategy", LADDER_BOOKS)
-def test_step_history_survives_sold_lot_and_all_lots_close_group(strategy):
+def test_executed_steps_survive_t1_partial_exit_and_pending_group_never_adds(strategy):
     st, pending, hooks = _state(strategy)
     _pool(st, pending, hooks, 0, 10.)
     _step(st, hooks, 1, 12.1)
     first, step = st.positions[CODE]
-    _sell(st, CODE, step, 12.1, DAYS[2], "profit_take:test", day_i=2)
+    group_pos = exit_positions(st, CODE, day_i=1)[0]
+    _sell(st, CODE, group_pos, 12.1, DAYS[1], "profit_take:test", day_i=1)
+    assert st.positions[CODE] == [step]
+    assert first.shares == 0
+    assert group_pos.pending_exit == "profit_take:test|t1_deferred"
     _step(st, hooks, 2, 12.1)
     assert len(_buys(st, "add:step20")) == 1
     _step(st, hooks, 3, 14.1)
-    assert len(_buys(st, "add:step20")) == 2
-    assert len({(t["position_id"], t["lot"]) for t in _buys(st)}) == 3
-    for lot in list(st.positions[CODE]):
-        _sell(st, CODE, lot, 14.1, DAYS[4], "profit_take:test", day_i=4)
-    assert first.shares == 0
-    _step(st, hooks, 5, 16.1)
-    assert len(_buys(st)) == 3
+    assert len(_buys(st, "add:step20")) == 1
+    assert group_pos.group.executed_steps == 1
+    _sell(st, CODE, group_pos, 14.1, DAYS[3], group_pos.pending_exit, day_i=3)
+    assert group_pos.group.closed
     assert CODE not in st.positions
 
 
 @pytest.mark.parametrize("strategy", LADDER_BOOKS)
-def test_first_lot_exit_preserves_group_anchor_while_step_lot_remains(strategy):
+def test_closed_group_cannot_reopen_at_higher_steps(strategy):
     st, pending, hooks = _state(strategy)
     _pool(st, pending, hooks, 0, 10.)
     _step(st, hooks, 1, 12.1)
-    first, step = st.positions[CODE]
-    _sell(st, CODE, first, 12.1, DAYS[2], "profit_take:test_first", day_i=2)
-    _step(st, hooks, 2, 14.1)
+    pos = exit_positions(st, CODE, day_i=2)[0]
+    _sell(st, CODE, pos, 12.1, DAYS[2], "profit_take:test_group", day_i=2)
+    _step(st, hooks, 3, 14.1)
     assert [(t["position_id"], t["price"]) for t in _buys(st, "add:step20")] == [
-        (_pid(0), 12.1), (_pid(0), 14.1),
+        (_pid(0), 12.1),
     ]
-    assert step in st.positions[CODE]
+    assert pos.group.closed
+    assert CODE not in st.positions
 
 
 @pytest.mark.parametrize("mode", MODES)
-def test_exdiv_scales_retained_first_cost_after_first_lot_exits(mode):
-    def exit_first(_px, cost, _peak, n_days):
-        return "profit_take:test_first" if cost == 10. and n_days >= 3 else None
-
+def test_exdiv_scales_group_cost_and_preserves_first_cost_step_anchor(mode):
     st = _run(
         mode, "version8", [10., 11., 12.1, 12.1, 12.1, 7.05], [0],
-        take_profit=exit_first, exdiv={CODE: {_ds(5): .5}},
+        take_profit=_no_exit, exdiv={CODE: {_ds(5): .5}},
     )
     assert [(t["date"], t["price"]) for t in _buys(st, "add:step20")] == [
         (_ds(2), 12.1), (_ds(5), 7.05),
     ]
-    assert len(_sells(st)) == 1
-    assert _sells(st)[0]["date"] < _ds(5)
-    assert _sells(st)[0]["lot"] == 0
+    assert not _sells(st)
     assert {p.position_id for p in st.positions[CODE]} == {_pid(0)}
-    assert [p.cost for p in st.positions[CODE]] == [6.05, 7.05]
+    assert [p.cost for p in st.positions[CODE]] == [5., 6.05, 7.05]
+    lots = st.positions[CODE]
+    assert exit_positions(st, CODE)[0].cost == pytest.approx(
+        sum(p.cost * p.shares for p in lots) / sum(p.shares for p in lots),
+    )
 
 
 @pytest.mark.parametrize("strategy", LADDER_BOOKS)

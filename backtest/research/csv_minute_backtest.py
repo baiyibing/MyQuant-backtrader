@@ -34,10 +34,12 @@ from backtest.research.csv_ledger import (  # noqa: E402
     QLIB_CLOSE_COST,
     QLIB_MIN_COST,
     QLIB_OPEN_COST,
+    IndependentExitPosition,
     SimState,
     chase_decision as chase_decision,
     configure_s8,
     execute_buy as execute_buy,
+    exit_positions,
     finish_pending_chase,
     queue_limit_up_chase as queue_limit_up_chase,
     hit_limit_down,
@@ -126,7 +128,11 @@ from backtest.research.csv_simulate_loop import (  # noqa: E402
 
 from backtest.research.ashare_volume_cap import VolumeCap, VolumeLookup  # noqa: E402
 from backtest.research.minute_audit import audit_scope, write_audit
-from backtest.research.minute_cash_order import run_chronological_day
+from backtest.research.minute_cash_order import (
+    HeldMinuteCursor,
+    advance_independent_exit,
+    run_chronological_day,
+)
 
 # Preserve historical loader aliases used by callers and tests.
 _ = (_annotate, _load_minute_from_lake, _read_one_minute)
@@ -783,8 +789,12 @@ def simulate(
             if callable(bind_opening):
                 bind_opening(ds, list(st.positions.keys()))
 
-            # OFF still settles full-day exits first. Only the new 8.3 price
-            # confirmation must not borrow a peak formed after its 14:55 scan.
+            # Price-add books need the post-14:55 group scan to observe their
+            # new weighted cost. Other OFF books retain full-day exits first.
+            split_group_scan = hooks.get("name") in {
+                "version8", "version8_3", "version8_4", "version8_5",
+            } and hooks.get("sizing") == "per_name"
+            post_group_scans = []
             confirm_peaks = {}
             s8_confirm = hooks.get("name") == "version8_3" and hooks.get("sizing") == "per_name"
             for code in list(st.positions):
@@ -832,10 +842,38 @@ def simulate(
                         confirm_peaks[id(pos)] = max(
                             float(pos.peak), prefix_high if pos.entry_idx < i else 0.0,
                         )
-                for pos in list(st.positions.get(code, [])):
+                for pos in exit_positions(st, code, i):
                     if getattr(pos, "ride_with", None) is not None:
                         continue
                     n_days = i - pos.entry_idx
+                    if isinstance(pos, IndependentExitPosition):
+                        cursor = HeldMinuteCursor(
+                            o, h, c, cost=pos.cost, peak=pos.peak,
+                            n_days=n_days,
+                            can_sell=t1_sellable(calendar[pos.entry_idx].date(), day.date()),
+                            stop_pct=stop_pct,
+                            profit_base=profit_base if profit_base is not None else 0.0,
+                            trail_ratio=0.0, pos_trail=pos_trail,
+                            limit_down=limit_down, hm=hm, peak_hm=int(pos.peak_hm),
+                            peak_gap_min=peak_gap_min, take_profit=take_profit,
+                            sell_gate=sell_gate, gate_code=code, gate_day=day,
+                            daily_closes_ending_yesterday=prev_rows["close"].astype(float).tolist(),
+                            force_sell_hm=force_sell_hm,
+                            reserve_limit_up=reserve_limit_up,
+                            defer_limit_up=defer_limit_up, limit_up=limit_up,
+                            reserved=bool(pos.reserved), close_clear=close_clear,
+                        )
+                        for bar_idx, at_hm in enumerate(hm):
+                            if split_group_scan and int(at_hm) > BUY_HM:
+                                continue
+                            for phase in ("open", "close"):
+                                advance_independent_exit(
+                                    st, code, pos, cursor, bar_idx, phase, limits,
+                                    day=day, day_i=i, audit_sink=audit_sink,
+                                )
+                        if split_group_scan:
+                            post_group_scans.append((code, pos, cursor, limits))
+                        continue
                     if minute_open:
                         # Only yesterday's pending EOD decision can sell, once at open.
                         if not pos.pending_exit or not t1_sellable(calendar[pos.entry_idx].date(), day.date()):
@@ -1067,6 +1105,15 @@ def simulate(
                         lambda _code, pos: min(float(pos.peak), confirm_peaks.get(id(pos), float(pos.peak)))
                     ) if s8_confirm else None,
                 )
+            for code, pos, cursor, limits in post_group_scans:
+                for bar_idx, at_hm in enumerate(cursor.hm):
+                    if int(at_hm) <= BUY_HM:
+                        continue
+                    for phase in ("open", "close"):
+                        advance_independent_exit(
+                            st, code, pos, cursor, bar_idx, phase, limits,
+                            day=day, day_i=i, audit_sink=audit_sink,
+                        )
 
         run_eod_exits(st, day=day, ds=ds, bars=daily_bars, eod_exit=hooks.get("eod_exit"),
                       hold_modes=hold_modes, exdiv=exdiv,

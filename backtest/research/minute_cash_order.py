@@ -16,11 +16,14 @@ from backtest.research.csv_common import book_limit_prices
 from backtest.research.csv_ledger import (
     CHASE_HM,
     PEAK_GAP_MIN,
+    IndependentExitPosition,
     _sell,
     apply_exdiv_economics,
+    exit_positions,
     hit_limit_down,
     hit_limit_up,
     peak_gap_blocks,
+    position_is_open,
     rescale_position,
     rescale_s8_groups,
 )
@@ -36,6 +39,65 @@ from backtest.research.strategy6_rules import trail_hits
 
 BUY_HM = 14 * 60 + 55
 CLOSE_CLEAR_HM = 15 * 60
+
+
+def advance_independent_exit(
+    st, code, pos, cursor, idx, phase, limits, *, day, day_i, audit_sink=None,
+):
+    """Advance a whole signal position and settle only its T+1-eligible lots.
+
+    A remembered T+1 or volume tail exits at the next tradable bar open.
+    With a completed-volume cap its first eligible point is the bar close.
+    Fresh signals retain the scanner's existing limit-down gate/retry rules.
+    """
+    if not position_is_open(st, pos):
+        return
+    at_hm = int(cursor.hm[idx])
+    cursor.cost = pos.cost
+    cursor.peak, cursor.peak_hm = pos.peak, pos.peak_hm
+    pending = bool(pos.pending_exit)
+    if pending:
+        pending_phase = "close" if st.volume_cap is not None else "open"
+        if phase != pending_phase or not any(
+            lot.entry_idx < day_i and lot.position_id == pos.position_id
+            for lot in st.positions.get(code, [])
+        ):
+            return
+        px = float(cursor.c[idx] if phase == "close" else cursor.o[idx])
+        reason = pos.pending_exit
+    else:
+        event = cursor.advance(idx, phase)
+        pos.peak, pos.peak_hm = cursor.peak, cursor.peak_hm
+        pos.reserved = cursor.current_reserved
+        if event is None:
+            return
+        _, px, reason = event
+    if not np.isfinite(px) or px <= 0:
+        return
+    if (
+        (not pending and defer_sell_at_limit(float(cursor.o[idx]), limits))
+        or defer_sell_at_limit(px, limits)
+    ):
+        st.stats["defer_sell_limit_down"] += 1
+        return
+    volume_kwargs = {}
+    if st.volume_cap is not None:
+        volume_kwargs = {
+            "bucket_id": at_hm,
+            "at": at_hm - 1 if phase == "open" else at_hm,
+        }
+    if pending:
+        price_rule = "minute_trigger_bar_close" if phase == "close" else "minute_pending_next_open"
+    else:
+        price_rule = {
+            "stop_loss:gap_open": "minute_gap_open",
+            "stop_loss:touch": "minute_trigger_bar_close",
+        }.get(reason, "")
+    with audit_scope(audit_sink, decision_hm=at_hm, quote_hm=at_hm, phase=phase):
+        _sell(
+            st, code, pos, px, day, reason, day_i=day_i, **volume_kwargs,
+            hm=at_hm if price_rule else None, price_rule=price_rule,
+        )
 
 
 @dataclass
@@ -285,7 +347,7 @@ def run_chronological_day(
             continue
         o, h, c = (frame[key].to_numpy(np.float64) for key in ("open", "high", "close"))
         hm = frame["hm"].to_numpy(np.int64)
-        for pos in list(st.positions.get(code, [])):
+        for pos in exit_positions(st, code, day_i):
             if pos.ride_with is not None:
                 continue
             sellable = t1_sellable(calendar[pos.entry_idx].date(), day.date())
@@ -464,7 +526,13 @@ def run_chronological_day(
     for at_hm in sorted(clocks):
         for phase in ("open", "close"):
             for code, pos, cursor, idx, limits in events.get(at_hm, []):
-                if not any(lot is pos for lot in st.positions.get(code, [])):
+                if isinstance(pos, IndependentExitPosition):
+                    advance_independent_exit(
+                        st, code, pos, cursor, idx, phase, limits,
+                        day=day, day_i=day_i, audit_sink=audit_sink,
+                    )
+                    continue
+                if not position_is_open(st, pos):
                     continue
                 event = cursor.advance(idx, phase)
                 pos.peak, pos.peak_hm = cursor.peak, cursor.peak_hm

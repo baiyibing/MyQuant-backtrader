@@ -56,7 +56,7 @@ def test_default_trades_and_equity_byte_identical_to_pre_s1_head():
     expected = json.loads(BASELINE.read_text(encoding="utf-8"))
     assert expected["source"] == "9fa8b27 (before slice B ledger/engine changes)"
     correction = json.loads(S8_BASELINE.read_text(encoding="utf-8"))
-    assert correction["rule_revision"] == "s8-independent-positions-2026-09-26"
+    assert correction["rule_revision"] == "s8-independent-group-exits-2026-09-26"
     assert correction["historical_sha256"] == BASELINE_SHA256
     corrected_cases = correction["sha256_csv_bytes"]
     assert set(corrected_cases) == {
