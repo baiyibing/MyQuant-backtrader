@@ -1,9 +1,36 @@
-import os
+from pathlib import Path
 
 import pandas as pd
 import re
 
 from common.infra.qmt_utils_adv import detect_encoding, check_bom
+from common.infra.pool_csv import (
+    PoolDuplicateCodeError,
+    iter_pool_csv_rows,
+    pool_cell_to_bare,
+    check_pool_duplicate,
+)
+from oskh_core.a_share_symbol_normalize import canonical_from_bare_code
+
+
+def _read_pool_csv_stocks(file_path):
+    """Read comparison pools without discarding normalized duplicate codes."""
+    encoding = check_bom(file_path)
+    if encoding == 'unknown':
+        encoding, _confidence = detect_encoding(file_path)
+    if encoding in ['GB2312', 'gb2312']:
+        encoding = 'GBK'
+
+    stocks = {}
+    seen = {}
+    for line_number, parts in iter_pool_csv_rows(Path(file_path), encoding=encoding):
+        bare = pool_cell_to_bare(parts[0])
+        canon = canonical_from_bare_code(bare) if bare else None
+        if canon is None:
+            continue
+        check_pool_duplicate(Path(file_path), seen, canon, line_number)
+        stocks[bare] = parts[1] if len(parts) > 1 else ''
+    return stocks
 
 
 # 更简单的方法：如果文件实际上是制表符分隔的
@@ -68,35 +95,11 @@ def compare_stock_files(xls_file, csv_file):
 
     # 读取CSV文件
     try:
-        # 方法1: 检查BOM（字节顺序标记）
-        encoding = check_bom(csv_file)
-        confidence = 1.0
-        if encoding != 'unknown':
-            pass
-        else:
-            # 方法2: 检查BOM（字节顺序标记）
-            encoding, confidence = detect_encoding(csv_file)
-
-        if encoding in ['GB2312','gb2312']:
-            encoding = 'GBK'
-
-        # 尝试读取CSV文件
-        df_csv = pd.read_csv(csv_file, header=None, dtype={0: str, 1: str}, encoding=encoding, skip_blank_lines=True)
-
-        stocks_csv = {}
-        for index, row in df_csv.iterrows():
-            if len(row) >= 2:
-                code = str(row[0]).strip()
-                name = str(row[1]).strip()
-
-                # 清理代码格式（去除="等符号）
-                code = re.sub(r'[="]', '', code)
-
-                if code and len(code) == 6 and code.isdigit():
-                    stocks_csv[code] = name
-
+        stocks_csv = _read_pool_csv_stocks(csv_file)
         print(f"CSV文件读取完成，共{len(stocks_csv)}只股票")
 
+    except PoolDuplicateCodeError:
+        raise
     except Exception as e:
         print(f"读取CSV文件出错: {e}")
         return False
