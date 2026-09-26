@@ -1,0 +1,39 @@
+
+
+十、独立持仓身份（仅有非空 position_id 的分析包追加本节）
+
+本节补充前文按代码 FIFO 的旧口径。旧输出或整份输入的 position_id 均为空时，
+继续使用旧列和旧字段说明，不追加本节。
+
+position_id              独立持仓身份，如 600000.SH@20251031；同码不同信号日不同仓。
+lot                      该持仓内的批次编号，从 0 开始；完整键为 (position_id, lot)。
+                         lot 不是全代码唯一编号。非空值用整数表示（0，不是 0.0），
+                         缺失值留空；仅在输入有 lot 列时追加。
+
+trades_daily.csv、round_trips.csv、ledger_by_stock.csv
+  追加 position_id；输入有 lot 列时另追加 lot。
+  非空身份 SELL 只配同一持仓的 BUY，有 lot 时按 lot，无 lot 时按持仓内 FIFO。
+  同一 (position_id, lot) 的尾盘子 BUY 合并数量、本金与买入佣金。
+  同码较新持仓先退出、整体退出多条 SELL、次日 |t1_deferred SELL 都保留原归属。
+
+  已有 BUY 来源的 identified SELL 超出已记录余股时，超出部分归原持仓/lot，
+  buy_price、buy_notional、buy_commission 为 0；卖出金额、佣金照常计入 realized_pnl。
+  已记录股数已卖完后，后续红股 SELL 仍沿用保留的 BUY 来源，不消耗其他持仓成本。
+  零增量成本部分的 return_pct 留空；买入日期、旁路背景与身份仍来自原 BUY。
+  从未出现 BUY 的身份或无匹配 BUY 来源的显式 lot 会报错，不按同码其他仓猜测。
+
+  一条 identified SELL 可因跨 BUY 来源或超量部分拆成多条 round_trips / ledger 行。
+  summary、pnl_by_stock 中的 round_trips，以及胜率/按卖因笔数，均按已平分析行计数，
+  不等于独立持仓数或原始 SELL 行数。金额合计仍包含全部成本、卖款和费用。
+
+positions_daily.csv
+  保留旧列，仅追加 position_id；每个净值日按代码、独立持仓输出一行。
+  lot 不追加到本表，同一持仓剩余 lot 汇总成一行，按实际 BUY/SELL 数量重建。
+  超量红股 SELL 的零增量成本归因不反推除权日期、期间红股数量或现金红利；
+  期间权益与估值须结合原引擎权益记录判断。
+
+空身份兼容边界
+  空身份 SELL 沿用按代码 FIFO；混合输入的空身份 SELL 可匹配该代码的全部剩余 BUY。
+  手工混合输入若部分卖出，round_trips 沿用旧行为弹出整个 BUY lot，
+  positions_daily 则按卖出数量扣减，所以前者可能已平而后者仍有余股。
+  引擎不产出这种混合输入；两表此时不能用来逐 lot 对账。

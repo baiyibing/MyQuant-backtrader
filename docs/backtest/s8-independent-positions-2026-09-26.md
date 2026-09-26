@@ -70,7 +70,13 @@ peak 初始为首买价，从首买的 T+1 起按原行情规则更新；加仓�
 
 同一 `(position_id, lot)` 的多个尾盘子 BUY 合并股数、本金和佣金；部分 SELL 按数量分摊买入成本和费用，无 lot 的 SELL 可按持仓内 FIFO 跨多条 BUY。EOD_MARK 按身份/lot 归属，各剩余 lot 只估值一次。
 
-旧输出或整份输入没有非空身份时，分析列与导出字节保持原样；有身份时 `trades_daily`、`round_trips`、`ledger_by_stock` 才追加 `position_id`（输入有 lot 时另追加 `lot`），`positions_daily` 按持仓输出并只追加 `position_id`。此处只重建分析配对，不修改原始 trades/equity 或引擎资金。持仓交错、多 lot、部分卖出和修改前十份分析包文件字节对照分别锁定新归因与旧兼容。
+显式 `exdiv_economics` 可能产生红股解禁后 SELL 股数大于已记录 BUY 的情况，例如买入 100,000 股、最终卖出 200,000 股。已有 BUY 来源的身份按零增量成本处理超出部分：仍归属同一 `position_id`/lot，超出部分的 `buy_notional` 与 `buy_commission` 为 0，卖出金额与费用完整计入已实现盈亏。原 lot 的已记录股数已全部卖完后，后续红股 SELL（包括 defer 拆行）仍可通过保留的 BUY 来源归属，不会借用同码其他持仓的成本。若该身份从未出现 BUY，或 SELL 指定的 lot 无可匹配 BUY 来源，则清晰报错，不猜测持仓。此口径保留旧分析对一次性超额 SELL 的总成本，并补齐后续拆行的归因；不从卖量反推除权日期、期间权益或现金红利。
+
+一条 identified SELL 可按 BUY 来源及零增量成本部分拆成多条 `round_trips`/`ledger_by_stock` 行；`round_trips`、胜率与按卖因笔数统计这些分析行，不代表独立持仓数或原始 SELL 行数。零增量成本行的 `return_pct` 留空，已实现盈亏照常纳入合计。
+
+混合空身份的手工输入保留旧兼容边界：空身份 SELL 在 `round_trips` 中按代码 FIFO 弹出一整个 BUY lot，而 `positions_daily` 按实际卖出数量扣减。因此部分卖出时，前者可显示该 lot 已平、后者仍有余股；两表此时不能作为逐 lot 一致性对账。引擎不会产出这种混合输入：目标书整次运行带身份，其他书无身份。此处仅说明差异，不改变旧 FIFO 行为。
+
+旧输出或整份输入没有非空身份时，分析列与导出字节保持原样；有身份时 `trades_daily`、`round_trips`、`ledger_by_stock` 才追加 `position_id`（输入有 lot 时另追加 `lot`，整数表示、缺失留空），`positions_daily` 按持仓输出并只追加 `position_id`。分析包仅在有身份时向 `字段说明.txt` 追加 [身份字段说明](csv-analysis-identity-fields.txt)，旧字段说明文件保持不变。此处只重建分析配对，不修改原始 trades/equity 或引擎资金。持仓交错、多 lot、部分卖出和修改前十份分析包文件字节对照分别锁定新归因与旧兼容。
 
 ## 2. Baseline 范围与逐 case 差异
 
@@ -242,8 +248,8 @@ fixture 总资金 500 万、每个完整独立仓预算 100 万，同一 `600000
 - **needed 门槛待确认**：本次按“实际整手订单本金 + 费用”（容量裁剪前）检查，不按“完整预算 + 费用”。两种口径的差别和示例见 §1.5。
 - 加仓属于持仓整体并一起退出已经用户确认，不再是待决项。T+1 与跌停限制按 §1.3 实施，没有通过提前卖出当日新股实现整体退出。
 - 分钟 OFF 仍是兼容近似时钟，四本有价格加仓的书仅在 14:55 处分段；日线追买仍用 open/close 近似 09:45。完整因果资金时序应使用分钟 ON。
-- 人工分析包已按 §1.6 支持 `position_id` 归因；旧文件和空身份 SELL 继续按代码 FIFO，缺失的身份无法从代码自动还原。
-- 分析包仍不重建显式除权产生但未记录为 BUY 的红股数量；这类 SELL 可能缺少可配对来源，属于既有分析能力边界。本次不从卖量反推权益事件或虚构成本，原始引擎账本不受影响。
+- 人工分析包已按 §1.6 支持 `position_id` 归因；旧文件和空身份 SELL 继续按代码 FIFO，缺失的身份无法从代码自动还原。混合空身份的手工部分卖出在 `round_trips` 与 `positions_daily` 间存在整 lot/按量口径差异，见 §1.6；引擎不产出这种混合输入。
+- 已有 BUY 来源的 identified 红股 SELL 超量部分按零增量成本归原持仓/lot，支持解禁后一次性退出及 defer 拆行；从未出现 BUY 的身份或无匹配来源的显式 lot 仍报错。分析包不据此重建红股在持有期间的数量变化，也不推测未记录的现金红利；期间持仓/估值涉及这些权益时仍须查看引擎权益记录。原始引擎账本不受影响。
 - 目标低现金用例冲突已按用户决定迁移；默认 2,100 万及目标 OFF golden 均未报资金不足，没有未解决的引擎规则冲突。
 
 ## 6. 改动文件范围
@@ -284,3 +290,11 @@ fixture 总资金 500 万、每个完整独立仓预算 100 万，同一 `600000
 - 全部 13 份原有 tracked fixture 与基点逐字节相同。主 `--check` 的 78 个生产 CSV hash 及库 hash、39 个 canonical/account case 全通过；完整测试同时验证省略/显式 OFF、次级 18+6 case 和其他既有 golden。baseline 包括 reason 在内无 diff，无需重录。
 - 另将 master `8cb6c4a` 用 `git archive` 导出只读目录，与当前树在独立进程运行同一 **162 组合成矩阵**（62 组全书有效日线/分钟开关、32 组尾盘含小预算、36 组原生规则红股/下跌、32 组 T+1 定向场景）。全部 trades 去 reason 后及 equity 原始 CSV 字节相同，现金亦完全相同；146 组完整 trades 不变。四本可加仓书的定向场景共 28 条 reason 差异：24 条移除 defer 日除权误标、4 条补原退出日锁定但成交前解锁的漏标。其他书 reason 无差异；不适用的日线 ON / version12 分钟 X-02 未计为通过。
 - `NUMBA_CACHE_DIR=/tmp/numba-followups`、`~/.venvs/bt-ci/bin/python`（pandas 3.0.6）：四个 gates、`ruff check bt_contract` 全通过；完整 CI 选择 **3414 passed、67 skipped、24 deselected、10 warnings**。文本 UTF-8 无 BOM、NUL=0；仅本地 commit，不 push、不开 PR、不 merge。
+
+## 9. PR #215 第一轮审查收口（基点 6b72b54）
+
+- P2-1 采用零增量成本方案：恢复旧分析可处理的一次性超额 SELL，并补齐旧 lot 已匹配完后的红股 defer 拆行。保留 BUY 来源用于身份/lot 归因，未知来源仍报错；只改分析，不改引擎 trades/equity。Kimi 的 100,000 股 BUY → 200,000 股 SELL 原探针现可完成导出，realized + mtm 与 NAV 增量均为 **897,100**；三时钟 defer 拆行端到端用例同样守恒。
+- P2-2 仅在 §1.6/§5 说明手工混合空身份部分卖出的两表差异，保留旧代码 FIFO 字节合同。
+- P2-3 身份模式的 lot 使用可空整数，CSV 为 `0`/`1` 而非 `0.0`/`1.0`；只向有身份的分析包追加独立字段说明，原 `csv-analysis-fields.txt` 不改。
+- 新增红股/归因 13 项、整数/说明 7 项测试，分析专项 **35 passed**；四 gates、ruff 通过，完整 CI **3434 passed、67 skipped、24 deselected、10 warnings**。主 baseline 原字节检查和 113 项 baseline 专项通过，全部 14 份已有 fixture（含旧分析快照）不变；无身份/全空身份两组各十份分析文件同路径原始 bytes 相等。
+- 相对 `6b72b54` 再跑只读整仓源码 162 组对照：完整 trades（**含 reason**）、equity 字节和现金全部一致，reason 差异 **0**。§8 相对 master 的 28 条 reason 修正仍仅属于前一提交。
