@@ -1,0 +1,85 @@
+csv_minute_topk_dropout 20260901..20260902
+  期末净值: 95,191.65 / 100,000
+  总收益率(全资金): -4.81%
+  动用资金收益率: -2.58%
+  最大回撤: -1.12%
+  买入 2 | 涨停跳过 0 | 追买 0 | 弃买 0 | 已持跳过 0 | 加仓 0
+  涨停分解: 追买 0 | 弃买 0 | 追买日仍涨停 0 | 缺行情 0 | 末日未追 0 | 覆盖 0 | 买失败 0 | 追买已持跳过 0 | 合计 0 / 涨停跳过 0
+  卖出: 止损 0 | 锚定回撤 0 | 正利润回撤 1 | 止盈 0 | 开板 0 | 强制 0 | 均线 0
+  跌停顺延卖出 0 | 补充资金 0
+  日线加载 2 | 池天数 2
+  sizing=daily_quota | daily_quota=100,000 | name_budget=1,000,000 | skip_cash=0 | skip_cash_notional=0 | chase_buy_fail_cash=0 | chase_buy_fail_shares=0
+  cost buy=0.001 sell=0.001 min=0
+  ration=file_order | ration_seed=0
+
+分钟向量化口径（相对 Cerebro 保真版：无事件总线，同公式逐分钟扫描）：
+  时钟：分钟湖 time 把 A 股会话钟点标成 UTC（09:30 UTC=开盘）。交易日=该 UTC 日期。
+  买入：池 CSV 当日候选、14:55 收盘价；买价达到或超过涨停价 → 当日不买，
+        记下额度。T+1 09:45 市价>当日开盘 → 09:45 收盘追买；否则弃买。
+        追买日无 K 保留 pending 到下一有 K 日（仍只评一次）。
+        per_name 是否加仓见策略书（v8 允许同码加仓、独立 lot）；daily_quota 沿用历史路径。
+        未知板块且无 ST 名 → skip_unknown_board，不交易。
+  止损：D+1 起，开盘 ≤ 买入价×(1-stop) → 开盘成交；否则该分钟 close 触价 → close 成交。
+  跌停禁卖：任何卖因成交前若开盘或成交价跌停 → 不成交、当日跳过、次日再评
+        （含 trail / profit_take / force / ma_signal / open_board，不只 stop_loss）。
+  停牌：冻仓；净值用最近有 K 的 close。
+  止盈 / 峰值：见下方对应策略书。峰值用 bar high，现价用 close。
+        策略 6 触价 bar 与创新高 bar 间隔不能 < 15 分钟（=15 允许；隔夜/午休 gap<0 视为满足）。
+        盘中触线按该分钟 close 走。v8：T+1 只评止损不评止盈。
+  T+0：不可卖；峰值固定为买入价，14:55 之后的 high 不计入。峰值从 T+1 起算。
+  资金 / T+1 / force_min / 佣金：与 csv_daily_backtest 相同。
+        资金模式见策略书（v8=每股预算）；per_name 现金不足（含佣金）整笔 skip_cash。
+  配给：--ration file_order 保持 CSV 行序；seeded_shuffle 用 --ration-seed 与日期
+        经 SHA-256 派生逐日稳定乱序；追买沿该次名单遍历产生的排队顺序。
+  复权：E-R6 除权日参考价修正 — 持仓期除权日一次性缩放 open lot 的 cost/peak，
+        并将当日 prev_close→档位换算点映射到 D 域；成交价/净值/股数仍 none。
+        非除权日与 ≤0.5% 噪声带见 E-R5 收窄声明（engine-ashare-correctness.md）。
+  窗口：分钟湖目前到 2026-05-25；要「→今天」用日线版。
+  加载 / 缓存：走 ashare_bars.load_minute_ohlc（湖 parquet 或命中 bar_cache）。
+        --no-cache 跳过；--rebuild-cache 重做。
+  落盘：与日线同三件套；若已有同策略 csv_daily_{book}_{start}_* 净值，summary 末尾附对照。
+  策略：必须显式指定已注册 --strategy（无缺省）。共用引擎，策略书换卖点与加仓。
+        strategy12 人裁（#151 option 2）约定：
+        1) 分钟成交域默认 none（--dividend-type none）；front 仅可选且缺 1m/front 时 fail-closed。
+        2) 日线信号域固定 front（MA/形态来自 1d/front）。
+        3) 分钟成交仍用分钟原始价（none 域）；
+        4) 除权只走显式 economics/文档路径，禁止与 front 日线信号形成静默双重调整。
+
+策略 topk_dropout（--strategy topk_dropout / topk / version_topk）：
+  底座 = qlib TopkDropout（method_buy=top / method_sell=bottom），对引擎实仓现算。
+  开盘仓只 decide 一次：sell_gate 与 planned_for_day 共用那对 buy/sell（卖完不重算）。
+  dropout 当日收盘卖（topk_drop 走 same-bar）；不是次日开盘 pending。
+  涨跌停贴近 qlib：统一 |Δ|≥9.5% 当日买卖都不做（forbid_all_trade_at_limit）；
+  不按板块 10/20/30，不追买，跌停不挂次日开盘。6/8 原语义不动。
+  新买额度 = min(日额度, 现金) * 0.95 / n_buy（qlib risk_degree）。
+  资金模式配对（plan-capital-pairing-2026-09-25）：本书族默认日额度 = --cash-total
+  （qlib 原生现金部署）；不传 --daily-quota 即是。显式 --daily-quota 覆盖。
+  不是 version6：无 trail 止盈；默认 10% 开仓价止损（stop_loss:touch / gap_open），不改 v6 的 6%。
+  日线买与 dropout 卖本就按收盘。--stop-fill touch|close（默认 touch）只改止损成交：
+  close = 日终收盘 ≤ cost×(1-p) 则按该收盘卖（含恰跌停，Q7）；同日止损先于 dropout。
+  分钟入口拒绝 --stop-fill close（逐根 bar close ≠ 当日收盘）。
+  --stop-pct 0 关闭止损（臂 0 / 对齐原生 Topk）。
+  --return-threshold-filter 买入挡 5 日涨幅>15%（已加载日线收盘，T-1/T-6）；与 ST/年龄独立。
+  --buy-state-file 新开买点旁路（MyQuant 导出 close/MA20/MA60/$winratio）：
+  (close<MA20 且 close<MA60 且 winratio<0.10) 或 close>MA20；无 MA5 斜率；缺行/NaN fail-closed。
+  盈筹 = 券商 $winratio，不是 CYQ parquet。topk_score_exit 拒绝此旗。默认不传=不滤。
+  --buy-state-rule oral|above-ma20|above-ma20-week20|above-ma5-ma20-week20（默认 oral）。
+  above-ma20 关掉盈筹抄底，只留 close>MA20；close=MA20 不买。
+  above-ma20-week20 再要求 close>20 周均线。周线照 qlib：每周第一个交易日的收盘做 Mean($close, 20)，
+  买入日沿用不晚于当日的最近一根。未满 20 周不买。用已加载的 day.bin 收盘，不 import qlib。
+  above-ma5-ma20-week20 在此之上再要求 close>个股 5 日均线（含当日的 5 根收盘均值）。
+  close=均线不买。未满 5 根不买。同样用已加载的日线收盘。分钟成交也可以用这几道日线闸。
+  必须同时传 --buy-state-file。分钟拒绝 --stop-fill close。
+  --keep-buy-vacancy 原买名单里没过 个股5日 / 20 日 / 20 周 / 上证 5 日线的不替补，名额空着。
+  ST、年龄、15% 仍先滤名单并补满只数，和这个开关无关。
+  当天资金按滤完名单的只数均分，均线空位的那一份留在现金里。默认关（关=按分数往下补）。
+  --index-ma5-gate 新开闸（默认关）：全市场只看上证指数 000001.SH，不分板块。
+  信号日=买入日前一根上证交易日。该日收盘 < 含当日的 5 日均线 → 下一交易日所有新开不买。
+  收盘=均线不挡。指数缺前史或无正收盘 → 不买。不因此强卖已持仓。
+  --dividend-type none|front|back 日线复权（默认 none）；front/back 不再做 E-R6 除权缩放。
+  --qlib-data-root 读 qlib features/*.day.bin（$close 后复权）。成交热路径不挂 qlib 运行时；
+  Mean($close, n) 用已加载收盘滚动均值，不是「算法不许像 qlib」。
+  --qlib-cost 佣金对齐 qlib：买 5bp / 卖 15bp / 最低 5（默认仍是双边 10bp 无最低）。
+  卖出 reason 前缀 topk_drop:bottom；止损 touch/gap_open，或 --stop-fill close → stop_loss:close。
+  排序与淘汰以 --pred-csv / --scores-dir 为准；--pool-dir 仍要（日历/契约），不以池 50 行当卖出。
+  禁止「今日池 CSV 没有就清仓」；禁止读 live_pool/*sell.csv。

@@ -1,0 +1,5 @@
+date,code,side,price,shares,notional,commission,reason,lot,session_phase,price_rule
+20260901,600000.SH,BUY,10.3,9200,94760.0,94.76,pool,0,,
+20260902,600000.SH,SELL,10.1,9200,92920.0,92.92,topk_drop:bottom,0,,
+20260902,600001.SH,BUY,10.2,9100,92820.0,92.82000000000001,pool,0,,
+20260902,600001.SH,EOD_MARK,10.0,9100,91000.0,0.0,,0,,

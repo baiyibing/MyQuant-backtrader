@@ -298,6 +298,7 @@ def run_chronological_day(
     audit_sink=None,
     tail_window_buy=False,
     tail_volume_unit="shares",
+    topk_exec="close",
 ):
     """Advance holdings and cash at (hm, open/close, existing stable order)."""
     if tail_window_buy:
@@ -458,6 +459,16 @@ def run_chronological_day(
         if px is None or px <= 0 or (minute_open and not np.isfinite(px)):
             return None
         return px, closes
+
+    topk_buys = None
+    if topk_exec != "close":
+        from backtest.research.topk_minute_exec import TopkMinuteBuys
+
+        topk_buys = TopkMinuteBuys(
+            st, mode=topk_exec, hooks=hooks, previous_and_frame=previous_and_frame,
+            open_quote_for=_open_quote_for, day_i=day_i, day=day, ds=ds,
+            names=names, daily_quota=daily_quota, exdiv=exdiv, audit_sink=audit_sink,
+        )
 
     tail_codes = set()
     tail_orders = {}
@@ -685,6 +696,8 @@ def run_chronological_day(
                 st.stats["defer_sell_volume"] += 1
 
     clocks = set(events) | {CHASE_HM, AM_OPEN if minute_open else BUY_HM}
+    if topk_buys is not None:
+        clocks.update(topk_buys.clocks)
     if tail_window_buy:
         clocks.update(TAIL_MINUTES)
     for at_hm in sorted(clocks):
@@ -733,6 +746,8 @@ def run_chronological_day(
                         hm=at_hm if price_rule else None,
                         price_rule=price_rule,
                     )
+            if topk_buys is not None and phase == "open":
+                topk_buys.advance(at_hm)
             if tail_window_buy and at_hm == TAIL_START and phase == "open":
                 with audit_scope(audit_sink, decision_hm=TAIL_START, phase="open", quote_hm=TAIL_START):
                     start_tail_parents()
@@ -767,7 +782,7 @@ def run_chronological_day(
                         add_gate=hooks.get("add_gate"),
                         index_blocks_add=hooks.get("index_blocks_add", True),
                     )
-            if not minute_open and at_hm == BUY_HM and phase == "close":
+            if topk_buys is None and not minute_open and at_hm == BUY_HM and phase == "close":
                 with audit_scope(
                     audit_sink, decision_hm=BUY_HM, phase="close", quote_for=pool_bucket
                 ):
