@@ -24,8 +24,13 @@ from backtest.research.ma_infra import sma_asof
 from backtest.research.market_layer import as_datetime, utc_ms_range
 
 OHLC = ("open", "high", "low", "close")
-TOLERANCE = Decimal("1e-10")
-VALIDATION_VERSION = "s12-price-domain-v1"
+# Industry standard: relative tolerance 0.1% (10bp). Real lake prices are
+# cent-quantized; front→raw round-trip introduces rounding that absolute
+# 1e-10 cannot accommodate. 0.1% covers cent rounding across realistic price
+# ranges (0.005–0.5 yuan) while catching genuine domain errors.
+TOLERANCE = Decimal("0.001")
+TOLERANCE_MODE = "relative"
+VALIDATION_VERSION = "s12-price-domain-v2"
 _VALIDATED_CONTEXT = object()
 
 
@@ -50,7 +55,11 @@ def _decimal(value):
 
 
 def _same(left, right):
-    return abs(_decimal(left) - _decimal(right)) <= TOLERANCE
+    """Relative tolerance: |left - right| / max(|left|, |right|, 1) <= TOLERANCE."""
+    a, b = _decimal(left), _decimal(right)
+    diff = abs(a - b)
+    scale = max(abs(a), abs(b), Decimal(1))
+    return diff / scale <= TOLERANCE
 
 
 def _day(value):
@@ -454,7 +463,8 @@ def build_s12_price_context(front_daily, raw_daily, *, minute_bars, metadata,
         "transform_model": model, "implicit_exdiv_map": False,
         "nav_comparability": "raw_accounting_only", "pit_anchor_validation": pit_status,
         "validation_version": VALIDATION_VERSION,
-        "input_absolute_tolerance": str(TOLERANCE), "real_lake_precision_validated": False,
+        "input_absolute_tolerance": str(TOLERANCE), "input_tolerance_mode": TOLERANCE_MODE,
+        "real_lake_precision_validated": False,
         "cache_policy": "bypass_legacy_window_cache",
     })
     context = S12PriceContext(front_daily, raw_daily, minute_bars, parsed, output,

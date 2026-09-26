@@ -1,0 +1,3877 @@
+{
+  "summary": {
+    "no_feature_bin": 9,
+    "not_in_instruments_file": 0,
+    "starts_after_window": 150,
+    "ends_before_window": 0,
+    "both_edges": 0,
+    "listed_covers_window": 614
+  },
+  "buckets": {
+    "no_feature_bin": [
+      {
+        "instrument": "BJ920680",
+        "instruments_row": null
+      },
+      {
+        "instrument": "SH600200",
+        "instruments_row": null
+      },
+      {
+        "instrument": "SH600355",
+        "instruments_row": null
+      },
+      {
+        "instrument": "SH603388",
+        "instruments_row": null
+      },
+      {
+        "instrument": "SZ000851",
+        "instruments_row": null
+      },
+      {
+        "instrument": "SZ002231",
+        "instruments_row": null
+      },
+      {
+        "instrument": "SZ300344",
+        "instruments_row": null
+      },
+      {
+        "instrument": "SZ300379",
+        "instruments_row": null
+      },
+      {
+        "instrument": "SZ300391",
+        "instruments_row": null
+      }
+    ],
+    "not_in_instruments_file": [],
+    "starts_after_window": [
+      {
+        "instrument": "BJ920002",
+        "listed_start": "2025-05-15 11:11:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920006",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920008",
+        "listed_start": "2025-05-15 11:11:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920010",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920021",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920026",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920037",
+        "listed_start": "2025-06-17 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920039",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920047",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920057",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920060",
+        "listed_start": "2025-05-15 11:11:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920077",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920082",
+        "listed_start": "2025-05-15 11:11:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920087",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920088",
+        "listed_start": "2025-05-15 11:11:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920090",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920091",
+        "listed_start": "2025-11-05 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920092",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920106",
+        "listed_start": "2025-05-15 11:11:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920116",
+        "listed_start": "2025-05-15 11:11:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920123",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920130",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920145",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920146",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920149",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920152",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920163",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920169",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920171",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920174",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920175",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920184",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920185",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920190",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920198",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920199",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920207",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920223",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920225",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920237",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920245",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920247",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920249",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920252",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920262",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920263",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920267",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920273",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920274",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920284",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920299",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920300",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920305",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-05-25 15:00:00"
+      },
+      {
+        "instrument": "BJ920339",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920351",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920367",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920368",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920371",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920374",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920392",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920394",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920395",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920396",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920403",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920405",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920407",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920414",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920418",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920419",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920422",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920425",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920436",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920438",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920475",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920476",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920493",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920504",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920505",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920508",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920509",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920522",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920533",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920553",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920556",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920564",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920570",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920571",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920576",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920579",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920580",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920592",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920627",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920634",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920639",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920640",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920641",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920642",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920663",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920670",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920682",
+        "listed_start": "2025-05-15 11:11:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920693",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920706",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920719",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920720",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920726",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920735",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920748",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920765",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920779",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920786",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920790",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920802",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920807",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920808",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920809",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920810",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920833",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920837",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920839",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920856",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920857",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920873",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920879",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920885",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920892",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920906",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920914",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920924",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920942",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920953",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920957",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920961",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "BJ920970",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH600289",
+        "listed_start": "2025-01-14 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH603248",
+        "listed_start": "2025-12-23 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688583",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688765",
+        "listed_start": "2025-10-28 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688775",
+        "listed_start": "2025-06-11 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002309",
+        "listed_start": "2025-01-09 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002379",
+        "listed_start": "2025-01-07 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002647",
+        "listed_start": "2025-01-03 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002656",
+        "listed_start": "2025-01-14 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ003020",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ003023",
+        "listed_start": "2025-01-06 10:53:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ003032",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301275",
+        "listed_start": "2025-03-11 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301501",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301629",
+        "listed_start": "2025-03-24 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301662",
+        "listed_start": "2025-05-12 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ302132",
+        "listed_start": "2025-05-15 10:47:00",
+        "listed_end": "2026-09-18 15:00:00"
+      }
+    ],
+    "ends_before_window": [],
+    "both_edges": [],
+    "listed_covers_window": [
+      {
+        "instrument": "SH600010",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH600021",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH600107",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH600113",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH600120",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH600127",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH600130",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH600136",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH600162",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH600165",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH600167",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH600170",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH600193",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-05-25 15:00:00"
+      },
+      {
+        "instrument": "SH600206",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH600228",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH600243",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH600246",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH600265",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH600302",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH600303",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH600351",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH600358",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH600360",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH600365",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH600381",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH600403",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH600421",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-05-25 15:00:00"
+      },
+      {
+        "instrument": "SH600475",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH600510",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH600525",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH600537",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH600568",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH600581",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH600593",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH600599",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-05-25 15:00:00"
+      },
+      {
+        "instrument": "SH600603",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH600608",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-05-25 15:00:00"
+      },
+      {
+        "instrument": "SH600622",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH600624",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH600658",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH600673",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH600696",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-05-25 15:00:00"
+      },
+      {
+        "instrument": "SH600735",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH600753",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH600770",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH600777",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH600793",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH600807",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH600826",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH600828",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH600829",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH600831",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH600843",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH600879",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH600892",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH601003",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH601005",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH601008",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH601126",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH601877",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH601929",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH601952",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH603007",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH603021",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH603067",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH603069",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH603086",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH603101",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH603123",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH603130",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH603179",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH603183",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH603185",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH603216",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH603256",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH603261",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH603268",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH603301",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH603333",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH603353",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH603367",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH603377",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH603378",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH603389",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH603398",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH603557",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH603580",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH603677",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH603717",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH603721",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH603789",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH603809",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH603813",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH603815",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH603818",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH603822",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH603828",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH603838",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH603843",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH603848",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH603863",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH603878",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH603879",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH603898",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH603938",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH603956",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH603959",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH605016",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH605055",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH605081",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-05-25 15:00:00"
+      },
+      {
+        "instrument": "SH605136",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH605580",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688023",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688025",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688027",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688031",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688035",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688039",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688053",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688059",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688066",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688068",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688071",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688081",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688090",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688095",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688096",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688098",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688108",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688109",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688110",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688114",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688115",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688148",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688151",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688158",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688159",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688165",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688166",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688167",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688171",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688182",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688189",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688195",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688203",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688205",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688207",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688215",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688218",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688226",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688227",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688228",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688229",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688233",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688244",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688249",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688265",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688272",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688273",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688280",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688288",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688316",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688320",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688323",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688327",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688333",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688335",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688336",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688343",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688353",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688356",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688365",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688379",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688382",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688393",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688400",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688425",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688426",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688433",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688435",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688448",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688455",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688472",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688503",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688512",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688519",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688520",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688523",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688551",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688573",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688577",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688585",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688603",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688607",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688610",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688611",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688619",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688620",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688622",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688623",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688627",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688648",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688656",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688658",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688660",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688670",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688678",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688687",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688691",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688708",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688709",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688711",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688737",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688776",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688778",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688788",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SH688799",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ000004",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-05-26 15:00:00"
+      },
+      {
+        "instrument": "SZ000032",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ000056",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ000066",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ000078",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ000409",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ000488",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ000504",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ000506",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ000510",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ000518",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ000536",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ000573",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ000581",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ000608",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ000609",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ000632",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ000638",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-05-26 15:00:00"
+      },
+      {
+        "instrument": "SZ000656",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ000659",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ000663",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ000668",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ000669",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ000688",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ000691",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ000695",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ000736",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ000752",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ000792",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ000793",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ000809",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ000818",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ000820",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ000830",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ000868",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ000878",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ000880",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ000903",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ000908",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ000929",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ000955",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ000973",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ000998",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ001270",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ001313",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ001330",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ001380",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002005",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002040",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002047",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002052",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002058",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002060",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002076",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002115",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002136",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002141",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002148",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002158",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002163",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002164",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002168",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002174",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002176",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002177",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002197",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002199",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002200",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002201",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002203",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002207",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002208",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002211",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002217",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002238",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002256",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002259",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002264",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002289",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002290",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002305",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002306",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002312",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002326",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002346",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002357",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002364",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002369",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002388",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002398",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002413",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002420",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002424",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002451",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002474",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002485",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002490",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002496",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002512",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002513",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002514",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002527",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002528",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002529",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002540",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002542",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002546",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002564",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002569",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002581",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002586",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002589",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002592",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002595",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002596",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002602",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002620",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002630",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002640",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002650",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002674",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002676",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002682",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002693",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002700",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002713",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002717",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002721",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002730",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002738",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002741",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002742",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002759",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002762",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002779",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002789",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002796",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002808",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-05-26 15:00:00"
+      },
+      {
+        "instrument": "SZ002810",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002816",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002822",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002848",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002853",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002857",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002868",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002871",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002898",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-05-26 15:00:00"
+      },
+      {
+        "instrument": "SZ002918",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002940",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002951",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002953",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ002957",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ003018",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300004",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300006",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300007",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300021",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300022",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300025",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300032",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300042",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300043",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300044",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300046",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300049",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300052",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300054",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300056",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300062",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300065",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300066",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300071",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300077",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300078",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300081",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300082",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300084",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300092",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300093",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300111",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300115",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300125",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300147",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300149",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300152",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300153",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300159",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300179",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300192",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300198",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300205",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300209",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300211",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300218",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300221",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300225",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300235",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300237",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300245",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300248",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300255",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300260",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300269",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300287",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300290",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300300",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300322",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300323",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300326",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300331",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300348",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300352",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300353",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300355",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300366",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300368",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300378",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300389",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300390",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300402",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300421",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300427",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300437",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300450",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300454",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300456",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300457",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300460",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300464",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300471",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300472",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300475",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300477",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300478",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300485",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300490",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300491",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300493",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300497",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300499",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300500",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300502",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300516",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300521",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300539",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300546",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300548",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300551",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300554",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300555",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300560",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300561",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300563",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300564",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300570",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300575",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300581",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300584",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300588",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300589",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300600",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300602",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300604",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300605",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300611",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300619",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300632",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300643",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300649",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300651",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300658",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300695",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300697",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300715",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300716",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300723",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300730",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300732",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300740",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300751",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300759",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300778",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300798",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300801",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300804",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300805",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300810",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300813",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300815",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300821",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300827",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300839",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300843",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300853",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300865",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300869",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300870",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300877",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300885",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300892",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300895",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300902",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300918",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300927",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300937",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300940",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300946",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300948",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300955",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300959",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300961",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300965",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300967",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300971",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300990",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300995",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300996",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ300997",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301002",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301010",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301011",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301013",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301017",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301022",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301024",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301030",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301038",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301069",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301070",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301076",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301079",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301089",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301109",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301111",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301123",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301136",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301137",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301138",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301139",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-09 15:00:00"
+      },
+      {
+        "instrument": "SZ301151",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301157",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301158",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301161",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301171",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301176",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301181",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301183",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301196",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301201",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301207",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301209",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301217",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301220",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301225",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301227",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301228",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301231",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301251",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301256",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301259",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301269",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301279",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301280",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301288",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301292",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301299",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301306",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301308",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301317",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301323",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301325",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301335",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301336",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301338",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301357",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301358",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301360",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301382",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301389",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301396",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301408",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301421",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301428",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301459",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301468",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301469",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301486",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301489",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301502",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301505",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301510",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301512",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301550",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301551",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301580",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301596",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      },
+      {
+        "instrument": "SZ301617",
+        "listed_start": "2025-01-02 09:30:00",
+        "listed_end": "2026-09-18 15:00:00"
+      }
+    ]
+  }
+}

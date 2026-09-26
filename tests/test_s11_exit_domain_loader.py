@@ -101,12 +101,28 @@ def test_front_only_date_is_snapshot_conflict(tmp_path):
 
 @pytest.mark.parametrize("kind", ["none", "front"])
 @pytest.mark.parametrize("bad", [np.nan, np.inf, 0., -1.])
-def test_invalid_prices_fail_before_filtering(tmp_path, kind, bad):
+def test_invalid_price_on_suspended_day_skipped_not_rejected(tmp_path, kind, bad):
+    """Industry standard (2026-09-26): zero-volume rows with 0/NaN price are
+    suspension (skip); nonzero-volume rows with bad prices are data corruption
+    (fail). Both domains get the same volume pattern so the date-set is symmetric."""
+    vol = [100., 0., 100.]
+    raw, _ = lake(tmp_path, raw_volume=vol, front_volume=vol)
+    broken = frame() * (.9 if kind == "front" else 1.)
+    broken.loc[broken.index[1], "close"] = bad
+    write_partition(tmp_path, broken, kind, volume=vol)
+    actual, _ = load(tmp_path, raw)
+    assert actual is not None
+
+
+@pytest.mark.parametrize("kind", ["none", "front"])
+@pytest.mark.parametrize("bad", [np.nan, np.inf, 0., -1.])
+def test_invalid_price_on_trading_day_still_fails(tmp_path, kind, bad):
+    """Bad price on a nonzero-volume (trading) day is still data corruption."""
     raw, _ = lake(tmp_path)
     broken = frame() * (.9 if kind == "front" else 1.)
     broken.loc[broken.index[1], "close"] = bad
-    write_partition(tmp_path, broken, kind, volume=[100., 0., 100.])
-    with pytest.raises(ValueError, match=f"date=20240903.*domain={kind}.*nonfinite or nonpositive"):
+    write_partition(tmp_path, broken, kind, volume=[100., 100., 100.])
+    with pytest.raises(ValueError, match=f"date=20240903.*domain={kind}.*nonfinite or nonpositive price on tradable"):
         load(tmp_path, raw)
 
 

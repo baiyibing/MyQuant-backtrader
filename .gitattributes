@@ -1,0 +1,5 @@
+# Byte-pinned contract artifacts must check out as committed (LF); the local
+# autocrlf working-tree conversion broke test_schema_file_sha256_pinned and
+# the off_byte_baseline golden fixtures on Windows checkouts (2026-09-26).
+bt_contract/schema/*.json text eol=lf
+tests/fixtures/*.json text eol=lf
