@@ -95,6 +95,8 @@
 
 2025 锚配置 × **{close, open, intraday} × {walkdown off/on} 六格**（见 §2.4）交付收益/回撤/成交数/重试到期/替补数，并做 **2026 窗交叉验证**。各格注明实际涨停价格路径，价域与其他配置保持一致。P2 定义并验收 vwap 及其替补组合后另补两格，完整矩阵为八格，不让 vwap 未定契约阻塞基础六格。
 
+tip `e38bc50` 的 2026 窗 walkdown-off 三格（`20260927a/b`）见 [4090 Human-GO 结果记录](topk-exec-3cell-2026-09-27.md)；六格 / walkdown-on 仍待 P3。
+
 ## 4. 边界与不做
 
 - 不改任何默认：`--topk-exec` 默认 **close**，walkdown 默认关；open/intraday 均须显式选择。
