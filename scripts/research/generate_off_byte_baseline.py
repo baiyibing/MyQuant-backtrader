@@ -8,7 +8,10 @@ HEAD or an existing golden, so updating a baseline cannot hide a regression.
 Checks retain the eff77f3 bytes/account contract and require the single #205
 metadata addition. Canonical CSV/account checks always run; raw byte checks
 require the golden's pandas major.minor (otherwise --check reports SKIP).
-See docs/backtest/off-byte-baseline-post205.md.
+Six per_name strategy-8 books use the explicit 2026-09-26 correction overlay;
+the other 27 cases still use the immutable historical files. --record-s8 writes
+only those 12 corrected cases and refuses to replace an existing overlay.
+See docs/backtest/s8-independent-positions-2026-09-26.md.
 """
 
 from __future__ import annotations
@@ -42,6 +45,12 @@ from backtest.research.csv_strategy_books import BOOKS
 SOURCE = "eff77f375f5636e3e9659aa8fd753404035f2782"
 GOLDEN = ROOT / "tests/fixtures/off_byte_baseline_eff77f3.json"
 CANONICAL_GOLDEN = ROOT / "tests/fixtures/off_canonical_baseline_eff77f3.json"
+HISTORICAL_GOLDEN_SHA256 = "3bfe51b6d3e20b665c3fed0449ebf8569988022719da275b7fcc9635a9988c6c"
+HISTORICAL_CANONICAL_SHA256 = "34f611da359f1a1d059bc78be75b2e9e2458c533b1dc3b46cfd61130fca7a04e"
+S8_GOLDEN = ROOT / "tests/fixtures/off_byte_baseline_s8_independent_20260926.json"
+S8_RULE_REVISION = "s8-independent-group-exits-2026-09-26"
+S8_BOOK_NAMES = ("version8", "version8_2", "version8_3", "version8_4", "version8_5", "version8_6")
+S8_CASES = tuple((book, engine) for book in S8_BOOK_NAMES for engine in ("daily", "minute"))
 BOOK_NAMES = (
     "version1", "version2", "version3", "version4", "version5", "version6",
     "version8", "version8_1", "version8_2", "version8_3", "version8_4",
@@ -185,6 +194,34 @@ def load_canonical_golden() -> dict:
     return golden
 
 
+def load_s8_golden() -> dict:
+    """Only the authorized 12 cases may supersede their historical contract."""
+    assert _hash(GOLDEN.read_bytes()) == HISTORICAL_GOLDEN_SHA256
+    assert _hash(CANONICAL_GOLDEN.read_bytes()) == HISTORICAL_CANONICAL_SHA256
+    golden = json.loads(S8_GOLDEN.read_text(encoding="utf-8"))
+    assert golden["rule_revision"] == S8_RULE_REVISION
+    assert golden["historical_raw_sha256"] == HISTORICAL_GOLDEN_SHA256
+    assert golden["historical_canonical_sha256"] == HISTORICAL_CANONICAL_SHA256
+    assert golden["contract"] == CANONICAL_CONTRACT
+    assert golden["books"] == list(S8_BOOK_NAMES)
+    assert set(golden["cases"]) == {f"{book}/{engine}" for book, engine in S8_CASES}
+    return golden
+
+
+def expected_case(book: str, engine: str) -> tuple[dict, dict, str]:
+    """Return account/raw, canonical hashes, and the recorded pandas version."""
+    key = f"{book}/{engine}"
+    if (book, engine) in S8_CASES:
+        golden = load_s8_golden()
+        case = golden["cases"][key]
+        canonical = {name: canonical_hash(table) for name, table in case["canonical_csv"].items()}
+        return case, canonical, golden["captured_environment"]["pandas"]
+    golden = json.loads(GOLDEN.read_text(encoding="utf-8"))
+    case = post205_expected_case(book, golden["cases"][key])
+    canonical = load_canonical_golden()["cases"][key]
+    return case, canonical, golden["captured_environment"]["pandas"]
+
+
 def assert_case_canonical(book: str, actual: dict, expected: dict, canonical_expected: dict):
     """Mandatory on every pandas version, before any byte-check skip."""
     for field, label in (("canonical_csv", "production"), ("library_canonical_csv", "library")):
@@ -301,8 +338,35 @@ def post205_expected_case(book: str, frozen_case: dict) -> dict:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--check", action="store_true", help="Compare to the immutable golden")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--check", action="store_true", help="Compare historical cases plus the S8 overlay")
+    mode.add_argument("--record-s8", action="store_true", help="Record only the 12 corrected S8 cases")
     args = parser.parse_args()
+    if args.record_s8:
+        if S8_GOLDEN.exists():
+            parser.error("The S8 correction overlay already exists; refusing to overwrite")
+        if pd.__version__ != "3.0.6":
+            parser.error("S8 correction recording requires the authorized pandas 3.0.6 environment")
+        assert _hash(GOLDEN.read_bytes()) == HISTORICAL_GOLDEN_SHA256
+        assert _hash(CANONICAL_GOLDEN.read_bytes()) == HISTORICAL_CANONICAL_SHA256
+        with tempfile.TemporaryDirectory(prefix="s8-byte-baseline-") as temp:
+            cases = {f"{book}/{engine}": capture_case(book, engine, Path(temp) / book / engine)
+                     for book, engine in S8_CASES}
+        for case in cases.values():
+            assert_case_bytes(case, case)
+        payload = {
+            "rule_revision": S8_RULE_REVISION,
+            "historical_raw_sha256": HISTORICAL_GOLDEN_SHA256,
+            "historical_canonical_sha256": HISTORICAL_CANONICAL_SHA256,
+            "books": list(S8_BOOK_NAMES),
+            "captured_environment": {"python": platform.python_version(), "pandas": pd.__version__,
+                                     "platform": sys.platform},
+            "contract": CANONICAL_CONTRACT,
+            "cases": cases,
+        }
+        S8_GOLDEN.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        print(f"Wrote {S8_GOLDEN}: 12 corrected cases / 24 production CSV hashes")
+        return
     if not args.check:
         head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
         if head != SOURCE or GOLDEN.exists():
@@ -310,22 +374,21 @@ def main():
     with tempfile.TemporaryDirectory(prefix="off-byte-baseline-") as temp:
         cases = capture_matrix(Path(temp))
     if args.check:
-        expected = json.loads(GOLDEN.read_text(encoding="utf-8"))
-        canonical_expected = load_canonical_golden()
-        assert expected["source"] == SOURCE
-        assert set(cases) == set(expected["cases"])
-        for key, case in expected["cases"].items():
-            book = key.split("/")[0]
-            assert_case_canonical(book, cases[key], post205_expected_case(book, case),
-                                  canonical_expected["cases"][key])
-        reason = byte_skip_reason(expected["captured_environment"]["pandas"])
-        if reason:
+        skipped = set()
+        for book, engine in CASES:
+            actual = cases[f"{book}/{engine}"]
+            expected, canonical_expected, recorded_pandas = expected_case(book, engine)
+            assert_case_canonical(book, actual, expected, canonical_expected)
+            reason = byte_skip_reason(recorded_pandas)
+            if reason:
+                skipped.add(reason)
+            else:
+                assert_case_bytes(actual, expected)
+        for reason in sorted(skipped):
             print(f"SKIP: {reason}")
-        else:
-            for key, case in expected["cases"].items():
-                assert_case_bytes(cases[key], case)
+        if not skipped:
             print("PASS: 78 production CSV hashes + library hashes (raw bytes)")
-        print(f"PASS: 39 canonical CSV/account cases; pandas={pd.__version__}")
+        print(f"PASS: 27 unchanged + 12 corrected canonical CSV/account cases; pandas={pd.__version__}")
         return
     for case in cases.values():
         assert case["sha256_csv_bytes"] == case["library_sha256_csv_bytes"], "writer/library mismatch"

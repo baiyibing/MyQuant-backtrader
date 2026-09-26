@@ -1,5 +1,6 @@
 from datetime import date
 
+from backtest.research.csv_ledger import configure_s8
 from backtest.research.csv_simulate_loop import (
     init_sim_state,
     run_pool_buys_day,
@@ -19,7 +20,9 @@ def _hooks(**extra):
 
 
 def _state(hooks, cash=21_000_000):
-    return init_sim_state(hooks, total_cash=cash, bars_loaded=2, pool_days={})[0]
+    st = init_sim_state(hooks, total_cash=cash, bars_loaded=2, pool_days={})[0]
+    configure_s8(st, hooks)
+    return st
 
 
 def _buy(st, hooks, codes, *, px=10.0, day="2025-11-03", ds="20251103", day_i=0):
@@ -77,16 +80,16 @@ def test_index_gate_blocks_new_names_when_map_passed():
     assert st.stats.get("skip_index_gate", 0) == 2
 
 
-def test_index_block_still_adds_held_name():
+def test_index_block_reappearance_is_a_new_position():
     blocked = date(2025, 11, 4)
     hooks = _hooks(index_block_new={blocked: True})
     st = _state(hooks)
     _buy(st, hooks, ["600000.SH"], px=10.0)
     _buy(st, hooks, ["600000.SH"], px=10.00, day=blocked, ds="20251104", day_i=1)
-    assert st.stats["add_lots"] == 1
+    assert st.stats["add_lots"] == 0
     assert st.stats["skip_held"] == 0
-    assert st.stats.get("skip_index_gate", 0) == 0
-    assert len(st.positions["600000.SH"]) == 2
+    assert st.stats.get("skip_index_gate", 0) == 1
+    assert len(st.positions["600000.SH"]) == 1
 
 
 def test_relist_loser_adds():
@@ -94,7 +97,7 @@ def test_relist_loser_adds():
     st = _state(hooks)
     _buy(st, hooks, ["600000.SH"], px=10.0)
     _buy(st, hooks, ["600000.SH"], px=9.90, day="2025-11-04", ds="20251104", day_i=1)
-    assert st.stats["add_lots"] == 1
+    assert st.stats["add_lots"] == 0
     assert st.stats["skip_held"] == 0
     assert len(st.positions["600000.SH"]) == 2
 
@@ -105,7 +108,7 @@ def test_relist_winner_adds():
     _buy(st, hooks, ["600000.SH"], px=10.0)
     _buy(st, hooks, ["600000.SH"], px=10.10, day="2025-11-04", ds="20251104", day_i=1)
     assert st.stats["skip_held"] == 0
-    assert st.stats["add_lots"] == 1
+    assert st.stats["add_lots"] == 0
     assert len(st.positions["600000.SH"]) == 2
 
 

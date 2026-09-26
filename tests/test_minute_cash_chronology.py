@@ -9,7 +9,9 @@ import pytest
 from backtest.research import ashare_bars
 from backtest.research import csv_minute_backtest as minute
 from backtest.research.ashare_volume_cap import BucketVolume
-from backtest.research.csv_ledger import Position
+from backtest.research.csv_ledger import (
+    IndependentGroup, IndependentPosition, InsufficientCashError, Position, s8_policy,
+)
 
 A, B, C = "600000.SH", "600001.SH", "600002.SH"
 D1, D2 = "20260901", "20260902"
@@ -17,6 +19,30 @@ D1, D2 = "20260901", "20260902"
 
 def fen(value):
     return Decimal(str(value)).quantize(Decimal(".01"), rounding=ROUND_HALF_UP)
+
+
+def assert_insufficient_cash(error, *, date=D2, code=B, needed=600.6, available=0):
+    assert error.date == date
+    assert error.code == code
+    assert error.needed == pytest.approx(needed)
+    assert error.available == pytest.approx(available)
+    assert error.shortfall == pytest.approx(needed - available)
+    for field in ("date", "code", "needed", "available", "shortfall"):
+        assert f"{field}=" in str(error)
+
+
+@pytest.fixture
+def captured_states(monkeypatch):
+    states = []
+    original = minute.init_sim_state
+
+    def capture(*args, **kwargs):
+        state, pending, names = original(*args, **kwargs)
+        states.append(state)
+        return state, pending, names
+
+    monkeypatch.setattr(minute, "init_sim_state", capture)
+    return states
 
 
 def fills(state):
@@ -71,6 +97,12 @@ def test_pool_boundary_same_close_sell_proceeds_are_immediately_available(
     sell_hm, can_buy, gap_open
 ):
     trace = []
+    if not can_buy:
+        with pytest.raises(InsufficientCashError) as exc:
+            cash_case(sell_hm, gap_open=gap_open, audit_sink=trace)
+        assert_insufficient_cash(exc.value)
+        assert [(t["code"], t["side"]) for t in trace] == [(A, "BUY")]
+        return
     state = cash_case(sell_hm, gap_open=gap_open, audit_sink=trace)
     assert [(t["code"], t["side"], t["shares"]) for t in fills(state)] == (
         [(A, "BUY", 100), (A, "SELL", 100)] + ([(B, "BUY", 100)] if can_buy else [])
@@ -92,7 +124,7 @@ def test_fallback_quote_does_not_backdate_decision_or_borrow_capacity(
     def seed(*args, **kwargs):
         state, pending, names = original(*args, **kwargs)
         if is_chase:
-            pending[B] = (1000, 0)
+            pending[f"{B}@{D1}"] = (1000, 0)
         return state, pending, names
 
     monkeypatch.setattr(minute, "init_sim_state", seed)
@@ -122,12 +154,13 @@ def test_fallback_quote_does_not_backdate_decision_or_borrow_capacity(
     assert (B, D2, 585 if is_chase else 895) not in calls
 
 
-def test_chase_cannot_spend_afternoon_sale_and_does_not_retry(monkeypatch):
+@pytest.mark.parametrize("enabled", [False, True])
+def test_chase_cannot_spend_afternoon_sale_and_does_not_retry(monkeypatch, enabled):
     original = minute.init_sim_state
 
     def seed(*args, **kwargs):
         state, pending, names = original(*args, **kwargs)
-        pending[B] = (1000, 0)
+        pending[f"{B}@{D1}"] = (1000, 0)
         return state, pending, names
 
     monkeypatch.setattr(minute, "init_sim_state", seed)
@@ -135,16 +168,16 @@ def test_chase_cannot_spend_afternoon_sale_and_does_not_retry(monkeypatch):
         A: [(D1, 895, 10, 10, 10), (D2, 899, 10, 10, 9.4)],
         B: [(D1, 895, 6, 6, 6), (D2, 570, 5.9, 5.9, 5.9), (D2, 585, 6, 6, 6)],
     }
-    off = run_case(rows, pools={D1: [A]}, references={B: 6}, fix_minute_cash_order=False)
-    on = run_case(rows, pools={D1: [A]}, references={B: 6})
-    assert fen(off.cash) == Decimal("338.46")
-    assert fen(on.cash) == Decimal("939.06")
-    assert not any(t["code"] == B for t in fills(on))
-    assert on.stats["chase_buy_fail_cash"] == 1 and on.stats["chase_pending_eod"] == 0
+    trace = []
+    with pytest.raises(InsufficientCashError) as exc:
+        run_case(rows, pools={D1: [A]}, references={B: 6},
+                 fix_minute_cash_order=enabled, audit_sink=trace)
+    assert_insufficient_cash(exc.value)
+    assert [(t["code"], t["side"]) for t in trace] == [(A, "BUY")]
 
 
 @pytest.mark.parametrize("failure", ["no_signal", "limit_down", "zero_capacity"])
-def test_unsold_position_contributes_no_cash(failure):
+def test_unsold_position_contributes_no_cash(failure, captured_states):
     close = {"no_signal": 10, "limit_down": 9, "zero_capacity": 9.4}[failure]
     options = {}
     if failure == "zero_capacity":
@@ -154,20 +187,23 @@ def test_unsold_position_contributes_no_cash(failure):
                 0 if date == D2 and code == A else 100_000, hm, "raw_shares_incremental"
             ),
         }
-    state = run_case(
-        {
-            A: [(D1, 895, 10, 10, 10), (D2, 894, 10, 10, close)],
-            B: [(D1, 895, 6, 6, 6), (D2, 895, 6, 6, 6)],
-        },
-        pools={D1: [A], D2: [B]},
-        **options,
-    )
+    with pytest.raises(InsufficientCashError) as exc:
+        run_case(
+            {
+                A: [(D1, 895, 10, 10, 10), (D2, 894, 10, 10, close)],
+                B: [(D1, 895, 6, 6, 6), (D2, 895, 6, 6, 6)],
+            },
+            pools={D1: [A], D2: [B]},
+            **options,
+        )
+    assert_insufficient_cash(exc.value)
+    state = captured_states[-1]
     assert [(t["code"], t["side"]) for t in fills(state)] == [(A, "BUY")]
     assert fen(state.cash) == 0 and state.positions[A][0].shares == 100
 
 
 @pytest.mark.parametrize("min_cost", [0, 5])
-def test_partial_sale_only_credits_actual_shares_net_of_fee(min_cost):
+def test_partial_sale_only_credits_actual_shares_net_of_fee(min_cost, captured_states):
     trace = []
 
     def volume(code, date, hm):
@@ -175,19 +211,24 @@ def test_partial_sale_only_credits_actual_shares_net_of_fee(min_cost):
             150 if (code, date) == (A, D2) else 100_000, hm, "raw_shares_incremental"
         )
 
-    state = run_case(
-        {
-            A: [(D1, 895, 10, 10, 10), (D2, 894, 10, 10, 9.4), (D2, 896, 10, 12, 9.3)],
-            B: [(D1, 895, 6, 6, 6), (D2, 895, 6, 6, 6)],
-        },
-        pools={D1: [A], D2: [B]},
-        total_cash=2000 + max(2, min_cost),
-        name_budget=2000,
-        min_cost=min_cost,
-        participation_rate=1,
-        volume_for_bucket=volume,
-        audit_sink=trace,
+    with pytest.raises(InsufficientCashError) as exc:
+        run_case(
+            {
+                A: [(D1, 895, 10, 10, 10), (D2, 894, 10, 10, 9.4), (D2, 896, 10, 12, 9.3)],
+                B: [(D1, 895, 6, 6, 6), (D2, 895, 6, 6, 6)],
+            },
+            pools={D1: [A], D2: [B]},
+            total_cash=2000 + max(2, min_cost),
+            name_budget=2000,
+            min_cost=min_cost,
+            participation_rate=1,
+            volume_for_bucket=volume,
+            audit_sink=trace,
+        )
+    assert_insufficient_cash(
+        exc.value, needed=1800 + max(1.8, min_cost), available=1410 - max(1.41, min_cost)
     )
+    state = captured_states[-1]
     assert [(t["code"], t["side"], t["shares"]) for t in fills(state)] == [
         (A, "BUY", 200),
         (A, "SELL", 150),
@@ -198,7 +239,7 @@ def test_partial_sale_only_credits_actual_shares_net_of_fee(min_cost):
     assert sum(t["side"] == "SELL" for t in trace) == 1
 
 
-def test_first_rejected_sell_attempt_does_not_retry_or_observe_later_high():
+def test_group_exit_retries_capacity_without_observing_later_high():
     looked_up = []
 
     def volume(code, date, hm):
@@ -211,9 +252,12 @@ def test_first_rejected_sell_attempt_does_not_retry_or_observe_later_high():
         participation_rate=1,
         volume_for_bucket=volume,
     )
-    assert [t["side"] for t in fills(state)] == ["BUY"]
-    assert state.positions[A][0].peak == 10
-    assert (A, D2, 896) not in looked_up
+    assert [t["side"] for t in fills(state)] == ["BUY", "SELL"]
+    assert fills(state)[-1]["price"] == 9.3
+    assert fills(state)[-1]["reason"] == "stop_loss:touch"
+    assert s8_policy(state)["groups"][f"{A}@{D1}"].first_lot.peak == 10
+    assert (A, D2, 896) in looked_up
+    assert A not in state.positions
 
 
 def test_future_sale_does_not_remove_held_before_pool(monkeypatch):
@@ -240,7 +284,11 @@ def test_partial_sale_funds_affordable_buy_and_preserves_trigger_high(monkeypatc
 
     def seed(*args, **kwargs):
         state, pending, names = original(*args, **kwargs)
-        state.positions[A] = [Position(A, 200, 10, 0, 10)]
+        position_id = f"{A}@{D1}"
+        pos = IndependentPosition(A, 200, 10, 0, 10,
+                                  position_id=position_id, entry_signal_date=D1)
+        state.positions[A] = [pos]
+        s8_policy(state)["groups"][position_id] = IndependentGroup(A, D1, 1000, pos)
         return state, pending, names
 
     monkeypatch.setattr(minute, "init_sim_state", seed)
@@ -264,9 +312,14 @@ def test_partial_sale_funds_affordable_buy_and_preserves_trigger_high(monkeypatc
     assert [(t["code"], t["side"], t["shares"]) for t in fills(state)] == [
         (A, "SELL", 150),
         (B, "BUY", 100),
+        (A, "SELL", 50),
     ]
-    assert fen(state.cash) == fen(1410 - max(1.41, min_cost) - 600 - max(0.6, min_cost))
-    assert (state.positions[A][0].shares, state.positions[A][0].peak) == (50, 13)
+    assert state.cash == pytest.approx(
+        1410 - max(1.41, min_cost) - 600 - max(0.6, min_cost)
+        + 465 - max(.465, min_cost)
+    )
+    assert A not in state.positions
+    assert s8_policy(state)["groups"][f"{A}@{D1}"].first_lot.peak == 13
 
 
 @pytest.mark.parametrize("gap_open", [False, True])
@@ -279,7 +332,7 @@ def test_single_name_without_crossed_clocks_keeps_fill_tuples(gap_open):
     assert on.cash == off.cash and on.positions == off.positions
 
 
-def test_opening_snapshot_pool_plan_budget_and_step_see_current_lots(monkeypatch):
+def test_opening_snapshot_sees_codes_but_reappearance_budget_sees_new_position(monkeypatch):
     real = minute.prepare_strategy_hooks
     observed = {"opening": [], "plan": [], "budget": [], "step": []}
 
@@ -308,18 +361,24 @@ def test_opening_snapshot_pool_plan_budget_and_step_see_current_lots(monkeypatch
     )
     assert observed["opening"] == [(D1, []), (D2, [A])]
     assert observed["plan"] == [(D1, []), (D2, [A])]
-    assert observed["budget"] == [[], [0]]
-    assert observed["step"] == [[0], [0, 1]]
+    assert observed["budget"] and all(lots == [] for lots in observed["budget"])
+    assert observed["step"] == []  # independent groups replace the old all-code hook
     assert [(p.entry_idx, p.shares, p.peak) for p in state.positions[A]] == [(1, 100, 10)]
+    assert state.positions[A][0].position_id == f"{A}@{D2}"
 
 
-def test_future_high_cannot_open_add_gate(monkeypatch):
+def test_future_high_does_not_gate_reappearance_or_set_new_peak(monkeypatch):
     real = minute.prepare_strategy_hooks
+    gate_calls = []
+
+    def old_add_gate(lots, px):
+        gate_calls.append((lots, px))
+        return lots[0].peak >= 11
 
     def hooks(*args, **kwargs):
         got = real(*args, **kwargs)
         got.update(
-            add_gate=lambda lots, px: lots[0].peak >= 11,
+            add_gate=old_add_gate,
             take_profit=lambda *_: None,
             reserve_limit_up=False,
             defer_limit_up=False,
@@ -333,8 +392,9 @@ def test_future_high_cannot_open_add_gate(monkeypatch):
         pools={D1: [A], D2: [A]},
         total_cash=5000,
     )
-    assert len(fills(state)) == 1 and state.stats["skip_add_loser"] == 1
-    assert state.positions[A][0].peak == 11
+    assert len(fills(state)) == 2 and state.stats["skip_add_loser"] == 0
+    assert gate_calls == []
+    assert [(p.entry_signal_date, p.peak) for p in state.positions[A]] == [(D1, 11), (D2, 10)]
 
 
 @pytest.mark.parametrize("ration", ["file_order", "seeded_shuffle"])
@@ -350,6 +410,19 @@ def test_whole_pool_denominator_ration_and_commission_match_legacy(ration, strat
         "ration_seed": 137,
         "strategy": strategy,
     }
+    if strategy == "version8_2":
+        traces = []
+        for enabled in (False, True):
+            trace = []
+            with pytest.raises(InsufficientCashError) as exc:
+                run_case(rows, fix_minute_cash_order=enabled, audit_sink=trace, **arguments)
+            assert_insufficient_cash(
+                exc.value, date=D1, code=C if ration == "file_order" else B, needed=1001
+            )
+            traces.append(trace)
+        assert traces[0] == traces[1]
+        assert [(t["side"], t["shares"]) for t in traces[0]] == [("BUY", 100)] * 2
+        return
     off = run_case(rows, fix_minute_cash_order=False, **arguments)
     on = run_case(rows, **arguments)
     assert on.trades == off.trades
@@ -715,12 +788,8 @@ def test_close_clear_milestones_with_chronological_clock(strategy, n_days, reaso
             index=pd.DatetimeIndex([pd.Timestamp("20260831"), *calendar]),
         )
     trace = []
-    state = minute.simulate(
-        ms,
-        ds,
-        {D1: [A], sell_day: [B]},
-        D1,
-        sell_day,
+    args = (ms, ds, {D1: [A], sell_day: [B]}, D1, sell_day)
+    options = dict(
         strategy=strategy,
         name_budget=1000,
         total_cash=1001,
@@ -728,6 +797,13 @@ def test_close_clear_milestones_with_chronological_clock(strategy, n_days, reaso
         fix_minute_cash_order=True,
         audit_sink=trace,
     )
+    if not can_buy:
+        with pytest.raises(InsufficientCashError) as exc:
+            minute.simulate(*args, **options)
+        assert_insufficient_cash(exc.value, date=sell_day)
+        assert [(t["code"], t["side"]) for t in trace] == [(A, "BUY")]
+        return
+    state = minute.simulate(*args, **options)
     assert [(t["code"], t["side"], t["reason"]) for t in fills(state)] == (
         [(A, "BUY", "pool"), (A, "SELL", reason)] + ([(B, "BUY", "pool")] if can_buy else [])
     )

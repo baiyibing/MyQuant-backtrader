@@ -234,8 +234,11 @@ def test_held_name_relist_below_cost_adds():
     bars = _bars(DAYS, rows)
     st = _run(pool, bars)
     buys = [t for t in st.trades if t["side"] == "BUY"]
-    assert [t["lot"] for t in buys] == [0, 1]
-    assert st.stats["add_lots"] == 1
+    assert [t["lot"] for t in buys] == [0, 0]
+    assert [t["position_id"] for t in buys] == [
+        "600000.SH@20251103", "600000.SH@20251104",
+    ]
+    assert st.stats["add_lots"] == 0
     assert st.stats["skip_held"] == 0
 
 
@@ -252,8 +255,11 @@ def test_held_name_relist_winner_below_target_adds():
     pool = {"20251103": ["600000.SH"], "20251104": ["600000.SH"]}
     st = _run(pool, _bars(DAYS, rows))
     buys = [t for t in st.trades if t["side"] == "BUY"]
-    assert [t["lot"] for t in buys] == [0, 1]
-    assert st.stats["add_lots"] == 1
+    assert [t["lot"] for t in buys] == [0, 0]
+    assert [t["position_id"] for t in buys] == [
+        "600000.SH@20251103", "600000.SH@20251104",
+    ]
+    assert st.stats["add_lots"] == 0
     assert st.stats["skip_held"] == 0
 
 

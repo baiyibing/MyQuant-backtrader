@@ -83,6 +83,213 @@ class Position:
 
 
 @dataclass
+class IndependentPosition(Position):
+    """Only the selected per-name 8.x books add identity to lot snapshots."""
+
+    position_id: str = ""
+    entry_signal_date: str = ""
+
+
+@dataclass
+class IndependentGroup:
+    code: str
+    entry_signal_date: str
+    budget: float
+    first_lot: IndependentPosition
+    next_lot_id: int = 1
+    executed_steps: int = 0
+    supplement_done: bool = False
+    last_add_date: str = ""
+    closed: bool = False
+    exit_day_idx: int | None = None
+    t1_deferred_bonus_lots: set[int] = field(default_factory=set)
+
+
+class IndependentExitPosition:
+    """Live exit view of one signal group, without changing its fill lots.
+
+    Costs use the same commission-exclusive fill-price convention as Position.
+    The first lot remains the entry/peak/pending anchor even after a partial
+    T+1 exit removes it from the ledger. Price adds keep that original anchor.
+    """
+
+    def __init__(self, st, position_id: str, group: IndependentGroup, day_i=None):
+        self.st = st
+        self.position_id = position_id
+        self.group = group
+        self.day_i = day_i
+
+    @property
+    def lots(self):
+        return [
+            p for p in self.st.positions.get(self.code, [])
+            if getattr(p, "position_id", None) == self.position_id
+        ]
+
+    @property
+    def code(self):
+        return self.group.code
+
+    @property
+    def entry_signal_date(self):
+        return self.group.entry_signal_date
+
+    @property
+    def shares(self):
+        return sum(p.shares for p in self.lots)
+
+    @property
+    def cost(self):
+        lots = self.lots
+        if len(lots) == 1:
+            return lots[0].cost  # Preserve single-lot float boundaries exactly.
+        shares = sum(p.shares for p in lots)
+        return (
+            sum(p.shares * p.cost for p in lots) / shares
+            if shares else self.group.first_lot.cost
+        )
+
+    @property
+    def entry_idx(self):
+        return self.group.first_lot.entry_idx
+
+    @property
+    def lot_id(self):
+        return self.group.first_lot.lot_id
+
+    @property
+    def ride_with(self):
+        return None
+
+    @property
+    def is_step(self):
+        return False
+
+    @property
+    def peak(self):
+        return self.group.first_lot.peak
+
+    @peak.setter
+    def peak(self, value):
+        self.group.first_lot.peak = value
+
+    @property
+    def peak_hm(self):
+        return self.group.first_lot.peak_hm
+
+    @peak_hm.setter
+    def peak_hm(self, value):
+        self.group.first_lot.peak_hm = value
+
+    @property
+    def reserved(self):
+        return self.group.first_lot.reserved
+
+    @reserved.setter
+    def reserved(self, value):
+        self.group.first_lot.reserved = value
+
+    @property
+    def pending_exit(self):
+        return self.group.first_lot.pending_exit
+
+    @pending_exit.setter
+    def pending_exit(self, value):
+        if value and not self.group.first_lot.pending_exit:
+            self.group.exit_day_idx = self.day_i
+        elif not value:
+            self.group.exit_day_idx = None
+            self.group.t1_deferred_bonus_lots.clear()
+        self.group.first_lot.pending_exit = value
+
+
+class InsufficientCashError(RuntimeError):
+    """The account cannot fund the actual whole-lot order notional plus fees."""
+
+    def __init__(self, *, date: str, code: str, needed: float, available: float):
+        self.date = date
+        self.code = code
+        self.needed = float(needed)
+        self.available = float(available)
+        self.shortfall = self.needed - self.available
+        super().__init__(
+            f"InsufficientCashError: date={date} code={code} "
+            f"needed={self.needed:.8f} available={self.available:.8f} "
+            f"shortfall={self.shortfall:.8f}"
+        )
+
+
+def configure_s8(st, hooks: dict) -> None:
+    """Bind the selected per-name hooks once, including direct shared-loop use."""
+    name = hooks.get("name")
+    if hooks.get("sizing") != "per_name" or name not in {
+        "version8", "version8_2", "version8_3", "version8_4", "version8_5", "version8_6",
+    }:
+        return
+    if s8_policy(st) is not None:
+        return
+    st.book_state["s8_independent"] = {
+        "name": name,
+        "name_budget": float(hooks["name_budget"]),
+        "allow_new_name": hooks.get("allow_new_name"),
+        "groups": {},
+    }
+
+
+def s8_policy(st):
+    return st.book_state.get("s8_independent")
+
+
+def s8_open_groups(st, code: str):
+    """Visit each live signal group once in the code's current lot order."""
+    policy = s8_policy(st)
+    if policy is None:
+        return
+    seen = set()
+    for pos in st.positions.get(code, []):
+        position_id = getattr(pos, "position_id", None)
+        if position_id is None or position_id in seen:
+            continue
+        seen.add(position_id)
+        group = policy["groups"][position_id]
+        if not group.closed:
+            yield position_id, group
+
+
+def position_identity(pos) -> dict:
+    if isinstance(pos, (IndependentPosition, IndependentExitPosition)):
+        return {"position_id": pos.position_id, "entry_signal_date": pos.entry_signal_date}
+    return {}
+
+
+def exit_positions(st, code: str, day_i: int | None = None) -> list:
+    """Return aggregate exit views only for the six independent-position books."""
+    if s8_policy(st) is None:
+        return list(st.positions.get(code, []))
+    return [
+        IndependentExitPosition(st, position_id, group, day_i)
+        for position_id, group in s8_open_groups(st, code)
+    ]
+
+
+def position_is_open(st, pos) -> bool:
+    if isinstance(pos, IndependentExitPosition):
+        return not pos.group.closed and pos.shares > 0
+    return any(p is pos for p in st.positions.get(pos.code, []))
+
+
+def rescale_s8_groups(st, code: str, k: float) -> None:
+    """Rescale a retained entry anchor only when its lot has already exited.
+
+    Live entry lots are rescaled by the engine's existing per-lot loop.
+    """
+    live_ids = {id(p) for p in st.positions.get(code, [])}
+    for _position_id, group in s8_open_groups(st, code):
+        if id(group.first_lot) not in live_ids:
+            rescale_position(group.first_lot, k)
+
+
+@dataclass
 class SimState:
     cash: float = DEFAULT_TOTAL_CASH
     positions: dict = field(default_factory=dict)
@@ -125,12 +332,14 @@ def chase_decision(open_px: float, px: float, limit_up: float) -> str:
 
 
 def queue_limit_up_chase(
-    st: SimState, pending_chase: dict, code: str, per: float, sig_idx: int
+    st: SimState, pending_chase: dict, code: str, per: float, sig_idx: int,
+    *, entry_signal_date: str | None = None,
 ) -> None:
     st.stats["skip_limit_up"] += 1
-    if code in pending_chase:
+    key = f"{code}@{entry_signal_date}" if entry_signal_date is not None else code
+    if key in pending_chase:
         st.stats["chase_overwrite"] += 1
-    pending_chase[code] = (per, sig_idx)
+    pending_chase[key] = (per, sig_idx)
 
 
 def finish_pending_chase(st: SimState, pending_chase: dict) -> None:
@@ -248,10 +457,33 @@ def execute_buy(
     bucket_id: int | None = None,
     shares_override: int | None = None,
     at: int | None = None,
+    position_id: str | None = None,
+    entry_signal_date: str | None = None,
 ) -> bool:
     """常规/追买共用；open 调用方显式传 at，默认仍为 bucket 收盘。"""
     if px <= 0:
         return False
+    policy = s8_policy(st)
+    group = None
+    if policy is not None:
+        if position_id is not None and (
+            not isinstance(position_id, str) or "@" not in position_id
+        ):
+            raise ValueError(
+                f"position_id must have the form code@entry_signal_date: {position_id!r}"
+            )
+        entry_signal_date = entry_signal_date or (
+            position_id.split("@", 1)[1] if position_id else _ymd(day)
+        )
+        position_id = position_id or f"{code}@{entry_signal_date}"
+        group = policy["groups"].get(position_id)
+        if group is not None and (
+            group.closed or group.first_lot.pending_exit
+            or reason == "pool" or reason.startswith("chase")
+        ):
+            return False  # One initial fill per source signal, even if called twice.
+        if reason.startswith("add:") and group is None:
+            raise ValueError(f"price add requires an open position_id: {position_id}")
     if shares_override is None:
         shares, supp = _buy_size(per, px)
     else:
@@ -264,6 +496,10 @@ def execute_buy(
     notional = shares * px
     comm = trade_commission(notional, st.buy_cost_rate, st.min_cost)
     if notional + comm > st.cash:
+        if policy is not None:
+            raise InsufficientCashError(
+                date=_ymd(day), code=code, needed=notional + comm, available=st.cash,
+            )
         record_rejection(st, code, day, "skip_cash", px)
         return False
     if st.volume_cap is not None:
@@ -272,7 +508,8 @@ def execute_buy(
             key, bucket_id if at is None else at, shares, buy=True,
         )
         if not shares:
-            _volume_skip(st, code, px, day, skip, bucket_id)
+            _volume_skip(st, code, px, day, skip, bucket_id,
+                         position_id=position_id, entry_signal_date=entry_signal_date)
             return False
         notional = shares * px
         comm = trade_commission(notional, st.buy_cost_rate, st.min_cost)
@@ -286,18 +523,32 @@ def execute_buy(
     st.stats["invested_notional"] += notional
     lots = st.positions.setdefault(code, [])
     lot_id = lots[-1].lot_id + 1 if lots else 0
-    lots.append(
-        Position(
-            code,
-            shares,
-            px,
-            entry_idx,
-            px,
-            lot_id=lot_id,
-            ride_with=ride_with,
-            is_step=bool(is_step) or reason == "add:step20",
-        )
+    if policy is not None:
+        lot_id = group.next_lot_id if group is not None else 0
+    position_type = IndependentPosition if policy is not None else Position
+    identity = (
+        {"position_id": position_id, "entry_signal_date": entry_signal_date}
+        if policy is not None else {}
     )
+    pos = position_type(
+        code,
+        shares,
+        px,
+        entry_idx,
+        px,
+        lot_id=lot_id,
+        ride_with=ride_with,
+        is_step=bool(is_step) or reason == "add:step20",
+        **identity,
+    )
+    lots.append(pos)
+    if policy is not None:
+        if group is None:
+            policy["groups"][position_id] = IndependentGroup(
+                code, entry_signal_date, policy["name_budget"], pos,
+            )
+        else:
+            group.next_lot_id += 1
     st.trades.append(
         {
             "date": _ymd(day),
@@ -311,6 +562,7 @@ def execute_buy(
             "lot": lot_id,
             "session_phase": "",
             "price_rule": "",
+            **identity,
         }
     )
     record_fill(st, st.trades[-1], cash_before)
@@ -327,13 +579,18 @@ def execute_buy(
 
 
 def _volume_skip(st: SimState, code: str, px: float, day, reason: str,
-                 bucket_id: int | None) -> None:
+                 bucket_id: int | None, *, position_id: str | None = None,
+                 entry_signal_date: str | None = None) -> None:
     family = reason.split(":", 1)[0]
     st.stats[family] = int(st.stats.get(family, 0)) + 1
+    identity = (
+        {"position_id": position_id, "entry_signal_date": entry_signal_date}
+        if s8_policy(st) is not None and position_id is not None else {}
+    )
     st.trades.append({"date": _ymd(day), "code": code, "side": "SKIP",
                       "price": px, "shares": 0, "notional": 0.0,
                       "commission": 0.0, "reason": reason, "bucket": bucket_id,
-                      "session_phase": "", "price_rule": ""})
+                      "session_phase": "", "price_rule": "", **identity})
     record_fill(st, st.trades[-1], st.cash)
 
 
@@ -341,7 +598,14 @@ def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str, *
           bucket_id: int | None = None, at: int | None = None,
           day_i: int | None = None, hm: int | None = None,
           session_phase: str = "", price_rule: str = "",
-          wanted_shares: int | None = None) -> int:
+          wanted_shares: int | None = None, _group_exit: bool = False) -> int:
+    if isinstance(pos, IndependentExitPosition):
+        return _sell_s8_group(
+            st, code, pos, px, day, reason,
+            bucket_id=bucket_id, at=at, day_i=day_i, hm=hm,
+            session_phase=session_phase, price_rule=price_rule,
+            wanted_shares=wanted_shares,
+        )
     shares = pos.shares
     if wanted_shares is not None:
         if isinstance(wanted_shares, bool) or not isinstance(wanted_shares, Integral):
@@ -359,7 +623,8 @@ def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str, *
             st.stats["exdiv_econ_defer_linked_t1"] = st.stats.get("exdiv_econ_defer_linked_t1", 0) + 1
             return 0
         shares -= _locked_bonus(st.exdiv_economics, pos, ds)
-        if st.volume_cap is not None and pos.pending_exit and shares < pos.shares:
+        if (st.volume_cap is not None and pos.pending_exit and not _group_exit
+                and shares < pos.shares):
             # δ5 pending exits are all-or-none, including when bonus is locked.
             st.stats["exdiv_econ_defer_pending_t1"] = st.stats.get("exdiv_econ_defer_pending_t1", 0) + 1
             return 0
@@ -375,19 +640,22 @@ def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str, *
                          if p.ride_with == pos.lot_id and p is not pos]
         child_ids = {p.lot_id for p in group if p is not pos}
         if any(p.ride_with in child_ids for p in st.positions.get(code, [])):
-            _volume_skip(st, code, px, day, "skip_volume_cap:unsupported_ride_tree", bucket_id)
+            _volume_skip(st, code, px, day, "skip_volume_cap:unsupported_ride_tree", bucket_id,
+                         **position_identity(pos))
             return 0
         if day_i is None or any(p.entry_idx >= day_i for p in group):
-            _volume_skip(st, code, px, day, "skip_volume_cap:t1", bucket_id)
+            _volume_skip(st, code, px, day, "skip_volume_cap:t1", bucket_id,
+                         **position_identity(pos))
             return 0
         key = (code, _ymd(day), bucket_id)
         wanted = shares if len(group) == 1 else sum(p.shares for p in group)
         allocated, skip = st.volume_cap.clamp(
             key, bucket_id if at is None else at, wanted,
-            atomic=len(group) > 1 or pos.ride_with is not None or bool(pos.pending_exit),
+            atomic=(len(group) > 1 or pos.ride_with is not None
+                    or (bool(pos.pending_exit) and not _group_exit)),
         )
         if not allocated:
-            _volume_skip(st, code, px, day, skip, bucket_id)
+            _volume_skip(st, code, px, day, skip, bucket_id, **position_identity(pos))
             return 0
         shares = min(shares, allocated)
     notional = shares * px
@@ -413,6 +681,7 @@ def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str, *
             "lot": pos.lot_id,
             "session_phase": session_phase,
             "price_rule": price_rule,
+            **position_identity(pos),
         }
     )
     record_fill(st, st.trades[-1], cash_before)
@@ -444,6 +713,13 @@ def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str, *
     st.positions[code] = [p for p in lots if p is not pos]
     if not st.positions[code]:
         del st.positions[code]
+    policy = s8_policy(st)
+    if policy is not None and isinstance(pos, IndependentPosition):
+        if not any(
+            getattr(p, "position_id", None) == pos.position_id
+            for p in st.positions.get(code, [])
+        ):
+            policy["groups"][pos.position_id].closed = True
     if getattr(pos, "ride_with", None) is not None:
         return shares
     riders = [
@@ -456,3 +732,59 @@ def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str, *
               bucket_id=bucket_id, at=at, day_i=day_i, hm=hm,
               session_phase=session_phase, price_rule=price_rule)
     return shares
+
+
+def _sell_s8_group(
+    st: SimState, code: str, pos: IndependentExitPosition, px: float, day,
+    reason: str, *, bucket_id: int | None, at: int | None,
+    day_i: int | None, hm: int | None, session_phase: str, price_rule: str,
+    wanted_shares: int | None,
+) -> int:
+    """Latch one group exit and retain its T+1-locked shares for the next open.
+
+    A group is one exit decision, while each fill lot retains its trade row and
+    existing commission calculation. Completed-volume limits retain their
+    per-lot partial fills; any unfilled shares keep the group's pending exit.
+    """
+    if wanted_shares is not None:
+        raise ValueError("independent-position exits must target the whole position")
+    day_i = pos.day_i if day_i is None else day_i
+    if day_i is None:
+        raise ValueError("independent-position exit requires day_i for T+1")
+    if not position_is_open(st, pos):
+        return 0
+    lots = pos.lots
+    if s8_policy(st)["name"] in {"version8_2", "version8_6"} and len(lots) == 1:
+        # These books cannot add within a position. Keep their single-lot
+        # settlement, volume-attempt and existing pending rules unchanged.
+        if lots[0].entry_idx >= day_i:
+            return 0
+        return _sell(
+            st, code, lots[0], px, day, reason,
+            bucket_id=bucket_id, at=at, day_i=day_i, hm=hm,
+            session_phase=session_phase, price_rule=price_rule,
+        )
+    pos.pending_exit = reason
+    if pos.group.exit_day_idx is None:
+        pos.group.exit_day_idx = day_i
+    if st.exdiv_economics is not None:
+        pos.group.t1_deferred_bonus_lots.update(
+            p.lot_id for p in lots if _locked_bonus(st.exdiv_economics, p, _ymd(day))
+        )
+    sellable = [p for p in lots if p.entry_idx < day_i]
+    if not sellable:
+        return 0
+    filled = 0
+    for lot in sellable:
+        lot_reason = reason
+        if day_i > pos.group.exit_day_idx and (
+            lot.entry_idx >= pos.group.exit_day_idx
+            or lot.lot_id in pos.group.t1_deferred_bonus_lots
+        ):
+            lot_reason += "|t1_deferred"
+        filled += _sell(
+            st, code, lot, px, day, lot_reason,
+            bucket_id=bucket_id, at=at, day_i=day_i, hm=hm,
+            session_phase=session_phase, price_rule=price_rule, _group_exit=True,
+        )
+    return filled

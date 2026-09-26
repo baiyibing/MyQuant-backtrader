@@ -12,12 +12,15 @@ from backtest.research.ashare_volume_cap import BucketVolume, VolumeCap
 
 CODE = "600000.SH"
 BASELINE = Path(__file__).parent / "fixtures/strategy12_default_outputs.json"
+BASELINE_SHA256 = "2f578d6fe9e601ad84a94bb6a269e1b5193c51ca4dd908366022769f0e1f31c2"
+S8_BASELINE = Path(__file__).parent / "fixtures/strategy12_default_outputs_s8_independent_20260926.json"
+S8_BASELINE_BOOKS = ("version8", "version8_2", "version8_3")
 LEGACY_BOOKS = ("version1", "version2", "version3", "version4", "version5",
                 "version6", "version8", "version8_1", "version8_2", "version8_3",
                 "version9", "version10")
 
 
-def legacy_outputs():
+def legacy_outputs(books=LEGACY_BOOKS):
     from backtest.research.csv_daily_backtest import simulate as daily
     from backtest.research.csv_minute_backtest import simulate as minute
 
@@ -34,7 +37,7 @@ def legacy_outputs():
     start, end = dates[12].strftime("%Y%m%d"), dates[-1].strftime("%Y%m%d")
     pool = {dates[j].strftime("%Y%m%d"): [CODE] for j in (12, 14, 18)}
     out = {}
-    for book in LEGACY_BOOKS:
+    for book in books:
         for engine, run in (("daily", lambda: daily({CODE: bars}, pool, start, end, strategy=book)),
                             ("minute", lambda: minute({CODE: mins}, {CODE: bars}, pool, start, end, strategy=book))):
             st = run()
@@ -48,9 +51,20 @@ def legacy_outputs():
 
 
 def test_default_trades_and_equity_byte_identical_to_pre_s1_head():
+    """Keep all 18 untouched cases; only six authorized S8 cases use the overlay."""
+    assert hashlib.sha256(BASELINE.read_bytes()).hexdigest() == BASELINE_SHA256
     expected = json.loads(BASELINE.read_text(encoding="utf-8"))
     assert expected["source"] == "9fa8b27 (before slice B ledger/engine changes)"
-    assert legacy_outputs() == expected["sha256_csv_bytes"]
+    correction = json.loads(S8_BASELINE.read_text(encoding="utf-8"))
+    assert correction["rule_revision"] == "s8-independent-group-exits-2026-09-26"
+    assert correction["historical_sha256"] == BASELINE_SHA256
+    corrected_cases = correction["sha256_csv_bytes"]
+    assert set(corrected_cases) == {
+        f"{book}/{engine}" for book in S8_BASELINE_BOOKS for engine in ("daily", "minute")
+    }
+    assert len(corrected_cases) == 6
+    assert len(set(expected["sha256_csv_bytes"]) - set(corrected_cases)) == 18
+    assert legacy_outputs() == {**expected["sha256_csv_bytes"], **corrected_cases}
 
 
 @pytest.mark.parametrize("capacity", [None, 150])

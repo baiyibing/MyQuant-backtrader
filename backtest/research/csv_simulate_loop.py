@@ -22,15 +22,20 @@ from backtest.research.csv_common import (
     day_bar_and_prev_closes,
 )
 from backtest.research.csv_ledger import (
+    InsufficientCashError,
     SimState,
     _buy_size,
     chase_decision,
+    configure_s8,
     execute_buy,
     trade_commission,
     hit_limit_down,
     hit_limit_up,
     market_close_mark,
     queue_limit_up_chase,
+    position_identity,
+    s8_open_groups,
+    s8_policy,
 )
 from backtest.research.csv_strategy_books import apply_csv_strategy
 from backtest.research.exdiv_map import mapped_prev_close
@@ -120,6 +125,7 @@ def init_sim_state(
     st.book_on_buy = hooks.get("on_buy")
     st.book_on_exdiv = hooks.get("on_exdiv")
     hooks["record_params"](st)
+    configure_s8(st, hooks)
     if daily_quota is not None:
         st.stats["daily_quota"] = float(daily_quota)
     st.stats["bars_loaded"] = int(bars_loaded)
@@ -149,18 +155,20 @@ def run_chase_due_day(
     reference_price_for: Callable[[str, str], float] | None = None,
 ) -> None:
     """T+1 chase for due codes; ``quotes_for`` supplies open/buy/prev closes."""
+    independent = s8_policy(st) is not None
     due = [c for c, (_per, sig) in pending_chase.items() if day_i > sig]
-    for code in due:
-        per_ch, _sig = pending_chase[code]
+    for chase_key in due:
+        code = chase_key.split("@", 1)[0] if independent else chase_key
+        per_ch, _sig = pending_chase[chase_key]
         if code in st.positions and not allow_add:
-            pending_chase.pop(code)
+            pending_chase.pop(chase_key)
             st.stats["skip_held"] += 1
             st.stats["chase_skip_held"] += 1
             record_rejection(st, code, day, "chase_skip_held")
             continue
         if callable(allow_new_name) and not allow_new_name(day):
-            if not (code in st.positions and not index_blocks_add):
-                pending_chase.pop(code)
+            if not (not independent and code in st.positions and not index_blocks_add):
+                pending_chase.pop(chase_key)
                 st.stats["skip_index_gate"] += 1
                 continue
         quoted = quotes_for(code)
@@ -168,7 +176,7 @@ def run_chase_due_day(
             # Missing bar / quotes / prev closes: keep pending for a later day.
             continue
         open_px, buy_px, closes = quoted
-        pending_chase.pop(code)
+        pending_chase.pop(chase_key)
         ymd = ds if ds is not None else pd.Timestamp(day).strftime("%Y%m%d")
         if reference_price_for is None:
             prev_close, did_map = mapped_prev_close(exdiv, code, ymd, float(closes[-1]))
@@ -201,7 +209,7 @@ def run_chase_due_day(
             if len(closes) < 10:
                 st.stats["skip_sma_warmup"] += 1
             continue
-        lots = st.positions.get(code, [])
+        lots = [] if independent else st.positions.get(code, [])
         if lots and callable(add_gate) and not add_gate(lots, buy_px):
             st.stats["skip_add_loser"] += 1
             continue
@@ -211,6 +219,10 @@ def run_chase_due_day(
             if volume_bucket_for is not None
             else {}
         )
+        if independent:
+            volume_kwargs.update(
+                position_id=chase_key, entry_signal_date=chase_key.split("@", 1)[1],
+            )
         volume_skips = sum(
             int(st.stats.get(k, 0))
             for k in ("skip_volume_cap", "skip_volume_unavailable")
@@ -273,6 +285,8 @@ def run_pool_buys_day(
     ``planned_for_day(ds, held_codes)`` is optional (default None). When set, its
     return replaces the pool file list before capital ration — old books unchanged.
     """
+    policy = s8_policy(st)
+    independent = policy is not None
     raw = list(pool_days.get(ds, []))
     if callable(planned_for_day):
         held_codes = list(st.positions.keys())
@@ -293,12 +307,14 @@ def run_pool_buys_day(
             )
         per = min(daily_quota, st.cash) * frac / _buy_denom(planned, planned_for_day)
     for code in planned:
+        if independent and f"{code}@{ds}" in policy["groups"]:
+            continue
         if code in st.positions and not allow_add:
             st.stats["skip_held"] += 1
             record_rejection(st, code, day, "skip_held")
             continue
         if callable(allow_new_name) and not allow_new_name(day):
-            if not (code in st.positions and not index_blocks_add):
+            if not (not independent and code in st.positions and not index_blocks_add):
                 st.stats["skip_index_gate"] += 1
                 continue
         quoted = buy_quote_for(code)
@@ -324,12 +340,21 @@ def run_pool_buys_day(
             st.stats["skip_unknown_board"] += 1
             continue
         limit_up, limit_down = limits
+        if independent:
+            # Price/limit checks must see this signal's own initial budget.
+            per = (
+                float(name_lot_budget(name_budget, []))
+                if callable(name_lot_budget) else float(name_budget)
+            )
         blocked = skip_buy_at_limit(px, limits) or (
             forbid_all_trade_at_limit and hit_limit_down(px, limit_down)
         )
         if blocked:
             if limit_up_chase:
-                queue_limit_up_chase(st, pending_chase, code, per, day_i)
+                queue_limit_up_chase(
+                    st, pending_chase, code, per, day_i,
+                    **({"entry_signal_date": ds} if independent else {}),
+                )
             else:
                 st.stats["skip_limit_up"] += 1
             continue
@@ -338,7 +363,7 @@ def run_pool_buys_day(
             if len(closes) < 10:
                 st.stats["skip_sma_warmup"] += 1
             continue
-        lots = st.positions.get(code, [])
+        lots = [] if independent else st.positions.get(code, [])
         if lots and callable(add_gate) and not add_gate(lots, px):
             st.stats["skip_add_loser"] += 1
             continue
@@ -351,6 +376,8 @@ def run_pool_buys_day(
         )
         if volume_at is not None:
             volume_kwargs["at"] = volume_at
+        if independent:
+            volume_kwargs.update(position_id=f"{code}@{ds}", entry_signal_date=ds)
         if sizing == "per_name":
             shares, _ = _buy_size(per, px)
             notional = shares * px
@@ -358,6 +385,12 @@ def run_pool_buys_day(
                 notional + trade_commission(notional, st.buy_cost_rate, st.min_cost)
                 > st.cash
             ):
+                if independent:
+                    raise InsufficientCashError(
+                        date=ds, code=code,
+                        needed=notional + trade_commission(notional, st.buy_cost_rate, st.min_cost),
+                        available=st.cash,
+                    )
                 st.stats["skip_cash"] = st.stats.setdefault("skip_cash", 0) + 1
                 st.stats["skip_cash_notional"] = (
                     st.stats.setdefault("skip_cash_notional", 0.0) + per
@@ -390,8 +423,19 @@ def run_step_adds_day(
     step_add=None,
     volume_bucket_for: Callable[[str], int | None] | None = None,
     reference_price_for: Callable[[str, str], float] | None = None,
+    confirm_peak_for: Callable[[str, object], float] | None = None,
 ) -> None:
-    """Off-list held scan: at most one +20% rider per name per day."""
+    """Off-list scan; selected 8.x books add once per independent group/day."""
+    if s8_policy(st) is not None:
+        _run_s8_price_adds_day(
+            st, day_i=day_i, day=day, ds=ds, names=names,
+            buy_quote_for=buy_quote_for, sizing=sizing, exdiv=exdiv,
+            qlib_limit_pct=qlib_limit_pct, forbid_all_trade_at_limit=forbid_all_trade_at_limit,
+            buy_gate=buy_gate, volume_bucket_for=volume_bucket_for,
+            reference_price_for=reference_price_for,
+            confirm_peak_for=confirm_peak_for,
+        )
+        return
     if not callable(step_add) or sizing != "per_name":
         return
     for code in list(st.positions.keys()):
@@ -463,6 +507,85 @@ def run_step_adds_day(
             **volume_kwargs,
         )
         st.daily_quota_used = quota_used
+
+
+def _run_s8_price_adds_day(
+    st, *, day_i, day, ds, names, buy_quote_for, sizing, exdiv,
+    qlib_limit_pct, forbid_all_trade_at_limit, buy_gate, volume_bucket_for,
+    reference_price_for, confirm_peak_for,
+) -> None:
+    policy = s8_policy(st)
+    book = policy["name"]
+    if sizing != "per_name" or book not in {"version8", "version8_3", "version8_4", "version8_5"}:
+        return
+    confirm = book == "version8_3"
+    gate = policy["allow_new_name"]
+    if confirm and callable(gate) and not gate(day):
+        # 8.3 has always blocked both new positions and adds at the index gate.
+        return
+    for code in list(st.positions):
+        quoted = buy_quote_for(code)
+        if quoted is None:
+            continue
+        px, closes = quoted
+        if not closes or float(px) <= 0:
+            continue
+        groups = list(s8_open_groups(st, code))
+        for position_id, group in groups:
+            if group.last_add_date == ds or group.first_lot.pending_exit:
+                continue
+            cost = float(group.first_lot.cost)
+            if cost <= 0:
+                continue
+            if confirm:
+                peak = (
+                    confirm_peak_for(code, group.first_lot)
+                    if confirm_peak_for is not None else group.first_lot.peak
+                )
+                if group.supplement_done or px < cost or peak < cost * 1.03:
+                    continue
+            elif int((float(px) / cost - 1.0) / 0.20 + 1e-12) <= group.executed_steps:
+                continue
+            if reference_price_for is None:
+                prev_close, did_map = mapped_prev_close(exdiv, code, ds, float(closes[-1]))
+            else:
+                prev_close, did_map = reference_price_for(code, ds), False
+            if did_map:
+                st.stats["exdiv_prev_close_mapped"] = (
+                    int(st.stats.get("exdiv_prev_close_mapped", 0)) + 1
+                )
+            limits = book_limit_prices(code, prev_close, names, qlib_limit_pct=qlib_limit_pct)
+            if limits is None:
+                st.stats["skip_unknown_board"] += 1
+                continue
+            limit_up, limit_down = limits
+            if hit_limit_up(px, limit_up) or (
+                forbid_all_trade_at_limit and hit_limit_down(px, limit_down)
+            ):
+                st.stats["skip_limit_up"] += 1
+                continue
+            if callable(buy_gate) and not buy_gate(code, px, day, closes):
+                st.stats["skip_buy_gate"] += 1
+                continue
+            per = group.budget * (0.50 if confirm else 1.0)
+            quota_used = st.daily_quota_used
+            volume_kwargs = (
+                {"bucket_id": volume_bucket_for(code)}
+                if volume_bucket_for is not None else {}
+            )
+            filled = execute_buy(
+                st, code, px, per, day_i, day,
+                reason="add:confirm3" if confirm else "add:step20",
+                is_step=not confirm, position_id=position_id,
+                entry_signal_date=group.entry_signal_date, **volume_kwargs,
+            )
+            st.daily_quota_used = quota_used
+            if filled:
+                group.last_add_date = ds
+                if confirm:
+                    group.supplement_done = True
+                else:
+                    group.executed_steps += 1
 
 
 def run_buybacks_day(
@@ -652,5 +775,6 @@ def append_equity_and_eod_marks(
                         "lot": pos.lot_id,
                         "session_phase": "",
                         "price_rule": "",
+                        **position_identity(pos),
                     }
                 )

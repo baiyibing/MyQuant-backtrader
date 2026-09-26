@@ -345,8 +345,11 @@ def test_simulate_held_name_adds_second_lot_below_cost():
     pool = {"20251103": ["600000.SH"], "20251104": ["600000.SH"]}
     st = sim.simulate(minute, daily, pool, "20251103", "20251104", strategy="version8")
     buys = [t for t in st.trades if t["side"] == "BUY"]
-    assert [t["lot"] for t in buys] == [0, 1]
-    assert st.stats["add_lots"] == 1
+    assert [t["lot"] for t in buys] == [0, 0]
+    assert [t["position_id"] for t in buys] == [
+        "600000.SH@20251103", "600000.SH@20251104",
+    ]
+    assert st.stats["add_lots"] == 0
     assert st.stats["skip_held"] == 0
 
 
@@ -364,6 +367,9 @@ def test_simulate_held_name_adds_when_below_target():
     pool = {"20251103": ["600000.SH"], "20251104": ["600000.SH"]}
     st = sim.simulate(minute, daily, pool, "20251103", "20251104", strategy="version8")
     buys = [t for t in st.trades if t["side"] == "BUY"]
-    assert [t["lot"] for t in buys] == [0, 1]
-    assert st.stats["add_lots"] == 1
+    assert [t["lot"] for t in buys] == [0, 0]
+    assert [t["position_id"] for t in buys] == [
+        "600000.SH@20251103", "600000.SH@20251104",
+    ]
+    assert st.stats["add_lots"] == 0
     assert st.stats["skip_held"] == 0
