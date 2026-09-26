@@ -1,4 +1,4 @@
-"""#208 P1 buy dispatch: fixed seats/budgets, session-open quotes, no substitutes.
+"""#208 P1/P2 buy dispatch: fixed seats/budgets, session-open quotes, no substitutes.
 
 The caller advances sells and these buys on the same minute clock. The legacy
 close path never constructs this dispatcher or adds its audit fields.
@@ -20,9 +20,13 @@ from backtest.research.exdiv_map import mapped_prev_close
 from backtest.research.minute_audit import audit_scope
 
 
+VWAP_SLICE_CLOCKS = (9 * 60 + 35, 10 * 60 + 30, 11 * 60 + 30,
+                     13 * 60, 14 * 60, 14 * 60 + 55)
+
+
 TOPK_EXEC_HELP_LOCK = """
-TopK minute execution (#208 P1; topk_dropout only):
-  --topk-exec close|open|intraday (default close; omitted = close).
+TopK minute execution (#208 P1/P2; topk_dropout only):
+  --topk-exec close|open|intraday|vwap (default close; omitted = close).
   close: existing 14:55 close, last close in 14:30–14:55 if missing; reason=pool.
   open (opt-in): exact 09:30 open once; missing 09:30 skips, no later-row fallback.
   intraday (opt-in): first session open < limit_up; equality retries the same name.
@@ -34,20 +38,27 @@ TopK minute execution (#208 P1; topk_dropout only):
   Reasons: pool:open / pool:intraday; trades carry actual hm (minute of day).
   topk_execution.json records seats, original code, selection/quote/execution
   minutes, allocation cash, quota, outcomes and limit_retry_fills/limit_retry_expired.
-  Sell rules are unchanged. topk_score_exit is excluded. P2/P3 are not implemented.
+  vwap (opt-in): equal-notional fixed-clock TWAP-style slicer, NOT volume-participation
+  VWAP or strategy-8 tail-window-buy. Session window [09:35,11:30] / [13:00,14:55].
+  Exact clocks 09:35,10:30,11:30,13:00,14:00,14:55; each quotes its bar open.
+  Freeze q=min(daily_quota,cash)*cash_deploy_frac/D at 09:30; each slice gets q/6.
+  Missing/invalid quotes, limits, sub-lot and other skips affect only that slice;
+  no borrow, no roll-forward; same-seat fills accumulate, reason=pool:vwap.
+  Strict open >= limit_up skips a slice; completed volume before hm only.
+  vwap x --limit-walkdown is refused until separate human GO defines partial-fill
+  handoff. P3 --limit-walkdown is not implemented (no such CLI flag).
+  Sell rules are unchanged. topk_score_exit is excluded.
 """
 
 
 def validate_topk_exec(mode, strategy):
-    if mode == "vwap":
-        raise ValueError("--topk-exec vwap is deferred to P2; choose close, open or intraday")
-    if mode not in ("close", "open", "intraday"):
-        raise ValueError(f"unknown --topk-exec {mode!r}; choose close, open or intraday")
+    if mode not in ("close", "open", "intraday", "vwap"):
+        raise ValueError(f"unknown --topk-exec {mode!r}; choose close, open, intraday or vwap")
     if mode != "close":
         from backtest.research.csv_strategy_books import normalize_csv_strategy
 
         if normalize_csv_strategy(strategy) != "topk_dropout":
-            raise ValueError("--topk-exec open/intraday applies only to topk_dropout (P1)")
+            raise ValueError("--topk-exec open/intraday/vwap applies only to topk_dropout (P1/P2)")
 
 
 def parse_topk_exec(value):
@@ -80,6 +91,10 @@ class TopkMinuteBuys:
         self.missing, self.unknown, self.done, self.retried = set(), set(), set(), set()
         self.last_quote = {}
         self.cash_basis = None
+        if mode == "vwap":
+            self.slice_results = {code: [] for code in self.planned}
+            self.spent = {code: 0. for code in self.planned}
+            self.filled = set()
         for code in self.planned:
             got = previous_and_frame(code)
             if got is None:
@@ -88,6 +103,9 @@ class TopkMinuteBuys:
             closes, frame = got
             # Same inclusive session contract as ashare_bars.annotate_session.
             frame = frame.loc[_in_session(frame["hm"])].sort_values("hm", kind="stable")
+            if mode == "vwap":
+                frame = frame.loc[frame["hm"].between(VWAP_SLICE_CLOCKS[0], VWAP_SLICE_CLOCKS[-1])
+                                  & frame["hm"].isin(VWAP_SLICE_CLOCKS)]
             if mode == "open":
                 opening = open_quote_for(frame)
                 frame = frame.iloc[:0] if opening is None else opening.to_frame().T
@@ -111,7 +129,8 @@ class TopkMinuteBuys:
 
     @property
     def clocks(self):
-        return set(self.events) | {AM_OPEN, PM_CLOSE}
+        return set(self.events) | {AM_OPEN, PM_CLOSE} | (
+            set(VWAP_SLICE_CLOCKS) if self.mode == "vwap" else set())
 
     def record(self, code, hm, reason, *, px=None, quote_hm=None, event=None, phase="open"):
         row = dict(event or {})
@@ -120,6 +139,10 @@ class TopkMinuteBuys:
                    execution_hm=hm if row.get("side") == "BUY" else None,
                    quota=self.quota, allocation_cash=self.cash_basis,
                    denominator=self.denom, reason=reason, price=px, phase=phase)
+        if self.mode == "vwap" and hm in VWAP_SLICE_CLOCKS and phase == "open":
+            row.update(slice_index=VWAP_SLICE_CLOCKS.index(hm), slice_hm=hm,
+                       slice_budget=self.quota / len(VWAP_SLICE_CLOCKS))
+            self.slice_results[code].append(row)
         self.st.topk_exec_audit.append(row)
 
     def advance(self, hm):
@@ -128,13 +151,16 @@ class TopkMinuteBuys:
             self.cash_basis = self.st.cash
             self.quota = (min(self.daily_quota, self.cash_basis)
                           * self.hooks["cash_deploy_frac"] / self.denom if self.denom else 0.)
-            for code in self.planned:
+            for code in ([] if self.mode == "vwap" else self.planned):
                 reason = ("skip_no_bar" if code in self.missing else
                           "skip_unknown_board" if code in self.unknown else None)
                 if reason:
                     self.st.stats[reason] += 1
                     self.done.add(code)
                     self.record(code, hm, reason)
+        if self.mode == "vwap":
+            self.advance_vwap(hm)
+            return
         for code, px in self.events.get(hm, []):
             if code in self.done:
                 continue
@@ -155,6 +181,33 @@ class TopkMinuteBuys:
                 self.done.add(code)
                 quote_hm, px = self.last_quote[code]
                 self.record(code, hm, "limit_retry_expired", px=px, quote_hm=quote_hm, phase="close")
+
+    def advance_vwap(self, hm):
+        if hm in VWAP_SLICE_CLOCKS:
+            quotes = dict(self.events.get(hm, []))
+            for code in self.planned:
+                px = quotes.get(code)
+                if px is None:
+                    reason = "skip_unknown_board" if code in self.unknown else "skip_no_bar"
+                    self.record(code, hm, reason)
+                else:
+                    self.attempt(code, hm, px)
+        if hm == PM_CLOSE:
+            for code in self.planned:
+                rows = self.slice_results[code]
+                valid = [row for row in rows if row["quote_hm"] is not None]
+                if code in self.filled:
+                    reason = "pool:vwap"
+                elif valid and all(row["reason"] == "skip_limit_up" for row in valid):
+                    reason = "skip_limit_up"
+                elif not valid:
+                    reason = "skip_unknown_board" if code in self.unknown else "skip_no_bar"
+                else:
+                    # Missing clocks do not hide the last concrete execution failure.
+                    reason = valid[-1]["reason"]
+                if reason.startswith("skip_") and not reason.startswith("skip_volume"):
+                    self.st.stats[reason] = self.st.stats.get(reason, 0) + 1
+                self.record(code, hm, reason, phase="close")
 
     def attempt(self, code, hm, px):
         def frozen_seat(_ds, _held):
@@ -177,7 +230,8 @@ class TopkMinuteBuys:
             run_pool_buys_day(
                 self.st, {}, day_i=self.day_i, day=self.day, ds=self.ds,
                 pool_days={}, daily_quota=self.daily_quota, names=self.names,
-                allow_add=bool(self.hooks["allow_add"]), buy_gate=self.hooks.get("buy_gate"),
+                allow_add=(code in self.filled if self.mode == "vwap"
+                           else bool(self.hooks["allow_add"])), buy_gate=self.hooks.get("buy_gate"),
                 buy_quote_for=lambda _code: (px, self.closes[code]),
                 planned_for_day=frozen_seat, allocation_cash=self.cash_basis,
                 cash_deploy_frac=self.hooks["cash_deploy_frac"],
@@ -185,9 +239,13 @@ class TopkMinuteBuys:
                 limit_up_chase=False,
                 forbid_all_trade_at_limit=self.hooks.get("forbid_all_trade_at_limit", False),
                 allow_new_name=self.hooks.get("allow_new_name"),
-                volume_bucket_for=(lambda _code: hm) if self.st.volume_cap is not None else None,
+                volume_bucket_for=(lambda _code: hm - 1 if self.mode == "vwap" else hm)
+                if self.st.volume_cap is not None else None,
                 volume_at=hm - 1, buy_reason=f"pool:{self.mode}", buy_hm=hm,
                 strict_limit_up=True,
+                **({"order_budget": min(self.quota / len(VWAP_SLICE_CLOCKS),
+                                        max(0., self.quota - self.spent[code]))}
+                   if self.mode == "vwap" else {}),
             )
         if emitted:
             event = emitted[-1]
@@ -204,6 +262,18 @@ class TopkMinuteBuys:
             ) if self.st.stats.get(key, 0) > before.get(key, 0)), "skip_budget")
             if reason == "skip_limit_up" and hit_limit_down(px, self.limits[code][1]):
                 reason = "skip_limit_down"
+        if self.mode == "vwap":
+            # Existing rejection counters describe seats, not six slice attempts.
+            # Keep concrete per-slice outcomes in the audit and tally at day end.
+            for key in set(self.st.stats) | set(before):
+                if key.startswith("skip_") and not key.startswith("skip_volume"):
+                    if key in before:
+                        self.st.stats[key] = before[key]
+                    else:
+                        self.st.stats.pop(key, None)
+            if event is not None and event["side"] == "BUY":
+                self.filled.add(code)
+                self.spent[code] += event["notional"]
         self.record(code, hm, reason, px=px, quote_hm=hm, event=event)
 
 

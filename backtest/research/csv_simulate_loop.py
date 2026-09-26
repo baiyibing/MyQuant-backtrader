@@ -284,6 +284,7 @@ def run_pool_buys_day(
     buy_reason: str = "pool",
     buy_hm: int | None = None,
     strict_limit_up: bool = False,
+    order_budget: float | None = None,
 ) -> None:
     """Pool buys for ``ds``; ``buy_quote_for`` supplies buy price + prev closes.
 
@@ -295,7 +296,11 @@ def run_pool_buys_day(
     ``buy_reason`` / ``buy_hm`` label opt-in buys without changing default rows.
     ``strict_limit_up`` uses P1's literal open < upper-band contract; the
     default retains the legacy epsilon comparison.
+    ``order_budget`` overrides the opt-in child order notional and floors to
+    whole lots without the legacy supplementary 100-share fallback.
     """
+    # Opt-in fixed slices use a hard notional budget without supplementary lots.
+    # Default books retain their existing sizing and 100-share fallback.
     policy = s8_policy(st)
     independent = policy is not None
     raw = list(pool_days.get(ds, []))
@@ -318,6 +323,8 @@ def run_pool_buys_day(
             )
         cash_basis = st.cash if allocation_cash is None else allocation_cash
         per = min(daily_quota, cash_basis) * frac / _buy_denom(planned, planned_for_day)
+    if order_budget is not None:
+        per = order_budget
     for code in planned:
         if handle_planned_code is not None and handle_planned_code(code):
             continue
@@ -393,6 +400,8 @@ def run_pool_buys_day(
             volume_kwargs["at"] = volume_at
         if buy_hm is not None:
             volume_kwargs["hm"] = buy_hm
+        if order_budget is not None:
+            volume_kwargs["shares_override"] = int(per / px / 100.) * 100
         if independent:
             volume_kwargs.update(position_id=f"{code}@{ds}", entry_signal_date=ds)
         if sizing == "per_name":
