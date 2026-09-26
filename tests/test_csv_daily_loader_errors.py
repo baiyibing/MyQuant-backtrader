@@ -29,7 +29,7 @@ def _write_valid_partition(root: Path, code: str) -> pd.DataFrame:
             "low": [9.9, 10.2],
             "close": [10.5, 10.7],
         },
-        index=dates,
+        index=dates.as_unit("ns"),
         dtype="float64",
     )
     frame = expected.reset_index(drop=True)
@@ -81,11 +81,10 @@ def test_load_daily_bars_omits_missing_symbol_and_keeps_valid_sibling(tmp_path):
     )
 
     assert set(result) == {VALID_CODE}
-    # pandas >=2.0 resolves to_datetime(unit="ms") to ns again on newer builds;
-    # compare in a fixed unit so the test is not pandas-patch-version fragile.
+    # pandas 2.x patch builds vary: to_datetime(unit="ms") may keep ms or resolve to ns.
+    # Compare both sides in ns so the assertion is patch-version independent.
     got = result[VALID_CODE].copy()
     got.index = got.index.as_unit("ns")
-    expected.index = expected.index.as_unit("ns")
     pd.testing.assert_frame_equal(got, expected)
 
 
