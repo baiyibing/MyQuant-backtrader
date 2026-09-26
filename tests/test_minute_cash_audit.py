@@ -4,14 +4,28 @@ import json
 from dataclasses import asdict
 
 import pytest
+from backtest.research.csv_ledger import InsufficientCashError
 from backtest.research.csv_minute_backtest import simulate
 
 from tests.minute_cash_fixtures import chronological_case, money
+from tests.test_minute_cash_chronology import assert_insufficient_cash
 
 
 @pytest.mark.parametrize("enabled", [False, True])
 def test_sidecar_preserves_state_and_records_real_clock_cash(enabled):
     trace = []
+    if enabled:
+        with pytest.raises(InsufficientCashError) as plain:
+            simulate(**chronological_case(), fix_minute_cash_order=True)
+        with pytest.raises(InsufficientCashError) as observed:
+            simulate(**chronological_case(), fix_minute_cash_order=True, audit_sink=trace)
+        assert_insufficient_cash(plain.value, date="20251105")
+        assert_insufficient_cash(observed.value, date="20251105")
+        assert vars(plain.value) == vars(observed.value)
+        assert [(row["decision_hm"], row["side"], row["cash_after"]) for row in trace] == [
+            (895, "BUY", 0)
+        ]
+        return
     plain = simulate(**chronological_case(), fix_minute_cash_order=enabled)
     observed = simulate(**chronological_case(), fix_minute_cash_order=enabled, audit_sink=trace)
     assert asdict(observed) == asdict(plain)
@@ -54,6 +68,13 @@ def test_shared_cli_audit_sidecar_preserves_csv_surface(tmp_path, monkeypatch, e
     output, audit = tmp_path / "out", tmp_path / "audit.json"
     args = ["--strategy", "version8", "--start", "20251104", "--end", "20251105",
             "--pool-dir", str(tmp_path), "--out-dir", str(output), "--execution-audit-file", str(audit)]
+    if enabled:
+        with pytest.raises(InsufficientCashError) as exc:
+            minute.main(args + ["--fix-minute-cash-order"])
+        assert_insufficient_cash(exc.value, date="20251105")
+        assert not audit.exists()
+        assert not (output / "trades.csv").exists()
+        return
     assert minute.main(args + (["--fix-minute-cash-order"] if enabled else [])) == 0
     payload = json.loads(audit.read_text())
     assert payload["fix_minute_cash_order"] is enabled

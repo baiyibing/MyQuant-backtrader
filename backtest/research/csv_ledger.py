@@ -83,6 +83,95 @@ class Position:
 
 
 @dataclass
+class IndependentPosition(Position):
+    """Only the selected per-name 8.x books add identity to lot snapshots."""
+
+    position_id: str = ""
+    entry_signal_date: str = ""
+
+
+@dataclass
+class IndependentGroup:
+    code: str
+    entry_signal_date: str
+    budget: float
+    first_lot: IndependentPosition
+    next_lot_id: int = 1
+    executed_steps: int = 0
+    supplement_done: bool = False
+    last_add_date: str = ""
+    closed: bool = False
+
+
+class InsufficientCashError(RuntimeError):
+    """The account cannot fund the complete budget-sized order plus fees."""
+
+    def __init__(self, *, date: str, code: str, needed: float, available: float):
+        self.date = date
+        self.code = code
+        self.needed = float(needed)
+        self.available = float(available)
+        self.shortfall = self.needed - self.available
+        super().__init__(
+            f"InsufficientCashError: date={date} code={code} "
+            f"needed={self.needed:.8f} available={self.available:.8f} "
+            f"shortfall={self.shortfall:.8f}"
+        )
+
+
+def configure_s8(st, hooks: dict) -> None:
+    """Enable the corrected default only at the public daily/minute entries."""
+    name = hooks.get("name")
+    if hooks.get("sizing") != "per_name" or name not in {
+        "version8", "version8_2", "version8_3", "version8_4", "version8_5", "version8_6",
+    }:
+        return
+    st.book_state["s8_independent"] = {
+        "name": name,
+        "name_budget": float(hooks["name_budget"]),
+        "allow_new_name": hooks.get("allow_new_name"),
+        "groups": {},
+    }
+
+
+def s8_policy(st):
+    return st.book_state.get("s8_independent")
+
+
+def s8_open_groups(st, code: str):
+    """Visit each live signal group once in the code's current lot order."""
+    policy = s8_policy(st)
+    if policy is None:
+        return
+    seen = set()
+    for pos in st.positions.get(code, []):
+        position_id = getattr(pos, "position_id", None)
+        if position_id is None or position_id in seen:
+            continue
+        seen.add(position_id)
+        group = policy["groups"][position_id]
+        if not group.closed:
+            yield position_id, group
+
+
+def position_identity(pos) -> dict:
+    if isinstance(pos, IndependentPosition):
+        return {"position_id": pos.position_id, "entry_signal_date": pos.entry_signal_date}
+    return {}
+
+
+def rescale_s8_groups(st, code: str, k: float) -> None:
+    """Rescale a retained entry anchor only when its lot has already exited.
+
+    Live entry lots are rescaled by the engine's existing per-lot loop.
+    """
+    live_ids = {id(p) for p in st.positions.get(code, [])}
+    for _position_id, group in s8_open_groups(st, code):
+        if id(group.first_lot) not in live_ids:
+            rescale_position(group.first_lot, k)
+
+
+@dataclass
 class SimState:
     cash: float = DEFAULT_TOTAL_CASH
     positions: dict = field(default_factory=dict)
@@ -125,12 +214,14 @@ def chase_decision(open_px: float, px: float, limit_up: float) -> str:
 
 
 def queue_limit_up_chase(
-    st: SimState, pending_chase: dict, code: str, per: float, sig_idx: int
+    st: SimState, pending_chase: dict, code: str, per: float, sig_idx: int,
+    *, entry_signal_date: str | None = None,
 ) -> None:
     st.stats["skip_limit_up"] += 1
-    if code in pending_chase:
+    key = f"{code}@{entry_signal_date}" if entry_signal_date is not None else code
+    if key in pending_chase:
         st.stats["chase_overwrite"] += 1
-    pending_chase[code] = (per, sig_idx)
+    pending_chase[key] = (per, sig_idx)
 
 
 def finish_pending_chase(st: SimState, pending_chase: dict) -> None:
@@ -248,10 +339,26 @@ def execute_buy(
     bucket_id: int | None = None,
     shares_override: int | None = None,
     at: int | None = None,
+    position_id: str | None = None,
+    entry_signal_date: str | None = None,
 ) -> bool:
     """常规/追买共用；open 调用方显式传 at，默认仍为 bucket 收盘。"""
     if px <= 0:
         return False
+    policy = s8_policy(st)
+    group = None
+    if policy is not None:
+        entry_signal_date = entry_signal_date or (
+            position_id.split("@", 1)[1] if position_id else _ymd(day)
+        )
+        position_id = position_id or f"{code}@{entry_signal_date}"
+        group = policy["groups"].get(position_id)
+        if group is not None and (
+            group.closed or reason == "pool" or reason.startswith("chase")
+        ):
+            return False  # One initial fill per source signal, even if called twice.
+        if reason.startswith("add:") and group is None:
+            raise ValueError(f"price add requires an open position_id: {position_id}")
     if shares_override is None:
         shares, supp = _buy_size(per, px)
     else:
@@ -264,6 +371,10 @@ def execute_buy(
     notional = shares * px
     comm = trade_commission(notional, st.buy_cost_rate, st.min_cost)
     if notional + comm > st.cash:
+        if policy is not None:
+            raise InsufficientCashError(
+                date=_ymd(day), code=code, needed=notional + comm, available=st.cash,
+            )
         record_rejection(st, code, day, "skip_cash", px)
         return False
     if st.volume_cap is not None:
@@ -286,18 +397,32 @@ def execute_buy(
     st.stats["invested_notional"] += notional
     lots = st.positions.setdefault(code, [])
     lot_id = lots[-1].lot_id + 1 if lots else 0
-    lots.append(
-        Position(
-            code,
-            shares,
-            px,
-            entry_idx,
-            px,
-            lot_id=lot_id,
-            ride_with=ride_with,
-            is_step=bool(is_step) or reason == "add:step20",
-        )
+    if policy is not None:
+        lot_id = group.next_lot_id if group is not None else 0
+    position_type = IndependentPosition if policy is not None else Position
+    identity = (
+        {"position_id": position_id, "entry_signal_date": entry_signal_date}
+        if policy is not None else {}
     )
+    pos = position_type(
+        code,
+        shares,
+        px,
+        entry_idx,
+        px,
+        lot_id=lot_id,
+        ride_with=ride_with,
+        is_step=bool(is_step) or reason == "add:step20",
+        **identity,
+    )
+    lots.append(pos)
+    if policy is not None:
+        if group is None:
+            policy["groups"][position_id] = IndependentGroup(
+                code, entry_signal_date, policy["name_budget"], pos,
+            )
+        else:
+            group.next_lot_id += 1
     st.trades.append(
         {
             "date": _ymd(day),
@@ -311,6 +436,7 @@ def execute_buy(
             "lot": lot_id,
             "session_phase": "",
             "price_rule": "",
+            **identity,
         }
     )
     record_fill(st, st.trades[-1], cash_before)
@@ -413,6 +539,7 @@ def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str, *
             "lot": pos.lot_id,
             "session_phase": session_phase,
             "price_rule": price_rule,
+            **position_identity(pos),
         }
     )
     record_fill(st, st.trades[-1], cash_before)
@@ -444,6 +571,13 @@ def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str, *
     st.positions[code] = [p for p in lots if p is not pos]
     if not st.positions[code]:
         del st.positions[code]
+    policy = s8_policy(st)
+    if policy is not None and isinstance(pos, IndependentPosition):
+        if not any(
+            getattr(p, "position_id", None) == pos.position_id
+            for p in st.positions.get(code, [])
+        ):
+            policy["groups"][pos.position_id].closed = True
     if getattr(pos, "ride_with", None) is not None:
         return shares
     riders = [

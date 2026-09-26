@@ -22,6 +22,7 @@ from backtest.research.csv_ledger import (
     hit_limit_up,
     peak_gap_blocks,
     rescale_position,
+    rescale_s8_groups,
 )
 from backtest.research.csv_simulate_loop import (
     run_chase_due_day,
@@ -269,6 +270,7 @@ def run_chronological_day(
         apply_exdiv_economics(st, code, ds)
         kk = k_for(exdiv, code, ds)
         if kk is not None:
+            rescale_s8_groups(st, code, kk)
             for pos in list(st.positions.get(code, [])):
                 rescale_position(pos, kk)
                 st.stats["exdiv_adjusted_lots"] = int(st.stats.get("exdiv_adjusted_lots", 0)) + 1

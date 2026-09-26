@@ -1,0 +1,33 @@
+{
+  "rule_revision": "s8-independent-positions-2026-09-26",
+  "historical_sha256": "2f578d6fe9e601ad84a94bb6a269e1b5193c51ca4dd908366022769f0e1f31c2",
+  "captured_environment": {
+    "pandas": "3.0.6"
+  },
+  "sha256_csv_bytes": {
+    "version8/daily": {
+      "trades": "c4c4baae70e7623f5c4c61f920919a5cd023ed18b786697c5b15ace80b02b271",
+      "equity": "80595c859e348df3cadb4af5f27dbf33ce9b5f6a6552a9da6fae91631330c018"
+    },
+    "version8/minute": {
+      "trades": "b4299e4285e0472d571c4ca586439d0b60f85830842f23cd0b5e030425b7423a",
+      "equity": "bd449b53ef40e54d849c1aa3e1b656f205736ad3aa33bdc4de01b59e690a6af8"
+    },
+    "version8_2/daily": {
+      "trades": "21658d2b315ade27b1cf6f4a7044238fe5b810a562a2fd053bdee1d4bbeb4de0",
+      "equity": "a6885e0c28d4fafde02251325cb79be88c8e3e856324a0d5dd27ca18f6448c14"
+    },
+    "version8_2/minute": {
+      "trades": "078aef070ced3bd107554ec0f7ad3c53dc06bd3de7de29e22d524988aedb40c5",
+      "equity": "337a7b4ee2e2224808974c6bbea47c4a57af89010eff8b339d7372bd106101db"
+    },
+    "version8_3/daily": {
+      "trades": "eba37c2b315eb8146ce36fa80d385a37c2f4fcdb0af6c2a3368e8524e2c124fd",
+      "equity": "030ddb9a24d7b3feffea4d03b1c613c6163f85485b20400f150a119284b199d7"
+    },
+    "version8_3/minute": {
+      "trades": "e70b757c55d0eda72ebd5eac9c9a3cddf68eb7ba8ea160e58035cdda2f04204f",
+      "equity": "da46a7fb7e34408b51bc9c085b88d7342f16c6a8b2f26f28f44b539d14b8ff45"
+    }
+  }
+}

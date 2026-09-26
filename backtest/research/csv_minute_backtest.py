@@ -36,6 +36,7 @@ from backtest.research.csv_ledger import (  # noqa: E402
     QLIB_OPEN_COST,
     SimState,
     chase_decision as chase_decision,
+    configure_s8,
     execute_buy as execute_buy,
     finish_pending_chase,
     queue_limit_up_chase as queue_limit_up_chase,
@@ -46,6 +47,7 @@ from backtest.research.csv_ledger import (  # noqa: E402
     _sell,
     _ymd,
     rescale_position,
+    rescale_s8_groups,
     apply_exdiv_economics,
 )
 
@@ -722,6 +724,7 @@ def simulate(
         pool_names_by_day=pool_names_by_day,
         daily_quota=daily_quota,
     )
+    configure_s8(st, hooks)
     if buy_cost_rate is not None:
         st.buy_cost_rate = float(buy_cost_rate)
     if sell_cost_rate is not None:
@@ -780,6 +783,10 @@ def simulate(
             if callable(bind_opening):
                 bind_opening(ds, list(st.positions.keys()))
 
+            # OFF still settles full-day exits first. Only the new 8.3 price
+            # confirmation must not borrow a peak formed after its 14:55 scan.
+            confirm_peaks = {}
+            s8_confirm = hooks.get("name") == "version8_3" and hooks.get("sizing") == "per_name"
             for code in list(st.positions):
                 mdf = minute_bars.get(code)
                 ddf = daily_bars.get(code)
@@ -795,6 +802,7 @@ def simulate(
                 # E-R6: rescale before scan_held_day; never between scan and peak writeback.
                 kk = k_for(exdiv, code, ds)
                 if kk is not None:
+                    rescale_s8_groups(st, code, kk)
                     for pos in list(st.positions.get(code, [])):
                         rescale_position(pos, kk)
                         st.stats["exdiv_adjusted_lots"] = (
@@ -818,6 +826,12 @@ def simulate(
                 h = day_m["high"].to_numpy(np.float64)
                 c = day_m["close"].to_numpy(np.float64)
                 hm = day_m["hm"].to_numpy(np.int64)
+                if s8_confirm:
+                    prefix_high = max((float(hi) for hi in h[hm <= BUY_HM] if hi > 0), default=0.0)
+                    for pos in st.positions.get(code, []):
+                        confirm_peaks[id(pos)] = max(
+                            float(pos.peak), prefix_high if pos.entry_idx < i else 0.0,
+                        )
                 for pos in list(st.positions.get(code, [])):
                     if getattr(pos, "ride_with", None) is not None:
                         continue
@@ -1047,6 +1061,11 @@ def simulate(
                     buy_gate=buy_gate,
                     name_lot_budget=hooks.get("name_lot_budget"),
                     step_add=hooks.get("step_add"),
+                    # Clamp, rather than change the sell scanner's peak state.
+                    # A T+0 chase lot has no snapshot and keeps its entry peak.
+                    confirm_peak_for=(
+                        lambda _code, pos: min(float(pos.peak), confirm_peaks.get(id(pos), float(pos.peak)))
+                    ) if s8_confirm else None,
                 )
 
         run_eod_exits(st, day=day, ds=ds, bars=daily_bars, eod_exit=hooks.get("eod_exit"),

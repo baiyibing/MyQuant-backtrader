@@ -13,7 +13,9 @@ from backtest.research import csv_minute_backtest as book
 from backtest.research import csv_minute_backtest_v7 as v7
 from backtest.research.ashare_fees import QLIB_PORTANA, trade_commission
 from backtest.research.ashare_volume_cap import BucketVolume, VolumeCap
-from backtest.research.csv_ledger import Position, SimState, _sell, execute_buy
+from backtest.research.csv_ledger import (
+    IndependentGroup, IndependentPosition, Position, SimState, _sell, execute_buy,
+)
 from backtest.research.csv_simulate_loop import run_chase_due_day, run_pool_buys_day, run_step_adds_day
 
 CODE = "600000.SH"
@@ -348,14 +350,20 @@ def test_decimal_boundary_zero_rate_and_frozen_sample():
 
 
 def test_public_book_pool_step_share_actual_quote_bucket(monkeypatch):
-    original = book.init_sim_state
+    original = book.configure_s8
 
-    def initialized(*args, **kwargs):
-        state, pending, names = original(*args, **kwargs)
-        state.positions[CODE] = [Position(CODE, 100, 10, 0, 10)]
-        return state, pending, names
+    def initialized(state, hooks):
+        original(state, hooks)
+        # The seeded older holding must have its own signal identity and anchor.
+        pos = IndependentPosition(CODE, 100, 10, 0, 10,
+                                  position_id=f"{CODE}@20260831",
+                                  entry_signal_date="20260831")
+        state.positions[CODE] = [pos]
+        state.book_state["s8_independent"]["groups"][pos.position_id] = IndependentGroup(
+            CODE, pos.entry_signal_date, hooks["name_budget"], pos,
+        )
 
-    monkeypatch.setattr(book, "init_sim_state", initialized)
+    monkeypatch.setattr(book, "configure_s8", initialized)
     state = book.simulate(bars([(D1, 894, 12, 12)]), daily_bars((12, 12, 12, 12)),
                           {"20260901": [CODE]}, "20260901", "20260901",
                           strategy="version8", name_budget=2400, participation_rate=.1,

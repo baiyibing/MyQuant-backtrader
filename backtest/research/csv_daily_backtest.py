@@ -72,6 +72,7 @@ from backtest.research.csv_ledger import (  # noqa: E402
     _ymd,
     chase_decision as chase_decision,
     chase_explained as chase_explained,
+    configure_s8,
     execute_buy as execute_buy,
     finish_pending_chase,
     hit_limit_down,
@@ -80,6 +81,7 @@ from backtest.research.csv_ledger import (  # noqa: E402
     peak_gap_blocks,
     queue_limit_up_chase as queue_limit_up_chase,
     rescale_position,
+    rescale_s8_groups,
     apply_exdiv_economics,
     resolve_limit_prices,
 )
@@ -297,6 +299,7 @@ def simulate(
         pool_names_by_day=pool_names_by_day,
         daily_quota=daily_quota,
     )
+    configure_s8(st, hooks)
     if buy_cost_rate is not None:
         st.buy_cost_rate = float(buy_cost_rate)
     if sell_cost_rate is not None:
@@ -348,6 +351,7 @@ def simulate(
                 # E-R6: rescale open lots then map prev_close before limits / lot loop.
                 kk = k_for(exdiv, code, ds)
                 if kk is not None:
+                    rescale_s8_groups(st, code, kk)
                     for pos in list(st.positions.get(code, [])):
                         rescale_position(pos, kk)
                         st.stats["exdiv_adjusted_lots"] = (
