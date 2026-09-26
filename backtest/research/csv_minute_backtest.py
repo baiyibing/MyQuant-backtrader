@@ -1565,8 +1565,8 @@ def main(argv: Optional[list] = None) -> int:
     ap.add_argument("--minute-source", choices=("lake", "qlib_1min"), default="lake")
     ap.add_argument("--daily-source", choices=("lake", "qlib_day"), default="lake")
     ap.add_argument(
-        "--topk-exec", type=parse_topk_exec, choices=("close", "open", "intraday"),
-        default="close", help="topk_dropout only: default close = 14:55 close; open/intraday opt-in",
+        "--topk-exec", type=parse_topk_exec, choices=("close", "open", "intraday", "vwap"),
+        default="close", help="topk_dropout only: default close = 14:55 close; open/intraday/vwap opt-in",
     )
     ap.add_argument("--dividend-type", choices=("none", "front"), default="none",
                     help="version12 minute fills allow none/front; daily signals fixed to 1d/front")
