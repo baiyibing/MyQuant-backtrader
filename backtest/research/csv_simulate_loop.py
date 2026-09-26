@@ -281,6 +281,9 @@ def run_pool_buys_day(
     reference_price_for: Callable[[str, str], float] | None = None,
     handle_planned_code: Callable[[str], bool] | None = None,
     allocation_cash: float | None = None,
+    buy_reason: str = "pool",
+    buy_hm: int | None = None,
+    strict_limit_up: bool = False,
 ) -> None:
     """Pool buys for ``ds``; ``buy_quote_for`` supplies buy price + prev closes.
 
@@ -288,7 +291,10 @@ def run_pool_buys_day(
     return replaces the pool file list before capital ration — old books unchanged.
     ``handle_planned_code(code)`` may consume one ordered slot (True), allowing
     opt-in child orders to compete with normal pool adds in the same cash order.
-    ``allocation_cash`` restores the unsliced daily-quota basis for tail mode.
+    ``allocation_cash`` freezes the daily-quota basis for opt-in schedulers.
+    ``buy_reason`` / ``buy_hm`` label opt-in buys without changing default rows.
+    ``strict_limit_up`` uses P1's literal open < upper-band contract; the
+    default retains the legacy epsilon comparison.
     """
     policy = s8_policy(st)
     independent = policy is not None
@@ -354,7 +360,8 @@ def run_pool_buys_day(
                 float(name_lot_budget(name_budget, []))
                 if callable(name_lot_budget) else float(name_budget)
             )
-        blocked = skip_buy_at_limit(px, limits) or (
+        upper_blocked = px >= limit_up if strict_limit_up else skip_buy_at_limit(px, limits)
+        blocked = upper_blocked or (
             forbid_all_trade_at_limit and hit_limit_down(px, limit_down)
         )
         if blocked:
@@ -384,6 +391,8 @@ def run_pool_buys_day(
         )
         if volume_at is not None:
             volume_kwargs["at"] = volume_at
+        if buy_hm is not None:
+            volume_kwargs["hm"] = buy_hm
         if independent:
             volume_kwargs.update(position_id=f"{code}@{ds}", entry_signal_date=ds)
         if sizing == "per_name":
@@ -406,11 +415,11 @@ def run_pool_buys_day(
                 record_rejection(st, code, day, "skip_cash", px)
                 continue
             quota_used = st.daily_quota_used
-            execute_buy(st, code, px, per, day_i, day, reason="pool", **volume_kwargs)
+            execute_buy(st, code, px, per, day_i, day, reason=buy_reason, **volume_kwargs)
             # Ledger's daily_quota_used is vestigial, not per_name enforcement.
             st.daily_quota_used = quota_used
         else:
-            execute_buy(st, code, px, per, day_i, day, reason="pool", **volume_kwargs)
+            execute_buy(st, code, px, per, day_i, day, reason=buy_reason, **volume_kwargs)
 
 
 def run_step_adds_day(
