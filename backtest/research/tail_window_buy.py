@@ -38,7 +38,7 @@ class TailQuote:
     capacity: int
 
 
-def tail_quote(row, hm: int, volume_unit: str | None = "shares") -> TailQuote | None:
+def tail_quote(row, hm: int, volume_unit: str | None = None) -> TailQuote | None:
     """A whole completed bucket, with amount in yuan and volume defaulting to shares.
 
     Missing/invalid volume or a present invalid amount rejects this child.

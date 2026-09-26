@@ -113,11 +113,12 @@ class IndependentExitPosition:
     T+1 exit removes it from the ledger. Price adds keep that original anchor.
     """
 
-    def __init__(self, st, position_id: str, group: IndependentGroup, day_i=None):
+    def __init__(self, st, position_id: str, group: IndependentGroup, day_i=None, *, day=None):
         self.st = st
         self.position_id = position_id
         self.group = group
         self.day_i = day_i
+        self.day = day  # Original-exit lock attribution only; not a fill-lot field.
 
     @property
     def lots(self):
@@ -197,6 +198,12 @@ class IndependentExitPosition:
     def pending_exit(self, value):
         if value and not self.group.first_lot.pending_exit:
             self.group.exit_day_idx = self.day_i
+            if self.day is not None and self.st.exdiv_economics is not None:
+                # Some daily exits latch without attempting a fill that day.
+                self.group.t1_deferred_bonus_lots.update(
+                    p.lot_id for p in self.lots
+                    if _locked_bonus(self.st.exdiv_economics, p, _ymd(self.day))
+                )
         elif not value:
             self.group.exit_day_idx = None
             self.group.t1_deferred_bonus_lots.clear()
@@ -262,12 +269,12 @@ def position_identity(pos) -> dict:
     return {}
 
 
-def exit_positions(st, code: str, day_i: int | None = None) -> list:
+def exit_positions(st, code: str, day_i: int | None = None, *, day=None) -> list:
     """Return aggregate exit views only for the six independent-position books."""
     if s8_policy(st) is None:
         return list(st.positions.get(code, []))
     return [
-        IndependentExitPosition(st, position_id, group, day_i)
+        IndependentExitPosition(st, position_id, group, day_i, day=day)
         for position_id, group in s8_open_groups(st, code)
     ]
 
@@ -795,7 +802,8 @@ def _sell_s8_group(
     pos.pending_exit = reason
     if pos.group.exit_day_idx is None:
         pos.group.exit_day_idx = day_i
-    if st.exdiv_economics is not None:
+    # Later ex-dates cannot retroactively make the original exit T+1-locked.
+    if st.exdiv_economics is not None and day_i == pos.group.exit_day_idx:
         pos.group.t1_deferred_bonus_lots.update(
             p.lot_id for p in lots if _locked_bonus(st.exdiv_economics, p, _ymd(day))
         )

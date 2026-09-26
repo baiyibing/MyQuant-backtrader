@@ -941,7 +941,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--fix-minute-cash-order", action="store_true",
                         help="settle cash and positions chronologically (default off)")
     parser.add_argument("--tail-window-buy", action="store_true",
-                        help="TWAP first buy 14:30-14:56 plus 15:00 auction; requires --fix-minute-cash-order (default off)")
+                        help="TWAP first buy 14:30-14:56 plus 15:00 auction; requires --fix-minute-cash-order (default off); "
+                             "target Q<2800 shares gives zero-share slices and no fills")
     parser.add_argument("--tail-volume-unit", choices=("shares", "lots"), default="shares",
                         help="lake minute volume unit (default shares); lots multiplies volume by 100")
     parser.add_argument("--execution-audit-file", help="optional execution JSON sidecar; leaves CSVs unchanged")

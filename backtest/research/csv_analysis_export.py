@@ -14,8 +14,9 @@ from __future__ import annotations
 import argparse
 import json
 from collections import defaultdict, deque
+from collections.abc import Iterator, Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 import pandas as pd
 
@@ -37,6 +38,7 @@ MARK_SIDES = frozenset({"EOD_MARK"})
 _REPO = Path(__file__).resolve().parents[2]
 FIELDS_NOTE_NAME = "字段说明.txt"
 FIELDS_NOTE_SRC = _REPO / "docs" / "backtest" / "csv-analysis-fields.txt"
+IDENTITY_FIELDS_NOTE_SRC = _REPO / "docs" / "backtest" / "csv-analysis-identity-fields.txt"
 HUMAN_ANALYSIS_NAME = "human_analysis.txt"
 BUNDLE_CSV = (
     "nav_daily.csv",
@@ -65,11 +67,15 @@ def _canon(raw) -> str:
     return _bare_or_canon(text) or text.strip().upper()
 
 
-def write_fields_note(out_dir: Path, *, run_dir: Path, nav: pd.DataFrame) -> Path:
+def write_fields_note(
+    out_dir: Path, *, run_dir: Path, nav: pd.DataFrame, has_identity: bool = False,
+) -> Path:
     """Copy the repo field guide into the bundle, with this run's path and window."""
     if not FIELDS_NOTE_SRC.is_file():
         raise FileNotFoundError(f"fields note missing: {FIELDS_NOTE_SRC}")
     body = FIELDS_NOTE_SRC.read_text(encoding="utf-8")
+    if has_identity:
+        body += "\n\n" + IDENTITY_FIELDS_NOTE_SRC.read_text(encoding="utf-8")
     first = str(nav["date"].iloc[0]) if len(nav) else ""
     last = str(nav["date"].iloc[-1]) if len(nav) else ""
     header = f"本次导出\nrun_dir: {run_dir}\n窗口: {first} .. {last}\n\n"
@@ -276,7 +282,98 @@ def load_trades(run_dir: Path) -> pd.DataFrame:
         work["reason"] = ""
     work["date"] = work["ymd"].map(_iso)
     work["notional"] = work["notional"].fillna(work["price"] * work["shares"])
+    if "position_id" in cols:
+        identity = raw[cols["position_id"]].map(_position_id)
+        if identity.any():
+            work["position_id"] = identity
+            if "lot" in cols:
+                work["lot"] = _integer_lots(raw[cols["lot"]])
     return work.reset_index(drop=True)
+
+
+def _position_id(value) -> str:
+    return "" if pd.isna(value) else str(value).strip()
+
+
+def _has_position_ids(trades: pd.DataFrame) -> bool:
+    return "position_id" in trades and trades["position_id"].map(_position_id).any()
+
+
+def _integer_lots(values: pd.Series) -> pd.Series:
+    """Keep optional lot numbers as integers, including when some rows lack one."""
+    try:
+        return pd.to_numeric(values, errors="coerce").astype("Int64")
+    except (TypeError, ValueError) as exc:
+        raise ValueError("lot identifiers must be integers or empty") from exc
+
+
+def _lot_id(value) -> int | None:
+    if pd.isna(value):
+        return None
+    number = int(value)
+    if number != value:
+        raise ValueError("lot identifiers must be integers or empty")
+    return number
+
+
+def _matching_lot(q: deque, position_id: str, lot_id=None) -> int | None:
+    """An identified sell stays in its position; an empty ID uses code FIFO."""
+    candidates = [
+        i for i, lot in enumerate(q)
+        if not position_id or lot.get("position_id") == position_id
+    ]
+    if position_id and pd.notna(lot_id):
+        exact = [i for i in candidates if q[i].get("lot") == lot_id]
+        # A producer without BUY lot numbers can still use position FIFO.
+        candidates = exact or [i for i in candidates if pd.isna(q[i].get("lot"))]
+    return candidates[0] if candidates else None
+
+
+def _sell_matches(
+    q: deque, row: dict, *, ymd: str, buy_history: deque,
+) -> Iterator[tuple[dict, dict]]:
+    """Allocate identified fills by quantity; preserve legacy whole-lot FIFO."""
+    identity = row.get("position_id", "")
+    lot_id = row.get("lot")
+    if not identity:
+        if not q:
+            raise SystemExit(f"unmatched SELL {row['code']} {ymd}")
+        yield q.popleft(), row
+        return
+    remaining = row["shares"]
+    last_matched = None
+    while remaining > 1e-9:
+        selected = _matching_lot(q, identity, lot_id)
+        if selected is None:
+            # Bonus shares need no extra purchase cost. Keep the original BUY
+            # provenance even after its paid shares have all been matched.
+            history = deque(reversed(buy_history))
+            source = _matching_lot(history, identity, lot_id)
+            if source is None:
+                raise SystemExit(
+                    f"unmatched SELL {row['code']} {ymd}: no recorded BUY for "
+                    f"position_id={identity} lot={lot_id}"
+                )
+            matched = dict(last_matched if last_matched is not None else history[source])
+            shares = remaining
+            matched.update(shares=shares, buy_price=0.0, buy_notional=0.0, buy_commission=0.0)
+        else:
+            lot = q[selected]
+            shares = min(remaining, lot["shares"])
+            matched = dict(lot)
+            fraction = shares / lot["shares"]
+            for field in ("shares", "buy_notional", "buy_commission"):
+                matched[field] *= fraction
+                lot[field] -= matched[field]
+            if lot["shares"] <= 1e-9:
+                del q[selected]
+            last_matched = matched
+        fill = dict(row)
+        fill["shares"] = shares
+        fill["notional"] *= shares / row["shares"]
+        fill["commission"] *= shares / row["shares"]
+        yield matched, fill
+        remaining -= shares
 
 
 def _ranks(score_map: Mapping[str, float]) -> dict[str, int]:
@@ -404,7 +501,7 @@ def pair_round_trips(
     age_map: Mapping[str, str] | None = None,
     topk: int = 50,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """FIFO lots. Returns trades_daily (fills+skips), round_trips, ledger."""
+    """Pair by position/lot when present, otherwise code FIFO; never resimulate."""
     rank_cache: dict[str, dict[str, int]] = {}
     age_map = age_map or {}
     cal_pos = {ymd: i for i, ymd in enumerate(nav["ymd"])}
@@ -420,10 +517,13 @@ def pair_round_trips(
 
     annotated: list[dict] = []
     opens: dict[str, deque] = defaultdict(deque)
-    eod: dict[str, dict] = {}
+    buy_history: dict[str, deque] = defaultdict(deque)
+    eod: dict[str | tuple, dict] = {}
     trips: list[dict] = []
     ledger: list[dict] = []
     cum_realized: dict[str, float] = defaultdict(float)
+    has_identity = _has_position_ids(trades)
+    has_lot = has_identity and "lot" in trades
 
     cols = list(trades.columns)
     for rec in trades.itertuples(index=False):
@@ -436,6 +536,12 @@ def pair_round_trips(
             age_map=age_map,
             topk=topk,
         )
+        identity = _position_id(getattr(rec, "position_id", ""))
+        lot_id = _lot_id(getattr(rec, "lot", None)) if has_lot else None
+        extra = {"position_id": identity} if has_identity else {}
+        if has_lot:
+            extra["lot"] = lot_id
+        row.update(extra)
         side = row["side"]
         if side in FILL_SIDES or side == "SKIP":
             annotated.append(row)
@@ -469,8 +575,24 @@ def pair_round_trips(
                 "buy_state_label": row["buy_state_label"],
                 "buy_state_ok": row["buy_state_ok"],
                 "buy_sidecar_hit": row["sidecar_hit"],
+                **extra,
             }
-            opens[code].append(lot)
+            recorded_lot = lot
+            existing = _matching_lot(opens[code], identity, lot_id)
+            if (identity and pd.notna(lot_id) and existing is not None
+                    and opens[code][existing].get("lot") == lot_id):
+                # Tail-window children share one ledger lot and one eventual exit.
+                merged = opens[code][existing]
+                merged["shares"] += lot["shares"]
+                merged["buy_notional"] += lot["buy_notional"]
+                merged["buy_commission"] += lot["buy_commission"]
+                merged["buy_price"] = merged["buy_notional"] / merged["shares"]
+                recorded_lot = merged
+            else:
+                opens[code].append(lot)
+            if identity:
+                # A copy must survive both quantity depletion and queue removal.
+                buy_history[code].append(dict(recorded_lot))
             ledger.append(
                 {
                     "date": row["date"],
@@ -487,58 +609,62 @@ def pair_round_trips(
                     "unrealized_pnl": 0.0,
                     "cum_realized_pnl": cum_realized[code],
                     "reason": row["reason"],
+                    **extra,
                 }
             )
         elif side == "SELL":
-            if not opens[code]:
-                raise SystemExit(f"unmatched SELL {code} {ymd}")
-            lot = opens[code].popleft()
-            debit = (lot["buy_notional"] or 0.0) + (lot["buy_commission"] or 0.0)
-            credit = (row["notional"] or 0.0) - (row["commission"] or 0.0)
-            pnl = credit - debit
-            cum_realized[code] += pnl
-            trips.append(
-                {
-                    **{k: v for k, v in lot.items() if k != "buy_ymd"},
-                    "sell_date": row["date"],
-                    "status": "closed",
-                    "hold_trading_days": hold_days(lot["buy_ymd"], ymd),
-                    "sell_price": row["price"],
-                    "sell_notional": row["notional"],
-                    "sell_commission": row["commission"],
-                    "sell_reason": row["reason"],
-                    "sell_score": row["score"],
-                    "sell_rank": row["score_rank"],
-                    "realized_pnl": pnl,
-                    "return_pct": pnl / debit if debit else None,
-                    "mtm_pnl": None,
-                    "sell_sidecar_close": row["sidecar_close"],
-                    "sell_ma20": row["ma20"],
-                    "sell_ma60": row["ma60"],
-                    "sell_winratio": row["winratio"],
-                }
-            )
-            remain = sum(x["shares"] for x in opens[code])
-            ledger.append(
-                {
-                    "date": row["date"],
-                    "code": code,
-                    "event": "sell",
-                    "delta_amount": row["shares"],
-                    "amount_after": remain,
-                    "price": row["price"],
-                    "entry_price": lot["buy_price"],
-                    "trade_value": row["notional"],
-                    "est_cost": row["commission"],
-                    "holding_days": hold_days(lot["buy_ymd"], ymd),
-                    "realized_pnl": pnl,
-                    "unrealized_pnl": 0.0 if remain <= 1e-9 else None,
-                    "cum_realized_pnl": cum_realized[code],
-                    "reason": row["reason"],
-                }
-            )
+            for lot, fill in _sell_matches(
+                opens[code], row, ymd=ymd, buy_history=buy_history[code],
+            ):
+                debit = (lot["buy_notional"] or 0.0) + (lot["buy_commission"] or 0.0)
+                credit = (fill["notional"] or 0.0) - (fill["commission"] or 0.0)
+                pnl = credit - debit
+                cum_realized[code] += pnl
+                trips.append(
+                    {
+                        **{k: v for k, v in lot.items() if k != "buy_ymd"},
+                        "sell_date": fill["date"],
+                        "status": "closed",
+                        "hold_trading_days": hold_days(lot["buy_ymd"], ymd),
+                        "sell_price": fill["price"],
+                        "sell_notional": fill["notional"],
+                        "sell_commission": fill["commission"],
+                        "sell_reason": fill["reason"],
+                        "sell_score": fill["score"],
+                        "sell_rank": fill["score_rank"],
+                        "realized_pnl": pnl,
+                        "return_pct": pnl / debit if debit else None,
+                        "mtm_pnl": None,
+                        "sell_sidecar_close": fill["sidecar_close"],
+                        "sell_ma20": fill["ma20"],
+                        "sell_ma60": fill["ma60"],
+                        "sell_winratio": fill["winratio"],
+                    }
+                )
+                remain = sum(x["shares"] for x in opens[code])
+                ledger.append(
+                    {
+                        "date": fill["date"],
+                        "code": code,
+                        "event": "sell",
+                        "delta_amount": fill["shares"],
+                        "amount_after": remain,
+                        "price": fill["price"],
+                        "entry_price": lot["buy_price"],
+                        "trade_value": fill["notional"],
+                        "est_cost": fill["commission"],
+                        "holding_days": hold_days(lot["buy_ymd"], ymd),
+                        "realized_pnl": pnl,
+                        "unrealized_pnl": 0.0 if remain <= 1e-9 else None,
+                        "cum_realized_pnl": cum_realized[code],
+                        "reason": fill["reason"],
+                        **({"position_id": lot.get("position_id", "")} if has_identity else {}),
+                        **({"lot": lot.get("lot")} if has_lot else {}),
+                    }
+                )
         elif side == "EOD_MARK":
-            eod[code] = {
+            mark_key = (code, identity, lot_id if pd.notna(lot_id) else None) if identity else code
+            eod[mark_key] = {
                 "ymd": ymd,
                 "price": row["price"],
                 "notional": row["notional"],
@@ -547,7 +673,15 @@ def pair_round_trips(
 
     for code, q in opens.items():
         for lot in q:
-            mark = eod.get(code)
+            identity = lot.get("position_id", "")
+            lot_id = lot.get("lot")
+            mark_key = (code, identity, lot_id if pd.notna(lot_id) else None) if identity else code
+            mark = eod.get(mark_key)
+            if mark is None and identity:
+                mark = eod.get((code, identity, None)) or eod.get(code)
+            if mark and identity:
+                # Marks may cover several lots; value each surviving lot once.
+                mark = {**mark, "notional": lot["shares"] * mark["price"]}
             sell_ymd = mark["ymd"] if mark else last_ymd
             debit = (lot["buy_notional"] or 0.0) + (lot["buy_commission"] or 0.0)
             mtm = (
@@ -604,6 +738,8 @@ def pair_round_trips(
                     "unrealized_pnl": mtm,
                     "cum_realized_pnl": cum_realized[code],
                     "reason": "EOD_MARK",
+                    **({"position_id": identity} if has_identity else {}),
+                    **({"lot": lot_id} if has_lot else {}),
                 }
             )
 
@@ -650,6 +786,10 @@ def pair_round_trips(
         "min_buy_ymd",
         "age_ok",
     ]
+    if has_identity:
+        trip_cols.append("position_id")
+    if has_lot:
+        trip_cols.append("lot")
     trip_df = pd.DataFrame(trips)
     if trip_df.empty:
         trip_df = pd.DataFrame(columns=trip_cols)
@@ -662,6 +802,10 @@ def pair_round_trips(
     led_df = pd.DataFrame(ledger)
     if not led_df.empty:
         led_df = led_df.sort_values(["code", "date", "event"], kind="mergesort")
+    if has_lot:
+        for frame in (trades_df, trip_df, led_df):
+            if "lot" in frame:
+                frame["lot"] = _integer_lots(frame["lot"])
     return trades_df, trip_df, led_df.reset_index(drop=True)
 
 
@@ -716,6 +860,8 @@ def pnl_from_trips(trips: pd.DataFrame) -> pd.DataFrame:
 
 def positions_daily(trades: pd.DataFrame, nav: pd.DataFrame) -> pd.DataFrame:
     """EOD holdings after each equity day's fills. Price = last fill or EOD_MARK."""
+    if _has_position_ids(trades):
+        return _positions_daily_by_position(trades, nav)
     by_day: dict[str, list] = defaultdict(list)
     for rec in trades.itertuples(index=False):
         by_day[rec.ymd].append(rec)
@@ -773,6 +919,77 @@ def positions_daily(trades: pd.DataFrame, nav: pd.DataFrame) -> pd.DataFrame:
                     "holding_days": hd,
                 }
             )
+    return pd.DataFrame(rows)
+
+
+def _positions_daily_by_position(trades: pd.DataFrame, nav: pd.DataFrame) -> pd.DataFrame:
+    """Preserve the old position columns, with one row per code/position ID."""
+    by_day: dict[str, list] = defaultdict(list)
+    for rec in trades.itertuples(index=False):
+        by_day[rec.ymd].append(rec)
+    opens: dict[str, deque] = defaultdict(deque)
+    last_px: dict[str, float] = {}
+    rows: list[dict] = []
+    cal_pos = {ymd: i for i, ymd in enumerate(nav["ymd"])}
+    for day in nav.itertuples(index=False):
+        for rec in by_day.get(day.ymd, []):
+            identity = _position_id(getattr(rec, "position_id", ""))
+            lot_id = _lot_id(getattr(rec, "lot", None))
+            q = opens[rec.code]
+            if rec.side == "BUY":
+                lot = {
+                    "position_id": identity,
+                    "lot": lot_id,
+                    "shares": float(rec.shares),
+                    "entry_ymd": day.ymd,
+                    "buy_price": float(rec.price),
+                }
+                existing = _matching_lot(q, identity, lot_id)
+                if (identity and pd.notna(lot_id) and existing is not None
+                        and q[existing].get("lot") == lot_id):
+                    merged = q[existing]
+                    cost = merged["buy_price"] * merged["shares"]
+                    cost += lot["buy_price"] * lot["shares"]
+                    merged["shares"] += lot["shares"]
+                    merged["buy_price"] = cost / merged["shares"]
+                else:
+                    q.append(lot)
+            elif rec.side == "SELL":
+                remaining = float(rec.shares)
+                while remaining > 1e-9:
+                    selected = _matching_lot(q, identity, lot_id)
+                    if selected is None:
+                        # Pairing validates BUY provenance for excess bonus
+                        # shares; do not turn their sale into negative holdings.
+                        break
+                    lot = q[selected]
+                    sold = min(remaining, lot["shares"])
+                    remaining -= sold
+                    lot["shares"] -= sold
+                    if lot["shares"] <= 1e-9:
+                        del q[selected]
+            if rec.side in FILL_SIDES or rec.side == "EOD_MARK":
+                last_px[rec.code] = float(rec.price)
+        for code, q in sorted(opens.items()):
+            grouped: dict[str, list] = defaultdict(list)
+            for lot in q:
+                grouped[lot["position_id"]].append(lot)
+            for identity, lots in grouped.items():
+                shares = sum(lot["shares"] for lot in lots)
+                first = lots[0]
+                px = last_px.get(code, first["buy_price"])
+                mv = shares * px
+                rows.append({
+                    "date": _iso(day.ymd),
+                    "code": code,
+                    "shares": shares,
+                    "price": px,
+                    "entry_price": first["buy_price"],
+                    "market_value": mv,
+                    "weight": mv / float(day.equity) if day.equity else None,
+                    "holding_days": cal_pos[day.ymd] - cal_pos[first["entry_ymd"]],
+                    "position_id": identity,
+                })
     return pd.DataFrame(rows)
 
 
@@ -950,7 +1167,7 @@ def write_bundle(
     reason_path = out_dir / "win_by_reason.csv"
     reason_df.to_csv(reason_path, index=False, encoding=CSV_ENCODING)
     paths["win_by_reason"] = str(reason_path)
-    note = write_fields_note(out_dir, run_dir=run_dir, nav=nav)
+    note = write_fields_note(out_dir, run_dir=run_dir, nav=nav, has_identity=_has_position_ids(trades))
     paths["fields_note"] = str(note)
 
     if xlsx:

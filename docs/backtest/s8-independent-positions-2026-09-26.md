@@ -32,6 +32,8 @@ peak 初始为首买价，从首买的 T+1 起按原行情规则更新；加仓�
 
 退出当日只卖 `entry_idx < 当前交易日` 的可卖股份。今日新加股份继续留仓，成交记录在原退出原因后追加唯一后缀 `|t1_deferred`，例如 `trail:band:2|t1_deferred`；下一个交易日第一个可卖时机继续卖出，避免价格反弹后取消已经触发的整体退出。标记依据是该 lot 在原退出日是否被 T+1 锁定，不是最终成交日：加仓后日线重评遇收盘跌停时，保留原退出原因及原退出日，不能给整个持仓统一拼后缀。日后解禁成交，原本可卖的旧股不带后缀，当日新加的股份才带后缀；其间继续跌停不改变归因。
 
+红股锁定也只在原退出日 `exit_day_idx` 记录归因。若除权日落在原退出日之后、最终成交之前的 defer 窗口，原退出日可卖的 lot 不因后来红股锁定而补上 `|t1_deferred`；实际可卖股数和解禁成交时点仍沿原权益/T+1 处理。日线在原退出日只挂 pending、次日才首次尝试成交的路径，也在首次挂起时快照原日锁定，避免锁定已解除后漏标。此修正只改误标/漏标的 reason 文本，不改撮合、现金或 equity。
+
 - 未启用成交量约束时，延迟股份在下一可卖日首个可用且允许卖出的 bar **open** 成交；日线为日 open。缺 bar、跌停或其他既有卖出约束仍顺延。
 - 启用完成桶成交量约束时，bar open 尚不能使用该 bar 的完整成交量；在首个容量可用的已完成 bar **close** 成交。已完成 bar 的 open 跌停而 close 已打开时，按 close 判断是否能卖；不借用尚未完成的成交量。
 - 对四本有价格加仓的书，因成交量不足只卖出部分，或退出尝试无可用容量时，整个持仓保留退出意图，后续可卖 bar 继续处理；纯容量延迟不额外加 T+1 标记。待退出期间不再增加价格仓。
@@ -54,13 +56,27 @@ peak 初始为首买价，从首买的 T+1 起按原行情规则更新；加仓�
 
 ### 1.5 严格现金、needed 口径与输出
 
-六书 `per_name` 的池首买、追买和价格加仓，现金不足支付整单及费用时抛出 `InsufficientCashError` 并停止。异常公开 `date`、`code`、`needed`、`available`、`shortfall`，其中 `shortfall = needed - available`；不缩单、不中途改预算，不改默认总资金 `21,000,000`。8.1 和其他书保留原 `skip_cash`。
+六书 `per_name` 的池首买、追买和价格加仓，现金不足支付整单及费用时抛出 `InsufficientCashError` 并停止。异常公开 `date`、`code`、`needed`、`available`、`shortfall`，其中 `shortfall = needed - available`；不缩单、不中途改预算，不改默认总资金 `21,000,000`。8.1、v7 和其他书保留原 `skip_cash`。X-04 尾盘 ON 的零股父单不走普通首买 supplementary 100 股路径，极小预算差异见 [X-04 份额取整](x04-tail-window-buy-2026-09-26.md#28-份成交价容量与费用)。
 
 **needed 当前为按预算及原整手/force_min 规则算出的实际下单本金，加原费用；不是完整预算加费用。** 现金检查在可选成交量容量裁剪之前。例：预算 1,000、价格 6，只能下 100 股，默认佣金 0.60，needed 为 600.60；现金 939.06 足以买入，即使低于预算 1,000。是否应改为“完整预算加费用”的更严格门槛仍列为待用户确认项，本次保留已获要求的实现口径。
 
 共享 `init_sim_state(hooks)` 自动、幂等绑定这六书的策略上下文；直接传 version8 hooks 调用共享买侧也必须严格检查，不能因为绕过 CLI 而静默回到 skip_cash。用户点名的四个底层用例因此均已迁移。内部 `fullstrat_research_book` replay 明确移除借用 version8 hooks 时的这项上下文，保留其范围外实验行为。
 
 目标书 BUY/SELL/EOD_MARK 在原列之后保留第一提交新增的 `position_id`、`entry_signal_date`；存活 lot 序列化同样带身份。容量不足产生的 SKIP 行也携带这两项身份，覆盖首买、追买、价格加仓和卖出尝试。组内 lot 号从 0 开始，完整键为 `(position_id, lot)`。不对范围外书添加列或统计键。六份 HELP_LOCK 已说明整体退出和 T+1，删除逐 lot 独退与“单码单日上限 2 笔”的旧说法；关键句和旧上限禁用文字均有断言锁定。目标书 `execute_buy` 收到不含 `@` 的 `position_id` 时抛出清晰的 `ValueError`，避免以字符串拆分的 `IndexError` 代替输入校验。
+
+### 1.6 人工分析包的成交归因
+
+`csv_analysis_export.py` 保留输入的非空 `position_id`，SELL 优先按该身份配对 BUY；持仓内按 lot 号匹配，无 lot 号时按 FIFO。整体退出的多条 SELL（包括次日 `|t1_deferred`）各自归属原持仓，同码新仓先卖也不会消耗旧仓成本。SELL 的身份缺失或为空时沿用按代码 FIFO，混合输入的空身份 SELL 也按该代码全部剩余买入的先后顺序匹配。
+
+同一 `(position_id, lot)` 的多个尾盘子 BUY 合并股数、本金和佣金；部分 SELL 按数量分摊买入成本和费用，无 lot 的 SELL 可按持仓内 FIFO 跨多条 BUY。EOD_MARK 按身份/lot 归属，各剩余 lot 只估值一次。
+
+显式 `exdiv_economics` 可能产生红股解禁后 SELL 股数大于已记录 BUY 的情况，例如买入 100,000 股、最终卖出 200,000 股。已有 BUY 来源的身份按零增量成本处理超出部分：仍归属同一 `position_id`/lot，超出部分的 `buy_notional` 与 `buy_commission` 为 0，卖出金额与费用完整计入已实现盈亏。原 lot 的已记录股数已全部卖完后，后续红股 SELL（包括 defer 拆行）仍可通过保留的 BUY 来源归属，不会借用同码其他持仓的成本。若该身份从未出现 BUY，或 SELL 指定的 lot 无可匹配 BUY 来源，则清晰报错，不猜测持仓。此口径保留旧分析对一次性超额 SELL 的总成本，并补齐后续拆行的归因；不从卖量反推除权日期、期间权益或现金红利。
+
+一条 identified SELL 可按 BUY 来源及零增量成本部分拆成多条 `round_trips`/`ledger_by_stock` 行；`round_trips`、胜率与按卖因笔数统计这些分析行，不代表独立持仓数或原始 SELL 行数。零增量成本行的 `return_pct` 留空，已实现盈亏照常纳入合计。
+
+混合空身份的手工输入保留旧兼容边界：空身份 SELL 在 `round_trips` 中按代码 FIFO 弹出一整个 BUY lot，而 `positions_daily` 按实际卖出数量扣减。因此部分卖出时，前者可显示该 lot 已平、后者仍有余股；两表此时不能作为逐 lot 一致性对账。引擎不会产出这种混合输入：目标书整次运行带身份，其他书无身份。此处仅说明差异，不改变旧 FIFO 行为。
+
+旧输出或整份输入没有非空身份时，分析列与导出字节保持原样；有身份时 `trades_daily`、`round_trips`、`ledger_by_stock` 才追加 `position_id`（输入有 lot 时另追加 `lot`，整数表示、缺失留空），`positions_daily` 按持仓输出并只追加 `position_id`。分析包仅在有身份时向 `字段说明.txt` 追加 [身份字段说明](csv-analysis-identity-fields.txt)，旧字段说明文件保持不变。此处只重建分析配对，不修改原始 trades/equity 或引擎资金。持仓交错、多 lot、部分卖出和修改前十份分析包文件字节对照分别锁定新归因与旧兼容。
 
 ## 2. Baseline 范围与逐 case 差异
 
@@ -232,7 +248,8 @@ fixture 总资金 500 万、每个完整独立仓预算 100 万，同一 `600000
 - **needed 门槛待确认**：本次按“实际整手订单本金 + 费用”（容量裁剪前）检查，不按“完整预算 + 费用”。两种口径的差别和示例见 §1.5。
 - 加仓属于持仓整体并一起退出已经用户确认，不再是待决项。T+1 与跌停限制按 §1.3 实施，没有通过提前卖出当日新股实现整体退出。
 - 分钟 OFF 仍是兼容近似时钟，四本有价格加仓的书仅在 14:55 处分段；日线追买仍用 open/close 近似 09:45。完整因果资金时序应使用分钟 ON。
-- 原人工分析包仍按代码 FIFO 配对/汇总，尚未迁移为 position_id 归因；原始输出新增身份列不表示后处理已正确归因，消费这些分析产物时需另行迁移核验。
+- 人工分析包已按 §1.6 支持 `position_id` 归因；旧文件和空身份 SELL 继续按代码 FIFO，缺失的身份无法从代码自动还原。混合空身份的手工部分卖出在 `round_trips` 与 `positions_daily` 间存在整 lot/按量口径差异，见 §1.6；引擎不产出这种混合输入。
+- 已有 BUY 来源的 identified 红股 SELL 超量部分按零增量成本归原持仓/lot，支持解禁后一次性退出及 defer 拆行；从未出现 BUY 的身份或无匹配来源的显式 lot 仍报错。分析包不据此重建红股在持有期间的数量变化，也不推测未记录的现金红利；期间持仓/估值涉及这些权益时仍须查看引擎权益记录。原始引擎账本不受影响。
 - 目标低现金用例冲突已按用户决定迁移；默认 2,100 万及目标 OFF golden 均未报资金不足，没有未解决的引擎规则冲突。
 
 ## 6. 改动文件范围
@@ -263,3 +280,21 @@ fixture 总资金 500 万、每个完整独立仓预算 100 万，同一 `600000
 本轮新增 53 个参数 case（容量/非法 ID 44、六书 HELP 6、日线双追买 1、跨日跌停归因新增 2）。相关四文件专项合计 311 passed。日线双追买测试只在 chase 报价回调处注入一次报价暂缺，不直接预填队列；正常完整日线 OHLC 共用同一天追买/池买报价，该测试用于核验日线入口的保留队列集成路径。
 
 使用同一 `~/.venvs/bt-ci/bin/python`（pandas 3.0.6），四个 contract gates 与 `ruff check bt_contract` 全通过；完整 `pytest -q -m "not production and not benchmark"`：**2937 passed、67 skipped、24 deselected、10 warnings，40.22s**。所有修改文本 UTF-8 无 BOM、NUL=0；本轮创建新本地 commit，不 amend、不 push。
+
+## 8. 合并后 follow-up（基点 master 8cb6c4a）
+
+本节记录 #210/#212/#209 合并后的修复；前文 baseline 重录和测试计数属于历史提交。本轮补齐 §1.3 的原退出日红股归因、§1.6 的分析包身份配对，以及 AGENTS/X-04 小预算/help 说明；`tail_quote` 默认参数由 `"shares"` 改为 `None`，仍经 resolver 得到 `shares`，不改行为。
+
+- T+1 新增 8 个回归 case；日线、分钟 OFF/ON 与 `8cb6c4a` 旧标记函数及旧 pending setter 对照，所有非 reason 成交字段、cash、equity、stats 一致。defer 窗口内除权的三例各删除两条 SELL 的误标；日线原退出日锁定但首次成交前已解锁的一例补上一条漏标；其余场景 reason 也不变。
+- 分析包新增 9 个 case，专项共 15 passed；覆盖新仓先卖、多 lot 整体退出、次日 T+1、尾片合并、部分卖出、持仓内跨 BUY 的 FIFO、混合空身份与 EOD 归属。无身份/全空身份两组分别对照修改前十份分析文件 SHA-256，测试快照只归一临时目录路径；另在完全相同 run/out 路径依次调用 master 旧实现和当前实现，十份文件原始 bytes 直接相等，无任何归一。新增的是旧实现兼容快照，没有重录已有 fixture。
+- 全部 13 份原有 tracked fixture 与基点逐字节相同。主 `--check` 的 78 个生产 CSV hash 及库 hash、39 个 canonical/account case 全通过；完整测试同时验证省略/显式 OFF、次级 18+6 case 和其他既有 golden。baseline 包括 reason 在内无 diff，无需重录。
+- 另将 master `8cb6c4a` 用 `git archive` 导出只读目录，与当前树在独立进程运行同一 **162 组合成矩阵**（62 组全书有效日线/分钟开关、32 组尾盘含小预算、36 组原生规则红股/下跌、32 组 T+1 定向场景）。全部 trades 去 reason 后及 equity 原始 CSV 字节相同，现金亦完全相同；146 组完整 trades 不变。四本可加仓书的定向场景共 28 条 reason 差异：24 条移除 defer 日除权误标、4 条补原退出日锁定但成交前解锁的漏标。其他书 reason 无差异；不适用的日线 ON / version12 分钟 X-02 未计为通过。
+- `NUMBA_CACHE_DIR=/tmp/numba-followups`、`~/.venvs/bt-ci/bin/python`（pandas 3.0.6）：四个 gates、`ruff check bt_contract` 全通过；完整 CI 选择 **3414 passed、67 skipped、24 deselected、10 warnings**。文本 UTF-8 无 BOM、NUL=0；仅本地 commit，不 push、不开 PR、不 merge。
+
+## 9. PR #215 第一轮审查收口（基点 6b72b54）
+
+- P2-1 采用零增量成本方案：恢复旧分析可处理的一次性超额 SELL，并补齐旧 lot 已匹配完后的红股 defer 拆行。保留 BUY 来源用于身份/lot 归因，未知来源仍报错；只改分析，不改引擎 trades/equity。Kimi 的 100,000 股 BUY → 200,000 股 SELL 原探针现可完成导出，realized + mtm 与 NAV 增量均为 **897,100**；三时钟 defer 拆行端到端用例同样守恒。
+- P2-2 仅在 §1.6/§5 说明手工混合空身份部分卖出的两表差异，保留旧代码 FIFO 字节合同。
+- P2-3 身份模式的 lot 使用可空整数，CSV 为 `0`/`1` 而非 `0.0`/`1.0`；只向有身份的分析包追加独立字段说明，原 `csv-analysis-fields.txt` 不改。
+- 新增红股/归因 13 项、整数/说明 7 项测试，分析专项 **35 passed**；四 gates、ruff 通过，完整 CI **3434 passed、67 skipped、24 deselected、10 warnings**。主 baseline 原字节检查和 113 项 baseline 专项通过，全部 14 份已有 fixture（含旧分析快照）不变；无身份/全空身份两组各十份分析文件同路径原始 bytes 相等。
+- 相对 `6b72b54` 再跑只读整仓源码 162 组对照：完整 trades（**含 reason**）、equity 字节和现金全部一致，reason 差异 **0**。§8 相对 master 的 28 条 reason 修正仍仅属于前一提交。

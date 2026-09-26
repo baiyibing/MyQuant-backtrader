@@ -6,12 +6,51 @@ from dataclasses import asdict, replace
 
 import pytest
 
+from backtest.research import csv_ledger
+from backtest.research.ashare_exdiv_economics import ExDivEvent
 from backtest.research.ashare_volume_cap import BucketVolume
 from backtest.research.csv_ledger import exit_positions
 from backtest.research.csv_strategy_books import BOOKS as REGISTERED_BOOKS
 from tests.test_s8_independent_positions import (
     CODE, LADDER_BOOKS, MODES, _buys, _ds, _no_exit, _pid, _run, _sells,
 )
+
+
+def _restore_previous_bonus_tracking(monkeypatch):
+    """Reproduce the pre-fix marker rules, leaving all settlement code intact."""
+    group_sell = csv_ledger._sell_s8_group
+
+    def previous_bonus_marker(st, code, pos, px, day, reason, **kwargs):
+        if st.exdiv_economics is not None:
+            pos.group.t1_deferred_bonus_lots.update(
+                p.lot_id for p in pos.lots
+                if csv_ledger._locked_bonus(st.exdiv_economics, p, csv_ledger._ymd(day))
+            )
+        return group_sell(st, code, pos, px, day, reason, **kwargs)
+
+    def previous_pending_exit(pos, value):
+        if value and not pos.group.first_lot.pending_exit:
+            pos.group.exit_day_idx = pos.day_i
+        elif not value:
+            pos.group.exit_day_idx = None
+            pos.group.t1_deferred_bonus_lots.clear()
+        pos.group.first_lot.pending_exit = value
+
+    monkeypatch.setattr(csv_ledger, "_sell_s8_group", previous_bonus_marker)
+    monkeypatch.setattr(
+        csv_ledger.IndependentExitPosition, "pending_exit",
+        csv_ledger.IndependentExitPosition.pending_exit.setter(previous_pending_exit),
+    )
+
+
+def _assert_only_reasons_can_differ(corrected, previous):
+    def without_reason(st):
+        return [{k: v for k, v in t.items() if k != "reason"} for t in st.trades]
+
+    assert without_reason(corrected) == without_reason(previous)
+    assert corrected.cash == previous.cash
+    assert corrected.equity_curve == previous.equity_curve
+    assert corrected.stats == previous.stats
 
 
 @pytest.mark.parametrize("mode", MODES)
@@ -152,6 +191,90 @@ def test_daily_add_close_limit_down_marks_only_shares_locked_on_original_exit_da
         initial["lot"]: initial["shares"], add["lot"]: add["shares"],
     }
     assert CODE not in st.positions
+
+
+@pytest.mark.parametrize("mode", MODES)
+@pytest.mark.parametrize("ex_day", (1, 2), ids=("original_exit_day", "during_defer"))
+def test_bonus_t1_marker_uses_original_exit_day_without_changing_fills(mode, ex_day, monkeypatch):
+    # On day 1 the original-exit case sells old shares and retains its bonus.
+    # In the later-ex-date case the exit waits: daily schedules the next open,
+    # while minute capacity prevents day-1 fills. Day 2's new bonus lock must
+    # not turn a previously sellable lot into an original-day T+1 deferral.
+    prices = [10., 4.5, 4.6] if ex_day == 1 else [10., 10., 5., 5.1]
+    options = {
+        "exdiv": {CODE: {_ds(ex_day): .5}},
+        "exdiv_economics": {
+            (CODE, _ds(ex_day)): ExDivEvent("bonus", 1, 0, _ds(ex_day), _ds(ex_day)),
+        },
+        "take_profit": _no_exit if ex_day == 1 else lambda *_: "trail:test_pending",
+    }
+    if mode != "daily" and ex_day == 2:
+        volumes = {
+            (CODE, _ds(i), hm): BucketVolume(
+                0 if i == 1 else 100_000, hm, "raw_shares_incremental",
+            )
+            for i in range(len(prices)) for hm in (570, 585, 895, 900)
+        }
+        options.update(participation_rate=1, volume_for_bucket=volumes)
+    corrected = _run(mode, "version8", prices, [0], **options)
+    sells = _sells(corrected)
+    assert [(t["date"], t["price"], t["shares"]) for t in sells] == [
+        (_ds(ex_day), prices[ex_day], 100_000),
+        (_ds(ex_day + 1), prices[ex_day + 1], 100_000),
+    ]
+    reason = "stop_loss:gap_open" if ex_day == 1 else "trail:test_pending"
+    assert [t["reason"] for t in sells] == [
+        reason, reason + ("|t1_deferred" if ex_day == 1 else ""),
+    ]
+    assert CODE not in corrected.positions
+
+    _restore_previous_bonus_tracking(monkeypatch)
+    previous = _run(mode, "version8", prices, [0], **options)
+    _assert_only_reasons_can_differ(corrected, previous)
+    if ex_day == 1:
+        assert corrected.trades == previous.trades
+    else:
+        assert [t["reason"] for t in _sells(previous)] == [reason + "|t1_deferred"] * 2
+
+
+@pytest.mark.parametrize("list_day", (1, 2), ids=("unlock_before_first_fill", "still_locked_at_first_fill"))
+def test_daily_pending_only_exit_snapshots_original_bonus_lock(list_day, monkeypatch):
+    # Daily profit-taking can latch an exit without calling _sell that day.
+    # Capture the original lock even if it expires before the first attempt.
+    reason = "trail:test_pending"
+    options = {
+        "take_profit": lambda *_: reason,
+        "exdiv": {CODE: {_ds(1): .5}},
+        "exdiv_economics": {
+            (CODE, _ds(1)): ExDivEvent("bonus", 1, 0, _ds(1), _ds(1), _ds(list_day)),
+        },
+    }
+    pending = _run("daily", "version8", [10., 5.], [0], **options)
+    pos = exit_positions(pending, CODE)[0]
+    assert not _sells(pending)
+    assert pos.pending_exit == reason
+    assert pos.group.exit_day_idx == 1
+    assert pos.group.t1_deferred_bonus_lots == {0}
+
+    prices = [10., 5., 5.1, 5.2]
+    corrected = _run("daily", "version8", prices, [0], **options)
+    sells = _sells(corrected)
+    expected = ([(_ds(2), 5.1, 200_000)] if list_day == 1 else [
+        (_ds(2), 5.1, 100_000), (_ds(3), 5.2, 100_000),
+    ])
+    assert [(t["date"], t["price"], t["shares"]) for t in sells] == expected
+    assert {t["reason"] for t in sells} == {reason + "|t1_deferred"}
+    assert CODE not in corrected.positions
+
+    _restore_previous_bonus_tracking(monkeypatch)
+    previous = _run("daily", "version8", prices, [0], **options)
+    _assert_only_reasons_can_differ(corrected, previous)
+    if list_day == 1:
+        # The old implementation also missed an original-day lock once it had
+        # expired; fixing that attribution changes only this reason suffix.
+        assert [t["reason"] for t in _sells(previous)] == [reason]
+    else:
+        assert corrected.trades == previous.trades
 
 
 @pytest.mark.parametrize("mode", ("minute_off", "minute_on"))
