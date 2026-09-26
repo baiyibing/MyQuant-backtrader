@@ -459,6 +459,8 @@ def execute_buy(
     at: int | None = None,
     position_id: str | None = None,
     entry_signal_date: str | None = None,
+    merge_lot: Position | None = None,
+    hm: int | None = None,
 ) -> bool:
     """常规/追买共用；open 调用方显式传 at，默认仍为 bucket 收盘。"""
     if px <= 0:
@@ -477,13 +479,26 @@ def execute_buy(
         )
         position_id = position_id or f"{code}@{entry_signal_date}"
         group = policy["groups"].get(position_id)
+        if merge_lot is not None and (
+            not isinstance(merge_lot, IndependentPosition)
+            or merge_lot.position_id != position_id
+            or merge_lot.entry_signal_date != entry_signal_date
+            or group is None or group.first_lot is not merge_lot
+        ):
+            raise ValueError("merge_lot must be the same signal position's initial lot")
         if group is not None and (
             group.closed or group.first_lot.pending_exit
             or reason == "pool" or reason.startswith("chase")
+            or (reason == "pool:tail_window" and merge_lot is None)
         ):
             return False  # One initial fill per source signal, even if called twice.
         if reason.startswith("add:") and group is None:
             raise ValueError(f"price add requires an open position_id: {position_id}")
+    if merge_lot is not None and (
+        merge_lot.code != code or merge_lot.entry_idx != entry_idx
+        or not any(lot is merge_lot for lot in st.positions.get(code, []))
+    ):
+        raise ValueError("merge_lot must be an existing same-code, same-day buy lot")
     if shares_override is None:
         shares, supp = _buy_size(per, px)
     else:
@@ -522,33 +537,43 @@ def execute_buy(
     st.stats["supplementary_used"] += supp
     st.stats["invested_notional"] += notional
     lots = st.positions.setdefault(code, [])
-    lot_id = lots[-1].lot_id + 1 if lots else 0
-    if policy is not None:
-        lot_id = group.next_lot_id if group is not None else 0
-    position_type = IndependentPosition if policy is not None else Position
     identity = (
         {"position_id": position_id, "entry_signal_date": entry_signal_date}
         if policy is not None else {}
     )
-    pos = position_type(
-        code,
-        shares,
-        px,
-        entry_idx,
-        px,
-        lot_id=lot_id,
-        ride_with=ride_with,
-        is_step=bool(is_step) or reason == "add:step20",
-        **identity,
-    )
-    lots.append(pos)
-    if policy is not None:
-        if group is None:
-            policy["groups"][position_id] = IndependentGroup(
-                code, entry_signal_date, policy["name_budget"], pos,
-            )
-        else:
-            group.next_lot_id += 1
+    if merge_lot is None:
+        lot_id = lots[-1].lot_id + 1 if lots else 0
+        if policy is not None:
+            lot_id = group.next_lot_id if group is not None else 0
+        position_type = IndependentPosition if policy is not None else Position
+        pos = position_type(
+            code,
+            shares,
+            px,
+            entry_idx,
+            px,
+            lot_id=lot_id,
+            ride_with=ride_with,
+            is_step=bool(is_step) or reason == "add:step20",
+            **identity,
+        )
+        lots.append(pos)
+        if policy is not None:
+            if group is None:
+                policy["groups"][position_id] = IndependentGroup(
+                    code, entry_signal_date, policy["name_budget"], pos,
+                )
+            else:
+                group.next_lot_id += 1
+    else:
+        lot_id = merge_lot.lot_id
+        merge_lot.cost = ((merge_lot.cost * merge_lot.shares + px * shares)
+                          / (merge_lot.shares + shares))
+        merge_lot.shares += shares
+        # Children are one T+0 lot: keep the first fill's peak and its -1 clock.
+        # The original scanner starts updating that peak only from T+1.
+        # The group's first_lot remains this object, so its price-add anchor is
+        # the weighted initial-lot cost known at the time of the add decision.
     st.trades.append(
         {
             "date": _ymd(day),
@@ -565,9 +590,12 @@ def execute_buy(
             **identity,
         }
     )
+    if hm is not None:
+        # Opt-in tail fills carry their execution clock; OFF keeps its columns.
+        st.trades[-1]["hm"] = int(hm)
     record_fill(st, st.trades[-1], cash_before)
     st.stats["buys"] += 1
-    if lot_id > 0:
+    if lot_id > 0 and merge_lot is None:
         st.stats["add_lots"] += 1
     if reason.startswith("chase"):
         st.stats["chase_buy"] += 1

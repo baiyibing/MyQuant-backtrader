@@ -15,6 +15,7 @@ import sys
 import time
 from dataclasses import dataclass, field
 from datetime import date, timedelta
+from math import isfinite
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
@@ -55,6 +56,15 @@ from backtest.research.ashare_session import (
 from backtest.research.csv_pool import load_pool_day_map, load_pool_names_by_day
 from backtest.research.ashare_exdiv_economics import EconomicLookup, ExDivEconomics
 from backtest.research.minute_audit import audit_scope, record_fill, write_audit
+from backtest.research.tail_window_buy import (
+    TAIL_MINUTES,
+    TAIL_START,
+    TailParent,
+    resolve_tail_volume_unit,
+    tail_policy,
+    tail_quote,
+    validate_tail_options,
+)
 from common.infra.data_root import resolve_index_daily_root
 from oskh_data.lake_kind import classify_daily_lake_kind
 from oskh_data.symbol_format import to_canonical_symbol, to_partition_key
@@ -302,6 +312,46 @@ def _sell_lots(state: SimResult, position: Position, day: date, hm: int, price: 
     return sold
 
 
+def _buy_tail_slice(state: SimResult, parent: TailParent, symbol: str, day: date,
+                    hm: int, row: Mapping[str, Any], volume_unit: str,
+                    fee: FeeSchedule) -> None:
+    quote = tail_quote(row, hm, volume_unit)
+    if quote is None:
+        _event(state, day, symbol, hm, "skip", 0, None, "skip_tail_quote")
+        return
+    shares = parent.allocation(quote, state.cash, fee.debit_buy)
+    if not shares:
+        _event(state, day, symbol, hm, "skip", 0, quote.price, "skip_tail_allocation")
+        return
+    if state.volume_cap is not None:
+        key = (symbol, day.strftime("%Y%m%d"), hm)
+        shares, skip = state.volume_cap.clamp(key, hm, shares, buy=True)
+        if not shares:
+            _event(state, day, symbol, hm, "skip", 0, quote.price, skip)
+            return
+    cash_before = state.cash
+    state.cash -= fee.debit_buy(shares * quote.price)
+    position = state.positions.get(symbol)
+    if position is None:
+        position = Position(symbol=symbol, entry_A=quote.price, last_add_date=day,
+                            peak=quote.price)
+        state.positions[symbol] = position
+    previous_shares = position.shares
+    position.avg_cost = (position.avg_cost * previous_shares + quote.price * shares) / (previous_shares + shares)
+    trial_lot = next((lot for lot in position.lots if lot.buy_date == day and lot.kind == "trial"), None)
+    if trial_lot is None:
+        position.lots.append(Lot(shares, day, quote.price, "trial"))
+    else:
+        trial_lot.price = (trial_lot.price * trial_lot.shares + quote.price * shares) / (trial_lot.shares + shares)
+        trial_lot.shares += shares
+    position.last_add_date = day
+    # Merged T+0 children change size and weighted cost, never the initial peak.
+    parent.book(shares, quote.price)
+    _event(state, day, symbol, hm, "buy", shares, quote.price, "buy:trial", cash_before=cash_before)
+    if state.volume_cap is not None:
+        state.volume_cap.consume(key, shares)
+
+
 def _is_frame_map(minute_bars: Any) -> bool:
     if not isinstance(minute_bars, Mapping) or not minute_bars:
         return False
@@ -343,6 +393,8 @@ def _run_chronological_day(
     names: Mapping[str, str] | None,
     names_by_day: Mapping[str, Mapping[str, str]] | None,
     blocked_new: bool, fee: FeeSchedule, audit_sink: Any,
+    tail_window_buy: bool = False,
+    tail_volume_unit: str | None = "shares",
 ) -> None:
     """Merge v7 bars; timer decisions observe the completed buy phase.
 
@@ -351,8 +403,12 @@ def _run_chronological_day(
     reference/economic work snapshots only positions held before any new buy.
     Missing-bar entitlement behavior deliberately remains the legacy X-13 rule.
     """
+    if tail_window_buy:
+        tail_volume_unit = resolve_tail_volume_unit(tail_volume_unit)
     ymd = day.strftime("%Y%m%d")
     cursors: list[_DayCursor] = []
+    tail_parents: dict[str, TailParent] = {}
+    tail_attempted: set[tuple[str, int]] = set()
     by_hm: dict[int, list[tuple[_DayCursor, int, dict[str, Any]]]] = {}
     for symbol in ordered:
         source = symbols_today.get(symbol, [])
@@ -360,7 +416,8 @@ def _run_chronological_day(
         records = [row for row, valid in zip(source, keep) if valid]
         if not records:
             if symbol in pool:
-                _event(state, day, symbol, None, "skip", 0, None, "skip_no_1455")
+                _event(state, day, symbol, None, "skip", 0, None,
+                       "skip_no_tail_start" if tail_window_buy else "skip_no_1455")
             continue
         position = state.positions.get(symbol)
         if position is not None:
@@ -376,7 +433,17 @@ def _run_chronological_day(
         for index, row in enumerate(records):
             by_hm.setdefault(int(row["hm"]), []).append((cursor, index, row))
 
+    if tail_window_buy:
+        for tail_hm in TAIL_MINUTES:
+            by_hm.setdefault(tail_hm, [])
     for hm, rows in sorted(by_hm.items()):
+        duplicate_tail_symbols: set[str] = set()
+        if tail_window_buy and hm in TAIL_MINUTES:
+            seen: set[str] = set()
+            for cursor, _, row in rows:
+                if cursor.symbol in seen or row.get("_tail_duplicate", False):
+                    duplicate_tail_symbols.add(cursor.symbol)
+                seen.add(cursor.symbol)
         # As in the original scanner, this bar's high is observed before its
         # gap-open stop. It never advances a different, later minute.
         for cursor, _, row in rows:
@@ -384,7 +451,9 @@ def _run_chronological_day(
             open_px = float(row.get("open", close_px))
             last_prices[cursor.symbol] = close_px
             position = state.positions.get(cursor.symbol)
-            if position is not None:
+            if position is not None and cursor.symbol not in tail_parents:
+                # ON trial lots retain their initial fill's peak on T+0.
+                # Preexisting positions and OFF retain the original scan.
                 position.peak = max(position.peak, float(row.get("high", max(open_px, close_px))))
 
         # Independent stop sells precede close buys. Opening fills settle first;
@@ -426,9 +495,56 @@ def _run_chronological_day(
                 if symbol not in state.positions:
                     cleared_today.add(symbol)
 
+            # The opening quote fixes quantity before the completed 14:30 bar
+            # exists; cash only constrains each later close-phase child fill.
+            if tail_window_buy and hm == TAIL_START and phase == "open":
+                for cursor, _, row in rows:
+                    symbol = cursor.symbol
+                    if (symbol not in pool or symbol in state.positions
+                            or symbol in cleared_today or cursor.open_checked):
+                        continue
+                    cursor.open_checked = True
+                    with audit_scope(audit_sink, decision_hm=hm, phase="open"):
+                        if symbol in duplicate_tail_symbols:
+                            _event(state, day, symbol, hm, "skip", 0, None, "skip_duplicate_tail_start")
+                        elif blocked_new:
+                            _event(state, day, symbol, hm, "skip", 0, None, "skip_index_gate")
+                        elif cursor.previous is None:
+                            _event(state, day, symbol, hm, "skip", 0, None, "skip_no_prev_close")
+                        elif cursor.limits is None:
+                            _event(state, day, symbol, hm, "skip", 0, None, "skip_unknown_board")
+                        else:
+                            try:
+                                opening = float(row["open"])
+                            except (KeyError, TypeError, ValueError):
+                                opening = 0.0
+                            if isfinite(opening) and opening > 0:
+                                tail_parents[symbol] = TailParent.from_budget(NAME_BUDGET * TRIAL_FRACTION, opening)
+                            else:
+                                _event(state, day, symbol, hm, "skip", 0, None, "skip_no_tail_start")
+
+        if tail_window_buy and hm in TAIL_MINUTES:
+            present = {cursor.symbol for cursor, _, _ in rows}
+            for symbol in tail_parents:
+                if symbol not in present:
+                    with audit_scope(audit_sink, decision_hm=hm, phase="close"):
+                        _event(state, day, symbol, hm, "skip", 0, None, "skip_tail_quote")
         for cursor, _, row in rows:
             symbol, close_px = cursor.symbol, float(row["close"])
             with audit_scope(audit_sink, decision_hm=hm, phase="close"):
+                if (tail_window_buy and hm in TAIL_MINUTES and symbol in tail_parents
+                        and (symbol, hm) not in tail_attempted):
+                    tail_attempted.add((symbol, hm))
+                    quote = (None if symbol in duplicate_tail_symbols
+                             else tail_quote(row, hm, tail_volume_unit))
+                    if symbol in duplicate_tail_symbols:
+                        _event(state, day, symbol, hm, "skip", 0, None, "skip_duplicate_tail_bar")
+                    elif quote is not None and skip_buy_at_limit(quote.price, cursor.limits):
+                        _event(state, day, symbol, hm, "skip", 0, quote.price, "skip_limit_up")
+                    elif quote is not None and defer_sell_at_limit(quote.price, cursor.limits):
+                        _event(state, day, symbol, hm, "skip", 0, quote.price, "skip_limit_down")
+                    else:
+                        _buy_tail_slice(state, tail_parents[symbol], symbol, day, hm, row, tail_volume_unit, fee)
                 position = state.positions.get(symbol)
                 if position is not None and in_add_window(hm):
                     ladder = ladder_decision(position.stage, close_px, entry_a=position.entry_A)
@@ -443,7 +559,7 @@ def _run_chronological_day(
                                        f"buy:{ladder.action}", ladder.action, fee=fee)):
                             position.stage = {"add_a104": FOUR, "add_a108": SIX,
                                               "add_a112": EIGHT, "add_a116": FULL}[ladder.action]
-                if (hm == 895 and symbol in pool and symbol not in state.positions
+                if (not tail_window_buy and hm == 895 and symbol in pool and symbol not in state.positions
                         and symbol not in cleared_today):
                     cursor.open_checked = True
                     if blocked_new:
@@ -480,6 +596,10 @@ def _run_chronological_day(
 
     for cursor in cursors:
         symbol = cursor.symbol
+        if tail_window_buy:
+            if symbol in pool and symbol not in state.positions and not cursor.open_checked:
+                _event(state, day, symbol, None, "skip", 0, None, "skip_no_tail_start")
+            continue
         if (symbol in pool and symbol not in state.positions and not cursor.open_checked
                 and not any(int(row["hm"]) == 895 for row in cursor.records)):
             _event(state, day, symbol, None, "skip", 0, None, "skip_no_1455")
@@ -496,6 +616,8 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
                 participation_rate: float | None = None,
                 volume_for_bucket: VolumeLookup | None = None,
                 fix_minute_cash_order: bool = False,
+                tail_window_buy: bool = False,
+                tail_volume_unit: str | None = "shares",
                 audit_sink: Any = None) -> SimResult:
     """Run the matcher; optional cap uses caller-attested completed minutes.
 
@@ -504,6 +626,9 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
     exdiv_economics accepts explicit ExDivEvents for raw bars; None retains the
     baseline. Bonus lots acquire list_date and use the existing T+1 predicate.
     """
+    validate_tail_options(tail_window_buy, fix_minute_cash_order, tail_volume_unit)
+    if tail_window_buy:
+        tail_volume_unit = resolve_tail_volume_unit(tail_volume_unit)
     frames = minute_bars if _is_frame_map(minute_bars) else None
     minutes = {} if frames is not None else _minute_records(minute_bars)
     closes = _daily_closes(daily_bars)
@@ -548,6 +673,8 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
                 closes, last_prices, cleared_today, exdiv=exdiv, names=names,
                 names_by_day=names_by_day, blocked_new=gate.get(day, False), fee=fee,
                 audit_sink=audit_sink,
+                tail_window_buy=tail_window_buy,
+                tail_volume_unit=tail_volume_unit,
             )
         else:
             for symbol in ordered:
@@ -772,7 +899,22 @@ def _load_cli_bars(
     qlib_1min_root: Path | None = None,
     daily_source: str = "lake",
     qlib_day_root: Path | None = None,
+    tail_window_buy: bool = False,
 ) -> tuple[dict, dict]:
+    if tail_window_buy:
+        if minute_source != "lake" or daily_source != "lake":
+            raise ValueError("--tail-window-buy requires --minute-source lake and --daily-source lake with raw bars")
+        from backtest.research.ashare_bars import load_daily_closes, load_minute_from_lake
+
+        symbols = {symbol for pool in pool_days.values() for symbol in pool}
+        if not symbols:
+            return {}, {}
+        minute = load_minute_from_lake(
+            symbols, start.strftime("%Y%m%d"), end.strftime("%Y%m%d"),
+            include_volume=True, include_amount=True,
+        )
+        daily = load_daily_closes(symbols, start, end, source=daily_source, qlib_root=qlib_day_root)
+        return minute, daily
     # Shared with topk: bars_from_pool/load_session_bars dispatches lake to
     # one book-frame window (cache off), qlib_1min to the private compact path.
     bars = bars_from_pool(
@@ -798,6 +940,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--fix-minute-cash-order", action="store_true",
                         help="settle cash and positions chronologically (default off)")
+    parser.add_argument("--tail-window-buy", action="store_true",
+                        help="TWAP first buy 14:30-14:56 plus 15:00 auction; requires --fix-minute-cash-order (default off)")
+    parser.add_argument("--tail-volume-unit", choices=("shares", "lots"), default="shares",
+                        help="lake minute volume unit (default shares); lots multiplies volume by 100")
     parser.add_argument("--execution-audit-file", help="optional execution JSON sidecar; leaves CSVs unchanged")
     parser.add_argument("--cash-total", type=float, default=21_000_000.0)
     parser.add_argument("--output-dir")
@@ -821,6 +967,12 @@ def write_run_config(output: Path, config: dict) -> None:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    try:
+        validate_tail_options(args.tail_window_buy, args.fix_minute_cash_order, args.tail_volume_unit)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+    if args.tail_window_buy and (args.qlib_1min_root or args.minute_source != "lake" or args.daily_source != "lake"):
+        raise SystemExit("--tail-window-buy requires --minute-source lake and --daily-source lake with raw bars")
     pool_value = args.pool_dir or os.environ.get("OSKH_TURTLE_POOL_DIR")
     if not pool_value:
         raise SystemExit("--pool-dir or OSKH_TURTLE_POOL_DIR is required")
@@ -839,6 +991,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         qlib_1min_root=Path(args.qlib_1min_root) if args.qlib_1min_root else None,
         daily_source=args.daily_source,
         qlib_day_root=Path(args.qlib_day_root) if args.qlib_day_root else None,
+        **({"tail_window_buy": True} if args.tail_window_buy else {}),
     )
     source = f"minute={minute_source} daily={args.daily_source}"
     load_s = time.perf_counter() - load_t0
@@ -863,7 +1016,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                         start=start, end=end, exdiv=exdiv,
                         names=None if args.asof_pool_names else names,
                         names_by_day=names_by_day,
-                        fix_minute_cash_order=args.fix_minute_cash_order, audit_sink=audit)
+                        fix_minute_cash_order=args.fix_minute_cash_order,
+                        tail_window_buy=args.tail_window_buy,
+                        tail_volume_unit=args.tail_volume_unit, audit_sink=audit)
     sim_s = time.perf_counter() - sim_t0
     output = Path(args.output_dir or f"backtest_output/csv_minute_v7_{args.start}_{args.end}")
     write_run_artifacts(state, output)
@@ -875,6 +1030,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         "fallback_order_clock": "exact_quote_only_no_chase",
         "stable_order": "pool_then_opening_held_then_input_symbols",
     }
+    if not args.tail_window_buy:
+        config.pop("tail_window_buy", None)
+        config.pop("tail_volume_unit", None)
+    else:
+        config.update(tail_policy(args.tail_volume_unit))
     write_run_config(output, config)
     if args.execution_audit_file:
         write_audit(args.execution_audit_file, audit, engine="csv_minute_v7",

@@ -279,11 +279,16 @@ def run_pool_buys_day(
     volume_at: int | None = None,
     sold_today: set[str] | None = None,
     reference_price_for: Callable[[str, str], float] | None = None,
+    handle_planned_code: Callable[[str], bool] | None = None,
+    allocation_cash: float | None = None,
 ) -> None:
     """Pool buys for ``ds``; ``buy_quote_for`` supplies buy price + prev closes.
 
     ``planned_for_day(ds, held_codes)`` is optional (default None). When set, its
     return replaces the pool file list before capital ration — old books unchanged.
+    ``handle_planned_code(code)`` may consume one ordered slot (True), allowing
+    opt-in child orders to compete with normal pool adds in the same cash order.
+    ``allocation_cash`` restores the unsliced daily-quota basis for tail mode.
     """
     policy = s8_policy(st)
     independent = policy is not None
@@ -305,8 +310,11 @@ def run_pool_buys_day(
             raise ValueError(
                 f"cash_deploy_frac must be in (0, 1], got {cash_deploy_frac!r}"
             )
-        per = min(daily_quota, st.cash) * frac / _buy_denom(planned, planned_for_day)
+        cash_basis = st.cash if allocation_cash is None else allocation_cash
+        per = min(daily_quota, cash_basis) * frac / _buy_denom(planned, planned_for_day)
     for code in planned:
+        if handle_planned_code is not None and handle_planned_code(code):
+            continue
         if independent and f"{code}@{ds}" in policy["groups"]:
             continue
         if code in st.positions and not allow_add:
