@@ -1570,7 +1570,8 @@ def main(argv: Optional[list] = None) -> int:
                 "total_return_complete", "pit_anchor_validation", "source_hashes",
                 "validation_version", "cache_policy", "transform_metadata_sha256",
                 "transform_evidence_sha256", "source_snapshot_id", "source_file_hashes",
-                "source_paths", "provenance", "optional_factor", "input_absolute_tolerance",
+                "source_paths", "provenance", "optional_factor", "input_price_tolerance",
+                "input_price_tolerance_mode", "input_coefficient_tolerance",
                 "real_lake_precision_validated",
             ) if key in st.stats}
             if args.fix_s12_price_domain else {

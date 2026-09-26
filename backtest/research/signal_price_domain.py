@@ -24,13 +24,12 @@ from backtest.research.ma_infra import sma_asof
 from backtest.research.market_layer import as_datetime, utc_ms_range
 
 OHLC = ("open", "high", "low", "close")
-# Industry standard: relative tolerance 0.1% (10bp). Real lake prices are
-# cent-quantized; front→raw round-trip introduces rounding that absolute
-# 1e-10 cannot accommodate. 0.1% covers cent rounding across realistic price
-# ranges (0.005–0.5 yuan) while catching genuine domain errors.
-TOLERANCE = Decimal("0.001")
-TOLERANCE_MODE = "relative"
-VALIDATION_VERSION = "s12-price-domain-v2"
+PRICE_TICK = Decimal("0.01")
+PRICE_HALF_TICK = Decimal("0.005")
+PRICE_EPS = Decimal("1e-9")  # Tiny slack for stored float64 -> Decimal noise.
+COEFF_TOLERANCE = Decimal("1e-10")
+OHLC_TOLERANCE = Decimal("1e-10")
+VALIDATION_VERSION = "s12-price-domain-v3"
 _VALIDATED_CONTEXT = object()
 
 
@@ -54,12 +53,20 @@ def _decimal(value):
     return result
 
 
-def _same(left, right):
-    """Relative tolerance: |left - right| / max(|left|, |right|, 1) <= TOLERANCE."""
-    a, b = _decimal(left), _decimal(right)
-    diff = abs(a - b)
-    scale = max(abs(a), abs(b), Decimal(1))
-    return diff / scale <= TOLERANCE
+def _same_price(expected, observed):
+    """Compare an unrounded model price with a cent-quantized observation.
+
+    Raw and front inputs are both cent-quantized. The model A * raw + B
+    uses the stored raw input without rounding its result; only the observed
+    front price is rounded from that result, so the legitimate gap is at most
+    half a tick (plus float64 representation slack), at every price level.
+    """
+    return abs(_decimal(expected) - _decimal(observed)) <= PRICE_HALF_TICK + PRICE_EPS
+
+
+def _same_coefficient(left, right):
+    """Declared transform coefficients do not have price-quantization slack."""
+    return abs(_decimal(left) - _decimal(right)) <= COEFF_TOLERANCE
 
 
 def _day(value):
@@ -122,9 +129,10 @@ def _validate_frame(frame, *, code, domain, path="<memory>", minute=False):
             _fail(str(exc), code=code, day=_day(index), domain=domain, path=path)
         if any(value <= 0 for value in values.values()):
             _fail("non-positive OHLC", code=code, day=_day(index), domain=domain, path=path)
-        if values["high"] + TOLERANCE < max(values["open"], values["close"]):
+        # Same-domain OHLC ordering has no cross-domain rounding allowance.
+        if values["high"] + OHLC_TOLERANCE < max(values["open"], values["close"]):
             _fail("high below open/close", code=code, day=_day(index), domain=domain, path=path)
-        if "low" in values and values["low"] - TOLERANCE > min(values["open"], values["close"]):
+        if "low" in values and values["low"] - OHLC_TOLERANCE > min(values["open"], values["close"]):
             _fail("low above open/close", code=code, day=_day(index), domain=domain, path=path)
     if minute:
         for column, expected in (("ymd", frame.index.strftime("%Y%m%d")),
@@ -197,7 +205,7 @@ class S12PriceContext:
         if any(value <= 0 for value in values):
             _fail("non-positive reconstructed historical close", code=code, day=key[1])
         previous = values[-1] if values else None
-        reference = (float(previous.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+        reference = (float(previous.quantize(PRICE_TICK, rounding=ROUND_HALF_UP))
                      if previous is not None else None)
         if reference is not None and reference <= 0:
             _fail("non-positive rounded reference", code=code, day=key[1])
@@ -225,7 +233,7 @@ class S12PriceContext:
             theoretical.append((front - active["B"]) / active["A"])
         if not theoretical:
             return
-        reference = theoretical[-1].quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        reference = theoretical[-1].quantize(PRICE_TICK, rounding=ROUND_HALF_UP)
         if reference != _decimal(view.prev_ref_raw):
             _fail("input precision changes rounded session reference", code=code,
                   day=_day(day), domain="front/raw", path=self.raw_path_for(code))
@@ -299,19 +307,37 @@ def _automatic_transforms(front_daily, raw_daily, start):
     result = {}
     for code, raw in raw_daily.items():
         front = front_daily[code]
-        ratios = [_decimal(front.loc[day, "open"]) / _decimal(raw.loc[day, "open"])
-                  for day in raw.index]
-        anchor = ratios[0]
-        if any(abs(value - anchor) > TOLERANCE for value in ratios):
+        # Each rounded front OHLC observation bounds the same unrounded A*raw.
+        # Intersect all bounds, rather than comparing noisy front/raw ratios or
+        # fitting a different coefficient to each day's rounded open.
+        half_tick = PRICE_HALF_TICK + PRICE_EPS
+        lower, upper, common_ratio = None, None, None
+        ratios_equal = True
+        for day in raw.index:
+            for field in OHLC:
+                raw_price = _decimal(raw.loc[day, field])
+                front_price = _decimal(front.loc[day, field])
+                lo, hi = (front_price - half_tick) / raw_price, (front_price + half_tick) / raw_price
+                lower = lo if lower is None else max(lower, lo)
+                upper = hi if upper is None else min(upper, hi)
+                ratio = front_price / raw_price
+                if common_ratio is None:
+                    common_ratio = ratio
+                elif ratio != common_ratio:
+                    ratios_equal = False
+        if lower > upper:
             _fail("changing ratio requires an explicit price transform file", code=code)
+        # Retain exact proportional fixtures; otherwise use one feasible A.
+        coefficient = common_ratio if ratios_equal else (lower + upper) / 2
         before = raw.loc[raw.index < _stamp(start)] if start else raw.iloc[:0]
+        # A within-bar range is same-domain evidence, not a rounding residual.
         informative = any(max(_decimal(row[key]) for key in OHLC)
-                          - min(_decimal(row[key]) for key in OHLC) > TOLERANCE
+                          - min(_decimal(row[key]) for key in OHLC) > OHLC_TOLERANCE
                           for _, row in before.iterrows())
         if not informative:
             _fail("B=0 not identifiable before first decision; provide transform evidence", code=code)
-        for day, ratio in zip(raw.index, ratios):
-            result[(code, _day(day))] = {"A": ratio, "B": Decimal(0)}
+        for day in raw.index:
+            result[(code, _day(day))] = {"A": coefficient, "B": Decimal(0)}
     return result
 
 
@@ -325,7 +351,8 @@ def _validate_pair_math(front_daily, raw_daily, transforms):
             transform = transforms[(code, _day(day))]
             for field in OHLC:
                 expected = transform["A"] * _decimal(raw.loc[day, field]) + transform["B"]
-                if not _same(expected, front.loc[day, field]):
+                # Unrounded A*raw+B is compared with stored, rounded front.
+                if not _same_price(expected, front.loc[day, field]):
                     _fail(f"A/B do not explain paired {field}", code=code, day=_day(day),
                           domain="front/raw")
 
@@ -377,8 +404,10 @@ def _validate_certificate(front_daily, raw_daily, transforms, provenance, eviden
             if len(declared) != len(history):
                 _fail("incomplete independent PIT history", code=code, day=session)
             for (day, value), observed in zip(history.items(), declared):
-                reconstructed = (_decimal(value) - transform["B"]) / transform["A"]
-                if _day(observed["date"]) != _day(day) or not _same(reconstructed, observed["close"]):
+                # Check in front space: inverse reconstruction would magnify
+                # front's half-tick rounding error by 1/A in raw space.
+                expected_front = transform["A"] * _decimal(observed["close"]) + transform["B"]
+                if _day(observed["date"]) != _day(day) or not _same_price(expected_front, value):
                     _fail("independent PIT reconstruction differs", code=code, day=session)
         return "hash_bound_independent_pit_views"
     if not provenance.get("generated_at"):
@@ -397,16 +426,19 @@ def _validate_certificate(front_daily, raw_daily, transforms, provenance, eviden
         if _day(transform.get("reconstructed_asof", "19000101")) != session:
             _fail("reconstructed_asof must equal session", code=code, day=session)
         base = base_transforms[key]
-        if not _same(transform["A"], scale * base["A"]) or not _same(
+        # A/B declarations are coefficients, so preserve their strict bound.
+        if not _same_coefficient(transform["A"], scale * base["A"]) or not _same_coefficient(
                 transform["B"], scale * base["B"] + shift):
             _fail("common anchor coefficients do not cancel", code=code, day=session)
         for field in OHLC:
             old = _decimal(base_rows[key][field])
             actual = front_daily[code].loc[_stamp(session), field]
-            if not _same(actual, scale * old + shift):
+            # Common-anchor model -> rounded front observation.
+            if not _same_price(scale * old + shift, actual):
                 _fail("front history is not a common affine anchor transform", code=code,
                       day=session, domain="front")
-            if not _same(old, base["A"] * _decimal(raw_daily[code].loc[_stamp(session), field]) + base["B"]):
+            # Base model -> rounded base-front observation.
+            if not _same_price(base["A"] * _decimal(raw_daily[code].loc[_stamp(session), field]) + base["B"], old):
                 _fail("base transform does not explain raw bars", code=code, day=session)
     events = _evidence_rows(evidence.get("events", []), "event")
     for code, raw in raw_daily.items():
@@ -420,13 +452,15 @@ def _validate_certificate(front_daily, raw_daily, transforms, provenance, eviden
                     _fail("transform transition lacks confirmed event evidence", code=code, day=key[1])
                 for field, value in (("from_A", prior["A"]), ("from_B", prior["B"]),
                                      ("to_A", current["A"]), ("to_B", current["B"])):
-                    if not _same(event.get(field), value):
+                    # Event A/B values certify coefficients, not rounded prices.
+                    if not _same_coefficient(event.get(field), value):
                         _fail("event transition coefficients differ", code=code, day=key[1])
                 previous = front_daily[code].loc[front_daily[code].index < day, "close"].iloc[-1]
                 active = transforms[key]
-                reference = ((_decimal(previous) - active["B"]) / active["A"]).quantize(
-                    Decimal("0.01"), rounding=ROUND_HALF_UP)
-                if not _same(reference, event.get("reference_raw")):
+                reference = (_decimal(previous) - active["B"]) / active["A"]
+                # The event reference is the cent-rounded raw reconstruction;
+                # leave the expected reconstruction unrounded for this check.
+                if not _same_price(reference, event.get("reference_raw")):
                     _fail("confirmed event reference differs", code=code, day=key[1])
             prior = current
     return "common_affine_certificate_full_pit_unverified"
@@ -463,7 +497,9 @@ def build_s12_price_context(front_daily, raw_daily, *, minute_bars, metadata,
         "transform_model": model, "implicit_exdiv_map": False,
         "nav_comparability": "raw_accounting_only", "pit_anchor_validation": pit_status,
         "validation_version": VALIDATION_VERSION,
-        "input_absolute_tolerance": str(TOLERANCE), "input_tolerance_mode": TOLERANCE_MODE,
+        "input_price_tolerance": f"{PRICE_HALF_TICK:f}+{PRICE_EPS:.0e}",
+        "input_price_tolerance_mode": "absolute_half_tick_price_space",
+        "input_coefficient_tolerance": f"{COEFF_TOLERANCE:.0e}",
         "real_lake_precision_validated": False,
         "cache_policy": "bypass_legacy_window_cache",
     })
@@ -574,8 +610,11 @@ def _validate_optional_factor(front, raw, paths_to_recheck):
             continue
         expected_raw = raw[row.code].loc[row.day, "close"]
         expected_front = front[row.code].loc[row.day, "close"]
-        if not all((_same(row.close_none, expected_raw), _same(row.close_front, expected_front),
-                    _same(row.cumulative_adj_factor, _decimal(expected_front) / _decimal(expected_raw)))):
+        # Stored closes compare in price space; a full cent discrepancy fails.
+        # The factor is a coefficient, but front/raw is a ratio of rounded
+        # prices: validate factor*raw against rounded front instead of ratios.
+        if not all((_same_price(expected_raw, row.close_none), _same_price(expected_front, row.close_front),
+                    _same_price(_decimal(row.cumulative_adj_factor) * _decimal(expected_raw), expected_front))):
             _fail("factor file does not match real paired closes", code=row.code,
                   day=_day(row.day), domain="factor", path=path)
     paths_to_recheck[path] = initial_hash

@@ -61,15 +61,17 @@ def _checked_frame(frame, *, code, domain, path, end) -> pd.DataFrame:
         raise _error(code, domain, path, "duplicate daily date", frame.index[duplicate][0])
     if "close" not in frame.columns:
         raise _error(code, domain, path, "missing close column")
-    # Industry standard (2026-09-26, Qlib/JoinQuant/Zipline convention):
-    # suspended-day rows (zero volume, zero/NaN price) are per-symbol skip,
-    # not batch reject. With volume info: validate only nonzero-volume rows.
-    # Without volume (in-memory cross-check): nonfinite is always corruption,
-    # but nonpositive (0/negative) may be suspension — skip that check.
-    has_volume = "volume" in frame.columns
-    if has_volume:
-        tradable = frame["volume"].to_numpy(dtype=float) != 0
-        tradable &= np.isfinite(frame["volume"].to_numpy(dtype=float))
+    # Only finite zero volume proves suspension. Without volume, every row
+    # must satisfy the price contract; corrupt volume cannot exempt a row.
+    if "volume" in frame.columns:
+        try:
+            volume = frame["volume"].to_numpy(dtype=float)
+        except (TypeError, ValueError) as exc:
+            raise _error(code, domain, path, "invalid volume") from exc
+        invalid_volume = ~np.isfinite(volume) | (volume < 0)
+        if invalid_volume.any():
+            raise _error(code, domain, path, "invalid volume", frame.index[invalid_volume][0])
+        tradable = volume != 0
     else:
         tradable = np.ones(len(frame), dtype=bool)
     columns = [name for name in OHLC if name in frame.columns]
@@ -78,22 +80,11 @@ def _checked_frame(frame, *, code, domain, path, end) -> pd.DataFrame:
             values = frame.loc[tradable, columns].to_numpy(dtype=float)
         except (TypeError, ValueError) as exc:
             raise _error(code, domain, path, "nonnumeric price") from exc
-        if len(values) > 0:
-            bad = ~np.isfinite(values)
-            if not has_volume:
-                # In-memory: NaN/inf is corruption; 0/negative may be suspension
-                bad_tradable = bad.any(axis=1)
-                if bad_tradable.any():
-                    raise _error(code, domain, path, "nonfinite price",
-                                 frame.index[tradable][bad_tradable][0])
-            else:
-                # Parquet with volume: both nonfinite and nonpositive on
-                # trading days are corruption; zero-volume rows are suspension
-                bad_tradable = (bad | (values <= 0)).any(axis=1)
-                if bad_tradable.any():
-                    raise _error(code, domain, path, "nonfinite or nonpositive price on tradable day",
-                                 frame.index[tradable][bad_tradable][0])
-    if has_volume and all(name in frame.columns for name in OHLC):
+        bad_tradable = (~np.isfinite(values) | (values <= 0)).any(axis=1)
+        if bad_tradable.any():
+            raise _error(code, domain, path, "nonfinite or nonpositive price on tradable day",
+                         frame.index[tradable][bad_tradable][0])
+    if all(name in frame.columns for name in OHLC):
         op, high, low, close = (frame.loc[tradable, name].to_numpy(dtype=float) for name in OHLC)
         if len(op) > 0:
             invalid = (high < np.maximum(op, close)) | (low > np.minimum(op, close)) | (low > high)
@@ -161,10 +152,9 @@ def _read_partition(code: str, path: Path, *, domain: str, start, end):
         # daily observations are rejected rather than silently keep-last.
         frame = _checked_frame(frame.sort_index(), code=code, domain=domain, path=path, end=end)
         if "volume" in frame:
+            # _checked_frame has rejected invalid volume. Keep suspended rows
+            # in source counts, but exclude them from signal bars / MA windows.
             volume = frame["volume"].to_numpy(dtype=float)
-            bad = ~np.isfinite(volume) | (volume < 0)
-            if bad.any():
-                raise _error(code, domain, path, "invalid volume", frame.index[bad][0])
             effective = frame.loc[volume != 0, list(OHLC)].astype(float)
         else:
             effective = frame.loc[:, list(OHLC)].astype(float)
