@@ -836,7 +836,7 @@ def run_modeb_library(
     try:
         from backtest.research.qlib_bin_1min import load_qlib_bin_1min_bars
         from backtest.research.fullstrat_research_hooks import run_modeb
-        from backtest.research.csv_pool import load_pool_day_map
+        from backtest.research.csv_pool import PoolDuplicateCodeError, load_pool_day_map
     except Exception as exc:  # pragma: no cover - import env
         row["note"] = f"import_failed:{exc}"
         return row
@@ -845,6 +845,8 @@ def run_modeb_library(
     end_d = date(int(end[:4]), int(end[4:6]), int(end[6:8]))
     try:
         pools = load_pool_day_map(pool_dir, start, end, key="ymd", empty_in_map=False)
+    except PoolDuplicateCodeError:
+        raise
     except Exception as exc:
         row["note"] = f"pool_load_failed:{exc}"
         return row
@@ -876,6 +878,8 @@ def run_modeb_library(
             clock_mode=clock_mode,
             slip_bp_per_side=slip_bp_per_side,
         )
+    except PoolDuplicateCodeError:
+        raise
     except Exception as exc:
         row["note"] = f"run_modeb_failed:{exc}"
         return row

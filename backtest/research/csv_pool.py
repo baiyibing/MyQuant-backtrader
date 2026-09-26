@@ -13,36 +13,16 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Iterator, List, Literal, Tuple
 
+from common.infra.pool_csv import (
+    PoolDuplicateCodeError,
+    check_pool_duplicate,
+    iter_pool_csv_rows as _iter_pool_csv_rows,
+    pool_cell_to_bare as _cell_to_bare,
+)
 from oskh_core.a_share_symbol_normalize import canonical_from_bare_code
 
-_BARE_CODE_RE = re.compile(r"(\d{6})")
 _EXACT_BARE_CODE_RE = re.compile(r"\d{6}")
 _POOL_FILENAME_RE = re.compile(r"\d{8}\.csv")
-_HEADER_FIRST = frozenset(
-    {"代码", "code", "symbol", "证券代码", "ticker", "stock", "stock_code"}
-)
-
-
-def _cell_to_bare(raw: str) -> str:
-    text = str(raw or "").strip().strip('"').strip("'")
-    if text.startswith("="):
-        text = text[1:].strip().strip('"').strip("'")
-    match = _BARE_CODE_RE.search(text)
-    return match.group(1) if match else ""
-
-
-def _iter_pool_csv_rows(path: Path) -> Iterator[tuple[int, List[str]]]:
-    """Yield non-comment data rows using the parser's shared header rules."""
-    text = Path(path).read_text(encoding="utf-8-sig")
-    for i, line in enumerate(text.splitlines()):
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        parts = [p.strip() for p in line.split(",")]
-        first = parts[0] if parts else ""
-        if i == 0 and first.strip('"').strip("'").lower() in _HEADER_FIRST:
-            continue
-        yield i + 1, parts
 
 
 def _iter_pool_csv_paths(pool_dir: Path) -> Iterator[Path]:
@@ -51,25 +31,25 @@ def _iter_pool_csv_paths(pool_dir: Path) -> Iterator[Path]:
 
 
 def parse_pool_csv_entries(path: Path) -> List[Tuple[str, str]]:
-    """解析一份名单文件 → ``(canonical, name)``（去重、保序）。"""
+    """解析单日名单 → ``(canonical, name)``（保序，规范化后重复即报错）。"""
     out: List[Tuple[str, str]] = []
-    seen: set[str] = set()
-    for _line_number, parts in _iter_pool_csv_rows(path):
+    seen: dict[tuple[str | None, str], int] = {}
+    for line_number, parts in _iter_pool_csv_rows(path):
         first = parts[0] if parts else ""
         bare = _cell_to_bare(first)
         if not bare:
             continue
         canon = canonical_from_bare_code(bare)
-        if not canon or canon in seen:
+        if not canon:
             continue
-        seen.add(canon)
+        check_pool_duplicate(path, seen, canon, line_number)
         name = parts[1] if len(parts) > 1 else ""
         out.append((canon, name))
     return out
 
 
 def parse_pool_csv(path: Path) -> List[str]:
-    """解析一份名单文件 → canonical 代码（去重、保序）。"""
+    """解析单日名单 → canonical 代码（保序，规范化后重复即报错）。"""
     return [code for code, _name in parse_pool_csv_entries(path)]
 
 
@@ -112,11 +92,14 @@ def is_repo_stock_pool(path: Path, *, repo: Path | None = None) -> bool:
 
 
 def validate_pool_dir(pool_dir: Path) -> List[str]:
-    """Return strict pool-contract failures found in ``pool_dir``.
+    """Raise on duplicate codes; collect other strict pool-contract failures.
 
     Unlike the loose parsers, this gate requires every CSV filename to be a
     valid ``YYYYMMDD.csv`` date and every data-row first cell (after trimming
-    whitespace and quotes) to contain exactly six digits.
+    whitespace and quotes) to contain exactly six digits. Filename, code-format
+    and read failures are returned as strings. A normalized same-day duplicate
+    raises ``PoolDuplicateCodeError`` immediately and stops the scan, so no
+    accumulated failures are returned in that case.
     """
     failures: List[str] = []
     for path in _iter_pool_csv_paths(pool_dir):
@@ -131,14 +114,21 @@ def validate_pool_dir(pool_dir: Path) -> List[str]:
 
         try:
             rows = _iter_pool_csv_rows(path)
+            seen: dict[tuple[str | None, str], int] = {}
             for line_number, parts in rows:
                 first = parts[0] if parts else ""
+                bare = _cell_to_bare(first)
+                canon = canonical_from_bare_code(bare) if bare else ""
+                if canon:
+                    check_pool_duplicate(path, seen, canon, line_number)
                 exact = str(first or "").strip().strip('"').strip("'").strip()
                 if not _EXACT_BARE_CODE_RE.fullmatch(exact):
                     failures.append(
                         f"{path.name}:{line_number}: first column must be exactly "
                         f"six digits: {first!r}"
                     )
+        except PoolDuplicateCodeError:
+            raise
         except Exception as exc:
             failures.append(f"{path.name}: cannot read pool CSV: {exc}")
     return failures
@@ -175,6 +165,8 @@ def load_pool_name_map(
             continue
         try:
             entries = parse_pool_csv_entries(path)
+        except PoolDuplicateCodeError:
+            raise
         except Exception as exc:
             print(f"skip pool {path.name}: {exc}", flush=True)
             continue
@@ -199,6 +191,8 @@ def load_pool_names_by_day(
             continue
         try:
             entries = parse_pool_csv_entries(path)
+        except PoolDuplicateCodeError:
+            raise
         except Exception as exc:
             print(f"skip pool {path.name}: {exc}", flush=True)
             continue
@@ -228,6 +222,8 @@ def load_pool_day_map(
             continue
         try:
             codes = parse_pool_csv(path)
+        except PoolDuplicateCodeError:
+            raise
         except Exception as exc:
             print(f"skip pool {path.name}: {exc}", flush=True)
             continue

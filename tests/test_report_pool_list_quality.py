@@ -237,7 +237,7 @@ def test_two_dir_io_errors_exit_two(tmp_path, capsys, monkeypatch, side, failure
         _write(broken, "not a directory\n")
     elif failure in ("read", "scan"):
         _write(broken / "20260303.csv", "600000,x\n")
-        method = "read_text" if failure == "read" else "glob"
+        method = "open" if failure == "read" else "glob"
         original = getattr(Path, method)
 
         def fail(path, *args, **kwargs):

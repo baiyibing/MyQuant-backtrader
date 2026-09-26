@@ -4,6 +4,14 @@ Pool files are named `YYYYMMDD.csv`, encoded as UTF-8/UTF-8-SIG, and contain a
 bare six-digit code in the first column. A header is optional. Missing dates and
 empty or parse-empty files always mean “no buys”.
 
+**同日重复属文件错误**：代码先按现有规则规范化；同一文件中的 `000001`、
+`000001.SZ`、`sz000001` 算同一代码。所有池加载器默认抛出
+`PoolDuplicateCodeError(ValueError)`，包含文件路径、规范化代码、第一次和第二次
+出现的物理行号（从 1 开始，包含表头、注释和空行）。此前静默保留第一条的行为
+已移除，无需开启 `--strict-pool`。不同日期文件可包含同一代码。
+现有池格式为单文件单日；共享校验辅助函数也支持按 `(日期, 规范化代码)` 判重，
+供多日期读取器使用。预测/分数 CSV 属于独立输入契约。
+
 **资金配给序（B GO）**：默认 `--ration file_order` 严格沿用 CSV 行序；研究 A/B
 可用 `--ration seeded_shuffle --ration-seed N`，按 `(N, YYYYMMDD)` 经 SHA-256
 稳定派生逐日乱序。涨停追买沿本次名单遍历形成的排队序，不另做重排。
@@ -29,6 +37,11 @@ empty or parse-empty files always mean “no buys”.
 `parse_pool_csv_entries` 仍接受这类输入。默认情况下，成交引擎的 `run()` 不调用严格校验。
 日线 / 分钟 `run()` 仅在启用 `--strict-pool`（默认关闭，对应 `strict_pool=True`）时，
 才在加载名单和行情前调用 `validate_pool_dir`；校验失败即退出。
+`validate_pool_dir` 收集并返回文件名、代码格式和读取错误；同日重复码则立即抛出
+`PoolDuplicateCodeError` 并停止扫描。日线 / 分钟的 `--strict-pool` 将该异常转为
+包含原诊断的 `SystemExit`。统一退出预检也采用 fail-closed：重复码输出
+`error: ...` 并返回 1，不生成报告；成功报告以 `instances` 表示实例数，
+不再输出 `deduped_instances` 或 `dup_files`。
 
 The map representation intentionally differs by engine. Strategies 6/8/9/10 omit
 an empty file from their `YYYYMMDD`-keyed map (`empty_in_map=False`). Strategy 7

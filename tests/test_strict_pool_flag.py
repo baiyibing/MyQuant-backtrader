@@ -57,6 +57,31 @@ def test_minute_run_strict_pool_exits_before_bar_load(tmp_path, monkeypatch):
     _assert_strict_rejects_before_loader(minute, tmp_path, monkeypatch)
 
 
+@pytest.mark.parametrize("engine", [daily, minute], ids=["daily", "minute"])
+@pytest.mark.parametrize("entry", ["run", "cli"])
+def test_strict_pool_duplicate_exits_with_original_diagnostic(
+    tmp_path, monkeypatch, engine, entry,
+):
+    pool = _write_pool(tmp_path, "code,name\n830001,first\n830001.BJ,second\n")
+    loader = Mock(side_effect=AssertionError("loader must not run"))
+    monkeypatch.setattr(engine, "load_daily_ohlc", loader)
+    out_dir = tmp_path / "output"
+
+    with pytest.raises(SystemExit) as caught:
+        if entry == "run":
+            engine.run(DAY, DAY, strategy="version6", pool_dir=tmp_path, strict_pool=True)
+        else:
+            engine.main([
+                "--strategy", "version6", "--start", DAY, "--end", DAY,
+                "--pool-dir", str(tmp_path), "--out-dir", str(out_dir), "--strict-pool",
+            ])
+
+    original = csv_pool.PoolDuplicateCodeError(pool, "830001.BJ", 2, 3)
+    assert caught.value.code == f"strict pool validation failed: {original}"
+    loader.assert_not_called()
+    assert not out_dir.exists()
+
+
 def test_daily_run_default_does_not_validate(tmp_path, monkeypatch):
     _assert_default_reaches_loader(daily, tmp_path, monkeypatch)
 

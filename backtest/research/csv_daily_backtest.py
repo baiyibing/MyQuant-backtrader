@@ -622,9 +622,12 @@ def run(
     t_pool = time.perf_counter()
     actual_pool_dir = resolve_research_pool_dir(strategy, pool_dir, repo=REPO)
     if strict_pool:
-        from backtest.research.csv_pool import validate_pool_dir
+        from backtest.research.csv_pool import PoolDuplicateCodeError, validate_pool_dir
 
-        failures = validate_pool_dir(actual_pool_dir)
+        try:
+            failures = validate_pool_dir(actual_pool_dir)
+        except PoolDuplicateCodeError as exc:
+            raise SystemExit(f"strict pool validation failed: {exc}") from None
         if failures:
             raise SystemExit("strict pool validation failed: " + "; ".join(failures[:8]))
     signal_bundle = None
