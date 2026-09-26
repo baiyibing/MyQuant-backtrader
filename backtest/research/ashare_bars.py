@@ -331,8 +331,14 @@ def annotate_session(frame):
     return out.loc[_in_session(out["hm"].to_numpy())]
 
 
-def read_lake_minute_ohlc(code: str, root: Path, start: str, end: str, *, include_volume: bool = False):
-    """Book-engine lake frame: DatetimeIndex + open/high/low/close/ymd/hm."""
+def read_lake_minute_ohlc(code: str, root: Path, start: str, end: str, *,
+                          include_volume: bool = False, include_amount: bool = False):
+    """Book-engine lake frame: DatetimeIndex + open/high/low/close/ymd/hm.
+
+    Tail's ``include_amount`` path retains the legacy zero-day filter and
+    marks duplicate minute buckets before keep-last normalization. Volume-only
+    callers retain v11's volume=A contract, including whole zero-volume days.
+    """
     import numpy as np
     import pandas as pd
     import pyarrow.compute as pc
@@ -340,6 +346,7 @@ def read_lake_minute_ohlc(code: str, root: Path, start: str, end: str, *, includ
 
     from backtest.research.market_layer import utc_ms_range
 
+    include_volume = include_volume or include_amount
     path = Path(root) / f"symbol={to_partition_key(code)}" / "data.parquet"
     if not path.is_file():
         if include_volume:
@@ -348,10 +355,13 @@ def read_lake_minute_ohlc(code: str, root: Path, start: str, end: str, *, includ
     t0, t1 = utc_ms_range(start, end)
     try:
         columns = ["time", "open", "high", "low", "close"]
-        has_volume = "volume" in pq.read_schema(path).names
+        schema_names = pq.read_schema(path).names
+        has_volume = "volume" in schema_names
+        has_amount = include_amount and "amount" in schema_names
         if include_volume and not has_volume:
             raise ValueError(f"minute volume required: {path}")
-        table = pq.read_table(path, columns=columns + (["volume"] if has_volume else []))
+        table = pq.read_table(path, columns=columns + (["volume"] if has_volume else [])
+                              + (["amount"] if has_amount else []))
         table = table.filter((pc.field("time") >= t0) & (pc.field("time") <= t1))
     except Exception as exc:
         if include_volume:
@@ -374,11 +384,21 @@ def read_lake_minute_ohlc(code: str, root: Path, start: str, end: str, *, includ
             "ymd": utc.strftime("%Y%m%d"),
             "hm": hm.to_numpy()[keep],
             **({"_volume": table["volume"].to_numpy()[keep]} if has_volume else {}),
+            **({"amount": table["amount"].to_numpy()[keep]} if has_amount else {}),
         },
         index=utc.tz_localize(None),
     ).astype({"open": np.float64, "high": np.float64, "low": np.float64, "close": np.float64, "hm": np.int64})
+    if include_amount:
+        # Tail children must reject ambiguous buckets even after the historical
+        # keep-last reader normalization. Seconds within a minute also collide.
+        out["_tail_duplicate"] = out.duplicated(["ymd", "hm"], keep=False)
     out = out[~out.index.duplicated(keep="last")].sort_index()
     if include_volume:
+        if include_amount:
+            # X-04 needs extra columns, not extra sellable days. Keep the OFF
+            # aggregate-after-dedup contract; v11's volume-only path is separate.
+            day_volume = out.groupby("ymd")["_volume"].transform("sum")
+            out = out.loc[day_volume != 0]
         out = out.rename(columns={"_volume": "volume"})
     elif has_volume:
         day_volume = out.groupby("ymd")["_volume"].transform("sum")
@@ -387,7 +407,8 @@ def read_lake_minute_ohlc(code: str, root: Path, start: str, end: str, *, includ
 
 
 def load_minute_from_lake(codes: set[str] | list[str], start: str, end: str, *, workers: int = 16,
-                          lake_root=None, include_volume: bool = False):
+                          lake_root=None, include_volume: bool = False,
+                          include_amount: bool = False):
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
     from backtest.research.csv_common import _progress
@@ -400,6 +421,8 @@ def load_minute_from_lake(codes: set[str] | list[str], start: str, end: str, *, 
         return out
     with ThreadPoolExecutor(max_workers=max(1, int(workers))) as pool:
         extra = {"include_volume": True} if include_volume else {}
+        if include_amount:
+            extra.update(include_volume=True, include_amount=True)
         futs = {pool.submit(read_lake_minute_ohlc, code, root, start, end, **extra): code for code in wanted}
         done = 0
         total = len(futs)
@@ -573,13 +596,15 @@ def load_minute_ohlc(
     status: Optional[dict] = None,
     lake_root=None,
     include_volume: bool = False,
+    include_amount: bool = False,
 ) -> dict:
     """Book frames; opt-in volume bypasses the legacy volume-free cache."""
-    if include_volume:
+    if include_volume or include_amount:
         if status is not None:
             status["cache"] = "off:volume_required"
         return load_minute_from_lake(codes, start, end, workers=workers,
-                                     lake_root=lake_root, include_volume=True)
+                                     lake_root=lake_root, include_volume=True,
+                                     **({"include_amount": True} if include_amount else {}))
     want = {to_canonical_symbol(str(code)) for code in codes}
     path = minute_cache_path(start, end, cache_dir)
     cached: dict = {}

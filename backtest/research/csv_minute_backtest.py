@@ -133,6 +133,11 @@ from backtest.research.minute_cash_order import (
     advance_independent_exit,
     run_chronological_day,
 )
+from backtest.research.tail_window_buy import (
+    resolve_tail_volume_unit,
+    tail_policy,
+    validate_tail_options,
+)
 
 # Preserve historical loader aliases used by callers and tests.
 _ = (_annotate, _load_minute_from_lake, _read_one_minute)
@@ -646,6 +651,8 @@ def simulate(
     fix_s11_exit_domain: bool = False,
     signal_bars_front: dict[str, pd.DataFrame] | None = None,
     fix_minute_cash_order: bool = False,
+    tail_window_buy: bool = False,
+    tail_volume_unit: str | None = "shares",
     audit_sink=None,
 ) -> SimState:
     """Opt-in cap uses caller-attested completed minutes; daily volume is unused.
@@ -653,6 +660,14 @@ def simulate(
     exdiv_economics is an explicit (symbol, YYYYMMDD) -> ExDivEvent lookup for
     raw bars. None retains the baseline; E-R6 ratios never imply entitlements.
     """
+    validate_tail_options(tail_window_buy, fix_minute_cash_order, tail_volume_unit)
+    if tail_window_buy:
+        tail_volume_unit = resolve_tail_volume_unit(tail_volume_unit)
+    if tail_window_buy and normalize_csv_strategy(strategy) not in {
+        "version8", "version8_1", "version8_2", "version8_3",
+        "version8_4", "version8_5", "version8_6",
+    }:
+        raise ValueError("--tail-window-buy applies only to version8 / version8.x in the shared entry")
     if fix_minute_cash_order and normalize_csv_strategy(strategy) == "version12":
         raise ValueError("--fix-minute-cash-order is not applicable to version12")
     if audit_sink is not None and normalize_csv_strategy(strategy) == "version12":
@@ -783,6 +798,7 @@ def simulate(
                 slice_day=lambda code, date: _slice_day(
                     minute_bars[code], day_spans.get(code, {}), date),
                 profit_base=profit_base, pos_trail=pos_trail, audit_sink=audit_sink,
+                tail_window_buy=tail_window_buy, tail_volume_unit=tail_volume_unit,
             )
         else:
             bind_opening = hooks.get("bind_opening_held")
@@ -1187,8 +1203,21 @@ def run(
     s12_price_transform_file: Path | None = None,
     fix_s11_exit_domain: bool = False,
     fix_minute_cash_order: bool = False,
+    tail_window_buy: bool = False,
+    tail_volume_unit: str | None = "shares",
     audit_sink=None,
 ) -> SimState:
+    validate_tail_options(tail_window_buy, fix_minute_cash_order, tail_volume_unit)
+    if tail_window_buy:
+        tail_volume_unit = resolve_tail_volume_unit(tail_volume_unit)
+        if normalize_csv_strategy(strategy) not in {
+            "version8", "version8_1", "version8_2", "version8_3",
+            "version8_4", "version8_5", "version8_6",
+        }:
+            raise ValueError("--tail-window-buy applies only to version8 / version8.x in the shared entry")
+        if (minute_source != "lake" or daily_source != "lake" or dividend_type != "none"
+                or qlib_1min_root is not None or qlib_day_root is not None):
+            raise ValueError("--tail-window-buy requires raw lake minute and daily data")
     if fix_s11_exit_domain:
         if normalize_csv_strategy(strategy) != "version11":
             raise ValueError("fix_s11_exit_domain is supported only by version11")
@@ -1348,7 +1377,8 @@ def run(
                 use_cache=use_cache,
                 rebuild_cache=rebuild_cache,
                 status=cache_status,
-                **({"include_volume": True} if volume_required else {}),
+                **({"include_volume": True} if volume_required or tail_window_buy else {}),
+                **({"include_amount": True} if tail_window_buy else {}),
             )
         t_minute = time.perf_counter() - t_minute
     print(
@@ -1447,6 +1477,8 @@ def run(
         **({"fix_s12_price_domain": True, "s12_price_context": s12_price_context}
            if fix_s12_price_domain else {}),
         fix_minute_cash_order=fix_minute_cash_order,
+        tail_window_buy=tail_window_buy,
+        tail_volume_unit=tail_volume_unit,
         audit_sink=audit_sink,
     )
     if skipped.get("exdiv_skipped_no_factor"):
@@ -1465,6 +1497,8 @@ def run(
                         same_hm_policy="strategy12_existing_sells_then_buys",
                         fallback_order_clock="strategy12_existing_hook",
                         stable_order="strategy12_existing_hook")
+    if tail_window_buy:
+        st.run_metadata = {"tail_window_buy": tail_policy(tail_volume_unit)}
     st.stats["t_pool_s"] = t_pool
     st.stats["t_daily_s"] = t_daily
     st.stats["t_minute_s"] = t_minute
@@ -1561,6 +1595,14 @@ def main(argv: Optional[list] = None) -> int:
         "--fix-minute-cash-order", action="store_true",
         help="advance minute cash/holdings chronologically (default off; unavailable for version12)",
     )
+    ap.add_argument(
+        "--tail-window-buy", action="store_true",
+        help="8.x first pool buy: 28 TWAP slices; requires --fix-minute-cash-order (default OFF)",
+    )
+    ap.add_argument(
+        "--tail-volume-unit", choices=("shares", "lots"), default="shares",
+        help="lake minute volume unit (default shares); lots multiplies volume by 100",
+    )
     ap.add_argument("--execution-audit-file", help="optional execution JSON sidecar; leaves CSVs unchanged")
     args = ap.parse_args(argv if argv is not None else None)
     pool_dir = resolve_research_pool_dir(args.strategy, args.pool_dir, repo=REPO)
@@ -1596,6 +1638,8 @@ def main(argv: Optional[list] = None) -> int:
         strict_pool=args.strict_pool,
         fix_s11_exit_domain=args.fix_s11_exit_domain,
         fix_minute_cash_order=args.fix_minute_cash_order,
+        tail_window_buy=args.tail_window_buy,
+        tail_volume_unit=args.tail_volume_unit,
         audit_sink=audit,
         **csv_run_kwargs_from_args(args),
     )
@@ -1616,18 +1660,23 @@ def main(argv: Optional[list] = None) -> int:
         raise SystemExit(
             f"refuse overwrite existing {out_dir}; pick a new stamp directory"
         )
+    emit_manifest = args.emit_run_manifest or args.tail_window_buy
+    manifest_args = vars(args).copy()
+    if not args.tail_window_buy:
+        manifest_args.pop("tail_window_buy", None)
+        manifest_args.pop("tail_volume_unit", None)
     write_run_artifacts(
         out_dir,
         st,
         text,
         help_lock_for(args.strategy, shared=HELP_LOCK),
-        emit_run_manifest=args.emit_run_manifest,
+        emit_run_manifest=emit_manifest,
         signal_bundle_sha256=st.stats.get("signal_bundle_sha256"),
         manifest_config=(
-            {**vars(args), "pool_dir": pool_dir, "out_dir": out_dir,
+            {**manifest_args, "pool_dir": pool_dir, "out_dir": out_dir,
              "minute_source": minute_source, "daily_source": daily_source,
              **getattr(st, "run_metadata", {})}
-            if args.emit_run_manifest else None
+            if emit_manifest else None
         ),
     )
     if normalize_csv_strategy(args.strategy) == "version12":
