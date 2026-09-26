@@ -101,12 +101,72 @@ def test_front_only_date_is_snapshot_conflict(tmp_path):
 
 @pytest.mark.parametrize("kind", ["none", "front"])
 @pytest.mark.parametrize("bad", [np.nan, np.inf, 0., -1.])
-def test_invalid_prices_fail_before_filtering(tmp_path, kind, bad):
+def test_invalid_price_on_suspended_day_skipped_not_rejected(tmp_path, kind, bad):
+    """Only zero-volume rows can skip price validation in both source domains."""
+    vol = [100., 0., 100.]
+    raw, _ = lake(tmp_path, raw_volume=vol, front_volume=vol)
+    broken = frame() * (.9 if kind == "front" else 1.)
+    broken.loc[broken.index[1], "close"] = bad
+    write_partition(tmp_path, broken, kind, volume=vol)
+    actual, meta = load(tmp_path, raw)
+    assert broken.index[1] not in actual[CODE].index
+    pd.testing.assert_frame_equal(actual[CODE], (frame() * .9).iloc[[0, 2]], check_freq=False)
+    for key in ("raw_sources", "front_sources"):
+        assert meta[key][0]["rows"] == 3
+        assert meta[key][0]["effective_rows"] == 2
+
+
+@pytest.mark.parametrize("kind", ["none", "front"])
+@pytest.mark.parametrize("bad", [np.nan, np.inf, 0., -1.])
+def test_invalid_price_on_trading_day_still_fails(tmp_path, kind, bad):
+    """Bad price on a nonzero-volume (trading) day is still data corruption."""
     raw, _ = lake(tmp_path)
     broken = frame() * (.9 if kind == "front" else 1.)
     broken.loc[broken.index[1], "close"] = bad
-    write_partition(tmp_path, broken, kind, volume=[100., 0., 100.])
-    with pytest.raises(ValueError, match=f"date=20240903.*domain={kind}.*nonfinite or nonpositive"):
+    write_partition(tmp_path, broken, kind, volume=[100., 100., 100.])
+    with pytest.raises(ValueError, match=f"date=20240903.*domain={kind}.*nonfinite or nonpositive price on tradable"):
+        load(tmp_path, raw)
+
+
+@pytest.mark.parametrize("kind", ["none", "front"])
+@pytest.mark.parametrize("column,value", [("high", 1.), ("low", 20.)])
+@pytest.mark.parametrize("volume", [0., 100.])
+def test_ohlc_range_checks_only_skip_zero_volume_rows(tmp_path, kind, column, value, volume):
+    volumes = [100., volume, 100.]
+    raw, _ = lake(tmp_path, raw_volume=volumes, front_volume=volumes)
+    broken = frame() * (.9 if kind == "front" else 1.)
+    broken.loc[broken.index[1], column] = value
+    write_partition(tmp_path, broken, kind, volume=volumes)
+    if volume:
+        with pytest.raises(domain.S11ExitDomainError, match=f"date=20240903.*domain={kind}.*invalid OHLC range"):
+            load(tmp_path, raw)
+    else:
+        actual, meta = load(tmp_path, raw)
+        assert broken.index[1] not in actual[CODE].index
+        for key in ("raw_sources", "front_sources"):
+            assert meta[key][0]["rows"] == 3
+            assert meta[key][0]["effective_rows"] == 2
+
+
+@pytest.mark.parametrize("kind", ["none", "front"])
+def test_volume_less_partition_with_zero_price_fails_closed(tmp_path, kind):
+    raw, _ = lake(tmp_path)
+    broken = frame() * (.9 if kind == "front" else 1.)
+    broken.loc[broken.index[1], "close"] = 0.
+    write_partition(tmp_path, broken, kind)
+    with pytest.raises(domain.S11ExitDomainError, match=f"date=20240903.*domain={kind}.*nonfinite or nonpositive price"):
+        load(tmp_path, raw)
+
+
+@pytest.mark.parametrize("kind", ["none", "front"])
+@pytest.mark.parametrize("bad", [np.nan, np.inf, -1., "bad"])
+def test_invalid_volume_rejected_before_bad_price(tmp_path, kind, bad):
+    raw, _ = lake(tmp_path)
+    broken = frame() * (.9 if kind == "front" else 1.)
+    broken.loc[broken.index[1], "close"] = np.nan
+    volumes = ["100", bad, "100"] if isinstance(bad, str) else [100., bad, 100.]
+    write_partition(tmp_path, broken, kind, volume=volumes)
+    with pytest.raises(domain.S11ExitDomainError, match=f"domain={kind}.*invalid volume"):
         load(tmp_path, raw)
 
 
@@ -164,6 +224,35 @@ def test_memory_validation_includes_warmup_and_excludes_future_prices():
     front = {CODE: frame() * .9}
     front[CODE].loc[pd.Timestamp(END)] = np.nan
     domain.validate_signal_bars(raw, front, start=START, end="20240903")
+
+
+@pytest.mark.parametrize("kind", ["none", "front"])
+@pytest.mark.parametrize("bad", [0., -5., np.nan, np.inf])
+def test_memory_without_volume_rejects_invalid_prices(kind, bad):
+    raw, front = {CODE: frame()}, {CODE: frame() * .9}
+    bars = raw[CODE] if kind == "none" else front[CODE]
+    bars.loc[bars.index[1], "close"] = bad
+    with pytest.raises(domain.S11ExitDomainError, match=f"date=20240903.*domain={kind}.*nonfinite or nonpositive price"):
+        domain.validate_signal_bars(raw, front, start=START, end=END)
+
+
+@pytest.mark.parametrize("kind", ["none", "front"])
+@pytest.mark.parametrize("column,value", [("high", 9.449), ("low", 9.451)])
+def test_memory_without_volume_rejects_invalid_ohlc_range(kind, column, value):
+    raw, front = {CODE: frame()}, {CODE: frame() * .9}
+    bars = raw[CODE] if kind == "none" else front[CODE]
+    bars.loc[bars.index[1], column] = value * (.9 if kind == "front" else 1.)
+    with pytest.raises(domain.S11ExitDomainError, match=f"date=20240903.*domain={kind}.*invalid OHLC range"):
+        domain.validate_signal_bars(raw, front, start=START, end=END)
+
+
+@pytest.mark.parametrize("bad", [np.nan, np.inf, -1., "bad"])
+def test_memory_invalid_volume_raises_structured_error(bad):
+    raw, front = {CODE: frame()}, {CODE: frame() * .9}
+    front[CODE]["volume"] = [100., bad, 100.]
+    front[CODE].loc[front[CODE].index[1], "close"] = np.nan
+    with pytest.raises(domain.S11ExitDomainError, match=f"code={CODE}.*domain=front.*path=<memory>.*invalid volume"):
+        domain.validate_signal_bars(raw, front, start=START, end=END)
 
 
 @pytest.mark.parametrize("engine_name", ["daily", "minute"])

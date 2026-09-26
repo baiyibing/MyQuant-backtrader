@@ -48,7 +48,13 @@ ON 先调用无写入副作用的 `require_market_marks` 校验全部持仓，�
 输入内容与变换文件绑定哈希，API 同样显式声明三种域并核输入身份。
 
 仅凭一对开盘价不能识别仿射变换。自动等比路径保守要求预热期间已有非退化样本、
-整个输入窗口比例不变且所有 OHLC 一致；变化的转换或平价不可识别样本需要显式证据。
+整个输入窗口的全部 OHLC 都能由同一个比例解释；变化的转换或平价不可识别样本需要显式证据。
+raw/front 输入都已量化到分，比较时保留 `A*raw+B` 的未舍入值，与已落分 front
+的差额最多为 `0.005+1e-9` 元，不随价格水平扩大。自动路径求全部日期、全部 OHLC
+的 `[(front-h)/raw, (front+h)/raw]` 交集（`h=0.005+1e-9`），为空即要求显式变换证据，
+非空则全窗口使用一个 A。系数比较与同域 OHLC 范围检查仍各用严格 `1e-10`。
+审计版本为 `s12-price-domain-v3`，元数据记录 `input_price_tolerance="0.005+1e-9"`、
+`input_price_tolerance_mode="absolute_half_tick_price_space"` 和 `input_coefficient_tolerance="1e-10"`。
 通用路径支持 PIT 视图或 `exact_asof_reconstruction`，区分参考可得时点、
 生成时点和重建时点，不把最新生成文件冒充历史已发布文件。
 固定表示精度检查不是 4090 供应商误差校准，真实数据的容差与来源还需核验。
@@ -91,7 +97,7 @@ ON 先调用无写入副作用的 `require_market_marks` 校验全部持仓，�
 `transforms` 必须逐个覆盖预热开始至回测结束期间、过滤双方一致停牌后的**全部配对日线
 `(code, session)`**，不能只写除权日、名单日或实际成交日；缺项、多项或重复项均失败。
 `session` 使用 `YYYYMMDD`；A/B 建议写十进制字符串，必须有限且 `A>0`。
-每行须解释同日全部 OHLC：`front=A*raw+B`，历史信号再统一用决策日这一行的 A/B 重锚。
+每行须解释同日全部 OHLC：`front=round2(A*raw+B)`，历史信号再统一用决策日这一行的 A/B 重锚。
 下面两种证据互斥，`evidence.json` 的 `kind` 和 `source_snapshot_id` 必须与主文件一致。
 
 PIT 证据的 `views` 也恰好覆盖全部变换行，每行包含独立来源及 D 日可得的完整历史视图：
@@ -113,7 +119,8 @@ PIT 证据的 `views` 也恰好覆盖全部变换行，每行包含独立来源�
 ```
 
 每个 `history` 必须按时间顺序完整列出已载入日线中所有 `t<D` 的日期和 D 日 raw 单位 close；
-最早载入日可为空，后续不能截短到 MA5/MA10。代码逐项核对它与 `(front_t-B_D)/A_D` 一致。
+最早载入日可为空，后续不能截短到 MA5/MA10。代码在 front 域逐项核对
+`abs(A_D*history_close+B_D-front_t) <= 0.005+1e-9`，避免逆变换的 `1/A_D` 放大舍入误差。
 `reference_available_at` 必须带显式时区，且不晚于该 session 的上海时间 09:30；
 仅填写一个较早时间字符串不能替代来源可得性的核验。
 
