@@ -1,7 +1,7 @@
 # 联合仓库 TopK 回测 · 问题记录
 
 - 日期：2026-09-22
-- 状态：**讨论中**。Q1–Q4 / Q6 / Q7 已裁；`--stop-fill` 与 `--buy-state-file` 已落地，默认关。不要把本页当「改默认成交」任务书。
+- 状态：**讨论中**。Q1–Q4 / Q6 / Q7 已裁；**Q5/Q9/Q10 已裁（2026-09-26）**：日线对照钉 qlib `$close` 日线后复权 bin + pred `8a061ea4` OOS `20260106–20260914` + cash 1e8；分钟价域归 #214/X-01 HOLD，非本页 impl GO。Q8 仍开。`--stop-fill close` 与 `--buy-state-file` 已落地，默认关；`--stop-fill` 默认 `touch`。不要把本页当「改默认成交」任务书。
 - 范围：MyQuant 出分 / 买闸；本仓 `topk_dropout` 向量化成交。不复活 PortAna 当产品；不改线上 10/3。
 - GitHub 问题：[#164](https://github.com/baiyibing/MyQuant-backtrader/issues/164)（本仓此前无专题 issue）。
 
@@ -406,15 +406,17 @@ BT-B：`eligible_buy` 只过滤**新开**；不够 `len(buy)` 则沿未持仓分
 | Q2 | 买点条件 2 | **已裁（2026-09-22）**：**不要 MA5 斜率**。条件 2 = `close > MA20`。现码带斜率的闸标 `legacy`，不进本配方、不改线上/年化默认 |
 | Q3 | 买点接到哪 | **已裁（2026-09-22）**：MyQuant qlib 写旁路；本仓 `--buy-state-file` 查表。不在 simulate 热路径 `import qlib`。默认关（N6 / overlay R-8 训练默认不翻） |
 | Q4 | 盈筹数据 | **已裁（2026-09-22）**：券商 `$winratio`（bins）。不用 CYQ `winner_ratio` parquet，不用 Quantile 代理 |
-| Q5 | 价域 | 继续 qlib `$close` bin（年化账尺子）vs 湖 `none`/`front`。两套不能混比 |
+| Q5 | 价域 | **已裁（2026-09-26 修订）**：联合**日线**对照钉 qlib `$close` **日线**后复权 bin（`--qlib-data-root` + 常配 `--qlib-cost`）。湖日线 `none`/`front` 另账。分钟本仓仅 `none`——与日线 bin/湖 `front` 禁止混比；分钟价域归专题 [#214](https://github.com/baiyibing/MyQuant-backtrader/pull/214) / X-01（信号复权→成交 `none` 换算；#214 现 HOLD，非本页 impl GO），勿用分钟 `none` NAV 对齐年化日线尺子。生产默认「不传则湖」不翻。 |
 | Q6 | 收盘止损与 dropout 同日 | **已裁（2026-09-22）**：**止损先**。与现核一致：先评止损（收盘臂按日终收盘），再评 `sell_gate` / dropout。同日只出一笔卖，reason 记止损 |
 | Q7 | 跌停 | **已裁（2026-09-22）**：收盘止损臂上，收盘恰跌停 **仍按该收盘价成交**。不 defer、不记 skip。只约束拟 `--stop-fill close`；默认触价核与 arm0「涨跌停当日买卖都不做」不翻。书的 `limit_down_pending=False` 仍表示不把未成交卖挂到次日开盘 |
-| Q8 | 本次是否同时开 ST/年龄 | 年化 A 格还叠了 5 日涨幅&gt;15% 挡。四条口述未提这条 |
-| Q9 | 窗与 pred | 是否沿用 `c5f4bccd` 2026 窗，还是回到年化账 `8a061ea4` |
-| Q10 | `--cash-total` | 默认 2100 万 vs 年化 1e8。对照必须同本金 |
+| Q8 | 本次是否同时开 ST/年龄 | **仍开**：年化 A 格还叠了 5 日涨幅&gt;15% 挡。四条口述未提这条，勿静默叠加 |
+| Q9 | 窗与 pred | **已裁（2026-09-26）**：钉年化主 pred **`8a061ea4`** + 2026 OOS 窗 **`20260106–20260914`**。`c5f4bccd` 仅烟测，不作对照归因窗。不覆盖 `pred.pkl`。 |
+| Q10 | `--cash-total` | **已裁（2026-09-26）**：对照实验一律显式 **`--cash-total 100000000`**，全臂同本金。CLI 默认 2100 万不翻。 |
 | Q11 | 闸做在哪边 | **随 Q3**：分数导出仍不过闸；买点用独立 sidecar，BT 只查表。不要 MQ `--buy-state-filter` 滤完分数再让 BT 滤同一层 |
 
-编码门槛：Q1/Q3/Q4/Q6/Q7 已裁（`--stop-fill close` 仅日线；买点旁路 + `$winratio`；止损先；收盘跌停仍成交）。对照实验先钉 Q5/Q9/Q10。
+编码门槛：Q1–Q4/Q6/Q7 已裁（`--stop-fill close` 仅日线；买点旁路 + `$winratio`；止损先；收盘跌停仍成交）。对照实验 Q5/Q9/Q10 **已裁（2026-09-26）**，按上表钉日线价域、pred/OOS 窗与全臂本金。**Q8 仍开**，勿静默叠年化 A 格的 5 日涨幅&gt;15% 挡。本次仅记人裁，不改生产默认，不授权 #214 实施；分钟信号→`none` 换算 / X-01 仍归 #214 HOLD 专题。
+
+不变边界：不传 `--qlib-data-root` 仍走湖；CLI 本金默认仍为 2100 万；`--stop-fill touch` 默认、线上 10/3 不翻；PortAna 不复活产品地位；seal bars = `qlib_bin`；validate 默认 `v1`。
 
 ---
 
@@ -541,3 +543,4 @@ csv_daily_backtest.py --strategy topk_dropout --pred-csv <MyQuant pred>
 | 2026-09-22 | **Q1 人裁并落地**：`--stop-fill touch\|close`；日线 close 止损；分钟拒绝 close。 |
 | 2026-09-22 | 写清禁 `import qlib`：**目的**是成交核不绑 qlib 运行时；**手段**是热路径不 import。对齐 `Mean($close)` 不是破例。 |
 | 2026-09-22 | **Q3/Q4 人裁并落地**：MyQuant 旁路 `$close`/`Mean(20/60)`/`$winratio`；BT `--buy-state-file` 查表。score_exit 拒绝此旗。MQ `--buy-state-filter` 默认不翻。 |
+| 2026-09-26 | **Q5/Q9/Q10 人裁**：日线对照钉 qlib `$close` 日线后复权 bin（`--qlib-data-root` + 常配 `--qlib-cost`），湖日线另账；分钟仅 `none`，禁与日线 bin/湖 `front` 混比，信号→`none` 换算归 #214/X-01 HOLD，非本页 impl GO。pred 钉 `8a061ea4` + OOS `20260106–20260914`，`c5f4bccd` 仅烟测、不作归因窗，不覆盖 `pred.pkl`；全臂显式 `--cash-total 100000000`。Q8 仍开，勿静默叠 5 日 15% 挡；生产默认与上述不变边界均不翻。 |
