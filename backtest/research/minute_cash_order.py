@@ -363,7 +363,7 @@ def run_chronological_day(
             continue
         o, h, c = (frame[key].to_numpy(np.float64) for key in ("open", "high", "close"))
         hm = frame["hm"].to_numpy(np.int64)
-        for pos in exit_positions(st, code, day_i):
+        for pos in exit_positions(st, code, day_i, day=day):
             if pos.ride_with is not None:
                 continue
             sellable = t1_sellable(calendar[pos.entry_idx].date(), day.date())

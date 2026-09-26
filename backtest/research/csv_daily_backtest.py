@@ -370,7 +370,7 @@ def simulate(
                     st.stats["skip_unknown_board"] += 1
                     continue
                 limit_up, limit_down = limits
-                for pos in exit_positions(st, code, i):
+                for pos in exit_positions(st, code, i, day=day):
                     if getattr(pos, "ride_with", None) is not None:
                         continue
                     n_days = i - pos.entry_idx  # 持仓交易日数（买入日=0）
@@ -577,7 +577,7 @@ def simulate(
                     if limits is None:
                         continue
                     close = float(row["close"])
-                    for pos in exit_positions(st, code, i):
+                    for pos in exit_positions(st, code, i, day=day):
                         if pos.position_id not in added or pos.entry_idx >= i or pos.pending_exit:
                             continue
                         reason = None

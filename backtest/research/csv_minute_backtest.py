@@ -858,7 +858,7 @@ def simulate(
                         confirm_peaks[id(pos)] = max(
                             float(pos.peak), prefix_high if pos.entry_idx < i else 0.0,
                         )
-                for pos in exit_positions(st, code, i):
+                for pos in exit_positions(st, code, i, day=day):
                     if getattr(pos, "ride_with", None) is not None:
                         continue
                     n_days = i - pos.entry_idx
@@ -1597,7 +1597,8 @@ def main(argv: Optional[list] = None) -> int:
     )
     ap.add_argument(
         "--tail-window-buy", action="store_true",
-        help="8.x first pool buy: 28 TWAP slices; requires --fix-minute-cash-order (default OFF)",
+        help="8.x first pool buy: 28 TWAP slices; requires --fix-minute-cash-order (default OFF); "
+             "target Q<2800 shares gives zero-share slices and no fills, without OFF supplementary 100-share fallback",
     )
     ap.add_argument(
         "--tail-volume-unit", choices=("shares", "lots"), default="shares",
