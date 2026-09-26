@@ -37,6 +37,11 @@ empty or parse-empty files always mean “no buys”.
 `parse_pool_csv_entries` 仍接受这类输入。默认情况下，成交引擎的 `run()` 不调用严格校验。
 日线 / 分钟 `run()` 仅在启用 `--strict-pool`（默认关闭，对应 `strict_pool=True`）时，
 才在加载名单和行情前调用 `validate_pool_dir`；校验失败即退出。
+`validate_pool_dir` 收集并返回文件名、代码格式和读取错误；同日重复码则立即抛出
+`PoolDuplicateCodeError` 并停止扫描。日线 / 分钟的 `--strict-pool` 将该异常转为
+包含原诊断的 `SystemExit`。统一退出预检也采用 fail-closed：重复码输出
+`error: ...` 并返回 1，不生成报告；成功报告以 `instances` 表示实例数，
+不再输出 `deduped_instances` 或 `dup_files`。
 
 The map representation intentionally differs by engine. Strategies 6/8/9/10 omit
 an empty file from their `YYYYMMDD`-keyed map (`empty_in_map=False`). Strategy 7

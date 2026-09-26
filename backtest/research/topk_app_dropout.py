@@ -122,12 +122,10 @@ def intersect_app_qlib(
             continue
         allowed = { _bare(code) for code in qlib_topn[ymd] }
         kept: list[tuple[str, str]] = []
-        seen: set[str] = set()
         for canon, name in parse_pool_csv_entries(Path(app_dir) / f"{ymd}.csv"):
             bare = _bare(canon)
-            if not bare or bare not in allowed or bare in seen:
+            if not bare or bare not in allowed:
                 continue
-            seen.add(bare)
             kept.append((canon, name))
         out[ymd] = kept
     return out

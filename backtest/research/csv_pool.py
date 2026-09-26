@@ -92,11 +92,14 @@ def is_repo_stock_pool(path: Path, *, repo: Path | None = None) -> bool:
 
 
 def validate_pool_dir(pool_dir: Path) -> List[str]:
-    """Return strict pool-contract failures found in ``pool_dir``.
+    """Raise on duplicate codes; collect other strict pool-contract failures.
 
     Unlike the loose parsers, this gate requires every CSV filename to be a
     valid ``YYYYMMDD.csv`` date and every data-row first cell (after trimming
-    whitespace and quotes) to contain exactly six digits.
+    whitespace and quotes) to contain exactly six digits. Filename, code-format
+    and read failures are returned as strings. A normalized same-day duplicate
+    raises ``PoolDuplicateCodeError`` immediately and stops the scan, so no
+    accumulated failures are returned in that case.
     """
     failures: List[str] = []
     for path in _iter_pool_csv_paths(pool_dir):

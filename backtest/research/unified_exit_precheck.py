@@ -3,7 +3,7 @@
 
 七项只读检查（docs/backtest/stock-backtest-unified-exit-proposal-2026-09-17.md §9.7）：
 
-1. 名单文件 / 实例数 / 单文件重复码
+1. 名单文件 / 实例数（同日重复码立即报错，停止预检）
 2. 交易日历覆盖（名单文件 vs 指数交易日：缺文件 / 多余文件）
 3. front 湖覆盖：缺失码、日线早断（退市 / 长停候选）、长无 K 间隙、受冻实例
 4. 买入日涨停边界统计（front 收盘 vs 板块幅度，±容差口径）
@@ -31,7 +31,7 @@ from datetime import date
 from pathlib import Path
 from typing import Optional
 
-from backtest.research.csv_pool import _cell_to_bare, _iter_pool_csv_rows, parse_pool_csv_entries
+from backtest.research.csv_pool import PoolDuplicateCodeError, parse_pool_csv_entries
 from backtest.research.csv_daily_loader import _read_one_daily, warmup_start
 from backtest.research.exdiv_map import load_exdiv_ratios
 from backtest.research.market_layer import limit_pct
@@ -54,18 +54,14 @@ DEFAULT_TOL = 0.002  # +/-0.2% band around the board limit ratio (fen rounding)
 
 
 def _pool_and_calendar(pool_dir: Path, start: str, end: str) -> dict:
-    """Checks 1-2: file/instance counts, dup codes, calendar coverage."""
+    """Count pool instances and calendar coverage; duplicate codes raise."""
     files = sorted(Path(pool_dir).glob("*.csv"))
     per_day: dict[str, list[tuple[str, str]]] = {}
-    dup_files: list[tuple[str, int]] = []
     total_rows = 0
     for f in files:
         entries = parse_pool_csv_entries(f)
         per_day[f.stem] = entries
-        raws = [r for r in (_cell_to_bare(p[0]) for _, p in _iter_pool_csv_rows(f) if p) if r]
-        total_rows += len(raws)
-        if (dups := len(raws) - len(set(raws))):
-            dup_files.append((f.name, dups))
+        total_rows += len(entries)
     closes = load_index_daily_closes(start, end)
     d0, d1 = _ymd_to_date(start), _ymd_to_date(end)
     sess_ymd = [d.strftime("%Y%m%d") for d in sorted(closes) if d0 <= d <= d1]
@@ -73,9 +69,8 @@ def _pool_and_calendar(pool_dir: Path, start: str, end: str) -> dict:
         "pool": {
             "files": len(files),
             "raw_rows": total_rows,
-            "deduped_instances": sum(len(v) for v in per_day.values()),
+            "instances": sum(len(v) for v in per_day.values()),
             "union_codes": len({c for v in per_day.values() for c, _ in v}),
-            "dup_files": dup_files,
             "per_day_min": min((len(v) for v in per_day.values()), default=0),
             "per_day_max": max((len(v) for v in per_day.values()), default=0),
         },
@@ -249,7 +244,7 @@ def run_precheck(
     horizons=HORIZONS,
     workers: int = 12,
 ) -> dict:
-    """Run all seven checks; returns the report dict (ASCII-safe values)."""
+    """Run all checks, raising on duplicate pool codes before lake access."""
     out: dict = {}
     base = _pool_and_calendar(Path(pool_dir), start, end)
     per_day, sess_ymd = base.pop("_per_day"), base.pop("_sess_ymd")
@@ -289,13 +284,17 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap.add_argument("--out-json", type=Path, default=Path("backtest_output/unified_exit_precheck.json"))
     args = ap.parse_args(argv)
 
-    report = run_precheck(args.start, args.end, pool_dir=args.pool_dir, tol=args.tol, workers=args.workers)
+    try:
+        report = run_precheck(args.start, args.end, pool_dir=args.pool_dir, tol=args.tol, workers=args.workers)
+    except PoolDuplicateCodeError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
     args.out_json.parent.mkdir(parents=True, exist_ok=True)
     args.out_json.write_text(json.dumps(report, ensure_ascii=True, indent=1, default=str), encoding="utf-8")
 
     p, cal, fr = report["pool"], report["calendar"], report["front"]
-    print(f"[pool] files={p['files']} rows={p['raw_rows']} dedup={p['deduped_instances']} "
-          f"union={p['union_codes']} dup_files={p['dup_files']}")
+    print(f"[pool] files={p['files']} rows={p['raw_rows']} instances={p['instances']} "
+          f"union={p['union_codes']}")
     print(f"[cal] sessions={cal['sessions']} missing_pool_files={cal['missing_pool_files']} "
           f"extra={cal['extra_pool_files']}")
     print(f"[front] missing={len(fr['missing_codes'])} early_stop={len(fr['early_stop_codes'])} "

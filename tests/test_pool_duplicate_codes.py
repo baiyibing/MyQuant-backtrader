@@ -24,6 +24,8 @@ def _load(loader: str, root: Path):
         return getattr(csv_pool, loader)(path)
     if loader in {"load_pool_day_map", "load_pool_name_map", "load_pool_names_by_day"}:
         return getattr(csv_pool, loader)(root, DAY, DAY)
+    if loader == "load_pool_day_map_date":
+        return csv_pool.load_pool_day_map(root, DAY_DATE, DAY_DATE, key="date")
     if loader == "validate_pool_dir":
         return csv_pool.validate_pool_dir(root)
     if loader in {"load_pool_codes_by_day", "report_pool_list_quality"}:
@@ -45,15 +47,20 @@ def _load(loader: str, root: Path):
 
 @pytest.mark.parametrize("loader", [
     "parse_pool_csv", "parse_pool_csv_entries", "validate_pool_dir",
-    "load_pool_day_map", "load_pool_name_map", "load_pool_names_by_day",
+    "load_pool_day_map", "load_pool_day_map_date", "load_pool_name_map", "load_pool_names_by_day",
     "load_pool_codes_by_day", "report_pool_list_quality", "v7", "mode_a",
     "precheck", "capital_ration", "app_intersection", "topn",
 ])
-@pytest.mark.parametrize("repeated", ["000001", "000001.SZ", "sz000001"])
-def test_all_pool_loaders_reject_normalized_duplicates(tmp_path, loader, repeated):
+@pytest.mark.parametrize("bare,repeated,canonical", [
+    ("000001", "000001", "000001.SZ"),
+    ("000001", "000001.SZ", "000001.SZ"),
+    ("000001", "sz000001", "000001.SZ"),
+    ("830001", "830001.BJ", "830001.BJ"),
+])
+def test_all_pool_loaders_reject_normalized_duplicates(tmp_path, loader, bare, repeated, canonical):
     path = tmp_path / f"{DAY}.csv"
     path.write_text(
-        f'\ufeff代码,名称\n# comment,"\n000001,first\n\n600000,other\n{repeated},second\n',
+        f'\ufeff代码,名称\n# comment,"\n{bare},first\n\n600000,other\n{repeated},second\n',
         encoding="utf-8",
     )
 
@@ -63,10 +70,10 @@ def test_all_pool_loaders_reject_normalized_duplicates(tmp_path, loader, repeate
     exc = error.value
     assert isinstance(exc, ValueError)
     assert (exc.path, exc.code, exc.first_line, exc.second_line) == (
-        path, "000001.SZ", 3, 6,
+        path, canonical, 3, 6,
     )
     assert str(path) in str(exc)
-    assert "000001.SZ" in str(exc)
+    assert canonical in str(exc)
     assert "first occurrence at line 3" in str(exc)
     assert "second occurrence at line 6" in str(exc)
 
