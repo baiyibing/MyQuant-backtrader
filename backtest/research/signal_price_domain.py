@@ -103,12 +103,23 @@ def frame_sha256(frame):
                                      separators=(",", ":")).encode("utf-8")).hexdigest()
 
 
+FRONT_REPRESENTATIONS = ("exact_transform_of_raw", "vendor_rounded")
+
+
 def build_source_metadata(front_daily, raw_daily, minute_bars, *,
-                          source_snapshot_id, provenance):
-    """Declare domains and frozen identities; this does not certify A/B values."""
+                          source_snapshot_id, provenance, front_representation):
+    """Declare domains and frozen identities; this does not certify A/B values.
+
+    front_representation states whether front bars are an exact A*raw+B
+    transform (synthetic fixtures) or vendor data rounded independently of the
+    declared coefficients (real lake). It gates the decision-precision check.
+    """
+    if front_representation not in FRONT_REPRESENTATIONS:
+        _fail(f"front_representation must be one of {FRONT_REPRESENTATIONS}")
     return {
         "daily_signal_domain": "front", "raw_daily_domain": "none",
         "minute_fill_domain": "none", "source_snapshot_id": source_snapshot_id,
+        "front_representation": front_representation,
         "provenance": dict(provenance),
         "source_hashes": {
             domain: {code: frame_sha256(frame) for code, frame in frames.items()}
@@ -317,6 +328,8 @@ def _validate_identities(front_daily, raw_daily, minute_bars, metadata):
             _fail(f"explicit {key}={expected!r} declaration required")
     if not metadata.get("source_snapshot_id"):
         _fail("source_snapshot_id required")
+    if metadata.get("front_representation") not in FRONT_REPRESENTATIONS:
+        _fail(f"explicit front_representation declaration required: {FRONT_REPRESENTATIONS}")
     if set(front_daily) != set(raw_daily) or set(raw_daily) != set(minute_bars):
         _fail("front/raw/minute code coverage differs")
     if not raw_daily:
@@ -550,12 +563,22 @@ def build_s12_price_context(front_daily, raw_daily, *, minute_bars, metadata,
         "real_lake_precision_validated": False,
         "cache_policy": "bypass_legacy_window_cache",
     })
+    # Human adjudication 2026-09-27: the decision-precision check demands that
+    # front bars be an exact A*raw+B representation, so any rounded-decision
+    # change is sub-tolerance corruption. Real-lake vendor front is rounded
+    # independently of the declared coefficients; its half-tick noise divided
+    # by A legitimately moves cent-rounded decisions, so the check is skipped
+    # (and recorded) there instead of misfiring.
+    _decision_precision_enabled = metadata.get("front_representation") == "exact_transform_of_raw"
+    output["decision_precision_check"] = (
+        "exact_front_enforced" if _decision_precision_enabled else "skipped_vendor_rounded_front")
     context = S12PriceContext(front_daily, raw_daily, minute_bars, parsed, output,
                               _validation_token=_VALIDATED_CONTEXT)
     for code, frame in raw_daily.items():
         for day in frame.index:
             view = context.day_signal_view(code, day)
-            context._validate_decision_precision(code, day, view)
+            if _decision_precision_enabled:
+                context._validate_decision_precision(code, day, view)
     return context
 
 
@@ -742,7 +765,8 @@ def load_s12_price_context(codes, start, end, *, load_start, transform_file=None
         provenance, transforms = document["provenance"], document.get("transforms")
         extra = {"transform_metadata_sha256": manifest_hash, "transform_evidence_sha256": evidence_hash}
     metadata = build_source_metadata(frames["front"], frames["raw"], frames["minute"],
-                                     source_snapshot_id=snapshot, provenance=provenance)
+                                     source_snapshot_id=snapshot, provenance=provenance,
+                                     front_representation="vendor_rounded")
     metadata.update(extra)
     metadata.update({"source_paths": {domain: {code: str(path) for code, path in by_code.items()}
                                       for domain, by_code in paths.items()},

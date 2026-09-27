@@ -38,7 +38,8 @@ def inputs(*, flat=False):
 
 def metadata(front, raw, minute, provenance=None):
     return domain.build_source_metadata(front, raw, minute, source_snapshot_id="snapshot-test",
-                                         provenance=provenance or PROVENANCE)
+                                         provenance=provenance or PROVENANCE,
+                                         front_representation="exact_transform_of_raw")
 
 
 def build(front, raw, minute, **kwargs):
@@ -201,10 +202,10 @@ def test_sub_tolerance_front_error_must_not_cross_reference_half_cent(event):
     transforms, provenance, evidence = pit_certificate(front, raw)
     if event:
         # Prior A=.5, D A=1: the rounding check must use the D inverse.
+        # Evidence closes stay raw-domain: per-day-A reconstruction validates
+        # each history day against that day's own transform, not session D's.
         front[CODE].iloc[-1] = raw[CODE].iloc[-1]
         transforms[(CODE, START)]["A"] = "1"
-        for row in evidence["views"][-1]["history"]:
-            row["close"] /= 2
     with pytest.raises(domain.PriceDomainError, match="precision changes rounded session reference"):
         certified_build(front, raw, minute, transforms, provenance, evidence)
 
