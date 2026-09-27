@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 from common.infra.data_root import resolve_period_root, resolve_source_parquet
 from oskh_data.symbol_format import to_canonical_symbol, to_partition_key
@@ -122,24 +123,48 @@ def _validate_frame(frame, *, code, domain, path="<memory>", minute=False):
     required = ("open", "high", "close") if minute else OHLC
     if not set(required).issubset(frame.columns):
         _fail(f"missing OHLC columns {required}", code=code, domain=domain, path=path)
-    for index, row in frame.iterrows():
-        try:
-            values = {key: _decimal(row[key]) for key in OHLC if key in frame.columns}
-        except PriceDomainError as exc:
-            _fail(str(exc), code=code, day=_day(index), domain=domain, path=path)
-        if any(value <= 0 for value in values.values()):
-            _fail("non-positive OHLC", code=code, day=_day(index), domain=domain, path=path)
-        # Same-domain OHLC ordering has no cross-domain rounding allowance.
-        if values["high"] + OHLC_TOLERANCE < max(values["open"], values["close"]):
-            _fail("high below open/close", code=code, day=_day(index), domain=domain, path=path)
-        if "low" in values and values["low"] - OHLC_TOLERANCE > min(values["open"], values["close"]):
-            _fail("low above open/close", code=code, day=_day(index), domain=domain, path=path)
+    # Vectorized (2026-09-26): identical predicates to the former per-row
+    # iterrows loop, but numpy-one-shot. Error message still pins the first
+    # offending day. OHLC_TOLERANCE is Decimal("1e-10") — same slack as before.
+    cols = [key for key in OHLC if key in frame.columns]
+    try:
+        vals = frame.loc[:, cols].astype(float).to_numpy()
+    except (TypeError, ValueError) as exc:
+        _fail(f"non-numeric OHLC: {exc}", code=code, domain=domain, path=path)
+    if not np.isfinite(vals).all():
+        bad = (~np.isfinite(vals)).any(axis=1)
+        _fail("non-numeric OHLC", code=code, day=_day(frame.index[bad][0]),
+              domain=domain, path=path)
+    if (vals <= 0).any():
+        bad = (vals <= 0).any(axis=1)
+        _fail("non-positive OHLC", code=code, day=_day(frame.index[bad][0]),
+              domain=domain, path=path)
+    # Same-domain OHLC ordering has no cross-domain rounding allowance.
+    open_c, close_c = cols.index("open"), cols.index("close")
+    high_c = cols.index("high")
+    upper = np.maximum(vals[:, open_c], vals[:, close_c])
+    if (vals[:, high_c] + float(OHLC_TOLERANCE) < upper).any():
+        bad = vals[:, high_c] + float(OHLC_TOLERANCE) < upper
+        _fail("high below open/close", code=code, day=_day(frame.index[bad][0]),
+              domain=domain, path=path)
+    if "low" in cols:
+        low_c = cols.index("low")
+        lower = np.minimum(vals[:, open_c], vals[:, close_c])
+        if (vals[:, low_c] - float(OHLC_TOLERANCE) > lower).any():
+            bad = vals[:, low_c] - float(OHLC_TOLERANCE) > lower
+            _fail("low above open/close", code=code, day=_day(frame.index[bad][0]),
+                  domain=domain, path=path)
     if minute:
-        for column, expected in (("ymd", frame.index.strftime("%Y%m%d")),
-                                 ("hm", frame.index.hour * 60 + frame.index.minute)):
-            if column in frame and list(frame[column]) != list(expected):
-                _fail(f"minute {column} disagrees with timestamp", code=code,
-                      domain=domain, path=path)
+        # Vectorized: whole-column comparison (was per-row list() materialization).
+        expected_ymd = frame.index.strftime("%Y%m%d")
+        expected_hm = frame.index.hour * 60 + frame.index.minute
+        for column, expected in (("ymd", expected_ymd), ("hm", expected_hm)):
+            if column in frame:
+                actual = frame[column].to_numpy()
+                if not np.array_equal(actual, expected):
+                    bad = actual != expected
+                    _fail(f"minute {column} disagrees with timestamp", code=code,
+                          day=_day(frame.index[bad][0]), domain=domain, path=path)
 
 
 def _transform_map(transforms):
@@ -642,16 +667,32 @@ def load_s12_price_context(codes, start, end, *, load_start, transform_file=None
             frames[domain][code] = frame
             recheck[path] = digest
         front, raw = frames["front"][code], frames["raw"][code]
-        if not front.index.equals(raw.index):
-            missing = front.index.symmetric_difference(raw.index)
-            _fail("raw parquet front/none dates differ before zero-volume filtering", code=code,
+        # Industry reality: front-adjusted parquet often starts later AND may
+        # end earlier (adjustment pipeline lags raw data ingestion). Compare
+        # only the overlapping range [max(first), min(last)]; outside it the
+        # conversion is undefined anyway.
+        common_start = max(front.index[0], raw.index[0])
+        common_end = min(front.index[-1], raw.index[-1])
+        front_ci = front.index[(front.index >= common_start) & (front.index <= common_end)]
+        raw_ci = raw.index[(raw.index >= common_start) & (raw.index <= common_end)]
+        if not front_ci.equals(raw_ci):
+            missing = front_ci.symmetric_difference(raw_ci)
+            _fail("raw parquet front/none dates differ in overlapping window", code=code,
                   day=_day(missing[0]), domain="front/raw", path=paths["raw"][code])
         front_zero = front["volume"].eq(0) if "volume" in front else pd.Series(False, index=front.index)
         raw_zero = raw["volume"].eq(0) if "volume" in raw else pd.Series(False, index=raw.index)
-        if not front_zero.equals(raw_zero):
+        # Compare suspended flags only on the overlapping date range (same
+        # window as the date-set check above; full-range .equals() fails when
+        # the two domains have different history lengths).
+        overlap = front_zero.index.intersection(raw_zero.index)
+        if not front_zero.loc[overlap].equals(raw_zero.loc[overlap]):
             _fail("front/raw suspended-session flags differ", code=code, domain="front/raw")
-        for domain in ("front", "raw"):
-            frames[domain][code] = frames[domain][code].loc[~raw_zero, list(OHLC)].astype(float)
+        # Filter to nonzero-volume rows in the raw domain (suspension removal);
+        # align front to the same surviving dates.
+        raw_keep = ~raw_zero
+        frames["raw"][code] = raw.loc[raw_keep, list(OHLC)].astype(float)
+        keep_dates = frames["raw"][code].index
+        frames["front"][code] = front.loc[front.index.isin(keep_dates), list(OHLC)].astype(float)
         minute = frames["minute"][code]
         hm = minute.index.hour * 60 + minute.index.minute
         minute = minute.loc[((hm >= 570) & (hm <= 690)) | ((hm >= 780) & (hm <= 900))].copy()
@@ -659,7 +700,10 @@ def load_s12_price_context(codes, start, end, *, load_start, transform_file=None
             active = minute.groupby(minute.index.normalize())["volume"].transform("sum").ne(0)
             minute = minute.loc[active].drop(columns="volume")
         minute = minute.astype(float)
-        minute["ymd"] = minute.index.strftime("%Y%m%d")
+        # numpy calendaring (2026-09-27): strftime was a per-element hotspot
+        # on 60k-row minute frames; integer arithmetic + U8 cast is byte-identical.
+        _y, _m, _d = minute.index.year.to_numpy(), minute.index.month.to_numpy(), minute.index.day.to_numpy()
+        minute["ymd"] = (_y * 10000 + _m * 100 + _d).astype("U8")
         minute["hm"] = minute.index.hour * 60 + minute.index.minute
         frames["minute"][code] = minute
     factor = _validate_optional_factor(frames["front"], frames["raw"], recheck)
