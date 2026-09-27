@@ -528,6 +528,7 @@ csv_daily_backtest.py --strategy topk_dropout --pred-csv <MyQuant pred>
 | 日期 | 什么 |
 |---|---|
 | 2026-09-27 | 归档 [4090 Human-GO TopK 执行三格（20260927a/b）](topk-exec-3cell-2026-09-27.md)：Q9 原结束日及湖末截尾，minute-none / nostop / walkdown-off；默认 close 不变，不新增 P2/P3/#214/Q8 GO。 |
+| 2026-09-27 | 归档 [4090 Human-GO TopK 执行六格（20260927c）](topk-exec-6cell-2026-09-27.md)：tip `9e58bde`（P3 #222），2026 窗含 walkdown-on，minute-none / nostop / Q9 原结束日及湖末警告；open_wd 与 intradate_wd 仅 equity MD5 相同，非全产物相同；非 2025 锚完整矩阵或默认切换 GO。 |
 | 2026-09-22 | 建页。收录两仓分工、四条规则缺口、止损扫是日线、开关 vs 多版本、日线/分钟入口、待裁 Q1–Q9。 |
 | 2026-09-22 | 补 §1 来龙去脉、§2 对齐尺子、§3 踩坑（引用 overlay / #87 / 填坑文 / 年化账 / 三仓定位）。 |
 | 2026-09-22 | 补 §6.4 落地清单、§6.5 日线/分钟 as-built、§9 现成 CLI（含分钟无 `--qlib-cost`）。 |
