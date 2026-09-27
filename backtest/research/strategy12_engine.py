@@ -132,7 +132,7 @@ def _limits(st, code, closes, ds, names, exdiv, reference_price_for=None):
         prev, mapped = reference_price_for(code, ds), False
     if mapped:
         st.stats["exdiv_prev_close_mapped"] = st.stats.get("exdiv_prev_close_mapped", 0) + 1
-    limits = book_limit_prices(code, prev, names)
+    limits = book_limit_prices(code, prev, names, as_of=ds)
     if limits is None:
         st.stats["skip_unknown_board"] += 1
     return limits

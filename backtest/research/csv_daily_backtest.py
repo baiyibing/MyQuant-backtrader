@@ -364,7 +364,7 @@ def simulate(
                         int(st.stats.get("exdiv_prev_close_mapped", 0)) + 1
                     )
                 limits = book_limit_prices(
-                    code, prev_close, names, qlib_limit_pct=qlib_limit_pct
+                    code, prev_close, names, qlib_limit_pct=qlib_limit_pct, as_of=ds
                 )
                 if limits is None:
                     st.stats["skip_unknown_board"] += 1
@@ -573,7 +573,7 @@ def simulate(
                         continue
                     row, closes = got
                     previous, _ = mapped_prev_close(exdiv, code, ds, float(closes[-1]))
-                    limits = book_limit_prices(code, previous, names, qlib_limit_pct=qlib_limit_pct)
+                    limits = book_limit_prices(code, previous, names, qlib_limit_pct=qlib_limit_pct, as_of=ds)
                     if limits is None:
                         continue
                     close = float(row["close"])

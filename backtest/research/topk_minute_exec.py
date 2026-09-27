@@ -35,7 +35,7 @@ TopK minute execution (#208 P1/P2/P3; topk_dropout only):
   open (opt-in): exact 09:30 open once; missing 09:30 skips, no later-row fallback.
   intraday (opt-in): first session open < limit_up; equality retries the same name.
   Sessions: [09:30,11:30] / [13:00,15:00]; all valid opens blocked → limit_retry_expired;
-  no valid quotes → skip_no_bar. Current qlib 9.5% band remains unchanged.
+  no valid quotes → skip_no_bar. Default qlib 9.5% band remains unchanged.
   open/intraday freeze min(daily_quota, cash)*0.95/D at 09:30 buy dispatch;
   execution checks actual cash including fees, after same-minute open sells,
   before same-minute close sells. Original planned seats D stay fixed.
@@ -54,20 +54,25 @@ TopK minute execution (#208 P1/P2/P3; topk_dropout only):
   to the next eligible frozen rank; close/open recurse at 14:55/09:30, intraday
   only scans hm >= selection time. Cash/other failures never hand off.
   Substitute fills: pool:walkdown:<exec>; counter walkdown_fills.
+  --topk-limit-rule qlib|real (default qlib): real opts into Decimal board/ST/date
+  tiers (X-07); undated main-ST falls back to 5%. Only topk_dropout; orthogonal
+  to execution/walkdown, with vwap x walkdown still refused. Audit records the rule.
   Sell rules are unchanged. topk_score_exit is excluded.
 """
 
 
-def validate_topk_exec(mode, strategy, limit_walkdown=False):
+def validate_topk_exec(mode, strategy, limit_walkdown=False, topk_limit_rule="qlib"):
+    if topk_limit_rule not in ("qlib", "real"):
+        raise ValueError(f"unknown --topk-limit-rule {topk_limit_rule!r}; choose qlib or real")
     if mode not in ("close", "open", "intraday", "vwap"):
         raise ValueError(f"unknown --topk-exec {mode!r}; choose close, open, intraday or vwap")
     if mode == "vwap" and limit_walkdown:
         raise ValueError("--topk-exec vwap x --limit-walkdown is refused")
-    if mode != "close" or limit_walkdown:
+    if mode != "close" or limit_walkdown or topk_limit_rule != "qlib":
         from backtest.research.csv_strategy_books import normalize_csv_strategy
 
         if normalize_csv_strategy(strategy) != "topk_dropout":
-            raise ValueError("--topk-exec open/intraday/vwap and --limit-walkdown apply only to topk_dropout")
+            raise ValueError("--topk-exec open/intraday/vwap, --limit-walkdown and --topk-limit-rule real apply only to topk_dropout")
 
 
 def parse_topk_exec(value):
@@ -148,7 +153,7 @@ class TopkMinuteBuys:
                 self.missing.add(code)
                 continue
             limits = book_limit_prices(code, previous, names,
-                                       qlib_limit_pct=hooks.get("qlib_limit_pct"))
+                                       qlib_limit_pct=hooks.get("qlib_limit_pct"), as_of=ds)
             if limits is None:
                 self.unknown.add(code)
                 continue
@@ -381,7 +386,7 @@ class TopkMinuteBuys:
 
 def write_topk_exec_audit(out_dir, st):
     payload = {key: st.stats[key] for key in (
-        "topk_exec", "limit_retry_fills", "limit_retry_expired",
+        "topk_exec", "topk_limit_rule", "limit_retry_fills", "limit_retry_expired",
     )}
     if st.stats.get("limit_walkdown"):
         payload.update(limit_walkdown=True, walkdown_fills=st.stats["walkdown_fills"],

@@ -659,13 +659,14 @@ def simulate(
     audit_sink=None,
     topk_exec: str = "close",
     limit_walkdown: bool = False,
+    topk_limit_rule: str = "qlib",
 ) -> SimState:
     """Opt-in cap uses caller-attested completed minutes; daily volume is unused.
 
     exdiv_economics is an explicit (symbol, YYYYMMDD) -> ExDivEvent lookup for
     raw bars. None retains the baseline; E-R6 ratios never imply entitlements.
     """
-    validate_topk_exec(topk_exec, strategy, limit_walkdown)
+    validate_topk_exec(topk_exec, strategy, limit_walkdown, topk_limit_rule)
     validate_tail_options(tail_window_buy, fix_minute_cash_order, tail_volume_unit)
     if tail_window_buy:
         tail_volume_unit = resolve_tail_volume_unit(tail_volume_unit)
@@ -723,6 +724,8 @@ def simulate(
         index_block_new=index_block_new,
         stop_fill=stop_fill,
     )
+    if topk_limit_rule == "real":
+        hooks["qlib_limit_pct"] = None
     stop_pct = hooks["stop_pct"]
     stop_fill = str(hooks.get("stop_fill") or "touch").strip().lower()
     if stop_fill == "close":
@@ -752,8 +755,8 @@ def simulate(
         daily_quota=daily_quota,
     )
     configure_s8(st, hooks)
-    if topk_exec != "close" or limit_walkdown:
-        st.stats.update(topk_exec=topk_exec, limit_retry_fills=0, limit_retry_expired=0)
+    if topk_exec != "close" or limit_walkdown or topk_limit_rule != "qlib":
+        st.stats.update(topk_limit_rule=topk_limit_rule, topk_exec=topk_exec, limit_retry_fills=0, limit_retry_expired=0)
         st.topk_exec_audit = []
         if limit_walkdown:
             st.stats.update(limit_walkdown=True, walkdown_fills=0, walkdown_exhausted=0)
@@ -854,7 +857,7 @@ def simulate(
                         int(st.stats.get("exdiv_prev_close_mapped", 0)) + 1
                     )
                 limits = book_limit_prices(
-                    code, prev_close, names, qlib_limit_pct=qlib_limit_pct
+                    code, prev_close, names, qlib_limit_pct=qlib_limit_pct, as_of=ds
                 )
                 if limits is None:
                     st.stats["skip_unknown_board"] += 1
@@ -1220,8 +1223,9 @@ def run(
     audit_sink=None,
     topk_exec: str = "close",
     limit_walkdown: bool = False,
+    topk_limit_rule: str = "qlib",
 ) -> SimState:
-    validate_topk_exec(topk_exec, strategy, limit_walkdown)
+    validate_topk_exec(topk_exec, strategy, limit_walkdown, topk_limit_rule)
     validate_tail_options(tail_window_buy, fix_minute_cash_order, tail_volume_unit)
     if tail_window_buy:
         tail_volume_unit = resolve_tail_volume_unit(tail_volume_unit)
@@ -1496,6 +1500,7 @@ def run(
         tail_volume_unit=tail_volume_unit,
         audit_sink=audit_sink,
         topk_exec=topk_exec, limit_walkdown=limit_walkdown,
+        topk_limit_rule=topk_limit_rule,
     )
     if skipped.get("exdiv_skipped_no_factor"):
         st.stats["exdiv_skipped_no_factor"] = int(skipped["exdiv_skipped_no_factor"])
@@ -1521,6 +1526,8 @@ def run(
     if limit_walkdown and topk_exec == "close":
         st.stats.update(fallback_order_clock="14:55_decision; _buy_px_quote_bucket",
                         allocation_clock="14:55_buy_dispatch")
+    if topk_exec != "close" or limit_walkdown or topk_limit_rule != "qlib":
+        st.run_metadata = {"topk_limit_rule": topk_limit_rule}
     if tail_window_buy:
         st.run_metadata = {"tail_window_buy": tail_policy(tail_volume_unit)}
     st.stats["t_pool_s"] = t_pool
@@ -1571,6 +1578,8 @@ def main(argv: Optional[list] = None) -> int:
     )
     ap.add_argument("--minute-source", choices=("lake", "qlib_1min"), default="lake")
     ap.add_argument("--daily-source", choices=("lake", "qlib_day"), default="lake")
+    ap.add_argument("--topk-limit-rule", choices=("qlib", "real"), default="qlib",
+                    help="TopK limit band: qlib 0.095 (default) or real board/ST/date tiers")
     ap.add_argument("--limit-walkdown", action="store_true",
                     help="TopK first limit-up block hands whole seat quota to next eligible rank")
     ap.add_argument(
@@ -1637,7 +1646,7 @@ def main(argv: Optional[list] = None) -> int:
     ap.add_argument("--execution-audit-file", help="optional execution JSON sidecar; leaves CSVs unchanged")
     args = ap.parse_args(argv if argv is not None else None)
     try:
-        validate_topk_exec(args.topk_exec, args.strategy, args.limit_walkdown)
+        validate_topk_exec(args.topk_exec, args.strategy, args.limit_walkdown, args.topk_limit_rule)
     except ValueError as exc:
         ap.error(str(exc))
     pool_dir = resolve_research_pool_dir(args.strategy, args.pool_dir, repo=REPO)
@@ -1677,6 +1686,7 @@ def main(argv: Optional[list] = None) -> int:
         tail_volume_unit=args.tail_volume_unit,
         audit_sink=audit,
         topk_exec=args.topk_exec, limit_walkdown=args.limit_walkdown,
+        topk_limit_rule=args.topk_limit_rule,
         **csv_run_kwargs_from_args(args),
     )
     book = engine_book(args.strategy)
@@ -1700,7 +1710,8 @@ def main(argv: Optional[list] = None) -> int:
     manifest_args = vars(args).copy()
     if not args.limit_walkdown:
         manifest_args.pop("limit_walkdown", None)
-    if args.topk_exec == "close" and not args.limit_walkdown:
+    if args.topk_exec == "close" and not args.limit_walkdown and args.topk_limit_rule == "qlib":
+        manifest_args.pop("topk_limit_rule", None)
         manifest_args.pop("topk_exec", None)
     if not args.tail_window_buy:
         manifest_args.pop("tail_window_buy", None)
@@ -1710,7 +1721,7 @@ def main(argv: Optional[list] = None) -> int:
         st,
         text,
         help_lock_for(args.strategy, shared=HELP_LOCK)
-        + (TOPK_EXEC_HELP_LOCK if args.topk_exec != "close" or args.limit_walkdown else ""),
+        + (TOPK_EXEC_HELP_LOCK if args.topk_exec != "close" or args.limit_walkdown or args.topk_limit_rule != "qlib" else ""),
         emit_run_manifest=emit_manifest,
         signal_bundle_sha256=st.stats.get("signal_bundle_sha256"),
         manifest_config=(
@@ -1720,7 +1731,7 @@ def main(argv: Optional[list] = None) -> int:
             if emit_manifest else None
         ),
     )
-    if args.topk_exec != "close" or args.limit_walkdown:
+    if args.topk_exec != "close" or args.limit_walkdown or args.topk_limit_rule != "qlib":
         write_topk_exec_audit(out_dir, st)
     if normalize_csv_strategy(args.strategy) == "version12":
         price_domain_audit = (

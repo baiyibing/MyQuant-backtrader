@@ -198,7 +198,7 @@ def evaluate_exit(
         at = available_at(day, hm, at_open=stop_open or take_open or index_open)
         session = ResearchSession(config, day, audit)
         rows = np.flatnonzero(path.ymd == day)
-        limits = session_limit_prices(inst.symbol, refs.get(day), inst.name)
+        limits = session_limit_prices(inst.symbol, refs.get(day), inst.name, as_of=day)
         candidates = [
             OpenCandidate(stamp(day, path.hm[j]), float(path.open[j]), limits)
             for j in rows
@@ -322,7 +322,7 @@ def run(
                 if not inst.opened or inst.list_date != day:
                     continue
                 refs = modeb._previous_refs(daily, inst.symbol, exdiv)
-                limits = session_limit_prices(inst.symbol, refs.get(day), inst.name)
+                limits = session_limit_prices(inst.symbol, refs.get(day), inst.name, as_of=day)
                 pk = minutes.packed.get(inst.symbol)
                 sl = None if pk is None else pk.slices.get(day)
                 if sl is None:

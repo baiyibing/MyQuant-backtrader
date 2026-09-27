@@ -68,8 +68,9 @@ def write_close_products(target, state):
 @pytest.mark.parametrize("case,price", [("exact", 10.4), ("fallback", 10.3), ("empty", None)])
 @pytest.mark.parametrize("mode", [None, "close"])
 @pytest.mark.parametrize("walkdown", [{}, {"limit_walkdown": False}])
-def test_close_matches_frozen_master_bytes(tmp_path, case, price, mode, walkdown):
-    state = close_case(case, **walkdown, **({} if mode is None else {"topk_exec": mode}))
+@pytest.mark.parametrize("limit_rule", [{}, {"topk_limit_rule": "qlib"}])
+def test_close_matches_frozen_master_bytes(tmp_path, case, price, mode, walkdown, limit_rule):
+    state = close_case(case, **limit_rule, **walkdown, **({} if mode is None else {"topk_exec": mode}))
     assert "walkdown_exhausted" not in state.stats
     buys = [t for t in state.trades if t["date"] == D1 and t["side"] == "BUY"]
     assert [t["price"] for t in buys] == ([] if price is None else [price])
@@ -739,3 +740,76 @@ def test_explicit_walkdown_off_preserves_opt_in_modes(mode):
     assert implicit.topk_exec_audit == explicit.topk_exec_audit
     assert "walkdown_fills" not in explicit.stats
     assert "walkdown_exhausted" not in explicit.stats
+
+
+@pytest.mark.parametrize("mode,walkdown", [
+    ("close", False), ("open", False), ("intraday", False), ("vwap", False),
+    ("close", True), ("open", True), ("intraday", True),
+])
+@pytest.mark.parametrize("code,name,price", [
+    ("300001.SZ", "ST测试", 11.0), (A, "*ST测试", 10.97),
+])
+def test_real_limit_tiers_reach_all_minute_dispatches(mode, walkdown, code, name, price):
+    clocks = sorted({570, 895, *VWAP_SLICE_CLOCKS})
+    rows = {code: [(D1, hm, price, price) for hm in clocks]}
+    options = dict(topk_exec=mode, limit_walkdown=walkdown, pool_names={code: name})
+    qlib = run_case(rows, **options, topk_limit_rule="qlib")
+    real = run_case(rows, **options, topk_limit_rule="real")
+    assert not buys(qlib)
+    assert buys(real)
+    assert all(t["price"] == price for t in buys(real))
+    assert real.stats["topk_limit_rule"] == "real"
+    # Per-run override must not leak into the next default run.
+    assert not buys(run_case(rows, **options))
+
+
+@pytest.mark.parametrize("strategy,rule,message", [
+    ("version6", "real", "only to topk_dropout"),
+    ("topk_score_exit", "real", "only to topk_dropout"),
+    ("topk_dropout", "bad", "unknown --topk-limit-rule"),
+])
+def test_limit_rule_api_validation(strategy, rule, message):
+    with pytest.raises(ValueError, match=message):
+        minute.run(D1, D1, strategy=strategy, topk_limit_rule=rule)
+    with pytest.raises(ValueError, match=message):
+        minute.simulate({}, {}, {}, D1, D1, strategy=strategy, topk_limit_rule=rule)
+
+
+@pytest.mark.parametrize("strategy,rule", [
+    ("version6", "real"), ("topk_score_exit", "real"), ("topk_dropout", "bad"),
+])
+def test_limit_rule_cli_validation(strategy, rule, capsys):
+    with pytest.raises(SystemExit) as exc:
+        minute.main(["--strategy", strategy, "--topk-limit-rule", rule])
+    assert exc.value.code == 2
+    assert "--topk-limit-rule" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("rule", ["qlib", "real"])
+@pytest.mark.parametrize("mode", ["close", "open"])
+def test_limit_rule_cli_artifacts(tmp_path, synthetic_loaders, rule, mode):
+    out = tmp_path / "out"
+    minute.main(["--strategy", "topk_dropout", "--start", D1, "--end", D1,
+                 "--pool-dir", str(tmp_path), "--out-dir", str(out),
+                 "--topk-limit-rule", rule, "--topk-exec", mode, "--emit-run-manifest"])
+    manifest = json.loads((out / "run-manifest.json").read_text())
+    if rule == "qlib" and mode == "close":
+        assert "topk_limit_rule" not in json.dumps(manifest)
+        assert not (out / "topk_execution.json").exists()
+    else:
+        audit = json.loads((out / "topk_execution.json").read_text())
+        assert audit["topk_limit_rule"] == rule
+        metadata = json.loads((out / "run-metadata.json").read_text())
+        assert metadata["topk_limit_rule"] == rule
+        assert any(row["path"].endswith("run-metadata.json") for row in manifest["artifacts"])
+
+
+def test_real_st_trade_day_crosses_switch():
+    # Use explicit simulation days to verify threading, not the undated 5% fallback.
+    for day, expected in [("20260705", False), ("20260706", True)]:
+        ms, ds = frames({A: [(day, 895, 10.7, 10.7)]})
+        ds[A].index = pd.to_datetime(["20260704", "20260705", "20260706"])
+        st = minute.simulate(ms, ds, {day: [A]}, day, day, strategy="topk_dropout",
+                             scores_by_day={day: {A: 1.}}, topk=1, n_drop=1,
+                             stop_pct=0, pool_names={A: "*ST测试"}, topk_limit_rule="real")
+        assert bool(buys(st)) == expected

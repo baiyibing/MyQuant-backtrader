@@ -81,8 +81,8 @@ def test_d2_no_previous_close_retains_none_policy():
     pytest.param("600000.SH", "", (110, 90), id="unknown-name-known-board"),
     pytest.param("999999.SZ", "普通名", None, id="unknown-board-normal-name"),
     pytest.param("999999.SZ", "*ST甲", (105, 95), id="st-before-unknown-board"),
-    pytest.param("300001.SZ", "ST甲", (105, 95), id="st-before-twenty-percent"),
-    pytest.param("920014.BJ", "*st甲", (105, 95), id="st-before-thirty-percent"),
+    pytest.param("300001.SZ", "ST甲", (120, 80), id="st-board-twenty-percent"),
+    pytest.param("920014.BJ", "*st甲", (130, 70), id="st-board-thirty-percent"),
     pytest.param("600000.SH", "WEST", (110, 90), id="latin-token-not-st"),
 ])
 def test_d3_name_and_board_boundaries(code, name, expected):

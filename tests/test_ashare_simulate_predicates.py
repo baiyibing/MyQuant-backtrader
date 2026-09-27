@@ -332,6 +332,8 @@ def test_reason_bucket_examples_keep_two_ledgers_explicit():
 @pytest.mark.parametrize("engine", ["daily", "minute", "v7"])
 @pytest.mark.parametrize("action", ["sell", "add"])
 def test_d3_held_name_chain_sell_and_add_bands(engine, action, monkeypatch):
+    # Name-chain 5% vs 10% distinction belongs before the X-07 switch.
+    D0, D1, D2, D3 = (date(2026, 6, n) for n in (1, 2, 3, 4))
     seed(monkeypatch, engine, CODE, D0)
     # Enable the same historical book add path used by the minute name pin.
     # There is no index/buy gate, cash is ample, and sell lots predate D2/D3.
@@ -433,3 +435,14 @@ def test_d3_unknown_board_st_reaches_limit_gate_and_fill(engine, price, blocked)
         assert len(fills) == 1
         assert fills[0]["price"] == 104 and fills[0]["shares"] > 0
         assert UNKNOWN in state.positions
+
+
+@pytest.mark.parametrize("engine", ["daily", "minute", "v7"])
+@pytest.mark.parametrize("month,filled", [(6, False), (9, True)])
+def test_main_st_trade_day_reaches_named_limit_gate(engine, month, filled):
+    previous, day = date(2026, month, 1), date(2026, month, 2)
+    names = {CODE: "*ST测试"}
+    kwargs = {"names": names} if engine == "v7" else {"pool_names": names}
+    state = run(engine, {previous: 100, day: 107}, day, day,
+                pool={day: [CODE]}, **kwargs)
+    assert bool([t for t in state.trades if t["side"].lower() == "buy"]) == filled
