@@ -58,6 +58,7 @@ def context_for(front, raw, mins, *, factor=0.5, offset=0, transforms=None):
         front, raw, mins, source_snapshot_id="x01-frozen-synthetic-v1",
         provenance={"kind": "synthetic_fixture", "algorithm": "known_affine_fixture",
                     "anchor_version": "fixture-v1"},
+        front_representation="exact_transform_of_raw",
     )
     if transforms is None:
         transforms = {
