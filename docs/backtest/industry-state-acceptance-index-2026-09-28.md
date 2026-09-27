@@ -6,20 +6,21 @@ audit_base_sha_short: 8a6d6c3
 pr_base_sha: 21adb693656cf81e6cb1a80d5c5641fab6415615
 pr_base_sha_short: 21adb69
 sources:
-  - /workspace/INDUSTRY_GAPS_BT_2026-09-28.md
-  - /workspace/KIMI_REVIEW_INDUSTRY_GAPS_BT_2026-09-28.md
+  - industry-gaps-bt-2026-09-28.md
+  - kimi-review-industry-gaps-bt-2026-09-28.md
+  - kimi-review-pr231-g9-g1-index-2026-09-28.md
 status: "docs-only index; no implementation; no default flip; no new lake GO"
 ---
 
 # 行业状态与正确性开关验收索引（G9 + G1）
 
-Human 于 2026-09-28 批准 [INDUSTRY_GAPS 基线审计](/workspace/INDUSTRY_GAPS_BT_2026-09-28.md)：**「批准此稿为基线；先做 G9+G1 合并只读索引（顺带修 B1），其余逐项单独 GO。」** [Kimi 核稿](/workspace/KIMI_REVIEW_INDUSTRY_GAPS_BT_2026-09-28.md) 为 **APPROVE_WITH_NITS**，建议 G1 第一、G9 从第八提至第二，合并为同一只读产物。
+Human 于 2026-09-28 批准 [INDUSTRY_GAPS 基线审计](industry-gaps-bt-2026-09-28.md)：**「批准此稿为基线；先做 G9+G1 合并只读索引（顺带修 B1），其余逐项单独 GO。」** [Kimi 核稿](kimi-review-industry-gaps-bt-2026-09-28.md) 为 **APPROVE_WITH_NITS**，建议 G1 第一、G9 从第八提至第二，合并为同一只读产物。
 
-这两份来源在 **Bot VM 的 `/workspace/`、git 之外**；普通 clone 不包含它们。本文提供仓内入口与证据边界，不复制整份审计，也不将不可访问的宿主回执视为已复核。审计基线 tip 为 `8a6d6c3`（#229）；本 PR 已 rebase 到 master tip `21adb69`（#230 squash-merge：docs stop/exdiv P3 `20260927e` archive）。本页“当前默认/opt-in”仍以审计基线为准；#230 **已合入**且 **defaults not flipped**。旧 plan 的历史状态以随后专项冻结记录为准。
+基线审计与 Kimi 核稿现已落仓（见 frontmatter `sources`）；原稿亦曾存放于 Bot VM `/workspace/`。本文仍是仓内入口与证据边界索引：不把未重审的宿主回执视为已复核。审计基线 tip 为 `8a6d6c3`（#229）；本 PR 已 rebase 到 master tip `21adb69`（#230 squash-merge：docs stop/exdiv P3 `20260927e` archive）。本页“当前默认/opt-in”仍以审计基线为准；#230 **已合入**且 **defaults not flipped**。旧 plan 的历史状态以随后专项冻结记录为准。
 
 ## 1 当前默认 vs opt-in（状态面 · G9）
 
-表中“已实现默认 OFF”“docs-only 决策关闭”“API 存在但 CLI 未接”是不同状态；PASS 不等于翻默认 GO。D 编号沿用外置审计，链接落到仓内材料；外置例外明确标注。
+表中“已实现默认 OFF”“docs-only 决策关闭”“API 存在但 CLI 未接”是不同状态；PASS 不等于翻默认 GO。D 编号沿用[基线审计](industry-gaps-bt-2026-09-28.md)，链接落到仓内材料。
 
 | 项目 | 当前默认 | opt-in / flag | 最新验收或状态指针 | 明确未证实 / 延期边界 |
 |---|---|---|---|---|
@@ -31,7 +32,7 @@ Human 于 2026-09-28 批准 [INDUSTRY_GAPS 基线审计](/workspace/INDUSTRY_GAP
 | X-02 分钟现金时序 | OFF（TopK 自动路径见 §2） | `--fix-minute-cash-order` | [D26 合成验证 / M 清单](x02-minute-cash-order-2026-09-25.md)；§2 | s12 明确拒绝；共享书/v7 的完整真湖验收未证实，不从 TopK 归档推导全书 PASS |
 | X-03 s11 退出信号域 | OFF | `--fix-s11-exit-domain` | [D27](x03-s11-exit-domain.md)；后续 [D32 附表](note-lessons-2026-09-25-26-experiment-chain.md#附本次实验链的最终状态) 真湖 PASS 摘要 | X-02×X-03、exporter/CYQK PIT、Slice D 不因此通过 |
 | X-07 named-limit 与 TopK 接线 | 原本的真实 named-limit 路径已按板块/日期修正；TopK 仍 qlib | TopK 显式 `--topk-limit-rule real` | [D14 P4 档位表、接线与后续](topk-exec-p4-2026-09-27.md)；[D17](topk-exec-6cell-real-2026-09-27.md) | **不能把 X-07 整体写为默认 OFF**；real 不证明名称 PIT 或特殊无限制 regime |
-| δ3 名称 as-of | v7 flat；开关 OFF | `--asof-pool-names` | [D20](plan-industry-align-p3-d3-st-pit-2026-09-19.md)；[D23 crosscheck §4 D07](../reviews/2026-09-25-minute-engine-review/raw/crosscheck-grok.md)；审计 §1.1 | by-day 能力存在；源在决策时刻可得仍需证明，默认不翻 |
+| δ3 名称 as-of | v7 flat；开关 OFF | `--asof-pool-names` | [D20](plan-industry-align-p3-d3-st-pit-2026-09-19.md)；[D23 crosscheck §4 D07](../reviews/2026-09-25-minute-engine-review/raw/crosscheck-grok.md)；[审计 §1.1](industry-gaps-bt-2026-09-28.md#11-核心三线与其他已实现能力) | by-day 能力存在；源在决策时刻可得仍需证明，默认不翻 |
 | δ5 容量 | API `participation_rate=None`（OFF） | API rate / 量桶参数 | [D22 v0.4 / §5–6](plan-industry-align-p3-d5-volume-cap-2026-09-19.md)；[D7 §2.4](engine-ashare-correctness.md) | API 已实现；共享 CLI/run 无通用 rate 接线，非“完全缺失”；真实量认证、日线 cap、排队/冲击延期 |
 | δ6 权益 | API `exdiv_economics=None`（OFF） | 显式 economics 事件 API | [D24 §5 / §8.4](plan-industry-align-p3-d6-exdiv-economics-2026-09-19.md)；[D7 §2.5](engine-ashare-correctness.md) | API 已实现；无通用 CLI/湖事件 loader；补发、恢复等生命周期延期，不从 k 猜派息 |
 | #135 classic P1/P4 与 P2 | P1/P4 A/A，as-built；P2 B 标签已交付 | P1/P4 为 docs-only decision closed，无新行为开关 | [D8 §4](plan-industry-align-next-2026-09-19.md)、[D9 §5](plan-industry-align-refactor-2026-09-18.md) | 不重开集合竞价或 touch/mark；`session_phase` / `price_rule` 可空，v7 schema 不自动扩展；标签不等于真实竞价模型 |
@@ -47,8 +48,8 @@ Human 于 2026-09-28 批准 [INDUSTRY_GAPS 基线审计](/workspace/INDUSTRY_GAP
 | s12 分钟：X-01 alone | X-01 ON；lake/none，front 经显式上下文转换至 D 日 raw 单位 | X-02 OFF；s12 自有路径 | 既有 MA 规则，使用转换后的历史；raw mark/成交 | 默认 OFF；显式权益独立，`exdiv=None` 防双调 | 独立参考价，非 TopK hook | ON 绕过旧分钟缓存 | 三域源字节 hash + transform/provenance 合同；实际宿主完整 hash 未重审 | [D25 开关/证据](x01-s12-price-domain.md) 合成；[D32 附表](note-lessons-2026-09-25-26-experiment-chain.md#附本次实验链的最终状态) R39/R40、HEAD `343e658` | Y（合成）；摘要-only（真湖）；完整细节未证实 |
 | s11 日线/分钟：X-03 alone | X-01 OFF；raw lake 执行 + 独立 1d/front | X-02 OFF；日线不适用 X-02 | X-03 ON；INITIAL/HOLD front；raw mark | 默认 OFF；旧参考映射不派权益 | 保留原参考映射/档位 | 真湖配方分钟显式 `--no-cache`；v11 volume 路径绕过旧无量缓存 | raw/front 源 hash、外层 metadata；池来源须另证，未重审真实池/hash | [D27 合成/真湖配方](x03-s11-exit-domain.md)；[D32 附表](note-lessons-2026-09-25-26-experiment-chain.md#附本次实验链的最终状态) | Y（合成）；摘要-only（真湖）；完整细节未证实 |
 | 共享受影响书 / 独立 v7：X-02 alone（合成） | X-01 OFF；原价格域 | X-02 ON；按 hm 与 open/close 推进 | X-03 OFF；旧退出 | 合成 M11–12 含 OFF/ON，不推广到真湖 | 保留既有档位；非切 TopK real 的实验 | 冻结合成输入，不消费旧湖缓存 | D26 记录输入/参数/源码/golden hash 报告合同 | [D26 合成验证与 M 清单](x02-minute-cash-order-2026-09-25.md) | Y（仅合成及 OFF 基线） |
-| 共享受影响书 / 独立 v7：X-02 alone（真湖） | X-01 OFF；原域须逐书冻结 | X-02 OFF/ON 独立 A/B | X-03 OFF | 需固定；实际配置未证实 | 需固定；实际配置未证实 | 实际缓存使用未证实 | 原窗/池/seed/费率/快照等冻结要求已写；完整回执未找到 | [D26 真实数据未验证](x02-minute-cash-order-2026-09-25.md)；基线审计 G1 | 未证实 / needs Human；紧现金与默认资金两组不能用合成替代 |
-| s11 分钟：X-02×X-03 | raw lake + 1d/front；X-01 OFF | X-02 ON | X-03 ON | 默认 OFF；组合实测配置未证实 | 原档位；不得叠 hl | v11 volume 绕过旧无量缓存；组合实测姿态未证实 | 原池/两源/配置 hash 与逐事件回执待核 | [D27 交互边界](x03-s11-exit-domain.md)；审计 G1 | 未证实；文本合并/单开 PASS 不等于 ON 交互 PASS |
+| 共享受影响书 / 独立 v7：X-02 alone（真湖） | X-01 OFF；原域须逐书冻结 | X-02 OFF/ON 独立 A/B | X-03 OFF | 需固定；实际配置未证实 | 需固定；实际配置未证实 | 实际缓存使用未证实 | 原窗/池/seed/费率/快照等冻结要求已写；完整回执未找到 | [D26 真实数据未验证](x02-minute-cash-order-2026-09-25.md)；[基线审计 G1](industry-gaps-bt-2026-09-28.md) | 未证实 / needs Human；紧现金与默认资金两组不能用合成替代 |
+| s11 分钟：X-02×X-03 | raw lake + 1d/front；X-01 OFF | X-02 ON | X-03 ON | 默认 OFF；组合实测配置未证实 | 原档位；不得叠 hl | v11 volume 绕过旧无量缓存；组合实测姿态未证实 | 原池/两源/配置 hash 与逐事件回执待核 | [D27 交互边界](x03-s11-exit-domain.md)；[基线审计 G1](industry-gaps-bt-2026-09-28.md) | 未证实；文本合并/单开 PASS 不等于 ON 交互 PASS |
 | topk_dropout：非 close 或 walkdown | X-01/X-03 不适用；归档 minute-none | 即使 X-02 flag OFF，`topk_exec != close` **或** walkdown ON 自动入时序路径 | 归档 nostop，不能当 hl 验收 | 默认 OFF；原始配置未重审 | c 为 qlib；d 为 real | 归档实际缓存姿态未重审 | recorder `8a061ea4`；c tip `9e58bde`、d tip `5a3e6e2`；完整 hash 未复核 | [P1](topk-exec-p1-2026-09-27.md)、[P3](topk-exec-p3-2026-09-27.md)、[c](topk-exec-6cell-2026-09-27.md)、[d](topk-exec-6cell-real-2026-09-27.md) | Y（自动接线）；摘要-only（open/intraday 与 walkdown 归档），非全书 X-02 验收 |
 | topk_dropout：vwap / walkdown OFF | 同上；X-01/X-03 不适用 | 非 close 自动入时序路径 | 未改卖出合同 | 默认 OFF | qlib 默认；real 可选 | 合成记录；真湖姿态未证实 | P2 固定时钟/预算合同，真湖快照未证实 | [P2 冻结](topk-exec-p2-2026-09-27.md)；[P4](topk-exec-p4-2026-09-27.md) | Y（合成）；真湖未证实；a–d 不含 vwap，vwap×walkdown 拒绝 |
 | topk_dropout：real + close / walkdown OFF | minute-none（d 归档） | X-02 OFF：**real 单开不自动切时序**，保留旧 close 调度 | nostop（d） | 默认 OFF；完整回执未重审 | `--topk-limit-rule real` | 实际缓存姿态未重审 | d 同 recorder / tip；完整 hash 未复核 | [P4 close/off 边界](topk-exec-p4-2026-09-27.md)；[d close_plain](topk-exec-6cell-real-2026-09-27.md) | Y（接线）；摘要-only（归档），不是现金时序修复验收 |
@@ -64,11 +65,11 @@ P3 外置 D5 使用 s12 fix-on + 既有 transform，仅支持该冻结上下文�
 
 未来文档推荐措辞：**「上交所 2026 修订规则（链接为发布通知页；科创板 200 股起申报的条文号未在本次抓取中直接核验，仓内 D23 X-10 独立记录同一规则）」**。
 
-[D23 X-10 与 §4 跟进计划](../reviews/2026-09-25-minute-engine-review/README.md) 独立记录科创板 200 股起、1 股递增；事实有仓内落盘支持。本项是引用精度修正，不是新增 gap，也不认证全板块/订单类型/历史生效日规则表。外置审计不改写入 git；未来引用其 G3 时一并引用本节。
+[D23 X-10 与 §4 跟进计划](../reviews/2026-09-25-minute-engine-review/README.md) 独立记录科创板 200 股起、1 股递增；事实有仓内落盘支持。本项是引用精度修正，不是新增 gap，也不认证全板块/订单类型/历史生效日规则表。未来引用[基线审计](industry-gaps-bt-2026-09-28.md) G3 时一并引用本节。
 
 ## 4 已裁延期 / 禁止重开（防倒退）
 
-以下承接**外置审计 §3、Kimi“不应开工”**；决策关闭不等于真实交易所模型全部完备：
+以下承接**[基线审计 §3](industry-gaps-bt-2026-09-28.md#3-明确不做--范围外)、Kimi“不应开工”**；决策关闭不等于真实交易所模型全部完备：
 
 - **#135 classic P1/P4**：A/A docs-only 关闭，14:57–15:00 成交资格与日线 close/NAV mark 分离；不复活集合竞价模型，不因标签空值重开已交付 P2。见 [D8 §4](plan-industry-align-next-2026-09-19.md)。
 - **默认翻转**：hl/fen、TopK exec/walkdown/real、X-*、δ3 保持基线；P3/TopK PASS 均不是默认 GO。见 §1 归档。
@@ -101,4 +102,4 @@ P3 外置 D5 使用 s12 fix-on + 既有 transform，仅支持该冻结上下文�
 
 ## 6 交叉依赖一句话
 
-见[外置审计 §5](/workspace/INDUSTRY_GAPS_BT_2026-09-28.md)：先锁价格域、现金时序与输入身份，再单轴裁决 TopK/#214、参考价/权益、容量/申报量及 joint-return 独立合同；各线不互相代验，资料索引完成不构成下一刀 GO。
+见[基线审计 §5](industry-gaps-bt-2026-09-28.md#5-与三线的交叉依赖)：先锁价格域、现金时序与输入身份，再单轴裁决 TopK/#214、参考价/权益、容量/申报量及 joint-return 独立合同；各线不互相代验，资料索引完成不构成下一刀 GO。

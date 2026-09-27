@@ -1,6 +1,6 @@
 # Plan: industry-align next (fill gates fork, zero-change default) (2026-09-19)
 
-2026-09-28 只读入口：[G9+G1 行业状态与验收覆盖索引](industry-state-acceptance-index-2026-09-28.md)汇总当前默认/opt-in、后续验收摘要与未证实组合，并记录 B1 引用勘误。该索引不改本计划人裁状态，不授权默认翻转、新实现或新湖实验；G2–G7 仍须逐项 Human GO。
+2026-09-28 只读入口：[G9+G1 行业状态与验收覆盖索引](industry-state-acceptance-index-2026-09-28.md)汇总当前默认/opt-in、后续验收摘要与未证实组合，并记录 B1 引用勘误；基线审计与 Kimi 核稿见 [industry-gaps-bt-2026-09-28.md](industry-gaps-bt-2026-09-28.md) 及同目录 `kimi-review-*`。该索引不改本计划人裁状态，不授权默认翻转、新实现或新湖实验；G2–G7 仍须逐项 Human GO。
 
 > **Status**: **Human GO P4=A closure: P4 closed as A (2026-09-20 Asia/Shanghai)**. Touch eligibility and official close / NAV mark are separate decisions; both stay as-built, and option B (coupled change) is forbidden this round. **P1 stays closed as A; P2 stays B** (book trades columns `session_phase` / `price_rule`). P3 δ authority is unchanged.
 > **P4=A closure IMPLEMENTATION_BASE (2026-09-20)**: `9b9bd71ae1315f7a8c13d8126a638fabe5a021e8` (post P2 #134). This ship is docs SSOT + data-free contract pins only, with **zero production Python diff** against this base, including P2 label wiring. Earlier bases/slices below are historical.
