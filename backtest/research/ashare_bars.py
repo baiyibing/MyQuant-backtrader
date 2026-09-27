@@ -663,7 +663,9 @@ def book_frames_from_compact(minute: Mapping[str, object]) -> dict:
                 "high": high,
                 "low": low,
                 "close": close,
-                "ymd": pd.DatetimeIndex(dates).strftime("%Y%m%d").to_numpy(),
+                "ymd": (pd.DatetimeIndex(dates).year.to_numpy() * 10000
+                        + pd.DatetimeIndex(dates).month.to_numpy() * 100
+                        + pd.DatetimeIndex(dates).day.to_numpy()).astype("U8"),
                 "hm": hm,
             },
             index=pd.DatetimeIndex(idx),
