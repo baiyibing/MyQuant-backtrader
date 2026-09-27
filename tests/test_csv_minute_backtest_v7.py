@@ -265,8 +265,10 @@ def test_exdiv_maps_official_prev_close_for_limit_up():
 
 
 def test_st_name_uses_five_percent_limit():
+    # Preserve the name-resolution regression before the X-07 tier switch.
+    D1, D2, D3 = (date(2026, 6, n) for n in (1, 2, 3))
     minutes = {SYMBOL: [bar(D1, 895, 105)]}
-    path_daily = {SYMBOL: {date(2026, 8, 31): 100.0}}
+    path_daily = {SYMBOL: {date(2026, 5, 31): 100.0}}
     st = simulate_v7(minutes, path_daily, {D1: [SYMBOL]}, [D1], names={SYMBOL: "*ST甲"})
     assert "skip_limit_up" in reasons(st)
     board = simulate_v7(minutes, path_daily, {D1: [SYMBOL]}, [D1])
@@ -381,8 +383,10 @@ def test_asof_pool_name_ignores_future_st_and_keeps_empty_from_clearing():
 
 
 def test_simulate_v7_asof_names_buy_early_day_that_flat_map_skips():
+    # Preserve the name-resolution regression before the X-07 tier switch.
+    D1, D2, D3 = (date(2026, 6, n) for n in (1, 2, 3))
     minutes = {SYMBOL: [bar(D1, 895, 105)]}
-    path_daily = {SYMBOL: {date(2026, 8, 31): 100.0, D1: 100.0}}
+    path_daily = {SYMBOL: {date(2026, 5, 31): 100.0, D1: 100.0}}
     names_by_day = {
         D1.strftime("%Y%m%d"): {SYMBOL: "浦发银行"},
         D2.strftime("%Y%m%d"): {SYMBOL: "*ST 浦发"},
@@ -424,8 +428,10 @@ def test_v7_cli_asof_pool_names_defaults_off(tmp_path):
 
 
 def test_v7_names_flatten_uses_window_end_name_for_earlier_day():
+    # Preserve the name-resolution regression before the X-07 tier switch.
+    D1, D2, D3 = (date(2026, 6, n) for n in (1, 2, 3))
     minutes = {SYMBOL: [bar(D1, 895, 105)]}
-    path_daily = {SYMBOL: {date(2026, 8, 31): 100.0, D1: 100.0}}
+    path_daily = {SYMBOL: {date(2026, 5, 31): 100.0, D1: 100.0}}
     baseline = simulate_v7(minutes, path_daily, {D1: [SYMBOL]}, [D1, D2])
     flattened = flatten_pool_names(
         {
@@ -446,13 +452,15 @@ def test_v7_names_flatten_uses_window_end_name_for_earlier_day():
 
 
 def test_d3_v7_unst_window_extension_changes_earlier_fill(tmp_path):
+    # Preserve the name-resolution regression before the X-07 tier switch.
+    D1, D2, D3 = (date(2026, 6, n) for n in (1, 2, 3))
     from backtest.research.csv_pool import load_pool_names_by_day
 
     for day, text in [(D1, "600000,*ST 浦发\n"), (D2, "600000,浦发\n"),
                       (D3, "000001,平安\n")]:
         (tmp_path / f"{day:%Y%m%d}.csv").write_text(text, encoding="utf-8")
     minutes = {SYMBOL: [bar(D1, 895, 105)]}
-    path_daily = {SYMBOL: {date(2026, 8, 31): 100}}
+    path_daily = {SYMBOL: {date(2026, 5, 31): 100}}
     states = []
     for end, expected_name, expected_limits in [
         (D1, "*ST 浦发", (105, 95)), (D3, "浦发", (110, 90)),

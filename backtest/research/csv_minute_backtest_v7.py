@@ -428,7 +428,7 @@ def _run_chronological_day(
         name = (asof_pool_name(names_by_day, ymd, symbol) if names_by_day is not None
                 else (names or {}).get(symbol, ""))
         previous = session_prev_close(closes.get(symbol, {}), day, symbol, exdiv)
-        cursor = _DayCursor(symbol, records, previous, session_limit_prices(symbol, previous, name))
+        cursor = _DayCursor(symbol, records, previous, session_limit_prices(symbol, previous, name, as_of=day))
         cursors.append(cursor)
         for index, row in enumerate(records):
             by_hm.setdefault(int(row["hm"]), []).append((cursor, index, row))
@@ -695,7 +695,7 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
                 else:
                     name = (names or {}).get(symbol, "")
                 previous = session_prev_close(closes.get(symbol, {}), day, symbol, exdiv)
-                limits = session_limit_prices(symbol, previous, name)
+                limits = session_limit_prices(symbol, previous, name, as_of=day)
                 first = True
                 open_checked = False
                 for row_index, row in enumerate(records):
@@ -769,7 +769,7 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
                             elif previous is None:
                                 _event(state, day, symbol, hm, "skip", 0, close_px, "skip_no_prev_close")
                             else:
-                                priced = session_limit_prices(symbol, previous, name)
+                                priced = session_limit_prices(symbol, previous, name, as_of=day)
                                 if priced is None:
                                     _event(state, day, symbol, hm, "skip", 0, close_px, "skip_unknown_board")
                                 else:

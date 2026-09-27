@@ -64,10 +64,11 @@ def session_limit_prices(
     code: str,
     previous: float | None,
     name: str = "",
+    as_of=None,
 ) -> tuple[float, float] | None:
     if previous is None:
         return None
-    return limit_prices(code, previous, name)
+    return limit_prices(code, previous, name, as_of=as_of)
 
 
 def skip_buy_at_limit(price: float, limits: tuple[float, float] | None) -> bool:
