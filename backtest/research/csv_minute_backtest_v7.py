@@ -930,7 +930,8 @@ def _load_cli_bars(
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Strategy 7 turtle CSV minute backtest")
+    parser = argparse.ArgumentParser(description="Strategy 7 turtle CSV minute backtest",
+                                     epilog="v7 不接 --minute-stop-trigger (hl or close); argparse rejects this flag.")
     parser.add_argument("--start", required=True)
     parser.add_argument("--end", required=True)
     parser.add_argument("--pool-dir")
