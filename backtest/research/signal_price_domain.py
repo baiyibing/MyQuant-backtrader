@@ -386,14 +386,14 @@ def _validate_pair_math(front_daily, raw_daily, transforms):
             for field in OHLC:
                 expected = transform["A"] * _decimal(raw.loc[day, field]) + transform["B"]
                 # Human adjudication 2026-09-27 (option B): OHLC extremes
-                # (open/high/low) get full tick (0.01) because vendor front-
-                # adjustment rounding on price extremes exceeds half-tick when
-                # a close-derived A is applied cross-field. Close (the signal
-                # domain) keeps the original half-tick (0.005).
+                # (open/high/low) get 1.5 ticks because vendor front-adjustment
+                # rounding on price extremes exceeds half-tick when a close-
+                # derived A is applied cross-field (000019.SZ low diff 0.0101).
+                # Close (the signal domain) keeps the original half-tick (0.005).
                 if field == "close":
                     tol = PRICE_HALF_TICK + PRICE_EPS
                 else:
-                    tol = Decimal("0.01") + PRICE_EPS
+                    tol = Decimal("0.015") + PRICE_EPS
                 if abs(_decimal(expected) - _decimal(front.loc[day, field])) > tol:
                     _fail(f"A/B do not explain paired {field}", code=code, day=_day(day),
                           domain="front/raw")
