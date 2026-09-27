@@ -1744,7 +1744,8 @@ def main(argv: Optional[list] = None) -> int:
                 "transform_evidence_sha256", "source_snapshot_id", "source_file_hashes",
                 "source_paths", "provenance", "optional_factor", "input_price_tolerance",
                 "input_price_tolerance_mode", "input_coefficient_tolerance",
-                "real_lake_precision_validated",
+                "real_lake_precision_validated", "front_representation",
+                "decision_precision_check",
             ) if key in st.stats}
             if args.fix_s12_price_domain else {
                 "fix_s12_price_domain": False,
