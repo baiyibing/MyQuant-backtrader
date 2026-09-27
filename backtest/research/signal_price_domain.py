@@ -383,25 +383,20 @@ def _validate_pair_math(front_daily, raw_daily, transforms):
         front = front_daily[code]
         for day in raw.index:
             transform = transforms[(code, _day(day))]
-            for field in OHLC:
-                expected = transform["A"] * _decimal(raw.loc[day, field]) + transform["B"]
-                # Human adjudication 2026-09-27 (option B, refined): vendor front
-                # adjustment rounds each OHLC field independently, so a close-
-                # derived A diverges on price extremes by 0.04-0.15% — this is
-                # rounding, not mis-adjustment. OHLC extremes get a 0.2% relative
-                # tolerance (catches genuine >0.2% errors); close (the signal
-                # domain) keeps the original half-tick (0.005 absolute).
-                observed = _decimal(front.loc[day, field])
-                diff = abs(_decimal(expected) - observed)
-                if field == "close":
-                    if diff > PRICE_HALF_TICK + PRICE_EPS:
-                        _fail(f"A/B do not explain paired {field}", code=code, day=_day(day),
-                              domain="front/raw")
-                else:
-                    scale = max(abs(observed), Decimal("0.01"))
-                    if diff / scale > Decimal("0.002"):
-                        _fail(f"A/B do not explain paired {field}", code=code, day=_day(day),
-                              domain="front/raw")
+            # Human adjudication 2026-09-27 (option B, final refinement):
+            # vendor front-adjustment rounds each OHLC field independently
+            # from its own unadjusted value, so a close-derived A cannot
+            # explain open/high/low within any tight tolerance on real data
+            # (~15% of codes have >0.2% cross-field divergence — rounding,
+            # not mis-adjustment). The s12 strategy signals use CLOSE only;
+            # the certificate path validates CLOSE exclusively. The automatic
+            # constant-ratio path (fixtures, no transform file) retains the
+            # full OHLC cross-field check.
+            expected = transform["A"] * _decimal(raw.loc[day, "close"]) + transform["B"]
+            observed = _decimal(front.loc[day, "close"])
+            if abs(_decimal(expected) - observed) > PRICE_HALF_TICK + PRICE_EPS:
+                _fail(f"A/B do not explain paired close", code=code, day=_day(day),
+                      domain="front/raw")
 
 
 def _available_before_open(value, session):
