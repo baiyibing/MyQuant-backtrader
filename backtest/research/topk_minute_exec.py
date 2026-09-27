@@ -90,10 +90,11 @@ class TopkMinuteBuys:
 
     def __init__(self, st, *, mode, hooks, previous_and_frame, open_quote_for,
                  day_i, day, ds, names, daily_quota, exdiv, audit_sink=None,
-                 limit_walkdown=False, close_quote_for=None):
+                 limit_walkdown=False, close_quote_for=None, exdiv_ref_fen=False):
         self.st, self.mode, self.hooks = st, mode, hooks
         self.day_i, self.day, self.ds = day_i, day, ds
         self.names, self.daily_quota, self.exdiv = names, daily_quota, exdiv
+        self.exdiv_ref_fen = exdiv_ref_fen
         self.audit_sink = audit_sink
         self.walkdown = limit_walkdown
         self.quote_bars = {}
@@ -148,7 +149,7 @@ class TopkMinuteBuys:
             if not quotes:
                 self.missing.add(code)
                 continue
-            previous, _ = mapped_prev_close(exdiv, code, ds, float(closes[-1]))
+            previous, _ = mapped_prev_close(exdiv, code, ds, float(closes[-1]), **({"fen_round": True} if exdiv_ref_fen else {}))
             if not math.isfinite(previous) or previous <= 0:
                 self.missing.add(code)
                 continue
@@ -338,7 +339,7 @@ class TopkMinuteBuys:
                 buy_quote_for=lambda _code: (px, self.closes[code]),
                 planned_for_day=frozen_seat, allocation_cash=self.cash_basis,
                 cash_deploy_frac=self.hooks["cash_deploy_frac"],
-                exdiv=self.exdiv, qlib_limit_pct=self.hooks.get("qlib_limit_pct"),
+                exdiv=self.exdiv, exdiv_ref_fen=self.exdiv_ref_fen, qlib_limit_pct=self.hooks.get("qlib_limit_pct"),
                 limit_up_chase=False,
                 forbid_all_trade_at_limit=self.hooks.get("forbid_all_trade_at_limit", False),
                 allow_new_name=self.hooks.get("allow_new_name"),
