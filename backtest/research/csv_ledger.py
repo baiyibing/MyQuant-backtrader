@@ -410,9 +410,9 @@ def _locked_bonus(account: ExDivEconomics, pos: Position, ds: str) -> int:
 
 
 def resolve_limit_prices(
-    code: str, prev_close: float, name: str = ""
+    code: str, prev_close: float, name: str = "", as_of=None
 ) -> Optional[tuple[float, float]]:
-    return limit_prices(code, prev_close, name)
+    return limit_prices(code, prev_close, name, as_of=as_of)
 
 
 def market_close_mark(df, day) -> Optional[float]:

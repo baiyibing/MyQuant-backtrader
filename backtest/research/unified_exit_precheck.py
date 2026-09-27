@@ -162,7 +162,7 @@ def _limit_boundary(per_day, stats_codes, root: Path, start: str, end: str, tol:
             p = lim.get(c, {}).get(y)
             if p is None:
                 continue
-            lp = limit_pct(c, n)
+            lp = limit_pct(c, n, as_of=y)
             if lp is None:
                 cnt["unknown_board"] += 1
             elif p >= lp + tol:

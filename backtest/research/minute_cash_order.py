@@ -359,7 +359,7 @@ def run_chronological_day(
             st.stats["exdiv_prev_close_mapped"] = (
                 int(st.stats.get("exdiv_prev_close_mapped", 0)) + 1
             )
-        limits = book_limit_prices(code, prev_close, names, qlib_limit_pct=qlib_limit_pct)
+        limits = book_limit_prices(code, prev_close, names, qlib_limit_pct=qlib_limit_pct, as_of=ds)
         if limits is None:
             st.stats["skip_unknown_board"] += 1
             continue
@@ -533,7 +533,7 @@ def run_chronological_day(
             prev_close, did_map = mapped_prev_close(exdiv, code, ds, float(closes[-1]))
             if did_map:
                 st.stats["exdiv_prev_close_mapped"] = int(st.stats.get("exdiv_prev_close_mapped", 0)) + 1
-            limits = book_limit_prices(code, prev_close, names, qlib_limit_pct=qlib_limit_pct)
+            limits = book_limit_prices(code, prev_close, names, qlib_limit_pct=qlib_limit_pct, as_of=ds)
             if limits is None:
                 st.stats["skip_unknown_board"] += 1
                 continue

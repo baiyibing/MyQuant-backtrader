@@ -187,7 +187,7 @@ def run_chase_due_day(
                 int(st.stats.get("exdiv_prev_close_mapped", 0)) + 1
             )
         limits = book_limit_prices(
-            code, prev_close, names, qlib_limit_pct=qlib_limit_pct
+            code, prev_close, names, qlib_limit_pct=qlib_limit_pct, as_of=ds
         )
         if limits is None:
             st.stats["skip_unknown_board"] += 1
@@ -355,7 +355,7 @@ def run_pool_buys_day(
                 int(st.stats.get("exdiv_prev_close_mapped", 0)) + 1
             )
         limits = book_limit_prices(
-            code, prev_close, names, qlib_limit_pct=qlib_limit_pct
+            code, prev_close, names, qlib_limit_pct=qlib_limit_pct, as_of=ds
         )
         if limits is None:
             st.stats["skip_unknown_board"] += 1
@@ -485,7 +485,7 @@ def run_step_adds_day(
                 int(st.stats.get("exdiv_prev_close_mapped", 0)) + 1
             )
         limits = book_limit_prices(
-            code, prev_close, names, qlib_limit_pct=qlib_limit_pct
+            code, prev_close, names, qlib_limit_pct=qlib_limit_pct, as_of=ds
         )
         if limits is None:
             st.stats["skip_unknown_board"] += 1
@@ -580,7 +580,7 @@ def _run_s8_price_adds_day(
                 st.stats["exdiv_prev_close_mapped"] = (
                     int(st.stats.get("exdiv_prev_close_mapped", 0)) + 1
                 )
-            limits = book_limit_prices(code, prev_close, names, qlib_limit_pct=qlib_limit_pct)
+            limits = book_limit_prices(code, prev_close, names, qlib_limit_pct=qlib_limit_pct, as_of=ds)
             if limits is None:
                 st.stats["skip_unknown_board"] += 1
                 continue
@@ -652,7 +652,7 @@ def run_buybacks_day(
                 prev, _ = mapped_prev_close(exdiv, code, ds, float(closes[-1]))
             else:
                 prev = reference_price_for(code, ds)
-            limits = book_limit_prices(code, prev, names, qlib_limit_pct=qlib_limit_pct)
+            limits = book_limit_prices(code, prev, names, qlib_limit_pct=qlib_limit_pct, as_of=ds)
             if limits is None:
                 st.stats["skip_unknown_board"] += 1
                 continue

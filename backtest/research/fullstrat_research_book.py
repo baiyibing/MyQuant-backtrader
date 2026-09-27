@@ -88,7 +88,7 @@ def simulate(
             closes[code] = prev["close"].astype(float).tolist()
             ref, _ = book.mapped_prev_close(exdiv, code, ds, closes[code][-1])
             limits[code] = book.book_limit_prices(
-                code, ref, names, qlib_limit_pct=hooks.get("qlib_limit_pct")
+                code, ref, names, qlib_limit_pct=hooks.get("qlib_limit_pct"), as_of=ds
             )
 
         def candidates(code):
