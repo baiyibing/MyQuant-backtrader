@@ -87,15 +87,14 @@ def file_sha256(path):
 
 
 def frame_sha256(frame):
-    """Stable identity without pandas' version-dependent CSV serialization.
+    """Stable identity within one run (hashes never compared across versions).
 
-    Vectorized (2026-09-27): pandas' built-in row hashing (default key)
-    feeds a {columns, row_count, row_hash_digest} payload; same frame ->
-    same digest, O(1) pandas pass instead of per-row itertuples + json.
-    Hashes are compared only within one run, never across pandas versions.
+    Vectorized (2026-09-27): pandas built-in row hashing on the numeric
+    frame + index. The former per-row itertuples + str() + json was the
+    dominant identity-phase cost on 56k-row minute frames.
     """
     row_hash = pd.util.hash_pandas_object(
-        frame.astype(str), index=True
+        frame, index=True
     ).to_numpy(dtype="uint64")
     payload = {"columns": list(frame.columns), "row_count": int(len(frame)),
                "row_hash_digest": hashlib.sha256(
