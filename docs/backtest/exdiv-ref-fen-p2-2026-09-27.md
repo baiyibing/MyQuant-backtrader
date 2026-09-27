@@ -1,8 +1,8 @@
 # 除权参考价到分 P2 实现冻结（2026-09-27）
 
-P1 已合并（#228）。本文对应 P2 PR，待人工「合」，不得自动合并。
+P1 已合并（#228）。本文为 P2 实现冻结记录，现已合并 #229。
 合同见 [计划 §2 / §4](plan-minute-stop-and-exdiv-fix-2026-09-26.md)。
-P3 真湖四格 A/B **未做**，不代表行业验证或真湖收益结论。
+冻结时 P3 真湖 A/B **未做**；后续归档见文末，不代表默认切换 GO。
 
 - 仅共享分钟 CLI 注册 `--exdiv-ref-fen`（store_true，默认 OFF）。
   main → run → simulate 传递；日线 / v7 不注册，共用参数表不变。
@@ -27,7 +27,7 @@ P3 真湖四格 A/B **未做**，不代表行业验证或真湖收益结论。
 测试覆盖 helper 半分、缺失映射、微额分红与 fallback 边界、普通 / 时序现金
 限价、默认与显式 OFF 完整 state 一致、CLI → run → loader / simulate、
 version12 / front 跳过 loader、日线 / v7 拒绝参数。另运行共享 helper 相关回归；
-本地验证结果见 PR。不声称全 CI 或 P3 已完成。
+本地验证结果见 PR。冻结时不声称全 CI 或 P3 已完成。
 
 本地验证：以下扩大集 1179 passed，2 条既有 pandas 弃用警告；随后追加三个
 买入 / 半分边界断言，新文件单跑 22 passed。四项 data-free CI 路径门禁通过。
@@ -42,3 +42,7 @@ OSKH_MERGE_PYTHON=/tmp/pr206-venv/bin/python /tmp/pr206-venv/bin/python -m pytes
   tests/test_minute_stop_trigger.py tests/test_s12_price_domain.py \
   tests/test_s11_exit_domain*.py tests/test_ashare_simulate_import_fence.py
 ```
+
+2026-09-27 后续：[P3 4090 真湖 A/B 记录](stop-exdiv-p3-ab-2026-09-27.md)（`20260927e`）已归档。
+s8 fen on 相对 off 的 NAV 在 close / hl 下均约 **−7.7k**（资金 `5e8`）；s12 本窗 fen off ≡ on，NAV 字节一致。
+后者与 R4 / version12 自有除权语义一致；本窗无可见效果，默认仍 **OFF**，不翻默认。
