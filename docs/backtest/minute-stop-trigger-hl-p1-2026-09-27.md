@@ -1,8 +1,8 @@
 # 分钟 H/L 止损触发 P1 实现冻结（2026-09-27）
 
-状态：P1 在 PR，待人工「合」；不合并、不翻默认。合同见
+冻结时状态：P1 在 PR，待人工「合」；现已合并 #228，不翻默认。合同见
 [计划 §1 / §4](plan-minute-stop-and-exdiv-fix-2026-09-26.md)。P2 `--exdiv-ref-fen`
-和 P3 真湖四格未实施，本文没有真湖收益结论。
+和 P3 在冻结时未实施；后续真湖归档见文末。
 
 - 共享分钟入口新增 `--minute-stop-trigger {hl,close}`，默认 `close`。
   省略 / 显式 close 保留原扫描、成交价、输出；仅 hl 在 stats 写入模式。
@@ -45,3 +45,7 @@ OSKH_MERGE_PYTHON=/tmp/pr206-venv/bin/python /tmp/pr206-venv/bin/python -m pytes
   tests/test_topk_minute_exec.py tests/test_s12_price_domain.py \
   tests/test_s11_exit_domain*.py tests/test_ashare_simulate_import_fence.py -q
 ```
+
+2026-09-27 后续：[P3 4090 真湖 A/B 记录](stop-exdiv-p3-ab-2026-09-27.md)（`20260927e`）已归档。
+s8 hl 较 close 止损增至 348（原 334），收益略差、maxDD 相同；两个 hl 格跌停顺延各 **1**。
+s12 hl 按 P1 合同 SKIP；默认仍 **close**，本记录不是默认切换 GO。

@@ -1,6 +1,6 @@
 # 计划 v2：分钟止损 H/L 触发 + E-R6 残留补丁（2026-09-26）
 
-> **状态**：v2 重写（按 Kimi 评审 #213 修正），待人裁。
+> **状态**：P1 #228 / P2 #229 已合并；Human-GO P3 真湖 A/B [已归档](stop-exdiv-p3-ab-2026-09-27.md)。默认仍为 close / OFF，不翻默认。
 > **v1 → v2 变化**：撤掉与 E-R6 重复的 `--exdiv-limit-ref` 全量开关，改为瞄准 E-R6 声明的残留缺口；补齐 v1 漏掉的第二套止损代码（`minute_cash_order.py`）和 v7 入口；补齐止盈方向；补齐跌停锁定 bar 不可成交规则；补齐开关兼容矩阵。
 > **依据**：调研 v2 [note-minute-bar-industry-practices-2026-09-26.md](note-minute-bar-industry-practices-2026-09-26.md)。E-R6 已落地事实见 `plan-exdiv-refprice-2026-09-16.md`（人裁 PX-1…PX-7）。
 
@@ -51,7 +51,7 @@
 
 1. `--minute-stop-trigger close` 不传 = **逐字节复现**现有全部书。
 2. `hl` 合成测试：low 触止损 close 反弹 → 止损价成交；high 触止盈 → 止盈价成交；跳空 → open；跌停封死 low 触 → 不成交顺延。
-3. 真实数据 A/B：s12 分钟 + s8 分钟，close vs hl 对照。
+3. 真实数据 A/B：s8 分钟 close vs hl；s12 仅 close × fen off/on，hl 按 P1 合同 SKIP。
 
 ## 2. 修复二：E-R6 残留补丁（参考价到分 + 噪声带取消 + exdiv=None 路径）
 
@@ -93,14 +93,15 @@
 
 P1 已合并（#228），默认仍为 close。见
 [实现冻结及兼容边界说明](minute-stop-trigger-hl-p1-2026-09-27.md)。
-P2 本次实现进入 PR，默认 OFF，待人工「合」；见
-[P2 冻结说明（含验收算术勘误）](exdiv-ref-fen-p2-2026-09-27.md)。P3 真湖 A/B 仍待办。
+P2 已合并（#229），默认 OFF；见
+[P2 冻结说明（含验收算术勘误）](exdiv-ref-fen-p2-2026-09-27.md)。P3 Human-GO 真湖 A/B
+[已归档（20260927e）](stop-exdiv-p3-ab-2026-09-27.md)：s8 四格 + s12 close 两格；不代表默认切换 GO。
 
 | 片 | 内容 | 依赖 |
 |----|------|------|
 | P1 | `--minute-stop-trigger hl`：S1 主引擎 + S2 时序现金引擎 + 合成测试 + close 模式回归锚 + 兼容矩阵 | 无 |
 | P2 | `--exdiv-ref-fen`：fen_round + 噪声带取消 + 合成测试 | 无 |
-| P3 | 真实数据 A/B：s12/s8 分钟 × {close,hl} × {fen off,on} 四格 + 跌停顺延检查 | P1+P2 |
+| P3 | 已归档：s8 × {close,hl} × {fen off,on} 四格 + s12 close × {fen off,on} 两格；s12 hl SKIP；含跌停顺延检查，见 [P3 记录](stop-exdiv-p3-ab-2026-09-27.md) | P1+P2 |
 
 ## 5. 维护
 
@@ -109,3 +110,5 @@ P2 本次实现进入 PR，默认 OFF，待人工「合」；见
 - 2026-09-27：P1 实现在 PR（S1+S2、v7 HELP 拒绝、合成及 close 回归）；P2/P3 保持待办。
 
 - 2026-09-27：P1 已合并 #228；P2 实现在 PR（fen_round 默认 False、分钟 opt-in、noise_eps=0、合成测试），P3 未做，不翻默认。
+
+- 2026-09-27：P1 #228 / P2 #229 已合并；[P3 真湖 A/B](stop-exdiv-p3-ab-2026-09-27.md) 已归档（stamp `20260927e`，PASS 于 2026-09-28 凌晨 Asia/Shanghai 交付）。Human re-GO：`5e8`、`20251023–20260909`，六格 PASS、s12 hl SKIP；默认仍 close / OFF。
