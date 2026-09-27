@@ -39,6 +39,7 @@ from backtest.research.csv_simulate_loop import (
 )
 from backtest.research.exdiv_map import k_for, mapped_prev_close
 from backtest.research.minute_audit import audit_scope
+from backtest.research.minute_stop_trigger import blocked_bar, target_fill, validate_low
 from backtest.research.strategy3_rules import reserve_step_minute
 from backtest.research.strategy6_rules import trail_hits
 from backtest.research.tail_window_buy import (
@@ -103,7 +104,7 @@ def advance_independent_exit(
     else:
         price_rule = {
             "stop_loss:gap_open": "minute_gap_open",
-            "stop_loss:touch": "minute_trigger_bar_close",
+            "stop_loss:touch": "minute_stop_price" if cursor.minute_stop_trigger == "hl" else "minute_trigger_bar_close",
         }.get(reason, "")
     with audit_scope(audit_sink, decision_hm=at_hm, quote_hm=at_hm, phase=phase):
         _sell(
@@ -150,6 +151,9 @@ class HeldMinuteCursor:
     exit_plan: object = None
     exit_state: dict | None = None
     close_clear: object = None
+    l: object = None
+    minute_stop_trigger: str = "close"
+    take_profit_pct: float | None = None
     current_reserved: bool = field(init=False)
     lu_today: bool = field(default=False, init=False)
     saw_close_hm: bool = field(default=False, init=False)
@@ -158,6 +162,7 @@ class HeldMinuteCursor:
     _open_state: dict[int, tuple[bool, float, int]] = field(default_factory=dict, init=False)
 
     def __post_init__(self):
+        validate_low(self.minute_stop_trigger, self.l, self.c)
         self.peak = float(self.peak)
         self.peak_hm = int(self.peak_hm)
         self.current_reserved = bool(self.reserved)
@@ -183,7 +188,7 @@ class HeldMinuteCursor:
                 self.peak, self.peak_hm = hi, cur_hm
             if cur_hm == CLOSE_CLEAR_HM:
                 self.saw_close_hm = True
-            skip_bar = self.limit_down > 0 and hit_limit_down(px_open, self.limit_down)
+            skip_bar = blocked_bar(self.minute_stop_trigger, px_open, hi, self.limit_down)
             self._open_state[idx] = skip_bar, self.peak, self.peak_hm
             if not skip_bar and stop_enabled and px_open <= self.cost * (1.0 - self.stop_pct):
                 return self._exit(idx, px_open, "stop_loss:gap_open")
@@ -213,8 +218,13 @@ class HeldMinuteCursor:
 
     def _close(self, idx, cur_hm, px_close, stop_enabled):
         ret = px_close / self.cost - 1.0
-        if stop_enabled and ret <= -self.stop_pct:
-            return self._exit(idx, px_close, "stop_loss:touch")
+        trigger = self.cost * (1.0 - self.stop_pct) if stop_enabled else None
+        if stop_enabled:
+            touched = (float(self.l[idx]) <= trigger if self.minute_stop_trigger == "hl"
+                       else ret <= -self.stop_pct)
+            if touched:
+                fill_px = trigger if self.minute_stop_trigger == "hl" else px_close
+                return self._exit(idx, fill_px, "stop_loss:touch")
         if self.defer_limit_up and self.limit_up > 0 and hit_limit_up(px_close, self.limit_up):
             self.lu_today = True
         if self.defer_limit_up and self.lu_today:
@@ -232,6 +242,11 @@ class HeldMinuteCursor:
                 return self._exit(idx, px_close, reason)
             if self.current_reserved and is_limit_up:
                 return None
+        if self.minute_stop_trigger == "hl" and not callable(self.exit_plan) and not callable(self.sell_gate):
+            fill = target_fill(float(self.o[idx]), float(self.h[idx]), self.cost, self.peak,
+                               self.n_days, self.take_profit_pct, self.take_profit)
+            if fill is not None:
+                return self._exit(idx, *fill)
         blocked = self.peak_hm >= 0 and peak_gap_blocks(cur_hm - self.peak_hm, self.peak_gap_min)
         if not blocked:
             if callable(self.exit_plan):
@@ -298,6 +313,7 @@ def run_chronological_day(
     audit_sink=None,
     tail_window_buy=False,
     tail_volume_unit="shares",
+    minute_stop_trigger="close",
     topk_exec="close",
     limit_walkdown=False,
 ):
@@ -378,6 +394,8 @@ def run_chronological_day(
                 o,
                 h,
                 c,
+                l=frame["low"].to_numpy(np.float64) if minute_stop_trigger == "hl" else None,
+                minute_stop_trigger=minute_stop_trigger, take_profit_pct=st.stats.get("profit_target"),
                 cost=pos.cost,
                 peak=pos.peak,
                 n_days=day_i - pos.entry_idx,
@@ -734,7 +752,7 @@ def run_chronological_day(
                     }
                 price_rule = {
                     "stop_loss:gap_open": "minute_gap_open",
-                    "stop_loss:touch": "minute_trigger_bar_close",
+                    "stop_loss:touch": "minute_stop_price" if cursor.minute_stop_trigger == "hl" else "minute_trigger_bar_close",
                 }.get(reason, "")
                 with audit_scope(audit_sink, decision_hm=at_hm, quote_hm=at_hm, phase=phase):
                     _sell(

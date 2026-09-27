@@ -128,6 +128,9 @@ from backtest.research.csv_simulate_loop import (  # noqa: E402
 
 from backtest.research.ashare_volume_cap import VolumeCap, VolumeLookup  # noqa: E402
 from backtest.research.minute_audit import audit_scope, write_audit
+from backtest.research.minute_stop_trigger import (
+    blocked_bar, target_fill, validate_low, validate_minute_stop_trigger,
+)
 from backtest.research.minute_cash_order import (
     HeldMinuteCursor,
     advance_independent_exit,
@@ -297,6 +300,9 @@ def scan_held_day_python(
     h: np.ndarray,
     c: np.ndarray,
     *,
+    l: Optional[np.ndarray] = None,
+    minute_stop_trigger: str = "close",
+    take_profit_pct: Optional[float] = None,
     cost: float,
     peak: float,
     n_days: int,
@@ -325,6 +331,7 @@ def scan_held_day_python(
     close_clear=None,
 ) -> tuple[int, float, str, float, int]:
     """Python reference implementation of the minute sell scan."""
+    validate_low(minute_stop_trigger, l, c)
     del pos_trail  # reserved for future; kept for API parity with callers
     stop_enabled = isinstance(stop_pct, float) and 0 < stop_pct < 1
     trigger = cost * (1.0 - stop_pct) if stop_enabled else None
@@ -348,13 +355,16 @@ def scan_held_day_python(
             saw_close_hm = True
         px_open = float(o[i])
         px_close = float(c[i])
-        if limit_down > 0 and hit_limit_down(px_open, limit_down):
+        if blocked_bar(minute_stop_trigger, px_open, hi, limit_down):
             continue
         if stop_enabled and trigger is not None and px_open <= trigger:
             return i, px_open, "stop_loss:gap_open", new_peak, new_peak_hm
         ret = px_close / cost - 1.0
-        if stop_enabled and ret <= -stop_pct:
-            return i, px_close, "stop_loss:touch", new_peak, new_peak_hm
+        if stop_enabled:
+            touched = float(l[i]) <= trigger if minute_stop_trigger == "hl" else ret <= -stop_pct
+            if touched:
+                fill_px = trigger if minute_stop_trigger == "hl" else px_close
+                return i, fill_px, "stop_loss:touch", new_peak, new_peak_hm
         if defer_lu and limit_up > 0 and hit_limit_up(px_close, limit_up):
             lu_today = True
         if defer_lu and lu_today:
@@ -370,6 +380,10 @@ def scan_held_day_python(
                 return i, px_close, reserve_reason, new_peak, new_peak_hm
             if current_reserved and is_limit_up:
                 continue
+        if minute_stop_trigger == "hl" and not callable(exit_plan) and not callable(sell_gate):
+            fill = target_fill(px_open, hi, cost, new_peak, n_days, take_profit_pct, take_profit)
+            if fill is not None:
+                return i, fill[0], fill[1], new_peak, new_peak_hm
         peak_blocked = new_peak_hm >= 0 and peak_gap_blocks(
             cur_hm - new_peak_hm, peak_gap_min
         )
@@ -431,6 +445,9 @@ def scan_held_day(
     h: np.ndarray,
     c: np.ndarray,
     *,
+    l: Optional[np.ndarray] = None,
+    minute_stop_trigger: str = "close",
+    take_profit_pct: Optional[float] = None,
     cost: float,
     peak: float,
     n_days: int,
@@ -466,7 +483,8 @@ def scan_held_day(
     Callables (sell_gate / take_profit) and reserve_limit_up always use Python.
     """
     can_offload = (
-        _want_numba_scan(use_numba)
+        minute_stop_trigger == "close"
+        and _want_numba_scan(use_numba)
         and _NUMBA_SCAN_AVAILABLE
         and sell_gate is None
         and take_profit is None
@@ -519,6 +537,7 @@ def scan_held_day(
         o,
         h,
         c,
+        l=l, minute_stop_trigger=minute_stop_trigger, take_profit_pct=take_profit_pct,
         cost=cost,
         peak=peak,
         n_days=n_days,
@@ -653,6 +672,7 @@ def simulate(
     s12_price_context=None,
     fix_s11_exit_domain: bool = False,
     signal_bars_front: dict[str, pd.DataFrame] | None = None,
+    minute_stop_trigger: str = "close",
     fix_minute_cash_order: bool = False,
     tail_window_buy: bool = False,
     tail_volume_unit: str | None = "shares",
@@ -666,6 +686,7 @@ def simulate(
     exdiv_economics is an explicit (symbol, YYYYMMDD) -> ExDivEvent lookup for
     raw bars. None retains the baseline; E-R6 ratios never imply entitlements.
     """
+    validate_minute_stop_trigger(minute_stop_trigger, normalize_csv_strategy(strategy), fix_s11_exit_domain)
     validate_topk_exec(topk_exec, strategy, limit_walkdown, topk_limit_rule)
     validate_tail_options(tail_window_buy, fix_minute_cash_order, tail_volume_unit)
     if tail_window_buy:
@@ -755,6 +776,8 @@ def simulate(
         daily_quota=daily_quota,
     )
     configure_s8(st, hooks)
+    if minute_stop_trigger == "hl":
+        st.stats["minute_stop_trigger"] = "hl"
     if topk_exec != "close" or limit_walkdown or topk_limit_rule != "qlib":
         st.stats.update(topk_limit_rule=topk_limit_rule, topk_exec=topk_exec, limit_retry_fills=0, limit_retry_expired=0)
         st.topk_exec_audit = []
@@ -813,6 +836,7 @@ def simulate(
                     minute_bars[code], day_spans.get(code, {}), date),
                 profit_base=profit_base, pos_trail=pos_trail, audit_sink=audit_sink,
                 tail_window_buy=tail_window_buy, tail_volume_unit=tail_volume_unit,
+                minute_stop_trigger=minute_stop_trigger,
                 topk_exec=topk_exec, limit_walkdown=limit_walkdown,
             )
         else:
@@ -880,6 +904,8 @@ def simulate(
                     if isinstance(pos, IndependentExitPosition):
                         cursor = HeldMinuteCursor(
                             o, h, c, cost=pos.cost, peak=pos.peak,
+                            l=day_m["low"].to_numpy(np.float64) if minute_stop_trigger == "hl" else None,
+                            minute_stop_trigger=minute_stop_trigger, take_profit_pct=st.stats.get("profit_target"),
                             n_days=n_days,
                             can_sell=t1_sellable(calendar[pos.entry_idx].date(), day.date()),
                             stop_pct=stop_pct,
@@ -937,6 +963,8 @@ def simulate(
                         o,
                         h,
                         c,
+                        l=day_m["low"].to_numpy(np.float64) if minute_stop_trigger == "hl" else None,
+                        minute_stop_trigger=minute_stop_trigger, take_profit_pct=st.stats.get("profit_target"),
                         cost=pos.cost,
                         peak=pos.peak,
                         n_days=n_days,
@@ -983,7 +1011,7 @@ def simulate(
                         # P2=B names only these two stop paths; other fills stay unlabeled.
                         price_rule = {
                             "stop_loss:gap_open": "minute_gap_open",
-                            "stop_loss:touch": "minute_trigger_bar_close",
+                            "stop_loss:touch": "minute_stop_price" if minute_stop_trigger == "hl" else "minute_trigger_bar_close",
                         }.get(reason, "")
                         with audit_scope(
                             audit_sink, decision_hm=int(hm[idx]), quote_hm=int(hm[idx]),
@@ -1217,6 +1245,7 @@ def run(
     fix_s12_price_domain: bool = False,
     s12_price_transform_file: Path | None = None,
     fix_s11_exit_domain: bool = False,
+    minute_stop_trigger: str = "close",
     fix_minute_cash_order: bool = False,
     tail_window_buy: bool = False,
     tail_volume_unit: str | None = "shares",
@@ -1225,6 +1254,7 @@ def run(
     limit_walkdown: bool = False,
     topk_limit_rule: str = "qlib",
 ) -> SimState:
+    validate_minute_stop_trigger(minute_stop_trigger, normalize_csv_strategy(strategy), fix_s11_exit_domain)
     validate_topk_exec(topk_exec, strategy, limit_walkdown, topk_limit_rule)
     validate_tail_options(tail_window_buy, fix_minute_cash_order, tail_volume_unit)
     if tail_window_buy:
@@ -1499,6 +1529,7 @@ def run(
         tail_window_buy=tail_window_buy,
         tail_volume_unit=tail_volume_unit,
         audit_sink=audit_sink,
+        minute_stop_trigger=minute_stop_trigger,
         topk_exec=topk_exec, limit_walkdown=limit_walkdown,
         topk_limit_rule=topk_limit_rule,
     )
@@ -1572,6 +1603,8 @@ def main(argv: Optional[list] = None) -> int:
         cash_total_default=DEFAULT_TOTAL_CASH,
         daily_quota_default=DEFAULT_DAILY_QUOTA,
     )
+    ap.add_argument("--minute-stop-trigger", choices=("hl", "close"), default="close",
+                    help="close (default): legacy scan; hl: low stop/high fixed target, threshold fills; rejects version12 and --fix-s11-exit-domain; v7 does not accept this flag")
     ap.add_argument("--no-cache", action="store_true", help="skip minute window cache")
     ap.add_argument(
         "--rebuild-cache", action="store_true", help="reload lake and rewrite cache"
@@ -1646,6 +1679,7 @@ def main(argv: Optional[list] = None) -> int:
     ap.add_argument("--execution-audit-file", help="optional execution JSON sidecar; leaves CSVs unchanged")
     args = ap.parse_args(argv if argv is not None else None)
     try:
+        validate_minute_stop_trigger(args.minute_stop_trigger, normalize_csv_strategy(args.strategy), args.fix_s11_exit_domain)
         validate_topk_exec(args.topk_exec, args.strategy, args.limit_walkdown, args.topk_limit_rule)
     except ValueError as exc:
         ap.error(str(exc))
@@ -1685,6 +1719,7 @@ def main(argv: Optional[list] = None) -> int:
         tail_window_buy=args.tail_window_buy,
         tail_volume_unit=args.tail_volume_unit,
         audit_sink=audit,
+        minute_stop_trigger=args.minute_stop_trigger,
         topk_exec=args.topk_exec, limit_walkdown=args.limit_walkdown,
         topk_limit_rule=args.topk_limit_rule,
         **csv_run_kwargs_from_args(args),
