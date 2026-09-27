@@ -97,7 +97,7 @@
 
 2025 锚配置 × **{close, open, intraday} × {walkdown off/on} 六格**（见 §2.4）交付收益/回撤/成交数/重试到期/替补数，并做 **2026 窗交叉验证**。各格注明实际涨停价格路径，价域与其他配置保持一致。P2 定义并验收 vwap 及其替补组合后另补两格，完整矩阵为八格，不让 vwap 未定契约阻塞基础六格。
 
-tip `9e58bde`（P3 #222）的 2026 窗六格（`20260927c`，含 walkdown-on）见 [4090 Human-GO 六格记录](topk-exec-6cell-2026-09-27.md)；此前 tip `e38bc50` 的 walkdown-off 三格（`20260927a/b`）见 [三格记录](topk-exec-3cell-2026-09-27.md)。本 stamp 为 2026 窗 Human GO，不代表 2025 锚配置完整矩阵已完成，亦非默认切换 GO。
+tip `9e58bde`（P3 #222）的 2026 窗六格（`20260927c`，含 walkdown-on）见 [4090 Human-GO 六格记录](topk-exec-6cell-2026-09-27.md)；此前 tip `e38bc50` 的 walkdown-off 三格（`20260927a/b`）见 [三格记录](topk-exec-3cell-2026-09-27.md)。tip `5a3e6e2`（P4 #225）的 real 六格（`20260927d`）及与 qlib c 的并列比较见 [4090 Human-GO real↔qlib 六格记录](topk-exec-6cell-real-2026-09-27.md)。以上均为 2026 窗 Human GO，不代表 2025 锚配置完整矩阵已完成，亦非默认切换 GO。
 
 ## 4. 边界与不做
 
@@ -117,7 +117,7 @@ tip `9e58bde`（P3 #222）的 2026 窗六格（`20260927c`，含 walkdown-on）�
 | P1 | 先登记 master-close 字节锚；`--topk-exec close\|open\|intraday`（默认 close）+ 新扫描/时点现金调度 + opt-in 审计/计数 + 合成测试 + 默认回归复现 | 计划人裁；本片 walkdown 关 |
 | P2 | `vwap` 分片报价、量分布及部分成交契约先明定，再做切片执行/成交率统计；与 walkdown 组合另经人裁后验收 | P1；组合实现还依赖 P3 |
 | P3 | `--limit-walkdown`（**人裁后**才实现）：整份额度、首次拦截移交、同模式候补/递归上限 + 基础六格 + 2026 交叉 | P1，可与 P2 的独立分片部分并行 |
-| P4 | 人裁 GO：X-07 + `--topk-limit-rule real`，见 [P4 实现说明](topk-exec-p4-2026-09-27.md)；两规则完整可用矩阵留 host follow-up | X-07 + TopK 接线同一 GO；默认 qlib 不变 |
+| P4 | 人裁 GO：X-07 + `--topk-limit-rule real`，见 [P4 实现说明](topk-exec-p4-2026-09-27.md)；[20260927d real↔qlib 2026 窗六格已归档](topk-exec-6cell-real-2026-09-27.md)，完整产物 hash 对照 / 2025 锚矩阵仍待 host follow-up | X-07 + TopK 接线同一 GO；默认 qlib 不变 |
 
 ## 6. 维护
 
