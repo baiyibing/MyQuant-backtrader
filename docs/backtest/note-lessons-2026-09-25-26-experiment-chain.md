@@ -86,7 +86,7 @@
 |------|------|
 | X-03（s11 出场域）真数据 | **PASS** +6.04% |
 | 8.3 新规则真数据（1e9） | **PASS** +1.63%（加仓 1605 笔确认独立仓位） |
-| X-01（s12 价格域）真数据 | 校验链修复 + 向量化 + decision-precision 门控（front_representation）完成；B10 证书已出；R39 带证书真湖重跑中（独立 worktree，HEAD 343e658） |
+| X-01（s12 价格域）真数据 | **PASS**：R39（fix-on，HEAD 343e658，独立 worktree）校验链全过 + 模拟完成，-9.65%；R40（fix-off 同 HEAD）-7.69%；Δ-1.96pp = 混域记账被修正；此后 s12 数字以 fix-on 为准（RECEIPT_X01_S12_196f7c6_20260927.md） |
 | 资金管理配对 #205 | 已合；topk 族默认 qlib 部署 |
 | bars bin 切换 | 已验证（三表 byte-identical，13×） |
 
