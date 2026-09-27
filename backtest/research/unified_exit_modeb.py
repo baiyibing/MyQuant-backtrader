@@ -456,6 +456,18 @@ def _instance_path(inst, minutes, sessions, prev_by, *, end, exdiv):
     return _Path(*cols, mark_day, mark_hm, mark_price, mark_held, shares)
 
 
+def _path_limit_pct(inst, path):
+    """Resolve each session separately, including paths crossing a rule change."""
+    by_day = {
+        day: limit_pct(inst.symbol, inst.name, as_of=str(day))
+        for day in dict.fromkeys(path.ymd)
+    }
+    # Unknown boards retain the existing no-limit-mask behavior.
+    return np.array([
+        np.nan if by_day[day] is None else by_day[day] for day in path.ymd
+    ], dtype=float)
+
+
 def _ld_mask(price, prev, lp, tol):
     if lp is None:
         return np.zeros(price.shape, dtype=bool)
@@ -574,7 +586,7 @@ def _first_hit(path, spec, *, lp, tol, index_block=None):
 
 def _exit_from_path(inst, spec, path, *, tol, lp=None, index_block=None):
     if lp is None:
-        lp = limit_pct(inst.symbol, inst.name)
+        lp = _path_limit_pct(inst, path)
     hit = _first_hit(path, spec, lp=lp, tol=tol, index_block=index_block)
     if hit is None:
         return _result(
@@ -593,7 +605,7 @@ def _oracle_from_path(inst, path, *, tol, lp=None):
     if n == 0:
         return None
     if lp is None:
-        lp = limit_pct(inst.symbol, inst.name)
+        lp = _path_limit_pct(inst, path)
     buy_cost = modea._lot_shares(inst.buy_price) * inst.buy_price * (1 + modea.COMMISSION)
     pnl = path.shares * path.close * (1 - modea.COMMISSION) - buy_cost
     pnl = np.where(_ld_mask(path.close, path.prev, lp, tol), -np.inf, pnl)
@@ -665,7 +677,7 @@ def _evaluate_exit_modeb_ref(inst, spec, minutes, sessions, prev_by, *, end, tol
             if (
                 prev is not None
                 and prev > 0
-                and modea._is_limit_down(opn, prev, inst.symbol, inst.name, tol=tol)
+                and modea._is_limit_down(opn, prev, inst.symbol, inst.name, tol=tol, as_of=ymd)
             ):
                 blocked = True
                 continue
@@ -694,7 +706,7 @@ def _evaluate_exit_modeb_ref(inst, spec, minutes, sessions, prev_by, *, end, tol
             if (
                 prev is not None
                 and prev > 0
-                and modea._is_limit_down(fill, prev, inst.symbol, inst.name, tol=tol)
+                and modea._is_limit_down(fill, prev, inst.symbol, inst.name, tol=tol, as_of=ymd)
             ):
                 blocked = True
                 continue
@@ -722,7 +734,7 @@ def evaluate_matrix(instances, specs, daily_bars, minute_bars, sessions, **kwarg
             inst, minutes, sessions, prev_cache[inst.symbol], end=end, exdiv=exdiv
         )
         key = modea.instance_key(inst)
-        lp = limit_pct(inst.symbol, inst.name)
+        lp = _path_limit_pct(inst, path)
         for spec in specs:
             out[spec.label()][key] = _exit_from_path(
                 inst, spec, path, tol=tol, lp=lp, index_block=block,
@@ -762,7 +774,7 @@ def oracle_exits(instances, daily_bars, minute_bars, sessions, *,
     for inst in modea.opened_instances(instances):
         prev_by = _previous_refs(daily, inst.symbol, exdiv) if inst.symbol in daily else {}
         path = _instance_path(inst, minutes, sessions, prev_by, end=end, exdiv=exdiv)
-        lp = limit_pct(inst.symbol, inst.name)
+        lp = _path_limit_pct(inst, path)
         best = _oracle_from_path(inst, path, tol=tol, lp=lp)
         if best is None:
             best = _exit_from_path(inst, modea.StrategySpec(0, None), path, tol=tol, lp=lp)

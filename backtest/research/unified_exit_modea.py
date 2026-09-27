@@ -189,8 +189,9 @@ def _is_limit_up(
     name: str,
     *,
     tol: float = DEFAULT_TOL,
+    as_of: str | None = None,
 ) -> bool:
-    lp = limit_pct(code, name)
+    lp = limit_pct(code, name, as_of=as_of)
     if lp is None:
         return False  # caller handles unknown_board separately
     pct = close / prev_close - 1.0
@@ -204,8 +205,9 @@ def _is_limit_down(
     name: str,
     *,
     tol: float = DEFAULT_TOL,
+    as_of: str | None = None,
 ) -> bool:
-    lp = limit_pct(code, name)
+    lp = limit_pct(code, name, as_of=as_of)
     if lp is None:
         return False
     pct = close / prev_close - 1.0
@@ -256,7 +258,7 @@ def assemble_instances(
             out.append(Instance(symbol, name, ymd, 0.0, False, "no_bar"))
             continue
         buy_price = closes[ymd]
-        lp = limit_pct(symbol, name)
+        lp = limit_pct(symbol, name, as_of=ymd)
         if lp is None:
             out.append(Instance(symbol, name, ymd, buy_price, False, "unknown_board"))
             continue
@@ -264,7 +266,7 @@ def assemble_instances(
         if prev is None or prev <= 0:
             # No prior bar to judge limit-up — still allow buy (first bar in series).
             prev = None
-        if prev is not None and _is_limit_up(buy_price, prev, symbol, name, tol=tol):
+        if prev is not None and _is_limit_up(buy_price, prev, symbol, name, tol=tol, as_of=ymd):
             out.append(Instance(symbol, name, ymd, buy_price, False, "limit_up"))
             continue
         if _lot_shares(buy_price) < 100:
@@ -424,7 +426,7 @@ def evaluate_exit(
     def _try_finish(ymd: str, close: float, reason: str) -> Optional[ExitResult]:
         prev = prev_by.get(ymd)
         if prev is not None and prev > 0 and _is_limit_down(
-            close, prev, inst.symbol, inst.name, tol=tol
+            close, prev, inst.symbol, inst.name, tol=tol, as_of=ymd
         ):
             return None  # postpone
         sell_i = _session_index(sessions, ymd)
@@ -727,7 +729,7 @@ def oracle_exits(
             close = close_by[ymd]
             prev = prev_by.get(ymd)
             if prev is not None and prev > 0 and _is_limit_down(
-                close, prev, inst.symbol, inst.name, tol=tol
+                close, prev, inst.symbol, inst.name, tol=tol, as_of=ymd
             ):
                 continue
             shares, pnl, ret = _price_return(inst.buy_price, close, is_trade=True)

@@ -1527,9 +1527,9 @@ def run(
         st.stats.update(fallback_order_clock="14:55_decision; _buy_px_quote_bucket",
                         allocation_clock="14:55_buy_dispatch")
     if topk_exec != "close" or limit_walkdown or topk_limit_rule != "qlib":
-        st.run_metadata = {"topk_limit_rule": topk_limit_rule}
+        st.run_metadata = {**getattr(st, "run_metadata", {}), "topk_limit_rule": topk_limit_rule}
     if tail_window_buy:
-        st.run_metadata = {"tail_window_buy": tail_policy(tail_volume_unit)}
+        st.run_metadata = {**getattr(st, "run_metadata", {}), "tail_window_buy": tail_policy(tail_volume_unit)}
     st.stats["t_pool_s"] = t_pool
     st.stats["t_daily_s"] = t_daily
     st.stats["t_minute_s"] = t_minute
@@ -1552,7 +1552,7 @@ def run(
         )
         if daily_source == "qlib_day":
             metadata["mark_domain"] = "qlib_adjusted"
-        st.run_metadata = {"s11_exit_domain": metadata}
+        st.run_metadata = {**getattr(st, "run_metadata", {}), "s11_exit_domain": metadata}
     return st
 
 

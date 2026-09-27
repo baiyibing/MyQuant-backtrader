@@ -164,7 +164,7 @@ def evaluate_exit(
         )
     refs = modeb._previous_refs(daily, inst.symbol, exdiv)
     path = modeb._instance_path(inst, minutes, sessions, refs, end=end, exdiv=exdiv)
-    lp = modeb.limit_pct(inst.symbol, inst.name)
+    lp = modeb._path_limit_pct(inst, path)
     after = ""
     while True:
         hit = _first_hit(
