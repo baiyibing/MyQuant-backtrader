@@ -673,6 +673,7 @@ def simulate(
     fix_s11_exit_domain: bool = False,
     signal_bars_front: dict[str, pd.DataFrame] | None = None,
     minute_stop_trigger: str = "close",
+    exdiv_ref_fen: bool = False,
     fix_minute_cash_order: bool = False,
     tail_window_buy: bool = False,
     tail_volume_unit: str | None = "shares",
@@ -836,6 +837,7 @@ def simulate(
                     minute_bars[code], day_spans.get(code, {}), date),
                 profit_base=profit_base, pos_trail=pos_trail, audit_sink=audit_sink,
                 tail_window_buy=tail_window_buy, tail_volume_unit=tail_volume_unit,
+                exdiv_ref_fen=exdiv_ref_fen,
                 minute_stop_trigger=minute_stop_trigger,
                 topk_exec=topk_exec, limit_walkdown=limit_walkdown,
             )
@@ -874,7 +876,7 @@ def simulate(
                             int(st.stats.get("exdiv_adjusted_lots", 0)) + 1
                         )
                 prev_close, did_map = mapped_prev_close(
-                    exdiv, code, ds, float(prev_rows.iloc[-1]["close"])
+                    exdiv, code, ds, float(prev_rows.iloc[-1]["close"]), **({"fen_round": True} if exdiv_ref_fen else {})
                 )
                 if did_map:
                     st.stats["exdiv_prev_close_mapped"] = (
@@ -1066,7 +1068,7 @@ def simulate(
                     buy_gate=buy_gate,
                     quotes_for=_chase_quotes_for,
                     volume_bucket_for=chase_volume if st.volume_cap is not None else None,
-                    exdiv=exdiv,
+                    exdiv=exdiv, exdiv_ref_fen=exdiv_ref_fen,
                     ds=ds,
                     qlib_limit_pct=qlib_limit_pct,
                     allow_new_name=hooks.get("allow_new_name"),
@@ -1124,7 +1126,7 @@ def simulate(
                     name_budget=hooks.get("name_budget", 1_000_000.0),
                     ration=hooks.get("ration", "file_order"),
                     ration_seed=hooks.get("ration_seed", 0),
-                    exdiv=exdiv,
+                    exdiv=exdiv, exdiv_ref_fen=exdiv_ref_fen,
                     planned_for_day=hooks.get("planned_for_day"),
                     cash_deploy_frac=hooks.get("cash_deploy_frac"),
                     qlib_limit_pct=qlib_limit_pct,
@@ -1152,7 +1154,7 @@ def simulate(
                     volume_bucket_for=pool_volume if st.volume_cap is not None else None,
                     sizing=hooks.get("sizing", "daily_quota"),
                     name_budget=hooks.get("name_budget", 1_000_000.0),
-                    exdiv=exdiv,
+                    exdiv=exdiv, exdiv_ref_fen=exdiv_ref_fen,
                     qlib_limit_pct=qlib_limit_pct,
                     forbid_all_trade_at_limit=forbid_all_trade_at_limit,
                     buy_gate=buy_gate,
@@ -1246,6 +1248,7 @@ def run(
     s12_price_transform_file: Path | None = None,
     fix_s11_exit_domain: bool = False,
     minute_stop_trigger: str = "close",
+    exdiv_ref_fen: bool = False,
     fix_minute_cash_order: bool = False,
     tail_window_buy: bool = False,
     tail_volume_unit: str | None = "shares",
@@ -1452,7 +1455,8 @@ def run(
     exdiv = (
         None
         if (book == "version12" or dividend_type == "front")
-        else load_exdiv_ratios(all_codes, start, end, skipped_out=skipped)
+        else load_exdiv_ratios(all_codes, start, end, skipped_out=skipped,
+                               **({"noise_eps": 0} if exdiv_ref_fen else {}))
     )
     index_block_new = None
     gate_book = normalize_csv_strategy(strategy)
@@ -1513,6 +1517,7 @@ def run(
         **({"fix_s11_exit_domain": True, "signal_bars_front": signal_bars_front}
            if fix_s11_exit_domain else {}),
         exdiv=exdiv,
+        exdiv_ref_fen=exdiv_ref_fen,
         scores_by_day=scores_by_day,
         topk=topk,
         n_drop=n_drop,
@@ -1603,6 +1608,8 @@ def main(argv: Optional[list] = None) -> int:
         cash_total_default=DEFAULT_TOTAL_CASH,
         daily_quota_default=DEFAULT_DAILY_QUOTA,
     )
+    ap.add_argument("--exdiv-ref-fen", action="store_true",
+                    help="opt-in E-R6 mapped reference HALF_UP to fen and no event noise band; default off; version12/front unchanged")
     ap.add_argument("--minute-stop-trigger", choices=("hl", "close"), default="close",
                     help="close (default): legacy scan; hl: low stop/high fixed target, threshold fills; rejects version12 and --fix-s11-exit-domain; v7 does not accept this flag")
     ap.add_argument("--no-cache", action="store_true", help="skip minute window cache")
@@ -1719,6 +1726,7 @@ def main(argv: Optional[list] = None) -> int:
         tail_window_buy=args.tail_window_buy,
         tail_volume_unit=args.tail_volume_unit,
         audit_sink=audit,
+        exdiv_ref_fen=args.exdiv_ref_fen,
         minute_stop_trigger=args.minute_stop_trigger,
         topk_exec=args.topk_exec, limit_walkdown=args.limit_walkdown,
         topk_limit_rule=args.topk_limit_rule,

@@ -146,6 +146,7 @@ def run_chase_due_day(
     buy_gate,
     quotes_for: ChaseQuotesFn,
     exdiv: Optional[dict] = None,
+    exdiv_ref_fen: bool = False,
     ds: Optional[str] = None,
     qlib_limit_pct: Optional[float] = None,
     allow_new_name=None,
@@ -179,7 +180,7 @@ def run_chase_due_day(
         pending_chase.pop(chase_key)
         ymd = ds if ds is not None else pd.Timestamp(day).strftime("%Y%m%d")
         if reference_price_for is None:
-            prev_close, did_map = mapped_prev_close(exdiv, code, ymd, float(closes[-1]))
+            prev_close, did_map = mapped_prev_close(exdiv, code, ymd, float(closes[-1]), **({"fen_round": True} if exdiv_ref_fen else {}))
         else:
             prev_close, did_map = reference_price_for(code, ymd), False
         if did_map:
@@ -266,6 +267,7 @@ def run_pool_buys_day(
     ration: str = "file_order",
     ration_seed: int = 0,
     exdiv: Optional[dict] = None,
+    exdiv_ref_fen: bool = False,
     planned_for_day=None,
     cash_deploy_frac: Optional[float] = None,
     qlib_limit_pct: Optional[float] = None,
@@ -347,7 +349,7 @@ def run_pool_buys_day(
             st.stats["skip_no_bar"] += 1
             continue
         if reference_price_for is None:
-            prev_close, did_map = mapped_prev_close(exdiv, code, ds, float(closes[-1]))
+            prev_close, did_map = mapped_prev_close(exdiv, code, ds, float(closes[-1]), **({"fen_round": True} if exdiv_ref_fen else {}))
         else:
             prev_close, did_map = reference_price_for(code, ds), False
         if did_map:
@@ -442,6 +444,7 @@ def run_step_adds_day(
     sizing: str = "daily_quota",
     name_budget: float = 1_000_000.0,
     exdiv: Optional[dict] = None,
+    exdiv_ref_fen: bool = False,
     qlib_limit_pct: Optional[float] = None,
     forbid_all_trade_at_limit: bool = False,
     buy_gate=None,
@@ -455,7 +458,7 @@ def run_step_adds_day(
     if s8_policy(st) is not None:
         _run_s8_price_adds_day(
             st, day_i=day_i, day=day, ds=ds, names=names,
-            buy_quote_for=buy_quote_for, sizing=sizing, exdiv=exdiv,
+            buy_quote_for=buy_quote_for, sizing=sizing, exdiv=exdiv, exdiv_ref_fen=exdiv_ref_fen,
             qlib_limit_pct=qlib_limit_pct, forbid_all_trade_at_limit=forbid_all_trade_at_limit,
             buy_gate=buy_gate, volume_bucket_for=volume_bucket_for,
             reference_price_for=reference_price_for,
@@ -477,7 +480,7 @@ def run_step_adds_day(
         if not step_add(lots, px):
             continue
         if reference_price_for is None:
-            prev_close, did_map = mapped_prev_close(exdiv, code, ds, float(closes[-1]))
+            prev_close, did_map = mapped_prev_close(exdiv, code, ds, float(closes[-1]), **({"fen_round": True} if exdiv_ref_fen else {}))
         else:
             prev_close, did_map = reference_price_for(code, ds), False
         if did_map:
@@ -538,7 +541,7 @@ def run_step_adds_day(
 def _run_s8_price_adds_day(
     st, *, day_i, day, ds, names, buy_quote_for, sizing, exdiv,
     qlib_limit_pct, forbid_all_trade_at_limit, buy_gate, volume_bucket_for,
-    reference_price_for, confirm_peak_for,
+    reference_price_for, confirm_peak_for, exdiv_ref_fen=False,
 ) -> None:
     policy = s8_policy(st)
     book = policy["name"]
@@ -573,7 +576,7 @@ def _run_s8_price_adds_day(
             elif int((float(px) / cost - 1.0) / 0.20 + 1e-12) <= group.executed_steps:
                 continue
             if reference_price_for is None:
-                prev_close, did_map = mapped_prev_close(exdiv, code, ds, float(closes[-1]))
+                prev_close, did_map = mapped_prev_close(exdiv, code, ds, float(closes[-1]), **({"fen_round": True} if exdiv_ref_fen else {}))
             else:
                 prev_close, did_map = reference_price_for(code, ds), False
             if did_map:

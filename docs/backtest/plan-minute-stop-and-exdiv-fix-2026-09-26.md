@@ -70,7 +70,7 @@
 
 ### 实现位置
 
-- `exdiv_map.py` `mapped_prev_close()` 加可选参数 `fen_round=True`：返回前 `Decimal.quantize(Decimal("0.01"), ROUND_HALF_UP)`
+- `exdiv_map.py` `mapped_prev_close()` 加可选参数 `fen_round=False`（ON 调用传 True）：返回前 `Decimal.quantize(Decimal("0.01"), ROUND_HALF_UP)`
 - 噪声带逻辑（`:28,302-304`）：新旗标控制下 `threshold = 0`（任何幅度都修正）
 - 调用方（`csv_minute_backtest.py:803-812`）传参
 
@@ -91,8 +91,10 @@
 
 ## 4. 切片
 
-P1 已按本次授权实现并在 PR，待人工「合」；默认仍为 close。见
-[实现冻结及兼容边界说明](minute-stop-trigger-hl-p1-2026-09-27.md)。P2 / P3 未实施。
+P1 已合并（#228），默认仍为 close。见
+[实现冻结及兼容边界说明](minute-stop-trigger-hl-p1-2026-09-27.md)。
+P2 本次实现进入 PR，默认 OFF，待人工「合」；见
+[P2 冻结说明（含验收算术勘误）](exdiv-ref-fen-p2-2026-09-27.md)。P3 真湖 A/B 仍待办。
 
 | 片 | 内容 | 依赖 |
 |----|------|------|
@@ -105,3 +107,5 @@ P1 已按本次授权实现并在 PR，待人工「合」；默认仍为 close�
 - 起草：zcode（4090 机）· 2026-09-26 · v2 按 Kimi 评审 #213 全面重写。
 
 - 2026-09-27：P1 实现在 PR（S1+S2、v7 HELP 拒绝、合成及 close 回归）；P2/P3 保持待办。
+
+- 2026-09-27：P1 已合并 #228；P2 实现在 PR（fen_round 默认 False、分钟 opt-in、noise_eps=0、合成测试），P3 未做，不翻默认。

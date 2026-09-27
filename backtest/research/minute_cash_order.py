@@ -313,6 +313,7 @@ def run_chronological_day(
     audit_sink=None,
     tail_window_buy=False,
     tail_volume_unit="shares",
+    exdiv_ref_fen=False,
     minute_stop_trigger="close",
     topk_exec="close",
     limit_walkdown=False,
@@ -370,7 +371,7 @@ def run_chronological_day(
             for pos in list(st.positions.get(code, [])):
                 rescale_position(pos, kk)
                 st.stats["exdiv_adjusted_lots"] = int(st.stats.get("exdiv_adjusted_lots", 0)) + 1
-        prev_close, did_map = mapped_prev_close(exdiv, code, ds, float(previous.iloc[-1]["close"]))
+        prev_close, did_map = mapped_prev_close(exdiv, code, ds, float(previous.iloc[-1]["close"]), **({"fen_round": True} if exdiv_ref_fen else {}))
         if did_map:
             st.stats["exdiv_prev_close_mapped"] = (
                 int(st.stats.get("exdiv_prev_close_mapped", 0)) + 1
@@ -487,7 +488,7 @@ def run_chronological_day(
             st, mode=topk_exec, hooks=hooks, previous_and_frame=previous_and_frame,
             limit_walkdown=limit_walkdown, close_quote_for=_buy_px,
             open_quote_for=_open_quote_for, day_i=day_i, day=day, ds=ds,
-            names=names, daily_quota=daily_quota, exdiv=exdiv, audit_sink=audit_sink,
+            names=names, daily_quota=daily_quota, exdiv=exdiv, exdiv_ref_fen=exdiv_ref_fen, audit_sink=audit_sink,
         )
 
     tail_codes = set()
@@ -548,7 +549,7 @@ def run_chronological_day(
             if not np.isfinite(px) or px <= 0:
                 st.stats["skip_no_bar"] += 1
                 continue
-            prev_close, did_map = mapped_prev_close(exdiv, code, ds, float(closes[-1]))
+            prev_close, did_map = mapped_prev_close(exdiv, code, ds, float(closes[-1]), **({"fen_round": True} if exdiv_ref_fen else {}))
             if did_map:
                 st.stats["exdiv_prev_close_mapped"] = int(st.stats.get("exdiv_prev_close_mapped", 0)) + 1
             limits = book_limit_prices(code, prev_close, names, qlib_limit_pct=qlib_limit_pct, as_of=ds)
@@ -626,6 +627,7 @@ def run_chronological_day(
             "sizing": hooks.get("sizing", "daily_quota"),
             "name_budget": hooks.get("name_budget", 1_000_000.0),
             "exdiv": exdiv,
+            "exdiv_ref_fen": exdiv_ref_fen,
             "qlib_limit_pct": qlib_limit_pct,
             "buy_gate": hooks.get("buy_gate"),
             "forbid_all_trade_at_limit": bool(hooks.get("forbid_all_trade_at_limit", False)),
@@ -796,7 +798,7 @@ def run_chronological_day(
                         buy_gate=hooks.get("buy_gate"),
                         quotes_for=chase_quotes,
                         volume_bucket_for=chase_bucket if st.volume_cap is not None else None,
-                        exdiv=exdiv,
+                        exdiv=exdiv, exdiv_ref_fen=exdiv_ref_fen,
                         qlib_limit_pct=qlib_limit_pct,
                         allow_new_name=hooks.get("allow_new_name"),
                         add_gate=hooks.get("add_gate"),
