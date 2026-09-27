@@ -326,7 +326,10 @@ def annotate_session(frame):
     out = frame.copy()
     idx = _session_index(out.index)
     out.index = idx
-    out["ymd"] = idx.strftime("%Y%m%d")
+    # numpy calendaring (2026-09-27): strftime was a per-element hotspot on
+    # 60k-row minute frames; integer arithmetic + U8 cast is byte-identical.
+    _y, _m, _d = idx.year.to_numpy(), idx.month.to_numpy(), idx.day.to_numpy()
+    out["ymd"] = (_y * 10000 + _m * 100 + _d).astype("U8")
     out["hm"] = idx.hour * 60 + idx.minute
     return out.loc[_in_session(out["hm"].to_numpy())]
 
