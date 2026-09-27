@@ -448,7 +448,12 @@ def _validate_certificate(front_daily, raw_daily, transforms, provenance, eviden
             for (day, value), observed in zip(history.items(), declared):
                 # Check in front space: inverse reconstruction would magnify
                 # front's half-tick rounding error by 1/A in raw space.
-                expected_front = transform["A"] * _decimal(observed["close"]) + transform["B"]
+                # Human adjudication 2026-09-27: for historical days that have
+                # their own transform (ex-div changes A over time), use THAT
+                # day's A. For days without a transform, use the session A.
+                day_key = (code, _day(day))
+                hist_transform = transforms.get(day_key, transform)
+                expected_front = hist_transform["A"] * _decimal(observed["close"]) + hist_transform["B"]
                 if _day(observed["date"]) != _day(day) or not _same_price(expected_front, value):
                     _fail("independent PIT reconstruction differs", code=code, day=session)
         return "hash_bound_independent_pit_views"
