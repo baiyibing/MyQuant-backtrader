@@ -255,10 +255,16 @@ class TopkMinuteBuys:
                     self.mode == "open" and code != original and reason == "skip_no_bar")
                 if not handoff:
                     break
+                current_rank = self.rank.get(code)
+                if current_rank is None:
+                    # Planner and roster may diverge; never invent a handoff rank.
+                    self.record(code, hm, "walkdown_missing_rank", phase=phase)
+                    break
                 candidate = next((c for c in self.roster
-                                  if self.rank[c] > self.rank[code]
+                                  if self.rank[c] > current_rank
                                   and c not in self.reserved and c not in self.st.positions), None)
                 if candidate is None:
+                    self.st.stats["walkdown_exhausted"] += 1
                     self.record(code, hm, "walkdown_exhausted", phase=phase)
                     break
                 self.reserved.add(candidate)
@@ -378,7 +384,8 @@ def write_topk_exec_audit(out_dir, st):
         "topk_exec", "limit_retry_fills", "limit_retry_expired",
     )}
     if st.stats.get("limit_walkdown"):
-        payload.update(limit_walkdown=True, walkdown_fills=st.stats["walkdown_fills"])
+        payload.update(limit_walkdown=True, walkdown_fills=st.stats["walkdown_fills"],
+                       walkdown_exhausted=st.stats["walkdown_exhausted"])
     payload["events"] = st.topk_exec_audit
     (Path(out_dir) / "topk_execution.json").write_text(
         json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8",

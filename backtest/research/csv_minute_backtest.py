@@ -756,7 +756,7 @@ def simulate(
         st.stats.update(topk_exec=topk_exec, limit_retry_fills=0, limit_retry_expired=0)
         st.topk_exec_audit = []
         if limit_walkdown:
-            st.stats.update(limit_walkdown=True, walkdown_fills=0)
+            st.stats.update(limit_walkdown=True, walkdown_fills=0, walkdown_exhausted=0)
     if buy_cost_rate is not None:
         st.buy_cost_rate = float(buy_cost_rate)
     if sell_cost_rate is not None:

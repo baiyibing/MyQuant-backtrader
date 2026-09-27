@@ -70,6 +70,7 @@ def write_close_products(target, state):
 @pytest.mark.parametrize("walkdown", [{}, {"limit_walkdown": False}])
 def test_close_matches_frozen_master_bytes(tmp_path, case, price, mode, walkdown):
     state = close_case(case, **walkdown, **({} if mode is None else {"topk_exec": mode}))
+    assert "walkdown_exhausted" not in state.stats
     buys = [t for t in state.trades if t["date"] == D1 and t["side"] == "BUY"]
     assert [t["price"] for t in buys] == ([] if price is None else [price])
     assert all(t["reason"] == "pool" and "hm" not in t for t in buys)
@@ -524,6 +525,7 @@ def test_walkdown_whole_quota_recursion_dedupe_and_vacancy(mode, vacancy):
     selected = [row["code"] for row in st.topk_exec_audit if row["reason"] == "walkdown_selected"]
     assert selected == [C, d]
     assert st.stats["walkdown_fills"] == 1
+    assert st.stats["walkdown_exhausted"] == 0
     assert st.stats["limit_retry_fills"] == st.stats["limit_retry_expired"] == 0
 
 
@@ -536,7 +538,28 @@ def test_walkdown_exhaustion_and_seats_cannot_share_candidate(mode):
     selected = [r["code"] for r in st.topk_exec_audit if r["reason"] == "walkdown_selected"]
     assert selected == [C]
     assert sum(r["reason"] == "walkdown_exhausted" for r in st.topk_exec_audit) == 2
+    assert st.stats["walkdown_exhausted"] == 2
     assert st.stats["walkdown_fills"] == st.stats["limit_retry_expired"] == 0
+
+
+@pytest.mark.parametrize("mode", ["close", "open", "intraday"])
+def test_walkdown_missing_planned_rank_stops_with_audit(monkeypatch, mode):
+    original = minute.apply_csv_strategy
+
+    def apply(*args, **kwargs):
+        hooks = original(*args, **kwargs)
+        hooks["planned_for_day"].walkdown_roster = lambda ds: [B]
+        return hooks
+
+    monkeypatch.setattr(minute, "apply_csv_strategy", apply)
+    hm = 895 if mode == "close" else 570
+    st = run_case({A: [(D1, hm, 10.95, 10.95)], B: [(D1, hm, 10., 10.)]},
+                  topk_exec=mode, limit_walkdown=True)
+    assert buys(st) == []
+    assert [(r["code"], r["reason"]) for r in st.topk_exec_audit] == [
+        (A, "skip_limit_up"), (A, "walkdown_missing_rank"),
+    ]
+    assert st.stats["walkdown_exhausted"] == st.stats["walkdown_fills"] == 0
 
 
 def test_walkdown_close_fallback_keeps_decision_and_quote_clocks_distinct():
@@ -640,6 +663,10 @@ def test_walkdown_cli_opt_in_products(tmp_path, synthetic_loaders, mode, monkeyp
     audit = json.loads((out / "topk_execution.json").read_text())
     assert audit["limit_walkdown"] is True
     assert audit["walkdown_fills"] == 0
+    assert audit["walkdown_exhausted"] == (0 if mode == "close" else 1)
+    assert audit["walkdown_exhausted"] == sum(
+        row["reason"] == "walkdown_exhausted" for row in audit["events"]
+    )
     assert audit["limit_retry_expired"] == 0
     assert configs[0]["limit_walkdown"] is True
     assert configs[0]["topk_exec"] == mode
@@ -711,3 +738,4 @@ def test_explicit_walkdown_off_preserves_opt_in_modes(mode):
     assert implicit.stats == explicit.stats
     assert implicit.topk_exec_audit == explicit.topk_exec_audit
     assert "walkdown_fills" not in explicit.stats
+    assert "walkdown_exhausted" not in explicit.stats
