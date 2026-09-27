@@ -164,7 +164,8 @@ def _validate_frame(frame, *, code, domain, path="<memory>", minute=False):
                   domain=domain, path=path)
     if minute:
         # Vectorized: whole-column comparison (was per-row list() materialization).
-        expected_ymd = frame.index.strftime("%Y%m%d")
+        _yy, _mm, _dd = frame.index.year.to_numpy(), frame.index.month.to_numpy(), frame.index.day.to_numpy()
+        expected_ymd = (_yy * 10000 + _mm * 100 + _dd).astype("U8")
         expected_hm = frame.index.hour * 60 + frame.index.minute
         for column, expected in (("ymd", expected_ymd), ("hm", expected_hm)):
             if column in frame:
@@ -577,9 +578,11 @@ def _read_strict(path, code, domain, start, end, *, minute=False):
     # reject corrupt prices before the legacy-compatible filtering below.
     _validate_frame(frame, code=code, domain=domain, path=path, minute=minute)
     if "volume" in frame:
-        for value in frame["volume"]:
-            if _decimal(value) < 0:
-                _fail("negative volume", code=code, domain=domain, path=path)
+        vol = pd.to_numeric(frame["volume"], errors="coerce").to_numpy()
+        if (vol < 0).any():
+            bad = vol < 0
+            _fail("negative volume", code=code, domain=domain, path=path,
+                  day=_day(frame.index[bad][0]))
     if file_sha256(path) != initial_hash:
         _fail("parquet changed while reading frozen snapshot", code=code, domain=domain, path=path)
     return frame, initial_hash
