@@ -86,7 +86,7 @@
 |------|------|
 | X-03（s11 出场域）真数据 | **PASS** +6.04% |
 | 8.3 新规则真数据（1e9） | **PASS** +1.63%（加仓 1605 笔确认独立仓位） |
-| X-01（s12 价格域）真数据 | 校验链三处修复 + 热点向量化完成；**B10 证书生成中**；带证书重跑待发 |
+| X-01（s12 价格域）真数据 | 校验链修复 + 向量化 + decision-precision 门控（front_representation）完成；B10 证书已出；R39 带证书真湖重跑中（独立 worktree，HEAD 343e658） |
 | 资金管理配对 #205 | 已合；topk 族默认 qlib 部署 |
 | bars bin 切换 | 已验证（三表 byte-identical，13×） |
 
@@ -111,3 +111,15 @@
 
 - 症状：向量化了 `_validate_frame` 的 iterrows 和 ymd/hm 比较，却漏了同一模块 `:713` 的 strftime 生产者；等 40 分钟才发现。
 - **纪律**：热点确认后，`grep -n` 该模式（strftime/iterrows/to_numpy 的逐行调用）**同模块全部出现点**，一次改完；PR 描述里列出每个调用点的处置。
+### 教训 25：「边跑边修」反模式——每一跑都必须是完整合并后的最终版
+
+- 症状：R10–R38 十几轮真湖跑，多轮发车后才发现修复未带上（工作区 stash 残留、跑在旧分支、修复在另一分支未合并）；用户三次重复指令「把修复都合并再跑」后仍然复发。
+- 根因：把「发车」当成了可并行于「修码」的活动。真湖单轮 1–3 小时，发车前省下的 10 分钟核对，换来的是整轮报废 + 下一轮排队。
+- **纪律**：①发车清单（全部执行，缺一不发）：当前分支名、`git rev-parse HEAD`、`git status` 干净、全部修复以 **grep 标记**逐一确认在跑的代码里、证书/输入文件 sha256 记录在案；②修复跨分支时先合并再发车，禁止「跑 A 分支、心里想着 B 分支的修复」；③跑必须放在**独立 worktree**（`git worktree add`，钉 commit），主仓随时可能被其他 agent 切分支——R24/R27/R29/R31 四次事故同因；④发车后头 5 分钟看日志确认没有立即报错，再离开。
+
+### 教训 26：Windows autocrlf 会静默回退字节级修复；byte-pin 测试先查 `git ls-files --eol`
+
+- 症状：提交后工作区文件仍是 CRLF（`w/crlf`），partial-sell golden 字节测试挂；批量恢复 CRLF 时 xargs 引号 bug 把 1400+ 文件误删，且把刚改完的 `signal_price_domain.py` 回退到 HEAD，未提交的四处编辑全部丢失，只能重放。
+- 根因：`core.autocrlf=true` 的旧检出状态 + 事后才补的 `.gitattributes eol=lf`——git 认为文件「未修改」（clean 过滤后一致），但工作区字节就是 CRLF；`rm + git checkout --` 恢复 LF 的操作一旦路径列表含中文/引号就会半途失败。
+- **纪律**：①byte-pin（golden sha256）类测试在本机挂而 CI 绿时，第一动作 `git ls-files --eol` 查 `w/crlf`；②恢复用 `git ls-files -z` 空分隔管道（或 Python `subprocess` 批处理），禁止裸 xargs 处理含中文路径的列表；③批量字节操作后 `git status` 必须**核对 M 文件名单与预期完全一致**，多一个少一个都停下重查；④重要未提交编辑在动工作区字节前先 `git stash` 或先提交。
+
