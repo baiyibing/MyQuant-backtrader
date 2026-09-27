@@ -179,6 +179,14 @@ def make_planned_for_day(
             out.append(code)
         return out
 
+    def walkdown_roster(ds):
+        from backtest.research.topk_dropout_rules import sort_by_score_desc
+
+        scores = scores_by_day[ds]
+        return [code for code in sort_by_score_desc(list(scores), scores)
+                if eligible_buy is None or eligible_buy(code, ds)]
+
+    planned_for_day.walkdown_roster = walkdown_roster
     return planned_for_day
 
 

@@ -658,13 +658,14 @@ def simulate(
     tail_volume_unit: str | None = "shares",
     audit_sink=None,
     topk_exec: str = "close",
+    limit_walkdown: bool = False,
 ) -> SimState:
     """Opt-in cap uses caller-attested completed minutes; daily volume is unused.
 
     exdiv_economics is an explicit (symbol, YYYYMMDD) -> ExDivEvent lookup for
     raw bars. None retains the baseline; E-R6 ratios never imply entitlements.
     """
-    validate_topk_exec(topk_exec, strategy)
+    validate_topk_exec(topk_exec, strategy, limit_walkdown)
     validate_tail_options(tail_window_buy, fix_minute_cash_order, tail_volume_unit)
     if tail_window_buy:
         tail_volume_unit = resolve_tail_volume_unit(tail_volume_unit)
@@ -751,9 +752,11 @@ def simulate(
         daily_quota=daily_quota,
     )
     configure_s8(st, hooks)
-    if topk_exec != "close":
+    if topk_exec != "close" or limit_walkdown:
         st.stats.update(topk_exec=topk_exec, limit_retry_fills=0, limit_retry_expired=0)
         st.topk_exec_audit = []
+        if limit_walkdown:
+            st.stats.update(limit_walkdown=True, walkdown_fills=0, walkdown_exhausted=0)
     if buy_cost_rate is not None:
         st.buy_cost_rate = float(buy_cost_rate)
     if sell_cost_rate is not None:
@@ -797,7 +800,7 @@ def simulate(
                 scan=scan_held_day,
                 **({"price_context": s12_price_context} if fix_s12_price_domain else {}),
             )
-        elif fix_minute_cash_order or topk_exec != "close":
+        elif fix_minute_cash_order or topk_exec != "close" or limit_walkdown:
             run_chronological_day(
                 st, pending_chase, hooks=hooks, minute_bars=minute_bars,
                 daily_bars=daily_bars, pool_days=pool_days, day_i=i, day=day,
@@ -807,7 +810,7 @@ def simulate(
                     minute_bars[code], day_spans.get(code, {}), date),
                 profit_base=profit_base, pos_trail=pos_trail, audit_sink=audit_sink,
                 tail_window_buy=tail_window_buy, tail_volume_unit=tail_volume_unit,
-                topk_exec=topk_exec,
+                topk_exec=topk_exec, limit_walkdown=limit_walkdown,
             )
         else:
             bind_opening = hooks.get("bind_opening_held")
@@ -1216,8 +1219,9 @@ def run(
     tail_volume_unit: str | None = "shares",
     audit_sink=None,
     topk_exec: str = "close",
+    limit_walkdown: bool = False,
 ) -> SimState:
-    validate_topk_exec(topk_exec, strategy)
+    validate_topk_exec(topk_exec, strategy, limit_walkdown)
     validate_tail_options(tail_window_buy, fix_minute_cash_order, tail_volume_unit)
     if tail_window_buy:
         tail_volume_unit = resolve_tail_volume_unit(tail_volume_unit)
@@ -1491,7 +1495,7 @@ def run(
         tail_window_buy=tail_window_buy,
         tail_volume_unit=tail_volume_unit,
         audit_sink=audit_sink,
-        topk_exec=topk_exec,
+        topk_exec=topk_exec, limit_walkdown=limit_walkdown,
     )
     if skipped.get("exdiv_skipped_no_factor"):
         st.stats["exdiv_skipped_no_factor"] = int(skipped["exdiv_skipped_no_factor"])
@@ -1509,11 +1513,14 @@ def run(
                         same_hm_policy="strategy12_existing_sells_then_buys",
                         fallback_order_clock="strategy12_existing_hook",
                         stable_order="strategy12_existing_hook")
-    if topk_exec != "close":
+    if topk_exec != "close" or limit_walkdown:
         st.stats.update(cash_order_policy="chronological",
                         same_hm_policy="open_before_close; independent_sells_before_buys",
                         fallback_order_clock="actual_session_open; no_open_fallback",
                         allocation_clock="09:30_buy_dispatch")
+    if limit_walkdown and topk_exec == "close":
+        st.stats.update(fallback_order_clock="14:55_decision; _buy_px_quote_bucket",
+                        allocation_clock="14:55_buy_dispatch")
     if tail_window_buy:
         st.run_metadata = {"tail_window_buy": tail_policy(tail_volume_unit)}
     st.stats["t_pool_s"] = t_pool
@@ -1564,6 +1571,8 @@ def main(argv: Optional[list] = None) -> int:
     )
     ap.add_argument("--minute-source", choices=("lake", "qlib_1min"), default="lake")
     ap.add_argument("--daily-source", choices=("lake", "qlib_day"), default="lake")
+    ap.add_argument("--limit-walkdown", action="store_true",
+                    help="TopK first limit-up block hands whole seat quota to next eligible rank")
     ap.add_argument(
         "--topk-exec", type=parse_topk_exec, choices=("close", "open", "intraday", "vwap"),
         default="close", help="topk_dropout only: default close = 14:55 close; open/intraday/vwap opt-in",
@@ -1628,7 +1637,7 @@ def main(argv: Optional[list] = None) -> int:
     ap.add_argument("--execution-audit-file", help="optional execution JSON sidecar; leaves CSVs unchanged")
     args = ap.parse_args(argv if argv is not None else None)
     try:
-        validate_topk_exec(args.topk_exec, args.strategy)
+        validate_topk_exec(args.topk_exec, args.strategy, args.limit_walkdown)
     except ValueError as exc:
         ap.error(str(exc))
     pool_dir = resolve_research_pool_dir(args.strategy, args.pool_dir, repo=REPO)
@@ -1667,7 +1676,7 @@ def main(argv: Optional[list] = None) -> int:
         tail_window_buy=args.tail_window_buy,
         tail_volume_unit=args.tail_volume_unit,
         audit_sink=audit,
-        topk_exec=args.topk_exec,
+        topk_exec=args.topk_exec, limit_walkdown=args.limit_walkdown,
         **csv_run_kwargs_from_args(args),
     )
     book = engine_book(args.strategy)
@@ -1689,7 +1698,9 @@ def main(argv: Optional[list] = None) -> int:
         )
     emit_manifest = args.emit_run_manifest or args.tail_window_buy
     manifest_args = vars(args).copy()
-    if args.topk_exec == "close":
+    if not args.limit_walkdown:
+        manifest_args.pop("limit_walkdown", None)
+    if args.topk_exec == "close" and not args.limit_walkdown:
         manifest_args.pop("topk_exec", None)
     if not args.tail_window_buy:
         manifest_args.pop("tail_window_buy", None)
@@ -1699,7 +1710,7 @@ def main(argv: Optional[list] = None) -> int:
         st,
         text,
         help_lock_for(args.strategy, shared=HELP_LOCK)
-        + (TOPK_EXEC_HELP_LOCK if args.topk_exec != "close" else ""),
+        + (TOPK_EXEC_HELP_LOCK if args.topk_exec != "close" or args.limit_walkdown else ""),
         emit_run_manifest=emit_manifest,
         signal_bundle_sha256=st.stats.get("signal_bundle_sha256"),
         manifest_config=(
@@ -1709,7 +1720,7 @@ def main(argv: Optional[list] = None) -> int:
             if emit_manifest else None
         ),
     )
-    if args.topk_exec != "close":
+    if args.topk_exec != "close" or args.limit_walkdown:
         write_topk_exec_audit(out_dir, st)
     if normalize_csv_strategy(args.strategy) == "version12":
         price_domain_audit = (
@@ -1744,7 +1755,7 @@ def main(argv: Optional[list] = None) -> int:
         )
     if args.execution_audit_file:
         write_audit(args.execution_audit_file, audit, engine=engine,
-                    enabled=args.fix_minute_cash_order or args.topk_exec != "close")
+                    enabled=args.fix_minute_cash_order or args.topk_exec != "close" or args.limit_walkdown)
     return 0
 
 
