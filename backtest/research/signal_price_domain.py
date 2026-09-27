@@ -87,12 +87,21 @@ def file_sha256(path):
 
 
 def frame_sha256(frame):
-    """Stable identity without pandas' version-dependent CSV serialization."""
-    rows = [[pd.Timestamp(index).isoformat(), *[str(v) for v in values]]
-            for index, values in zip(frame.index, frame.itertuples(index=False, name=None))]
-    payload = {"columns": list(frame.columns), "rows": rows}
+    """Stable identity without pandas' version-dependent CSV serialization.
+
+    Vectorized (2026-09-27): pandas' built-in row hashing (default key)
+    feeds a {columns, row_count, row_hash_digest} payload; same frame ->
+    same digest, O(1) pandas pass instead of per-row itertuples + json.
+    Hashes are compared only within one run, never across pandas versions.
+    """
+    row_hash = pd.util.hash_pandas_object(
+        frame.astype(str), index=True
+    ).to_numpy(dtype="uint64")
+    payload = {"columns": list(frame.columns), "row_count": int(len(frame)),
+               "row_hash_digest": hashlib.sha256(
+                   row_hash.tobytes()).hexdigest()}
     return hashlib.sha256(json.dumps(payload, ensure_ascii=False,
-                                    separators=(",", ":")).encode("utf-8")).hexdigest()
+                                     separators=(",", ":")).encode("utf-8")).hexdigest()
 
 
 def build_source_metadata(front_daily, raw_daily, minute_bars, *,
