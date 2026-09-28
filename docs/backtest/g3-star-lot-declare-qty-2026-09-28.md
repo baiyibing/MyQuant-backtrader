@@ -8,6 +8,8 @@ Human sequential GO：本刀仅 G3。默认 **OFF**，不改变旧整百基线�
 
 [上交所链接](https://www.sse.com.cn/lawandrules/sselawsrules2025/stocks/exchange/c/c_20260424_10816482.shtml)是发布通知页，不是仓内已核验的 §6.7 条文。本刀引用仓内 [D23 X-10 / §4 跟进计划第 6 项](../reviews/2026-09-25-minute-engine-review/README.md)：**科创板 200 股起、1 股递增**。不声称本次重新核验外部附件，不补造全板块、订单类别或历史生效日规则表。[基线 G3](industry-gaps-bt-2026-09-28.md)只读保留，引用时一并看 B1。
 
+基线审计中的「§6.7」措辞属于冻结基线、只读保留；B1 勘误指针为索引 §3，并非重新抓取上交所条文。
+
 ## 冻结：申报 vs fill vs 残量
 
 | 层 | 含义 | G3 范围 |

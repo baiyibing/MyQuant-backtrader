@@ -107,8 +107,11 @@ def test_off_matches_frozen_base_bytes():
 
 
 @pytest.mark.parametrize("engine", ["daily", "minute"])
-@pytest.mark.parametrize("enabled,expected", [(False, 100), (True, 0)])
-def test_shared_simulate_wiring(engine, enabled, expected):
+@pytest.mark.parametrize("enabled,quota,expected", [
+    (False, 1500., 100), (True, 1500., 0),
+    (True, 2000., 200), (True, 2010., 201), (True, 2500., 250),
+])
+def test_shared_simulate_wiring(engine, enabled, quota, expected):
     from backtest.research import csv_daily_backtest as daily
     from backtest.research import csv_minute_backtest as minute
     days = pd.to_datetime(["2026-08-31", "2026-09-01"])
@@ -118,7 +121,12 @@ def test_shared_simulate_wiring(engine, enabled, expected):
     args = (ds,) if engine == "daily" else (ms, ds)
     fn = daily.simulate if engine == "daily" else minute.simulate
     st = fn(*args, {"20260901": [CODE]}, "20260901", "20260901", strategy="version6",
-            daily_quota=1500., star_lot_declare_check=enabled)
-    assert sum(t["shares"] for t in st.trades if t["side"] == "BUY") == expected
+            daily_quota=quota, star_lot_declare_check=enabled)
+    buys = [t for t in st.trades if t["side"] == "BUY"]
+    assert sum(t["shares"] for t in buys) == expected
     if enabled:
-        assert st.stats["skip_star_buy_declare_qty"] == 1
+        assert st.stats.get("skip_star_buy_declare_qty", 0) == (1 if expected == 0 else 0)
+        if expected >= 200:
+            assert buys
+            # No volume cap here: each fill is the full declaration.
+            assert all(t["shares"] >= 200 for t in buys)
