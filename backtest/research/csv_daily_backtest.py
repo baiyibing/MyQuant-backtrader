@@ -241,6 +241,7 @@ def simulate(
     index_block_new=None,
     stop_fill: Optional[str] = None,
     fix_s11_exit_domain: bool = False,
+    fix_s81_band_precision: bool = False,
     signal_bars_front: dict[str, pd.DataFrame] | None = None,
 ) -> SimState:
     """核心日循环。bars/pool_days 可由测试注入；run() 负责从湖与 CSV 加载。
@@ -275,6 +276,7 @@ def simulate(
         tiers=tiers,
         tier_default=tier_default,
         apply_fn=apply_csv_strategy,
+        **({"fix_s81_band_precision": True} if fix_s81_band_precision else {}),
         scores_by_day=scores_by_day,
         topk=topk,
         n_drop=n_drop,
@@ -656,7 +658,10 @@ def run(
     stop_fill: Optional[str] = None,
     strict_pool: bool = False,
     fix_s11_exit_domain: bool = False,
+    fix_s81_band_precision: bool = False,
 ) -> SimState:
+    if fix_s81_band_precision and normalize_csv_strategy(strategy) != "version8_1":
+        raise ValueError("fix_s81_band_precision is supported only by version8_1")
     if fix_s11_exit_domain:
         if normalize_csv_strategy(strategy) != "version11":
             raise ValueError("fix_s11_exit_domain is supported only by version11")
@@ -813,6 +818,7 @@ def run(
         tier_default=tier_default,
         pos_trail=pos_trail,
         strategy=strategy,
+        **({"fix_s81_band_precision": True} if fix_s81_band_precision else {}),
         take_profit=take_profit,
         record_params=record_params,
         name_budget=name_budget,

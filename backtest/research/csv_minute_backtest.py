@@ -672,6 +672,7 @@ def simulate(
     fix_s12_price_domain: bool = False,
     s12_price_context=None,
     fix_s11_exit_domain: bool = False,
+    fix_s81_band_precision: bool = False,
     signal_bars_front: dict[str, pd.DataFrame] | None = None,
     minute_stop_trigger: str = "close",
     exdiv_ref_fen: bool = False,
@@ -739,6 +740,7 @@ def simulate(
         tiers=tiers,
         tier_default=tier_default,
         apply_fn=apply_csv_strategy,
+        **({"fix_s81_band_precision": True} if fix_s81_band_precision else {}),
         scores_by_day=scores_by_day,
         topk=topk,
         n_drop=n_drop,
@@ -1249,6 +1251,7 @@ def run(
     fix_s12_price_domain: bool = False,
     s12_price_transform_file: Path | None = None,
     fix_s11_exit_domain: bool = False,
+    fix_s81_band_precision: bool = False,
     minute_stop_trigger: str = "close",
     exdiv_ref_fen: bool = False,
     fix_minute_cash_order: bool = False,
@@ -1259,6 +1262,8 @@ def run(
     limit_walkdown: bool = False,
     topk_limit_rule: str = "qlib",
 ) -> SimState:
+    if fix_s81_band_precision and normalize_csv_strategy(strategy) != "version8_1":
+        raise ValueError("fix_s81_band_precision is supported only by version8_1")
     validate_minute_stop_trigger(minute_stop_trigger, normalize_csv_strategy(strategy), fix_s11_exit_domain)
     validate_topk_exec(topk_exec, strategy, limit_walkdown, topk_limit_rule)
     validate_tail_options(tail_window_buy, fix_minute_cash_order, tail_volume_unit)
@@ -1510,6 +1515,7 @@ def run(
         tier_default=tier_default,
         pos_trail=pos_trail,
         strategy=strategy,
+        **({"fix_s81_band_precision": True} if fix_s81_band_precision else {}),
         take_profit=take_profit,
         record_params=record_params,
         name_budget=name_budget,

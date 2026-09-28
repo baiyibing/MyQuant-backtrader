@@ -96,7 +96,7 @@ P3 外置 D5 使用 s12 fix-on + 既有 transform，仅支持该冻结上下文�
 | G4 | Human sequential GO：s11 单一 exporter 双快照/双锚点合成取证 PASS-for-method；无生产修改，完整历史 PIT 未证，勿合 | [G4 方法、冻结桶与结果](g4-front-pit-evidence-2026-09-28.md)；审计 G4；[D27 PIT 边界](x03-s11-exit-domain.md) |
 | G5 | Human sequential GO：BT 侧 MQ/BT 联合语义 tie-break 提案 + 当前规则合成锁定；旧 pack/seal 保留、replay 内核不改，政策待联合 Human GO，勿合 | [G5 窄合同与合成证据](g5-jr-semantic-tiebreak-2026-09-28.md)；审计 G5；[D30 §6b](handoff-joint-return-clock-regen-2026-09-24.md)（定位 §6b，不沿用旧页首误指 §7） |
 | G6 | Human 单独 GO：v7 frame API 缺省日历冻结为 frame index 日期 ∪ pool 日期；仅 API 修复与合成对照，勿合 | [G6 日历合同与验证](g6-v7-frame-calendar-2026-09-28.md)；审计 G6；D23 X-11；标准 CLI 已传日历且不改 |
-| G7 | 8.1 单一数学档位边界与两侧例子；SMA 等号另列 | 审计 G7；D23 X-05、D27 末段；不全库加 epsilon |
+| G7 | Human 单独 GO：8.1 精确分档开关默认 OFF；边界与两侧合成验证，SMA 等号另刀，勿合 | [G7 合同与验证](g7-81-float-band-2026-09-28.md)；审计 G7；D23 X-05、D27 末段 |
 
 **G8 另待业务人裁**：s12 lot0 全卖/部分卖/买回后的台阶锚生命周期，不能用行业规则代裁；不改 latch=A/residual=2，不新建策略版本。依据审计 G8、[D25 保留限制](x01-s12-price-domain.md)。
 
