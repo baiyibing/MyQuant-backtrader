@@ -3,6 +3,7 @@
 - 日期：2026-09-12（E-R5 人裁回写 2026-09-16；E-R6 落地 2026-09-16；P1=A / P4=A 正式关闭、P2=B 标签列 2026-09-20）
 - 状态：已落地。卖点/书契约仍以 [plan-unify-csv-strategies-1-8-2026-09-12.md](_archive/plans/plan-unify-csv-strategies-1-8-2026-09-12.md) 的 U-R\* 为准；下表 **E-R\*** 重开了其中撮合锁（含 E-R5 除权已知边界）。
 - 定位：[engine-positioning-ssot.md](engine-positioning-ssot.md)。名单：[pool-csv-contract.md](pool-csv-contract.md)。
+- 分钟成交假设总表：[minute-fill-policy-ssot.md](minute-fill-policy-ssot.md)（核查基线 `fad804a`；2026-09-28 S0 仅勘误下述费率接线，生产默认不变）。
 
 ## 1. 模块
 
@@ -14,7 +15,7 @@ ashare_fees.py      日线/分钟共用费率 SSOT：默认双边 10bp；qlib Po
 csv_pool.py         名单 + 名称列（ST）
 csv_ledger.py       Position / SimState / execute_buy / _sell / 追买桶（命中函数转调 ashare_session）
 csv_daily_backtest  simulate + 日线加载 + CLI（可选 `--qlib-cost` → SimState 费率覆写）
-csv_minute_backtest scan_held_day + CLI；分钟/日线加载转调 ashare_bars（继承 SimState 默认费率）
+csv_minute_backtest scan_held_day + CLI；分钟/日线加载转调 ashare_bars（默认继承 SimState 费率；可选 --qlib-cost 覆写）
 csv_minute_backtest_v7  独立仓位机；显式 `FeeSchedule`；微结构只走 ashare_session；_day_frame_records 按 (b) 切书帧/compact
 ashare_fill_clock.py    命名叶子：SessionPhase / FillPriceRule；P2=B 仅写入标签，不选价、不过滤
 ```
@@ -30,8 +31,8 @@ ashare_fill_clock.py    命名叶子：SessionPhase / FillPriceRule；P2=B 仅�
 | 公式 | `ashare_fees.trade_commission(notional, rate, min_cost)`；`min_cost>0` 时 `max(fee, floor)` |
 | 模块默认指针 | `DEFAULT_SCHEDULE is BILATERAL_10BP`（双边 10bp，`min_cost=0`） |
 | 书/分钟默认指针 | `SimState()` 三 float：`(buy_cost_rate, sell_cost_rate, min_cost) == (COMMISSION, COMMISSION, 0.0)`；**不**读 `FeeSchedule` 对象 |
-| qlib PortAna | `QLIB_PORTANA` = 买 5bp / 卖 15bp / min 5；日线 CLI `--qlib-cost` 经 `simulate(..., buy_cost_rate=..., sell_cost_rate=..., min_cost=...)` 写入 `SimState`（opt-in） |
-| 分钟路径 | `csv_minute_backtest.simulate` **无**费率 kwargs；继承 `SimState` 默认 |
+| qlib PortAna | `QLIB_PORTANA` = 买 5bp / 卖 15bp / min 5；日线 / 共享分钟 CLI `--qlib-cost` 经 `simulate(..., buy_cost_rate=..., sell_cost_rate=..., min_cost=...)` 写入 `SimState`（opt-in） |
+| 分钟路径 | **2026-09-28 勘误（`fad804a`）**：[`csv_minute_backtest.py`](../../backtest/research/csv_minute_backtest.py) 的 `main → run → simulate` 已透传 `buy_cost_rate` / `sell_cost_rate` / `min_cost`，由 `simulate` 覆写 `SimState`。`--qlib-cost` 默认 OFF，省略时三项传 `None`，仍继承双边 10bp / min 0；ON 为买 5bp / 卖 15bp / min 5。旧“无费率 kwargs”描述已过时；见 [成交假设 SSOT](minute-fill-policy-ssot.md) F 行 |
 | v7 路径 | `_buy` / `_sell_lots` / `simulate_v7(..., fee=FeeSchedule=DEFAULT_SCHEDULE)` 显式透传 |
 | 扣费粒度 | **每次函数调用**（非按标的/按日）。书 `_sell`×2 lot 可两次触 floor；v7 一次 `_sell_lots` 聚合名义后一次 `credit_sell`（δ1 plan §2.4 两 lot oracle：PortAna 下书 10/+1990 vs v7 一次 5/+1995） |
 | 印花/过户边界 | 研究热路径 **仅佣金记账**（代理口径，≠ 现行印花税账单）；禁止未来在 ledger 再加印花行造成双重计入。真券商印花+过户留在 live `trade_fee_policy`，**不得** import 进 simulate 热路径 |
