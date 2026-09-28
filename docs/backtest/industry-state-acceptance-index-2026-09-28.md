@@ -94,7 +94,7 @@ P3 外置 D5 使用 s12 fix-on + 既有 transform，仅支持该冻结上下文�
 | G2 | 旧共享分钟缓存的来源/快照身份合同；独立 Human GO 实施，仅合成验证，勿合 | [G2 身份守卫合同](g2-minute-cache-identity-2026-09-28.md)；审计 G2；[D25 输入身份](x01-s12-price-domain.md)、[D23 X-12](../reviews/2026-09-25-minute-engine-review/README.md) |
 | G3 | 申报 vs fill vs 残量规则表；Human 单独 GO 后实现默认 OFF 的 STAR 普通买入校验（勿合） | 审计 G3；D23 X-10；本页 §3 B1；[G3 合同与反例](g3-star-lot-declare-qty-2026-09-28.md) |
 | G4 | Human sequential GO：s11 单一 exporter 双快照/双锚点合成取证 PASS-for-method；无生产修改，完整历史 PIT 未证，勿合 | [G4 方法、冻结桶与结果](g4-front-pit-evidence-2026-09-28.md)；审计 G4；[D27 PIT 边界](x03-s11-exit-domain.md) |
-| G5 | MQ/BT 联合语义 tie-break 窄合同，保留旧 pack/seal | 审计 G5；[D30 §6b](handoff-joint-return-clock-regen-2026-09-24.md)（定位 §6b，不沿用旧页首误指 §7） |
+| G5 | Human sequential GO：BT 侧 MQ/BT 联合语义 tie-break 提案 + 当前规则合成锁定；旧 pack/seal 保留、replay 内核不改，政策待联合 Human GO，勿合 | [G5 窄合同与合成证据](g5-jr-semantic-tiebreak-2026-09-28.md)；审计 G5；[D30 §6b](handoff-joint-return-clock-regen-2026-09-24.md)（定位 §6b，不沿用旧页首误指 §7） |
 | G6 | v7 frame API 未传日历的显式拒绝或构造合同 | 审计 G6；D23 X-11；标准 CLI 已传日历，不据此重构 CLI |
 | G7 | 8.1 单一数学档位边界与两侧例子；SMA 等号另列 | 审计 G7；D23 X-05、D27 末段；不全库加 epsilon |
 
