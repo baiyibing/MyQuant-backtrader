@@ -1,10 +1,8 @@
 """G3 declaration/fill/residual counterexamples; synthetic data only."""
 from dataclasses import asdict
 from datetime import date
-import importlib.util
+import hashlib
 import json
-from pathlib import Path
-import subprocess
 
 import pandas as pd
 import pytest
@@ -92,25 +90,20 @@ def snapshot(st):
                        "supplementary_used": st.supplementary_used}, sort_keys=True).encode()
 
 
-def test_off_matches_frozen_base_bytes(tmp_path, monkeypatch):
-    # Compare actual baseline code, not a second invocation of the new branch.
-    base = "3f1586f77e94a31ba0c4b86d5c03ff13f332d382"
-    root = Path(__file__).resolve().parents[1]
-    source = subprocess.check_output(["git", "show", f"{base}:backtest/research/csv_ledger.py"], cwd=root)
-    path = tmp_path / "g3_base_ledger.py"
-    path.write_bytes(source)
-    spec = importlib.util.spec_from_file_location("g3_base_ledger", path)
-    old = importlib.util.module_from_spec(spec)
-    import sys
-    monkeypatch.setitem(sys.modules, spec.name, old)
-    spec.loader.exec_module(old)
-    states = [old.SimState(), ledger.SimState(), ledger.SimState(star_lot_declare_check=False)]
-    for module, st in zip([old, ledger, ledger], states):
+def test_off_matches_frozen_base_bytes():
+    # Frozen SHA-256 of snapshot(SimState()) after the matrix below, generated
+    # with pre-G3 backtest/research/csv_ledger.py at
+    # 3f1586f77e94a31ba0c4b86d5c03ff13f332d382. Never regenerate from G3 code:
+    # this golden preserves the legacy floor-100 behavior without Git history.
+    expected_sha256 = "42230023a480ed77397207be894d02b067366271f705ad15e3720222cfe5793c"
+    states = [ledger.SimState(), ledger.SimState(star_lot_declare_check=False)]
+    for st in states:
         for qty in [1, 100, 199, 200, 201, 250]:
             for override in [None, qty]:
-                module.execute_buy(st, CODE, 10., qty * 10., 0, DAY, shares_override=override)
-    assert snapshot(states[0]) == snapshot(states[1]) == snapshot(states[2])
-    assert states[1].trades[0]["shares"] == 100
+                ledger.execute_buy(st, CODE, 10., qty * 10., 0, DAY, shares_override=override)
+        assert hashlib.sha256(snapshot(st)).hexdigest() == expected_sha256
+        assert [t["shares"] for t in st.trades] == [100] * 5 + [200] * 6
+    assert snapshot(states[0]) == snapshot(states[1])
 
 
 @pytest.mark.parametrize("engine", ["daily", "minute"])
