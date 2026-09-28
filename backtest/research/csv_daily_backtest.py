@@ -229,6 +229,7 @@ def simulate(
     pool_names_by_day: Optional[dict[str, dict[str, str]]] = None,
     exdiv: Optional[dict] = None,
     exdiv_economics: EconomicLookup | None = None,
+    star_lot_declare_check: bool = False,
     scores_by_day=None,
     topk=None,
     n_drop=None,
@@ -301,6 +302,7 @@ def simulate(
         daily_quota=daily_quota,
     )
     configure_s8(st, hooks)
+    st.star_lot_declare_check = star_lot_declare_check
     if buy_cost_rate is not None:
         st.buy_cost_rate = float(buy_cost_rate)
     if sell_cost_rate is not None:

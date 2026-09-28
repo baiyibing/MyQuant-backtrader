@@ -24,7 +24,7 @@ from backtest.research.ashare_fill_clock import session_phase as _session_phase
 from backtest.research.ashare_session import LIMIT_EPS, hit_limit_down as hit_limit_down, hit_limit_up
 from backtest.research.ashare_volume_cap import VolumeCap
 from backtest.research.ashare_exdiv_economics import ExDivEconomics
-from backtest.research.market_layer import limit_prices
+from backtest.research.market_layer import _digit_prefix, limit_prices
 from backtest.research.minute_audit import record_fill, record_rejection
 
 DEFAULT_TOTAL_CASH = 21_000_000.0
@@ -313,6 +313,7 @@ class SimState:
     book_state: dict = field(default_factory=dict, repr=False, compare=False)
     book_on_buy: object = field(default=None, repr=False, compare=False)
     book_on_exdiv: object = field(default=None, repr=False, compare=False)
+    star_lot_declare_check: bool = field(default=False, repr=False, compare=False, kw_only=True)
 
 
 def _ymd(ts) -> str:
@@ -437,10 +438,13 @@ def last_close_mark(df, day, fallback: float) -> float:
     return float(fallback) if m is None else m
 
 
-def _buy_size(per_quota: float, price: float) -> tuple[int, float]:
-    """常规额度内最大整百股；不足 100 股用补充资金补足（返回 (shares, supp_used))。"""
+def _buy_size(per_quota: float, price: float, *, star_declare: bool = False) -> tuple[int, float]:
+    """默认整百且可补足 100 股；STAR opt-in 按整数股、不补足，由入口校验。"""
     if price <= 0 or per_quota <= 0:
         return 0, 0.0
+    if star_declare:
+        # D23 X-10: integer shares, min 200 checked at entry; no top-up.
+        return int(per_quota / price), 0.0
     shares = int(per_quota / price / 100.0) * 100
     supp = 0.0
     if shares == 0:
@@ -506,13 +510,24 @@ def execute_buy(
         or not any(lot is merge_lot for lot in st.positions.get(code, []))
     ):
         raise ValueError("merge_lot must be an existing same-code, same-day buy lot")
+    star_declare = st.star_lot_declare_check and _digit_prefix(code).startswith(("688", "689"))
     if shares_override is None:
-        shares, supp = _buy_size(per, px)
+        shares, supp = _buy_size(per, px, star_declare=star_declare)
     else:
         if isinstance(shares_override, bool) or not isinstance(shares_override, Integral):
             raise ValueError("shares_override must be an integer share count")
-        shares, supp = max(0, int(shares_override)) // 100 * 100, 0.0
+        shares, supp = (
+            int(shares_override) if star_declare else max(0, int(shares_override)) // 100 * 100
+        ), 0.0
         per = shares * px
+    # This is the new buy declaration, not its eventual fill. A later cap may
+    # fill <200; a subsequent execute_buy call is a NEW declaration, including
+    # residual retries / merge_lot. Held-position sell unwinds stay separate.
+    if star_declare and shares < 200:
+        reason_code = "skip_star_buy_declare_qty"
+        st.stats[reason_code] = st.stats.get(reason_code, 0) + 1
+        record_rejection(st, code, day, reason_code, px)
+        return False
     if shares <= 0:
         return False
     notional = shares * px
