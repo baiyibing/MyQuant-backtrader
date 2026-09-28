@@ -1,7 +1,27 @@
-"""Opt-in chronological minute scheduling; the legacy scanner stays untouched.
+"""Shared-minute X-02 scheduling and resumable held-position exits.
+
+This module owns ``HeldMinuteCursor`` (scan state and exit candidates),
+``advance_independent_exit`` (whole-signal-position exits through the existing
+ledger, settling T+1-eligible lots), and ``run_chronological_day`` (shared account
+dispatch by hm, open/close phase, and existing stable order). The legacy
+independent-position path also uses the cursor and exit helper; those calls
+alone do not imply chronological account scheduling.
+
+The shared entry selects scheduling: ``--fix-minute-cash-order`` defaults OFF
+and is refused ON for version12. Valid TopK non-close execution or walkdown
+also selects chronological dispatch with the flag OFF; real limits alone do
+not. Quotes, fallback buckets, book rules and ledger gates retain their own
+contracts. Same-hm close sell proceeds may fund later close buys, never earlier
+open buys. The independent v7 scheduler and its post-buy timer stay in
+``csv_minute_backtest_v7``; this module does not own their order.
 
 The cursor preserves the research scanner's high-before-gap-open approximation.
-Only settlement is split into open and close; this is not an intrabar tick model.
+Gap stops settle in the open phase; hl touches and fixed-target checks run in
+the close phase, even when a gap-target fill quotes open. These are OHLC phase
+conventions, not tick-level ordering. See
+``docs/backtest/s2c-x02-cash-order-boundary-2026-09-28.md`` and
+``docs/backtest/minute-fill-policy-ssot.md`` (X2 / section 4) for the boundary
+and S2-B hl cross-reference. This documentation does not change scheduling.
 """
 
 from __future__ import annotations
