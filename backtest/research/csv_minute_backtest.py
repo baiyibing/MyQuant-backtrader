@@ -656,6 +656,7 @@ def simulate(
     pool_names_by_day: Optional[dict[str, dict[str, str]]] = None,
     exdiv: Optional[dict] = None,
     exdiv_economics: EconomicLookup | None = None,
+    star_lot_declare_check: bool = False,
     scores_by_day=None,
     topk=None,
     n_drop=None,
@@ -795,6 +796,7 @@ def simulate(
     st.stats["min_cost"] = st.min_cost
     if participation_rate is not None:
         st.volume_cap = VolumeCap(participation_rate, volume_for_bucket)
+    st.star_lot_declare_check = star_lot_declare_check
     if exdiv_economics is not None:
         st.exdiv_economics = ExDivEconomics(exdiv_economics, st.stats)
     allow_add = bool(hooks["allow_add"])
