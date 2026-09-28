@@ -59,6 +59,18 @@ def _v7_run_cli(request):
     return run_cli(request)
 
 
+def _grid_modeb_run(request):
+    from .adapters.grid_modeb import run_modeb
+
+    return run_modeb(request)
+
+
+def _grid_modeb_run_cli(request):
+    from .adapters.grid_modeb import run_cli
+
+    return run_cli(request)
+
+
 _ENTRIES = MappingProxyType({
     ("joint_return", "native_api", "joint_return_replay.replay"): _replay,
     ("joint_return", "native_api", "joint_return_replay.run_replay"): _run_replay,
@@ -68,6 +80,8 @@ _ENTRIES = MappingProxyType({
     ("csv_minute", "native_cli", "backtest/research/csv_minute_backtest.py"): _csv_run_cli,
     ("v7", "native_api", "csv_minute_backtest_v7.simulate_v7"): _v7_simulate,
     ("v7", "native_cli", "backtest/research/csv_minute_backtest_v7.py"): _v7_run_cli,
+    ("grid_modeb", "native_api", "unified_exit_modeb.run_modeb"): _grid_modeb_run,
+    ("grid_modeb", "native_cli", "scripts/research/run_unified_exit_modeb.py"): _grid_modeb_run_cli,
 })
 
 
