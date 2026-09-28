@@ -47,6 +47,18 @@ def _csv_run_cli(request):
     return run_cli(request)
 
 
+def _v7_simulate(request):
+    from .adapters.v7 import simulate_v7
+
+    return simulate_v7(request)
+
+
+def _v7_run_cli(request):
+    from .adapters.v7 import run_cli
+
+    return run_cli(request)
+
+
 _ENTRIES = MappingProxyType({
     ("joint_return", "native_api", "joint_return_replay.replay"): _replay,
     ("joint_return", "native_api", "joint_return_replay.run_replay"): _run_replay,
@@ -54,6 +66,8 @@ _ENTRIES = MappingProxyType({
     ("csv_minute", "native_api", "csv_minute_backtest.simulate"): _csv_simulate,
     ("csv_minute", "native_api", "csv_minute_backtest.run"): _csv_run,
     ("csv_minute", "native_cli", "backtest/research/csv_minute_backtest.py"): _csv_run_cli,
+    ("v7", "native_api", "csv_minute_backtest_v7.simulate_v7"): _v7_simulate,
+    ("v7", "native_cli", "backtest/research/csv_minute_backtest_v7.py"): _v7_run_cli,
 })
 
 
