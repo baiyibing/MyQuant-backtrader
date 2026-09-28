@@ -6,6 +6,8 @@
 
 分钟成交假设、各入口默认、研究 opt-in 与 NAV 混比边界统一见 [minute-fill-policy-ssot.md](minute-fill-policy-ssot.md)（S0 文档总表，生产默认不变）。
 
+规划中的 L1 薄 run facade / L2 可选研究后端见 [P0 产品边界](note-l1-l2-research-engine-boundary-2026-09-28.md)（仅文档，P0 后停在 Q1；不替换共享 CSV，绿P / 绿C 不授予 NAV 比较资格）。
+
 本仓回测不是一堆互不相关的策略名。共同问题是：
 
 **给定一份按日的买入名单（信号），在向量化引擎上把买卖规则调到总收益最大。**
