@@ -4,6 +4,8 @@ Standalone research-face fork (see [README.md](README.md)). Since migration S2 (
 
 **成交引擎定位**：本仓 = 向量化。1.3 = LEBS + MockQMT 真栈。Qlib PortAnaRecord 停用；Cerebro / Rolling 已退场（2026-09-16）。见 [`docs/backtest/engine-positioning-ssot.md`](docs/backtest/engine-positioning-ssot.md)。成交核（档位 / 全卖因跌停 / Decimal 涨跌停价）见 [`docs/backtest/engine-ashare-correctness.md`](docs/backtest/engine-ashare-correctness.md)。分钟成交假设、默认锁与混比边界见 [`docs/backtest/minute-fill-policy-ssot.md`](docs/backtest/minute-fill-policy-ssot.md)。研究问题地图（三份名单 × 收益最大化）见 [`docs/backtest/research-backtest-entry.md`](docs/backtest/research-backtest-entry.md)。入口命令见 [`docs/backtest/README.md`](docs/backtest/README.md)。
 
+规划中的 L1 薄 run facade / L2 可选研究后端见 [P0 产品边界](docs/backtest/note-l1-l2-research-engine-boundary-2026-09-28.md)（仅文档 GO；P0 后停在 Q1，不授权 types / adapters / L2 代码，不替换共享 CSV，L2 ≠ `l2_analytics/`）。
+
 三仓回测不做重：MyQuant 出信号，本仓向量化研究，1.3 执行验收；LEBS 只在 1.3，且 LEBS ≠ MockQMT 真栈。本仓无 `python -m backtest.lebs` 入口。旧 CSV CLI 保留真身，HELP_LOCK 不变（P5=A）。
 
 ## Research entries
