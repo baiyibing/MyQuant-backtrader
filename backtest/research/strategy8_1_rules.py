@@ -43,6 +43,8 @@ def band_floor(peak_ret: float | Fraction, *, fix_s81_band_precision: bool = Fal
     """峰值涨幅所在档的止盈地板；未摸到 +6% 或已过 120% 返回 None。"""
     if fix_s81_band_precision:
         # Exact decimal-input contract; never round an already computed float return.
+        # Return float(floor) deliberately: only band *selection* is exact; trigger
+        # compare at take_profit_reason stays the legacy float formula.
         ret = peak_ret if isinstance(peak_ret, Fraction) else Fraction(str(peak_ret))
         if Fraction(str(SMALL_ARM)) <= ret <= Fraction(str(PROFIT_BASE)):
             return float(SMALL_FLOOR)
@@ -103,8 +105,10 @@ def take_profit_reason(
         if fix_s81_band_precision else float(peak) / float(cost) - 1.0
     )
     floor = band_floor(peak_ret, fix_s81_band_precision=fix_s81_band_precision)
+    # Trigger-price compare stays float even when ON (band selection alone is exact).
     if floor is not None and float(px) <= float(cost) * (1.0 + float(floor)):
         return f"trail:band:{int(round(floor * 100))}"
+    # ON inlines exact arm here (one call site); share a helper if a second consumer appears.
     dd_hits = (
         peak_ret > Fraction(str(PEAK_DD_ARM))
         and float(px) <= float(peak) * (1.0 - float(PEAK_DD_PCT))
