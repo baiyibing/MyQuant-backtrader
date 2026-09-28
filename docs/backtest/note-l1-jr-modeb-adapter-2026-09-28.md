@@ -12,7 +12,7 @@ Human Q1 钉定 **joint_return Mode B 入口 = JR 的 M-REF / M-LAG**，
 ## 精确入口
 
 公共调用：`from backtest.research.run_protocol import run`，然后 `run(request)`。
-静态白名单只含下表三项；未知 family、transport 或 entry 抛 `UnregisteredEntryError`
+本 JR slice 的静态白名单含下表三项；后续 [CSV slice](note-l1-csv-minute-adapter-2026-09-28.md) 增加 CSV 三项并保留 JR。未知 family、transport 或 entry 抛 `UnregisteredEntryError`
 （位于 `run_protocol.facade`），在加载 adapter / 调用 native 之前失败。
 
 | family | entry_kind | native_entry（精确字符串） | native target |

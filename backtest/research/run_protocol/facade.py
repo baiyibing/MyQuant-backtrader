@@ -29,10 +29,31 @@ def _run_cli(request):
     return run_cli(request)
 
 
+def _csv_simulate(request):
+    from .adapters.csv_minute import simulate
+
+    return simulate(request)
+
+
+def _csv_run(request):
+    from .adapters.csv_minute import run
+
+    return run(request)
+
+
+def _csv_run_cli(request):
+    from .adapters.csv_minute import run_cli
+
+    return run_cli(request)
+
+
 _ENTRIES = MappingProxyType({
     ("joint_return", "native_api", "joint_return_replay.replay"): _replay,
     ("joint_return", "native_api", "joint_return_replay.run_replay"): _run_replay,
     ("joint_return", "native_cli", "scripts/research/run_joint_return_replay.py"): _run_cli,
+    ("csv_minute", "native_api", "csv_minute_backtest.simulate"): _csv_simulate,
+    ("csv_minute", "native_api", "csv_minute_backtest.run"): _csv_run,
+    ("csv_minute", "native_cli", "backtest/research/csv_minute_backtest.py"): _csv_run_cli,
 })
 
 
