@@ -1,4 +1,18 @@
-"""Opt-in minute H/L predicates; daily books and close scans stay unchanged."""
+"""Validation and local predicates for shared-minute opt-in H/L triggers.
+
+This module owns only validate_minute_stop_trigger, validate_low, blocked_bar,
+and target_fill. It does not own a scan loop, phase scheduling, or ledger fills.
+H/L scan/fill semantics remain in csv_minute_backtest.scan_held_day_python and
+minute_cash_order.HeldMinuteCursor.advance (including its _close path), with
+the surrounding simulate loops retaining execution and accounting.
+
+The shared-minute default remains close. H/L rejects version12 and
+--fix-s11-exit-domain; v7 and daily CLIs do not expose --minute-stop-trigger.
+This is neither Mode B Q39 nor the daily --stop-fill policy.
+
+S2-B freezes this boundary without moving scans or changing behavior; see
+docs/backtest/s2b-hl-helper-boundary-2026-09-28.md.
+"""
 
 from backtest.research.csv_ledger import hit_limit_down
 

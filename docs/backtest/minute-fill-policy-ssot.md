@@ -4,6 +4,8 @@
 
 **S0 docs-only 已获 Human「批 S0，开干」；仅发布成交假设总表、指针与旧文档勘误。** 核查基线为 `fad804a99f36e084f57f98bf57d2cf7a462e1522`（`fad804a`，G7 #237）。合同来源为评审交接 `PLAN_MINUTE_FILL_POLICY_INFRA.md` §1、§4–§6；Kimi 计划评审及 R1+R2 共识均为 APPROVE，本表纳入 `R2_CONSENSUS.md` §Nits。计划浏览副本不入本 PR，不作为本表链接依赖。
 
+2026-09-28 后续增补：[S2-B 边界冻结][hl-boundary]获 Human「批 B（边界文档化），开干」，仅加强 H 行 / §4 的 helper 职责说明。下文 S0 的「本 PR / 本片」范围与验收记录保留为 #238 历史，不扩为 S1 目录或 S2 抽取授权。
+
 `production_C=frozen`：本 PR 不改变生产 fill / scan / fee / clock 默认，也不撤销此前已合入的独立 Human GO。本表记录各入口已有合同及比较资格，不建立可配置超级成交核；三仓分工仍见 [成交引擎定位][positioning]。S1 目录、S2 helper 抽取均未授权；本 PR **勿合，等待 Human「合」**。
 
 本次仅只读核对代码与冻结说明；不运行 Python、测试或湖回测，不提供新 NAV / 收益数字。引用文档中的历史测试、跑数和 SHA 是来源记录，不代表本次复验。
@@ -47,7 +49,7 @@
 | J2 JR M-REF | 同上 `--fill-mode M-REF`；`all` 分别运行两模式 | 合法 open 时点记账，价格取冻结参考；frozen 包须逐 intent 的独立 raw lake mark 证据，不以该分钟 open 冒充参考价 | 同参考价口径用于 SELL；理想流动性，但仍保留 T+1 / 停牌 / 方向限价；不是原参考时点可执行收益 | 必须显式选择 | `--fill-mode all` 不是混合撮合；frozen 仅 P-BASE；缺证据 INPUT_BLOCKED | 仅 J1/J2 的假设敏感比较；不得称 M-REF 可执行策略收益 | [JR 文档 Mode B][jr-doc]；[JR code][jr-code] |
 | R1 敏感格 batch1–3 局部事件 | `scripts/research/run_minute_sensitivity_b.py` 及既有 exports | 固定基线事件/股数后比较候选 open 或 slip；Book chase、v7 add 分列 | batch3 Mode B `next_tradable_open` 为实例对照；Q39 baseline，oracle 另列事后上界 | 独立研究 harness，不是生产旗 | `next_tradable_open` 是研究模型名称，**不是共享 CSV CLI 参数**；合成/真数据的标签和寿命按各批合同 | 只在同实验单位比较局部价差/bp；局部 bp → 全策略 NAV 红 | [敏感计划 §1–§7][sensitivity]；原脚本 / exports |
 | R2 敏感格 batch4 全策略 | `scripts/research/run_minute_sensitivity_b_batch4_fullstrat.py` → 独立 adapters | `production_default` 委托原引擎；`next_tradable_open_research` 替换全部买卖 fill；成交价执行 Q2 重定量 | START 标签 close 可得于 hm+1min，submit=decision+1ms；仅 [09:30,11:30) / [13:00,14:57) 候选；买卖同日到期，卖意图不跨日粘住、次日策略重评 | `--cells baseline_default_clock_fee`；API clock=`production_default`、slip=0 | `--cells clock_next_open_fullstrat` / `slip_5bp_fullstrat` / `slip_10bp_fullstrat` / `slip_20bp_fullstrat`；API `clock_mode` / `slip_bp_per_side`，clock XOR slip | Book/v7/B **各自**绿 S，跨引擎红；未默认覆盖 TopK、新8.x、11/12 等全部新能力 | [计划 §9][sensitivity]；[设计 §9][fullstrat-design]；[hooks][research-hooks] |
-| H 共享 hl 触发 | 共享分钟 `--minute-stop-trigger hl` | 买侧时钟保持所属行 | low≤stop 按 stop，gap 按 open；high≥已有固定 target 按 target/open，需原回调确认；同 bar 止损优先；不是把 trail/MA 全改 H/L | `close`，显式 close 与省略一致；hl 走 Python | 历史 H/L 切片 S1（普通/独立仓扫描）及 S2（X-02）已接，并非本次 S1/S2 审批门；拒绝 version12、`--fix-s11-exit-domain`；v7/日线无此参数 | 同书 close↔hl 绿 S；与 Mode B 旧 H/L、Q39 不同合同 | [H/L P1][hl]；[扫描][csv] / [X-02 cursor][cash-code]；[小 helper][hl-code] |
+| H 共享 hl 触发 | 共享分钟 `--minute-stop-trigger hl` | 买侧时钟保持所属行 | low≤stop 按 stop，gap 按 open；high≥已有固定 target 按 target/open，需原回调确认；同 bar 止损优先；不是把 trail/MA 全改 H/L | `close`，显式 close 与省略一致；hl 走 Python | 历史 H/L 切片 S1（普通/独立仓扫描）及 S2（X-02）已接，并非计划 S0/S1/S2 审批门；拒绝 version12、`--fix-s11-exit-domain`；v7/日线无此参数 | 同书 close↔hl 绿 S；与 Mode B 旧 H/L、Q39 不同合同 | [H/L P1][hl]；[S2-B 边界冻结][hl-boundary]：scan/fill 在[扫描][csv] / [cursor][cash-code]，[helper][hl-code]仅校验与局部谓词 |
 | X2 时序现金 | 共享分钟 / v7 `--fix-minute-cash-order` | 保留各报价规则与旧 fallback，按 decision_hm 用当刻现金 | open/close 相位调度（hl 相位见 §4）；同 hm close 卖先买后；不宣称 tick 先后；v7 timer 顺序仍独立 | OFF；TopK 非 close 或 walkdown 会自动走该调度 | version12 ON 拒绝；不能只看 CLI OFF 就推断实际调度为 legacy | 同引擎 OFF/ON 绿 S，必须标记有效 cash-order policy | [X-02][x02]；[CSV][csv]；[v7][v7] |
 | X4 尾盘首买 | 共享 8/8.1–8.6 及 v7 | 精确 14:30 open 定父单；14:30–14:56 +15:00 共28片；连续段有 amount 列用 amount/volume_shares，否则 close；有列但无效不回退；15:00 close | 卖侧保持所属书；close 阶段分片、10% 分钟容量及原费用；14:57–14:59 无子单 | `--tail-window-buy` OFF；`--tail-volume-unit shares` | 必须同时 X-02；`lots` 显式×100；Q<2800 股每片0、不用普通首买 supplementary 100股兜底 | 各自尾盘 ON/OFF 绿 S；须有14:30前信号可得证据，未证实时不得宣称可执行；和 T3 红色混同 | [X-04][x04]；`tail_window_buy.py` |
 | E 参考价到分 | 仅共享分钟 `--exdiv-ref-fen` | 成交规则不换；改变已映射除权参考价及相应限价门 | ON：成功映射参考价先 HALF_UP 到分；已登记事件 noise_eps=0，fallback 仍原1%门槛；成本/peak 的 k 不舍入 | OFF | version12/front 不走 E-R6 loader，不能因 flag ON 就声称已覆盖；v7/日线不注册 | 同书 OFF/ON 绿 S，价域及 economics 同时固定 | [P2][fen]；[CSV loader wiring][csv] |
@@ -61,7 +63,7 @@
 2. **三个 close 不同**：`--topk-exec close` 是买侧14:55分钟 close；`--minute-stop-trigger close` 是分钟止损触发域；`--stop-fill close` 指日线 EOD 止损，**共享分钟入口拒绝**。不得提供含糊的全局 `close` 别名。[CSV `simulate`][csv]
 3. **H/L 与 Q39 优先级不同**：Q39 先 open 阶段，若 open 止盈已成便不看 close；hl 是保守 OHLC 止损优先，即使 open 越过 target 而同 bar low 穿 stop 也先止损。名称相近不能合成同一规则。X-02 下跳空止损在 open 阶段；H/L 触价在该 bar close 阶段观察并结算，固定目标也在 close 阶段评估，虽跳空目标成交价可取 open。报价为 open 不等于在 open 阶段结算，不据此宣称 tick 级先后。[H/L 冻结说明][hl]、[HeldMinuteCursor.advance][cash-code]
 4. **scan / touch / mark 分开**：14:57–15:00 的 `closing_call` 只是标签，现有 touch 资格冻结；共享书 NAV 继续日线 close / prior close / lot-cost fallback。TopK intraday 包含15:00、研究 next-open 排除14:57起、X-04只在15:00另有片，三者不能互相推导。[成交核 P1/P4][correctness]
-5. **原模块已经存在**：`ashare_fill_clock.py` 仅命名，`minute_stop_trigger.py` 只是小 helper（`validate_minute_stop_trigger` / `validate_low` / `blocked_bar` / `target_fill`）；**hl scan/fill 语义在 simulate 扫描循环中**，包括 `csv_minute_backtest.scan_held_day_python` 与 X-02 的 `minute_cash_order.HeldMinuteCursor.advance`，不能归给这个小模块。`topk_minute_exec.py` 管 TopK 买侧，`fullstrat_research_hooks.py` 管隔离研究调度。目录不能让这些模块交叉承担新职责。[命名叶子][clock-code]、[小 helper][hl-code]、[扫描][csv]、[X-02 cursor][cash-code]
+5. **原模块已经存在，职责不随名称扩大**：`ashare_fill_clock.py` 仅命名；`minute_stop_trigger.py` 仅拥有 `validate_minute_stop_trigger` / `validate_low` / `blocked_bar` / `target_fill` 四个校验与局部谓词函数。**hl scan/fill 语义在 simulate 扫描循环中**：`csv_minute_backtest.scan_held_day_python` 与 `minute_cash_order.HeldMinuteCursor.advance`（含 `_close`，供独立持仓及 X-02 使用）负责扫描 / 相位与候选顺序，外围 simulate / 调度路径负责成交记账；`target_fill` 返回固定目标候选不等于拥有成交循环。[S2-B 边界冻结][hl-boundary]只澄清该边界，四函数源码保持逐字节不变，不搬 scan/fill。`topk_minute_exec.py` 管 TopK 买侧，`fullstrat_research_hooks.py` 管隔离研究调度。目录不能让这些模块交叉承担新职责。[命名叶子][clock-code]、[小 helper][hl-code]、[扫描][csv]、[cursor][cash-code]
 
 ## 5. 默认锁（计划 §4 摘要）
 
@@ -106,6 +108,7 @@ S0 前后**所有行为保持一致**：成交、拒绝 / 异常、现金、持�
 [stop-plan]: plan-minute-stop-and-exdiv-fix-2026-09-26.md
 [topk-plan]: plan-topk-exec-model-2026-09-26.md
 [hl]: minute-stop-trigger-hl-p1-2026-09-27.md
+[hl-boundary]: s2b-hl-helper-boundary-2026-09-28.md
 [fen]: exdiv-ref-fen-p2-2026-09-27.md
 [topk1]: topk-exec-p1-2026-09-27.md
 [topk2]: topk-exec-p2-2026-09-27.md
