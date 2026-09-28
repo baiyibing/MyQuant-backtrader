@@ -4,6 +4,8 @@
 > **这份文档管什么**：本仓向量化回测在做什么、名单从哪来、策略号 / Mode A/B / TopK 怎么挂到同一件「收益最大化」上。  
 > **这份文档不管什么**：成交核数字（档位 / 跌停 / 除权）见 [engine-ashare-correctness.md](engine-ashare-correctness.md)；复制粘贴命令见 [README.md](README.md)；三件引擎分工见 [engine-positioning-ssot.md](engine-positioning-ssot.md)。
 
+分钟成交假设、各入口默认、研究 opt-in 与 NAV 混比边界统一见 [minute-fill-policy-ssot.md](minute-fill-policy-ssot.md)（S0 文档总表，生产默认不变）。
+
 本仓回测不是一堆互不相关的策略名。共同问题是：
 
 **给定一份按日的买入名单（信号），在向量化引擎上把买卖规则调到总收益最大。**
