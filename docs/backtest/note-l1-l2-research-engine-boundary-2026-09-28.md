@@ -39,7 +39,7 @@ R1：Codex APPROVE / Kimi APPROVE / Cursor COMMENT，三方均同意薄 P0；R2 
 - Q1 须点名现有或拟建 notebook / runner，并明确首版认证范围；没有具体消费者就延后 types。Q1 解决后，L1-S0 仍须单独切片 GO。
 - 外部 PLAN **§10 的“P0，然后 L1-S0 types”不得读成自动 GO**；须按 R2 共识插入 Q1 停点。P0 不授权 types、DTO、adapter、catalog、helper 抽取或新 CLI。
 - 后续每个 PR 只做一个 adapter 家族，逐片明确 GO；签收须钉住具体 pin IDs、输入 hashes、实现 SHA 及环境，不能用 mock-only 通过宣称完整 native parity。
-- L2-S0 合同仍待裁决：Q2 定首个研究问题，Q3 冻结范围及订单 / 时钟 / 容量 / 费用 / 账本等语义，Q4 定来源方案及移植许可门。**Q2–Q4 经 Human 冻结、L2-S0 完成且具体代码切片获显式 GO 后，才可写 L2 可执行代码（含 MatchCore）。**
+- **2026-09-29 Q2–Q4 已由 Human 冻结**：Q2=A（外部 LIMIT、完成桶 close、partial/expiry），Q3=PLAN §4.2 窄包逐行签认，Q4=机制参考自行实现；Human GO 仅限 L2-S0 docs-only，基线 `7bdc7f7`（#248 后，L1 四个 adapters 已合入）。见[研究合同 v0](note-l2-s0-minute-orders-contract-2026-09-29.md)、[独立手算 oracle 草图](note-l2-s0-handcalc-oracle-sketches-2026-09-29.md)、[来源/LICENSE 决定](note-l2-s0-source-license-decision-2026-09-29.md)。**L2 可执行代码（含 MatchCore）仍未授权，须满足前置门并另获 L2-S1+ 具体切片 GO；L1 views 仍可选、后置，`production_C=frozen`。**
 - P0 及后续切片均须 Human「合」才合并；本 PR **勿合 / wait for Human「合」**。
 
 ## 4. 将来的验收用语
