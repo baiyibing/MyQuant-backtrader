@@ -676,6 +676,8 @@ def test_t0_after_buy_high_does_not_set_peak():
 
 
 def test_minute_cache_roundtrip(tmp_path):
+    lake = tmp_path / "lake"
+    lake.mkdir()
     raw = _day(
         "2025-11-03",
         [
@@ -684,7 +686,7 @@ def test_minute_cache_roundtrip(tmp_path):
         ],
     )
     path = sim.write_minute_cache(
-        {"600000.SH": raw}, "20251103", "20251104", cache_dir=tmp_path
+        {"600000.SH": raw}, "20251103", "20251104", cache_dir=tmp_path, lake_root=lake
     )
     assert path.is_file()
     got = sim.read_minute_cache(path, {"600000.SH"})
@@ -701,6 +703,7 @@ def test_minute_cache_roundtrip(tmp_path):
         "20251104",
         use_cache=True,
         cache_dir=tmp_path,
+        lake_root=lake,
         workers=1,
     )
     assert "600000.SH" in hit

@@ -91,7 +91,7 @@ P3 外置 D5 使用 s12 fix-on + 既有 transform，仅支持该冻结上下文�
 
 | 候选 | 下一份窄产物（未开工） | 依据 |
 |---|---|---|
-| G2 | 旧共享分钟缓存的来源/快照身份合同 | 审计 G2；[D25 输入身份](x01-s12-price-domain.md)、[D23 X-12](../reviews/2026-09-25-minute-engine-review/README.md) |
+| G2 | 旧共享分钟缓存的来源/快照身份合同；独立 Human GO 实施，仅合成验证，勿合 | [G2 身份守卫合同](g2-minute-cache-identity-2026-09-28.md)；审计 G2；[D25 输入身份](x01-s12-price-domain.md)、[D23 X-12](../reviews/2026-09-25-minute-engine-review/README.md) |
 | G3 | 申报 vs fill vs 残量规则表，先裁科创板普通买入入口 | 审计 G3；D23 X-10；本页 §3 B1 |
 | G4 | 单一 exporter 冻结快照的两锚点/截断日前缀对照，先证信号差异 | 审计 G4；[D27 PIT 边界](x03-s11-exit-domain.md) |
 | G5 | MQ/BT 联合语义 tie-break 窄合同，保留旧 pack/seal | 审计 G5；[D30 §6b](handoff-joint-return-clock-regen-2026-09-24.md)（定位 §6b，不沿用旧页首误指 §7） |
