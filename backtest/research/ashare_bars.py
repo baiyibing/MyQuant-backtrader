@@ -446,6 +446,11 @@ def _identity_hash(value) -> str:
                                      ensure_ascii=False).encode("utf-8")).hexdigest()
 
 
+def _shallow_entry_stamp(path):
+    stat = path.stat()
+    return [path.name, stat.st_mode, stat.st_size, stat.st_mtime_ns]
+
+
 def minute_cache_identity(start: str, end: str, *, lake_root=None,
                           source_snapshot: Optional[str] = None) -> dict:
     """G2 identity: shallow metadata snapshot, never a recursive lake read.
@@ -460,12 +465,9 @@ def minute_cache_identity(start: str, end: str, *, lake_root=None,
     if not root.is_dir():
         raise NotADirectoryError(root)
     if source_snapshot is None:
-        def stamp(path):
-            stat = path.stat()
-            return [path.name, stat.st_mode, stat.st_size, stat.st_mtime_ns]
-
         source_snapshot = "shallow-v1:" + _identity_hash(
-            [stamp(root), [stamp(p) for p in sorted(root.iterdir(), key=lambda p: p.name)]])
+            [_shallow_entry_stamp(root),
+             [_shallow_entry_stamp(p) for p in sorted(root.iterdir(), key=lambda p: p.name)]])
     elif not isinstance(source_snapshot, str) or not source_snapshot.strip():
         raise ValueError("source_snapshot must be a non-empty string")
     schema = [[field.name, str(field.type), field.nullable] for field in _cache_schema()]
@@ -657,7 +659,10 @@ def load_minute_ohlc(
     include_volume: bool = False,
     include_amount: bool = False,
 ) -> dict:
-    """Book frames; opt-in volume bypasses the legacy volume-free cache."""
+    """Book frames with a digested cache path and source/snapshot sidecar identity guard.
+
+    Missing or mismatched identity fails closed; volume/amount requests bypass the cache.
+    """
     if include_volume or include_amount:
         if status is not None:
             status["cache"] = "off:volume_required"

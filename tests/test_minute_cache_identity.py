@@ -94,6 +94,24 @@ def test_every_auth_field_is_required_and_must_match(case, field, action):
     assert set(bars.read_minute_cache(path)) == {A}
 
 
+def test_same_type_wrong_identity_version_fails_closed(case):
+    options, frame, calls = case
+    stale = frame.copy()
+    stale["close"] = 99.0
+    path = bars.write_minute_cache({A: stale, B: stale}, START, END, **options)
+    sidecar = path.with_suffix(".json")
+    meta = json.loads(sidecar.read_text())
+    meta["identity_version"] = 2
+    sidecar.write_text(json.dumps(meta), encoding="utf-8")
+
+    result, status = load(options)
+    assert status == "miss:identity"
+    assert len(calls) == 1 and calls[0][0] == {A}
+    pd.testing.assert_frame_equal(result[A], frame)
+    # Failed authentication also forbids merging unrequested cached symbols.
+    assert set(bars.read_minute_cache(path)) == {A}
+
+
 @pytest.mark.parametrize("metadata", [None, "{broken", "[]", '{"start":"20260901","end":"20260902"}'])
 def test_missing_malformed_or_legacy_sidecar_fails_closed(case, metadata):
     options, frame, _ = case
