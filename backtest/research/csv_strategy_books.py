@@ -112,6 +112,8 @@ def get_book(strategy: str) -> CsvStrategyBook:
 
 def apply_csv_strategy(strategy: str, **kwargs) -> dict:
     book = get_book(strategy)
+    if kwargs.get("fix_s81_band_precision") and book.name != "version8_1":
+        raise ValueError("fix_s81_band_precision is supported only by version8_1")
     name_budget = kwargs.pop("name_budget", None)
     ration = kwargs.pop("ration", "file_order")
     ration_seed = int(kwargs.pop("ration_seed", 0))
@@ -391,6 +393,10 @@ def add_csv_backtest_common_args(
     ``--out-dir``; minute ``--no-cache`` / ``--rebuild-cache``).
     """
     ap.add_argument("--start", default=start_default)
+    ap.add_argument(
+        "--fix-s81-band-precision", action="store_true",
+        help="version8_1 exact decimal-input peak-return bands (default OFF)",
+    )
     if end_help is None:
         ap.add_argument("--end", default=end_default)
     else:
@@ -496,6 +502,8 @@ def resolve_stop_fill(raw) -> str:
 
 def csv_run_kwargs_from_args(args) -> dict:
     name = normalize_csv_strategy(getattr(args, "strategy", "") or "")
+    if getattr(args, "fix_s81_band_precision", False) and name != "version8_1":
+        raise SystemExit("--fix-s81-band-precision is supported only by version8_1")
     fill_s = getattr(args, "stop_fill", None)
     fill_s = None if fill_s is None else str(fill_s).strip().lower()
     if fill_s == "":
@@ -746,15 +754,20 @@ def _apply_version8_1(
     stop_pct: Optional[float] = None,
     take_profit=None,
     record_params=None,
+    fix_s81_band_precision: bool = False,
     **_,
 ) -> dict:
     resolved = strategy8_1_rules.STOP_PCT if stop_pct is None else float(stop_pct)
 
     def _tp(px, cost, peak, n_days=1):
-        return strategy8_1_rules.take_profit_reason(px, cost, peak, n_days)
+        return strategy8_1_rules.take_profit_reason(
+            px, cost, peak, n_days, fix_s81_band_precision=fix_s81_band_precision,
+        )
 
     def _rec(st):
         strategy8_1_rules.record_strategy8_1_params(st, stop_pct=resolved)
+        if fix_s81_band_precision:
+            st.stats["fix_s81_band_precision"] = True
 
     return {
         "stop_pct": resolved,
@@ -767,7 +780,9 @@ def _run_kwargs_version8_1(args) -> dict:
     stop = getattr(args, "stop_pct", None)
     if stop is not None and not 0 < float(stop) < 1:
         raise SystemExit(f"--stop-pct must be in (0, 1), got {stop}")
-    return {"strategy": "version8_1", "stop_pct": stop}
+    return {"strategy": "version8_1", "stop_pct": stop,
+            **({"fix_s81_band_precision": True}
+               if getattr(args, "fix_s81_band_precision", False) else {})}
 
 
 def _apply_version8_2(
