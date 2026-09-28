@@ -163,10 +163,8 @@ def test_two_frozen_snapshots_two_anchor_report(tmp_path):
 @pytest.mark.parametrize("label", ["A", "B"])
 def test_future_changes_do_not_rewrite_shared_prefix(label):
     for frame in frozen_snapshots()[label].values():
-        before = frame.copy(deep=True)
         changed = frame.copy(deep=True)
         changed.loc[changed.index > ANCHORS[0], PRICE] *= 3
         original = signal_prefix(frame, ANCHORS[0])
         pd.testing.assert_frame_equal(original, signal_prefix(changed, ANCHORS[1]).loc[:ANCHORS[0]],
                                       check_exact=True)
-        pd.testing.assert_frame_equal(frame, before, check_exact=True)

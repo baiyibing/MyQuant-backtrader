@@ -40,10 +40,14 @@
 
 冻结总指纹是对 `{symbol: CSV_SHA256}` 做键排序、紧凑 JSON 编码后 SHA-256，测试固定断言，避免夹具被静默更换；逐文件指纹保存在生成的 report.json：
 
+指纹 SSOT 为 `tests/test_g4_front_pit_evidence.py` 的 `FROZEN_DIGESTS`；合法重新冻结时先更新测试，再同步下表。
+
 | 标签 | 总指纹（仅本地合成快照） |
 |---|---|
 | A | `69da5b4f12eb40d6234b58455be862fd648498b531f966c5707fe0e5965233ac` |
 | B | `5f0689fade0ed63d9b156f5bd97e00e46979de66543a7a7daf838c2b3fea1dfa` |
+
+指纹依赖 `%.17g` 格式；numpy/pandas 或 `%.17g` 数值表示变化可能合法地要求重新冻结，现有指纹锁定断言会检出差异。
 
 ## 复现与验收
 
