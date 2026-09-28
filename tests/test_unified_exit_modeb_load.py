@@ -13,37 +13,48 @@ def minute_frame():
 
 
 def test_cache_miss_hit_subset_and_partial_preserve(tmp_path, monkeypatch):
+    lake_root = tmp_path / "lake"
+    lake_root.mkdir()
     calls = []
     def lake(codes, start, end, **kw):
+        assert kw["lake_root"] == lake_root.resolve()
         calls.append((codes, start, end))
         return {c: minute_frame() for c in codes}
     monkeypatch.setattr(bars, "load_minute_from_lake", lake)
     status = {}
-    b.load_monitor_bars({"600998.SH", "600997.SH"}, cache_dir=tmp_path, status=status)
+    b.load_monitor_bars({"600998.SH", "600997.SH"}, cache_dir=tmp_path, status=status,
+                        lake_root=lake_root)
     assert status["cache"] == "miss"
     assert calls[0][1:] == ("20251013", "20260909")
-    path = tmp_path / "minute_none_20251013_20260909.parquet"
+    path = bars.minute_cache_path("20251013", "20260909", cache_dir=tmp_path,
+                                  lake_root=lake_root)
     assert path.is_file()
-    cached = b.load_monitor_bars({"600998.SH"}, cache_dir=tmp_path, status=status)
+    cached = b.load_monitor_bars({"600998.SH"}, cache_dir=tmp_path, status=status,
+                                 lake_root=lake_root)
     assert status["cache"] == "hit" and len(calls) == 1
     assert cached["600998.SH"]["hm"].tolist() == [600]
     assert b.minute_coverage(["600998.SH"], cached)["covered_codes"] == 1
-    b.load_monitor_bars({"600996.SH"}, cache_dir=tmp_path)
+    b.load_monitor_bars({"600996.SH"}, cache_dir=tmp_path, lake_root=lake_root)
     assert set(minute.read_minute_cache(path, None)) == {"600998.SH", "600997.SH", "600996.SH"}
 
 
 def test_mmap_pack_write_hit_and_matches_frames(tmp_path, monkeypatch):
+    lake_root = tmp_path / "lake"
+    lake_root.mkdir()
     def lake(codes, start, end, **kw):
+        assert kw["lake_root"] == lake_root.resolve()
         return {c: minute_frame() for c in codes}
 
     monkeypatch.setattr(bars, "load_minute_from_lake", lake)
     status = {}
-    first = b.load_prepared_minutes({"600998.SH"}, cache_dir=tmp_path, status=status)
+    first = b.load_prepared_minutes({"600998.SH"}, cache_dir=tmp_path, status=status,
+                                    lake_root=lake_root)
     assert status["pack"] == "write" and status["cache"] == "miss"
     pack = tmp_path / "modeb_pack_20251013_20260909"
     assert (pack / "meta.json").is_file()
     assert (pack / "open.f64").is_file()
-    second = b.load_prepared_minutes({"600998.SH"}, cache_dir=tmp_path, status=status)
+    second = b.load_prepared_minutes({"600998.SH"}, cache_dir=tmp_path, status=status,
+                                     lake_root=lake_root)
     assert status["cache"] == "pack" and status["pack"] == "hit"
     assert isinstance(first, b.PreparedMinutes) and isinstance(second, b.PreparedMinutes)
     assert first.last_close("600998.SH", "20251024") == 10.0

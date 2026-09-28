@@ -43,15 +43,15 @@ def load_none_bars(codes, start, end, *, none_root=None, workers=8, bars=None):
 
 
 def load_monitor_bars(codes, start=modea.DEFAULT_START, end=modea.DEFAULT_END,
-                      *, workers=16, cache_dir=None, status=None):
+                      *, workers=16, cache_dir=None, status=None, lake_root=None):
     """Use the existing ten-calendar-day warmup cache (20251013 by default)."""
     return load_minute_bars(set(codes), warmup_start(start, days=10), end,
                             workers=workers, use_cache=True,
-                            cache_dir=cache_dir, status=status)
+                            cache_dir=cache_dir, status=status, lake_root=lake_root)
 
 
 def load_prepared_minutes(codes, start=modea.DEFAULT_START, end=modea.DEFAULT_END,
-                          *, workers=16, cache_dir=None, status=None):
+                          *, workers=16, cache_dir=None, status=None, lake_root=None):
     """Prefer the Mode B mmap pack; otherwise parquet/lake then write the pack."""
     warm = warmup_start(start, days=10)
     wanted = set(codes)
@@ -62,7 +62,8 @@ def load_prepared_minutes(codes, start=modea.DEFAULT_START, end=modea.DEFAULT_EN
             status["pack"] = "hit"
         return PreparedMinutes.from_mmap(pack, wanted)
     frames = load_monitor_bars(
-        wanted, start, end, workers=workers, cache_dir=cache_dir, status=status
+        wanted, start, end, workers=workers, cache_dir=cache_dir, status=status,
+        lake_root=lake_root
     )
     prepared = PreparedMinutes(frames)
     write_modeb_pack(prepared, pack, start=warm, end=end)

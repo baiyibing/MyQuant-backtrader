@@ -592,7 +592,8 @@ def _frame_from_cache_group(group):
     import pandas as pd
 
     frame = group.drop(columns=["symbol"])
-    frame.index = pd.DatetimeIndex(frame.pop("time"))
+    # Keep book frames aligned with the lake/cache timestamp(ns) schema.
+    frame.index = pd.DatetimeIndex(frame.pop("time")).as_unit("ns")
     frame["hm"] = frame["hm"].astype("int64", copy=False)
     if not frame.index.is_monotonic_increasing:
         frame = frame.sort_index()

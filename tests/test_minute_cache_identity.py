@@ -18,7 +18,7 @@ def case(tmp_path, monkeypatch):
     cache = tmp_path / "cache"
     frame = bars.annotate_session(pd.DataFrame(
         {key: [10.0] for key in ("open", "high", "low", "close")},
-        index=pd.to_datetime(["2026-09-01 09:30"]))).astype({"hm": "int64"})
+        index=pd.to_datetime(["2026-09-01 09:30"]).as_unit("ns"))).astype({"hm": "int64"})
     calls = []
 
     def load(codes, start, end, **kwargs):
@@ -35,7 +35,11 @@ def load(options, codes=(A,), **kwargs):
     return result, status["cache"]
 
 
-def test_same_identity_hits_and_partial_preserves_other_symbols(case):
+def test_same_identity_hits_and_partial_preserves_other_symbols(case, monkeypatch):
+    def forbidden(*args, **kwargs):
+        pytest.fail("explicit lake_root must not call the data root resolver")
+
+    monkeypatch.setattr("common.infra.data_root.resolve_period_root", forbidden)
     options, frame, calls = case
     assert load(options)[1] == "miss"
     result, status = load(options)
