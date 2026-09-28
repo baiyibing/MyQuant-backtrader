@@ -1,7 +1,29 @@
-"""#208 P1/P2/P3 buy dispatch: fixed seats/budgets and opt-in limit handoff.
+"""TopK buy execution boundary: existing #208 P1-P4 contracts, not sell rules.
 
-The caller advances sells and these buys on the same minute clock. The legacy
-close path never constructs this dispatcher or adds its audit fields.
+Owns validate_topk_exec / parse_topk_exec, TOPK_EXEC_HELP_LOCK, CLOSE_BUY_HM /
+VWAP_SLICE_CLOCKS, TopkMinuteBuys dispatch and write_topk_exec_audit. The shared
+minute entry wires these contracts; sell predicates and scanning remain in the
+book/simulate paths, and fills use the existing run_pool_buys_day ledger.
+
+Defaults remain close (omitted = close), walkdown OFF and limit rule qlib.
+Non-close execution, walkdown and real limits are topk_dropout-only;
+topk_score_exit rejects non-default combinations; vwap x walkdown is also refused.
+The unchanged close/qlib/walkdown-OFF path uses the caller's legacy buy path,
+without this dispatcher or new TopK audit fields. Real alone changes limit
+references for buys and sells, not scheduling; close/OFF audit events stay empty.
+
+The caller selects chronological cash order for non-close execution or walkdown
+and advances sells and buys on its minute open/close phases. This module does
+not own that scheduler. TopK close means the 14:55 buy quote with its existing
+fallback, distinct from minute_stop_trigger=close and daily stop_fill=close
+(the shared minute entry refuses the latter). Vwap uses fixed-clock open quotes
+and equal-notional TWAP-style slices, not volume VWAP or X-04 tail-window buys.
+The separate topk_app_dropout CLI does not expose these execution flags.
+
+Ownership freeze: docs/backtest/s2d-topk-exec-boundary-2026-09-28.md.
+Defaults/comparison SSOT: docs/backtest/minute-fill-policy-ssot.md, T0-T4 / §4.
+S2-D documents this existing boundary only; plan S0/S1/S2 approval gates are
+distinct from historical TopK P1-P4 implementation slices.
 """
 
 from __future__ import annotations
