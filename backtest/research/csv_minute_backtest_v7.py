@@ -627,6 +627,7 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
     baseline. Bonus lots acquire list_date and use the existing T+1 predicate.
     Without an explicit index calendar, frame indexes supply observed dates,
     unioned with pool dates, matching the records-path calendar contract.
+    Dates absent from all frames and pools are not backfilled, as with records.
     """
     validate_tail_options(tail_window_buy, fix_minute_cash_order, tail_volume_unit)
     if tail_window_buy:

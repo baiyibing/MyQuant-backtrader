@@ -6,7 +6,7 @@ Human 单独 GO；仅修 `simulate_v7` API 边界。选择并冻结 **frame 日�
 
 当 `_is_frame_map(minute_bars)` 成立且 `index_days` 为 `None` 或空序列（如 `[]` / `()`），日历为 **所有 frame index 中日期的去重并集 ∪ pool 日期**，按日期升序排列，再应用原有 inclusive `start` / `end` 过滤。空 frame 不贡献日期；无行情的 pool 日期仍保留；未持有、未入池的其他 symbol frame 也贡献日期。日期转换沿用 `_as_date`，不填充自然日或猜测交易所会话。
 
-frame 沿用既有输入合同：时间索引与用于切日的 `ymd` / `date` 列（若有）须一致，行保留成交所需的 `hm` / OHLC。此刀不新增任意索引、混合输入或日期列修复适配。构造只读取索引，不把全量 frame 转成 records。
+frame 沿用既有输入合同：时间索引与用于切日的 `ymd` / `date` 列（若有）须一致，行保留成交所需的 `hm` / OHLC。此刀不新增任意索引、混合输入或日期列修复适配。构造只读取索引，不把全量 frame 转成 records。日历构造会遍历所有 frame 的完整索引（扫描复杂度 O(total rows)），面向研究规模输入。
 
 显式非空日期列表仍单独决定日历；`Mapping` 仍先走指数收盘价 gate 分支，包括原有 11 会话预热要求。**空 Mapping `{}` 仍报预热不足**，不被缺省构造吞掉。records 输入仍使用原来的 `sorted(set(minutes) | set(pools))`。标准 CLI 已传 `index_closes`，其加载、参数和调用均未修改。
 
