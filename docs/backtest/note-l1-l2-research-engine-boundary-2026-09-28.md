@@ -34,6 +34,8 @@ R1：Codex APPROVE / Kimi APPROVE / Cursor COMMENT，三方均同意薄 P0；R2 
 
 **顺序：P0 → stop for Q1（点名 L1 具体消费者）→ only then L1-S0 types。**
 
+2026-09-28 后续 Human 已点名 Q1「joint_return Mode B 入口」并单独批准 [L1-S0 types-only](note-l1-s0-run-protocol-types-2026-09-28.md)，本次仅冻结类型与契约测试，adapter / L2 仍待各自 GO。
+
 - Q1 须点名现有或拟建 notebook / runner，并明确首版认证范围；没有具体消费者就延后 types。Q1 解决后，L1-S0 仍须单独切片 GO。
 - 外部 PLAN **§10 的“P0，然后 L1-S0 types”不得读成自动 GO**；须按 R2 共识插入 Q1 停点。P0 不授权 types、DTO、adapter、catalog、helper 抽取或新 CLI。
 - 后续每个 PR 只做一个 adapter 家族，逐片明确 GO；签收须钉住具体 pin IDs、输入 hashes、实现 SHA 及环境，不能用 mock-only 通过宣称完整 native parity。
