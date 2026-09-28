@@ -246,7 +246,7 @@ def test_v11_loader_keeps_zero_open_volume_and_bypasses_old_cache(tmp_path):
     assert "volume" not in legacy
     cache = tmp_path / "cache"
     cache.mkdir()
-    ashare_bars.minute_cache_path(T, THIRD, cache).write_bytes(b"not a readable legacy cache")
+    (cache / f"minute_none_{T}_{THIRD}.parquet").write_bytes(b"not a readable legacy cache")
     status = {}
     loaded = ashare_bars.load_minute_ohlc({CODE}, T, THIRD, lake_root=root,
                                          include_volume=True, cache_dir=cache, status=status)

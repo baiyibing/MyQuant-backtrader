@@ -15,6 +15,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
+import hashlib
+import json
 from pathlib import Path
 from typing import Iterable, Mapping, Optional
 
@@ -439,9 +441,58 @@ def load_minute_from_lake(codes: set[str] | list[str], start: str, end: str, *, 
     return out
 
 
-def minute_cache_path(start: str, end: str, cache_dir: Optional[Path] = None) -> Path:
+def _identity_hash(value) -> str:
+    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":"),
+                                     ensure_ascii=False).encode("utf-8")).hexdigest()
+
+
+def minute_cache_identity(start: str, end: str, *, lake_root=None,
+                          source_snapshot: Optional[str] = None) -> dict:
+    """G2 identity: shallow metadata snapshot, never a recursive lake read.
+
+    Deep in-place repairs require a new explicit snapshot token (see G2 note).
+    Even explicit tokens require an existing, resolved source directory.
+    """
+    from common.infra.data_root import resolve_period_root
+
+    root = (Path(lake_root) if lake_root is not None else
+            resolve_period_root("1m") / "dividend_type=none").resolve(strict=True)
+    if not root.is_dir():
+        raise NotADirectoryError(root)
+    if source_snapshot is None:
+        def stamp(path):
+            stat = path.stat()
+            return [path.name, stat.st_mode, stat.st_size, stat.st_mtime_ns]
+
+        source_snapshot = "shallow-v1:" + _identity_hash(
+            [stamp(root), [stamp(p) for p in sorted(root.iterdir(), key=lambda p: p.name)]])
+    elif not isinstance(source_snapshot, str) or not source_snapshot.strip():
+        raise ValueError("source_snapshot must be a non-empty string")
+    schema = [[field.name, str(field.type), field.nullable] for field in _cache_schema()]
+    return {"identity_version": 1, "start": _as_ymd(start), "end": _as_ymd(end),
+            "dividend_type": "none", "schema": _identity_hash(schema),
+            "resolver_identity": str(root), "source_snapshot": source_snapshot}
+
+
+def minute_cache_path(start: str, end: str, cache_dir: Optional[Path] = None, *,
+                      lake_root=None, source_snapshot: Optional[str] = None,
+                      identity: Optional[dict] = None) -> Path:
     root = Path(cache_dir) if cache_dir is not None else CACHE_ROOT
-    return root / f"minute_none_{start}_{end}.parquet"
+    if identity is None:
+        identity = minute_cache_identity(start, end, lake_root=lake_root,
+                                         source_snapshot=source_snapshot)
+    return root / (f"minute_none_{identity['start']}_{identity['end']}_"
+                   f"{_identity_hash(identity)[:12]}.parquet")
+
+
+def _cache_identity_matches(path: Path, identity: dict) -> bool:
+    try:
+        metadata = json.loads(path.with_suffix(".json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return isinstance(metadata, dict) and all(
+        key in metadata and type(metadata[key]) is type(value) and metadata[key] == value
+        for key, value in identity.items())
 
 
 def _cache_schema():
@@ -461,8 +512,9 @@ def _cache_schema():
     )
 
 
-def write_minute_cache(bars: dict, start: str, end: str, cache_dir: Optional[Path] = None) -> Path:
-    import json
+def write_minute_cache(bars: dict, start: str, end: str, cache_dir: Optional[Path] = None, *,
+                       lake_root=None, source_snapshot: Optional[str] = None,
+                       identity: Optional[dict] = None) -> Path:
 
     import numpy as np
     import pandas as pd
@@ -472,7 +524,10 @@ def write_minute_cache(bars: dict, start: str, end: str, cache_dir: Optional[Pat
     from backtest.research.csv_common import _progress
 
     schema = _cache_schema()
-    path = minute_cache_path(start, end, cache_dir)
+    if identity is None:
+        identity = minute_cache_identity(start, end, lake_root=lake_root,
+                                         source_snapshot=source_snapshot)
+    path = minute_cache_path(start, end, cache_dir, identity=identity)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".parquet.tmp")
     if tmp.exists():
@@ -517,8 +572,7 @@ def write_minute_cache(bars: dict, start: str, end: str, cache_dir: Optional[Pat
     path.with_suffix(".json").write_text(
         json.dumps(
             {
-                "start": start,
-                "end": end,
+                **identity,
                 "n_symbols": len(bars),
                 "n_rows": n_rows,
                 "created_utc": datetime.now(timezone.utc).isoformat(),
@@ -598,6 +652,7 @@ def load_minute_ohlc(
     cache_dir: Optional[Path] = None,
     status: Optional[dict] = None,
     lake_root=None,
+    source_snapshot: Optional[str] = None,
     include_volume: bool = False,
     include_amount: bool = False,
 ) -> dict:
@@ -609,10 +664,20 @@ def load_minute_ohlc(
                                      lake_root=lake_root, include_volume=True,
                                      **({"include_amount": True} if include_amount else {}))
     want = {to_canonical_symbol(str(code)) for code in codes}
-    path = minute_cache_path(start, end, cache_dir)
+    if not use_cache:
+        if status is not None:
+            status["cache"] = "off"
+        return load_minute_from_lake(want, start, end, workers=workers, lake_root=lake_root)
+    identity = minute_cache_identity(start, end, lake_root=lake_root,
+                                     source_snapshot=source_snapshot)
+    # Pin the fill to the exact root authenticated above, including resolver/symlink resolution.
+    lake_root = Path(identity["resolver_identity"])
+    start, end = identity["start"], identity["end"]
+    path = minute_cache_path(start, end, cache_dir, identity=identity)
     cached: dict = {}
     had_file = path.is_file()
-    if use_cache and had_file and not rebuild_cache:
+    reusable = had_file and not rebuild_cache and _cache_identity_matches(path, identity)
+    if reusable:
         print(f"minute cache hit {path}", flush=True)
         cached = read_minute_cache(path, want)
     missing = want - set(cached)
@@ -620,22 +685,22 @@ def load_minute_ohlc(
         print(f"minute lake load {len(missing)} codes ({len(cached)} cached)", flush=True)
         fresh = load_minute_from_lake(missing, start, end, workers=workers, lake_root=lake_root)
         cached.update(fresh)
-        if use_cache and fresh:
+        if fresh:
             merged = cached
-            if path.is_file() and not rebuild_cache:
+            if reusable:
                 old = read_minute_cache(path, None)
                 old.update(cached)
                 merged = old
-            write_minute_cache(merged, start, end, cache_dir)
+            write_minute_cache(merged, start, end, cache_dir, identity=identity)
     if status is not None:
-        if not use_cache:
-            status["cache"] = "off"
-        elif rebuild_cache:
+        if rebuild_cache:
             status["cache"] = "rebuild"
-        elif had_file and not missing:
+        elif reusable and not missing:
             status["cache"] = "hit"
-        elif had_file:
+        elif reusable:
             status["cache"] = "partial"
+        elif had_file:
+            status["cache"] = "miss:identity"
         else:
             status["cache"] = "miss"
     return {code: cached[code] for code in want if code in cached}
