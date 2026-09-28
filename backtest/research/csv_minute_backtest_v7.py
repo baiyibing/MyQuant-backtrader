@@ -625,6 +625,9 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
     use that bucket. An index date->close mapping enables the new-open gate.
     exdiv_economics accepts explicit ExDivEvents for raw bars; None retains the
     baseline. Bonus lots acquire list_date and use the existing T+1 predicate.
+    Without an explicit index calendar, frame indexes supply observed dates,
+    unioned with pool dates, matching the records-path calendar contract.
+    Dates absent from all frames and pools are not backfilled, as with records.
     """
     validate_tail_options(tail_window_buy, fix_minute_cash_order, tail_volume_unit)
     if tail_window_buy:
@@ -645,6 +648,9 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
         calendar = sorted(gate)
     elif index_days:
         calendar = sorted(_as_date(day) for day in index_days)
+    elif frames is not None:
+        calendar = sorted({_as_date(stamp) for frame in frames.values()
+                           for stamp in frame.index} | set(pools))
     else:
         calendar = sorted(set(minutes) | set(pools))
     if start is not None:
