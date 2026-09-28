@@ -60,4 +60,4 @@ D30 记录跨重生成 3631 vs 4475 fills、net 59.1% vs 59.3%，且旧包 × �
 
 [test_joint_return_semantic_tiebreak.py](../../tests/test_joint_return_semantic_tiebreak.py) 用 AST 读取 `_Replay.run` 两处真实 lambda，逐一锁定与现行 key 的结构一致，再只执行该纯 key；不 import 重 replay，也不更改生产代码。覆盖 SELL-first / 同侧字典序、输入排列不影响唯一 ID 排序、instrument 不作为当前同分钟优先级，以及 §3 的两血统现金拆分。候选 key 仅存在于测试，演示本例在血统与输入排列变化下仍为 200 / 100。
 
-运行：`"$OSKH_MERGE_PYTHON" -m pytest -q tests/test_joint_return_semantic_tiebreak.py`（解释器须显式配置）。2026-09-28 在本 worktree 使用显式 `/workspace/vanna312/bin/python`：**7 passed in 0.24s**。这是当前 key 的源码锁定与简化分配模型证据，不是完整 replay、真实 hash/seal、手续费/容量组合或真湖收益验收；不据此宣布候选政策已投产或经济公平已证。
+运行：`"$OSKH_MERGE_PYTHON" -m pytest -q tests/test_joint_return_semantic_tiebreak.py`（解释器须显式配置）。2026-09-28 在本 worktree 使用显式 `/workspace/vanna312/bin/python`：**7 passed in ~0.2s**。这是当前 key 的源码锁定与简化分配模型证据，不是完整 replay、真实 hash/seal、手续费/容量组合或真湖收益验收；不据此宣布候选政策已投产或经济公平已证。

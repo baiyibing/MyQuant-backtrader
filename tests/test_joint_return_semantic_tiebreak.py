@@ -21,6 +21,7 @@ def current_key(request):
     calls = [n for n in ast.walk(run) if isinstance(n, ast.Call)
              and isinstance(n.func, ast.Name) and n.func.id == "sorted"
              and ast.unparse(n.args[0]) == request.param]
+    # Intentionally lock one same-minute sort site per fixture input, guarding a silent second sort path.
     assert len(calls) == 1
     key = next(k.value for k in calls[0].keywords if k.arg == "key")
     assert ast.dump(key) == ast.dump(ast.parse(CURRENT_KEY, mode="eval").body)
