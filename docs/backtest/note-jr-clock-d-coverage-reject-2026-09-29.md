@@ -51,12 +51,12 @@
 | execution calendar | 244 天，`2025-01-02` → `2026-01-05`；外部 calendar 文件与 pack `execution_calendar` 相等 |
 | pack sessions | 243 行，decision 日期 `2025-01-02` → `2025-12-31`；首 `available_at` / `effective_at` = `2025-01-03T09:30:00+08:00` |
 | tail next session | 最后 `available_at` / `effective_at` = `2026-01-05T09:30:00+08:00`；最后 `expires_at` = `2026-01-05T15:00:00+08:00` |
-| bars calendar | 243 天，`2025-01-02` → `2025-12-31`；与 pack execution calendar **不相等**：`only_pack=[2026-01-05]`、`only_bars=[]` |
+| bars calendar | 243 天，`2025-01-02` → `2025-12-31`；与 pack execution calendar **不相等**：`only_pack=[2026-01-05]`、`only_bars=[]`；[宿主报告][host] 第 59 行将该尾日归类为 “next-session day after last decision date; not a bars trading day” |
 | universe | 614 证券；1891 intents，unique intent_id=1891，duplicate intent_id=0 |
 | bars kind / 时间与价格域 | `frozen_explicit`；`OPEN_TIME` / 60 秒；`Asia/Shanghai` / `none` |
 | bars content_sha256（登记 seal） | `83e7deae9ea580aa1aad208cc1751ad84df8157179751e252a0d43c1e28d8cdd` |
 
-Host 报告 `identity_ok=true`。这支持上述登记身份对账；报告未提供全部 intents 的执行时点范围或尾 session 需求核对结果。`sessions.json` 的 clock 尾日存在，与该尾日的 bars 覆盖已证明，是两项不同的事实。
+Host 报告 `identity_ok=true`。这支持上述登记身份对账；报告未提供全部 intents 的执行时点范围或尾 session 需求核对结果。`sessions.json` 的 clock 尾日存在已有记录；该日期的 bars 覆盖属于另一项核验，尚未证明，在 G1 下仍为 **未知**。
 
 ## 4. 已测 bars / marks 覆盖
 
@@ -78,7 +78,7 @@ Host 采用的 bars 计数规则与 [frozen explicit 覆盖规则][price]、`val
 
 | 缺口 | 当前证据为何不足 | 转为 ACCEPT 前需补的只读证明 |
 |---|---|---|
-| G1：完整执行/估值窗口与 bars 需求集合尚未对齐 | 计数分母取自 bars 本身；pack 最后可执行 clock 落在 `2026-01-05`，该日不在 bars calendar。报告未给出 1891 intents 的执行窗分布，亦未证明尾日依合同不需要 bars | 从本次 pack / manifest / intents 与估值规则确定需求时点，逐项对照 pin 的 calendar / sessions。若尾日不属于本次研究观测窗，须给出合法截断依据及受影响 intents 的处理核对；若属于需求，报告其 expected / observed / missing。现阶段不假定尾日必须补几行，也不把“未测”写成 0 |
+| G1：完整执行/估值窗口与 bars 需求集合尚未对齐 | 计数分母取自 bars 本身；pack 最后可执行 clock 落在 `2026-01-05`，该日不在 bars calendar。Host 已给出 §3 所引尾日分类；但报告未打印 manifest `metadata.calendar` 与 bars `metadata.calendar` 的相等性核验，也未给出 1891 intents 的执行窗分布及逐 intent 尾日处理，尚未证明尾日依合同不需要 bars | 从本次 pack / manifest / intents 与估值规则确定需求时点，逐项对照 pin 的 calendar / sessions。若尾日不属于本次研究观测窗，须给出合法截断依据及受影响 intents 的处理核对；若属于需求，报告其 expected / observed / missing。现阶段不假定尾日必须补几行，也不把“未测”写成 0 |
 | G2：seal 登记值未附复核结果 | `content_sha256` 已提供，但报告与数字转储未记录 canonical content hash 复算相等或可绑定此 pin 的既有 seal 校验回执 | 补该精确 pin 的只读 seal 校验结果，或可核对至该工件的既有完整校验回执；记录登记值、复核值及相等结果。沿用既有合同，不修改工件或重写 seal |
 
 仅当宿主补足范围相容与 seal 证明，且所需 bars missing=0、marks missing=0 均有对应证据，才能另行记录 D ACCEPT。补证不等于获准导湖；若发现真实行情缺口，先列 gap，再另获 Human GO。本次不推导或伪造完整窗口的 missing 数字，不启动补数任务。
