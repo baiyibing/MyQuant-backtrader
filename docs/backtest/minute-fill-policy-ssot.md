@@ -98,6 +98,8 @@ S0 前后**所有行为保持一致**：成交、拒绝 / 异常、现金、持�
 
 局部事件与全策略实验分别见 [敏感计划 §1–§9][sensitivity]、[batch4 设计 §9][fullstrat-design]；JR 显式输入 / 参考价边界见 [JR 合同][jr-doc]。所有绿色都须补齐证据，不能凭表行名称自动放行。
 
+2026-09-29 Track C 具名申请：[L2-CAP-SENS-01 charter](charter-l2-cap-sens-01-2026-09-29.md) 仅为 **synthetic 绿 S proposed**，固定 `completed_bucket_close` 与其余身份，仅变 `participation_rate ∈ {0.05, 0.10}`；默认不声明 NAV，lake/real **blocked** 待 B-L2 独立 GO+证据及另行裁定。待 Human「合」与完整外部授权记录，仅限该单元/来源/轴，不授予绿 R 或全部 L2 绿 S；原 `comparison_status` 不变，本片不授权实验运行。
+
 ## 7. 本片范围外
 
 - **S1 只读目录需独立 Human GO**，先点名机器消费者及为何 Markdown 不够；本片不建 catalog、API、枚举、测试或 metadata writer。
