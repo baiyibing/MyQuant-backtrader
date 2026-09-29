@@ -34,9 +34,9 @@ REQUIRED = {
     "v7": ("trades.csv", "daily_equity.csv", "summary.txt",
            "run-config.json", "execution-audit.json"),
 }
-# Only numeric duration captures may differ. Every surrounding byte must match.
-# Recognize Windows CRLF as well as LF, but leave endings in the residue so
-# cross-side newline changes still fail exact comparison.
+TEXT_SUFFIXES = (".csv", ".json", ".txt")
+# Only numeric duration captures may differ after text normalization to LF.
+# Keep #261's capture grammar; every surrounding character must still match.
 DURATION_LINES = (
     r"  耗时: 池 (?P<pool>\d+\.\d+)s \| 日线 (?P<daily>\d+\.\d+)s \| 分钟 (?P<minute>\d+\.\d+)s \| 模拟 (?P<sim>\d+\.\d+)s(?: \| 缓存 [^\r\n]+)?(?:\r?\n)?",
     r"loaded minute=lake daily=lake: minute_names=\d+ daily_names=\d+ exdiv_names=\d+ st_names=\d+ in (?P<load>\d+\.\d+)s(?:\r?\n)?",
@@ -51,6 +51,21 @@ def digest(data: bytes) -> str:
 def file_digest(path: Path) -> str:
     with path.open("rb") as handle:
         return hashlib.file_digest(handle, "sha256").hexdigest()
+
+
+def lf_text(data: bytes) -> str | None:
+    """Strict UTF-8 text only; binary controls fail closed to raw comparison.
+
+    Call only for declared text artifacts/streams. Normalize CRLF and lone CR
+    after classification, and strip exactly one leading UTF-8 BOM.
+    """
+    try:
+        text = data.decode("utf-8-sig")
+    except UnicodeError:
+        return None
+    if re.search(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]", text):
+        return None
+    return text.replace("\r\n", "\n").replace("\r", "\n")
 
 
 def canonical(value) -> bytes:
@@ -130,8 +145,9 @@ def compare_observations(left: Observation, right: Observation,
                          policy: ComparePolicy = ComparePolicy()) -> dict:
     """Compare all files and raw streams; retain every allowed difference.
 
+    Text uses LF semantics before parsing/masking; binary stays byte-exact.
     Raw-byte differences are allowed only when all parsed differences are allowed
-    and masking those pieces leaves identical residue. No float tolerance,
+    and masking those pieces leaves identical normalized residue. No float tolerance,
     row sorting, path substitution, timestamp wildcard, or byte-identity claim.
     """
     differences, raw = [], {}
@@ -190,11 +206,19 @@ def compare_observations(left: Observation, right: Observation,
     for name in sorted(set(lt) | set(rt) | set(policy.required_files)):
         if name not in lt or name not in rt:
             diff("files/" + name, name in lt, name in rt, reason="missing required file or unequal file set")
+    pairs = [(name, lt[name].read_bytes(), rt[name].read_bytes()) for name in sorted(lt.keys() & rt.keys())]
+    pairs += [("stdout", left.stdout, right.stdout), ("stderr", left.stderr, right.stderr)]
+    text_pairs = {}
+    for name, a, b in pairs:
+        if name in ("stdout", "stderr") or name.endswith(TEXT_SUFFIXES) or name in policy.duration_files:
+            at, bt = lf_text(a), lf_text(b)
+            if at is not None and bt is not None:
+                text_pairs[name] = (at, bt)
     allowed_fields = set(policy.allowed_json_fields)
     invalid_files = set()
-    # The native manifest hashes summary.txt, which contains measured durations.
-    # Permit only its derived digests, and only after checking each digest against
-    # its own raw file and comparing that file with the declared duration policy.
+    # Validate every manifest digest against its own raw file. Derived digests
+    # may differ for identical LF text, or the existing summary duration policy;
+    # the artifact comparison below must still pass. Non-text hashes stay exact.
     if policy.verify_manifest:
         for side, files in (("left", lt), ("right", rt)):
             try:
@@ -209,39 +233,43 @@ def compare_observations(left: Observation, right: Observation,
                         if row[algo] != actual:
                             diff(f"{side}/run-manifest.json/artifacts/{i}/{algo}", row[algo], actual)
                             invalid_files.add("run-manifest.json")
-                        if name == "summary.txt" and name in policy.duration_files:
+                        texts = text_pairs.get(name)
+                        if texts is not None and (texts[0] == texts[1]
+                                or (name == "summary.txt" and name in policy.duration_files)):
                             allowed_fields.add(("run-manifest.json", f"/artifacts/{i}/{algo}"))
             except (KeyError, ValueError, TypeError) as exc:
                 diff(side + "/run-manifest.json/integrity", str(exc), "valid native manifest")
                 invalid_files.add("run-manifest.json")
 
-    pairs = [(name, lt[name].read_bytes(), rt[name].read_bytes()) for name in sorted(lt.keys() & rt.keys())]
-    pairs += [("stdout", left.stdout, right.stdout), ("stderr", left.stderr, right.stderr)]
     for name, a, b in pairs:
         raw[name] = {"left_sha256": digest(a), "right_sha256": digest(b), "byte_equal": a == b}
         if a == b:
             continue
         start = len(differences)
-        residue_equal = False
+        texts = text_pairs.get(name)
+        if texts is None:
+            diff(name + "/bytes", digest(a), digest(b), reason="raw bytes differ")
+            continue
+        at, bt = texts
+        residue_equal = at == bt
         try:
             if name.endswith(".json"):
-                walk(json.loads(a), json.loads(b), name, allowed_fields=allowed_fields)
+                walk(json.loads(at), json.loads(bt), name, allowed_fields=allowed_fields)
                 parsed = differences[start:]
                 if parsed and all(item["allowed"] for item in parsed):
                     pointers = {item["path"][len(name):] for item in parsed}
-                    residue_equal = (json_residue(a.decode("utf-8"), pointers)
-                                     == json_residue(b.decode("utf-8"), pointers))
+                    residue_equal = json_residue(at, pointers) == json_residue(bt, pointers)
             elif name.endswith(".csv"):
                 # DictReader keeps row order and field values as exact strings.
-                ar, br = csv.DictReader(io.StringIO(a.decode("utf-8-sig"))), csv.DictReader(io.StringIO(b.decode("utf-8-sig")))
+                ar, br = csv.DictReader(io.StringIO(at)), csv.DictReader(io.StringIO(bt))
                 walk(ar.fieldnames, br.fieldnames, name, "/columns")
                 walk(list(ar), list(br), name, "/rows")
             else:
-                ar, br = text_compare(a.decode("utf-8"), b.decode("utf-8"), name,
+                ar, br = text_compare(at, bt, name,
                                       name in policy.duration_files or (name == "stdout" and policy.duration_stdout))
                 residue_equal = ar == br
         except (UnicodeError, ValueError, csv.Error):
-            pass
+            residue_equal = False
         allowed = (residue_equal and name not in invalid_files
                    and all(item["allowed"] for item in differences[start:]))
         diff(name + "/bytes", digest(a), digest(b), allowed, reason="raw bytes differ")
@@ -520,10 +548,14 @@ def main(argv=None) -> int:
                            "other_flags": "native pinned code defaults; no X-02/X-04 or production changes"},
         "cache": "CSV --no-cache; v7 native bars_from_pool use_cache=False; fresh processes; shared isolated numba code cache only",
         "compare_policy": {"duration_lines": DURATION_LINES, "duration_files": ["summary.txt"],
-                           "stdout": "exact except listed duration captures", "stderr": "exact bytes",
+                           "text": {"suffixes": TEXT_SUFFIXES, "also": ["stdout", "stderr", "declared duration_files"],
+                                    "classification": "strict UTF-8; no C0/C1 controls except tab/CR/LF",
+                                    "normalization": "strip one leading UTF-8 BOM; CRLF and lone CR to LF before parsing/masking"},
+                           "stdout": "LF text exact except listed duration captures; non-text byte-exact",
+                           "stderr": "LF text exact; non-text byte-exact",
                            "json": "exact ordered arrays and field values; no path/timestamp exclusions",
-                           "bytes": "record both digests on every mismatch; allow only declared parsed differences with identical masked residue; preserve JSON key order and whitespace",
-                           "manifest": "validate raw own-file hashes; allow summary duration-derived hashes only",
+                           "bytes": "record original digests on every mismatch; allow only identical normalized text or declared parsed differences with identical normalized masked residue; preserve JSON key order and other whitespace; non-text byte-exact",
+                           "manifest": "validate raw own-file hashes; allow derived hashes for identical normalized text or summary duration policy only",
                            "required_success_files": REQUIRED,
                            "positions_phases": "native trade position IDs, audit phases/cash/fees and v7 holdings; no unexposed state fabricated"},
         "authority": "native-to-L1 fidelity only; no SSOT R/S, L2 lake, cross-family equality or production_C change",

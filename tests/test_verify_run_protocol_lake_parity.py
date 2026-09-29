@@ -165,7 +165,7 @@ def test_json_serialization_only_or_parse_error_keeps_bytes_disallowed(pair, rig
      "minute_names=2", "minute_names=0"),
     ("  耗时: 池 1.23s | 日线 1.0s | 分钟 1.0s | 模拟 1.0s | 缓存 bypass\n",
      "缓存 bypass", "缓存 hit"),
-    ("timing load=1.23s simulate=2.34s total=3.57s\n", "\n", "\r\n"),
+    ("timing load=1.23s simulate=2.34s total=3.57s\n", "\n", ""),
 ])
 def test_duration_policy_keeps_counts_and_cache_posture_exact(pair, line, forbidden_before, forbidden_after):
     left = replace(pair[0], stdout=line.encode("utf-8"))
@@ -189,10 +189,13 @@ def test_duration_policy_keeps_counts_and_cache_posture_exact(pair, line, forbid
     assert result["differences"][1]["allowed"] is False
 
 
-def make_manifest(root):
-    data = (root / "summary.txt").read_bytes()
-    manifest = {"artifacts": [{"path": "artifacts/summary.txt", "md5": hashlib.md5(data).hexdigest(),
-                              "sha256": harness.digest(data)}]}
+def make_manifest(root, names=("summary.txt",)):
+    artifacts = []
+    for name in names:
+        data = (root / name).read_bytes()
+        artifacts.append({"path": "artifacts/" + name, "md5": hashlib.md5(data).hexdigest(),
+                          "sha256": harness.digest(data)})
+    manifest = {"artifacts": artifacts}
     (root / "run-manifest.json").write_text(json.dumps(manifest))
 
 
@@ -280,7 +283,7 @@ def test_multiline_summary_and_stdout_duration_residue_preserves_endings(pair, e
     ("exit_code", 1, "exit_code"),
     ("stderr", b"warning\r\n", "stderr/bytes"),
     ("stdout", b"NAV=10008.000000001\r\n", "stdout/bytes"),
-    ("stdout", b"NAV=10008\n", "stdout/bytes"),
+    ("stdout", b"NAV=10008", "stdout/bytes"),
     ("stdout", b"NAV=10008\r\n\r\n", "stdout/bytes"),
     ("trades.csv", b"side,shares,price,commission,position_id,phase\n"
      b"buy,100,10.000000001,1.00,600000@20251103,close\n"
@@ -341,6 +344,168 @@ def test_economic_summary_change_not_excused_by_derived_hash_policy(pair):
         make_manifest(observation.root)
     result = harness.compare_observations(*pair, harness.ComparePolicy(duration_files=("summary.txt",), verify_manifest=True))
     assert result["status"] == "FAIL"
+
+
+def with_observed_bytes(observation, name, data):
+    if name in ("stdout", "stderr"):
+        return replace(observation, **{name: data})
+    (observation.root / name).write_bytes(data)
+    return observation
+
+
+TEXT_CASES = [
+    ("stdout", b"NAV=10008\ntiming load=1.23s simulate=2.34s total=3.57s\n"),
+    ("stderr", b"warning: NAV=10008\n"),
+    ("summary.txt", "NAV=10008\n  耗时: 池 1.23s | 日线 1.0s | 分钟 1.0s | 模拟 1.0s\n".encode()),
+    ("trades.csv", b"side,shares,price\nbuy,100,10008\n"),
+    ("metadata.json", b'{\n  "equity": 10008,\n  "created_at": "same"\n}\n'),
+    ("runtime.log", b"NAV=10008\ntiming load=1.23s simulate=2.34s total=3.57s\n"),
+]
+
+
+@pytest.mark.parametrize("name,data", TEXT_CASES)
+@pytest.mark.parametrize("prefix,ending", [
+    (b"", b"\r\n"), (b"\xef\xbb\xbf", b"\r\n"),
+    (b"\xef\xbb\xbf", b"\n"), (b"", b"\r"),
+])
+def test_lf_text_parity_preserves_raw_evidence(pair, name, data, prefix, ending):
+    changed = prefix + data.replace(b"\n", ending)
+    left = with_observed_bytes(pair[0], name, data)
+    right = with_observed_bytes(pair[1], name, changed)
+    policy = harness.ComparePolicy(duration_files=("runtime.log",))
+    result = harness.compare_observations(left, right, policy)
+    assert result["status"] == "PASS" and not result["byte_identical"]
+    assert result["raw"][name] == {
+        "left_sha256": harness.digest(data), "right_sha256": harness.digest(changed),
+        "byte_equal": False,
+    }
+    assert result["differences"] == [{
+        "path": name + "/bytes", "left": harness.digest(data), "right": harness.digest(changed),
+        "allowed": True, "reason": "raw bytes differ",
+    }]
+
+
+@pytest.mark.parametrize("name", ["stdout", "summary.txt", "runtime.log"])
+@pytest.mark.parametrize("line", [
+    "  耗时: 池 1.23s | 日线 1.0s | 分钟 1.0s | 模拟 1.0s | 缓存 bypass\n",
+    "loaded minute=lake daily=lake: minute_names=2 daily_names=2 exdiv_names=0 st_names=2 in 1.23s\n",
+    "timing load=1.23s simulate=2.34s total=3.57s\n",
+])
+def test_lf_crlf_duration_captures_are_masked_after_normalization(pair, name, line):
+    data = (line + "NAV=10008\n").encode()
+    changed = b"\xef\xbb\xbf" + data.replace(b"1.23s", b"12.345s").replace(b"\n", b"\r\n")
+    left = with_observed_bytes(pair[0], name, data)
+    right = with_observed_bytes(pair[1], name, changed)
+    assert harness.compare_observations(left, right)["status"] == "FAIL"
+    policy = harness.ComparePolicy(duration_files=("summary.txt", "runtime.log"), duration_stdout=True)
+    result = harness.compare_observations(left, right, policy)
+    assert result["status"] == "PASS" and not result["byte_identical"]
+    assert [item["path"] for item in result["differences"]] == [name + "/line/1", name + "/bytes"]
+    assert all(item["allowed"] for item in result["differences"])
+
+
+@pytest.mark.parametrize("name,data", TEXT_CASES)
+def test_normalization_never_excuses_non_duration_text_changes(pair, name, data):
+    changed = b"\xef\xbb\xbf" + data.replace(b"10008", b"10008.000000001").replace(b"\n", b"\r\n")
+    left = with_observed_bytes(pair[0], name, data)
+    right = with_observed_bytes(pair[1], name, changed)
+    policy = harness.ComparePolicy(duration_files=("summary.txt", "runtime.log"), duration_stdout=True)
+    result = harness.compare_observations(left, right, policy)
+    assert result["status"] == "FAIL"
+    assert result["differences"][-1]["path"] == name + "/bytes"
+    assert result["differences"][-1]["allowed"] is False
+
+
+@pytest.mark.parametrize("name,left_data,right_data", [
+    ("stdout", b"NAV=10008\n", b"NAV=10008"),
+    ("stdout", b"NAV=10008\n", b"NAV=10008\r\n\r\n"),
+    ("stdout", b"NAV=10008\n", b"NAV=\xef\xbb\xbf10008\r\n"),
+    ("stdout", b"NAV=10008\n", b"\xef\xbb\xbf\xef\xbb\xbfNAV=10008\r\n"),
+    ("stderr", b"timing load=1.23s simulate=2.34s total=3.57s\n",
+     b"timing load=12.34s simulate=2.34s total=3.57s\r\n"),
+    ("trades.csv", b"shares,price\n100,10.00\n", b'shares,price\r\n100,"10.00"\r\n'),
+    ("metadata.json", b'{\n"equity": 10.0\n}\n', b'{\r\n"equity": 10.00\r\n}\r\n'),
+    ("metadata.json", b'{\n"equity": 10\n}\n', b'{\r\n "equity": 10\r\n}\r\n'),
+    ("metadata.json", b'{\n"equity": 10, "shares": 100\n}\n',
+     b'{\r\n"shares": 100, "equity": 10\r\n}\r\n'),
+])
+def test_lf_semantics_keep_other_serialization_exact(pair, name, left_data, right_data):
+    left = with_observed_bytes(pair[0], name, left_data)
+    right = with_observed_bytes(pair[1], name, right_data)
+    result = harness.compare_observations(left, right, harness.ComparePolicy(duration_stdout=True))
+    assert result["status"] == "FAIL"
+    assert any(item["path"] == name + "/bytes" and not item["allowed"] for item in result["differences"])
+
+
+def test_json_field_mask_uses_lf_residue_and_preserves_other_bytes(pair):
+    left_data = b'{\n"created_at": "old", "equity": 10.0\n}\n'
+    right_data = b'\xef\xbb\xbf{\r\n"created_at": "new", "equity": 10.0\r\n}\r\n'
+    left = with_observed_bytes(pair[0], "metadata.json", left_data)
+    right = with_observed_bytes(pair[1], "metadata.json", right_data)
+    policy = harness.ComparePolicy(allowed_json_fields=(("metadata.json", "/created_at"),))
+    result = harness.compare_observations(left, right, policy)
+    assert result["status"] == "PASS" and not result["byte_identical"]
+    assert all(item["allowed"] for item in result["differences"])
+    with_observed_bytes(right, "metadata.json", right_data.replace(b"10.0", b"10.00"))
+    assert harness.compare_observations(left, right, policy)["status"] == "FAIL"
+
+
+@pytest.mark.parametrize("name,prefix", [
+    ("stdout", b"\xff"), ("stderr", b"\xff"), ("summary.txt", b"\xff"),
+    ("stdout", b"\x00"), ("stderr", b"\x00"), ("summary.txt", b"\x00"),
+    ("stdout", b"\x1b"), ("stderr", b"\xc2\x85"),
+    ("trades.csv", b"\x00"), ("metadata.json", b"\x00"),
+    ("observation.bin", b""), ("data.parquet", b""), ("raw.sha256", b""),
+])
+def test_binary_and_undeclared_artifacts_remain_byte_exact(pair, name, prefix):
+    data = prefix + b"timing load=1.23s simulate=2.34s total=3.57s\n"
+    left = with_observed_bytes(pair[0], name, data)
+    right = with_observed_bytes(pair[1], name, data)
+    policy = harness.ComparePolicy(duration_files=("summary.txt",), duration_stdout=True)
+    assert harness.compare_observations(left, right, policy)["byte_identical"]
+    for changed in (data.replace(b"\n", b"\r\n"), b"\xef\xbb\xbf" + data,
+                    data.replace(b"1.23s", b"12.345s")):
+        right = with_observed_bytes(right, name, changed)
+        result = harness.compare_observations(left, right, policy)
+        assert result["status"] == "FAIL"
+        assert result["differences"] == [{
+            "path": name + "/bytes", "left": harness.digest(data), "right": harness.digest(changed),
+            "allowed": False, "reason": "raw bytes differ",
+        }]
+
+
+@pytest.mark.parametrize("name,data", [case for case in TEXT_CASES if case[0].endswith(harness.TEXT_SUFFIXES)])
+def test_normalized_text_manifest_hashes_still_validate_original_files(pair, name, data):
+    changed = b"\xef\xbb\xbf" + data.replace(b"\n", b"\r\n")
+    for observation, content in zip(pair, (data, changed)):
+        with_observed_bytes(observation, name, content)
+        make_manifest(observation.root, (name,))
+    policy = harness.ComparePolicy(verify_manifest=True)
+    result = harness.compare_observations(*pair, policy)
+    assert result["status"] == "PASS" and not result["byte_identical"]
+    assert all(item["allowed"] for item in result["differences"])
+    # A digest of normalized text is invalid for the original CRLF/BOM file.
+    manifest_path = pair[1].root / "run-manifest.json"
+    manifest = json.loads(manifest_path.read_bytes())
+    manifest["artifacts"][0]["sha256"] = harness.digest(data)
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    result = harness.compare_observations(*pair, policy)
+    assert result["status"] == "FAIL"
+    assert any(item["path"] == "right/run-manifest.json/artifacts/0/sha256" and not item["allowed"]
+               for item in result["differences"])
+
+
+def test_manifest_does_not_excuse_binary_hash_changes(pair):
+    for observation, ending in zip(pair, (b"\n", b"\r\n")):
+        (observation.root / "raw.bin").write_bytes(b"10008" + ending)
+        make_manifest(observation.root, ("raw.bin",))
+    result = harness.compare_observations(*pair, harness.ComparePolicy(verify_manifest=True))
+    assert result["status"] == "FAIL"
+    assert all(not item["allowed"] for item in result["differences"])
+    assert {item["path"] for item in result["differences"]} == {
+        "raw.bin/bytes", "run-manifest.json/bytes",
+        "run-manifest.json/artifacts/0/md5", "run-manifest.json/artifacts/0/sha256",
+    }
 
 
 def test_normal_and_low_cash_cannot_pass_without_trigger(pair):
