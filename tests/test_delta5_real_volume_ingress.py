@@ -187,6 +187,7 @@ def test_m7_native_harness_zero_suspension_and_raw_daily_mark():
     zero = passed(fixture(volume=0, oracle=[], cell="M7"))
     assert used(zero) == {}
     assert len(zero["coverage"]["zero_keys"]) == 240
+    assert state(zero)["trades"][0]["reason"] == "skip_volume_cap:zero_or_exhausted"
     f = fixture(days=2, suspended=(1,), cell="M7")
     result = passed(f)
     inputs = normalize(f["source"])
@@ -333,6 +334,32 @@ def test_m5_m6_m7_m11_ingress_rejects_before_api(case, monkeypatch):
     assert calls == []
 
 
+@pytest.mark.parametrize("encoding,timestamp,detail", [
+    ("local_wall", "NaT", "NaT"),
+    ("local_wall", "2026-09-01T09:30:00+08:00", "local_wall must be naive"),
+    ("utc_instant", "2026-09-01T09:30:00", "UTC container requires explicit UTC offset"),
+    ("utc_instant", "2026-09-01T09:30:00+08:00", "UTC container requires explicit UTC offset"),
+    ("utc_wall", "2026-09-01T09:30:00", "UTC container requires explicit UTC offset"),
+    ("utc_wall", "2026-09-01T09:30:00+08:00", "UTC container requires explicit UTC offset"),
+])
+def test_time_rule_error_keeps_detail_before_api(encoding, timestamp, detail, monkeypatch):
+    f = fixture(encoding=encoding)
+    f["source"]["minute"][0]["begin"] = timestamp
+    calls = []
+
+    def forbidden(*args, **kwargs):
+        calls.append(1)
+        raise AssertionError("time preflight failure reached API")
+
+    monkeypatch.setattr(harness.engine, "simulate", forbidden)
+    with pytest.raises(IngressError) as caught:
+        harness.compare(f, .1)
+    assert calls == []
+    assert caught.value.stage == "time"
+    assert caught.value.detail == detail
+    assert str(caught.value) == f"time: {detail}"
+
+
 def test_provider_unknown_key_propagates_and_freezes():
     key = CODE, DAYS[0], 895
     original = {key: BucketVolume(2500, 895, UNIT)}
@@ -418,6 +445,41 @@ def test_cli_success_provenance_isolation_and_overwrite(external):
     before = (root / "receipt.json").read_bytes()
     assert harness.main(args) == 1
     assert (root / "receipt.json").read_bytes() == before
+
+
+@pytest.mark.parametrize("rate", ["-0.1", "1.1", "NaN", "Inf", "-Inf", "True", "False"])
+def test_cli_invalid_rate_rejected_before_api(external, monkeypatch, rate):
+    args = cli_args(external)
+    args[-2:] = [f"--participation-rate={rate}"]
+    calls = []
+
+    def forbidden(*args, **kwargs):
+        calls.append(1)
+        raise AssertionError("rate preflight failure reached API")
+
+    monkeypatch.setattr(harness.engine, "simulate", forbidden)
+    assert harness.main(args) == 1
+    assert calls == []
+    receipt = json.loads((external / "outputs" / "run" / "receipt.json").read_text())
+    assert receipt["status"] == "FAIL"
+    assert receipt["failure"]["stage"] == "participation_rate"
+    assert receipt["output_files"] == ["receipt.json"]
+    assert all(cell["status"] == "NOT_RUN" for cell in receipt["matrix"].values())
+
+
+@pytest.mark.parametrize("rate,oracle", [
+    ("none", [["BUY", 500, 10., 7.5]]),
+    ("omitted", [["BUY", 500, 10., 7.5]]),
+    ("0", []),
+    (".1", [["BUY", 200, 10., 5.]]),
+    ("1", [["BUY", 500, 10., 7.5]]),
+])
+def test_cli_valid_rate_domain(external, rate, oracle):
+    args = cli_args(external, fixture(oracle=oracle))
+    args[-1] = rate
+    assert harness.main(args) == 0
+    receipt = json.loads((external / "outputs" / "run" / "receipt.json").read_text())
+    assert receipt["status"] == "PASS"
 
 
 @pytest.mark.parametrize("failure", ["hash", "missing_file", "missing_bucket", "native_delta", "api", "write"])

@@ -3,7 +3,7 @@
 **合同 ID：`D5-REAL-VOLUME-INGRESS-v1`；本刀仅文档，来源验收 / 实施 / 湖运行均 NOT_RUN。**
 核对基线：`fd74932dc2d86bb01cd47f2ebc39ce8a389ace2f`；`production_C=frozen`。
 授权：2026-09-29 Human「D GO」；范围来自同日 ORDER_EVAL（A–E residual tracks）§7「Track D card — industry / #135 线」。
-本页冻结下一刀可实现的接入合同，不表示已有 certified source、harness、运行回执或比较授权；**未经 Human「合」不合并**。
+本页冻结下一刀可实现的接入合同，certified source 与比较授权仍未具备；data-free harness 与外部运行回执现已存在，范围见 §8；**未经 Human「合」不合并**。
 
 ## 1 唯一首消费者与边界
 

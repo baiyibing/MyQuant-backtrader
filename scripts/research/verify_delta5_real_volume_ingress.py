@@ -249,9 +249,12 @@ def main(argv=None):
                              "path": str(args.fixture.resolve())}
         receipt["source"]["before"] = identity(args.fixture)
         fixture, before = read_fixture(args.fixture, args.fixture_sha256)
-        receipt["stage"] = "preflight_compare"
+        receipt["stage"] = "participation_rate"
         rate = (OMITTED if args.participation_rate == "omitted" else
                 None if args.participation_rate == "none" else float(args.participation_rate))
+        require(rate is OMITTED or rate is None or (np.isfinite(rate) and 0 <= rate <= 1),
+                "participation_rate", "expected none, omitted, or a finite rate in [0,1]")
+        receipt["stage"] = "preflight_compare"
         result = compare(fixture, rate)
         receipt["source"]["after"] = identity(args.fixture)
         require(receipt["source"]["after"] == before, "identity", "source changed during run")

@@ -63,6 +63,8 @@ def decode_time(value, encoding):
             ts = (ts.tz_convert("Asia/Shanghai").tz_localize(None)
                   if encoding == "utc_instant" else ts.tz_localize(None))
         return ts
+    except IngressError:
+        raise
     except (ValueError, TypeError) as exc:
         raise IngressError("time", str(exc)) from exc
 
