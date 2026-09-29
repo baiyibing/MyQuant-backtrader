@@ -3,7 +3,7 @@
 **合同 ID：`D5-REAL-VOLUME-INGRESS-v1`；本刀仅文档，来源验收 / 实施 / 湖运行均 NOT_RUN。**
 核对基线：`fd74932dc2d86bb01cd47f2ebc39ce8a389ace2f`；`production_C=frozen`。
 授权：2026-09-29 Human「D GO」；范围来自同日 ORDER_EVAL（A–E residual tracks）§7「Track D card — industry / #135 线」。
-本页冻结下一刀可实现的接入合同，不表示已有 certified source、harness、运行回执或比较授权；**未经 Human「合」不合并**。
+本页冻结下一刀可实现的接入合同，certified source 与比较授权仍未具备；data-free harness 与外部运行回执现已存在，范围见 §8；**未经 Human「合」不合并**。
 
 ## 1 唯一首消费者与边界
 
@@ -122,6 +122,10 @@ START 规范化是独立 harness 的显式输入映射，不修改共享 loader 
 - 退出判定：预检/provider/API/隔离写出失败为非零；合法零量/容量拒绝可是成功研究run但验收格未必覆盖。不得凭exit0、summary存在或非零成交任一项升级来源/比较资格。
 
 ## 8 下一实施刀 allowlist 草案与确认表
+
+**实施后续（2026-09-30，Human「开 δ5 实施」）**：data-free implement 已落代码，待 PR 审查 / Human「合」；独立 [harness CLI](../../scripts/research/verify_delta5_real_volume_ingress.py)、[synthetic mapper/provider](../../backtest/research/delta5_volume_ingress.py)、[验收测试](../../tests/test_delta5_real_volume_ingress.py) 与 [双侧独立构造的完整 session 夹具](../../tests/fixtures/delta5_ingress.py)。GO 留于外部交接 `d5_impl_harness_20260929/HUMAN_GO.md`。CLI 要求显式 fixture JSON/hash、GO、rate（含 none/omitted）及 external parent/run-id，输出 `d5_ingress_v1`，不经共享 run/main、不读写共享分钟缓存。只接受 synthetic source；前文“本刀仅文档 / 未执行”保留为 #260 合同冻结的历史状态。
+
+本次 data-free 覆盖：M1–M4、M6b、M7、M8、M10 的 N/H 完整原生状态对照；M5 的 START/END、三种显式时间编码、可得时间向上取整 N/H（买点 14:55），09:31/09:32 与 open570 门另以 L 验证；M6 为缺行 I + 原生 fallback 边界，**没有 harness 缺桶成功**；M9 仅旧 ride 组 L。M5/M6/M7/M11 的非法记录、覆盖缺口、输入 hash 漂移及输出隔离有 I/CLI 负例。真实 resolver 根/分区验收、真实来源认证/湖运行、v7 及完整 M5 09:31 买点 public E2E 均 **NOT_RUN**。每次 CLI 只报告其 fixture 的具名 N/H 子格，其余格与剩余子例明确 NOT_RUN；测试总覆盖与命令结果见外部 `D5_CODEX_RECEIPT.md`。`production_C=frozen`、`comparison_status=no_ssot_compare_authorization`；没有 SSOT green，也没有以改引擎求 PASS。
 
 须另获具名 GO 后再确定路径：新 `scripts/research/verify_delta5_real_volume_ingress.py`（独立 harness，可内含provider）、必要的新独立映射模块、新 `tests/test_delta5_real_volume_ingress.py` 与synthetic fixtures、本页及外部receipt。
 下一刀先完成 data-free 映射/拒绝/原生对照；真实源认证与湖运行还须具名源、宿主、配方和显式运行GO。不得凭本次D GO发车；遇既有行为冲突先报告差异，不修改引擎求PASS。
