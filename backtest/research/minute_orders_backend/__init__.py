@@ -1,4 +1,8 @@
-"""L2-S1 actions and L2-S2 accounting only; no broker, runner or L1 registration."""
+"""L2-S1/S2 public exports only.
+
+Clock, BrokerCore and runner live in submodules and are imported explicitly;
+see docs/backtest/note-l2-s3-clock-broker-runner-2026-09-29.md.
+"""
 
 from .fees import FeeModel
 from .ledger import Ledger

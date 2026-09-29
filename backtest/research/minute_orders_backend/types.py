@@ -1,9 +1,9 @@
-"""Immutable action and accounting values for research contract v0, L2-S1/S2."""
+"""Immutable action, accounting and explicit replay values for research v0."""
 
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from decimal import Decimal
-from enum import Enum
+from enum import Enum, IntEnum
 from typing import Literal
 
 
@@ -242,3 +242,183 @@ class LedgerSnapshot:
 
     def reserved_sellable_qty(self, symbol: str) -> int:
         return sum(lot.reserved_qty for lot in self.lots if lot.symbol == symbol)
+
+
+class RunContractError(ValueError):
+    """Invalid replay facts; abort instead of returning a successful result."""
+
+
+class Phase(IntEnum):
+    # BUCKET is the visibility/registration step of the match phase, not a fill.
+    EXPIRY = 0
+    CANCEL = 1
+    BUCKET = 2
+    MATCH = 3
+    SUBMIT = 4
+    MARK = 5
+
+
+class OrderStatus(str, Enum):
+    SUBMITTED = "Submitted"
+    ACCEPTED = "Accepted"
+    REJECTED = "Rejected"
+    PARTIALLY_FILLED = "PartiallyFilled"
+    FILLED = "Filled"
+    CANCELLED = "Cancelled"
+    EXPIRED = "Expired"
+
+
+@dataclass(frozen=True)
+class SubmitOrder:
+    command_id: str
+    order_id: str
+    symbol: str
+    side: Side
+    qty: int
+    limit: Decimal
+    available_at: datetime
+    submitted_at: datetime
+    effective_at: datetime
+    expires_at: datetime
+    sequence: int
+    order_type: Literal["LIMIT"] = "LIMIT"
+
+
+@dataclass(frozen=True)
+class CancelOrder:
+    command_id: str
+    order_id: str
+    available_at: datetime
+    submitted_at: datetime
+    effective_at: datetime
+    sequence: int
+
+
+@dataclass(frozen=True)
+class SessionBucket:
+    bucket_id: str
+    start: datetime
+    end: datetime
+    session: Literal["continuous"]
+
+
+@dataclass(frozen=True)
+class CalendarFacts:
+    """Caller-attested dates and exact buckets covered by this bounded replay."""
+
+    trading_dates: tuple[date, ...]
+    session_buckets: tuple[SessionBucket, ...]
+    company_actions_covered: bool
+    company_actions: tuple[object, ...]
+
+
+@dataclass(frozen=True)
+class InstrumentFacts:
+    symbol: str
+    trade_date: date
+    board: Literal["main"]
+    price_domain: Literal["raw"]
+    tick_size: Decimal
+    lot_size: int
+    reference_price: Decimal
+    limit_down: Decimal
+    limit_up: Decimal
+
+
+@dataclass(frozen=True)
+class CompletedBucket:
+    """One calendar bucket's symbol coverage, including explicit missing/halt facts.
+
+    A missing bucket has close=volume_shares=None. A present bucket (including
+    a halted one) must supply both. Neither field is released before end.
+    """
+
+    symbol: str
+    bucket_id: str
+    start: datetime
+    end: datetime
+    close: Decimal | None
+    volume_shares: int | None
+    missing: bool
+    halted: bool
+
+
+@dataclass(frozen=True)
+class MarkPrice:
+    symbol: str
+    price: Decimal
+
+
+@dataclass(frozen=True)
+class MarkEvent:
+    mark_id: str
+    event_time: datetime
+    available_at: datetime
+    prices: tuple[MarkPrice, ...]
+    price_domain: Literal["raw"]
+    source: str
+
+
+@dataclass(frozen=True)
+class RunInput:
+    start_at: datetime
+    end_at: datetime
+    commands: tuple[SubmitOrder | CancelOrder, ...]
+    buckets: tuple[CompletedBucket, ...]
+    calendar: CalendarFacts
+    instruments: tuple[InstrumentFacts, ...]
+    initial_cash: Decimal
+    initial_lots: tuple[LotPosition, ...]
+    buy_fees: FeeModelParams
+    sell_fees: FeeModelParams
+    participation_rate: Decimal
+    marks: tuple[MarkEvent, ...]
+    requires_marks: bool
+
+
+@dataclass(frozen=True)
+class ClockEvent:
+    event_time: datetime
+    phase: Phase
+    sell_before_buy: int
+    submitted_at: datetime
+    sequence: int
+    order_id: str
+    payload: SubmitOrder | CancelOrder | CompletedBucket | MarkEvent
+
+    @property
+    def key(self) -> tuple:
+        return (
+            self.event_time, int(self.phase), self.sell_before_buy,
+            self.submitted_at, self.sequence, self.order_id,
+        )
+
+
+@dataclass(frozen=True)
+class OrderState:
+    order: SubmitOrder
+    status: OrderStatus
+    filled_qty: int
+    remaining_qty: int
+    rejection: ReservationRejected | None = None
+
+
+@dataclass(frozen=True)
+class OrderTransition:
+    event: ClockEvent
+    state: OrderState
+
+
+@dataclass(frozen=True)
+class MarkObservation:
+    event: MarkEvent
+    ledger: LedgerSnapshot
+
+
+@dataclass(frozen=True)
+class RunResult:
+    orders: tuple[OrderState, ...]
+    fills: tuple[FillApplied, ...]
+    ledger: LedgerSnapshot
+    transitions: tuple[OrderTransition, ...]
+    marks: tuple[MarkObservation, ...]
