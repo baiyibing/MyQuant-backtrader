@@ -196,6 +196,116 @@ def make_manifest(root):
     (root / "run-manifest.json").write_text(json.dumps(manifest))
 
 
+@pytest.mark.parametrize("family,cell", [
+    ("csv_minute", "normal"), ("csv_minute", "bad_output"),
+    ("v7", "normal"), ("v7", "low_cash"), ("v7", "bad_output"),
+])
+def test_windows_lake_duration_only_stdout_bytes_pass(pair, family, cell):
+    # Data-free reproduction of the five reported 4090 FAIL cells: summary
+    # files use LF here, while Windows stdout has CRLF on both sides.
+    observations = []
+    for i, observation in enumerate(pair):
+        summary = "NAV=10008\n"
+        if family == "csv_minute":
+            pool, daily, minute, sim = (("0.0", "1.2", "3.4", "5.6"),
+                                       ("0.1", "12.3", "0.4", "56.7"))[i]
+            summary += (f"  耗时: 池 {pool}s | 日线 {daily}s | 分钟 {minute}s | 模拟 {sim}s"
+                        " | 缓存 bypass\n")
+            stdout = "loaded daily 2 / minute 2 / pool days 2\n" + summary + "\n"
+        else:
+            load, sim, total = (("1.23", "2.34", "3.57"), ("12.34", "20.01", "32.35"))[i]
+            stdout = ("loaded minute=lake daily=lake: minute_names=2 daily_names=2 "
+                      f"exdiv_names=0 st_names=2 in {load}s\n")
+            if cell != "bad_output":
+                stdout += summary + f"timing load={load}s simulate={sim}s total={total}s\n"
+        if cell == "bad_output":
+            sentinel = observation.root / "artifacts"
+            sentinel.write_bytes(b"B-native-CV-01 refusal sentinel\n")
+            error = "NotADirectoryError" if family == "csv_minute" else "FileExistsError"
+            observation = replace(observation, root=sentinel, exit_code=1,
+                                  stderr=f"{error}: artifacts\r\n".encode())
+        else:
+            (observation.root / "summary.txt").write_bytes(summary.encode("utf-8"))
+            if family == "csv_minute":
+                make_manifest(observation.root)
+            else:
+                (observation.root / "run-config.json").write_bytes(b'{"minute_source": "lake"}\n')
+                if cell == "low_cash":
+                    (observation.root / "trades.csv").write_bytes(b"side,reason\nskip,skip_cash\n")
+        observations.append(replace(observation, stdout=stdout.replace("\n", "\r\n").encode("utf-8")))
+
+    policy = harness.ComparePolicy(
+        required_files=() if cell == "bad_output" else harness.REQUIRED[family],
+        duration_files=("summary.txt",), duration_stdout=True,
+        verify_manifest=family == "csv_minute" and cell != "bad_output",
+    )
+    assert harness.compare_observations(*observations)["status"] == "FAIL"
+    result = harness.compare_observations(*observations, policy)
+    differences = {item["path"]: item for item in result["differences"]}
+    if family == "csv_minute" and cell == "normal":
+        for path in ("summary.txt/line/2", "summary.txt/bytes", "run-manifest.json/bytes"):
+            assert differences[path]["allowed"] is True
+    assert differences["stdout/bytes"]["allowed"] is True
+    assert result["status"] == "PASS" and not result["byte_identical"]
+    assert all(item["allowed"] for item in result["differences"])
+    assert result["raw"]["stdout"] == {
+        "left_sha256": harness.digest(observations[0].stdout),
+        "right_sha256": harness.digest(observations[1].stdout), "byte_equal": False,
+    }
+    assert harness.cell_verdict(family, cell, observations, result)[0] == "PASS"
+
+
+@pytest.mark.parametrize("ending", ["\n", "\r\n", ""])
+@pytest.mark.parametrize("cache", ["", " | 缓存 bypass"])
+def test_multiline_summary_and_stdout_duration_residue_preserves_endings(pair, ending, cache):
+    observations = []
+    for observation, durations in zip(pair, (("0.0", "1.2", "3.4", "5.6"),
+                                           ("0.1", "12.3", "0.4", "56.7"))):
+        pool, daily, minute, sim = durations
+        text = ("NAV=10008\r\n\n"
+                f"  耗时: 池 {pool}s | 日线 {daily}s | 分钟 {minute}s | 模拟 {sim}s{cache}{ending}")
+        data = text.encode("utf-8")
+        (observation.root / "summary.txt").write_bytes(data)
+        observations.append(replace(observation, stdout=data))
+    policy = harness.ComparePolicy(duration_files=("summary.txt",), duration_stdout=True)
+    result = harness.compare_observations(*observations, policy)
+    assert result["status"] == "PASS" and not result["byte_identical"]
+    assert {item["path"] for item in result["differences"]} == {
+        "summary.txt/line/3", "summary.txt/bytes", "stdout/line/3", "stdout/bytes",
+    }
+    assert all(item["allowed"] for item in result["differences"])
+
+
+@pytest.mark.parametrize("field,value,path", [
+    ("exit_code", 1, "exit_code"),
+    ("stderr", b"warning\r\n", "stderr/bytes"),
+    ("stdout", b"NAV=10008.000000001\r\n", "stdout/bytes"),
+    ("stdout", b"NAV=10008\n", "stdout/bytes"),
+    ("stdout", b"NAV=10008\r\n\r\n", "stdout/bytes"),
+    ("trades.csv", b"side,shares,price,commission,position_id,phase\n"
+     b"buy,100,10.000000001,1.00,600000@20251103,close\n"
+     b"sell,100,10.10,1.01,600000@20251103,close\n", "trades.csv/bytes"),
+    ("daily_equity.csv", b"date,equity\n20251103,9999\n20251104,10008.000000001\n", "daily_equity.csv/bytes"),
+    ("execution-audit.json", b'{"events": [{"phase": "close", "commission": 1.000000001}]}',
+     "execution-audit.json/bytes"),
+])
+def test_allowed_windows_timing_never_excuses_other_differences(pair, field, value, path):
+    line = b"timing load=1.23s simulate=2.34s total=3.57s\r\n"
+    left = replace(pair[0], stdout=line + b"NAV=10008\r\n")
+    right = replace(pair[1], stdout=line.replace(b"1.23s", b"12.34s") + b"NAV=10008\r\n")
+    if field == "stdout":
+        right = replace(right, stdout=right.stdout.splitlines(keepends=True)[0] + value)
+    elif field in ("exit_code", "stderr"):
+        right = replace(right, **{field: value})
+    else:
+        (right.root / field).write_bytes(value)
+    result = harness.compare_observations(left, right, harness.ComparePolicy(duration_stdout=True))
+    assert result["status"] == "FAIL"
+    differences = {item["path"]: item for item in result["differences"]}
+    assert differences["stdout/line/1"]["allowed"] is True
+    assert differences[path]["allowed"] is False
+
+
 def test_duration_derived_manifest_hashes_must_match_actual_bytes(pair):
     for observation, timing in zip(pair, ("1.0", "2.0")):
         (observation.root / "summary.txt").write_text(f"NAV=10008\n  耗时: 池 {timing}s | 日线 1.0s | 分钟 1.0s | 模拟 1.0s | 缓存 bypass\n")

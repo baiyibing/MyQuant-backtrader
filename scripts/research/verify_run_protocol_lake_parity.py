@@ -35,10 +35,12 @@ REQUIRED = {
            "run-config.json", "execution-audit.json"),
 }
 # Only numeric duration captures may differ. Every surrounding byte must match.
+# Recognize Windows CRLF as well as LF, but leave endings in the residue so
+# cross-side newline changes still fail exact comparison.
 DURATION_LINES = (
-    r"  耗时: 池 (?P<pool>\d+\.\d+)s \| 日线 (?P<daily>\d+\.\d+)s \| 分钟 (?P<minute>\d+\.\d+)s \| 模拟 (?P<sim>\d+\.\d+)s(?: \| 缓存 [^\r\n]+)?\n?",
-    r"loaded minute=lake daily=lake: minute_names=\d+ daily_names=\d+ exdiv_names=\d+ st_names=\d+ in (?P<load>\d+\.\d+)s\n?",
-    r"timing load=(?P<load>\d+\.\d+)s simulate=(?P<sim>\d+\.\d+)s total=(?P<total>\d+\.\d+)s\n?",
+    r"  耗时: 池 (?P<pool>\d+\.\d+)s \| 日线 (?P<daily>\d+\.\d+)s \| 分钟 (?P<minute>\d+\.\d+)s \| 模拟 (?P<sim>\d+\.\d+)s(?: \| 缓存 [^\r\n]+)?(?:\r?\n)?",
+    r"loaded minute=lake daily=lake: minute_names=\d+ daily_names=\d+ exdiv_names=\d+ st_names=\d+ in (?P<load>\d+\.\d+)s(?:\r?\n)?",
+    r"timing load=(?P<load>\d+\.\d+)s simulate=(?P<sim>\d+\.\d+)s total=(?P<total>\d+\.\d+)s(?:\r?\n)?",
 )
 
 
