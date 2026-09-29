@@ -4,7 +4,7 @@
 
 Human「开干 L2-S0 合同文档」冻结 **Q2=A / Q3=PLAN §4.2 窄包逐行签认 / Q4=机制参考自行实现**。本文是研究合同 v0，不是 production SSOT，不声称交易所精确撮合；**不是 L2-S1 implementation GO**。本片无 Python package、MatchCore、adapter 或 L1 views；L2-S1+ 仍须各片显式 GO，且保留 PLAN 的 L1-S5 前置门，四家 adapters 合入不自动替代该门。PR 须 Human「合」，勿自动合并。
 
-后续状态：另获 Human GO 的 [L2-S1 types + MatchCore](note-l2-s1-matchcore-2026-09-29.md) 已落地为 **action-only**；Ledger/Broker/runner 与 L1 注册仍受后续切片门禁约束。
+后续状态：另获 Human GO 的 [L2-S1 types + MatchCore](note-l2-s1-matchcore-2026-09-29.md) 已落地为 **action-only**，[L2-S2 ledger + fee](note-l2-s2-ledger-fee-2026-09-29.md) 已实现账本、预留和累计费；Broker/Clock/runner 与 L1 注册仍受后续切片门禁约束。
 
 授权依据（工作站外部文件，不是运行依赖）：
 
