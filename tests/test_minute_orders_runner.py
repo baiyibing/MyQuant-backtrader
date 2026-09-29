@@ -381,6 +381,31 @@ def test_noncontinuous_or_misaligned_buckets_fail_closed(start):
         run(inputs(buckets=(bucket(start),), end=at("16:00:00")))
 
 
+@pytest.mark.parametrize("start", ["14:57:00", "14:58:00", "14:59:00"])
+def test_closing_call_buckets_fail_closed_before_broker_match(start, monkeypatch):
+    def forbidden(*args, **kwargs):
+        pytest.fail("closing-call bucket reached BrokerCore matching")
+
+    monkeypatch.setattr(BrokerCore, "_match", forbidden)
+    with pytest.raises(RunContractError, match="continuous session endpoints"):
+        run(inputs(
+            commands=(submit(time="14:55:00", effective="14:56:00", expiry="15:01:00"),),
+            buckets=(bucket(start),), end=at("15:01:00"),
+        ))
+
+
+def test_last_continuous_afternoon_bucket_still_fills():
+    result = run(inputs(
+        commands=(submit(time="14:55:00", effective="14:56:00", expiry="15:01:00"),),
+        buckets=(bucket("14:56:00"),), end=at("15:01:00"),
+    ))
+    assert states(result)["O1"] == (OrderStatus.FILLED, 100, 0)
+    assert [(f.proposal.qty, f.proposal.price) for f in result.fills] == [(100, D("10.00"))]
+    assert [t.event.event_time for t in result.transitions if t.event.phase is Phase.MATCH] == [
+        at("14:57:00"),
+    ]
+
+
 def test_explicit_lunch_gap_is_legal_and_capacity_does_not_carry():
     result = run(inputs(
         commands=(submit(qty=300, expiry="14:00:00"),),

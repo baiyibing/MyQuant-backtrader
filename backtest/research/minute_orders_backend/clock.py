@@ -93,7 +93,7 @@ class Clock:
             start, end = session.start.time(), session.end.time()
             if not (
                 time(9, 30) <= start < end <= time(11, 30)
-                or time(13) <= start < end <= time(15)
+                or time(13) <= start < end <= time(14, 57)
             ):
                 raise RunContractError("bucket crosses lunch or continuous session endpoints")
             if previous is not None:
