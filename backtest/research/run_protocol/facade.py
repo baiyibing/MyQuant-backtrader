@@ -83,6 +83,12 @@ def _minute_orders_run_with_artifacts(request):
     return run_minute_orders_research_with_artifacts(request)
 
 
+def _minute_orders_run_cli(request):
+    from .adapters.minute_orders import run_cli
+
+    return run_cli(request)
+
+
 _ENTRIES = MappingProxyType({
     ("joint_return", "native_api", "joint_return_replay.replay"): _replay,
     ("joint_return", "native_api", "joint_return_replay.run_replay"): _run_replay,
@@ -98,6 +104,8 @@ _ENTRIES = MappingProxyType({
      "minute_orders_backend.runner.run_minute_orders_research"): _minute_orders_run,
     ("minute_orders_research", "native_api",
      "minute_orders_backend.runner.run_minute_orders_research_with_artifacts"): _minute_orders_run_with_artifacts,
+    ("minute_orders_research", "native_cli",
+     "scripts/research/run_minute_orders_research.py"): _minute_orders_run_cli,
 })
 
 

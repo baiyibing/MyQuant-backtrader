@@ -8,6 +8,8 @@
 
 规划中的 L1 薄 run facade / L2 可选研究后端见 [P0 产品边界](note-l1-l2-research-engine-boundary-2026-09-28.md)（仅文档，P0 后停在 Q1；不替换共享 CSV，绿P / 绿C 不授予 NAV 比较资格）。
 
+后续逐片 GO：L2 S1–S5 已交付，2026-09-29「A GO」加入 [minute_orders 专用研究 CLI](note-minute-orders-cli-2026-09-29.md)：`scripts/research/run_minute_orders_research.py`，显式 JSON + parent + run-id + synthetic 声明；只研究外部 LIMIT 生命周期，不读湖、不生成策略名单、不授予 SSOT 比较资格。
+
 本仓回测不是一堆互不相关的策略名。共同问题是：
 
 **给定一份按日的买入名单（信号），在向量化引擎上把买卖规则调到总收益最大。**
