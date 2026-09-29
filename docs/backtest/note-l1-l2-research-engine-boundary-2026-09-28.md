@@ -42,6 +42,8 @@ R1：Codex APPROVE / Kimi APPROVE / Cursor COMMENT，三方均同意薄 P0；R2 
 - **2026-09-29 Q2–Q4 已由 Human 冻结**：Q2=A（外部 LIMIT、完成桶 close、partial/expiry），Q3=PLAN §4.2 窄包逐行签认，Q4=机制参考自行实现；Human GO 仅限 L2-S0 docs-only，基线 `7bdc7f7`（#248 后，L1 四个 adapters 已合入）。见[研究合同 v0](note-l2-s0-minute-orders-contract-2026-09-29.md)、[独立手算 oracle 草图](note-l2-s0-handcalc-oracle-sketches-2026-09-29.md)、[来源/LICENSE 决定](note-l2-s0-source-license-decision-2026-09-29.md)。**L2 可执行代码（含 MatchCore）仍未授权，须满足前置门并另获 L2-S1+ 具体切片 GO；L1 views 仍可选、后置，`production_C=frozen`。**
 - P0 及后续切片均须 Human「合」才合并；本 PR **勿合 / wait for Human「合」**。
 
+2026-09-29 Human「先做 L1 views」后，[L1-Slast views](note-l1-views-2026-09-29.md) 已实现为点名 joint_return / bt 离线编排消费者的 **opt-in 只读投影**，`run()` 与 native writers 不变、无 sidecar。L2 可执行代码仍受独立 GO 门禁约束。
+
 ## 4. 将来的验收用语
 
 | 用语（未来验收，当前未签收） | 只证明什么 |
