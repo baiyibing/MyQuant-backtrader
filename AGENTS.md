@@ -6,6 +6,8 @@ Standalone research-face fork (see [README.md](README.md)). Since migration S2 (
 
 规划中的 L1 薄 run facade / L2 可选研究后端见 [P0 产品边界](docs/backtest/note-l1-l2-research-engine-boundary-2026-09-28.md)（仅文档 GO；P0 后停在 Q1，不授权 types / adapters / L2 代码，不替换共享 CSV，L2 ≠ `l2_analytics/`）。
 
+后续逐片 GO 状态：L2 S1–S5 已交付；2026-09-29 Human「A GO」新增 [minute_orders 专用 synthetic CLI](docs/backtest/note-minute-orders-cli-2026-09-29.md)（显式 JSON/parent/run-id/evidence，L1 仅一条 CLI 注册）。P0 原文为历史停点；无湖接入、无默认 family，`no_ssot_compare_authorization` 不变。
+
 三仓回测不做重：MyQuant 出信号，本仓向量化研究，1.3 执行验收；LEBS 只在 1.3，且 LEBS ≠ MockQMT 真栈。本仓无 `python -m backtest.lebs` 入口。旧 CSV CLI 保留真身，HELP_LOCK 不变（P5=A）。
 
 ## Research entries

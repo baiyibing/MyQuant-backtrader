@@ -7,6 +7,8 @@ Human：「下一默认刀是 L2-S5 注册到 L1===GO」。冻结记录：
 的「L2-S5 注册到 L1」切片。`production_C=frozen`。
 PR 后交 Human/Grok review；**Do NOT merge without human「合」；不启用 auto-merge**。
 
+后续 Track A（2026-09-29 Human「A GO」，基线 `6cd29e6`）已新增专用 CLI 与该脚本唯一一条 L1 `native_cli` 注册，见 [CLI 使用及退出合同](note-minute-orders-cli-2026-09-29.md)。下文“不注册 CLI / 无 CLI 产品化”记录 S5 当时切片边界；两条 API、synthetic-only 及比较权限保持。
+
 ## 显式身份与白名单
 
 L1 family 新增 `minute_orders_research`，指向现有 backend `minute_orders_research_v1`。
@@ -17,9 +19,10 @@ L1 family 新增 `minute_orders_research`，指向现有 backend `minute_orders_
 |---|---|---|
 | `minute_orders_research` | `native_api` | `minute_orders_backend.runner.run_minute_orders_research` |
 | `minute_orders_research` | `native_api` | `minute_orders_backend.runner.run_minute_orders_research_with_artifacts` |
+| `minute_orders_research` | `native_cli` | `scripts/research/run_minute_orders_research.py` |
 
-两项均委托 `backtest.research.minute_orders_backend.runner` 的对应函数。
-不注册独立 writer、短名别名或 `native_cli`；未知组合仍抛 `UnregisteredEntryError`。
+两条 API 仍委托 `backtest.research.minute_orders_backend.runner` 的对应函数。
+不注册独立 writer 或短名别名；`native_cli` 仅注册表中脚本，未知组合仍抛 `UnregisteredEntryError`。
 API / CLI 请求载体继续分型；能构造 CLI 请求不等于已登记 CLI 能力。
 family 必填，无默认选择器，无旧家族失败转 L2，无插件发现或 fallback。
 导入 `run_protocol`、facade registry、adapters 包乃至新 adapter 模块都不加载引擎；
