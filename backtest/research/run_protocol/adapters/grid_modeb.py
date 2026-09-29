@@ -6,13 +6,13 @@ import os
 from pathlib import Path
 import subprocess
 
-# The facade imports this adapter only when a grid_modeb entry is selected.
-from backtest.research.unified_exit_modeb import run_modeb as _native_run_modeb
-
 from ..types import OMITTED, ApiResult, CliResult, NativeApiRequest, NativeCliRequest
 
 
 def run_modeb(request: NativeApiRequest) -> ApiResult:
+    # CLI dispatch leaves engine dependencies to the configured child interpreter.
+    from backtest.research.unified_exit_modeb import run_modeb as _native_run_modeb
+
     value = _native_run_modeb(*request.args, **request.kwargs)
     # Native returns a dict, not writer paths; reports are its own side effect.
     return ApiResult(request=request, native_value=value)

@@ -1,4 +1,4 @@
-"""Hand-built native evidence only: no runners, lake or clock packs."""
+"""Hand-built evidence and synthetic native v7 projection; no lake or clock packs."""
 
 from copy import deepcopy
 from dataclasses import FrozenInstanceError, dataclass
@@ -90,14 +90,25 @@ def test_fee_missing_null_and_reported_zero_remain_distinct(jr):
     ("side", "SKIP"), ("status", "REJECTED"), ("event", "EOD_MARK"),
     ("side", "EOD_MARK"), ("reason", "skip_cash"), ("status_reason", "REJECT"),
     ("event", "MARK"), ("reason", "mark_end"),
+    ("side", "skip"), ("side", "mark"), ("event", "eod_mark"),
 ])
 def test_non_fill_markers_never_promoted(family, field, marker):
-    row = dict(side="BUY", status="FILLED", executed_quantity=Decimal("100"),
+    row = dict(side="buy" if family == "v7" else "BUY", status="FILLED", executed_quantity=Decimal("100"),
                shares=100, price=10, fee=0)
     row[field] = marker
     result = project_fills(family, [row], run_id="r", source="native.csv")
     assert result.rows == ()
     assert result.excluded[0].unknown_reason == "non_fill_marker"
+    assert result.excluded[0].provenance.path == (0,)
+
+
+@pytest.mark.parametrize("family", ["joint_return", "csv_minute", "v7"])
+@pytest.mark.parametrize("side_fields", [{}, {"side": None}, {"side": "hold"}])
+def test_missing_or_non_trade_side_is_excluded(family, side_fields):
+    row = dict(side_fields, status="FILLED", executed_quantity=100, shares=100, price=10)
+    result = project_fills(family, [row])
+    assert result.rows == ()
+    assert result.excluded[0].unknown_reason == "no_native_fill_side"
     assert result.excluded[0].provenance.path == (0,)
 
 
@@ -131,9 +142,11 @@ def test_missing_orders_do_not_invent_lifecycle(family):
     assert order.field("submit_at").unknown_reason == "field_missing"
 
 
-@pytest.mark.parametrize("family,fee_key", [("csv_minute", "commission"), ("v7", "fee")])
-def test_native_trade_granularity_and_missing_v7_fee(family, fee_key):
-    trade = dict(side="SELL", shares=100, price=10.25, reason="exit:timer10", lot=3,
+@pytest.mark.parametrize("family,side,fee_key", [
+    ("csv_minute", "SELL", "commission"), ("v7", "sell", "fee"), ("v7", "SELL", "fee"),
+])
+def test_native_trade_granularity_and_missing_v7_fee(family, side, fee_key):
+    trade = dict(side=side, shares=100, price=10.25, reason="exit:timer10", lot=3,
                  position_id="600000.SH@20260928", hm=600)
     if family == "csv_minute":
         trade[fee_key] = 5.0
@@ -146,6 +159,34 @@ def test_native_trade_granularity_and_missing_v7_fee(family, fee_key):
         assert fill.fee.value is None and fill.fee.unknown_reason == "field_missing"
     else:
         assert fill.fee.value == 5.0
+
+
+def test_real_native_v7_buy_and_sell_projection_preserves_evidence():
+    from backtest.research.csv_minute_backtest_v7 import simulate_v7
+    from tests.test_csv_minute_backtest_v7 import D1, D2, D3, SYMBOL, bar, daily
+
+    result = simulate_v7(
+        {SYMBOL: [bar(D1, 895, 100), bar(D2, 885, 104), bar(D2, 895, 108), bar(D3, 570, 96)]},
+        {SYMBOL: {**daily()[SYMBOL], D2: 100.0}}, {D1: [SYMBOL]}, [D1, D2, D3],
+    )
+    before = deepcopy(result)
+    assert [trade["side"] for trade in result.trades] == ["buy", "buy", "buy", "sell"]
+    projection = project_fills("v7", result, run_id="synthetic-v7", source="native-result")
+    assert len(projection.rows) == 4 and projection.excluded == ()
+    for index, (fill, trade) in enumerate(zip(projection.rows, result.trades)):
+        assert isinstance(fill, FillView)
+        assert dict(fill.native_fields) == trade
+        assert fill.quantity.value == trade["shares"]
+        assert fill.price.value == trade["price"]
+        assert fill.fee.value is None and fill.fee.unknown_reason == "field_missing"
+        side = fill.field("side")
+        assert side.value == trade["side"] and not side.derived
+        assert (side.provenance.family, side.provenance.run_id,
+                side.provenance.source_file, side.provenance.path) == (
+            "v7", "synthetic-v7", "native-result", ("trades", index, "side"))
+        assert side.provenance.unknown_reasons == ()
+        assert fill.quantity.provenance.path == ("trades", index, "shares")
+    assert result == before
 
 
 def test_jr_portfolio_keeps_arm_fill_lot_identity(jr):

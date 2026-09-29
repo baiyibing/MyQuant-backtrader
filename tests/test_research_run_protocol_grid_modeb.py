@@ -15,7 +15,6 @@ from backtest.research import unified_exit_modeb as native
 from backtest.research.run_protocol import (
     OMITTED, ApiResult, CliContext, CliResult, NativeApiRequest, NativeCliRequest, run,
 )
-from backtest.research.run_protocol.adapters import grid_modeb as adapter
 from backtest.research.run_protocol.facade import UnregisteredEntryError
 from tests.test_unified_exit_modeb_exit import CODE
 
@@ -55,6 +54,7 @@ def test_full_pipeline_parity_identity_and_one_shot(synthetic_run, tmp_path, mon
     args, kwargs = synthetic_run
     direct_out, facade_out = tmp_path / "direct", tmp_path / "facade"
     expected = native.run_modeb(*args, **kwargs, out_dir=direct_out)
+    native_run_modeb = native.run_modeb
     kwargs["out_dir"] = facade_out
     calls, returned = [], []
 
@@ -66,11 +66,11 @@ def test_full_pipeline_parity_identity_and_one_shot(synthetic_run, tmp_path, mon
         assert all(received_kwargs[key] is value for key, value in kwargs.items())
         assert "tol" not in received_kwargs and "workers" not in received_kwargs
         # The adapter must leave all spec expansion and robustness runs here.
-        value = native.run_modeb(*received_args, **received_kwargs)
+        value = native_run_modeb(*received_args, **received_kwargs)
         returned.append(value)
         return value
 
-    monkeypatch.setattr(adapter, "_native_run_modeb", spy)
+    monkeypatch.setattr(native, "run_modeb", spy)
     request = NativeApiRequest(family="grid_modeb", native_entry=API, args=args, kwargs=kwargs)
     result = run(request)
     assert isinstance(result, ApiResult) and result.request is request
@@ -112,17 +112,18 @@ def test_real_native_failure_is_same_instance_once(tmp_path, monkeypatch):
     kwargs = {"out_dir": tmp_path / "unified_exit_modea" / "nested"}
     with pytest.raises(ValueError, match="Mode B") as direct:
         native.run_modeb(*args, **kwargs)
+    native_run_modeb = native.run_modeb
     calls, observed = [], []
 
     def spy(*args, **kwargs):
         calls.append(1)
         try:
-            return native.run_modeb(*args, **kwargs)
+            return native_run_modeb(*args, **kwargs)
         except BaseException as exc:
             observed.append(exc)
             raise
 
-    monkeypatch.setattr(adapter, "_native_run_modeb", spy)
+    monkeypatch.setattr(native, "run_modeb", spy)
     with pytest.raises(ValueError, match="Mode B") as caught:
         run(NativeApiRequest(family="grid_modeb", native_entry=API, args=args, kwargs=kwargs))
     assert calls == [1] and len(observed) == 1 and caught.value is observed[0]
@@ -137,7 +138,7 @@ def test_api_system_exit_is_raised_once_not_returned(monkeypatch):
         calls.append(1)
         raise error from cause
 
-    monkeypatch.setattr(adapter, "_native_run_modeb", fail)
+    monkeypatch.setattr(native, "run_modeb", fail)
     with pytest.raises(SystemExit) as caught:
         run(NativeApiRequest(family="grid_modeb", native_entry=API))
     assert caught.value is error and caught.value.__cause__ is cause and calls == [1]
@@ -163,7 +164,7 @@ def test_api_omission_mutation_and_caller_context(optional, monkeypatch):
         mutable["native_mutation"] = True
         return value
 
-    monkeypatch.setattr(adapter, "_native_run_modeb", spy)
+    monkeypatch.setattr(native, "run_modeb", spy)
     before = (os.getcwd(), dict(os.environ), random.getstate(), list(sys.path))
     request = NativeApiRequest(family="grid_modeb", native_entry=API, args=args, kwargs=kwargs)
     result = run(request)
@@ -199,7 +200,7 @@ def test_unregistered_entry_cannot_reach_native(family, entry, cli, monkeypatch)
     def forbidden(*args, **kwargs):
         pytest.fail("unregistered entry reached native")
 
-    monkeypatch.setattr(adapter, "_native_run_modeb", forbidden)
+    monkeypatch.setattr(native, "run_modeb", forbidden)
     monkeypatch.setattr(subprocess, "run", forbidden)
     request = (
         NativeCliRequest(family=family, native_entry=entry, argv=[])
@@ -289,6 +290,58 @@ def test_transport_failure_is_not_a_native_exit(cli_python, monkeypatch):
     with pytest.raises(FileNotFoundError) as caught:
         run(NativeCliRequest(family="grid_modeb", native_entry=CLI, argv=[]))
     assert caught.value is error and calls == [1]
+
+
+def test_cli_clean_parent_uses_working_child_and_api_imports_on_call(tmp_path, cli_python):
+    code = textwrap.dedent("""
+        import importlib.util
+        import os
+        import subprocess
+        import sys
+        sys.path.insert(0, sys.argv[1])
+        assert importlib.util.find_spec('numpy') is None
+        before = (os.getcwd(), dict(os.environ), list(sys.path))
+        allowed = {
+            'backtest', 'backtest.research', 'backtest.research.run_protocol',
+            'backtest.research.run_protocol.types', 'backtest.research.run_protocol.facade',
+            'backtest.research.run_protocol.adapters',
+            'backtest.research.run_protocol.adapters.grid_modeb',
+            'scripts', 'scripts._script_bootstrap',
+        }
+        class ParentImportFence:
+            def find_spec(self, fullname, path=None, target=None):
+                assert fullname in allowed or fullname.split('.')[0] in sys.stdlib_module_names, fullname
+        fence = ParentImportFence()
+        sys.meta_path.insert(0, fence)
+        from backtest.research.run_protocol import CliResult, NativeApiRequest, NativeCliRequest, run
+        entry = 'scripts/research/run_unified_exit_modeb.py'
+        direct = subprocess.run(
+            [sys.argv[2], sys.argv[1] + '/' + entry, '--help'],
+            capture_output=True, check=False,
+        )
+        result = run(NativeCliRequest(family='grid_modeb', native_entry=entry, argv=['--help']))
+        assert isinstance(result, CliResult)
+        assert result.native_exit_status == direct.returncode == 0
+        assert (result.stdout_bytes, result.stderr_bytes) == (direct.stdout, direct.stderr)
+        assert b'--workers' in result.stdout_bytes
+        assert not {'numpy', 'pandas', 'backtest.research.unified_exit_modeb'}.intersection(sys.modules)
+        assert (os.getcwd(), dict(os.environ), list(sys.path)) == before
+        sys.meta_path.remove(fence)
+        # This parent lacks engine dependencies; only invoking the API needs them.
+        try:
+            run(NativeApiRequest(family='grid_modeb', native_entry='unified_exit_modeb.run_modeb'))
+        except ModuleNotFoundError as exc:
+            assert exc.name == 'numpy', exc
+        else:
+            raise AssertionError('API did not import its native engine')
+    """)
+    process = subprocess.run(
+        [sys.executable, "-I", "-S", "-B", "-c", code, str(ROOT), cli_python],
+        cwd=tmp_path, env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+        capture_output=True, timeout=30,
+    )
+    assert process.returncode == 0, process.stdout + process.stderr
+    assert not list(tmp_path.iterdir())
 
 
 def test_fresh_import_and_grid_modeb_dispatch_are_lazy(tmp_path):

@@ -226,7 +226,11 @@ def _fill_rejection(row, family):
             marker = marker.upper()
             if marker.startswith(("SKIP", "REJECT", "EOD_MARK")) or marker in ("MARK", "MARK_END"):
                 return "non_fill_marker"
-    if row.get("side") not in ("BUY", "SELL"):
+    side = row.get("side")
+    if family == "v7" and isinstance(side, str):
+        # Native v7 uses lowercase sides; classify without rewriting evidence.
+        side = side.upper()
+    if side not in ("BUY", "SELL"):
         return "no_native_fill_side"
     if family == "joint_return" and row.get("status") not in ("FILLED", "PARTIAL"):
         return "no_native_fill_status"
