@@ -22,7 +22,7 @@ from decimal import (
 from .types import FeeContractError, FeeModelParams, Side
 
 
-def _cents(value: Decimal, name: str) -> int:
+def money_cents(value: Decimal, name: str) -> int:
     if not isinstance(value, Decimal) or not value.is_finite() or value < 0:
         raise FeeContractError(f"{name} must be a finite nonnegative Decimal")
     numerator, denominator = value.as_integer_ratio()
@@ -32,7 +32,7 @@ def _cents(value: Decimal, name: str) -> int:
     return cents
 
 
-def _money(cents: int) -> Decimal:
+def from_cents(cents: int) -> Decimal:
     """Exact cents -> Decimal, independent of the caller's decimal context."""
     return Decimal((int(cents < 0), tuple(map(int, str(abs(cents)))), -2))
 
@@ -55,7 +55,7 @@ def _validate_params(params: FeeModelParams) -> None:
         raise FeeContractError("explicit FeeModelParams required for each side")
     if not isinstance(params.rate, Decimal) or not params.rate.is_finite() or params.rate < 0:
         raise FeeContractError("rate must be a finite nonnegative Decimal")
-    _cents(params.min_fee, "min_fee")
+    money_cents(params.min_fee, "min_fee")
     if not isinstance(params.rounding, str) or params.rounding not in _MONOTONE_ROUNDING:
         raise FeeContractError("rounding must provide a monotone cent fee bound")
 
@@ -78,7 +78,7 @@ class FeeModel:
     def cumulative_fee(self, side: Side, notional: Decimal) -> Decimal:
         if not isinstance(side, Side):
             raise FeeContractError("side must be Side.BUY or Side.SELL")
-        cents = _cents(notional, "notional")
+        cents = money_cents(notional, "notional")
         if cents == 0:
             return Decimal("0.00")
         params = self.buy if side is Side.BUY else self.sell
@@ -97,22 +97,22 @@ class FeeModel:
             raise FeeContractError("fee arithmetic cannot provide a valid bound") from exc
 
     def fee_delta(self, side: Side, before: Decimal, after: Decimal) -> Decimal:
-        if _cents(after, "after") < _cents(before, "before"):
+        if money_cents(after, "after") < money_cents(before, "before"):
             raise FeeContractError("cumulative notional cannot decrease")
-        delta = _cents(self.cumulative_fee(side, after), "fee_after") - _cents(
+        delta = money_cents(self.cumulative_fee(side, after), "fee_after") - money_cents(
             self.cumulative_fee(side, before), "fee_before"
         )
         if delta < 0:
             raise FeeContractError("fee model is not monotone")
-        return _money(delta)
+        return from_cents(delta)
 
     def buy_fee_upper_bound(
         self, paid_notional: Decimal, limit: Decimal, remaining_qty: int
     ) -> Decimal:
-        paid = _cents(paid_notional, "paid_notional")
-        price = _cents(limit, "limit")
+        paid = money_cents(paid_notional, "paid_notional")
+        price = money_cents(limit, "limit")
         if price == 0:
             raise FeeContractError("limit must be positive")
         if type(remaining_qty) is not int or remaining_qty < 0:
             raise FeeContractError("remaining_qty must be a nonnegative integer")
-        return self.fee_delta(Side.BUY, paid_notional, _money(paid + price * remaining_qty))
+        return self.fee_delta(Side.BUY, paid_notional, from_cents(paid + price * remaining_qty))

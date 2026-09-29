@@ -9,7 +9,7 @@ from dataclasses import replace
 from datetime import date
 from decimal import Decimal
 
-from .fees import FeeModel, _cents, _money
+from .fees import FeeModel, money_cents, from_cents
 from .types import (
     BucketCapacity,
     FillApplied,
@@ -54,7 +54,7 @@ class Ledger:
     def __init__(
         self, initial_cash: Decimal, initial_lots: list[LotPosition], *, fee_model: FeeModel
     ) -> None:
-        cash = _money(_cents(initial_cash, "initial_cash"))
+        cash = from_cents(money_cents(initial_cash, "initial_cash"))
         if type(fee_model) is not FeeModel:
             raise LedgerError("only the explicit monotone FeeModel is supported")
         if not isinstance(initial_lots, (list, tuple)):
@@ -85,12 +85,12 @@ class Ledger:
 
     def _commit(self, **changes) -> LedgerSnapshot:
         candidate = replace(self._state, **changes, ledger_version=self._state.ledger_version + 1)
-        reserved = sum(_cents(r.cash, "reservation cash") for r in candidate.reservations)
-        cash = _cents(candidate.cash, "cash")
+        reserved = sum(money_cents(r.cash, "reservation cash") for r in candidate.reservations)
+        cash = money_cents(candidate.cash, "cash")
         if cash < reserved:
             raise LedgerError("fill would spend another order's reserved cash")
         candidate = replace(
-            candidate, reserved_cash=_money(reserved), free_cash=_money(cash - reserved)
+            candidate, reserved_cash=from_cents(reserved), free_cash=from_cents(cash - reserved)
         )
         self._state = candidate
         return candidate
@@ -112,7 +112,7 @@ class Ledger:
             raise LedgerError("order_id already used; a new submit needs a new ID")
         self._symbol_lot(symbol, lot_size)
         _quantity(qty, lot_size)
-        if _cents(limit, "limit") == 0:
+        if money_cents(limit, "limit") == 0:
             raise LedgerError("limit must be positive")
 
     def _reserve(
@@ -150,11 +150,11 @@ class Ledger:
         fee_upper: Decimal,
     ) -> Reservation | ReservationRejected:
         self._new_order(order_id, symbol, limit, remaining_qty, lot_size)
-        upper = _cents(fee_upper, "fee_upper")
+        upper = money_cents(fee_upper, "fee_upper")
         expected = self._fee_model.buy_fee_upper_bound(_ZERO, limit, remaining_qty)
         if fee_upper != expected:
             raise LedgerError("fee_upper must equal the configured model's bound")
-        required = _money(_cents(limit, "limit") * remaining_qty + upper)
+        required = from_cents(money_cents(limit, "limit") * remaining_qty + upper)
         if required > self._state.free_cash:
             return self._reject(
                 order_id, ResourceRejectReason.INSUFFICIENT_CASH, required, self._state.free_cash
@@ -274,9 +274,9 @@ class Ledger:
         _integer(p.capacity_consumed, "capacity_consumed", 1)
         if p.capacity_consumed != p.qty:
             raise LedgerError("capacity consumption must equal absolute fill qty")
-        if _cents(p.price, "price") == 0:
+        if money_cents(p.price, "price") == 0:
             raise LedgerError("price must be positive")
-        _cents(p.fee_delta, "fee_delta")
+        money_cents(p.fee_delta, "fee_delta")
         _integer(p.expected_version, "expected_version")
         _date(p.trade_date, "trade_date")
         if p.side is Side.BUY:
@@ -316,21 +316,21 @@ class Ledger:
         if bucket.remaining < p.qty:
             raise LedgerError("insufficient shared bucket capacity")
         totals = next(t for t in self._state.order_totals if t.order_id == p.order_id)
-        notional = _cents(p.price, "price") * p.qty
-        after = _money(_cents(totals.notional, "notional") + notional)
+        notional = money_cents(p.price, "price") * p.qty
+        after = from_cents(money_cents(totals.notional, "notional") + notional)
         expected_fee = self._fee_model.fee_delta(p.side, totals.notional, after)
         if p.fee_delta != expected_fee:
             raise LedgerError("fee_delta differs from configured cumulative fee")
-        fee = _cents(p.fee_delta, "fee_delta")
+        fee = money_cents(p.fee_delta, "fee_delta")
         remaining = reservation.remaining_qty - p.qty
-        cash = _cents(self._state.cash, "cash")
+        cash = money_cents(self._state.cash, "cash")
         lots = self._state.lots
         if p.side is Side.BUY:
             fee_upper = self._fee_model.buy_fee_upper_bound(after, reservation.limit, remaining)
-            remaining_cash = _cents(reservation.limit, "limit") * remaining + _cents(
+            remaining_cash = money_cents(reservation.limit, "limit") * remaining + money_cents(
                 fee_upper, "fee_upper"
             )
-            if notional + fee + remaining_cash > _cents(reservation.cash, "reserved cash"):
+            if notional + fee + remaining_cash > money_cents(reservation.cash, "reserved cash"):
                 raise LedgerError("BUY exceeds its reserved cash including remainder")
             lot_id = "fill:" + p.fill_id
             if any(lot.lot_id == lot_id for lot in lots):
@@ -342,7 +342,7 @@ class Ledger:
             updated = replace(
                 reservation,
                 remaining_qty=remaining,
-                cash=_money(remaining_cash),
+                cash=from_cents(remaining_cash),
                 fee_upper=fee_upper,
             )
         else:
@@ -357,17 +357,17 @@ class Ledger:
             if r.order_id != p.order_id or remaining
         )
         new_totals = replace(
-            totals, notional=after, fees_paid=_money(_cents(totals.fees_paid, "fees") + fee)
+            totals, notional=after, fees_paid=from_cents(money_cents(totals.fees_paid, "fees") + fee)
         )
         result = FillApplied(p, self._state.ledger_version + 1)
         self._commit(
-            cash=_money(cash),
+            cash=from_cents(cash),
             lots=lots,
             reservations=reservations,
             order_totals=tuple(
                 new_totals if t.order_id == p.order_id else t for t in self._state.order_totals
             ),
-            fees_paid=_money(_cents(self._state.fees_paid, "fees_paid") + fee),
+            fees_paid=from_cents(money_cents(self._state.fees_paid, "fees_paid") + fee),
             buckets=tuple(
                 replace(b, remaining=b.remaining - p.qty) if b == bucket else b
                 for b in self._state.buckets
