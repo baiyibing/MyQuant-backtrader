@@ -6,6 +6,8 @@ Human「下一刀 GO」授权本片，依据仓外
 对应 PLAN 的 L2-S3。PR 后 Human/Grok 评审；**未经 Human「合」不得合并**。
 `production_C=frozen`；本片没有 writers、CLI、L1 注册、湖、vendor 或在线 StrategyPort。
 
+后续状态：[L2-S4 artifacts + isolation](note-l2-s4-artifacts-isolation-2026-09-29.md) 已获独立 Human GO，新增显式 writer/采集 wrapper（本 PR，待 Human/Grok 评审）；默认 S3 API 保持纯内存，CLI/L1/lake 不在范围。
+
 合同沿用 [S0](note-l2-s0-minute-orders-contract-2026-09-29.md)、
 [手算 A–E](note-l2-s0-handcalc-oracle-sketches-2026-09-29.md)、
 [S1 action-only](note-l2-s1-matchcore-2026-09-29.md) 与

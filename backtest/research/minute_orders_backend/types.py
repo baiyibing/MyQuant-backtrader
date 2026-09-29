@@ -407,6 +407,8 @@ class OrderState:
 class OrderTransition:
     event: ClockEvent
     state: OrderState
+    # S4 opt-in observation only; the ordinary S3 replay leaves this unavailable.
+    ledger: LedgerSnapshot | None = None
 
 
 @dataclass(frozen=True)
