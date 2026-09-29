@@ -2,6 +2,8 @@
 
 基线：BT `05adce625b21dd3e7821517c70c177404fd2ae34`（#263）；分支 `feat/d-jr-clock-coverage`。授权：[Human D GO][go]（2026-09-29 约 20:04 CST，4090，只读覆盖核验）。依据：[ORDER_EVAL §8][order]、[身份对账 §5 gate D][identity]、[时钟交接 §2 D][handoff]。`production_C=frozen`。
 
+后续状态（2026-09-29 独立 D-close GO）：[G1/G2 收口记录](note-jr-clock-d-coverage-close-2026-09-29.md)已依据宿主补证记为 **G1 CLOSED / G2 CLOSED，D ACCEPT**，所需 bars/marks missing 均为 0。下文保留 #264 补证前的 REJECT 历史；本次接收不授权 E/F，各需独立 Human GO。
+
 ## 1. 判定与证据边界
 
 **本次 bt D：未完成 / REJECT pending host。** [HOST_D_EVIDENCE.md][host] 已收到，宿主给出的结论是 `ACCEPT missing_bars=0 missing_marks=0`；[coverage_numbers.json][numbers] 与其数字一致。但 bars 的分母来自 bars 自带的 `metadata.sessions`，尚缺完整执行/估值时点与该分母相容的证明：pack 执行日历多出尾部 `2026-01-05`，bars 止于 `2025-12-31`。此外，材料列出 bars seal 值，未报告该 pin 的 seal 复核结果。故保留已测零缺口，不将其升级为完整 D ACCEPT；待补项见 §5。

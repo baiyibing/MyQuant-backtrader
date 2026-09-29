@@ -75,9 +75,9 @@
 | E | 4090：P-BASE M-LAG | D 接收回执及独立 E GO；使用另行登记的新 out；非零 `orders_with_fills`，并按本包身份对账。**若仍 0 fills，停回 qlib 查时钟，不交 F** | 未授权 |
 | F | 4090：Mode B M-REF / M-LAG | E 通过及独立 F GO；真实 marks 证据链齐全；模式、现金与新输出根在 GO 中明确，不能自动继承旧 cash=1e9 fork | 未授权 |
 
-2026-09-29 后续独立 Human D GO：[本次覆盖核验记录](note-jr-clock-d-coverage-reject-2026-09-29.md)为 **未完成 / REJECT pending host**（宿主已测 bars/marks missing 均为 0；完整执行窗相容性与 seal 复核证明待补）。该记录不改变历史 B–G 完成态，不授权 E/F。
+2026-09-29 后续独立 Human D GO：[#264 初次覆盖核验](note-jr-clock-d-coverage-reject-2026-09-29.md)记录 **REJECT pending host**；随后独立 D-close GO 的 [G1/G2 收口记录](note-jr-clock-d-coverage-close-2026-09-29.md)依据宿主补证转为 **G1 CLOSED / G2 CLOSED，D ACCEPT**（manifest/bars 观测日历相等，10 条尾日 intents 合法截断；seal 完整复算相等；所需 bars/marks missing 均为 0）。此更新接续上表的原授权时点，不改变历史 B–G 完成态，不授权 E/F。
 
-**归档包 B/C 已完成，当前没有待恢复的操作。** 若后来另获具名 GO，要复用该包开展一次新的研究接收，下一 *operational* gate 是 **bt D**：在该 GO 下核对身份、window、bars、marks，只有 `missing=0` 才准接收并申请 E；不能回到 B/C 重跑。未来新包若已有完整 B/C 回执，同样直接申请 D，无需再造一轮时钟。
+**归档包 B/C 已完成，当前没有待恢复的操作。** 本包 D 接收已由上述 D-close 记录完成；下一 *operational* gate 是 **4090 E P-BASE**，须独立具名 E GO，F 仍须独立 F GO；不能回到 B/C 重跑。未来新包若已有完整 B/C 回执，直接申请 D，无需再造一轮时钟。
 
 D 只能在窗口与身份相容时复用旧 bars；`reference_marks` 按 intent_id 挂证，相同证券数或 marks 数并不证明可复用。需改变身份/映射时另定合法新工件和校验范围，遵守现有 seal 合同，不修改旧工件。[交接 §2 D、§6b][handoff] 的真实源定位仅作来源线索：缺口只能在后续明确授权下从已指定真实源合法导出；缺配置/文件/证明即停，不探盘、不补造 bars/marks。**本轮不导出、不重映射、不重算 seal。**
 
