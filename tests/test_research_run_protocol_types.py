@@ -26,7 +26,7 @@ from backtest.research.run_protocol import (
 )
 
 
-FAMILIES = ("csv_minute", "v7", "joint_return", "grid_modeb")
+FAMILIES = ("csv_minute", "v7", "joint_return", "grid_modeb", "minute_orders_research")
 
 
 @pytest.mark.parametrize("value", [None, False, "", (), [], {}])

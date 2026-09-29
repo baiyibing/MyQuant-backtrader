@@ -71,6 +71,18 @@ def _grid_modeb_run_cli(request):
     return run_cli(request)
 
 
+def _minute_orders_run(request):
+    from .adapters.minute_orders import run_minute_orders_research
+
+    return run_minute_orders_research(request)
+
+
+def _minute_orders_run_with_artifacts(request):
+    from .adapters.minute_orders import run_minute_orders_research_with_artifacts
+
+    return run_minute_orders_research_with_artifacts(request)
+
+
 _ENTRIES = MappingProxyType({
     ("joint_return", "native_api", "joint_return_replay.replay"): _replay,
     ("joint_return", "native_api", "joint_return_replay.run_replay"): _run_replay,
@@ -82,6 +94,10 @@ _ENTRIES = MappingProxyType({
     ("v7", "native_cli", "backtest/research/csv_minute_backtest_v7.py"): _v7_run_cli,
     ("grid_modeb", "native_api", "unified_exit_modeb.run_modeb"): _grid_modeb_run,
     ("grid_modeb", "native_cli", "scripts/research/run_unified_exit_modeb.py"): _grid_modeb_run_cli,
+    ("minute_orders_research", "native_api",
+     "minute_orders_backend.runner.run_minute_orders_research"): _minute_orders_run,
+    ("minute_orders_research", "native_api",
+     "minute_orders_backend.runner.run_minute_orders_research_with_artifacts"): _minute_orders_run_with_artifacts,
 })
 
 
