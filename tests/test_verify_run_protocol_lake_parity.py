@@ -98,7 +98,8 @@ def test_explicit_non_economic_json_policy_records_not_hides_diff(pair, serializ
     policy = harness.ComparePolicy(allowed_json_fields=(("metadata.json", "/created_at"),))
     assert harness.compare_observations(*pair)["status"] == "FAIL"
     result = harness.compare_observations(*pair, policy)
-    assert result["status"] == "FAIL" and not result["byte_identical"]
+    assert result["status"] == ("PASS" if serialization == "unchanged" else "FAIL")
+    assert not result["byte_identical"]
     assert result["raw"]["metadata.json"]["byte_equal"] is False
     assert result["differences"][0]["path"] == "metadata.json/created_at"
     assert result["differences"][0]["allowed"] is True
@@ -106,7 +107,7 @@ def test_explicit_non_economic_json_policy_records_not_hides_diff(pair, serializ
         "path": "metadata.json/bytes",
         "left": harness.digest((pair[0].root / "metadata.json").read_bytes()),
         "right": harness.digest(path.read_bytes()),
-        "allowed": False,
+        "allowed": serialization == "unchanged",
         "reason": "raw bytes differ",
     }
     (pair[1].root / "metadata.json").write_text(json.dumps({"created_at": "later", "equity": 11}))
@@ -114,22 +115,78 @@ def test_explicit_non_economic_json_policy_records_not_hides_diff(pair, serializ
     assert result["status"] == "FAIL"
     assert any(item["path"] == "metadata.json/equity" and item["allowed"] is False
                for item in result["differences"])
+    assert result["differences"][-1]["path"] == "metadata.json/bytes"
+    assert result["differences"][-1]["allowed"] is False
 
 
-def test_duration_policy_keeps_counts_and_cache_posture_exact(pair):
-    left = replace(pair[0], stdout=b"loaded minute=lake daily=lake: minute_names=2 daily_names=2 exdiv_names=0 st_names=2 in 1.23s\n")
-    right = replace(pair[1], stdout=left.stdout.replace(b"1.23s", b"2.34s"))
+@pytest.mark.parametrize("left_json,right_json,pointers,status", [
+    ('{"nested": [{"a/b~c": "old\\\"stamp\\\\字"}], "equity": 10}',
+     '{"nested": [{"a/b~c": "new\\\"stamp\\\\字"}], "equity": 10}',
+     ("/nested/0/a~1b~0c",), "PASS"),
+    ('{"elapsed": 1, "equity": 1.0}', '{"elapsed": 222, "equity": 1.0}',
+     ("/elapsed",), "PASS"),
+    ('{"elapsed": 1, "equity": 1.0}', '{"elapsed": 222, "equity": 1.00}',
+     ("/elapsed",), "FAIL"),
+    ('{"created_at": "a", "checked_at": "b", "a": 0, "b": 0}',
+     '{"created_at": "b", "checked_at": "a", "b": 0, "a": 0}',
+     ("/created_at", "/checked_at"), "FAIL"),
+    ('{"created_at": "a", "created_at": "a"}',
+     '{"created_at": "b", "created_at": "b"}', ("/created_at",), "FAIL"),
+])
+def test_json_mask_is_scoped_to_encoded_values(pair, left_json, right_json, pointers, status):
+    for observation, text in zip(pair, (left_json, right_json)):
+        (observation.root / "metadata.json").write_text(text, encoding="utf-8")
+    policy = harness.ComparePolicy(allowed_json_fields=tuple(("metadata.json", p) for p in pointers))
+    result = harness.compare_observations(*pair, policy)
+    assert result["status"] == status and not result["byte_identical"]
+    assert all(item["allowed"] for item in result["differences"][:-1])
+    assert result["differences"][-1]["path"] == "metadata.json/bytes"
+    assert result["differences"][-1]["allowed"] is (status == "PASS")
+
+
+@pytest.mark.parametrize("right_json", [
+    '{"equity": 10, "created_at": "same"}',
+    '{ "created_at": "same", "equity": 10 }',
+    '{"created_at": "later", "equity": 10',
+])
+def test_json_serialization_only_or_parse_error_keeps_bytes_disallowed(pair, right_json):
+    (pair[0].root / "metadata.json").write_text('{"created_at": "same", "equity": 10}')
+    (pair[1].root / "metadata.json").write_text(right_json)
+    policy = harness.ComparePolicy(allowed_json_fields=(("metadata.json", "/created_at"),))
+    result = harness.compare_observations(*pair, policy)
+    assert result["status"] == "FAIL" and not result["byte_identical"]
+    assert len(result["differences"]) == 1
+    assert result["differences"][0]["path"] == "metadata.json/bytes"
+    assert result["differences"][0]["allowed"] is False
+
+
+@pytest.mark.parametrize("line,forbidden_before,forbidden_after", [
+    ("loaded minute=lake daily=lake: minute_names=2 daily_names=2 exdiv_names=0 st_names=2 in 1.23s\n",
+     "minute_names=2", "minute_names=0"),
+    ("  耗时: 池 1.23s | 日线 1.0s | 分钟 1.0s | 模拟 1.0s | 缓存 bypass\n",
+     "缓存 bypass", "缓存 hit"),
+    ("timing load=1.23s simulate=2.34s total=3.57s\n", "\n", "\r\n"),
+])
+def test_duration_policy_keeps_counts_and_cache_posture_exact(pair, line, forbidden_before, forbidden_after):
+    left = replace(pair[0], stdout=line.encode("utf-8"))
+    right = replace(pair[1], stdout=left.stdout.replace(b"1.23s", b"12.345s"))
     policy = harness.ComparePolicy(duration_stdout=True)
+    assert harness.compare_observations(left, right)["status"] == "FAIL"
     result = harness.compare_observations(left, right, policy)
-    assert result["status"] == "FAIL" and not result["raw"]["stdout"]["byte_equal"]
+    assert result["status"] == "PASS" and not result["byte_identical"]
+    assert not result["raw"]["stdout"]["byte_equal"]
+    assert len(result["differences"]) == 2
     assert result["differences"][0]["path"] == "stdout/line/1"
     assert result["differences"][0]["allowed"] is True
     assert result["differences"][1]["path"] == "stdout/bytes"
-    assert result["differences"][1]["allowed"] is False
-    right = replace(right, stdout=right.stdout.replace(b"minute_names=2", b"minute_names=0"))
+    assert result["differences"][1]["allowed"] is True
+    assert result["differences"][1]["left"] == harness.digest(left.stdout)
+    assert result["differences"][1]["right"] == harness.digest(right.stdout)
+    right = replace(right, stdout=right.stdout.replace(forbidden_before.encode("utf-8"), forbidden_after.encode("utf-8")))
     result = harness.compare_observations(left, right, policy)
     assert result["status"] == "FAIL"
     assert result["differences"][0]["allowed"] is False
+    assert result["differences"][1]["allowed"] is False
 
 
 def make_manifest(root):
@@ -145,17 +202,26 @@ def test_duration_derived_manifest_hashes_must_match_actual_bytes(pair):
         make_manifest(observation.root)
     policy = harness.ComparePolicy(duration_files=("summary.txt",), verify_manifest=True)
     result = harness.compare_observations(*pair, policy)
-    assert result["status"] == "FAIL" and not result["byte_identical"]
+    assert result["status"] == "PASS" and not result["byte_identical"]
     assert len(result["differences"]) == 5
-    assert {item["path"] for item in result["differences"] if not item["allowed"]} == {
-        "run-manifest.json/bytes", "summary.txt/bytes",
+    assert all(item["allowed"] for item in result["differences"])
+    assert {item["path"] for item in result["differences"]} == {
+        "run-manifest.json/artifacts/0/md5", "run-manifest.json/artifacts/0/sha256",
+        "run-manifest.json/bytes", "summary.txt/line/2", "summary.txt/bytes",
     }
+    for item in result["differences"]:
+        if item["path"].endswith("/bytes"):
+            name = item["path"].removesuffix("/bytes")
+            assert item["left"] == harness.digest((pair[0].root / name).read_bytes())
+            assert item["right"] == harness.digest((pair[1].root / name).read_bytes())
     data = json.loads((pair[1].root / "run-manifest.json").read_text())
     data["artifacts"][0]["sha256"] = "0" * 64
     (pair[1].root / "run-manifest.json").write_text(json.dumps(data))
     result = harness.compare_observations(*pair, policy)
     assert result["status"] == "FAIL"
     assert any(item["path"] == "right/run-manifest.json/artifacts/0/sha256" and item["allowed"] is False
+               for item in result["differences"])
+    assert any(item["path"] == "run-manifest.json/bytes" and item["allowed"] is False
                for item in result["differences"])
 
 

@@ -88,12 +88,48 @@ def tree(root: Path) -> dict[str, Path]:
     return {p.relative_to(root).as_posix(): p for p in sorted(root.rglob("*")) if p.is_file()}
 
 
+def json_residue(text: str, masked_pointers: set[str]) -> str:
+    """Mask encoded values at exact pointers, preserving keys and whitespace."""
+    decoder = json.JSONDecoder()
+    whitespace = re.compile(r"[ \t\r\n]*")
+    spans = []
+
+    def visit(start, pointer):
+        start = whitespace.match(text, start).end()
+        value, end = decoder.raw_decode(text, start)
+        if isinstance(value, (dict, list)):
+            cursor, index, keys = start + 1, 0, set()
+            while (cursor := whitespace.match(text, cursor).end()) < end - 1:
+                if isinstance(value, dict):
+                    key, cursor = decoder.raw_decode(text, cursor)
+                    if key in keys:
+                        raise ValueError("duplicate JSON key")
+                    keys.add(key)
+                    cursor = whitespace.match(text, cursor).end() + 1  # Colon.
+                else:
+                    key = str(index)
+                part = pointer + "/" + key.replace("~", "~0").replace("/", "~1")
+                cursor = visit(cursor, part)
+                cursor = whitespace.match(text, cursor).end()
+                if cursor < end - 1:
+                    cursor += 1  # Comma.
+                index += 1
+        elif pointer in masked_pointers:
+            spans.append((start, end))
+        return end
+
+    visit(0, "")
+    for start, end in reversed(spans):
+        text = text[:start] + "<allowed>" + text[end:]
+    return text
+
+
 def compare_observations(left: Observation, right: Observation,
                          policy: ComparePolicy = ComparePolicy()) -> dict:
     """Compare all files and raw streams; retain every allowed difference.
 
-    Raw-byte differences always fail, including JSON/CSV serialization changes,
-    even when parsed differences are explicitly allowed. No float tolerance,
+    Raw-byte differences are allowed only when all parsed differences are allowed
+    and masking those pieces leaves identical residue. No float tolerance,
     row sorting, path substitution, timestamp wildcard, or byte-identity claim.
     """
     differences, raw = [], {}
@@ -140,9 +176,11 @@ def compare_observations(left: Observation, right: Observation,
                             return value
                         allowed = skeleton(am) == skeleton(bm)
                         if allowed:
+                            aa[i], bb[i] = skeleton(am), skeleton(bm)
                             break
             diff(f"{name}/line/{i + 1}", av, bv, allowed,
                  "duration numeric captures only" if allowed else "exact comparison")
+        return "".join(aa), "".join(bb)
 
     if left.exit_code != right.exit_code:
         diff("exit_code", left.exit_code, right.exit_code)
@@ -151,6 +189,7 @@ def compare_observations(left: Observation, right: Observation,
         if name not in lt or name not in rt:
             diff("files/" + name, name in lt, name in rt, reason="missing required file or unequal file set")
     allowed_fields = set(policy.allowed_json_fields)
+    invalid_files = set()
     # The native manifest hashes summary.txt, which contains measured durations.
     # Permit only its derived digests, and only after checking each digest against
     # its own raw file and comparing that file with the declared duration policy.
@@ -167,10 +206,12 @@ def compare_observations(left: Observation, right: Observation,
                         actual = hashlib.new(algo, data).hexdigest()
                         if row[algo] != actual:
                             diff(f"{side}/run-manifest.json/artifacts/{i}/{algo}", row[algo], actual)
+                            invalid_files.add("run-manifest.json")
                         if name == "summary.txt" and name in policy.duration_files:
                             allowed_fields.add(("run-manifest.json", f"/artifacts/{i}/{algo}"))
             except (KeyError, ValueError, TypeError) as exc:
                 diff(side + "/run-manifest.json/integrity", str(exc), "valid native manifest")
+                invalid_files.add("run-manifest.json")
 
     pairs = [(name, lt[name].read_bytes(), rt[name].read_bytes()) for name in sorted(lt.keys() & rt.keys())]
     pairs += [("stdout", left.stdout, right.stdout), ("stderr", left.stderr, right.stderr)]
@@ -178,20 +219,30 @@ def compare_observations(left: Observation, right: Observation,
         raw[name] = {"left_sha256": digest(a), "right_sha256": digest(b), "byte_equal": a == b}
         if a == b:
             continue
+        start = len(differences)
+        residue_equal = False
         try:
             if name.endswith(".json"):
                 walk(json.loads(a), json.loads(b), name, allowed_fields=allowed_fields)
+                parsed = differences[start:]
+                if parsed and all(item["allowed"] for item in parsed):
+                    pointers = {item["path"][len(name):] for item in parsed}
+                    residue_equal = (json_residue(a.decode("utf-8"), pointers)
+                                     == json_residue(b.decode("utf-8"), pointers))
             elif name.endswith(".csv"):
                 # DictReader keeps row order and field values as exact strings.
                 ar, br = csv.DictReader(io.StringIO(a.decode("utf-8-sig"))), csv.DictReader(io.StringIO(b.decode("utf-8-sig")))
                 walk(ar.fieldnames, br.fieldnames, name, "/columns")
                 walk(list(ar), list(br), name, "/rows")
             else:
-                text_compare(a.decode("utf-8"), b.decode("utf-8"), name,
-                             name in policy.duration_files or (name == "stdout" and policy.duration_stdout))
+                ar, br = text_compare(a.decode("utf-8"), b.decode("utf-8"), name,
+                                      name in policy.duration_files or (name == "stdout" and policy.duration_stdout))
+                residue_equal = ar == br
         except (UnicodeError, ValueError, csv.Error):
             pass
-        diff(name + "/bytes", digest(a), digest(b), reason="raw bytes differ")
+        allowed = (residue_equal and name not in invalid_files
+                   and all(item["allowed"] for item in differences[start:]))
+        diff(name + "/bytes", digest(a), digest(b), allowed, reason="raw bytes differ")
     failed = any(not item["allowed"] for item in differences)
     return {"status": "FAIL" if failed else "PASS", "differences": differences,
             "raw": raw, "byte_identical": not differences and set(lt) == set(rt),
@@ -469,6 +520,7 @@ def main(argv=None) -> int:
         "compare_policy": {"duration_lines": DURATION_LINES, "duration_files": ["summary.txt"],
                            "stdout": "exact except listed duration captures", "stderr": "exact bytes",
                            "json": "exact ordered arrays and field values; no path/timestamp exclusions",
+                           "bytes": "record both digests on every mismatch; allow only declared parsed differences with identical masked residue; preserve JSON key order and whitespace",
                            "manifest": "validate raw own-file hashes; allow summary duration-derived hashes only",
                            "required_success_files": REQUIRED,
                            "positions_phases": "native trade position IDs, audit phases/cash/fees and v7 holdings; no unexposed state fabricated"},
