@@ -107,3 +107,7 @@ native API/S4 与 native CLI/L1 CLI 全工件逐字节一致，两个 CLI 的退
 这只证明 synthetic 产品闭环及本家族委托 parity；无湖验证、无跨后端收益比较。
 `evidence_level=lake` 拒绝；`comparison_status=no_ssot_compare_authorization` 保持。
 未改 Clock/Broker/Match/Ledger/Fees、旧家族、HELP_LOCK、presets、golden 或任何 SSOT 绿R/绿S。
+
+后续 [B-L2-01 lake source ingress 合同](note-l2-lake-source-ingress-b-l2-01-2026-09-29.md)
+仅冻结具名单元与 resolver→RunInput 来源映射；loader/evidence 扩展和 4090 真湖验收各待具名 GO。
+本 CLI 仍为 synthetic-only；该合同不构成 L2 lake PASS 或 SSOT 比较授权。
