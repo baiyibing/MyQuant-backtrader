@@ -75,7 +75,7 @@ P3 外置 D5 使用 s12 fix-on + 既有 transform，仅支持该冻结上下文�
 - **默认翻转**：hl/fen、TopK exec/walkdown/real、X-*、δ3 保持基线；P3/TopK PASS 均不是默认 GO。见 §1 归档。
 - **#214 R3/R4**：配股公式、`exdiv=None` / version12-front 语义不借 fen 重写；不静默双调。v4 SMA/raw、无 ex-date 微额兜底与特殊无涨跌幅 regime 不顺带扩围。见 [止损/除权计划](plan-minute-stop-and-exdiv-fix-2026-09-26.md)、[P2](exdiv-ref-fen-p2-2026-09-27.md)。
 - **δ1/δ2/δ6 延期面**：真实历史费用账、完整因子/PIT 恢复、缺 bar 权益漏记、补发/恢复、登记日/税务/修订/跨运行生命周期不重开；economics API 已有不代表这些已完成。见 [δ1](plan-industry-align-p3-fees-2026-09-19.md)、[δ2](plan-industry-align-p3-d2-exdiv-2026-09-19.md)、[δ6](plan-industry-align-p3-d6-exdiv-economics-2026-09-19.md)。
-- **δ5**：不重做已实现 cap，不擅接通用 CLI/日线容量、真实量认证或排队/冲击。version11 分钟 volume=A 的 09:30 未完成桶拒绝是既有合同，不能用未来量补开仓；TopK vwap 前桶是独立模型。见 [δ5](plan-industry-align-p3-d5-volume-cap-2026-09-19.md)、[P2 vwap](topk-exec-p2-2026-09-27.md)。
+- **δ5**：不重做已实现 cap，不擅接通用 CLI/日线容量、真实量认证或排队/冲击。具名残项 [D5-REAL-VOLUME-INGRESS](note-delta5-real-volume-ingress-2026-09-29.md) 已获 2026-09-29 Human「D GO」仅冻结 version8 独立研究接入文档；实施/湖/生产接线仍待另 GO，无 SSOT 绿灯。version11 分钟 volume=A 的 09:30 未完成桶拒绝是既有合同，不能用未来量补开仓；TopK vwap 前桶是独立模型。见 [δ5](plan-industry-align-p3-d5-volume-cap-2026-09-19.md)、[P2 vwap](topk-exec-p2-2026-09-27.md)。
 - **TopK 残余与分钟近似**：不重做 P1–P4，不启动 2025 锚/hash follow-up、Q8 或 vwap×walkdown 移交；OHLC 内部路径、同 close 先卖后买、旧报价 fallback 不扩成 tick/订单簿。见 [TopK tracker §8](topk-joint-research-tracker-2026-09-22.md)、[X-02 限制](x02-minute-cash-order-2026-09-25.md)。
 - **version11 Slice D / exporter**：X-03 PASS 不等于静态档案对照完成或策略收益有效；完整 PIT 与浮点边界不由单夹具背书。见 [X-03](x03-s11-exit-domain.md)。
 - **X-20/26/27/35/36 与性能线索**：未完成当前全部调用路径核验，**未证实 / needs Human**；禁止从 [D23 旧表](../reviews/2026-09-25-minute-engine-review/README.md) 未经核验直接复活为生产缺陷或实施任务。

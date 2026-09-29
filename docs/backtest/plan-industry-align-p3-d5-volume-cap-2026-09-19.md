@@ -1,5 +1,7 @@
 # Plan: industry-align P3 δ5 volume participation cap production (2026-09-19)
 
+> **具名残项 D5-REAL-VOLUME-INGRESS（2026-09-29）**：Human「D GO」仅冻结 [version8 真实量→既有 API 的独立研究接入合同](note-delta5-real-volume-ingress-2026-09-29.md)；无生产/CLI/湖运行/SSOT GO。下文保留历史记录；classic P1=A、P2=B、P4=A 已关闭/交付，不重开。当前 version8 独立持仓残量分叉见新合同 §5，不能套用历史普通 lot 一日首次尝试描述。
+
 > **状态交叉引用（2026-09-20）**：Human GO P2=B 仅授权书 trades 的 `session_phase` / `price_rule` 两列，覆盖本文历史 P2 延后记录；P1 已 closed as A，P4 仍 deferred，本文 δ 合同不重开。见 [schema SSOT](engine-ashare-correctness.md#p2-trades-标签列human-go-b2026-09-20)。
 > **Status**: **v0.4 · production volume-cap landed · Human GO C/A/A/A**；Slice A/B/C 完成，验收见 §8.4。此刀独立实施 δ5；δ6 production economics NOT started。
 > **Main ship / 单行范围**: 分钟书 `simulate` 与 `simulate_v7` 可显式启用共享成交量预算，允许部分成交；默认 cap off = as-built。
