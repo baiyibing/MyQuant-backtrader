@@ -203,7 +203,10 @@ def make_manifest(root, names=("summary.txt",)):
     ("csv_minute", "normal"), ("csv_minute", "bad_output"),
     ("v7", "normal"), ("v7", "low_cash"), ("v7", "bad_output"),
 ])
-def test_windows_lake_duration_only_stdout_bytes_pass(pair, family, cell):
+@pytest.mark.parametrize("encodings", [
+    ("utf-8", "utf-8"), ("utf-8", "cp936"), ("gbk", "utf-8"), ("gbk", "cp936"),
+])
+def test_windows_lake_duration_only_stdout_bytes_pass(pair, family, cell, encodings):
     # Data-free reproduction of the five reported 4090 FAIL cells: summary
     # files use LF here, while Windows stdout has CRLF on both sides.
     observations = []
@@ -235,7 +238,7 @@ def test_windows_lake_duration_only_stdout_bytes_pass(pair, family, cell):
                 (observation.root / "run-config.json").write_bytes(b'{"minute_source": "lake"}\n')
                 if cell == "low_cash":
                     (observation.root / "trades.csv").write_bytes(b"side,reason\nskip,skip_cash\n")
-        observations.append(replace(observation, stdout=stdout.replace("\n", "\r\n").encode("utf-8")))
+        observations.append(replace(observation, stdout=stdout.replace("\n", "\r\n").encode(encodings[i])))
 
     policy = harness.ComparePolicy(
         required_files=() if cell == "bad_output" else harness.REQUIRED[family],
@@ -404,6 +407,51 @@ def test_lf_crlf_duration_captures_are_masked_after_normalization(pair, name, li
     assert all(item["allowed"] for item in result["differences"])
 
 
+@pytest.mark.parametrize("name,text", [
+    ("stdout", "净值=10008\n"),
+    ("stderr", "警告: 净值=10008\n"),
+    ("summary.txt", "净值=10008\n"),
+    ("trades.csv", "side,shares,price,label\nbuy,100,10008,净值\n"),
+    ("metadata.json", '{"equity": 10008, "label": "净值"}\n'),
+    ("runtime.log", "净值=10008\n"),
+])
+@pytest.mark.parametrize("replacement", [None, ("净值", "收益"), ("10008", "10008.000000001")])
+def test_gbk_utf8_text_requires_exact_unicode_residue(pair, name, text, replacement):
+    data = text.encode("utf-8-sig")
+    changed_text = text if replacement is None else text.replace(*replacement)
+    changed = changed_text.replace("\n", "\r\n").encode("cp936")
+    left = with_observed_bytes(pair[0], name, data)
+    right = with_observed_bytes(pair[1], name, changed)
+    policy = harness.ComparePolicy(duration_files=("summary.txt", "runtime.log"), duration_stdout=True)
+    result = harness.compare_observations(left, right, policy)
+    assert result["status"] == ("PASS" if replacement is None else "FAIL")
+    assert not result["byte_identical"]
+    assert result["raw"][name] == {
+        "left_sha256": harness.digest(data), "right_sha256": harness.digest(changed),
+        "byte_equal": False,
+    }
+    assert result["differences"][-1]["path"] == name + "/bytes"
+    assert result["differences"][-1]["allowed"] is (replacement is None)
+
+
+@pytest.mark.parametrize("name", ["stdout", "summary.txt", "runtime.log", "stderr"])
+@pytest.mark.parametrize("cache", ["bypass", "命中"])
+def test_gbk_duration_mask_preserves_chinese_residue_and_scope(pair, name, cache):
+    line = "  耗时: 池 1.23s | 日线 1.0s | 分钟 1.0s | 模拟 1.0s | 缓存 bypass\n"
+    data = line.encode("utf-8")
+    changed = (b"\xef\xbb\xbf" + line.replace("1.23s", "12.345s")
+               .replace("bypass", cache).replace("\n", "\r\n").encode("gbk"))
+    left = with_observed_bytes(pair[0], name, data)
+    right = with_observed_bytes(pair[1], name, changed)
+    assert harness.compare_observations(left, right)["status"] == "FAIL"
+    policy = harness.ComparePolicy(duration_files=("summary.txt", "runtime.log"), duration_stdout=True)
+    result = harness.compare_observations(left, right, policy)
+    allowed = cache == "bypass" and name != "stderr"
+    assert result["status"] == ("PASS" if allowed else "FAIL")
+    assert [item["path"] for item in result["differences"]] == [name + "/line/1", name + "/bytes"]
+    assert all(item["allowed"] is allowed for item in result["differences"])
+
+
 @pytest.mark.parametrize("name,data", TEXT_CASES)
 def test_normalization_never_excuses_non_duration_text_changes(pair, name, data):
     changed = b"\xef\xbb\xbf" + data.replace(b"10008", b"10008.000000001").replace(b"\n", b"\r\n")
@@ -454,8 +502,10 @@ def test_json_field_mask_uses_lf_residue_and_preserves_other_bytes(pair):
     ("stdout", b"\xff"), ("stderr", b"\xff"), ("summary.txt", b"\xff"),
     ("stdout", b"\x00"), ("stderr", b"\x00"), ("summary.txt", b"\x00"),
     ("stdout", b"\x1b"), ("stderr", b"\xc2\x85"),
+    ("stdout", b"\x81\n"), ("stderr", "警告".encode("gbk") + b"\x00"),
     ("trades.csv", b"\x00"), ("metadata.json", b"\x00"),
     ("observation.bin", b""), ("data.parquet", b""), ("raw.sha256", b""),
+    ("observation.bin", "净值".encode("gbk")),
 ])
 def test_binary_and_undeclared_artifacts_remain_byte_exact(pair, name, prefix):
     data = prefix + b"timing load=1.23s simulate=2.34s total=3.57s\n"
@@ -489,6 +539,31 @@ def test_normalized_text_manifest_hashes_still_validate_original_files(pair, nam
     manifest = json.loads(manifest_path.read_bytes())
     manifest["artifacts"][0]["sha256"] = harness.digest(data)
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    result = harness.compare_observations(*pair, policy)
+    assert result["status"] == "FAIL"
+    assert any(item["path"] == "right/run-manifest.json/artifacts/0/sha256" and not item["allowed"]
+               for item in result["differences"])
+
+
+def test_gbk_manifest_and_summary_validate_original_bytes(pair):
+    for observation, encoding, seconds in zip(pair, ("utf-8", "gbk"), ("1.23", "12.345")):
+        summary = f"净值=10008\n  耗时: 池 {seconds}s | 日线 1.0s | 分钟 1.0s | 模拟 1.0s\n"
+        (observation.root / "summary.txt").write_bytes(summary.encode(encoding))
+        make_manifest(observation.root)
+        path = observation.root / "run-manifest.json"
+        manifest = json.loads(path.read_bytes())
+        manifest["label"] = "净值"
+        path.write_bytes(json.dumps(manifest, ensure_ascii=False).encode(encoding))
+    policy = harness.ComparePolicy(duration_files=("summary.txt",), verify_manifest=True)
+    result = harness.compare_observations(*pair, policy)
+    assert result["status"] == "PASS" and not result["byte_identical"]
+    assert all(item["allowed"] for item in result["differences"])
+    # Hashes must describe the GBK original, not its normalized UTF-8 text.
+    summary = (pair[1].root / "summary.txt").read_bytes()
+    path = pair[1].root / "run-manifest.json"
+    manifest = json.loads(path.read_bytes().decode("gbk"))
+    manifest["artifacts"][0]["sha256"] = harness.digest(summary.decode("gbk").encode("utf-8"))
+    path.write_bytes(json.dumps(manifest, ensure_ascii=False).encode("gbk"))
     result = harness.compare_observations(*pair, policy)
     assert result["status"] == "FAIL"
     assert any(item["path"] == "right/run-manifest.json/artifacts/0/sha256" and not item["allowed"]

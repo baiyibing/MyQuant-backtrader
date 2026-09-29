@@ -54,15 +54,19 @@ def file_digest(path: Path) -> str:
 
 
 def lf_text(data: bytes) -> str | None:
-    """Strict UTF-8 text only; binary controls fail closed to raw comparison.
+    """Strict UTF-8 first, then GBK (cp936) on decode failure; never lossy.
 
     Call only for declared text artifacts/streams. Normalize CRLF and lone CR
-    after classification, and strip exactly one leading UTF-8 BOM.
+    after classification, and strip exactly one leading UTF-8 BOM. Binary
+    controls fail closed, without retrying a successful UTF-8 decode as GBK.
     """
     try:
         text = data.decode("utf-8-sig")
-    except UnicodeError:
-        return None
+    except UnicodeDecodeError:
+        try:
+            text = data.removeprefix(b"\xef\xbb\xbf").decode("gbk")
+        except UnicodeDecodeError:
+            return None
     if re.search(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]", text):
         return None
     return text.replace("\r\n", "\n").replace("\r", "\n")
@@ -145,7 +149,7 @@ def compare_observations(left: Observation, right: Observation,
                          policy: ComparePolicy = ComparePolicy()) -> dict:
     """Compare all files and raw streams; retain every allowed difference.
 
-    Text uses LF semantics before parsing/masking; binary stays byte-exact.
+    Text uses Unicode / LF semantics before parsing/masking; binary stays byte-exact.
     Raw-byte differences are allowed only when all parsed differences are allowed
     and masking those pieces leaves identical normalized residue. No float tolerance,
     row sorting, path substitution, timestamp wildcard, or byte-identity claim.
@@ -222,7 +226,10 @@ def compare_observations(left: Observation, right: Observation,
     if policy.verify_manifest:
         for side, files in (("left", lt), ("right", rt)):
             try:
-                manifest = json.loads(files["run-manifest.json"].read_bytes())
+                manifest_text = lf_text(files["run-manifest.json"].read_bytes())
+                if manifest_text is None:
+                    raise ValueError("manifest is not UTF-8 or GBK text")
+                manifest = json.loads(manifest_text)
                 for i, row in enumerate(manifest["artifacts"]):
                     name = Path(row["path"]).name
                     if row["path"] != "artifacts/" + name or name not in files:
