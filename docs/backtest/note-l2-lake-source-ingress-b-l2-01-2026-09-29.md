@@ -20,7 +20,7 @@ Human GO：`/workspace/handoffs/b_l2_source_contract_20260929/HUMAN_GO.md`；
 | 运行身份 | 后续登记固定 symbol 全集、精确 `start_at/end_at`、命令批次、经济参数、mark 网格、完整 SHA 与新 run 根；未齐不得执行 |
 
 日期提案复用 [B-native-CV-01](note-l1-lake-e2e-b-native-cv01-2026-09-29.md) 的短窗，
-只借其 recipe/hash、原字节、逐格状态和失败留证的组织方式。
+只借鉴其 recipe/hash、原字节、逐格状态和失败留证等材料的组织方式；不得将 B-native 的 hash 或原字节复制到 L2 收据。
 该单元仅属 CSV/v7；其文档、宿主结果或 PASS **都不是 L2 lake PASS**，不证明此窗适用于 L2。
 冻结后若窗口/品种不适用，记录原因并重新登记、裁定；不得按成交或收益挑换输入。
 
@@ -34,7 +34,7 @@ Human GO：`/workspace/handoffs/b_l2_source_contract_20260929/HUMAN_GO.md`；
 | 读取对象 | 显式定位 / 缺失处理 |
 |---|---|
 | 湖容器 | `common.infra.data_root.resolve_parquet_container()`；记录 SOURCE 或 AUTHORITY_HINT + `.authority` 的解析依据；未配置即失败 |
-| 分钟 / 日线 raw | `resolve_period_root("1m"/"1d")` 后取 `dividend_type=none/symbol=<规范分区键>/data.parquet`；记录实际根、period override、符号规范化版本和选取区间 |
+| 分钟 / 日线 raw | `resolve_period_root("1m"/"1d")` 后取 `dividend_type=none/symbol=<规范分区键>/data.parquet`；符号规范化统一走 [`oskh_data/symbol_format.py`](../../oskh_data/symbol_format.py)：`to_canonical_symbol` 用于 RunInput 的点号格式 `603196.SH`，`to_partition_key` 用于 Hive 目录 `symbol=603196_SH`，禁止临时 `.replace()`；记录实际根、period override、符号规范化版本和选取区间 |
 | 公司行动证据 | `resolve_source_parquet("ex_date_index.parquet")`、`resolve_source_parquet("adj_factor.parquet")` 可作覆盖核验材料；必须另证其覆盖范围/完整性，不把文件存在或空筛选当无事件证明 |
 | 日历、每日 facts、halt/missing、mark 证据 | 运行前登记已存在的明确源 ref、实际文件/分区及 schema/列映射；按所属树用既有 resolver，或显式受控 sidecar ref；本片不虚构这些源已存在 |
 | 若用指数佐证日历 | 仅 `resolve_index_daily_root()`；不能借 stock 日线 override；指数有 K 也不能单独证明个股无停牌/无缺根 |
