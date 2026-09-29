@@ -19,9 +19,10 @@ L1 family 新增 `minute_orders_research`，指向现有 backend `minute_orders_
 |---|---|---|
 | `minute_orders_research` | `native_api` | `minute_orders_backend.runner.run_minute_orders_research` |
 | `minute_orders_research` | `native_api` | `minute_orders_backend.runner.run_minute_orders_research_with_artifacts` |
+| `minute_orders_research` | `native_cli` | `scripts/research/run_minute_orders_research.py` |
 
-两项均委托 `backtest.research.minute_orders_backend.runner` 的对应函数。
-不注册独立 writer、短名别名或 `native_cli`；未知组合仍抛 `UnregisteredEntryError`。
+两条 API 仍委托 `backtest.research.minute_orders_backend.runner` 的对应函数。
+不注册独立 writer 或短名别名；`native_cli` 仅注册表中脚本，未知组合仍抛 `UnregisteredEntryError`。
 API / CLI 请求载体继续分型；能构造 CLI 请求不等于已登记 CLI 能力。
 family 必填，无默认选择器，无旧家族失败转 L2，无插件发现或 fallback。
 导入 `run_protocol`、facade registry、adapters 包乃至新 adapter 模块都不加载引擎；

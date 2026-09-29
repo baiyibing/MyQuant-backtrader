@@ -19,7 +19,7 @@ from backtest.research.run_protocol import (
     NativeCliRequest,
     run,
 )
-from backtest.research.run_protocol.facade import UnregisteredEntryError
+from backtest.research.run_protocol.facade import UnregisteredEntryError, _ENTRIES
 
 from tests.test_minute_orders_artifacts import request as artifact_input
 from tests.test_minute_orders_runner import bucket, inputs, mark, submit
@@ -204,6 +204,16 @@ def test_existing_root_rejection_is_preserved(foreign, tmp_path, monkeypatch):
     assert caught.value is calls[0]["error"]
     assert caught.value.args == direct.value.args
     assert (tree_bytes(tmp_path), sorted(p.relative_to(tmp_path) for p in tmp_path.rglob("*"))) == before
+
+
+def test_minute_orders_registry_keys_are_exact():
+    assert {key for key in _ENTRIES if key[:2] == (FAMILY, "native_cli")} == {
+        (FAMILY, "native_cli", CLI),
+    }
+    assert {key for key in _ENTRIES if key[:2] == (FAMILY, "native_api")} == {
+        (FAMILY, "native_api", ENTRY),
+        (FAMILY, "native_api", DISK_ENTRY),
+    }
 
 
 @pytest.mark.parametrize("family,entry,cli", [
