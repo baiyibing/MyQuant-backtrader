@@ -48,7 +48,7 @@ child resolver 环境显式固定到已解析的绝对根；不更改宿主环�
 
 保存每侧原始 `stdout.bin`、`stderr.bin`、native exit、request 和所有原生工件。
 `comparison.json` 同时保留原字节 hashes、`byte_identical` 与逐字段差异；
-政策允许差异的 PASS **不称 byte-identical**。
+原始字节不同始终追加不允许的 `<name>/bytes` 差异并判 FAIL，即使已有允许的解析差异；**不称 byte-identical**。
 
 - 文件集合、CSV 列和行序、数量/价费/position_id、权益、审计 phase/cash/commission
   严格比较，不排序、不做浮点容差。v7 不暴露独立持仓快照；比较其 holdings 和

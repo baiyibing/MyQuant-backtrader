@@ -48,6 +48,8 @@ def test_economic_mismatch_has_exact_field_path(pair, column, value):
     result = harness.compare_observations(*pair)
     assert result["status"] == "FAIL"
     assert result["differences"][0]["path"] == "trades.csv/rows/0/" + column
+    assert result["differences"][1]["path"] == "trades.csv/bytes"
+    assert result["differences"][1]["allowed"] is False
 
 
 def test_trade_order_is_not_sorted_away(pair):
@@ -69,7 +71,10 @@ def test_missing_required_file_fails_even_when_both_omit_it(pair, both):
 
 def test_extra_file_is_not_ignored(pair):
     (pair[1].root / "unexpected.json").write_text("{}")
-    assert harness.compare_observations(*pair)["differences"][0]["path"] == "files/unexpected.json"
+    result = harness.compare_observations(*pair)
+    assert result["status"] == "FAIL"
+    assert result["differences"][0]["path"] == "files/unexpected.json"
+    assert result["differences"][0]["allowed"] is False
 
 
 @pytest.mark.parametrize("field,value", [("exit_code", 2), ("stdout", b"changed\xff"), ("stderr", b"warning\x00")])
@@ -80,16 +85,35 @@ def test_exit_and_raw_stream_differences_fail(pair, field, value):
     assert result["differences"][0]["path"].startswith(field)
 
 
-def test_explicit_non_economic_json_policy_records_not_hides_diff(pair):
+@pytest.mark.parametrize("serialization", ["unchanged", "key_order", "whitespace"])
+def test_explicit_non_economic_json_policy_records_not_hides_diff(pair, serialization):
     for observation, stamp in zip(pair, ("2026-09-29T01:00:00Z", "2026-09-29T01:01:00Z")):
         (observation.root / "metadata.json").write_text(json.dumps({"created_at": stamp, "equity": 10}))
+    path = pair[1].root / "metadata.json"
+    data = json.loads(path.read_text())
+    if serialization == "key_order":
+        path.write_text(json.dumps({"equity": data["equity"], "created_at": data["created_at"]}))
+    elif serialization == "whitespace":
+        path.write_text(json.dumps(data, indent=2) + "\n")
     policy = harness.ComparePolicy(allowed_json_fields=(("metadata.json", "/created_at"),))
     assert harness.compare_observations(*pair)["status"] == "FAIL"
     result = harness.compare_observations(*pair, policy)
-    assert result["status"] == "PASS" and not result["byte_identical"]
-    assert result["differences"][0]["allowed"]
+    assert result["status"] == "FAIL" and not result["byte_identical"]
+    assert result["raw"]["metadata.json"]["byte_equal"] is False
+    assert result["differences"][0]["path"] == "metadata.json/created_at"
+    assert result["differences"][0]["allowed"] is True
+    assert result["differences"][1] == {
+        "path": "metadata.json/bytes",
+        "left": harness.digest((pair[0].root / "metadata.json").read_bytes()),
+        "right": harness.digest(path.read_bytes()),
+        "allowed": False,
+        "reason": "raw bytes differ",
+    }
     (pair[1].root / "metadata.json").write_text(json.dumps({"created_at": "later", "equity": 11}))
-    assert harness.compare_observations(*pair, policy)["status"] == "FAIL"
+    result = harness.compare_observations(*pair, policy)
+    assert result["status"] == "FAIL"
+    assert any(item["path"] == "metadata.json/equity" and item["allowed"] is False
+               for item in result["differences"])
 
 
 def test_duration_policy_keeps_counts_and_cache_posture_exact(pair):
@@ -97,10 +121,15 @@ def test_duration_policy_keeps_counts_and_cache_posture_exact(pair):
     right = replace(pair[1], stdout=left.stdout.replace(b"1.23s", b"2.34s"))
     policy = harness.ComparePolicy(duration_stdout=True)
     result = harness.compare_observations(left, right, policy)
-    assert result["status"] == "PASS" and not result["raw"]["stdout"]["byte_equal"]
+    assert result["status"] == "FAIL" and not result["raw"]["stdout"]["byte_equal"]
     assert result["differences"][0]["path"] == "stdout/line/1"
+    assert result["differences"][0]["allowed"] is True
+    assert result["differences"][1]["path"] == "stdout/bytes"
+    assert result["differences"][1]["allowed"] is False
     right = replace(right, stdout=right.stdout.replace(b"minute_names=2", b"minute_names=0"))
-    assert harness.compare_observations(left, right, policy)["status"] == "FAIL"
+    result = harness.compare_observations(left, right, policy)
+    assert result["status"] == "FAIL"
+    assert result["differences"][0]["allowed"] is False
 
 
 def make_manifest(root):
@@ -116,12 +145,18 @@ def test_duration_derived_manifest_hashes_must_match_actual_bytes(pair):
         make_manifest(observation.root)
     policy = harness.ComparePolicy(duration_files=("summary.txt",), verify_manifest=True)
     result = harness.compare_observations(*pair, policy)
-    assert result["status"] == "PASS" and not result["byte_identical"]
-    assert len(result["differences"]) == 3
+    assert result["status"] == "FAIL" and not result["byte_identical"]
+    assert len(result["differences"]) == 5
+    assert {item["path"] for item in result["differences"] if not item["allowed"]} == {
+        "run-manifest.json/bytes", "summary.txt/bytes",
+    }
     data = json.loads((pair[1].root / "run-manifest.json").read_text())
     data["artifacts"][0]["sha256"] = "0" * 64
     (pair[1].root / "run-manifest.json").write_text(json.dumps(data))
-    assert harness.compare_observations(*pair, policy)["status"] == "FAIL"
+    result = harness.compare_observations(*pair, policy)
+    assert result["status"] == "FAIL"
+    assert any(item["path"] == "right/run-manifest.json/artifacts/0/sha256" and item["allowed"] is False
+               for item in result["differences"])
 
 
 def test_economic_summary_change_not_excused_by_derived_hash_policy(pair):

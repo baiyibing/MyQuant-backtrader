@@ -92,8 +92,8 @@ def compare_observations(left: Observation, right: Observation,
                          policy: ComparePolicy = ComparePolicy()) -> dict:
     """Compare all files and raw streams; retain every allowed difference.
 
-    JSON object order/whitespace and CSV serialization differences are failures
-    too, unless another explicitly allowed field differs. No float tolerance,
+    Raw-byte differences always fail, including JSON/CSV serialization changes,
+    even when parsed differences are explicitly allowed. No float tolerance,
     row sorting, path substitution, timestamp wildcard, or byte-identity claim.
     """
     differences, raw = [], {}
@@ -178,7 +178,6 @@ def compare_observations(left: Observation, right: Observation,
         raw[name] = {"left_sha256": digest(a), "right_sha256": digest(b), "byte_equal": a == b}
         if a == b:
             continue
-        before = len(differences)
         try:
             if name.endswith(".json"):
                 walk(json.loads(a), json.loads(b), name, allowed_fields=allowed_fields)
@@ -192,8 +191,7 @@ def compare_observations(left: Observation, right: Observation,
                              name in policy.duration_files or (name == "stdout" and policy.duration_stdout))
         except (UnicodeError, ValueError, csv.Error):
             pass
-        if len(differences) == before:
-            diff(name + "/bytes", digest(a), digest(b), reason="unapproved serialization or binary difference")
+        diff(name + "/bytes", digest(a), digest(b), reason="raw bytes differ")
     failed = any(not item["allowed"] for item in differences)
     return {"status": "FAIL" if failed else "PASS", "differences": differences,
             "raw": raw, "byte_identical": not differences and set(lt) == set(rt),
