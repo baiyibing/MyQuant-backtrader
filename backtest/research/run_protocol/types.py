@@ -20,7 +20,9 @@ from os import PathLike
 from typing import Literal, Mapping, TypeAlias
 
 
-Family: TypeAlias = Literal["csv_minute", "v7", "joint_return", "grid_modeb"]
+Family: TypeAlias = Literal[
+    "csv_minute", "v7", "joint_return", "grid_modeb", "minute_orders_research",
+]
 EntryKind: TypeAlias = Literal["native_api", "native_cli"]
 
 

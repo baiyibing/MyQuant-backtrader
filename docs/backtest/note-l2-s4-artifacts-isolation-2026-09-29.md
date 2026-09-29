@@ -117,3 +117,6 @@ summary 先写同根 `.summary.json.pending`、flush/fsync 并校验，再原子
 S1/S2/S3 原测试保持。**绿C = synthetic artifact/isolation oracle；绿C≠绿R/绿S**。
 范围外：CLI 产品化、L1 注册、lake/vendor、在线 StrategyPort、production_C 改动、
 旧 CSV/JR/v7/ModeB 路径和 NAV 可比性；不修改 HELP_LOCK/CI/presets/golden。
+
+后续：另获 Human GO 的 [L2-S5 注册到 L1](note-l2-s5-l1-register-2026-09-29.md)
+将内存 API 与本片 wrapper 分别注册为显式研究 entry（本 PR）；无 CLI/默认选择，比较资格不变。
