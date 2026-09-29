@@ -2,11 +2,11 @@
 
 > **具名残项 D5-REAL-VOLUME-INGRESS（2026-09-29）**：Human「D GO」仅冻结 [version8 真实量→既有 API 的独立研究接入合同](note-delta5-real-volume-ingress-2026-09-29.md)；无生产/CLI/湖运行/SSOT GO。下文保留历史记录；classic P1=A、P2=B、P4=A 已关闭/交付，不重开。当前 version8 独立持仓残量分叉见新合同 §5，不能套用历史普通 lot 一日首次尝试描述。
 
-> **状态交叉引用（2026-09-20）**：Human GO P2=B 仅授权书 trades 的 `session_phase` / `price_rule` 两列，覆盖本文历史 P2 延后记录；P1 已 closed as A，P4 仍 deferred，本文 δ 合同不重开。见 [schema SSOT](engine-ashare-correctness.md#p2-trades-标签列human-go-b2026-09-20)。
+> **历史状态交叉引用（2026-09-20）**：Human GO P2=B 仅授权书 trades 的 `session_phase` / `price_rule` 两列，覆盖本文历史 P2 延后记录；P1 已 closed as A，P4 当时仍 deferred（已由 P4=A closed/delivered 覆盖），本文 δ 合同不重开。见 [schema SSOT](engine-ashare-correctness.md#p2-trades-标签列human-go-b2026-09-20)。
 > **Status**: **v0.4 · production volume-cap landed · Human GO C/A/A/A**；Slice A/B/C 完成，验收见 §8.4。此刀独立实施 δ5；δ6 production economics NOT started。
 > **Main ship / 单行范围**: 分钟书 `simulate` 与 `simulate_v7` 可显式启用共享成交量预算，允许部分成交；默认 cap off = as-built。
 > **IMPLEMENTATION_BASE**: `7428a1a89e309c5f5cbc21eab6eda2e38448c6cd`（#129 merge tip，δ4 fail-closed；worktree 起点实测 40 字符）。不跟随移动分支或推算 merge-base。
-> **Human GO recorded 2026-09-19 (Asia/Shanghai)**: **P3δ5.1=C / P3δ5.2=A / P3δ5.3=A / P3δ5.4=A**。本次新授权覆盖 #127 的 B design-only freeze，仅限下列生产例外；P1/P2/P4 deferred。
+> **Human GO recorded 2026-09-19 (Asia/Shanghai)**: **P3δ5.1=C / P3δ5.2=A / P3δ5.3=A / P3δ5.4=A**。本次新授权覆盖 #127 的 B design-only freeze，仅限下列生产例外；P1/P2/P4 deferred（历史状态，已由上方 closed/delivered 状态覆盖）。
 > **前序**: [δ1 fees](plan-industry-align-p3-fees-2026-09-19.md)、[δ2 exdiv](plan-industry-align-p3-d2-exdiv-2026-09-19.md)、[δ4 fail-closed](plan-industry-align-p3-d4-v7-limits-none-2026-09-19.md)、[engine SSOT §2.4](engine-ashare-correctness.md#24-p3-δ5-volume-participation-cap-productionhuman-go-caaa)。历史 B 见 §10。
 
 ## 0) One-line scope
@@ -100,7 +100,7 @@
 | F-R4 | 单 run symbol/session/bucket 跨 side/path/lot 共享；实际成交才扣 |
 | F-R5 | 既有门先行，force-min 不破 cap，mark 不扣容量 |
 | F-R6 | partial 状态按 §2.4；原子 pending/ride 失败保留整组，无隐式残量队列 |
-| F-R7 | P1/P2/P4 deferred；δ1–δ4 及 exdiv economics 不扩范围 |
+| F-R7 | P1/P2/P4 deferred（历史状态，已由 P1=A / P2=B / P4=A closed/delivered 覆盖；no re-open）；δ1–δ4 及 exdiv economics 不扩范围 |
 | F-R8 | tests仅内存/tmp_path；禁止湖/CLI回测/网络/download |
 | F-R9 | §9 保留22行；仅4个既有例外+1新helper；SIMULATE_HOT_PATH 枚举不扩大 |
 | F-R10 | 不接 L2/live/LEBS/MockQMT、不复活 Cerebro/PortAnaRecord；无嵌套 Codex/agent |

@@ -2,7 +2,7 @@
 
 **合同 ID：`D5-REAL-VOLUME-INGRESS-v1`；本刀仅文档，来源验收 / 实施 / 湖运行均 NOT_RUN。**
 核对基线：`fd74932dc2d86bb01cd47f2ebc39ce8a389ace2f`；`production_C=frozen`。
-授权：[Human「D GO」](/workspace/handoffs/d_delta5_ingress_20260929/HUMAN_GO.md)（2026-09-29）；范围来自 [ORDER_EVAL §7](/workspace/handoffs/next_tracks_abcde_order_20260929/ORDER_EVAL.md)。
+授权：2026-09-29 Human「D GO」；范围来自同日 ORDER_EVAL（A–E residual tracks）§7「Track D card — industry / #135 线」。
 本页冻结下一刀可实现的接入合同，不表示已有 certified source、harness、运行回执或比较授权；**未经 Human「合」不合并**。
 
 ## 1 唯一首消费者与边界
@@ -28,6 +28,8 @@
 | OHLC / mark | 分钟 OHLC 与量来自同一物理桶和冻结快照；价格均为 raw 元/股，有限正值且 OHLC 自洽，量仍为增量股数。日线 raw close 用于既有估值；禁止 front 日线与 raw 分钟混用，也不把 EOD 量用于 cap |
 | reference / limits | 记录每日参考价所用前一有效交易日日线 raw close、证券/名称 as-of 证据及既有 `book_limit_prices` 参数；首日须有前序日线。无事件证据覆盖前序参考日到结束日；不替换参考价、不改到分/档位规则、不从价格跳变猜公司行动 |
 | 覆盖证据 | 显式交易日历、每证券生命周期/停牌状态、预期桶集合、无公司行动覆盖及各证据 hash。交易日不存在、代码未上市与缺数据不能混为一类；样本不适用即停，不能静默缩宇宙/窗口 |
+
+上述股数单位、精确整数值及可无损表示证据全部通过后，harness 必须显式转为非 bool 的 `int` 再传入 `BucketVolume.shares`；不得透传 `2500.0` 等整数值浮点。helper 拒绝非 `Integral` 值（以及 bool），诊断为 `skip_volume_unavailable:invalid_shares`；不得为此修改 `VolumeCap`。
 
 未来核验应在旧 reader 去重、过滤或丢列**之前**检查源记录。现有 `read_lake_minute_ohlc` 有 keep-last/时钟投影，G2 缓存指纹也不是内容或单位认证；不得把已清洗 frame 当原始来源证明。
 
