@@ -103,6 +103,6 @@ E 累计最低费/cancel；跨品种排序、稳定 sequence 置换后的完整�
 原 S1 MatchCore 与 S2 Ledger/Fee 测试保持不改并通过。
 
 **绿C = synthetic integration oracle；不等于绿P/绿R/绿S、湖验证或全 PLAN 收官。**
-L2-S4 writers/schema/isolation、CLI 产品化、真实数据、收益/NAV 比较仍在范围外。
+磁盘 writers 经 Human GO 后已在 [L2-S4](note-l2-s4-artifacts-isolation-2026-09-29.md) 落地；CLI 产品化、L1 注册、湖、收益/NAV 比较仍在 S3 范围外。
 旧 CSV/JR/v7/ModeB、L1/run_protocol、fees/exdiv/fill-gates、HELP_LOCK/CI/presets/golden 均不改。
 按 Q4 自行实现，无 vendor 代码复制或 runtime 依赖；无新增策略版本或注册。
