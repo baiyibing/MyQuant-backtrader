@@ -1,7 +1,7 @@
-"""Immutable inputs and action evidence for research contract v0, L2-S1."""
+"""Immutable action and accounting values for research contract v0, L2-S1/S2."""
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
 from typing import Literal
@@ -114,3 +114,131 @@ class NoMatch:
     symbol: str
     bucket_id: str
     reason: MatchReason
+
+
+class LedgerError(ValueError):
+    """Malformed accounting command, stale proposal or conflicting identity."""
+
+
+class FeeContractError(LedgerError):
+    """Invalid explicit fee parameters or an unavailable reservation bound."""
+
+
+@dataclass(frozen=True)
+class FeeModelParams:
+    rate: Decimal
+    min_fee: Decimal
+    rounding: str
+
+
+@dataclass(frozen=True)
+class LotPosition:
+    lot_id: str
+    symbol: str
+    acquire_date: date
+    sellable_date: date
+    qty: int
+    lot_size: int
+    reserved_qty: int = 0
+
+    @property
+    def free_qty(self) -> int:
+        return self.qty - self.reserved_qty
+
+
+@dataclass(frozen=True)
+class LotAllocation:
+    lot_id: str
+    qty: int
+
+
+@dataclass(frozen=True)
+class Reservation:
+    order_id: str
+    symbol: str
+    side: Side
+    limit: Decimal
+    remaining_qty: int
+    lot_size: int
+    cash: Decimal
+    fee_upper: Decimal
+    lots: tuple[LotAllocation, ...] = ()
+
+
+class ResourceRejectReason(str, Enum):
+    INSUFFICIENT_CASH = "insufficient_cash"
+    INSUFFICIENT_SELLABLE = "insufficient_sellable"
+
+
+@dataclass(frozen=True)
+class ReservationRejected:
+    order_id: str
+    reason: ResourceRejectReason
+    required: Decimal | int
+    available: Decimal | int
+
+
+@dataclass(frozen=True)
+class OrderTotals:
+    order_id: str
+    side: Side
+    notional: Decimal
+    fees_paid: Decimal
+
+
+@dataclass(frozen=True)
+class BucketCapacity:
+    symbol: str
+    bucket_id: str
+    trade_date: date
+    lot_size: int
+    capacity: int
+    remaining: int
+
+
+@dataclass(frozen=True)
+class FillProposal:
+    """Explicit economic command; never implicitly constructed from an action."""
+
+    fill_id: str
+    order_id: str
+    symbol: str
+    side: Side
+    qty: int
+    price: Decimal
+    fee_delta: Decimal
+    bucket_id: str
+    capacity_consumed: int
+    lot_size: int
+    trade_date: date
+    sellable_date: date | None
+    expected_version: int
+
+
+@dataclass(frozen=True)
+class FillApplied:
+    proposal: FillProposal
+    ledger_version: int
+    duplicate: bool = False
+
+
+@dataclass(frozen=True)
+class LedgerSnapshot:
+    cash: Decimal
+    reserved_cash: Decimal
+    free_cash: Decimal
+    lots: tuple[LotPosition, ...]
+    reservations: tuple[Reservation, ...]
+    order_totals: tuple[OrderTotals, ...]
+    buckets: tuple[BucketCapacity, ...]
+    applied_fills: tuple[FillApplied, ...]
+    used_order_ids: frozenset[str]
+    ledger_version: int
+    fees_paid: Decimal
+
+    @property
+    def applied_fill_ids(self) -> frozenset[str]:
+        return frozenset(item.proposal.fill_id for item in self.applied_fills)
+
+    def reserved_sellable_qty(self, symbol: str) -> int:
+        return sum(lot.reserved_qty for lot in self.lots if lot.symbol == symbol)

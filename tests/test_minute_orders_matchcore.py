@@ -252,6 +252,8 @@ def test_fresh_import_allows_only_stdlib_and_matchcore_package():
             'backtest.research.minute_orders_backend',
             'backtest.research.minute_orders_backend.types',
             'backtest.research.minute_orders_backend.match',
+            'backtest.research.minute_orders_backend.fees',
+            'backtest.research.minute_orders_backend.ledger',
         }
         def permitted(name):
             return name in allowed or name.split('.')[0] in sys.stdlib_module_names

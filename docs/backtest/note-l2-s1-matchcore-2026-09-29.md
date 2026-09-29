@@ -60,3 +60,5 @@ cancel/expiry 相位与生命周期、Clock/日历/缺根/停牌/方向资格门
 mark/NAV、runner、writers/CLI、湖读取和 L1 注册。本片均未实现。
 资源守恒、费用、幂等/原子性留 L2-S2；全序、可得性、撤单到期及完整回放留 L2-S3；
 工件与失败隔离留 L2-S4，各片仍须 GO。未替换 CSV，Cerebro 禁令保持。
+
+L2-S2 ledger+fee 已落地，见 [L2-S2 说明](note-l2-s2-ledger-fee-2026-09-29.md)；Broker/Clock/runner 仍须后续 Human GO。
