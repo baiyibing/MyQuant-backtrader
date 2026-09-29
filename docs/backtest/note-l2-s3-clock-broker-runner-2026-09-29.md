@@ -6,6 +6,8 @@ Human「下一刀 GO」授权本片，依据仓外
 对应 PLAN 的 L2-S3。PR 后 Human/Grok 评审；**未经 Human「合」不得合并**。
 `production_C=frozen`；本片没有 writers、CLI、L1 注册、湖、vendor 或在线 StrategyPort。
 
+后续状态：[L2-S4 artifacts + isolation](note-l2-s4-artifacts-isolation-2026-09-29.md) 已获独立 Human GO，新增显式 writer/采集 wrapper（本 PR，待 Human/Grok 评审）；默认 S3 API 保持纯内存，CLI/L1/lake 不在范围。
+
 合同沿用 [S0](note-l2-s0-minute-orders-contract-2026-09-29.md)、
 [手算 A–E](note-l2-s0-handcalc-oracle-sketches-2026-09-29.md)、
 [S1 action-only](note-l2-s1-matchcore-2026-09-29.md) 与
@@ -101,6 +103,6 @@ E 累计最低费/cancel；跨品种排序、稳定 sequence 置换后的完整�
 原 S1 MatchCore 与 S2 Ledger/Fee 测试保持不改并通过。
 
 **绿C = synthetic integration oracle；不等于绿P/绿R/绿S、湖验证或全 PLAN 收官。**
-L2-S4 writers/schema/isolation、CLI 产品化、真实数据、收益/NAV 比较仍在范围外。
+磁盘 writers 经 Human GO 后已在 [L2-S4](note-l2-s4-artifacts-isolation-2026-09-29.md) 落地；CLI 产品化、L1 注册、湖、收益/NAV 比较仍在 S3 范围外。
 旧 CSV/JR/v7/ModeB、L1/run_protocol、fees/exdiv/fill-gates、HELP_LOCK/CI/presets/golden 均不改。
 按 Q4 自行实现，无 vendor 代码复制或 runtime 依赖；无新增策略版本或注册。
