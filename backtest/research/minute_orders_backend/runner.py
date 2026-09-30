@@ -28,6 +28,7 @@ class _ObservedBroker(BrokerCore):
 
 def run_minute_orders_research_with_artifacts(
     run_input: RunInput, parent, *, run_id: str, evidence_level: str, code_sha=None,
+    source_provenance=None,
 ):
     """Explicit disk opt-in; return ArtifactWriteResult (including run failures).
 
@@ -35,10 +36,16 @@ def run_minute_orders_research_with_artifacts(
     run_id root. Writer errors raise; engine errors become failed evidence only.
     The ordinary in-memory API above retains its original exception semantics.
     """
-    from .artifacts import FailedRun, write_minute_orders_artifacts
+    from .artifacts import FailedRun, _validate_evidence_request, write_minute_orders_artifacts
 
+    _validate_evidence_request(run_input, evidence_level, source_provenance)
     broker = None
     try:
+        if evidence_level == "hybrid":
+            from .source_provenance import validate_source_provenance
+
+            validate_source_provenance(run_input, source_provenance, parent=parent,
+                                       run_id=run_id, code_sha=code_sha)
         broker = _ObservedBroker(run_input)
         outcome = broker.run()
     except Exception as error:
@@ -50,4 +57,5 @@ def run_minute_orders_research_with_artifacts(
     return write_minute_orders_artifacts(
         run_input, outcome, parent, run_id=run_id,
         evidence_level=evidence_level, code_sha=code_sha,
+        source_provenance=source_provenance,
     )

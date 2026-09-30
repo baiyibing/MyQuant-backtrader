@@ -7,6 +7,10 @@ Human GO：`/workspace/handoffs/b_l2_source_contract_20260929/HUMAN_GO.md`；
 本片冻结来源要求与映射边界，未实现 loader、未读湖、未取得宿主 attestation 或运行 PASS。
 `production_C=frozen`；PR 待 Human「合」，不得自动合并。
 
+**2026-09-30 状态补记：** 上述为 #266 合同片的历史停点；ORDER_EVAL §5 item 3 已按
+`/workspace/handoffs/b_l2_loader_impl_20260930/HUMAN_GO.md` 实现，接口与证据版本见 [§7](#7-item-3-实现接口与证据版本2026-09-30)。
+item 4 / 4090 live 仍须另行 GO；未取得 host attestation、L2 lake PASS 或 SSOT 绿 R/S。
+
 ## 1. 具名单元与当前停点
 
 | 项目 | B-L2-01 合同 / 待证明项 |
@@ -177,3 +181,59 @@ mark 网格在执行前固定；每点预供固定品种全集的 raw、合法 t
    **验收 PASS ≠ 市场可执行性/真实策略收益 ≠ SSOT 绿 R/S**；比较授权仍另行具名裁定。
 
 本刀完成条件仅为文档 PR 打开与仓外 `BL2_CODEX_RECEIPT.md` 写入；实现、真湖与比较授权均未发车。
+
+## 7. Item 3 实现接口与证据版本（2026-09-30）
+
+本节为后续 implementation GO 的增量；不追改上文 #266 的历史授权范围。
+[source_loader.py](../../backtest/research/minute_orders_backend/source_loader.py) 提供显式只读 API，
+[source_provenance.py](../../backtest/research/minute_orders_backend/source_provenance.py) 负责来源绑定与重验。
+普通 runner 不读湖；CLI 和严格 `minute_orders_run_input_v1` codec 均保持原样。
+
+```python
+from backtest.research.minute_orders_backend.source_loader import load_minute_orders_source
+from backtest.research.minute_orders_backend.runner import run_minute_orders_research_with_artifacts
+
+# 三个变量必须由获批且已冻结的调用方提供；此处不提供宿主路径/经济默认。
+loaded = load_minute_orders_source(recipe_path, expected_sha256=recipe_sha256)
+result = run_minute_orders_research_with_artifacts(
+    loaded.run_input, parent, run_id=run_id, evidence_level="hybrid",
+    source_provenance=loaded.provenance,
+)
+```
+
+`recipe_path` 必须绝对路径、原始 bytes SHA-256 必填；parent/run_id 必须与 recipe 一致。
+`minute_orders_source_recipe_v1` 全字段必填、拒绝未知字段/重复 JSON keys/JSON 浮点数；
+完整、可生成的小型 **synthetic fixture** 见
+[SyntheticCase](../../tests/test_minute_orders_source_loader.py)，不是可用于宿主验收的真实 recipe。
+
+| 独立输入 | v1 表达 / 门禁 |
+|---|---|
+| recipe | `unit=B-L2-01`、`source_kind=lake\|synthetic_fixture`、注册时间、run_id/parent、精确 invocation、symbols、起止、连续 intervals、mark_grid、是否参阅样本的披露；implementation 显式 pin 完整 code SHA / Python version / PyArrow version / transform version |
+| sources | 各 id、location、format、完整 schema、SHA-256；minute/daily 使用 raw resolver 分区；loose 仅 ex_date_index/adj_factor；其他事实为显式绝对 sidecar。Parquet 从已验 hash 的 bytes 解码、schema 精确匹配，不用旧缓存 |
+| roles | 独立 calendar/instruments/status/actions/commands/account/attestation JSON 源；封套 `schema_version=bl2_<role>_v1` 与 `data`。commands 仅 `designed_limit_batch`；account 仅 `synthetic_account`，所有经济字段显式提供 |
+| bars | 显式列映射、START/END、Asia/Shanghai、时间编码、完成桶可得性、raw、incremental shares/lots 与换算因子；支持带偏移文本、已声明的 naive Shanghai、整数 epoch s/ms/us、aware datetime；不猜标签、不差分、不修价 |
+| facts/coverage | 每日主板/raw facts 的生效区间、available_at、ordinary_listing、事实或批准推导的证明；status 逐格含 missing/halted/reason/issuer/proofs，两个 False 也需证明；actions 须覆盖经济区间且 events=[] |
+| attestation | issuer/issued_at、source_kind、symbols/日期完整覆盖、七类具名 claims、独立 `bl2_proof_v1` 材料 refs/hashes、limitations；`scope_hash=attestation_scope(recipe)` 绑定除 attestation 自身 descriptor 之外的完整 recipe 与源快照，避免循环 hash；变更单位、标签、参数或源须重做证明 |
+| marks | 预登记末次与独立抽查点，每点全 symbol 的原始 Parquet 行号/列/时间转换；同一 minute 源必须沿用原 close/时间映射；15:00 可以来自排除于撮合网格之外的合法行，不能增加竞价成交桶；无补价 |
+
+proof 材料的权威性仍由宿主独立审验；代码验证其存在、绑定与覆盖，不能签发 host certification。
+湖源须 clean git HEAD，禁止 hybrid 的 caller code_sha override；fixture 允许 dirty 并如实记录。
+loader 保存逐行来源与 Decimal/量/时间转换、排除行及计数、resolver 配置依据、实现文件 hashes、
+S4 input/contract/各 component hashes；既有 validators 只用于预检，不执行成交事件。
+
+S4 新路径为 `evidence_level=hybrid`、`minute_orders_artifacts_v2`、
+`minute_orders_hybrid_evidence_v1` 与 `minute_orders_source_provenance_v1`，转换版 `bl2_source_transform_v1`。
+它显式区分 market 来源与 synthetic commands/account；本单元不提供 real-only 或 `lake` evidence_level。
+wrapper 执行前、writer 执行后重读冻结源并重建映射，不只信任调用方自报的 provenance hash。
+增加 `source_provenance.json`、`source_checks.json`、成功路径的 `source_postflight.json`；
+保留源核验前后身份与失败归档，summary 仍最后发布、已有根仍拒覆写。
+provenance 的 canonical payload hash 与工件含换行 bytes hash 分别记录，不混为一个 hash。
+
+旧 `evidence_level=synthetic` 无新增必填 tags；九份原有工件对 `58b6355` 原 writer 的 pinned fixture
+逐文件 bytes SHA-256 保持一致。loader 的 mark.source 保留 `B-L2-01/` 来源标记，经过 v1 codec 后仍拒贴 synthetic；
+真实来源不得去标记、手改 manifest 或旁路 writer。`comparison_status=no_ssot_compare_authorization` 不变。
+全程空仓的有效业务运行记 `held_mark_coverage=not_covered`，不能作为完整 mark 验收。
+
+**Fixture PASS != lake PASS。** 本实现只取得 data-free/synthetic 测试证据；没有真实来源/宿主 attestation、
+4090 live、L2 native↔L1 湖 parity 或真湖独立 oracle，B-native CSV/v7 PASS 也不替代这些证据。
+item 4 及其外部 streams/host receipt 仍按 §6 另行 GO，SSOT 绿 R/S 仍另行裁定。
