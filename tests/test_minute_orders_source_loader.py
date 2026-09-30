@@ -2,7 +2,7 @@
 
 import json
 from copy import deepcopy
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 
@@ -10,6 +10,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 from backtest.research.minute_orders_backend.clock import RunContractError
+from backtest.research.minute_orders_backend import source_loader
 from backtest.research.minute_orders_backend.source_loader import load_minute_orders_source
 from backtest.research.minute_orders_backend.source_provenance import (
     FIXTURE_NOTICE,
@@ -222,6 +223,136 @@ class SyntheticCase:
 @pytest.fixture
 def source_case(tmp_path, monkeypatch):
     return SyntheticCase(tmp_path, monkeypatch)
+
+
+@pytest.mark.parametrize("encoding,expected", [
+    ("epoch_ms_wall_shanghai_as_utc", "2025-10-23T09:30:00+08:00"),
+    ("epoch_ms", "2025-10-23T17:30:00+08:00"),
+])
+def test_explicit_wall_encoding_preserves_old_epoch_instant(encoding, expected):
+    spec = {"encoding": encoding, "timezone": "Asia/Shanghai", "label": "END"}
+    assert source_loader._time(1761211800000, spec, "fixture").isoformat() == expected
+
+
+@pytest.mark.parametrize("value, message", [
+    (True, "^fixture: wall epoch ms must be an integer$"),
+    ("1761211800000", "^fixture: wall epoch ms must be an integer$"),
+    (1761211800000.0, "^fixture: wall epoch ms must be an integer$"),
+    (None, "^fixture: wall epoch ms must be an integer$"),
+    (10**30, "^fixture: invalid timestamp: "),
+])
+def test_wall_encoding_rejects_non_integer_or_overflow(value, message):
+    with pytest.raises(SourceContractError, match=message):
+        source_loader._time(value, {"encoding": "epoch_ms_wall_shanghai_as_utc",
+                                   "timezone": "Asia/Shanghai", "label": "END"}, "fixture")
+
+
+@pytest.fixture
+def wall_case(source_case, monkeypatch):
+    """Fabricated approval trust anchor only; never claim these bytes are lake evidence."""
+    case = source_case
+    case.use_vendor_schema()  # The existing real-epoch fixture recipe remains unchanged.
+    for row in case.rows:
+        wall = row["__index_level_0__"] + timedelta(minutes=1)  # START fixture -> END fixture.
+        row["__index_level_0__"] = wall
+        row["time"] = int(wall.replace(tzinfo=UTC).timestamp()) * 1000
+    time = {"encoding": "epoch_ms_wall_shanghai_as_utc", "timezone": "Asia/Shanghai", "label": "END"}
+    case.recipe["bars"][0]["time"] = time
+    for point in case.recipe["mark_grid"]:
+        point["prices"][0]["time"] = deepcopy(time)
+    case.freeze()
+    sources = {s["id"]: s for s in case.recipe["sources"]}
+    case.sidecars["encoding_approval"] = {"rows": [{
+        "approval_id": "fabricated-test-author-approval", "r4_authorized": False,
+        "fixture_notice": FIXTURE_NOTICE,
+        "binding": {"source": "bars", "source_sha256": sources["bars"]["sha256"],
+                    "column": "time", "source_type": "int64", "symbol": SYMBOL, **time,
+                    "availability": "bucket_end", "from_date": "2026-09-28", "through_date": "2026-09-28"},
+        "evidence_refs": {"observations": sources["observations"]["sha256"]},
+    }]}
+    case.recipe["sources"].insert(-1, {
+        "id": "encoding_approval", "location": {"kind": "sidecar", "path": str(case.root / "encoding_approval.json")},
+        "format": "json", "schema": "bl2_time_encoding_approval_v1", "sha256": "",
+    })
+    proof = case.sidecars["proof_timing"]
+    proof["source_refs"].append("encoding_approval")
+    proof["result"]["rows"].append({"source": "encoding_approval", "row": 0, "observation": FIXTURE_NOTICE})
+    case.freeze(write_bars=False)
+    # Production has no synthetic bypass. Replace the one pinned approval only
+    # inside this test to exercise full mapping/audit with fabricated parquet.
+    monkeypatch.setattr(source_loader, "_TIME_ENCODING_APPROVAL_SHA256",
+                        next(s["sha256"] for s in case.recipe["sources"] if s["id"] == "encoding_approval"))
+    return case
+
+
+def test_bound_wall_encoding_loads_end_buckets_and_marks_with_audit(wall_case):
+    loaded = wall_case.load()
+    run = loaded.run_input
+    assert [(b.start.isoformat(), b.end.isoformat()) for b in run.buckets] == [
+        (at("09:30:00"), at("09:31:00")), (at("09:31:00"), at("09:32:00"))]
+    assert run.marks[-1].event_time.isoformat() == at("15:00:00")
+    doc = loaded.provenance.document()
+    assert doc["transform"]["version"] == "bl2_source_transform_v5"
+    for row, raw in zip(doc["transform"]["bars"], wall_case.rows):
+        assert row["original_time"] == str(raw["time"])
+        assert row["time_source_type"] == "int64"
+        assert row["time"] == wall_case.recipe["bars"][0]["time"]
+        assert row["time_proofs"][0]["approval_id"] == "fabricated-test-author-approval"
+        assert row["available_at"] == row["end"]
+    assert doc["transform"]["excluded"][0]["excluded_count"] == 3
+    assert doc["transform"]["marks"][-1]["original_time"] == str(wall_case.rows[-1]["time"])
+    assert doc["transform"]["marks"][-1]["time_proofs"]
+    assert doc["notice"] == FIXTURE_NOTICE
+
+
+@pytest.mark.parametrize("change,match", [
+    ("no_binding", "matching pinned HOST approval binding required"),
+    ("not_claimed", "matching pinned HOST approval binding required"),
+    ("approval_pin", "HOST approval pin mismatch"),
+    ("source_hash", "source/column/mapping binding mismatch"),
+    ("column", "approved int64 minute source required"),
+    ("label", "source/column/mapping binding mismatch"),
+    ("timezone", "source/column/mapping binding mismatch"),
+    ("window", "approval window coverage gap"),
+    ("missing_material", "pinned approval material missing or changed"),
+    ("changed_material", "pinned approval material missing or changed"),
+    ("incomplete", "complete saved result required"),
+])
+def test_wall_encoding_binding_fails_closed(wall_case, change, match):
+    case = wall_case
+    proof = case.sidecars["proof_timing"]
+    write_bars = False
+    if change == "no_binding":
+        proof["result"]["rows"].pop()
+    elif change == "not_claimed":
+        case.sidecars["proof_unused_timing"] = deepcopy(proof)
+        case.recipe["sources"].insert(-1, {
+            "id": "proof_unused_timing", "location": {"kind": "sidecar", "path": str(case.root / "unused.json")},
+            "format": "json", "schema": "bl2_proof_v1", "sha256": "",
+        })
+        proof["result"]["rows"].pop()
+    elif change == "approval_pin":
+        case.sidecars["encoding_approval"]["rows"][0]["r4_authorized"] = True
+    elif change == "source_hash":
+        case.rows[-1]["amount"] += 1.0
+        write_bars = True
+    elif change == "column":
+        case.recipe["bars"][0]["columns"]["time"] = "close"
+    elif change in ("label", "timezone"):
+        case.recipe["bars"][0]["time"][change] = "START" if change == "label" else "UTC"
+    elif change == "window":
+        case.recipe["start_at"] = "2026-09-27T09:28:00+08:00"
+    elif change == "missing_material":
+        proof["result"]["rows"] = proof["result"]["rows"][-1:]
+        proof["source_refs"].remove("observations")
+    elif change == "changed_material":
+        case.sidecars["observations"]["rows"][0]["fixture_notice"] += " changed"
+    else:
+        proof["result"]["complete"] = False
+    case.freeze(write_bars=write_bars)
+    with pytest.raises(SourceContractError, match=match):
+        case.load()
+    assert not Path(case.recipe["parent"]).exists()
 
 
 def test_explicit_mapping_and_excluded_rows_keep_independent_1500_mark(source_case):

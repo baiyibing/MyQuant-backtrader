@@ -383,7 +383,8 @@ def test_cam_calendar_actions_and_marks_are_scoped_saved_observations():
     assert all(page["page_metadata"]["totalpages"] == 2 for page in pages)  # Preserve upstream inconsistency.
     marks = document("marks.json")["data"]
     assert marks["subject"] == "marks" and marks["conclusion"] == "raw_contemporaneous_grid"
-    assert marks["transform_version"] == "bl2_source_transform_v4"
+    assert marks["transform_version"] == "bl2_source_transform_v5"
+    assert marks["time"] == {"encoding": "epoch_ms_wall_shanghai_as_utc", "timezone": "Asia/Shanghai", "label": "END"}
     assert marks["source_identity_note"]["sha256"] == "58879893f221bfe050b7a16029667c49fb65d8ec6f47592254e549374a577083"
     assert marks["source_identity_note"]["binding_status"] == "unbound_minute_source"
     expected_points = [("spot_20251023_close", "2025-10-23T15:00:00+08:00", 46753, "23.89"),
@@ -529,7 +530,7 @@ def test_timing_proof_resolves_r4d_claim_with_manifest_sources_only():
     assert manifest["unbound_minute_source"]["sha256"] is None
     assert not any("timing" in gap for gap in manifest["unresolved"])
     assert any("account/commands" in gap for gap in manifest["unresolved"])
-    assert any("time-encoding reconciliation" in gap for gap in manifest["unresolved"])
+    assert not any("time-encoding reconciliation" in gap for gap in manifest["unresolved"])
     assert any("host recipe, lake identity/coverage and fresh freeze" in gap for gap in manifest["unresolved"])
     readme = (PACK / "README.md").read_text(encoding="utf-8")
     assert '"conclusion": "completed_bucket_available_at_end"' in readme
@@ -556,14 +557,112 @@ def test_timing_boundary_samples_keep_original_indexes_and_end_mapping():
         assert "close/volume available at end" in cited[index]
     decoded = source_loader._time(1761211800000, {"encoding": "epoch_ms", "timezone": "Asia/Shanghai", "label": "END"}, "timing")
     assert decoded.isoformat() == "2025-10-23T17:30:00+08:00"
-    # Preserve the discovered contradiction as a host freeze blocker, not a silent decoder fix.
+    # Preserve original evidence and old decoding; only the named encoding resolves wall intent.
     map_rows = document("sources/timing_materials_map.json")["data"]["rows"]
     assert any("1761211800000" in row["text"] and "09:30" in row["text"] for row in map_rows)
     vendor = document("sources/daqmt_1m.json")["data"]["rows"][0]
     assert int(vendor["time"]) == 1761183000000
     assert decoded - datetime.fromisoformat(vendor["datetime"]) == timedelta(hours=8)
     limitations = document("timing.proof.json")["data"]["limitations"]
-    assert any("does not certify the R4d epoch_ms mapping" in item for item in limitations)
+    assert any("old epoch_ms mapping" in item for item in limitations)
+    named = source_loader._time(1761211800000, {
+        "encoding": "epoch_ms_wall_shanghai_as_utc", "timezone": "Asia/Shanghai", "label": "END"}, "timing")
+    assert named.isoformat() == "2025-10-23T09:30:00+08:00"
+
+
+def time_encoding_store():
+    """Pinned packs plus a descriptor only; never read lake parquet."""
+    store = SimpleNamespace(data={}, specs={})
+    for spec in document("manifest.json")["artifacts"]:
+        store.data[spec["id"]] = document(spec["path"])["data"]
+        store.specs[spec["id"]] = {**spec, "location": {"kind": "sidecar"}}
+    binding = store.data["time_encoding_approval"]["rows"][0]["binding"]
+    store.specs["minute_603196"] = {
+        "location": {"kind": "minute", "symbol": "603196.SH"},
+        "schema": {"time": "int64"}, "sha256": binding["source_sha256"],
+    }
+    store.data["attestation"] = {"claims": {"timing": {"proofs": ["proof_timing"]}}}
+    store.role = lambda identity, role: store.data[identity]
+    recipe = {"start_at": "2025-10-23T09:29:00+08:00", "end_at": "2025-11-04T15:00:00+08:00",
+              "roles": {"attestation": "attestation"}}
+    time = {k: binding[k] for k in ("encoding", "timezone", "label")}
+    return store, recipe, time
+
+
+def test_time_encoding_approval_binds_real_saved_materials_without_opening_lake():
+    store, recipe, time = time_encoding_store()
+    spec = store.specs["time_encoding_approval"]
+    assert sha256((PACK / spec["path"]).read_bytes()) == spec["sha256"] == source_loader._TIME_ENCODING_APPROVAL_SHA256
+    row = store.data["time_encoding_approval"]["rows"][0]
+    assert row["approval_id"] == "host_r4_time_encoding_approval_20260930"
+    assert row["r4_authorized"] is False
+    assert row["binding"]["source_sha256"] == "58879893f221bfe050b7a16029667c49fb65d8ec6f47592254e549374a577083"
+    assert row["human_go_document_sha256"] == sha256((PACK / "HUMAN_GO_TIME_ENCODING.md").read_bytes()) == (
+        "e605e3256be64943d8026e45c4ad3ce60c34663ad9ebb45ed99b5d3e86e66538")
+    assert row["approval_document_sha256"] == sha256((PACK / "HOST_R4_TIME_ENCODING_APPROVAL_20260930.md").read_bytes())
+    assert set(row["evidence_refs"]) == {"host_time_encoding_approval", "human_go_time_encoding",
+                                       "timing_materials_map", "timing_lake_census", "time_encoding_advice", "time_encoding_r4f"}
+    for ref, pin in row["evidence_refs"].items():
+        assert store.specs[ref]["sha256"] == pin
+    assert source_loader._proof(store.data["proof_timing"], store, "proof_timing") == {}
+    matches = source_loader._time_encoding_refs(recipe, store, "minute_603196", "time", time)
+    assert len(matches) == 1 and matches[0]["approval_id"] == row["approval_id"]
+    assert document("manifest.json")["transform_version"] == "bl2_source_transform_v5"
+
+
+@pytest.mark.parametrize("change", ["source", "hash", "column", "symbol", "window", "label", "daily",
+                                    "approval_pin", "material_pin", "material_ref", "no_binding"])
+def test_saved_time_encoding_approval_rejects_rebinding(change):
+    store, recipe, time = time_encoding_store()
+    sid, column = "minute_603196", "time"
+    if change == "source":
+        store.specs["other_minute"] = deepcopy(store.specs[sid])
+        sid = "other_minute"
+    elif change == "hash":
+        store.specs[sid]["sha256"] = "0" * 64
+    elif change == "column":
+        store.specs[sid]["schema"]["other_time"] = "int64"
+        column = "other_time"
+    elif change == "symbol":
+        store.specs[sid]["location"]["symbol"] = "000001.SZ"
+    elif change == "window":
+        recipe["end_at"] = "2025-11-05T15:00:00+08:00"
+        store.data["proof_timing"]["filter"]["through_date"] = "2025-11-05"
+    elif change == "label":
+        time["label"] = "START"
+    elif change == "daily":
+        store.specs[sid]["location"]["kind"] = "daily"
+    elif change == "approval_pin":
+        store.specs["time_encoding_approval"]["sha256"] = "0" * 64
+    elif change == "material_pin":
+        store.specs["host_time_encoding_approval"]["sha256"] = "0" * 64
+    elif change == "material_ref":
+        store.data["proof_timing"]["source_refs"].remove("human_go_time_encoding")
+    else:
+        store.data["proof_timing"]["result"]["rows"].pop()
+    with pytest.raises(SourceContractError, match="time encoding:"):
+        source_loader._time_encoding_refs(recipe, store, sid, column, time)
+
+
+@pytest.mark.parametrize("name", ["HUMAN_GO_TIME_ENCODING.md", "HOST_R4_TIME_ENCODING_APPROVAL_20260930.md"])
+def test_remapper_rejects_time_encoding_approval_document_tamper(tmp_path, remapper, monkeypatch, name):
+    destination = tmp_path / "pack"
+    shutil.copytree(PACK, destination)
+    path = destination / name
+    path.write_bytes(path.read_bytes() + b"tampered\n")
+    monkeypatch.setattr(remapper, "HERE", destination)
+    with pytest.raises(ValueError, match="time encoding approval/GO hash mismatch"):
+        remapper.build(UPSTREAM, PACK / "HUMAN_GO.md")
+
+
+@pytest.mark.parametrize("name", ["time_encoding_advice.json", "time_encoding_r4f.json"])
+def test_remapper_rejects_time_encoding_saved_report_tamper(tmp_path, remapper, name):
+    destination = tmp_path / "upstream"
+    shutil.copytree(UPSTREAM, destination)
+    path = destination / "time_encoding_host_materials" / name
+    path.write_bytes(path.read_bytes() + b"tampered\n")
+    with pytest.raises(ValueError, match="time encoding input hash mismatch"):
+        remapper.build(destination, PACK / "HUMAN_GO.md")
 
 
 @pytest.mark.parametrize("change,match", [("empty_rows", "saved observations required"),

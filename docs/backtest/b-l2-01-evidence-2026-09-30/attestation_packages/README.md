@@ -56,6 +56,16 @@ all existing instruments/status/units/CAM consumer, proof and source bytes.
 **R4d stays BLOCKED/NOT_RUN as recorded; this fixes evidence registration,
 not a lake verdict. `r4_authorized=false`; `production_C=frozen`.**
 
+R4f time encoding A (2026-09-30, Human **「开修」+ confirm A**):
+[HUMAN_GO_TIME_ENCODING.md](HUMAN_GO_TIME_ENCODING.md) preserves SHA-256
+`e605e3256be64943d8026e45c4ad3ce60c34663ad9ebb45ed99b5d3e86e66538`.
+[HOST_R4_TIME_ENCODING_APPROVAL_20260930.md](HOST_R4_TIME_ENCODING_APPROVAL_20260930.md)
+records the named implementation approval. Transform **v5** adds
+`epoch_ms_wall_shanghai_as_utc` and requires the byte-pinned
+[structured approval](sources/time_encoding_approval.json) through `proof_timing`.
+R4f remains BLOCKED/NOT_RUN; this closes the encoding implementation/evidence
+gap, not host freeze or lake acceptance. **No R4g is authorized.**
+
 ## Human exception and units
 
 The byte-preserved [HUMAN_GO.md](HUMAN_GO.md) was supplied at
@@ -166,10 +176,15 @@ source's symbol/time/close mapping and matching final `end_at`; no new loader
 schema or price fallback is introduced. A 15:00 mark adds no execution bucket.
 
 Parquet SHA-256 `58879893f221bfe050b7a16029667c49fb65d8ec6f47592254e549374a577083`
-is a **saved identity note** from #1114. The substrate describes the parquet pin,
-row table and census agreement supporting legal 15:00 marks. This remap does not
-read parquet or census bytes: the manifest's `unbound_minute_source.sha256` stays
-null, and exports do not establish configured lake equivalence. No lake PASS.
+is a **saved identity** from #1114, also pinned for wall encoding by
+`time_encoding_approval.binding.source_sha256` in the
+[structured approval](sources/time_encoding_approval.json); the loader enforces
+that pin. The substrate describes the parquet pin, row table and census agreement
+supporting legal 15:00 marks. This remap does not read parquet or census bytes.
+The manifest's `unbound_minute_source.sha256` stays null because this catalog does
+not ship parquet bytes; the wall-encoding pin lives in the approval binding.
+The host must still configure/resolve lake identity/coverage and freshly freeze.
+Exports do not establish configured lake equivalence. No lake PASS.
 
 Source limitations are retained: ex_date_index's local `e8fe70ce…` snapshot is
 different from R3's `93c264ed…` pin; unchanged preClose/adj_factor are supporting
@@ -211,14 +226,36 @@ indexes the compact source's `data.rows`, never the parquet directly.
 
 Census and map §1.1 explicitly declare END: label t covers `[t-1min,t)`.
 Contract §3.1 gives completed close/volume availability at `bucket.end=t`.
-The proof approves END and `availability=bucket_end`. **The R4d source encoding
-declaration still requires host reconciliation before freeze:** map §1.1 labels
+The proof approves END and `availability=bucket_end`. Map §1.1 labels
 `1761211800000` as Shanghai 09:30 and says “不是真 UTC”, while the unchanged
 `epoch_ms` decoder returns **`2025-10-23T17:30:00+08:00`**. The pinned #1111
 vendor export instead uses `1761183000000` for Shanghai 09:30, a 28800000 ms
-difference. Tests preserve this discrepancy explicitly. The proof attests
-END/completed-bucket semantics, not the contradictory epoch mapping; no silent
-offset correction, source substitution, Clock change or lake PASS is introduced.
+difference. Tests preserve both old source semantics. The separately pinned
+Kimi advice reports 2169 rows with zero violations of `time_ms` versus the naive
+index interpreted as UTC wall. The new approval binds that saved conclusion
+to `minute_603196`, the R4f lake hash, `time:int64` and the stated window.
+The new decoder constructs UTC wall components and stamps Shanghai using
+`replace(tzinfo=None).replace(tzinfo=Asia/Shanghai)`; it applies no numeric
+offset correction. `epoch_ms` retains its original instant semantics.
+
+Host recipes for this partition **must** set both `bars[].time` and the
+same-source `mark_grid[].prices[].time` to:
+
+```json
+{"encoding": "epoch_ms_wall_shanghai_as_utc", "timezone": "Asia/Shanghai", "label": "END"}
+```
+
+Keep `availability="bucket_end"` and source ID `minute_603196`. The loader pins
+the exact `bl2_time_encoding_approval_v1` artifact, which includes HOST/GO,
+map/census, advice and R4f material hashes. The timing claim must cite its row
+and register every material; the source hash, column/type, symbol, time mapping
+and covered dates must match. Missing or changed binding/approval fails closed,
+including for marks. Other sources/windows cannot reuse this approval.
+The pure `_time` helper only decodes; both source ingestion paths apply the gate.
+There is no fixture bypass in production; synthetic tests substitute a
+fabricated trust anchor only with pytest monkeypatch and retain fixture notices.
+Bar audit records retain the original integer text and `time_source_type=int64`,
+the declared time mapping, converted ISO `start/end` and `time_proofs` references.
 
 Coverage is 2169 rows / 2133 tradable cells / zero missing / zero duplicates;
 237 tradable END labels per day are 09:31–11:30 and 13:01–14:57.
@@ -233,11 +270,15 @@ This attests the historical completed-bar model, not live feed arrival latency.
 Known availability after end must reject adaptation. File collection time is
 not event time; vendor timestamp fields only corroborate the field mapping,
 and `fill_data` zero-fill is not event-time or actual-trade proof. Vendor export
-does not establish lake identity. The census's saved parquet hash remains an
-identity note; `unbound_minute_source.sha256=null`, pending host pin/coverage.
+does not establish lake identity. `unbound_minute_source.sha256=null` means this
+catalog does not ship parquet bytes. Wall encoding still pins the saved parquet
+hash `58879893f221bfe050b7a16029667c49fb65d8ec6f47592254e549374a577083` via
+`time_encoding_approval.binding.source_sha256`, and the loader enforces it.
+The host must still configure/resolve lake identity/coverage and freshly freeze;
+this is not lake PASS.
 
 R4d-style runners register **all `manifest.artifacts`** as recipe sources, so
-the 46-entry manifest automatically supplies `proof_timing` and its sidecars.
+the 51-entry manifest automatically supplies `proof_timing` and its sidecars.
 Preserve each artifact id/schema/hash and resolve its path on the host. The
 existing attestation claim is:
 
@@ -251,15 +292,20 @@ existing attestation claim is:
 There is no timing consumer or loader role. A host using an explicit source
 allowlist must include the new proof and all its `source_refs`; leaving the
 claim pointed at a missing id reproduces the R4d failure. Host account/commands,
-full recipe review/registration, time-encoding reconciliation, configured lake identity/coverage and fresh
+full recipe review/registration, configured lake identity/coverage and fresh
 `attestation_scope(recipe)`/freeze remain required. This catalog supplies no
 partial recipe and does not reuse or rewrite the R4d attempt/receipt as PASS.
+The v5 implementation SHA/runtime, source descriptors, time mappings and scoped
+attestation must all be freshly pinned; R4f recipe/attestation cannot be reused.
 
 ## Status and lake boundary
 
 `start/end` are Shanghai `+08:00` one-minute buckets with END labels
 09:31–11:30 and 13:01–15:00. Closing auction labels remain in this canonical
 source grid; this is not approval of continuous-auction fill semantics there.
+R4f's 240-cell status-derived intervals include labels after 14:57; a fresh
+host recipe must respect the existing 237-cell continuous execution boundary
+and exact status coverage gate. This knife does not alter either matrix.
 The nine 09:30 records are retained in
 [sources/opening_auction.json](sources/opening_auction.json), outside the
 2,160 status rows. Zero volume does not mean missing or halted: all 62 such rows
@@ -343,6 +389,11 @@ checked-in [timing record](HOST_R4_TIMING_APPROVAL_20260930.md), validating its
 hash and approval_id. An external `--source-dir` must stage the original
 #1111 tree plus #1112 `sse_rule_archive/`, #1114 `cam_host_materials/` and the
 three pinned `timing_host_materials/` compact fixtures.
+It must also stage `time_encoding_host_materials/`, containing the byte-pinned
+saved Kimi advice and R4f receipt excerpts. `inputs.json` records their original
+handoff hashes separately from the compact fixture hashes. The new HOST and
+Human GO documents default to the checked-in files and are checked independently;
+earlier units/CAM/TIMING GO and approval records are never overwritten.
 `--output-dir /new/offline/directory` writes a new directory instead of checking;
 existing destinations are rejected. No network, market download, resolver, lake
 write, or research runner is called. Checked-in compact JSON retains every
@@ -363,10 +414,10 @@ shown above. Account, commands and full recipe/attestation freeze still need
 host review and registration; this
 catalog is not a recipe or a scoped attestation.
 
-The validator change is `bl2_source_transform_v4` (package IDs remain v1).
-The 2026-09-30 instruments, CAM and timing host fills change evidence bytes only — the v4
-validator/contract is unchanged, so the transform version is deliberately not
-bumped (v3/v4 bumps tracked validator changes, not evidence fills).
+The current validator/decoder is `bl2_source_transform_v5` (package IDs remain v1).
+Earlier instruments, CAM and timing fills were evidence-only on v4; their saved
+approval records retain that historical version. The named encoding changes
+decoding and admission gates, so active manifest/marks/recipe pins now require v5.
 Ratio evidence requires the explicit basis, pinned structured Human marker,
 exact approved symbol/window/volume column/factor and four distinct raw sources.
 For `source_declaration`, the referenced raw observation must now contain
@@ -376,4 +427,4 @@ as a declaration fails. Existing bar-alias independence checks remain active.
 Saved statement checks do not certify authenticity or confer lake PASS.
 
 Do not merge this PR without Human「合」. Merge does not authorize R4.
-Remaining Human steps: **Grok review → Human「合」→ land packs on 4090 → Human「开 R4」**.
+Remaining Human steps: **Grok review → Human「合」→ land → named Human「开 R4g」**.

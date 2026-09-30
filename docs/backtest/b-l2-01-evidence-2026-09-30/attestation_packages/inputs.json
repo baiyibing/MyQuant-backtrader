@@ -127,7 +127,7 @@
     },
     "files": {
       "timing_lake_census.json": {
-        "git_sha256": "cbf4bd8551dc1ed7b33581b7651296ed1bb1e379d7433e2d3542e245ef51b6c4",
+        "git_sha256": "c6495b53c3abf257f5e71299e6b63bc4cbce4053f612896d2dffd54a9c99798b",
         "original_file": "raw_materials/raw_lake_minute_census_603196SH_20251023_20251104.json"
       },
       "timing_xtquant_docs.json": {
@@ -135,11 +135,25 @@
         "original_file": "raw_materials/raw_excerpt_xtquant_docs.json"
       },
       "timing_materials_map.json": {
-        "git_sha256": "0db8056be9f901f80dc7389cc08761a9ca319356d7928e66bd3b08c6a8f090cb",
+        "git_sha256": "d4a68592d452648c2fa742c2d141d6f99faf7fcb1e96006be07fe477ab4a1ba1",
         "original_file": "HOST_MATERIALS_MAP_R4.md"
       }
     }
   },
   "host_timing_approval_sha256": "c3fb7b09026ecbb9ef7796b0cb6e182bfec8b8811ca16e530fab69e5ed95245d",
-  "human_go_timing_sha256": "b89d99fc0fabbad5dd1e6da4ff6f3368ab84d1c7afce71832ea9e405d7e270f7"
+  "human_go_timing_sha256": "b89d99fc0fabbad5dd1e6da4ff6f3368ab84d1c7afce71832ea9e405d7e270f7",
+  "human_go_time_encoding_sha256": "e605e3256be64943d8026e45c4ad3ce60c34663ad9ebb45ed99b5d3e86e66538",
+  "host_time_encoding_approval_sha256": "bba1bf35212c49c7c1be10391e5eab5ff9914ac0e83236a4f7449fa4a9d83186",
+  "time_encoding_host_materials": {
+    "files": {
+      "time_encoding_advice.json": {
+        "git_sha256": "87eaa570f459d04b91c450ab0a1de13fc72a748d04e54beac5d2c48dbc75f399",
+        "original_sha256": "b38624793095fabf698874f6999660704e62c4bc5917f9a3b702b12f73644415"
+      },
+      "time_encoding_r4f.json": {
+        "git_sha256": "2f37cd3942a636dd4055e21587910af229271d5bd2ae9c51ca95e0f22fd65be8",
+        "original_sha256": "b683f4a07cc788fb1e39139773b625b82b6f6c741d4903c2615326d073a3d37a"
+      }
+    }
+  }
 }

@@ -6,7 +6,7 @@ approval record, available_at, ordinary_listing) is bound to pinned inputs in
 inputs.json and HOST_R4_INSTRUMENTS_APPROVAL_20260930.md. The #1114 CAM
 materials and HOST_R4_CAM_APPROVAL_20260930.md fill calendar/actions/marks
 evidence only. The timing fill uses pinned MyQuant census/map/vendor excerpts;
-r4_authorized stays false and the transform remains v4.
+r4_authorized stays false. The named wall-time encoding approval requires v5.
 """
 
 import argparse
@@ -46,6 +46,11 @@ TIMING_GO_NAME = "HUMAN_GO_TIMING.md"
 TIMING_CENSUS = "raw_materials/raw_lake_minute_census_603196SH_20251023_20251104.json"
 TIMING_DOCS = "raw_materials/raw_excerpt_xtquant_docs.json"
 TIMING_MAP = "HOST_MATERIALS_MAP_R4.md"
+TIME_ENCODING = "epoch_ms_wall_shanghai_as_utc"
+TIME_ENCODING_DIR = "time_encoding_host_materials"
+TIME_ENCODING_APPROVAL_NAME = "HOST_R4_TIME_ENCODING_APPROVAL_20260930.md"
+TIME_ENCODING_APPROVAL_ID = "host_r4_time_encoding_approval_20260930"
+TIME_ENCODING_GO_NAME = "HUMAN_GO_TIME_ENCODING.md"
 
 
 def require(condition, message):
@@ -138,6 +143,20 @@ def read_inputs(source_dir, human_go, host_approval=None, host_cam_approval=None
         inputs[key] = json.loads(raw, parse_float=Decimal)
     inputs[TIMING_APPROVAL_NAME] = timing_approval_raw.decode("utf-8")
     inputs[TIMING_GO_NAME] = timing_go_raw.decode("utf-8")
+    for name, key in ((TIME_ENCODING_APPROVAL_NAME, "host_time_encoding_approval_sha256"),
+                      (TIME_ENCODING_GO_NAME, "human_go_time_encoding_sha256")):
+        raw = (HERE / name).read_bytes()
+        require(digest(raw) == pins[key], f"time encoding approval/GO hash mismatch: {name}")
+        inputs[name] = raw.decode("utf-8")
+    require(TIME_ENCODING_APPROVAL_ID in inputs[TIME_ENCODING_APPROVAL_NAME],
+            "time encoding approval id marker missing")
+    for name, pin in pins[TIME_ENCODING_DIR]["files"].items():
+        raw = (source_dir / TIME_ENCODING_DIR / name).read_bytes()
+        require(digest(raw) == pin["git_sha256"], f"time encoding input hash mismatch: {name}")
+        doc = json.loads(raw)
+        require(doc["data"]["origin"]["sha256"] == pin["original_sha256"],
+                f"time encoding original pin mismatch: {name}")
+        inputs[TIME_ENCODING_DIR + "/" + name] = doc
     return pins, inputs
 
 
@@ -169,8 +188,9 @@ def extract_timing_materials(materials, originals):
         {"method": "Copy semantics, grid, counters and selected cells; source_cell_index indexes original /cells; "
                    "row_idx is the saved zero-based absolute parquet row, not an excerpt index."},
         source_identity_note=census["source"],
-        limitation="Saved census statement and boundary samples only; configured minute parquet remains unbound. "
-                   "No local lake identity/coverage verification; full original census pinned separately.")}
+        limitation="Saved census statement and boundary samples only; no local lake identity/coverage verification. "
+                   "Full original census pinned separately. The time_encoding_approval binds these saved labels "
+                   "to the R4f partition hash, time:int64 and approved Shanghai wall encoding/window.")}
 
     docs = json.loads(originals[TIMING_DOCS])
     rows = []
@@ -192,7 +212,8 @@ def extract_timing_materials(materials, originals):
         {"method": "UTF-8 lines from header through section 1.1, excluding section 1.2; original zero-based line retained."},
         limitation="Original host-assist DRAFT and time wording preserved. Section 1.1 supplies END semantics. "
                    "Its example labels 1761211800000 as Shanghai 09:30, but the existing epoch_ms decoder "
-                   "gives 17:30+08:00. Host must reconcile this encoding mismatch before freeze; no silent shift.")
+                   "gives 17:30+08:00. The separate time_encoding_approval binds this wall intent to the named "
+                   "encoding and R4f source/window; fresh v5 host freeze still required, no numeric offset correction.")
     return result
 
 
@@ -249,8 +270,8 @@ def add_timing_package(pins, inputs, add, md_excerpt):
     for identity, token, observation in (
         ("timing_materials_map", "1761211800000", "Pinned §1.1 labels 1761211800000 as Shanghai 09:30 and says "
          "'不是真 UTC'. Arithmetic check with the unchanged epoch_ms decoder instead gives "
-         "2025-10-23T17:30:00+08:00. END is attested separately; host encoding reconciliation remains "
-         "a freeze blocker, with no silent offset change or START relabel."),
+         "2025-10-23T17:30:00+08:00. The pinned time_encoding_approval now binds the named Shanghai wall "
+         "encoding to this source/column/window; END stays unchanged, with no numeric offset correction."),
         ("timing_xtquant_docs", "'time'", "Vendor K-line time is a timestamp field; corroborates the field mapping, "
          "not by itself END semantics or feed arrival latency."),
         ("timing_xtquant_docs", "amount、volume为0", "fill_data=True may fill missing volume/amount with zero and "
@@ -273,7 +294,7 @@ def add_timing_package(pins, inputs, add, md_excerpt):
         "subject": "timing", "source_refs": [*excerpts, "opening_auction", "daqmt_1m"],
         "filter": {"symbols": [SYMBOL], "from_date": FIRST, "through_date": LAST,
                    "predicate": "END labels map to [t-1min,t); completed close/volume available at bucket.end=t; "
-                                "saved Shanghai labels for bars and legal marks; host epoch mapping must be reconciled"},
+                                "saved Shanghai labels for bars and legal marks; named wall encoding bound by host approval"},
         "result": {"complete": True, "summary": "completed_bucket_available_at_end; independently pinned census "
                    "END statement and boundary samples, map §1.1, vendor field corroboration and scoped approval",
                    "rows": observations},
@@ -283,13 +304,55 @@ def add_timing_package(pins, inputs, add, md_excerpt):
             "than bucket.end must reject adaptation; file collection time is not event time.",
             "fill_data zero-fill is not event-time proof or proof of actual trades. Vendor timestamp docs do not "
             "independently declare START/END; END comes from the pinned census and host materials map §1.1.",
-            "Vendor export != lake identity; the saved census parquet hash is an identity note only. "
-            "minute_603196 remains unbound; host must pin configured lake identity/coverage and freshly freeze.",
+            "Vendor export != lake identity. minute_603196 remains unbound only in the sense that this catalog "
+            "does not ship parquet bytes; wall encoding still pins "
+            f"{CAM_LAKE_SHA256} via time_encoding_approval.binding.source_sha256, enforced by the loader. "
+            "Host must still configure/resolve lake identity/coverage and freshly freeze.",
             "Proof covers bars/marks 2025-10-23..2025-11-04, not bars on next BUY calendar date 2025-11-05. "
             "A wider execution/mark window requires fresh coverage; calendar retains its separate next-day coverage.",
-            "The END/completed-bucket conclusion does not certify the R4d epoch_ms mapping: map 1761211800000 "
-            "labels Shanghai 09:30, while the unchanged loader yields 17:30+08:00. Host must reconcile pinned "
-            "time/index/label evidence before freeze. No silent offset, Clock or economic-semantics change."]})
+            "The old epoch_ms mapping still yields 17:30+08:00 and is not approved for this lake partition. "
+            "Use epoch_ms_wall_shanghai_as_utc with the pinned source/column/window approval; v5 requires fresh "
+            "implementation/recipe/attestation pins. No new lake run, Clock or economic-semantics change."]})
+
+
+def add_time_encoding_package(pins, inputs, artifacts, add, md_excerpt):
+    """Pin Human A, saved host reports and the exact mapping approved for v5."""
+    for identity, name, key in (
+        ("host_time_encoding_approval", TIME_ENCODING_APPROVAL_NAME, "host_time_encoding_approval_sha256"),
+        ("human_go_time_encoding", TIME_ENCODING_GO_NAME, "human_go_time_encoding_sha256"),
+    ):
+        md_excerpt(identity, name, {"repository": "baiyibing/MyQuant-backtrader",
+            "path": "docs/backtest/b-l2-01-evidence-2026-09-30/attestation_packages/" + name,
+            "sha256": pins[key]}, limitation="Named encoding implementation GO only; r4_authorized=false.")
+    for name in pins[TIME_ENCODING_DIR]["files"]:
+        doc = inputs[TIME_ENCODING_DIR + "/" + name]
+        add(Path(name).stem, "sources/" + name, doc["schema_version"], doc["data"])
+    material_ids = {"host_time_encoding_approval", "human_go_time_encoding", "time_encoding_advice",
+                    "time_encoding_r4f", "timing_materials_map", "timing_lake_census"}
+    evidence_refs = {identity: digest(encode(doc)) for identity, doc in artifacts.values() if identity in material_ids}
+    require(set(evidence_refs) == material_ids, "missing time encoding materials")
+    approval = {
+        "approval_id": TIME_ENCODING_APPROVAL_ID,
+        "approval_document_sha256": pins["host_time_encoding_approval_sha256"],
+        "human_go_document_sha256": pins["human_go_time_encoding_sha256"],
+        "r4_authorized": False,
+        "decode_rule": "UTC integer milliseconds construction; replace(tzinfo=None).replace(tzinfo=Asia/Shanghai); no offset arithmetic",
+        "binding": {"source": MINUTE_SOURCE, "source_sha256": CAM_LAKE_SHA256,
+                    "column": "time", "source_type": "int64", "symbol": SYMBOL,
+                    "encoding": TIME_ENCODING, "timezone": "Asia/Shanghai", "label": "END",
+                    "availability": "bucket_end", "from_date": FIRST, "through_date": LAST},
+        "evidence_refs": evidence_refs,
+    }
+    add("time_encoding_approval", "sources/time_encoding_approval.json", "bl2_time_encoding_approval_v1",
+        {"rows": [approval]})
+    proof = artifacts["timing.proof.json"][1]["data"]
+    proof["source_refs"] += sorted(material_ids - set(proof["source_refs"])) + ["time_encoding_approval"]
+    proof["result"]["rows"].append({"source": "time_encoding_approval", "row": 0,
+        "observation": "Human A GO: epoch_ms_wall_shanghai_as_utc for pinned minute_603196 time:int64, "
+                       "603196.SH 2025-10-23..2025-11-04; UTC wall components stamped Asia/Shanghai, "
+                       "no offset arithmetic. Saved Kimi census reports 2169 rows / zero violations; "
+                       "HOST approval and all source materials are byte-bound. Fresh v5 freeze required."})
+    proof["result"]["summary"] += "; epoch_ms_wall_shanghai_as_utc bound to source/column/window and Human A HOST approval"
 
 
 def add_cam_packages(pins, inputs, add, md_excerpt):
@@ -439,7 +502,8 @@ def add_cam_packages(pins, inputs, add, md_excerpt):
     add("marks", "marks.json", "bl2_marks_grid_v1", {
         "subject": "marks", "conclusion": "raw_contemporaneous_grid",
         "purpose": "Host-facing approved grid document; not a loader role or a frozen recipe.",
-        "approval_id": CAM_APPROVAL_ID, "transform_version": "bl2_source_transform_v4",
+        "approval_id": CAM_APPROVAL_ID, "transform_version": "bl2_source_transform_v5",
+        "time": {"encoding": TIME_ENCODING, "timezone": "Asia/Shanghai", "label": "END"},
         "source_identity_note": {"source": MINUTE_SOURCE, "sha256": CAM_LAKE_SHA256,
                                  "binding_status": "unbound_minute_source",
                                  "note": "Identity recorded in pinned #1114 substrate; parquet/census not read here. "
@@ -716,14 +780,19 @@ def build(source_dir, human_go, host_approval=None, host_cam_approval=None, host
 
     add_cam_packages(pins, inputs, add, md_excerpt)
     add_timing_package(pins, inputs, add, md_excerpt)
+    add_time_encoding_package(pins, inputs, artifacts, add, md_excerpt)
     outputs = {filename: encode(document) for filename, (_, document) in artifacts.items()}
     catalog = {"source_repository": pins["repository"], "source_commit": pins["commit"],
                "notice": NOTICE, "r4_authorized": False, "lake_verdict": "NOT_RUN",
                "unbound_minute_source": {"id": MINUTE_SOURCE, "sha256": None,
-                                         "requirement": "Host must pin configured raw minute parquet; exports do not establish lake equivalence."},
+                                         "requirement": "Null sha256 means this catalog does not ship parquet bytes. "
+                                         "The wall-encoding pin lives in time_encoding_approval.binding.source_sha256 "
+                                         f"({CAM_LAKE_SHA256}), not in this field, and the loader enforces it. "
+                                         "Host must still configure/resolve lake identity/coverage and freshly freeze; "
+                                         "exports do not establish lake equivalence."},
                "unresolved": ["account/commands and scoped attestation require host recipe review and registration",
-                              "host time-encoding reconciliation before freeze: map labels 1761211800000 as Shanghai 09:30; existing epoch_ms decoder yields 17:30+08:00; no silent shift",
                               "host recipe, lake identity/coverage and fresh freeze; r4_authorized stays false"],
+               "transform_version": "bl2_source_transform_v5",
                "artifacts": [{"id": identity, "path": filename, "format": "json", "schema": doc["schema_version"],
                               "sha256": digest(outputs[filename])} for filename, (identity, doc) in artifacts.items()]}
     outputs["manifest.json"] = encode(catalog)
