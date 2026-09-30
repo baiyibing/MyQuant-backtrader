@@ -1,0 +1,697 @@
+{
+ "schema_version": "bl2_raw_excerpt_draft_v0_host_review",
+ "collected_at": "2026-09-30",
+ "collector": "ZCode(host-assist) via user request",
+ "xtquant_version": "250516.1.1",
+ "purpose": "B-L2-01 三门外材料：vendor 字段语义行式摘录；非 bl2_proof_v1，host 审核后才可引用",
+ "rows": [
+  {
+   "excerpt_id": "xtdata_md_kline_fields",
+   "original": "D:\\anaconda3\\envs\\vanna312\\Lib\\site-packages\\xtquant\\doc\\xtdata.md",
+   "original_sha256": "b3879a4ccf9124a3ae7b1e242b67bab6319036fcae2e52c60aa624e7c611f82f",
+   "lines": [
+    {
+     "line": 1219,
+     "text": "#### 1m / 5m / 1d - K线数据"
+    },
+    {
+     "line": 1220,
+     "text": ""
+    },
+    {
+     "line": 1221,
+     "text": "```python"
+    },
+    {
+     "line": 1222,
+     "text": "'time'                  #时间戳"
+    },
+    {
+     "line": 1223,
+     "text": "'open'                  #开盘价"
+    },
+    {
+     "line": 1224,
+     "text": "'high'                  #最高价"
+    },
+    {
+     "line": 1225,
+     "text": "'low'                   #最低价"
+    },
+    {
+     "line": 1226,
+     "text": "'close'                 #收盘价"
+    },
+    {
+     "line": 1227,
+     "text": "'volume'                #成交量"
+    },
+    {
+     "line": 1228,
+     "text": "'amount'                #成交额"
+    },
+    {
+     "line": 1229,
+     "text": "'settelementPrice'      #今结算"
+    },
+    {
+     "line": 1230,
+     "text": "'openInterest'          #持仓量"
+    },
+    {
+     "line": 1231,
+     "text": "'preClose'              #前收价"
+    },
+    {
+     "line": 1232,
+     "text": "'suspendFlag'           #停牌标记 0 - 正常 1 - 停牌 -1 - 当日起复牌"
+    },
+    {
+     "line": 1233,
+     "text": "```"
+    },
+    {
+     "line": 1234,
+     "text": ""
+    },
+    {
+     "line": 1235,
+     "text": "#### 除权数据"
+    },
+    {
+     "line": 1236,
+     "text": ""
+    },
+    {
+     "line": 1237,
+     "text": "```python"
+    },
+    {
+     "line": 1238,
+     "text": "'interest'        \t\t#每股股利（税前，元）"
+    },
+    {
+     "line": 1239,
+     "text": "'stockBonus'      \t\t#每股红股（股）"
+    },
+    {
+     "line": 1240,
+     "text": "'stockGift'       \t\t#每股转增股本（股）"
+    },
+    {
+     "line": 1241,
+     "text": "'allotNum'        \t\t#每股配股数（股）"
+    }
+   ],
+   "note": "K线(1m/5m/1d)字段表：volume=成交量(无单位注记)、preClose=前收价、suspendFlag=停牌标记 0/-1/1、amount=成交额。供应商未在字段表声明 volume 单位(手/股)——units 门缺声明级直接证据。"
+  },
+  {
+   "excerpt_id": "xtdata_py_fill_data_semantics",
+   "original": "D:\\anaconda3\\envs\\vanna312\\Lib\\site-packages\\xtquant\\xtdata.py",
+   "original_sha256": "a6c6939a0d9cf7d1b51ed1a1bb41140cbb37dbe2098084e617f872ddcf9d9909",
+   "lines": [
+    {
+     "line": 4087,
+     "text": "        K线可选字段："
+    },
+    {
+     "line": 4088,
+     "text": "            \"time\"                #时间戳"
+    },
+    {
+     "line": 4089,
+     "text": "            \"open\"                #开盘价"
+    },
+    {
+     "line": 4090,
+     "text": "            \"high\"                #最高价"
+    },
+    {
+     "line": 4091,
+     "text": "            \"low\"                 #最低价"
+    },
+    {
+     "line": 4092,
+     "text": "            \"close\"               #收盘价"
+    },
+    {
+     "line": 4093,
+     "text": "            \"volume\"              #成交量"
+    },
+    {
+     "line": 4094,
+     "text": "            \"amount\"              #成交额"
+    },
+    {
+     "line": 4095,
+     "text": "            \"settle\"              #今结算"
+    },
+    {
+     "line": 4096,
+     "text": "            \"openInterest\"        #持仓量"
+    },
+    {
+     "line": 4097,
+     "text": "    :param stock_list: 股票代码 \"000001.SZ\""
+    },
+    {
+     "line": 4098,
+     "text": "    :param period: 周期 分钟线\"1m\"/\"5m\"/\"15m\" 日线\"1d\""
+    },
+    {
+     "line": 4099,
+     "text": "    :param start_time: 起始时间 \"20200101\" \"20200101093000\""
+    },
+    {
+     "line": 4100,
+     "text": "    :param end_time: 结束时间 \"20201231\" \"20201231150000\""
+    },
+    {
+     "line": 4101,
+     "text": "    :param count: 数量 -1全部/n: 从结束时间向前数n个"
+    },
+    {
+     "line": 4102,
+     "text": "    :param dividend_type: 除权类型\"none\" \"front\" \"back\" \"front_ratio\" \"back_ratio\""
+    },
+    {
+     "line": 4103,
+     "text": "    :param fill_data: 对齐时间戳时是否填充数据，仅对K线有效，分笔周期不对齐时间戳"
+    },
+    {
+     "line": 4104,
+     "text": "        为True时，以缺失数据的前一条数据填充"
+    },
+    {
+     "line": 4105,
+     "text": "            open、high、low、close 为前一条数据的close"
+    },
+    {
+     "line": 4106,
+     "text": "            amount、volume为0"
+    },
+    {
+     "line": 4107,
+     "text": "            settle、openInterest 和前一条数据相同"
+    },
+    {
+     "line": 4108,
+     "text": "        为False时，缺失数据所有字段填NaN"
+    },
+    {
+     "line": 4109,
+     "text": "    :return: pd.DataFrame 字段对应的数据，各字段维度相同，index为为time_list,包含symbol列"
+    },
+    {
+     "line": 4110,
+     "text": "    '''"
+    },
+    {
+     "line": 4111,
+     "text": "    if period in {'1m', '5m', '15m', '30m', '60m', '1h', '1d', '1w', '1mon', '1q', '1hy', '1y'}:"
+    },
+    {
+     "line": 4112,
+     "text": "        return _get_market_data_ex_250414(field_list, stock_list, period, start_time, end_time, count, dividend_type, fill_data)"
+    },
+    {
+     "line": 4113,
+     "text": ""
+    },
+    {
+     "line": 4114,
+     "text": "    return _get_tabular_data(stock_list, field_list, period, start_time, end_time, count, dividend_type=dividend_type, fill_data=fill_data)"
+    }
+   ],
+   "note": "get_tabular_data docstring：fill_data=True 对齐时间戳时缺失数据 amount、volume 填 0、价格以前条 close 填充——零量行可能是 vendor 对齐填充行；1.3 下载调用 fill_data=True。"
+  },
+  {
+   "excerpt_id": "xtdata_md_tick_vs_kline_volume",
+   "original": "D:\\anaconda3\\envs\\vanna312\\Lib\\site-packages\\xtquant\\doc\\xtdata.md",
+   "original_sha256": "b3879a4ccf9124a3ae7b1e242b67bab6319036fcae2e52c60aa624e7c611f82f",
+   "lines": [
+    {
+     "line": 1200,
+     "text": "'time'                  #时间戳"
+    },
+    {
+     "line": 1201,
+     "text": "'lastPrice'             #最新价"
+    },
+    {
+     "line": 1202,
+     "text": "'open'                  #开盘价"
+    },
+    {
+     "line": 1203,
+     "text": "'high'                  #最高价"
+    },
+    {
+     "line": 1204,
+     "text": "'low'                   #最低价"
+    },
+    {
+     "line": 1205,
+     "text": "'lastClose'             #前收盘价"
+    },
+    {
+     "line": 1206,
+     "text": "'amount'                #成交总额"
+    },
+    {
+     "line": 1207,
+     "text": "'volume'                #成交总量"
+    },
+    {
+     "line": 1208,
+     "text": "'pvolume'               #原始成交总量"
+    },
+    {
+     "line": 1209,
+     "text": "'stockStatus'           #证券状态"
+    },
+    {
+     "line": 1210,
+     "text": "'openInt'               #持仓量"
+    },
+    {
+     "line": 1211,
+     "text": "'lastSettlementPrice'   #前结算"
+    },
+    {
+     "line": 1212,
+     "text": "'askPrice'              #委卖价"
+    },
+    {
+     "line": 1213,
+     "text": "'bidPrice'              #委买价"
+    },
+    {
+     "line": 1214,
+     "text": "'askVol'                #委卖量"
+    },
+    {
+     "line": 1215,
+     "text": "'bidVol'                #委买量"
+    },
+    {
+     "line": 1216,
+     "text": "'transactionNum'\t\t#成交笔数"
+    },
+    {
+     "line": 1217,
+     "text": "```"
+    },
+    {
+     "line": 1218,
+     "text": ""
+    }
+   ],
+   "note": "tick 分笔 volume=成交总量(累计) vs K线 volume=成交量(每根 bar)——每 bar 增量与累计口径的 vendor 语义区分。"
+  },
+  {
+   "excerpt_id": "xtdata_md_l2quote_hand_units",
+   "original": "D:\\anaconda3\\envs\\vanna312\\Lib\\site-packages\\xtquant\\doc\\xtdata.md",
+   "original_sha256": "b3879a4ccf9124a3ae7b1e242b67bab6319036fcae2e52c60aa624e7c611f82f",
+   "lines": [
+    {
+     "line": 1560,
+     "text": "#### l2thousand - level2委买委卖千档盘口"
+    },
+    {
+     "line": 1561,
+     "text": ""
+    },
+    {
+     "line": 1562,
+     "text": "```python"
+    },
+    {
+     "line": 1563,
+     "text": "'timeTag'                    #时间戳"
+    },
+    {
+     "line": 1564,
+     "text": "'price'                      #最新成交价"
+    },
+    {
+     "line": 1565,
+     "text": "'bidPrice'                   #多档委买价(向量)"
+    },
+    {
+     "line": 1566,
+     "text": "'bidVolume'                  #多档委买量(向量)，单位是手"
+    },
+    {
+     "line": 1567,
+     "text": "'offPrice'                   #多档委卖价(向量)"
+    },
+    {
+     "line": 1568,
+     "text": "'offVolume'                  #多档委卖量(向量)，单位是手"
+    },
+    {
+     "line": 1569,
+     "text": "```"
+    },
+    {
+     "line": 1570,
+     "text": ""
+    },
+    {
+     "line": 1571,
+     "text": ""
+    },
+    {
+     "line": 1572,
+     "text": ""
+    }
+   ],
+   "note": "l2quote 多档委买/委卖量单位是手——供应商对量类字段在手单位的显式声明示例，但非 K线 volume 本身。"
+  },
+  {
+   "excerpt_id": "xtdata_py_instrument_detail_fields",
+   "original": "D:\\anaconda3\\envs\\vanna312\\Lib\\site-packages\\xtquant\\xtdata.py",
+   "original_sha256": "a6c6939a0d9cf7d1b51ed1a1bb41140cbb37dbe2098084e617f872ddcf9d9909",
+   "lines": [
+    {
+     "line": 1720,
+     "text": "        , InstrumentID(str):合约代码"
+    },
+    {
+     "line": 1721,
+     "text": "        , InstrumentName(str):合约名称"
+    },
+    {
+     "line": 1722,
+     "text": "        , ProductID(str):合约的品种ID(期货)"
+    },
+    {
+     "line": 1723,
+     "text": "        , ProductName(str):合约的品种名称(期货)"
+    },
+    {
+     "line": 1724,
+     "text": "        , ProductType(str):合约的类型"
+    },
+    {
+     "line": 1725,
+     "text": "        , ExchangeCode(str):交易所代码"
+    },
+    {
+     "line": 1726,
+     "text": "        , UniCode(str):统一规则代码"
+    },
+    {
+     "line": 1727,
+     "text": "        , CreateDate(str):上市日期(期货)"
+    },
+    {
+     "line": 1728,
+     "text": "        , OpenDate(str):IPO日期(股票)"
+    },
+    {
+     "line": 1729,
+     "text": "        , ExpireDate(str):退市日或者到期日"
+    },
+    {
+     "line": 1730,
+     "text": "        , PreClose(double):前收盘价格"
+    },
+    {
+     "line": 1731,
+     "text": "        , SettlementPrice(double):前结算价格"
+    },
+    {
+     "line": 1732,
+     "text": "        , UpStopPrice(double):当日涨停价"
+    },
+    {
+     "line": 1733,
+     "text": "        , DownStopPrice(double):当日跌停价"
+    },
+    {
+     "line": 1734,
+     "text": "        , FloatVolume(double):流通股本"
+    },
+    {
+     "line": 1735,
+     "text": "        , TotalVolume(double):总股本"
+    },
+    {
+     "line": 1736,
+     "text": "        , LongMarginRatio(double):多头保证金率"
+    },
+    {
+     "line": 1737,
+     "text": "        , ShortMarginRatio(double):空头保证金率"
+    },
+    {
+     "line": 1738,
+     "text": "        , PriceTick(double):最小变价单位"
+    },
+    {
+     "line": 1739,
+     "text": "        , VolumeMultiple(int):合约乘数(对期货以外的品种，默认是1)"
+    },
+    {
+     "line": 1740,
+     "text": "        , MainContract(int):主力合约标记"
+    },
+    {
+     "line": 1741,
+     "text": "        , LastVolume(int):昨日持仓量"
+    },
+    {
+     "line": 1742,
+     "text": "        , InstrumentStatus(int):合约停牌状态"
+    },
+    {
+     "line": 1743,
+     "text": "        , IsTrading(bool):合约是否可交易"
+    },
+    {
+     "line": 1744,
+     "text": "        , IsRecent(bool):是否是近月合约,"
+    },
+    {
+     "line": 1745,
+     "text": "    '''"
+    },
+    {
+     "line": 1746,
+     "text": ""
+    },
+    {
+     "line": 1747,
+     "text": "    inst = _get_instrument_detail(stock_code)"
+    },
+    {
+     "line": 1748,
+     "text": "    if not inst:"
+    },
+    {
+     "line": 1749,
+     "text": "        return None"
+    },
+    {
+     "line": 1750,
+     "text": ""
+    },
+    {
+     "line": 1751,
+     "text": "    if iscomplete:"
+    },
+    {
+     "line": 1752,
+     "text": "        if 'ExtendInfo' in inst:"
+    },
+    {
+     "line": 1753,
+     "text": "            for field in inst['ExtendInfo']:"
+    },
+    {
+     "line": 1754,
+     "text": "                inst[field] = inst['ExtendInfo'][field]"
+    },
+    {
+     "line": 1755,
+     "text": "            del inst['ExtendInfo']"
+    },
+    {
+     "line": 1756,
+     "text": ""
+    },
+    {
+     "line": 1757,
+     "text": "        def convNum2Str(field):"
+    },
+    {
+     "line": 1758,
+     "text": "            if field in inst and isinstance(inst[field], int):"
+    },
+    {
+     "line": 1759,
+     "text": "                inst[field] = str(inst[field])"
+    },
+    {
+     "line": 1760,
+     "text": ""
+    }
+   ],
+   "note": "get_instrument_detail 字段：PreClose/UpStopPrice(当日涨停价)/DownStopPrice(当日跌停价)/PriceTick(最小变价)/InstrumentStatus(停牌状态)——vendor instrument 事实字段存在，但语义为当日，历史窗口需另取。"
+  },
+  {
+   "excerpt_id": "xttrader_md_order_volume_unit",
+   "original": "D:\\anaconda3\\envs\\vanna312\\Lib\\site-packages\\xtquant\\doc\\xttrader.md",
+   "original_sha256": "a107db985c78846292f55c83ae966f9ac5999e2b20b4aa3dda4950b84e17abab",
+   "lines": [
+    {
+     "line": 1000,
+     "text": "* 参数"
+    },
+    {
+     "line": 1001,
+     "text": "  - account - StockAccount 资金账号"
+    },
+    {
+     "line": 1002,
+     "text": "  - stock_code - str 证券代码，如'600000.SH'"
+    },
+    {
+     "line": 1003,
+     "text": "  - order_type - int 委托类型"
+    },
+    {
+     "line": 1004,
+     "text": "  - order_volume - int 委托数量，股票以'股'为单位，债券以'张'为单位"
+    },
+    {
+     "line": 1005,
+     "text": "  - price_type - int 报价类型"
+    },
+    {
+     "line": 1006,
+     "text": "  - price - float 委托价格"
+    },
+    {
+     "line": 1007,
+     "text": "  - strategy_name - str 策略名称"
+    },
+    {
+     "line": 1008,
+     "text": "  - order_remark - str 委托备注"
+    },
+    {
+     "line": 1009,
+     "text": "* 返回 "
+    },
+    {
+     "line": 1010,
+     "text": "  - 系统生成的订单编号，成功委托后的订单编号为大于0的正整数，如果为-1表示委托失败"
+    },
+    {
+     "line": 1011,
+     "text": "* 备注"
+    },
+    {
+     "line": 1012,
+     "text": "  - 无"
+    },
+    {
+     "line": 1013,
+     "text": "* 示例"
+    },
+    {
+     "line": 1014,
+     "text": "  - 股票资金账号1000000365对浦发银行买入1000股，使用限价价格10.5元, 委托备注为'order_test'"
+    },
+    {
+     "line": 1015,
+     "text": "```python"
+    },
+    {
+     "line": 1016,
+     "text": "account = StockAccount('1000000365')"
+    },
+    {
+     "line": 1017,
+     "text": "#xt_trader为XtQuant API实例对象"
+    },
+    {
+     "line": 1018,
+     "text": "order_id = xt_trader.order_stock(account, '600000.SH', xtconstant.STOCK_BUY, 1000, xtconstant.FIX_PRICE, 10.5, 'strategy1', 'order_test')"
+    },
+    {
+     "line": 1019,
+     "text": "```"
+    },
+    {
+     "line": 1020,
+     "text": "#### 股票异步报单"
+    },
+    {
+     "line": 1021,
+     "text": ""
+    },
+    {
+     "line": 1022,
+     "text": "```python"
+    },
+    {
+     "line": 1023,
+     "text": "order_stock_async(account, stock_code, order_type, order_volume, price_type, price, strategy_name, order_remark)"
+    },
+    {
+     "line": 1024,
+     "text": "```"
+    },
+    {
+     "line": 1025,
+     "text": "* 释义 "
+    },
+    {
+     "line": 1026,
+     "text": "  - 对股票进行异步下单操作，异步下单接口如果正常返回了下单请求序号seq，会收到on_order_stock_async_response的委托反馈"
+    },
+    {
+     "line": 1027,
+     "text": "* 参数"
+    },
+    {
+     "line": 1028,
+     "text": "  - account - StockAccount 资金账号"
+    },
+    {
+     "line": 1029,
+     "text": "  - stock_code - str 证券代码， 如'600000.SH'"
+    },
+    {
+     "line": 1030,
+     "text": "  - order_type - int 委托类型"
+    },
+    {
+     "line": 1031,
+     "text": "  - order_volume - int 委托数量，股票以'股'为单位，债券以'张'为单位"
+    },
+    {
+     "line": 1032,
+     "text": "  - price_type - int 报价类型"
+    },
+    {
+     "line": 1033,
+     "text": "  - price - float 委托价格"
+    },
+    {
+     "line": 1034,
+     "text": "  - strategy_name - str 策略名称"
+    },
+    {
+     "line": 1035,
+     "text": "  - order_remark - str 委托备注"
+    }
+   ],
+   "note": "xttrader 委托 order_volume 股票以股为单位——下单域单位声明，与行情域相区分。"
+  }
+ ]
+}

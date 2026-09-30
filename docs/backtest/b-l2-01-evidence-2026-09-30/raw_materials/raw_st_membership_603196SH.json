@@ -1,0 +1,18 @@
+{
+ "schema_version": "bl2_raw_excerpt_draft_v0_host_review",
+ "source": {
+  "path": "E:\\stock_data\\vendor_wind_st_status\\st_daily.parquet",
+  "sha256": "3656349a8e6606589e286cba54578ff0eb670eb70110713816c1672d6ab2d235",
+  "rows_total": 261155,
+  "columns": [
+   "trade_date",
+   "code",
+   "is_st",
+   "st_kind",
+   "name"
+  ]
+ },
+ "filter": "code contains 603196",
+ "hits": 0,
+ "note": "603196.SH 全表零命中=非 ST；st_daily 覆盖期由 vendor_wind_st_status harvest 声明，host 另核覆盖期含 2025-10。"
+}

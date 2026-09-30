@@ -4,6 +4,11 @@ These are intentionally invalid, unfilled templates, not market facts. Unknown
 values are `null`, proof refs are empty, and proof completeness is `false`.
 Do not substitute 10% bands, lot guesses, or `false` halt flags to make them pass.
 
+Post-R3 (2026-09-30): host-side raw material drafts for filling these live in
+[docs/backtest/b-l2-01-evidence-2026-09-30/](../../../docs/backtest/b-l2-01-evidence-2026-09-30/)
+(see its README + [sweep note](../../../docs/backtest/note-b-l2-01-r3-evidence-sweep-2026-09-30.md));
+they are drafts, not proofs, and R3 stays BLOCKED/NOT_RUN.
+
 | Artifact | Package / use |
 |---|---|
 | `units.proof.template.json` | `bl2_proof_v1`, subject `units`; exact source/column/incremental/unit/factor declaration |

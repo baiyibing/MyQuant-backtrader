@@ -1,0 +1,17 @@
+{
+ "schema_version": "bl2_raw_excerpt_draft_v0_host_review",
+ "source": {
+  "path": "E:\\stock_data\\ex_date_index.parquet",
+  "sha256": "93c264ede7e89f97cc799c4891b14e3cefa5ae421c50cf1f93a9987b99246c47",
+  "rows_total": 57867,
+  "columns": [
+   "stock_code",
+   "ex_date",
+   "dr",
+   "fetched_at"
+  ]
+ },
+ "filter": "stock_code contains 603196 and ex_date in 2025-09-01..2025-12-31",
+ "hits": 0,
+ "note": "零事件命中；§3.2 要求覆盖完整性另证(hash 只证身份)；R2/R3 探针同样零命中。"
+}

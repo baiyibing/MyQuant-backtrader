@@ -450,3 +450,15 @@ missing=false 而源行缺失则失败，零量源行仍是存在的记录。
 覆盖 / 市场可执行性 / SSOT 绿 R/S。** `no_ssot_compare_authorization` 不变。
 **PR 不合并；合并须 Human「合」。4090 R3 发车前还需要另一条具名 Human GO**，
 即使模板填写完、校验通过或 PR 后续获准合并，也不沿用 R2/probe GO 自动调度。
+
+## 10. R3 后证据采集登记（2026-09-30）
+
+R3 已在 4090 执行：tip `a268e11` · transform `bl2_source_transform_v3` · verdict 仍
+**`BLOCKED/NOT_RUN`**（同 §9 三门，收据与探针摘要已逐字节入库
+[b-l2-01-evidence-2026-09-30/](b-l2-01-evidence-2026-09-30/)）。
+随后 host 指示做了一轮湖外只读取证（1.3 / MyQuant / xtquant 包 / 湖本体 / 公开规则），
+六包 `bl2_raw_excerpt_draft_v0_host_review` 原材料与 R4 行动清单（R4-A QMT 全字段回补
+`preClose/suspendFlag`、R4-B 量单位声明 hunt、R4-C 规则文本/双 issuer、R4-D host 审核）
+登记于 [note-b-l2-01-r3-evidence-sweep-2026-09-30.md](note-b-l2-01-r3-evidence-sweep-2026-09-30.md)。
+**新材料是草稿摘录而非 proof：不解除任何 BLOCKED 门，不改上文合同一字；
+量单位「vendor 无 K线单位注记」本身已按缺失证据 pin。R4 仍需具名 Human GO。**
