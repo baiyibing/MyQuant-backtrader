@@ -54,6 +54,11 @@ _CLAIMS = {
 _BOUND_SUBJECTS = {"units", "instruments", "status"}
 _FACT_PACKAGES = ("bl2_instruments_v1", "bl2_status_v1")
 _RATIO_GO_SHA256 = "bb287dfe9e2559e9fe05abb7401a636aa6596524cfb79ffa34a4f3ff884c2afe"
+_WALL_SHANGHAI_ENCODING = "epoch_ms_wall_shanghai_as_utc"
+# attestation_packages/sources/time_encoding_approval.json: exact saved HOST
+# approval, including source/column/window and material hashes.
+# Synthetic tests replace only this trust anchor with explicitly fabricated bytes.
+_TIME_ENCODING_APPROVAL_SHA256 = "8fedbb2833675a18c9d434f0c38592b2fd2f74e24cb08a283aeeeecb0b8f71b7"
 
 
 def _units_evidence(data, row, evidence, store, where):
@@ -258,6 +263,53 @@ def _bound_refs(values, store, subject, binding, basis, **scope):
     return matches
 
 
+def _time_encoding_refs(recipe, store, sid, column, time_spec):
+    """Require the one approved wall encoding binding through the timing claim.
+
+    This is deliberately narrower than a general timezone override. An approval
+    for another source snapshot/window requires a new named implementation GO.
+    The pure _time decoder is called only after this gate by bars and marks.
+    """
+    object_fields(time_spec, ("encoding", "timezone", "label"), "time encoding")
+    if time_spec["encoding"] != _WALL_SHANGHAI_ENCODING:
+        return []
+    where = "time encoding"
+    source = store.specs[sid]
+    require(source["location"]["kind"] == "minute" and source["schema"].get(column) == "int64",
+            f"{where}: approved int64 minute source required")
+    first, last = (_timestamp(recipe[k], k).date() for k in ("start_at", "end_at"))
+    symbol = _symbol(source["location"]["symbol"])
+    refs = store.role(recipe["roles"]["attestation"], "attestation")["claims"]["timing"]["proofs"]
+    _refs(refs, store, where, subject="timing", symbols=[symbol], from_date=first, through_date=last)
+    matches = []
+    for ref in refs:
+        proof = store.data[ref]
+        for index, observation in enumerate(proof["result"]["rows"]):
+            evidence_id = observation["source"]
+            evidence_spec = store.specs[evidence_id]
+            if evidence_spec["schema"] != "bl2_time_encoding_approval_v1":
+                continue
+            require(evidence_spec["sha256"] == _TIME_ENCODING_APPROVAL_SHA256,
+                    f"{where}: HOST approval pin mismatch")
+            evidence = store.data[evidence_id]["rows"][observation["row"]]
+            binding = evidence["binding"]
+            require(canonical({k: v for k, v in binding.items() if k not in ("from_date", "through_date")})
+                    == canonical({"source": sid, "source_sha256": source["sha256"], "column": column,
+                                  "source_type": "int64", "symbol": symbol, **time_spec,
+                                  "availability": "bucket_end"}),
+                    f"{where}: source/column/mapping binding mismatch")
+            require(_date(binding["from_date"], where) <= first <= last
+                    <= _date(binding["through_date"], where), f"{where}: approval window coverage gap")
+            for material, pin in evidence["evidence_refs"].items():
+                require(material in proof["source_refs"] and store.specs[material]["sha256"] == pin,
+                        f"{where}: pinned approval material missing or changed: {material}")
+            require(evidence["r4_authorized"] is False, f"{where}: R4 authorization is separate")
+            matches.append({"proof": ref, "row": index, "source": evidence_id,
+                            "source_row": observation["row"], "approval_id": evidence["approval_id"]})
+    require(bool(matches), f"{where}: matching pinned HOST approval binding required")
+    return matches
+
+
 def _time(value, spec, where):
     object_fields(spec, ("encoding", "timezone", "label"), where)
     require(spec["timezone"] == "Asia/Shanghai", f"{where}: unknown source timezone")
@@ -275,6 +327,10 @@ def _time(value, spec, where):
                     f"{where}: expected aware source datetime")
             require(value.utcoffset() == timedelta(hours=8), f"{where}: unexpected source offset")
             return value.astimezone(_TZ)
+        if encoding == _WALL_SHANGHAI_ENCODING:
+            require(type(value) is int, f"{where}: wall epoch ms must be an integer")
+            utc_wall = datetime(1970, 1, 1, tzinfo=UTC) + timedelta(microseconds=value * 1000)
+            return utc_wall.replace(tzinfo=None).replace(tzinfo=_TZ)
         require(encoding in ("epoch_s", "epoch_ms", "epoch_us"), f"{where}: unknown timestamp encoding")
         require(type(value) is int, f"{where}: epoch must be an integer")
         scale = {"epoch_s": 1_000_000, "epoch_ms": 1000, "epoch_us": 1}[encoding]
@@ -515,6 +571,7 @@ def _bars(recipe, store, symbols, sessions, coverage):
         object_fields(spec["time"], ("encoding", "timezone", "label"), "bar time")
         label = spec["time"]["label"]
         require(label in ("START", "END"), "explicit START/END timestamp label required")
+        time_proofs = _time_encoding_refs(recipe, store, sid, cols["time"], spec["time"])
         volume = spec["volume"]
         object_fields(volume, ("kind", "unit", "shares_per_unit"), "volume")
         require(volume["kind"] == "incremental" and volume["unit"] in ("shares", "lots"),
@@ -553,11 +610,15 @@ def _bars(recipe, store, symbols, sessions, coverage):
             mapped[key] = (str(close), shares)
             audit.append({"source": sid, "row": index, "columns": cols, "symbol_binding": binding,
                           "original_time": str(row[cols["time"]]), "symbol": symbol,
+                          "time": spec["time"], "time_source_type": schema[cols["time"]],
+                          "time_proofs": time_proofs,
                           "start": key[1], "end": key[2], "available_at": key[2],
                           "price": price_record, "volume": qty_record,
                           "shares_per_unit": factor, "volume_shares": shares, "volume_proofs": volume_proofs,
                           "status_row": status_index, "target": "buckets/" + symbol + "/" + key[1]})
         exclusions.append({"source": sid, "total_rows": len(rows), "excluded_count": len(excluded_rows),
+                           "time": spec["time"], "time_source_type": schema[cols["time"]],
+                           "time_proofs": time_proofs,
                            "excluded_rows": excluded_rows})
     require(sorted(partition_symbols) == symbols, "exactly one minute partition per declared symbol required")
     result = []
@@ -605,6 +666,7 @@ def _marks(recipe, store, symbols):
             row = rows[index]
             if binding is None:
                 require(_symbol(row[ref["symbol_column"]]) == symbol, "mark source symbol mismatch")
+            time_proofs = _time_encoding_refs(recipe, store, sid, ref["time_column"], ref["time"])
             stamp = _time(row[ref["time_column"]], ref["time"], "mark source time")
             label = ref["time"]["label"]
             require(label in ("START", "END", "INSTANT"), "unknown mark time label")
@@ -615,6 +677,8 @@ def _marks(recipe, store, symbols):
             prices.append({"symbol": symbol, "price": str(price)})
             audit.append({"source": sid, "row": index, "columns": ref, "conversion": conversion,
                           "symbol_binding": binding,
+                          "original_time": str(row[ref["time_column"]]),
+                          "time_source_type": schema[ref["time_column"]], "time_proofs": time_proofs,
                           "event_time": event.isoformat(), "available_at": event.isoformat(),
                           "target": "marks/" + point["mark_id"] + "/" + symbol})
         require(sorted(p["symbol"] for p in prices) == symbols, "mark universe coverage gap")

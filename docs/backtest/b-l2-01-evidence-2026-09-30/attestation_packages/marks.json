@@ -5,7 +5,12 @@
     "conclusion": "raw_contemporaneous_grid",
     "purpose": "Host-facing approved grid document; not a loader role or a frozen recipe.",
     "approval_id": "host_r4_cam_approval_20260930",
-    "transform_version": "bl2_source_transform_v4",
+    "transform_version": "bl2_source_transform_v5",
+    "time": {
+      "encoding": "epoch_ms_wall_shanghai_as_utc",
+      "timezone": "Asia/Shanghai",
+      "label": "END"
+    },
     "source_identity_note": {
       "source": "minute_603196",
       "sha256": "58879893f221bfe050b7a16029667c49fb65d8ec6f47592254e549374a577083",

@@ -11,7 +11,7 @@
       "row_index": "zero-based excerpt rows array",
       "method": "UTF-8 lines from header through section 1.1, excluding section 1.2; original zero-based line retained."
     },
-    "limitation": "Original host-assist DRAFT and time wording preserved. Section 1.1 supplies END semantics. Its example labels 1761211800000 as Shanghai 09:30, but the existing epoch_ms decoder gives 17:30+08:00. Host must reconcile this encoding mismatch before freeze; no silent shift.",
+    "limitation": "Original host-assist DRAFT and time wording preserved. Section 1.1 supplies END semantics. Its example labels 1761211800000 as Shanghai 09:30, but the existing epoch_ms decoder gives 17:30+08:00. The separate time_encoding_approval binds this wall intent to the named encoding and R4f source/window; fresh v5 host freeze still required, no numeric offset correction.",
     "rows": [
     {"line":0,"text":"# B-L2-01 R4 证据材料地图（host-assist 采集，2026-09-30）"},
     {"line":1,"text":""},

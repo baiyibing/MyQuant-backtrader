@@ -17,7 +17,7 @@
       "rows_total": 100497,
       "schema": "time: int64\nopen: double\nhigh: double\nlow: double\nclose: double\nvolume: int64\namount: double\n__index_level_0__: timestamp[ns]\n-- schema metadata --\npandas: '{\"index_columns\": [\"__index_level_0__\"], \"column_indexes\": [{\"na' + 1122"
     },
-    "limitation": "Saved census statement and boundary samples only; configured minute parquet remains unbound. No local lake identity/coverage verification; full original census pinned separately.",
+    "limitation": "Saved census statement and boundary samples only; no local lake identity/coverage verification. Full original census pinned separately. The time_encoding_approval binds these saved labels to the R4f partition hash, time:int64 and approved Shanghai wall encoding/window.",
     "rows": [
     {"kind":"time_semantics","json_pointer":"/time_semantics","time_semantics":"END 标签：bar 标签 t 覆盖 [t-1min,t)；上海墙钟按 UTC epoch 毫秒编码；每日 241 行 = 09:30 集合竞价条 + 09:31-11:30 + 13:01-15:00"},
     {"kind":"grid_definition","json_pointer":"/grid_definition","grid_definition":"合同可交易网格 END 标签 09:31-11:30(120)+13:01-14:57(117)=237/日；09:30/14:58/14:59/15:00 为网格外行(15:00 可作 mark 行)"},

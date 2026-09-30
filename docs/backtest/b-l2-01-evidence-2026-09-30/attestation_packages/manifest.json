@@ -11,9 +11,9 @@
   },
   "unresolved": [
     "account/commands and scoped attestation require host recipe review and registration",
-    "host time-encoding reconciliation before freeze: map labels 1761211800000 as Shanghai 09:30; existing epoch_ms decoder yields 17:30+08:00; no silent shift",
     "host recipe, lake identity/coverage and fresh freeze; r4_authorized stays false"
   ],
+  "transform_version": "bl2_source_transform_v5",
   "artifacts": [
     {
       "id": "daqmt_1m",
@@ -286,7 +286,7 @@
       "path": "marks.json",
       "format": "json",
       "schema": "bl2_marks_grid_v1",
-      "sha256": "b30f680c7dd07fada1790db430ffd208a487d8a78bb3aba7beba959eec928f35"
+      "sha256": "a4fc3700213984969f82c555ccc014e00b9ed29876db949b69a8c5d3b78daa00"
     },
     {
       "id": "proof_marks",
@@ -300,7 +300,7 @@
       "path": "sources/timing_lake_census.json",
       "format": "json",
       "schema": "bl2_raw_excerpt_v1",
-      "sha256": "cbf4bd8551dc1ed7b33581b7651296ed1bb1e379d7433e2d3542e245ef51b6c4"
+      "sha256": "c6495b53c3abf257f5e71299e6b63bc4cbce4053f612896d2dffd54a9c99798b"
     },
     {
       "id": "timing_xtquant_docs",
@@ -314,7 +314,7 @@
       "path": "sources/timing_materials_map.json",
       "format": "json",
       "schema": "bl2_raw_excerpt_v1",
-      "sha256": "0db8056be9f901f80dc7389cc08761a9ca319356d7928e66bd3b08c6a8f090cb"
+      "sha256": "d4a68592d452648c2fa742c2d141d6f99faf7fcb1e96006be07fe477ab4a1ba1"
     },
     {
       "id": "host_timing_approval",
@@ -335,7 +335,42 @@
       "path": "timing.proof.json",
       "format": "json",
       "schema": "bl2_proof_v1",
-      "sha256": "c6bd7c0ef884817528160361cdd0132ca52ceb549e764b40bbadd6cbf428dcfa"
+      "sha256": "9c53863353824c4bcc0ff37a787486a5b5c31d888bf922057910841efad385e0"
+    },
+    {
+      "id": "host_time_encoding_approval",
+      "path": "sources/host_time_encoding_approval.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "d77697d6593c670eea0ef24b48e774acf24ce848c50ad40fc7e98fae6f36bea1"
+    },
+    {
+      "id": "human_go_time_encoding",
+      "path": "sources/human_go_time_encoding.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "ab70b48c9605df52e193f9f347576d111266c1edd95b4f6251501475d220f8c8"
+    },
+    {
+      "id": "time_encoding_advice",
+      "path": "sources/time_encoding_advice.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "52309274d0c232306ad762149ef18d83ef1028a1840ac8b8137a80ebf3dafec5"
+    },
+    {
+      "id": "time_encoding_r4f",
+      "path": "sources/time_encoding_r4f.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "a42de265ace7ffc77dba1f2864033b71848a1ca98e2da3a0bb31d49402c3c9f4"
+    },
+    {
+      "id": "time_encoding_approval",
+      "path": "sources/time_encoding_approval.json",
+      "format": "json",
+      "schema": "bl2_time_encoding_approval_v1",
+      "sha256": "8fedbb2833675a18c9d434f0c38592b2fd2f74e24cb08a283aeeeecb0b8f71b7"
     }
   ]
 }
