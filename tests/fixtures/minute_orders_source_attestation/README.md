@@ -9,6 +9,16 @@ Post-R3 (2026-09-30): host-side raw material drafts for filling these live in
 (see its README + [sweep note](../../../docs/backtest/note-b-l2-01-r3-evidence-sweep-2026-09-30.md));
 they are drafts, not proofs, and R3 stays BLOCKED/NOT_RUN.
 
+2026-09-30 scoped Human GO and six remapped drafts:
+[attestation_packages](../../../docs/backtest/b-l2-01-evidence-2026-09-30/attestation_packages/README.md).
+Only `603196.SH`, `20251023–20251104` may use the explicitly marked
+`cross_source_ratio` exception; this does not change these unfilled templates
+into facts. In transform v4 a `source_declaration` proof must reference a raw row
+with `basis="source_declaration"` and `unit_declaration` matching
+`column/kind/unit/shares_per_unit`; a label without that declaration fails.
+The derived instrument package replaces the source-fact alternative and uses
+two proof files; unresolved historical metadata remains null and incomplete.
+
 | Artifact | Package / use |
 |---|---|
 | `units.proof.template.json` | `bl2_proof_v1`, subject `units`; exact source/column/incremental/unit/factor declaration |

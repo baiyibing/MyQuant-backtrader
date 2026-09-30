@@ -132,6 +132,11 @@ def test_proof_bindings_are_structured_independent_and_unambiguous(case, subject
         binding = contradictory["result"]["rows"][0]["binding"]
         if subject == "units":
             binding.update(unit="lots", shares_per_unit=100)
+            # Each declaration is internally valid; the claim still conflicts.
+            observations = case.sidecars["observations"]["rows"]
+            observations.append({"basis": "source_declaration", "unit_declaration": {
+                k: binding[k] for k in ("column", "kind", "unit", "shares_per_unit")}})
+            contradictory["result"]["rows"][0]["row"] = len(observations) - 1
         elif subject == "status":
             binding["halted"] = True
         else:

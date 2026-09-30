@@ -53,6 +53,57 @@ _CLAIMS = {
 }
 _BOUND_SUBJECTS = {"units", "instruments", "status"}
 _FACT_PACKAGES = ("bl2_instruments_v1", "bl2_status_v1")
+_RATIO_GO_SHA256 = "bb287dfe9e2559e9fe05abb7401a636aa6596524cfb79ffa34a4f3ff884c2afe"
+
+
+def _units_evidence(data, row, evidence, store, where):
+    """Check saved declarations, or the one explicitly scoped Human exception.
+
+    This validates pinned assertions, not vendor authenticity or a lake run.
+    Raw CSV reconciliation belongs to the offline evidence remapper.
+    """
+    require(type(evidence) is dict, f"{where}: structured units evidence required")
+    binding = row["binding"]
+    declaration = {k: binding[k] for k in ("column", "kind", "unit", "shares_per_unit")}
+    if row["basis"] == "source_declaration":
+        require(evidence.get("basis") == "source_declaration"
+                and canonical(evidence.get("unit_declaration")) == canonical(declaration),
+                f"{where}: source_declaration requires an explicit matching unit declaration")
+        return
+    require(evidence.get("basis") == "cross_source_ratio"
+            and evidence.get("unit_declaration") is None
+            and store.specs[row["source"]]["schema"] == "bl2_cross_source_ratio_v1",
+            f"{where}: cross_source_ratio cannot masquerade as source_declaration")
+    require(_symbols(data["filter"]["symbols"]) == ["603196.SH"]
+            and data["filter"]["from_date"] == "2025-10-23"
+            and data["filter"]["through_date"] == "2025-11-04"
+            and _symbol(store.specs[binding["source"]]["location"]["symbol"]) == "603196.SH"
+            and declaration == {"column": "volume", "kind": "incremental", "unit": "lots", "shares_per_unit": 100},
+            f"{where}: cross_source_ratio outside Human GO probe scope")
+    go_ref = evidence.get("human_go")
+    require(type(go_ref) is str and go_ref in data["source_refs"]
+            and store.specs[go_ref]["schema"] == "bl2_human_go_v1",
+            f"{where}: cross_source_ratio requires pinned Human GO marker")
+    go = store.data[go_ref]
+    require(type(go) is dict and type(go.get("rows")) is list and len(go["rows"]) == 1,
+            f"{where}: invalid Human GO marker")
+    marker = go["rows"][0]
+    require(type(marker) is dict and canonical(marker) == canonical({
+        "approval_id": "b_l2_remap_r4_20260930",
+        "source_document_sha256": _RATIO_GO_SHA256,
+        "cue": "人裁：①量单位接受直接对账（basis=cross_source_ratio），然后 remap",
+        "basis": "cross_source_ratio", "symbols": ["603196.SH"],
+        "from_date": "2025-10-23", "through_date": "2025-11-04",
+        "unit": "手", "shares_per_unit": 100, "kind": "incremental",
+        "scope": "docs/fixtures remap only", "r4_authorized": False,
+    }), f"{where}: Human GO marker mismatch")
+    refs = evidence.get("evidence_refs")
+    object_fields(refs, ("daqmt_1m", "daqmt_1d", "ths_daily", "ratio_table"), where + " ratio evidence")
+    require(all(type(ref) is str and ref in data["source_refs"]
+                and store.specs[ref]["schema"] == "bl2_raw_excerpt_v1" for ref in refs.values()),
+            f"{where}: ratio evidence needs four pinned raw excerpts")
+    require(len({store.specs[ref]["sha256"] for ref in refs.values()}) == 4,
+            f"{where}: ratio evidence sources must be distinct")
 
 
 def _binding_key(subject, binding):
@@ -143,7 +194,7 @@ def _proof(data, store, identity):
             require(type(observations) is list and row["row"] < len(observations),
                     f"{where}: observation row outside pinned source rows")
             if bound:
-                allowed = {"units": ("source_declaration",), "status": ("explicit_status",),
+                allowed = {"units": ("source_declaration", "cross_source_ratio"), "status": ("explicit_status",),
                            "instruments": ("source_fact", "approved_derivation")}[data["subject"]]
                 require(row["basis"] in allowed, f"{where}: unsupported evidence basis; heuristics are not attestation")
                 key = _binding_key(data["subject"], row["binding"])
@@ -164,6 +215,7 @@ def _proof(data, store, identity):
                     require(all(store.specs[ref]["location"]["kind"] not in ("minute", "daily")
                                 and store.specs[ref]["sha256"] not in bar_hashes for ref in refs),
                             f"{where}: units need independent source declaration, not bar heuristics")
+                    _units_evidence(data, row, observations[row["row"]], store, where)
     require(type(data["limitations"]) is list and bool(data["limitations"]),
             f"{where}: limitations required")
     for limitation in data["limitations"]:
@@ -197,7 +249,8 @@ def _bound_refs(values, store, subject, binding, basis, **scope):
         saved = store.proof_bindings[ref].get(key)
         if saved is not None:
             index, observation = saved
-            require(observation["basis"] == basis and canonical(observation["binding"]) == canonical(binding),
+            require(observation["basis"] in (basis if isinstance(basis, tuple) else (basis,))
+                    and canonical(observation["binding"]) == canonical(binding),
                     f"{subject}: proof binding mismatch")
             matches.append({"proof": ref, "row": index, "source": observation["source"],
                             "source_row": observation["row"]})
@@ -472,7 +525,7 @@ def _bars(recipe, store, symbols, sessions, coverage):
         claim = store.role(recipe["roles"]["attestation"], "attestation")["claims"]["units"]
         volume_proofs = _bound_refs(
             claim["proofs"], store, "units", {"source": sid, "column": cols["volume"], **volume},
-            "source_declaration", symbols=[symbol],
+            ("source_declaration", "cross_source_ratio"), symbols=[symbol],
             from_date=_timestamp(recipe["start_at"], "start_at").date(),
             through_date=_timestamp(recipe["end_at"], "end_at").date())
         seen = set()

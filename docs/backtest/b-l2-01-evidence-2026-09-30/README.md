@@ -5,6 +5,12 @@
 供任意机器的 agent 独立核对。叙事、文档关联与复算命令见
 [../note-b-l2-01-r3-evidence-sweep-2026-09-30.md](../note-b-l2-01-r3-evidence-sweep-2026-09-30.md)。
 
+2026-09-30 新增独立 [attestation_packages/](attestation_packages/README.md)：
+按 Human GO 将 #1111 `ec19fd6` 的保存材料 remap 为六份 consumer/proof 草稿，
+此子目录是确定性映射产物，另有 inputs/manifest 哈希清单；不属于上述 R3 原收据副本。
+units 使用仅限指定窗口的 `cross_source_ratio`，instrument 缺失审核项继续显式 BLOCKED。
+未运行 4090 或 R4，production_C=frozen。
+
 **边界（先读）**：
 
 - `raw_materials/` 内全部 `raw_*.json` 的封套是 `bl2_raw_excerpt_draft_v0_host_review`——

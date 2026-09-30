@@ -1,0 +1,160 @@
+{
+  "source_repository": "baiyibing/OSkhQuant1.3",
+  "source_commit": "ec19fd6f69a52f93aa9870ad582f0173df8963f4",
+  "notice": "Remapped draft only; structural checks != lake PASS; R3 BLOCKED/NOT_RUN; R4 needs separate Human「开 R4」; production_C=frozen.",
+  "r4_authorized": false,
+  "lake_verdict": "NOT_RUN",
+  "unbound_minute_source": {
+    "id": "minute_603196",
+    "sha256": null,
+    "requirement": "Host must pin configured raw minute parquet; exports do not establish lake equivalence."
+  },
+  "unresolved": [
+    "instrument historical available_at",
+    "ordinary listing scope",
+    "SSE rule archive, approved applicability/rounding and independent approval review",
+    "host recipe, lake identity/coverage, remaining claims and fresh freeze"
+  ],
+  "artifacts": [
+    {
+      "id": "daqmt_1m",
+      "path": "sources/daqmt_1m.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "8fa1a95e63d1253b8bfca0c077172a8089f578a1845abf74edb2810014d18d26"
+    },
+    {
+      "id": "daqmt_1d",
+      "path": "sources/daqmt_1d.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "7544d980e1d7be303b91570eaca1efbf99f07a090d856dbc28b2c4ff8bc301b8"
+    },
+    {
+      "id": "ths_daily",
+      "path": "sources/ths_daily.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "9210c5d47678a85eeab9a6249d5bb87752dc17fe391c8871bc250d48f47f283d"
+    },
+    {
+      "id": "ratio_table",
+      "path": "sources/ratio_table.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "28ff2570477febf86d9cfe94423a2534b67843d7f65759967a1a945b5b8eee03"
+    },
+    {
+      "id": "zero_volume",
+      "path": "sources/zero_volume.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "19a83136bb68ea4932bc775d40ece91bc24f8ac751c2a8077e083fb61abc28ca"
+    },
+    {
+      "id": "wind_limits",
+      "path": "sources/wind_limits.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "182c278ac7cc4c6b50d1ab80e3eb9f045aa7cefc63c26fba33b2d59c23fe41fd"
+    },
+    {
+      "id": "daqmt_detail",
+      "path": "sources/daqmt_detail.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "d1768230423de6ca52fe7cf6e95045d2b12294604ff6605b65cbc46630e04971"
+    },
+    {
+      "id": "sse_rule",
+      "path": "sources/sse_rule.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "6d5238767be79049d383f74e7a73d7f5f2d5bfabc054a2fa8e94d9c02ed8b0f6"
+    },
+    {
+      "id": "upstream_instruments",
+      "path": "sources/upstream_instruments.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "6ecda54157a6dd915185b6c619745f63423d4bab7a4cdec640672beec5c8d0f9"
+    },
+    {
+      "id": "vendor_status_semantics",
+      "path": "sources/vendor_status_semantics.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "04afea19e8da07facafb06485fca6135ffb3aa45624271c37d80f8614c5c5d06"
+    },
+    {
+      "id": "vendor_units_absence",
+      "path": "sources/vendor_units_absence.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "4882c27bad7dd75bc4c5b491e4c170d9a45ab6b759988a8ca7d30f5b85afea16"
+    },
+    {
+      "id": "human_go",
+      "path": "sources/human_go.json",
+      "format": "json",
+      "schema": "bl2_human_go_v1",
+      "sha256": "34c4c7e56b0fad54c4eded684b1108d3752a444d5a775ec2d8335fa3638a70ff"
+    },
+    {
+      "id": "units_comparison",
+      "path": "sources/units_comparison.json",
+      "format": "json",
+      "schema": "bl2_cross_source_ratio_v1",
+      "sha256": "52fc830cc42bdb90f36453c8f9b378f8042aeae34e2064e748c43eb5d647d442"
+    },
+    {
+      "id": "proof_units",
+      "path": "units.proof.json",
+      "format": "json",
+      "schema": "bl2_proof_v1",
+      "sha256": "1350ad54777bd4e96e62f1682e3e8003128628edc8ffbcea8a9f1ac11c8db320"
+    },
+    {
+      "id": "instruments",
+      "path": "instruments.json",
+      "format": "json",
+      "schema": "bl2_instruments_v1",
+      "sha256": "1a25b24198ab16bfc4d1389feaaef55e43839bca6da1b6a802ebfb275dfff4f5"
+    },
+    {
+      "id": "proof_instruments_sse",
+      "path": "instruments.proof.json",
+      "format": "json",
+      "schema": "bl2_proof_v1",
+      "sha256": "7ee500f7ee40519598fbea6e2e7eb06970f5eaff0727dde77a4f29695d8ab2c3"
+    },
+    {
+      "id": "proof_instruments_wind",
+      "path": "instruments.wind.proof.json",
+      "format": "json",
+      "schema": "bl2_proof_v1",
+      "sha256": "e381c6e54780a245a451507d3d29f5fafadb5c3d25034db8a282b6e7544bc095"
+    },
+    {
+      "id": "status",
+      "path": "status.json",
+      "format": "json",
+      "schema": "bl2_status_v1",
+      "sha256": "e6fdc028e214b56c20c05c53967204fa136d1d94df03787a379cc4152f2c126f"
+    },
+    {
+      "id": "opening_auction",
+      "path": "sources/opening_auction.json",
+      "format": "json",
+      "schema": "bl2_opening_auction_evidence_v1",
+      "sha256": "7b627ca657f70db1de966b775af1b1b9de4eef880f80f8e2b738a5fe84ff3ee9"
+    },
+    {
+      "id": "proof_status",
+      "path": "status.proof.json",
+      "format": "json",
+      "schema": "bl2_proof_v1",
+      "sha256": "d874d21713be4645f5809903bf0b57080d556dddaeab812a9dce9fda432b9942"
+    }
+  ]
+}

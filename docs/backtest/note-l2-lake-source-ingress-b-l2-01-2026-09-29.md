@@ -474,3 +474,14 @@ R3 已在 4090 执行：tip `a268e11` · transform `bl2_source_transform_v3` · 
 逐股一致，等价链加强到四源）；同包 pin 负结果：MCP 自带 Wind 字段目录 volume 条
 **无单位注记**，Wind 权威单位规范不在 MCP 暴露面，source_declaration 锚仍缺位。
 按 §9.2 仍为 NON-ATTESTATION 经验旁证，任何 BLOCKED 门状态不变。
+
+2026-09-30 Human GO 窄例外（仅覆盖本段）：[原始 GO 与 remap 包](b-l2-01-evidence-2026-09-30/attestation_packages/README.md)
+接受 `603196.SH`、`20251023–20251104` 的 units `basis=cross_source_ratio`，依据 #1111
+`ec19fd6` 的 daqmt 日量 ×100 对 THS/stock_finance_data 及逐日 `sum(1m)==1d`；单位手、
+`shares_per_unit=100`、incremental 显式声明。此例外不成为通用 vendor `source_declaration`，
+文档缺单位声明的负结果及 20251023 差 100 股仍须披露；§9.2 的 amount/close/volume 启发式禁令保留。
+`bl2_source_transform_v4` 仅在显式 basis、固定 Human GO marker、此证券/窗口/列/因子与独立来源齐备时接受；
+`source_declaration` 须有匹配的原材料 `unit_declaration`，不得把 ratio 改标签冒充声明。
+六份 remapped drafts 的填充/结构验证 **≠ lake PASS**，instrument 未证实的历史可得性、ordinary listing
+与规则批准仍 fail closed；不补造 10% 或 halt-from-silence。R3 仍 `BLOCKED/NOT_RUN`，
+R4 仍须单独 Human「开 R4」，合并仍须 Human「合」，production_C=frozen。

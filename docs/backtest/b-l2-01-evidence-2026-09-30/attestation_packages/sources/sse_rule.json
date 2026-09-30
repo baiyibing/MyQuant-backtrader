@@ -1,0 +1,18 @@
+{
+  "schema_version": "bl2_raw_excerpt_v1",
+  "data": {
+    "origin": {
+      "repository": "baiyibing/OSkhQuant1.3",
+      "commit": "ec19fd6f69a52f93aa9870ad582f0173df8963f4",
+      "path": "docs/evidence/b_l2_01_4090_r3_20260930/instruments.proof.json",
+      "git_sha256": "aef5fbc78ac7de5753eee95de60f94095cb0188078991ba165eb34c641114cce"
+    },
+    "extraction": {
+      "json_pointer": "/proofs/0"
+    },
+    "limitation": "Host-recorded SSE rule paraphrase and URL only; original rule archive and approval receipt absent.",
+    "rows": [
+    {"issuer":"上海证券交易所","document":"上海证券交易所交易规则","url":"https://www.sse.com.cn/lawandrules/sselawsrules/repeal/rules/c/c_20230418_5720138.shtml","rule":"主板股票涨跌幅限制比例为10%，申报价格最小变动单位为0.01元，申报数量单位为100股或其整数倍。"}
+  ]
+  }
+}
