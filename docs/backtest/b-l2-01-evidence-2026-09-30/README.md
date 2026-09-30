@@ -36,6 +36,8 @@
 | `raw_materials/raw_st_membership_603196SH.json` | 541 | `9353e3e09cb21525a66e666ccb58e04d89c63dd9be13a1eee5b678444b022c9a` | 603196.SH 非 ST 材料（st_daily 零命中） |
 | `raw_materials/raw_corporate_actions_603196SH_window.json` | 530 | `fd8311f59ed93a5bee602044d98e75b739583fdd74c6d103dc112e59b2257015` | 窗口零公司行动材料（ex_date_index 零命中） |
 | `raw_materials/web_rule_references_20260930.md` | 2767 | `ed73ae7ec6038706fd745aeea8fac116e000a94ea9f351667da4ebad4a5dd86e` | 交易所规则公式 / 2026-07-06 ST 新政公开来源引用 |
+| `raw_materials/raw_excerpt_crossvendor_daily_603196SH.json` | 20441 | `c5f7a4324115f5325fe6b8476ed8a02d0018dfe2d1e9620e061527c8da06180a` | 湖日线 vs 腾讯/新浪双独立行情源对照 + 10% 涨跌停复算零违例 + 零股观察（NON-ATTESTATION 旁证） |
+| `check_crossvendor_daily.py` | 3628 | `862a727b7ef687c571288a322af390568149d0bf7cf4bd7869c261b8c163c85d` | 上包离线自检器（无网络，重算三源对照/涨跌停/零股，exit 0=一致） |
 
 ## 关于 `gen_raw_materials.py` 的位置
 

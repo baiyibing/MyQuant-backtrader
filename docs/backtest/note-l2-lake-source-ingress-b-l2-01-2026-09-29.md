@@ -462,3 +462,8 @@ R3 已在 4090 执行：tip `a268e11` · transform `bl2_source_transform_v3` · 
 登记于 [note-b-l2-01-r3-evidence-sweep-2026-09-30.md](note-b-l2-01-r3-evidence-sweep-2026-09-30.md)。
 **新材料是草稿摘录而非 proof：不解除任何 BLOCKED 门，不改上文合同一字；
 量单位「vendor 无 K线单位注记」本身已按缺失证据 pin。R4 仍需具名 Human GO。**
+
+2026-09-30 午增补：PR #272 评审跟进以腾讯/新浪两个湖外独立行情源对湖日线做交叉核对，
+封第七包 `raw_excerpt_crossvendor_daily_603196SH.json`（同目录，附离线自检器）——
+13 天三源 OHLC/volume 全等、10% 涨跌停复算零违例、零股解释探针比率 ≈99.98。
+按 §9.2 仍为 NON-ATTESTATION 经验旁证，任何 BLOCKED 门状态不变。

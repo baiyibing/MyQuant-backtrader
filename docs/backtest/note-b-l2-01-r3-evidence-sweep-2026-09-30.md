@@ -28,6 +28,10 @@ SSOT 结论；R4 发车仍需具名 Human GO（§9.5 第 7 条）。PR 不自动
    1.3 / MyQuant / 本仓 / xtquant 安装包（`250516.1.1`）/ 湖本体 / 公开网络做一轮只读取证，
    六包原材料 + 材料地图落盘；**Human 指示证据全部入库**（不再只放仓外），即
    [b-l2-01-evidence-2026-09-30/](b-l2-01-evidence-2026-09-30/)（逐字节副本，hash 见该目录 README）。
+6. **PR #272 评审跟进（2026-09-30 午）**：评审 agent 用两个**独立公开行情源**
+   （腾讯 ifzq / 新浪 K线 API，湖外、非 QMT 链路）对湖日线做交叉核对，结论封成第七包
+   `raw_excerpt_crossvendor_daily_603196SH.json`（附离线自检器
+   `check_crossvendor_daily.py`），Human 指示补进本 PR。仍是 NON-ATTESTATION 旁证（§9.2）。
 
 ## 2. 三门的取证结果
 
@@ -42,6 +46,12 @@ SSOT 结论；R4 发车仍需具名 Human GO（§9.5 第 7 条）。PR 不自动
 - 湖↔qlib 旁证：MyQuant `qlib_scripts/stage_1min_from_lake.py` L96 以 `vol*100` 作 vwap
   分母（消费侧按「手」假设）；R3 探针比率 mean=99.98。**两者均按 §9.2 定性
   NON-ATTESTATION，只能进 limitations/佐证，不能当 source_declaration。**
+- 跨 vendor 旁证（第七包）：湖日线 volume 与腾讯 ifzq（手口径）**13/13 天完全相等**；
+  新浪（股口径）÷ 湖 = 恰好 100 的有 12/13 天，唯一例外 2025-10-23 差 −41 股（**零股**）——
+  R3 探针比率 mean≈99.98 而非 100 由此得到实质解释（真实成交含零股，「手」口径聚合取整，
+  不是数据错误）。分钟级三源均不可回溯（1m 历史只留近期），此观察仅限日线。
+  东财交互查询曾三方一致（含 amount、preKPrice=23.04），但补包重抓被服务端断连，
+  未 pin 原件，不纳入。仍 NON-ATTESTATION。
 - 剩余路径（材料地图 R4-B）：① host 浏览器取迅投官方文档站
   `dict.thtrader.com/nativeApi/xtquant.html`（本机 DNS EAI_AGAIN）；
   ② 国金 miniQMT 客户端内置帮助；③ 国金书面口径；④ 都拿不到则 units 门保持 BLOCKED。
@@ -61,6 +71,10 @@ SSOT 结论；R4 发车仍需具名 Human GO（§9.5 第 7 条）。PR 不自动
   （非 ST + 窗口零除权，两包 raw 材料）已齐；独立核验内容：每日 high≤limit_up、
   low≥limit_down 可由日线复算。**双 issuer（host + 独立核验者）人选与规则版本批准
   仍是 host 责任**。更强的 source_fact 路线（vendor `preClose`）见 §2.3 的 R4-A。
+- 规则复算旁证（第七包）：以腾讯 2025-10-17 收盘为前收锚点，按「×(1±10%) 四舍五入至
+  0.01」逐日（13 天）复算 limit_up/limit_down，湖日线 high/low **零违例**——经验层面
+  corroborate approved_derivation 的规则公式与窗口适用性，但不替代规则全文存档与
+  双 issuer 批准。
 
 ### 2.3 halt / missing（status）——网格事实已定，缺一格 vendor 停牌事实源
 
@@ -93,6 +107,7 @@ SSOT 结论；R4 发车仍需具名 Human GO（§9.5 第 7 条）。PR 不自动
 | R3 探针摘要/驱动/ hashes | 同上宿主根 `probe_summary.json` · `_run_b_l2_01_r3.py` · `artifact_hashes.json` | 同上 |
 | R4 材料地图 | `b-l2-01-evidence-2026-09-30/HOST_MATERIALS_MAP_R4.md`（宿主 `evidence\` 同名原件） | 入库；行动清单 R4-A/B/C/D |
 | 六包原材料 | `b-l2-01-evidence-2026-09-30/raw_materials/` | 入库；封套 `bl2_raw_excerpt_draft_v0_host_review` |
+| 第七包（评审跟进） | `raw_materials/raw_excerpt_crossvendor_daily_603196SH.json` + `check_crossvendor_daily.py` | 湖日线 vs 腾讯/新浪双源对照、涨跌停复算零违例、零股解释；NON-ATTESTATION |
 | 生成器 | `b-l2-01-evidence-2026-09-30/gen_raw_materials.py` | 入库（含宿主路径，故置 docs/ 不进代码树） |
 | 1.3 锚点 | `OSkhQuant1.3@47afc24`：`oskh_core/board_limit.py` · `common/integrations/qmt_xtdata_mock.py`（`_get_limit_rate`/`_limit_prices`）· `oskh_data/download_transport.py` | 跨仓引用（非本仓文件），摘录已 pin |
 | MyQuant 锚点 | `MyQuant@910abd3`：`qlib_scripts/stage_1min_from_lake.py` | 跨仓引用；NON-ATTESTATION 旁证 |
@@ -113,18 +128,24 @@ python scripts/gates/verify_tr_bridge_import_ssot.py
 
 # 证据包自检（逐字节重生成 → sha256 对 README 表）
 python docs/backtest/b-l2-01-evidence-2026-09-30/gen_raw_materials.py
+
+# 第七包离线自检（无网络，重算三源对照/涨跌停/零股）
+python docs/backtest/b-l2-01-evidence-2026-09-30/check_crossvendor_daily.py
 ```
 
 核对要点：① census 的 `grid_cells=2133 / grid_missing=0 / zero_volume_grid_cells=46`；
 ② `raw_excerpt_xtquant_docs.json` 中 K线字段表原文确无 volume 单位注记；
-③ 跨仓摘录与所引 HEAD 的文件 hash 一致；④ R3 收据 verdict 仍为 `BLOCKED/NOT_RUN`。
+③ 跨仓摘录与所引 HEAD 的文件 hash 一致；④ R3 收据 verdict 仍为 `BLOCKED/NOT_RUN`；
+⑤ 第七包：13 天 × (OHLC 三源一致 + 湖==腾讯 volume)、涨跌停复算 0 违例、
+新浪=100×湖 12/13 天且 2025-10-23 零股 −41 股。
 
 ## 5. 非声明与边界
 
 - 本片是**材料登记**：六包 raw 是草稿摘录，不是 `bl2_proof_v1`；没有 issuer 签发、
   没有规则版本批准、没有双 issuer 推导核验。
 - R3 `BLOCKED/NOT_RUN` 原样；freeze / native↔L1 / oracles 未跑；湖 / SSOT / δ5 / JR G 未动。
-- units 门：**没有任何新证据支持把手启发式升级为声明**；若 R4-B 三条路径都取不到，
+- units 门：**没有任何新证据支持把手启发式升级为声明**；第七包的跨 vendor 一致性
+  （湖=腾讯=新浪）同样是经验旁证而非 xtquant 官方 source_declaration；若 R4-B 三条路径都取不到，
   units 保持 BLOCKED，不硬开 R4。
 - `gen_raw_materials.py` 含宿主绝对路径，属 pinned provenance，刻意不入代码树；
   生产代码仍必须走 resolver（AGENTS 数据盘纪律不变）。
