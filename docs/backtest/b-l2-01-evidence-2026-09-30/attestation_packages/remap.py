@@ -1,7 +1,10 @@
-"""Offline remap of pinned #1111 evidence; no lake, network, runner or R4.
+"""Offline remap of pinned #1111 evidence plus the 2026-09-30 host fill.
 
-Uses only the standard library. Pinned LF inputs are vendored for offline CI.
-Unknown historical availability and rule approval remain explicitly blocked.
+No lake, network, runner or R4. Uses only the standard library. Pinned LF
+inputs are vendored for offline CI. The instruments host fill (rule archive,
+approval record, available_at, ordinary_listing) is bound to pinned inputs in
+inputs.json and the Human decision record HOST_R4_INSTRUMENTS_APPROVAL_20260930.md;
+r4_authorized stays false.
 """
 
 import argparse
@@ -23,6 +26,11 @@ GO_CUE = "人裁：①量单位接受直接对账（basis=cross_source_ratio）�
 DATES = ("20251023", "20251024", "20251027", "20251028", "20251029",
          "20251030", "20251031", "20251103", "20251104")
 NOTICE = "Remapped draft only; structural checks != lake PASS; R3 BLOCKED/NOT_RUN; R4 needs separate Human「开 R4」; production_C=frozen."
+APPROVAL_NAME = "HOST_R4_INSTRUMENTS_APPROVAL_20260930.md"
+APPROVAL_ID = "host_r4_instruments_approval_20260930"
+RULE_FULLTEXT = "sse_rule_archive/sse_trading_rules_fulltext_retrieved_20260930.md"
+RULE_EXCERPTS = "sse_rule_archive/clause_excerpts.md"
+AVAILABLE_AT_SUFFIX = "T15:30:00+08:00"  # Human-approved convention (a): T-1 post-close archive.
 
 
 def require(condition, message):
@@ -65,9 +73,13 @@ def encode(document):
     return (json.dumps(document, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
 
 
-def read_inputs(source_dir, human_go):
+def read_inputs(source_dir, human_go, host_approval=None):
     pins = json.loads((HERE / "inputs.json").read_bytes())
     require(digest(human_go.read_bytes()) == pins["human_go_sha256"], "Human GO hash mismatch")
+    if host_approval is None:
+        host_approval = HERE / APPROVAL_NAME
+    approval_raw = host_approval.read_bytes()
+    require(digest(approval_raw) == pins["host_approval_sha256"], "host approval hash mismatch")
     inputs = {}
     for name, hashes in pins["files"].items():
         raw = (source_dir / name).read_bytes()
@@ -82,11 +94,16 @@ def read_inputs(source_dir, human_go):
         # Parse decimal tokens directly: do not round pinned source text via binary floats.
         inputs[name] = (list(csv.DictReader(io.StringIO(text))) if name.endswith(".csv")
                         else json.loads(text, parse_float=Decimal))
+    for name, hashes in pins["host_materials"]["files"].items():
+        raw = (source_dir / name).read_bytes()
+        require(digest(raw) == hashes["git_sha256"], f"input hash mismatch: {name}")
+        inputs[name] = raw.decode("utf-8")
+    inputs[APPROVAL_NAME] = approval_raw.decode("utf-8")
     return pins, inputs
 
 
-def build(source_dir, human_go):
-    pins, inputs = read_inputs(source_dir, human_go)
+def build(source_dir, human_go, host_approval=None):
+    pins, inputs = read_inputs(source_dir, human_go, host_approval)
     artifacts = {}
 
     def add(identity, filename, schema, data):
@@ -114,12 +131,43 @@ def build(source_dir, human_go):
             rows = [{k: r[k] for k in columns} for r in rows]
         excerpt(identity, name, rows, extraction={"method": "CSV DictReader, strings unchanged, row order unchanged",
                                                 "columns": columns, "row_index": "zero-based excluding header"})
+    def md_excerpt(identity, name, origin, **metadata):
+        rows = [{"line": index, "text": line} for index, line in enumerate(inputs[name].splitlines())]
+        add(identity, "sources/" + identity + ".json", "bl2_raw_excerpt_v1",
+            {"origin": origin, "extraction": {"method": "UTF-8 markdown lines, order unchanged, one row per line",
+                                              "row_index": "zero-based line number"},
+             **metadata, "rows": rows})
+        return rows
+
     excerpt("daqmt_detail", "raw/daqmt_603196_instrument_detail.json",
             [inputs["raw/daqmt_603196_instrument_detail.json"]],
             limitation="2026-09-30 snapshot; corroboration only, not historical limits or listing status.")
-    excerpt("sse_rule", "instruments.proof.json", [inputs["instruments.proof.json"]["proofs"][0]],
-            extraction={"json_pointer": "/proofs/0"},
-            limitation="Host-recorded SSE rule paraphrase and URL only; original rule archive and approval receipt absent.")
+    materials = pins["host_materials"]
+    require(APPROVAL_ID in inputs[APPROVAL_NAME], "host approval id marker missing")
+    sse_rows = md_excerpt(
+        "sse_rule", RULE_FULLTEXT,
+        {"repository": materials["repository"], "commit": materials["commit"],
+         "path": materials["directory"] + "/" + RULE_FULLTEXT, **materials["files"][RULE_FULLTEXT]},
+        limitation="Retrieved SSE trading rules fulltext archive (2013 base + 2023-04-18 revision; "
+                   "window-effective per clause_excerpts section D). Supersedes the #1111 URL/paraphrase "
+                   "excerpt. Applicability, rounding and exception review recorded in host_approval.")
+    clause_line = {}
+    for clause in ("3.4.7", "3.4.11", "3.4.13", "3.4.14", "3.7.2", "4.1.3"):
+        matches = [r["line"] for r in sse_rows if r["text"].startswith(clause + " ")]
+        require(matches, f"clause {clause} missing from pinned rule archive")
+        clause_line[clause] = matches[0]
+    md_excerpt("clause_excerpts", RULE_EXCERPTS,
+               {"repository": materials["repository"], "commit": materials["commit"],
+                "path": materials["directory"] + "/" + RULE_EXCERPTS, **materials["files"][RULE_EXCERPTS]},
+               limitation="Clause excerpts and effective-interval delimitation quoted from the archived "
+                          "fulltext; 9/9 Decimal ROUND_HALF_UP recomputation recorded. Approved via host_approval.")
+    md_excerpt("host_approval", APPROVAL_NAME,
+               {"repository": "baiyibing/MyQuant-backtrader",
+                "path": "docs/backtest/b-l2-01-evidence-2026-09-30/attestation_packages/" + APPROVAL_NAME,
+                "sha256": pins["host_approval_sha256"],
+                "note": "Created by the instruments host-fill PR; pinned by bytes SHA-256 in inputs.json."},
+               limitation="Human decision record of the 2026-09-30 session; awaits baiyibing countersign "
+                          "before merge. r4_authorized is not flipped by this record.")
     excerpt("upstream_instruments", "instruments.json", inputs["instruments.json"]["rows"],
             extraction={"json_pointer": "/rows"},
             upstream_metadata={k: inputs["instruments.json"][k] for k in ("origin", "approved_rule_version", "board", "inputs")})
@@ -174,14 +222,17 @@ def build(source_dir, human_go):
                 "finding": "8/9 daily ratios exactly 100; 20251023 THS is 100 shares less than daqmt*100; 9/9 full-day sum(1m)==1d, including 09:30 opening bars."}
     add("units_comparison", "sources/units_comparison.json", "bl2_cross_source_ratio_v1", {"rows": [evidence]})
 
-    def proof(identity, filename, issuer, subject, refs, rows, limitations, complete=True):
+    def proof(identity, filename, issuer, subject, refs, rows, limitations, complete=True, summary=None):
+        if summary is None:
+            summary = "#1111 remapped " + subject + " draft; " + (
+                "saved observations checked offline" if complete
+                else "BLOCKED: historical availability and rule approval not evidenced")
         add(identity, filename, "bl2_proof_v1", {
             "issuer": issuer, "subject": subject, "source_refs": refs,
             "filter": {"symbols": [SYMBOL], "from_date": FIRST, "through_date": LAST,
                        "predicate": "603196.SH only; inclusive probe dates; exact source rows and bindings; " + subject},
-            "result": {"complete": complete, "summary": "#1111 remapped " + subject + " draft; " +
-                       ("saved observations checked offline" if complete else "BLOCKED: historical availability and rule approval not evidenced"),
-                       "rows": rows}, "limitations": [NOTICE, *limitations]})
+            "result": {"complete": complete, "summary": summary, "rows": rows},
+            "limitations": [NOTICE, *limitations]})
 
     proof("proof_units", "units.proof.json", "Human GO 2026-09-30 / #1111 cross-source evidence remap", "units",
           ["units_comparison", "human_go", "daqmt_1m", "daqmt_1d", "ths_daily", "ratio_table", "vendor_units_absence"],
@@ -195,7 +246,8 @@ def build(source_dir, human_go):
 
     inst_rows = []
     inst_bindings = []
-    inst_inputs = ["sse_rule", "upstream_instruments", "daqmt_1d", "wind_limits"]
+    inst_inputs = ["sse_rule", "clause_excerpts", "host_approval", "upstream_instruments",
+                   "daqmt_1d", "wind_limits", "ths_daily"]
     upstream = inputs["instruments.json"]
     # These consumer labels apply only to the pinned upstream convention.
     require(upstream["board"] == "sse_main_a", "unsupported upstream instrument board")
@@ -207,29 +259,58 @@ def build(source_dir, human_go):
         require(Decimal(str(raw["reference_price"])) == Decimal(daily[i]["preClose"]), "reference/preClose mismatch")
         for field, column in (("limit_up", "涨停价"), ("limit_down", "跌停价")):
             require(Decimal(str(raw[field])) == Decimal(wind[i][column]), "Wind/upstream limit mismatch")
+        # Host-approved convention (a): T-1 trading day post-close archive (host_approval section 1).
+        prev = DATES[i - 1] if i else "20251022"
+        require(prev in ths, "T-1 archive row missing from pinned daily sources")
+        if i:
+            require(Decimal(daily[i - 1]["close"]) == Decimal(daily[i]["preClose"]),
+                    "T-1 archive close chain mismatch")
+        else:
+            require(Decimal(ths[prev]["close"]) == Decimal(daily[0]["preClose"]),
+                    "first T-1 archive close mismatch")
+        available = datetime.strptime(prev, "%Y%m%d").date().isoformat() + AVAILABLE_AT_SUFFIX
         day = datetime.strptime(raw["date"], "%Y%m%d").date().isoformat()
         facts = {"symbol": SYMBOL, "trade_date": day, "board": "main", "price_domain": "raw",
                  **{k: format(Decimal(str(raw[k])), ".2f") for k in ("tick_size", "reference_price", "limit_down", "limit_up")},
                  "lot_size": raw["lot_size"]}
         binding = {"facts": facts, "effective_from": day, "effective_through": day,
-                   "available_at": None, "ordinary_listing": None, "origin": "approved_derivation",
+                   "available_at": available, "ordinary_listing": True, "origin": "approved_derivation",
                    "derivation": {"inputs": inst_inputs, "approved_rule_version": upstream["approved_rule_version"]}}
         inst_bindings.append(binding)
         inst_rows.append({**binding, "proofs": ["proof_instruments_sse"],
                           "derivation": {**binding["derivation"], "independent_verification": ["proof_instruments_wind"]}})
     add("instruments", "instruments.json", "bl2_instruments_v1", {"rows": inst_rows})
+    inst_observation = ("Host fill 2026-09-30 per host_approval: #1111 values checked against the daqmt "
+                        "preClose chain, Wind 18/18 limits and archived SSE clauses; available_at is the "
+                        "approved T-1 post-close archive convention; ordinary_listing approved. "
+                        "No default band computed.")
+    inst_limitations = [
+        "available_at is the Human-approved T-1 post-close archive convention (host_approval section 1): "
+        "SSE rule 4.1.3 close at 15:00 and 3.7.2 in-window rule timepoint 15:30; anchored to pinned daily "
+        "archive rows, not a vendor publication timestamp. The 2026-07-06 after-hours rule change postdates "
+        "the window and is not an anchor.",
+        "ordinary_listing approved by host (host_approval section 2): window non-ST, zero corporate actions, "
+        "no 3.4.13 first-day exception; 9/9 values consistent with the 10% formula and tick 0.01.",
+        "approved_rule_version sse_main_board_limit_pct10_tick0.01_lot100_v2023 approved by baiyibing "
+        "2026-09-30 (host_approval section 3); archive = 2013 base + 2023-04-18 revision; Decimal "
+        "ROUND_HALF_UP recomputed 9/9 (clause_excerpts section C).",
+        "Issuer identifies the evidence source, not a signature or host certification; the approval record "
+        "awaits baiyibing countersign before merge.",
+        "Wind verifies 18/18 daily limit values; daqmt instrument_detail is a 20260930 corroborating "
+        "snapshot only, not the second historical issuer."]
     for identity, filename, issuer, source in (
-        ("proof_instruments_sse", "instruments.proof.json", "上海证券交易所 / #1111 rule excerpt (unsigned remapped draft)", "sse_rule"),
-        ("proof_instruments_wind", "instruments.wind.proof.json", "Wind 万得 via kimi-datasource / #1111 daily limits (remapped draft)", "wind_limits"),
+        ("proof_instruments_sse", "instruments.proof.json",
+         "上海证券交易所交易规则存档 (2023 修订) / host fill 2026-09-30 (remapped draft)", "sse_rule"),
+        ("proof_instruments_wind", "instruments.wind.proof.json",
+         "Wind 万得 via kimi-datasource / #1111 daily limits (host fill 2026-09-30, remapped draft)", "wind_limits"),
     ):
         proof(identity, filename, issuer, "instruments", [*inst_inputs, "daqmt_detail"],
-              [{"source": source, "row": 0 if source == "sse_rule" else i,
-                "observation": "#1111 supplied values copied; daqmt daily preClose checked; Wind limit_up/down match. No default band computed.",
+              [{"source": source, "row": clause_line["3.4.13"] if source == "sse_rule" else i,
+                "observation": inst_observation,
                 "basis": "approved_derivation", "binding": b} for i, b in enumerate(inst_bindings)],
-              ["available_at and ordinary_listing remain null: #1111 lacks historical availability and authoritative ordinary-listing coverage. No 09:00 availability invented.",
-               "approved_rule_version is copied from #1111, not a new approval. SSE archive, rounding/exception applicability and independent approval review remain required.",
-               "Issuer identifies the evidence source, not a signature or host certification; complete=false preserves this review gate.",
-               "Wind verifies 18/18 daily limit values; daqmt instrument_detail is a 20260930 corroborating snapshot only, not the second historical issuer."], complete=False)
+              inst_limitations,
+              summary="#1111 remapped instruments draft; host fill 2026-09-30 (rule archive/approval, "
+                      "available_at, ordinary_listing) checked offline")
 
     zero_keys = {(r["date"], r["hm"]) for r in inputs[raw_names["zero_volume"]]}
     actual_zero = {key for key, (_, row) in minute_by_key.items() if int(row["volume"]) == 0}
@@ -283,9 +364,8 @@ def build(source_dir, human_go):
                "notice": NOTICE, "r4_authorized": False, "lake_verdict": "NOT_RUN",
                "unbound_minute_source": {"id": MINUTE_SOURCE, "sha256": None,
                                          "requirement": "Host must pin configured raw minute parquet; exports do not establish lake equivalence."},
-               "unresolved": ["instrument historical available_at", "ordinary listing scope",
-                              "SSE rule archive, approved applicability/rounding and independent approval review",
-                              "host recipe, lake identity/coverage, remaining claims and fresh freeze"],
+               "unresolved": ["calendar/actions/marks and the remaining claims require independent attestation",
+                              "host recipe, lake identity/coverage and fresh freeze; r4_authorized stays false"],
                "artifacts": [{"id": identity, "path": filename, "format": "json", "schema": doc["schema_version"],
                               "sha256": digest(outputs[filename])} for filename, (identity, doc) in artifacts.items()]}
     outputs["manifest.json"] = encode(catalog)
@@ -296,11 +376,13 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-dir", type=Path, required=True, help="Read-only copy of #1111 evidence tree")
     parser.add_argument("--human-go", type=Path, required=True)
+    parser.add_argument("--host-approval", type=Path, default=None,
+                        help="Host approval record; defaults to the checked-in package file")
     target = parser.add_mutually_exclusive_group(required=True)
     target.add_argument("--check", action="store_true", help="Compare generated bytes to checked-in package")
     target.add_argument("--output-dir", type=Path, help="New offline output directory; existing paths rejected")
     args = parser.parse_args()
-    outputs = build(args.source_dir, args.human_go)
+    outputs = build(args.source_dir, args.human_go, args.host_approval)
     if args.check:
         for name, raw in outputs.items():
             require((HERE / name).read_bytes() == raw, f"remap output mismatch: {name}")
@@ -310,7 +392,7 @@ def main():
             path = args.output_dir / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(raw)
-    print(f"Offline remap checked: {len(outputs)} files; 9 instrument rows, 2160 status rows, 9 opening rows, 62 zero-volume rows. " + NOTICE)
+    print(f"Offline remap checked: {len(outputs)} files; 9 host-filled instrument rows, 2160 status rows, 9 opening rows, 62 zero-volume rows. " + NOTICE)
 
 
 if __name__ == "__main__":

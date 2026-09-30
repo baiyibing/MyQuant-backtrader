@@ -115,7 +115,18 @@ def test_declaration_label_without_declaration_fails(tmp_path, monkeypatch):
         case.load()
 
 
-def test_checked_packages_hashes_bind_all_rows_and_preserve_instrument_blockers():
+EXPECTED_AVAILABLE_AT = {
+    "2025-10-23": "2025-10-22T15:30:00+08:00", "2025-10-24": "2025-10-23T15:30:00+08:00",
+    "2025-10-27": "2025-10-24T15:30:00+08:00", "2025-10-28": "2025-10-27T15:30:00+08:00",
+    "2025-10-29": "2025-10-28T15:30:00+08:00", "2025-10-30": "2025-10-29T15:30:00+08:00",
+    "2025-10-31": "2025-10-30T15:30:00+08:00", "2025-11-03": "2025-10-31T15:30:00+08:00",
+    "2025-11-04": "2025-11-03T15:30:00+08:00",
+}
+DERIVATION_INPUTS = {"sse_rule", "clause_excerpts", "host_approval", "upstream_instruments",
+                     "daqmt_1d", "wind_limits", "ths_daily"}
+
+
+def test_checked_packages_hashes_bind_all_rows_and_record_instrument_host_fill():
     manifest = document("manifest.json")
     store = SimpleNamespace(data={}, specs={}, proof_bindings={})
     for spec in manifest["artifacts"]:
@@ -128,7 +139,7 @@ def test_checked_packages_hashes_bind_all_rows_and_preserve_instrument_blockers(
     # Descriptor only for proof structure; never invokes the lake resolver.
     store.specs["minute_603196"] = {"schema": {"volume": "int64"}, "sha256": "0" * 64,
                                     "location": {"kind": "minute", "symbol": "603196.SH"}}
-    for identity in ("proof_units", "proof_status"):
+    for identity in ("proof_units", "proof_status", "proof_instruments_sse", "proof_instruments_wind"):
         store.proof_bindings[identity] = source_loader._proof(store.data[identity], store, identity)
     statuses = store.data["status"]["rows"]
     assert len(statuses) == len(store.proof_bindings["proof_status"]) == 2160
@@ -148,16 +159,22 @@ def test_checked_packages_hashes_bind_all_rows_and_preserve_instrument_blockers(
         assert raw["suspendFlag"] == "0"
         assert (int(raw["volume"]) == 0) == ("zero volume" in row["reason"])
     assert len(store.data["opening_auction"]["rows"]) == 9
+    # Host fill 2026-09-30: both instruments proofs are complete, bound to every
+    # derivation input and to the exact consumer rows; r4_authorized stays false.
     sse, wind = (store.data[p] for p in ("proof_instruments_sse", "proof_instruments_wind"))
     assert sse["issuer"] != wind["issuer"]
-    for proof in (sse, wind):
-        with pytest.raises(SourceContractError, match="complete saved result required"):
-            source_loader._proof(proof, store, "blocked_instruments")
+    assert DERIVATION_INPUTS <= set(sse["source_refs"]) and DERIVATION_INPUTS <= set(wind["source_refs"])
+    assert manifest["r4_authorized"] is False
+    assert not any(term in item for item in manifest["unresolved"]
+                   for term in ("available_at", "ordinary listing", "SSE rule archive"))
     for index, row in enumerate(store.data["instruments"]["rows"]):
-        assert row["available_at"] is row["ordinary_listing"] is None
+        assert row["available_at"] == EXPECTED_AVAILABLE_AT[row["facts"]["trade_date"]]
+        assert row["ordinary_listing"] is True
+        assert set(row["derivation"]["inputs"]) == DERIVATION_INPUTS
         binding = source_loader._instrument_binding(row)
         assert binding == sse["result"]["rows"][index]["binding"] == wind["result"]["rows"][index]["binding"]
-        assert set(row["derivation"]["inputs"]) <= set(sse["source_refs"]) & set(wind["source_refs"])
+        source_loader._bound_refs(["proof_instruments_sse"], store, "instruments", binding, "approved_derivation")
+        source_loader._bound_refs(["proof_instruments_wind"], store, "instruments", binding, "approved_derivation")
     assert store.data["wind_limits"]["origin"]["host_sha256"] == "31f8461a4ae7aca352db35648c0d7c60e476597b259bfecc03c9807c9f3a048b"
 
 
@@ -201,7 +218,7 @@ def test_remapper_rejects_nonfinite_source_numbers(remapper, value):
 
 
 def test_pinned_json_excerpts_preserve_source_decimals_and_unknowns(remapper):
-    _, inputs = remapper.read_inputs(UPSTREAM, PACK / "HUMAN_GO.md")
+    pins, inputs = remapper.read_inputs(UPSTREAM, PACK / "HUMAN_GO.md")
     raw_detail = inputs["raw/daqmt_603196_instrument_detail.json"]
     assert type(raw_detail["PreClose"]) is Decimal
     detail = document("sources/daqmt_detail.json")["data"]["rows"][0]
@@ -214,12 +231,20 @@ def test_pinned_json_excerpts_preserve_source_decimals_and_unknowns(remapper):
     assert upstream["rows"][0]["lot_size"] == 100
     assert document("manifest.json")["r4_authorized"] is False
     assert document("sources/human_go.json")["data"]["rows"][0]["r4_authorized"] is False
+    # Host fill 2026-09-30 pins: OSkhQuant1.3 #1112 rule archive plus the approval record.
+    assert pins["host_materials"]["commit"] == "d0edd384e9bd7fc0029b380e8850920539c46a95"
+    approval = (PACK / "HOST_R4_INSTRUMENTS_APPROVAL_20260930.md").read_bytes()
+    assert pins["host_approval_sha256"] == sha256(approval)
+    assert "host_r4_instruments_approval_20260930" in inputs["HOST_R4_INSTRUMENTS_APPROVAL_20260930.md"]
+    sse = document("sources/sse_rule.json")["data"]
+    assert sse["origin"]["path"].endswith("sse_trading_rules_fulltext_retrieved_20260930.md")
+    assert any(r["text"].startswith("3.4.13 ") for r in sse["rows"])
+    clauses = document("sources/clause_excerpts.json")["data"]
+    assert clauses["origin"]["git_sha256"] == "f70180cfb8a10c8294655084bd8e025018e4521420ee1676e48cca5068f88f7d"
 
 
-@pytest.mark.parametrize("proof_path", ["instruments.proof.json", "instruments.wind.proof.json"])
-def test_remapped_sources_reach_incomplete_instruments_gate_after_decimal_fix(tmp_path, monkeypatch, proof_path):
-    case = SyntheticCase(tmp_path, monkeypatch)
-    # Real saved excerpts, but only a fabricated local recipe/bar fixture; no host/lake run.
+def _register_real_sources(case, tmp_path):
+    """Pin the real saved excerpts as sidecars; no host/lake run."""
     for spec in document("manifest.json")["artifacts"]:
         if spec["path"].startswith("sources/"):
             identity = spec["id"]
@@ -228,11 +253,74 @@ def test_remapped_sources_reach_incomplete_instruments_gate_after_decimal_fix(tm
                 "id": identity, "location": {"kind": "sidecar", "path": str(tmp_path / (identity + ".json"))},
                 "format": "json", "schema": spec["schema"], "sha256": "",
             })
+
+
+@pytest.mark.parametrize("proof_path", ["instruments.proof.json", "instruments.wind.proof.json"])
+def test_remapped_complete_proofs_reject_fabricated_rows_outside_scope(tmp_path, monkeypatch, proof_path):
+    case = SyntheticCase(tmp_path, monkeypatch)
+    _register_real_sources(case, tmp_path)
     case.sidecars["proof_instruments"] = document(proof_path)["data"]
     case.freeze()
-    with pytest.raises(SourceContractError, match="proof_instruments: proof: complete saved result required"):
+    # The host-filled proof now passes the completeness gate; the fabricated
+    # 2026-09 row outside its approved scope still fails closed at coverage.
+    with pytest.raises(SourceContractError, match="proof scope coverage gap"):
         case.load()
     assert not Path(case.recipe["parent"]).exists()
+
+
+def test_real_instrument_row_and_proofs_pass_the_instruments_gate(tmp_path, monkeypatch):
+    case = SyntheticCase(tmp_path, monkeypatch)
+    # Shift the fabricated recipe into the approved probe window (same mapping as
+    # the ratio fixture), then bind the REAL host-filled row and both REAL proofs.
+    def shift(value):
+        if isinstance(value, str):
+            for before, after in (("2026-09-25", "2025-10-22"), ("2026-09-28", "2025-10-23"),
+                                  ("2026-09-29", "2025-10-24")):
+                value = value.replace(before, after)
+            return value
+        if isinstance(value, list):
+            return [shift(v) for v in value]
+        if isinstance(value, dict):
+            return {k: shift(v) for k, v in value.items()}
+        return value
+    case.rows, case.sidecars, case.recipe = map(shift, (case.rows, case.sidecars, case.recipe))
+    _register_real_sources(case, tmp_path)
+    case.sidecars["instruments"] = {"rows": [document("instruments.json")["data"]["rows"][0]]}
+    # Keep fabricated quotes inside the real approved limit band; facts stay real.
+    for row in case.rows:
+        row["close"] = 23.50
+    case.sidecars["commands"]["commands"][0]["limit"] = "23.50"
+    del case.sidecars["proof_instruments"]
+    case.recipe["sources"] = [s for s in case.recipe["sources"] if s["id"] != "proof_instruments"]
+    for identity in ("proof_instruments_sse", "proof_instruments_wind"):
+        case.sidecars[identity] = document(
+            "instruments.proof.json" if identity.endswith("sse") else "instruments.wind.proof.json")["data"]
+        case.recipe["sources"].insert(-1, {
+            "id": identity, "location": {"kind": "sidecar", "path": str(tmp_path / (identity + ".json"))},
+            "format": "json", "schema": "bl2_proof_v1", "sha256": "",
+        })
+    case.sidecars["attestation"]["claims"]["instruments"]["proofs"] = [
+        "proof_instruments_sse", "proof_instruments_wind"]
+    case.freeze()
+    loaded = case.load()
+    instrument = loaded.run_input.instruments[0]
+    assert (instrument.reference_price, instrument.limit_down, instrument.limit_up) == (
+        Decimal("23.36"), Decimal("21.02"), Decimal("25.70"))
+    assert instrument.tick_size == Decimal("0.01") and instrument.lot_size == 100
+    audit = loaded.provenance.document()["transform"]["instruments"][0]
+    assert audit["available_at"] == "2025-10-22T15:30:00+08:00"
+    assert audit["origin"] == "approved_derivation"
+    # This crossing is evidence-structure only: calendar/actions/marks for the real
+    # window remain unattested, no recipe exists, and r4_authorized stays false.
+    assert not Path(case.recipe["parent"]).exists()
+
+
+def test_remapper_rejects_tampered_host_approval(tmp_path, remapper):
+    approval = tmp_path / "approval.md"
+    approval.write_text("unapproved", encoding="utf-8")
+    with pytest.raises(ValueError, match="host approval hash mismatch"):
+        remapper.build(UPSTREAM, PACK / "HUMAN_GO.md", approval)
+    assert list(tmp_path.iterdir()) == [approval]
 
 
 def test_remapper_check_matches_checked_in_packages():

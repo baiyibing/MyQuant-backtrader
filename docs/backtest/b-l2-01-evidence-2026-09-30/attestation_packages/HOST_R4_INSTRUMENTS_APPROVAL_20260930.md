@@ -1,0 +1,73 @@
+# HOST R4 instruments 宿主补证批准记录（2026-09-30）
+
+> **本文件记录人类在 2026-09-30 会话中的决定，合并前由 baiyibing 复核确认。**
+> approval_id: `host_r4_instruments_approval_20260930`
+> 范围：603196.SH / 2025-10-23 ~ 2025-11-04（9 个交易日），basis=cross_source_ratio 例外不变。
+> 依据合同：`docs/backtest/note-l2-lake-source-ingress-b-l2-01-2026-09-29.md` §9.3.1（四部分清单）与 §9.5（填写/冻结流程）。
+> 材料 pin：OSkhQuant1.3 PR #1112，commit `d0edd384e9bd7fc0029b380e8850920539c46a95`，目录 `docs/evidence/b_l2_r4_host_materials_draft_20260930`。
+
+## 1. available_at 口径批准：口径 (a) T-1 收盘后归档
+
+**决定**：9 行 `available_at` 统一按口径 (a) 填 `T-1 交易日 15:30:00+08:00`。
+
+锚定依据（人裁认定）：
+
+- 规则 4.1.3：收盘价于 15:00 收盘后成立（当日最后一笔交易前一分钟成交量加权平均价）。
+- 规则 3.7.2：大宗交易申报时间至每个交易日 15:30 止——15:30 为窗口适用版规则（2013 基础文本 + 2023-04-18 修订）内的规则时刻点，作为「T-1 收盘后日行情归档可得」的保守下限。
+- **禁止引用 2026-07-06 盘后固定价格交易新政**（晚于窗口，时代错置）；本记录不引用该新政作为锚。
+- 归档行锚定（已核实）：daqmt 湖日线 T 行自带 preClose（2025-10-23 行 preClose=23.36 ✓）；链式自洽（2025-10-23 close=23.89 = 2025-10-24 preClose ✓）；首行 T-1=2025-10-22 close=23.36 在已 pin 的 `raw/kimi_stock_finance_data_603196_daily.csv`（OSkhQuant1.3 R3 证据包）中。
+- 9 行填值全部早于当日任何盘中首次使用（≥09:30），满足 loader「available_at ≤ 当日首次使用」约束。
+
+逐行填值：
+
+| trade_date | available_at |
+|---|---|
+| 2025-10-23 | 2025-10-22T15:30:00+08:00 |
+| 2025-10-24 | 2025-10-23T15:30:00+08:00 |
+| 2025-10-27 | 2025-10-24T15:30:00+08:00 |
+| 2025-10-28 | 2025-10-27T15:30:00+08:00 |
+| 2025-10-29 | 2025-10-28T15:30:00+08:00 |
+| 2025-10-30 | 2025-10-29T15:30:00+08:00 |
+| 2025-10-31 | 2025-10-30T15:30:00+08:00 |
+| 2025-11-03 | 2025-10-31T15:30:00+08:00 |
+| 2025-11-04 | 2025-11-03T15:30:00+08:00 |
+
+## 2. ordinary_listing 权威覆盖批准
+
+**决定**：9 行 `ordinary_listing` 统一填 `true`（布尔）。
+
+依据（人裁认定）：窗口内 603196.SH 非 ST；窗口内零公司行动；2017 年上市，不触规则 3.4.13 首日无涨跌幅例外；9 行数值与 3.4.13 的 10% 公式 + 3.4.11 tick 0.01 全量自洽（9/9）。本批准为窗口内的权威覆盖声明，非由 OpenDate/代码前缀/ST 名单缺失推定。
+
+## 3. 规则适用性 / 舍入 / 例外批准
+
+**决定**：批准 `approved_rule_version = sse_main_board_limit_pct10_tick0.01_lot100_v2023`（字符串不变，本次补上批准实质）。
+
+- 批准材料：SSE 交易规则全文存档（`sse_rule_archive/sse_trading_rules_fulltext_retrieved_20260930.md`）+ 条款摘录与生效区间划界（`sse_rule_archive/clause_excerpts.md`）。
+- 适用版本：2013 基础文本（规则 11.7，自 2013-01-01 施行）+ 2023-04-18 修订，覆盖窗口；2026 修订版与主板风险警示股 5%→10% 新政（2026-07-06 施行）均晚于窗口，不作锚。
+- 条款对应：3.4.13（10% + 前收盘价基准 + 四舍五入取至最小变动单位 + 首日例外）、3.4.11（tick 0.01）、3.4.7（lot 100）、3.4.14（有效申报边界）。
+- 舍入：Decimal ROUND_HALF_UP，与 3.4.13「四舍五入」口径一致；9 行复核 9/9 OK（clause_excerpts §C 第三遍独立核算）。
+- 例外审查：窗口内不触 3.4.13 首日例外、不触 4.3.3 除权除息基准（零公司行动）。
+- 批准人：baiyibing。批准记录：本文件；材料审过 OSkhQuant1.3 PR #1112 / commit `d0edd384e9bd7fc0029b380e8850920539c46a95`。
+
+## 4. 第二 issuer 独立核验审核记录
+
+**决定**：`proof_instruments_wind`（issuer: Wind 万得 via kimi-datasource）作为第二 issuer 独立核验，`complete` 随本记录翻 `true`。
+
+审核内容（人裁认定）：① 上述规则批准与输入（规则存档、条款摘录、上游 instruments 行、daqmt 日线、Wind 日线涨跌停、kimi 日线）逐项一致；② ROUND_HALF_UP 9/9 复核；③ Wind 日线涨跌停 18/18 对平；④ 输入 IDs / 输出事实 / binding 与消费行逐字段一致（含新填 available_at / ordinary_listing）。两 proof issuer 不相交、proof IDs 不相交，source_refs 均含全部 derivation.inputs。
+
+## 5. 冻结边界声明
+
+- **`r4_authorized` 不在本 PR 翻转**，manifest 与 Human GO marker 保持 `false`。
+- freeze 重跑（4090 落 packs + `freeze_recipe_attestation`）待另行具名 Human GO；本记录不构成「开 R4」授权。
+- calendar / actions / marks 等其他门的独立 attestation、host recipe、lake identity/coverage 仍是冻结前置，不由本次 instruments 补证替代。
+- production_C=frozen、Human 例外范围（603196.SH / 20251023–20251104 / basis=cross_source_ratio）不变。
+
+签字区：
+
+| 项 | 决定 | 批准人 | 日期 |
+|---|---|---|---|
+| §1 available_at 口径 (a) | 批准（上表 9 行） | baiyibing | 2026-09-30 |
+| §2 ordinary_listing=true | 批准 | baiyibing | 2026-09-30 |
+| §3 规则适用性批准 | 批准 v2023 版 | baiyibing | 2026-09-30 |
+| §4 第二 issuer 审核 | 批准 complete=true | baiyibing | 2026-09-30 |
+| §5 授权开 R4 | **未授权**（另行具名 GO） | — | — |
