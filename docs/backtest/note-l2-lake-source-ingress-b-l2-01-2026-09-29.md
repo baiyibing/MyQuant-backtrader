@@ -412,6 +412,33 @@ facts、有效期、available_at、ordinary_listing、origin 和空 derivation�
 `reference_price` 不自动等于昨日 close；无涨跌停事实/未覆盖特殊情况不能造一个范围让输入通过。
 只消费已供给值；不同/非对称 limit 的 synthetic 测试证明代码没有重算 10%，不证明真实证券的限制。
 
+#### 9.3.1 R4 instruments 宿主补证清单（2026-09-30）
+
+Human「开修」仅授权修复 PR。复核 #1111 的 `src1111`、`src1111_full`、`src1111_host_bytes`、
+remapped 包与 tip `5b4ef3e` 的 R4 收据后，仍无可直接使用的历史 `available_at` 或权威
+ordinary-listing 窗口事实。daqmt 2026-09-30 快照中的 `OpenDate` 不证明历史普通上市状态；
+Wind 18/18 涨跌停数值相符也不证明可得时点或 SSE 规则已获批准。
+当前 9 行两字段继续 `null`，两份 instruments proof 继续 `complete=false`，**remapped packs 仍 BLOCKED**。
+
+宿主须在后续独立授权下补齐并 pin 以下材料，方可经审核将两份 proof 标为 complete：
+
+1. **逐 trade_date 历史可得性**：覆盖 `603196.SH` / `20251023–20251104` 的每个使用日，
+   给出可追溯到原始归档行的 `available_at`，类型为带 `+08:00` 的时间戳，且不晚于该日
+   submit、bucket、mark 或初始持仓的首次使用；采集时间不能替代历史可得性，禁止默认 09:00。
+2. **权威 ordinary-listing 覆盖**：逐日或显式有效区间覆盖全窗口，说明普通上市及特殊状态/例外
+   的适用性，审核后才能填写布尔 `true`；不得由 IPO `OpenDate`、代码、ST 名单或公告缺失推定。
+3. **SSE 规则归档与批准记录**：保存实际规则版本/生效区间、该证券在该窗口的适用性、参考价选择、
+   tick/lot、舍入和例外审查及批准人/记录；URL、规则摘述或 `approved_rule_version` 字符串不等于批准。
+   全部材料登记为 pinned inputs，禁止补默认 10% 涨跌幅。
+4. **第二 issuer 独立核验**：不同 issuer 审核上述批准、输入、完整输出与历史元数据；Wind 数值相符
+   不能代替这项审查，daqmt 当前快照也不是第二历史 issuer。两 proof 引用全部 inputs，保存相同
+   facts/有效期/available_at/ordinary_listing/规则版本 binding，并登记在 instruments claim 中。
+
+缺任一项就保持 null / incomplete / BLOCKED。填完后重新 pin 原始来源、消费包、两 proof、
+recipe 与 attestation；calendar/actions/marks 等其他门仍须独立满足。模板与 synthetic tests 的
+**fixture PASS ≠ lake PASS**，Decimal 字符串修复也不解除 freeze 的证据门。
+`r4_authorized=false`、`production_C=frozen`、仅 `cross_source_ratio` 的原 scope 不变；本修复不调度 4090/R5。
+
 ### 9.4 Status：每 symbol × session-minute 的完整事实网格
 
 host 按冻结的 `symbols × intervals` 展开网格，start/end 必须是每个一分钟桶；不从是否有成交猜网格。

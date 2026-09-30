@@ -2,14 +2,16 @@
 
 import json
 from copy import deepcopy
+from datetime import datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 
 import pytest
 
 from backtest.research.minute_orders_backend import source_loader
+from backtest.research.minute_orders_backend.input_codec import InputCodecError
 from backtest.research.minute_orders_backend.source_provenance import SourceContractError, sha256
-from tests.test_minute_orders_source_loader import SyntheticCase
+from tests.test_minute_orders_source_loader import SyntheticCase, at
 
 TEMPLATES = Path(__file__).parent / "fixtures/minute_orders_source_attestation"
 
@@ -255,6 +257,7 @@ def test_unfilled_templates_fail_closed_and_contain_no_market_values(case, filen
         assert row["proofs"] == []
         if subject == "instruments":
             assert all(v is None for v in row["facts"].values())
+            assert row["available_at"] is row["ordinary_listing"] is None
         else:
             assert row["missing"] is None and row["halted"] is None
         case.sidecars[subject] = template["data"]
@@ -263,8 +266,12 @@ def test_unfilled_templates_fail_closed_and_contain_no_market_values(case, filen
         case.load()
 
 
-@pytest.mark.parametrize("derived", [False, True])
-def test_host_template_shapes_can_be_filled_with_explicit_fabricated_assertions(case, derived):
+@pytest.fixture(params=[False, True], ids=["source_fact", "approved_derivation"])
+def filled_host_case(case, request):
+    derived = request.param
+    # Fabricated availability exactly at first submit, not an assumed pre-open default.
+    case.sidecars["instruments"]["rows"][0]["available_at"] = at("09:29:00")
+    case.attest_fabricated_bindings()
     if derived:
         case.approve_fabricated_derivation()
 
@@ -284,9 +291,74 @@ def test_host_template_shapes_can_be_filled_with_explicit_fabricated_assertions(
             template["result"]["rows"][0]["binding"]["derivation"] = {
                 "inputs": [], "approved_rule_version": None}
         case.sidecars["proof_" + subject] = fill(template, case.sidecars["proof_" + subject])
+        if derived and subject == "instruments":
+            case.sidecars["proof_verification"] = fill(template, case.sidecars["proof_verification"])
     for subject in ("instruments", "status"):
         name = "instruments.derived" if subject == "instruments" and derived else subject
         template = json.loads((TEMPLATES / f"{name}.template.json").read_text(encoding="utf-8"))["data"]
         case.sidecars[subject] = fill(template, case.sidecars[subject])
     case.freeze()
+    return case
+
+
+def test_host_template_shapes_can_be_filled_with_explicit_fabricated_assertions(filled_host_case):
+    case = filled_host_case
+    row = case.sidecars["instruments"]["rows"][0]
+    available = datetime.fromisoformat(row["available_at"])
+    assert available.utcoffset() == timedelta(hours=8)
+    assert available == datetime.fromisoformat(case.sidecars["commands"]["commands"][0]["submitted_at"])
+    assert row["ordinary_listing"] is True
+    for identity in case.sidecars["attestation"]["claims"]["instruments"]["proofs"]:
+        proof = case.sidecars[identity]
+        assert proof["result"]["complete"] is True
+        assert proof["result"]["rows"][0]["binding"] == source_loader._instrument_binding(row)
     assert case.load().run_input.instruments[0].reference_price == Decimal("10.00")
+    assert not Path(case.recipe["parent"]).exists()
+
+
+@pytest.mark.parametrize("field,value,message", [
+    ("available_at", None, "instrument available_at"),
+    ("available_at", True, "instrument available_at"),
+    ("available_at", 20260928, "instrument available_at"),
+    ("available_at", "", "instrument available_at"),
+    ("available_at", "2026-09-28", "instrument available_at"),
+    ("available_at", "2026-09-28T09:00:00", "instrument available_at"),
+    ("available_at", "2026-09-28T01:00:00+00:00", "instrument available_at"),
+    ("available_at", at("09:29:00.000001"), "instrument facts unavailable at use"),
+    ("ordinary_listing", None, "unsupported listing"),
+    ("ordinary_listing", False, "unsupported listing"),
+    ("ordinary_listing", "true", "unsupported listing"),
+    ("ordinary_listing", 1, "unsupported listing"),
+])
+def test_refreezing_matching_proofs_cannot_fill_unknown_or_invalid_instrument_metadata(
+        filled_host_case, field, value, message):
+    case = filled_host_case
+    row = case.sidecars["instruments"]["rows"][0]
+    row[field] = value
+    for identity in case.sidecars["attestation"]["claims"]["instruments"]["proofs"]:
+        case.sidecars[identity]["result"]["rows"][0]["binding"] = deepcopy(source_loader._instrument_binding(row))
+    case.freeze()  # Fresh hashes and matching assertions cannot make invalid facts loadable.
+    with pytest.raises((SourceContractError, InputCodecError), match=message):
+        case.load()
+    assert not Path(case.recipe["parent"]).exists()
+
+
+@pytest.mark.parametrize("identity", ["proof_instruments", "proof_verification"])
+@pytest.mark.parametrize("complete", [False, None, 1, "true"])
+def test_both_derived_instrument_proofs_require_literal_complete_true(case, identity, complete):
+    case.approve_fabricated_derivation()
+    case.sidecars[identity]["result"]["complete"] = complete
+    case.freeze()
+    with pytest.raises(SourceContractError, match=identity + ": proof: complete saved result required"):
+        case.load()
+    assert not Path(case.recipe["parent"]).exists()
+
+
+@pytest.mark.parametrize("identity", ["proof_instruments", "proof_verification"])
+@pytest.mark.parametrize("field,value", [("available_at", at("09:28:00")), ("ordinary_listing", None)])
+def test_both_derived_proofs_must_bind_the_exact_availability_and_listing(case, identity, field, value):
+    case.approve_fabricated_derivation()
+    case.sidecars[identity]["result"]["rows"][0]["binding"][field] = value
+    case.freeze()
+    with pytest.raises(SourceContractError, match="instruments: proof binding mismatch"):
+        case.load()

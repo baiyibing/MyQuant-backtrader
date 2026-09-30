@@ -9,6 +9,12 @@ They are drafts for a later, separately authorized 4090 copy into
 **R3 stays BLOCKED/NOT_RUN; R4 needs separate Human「开 R4」; production_C=frozen.**
 No lake writes, MatchCore/Fees/SSOT changes, execution, or host certification.
 
+R4 fix update (Human「开修」, 2026-09-30): the separately authorized R4 host run
+on tip `5b4ef3e` returned **BLOCKED/NOT_RUN**. Its original receipt is unchanged.
+This fix removes bare JSON floats from remapped sources and tests the host-fill
+contract; it does not authorize another host run or 4090/R5. The stored remap
+marker and manifest retain `r4_authorized=false`; `production_C=frozen`.
+
 ## Human exception and units
 
 The byte-preserved [HUMAN_GO.md](HUMAN_GO.md) was supplied at
@@ -61,6 +67,15 @@ The remaining fields are mapped from the supplied daily rows; effective dates
 are each row's trade date, not evidence collection dates. A pre-open timestamp
 must not be fabricated to obtain PASS. The host must supply the missing evidence,
 update both bindings and freshly pin all changed bytes before any future load.
+The R4 fix audit covered saved `src1111`, `src1111_full`, `src1111_host_bytes`,
+the earlier `remapped/` bundle and the R4 receipt; no usable historical
+availability or authoritative ordinary-listing coverage was found. In particular,
+the snapshot's `OpenDate` is not window-wide ordinary-listing evidence, and the
+SSE URL/paraphrase is not an archived rule plus approval record.
+Follow the [host checklist in ingress §9.3.1](../../note-l2-lake-source-ingress-b-l2-01-2026-09-29.md#931-r4-instruments-宿主补证清单2026-09-30)
+for the four required evidence groups and matching bindings. **Current remapped
+packs remain BLOCKED; fixture PASS ≠ lake PASS.** Calendar/actions/marks and the
+full attestation remain separate prerequisites to freezing.
 
 ## Status and lake boundary
 
@@ -101,6 +116,13 @@ verifies newline-only equivalence. It does not accept arbitrary normalized data.
 Git LF inputs are vendored under `tests/fixtures/bl2_attestation_remap_upstream/` for pytest `remap.py --check`; host originals remain with #1111 / the host. `sources/*.json` are pinned row
 excerpts with original paths, commit, hashes, and extraction descriptions. CSV
 values remain strings and row indices are zero-based excluding the header.
+JSON fractional numbers are parsed as Decimal from the pinned source text and
+recursively emitted as finite Decimal strings, including nested metadata in
+`daqmt_detail` and `upstream_instruments`. No two-decimal quantization is applied
+to these excerpts; integers, booleans and nulls retain their types. Upstream
+input bytes/pins are unchanged; the regenerated excerpt hashes are in the manifest.
+All package JSON is checked with the loader's `strict_json`. Fixing its Decimal
+parse error does not make incomplete instrument proofs or attestations loadable.
 The minute excerpt keeps only datetime/time/volume/suspendFlag, preserving all
 2,169 row positions. The loader accepts JSON/Parquet, so proof `source_refs`
 point to these JSON excerpts, not unsupported CSV descriptors. Each excerpt has

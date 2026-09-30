@@ -1,18 +1,18 @@
 """Offline evidence checks and fabricated acceptance tests; no lake or host run."""
 
 import importlib.util
-import json
 import subprocess
 import sys
 from collections import Counter
 from datetime import datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 from backtest.research.minute_orders_backend import source_loader
-from backtest.research.minute_orders_backend.source_provenance import SourceContractError, sha256
+from backtest.research.minute_orders_backend.source_provenance import SourceContractError, sha256, strict_json
 from tests.test_minute_orders_source_loader import SyntheticCase
 
 
@@ -21,7 +21,7 @@ UPSTREAM = Path(__file__).parent / "fixtures/bl2_attestation_remap_upstream"
 
 
 def document(name):
-    return json.loads((PACK / name).read_bytes())
+    return strict_json((PACK / name).read_bytes(), name)
 
 
 @pytest.fixture
@@ -121,7 +121,7 @@ def test_checked_packages_hashes_bind_all_rows_and_preserve_instrument_blockers(
     for spec in manifest["artifacts"]:
         raw = (PACK / spec["path"]).read_bytes()
         assert sha256(raw) == spec["sha256"]
-        doc = json.loads(raw)
+        doc = strict_json(raw, spec["path"])
         assert doc["schema_version"] == spec["schema"]
         store.data[spec["id"]] = doc["data"]
         store.specs[spec["id"]] = {**spec, "location": {"kind": "sidecar"}}
@@ -167,6 +167,72 @@ def remapper():
     remap = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(remap)
     return remap
+
+
+@pytest.mark.parametrize("path", sorted(PACK.rglob("*.json")), ids=lambda p: str(p.relative_to(PACK)))
+def test_every_package_json_passes_loader_strict_json(path):
+    strict_json(path.read_bytes(), str(path))
+
+
+@pytest.mark.parametrize("envelope", [False, True])
+def test_remapper_encodes_nested_decimal_values_without_rounding(remapper, envelope):
+    data = {"metadata": {"rate": 0.1}, "rows": [{
+        "price": 17.84, "tick": 0.01, "small": 1e-7,
+        "exact": Decimal("23.360000000000000001"), "scale": Decimal("1.2300"),
+        "count": 100, "missing": None, "flag": False, "text": "unchanged",
+    }]}
+    original = {"schema_version": "bl2_raw_excerpt_v1", "data": data} if envelope else data
+    result = strict_json(remapper.encode(original), "fabricated remap")
+    result = result["data"] if envelope else result
+    assert result == {"metadata": {"rate": "0.1"}, "rows": [{
+        "price": "17.84", "tick": "0.01", "small": "0.0000001",
+        "exact": "23.360000000000000001", "scale": "1.2300",
+        "count": 100, "missing": None, "flag": False, "text": "unchanged",
+    }]}
+    assert type(result["rows"][0]["count"]) is int
+    assert result["rows"][0]["flag"] is False
+    assert type(data["rows"][0]["price"]) is float  # Encoding never edits the input.
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), Decimal("-Infinity")])
+def test_remapper_rejects_nonfinite_source_numbers(remapper, value):
+    with pytest.raises(ValueError, match="non-finite source number"):
+        remapper.encode({"nested": [{"number": value}]})
+
+
+def test_pinned_json_excerpts_preserve_source_decimals_and_unknowns(remapper):
+    _, inputs = remapper.read_inputs(UPSTREAM, PACK / "HUMAN_GO.md")
+    raw_detail = inputs["raw/daqmt_603196_instrument_detail.json"]
+    assert type(raw_detail["PreClose"]) is Decimal
+    detail = document("sources/daqmt_detail.json")["data"]["rows"][0]
+    assert detail["PreClose"] == "17.84"
+    assert detail["PriceTick"] == "0.01"
+    assert detail["IsTrading"] is None
+    upstream = document("sources/upstream_instruments.json")["data"]
+    assert upstream["upstream_metadata"]["inputs"]["limit_rate"] == "0.1"
+    assert upstream["rows"][0]["reference_price"] == "23.36"
+    assert upstream["rows"][0]["lot_size"] == 100
+    assert document("manifest.json")["r4_authorized"] is False
+    assert document("sources/human_go.json")["data"]["rows"][0]["r4_authorized"] is False
+
+
+@pytest.mark.parametrize("proof_path", ["instruments.proof.json", "instruments.wind.proof.json"])
+def test_remapped_sources_reach_incomplete_instruments_gate_after_decimal_fix(tmp_path, monkeypatch, proof_path):
+    case = SyntheticCase(tmp_path, monkeypatch)
+    # Real saved excerpts, but only a fabricated local recipe/bar fixture; no host/lake run.
+    for spec in document("manifest.json")["artifacts"]:
+        if spec["path"].startswith("sources/"):
+            identity = spec["id"]
+            case.sidecars[identity] = document(spec["path"])["data"]
+            case.recipe["sources"].insert(-1, {
+                "id": identity, "location": {"kind": "sidecar", "path": str(tmp_path / (identity + ".json"))},
+                "format": "json", "schema": spec["schema"], "sha256": "",
+            })
+    case.sidecars["proof_instruments"] = document(proof_path)["data"]
+    case.freeze()
+    with pytest.raises(SourceContractError, match="proof_instruments: proof: complete saved result required"):
+        case.load()
+    assert not Path(case.recipe["parent"]).exists()
 
 
 def test_remapper_check_matches_checked_in_packages():

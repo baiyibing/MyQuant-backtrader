@@ -16,22 +16,22 @@
       "board": "sse_main_a",
       "inputs": {
         "reference_price": "daqmt 1d bar preClose (vendor field; OHLCV cross-validated vs THS stock_finance_data, exact match)",
-        "limit_rate": 0.1,
+        "limit_rate": "0.1",
         "tick_size_rule": "0.01 CNY",
         "lot_size_rule": "100 shares per lot",
         "st_status": "false (vendor_wind_st_status + 0 halt announcements in window)"
       }
     },
     "rows": [
-    {"date":"20251023","symbol":"603196.SH","tick_size":0.01,"lot_size":100,"reference_price":23.36,"reference_price_source":"daqmt_1d_bar.preClose (vendor field, cross-validated vs THS)","limit_up":25.7,"limit_down":21.02,"limit_rule":"SSE main board ±10% of previous close, tick 0.01","today_open":23.25,"open_within_limit":true},
-    {"date":"20251024","symbol":"603196.SH","tick_size":0.01,"lot_size":100,"reference_price":23.89,"reference_price_source":"daqmt_1d_bar.preClose (vendor field, cross-validated vs THS)","limit_up":26.28,"limit_down":21.5,"limit_rule":"SSE main board ±10% of previous close, tick 0.01","today_open":23.92,"open_within_limit":true},
-    {"date":"20251027","symbol":"603196.SH","tick_size":0.01,"lot_size":100,"reference_price":23.89,"reference_price_source":"daqmt_1d_bar.preClose (vendor field, cross-validated vs THS)","limit_up":26.28,"limit_down":21.5,"limit_rule":"SSE main board ±10% of previous close, tick 0.01","today_open":23.89,"open_within_limit":true},
-    {"date":"20251028","symbol":"603196.SH","tick_size":0.01,"lot_size":100,"reference_price":24.32,"reference_price_source":"daqmt_1d_bar.preClose (vendor field, cross-validated vs THS)","limit_up":26.75,"limit_down":21.89,"limit_rule":"SSE main board ±10% of previous close, tick 0.01","today_open":23.95,"open_within_limit":true},
-    {"date":"20251029","symbol":"603196.SH","tick_size":0.01,"lot_size":100,"reference_price":23.12,"reference_price_source":"daqmt_1d_bar.preClose (vendor field, cross-validated vs THS)","limit_up":25.43,"limit_down":20.81,"limit_rule":"SSE main board ±10% of previous close, tick 0.01","today_open":23.19,"open_within_limit":true},
-    {"date":"20251030","symbol":"603196.SH","tick_size":0.01,"lot_size":100,"reference_price":23.04,"reference_price_source":"daqmt_1d_bar.preClose (vendor field, cross-validated vs THS)","limit_up":25.34,"limit_down":20.74,"limit_rule":"SSE main board ±10% of previous close, tick 0.01","today_open":23.07,"open_within_limit":true},
-    {"date":"20251031","symbol":"603196.SH","tick_size":0.01,"lot_size":100,"reference_price":22.94,"reference_price_source":"daqmt_1d_bar.preClose (vendor field, cross-validated vs THS)","limit_up":25.23,"limit_down":20.65,"limit_rule":"SSE main board ±10% of previous close, tick 0.01","today_open":22.78,"open_within_limit":true},
-    {"date":"20251103","symbol":"603196.SH","tick_size":0.01,"lot_size":100,"reference_price":23.03,"reference_price_source":"daqmt_1d_bar.preClose (vendor field, cross-validated vs THS)","limit_up":25.33,"limit_down":20.73,"limit_rule":"SSE main board ±10% of previous close, tick 0.01","today_open":22.9,"open_within_limit":true},
-    {"date":"20251104","symbol":"603196.SH","tick_size":0.01,"lot_size":100,"reference_price":23.05,"reference_price_source":"daqmt_1d_bar.preClose (vendor field, cross-validated vs THS)","limit_up":25.36,"limit_down":20.75,"limit_rule":"SSE main board ±10% of previous close, tick 0.01","today_open":23.11,"open_within_limit":true}
+    {"date":"20251023","symbol":"603196.SH","tick_size":"0.01","lot_size":100,"reference_price":"23.36","reference_price_source":"daqmt_1d_bar.preClose (vendor field, cross-validated vs THS)","limit_up":"25.7","limit_down":"21.02","limit_rule":"SSE main board ±10% of previous close, tick 0.01","today_open":"23.25","open_within_limit":true},
+    {"date":"20251024","symbol":"603196.SH","tick_size":"0.01","lot_size":100,"reference_price":"23.89","reference_price_source":"daqmt_1d_bar.preClose (vendor field, cross-validated vs THS)","limit_up":"26.28","limit_down":"21.5","limit_rule":"SSE main board ±10% of previous close, tick 0.01","today_open":"23.92","open_within_limit":true},
+    {"date":"20251027","symbol":"603196.SH","tick_size":"0.01","lot_size":100,"reference_price":"23.89","reference_price_source":"daqmt_1d_bar.preClose (vendor field, cross-validated vs THS)","limit_up":"26.28","limit_down":"21.5","limit_rule":"SSE main board ±10% of previous close, tick 0.01","today_open":"23.89","open_within_limit":true},
+    {"date":"20251028","symbol":"603196.SH","tick_size":"0.01","lot_size":100,"reference_price":"24.32","reference_price_source":"daqmt_1d_bar.preClose (vendor field, cross-validated vs THS)","limit_up":"26.75","limit_down":"21.89","limit_rule":"SSE main board ±10% of previous close, tick 0.01","today_open":"23.95","open_within_limit":true},
+    {"date":"20251029","symbol":"603196.SH","tick_size":"0.01","lot_size":100,"reference_price":"23.12","reference_price_source":"daqmt_1d_bar.preClose (vendor field, cross-validated vs THS)","limit_up":"25.43","limit_down":"20.81","limit_rule":"SSE main board ±10% of previous close, tick 0.01","today_open":"23.19","open_within_limit":true},
+    {"date":"20251030","symbol":"603196.SH","tick_size":"0.01","lot_size":100,"reference_price":"23.04","reference_price_source":"daqmt_1d_bar.preClose (vendor field, cross-validated vs THS)","limit_up":"25.34","limit_down":"20.74","limit_rule":"SSE main board ±10% of previous close, tick 0.01","today_open":"23.07","open_within_limit":true},
+    {"date":"20251031","symbol":"603196.SH","tick_size":"0.01","lot_size":100,"reference_price":"22.94","reference_price_source":"daqmt_1d_bar.preClose (vendor field, cross-validated vs THS)","limit_up":"25.23","limit_down":"20.65","limit_rule":"SSE main board ±10% of previous close, tick 0.01","today_open":"22.78","open_within_limit":true},
+    {"date":"20251103","symbol":"603196.SH","tick_size":"0.01","lot_size":100,"reference_price":"23.03","reference_price_source":"daqmt_1d_bar.preClose (vendor field, cross-validated vs THS)","limit_up":"25.33","limit_down":"20.73","limit_rule":"SSE main board ±10% of previous close, tick 0.01","today_open":"22.9","open_within_limit":true},
+    {"date":"20251104","symbol":"603196.SH","tick_size":"0.01","lot_size":100,"reference_price":"23.05","reference_price_source":"daqmt_1d_bar.preClose (vendor field, cross-validated vs THS)","limit_up":"25.36","limit_down":"20.75","limit_rule":"SSE main board ±10% of previous close, tick 0.01","today_open":"23.11","open_within_limit":true}
   ]
   }
 }

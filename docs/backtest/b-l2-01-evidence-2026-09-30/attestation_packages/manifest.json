@@ -63,7 +63,7 @@
       "path": "sources/daqmt_detail.json",
       "format": "json",
       "schema": "bl2_raw_excerpt_v1",
-      "sha256": "d1768230423de6ca52fe7cf6e95045d2b12294604ff6605b65cbc46630e04971"
+      "sha256": "b73449791a2e1a81631b1f26060085a863971101de141d6c065302368034ea10"
     },
     {
       "id": "sse_rule",
@@ -77,7 +77,7 @@
       "path": "sources/upstream_instruments.json",
       "format": "json",
       "schema": "bl2_raw_excerpt_v1",
-      "sha256": "6ecda54157a6dd915185b6c619745f63423d4bab7a4cdec640672beec5c8d0f9"
+      "sha256": "c815bd56fec8c14060f670bc9941487178bce237f0e192ff30751cff555b7569"
     },
     {
       "id": "vendor_status_semantics",
