@@ -42,6 +42,20 @@ it does not overwrite the units GO. Instruments/status/units consumer and proof
 bytes, and all their existing source excerpts, remain unchanged from #276.
 **`r4_authorized=false`; this approval is packs only, not「开 R4」.**
 
+R4d timing host fill (2026-09-30, Human **「开修」**): #277 baseline
+`55f27f7967bc98a30146dc2474b91f1ac69f46f0` reached the timing claim with
+`SourceContractError: timing: unknown proof source ref`. This fill supplies the
+independent [timing.proof.json](timing.proof.json), manifest id **`proof_timing`**,
+using existing MyQuant census/map/vendor materials. The
+[timing approval record](HOST_R4_TIMING_APPROVAL_20260930.md) awaits baiyibing
+countersign before merge. [HUMAN_GO_TIMING.md](HUMAN_GO_TIMING.md) preserves the
+supplied GO bytes, SHA-256
+`b89d99fc0fabbad5dd1e6da4ff6f3368ab84d1c7afce71832ea9e405d7e270f7`.
+The units/CAM GO documents and #1111/#1112/#1114 pins remain unchanged, as do
+all existing instruments/status/units/CAM consumer, proof and source bytes.
+**R4d stays BLOCKED/NOT_RUN as recorded; this fixes evidence registration,
+not a lake verdict. `r4_authorized=false`; `production_C=frozen`.**
+
 ## Human exception and units
 
 The byte-preserved [HUMAN_GO.md](HUMAN_GO.md) was supplied at
@@ -79,6 +93,7 @@ is explicit. No amount/close/volume inference is used.
 | [actions.proof.json](actions.proof.json) | `bl2_proof_v1` / `proof_actions` | actions; `complete_no_company_actions`; `result.rows=[]` |
 | [marks.json](marks.json) | `bl2_marks_grid_v1` / `marks` | host-facing approved grid document; **not a loader role** |
 | [marks.proof.json](marks.proof.json) | `bl2_proof_v1` / `proof_marks` | marks; `raw_contemporaneous_grid` |
+| [timing.proof.json](timing.proof.json) | `bl2_proof_v1` / `proof_timing` | claim only; `completed_bucket_available_at_end`; **no timing consumer role** |
 
 The source-fact instrument template is an alternative, not another required
 package: these inputs are explicitly an `approved_derivation`. Both instrument
@@ -166,6 +181,80 @@ raw response bytes remain vendored and pinned. The archived materials keep their
 DRAFT wording; approval is a separate record, not an edit of upstream evidence.
 Name correction: **603196.SH 日播时尚 → 璞源材料**, not 亚士创能 (603378).
 
+## Timing host fill and R4d registration
+
+The timing proof uses the existing §9/§9.1 six-field envelope, `complete=true`
+and non-empty `source/row/observation` rows; no instruments-only basis/binding
+requirement is added. Independent sources are `timing_lake_census`,
+`timing_xtquant_docs`, `timing_materials_map`, `host_timing_approval`,
+`human_go_timing` and existing `opening_auction`/`daqmt_1m`. None is a proof or attestation.
+
+The originals are already vendored in **baiyibing/MyQuant-backtrader** at
+`55f27f7967bc98a30146dc2474b91f1ac69f46f0`, under this evidence directory;
+they are not attributed to OSkhQuant1.3. Full-file bytes are pinned in
+`inputs.json.timing_host_materials.original_files`:
+
+| Original material | SHA-256 |
+|---|---|
+| `raw_materials/raw_lake_minute_census_603196SH_20251023_20251104.json` | `b4ee473bcf7d224d635ce0f788d0d64dde8a2e421034420c2c292e9c632b7188` |
+| `raw_materials/raw_excerpt_xtquant_docs.json` | `3884f478256f96c7938cb5f0f40075ceb03f8064665be1193e2d445612bc8a12` |
+| `HOST_MATERIALS_MAP_R4.md` | `b2487a9ba20f66b8e211b22536fb92d5dc60b0c2edb8eb2427c8d4c93e0e2fba` |
+
+Compact LF fixtures in `tests/fixtures/bl2_attestation_remap_upstream/timing_host_materials/`
+have separate byte pins and reproduce their `sources/` copies exactly.
+`extract_timing_materials` reconstructs them from the hash-checked saved
+originals in offline tests. The full 2169-cell census is not duplicated in each
+sidecar. Census excerpt rows 0/1/2 hold semantics/grid/counters; rows 3–11 hold
+nine boundary samples, with `source_cell_index` into the original `/cells` and
+`row_idx` for the separate zero-based absolute parquet row. Proof `row` always
+indexes the compact source's `data.rows`, never the parquet directly.
+
+Census and map §1.1 explicitly declare END: label t covers `[t-1min,t)`.
+Contract §3.1 gives completed close/volume availability at `bucket.end=t`.
+The proof approves END and `availability=bucket_end`. **The R4d source encoding
+declaration still requires host reconciliation before freeze:** map §1.1 labels
+`1761211800000` as Shanghai 09:30 and says “不是真 UTC”, while the unchanged
+`epoch_ms` decoder returns **`2025-10-23T17:30:00+08:00`**. The pinned #1111
+vendor export instead uses `1761183000000` for Shanghai 09:30, a 28800000 ms
+difference. Tests preserve this discrepancy explicitly. The proof attests
+END/completed-bucket semantics, not the contradictory epoch mapping; no silent
+offset correction, source substitution, Clock change or lake PASS is introduced.
+
+Coverage is 2169 rows / 2133 tradable cells / zero missing / zero duplicates;
+237 tradable END labels per day are 09:31–11:30 and 13:01–14:57.
+09:30/14:58/14:59/15:00 remain off-grid; 15:00 is mark-legal. Samples preserve
+first-day 09:30→46513, 09:31→46514, 14:57→46750, 15:00→46753 and final-day
+15:00→48681, plus lunch and closing-auction boundaries. Scope is
+`603196.SH` / `2025-10-23..2025-11-04`, covering the R4d bars/marks window.
+Calendar's next possible BUY date 2025-11-05 does not widen this minute claim;
+a wider execution/mark window needs fresh timing coverage.
+
+This attests the historical completed-bar model, not live feed arrival latency.
+Known availability after end must reject adaptation. File collection time is
+not event time; vendor timestamp fields only corroborate the field mapping,
+and `fill_data` zero-fill is not event-time or actual-trade proof. Vendor export
+does not establish lake identity. The census's saved parquet hash remains an
+identity note; `unbound_minute_source.sha256=null`, pending host pin/coverage.
+
+R4d-style runners register **all `manifest.artifacts`** as recipe sources, so
+the 46-entry manifest automatically supplies `proof_timing` and its sidecars.
+Preserve each artifact id/schema/hash and resolve its path on the host. The
+existing attestation claim is:
+
+```json
+"timing": {
+  "conclusion": "completed_bucket_available_at_end",
+  "proofs": ["proof_timing"]
+}
+```
+
+There is no timing consumer or loader role. A host using an explicit source
+allowlist must include the new proof and all its `source_refs`; leaving the
+claim pointed at a missing id reproduces the R4d failure. Host account/commands,
+full recipe review/registration, time-encoding reconciliation, configured lake identity/coverage and fresh
+`attestation_scope(recipe)`/freeze remain required. This catalog supplies no
+partial recipe and does not reuse or rewrite the R4d attempt/receipt as PASS.
+
 ## Status and lake boundary
 
 `start/end` are Shanghai `+08:00` one-minute buckets with END labels
@@ -197,7 +286,10 @@ plus the bytes SHA-256 of the host approval record under `host_approval_sha256`.
 `cam_host_materials` additionally pins all thirteen #1114 files, including its
 manifest, three raw cninfo responses, seven calendar/actions/marks text sources,
 README and host-fill form. `host_cam_approval_sha256` pins the CAM approval;
-`human_go_cam_sha256` pins the supplied four-cell GO separately. None of the
+`human_go_cam_sha256` pins the supplied four-cell GO separately.
+`timing_host_materials` pins the three original MyQuant files and compact
+fixtures; `host_timing_approval_sha256` and `human_go_timing_sha256` separately
+pin the new timing approval and GO. None of the
 #1111/#1112 pins or the existing units GO/approval hashes is replaced.
 Git LF bytes differ
 from original Windows CRLF bytes for daqmt artifacts. Both verified hashes are
@@ -237,15 +329,20 @@ With explicit approved Python and local copies of the pinned inputs:
 ```bash
 "$OSKH_MERGE_PYTHON" docs/backtest/b-l2-01-evidence-2026-09-30/attestation_packages/remap.py \
   --source-dir tests/fixtures/bl2_attestation_remap_upstream \
-  --human-go docs/backtest/b-l2-01-evidence-2026-09-30/attestation_packages/HUMAN_GO.md --check
+  --human-go docs/backtest/b-l2-01-evidence-2026-09-30/attestation_packages/HUMAN_GO.md \
+  --host-cam-approval docs/backtest/b-l2-01-evidence-2026-09-30/attestation_packages/HOST_R4_CAM_APPROVAL_20260930.md \
+  --host-timing-approval docs/backtest/b-l2-01-evidence-2026-09-30/attestation_packages/HOST_R4_TIMING_APPROVAL_20260930.md --check
 ```
 
 `--host-approval` pins the approval record and defaults to the checked-in
 [HOST_R4_INSTRUMENTS_APPROVAL_20260930.md](HOST_R4_INSTRUMENTS_APPROVAL_20260930.md).
 `--host-cam-approval` separately pins the CAM record and defaults to
 [HOST_R4_CAM_APPROVAL_20260930.md](HOST_R4_CAM_APPROVAL_20260930.md); its approval_id
-marker is also required. An external `--source-dir` must stage the original
-#1111 tree plus #1112 `sse_rule_archive/` plus #1114 `cam_host_materials/`.
+marker is also required. `--host-timing-approval` likewise defaults to the
+checked-in [timing record](HOST_R4_TIMING_APPROVAL_20260930.md), validating its
+hash and approval_id. An external `--source-dir` must stage the original
+#1111 tree plus #1112 `sse_rule_archive/`, #1114 `cam_host_materials/` and the
+three pinned `timing_host_materials/` compact fixtures.
 `--output-dir /new/offline/directory` writes a new directory instead of checking;
 existing destinations are rejected. No network, market download, resolver, lake
 write, or research runner is called. Checked-in compact JSON retains every
@@ -261,12 +358,13 @@ synchronized across bindings, inputs and claims, then re-pin. Register the actua
 minute partition separately through the existing resolver. Calendar/actions roles
 and claims now use `calendar`/`actions` and `proof_calendar`/`proof_actions`;
 the marks claim uses `proof_marks`, with the approved document translated into
-recipe `mark_grid`. Remaining claims (including timing), account, commands and
-full recipe/attestation freeze still need host review and registration; this
+recipe `mark_grid`. Timing now uses `proof_timing` through its claim only, as
+shown above. Account, commands and full recipe/attestation freeze still need
+host review and registration; this
 catalog is not a recipe or a scoped attestation.
 
 The validator change is `bl2_source_transform_v4` (package IDs remain v1).
-The 2026-09-30 instruments and CAM host fills change evidence bytes only — the v4
+The 2026-09-30 instruments, CAM and timing host fills change evidence bytes only — the v4
 validator/contract is unchanged, so the transform version is deliberately not
 bumped (v3/v4 bumps tracked validator changes, not evidence fills).
 Ratio evidence requires the explicit basis, pinned structured Human marker,

@@ -143,7 +143,7 @@ def test_checked_packages_hashes_bind_all_rows_and_record_instrument_host_fill()
     store.specs["minute_603196"] = {"schema": {"volume": "int64"}, "sha256": "0" * 64,
                                     "location": {"kind": "minute", "symbol": "603196.SH"}}
     for identity in ("proof_units", "proof_status", "proof_instruments_sse", "proof_instruments_wind",
-                     "proof_calendar", "proof_actions", "proof_marks"):
+                     "proof_calendar", "proof_actions", "proof_marks", "proof_timing"):
         store.proof_bindings[identity] = source_loader._proof(store.data[identity], store, identity)
     statuses = store.data["status"]["rows"]
     assert len(statuses) == len(store.proof_bindings["proof_status"]) == 2160
@@ -331,7 +331,8 @@ def test_remapper_check_matches_checked_in_packages():
     result = subprocess.run(
         [sys.executable, str(PACK / "remap.py"), "--source-dir", str(UPSTREAM),
          "--human-go", str(PACK / "HUMAN_GO.md"),
-         "--host-cam-approval", str(PACK / "HOST_R4_CAM_APPROVAL_20260930.md"), "--check"],
+         "--host-cam-approval", str(PACK / "HOST_R4_CAM_APPROVAL_20260930.md"),
+         "--host-timing-approval", str(PACK / "HOST_R4_TIMING_APPROVAL_20260930.md"), "--check"],
         capture_output=True, text=True, encoding="utf-8", timeout=30,
     )
     assert result.returncode == 0, result.stdout + result.stderr
@@ -459,6 +460,160 @@ def test_remapper_rejects_tampered_cam_pin(tmp_path, remapper, name):
     path = source / "cam_host_materials" / name
     path.write_bytes(path.read_bytes() + b"tampered\n")
     with pytest.raises(ValueError, match="CAM input hash mismatch"):
+        remapper.build(source, PACK / "HUMAN_GO.md")
+    assert list(tmp_path.iterdir()) == [source]
+
+
+def test_timing_excerpts_reproduce_pinned_original_materials(remapper):
+    pins, _ = remapper.read_inputs(UPSTREAM, PACK / "HUMAN_GO.md")
+    materials = pins["timing_host_materials"]
+    assert materials["repository"] == "baiyibing/MyQuant-backtrader"
+    assert materials["commit"] == "55f27f7967bc98a30146dc2474b91f1ac69f46f0"
+    assert materials["directory"] == "docs/backtest/b-l2-01-evidence-2026-09-30"
+    expected_pins = {
+        remapper.TIMING_CENSUS: "b4ee473bcf7d224d635ce0f788d0d64dde8a2e421034420c2c292e9c632b7188",
+        remapper.TIMING_DOCS: "3884f478256f96c7938cb5f0f40075ceb03f8064665be1193e2d445612bc8a12",
+        remapper.TIMING_MAP: "b2487a9ba20f66b8e211b22536fb92d5dc60b0c2edb8eb2427c8d4c93e0e2fba",
+    }
+    originals = {name: (PACK.parent / name).read_bytes() for name in expected_pins}
+    assert {name: sha256(raw) for name, raw in originals.items()} == expected_pins
+    assert materials["original_files"] == {name: {"sha256": pin} for name, pin in expected_pins.items()}
+    for name, excerpt in remapper.extract_timing_materials(materials, originals).items():
+        raw = (UPSTREAM / remapper.TIMING_DIR / name).read_bytes()
+        assert sha256(raw) == materials["files"][name]["git_sha256"]
+        assert raw == remapper.encode(excerpt) == (PACK / "sources" / name).read_bytes()
+        assert not raw.startswith(b"\xef\xbb\xbf") and b"\r" not in raw and b"\x00" not in raw
+    assert pins["human_go_timing_sha256"] == sha256((PACK / remapper.TIMING_GO_NAME).read_bytes()) == (
+        "b89d99fc0fabbad5dd1e6da4ff6f3368ab84d1c7afce71832ea9e405d7e270f7")
+    assert pins["host_timing_approval_sha256"] == sha256((PACK / remapper.TIMING_APPROVAL_NAME).read_bytes())
+    # Neither earlier Human GO pin is repurposed by the new timing approval.
+    assert pins["human_go_sha256"] == "bb287dfe9e2559e9fe05abb7401a636aa6596524cfb79ffa34a4f3ff884c2afe"
+    assert pins["human_go_cam_sha256"] == "e15c79acde154bd7163208f2bf0a156737a9f908ed3fb9f41b87b64d42c13feb"
+
+
+def test_timing_proof_resolves_r4d_claim_with_manifest_sources_only():
+    manifest = document("manifest.json")
+    store = SimpleNamespace(data={}, specs={})
+    for spec in manifest["artifacts"]:
+        assert spec["id"] not in store.data
+        store.data[spec["id"]] = document(spec["path"])["data"]
+        store.specs[spec["id"]] = spec
+    proof = store.data["proof_timing"]
+    assert store.specs["proof_timing"]["path"] == "timing.proof.json"
+    assert store.specs["proof_timing"]["schema"] == "bl2_proof_v1"
+    assert set(proof) == {"issuer", "subject", "source_refs", "filter", "result", "limitations"}
+    assert proof["subject"] == "timing" and proof["result"]["complete"] is True
+    assert proof["filter"]["symbols"] == ["603196.SH"]
+    assert proof["filter"]["from_date"] == "2025-10-23"
+    assert proof["filter"]["through_date"] == "2025-11-04"
+    assert "END" in proof["filter"]["predicate"] and "bucket.end" in proof["filter"]["predicate"]
+    assert "completed_bucket_available_at_end" in proof["result"]["summary"]
+    assert {"timing_lake_census", "timing_xtquant_docs", "timing_materials_map",
+            "host_timing_approval", "human_go_timing"} <= set(proof["source_refs"])
+    for ref in proof["source_refs"]:
+        assert store.specs[ref]["schema"] not in ("bl2_proof_v1", "bl2_attestation_v1")
+        assert sha256((PACK / store.specs[ref]["path"]).read_bytes()) == store.specs[ref]["sha256"]
+    assert proof["result"]["rows"]
+    for obs in proof["result"]["rows"]:
+        assert set(obs) == {"source", "row", "observation"}  # No instruments-only binding requirement.
+        assert obs["source"] in proof["source_refs"]
+        assert 0 <= obs["row"] < len(store.data[obs["source"]]["rows"])
+    assert source_loader._proof(proof, store, "proof_timing") == {}
+    source_loader._refs(["proof_timing"], store, "timing", symbols=["603196.SH"],
+                        from_date=datetime(2025, 10, 23).date(), through_date=datetime(2025, 11, 4).date())
+    # Reproduce the original missing-id failure without a recipe, resolver or lake.
+    del store.data["proof_timing"]
+    with pytest.raises(SourceContractError, match="timing: unknown proof source ref"):
+        source_loader._refs(["proof_timing"], store, "timing")
+    assert manifest["r4_authorized"] is False and manifest["lake_verdict"] == "NOT_RUN"
+    assert manifest["unbound_minute_source"]["sha256"] is None
+    assert not any("timing" in gap for gap in manifest["unresolved"])
+    assert any("account/commands" in gap for gap in manifest["unresolved"])
+    assert any("time-encoding reconciliation" in gap for gap in manifest["unresolved"])
+    assert any("host recipe, lake identity/coverage and fresh freeze" in gap for gap in manifest["unresolved"])
+    readme = (PACK / "README.md").read_text(encoding="utf-8")
+    assert '"conclusion": "completed_bucket_available_at_end"' in readme
+    assert '"proofs": ["proof_timing"]' in readme
+
+
+def test_timing_boundary_samples_keep_original_indexes_and_end_mapping():
+    census = document("sources/timing_lake_census.json")["data"]["rows"]
+    original = json.loads((PACK.parent / "raw_materials/raw_lake_minute_census_603196SH_20251023_20251104.json").read_bytes())
+    assert census[0]["time_semantics"] == original["time_semantics"]
+    assert census[1]["grid_definition"] == original["grid_definition"]
+    assert [census[2][k] for k in ("window_rows", "grid_cells", "grid_missing", "grid_dup")] == [2169, 2133, 0, 0]
+    expected = [("2025-10-23", "0930", 46513, False), ("2025-10-23", "0931", 46514, True),
+                ("2025-10-23", "1130", 46633, True), ("2025-10-23", "1301", 46634, True),
+                ("2025-10-23", "1457", 46750, True), ("2025-10-23", "1458", 46751, False),
+                ("2025-10-23", "1459", 46752, False), ("2025-10-23", "1500", 46753, False),
+                ("2025-11-04", "1500", 48681, False)]
+    assert [(r["day"], r["end_label_hm"], r["row_idx"], r["in_tradable_grid"]) for r in census[3:]] == expected
+    observations = document("timing.proof.json")["data"]["result"]["rows"]
+    cited = {obs["row"]: obs["observation"] for obs in observations if obs["source"] == "timing_lake_census"}
+    for index, row in enumerate(census[3:], 3):
+        assert {k: v for k, v in row.items() if k not in ("kind", "source_cell_index")} == original["cells"][row["source_cell_index"]]
+        assert f"parquet row={row['row_idx']}" in cited[index]
+        assert "close/volume available at end" in cited[index]
+    decoded = source_loader._time(1761211800000, {"encoding": "epoch_ms", "timezone": "Asia/Shanghai", "label": "END"}, "timing")
+    assert decoded.isoformat() == "2025-10-23T17:30:00+08:00"
+    # Preserve the discovered contradiction as a host freeze blocker, not a silent decoder fix.
+    map_rows = document("sources/timing_materials_map.json")["data"]["rows"]
+    assert any("1761211800000" in row["text"] and "09:30" in row["text"] for row in map_rows)
+    vendor = document("sources/daqmt_1m.json")["data"]["rows"][0]
+    assert int(vendor["time"]) == 1761183000000
+    assert decoded - datetime.fromisoformat(vendor["datetime"]) == timedelta(hours=8)
+    limitations = document("timing.proof.json")["data"]["limitations"]
+    assert any("does not certify the R4d epoch_ms mapping" in item for item in limitations)
+
+
+@pytest.mark.parametrize("change,match", [("empty_rows", "saved observations required"),
+                                        ("self_ref", "proof/attestation cannot be its own evidence"),
+                                        ("bad_index", "observation row outside pinned source rows")])
+def test_timing_proof_keeps_loader_negative_contract(change, match):
+    store = SimpleNamespace(data={}, specs={})
+    for spec in document("manifest.json")["artifacts"]:
+        store.data[spec["id"]] = document(spec["path"])["data"]
+        store.specs[spec["id"]] = spec
+    proof = deepcopy(store.data["proof_timing"])
+    if change == "empty_rows":
+        proof["result"]["rows"] = []
+    elif change == "self_ref":
+        proof["source_refs"].append("proof_timing")
+    else:
+        proof["result"]["rows"][0]["row"] = 2169  # Full census indexes cannot substitute for excerpt indexes.
+    with pytest.raises(SourceContractError, match=match):
+        source_loader._proof(proof, store, "proof_timing")
+
+
+def test_remapper_rejects_tampered_timing_approval(tmp_path, remapper):
+    approval = tmp_path / "timing_approval.md"
+    approval.write_bytes((PACK / remapper.TIMING_APPROVAL_NAME).read_bytes() + b"tampered\n")
+    with pytest.raises(ValueError, match="timing host approval hash mismatch"):
+        remapper.build(UPSTREAM, PACK / "HUMAN_GO.md", host_timing_approval=approval)
+    assert list(tmp_path.iterdir()) == [approval]
+
+
+def test_remapper_requires_timing_approval_id_even_after_repin(tmp_path, remapper, monkeypatch):
+    pins = document("inputs.json")
+    approval = tmp_path / remapper.TIMING_APPROVAL_NAME
+    approval.write_text((PACK / remapper.TIMING_APPROVAL_NAME).read_text(encoding="utf-8").replace(
+        remapper.TIMING_APPROVAL_ID, "unapproved"), encoding="utf-8")
+    pins["host_timing_approval_sha256"] = sha256(approval.read_bytes())
+    (tmp_path / "inputs.json").write_text(json.dumps(pins), encoding="utf-8")
+    shutil.copyfile(PACK / remapper.CAM_GO_NAME, tmp_path / remapper.CAM_GO_NAME)
+    monkeypatch.setattr(remapper, "HERE", tmp_path)
+    with pytest.raises(ValueError, match="timing host approval id marker missing"):
+        remapper.build(UPSTREAM, PACK / "HUMAN_GO.md", PACK / remapper.APPROVAL_NAME,
+                       PACK / remapper.CAM_APPROVAL_NAME, approval)
+
+
+@pytest.mark.parametrize("name", ["timing_lake_census.json", "timing_xtquant_docs.json", "timing_materials_map.json"])
+def test_remapper_rejects_tampered_timing_pin(tmp_path, remapper, name):
+    source = tmp_path / "source"
+    shutil.copytree(UPSTREAM, source)
+    path = source / remapper.TIMING_DIR / name
+    path.write_bytes(path.read_bytes() + b"tampered\n")
+    with pytest.raises(ValueError, match="timing input hash mismatch"):
         remapper.build(source, PACK / "HUMAN_GO.md")
     assert list(tmp_path.iterdir()) == [source]
 

@@ -1,0 +1,53 @@
+{
+  "schema_version": "bl2_raw_excerpt_v1",
+  "data": {
+    "origin": {
+      "repository": "baiyibing/MyQuant-backtrader",
+      "path": "docs/backtest/b-l2-01-evidence-2026-09-30/attestation_packages/HUMAN_GO_TIMING.md",
+      "sha256": "b89d99fc0fabbad5dd1e6da4ff6f3368ab84d1c7afce71832ea9e405d7e270f7"
+    },
+    "extraction": {
+      "method": "UTF-8 markdown lines, order unchanged, one row per line",
+      "row_index": "zero-based line number"
+    },
+    "limitation": "Human「开修」timing packs only. Merge awaits baiyibing countersign; not「开 R4」; r4_authorized=false; production_C=frozen.",
+    "rows": [
+    {"line":0,"text":"# Human GO — B-L2 R4d timing freeze blocker fix"},
+    {"line":1,"text":""},
+    {"line":2,"text":"- Date: 2026-09-30 (Asia/Shanghai)"},
+    {"line":3,"text":"- Cue: 「开修」"},
+    {"line":4,"text":"- Unit: B-L2-01"},
+    {"line":5,"text":"- Scope: `603196.SH` / `20251023–20251104` / `basis=cross_source_ratio`"},
+    {"line":6,"text":"- Tip baseline: `55f27f7967bc98a30146dc2474b91f1ac69f46f0` (#277 CAM packs)"},
+    {"line":7,"text":"- R4d handoff: `/workspace/handoffs/b_l2_4090_live_r4d_20260930/`"},
+    {"line":8,"text":"  - Error: `SourceContractError: timing: unknown proof source ref`"},
+    {"line":9,"text":"  - Cause: attestation claims.timing.proofs=`[\"proof_timing\"]` but no independently attested `proof_timing` artifact in packs/recipe sources"},
+    {"line":10,"text":""},
+    {"line":11,"text":"## Authorized"},
+    {"line":12,"text":""},
+    {"line":13,"text":"Open a **packs-only** PR that supplies an independently attested `proof_timing` (and any host recipe wiring needed so the loader resolves the timing claim `source_refs`), updates packs/manifest/remap/tests, keeps `production_C` frozen, prefers transform **v4**."},
+    {"line":14,"text":""},
+    {"line":15,"text":"## Hard locks (do NOT)"},
+    {"line":16,"text":""},
+    {"line":17,"text":"- Do **NOT** merge."},
+    {"line":18,"text":"- Do **NOT** flip `r4_authorized` (must stay false)."},
+    {"line":19,"text":"- Do **NOT** dispatch 4090 / R4 / R5."},
+    {"line":20,"text":"- Do **NOT** invent 10% limits, halt-from-silence, START/END guesses without pinned materials, or lake PASS claims."},
+    {"line":21,"text":"- Do **NOT** thaw MatchCore / Ledger / Fees / Clock / SSOT / lake writes."},
+    {"line":22,"text":"- Do **NOT** overwrite prior R4/R4b/R4c/R4d host exports as PASS."},
+    {"line":23,"text":""},
+    {"line":24,"text":"## Materials already on tip (use; do not invent market facts)"},
+    {"line":25,"text":""},
+    {"line":26,"text":"Per `docs/backtest/b-l2-01-evidence-2026-09-30/HOST_MATERIALS_MAP_R4.md` §1.1「时间语义（§3.1 门，材料已够）」:"},
+    {"line":27,"text":""},
+    {"line":28,"text":"- `raw_materials/raw_lake_minute_census_603196SH_20251023_20251104.json` (`b4ee473b…632b7188`) — explicit `time_semantics` END label + 2169 cells"},
+    {"line":29,"text":"- `raw_materials/raw_excerpt_xtquant_docs.json` (`3884f478…bc8a12`) — vendor time/field semantics"},
+    {"line":30,"text":"- Existing pack `sources/opening_auction.json` — 09:30 END-label opening-auction observations"},
+    {"line":31,"text":"- Contract: `docs/backtest/note-l2-lake-source-ingress-b-l2-01-2026-09-29.md` §3.1 timing / §9 proof envelope"},
+    {"line":32,"text":""},
+    {"line":33,"text":"## After land"},
+    {"line":34,"text":""},
+    {"line":35,"text":"Merge still needs Human「合」. Merge does **not** authorize R4. Separate Human「开 R4」required for 4090 re-freeze."}
+  ]
+  }
+}
