@@ -238,7 +238,7 @@ def main(argv=None):
     expected_hash = args.recipe_sha256 if args.recipe is not None else args.fixture_sha256
     receipt = {"schema": "d5_ingress_v1", "run_id": args.run_id, "status": "FAIL",
                "comparison_status": "no_ssot_compare_authorization", "production_C": "frozen",
-               "source_certification": "NOT_RUN", "real_lake_run": "NOT_RUN",
+               "source_certification": "NOT_RUN", "real_lake_run": "NOT_RUN", "host_attestation": "NOT_RUN",
                "cache": "no read/write shared minute cache; no new cache",
                "matrix": {cell: {"status": "NOT_RUN"} for cell in CELLS},
                "outputs": {}, "stage": "output"}
@@ -250,8 +250,17 @@ def main(argv=None):
         # Inspect locators before creating output: evidence may live away from recipe/lake.
         # This is not acceptance; the pinned read and every evidence gate follow below.
         if args.recipe is not None and path.is_file():
-            locators = certified.strict_json(path.read_bytes())
-            extra_roots.extend(certified.input_roots(locators.get("source", {})))
+            receipt["stage"] = "identity/parse"
+            receipt["source"]["before"] = identity(path)
+            try:
+                locators = certified.strict_json(path.read_bytes())
+            except (json.JSONDecodeError, UnicodeError, IngressError) as exc:
+                # Malformed JSON has no usable locators. Isolate from every known
+                # input/configured root before persisting its rejection receipt.
+                root = output_root(args.external_parent, args.run_id, path.parent, extra_roots)
+                raise IngressError("identity/parse", str(exc)) from exc
+            extra_roots.extend(certified.input_roots(locators))
+        receipt["stage"] = "output"
         root = output_root(args.external_parent, args.run_id, path.parent, extra_roots)
         receipt["stage"] = "identity"
         require(expected_hash is not None, "identity", "explicit input SHA-256 required")

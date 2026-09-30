@@ -16,7 +16,8 @@ import re
 import pandas as pd
 
 from backtest.research.delta5_volume_ingress import (
-    CLOSE_MINUTES, IngressError, UNIT, _map_records, decode_time, digest, require,
+    CLOSE_MINUTES, IngressError, UNIT, _map_records, decode_time, digest, prices,
+    require, session, shares,
 )
 from common.infra import data_root
 
@@ -36,11 +37,16 @@ DOCUMENT_TYPES = {
     "context": "calendar_listing_mapping_coverage",
 }
 MAPPING_VERSION = "d5_certified_mapping_v1"
+UNFILLED_TEXT = {
+    "null", "none", "nil", "nan", "na", "n/a", "n.a.", "not applicable",
+    "not available", "not provided", "missing", "unknown", "unfilled",
+    "placeholder", "todo", "tbd", "tbc", "-", "--", "?",
+}
 
 
 def nonempty(value, where):
     require(isinstance(value, str) and bool(value.strip()) and
-            value.strip().lower() not in {"null", "unknown", "unfilled", "todo", "tbd"},
+            value.strip().lower() not in UNFILLED_TEXT,
             "evidence", f"{where}: unfilled text")
     return value
 
@@ -295,22 +301,59 @@ def normalize_certified(source):
         publication[key] = row
     require(source["label"] in {"START", "END"} and
             source["time_encoding"] in {"local_wall", "utc_instant", "utc_wall"}, "time", "unknown label/encoding")
-    minute, used, present = [], set(), set()
+    validated_minute, used, buckets, previous = [], set(), set(), {}
+    present = set()
     for sid, i, row in records["1m"]:
+        # Validate the entire pinned file, including rows outside the run window.
+        symbol = row["symbol"]
+        require(symbol in source["instruments"], "symbols", f"unknown symbol {symbol}")
+        code = source["instruments"][symbol]["engine_symbol"]
         ts = decode_time(row["timestamp"], source["time_encoding"])
         close = ts + pd.Timedelta(minutes=1) if source["label"] == "START" else ts
+        begin = close - pd.Timedelta(minutes=1)
         day = close.strftime("%Y%m%d")
-        if not source["start"] <= day <= source["end"]:
-            continue  # Explicit physical-close window; never clamp requested dates.
+        hm = close.hour * 60 + close.minute
+        require(close == close.floor("min") and begin.date() == close.date()
+                and hm in CLOSE_MINUTES, "time", f"outside session physical minute {begin}/{close}")
+        bucket = code, day, hm
+        require(bucket not in buckets, "coverage", f"duplicate bucket {bucket}")
+        require(code not in previous or close > previous[code],
+                "coverage", f"unordered/overlap {bucket}")
+        buckets.add(bucket)
+        previous[code] = close
+        quantity = shares(row["volume"], source["float_exact"])
+        prices(row)
         key = sid, i
         require(key in publication, "availability", f"missing publication proof {key}")
         proof = publication[key]
         require(proof["symbol"] == row["symbol"] and proof["timestamp"] == row["timestamp"],
                 "availability", f"publication belongs to another raw record {key}")
-        minute.append({**row, **{k: proof[k] for k in ("begin", "end", "available_at", "volume_state")}})
+        require(decode_time(proof["begin"], source["time_encoding"]) == begin
+                and decode_time(proof["end"], source["time_encoding"]) == close,
+                "time", "label does not identify physical interval")
+        available = decode_time(proof["available_at"], source["time_encoding"])
+        require(available >= close, "availability", "publication before close")
+        require(available.ceil("min").date() == close.date(), "availability", "cross-session publication")
+        require(proof["volume_state"] == ("zero" if quantity == 0 else "positive"),
+                "volume", f"missing/contradictory zero status {bucket}")
+        validated_minute.append((day, {**row, **{k: proof[k] for k in (
+            "begin", "end", "available_at", "volume_state")}}))
         used.add(key)
-        present.add((row["symbol"], day, close.hour * 60 + close.minute))
-    require(used == set(publication), "availability", "extraneous/out-of-window publication proof")
+        present.add((symbol, day, hm))
+    require(used == set(publication), "availability", "extraneous publication proof")
+    previous_daily = {}
+    for _, _, row in records["1d"]:
+        require(row["symbol"] in source["instruments"], "symbols", "unknown daily symbol")
+        code = source["instruments"][row["symbol"]]["engine_symbol"]
+        day = row["day"]
+        session(day)
+        require(code not in previous_daily or day > previous_daily[code],
+                "coverage", f"duplicate/unordered daily {code}/{day}")
+        previous_daily[code] = day
+        prices(row)
+    # Selection follows full-file row checks; requested dates and coverage stay frozen.
+    minute = [row for day, row in validated_minute if source["start"] <= day <= source["end"]]
+    present = {key for key in present if source["start"] <= key[1] <= source["end"]}
     halt = packs["halt"]["binding"]
     require(set(halt) == {"status", "expected_close_minutes", "missing_rule", "grid"}
             and digest(halt["status"]) == digest(source["status"])
@@ -339,6 +382,9 @@ def normalize_certified(source):
              "evidence_origin": source["evidence_origin"], "resolver": resolver,
              "source_identity": {k: source[k] for k in ("schema", "publisher", "snapshot_id", "evidence_id")},
              "scope_hash": scope_hash(source), "evidence_hash": digest(packs),
+             "raw_row_counts": {period: {"validated": len(records[period]), "selected": len(selected),
+                                         "excluded_outside_window": len(records[period]) - len(selected)}
+                                for period, selected in (("1m", minute), ("1d", daily))},
              "packages": packs, "pinned_inputs": identities, "pool_origin": source["pool_origin"]}
     result = _map_records({**source, "minute": minute, "daily": daily}, audit)
     verify_unchanged(identities)

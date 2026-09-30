@@ -49,6 +49,139 @@ def test_complete_packs_map_fabricated_raw_bytes(tmp_path, monkeypatch, parquet)
     assert audit["resolver"]["environment"]["OSKH_SOURCE_PARQUET_ROOT"] == str(tmp_path / "invented-lake")
 
 
+def add_neighbor(rows, period, side):
+    row = deepcopy(rows[period][0])
+    date = "2026-08-28" if side == "before" else "2026-09-02"
+    if period == "1m":
+        for key in ("timestamp", "begin", "end", "available_at"):
+            row[key] = date + row[key][10:]
+    else:
+        row["day"] = date.replace("-", "")
+    rows[period].insert(0 if side == "before" else len(rows[period]), row)
+    return row
+
+
+@pytest.mark.parametrize("parquet", [False, True])
+@pytest.mark.parametrize("label", ["START", "END"])
+def test_valid_neighbor_rows_are_checked_then_counted_and_excluded(tmp_path, monkeypatch, parquet, label):
+    def neighbors(rows):
+        for period in ("1m", "1d"):
+            for side in ("before", "after"):
+                add_neighbor(rows, period, side)
+
+    source = fabricated_recipe(tmp_path, monkeypatch, parquet=parquet, label=label,
+                               raw_mutator=neighbors)["source"]
+    mapped = normalize(source)
+    assert mapped.canonical() == cli.native_inputs(fixture()["native"]).canonical()
+    assert mapped.audit["source_certification"] == "verified"
+    assert mapped.audit["raw_row_counts"] == {
+        "1m": {"validated": 242, "selected": 240, "excluded_outside_window": 2},
+        "1d": {"validated": 4, "selected": 2, "excluded_outside_window": 2},
+    }
+    assert mapped.audit["requested_window"] == mapped.audit["actual_window"] == [DAYS[0], DAYS[0]]
+
+
+@pytest.mark.parametrize("side", ["before", "after"])
+@pytest.mark.parametrize("period,case,stage", [
+    ("1m", "bad_volume", "volume"), ("1m", "null_volume", "volume"),
+    ("1m", "bool_volume", "volume"), ("1m", "fractional_volume", "volume"),
+    ("1m", "negative_volume", "volume"), ("1m", "inexact_volume", "volume"),
+    ("1m", "null_ohlc", "prices"), ("1d", "null_ohlc", "prices"),
+    ("1m", "negative_ohlc", "prices"), ("1d", "negative_ohlc", "prices"),
+    ("1m", "inconsistent_ohlc", "prices"), ("1d", "inconsistent_ohlc", "prices"),
+    ("1m", "unknown_symbol", "symbols"), ("1d", "unknown_symbol", "symbols"),
+    ("1m", "duplicate", "coverage"), ("1d", "duplicate", "coverage"),
+    ("1m", "unordered", "coverage"), ("1d", "unordered", "coverage"),
+    ("1m", "fractional_time", "time"), ("1m", "out_of_session", "time"),
+    ("1m", "wrong_interval", "time"), ("1m", "backdated", "availability"),
+    ("1m", "late_publication", "availability"), ("1m", "wrong_zero_status", "volume"),
+    ("1d", "invalid_day", "calendar"),
+])
+def test_corrupt_neighbor_rows_cannot_be_certified(tmp_path, monkeypatch, side, period, case, stage):
+    def corrupt(rows):
+        row = add_neighbor(rows, period, side)
+        if case.endswith("volume"):
+            row["volume"] = {"bad_volume": "not-shares", "null_volume": None,
+                             "bool_volume": True, "fractional_volume": 1.5,
+                             "negative_volume": -1, "inexact_volume": float(2**53)}[case]
+        elif case.endswith("ohlc"):
+            row["close"] = {"null_ohlc": None, "negative_ohlc": -1, "inconsistent_ohlc": 11}[case]
+        elif case == "unknown_symbol":
+            row["symbol"] = "UNKNOWN_TEST_SYMBOL"
+        elif case == "duplicate":
+            rows[period].insert(0 if side == "before" else len(rows[period]), deepcopy(row))
+        elif case == "unordered":
+            rows[period].reverse()
+        elif case == "fractional_time":
+            row["timestamp"] += ".5"
+        elif case == "out_of_session":
+            row["timestamp"] = row["timestamp"][:10] + "T12:00:00"
+        elif case == "wrong_interval":
+            row["begin"] = row["end"]
+        elif case == "backdated":
+            row["available_at"] = row["begin"]
+        elif case == "late_publication":
+            row["available_at"] = row["timestamp"][:10] + "T23:59:59"
+        elif case == "wrong_zero_status":
+            row["volume_state"] = "zero"
+        else:
+            row["day"] = "20260800" if side == "before" else "20260932"
+
+    source = fabricated_recipe(tmp_path, monkeypatch, raw_mutator=corrupt)["source"]
+    with pytest.raises(IngressError) as failure:
+        normalize(source)
+    assert failure.value.stage == stage
+
+
+@pytest.mark.parametrize("side", ["before", "after"])
+def test_neighbor_minute_requires_publication_proof(tmp_path, monkeypatch, side):
+    source = fabricated_recipe(tmp_path, monkeypatch,
+                               raw_mutator=lambda rows: add_neighbor(rows, "1m", side))["source"]
+    edit_pack(source, "availability", lambda p: p["binding"]["records"].pop(0 if side == "before" else -1))
+    with pytest.raises(IngressError, match="missing publication proof"):
+        normalize(source)
+
+
+@pytest.mark.parametrize("period,column,value,stage", [
+    ("1m", "volume", float("nan"), "volume"),
+    ("1m", "volume", float("inf"), "volume"),
+    ("1m", "close", None, "prices"),
+    ("1m", "close", float("inf"), "prices"),
+    ("1d", "close", float("nan"), "prices"),
+    ("1d", "close", float("inf"), "prices"),
+])
+def test_decoded_parquet_neighbor_values_fail_closed(tmp_path, monkeypatch, period, column, value, stage):
+    def corrupt(rows):
+        add_neighbor(rows, period, "before")[column] = value
+
+    source = fabricated_recipe(tmp_path, monkeypatch, parquet=True, raw_mutator=corrupt)["source"]
+    with pytest.raises(IngressError) as failure:
+        normalize(source)
+    assert failure.value.stage == stage
+
+
+@pytest.mark.parametrize("encoding", ["local_wall", "utc_instant", "utc_wall"])
+def test_physical_datetime_parquet_columns(tmp_path, monkeypatch, encoding):
+    source = fabricated_recipe(tmp_path, monkeypatch, parquet=True, physical_datetime=True,
+                               encoding=encoding)["source"]
+    assert source["raw_sources"][0]["schema"]["timestamp"].startswith("timestamp[")
+    mapped = normalize(source)
+    assert mapped.canonical() == cli.native_inputs(fixture()["native"]).canonical()
+    assert mapped.audit["real_lake_run"] == mapped.audit["host_attestation"] == "NOT_RUN"
+
+
+@pytest.mark.parametrize("sentinel", [
+    "null", "unknown", "unfilled", "todo", "tbd", "none", "n/a", "placeholder",
+    "nil", "nan", "na", "n.a.", "not applicable", "not available", "not provided",
+    "missing", "tbc", "-", "--", "?",
+])
+def test_unfilled_template_words_reject_even_with_valid_pins(tmp_path, monkeypatch, sentinel):
+    source = fabricated_recipe(tmp_path, monkeypatch)["source"]
+    edit_pack(source, "units", lambda p: p.update(issuer=f"  {sentinel.upper()}  "))
+    with pytest.raises(IngressError, match="units.issuer: unfilled text"):
+        normalize(source)
+
+
 @pytest.mark.parametrize("subject", list(cert.PACKS))
 @pytest.mark.parametrize("failure", ["missing", "unfilled", "pin", "original_pin", "binding", "basis", "refs", "scope", "issuer"])
 def test_required_packs_fail_closed(tmp_path, monkeypatch, subject, failure):
@@ -229,10 +362,12 @@ def recipe_args(root, recipe):
 
 @pytest.mark.parametrize("failure", [None, "units", "availability", "no_events", "halt", "context",
                                     "null_pack", "missing_pack_file", "go_hash", "recipe_hash"])
-def test_recipe_cli_receipts_never_claim_lake_or_matrix_pass(monkeypatch, failure):
+@pytest.mark.parametrize("origin", ["fabricated_test", "host_supplied"])
+def test_recipe_cli_receipts_never_claim_lake_or_matrix_pass(monkeypatch, failure, origin):
     with tempfile.TemporaryDirectory(prefix="d5-certified-") as tmp:
         root = Path(tmp)
-        recipe = fabricated_recipe(root, monkeypatch)
+        # host_supplied exercises receipt semantics using the same fabricated facts.
+        recipe = fabricated_recipe(root, monkeypatch, evidence_origin=origin)
         if failure in cert.PACKS:
             del recipe["source"]["packs"][failure]
         elif failure == "null_pack":
@@ -250,12 +385,14 @@ def test_recipe_cli_receipts_never_claim_lake_or_matrix_pass(monkeypatch, failur
         assert cli.main(args) == (0 if failure is None else 1)
         receipt_path = root / "outputs" / "preflight" / "receipt.json"
         receipt = json.loads(receipt_path.read_text())
-        assert receipt["real_lake_run"] == "NOT_RUN"
+        assert receipt["real_lake_run"] == receipt["host_attestation"] == "NOT_RUN"
         assert receipt["comparison_status"] == "no_ssot_compare_authorization"
         assert all(v["status"] == "NOT_RUN" for v in receipt["matrix"].values())
         if failure is None:
             assert receipt["source_certification"] == "verified"
-            assert receipt["evidence_origin"] == "fabricated_test"
+            assert receipt["evidence_origin"] == receipt["coverage"]["evidence_origin"] == origin
+            assert receipt["certification_scope"] == receipt["coverage"]["certification_scope"] == "structure_and_pins_only"
+            assert receipt["coverage"]["real_lake_run"] == receipt["coverage"]["host_attestation"] == "NOT_RUN"
             assert receipt["preflight"]["scope"] == "structure_and_mapping_only"
             assert set(receipt["output_files"]) == {"preflight.json", "receipt.json"}
             before = receipt_path.read_bytes()
@@ -265,6 +402,54 @@ def test_recipe_cli_receipts_never_claim_lake_or_matrix_pass(monkeypatch, failur
             assert receipt["preflight"]["intentional_reject"] is True
             assert receipt["source_certification"] == "NOT_RUN"
             assert receipt["output_files"] == ["receipt.json"]
+
+
+@pytest.mark.parametrize("payload", [b"{bad", b'{"source":', b'{"source":{},"source":{}}', b"\xff"])
+def test_invalid_json_recipe_writes_identity_parse_rejection(monkeypatch, payload):
+    with tempfile.TemporaryDirectory(prefix="d5-invalid-recipe-") as tmp:
+        root = Path(tmp)
+        args = recipe_args(root, fabricated_recipe(root, monkeypatch))
+        Path(args[1]).write_bytes(payload)
+        args[3] = hashlib.sha256(payload).hexdigest()
+        assert cli.main(args) == 1
+        receipt = json.loads((root / "outputs" / "preflight" / "receipt.json").read_text())
+        assert receipt["failure"]["stage"] == "identity/parse"
+        assert receipt["source"]["before"]["sha256"] == args[3]
+        assert receipt["source_certification"] == receipt["host_attestation"] == receipt["real_lake_run"] == "NOT_RUN"
+        assert receipt["preflight"] == {"status": "REJECTED", "intentional_reject": True}
+        assert all(v["status"] == "NOT_RUN" for v in receipt["matrix"].values())
+        assert receipt["output_files"] == ["receipt.json"]
+
+
+@pytest.mark.parametrize("protected", ["recipe", "authority", "invented-lake"])
+def test_invalid_json_recipe_cannot_write_into_known_inputs(monkeypatch, protected, capsys):
+    with tempfile.TemporaryDirectory(prefix="d5-invalid-isolation-") as tmp:
+        root = Path(tmp)
+        args = recipe_args(root, fabricated_recipe(root, monkeypatch))
+        Path(args[1]).write_bytes(b"{bad")
+        args[3] = hashlib.sha256(b"{bad").hexdigest()
+        args[9] = str(root / protected / "outputs")
+        assert cli.main(args) == 1
+        result = json.loads(capsys.readouterr().out)
+        assert result["failure"]["stage"] == "output"
+        assert result["root"] is None
+        assert not (root / protected / "outputs").exists()
+
+
+@pytest.mark.parametrize("period", ["1m", "1d"])
+def test_corrupt_neighbor_cli_receipt_never_claims_verified(monkeypatch, period):
+    def corrupt(rows):
+        add_neighbor(rows, period, "before")["close"] = None
+
+    with tempfile.TemporaryDirectory(prefix="d5-neighbor-reject-") as tmp:
+        root = Path(tmp)
+        args = recipe_args(root, fabricated_recipe(root, monkeypatch, raw_mutator=corrupt))
+        assert cli.main(args) == 1
+        receipt = json.loads((root / "outputs" / "preflight" / "receipt.json").read_text())
+        assert receipt["failure"]["stage"] == "prices"
+        assert receipt["source_certification"] == receipt["host_attestation"] == receipt["real_lake_run"] == "NOT_RUN"
+        assert receipt["output_files"] == ["receipt.json"]
+        assert all(v["status"] == "NOT_RUN" for v in receipt["matrix"].values())
 
 
 def test_recipe_subprocess_and_evidence_output_isolation(monkeypatch):

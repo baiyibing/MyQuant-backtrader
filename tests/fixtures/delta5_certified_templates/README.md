@@ -1,7 +1,7 @@
 # δ5 certified-real host shapes (unfilled)
 
-These are interface templates, not market facts or attestation. The adjacent
-`delta5_certified.py` builder creates **fabricated test data only**; never use its
+These are interface templates, not market facts or attestation. The
+[`delta5_certified.py`](../delta5_certified.py) builder creates **fabricated test data only**; never use its
 assertions as host facts. B-L2 package IDs describe related evidence shapes, not
 δ5 certification or B-L2 PASS. No host export is included here.
 
@@ -56,8 +56,11 @@ encodings fail closed. Paths must be in configured resolver `dividend_type=none`
 partitions. Parquet `schema` is the exact column-name→Arrow-type mapping; reads
 use pinned bytes before any cleaning. JSON raw records use `d5_raw_records_v1`
 with publisher, snapshot_id, origin and rows. All files are checked before/after
-reading and again after mapping. Out-of-window records are selected by physical
-close; in-window duplicates, disorder, missing buckets and unexpected days fail.
+reading and again after mapping. Every decoded raw row must pass time, known-symbol,
+OHLC, minute-share and duplicate/order checks before window selection; every minute
+row also requires publication proof. Valid rows outside the physical-close window
+(daily: reference through end) are excluded and counted in `raw_row_counts`.
+In-window missing buckets and unexpected days still fail.
 
 Evidence package template (unfilled; every subject needs an independent file):
 
@@ -77,12 +80,13 @@ document_type, issuer, original_reference, extraction_method, and nonempty rows
 with subject/basis/scope_hash/observation/binding. Host retains and audits the
 originals; pinned excerpts must match concrete pack bindings exactly. A bar file
 or same-byte alias cannot serve as independent evidence. Missing/null/unfilled
-fields, empty refs, stale scopes or incomplete packages fail.
+fields (including `none`, `n/a`, `placeholder` and similar template sentinels), empty
+refs, stale scopes or incomplete packages fail.
 
 | Subject | Basis / source document type | Concrete binding |
 |---|---|---|
 | units | source_units_declaration / publisher_field_semantics | Every minute file/hash/physical column; raw incremental shares; exact representation, no conversion |
-| availability | publication_records / publication_log_or_contract | Every selected raw source/row/symbol/timestamp → explicit begin/end/publication/zero-or-positive state; close or mtime alone is insufficient |
+| availability | publication_records / publication_log_or_contract | Every raw minute source/row/symbol/timestamp, including outside the window → explicit begin/end/publication/zero-or-positive state; close or mtime alone is insufficient |
 | no_events | corporate_action_coverage / corporate_action_registry_coverage | Exact symbols, reference→end, empty events and evidence ID |
 | halt | explicit_halt_missing_grid / halt_and_missing_registry | Full symbol×session×240-close-key grid; missing/halted booleans, reason and explicit missing rule; no silence/ST inference |
 | context | calendar_instrument_and_mapping_facts / calendar_listing_mapping_coverage | Calendar, lifecycle/name/ordinary/non-ST facts, pool origin, raw daily identity/reference/marks, clock/interval mapping and existing book_limit_prices parameters |

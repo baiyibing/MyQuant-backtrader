@@ -1,11 +1,13 @@
 """Fabricated tmp_path packages only. No host exports or market facts.
 
-This builder is test code, never a host attestation generator. Every file says
-fabricated_test. A passing load verifies structure and pins, not its truth.
+This builder is test code, never a host attestation generator. The origin defaults
+to fabricated_test; host_supplied only exercises that enum with invented data.
+A passing load verifies structure and pins, not its truth.
 """
 
 import hashlib
 import json
+from datetime import datetime
 
 from backtest.research.delta5_certified_source import DOCUMENT_TYPES, PACKS, SCHEMA, scope_hash
 from backtest.research.delta5_volume_ingress import CLOSE_MINUTES
@@ -20,9 +22,13 @@ def pin_json(path, payload):
             "sha256": hashlib.sha256(data).hexdigest(), "schema": payload["schema"]}
 
 
-def fabricated_recipe(root, monkeypatch, *, suspended=(), parquet=False, volume=2500, overrides=None):
-    f = fixture(suspended=suspended, volume=volume, overrides=overrides)
+def fabricated_recipe(root, monkeypatch, *, suspended=(), parquet=False, volume=2500, overrides=None,
+                      raw_mutator=None, physical_datetime=False, label="START", encoding="local_wall",
+                      evidence_origin="fabricated_test"):
+    f = fixture(suspended=suspended, volume=volume, overrides=overrides, label=label, encoding=encoding)
     old = f["source"]
+    if raw_mutator is not None:
+        raw_mutator({"1m": old["minute"], "1d": old["daily"]})
     lake = root / "invented-lake"
     monkeypatch.setenv("OSKH_SOURCE_PARQUET_ROOT", str(lake))
     for key in ("OSKH_PERIOD_1M_ROOT", "OSKH_PERIOD_1D_ROOT", "OSKH_AUTHORITY_HINT_ROOT"):
@@ -30,7 +36,7 @@ def fabricated_recipe(root, monkeypatch, *, suspended=(), parquet=False, volume=
     source = {k: v for k, v in old.items() if k not in {"kind", "schema", "minute", "daily"}}
     source.update(kind="certified-real", schema=SCHEMA,
                   publisher="fabricated test publisher; no real source",
-                  snapshot_id="fabricated-only-snapshot", evidence_origin="fabricated_test",
+                  snapshot_id="fabricated-only-snapshot", evidence_origin=evidence_origin,
                   pool_origin="fabricated arithmetic signals; not a real strategy",
                   raw_sources=[], materials=[], packs={})
     minutes = old["minute"]  # Explicitly suspended sessions need no invented bar.
@@ -39,7 +45,7 @@ def fabricated_recipe(root, monkeypatch, *, suspended=(), parquet=False, volume=
         ("1d", old["daily"], ("symbol", "day", "open", "high", "low", "close")),
     ):
         path = lake / "stock" / f"period={period}" / "dividend_type=none" / "invented.json"
-        payload = {"schema": "d5_raw_records_v1", "origin": "fabricated_test",
+        payload = {"schema": "d5_raw_records_v1", "origin": evidence_origin,
                    "publisher": source["publisher"], "snapshot_id": source["snapshot_id"],
                    "rows": [{k: row[k] for k in keys} for row in rows]}
         spec = pin_json(path, payload)
@@ -48,6 +54,9 @@ def fabricated_recipe(root, monkeypatch, *, suspended=(), parquet=False, volume=
             import pyarrow as pa
             import pyarrow.parquet as pq
 
+            if physical_datetime and period == "1m":
+                for row in payload["rows"]:
+                    row["timestamp"] = datetime.fromisoformat(row["timestamp"])
             table = (pa.Table.from_pylist(payload["rows"]) if payload["rows"] else
                      pa.Table.from_pylist([], schema=pa.schema([
                          (k, pa.string() if k in {"symbol", "timestamp", "day"} else pa.float64())
@@ -90,7 +99,7 @@ def fabricated_recipe(root, monkeypatch, *, suspended=(), parquet=False, volume=
     }
     for subject, basis in PACKS.items():
         binding = claims[subject]
-        original = {"schema": "d5_source_document_v1", "origin": "fabricated_test",
+        original = {"schema": "d5_source_document_v1", "origin": evidence_origin,
                     "document_type": DOCUMENT_TYPES[subject],
                     "issuer": "invented evidence issuer", "original_reference": f"invented:{subject}",
                     "extraction_method": "fabricated arithmetic; no real source document",
@@ -99,7 +108,7 @@ def fabricated_recipe(root, monkeypatch, *, suspended=(), parquet=False, volume=
         material = pin_json(root / "materials" / f"{subject}.json", original)
         source["materials"].append({**material, "id": f"original_{subject}"})
         pack = {"schema": "d5_evidence_pack_v1", "package_id": f"invented_{subject}_v1",
-                "subject": subject, "origin": "fabricated_test", "complete": True,
+                "subject": subject, "origin": evidence_origin, "complete": True,
                 "issuer": "invented reviewer", "issued_at": "2026-09-30T12:00:00+08:00",
                 "summary": "test structure only", "limitations": ["fabricated, no host attestation"],
                 "scope_hash": scope_hash(source), "basis": basis, "binding": binding,
