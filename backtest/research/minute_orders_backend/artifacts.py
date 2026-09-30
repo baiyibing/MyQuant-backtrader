@@ -23,6 +23,20 @@ from .types import (
 BACKEND_ID = "minute_orders_research_v1"
 SCHEMA_VERSION = "minute_orders_artifacts_v1"
 COMPARISON_STATUS = "no_ssot_compare_authorization"
+HYBRID_SCHEMA_VERSION = "minute_orders_artifacts_v2"
+
+
+def _validate_evidence_request(run, evidence_level, source_provenance):
+    if evidence_level == "synthetic":
+        marks = getattr(run, "marks", ())
+        if source_provenance is not None or any(
+            isinstance(getattr(mark, "source", None), str) and mark.source.startswith("B-L2-01/")
+            for mark in (marks if isinstance(marks, (list, tuple)) else ())
+        ):
+            raise ValueError("source-loaded input requires hybrid evidence; cannot label it synthetic")
+        return
+    if evidence_level != "hybrid" or source_provenance is None:
+        raise ValueError("S4 requires synthetic or explicit hybrid evidence with source provenance")
 
 
 @dataclass(frozen=True)
@@ -344,6 +358,7 @@ def _failure(root, identity, *, stage, error, outcome):
 def write_minute_orders_artifacts(
     run_input: RunInput, run_result_or_error: RunResult | FailedRun | Exception,
     parent, *, run_id: str, evidence_level: str, code_sha: str | None = None,
+    source_provenance=None,
 ) -> ArtifactWriteResult:
     """Write one new isolated root; never replay an engine to recover evidence.
 
@@ -351,13 +366,16 @@ def write_minute_orders_artifacts(
     Use runner.run_minute_orders_research_with_artifacts for the complete trace.
     Engine failures return status=failed; disk/encoding failures raise with root.
     """
-    if evidence_level != "synthetic":
-        raise ValueError("S4 only supports explicitly declared synthetic evidence")
+    _validate_evidence_request(run_input, evidence_level, source_provenance)
     if not isinstance(run_result_or_error, (RunResult, FailedRun, Exception)):
         raise TypeError("expected RunResult, FailedRun or an engine Exception")
     identity = dict(schema_version=SCHEMA_VERSION, run_id=run_id, backend_id=BACKEND_ID,
                     evidence_level=evidence_level, comparison_status=COMPARISON_STATUS,
                     **_code_identity(code_sha))
+    if evidence_level == "hybrid":
+        from .source_provenance import EVIDENCE_VERSION
+
+        identity.update(schema_version=HYBRID_SCHEMA_VERSION, evidence_schema_version=EVIDENCE_VERSION)
     root = _new_root(parent, run_id)
     outcome = FailedRun(run_result_or_error) if isinstance(run_result_or_error, Exception) else run_result_or_error
     stage = "encode_inputs"
@@ -374,9 +392,36 @@ def write_minute_orders_artifacts(
         for name, body in documents.items():
             stage = name
             _write_file(root, name, body)
+        if evidence_level == "hybrid":
+            from .source_provenance import (
+                SourceProvenance, require, require_unchanged, source_checks,
+                validate_source_provenance,
+            )
+
+            stage = "source_provenance"
+            require(type(source_provenance) is SourceProvenance, "hybrid requires loader SourceProvenance")
+            documents["source_provenance.json"] = source_provenance.payload + b"\n"
+            _write_file(root, "source_provenance.json", documents["source_provenance.json"])
+            # Observe before validation so changed/missing sources retain both hashes.
+            documents["source_checks.json"] = _json(source_checks(source_provenance))
+            _write_file(root, "source_checks.json", documents["source_checks.json"])
+            doc = validate_source_provenance(run_input, source_provenance, parent=parent,
+                                             run_id=run_id, code_sha=code_sha)
+            identity.update(source_provenance_hash=source_provenance.sha256,
+                            source_kind=doc["source_kind"], evidence_notice=doc["notice"],
+                            source_components={"market": doc["source_kind"],
+                                               "commands": "synthetic", "account": "synthetic"},
+                            host_attestation_status="not_certified_by_writer",
+                            live_acceptance_status="not_assessed",
+                            code_sha=doc["execution"]["code_sha"],
+                            code_dirty=doc["execution"]["code_dirty"], code_sha_source="git_head")
         stage = "validate_result"
         if isinstance(outcome, RunResult):
             _validate_result(run_input, outcome)
+            if evidence_level == "hybrid":
+                identity["held_mark_coverage"] = (
+                    "covered" if any(m.ledger.lots for m in outcome.marks) else "not_covered"
+                )
         for name, rows in _rows(run_input, outcome).items():
             stage = name
             documents[name] = _jsonl(rows)
@@ -386,6 +431,13 @@ def write_minute_orders_artifacts(
             _failure(root, identity, stage=stage, error=outcome.error, outcome=outcome)
             return ArtifactWriteResult(root, "failed", identity["contract_hash"], identity["input_hash"])
         stage = "validate_artifacts"
+        if evidence_level == "hybrid":
+            stage = "source_postflight"
+            checks = source_checks(source_provenance)
+            documents["source_postflight.json"] = _json(checks)
+            _write_file(root, "source_postflight.json", documents["source_postflight.json"])
+            require_unchanged(checks)
+            stage = "validate_artifacts"
         summary = _json(dict(_summary(outcome), run_id=run_id,
                              contract_hash=identity["contract_hash"], input_hash=identity["input_hash"]))
         refs = [{"path": name, "sha256": _hash(body)} for name, body in documents.items()]
