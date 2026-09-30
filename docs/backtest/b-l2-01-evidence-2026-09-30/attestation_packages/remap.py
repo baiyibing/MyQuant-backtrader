@@ -76,7 +76,7 @@ def decimal_strings(value):
 
 
 def encode(document):
-    """Compact JSON, one data row per line for stable diffs on the 2160 grid."""
+    """Compact JSON, one data row per line for stable diffs on the status grid."""
     document = decimal_strings(document)
     if "schema_version" in document:
         data = document["data"]
@@ -740,11 +740,12 @@ def build(source_dir, human_go, host_approval=None, host_cam_approval=None, host
     statuses, observations, opening = [], [], []
     expected_keys = set()
     upstream_grid = {(r["date"], r["minute"]): r for r in inputs["status.json"]["minute_grid"]}
+    require(len(upstream_grid) == len(inputs["status.json"]["minute_grid"]), "duplicate upstream status minute")
     for day in DATES:
-        for hour in (9, 13):
+        for hour, span in ((9, 120), (13, 117)):
             base = datetime.fromisoformat(datetime.strptime(day, "%Y%m%d").date().isoformat() +
                                          ("T09:30:00+08:00" if hour == 9 else "T13:00:00+08:00"))
-            for offset in range(120):
+            for offset in range(span):
                 start, end = base + timedelta(minutes=offset), base + timedelta(minutes=offset + 1)
                 key = day, end.strftime("%H:%M")
                 expected_keys.add(key)
@@ -766,15 +767,27 @@ def build(source_dir, human_go, host_approval=None, host_cam_approval=None, host
         index, raw = minute_by_key[key]
         opening.append({"source": "daqmt_1m", "row": index, "datetime": raw["datetime"],
                         "grid_role": "opening_auction", "volume": raw["volume"], "suspendFlag": raw["suspendFlag"]})
-    require(set(minute_by_key) == expected_keys | {(d, "09:30") for d in DATES}, "unexpected raw grid rows")
-    require(len(statuses) == 2160 and len(minute) == 2169, "canonical grid size mismatch")
+    opening_keys = {(d, "09:30") for d in DATES}
+    closing_keys = {(d, hm) for d in DATES for hm in ("14:58", "14:59", "15:00")}
+    require(set(minute_by_key) == expected_keys | opening_keys | closing_keys, "unexpected raw grid rows")
+    require(set(upstream_grid) == set(minute_by_key), "upstream/raw grid coverage mismatch")
+    for role, keys in (("continuous", expected_keys), ("opening_auction", opening_keys),
+                       ("closing_auction", closing_keys)):
+        require({key for key, row in upstream_grid.items() if row["grid_role"] == role} == keys,
+                f"upstream {role} grid mismatch")
+    require(all(upstream_grid[key]["status"] == "trading" for key in closing_keys),
+            "closing-auction status mismatch")
+    require(len(statuses) == 2133 and len(minute) == 2169, "Clock-aligned continuous/raw grid size mismatch")
+    require(len(zero_keys & expected_keys) == 46 and len(zero_keys & closing_keys) == 16,
+            "continuous/closing zero-volume census mismatch")
     add("status", "status.json", "bl2_status_v1", {"rows": statuses})
     add("opening_auction", "sources/opening_auction.json", "bl2_opening_auction_evidence_v1", {"rows": opening})
     proof("proof_status", "status.proof.json", "国金 QMT (迅投数据通道) / #1111 suspendFlag remap", "status",
           ["daqmt_1m", "zero_volume", "vendor_status_semantics"], observations,
-          ["Canonical 240 END labels per day: 09:31-11:30 and 13:01-15:00; closing auction labels remain in this source grid, without asserting continuous-auction execution semantics.",
+          ["Clock-aligned continuous status grid: 237 buckets per day (2133 across nine days), 09:30-11:30 and 13:00-14:57; END labels 09:31-11:30 and 13:01-14:57.",
+           "27 closing_auction END labels (14:58/14:59/15:00 per day) remain in the 2169 raw minute rows but are excluded from status/session grid and proof bindings; 15:00 remains mark-legal.",
            "Nine 09:30 opening_auction rows are separate evidence, excluded from status/session grid; included only in full-day volume reconciliation.",
-           "62 zero-volume bars have explicit suspendFlag=0 and are trading, not missing/halted. No announcement silence used as evidence.",
+           "62 raw zero-volume bars retain explicit suspendFlag=0: 46 in continuous status and 16 in excluded closing-auction minutes. Zero volume is not missing/halted; no announcement silence used as evidence.",
            "fill_data=True: presence attests the exported vendor row, not an actual trade or unfilled raw feed. Missing lake rows cannot inherit this vendor-present assertion.",
            "suspendFlag semantics: 0 normal, 1 suspended, -1 resumption day. This pinned window is all 0; changed/missing flags fail remapping, never default to false."])
 
@@ -790,7 +803,7 @@ def build(source_dir, human_go, host_approval=None, host_cam_approval=None, host
                                          f"({CAM_LAKE_SHA256}), not in this field, and the loader enforces it. "
                                          "Host must still configure/resolve lake identity/coverage and freshly freeze; "
                                          "exports do not establish lake equivalence."},
-               "unresolved": ["account/commands and scoped attestation require host recipe review and registration",
+               "unresolved": ["status continuous trim is Clock-aligned (237/day, 2133 rows); account/commands and scoped attestation require host recipe review and registration",
                               "host recipe, lake identity/coverage and fresh freeze; r4_authorized stays false"],
                "transform_version": "bl2_source_transform_v5",
                "artifacts": [{"id": identity, "path": filename, "format": "json", "schema": doc["schema_version"],
@@ -824,8 +837,9 @@ def main():
             path = args.output_dir / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(raw)
-    print(f"Offline remap checked: {len(outputs)} files; 9 host-filled instrument rows, 2160 status rows, "
-          "9 opening rows, 62 zero-volume rows; CAM: 10 calendar dates, empty actions, 2 marks; "
+    print(f"Offline remap checked: {len(outputs)} files; 9 host-filled instrument rows, 2133 status rows (237/day), "
+          "9 opening rows, 27 off-grid closing rows; 62 raw zero-volume rows (46 in status, 16 closing); "
+          "CAM: 10 calendar dates, empty actions, 2 marks; "
           "timing: independent proof_timing and compact pinned observations. " + NOTICE)
 
 

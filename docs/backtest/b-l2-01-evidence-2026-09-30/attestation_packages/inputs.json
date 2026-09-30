@@ -13,7 +13,7 @@
       "git_sha256": "aef5fbc78ac7de5753eee95de60f94095cb0188078991ba165eb34c641114cce"
     },
     "status.json": {
-      "git_sha256": "99bf3c9c531774cf9251b0287ca23ba35395efafb6a92a565470299ea77fd771"
+      "git_sha256": "3cdc1629165c4b68cffac0baee40b62d1cc31afd822f4e5b07e6902754b8496a"
     },
     "status.proof.json": {
       "git_sha256": "7afd3f3d3098504a5b12c41882ad6926691d4404ff0bf4e7f9a79d527aa3fc35"
@@ -155,5 +155,12 @@
         "original_sha256": "b683f4a07cc788fb1e39139773b625b82b6f6c741d4903c2615326d073a3d37a"
       }
     }
+  },
+  "status_grid_revision": {
+    "file": "status.json",
+    "upstream_git_sha256": "99bf3c9c531774cf9251b0287ca23ba35395efafb6a92a565470299ea77fd771",
+    "human_go_sha256": "d06b01b536dbd8b4c5a13eaf72ceca703ed84bc528d70de75bfc446cc35390d8",
+    "cue": "Human「开修」via bt",
+    "note": "Local R4g fixture classification revision, not replacement upstream evidence: 27 END labels at 14:58/14:59/15:00 become closing_auction; continuous metadata/counts align to Clock (237/day). files.status.json.git_sha256 pins these revised LF bytes. All 2169 raw minute rows and original upstream status.proof.json are unchanged."
   }
 }
