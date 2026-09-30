@@ -1,0 +1,17 @@
+{
+  "schema_version": "bl2_status_v1",
+  "data": {
+    "rows": [
+      {
+        "symbol": null,
+        "start": null,
+        "end": null,
+        "missing": null,
+        "halted": null,
+        "reason": null,
+        "issuer": null,
+        "proofs": []
+      }
+    ]
+  }
+}

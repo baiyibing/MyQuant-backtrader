@@ -113,3 +113,7 @@ native API/S4 与 native CLI/L1 CLI 全工件逐字节一致，两个 CLI 的退
 记录 2026-09-30 item-3 专用 loader API / hybrid provenance 实现。
 本 CLI 仍为 synthetic-only，v1 codec 不变；item-4 / 4090 真湖验收须另行 GO。
 Fixture PASS != lake PASS；该实现不构成 host attestation、L2 lake PASS 或 SSOT 比较授权。
+
+R2 三项事实门的 host-fillable packages、proof 绑定与冻结清单见
+[ingress §9](note-l2-lake-source-ingress-b-l2-01-2026-09-29.md#9-factsattestation-package-go2026-09-30)。
+这是 loader 的输入登记；本 CLI 仍 synthetic-only，4090 R3 须另一条 Human GO。

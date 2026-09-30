@@ -1,0 +1,27 @@
+{
+  "schema_version": "bl2_instruments_v1",
+  "data": {
+    "rows": [
+      {
+        "facts": {
+          "symbol": null,
+          "trade_date": null,
+          "board": null,
+          "price_domain": null,
+          "tick_size": null,
+          "lot_size": null,
+          "reference_price": null,
+          "limit_down": null,
+          "limit_up": null
+        },
+        "effective_from": null,
+        "effective_through": null,
+        "available_at": null,
+        "ordinary_listing": null,
+        "origin": "source_fact",
+        "proofs": [],
+        "derivation": {}
+      }
+    ]
+  }
+}

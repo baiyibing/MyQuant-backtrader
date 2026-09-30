@@ -1,0 +1,36 @@
+{
+  "schema_version": "bl2_proof_v1",
+  "data": {
+    "issuer": null,
+    "subject": "units",
+    "source_refs": [],
+    "filter": {
+      "symbols": [],
+      "from_date": null,
+      "through_date": null,
+      "predicate": null
+    },
+    "result": {
+      "complete": false,
+      "summary": null,
+      "rows": [
+        {
+          "source": null,
+          "row": null,
+          "observation": null,
+          "basis": "source_declaration",
+          "binding": {
+            "source": null,
+            "column": null,
+            "kind": null,
+            "unit": null,
+            "shares_per_unit": null
+          }
+        }
+      ]
+    },
+    "limitations": [
+      "UNFILLED TEMPLATE: no market facts or host attestation; replace after independent review."
+    ]
+  }
+}
