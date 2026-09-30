@@ -11,6 +11,7 @@ from backtest.research.minute_orders_backend.source_provenance import (
     SourceContractError,
     sha256,
 )
+from backtest.research.minute_orders_backend.types import RunContractError
 
 from tests.test_minute_orders_source_loader import SYMBOL, SyntheticCase, at
 
@@ -119,6 +120,24 @@ def test_partition_marks_preserve_source_identity_and_mapping(vendor_case, chang
         vendor_case.load()
 
 
+def test_zero_volume_source_bar_remains_present(vendor_case):
+    vendor_case.rows[0].update(volume=0, amount=0.0)
+    vendor_case.freeze()
+    loaded = vendor_case.load()
+    first, second = loaded.run_input.buckets
+    assert first.start.isoformat() == at("09:30:00")
+    assert first.volume_shares == 0
+    assert first.missing is False and first.halted is False
+    assert first.close == Decimal("10.0")
+    assert second.volume_shares == 500
+    transform = loaded.provenance.document()["transform"]
+    bar = transform["bars"][0]
+    assert bar["source"] == "bars" and bar["row"] == 0
+    assert bar["volume_shares"] == 0
+    status = transform["status"][bar["status_row"]]
+    assert status["missing"] is False and status["halted"] is False
+
+
 def test_status_grid_retains_explicit_missing_halted_and_issuer_proofs(vendor_case):
     vendor_case.rows.pop(1)
     missing = vendor_case.sidecars["status"]["rows"][1]
@@ -212,8 +231,12 @@ def test_valid_attestation_does_not_cover_an_unrelated_row_proof(vendor_case, ro
         vendor_case.load()
 
 
-@pytest.mark.parametrize("missing_role", [None, "status", "instruments"])
-def test_multiple_sessions_require_status_cells_and_daily_facts(vendor_case, missing_role):
+@pytest.mark.parametrize(("missing_role", "error", "message"), [
+    (None, None, None),
+    ("status", SourceContractError, "coverage grid mismatch"),
+    ("instruments", RunContractError, "missing instrument facts"),
+])
+def test_multiple_sessions_require_status_cells_and_daily_facts(vendor_case, missing_role, error, message):
     def next_day(value):
         return value.replace("2026-09-28", "2026-09-29")
 
@@ -242,7 +265,7 @@ def test_multiple_sessions_require_status_cells_and_daily_facts(vendor_case, mis
         run = vendor_case.load().run_input
         assert len(run.buckets) == 3 and len(run.instruments) == 2
     else:
-        with pytest.raises(ValueError, match="coverage grid mismatch|missing instrument facts"):
+        with pytest.raises(error, match=message):
             vendor_case.load()
 
 
@@ -270,9 +293,18 @@ def test_no_instrument_defaults_when_pinned_fact_field_is_absent(vendor_case, fi
         vendor_case.load()
 
 
-@pytest.mark.parametrize("change", ["no_rows", "duplicate", "unknown_symbol", "no_proof", "wrong_proof",
-                                  "no_listing", "effective_gap", "late", "hidden_derivation"])
-def test_instrument_grid_rejects_missing_or_unproven_facts(vendor_case, change):
+@pytest.mark.parametrize(("change", "error"), [
+    ("no_rows", RunContractError),
+    ("duplicate", RunContractError),
+    ("unknown_symbol", SourceContractError),
+    ("no_proof", SourceContractError),
+    ("wrong_proof", SourceContractError),
+    ("no_listing", SourceContractError),
+    ("effective_gap", SourceContractError),
+    ("late", SourceContractError),
+    ("hidden_derivation", SourceContractError),
+])
+def test_instrument_grid_rejects_missing_or_unproven_facts(vendor_case, change, error):
     rows = vendor_case.sidecars["instruments"]["rows"]
     if change == "no_rows":
         rows.clear()
@@ -293,7 +325,7 @@ def test_instrument_grid_rejects_missing_or_unproven_facts(vendor_case, change):
     else:
         rows[0]["derivation"] = {"guess": "10 percent"}
     vendor_case.freeze()
-    with pytest.raises(ValueError, match="instrument|proof|listing|derivation"):
+    with pytest.raises(error, match="instrument|proof|listing|derivation"):
         vendor_case.load()
 
 
