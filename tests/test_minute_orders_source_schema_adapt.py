@@ -100,7 +100,7 @@ def test_partition_mode_still_rejects_duplicate_timestamps(vendor_case):
 def test_partition_identity_cannot_be_taken_from_an_arbitrary_sidecar_path(vendor_case):
     vendor_case.recipe["sources"][0]["location"] = {"kind": "sidecar", "path": str(vendor_case.bar_path)}
     vendor_case.freeze()
-    with pytest.raises(SourceContractError, match="raw minute resolver"):
+    with pytest.raises(SourceContractError, match="pinned minute source/column"):
         vendor_case.load()
 
 
@@ -143,6 +143,7 @@ def test_status_grid_retains_explicit_missing_halted_and_issuer_proofs(vendor_ca
     missing = vendor_case.sidecars["status"]["rows"][1]
     missing.update(missing=True, halted=True, reason="fabricated halt and missing observation")
     vendor_case.recipe["mark_grid"][-1]["prices"][0]["row"] -= 1
+    vendor_case.attest_fabricated_bindings()
     vendor_case.freeze()
     loaded = vendor_case.load()
     first, second = loaded.run_input.buckets
@@ -260,6 +261,7 @@ def test_multiple_sessions_require_status_cells_and_daily_facts(vendor_case, mis
         vendor_case.sidecars["status"]["rows"].append(status)
     if missing_role != "instruments":
         vendor_case.sidecars["instruments"]["rows"].append(facts)
+    vendor_case.attest_fabricated_bindings()
     vendor_case.freeze()
     if missing_role is None:
         run = vendor_case.load().run_input
@@ -274,6 +276,7 @@ def test_pinned_instrument_facts_are_used_verbatim_without_ten_percent_guess(ven
     row = vendor_case.sidecars["instruments"]["rows"][0]
     row["facts"].update(tick_size="0.02", lot_size=200, reference_price="10.00",
                         limit_down="8.40", limit_up="11.60")
+    vendor_case.attest_fabricated_bindings()
     vendor_case.freeze()
     loaded = vendor_case.load()
     facts, = loaded.run_input.instruments
@@ -331,10 +334,8 @@ def test_instrument_grid_rejects_missing_or_unproven_facts(vendor_case, change, 
 
 @pytest.mark.parametrize("change", [None, "no_inputs", "proof_as_input", "no_rule", "no_verification", "wrong_verification"])
 def test_derived_facts_need_pinned_inputs_rule_and_independent_proof(vendor_case, change):
+    vendor_case.approve_fabricated_derivation()
     row = vendor_case.sidecars["instruments"]["rows"][0]
-    row["origin"] = "approved_derivation"
-    row["derivation"] = {"inputs": ["observations"], "approved_rule_version": "fabricated-rule-v1",
-                         "independent_verification": ["proof_instruments"]}
     if change == "no_inputs":
         row["derivation"]["inputs"] = []
     elif change == "proof_as_input":

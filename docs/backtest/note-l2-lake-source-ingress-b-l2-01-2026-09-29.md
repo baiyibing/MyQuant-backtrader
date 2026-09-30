@@ -226,6 +226,7 @@ S4 input/contract/各 component hashes；既有 validators 只用于预检，不
 S4 新路径为 `evidence_level=hybrid`、`minute_orders_artifacts_v2`、
 `minute_orders_hybrid_evidence_v1` 与 `minute_orders_source_provenance_v1`；原转换版 `bl2_source_transform_v1`，
 本次 §8 升为 `bl2_source_transform_v2`，须重新 pin implementation/recipe/attestation。
+上述 v2 仅为 §8 历史记录；当前宿主须统一按 §9 / §9.5 以 `bl2_source_transform_v3` 为唯一版本重新 pin implementation/recipe/attestation。
 它显式区分 market 来源与 synthetic commands/account；本单元不提供 real-only 或 `lake` evidence_level。
 wrapper 执行前、writer 执行后重读冻结源并重建映射，不只信任调用方自报的 provenance hash。
 增加 `source_provenance.json`、`source_checks.json`、成功路径的 `source_postflight.json`；
@@ -299,9 +300,9 @@ instrument 的出具者保存在其具名 proofs 的 `issuer`；provenance 保�
 | 字段 | 内容 / 校验 |
 |---|---|
 | `issuer/subject` | 非空出具者；status 使用 `subject="status"`，instruments 及推导核验使用 `subject="instruments"` |
-| `source_refs` | 非空、已 pin 的原始材料 ID 数组；不得指向 proof 或 attestation 自证 |
+| `source_refs` | 非空、已 pin 的原始材料 ID 数组；不得指向 proof 或 attestation 自证；units/instruments/status 还不得引用 `bl2_instruments_v1` 或 `bl2_status_v1` 消费包作证明材料，见 §9.1 |
 | `filter` | `symbols/from_date/through_date/predicate`；品种与日期覆盖使用该 proof 的事实行，predicate 非空 |
-| `result` | `complete=true`、非空 `summary`、非空 `rows`；每个观察为 `{"source":"<source_refs 中的 ID>","row":0,"observation":"<保存的核验观察>"}`，row 是零基索引 |
+| `result` | `complete=true`、非空 `summary`、非空 `rows`；原观察字段为 `source/row/observation`，row 是零基索引；units/instruments/status 自 §9 起还必须有 `basis/binding`，纯文字观察不再充分 |
 | `limitations` | 非空文本数组，记录权威性、范围及其他限制 |
 
 观察行号必须存在于已 pin Parquet 行、JSON `data` 数组或 JSON `data.rows` 数组中；越界不能充当证明。
@@ -312,3 +313,140 @@ calendar、公司行动、时间/量单位、marks 证明及完整 `scope_hash` 
 
 本片 **fixture PASS ≠ lake PASS**；不解除原宿主 `BLOCKED/NOT_RUN` 收据，不签 native↔L1 湖 parity 或独立 oracle。
 PR 合并仍待 Human「合」；**合并后 4090 re-run 需要另一次具名 Human GO**，不能沿用先前 probe 的 GO 自动发车。
+
+## 9. Facts/attestation package GO（2026-09-30）
+
+本片授权为 facts/attestation **接口登记、绑定收紧、空模板与 synthetic 测试**。
+依据仓外 `/workspace/handoffs/b_l2_facts_attestation_20260930/HOST_B_L2_01_R2.md`，
+R2 在 `47abe4d8d6221db8de3d6782e90ecdfea96780af` 为 **BLOCKED/NOT_RUN**。
+schema 分区身份已支持，但三项市场事实门仍缺材料；下表是 host 的交付位置，不是 PASS 声明。
+
+| R2 BLOCKED gate | Package ID / claim | Host-fillable artifact |
+|---|---|---|
+| `volume_units_attestation` | `bl2_proof_v1`, subject `units`; `claims.units.conclusion=incremental_volume_units_verified` | [units proof template](../../tests/fixtures/minute_orders_source_attestation/units.proof.template.json) |
+| `instrument_limits_facts` | `bl2_instruments_v1` + `bl2_proof_v1`, subject `instruments`; `ordinary_main_raw_facts_verified` | [source facts](../../tests/fixtures/minute_orders_source_attestation/instruments.template.json)、[approved derivation](../../tests/fixtures/minute_orders_source_attestation/instruments.derived.template.json)、[instrument proof](../../tests/fixtures/minute_orders_source_attestation/instruments.proof.template.json) |
+| `halt_missing_facts_source` | `bl2_status_v1` + `bl2_proof_v1`, subject `status`; `complete_halt_missing_grid` | [status grid](../../tests/fixtures/minute_orders_source_attestation/status.template.json)、[status proof](../../tests/fixtures/minute_orders_source_attestation/status.proof.template.json) |
+
+模板集中在 [template README](../../tests/fixtures/minute_orders_source_attestation/README.md)。
+`null`、空 refs、`complete=false` 表示未填写，**原样加载必须失败**；没有默认宿主 symbol、日期、
+tick、lot、reference、limits、量因子或状态。文件名不是固定 source ID；host 为每份材料登记独立 ID。
+合成接受/拒绝例见 [attestation tests](../../tests/test_minute_orders_source_attestation.py)，不得复制成市场事实。
+
+### 9.1 Proof 封套与具体值绑定
+
+封套仍为 `{"schema_version":"bl2_proof_v1","data":{...}}`，`data` **仅有六项必填字段**：
+
+| 字段 | 冻结要求 |
+|---|---|
+| `issuer` | 非空、可追溯的出具者；host 审核身份与权限，不以随意填姓名代替认证 |
+| `subject` | 本三门分别为 `units` / `instruments` / `status`，必须对应具名 claim 与事实行 |
+| `source_refs` | 非空 source ID 数组，所有原始材料独立登记路径/schema/bytes SHA-256；不得引用 proof、attestation、`bl2_instruments_v1` 或 `bl2_status_v1` 消费包自证 |
+| `filter` | 完整 `symbols/from_date/through_date/predicate`，品种与包含端点的日期范围覆盖所证明内容，predicate 说明实际筛选与证据含义 |
+| `result` | 完整 `complete/summary/rows`；审核完成才写 `complete=true`；summary 非空，观察 rows 非空，每行见下文 |
+| `limitations` | 非空文本数组，披露来源权威性、时点、覆盖、观察与推导限制，不能用限制语句豁免缺证据 |
+
+三类 proof 的每个 `result.rows[]` 现在严格包含：
+`source`（须在 source_refs 中）、`row`（原材料零基行号）、`observation`（非空审核说明）、
+`basis`（下表枚举）、`binding`（保存的具体断言对象）。
+原材料行必须存在于已 pin Parquet 行、JSON `data` 数组或 `data.rows` 数组中。
+原始资料若不在这两种文件格式中，由 host 在获准的采集侧留存原件和可审核的行式摘录，再 pin 摘录；
+本仓不抓取、不生成事实。说明原件身份与摘录方法属于 host 审核责任。
+
+| subject | 允许的 basis | binding 内容与唯一键 |
+|---|---|---|
+| `units` | `source_declaration` | `source/column/kind/unit/shares_per_unit`；键 `(source,column)` |
+| `instruments` | `source_fact` 或 `approved_derivation`，与消费行 origin 相同 | 完整 instrument 行去掉 `proofs` 及 `derivation.independent_verification`；键 `(canonical symbol,trade_date)` |
+| `status` | `explicit_status` | 完整 status 行去掉 `proofs`；键 `(canonical symbol,start,end)` |
+
+bindings 使用规范 symbol、带 `+08:00` 的规范时间及与消费包完全相同的 Decimal 字符串/整数/布尔值。
+比较为 canonical JSON 精确相等（`false` 不等于 `0`，`"10.0"` 不等于 `"10.00"`），不替 host 修正值。
+同一 proof 内重复键拒绝；claim 引用的多个 proof 若对同键给出冲突值也拒绝。
+每条消费行必须有匹配 binding，日期范围内的一条泛泛观察不能替代该行断言。
+status/instrument 行 proofs 及 derivation verification refs 都须出现在对应 attestation claim 中。
+claim 与行级证据都要匹配，不能用不相关的总体证明遮住未证明的值。
+原 §8 的 claim proof 全窗口覆盖要求保留；多 source 的 units proof 也须覆盖声明的所有 symbol 与运行日期。
+calendar/timing/actions/marks 的已有 proof 形状不变。
+
+代码验证的是材料字节、声明结构、具体值和覆盖的一致性；不判读 narrative 是否真实，也不签发身份认证。
+host 必须逐行审核原始资料是否真正支持 `basis` 和 `binding`。手工把启发式改名为 `source_declaration`
+或 `explicit_status` 不会产生市场事实，仍不满足 host attestation。
+
+### 9.2 量单位：绑定到 raw minute 源与具体列
+
+`bars[].volume={"kind":"incremental","unit":...,"shares_per_unit":...}` 全部显式提供。
+shares 要求 factor=1；lots 要求正整数 factor，**没有默认 100**。
+proof 的 binding.source 指向已 pin 的 minute source，binding.column 是其物理 volume 映射列；
+kind/unit/factor 必须逐项匹配。证明还须覆盖该 source 的 symbol 及 recipe 起止日期。
+`claims.units.proofs` 中没有匹配结果，即使重算了 `scope_hash`、填写 complete=true 或改成 lake 标签，也失败。
+缺单位声明不通过；不得从另一 source/列、另一日期、旧 shares proof 或旧 factor 借证。
+provenance 的 `transform.bars[].volume_proofs` 保存匹配 proof ID/观察行号/原材料 ID/原行号。
+
+独立依据应为可审核的供应商字段语义/单位声明或其他具名权威材料，明确适用版本、品种与期间，
+并说明成交量为每分钟增量而非累计量。minute/daily bars 本身不能充当此声明的 source_refs，
+同字节行情文件换成 sidecar 别名也不能绕过独立性检查。
+**amount/(close×volume)≈100 是启发式、明确 non-attestation**；R2 报告中的比率不是 lots×100 证明。
+不论接近度或样本数量，都不能据此签 `incremental_volume_units_verified`。
+int64、列名 volume、推测常见行情口径也不证明单位。
+
+### 9.3 Instrument：来源事实与批准推导
+
+消费形状沿用 §8.2，键为 `(symbol,trade_date)`；tick/reference/上下限为有限 Decimal 字符串，
+lot_size 为正整数，禁止 bool 冒充。每个使用日完整覆盖，不跨日继承；保留 ordinary/main/raw、
+有效期、available_at 和既有经济校验。issuer 位于对应 proof；不增添引擎经济字段。
+
+`source_fact`：host 提供原始事实行，`derivation={}`；proof 的 `basis=source_fact`，binding 保存整个
+facts、有效期、available_at、ordinary_listing、origin 和空 derivation。改一个 tick、lot、reference
+或 limit 值而不取得新 proof 就失败。原始材料可分列来自不同来源，但必须能逐项审核其适用日与出处。
+
+`approved_derivation`：不得因为缺事实就改标签。必须先有具名批准规则和冻结输入：
+
+1. `derivation.inputs` 非空，指向已 pin 原始材料，不得用 proof/attestation/本次 facts 或 status 消费包替代。
+2. `approved_rule_version` 非空，指向 host 已审验批准的规则版本；保存规则内容、批准材料、
+   适用范围、参考价选择、舍入方式及例外条件的可审核材料，并在 inputs 中登记相应来源。
+3. primary proofs 与 `independent_verification` 使用不同 proof IDs、不同 issuer；两组都引用全部 inputs，
+   都保存相同输出事实、输入 IDs 和批准规则版本的 binding，并全部登记到 instruments claim。
+4. 独立核验者审核规则批准与数值推导。代码不执行公式，也无法从版本字符串验证实际批准权；
+   host 审核不通过，仍保持 BLOCKED。
+
+**不硬编码或默认 10%**，不由价格轨迹、ST 名单存在、证券代码或 volume 启发式生成 tick/lot/limit。
+`reference_price` 不自动等于昨日 close；无涨跌停事实/未覆盖特殊情况不能造一个范围让输入通过。
+只消费已供给值；不同/非对称 limit 的 synthetic 测试证明代码没有重算 10%，不证明真实证券的限制。
+
+### 9.4 Status：每 symbol × session-minute 的完整事实网格
+
+host 按冻结的 `symbols × intervals` 展开网格，start/end 必须是每个一分钟桶；不从是否有成交猜网格。
+每格显式填写 missing、halted、reason、issuer、proofs；两个 False 仍需 `explicit_status` binding。
+binding 连同区间、两布尔、原因和出具者逐项一致。缺格、多格、重复格、无证据、只有日期级概述、
+陈旧结论或其他分钟的 proof 均不通过。
+
+`missing` 说明声明网格内该源分钟记录是否缺失；`halted` 是独立的停牌事实。
+无源行不能自动设 missing，须有缺失核验；无源行、零 volume、ST 供应商目录、没有停牌公告结果，
+均不能自动设 halted，也不能自动设 halted=false。**no halt-from-silence**。
+允许有证据的四种 missing/halted 组合；missing 与源行同时存在则冲突失败，
+missing=false 而源行缺失则失败，零量源行仍是存在的记录。
+原始资料必须同时支撑源缺失结论与停牌结论；逐格 reason 应解释所用材料及覆盖规则。
+
+### 9.5 4090 填写/冻结清单与停点
+
+1. 从 R2 收据的 BLOCKED 项开始，确认获准窗口、symbol、连续分钟 intervals 与独立 mark grid；
+   R2 的 2169 行、单位比率、零公司行动命中、两分钟提案均是 probe，不是已冻结事实或 GO。
+2. 在湖外 evidence 目录填写上述模板，收集独立量单位声明、每日 instrument 原材料、逐分钟状态资料。
+   每个未知字段继续为空；无法取证就记录 BLOCKED，不填“通常值”。
+3. 审核所有 proof 的六字段与具体 bindings；需要推导时先审核规则批准及另一 issuer 的独立核验。
+   全量状态覆盖、事实可得性和 source rows 都核对完才写 complete=true。
+4. 先 pin 原始来源，再 pin proof 和消费包；所有文件加入 recipe.sources，填好 roles 和七类 claims。
+   action/calendar/timing/marks/account/commands 等现有门仍必须满足；本三门不能替代它们。
+5. 本片转换版升为 **`bl2_source_transform_v3`**；package/schema IDs 保持上述 v1，
+   v2 的纯文字 units/instruments/status proof 不兼容本次收紧，必须补齐 basis/binding。
+   pin 当前 clean code SHA、实际 Python/PyArrow/transform；按 §7 计算 `attestation_scope(recipe)`，
+   写 attestation、pin 其 bytes SHA-256，最后冻结 recipe bytes/hash。任一变更均重新冻结；不改旧收据。
+6. 获准做 host 预检时，使用 §7 的 `load_minute_orders_source(recipe_path, expected_sha256=...)`
+   单独校验；该 API 不运行撮合事件、不生成 S4 工件。错误保留为错误，不能自动补值或调用 runner。
+   本片测试使用显式 `OSKH_MERGE_PYTHON` 与 tmp_path fabricated sources，没有访问 4090/真实湖。
+7. 将各 gate 的材料路径/hash、审核人、范围与局限提交新的 host receipt。
+   `freeze_recipe_attestation` 是后续组合门，仅有这些模板不能将其判 PASS。
+
+**本 PR 不解除 R2 BLOCKED，不宣称 lake PASS / host certification / native↔L1 湖 parity / 独立 oracle
+覆盖 / 市场可执行性 / SSOT 绿 R/S。** `no_ssot_compare_authorization` 不变。
+**PR 不合并；合并须 Human「合」。4090 R3 发车前还需要另一条具名 Human GO**，
+即使模板填写完、校验通过或 PR 后续获准合并，也不沿用 R2/probe GO 自动调度。

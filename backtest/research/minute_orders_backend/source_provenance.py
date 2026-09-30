@@ -15,7 +15,7 @@ from pathlib import Path
 
 PROVENANCE_VERSION = "minute_orders_source_provenance_v1"
 EVIDENCE_VERSION = "minute_orders_hybrid_evidence_v1"
-TRANSFORM_VERSION = "bl2_source_transform_v2"
+TRANSFORM_VERSION = "bl2_source_transform_v3"
 SOURCE_MARK_PREFIX = "B-L2-01/"
 FIXTURE_NOTICE = "Fixture PASS != lake PASS; no host attestation or live PASS is established."
 

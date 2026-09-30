@@ -134,7 +134,44 @@ class SyntheticCase:
             self.recipe["sources"].append({"id": role, "location": {"kind": "sidecar", "path": str(tmp_path / (role + ".json"))},
                                             "format": "json", "schema": "bl2_proof_v1" if role.startswith("proof_") else f"bl2_{role}_v1",
                                             "sha256": ""})
+        self.attest_fabricated_bindings()
         self.freeze()
+
+    def attest_fabricated_bindings(self):
+        """Explicit test-author assertion, NEVER auto-refresh proofs in freeze()."""
+        bindings = {
+            "units": [{"source": b["source"], "column": b["columns"]["volume"], **b["volume"]}
+                      for b in self.recipe["bars"]],
+            "status": [{k: v for k, v in row.items() if k != "proofs"}
+                       for row in self.sidecars["status"]["rows"]],
+            "instruments": [
+                {**{k: v for k, v in row.items() if k not in ("proofs", "derivation")},
+                 "derivation": {k: v for k, v in row["derivation"].items() if k != "independent_verification"}}
+                for row in self.sidecars["instruments"]["rows"]],
+        }
+        for subject, values in bindings.items():
+            proof = self.sidecars["proof_" + subject]
+            source_row = next(i for i, r in enumerate(self.sidecars["observations"]["rows"])
+                              if r["subject"] == subject)
+            proof["result"]["rows"] = [
+                {"source": "observations", "row": source_row, "observation": "Fabricated test assertion only",
+                 "basis": {"units": "source_declaration", "status": "explicit_status"}.get(subject, b.get("origin")),
+                 "binding": deepcopy(b)} for b in values]
+
+    def approve_fabricated_derivation(self):
+        row = self.sidecars["instruments"]["rows"][0]
+        row["origin"] = "approved_derivation"
+        row["derivation"] = {"inputs": ["observations"], "approved_rule_version": "fabricated-rule-v1",
+                             "independent_verification": ["proof_verification"]}
+        self.attest_fabricated_bindings()
+        proof = deepcopy(self.sidecars["proof_instruments"])
+        proof["issuer"] = "independent-synthetic-test-reviewer"
+        self.sidecars["proof_verification"] = proof
+        self.recipe["sources"].insert(-1, {
+            "id": "proof_verification", "location": {"kind": "sidecar", "path": str(self.root / "verification.json")},
+            "format": "json", "schema": "bl2_proof_v1", "sha256": "",
+        })
+        self.sidecars["attestation"]["claims"]["instruments"]["proofs"].append("proof_verification")
 
     def use_vendor_schema(self):
         # Schema mirror only: timestamps, prices, units and facts are fabricated.
@@ -223,6 +260,7 @@ def test_end_labels_and_exact_fractional_lots(source_case):
     source_case.recipe["bars"][0]["volume"].update(unit="lots", shares_per_unit=100)
     for mark in source_case.recipe["mark_grid"]:
         mark["prices"][0]["time"]["label"] = "END"
+    source_case.attest_fabricated_bindings()
     source_case.freeze()
     loaded = source_case.load()
     assert [b.volume_shares for b in loaded.run_input.buckets] == [1000, 500]
@@ -285,6 +323,7 @@ def test_missing_halt_and_zero_are_distinct_with_full_evidence(source_case):
     source_case.rows.pop(1)
     source_case.sidecars["status"]["rows"][1]["missing"] = True
     source_case.recipe["mark_grid"][-1]["prices"][0]["row"] -= 1
+    source_case.attest_fabricated_bindings()
     source_case.freeze()
     first, missing = source_case.load().run_input.buckets
     assert first.volume_shares == 0 and first.halted and not first.missing
@@ -297,6 +336,7 @@ def test_coverage_rejections(source_case, case):
         source_case.sidecars["status"]["rows"].pop()
     elif case == "missing_conflict":
         source_case.sidecars["status"]["rows"][0]["missing"] = True
+        source_case.attest_fabricated_bindings()
     elif case == "source_gap":
         source_case.rows.pop(1)
     elif case == "duplicate":
@@ -344,7 +384,7 @@ def test_content_free_proof_objects_fail_closed(source_case, subject, payload):
     ("limitations", [], "limitations"),
 ])
 def test_proof_requires_pinned_scoped_saved_evidence(source_case, field, value, message):
-    target = source_case.sidecars["proof_status"]
+    target = source_case.sidecars["proof_timing"]
     *parts, key = field.split(".")
     for part in parts:
         target = target[part]
@@ -465,6 +505,7 @@ def test_fact_calendar_economic_recipe_rejections(source_case, case):
              "missing": not any(row["time"] == interval["start"] for row in source_case.rows)}
             for interval in source_case.recipe["intervals"]
         ]
+        source_case.attest_fabricated_bindings()
         error = RunContractError
         message = ("session gap must be covered by explicit missing buckets" if case == "session_gap_covered"
                    else "bucket crosses lunch or continuous session endpoints")
@@ -479,6 +520,7 @@ def test_last_continuous_bucket_ends_at_1457(source_case):
     interval = {"start": at("14:56:00"), "end": at("14:57:00")}
     source_case.recipe["intervals"] = [interval]
     source_case.sidecars["status"]["rows"] = [{**source_case.sidecars["status"]["rows"][0], **interval}]
+    source_case.attest_fabricated_bindings()
     source_case.freeze()
     bucket, = source_case.load().run_input.buckets
     assert bucket.start.isoformat() == interval["start"]
@@ -522,6 +564,7 @@ def test_decimal_source_keeps_precision_and_fractional_shares_are_never_rounded(
         row["close"] = Decimal("10.00")
         row["volume"] = Decimal("10.01")
     source_case.recipe["bars"][0]["volume"].update(unit="lots", shares_per_unit=100)
+    source_case.attest_fabricated_bindings()
     source_case.freeze()
     loaded = source_case.load()
     assert loaded.run_input.buckets[0].close.as_tuple() == Decimal("10.00").as_tuple()
@@ -550,7 +593,7 @@ def test_all_universe_cells_sorted_and_all_marks_required(source_case, partition
     # Freeze the existing sources first, then add a second pinned partition.
     for key in ("actions", "attestation"):
         source_case.sidecars[key]["symbols"].append(second_symbol)
-    for key in ("proof_status", "proof_instruments"):
+    for key in ("proof_status", "proof_instruments", "proof_units"):
         source_case.sidecars[key]["filter"]["symbols"].append(second_symbol)
     status = source_case.sidecars["status"]["rows"]
     status.extend([{**deepcopy(row), "symbol": second_symbol} for row in list(status)])
@@ -560,6 +603,7 @@ def test_all_universe_cells_sorted_and_all_marks_required(source_case, partition
     for mark in source_case.recipe["mark_grid"]:
         mark["prices"].append({**deepcopy(mark["prices"][0]), "symbol": second_symbol, "source": "bars2"})
     source_case.recipe["bars"].append({**deepcopy(source_case.recipe["bars"][0]), "source": "bars2"})
+    source_case.attest_fabricated_bindings()
     source_case.freeze()
     spec = {**deepcopy(source_case.recipe["sources"][0]), "id": "bars2",
             "location": {"kind": "minute", "symbol": second_symbol}, "sha256": sha256(second_path.read_bytes())}

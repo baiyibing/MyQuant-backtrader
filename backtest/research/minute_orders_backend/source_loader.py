@@ -51,6 +51,31 @@ _CLAIMS = {
     "status": "complete_halt_missing_grid",
     "marks": "raw_contemporaneous_grid",
 }
+_BOUND_SUBJECTS = {"units", "instruments", "status"}
+_FACT_PACKAGES = ("bl2_instruments_v1", "bl2_status_v1")
+
+
+def _binding_key(subject, binding):
+    """Identity of a saved assertion, separate from its asserted values."""
+    require(type(binding) is dict, f"{subject}: structured proof binding required")
+    if subject == "units":
+        object_fields(binding, ("source", "column", "kind", "unit", "shares_per_unit"), "units binding")
+        return nonempty(binding["source"], "units source"), nonempty(binding["column"], "units column")
+    if subject == "status":
+        object_fields(binding, ("symbol", "start", "end", "missing", "halted", "reason", "issuer"), "status binding")
+        return (_symbol(binding["symbol"]), _timestamp(binding["start"], "status binding start").isoformat(),
+                _timestamp(binding["end"], "status binding end").isoformat())
+    object_fields(binding, ("facts", "effective_from", "effective_through", "available_at",
+                           "ordinary_listing", "origin", "derivation"), "instrument binding")
+    facts = binding["facts"]
+    object_fields(facts, ("symbol", "trade_date", "board", "price_domain", "tick_size", "lot_size",
+                          "reference_price", "limit_down", "limit_up"), "instrument binding facts")
+    return _symbol(facts["symbol"]), _date(facts["trade_date"], "instrument binding date")
+
+
+def _instrument_binding(row):
+    return {**{k: v for k, v in row.items() if k not in ("proofs", "derivation")},
+            "derivation": {k: v for k, v in row["derivation"].items() if k != "independent_verification"}}
 
 
 @dataclass(frozen=True)
@@ -86,6 +111,9 @@ def _proof(data, store, identity):
             f"{where}: pinned source refs required")
     require(all(store.specs[ref]["schema"] not in ("bl2_proof_v1", "bl2_attestation_v1")
                 for ref in refs), f"{where}: proof/attestation cannot be its own evidence")
+    if data["subject"] in _BOUND_SUBJECTS:
+        require(all(store.specs[ref]["schema"] not in _FACT_PACKAGES for ref in refs),
+                f"{where}: fact packages cannot be their own evidence")
     scope = data["filter"]
     object_fields(scope, ("symbols", "from_date", "through_date", "predicate"), where + " filter")
     _symbols(scope["symbols"])
@@ -97,12 +125,15 @@ def _proof(data, store, identity):
     require(result["complete"] is True, f"{where}: complete saved result required")
     nonempty(result["summary"], where + " result summary")
     require(type(result["rows"]) is list, f"{where}: saved result rows required")
+    bindings = {}
     if data["subject"] == "actions":
         require(result["rows"] == [], f"{where}: company actions must have an empty saved filter result")
     else:
         require(bool(result["rows"]), f"{where}: saved observations required")
-        for row in result["rows"]:
-            object_fields(row, ("source", "row", "observation"), where + " observation")
+        for index, row in enumerate(result["rows"]):
+            bound = data["subject"] in _BOUND_SUBJECTS
+            object_fields(row, ("source", "row", "observation", *(("basis", "binding") if bound else ())),
+                          where + " observation")
             require(type(row["source"]) is str and row["source"] in refs
                     and type(row["row"]) is int and row["row"] >= 0,
                     f"{where}: observation needs a source ref and row index")
@@ -111,10 +142,33 @@ def _proof(data, store, identity):
             observations = source.get("rows") if type(source) is dict else source
             require(type(observations) is list and row["row"] < len(observations),
                     f"{where}: observation row outside pinned source rows")
+            if bound:
+                allowed = {"units": ("source_declaration",), "status": ("explicit_status",),
+                           "instruments": ("source_fact", "approved_derivation")}[data["subject"]]
+                require(row["basis"] in allowed, f"{where}: unsupported evidence basis; heuristics are not attestation")
+                key = _binding_key(data["subject"], row["binding"])
+                require(key not in bindings, f"{where}: duplicate/conflicting proof binding")
+                bindings[key] = (index, row)
+                if data["subject"] == "units":
+                    binding = row["binding"]
+                    require(binding["source"] in store.specs
+                            and store.specs[binding["source"]]["location"]["kind"] == "minute"
+                            and binding["column"] in store.specs[binding["source"]]["schema"],
+                            f"{where}: units binding needs a pinned minute source/column")
+                    require(binding["kind"] == "incremental" and binding["unit"] in ("shares", "lots")
+                            and type(binding["shares_per_unit"]) is int and binding["shares_per_unit"] > 0
+                            and (binding["unit"] != "shares" or binding["shares_per_unit"] == 1),
+                            f"{where}: invalid units binding factor")
+                    bar_hashes = {spec["sha256"] for spec in store.specs.values()
+                                  if spec["location"]["kind"] in ("minute", "daily")}
+                    require(all(store.specs[ref]["location"]["kind"] not in ("minute", "daily")
+                                and store.specs[ref]["sha256"] not in bar_hashes for ref in refs),
+                            f"{where}: units need independent source declaration, not bar heuristics")
     require(type(data["limitations"]) is list and bool(data["limitations"]),
             f"{where}: limitations required")
     for limitation in data["limitations"]:
         nonempty(limitation, where + " limitation")
+    return bindings
 
 
 def _refs(values, store, where, *, subject=None, symbols=None, from_date=None, through_date=None):
@@ -132,6 +186,23 @@ def _refs(values, store, where, *, subject=None, symbols=None, from_date=None, t
                     and _date(scope["from_date"], where) <= from_date
                     and _date(scope["through_date"], where) >= through_date,
                     f"{where}: proof scope coverage gap")
+
+
+def _bound_refs(values, store, subject, binding, basis, **scope):
+    """Require exact saved assertions; never infer facts from narrative text."""
+    _refs(values, store, subject, **scope)
+    key = _binding_key(subject, binding)
+    matches = []
+    for ref in values:
+        saved = store.proof_bindings[ref].get(key)
+        if saved is not None:
+            index, observation = saved
+            require(observation["basis"] == basis and canonical(observation["binding"]) == canonical(binding),
+                    f"{subject}: proof binding mismatch")
+            matches.append({"proof": ref, "row": index, "source": observation["source"],
+                            "source_row": observation["row"]})
+    require(bool(matches), f"{subject}: matching proof binding required")
+    return matches
 
 
 def _time(value, spec, where):
@@ -240,9 +311,11 @@ class _Sources:
             self.data[identity], self.specs[identity] = data, spec
             self.snapshots.append({"id": identity, "ref": str(path), "sha256": spec["sha256"],
                                    "format": spec["format"], "schema": spec["schema"], "rows": rows})
+        # Index only validated assertions from this pinned snapshot. No cross-load cache.
+        self.proof_bindings = {}
         for identity, spec in self.specs.items():
             if spec["schema"] == "bl2_proof_v1":
-                _proof(self.data[identity], self, identity)
+                self.proof_bindings[identity] = _proof(self.data[identity], self, identity)
         if self.resolver["basis"] == "AUTHORITY_HINT":
             marker = data_root.find_authority_marker()
             require(marker is not None, "authority marker disappeared")
@@ -362,6 +435,12 @@ def _coverage(recipe, store, symbols, sessions):
         _refs(row["proofs"], store, "status", symbols=[symbol],
               from_date=_timestamp(start, "status start").date(),
               through_date=_timestamp(end, "status end").date())
+        binding = {**{k: v for k, v in row.items() if k != "proofs"},
+                   "symbol": symbol, "start": start, "end": end}
+        claim = store.role(recipe["roles"]["attestation"], "attestation")["claims"]["status"]
+        require(set(row["proofs"]) <= set(claim["proofs"]), "status: row proofs must be registered in claim")
+        _bound_refs(claim["proofs"], store, "status", binding, "explicit_status")
+        _bound_refs(row["proofs"], store, "status", binding, "explicit_status")
         result[key] = (row, index)
     expected = {(symbol, s["start"], s["end"]) for symbol in symbols for s in sessions}
     require(set(result) == expected, "halt/missing coverage grid mismatch")
@@ -390,6 +469,12 @@ def _bars(recipe, store, symbols, sessions, coverage):
         factor = volume["shares_per_unit"]
         require(type(factor) is int and factor > 0
                 and (volume["unit"] != "shares" or factor == 1), "invalid explicit volume conversion factor")
+        claim = store.role(recipe["roles"]["attestation"], "attestation")["claims"]["units"]
+        volume_proofs = _bound_refs(
+            claim["proofs"], store, "units", {"source": sid, "column": cols["volume"], **volume},
+            "source_declaration", symbols=[symbol],
+            from_date=_timestamp(recipe["start_at"], "start_at").date(),
+            through_date=_timestamp(recipe["end_at"], "end_at").date())
         seen = set()
         excluded_rows = []
         for index, row in enumerate(rows):
@@ -417,7 +502,7 @@ def _bars(recipe, store, symbols, sessions, coverage):
                           "original_time": str(row[cols["time"]]), "symbol": symbol,
                           "start": key[1], "end": key[2], "available_at": key[2],
                           "price": price_record, "volume": qty_record,
-                          "shares_per_unit": factor, "volume_shares": shares,
+                          "shares_per_unit": factor, "volume_shares": shares, "volume_proofs": volume_proofs,
                           "status_row": status_index, "target": "buckets/" + symbol + "/" + key[1]})
         exclusions.append({"source": sid, "total_rows": len(rows), "excluded_count": len(excluded_rows),
                            "excluded_rows": excluded_rows})
@@ -596,12 +681,28 @@ def load_minute_orders_source(recipe_path, *, expected_sha256: str) -> LoadedSou
             require(type(row["derivation"]["inputs"]) is list and bool(row["derivation"]["inputs"])
                     and all(type(s) is str and s in store.data
                             and store.specs[s]["schema"] not in ("bl2_proof_v1", "bl2_attestation_v1")
+                            and store.specs[s]["schema"] not in _FACT_PACKAGES
                             for s in row["derivation"]["inputs"]), "derived facts need pinned inputs")
             nonempty(row["derivation"]["approved_rule_version"], "approved rule")
             _refs(row["derivation"]["independent_verification"], store, "derivation verification",
                   subject="instruments", symbols=[facts["symbol"]], from_date=day, through_date=day)
+            verification = row["derivation"]["independent_verification"]
+            require(not set(verification) & set(row["proofs"]), "derivation verification must use independent proofs")
+            require(not {store.data[p]["issuer"] for p in verification}
+                    & {store.data[p]["issuer"] for p in row["proofs"]},
+                    "derivation verification must use independent issuers")
+            for proof in [*row["proofs"], *verification]:
+                require(set(row["derivation"]["inputs"]) <= set(store.data[proof]["source_refs"]),
+                        "derivation proof must bind all pinned inputs")
         else:
             require(row["derivation"] == {}, "source facts cannot hide a derivation")
+            verification = []
+        claim = attestation["claims"]["instruments"]
+        require(set([*row["proofs"], *verification]) <= set(claim["proofs"]),
+                "instruments: row/verification proofs must be registered in claim")
+        binding = _instrument_binding(row)
+        for refs in (claim["proofs"], row["proofs"], *([verification] if verification else [])):
+            _bound_refs(refs, store, "instruments", binding, row["origin"])
         instruments.append(facts)
         facts_audit.append({"source": recipe["roles"]["instruments"], "row": index,
                             "proofs": row["proofs"], "origin": row["origin"],
