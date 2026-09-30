@@ -10,6 +10,8 @@ Human GO：`/workspace/handoffs/b_l2_source_contract_20260929/HUMAN_GO.md`；
 **2026-09-30 状态补记：** 上述为 #266 合同片的历史停点；ORDER_EVAL §5 item 3 已按
 `/workspace/handoffs/b_l2_loader_impl_20260930/HUMAN_GO.md` 实现，接口与证据版本见 [§7](#7-item-3-实现接口与证据版本2026-09-30)。
 item 4 / 4090 live 仍须另行 GO；未取得 host attestation、L2 lake PASS 或 SSOT 绿 R/S。
+4090 首次 probe 已记 `BLOCKED/NOT_RUN`；本次 schema-adapt 与事实 sidecar 登记见
+[§8](#8-schema-adapt与事实-sidecar2026-09-30)。**合并后重新运行 4090 仍需另一次 Human GO**。
 
 ## 1. 具名单元与当前停点
 
@@ -222,7 +224,8 @@ loader 保存逐行来源与 Decimal/量/时间转换、排除行及计数、res
 S4 input/contract/各 component hashes；既有 validators 只用于预检，不执行成交事件。
 
 S4 新路径为 `evidence_level=hybrid`、`minute_orders_artifacts_v2`、
-`minute_orders_hybrid_evidence_v1` 与 `minute_orders_source_provenance_v1`，转换版 `bl2_source_transform_v1`。
+`minute_orders_hybrid_evidence_v1` 与 `minute_orders_source_provenance_v1`；原转换版 `bl2_source_transform_v1`，
+本次 §8 升为 `bl2_source_transform_v2`，须重新 pin implementation/recipe/attestation。
 它显式区分 market 来源与 synthetic commands/account；本单元不提供 real-only 或 `lake` evidence_level。
 wrapper 执行前、writer 执行后重读冻结源并重建映射，不只信任调用方自报的 provenance hash。
 增加 `source_provenance.json`、`source_checks.json`、成功路径的 `source_postflight.json`；
@@ -237,3 +240,75 @@ provenance 的 canonical payload hash 与工件含换行 bytes hash 分别记录
 **Fixture PASS != lake PASS。** 本实现只取得 data-free/synthetic 测试证据；没有真实来源/宿主 attestation、
 4090 live、L2 native↔L1 湖 parity 或真湖独立 oracle，B-native CSV/v7 PASS 也不替代这些证据。
 item 4 及其外部 streams/host receipt 仍按 §6 另行 GO，SSOT 绿 R/S 仍另行裁定。
+
+## 8. Schema-adapt与事实 sidecar（2026-09-30）
+
+针对 `HOST_B_L2_01.md` 的三项 schema/事实来源 BLOCKED，登记以下只读接口。
+receipt：`/workspace/handoffs/b_l2_schema_adapt_20260930/HOST_B_L2_01.md`。
+这里注册的是可 pin 的输入形状，**没有提供或认证宿主市场事实**；生成式小 fixture 见
+[`test_minute_orders_source_schema_adapt.py`](../../tests/test_minute_orders_source_schema_adapt.py)。
+
+### 8.1 Vendor 分区身份
+
+已报告的物理 schema 为 `time:int64, open/high/low/close:double, volume:int64,
+amount:double, __index_level_0__:timestamp[ns]`，无 `symbol` 列。
+recipe 的 source 仍须 `location={"kind":"minute","symbol":"603196.SH"}`，
+经 resolver 与 `to_partition_key` 定位 raw `symbol=603196_SH/data.parquet`，pin **完整物理 schema 与原文件 SHA-256**。
+新模式显式写 `bars[].columns.symbol={"kind":"partition"}`；其余 time/close/volume 仍是实际列名。
+引用同一 minute source 的 `mark_grid[].prices[].symbol_column` 也必须是 `{"kind":"partition"}`，
+并保留同一 time/close 映射；mark 的 `symbol` 仍显式填写且必须匹配分区。
+
+原 `columns.symbol="symbol"`（或其他具名身份列）模式保留：列不存在立即失败，不能自动切换模式。
+partition 模式不生成/写入列；若文件已有物理 `symbol` 列，所有行必须规范化后匹配分区，
+包括窗口外、排除的竞价行与仅供 mark 的行。具名身份列与物理 `symbol` 同时存在时两者都核对；
+不同身份、null/非法身份、重复时间及混合品种文件拒绝。无身份列的文件仍须由宿主证明属于该分区，
+代码不从 OHLC 猜品种。provenance 的 `symbol_binding` 保存模式、location、partition_key 与已检查列。
+时间 int64 不自动等于 epoch_ms，volume int64 不证明手/股；原 START/END、时间单位和量单位 attestation 门保留。
+
+### 8.2 登记、状态网格与每日 instrument facts
+
+两类文件均由宿主显式提供，推荐置于受控的仓外 evidence 目录，不生成 lake parquet。
+每份加入 `sources[]`：唯一 `id`、`location={"kind":"sidecar","path":"<绝对路径>"}`、
+`format="json"`、下列 `schema` 和完整 bytes `sha256`；`roles.status/instruments` 各指向独立 source ID。
+JSON 封套严格为 `{"schema_version":"<对应 schema>","data":{"rows":[...]}}`；不省略字段、不接受 JSON 浮点数。
+
+| schema | 每个 `data.rows[]` 的完整字段 |
+|---|---|
+| `bl2_status_v1` | `symbol`、`start/end`（Asia/Shanghai 带 +08:00 的精确一分钟区间）、`missing/halted`（两个显式 bool）、`reason/issuer`（非空文本）、`proofs`（非空 proof source ID 数组） |
+| `bl2_instruments_v1` | `facts`（见下行）、`effective_from/effective_through`（ISO 日期，包含 trade_date）、`available_at`（带 +08:00，不晚于该日首次使用）、`ordinary_listing=true`、`origin`、`proofs`、`derivation` |
+| `facts` | `symbol/trade_date`、`board="main"`、`price_domain="raw"`、`tick_size/reference_price/limit_down/limit_up`（Decimal 字符串）、`lot_size`（正整数） |
+
+status 的键是 `(规范 symbol,start,end)`，须精确覆盖冻结 symbol 全集 × `intervals` 展开的**每个 session 分钟桶**；
+不是每交易日写一行 False 就算覆盖。缺格、多格、重复格、缺布尔/原因/出具者/证明均失败。
+只有有证据的 missing 才映射为 null close/volume；missing 与实际源行冲突即失败，缺源行不自动变 missing。
+halted 与 missing 独立取值，两个 False 同样需要证明。provenance `transform.status` 保留每格 source/行号及全部事实字段。
+
+instrument 按 `(symbol,trade_date)` 唯一供给，覆盖 bucket、submit、mark 及初始持仓首次使用日；
+跨日不沿用昨日 facts，缺日/重复/不可得/不支持 board 或价域均失败，既有 lot/tick/limits 校验继续生效。
+`origin="source_fact"` 时 `derivation={}`；`origin="approved_derivation"` 时须完整给出
+`derivation={"inputs":["<已 pin 的原始 source ID>"],"approved_rule_version":"<已批准规则版>",
+"independent_verification":["<instruments proof ID>"]}`。
+inputs 不能拿 proof/attestation 代替原始材料；loader 只验证并消费已供给数值，**不计算或默认 10% 上下限、tick、lot**。
+instrument 的出具者保存在其具名 proofs 的 `issuer`；provenance 保存 facts source/行号、有效期、可得性、origin/proofs/derivation。
+
+### 8.3 可 pin 的证明材料与剩余门禁
+
+`proofs` 指向独立登记、带 bytes hash 的 JSON sidecar：`schema="bl2_proof_v1"`，
+封套仍为 `schema_version/data`，其中 `data` 完整形状如下：
+
+| 字段 | 内容 / 校验 |
+|---|---|
+| `issuer/subject` | 非空出具者；status 使用 `subject="status"`，instruments 及推导核验使用 `subject="instruments"` |
+| `source_refs` | 非空、已 pin 的原始材料 ID 数组；不得指向 proof 或 attestation 自证 |
+| `filter` | `symbols/from_date/through_date/predicate`；品种与日期覆盖使用该 proof 的事实行，predicate 非空 |
+| `result` | `complete=true`、非空 `summary`、非空 `rows`；每个观察为 `{"source":"<source_refs 中的 ID>","row":0,"observation":"<保存的核验观察>"}`，row 是零基索引 |
+| `limitations` | 非空文本数组，记录权威性、范围及其他限制 |
+
+观察行号必须存在于已 pin Parquet 行、JSON `data` 数组或 JSON `data.rows` 数组中；越界不能充当证明。
+对应 attestation claims 仍为 `complete_halt_missing_grid` / `ordinary_main_raw_facts_verified`；
+每份 claim proof 须覆盖整个 recipe 品种/日期窗口，逐行 proof 及 derivation verification 另核该行品种/日期。
+宿主仍需独立审核原始材料、逐格结论和规则批准的真实性；非空文字与 hash 本身不认证市场事实。
+calendar、公司行动、时间/量单位、marks 证明及完整 `scope_hash` 绑定要求全部保留。
+
+本片 **fixture PASS ≠ lake PASS**；不解除原宿主 `BLOCKED/NOT_RUN` 收据，不签 native↔L1 湖 parity 或独立 oracle。
+PR 合并仍待 Human「合」；**合并后 4090 re-run 需要另一次具名 Human GO**，不能沿用先前 probe 的 GO 自动发车。

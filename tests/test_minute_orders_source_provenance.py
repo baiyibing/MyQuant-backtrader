@@ -46,7 +46,11 @@ def check_refs(root):
     return manifest
 
 
-def test_hybrid_writer_binds_sources_input_and_artifacts_with_truthful_fixture_identity(source_case, monkeypatch):
+@pytest.mark.parametrize("vendor_schema", [False, True])
+def test_hybrid_writer_binds_sources_input_and_artifacts_with_truthful_fixture_identity(source_case, monkeypatch, vendor_schema):
+    if vendor_schema:
+        source_case.use_vendor_schema()
+        source_case.freeze()
     loaded = source_case.load()
     published = []
     original = artifacts._publish

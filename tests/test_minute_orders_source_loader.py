@@ -136,9 +136,28 @@ class SyntheticCase:
                                             "sha256": ""})
         self.freeze()
 
+    def use_vendor_schema(self):
+        # Schema mirror only: timestamps, prices, units and facts are fabricated.
+        self.rows = [
+            {"time": int(datetime.fromisoformat(row["time"]).timestamp()) * 1000,
+             "open": row["close"], "high": row["close"], "low": row["close"], "close": row["close"],
+             "volume": row["volume"], "amount": float(row["volume"]) * row["close"],
+             "__index_level_0__": datetime.fromisoformat(row["time"]).replace(tzinfo=None)}
+            for row in self.rows
+        ]
+        self.recipe["bars"][0]["columns"]["symbol"] = {"kind": "partition"}
+        self.recipe["bars"][0]["time"]["encoding"] = "epoch_ms"
+        for mark in self.recipe["mark_grid"]:
+            mark["prices"][0]["symbol_column"] = {"kind": "partition"}
+            mark["prices"][0]["time"]["encoding"] = "epoch_ms"
+
     def freeze(self, *, write_bars=True):
         if write_bars:
-            pq.write_table(pa.Table.from_pylist(self.rows), self.bar_path)
+            table = pa.Table.from_pylist(self.rows)
+            if "__index_level_0__" in table.column_names:
+                index = table.schema.get_field_index("__index_level_0__")
+                table = table.set_column(index, "__index_level_0__", table.column(index).cast(pa.timestamp("ns")))
+            pq.write_table(table, self.bar_path)
             self.recipe["sources"][0]["schema"] = {f.name: str(f.type) for f in pq.read_schema(self.bar_path)}
         for spec in self.recipe["sources"]:
             if spec["id"] == "bars":
@@ -513,16 +532,26 @@ def test_decimal_source_keeps_precision_and_fractional_shares_are_never_rounded(
         source_case.load()
 
 
-def test_all_universe_cells_sorted_and_all_marks_required(source_case):
+@pytest.mark.parametrize("partition_only", [False, True])
+def test_all_universe_cells_sorted_and_all_marks_required(source_case, partition_only):
+    if partition_only:
+        source_case.use_vendor_schema()
+        source_case.freeze()
     second_symbol = "000001.SZ"
     second_path = source_case.lake / "stock/period=1m/dividend_type=none/symbol=000001_SZ/data.parquet"
     second_path.parent.mkdir(parents=True)
-    rows = [{**row, "symbol": "000001_SZ"} for row in source_case.rows]
-    pq.write_table(pa.Table.from_pylist(rows), second_path)
+    if partition_only:
+        # Same fabricated quotes in two separately pinned symbol partitions.
+        second_path.write_bytes(source_case.bar_path.read_bytes())
+    else:
+        rows = [{**row, "symbol": "000001_SZ"} for row in source_case.rows]
+        pq.write_table(pa.Table.from_pylist(rows), second_path)
     source_case.recipe["symbols"].append(second_symbol)
     # Freeze the existing sources first, then add a second pinned partition.
     for key in ("actions", "attestation"):
         source_case.sidecars[key]["symbols"].append(second_symbol)
+    for key in ("proof_status", "proof_instruments"):
+        source_case.sidecars[key]["filter"]["symbols"].append(second_symbol)
     status = source_case.sidecars["status"]["rows"]
     status.extend([{**deepcopy(row), "symbol": second_symbol} for row in list(status)])
     facts = deepcopy(source_case.sidecars["instruments"]["rows"][0])

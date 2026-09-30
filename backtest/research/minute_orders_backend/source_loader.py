@@ -107,13 +107,17 @@ def _proof(data, store, identity):
                     and type(row["row"]) is int and row["row"] >= 0,
                     f"{where}: observation needs a source ref and row index")
             nonempty(row["observation"], where + " observation")
+            source = store.data[row["source"]]
+            observations = source.get("rows") if type(source) is dict else source
+            require(type(observations) is list and row["row"] < len(observations),
+                    f"{where}: observation row outside pinned source rows")
     require(type(data["limitations"]) is list and bool(data["limitations"]),
             f"{where}: limitations required")
     for limitation in data["limitations"]:
         nonempty(limitation, where + " limitation")
 
 
-def _refs(values, store, where, *, subject=None):
+def _refs(values, store, where, *, subject=None, symbols=None, from_date=None, through_date=None):
     require(type(values) is list and bool(values), f"{where}: proof refs required")
     require(all(type(v) is str and v in store.data for v in values),
             f"{where}: unknown proof source ref")
@@ -121,6 +125,13 @@ def _refs(values, store, where, *, subject=None):
             f"{where}: independently pinned bl2_proof_v1 material required")
     require(all(store.data[v]["subject"] == (subject or where) for v in values),
             f"{where}: proof subject mismatch")
+    if symbols is not None:
+        for value in values:
+            scope = store.data[value]["filter"]
+            require(set(symbols) <= set(_symbols(scope["symbols"]))
+                    and _date(scope["from_date"], where) <= from_date
+                    and _date(scope["through_date"], where) >= through_date,
+                    f"{where}: proof scope coverage gap")
 
 
 def _time(value, spec, where):
@@ -175,6 +186,7 @@ class _Sources:
                 "OSKH_PERIOD_1M_ROOT", "OSKH_PERIOD_1D_ROOT",
             )}, "basis": "SOURCE" if os.environ.get("OSKH_SOURCE_PARQUET_ROOT") else "AUTHORITY_HINT"}
         self.data, self.specs, self.snapshots = {}, {}, []
+        self._minute_bindings = {}
         require(type(specs) is list and bool(specs), "source snapshots required")
         for spec in specs:
             object_fields(spec, ("id", "location", "format", "schema", "sha256"), "source")
@@ -249,6 +261,41 @@ class _Sources:
         require(all(type(c) is str and c in schema for c in columns), f"{identity}: missing mapped column")
         return self.data[identity], schema
 
+    def minute_table(self, identity, symbol_column, columns):
+        """Bind identity to the pinned locator; never add a physical column.
+
+        Check identity on *all* rows, including excluded/mark-only rows. An
+        existing physical symbol column remains evidence even in partition mode.
+        """
+        partition_only = type(symbol_column) is dict
+        if partition_only:
+            object_fields(symbol_column, ("kind",), "partition symbol selector")
+            require(symbol_column["kind"] == "partition", "unknown symbol selector")
+        else:
+            nonempty(symbol_column, "symbol column")
+        rows, schema = self.table(identity, [*columns, *([] if partition_only else [symbol_column])])
+        key = identity, None if partition_only else symbol_column
+        if key in self._minute_bindings:
+            symbol, binding = self._minute_bindings[key]
+            return rows, schema, symbol, binding
+        location = self.specs[identity]["location"]
+        require(location["kind"] == "minute", "bars must come from the raw minute resolver")
+        symbol = _symbol(location["symbol"])
+        checked_columns = set() if partition_only else {symbol_column}
+        if "symbol" in schema:
+            checked_columns.add("symbol")
+        for index, row in enumerate(rows):
+            for column in sorted(checked_columns):
+                require(_symbol(row[column]) == symbol,
+                        f"{identity}#{index}: partition/symbol mismatch in {column}")
+        binding = {"kind": "partition" if partition_only else "column", "location": location,
+                   "partition_key": to_partition_key(symbol), "checked_columns": sorted(checked_columns)}
+        if not partition_only:
+            binding["column"] = symbol_column
+        # Reuse only within this pinned in-memory snapshot, never across loads.
+        self._minute_bindings[key] = symbol, binding
+        return rows, schema, symbol, binding
+
 
 def _sessions(recipe):
     require(type(recipe["intervals"]) is list and bool(recipe["intervals"]), "continuous intervals required")
@@ -291,7 +338,9 @@ def _attestation(recipe, store, symbols, first_day, last_day):
         claim = att["claims"][name]
         object_fields(claim, ("conclusion", "proofs"), name)
         require(claim["conclusion"] == conclusion, f"{name}: unsupported/unknown attestation conclusion")
-        _refs(claim["proofs"], store, name)
+        scope = ({"symbols": symbols, "from_date": _timestamp(recipe["start_at"], "start_at").date(),
+                  "through_date": last_day} if name in ("status", "instruments") else {})
+        _refs(claim["proofs"], store, name, **scope)
     return att
 
 
@@ -310,7 +359,9 @@ def _coverage(recipe, store, symbols, sessions):
                 "explicit missing/halted booleans required")
         nonempty(row["reason"], "status reason")
         nonempty(row["issuer"], "status issuer")
-        _refs(row["proofs"], store, "status")
+        _refs(row["proofs"], store, "status", symbols=[symbol],
+              from_date=_timestamp(start, "status start").date(),
+              through_date=_timestamp(end, "status end").date())
         result[key] = (row, index)
     expected = {(symbol, s["start"], s["end"]) for symbol in symbols for s in sessions}
     require(set(result) == expected, "halt/missing coverage grid mismatch")
@@ -324,10 +375,8 @@ def _bars(recipe, store, symbols, sessions, coverage):
         object_fields(spec, ("source", "columns", "time", "volume", "availability", "price_domain"), "bar mapping")
         sid, cols = spec["source"], spec["columns"]
         object_fields(cols, ("symbol", "time", "close", "volume"), "bar columns")
-        rows, schema = store.table(sid, cols.values())
-        location = store.specs[sid]["location"]
-        require(location["kind"] == "minute", "bars must come from the raw minute resolver")
-        symbol = _symbol(location["symbol"])
+        rows, schema, symbol, binding = store.minute_table(
+            sid, cols["symbol"], [cols[key] for key in ("time", "close", "volume")])
         partition_symbols.append(symbol)
         require(spec["availability"] == "bucket_end" and spec["price_domain"] == "raw",
                 "late/unknown availability or mixed price domain")
@@ -344,7 +393,6 @@ def _bars(recipe, store, symbols, sessions, coverage):
         seen = set()
         excluded_rows = []
         for index, row in enumerate(rows):
-            require(_symbol(row[cols["symbol"]]) == symbol, f"{sid}#{index}: partition/symbol mismatch")
             stamp = _time(row[cols["time"]], spec["time"], f"{sid}#{index}")
             start = stamp if label == "START" else stamp - timedelta(minutes=1)
             end = start + timedelta(minutes=1)
@@ -365,7 +413,7 @@ def _bars(recipe, store, symbols, sessions, coverage):
             shares = numerator * factor // denominator
             require(key not in mapped, "duplicate mapped source bucket")
             mapped[key] = (str(close), shares)
-            audit.append({"source": sid, "row": index, "columns": cols,
+            audit.append({"source": sid, "row": index, "columns": cols, "symbol_binding": binding,
                           "original_time": str(row[cols["time"]]), "symbol": symbol,
                           "start": key[1], "end": key[2], "available_at": key[2],
                           "price": price_record, "volume": qty_record,
@@ -401,7 +449,8 @@ def _marks(recipe, store, symbols):
         for ref in point["prices"]:
             object_fields(ref, ("symbol", "source", "row", "symbol_column", "time_column", "price_column", "time"), "mark ref")
             sid, index, symbol = ref["source"], ref["row"], _symbol(ref["symbol"])
-            rows, schema = store.table(sid, (ref["symbol_column"], ref["time_column"], ref["price_column"]))
+            require(sid in store.specs, f"{sid}: unknown mark source")
+            binding = None
             if store.specs[sid]["location"]["kind"] == "minute":
                 mapping = next((b for b in recipe["bars"] if b["source"] == sid), None)
                 require(mapping is not None and ref["time"] == mapping["time"]
@@ -409,9 +458,15 @@ def _marks(recipe, store, symbols):
                         and ref["time_column"] == mapping["columns"]["time"]
                         and ref["price_column"] == mapping["columns"]["close"],
                         "mark must preserve the minute source's time/close mapping")
+                rows, schema, partition_symbol, binding = store.minute_table(
+                    sid, ref["symbol_column"], [ref["time_column"], ref["price_column"]])
+                require(symbol == partition_symbol, "mark source symbol mismatch")
+            else:
+                rows, schema = store.table(sid, (ref["symbol_column"], ref["time_column"], ref["price_column"]))
             require(type(index) is int and 0 <= index < len(rows), "missing mark source row")
             row = rows[index]
-            require(_symbol(row[ref["symbol_column"]]) == symbol, "mark source symbol mismatch")
+            if binding is None:
+                require(_symbol(row[ref["symbol_column"]]) == symbol, "mark source symbol mismatch")
             stamp = _time(row[ref["time_column"]], ref["time"], "mark source time")
             label = ref["time"]["label"]
             require(label in ("START", "END", "INSTANT"), "unknown mark time label")
@@ -421,6 +476,7 @@ def _marks(recipe, store, symbols):
             price, conversion = _decimal(row[ref["price_column"]], schema[ref["price_column"]], "mark price")
             prices.append({"symbol": symbol, "price": str(price)})
             audit.append({"source": sid, "row": index, "columns": ref, "conversion": conversion,
+                          "symbol_binding": binding,
                           "event_time": event.isoformat(), "available_at": event.isoformat(),
                           "target": "marks/" + point["mark_id"] + "/" + symbol})
         require(sorted(p["symbol"] for p in prices) == symbols, "mark universe coverage gap")
@@ -532,18 +588,25 @@ def load_minute_orders_source(recipe_path, *, expected_sha256: str) -> LoadedSou
             uses.append(start.isoformat())
         require(all(available <= _timestamp(t, "fact use") for t in uses
                     if _timestamp(t, "fact use").date() == day), "instrument facts unavailable at use")
-        _refs(row["proofs"], store, "instrument", subject="instruments")
+        _refs(row["proofs"], store, "instrument", subject="instruments", symbols=[facts["symbol"]],
+              from_date=day, through_date=day)
         require(row["origin"] in ("source_fact", "approved_derivation"), "unknown instrument fact origin")
         if row["origin"] == "approved_derivation":
             object_fields(row["derivation"], ("inputs", "approved_rule_version", "independent_verification"), "derivation")
             require(type(row["derivation"]["inputs"]) is list and bool(row["derivation"]["inputs"])
-                    and all(s in store.data for s in row["derivation"]["inputs"]), "derived facts need pinned inputs")
+                    and all(type(s) is str and s in store.data
+                            and store.specs[s]["schema"] not in ("bl2_proof_v1", "bl2_attestation_v1")
+                            for s in row["derivation"]["inputs"]), "derived facts need pinned inputs")
             nonempty(row["derivation"]["approved_rule_version"], "approved rule")
-            _refs(row["derivation"]["independent_verification"], store, "derivation verification", subject="instruments")
+            _refs(row["derivation"]["independent_verification"], store, "derivation verification",
+                  subject="instruments", symbols=[facts["symbol"]], from_date=day, through_date=day)
         else:
             require(row["derivation"] == {}, "source facts cannot hide a derivation")
         instruments.append(facts)
         facts_audit.append({"source": recipe["roles"]["instruments"], "row": index,
+                            "proofs": row["proofs"], "origin": row["origin"],
+                            "effective_from": row["effective_from"], "effective_through": row["effective_through"],
+                            "available_at": row["available_at"], "derivation": row["derivation"],
                             "target": "instruments/" + facts["symbol"] + "/" + facts["trade_date"]})
     data = {"start_at": recipe["start_at"], "end_at": recipe["end_at"], "commands": orders["commands"],
             "buckets": buckets, "calendar": {**calendar, "session_buckets": sessions,
@@ -577,6 +640,9 @@ def load_minute_orders_source(recipe_path, *, expected_sha256: str) -> LoadedSou
            "transform": {"version": TRANSFORM_VERSION, "symbol_rule": "oskh_data.symbol_format",
                          "sort_rule": "bucket(start,symbol); mark prices(symbol)",
                          "bars": bar_audit, "excluded": exclusions, "marks": mark_audit,
+                         "status": [{"source": recipe["roles"]["status"], "row": index, **row,
+                                     "target": "buckets/" + symbol + "/" + start}
+                                    for (symbol, start, _), (row, index) in sorted(coverage.items())],
                          "instruments": facts_audit, "role_sources": recipe["roles"],
                          "recipe_targets": ["start_at", "end_at", "calendar/session_buckets", "marks/grid"],
                          "account_targets": [key for key in account if key != "origin"]},
