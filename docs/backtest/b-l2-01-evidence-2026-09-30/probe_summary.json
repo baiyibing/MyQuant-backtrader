@@ -1,0 +1,394 @@
+{
+  "unit": "B-L2-01",
+  "round": "R3",
+  "verdict": "BLOCKED/NOT_RUN",
+  "label": "真实行情驱动的合成订单研究",
+  "issued_at": "2026-09-30T10:57:56+08:00",
+  "host": "newtest_4090",
+  "tip_expected": "a268e11bc682cd1ae5a6672ab89091cea1abe937",
+  "tip_actual": "a268e11bc682cd1ae5a6672ab89091cea1abe937",
+  "code_dirty": false,
+  "transform_version": "bl2_source_transform_v3",
+  "pr_ref": "#270",
+  "execution_identity": {
+    "code_sha": "a268e11bc682cd1ae5a6672ab89091cea1abe937",
+    "code_dirty": false,
+    "python_version": "3.12.13 | packaged by Anaconda, Inc. | (main, Jul  9 2026, 14:26:47) [MSC v.1942 64 bit (AMD64)]",
+    "pyarrow_version": "25.0.0",
+    "transform_version": "bl2_source_transform_v3"
+  },
+  "python": "3.12.13 | packaged by Anaconda, Inc. | (main, Jul  9 2026, 14:26:47) [MSC v.1942 64 bit (AMD64)]",
+  "pyarrow": "25.0.0",
+  "source_root": "E:\\stock_data",
+  "proposed_window": {
+    "from": "20251023",
+    "through": "20251104",
+    "status": "proposed_unattested"
+  },
+  "probe_symbol": "603196.SH",
+  "minute_partition": "E:\\stock_data\\stock\\period=1m\\dividend_type=none\\symbol=603196_SH\\data.parquet",
+  "minute_schema": {
+    "time": "int64",
+    "open": "double",
+    "high": "double",
+    "low": "double",
+    "close": "double",
+    "volume": "int64",
+    "amount": "double",
+    "__index_level_0__": "timestamp[ns]"
+  },
+  "has_symbol_column": false,
+  "partition_mode_viable": true,
+  "schema_matches_vendor_expectation": true,
+  "window_days": [
+    "2025-10-23",
+    "2025-10-24",
+    "2025-10-27",
+    "2025-10-28",
+    "2025-10-29",
+    "2025-10-30",
+    "2025-10-31",
+    "2025-11-03",
+    "2025-11-04"
+  ],
+  "window_rows": 2169,
+  "window_first": {
+    "time_ms": 1761211800000,
+    "close": 23.25,
+    "volume": 139,
+    "index": "2025-10-23 09:30:00"
+  },
+  "window_last": {
+    "time_ms": 1762268400000,
+    "close": 22.96,
+    "volume": 313,
+    "index": "2025-11-04 15:00:00"
+  },
+  "sample_volumes": [
+    139,
+    380,
+    223,
+    295,
+    463,
+    507,
+    253,
+    236,
+    236,
+    288,
+    218,
+    609,
+    310,
+    298,
+    123,
+    96,
+    53,
+    184,
+    43,
+    121
+  ],
+  "volume_unit_probe": {
+    "implied_amount_over_close_volume": {
+      "n": 200,
+      "mean": 99.97672965466114,
+      "median": 99.9987221440696,
+      "min": 99.50864635738277,
+      "max": 100.38659546727,
+      "frac_within_0_5_of_100": 1.0,
+      "frac_within_0_5_of_1": 0.0
+    },
+    "attested": false,
+    "note": "heuristic only; not claim units + proof; not source_declaration"
+  },
+  "small_interval_proposal": {
+    "day": "2025-10-23",
+    "proposed_intervals": [
+      {
+        "start": "2025-10-23T09:30:00+08:00",
+        "end": "2025-10-23T09:32:00+08:00"
+      }
+    ],
+    "note": "2 continuous START minutes on one session; calendar still needs acquire/sellable/next BUY dates"
+  },
+  "mark_1459_for_1500_start": {
+    "index": "2025-10-23 14:59:00",
+    "time_ms": 1761231540000,
+    "close": 23.830000000000002,
+    "volume": 0,
+    "note": "15:00 mark via START row at 14:59 if bars use START"
+  },
+  "ex_date_index": "E:\\stock_data\\ex_date_index.parquet",
+  "adj_factor": "E:\\stock_data\\adj_factor.parquet",
+  "ex_window_hits": [],
+  "lake_top_nonhidden": [
+    "adj_factor.meta.json",
+    "adj_factor.parquet",
+    "cyq_winner_ratio",
+    "cyq_winner_ratio_daily_2026.parquet",
+    "etf",
+    "ex_date_index.parquet",
+    "float_shares.parquet",
+    "free_float_shares.parquet",
+    "index",
+    "quarantine",
+    "stock",
+    "stock_data_exp_period1d.7z",
+    "stock_index_daily_hive_20260921.7z",
+    "stock_pool.7z",
+    "tr_staging",
+    "turnover_resistance_daily.parquet",
+    "vendor_cninfo_st_status",
+    "vendor_qmt_chip_distribution",
+    "vendor_qmt_st_names",
+    "vendor_qmt_winner_chips.parquet",
+    "vendor_rust_cyqk",
+    "vendor_wind_st_status"
+  ],
+  "instrument_like_names": [],
+  "status_like_names": [],
+  "st_vendor_dirs": [
+    "vendor_cninfo_st_status",
+    "vendor_qmt_st_names",
+    "vendor_wind_st_status"
+  ],
+  "keyword_search_hits": {
+    "instrument": [],
+    "status": [],
+    "units": [],
+    "instrument_count": 0,
+    "status_count": 0,
+    "units_count": 0
+  },
+  "extra_roots_checked": {
+    "D:\\stock_data": false,
+    "E:\\data": false,
+    "D:\\data": false,
+    "E:\\qmt": false,
+    "D:\\qmt": false,
+    "E:\\Wind": false,
+    "D:\\Wind": false,
+    "E:\\vendor": false,
+    "D:\\vendor": false,
+    "E:\\xtquant": false,
+    "D:\\xtquant": false,
+    "E:\\market_data": false,
+    "D:\\market_data": false
+  },
+  "daily_schema": {
+    "time": "int64",
+    "open": "double",
+    "high": "double",
+    "low": "double",
+    "close": "double",
+    "volume": "int64",
+    "amount": "double"
+  },
+  "daily_limit_like_columns": [],
+  "float_shares_schema": {
+    "stock_code": "string",
+    "FloatVolume": "double",
+    "TotalVolume": "double",
+    "name": "string",
+    "updated_at": "string"
+  },
+  "st_vendor_schemas": {
+    "vendor_wind_st_status/st_daily.parquet": {
+      "trade_date": "timestamp[ns]",
+      "code": "string",
+      "is_st": "bool",
+      "st_kind": "string",
+      "name": "string"
+    },
+    "vendor_wind_st_status/st_intervals.parquet": {
+      "code": "string",
+      "name": "string",
+      "st_kind": "string",
+      "start_date": "timestamp[ns]",
+      "end_date": "timestamp[ns]",
+      "reason": "string",
+      "end_status": "string"
+    }
+  },
+  "packages_filled": {
+    "volume_units": null,
+    "instruments": null,
+    "status": null
+  },
+  "unfilled_templates_copied": {
+    "units.proof.template.json": {
+      "path": "D:\\exports\\b_l2_01_4090_r3_20260930\\evidence\\units.proof.template.json",
+      "sha256": "e7eba2e41daca2df1d0642d788c28d00e71ef4afb4c0685c71785d3ccf4e36c7",
+      "filled": false,
+      "note": "UNFILLED template copy; nulls/empty refs retained; not market attestation"
+    },
+    "instruments.template.json": {
+      "path": "D:\\exports\\b_l2_01_4090_r3_20260930\\evidence\\instruments.template.json",
+      "sha256": "5a36fbbf5406710499016280dac538820de0f52d975ff67f1c1e8df2d8cbd3af",
+      "filled": false,
+      "note": "UNFILLED template copy; nulls/empty refs retained; not market attestation"
+    },
+    "instruments.derived.template.json": {
+      "path": "D:\\exports\\b_l2_01_4090_r3_20260930\\evidence\\instruments.derived.template.json",
+      "sha256": "c246a336f81bffbbc3f8557bb79fd15e2ad65580eb7d193bf0cd11befd25de84",
+      "filled": false,
+      "note": "UNFILLED template copy; nulls/empty refs retained; not market attestation"
+    },
+    "instruments.proof.template.json": {
+      "path": "D:\\exports\\b_l2_01_4090_r3_20260930\\evidence\\instruments.proof.template.json",
+      "sha256": "8fee068c095ea1b73bc712f645b21989ec31ed2f6d20c7d35169a3aa06e6c697",
+      "filled": false,
+      "note": "UNFILLED template copy; nulls/empty refs retained; not market attestation"
+    },
+    "status.template.json": {
+      "path": "D:\\exports\\b_l2_01_4090_r3_20260930\\evidence\\status.template.json",
+      "sha256": "ad69a75790a069f9dca6741fce395044ae1cf98d2060d9b32f4dde2876a75a26",
+      "filled": false,
+      "note": "UNFILLED template copy; nulls/empty refs retained; not market attestation"
+    },
+    "status.proof.template.json": {
+      "path": "D:\\exports\\b_l2_01_4090_r3_20260930\\evidence\\status.proof.template.json",
+      "sha256": "c172a9342ece4b2596e7f7e202a9d56288e38efe007cd212f4ce4f9e2fb221a1",
+      "filled": false,
+      "note": "UNFILLED template copy; nulls/empty refs retained; not market attestation"
+    }
+  },
+  "blocked_reasons": [
+    "volume_units_attestation: no independently pinned vendor field-semantics / named-authority source_declaration for minute volume units; bars themselves cannot be source_refs; amount/(close*volume)≈100 remains non-attestation heuristic; refusing to invent units attestation or rename heuristic to source_declaration",
+    "instrument_limits_facts: no independent tick/lot/reference/limit_up/limit_down fact table on host or nearby vendor dirs; 1d bars lack limit cols; float_shares lacks tick/lot/limits; ST vendors are ST-name lists not instrument facts; refusing to invent bare 10% limits or approved_derivation without pinned inputs+approved_rule_version+two issuers",
+    "halt_missing_facts_source: no bl2_status_v1 full symbol×session-minute grid with explicit missing/halted + proofs; ST vendor dirs (cninfo/qmt/wind) are ST status/names not halt/missing minute grids; zero-volume bars ≠ halted; absent source row ≠ auto-missing; refusing to invent halt-from-silence or false/false without explicit_status binding",
+    "freeze_recipe_attestation: blocked by prior gates; no lake RunInput frozen"
+  ],
+  "progress_vs_r2": {
+    "tip": "47abe4d (#269) → a268e11 (#270)",
+    "transform": "bl2_source_transform_v2 → bl2_source_transform_v3",
+    "packages_registered": true,
+    "binding_tightened": true,
+    "empty_templates_present": true,
+    "volume_units_still_blocked": true,
+    "instrument_limits_still_blocked": true,
+    "halt_missing_still_blocked": true,
+    "freeze_still_blocked": true,
+    "native_l1_still_not_run": true,
+    "oracles_still_not_run": true,
+    "note": "#270 registered packages+templates; host still lacks independent source materials to fill them"
+  },
+  "hard_locks": {
+    "lake_overwrite": false,
+    "ssot_green": false,
+    "delta5": false,
+    "jr_g": false,
+    "merge": false,
+    "fixture_pass_claimed_as_lake": false,
+    "alternate_period_root_invented": false,
+    "invented_10pct_limits": false,
+    "invented_volume_units_attestation": false,
+    "invented_halt_from_silence": false,
+    "renamed_heuristic_to_source_declaration": false,
+    "r1_r2_export_roots_preserved": true
+  },
+  "frozen": {
+    "recipe": null,
+    "sidecars": null,
+    "run_input": null,
+    "attestation_scope_hash": null
+  },
+  "api_runs": {
+    "native_hybrid": "NOT_RUN",
+    "l1_full_s4": "NOT_RUN",
+    "compare": "NOT_RUN",
+    "load_minute_orders_source_precheck": "NOT_RUN"
+  },
+  "cells": [
+    {
+      "gate": "sync_tip",
+      "source_correctness": "PASS",
+      "delegation_parity": "NOT_RUN",
+      "independent_oracle": "NOT_RUN",
+      "note": "HEAD=a268e11bc682cd1ae5a6672ab89091cea1abe937 dirty=False identity.code_sha=a268e11bc682cd1ae5a6672ab89091cea1abe937 transform=bl2_source_transform_v3"
+    },
+    {
+      "gate": "configured_source_root",
+      "source_correctness": "PASS",
+      "delegation_parity": "NOT_RUN",
+      "independent_oracle": "NOT_RUN",
+      "note": "OSKH_SOURCE_PARQUET_ROOT=E:\\stock_data container_ok=True"
+    },
+    {
+      "gate": "proposed_window_bars_present",
+      "source_correctness": "PASS",
+      "delegation_parity": "NOT_RUN",
+      "independent_oracle": "NOT_RUN",
+      "note": "symbol=603196.SH window_rows=2169 days=9"
+    },
+    {
+      "gate": "minute_parquet_partition_symbol_mode",
+      "source_correctness": "PASS",
+      "delegation_parity": "NOT_RUN",
+      "independent_oracle": "NOT_RUN",
+      "note": "vendor schema matches #269/#270 partition-mode expectation; columns.symbol={'kind':'partition'} would bind identity; has_symbol_column=False schema_matches_vendor=True"
+    },
+    {
+      "gate": "volume_units_attestation",
+      "source_correctness": "BLOCKED",
+      "delegation_parity": "NOT_RUN",
+      "independent_oracle": "未覆盖",
+      "note": "no independently pinned vendor field-semantics / named-authority source_declaration for minute volume units; bars themselves cannot be source_refs; amount/(close*volume)≈100 remains non-attestation heuristic; refusing to invent units attestation or rename heuristic to source_declaration"
+    },
+    {
+      "gate": "instrument_limits_facts",
+      "source_correctness": "BLOCKED",
+      "delegation_parity": "NOT_RUN",
+      "independent_oracle": "未覆盖",
+      "note": "no independent tick/lot/reference/limit_up/limit_down fact table on host or nearby vendor dirs; 1d bars lack limit cols; float_shares lacks tick/lot/limits; ST vendors are ST-name lists not instrument facts; refusing to invent bare 10% limits or approved_derivation without pinned inputs+approved_rule_version+two issuers"
+    },
+    {
+      "gate": "halt_missing_facts_source",
+      "source_correctness": "BLOCKED",
+      "delegation_parity": "NOT_RUN",
+      "independent_oracle": "未覆盖",
+      "note": "no bl2_status_v1 full symbol×session-minute grid with explicit missing/halted + proofs; ST vendor dirs (cninfo/qmt/wind) are ST status/names not halt/missing minute grids; zero-volume bars ≠ halted; absent source row ≠ auto-missing; refusing to invent halt-from-silence or false/false without explicit_status binding"
+    },
+    {
+      "gate": "freeze_recipe_attestation",
+      "source_correctness": "BLOCKED",
+      "delegation_parity": "NOT_RUN",
+      "independent_oracle": "NOT_RUN",
+      "note": "fail-closed: cannot freeze lake recipe/attestation without honest volume units + instrument facts + status grid + scope_hash=attestation_scope(recipe); TRANSFORM_VERSION=bl2_source_transform_v3; packages remain UNFILLED templates only"
+    },
+    {
+      "gate": "native_api_vs_l1_api",
+      "source_correctness": "NOT_RUN",
+      "delegation_parity": "NOT_RUN",
+      "independent_oracle": "NOT_RUN",
+      "note": "no frozen RunInput (recipe/attestation BLOCKED); hybrid S4 not attempted"
+    },
+    {
+      "gate": "independent_spot_checks_capacity_expiry_t1_fee_mark",
+      "source_correctness": "NOT_RUN",
+      "delegation_parity": "NOT_RUN",
+      "independent_oracle": "NOT_RUN",
+      "note": "no frozen source rows; oracles require frozen source not MatchCore"
+    },
+    {
+      "gate": "company_actions_empty_window_probe",
+      "source_correctness": "PASS",
+      "delegation_parity": "NOT_RUN",
+      "independent_oracle": "未覆盖",
+      "note": "ex_window_hits=0; probe only ≠ bl2_proof_v1 complete_no_company_actions"
+    },
+    {
+      "gate": "attestation_packages_fill",
+      "source_correctness": "BLOCKED",
+      "delegation_parity": "NOT_RUN",
+      "independent_oracle": "NOT_RUN",
+      "note": "evidence/ holds UNFILLED #270 templates only; packages_filled={'volume_units': None, 'instruments': None, 'status': None}; no real source materials to review"
+    }
+  ],
+  "limitations": [
+    "Fixture PASS != lake PASS; empty templates intentionally fail until filled.",
+    "PASS != market executability; no SSOT / δ5 / JR G / merge.",
+    "Proposed window remains unattested until freeze.",
+    "ST vendor dirs are not halt/missing session-minute grids.",
+    "Volume ratio heuristic is explicitly non-attestation under §9.2."
+  ],
+  "next_ask": "Human/bt: supply independently reviewable (1) vendor volume-units source_declaration for 1m bars, (2) daily tick/lot/reference/limit fact table or approved_derivation materials with two issuers, (3) full symbol×session-minute halt/missing status grid with proofs — then re-GO R4 fill/pin/freeze; do not invent 10%/halt-from-silence/lots-heuristic."
+}

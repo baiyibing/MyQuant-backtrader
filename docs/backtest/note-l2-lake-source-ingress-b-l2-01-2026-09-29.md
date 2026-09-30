@@ -450,3 +450,27 @@ missing=false 而源行缺失则失败，零量源行仍是存在的记录。
 覆盖 / 市场可执行性 / SSOT 绿 R/S。** `no_ssot_compare_authorization` 不变。
 **PR 不合并；合并须 Human「合」。4090 R3 发车前还需要另一条具名 Human GO**，
 即使模板填写完、校验通过或 PR 后续获准合并，也不沿用 R2/probe GO 自动调度。
+
+## 10. R3 后证据采集登记（2026-09-30）
+
+R3 已在 4090 执行：tip `a268e11` · transform `bl2_source_transform_v3` · verdict 仍
+**`BLOCKED/NOT_RUN`**（同 §9 三门，收据与探针摘要已逐字节入库
+[b-l2-01-evidence-2026-09-30/](b-l2-01-evidence-2026-09-30/)）。
+随后 host 指示做了一轮湖外只读取证（1.3 / MyQuant / xtquant 包 / 湖本体 / 公开规则），
+六包 `bl2_raw_excerpt_draft_v0_host_review` 原材料与 R4 行动清单（R4-A QMT 全字段回补
+`preClose/suspendFlag`、R4-B 量单位声明 hunt、R4-C 规则文本/双 issuer、R4-D host 审核）
+登记于 [note-b-l2-01-r3-evidence-sweep-2026-09-30.md](note-b-l2-01-r3-evidence-sweep-2026-09-30.md)。
+**新材料是草稿摘录而非 proof：不解除任何 BLOCKED 门，不改上文合同一字；
+量单位「vendor 无 K线单位注记」本身已按缺失证据 pin。R4 仍需具名 Human GO。**
+
+2026-09-30 午增补：PR #272 评审跟进以腾讯/新浪两个湖外独立行情源对湖日线做交叉核对，
+封第七包 `raw_excerpt_crossvendor_daily_603196SH.json`（同目录，附离线自检器）——
+13 天三源 OHLC/volume 全等、10% 涨跌停复算零违例、零股解释探针比率 ≈99.98。
+按 §9.2 仍为 NON-ATTESTATION 经验旁证，任何 BLOCKED 门状态不变。
+
+2026-09-30 午增补 #2：评审环境接入 kimi-datasource MCP 的 Wind 数据源（授权行情），
+封第八包 `raw_excerpt_wind_mcp_daily_603196SH.json`（同目录，附两份 pin CSV 与离线
+自检器）——13 天湖≡Wind（OHLC/amount 全等，Wind 为股口径、零股日 2025-10-23 与新浪
+逐股一致，等价链加强到四源）；同包 pin 负结果：MCP 自带 Wind 字段目录 volume 条
+**无单位注记**，Wind 权威单位规范不在 MCP 暴露面，source_declaration 锚仍缺位。
+按 §9.2 仍为 NON-ATTESTATION 经验旁证，任何 BLOCKED 门状态不变。

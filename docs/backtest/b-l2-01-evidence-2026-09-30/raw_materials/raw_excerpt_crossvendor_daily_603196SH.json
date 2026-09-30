@@ -1,0 +1,897 @@
+{
+ "schema_version": "bl2_raw_excerpt_draft_v0_host_review",
+ "collected_at": "2026-09-30T12:22+08:00",
+ "collector": "kimi-code host-assist (PR #272 review follow-up, Human GO: 补进 PR #272)",
+ "purpose": "湖日线 vs 两个独立公开行情源(腾讯 ifzq / 新浪) 的跨 vendor 对照 + 主板10%涨跌停规则复算 + 量单位零股观察。经验一致性旁证,不是 vendor source_declaration。",
+ "subject": {
+  "symbol": "603196.SH",
+  "name_note": "东财返回现名「璞源材料」,原「日播时尚」更名;窗口 2025-10-20~2025-11-05(探针窗口 10-23~11-04 前后各留缓冲)"
+ },
+ "sources": {
+  "lake": {
+   "package": "raw_lake_daily_603196SH_20251020_20251105.json",
+   "parquet": "E:\\stock_data\\stock\\period=1d\\dividend_type=none\\symbol=603196_SH\\data.parquet",
+   "parquet_sha256": "d96f2ed8903a5140d4154969d9faa7ddc66a885e1bbc2b7350901784c625155e"
+  },
+  "tencent_ifzq": {
+   "url": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh603196,day,2025-10-15,2025-11-05,25,",
+   "fq": "不复权(空 fq 参数)",
+   "raw_response_sha256": "d7e43e5aab78e487b92b3c459dcd5a436ba64f074d2587452ef8ce32ea129304",
+   "field_order": "[date, open, close, high, low, volume(手)]",
+   "rows_embedded": 16
+  },
+  "sina_kline": {
+   "url": "https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData?symbol=sh603196&scale=240&ma=no&datalen=260",
+   "fq": "不复权(scale=240 日线)",
+   "raw_response_sha256": "7401156e4d00627761acdcd88a8cfdc2baa2b0d2a4f8165a20fe1839e83cc8e5",
+   "raw_response_rows": 260,
+   "window_rows_embedded": 13
+  }
+ },
+ "vendor_rows": {
+  "tencent_window": [
+   [
+    "2025-10-15",
+    "21.410",
+    "22.990",
+    "23.500",
+    "21.410",
+    "74975.000"
+   ],
+   [
+    "2025-10-16",
+    "23.220",
+    "23.480",
+    "23.900",
+    "23.010",
+    "60836.000"
+   ],
+   [
+    "2025-10-17",
+    "23.460",
+    "23.040",
+    "23.660",
+    "22.820",
+    "34037.000"
+   ],
+   [
+    "2025-10-20",
+    "23.000",
+    "23.190",
+    "23.420",
+    "22.710",
+    "32668.000"
+   ],
+   [
+    "2025-10-21",
+    "23.300",
+    "23.390",
+    "23.390",
+    "22.820",
+    "24766.000"
+   ],
+   [
+    "2025-10-22",
+    "23.480",
+    "23.360",
+    "24.200",
+    "23.270",
+    "45939.000"
+   ],
+   [
+    "2025-10-23",
+    "23.250",
+    "23.890",
+    "23.890",
+    "23.030",
+    "31780.000"
+   ],
+   [
+    "2025-10-24",
+    "23.920",
+    "23.890",
+    "24.150",
+    "23.700",
+    "38872.000"
+   ],
+   [
+    "2025-10-27",
+    "23.890",
+    "24.320",
+    "24.490",
+    "23.630",
+    "45455.000"
+   ],
+   [
+    "2025-10-28",
+    "23.950",
+    "23.120",
+    "24.160",
+    "22.760",
+    "60310.000"
+   ],
+   [
+    "2025-10-29",
+    "23.190",
+    "23.040",
+    "23.390",
+    "22.710",
+    "33039.000"
+   ],
+   [
+    "2025-10-30",
+    "23.070",
+    "22.940",
+    "23.260",
+    "22.760",
+    "27312.000"
+   ],
+   [
+    "2025-10-31",
+    "22.780",
+    "23.030",
+    "23.370",
+    "22.780",
+    "22563.000"
+   ],
+   [
+    "2025-11-03",
+    "22.900",
+    "23.050",
+    "23.110",
+    "22.660",
+    "20254.000"
+   ],
+   [
+    "2025-11-04",
+    "23.110",
+    "22.960",
+    "23.220",
+    "22.750",
+    "23347.000"
+   ],
+   [
+    "2025-11-05",
+    "22.840",
+    "22.550",
+    "23.080",
+    "22.530",
+    "22222.000"
+   ]
+  ],
+  "sina_window": [
+   {
+    "day": "2025-10-20",
+    "open": "23.000",
+    "high": "23.420",
+    "low": "22.710",
+    "close": "23.190",
+    "volume": "3266800"
+   },
+   {
+    "day": "2025-10-21",
+    "open": "23.300",
+    "high": "23.390",
+    "low": "22.820",
+    "close": "23.390",
+    "volume": "2476600"
+   },
+   {
+    "day": "2025-10-22",
+    "open": "23.480",
+    "high": "24.200",
+    "low": "23.270",
+    "close": "23.360",
+    "volume": "4593900"
+   },
+   {
+    "day": "2025-10-23",
+    "open": "23.250",
+    "high": "23.890",
+    "low": "23.030",
+    "close": "23.890",
+    "volume": "3177959"
+   },
+   {
+    "day": "2025-10-24",
+    "open": "23.920",
+    "high": "24.150",
+    "low": "23.700",
+    "close": "23.890",
+    "volume": "3887200"
+   },
+   {
+    "day": "2025-10-27",
+    "open": "23.890",
+    "high": "24.490",
+    "low": "23.630",
+    "close": "24.320",
+    "volume": "4545500"
+   },
+   {
+    "day": "2025-10-28",
+    "open": "23.950",
+    "high": "24.160",
+    "low": "22.760",
+    "close": "23.120",
+    "volume": "6031000"
+   },
+   {
+    "day": "2025-10-29",
+    "open": "23.190",
+    "high": "23.390",
+    "low": "22.710",
+    "close": "23.040",
+    "volume": "3303900"
+   },
+   {
+    "day": "2025-10-30",
+    "open": "23.070",
+    "high": "23.260",
+    "low": "22.760",
+    "close": "22.940",
+    "volume": "2731200"
+   },
+   {
+    "day": "2025-10-31",
+    "open": "22.780",
+    "high": "23.370",
+    "low": "22.780",
+    "close": "23.030",
+    "volume": "2256300"
+   },
+   {
+    "day": "2025-11-03",
+    "open": "22.900",
+    "high": "23.110",
+    "low": "22.660",
+    "close": "23.050",
+    "volume": "2025400"
+   },
+   {
+    "day": "2025-11-04",
+    "open": "23.110",
+    "high": "23.220",
+    "low": "22.750",
+    "close": "22.960",
+    "volume": "2334700"
+   },
+   {
+    "day": "2025-11-05",
+    "open": "22.840",
+    "high": "23.080",
+    "low": "22.530",
+    "close": "22.550",
+    "volume": "2222200"
+   }
+  ]
+ },
+ "comparison": {
+  "fields_compared": [
+   "open",
+   "high",
+   "low",
+   "close",
+   "volume"
+  ],
+  "all_days_all_fields_equal": true,
+  "days": [
+   {
+    "trade_date": "2025-10-20",
+    "lake": {
+     "open": "23.0",
+     "high": "23.42",
+     "low": "22.71",
+     "close": "23.19",
+     "volume": 32668,
+     "amount": "75635077.0",
+     "row_idx": 8502
+    },
+    "tencent": {
+     "open": "23.000",
+     "close": "23.190",
+     "high": "23.420",
+     "low": "22.710",
+     "volume": "32668.000"
+    },
+    "sina": {
+     "open": "23.000",
+     "high": "23.420",
+     "low": "22.710",
+     "close": "23.190",
+     "volume": "3266800"
+    },
+    "sina_shares_over_lake_volume": "100.000000",
+    "sina_minus_100x_lake_shares": 0,
+    "equal": {
+     "open": true,
+     "high": true,
+     "low": true,
+     "close": true,
+     "lake_eq_tencent_volume": true
+    },
+    "all_equal": true
+   },
+   {
+    "trade_date": "2025-10-21",
+    "lake": {
+     "open": "23.3",
+     "high": "23.39",
+     "low": "22.82",
+     "close": "23.39",
+     "volume": 24766,
+     "amount": "57268449.0",
+     "row_idx": 8503
+    },
+    "tencent": {
+     "open": "23.300",
+     "close": "23.390",
+     "high": "23.390",
+     "low": "22.820",
+     "volume": "24766.000"
+    },
+    "sina": {
+     "open": "23.300",
+     "high": "23.390",
+     "low": "22.820",
+     "close": "23.390",
+     "volume": "2476600"
+    },
+    "sina_shares_over_lake_volume": "100.000000",
+    "sina_minus_100x_lake_shares": 0,
+    "equal": {
+     "open": true,
+     "high": true,
+     "low": true,
+     "close": true,
+     "lake_eq_tencent_volume": true
+    },
+    "all_equal": true
+   },
+   {
+    "trade_date": "2025-10-22",
+    "lake": {
+     "open": "23.48",
+     "high": "24.2",
+     "low": "23.27",
+     "close": "23.36",
+     "volume": 45939,
+     "amount": "108656297.0",
+     "row_idx": 8504
+    },
+    "tencent": {
+     "open": "23.480",
+     "close": "23.360",
+     "high": "24.200",
+     "low": "23.270",
+     "volume": "45939.000"
+    },
+    "sina": {
+     "open": "23.480",
+     "high": "24.200",
+     "low": "23.270",
+     "close": "23.360",
+     "volume": "4593900"
+    },
+    "sina_shares_over_lake_volume": "100.000000",
+    "sina_minus_100x_lake_shares": 0,
+    "equal": {
+     "open": true,
+     "high": true,
+     "low": true,
+     "close": true,
+     "lake_eq_tencent_volume": true
+    },
+    "all_equal": true
+   },
+   {
+    "trade_date": "2025-10-23",
+    "lake": {
+     "open": "23.25",
+     "high": "23.89",
+     "low": "23.03",
+     "close": "23.89",
+     "volume": 31780,
+     "amount": "74677648.0",
+     "row_idx": 8505
+    },
+    "tencent": {
+     "open": "23.250",
+     "close": "23.890",
+     "high": "23.890",
+     "low": "23.030",
+     "volume": "31780.000"
+    },
+    "sina": {
+     "open": "23.250",
+     "high": "23.890",
+     "low": "23.030",
+     "close": "23.890",
+     "volume": "3177959"
+    },
+    "sina_shares_over_lake_volume": "99.998710",
+    "sina_minus_100x_lake_shares": -41,
+    "equal": {
+     "open": true,
+     "high": true,
+     "low": true,
+     "close": true,
+     "lake_eq_tencent_volume": true
+    },
+    "all_equal": true
+   },
+   {
+    "trade_date": "2025-10-24",
+    "lake": {
+     "open": "23.92",
+     "high": "24.15",
+     "low": "23.7",
+     "close": "23.89",
+     "volume": 38872,
+     "amount": "92957361.0",
+     "row_idx": 8506
+    },
+    "tencent": {
+     "open": "23.920",
+     "close": "23.890",
+     "high": "24.150",
+     "low": "23.700",
+     "volume": "38872.000"
+    },
+    "sina": {
+     "open": "23.920",
+     "high": "24.150",
+     "low": "23.700",
+     "close": "23.890",
+     "volume": "3887200"
+    },
+    "sina_shares_over_lake_volume": "100.000000",
+    "sina_minus_100x_lake_shares": 0,
+    "equal": {
+     "open": true,
+     "high": true,
+     "low": true,
+     "close": true,
+     "lake_eq_tencent_volume": true
+    },
+    "all_equal": true
+   },
+   {
+    "trade_date": "2025-10-27",
+    "lake": {
+     "open": "23.89",
+     "high": "24.49",
+     "low": "23.63",
+     "close": "24.32",
+     "volume": 45455,
+     "amount": "109620351.0",
+     "row_idx": 8507
+    },
+    "tencent": {
+     "open": "23.890",
+     "close": "24.320",
+     "high": "24.490",
+     "low": "23.630",
+     "volume": "45455.000"
+    },
+    "sina": {
+     "open": "23.890",
+     "high": "24.490",
+     "low": "23.630",
+     "close": "24.320",
+     "volume": "4545500"
+    },
+    "sina_shares_over_lake_volume": "100.000000",
+    "sina_minus_100x_lake_shares": 0,
+    "equal": {
+     "open": true,
+     "high": true,
+     "low": true,
+     "close": true,
+     "lake_eq_tencent_volume": true
+    },
+    "all_equal": true
+   },
+   {
+    "trade_date": "2025-10-28",
+    "lake": {
+     "open": "23.95",
+     "high": "24.16",
+     "low": "22.76",
+     "close": "23.12",
+     "volume": 60310,
+     "amount": "140591436.0",
+     "row_idx": 8508
+    },
+    "tencent": {
+     "open": "23.950",
+     "close": "23.120",
+     "high": "24.160",
+     "low": "22.760",
+     "volume": "60310.000"
+    },
+    "sina": {
+     "open": "23.950",
+     "high": "24.160",
+     "low": "22.760",
+     "close": "23.120",
+     "volume": "6031000"
+    },
+    "sina_shares_over_lake_volume": "100.000000",
+    "sina_minus_100x_lake_shares": 0,
+    "equal": {
+     "open": true,
+     "high": true,
+     "low": true,
+     "close": true,
+     "lake_eq_tencent_volume": true
+    },
+    "all_equal": true
+   },
+   {
+    "trade_date": "2025-10-29",
+    "lake": {
+     "open": "23.19",
+     "high": "23.39",
+     "low": "22.71",
+     "close": "23.04",
+     "volume": 33039,
+     "amount": "75809642.0",
+     "row_idx": 8509
+    },
+    "tencent": {
+     "open": "23.190",
+     "close": "23.040",
+     "high": "23.390",
+     "low": "22.710",
+     "volume": "33039.000"
+    },
+    "sina": {
+     "open": "23.190",
+     "high": "23.390",
+     "low": "22.710",
+     "close": "23.040",
+     "volume": "3303900"
+    },
+    "sina_shares_over_lake_volume": "100.000000",
+    "sina_minus_100x_lake_shares": 0,
+    "equal": {
+     "open": true,
+     "high": true,
+     "low": true,
+     "close": true,
+     "lake_eq_tencent_volume": true
+    },
+    "all_equal": true
+   },
+   {
+    "trade_date": "2025-10-30",
+    "lake": {
+     "open": "23.07",
+     "high": "23.26",
+     "low": "22.76",
+     "close": "22.94",
+     "volume": 27312,
+     "amount": "62729111.0",
+     "row_idx": 8510
+    },
+    "tencent": {
+     "open": "23.070",
+     "close": "22.940",
+     "high": "23.260",
+     "low": "22.760",
+     "volume": "27312.000"
+    },
+    "sina": {
+     "open": "23.070",
+     "high": "23.260",
+     "low": "22.760",
+     "close": "22.940",
+     "volume": "2731200"
+    },
+    "sina_shares_over_lake_volume": "100.000000",
+    "sina_minus_100x_lake_shares": 0,
+    "equal": {
+     "open": true,
+     "high": true,
+     "low": true,
+     "close": true,
+     "lake_eq_tencent_volume": true
+    },
+    "all_equal": true
+   },
+   {
+    "trade_date": "2025-10-31",
+    "lake": {
+     "open": "22.78",
+     "high": "23.37",
+     "low": "22.78",
+     "close": "23.03",
+     "volume": 22563,
+     "amount": "52119297.0",
+     "row_idx": 8511
+    },
+    "tencent": {
+     "open": "22.780",
+     "close": "23.030",
+     "high": "23.370",
+     "low": "22.780",
+     "volume": "22563.000"
+    },
+    "sina": {
+     "open": "22.780",
+     "high": "23.370",
+     "low": "22.780",
+     "close": "23.030",
+     "volume": "2256300"
+    },
+    "sina_shares_over_lake_volume": "100.000000",
+    "sina_minus_100x_lake_shares": 0,
+    "equal": {
+     "open": true,
+     "high": true,
+     "low": true,
+     "close": true,
+     "lake_eq_tencent_volume": true
+    },
+    "all_equal": true
+   },
+   {
+    "trade_date": "2025-11-03",
+    "lake": {
+     "open": "22.9",
+     "high": "23.11",
+     "low": "22.66",
+     "close": "23.05",
+     "volume": 20254,
+     "amount": "46473359.0",
+     "row_idx": 8512
+    },
+    "tencent": {
+     "open": "22.900",
+     "close": "23.050",
+     "high": "23.110",
+     "low": "22.660",
+     "volume": "20254.000"
+    },
+    "sina": {
+     "open": "22.900",
+     "high": "23.110",
+     "low": "22.660",
+     "close": "23.050",
+     "volume": "2025400"
+    },
+    "sina_shares_over_lake_volume": "100.000000",
+    "sina_minus_100x_lake_shares": 0,
+    "equal": {
+     "open": true,
+     "high": true,
+     "low": true,
+     "close": true,
+     "lake_eq_tencent_volume": true
+    },
+    "all_equal": true
+   },
+   {
+    "trade_date": "2025-11-04",
+    "lake": {
+     "open": "23.11",
+     "high": "23.22",
+     "low": "22.75",
+     "close": "22.96",
+     "volume": 23347,
+     "amount": "53498695.0",
+     "row_idx": 8513
+    },
+    "tencent": {
+     "open": "23.110",
+     "close": "22.960",
+     "high": "23.220",
+     "low": "22.750",
+     "volume": "23347.000"
+    },
+    "sina": {
+     "open": "23.110",
+     "high": "23.220",
+     "low": "22.750",
+     "close": "22.960",
+     "volume": "2334700"
+    },
+    "sina_shares_over_lake_volume": "100.000000",
+    "sina_minus_100x_lake_shares": 0,
+    "equal": {
+     "open": true,
+     "high": true,
+     "low": true,
+     "close": true,
+     "lake_eq_tencent_volume": true
+    },
+    "all_equal": true
+   },
+   {
+    "trade_date": "2025-11-05",
+    "lake": {
+     "open": "22.84",
+     "high": "23.08",
+     "low": "22.53",
+     "close": "22.55",
+     "volume": 22222,
+     "amount": "50517200.0",
+     "row_idx": 8514
+    },
+    "tencent": {
+     "open": "22.840",
+     "close": "22.550",
+     "high": "23.080",
+     "low": "22.530",
+     "volume": "22222.000"
+    },
+    "sina": {
+     "open": "22.840",
+     "high": "23.080",
+     "low": "22.530",
+     "close": "22.550",
+     "volume": "2222200"
+    },
+    "sina_shares_over_lake_volume": "100.000000",
+    "sina_minus_100x_lake_shares": 0,
+    "equal": {
+     "open": true,
+     "high": true,
+     "low": true,
+     "close": true,
+     "lake_eq_tencent_volume": true
+    },
+    "all_equal": true
+   }
+  ]
+ },
+ "limit_rule_check": {
+  "rule": "主板非ST ±10%:涨(跌)停价=前收盘价×1.1(0.9),四舍五入(ROUND_HALF_UP)至0.01元;窗口(2025-10)适用2023修订版,2026-07-06 ST新政不影响(标的非ST且窗口早于新政)",
+  "anchor": "tencent 2025-10-17 close(窗口外前一交易日)",
+  "violations": 0,
+  "days": [
+   {
+    "trade_date": "2025-10-20",
+    "prev_close": "23.040",
+    "limit_up": "25.34",
+    "limit_down": "20.74",
+    "high": "23.42",
+    "low": "22.71",
+    "high_le_limit_up": true,
+    "low_ge_limit_down": true
+   },
+   {
+    "trade_date": "2025-10-21",
+    "prev_close": "23.19",
+    "limit_up": "25.51",
+    "limit_down": "20.87",
+    "high": "23.39",
+    "low": "22.82",
+    "high_le_limit_up": true,
+    "low_ge_limit_down": true
+   },
+   {
+    "trade_date": "2025-10-22",
+    "prev_close": "23.39",
+    "limit_up": "25.73",
+    "limit_down": "21.05",
+    "high": "24.2",
+    "low": "23.27",
+    "high_le_limit_up": true,
+    "low_ge_limit_down": true
+   },
+   {
+    "trade_date": "2025-10-23",
+    "prev_close": "23.36",
+    "limit_up": "25.70",
+    "limit_down": "21.02",
+    "high": "23.89",
+    "low": "23.03",
+    "high_le_limit_up": true,
+    "low_ge_limit_down": true
+   },
+   {
+    "trade_date": "2025-10-24",
+    "prev_close": "23.89",
+    "limit_up": "26.28",
+    "limit_down": "21.50",
+    "high": "24.15",
+    "low": "23.7",
+    "high_le_limit_up": true,
+    "low_ge_limit_down": true
+   },
+   {
+    "trade_date": "2025-10-27",
+    "prev_close": "23.89",
+    "limit_up": "26.28",
+    "limit_down": "21.50",
+    "high": "24.49",
+    "low": "23.63",
+    "high_le_limit_up": true,
+    "low_ge_limit_down": true
+   },
+   {
+    "trade_date": "2025-10-28",
+    "prev_close": "24.32",
+    "limit_up": "26.75",
+    "limit_down": "21.89",
+    "high": "24.16",
+    "low": "22.76",
+    "high_le_limit_up": true,
+    "low_ge_limit_down": true
+   },
+   {
+    "trade_date": "2025-10-29",
+    "prev_close": "23.12",
+    "limit_up": "25.43",
+    "limit_down": "20.81",
+    "high": "23.39",
+    "low": "22.71",
+    "high_le_limit_up": true,
+    "low_ge_limit_down": true
+   },
+   {
+    "trade_date": "2025-10-30",
+    "prev_close": "23.04",
+    "limit_up": "25.34",
+    "limit_down": "20.74",
+    "high": "23.26",
+    "low": "22.76",
+    "high_le_limit_up": true,
+    "low_ge_limit_down": true
+   },
+   {
+    "trade_date": "2025-10-31",
+    "prev_close": "22.94",
+    "limit_up": "25.23",
+    "limit_down": "20.65",
+    "high": "23.37",
+    "low": "22.78",
+    "high_le_limit_up": true,
+    "low_ge_limit_down": true
+   },
+   {
+    "trade_date": "2025-11-03",
+    "prev_close": "23.03",
+    "limit_up": "25.33",
+    "limit_down": "20.73",
+    "high": "23.11",
+    "low": "22.66",
+    "high_le_limit_up": true,
+    "low_ge_limit_down": true
+   },
+   {
+    "trade_date": "2025-11-04",
+    "prev_close": "23.05",
+    "limit_up": "25.36",
+    "limit_down": "20.75",
+    "high": "23.22",
+    "low": "22.75",
+    "high_le_limit_up": true,
+    "low_ge_limit_down": true
+   },
+   {
+    "trade_date": "2025-11-05",
+    "prev_close": "22.96",
+    "limit_up": "25.26",
+    "limit_down": "20.66",
+    "high": "23.08",
+    "low": "22.53",
+    "high_le_limit_up": true,
+    "low_ge_limit_down": true
+   }
+  ]
+ },
+ "volume_unit_observation": {
+  "tencent_unit": "手(东财/腾讯 A股日线口径)",
+  "sina_unit": "股",
+  "lake_eq_tencent_all_13d": true,
+  "sina_eq_100x_lake_days": "12/13",
+  "odd_lot_day": "2025-10-23: 新浪 3,177,959 股 vs 湖 31,780 手 → 差 -41 股(零股)",
+  "interpretation": "R3 探针 amount/(close×volume) mean≈99.98 非数据错误:真实成交含零股,「手」口径聚合取整,比率天然略低于100。"
+ },
+ "eastmoney_note": "审核中曾交互查询东财 push2his API(fqt=0),其 13 天 OHLC/volume(手)/amount 与湖完全一致(preKPrice=23.04 亦吻合);但补包重抓时被服务端断连(HTTP 52/56/302),未能 pin 原始响应,故本包不纳入东财,仅以腾讯+新浪两源为准。",
+ "minute_level_note": "腾讯/新浪/东财 1m 历史均只保留近期,2025-10 窗口分钟数据不可得;census(2133格/46零量格)仍仅湖自证,待 R4-A QMT 全字段回补。",
+ "non_attestation": "本包为跨 vendor 经验一致性旁证。按 ingress §9.2:不能作为 units 门 source_declaration,不能作为 instruments 门 source_fact,不能作为 status 门 explicit_status;仅可入 limitations/佐证。R3 BLOCKED/NOT_RUN 不因此解除。"
+}
