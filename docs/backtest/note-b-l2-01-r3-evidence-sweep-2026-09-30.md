@@ -32,6 +32,12 @@ SSOT 结论；R4 发车仍需具名 Human GO（§9.5 第 7 条）。PR 不自动
    （腾讯 ifzq / 新浪 K线 API，湖外、非 QMT 链路）对湖日线做交叉核对，结论封成第七包
    `raw_excerpt_crossvendor_daily_603196SH.json`（附离线自检器
    `check_crossvendor_daily.py`），Human 指示补进本 PR。仍是 NON-ATTESTATION 旁证（§9.2）。
+7. **PR #272 评审跟进 #2（2026-09-30 午）**：评审环境接入 kimi-datasource MCP 的
+   **Wind 数据源**（授权行情，非免费公开 API），做两件事——① Wind 日线对湖 13 天
+   交叉核对（第四独立源）；② 查 MCP 自带 Wind 字段目录的 volume 条目（**无单位注记**，
+   负结果）。结论封成第八包 `raw_excerpt_wind_mcp_daily_603196SH.json`（附 pin 原件
+   两份 CSV 与离线自检器 `check_wind_mcp_daily.py`），Human 指示补进本 PR。
+   仍是 NON-ATTESTATION 旁证（§9.2）。
 
 ## 2. 三门的取证结果
 
@@ -52,6 +58,14 @@ SSOT 结论；R4 发车仍需具名 Human GO（§9.5 第 7 条）。PR 不自动
   不是数据错误）。分钟级三源均不可回溯（1m 历史只留近期），此观察仅限日线。
   东财交互查询曾三方一致（含 amount、preKPrice=23.04），但补包重抓被服务端断连，
   未 pin 原件，不纳入。仍 NON-ATTESTATION。
+- 跨 vendor 旁证（第八包，Wind）：Wind（kimi-datasource MCP）日线 13/13 天 OHLC
+  与 amount 与湖完全相等；Wind volume 为**股口径**（实测，含零股），湖×100==Wind
+  有 12/13 天，唯一例外同为 2025-10-23（湖比真实成交多 41 股，与新浪逐股一致）——
+  第七包零股发现获第四源独立复现。**注意：公开资料惯称 Wind wsd volume 单位为手，
+  本 MCP 返回为股（疑似代理层换算或资料过时）——锚的单位语义同样须声明 pin。**
+  同包负结果：MCP 自带 Wind 字段目录 volume 条仅有「成交量」别名、**无单位注记**，
+  与 xtquant 文档缺失同类；Wind 权威规范（wsd 手册/终端指标浏览器）不在 MCP 暴露面。
+  仍 NON-ATTESTATION。
 - 剩余路径（材料地图 R4-B）：① host 浏览器取迅投官方文档站
   `dict.thtrader.com/nativeApi/xtquant.html`（本机 DNS EAI_AGAIN）；
   ② 国金 miniQMT 客户端内置帮助；③ 国金书面口径；④ 都拿不到则 units 门保持 BLOCKED。
@@ -108,6 +122,7 @@ SSOT 结论；R4 发车仍需具名 Human GO（§9.5 第 7 条）。PR 不自动
 | R4 材料地图 | `b-l2-01-evidence-2026-09-30/HOST_MATERIALS_MAP_R4.md`（宿主 `evidence\` 同名原件） | 入库；行动清单 R4-A/B/C/D |
 | 六包原材料 | `b-l2-01-evidence-2026-09-30/raw_materials/` | 入库；封套 `bl2_raw_excerpt_draft_v0_host_review` |
 | 第七包（评审跟进） | `raw_materials/raw_excerpt_crossvendor_daily_603196SH.json` + `check_crossvendor_daily.py` | 湖日线 vs 腾讯/新浪双源对照、涨跌停复算零违例、零股解释；NON-ATTESTATION |
+| 第八包（评审跟进 #2） | `raw_materials/raw_excerpt_wind_mcp_daily_603196SH.json` + 两份 pin CSV + `check_wind_mcp_daily.py` | 湖日线 vs Wind（MCP）第四源对照（OHLC/amount 13/13 全等、零股复现）、MCP 字段目录无单位注记负结果；NON-ATTESTATION |
 | 生成器 | `b-l2-01-evidence-2026-09-30/gen_raw_materials.py` | 入库（含宿主路径，故置 docs/ 不进代码树） |
 | 1.3 锚点 | `OSkhQuant1.3@47afc24`：`oskh_core/board_limit.py` · `common/integrations/qmt_xtdata_mock.py`（`_get_limit_rate`/`_limit_prices`）· `oskh_data/download_transport.py` | 跨仓引用（非本仓文件），摘录已 pin |
 | MyQuant 锚点 | `MyQuant@910abd3`：`qlib_scripts/stage_1min_from_lake.py` | 跨仓引用；NON-ATTESTATION 旁证 |
@@ -131,13 +146,18 @@ python docs/backtest/b-l2-01-evidence-2026-09-30/gen_raw_materials.py
 
 # 第七包离线自检（无网络，重算三源对照/涨跌停/零股）
 python docs/backtest/b-l2-01-evidence-2026-09-30/check_crossvendor_daily.py
+
+# 第八包离线自检（无网络/MCP，重算湖↔Wind 对照/负结果/pin hash）
+python docs/backtest/b-l2-01-evidence-2026-09-30/check_wind_mcp_daily.py
 ```
 
 核对要点：① census 的 `grid_cells=2133 / grid_missing=0 / zero_volume_grid_cells=46`；
 ② `raw_excerpt_xtquant_docs.json` 中 K线字段表原文确无 volume 单位注记；
 ③ 跨仓摘录与所引 HEAD 的文件 hash 一致；④ R3 收据 verdict 仍为 `BLOCKED/NOT_RUN`；
 ⑤ 第七包：13 天 × (OHLC 三源一致 + 湖==腾讯 volume)、涨跌停复算 0 违例、
-新浪=100×湖 12/13 天且 2025-10-23 零股 −41 股。
+新浪=100×湖 12/13 天且 2025-10-23 零股 −41 股；⑥ 第八包：13 天 × (OHLC+amount
+湖==Wind)、Wind(股)=100×湖 12/13 天且 2025-10-23 湖多 41 股（与新浪逐股一致）、
+MCP 字段目录 volume 无单位注记（负结果）、两份 pin CSV hash 锁定。
 
 ## 5. 非声明与边界
 
@@ -145,8 +165,9 @@ python docs/backtest/b-l2-01-evidence-2026-09-30/check_crossvendor_daily.py
   没有规则版本批准、没有双 issuer 推导核验。
 - R3 `BLOCKED/NOT_RUN` 原样；freeze / native↔L1 / oracles 未跑；湖 / SSOT / δ5 / JR G 未动。
 - units 门：**没有任何新证据支持把手启发式升级为声明**；第七包的跨 vendor 一致性
-  （湖=腾讯=新浪）同样是经验旁证而非 xtquant 官方 source_declaration；若 R4-B 三条路径都取不到，
-  units 保持 BLOCKED，不硬开 R4。
+  （湖=腾讯=新浪）与第八包的第四源一致性（湖=Wind）同样是经验旁证而非 xtquant 官方
+  source_declaration——第八包还 pin 了负结果：连 Wind MCP 自带字段目录都无 volume
+  单位注记；若 R4-B 三条路径都取不到，units 保持 BLOCKED，不硬开 R4。
 - `gen_raw_materials.py` 含宿主绝对路径，属 pinned provenance，刻意不入代码树；
   生产代码仍必须走 resolver（AGENTS 数据盘纪律不变）。
 - R4 发车 = 另一条具名 Human GO；本 PR 打开后待 Human「合」，不自动合并。

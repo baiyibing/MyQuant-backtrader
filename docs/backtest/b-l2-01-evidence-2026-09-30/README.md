@@ -38,6 +38,10 @@
 | `raw_materials/web_rule_references_20260930.md` | 2767 | `ed73ae7ec6038706fd745aeea8fac116e000a94ea9f351667da4ebad4a5dd86e` | 交易所规则公式 / 2026-07-06 ST 新政公开来源引用 |
 | `raw_materials/raw_excerpt_crossvendor_daily_603196SH.json` | 20441 | `c5f7a4324115f5325fe6b8476ed8a02d0018dfe2d1e9620e061527c8da06180a` | 湖日线 vs 腾讯/新浪双独立行情源对照 + 10% 涨跌停复算零违例 + 零股观察（NON-ATTESTATION 旁证） |
 | `check_crossvendor_daily.py` | 3628 | `862a727b7ef687c571288a322af390568149d0bf7cf4bd7869c261b8c163c85d` | 上包离线自检器（无网络，重算三源对照/涨跌停/零股，exit 0=一致） |
+| `raw_materials/raw_excerpt_wind_mcp_daily_603196SH.json` | 8367 | `bfef633889c83a043181f9be574e6772c36a4c9da8ac782ad770439c4229d904` | 湖日线 vs Wind（kimi-datasource MCP）第四源对照 + 字段目录无单位注记负结果（NON-ATTESTATION 旁证） |
+| `raw_materials/wind_mcp_603196_daily_20251020_20251105.csv` | 861 | `0abc3b6c49fea853b92337518f49330ce1e0f8f7492df19e3fa78ed34f121b6e` | Wind MCP `wind_get_price` 原始响应（pin） |
+| `raw_materials/wind_mcp_field_search_volume.csv` | 74 | `0afc4305874f59b6dec3b202114eeefc480e016dc38694c67e714e2b7240e882` | Wind MCP 字段目录 volume 条目原始响应（无单位注记负结果，pin） |
+| `check_wind_mcp_daily.py` | 4418 | `0ed03e450ad0918504b0a5c3f63172a4cc71c0126065074a7535286a611dd3df` | 第八包离线自检器（无网络/MCP，重算湖↔Wind 对照/负结果/pin hash，exit 0=一致） |
 
 ## 关于 `gen_raw_materials.py` 的位置
 

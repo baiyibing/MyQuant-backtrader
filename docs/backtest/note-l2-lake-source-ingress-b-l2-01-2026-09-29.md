@@ -467,3 +467,10 @@ R3 已在 4090 执行：tip `a268e11` · transform `bl2_source_transform_v3` · 
 封第七包 `raw_excerpt_crossvendor_daily_603196SH.json`（同目录，附离线自检器）——
 13 天三源 OHLC/volume 全等、10% 涨跌停复算零违例、零股解释探针比率 ≈99.98。
 按 §9.2 仍为 NON-ATTESTATION 经验旁证，任何 BLOCKED 门状态不变。
+
+2026-09-30 午增补 #2：评审环境接入 kimi-datasource MCP 的 Wind 数据源（授权行情），
+封第八包 `raw_excerpt_wind_mcp_daily_603196SH.json`（同目录，附两份 pin CSV 与离线
+自检器）——13 天湖≡Wind（OHLC/amount 全等，Wind 为股口径、零股日 2025-10-23 与新浪
+逐股一致，等价链加强到四源）；同包 pin 负结果：MCP 自带 Wind 字段目录 volume 条
+**无单位注记**，Wind 权威单位规范不在 MCP 暴露面，source_declaration 锚仍缺位。
+按 §9.2 仍为 NON-ATTESTATION 经验旁证，任何 BLOCKED 门状态不变。
