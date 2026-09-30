@@ -98,7 +98,7 @@ verifies newline-only equivalence. It does not accept arbitrary normalized data.
 | zero-volume rows | `e974fa22d58c6596b61f3a765f798419a3ffc39bd45acb877f4478190cdc8643` | `992e00c523ca0479f70ff6fc9caa171ec062e0b95c94aace97ac53b12974d405` |
 | THS daily | `6a7effd00a0d1d3533b5adb820644d57f19605c7d9cf9b9276c82f207a5fbf05` | same |
 
-Raw originals remain with #1111 / the host. `sources/*.json` are pinned row
+Git LF inputs are vendored under `tests/fixtures/bl2_attestation_remap_upstream/` for pytest `remap.py --check`; host originals remain with #1111 / the host. `sources/*.json` are pinned row
 excerpts with original paths, commit, hashes, and extraction descriptions. CSV
 values remain strings and row indices are zero-based excluding the header.
 The minute excerpt keeps only datetime/time/volume/suspendFlag, preserving all

@@ -1,6 +1,6 @@
 """Offline remap of pinned #1111 evidence; no lake, network, runner or R4.
 
-Uses only the standard library. Source CSVs stay outside this repository.
+Uses only the standard library. Pinned LF inputs are vendored for offline CI.
 Unknown historical availability and rule approval remain explicitly blocked.
 """
 
@@ -181,8 +181,12 @@ def build(source_dir, human_go):
     inst_bindings = []
     inst_inputs = ["sse_rule", "upstream_instruments", "daqmt_1d", "wind_limits"]
     upstream = inputs["instruments.json"]
+    # These consumer labels apply only to the pinned upstream convention.
+    require(upstream["board"] == "sse_main_a", "unsupported upstream instrument board")
+    require(upstream.get("price_domain") is None, "upstream instrument price_domain requires fresh review")
     require(tuple(r["date"] for r in upstream["rows"]) == DATES, "instrument date coverage mismatch")
     for i, raw in enumerate(upstream["rows"]):
+        require(raw.get("price_domain") is None, "upstream instrument row price_domain requires fresh review")
         require(raw["symbol"] == wind[i]["Wind代码"] == SYMBOL, "instrument symbol mismatch")
         require(Decimal(str(raw["reference_price"])) == Decimal(daily[i]["preClose"]), "reference/preClose mismatch")
         for field, column in (("limit_up", "涨停价"), ("limit_down", "跌停价")):

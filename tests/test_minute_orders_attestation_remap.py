@@ -2,6 +2,8 @@
 
 import importlib.util
 import json
+import subprocess
+import sys
 from collections import Counter
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -15,6 +17,7 @@ from tests.test_minute_orders_source_loader import SyntheticCase
 
 
 PACK = Path(__file__).parents[1] / "docs/backtest/b-l2-01-evidence-2026-09-30/attestation_packages"
+UPSTREAM = Path(__file__).parent / "fixtures/bl2_attestation_remap_upstream"
 
 
 def document(name):
@@ -158,16 +161,49 @@ def test_checked_packages_hashes_bind_all_rows_and_preserve_instrument_blockers(
     assert store.data["wind_limits"]["origin"]["host_sha256"] == "31f8461a4ae7aca352db35648c0d7c60e476597b259bfecc03c9807c9f3a048b"
 
 
-def test_remapper_rejects_unpinned_raw_before_parsing_or_writing(tmp_path):
+@pytest.fixture
+def remapper():
     spec = importlib.util.spec_from_file_location("remap", PACK / "remap.py")
     remap = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(remap)
+    return remap
+
+
+def test_remapper_check_matches_checked_in_packages():
+    result = subprocess.run(
+        [sys.executable, str(PACK / "remap.py"), "--source-dir", str(UPSTREAM),
+         "--human-go", str(PACK / "HUMAN_GO.md"), "--check"],
+        capture_output=True, text=True, encoding="utf-8", timeout=30,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize("scope,field,value", [
+    ("document", "board", "sse_star_a"),
+    ("document", "board", None),
+    ("document", "price_domain", "front"),
+    ("row", "price_domain", "front"),
+    ("document", "price_domain", "raw"),
+    ("row", "price_domain", "raw"),
+])
+def test_remapper_rejects_changed_upstream_labels_after_repin(remapper, monkeypatch, scope, field, value):
+    pins, inputs = remapper.read_inputs(UPSTREAM, PACK / "HUMAN_GO.md")
+    upstream = inputs["instruments.json"]
+    target = upstream if scope == "document" else upstream["rows"][0]
+    target[field] = value
+    # Simulate a future accepted re-pin; the semantic guard must still reject it.
+    monkeypatch.setattr(remapper, "read_inputs", lambda *_: (pins, inputs))
+    with pytest.raises(ValueError, match=field):
+        remapper.build(UPSTREAM, PACK / "HUMAN_GO.md")
+
+
+def test_remapper_rejects_unpinned_raw_before_parsing_or_writing(tmp_path, remapper):
     go = tmp_path / "HUMAN_GO.md"
     go.write_text("unapproved", encoding="utf-8")
     with pytest.raises(ValueError, match="Human GO hash mismatch"):
-        remap.build(tmp_path, go)
+        remapper.build(tmp_path, go)
     assert list(tmp_path.iterdir()) == [go]
     go.write_bytes((PACK / "HUMAN_GO.md").read_bytes())
     (tmp_path / "units.proof.json").write_text("{}", encoding="utf-8")
     with pytest.raises(ValueError, match="input hash mismatch: units.proof.json"):
-        remap.build(tmp_path, go)
+        remapper.build(tmp_path, go)

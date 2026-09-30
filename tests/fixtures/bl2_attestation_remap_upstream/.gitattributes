@@ -1,0 +1,2 @@
+# Preserve the pinned Git LF bytes, including on Windows checkouts.
+* text eol=lf
