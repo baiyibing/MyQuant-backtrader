@@ -226,6 +226,7 @@ S4 input/contract/各 component hashes；既有 validators 只用于预检，不
 S4 新路径为 `evidence_level=hybrid`、`minute_orders_artifacts_v2`、
 `minute_orders_hybrid_evidence_v1` 与 `minute_orders_source_provenance_v1`；原转换版 `bl2_source_transform_v1`，
 本次 §8 升为 `bl2_source_transform_v2`，须重新 pin implementation/recipe/attestation。
+上述 v2 仅为 §8 历史记录；当前宿主须统一按 §9 / §9.5 以 `bl2_source_transform_v3` 为唯一版本重新 pin implementation/recipe/attestation。
 它显式区分 market 来源与 synthetic commands/account；本单元不提供 real-only 或 `lake` evidence_level。
 wrapper 执行前、writer 执行后重读冻结源并重建映射，不只信任调用方自报的 provenance hash。
 增加 `source_provenance.json`、`source_checks.json`、成功路径的 `source_postflight.json`；
@@ -299,7 +300,7 @@ instrument 的出具者保存在其具名 proofs 的 `issuer`；provenance 保�
 | 字段 | 内容 / 校验 |
 |---|---|
 | `issuer/subject` | 非空出具者；status 使用 `subject="status"`，instruments 及推导核验使用 `subject="instruments"` |
-| `source_refs` | 非空、已 pin 的原始材料 ID 数组；不得指向 proof 或 attestation 自证 |
+| `source_refs` | 非空、已 pin 的原始材料 ID 数组；不得指向 proof 或 attestation 自证；units/instruments/status 还不得引用 `bl2_instruments_v1` 或 `bl2_status_v1` 消费包作证明材料，见 §9.1 |
 | `filter` | `symbols/from_date/through_date/predicate`；品种与日期覆盖使用该 proof 的事实行，predicate 非空 |
 | `result` | `complete=true`、非空 `summary`、非空 `rows`；原观察字段为 `source/row/observation`，row 是零基索引；units/instruments/status 自 §9 起还必须有 `basis/binding`，纯文字观察不再充分 |
 | `limitations` | 非空文本数组，记录权威性、范围及其他限制 |
