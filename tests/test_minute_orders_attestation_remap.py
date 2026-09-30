@@ -7,7 +7,7 @@ import subprocess
 import sys
 from collections import Counter
 from copy import deepcopy
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
@@ -146,14 +146,19 @@ def test_checked_packages_hashes_bind_all_rows_and_record_instrument_host_fill()
                      "proof_calendar", "proof_actions", "proof_marks", "proof_timing"):
         store.proof_bindings[identity] = source_loader._proof(store.data[identity], store, identity)
     statuses = store.data["status"]["rows"]
-    assert len(statuses) == len(store.proof_bindings["proof_status"]) == 2160
-    assert set(Counter(r["start"][:10] for r in statuses).values()) == {240}
+    assert len(statuses) == len(store.proof_bindings["proof_status"]) == 2133
+    assert set(Counter(r["start"][:10] for r in statuses).values()) == {237}
     assert len(Counter(r["start"][:10] for r in statuses)) == 9
-    assert sum("zero volume" in r["reason"] for r in statuses) == 62
+    assert sum("zero volume" in r["reason"] for r in statuses) == 46
     for row in statuses:
         assert row["missing"] is row["halted"] is False
-        assert datetime.fromisoformat(row["end"]) - datetime.fromisoformat(row["start"]) == timedelta(minutes=1)
-        assert row["end"][11:16] != "09:30"
+        start, end = (datetime.fromisoformat(row[k]) for k in ("start", "end"))
+        assert start.date() == end.date()
+        assert start.utcoffset() == end.utcoffset() == timedelta(hours=8)
+        assert end - start == timedelta(minutes=1)
+        assert start.second == start.microsecond == 0
+        assert (time(9, 30) <= start.time() < end.time() <= time(11, 30)
+                or time(13) <= start.time() < end.time() <= time(14, 57))
         source_loader._bound_refs(row["proofs"], store, "status",
                                   {k: v for k, v in row.items() if k != "proofs"}, "explicit_status")
         key = source_loader._binding_key("status", {k: v for k, v in row.items() if k != "proofs"})
@@ -163,6 +168,8 @@ def test_checked_packages_hashes_bind_all_rows_and_record_instrument_host_fill()
         assert raw["suspendFlag"] == "0"
         assert (int(raw["volume"]) == 0) == ("zero volume" in row["reason"])
     assert len(store.data["opening_auction"]["rows"]) == 9
+    assert len(store.data["daqmt_1m"]["rows"]) == 2169
+    assert len(store.data["zero_volume"]["rows"]) == 62
     # Host fill 2026-09-30: both instruments proofs are complete, bound to every
     # derivation input and to the exact consumer rows; r4_authorized stays false.
     sse, wind = (store.data[p] for p in ("proof_instruments_sse", "proof_instruments_wind"))
@@ -188,6 +195,32 @@ def remapper():
     remap = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(remap)
     return remap
+
+
+def test_status_continuous_grid_matches_fixture_and_timing_census(remapper):
+    pins, inputs = remapper.read_inputs(UPSTREAM, PACK / "HUMAN_GO.md")
+    grid = inputs["status.json"]["minute_grid"]
+    assert Counter(r["grid_role"] for r in grid) == {
+        "continuous": 2133, "opening_auction": 9, "closing_auction": 27,
+    }
+    assert {r["minute"] for r in grid if r["grid_role"] == "closing_auction"} == {"14:58", "14:59", "15:00"}
+    assert sum(r["zero_volume"] for r in grid if r["grid_role"] == "closing_auction") == 16
+    assert all(r["status"] == "trading" for r in grid)
+    statuses = document("status.json")["data"]["rows"]
+    status_keys = {(r["end"][:10].replace("-", ""), r["end"][11:16]) for r in statuses}
+    assert len(status_keys) == len(statuses) == 2133
+    assert status_keys == {(r["date"], r["minute"]) for r in grid if r["grid_role"] == "continuous"}
+    census = json.loads((PACK.parent / remapper.TIMING_CENSUS).read_bytes())
+    assert status_keys == {(r["day"].replace("-", ""), r["end_label_hm"][:2] + ":" + r["end_label_hm"][2:])
+                           for r in census["cells"] if r["in_tradable_grid"]}
+    for day in remapper.DATES:
+        ends = sorted(label for date, label in status_keys if date == day)
+        morning, afternoon = [label for label in ends if label < "12:00"], [label for label in ends if label > "12:00"]
+        assert (len(morning), morning[0], morning[-1]) == (120, "09:31", "11:30")
+        assert (len(afternoon), afternoon[0], afternoon[-1]) == (117, "13:01", "14:57")
+    assert pins["status_grid_revision"]["human_go_sha256"] == "d06b01b536dbd8b4c5a13eaf72ceca703ed84bc528d70de75bfc446cc35390d8"
+    assert document("manifest.json")["transform_version"] == "bl2_source_transform_v5"
+    assert document("manifest.json")["r4_authorized"] is False
 
 
 @pytest.mark.parametrize("path", sorted(PACK.rglob("*.json")), ids=lambda p: str(p.relative_to(PACK)))

@@ -64,7 +64,24 @@ records the named implementation approval. Transform **v5** adds
 `epoch_ms_wall_shanghai_as_utc` and requires the byte-pinned
 [structured approval](sources/time_encoding_approval.json) through `proof_timing`.
 R4f remains BLOCKED/NOT_RUN; this closes the encoding implementation/evidence
-gap, not host freeze or lake acceptance. **No R4g is authorized.**
+gap, not host freeze or lake acceptance. That encoding approval did not authorize R4g.
+
+R4g status trim (2026-09-30, Human **「开修」via bt**): baseline
+`a8b735018cd7c936b5ccb9b4de4476ec16f56602` (#279) reached Clock with
+`RunContractError: bucket crosses lunch or continuous session endpoints`.
+The supplied GO at
+`/workspace/handoffs/b_l2_r4_status_trim_clock_20260930/HUMAN_GO.md` has SHA-256
+`d06b01b536dbd8b4c5a13eaf72ceca703ed84bc528d70de75bfc446cc35390d8`.
+This packs-only knife trims status and matching proof bindings from **240×9=2160**
+to **237×9=2133**, matching the unchanged Clock bounds: morning
+`09:30 <= start < end <= 11:30`, afternoon `13:00 <= start < end <= 14:57`.
+Transform stays **`bl2_source_transform_v5`**, wall encoding stays
+**`epoch_ms_wall_shanghai_as_utc`**, and **`r4_authorized=false`**.
+The 15:00 marks remain legal and unchanged. R4g's receipt remains BLOCKED/NOT_RUN;
+no fresh freeze or lake PASS is claimed. No 4090/R4 dispatch or merge is performed.
+Next steps: Grok review → Human「合」→ land packs on 4090 → Human「开 R4」.
+Merge does not authorize R4. Existing units/CAM/timing/time-encoding GO files
+are unchanged.
 
 ## Human exception and units
 
@@ -95,7 +112,7 @@ is explicit. No amount/close/volume inference is used.
 | [instruments.json](instruments.json) | `bl2_instruments_v1` / `instruments` | **derived** template; 9 supplied daily rows |
 | [instruments.proof.json](instruments.proof.json) | `bl2_proof_v1` / `proof_instruments_sse` | instrument proof; SSE rule source |
 | [instruments.wind.proof.json](instruments.wind.proof.json) | `bl2_proof_v1` / `proof_instruments_wind` | second instrument proof; Wind daily limit source |
-| [status.json](status.json) | `bl2_status_v1` / `status` | canonical 240 × 9 minute rows |
+| [status.json](status.json) | `bl2_status_v1` / `status` | Clock-aligned 237 × 9 = 2133 continuous minute rows |
 | [status.proof.json](status.proof.json) | `bl2_proof_v1` / `proof_status` | exact per-minute bindings |
 | [calendar.json](calendar.json) | `bl2_calendar_v1` / `calendar` | PMC subset; only `trading_dates` |
 | [calendar.proof.json](calendar.proof.json) | `bl2_proof_v1` / `proof_calendar` | calendar; `complete_trading_calendar` |
@@ -301,15 +318,23 @@ attestation must all be freshly pinned; R4f recipe/attestation cannot be reused.
 ## Status and lake boundary
 
 `start/end` are Shanghai `+08:00` one-minute buckets with END labels
-09:31–11:30 and 13:01–15:00. Closing auction labels remain in this canonical
-source grid; this is not approval of continuous-auction fill semantics there.
-R4f's 240-cell status-derived intervals include labels after 14:57; a fresh
-host recipe must respect the existing 237-cell continuous execution boundary
-and exact status coverage gate. This knife does not alter either matrix.
-The nine 09:30 records are retained in
+09:31–11:30 and 13:01–14:57: **120 morning + 117 afternoon = 237/day**.
+The R4g trim removes the 27 buckets 14:57–14:58, 14:58–14:59 and 14:59–15:00
+(three per day) and their proof bindings. Status now exactly matches the timing
+census's 2133-cell continuous grid and Clock's unchanged endpoints. A fresh
+host recipe can derive 18 continuous intervals from status (two per day),
+expanding to exactly 2133 buckets. Host recipe review and a fresh freeze remain
+required; the old R4g recipe/attestation must not be reused.
+
+The fixture labels 14:58/14:59/15:00 as `closing_auction`; these 27 rows stay
+in the raw 2169-row vendor window but are excluded from continuous status.
+The existing 15:00 marks and their proofs are unchanged: marks add no execution
+buckets. The nine 09:30 records are retained in
 [sources/opening_auction.json](sources/opening_auction.json), outside the
-2,160 status rows. Zero volume does not mean missing or halted: all 62 such rows
-have explicit vendor `suspendFlag=0`, and their exact raw row indices are bound.
+2133 status rows. Zero volume does not mean missing or halted: all **62 raw**
+zero-volume rows retain explicit vendor `suspendFlag=0`; **46** remain in
+status with their exact raw row indices bound, and **16** are in the excluded
+closing-auction minutes. Raw `zero_volume` census bytes remain unchanged.
 Semantics copied from #1111: 0 normal, 1 suspended, -1 resumption day.
 The generator rejects absent minutes, duplicate labels and any changed flag;
 it never derives a halt or non-halt from silence or announcement counts.
@@ -324,7 +349,8 @@ data or relabel this bundle as a ready recipe.
 
 ## Pins, reconstruction and later host registration
 
-[inputs.json](inputs.json) pins twelve saved #1111 inputs, plus two host
+[inputs.json](inputs.json) pins twelve #1111-derived inputs, including the locally
+reclassified status fixture described below, plus two host
 materials from OSkhQuant1.3 PR #1112 (commit
 `d0edd384e9bd7fc0029b380e8850920539c46a95`, directory
 `docs/evidence/b_l2_r4_host_materials_draft_20260930`) under `host_materials`,
@@ -335,8 +361,15 @@ README and host-fill form. `host_cam_approval_sha256` pins the CAM approval;
 `human_go_cam_sha256` pins the supplied four-cell GO separately.
 `timing_host_materials` pins the three original MyQuant files and compact
 fixtures; `host_timing_approval_sha256` and `human_go_timing_sha256` separately
-pin the new timing approval and GO. None of the
-#1111/#1112 pins or the existing units GO/approval hashes is replaced.
+pin the timing approval and GO. The R4g status fixture is the sole revised
+#1111 input: `files.status.json.git_sha256` pins its local LF bytes, and
+`status_grid_revision` retains the original #1111 hash
+`99bf3c9c531774cf9251b0287ca23ba35395efafb6a92a565470299ea77fd771`
+and the status-trim Human GO hash. Its continuous counts/roles are revised;
+daily summary zero-volume and first/last-present fields still describe the full
+raw vendor window. This classification revision is not attributed to the
+original upstream commit. All raw market inputs, other #1111/#1112/#1114 pins,
+and existing units/CAM/timing/time-encoding GO/approval hashes remain unchanged.
 Git LF bytes differ
 from original Windows CRLF bytes for daqmt artifacts. Both verified hashes are
 recorded explicitly; `read_inputs` accepts only one of those exact hashes and
@@ -360,7 +393,8 @@ JSON fractional numbers are parsed as Decimal from the pinned source text and
 recursively emitted as finite Decimal strings, including nested metadata in
 `daqmt_detail` and `upstream_instruments`. No two-decimal quantization is applied
 to these excerpts; integers, booleans and nulls retain their types. Upstream
-input bytes/pins are unchanged; the regenerated excerpt hashes are in the manifest.
+raw bytes/pins are unchanged; the local status classification revision is
+described above. Regenerated artifact hashes are in the manifest.
 All package JSON is checked with the loader's `strict_json`. Fixing its Decimal
 parse error does not make incomplete instrument proofs or attestations loadable.
 The minute excerpt keeps only datetime/time/volume/suspendFlag, preserving all

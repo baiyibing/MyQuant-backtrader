@@ -10,7 +10,7 @@
     "requirement": "Null sha256 means this catalog does not ship parquet bytes. The wall-encoding pin lives in time_encoding_approval.binding.source_sha256 (58879893f221bfe050b7a16029667c49fb65d8ec6f47592254e549374a577083), not in this field, and the loader enforces it. Host must still configure/resolve lake identity/coverage and freshly freeze; exports do not establish lake equivalence."
   },
   "unresolved": [
-    "account/commands and scoped attestation require host recipe review and registration",
+    "status continuous trim is Clock-aligned (237/day, 2133 rows); account/commands and scoped attestation require host recipe review and registration",
     "host recipe, lake identity/coverage and fresh freeze; r4_authorized stays false"
   ],
   "transform_version": "bl2_source_transform_v5",
@@ -153,7 +153,7 @@
       "path": "status.json",
       "format": "json",
       "schema": "bl2_status_v1",
-      "sha256": "e6fdc028e214b56c20c05c53967204fa136d1d94df03787a379cc4152f2c126f"
+      "sha256": "7795a59fe82402e05a9d7a41ef6421feab00da8cdc7866fe7c55ace874e8d8f0"
     },
     {
       "id": "opening_auction",
@@ -167,7 +167,7 @@
       "path": "status.proof.json",
       "format": "json",
       "schema": "bl2_proof_v1",
-      "sha256": "d874d21713be4645f5809903bf0b57080d556dddaeab812a9dce9fda432b9942"
+      "sha256": "5d63c82a5b04253eb63a4545cd2a114e633ede905e28de934d466ae0783f6ff9"
     },
     {
       "id": "cam_sse_holidays",

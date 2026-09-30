@@ -6,16 +6,18 @@
   ],
   "timezone": "Asia/Shanghai",
   "grid_convention": {
-    "canonical_minutes": 240,
-    "right_edge_labels": "09:31-11:30 (120) + 13:01-15:00 (120)",
-    "opening_auction_bar": "09:30 label tracked separately (QMT opening bar), not counted in the 240 continuous minutes",
-    "zero_volume_semantics": "volume=0 bar with suspendFlag=0 = trading minute with no trades (62 in window); NOT missing"
+    "canonical_minutes": 237,
+    "right_edge_labels": "09:31-11:30 (120) + 13:01-14:57 (117)",
+    "opening_auction_bar": "09:30 label tracked separately (QMT opening bar), not counted in the 237 continuous minutes",
+    "zero_volume_semantics": "volume=0 bar with suspendFlag=0 = no trades, NOT missing/halted; 62 raw in window = 46 continuous + 16 closing_auction",
+    "closing_auction_bars": "14:58/14:59/15:00 END labels retained in raw minutes, excluded from continuous status; 15:00 remains mark-legal",
+    "daily_summary_scope": "expected/present_minutes count continuous grid only; zero_volume_bars and first/last_present retain the full raw vendor window"
   },
   "daily_summary": [
     {
       "date": "20251023",
-      "expected_minutes": 240,
-      "present_minutes": 240,
+      "expected_minutes": 237,
+      "present_minutes": 237,
       "missing_minutes": 0,
       "opening_auction_bar": true,
       "zero_volume_bars": 4,
@@ -29,8 +31,8 @@
     },
     {
       "date": "20251024",
-      "expected_minutes": 240,
-      "present_minutes": 240,
+      "expected_minutes": 237,
+      "present_minutes": 237,
       "missing_minutes": 0,
       "opening_auction_bar": true,
       "zero_volume_bars": 3,
@@ -44,8 +46,8 @@
     },
     {
       "date": "20251027",
-      "expected_minutes": 240,
-      "present_minutes": 240,
+      "expected_minutes": 237,
+      "present_minutes": 237,
       "missing_minutes": 0,
       "opening_auction_bar": true,
       "zero_volume_bars": 2,
@@ -59,8 +61,8 @@
     },
     {
       "date": "20251028",
-      "expected_minutes": 240,
-      "present_minutes": 240,
+      "expected_minutes": 237,
+      "present_minutes": 237,
       "missing_minutes": 0,
       "opening_auction_bar": true,
       "zero_volume_bars": 5,
@@ -74,8 +76,8 @@
     },
     {
       "date": "20251029",
-      "expected_minutes": 240,
-      "present_minutes": 240,
+      "expected_minutes": 237,
+      "present_minutes": 237,
       "missing_minutes": 0,
       "opening_auction_bar": true,
       "zero_volume_bars": 8,
@@ -89,8 +91,8 @@
     },
     {
       "date": "20251030",
-      "expected_minutes": 240,
-      "present_minutes": 240,
+      "expected_minutes": 237,
+      "present_minutes": 237,
       "missing_minutes": 0,
       "opening_auction_bar": true,
       "zero_volume_bars": 12,
@@ -104,8 +106,8 @@
     },
     {
       "date": "20251031",
-      "expected_minutes": 240,
-      "present_minutes": 240,
+      "expected_minutes": 237,
+      "present_minutes": 237,
       "missing_minutes": 0,
       "opening_auction_bar": true,
       "zero_volume_bars": 3,
@@ -119,8 +121,8 @@
     },
     {
       "date": "20251103",
-      "expected_minutes": 240,
-      "present_minutes": 240,
+      "expected_minutes": 237,
+      "present_minutes": 237,
       "missing_minutes": 0,
       "opening_auction_bar": true,
       "zero_volume_bars": 12,
@@ -134,8 +136,8 @@
     },
     {
       "date": "20251104",
-      "expected_minutes": 240,
-      "present_minutes": 240,
+      "expected_minutes": 237,
+      "present_minutes": 237,
       "missing_minutes": 0,
       "opening_auction_bar": true,
       "zero_volume_bars": 13,
@@ -2294,7 +2296,7 @@
     {
       "date": "20251023",
       "minute": "14:58",
-      "grid_role": "continuous",
+      "grid_role": "closing_auction",
       "status": "trading",
       "explicit_status_proof": "vendor_bar_present + suspendFlag=0 (正常)",
       "volume_lots": 0,
@@ -2303,7 +2305,7 @@
     {
       "date": "20251023",
       "minute": "14:59",
-      "grid_role": "continuous",
+      "grid_role": "closing_auction",
       "status": "trading",
       "explicit_status_proof": "vendor_bar_present + suspendFlag=0 (正常)",
       "volume_lots": 0,
@@ -2312,7 +2314,7 @@
     {
       "date": "20251023",
       "minute": "15:00",
-      "grid_role": "continuous",
+      "grid_role": "closing_auction",
       "status": "trading",
       "explicit_status_proof": "vendor_bar_present + suspendFlag=0 (正常)",
       "volume_lots": 1395,
@@ -4463,7 +4465,7 @@
     {
       "date": "20251024",
       "minute": "14:58",
-      "grid_role": "continuous",
+      "grid_role": "closing_auction",
       "status": "trading",
       "explicit_status_proof": "vendor_bar_present + suspendFlag=0 (正常)",
       "volume_lots": 0,
@@ -4472,7 +4474,7 @@
     {
       "date": "20251024",
       "minute": "14:59",
-      "grid_role": "continuous",
+      "grid_role": "closing_auction",
       "status": "trading",
       "explicit_status_proof": "vendor_bar_present + suspendFlag=0 (正常)",
       "volume_lots": 0,
@@ -4481,7 +4483,7 @@
     {
       "date": "20251024",
       "minute": "15:00",
-      "grid_role": "continuous",
+      "grid_role": "closing_auction",
       "status": "trading",
       "explicit_status_proof": "vendor_bar_present + suspendFlag=0 (正常)",
       "volume_lots": 264,
@@ -6632,7 +6634,7 @@
     {
       "date": "20251027",
       "minute": "14:58",
-      "grid_role": "continuous",
+      "grid_role": "closing_auction",
       "status": "trading",
       "explicit_status_proof": "vendor_bar_present + suspendFlag=0 (正常)",
       "volume_lots": 0,
@@ -6641,7 +6643,7 @@
     {
       "date": "20251027",
       "minute": "14:59",
-      "grid_role": "continuous",
+      "grid_role": "closing_auction",
       "status": "trading",
       "explicit_status_proof": "vendor_bar_present + suspendFlag=0 (正常)",
       "volume_lots": 0,
@@ -6650,7 +6652,7 @@
     {
       "date": "20251027",
       "minute": "15:00",
-      "grid_role": "continuous",
+      "grid_role": "closing_auction",
       "status": "trading",
       "explicit_status_proof": "vendor_bar_present + suspendFlag=0 (正常)",
       "volume_lots": 423,
@@ -8801,7 +8803,7 @@
     {
       "date": "20251028",
       "minute": "14:58",
-      "grid_role": "continuous",
+      "grid_role": "closing_auction",
       "status": "trading",
       "explicit_status_proof": "vendor_bar_present + suspendFlag=0 (正常)",
       "volume_lots": 12,
@@ -8810,7 +8812,7 @@
     {
       "date": "20251028",
       "minute": "14:59",
-      "grid_role": "continuous",
+      "grid_role": "closing_auction",
       "status": "trading",
       "explicit_status_proof": "vendor_bar_present + suspendFlag=0 (正常)",
       "volume_lots": 0,
@@ -8819,7 +8821,7 @@
     {
       "date": "20251028",
       "minute": "15:00",
-      "grid_role": "continuous",
+      "grid_role": "closing_auction",
       "status": "trading",
       "explicit_status_proof": "vendor_bar_present + suspendFlag=0 (正常)",
       "volume_lots": 679,
@@ -10970,7 +10972,7 @@
     {
       "date": "20251029",
       "minute": "14:58",
-      "grid_role": "continuous",
+      "grid_role": "closing_auction",
       "status": "trading",
       "explicit_status_proof": "vendor_bar_present + suspendFlag=0 (正常)",
       "volume_lots": 0,
@@ -10979,7 +10981,7 @@
     {
       "date": "20251029",
       "minute": "14:59",
-      "grid_role": "continuous",
+      "grid_role": "closing_auction",
       "status": "trading",
       "explicit_status_proof": "vendor_bar_present + suspendFlag=0 (正常)",
       "volume_lots": 0,
@@ -10988,7 +10990,7 @@
     {
       "date": "20251029",
       "minute": "15:00",
-      "grid_role": "continuous",
+      "grid_role": "closing_auction",
       "status": "trading",
       "explicit_status_proof": "vendor_bar_present + suspendFlag=0 (正常)",
       "volume_lots": 362,
@@ -13139,7 +13141,7 @@
     {
       "date": "20251030",
       "minute": "14:58",
-      "grid_role": "continuous",
+      "grid_role": "closing_auction",
       "status": "trading",
       "explicit_status_proof": "vendor_bar_present + suspendFlag=0 (正常)",
       "volume_lots": 0,
@@ -13148,7 +13150,7 @@
     {
       "date": "20251030",
       "minute": "14:59",
-      "grid_role": "continuous",
+      "grid_role": "closing_auction",
       "status": "trading",
       "explicit_status_proof": "vendor_bar_present + suspendFlag=0 (正常)",
       "volume_lots": 0,
@@ -13157,7 +13159,7 @@
     {
       "date": "20251030",
       "minute": "15:00",
-      "grid_role": "continuous",
+      "grid_role": "closing_auction",
       "status": "trading",
       "explicit_status_proof": "vendor_bar_present + suspendFlag=0 (正常)",
       "volume_lots": 114,
@@ -15308,7 +15310,7 @@
     {
       "date": "20251031",
       "minute": "14:58",
-      "grid_role": "continuous",
+      "grid_role": "closing_auction",
       "status": "trading",
       "explicit_status_proof": "vendor_bar_present + suspendFlag=0 (正常)",
       "volume_lots": 5,
@@ -15317,7 +15319,7 @@
     {
       "date": "20251031",
       "minute": "14:59",
-      "grid_role": "continuous",
+      "grid_role": "closing_auction",
       "status": "trading",
       "explicit_status_proof": "vendor_bar_present + suspendFlag=0 (正常)",
       "volume_lots": 0,
@@ -15326,7 +15328,7 @@
     {
       "date": "20251031",
       "minute": "15:00",
-      "grid_role": "continuous",
+      "grid_role": "closing_auction",
       "status": "trading",
       "explicit_status_proof": "vendor_bar_present + suspendFlag=0 (正常)",
       "volume_lots": 423,
@@ -17477,7 +17479,7 @@
     {
       "date": "20251103",
       "minute": "14:58",
-      "grid_role": "continuous",
+      "grid_role": "closing_auction",
       "status": "trading",
       "explicit_status_proof": "vendor_bar_present + suspendFlag=0 (正常)",
       "volume_lots": 0,
@@ -17486,7 +17488,7 @@
     {
       "date": "20251103",
       "minute": "14:59",
-      "grid_role": "continuous",
+      "grid_role": "closing_auction",
       "status": "trading",
       "explicit_status_proof": "vendor_bar_present + suspendFlag=0 (正常)",
       "volume_lots": 0,
@@ -17495,7 +17497,7 @@
     {
       "date": "20251103",
       "minute": "15:00",
-      "grid_role": "continuous",
+      "grid_role": "closing_auction",
       "status": "trading",
       "explicit_status_proof": "vendor_bar_present + suspendFlag=0 (正常)",
       "volume_lots": 439,
@@ -19646,7 +19648,7 @@
     {
       "date": "20251104",
       "minute": "14:58",
-      "grid_role": "continuous",
+      "grid_role": "closing_auction",
       "status": "trading",
       "explicit_status_proof": "vendor_bar_present + suspendFlag=0 (正常)",
       "volume_lots": 0,
@@ -19655,7 +19657,7 @@
     {
       "date": "20251104",
       "minute": "14:59",
-      "grid_role": "continuous",
+      "grid_role": "closing_auction",
       "status": "trading",
       "explicit_status_proof": "vendor_bar_present + suspendFlag=0 (正常)",
       "volume_lots": 0,
@@ -19664,7 +19666,7 @@
     {
       "date": "20251104",
       "minute": "15:00",
-      "grid_role": "continuous",
+      "grid_role": "closing_auction",
       "status": "trading",
       "explicit_status_proof": "vendor_bar_present + suspendFlag=0 (正常)",
       "volume_lots": 313,
