@@ -47,5 +47,19 @@
       "host_sha256": "3e475fb9f6e4cda110a2e6481f2d273b8e2e3a4b4e19d82e8ec36b8cd12edaf1"
     }
   },
-  "human_go_sha256": "bb287dfe9e2559e9fe05abb7401a636aa6596524cfb79ffa34a4f3ff884c2afe"
+  "human_go_sha256": "bb287dfe9e2559e9fe05abb7401a636aa6596524cfb79ffa34a4f3ff884c2afe",
+  "host_materials": {
+    "repository": "baiyibing/OSkhQuant1.3",
+    "commit": "d0edd384e9bd7fc0029b380e8850920539c46a95",
+    "directory": "docs/evidence/b_l2_r4_host_materials_draft_20260930",
+    "files": {
+      "sse_rule_archive/sse_trading_rules_fulltext_retrieved_20260930.md": {
+        "git_sha256": "599db44556e550d34f39763e4f6a357f1d651642d276ec554b85f7bfb56d4cea"
+      },
+      "sse_rule_archive/clause_excerpts.md": {
+        "git_sha256": "f70180cfb8a10c8294655084bd8e025018e4521420ee1676e48cca5068f88f7d"
+      }
+    }
+  },
+  "host_approval_sha256": "dfa318e5d22dde2f6a18d01e471ec2bec93aaee994ec66b2bfa2cdea321cd694"
 }

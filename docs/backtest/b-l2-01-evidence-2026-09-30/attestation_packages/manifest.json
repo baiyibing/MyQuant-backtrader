@@ -10,10 +10,8 @@
     "requirement": "Host must pin configured raw minute parquet; exports do not establish lake equivalence."
   },
   "unresolved": [
-    "instrument historical available_at",
-    "ordinary listing scope",
-    "SSE rule archive, approved applicability/rounding and independent approval review",
-    "host recipe, lake identity/coverage, remaining claims and fresh freeze"
+    "calendar/actions/marks and the remaining claims require independent attestation",
+    "host recipe, lake identity/coverage and fresh freeze; r4_authorized stays false"
   ],
   "artifacts": [
     {
@@ -70,7 +68,21 @@
       "path": "sources/sse_rule.json",
       "format": "json",
       "schema": "bl2_raw_excerpt_v1",
-      "sha256": "6d5238767be79049d383f74e7a73d7f5f2d5bfabc054a2fa8e94d9c02ed8b0f6"
+      "sha256": "bc94cbd5e4a172088fd7fb1c0eec4d2d4c0f25b183eb3e198cd7122722e5a8fd"
+    },
+    {
+      "id": "clause_excerpts",
+      "path": "sources/clause_excerpts.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "51fa8c95e4460bbaef602fbc238ccfbd20139bd0e0a0640559077ef9b91c85ed"
+    },
+    {
+      "id": "host_approval",
+      "path": "sources/host_approval.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "8d5bdee7ee57c07e5aa4d45c8d8aec8fe39e4d548ba50d0b0eb87f973f2588b6"
     },
     {
       "id": "upstream_instruments",
@@ -119,21 +131,21 @@
       "path": "instruments.json",
       "format": "json",
       "schema": "bl2_instruments_v1",
-      "sha256": "1a25b24198ab16bfc4d1389feaaef55e43839bca6da1b6a802ebfb275dfff4f5"
+      "sha256": "ffe8cdf3a1a57270d7e729c3504ee3eae88be7d267c622e404720a429ddb8320"
     },
     {
       "id": "proof_instruments_sse",
       "path": "instruments.proof.json",
       "format": "json",
       "schema": "bl2_proof_v1",
-      "sha256": "7ee500f7ee40519598fbea6e2e7eb06970f5eaff0727dde77a4f29695d8ab2c3"
+      "sha256": "2f06f0ac7ca772b053c03f54ff2211f7614d7936e0e871ccca6122c9093f74dd"
     },
     {
       "id": "proof_instruments_wind",
       "path": "instruments.wind.proof.json",
       "format": "json",
       "schema": "bl2_proof_v1",
-      "sha256": "e381c6e54780a245a451507d3d29f5fafadb5c3d25034db8a282b6e7544bc095"
+      "sha256": "3e485d6abf67a5b4d6d075584ce4504d54d11bf2ca271fe869015a42a5ea6828"
     },
     {
       "id": "status",

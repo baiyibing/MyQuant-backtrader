@@ -15,6 +15,20 @@ This fix removes bare JSON floats from remapped sources and tests the host-fill
 contract; it does not authorize another host run or 4090/R5. The stored remap
 marker and manifest retain `r4_authorized=false`; `production_C=frozen`.
 
+R4 instruments host fill (2026-09-30, Human-selected available_at convention (a)):
+the four §9.3.1 evidence groups are now supplied and pinned — the archived SSE
+trading rules fulltext and clause excerpts (OSkhQuant1.3 PR #1112, commit
+`d0edd384e9bd7fc0029b380e8850920539c46a95`, directory
+`docs/evidence/b_l2_r4_host_materials_draft_20260930`), the Human decision record
+[HOST_R4_INSTRUMENTS_APPROVAL_20260930.md](HOST_R4_INSTRUMENTS_APPROVAL_20260930.md)
+(pinned by bytes SHA-256 in [inputs.json](inputs.json)), per-day `available_at`
+under the approved T-1 post-close archive convention, and approved
+`ordinary_listing=true`. Both instruments proofs are `complete=true` with
+bindings identical to the consumer rows. **The approval record awaits baiyibing
+countersign before merge. `r4_authorized` stays `false`; calendar/actions/marks
+attestation, the host recipe and a fresh freeze remain separate prerequisites;
+this PR does not authorize R4 or 4090/R5.**
+
 ## Human exception and units
 
 The byte-preserved [HUMAN_GO.md](HUMAN_GO.md) was supplied at
@@ -57,25 +71,26 @@ not signatures by SSE/Wind on these remapped JSONs. Wind's nine daily rows verif
 The 2026-09-30 daqmt instrument-detail snapshot is corroboration only.
 No default 10% calculation is performed by this remapper or the loader.
 
-**Instrument blockers remain explicit:** #1111 does not supply a historical
-`available_at`, authoritative ordinary-listing coverage, or an archived SSE rule
-plus approved applicability/rounding/exception review. `available_at` and
-`ordinary_listing` stay `null`; both instrument proofs stay `complete=false`.
-The rule-version string is copied without inventing an approval. These drafts
-therefore intentionally fail the loader's completeness/availability gates.
-The remaining fields are mapped from the supplied daily rows; effective dates
-are each row's trade date, not evidence collection dates. A pre-open timestamp
-must not be fabricated to obtain PASS. The host must supply the missing evidence,
-update both bindings and freshly pin all changed bytes before any future load.
-The R4 fix audit covered saved `src1111`, `src1111_full`, `src1111_host_bytes`,
-the earlier `remapped/` bundle and the R4 receipt; no usable historical
-availability or authoritative ordinary-listing coverage was found. In particular,
-the snapshot's `OpenDate` is not window-wide ordinary-listing evidence, and the
-SSE URL/paraphrase is not an archived rule plus approval record.
-Follow the [host checklist in ingress §9.3.1](../../note-l2-lake-source-ingress-b-l2-01-2026-09-29.md#931-r4-instruments-宿主补证清单2026-09-30)
-for the four required evidence groups and matching bindings. **Current remapped
-packs remain BLOCKED; fixture PASS ≠ lake PASS.** Calendar/actions/marks and the
-full attestation remain separate prerequisites to freezing.
+**Instrument blockers filled 2026-09-30 (host fill):** #1111 did not supply a
+historical `available_at`, authoritative ordinary-listing coverage, or an
+archived SSE rule plus approval. Those four groups are now pinned and bound:
+`sse_rule` is re-pointed from the #1111 URL/paraphrase to the archived rules
+fulltext (292 line rows); `clause_excerpts` carries the clause excerpts and
+effective-interval delimitation; `host_approval` carries the Human decision
+record. `available_at` follows the Human-selected convention (a): `T-1` trading
+day `15:30:00+08:00` post-close archive, anchored to the pinned daily archive
+rows (daqmt preClose chain; first row's T-1 = 2025-10-22 close 23.36 in the
+pinned kimi daily CSV, now also a derivation input via `ths_daily`). The
+2026-07-06 after-hours rule change postdates the window and is not an anchor.
+`ordinary_listing=true` is the Human-approved window coverage (non-ST, zero
+corporate actions, no 3.4.13 first-day exception). `approved_rule_version`
+keeps its string and now has an approval record behind it. Both proofs bind all
+seven derivation inputs plus the `daqmt_detail` corroboration, and remain
+distinct issuers. Calendar/actions/marks attestation, the host recipe, lake
+identity/coverage and the fresh freeze are **still** separate prerequisites —
+follow the [host checklist in ingress §9.3.1](../../note-l2-lake-source-ingress-b-l2-01-2026-09-29.md#931-r4-instruments-宿主补证清单2026-09-30)
+for what remained, and §9.5 for the freeze order. **Fixture PASS ≠ lake PASS;
+`r4_authorized` stays `false`.**
 
 ## Status and lake boundary
 
@@ -100,10 +115,16 @@ data or relabel this bundle as a ready recipe.
 
 ## Pins, reconstruction and later host registration
 
-[inputs.json](inputs.json) pins twelve saved #1111 inputs. Git LF bytes differ
+[inputs.json](inputs.json) pins twelve saved #1111 inputs, plus two host
+materials from OSkhQuant1.3 PR #1112 (commit
+`d0edd384e9bd7fc0029b380e8850920539c46a95`, directory
+`docs/evidence/b_l2_r4_host_materials_draft_20260930`) under `host_materials`,
+plus the bytes SHA-256 of the host approval record under `host_approval_sha256`.
+Git LF bytes differ
 from original Windows CRLF bytes for daqmt artifacts. Both verified hashes are
 recorded explicitly; `read_inputs` accepts only one of those exact hashes and
 verifies newline-only equivalence. It does not accept arbitrary normalized data.
+The two host-material markdown files are pinned by exact LF bytes only.
 
 | Raw input | #1111 host SHA-256 | Git LF SHA-256 |
 |---|---|---|
@@ -113,7 +134,8 @@ verifies newline-only equivalence. It does not accept arbitrary normalized data.
 | zero-volume rows | `e974fa22d58c6596b61f3a765f798419a3ffc39bd45acb877f4478190cdc8643` | `992e00c523ca0479f70ff6fc9caa171ec062e0b95c94aace97ac53b12974d405` |
 | THS daily | `6a7effd00a0d1d3533b5adb820644d57f19605c7d9cf9b9276c82f207a5fbf05` | same |
 
-Git LF inputs are vendored under `tests/fixtures/bl2_attestation_remap_upstream/` for pytest `remap.py --check`; host originals remain with #1111 / the host. `sources/*.json` are pinned row
+Git LF inputs are vendored under `tests/fixtures/bl2_attestation_remap_upstream/` for pytest `remap.py --check` (including the two
+`sse_rule_archive/*.md` host materials); host originals remain with #1111 / #1112 / the host. `sources/*.json` are pinned row
 excerpts with original paths, commit, hashes, and extraction descriptions. CSV
 values remain strings and row indices are zero-based excluding the header.
 JSON fractional numbers are parsed as Decimal from the pinned source text and
@@ -126,7 +148,9 @@ parse error does not make incomplete instrument proofs or attestations loadable.
 The minute excerpt keeps only datetime/time/volume/suspendFlag, preserving all
 2,169 row positions. The loader accepts JSON/Parquet, so proof `source_refs`
 point to these JSON excerpts, not unsupported CSV descriptors. Each excerpt has
-its own schema and byte hash in [manifest.json](manifest.json).
+its own schema and byte hash in [manifest.json](manifest.json). Markdown
+excerpts (`sse_rule`, `clause_excerpts`, `host_approval`) keep one UTF-8 line
+per row with zero-based line indices.
 
 With explicit approved Python and local copies of the pinned inputs:
 
@@ -135,13 +159,16 @@ With explicit approved Python and local copies of the pinned inputs:
   --source-dir /path/to/saved/src1111_tree --human-go /path/to/HUMAN_GO.md --check
 ```
 
+`--host-approval` pins the approval record and defaults to the checked-in
+[HOST_R4_INSTRUMENTS_APPROVAL_20260930.md](HOST_R4_INSTRUMENTS_APPROVAL_20260930.md).
 `--output-dir /new/offline/directory` writes a new directory instead of checking;
 existing destinations are rejected. No network, market download, resolver, lake
 write, or research runner is called. Checked-in compact JSON retains every
 minute row, so no generator execution is necessary just to review the bundle.
 
-Later, after separate authorization, the host must review and fill the blockers,
-copy the files, and translate catalog paths into resolved absolute sidecar paths.
+Later, after separate authorization, the host must review the countersigned
+approval record, copy the files, and translate catalog paths into resolved
+absolute sidecar paths.
 Register every artifact's exact schema/hash/source ID. `claims.units.proofs` uses
 `proof_units`; instruments uses both `proof_instruments_sse` and
 `proof_instruments_wind`; status uses `proof_status`. Keep any source-ID changes
@@ -151,6 +178,9 @@ calendar, marks, actions, account, commands and full recipe/attestation freeze
 are still required; this catalog is not a recipe or an attestation.
 
 The validator change is `bl2_source_transform_v4` (package IDs remain v1).
+The 2026-09-30 instruments host fill changes evidence bytes only — the v4
+validator/contract is unchanged, so the transform version is deliberately not
+bumped (v3/v4 bumps tracked validator changes, not evidence fills).
 Ratio evidence requires the explicit basis, pinned structured Human marker,
 exact approved symbol/window/volume column/factor and four distinct raw sources.
 For `source_declaration`, the referenced raw observation must now contain
