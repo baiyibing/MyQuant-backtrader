@@ -234,9 +234,15 @@ def test_explicit_wall_encoding_preserves_old_epoch_instant(encoding, expected):
     assert source_loader._time(1761211800000, spec, "fixture").isoformat() == expected
 
 
-@pytest.mark.parametrize("value", [True, "1761211800000", 1761211800000.0, None, 10**30])
-def test_wall_encoding_rejects_non_integer_or_overflow(value):
-    with pytest.raises(SourceContractError):
+@pytest.mark.parametrize("value, message", [
+    (True, "^fixture: wall epoch ms must be an integer$"),
+    ("1761211800000", "^fixture: wall epoch ms must be an integer$"),
+    (1761211800000.0, "^fixture: wall epoch ms must be an integer$"),
+    (None, "^fixture: wall epoch ms must be an integer$"),
+    (10**30, "^fixture: invalid timestamp: "),
+])
+def test_wall_encoding_rejects_non_integer_or_overflow(value, message):
+    with pytest.raises(SourceContractError, match=message):
         source_loader._time(value, {"encoding": "epoch_ms_wall_shanghai_as_utc",
                                    "timezone": "Asia/Shanghai", "label": "END"}, "fixture")
 

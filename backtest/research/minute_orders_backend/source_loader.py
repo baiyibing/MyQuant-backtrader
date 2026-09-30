@@ -314,6 +314,8 @@ def _time(value, spec, where):
     object_fields(spec, ("encoding", "timezone", "label"), where)
     require(spec["timezone"] == "Asia/Shanghai", f"{where}: unknown source timezone")
     encoding = spec["encoding"]
+    if encoding == _WALL_SHANGHAI_ENCODING:
+        require(type(value) is int, f"{where}: wall epoch ms must be an integer")
     try:
         if encoding == "iso_offset":
             return _timestamp(value, where)
@@ -328,7 +330,6 @@ def _time(value, spec, where):
             require(value.utcoffset() == timedelta(hours=8), f"{where}: unexpected source offset")
             return value.astimezone(_TZ)
         if encoding == _WALL_SHANGHAI_ENCODING:
-            require(type(value) is int, f"{where}: wall epoch ms must be an integer")
             utc_wall = datetime(1970, 1, 1, tzinfo=UTC) + timedelta(microseconds=value * 1000)
             return utc_wall.replace(tzinfo=None).replace(tzinfo=_TZ)
         require(encoding in ("epoch_s", "epoch_ms", "epoch_us"), f"{where}: unknown timestamp encoding")

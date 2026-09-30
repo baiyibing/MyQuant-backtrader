@@ -176,10 +176,15 @@ source's symbol/time/close mapping and matching final `end_at`; no new loader
 schema or price fallback is introduced. A 15:00 mark adds no execution bucket.
 
 Parquet SHA-256 `58879893f221bfe050b7a16029667c49fb65d8ec6f47592254e549374a577083`
-is a **saved identity note** from #1114. The substrate describes the parquet pin,
-row table and census agreement supporting legal 15:00 marks. This remap does not
-read parquet or census bytes: the manifest's `unbound_minute_source.sha256` stays
-null, and exports do not establish configured lake equivalence. No lake PASS.
+is a **saved identity** from #1114, also pinned for wall encoding by
+`time_encoding_approval.binding.source_sha256` in the
+[structured approval](sources/time_encoding_approval.json); the loader enforces
+that pin. The substrate describes the parquet pin, row table and census agreement
+supporting legal 15:00 marks. This remap does not read parquet or census bytes.
+The manifest's `unbound_minute_source.sha256` stays null because this catalog does
+not ship parquet bytes; the wall-encoding pin lives in the approval binding.
+The host must still configure/resolve lake identity/coverage and freshly freeze.
+Exports do not establish configured lake equivalence. No lake PASS.
 
 Source limitations are retained: ex_date_index's local `e8fe70ce…` snapshot is
 different from R3's `93c264ed…` pin; unchanged preClose/adj_factor are supporting
@@ -265,8 +270,12 @@ This attests the historical completed-bar model, not live feed arrival latency.
 Known availability after end must reject adaptation. File collection time is
 not event time; vendor timestamp fields only corroborate the field mapping,
 and `fill_data` zero-fill is not event-time or actual-trade proof. Vendor export
-does not establish lake identity. The census's saved parquet hash remains an
-identity note; `unbound_minute_source.sha256=null`, pending host pin/coverage.
+does not establish lake identity. `unbound_minute_source.sha256=null` means this
+catalog does not ship parquet bytes. Wall encoding still pins the saved parquet
+hash `58879893f221bfe050b7a16029667c49fb65d8ec6f47592254e549374a577083` via
+`time_encoding_approval.binding.source_sha256`, and the loader enforces it.
+The host must still configure/resolve lake identity/coverage and freshly freeze;
+this is not lake PASS.
 
 R4d-style runners register **all `manifest.artifacts`** as recipe sources, so
 the 51-entry manifest automatically supplies `proof_timing` and its sidecars.

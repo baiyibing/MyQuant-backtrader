@@ -304,8 +304,10 @@ def add_timing_package(pins, inputs, add, md_excerpt):
             "than bucket.end must reject adaptation; file collection time is not event time.",
             "fill_data zero-fill is not event-time proof or proof of actual trades. Vendor timestamp docs do not "
             "independently declare START/END; END comes from the pinned census and host materials map §1.1.",
-            "Vendor export != lake identity; the saved census parquet hash is an identity note only. "
-            "minute_603196 remains unbound; host must pin configured lake identity/coverage and freshly freeze.",
+            "Vendor export != lake identity. minute_603196 remains unbound only in the sense that this catalog "
+            "does not ship parquet bytes; wall encoding still pins "
+            f"{CAM_LAKE_SHA256} via time_encoding_approval.binding.source_sha256, enforced by the loader. "
+            "Host must still configure/resolve lake identity/coverage and freshly freeze.",
             "Proof covers bars/marks 2025-10-23..2025-11-04, not bars on next BUY calendar date 2025-11-05. "
             "A wider execution/mark window requires fresh coverage; calendar retains its separate next-day coverage.",
             "The old epoch_ms mapping still yields 17:30+08:00 and is not approved for this lake partition. "
@@ -783,7 +785,11 @@ def build(source_dir, human_go, host_approval=None, host_cam_approval=None, host
     catalog = {"source_repository": pins["repository"], "source_commit": pins["commit"],
                "notice": NOTICE, "r4_authorized": False, "lake_verdict": "NOT_RUN",
                "unbound_minute_source": {"id": MINUTE_SOURCE, "sha256": None,
-                                         "requirement": "Host must pin configured raw minute parquet; exports do not establish lake equivalence."},
+                                         "requirement": "Null sha256 means this catalog does not ship parquet bytes. "
+                                         "The wall-encoding pin lives in time_encoding_approval.binding.source_sha256 "
+                                         f"({CAM_LAKE_SHA256}), not in this field, and the loader enforces it. "
+                                         "Host must still configure/resolve lake identity/coverage and freshly freeze; "
+                                         "exports do not establish lake equivalence."},
                "unresolved": ["account/commands and scoped attestation require host recipe review and registration",
                               "host recipe, lake identity/coverage and fresh freeze; r4_authorized stays false"],
                "transform_version": "bl2_source_transform_v5",

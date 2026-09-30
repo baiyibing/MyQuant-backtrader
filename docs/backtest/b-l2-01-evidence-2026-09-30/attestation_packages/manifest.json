@@ -7,7 +7,7 @@
   "unbound_minute_source": {
     "id": "minute_603196",
     "sha256": null,
-    "requirement": "Host must pin configured raw minute parquet; exports do not establish lake equivalence."
+    "requirement": "Null sha256 means this catalog does not ship parquet bytes. The wall-encoding pin lives in time_encoding_approval.binding.source_sha256 (58879893f221bfe050b7a16029667c49fb65d8ec6f47592254e549374a577083), not in this field, and the loader enforces it. Host must still configure/resolve lake identity/coverage and freshly freeze; exports do not establish lake equivalence."
   },
   "unresolved": [
     "account/commands and scoped attestation require host recipe review and registration",
@@ -335,7 +335,7 @@
       "path": "timing.proof.json",
       "format": "json",
       "schema": "bl2_proof_v1",
-      "sha256": "9c53863353824c4bcc0ff37a787486a5b5c31d888bf922057910841efad385e0"
+      "sha256": "0300d4a1febacdfb391f3ad5e311daaec9c470c3643954df75e8798358fb1405"
     },
     {
       "id": "host_time_encoding_approval",
