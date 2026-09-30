@@ -1,7 +1,9 @@
-"""Data-free δ5 native/API comparator. Run --help for the external-only CLI.
+"""δ5 synthetic native/API comparator and certified-real source preflight.
 
 Fixture JSON contains source evidence/records, independently authored normalized
 native inputs, parameters, and a manual fill oracle. It is not source certification.
+--recipe validates pinned host inputs and maps them without invoking simulate.
+Its structural PASS leaves real_lake_run and every N/H matrix cell NOT_RUN.
 """
 
 from __future__ import annotations
@@ -29,6 +31,7 @@ from backtest.research.ashare_volume_cap import BucketVolume  # noqa: E402
 from backtest.research.delta5_volume_ingress import (  # noqa: E402
     FrozenProvider, IngressError, Inputs, digest, normalize, require,
 )
+from backtest.research import delta5_certified_source as certified  # noqa: E402
 
 CONTRACT = REPO_ROOT / "docs/backtest/note-delta5-real-volume-ingress-2026-09-29.md"
 MAPPING = REPO_ROOT / "backtest/research/delta5_volume_ingress.py"
@@ -183,21 +186,22 @@ def identity(path):
             "device": stat.st_dev, "inode": stat.st_ino, "mtime_ns": stat.st_mtime_ns}
 
 
-def read_fixture(path, expected_hash):
+def read_fixture(path, expected_hash, *, decoder=json.loads):
     before = identity(path)
     require(before["sha256"] == expected_hash, "identity", {"expected": expected_hash, "actual": before})
     payload = path.read_bytes()
     after = identity(path)
     require(before == after and hashlib.sha256(payload).hexdigest() == expected_hash,
             "identity", "source changed during read")
-    return json.loads(payload), before
+    return decoder(payload), before
 
 
-def output_root(parent, run_id, input_root):
+def output_root(parent, run_id, input_root, extra_roots=()):
     require(re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,79}", run_id), "output", "invalid run_id")
     require(parent.is_absolute(), "output", "explicit absolute external parent required")
     parent = parent.resolve()
     forbidden = [REPO_ROOT.resolve(), input_root.resolve()]
+    forbidden.extend(Path(path).resolve() for path in extra_roots)
     forbidden.extend(Path(os.environ[k]).resolve() for k in (
         "OSKH_SOURCE_PARQUET_ROOT", "OSKH_AUTHORITY_HINT_ROOT", "OSKH_DATA_ROOT",
         "OSKH_PERIOD_1D_ROOT", "OSKH_PERIOD_1M_ROOT", "TURNOVER_RESIST_DATA_DIR",
@@ -219,23 +223,54 @@ def write_json(path, value):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--fixture", type=Path, required=True, help="synthetic source + independent native + manual oracle JSON")
-    parser.add_argument("--fixture-sha256", required=True, help="pre-registered SHA-256 of the whole fixture")
+    inputs = parser.add_mutually_exclusive_group(required=True)
+    inputs.add_argument("--fixture", type=Path, help="synthetic source + independent native + manual oracle JSON")
+    inputs.add_argument("--recipe", type=Path, help="certified-real pinned recipe; mapping preflight only, no lake PASS")
+    parser.add_argument("--fixture-sha256", help="pre-registered SHA-256 of the whole fixture")
+    parser.add_argument("--recipe-sha256", help="pre-registered SHA-256 of the whole certified-real recipe")
     parser.add_argument("--human-go", type=Path, required=True)
+    parser.add_argument("--human-go-sha256", help="required pinned authority for --recipe")
     parser.add_argument("--external-parent", type=Path, required=True)
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--participation-rate", required=True, help="none, omitted, or explicit finite rate in [0,1]")
     args = parser.parse_args(argv)
+    path = args.recipe if args.recipe is not None else args.fixture
+    expected_hash = args.recipe_sha256 if args.recipe is not None else args.fixture_sha256
     receipt = {"schema": "d5_ingress_v1", "run_id": args.run_id, "status": "FAIL",
                "comparison_status": "no_ssot_compare_authorization", "production_C": "frozen",
-               "source_certification": "NOT_RUN", "real_lake_run": "NOT_RUN",
+               "source_certification": "NOT_RUN", "real_lake_run": "NOT_RUN", "host_attestation": "NOT_RUN",
                "cache": "no read/write shared minute cache; no new cache",
                "matrix": {cell: {"status": "NOT_RUN"} for cell in CELLS},
                "outputs": {}, "stage": "output"}
+    receipt["source"] = {"kind": "certified-real" if args.recipe is not None else "synthetic",
+                         "expected_sha256": expected_hash, "path": str(path.resolve())}
     root = None
     try:
-        root = output_root(args.external_parent, args.run_id, args.fixture.parent)
+        extra_roots = [args.human_go.resolve().parent] if args.recipe is not None else []
+        # Inspect locators before creating output: evidence may live away from recipe/lake.
+        # This is not acceptance; the pinned read and every evidence gate follow below.
+        if args.recipe is not None and path.is_file():
+            receipt["stage"] = "identity/parse"
+            receipt["source"]["before"] = identity(path)
+            try:
+                locators = certified.strict_json(path.read_bytes())
+            except (json.JSONDecodeError, UnicodeError, IngressError) as exc:
+                # Malformed JSON has no usable locators. Isolate from every known
+                # input/configured root before persisting its rejection receipt.
+                root = output_root(args.external_parent, args.run_id, path.parent, extra_roots)
+                raise IngressError("identity/parse", str(exc)) from exc
+            extra_roots.extend(certified.input_roots(locators))
+        receipt["stage"] = "output"
+        root = output_root(args.external_parent, args.run_id, path.parent, extra_roots)
         receipt["stage"] = "identity"
+        require(expected_hash is not None, "identity", "explicit input SHA-256 required")
+        if args.recipe is not None:
+            require(args.fixture_sha256 is None and args.human_go_sha256 is not None,
+                    "identity", "--recipe requires --recipe-sha256 and --human-go-sha256")
+            require(identity(args.human_go)["sha256"] == args.human_go_sha256,
+                    "identity", "human GO hash mismatch")
+        else:
+            require(args.recipe_sha256 is None, "identity", "recipe hash supplied for fixture")
         receipt["authority"] = {"contract_id": "D5-REAL-VOLUME-INGRESS-v1",
                                 "contract": identity(CONTRACT), "human_go": identity(args.human_go)}
         receipt["code"] = {"sha": subprocess.check_output(
@@ -245,31 +280,62 @@ def main(argv=None):
             "mapping": identity(MAPPING), "harness": identity(Path(__file__)),
             "python": sys.version, "executable": sys.executable,
             "dependencies": {"numpy": np.__version__, "pandas": pd.__version__}}
-        receipt["source"] = {"kind": "synthetic", "expected_sha256": args.fixture_sha256,
-                             "path": str(args.fixture.resolve())}
-        receipt["source"]["before"] = identity(args.fixture)
-        fixture, before = read_fixture(args.fixture, args.fixture_sha256)
+        receipt["code"]["certified_mapping"] = identity(Path(certified.__file__))
+        receipt["source"]["before"] = identity(path)
+        fixture, before = read_fixture(path, expected_hash,
+                                       decoder=certified.strict_json if args.recipe is not None else json.loads)
         receipt["stage"] = "participation_rate"
         rate = (OMITTED if args.participation_rate == "omitted" else
                 None if args.participation_rate == "none" else float(args.participation_rate))
         require(rate is OMITTED or rate is None or (np.isfinite(rate) and 0 <= rate <= 1),
                 "participation_rate", "expected none, omitted, or a finite rate in [0,1]")
-        receipt["stage"] = "preflight_compare"
-        result = compare(fixture, rate)
-        receipt["source"]["after"] = identity(args.fixture)
+        if args.recipe is not None:
+            receipt["stage"] = "certified_preflight"
+            require(fixture["schema"] == "d5_certified_recipe_v1" and
+                    fixture["source"]["kind"] == "certified-real", "schema", "certified-real recipe required")
+            # Recheck the pinned recipe's locators, not only the earlier preview.
+            for protected in certified.input_roots(fixture["source"]):
+                parent = args.external_parent.resolve()
+                require(not (parent.is_relative_to(protected) or protected.is_relative_to(parent)),
+                        "output", f"external parent overlaps pinned input root {protected}")
+            receipt["registered_source"] = fixture["source"]  # Assertions, not verified facts.
+            receipt["evidence_origin"] = fixture["source"].get("evidence_origin")
+            params = options(fixture["parameters"])
+            mapped = normalize(fixture["source"])
+            result = {"status": "PASS", "scope": "structure_and_mapping_only",
+                      "coverage": mapped.audit, "canonical_hash": mapped.audit["canonical_hash"],
+                      "parameters": {**raw(params), "participation_rate":
+                                     "omitted" if rate is OMITTED else rate}}
+            certified.verify_unchanged(mapped.audit["pinned_inputs"])
+            receipt.update(source_certification="verified", certification_scope="structure_and_pins_only",
+                           host_attestation="NOT_RUN", evidence_origin=fixture["source"]["evidence_origin"],
+                           execution="NOT_RUN; host attestation and separate 4090 Human re-GO required")
+        else:
+            receipt["stage"] = "preflight_compare"
+            require(fixture["source"]["kind"] == "synthetic", "source", "--fixture is synthetic-only; use --recipe")
+            result = compare(fixture, rate)
+        receipt["source"]["after"] = identity(path)
         require(receipt["source"]["after"] == before, "identity", "source changed during run")
+        require(identity(args.human_go) == receipt["authority"]["human_go"], "identity", "human GO changed during run")
         receipt["stage"] = "write"
-        for side in ("native", "harness"):
-            (root / side).mkdir()
-            write_json(root / side / "result.json", result[side])
-        write_json(root / "comparison.json", result)
-        cell = fixture["cell"]
-        require(cell in CELLS, "schema", "unknown matrix cell")
-        receipt["matrix"][cell] = {"status": result["status"], "layer": "N/H",
-                                  "scope": fixture["scope"], "remaining_subcases": "NOT_RUN"}
+        if args.recipe is not None:
+            write_json(root / "preflight.json", result)
+            receipt["preflight"] = {"status": "PASS", "scope": "structure_and_mapping_only"}
+        else:
+            for side in ("native", "harness"):
+                (root / side).mkdir()
+                write_json(root / side / "result.json", result[side])
+            write_json(root / "comparison.json", result)
+            cell = fixture["cell"]
+            require(cell in CELLS, "schema", "unknown matrix cell")
+            receipt["matrix"][cell] = {"status": result["status"], "layer": "N/H",
+                                      "scope": fixture["scope"], "remaining_subcases": "NOT_RUN"}
         receipt.update(status=result["status"], stage="complete", canonical_hash=result["canonical_hash"],
                        parameters=result["parameters"], coverage=result["coverage"])
     except Exception as exc:
+        if args.recipe is not None:
+            receipt["preflight"] = {"status": "REJECTED", "intentional_reject": isinstance(exc, IngressError)}
+            receipt["source_certification"] = "NOT_RUN"
         receipt["failure"] = {"type": type(exc).__name__, "message": str(exc),
                               "stage": getattr(exc, "stage", receipt["stage"]),
                               "detail": getattr(exc, "detail", None)}
