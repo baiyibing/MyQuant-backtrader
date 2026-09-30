@@ -61,5 +61,53 @@
       }
     }
   },
-  "host_approval_sha256": "dfa318e5d22dde2f6a18d01e471ec2bec93aaee994ec66b2bfa2cdea321cd694"
+  "host_approval_sha256": "dfa318e5d22dde2f6a18d01e471ec2bec93aaee994ec66b2bfa2cdea321cd694",
+  "cam_host_materials": {
+    "repository": "baiyibing/OSkhQuant1.3",
+    "commit": "42d066b81a083be49881f0dd8c5ab53ed4f422f6",
+    "directory": "docs/evidence/b_l2_r4_cam_host_materials_draft_20260930",
+    "files": {
+      "HOST_FILL_FORM_CAM.md": {
+        "git_sha256": "7eef7f430dd4ed6b056eff93943407e1c41fb2555de5c4a19b705039a2270423"
+      },
+      "README.md": {
+        "git_sha256": "f4a2b8bee220bca0d9cc271e52a615d00501357776682a9c0f9a8bbdbefee215"
+      },
+      "actions/cninfo_603196_announcements_analysis.md": {
+        "git_sha256": "b909a9bca343e1c88bcde0bdc095f54e56077c6275cc3a049f173d5526643ed0"
+      },
+      "actions/cninfo_603196_announcements_p1.json": {
+        "git_sha256": "f359976fa48dbfe28db4d0e80a07489a92358ca7fc4476cc689f50544fc532d4"
+      },
+      "actions/cninfo_603196_announcements_p2.json": {
+        "git_sha256": "a2c1eb49bb717332fc57b18b8f8abf7baf92e48466dfc6d053876d47d4abb7f2"
+      },
+      "actions/cninfo_603196_announcements_p3.json": {
+        "git_sha256": "3d8ba8bab9607daeee44a1dfef5e0baa43fc6ef75256623e17c2dfa31d8731f1"
+      },
+      "actions/ex_date_index_local_check.md": {
+        "git_sha256": "608a8e6a9ae5c99547c245d979c04c4b7c65746d11a328d3c5383762036f40cd"
+      },
+      "actions/preclose_chain_no_ex_adjustment.md": {
+        "git_sha256": "bffbdb4da289c01130acb82f5c3167ad9bba01f27cf01270ae6b644973f14833"
+      },
+      "calendar/calendar_cross_check.md": {
+        "git_sha256": "ca539772a69ade11609e449b5dff067f7f81aab7fa21ca7f32d2f0cc7d832c62"
+      },
+      "calendar/pmc_sse_calendar_20250901_20251231.txt": {
+        "git_sha256": "ee04c7384d5a96f8d4c3b13a1012dc8c0bcf13699f486e825d05e281ff2862cb"
+      },
+      "calendar/sse_holiday_notices_2025.md": {
+        "git_sha256": "33715e169b8f400e3731dab2ca27b6cfda4fc9850ad23c2f9a127df4c9c783ae"
+      },
+      "manifest.json": {
+        "git_sha256": "652602e4997529f68107294cc5694d92f090328065c0810408cc96202bd6fd4c"
+      },
+      "marks/minute_lake_marks_substrate.md": {
+        "git_sha256": "add5b9641e27edcd8d9a2fe53d12dbb0403487ff0f0f73c9b9199ccec51eb9bb"
+      }
+    }
+  },
+  "host_cam_approval_sha256": "19c3f778986e3b86e16b28644c526d1625134c52e0416e080fa4e51e41c752d1",
+  "human_go_cam_sha256": "e15c79acde154bd7163208f2bf0a156737a9f908ed3fb9f41b87b64d42c13feb"
 }

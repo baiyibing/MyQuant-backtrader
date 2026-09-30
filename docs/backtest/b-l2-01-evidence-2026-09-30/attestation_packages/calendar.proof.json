@@ -1,0 +1,43 @@
+{
+  "schema_version": "bl2_proof_v1",
+  "data": {
+    "issuer": "Human GO 2026-09-30 / #1114 CAM saved-material host fill",
+    "subject": "calendar",
+    "source_refs": [
+      "cam_pmc_calendar",
+      "cam_sse_holidays",
+      "cam_calendar_cross_check",
+      "host_cam_approval",
+      "human_go_cam"
+    ],
+    "filter": {
+      "symbols": [
+        "603196.SH"
+      ],
+      "from_date": "2025-10-23",
+      "through_date": "2025-11-05",
+      "predicate": "complete_trading_calendar; approved economic scope; pinned source rows/line indexes"
+    },
+    "result": {
+      "complete": true,
+      "summary": "complete_trading_calendar; Human「四格全批，开 packs」; saved #1114 observations plus the scoped coverage approval",
+      "rows": [
+    {"source":"cam_pmc_calendar","row":38,"observation":"2025-10-23: PMC/SSE trading date; first_day=2025-10-23; 2025-11-05 included as the next possible BUY trading date."},
+    {"source":"cam_pmc_calendar","row":39,"observation":"2025-10-24: PMC/SSE trading date; first_day=2025-10-23; 2025-11-05 included as the next possible BUY trading date."},
+    {"source":"cam_pmc_calendar","row":40,"observation":"2025-10-27: PMC/SSE trading date; first_day=2025-10-23; 2025-11-05 included as the next possible BUY trading date."},
+    {"source":"cam_pmc_calendar","row":41,"observation":"2025-10-28: PMC/SSE trading date; first_day=2025-10-23; 2025-11-05 included as the next possible BUY trading date."},
+    {"source":"cam_pmc_calendar","row":42,"observation":"2025-10-29: PMC/SSE trading date; first_day=2025-10-23; 2025-11-05 included as the next possible BUY trading date."},
+    {"source":"cam_pmc_calendar","row":43,"observation":"2025-10-30: PMC/SSE trading date; first_day=2025-10-23; 2025-11-05 included as the next possible BUY trading date."},
+    {"source":"cam_pmc_calendar","row":44,"observation":"2025-10-31: PMC/SSE trading date; first_day=2025-10-23; 2025-11-05 included as the next possible BUY trading date."},
+    {"source":"cam_pmc_calendar","row":45,"observation":"2025-11-03: PMC/SSE trading date; first_day=2025-10-23; 2025-11-05 included as the next possible BUY trading date."},
+    {"source":"cam_pmc_calendar","row":46,"observation":"2025-11-04: PMC/SSE trading date; first_day=2025-10-23; 2025-11-05 included as the next possible BUY trading date."},
+    {"source":"cam_pmc_calendar","row":47,"observation":"2025-11-05: PMC/SSE trading date; first_day=2025-10-23; 2025-11-05 included as the next possible BUY trading date."}
+  ]
+    },
+    "limitations": [
+      "Remapped draft only; structural checks != lake PASS; R3 BLOCKED/NOT_RUN; R4 needs separate Human「开 R4」; production_C=frozen.",
+      "SSE notices are the independent holiday anchor; PMC supplies the ordered dates. The census is corroboration only; dates are not inferred from bar presence or weekdays.",
+      "Human confirms no initial lot acquired before first_day=2025-10-23; a changed recipe economic window requires fresh calendar/actions coverage review."
+    ]
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "schema_version": "bl2_proof_v1",
+  "data": {
+    "issuer": "Human GO 2026-09-30 / #1114 CAM saved-material host fill",
+    "subject": "marks",
+    "source_refs": [
+      "cam_marks_substrate",
+      "daqmt_1d",
+      "ths_daily",
+      "host_cam_approval",
+      "human_go_cam"
+    ],
+    "filter": {
+      "symbols": [
+        "603196.SH"
+      ],
+      "from_date": "2025-10-23",
+      "through_date": "2025-11-04",
+      "predicate": "raw_contemporaneous_grid; approved economic scope; pinned source rows/line indexes"
+    },
+    "result": {
+      "complete": true,
+      "summary": "raw_contemporaneous_grid; Human「四格全批，开 packs」; saved #1114 observations plus the scoped coverage approval",
+      "rows": [
+    {"source":"cam_marks_substrate","row":14,"observation":"spot_20251023_close: 603196.SH; event_time=2025-10-23T15:00:00+08:00; available_at=event_time=2025-10-23T15:00:00+08:00; zero-based absolute parquet row=46753, time column=time, price column=close, raw close=23.89; saved parquet SHA-256 58879893f221bfe050b7a16029667c49fb65d8ec6f47592254e549374a577083. Substrate records row-table/census agreement; configured minute source remains unbound."},
+    {"source":"cam_marks_substrate","row":22,"observation":"final: 603196.SH; event_time=2025-11-04T15:00:00+08:00; available_at=event_time=2025-11-04T15:00:00+08:00; zero-based absolute parquet row=48681, time column=time, price column=close, raw close=22.96; saved parquet SHA-256 58879893f221bfe050b7a16029667c49fb65d8ec6f47592254e549374a577083. Substrate records row-table/census agreement; configured minute source remains unbound."}
+  ]
+    },
+    "limitations": [
+      "Remapped draft only; structural checks != lake PASS; R3 BLOCKED/NOT_RUN; R4 needs separate Human「开 R4」; production_C=frozen.",
+      "Human approves the candidate grid; this implementation selects the first-day explicit close as the independent spot-check and the required final close. Both are direct substrate rows.",
+      "available_at=event_time is the approved minute-label convention. The saved substrate describes parquet pin + row table + census agreement for legal 15:00 marks; no local parquet or census verification is claimed. These marks add no execution buckets.",
+      "Host must bind the configured minute source, preserve the loader's time/close mapping, register this approved grid and re-freeze the scoped attestation. The grid document and source exports do not establish lake equivalence or lake PASS."
+    ]
+  }
+}

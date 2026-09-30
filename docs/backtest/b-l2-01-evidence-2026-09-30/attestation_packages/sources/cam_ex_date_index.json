@@ -1,0 +1,54 @@
+{
+  "schema_version": "bl2_raw_excerpt_v1",
+  "data": {
+    "origin": {
+      "repository": "baiyibing/OSkhQuant1.3",
+      "commit": "42d066b81a083be49881f0dd8c5ab53ed4f422f6",
+      "path": "docs/evidence/b_l2_r4_cam_host_materials_draft_20260930/actions/ex_date_index_local_check.md",
+      "git_sha256": "608a8e6a9ae5c99547c245d979c04c4b7c65746d11a328d3c5383762036f40cd"
+    },
+    "extraction": {
+      "method": "UTF-8 markdown lines, order unchanged, one row per line",
+      "row_index": "zero-based line number"
+    },
+    "limitation": "Pinned #1114 saved material; original DRAFT wording preserved. Human's four-cell approval is recorded separately in host_cam_approval. No local market-source retrieval or lake verification.",
+    "rows": [
+    {"line":0,"text":"# ex_date_index 本机复核（DRAFT）"},
+    {"line":1,"text":""},
+    {"line":2,"text":"> 用途：actions claim 的除权除息执行数据源复核。仓内草稿 `raw_corporate_actions_603196SH_window.json`（pin `E:\\stock_data\\ex_date_index.parquet`，sha256 `93c264ed…`，57867 行，2025-09-01..2025-12-31 零命中）为 R3 host 侧产物；本文件为 2026-09-30 在 win11 数据盘（F:，hive 三树同型）上的独立复核。"},
+    {"line":3,"text":""},
+    {"line":4,"text":"## 复核对象"},
+    {"line":5,"text":""},
+    {"line":6,"text":"- 文件：`F:\\stock_data\\ex_date_index.parquet`"},
+    {"line":7,"text":"- 本机 sha256：`e8fe70ce856a37228c14c40067b94b1f5793da3cff32b0d699515e53b96cbedc`（57846 行，列 `stock_code/ex_date/dr/fetched_at`，fetched_at=2026-07-09）"},
+    {"line":8,"text":"- ⚠️ 与 pin 的 `93c264ed…`（57867 行）**不是同一字节版本**——湖文件 2026-07-09 重抓过。pin 版本的零命中结论以 R3 草稿为准；本复核在**更新版本**上独立重跑，结论一致（见下），属加强证据而非替代。"},
+    {"line":9,"text":""},
+    {"line":10,"text":"## 复核结果（2026-09-30，vanna312 + pyarrow）"},
+    {"line":11,"text":""},
+    {"line":12,"text":"603196.SH 全历史命中 8 行，全部在窗口之前："},
+    {"line":13,"text":""},
+    {"line":14,"text":"| ex_date | dr（复权因子） |"},
+    {"line":15,"text":"|---|---|"},
+    {"line":16,"text":"| 20180615 | 1.009416 |"},
+    {"line":17,"text":"| 20190614 | 1.011376 |"},
+    {"line":18,"text":"| 20200612 | 1.026595 |"},
+    {"line":19,"text":"| 20210610 | 1.010938 |"},
+    {"line":20,"text":"| 20220610 | 1.029032 |"},
+    {"line":21,"text":"| 20221207 | 1.019946 |"},
+    {"line":22,"text":"| 20230613 | 1.003508 |"},
+    {"line":23,"text":"| 20240614 | 1.002547 |"},
+    {"line":24,"text":""},
+    {"line":25,"text":"- **2025 全年命中 = 0**（含经济覆盖区间 [2025-10-23, 2025-11-04]）——历史规律为每年 6 月现金分红除息，2025 年无记录，窗口必然无事件。"},
+    {"line":26,"text":"- 与仓内草稿（pin 版本、2025-09-01..2025-12-31 零命中）结论一致；两版本快照横跨 2026-07 重抓，结论稳定。"},
+    {"line":27,"text":""},
+    {"line":28,"text":"## adj_factor 交叉（2026-09-30 补入，duckdb 谓词下推）"},
+    {"line":29,"text":""},
+    {"line":30,"text":"`F:\\stock_data\\adj_factor.parquet`（列 `date/stock_code/close_front/close_none/cumulative_adj_factor/adj_factor_back`）603196.SH 切片 2025-10-20..2025-11-06（14 个交易日）："},
+    {"line":31,"text":""},
+    {"line":32,"text":"- `cumulative_adj_factor` 全切片恒等于 **1.0**（distinct = [1.0]）——窗口及前后复权因子无任何跳变，无事件的量化旁证 ✓"},
+    {"line":33,"text":"- `close_none` 与 daqmt/kimi 日线收盘价 14/14 一致（10-22=23.36、10-23=23.89 … 11-04=22.96、11-05=22.55）——第四源价格交叉 ✓"},
+    {"line":34,"text":""},
+    {"line":35,"text":"四源互证齐备：ex_date_index 零命中 × cninfo 77 公告零行动 × preClose 链无调整 × adj_factor 恒 1.0。"}
+  ]
+  }
+}

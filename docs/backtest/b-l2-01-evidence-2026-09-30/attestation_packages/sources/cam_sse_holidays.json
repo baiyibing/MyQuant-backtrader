@@ -1,0 +1,55 @@
+{
+  "schema_version": "bl2_raw_excerpt_v1",
+  "data": {
+    "origin": {
+      "repository": "baiyibing/OSkhQuant1.3",
+      "commit": "42d066b81a083be49881f0dd8c5ab53ed4f422f6",
+      "path": "docs/evidence/b_l2_r4_cam_host_materials_draft_20260930/calendar/sse_holiday_notices_2025.md",
+      "git_sha256": "33715e169b8f400e3731dab2ca27b6cfda4fc9850ad23c2f9a127df4c9c783ae"
+    },
+    "extraction": {
+      "method": "UTF-8 markdown lines, order unchanged, one row per line",
+      "row_index": "zero-based line number"
+    },
+    "limitation": "Pinned #1114 saved material; original DRAFT wording preserved. Human's four-cell approval is recorded separately in host_cam_approval. No local market-source retrieval or lake verification.",
+    "rows": [
+    {"line":0,"text":"# SSE 官方休市安排存档（2025 年度）（DRAFT / host-review 待审）"},
+    {"line":1,"text":""},
+    {"line":2,"text":"> 用途：calendar claim（`complete_trading_calendar`）的权威独立锚——合同 §3 表要求「独立可核验交易日历……不得自然日+1、仅按有 bar 日或工作日猜测」。以下为交易所官方通知原文（检索时间 2026-09-30，Kimi agent 经 FetchURL 抓取）。"},
+    {"line":3,"text":""},
+    {"line":4,"text":"## 通知 1：年度安排（窗口前 10 个月发布）"},
+    {"line":5,"text":""},
+    {"line":6,"text":"- 来源：<https://www.sse.com.cn/disclosure/announcement/general/c/c_20241223_10767108.shtml>"},
+    {"line":7,"text":"- 文号：上证公告〔2024〕38号，发布日期 2024-12-23"},
+    {"line":8,"text":"- 标题：关于上海证券交易所2025年部分节假日休市安排的通知"},
+    {"line":9,"text":""},
+    {"line":10,"text":"原文（节选与窗口相关条款）："},
+    {"line":11,"text":""},
+    {"line":12,"text":"> （六）国庆节、中秋节：10月1日（星期三）至10月8日（星期三）休市，10月9日（星期四）起照常开市。另外，9月28日（星期日）、10月11日（星期六）为周末休市。"},
+    {"line":13,"text":""},
+    {"line":14,"text":"（全文另含元旦/春节/清明/劳动节/端午安排，与窗口无关，从略；检索文本完整保存于本文件历史版本。）"},
+    {"line":15,"text":""},
+    {"line":16,"text":"## 通知 2：国庆中秋专项公告（窗口前 4 周发布）"},
+    {"line":17,"text":""},
+    {"line":18,"text":"- 来源：<https://www.sse.com.cn/disclosure/announcement/general/c/c_20250925_10792976.shtml>"},
+    {"line":19,"text":"- 文号：上证公告〔2025〕36号，发布日期 2025-09-25"},
+    {"line":20,"text":"- 标题：关于2025年国庆节、中秋节休市安排的公告"},
+    {"line":21,"text":""},
+    {"line":22,"text":"原文："},
+    {"line":23,"text":""},
+    {"line":24,"text":"> 一、休市安排：10月1日（星期三）至10月8日（星期三）休市，10月9日（星期四）起照常开市。另外，9月28日（星期日）、10月11日（星期六）为周末休市。"},
+    {"line":25,"text":"> 二、有关清算事宜将根据中国证券登记结算有限责任公司的安排进行。"},
+    {"line":26,"text":""},
+    {"line":27,"text":"## 对窗口的含义（2025-10-23 ~ 2025-11-04）"},
+    {"line":28,"text":""},
+    {"line":29,"text":"1. 窗口位于国庆休市（10-01~10-08）结束之后、元旦之前，**两份官方通知中该区间无任何休市安排**；"},
+    {"line":30,"text":"2. 区间内 9 个日期全部为工作日（周一至周五），周末（10-25/26、11-01/02）自然休市；"},
+    {"line":31,"text":"3. 「末次可能 BUY 的下一交易日」2025-11-05（星期三）同样不在任何休市安排内；"},
+    {"line":32,"text":"4. 两份通知的发布日均**早于**窗口（2024-12-23 / 2025-09-25），满足「预公布、可核验」的独立性要求——日历事实在 run 发生前已由交易所官方确定。"},
+    {"line":33,"text":""},
+    {"line":34,"text":"## 保真说明"},
+    {"line":35,"text":""},
+    {"line":36,"text":"以上为官网正文提取文本（UTF-8）。人审时建议对照原 URL 复核后再 pin。状态：DRAFT，未经人审。"}
+  ]
+  }
+}

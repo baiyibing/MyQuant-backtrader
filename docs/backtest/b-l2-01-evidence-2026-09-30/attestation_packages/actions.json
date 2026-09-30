@@ -1,0 +1,15 @@
+{
+  "schema_version": "bl2_actions_v1",
+  "data": {
+    "symbols": [
+      "603196.SH"
+    ],
+    "from_date": "2025-10-23",
+    "through_date": "2025-11-04",
+    "complete": true,
+    "events": [],
+    "proofs": [
+      "proof_actions"
+    ]
+  }
+}

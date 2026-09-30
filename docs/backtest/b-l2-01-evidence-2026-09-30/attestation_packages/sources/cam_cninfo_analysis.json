@@ -1,0 +1,44 @@
+{
+  "schema_version": "bl2_raw_excerpt_v1",
+  "data": {
+    "origin": {
+      "repository": "baiyibing/OSkhQuant1.3",
+      "commit": "42d066b81a083be49881f0dd8c5ab53ed4f422f6",
+      "path": "docs/evidence/b_l2_r4_cam_host_materials_draft_20260930/actions/cninfo_603196_announcements_analysis.md",
+      "git_sha256": "b909a9bca343e1c88bcde0bdc095f54e56077c6275cc3a049f173d5526643ed0"
+    },
+    "extraction": {
+      "method": "UTF-8 markdown lines, order unchanged, one row per line",
+      "row_index": "zero-based line number"
+    },
+    "limitation": "Pinned #1114 saved material; original DRAFT wording preserved. Human's four-cell approval is recorded separately in host_cam_approval. No local market-source retrieval or lake verification.",
+    "rows": [
+    {"line":0,"text":"# cninfo 公告检索分析：603196（日播时尚→璞源材料）2025-06-01 ~ 2025-12-31（DRAFT）"},
+    {"line":1,"text":""},
+    {"line":2,"text":"> 用途：actions claim（`complete_no_company_actions`）的第二独立源。合同 §3.2：「空筛选 / 文件存在 ≠ 无事件」——本文件提供官方披露平台的逐条检索 + 关键词分析 + 覆盖声明底稿。"},
+    {"line":3,"text":"> 数据源：巨潮资讯网（证监会指定披露平台）`www.cninfo.com.cn/new/hisAnnouncement/query`，检索时间 2026-09-30。"},
+    {"line":4,"text":"> 原始返回：`cninfo_603196_announcements_p1.json` / `_p2.json` / `_p3.json`（3 页共 77 条，与 totalAnnouncement=77 一致）。"},
+    {"line":5,"text":""},
+    {"line":6,"text":"## 标的身份与名称连续性（重要）"},
+    {"line":7,"text":""},
+    {"line":8,"text":"603196 窗口期间的证券简称为**日播时尚**（日播时尚集团股份有限公司，2017 年主板上市）；2025 年内推进「发行股份及支付现金购买资产并募集配套资金暨关联交易」重组（2025-12-11 获上交所并购重组审核委员会通过，**晚于窗口**），其后更名**璞源材料**（cninfo orgId 9900031491 现名璞源材料；R3 证据包 kimi csv 现名璞源材料）。同一 6 位代码贯穿，价格序列连续。⚠️ 此前 R4 过程中曾误称「亚士创能」（603378），此处更正，人审注意。"},
+    {"line":9,"text":""},
+    {"line":10,"text":"## 检索结果"},
+    {"line":11,"text":""},
+    {"line":12,"text":"- 区间 2025-06-01..2025-12-31（覆盖经济覆盖区间 [2025-10-23, 2025-11-04] 及其前置公告期）：共 **77 条**。"},
+    {"line":13,"text":"- 行动类关键词扫描（分红｜权益分派｜送转｜配股｜除权｜除息｜派息｜资本公积转增｜增发｜利润分配）：**0 命中**。"},
+    {"line":14,"text":"- 停牌/复牌/更名/简称关键词扫描：**0 命中**（窗口内无停牌——与 status pack 的 suspendFlag=0、每日 241 分钟行互证）。"},
+    {"line":15,"text":"- 窗口内（2025-10-20..2025-11-10）全部公告仅 7 条，均为常规治理/定期报告：Q3 报告、Q3 经营数据、续聘会计师、董事会决议、业绩说明会通知、两项制度修订——无任何影响价格序列的事件。"},
+    {"line":16,"text":"- 重组相关公告（12 月注册稿等）性质为**新发股份购买资产**：不向存量股东摊派、不产生 除权/除息 价格调整（非配股/送转），且全部晚于窗口。"},
+    {"line":17,"text":""},
+    {"line":18,"text":"## 覆盖声明（底稿，待人审签署）"},
+    {"line":19,"text":""},
+    {"line":20,"text":"> 本检索覆盖 603196.SH 于经济覆盖区间 [2025-10-23, 2025-11-04] 及其前后各约两个月的公告全集（2025-06-01..2025-12-31，77/77 条逐条标题核验），未发现任何导致除权除息、停牌或证券变更的事件；区间内公司行动事件集为空（events=[]）。"},
+    {"line":21,"text":""},
+    {"line":22,"text":"## 局限"},
+    {"line":23,"text":""},
+    {"line":24,"text":"- 检索按公告标题关键词 + 窗口人工逐条，未逐份 PDF 全文 NLP；如需更高保证可抽查 Q3 报告「利润分配」章节。"},
+    {"line":25,"text":"- cninfo 为披露平台，除权除息**执行**数据以交易所/登记结算为准——由 `ex_date_index` 独立源（`ex_date_index_local_check.md`）与 daqmt preClose 链（`preclose_chain_no_ex_adjustment.md`）交叉覆盖。"}
+  ]
+  }
+}
