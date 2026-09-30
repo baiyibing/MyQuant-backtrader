@@ -6,7 +6,8 @@ approval record, available_at, ordinary_listing) is bound to pinned inputs in
 inputs.json and HOST_R4_INSTRUMENTS_APPROVAL_20260930.md. The #1114 CAM
 materials and HOST_R4_CAM_APPROVAL_20260930.md fill calendar/actions/marks
 evidence only. The timing fill uses pinned MyQuant census/map/vendor excerpts;
-r4_authorized stays false. The named wall-time encoding approval requires v5.
+r4_authorized stays false. Transform v6 adds explicit bounded double-price
+cent quantization; the named wall-time encoding and its approval stay unchanged.
 """
 
 import argparse
@@ -207,6 +208,8 @@ def extract_timing_materials(materials, originals):
                    "fill_data zero-fill is not event-time proof; collected_at is file collection, not event time.")
     lines = originals[TIMING_MAP].decode("utf-8").splitlines()
     stop = next(index for index, line in enumerate(lines) if line.startswith("### 1.2 "))
+    # Preserve the historical v5 limitation bytes: this excerpt is a leaf of
+    # the existing time-encoding approval hash. Active pins/limitations use v6.
     result["timing_materials_map.json"] = excerpt(TIMING_MAP,
         [{"line": index, "text": line} for index, line in enumerate(lines[:stop])],
         {"method": "UTF-8 lines from header through section 1.1, excluding section 1.2; original zero-based line retained."},
@@ -311,8 +314,10 @@ def add_timing_package(pins, inputs, add, md_excerpt):
             "Proof covers bars/marks 2025-10-23..2025-11-04, not bars on next BUY calendar date 2025-11-05. "
             "A wider execution/mark window requires fresh coverage; calendar retains its separate next-day coverage.",
             "The old epoch_ms mapping still yields 17:30+08:00 and is not approved for this lake partition. "
-            "Use epoch_ms_wall_shanghai_as_utc with the pinned source/column/window approval; v5 requires fresh "
-            "implementation/recipe/attestation pins. No new lake run, Clock or economic-semantics change."]})
+            "Use epoch_ms_wall_shanghai_as_utc with the pinned source/column/window approval; v6 requires fresh "
+            "implementation/recipe/attestation pins. No new lake run and no Clock/Fees/MatchCore edits; "
+            "v6 only changes double→Decimal price admission via attested bound cent quantize "
+            "(see manifest.price_conversion / packs README), not tick size or fee math."]})
 
 
 def add_time_encoding_package(pins, inputs, artifacts, add, md_excerpt):
@@ -351,7 +356,7 @@ def add_time_encoding_package(pins, inputs, artifacts, add, md_excerpt):
         "observation": "Human A GO: epoch_ms_wall_shanghai_as_utc for pinned minute_603196 time:int64, "
                        "603196.SH 2025-10-23..2025-11-04; UTC wall components stamped Asia/Shanghai, "
                        "no offset arithmetic. Saved Kimi census reports 2169 rows / zero violations; "
-                       "HOST approval and all source materials are byte-bound. Fresh v5 freeze required."})
+                       "HOST approval and all source materials are byte-bound. Fresh v6 freeze required."})
     proof["result"]["summary"] += "; epoch_ms_wall_shanghai_as_utc bound to source/column/window and Human A HOST approval"
 
 
@@ -502,7 +507,7 @@ def add_cam_packages(pins, inputs, add, md_excerpt):
     add("marks", "marks.json", "bl2_marks_grid_v1", {
         "subject": "marks", "conclusion": "raw_contemporaneous_grid",
         "purpose": "Host-facing approved grid document; not a loader role or a frozen recipe.",
-        "approval_id": CAM_APPROVAL_ID, "transform_version": "bl2_source_transform_v5",
+        "approval_id": CAM_APPROVAL_ID, "transform_version": "bl2_source_transform_v6",
         "time": {"encoding": TIME_ENCODING, "timezone": "Asia/Shanghai", "label": "END"},
         "source_identity_note": {"source": MINUTE_SOURCE, "sha256": CAM_LAKE_SHA256,
                                  "binding_status": "unbound_minute_source",
@@ -803,9 +808,20 @@ def build(source_dir, human_go, host_approval=None, host_cam_approval=None, host
                                          f"({CAM_LAKE_SHA256}), not in this field, and the loader enforces it. "
                                          "Host must still configure/resolve lake identity/coverage and freshly freeze; "
                                          "exports do not establish lake equivalence."},
-               "unresolved": ["status continuous trim is Clock-aligned (237/day, 2133 rows); account/commands and scoped attestation require host recipe review and registration",
+               "unresolved": ["v6 double-price cent-align transform implemented and attested; no fresh host freeze or lake PASS claimed",
+                              "status continuous trim is Clock-aligned (237/day, 2133 rows); account/commands and scoped attestation require host recipe review and registration",
                               "host recipe, lake identity/coverage and fresh freeze; r4_authorized stays false"],
-               "transform_version": "bl2_source_transform_v5",
+               "transform_version": "bl2_source_transform_v6",
+               "price_conversion": {
+                   "rule": "double_repr_cent_quantize_v1", "source_type": "double",
+                   "targets": ["bucket.close", "mark.price"], "quantum": "0.01",
+                   "rounding": "ROUND_HALF_EVEN", "max_abs_residue": "1E-9",
+                   "behavior": "Decimal(repr(float)); retain cent-aligned values; quantize only when absolute "
+                               "residue <= bound, otherwise SourceContractError; exact Decimal/string/int "
+                               "prices unchanged; volume remains exact integer shares",
+                   "audit": "original, decimal_text, residue, max_abs_residue, rounding, rule, quantized; "
+                            "quantized_text when changed",
+                   "human_go_sha256": "45ba9a99ec4d09fdb4c73c5dc2e2bf3aa6115a2c7b6a374eed79bc5448b71729"},
                "artifacts": [{"id": identity, "path": filename, "format": "json", "schema": doc["schema_version"],
                               "sha256": digest(outputs[filename])} for filename, (identity, doc) in artifacts.items()]}
     outputs["manifest.json"] = encode(catalog)

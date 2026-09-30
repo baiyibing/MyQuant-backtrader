@@ -48,7 +48,7 @@
     {"source":"human_go_timing","row":3,"observation":"Human「开修」authorizes this timing packs-only repair of the R4d missing id."},
     {"source":"opening_auction","row":0,"observation":"Existing #1111 2025-10-23 09:30 opening-auction observation corroborates the boundary; it remains off-grid, and vendor export does not establish lake equivalence."},
     {"source":"daqmt_1m","row":0,"observation":"Pinned #1111 vendor export has time=1761183000000 and datetime=2025-10-23 09:30:00+08:00, consistent with the existing epoch_ms decoder. This differs by 28800000 ms from the map's example; do not substitute vendor time for lake identity."},
-    {"source":"time_encoding_approval","row":0,"observation":"Human A GO: epoch_ms_wall_shanghai_as_utc for pinned minute_603196 time:int64, 603196.SH 2025-10-23..2025-11-04; UTC wall components stamped Asia/Shanghai, no offset arithmetic. Saved Kimi census reports 2169 rows / zero violations; HOST approval and all source materials are byte-bound. Fresh v5 freeze required."}
+    {"source":"time_encoding_approval","row":0,"observation":"Human A GO: epoch_ms_wall_shanghai_as_utc for pinned minute_603196 time:int64, 603196.SH 2025-10-23..2025-11-04; UTC wall components stamped Asia/Shanghai, no offset arithmetic. Saved Kimi census reports 2169 rows / zero violations; HOST approval and all source materials are byte-bound. Fresh v6 freeze required."}
   ]
     },
     "limitations": [
@@ -58,7 +58,7 @@
       "fill_data zero-fill is not event-time proof or proof of actual trades. Vendor timestamp docs do not independently declare START/END; END comes from the pinned census and host materials map §1.1.",
       "Vendor export != lake identity. minute_603196 remains unbound only in the sense that this catalog does not ship parquet bytes; wall encoding still pins 58879893f221bfe050b7a16029667c49fb65d8ec6f47592254e549374a577083 via time_encoding_approval.binding.source_sha256, enforced by the loader. Host must still configure/resolve lake identity/coverage and freshly freeze.",
       "Proof covers bars/marks 2025-10-23..2025-11-04, not bars on next BUY calendar date 2025-11-05. A wider execution/mark window requires fresh coverage; calendar retains its separate next-day coverage.",
-      "The old epoch_ms mapping still yields 17:30+08:00 and is not approved for this lake partition. Use epoch_ms_wall_shanghai_as_utc with the pinned source/column/window approval; v5 requires fresh implementation/recipe/attestation pins. No new lake run, Clock or economic-semantics change."
+      "The old epoch_ms mapping still yields 17:30+08:00 and is not approved for this lake partition. Use epoch_ms_wall_shanghai_as_utc with the pinned source/column/window approval; v6 requires fresh implementation/recipe/attestation pins. No new lake run and no Clock/Fees/MatchCore edits; v6 only changes double→Decimal price admission via attested bound cent quantize (see manifest.price_conversion / packs README), not tick size or fee math."
     ]
   }
 }

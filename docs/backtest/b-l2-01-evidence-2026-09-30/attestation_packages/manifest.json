@@ -10,10 +10,25 @@
     "requirement": "Null sha256 means this catalog does not ship parquet bytes. The wall-encoding pin lives in time_encoding_approval.binding.source_sha256 (58879893f221bfe050b7a16029667c49fb65d8ec6f47592254e549374a577083), not in this field, and the loader enforces it. Host must still configure/resolve lake identity/coverage and freshly freeze; exports do not establish lake equivalence."
   },
   "unresolved": [
+    "v6 double-price cent-align transform implemented and attested; no fresh host freeze or lake PASS claimed",
     "status continuous trim is Clock-aligned (237/day, 2133 rows); account/commands and scoped attestation require host recipe review and registration",
     "host recipe, lake identity/coverage and fresh freeze; r4_authorized stays false"
   ],
-  "transform_version": "bl2_source_transform_v5",
+  "transform_version": "bl2_source_transform_v6",
+  "price_conversion": {
+    "rule": "double_repr_cent_quantize_v1",
+    "source_type": "double",
+    "targets": [
+      "bucket.close",
+      "mark.price"
+    ],
+    "quantum": "0.01",
+    "rounding": "ROUND_HALF_EVEN",
+    "max_abs_residue": "1E-9",
+    "behavior": "Decimal(repr(float)); retain cent-aligned values; quantize only when absolute residue <= bound, otherwise SourceContractError; exact Decimal/string/int prices unchanged; volume remains exact integer shares",
+    "audit": "original, decimal_text, residue, max_abs_residue, rounding, rule, quantized; quantized_text when changed",
+    "human_go_sha256": "45ba9a99ec4d09fdb4c73c5dc2e2bf3aa6115a2c7b6a374eed79bc5448b71729"
+  },
   "artifacts": [
     {
       "id": "daqmt_1m",
@@ -286,7 +301,7 @@
       "path": "marks.json",
       "format": "json",
       "schema": "bl2_marks_grid_v1",
-      "sha256": "a4fc3700213984969f82c555ccc014e00b9ed29876db949b69a8c5d3b78daa00"
+      "sha256": "ae2229466221ce3b528eb53b07719ed4680bca12e6173e07897aeff3e53531e9"
     },
     {
       "id": "proof_marks",
@@ -335,7 +350,7 @@
       "path": "timing.proof.json",
       "format": "json",
       "schema": "bl2_proof_v1",
-      "sha256": "0300d4a1febacdfb391f3ad5e311daaec9c470c3643954df75e8798358fb1405"
+      "sha256": "74a741e88bb903c6f811150d6fc97eaa8b9ddcc3a5f159acde022c8dc41d04ab"
     },
     {
       "id": "host_time_encoding_approval",

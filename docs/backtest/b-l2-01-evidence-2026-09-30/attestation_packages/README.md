@@ -9,6 +9,46 @@ They are drafts for a later, separately authorized 4090 copy into
 **R3 stays BLOCKED/NOT_RUN; R4 needs separate Human「开 R4」; production_C=frozen.**
 No lake writes, MatchCore/Fees/SSOT changes, execution, or host certification.
 
+R4h cent-align fix (2026-09-30, Human **「开修」via bt**): baseline
+`0f009aed5f7132ae9aed93e44fd74d3d844c35b8` (#280) reached BrokerCore with
+**`FeeContractError: bucket close must be cent-aligned; no implicit rounding`**.
+The supplied `/workspace/handoffs/b_l2_r4_cent_align_20260930/HUMAN_GO.md`
+has SHA-256 `45ba9a99ec4d09fdb4c73c5dc2e2bf3aa6115a2c7b6a374eed79bc5448b71729`;
+the adjacent `DIAGNOSIS.md` traces parquet double → `Decimal(repr(float))` →
+`money_cents`. The saved [lake census](sources/timing_lake_census.json) records
+`23.310000000000002` at 13:01 and `23.830000000000002` at 14:57 on 2025-10-23.
+Those representations are not cent-aligned; the Fees rejection is correct.
+
+The active transform is now **`bl2_source_transform_v6`**. For pinned parquet
+`double` prices only, **`double_repr_cent_quantize_v1`** starts with
+`Decimal(repr(float))`, retains already cent-aligned values, and otherwise
+quantizes to `Decimal("0.01")` using **`ROUND_HALF_EVEN`** only when the absolute
+residue is **≤ `Decimal("1e-9")` yuan**. This explicit bound accepts the observed
+`2e-15` noise and is far below `0.005`; `10.001` fails early with
+`SourceContractError` naming the rule. The rule uses its own Decimal context,
+independent of caller precision, rounding and traps. Bars and marks share the
+same price helper. Exact Decimal/string/int paths preserve their values;
+true sub-cents still fail validation. Volume remains exact integer shares.
+
+Each double-price conversion records `original`, `decimal_text`, `residue`,
+`max_abs_residue`, `rounding`, `rule`, and `quantized`, plus `quantized_text` when
+changed, in bar/mark provenance. [manifest.json](manifest.json) attests the rule,
+bound and GO hash. Fees, BrokerCore admission, MatchCore, Ledger and Clock stay
+unchanged. Wall encoding stays **`epoch_ms_wall_shanghai_as_utc`**;
+**`r4_authorized=false`**, `production_C=frozen`. Existing units/CAM/timing/
+time-encoding Human GO files and the byte-pinned wall-encoding approval remain
+unchanged. Their historical v5 references (including the approval's pinned
+source excerpts) are preserved; living manifest/marks/recipe and proof
+limitations require v6.
+
+Cent-align implementation and offline attestation are complete; account/commands
+and scoped attestation still require host recipe review and registration.
+Host lake identity/coverage, a fresh implementation/runtime pin, recipe,
+attestation `scope_hash`, and fresh freeze remain outstanding. No freeze/lake
+PASS, R4h receipt rewrite, merge, or 4090/R4 dispatch is claimed or performed.
+Remaining Human steps: **Grok review → Human「合」→ land → Human「开 R4」**.
+Merge does not authorize R4.
+
 R4 fix update (Human「开修」, 2026-09-30): the separately authorized R4 host run
 on tip `5b4ef3e` returned **BLOCKED/NOT_RUN**. Its original receipt is unchanged.
 This fix removes bare JSON floats from remapped sources and tests the host-fill
@@ -75,7 +115,8 @@ The supplied GO at
 This packs-only knife trims status and matching proof bindings from **240×9=2160**
 to **237×9=2133**, matching the unchanged Clock bounds: morning
 `09:30 <= start < end <= 11:30`, afternoon `13:00 <= start < end <= 14:57`.
-Transform stays **`bl2_source_transform_v5`**, wall encoding stays
+That status-only change retained **`bl2_source_transform_v5`**; the R4h fix above
+now requires v6. Wall encoding stays
 **`epoch_ms_wall_shanghai_as_utc`**, and **`r4_authorized=false`**.
 The 15:00 marks remain legal and unchanged. R4g's receipt remains BLOCKED/NOT_RUN;
 no fresh freeze or lake PASS is claimed. No 4090/R4 dispatch or merge is performed.
@@ -312,7 +353,7 @@ claim pointed at a missing id reproduces the R4d failure. Host account/commands,
 full recipe review/registration, configured lake identity/coverage and fresh
 `attestation_scope(recipe)`/freeze remain required. This catalog supplies no
 partial recipe and does not reuse or rewrite the R4d attempt/receipt as PASS.
-The v5 implementation SHA/runtime, source descriptors, time mappings and scoped
+The v6 implementation SHA/runtime, source descriptors, time mappings and scoped
 attestation must all be freshly pinned; R4f recipe/attestation cannot be reused.
 
 ## Status and lake boundary
@@ -448,10 +489,10 @@ shown above. Account, commands and full recipe/attestation freeze still need
 host review and registration; this
 catalog is not a recipe or a scoped attestation.
 
-The current validator/decoder is `bl2_source_transform_v5` (package IDs remain v1).
+The current validator/decoder is `bl2_source_transform_v6` (package IDs remain v1).
 Earlier instruments, CAM and timing fills were evidence-only on v4; their saved
-approval records retain that historical version. The named encoding changes
-decoding and admission gates, so active manifest/marks/recipe pins now require v5.
+approval records retain that historical version. The named encoding introduced
+v5; the explicit double-price rule now requires v6 manifest/marks/recipe pins.
 Ratio evidence requires the explicit basis, pinned structured Human marker,
 exact approved symbol/window/volume column/factor and four distinct raw sources.
 For `source_declaration`, the referenced raw observation must now contain
@@ -461,4 +502,4 @@ as a declaration fails. Existing bar-alias independence checks remain active.
 Saved statement checks do not certify authenticity or confer lake PASS.
 
 Do not merge this PR without Human「合」. Merge does not authorize R4.
-Remaining Human steps: **Grok review → Human「合」→ land → named Human「开 R4g」**.
+Remaining Human steps: **Grok review → Human「合」→ land → Human「开 R4」**.

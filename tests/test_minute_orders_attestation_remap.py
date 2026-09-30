@@ -27,6 +27,28 @@ def document(name):
     return strict_json((PACK / name).read_bytes(), name)
 
 
+def test_cent_align_attestation_matches_loader_and_preserves_wall_approval():
+    manifest = document("manifest.json")
+    rule = manifest["price_conversion"]
+    assert manifest["transform_version"] == "bl2_source_transform_v6"
+    assert manifest["r4_authorized"] is False and manifest["lake_verdict"] == "NOT_RUN"
+    assert rule["human_go_sha256"] == "45ba9a99ec4d09fdb4c73c5dc2e2bf3aa6115a2c7b6a374eed79bc5448b71729"
+    assert rule["targets"] == ["bucket.close", "mark.price"]
+    for value in (23.310000000000002, 23.830000000000002):
+        price, audit = source_loader._price_decimal(value, rule["source_type"], "census close")
+        assert audit["rule"] == rule["rule"] == "double_repr_cent_quantize_v1"
+        assert audit["max_abs_residue"] == rule["max_abs_residue"] == "1E-9"
+        assert audit["rounding"] == rule["rounding"] == "ROUND_HALF_EVEN"
+        assert price.as_tuple().exponent == Decimal(rule["quantum"]).as_tuple().exponent == -2
+    assert document("marks.json")["data"]["transform_version"] == manifest["transform_version"]
+    assert document("marks.json")["data"]["time"]["encoding"] == "epoch_ms_wall_shanghai_as_utc"
+    assert sha256((PACK / "sources/time_encoding_approval.json").read_bytes()) == (
+        "8fedbb2833675a18c9d434f0c38592b2fd2f74e24cb08a283aeeeecb0b8f71b7")
+    assert any("cent-align transform implemented" in gap for gap in manifest["unresolved"])
+    assert any("account/commands" in gap for gap in manifest["unresolved"])
+    assert any("host recipe, lake identity/coverage and fresh freeze" in gap for gap in manifest["unresolved"])
+
+
 @pytest.fixture
 def ratio_case(tmp_path, monkeypatch):
     case = SyntheticCase(tmp_path, monkeypatch)
@@ -219,7 +241,7 @@ def test_status_continuous_grid_matches_fixture_and_timing_census(remapper):
         assert (len(morning), morning[0], morning[-1]) == (120, "09:31", "11:30")
         assert (len(afternoon), afternoon[0], afternoon[-1]) == (117, "13:01", "14:57")
     assert pins["status_grid_revision"]["human_go_sha256"] == "d06b01b536dbd8b4c5a13eaf72ceca703ed84bc528d70de75bfc446cc35390d8"
-    assert document("manifest.json")["transform_version"] == "bl2_source_transform_v5"
+    assert document("manifest.json")["transform_version"] == "bl2_source_transform_v6"
     assert document("manifest.json")["r4_authorized"] is False
 
 
@@ -416,7 +438,7 @@ def test_cam_calendar_actions_and_marks_are_scoped_saved_observations():
     assert all(page["page_metadata"]["totalpages"] == 2 for page in pages)  # Preserve upstream inconsistency.
     marks = document("marks.json")["data"]
     assert marks["subject"] == "marks" and marks["conclusion"] == "raw_contemporaneous_grid"
-    assert marks["transform_version"] == "bl2_source_transform_v5"
+    assert marks["transform_version"] == "bl2_source_transform_v6"
     assert marks["time"] == {"encoding": "epoch_ms_wall_shanghai_as_utc", "timezone": "Asia/Shanghai", "label": "END"}
     assert marks["source_identity_note"]["sha256"] == "58879893f221bfe050b7a16029667c49fb65d8ec6f47592254e549374a577083"
     assert marks["source_identity_note"]["binding_status"] == "unbound_minute_source"
@@ -640,7 +662,7 @@ def test_time_encoding_approval_binds_real_saved_materials_without_opening_lake(
     assert source_loader._proof(store.data["proof_timing"], store, "proof_timing") == {}
     matches = source_loader._time_encoding_refs(recipe, store, "minute_603196", "time", time)
     assert len(matches) == 1 and matches[0]["approval_id"] == row["approval_id"]
-    assert document("manifest.json")["transform_version"] == "bl2_source_transform_v5"
+    assert document("manifest.json")["transform_version"] == "bl2_source_transform_v6"
 
 
 @pytest.mark.parametrize("change", ["source", "hash", "column", "symbol", "window", "label", "daily",
