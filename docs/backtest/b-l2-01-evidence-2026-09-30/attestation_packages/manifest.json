@@ -350,7 +350,7 @@
       "path": "timing.proof.json",
       "format": "json",
       "schema": "bl2_proof_v1",
-      "sha256": "ec1ba159597c620dff2d1a133c3232ba929645de63d7aef74df9321f1f4bb852"
+      "sha256": "74a741e88bb903c6f811150d6fc97eaa8b9ddcc3a5f159acde022c8dc41d04ab"
     },
     {
       "id": "host_time_encoding_approval",

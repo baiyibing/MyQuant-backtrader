@@ -533,12 +533,14 @@ map §1.1 / census、已保存 Kimi 与 R4f 收据的逐份 hash。loader 固定
 同分钟源的 marks 沿用该映射并受同门禁；不能给其他 daily/mark 源随意贴此编码。
 逐 bar audit 保留原整数文本、int64 类型、声明编码、ISO 起止及批准引用。
 
-本节历史 transform 为 **`bl2_source_transform_v5`**（当前见 §10.2）；宿主须重新 pin code/runtime、recipe、
-marks 映射与 `attestation_scope`。旧 R4f 收据/尝试保持原状，不能复用为新 freeze。
-状态/单位/instruments/CAM 矩阵不改；240 格 status 与 237 格连续撮合范围的差异仍须宿主处理。
-account/commands、配置湖身份复核及 fresh freeze 仍可能阻挡；本地只测合成 fixtures/保存证据，
+本节历史 transform 为 **`bl2_source_transform_v5`**（当前 pin 见 §10.2 v6）。当时宿主须重新 pin code/runtime、recipe、
+marks 映射与 `attestation_scope`；旧 R4f 收据/尝试保持原状，不能复用为新 freeze。
+§10.1 当时不改 status 矩阵：当时仍是 240 格 status（午后至 15:00）对 Clock 连续 237 格的差异，
+**随后已由 #280 status trim（R4g→R4h 前）收口为 237×9=2133**，勿再按「仍须宿主处理 240 格」执行。
+account/commands、配置湖身份复核及 fresh freeze 在当时仍可能阻挡；本地只测合成 fixtures/保存证据，
 **不宣称 lake PASS**。`r4_authorized=false`、`no_ssot_compare_authorization`、production_C 冻结不变。
-后续为 **Grok → Human「合」→ land → 另一次具名 Human「开 R4g」**；本刀不合并、不发车、不改湖。
+§10.1 刀当时的后续是 **Grok → Human「合」→ land → 另一次具名 Human「开 R4g」**（历史命名；#280 已落地 status trim）。
+当前继续读 §10.2（cent-align v6）与 packs README；本历史段不合并、不发车、不改湖。
 
 ### 10.2 R4h cent-align：double 价格显式有界转换（2026-09-30）
 

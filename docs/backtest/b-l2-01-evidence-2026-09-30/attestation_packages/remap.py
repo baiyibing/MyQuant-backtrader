@@ -315,7 +315,9 @@ def add_timing_package(pins, inputs, add, md_excerpt):
             "A wider execution/mark window requires fresh coverage; calendar retains its separate next-day coverage.",
             "The old epoch_ms mapping still yields 17:30+08:00 and is not approved for this lake partition. "
             "Use epoch_ms_wall_shanghai_as_utc with the pinned source/column/window approval; v6 requires fresh "
-            "implementation/recipe/attestation pins. No new lake run, Clock or economic-semantics change."]})
+            "implementation/recipe/attestation pins. No new lake run and no Clock/Fees/MatchCore edits; "
+            "v6 only changes double→Decimal price admission via attested bound cent quantize "
+            "(see manifest.price_conversion / packs README), not tick size or fee math."]})
 
 
 def add_time_encoding_package(pins, inputs, artifacts, add, md_excerpt):
