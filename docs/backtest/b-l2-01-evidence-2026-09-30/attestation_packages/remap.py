@@ -34,8 +34,22 @@ def digest(raw):
     return hashlib.sha256(raw).hexdigest()
 
 
+def decimal_strings(value):
+    """Keep decimal values exact in loader JSON, including nested metadata."""
+    if isinstance(value, (Decimal, float)):
+        number = Decimal(str(value))
+        require(number.is_finite(), "non-finite source number")
+        return format(number, "f")
+    if isinstance(value, dict):
+        return {key: decimal_strings(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [decimal_strings(item) for item in value]
+    return value
+
+
 def encode(document):
     """Compact JSON, one data row per line for stable diffs on the 2160 grid."""
+    document = decimal_strings(document)
     if "schema_version" in document:
         data = document["data"]
         rows_key = "result" if "result" in data else None
@@ -65,7 +79,9 @@ def read_inputs(source_dir, human_go):
             require(digest(normalized.replace(b"\n", b"\r\n")) == hashes["host_sha256"],
                     f"host CRLF pin mismatch: {name}")
         text = normalized.decode("utf-8")
-        inputs[name] = list(csv.DictReader(io.StringIO(text))) if name.endswith(".csv") else json.loads(text)
+        # Parse decimal tokens directly: do not round pinned source text via binary floats.
+        inputs[name] = (list(csv.DictReader(io.StringIO(text))) if name.endswith(".csv")
+                        else json.loads(text, parse_float=Decimal))
     return pins, inputs
 
 

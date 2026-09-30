@@ -3,6 +3,12 @@
 These are intentionally invalid, unfilled templates, not market facts. Unknown
 values are `null`, proof refs are empty, and proof completeness is `false`.
 Do not substitute 10% bands, lot guesses, or `false` halt flags to make them pass.
+Instrument `available_at` and `ordinary_listing` remain null in both consumer
+alternatives and the proof binding; `complete=false` remains unloadable even
+after re-pinning. See the [R4 host checklist](../../../docs/backtest/note-l2-lake-source-ingress-b-l2-01-2026-09-29.md#931-r4-instruments-宿主补证清单2026-09-30)
+for per-date historical availability, authoritative ordinary-listing coverage,
+archived SSE rule/approval review, and second-issuer verification. Do not turn
+the daqmt snapshot's `OpenDate` into historical listing coverage or invent 09:00.
 
 Post-R3 (2026-09-30): host-side raw material drafts for filling these live in
 [docs/backtest/b-l2-01-evidence-2026-09-30/](../../../docs/backtest/b-l2-01-evidence-2026-09-30/)
@@ -45,3 +51,7 @@ Fill order, full field contracts, claim conclusions, validation API and R3 GO
 boundary are in [ingress note §9](../../../docs/backtest/note-l2-lake-source-ingress-b-l2-01-2026-09-29.md#9-factsattestation-package-go2026-09-30).
 Tests fill these shapes using fabricated values and verify rejection before
 they are filled. Fixture PASS != lake PASS; no host certification or SSOT green.
+The tests also re-pin otherwise filled packages with null/ill-typed/late
+availability, non-true listing flags, incomplete proofs or mismatched bindings;
+all remain rejected. Both derived proofs must be literally `complete=true` and
+bind the same supplied metadata. Current remapped instrument packs remain BLOCKED.
