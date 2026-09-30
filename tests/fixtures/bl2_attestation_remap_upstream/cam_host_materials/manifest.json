@@ -1,0 +1,72 @@
+{
+  "schema": "b_l2_r4_cam_host_materials_draft_manifest_v0",
+  "generated_at": "2026-09-30T17:30:00+08:00",
+  "status": "DRAFT_unpinned",
+  "github_refs": {
+    "myquant_backtrader_tip": "baiyibing/MyQuant-backtrader@c69f4bcc487608e8ff75e090526e50d116a4bc0a",
+    "instruments_materials": "baiyibing/OSkhQuant1.3@d0edd384e9bd7fc0029b380e8850920539c46a95"
+  },
+  "note": "Hashes over local UTF-8 bytes. cninfo JSONs are raw API responses archived as fetched.",
+  "artifacts": [
+    {
+      "path": "actions/cninfo_603196_announcements_analysis.md",
+      "bytes": 2902,
+      "sha256": "b909a9bca343e1c88bcde0bdc095f54e56077c6275cc3a049f173d5526643ed0"
+    },
+    {
+      "path": "actions/cninfo_603196_announcements_p1.json",
+      "bytes": 25743,
+      "sha256": "f359976fa48dbfe28db4d0e80a07489a92358ca7fc4476cc689f50544fc532d4"
+    },
+    {
+      "path": "actions/cninfo_603196_announcements_p2.json",
+      "bytes": 23170,
+      "sha256": "a2c1eb49bb717332fc57b18b8f8abf7baf92e48466dfc6d053876d47d4abb7f2"
+    },
+    {
+      "path": "actions/cninfo_603196_announcements_p3.json",
+      "bytes": 13318,
+      "sha256": "3d8ba8bab9607daeee44a1dfef5e0baa43fc6ef75256623e17c2dfa31d8731f1"
+    },
+    {
+      "path": "actions/ex_date_index_local_check.md",
+      "bytes": 2252,
+      "sha256": "608a8e6a9ae5c99547c245d979c04c4b7c65746d11a328d3c5383762036f40cd"
+    },
+    {
+      "path": "actions/preclose_chain_no_ex_adjustment.md",
+      "bytes": 1215,
+      "sha256": "bffbdb4da289c01130acb82f5c3167ad9bba01f27cf01270ae6b644973f14833"
+    },
+    {
+      "path": "calendar/calendar_cross_check.md",
+      "bytes": 2373,
+      "sha256": "ca539772a69ade11609e449b5dff067f7f81aab7fa21ca7f32d2f0cc7d832c62"
+    },
+    {
+      "path": "calendar/pmc_sse_calendar_20250901_20251231.txt",
+      "bytes": 1031,
+      "sha256": "ee04c7384d5a96f8d4c3b13a1012dc8c0bcf13699f486e825d05e281ff2862cb"
+    },
+    {
+      "path": "calendar/sse_holiday_notices_2025.md",
+      "bytes": 2446,
+      "sha256": "33715e169b8f400e3731dab2ca27b6cfda4fc9850ad23c2f9a127df4c9c783ae"
+    },
+    {
+      "path": "HOST_FILL_FORM_CAM.md",
+      "bytes": 3541,
+      "sha256": "7eef7f430dd4ed6b056eff93943407e1c41fb2555de5c4a19b705039a2270423"
+    },
+    {
+      "path": "marks/minute_lake_marks_substrate.md",
+      "bytes": 2904,
+      "sha256": "add5b9641e27edcd8d9a2fe53d12dbb0403487ff0f0f73c9b9199ccec51eb9bb"
+    },
+    {
+      "path": "README.md",
+      "bytes": 3384,
+      "sha256": "f4a2b8bee220bca0d9cc271e52a615d00501357776682a9c0f9a8bbdbefee215"
+    }
+  ]
+}

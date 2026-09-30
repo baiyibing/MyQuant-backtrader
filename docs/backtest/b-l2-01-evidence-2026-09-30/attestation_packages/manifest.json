@@ -10,7 +10,7 @@
     "requirement": "Host must pin configured raw minute parquet; exports do not establish lake equivalence."
   },
   "unresolved": [
-    "calendar/actions/marks and the remaining claims require independent attestation",
+    "remaining claims (including timing), account/commands and scoped attestation require host recipe review",
     "host recipe, lake identity/coverage and fresh freeze; r4_authorized stays false"
   ],
   "artifacts": [
@@ -167,6 +167,132 @@
       "format": "json",
       "schema": "bl2_proof_v1",
       "sha256": "d874d21713be4645f5809903bf0b57080d556dddaeab812a9dce9fda432b9942"
+    },
+    {
+      "id": "cam_sse_holidays",
+      "path": "sources/cam_sse_holidays.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "65e461db44a8f13fcb51b6483a51cd2d82893509f68b9fd55cdecdcd597abc47"
+    },
+    {
+      "id": "cam_pmc_calendar",
+      "path": "sources/cam_pmc_calendar.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "5725f74032b5e97b42fbe0c784af798f5d7d3811ca261382a2dcfa4bfafbd44a"
+    },
+    {
+      "id": "cam_calendar_cross_check",
+      "path": "sources/cam_calendar_cross_check.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "dc7f4efe352d83a27d2778cad0cb4da4409612b233c0a2bd2575d8a5745ae056"
+    },
+    {
+      "id": "cam_cninfo_analysis",
+      "path": "sources/cam_cninfo_analysis.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "641e99cd059f038580e19fbc279a74bdcb614d681967e8662dc60520e8b79127"
+    },
+    {
+      "id": "cam_ex_date_index",
+      "path": "sources/cam_ex_date_index.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "5de5792e7098e944c345ba774aa8f42b07e4ef88f786fccfebafa0b9642c7f29"
+    },
+    {
+      "id": "cam_preclose_chain",
+      "path": "sources/cam_preclose_chain.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "12096e3e8a6edd01207a81f596efe675f1802bc1e59c07300db825d88cb9e7e7"
+    },
+    {
+      "id": "cam_marks_substrate",
+      "path": "sources/cam_marks_substrate.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "f6ac7c60366ee60ed9d6e2722f33d63fce3a57072ead778c000df477c5c5d055"
+    },
+    {
+      "id": "host_cam_approval",
+      "path": "sources/host_cam_approval.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "83dce9d12663d3989f462c696980bc175a1e9538ff39d17beb3d8d710c5655a3"
+    },
+    {
+      "id": "human_go_cam",
+      "path": "sources/human_go_cam.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "b395c41ea3b645f7928019cc75f4a6f048c68118b33be45e9e908e1a32bd3377"
+    },
+    {
+      "id": "cam_cninfo_p1",
+      "path": "sources/cam_cninfo_p1.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "22417e40091d8c18ec5e925a5e5bbd7a9f6a66dea6c1f908e38d1a7e57491bab"
+    },
+    {
+      "id": "cam_cninfo_p2",
+      "path": "sources/cam_cninfo_p2.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "77f9eb9585d045f1781d9241fcca1152810ee10d2756e8f16e7bece51d57e149"
+    },
+    {
+      "id": "cam_cninfo_p3",
+      "path": "sources/cam_cninfo_p3.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "9e8e7d81b435e471c4ec5683b59541049b21ff61959db24da7fd1fb797ef732d"
+    },
+    {
+      "id": "calendar",
+      "path": "calendar.json",
+      "format": "json",
+      "schema": "bl2_calendar_v1",
+      "sha256": "2d5977284a1307274ac5c20deb28d4db9b9ae4d9fa6db0e580fad451736212a5"
+    },
+    {
+      "id": "proof_calendar",
+      "path": "calendar.proof.json",
+      "format": "json",
+      "schema": "bl2_proof_v1",
+      "sha256": "3ed1c2249fb6ffd57ca9c15b8f01024312d6a1478dceceeb98bf063e3f341108"
+    },
+    {
+      "id": "actions",
+      "path": "actions.json",
+      "format": "json",
+      "schema": "bl2_actions_v1",
+      "sha256": "c4b676e3dcabdd7c3729938c3f81aca677e8b7de9c4e75d44c1e31734aef642e"
+    },
+    {
+      "id": "proof_actions",
+      "path": "actions.proof.json",
+      "format": "json",
+      "schema": "bl2_proof_v1",
+      "sha256": "9069d9c11cf45b2d7854f1e9c9a59b98ef90aa0ccf106ebce890a3bc43f20682"
+    },
+    {
+      "id": "marks",
+      "path": "marks.json",
+      "format": "json",
+      "schema": "bl2_marks_grid_v1",
+      "sha256": "b30f680c7dd07fada1790db430ffd208a487d8a78bb3aba7beba959eec928f35"
+    },
+    {
+      "id": "proof_marks",
+      "path": "marks.proof.json",
+      "format": "json",
+      "schema": "bl2_proof_v1",
+      "sha256": "083eec4f56c40e44a486fecc013c31881a1afc0f6d1098e7ac738a4381c66cd8"
     }
   ]
 }

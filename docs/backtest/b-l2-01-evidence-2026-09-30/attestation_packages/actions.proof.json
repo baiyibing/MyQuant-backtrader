@@ -1,0 +1,41 @@
+{
+  "schema_version": "bl2_proof_v1",
+  "data": {
+    "issuer": "Human GO 2026-09-30 / #1114 CAM saved-material host fill",
+    "subject": "actions",
+    "source_refs": [
+      "cam_cninfo_analysis",
+      "cam_cninfo_p1",
+      "cam_cninfo_p2",
+      "cam_cninfo_p3",
+      "cam_ex_date_index",
+      "cam_preclose_chain",
+      "daqmt_1d",
+      "ths_daily",
+      "host_cam_approval",
+      "human_go_cam"
+    ],
+    "filter": {
+      "symbols": [
+        "603196.SH"
+      ],
+      "from_date": "2025-10-23",
+      "through_date": "2025-11-04",
+      "predicate": "complete_no_company_actions; approved economic scope; pinned source rows/line indexes"
+    },
+    "result": {
+      "complete": true,
+      "summary": "complete_no_company_actions; Human「四格全批，开 packs」; saved #1114 observations plus the scoped coverage approval",
+      "rows": [
+
+  ]
+    },
+    "limitations": [
+      "Remapped draft only; structural checks != lake PASS; R3 BLOCKED/NOT_RUN; R4 needs separate Human「开 R4」; production_C=frozen.",
+      "Contract §3.2: `ex_date_index/adj_factor` 的 hash 只证明身份；无行、因子未变或源缺失均不单独证明无事件。 Empty filter/file presence alone is not no-events evidence.",
+      "Human approves complete economic-window coverage [2025-10-23,2025-11-04]: ex_date_index zero matches + cninfo 77 announcement titles with zero action-keyword matches + preClose chain 9/9 without adjustment + adj_factor constant 1.0. result.rows=[] is the saved event filter result; supporting observations remain in source_refs, not in actions proof rows.",
+      "cninfo search window is 2025-06-01..2025-12-31; this is not an empty-events claim for that whole interval. Titles/window review only; no PDF full-text verification. API totalpages=2 is retained despite three responses (30+30+17 unique IDs); see page excerpts.",
+      "The local ex_date_index e8fe70ce snapshot differs from the R3 93c264ed pin. The saved check corroborates rather than replaces it; adj_factor and unchanged preClose are supporting observations, not independent proof of event absence or of configured lake coverage."
+    ]
+  }
+}

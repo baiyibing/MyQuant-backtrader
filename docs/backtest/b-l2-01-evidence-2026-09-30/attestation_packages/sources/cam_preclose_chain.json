@@ -1,0 +1,41 @@
+{
+  "schema_version": "bl2_raw_excerpt_v1",
+  "data": {
+    "origin": {
+      "repository": "baiyibing/OSkhQuant1.3",
+      "commit": "42d066b81a083be49881f0dd8c5ab53ed4f422f6",
+      "path": "docs/evidence/b_l2_r4_cam_host_materials_draft_20260930/actions/preclose_chain_no_ex_adjustment.md",
+      "git_sha256": "bffbdb4da289c01130acb82f5c3167ad9bba01f27cf01270ae6b644973f14833"
+    },
+    "extraction": {
+      "method": "UTF-8 markdown lines, order unchanged, one row per line",
+      "row_index": "zero-based line number"
+    },
+    "limitation": "Pinned #1114 saved material; original DRAFT wording preserved. Human's four-cell approval is recorded separately in host_cam_approval. No local market-source retrieval or lake verification.",
+    "rows": [
+    {"line":0,"text":"# daqmt preClose 链无除权调整互证（DRAFT）"},
+    {"line":1,"text":""},
+    {"line":2,"text":"> 用途：actions claim 的量化交叉证据。若窗口内发生除权除息，则 T 日行 preClose 会偏离 T-1 日原始收盘价（交易所除权基准价调整）；raw（dividend_type=none）价格序列上的 preClose 链自洽 = 无事件的强量化旁证。"},
+    {"line":3,"text":""},
+    {"line":4,"text":"## 数据（已 pin：OSKhQuant1.3 R3 证据包 raw/daqmt_603196_1d_none.csv）"},
+    {"line":5,"text":""},
+    {"line":6,"text":"| T | close(T-1) | preClose(T) 行值 | 一致 |"},
+    {"line":7,"text":"|---|---|---|---|"},
+    {"line":8,"text":"| 2025-10-23 | 23.36（10-22，kimi csv 已 pin） | 23.36 | ✓ |"},
+    {"line":9,"text":"| 2025-10-24 | 23.89 | 23.89 | ✓ |"},
+    {"line":10,"text":"| 2025-10-27 | 23.89 | 23.89 | ✓ |"},
+    {"line":11,"text":"| 2025-10-28 | 24.32 | 24.32 | ✓ |"},
+    {"line":12,"text":"| 2025-10-29 | 23.12 | 23.12 | ✓ |"},
+    {"line":13,"text":"| 2025-10-30 | 23.04 | 23.04 | ✓ |"},
+    {"line":14,"text":"| 2025-10-31 | 22.94 | 22.94 | ✓ |"},
+    {"line":15,"text":"| 2025-11-03 | 23.03 | 23.03 | ✓ |"},
+    {"line":16,"text":"| 2025-11-04 | 23.05 | 23.05 | ✓ |"},
+    {"line":17,"text":""},
+    {"line":18,"text":"9/9 精确相等（原始未复权口径）。分钟湖数据末行 close 与日线 close 逐日一致（见 `../marks/minute_lake_marks_substrate.md`），链上无断点。"},
+    {"line":19,"text":""},
+    {"line":20,"text":"## 结论"},
+    {"line":21,"text":""},
+    {"line":22,"text":"preClose 链在窗口 9 日无任何除权调整迹象，与 ex_date_index 零命中、cninfo 77 公告零行动关键词三源互证：经济覆盖区间内公司行动事件集为空。"}
+  ]
+  }
+}

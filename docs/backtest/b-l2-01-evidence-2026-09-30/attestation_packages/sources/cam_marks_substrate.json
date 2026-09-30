@@ -1,0 +1,54 @@
+{
+  "schema_version": "bl2_raw_excerpt_v1",
+  "data": {
+    "origin": {
+      "repository": "baiyibing/OSkhQuant1.3",
+      "commit": "42d066b81a083be49881f0dd8c5ab53ed4f422f6",
+      "path": "docs/evidence/b_l2_r4_cam_host_materials_draft_20260930/marks/minute_lake_marks_substrate.md",
+      "git_sha256": "add5b9641e27edcd8d9a2fe53d12dbb0403487ff0f0f73c9b9199ccec51eb9bb"
+    },
+    "extraction": {
+      "method": "UTF-8 markdown lines, order unchanged, one row per line",
+      "row_index": "zero-based line number"
+    },
+    "limitation": "Pinned #1114 saved material; original DRAFT wording preserved. Human's four-cell approval is recorded separately in host_cam_approval. No local market-source retrieval or lake verification.",
+    "rows": [
+    {"line":0,"text":"# marks 湖分钟行绑定基板（DRAFT）"},
+    {"line":1,"text":""},
+    {"line":2,"text":"> 用途：marks claim（`raw_contemporaneous_grid`）的行绑定基板。合同 §3.3：mark 网格执行前固定、每点追到真实源行（行号/列/时间）、`available_at=event_time`、禁止编价/前值/合成价补缺。recipe 的实际 mark 网格属宿主数据——本文件提供**逐日可锚行清单**，宿主选定网格后逐点引用行号即可。"},
+    {"line":3,"text":""},
+    {"line":4,"text":"## 源文件身份核验（字节级）"},
+    {"line":5,"text":""},
+    {"line":6,"text":"- 湖 parquet：`F:\\stock_data\\stock\\period=1m\\dividend_type=none\\symbol=603196_SH\\data.parquet`"},
+    {"line":7,"text":"- 本机 sha256：`58879893f221bfe050b7a16029667c49fb65d8ec6f47592254e549374a577083` —— **与 census pin（E:\\stock_data 同型树）逐字节一致** ✓"},
+    {"line":8,"text":"- 100497 行；列 `time:int64`（北京墙钟 epoch ms）/`open/high/low/close/volume/amount/__index_level_0__`；行号 = 0-based 绝对行号（与 census `row_idx` 同口径，窗口首行 46513 已复核一致 ✓）"},
+    {"line":9,"text":""},
+    {"line":10,"text":"## 窗口逐日行清单（9 日 × 241 行）"},
+    {"line":11,"text":""},
+    {"line":12,"text":"| trade_date | 首行（09:30）abs row | 末行（15:00）abs row | 15:00 close | 15:00 volume | 日线 close 交叉 |"},
+    {"line":13,"text":"|---|---|---|---|---|---|"},
+    {"line":14,"text":"| 2025-10-23 | 46513 | 46753 | 23.89 | 1395 | ✓ |"},
+    {"line":15,"text":"| 2025-10-24 | 46754 | 46994 | 23.89 | 264 | ✓ |"},
+    {"line":16,"text":"| 2025-10-27 | 46995 | 47235 | 24.32 | 423 | ✓ |"},
+    {"line":17,"text":"| 2025-10-28 | 47236 | 47476 | 23.12 | 679 | ✓ |"},
+    {"line":18,"text":"| 2025-10-29 | 47477 | 47717 | 23.04 | 362 | ✓ |"},
+    {"line":19,"text":"| 2025-10-30 | 47718 | 47958 | 22.94 | 114 | ✓ |"},
+    {"line":20,"text":"| 2025-10-31 | 47959 | 48199 | 23.03 | 423 | ✓ |"},
+    {"line":21,"text":"| 2025-11-03 | 48200 | 48440 | 23.05 | 439 | ✓ |"},
+    {"line":22,"text":"| 2025-11-04 | 48441 | 48681 | 22.96 | 313 | ✓ |"},
+    {"line":23,"text":""},
+    {"line":24,"text":"（日线 close 交叉源：已 pin 的 daqmt_1d / kimi csv；分钟末行 close 与日线 close 9/9 一致。）"},
+    {"line":25,"text":""},
+    {"line":26,"text":"## 候选 mark 点（供宿主网格选用）"},
+    {"line":27,"text":""},
+    {"line":28,"text":"- **final mark（必含，= run end_at）**：2025-11-04 15:00 → abs row **48681**，close=22.96（raw，`dividend_type=none`，`price_domain=raw` 与 instruments 行一致）。census `grid_definition` 已注明「15:00 可作 mark 行」；loader 要求网格含 end_at 时刻（`mark grid must include the final run time`）。"},
+    {"line":29,"text":"- **抽查点（≥1，时刻互异）**：任意 09:30–15:00 标签行均可按 `abs row = 当日首行 + 标签序号` 定位；建议挑 census 已收录的格子（2169 cells 均有 row_idx/close/volume/amount）以复用其审核记录。"},
+    {"line":30,"text":"- **可得性**：`available_at = event_time`（分钟行时间标签即事实成立时刻；run 内、无前值/合成回退——loader 已硬校验 \"no last-value or synthetic fallback\"）。"},
+    {"line":31,"text":""},
+    {"line":32,"text":"## 缺口（须宿主补齐）"},
+    {"line":33,"text":""},
+    {"line":34,"text":"1. recipe 的实际 mark_grid（时点/mark_id 集合）——R4c recipe 在宿主侧（4090/exports），本机不可得；本基板覆盖一切合法选择。"},
+    {"line":35,"text":"2. 15:00 mark 的「独立合法来源」叙述（合同 §3.3 末段）——建议引用：湖 parquet 字节 pin + 本表行号 + census 审核记录，三者同指一行。"}
+  ]
+  }
+}

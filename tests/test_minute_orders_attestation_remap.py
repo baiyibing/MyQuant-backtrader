@@ -1,9 +1,12 @@
 """Offline evidence checks and fabricated acceptance tests; no lake or host run."""
 
 import importlib.util
+import json
+import shutil
 import subprocess
 import sys
 from collections import Counter
+from copy import deepcopy
 from datetime import datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -139,7 +142,8 @@ def test_checked_packages_hashes_bind_all_rows_and_record_instrument_host_fill()
     # Descriptor only for proof structure; never invokes the lake resolver.
     store.specs["minute_603196"] = {"schema": {"volume": "int64"}, "sha256": "0" * 64,
                                     "location": {"kind": "minute", "symbol": "603196.SH"}}
-    for identity in ("proof_units", "proof_status", "proof_instruments_sse", "proof_instruments_wind"):
+    for identity in ("proof_units", "proof_status", "proof_instruments_sse", "proof_instruments_wind",
+                     "proof_calendar", "proof_actions", "proof_marks"):
         store.proof_bindings[identity] = source_loader._proof(store.data[identity], store, identity)
     statuses = store.data["status"]["rows"]
     assert len(statuses) == len(store.proof_bindings["proof_status"]) == 2160
@@ -310,8 +314,8 @@ def test_real_instrument_row_and_proofs_pass_the_instruments_gate(tmp_path, monk
     audit = loaded.provenance.document()["transform"]["instruments"][0]
     assert audit["available_at"] == "2025-10-22T15:30:00+08:00"
     assert audit["origin"] == "approved_derivation"
-    # This crossing is evidence-structure only: calendar/actions/marks for the real
-    # window remain unattested, no recipe exists, and r4_authorized stays false.
+    # This crossing is evidence-structure only: the real host recipe and lake
+    # remain unbound, and r4_authorized stays false.
     assert not Path(case.recipe["parent"]).exists()
 
 
@@ -326,10 +330,137 @@ def test_remapper_rejects_tampered_host_approval(tmp_path, remapper):
 def test_remapper_check_matches_checked_in_packages():
     result = subprocess.run(
         [sys.executable, str(PACK / "remap.py"), "--source-dir", str(UPSTREAM),
-         "--human-go", str(PACK / "HUMAN_GO.md"), "--check"],
+         "--human-go", str(PACK / "HUMAN_GO.md"),
+         "--host-cam-approval", str(PACK / "HOST_R4_CAM_APPROVAL_20260930.md"), "--check"],
         capture_output=True, text=True, encoding="utf-8", timeout=30,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_cam_pins_match_upstream_manifest_and_human_go(remapper):
+    pins, inputs = remapper.read_inputs(UPSTREAM, PACK / "HUMAN_GO.md")
+    cam = pins["cam_host_materials"]
+    assert cam["repository"] == "baiyibing/OSkhQuant1.3"
+    assert cam["commit"] == "42d066b81a083be49881f0dd8c5ab53ed4f422f6"
+    assert cam["directory"] == "docs/evidence/b_l2_r4_cam_host_materials_draft_20260930"
+    upstream_manifest = json.loads(inputs["cam_host_materials/manifest.json"])
+    assert set(cam["files"]) == {a["path"] for a in upstream_manifest["artifacts"]} | {"manifest.json"}
+    for item in upstream_manifest["artifacts"]:
+        raw = (UPSTREAM / "cam_host_materials" / item["path"]).read_bytes()
+        assert len(raw) == item["bytes"]
+        assert sha256(raw) == item["sha256"] == cam["files"][item["path"]]["git_sha256"]
+        assert not raw.startswith(b"\xef\xbb\xbf") and b"\r" not in raw and b"\x00" not in raw
+    assert pins["human_go_cam_sha256"] == sha256((PACK / "HUMAN_GO_CAM.md").read_bytes()) == (
+        "e15c79acde154bd7163208f2bf0a156737a9f908ed3fb9f41b87b64d42c13feb")
+    approval = (PACK / remapper.CAM_APPROVAL_NAME).read_bytes()
+    assert pins["host_cam_approval_sha256"] == sha256(approval)
+    assert remapper.CAM_APPROVAL_ID in approval.decode("utf-8")
+    assert "四格全批，开 packs" in inputs[remapper.CAM_GO_NAME]
+    assert pins["commit"] == "ec19fd6f69a52f93aa9870ad582f0173df8963f4"
+    assert pins["host_materials"]["commit"] == "d0edd384e9bd7fc0029b380e8850920539c46a95"
+
+
+def test_cam_calendar_actions_and_marks_are_scoped_saved_observations():
+    calendar = document("calendar.json")["data"]
+    expected = list(EXPECTED_AVAILABLE_AT) + ["2025-11-05"]
+    assert calendar == {"trading_dates": expected}
+    proof = document("calendar.proof.json")["data"]
+    assert proof["filter"]["through_date"] == "2025-11-05"
+    pmc = document("sources/cam_pmc_calendar.json")["data"]["rows"]
+    assert [pmc[row["row"]]["text"] for row in proof["result"]["rows"]] == [day.replace("-", "") for day in expected]
+    assert {"cam_sse_holidays", "cam_calendar_cross_check", "host_cam_approval"} <= set(proof["source_refs"])
+    actions = document("actions.json")["data"]
+    assert actions == {"symbols": ["603196.SH"], "from_date": "2025-10-23", "through_date": "2025-11-04",
+                       "complete": True, "events": [], "proofs": ["proof_actions"]}
+    action_proof = document("actions.proof.json")["data"]
+    assert action_proof["result"]["rows"] == []
+    assert {"cam_ex_date_index", "cam_cninfo_analysis", "cam_preclose_chain",
+            "cam_cninfo_p1", "cam_cninfo_p2", "cam_cninfo_p3", "host_cam_approval"} <= set(action_proof["source_refs"])
+    pages = [document(f"sources/cam_cninfo_p{page}.json")["data"] for page in (1, 2, 3)]
+    assert [len(page["rows"]) for page in pages] == [30, 30, 17]
+    assert len({r["announcementId"] for page in pages for r in page["rows"]}) == 77
+    assert all(page["page_metadata"]["totalpages"] == 2 for page in pages)  # Preserve upstream inconsistency.
+    marks = document("marks.json")["data"]
+    assert marks["subject"] == "marks" and marks["conclusion"] == "raw_contemporaneous_grid"
+    assert marks["transform_version"] == "bl2_source_transform_v4"
+    assert marks["source_identity_note"]["sha256"] == "58879893f221bfe050b7a16029667c49fb65d8ec6f47592254e549374a577083"
+    assert marks["source_identity_note"]["binding_status"] == "unbound_minute_source"
+    expected_points = [("spot_20251023_close", "2025-10-23T15:00:00+08:00", 46753, "23.89"),
+                       ("final", "2025-11-04T15:00:00+08:00", 48681, "22.96")]
+    substrate = document("sources/cam_marks_substrate.json")["data"]["rows"]
+    observations = document("marks.proof.json")["data"]["result"]["rows"]
+    assert len(marks["rows"]) == len(observations) == 2
+    for point, obs, (identity, event, abs_row, close) in zip(marks["rows"], observations, expected_points, strict=True):
+        assert point["mark_id"] == identity
+        assert point["event_time"] == point["available_at"] == event
+        assert point["price_domain"] == "raw" and len(point["prices"]) == 1
+        price = point["prices"][0]
+        assert (price["symbol"], price["abs_row"], price["price"]) == ("603196.SH", abs_row, close)
+        assert price["source"] == "minute_603196" and price["price_column"] == "close"
+        assert obs["source"] == price["substrate_source"] == "cam_marks_substrate"
+        assert obs["row"] == price["substrate_row"]
+        line = substrate[obs["row"]]
+        assert line["line"] == obs["row"]
+        assert f"| {abs_row} | {close} |" in line["text"]
+        assert "available_at=event_time=" + event in obs["observation"]
+        assert f"absolute parquet row={abs_row}" in obs["observation"]
+    for subject in ("calendar", "actions", "marks"):
+        proof = document(subject + ".proof.json")["data"]
+        assert set(proof) == {"issuer", "subject", "source_refs", "filter", "result", "limitations"}
+        assert proof["subject"] == subject and proof["result"]["complete"] is True
+        assert proof["filter"]["from_date"] <= "2025-10-23"
+        assert proof["filter"]["through_date"] >= "2025-11-04"
+    manifest = document("manifest.json")
+    assert manifest["r4_authorized"] is False and manifest["lake_verdict"] == "NOT_RUN"
+    assert manifest["unbound_minute_source"]["sha256"] is None
+    assert not any("calendar/actions/marks" in gap for gap in manifest["unresolved"])
+    assert any("host recipe, lake identity/coverage and fresh freeze" in gap for gap in manifest["unresolved"])
+    assert document("sources/human_go.json")["data"]["rows"][0]["r4_authorized"] is False
+
+
+@pytest.mark.parametrize("subject", ["calendar", "actions", "marks"])
+def test_cam_proofs_keep_loader_negative_row_contract(subject):
+    store = SimpleNamespace(data={}, specs={})
+    for spec in document("manifest.json")["artifacts"]:
+        store.data[spec["id"]] = document(spec["path"])["data"]
+        store.specs[spec["id"]] = spec
+    proof = deepcopy(store.data["proof_" + subject])
+    proof["result"]["rows"] = [{"source": "cam_ex_date_index", "row": 0, "observation": "not an event"}] if subject == "actions" else []
+    with pytest.raises(SourceContractError, match="empty saved filter result|saved observations required"):
+        source_loader._proof(proof, store, "proof_" + subject)
+
+
+def test_remapper_rejects_tampered_cam_approval(tmp_path, remapper):
+    approval = tmp_path / "cam_approval.md"
+    approval.write_bytes((PACK / remapper.CAM_APPROVAL_NAME).read_bytes() + b"tampered\n")
+    with pytest.raises(ValueError, match="CAM host approval hash mismatch"):
+        remapper.build(UPSTREAM, PACK / "HUMAN_GO.md", host_cam_approval=approval)
+    assert list(tmp_path.iterdir()) == [approval]
+
+
+def test_remapper_requires_cam_approval_id_even_after_repin(tmp_path, remapper, monkeypatch):
+    pins = document("inputs.json")
+    approval = tmp_path / remapper.CAM_APPROVAL_NAME
+    approval.write_text((PACK / remapper.CAM_APPROVAL_NAME).read_text(encoding="utf-8").replace(
+        remapper.CAM_APPROVAL_ID, "unapproved"), encoding="utf-8")
+    pins["host_cam_approval_sha256"] = sha256(approval.read_bytes())
+    (tmp_path / "inputs.json").write_text(json.dumps(pins), encoding="utf-8")
+    monkeypatch.setattr(remapper, "HERE", tmp_path)
+    with pytest.raises(ValueError, match="CAM host approval id marker missing"):
+        remapper.build(UPSTREAM, PACK / "HUMAN_GO.md", PACK / remapper.APPROVAL_NAME, approval)
+
+
+@pytest.mark.parametrize("name", ["calendar/pmc_sse_calendar_20250901_20251231.txt",
+                                  "actions/cninfo_603196_announcements_p3.json",
+                                  "marks/minute_lake_marks_substrate.md", "manifest.json"])
+def test_remapper_rejects_tampered_cam_pin(tmp_path, remapper, name):
+    source = tmp_path / "source"
+    shutil.copytree(UPSTREAM, source)
+    path = source / "cam_host_materials" / name
+    path.write_bytes(path.read_bytes() + b"tampered\n")
+    with pytest.raises(ValueError, match="CAM input hash mismatch"):
+        remapper.build(source, PACK / "HUMAN_GO.md")
+    assert list(tmp_path.iterdir()) == [source]
 
 
 @pytest.mark.parametrize("scope,field,value", [
