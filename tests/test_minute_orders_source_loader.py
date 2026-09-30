@@ -153,6 +153,10 @@ class SyntheticCase:
             proof = self.sidecars["proof_" + subject]
             source_row = next(i for i, r in enumerate(self.sidecars["observations"]["rows"])
                               if r["subject"] == subject)
+            if subject == "units":
+                self.sidecars["observations"]["rows"][source_row].update(
+                    basis="source_declaration", unit_declaration={
+                        k: values[0][k] for k in ("column", "kind", "unit", "shares_per_unit")})
             proof["result"]["rows"] = [
                 {"source": "observations", "row": source_row, "observation": "Fabricated test assertion only",
                  "basis": {"units": "source_declaration", "status": "explicit_status"}.get(subject, b.get("origin")),

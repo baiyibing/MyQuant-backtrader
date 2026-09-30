@@ -1,0 +1,8 @@
+{
+  "schema_version": "bl2_cross_source_ratio_v1",
+  "data": {
+    "rows": [
+    {"basis":"cross_source_ratio","unit_declaration":null,"declared_unit":"手","shares_per_unit":100,"kind":"incremental","human_go":"human_go","evidence_refs":{"daqmt_1m":"daqmt_1m","daqmt_1d":"daqmt_1d","ths_daily":"ths_daily","ratio_table":"ratio_table"},"finding":"8/9 daily ratios exactly 100; 20251023 THS is 100 shares less than daqmt*100; 9/9 full-day sum(1m)==1d, including 09:30 opening bars."}
+  ]
+  }
+}

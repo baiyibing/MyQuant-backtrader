@@ -1,0 +1,16 @@
+{
+  "schema_version": "bl2_raw_excerpt_v1",
+  "data": {
+    "origin": {
+      "repository": "baiyibing/OSkhQuant1.3",
+      "commit": "ec19fd6f69a52f93aa9870ad582f0173df8963f4",
+      "path": "docs/evidence/b_l2_01_4090_r3_20260930/raw/daqmt_603196_instrument_detail.json",
+      "git_sha256": "8b31697f3bb6a97d847c6a7257271a7273ca365d6cddbb7396e880a478340f21",
+      "host_sha256": "3e475fb9f6e4cda110a2e6481f2d273b8e2e3a4b4e19d82e8ec36b8cd12edaf1"
+    },
+    "limitation": "2026-09-30 snapshot; corroboration only, not historical limits or listing status.",
+    "rows": [
+    {"ExchangeID":"SH","InstrumentID":"603196","InstrumentName":"璞源材料","ProductID":"","ProductName":"","ExchangeCode":"603196","RzrkCode":"","UniCode":"603196","CreateDate":0,"OpenDate":20170531,"ExpireDate":99999999,"TradingDay":20260930,"PreClose":17.84,"SettlementPrice":null,"UpStopPrice":19.62,"DownStopPrice":16.06,"FloatVolumn":65400000,"TotalVolumn":240000000,"FloatVolume":65400000,"TotalVolume":240000000,"LongMarginRatio":null,"ShortMarginRatio":null,"PriceTick":0.01,"VolumeMultiple":1,"MainContract":0,"LastVolume":null,"InstrumentStatus":0,"IsTrading":null,"IsRecent":null,"HSGTFlag":null}
+  ]
+  }
+}

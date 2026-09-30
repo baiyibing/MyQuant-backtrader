@@ -226,7 +226,7 @@ S4 input/contract/各 component hashes；既有 validators 只用于预检，不
 S4 新路径为 `evidence_level=hybrid`、`minute_orders_artifacts_v2`、
 `minute_orders_hybrid_evidence_v1` 与 `minute_orders_source_provenance_v1`；原转换版 `bl2_source_transform_v1`，
 本次 §8 升为 `bl2_source_transform_v2`，须重新 pin implementation/recipe/attestation。
-上述 v2 仅为 §8 历史记录；当前宿主须统一按 §9 / §9.5 以 `bl2_source_transform_v3` 为唯一版本重新 pin implementation/recipe/attestation。
+上述 v2 仅为 §8 历史记录；§9 / §9.5 的 `bl2_source_transform_v3` 唯一版本要求限于 R3，已冻结的 R3 收据/证据保留 v3；当前 remap 路径须按 §10 的 `bl2_source_transform_v4` 重新 pin implementation/recipe/attestation。
 它显式区分 market 来源与 synthetic commands/account；本单元不提供 real-only 或 `lake` evidence_level。
 wrapper 执行前、writer 执行后重读冻结源并重建映射，不只信任调用方自报的 provenance hash。
 增加 `source_provenance.json`、`source_checks.json`、成功路径的 `source_postflight.json`；
@@ -436,7 +436,7 @@ missing=false 而源行缺失则失败，零量源行仍是存在的记录。
    全量状态覆盖、事实可得性和 source rows 都核对完才写 complete=true。
 4. 先 pin 原始来源，再 pin proof 和消费包；所有文件加入 recipe.sources，填好 roles 和七类 claims。
    action/calendar/timing/marks/account/commands 等现有门仍必须满足；本三门不能替代它们。
-5. 本片转换版升为 **`bl2_source_transform_v3`**；package/schema IDs 保持上述 v1，
+5. 本片转换版升为 **`bl2_source_transform_v3`**（R3 已冻结收据/证据保留 v3；当前 remap 路径用 §10 的 v4）；package/schema IDs 保持上述 v1，
    v2 的纯文字 units/instruments/status proof 不兼容本次收紧，必须补齐 basis/binding。
    pin 当前 clean code SHA、实际 Python/PyArrow/transform；按 §7 计算 `attestation_scope(recipe)`，
    写 attestation、pin 其 bytes SHA-256，最后冻结 recipe bytes/hash。任一变更均重新冻结；不改旧收据。
@@ -474,3 +474,14 @@ R3 已在 4090 执行：tip `a268e11` · transform `bl2_source_transform_v3` · 
 逐股一致，等价链加强到四源）；同包 pin 负结果：MCP 自带 Wind 字段目录 volume 条
 **无单位注记**，Wind 权威单位规范不在 MCP 暴露面，source_declaration 锚仍缺位。
 按 §9.2 仍为 NON-ATTESTATION 经验旁证，任何 BLOCKED 门状态不变。
+
+2026-09-30 Human GO 窄例外（仅覆盖本段）：[原始 GO 与 remap 包](b-l2-01-evidence-2026-09-30/attestation_packages/README.md)
+接受 `603196.SH`、`20251023–20251104` 的 units `basis=cross_source_ratio`，依据 #1111
+`ec19fd6` 的 daqmt 日量 ×100 对 THS/stock_finance_data 及逐日 `sum(1m)==1d`；单位手、
+`shares_per_unit=100`、incremental 显式声明。此例外不成为通用 vendor `source_declaration`，
+文档缺单位声明的负结果及 20251023 差 100 股仍须披露；§9.2 的 amount/close/volume 启发式禁令保留。
+`bl2_source_transform_v4` 仅在显式 basis、固定 Human GO marker、此证券/窗口/列/因子与独立来源齐备时接受；
+`source_declaration` 须有匹配的原材料 `unit_declaration`，不得把 ratio 改标签冒充声明。
+六份 remapped drafts 的填充/结构验证 **≠ lake PASS**，instrument 未证实的历史可得性、ordinary listing
+与规则批准仍 fail closed；不补造 10% 或 halt-from-silence。R3 仍 `BLOCKED/NOT_RUN`，
+R4 仍须单独 Human「开 R4」，合并仍须 Human「合」，production_C=frozen。

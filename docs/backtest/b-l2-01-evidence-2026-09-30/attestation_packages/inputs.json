@@ -1,0 +1,51 @@
+{
+  "repository": "baiyibing/OSkhQuant1.3",
+  "commit": "ec19fd6f69a52f93aa9870ad582f0173df8963f4",
+  "directory": "docs/evidence/b_l2_01_4090_r3_20260930",
+  "files": {
+    "units.proof.json": {
+      "git_sha256": "e5d5bc599cdc9ddd62c68a1123032345da59b7da56199e900e05b5068d27d3f6"
+    },
+    "instruments.json": {
+      "git_sha256": "82f1f98b814273bef1efc61158789528264280f8f4443d109448299d2f733910"
+    },
+    "instruments.proof.json": {
+      "git_sha256": "aef5fbc78ac7de5753eee95de60f94095cb0188078991ba165eb34c641114cce"
+    },
+    "status.json": {
+      "git_sha256": "99bf3c9c531774cf9251b0287ca23ba35395efafb6a92a565470299ea77fd771"
+    },
+    "status.proof.json": {
+      "git_sha256": "7afd3f3d3098504a5b12c41882ad6926691d4404ff0bf4e7f9a79d527aa3fc35"
+    },
+    "raw/daqmt_603196_1m_none.csv": {
+      "git_sha256": "2402104c7a02381c634257934ae31bd613d0bcdec537b4c226e1ae9a57bc703b",
+      "host_sha256": "0404c9deddd777297d7c1258bea196854d0ff93560736ddeba1c182a6a8b84b0"
+    },
+    "raw/daqmt_603196_1d_none.csv": {
+      "git_sha256": "2630292798ad475678d09fb63e5ff7d0d8fcb3c66ab7e6b9cbd5f6ade2a1594d",
+      "host_sha256": "7f87dbcee6baaa8ebfb3e6b75940ccc821adc417735ff1b972609ecf899d367b"
+    },
+    "raw/daqmt_603196_zero_volume_bars.csv": {
+      "git_sha256": "992e00c523ca0479f70ff6fc9caa171ec062e0b95c94aace97ac53b12974d405",
+      "host_sha256": "e974fa22d58c6596b61f3a765f798419a3ffc39bd45acb877f4478190cdc8643"
+    },
+    "raw/kimi_stock_finance_data_603196_daily.csv": {
+      "git_sha256": "6a7effd00a0d1d3533b5adb820644d57f19605c7d9cf9b9276c82f207a5fbf05",
+      "host_sha256": "6a7effd00a0d1d3533b5adb820644d57f19605c7d9cf9b9276c82f207a5fbf05"
+    },
+    "raw/daqmt_ths_unit_ratio_table.csv": {
+      "git_sha256": "07591611041c21561d67c4908e64f8713b82dd67e7c0a404311749eb1b9a66f6",
+      "host_sha256": "ccb1bd575f5e4fe7f8846a8e753933a2e08281ebc15d0509d79e658a4ad762ba"
+    },
+    "raw/wind_603196_daily_limits.csv": {
+      "git_sha256": "31f8461a4ae7aca352db35648c0d7c60e476597b259bfecc03c9807c9f3a048b",
+      "host_sha256": "31f8461a4ae7aca352db35648c0d7c60e476597b259bfecc03c9807c9f3a048b"
+    },
+    "raw/daqmt_603196_instrument_detail.json": {
+      "git_sha256": "8b31697f3bb6a97d847c6a7257271a7273ca365d6cddbb7396e880a478340f21",
+      "host_sha256": "3e475fb9f6e4cda110a2e6481f2d273b8e2e3a4b4e19d82e8ec36b8cd12edaf1"
+    }
+  },
+  "human_go_sha256": "bb287dfe9e2559e9fe05abb7401a636aa6596524cfb79ffa34a4f3ff884c2afe"
+}

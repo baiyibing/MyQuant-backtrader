@@ -5,6 +5,12 @@
 > 六份空模板已在远端 master（a268e11）入库：`tests/fixtures/minute_orders_source_attestation/`；ingress §9 见 `docs/backtest/note-l2-lake-source-ingress-b-l2-01-2026-09-29.md`（本文所述登记/绑定规则均以该 §8.2–§9.5 为准）。本机工作副本 master 落后（f8b2b52），本文档以远端 master 为基提交。box 侧落点 `D:\exports\b_l2_01_4090_r3_20260930\evidence\`（本机无此路径）。
 > 探针窗口：603196.SH · 20251023–20251104（R3 未冻结）。
 
+2026-09-30 后续人裁已接受此窗口 `basis=cross_source_ratio`；#1111 `ec19fd6`
+提供 daqmt/THS 对账、Wind 逐日 limits 与 suspendFlag 原材料。
+见 [Human GO 与 remapped drafts](b-l2-01-evidence-2026-09-30/attestation_packages/README.md)
+及 ingress §10 的窄例外。下文保留采集时记录；vendor 单位声明仍不存在，
+不得把本次人裁写成 `source_declaration`。R3 不变、R4 未授权、production_C=frozen。
+
 ## 0. TL;DR
 
 1. **湖的分钟 bar 供应商 = 国金 QMT（xtquant / daqmt 垫片）**，volume 全链路零换算直写 parquet → 湖的单位就是 QMT K 线的原生单位。

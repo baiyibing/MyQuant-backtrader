@@ -1,0 +1,18 @@
+{
+  "schema_version": "bl2_raw_excerpt_v1",
+  "data": {
+    "origin": {
+      "repository": "baiyibing/OSkhQuant1.3",
+      "commit": "ec19fd6f69a52f93aa9870ad582f0173df8963f4",
+      "path": "docs/evidence/b_l2_01_4090_r3_20260930/status.proof.json",
+      "git_sha256": "7afd3f3d3098504a5b12c41882ad6926691d4404ff0bf4e7f9a79d527aa3fc35"
+    },
+    "extraction": {
+      "json_pointer": "/vendor_field_semantics"
+    },
+    "limitation": "#1111 records thinktrader semantics: 0 normal, 1 suspended, -1 resumption day; fill_data=True.",
+    "rows": [
+    {"suspendFlag":"0 - 正常, 1 - 停牌, -1 - 当日起复牌 (thinktrader official doc)","fill_data":"daqmt read uses fill_data=True: bars emitted for every trading minute; absence of bar = no vendor data for that minute"}
+  ]
+  }
+}
