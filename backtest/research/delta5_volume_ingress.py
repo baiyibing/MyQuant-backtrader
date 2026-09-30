@@ -1,7 +1,7 @@
-"""Synthetic-only δ5 ingress v1. No lake reader, certification, or disk cache.
+"""δ5 ingress: synthetic records or independently pinned certified-real evidence.
 
-The explicit fixture evidence below describes an invented source, never a vendor
-attestation. Real sources need a separately authorized reader and certification.
+Structural certification is not host attestation, a lake run, or comparison GO.
+Neither branch uses the shared minute reader/cache.
 """
 
 from __future__ import annotations
@@ -136,17 +136,29 @@ class Inputs:
 
 
 def normalize(source):
-    """Preflight raw fixture records before any deduplication or API invocation."""
+    """Preflight before any deduplication or API invocation."""
     try:
+        if source["kind"] == "certified-real":
+            from backtest.research.delta5_certified_source import normalize_certified
+            return normalize_certified(source)
         return _normalize(source)
     except (KeyError, IndexError, TypeError, AttributeError) as exc:
         raise IngressError("schema", str(exc)) from exc
+    except json.JSONDecodeError as exc:
+        raise IngressError("schema", str(exc)) from exc
+    except OSError as exc:
+        raise IngressError("identity", str(exc)) from exc
 
 
 def _normalize(s):
-    require(s["kind"] == "synthetic", "source", "certified-real is NOT_RUN / unsupported")
+    require(s["kind"] == "synthetic", "source", "unsupported source kind")
     require(s["schema"] == "d5_synthetic_source_v1" and s["publisher"] and s["snapshot_id"],
             "source", "missing source identity")
+    return _map_records(s)
+
+
+def _map_records(s, certification=None):
+    """Shared record checks; certified callers must first verify external packs."""
     require(s["unit"] == UNIT and s["price_domain"] == "raw"
             and s["incremental"] is True, "source", "raw incremental shares required")
     require(s["label"] in ("START", "END"), "time", "unknown label")
@@ -277,6 +289,8 @@ def _normalize(s):
              "price_domain": "raw", "reference_and_mark": "same snapshot raw daily close",
              "limits": "existing book_limit_prices; qlib_limit_pct=None; names as registered"}
     result = Inputs(minute, daily, pool, names, samples, start, end, audit)
+    if certification is not None:
+        result.audit.update(certification)
     result.audit["canonical_hash"] = digest(result.canonical())
     result.audit["frame_hash"] = digest(frame_payload(minute))
     result.audit["bucket_map_hash"] = digest(map_payload(samples))

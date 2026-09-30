@@ -123,6 +123,19 @@ START 规范化是独立 harness 的显式输入映射，不修改共享 loader 
 
 ## 8 下一实施刀 allowlist 草案与确认表
 
+**certified-real 实施后续（2026-09-30，Human「开 δ5 certified-real 实施刀」）**：
+在 #267/#270 后新增 [独立证据加载分支](../../backtest/research/delta5_certified_source.py)；
+`normalize(kind="certified-real")` 要求 resolver 下 raw 分钟/日线逐文件 schema、大小及 bytes SHA-256，
+独立 units / availability / no_events / halt 与 context 包、原材料具体 binding 和完整 session 网格。
+入口仍为上述独立 CLI，新增 `--recipe` / `--recipe-sha256` / `--human-go-sha256`，保留原 `--fixture`。
+`--recipe` **仅结构预检与映射，不调用 simulate**；`source_certification=verified` 限
+`structure_and_pins_only`，fabricated 材料明确记 `evidence_origin=fabricated_test`，
+`host_attestation` / `real_lake_run` 及全部 N/H 格仍 `NOT_RUN`；缺包非零退出并保留拒绝回执。
+形状说明见 [host 填写指针](../../tests/fixtures/delta5_certified/README.md)。
+本刀不解除 `/workspace/handoffs/d5_4090_certified_real_20260930/HOST_D5_CERTIFIED_REAL.md` 的
+BLOCKED；真实源仍需 host 审核认证包及另次 4090 Human re-GO。`production_C=frozen`、
+`no_ssot_compare_authorization` 不变，结构/fixture PASS ≠ 湖 PASS；下文 synthetic-only 描述保留为前刀历史。
+
 **实施后续（2026-09-30，Human「开 δ5 实施」）**：data-free implement 已落代码，待 PR 审查 / Human「合」；独立 [harness CLI](../../scripts/research/verify_delta5_real_volume_ingress.py)、[synthetic mapper/provider](../../backtest/research/delta5_volume_ingress.py)、[验收测试](../../tests/test_delta5_real_volume_ingress.py) 与 [双侧独立构造的完整 session 夹具](../../tests/fixtures/delta5_ingress.py)。GO 留于外部交接 `d5_impl_harness_20260929/HUMAN_GO.md`。CLI 要求显式 fixture JSON/hash、GO、rate（含 none/omitted）及 external parent/run-id，输出 `d5_ingress_v1`，不经共享 run/main、不读写共享分钟缓存。只接受 synthetic source；前文“本刀仅文档 / 未执行”保留为 #260 合同冻结的历史状态。
 
 本次 data-free 覆盖：M1–M4、M6b、M7、M8、M10 的 N/H 完整原生状态对照；M5 的 START/END、三种显式时间编码、可得时间向上取整 N/H（买点 14:55），09:31/09:32 与 open570 门另以 L 验证；M6 为缺行 I + 原生 fallback 边界，**没有 harness 缺桶成功**；M9 仅旧 ride 组 L。M5/M6/M7/M11 的非法记录、覆盖缺口、输入 hash 漂移及输出隔离有 I/CLI 负例。真实 resolver 根/分区验收、真实来源认证/湖运行、v7 及完整 M5 09:31 买点 public E2E 均 **NOT_RUN**。每次 CLI 只报告其 fixture 的具名 N/H 子格，其余格与剩余子例明确 NOT_RUN；测试总覆盖与命令结果见外部 `D5_CODEX_RECEIPT.md`。`production_C=frozen`、`comparison_status=no_ssot_compare_authorization`；没有 SSOT green，也没有以改引擎求 PASS。
