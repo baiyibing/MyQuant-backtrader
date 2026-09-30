@@ -219,6 +219,34 @@ def test_lake_claim_requires_clean_code_and_matching_attestation(source_case, mo
         source_case.load()
 
 
+def test_clean_lake_label_publishes_only_non_acceptance_evidence(source_case, monkeypatch):
+    from backtest.research.minute_orders_backend import source_loader
+
+    # Fabricated tmp_path sources only; use actual clean identity on committed runs.
+    original = source_loader.execution_identity
+    if original()["code_dirty"]:
+        monkeypatch.setattr(source_loader, "execution_identity", lambda: dict(original(), code_dirty=False))
+    source_case.recipe["source_kind"] = "lake"
+    source_case.sidecars["attestation"]["source_kind"] = "lake"
+    source_case.freeze()
+    loaded = source_case.load()
+    result = write(source_case, loaded)
+    assert result.status == "success"
+    manifest = check_refs(result.root)
+    assert manifest["source_kind"] == "lake"
+    assert manifest["source_components"] == {"market": "lake", "commands": "synthetic", "account": "synthetic"}
+    assert manifest["evidence_level"] == "hybrid"
+    assert manifest["live_acceptance_status"] == "not_assessed"
+    assert manifest["host_attestation_status"] == "not_certified_by_writer"
+    notice = "真实行情驱动的合成订单研究; source validation is not host certification or item-4 live PASS."
+    assert manifest["evidence_notice"] == notice
+    provenance = read(result.root, "source_provenance.json")
+    assert provenance["execution"]["code_dirty"] is False
+    assert provenance["source_kind"] == "lake" and provenance["notice"] == notice
+    assert provenance == loaded.provenance.document()
+    assert read(result.root, "summary.json")["status"] == "success"
+
+
 def test_legacy_synthetic_bytes_match_pinned_pre_loader_writer(tmp_path):
     # Obtained by executing S4 artifacts.py from the requested 58b6355 base,
     # with that same unchanged test request and observed trace. Never re-record

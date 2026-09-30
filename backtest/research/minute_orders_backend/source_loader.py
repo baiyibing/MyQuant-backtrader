@@ -73,12 +73,54 @@ def _symbols(values):
     return sorted(result)
 
 
-def _refs(values, store, where):
+def _proof(data, store, identity):
+    """Require saved, scoped evidence; authenticity remains a host review task."""
+    where = f"{identity}: proof"
+    object_fields(data, ("issuer", "subject", "source_refs", "filter", "result", "limitations"), where)
+    nonempty(data["issuer"], where + " issuer")
+    require(type(data["subject"]) is str and data["subject"] in _CLAIMS,
+            f"{where}: unknown subject")
+    refs = data["source_refs"]
+    require(type(refs) is list and bool(refs)
+            and all(type(ref) is str and ref in store.data for ref in refs),
+            f"{where}: pinned source refs required")
+    require(all(store.specs[ref]["schema"] not in ("bl2_proof_v1", "bl2_attestation_v1")
+                for ref in refs), f"{where}: proof/attestation cannot be its own evidence")
+    scope = data["filter"]
+    object_fields(scope, ("symbols", "from_date", "through_date", "predicate"), where + " filter")
+    _symbols(scope["symbols"])
+    require(_date(scope["from_date"], where) <= _date(scope["through_date"], where),
+            f"{where}: reversed filter dates")
+    nonempty(scope["predicate"], where + " filter predicate")
+    result = data["result"]
+    object_fields(result, ("complete", "summary", "rows"), where + " result")
+    require(result["complete"] is True, f"{where}: complete saved result required")
+    nonempty(result["summary"], where + " result summary")
+    require(type(result["rows"]) is list, f"{where}: saved result rows required")
+    if data["subject"] == "actions":
+        require(result["rows"] == [], f"{where}: company actions must have an empty saved filter result")
+    else:
+        require(bool(result["rows"]), f"{where}: saved observations required")
+        for row in result["rows"]:
+            object_fields(row, ("source", "row", "observation"), where + " observation")
+            require(type(row["source"]) is str and row["source"] in refs
+                    and type(row["row"]) is int and row["row"] >= 0,
+                    f"{where}: observation needs a source ref and row index")
+            nonempty(row["observation"], where + " observation")
+    require(type(data["limitations"]) is list and bool(data["limitations"]),
+            f"{where}: limitations required")
+    for limitation in data["limitations"]:
+        nonempty(limitation, where + " limitation")
+
+
+def _refs(values, store, where, *, subject=None):
     require(type(values) is list and bool(values), f"{where}: proof refs required")
     require(all(type(v) is str and v in store.data for v in values),
             f"{where}: unknown proof source ref")
     require(all(store.specs[v]["schema"] == "bl2_proof_v1" for v in values),
             f"{where}: independently pinned bl2_proof_v1 material required")
+    require(all(store.data[v]["subject"] == (subject or where) for v in values),
+            f"{where}: proof subject mismatch")
 
 
 def _time(value, spec, where):
@@ -183,11 +225,12 @@ class _Sources:
                         f"{path}: JSON source schema mismatch")
                 data = document["data"]
                 rows = None
-                if spec["schema"] == "bl2_proof_v1":
-                    require(type(data) is dict and bool(data), f"{path}: empty proof material")
             self.data[identity], self.specs[identity] = data, spec
             self.snapshots.append({"id": identity, "ref": str(path), "sha256": spec["sha256"],
                                    "format": spec["format"], "schema": spec["schema"], "rows": rows})
+        for identity, spec in self.specs.items():
+            if spec["schema"] == "bl2_proof_v1":
+                _proof(self.data[identity], self, identity)
         if self.resolver["basis"] == "AUTHORITY_HINT":
             marker = data_root.find_authority_marker()
             require(marker is not None, "authority marker disappeared")
@@ -453,7 +496,7 @@ def load_minute_orders_source(recipe_path, *, expected_sha256: str) -> LoadedSou
             "company actions absent/unsupported or incomplete coverage")
     require(_date(actions["from_date"], "actions from_date") <= first_day
             and _date(actions["through_date"], "actions through_date") >= end.date(), "company actions coverage gap")
-    _refs(actions["proofs"], store, "company actions")
+    _refs(actions["proofs"], store, "company actions", subject="actions")
     sessions = _sessions(recipe)
     coverage = _coverage(recipe, store, symbols, sessions)
     buckets, bar_audit, exclusions = _bars(recipe, store, symbols, sessions, coverage)
@@ -489,14 +532,14 @@ def load_minute_orders_source(recipe_path, *, expected_sha256: str) -> LoadedSou
             uses.append(start.isoformat())
         require(all(available <= _timestamp(t, "fact use") for t in uses
                     if _timestamp(t, "fact use").date() == day), "instrument facts unavailable at use")
-        _refs(row["proofs"], store, "instrument")
+        _refs(row["proofs"], store, "instrument", subject="instruments")
         require(row["origin"] in ("source_fact", "approved_derivation"), "unknown instrument fact origin")
         if row["origin"] == "approved_derivation":
             object_fields(row["derivation"], ("inputs", "approved_rule_version", "independent_verification"), "derivation")
             require(type(row["derivation"]["inputs"]) is list and bool(row["derivation"]["inputs"])
                     and all(s in store.data for s in row["derivation"]["inputs"]), "derived facts need pinned inputs")
             nonempty(row["derivation"]["approved_rule_version"], "approved rule")
-            _refs(row["derivation"]["independent_verification"], store, "derivation verification")
+            _refs(row["derivation"]["independent_verification"], store, "derivation verification", subject="instruments")
         else:
             require(row["derivation"] == {}, "source facts cannot hide a derivation")
         instruments.append(facts)

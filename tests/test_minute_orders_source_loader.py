@@ -9,6 +9,7 @@ from pathlib import Path
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
+from backtest.research.minute_orders_backend.clock import RunContractError
 from backtest.research.minute_orders_backend.source_loader import load_minute_orders_source
 from backtest.research.minute_orders_backend.source_provenance import (
     FIXTURE_NOTICE,
@@ -44,9 +45,6 @@ class SyntheticCase:
         pq.write_table(pa.Table.from_pylist(self.rows), self.bar_path)
         fees = {"rate": "0.001", "min_fee": "5.00", "rounding": "ROUND_HALF_UP"}
         self.sidecars = {
-            "proof": {"fixture_notice": FIXTURE_NOTICE, "issuer": "synthetic-test-author",
-                      "boundary_samples": [{"source": "bars", "row": 0, "start": at("09:30:00"), "end": at("09:31:00")}],
-                      "unit": "incremental shares", "limitation": "fabricated facts for mapping tests only"},
             "calendar": {"trading_dates": ["2026-09-25", "2026-09-28", "2026-09-29"]},
             "commands": {"origin": "designed_limit_batch", "commands": [
                 {"kind": "submit", "command_id": "submit-A", "order_id": "A", "symbol": "symbol=603196_SH",
@@ -62,21 +60,50 @@ class SyntheticCase:
                                                 "reference_price": "10.00", "limit_down": "9.00", "limit_up": "11.00"},
                                       "effective_from": "2026-09-28", "effective_through": "2026-09-28",
                                       "available_at": at("09:00:00"), "ordinary_listing": True,
-                                      "origin": "source_fact", "proofs": ["proof"], "derivation": {}}]},
+                                      "origin": "source_fact", "proofs": ["proof_instruments"], "derivation": {}}]},
             "status": {"rows": [{"symbol": SYMBOL, "start": at(start), "end": at(end), "missing": False,
-                                  "halted": False, "reason": "fixture source present", "issuer": "synthetic-test-author", "proofs": ["proof"]}
+                                  "halted": False, "reason": "fixture source present", "issuer": "synthetic-test-author", "proofs": ["proof_status"]}
                                  for start, end in (("09:30:00", "09:31:00"), ("09:31:00", "09:32:00"))]},
             "actions": {"symbols": [SYMBOL], "from_date": "2026-09-25", "through_date": "2026-09-29",
-                        "complete": True, "events": [], "proofs": ["proof"]},
+                        "complete": True, "events": [], "proofs": ["proof_actions"]},
             "attestation": {"issuer": "synthetic-test-author", "issued_at": "2026-09-29T08:00:00+08:00",
                             "source_kind": "synthetic_fixture", "symbols": [SYMBOL], "from_date": "2026-09-25",
                             "through_date": "2026-09-29", "complete": True, "limitations": [FIXTURE_NOTICE],
-                            "claims": {name: {"conclusion": claim, "proofs": ["proof"]} for name, claim in (
+                            "claims": {name: {"conclusion": claim, "proofs": ["proof_" + name]} for name, claim in (
                                 ("calendar", "complete_trading_calendar"), ("timing", "completed_bucket_available_at_end"),
                                 ("units", "incremental_volume_units_verified"), ("instruments", "ordinary_main_raw_facts_verified"),
                                 ("actions", "complete_no_company_actions"), ("status", "complete_halt_missing_grid"),
                                 ("marks", "raw_contemporaneous_grid"))}},
         }
+        # Independently pinned fabricated observations and company-action inputs.
+        # These exercise saved proof structure, never host authenticity.
+        self.action_paths = {}
+        for name, table in (
+            ("ex_date_index", pa.table({"symbol": pa.array([], type=pa.string()),
+                                       "ex_date": pa.array([], type=pa.string())})),
+            ("adj_factor", pa.table({"symbol": [SYMBOL, SYMBOL],
+                                     "date": ["2026-09-25", "2026-09-29"], "factor": ["1", "1"]})),
+        ):
+            path = self.lake / (name + ".parquet")
+            pq.write_table(table, path)
+            self.action_paths[name] = path
+        attestation = self.sidecars.pop("attestation")
+        self.sidecars["observations"] = {
+            "rows": [{"subject": name, "conclusion": claim["conclusion"], "fixture_notice": FIXTURE_NOTICE}
+                     for name, claim in attestation["claims"].items()]
+        }
+        for index, (name, claim) in enumerate(attestation["claims"].items()):
+            self.sidecars["proof_" + name] = {
+                "issuer": "synthetic-test-author", "subject": name,
+                "source_refs": ["ex_date_index", "adj_factor"] if name == "actions" else ["observations"],
+                "filter": {"symbols": [SYMBOL], "from_date": "2026-09-25", "through_date": "2026-09-29",
+                           "predicate": "symbol in declared universe and date within inclusive coverage window"},
+                "result": {"complete": True, "summary": claim["conclusion"] + " (fabricated fixture)",
+                           "rows": [] if name == "actions" else [
+                               {"source": "observations", "row": index, "observation": claim["conclusion"]}]},
+                "limitations": [FIXTURE_NOTICE, "Fabricated saved results; completeness needs independent host review."],
+            }
+        self.sidecars["attestation"] = attestation
         execution = execution_identity()
         self.recipe = {
             "schema_version": "minute_orders_source_recipe_v1", "unit": "B-L2-01", "source_kind": "synthetic_fixture",
@@ -93,15 +120,20 @@ class SyntheticCase:
                                "pyarrow_version": execution["pyarrow_version"], "transform_version": TRANSFORM_VERSION},
             "sources": [{"id": "bars", "location": {"kind": "minute", "symbol": SYMBOL}, "format": "parquet",
                          "schema": {"symbol": "string", "time": "string", "close": "double", "volume": "int64"}, "sha256": ""}],
-            "roles": {role: role for role in self.sidecars if role != "proof"},
+            "roles": {role: role for role in ("calendar", "instruments", "status", "actions", "commands", "account", "attestation")},
             "bars": [{"source": "bars", "columns": {"symbol": "symbol", "time": "time", "close": "close", "volume": "volume"},
                       "time": {"encoding": "iso_offset", "timezone": "Asia/Shanghai", "label": "START"},
                       "volume": {"kind": "incremental", "unit": "shares", "shares_per_unit": 1},
                       "availability": "bucket_end", "price_domain": "raw"}],
         }
+        for name, path in self.action_paths.items():
+            self.recipe["sources"].append({"id": name, "location": {"kind": "loose", "name": path.name},
+                                            "format": "parquet", "schema": {f.name: str(f.type) for f in pq.read_schema(path)},
+                                            "sha256": ""})
         for role in self.sidecars:
             self.recipe["sources"].append({"id": role, "location": {"kind": "sidecar", "path": str(tmp_path / (role + ".json"))},
-                                            "format": "json", "schema": f"bl2_{role}_v1", "sha256": ""})
+                                            "format": "json", "schema": "bl2_proof_v1" if role.startswith("proof_") else f"bl2_{role}_v1",
+                                            "sha256": ""})
         self.freeze()
 
     def freeze(self, *, write_bars=True):
@@ -111,6 +143,8 @@ class SyntheticCase:
         for spec in self.recipe["sources"]:
             if spec["id"] == "bars":
                 path = self.bar_path
+            elif spec["id"] in self.action_paths:
+                path = self.action_paths[spec["id"]]
             else:
                 path = Path(spec["location"]["path"])
                 if spec["id"] == "attestation":
@@ -263,6 +297,65 @@ def test_coverage_rejections(source_case, case):
         source_case.load()
 
 
+@pytest.mark.parametrize("subject", ["calendar", "timing", "units", "instruments", "actions", "status", "marks"])
+@pytest.mark.parametrize("payload", [{}, {"placeholder": True}, {"issuer": "synthetic-test-author"}])
+def test_content_free_proof_objects_fail_closed(source_case, subject, payload):
+    source_case.sidecars["proof_" + subject] = payload
+    source_case.freeze()
+    with pytest.raises(SourceContractError, match="proof.*schema fields"):
+        source_case.load()
+
+
+@pytest.mark.parametrize(("field", "value", "message"), [
+    ("issuer", " ", "issuer"),
+    ("source_refs", [], "pinned source refs"),
+    ("source_refs", ["unknown"], "pinned source refs"),
+    ("source_refs", ["proof_status"], "own evidence"),
+    ("source_refs", ["attestation"], "own evidence"),
+    ("filter.symbols", [], "symbol universe"),
+    ("filter.from_date", "2026-09-30", "reversed filter dates"),
+    ("filter.predicate", " ", "filter predicate"),
+    ("result.complete", False, "complete saved result"),
+    ("result.summary", " ", "result summary"),
+    ("result.rows", [], "saved observations"),
+    ("result.rows", [{}], "observation.*schema fields"),
+    ("result.rows", [{"source": "bars", "row": 0, "observation": "present"}], "source ref and row index"),
+    ("result.rows", [{"source": "observations", "row": True, "observation": "present"}], "source ref and row index"),
+    ("result.rows", [{"source": "observations", "row": 0, "observation": " "}], "observation"),
+    ("limitations", [], "limitations"),
+])
+def test_proof_requires_pinned_scoped_saved_evidence(source_case, field, value, message):
+    target = source_case.sidecars["proof_status"]
+    *parts, key = field.split(".")
+    for part in parts:
+        target = target[part]
+    target[key] = value
+    source_case.freeze()
+    with pytest.raises(SourceContractError, match=message):
+        source_case.load()
+
+
+@pytest.mark.parametrize("target", ["status", "actions", "attestation"])
+def test_proof_refs_cannot_substitute_an_unrelated_claim(source_case, target):
+    if target == "status":
+        row = source_case.sidecars["status"]["rows"][0]
+    elif target == "actions":
+        row = source_case.sidecars["actions"]
+    else:
+        row = source_case.sidecars["attestation"]["claims"]["actions"]
+    row["proofs"] = ["proof_timing"]
+    source_case.freeze()
+    with pytest.raises(SourceContractError, match="proof subject mismatch"):
+        source_case.load()
+
+
+def test_company_action_proof_requires_saved_empty_filter_result(source_case):
+    source_case.sidecars["proof_actions"]["result"]["rows"] = [{"symbol": SYMBOL, "cash": "1.00"}]
+    source_case.freeze()
+    with pytest.raises(SourceContractError, match="company actions.*empty saved filter result"):
+        source_case.load()
+
+
 @pytest.mark.parametrize("case", ["no_final", "no_spot", "universe_gap", "wrong_time", "missing_row", "off_tick", "disabled"])
 def test_mark_rejections(source_case, case):
     if case == "no_final":
@@ -316,9 +409,10 @@ def test_authority_marker_and_period_override_are_recorded(source_case, monkeypa
     assert any(s["id"] == "authority_marker" for s in doc["snapshots"])
 
 
-@pytest.mark.parametrize("case", ["main", "raw", "listing", "facts_gap", "late_facts", "derivation", "next_date", "default_fee", "session_gap", "auction", "duplicate_symbol"])
+@pytest.mark.parametrize("case", ["main", "raw", "listing", "facts_gap", "late_facts", "derivation", "next_date", "default_fee", "session_gap", "auction", "session_gap_covered", "lunch_covered", "auction_covered", "duplicate_symbol"])
 def test_fact_calendar_economic_recipe_rejections(source_case, case):
     facts = source_case.sidecars["instruments"]["rows"][0]
+    error, message = ValueError, None
     if case == "main":
         facts["facts"]["board"] = "star"
     elif case == "raw":
@@ -335,16 +429,41 @@ def test_fact_calendar_economic_recipe_rejections(source_case, case):
         source_case.sidecars["calendar"]["trading_dates"].pop()
     elif case == "default_fee":
         del source_case.sidecars["account"]["buy_fees"]
-    elif case == "session_gap":
+    elif case in ("session_gap", "session_gap_covered"):
         source_case.recipe["intervals"] = [{"start": at("09:30:00"), "end": at("09:31:00")},
                                             {"start": at("09:32:00"), "end": at("09:33:00")}]
-    elif case == "auction":
+    elif case in ("auction", "auction_covered"):
         source_case.recipe["intervals"] = [{"start": at("14:57:00"), "end": at("14:58:00")}]
+    elif case == "lunch_covered":
+        source_case.recipe["intervals"] = [{"start": at("12:00:00"), "end": at("12:01:00")}]
     else:
         source_case.recipe["symbols"].append(SYMBOL)
+    if case.endswith("_covered"):
+        # Match the entire status grid so refusal reaches BrokerCore -> Clock.
+        template = source_case.sidecars["status"]["rows"][0]
+        source_case.sidecars["status"]["rows"] = [
+            {**deepcopy(template), **interval,
+             "missing": not any(row["time"] == interval["start"] for row in source_case.rows)}
+            for interval in source_case.recipe["intervals"]
+        ]
+        error = RunContractError
+        message = ("session gap must be covered by explicit missing buckets" if case == "session_gap_covered"
+                   else "bucket crosses lunch or continuous session endpoints")
+    elif case in ("session_gap", "auction"):
+        error, message = SourceContractError, "halt/missing coverage grid mismatch"
     source_case.freeze()
-    with pytest.raises(ValueError):
+    with pytest.raises(error, match=message):
         source_case.load()
+
+
+def test_last_continuous_bucket_ends_at_1457(source_case):
+    interval = {"start": at("14:56:00"), "end": at("14:57:00")}
+    source_case.recipe["intervals"] = [interval]
+    source_case.sidecars["status"]["rows"] = [{**source_case.sidecars["status"]["rows"][0], **interval}]
+    source_case.freeze()
+    bucket, = source_case.load().run_input.buckets
+    assert bucket.start.isoformat() == interval["start"]
+    assert bucket.end.isoformat() == interval["end"]
 
 
 def test_attestation_cannot_be_reused_after_changing_mapping(source_case):
