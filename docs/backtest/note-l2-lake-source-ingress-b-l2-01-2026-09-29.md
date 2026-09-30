@@ -88,7 +88,8 @@ resolver 只定位，不保证文件存在：loader 必须逐项检查可读性�
   原值、因子、结果均登记。累计量/单位不明拒绝本首实现，不凭差分、100 倍猜测或四舍五入修复。
 - 原生价格/金额使用 Decimal；JSON 按 [v1 codec](note-minute-orders-cli-2026-09-29.md) 用字符串。
   decimal/text 源保留精度；double 源取已 pin 解释器的 `repr(value)` 最短往返十进制文本再转 Decimal，
-  记录原类型/值、文本及转换版本；必须已满足分/tick，不以 float 运算或隐式 quantize 修价。
+  记录原类型/值、文本及转换版本；必须满足分/tick，不以 float 运算或隐式 quantize 修价。
+  §10.2 的 v6 仅对 double 价格增加显式、有界且留痕的分位 quantize；精确源和 volume 不适用。
   非有限、负量、非整数股数及价域混用均失败。
 
 ### 3.2 日限、公司行动与缺根证据
@@ -226,7 +227,7 @@ S4 input/contract/各 component hashes；既有 validators 只用于预检，不
 S4 新路径为 `evidence_level=hybrid`、`minute_orders_artifacts_v2`、
 `minute_orders_hybrid_evidence_v1` 与 `minute_orders_source_provenance_v1`；原转换版 `bl2_source_transform_v1`，
 本次 §8 升为 `bl2_source_transform_v2`，须重新 pin implementation/recipe/attestation。
-上述 v2 仅为 §8 历史记录；§9 / §9.5 的 `bl2_source_transform_v3` 唯一版本要求限于 R3，已冻结的 R3 收据/证据保留 v3；§10 的 v4 为 units 例外版本，当前 remap 路径须按 §10.1 的 `bl2_source_transform_v5` 重新 pin implementation/recipe/attestation。
+上述 v2 仅为 §8 历史记录；§9 / §9.5 的 `bl2_source_transform_v3` 唯一版本要求限于 R3，已冻结的 R3 收据/证据保留 v3；§10 的 v4 为 units 例外版本，§10.1 的 v5 为 wall encoding 版本，当前 remap 路径须按 §10.2 的 `bl2_source_transform_v6` 重新 pin implementation/recipe/attestation。
 它显式区分 market 来源与 synthetic commands/account；本单元不提供 real-only 或 `lake` evidence_level。
 wrapper 执行前、writer 执行后重读冻结源并重建映射，不只信任调用方自报的 provenance hash。
 增加 `source_provenance.json`、`source_checks.json`、成功路径的 `source_postflight.json`；
@@ -532,9 +533,29 @@ map §1.1 / census、已保存 Kimi 与 R4f 收据的逐份 hash。loader 固定
 同分钟源的 marks 沿用该映射并受同门禁；不能给其他 daily/mark 源随意贴此编码。
 逐 bar audit 保留原整数文本、int64 类型、声明编码、ISO 起止及批准引用。
 
-当前 transform 为 **`bl2_source_transform_v5`**；宿主须重新 pin code/runtime、recipe、
+本节历史 transform 为 **`bl2_source_transform_v5`**（当前见 §10.2）；宿主须重新 pin code/runtime、recipe、
 marks 映射与 `attestation_scope`。旧 R4f 收据/尝试保持原状，不能复用为新 freeze。
 状态/单位/instruments/CAM 矩阵不改；240 格 status 与 237 格连续撮合范围的差异仍须宿主处理。
 account/commands、配置湖身份复核及 fresh freeze 仍可能阻挡；本地只测合成 fixtures/保存证据，
 **不宣称 lake PASS**。`r4_authorized=false`、`no_ssot_compare_authorization`、production_C 冻结不变。
 后续为 **Grok → Human「合」→ land → 另一次具名 Human「开 R4g」**；本刀不合并、不发车、不改湖。
+
+### 10.2 R4h cent-align：double 价格显式有界转换（2026-09-30）
+
+Human「开修」via bt（GO SHA-256
+`45ba9a99ec4d09fdb4c73c5dc2e2bf3aa6115a2c7b6a374eed79bc5448b71729`）授权修复
+`FeeContractError: bucket close must be cent-aligned; no implicit rounding`。
+当前 transform 为 **`bl2_source_transform_v6`**。`double_repr_cent_quantize_v1`
+对 bars/marks 的 pinned double 价格先取 `Decimal(repr(float))`；已对齐分位则保留原值，
+否则仅当到最近分的绝对残差 ≤ `Decimal("1e-9")` 元时，以 `ROUND_HALF_EVEN`
+显式 quantize 到 `Decimal("0.01")`，超界抛 `SourceContractError`。
+audit 保存原文本、结果文本、残差、上界、规则、舍入方式和是否 quantize。
+精确 Decimal/string/int 保持原值，volume 仍要求精确整数股；`10.001` 仍拒绝。
+完整规则、lake census 残差样例及再冻结要求见
+[packs README](b-l2-01-evidence-2026-09-30/attestation_packages/README.md)。
+Fees / BrokerCore / MatchCore / Ledger / Clock 不改；wall encoding 保持
+`epoch_ms_wall_shanghai_as_utc`，原批准与证据字节不改。
+须以 v6 重新 pin code/runtime、recipe、marks 与 scoped attestation；account/commands、
+宿主湖身份/覆盖核验和 fresh freeze 仍待完成，不宣称 freeze/lake PASS。
+`r4_authorized=false`、`no_ssot_compare_authorization`、production_C 冻结不变。
+后续为 **Grok review → Human「合」→ land → Human「开 R4」**；合并不授权 R4，本刀不合并、不发车。

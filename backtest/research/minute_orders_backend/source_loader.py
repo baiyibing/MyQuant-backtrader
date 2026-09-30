@@ -9,7 +9,7 @@ import os
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
+from decimal import Context, Decimal, ROUND_HALF_EVEN, localcontext
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -55,6 +55,9 @@ _BOUND_SUBJECTS = {"units", "instruments", "status"}
 _FACT_PACKAGES = ("bl2_instruments_v1", "bl2_status_v1")
 _RATIO_GO_SHA256 = "bb287dfe9e2559e9fe05abb7401a636aa6596524cfb79ffa34a4f3ff884c2afe"
 _WALL_SHANGHAI_ENCODING = "epoch_ms_wall_shanghai_as_utc"
+_DOUBLE_PRICE_RULE = "double_repr_cent_quantize_v1"
+_CENT = Decimal("0.01")
+_MAX_DOUBLE_PRICE_RESIDUE = Decimal("1e-9")  # Yuan; explicit double-price noise allowance only.
 # attestation_packages/sources/time_encoding_approval.json: exact saved HOST
 # approval, including source/column/window and material hashes.
 # Synthetic tests replace only this trust anchor with explicitly fabricated bytes.
@@ -355,6 +358,31 @@ def _decimal(value, arrow_type, where):
                     "decimal_text": str(result), "rule": "double_repr_or_exact_decimal_v1"}
 
 
+def _price_decimal(value, arrow_type, where):
+    """Attest bounded double residue for prices only; exact inputs stay exact."""
+    result, record = _decimal(value, arrow_type, where)
+    if type(value) is not float:
+        return result, record
+    numerator, denominator = result.as_integer_ratio()
+    residue = Decimal(0)
+    quantized = (numerator * 100) % denominator != 0
+    if quantized:
+        # Fresh context makes the bound/rounding independent of caller precision,
+        # rounding and traps. repr(double) has at most 17 significant digits.
+        with localcontext(Context(prec=max(28, result.adjusted() + 3), rounding=ROUND_HALF_EVEN)):
+            nearest = result.quantize(_CENT)
+            residue = abs(result - nearest)
+        require(residue <= _MAX_DOUBLE_PRICE_RESIDUE,
+                f"{where}: {_DOUBLE_PRICE_RULE}: price must be cent-aligned; "
+                f"residue {residue} exceeds {_MAX_DOUBLE_PRICE_RESIDUE} yuan")
+        result = nearest
+        record["quantized_text"] = str(result)
+    record.update(decimal_text=str(result), rule=_DOUBLE_PRICE_RULE,
+                  quantized=quantized, residue=str(residue),
+                  max_abs_residue=str(_MAX_DOUBLE_PRICE_RESIDUE), rounding="ROUND_HALF_EVEN")
+    return result, record
+
+
 class _Sources:
     def __init__(self, specs):
         from common.infra import data_root
@@ -601,7 +629,7 @@ def _bars(recipe, store, symbols, sessions, coverage):
                 continue
             status, status_index = coverage[key]
             require(not status["missing"], f"{sid}#{index}: missing coverage conflicts with source row")
-            close, price_record = _decimal(row[cols["close"]], schema[cols["close"]], f"{sid}#{index} close")
+            close, price_record = _price_decimal(row[cols["close"]], schema[cols["close"]], f"{sid}#{index} close")
             quantity, qty_record = _decimal(row[cols["volume"]], schema[cols["volume"]], f"{sid}#{index} volume")
             numerator, denominator = quantity.as_integer_ratio()
             require(numerator >= 0 and (numerator * factor) % denominator == 0,
@@ -674,7 +702,7 @@ def _marks(recipe, store, symbols):
             if label == "START":
                 stamp += timedelta(minutes=1)
             require(stamp == event, "mark source time/availability gap; no last-value or synthetic fallback")
-            price, conversion = _decimal(row[ref["price_column"]], schema[ref["price_column"]], "mark price")
+            price, conversion = _price_decimal(row[ref["price_column"]], schema[ref["price_column"]], "mark price")
             prices.append({"symbol": symbol, "price": str(price)})
             audit.append({"source": sid, "row": index, "columns": ref, "conversion": conversion,
                           "symbol_binding": binding,

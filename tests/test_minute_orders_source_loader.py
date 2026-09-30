@@ -3,13 +3,14 @@
 import json
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
+from decimal import Decimal, Inexact, ROUND_UP, Rounded, localcontext
 from pathlib import Path
 
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 from backtest.research.minute_orders_backend.clock import RunContractError
+from backtest.research.minute_orders_backend.fees import FeeContractError, money_cents
 from backtest.research.minute_orders_backend import source_loader
 from backtest.research.minute_orders_backend.source_loader import load_minute_orders_source
 from backtest.research.minute_orders_backend.source_provenance import (
@@ -292,7 +293,7 @@ def test_bound_wall_encoding_loads_end_buckets_and_marks_with_audit(wall_case):
         (at("09:30:00"), at("09:31:00")), (at("09:31:00"), at("09:32:00"))]
     assert run.marks[-1].event_time.isoformat() == at("15:00:00")
     doc = loaded.provenance.document()
-    assert doc["transform"]["version"] == "bl2_source_transform_v5"
+    assert doc["transform"]["version"] == "bl2_source_transform_v6"
     for row, raw in zip(doc["transform"]["bars"], wall_case.rows):
         assert row["original_time"] == str(raw["time"])
         assert row["time_source_type"] == "int64"
@@ -369,6 +370,89 @@ def test_explicit_mapping_and_excluded_rows_keep_independent_1500_mark(source_ca
     assert doc["source_kind"] == "synthetic_fixture" and doc["notice"] == FIXTURE_NOTICE
     assert all(row["unchanged"] for row in doc["source_checks_at_load"])
     assert not Path(source_case.recipe["parent"]).exists()
+
+
+@pytest.mark.parametrize("noisy,expected", [
+    (23.310000000000002, "23.31"), (23.830000000000002, "23.83"),
+])
+def test_double_price_residue_is_attested_for_buckets_and_marks(source_case, noisy, expected):
+    for row in source_case.rows:
+        row["close"] = noisy
+    source_case.sidecars["instruments"]["rows"][0]["facts"].update(
+        reference_price="23.00", limit_down="20.00", limit_up="26.00")
+    source_case.sidecars["commands"]["commands"][0]["limit"] = "23.00"
+    source_case.attest_fabricated_bindings()
+    source_case.freeze()
+    loaded = source_case.load()
+    assert all(b.close.as_tuple() == Decimal(expected).as_tuple() for b in loaded.run_input.buckets)
+    assert all(p.price.as_tuple() == Decimal(expected).as_tuple()
+               for m in loaded.run_input.marks for p in m.prices)
+    transform = loaded.provenance.document()["transform"]
+    assert transform["version"] == "bl2_source_transform_v6"
+    for record in ([b["price"] for b in transform["bars"]]
+                   + [m["conversion"] for m in transform["marks"]]):
+        assert record == {"source_type": "double", "original": repr(noisy),
+                          "decimal_text": expected, "quantized_text": expected,
+                          "rule": "double_repr_cent_quantize_v1", "quantized": True,
+                          "residue": "2E-15", "max_abs_residue": "1E-9", "rounding": "ROUND_HALF_EVEN"}
+    assert all(b["volume"]["rule"] == "double_repr_or_exact_decimal_v1" for b in transform["bars"])
+
+
+@pytest.mark.parametrize("value,expected,residue", [
+    (23.31, "23.31", "0"), (10.0, "10.0", "0"),
+    (23.309999999999995, "23.31", "5E-15"),
+    (10.000000001, "10.00", "1E-9"), (9.999999999, "10.00", "1E-9"),
+])
+def test_double_price_rule_preserves_aligned_values_and_accepts_inclusive_bound(value, expected, residue):
+    # Ambient precision, rounding and inexact traps must not alter the rule.
+    with localcontext() as ctx:
+        ctx.prec, ctx.rounding = 6, ROUND_UP
+        ctx.traps[Inexact] = ctx.traps[Rounded] = True
+        price, audit = source_loader._price_decimal(value, "double", "test close")
+    assert price.as_tuple() == Decimal(expected).as_tuple()
+    assert audit["original"] == repr(value) and audit["decimal_text"] == expected
+    assert audit["rule"] == "double_repr_cent_quantize_v1"
+    assert Decimal(audit["residue"]) == Decimal(residue)
+    assert audit["quantized"] is (residue != "0")
+    assert money_cents(price, "test close") == int(Decimal(expected) * 100)
+
+
+@pytest.mark.parametrize("value", [10.001, 10.005, 10.000000001000002, 9.999999998999998])
+def test_double_price_rule_rejects_subcents_outside_bound(value):
+    with pytest.raises(SourceContractError, match="double_repr_cent_quantize_v1.*cent-aligned.*exceeds"):
+        source_loader._price_decimal(value, "double", "test close")
+
+
+@pytest.mark.parametrize("value,arrow_type", [
+    ("10.001", "string"), (Decimal("10.001"), "decimal128(5, 3)"),
+    ("23.310000000000002", "string"),
+    (Decimal("23.310000000000002"), "decimal128(17, 15)"), (10, "int64"),
+])
+def test_exact_prices_never_take_double_noise_allowance(value, arrow_type):
+    price, audit = source_loader._price_decimal(value, arrow_type, "test close")
+    assert price.as_tuple() == Decimal(str(value)).as_tuple()
+    assert audit["rule"] == "double_repr_or_exact_decimal_v1"
+    assert "quantized_text" not in audit
+    if type(value) is not int:
+        with pytest.raises(FeeContractError, match="cent-aligned"):
+            money_cents(price, "test close")
+
+
+@pytest.mark.parametrize("index,where", [(0, "close"), (-1, "mark price")])
+def test_parquet_double_subcent_prices_fail_at_transform(source_case, index, where):
+    source_case.rows[index]["close"] = 10.001
+    source_case.freeze()
+    with pytest.raises(SourceContractError, match=where + ": double_repr_cent_quantize_v1.*cent-aligned"):
+        source_case.load()
+
+
+def test_parquet_double_volume_residue_is_not_price_quantized(source_case):
+    for row in source_case.rows:
+        row["volume"] = float(row["volume"])
+    source_case.rows[0]["volume"] = 1000.0000000000001
+    source_case.freeze()
+    with pytest.raises(SourceContractError, match="exact integer shares"):
+        source_case.load()
 
 
 @pytest.mark.parametrize("tag", [SYMBOL, "603196_SH", "symbol=603196_SH"])
