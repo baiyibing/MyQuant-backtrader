@@ -5,7 +5,8 @@ inputs are vendored for offline CI. The instruments host fill (rule archive,
 approval record, available_at, ordinary_listing) is bound to pinned inputs in
 inputs.json and HOST_R4_INSTRUMENTS_APPROVAL_20260930.md. The #1114 CAM
 materials and HOST_R4_CAM_APPROVAL_20260930.md fill calendar/actions/marks
-evidence only; r4_authorized stays false and the transform remains v4.
+evidence only. The timing fill uses pinned MyQuant census/map/vendor excerpts;
+r4_authorized stays false and the transform remains v4.
 """
 
 import argparse
@@ -38,6 +39,13 @@ CAM_APPROVAL_ID = "host_r4_cam_approval_20260930"
 CAM_GO_NAME = "HUMAN_GO_CAM.md"
 CAM_LAKE_SHA256 = "58879893f221bfe050b7a16029667c49fb65d8ec6f47592254e549374a577083"
 NEXT_BUY_DAY = "2025-11-05"
+TIMING_DIR = "timing_host_materials"
+TIMING_APPROVAL_NAME = "HOST_R4_TIMING_APPROVAL_20260930.md"
+TIMING_APPROVAL_ID = "host_r4_timing_approval_20260930"
+TIMING_GO_NAME = "HUMAN_GO_TIMING.md"
+TIMING_CENSUS = "raw_materials/raw_lake_minute_census_603196SH_20251023_20251104.json"
+TIMING_DOCS = "raw_materials/raw_excerpt_xtquant_docs.json"
+TIMING_MAP = "HOST_MATERIALS_MAP_R4.md"
 
 
 def require(condition, message):
@@ -80,7 +88,7 @@ def encode(document):
     return (json.dumps(document, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
 
 
-def read_inputs(source_dir, human_go, host_approval=None, host_cam_approval=None):
+def read_inputs(source_dir, human_go, host_approval=None, host_cam_approval=None, host_timing_approval=None):
     pins = json.loads((HERE / "inputs.json").read_bytes())
     require(digest(human_go.read_bytes()) == pins["human_go_sha256"], "Human GO hash mismatch")
     if host_approval is None:
@@ -118,7 +126,170 @@ def read_inputs(source_dir, human_go, host_approval=None, host_cam_approval=None
         inputs[key] = raw.decode("utf-8")
     inputs[CAM_APPROVAL_NAME] = cam_approval_raw.decode("utf-8")
     inputs[CAM_GO_NAME] = cam_go_raw.decode("utf-8")
+    timing_approval_raw = (host_timing_approval or HERE / TIMING_APPROVAL_NAME).read_bytes()
+    require(digest(timing_approval_raw) == pins["host_timing_approval_sha256"], "timing host approval hash mismatch")
+    require(TIMING_APPROVAL_ID in timing_approval_raw.decode("utf-8"), "timing host approval id marker missing")
+    timing_go_raw = (HERE / TIMING_GO_NAME).read_bytes()
+    require(digest(timing_go_raw) == pins["human_go_timing_sha256"], "timing Human GO hash mismatch")
+    for name, hashes in pins["timing_host_materials"]["files"].items():
+        key = TIMING_DIR + "/" + name
+        raw = (source_dir / key).read_bytes()
+        require(digest(raw) == hashes["git_sha256"], f"timing input hash mismatch: {name}")
+        inputs[key] = json.loads(raw, parse_float=Decimal)
+    inputs[TIMING_APPROVAL_NAME] = timing_approval_raw.decode("utf-8")
+    inputs[TIMING_GO_NAME] = timing_go_raw.decode("utf-8")
     return pins, inputs
+
+
+def extract_timing_materials(materials, originals):
+    """Reproduce compact fixtures from pinned saved evidence, never a live lake."""
+    for name, raw in originals.items():
+        require(digest(raw) == materials["original_files"][name]["sha256"],
+                f"timing original hash mismatch: {name}")
+
+    def excerpt(name, rows, extraction, **metadata):
+        return {"schema_version": "bl2_raw_excerpt_v1", "data": {
+            "origin": {"repository": materials["repository"], "commit": materials["commit"],
+                       "path": materials["directory"] + "/" + name,
+                       **materials["original_files"][name]},
+            "extraction": {"row_index": "zero-based excerpt rows array", **extraction},
+            **metadata, "rows": rows}}
+
+    census = json.loads(originals[TIMING_CENSUS], parse_float=Decimal)
+    rows = [{"kind": key, "json_pointer": "/" + key, key: census[key]}
+            for key in ("time_semantics", "grid_definition")]
+    counters = ("window_rows", "grid_cells", "grid_missing", "grid_dup", "zero_volume_grid_cells")
+    rows.append({"kind": "coverage", **{key: census[key] for key in counters}})
+    for index, cell in enumerate(census["cells"]):
+        if (cell["day"] == FIRST and cell["end_label_hm"] in
+                ("0930", "0931", "1130", "1301", "1457", "1458", "1459", "1500")) or (
+                cell["day"] == LAST and cell["end_label_hm"] == "1500"):
+            rows.append({"kind": "boundary_sample", "source_cell_index": index, **cell})
+    result = {"timing_lake_census.json": excerpt(TIMING_CENSUS, rows,
+        {"method": "Copy semantics, grid, counters and selected cells; source_cell_index indexes original /cells; "
+                   "row_idx is the saved zero-based absolute parquet row, not an excerpt index."},
+        source_identity_note=census["source"],
+        limitation="Saved census statement and boundary samples only; configured minute parquet remains unbound. "
+                   "No local lake identity/coverage verification; full original census pinned separately.")}
+
+    docs = json.loads(originals[TIMING_DOCS])
+    rows = []
+    for index, selected in ((0, (1219, 1222, 1226, 1227)), (1, (4088, 4103, 4104, 4105, 4106, 4107, 4108))):
+        entry = docs["rows"][index]
+        for line in entry["lines"]:
+            if line["line"] in selected:
+                rows.append({"source_row_index": index, "excerpt_id": entry["excerpt_id"],
+                             "original": entry["original"], "original_sha256": entry["original_sha256"], **line})
+    result["timing_xtquant_docs.json"] = excerpt(TIMING_DOCS, rows,
+        {"method": "Selected K-line time/close/volume and fill_data lines; preserve original vendor line numbers."},
+        collected_at=docs["collected_at"], xtquant_version=docs["xtquant_version"],
+        limitation="Timestamp field corroboration only, not an independent vendor END or latency declaration. "
+                   "fill_data zero-fill is not event-time proof; collected_at is file collection, not event time.")
+    lines = originals[TIMING_MAP].decode("utf-8").splitlines()
+    stop = next(index for index, line in enumerate(lines) if line.startswith("### 1.2 "))
+    result["timing_materials_map.json"] = excerpt(TIMING_MAP,
+        [{"line": index, "text": line} for index, line in enumerate(lines[:stop])],
+        {"method": "UTF-8 lines from header through section 1.1, excluding section 1.2; original zero-based line retained."},
+        limitation="Original host-assist DRAFT and time wording preserved. Section 1.1 supplies END semantics. "
+                   "Its example labels 1761211800000 as Shanghai 09:30, but the existing epoch_ms decoder "
+                   "gives 17:30+08:00. Host must reconcile this encoding mismatch before freeze; no silent shift.")
+    return result
+
+
+def add_timing_package(pins, inputs, add, md_excerpt):
+    """Independent timing observations; no consumer role or recipe placeholder."""
+    materials = pins["timing_host_materials"]
+    excerpts = {}
+    for name, pin in materials["files"].items():
+        doc = inputs[TIMING_DIR + "/" + name]
+        original = pin["original_file"]
+        require(doc["schema_version"] == "bl2_raw_excerpt_v1" and doc["data"]["origin"] == {
+            "repository": materials["repository"], "commit": materials["commit"],
+            "path": materials["directory"] + "/" + original, **materials["original_files"][original]},
+            f"timing excerpt origin mismatch: {name}")
+        identity = Path(name).stem
+        excerpts[identity] = doc["data"]["rows"]
+        add(identity, "sources/" + name, doc["schema_version"], doc["data"])
+    for identity, name, hash_key in (
+        ("host_timing_approval", TIMING_APPROVAL_NAME, "host_timing_approval_sha256"),
+        ("human_go_timing", TIMING_GO_NAME, "human_go_timing_sha256"),
+    ):
+        excerpts[identity] = md_excerpt(identity, name,
+            {"repository": "baiyibing/MyQuant-backtrader",
+             "path": "docs/backtest/b-l2-01-evidence-2026-09-30/attestation_packages/" + name,
+             "sha256": pins[hash_key]},
+            limitation="Human「开修」timing packs only. Merge awaits baiyibing countersign; "
+                       "not「开 R4」; r4_authorized=false; production_C=frozen.")
+    census = excerpts["timing_lake_census"]
+    require("END 标签" in census[0]["time_semantics"] and "[t-1min,t)" in census[0]["time_semantics"],
+            "timing END semantics missing")
+    require(tuple(census[2][key] for key in ("window_rows", "grid_cells", "grid_missing", "grid_dup"))
+            == (2169, 2133, 0, 0), "timing census coverage mismatch")
+    observations = [
+        {"source": "timing_lake_census", "row": 0,
+         "observation": "Pinned END declaration: label t covers [t-1min,t). Under §3.1 the completed "
+                        "bar close/volume are available at bucket.end=t (availability=bucket_end), never "
+                        "at bucket.start; completed_bucket_available_at_end is historical model availability."},
+        {"source": "timing_lake_census", "row": 1,
+         "observation": "237 tradable END labels/day: 09:31-11:30 and 13:01-14:57. 09:30/14:58/14:59/15:00 "
+                        "remain off-grid; 15:00 is mark-legal, not an execution bucket."},
+        {"source": "timing_lake_census", "row": 2,
+         "observation": "Saved census: window_rows=2169, grid_cells=2133, grid_missing=0, grid_dup=0. "
+                        "These saved counts do not bind configured lake bytes."},
+    ]
+    for index, sample in enumerate(census[3:], 3):
+        label = sample["end_label_hm"]
+        end = datetime.fromisoformat(sample["day"] + "T" + label[:2] + ":" + label[2:] + ":00+08:00")
+        start = end - timedelta(minutes=1)
+        observations.append({"source": "timing_lake_census", "row": index,
+            "observation": f"{SYMBOL}: saved absolute parquet row={sample['row_idx']}; END label={end.isoformat()} "
+                           f"maps to [{start.isoformat()},{end.isoformat()}); close/volume available at end "
+                           f"under §3.1. in_tradable_grid={sample['in_tradable_grid']}; "
+                           "off-grid samples remain excluded from execution; 15:00 may support a mark."})
+    for identity, token, observation in (
+        ("timing_materials_map", "1761211800000", "Pinned §1.1 labels 1761211800000 as Shanghai 09:30 and says "
+         "'不是真 UTC'. Arithmetic check with the unchanged epoch_ms decoder instead gives "
+         "2025-10-23T17:30:00+08:00. END is attested separately; host encoding reconciliation remains "
+         "a freeze blocker, with no silent offset change or START relabel."),
+        ("timing_xtquant_docs", "'time'", "Vendor K-line time is a timestamp field; corroborates the field mapping, "
+         "not by itself END semantics or feed arrival latency."),
+        ("timing_xtquant_docs", "amount、volume为0", "fill_data=True may fill missing volume/amount with zero and "
+         "prices with prior close; this is a limitation, not evidence of event time or trades."),
+        ("host_timing_approval", "completed_bucket_available_at_end", "Scoped approval of END and completed-bucket "
+         "availability from census/map §1.1 and contract §3.1; merge countersign pending; no R4 authorization."),
+        ("human_go_timing", "Cue:", "Human「开修」authorizes this timing packs-only repair of the R4d missing id."),
+    ):
+        row = next(i for i, item in enumerate(excerpts[identity]) if token in item["text"])
+        observations.append({"source": identity, "row": row, "observation": observation})
+    observations.append({"source": "opening_auction", "row": 0,
+        "observation": "Existing #1111 2025-10-23 09:30 opening-auction observation corroborates the boundary; "
+                       "it remains off-grid, and vendor export does not establish lake equivalence."})
+    observations.append({"source": "daqmt_1m", "row": 0,
+        "observation": "Pinned #1111 vendor export has time=1761183000000 and datetime=2025-10-23 "
+                       "09:30:00+08:00, consistent with the existing epoch_ms decoder. This differs by "
+                       "28800000 ms from the map's example; do not substitute vendor time for lake identity."})
+    add("proof_timing", "timing.proof.json", "bl2_proof_v1", {
+        "issuer": "Human GO 2026-09-30 / MyQuant pinned host-assist census and §1.1 timing host fill",
+        "subject": "timing", "source_refs": [*excerpts, "opening_auction", "daqmt_1m"],
+        "filter": {"symbols": [SYMBOL], "from_date": FIRST, "through_date": LAST,
+                   "predicate": "END labels map to [t-1min,t); completed close/volume available at bucket.end=t; "
+                                "saved Shanghai labels for bars and legal marks; host epoch mapping must be reconciled"},
+        "result": {"complete": True, "summary": "completed_bucket_available_at_end; independently pinned census "
+                   "END statement and boundary samples, map §1.1, vendor field corroboration and scoped approval",
+                   "rows": observations},
+        "limitations": [NOTICE,
+            "R4d remains BLOCKED/NOT_RUN as recorded; this remapped draft is not lake PASS. r4_authorized stays false.",
+            "Historical completed-bar model only, not measured live feed arrival latency. Known availability later "
+            "than bucket.end must reject adaptation; file collection time is not event time.",
+            "fill_data zero-fill is not event-time proof or proof of actual trades. Vendor timestamp docs do not "
+            "independently declare START/END; END comes from the pinned census and host materials map §1.1.",
+            "Vendor export != lake identity; the saved census parquet hash is an identity note only. "
+            "minute_603196 remains unbound; host must pin configured lake identity/coverage and freshly freeze.",
+            "Proof covers bars/marks 2025-10-23..2025-11-04, not bars on next BUY calendar date 2025-11-05. "
+            "A wider execution/mark window requires fresh coverage; calendar retains its separate next-day coverage.",
+            "The END/completed-bucket conclusion does not certify the R4d epoch_ms mapping: map 1761211800000 "
+            "labels Shanghai 09:30, while the unchanged loader yields 17:30+08:00. Host must reconcile pinned "
+            "time/index/label evidence before freeze. No silent offset, Clock or economic-semantics change."]})
 
 
 def add_cam_packages(pins, inputs, add, md_excerpt):
@@ -286,8 +457,8 @@ def add_cam_packages(pins, inputs, add, md_excerpt):
            "source exports do not establish lake equivalence or lake PASS."])
 
 
-def build(source_dir, human_go, host_approval=None, host_cam_approval=None):
-    pins, inputs = read_inputs(source_dir, human_go, host_approval, host_cam_approval)
+def build(source_dir, human_go, host_approval=None, host_cam_approval=None, host_timing_approval=None):
+    pins, inputs = read_inputs(source_dir, human_go, host_approval, host_cam_approval, host_timing_approval)
     artifacts = {}
 
     def add(identity, filename, schema, data):
@@ -544,12 +715,14 @@ def build(source_dir, human_go, host_approval=None, host_cam_approval=None):
            "suspendFlag semantics: 0 normal, 1 suspended, -1 resumption day. This pinned window is all 0; changed/missing flags fail remapping, never default to false."])
 
     add_cam_packages(pins, inputs, add, md_excerpt)
+    add_timing_package(pins, inputs, add, md_excerpt)
     outputs = {filename: encode(document) for filename, (_, document) in artifacts.items()}
     catalog = {"source_repository": pins["repository"], "source_commit": pins["commit"],
                "notice": NOTICE, "r4_authorized": False, "lake_verdict": "NOT_RUN",
                "unbound_minute_source": {"id": MINUTE_SOURCE, "sha256": None,
                                          "requirement": "Host must pin configured raw minute parquet; exports do not establish lake equivalence."},
-               "unresolved": ["remaining claims (including timing), account/commands and scoped attestation require host recipe review",
+               "unresolved": ["account/commands and scoped attestation require host recipe review and registration",
+                              "host time-encoding reconciliation before freeze: map labels 1761211800000 as Shanghai 09:30; existing epoch_ms decoder yields 17:30+08:00; no silent shift",
                               "host recipe, lake identity/coverage and fresh freeze; r4_authorized stays false"],
                "artifacts": [{"id": identity, "path": filename, "format": "json", "schema": doc["schema_version"],
                               "sha256": digest(outputs[filename])} for filename, (identity, doc) in artifacts.items()]}
@@ -560,17 +733,19 @@ def build(source_dir, human_go, host_approval=None, host_cam_approval=None):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-dir", type=Path, required=True,
-                        help="Read-only staged #1111 tree plus #1112 sse_rule_archive/ and #1114 cam_host_materials/")
+                        help="Read-only staged #1111 tree plus #1112 sse_rule_archive/, #1114 cam_host_materials/ and timing_host_materials/")
     parser.add_argument("--human-go", type=Path, required=True)
     parser.add_argument("--host-approval", type=Path, default=None,
                         help="Host approval record; defaults to the checked-in package file")
     parser.add_argument("--host-cam-approval", type=Path, default=None,
                         help="CAM host approval record; defaults to the checked-in package file")
+    parser.add_argument("--host-timing-approval", type=Path, default=None,
+                        help="Timing host approval record; defaults to the checked-in package file")
     target = parser.add_mutually_exclusive_group(required=True)
     target.add_argument("--check", action="store_true", help="Compare generated bytes to checked-in package")
     target.add_argument("--output-dir", type=Path, help="New offline output directory; existing paths rejected")
     args = parser.parse_args()
-    outputs = build(args.source_dir, args.human_go, args.host_approval, args.host_cam_approval)
+    outputs = build(args.source_dir, args.human_go, args.host_approval, args.host_cam_approval, args.host_timing_approval)
     if args.check:
         for name, raw in outputs.items():
             require((HERE / name).read_bytes() == raw, f"remap output mismatch: {name}")
@@ -581,7 +756,8 @@ def main():
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(raw)
     print(f"Offline remap checked: {len(outputs)} files; 9 host-filled instrument rows, 2160 status rows, "
-          "9 opening rows, 62 zero-volume rows; CAM: 10 calendar dates, empty actions, 2 marks. " + NOTICE)
+          "9 opening rows, 62 zero-volume rows; CAM: 10 calendar dates, empty actions, 2 marks; "
+          "timing: independent proof_timing and compact pinned observations. " + NOTICE)
 
 
 if __name__ == "__main__":

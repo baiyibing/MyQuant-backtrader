@@ -1,0 +1,31 @@
+{
+  "schema_version": "bl2_raw_excerpt_v1",
+  "data": {
+    "origin": {
+      "repository": "baiyibing/MyQuant-backtrader",
+      "commit": "55f27f7967bc98a30146dc2474b91f1ac69f46f0",
+      "path": "docs/backtest/b-l2-01-evidence-2026-09-30/raw_materials/raw_excerpt_xtquant_docs.json",
+      "sha256": "3884f478256f96c7938cb5f0f40075ceb03f8064665be1193e2d445612bc8a12"
+    },
+    "extraction": {
+      "row_index": "zero-based excerpt rows array",
+      "method": "Selected K-line time/close/volume and fill_data lines; preserve original vendor line numbers."
+    },
+    "collected_at": "2026-09-30",
+    "xtquant_version": "250516.1.1",
+    "limitation": "Timestamp field corroboration only, not an independent vendor END or latency declaration. fill_data zero-fill is not event-time proof; collected_at is file collection, not event time.",
+    "rows": [
+    {"source_row_index":0,"excerpt_id":"xtdata_md_kline_fields","original":"D:\\anaconda3\\envs\\vanna312\\Lib\\site-packages\\xtquant\\doc\\xtdata.md","original_sha256":"b3879a4ccf9124a3ae7b1e242b67bab6319036fcae2e52c60aa624e7c611f82f","line":1219,"text":"#### 1m / 5m / 1d - K线数据"},
+    {"source_row_index":0,"excerpt_id":"xtdata_md_kline_fields","original":"D:\\anaconda3\\envs\\vanna312\\Lib\\site-packages\\xtquant\\doc\\xtdata.md","original_sha256":"b3879a4ccf9124a3ae7b1e242b67bab6319036fcae2e52c60aa624e7c611f82f","line":1222,"text":"'time'                  #时间戳"},
+    {"source_row_index":0,"excerpt_id":"xtdata_md_kline_fields","original":"D:\\anaconda3\\envs\\vanna312\\Lib\\site-packages\\xtquant\\doc\\xtdata.md","original_sha256":"b3879a4ccf9124a3ae7b1e242b67bab6319036fcae2e52c60aa624e7c611f82f","line":1226,"text":"'close'                 #收盘价"},
+    {"source_row_index":0,"excerpt_id":"xtdata_md_kline_fields","original":"D:\\anaconda3\\envs\\vanna312\\Lib\\site-packages\\xtquant\\doc\\xtdata.md","original_sha256":"b3879a4ccf9124a3ae7b1e242b67bab6319036fcae2e52c60aa624e7c611f82f","line":1227,"text":"'volume'                #成交量"},
+    {"source_row_index":1,"excerpt_id":"xtdata_py_fill_data_semantics","original":"D:\\anaconda3\\envs\\vanna312\\Lib\\site-packages\\xtquant\\xtdata.py","original_sha256":"a6c6939a0d9cf7d1b51ed1a1bb41140cbb37dbe2098084e617f872ddcf9d9909","line":4088,"text":"            \"time\"                #时间戳"},
+    {"source_row_index":1,"excerpt_id":"xtdata_py_fill_data_semantics","original":"D:\\anaconda3\\envs\\vanna312\\Lib\\site-packages\\xtquant\\xtdata.py","original_sha256":"a6c6939a0d9cf7d1b51ed1a1bb41140cbb37dbe2098084e617f872ddcf9d9909","line":4103,"text":"    :param fill_data: 对齐时间戳时是否填充数据，仅对K线有效，分笔周期不对齐时间戳"},
+    {"source_row_index":1,"excerpt_id":"xtdata_py_fill_data_semantics","original":"D:\\anaconda3\\envs\\vanna312\\Lib\\site-packages\\xtquant\\xtdata.py","original_sha256":"a6c6939a0d9cf7d1b51ed1a1bb41140cbb37dbe2098084e617f872ddcf9d9909","line":4104,"text":"        为True时，以缺失数据的前一条数据填充"},
+    {"source_row_index":1,"excerpt_id":"xtdata_py_fill_data_semantics","original":"D:\\anaconda3\\envs\\vanna312\\Lib\\site-packages\\xtquant\\xtdata.py","original_sha256":"a6c6939a0d9cf7d1b51ed1a1bb41140cbb37dbe2098084e617f872ddcf9d9909","line":4105,"text":"            open、high、low、close 为前一条数据的close"},
+    {"source_row_index":1,"excerpt_id":"xtdata_py_fill_data_semantics","original":"D:\\anaconda3\\envs\\vanna312\\Lib\\site-packages\\xtquant\\xtdata.py","original_sha256":"a6c6939a0d9cf7d1b51ed1a1bb41140cbb37dbe2098084e617f872ddcf9d9909","line":4106,"text":"            amount、volume为0"},
+    {"source_row_index":1,"excerpt_id":"xtdata_py_fill_data_semantics","original":"D:\\anaconda3\\envs\\vanna312\\Lib\\site-packages\\xtquant\\xtdata.py","original_sha256":"a6c6939a0d9cf7d1b51ed1a1bb41140cbb37dbe2098084e617f872ddcf9d9909","line":4107,"text":"            settle、openInterest 和前一条数据相同"},
+    {"source_row_index":1,"excerpt_id":"xtdata_py_fill_data_semantics","original":"D:\\anaconda3\\envs\\vanna312\\Lib\\site-packages\\xtquant\\xtdata.py","original_sha256":"a6c6939a0d9cf7d1b51ed1a1bb41140cbb37dbe2098084e617f872ddcf9d9909","line":4108,"text":"        为False时，缺失数据所有字段填NaN"}
+  ]
+  }
+}

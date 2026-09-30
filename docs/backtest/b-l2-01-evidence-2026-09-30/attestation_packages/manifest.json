@@ -10,7 +10,8 @@
     "requirement": "Host must pin configured raw minute parquet; exports do not establish lake equivalence."
   },
   "unresolved": [
-    "remaining claims (including timing), account/commands and scoped attestation require host recipe review",
+    "account/commands and scoped attestation require host recipe review and registration",
+    "host time-encoding reconciliation before freeze: map labels 1761211800000 as Shanghai 09:30; existing epoch_ms decoder yields 17:30+08:00; no silent shift",
     "host recipe, lake identity/coverage and fresh freeze; r4_authorized stays false"
   ],
   "artifacts": [
@@ -293,6 +294,48 @@
       "format": "json",
       "schema": "bl2_proof_v1",
       "sha256": "083eec4f56c40e44a486fecc013c31881a1afc0f6d1098e7ac738a4381c66cd8"
+    },
+    {
+      "id": "timing_lake_census",
+      "path": "sources/timing_lake_census.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "cbf4bd8551dc1ed7b33581b7651296ed1bb1e379d7433e2d3542e245ef51b6c4"
+    },
+    {
+      "id": "timing_xtquant_docs",
+      "path": "sources/timing_xtquant_docs.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "126726d85dcfafaddfff4813e2a10caf78a7e3000b394afee069eacd9cfca200"
+    },
+    {
+      "id": "timing_materials_map",
+      "path": "sources/timing_materials_map.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "0db8056be9f901f80dc7389cc08761a9ca319356d7928e66bd3b08c6a8f090cb"
+    },
+    {
+      "id": "host_timing_approval",
+      "path": "sources/host_timing_approval.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "766cec2e05f7d8b289fa6b61fe901966eb726fa35641d386cbf2417c67fb4e92"
+    },
+    {
+      "id": "human_go_timing",
+      "path": "sources/human_go_timing.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "9142b791951520a5c772615a0b21ed692b559795bdca5e35f367c7bdb6587bea"
+    },
+    {
+      "id": "proof_timing",
+      "path": "timing.proof.json",
+      "format": "json",
+      "schema": "bl2_proof_v1",
+      "sha256": "c6bd7c0ef884817528160361cdd0132ca52ceb549e764b40bbadd6cbf428dcfa"
     }
   ]
 }

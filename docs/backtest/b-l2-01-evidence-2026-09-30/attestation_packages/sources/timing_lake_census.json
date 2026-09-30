@@ -1,0 +1,36 @@
+{
+  "schema_version": "bl2_raw_excerpt_v1",
+  "data": {
+    "origin": {
+      "repository": "baiyibing/MyQuant-backtrader",
+      "commit": "55f27f7967bc98a30146dc2474b91f1ac69f46f0",
+      "path": "docs/backtest/b-l2-01-evidence-2026-09-30/raw_materials/raw_lake_minute_census_603196SH_20251023_20251104.json",
+      "sha256": "b4ee473bcf7d224d635ce0f788d0d64dde8a2e421034420c2c292e9c632b7188"
+    },
+    "extraction": {
+      "row_index": "zero-based excerpt rows array",
+      "method": "Copy semantics, grid, counters and selected cells; source_cell_index indexes original /cells; row_idx is the saved zero-based absolute parquet row, not an excerpt index."
+    },
+    "source_identity_note": {
+      "path": "E:\\stock_data\\stock\\period=1m\\dividend_type=none\\symbol=603196_SH\\data.parquet",
+      "sha256": "58879893f221bfe050b7a16029667c49fb65d8ec6f47592254e549374a577083",
+      "rows_total": 100497,
+      "schema": "time: int64\nopen: double\nhigh: double\nlow: double\nclose: double\nvolume: int64\namount: double\n__index_level_0__: timestamp[ns]\n-- schema metadata --\npandas: '{\"index_columns\": [\"__index_level_0__\"], \"column_indexes\": [{\"na' + 1122"
+    },
+    "limitation": "Saved census statement and boundary samples only; configured minute parquet remains unbound. No local lake identity/coverage verification; full original census pinned separately.",
+    "rows": [
+    {"kind":"time_semantics","json_pointer":"/time_semantics","time_semantics":"END 标签：bar 标签 t 覆盖 [t-1min,t)；上海墙钟按 UTC epoch 毫秒编码；每日 241 行 = 09:30 集合竞价条 + 09:31-11:30 + 13:01-15:00"},
+    {"kind":"grid_definition","json_pointer":"/grid_definition","grid_definition":"合同可交易网格 END 标签 09:31-11:30(120)+13:01-14:57(117)=237/日；09:30/14:58/14:59/15:00 为网格外行(15:00 可作 mark 行)"},
+    {"kind":"coverage","window_rows":2169,"grid_cells":2133,"grid_missing":0,"grid_dup":0,"zero_volume_grid_cells":46},
+    {"kind":"boundary_sample","source_cell_index":0,"day":"2025-10-23","end_label_hm":"0930","row_idx":46513,"in_tradable_grid":false,"close":"23.25","volume":139,"amount":"323175.0"},
+    {"kind":"boundary_sample","source_cell_index":1,"day":"2025-10-23","end_label_hm":"0931","row_idx":46514,"in_tradable_grid":true,"close":"23.1","volume":380,"amount":"879429.0000000001"},
+    {"kind":"boundary_sample","source_cell_index":120,"day":"2025-10-23","end_label_hm":"1130","row_idx":46633,"in_tradable_grid":true,"close":"23.3","volume":7,"amount":"16310.000000000002"},
+    {"kind":"boundary_sample","source_cell_index":121,"day":"2025-10-23","end_label_hm":"1301","row_idx":46634,"in_tradable_grid":true,"close":"23.310000000000002","volume":47,"amount":"109495.0"},
+    {"kind":"boundary_sample","source_cell_index":237,"day":"2025-10-23","end_label_hm":"1457","row_idx":46750,"in_tradable_grid":true,"close":"23.830000000000002","volume":995,"amount":"2365983.0000000005"},
+    {"kind":"boundary_sample","source_cell_index":238,"day":"2025-10-23","end_label_hm":"1458","row_idx":46751,"in_tradable_grid":false,"close":"23.830000000000002","volume":0,"amount":"0.0"},
+    {"kind":"boundary_sample","source_cell_index":239,"day":"2025-10-23","end_label_hm":"1459","row_idx":46752,"in_tradable_grid":false,"close":"23.830000000000002","volume":0,"amount":"0.0"},
+    {"kind":"boundary_sample","source_cell_index":240,"day":"2025-10-23","end_label_hm":"1500","row_idx":46753,"in_tradable_grid":false,"close":"23.89","volume":1395,"amount":"3332655.0000000005"},
+    {"kind":"boundary_sample","source_cell_index":2168,"day":"2025-11-04","end_label_hm":"1500","row_idx":48681,"in_tradable_grid":false,"close":"22.96","volume":313,"amount":"718648.0"}
+  ]
+  }
+}

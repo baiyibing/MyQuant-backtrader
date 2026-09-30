@@ -109,5 +109,37 @@
     }
   },
   "host_cam_approval_sha256": "19c3f778986e3b86e16b28644c526d1625134c52e0416e080fa4e51e41c752d1",
-  "human_go_cam_sha256": "e15c79acde154bd7163208f2bf0a156737a9f908ed3fb9f41b87b64d42c13feb"
+  "human_go_cam_sha256": "e15c79acde154bd7163208f2bf0a156737a9f908ed3fb9f41b87b64d42c13feb",
+  "timing_host_materials": {
+    "repository": "baiyibing/MyQuant-backtrader",
+    "commit": "55f27f7967bc98a30146dc2474b91f1ac69f46f0",
+    "directory": "docs/backtest/b-l2-01-evidence-2026-09-30",
+    "original_files": {
+      "raw_materials/raw_lake_minute_census_603196SH_20251023_20251104.json": {
+        "sha256": "b4ee473bcf7d224d635ce0f788d0d64dde8a2e421034420c2c292e9c632b7188"
+      },
+      "raw_materials/raw_excerpt_xtquant_docs.json": {
+        "sha256": "3884f478256f96c7938cb5f0f40075ceb03f8064665be1193e2d445612bc8a12"
+      },
+      "HOST_MATERIALS_MAP_R4.md": {
+        "sha256": "b2487a9ba20f66b8e211b22536fb92d5dc60b0c2edb8eb2427c8d4c93e0e2fba"
+      }
+    },
+    "files": {
+      "timing_lake_census.json": {
+        "git_sha256": "cbf4bd8551dc1ed7b33581b7651296ed1bb1e379d7433e2d3542e245ef51b6c4",
+        "original_file": "raw_materials/raw_lake_minute_census_603196SH_20251023_20251104.json"
+      },
+      "timing_xtquant_docs.json": {
+        "git_sha256": "126726d85dcfafaddfff4813e2a10caf78a7e3000b394afee069eacd9cfca200",
+        "original_file": "raw_materials/raw_excerpt_xtquant_docs.json"
+      },
+      "timing_materials_map.json": {
+        "git_sha256": "0db8056be9f901f80dc7389cc08761a9ca319356d7928e66bd3b08c6a8f090cb",
+        "original_file": "HOST_MATERIALS_MAP_R4.md"
+      }
+    }
+  },
+  "host_timing_approval_sha256": "c3fb7b09026ecbb9ef7796b0cb6e182bfec8b8811ca16e530fab69e5ed95245d",
+  "human_go_timing_sha256": "b89d99fc0fabbad5dd1e6da4ff6f3368ab84d1c7afce71832ea9e405d7e270f7"
 }
