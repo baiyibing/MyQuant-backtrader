@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "export_id": "bt_practical_parity_limits_tick_20261001",
+  "purpose": "research-BT practical parity: pricetick rounding for limit_up / limit_down prices",
+  "preferred_profile": "myquant_fen_half_up",
+  "profiles": {
+    "myquant_fen_half_up": {
+      "label": "MyQuant PRICE_TICK + Decimal HALF_UP fen",
+      "source_paths": [
+        "/workspace/MyQuant-backtrader/backtest/research/signal_price_domain.py",
+        "/workspace/MyQuant-backtrader/backtest/research/market_layer.py"
+      ],
+      "source_sha256_box": {
+        "signal_price_domain.py": "67dc3522b15c618e5c5fa4b0a40e313d818c995469f7c90a4d4463bd985afb9a",
+        "market_layer.py": "b26eb06a6655253ff6fa234ca9c794c304172accc97dac368d2eff25b6c47658"
+      },
+      "PRICE_TICK": "0.01",
+      "PRICE_TICK_decimal": "Decimal(\"0.01\")",
+      "rounding_mode": "ROUND_HALF_UP",
+      "unit": "fen (0.01 CNY)",
+      "round_fen": {
+        "formula": "float(Decimal(str(price)).quantize(Decimal(\"0.01\"), rounding=ROUND_HALF_UP))",
+        "note": "Not banker's rounding (ROUND_HALF_EVEN)."
+      },
+      "limit_prices": {
+        "inputs": ["code", "prev_close", "name?", "as_of?"],
+        "pct_source": "limit_pct(code, name, as_of) from board bands (+ optional ST overlay)",
+        "formula": {
+          "prev": "Decimal(str(prev_close))",
+          "step": "Decimal(\"0.01\")",
+          "limit_up": "(prev * (Decimal(\"1\") + Decimal(str(pct)))).quantize(step, rounding=ROUND_HALF_UP)",
+          "limit_down": "(prev * (Decimal(\"1\") - Decimal(str(pct)))).quantize(step, rounding=ROUND_HALF_UP)"
+        },
+        "returns": "[limit_up_float, limit_down_float] or null if pct unknown",
+        "worked_example": {
+          "prev_close": 10.0,
+          "pct": 0.10,
+          "limit_up": 11.0,
+          "limit_down": 9.0
+        },
+        "worked_example_half_up": {
+          "prev_close": 10.05,
+          "pct": 0.10,
+          "unrounded_up": 11.055,
+          "limit_up_HALF_UP": 11.06,
+          "unrounded_down": 9.045,
+          "limit_down_HALF_UP": 9.05
+        }
+      }
+    }
+  },
+  "bt_config_binding": {
+    "prefer": "myquant_fen_half_up",
+    "reject": "vnpy-only priceticks[vt_symbol] without copying the Decimal HALF_UP fen contract into research BT config",
+    "note": "Survey gap ② OPTIONAL pricetick — filled here as required companion to board_% limit price construction."
+  },
+  "notes": [
+    "signal_price_domain.PRICE_TICK = Decimal(\"0.01\"); also used for prev_ref rounding HALF_UP.",
+    "查阅禁 import vendor; helper in export/helpers mirrors these rules self-contained."
+  ]
+}

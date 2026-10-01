@@ -119,7 +119,7 @@ As-built：分钟 touch 路径在既有扫描 / 资格下仍可能到达 15:00�
 | ID | 现行为 | 作废的旧锁 |
 |----|--------|------------|
 | **E-R1** | 日线+分钟：**任何卖因**成交前 `hit_limit_down` → defer、不成交（含 6/8 trail、`stop_loss:touch`、`profit_take`、`force_sell`、`ma_signal`、`open_board`）。reason 前缀不改。 | U-R1「分钟仅 `stop_loss*` defer」 |
-| **E-R2** | `limit_pct`：`300/301/302/688/689=20%`；`430/83/87/88/920=30%`；`600/601/603/605/000/001/002/003=10%`；名称列 `ST`/`*ST`=5%；其余 **`None` → `skip_unknown_board`，不默认 10%**。 | U-R12「原样搬家 / 不建模北交 ST 689」 |
+| **E-R2** | `limit_pct` 静态看板：`300/301/302/688/689=20%`；`430/83/87/88/920=30%`；`600/601/603/605/000/001/002/003=10%`；其余 **`None` → `skip_unknown_board`，不默认 10%**。名称列 ST/*ST **时间分段**（工程 SSOT = [PR #225](https://github.com/baiyibing/MyQuant-backtrader/pull/225) / `ST_MAIN_LIMIT_PCT_SWITCH=date(2026,7,6)` in `market_layer.py`；公政佐证 上证发〔2026〕41号，自 **2026-07-06** 施行，见 [ssot/SOURCES.md](ssot/SOURCES.md)）：**主板/中小板 ST** 在 2026-07-06 前（含未标注 `as_of`）=**5%**，当日及之后=**10%**；**创业板/科创板 ST 保持 20%**；**北交所 ST 保持 30%**；未知前缀具名 ST=5%。涨跌停价 = `prev_close*(1±pct)` 后 **`PRICE_TICK=0.01` Decimal `ROUND_HALF_UP`** 到分（`round_fen` / `limit_prices`）。已入库 JSON：[`ssot/board_limit_bands.json`](ssot/board_limit_bands.json)、[`ssot/st_limit_regimes.json`](ssot/st_limit_regimes.json)、[`ssot/pricetick_limit_rounding.json`](ssot/pricetick_limit_rounding.json)。 | U-R12「原样搬家 / 不建模北交 ST 689」 |
 | **E-R3** | 市场层只留 Decimal `limit_prices`。v7 改 import。`1.65×10%` 跌停 = **1.49**。禁止 `round()` 银行家舍入。 | U-R10/U-R30「v7 留本地 float」 |
 | **E-R4** | 停牌仍冻仓。加载侧丢弃零量占位 K（日线 `volume==0`；分钟整日 `sum(volume)==0`），**等价于当日无 K**，复用同一条冻仓 / pending / `last_close_mark` 路径，不建第二套停牌状态机。净值用最近有 K 的 close，不用 `pos.cost`。追买日无 K **保留 pending** 到下一有 K 日（有 K 后仍只评一次）。 | U-R27「追买 pop 作废 / 净值标成本」 |
 | **E-R5（收窄 2026-09-16）** | csv 日线/分钟链成交与估值全程 `dividend_type=none`；**除权日**（事件判定见 E-R6）的 cost/peak/涨跌停参考价已按 E-R6 修正。残留近似三句：①跳变 ≤0.5% 的小额分红（窗内约 1,372 起）不修正——止损触发距离/止盈地板偏移 ≤0.5pp，低价股档位边缘可差 1 分；②跨除权持有 lot 的成交与净值按原始价×原始股数记账（送转不增股、分红不入账），trades pnl 与净值含 (1−k) 结构性失真（见 E-R6 残留声明）；③v4 SMA 门用截至昨收的原始 closes，除权日不换域（假 ma_signal/buy_gate 拒，历史行为保留）。21M 口径历史数字（命中 daily 8.1% / minute 2.0%）与 5 亿口径 149 笔止损为**修正前口径**。证据：[np2-exdiv-hold-hits-host-note-2026-09-16.md](np2-exdiv-hold-hits-host-note-2026-09-16.md) + [survey-exdiv-adj-data-prep-2026-09-16.md](survey-exdiv-adj-data-prep-2026-09-16.md) + [plan-exdiv-refprice-2026-09-16.md](plan-exdiv-refprice-2026-09-16.md)。 | 无（E-R5 原「不对除权调整」整条收窄；非 U-R 重开） |
@@ -181,7 +181,7 @@ v7 非空 `add1_A1` 仅由人工 Position 验证兼容分支，公开自然加�
 | 书 daily/minute | `pool_names_by_day is None` 才用 flat map；即使 `{}` 也优先于 flat。从空 `last_seen` 起步，按日期排序，消费 `date <= ds` 的非空名，缺名继承 | `backtest/research/csv_common.py:85-108` |
 | 书接线 | shared loop 创建 resolver；daily/minute 每会话取名；两个 `run()` 均加载并传 by-day 名称 | `backtest/research/csv_simulate_loop.py:96-109`；`csv_daily_backtest.py:291-293`、`:537`、`:617`；`csv_minute_backtest.py:577-579`、`:821`、`:913`（均在 `backtest/research/`） |
 | v7 保留分叉 | `flatten_pool_names` 按日期排序后 `dict.update`；context 平铺 start/end 窗口。`simulate_v7(names=...)` 无 by-day 参数，各会话使用同一 map | `backtest/research/ashare_session.py:81-100`；`backtest/research/csv_minute_backtest_v7.py:277-282`、`:327-329`、`:571`、`:583-584` |
-| 名字→档位 | 正则识别 ST / *ST，忽略大小写；命中 **先返回 5%**，再考虑板块回退。已知板块缺名可回落板块档位，未知板块非 ST 为 None；ST 命中甚至先于未知板块。价格以 Decimal HALF_UP 到分 | `backtest/research/market_layer.py:15`、`:34-36`、`:57-84` |
+| 名字→档位 | 正则识别 ST / *ST，忽略大小写；命中后按 **E-R2 时间分段**：创科 ST 保持板块 20%、北交 ST 保持 30%、主板/中小 ST 在 `as_of < 2026-07-06` 或未标注时 5%、`as_of >= ST_MAIN_LIMIT_PCT_SWITCH` 时 10%、未知前缀具名 ST 5%；非 ST 走静态看板（未知前缀 None）。价格以 Decimal HALF_UP 到分（`PRICE_TICK=0.01`）。契约 JSON 见 [`ssot/st_limit_regimes.json`](ssot/st_limit_regimes.json)。 | `backtest/research/market_layer.py`（`ST_MAIN_LIMIT_PCT_SWITCH` / `limit_pct` / `round_fen`） |
 | 书例外 | 显式 `qlib_limit_pct` 使用固定 band，绕过 named limits。δ3 书 ST pins 使用默认 `qlib_limit_pct=None` 路径 | `backtest/research/csv_common.py:73-82` |
 
 ST 正则为 `(?:\*ST|(?<![A-Za-z])ST)`（`re.IGNORECASE`）；`WEST` 这样的拉丁词不命中。
@@ -202,7 +202,7 @@ ST 正则为 `(?:\*ST|(?<![A-Za-z])ST)`（`re.IGNORECASE`）；`WEST` 这样的�
 
 实施基线为 `073538d4486a07a71f561631c3f274ffa06eeecb`（#128 merge，post δ6 docs）。**P3δ4.1=C / P3δ4.2=B / P3δ4.3=A：production fail-closed 已落地**，只改 v7 held stop/add/timer 的 None 交易尝试；复用现有事件与 reason，不增加 CLI/policy/schema。此前 #126 的 A/A/A 首开拒绝 / held fail-open 合同由本 C cut 覆盖，历史保留在 [δ4 plan changelog](plan-industry-align-p3-d4-v7-limits-none-2026-09-19.md#10-changelog)。测试与冻结证明见 [δ4 plan §7–9](plan-industry-align-p3-d4-v7-limits-none-2026-09-19.md)。
 
-`limits=None` 表示没有可用档位，不能推断标的依法无涨跌幅限制。两个来源分别是：没有 today 之前的 close；有昨收但未知板块且名称未命中 ST。ST 名称先返回 5%，所以未知代码不必然得到 None；NaN/Inf、零/负昨收不由本刀扩展分类。以下 file:line 已按本 C cut 编辑后的源码核实：
+`limits=None` 表示没有可用档位，不能推断标的依法无涨跌幅限制。两个来源分别是：没有 today 之前的 close；有昨收但未知板块且名称未命中 ST。ST 命中走 E-R2 时间分段（主板/中小未标注或切日前 5%；切日及之后 10%；创科/北交保持板块档）；未知非 ST 前缀仍可为 None。以下 file:line 已按本 C cut 编辑后的源码核实：
 
 | 路径 / 前提 | as-built 合同 | 源码锚点（均在 `backtest/research/`） |
 |---|---|---|
