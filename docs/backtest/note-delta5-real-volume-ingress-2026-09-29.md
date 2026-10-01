@@ -1,9 +1,49 @@
-# Track D｜δ5 真实分钟量研究接入合同（2026-09-29）
+# Track D｜δ5 真实分钟量研究接入合同（2026-09-29；v2 降档修订 2026-10-01）
 
-**合同 ID：`D5-REAL-VOLUME-INGRESS-v1`；synthetic harness 与 certified-real 结构预检代码已落地，见 §8；结构 PASS ≠ 湖 PASS，host attestation / 湖运行仍 NOT_RUN。**
-核对基线：`fd74932dc2d86bb01cd47f2ebc39ce8a389ace2f`；`production_C=frozen`。
-授权：2026-09-29 Human「D GO」；范围来自同日 ORDER_EVAL（A–E residual tracks）§7「Track D card — industry / #135 线」。
-本页由 2026-09-29 文档刀冻结接入合同；当前代码路径及验收范围见 §8，真实来源认证与比较授权仍未具备；下文“下一刀 / 未执行”为合同冻结时的历史规划。**未经 Human「合」不合并**。
+**现行合同 ID：`D5-REAL-VOLUME-INGRESS-v2`（研究默认 = practical parity）。**
+v1 全文（§1–§8）保留为历史 certified / live-attestation 合同与已落地代码指针；**普通研究前置以本页 §0 为准**，不以五包 `complete=true` 为门。
+synthetic harness 与 certified-real 结构预检代码仍见 §8；结构 PASS ≠ 湖 PASS；五包 `complete=false` 继续 **NOT READY**，不改 PASS。
+核对基线（v2 修订）：`602ce1735c69e4953961636f390a5a3c88ae978b`（#288 S2 已合）；`production_C=frozen`。
+v1 冻结基线：`fd74932dc2d86bb01cd47f2ebc39ce8a389ace2f`。
+授权：2026-10-01 Human「四路合成降档 GO」；合成输入见外部 handoff `minute_engine_industry_review_vm_20261001/SYNTHESIS.md`。
+本刀 **docs-only**：只改本合同分档与关联 SSOT 声明；不改引擎经济学、MatchCore/Fees、策略默认；不开 δ5 certified ingress / R4；不写湖；**未经 Human「合」不合并**。
+
+## 0 v2 分档声明（研究默认 vs live-attestation）｜2026-10-01
+
+### 0.1 两档定义
+
+| 档位 | 含义 | 普通策略 1–12 / TopK 研究回测 | 与 qlib / OSkhQuant1.3 / vnpy |
+|---|---|---|---|
+| **研究默认（research-BT / practical parity）** | pinned 数据 + 显式假设 + 已落地成交／账本／容量核约束 | **默认路径**；不以 issuer 签发包为前置 | 同档 |
+| **live-attestation（exchange-grade 遗产）** | 五包 `d5_evidence_pack_v1`、issuer 网格、逐行 pub-log、host attestation | **退出普通研究前置**；仅按需另裁；当前 `complete=false` → **NOT READY** | 对照引擎均无此档 |
+
+`no_ssot_compare_authorization` 两档均保持；研究默认跑通 ≠ SSOT 绿 R/S。
+
+### 0.2 过重证据项处置（O1–O5；写入合同，永久生效于研究默认）
+
+| ID | 项 | v2 处置 | 研究默认怎么做 |
+|---|---|---|---|
+| O1 | **halt 2160 issuer 网格**（symbol×session×240） | **永久 stub**；不补签、不排期 | 缺行／零量按数据可用性不可交易（E-R4／qlib 式）；**零量 ≠ 停牌**；禁止从零量发明停牌事件。§4「已证停牌允许缺行」语义可留，**证明不再要求 issuer 全网格** |
+| O2 | **per-row publication log / `available_at` 认证** | **砍认证**；研究默认采 **`bucket_end`（完成桶 close）** | `available_at = 完成桶 close`（与容量核 completed-bar 一致）；mtime／事后 close **不得**伪装 publication PIT。逐行 pub-log 仅 live-attestation 另裁 |
+| O3 | **units 厂商级证明 + at-rest 零转换硬边界** | **研究默认接受 S1 导出声明** | 接受 `shares_raw_tree_20261001`：`unit=raw_shares_incremental`、导出侧显式 ×100、`transformations=[]`（见 S1 `TREE_CONTRACT`／`PIN.json` + #288 直读）。停止「原湖 at-rest 已是股」多源签证；旧树 v8×100 **不进** δ5 证据 |
+| O4 | **pool issuer 签名绑定** | **永久 stub** | 池：`csv_pool` + 文件 hash／manifest；不要求 issuer 签名名单 |
+| O5 | **五包 certified 签发**（`d5_evidence_pack_v1` + recipe/GO 双 SHA 等） | **退出普通研究前置**；冻结为 live-attestation 遗产 | 保留 pin／recipe／输出隔离等工程纪律（有用且便宜）。**`complete=false` 保持 NOT READY，不得改 PASS**；不以五包签发卡研究回测 |
+
+（O6 no_events／O7 context 全绑定：研究默认分别走 E-R6／δ6 与 pinned 静态表／run manifest；不挡本刀总判，细节仍可另裁细化。）
+
+### 0.3 明确保留不动
+
+- **S1** `shares_raw_tree_20261001`（湖仍是手；导出显式 ×100）
+- **#288** loader 新树直读（旧树 v8×100 仅旧模式）
+- **已落地容量核**（`ashare_volume_cap.py`：完成桶、共享预算、`floor(p×V)`、partial、不借未来量；默认 `participation_rate=None` cap-off）
+- **涨跌停 SSOT**（#285/#286）；分钟成交假设 SSOT；费用／T+1／现金锁；`no_ssot_compare_authorization`
+- 不翻 hl／fen／TopK exec／策略默认；不开 δ5 4090 certified 湖跑／R4；不写湖
+
+### 0.4 与 §1–§8 的效力关系
+
+- **研究默认消费者**读 §0 + 既有容量核／S1／#288／涨跌停 SSOT 即可；§2–§4／§7–§8 中要求 issuer 网格、逐行 pub-log、五包签发、厂商 at-rest 单位证明之处，对研究默认 **降级为 live-attestation 可选**，不再是前置。
+- **live-attestation / certified-real CLI**（§8）代码与模板保留；缺包、`complete=false`、host attestation／real_lake_run **NOT_RUN** 状态不变。
+- §5 经济与状态锁、§6 M1–M11 合成／单测锚仍对容量核行为有效；全量三列认证矩阵不作为普通研究门。
 
 ## 1 唯一首消费者与边界
 
