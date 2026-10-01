@@ -142,7 +142,10 @@ def read_bars(args, needed, pins):
             require(frame[key].eq(value).all(), f"invalid {key}: {path}")
         require(frame.symbol.map(_bare_or_canon).eq(frame.symbol).all(), "canonical source symbols required")
         stamp = pd.to_datetime(frame.timestamp, format="%Y-%m-%d %H:%M:%S", errors="raise")
-        require(stamp.notna().all() and stamp.equals(pd.to_datetime(frame.time_ms, unit="ms")), "S1 wall-clock mismatch")
+        # pandas 3 parses strings as us and epoch milliseconds as ms; compare exact ns values.
+        epoch_stamp = pd.to_datetime(frame.time_ms, unit="ms").astype("datetime64[ns]")
+        require(stamp.notna().all() and stamp.astype("datetime64[ns]").equals(epoch_stamp),
+                "S1 wall-clock mismatch")
         require(stamp.dt.strftime("%Y%m%d").eq(frame.day).all(), "S1 day mismatch")
         require((stamp.dt.second == 0).all(), "minute-aligned source required")
         require(not frame.duplicated(["symbol", "timestamp"]).any(), "duplicate source bucket")

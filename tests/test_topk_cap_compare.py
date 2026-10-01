@@ -128,6 +128,32 @@ def test_bad_inputs_never_run_partial_universe(source, failure):
     assert not (out / "cap_off").exists() and not (out / "cap_on").exists()
 
 
+@pytest.mark.parametrize("period", ["1m", "1d"])
+@pytest.mark.parametrize("failure", ["one_ms_offset", "missing_timestamps"])
+def test_wall_clock_rejects_invalid_times_before_either_arm(source, period, failure):
+    root, inputs, argv = source
+    path = inputs / f"{period}.parquet"
+    frame = pd.read_parquet(path)
+    if failure == "one_ms_offset":
+        frame.loc[0, "time_ms"] += 1
+    else:
+        frame.loc[0, "timestamp"] = None
+        frame["time_ms"] = frame.time_ms.astype("Int64")
+        frame.loc[0, "time_ms"] = pd.NA
+    frame.to_parquet(path, index=False)
+    pin = json.loads((inputs / "PIN.json").read_text())
+    entry = next(row for row in pin["artifacts"] if row["path"] == str(path))
+    entry.update(sha256=harness.digest(path), rows=len(frame))
+    harness.write_json(inputs / "PIN.json", pin)
+
+    assert harness.main(argv) == 2
+    out = root / "run"
+    status = json.loads((out / "STATUS.json").read_text())
+    assert status["status"] == "INPUT_BLOCKED"
+    assert status["reason"] == "ValueError: S1 wall-clock mismatch"
+    assert not (out / "cap_off").exists() and not (out / "cap_on").exists()
+
+
 def test_prepare_without_bars_lists_scope_and_leaves_both_arms_not_run(source):
     root, inputs, argv = source
     (inputs / "1m.parquet").unlink()

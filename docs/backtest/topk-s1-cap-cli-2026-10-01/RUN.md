@@ -83,3 +83,40 @@ cap-on `available_at=bucket_end` 仅研究完成桶近似；validation 非 OOS�
 
 没有修改 MyQuant 业务代码，没有运行其 exporter；命令仅交给宿主清单。
 没有写湖，没有开 δ5 certified / R4，没有自动合并。
+
+## 2026-10-01 CI 跟刀：pandas 3 wall-clock 分辨率
+
+Draft PR #291、分支 `knife/topk-s1-cap-cli`，修复基线
+`f2b44b29382348051b6a0b7fecd72c333dd842db`。
+修复前在 `/tmp/pd3venv` 复现原两臂用例失败：`INPUT_BLOCKED` /
+`ValueError: S1 wall-clock mismatch`。pandas 3.0.6 将字符串时间解析为
+`datetime64[us]`，epoch 毫秒解析为 `datetime64[ms]`；值相同但 `Series.equals`
+因 dtype 分辨率不同返回 False，pandas 2.3.3 未暴露此问题。
+
+`read_bars` 仅在核对时将两边归一为 `datetime64[ns]` 后严格 `equals`，
+保留非空检查，不截断、不加容差；后续索引仍使用原 `stamp`。
+新增分钟/日线 × 1 毫秒错位/双侧空时间四个回归用例，均要求
+`INPUT_BLOCKED`、准确的 wall-clock 错误且两臂未启动；原多证券两臂正例恢复通过。
+
+扫描 `scripts/`、`backtest/`、`oskh_data/` 的 `.equals()`：
+本脚手架只有这一处；共享分钟、容量与 TopK 直接路径无第二处。
+`signal_price_domain.py` 其余比较为日期索引/布尔标记，湖加载器两域索引均由
+同一 `_read_strict(... unit="ms")` 构建；另两处是 Arrow schema/type 核对。
+未发现第二处字符串时间与 epoch 毫秒 Series 的同类比较。
+
+按顺序执行同一组测试：
+
+```bash
+PYTHONPATH=. /tmp/pd3venv/bin/python -m pytest -q tests/test_topk_cap_compare.py tests/test_csv_minute_participation.py
+PYTHONPATH=. /workspace/vanna312/bin/python -m pytest -q tests/test_topk_cap_compare.py tests/test_csv_minute_participation.py
+```
+
+- Python 3.13.5 / pandas 3.0.6：**39 passed, 3 warnings in 10.81s**（退出 0）。
+  警告为该临时环境未识别三个 pytest 配置项，与 wall-clock 无关。
+- Python 3.12.13 / pandas 2.3.3：**39 passed in 9.88s**（退出 0）。
+- 四项既有 data-free gates 再次全 PASS；`git diff --check`、改动文本
+  UTF-8 无 BOM / NUL=0 及 Python AST 检查通过。
+
+日志：外部 handoff 的 `pytest-nits-pandas3.log` / `pytest-nits-pandas2.log`。
+推送后的完整 tip、远程 CI 状态与最终回执见同目录 `NITS_RUN.md`。
+仍为同一 draft PR，禁止 merge；宿主真输入两臂仍 **NOT_RUN**。
