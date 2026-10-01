@@ -1,0 +1,8 @@
+{
+  "schema_version": "bl2_human_go_v1",
+  "data": {
+    "rows": [
+    {"approval_id":"b_l2_units_shares_20261001","source_document":"HUMAN_GO_UNITS_SHARES.md","source_document_sha256":"ff0a5f3bf74e775c66a692e7857eff22cc6d5f0fd0757d97abb38172c75613ab","basis":"human_target","target":{"kind":"incremental","unit":"shares","shares_per_unit":1,"contract":"raw_shares_incremental"},"supersedes_document_sha256":"bb287dfe9e2559e9fe05abb7401a636aa6596524cfb79ffa34a4f3ff884c2afe","option":"A","complete":false,"r4_authorized":false,"limitation":"Human chooses raw_shares_incremental; this is not a vendor declaration or proof that lake volume is shares. Lake numeric scale remains lots-like; no units acceptance."}
+  ]
+  }
+}
