@@ -30,7 +30,7 @@ def document(name):
 def test_cent_align_attestation_matches_loader_and_preserves_wall_approval():
     manifest = document("manifest.json")
     rule = manifest["price_conversion"]
-    assert manifest["transform_version"] == "bl2_source_transform_v6"
+    assert manifest["transform_version"] == "bl2_source_transform_v7"
     assert manifest["r4_authorized"] is False and manifest["lake_verdict"] == "NOT_RUN"
     assert rule["human_go_sha256"] == "45ba9a99ec4d09fdb4c73c5dc2e2bf3aa6115a2c7b6a374eed79bc5448b71729"
     assert rule["targets"] == ["bucket.close", "mark.price"]
@@ -85,10 +85,13 @@ def ratio_case(tmp_path, monkeypatch):
     return case
 
 
-def test_explicit_human_go_accepts_ratio_only_inside_probe_window(ratio_case):
-    loaded = ratio_case.load()
-    assert [b.volume_shares for b in loaded.run_input.buckets] == [100000, 50000]
-    assert loaded.provenance.document()["transform"]["bars"][0]["volume_proofs"][0]["source"] == "comparison"
+@pytest.mark.parametrize("unit,factor", [("lots", 100), ("shares", 1)])
+def test_superseded_ratio_go_rejected_even_in_original_probe_scope(ratio_case, unit, factor):
+    ratio_case.recipe["bars"][0]["volume"].update(unit=unit, shares_per_unit=factor)
+    ratio_case.sidecars["proof_units"]["result"]["rows"][0]["binding"].update(unit=unit, shares_per_unit=factor)
+    ratio_case.freeze()
+    with pytest.raises(SourceContractError, match="unsupported evidence basis|cross_source_ratio is historical_superseded"):
+        ratio_case.load()
     assert not Path(ratio_case.recipe["parent"]).exists()
 
 
@@ -164,9 +167,13 @@ def test_checked_packages_hashes_bind_all_rows_and_record_instrument_host_fill()
     # Descriptor only for proof structure; never invokes the lake resolver.
     store.specs["minute_603196"] = {"schema": {"volume": "int64"}, "sha256": "0" * 64,
                                     "location": {"kind": "minute", "symbol": "603196.SH"}}
-    for identity in ("proof_units", "proof_status", "proof_instruments_sse", "proof_instruments_wind",
+    for identity in ("proof_status", "proof_instruments_sse", "proof_instruments_wind",
                      "proof_calendar", "proof_actions", "proof_marks", "proof_timing"):
         store.proof_bindings[identity] = source_loader._proof(store.data[identity], store, identity)
+    with pytest.raises(SourceContractError, match="complete saved result required"):
+        source_loader._proof(store.data["proof_units"], store, "proof_units")
+    with pytest.raises(SourceContractError, match="unsupported evidence basis|cross_source_ratio is historical_superseded"):
+        source_loader._proof(document("historical/units.lots.proof.json")["data"], store, "old_proof_units")
     statuses = store.data["status"]["rows"]
     assert len(statuses) == len(store.proof_bindings["proof_status"]) == 2133
     assert set(Counter(r["start"][:10] for r in statuses).values()) == {237}
@@ -241,7 +248,7 @@ def test_status_continuous_grid_matches_fixture_and_timing_census(remapper):
         assert (len(morning), morning[0], morning[-1]) == (120, "09:31", "11:30")
         assert (len(afternoon), afternoon[0], afternoon[-1]) == (117, "13:01", "14:57")
     assert pins["status_grid_revision"]["human_go_sha256"] == "d06b01b536dbd8b4c5a13eaf72ceca703ed84bc528d70de75bfc446cc35390d8"
-    assert document("manifest.json")["transform_version"] == "bl2_source_transform_v6"
+    assert document("manifest.json")["transform_version"] == "bl2_source_transform_v7"
     assert document("manifest.json")["r4_authorized"] is False
 
 
@@ -438,7 +445,7 @@ def test_cam_calendar_actions_and_marks_are_scoped_saved_observations():
     assert all(page["page_metadata"]["totalpages"] == 2 for page in pages)  # Preserve upstream inconsistency.
     marks = document("marks.json")["data"]
     assert marks["subject"] == "marks" and marks["conclusion"] == "raw_contemporaneous_grid"
-    assert marks["transform_version"] == "bl2_source_transform_v6"
+    assert marks["transform_version"] == "bl2_source_transform_v7"
     assert marks["time"] == {"encoding": "epoch_ms_wall_shanghai_as_utc", "timezone": "Asia/Shanghai", "label": "END"}
     assert marks["source_identity_note"]["sha256"] == "58879893f221bfe050b7a16029667c49fb65d8ec6f47592254e549374a577083"
     assert marks["source_identity_note"]["binding_status"] == "unbound_minute_source"
@@ -662,7 +669,7 @@ def test_time_encoding_approval_binds_real_saved_materials_without_opening_lake(
     assert source_loader._proof(store.data["proof_timing"], store, "proof_timing") == {}
     matches = source_loader._time_encoding_refs(recipe, store, "minute_603196", "time", time)
     assert len(matches) == 1 and matches[0]["approval_id"] == row["approval_id"]
-    assert document("manifest.json")["transform_version"] == "bl2_source_transform_v6"
+    assert document("manifest.json")["transform_version"] == "bl2_source_transform_v7"
 
 
 @pytest.mark.parametrize("change", ["source", "hash", "column", "symbol", "window", "label", "daily",
@@ -755,6 +762,11 @@ def test_remapper_requires_timing_approval_id_even_after_repin(tmp_path, remappe
     pins["host_timing_approval_sha256"] = sha256(approval.read_bytes())
     (tmp_path / "inputs.json").write_text(json.dumps(pins), encoding="utf-8")
     shutil.copyfile(PACK / remapper.CAM_GO_NAME, tmp_path / remapper.CAM_GO_NAME)
+    for name in (remapper.UNITS_GO_NAME, remapper.UNITS_DIAGNOSIS_NAME,
+                 *pins["units_supersession"]["historical_files"]):
+        target = tmp_path / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(PACK / name, target)
     monkeypatch.setattr(remapper, "HERE", tmp_path)
     with pytest.raises(ValueError, match="timing host approval id marker missing"):
         remapper.build(UPSTREAM, PACK / "HUMAN_GO.md", PACK / remapper.APPROVAL_NAME,
@@ -801,3 +813,68 @@ def test_remapper_rejects_unpinned_raw_before_parsing_or_writing(tmp_path, remap
     (tmp_path / "units.proof.json").write_text("{}", encoding="utf-8")
     with pytest.raises(ValueError, match="input hash mismatch: units.proof.json"):
         remapper.build(tmp_path, go)
+
+
+def test_shares_supersession_pins_keep_historical_bytes_and_target_honest():
+    pins, manifest = document("inputs.json"), document("manifest.json")
+    supersession = pins["units_supersession"]
+    assert manifest["units_supersession"] == supersession
+    assert supersession["option"] == "A" and supersession["status"] == "incomplete"
+    assert supersession["historical_status"] == "historical_superseded"
+    assert supersession["target"] == {
+        "kind": "incremental", "unit": "shares", "shares_per_unit": 1, "contract": "raw_shares_incremental"}
+    assert pins["human_go_units_shares_sha256"] == sha256((PACK / "HUMAN_GO_UNITS_SHARES.md").read_bytes()) == (
+        "ff0a5f3bf74e775c66a692e7857eff22cc6d5f0fd0757d97abb38172c75613ab")
+    assert pins["units_diagnosis_sha256"] == sha256((PACK / "DIAGNOSIS_UNITS_SHARES.md").read_bytes())
+    for name, pin in supersession["historical_files"].items():
+        assert sha256((PACK / name).read_bytes()) == pin["sha256"]
+    assert pins["human_go_sha256"] == "bb287dfe9e2559e9fe05abb7401a636aa6596524cfb79ffa34a4f3ff884c2afe"
+    for spec in manifest["artifacts"]:
+        if spec["id"] in ("human_go", "units_comparison"):
+            assert spec["status"] == "historical_superseded"
+        assert not spec["path"].startswith("historical/")  # Never register the superseded proof as living.
+    historical = document("historical/units.lots.proof.json")["data"]
+    assert historical["result"]["complete"] is True
+    assert historical["result"]["rows"][0]["binding"]["unit"] == "lots"
+    proof = document("units.proof.json")["data"]
+    assert proof["result"]["complete"] is False
+    assert set(proof["source_refs"]) == {"human_go_units_shares", "units_diagnosis", "vendor_units_absence"}
+    row = proof["result"]["rows"][0]
+    assert row["basis"] == "human_target" and row["binding"] == {
+        "source": "minute_603196", "column": "volume", "kind": "incremental", "unit": "shares", "shares_per_unit": 1}
+    marker = document("sources/human_go_units_shares.json")["data"]["rows"][0]
+    assert marker["source_document_sha256"] == pins["human_go_units_shares_sha256"]
+    assert marker["complete"] is marker["r4_authorized"] is False
+    assert "unit_declaration" not in marker
+
+
+@pytest.mark.parametrize("change,match", [
+    ("none", "complete saved result required"),
+    ("complete", "unsupported evidence basis"),
+    ("declaration_label", "explicit matching unit declaration"),
+])
+def test_real_shares_target_never_becomes_proof_by_repinning(tmp_path, monkeypatch, change, match):
+    case = SyntheticCase(tmp_path, monkeypatch)
+    _register_real_sources(case, tmp_path)
+    proof = case.sidecars["proof_units"] = document("units.proof.json")["data"]
+    proof["result"]["rows"][0]["binding"]["source"] = "bars"
+    if change != "none":
+        proof["result"]["complete"] = True
+    if change == "declaration_label":
+        proof["result"]["rows"][0]["basis"] = "source_declaration"
+    case.freeze()
+    with pytest.raises(SourceContractError, match=match):
+        case.load()
+    assert not Path(case.recipe["parent"]).exists()
+
+
+@pytest.mark.parametrize("name", ["HUMAN_GO_UNITS_SHARES.md", "DIAGNOSIS_UNITS_SHARES.md",
+                                  "historical/units.lots.proof.json", "sources/units_comparison.json"])
+def test_units_supersession_input_pins_reject_tampering(remapper, tmp_path, monkeypatch, name):
+    package = tmp_path / "package"
+    shutil.copytree(PACK, package)
+    path = package / name
+    path.write_bytes(path.read_bytes() + b"\n")
+    monkeypatch.setattr(remapper, "HERE", package)
+    with pytest.raises(ValueError, match="units input hash mismatch|units supersession input hash mismatch"):
+        remapper.build(UPSTREAM, package / "HUMAN_GO.md")

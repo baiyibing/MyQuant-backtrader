@@ -1,15 +1,11 @@
 {
   "schema_version": "bl2_proof_v1",
   "data": {
-    "issuer": "Human GO 2026-09-30 / #1111 cross-source evidence remap",
+    "issuer": "Human GO 2026-10-01 / option A incomplete shares target",
     "subject": "units",
     "source_refs": [
-      "units_comparison",
-      "human_go",
-      "daqmt_1m",
-      "daqmt_1d",
-      "ths_daily",
-      "ratio_table",
+      "human_go_units_shares",
+      "units_diagnosis",
       "vendor_units_absence"
     ],
     "filter": {
@@ -21,19 +17,20 @@
       "predicate": "603196.SH only; inclusive probe dates; exact source rows and bindings; units"
     },
     "result": {
-      "complete": true,
-      "summary": "#1111 remapped units draft; saved observations checked offline",
+      "complete": false,
+      "summary": "BLOCKED: raw_shares_incremental target; lake lots-scale conflict unresolved",
       "rows": [
-    {"source":"units_comparison","row":0,"observation":"8/9 daily ratios exactly 100; 20251023 THS is 100 shares less than daqmt*100; 9/9 full-day sum(1m)==1d, including 09:30 opening bars.","basis":"cross_source_ratio","binding":{"source":"minute_603196","column":"volume","kind":"incremental","unit":"lots","shares_per_unit":100}}
+    {"source":"human_go_units_shares","row":0,"observation":"Requested target only: raw_shares_incremental. No verified lake shares binding.","basis":"human_target","binding":{"source":"minute_603196","column":"volume","kind":"incremental","unit":"shares","shares_per_unit":1}}
   ]
     },
     "limitations": [
       "Remapped draft only; structural checks != lake PASS; R3 BLOCKED/NOT_RUN; R4 needs separate Human「开 R4」; production_C=frozen.",
-      "Human GO quote: 人裁：①量单位接受直接对账（basis=cross_source_ratio），然后 remap",
-      "Vendor-doc absence (#1111 verbatim finding): 官方字段表只声明 volume = 成交量，未声明 K 线 volume 单位（与 MyQuant #273 地图一致）。单位须由直接对账确定。",
-      "unit=手 is encoded as the existing loader enum lots; shares_per_unit=100 is explicit, not a default.",
-      "20251023 differs by 100 shares; this exception is not a general vendor declaration or amount/(close*volume) heuristic.",
-      "minute_603196 is an intended host source ID. Actual lake bytes, coverage and identity still require separate host binding; daqmt exports are not the configured lake."
+      "Option A: complete=false; human_target is deliberately not an accepted units evidence basis. Changing complete to true cannot turn this target into a source declaration.",
+      "Prior GO bb287dfe9e2559e9fe05abb7401a636aa6596524cfb79ffa34a4f3ff884c2afe, human_go, units_comparison and historical/units.lots.proof.json are historical_superseded; bytes preserved.",
+      "Lake/daqmt/Tencent are lots-scale; Wind/THS/Sina are shares-scale. Lake*100 approximates Wind on 12/13 days. These are historical lots evidence / conflict disclosure, never living shares proof.",
+      "Vendor-doc absence remains: 官方字段表只声明 volume = 成交量，未声明 K 线 volume 单位（与 MyQuant #273 地图一致）。单位须由直接对账确定。",
+      "Blocked until shares-scale lake bytes or a separately authorized mapping contract has honest evidence. No lake rewrite or lots*100 relabelled as raw_shares_incremental in this knife.",
+      "v7 retires the ratio accept path; no R3/R4i PASS reuse, lake PASS, or R4 authorization. Human「合」then land and named「开 R4」remain required. δ5 needs its own d5_evidence_pack_v1 units pack."
     ]
   }
 }

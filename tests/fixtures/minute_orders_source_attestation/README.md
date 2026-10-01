@@ -17,9 +17,10 @@ they are drafts, not proofs, and R3 stays BLOCKED/NOT_RUN.
 
 2026-09-30 scoped Human GO and six remapped drafts:
 [attestation_packages](../../../docs/backtest/b-l2-01-evidence-2026-09-30/attestation_packages/README.md).
-Only `603196.SH`, `20251023–20251104` may use the explicitly marked
-`cross_source_ratio` exception; this does not change these unfilled templates
-into facts. In transform v4 a `source_declaration` proof must reference a raw row
+The former `603196.SH`, `20251023–20251104` `cross_source_ratio` exception
+is **historical_superseded** by Human GO 2026-10-01. Transform v7 rejects it;
+the living shares target remains incomplete (option A). These templates are
+still unfilled, not facts. In transform v4 a `source_declaration` proof must reference a raw row
 with `basis="source_declaration"` and `unit_declaration` matching
 `column/kind/unit/shares_per_unit`; a label without that declaration fails.
 The derived instrument package replaces the source-fact alternative and uses

@@ -293,7 +293,7 @@ def test_bound_wall_encoding_loads_end_buckets_and_marks_with_audit(wall_case):
         (at("09:30:00"), at("09:31:00")), (at("09:31:00"), at("09:32:00"))]
     assert run.marks[-1].event_time.isoformat() == at("15:00:00")
     doc = loaded.provenance.document()
-    assert doc["transform"]["version"] == "bl2_source_transform_v6"
+    assert doc["transform"]["version"] == "bl2_source_transform_v7"
     for row, raw in zip(doc["transform"]["bars"], wall_case.rows):
         assert row["original_time"] == str(raw["time"])
         assert row["time_source_type"] == "int64"
@@ -388,7 +388,7 @@ def test_double_price_residue_is_attested_for_buckets_and_marks(source_case, noi
     assert all(p.price.as_tuple() == Decimal(expected).as_tuple()
                for m in loaded.run_input.marks for p in m.prices)
     transform = loaded.provenance.document()["transform"]
-    assert transform["version"] == "bl2_source_transform_v6"
+    assert transform["version"] == "bl2_source_transform_v7"
     for record in ([b["price"] for b in transform["bars"]]
                    + [m["conversion"] for m in transform["marks"]]):
         assert record == {"source_type": "double", "original": repr(noisy),
@@ -838,3 +838,27 @@ def test_all_universe_cells_sorted_and_all_marks_required(source_case, partition
     run = source_case.load().run_input
     assert [b.symbol for b in run.buckets] == [second_symbol, SYMBOL, second_symbol, SYMBOL]
     assert all([p.symbol for p in m.prices] == [second_symbol, SYMBOL] for m in run.marks)
+
+
+def test_declared_synthetic_shares_remain_raw_incremental_without_scaling(source_case):
+    # Fabricated declaration and values, not evidence that the real lake is shares.
+    loaded = source_case.load()
+    assert [bucket.volume_shares for bucket in loaded.run_input.buckets] == [1000, 500]
+    assert loaded.provenance.document()["transform"]["version"] == "bl2_source_transform_v7"
+
+
+@pytest.mark.parametrize("change", ["absent", "human_target", "historical_ratio", "factor_100"])
+def test_shares_label_requires_matching_source_evidence(source_case, change):
+    proof = source_case.sidecars["proof_units"]
+    row = proof["result"]["rows"][0]
+    evidence = source_case.sidecars[row["source"]]["rows"][row["row"]]
+    if change == "absent":
+        del evidence["unit_declaration"]
+    elif change == "factor_100":
+        evidence["unit_declaration"]["shares_per_unit"] = 100
+    else:
+        evidence["basis"] = "human_target" if change == "human_target" else "cross_source_ratio"
+    source_case.freeze()
+    with pytest.raises(SourceContractError, match="explicit matching unit declaration"):
+        source_case.load()
+    assert not Path(source_case.recipe["parent"]).exists()

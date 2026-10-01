@@ -227,7 +227,7 @@ S4 input/contract/各 component hashes；既有 validators 只用于预检，不
 S4 新路径为 `evidence_level=hybrid`、`minute_orders_artifacts_v2`、
 `minute_orders_hybrid_evidence_v1` 与 `minute_orders_source_provenance_v1`；原转换版 `bl2_source_transform_v1`，
 本次 §8 升为 `bl2_source_transform_v2`，须重新 pin implementation/recipe/attestation。
-上述 v2 仅为 §8 历史记录；§9 / §9.5 的 `bl2_source_transform_v3` 唯一版本要求限于 R3，已冻结的 R3 收据/证据保留 v3；§10 的 v4 为 units 例外版本，§10.1 的 v5 为 wall encoding 版本，当前 remap 路径须按 §10.2 的 `bl2_source_transform_v6` 重新 pin implementation/recipe/attestation。
+上述 v2 仅为 §8 历史记录；§9 / §9.5 的 `bl2_source_transform_v3` 唯一版本要求限于 R3，已冻结的 R3 收据/证据保留 v3；§10 的 v4 为 units 例外版本，§10.1 的 v5 为 wall encoding 版本，§10.2 的 v6 为 cent-align 版本，当前 remap 路径须按 §10.3 的 `bl2_source_transform_v7` 重新 pin implementation/recipe/attestation。
 它显式区分 market 来源与 synthetic commands/account；本单元不提供 real-only 或 `lake` evidence_level。
 wrapper 执行前、writer 执行后重读冻结源并重建映射，不只信任调用方自报的 provenance hash。
 增加 `source_provenance.json`、`source_checks.json`、成功路径的 `source_postflight.json`；
@@ -481,6 +481,11 @@ missing=false 而源行缺失则失败，零量源行仍是存在的记录。
 
 ## 10. R3 后证据采集登记（2026-09-30）
 
+**历史登记：本节 lots / `cross_source_ratio` GO 已于 2026-10-01 被 §10.3
+标记为 `historical_superseded`；v7 不再接受该例外。** 本节原材料与历史结论保留，
+不得用来声称湖 `volume` 原值是股。下文「湖≡Wind」只保留当时 OHLC/amount 等价叙述；
+成交量须区分湖手级与 Wind 股级，湖×100 ≈ Wind（12/13 天），并非原值 1:1。
+
 R3 已在 4090 执行：tip `a268e11` · transform `bl2_source_transform_v3` · verdict 仍
 **`BLOCKED/NOT_RUN`**（同 §9 三门，收据与探针摘要已逐字节入库
 [b-l2-01-evidence-2026-09-30/](b-l2-01-evidence-2026-09-30/)）。
@@ -503,7 +508,7 @@ R3 已在 4090 执行：tip `a268e11` · transform `bl2_source_transform_v3` · 
 **无单位注记**，Wind 权威单位规范不在 MCP 暴露面，source_declaration 锚仍缺位。
 按 §9.2 仍为 NON-ATTESTATION 经验旁证，任何 BLOCKED 门状态不变。
 
-2026-09-30 Human GO 窄例外（仅覆盖本段）：[原始 GO 与 remap 包](b-l2-01-evidence-2026-09-30/attestation_packages/README.md)
+2026-09-30 Human GO 窄例外（历史，已由 §10.3 supersede；仅覆盖本段）：[原始 GO 与 remap 包](b-l2-01-evidence-2026-09-30/attestation_packages/README.md)
 接受 `603196.SH`、`20251023–20251104` 的 units `basis=cross_source_ratio`，依据 #1111
 `ec19fd6` 的 daqmt 日量 ×100 对 THS/stock_finance_data 及逐日 `sum(1m)==1d`；单位手、
 `shares_per_unit=100`、incremental 显式声明。此例外不成为通用 vendor `source_declaration`，
@@ -533,21 +538,21 @@ map §1.1 / census、已保存 Kimi 与 R4f 收据的逐份 hash。loader 固定
 同分钟源的 marks 沿用该映射并受同门禁；不能给其他 daily/mark 源随意贴此编码。
 逐 bar audit 保留原整数文本、int64 类型、声明编码、ISO 起止及批准引用。
 
-本节历史 transform 为 **`bl2_source_transform_v5`**（当前 pin 见 §10.2 v6）。当时宿主须重新 pin code/runtime、recipe、
+本节历史 transform 为 **`bl2_source_transform_v5`**（当前 pin 见 §10.3 v7）。当时宿主须重新 pin code/runtime、recipe、
 marks 映射与 `attestation_scope`；旧 R4f 收据/尝试保持原状，不能复用为新 freeze。
 §10.1 当时不改 status 矩阵：当时仍是 240 格 status（午后至 15:00）对 Clock 连续 237 格的差异，
 **随后已由 #280 status trim（R4g→R4h 前）收口为 237×9=2133**，勿再按「仍须宿主处理 240 格」执行。
 account/commands、配置湖身份复核及 fresh freeze 在当时仍可能阻挡；本地只测合成 fixtures/保存证据，
 **不宣称 lake PASS**。`r4_authorized=false`、`no_ssot_compare_authorization`、production_C 冻结不变。
 §10.1 刀当时的后续是 **Grok → Human「合」→ land → 另一次具名 Human「开 R4g」**（历史命名；#280 已落地 status trim）。
-当前继续读 §10.2（cent-align v6）与 packs README；本历史段不合并、不发车、不改湖。
+当前继续读 §10.2（cent-align v6）、§10.3（units supersession v7）与 packs README；本历史段不合并、不发车、不改湖。
 
 ### 10.2 R4h cent-align：double 价格显式有界转换（2026-09-30）
 
 Human「开修」via bt（GO SHA-256
 `45ba9a99ec4d09fdb4c73c5dc2e2bf3aa6115a2c7b6a374eed79bc5448b71729`）授权修复
 `FeeContractError: bucket close must be cent-aligned; no implicit rounding`。
-当前 transform 为 **`bl2_source_transform_v6`**。`double_repr_cent_quantize_v1`
+本节历史 transform 为 **`bl2_source_transform_v6`**（当前 v7 见 §10.3）。`double_repr_cent_quantize_v1`
 对 bars/marks 的 pinned double 价格先取 `Decimal(repr(float))`；已对齐分位则保留原值，
 否则仅当到最近分的绝对残差 ≤ `Decimal("1e-9")` 元时，以 `ROUND_HALF_EVEN`
 显式 quantize 到 `Decimal("0.01")`，超界抛 `SourceContractError`。
@@ -557,7 +562,52 @@ audit 保存原文本、结果文本、残差、上界、规则、舍入方式�
 [packs README](b-l2-01-evidence-2026-09-30/attestation_packages/README.md)。
 Fees / BrokerCore / MatchCore / Ledger / Clock 不改；wall encoding 保持
 `epoch_ms_wall_shanghai_as_utc`，原批准与证据字节不改。
-须以 v6 重新 pin code/runtime、recipe、marks 与 scoped attestation；account/commands、
+本节当时须以 v6 重新 pin；当前须按 §10.3 用 v7 pin code/runtime、recipe、marks 与 scoped attestation；account/commands、
 宿主湖身份/覆盖核验和 fresh freeze 仍待完成，不宣称 freeze/lake PASS。
 `r4_authorized=false`、`no_ssot_compare_authorization`、production_C 冻结不变。
 后续为 **Grok review → Human「合」→ land → Human「开 R4」**；合并不授权 R4，本刀不合并、不发车。
+
+
+### 10.3 B-L2 units → shares：Human supersession，option A fail-closed（2026-10-01）
+
+Human cut (bt) 将 living 目标改为 **股 / `raw_shares_incremental`**，即
+`column=volume`、`kind=incremental`、`unit=shares`、`shares_per_unit=1`。
+基线为 `eccc750215af7051ba85b4fab42415a7eecb35fe`；
+[新 Human GO](b-l2-01-evidence-2026-09-30/attestation_packages/HUMAN_GO_UNITS_SHARES.md)
+逐字节保存，SHA-256
+`ff0a5f3bf74e775c66a692e7857eff22cc6d5f0fd0757d97abb38172c75613ab`；
+[权威 DIAGNOSIS](b-l2-01-evidence-2026-09-30/attestation_packages/DIAGNOSIS_UNITS_SHARES.md)
+也逐字节保存，两者均在 packs `inputs.json` pin，并有具名 source 摘录。
+
+旧 lots GO SHA-256
+`bb287dfe9e2559e9fe05abb7401a636aa6596524cfb79ffa34a4f3ff884c2afe`、
+`HUMAN_GO.md`、`sources/human_go.json`、`sources/units_comparison.json` 已标为
+**`historical_superseded`**，原字节保留；旧 proof 移存
+`historical/units.lots.proof.json` 并单独 pin，不注册为 living proof。§10 的窄例外
+是历史，不再是当前接受路径；旧材料仍能支持历史 lots 结论，不能冒充 shares 证明。
+
+数值冲突没有消失：湖/daqmt/Tencent 是**手级**，Wind/THS/Sina 是**股级**；
+2025-10-23 湖/daqmt 为 **31780**，Wind/Sina 为 **3177959**，THS 为 **3177900**。
+湖×100 ≈ Wind（12/13 天）；九日 daqmt/THS 表中 8/9 比值正好 100。
+分钟样例 `volume=380`、`close≈23.1`、`amount≈879429` 同样呈手级；
+`amount/(close×volume)≈100.19` 只披露冲突，继续是 NON-ATTESTATION。
+官方 K 线单位声明缺失的负结果保持；1.3 交易数量为股和 Human 偏好均不是湖单位声明。
+
+因此选择 **A**：living `units.proof.json` 为 **`complete=false`**，
+`basis=human_target` 只记录请求目标，不能用于 `incremental_volume_units_verified`。
+`source_refs` 仅引新 GO、诊断及 vendor 单位声明缺失；Wind/THS/daqmt/ratio
+只作为历史 lots 证据或冲突披露。即便仅把 complete 翻为 true，loader 仍因非证明 basis
+拒绝。完成门槛是有诚实证据的 shares-scale 源字节或另行授权的映射合同；本刀不改湖，
+不做 lots×100 却贴 raw_shares_incremental 标签，不签 lake PASS。
+
+**`bl2_source_transform_v7`** 替代 v6，原因仅为撤销已 supersede 的
+`cross_source_ratio` 接受例外。`source_declaration` 仍须独立原材料中显式匹配的
+`unit_declaration`；Human GO 与 ratio 不可改标签冒充。v6 价格转换、v5 wall encoding
+及其 byte pin 保持；MatchCore / Fees / Clock / SSOT 不变，没有经济放宽。
+新 manifest/marks/timing limitations 对齐 v7，code/runtime、recipe、scoped attestation
+须重新 pin；先解决 units 缺口再谈 fresh freeze。旧 R3/R4i 结果不复用为 PASS。
+
+**`r4_authorized=false`、`production_C=frozen`、`no_ssot_compare_authorization`**。
+本刀只开 PR，不合并，不调度 4090/R4；后续必须 Human **「合」→ land → 具名「开 R4」**，
+合并也不自动授权 R4。δ5 仍需自己的 `d5_evidence_pack_v1` units pack；本刀限 B-L2，
+不造 δ5 包，不将 B-L2 标签沿用为 δ5 PASS。

@@ -10,11 +10,44 @@
     "requirement": "Null sha256 means this catalog does not ship parquet bytes. The wall-encoding pin lives in time_encoding_approval.binding.source_sha256 (58879893f221bfe050b7a16029667c49fb65d8ec6f47592254e549374a577083), not in this field, and the loader enforces it. Host must still configure/resolve lake identity/coverage and freshly freeze; exports do not establish lake equivalence."
   },
   "unresolved": [
+    "BLOCKED: units complete=false; raw_shares_incremental target conflicts with lots-scale lake volume",
     "v6 double-price cent-align transform implemented and attested; no fresh host freeze or lake PASS claimed",
     "status continuous trim is Clock-aligned (237/day, 2133 rows); account/commands and scoped attestation require host recipe review and registration",
     "host recipe, lake identity/coverage and fresh freeze; r4_authorized stays false"
   ],
-  "transform_version": "bl2_source_transform_v6",
+  "transform_version": "bl2_source_transform_v7",
+  "transform_reason": "v7 retires the historical cross_source_ratio lots exception; option A shares target is incomplete, no new acceptance or numeric conversion",
+  "units_supersession": {
+    "date": "2026-10-01",
+    "option": "A",
+    "status": "incomplete",
+    "target": {
+      "kind": "incremental",
+      "unit": "shares",
+      "shares_per_unit": 1,
+      "contract": "raw_shares_incremental"
+    },
+    "historical_status": "historical_superseded",
+    "superseded_by": "HUMAN_GO_UNITS_SHARES.md",
+    "historical_files": {
+      "HUMAN_GO.md": {
+        "sha256": "bb287dfe9e2559e9fe05abb7401a636aa6596524cfb79ffa34a4f3ff884c2afe"
+      },
+      "sources/human_go.json": {
+        "sha256": "34c4c7e56b0fad54c4eded684b1108d3752a444d5a775ec2d8335fa3638a70ff"
+      },
+      "sources/units_comparison.json": {
+        "sha256": "52fc830cc42bdb90f36453c8f9b378f8042aeae34e2064e748c43eb5d647d442"
+      },
+      "historical/units.lots.proof.json": {
+        "sha256": "1350ad54777bd4e96e62f1682e3e8003128628edc8ffbcea8a9f1ac11c8db320"
+      }
+    },
+    "reason": "Lake numeric scale remains lots-like. Human shares target is not a vendor declaration. No living shares proof.",
+    "r4_authorized": false
+  },
+  "human_go_units_shares_sha256": "ff0a5f3bf74e775c66a692e7857eff22cc6d5f0fd0757d97abb38172c75613ab",
+  "units_diagnosis_sha256": "c9629c96f4b8867ae82444962de675fcc7845d23a6e639cb80ccbeba0d170e4e",
   "price_conversion": {
     "rule": "double_repr_cent_quantize_v1",
     "source_type": "double",
@@ -126,21 +159,39 @@
       "path": "sources/human_go.json",
       "format": "json",
       "schema": "bl2_human_go_v1",
-      "sha256": "34c4c7e56b0fad54c4eded684b1108d3752a444d5a775ec2d8335fa3638a70ff"
+      "sha256": "34c4c7e56b0fad54c4eded684b1108d3752a444d5a775ec2d8335fa3638a70ff",
+      "status": "historical_superseded",
+      "usage": "historical lots evidence / conflict disclosure only"
     },
     {
       "id": "units_comparison",
       "path": "sources/units_comparison.json",
       "format": "json",
       "schema": "bl2_cross_source_ratio_v1",
-      "sha256": "52fc830cc42bdb90f36453c8f9b378f8042aeae34e2064e748c43eb5d647d442"
+      "sha256": "52fc830cc42bdb90f36453c8f9b378f8042aeae34e2064e748c43eb5d647d442",
+      "status": "historical_superseded",
+      "usage": "historical lots evidence / conflict disclosure only"
+    },
+    {
+      "id": "human_go_units_shares",
+      "path": "sources/human_go_units_shares.json",
+      "format": "json",
+      "schema": "bl2_human_go_v1",
+      "sha256": "388ad958a4fb97c460e1436f26ef129f5db9f2b07c97a40fcf7f83bf90e532b7"
+    },
+    {
+      "id": "units_diagnosis",
+      "path": "sources/units_diagnosis.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "8bb239057320270ce8356c5aa87cb49900aa99a700ce9088b702d7c2f091492d"
     },
     {
       "id": "proof_units",
       "path": "units.proof.json",
       "format": "json",
       "schema": "bl2_proof_v1",
-      "sha256": "1350ad54777bd4e96e62f1682e3e8003128628edc8ffbcea8a9f1ac11c8db320"
+      "sha256": "15b2b3ac796e824393ebe0052c2410a0206c511b85d9f831e2cd2762a9243161"
     },
     {
       "id": "instruments",
@@ -301,7 +352,7 @@
       "path": "marks.json",
       "format": "json",
       "schema": "bl2_marks_grid_v1",
-      "sha256": "ae2229466221ce3b528eb53b07719ed4680bca12e6173e07897aeff3e53531e9"
+      "sha256": "23a478984100bf440b1dc51c57383b7828e3f2661674a61508466a8303a35d07"
     },
     {
       "id": "proof_marks",
@@ -350,7 +401,7 @@
       "path": "timing.proof.json",
       "format": "json",
       "schema": "bl2_proof_v1",
-      "sha256": "74a741e88bb903c6f811150d6fc97eaa8b9ddcc3a5f159acde022c8dc41d04ab"
+      "sha256": "40fbd2c903cc45d78c0689e14146f4d45a0f2e8e89b69da21dfada48ef91ff09"
     },
     {
       "id": "host_time_encoding_approval",

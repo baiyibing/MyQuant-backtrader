@@ -8,8 +8,8 @@
 2026-09-30 新增独立 [attestation_packages/](attestation_packages/README.md)：
 按 Human GO 将 #1111 `ec19fd6` 的保存材料 remap 为六份 consumer/proof 草稿，
 此子目录是确定性映射产物，另有 inputs/manifest 哈希清单；不属于上述 R3 原收据副本。
-units 使用仅限指定窗口的 `cross_source_ratio`，instrument 缺失审核项继续显式 BLOCKED。
-未运行 4090 或 R4，production_C=frozen。
+units：**2026-10-01 起** living 目标为 `raw_shares_incremental`（`unit=shares` / `shares_per_unit=1`），`attestation_packages/units.proof.json` 为 option A `complete=false`（湖 volume 仍为手级，见 packs README / ingress §10.3）；旧指定窗口 `cross_source_ratio` / lots×100 已 **historical_superseded**（归档于 `attestation_packages/historical/`）。instrument 缺失审核项继续显式 BLOCKED。
+未运行 4090 或 R4，production_C=frozen；`r4_authorized=false`。
 
 **边界（先读）**：
 

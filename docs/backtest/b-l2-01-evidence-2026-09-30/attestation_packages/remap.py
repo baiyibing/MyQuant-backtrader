@@ -6,8 +6,9 @@ approval record, available_at, ordinary_listing) is bound to pinned inputs in
 inputs.json and HOST_R4_INSTRUMENTS_APPROVAL_20260930.md. The #1114 CAM
 materials and HOST_R4_CAM_APPROVAL_20260930.md fill calendar/actions/marks
 evidence only. The timing fill uses pinned MyQuant census/map/vendor excerpts;
-r4_authorized stays false. Transform v6 adds explicit bounded double-price
-cent quantization; the named wall-time encoding and its approval stay unchanged.
+r4_authorized stays false. Transform v7 retires the superseded lots ratio
+exception; the shares target remains incomplete (option A). The v6 bounded
+price conversion and named wall-time encoding approval stay unchanged.
 """
 
 import argparse
@@ -25,7 +26,7 @@ HERE = Path(__file__).resolve().parent
 SYMBOL = "603196.SH"
 FIRST, LAST = "2025-10-23", "2025-11-04"
 MINUTE_SOURCE = "minute_603196"
-GO_CUE = "人裁：①量单位接受直接对账（basis=cross_source_ratio），然后 remap"
+HISTORICAL_GO_CUE = "人裁：①量单位接受直接对账（basis=cross_source_ratio），然后 remap"
 DATES = ("20251023", "20251024", "20251027", "20251028", "20251029",
          "20251030", "20251031", "20251103", "20251104")
 NOTICE = "Remapped draft only; structural checks != lake PASS; R3 BLOCKED/NOT_RUN; R4 needs separate Human「开 R4」; production_C=frozen."
@@ -52,6 +53,9 @@ TIME_ENCODING_DIR = "time_encoding_host_materials"
 TIME_ENCODING_APPROVAL_NAME = "HOST_R4_TIME_ENCODING_APPROVAL_20260930.md"
 TIME_ENCODING_APPROVAL_ID = "host_r4_time_encoding_approval_20260930"
 TIME_ENCODING_GO_NAME = "HUMAN_GO_TIME_ENCODING.md"
+UNITS_GO_NAME = "HUMAN_GO_UNITS_SHARES.md"
+UNITS_DIAGNOSIS_NAME = "DIAGNOSIS_UNITS_SHARES.md"
+TRANSFORM_VERSION = "bl2_source_transform_v7"
 
 
 def require(condition, message):
@@ -107,6 +111,15 @@ def read_inputs(source_dir, human_go, host_approval=None, host_cam_approval=None
     cam_go_raw = (HERE / CAM_GO_NAME).read_bytes()
     require(digest(cam_go_raw) == pins["human_go_cam_sha256"], "CAM Human GO hash mismatch")
     inputs = {}
+    for name, key in ((UNITS_GO_NAME, "human_go_units_shares_sha256"),
+                      (UNITS_DIAGNOSIS_NAME, "units_diagnosis_sha256")):
+        raw = (HERE / name).read_bytes()
+        require(digest(raw) == pins[key], f"units supersession input hash mismatch: {name}")
+        inputs[name] = raw.decode("utf-8")
+    for name, pin in pins["units_supersession"]["historical_files"].items():
+        raw = (HERE / name).read_bytes()
+        require(digest(raw) == pin["sha256"], f"historical units input hash mismatch: {name}")
+        inputs[name] = raw
     for name, hashes in pins["files"].items():
         raw = (source_dir / name).read_bytes()
         require(digest(raw) in hashes.values(), f"input hash mismatch: {name}")
@@ -209,7 +222,7 @@ def extract_timing_materials(materials, originals):
     lines = originals[TIMING_MAP].decode("utf-8").splitlines()
     stop = next(index for index, line in enumerate(lines) if line.startswith("### 1.2 "))
     # Preserve the historical v5 limitation bytes: this excerpt is a leaf of
-    # the existing time-encoding approval hash. Active pins/limitations use v6.
+    # the existing time-encoding approval hash. Active pins/limitations use v7.
     result["timing_materials_map.json"] = excerpt(TIMING_MAP,
         [{"line": index, "text": line} for index, line in enumerate(lines[:stop])],
         {"method": "UTF-8 lines from header through section 1.1, excluding section 1.2; original zero-based line retained."},
@@ -314,10 +327,10 @@ def add_timing_package(pins, inputs, add, md_excerpt):
             "Proof covers bars/marks 2025-10-23..2025-11-04, not bars on next BUY calendar date 2025-11-05. "
             "A wider execution/mark window requires fresh coverage; calendar retains its separate next-day coverage.",
             "The old epoch_ms mapping still yields 17:30+08:00 and is not approved for this lake partition. "
-            "Use epoch_ms_wall_shanghai_as_utc with the pinned source/column/window approval; v6 requires fresh "
+            "Use epoch_ms_wall_shanghai_as_utc with the pinned source/column/window approval; v7 requires fresh "
             "implementation/recipe/attestation pins. No new lake run and no Clock/Fees/MatchCore edits; "
-            "v6 only changes double→Decimal price admission via attested bound cent quantize "
-            "(see manifest.price_conversion / packs README), not tick size or fee math."]})
+            "v7 retires the historical lots ratio exception; living shares units remain incomplete. "
+            "The v6 bounded double-price conversion is unchanged (see manifest.price_conversion)."]})
 
 
 def add_time_encoding_package(pins, inputs, artifacts, add, md_excerpt):
@@ -356,7 +369,7 @@ def add_time_encoding_package(pins, inputs, artifacts, add, md_excerpt):
         "observation": "Human A GO: epoch_ms_wall_shanghai_as_utc for pinned minute_603196 time:int64, "
                        "603196.SH 2025-10-23..2025-11-04; UTC wall components stamped Asia/Shanghai, "
                        "no offset arithmetic. Saved Kimi census reports 2169 rows / zero violations; "
-                       "HOST approval and all source materials are byte-bound. Fresh v6 freeze required."})
+                       "HOST approval and all source materials are byte-bound. Fresh v7 freeze required after units evidence is resolved."})
     proof["result"]["summary"] += "; epoch_ms_wall_shanghai_as_utc bound to source/column/window and Human A HOST approval"
 
 
@@ -507,7 +520,7 @@ def add_cam_packages(pins, inputs, add, md_excerpt):
     add("marks", "marks.json", "bl2_marks_grid_v1", {
         "subject": "marks", "conclusion": "raw_contemporaneous_grid",
         "purpose": "Host-facing approved grid document; not a loader role or a frozen recipe.",
-        "approval_id": CAM_APPROVAL_ID, "transform_version": "bl2_source_transform_v6",
+        "approval_id": CAM_APPROVAL_ID, "transform_version": TRANSFORM_VERSION,
         "time": {"encoding": TIME_ENCODING, "timezone": "Asia/Shanghai", "label": "END"},
         "source_identity_note": {"source": MINUTE_SOURCE, "sha256": CAM_LAKE_SHA256,
                                  "binding_status": "unbound_minute_source",
@@ -604,7 +617,7 @@ def build(source_dir, human_go, host_approval=None, host_cam_approval=None, host
             limitation="Vendor K-line volume unit declaration is absent; upstream basis label source_declaration is not adopted.")
 
     marker = {"approval_id": "b_l2_remap_r4_20260930", "source_document_sha256": pins["human_go_sha256"],
-              "cue": GO_CUE, "basis": "cross_source_ratio", "symbols": [SYMBOL],
+              "cue": HISTORICAL_GO_CUE, "basis": "cross_source_ratio", "symbols": [SYMBOL],
               "from_date": FIRST, "through_date": LAST, "unit": "手", "shares_per_unit": 100,
               "kind": "incremental", "scope": "docs/fixtures remap only", "r4_authorized": False}
     add("human_go", "sources/human_go.json", "bl2_human_go_v1", {"rows": [marker]})
@@ -658,15 +671,41 @@ def build(source_dir, human_go, host_approval=None, host_cam_approval=None, host
             "result": {"complete": complete, "summary": summary, "rows": rows},
             "limitations": [NOTICE, *limitations]})
 
-    proof("proof_units", "units.proof.json", "Human GO 2026-09-30 / #1111 cross-source evidence remap", "units",
-          ["units_comparison", "human_go", "daqmt_1m", "daqmt_1d", "ths_daily", "ratio_table", "vendor_units_absence"],
-          [{"source": "units_comparison", "row": 0, "observation": evidence["finding"], "basis": "cross_source_ratio",
-            "binding": {"source": MINUTE_SOURCE, "column": "volume", "kind": "incremental", "unit": "lots", "shares_per_unit": 100}}],
-          ["Human GO quote: " + GO_CUE,
-           "Vendor-doc absence (#1111 verbatim finding): " + inputs["units.proof.json"]["vendor_doc_verbatim"]["finding"],
-           "unit=手 is encoded as the existing loader enum lots; shares_per_unit=100 is explicit, not a default.",
-           "20251023 differs by 100 shares; this exception is not a general vendor declaration or amount/(close*volume) heuristic.",
-           "minute_603196 is an intended host source ID. Actual lake bytes, coverage and identity still require separate host binding; daqmt exports are not the configured lake."])
+    # Historical lots sources above retain their exact bytes. Catalog lifecycle
+    # metadata marks them superseded; the living proof cites target/conflict only.
+    target = pins["units_supersession"]["target"]
+    add("human_go_units_shares", "sources/human_go_units_shares.json", "bl2_human_go_v1", {"rows": [{
+        "approval_id": "b_l2_units_shares_20261001",
+        "source_document": UNITS_GO_NAME, "source_document_sha256": pins["human_go_units_shares_sha256"],
+        "basis": "human_target", "target": target,
+        "supersedes_document_sha256": pins["human_go_sha256"],
+        "option": "A", "complete": False, "r4_authorized": False,
+        "limitation": "Human chooses raw_shares_incremental; this is not a vendor declaration or proof "
+                      "that lake volume is shares. Lake numeric scale remains lots-like; no units acceptance.",
+    }]})
+    md_excerpt("units_diagnosis", UNITS_DIAGNOSIS_NAME,
+               {"path": UNITS_DIAGNOSIS_NAME, "sha256": pins["units_diagnosis_sha256"]},
+               limitation="Byte-preserved authoritative handoff diagnosis; conflict disclosure, not shares proof. "
+                          "Wind/THS/daqmt/ratio support the historical lots claim only.")
+    proof("proof_units", "units.proof.json", "Human GO 2026-10-01 / option A incomplete shares target", "units",
+          ["human_go_units_shares", "units_diagnosis", "vendor_units_absence"],
+          [{"source": "human_go_units_shares", "row": 0,
+            "observation": "Requested target only: raw_shares_incremental. No verified lake shares binding.",
+            "basis": "human_target",
+            "binding": {"source": MINUTE_SOURCE, "column": "volume", "kind": "incremental",
+                        "unit": "shares", "shares_per_unit": 1}}],
+          ["Option A: complete=false; human_target is deliberately not an accepted units evidence basis. "
+           "Changing complete to true cannot turn this target into a source declaration.",
+           "Prior GO bb287dfe9e2559e9fe05abb7401a636aa6596524cfb79ffa34a4f3ff884c2afe, human_go, "
+           "units_comparison and historical/units.lots.proof.json are historical_superseded; bytes preserved.",
+           "Lake/daqmt/Tencent are lots-scale; Wind/THS/Sina are shares-scale. Lake*100 approximates Wind "
+           "on 12/13 days. These are historical lots evidence / conflict disclosure, never living shares proof.",
+           "Vendor-doc absence remains: " + inputs["units.proof.json"]["vendor_doc_verbatim"]["finding"],
+           "Blocked until shares-scale lake bytes or a separately authorized mapping contract has honest evidence. "
+           "No lake rewrite or lots*100 relabelled as raw_shares_incremental in this knife.",
+           "v7 retires the ratio accept path; no R3/R4i PASS reuse, lake PASS, or R4 authorization. "
+           "Human「合」then land and named「开 R4」remain required. δ5 needs its own d5_evidence_pack_v1 units pack."],
+          complete=False, summary="BLOCKED: raw_shares_incremental target; lake lots-scale conflict unresolved")
 
     inst_rows = []
     inst_bindings = []
@@ -800,6 +839,11 @@ def build(source_dir, human_go, host_approval=None, host_cam_approval=None, host
     add_timing_package(pins, inputs, add, md_excerpt)
     add_time_encoding_package(pins, inputs, artifacts, add, md_excerpt)
     outputs = {filename: encode(document) for filename, (_, document) in artifacts.items()}
+    for name, pin in pins["units_supersession"]["historical_files"].items():
+        if name in outputs:
+            require(digest(outputs[name]) == pin["sha256"], f"historical units output changed: {name}")
+        elif name.startswith("historical/"):
+            outputs[name] = inputs[name]
     catalog = {"source_repository": pins["repository"], "source_commit": pins["commit"],
                "notice": NOTICE, "r4_authorized": False, "lake_verdict": "NOT_RUN",
                "unbound_minute_source": {"id": MINUTE_SOURCE, "sha256": None,
@@ -808,10 +852,16 @@ def build(source_dir, human_go, host_approval=None, host_cam_approval=None, host
                                          f"({CAM_LAKE_SHA256}), not in this field, and the loader enforces it. "
                                          "Host must still configure/resolve lake identity/coverage and freshly freeze; "
                                          "exports do not establish lake equivalence."},
-               "unresolved": ["v6 double-price cent-align transform implemented and attested; no fresh host freeze or lake PASS claimed",
+               "unresolved": ["BLOCKED: units complete=false; raw_shares_incremental target conflicts with lots-scale lake volume",
+                              "v6 double-price cent-align transform implemented and attested; no fresh host freeze or lake PASS claimed",
                               "status continuous trim is Clock-aligned (237/day, 2133 rows); account/commands and scoped attestation require host recipe review and registration",
                               "host recipe, lake identity/coverage and fresh freeze; r4_authorized stays false"],
-               "transform_version": "bl2_source_transform_v6",
+               "transform_version": TRANSFORM_VERSION,
+               "transform_reason": "v7 retires the historical cross_source_ratio lots exception; "
+                                   "option A shares target is incomplete, no new acceptance or numeric conversion",
+               "units_supersession": pins["units_supersession"],
+               "human_go_units_shares_sha256": pins["human_go_units_shares_sha256"],
+               "units_diagnosis_sha256": pins["units_diagnosis_sha256"],
                "price_conversion": {
                    "rule": "double_repr_cent_quantize_v1", "source_type": "double",
                    "targets": ["bucket.close", "mark.price"], "quantum": "0.01",
@@ -823,7 +873,10 @@ def build(source_dir, human_go, host_approval=None, host_cam_approval=None, host
                             "quantized_text when changed",
                    "human_go_sha256": "45ba9a99ec4d09fdb4c73c5dc2e2bf3aa6115a2c7b6a374eed79bc5448b71729"},
                "artifacts": [{"id": identity, "path": filename, "format": "json", "schema": doc["schema_version"],
-                              "sha256": digest(outputs[filename])} for filename, (identity, doc) in artifacts.items()]}
+                              "sha256": digest(outputs[filename]),
+                              **({"status": "historical_superseded", "usage": "historical lots evidence / conflict disclosure only"}
+                                 if identity in ("human_go", "units_comparison") else {})}
+                             for filename, (identity, doc) in artifacts.items()]}
     outputs["manifest.json"] = encode(catalog)
     return outputs
 
@@ -832,7 +885,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-dir", type=Path, required=True,
                         help="Read-only staged #1111 tree plus #1112 sse_rule_archive/, #1114 cam_host_materials/ and timing_host_materials/")
-    parser.add_argument("--human-go", type=Path, required=True)
+    parser.add_argument("--human-go", type=Path, required=True,
+                        help="Historical 2026-09-30 lots GO; byte-preserved for reconstruction only. "
+                             "Living shares GO and diagnosis are separately pinned checked-in files.")
     parser.add_argument("--host-approval", type=Path, default=None,
                         help="Host approval record; defaults to the checked-in package file")
     parser.add_argument("--host-cam-approval", type=Path, default=None,
@@ -856,7 +911,8 @@ def main():
     print(f"Offline remap checked: {len(outputs)} files; 9 host-filled instrument rows, 2133 status rows (237/day), "
           "9 opening rows, 27 off-grid closing rows; 62 raw zero-volume rows (46 in status, 16 closing); "
           "CAM: 10 calendar dates, empty actions, 2 marks; "
-          "timing: independent proof_timing and compact pinned observations. " + NOTICE)
+          "timing: independent proof_timing and compact pinned observations. "
+          "Units: option A INCOMPLETE shares target; old lots GO historical_superseded. " + NOTICE)
 
 
 if __name__ == "__main__":
