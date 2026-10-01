@@ -65,23 +65,24 @@
 
 ## 5. 冻结后续交接门：仅列门槛，不派工
 
-顺序固定为 **`4090 B → 4090 C → bt D coverage → 4090 E P-BASE → 4090 F`**。以下字母是 JR 工序，与 ORDER_EVAL 的 tracks B/C/D/E 无关。**每一步均需另行、具名 Human GO；本表及本次 E GO 不授权任何宿主任务。**
+顺序固定为 **`4090 B → 4090 C → bt D coverage → 4090 E P-BASE → 4090 F`**。以下字母是 JR 工序，与 ORDER_EVAL 的 tracks B/C/D/E 无关。**每一步均需另行、具名 Human GO；本表及原 reconcile E GO 不授权任何宿主任务。** 下表 D/E/F 的后续完成记录仅适用于 `narrow_clock_full_20260924`，G 文档回填由 [2026-10-01 Human「开 JR-G」](/workspace/handoffs/g_jr_clock_backfill_20261001/HUMAN_GO.md) 授权，不自动授权新包或新宿主任务。
 
-| 门 | 责任方 / 动作 | 进入条件与验收停点 | 本轮授权 |
+| 门 | 责任方 / 动作 | 进入条件与验收停点 | 授权 / 后续完成记录 |
 |---|---|---|---|
 | B | 4090：时钟准备 | 仅在具名新包确需 B 且获得 B GO 时；新目录存在即停；唯一执行器；核输入/磁盘/进程；无同日 15:03→16:00 空窗、每个尾日信号有下一 session、日期集合可对账 | 未授权；归档包已完成，不重做 |
 | C | 4090：rule → freeze → portfolio | B 回执及独立 C GO；成功线 carryforward、完整 SHA/hash/URI 登记相容；`PORTFOLIO_CONSTRAINTS_PASS`、收窄依据与 counts 对账；B/C 不开第二执行器 | 未授权；归档包已完成，不重做 |
-| D | bt：新 execution/valuation window 与 bars/marks 覆盖验收 | 独立 D GO；已验 B/C 身份；核证券集合、日历、尾部下一 session、全部执行/估值时点、bar/mark 身份与 seals；**bars missing=0 且 marks missing=0** 才接收 | 未授权；本轮未检查覆盖 |
-| E | 4090：P-BASE M-LAG | D 接收回执及独立 E GO；使用另行登记的新 out；非零 `orders_with_fills`，并按本包身份对账。**若仍 0 fills，停回 qlib 查时钟，不交 F** | 未授权 |
-| F | 4090：Mode B M-REF / M-LAG | E 通过及独立 F GO；真实 marks 证据链齐全；模式、现金与新输出根在 GO 中明确，不能自动继承旧 cash=1e9 fork | 未授权 |
+| D | bt：新 execution/valuation window 与 bars/marks 覆盖验收 | 独立 D GO；已验 B/C 身份；核证券集合、日历、尾部下一 session、全部执行/估值时点、bar/mark 身份与 seals；**bars missing=0 且 marks missing=0** 才接收 | **已完成**：D ACCEPT，G1/G2 CLOSED；[HOST_D_CLOSE_EVIDENCE.md](/workspace/handoffs/d_jr_clock_close_20260929/HOST_D_CLOSE_EVIDENCE.md)（requested tip `f267e60`）；[D-close](note-jr-clock-d-coverage-close-2026-09-29.md) / [#265](https://github.com/baiyibing/MyQuant-backtrader/pull/265) → 合并 tip `6528ac9` |
+| E | 4090：P-BASE M-LAG | D 接收回执及独立 E GO；使用另行登记的新 out；非零 `orders_with_fills`，并按本包身份对账。**若仍 0 fills，停回 qlib 查时钟，不交 F** | **已完成**：[HOST_E_PBASE.md](/workspace/handoffs/e_jr_clock_pbase_20260929/HOST_E_PBASE.md)，tip `6528ac9`，**3631 fills**，`BT_RESEARCH_REPLAY_PASS` |
+| F | 4090：Mode B M-REF / M-LAG | E 通过及独立 F GO；真实 marks 证据链齐全；模式、现金与新输出根在 GO 中明确，不能自动继承旧 cash=1e9 fork | **已完成**：[HOST_F_MODEB.md](/workspace/handoffs/f_jr_clock_modeb_20260929/HOST_F_MODEB.md)，tip `6528ac9`，**M-REF 21 / M-LAG 3631**，cash **1e8**，`BT_RESEARCH_REPLAY_PASS` |
+| G | bt：宿主复核文档回填 | D ACCEPT + E PASS + F PASS；独立 Human「开 JR-G」 | **文档回填本刀；下一 operational 无强制宿主门（旁路 δ5/B-L2 另 GO）**；见 [G note](note-jr-clock-g-host-reverify-backfill-2026-10-01.md)，合并仍须 Human「合」 |
 
-2026-09-29 后续独立 Human D GO：[#264 初次覆盖核验](note-jr-clock-d-coverage-reject-2026-09-29.md)记录 **REJECT pending host**；随后独立 D-close GO 的 [G1/G2 收口记录](note-jr-clock-d-coverage-close-2026-09-29.md)依据宿主补证转为 **G1 CLOSED / G2 CLOSED，D ACCEPT**（manifest/bars 观测日历相等，10 条尾日 intents 合法截断；seal 完整复算相等；所需 bars/marks missing 均为 0）。此更新接续上表的原授权时点，不改变历史 B–G 完成态，不授权 E/F。
+2026-09-29 后续独立 Human D GO：[#264 初次覆盖核验](note-jr-clock-d-coverage-reject-2026-09-29.md)记录 **REJECT pending host**；随后独立 D-close GO 的 [G1/G2 收口记录](note-jr-clock-d-coverage-close-2026-09-29.md)依据宿主补证转为 **G1 CLOSED / G2 CLOSED，D ACCEPT**（manifest/bars 观测日历相等，10 条尾日 intents 合法截断；seal 完整复算相等；所需 bars/marks missing 均为 0）。D-close 本身不授权 E/F；后续 E/F 已分别依据独立 Human GO 在 `6528ac944c7036fad65743158d9ffc1ad75ceddb` 完成宿主复核，报告及数字见 [G note §3](note-jr-clock-g-host-reverify-backfill-2026-10-01.md)。
 
-**归档包 B/C 已完成，当前没有待恢复的操作。** 本包 D 接收已由上述 D-close 记录完成；下一 *operational* gate 是 **4090 E P-BASE**，须独立具名 E GO，F 仍须独立 F GO；不能回到 B/C 重跑。未来新包若已有完整 B/C 回执，直接申请 D，无需再造一轮时钟。
+**归档包 B/C 已完成，当前没有待恢复的操作。** 本包 D/E/F 宿主复核链已闭合，本刀回填 G；下一 *operational* 无强制宿主门，旁路 δ5/B-L2 另 GO，不授权 G5 policy；不能回到 B/C 重跑。未来新包若已有完整 B/C 回执，直接申请 D，无需再造一轮时钟。
 
 D 只能在窗口与身份相容时复用旧 bars；`reference_marks` 按 intent_id 挂证，相同证券数或 marks 数并不证明可复用。需改变身份/映射时另定合法新工件和校验范围，遵守现有 seal 合同，不修改旧工件。[交接 §2 D、§6b][handoff] 的真实源定位仅作来源线索：缺口只能在后续明确授权下从已指定真实源合法导出；缺配置/文件/证明即停，不探盘、不补造 bars/marks。**本轮不导出、不重映射、不重算 seal。**
 
-E/F 通过后才可回填 G；G 的文档回写范围仍须在后续 GO 中明确。历史 G 已完成，本文不重复解除状态，也不把归档值当成下一次运行的 PASS。
+E/F 通过后的 G 文档回写范围已由 Human「开 JR-G」明确，见 [G 宿主复核回填 note](note-jr-clock-g-host-reverify-backfill-2026-10-01.md)。**仅此次 D-close/E/F re-verify 的证据层级升级为「宿主证据已复核（4090 D-close/E/F）」**；§§1–4 的「文档完成；宿主证据本轮未复核」仍是原 reconcile 轮次的历史限定。历史 G 已完成，本刀不重复解除 `NOT_READY_FOR_MODE_B`，不新增 Mode B 授权，也不把归档值当成下一次运行的 PASS；`production_C=frozen`，合并仍须 Human「合」。
 
 ## 6. 范围锁与交付
 
