@@ -910,6 +910,52 @@ def test_authorized_mapping_scales_loaded_volume_and_audits_without_writing_lake
     assert not Path(case.recipe["parent"]).exists()
 
 
+def test_bar_mapping_reads_multiplier_from_validated_evidence(mapped_volume_case, monkeypatch):
+    bars = source_loader._bars
+    reads = []
+
+    class TrackedEvidence(dict):
+        def __getitem__(self, key):
+            reads.append(key)
+            return super().__getitem__(key)
+
+        def get(self, key, default=None):
+            reads.append(key)
+            return super().get(key, default)
+
+    def track_bar_evidence(recipe, store, *args):
+        # _Sources has already run the real units validator against pinned bytes.
+        # Observe only bar-path reads, so validation alone cannot satisfy this check.
+        evidence_rows = store.data["mapping_approval"]["rows"]
+        evidence_rows[0] = TrackedEvidence(evidence_rows[0])
+        return bars(recipe, store, *args)
+
+    monkeypatch.setattr(source_loader, "_bars", track_bar_evidence)
+    loaded = mapped_volume_case.load()
+    assert "multiplier" in reads
+    multiplier = mapped_volume_case.sidecars["mapping_approval"]["rows"][0]["multiplier"]
+    assert [bucket.volume_shares for bucket in loaded.run_input.buckets] == [31780 * multiplier, 0]
+    assert all(row["volume_mapping"]["multiplier"] == multiplier
+               for row in loaded.provenance.document()["transform"]["bars"])
+
+
+@pytest.mark.parametrize("multiplier", ["missing", None, True, "100", 100.0, 1])
+def test_authorized_mapping_rejects_invalid_multiplier(mapped_volume_case, monkeypatch, multiplier):
+    case = mapped_volume_case
+    evidence = case.sidecars["mapping_approval"]["rows"][0]
+    if multiplier == "missing":
+        del evidence["multiplier"]
+    else:
+        evidence["multiplier"] = multiplier
+    case.freeze(write_bars=False)
+    # Repin only fabricated bytes to exercise contract validation past the SHA gate.
+    monkeypatch.setattr(source_loader, "_VOLUME_MAPPING_APPROVAL_SHA256",
+                        next(s["sha256"] for s in case.recipe["sources"] if s["id"] == "mapping_approval"))
+    match = "use Decimal strings" if type(multiplier) is float else "invalid authorized volume mapping contract"
+    with pytest.raises(SourceContractError, match=match):
+        case.load()
+
+
 @pytest.mark.parametrize("change,match", [
     ("no_go", "pinned volume mapping material missing"),
     ("no_lots_scale", "pinned volume mapping material missing"),

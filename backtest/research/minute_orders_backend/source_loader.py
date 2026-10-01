@@ -104,7 +104,7 @@ def _units_evidence(data, row, evidence, store, where):
                 and _date(evidence["from_date"], where) <= _date(scope["from_date"], where)
                 <= _date(scope["through_date"], where) <= _date(evidence["through_date"], where),
                 f"{where}: authorized volume mapping window/symbol coverage mismatch")
-        require(evidence["operation"] == "multiply" and type(evidence["multiplier"]) is int
+        require(evidence["operation"] == "multiply" and type(evidence.get("multiplier")) is int
                 and evidence["multiplier"] == 100 and evidence["transform_version"] == TRANSFORM_VERSION
                 and evidence["r4_authorized"] is False,
                 f"{where}: invalid authorized volume mapping contract")
@@ -624,7 +624,11 @@ def _bars(recipe, store, symbols, sessions, coverage):
         bases = {store.data[p["proof"]]["result"]["rows"][p["row"]]["basis"] for p in volume_proofs}
         require(len(bases) == 1, "units: conflicting declaration/mapping bases")
         authorized_mapping = bases == {"authorized_mapping"}
-        source_factor = 100 if authorized_mapping else factor
+        source_factor = factor
+        if authorized_mapping:
+            # Every bound mapping row has passed _units_evidence's pinned contract.
+            proof = volume_proofs[0]
+            source_factor = store.data[proof["source"]]["rows"][proof["source_row"]]["multiplier"]
         seen = set()
         excluded_rows = []
         for index, row in enumerate(rows):
