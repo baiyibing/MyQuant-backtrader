@@ -1,0 +1,11 @@
+{
+  "schema_version": "bl2_raw_document_v1",
+  "data": {
+    "origin": {
+      "path": "historical/units.lots.proof.json",
+      "sha256": "1350ad54777bd4e96e62f1682e3e8003128628edc8ffbcea8a9f1ac11c8db320"
+    },
+    "text": "{\n  \"schema_version\": \"bl2_proof_v1\",\n  \"data\": {\n    \"issuer\": \"Human GO 2026-09-30 / #1111 cross-source evidence remap\",\n    \"subject\": \"units\",\n    \"source_refs\": [\n      \"units_comparison\",\n      \"human_go\",\n      \"daqmt_1m\",\n      \"daqmt_1d\",\n      \"ths_daily\",\n      \"ratio_table\",\n      \"vendor_units_absence\"\n    ],\n    \"filter\": {\n      \"symbols\": [\n        \"603196.SH\"\n      ],\n      \"from_date\": \"2025-10-23\",\n      \"through_date\": \"2025-11-04\",\n      \"predicate\": \"603196.SH only; inclusive probe dates; exact source rows and bindings; units\"\n    },\n    \"result\": {\n      \"complete\": true,\n      \"summary\": \"#1111 remapped units draft; saved observations checked offline\",\n      \"rows\": [\n    {\"source\":\"units_comparison\",\"row\":0,\"observation\":\"8/9 daily ratios exactly 100; 20251023 THS is 100 shares less than daqmt*100; 9/9 full-day sum(1m)==1d, including 09:30 opening bars.\",\"basis\":\"cross_source_ratio\",\"binding\":{\"source\":\"minute_603196\",\"column\":\"volume\",\"kind\":\"incremental\",\"unit\":\"lots\",\"shares_per_unit\":100}}\n  ]\n    },\n    \"limitations\": [\n      \"Remapped draft only; structural checks != lake PASS; R3 BLOCKED/NOT_RUN; R4 needs separate Human「开 R4」; production_C=frozen.\",\n      \"Human GO quote: 人裁：①量单位接受直接对账（basis=cross_source_ratio），然后 remap\",\n      \"Vendor-doc absence (#1111 verbatim finding): 官方字段表只声明 volume = 成交量，未声明 K 线 volume 单位（与 MyQuant #273 地图一致）。单位须由直接对账确定。\",\n      \"unit=手 is encoded as the existing loader enum lots; shares_per_unit=100 is explicit, not a default.\",\n      \"20251023 differs by 100 shares; this exception is not a general vendor declaration or amount/(close*volume) heuristic.\",\n      \"minute_603196 is an intended host source ID. Actual lake bytes, coverage and identity still require separate host binding; daqmt exports are not the configured lake.\"\n    ]\n  }\n}\n",
+    "usage": "Mapping authorization/diagnosis or historical input lots-scale evidence; not a vendor shares declaration."
+  }
+}

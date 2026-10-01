@@ -1,56 +1,68 @@
-# B-L2 remapped drafts — living units supersession 2026-10-01
+# B-L2 remapped drafts — authorized volume shares-scale mapping (2026-10-01)
 
-**Current decision: option A, fail-closed.** Human's living target is
-`unit=shares`, `shares_per_unit=1`, `kind=incremental`, **raw_shares_incremental**.
-[HUMAN_GO_UNITS_SHARES.md](HUMAN_GO_UNITS_SHARES.md) byte-preserves the new GO,
-SHA-256 `ff0a5f3bf74e775c66a692e7857eff22cc6d5f0fd0757d97abb38172c75613ab`.
-The authoritative [DIAGNOSIS_UNITS_SHARES.md](DIAGNOSIS_UNITS_SHARES.md) is also
-byte-preserved; both documents are pinned in [inputs.json](inputs.json), with
-structured target/conflict excerpts in `sources/`. Baseline:
-`eccc750215af7051ba85b4fab42415a7eecb35fe`.
+**Path L: loader ×100, `bl2_source_transform_v8`.** Human「改成股啊」authorizes
+conversion of the attested lots-scale lake volume into loaded shares. Baseline:
+`3fd48612fdcfd8341796517272c71b78735d50a7` (post-merge #283).
+[HUMAN_GO_VOLUME_SHARES_SCALE.md](HUMAN_GO_VOLUME_SHARES_SCALE.md) is byte-preserved,
+SHA-256 `722632a9ff008715c277616004b0e2bfbfd5d380664574cc591a6276cce0435e`.
+[DIAGNOSIS_VOLUME_SHARES_SCALE.md](DIAGNOSIS_VOLUME_SHARES_SCALE.md) is byte-preserved,
+SHA-256 `575b7a2f7c7bdf1958b3fc341229c33c17f97f5ed51811051a68b663c5758b1b`.
+Both are pinned in [inputs.json](inputs.json) and preserved in structured raw
+source documents. Host export of shares-scale bytes is deferred.
 
-The saved lake/daqmt/Tencent volume numbers are **lots-scale**; Wind/THS/Sina
-are **shares-scale**. On 2025-10-23 the lake/daqmt daily volume is **31780**,
-Wind/Sina **3177959**, THS **3177900**. Lake ×100 ≈ Wind on 12/13 days;
-the nine-day daqmt/THS ratio table has eight exact ×100 days. Those materials
-support the historical lots claim and disclose the conflict; they do **not**
-prove that the lake `volume` column is shares. The minute sample's
-`amount/(close×volume)≈100.19` is conflict context, not attestation. The existing
-vendor K-line unit declaration absence remains; no shares declaration is invented.
+[units.proof.json](units.proof.json) is **`complete=true`**, with the new
+**`basis=authorized_mapping`**. The living contract is **post-transform**
+`raw_shares_incremental`: `kind=incremental`, `unit=shares`, `shares_per_unit=1`.
+The recipe volume section uses these same three fields. The source column stays
+`volume:int64` and **lots-scale at rest**; v8 multiplies its integer values by
+100 before emitting `volume_shares`. For example, 31780 maps to 3178000 shares.
+No source parquet is rewritten. Zero stays zero; conversion uses exact integer
+arithmetic. Synthetic explicit `source_declaration` shares/1 stays 1:1.
 
-[units.proof.json](units.proof.json) now has **`complete=false`**. Its
-`basis=human_target` row records the requested shares binding only; this basis
-is deliberately rejected by the loader even if someone flips `complete` to true.
-Its `source_refs` cite the new Human target, diagnosis and vendor-declaration
-absence only. There is **no verified living lake shares binding**. Completion
-requires honestly evidenced shares-scale source bytes or a separately authorized
-mapping contract; this knife neither rewrites lake data nor relabels lots×100
-as raw_shares_incremental.
+[sources/volume_mapping_approval.json](sources/volume_mapping_approval.json)
+binds the GO, diagnosis, full historical lots proof text, historical lots GO,
+comparison, raw minute/daily excerpts, THS and ratio table by SHA-256. Its own
+hash is a loader trust anchor. Input scope is `minute_603196`, `603196.SH`,
+`volume:int64`, dates `2025-10-23..2025-11-04`, partition SHA-256
+`58879893f221bfe050b7a16029667c49fb65d8ec6f47592254e549374a577083`.
+Missing/changed mapping GO or historical scale material, changed source hash,
+column, type, symbol, window, output binding or approval fails closed. The
+loader records original integer text/type, output shares, proof references and
+`volume_mapping` with input lots, multiplier 100, output shares/1 and contract.
+Recipe/output `shares_per_unit=1` does not hide the separate ×100 mapping.
+Conflicting declaration/mapping proofs for the same input are rejected.
 
-The prior [HUMAN_GO.md](HUMAN_GO.md), SHA-256
+The lake/daqmt/Tencent numbers remain **lots-scale**. On 2025-10-23 daily volume
+is **31780**, Wind/Sina **3177959**, THS **3177900**. Lake ×100 approximates Wind;
+it does not recover the exact-share residuals lost in rounded lots. Wind/THS
+are historical factor/conflict evidence, never a vendor declaration that lake
+raw volume is shares. The vendor K-line unit declaration absence remains.
+`amount/(close×volume)` heuristics do not attest units.
+
+The earlier [shares-target GO](HUMAN_GO_UNITS_SHARES.md), SHA-256
+`ff0a5f3bf74e775c66a692e7857eff22cc6d5f0fd0757d97abb38172c75613ab`,
+[diagnosis](DIAGNOSIS_UNITS_SHARES.md), and their structured sources retain their
+bytes. Lifecycle: **target_satisfied_by_authorized_mapping**. Its earlier
+incomplete proof is archived as
+[historical/units.shares-target.proof.json](historical/units.shares-target.proof.json).
+`human_target` alone remains rejected even if `complete` is flipped to true.
+The old lots [HUMAN_GO.md](HUMAN_GO.md), SHA-256
 `bb287dfe9e2559e9fe05abb7401a636aa6596524cfb79ffa34a4f3ff884c2afe`,
-[sources/human_go.json](sources/human_go.json) and
-[sources/units_comparison.json](sources/units_comparison.json) retain their exact
-bytes and are marked **historical_superseded** in inputs/manifest lifecycle
-metadata. The former living proof is byte-preserved as
-[historical/units.lots.proof.json](historical/units.lots.proof.json), separately
-pinned and excluded from the living artifact registration list. Its historical
-`complete=true` is not a current verdict. The remapper still checks historical
-ratios for reproducibility; those checks cannot complete the shares proof.
-
-**`bl2_source_transform_v7`** retires the old lots-only `cross_source_ratio`
-acceptance exception. Explicit matching `source_declaration` remains required;
-Human preference and historical ratios cannot substitute for it. Synthetic
-shares declarations still map exact integer input volume 1:1. The v6 bounded
-price conversion and v5 wall-time approval remain unchanged; living
-manifest/marks/timing limitations now require v7 pins. Old R3/R4i results and
-freezes cannot be reused as PASS or as this transform's acceptance.
+`sources/human_go.json`, `sources/units_comparison.json` and
+[historical/units.lots.proof.json](historical/units.lots.proof.json) retain their
+bytes and **historical_superseded** status for living ratio acceptance.
+They support only the mapping's input lots scale/factor and conflict disclosure.
+Neither archived proof is registered as a living proof. The raw-document
+`historical_lots_scale` envelope preserves the lots proof as historical input.
 
 **`r4_authorized=false`; `production_C=frozen`; lake verdict `NOT_RUN`.**
-No MatchCore/Fees/Clock/SSOT change, economic relaxation, lake rewrite, merge,
-or 4090/R4 dispatch. Do NOT merge without Human「合」. A later host run still
-requires land plus separate named Human「开 R4」and resolved units evidence.
-δ5 still needs its own `d5_evidence_pack_v1` units pack; none is fabricated here.
+The v5 wall-time approval and v6 price rule retain their behavior and pins.
+Fresh v8 code/runtime, recipe, marks and scoped attestation pins are required;
+old R3/R4i PASS and freezes cannot be reused. No MatchCore/Fees/Clock/SSOT change,
+economic relaxation, lake rewrite, merge or 4090/R4 dispatch.
+Do NOT merge without Human「合」. A later host run requires land and separate
+named Human「开 R4」. δ5 still needs its own `d5_evidence_pack_v1` units pack and
+its own decision on this mapping; no δ5 pack or PASS is supplied.
 
 ## Earlier fills and provenance (historical decisions; current units above)
 
@@ -73,7 +85,7 @@ the adjacent `DIAGNOSIS.md` traces parquet double → `Decimal(repr(float))` →
 `23.310000000000002` at 13:01 and `23.830000000000002` at 14:57 on 2025-10-23.
 Those representations are not cent-aligned; the Fees rejection is correct.
 
-The R4h transform was **`bl2_source_transform_v6`** (current v7 above). For pinned parquet
+The R4h transform was **`bl2_source_transform_v6`** (current v8 above). For pinned parquet
 `double` prices only, **`double_repr_cent_quantize_v1`** starts with
 `Decimal(repr(float))`, retains already cent-aligned values, and otherwise
 quantizes to `Decimal("0.01")` using **`ROUND_HALF_EVEN`** only when the absolute
@@ -93,7 +105,7 @@ unchanged. Wall encoding stays **`epoch_ms_wall_shanghai_as_utc`**;
 time-encoding Human GO files and the byte-pinned wall-encoding approval remain
 unchanged. Their historical v5 references (including the approval's pinned
 source excerpts) are preserved; living manifest/marks/recipe and proof
-limitations required v6 for R4h and now require v7.
+limitations required v6 for R4h and now require v8.
 
 Cent-align implementation and offline attestation are complete; account/commands
 and scoped attestation still require host recipe review and registration.
@@ -170,7 +182,7 @@ This packs-only knife trims status and matching proof bindings from **240×9=216
 to **237×9=2133**, matching the unchanged Clock bounds: morning
 `09:30 <= start < end <= 11:30`, afternoon `13:00 <= start < end <= 14:57`.
 That status-only change retained **`bl2_source_transform_v5`**; the R4h fix above
-required v6 at R4h; current v7 is described above. Wall encoding stays
+required v6 at R4h; current v8 is described above. Wall encoding stays
 **`epoch_ms_wall_shanghai_as_utc`**, and **`r4_authorized=false`**.
 The 15:00 marks remain legal and unchanged. R4g's receipt remains BLOCKED/NOT_RUN;
 no fresh freeze or lake PASS is claimed. No 4090/R4 dispatch or merge is performed.
@@ -181,7 +193,7 @@ are unchanged.
 ## Historical superseded Human lots exception (2026-09-30)
 
 This entire subsection describes the **historical_superseded** exception;
-v7 rejects it. The byte-preserved [HUMAN_GO.md](HUMAN_GO.md) was supplied at
+v7 retired it; v8 still rejects living ratio acceptance. The byte-preserved [HUMAN_GO.md](HUMAN_GO.md) was supplied at
 `/workspace/handoffs/b_l2_remap_r4_20260930/HUMAN_GO.md`:
 
 > 人裁：①量单位接受直接对账（basis=cross_source_ratio），然后 remap
@@ -204,7 +216,7 @@ is explicit. No amount/close/volume inference is used.
 
 | Artifact | Schema / intended source ID | Template mapping |
 |---|---|---|
-| [units.proof.json](units.proof.json) | `bl2_proof_v1` / `proof_units` | incomplete shares target; historical ratio exception retired |
+| [units.proof.json](units.proof.json) | `bl2_proof_v1` / `proof_units` | complete authorized_mapping; loader lots ×100 → shares/1 |
 | [instruments.json](instruments.json) | `bl2_instruments_v1` / `instruments` | **derived** template; 9 supplied daily rows |
 | [instruments.proof.json](instruments.proof.json) | `bl2_proof_v1` / `proof_instruments_sse` | instrument proof; SSE rule source |
 | [instruments.wind.proof.json](instruments.wind.proof.json) | `bl2_proof_v1` / `proof_instruments_wind` | second instrument proof; Wind daily limit source |
@@ -391,7 +403,7 @@ The host must still configure/resolve lake identity/coverage and freshly freeze;
 this is not lake PASS.
 
 R4d-style runners register **all `manifest.artifacts`** as recipe sources, so
-the 51-entry manifest automatically supplies `proof_timing` and its sidecars.
+the manifest automatically supplies `proof_timing` and its sidecars.
 Preserve each artifact id/schema/hash and resolve its path on the host. The
 existing attestation claim is:
 
@@ -408,7 +420,7 @@ claim pointed at a missing id reproduces the R4d failure. Host account/commands,
 full recipe review/registration, configured lake identity/coverage and fresh
 `attestation_scope(recipe)`/freeze remain required. This catalog supplies no
 partial recipe and does not reuse or rewrite the R4d attempt/receipt as PASS.
-The v7 implementation SHA/runtime, source descriptors, time mappings and scoped
+The v8 implementation SHA/runtime, source descriptors, time mappings and scoped
 attestation must all be freshly pinned; R4f recipe/attestation cannot be reused.
 
 ## Status and lake boundary
@@ -438,9 +450,10 @@ it never derives a halt or non-halt from silence or announcement counts.
 The vendor export used `fill_data=True`. Presence proves an exported record,
 not an actual trade, an unfilled feed, or presence in the configured lake.
 #1111 reports its local lake covers only 20251023, while exports cover nine days.
-Host lake identity/coverage remains a separate gate. The incomplete units target uses
-intended minute source ID `minute_603196`; its actual resolver path/schema/hash
-is deliberately **unbound** in this catalog. Do not substitute an export for lake
+Host lake identity/coverage remains a separate gate. The completed mapping binds
+minute source ID `minute_603196` and the approved partition hash/type/window.
+The catalog ships no parquet bytes; the actual resolver path and coverage
+remain host responsibilities. Do not substitute an export for lake
 data or relabel this bundle as a ready recipe.
 
 ## Pins, reconstruction and later host registration
@@ -492,7 +505,7 @@ to these excerpts; integers, booleans and nulls retain their types. Upstream
 raw bytes/pins are unchanged; the local status classification revision is
 described above. Regenerated artifact hashes are in the manifest.
 All package JSON is checked with the loader's `strict_json`. Fixing its Decimal
-parse error does not make incomplete units proofs or attestations loadable.
+parse error alone does not complete proofs; units completion now uses the separately authorized v8 mapping.
 The minute excerpt keeps only datetime/time/volume/suspendFlag, preserving all
 2,169 row positions. The loader accepts JSON/Parquet, so proof `source_refs`
 point to these JSON excerpts, not unsupported CSV descriptors. Each excerpt has
@@ -511,9 +524,9 @@ With explicit approved Python and local copies of the pinned inputs:
 ```
 
 `--human-go` still takes the **historical** lots GO for byte-exact reconstruction;
-it does not select living authorization. The new shares GO and diagnosis default
-to the checked-in `HUMAN_GO_UNITS_SHARES.md` / `DIAGNOSIS_UNITS_SHARES.md` and
-are independently hash-checked, along with all archived units files.
+it does not select living authorization. The mapping GO/diagnosis default to
+`HUMAN_GO_VOLUME_SHARES_SCALE.md` / `DIAGNOSIS_VOLUME_SHARES_SCALE.md`. They and
+the prior shares-target GO/diagnosis plus all archives are independently hash-checked.
 
 `--host-approval` pins the approval record and defaults to the checked-in
 [HOST_R4_INSTRUMENTS_APPROVAL_20260930.md](HOST_R4_INSTRUMENTS_APPROVAL_20260930.md).
@@ -534,14 +547,15 @@ existing destinations are rejected. No network, market download, resolver, lake
 write, or research runner is called. Checked-in compact JSON retains every
 minute row, so no generator execution is necessary just to review the bundle.
 
-Later, after resolving the units evidence gap and separate authorization, the host must review the countersigned
+Later, after separate authorization, the host must review the countersigned
 approval record, copy the files, and translate catalog paths into resolved
 absolute sidecar paths.
 Register living artifacts with exact schema/hash/source ID; keep historical
-units files for audit only. `claims.units.proofs` would use `proof_units`, which
-is currently incomplete and blocks loading; instruments uses both `proof_instruments_sse` and
-`proof_instruments_wind`; status uses `proof_status`. Keep any source-ID changes
-synchronized across bindings, inputs and claims, then re-pin. Register the actual
+units proofs as archives, while registering all pinned mapping source materials.
+`claims.units.proofs` uses the complete `proof_units` authorized mapping;
+recipe `bars[].volume` must use incremental/shares/1. Instruments uses both `proof_instruments_sse` and
+`proof_instruments_wind`; status uses `proof_status`. The mapping approval fixes
+source IDs as well as hashes; renaming requires a newly reviewed implementation pin. Register the actual
 minute partition separately through the existing resolver. Calendar/actions roles
 and claims now use `calendar`/`actions` and `proof_calendar`/`proof_actions`;
 the marks claim uses `proof_marks`, with the approved document translated into
@@ -550,11 +564,11 @@ shown above. Account, commands and full recipe/attestation freeze still need
 host review and registration; this
 catalog is not a recipe or a scoped attestation.
 
-The current validator/decoder is `bl2_source_transform_v7` (package IDs remain v1).
+The current validator/decoder is `bl2_source_transform_v8` (package IDs remain v1).
 Earlier instruments, CAM and timing fills were evidence-only on v4; their saved
 approval records retain that historical version. The named encoding introduced
-v5 and the explicit double-price rule introduced v6. The units supersession
-now requires v7 manifest/marks/recipe pins. Historical ratio evidence is rejected,
+v5 and the explicit double-price rule introduced v6. The v8 units mapping
+requires fresh manifest/marks/recipe pins. Living historical ratio acceptance is rejected,
 including inside the previously approved symbol/window/column/factor scope.
 For `source_declaration`, the referenced raw observation must now contain
 `basis="source_declaration"` and a `unit_declaration` object matching

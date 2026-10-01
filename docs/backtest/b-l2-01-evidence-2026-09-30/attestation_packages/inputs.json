@@ -168,7 +168,7 @@
   "units_supersession": {
     "date": "2026-10-01",
     "option": "A",
-    "status": "incomplete",
+    "status": "target_satisfied_by_authorized_mapping",
     "target": {
       "kind": "incremental",
       "unit": "shares",
@@ -191,7 +191,46 @@
         "sha256": "1350ad54777bd4e96e62f1682e3e8003128628edc8ffbcea8a9f1ac11c8db320"
       }
     },
-    "reason": "Lake numeric scale remains lots-like. Human shares target is not a vendor declaration. No living shares proof.",
-    "r4_authorized": false
+    "reason": "Prior option A target remains true; the separately authorized v8 loader mapping supplies shares-scale output from the lots-scale lake. Historical ratio acceptance stays superseded.",
+    "r4_authorized": false,
+    "target_satisfied_by": "HUMAN_GO_VOLUME_SHARES_SCALE.md",
+    "target_files": {
+      "HUMAN_GO_UNITS_SHARES.md": {
+        "sha256": "ff0a5f3bf74e775c66a692e7857eff22cc6d5f0fd0757d97abb38172c75613ab"
+      },
+      "DIAGNOSIS_UNITS_SHARES.md": {
+        "sha256": "c9629c96f4b8867ae82444962de675fcc7845d23a6e639cb80ccbeba0d170e4e"
+      },
+      "sources/human_go_units_shares.json": {
+        "sha256": "388ad958a4fb97c460e1436f26ef129f5db9f2b07c97a40fcf7f83bf90e532b7"
+      },
+      "sources/units_diagnosis.json": {
+        "sha256": "8bb239057320270ce8356c5aa87cb49900aa99a700ce9088b702d7c2f091492d"
+      },
+      "historical/units.shares-target.proof.json": {
+        "sha256": "15b2b3ac796e824393ebe0052c2410a0206c511b85d9f831e2cd2762a9243161"
+      }
+    }
+  },
+  "human_go_volume_shares_scale_sha256": "722632a9ff008715c277616004b0e2bfbfd5d380664574cc591a6276cce0435e",
+  "volume_shares_scale_diagnosis_sha256": "575b7a2f7c7bdf1958b3fc341229c33c17f97f5ed51811051a68b663c5758b1b",
+  "volume_shares_mapping": {
+    "date": "2026-10-01",
+    "path": "L",
+    "basis": "authorized_mapping",
+    "transform_version": "bl2_source_transform_v8",
+    "source_unit_at_rest": "lots",
+    "loader_multiplier": 100,
+    "output": {
+      "kind": "incremental",
+      "unit": "shares",
+      "shares_per_unit": 1,
+      "contract": "raw_shares_incremental"
+    },
+    "human_go": "HUMAN_GO_VOLUME_SHARES_SCALE.md",
+    "diagnosis": "DIAGNOSIS_VOLUME_SHARES_SCALE.md",
+    "host_export": "deferred",
+    "r4_authorized": false,
+    "production_C": "frozen"
   }
 }

@@ -91,7 +91,7 @@ def test_amount_close_volume_ratio_is_not_independent_unit_evidence(case, alias)
         # Preserve the parquet alias while freeze writes ordinary sidecars.
         case.action_paths["bar_alias"] = case.bar_path
         case.freeze(write_bars=False)
-    with pytest.raises(SourceContractError, match="independent source declaration, not bar heuristics"):
+    with pytest.raises(SourceContractError, match="independent declaration/mapping evidence, not bar heuristics"):
         case.load()
 
 

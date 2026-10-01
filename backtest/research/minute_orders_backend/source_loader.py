@@ -61,14 +61,17 @@ _MAX_DOUBLE_PRICE_RESIDUE = Decimal("1e-9")  # Yuan; explicit double-price noise
 # approval, including source/column/window and material hashes.
 # Synthetic tests replace only this trust anchor with explicitly fabricated bytes.
 _TIME_ENCODING_APPROVAL_SHA256 = "8fedbb2833675a18c9d434f0c38592b2fd2f74e24cb08a283aeeeecb0b8f71b7"
+# Exact authorized mapping and its GO/diagnosis/historical lots material pins.
+# This is a single saved lake snapshot/window, not a general scaling override.
+_VOLUME_MAPPING_APPROVAL_SHA256 = "eec1e0a287c6f1a05fa73b3772c039ddc230792349eef5b787bfb1f72bff4a54"
 
 
 def _units_evidence(data, row, evidence, store, where):
-    """Check saved declarations; the 2026-09-30 ratio exception is historical.
+    """Check declarations or the pinned 2026-10-01 lots-to-shares mapping.
 
     This validates pinned assertions, not vendor authenticity or a lake run.
-    Human's 2026-10-01 shares target is not a source unit declaration.
-    Raw CSV reconciliation remains historical evidence in the offline remapper.
+    The target alone is not evidence. Historical ratios attest only input scale;
+    the separate mapping GO authorizes the post-transform shares contract.
     """
     require(row["basis"] != "cross_source_ratio",
             f"{where}: cross_source_ratio is historical_superseded by Human GO 2026-10-01; "
@@ -76,8 +79,42 @@ def _units_evidence(data, row, evidence, store, where):
     require(type(evidence) is dict, f"{where}: structured units evidence required")
     binding = row["binding"]
     declaration = {k: binding[k] for k in ("column", "kind", "unit", "shares_per_unit")}
+    if row["basis"] == "authorized_mapping":
+        approval = store.specs[row["source"]]
+        require(approval["schema"] == "bl2_volume_mapping_approval_v1"
+                and approval["sha256"] == _VOLUME_MAPPING_APPROVAL_SHA256,
+                f"{where}: authorized volume mapping approval pin mismatch")
+        source = store.specs[binding["source"]]
+        require(evidence["basis"] == "authorized_mapping"
+                and canonical(evidence["output_binding"]) == canonical(binding)
+                and evidence["contract"] == "raw_shares_incremental"
+                and declaration == {"column": "volume", "kind": "incremental",
+                                    "unit": "shares", "shares_per_unit": 1},
+                f"{where}: authorized volume mapping output binding mismatch")
+        at_rest = evidence["input_binding"]
+        require(canonical(at_rest) == canonical({
+            "source": binding["source"], "source_sha256": source["sha256"],
+            "symbol": _symbol(source["location"]["symbol"]), "column": binding["column"],
+            "source_type": source["schema"][binding["column"]],
+            "kind": "incremental", "unit": "lots", "shares_per_unit": 100,
+        }) and at_rest["source_type"] == "int64",
+                f"{where}: authorized volume mapping input source/column/scale mismatch")
+        scope = data["filter"]
+        require(_symbols(scope["symbols"]) == [at_rest["symbol"]]
+                and _date(evidence["from_date"], where) <= _date(scope["from_date"], where)
+                <= _date(scope["through_date"], where) <= _date(evidence["through_date"], where),
+                f"{where}: authorized volume mapping window/symbol coverage mismatch")
+        require(evidence["operation"] == "multiply" and type(evidence.get("multiplier")) is int
+                and evidence["multiplier"] == 100 and evidence["transform_version"] == TRANSFORM_VERSION
+                and evidence["r4_authorized"] is False,
+                f"{where}: invalid authorized volume mapping contract")
+        for material, pin in evidence["evidence_refs"].items():
+            require(material in data["source_refs"] and store.specs[material]["sha256"] == pin,
+                    f"{where}: pinned volume mapping material missing or changed: {material}")
+        return
     require(row["basis"] == "source_declaration"
-            and store.specs[row["source"]]["schema"] not in ("bl2_cross_source_ratio_v1", "bl2_human_go_v1")
+            and store.specs[row["source"]]["schema"] not in (
+                "bl2_cross_source_ratio_v1", "bl2_human_go_v1", "bl2_volume_mapping_approval_v1")
             and evidence.get("basis") == "source_declaration"
             and canonical(evidence.get("unit_declaration")) == canonical(declaration),
             f"{where}: source_declaration requires an explicit matching unit declaration; "
@@ -172,7 +209,7 @@ def _proof(data, store, identity):
             require(type(observations) is list and row["row"] < len(observations),
                     f"{where}: observation row outside pinned source rows")
             if bound:
-                allowed = {"units": ("source_declaration",), "status": ("explicit_status",),
+                allowed = {"units": ("source_declaration", "authorized_mapping"), "status": ("explicit_status",),
                            "instruments": ("source_fact", "approved_derivation")}[data["subject"]]
                 require(row["basis"] in allowed, f"{where}: unsupported evidence basis; heuristics are not attestation")
                 key = _binding_key(data["subject"], row["binding"])
@@ -192,7 +229,7 @@ def _proof(data, store, identity):
                                   if spec["location"]["kind"] in ("minute", "daily")}
                     require(all(store.specs[ref]["location"]["kind"] not in ("minute", "daily")
                                 and store.specs[ref]["sha256"] not in bar_hashes for ref in refs),
-                            f"{where}: units need independent source declaration, not bar heuristics")
+                            f"{where}: units need independent declaration/mapping evidence, not bar heuristics")
                     _units_evidence(data, row, observations[row["row"]], store, where)
     require(type(data["limitations"]) is list and bool(data["limitations"]),
             f"{where}: limitations required")
@@ -581,9 +618,17 @@ def _bars(recipe, store, symbols, sessions, coverage):
         claim = store.role(recipe["roles"]["attestation"], "attestation")["claims"]["units"]
         volume_proofs = _bound_refs(
             claim["proofs"], store, "units", {"source": sid, "column": cols["volume"], **volume},
-            "source_declaration", symbols=[symbol],
+            ("source_declaration", "authorized_mapping"), symbols=[symbol],
             from_date=_timestamp(recipe["start_at"], "start_at").date(),
             through_date=_timestamp(recipe["end_at"], "end_at").date())
+        bases = {store.data[p["proof"]]["result"]["rows"][p["row"]]["basis"] for p in volume_proofs}
+        require(len(bases) == 1, "units: conflicting declaration/mapping bases")
+        authorized_mapping = bases == {"authorized_mapping"}
+        source_factor = factor
+        if authorized_mapping:
+            # Every bound mapping row has passed _units_evidence's pinned contract.
+            proof = volume_proofs[0]
+            source_factor = store.data[proof["source"]]["rows"][proof["source_row"]]["multiplier"]
         seen = set()
         excluded_rows = []
         for index, row in enumerate(rows):
@@ -602,9 +647,9 @@ def _bars(recipe, store, symbols, sessions, coverage):
             close, price_record = _price_decimal(row[cols["close"]], schema[cols["close"]], f"{sid}#{index} close")
             quantity, qty_record = _decimal(row[cols["volume"]], schema[cols["volume"]], f"{sid}#{index} volume")
             numerator, denominator = quantity.as_integer_ratio()
-            require(numerator >= 0 and (numerator * factor) % denominator == 0,
+            require(numerator >= 0 and (numerator * source_factor) % denominator == 0,
                     f"{sid}#{index}: volume is negative or not exact integer shares")
-            shares = numerator * factor // denominator
+            shares = numerator * source_factor // denominator
             require(key not in mapped, "duplicate mapped source bucket")
             mapped[key] = (str(close), shares)
             audit.append({"source": sid, "row": index, "columns": cols, "symbol_binding": binding,
@@ -614,6 +659,11 @@ def _bars(recipe, store, symbols, sessions, coverage):
                           "start": key[1], "end": key[2], "available_at": key[2],
                           "price": price_record, "volume": qty_record,
                           "shares_per_unit": factor, "volume_shares": shares, "volume_proofs": volume_proofs,
+                          **({"volume_mapping": {"basis": "authorized_mapping", "input_unit": "lots",
+                                                  "operation": "multiply", "multiplier": source_factor,
+                                                  "output_unit": "shares", "shares_per_unit": factor,
+                                                  "contract": "raw_shares_incremental"}}
+                             if authorized_mapping else {}),
                           "status_row": status_index, "target": "buckets/" + symbol + "/" + key[1]})
         exclusions.append({"source": sid, "total_rows": len(rows), "excluded_count": len(excluded_rows),
                            "time": spec["time"], "time_source_type": schema[cols["time"]],

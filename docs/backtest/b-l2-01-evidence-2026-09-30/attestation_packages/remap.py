@@ -6,8 +6,8 @@ approval record, available_at, ordinary_listing) is bound to pinned inputs in
 inputs.json and HOST_R4_INSTRUMENTS_APPROVAL_20260930.md. The #1114 CAM
 materials and HOST_R4_CAM_APPROVAL_20260930.md fill calendar/actions/marks
 evidence only. The timing fill uses pinned MyQuant census/map/vendor excerpts;
-r4_authorized stays false. Transform v7 retires the superseded lots ratio
-exception; the shares target remains incomplete (option A). The v6 bounded
+r4_authorized stays false. Transform v8 implements the separately authorized
+lots-to-shares x100 loader mapping. Ratio acceptance stays retired. The v6 bounded
 price conversion and named wall-time encoding approval stay unchanged.
 """
 
@@ -55,7 +55,9 @@ TIME_ENCODING_APPROVAL_ID = "host_r4_time_encoding_approval_20260930"
 TIME_ENCODING_GO_NAME = "HUMAN_GO_TIME_ENCODING.md"
 UNITS_GO_NAME = "HUMAN_GO_UNITS_SHARES.md"
 UNITS_DIAGNOSIS_NAME = "DIAGNOSIS_UNITS_SHARES.md"
-TRANSFORM_VERSION = "bl2_source_transform_v7"
+VOLUME_GO_NAME = "HUMAN_GO_VOLUME_SHARES_SCALE.md"
+VOLUME_DIAGNOSIS_NAME = "DIAGNOSIS_VOLUME_SHARES_SCALE.md"
+TRANSFORM_VERSION = "bl2_source_transform_v8"
 
 
 def require(condition, message):
@@ -112,14 +114,19 @@ def read_inputs(source_dir, human_go, host_approval=None, host_cam_approval=None
     require(digest(cam_go_raw) == pins["human_go_cam_sha256"], "CAM Human GO hash mismatch")
     inputs = {}
     for name, key in ((UNITS_GO_NAME, "human_go_units_shares_sha256"),
-                      (UNITS_DIAGNOSIS_NAME, "units_diagnosis_sha256")):
+                      (UNITS_DIAGNOSIS_NAME, "units_diagnosis_sha256"),
+                      (VOLUME_GO_NAME, "human_go_volume_shares_scale_sha256"),
+                      (VOLUME_DIAGNOSIS_NAME, "volume_shares_scale_diagnosis_sha256")):
         raw = (HERE / name).read_bytes()
         require(digest(raw) == pins[key], f"units supersession input hash mismatch: {name}")
         inputs[name] = raw.decode("utf-8")
-    for name, pin in pins["units_supersession"]["historical_files"].items():
+    archives = {**pins["units_supersession"]["historical_files"],
+                **pins["units_supersession"]["target_files"]}
+    for name, pin in archives.items():
         raw = (HERE / name).read_bytes()
         require(digest(raw) == pin["sha256"], f"historical units input hash mismatch: {name}")
-        inputs[name] = raw
+        if name not in inputs:
+            inputs[name] = raw
     for name, hashes in pins["files"].items():
         raw = (source_dir / name).read_bytes()
         require(digest(raw) in hashes.values(), f"input hash mismatch: {name}")
@@ -222,7 +229,7 @@ def extract_timing_materials(materials, originals):
     lines = originals[TIMING_MAP].decode("utf-8").splitlines()
     stop = next(index for index, line in enumerate(lines) if line.startswith("### 1.2 "))
     # Preserve the historical v5 limitation bytes: this excerpt is a leaf of
-    # the existing time-encoding approval hash. Active pins/limitations use v7.
+    # the existing time-encoding approval hash. Active pins/limitations use v8.
     result["timing_materials_map.json"] = excerpt(TIMING_MAP,
         [{"line": index, "text": line} for index, line in enumerate(lines[:stop])],
         {"method": "UTF-8 lines from header through section 1.1, excluding section 1.2; original zero-based line retained."},
@@ -327,9 +334,9 @@ def add_timing_package(pins, inputs, add, md_excerpt):
             "Proof covers bars/marks 2025-10-23..2025-11-04, not bars on next BUY calendar date 2025-11-05. "
             "A wider execution/mark window requires fresh coverage; calendar retains its separate next-day coverage.",
             "The old epoch_ms mapping still yields 17:30+08:00 and is not approved for this lake partition. "
-            "Use epoch_ms_wall_shanghai_as_utc with the pinned source/column/window approval; v7 requires fresh "
+            "Use epoch_ms_wall_shanghai_as_utc with the pinned source/column/window approval; v8 requires fresh "
             "implementation/recipe/attestation pins. No new lake run and no Clock/Fees/MatchCore edits; "
-            "v7 retires the historical lots ratio exception; living shares units remain incomplete. "
+            "v8 maps lots to shares only via separately pinned authorized_mapping; historical ratio acceptance stays retired. "
             "The v6 bounded double-price conversion is unchanged (see manifest.price_conversion)."]})
 
 
@@ -369,7 +376,7 @@ def add_time_encoding_package(pins, inputs, artifacts, add, md_excerpt):
         "observation": "Human A GO: epoch_ms_wall_shanghai_as_utc for pinned minute_603196 time:int64, "
                        "603196.SH 2025-10-23..2025-11-04; UTC wall components stamped Asia/Shanghai, "
                        "no offset arithmetic. Saved Kimi census reports 2169 rows / zero violations; "
-                       "HOST approval and all source materials are byte-bound. Fresh v7 freeze required after units evidence is resolved."})
+                       "HOST approval and all source materials are byte-bound. Fresh v8 freeze required for the authorized volume mapping."})
     proof["result"]["summary"] += "; epoch_ms_wall_shanghai_as_utc bound to source/column/window and Human A HOST approval"
 
 
@@ -672,7 +679,7 @@ def build(source_dir, human_go, host_approval=None, host_cam_approval=None, host
             "limitations": [NOTICE, *limitations]})
 
     # Historical lots sources above retain their exact bytes. Catalog lifecycle
-    # metadata marks them superseded; the living proof cites target/conflict only.
+    # metadata marks them superseded. Preserve the earlier target sources too.
     target = pins["units_supersession"]["target"]
     add("human_go_units_shares", "sources/human_go_units_shares.json", "bl2_human_go_v1", {"rows": [{
         "approval_id": "b_l2_units_shares_20261001",
@@ -687,25 +694,57 @@ def build(source_dir, human_go, host_approval=None, host_cam_approval=None, host
                {"path": UNITS_DIAGNOSIS_NAME, "sha256": pins["units_diagnosis_sha256"]},
                limitation="Byte-preserved authoritative handoff diagnosis; conflict disclosure, not shares proof. "
                           "Wind/THS/daqmt/ratio support the historical lots claim only.")
-    proof("proof_units", "units.proof.json", "Human GO 2026-10-01 / option A incomplete shares target", "units",
-          ["human_go_units_shares", "units_diagnosis", "vendor_units_absence"],
-          [{"source": "human_go_units_shares", "row": 0,
-            "observation": "Requested target only: raw_shares_incremental. No verified lake shares binding.",
-            "basis": "human_target",
-            "binding": {"source": MINUTE_SOURCE, "column": "volume", "kind": "incremental",
-                        "unit": "shares", "shares_per_unit": 1}}],
-          ["Option A: complete=false; human_target is deliberately not an accepted units evidence basis. "
-           "Changing complete to true cannot turn this target into a source declaration.",
-           "Prior GO bb287dfe9e2559e9fe05abb7401a636aa6596524cfb79ffa34a4f3ff884c2afe, human_go, "
-           "units_comparison and historical/units.lots.proof.json are historical_superseded; bytes preserved.",
-           "Lake/daqmt/Tencent are lots-scale; Wind/THS/Sina are shares-scale. Lake*100 approximates Wind "
-           "on 12/13 days. These are historical lots evidence / conflict disclosure, never living shares proof.",
+    # Full original document text in a raw evidence envelope. The historical
+    # proof is an input-scale archive here, never registered as a living proof.
+    for identity, name, pin in (
+        ("volume_mapping_go", VOLUME_GO_NAME, pins["human_go_volume_shares_scale_sha256"]),
+        ("volume_mapping_diagnosis", VOLUME_DIAGNOSIS_NAME, pins["volume_shares_scale_diagnosis_sha256"]),
+        ("historical_lots_scale", "historical/units.lots.proof.json",
+         pins["units_supersession"]["historical_files"]["historical/units.lots.proof.json"]["sha256"]),
+    ):
+        text = inputs[name]
+        if isinstance(text, bytes):
+            text = text.decode("utf-8")
+        require(digest(text.encode("utf-8")) == pin, f"volume mapping document hash mismatch: {name}")
+        add(identity, "sources/" + identity + ".json", "bl2_raw_document_v1", {
+            "origin": {"path": name, "sha256": pin}, "text": text,
+            "usage": "Mapping authorization/diagnosis or historical input lots-scale evidence; not a vendor shares declaration."})
+    material_ids = {"volume_mapping_go", "volume_mapping_diagnosis", "historical_lots_scale",
+                    "human_go", "units_comparison", "daqmt_1m", "daqmt_1d", "ths_daily", "ratio_table"}
+    evidence_refs = {identity: digest(encode(doc)) for _, (identity, doc) in artifacts.items()
+                     if identity in material_ids}
+    require(set(evidence_refs) == material_ids, "volume mapping materials missing")
+    output_binding = {"source": MINUTE_SOURCE, "column": "volume", "kind": "incremental",
+                      "unit": "shares", "shares_per_unit": 1}
+    mapping = {
+        "approval_id": "b_l2_volume_shares_scale_20261001", "basis": "authorized_mapping",
+        "human_go_document_sha256": pins["human_go_volume_shares_scale_sha256"],
+        "diagnosis_document_sha256": pins["volume_shares_scale_diagnosis_sha256"],
+        "input_binding": {"source": MINUTE_SOURCE, "source_sha256": CAM_LAKE_SHA256,
+                          "symbol": SYMBOL, "column": "volume", "source_type": "int64",
+                          "kind": "incremental", "unit": "lots", "shares_per_unit": 100},
+        "from_date": FIRST, "through_date": LAST,
+        "operation": "multiply", "multiplier": 100, "output_binding": output_binding,
+        "contract": "raw_shares_incremental", "transform_version": TRANSFORM_VERSION,
+        "evidence_refs": evidence_refs, "r4_authorized": False, "production_C": "frozen",
+        "limitation": "Lake integers remain lots-scale at rest. Shares contract applies after loader x100 only. "
+                      "Wind/THS are historical factor/conflict evidence, not proof that lake bytes are shares. "
+                      "Rounded lots cannot recover vendor exact-share residuals; no lake write or PASS claimed.",
+    }
+    add("volume_mapping_approval", "sources/volume_mapping_approval.json", "bl2_volume_mapping_approval_v1",
+        {"rows": [mapping]})
+    proof("proof_units", "units.proof.json", "Human GO 2026-10-01 / authorized loader x100 mapping", "units",
+          ["volume_mapping_approval", *evidence_refs, "human_go_units_shares", "units_diagnosis", "vendor_units_absence"],
+          [{"source": "volume_mapping_approval", "row": 0,
+            "observation": "Pinned lots lake volume x100 in loader v8 produces shares/1; raw_shares_incremental is the post-transform contract.",
+            "basis": "authorized_mapping", "binding": output_binding}],
+          [mapping["limitation"],
+           "Prior shares-target GO is satisfied by the separate mapping GO; human_target alone cannot complete. "
+           "Prior target GO/diagnosis/proof bytes are preserved; historical lots ratio acceptance stays historical_superseded.",
            "Vendor-doc absence remains: " + inputs["units.proof.json"]["vendor_doc_verbatim"]["finding"],
-           "Blocked until shares-scale lake bytes or a separately authorized mapping contract has honest evidence. "
-           "No lake rewrite or lots*100 relabelled as raw_shares_incremental in this knife.",
-           "v7 retires the ratio accept path; no R3/R4i PASS reuse, lake PASS, or R4 authorization. "
-           "Human「合」then land and named「开 R4」remain required. δ5 needs its own d5_evidence_pack_v1 units pack."],
-          complete=False, summary="BLOCKED: raw_shares_incremental target; lake lots-scale conflict unresolved")
+           "No R3/R4i PASS reuse, lake PASS, R4 authorization or delta5 pack. Fresh v8 host recipe/freeze required. "
+           "Human「合」then land and named「开 R4」remain required; delta5 needs its own d5_evidence_pack_v1 decision."],
+          summary="Authorized mapping complete: lake lots x100 -> loaded shares/1, raw_shares_incremental; lake NOT_RUN")
 
     inst_rows = []
     inst_bindings = []
@@ -839,26 +878,31 @@ def build(source_dir, human_go, host_approval=None, host_cam_approval=None, host
     add_timing_package(pins, inputs, add, md_excerpt)
     add_time_encoding_package(pins, inputs, artifacts, add, md_excerpt)
     outputs = {filename: encode(document) for filename, (_, document) in artifacts.items()}
-    for name, pin in pins["units_supersession"]["historical_files"].items():
+    for name, pin in {**pins["units_supersession"]["historical_files"],
+                      **pins["units_supersession"]["target_files"]}.items():
         if name in outputs:
             require(digest(outputs[name]) == pin["sha256"], f"historical units output changed: {name}")
         elif name.startswith("historical/"):
             outputs[name] = inputs[name]
     catalog = {"source_repository": pins["repository"], "source_commit": pins["commit"],
-               "notice": NOTICE, "r4_authorized": False, "lake_verdict": "NOT_RUN",
+               "notice": NOTICE, "r4_authorized": False, "production_C": "frozen", "lake_verdict": "NOT_RUN",
                "unbound_minute_source": {"id": MINUTE_SOURCE, "sha256": None,
                                          "requirement": "Null sha256 means this catalog does not ship parquet bytes. "
-                                         "The wall-encoding pin lives in time_encoding_approval.binding.source_sha256 "
+                                         "The wall-encoding and volume-mapping pins live in time_encoding_approval.binding.source_sha256 "
+                                         "and volume_mapping_approval.input_binding.source_sha256 "
                                          f"({CAM_LAKE_SHA256}), not in this field, and the loader enforces it. "
                                          "Host must still configure/resolve lake identity/coverage and freshly freeze; "
                                          "exports do not establish lake equivalence."},
-               "unresolved": ["BLOCKED: units complete=false; raw_shares_incremental target conflicts with lots-scale lake volume",
+               "unresolved": ["Authorized mapping completes units evidence only; fresh v8 host recipe/freeze and lake identity/coverage remain unverified",
                               "v6 double-price cent-align transform implemented and attested; no fresh host freeze or lake PASS claimed",
                               "status continuous trim is Clock-aligned (237/day, 2133 rows); account/commands and scoped attestation require host recipe review and registration",
                               "host recipe, lake identity/coverage and fresh freeze; r4_authorized stays false"],
                "transform_version": TRANSFORM_VERSION,
-               "transform_reason": "v7 retires the historical cross_source_ratio lots exception; "
-                                   "option A shares target is incomplete, no new acceptance or numeric conversion",
+               "transform_reason": "v8 applies explicitly authorized loader x100 to the pinned lots lake; "
+                                   "output shares/1 is raw_shares_incremental; historical ratio acceptance stays retired",
+               "volume_shares_mapping": pins["volume_shares_mapping"],
+               "human_go_volume_shares_scale_sha256": pins["human_go_volume_shares_scale_sha256"],
+               "volume_shares_scale_diagnosis_sha256": pins["volume_shares_scale_diagnosis_sha256"],
                "units_supersession": pins["units_supersession"],
                "human_go_units_shares_sha256": pins["human_go_units_shares_sha256"],
                "units_diagnosis_sha256": pins["units_diagnosis_sha256"],
@@ -874,8 +918,10 @@ def build(source_dir, human_go, host_approval=None, host_cam_approval=None, host
                    "human_go_sha256": "45ba9a99ec4d09fdb4c73c5dc2e2bf3aa6115a2c7b6a374eed79bc5448b71729"},
                "artifacts": [{"id": identity, "path": filename, "format": "json", "schema": doc["schema_version"],
                               "sha256": digest(outputs[filename]),
-                              **({"status": "historical_superseded", "usage": "historical lots evidence / conflict disclosure only"}
-                                 if identity in ("human_go", "units_comparison") else {})}
+                              **({"status": "historical_superseded", "usage": "historical input lots scale/factor and conflict disclosure; no living ratio acceptance"}
+                                 if identity in ("human_go", "units_comparison", "historical_lots_scale") else
+                                 {"status": "target_satisfied_by_authorized_mapping"}
+                                 if identity in ("human_go_units_shares", "units_diagnosis") else {})}
                              for filename, (identity, doc) in artifacts.items()]}
     outputs["manifest.json"] = encode(catalog)
     return outputs
@@ -912,7 +958,7 @@ def main():
           "9 opening rows, 27 off-grid closing rows; 62 raw zero-volume rows (46 in status, 16 closing); "
           "CAM: 10 calendar dates, empty actions, 2 marks; "
           "timing: independent proof_timing and compact pinned observations. "
-          "Units: option A INCOMPLETE shares target; old lots GO historical_superseded. " + NOTICE)
+          "Units: authorized_mapping COMPLETE via v8 loader x100; old lots GO historical_superseded. " + NOTICE)
 
 
 if __name__ == "__main__":
