@@ -1,0 +1,55 @@
+你是 Kimi Datasource 执行员（非建议顾问）。任务：用官方市场数据源 **同花顺(THS)=stock_finance_data** 与 **Wind=wind** 填写 B-L2 instruments 四个宿主字段。禁止发明。禁止开 R4 / 跑 δ5 / merge PR / 改 MatchCore/Fees / 改 lake。
+
+## 四个字段（本 GO 定义，对齐 bl2_instruments_v1 宿主缺口）
+对 symbol=`603196.SH`、交易日窗口 `2025-10-23`…`2025-11-04`（9 个交易日）逐日填写：
+1. **reference_price** — 前收/参考价（用于涨跌停基准）
+2. **limit_up** — 涨停价
+3. **limit_down** — 跌停价
+4. **ordinary_listing** — 是否普通上市（非 ST / 非特别处理）；布尔
+
+（另：tick_size / lot_size 若厂商可取则作为 corroboration 记录，但本 GO 的「四字段」就是上面四个。）
+
+## 必用数据源顺序
+1. 先 `get_data_source_desc`：`stock_finance_data`（THS）与 `wind`
+2. 再 `call_data_source_tool` 拉数；**file_path 写到** `D:\exports\bt_bl2_instruments_kimi_fill_20261001\raw\` 下（例如 `ths_603196_daily.csv`、`wind_603196_limits.csv`）
+3. 优先：reference_price ← THS；limit_up/limit_down ← Wind；ordinary_listing ← Wind ST/名称或 THS 名称不含 ST
+4. 若某一源缺字段：换另一源；仍缺则 **诚实留空 + gap**，禁止 invent
+
+## 背景（只作对照，勿当本轮拉取结果）
+- R4j freeze 已 PASS @ tip `6b6d0039…`（instruments gate PASS 来自 #276 host-fill）；本 GO **不重开 R4**，只做 Kimi Datasource 补证 pack。
+- 既有 materials/prior_ths_daily.json、prior_wind_limits.json 是 R3 摘录，可交叉核对，但本轮必须以 **本次 datasource 新拉取 CSV** 为准。
+- master tip after #285：`f8efed23472a7603422d0707843f97e2c4ec87ad`；#286 draft pending Human「合」——勿 merge。
+
+## 输出要求（写到工作目录）
+请用工具把结果落成这些文件（UTF-8）：
+1. `raw/*.csv` — datasource 原始输出
+2. `INSTRUMENTS_FOUR_FIELDS.json` — 结构：
+```json
+{
+  "schema": "bl2_instruments_kimi_fill_v1",
+  "symbol": "603196.SH",
+  "window": ["2025-10-23","2025-11-04"],
+  "rows": [
+    {
+      "trade_date": "2025-10-23",
+      "reference_price": "...",
+      "limit_up": "...",
+      "limit_down": "...",
+      "ordinary_listing": true,
+      "vendor": {
+        "reference_price": "THS|Wind|...",
+        "limit_up": "THS|Wind|...",
+        "limit_down": "THS|Wind|...",
+        "ordinary_listing": "THS|Wind|..."
+      },
+      "source_refs": ["raw/..."]
+    }
+  ],
+  "gaps": [],
+  "corroboration": {"tick_size": null, "lot_size": null}
+}
+```
+3. `KIMI_FILL_REPORT.md` — 中文短报告：每字段←何源；与 prior 对照差异；残留 gap；明确未开 R4/未跑 δ5/未 merge
+4. 在 stdout 打印同样的中文摘要 + `FILL_STATUS=COMPLETE|PARTIAL`
+
+硬锁：不 invent；不改 living attestation_packages；不写 lake；不改 SSOT JSON packs。
