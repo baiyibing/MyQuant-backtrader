@@ -100,6 +100,8 @@ S0 前后**所有行为保持一致**：成交、拒绝 / 异常、现金、持�
 
 2026-09-29 Track C 具名申请：[L2-CAP-SENS-01 charter](charter-l2-cap-sens-01-2026-09-29.md) 仅为 **synthetic 绿 S proposed**，固定 `completed_bucket_close` 与其余身份，仅变 `participation_rate ∈ {0.05, 0.10}`；默认不声明 NAV，lake/real **blocked** 待 B-L2 独立 GO+证据及另行裁定。待 Human「合」与完整外部授权记录，仅限该单元/来源/轴，不授予绿 R 或全部 L2 绿 S；原 `comparison_status` 不变，本片不授权实验运行。
 
+2026-10-01 增补（Human「四路合成降档 GO」；docs-only）：**研究默认可用性命名约定**——当共享分钟 `participation_rate` 显式开启时，容量核 `BucketVolume.available_at` 研究默认取 **完成桶 close（`bucket_end`）**，与已落地 completed-bar 近似一致；**不**要求逐行 publication log；文件 mtime／事后 close **不得**伪装历史 publication PIT。单位研究默认接受 S1 `shares_raw_tree_20261001` 导出声明（`unit=raw_shares_incremental`）+#288 直读。δ5 五包签发／halt 2160 issuer 网格／pool issuer 签名退出普通研究前置（`complete=false` 保持 NOT READY）。详见 [δ5 接入合同 v2 §0](note-delta5-real-volume-ingress-2026-09-29.md)。本增补不改 V/E 行默认（二者仍 `None`／cap-off），不改引擎代码或策略默认。
+
 ## 7. 本片范围外
 
 - **S1 只读目录需独立 Human GO**，先点名机器消费者及为何 Markdown 不够；本片不建 catalog、API、枚举、测试或 metadata writer。
