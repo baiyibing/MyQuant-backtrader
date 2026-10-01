@@ -1,4 +1,14 @@
-"""Read-only sample interval comparison; never relabel or write source tables."""
+"""Read-only sample interval comparison; never relabel or write source tables.
+
+The median near 100 or 0.01 heuristic only flags volume_unit_suspect.
+--volume-scale is an explicit, recorded lake-volume multiplier for comparison;
+never silently detect or convert lots/shares, including in future CLI edits.
+HostRoot market/**/*.parquet is listed only as market_not_adopted: mixed
+START/END overlays are not pure lake by default. Opt-in requires separate
+Human GO and must not enter this knife's default path.
+Synthetic tests / sample PASS cover the scaffold contract only: ≠δ5 ≠R4;
+they do not substitute δ5 certified or R4 market acceptance.
+"""
 from __future__ import annotations
 
 import argparse
@@ -86,7 +96,7 @@ def compare(wind, lake, *, price_atol=1e-8, price_rtol=0.0, volume_atol=0.0,
         for field in FIELDS:
             w = common[field + '_wind']
             l = common[field + '_lake']
-            # Explicit scale applies to lake volume, e.g. lots * 100 -> shares.
+            # User-supplied comparison multiplier only; never infer a unit conversion.
             if field == 'volume':
                 l = l * (volume_scale if volume_scale is not None else 1)
             ok = np.isclose(w, l, atol=volume_atol if field == 'volume' else price_atol,
@@ -118,13 +128,20 @@ def parser():
     p = argparse.ArgumentParser(description=__doc__)
     for name in ('wind', 'lake'):
         p.add_argument('--' + name, action='append', nargs='+', default=[])
-    p.add_argument('--host-root', type=Path)
+    p.add_argument('--host-root', type=Path,
+                   help='Discover Wind/prepare inputs; market/**/*.parquet is listed only '
+                        '(market_not_adopted). Mixed START/END overlay is not pure lake by '
+                        'default; opt-in requires separate Human GO, outside this knife default.')
     p.add_argument('--out-dir', type=Path, required=True)
     p.add_argument('--symbols', nargs='+')
     for name, default in [('wind', 'START'), ('lake', 'END')]:
         p.add_argument('--' + name + '-label', choices=['START', 'END'], default=default)
     for name, default in [('price-atol', 1e-8), ('price-rtol', 0), ('volume-atol', 0), ('volume-scale', None)]:
-        p.add_argument('--' + name, type=float, default=default)
+        help_text = ('Explicit recorded lake-volume multiplier for comparison; acknowledges '
+                     'volume_unit_suspect, never auto-detects or converts lots/shares. '
+                     'Future CLI edits must not add automatic unit conversion.'
+                     if name == 'volume-scale' else None)
+        p.add_argument('--' + name, type=float, default=default, help=help_text)
     p.add_argument('--pin', type=Path)
     return p
 
@@ -139,7 +156,7 @@ def main(argv=None):
         found_prepare = sorted(args.host_root.glob('prepare/**/*minute*.parquet'))
         found_market = sorted(args.host_root.glob('market/**/*.parquet'))
         discovery = dict(wind=[str(p) for p in found_wind], prepare_candidates=[str(p) for p in found_prepare],
-                         market_not_adopted=[str(p) for p in found_market], note='Market may mix native START vendor overlay with END siblings; explicit lake paths required to opt in.')
+                         market_not_adopted=[str(p) for p in found_market], note='Market listed only; mixed START/END overlay is not pure lake by default. Opt-in requires separate Human GO and explicit lake paths; do not fold into this knife default.')
         wind = wind or found_wind
         lake = lake or found_prepare
     out = args.out_dir.resolve()
