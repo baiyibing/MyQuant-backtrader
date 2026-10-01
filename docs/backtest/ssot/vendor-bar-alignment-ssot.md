@@ -74,4 +74,4 @@
 
 ## 9. Phase2 adapter staging（独立 Human GO）
 
-[三票 Phase2 PLAN](../vendor-three-symbol-lake-ingest-2026-10-01/PLAN.md) 与 [adapter CLI](../../../scripts/research/vendor_to_lake_adapter.py) 仅将已接受的 Wind START shares（可选 THS 1d）转换到独立 staging：sparse A、lots（//100 且审计余数）、删除 START 09:30 竞价后连续 +1min。此 GO 不改变 §7 的 shares overlay，不代表真实三票验收；write-lake 仍需独立 Human GO，CLI 无写湖开关。≠δ5 ≠R4；勿合，等待 Human「合」。
+[三票 Phase2 PLAN](../vendor-three-symbol-lake-ingest-2026-10-01/PLAN.md) 与 [adapter CLI](../../../scripts/research/vendor_to_lake_adapter.py) 仅将已接受的 Wind START shares（可选 THS 1d）转换到独立 staging：sparse A、lots（//100 且审计余数）、按 2026-10-02 Human boundary GO 删除 START 09:30 竞价及 11:30/15:00 边界后连续 +1min，`excluded_start_boundary` 在 coverage/PIN/STATUS/REPORT 保留计数与封顶样本；其他越界及排除后无连续 bar 仍 FAIL，纯 xcheck 默认 fail-closed 不变。此 GO 不改变 §7 的 shares overlay，不代表真实三票验收；write-lake 仍需独立 Human GO，CLI 无写湖开关。≠δ5 ≠R4；勿合，等待 Human「合」。
