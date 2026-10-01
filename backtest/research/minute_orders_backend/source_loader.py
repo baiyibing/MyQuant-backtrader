@@ -19,6 +19,7 @@ from .input_codec import _date, _timestamp, decode_run_input
 from .source_provenance import (
     EVIDENCE_VERSION,
     FIXTURE_NOTICE,
+    NATIVE_SHARES_TRANSFORM_VERSION,
     PROVENANCE_VERSION,
     SOURCE_MARK_PREFIX,
     TRANSFORM_VERSION,
@@ -64,10 +65,19 @@ _TIME_ENCODING_APPROVAL_SHA256 = "8fedbb2833675a18c9d434f0c38592b2fd2f74e24cb08a
 # Exact authorized mapping and its GO/diagnosis/historical lots material pins.
 # This is a single saved lake snapshot/window, not a general scaling override.
 _VOLUME_MAPPING_APPROVAL_SHA256 = "eec1e0a287c6f1a05fa73b3772c039ddc230792349eef5b787bfb1f72bff4a54"
+_RAW_SHARES = "raw_shares_incremental"
+
+
+def _native_units_declaration(evidence, declaration, where):
+    """S1 conversion happened at export; these pinned bytes need no scaling."""
+    require(evidence.get("contract") == _RAW_SHARES and evidence.get("transformations") == []
+            and declaration == {"column": "volume", "kind": "incremental",
+                                "unit": "shares", "shares_per_unit": 1},
+            f"{where}: native shares require volume/shares/1, raw_shares_incremental and transformations=[]")
 
 
 def _units_evidence(data, row, evidence, store, where):
-    """Check declarations or the pinned 2026-10-01 lots-to-shares mapping.
+    """Check declarations or the historical B-L2 old-tree lots-to-shares mapping.
 
     This validates pinned assertions, not vendor authenticity or a lake run.
     The target alone is not evidence. Historical ratios attest only input scale;
@@ -80,6 +90,8 @@ def _units_evidence(data, row, evidence, store, where):
     binding = row["binding"]
     declaration = {k: binding[k] for k in ("column", "kind", "unit", "shares_per_unit")}
     if row["basis"] == "authorized_mapping":
+        require("transformations" not in evidence,
+                f"{where}: old-tree authorized_mapping cannot claim native transformations=[]")
         approval = store.specs[row["source"]]
         require(approval["schema"] == "bl2_volume_mapping_approval_v1"
                 and approval["sha256"] == _VOLUME_MAPPING_APPROVAL_SHA256,
@@ -119,6 +131,10 @@ def _units_evidence(data, row, evidence, store, where):
             and canonical(evidence.get("unit_declaration")) == canonical(declaration),
             f"{where}: source_declaration requires an explicit matching unit declaration; "
             "ratio evidence and Human targets are not declarations")
+    require(not {"operation", "multiplier", "input_binding", "output_binding"} & evidence.keys(),
+            f"{where}: source_declaration cannot contain mapping instructions")
+    if "contract" in evidence or "transformations" in evidence:
+        _native_units_declaration(evidence, declaration, where)
 
 
 def _binding_key(subject, binding):
@@ -594,6 +610,7 @@ def _coverage(recipe, store, symbols, sessions):
 
 def _bars(recipe, store, symbols, sessions, coverage):
     require(type(recipe["bars"]) is list, "bar mappings required")
+    native_shares = recipe["implementation"]["transform_version"] == NATIVE_SHARES_TRANSFORM_VERSION
     mapped, audit, exclusions, partition_symbols = {}, [], [], []
     for spec in recipe["bars"]:
         object_fields(spec, ("source", "columns", "time", "volume", "availability", "price_domain"), "bar mapping")
@@ -624,8 +641,32 @@ def _bars(recipe, store, symbols, sessions, coverage):
         bases = {store.data[p["proof"]]["result"]["rows"][p["row"]]["basis"] for p in volume_proofs}
         require(len(bases) == 1, "units: conflicting declaration/mapping bases")
         authorized_mapping = bases == {"authorized_mapping"}
+        evidence_rows = []
+        for proof in volume_proofs:
+            observations = store.data[proof["source"]]
+            if type(observations) is dict:
+                observations = observations["rows"]
+            evidence_rows.append(observations[proof["source_row"]])
+        declares_native = not authorized_mapping and any(
+            "contract" in evidence or "transformations" in evidence for evidence in evidence_rows)
+        physical_native = "unit" in schema and any(row["unit"] == _RAW_SHARES for row in rows)
+        require(native_shares or not (declares_native or physical_native),
+                "units: raw shares at rest require shares_raw_tree_direct_read_v1; old-tree scaling forbidden")
+        if native_shares:
+            require(bases == {"source_declaration"},
+                    "units: native shares require source_declaration, not authorized_mapping")
+            for evidence in evidence_rows:
+                _native_units_declaration(evidence, {"column": cols["volume"], **volume}, "units")
+            require(schema[cols["volume"]] == "int64" and schema.get("unit") in ("string", "large_string")
+                    and all(row["unit"] == _RAW_SHARES for row in rows),
+                    "units: native shares require int64 volume and consistent raw_shares_incremental source units")
+        elif "unit" in schema:
+            at_rest_unit = "lots" if authorized_mapping else volume["unit"]
+            require(all(row["unit"] == at_rest_unit for row in rows),
+                    "units: physical source units conflict with old-tree declaration/mapping")
         source_factor = factor
         if authorized_mapping:
+            # Historical B-L2 only; never native shares or delta5 units evidence.
             # Every bound mapping row has passed _units_evidence's pinned contract.
             proof = volume_proofs[0]
             source_factor = store.data[proof["source"]]["rows"][proof["source_row"]]["multiplier"]
@@ -647,9 +688,14 @@ def _bars(recipe, store, symbols, sessions, coverage):
             close, price_record = _price_decimal(row[cols["close"]], schema[cols["close"]], f"{sid}#{index} close")
             quantity, qty_record = _decimal(row[cols["volume"]], schema[cols["volume"]], f"{sid}#{index} volume")
             numerator, denominator = quantity.as_integer_ratio()
-            require(numerator >= 0 and (numerator * source_factor) % denominator == 0,
-                    f"{sid}#{index}: volume is negative or not exact integer shares")
-            shares = numerator * source_factor // denominator
+            if native_shares:
+                require(numerator >= 0 and denominator == 1,
+                        f"{sid}#{index}: volume is negative or not exact integer shares")
+                shares = numerator
+            else:
+                require(numerator >= 0 and (numerator * source_factor) % denominator == 0,
+                        f"{sid}#{index}: volume is negative or not exact integer shares")
+                shares = numerator * source_factor // denominator
             require(key not in mapped, "duplicate mapped source bucket")
             mapped[key] = (str(close), shares)
             audit.append({"source": sid, "row": index, "columns": cols, "symbol_binding": binding,
@@ -659,6 +705,8 @@ def _bars(recipe, store, symbols, sessions, coverage):
                           "start": key[1], "end": key[2], "available_at": key[2],
                           "price": price_record, "volume": qty_record,
                           "shares_per_unit": factor, "volume_shares": shares, "volume_proofs": volume_proofs,
+                          **({"volume_at_rest": {"basis": "source_declaration", "unit": _RAW_SHARES,
+                                                "transformations": []}} if native_shares else {}),
                           **({"volume_mapping": {"basis": "authorized_mapping", "input_unit": "lots",
                                                   "operation": "multiply", "multiplier": source_factor,
                                                   "output_unit": "shares", "shares_per_unit": factor,
@@ -757,10 +805,13 @@ def load_minute_orders_source(recipe_path, *, expected_sha256: str) -> LoadedSou
     require(recipe["schema_version"] == RECIPE_VERSION and recipe["unit"] == "B-L2-01", "unsupported recipe version/unit")
     require(recipe["source_kind"] in ("lake", "synthetic_fixture"), "unknown recipe source kind")
     object_fields(recipe["implementation"], ("code_sha", "python_version", "pyarrow_version", "transform_version"), "implementation")
+    transform_version = recipe["implementation"]["transform_version"]
+    require(transform_version in (TRANSFORM_VERSION, NATIVE_SHARES_TRANSFORM_VERSION),
+            "pre-registered implementation/runtime version mismatch: unsupported transform version")
     execution = execution_identity()
     require(recipe["implementation"] == {
         "code_sha": execution["code_sha"], "python_version": execution["python_version"],
-        "pyarrow_version": execution["pyarrow_version"], "transform_version": TRANSFORM_VERSION,
+        "pyarrow_version": execution["pyarrow_version"], "transform_version": transform_version,
     }, "pre-registered implementation/runtime version mismatch")
     require(type(recipe["orders_observed_sample"]) is bool, "sample observation disclosure required")
     _timestamp(recipe["registered_at"], "registered_at")
@@ -904,7 +955,7 @@ def load_minute_orders_source(recipe_path, *, expected_sha256: str) -> LoadedSou
            "真实行情驱动的合成订单研究; source validation is not host certification or item-4 live PASS.",
            "recipe": recipe_ref, "resolver": store.resolver, "snapshots": store.snapshots,
            "attestation": attestation, "execution": execution, "binding": input_binding(run),
-           "transform": {"version": TRANSFORM_VERSION, "symbol_rule": "oskh_data.symbol_format",
+           "transform": {"version": transform_version, "symbol_rule": "oskh_data.symbol_format",
                          "sort_rule": "bucket(start,symbol); mark prices(symbol)",
                          "bars": bar_audit, "excluded": exclusions, "marks": mark_audit,
                          "status": [{"source": recipe["roles"]["status"], "row": index, **row,

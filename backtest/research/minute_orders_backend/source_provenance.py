@@ -15,9 +15,10 @@ from pathlib import Path
 
 PROVENANCE_VERSION = "minute_orders_source_provenance_v1"
 EVIDENCE_VERSION = "minute_orders_hybrid_evidence_v1"
-# v8 maps the pinned, Human-authorized lots lake x100 to shares at ingress.
-# Historical ratio acceptance stays retired; declarations retain their scale.
+# Historical B-L2 old-tree branch only: v8 permits the pinned lots x100 mapping.
+# It is not delta5 units evidence. Native shares trees use the separate tag below.
 TRANSFORM_VERSION = "bl2_source_transform_v8"
+NATIVE_SHARES_TRANSFORM_VERSION = "shares_raw_tree_direct_read_v1"
 SOURCE_MARK_PREFIX = "B-L2-01/"
 FIXTURE_NOTICE = "Fixture PASS != lake PASS; no host attestation or live PASS is established."
 
