@@ -69,12 +69,13 @@ Codex 做  →  Grok CLI 核  →  CI 绿  →  （再核，若需要）  →  �
 
 | 步骤 | 谁 | 模型钉（调用时显式带上） |
 |---|---|---|
-| 实现 / 开 PR | Codex CLI | **`gpt-6-astra`**（`-m gpt-6-astra`） |
+| 实现 / 开 PR | Codex CLI | **一般 `gpt-6.1-sol`**（`-m gpt-6.1-sol`）；**上强度 `gpt-6-astra`**（`-m gpt-6-astra`） |
 | 对抗核 / 发布核 | Grok CLI | **`grok-4.7`**（`-m grok-4.7`） |
 | 合入 | 仓 Owner bot（或用户点名的合入方） | CI 全绿 + 核结论 GO / GO-WITH-NITS 后再合；**人裁** |
 
 说明：
 
+- Codex 模型路由（2026-10-01 Human）：**一般情况用 `gpt-6.1-sol`**；**上强度用 `gpt-6-astra`**（长程终端、科研仿真、强对齐自治、错一次很贵）。日常 coding／文档／普通 agent 默认 Sol；先 Sol，抽样失败或明示上强度再升 Astra。勿用 ChatGPT 账号不支持的裸名（如 `gpt-6.1`／`gpt-5.4`）。
 - 「绿了再核、再合」：CI 变绿后若首轮核早于绿点，或有实质 push，再跑一轮 Grok 核再合。
 - 用户明确说「绿了就合」且核已过关时，协调 Bot 可直接合，不必再问一次。
 - 禁止对同一把刀平行开第二个 Codex/Grok 实现 PR；跟刀在原 PR 上改。
@@ -102,7 +103,7 @@ MyQuant  →  MyQuant-backtrader  →  OSkhQuant1.3
    - **物理机不限定 4090**：含 `newtest_4090`、笔记本 `LAPTOP-75JKCBED` 等已注册机器。  
    - **agent 不限定 Cursor**：任意 agent（含 zcode 等）均可发起。
 2. **该仓主管 bot 接手**（本仓即 **bt**）。
-3. **主管安排 Codex**（Bot VM，`gpt-6-astra`）按交接文档无头实现 / 推 PR。
+3. **主管安排 Codex**（Bot VM；一般 `gpt-6.1-sol`，上强度 `gpt-6-astra`）按交接文档无头实现 / 推 PR。
 4. **Grok 核**（`grok-4.7`，缺陷优先）。
 5. **主管侧回写 plan**；**人裁合入**。
 
@@ -154,7 +155,7 @@ MyQuant  →  MyQuant-backtrader  →  OSkhQuant1.3
 - [ ] 本刀 Owner 是否正确？
 - [ ] 跨仓是否只经 handoff 目录，未直接改对方业务仓？
 - [ ] 若走 `codex-impl-handoff`：发起方是否为物理机 agent，接手是否为仓主管？
-- [ ] 实现是否走 `codex … -m gpt-6-astra`？核是否走 `grok … -m grok-4.7`？
+- [ ] 实现是否走 `codex … -m gpt-6.1-sol`（一般）或 `-m gpt-6-astra`（上强度）？核是否走 `grok … -m grok-4.7`？
 - [ ] 执行面（Bot VM **与**已注册物理机 agent CLI）是否均 headless？交互 TUI 是否仅用户明示调试？
 - [ ] 是否只有一把 PR / 一个分支在干活？
 - [ ] 需要 4090 时，是否由 **正在干这活的 bot** 派 4090bot，且按接收顺序排队？
@@ -171,3 +172,4 @@ MyQuant  →  MyQuant-backtrader  →  OSkhQuant1.3
 | 2026-09-22 | **合并为唯一正文**：CLI 流水线/模型钉并入本文；1.3 / MQ 只指针、不另写 SSOT |
 | 2026-09-22 | 跨仓 handoff 回执薄约定（STATUS / 摘要 / blocker / 数字 / 路径） |
 | 2026-09-23 | Bot VM agent CLI 优先 headless（非交互）；同日修订：已注册物理机上 bot 调度的 agent CLI 亦优先 headless（不限 4090）；再订：headless=默认执行面、交互 TUI=调试面（仅用户明示）、登录/SSO/2FA/付费墙走人交接 |
+| 2026-10-01 | Codex 模型路由：一般 `gpt-6.1-sol`，上强度 `gpt-6-astra`（Human 当面裁定）；清单与 handoff 落点同步 |
