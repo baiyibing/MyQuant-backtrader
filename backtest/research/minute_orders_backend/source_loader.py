@@ -172,7 +172,7 @@ def _proof(data, store, identity):
             require(type(observations) is list and row["row"] < len(observations),
                     f"{where}: observation row outside pinned source rows")
             if bound:
-                allowed = {"units": ("source_declaration", "cross_source_ratio"), "status": ("explicit_status",),
+                allowed = {"units": ("source_declaration",), "status": ("explicit_status",),
                            "instruments": ("source_fact", "approved_derivation")}[data["subject"]]
                 require(row["basis"] in allowed, f"{where}: unsupported evidence basis; heuristics are not attestation")
                 key = _binding_key(data["subject"], row["binding"])

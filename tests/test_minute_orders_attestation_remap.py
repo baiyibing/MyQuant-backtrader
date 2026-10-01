@@ -90,7 +90,7 @@ def test_superseded_ratio_go_rejected_even_in_original_probe_scope(ratio_case, u
     ratio_case.recipe["bars"][0]["volume"].update(unit=unit, shares_per_unit=factor)
     ratio_case.sidecars["proof_units"]["result"]["rows"][0]["binding"].update(unit=unit, shares_per_unit=factor)
     ratio_case.freeze()
-    with pytest.raises(SourceContractError, match="cross_source_ratio is historical_superseded"):
+    with pytest.raises(SourceContractError, match="unsupported evidence basis|cross_source_ratio is historical_superseded"):
         ratio_case.load()
     assert not Path(ratio_case.recipe["parent"]).exists()
 
@@ -172,7 +172,7 @@ def test_checked_packages_hashes_bind_all_rows_and_record_instrument_host_fill()
         store.proof_bindings[identity] = source_loader._proof(store.data[identity], store, identity)
     with pytest.raises(SourceContractError, match="complete saved result required"):
         source_loader._proof(store.data["proof_units"], store, "proof_units")
-    with pytest.raises(SourceContractError, match="cross_source_ratio is historical_superseded"):
+    with pytest.raises(SourceContractError, match="unsupported evidence basis|cross_source_ratio is historical_superseded"):
         source_loader._proof(document("historical/units.lots.proof.json")["data"], store, "old_proof_units")
     statuses = store.data["status"]["rows"]
     assert len(statuses) == len(store.proof_bindings["proof_status"]) == 2133
