@@ -188,3 +188,4 @@ Cerebro / Rolling 已退场（2026-09-16）；chip / ma_chip 对照产物为静�
 | [资金管理实现逻辑（含回滚机制）.md](_archive/fossils/资金管理实现逻辑（含回滚机制）.md) | 资金管理（延期段 A6b 已拆除） |
 
 - Vendor 分钟只读样本 OHLCV 核对：[PLAN / CLI 合同](vendor-bar-xcheck-2026-10-01/PLAN.md)；不写湖，START→END 仍受样本证据门槛约束；12 个合成测试 / sample PASS 仅覆盖 scaffold 合同，不替代 δ5 certified 或 R4 市场验收（≠δ5 ≠R4）。
+- Vendor→lake Phase2：[PLAN / adapter CLI 合同](vendor-three-symbol-lake-ingest-2026-10-01/PLAN.md)；仅 dry-run staging（END/lots/sparse A，09:30 竞价排除），无湖写入，≠δ5 ≠R4；勿合，等待 Human「合」。
