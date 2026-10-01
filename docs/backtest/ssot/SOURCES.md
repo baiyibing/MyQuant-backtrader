@@ -5,7 +5,17 @@ Dated export filling research-BT **practical parity** gaps:
 (b) pricetick rounding for limit prices (0.01 fen, Decimal HALF_UP)
 (c) **ST time-segmented regimes** (main 5%→10% cutover; ChiNext/STAR/BJ retain board tier)
 
-查阅禁 import of vendor trees — rules copied into `config/*.json` and optional `helpers/board_limit_pricetick.py`.
+查阅禁 import of vendor trees — rules copied into checked-in JSON under `docs/backtest/ssot/` (canonical on-disk SSOT for this repo).
+
+## Canonical path (loader)
+
+| Item | Value |
+|------|-------|
+| On-disk SSOT | `docs/backtest/ssot/{board_limit_bands,st_limit_regimes,pricetick_limit_rounding}.json` |
+| Loader | `backtest/research/ssot_limits_loader.py` (leaf; attest preferred profiles) |
+| `config/*.json` mentions in JSON `bt_config_binding` | export-era binding labels only — **no** second divergent copy under `config/` in this repo |
+| Production hot path | still `backtest/research/market_layer.py` (parity-gated; not rewritten to read JSON every call) |
+
 
 ## Engineering SSOT (preferred over inventing public dates)
 
