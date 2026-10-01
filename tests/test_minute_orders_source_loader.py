@@ -293,7 +293,7 @@ def test_bound_wall_encoding_loads_end_buckets_and_marks_with_audit(wall_case):
         (at("09:30:00"), at("09:31:00")), (at("09:31:00"), at("09:32:00"))]
     assert run.marks[-1].event_time.isoformat() == at("15:00:00")
     doc = loaded.provenance.document()
-    assert doc["transform"]["version"] == "bl2_source_transform_v7"
+    assert doc["transform"]["version"] == "bl2_source_transform_v8"
     for row, raw in zip(doc["transform"]["bars"], wall_case.rows):
         assert row["original_time"] == str(raw["time"])
         assert row["time_source_type"] == "int64"
@@ -388,7 +388,7 @@ def test_double_price_residue_is_attested_for_buckets_and_marks(source_case, noi
     assert all(p.price.as_tuple() == Decimal(expected).as_tuple()
                for m in loaded.run_input.marks for p in m.prices)
     transform = loaded.provenance.document()["transform"]
-    assert transform["version"] == "bl2_source_transform_v7"
+    assert transform["version"] == "bl2_source_transform_v8"
     for record in ([b["price"] for b in transform["bars"]]
                    + [m["conversion"] for m in transform["marks"]]):
         assert record == {"source_type": "double", "original": repr(noisy),
@@ -844,7 +844,141 @@ def test_declared_synthetic_shares_remain_raw_incremental_without_scaling(source
     # Fabricated declaration and values, not evidence that the real lake is shares.
     loaded = source_case.load()
     assert [bucket.volume_shares for bucket in loaded.run_input.buckets] == [1000, 500]
-    assert loaded.provenance.document()["transform"]["version"] == "bl2_source_transform_v7"
+    assert loaded.provenance.document()["transform"]["version"] == "bl2_source_transform_v8"
+    assert all(row["shares_per_unit"] == 1 and "volume_mapping" not in row
+               for row in loaded.provenance.document()["transform"]["bars"])
+
+
+@pytest.fixture
+def mapped_volume_case(source_case, monkeypatch):
+    """Fabricated approval, never valid under the production mapping pin."""
+    case = source_case
+    case.rows[0]["volume"], case.rows[1]["volume"] = 31780, 0
+    materials = ("mapping_go", "historical_lots_scale", "historical_ratio")
+    for identity in materials:
+        case.sidecars[identity] = {"rows": [{"fixture_notice": FIXTURE_NOTICE, "material": identity}]}
+        case.recipe["sources"].insert(-1, {
+            "id": identity, "location": {"kind": "sidecar", "path": str(case.root / (identity + ".json"))},
+            "format": "json", "schema": "bl2_raw_excerpt_v1", "sha256": ""})
+    case.freeze()
+    sources = {s["id"]: s for s in case.recipe["sources"]}
+    proof = case.sidecars["proof_units"]
+    row = proof["result"]["rows"][0]
+    case.sidecars["mapping_approval"] = {"rows": [{
+        "approval_id": "fabricated-volume-mapping", "basis": "authorized_mapping",
+        "input_binding": {"source": "bars", "source_sha256": sources["bars"]["sha256"],
+                          "symbol": SYMBOL, "column": "volume", "source_type": "int64",
+                          "kind": "incremental", "unit": "lots", "shares_per_unit": 100},
+        "from_date": "2026-09-25", "through_date": "2026-09-29",
+        "operation": "multiply", "multiplier": 100, "output_binding": deepcopy(row["binding"]),
+        "contract": "raw_shares_incremental", "transform_version": TRANSFORM_VERSION,
+        "evidence_refs": {ref: sources[ref]["sha256"] for ref in materials},
+        "r4_authorized": False, "fixture_notice": FIXTURE_NOTICE,
+    }]}
+    case.recipe["sources"].insert(-1, {
+        "id": "mapping_approval", "location": {"kind": "sidecar", "path": str(case.root / "mapping_approval.json")},
+        "format": "json", "schema": "bl2_volume_mapping_approval_v1", "sha256": ""})
+    row.update(source="mapping_approval", row=0, basis="authorized_mapping")
+    proof["source_refs"] = ["mapping_approval", *materials]
+    case.freeze(write_bars=False)
+    # As in the time-encoding fixture, replace only the exact trust anchor in
+    # this test. There is no fixture override or general mapping knob at runtime.
+    monkeypatch.setattr(source_loader, "_VOLUME_MAPPING_APPROVAL_SHA256",
+                        next(s["sha256"] for s in case.recipe["sources"] if s["id"] == "mapping_approval"))
+    return case
+
+
+def test_authorized_mapping_scales_loaded_volume_and_audits_without_writing_lake(mapped_volume_case):
+    case = mapped_volume_case
+    before = case.bar_path.read_bytes()
+    loaded = case.load()
+    assert [bucket.volume_shares for bucket in loaded.run_input.buckets] == [3178000, 0]
+    assert case.bar_path.read_bytes() == before
+    assert pq.read_table(case.bar_path).column("volume").to_pylist()[:2] == [31780, 0]
+    assert case.recipe["bars"][0]["volume"] == {"kind": "incremental", "unit": "shares", "shares_per_unit": 1}
+    transform = loaded.provenance.document()["transform"]
+    assert transform["version"] == "bl2_source_transform_v8"
+    for row, original in zip(transform["bars"], [31780, 0], strict=True):
+        assert row["volume"]["original"] == str(original)
+        assert row["volume"]["source_type"] == "int64"
+        assert row["volume_shares"] == original * 100
+        assert row["shares_per_unit"] == 1
+        assert row["volume_mapping"] == {
+            "basis": "authorized_mapping", "input_unit": "lots", "operation": "multiply",
+            "multiplier": 100, "output_unit": "shares", "shares_per_unit": 1, "contract": "raw_shares_incremental"}
+        assert row["volume_proofs"][0]["source"] == "mapping_approval"
+    assert not Path(case.recipe["parent"]).exists()
+
+
+@pytest.mark.parametrize("change,match", [
+    ("no_go", "pinned volume mapping material missing"),
+    ("no_lots_scale", "pinned volume mapping material missing"),
+    ("changed_lots_scale", "pinned volume mapping material missing or changed"),
+    ("changed_go", "pinned volume mapping material missing or changed"),
+    ("no_ratio", "pinned volume mapping material missing"),
+    ("approval_repin", "approval pin mismatch"),
+    ("source_hash", "input source/column/scale mismatch"),
+    ("source_type", "input source/column/scale mismatch"),
+    ("column", "output binding mismatch"),
+    ("symbol", "window/symbol coverage mismatch"),
+    ("window", "window/symbol coverage mismatch"),
+    ("recipe_window", "coverage gap"),
+    ("lots_output", "output binding mismatch"),
+    ("declaration_label", "explicit matching unit declaration"),
+    ("historical_ratio", "unsupported evidence basis"),
+    ("human_target", "unsupported evidence basis"),
+    ("incomplete", "complete saved result required"),
+    ("stale_v7", "implementation"),
+])
+def test_authorized_volume_mapping_fails_closed(mapped_volume_case, change, match):
+    case = mapped_volume_case
+    proof = case.sidecars["proof_units"]
+    row = proof["result"]["rows"][0]
+    if change in ("no_go", "no_lots_scale", "no_ratio"):
+        proof["source_refs"].remove({"no_go": "mapping_go", "no_lots_scale": "historical_lots_scale",
+                                     "no_ratio": "historical_ratio"}[change])
+    elif change in ("changed_go", "changed_lots_scale"):
+        case.sidecars["mapping_go" if change == "changed_go" else "historical_lots_scale"]["rows"].append({})
+    elif change == "approval_repin":
+        case.sidecars["mapping_approval"]["rows"][0]["multiplier"] = 1
+    elif change in ("source_hash", "source_type"):
+        case.rows[0]["volume"] = 31781 if change == "source_hash" else 31780.0
+    elif change == "column":
+        row["binding"]["column"] = "close"
+    elif change == "symbol":
+        proof["filter"]["symbols"] = ["000001.SZ"]
+    elif change == "window":
+        proof["filter"]["through_date"] = "2026-09-30"
+    elif change == "recipe_window":
+        case.recipe["end_at"] = "2026-09-30T15:00:00+08:00"
+    elif change == "lots_output":
+        row["binding"].update(unit="lots", shares_per_unit=100)
+    elif change in ("declaration_label", "historical_ratio", "human_target"):
+        row["basis"] = {"declaration_label": "source_declaration", "historical_ratio": "cross_source_ratio",
+                        "human_target": "human_target"}[change]
+    elif change == "incomplete":
+        proof["result"]["complete"] = False
+    else:
+        case.recipe["implementation"]["transform_version"] = "bl2_source_transform_v7"
+    case.freeze()
+    with pytest.raises(SourceContractError, match=match):
+        case.load()
+    assert not Path(case.recipe["parent"]).exists()
+
+
+def test_mapping_and_declaration_cannot_disagree_on_source_scale(mapped_volume_case):
+    case = mapped_volume_case
+    declaration = deepcopy(case.sidecars["proof_units"])
+    declaration["source_refs"] = ["observations"]
+    declaration["result"]["rows"][0].update(source="observations", row=2, basis="source_declaration")
+    case.sidecars["proof_declaration"] = declaration
+    case.recipe["sources"].insert(-1, {
+        "id": "proof_declaration", "location": {"kind": "sidecar", "path": str(case.root / "declaration.json")},
+        "format": "json", "schema": "bl2_proof_v1", "sha256": ""})
+    case.sidecars["attestation"]["claims"]["units"]["proofs"].append("proof_declaration")
+    case.freeze()
+    with pytest.raises(SourceContractError, match="conflicting declaration/mapping bases"):
+        case.load()
 
 
 @pytest.mark.parametrize("change", ["absent", "human_target", "historical_ratio", "factor_100"])

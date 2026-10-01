@@ -30,7 +30,7 @@ def document(name):
 def test_cent_align_attestation_matches_loader_and_preserves_wall_approval():
     manifest = document("manifest.json")
     rule = manifest["price_conversion"]
-    assert manifest["transform_version"] == "bl2_source_transform_v7"
+    assert manifest["transform_version"] == "bl2_source_transform_v8"
     assert manifest["r4_authorized"] is False and manifest["lake_verdict"] == "NOT_RUN"
     assert rule["human_go_sha256"] == "45ba9a99ec4d09fdb4c73c5dc2e2bf3aa6115a2c7b6a374eed79bc5448b71729"
     assert rule["targets"] == ["bucket.close", "mark.price"]
@@ -165,13 +165,13 @@ def test_checked_packages_hashes_bind_all_rows_and_record_instrument_host_fill()
         store.data[spec["id"]] = doc["data"]
         store.specs[spec["id"]] = {**spec, "location": {"kind": "sidecar"}}
     # Descriptor only for proof structure; never invokes the lake resolver.
-    store.specs["minute_603196"] = {"schema": {"volume": "int64"}, "sha256": "0" * 64,
+    store.specs["minute_603196"] = {"schema": {"volume": "int64"},
+                                    "sha256": "58879893f221bfe050b7a16029667c49fb65d8ec6f47592254e549374a577083",
                                     "location": {"kind": "minute", "symbol": "603196.SH"}}
     for identity in ("proof_status", "proof_instruments_sse", "proof_instruments_wind",
-                     "proof_calendar", "proof_actions", "proof_marks", "proof_timing"):
+                     "proof_calendar", "proof_actions", "proof_marks", "proof_timing", "proof_units"):
         store.proof_bindings[identity] = source_loader._proof(store.data[identity], store, identity)
-    with pytest.raises(SourceContractError, match="complete saved result required"):
-        source_loader._proof(store.data["proof_units"], store, "proof_units")
+    assert len(store.proof_bindings["proof_units"]) == 1
     with pytest.raises(SourceContractError, match="unsupported evidence basis|cross_source_ratio is historical_superseded"):
         source_loader._proof(document("historical/units.lots.proof.json")["data"], store, "old_proof_units")
     statuses = store.data["status"]["rows"]
@@ -248,7 +248,7 @@ def test_status_continuous_grid_matches_fixture_and_timing_census(remapper):
         assert (len(morning), morning[0], morning[-1]) == (120, "09:31", "11:30")
         assert (len(afternoon), afternoon[0], afternoon[-1]) == (117, "13:01", "14:57")
     assert pins["status_grid_revision"]["human_go_sha256"] == "d06b01b536dbd8b4c5a13eaf72ceca703ed84bc528d70de75bfc446cc35390d8"
-    assert document("manifest.json")["transform_version"] == "bl2_source_transform_v7"
+    assert document("manifest.json")["transform_version"] == "bl2_source_transform_v8"
     assert document("manifest.json")["r4_authorized"] is False
 
 
@@ -445,7 +445,7 @@ def test_cam_calendar_actions_and_marks_are_scoped_saved_observations():
     assert all(page["page_metadata"]["totalpages"] == 2 for page in pages)  # Preserve upstream inconsistency.
     marks = document("marks.json")["data"]
     assert marks["subject"] == "marks" and marks["conclusion"] == "raw_contemporaneous_grid"
-    assert marks["transform_version"] == "bl2_source_transform_v7"
+    assert marks["transform_version"] == "bl2_source_transform_v8"
     assert marks["time"] == {"encoding": "epoch_ms_wall_shanghai_as_utc", "timezone": "Asia/Shanghai", "label": "END"}
     assert marks["source_identity_note"]["sha256"] == "58879893f221bfe050b7a16029667c49fb65d8ec6f47592254e549374a577083"
     assert marks["source_identity_note"]["binding_status"] == "unbound_minute_source"
@@ -669,7 +669,7 @@ def test_time_encoding_approval_binds_real_saved_materials_without_opening_lake(
     assert source_loader._proof(store.data["proof_timing"], store, "proof_timing") == {}
     matches = source_loader._time_encoding_refs(recipe, store, "minute_603196", "time", time)
     assert len(matches) == 1 and matches[0]["approval_id"] == row["approval_id"]
-    assert document("manifest.json")["transform_version"] == "bl2_source_transform_v7"
+    assert document("manifest.json")["transform_version"] == "bl2_source_transform_v8"
 
 
 @pytest.mark.parametrize("change", ["source", "hash", "column", "symbol", "window", "label", "daily",
@@ -763,7 +763,8 @@ def test_remapper_requires_timing_approval_id_even_after_repin(tmp_path, remappe
     (tmp_path / "inputs.json").write_text(json.dumps(pins), encoding="utf-8")
     shutil.copyfile(PACK / remapper.CAM_GO_NAME, tmp_path / remapper.CAM_GO_NAME)
     for name in (remapper.UNITS_GO_NAME, remapper.UNITS_DIAGNOSIS_NAME,
-                 *pins["units_supersession"]["historical_files"]):
+                 remapper.VOLUME_GO_NAME, remapper.VOLUME_DIAGNOSIS_NAME,
+                 *pins["units_supersession"]["historical_files"], *pins["units_supersession"]["target_files"]):
         target = tmp_path / name
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(PACK / name, target)
@@ -819,14 +820,14 @@ def test_shares_supersession_pins_keep_historical_bytes_and_target_honest():
     pins, manifest = document("inputs.json"), document("manifest.json")
     supersession = pins["units_supersession"]
     assert manifest["units_supersession"] == supersession
-    assert supersession["option"] == "A" and supersession["status"] == "incomplete"
+    assert supersession["option"] == "A" and supersession["status"] == "target_satisfied_by_authorized_mapping"
     assert supersession["historical_status"] == "historical_superseded"
     assert supersession["target"] == {
         "kind": "incremental", "unit": "shares", "shares_per_unit": 1, "contract": "raw_shares_incremental"}
     assert pins["human_go_units_shares_sha256"] == sha256((PACK / "HUMAN_GO_UNITS_SHARES.md").read_bytes()) == (
         "ff0a5f3bf74e775c66a692e7857eff22cc6d5f0fd0757d97abb38172c75613ab")
     assert pins["units_diagnosis_sha256"] == sha256((PACK / "DIAGNOSIS_UNITS_SHARES.md").read_bytes())
-    for name, pin in supersession["historical_files"].items():
+    for name, pin in {**supersession["historical_files"], **supersession["target_files"]}.items():
         assert sha256((PACK / name).read_bytes()) == pin["sha256"]
     assert pins["human_go_sha256"] == "bb287dfe9e2559e9fe05abb7401a636aa6596524cfb79ffa34a4f3ff884c2afe"
     for spec in manifest["artifacts"]:
@@ -837,11 +838,34 @@ def test_shares_supersession_pins_keep_historical_bytes_and_target_honest():
     assert historical["result"]["complete"] is True
     assert historical["result"]["rows"][0]["binding"]["unit"] == "lots"
     proof = document("units.proof.json")["data"]
-    assert proof["result"]["complete"] is False
-    assert set(proof["source_refs"]) == {"human_go_units_shares", "units_diagnosis", "vendor_units_absence"}
+    assert proof["result"]["complete"] is True
+    mapping = document("sources/volume_mapping_approval.json")["data"]["rows"][0]
+    assert set(mapping["evidence_refs"]) <= set(proof["source_refs"])
     row = proof["result"]["rows"][0]
-    assert row["basis"] == "human_target" and row["binding"] == {
+    assert row["basis"] == "authorized_mapping" and row["binding"] == {
         "source": "minute_603196", "column": "volume", "kind": "incremental", "unit": "shares", "shares_per_unit": 1}
+    assert mapping["output_binding"] == row["binding"]
+    assert mapping["input_binding"]["unit"] == "lots"
+    assert mapping["input_binding"]["shares_per_unit"] == mapping["multiplier"] == 100
+    assert mapping["contract"] == "raw_shares_incremental"
+    assert mapping["transform_version"] == "bl2_source_transform_v8"
+    assert mapping["r4_authorized"] is False and mapping["production_C"] == "frozen"
+    assert pins["volume_shares_mapping"] == manifest["volume_shares_mapping"]
+    assert pins["volume_shares_mapping"]["path"] == "L"
+    assert sha256((PACK / "sources/volume_mapping_approval.json").read_bytes()) == source_loader._VOLUME_MAPPING_APPROVAL_SHA256
+    artifacts = {s["id"]: s for s in manifest["artifacts"]}
+    for ref, pin in mapping["evidence_refs"].items():
+        assert artifacts[ref]["sha256"] == pin
+    for identity, key, expected in (
+        ("volume_mapping_go", "human_go_volume_shares_scale_sha256", "722632a9ff008715c277616004b0e2bfbfd5d380664574cc591a6276cce0435e"),
+        ("volume_mapping_diagnosis", "volume_shares_scale_diagnosis_sha256", "575b7a2f7c7bdf1958b3fc341229c33c17f97f5ed51811051a68b663c5758b1b"),
+        ("historical_lots_scale", None, "1350ad54777bd4e96e62f1682e3e8003128628edc8ffbcea8a9f1ac11c8db320"),
+    ):
+        doc = document(artifacts[identity]["path"])["data"]
+        assert doc["text"].encode("utf-8") == (PACK / doc["origin"]["path"]).read_bytes()
+        assert sha256(doc["text"].encode("utf-8")) == doc["origin"]["sha256"] == expected
+        if key:
+            assert pins[key] == manifest[key] == expected
     marker = document("sources/human_go_units_shares.json")["data"]["rows"][0]
     assert marker["source_document_sha256"] == pins["human_go_units_shares_sha256"]
     assert marker["complete"] is marker["r4_authorized"] is False
@@ -856,7 +880,7 @@ def test_shares_supersession_pins_keep_historical_bytes_and_target_honest():
 def test_real_shares_target_never_becomes_proof_by_repinning(tmp_path, monkeypatch, change, match):
     case = SyntheticCase(tmp_path, monkeypatch)
     _register_real_sources(case, tmp_path)
-    proof = case.sidecars["proof_units"] = document("units.proof.json")["data"]
+    proof = case.sidecars["proof_units"] = document("historical/units.shares-target.proof.json")["data"]
     proof["result"]["rows"][0]["binding"]["source"] = "bars"
     if change != "none":
         proof["result"]["complete"] = True
@@ -869,6 +893,8 @@ def test_real_shares_target_never_becomes_proof_by_repinning(tmp_path, monkeypat
 
 
 @pytest.mark.parametrize("name", ["HUMAN_GO_UNITS_SHARES.md", "DIAGNOSIS_UNITS_SHARES.md",
+                                  "HUMAN_GO_VOLUME_SHARES_SCALE.md", "DIAGNOSIS_VOLUME_SHARES_SCALE.md",
+                                  "historical/units.shares-target.proof.json", "sources/human_go_units_shares.json",
                                   "historical/units.lots.proof.json", "sources/units_comparison.json"])
 def test_units_supersession_input_pins_reject_tampering(remapper, tmp_path, monkeypatch, name):
     package = tmp_path / "package"

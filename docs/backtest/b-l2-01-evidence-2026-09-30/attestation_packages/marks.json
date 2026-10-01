@@ -5,7 +5,7 @@
     "conclusion": "raw_contemporaneous_grid",
     "purpose": "Host-facing approved grid document; not a loader role or a frozen recipe.",
     "approval_id": "host_r4_cam_approval_20260930",
-    "transform_version": "bl2_source_transform_v7",
+    "transform_version": "bl2_source_transform_v8",
     "time": {
       "encoding": "epoch_ms_wall_shanghai_as_utc",
       "timezone": "Asia/Shanghai",

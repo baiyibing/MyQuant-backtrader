@@ -3,24 +3,46 @@
   "source_commit": "ec19fd6f69a52f93aa9870ad582f0173df8963f4",
   "notice": "Remapped draft only; structural checks != lake PASS; R3 BLOCKED/NOT_RUN; R4 needs separate Human「开 R4」; production_C=frozen.",
   "r4_authorized": false,
+  "production_C": "frozen",
   "lake_verdict": "NOT_RUN",
   "unbound_minute_source": {
     "id": "minute_603196",
     "sha256": null,
-    "requirement": "Null sha256 means this catalog does not ship parquet bytes. The wall-encoding pin lives in time_encoding_approval.binding.source_sha256 (58879893f221bfe050b7a16029667c49fb65d8ec6f47592254e549374a577083), not in this field, and the loader enforces it. Host must still configure/resolve lake identity/coverage and freshly freeze; exports do not establish lake equivalence."
+    "requirement": "Null sha256 means this catalog does not ship parquet bytes. The wall-encoding and volume-mapping pins live in time_encoding_approval.binding.source_sha256 and volume_mapping_approval.input_binding.source_sha256 (58879893f221bfe050b7a16029667c49fb65d8ec6f47592254e549374a577083), not in this field, and the loader enforces it. Host must still configure/resolve lake identity/coverage and freshly freeze; exports do not establish lake equivalence."
   },
   "unresolved": [
-    "BLOCKED: units complete=false; raw_shares_incremental target conflicts with lots-scale lake volume",
+    "Authorized mapping completes units evidence only; fresh v8 host recipe/freeze and lake identity/coverage remain unverified",
     "v6 double-price cent-align transform implemented and attested; no fresh host freeze or lake PASS claimed",
     "status continuous trim is Clock-aligned (237/day, 2133 rows); account/commands and scoped attestation require host recipe review and registration",
     "host recipe, lake identity/coverage and fresh freeze; r4_authorized stays false"
   ],
-  "transform_version": "bl2_source_transform_v7",
-  "transform_reason": "v7 retires the historical cross_source_ratio lots exception; option A shares target is incomplete, no new acceptance or numeric conversion",
+  "transform_version": "bl2_source_transform_v8",
+  "transform_reason": "v8 applies explicitly authorized loader x100 to the pinned lots lake; output shares/1 is raw_shares_incremental; historical ratio acceptance stays retired",
+  "volume_shares_mapping": {
+    "date": "2026-10-01",
+    "path": "L",
+    "basis": "authorized_mapping",
+    "transform_version": "bl2_source_transform_v8",
+    "source_unit_at_rest": "lots",
+    "loader_multiplier": 100,
+    "output": {
+      "kind": "incremental",
+      "unit": "shares",
+      "shares_per_unit": 1,
+      "contract": "raw_shares_incremental"
+    },
+    "human_go": "HUMAN_GO_VOLUME_SHARES_SCALE.md",
+    "diagnosis": "DIAGNOSIS_VOLUME_SHARES_SCALE.md",
+    "host_export": "deferred",
+    "r4_authorized": false,
+    "production_C": "frozen"
+  },
+  "human_go_volume_shares_scale_sha256": "722632a9ff008715c277616004b0e2bfbfd5d380664574cc591a6276cce0435e",
+  "volume_shares_scale_diagnosis_sha256": "575b7a2f7c7bdf1958b3fc341229c33c17f97f5ed51811051a68b663c5758b1b",
   "units_supersession": {
     "date": "2026-10-01",
     "option": "A",
-    "status": "incomplete",
+    "status": "target_satisfied_by_authorized_mapping",
     "target": {
       "kind": "incremental",
       "unit": "shares",
@@ -43,8 +65,26 @@
         "sha256": "1350ad54777bd4e96e62f1682e3e8003128628edc8ffbcea8a9f1ac11c8db320"
       }
     },
-    "reason": "Lake numeric scale remains lots-like. Human shares target is not a vendor declaration. No living shares proof.",
-    "r4_authorized": false
+    "reason": "Prior option A target remains true; the separately authorized v8 loader mapping supplies shares-scale output from the lots-scale lake. Historical ratio acceptance stays superseded.",
+    "r4_authorized": false,
+    "target_satisfied_by": "HUMAN_GO_VOLUME_SHARES_SCALE.md",
+    "target_files": {
+      "HUMAN_GO_UNITS_SHARES.md": {
+        "sha256": "ff0a5f3bf74e775c66a692e7857eff22cc6d5f0fd0757d97abb38172c75613ab"
+      },
+      "DIAGNOSIS_UNITS_SHARES.md": {
+        "sha256": "c9629c96f4b8867ae82444962de675fcc7845d23a6e639cb80ccbeba0d170e4e"
+      },
+      "sources/human_go_units_shares.json": {
+        "sha256": "388ad958a4fb97c460e1436f26ef129f5db9f2b07c97a40fcf7f83bf90e532b7"
+      },
+      "sources/units_diagnosis.json": {
+        "sha256": "8bb239057320270ce8356c5aa87cb49900aa99a700ce9088b702d7c2f091492d"
+      },
+      "historical/units.shares-target.proof.json": {
+        "sha256": "15b2b3ac796e824393ebe0052c2410a0206c511b85d9f831e2cd2762a9243161"
+      }
+    }
   },
   "human_go_units_shares_sha256": "ff0a5f3bf74e775c66a692e7857eff22cc6d5f0fd0757d97abb38172c75613ab",
   "units_diagnosis_sha256": "c9629c96f4b8867ae82444962de675fcc7845d23a6e639cb80ccbeba0d170e4e",
@@ -161,7 +201,7 @@
       "schema": "bl2_human_go_v1",
       "sha256": "34c4c7e56b0fad54c4eded684b1108d3752a444d5a775ec2d8335fa3638a70ff",
       "status": "historical_superseded",
-      "usage": "historical lots evidence / conflict disclosure only"
+      "usage": "historical input lots scale/factor and conflict disclosure; no living ratio acceptance"
     },
     {
       "id": "units_comparison",
@@ -170,28 +210,60 @@
       "schema": "bl2_cross_source_ratio_v1",
       "sha256": "52fc830cc42bdb90f36453c8f9b378f8042aeae34e2064e748c43eb5d647d442",
       "status": "historical_superseded",
-      "usage": "historical lots evidence / conflict disclosure only"
+      "usage": "historical input lots scale/factor and conflict disclosure; no living ratio acceptance"
     },
     {
       "id": "human_go_units_shares",
       "path": "sources/human_go_units_shares.json",
       "format": "json",
       "schema": "bl2_human_go_v1",
-      "sha256": "388ad958a4fb97c460e1436f26ef129f5db9f2b07c97a40fcf7f83bf90e532b7"
+      "sha256": "388ad958a4fb97c460e1436f26ef129f5db9f2b07c97a40fcf7f83bf90e532b7",
+      "status": "target_satisfied_by_authorized_mapping"
     },
     {
       "id": "units_diagnosis",
       "path": "sources/units_diagnosis.json",
       "format": "json",
       "schema": "bl2_raw_excerpt_v1",
-      "sha256": "8bb239057320270ce8356c5aa87cb49900aa99a700ce9088b702d7c2f091492d"
+      "sha256": "8bb239057320270ce8356c5aa87cb49900aa99a700ce9088b702d7c2f091492d",
+      "status": "target_satisfied_by_authorized_mapping"
+    },
+    {
+      "id": "volume_mapping_go",
+      "path": "sources/volume_mapping_go.json",
+      "format": "json",
+      "schema": "bl2_raw_document_v1",
+      "sha256": "aa5edb8aa1e278edec0f135d4f0e10def5d05778a827f250f7cd4580c5bf5a26"
+    },
+    {
+      "id": "volume_mapping_diagnosis",
+      "path": "sources/volume_mapping_diagnosis.json",
+      "format": "json",
+      "schema": "bl2_raw_document_v1",
+      "sha256": "ef382609fb151e100b9278b3bd1b95c4f5a32462a6cc2189a522d3e5935421db"
+    },
+    {
+      "id": "historical_lots_scale",
+      "path": "sources/historical_lots_scale.json",
+      "format": "json",
+      "schema": "bl2_raw_document_v1",
+      "sha256": "5d1fdb2991ae37f163b6059e67099ce1602d2f422848b3110289e74270b57998",
+      "status": "historical_superseded",
+      "usage": "historical input lots scale/factor and conflict disclosure; no living ratio acceptance"
+    },
+    {
+      "id": "volume_mapping_approval",
+      "path": "sources/volume_mapping_approval.json",
+      "format": "json",
+      "schema": "bl2_volume_mapping_approval_v1",
+      "sha256": "eec1e0a287c6f1a05fa73b3772c039ddc230792349eef5b787bfb1f72bff4a54"
     },
     {
       "id": "proof_units",
       "path": "units.proof.json",
       "format": "json",
       "schema": "bl2_proof_v1",
-      "sha256": "15b2b3ac796e824393ebe0052c2410a0206c511b85d9f831e2cd2762a9243161"
+      "sha256": "54c5e40ccd79c41f26532f1d380081052ee876c92028a272c305540797c853e6"
     },
     {
       "id": "instruments",
@@ -352,7 +424,7 @@
       "path": "marks.json",
       "format": "json",
       "schema": "bl2_marks_grid_v1",
-      "sha256": "23a478984100bf440b1dc51c57383b7828e3f2661674a61508466a8303a35d07"
+      "sha256": "b018e4c37644a33de409312c3e861ae4c78ee2f5ad5c1fc5578fecd4df6babac"
     },
     {
       "id": "proof_marks",
@@ -401,7 +473,7 @@
       "path": "timing.proof.json",
       "format": "json",
       "schema": "bl2_proof_v1",
-      "sha256": "40fbd2c903cc45d78c0689e14146f4d45a0f2e8e89b69da21dfada48ef91ff09"
+      "sha256": "3bbe69e98f9c5201ec99d636efcc9a6bc51a19e02061d019004202cfd29372f6"
     },
     {
       "id": "host_time_encoding_approval",
