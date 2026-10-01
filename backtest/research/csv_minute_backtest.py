@@ -127,6 +127,9 @@ from backtest.research.csv_simulate_loop import (  # noqa: E402
 )
 
 from backtest.research.ashare_volume_cap import VolumeCap, VolumeLookup  # noqa: E402
+from backtest.research.csv_minute_volume import (  # noqa: E402
+    completed_minute_volumes, validate_participation_rate,
+)
 from backtest.research.minute_audit import audit_scope, write_audit
 from backtest.research.minute_stop_trigger import (
     blocked_bar, target_fill, validate_low, validate_minute_stop_trigger,
@@ -1261,7 +1264,14 @@ def run(
     topk_exec: str = "close",
     limit_walkdown: bool = False,
     topk_limit_rule: str = "qlib",
+    participation_rate: float | None = None,
 ) -> SimState:
+    validate_participation_rate(participation_rate)
+    if participation_rate is not None:
+        if minute_source != "lake" or qlib_1min_root is not None or dividend_type != "none":
+            raise ValueError("participation_rate requires raw lake minute volume in shares")
+        if tail_window_buy and tail_volume_unit != "shares":
+            raise ValueError("participation_rate requires shares, not tail volume lots")
     if fix_s81_band_precision and normalize_csv_strategy(strategy) != "version8_1":
         raise ValueError("fix_s81_band_precision is supported only by version8_1")
     validate_minute_stop_trigger(minute_stop_trigger, normalize_csv_strategy(strategy), fix_s11_exit_domain)
@@ -1308,7 +1318,7 @@ def run(
     elif dividend_type != "none":
         raise ValueError("minute --dividend-type front is supported only by version12")
     warn_stale_period_env()
-    volume_required = normalize_csv_strategy(strategy) == "version11"
+    volume_required = normalize_csv_strategy(strategy) == "version11" or participation_rate is not None
     if volume_required and minute_source != "lake":
         raise ValueError("version11 requires lake minute volume; qlib_1min frames do not carry it")
     if minute_source == "lake" and end > MINUTE_LAKE_END:
@@ -1444,6 +1454,14 @@ def run(
         f"loaded daily {len(daily)} / minute {len(minute)} / pool days {len(pool_days)}",
         flush=True,
     )
+    volume_options = {}
+    if participation_rate is not None:
+        if missing := all_codes - minute.keys():
+            raise ValueError(f"missing minute volume frames: {sorted(missing)}")
+        volume_options = {
+            "participation_rate": participation_rate,
+            "volume_for_bucket": completed_minute_volumes(minute),
+        }
     if week_ma_gate:
         from backtest.research.topk_dropout_eligibility import with_week_ma_gate
 
@@ -1515,6 +1533,7 @@ def run(
         tier_default=tier_default,
         pos_trail=pos_trail,
         strategy=strategy,
+        **volume_options,
         **({"fix_s81_band_precision": True} if fix_s81_band_precision else {}),
         take_profit=take_profit,
         record_params=record_params,
@@ -1574,6 +1593,13 @@ def run(
         st.run_metadata = {**getattr(st, "run_metadata", {}), "topk_limit_rule": topk_limit_rule}
     if tail_window_buy:
         st.run_metadata = {**getattr(st, "run_metadata", {}), "tail_window_buy": tail_policy(tail_volume_unit)}
+    if participation_rate is not None:
+        st.run_metadata = {**getattr(st, "run_metadata", {}), "volume_capacity": {
+            "participation_rate": participation_rate, "unit": "raw_shares_incremental",
+            "available_at": "bucket_end", "auction_0930": "excluded",
+            "assumption": "caller_declares_raw_incremental_shares; no_unit_conversion",
+            "comparison_status": "no_ssot_compare_authorization",
+        }}
     st.stats["t_pool_s"] = t_pool
     st.stats["t_daily_s"] = t_daily
     st.stats["t_minute_s"] = t_minute
@@ -1621,6 +1647,12 @@ def main(argv: Optional[list] = None) -> int:
     ap.add_argument("--minute-stop-trigger", choices=("hl", "close"), default="close",
                     help="close (default): legacy scan; hl: low stop/high fixed target, threshold fills; rejects version12 and --fix-s11-exit-domain; v7 does not accept this flag")
     ap.add_argument("--no-cache", action="store_true", help="skip minute window cache")
+    ap.add_argument(
+        "--participation-rate", type=float, default=None,
+        help="research opt-in finite [0,1]; omitted = cap off. Declares raw incremental "
+             "SHARE volume in loaded lake minutes (no lots conversion); completed bucket_end "
+             "approximation, excludes 09:30 auction, bypasses minute cache",
+    )
     ap.add_argument(
         "--rebuild-cache", action="store_true", help="reload lake and rewrite cache"
     )
@@ -1693,6 +1725,7 @@ def main(argv: Optional[list] = None) -> int:
     )
     ap.add_argument("--execution-audit-file", help="optional execution JSON sidecar; leaves CSVs unchanged")
     args = ap.parse_args(argv if argv is not None else None)
+    validate_participation_rate(args.participation_rate)
     try:
         validate_minute_stop_trigger(args.minute_stop_trigger, normalize_csv_strategy(args.strategy), args.fix_s11_exit_domain)
         validate_topk_exec(args.topk_exec, args.strategy, args.limit_walkdown, args.topk_limit_rule)
@@ -1729,6 +1762,7 @@ def main(argv: Optional[list] = None) -> int:
         sell_cost_rate=QLIB_CLOSE_COST if args.qlib_cost else None,
         min_cost=QLIB_MIN_COST if args.qlib_cost else None,
         strict_pool=args.strict_pool,
+        **({"participation_rate": args.participation_rate} if args.participation_rate is not None else {}),
         fix_s11_exit_domain=args.fix_s11_exit_domain,
         fix_minute_cash_order=args.fix_minute_cash_order,
         tail_window_buy=args.tail_window_buy,
@@ -1757,8 +1791,10 @@ def main(argv: Optional[list] = None) -> int:
         raise SystemExit(
             f"refuse overwrite existing {out_dir}; pick a new stamp directory"
         )
-    emit_manifest = args.emit_run_manifest or args.tail_window_buy
+    emit_manifest = args.emit_run_manifest or args.tail_window_buy or args.participation_rate is not None
     manifest_args = vars(args).copy()
+    if args.participation_rate is None:
+        manifest_args.pop("participation_rate", None)
     if not args.limit_walkdown:
         manifest_args.pop("limit_walkdown", None)
     if args.topk_exec == "close" and not args.limit_walkdown and args.topk_limit_rule == "qlib":
