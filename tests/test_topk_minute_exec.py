@@ -817,7 +817,7 @@ def test_real_st_trade_day_crosses_switch():
 
 @pytest.mark.parametrize("existing", [None, {"provenance": "keep"}])
 @pytest.mark.parametrize("enabled", [False, True])
-def test_run_metadata_assembly_merges_topk_tail_and_s11(existing, enabled):
+def test_run_metadata_assembly_merges_topk_tail_capacity_and_s11(existing, enabled):
     """Simulate run's assembly: CLI currently disallows topk + tail together."""
     import ast
     import inspect
@@ -828,23 +828,30 @@ def test_run_metadata_assembly_merges_topk_tail_and_s11(existing, enabled):
               and any(isinstance(child, ast.Assign)
                       and any(ast.unparse(target) == "st.run_metadata" for target in child.targets)
                       for child in node.body)]
-    # The topk/tail blocks precede the strategy-11 provenance block.
-    assert len(blocks) == 3
+    # The topk/tail/capacity blocks precede the strategy-11 provenance block.
+    assert len(blocks) == 4
     st = SimpleNamespace()
     if existing is not None:
         st.run_metadata = existing.copy()
     scope = dict(st=st, topk_exec="close", limit_walkdown=False,
                  topk_limit_rule="real" if enabled else "qlib",
                  tail_window_buy=enabled, tail_volume_unit="shares",
+                 participation_rate=.1 if enabled else None,
                  tail_policy=minute.tail_policy)
-    exec(compile(ast.Module(body=blocks[:2], type_ignores=[]), "run_metadata", "exec"), scope)
+    exec(compile(ast.Module(body=blocks[:3], type_ignores=[]), "run_metadata", "exec"), scope)
     expected = dict(existing or {})
     if enabled:
         expected.update(topk_limit_rule="real", tail_window_buy=minute.tail_policy("shares"))
+        expected["volume_capacity"] = {
+            "participation_rate": .1, "unit": "raw_shares_incremental",
+            "available_at": "bucket_end", "auction_0930": "excluded",
+            "assumption": "caller_declares_raw_incremental_shares; no_unit_conversion",
+            "comparison_status": "no_ssot_compare_authorization",
+        }
     assert getattr(st, "run_metadata", {}) == expected
     if existing is None and not enabled:
         assert not hasattr(st, "run_metadata")
     # The sibling s11 writer must preserve those assembled keys too.
     scope["metadata"] = {"enabled": True}
-    exec(compile(ast.Module(body=[blocks[2].body[-1]], type_ignores=[]), "s11_metadata", "exec"), scope)
+    exec(compile(ast.Module(body=[blocks[3].body[-1]], type_ignores=[]), "s11_metadata", "exec"), scope)
     assert st.run_metadata == {**expected, "s11_exit_domain": {"enabled": True}}
