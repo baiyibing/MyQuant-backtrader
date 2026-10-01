@@ -6,6 +6,8 @@
 
 三件成交引擎（本仓向量化 / 1.3 LEBS / 1.3 MockQMT）怎么分工：见 **[engine-positioning-ssot.md](engine-positioning-ssot.md)**。Qlib `PortAnaRecord` 停用；Cerebro / Rolling 已退场（2026-09-16）。本仓没有 `backtest/lebs/`。
 
+Wind / 同花顺（THS）/ QMT 分钟与日线对齐：[vendor bar alignment SSOT](ssot/vendor-bar-alignment-ssot.md)（标签、单位、稀疏网格；docs-only，不授权写湖）。
+
 ## 本仓研究入口（向量化）
 
 除权参考价 SSOT：[engine-ashare-correctness §2.1](engine-ashare-correctness.md#21-p3-δ2-除权参考价契约human-go-aaaaa)；[P3 δ2 plan / data-free 验收 §8](plan-industry-align-p3-d2-exdiv-2026-09-19.md)。Human GO A/A/A/A/A 仅收口契约与 pins，送转不增股、现金红利不入账、NAV 经济残留继续 deferred。
