@@ -1,0 +1,167 @@
+{
+  "schema_version": 1,
+  "export_id": "bt_practical_parity_limits_tick_20261001",
+  "purpose": "research-BT practical parity: static time-segmented ST / *ST limit_% regimes (as_of cutovers)",
+  "engineering_ssot": {
+    "pr": 225,
+    "pr_url": "https://github.com/baiyibing/MyQuant-backtrader/pull/225",
+    "pr_title": "feat(research): X-07 ST limit tiers + TopK --topk-limit-rule real (P4)",
+    "merge_commit": "5a3e6e20a20ac0b398e76ff82e9f30bca9510e65",
+    "merged_at_utc": "2026-09-27T04:51:54Z",
+    "merged_at_cst": "2026-09-27 12:51:54 +0800",
+    "paths": [
+      "backtest/research/market_layer.py",
+      "docs/backtest/topk-exec-p4-2026-09-27.md",
+      "docs/backtest/plan-topk-exec-model-2026-09-26.md"
+    ],
+    "constant": "ST_MAIN_LIMIT_PCT_SWITCH = date(2026, 7, 6)",
+    "x07_label": "X-07 ST limit tiers"
+  },
+  "st_name_regex": "(?:\\*ST|(?<![A-Za-z])ST)",
+  "st_name_regex_flags": "IGNORECASE",
+  "requires_name_feed": true,
+  "non_st_policy": "unchanged_board_table_via_board_limit_pct",
+  "regimes": [
+    {
+      "id": "st_chinext_star_retain_board_20",
+      "applies_when": "is_st_name AND board_pct in {0.20}",
+      "prefixes": [
+        "300",
+        "301",
+        "302",
+        "688",
+        "689"
+      ],
+      "as_of": null,
+      "pct": 0.2,
+      "note": "ChiNext/STAR ST retains board tier 0.20 (not forced to 5%)"
+    },
+    {
+      "id": "st_bj_retain_board_30",
+      "applies_when": "is_st_name AND board_pct in {0.30}",
+      "prefixes": [
+        "920",
+        "430",
+        "83",
+        "87",
+        "88"
+      ],
+      "as_of": null,
+      "pct": 0.3,
+      "note": "BJ ST retains board tier 0.30 (not forced to 5%)"
+    },
+    {
+      "id": "st_main_sme_pre_switch_5",
+      "applies_when": "is_st_name AND board_pct == 0.10 AND (as_of is None OR as_of < switch)",
+      "prefixes": [
+        "600",
+        "601",
+        "603",
+        "605",
+        "000",
+        "001",
+        "002",
+        "003"
+      ],
+      "effective_from": null,
+      "effective_until_exclusive": "2026-07-06",
+      "pct": 0.05,
+      "note": "main/SME ST pre-switch 5%; undated as_of also retains 5% (pre-switch compat)"
+    },
+    {
+      "id": "st_main_sme_post_switch_10",
+      "applies_when": "is_st_name AND board_pct == 0.10 AND as_of >= switch",
+      "prefixes": [
+        "600",
+        "601",
+        "603",
+        "605",
+        "000",
+        "001",
+        "002",
+        "003"
+      ],
+      "effective_from_inclusive": "2026-07-06",
+      "effective_until_exclusive": null,
+      "pct": 0.1,
+      "note": "main/SME ST on/after 2026-07-06 → 10% (matches non-ST main board)"
+    },
+    {
+      "id": "st_unknown_prefix_named_fallback_5",
+      "applies_when": "is_st_name AND board_pct is None",
+      "prefixes": [],
+      "as_of": null,
+      "pct": 0.05,
+      "note": "unknown-prefix named ST retains 5%; does not invent a board"
+    }
+  ],
+  "cutover": {
+    "name": "ST_MAIN_LIMIT_PCT_SWITCH",
+    "date": "2026-07-06",
+    "inclusive": true,
+    "scope": "SH/SZ main + SME risk-warning (ST/*ST) only",
+    "unchanged": [
+      "ChiNext/STAR ST remain 0.20",
+      "BJ ST remain 0.30",
+      "non-ST board table unchanged"
+    ]
+  },
+  "policy_cites": {
+    "engineering_preferred": [
+      {
+        "kind": "merged_pr",
+        "cite": "baiyibing/MyQuant-backtrader#225",
+        "url": "https://github.com/baiyibing/MyQuant-backtrader/pull/225",
+        "merge_sha": "5a3e6e20a20ac0b398e76ff82e9f30bca9510e65",
+        "date_cst": "2026-09-27 12:51:54 +0800",
+        "excerpt": "X-07 table: non-ST board tiers unchanged; ChiNext/STAR ST = 20%; BJ ST = 30%; main/SME ST = 5% before 2026-07-06 and 10% from that day inclusive."
+      },
+      {
+        "kind": "frozen_note",
+        "path": "docs/backtest/topk-exec-p4-2026-09-27.md",
+        "box_sha256": "b0a9c380d5e9b2a7db2ad2770c184508c3d8c4d53624268f28f67940c949ab3b",
+        "excerpt": "ST/*ST main/SME: before 2026-07-06 → 5%; on/after 2026-07-06 → 10%; undated → 5%"
+      },
+      {
+        "kind": "code_constant",
+        "path": "backtest/research/market_layer.py",
+        "box_sha256": "b26eb06a6655253ff6fa234ca9c794c304172accc97dac368d2eff25b6c47658",
+        "host_sha256": "6588c1f30582f4dbdbb85f0bfedf1c96161fbfced96fb72bd81b78149326b71a",
+        "symbol": "ST_MAIN_LIMIT_PCT_SWITCH = date(2026, 7, 6)"
+      }
+    ],
+    "public_policy_supporting": [
+      {
+        "label": "SSE Trading Rules (2026 revision) — effective 2026-07-06",
+        "url": "https://www.sse.com.cn/lawandrules/sselawsrules2025/stocks/exchange/c/c_20260424_10816482.shtml",
+        "doc_date": "2026-04-24",
+        "effective": "2026-07-06",
+        "note": "上证发〔2026〕41号; official rule text effective date matches engineering cutover"
+      },
+      {
+        "label": "SSE news: trading rules revision includes main-board risk-warning limit 5%→10%",
+        "url": "https://www.sse.com.cn/aboutus/mediacenter/hotandd/c/c_20260424_10816474.shtml",
+        "doc_date": "2026-04-24"
+      },
+      {
+        "label": "CSRC Shanghai bureau reprint: A-share trading new rules effective 2026-07-06; main ST 5%→10%; ChiNext/STAR ST stay 20%; BJ ST 30%",
+        "url": "https://www.csrc.gov.cn/shanghai/c105566/c7643909/content.shtml",
+        "doc_date": "2026-07-06",
+        "status": "official_reprint_of_securities_daily"
+      },
+      {
+        "label": "SSE 2025-06-27 solicitation on adjusting main-board risk-warning limit to 10%",
+        "url": "https://www.sse.com.cn/aboutus/mediacenter/hotandd/c/c_20250627_10783267.shtml",
+        "doc_date": "2025-06-27",
+        "status": "solicitation_precursor"
+      }
+    ],
+    "uncertainty_note": "Engineering SSOT for as_of cutover date is MyQuant PR #225 / ST_MAIN_LIMIT_PCT_SWITCH. Public SSE/CSRC cites corroborate 2026-07-06 effective; do not invent alternate cutover dates."
+  },
+  "evaluation_order": [
+    "if not is_st_name(name): return board_limit_pct(code)",
+    "if board in (0.20, 0.30): return board",
+    "if board == 0.10 and as_of is not None and as_of >= 2026-07-06: return 0.10",
+    "return 0.05  # main undated/pre-switch OR unknown-prefix named ST"
+  ]
+}
