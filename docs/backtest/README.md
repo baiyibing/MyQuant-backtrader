@@ -186,3 +186,5 @@ Cerebro / Rolling 已退场（2026-09-16）；chip / ma_chip 对照产物为静�
 | [订单生命周期详解.md](_archive/fossils/订单生命周期详解.md) | 历史 Backtrader 订单生命周期 |
 | [延期买入误检查.md](_archive/fossils/延期买入误检查.md) | 历史分析（A6b 已拆除） |
 | [资金管理实现逻辑（含回滚机制）.md](_archive/fossils/资金管理实现逻辑（含回滚机制）.md) | 资金管理（延期段 A6b 已拆除） |
+
+- Vendor 分钟只读样本 OHLCV 核对：[PLAN / CLI 合同](vendor-bar-xcheck-2026-10-01/PLAN.md)；不写湖，START→END 仍受样本证据门槛约束。

@@ -67,3 +67,7 @@
 本例 PIN 的历史湖来源含通配路径及 `sha256=null`，不满足未来写湖的逐文件 pin 门槛。另有 000638.SZ 日线 OHLC 全零，以已有 1m 聚合派生日线并记录 conversion_rule；这是特定异常处理，不是补造行情或通用修复授权。研究运行 OK 不证明跨 vendor 全量 OHLCV 已对齐。
 
 **本 SSOT ≠ δ5 certified ≠ R4；docs-only；勿合，等待 Human「合」。** 后续 vendor→lake adapter CLI 须另行 Human GO。
+
+## 8. 只读样本核对 scaffold
+
+[2026-10-01 PLAN](../vendor-bar-xcheck-2026-10-01/PLAN.md) 与 [只读 CLI](../../../scripts/research/vendor_bar_xcheck.py) 提供交集 OHLCV 核对、边界及单位疑点报告；不写湖、不重标源表。START→END 实际转换仍须先取得样本证据；此 scaffold ≠δ5 ≠R4，物理湖核对待独立 Human GO。
