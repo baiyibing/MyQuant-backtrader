@@ -125,9 +125,10 @@ docs/backtest/note-true-core-x6-synthetic-attestation-2026-10-02.md
 - TC1 合同：[note-true-core-c-new-tc1-contract-2026-10-02.md](note-true-core-c-new-tc1-contract-2026-10-02.md) §5 X6
 - tip loader / notice：`backtest/research/minute_orders_backend/source_loader.py` · `source_provenance.FIXTURE_NOTICE`
 - 湖 ingress 合同：[note-l2-lake-source-ingress-b-l2-01-2026-09-29.md](note-l2-lake-source-ingress-b-l2-01-2026-09-29.md)
-- X6 真湖只读 END/loader 边界：[note-true-core-x6-lake-boundary-2026-10-02.md](note-true-core-x6-lake-boundary-2026-10-02.md)（draft 勿合；Human「C GO」）
+- X6 真湖只读 END/loader 边界：[note-true-core-x6-lake-boundary-2026-10-02.md](note-true-core-x6-lake-boundary-2026-10-02.md)（**#309 MERGED** `d0804d09`）
+- X6 真湖 recipe e2e（只读 load）：[note-true-core-x6-lake-recipe-e2e-2026-10-02.md](note-true-core-x6-lake-recipe-e2e-2026-10-02.md)（**#310 draft · 勿合**）
 - TC4 X8（已合 #306）：[note-true-core-tc4-x8-compare-bridge-2026-10-02.md](note-true-core-tc4-x8-compare-bridge-2026-10-02.md)
-- TC5 GO/scope（draft 勿合）：[note-true-core-tc5-go-scope-2026-10-02.md](note-true-core-tc5-go-scope-2026-10-02.md)
+- TC5 GO/scope（**#308 MERGED**）：[note-true-core-tc5-go-scope-2026-10-02.md](note-true-core-tc5-go-scope-2026-10-02.md)
 - 成交假设 SSOT：[minute-fill-policy-ssot.md](minute-fill-policy-ssot.md)
 
 **≠δ5 certified ≠R4；无 MatchCore/Fees/simulate 重写；无写湖；本码已合 #307。**

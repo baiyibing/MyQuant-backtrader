@@ -196,8 +196,13 @@ def test_cli_refuses_synthetic_meta(tmp_path):
     assert "synthetic" in process.stderr.lower()
 
 
-def test_package_does_not_import_matchcore_fees_simulate_or_loader():
-    text = "\n".join(p.read_text(encoding="utf-8") for p in PKG.glob("*.py"))
+def test_boundary_modules_do_not_import_matchcore_fees_simulate_or_loader():
+    # Boundary surface (#309): differential + ingest only.
+    # Recipe e2e (separate GO) may call load_minute_orders_source in e2e.py.
+    text = "\n".join(
+        (PKG / name).read_text(encoding="utf-8")
+        for name in ("differential.py", "ingest.py")
+    )
     assert "match_candidates" not in text
     assert "compute_bucket_capacity" not in text
     assert "csv_minute_backtest" not in text
