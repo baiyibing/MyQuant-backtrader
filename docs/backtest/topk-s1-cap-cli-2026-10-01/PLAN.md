@@ -59,3 +59,7 @@ data-free 核验：参数解析/拒绝、省略≡None（且不读量）、0/0.1
 `topk_s1_cap_real_pnl_20261001/SCORES.md` 的真分数 BLOCKED 未被本机测试解除。
 后续顺序：本刀 draft → 人转 Grok CLI 核 → 4090bot 取真输入并运行。
 本刀只用 Codex CLI，没有代用 Grok 额度或自动发消息给其他 bot。
+
+## P2-B 外壳预检指针（2026-10-02）
+
+单位 + 完成桶 fail-closed 预检产品化落在 CLI/loader/adapter：[`participation_rate_precheck.py`](../../../backtest/research/participation_rate_precheck.py)。省略 `participation_rate=None` = 旧臂；**≠δ5 certified ≠R4**；不改 VolumeCap 公式/clamp/完成桶定义 / `simulate` / MatchCore。详见 [P2 adapters note §3](../note-minute-engine-p2-adapters-2026-10-02.md)。

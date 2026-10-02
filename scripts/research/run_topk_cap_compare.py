@@ -1,4 +1,7 @@
-"""S1 三买日真实分数研究对照；显式 scoped 输入，只读，不调用 certified/R4。"""
+"""S1 三买日真实分数研究对照；显式 scoped 输入，只读，不调用 certified/R4。
+
+P2-B：loader 出口做单位 + 完成桶外壳预检；≠δ5 certified ≠R4；不改 simulate/MatchCore/Fees/VolumeCap。
+"""
 
 from __future__ import annotations
 
@@ -21,6 +24,10 @@ import pandas as pd
 from backtest.research import csv_minute_backtest as minute
 from backtest.research.csv_artifacts import summarize, write_run_artifacts
 from backtest.research.csv_minute_volume import UNIT, completed_minute_volumes, validate_participation_rate
+from backtest.research.participation_rate_precheck import (
+    precheck_completed_bucket_samples,
+    precheck_source_pin_unit,
+)
 from backtest.research.csv_pool import load_pool_day_map, load_pool_names_by_day, validate_pool_dir
 from backtest.research.topk_dropout_rules import sort_by_score_desc
 from backtest.research.topk_dropout_scores import _bare_or_canon
@@ -124,7 +131,11 @@ def read_bars(args, needed, pins):
     pin_path = args.source_pin.resolve(strict=True)
     pins[str(pin_path)] = digest(pin_path)
     source = json.loads(pin_path.read_text(encoding="utf-8"))
-    require(source["unit"] == UNIT and source["transformations"] == [], "source PIN must declare raw shares; no runtime conversions")
+    # P2-B loader-exit unit precheck (shell; ≠δ5 certified ≠R4).
+    try:
+        precheck_source_pin_unit(source)
+    except ValueError as exc:
+        raise ValueError(str(exc)) from exc
     require(source.get("time_encoding") == "local_wall_as_utc_ms" and source.get("minute_label") == "END",
             "source PIN must declare S1 wall-clock encoding and END minute labels")
     frames = {}
@@ -173,6 +184,8 @@ def read_bars(args, needed, pins):
             require(grid <= set(rows.hm), f"missing completed minute buckets: {code} {day}")
         frames["1m"][code] = bars.loc[bars.day.isin(DAYS)].copy()
     samples = completed_minute_volumes(frames["1m"])
+    # P2-B loader-exit completed-bucket precheck (does not redefine buckets).
+    precheck_completed_bucket_samples(samples)
     return frames["1m"], frames["1d"], samples
 
 
@@ -215,7 +228,11 @@ def main(argv=None):
     parser.add_argument("--recorder-id", required=True, choices=(RECORDER,))
     for flag in ("minute-parquet", "daily-parquet", "source-pin"):
         parser.add_argument("--" + flag, type=Path)
-    parser.add_argument("--participation-rate", type=float, required=True, help="cap_on [0,1]; cap_off always None")
+    parser.add_argument(
+        "--participation-rate", type=float, required=True,
+        help="cap_on [0,1]; cap_off always None. Shell unit+completed-bucket precheck (P2-B); "
+             "≠δ5 certified ≠R4 (not capacity certified)",
+    )
     parser.add_argument("--cash-total", type=float, default=minute.DEFAULT_TOTAL_CASH)
     parser.add_argument("--prepare-only", action="store_true", help="验证分数并输出所需证券/date-map，不加载行情")
     args = parser.parse_args(argv)

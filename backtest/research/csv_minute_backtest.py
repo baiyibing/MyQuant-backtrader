@@ -130,6 +130,10 @@ from backtest.research.ashare_volume_cap import VolumeCap, VolumeLookup  # noqa:
 from backtest.research.csv_minute_volume import (  # noqa: E402
     completed_minute_volumes, validate_participation_rate,
 )
+from backtest.research.participation_rate_precheck import (  # noqa: E402
+    precheck_cli_participation_rate,
+    precheck_completed_bucket_samples,
+)
 from backtest.research.minute_audit import audit_scope, write_audit
 from backtest.research.minute_stop_trigger import (
     blocked_bar, target_fill, validate_low, validate_minute_stop_trigger,
@@ -1266,12 +1270,16 @@ def run(
     topk_limit_rule: str = "qlib",
     participation_rate: float | None = None,
 ) -> SimState:
-    validate_participation_rate(participation_rate)
-    if participation_rate is not None:
-        if minute_source != "lake" or qlib_1min_root is not None or dividend_type != "none":
-            raise ValueError("participation_rate requires raw lake minute volume in shares")
-        if tail_window_buy and tail_volume_unit != "shares":
-            raise ValueError("participation_rate requires shares, not tail volume lots")
+    # P2-B shell precheck (adapter surface on run facade; not simulate / VolumeCap).
+    # participation_rate=None → no-op (byte-identical old arm). ≠δ5 certified ≠R4.
+    precheck_cli_participation_rate(
+        participation_rate,
+        minute_source=minute_source,
+        qlib_1min_root=qlib_1min_root,
+        dividend_type=dividend_type,
+        tail_window_buy=tail_window_buy,
+        tail_volume_unit=tail_volume_unit,
+    )
     if fix_s81_band_precision and normalize_csv_strategy(strategy) != "version8_1":
         raise ValueError("fix_s81_band_precision is supported only by version8_1")
     validate_minute_stop_trigger(minute_stop_trigger, normalize_csv_strategy(strategy), fix_s11_exit_domain)
@@ -1458,9 +1466,12 @@ def run(
     if participation_rate is not None:
         if missing := all_codes - minute.keys():
             raise ValueError(f"missing minute volume frames: {sorted(missing)}")
+        samples = completed_minute_volumes(minute)
+        # P2-B loader-exit completed-bucket precheck (shell; does not redefine buckets).
+        precheck_completed_bucket_samples(samples)
         volume_options = {
             "participation_rate": participation_rate,
-            "volume_for_bucket": completed_minute_volumes(minute),
+            "volume_for_bucket": samples,
         }
     if week_ma_gate:
         from backtest.research.topk_dropout_eligibility import with_week_ma_gate
@@ -1649,9 +1660,11 @@ def main(argv: Optional[list] = None) -> int:
     ap.add_argument("--no-cache", action="store_true", help="skip minute window cache")
     ap.add_argument(
         "--participation-rate", type=float, default=None,
-        help="research opt-in finite [0,1]; omitted = cap off. Declares raw incremental "
-             "SHARE volume in loaded lake minutes (no lots conversion); completed bucket_end "
-             "approximation, excludes 09:30 auction, bypasses minute cache",
+        help="research opt-in finite [0,1]; omitted = cap off (byte-identical old arm). "
+             "Declares raw incremental SHARE volume in loaded lake minutes (no lots "
+             "conversion); completed bucket_end approximation, excludes 09:30 auction, "
+             "bypasses minute cache. Shell precheck (P2-B) fail-closed on unit/domain; "
+             "≠δ5 certified ≠R4 (not capacity certified)",
     )
     ap.add_argument(
         "--rebuild-cache", action="store_true", help="reload lake and rewrite cache"
@@ -1725,7 +1738,17 @@ def main(argv: Optional[list] = None) -> int:
     )
     ap.add_argument("--execution-audit-file", help="optional execution JSON sidecar; leaves CSVs unchanged")
     args = ap.parse_args(argv if argv is not None else None)
-    validate_participation_rate(args.participation_rate)
+    # P2-B: CLI-parse shell precheck (unit/domain). None → no-op. ≠δ5≠R4.
+    # Keep ValueError (not ap.error) so invalid-rate contract matches pre-P2 tests/API.
+    minute_source_early = "qlib_1min" if args.qlib_1min_root else args.minute_source
+    precheck_cli_participation_rate(
+        args.participation_rate,
+        minute_source=minute_source_early,
+        qlib_1min_root=args.qlib_1min_root,
+        dividend_type=args.dividend_type,
+        tail_window_buy=args.tail_window_buy,
+        tail_volume_unit=args.tail_volume_unit,
+    )
     try:
         validate_minute_stop_trigger(args.minute_stop_trigger, normalize_csv_strategy(args.strategy), args.fix_s11_exit_domain)
         validate_topk_exec(args.topk_exec, args.strategy, args.limit_walkdown, args.topk_limit_rule)

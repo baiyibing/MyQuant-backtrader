@@ -33,7 +33,7 @@ Human 于 2026-09-28 批准 [INDUSTRY_GAPS 基线审计](industry-gaps-bt-2026-0
 | X-03 s11 退出信号域 | OFF | `--fix-s11-exit-domain` | [D27](x03-s11-exit-domain.md)；后续 [D32 附表](note-lessons-2026-09-25-26-experiment-chain.md#附本次实验链的最终状态) 真湖 PASS 摘要 | X-02×X-03、exporter/CYQK PIT、Slice D 不因此通过 |
 | X-07 named-limit 与 TopK 接线 | 原本的真实 named-limit 路径已按板块/日期修正；TopK 仍 qlib | TopK 显式 `--topk-limit-rule real` | [D14 P4 档位表、接线与后续](topk-exec-p4-2026-09-27.md)；[D17](topk-exec-6cell-real-2026-09-27.md) | **不能把 X-07 整体写为默认 OFF**；real 不证明名称 PIT 或特殊无限制 regime |
 | δ3 名称 as-of | v7 flat；开关 OFF | `--asof-pool-names` | [D20](plan-industry-align-p3-d3-st-pit-2026-09-19.md)；[D23 crosscheck §4 D07](../reviews/2026-09-25-minute-engine-review/raw/crosscheck-grok.md)；[审计 §1.1](industry-gaps-bt-2026-09-28.md#11-核心三线与其他已实现能力) | by-day 能力存在；源在决策时刻可得仍需证明，默认不翻 |
-| δ5 容量 | API `participation_rate=None`（OFF） | API rate / 量桶参数；共享 CLI `--participation-rate`（#291，opt-in） | [D22 v0.4 / §5–6](plan-industry-align-p3-d5-volume-cap-2026-09-19.md)；[D7 §2.4](engine-ashare-correctness.md)；#291 | **VolumeCap API 先于 #291 CLI**；#291=共享入口 opt-in 接线 + 对照脚手架，省略=旧臂；**≠δ5 certified ≠R4**；真实量认证、日线 cap、排队/冲击延期；P2-B 外壳预检另 GO |
+| δ5 容量 | API `participation_rate=None`（OFF） | API rate / 量桶参数；共享 CLI `--participation-rate`（#291，opt-in）；P2-B 外壳预检 | [D22 v0.4 / §5–6](plan-industry-align-p3-d5-volume-cap-2026-09-19.md)；[D7 §2.4](engine-ashare-correctness.md)；#291；[P2 adapters](note-minute-engine-p2-adapters-2026-10-02.md) | **VolumeCap API 先于 #291 CLI**；#291=共享入口 opt-in 接线 + 对照脚手架，省略=旧臂；P2-B=CLI/loader 单位+完成桶预检（不改核）；**≠δ5 certified ≠R4**；≠ capacity certified；真实量认证、日线 cap、排队/冲击延期 |
 | δ6 权益 | API `exdiv_economics=None`（OFF） | 显式 economics 事件 API | [D24 §5 / §8.4](plan-industry-align-p3-d6-exdiv-economics-2026-09-19.md)；[D7 §2.5](engine-ashare-correctness.md) | API 已实现；无通用 CLI/湖事件 loader；补发、恢复等生命周期延期，不从 k 猜派息 |
 | #135 classic P1/P4 与 P2 | P1/P4 A/A，as-built；P2 B 标签已交付 | P1/P4 为 docs-only decision closed，无新行为开关 | [D8 §4](plan-industry-align-next-2026-09-19.md)、[D9 §5](plan-industry-align-refactor-2026-09-18.md) | 不重开集合竞价或 touch/mark；`session_phase` / `price_rule` 可空，v7 schema 不自动扩展；标签不等于真实竞价模型 |
 
@@ -104,15 +104,16 @@ P3 外置 D5 使用 s12 fix-on + 既有 transform，仅支持该冻结上下文�
 
 见[基线审计 §5](industry-gaps-bt-2026-09-28.md#5-与三线的交叉依赖)：先锁价格域、现金时序与输入身份，再单轴裁决 TopK/#214、参考价/权益、容量/申报量及 joint-return 独立合同；各线不互相代验，资料索引完成不构成下一刀 GO。
 
-## 7 P1 bar 身份 / Phase5 指针（只读 · 非第二默认表）
+## 7 P1/P2 bar 身份 / adapters 指针（只读 · 非第二默认表）
 
-2026-10-02 Human 采纳 P1 docs draft（H1=A 湖 END+lots→股推荐；H2=A sparse PIN+host 松弛；H6=B docs PR 勿合）。**本索引不另开平行成交默认表**；入口默认继续只链 [minute-fill-policy-ssot.md](minute-fill-policy-ssot.md)。
+2026-10-02 Human：P1 docs 已合 #298；P2-A/B/C draft（H1=A / H2=A / H3=B / H4=A / H5=A / H6=B 勿合）。**本索引不另开平行成交默认表**；入口默认继续只链 [minute-fill-policy-ssot.md](minute-fill-policy-ssot.md)。
 
 | 主题 | 指针 | 边界 |
 |---|---|---|
-| Bar 身份 / PIN | [vendor-bar-alignment-ssot.md](ssot/vendor-bar-alignment-ssot.md) §5/§10/§11；[P1 Human defaults](note-minute-engine-p1-human-defaults-2026-10-02.md) | 身份五元组；非 fill-policy 行 |
-| Phase5 湖 END 研究路径 | vendor-bar §10；host `/workspace/handoffs/vendor_lake_phase5_host_20261002/` | 不可与 START-accept 直接比 PnL |
-| #291 participation_rate | 本页 §1 δ5 行；`scripts/research/run_topk_cap_compare.py` | ≠δ5 certified ≠R4；P2-B 预检码另 GO |
+| Bar 身份 / PIN | [vendor-bar-alignment-ssot.md](ssot/vendor-bar-alignment-ssot.md) §5/§10/§11/§12；[P1 Human defaults](note-minute-engine-p1-human-defaults-2026-10-02.md) | 身份五元组；非 fill-policy 行 |
+| Phase5 / P2-A recipe | vendor-bar §10/§12；[P2 adapters](note-minute-engine-p2-adapters-2026-10-02.md) §2；host `/workspace/handoffs/vendor_lake_phase5_host_20261002/` | **不可**与 START-accept 直接比 PnL |
+| #291 + P2-B 预检 | 本页 §1 δ5 行；`participation_rate_precheck.py`；`run_topk_cap_compare.py` | ≠δ5 certified ≠R4；≠ capacity certified |
+| P2-C L2↔共享湖 | [L1/L2 边界 §6](note-l1-l2-research-engine-boundary-2026-09-28.md)；P2 adapters §4 | 同 PIN 不同后端 → 红混比；L2 永 opt-in |
 | JR-clock G hygiene | [G 回填 note](note-jr-clock-g-host-reverify-backfill-2026-10-01.md)（#297 合入 tip） | ≠δ5≠R4 |
 
-L2 `minute_orders` 定位：**永 opt-in**（H4=A）。G3 科创板申报数量延后（H5=A）。不授权改 MatchCore / Fees / `simulate` / VolumeCap·clamp·完成桶。
+L2 `minute_orders` 定位：**永 opt-in**（H4=A）。G3 科创板申报数量延后（H5=A）。不授权改 MatchCore / Fees / `simulate` / VolumeCap·clamp·完成桶。P2 draft **勿合，等待 Human「合」**。
