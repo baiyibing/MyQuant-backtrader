@@ -9,9 +9,12 @@ Checks retain the eff77f3 bytes/account contract and require the single #205
 metadata addition. Canonical CSV/account checks always run; raw byte checks
 require the golden's pandas major.minor (otherwise --check reports SKIP).
 Six per_name strategy-8 books use the explicit 2026-09-26 correction overlay;
-the other 27 cases still use the immutable historical files. --record-s8 writes
-only those 12 corrected cases and refuses to replace an existing overlay.
-See docs/backtest/s8-independent-positions-2026-09-26.md.
+the other historical non-S8 cases still use the immutable historical files.
+version6_1 (20th book, bee0b91) is covered by a scoped additive overlay
+(precedent #212): historical golden stays 19 books / 39 cases; --record-v61
+writes only the two new cases and refuses overwrite. --record-s8 unchanged.
+See docs/backtest/s8-independent-positions-2026-09-26.md and
+docs/backtest/v61-off-byte-overlay-2026-10-02.md.
 """
 
 from __future__ import annotations
@@ -51,12 +54,21 @@ S8_GOLDEN = ROOT / "tests/fixtures/off_byte_baseline_s8_independent_20260926.jso
 S8_RULE_REVISION = "s8-independent-group-exits-2026-09-26"
 S8_BOOK_NAMES = ("version8", "version8_2", "version8_3", "version8_4", "version8_5", "version8_6")
 S8_CASES = tuple((book, engine) for book in S8_BOOK_NAMES for engine in ("daily", "minute"))
-BOOK_NAMES = (
+# Immutable eff77f3 matrix (19 books). New books extend via scoped overlay (#212).
+HISTORICAL_BOOK_NAMES = (
     "version1", "version2", "version3", "version4", "version5", "version6",
     "version8", "version8_1", "version8_2", "version8_3", "version8_4",
     "version8_5", "version8_6", "version9", "version10", "version11",
     "version12", "topk_dropout", "topk_score_exit",
 )
+HISTORICAL_CASES = tuple(
+    (book, engine) for book in HISTORICAL_BOOK_NAMES for engine in ("daily", "minute")
+) + (("version7", "minute"),)
+V61_GOLDEN = ROOT / "tests/fixtures/off_byte_baseline_v61_20261002.json"
+V61_RULE_REVISION = "v61-unbounded-ladder-2026-10-02"
+V61_BOOK_NAMES = ("version6_1",)
+V61_CASES = tuple((book, engine) for book in V61_BOOK_NAMES for engine in ("daily", "minute"))
+BOOK_NAMES = HISTORICAL_BOOK_NAMES + V61_BOOK_NAMES
 CODE = "600000.SH"
 TOPK_CODES = (CODE, "600001.SH", "600002.SH")
 CASES = tuple((book, engine) for book in BOOK_NAMES for engine in ("daily", "minute")) + (
@@ -190,7 +202,7 @@ def load_canonical_golden() -> dict:
     assert golden["source"] == SOURCE
     assert golden["raw_golden_sha256"] == _hash(GOLDEN.read_bytes())
     assert golden["contract"] == CANONICAL_CONTRACT
-    assert set(golden["cases"]) == {f"{book}/{engine}" for book, engine in CASES}
+    assert set(golden["cases"]) == {f"{book}/{engine}" for book, engine in HISTORICAL_CASES}
     return golden
 
 
@@ -208,11 +220,30 @@ def load_s8_golden() -> dict:
     return golden
 
 
+def load_v61_golden() -> dict:
+    """Additive overlay for version6_1 only; historical files stay immutable."""
+    assert _hash(GOLDEN.read_bytes()) == HISTORICAL_GOLDEN_SHA256
+    assert _hash(CANONICAL_GOLDEN.read_bytes()) == HISTORICAL_CANONICAL_SHA256
+    golden = json.loads(V61_GOLDEN.read_text(encoding="utf-8"))
+    assert golden["rule_revision"] == V61_RULE_REVISION
+    assert golden["historical_raw_sha256"] == HISTORICAL_GOLDEN_SHA256
+    assert golden["historical_canonical_sha256"] == HISTORICAL_CANONICAL_SHA256
+    assert golden["contract"] == CANONICAL_CONTRACT
+    assert golden["books"] == list(V61_BOOK_NAMES)
+    assert set(golden["cases"]) == {f"{book}/{engine}" for book, engine in V61_CASES}
+    return golden
+
+
 def expected_case(book: str, engine: str) -> tuple[dict, dict, str]:
     """Return account/raw, canonical hashes, and the recorded pandas version."""
     key = f"{book}/{engine}"
     if (book, engine) in S8_CASES:
         golden = load_s8_golden()
+        case = golden["cases"][key]
+        canonical = {name: canonical_hash(table) for name, table in case["canonical_csv"].items()}
+        return case, canonical, golden["captured_environment"]["pandas"]
+    if (book, engine) in V61_CASES:
+        golden = load_v61_golden()
         case = golden["cases"][key]
         canonical = {name: canonical_hash(table) for name, table in case["canonical_csv"].items()}
         return case, canonical, golden["captured_environment"]["pandas"]
@@ -310,7 +341,9 @@ def capture_case(book: str, engine: str, output_dir: Path, *, explicit_false: bo
 
 def capture_matrix(output_dir: Path, *, explicit_false: bool = False):
     assert set(BOOK_NAMES) == set(BOOKS), "Update coverage explicitly when BOOKS changes"
-    assert len(BOOK_NAMES) == 19 and len(CASES) == 39
+    assert len(HISTORICAL_BOOK_NAMES) == 19 and len(HISTORICAL_CASES) == 39
+    assert len(BOOK_NAMES) == 20 and len(CASES) == 41
+    assert set(BOOK_NAMES) == set(HISTORICAL_BOOK_NAMES) | set(V61_BOOK_NAMES)
     return {f"{book}/{engine}": capture_case(book, engine, output_dir / book / engine,
                                             explicit_false=explicit_false)
             for book, engine in CASES}
@@ -339,8 +372,15 @@ def post205_expected_case(book: str, frozen_case: dict) -> dict:
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     mode = parser.add_mutually_exclusive_group()
-    mode.add_argument("--check", action="store_true", help="Compare historical cases plus the S8 overlay")
+    mode.add_argument(
+        "--check", action="store_true",
+        help="Compare historical cases plus the S8 and version6_1 overlays",
+    )
     mode.add_argument("--record-s8", action="store_true", help="Record only the 12 corrected S8 cases")
+    mode.add_argument(
+        "--record-v61", action="store_true",
+        help="Record only the 2 additive version6_1 cases (scoped overlay)",
+    )
     args = parser.parse_args()
     if args.record_s8:
         if S8_GOLDEN.exists():
@@ -367,6 +407,32 @@ def main():
         S8_GOLDEN.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         print(f"Wrote {S8_GOLDEN}: 12 corrected cases / 24 production CSV hashes")
         return
+    if args.record_v61:
+        if V61_GOLDEN.exists():
+            parser.error("The version6_1 overlay already exists; refusing to overwrite")
+        if pd.__version__ != "3.0.6":
+            parser.error("version6_1 recording requires the authorized pandas 3.0.6 environment")
+        assert _hash(GOLDEN.read_bytes()) == HISTORICAL_GOLDEN_SHA256
+        assert _hash(CANONICAL_GOLDEN.read_bytes()) == HISTORICAL_CANONICAL_SHA256
+        with tempfile.TemporaryDirectory(prefix="v61-byte-baseline-") as temp:
+            cases = {f"{book}/{engine}": capture_case(book, engine, Path(temp) / book / engine)
+                     for book, engine in V61_CASES}
+        for case in cases.values():
+            assert_case_bytes(case, case)
+            assert case["fill_counts"]["BUY"] > 0 and case["fill_counts"]["SELL"] > 0
+        payload = {
+            "rule_revision": V61_RULE_REVISION,
+            "historical_raw_sha256": HISTORICAL_GOLDEN_SHA256,
+            "historical_canonical_sha256": HISTORICAL_CANONICAL_SHA256,
+            "books": list(V61_BOOK_NAMES),
+            "captured_environment": {"python": platform.python_version(), "pandas": pd.__version__,
+                                     "platform": sys.platform},
+            "contract": CANONICAL_CONTRACT,
+            "cases": cases,
+        }
+        V61_GOLDEN.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        print(f"Wrote {V61_GOLDEN}: 2 additive cases / 4 production CSV hashes")
+        return
     if not args.check:
         head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
         if head != SOURCE or GOLDEN.exists():
@@ -387,8 +453,11 @@ def main():
         for reason in sorted(skipped):
             print(f"SKIP: {reason}")
         if not skipped:
-            print("PASS: 78 production CSV hashes + library hashes (raw bytes)")
-        print(f"PASS: 27 unchanged + 12 corrected canonical CSV/account cases; pandas={pd.__version__}")
+            print("PASS: 82 production CSV hashes + library hashes (raw bytes)")
+        print(
+            "PASS: 27 unchanged + 12 S8-corrected + 2 version6_1 additive "
+            f"canonical CSV/account cases; pandas={pd.__version__}"
+        )
         return
     for case in cases.values():
         assert case["sha256_csv_bytes"] == case["library_sha256_csv_bytes"], "writer/library mismatch"
