@@ -126,8 +126,8 @@ P3 外置 D5 使用 s12 fix-on + 既有 transform，仅支持该冻结上下文�
 | 真核 CLI lake opt-in | [CLI lake](note-true-core-cli-lake-2026-10-02.md) | CLI `lake`→S4 hybrid；lake+END；≠ host PASS；不写湖；不 4090；≠δ5≠R4；#311 MERGED |
 | 真核写湖残差 · staging dry-run | [write-lake residual](note-true-core-write-lake-residual-2026-10-02.md) | docs+骨架；MUST Human cuts 草案；**无**生产写；无 `--write-lake`；拒 stock_data；≠δ5≠R4；#312 MERGED `3f7af6a2` |
 | 真核写湖 MUST cuts · Human A | [MUST cuts register A](note-true-core-write-lake-must-cuts-register-2026-10-03.md) | **Human cut A**：owner=host/1.3；本仓只登记、不写路径；no_borrow；rollback=禁原地覆盖；target_pin 未裁；登记≠授权；≠δ5≠R4；docs-only |
-| 真核 Codex 残差实施计划 | [Codex residual plan](note-true-core-codex-residual-plan-2026-10-02.md) | R1/R2 已合后按序清单；A·X7 本刀；≠一次写完生产写/4090/X2–X5；≠δ5≠R4；draft 勿合 |
-| 真核 A·X7 观察面 | [A·X7 observe](note-true-core-ax7-observe-2026-10-02.md) | 新投影入口；不塞 `views._FAMILIES`；观察≠绿 R；无 NAV 重写；无生产写/4090；≠δ5≠R4；draft 勿合 |
+| 真核 Codex 残差实施计划 | [Codex residual plan](note-true-core-codex-residual-plan-2026-10-02.md) | R1/R2 已合后按序清单；A·X7 同票已合；≠一次写完生产写/4090/X2–X5；≠δ5≠R4；#314 MERGED |
+| 真核 A·X7 观察面 | [A·X7 observe](note-true-core-ax7-observe-2026-10-02.md) | 新投影入口；不塞 `views._FAMILIES`；观察≠绿 R；无 NAV 重写；无生产写/4090；≠δ5≠R4；#314 MERGED |
 | 真核 TC5 · 扩展包 GO/范围 | [TC5 GO/scope](note-true-core-tc5-go-scope-2026-10-02.md) | docs-only 裁断单；**不** mint 新 contract/backend_id；H-TC5-NEXT=C 已点（#309）；≠δ5≠R4；本刀合入 docs |
 
 L2 `minute_orders` 定位：**永 opt-in**（P1 H4=A · 统一 H-U3 · 真核 H-TC9）。G3 科创板申报数量延后（H5=A）。统一语境与 TC1/TC2/TC3/TC4/X6/TC5 docs **均不授权**改 MatchCore / Fees / `simulate` / VolumeCap·clamp·完成桶。TC1 已合 #303；TC2 X1 已合 #304；TC3 已合 #305；TC4 X8 已合 #306；X6 合成差分已合 #307；X6 真湖只读边界已合 #309；X6 真湖 recipe e2e 已合 #310；CLI lake 已合 #311；写湖 staging dry-run 已合 #312（≠生产写）；**Human cut A registered**（owner=host/1.3；本仓不实现写路径；登记≠授权；见 MUST cuts register note）；v6.1 sol 已合 #313；Codex 残差计划 + A·X7 已合 #314（新投影；不塞 `_FAMILIES`）；TC5 GO/scope docs 已合（生产写执行在 host/1.3；target_pin 未裁；4090/X2–X5 仍须独立 GO）。

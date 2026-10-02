@@ -26,9 +26,9 @@ Human 点了「GO 写湖」。Codex 将该轴排在残差最末：物理污染/�
 | 独立 tool 根 `staging_dry_run_report.json` + `MUST_HUMAN_CUTS.json` | 产成功 `summary.json`；host PASS；绿 R |
 | 合成测例（无湖 I/O） | 4090；借用 Phase4 RECEIPT 升格本链 |
 
-## 2. MUST Human cuts（生产写前必裁）
+## 2. MUST Human cuts（生产写前必裁 · #312 当时清单）
 
-| ID | 裁断 |
+| ID | 裁断（#312 草案措辞；当前状态见页脚 Human cut A） |
 |---|---|
 | **owner** | 点名生产写执行方：host agent / 1.3 download transport / vendor merge — **默认不是**本 research fork |
 | **target_pin** | 钉死湖根、underscore hive 标的、`{1m,1d}`、`dividend_type`、源 sha256；禁通配 |
@@ -38,7 +38,7 @@ Human 点了「GO 写湖」。Codex 将该轴排在残差最末：物理污染/�
 | **locks** | 空 MatchCore/Fees/simulate/loader；≠δ5≠R4；永不 BOOKS；永 opt-in；无绿 R；无 4090（除非另 GO） |
 | **budget** | 按 H-TC8 **单独重估**；「C 已开」不吞进原 1–2 人周 |
 
-未裁齐前：**任何生产写湖实施 = 越权**。cuts 清单仍是未裁齐草案，只落成机器可读 `MUST_HUMAN_CUTS.json`。
+#312 机器清单仍是当时草案（`MUST_HUMAN_CUTS.json` 本刀不改）。Human cut A 已登记于 [note-true-core-write-lake-must-cuts-register-2026-10-03.md](note-true-core-write-lake-must-cuts-register-2026-10-03.md)：owner=host/1.3（本仓不是写方）、no_borrow_receipt、rollback=禁原地覆盖、budget=本仓无新码刀已登记；target_pin **未裁**（host 链）；no_write_flag / locks 仍锁。登记 ≠ 生产写授权。target_pin 未裁且无另具名生产写 GO 前，任何生产写仍越权。
 
 ## 3. 如何调用（staging dry-run）
 

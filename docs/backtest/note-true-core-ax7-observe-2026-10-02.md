@@ -7,7 +7,7 @@
 | Human GO | 「Codex 计划+A GO」→ **A · X7 观察面**（新投影；无新经济语义；零湖零 4090） |
 | 方案 | TC1 §5 X7 / TC5 轴表 / PLAN X7；计划见 [Codex residual plan](note-true-core-codex-residual-plan-2026-10-02.md) |
 | 硬约束 | **不** mint 新经济合同 / 新 `backend_id`；`observation_id` ≠ backend_id；**新**投影入口；**不**塞 `views._FAMILIES`；观察 ≠ 绿 R；**不**重算 NAV；不产成功 `summary.json`；≠δ5≠R4；无生产写湖；无 4090；永 opt-in |
-| PR | **draft · 勿合** |
+| PR | **#314 MERGED** |
 
 > **本 note ≠ 绿 R，≠ fill-policy，≠ NAV 排行，≠ host PASS，≠ 生产写湖。**  
 > 观察面身份 ≠ 经济合同版本。入口默认 / 绿 R·S 继续只链 [minute-fill-policy-ssot.md](minute-fill-policy-ssot.md)。
@@ -138,4 +138,4 @@ tests/test_minute_orders_x7_observe.py
 - 写湖 staging：[note-true-core-write-lake-residual-2026-10-02.md](note-true-core-write-lake-residual-2026-10-02.md)（#312 MERGED；≠ 生产写）
 - industry §7：[industry-state-acceptance-index-2026-09-28.md](industry-state-acceptance-index-2026-09-28.md)
 
-**≠δ5 certified ≠R4；观察 ≠ 绿 R；无 MatchCore/Fees/simulate 重写；无生产写湖；无 4090；draft 勿合。**
+**≠δ5 certified ≠R4；观察 ≠ 绿 R；无 MatchCore/Fees/simulate 重写；无生产写湖；无 4090；#314 MERGED。**
