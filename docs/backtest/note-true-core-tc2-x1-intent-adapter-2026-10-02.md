@@ -114,8 +114,9 @@ pytest tests/test_minute_orders_intent_x1.py tests/test_minute_orders_runner.py 
 ## 6. ≠δ5≠R4 · 范围外
 
 - **≠δ5 certified ≠R4**；无绿 R / NAV 混比授权。
-- Out of scope：X2–X8 实装、P3、4090、湖写入、Compat 主路径、HELP/preset、L1 `_ENTRIES` 注册。
-- 本 draft **勿合**，等 Human「合」。
+- Out of scope：X2–X8 实装、P3、4090、湖写入、Compat 主路径、L1 `_ENTRIES` 注册。
+- 具名 CLI/HELP 闭环见 [TC3](note-true-core-tc3-named-consumer-2026-10-02.md)（本 tip 后刀；draft 勿合）。
+- 本 note 对应码已合 #304；后续消费者接线见 TC3。
 
 ## 7. 指针
 
@@ -124,5 +125,6 @@ pytest tests/test_minute_orders_intent_x1.py tests/test_minute_orders_runner.py 
 - S3 runner：[note-l2-s3-clock-broker-runner-2026-09-29.md](note-l2-s3-clock-broker-runner-2026-09-29.md)
 - 统一上限 U1：[note-minute-engine-unify-ceiling-u1-2026-10-02.md](note-minute-engine-unify-ceiling-u1-2026-10-02.md)
 - handoff（仓外）：`/workspace/handoffs/minute_engine_true_core_new_20261002/`
+- TC3 具名消费者闭环：[note-true-core-tc3-named-consumer-2026-10-02.md](note-true-core-tc3-named-consumer-2026-10-02.md)
 
-**≠δ5≠R4；适配器身份 only；复用 v0 runner；无 MatchCore/Fees/simulate 重写；draft 勿合。**
+**≠δ5≠R4；适配器身份 only；复用 v0 runner；无 MatchCore/Fees/simulate 重写；#304 MERGED；消费者 CLI 见 TC3。**
