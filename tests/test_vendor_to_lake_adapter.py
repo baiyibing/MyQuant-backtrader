@@ -47,7 +47,7 @@ def test_remainder_and_pin(tmp_path):
     assert len(audit) == 1
     assert (audit[0]['shares'], audit[0]['volume_lots'], audit[0]['remainder_shares']) == (251, 2, 51)
     pin = json.loads((out / 'PIN.json').read_text())
-    assert pin['minute_label'] == 'END; 09:30 auction excluded'
+    assert pin['minute_label'] == 'END; START 09:30/11:30/15:00 excluded'
     assert pin['unit'] == pin['unit_out'] == 'lots'
     assert pin['dry_run'] and pin['sparse_policy'] == 'A'
     assert pin['transformations'] and len(pin['sources'][0]['sha256']) == 64
@@ -138,3 +138,91 @@ def test_parquet_input_and_symbol_filter(tmp_path):
     out = tmp_path / 'out'
     assert a.main(['--wind', str(parquet), '--out-dir', str(out)]) == 0
     assert not (out / 'period=1m/dividend_type=none/symbol=600113.SH').exists()
+
+
+@pytest.mark.parametrize('boundaries', [('11:30',), ('15:00',), ('09:30', '11:30', '15:00')])
+def test_start_boundary_exclusion_audit(tmp_path, boundaries):
+    out, frame = run(tmp_path, minutes=boundaries + ('09:31', '11:29', '13:00', '14:59'),
+                     volumes=[999] * len(boundaries) + [251, 300, 400, 500])
+    assert pd.to_datetime(frame.time, unit='ms').dt.strftime('%H:%M').tolist() == [
+        '09:32', '11:30', '13:01', '15:00']
+    assert frame.volume.tolist() == [2, 3, 4, 5]
+    coverage = json.loads((out / 'coverage_audit.json').read_text())['1m']
+    assert coverage['bars_in'] == len(boundaries) + 4
+    assert coverage['bars_out'] == 4 and coverage['invented_bars'] == 0
+    assert coverage['auction_dropped'] == int('09:30' in boundaries)
+    audit = coverage['excluded_start_boundary']
+    assert audit['count'] == len(boundaries)
+    assert audit['per_symbol'] == {'002231.SZ': len(boundaries), '300379.SZ': 0, '600200.SH': 0}
+    expected_hm = {int(t[:2]) * 60 + int(t[3:]) for t in boundaries}
+    assert {r['hm'] for r in audit['samples']} == expected_hm
+    assert all(r['ymd'] == '20251024' and r['symbol'] == '002231.SZ' for r in audit['samples'])
+    assert audit['per_hm'] == {str(hm): int(hm in expected_hm) for hm in (570, 690, 900)}
+    assert {r['reason'] for r in audit['samples']} == {
+        {570: 'auction_0930', 690: 'morning_close_1130', 900: 'close_1500'}[hm] for hm in expected_hm}
+    for name in ('PIN.json', 'STATUS.json'):
+        assert json.loads((out / name).read_text())['excluded_start_boundary'] == audit
+    assert '11:30/15:00' in (out / 'REPORT.md').read_text()
+    remainder = json.loads((out / 'remainder_audit.json').read_text())
+    assert len(remainder) == 1 and remainder[0]['remainder_shares'] == 51
+
+
+@pytest.mark.parametrize('minutes', [('11:30',), ('15:00',), ('09:30', '11:30', '15:00')])
+def test_only_boundaries_fail_with_audit(tmp_path, minutes):
+    path = source(tmp_path, minutes)
+    out = tmp_path / 'out'
+    assert a.main(['--wind', str(path), '--out-dir', str(out)]) == 1
+    status = json.loads((out / 'STATUS.json').read_text())
+    assert status['reason'] == '1m: no continuous bars after boundary exclusion'
+    assert status['excluded_start_boundary']['count'] == len(minutes)
+    assert not list(out.rglob('*.parquet'))
+
+
+@pytest.mark.parametrize('unexpected', ['09:29', '11:31', '12:00', '15:01'])
+def test_non_boundary_still_fail_closed(tmp_path, unexpected):
+    path = source(tmp_path, ('09:30', '10:00', '11:30', '15:00', unexpected))
+    out = tmp_path / 'out'
+    assert a.main(['--wind', str(path), '--out-dir', str(out)]) == 1
+    status = json.loads((out / 'STATUS.json').read_text())
+    assert 'outside declared continuous-session intervals' in status['reason']
+    audit = status['excluded_start_boundary']
+    assert audit['count'] == 3
+    assert audit['per_hm'] == {'570': 1, '690': 1, '900': 1}
+    assert audit['per_symbol']['002231.SZ'] == 3
+    assert {row['hm'] for row in audit['samples']} == {570, 690, 900}
+    assert json.dumps(audit, ensure_ascii=False, indent=2) in (out / 'REPORT.md').read_text()
+    assert not list(out.rglob('*.parquet'))
+
+
+@pytest.mark.parametrize('policy', [None, 'exclude_0930', 'exclude_0930_1130_1500'])
+def test_auction_policy_canonical_pin(tmp_path, policy):
+    path = source(tmp_path, ('09:30', '09:31', '11:30', '15:00'))
+    out = tmp_path / 'out'
+    argv = ['--wind', str(path), '--out-dir', str(out)]
+    if policy is not None:
+        argv += ['--auction-policy', policy]
+    assert a.main(argv) == 0
+    pin = json.loads((out / 'PIN.json').read_text())
+    assert pin['auction_policy'] == 'exclude_0930_1130_1500'
+    coverage = json.loads((out / 'coverage_audit.json').read_text())['1m']
+    assert coverage['excluded_start_boundary']['count'] == 3
+    assert coverage['auction_dropped'] == coverage['bars_out'] == 1
+    help_text = a.parser().format_help()
+    assert all(token in help_text for token in ('09:30', '11:30', '15:00', '570/690/900'))
+
+
+def test_boundary_audit_capped_multiple_symbols_parquet(tmp_path):
+    path = source(tmp_path, ('10:00',))
+    frames = [pd.read_csv(path)]
+    for symbol in ('002231.SZ', '300379.SZ'):
+        rows = pd.read_csv(path).iloc[[0] * 15].copy()
+        rows['wind_code'] = symbol
+        rows['TIME'] = [f'2025-10-{day:02d}T15:00:00+08:00' for day in range(1, 16)]
+        frames.append(rows)
+    parquet = path.with_suffix('.parquet')
+    pd.concat(frames).to_parquet(parquet, index=False)
+    out = tmp_path / 'out'
+    assert a.main(['--wind', str(parquet), '--out-dir', str(out)]) == 0
+    audit = json.loads((out / 'PIN.json').read_text())['excluded_start_boundary']
+    assert audit['count'] == 30 and len(audit['samples']) == audit['sample_limit'] == 20
+    assert audit['per_symbol']['002231.SZ'] == audit['per_symbol']['300379.SZ'] == 15

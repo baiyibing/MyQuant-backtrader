@@ -18,11 +18,20 @@ _spec = importlib.util.spec_from_file_location(
 xcheck = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(xcheck)
 DEFAULT_SYMBOLS = ['002231.SZ', '300379.SZ', '600200.SH']
+AUCTION_POLICY = 'exclude_0930_1130_1500'
 TRANSFORMATIONS = ['Wind continuous START -> END (+1 minute)',
                    'shares -> lots (floor division; remainder audited)',
-                   'drop Wind START 09:30 auction before continuous output',
+                   'drop Wind START 09:30 auction and 11:30/15:00 boundaries before continuous mapping',
                    'sparse A: observed bars only; no zero-fill',
                    'THS daily: day keys, no minute shift']
+
+
+class StartIntervalError(ValueError):
+    """Continuous-session failure retaining the already-computed boundary audit."""
+
+    def __init__(self, audit):
+        super().__init__('outside declared continuous-session intervals; non-boundary START requires review')
+        self.excluded_start_boundary = audit
 
 
 def parser():
@@ -35,7 +44,10 @@ def parser():
     p.add_argument('--lake-label', choices=['END'], default='END')
     p.add_argument('--unit-out', choices=['lots'], default='lots')
     p.add_argument('--shares-to-lots-div', type=int, choices=[100], default=100)
-    p.add_argument('--auction-policy', choices=['exclude_0930'], default='exclude_0930')
+    p.add_argument('--auction-policy', choices=[AUCTION_POLICY, 'exclude_0930'], default=AUCTION_POLICY,
+                   help='Exclude START 09:30, 11:30 and 15:00 (hm 570/690/900) with audit; '
+                        'continuous mapping unchanged. exclude_0930 is a compatibility alias; '
+                        'PIN records the canonical policy name.')
     return p
 
 
@@ -68,6 +80,67 @@ def sha(path):
 
 def json_write(path, data):
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+
+
+def read_wind_start(paths, symbols):
+    """Adapter-only boundary policy; pure xcheck retains its strict intervals."""
+    frames = []
+    for path in paths:
+        path = Path(path)
+        df = pd.read_csv(path) if path.suffix.lower() == '.csv' else pd.read_parquet(path)
+        df.columns = [str(c).lower() for c in df.columns]
+        df = df.rename(columns={'match': 'close', 'wind_code': 'symbol'})
+        if 'symbol' not in df:
+            match = re.search(r'symbol=([0-9]{6}\.(?:SZ|SH|BJ))', str(path), re.I)
+            if not match:
+                raise ValueError(f'{path}: missing symbol column/hive partition')
+            df['symbol'] = match.group(1)
+        df['symbol'] = df.symbol.astype(str).str.upper().str.strip()
+        if symbols:
+            df = df[df.symbol.isin(symbols)].copy()
+        if df.empty:
+            frames.append(pd.DataFrame(columns=xcheck.KEYS + list(xcheck.FIELDS)))
+            continue
+        if not df.symbol.str.fullmatch(r'[0-9]{6}\.(SZ|SH|BJ)').all():
+            raise ValueError(f'{path}: invalid canonical symbol')
+        stamp = df['time']
+        # Numeric lake times encode wall clock as UTC ms, not actual UTC instants.
+        if pd.api.types.is_numeric_dtype(stamp):
+            times = pd.to_datetime(stamp, unit='ms', utc=True).dt.tz_localize(None)
+        else:
+            def wall(value):
+                ts = pd.Timestamp(value)
+                return ts.tz_convert('Asia/Shanghai').tz_localize(None) if ts.tzinfo else ts
+            times = stamp.map(wall)
+        if times.isna().any() or ((times.dt.second != 0) | (times.dt.microsecond != 0) | (times.dt.nanosecond != 0)).any():
+            raise ValueError(f'{path}: invalid/non-minute time')
+        df['ymd'] = times.dt.strftime('%Y%m%d')
+        hm = times.dt.hour * 60 + times.dt.minute
+        df['hm'] = hm
+        for field in xcheck.FIELDS:
+            df[field] = pd.to_numeric(df[field], errors='raise')
+            if not np.isfinite(df[field]).all() or (df[field] < 0).any():
+                raise ValueError(f'{path}: invalid {field}')
+        frames.append(df[xcheck.KEYS + list(xcheck.FIELDS)])
+    if not frames:
+        raise ValueError('missing input paths')
+    result = pd.concat(frames, ignore_index=True)
+    if result.duplicated(xcheck.KEYS).any():
+        raise ValueError('duplicate interval keys')
+    reasons = {570: 'auction_0930', 690: 'morning_close_1130', 900: 'close_1500'}
+    dropped = result.hm.isin(reasons)
+    excluded = result.loc[dropped, xcheck.KEYS].copy()
+    excluded['reason'] = excluded.hm.map(reasons)
+    audit = dict(count=len(excluded),
+                 per_hm={str(hm): int((excluded.hm == hm).sum()) for hm in reasons},
+                 per_symbol={s: int((excluded.symbol == s).sum()) for s in symbols},
+                 samples=excluded.head(20).to_dict('records'), sample_limit=20)
+    kept = result.loc[~dropped].copy()
+    valid = ((kept.hm >= 570) & (kept.hm < 690) | (kept.hm >= 780) & (kept.hm < 900))
+    if not valid.all():
+        raise StartIntervalError(audit)
+    kept['hm'] = kept.hm + 1
+    return kept, result, audit
 
 
 def read_daily(paths, symbols):
@@ -156,9 +229,10 @@ def main(argv=None):
         if not all(re.fullmatch(r'[0-9]{6}\.(SZ|SH|BJ)', s) for s in symbols):
             raise ValueError('invalid canonical symbol')
         pins = [dict(period=period, path=str(p), sha256=sha(p), unit='shares') for period, p in sources]
-        minute = xcheck.read_bars([p for period, p in sources if period == '1m'], 'START', symbols)
+        minute, minute_source, boundary = read_wind_start([p for period, p in sources if period == '1m'], symbols)
+        status['excluded_start_boundary'] = boundary
         if minute.empty:
-            raise ValueError('no observed Wind bars for selected symbols')
+            raise ValueError('1m: no continuous bars after boundary exclusion')
         tables = {'1m': minute}
         if args.ths_daily:
             tables['1d'] = read_daily([p for period, p in sources if period == '1d'], symbols)
@@ -166,28 +240,29 @@ def main(argv=None):
                 raise ValueError('no observed THS daily bars for selected symbols')
         expected, audit, coverage = {}, [], {}
         for period, original in tables.items():
-            # read_bars has mapped 09:30 START to hm=571; exclude that source row.
-            dropped = original.hm == 571 if period == '1m' else pd.Series(False, index=original.index)
-            kept = original.loc[~dropped].copy()
-            frame, remainder = convert(kept, period, args.shares_to_lots_div)
+            source_rows = minute_source if period == '1m' else original
+            dropped = source_rows.hm == 570 if period == '1m' else pd.Series(False, index=source_rows.index)
+            frame, remainder = convert(original, period, args.shares_to_lots_div)
             if frame.empty:
-                raise ValueError(f'{period}: no continuous bars after auction exclusion')
+                raise ValueError(f'{period}: no continuous bars after boundary exclusion')
             audit.extend(remainder)
-            coverage[period] = dict(bars_in=len(original), bars_out=len(frame), auction_dropped=int(dropped.sum()),
-                                   per_symbol={s: dict(bars_in=int((original.symbol == s).sum()),
+            coverage[period] = dict(bars_in=len(source_rows), bars_out=len(frame), auction_dropped=int(dropped.sum()),
+                                   per_symbol={s: dict(bars_in=int((source_rows.symbol == s).sum()),
                                                       bars_out=int((frame.symbol == s).sum()),
-                                                      auction_dropped=int(((original.symbol == s) & dropped).sum())) for s in symbols},
+                                                      auction_dropped=int(((source_rows.symbol == s) & dropped).sum())) for s in symbols},
                                    missing_requested_symbols=[s for s in symbols if s not in set(frame.symbol)],
                                    sparse_policy='A', invented_bars=0)
+            if period == '1m':
+                coverage[period]['excluded_start_boundary'] = boundary
             for symbol, group in frame.groupby('symbol'):
                 relative = Path(f'period={period}/dividend_type=none/symbol={symbol}/data.parquet')
                 expected[relative] = group.reset_index(drop=True)
-        pin = dict(minute_label='END; 09:30 auction excluded', unit='lots', unit_out='lots',
+        pin = dict(minute_label='END; START 09:30/11:30/15:00 excluded', excluded_start_boundary=boundary, unit='lots', unit_out='lots',
                    time_encoding='local_wall_as_utc_ms', transformations=TRANSFORMATIONS if args.ths_daily else TRANSFORMATIONS[:-1],
                    sparse_policy='A', shares_to_lots_div=args.shares_to_lots_div,
-                   auction_policy=args.auction_policy, dry_run=True, lake_writes=False,
+                   auction_policy=AUCTION_POLICY, dry_run=True, lake_writes=False,
                    sources=pins, symbols=symbols, tip=tip,
-                   human_acceptance='2026-10-01 Phase2 GO only; Phase3/4 and write-lake need separate Human GO; ≠δ5 ≠R4',
+                   human_acceptance='2026-10-02 boundary exclude GO; staging only; write-lake needs separate Human GO; ≠δ5 ≠R4',
                    daily_label='trading day; no minute shift',
                    outputs=[dict(path=str(p), rows=len(df)) for p, df in expected.items()])
         for relative, frame in expected.items():
@@ -206,18 +281,22 @@ def main(argv=None):
             raise ValueError('source changed during staging')
         status.update(status='PASS', reason='staging contract verified; not real-vendor acceptance')
     except Exception as exc:
+        if isinstance(exc, StartIntervalError):
+            status['excluded_start_boundary'] = exc.excluded_start_boundary
         status['reason'] = str(exc)
     json_write(out / 'STATUS.json', status)
     (out / 'REPORT.md').write_text(
         '# Phase2 vendor→lake staging dry-run\n\n' + status['status'] + ': ' + status['reason'] +
         '\n\n仅 staging；无湖写入，≠δ5 ≠R4，不改 MatchCore/Fees。勿合，等待 Human「合」。\n'
         '\n布局：period={1m,1d}/dividend_type=none/symbol=XXX/data.parquet；volume 为 lots。'
-        '\n1m 上海墙钟 END 按 UTC 毫秒编码。09:30 START 竞价删除；09:31 START → 09:32 END；'
+        '\n1m 上海墙钟 END 按 UTC 毫秒编码。09:30 START 竞价及 11:30/15:00 START 边界删除；09:31 START → 09:32 END；'
         '13:00 START → 13:01 END。1d 仅交易日午夜键，不加一分钟；日线竞价汇总范围尚未验证。'
         '\nSparse A：不补缺分钟。余数见 remainder_audit.json；覆盖见 coverage_audit.json（仅所选标的）。'
         '\n防护：拒绝 stock_data 路径组件、配置湖根及其后代、输入目录重叠、非空输出目录；'
         '路径防护为 best-effort，未知命名的真实湖根不可能完全识别，调用方必须指定独立 staging。'
-        '\n失败目录不能用于后续验收。Phase3/4 及写湖需独立 Human GO。\n', encoding='utf-8')
+        '\n边界排除审计（原始 START hm）：\n```json\n' +
+        json.dumps(status.get('excluded_start_boundary', {}), ensure_ascii=False, indent=2) +
+        '\n```\n失败目录不能用于后续验收。写湖需独立 Human GO。\n', encoding='utf-8')
     return 0 if status['status'] == 'PASS' else 1
 
 
