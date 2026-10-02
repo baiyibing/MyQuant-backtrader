@@ -2,9 +2,9 @@
 
 ## 1. 目的与边界
 
-本表供 Human 比较 Wind、同花顺（THS）与 QMT 下载的分钟/日线行情时，统一说明区间、成交量单位、时间编码与缺根政策。2026-10-01 docs-only Human GO；基线 `f9ba3158b8e2bd82ac6eb5ab54668add224873c2`（#291）。表内 vendor 特征以本次只读证据为限，不把单批导出推广成所有接口的保证。
+本表供 Human 比较 Wind、同花顺（THS）与 QMT 下载的分钟/日线行情时，统一说明区间、成交量单位、时间编码与缺根政策。2026-10-01 docs-only Human GO；基线 `f9ba3158b8e2bd82ac6eb5ab54668add224873c2`（#291）。2026-10-02 Human GO 采纳 P1 docs draft（H1=A / H2=A / H6=B）；基线 tip `a93b8112e74e99ba2577bc6fe044e848e072acc5`（#297 后）。表内 vendor 特征以本次只读证据为限，不把单批导出推广成所有接口的保证。
 
-成交假设另见 [minute-fill-policy-ssot.md](../minute-fill-policy-ssot.md)；复权/止损另见 [行业实践说明](../note-minute-bar-industry-practices-2026-09-26.md)。本表不改 MatchCore / Fees / engine，不开启 δ5 certified 或 R4，也不授权改写湖。采集、外部下载与 vendor merge 仍属 OSkhQuant1.3，本仓只消费配置的湖。
+**本表是 bar 身份 / vendor 对齐 SSOT，不是第二套成交默认表。** 入口默认、opt-in、绿 R / 绿 S / 红混比继续 **只链** [minute-fill-policy-ssot.md](../minute-fill-policy-ssot.md)；本表只声明 `minute_label`×`unit`×`time_encoding`×`grid_policy`×`auction_policy` 及 PIN 门槛。复权/止损另见 [行业实践说明](../note-minute-bar-industry-practices-2026-09-26.md)。本表不改 MatchCore / Fees / `simulate` / VolumeCap·clamp·完成桶，不开启 δ5 certified 或 R4，也不授权改写湖。采集、外部下载与 vendor merge 仍属 OSkhQuant1.3，本仓只消费配置的湖。
 
 ## 2. Canonical target：区间与单位分开声明
 
@@ -40,12 +40,16 @@
 | 字段 | 必须说明 |
 |---|---|
 | `minute_label` | START / END、竞价排除或纳入；纯日线明确不适用。混合来源须逐 source/symbol 声明，不能仅靠顶层标签 |
-| `unit`（或 volume unit） | lots / raw_shares_incremental，增量或累计；源 at-rest 与输出单位分列 |
+| `unit`（或 volume unit） | lots / raw_shares_incremental，增量或累计；源 at-rest 与输出单位分列；**禁止由数值大小推断 lots/股** |
 | `time_encoding` | 原始编码、时区语义、解码规则；是否 local_wall_as_utc_ms |
+| `grid_policy` | `sparseA`（省略零量/缺根分钟，须 PIN + 缺根审计）或 `full`（满网断言）；未声明不得静默 fill-forward |
+| `auction_policy` | 开盘/午休/收盘竞价行如何排除或纳入（例：`exclude_0930_1130_1500`）；与 `minute_label` 分列，不能凭标签推断 |
 | source paths + `sha256` | 原始 vendor 文件与实际湖输入的路径/SHA-256、周期、标的、窗口；输出 artifact 路径/SHA-256；null/通配符不等于已完成逐文件 pin |
 | `conversion_rule` / `transformations` | 标签、单位、日线派生、缺根处理的实际转换；源单位与 export/runtime 转换分别记录，不能用 runtime 空数组抹掉 export ×100 |
 | `human_acceptance` | 放宽标签/网格时的 Human GO 日期、范围、证据链接；未放宽也显式说明 |
 | coverage / cross-check | 样本 OHLCV 对照、竞价/会话、缺根/重复、价格域、异常清单与处置 |
+
+身份勾选（P1-A；研究臂开工前）：`minute_label` × `unit` × `time_encoding` × `grid_policy(sparseA|full)` × `auction_policy` 五元组均已显式 PIN。缺任一字段 = fail-closed（文档合同；loader 码另 GO，见 §11 / [P1 Human defaults](../note-minute-engine-p1-human-defaults-2026-10-02.md)）。示例形状见 [vendor-market-overlay-pin.example.json](./vendor-market-overlay-pin.example.json)。
 
 ## 6. 写湖前 checklist（未来写入方的门槛）
 
@@ -88,3 +92,33 @@ Phase5 宿主证据（box 镜像）：
 - 5.3 两臂：`D:\exports\vendor_lake_phase5_host_20261002\compare_lake_end_accept_20261002131446`（cap_off ~1.88% / cap_on ~1.07%；`skip_volume_unavailable` cap_on=10）
 
 **START→END 键位移 ⇒ 与 START-accept overlay 的 PnL/收益不可直接回归对比**；本条只记口径变更与指针，不宣称数值回归。≠δ5 certified ≠R4；docs-only；勿合，等待 Human「合」。
+
+## 11. P1 身份合同与研究推荐路径（2026-10-02 Human defaults）
+
+**性质**：P1-A/B docs 增补；**非**第二套 fill-policy SSOT；入口默认/混比继续只链 [minute-fill-policy-ssot.md](../minute-fill-policy-ssot.md)。Human 裁断记录见 [note-minute-engine-p1-human-defaults-2026-10-02.md](../note-minute-engine-p1-human-defaults-2026-10-02.md)。方案来源：`/workspace/handoffs/minute_engine_industry_plan_20261002/PLAN.md` §3.2 + R1/R2。
+
+### 11.1 研究推荐路径（H1=A）
+
+**推荐研究路径**：湖 at-rest **END + lots** → market export **×100 → `raw_shares_incremental`（股）**，顶层 PIN 声明 `minute_label=END`、`unit=raw_shares_incremental`、`time_encoding=…`、`grid_policy=sparseA`（或显式 `full`）、`auction_policy=…`、`transformations=[]`（export 侧 ×100 记入 `conversion_rule`，不得被 runtime 空数组抹掉）。证据指针见 §10 Phase5。
+
+START+sparse overlay（§7）仍可作 **分列研究臂**，但须独立 PIN + `human_acceptance`；**禁止**与湖 END 臂无声明混比 PnL/收益（START→END 键位移）。
+
+### 11.2 Sparse A 与满网（H2=A）
+
+研究臂允许 **sparse A + host lake-accept 类松弛**，且必须 PIN：`grid_policy=sparseA`、缺根审计、Human acceptance 范围。松弛仅放宽满网断言，**不**改 MatchCore / Fees / `simulate` / VolumeCap 公式·clamp·完成桶定义。未 PIN 的静默 fill-forward **禁止**（对照 Lean FF Volume=0 边界见行业 COMPARISON；本仓不默示零量已观测）。
+
+`full` 网格仍为更严门槛（例：tip `run_topk_cap_compare.py` 满网）；sparse 臂不得自称已通过 full-grid 验收。
+
+### 11.3 PIN schema 合同（P1-B · docs；码另 GO）
+
+将 §5 字段落成 fail-closed JSON 身份合同（示例：[vendor-market-overlay-pin.example.json](./vendor-market-overlay-pin.example.json)）：
+
+- 缺 `minute_label` / `unit` / `time_encoding` / `grid_policy` / `auction_policy` / source sha / `conversion_rule`（或等价 transformations 记录）/ `human_acceptance` → **FAIL**（文档验收；实现 loader 另 GO）。
+- **拒绝**「由数值大小推断 lots/股」。
+- 不发明第二套成交默认，不新增 fill-policy 行号。
+
+### 11.4 硬边界
+
+- ≠δ5 certified ≠R4；本增补 **docs-only**；**勿合，等待 Human「合」**。
+- 不改 MatchCore / Fees / `simulate` / VolumeCap·clamp·完成桶；P2-B 外壳预检合同可先写 docs（H3=B），码另 GO。
+- 不写湖；不跑 4090；不把 Phase5 PnL 写成对 START-accept 的回归证明。
