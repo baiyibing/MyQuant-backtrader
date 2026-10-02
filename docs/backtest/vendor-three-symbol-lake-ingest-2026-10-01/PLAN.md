@@ -32,9 +32,22 @@
 
 Host 只读证据：`/workspace/handoffs/vendor_bar_xcheck_host_20261001/` 与 `/workspace/handoffs/topk_s1_cap_cli_host_20261001/`。已有副样本证明连续 START/END 区间与量比 100 的线索，但 scale100 核对仍 FAIL；000559 晨收盘价格/量残差不能抹掉。三票原湖缺目录，副样本结果不能替代三票验收；THS 1m 未证实，不作为输入。
 
-Phase3 真三票 staging 验收另需 Human GO，包含源 RECEIPT SHA、开盘/午休/尾根、lots 余数、稀疏覆盖与逐项 OHLCV xcheck；本刀只跑合成测试，不派发 4090。Phase4 写湖必须独立明确 Human「写湖 GO」，本 CLI 不提供写湖能力。Phase5 研究路径切换另议。
+Phase3 真三票 staging 验收另需 Human GO，包含源 RECEIPT SHA、开盘/午休/尾根、lots 余数、稀疏覆盖与逐项 OHLCV xcheck；本刀只跑合成测试，不派发 4090。Phase4 写湖必须独立明确 Human「写湖 GO」，本 CLI 不提供写湖能力。Phase5 研究路径切换见下方「Phase5 完成摘要」（2026-10-02）。
 
 **非目标：≠δ5 certified ≠R4；无 MatchCore/Fees/engine/simulate 改动；无湖写入、无下载/vendor merge、无自动合并、无 `gh pr ready`、无 Cursor Cloud Agents。** 回滚仅删除独立 staging；PR 保持 draft，等待 Human「合」。
+
+## Phase5 完成摘要（2026-10-02；研究路径改读湖 END）
+
+Phase4 写湖 PASS 后，研究侧在 4090 宿主重建 market overlay：三票改读湖 END+lots（export 整数 ×100→`raw_shares_incremental`），其余 ~133 仍历史湖 siblings；tip `run_topk_cap_compare.py` 未改；sparse A 用 host-only lake-accept 松弛满网断言。**不改** MatchCore/Fees/`simulate`；≠δ5 ≠R4；无湖回写。
+
+| 阶 | 结果 | 指针 |
+|---|---|---|
+| 5.0 方案 | OK | box `/workspace/handoffs/vendor_lake_phase5_research_path_20261002/PLAN.md` |
+| 5.2 market 导出 | PASS | host `D:\exports\vendor_lake_phase5_host_20261002\market_lake_end_20261002130705`；box 镜像同名于 `/workspace/handoffs/vendor_lake_phase5_host_20261002/` |
+| 5.3 两臂对照 | PASS | host `...\compare_lake_end_accept_20261002131446`；cap_off ~1.88% / cap_on ~1.07%；**不可与 START-accept 直接比 PnL** |
+| 5.4 tip `--allow-sparse-a` | 未做 | 仅当 Human 不要 host 旁路时另 GO |
+
+权威 RECEIPT：`/workspace/handoffs/vendor_lake_phase5_host_20261002/RECEIPT.md`。SSOT 指针见 [vendor-bar-alignment-ssot §10](../ssot/vendor-bar-alignment-ssot.md)。本段 docs-only；勿合，等待 Human「合」。
 
 ## 2026-10-02 START boundary exclude 刀（Human GO）
 
