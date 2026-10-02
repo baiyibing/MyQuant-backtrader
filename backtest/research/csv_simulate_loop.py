@@ -545,7 +545,7 @@ def _run_s8_price_adds_day(
 ) -> None:
     policy = s8_policy(st)
     book = policy["name"]
-    if sizing != "per_name" or book not in {"version8", "version8_3", "version8_4", "version8_5"}:
+    if sizing != "per_name" or book not in {"version6_1", "version8", "version8_3", "version8_4", "version8_5"}:
         return
     confirm = book == "version8_3"
     gate = policy["allow_new_name"]

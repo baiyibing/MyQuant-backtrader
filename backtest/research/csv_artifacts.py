@@ -181,6 +181,15 @@ def summarize(
             f"  参数: 止损 {stop_text} | 满持有 "
             f"{int(st.stats.get('max_hold', 20))} 日 force_sell"
         )
+    elif st.stats.get("sell_book") == "v6_1":
+        lines.append(
+            f"  参数: 止损 {stop_text} | T+1起评止盈 | 峰值涨幅每"
+            f"{float(st.stats.get('ladder_band_width', 0.05)):.0%}一档 "
+            f"B={float(st.stats.get('ladder_give_base', 0.05)):.0%}"
+            f"+{float(st.stats.get('ladder_give_step', 0.02)):.0%}×档 "
+            f"离场=峰值−成本×B（允许成本下方,无上限） | step+"
+            f"{float(st.stats.get('add_step', 0.20)):.0%} 同进同出 | 再现独立组"
+        )
     elif st.stats.get("v6_dd_bands"):
         lines.append(
             f"  参数: 止损 {stop_text} | T+1起评止盈 | "

@@ -230,7 +230,7 @@ def configure_s8(st, hooks: dict) -> None:
     """Bind the selected per-name hooks once, including direct shared-loop use."""
     name = hooks.get("name")
     if hooks.get("sizing") != "per_name" or name not in {
-        "version8", "version8_2", "version8_3", "version8_4", "version8_5", "version8_6",
+        "version6_1", "version8", "version8_2", "version8_3", "version8_4", "version8_5", "version8_6",
     }:
         return
     if s8_policy(st) is not None:

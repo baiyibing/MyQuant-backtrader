@@ -18,6 +18,7 @@ from backtest.research import (
     strategy4_rules,
     strategy5_rules,
     strategy6_rules,
+    strategy6_1_rules,
     strategy8_rules,
     strategy8_1_rules,
     strategy8_2_rules,
@@ -40,6 +41,7 @@ HELP_LOCK_V3 = strategy3_rules.HELP_LOCK
 HELP_LOCK_V4 = strategy4_rules.HELP_LOCK
 HELP_LOCK_V5 = strategy5_rules.HELP_LOCK
 HELP_LOCK_V6 = strategy6_rules.HELP_LOCK
+HELP_LOCK_V6_1 = strategy6_1_rules.HELP_LOCK
 HELP_LOCK_V8 = strategy8_rules.HELP_LOCK
 HELP_LOCK_V8_1 = strategy8_1_rules.HELP_LOCK
 HELP_LOCK_V8_2 = strategy8_2_rules.HELP_LOCK
@@ -681,6 +683,36 @@ def _apply_version6(
 
 def _run_kwargs_version6(args) -> dict:
     return {"strategy": "version6", **strategy6_kwargs_from_args(args)}
+
+
+def _apply_version6_1(
+    *,
+    stop_pct: Optional[float] = None,
+    take_profit=None,
+    record_params=None,
+    **_,
+) -> dict:
+    resolved = strategy6_1_rules.STOP_PCT if stop_pct is None else float(stop_pct)
+
+    def _tp(px, cost, peak, n_days=1):
+        return strategy6_1_rules.take_profit_reason(px, cost, peak, n_days)
+
+    def _rec(st):
+        strategy6_1_rules.record_strategy6_1_params(st, stop_pct=resolved)
+
+    return {
+        "stop_pct": resolved,
+        "take_profit": take_profit if take_profit is not None else _tp,
+        "record_params": record_params if record_params is not None else _rec,
+        "name_lot_budget": strategy6_1_rules.lot_budget,
+    }
+
+
+def _run_kwargs_version6_1(args) -> dict:
+    stop = getattr(args, "stop_pct", None)
+    if stop is not None and not 0 < float(stop) < 1:
+        raise SystemExit(f"--stop-pct must be in (0, 1), got {stop}")
+    return {"strategy": "version6_1", "stop_pct": stop}
 
 
 def _apply_version12(*, index_block_new=None, **_) -> dict:
@@ -1366,6 +1398,20 @@ register(
         help_lock=strategy6_rules.HELP_LOCK,
         apply=_apply_version6,
         run_kwargs=_run_kwargs_version6,
+    )
+)
+register(
+    CsvStrategyBook(
+        name="version6_1",
+        sizing="per_name",
+        name_budget=1_000_000.0,
+        tag=strategy6_1_rules.BOOK_TAG,
+        aliases=("6.1", "6_1", "v6.1", "v6_1", "version6_1"),
+        allow_add=strategy6_1_rules.ALLOW_ADD,
+        peak_gap_min=strategy6_1_rules.PEAK_GAP_MIN,
+        help_lock=strategy6_1_rules.HELP_LOCK,
+        apply=_apply_version6_1,
+        run_kwargs=_run_kwargs_version6_1,
     )
 )
 register(

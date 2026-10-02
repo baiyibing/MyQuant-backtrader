@@ -860,7 +860,7 @@ def simulate(
             # Price-add books need the post-14:55 group scan to observe their
             # new weighted cost. Other OFF books retain full-day exits first.
             split_group_scan = hooks.get("name") in {
-                "version8", "version8_3", "version8_4", "version8_5",
+                "version6_1", "version8", "version8_3", "version8_4", "version8_5",
             } and hooks.get("sizing") == "per_name"
             post_group_scans = []
             confirm_peaks = {}

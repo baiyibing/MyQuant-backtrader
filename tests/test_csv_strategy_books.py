@@ -25,6 +25,7 @@ def test_registered_books_are_explicit():
         "version4",
         "version5",
         "version6",
+        "version6_1",
         "version8",
         "version8_1",
         "version8_2",
@@ -88,6 +89,38 @@ def test_apply_version6_is_not_a_silent_fallback():
     assert hooks["take_profit"](10.15, 10.0, 10.50, 1) == "trail:band:lt6"
     assert hooks["take_profit"](10.151, 10.0, 10.50, 1) is None
     assert hooks["take_profit"](10.30, 10.0, 10.60, 1) == "trail:band:ge6"
+
+
+def test_apply_version6_1_registers_per_name_ladder_book():
+    hooks = apply_csv_strategy("v6.1")
+    assert hooks["name"] == "version6_1"
+    assert hooks["book"] == "v6_1"
+    assert hooks["sizing"] == "per_name"
+    assert hooks["name_budget"] == pytest.approx(1_000_000.0)
+    assert hooks["allow_add"] is True
+    assert hooks["peak_gap_min"] == 15
+    assert hooks["stop_pct"] == pytest.approx(0.05)
+    assert hooks["name_lot_budget"](1_000_000.0, object()) == pytest.approx(1_000_000.0)
+    # Q1=G：离场价 = 峰值 − 成本×B；A=10% 落 [10,15%) 档 → B=9% → 11 − 0.9。
+    assert hooks["take_profit"](10.10, 10.0, 11.0, 1) == "trail:ladder:10"
+    assert hooks["take_profit"](10.11, 10.0, 11.0, 1) is None
+    # Q2：首档离场线可在成本下方触发。
+    assert hooks["take_profit"](9.70, 10.0, 10.20, 1) == "trail:ladder:0"
+    assert hooks["take_profit"](9.71, 10.0, 10.20, 1) is None
+
+
+def test_version6_1_cli_stop_override():
+    book = get_book("version6_1")
+    assert book.run_kwargs(argparse.Namespace(stop_pct=None)) == {
+        "strategy": "version6_1",
+        "stop_pct": None,
+    }
+    assert book.run_kwargs(argparse.Namespace(stop_pct=0.07)) == {
+        "strategy": "version6_1",
+        "stop_pct": 0.07,
+    }
+    with pytest.raises(SystemExit, match="--stop-pct"):
+        book.run_kwargs(argparse.Namespace(stop_pct=1.5))
 
 
 def test_apply_version5_has_no_stop_and_has_minute_clock():
