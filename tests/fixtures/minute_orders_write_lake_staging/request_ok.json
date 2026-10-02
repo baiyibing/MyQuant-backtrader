@@ -1,0 +1,9 @@
+{
+  "schema": "minute_orders_write_lake_staging_request_v0",
+  "mode": "staging_dry_run",
+  "proposed_symbols": ["002231.SZ", "300379.SZ", "600200.SH"],
+  "proposed_periods": ["1m", "1d"],
+  "proposed_staging_layout": "hive_underscore_end_lots_sparse_a",
+  "proposed_target_hint": "/tmp/true-core-write-lake-staging-hint",
+  "notice": "staging dry-run plan only; not production lake write; != host PASS"
+}
