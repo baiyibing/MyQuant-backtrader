@@ -131,3 +131,21 @@ def test_l2_source_loader_precheck_surface():
 
     src = Path(source_loader.__file__).read_text(encoding="utf-8")
     assert "precheck_cli_participation_rate" in src
+
+
+def test_precheck_module_pandas_free():
+    """L2 synthetic CLI uses python -I -S; precheck must not import pandas."""
+    import ast
+
+    src = Path("backtest/research/participation_rate_precheck.py").read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    imported = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imported.extend(alias.name.split(".")[0] for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            imported.append(node.module.split(".")[0])
+            imported.append(node.module)
+    assert "pandas" not in imported
+    assert "csv_minute_volume" not in imported
+    assert "backtest.research.csv_minute_volume" not in imported
