@@ -47,7 +47,7 @@ Phase4 写湖 PASS 后，研究侧在 4090 宿主重建 market overlay：三票�
 | 5.3 两臂对照 | PASS | host `...\compare_lake_end_accept_20261002131446`；cap_off ~1.88% / cap_on ~1.07%；**不可与 START-accept 直接比 PnL** |
 | 5.4 tip `--allow-sparse-a` | 未做 | 仅当 Human 不要 host 旁路时另 GO |
 
-权威 RECEIPT：`/workspace/handoffs/vendor_lake_phase5_host_20261002/RECEIPT.md`。SSOT 指针见 [vendor-bar-alignment-ssot §10](../ssot/vendor-bar-alignment-ssot.md)。本段 docs-only；勿合，等待 Human「合」。
+权威 RECEIPT：`/workspace/handoffs/vendor_lake_phase5_host_20261002/RECEIPT.md`。SSOT 指针见 [vendor-bar-alignment-ssot §10/§12](../ssot/vendor-bar-alignment-ssot.md)；可重复 host recipe 见 [P2 adapters §2](../note-minute-engine-p2-adapters-2026-10-02.md)。**不可与 START-accept 直接比 PnL**。
 
 ## 2026-10-02 START boundary exclude 刀（Human GO）
 

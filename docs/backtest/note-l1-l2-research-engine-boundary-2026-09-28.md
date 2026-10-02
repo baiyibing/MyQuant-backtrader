@@ -60,3 +60,19 @@ R1：Codex APPROVE / Kimi APPROVE / Cursor COMMENT，三方均同意薄 P0；R2 
 本 PR 无 MatchCore / DTO / types / adapters，无 Python、测试、fixture、config、CI、HELP_LOCK、parser、presets 改动；不抽 helper、不建 catalog、不重录 golden，不改 fill / scan / fee / clock 默认或既有 opt-in 语义。不重开 JR clock / G8 / strategy12，不接入或运行 lake，不替换共享 CSV。
 
 工作站 handoff（本机外部文件，**不是仓库文件或可移植 repo 链接**）：`/workspace/handoffs/l1_l2_research_engine_plan_20260928/PLAN_L1_L2_RESEARCH_ENGINE.md`；R2 共识位于其同目录 `multi_review_20260928/R2_CONSENSUS.md`。完整 PLAN 保留在 handoff，本仓只保留薄边界。
+
+## 6. P2-C：L2 `source_loader` ↔ 共享湖读取边界对照（2026-10-02）
+
+Human H4=A：L2 `minute_orders` **永 opt-in** 对照后端。本表保护 MatchCore 研究后端 **不被误读成默认 CSV / 共享湖 loader 替换**。完整刀文见 [P2 adapters note §4](note-minute-engine-p2-adapters-2026-10-02.md)。
+
+| 维度 | 共享 CSV / market export / `ashare_bars` | L2 `source_loader`（`minute_orders_backend`） |
+|---|---|---|
+| 产品角色 | 主研究路径；Books / TopK / 共享 `--participation-rate` | 可选研究后端；显式 recipe + attestation；不进 BOOKS 默认 |
+| 入口 | `csv_minute_backtest` / `run_topk_cap_compare` 等 | `load_minute_orders_source(recipe_path, expected_sha256=…)` → `RunInput` |
+| 行情身份 | vendor-bar PIN：`minute_label`×`unit`×…；推荐湖 END+lots→股 export | 独立 recipe：`unit` / window / symbols / transform version / provenance |
+| 成交核 | 共享 `simulate`（+ 可选 VolumeCap） | L2 MatchCore / Fees（冻结合同；研究骨架） |
+| 完成桶 | `csv_minute_volume.completed_minute_volumes`；邻核冻结 | L2 合同 `completed_bucket_close`；**不得**借本表改共享桶定义 |
+| 同 PIN 不同后端 | — | **红混比**：同 PIN / 同 facade 返回类型 **≠** 可绿 R NAV 并排 |
+| 默认翻转 | 无（本表不授权） | **禁止**将 L2 接成共享 CSV 默认替换 |
+
+**绿P / 绿C ≠ 绿R / 绿S。** ≠δ5 certified ≠R4。不改 MatchCore / Fees / `simulate` / VolumeCap。P2 勿合，等待 Human「合」。

@@ -119,6 +119,22 @@ START+sparse overlay（§7）仍可作 **分列研究臂**，但须独立 PIN + 
 
 ### 11.4 硬边界
 
-- ≠δ5 certified ≠R4；本增补 **docs-only**；**勿合，等待 Human「合」**。
-- 不改 MatchCore / Fees / `simulate` / VolumeCap·clamp·完成桶；P2-B 外壳预检合同可先写 docs（H3=B），码另 GO。
+- ≠δ5 certified ≠R4；不改 MatchCore / Fees / `simulate` / VolumeCap·clamp·完成桶。
 - 不写湖；不跑 4090；不把 Phase5 PnL 写成对 START-accept 的回归证明。
+- P2 外壳预检与 recipe：见 §12 与 [P2 adapters note](../note-minute-engine-p2-adapters-2026-10-02.md)（H3=B；≠ capacity certified）。
+
+## 12. P2-A host recipe：湖 END+lots → export 股（2026-10-02）
+
+**性质**：把 Phase5 宿主做法固化为可重复 recipe 指针；**不是**第二套 fill-policy；**不是**写湖授权。完整步骤与红线见 [P2 adapters note §2](../note-minute-engine-p2-adapters-2026-10-02.md)。
+
+| 步 | 动作 | 验收 |
+|---|---|---|
+| 1 | 核对 Phase4 三票 underscore 湖 sha | 与 Phase4 RECEIPT 一致；拒 dotted hive |
+| 2 | 新建 `market_lake_end_*` 根（勿覆盖 START overlay） | 独立 out-dir |
+| 3 | 湖 lots → 整数 ×100 → `raw_shares_incremental`；键保持 END | PIN `conversion_rule.export` 记录 ×100 |
+| 4 | PIN：五元组 + `source_lake_pins` 逐文件 sha + `human_acceptance.no_pnl_mix_with_START_overlay=true` | 示例 [vendor-market-overlay-pin.example.json](./vendor-market-overlay-pin.example.json) |
+| 5 | （可选）两臂：`cap_off=None` / `cap_on=rate`；sparse 用 host lake-accept **仅**松弛满网 | tip 满网脚手架遇 sparse → INPUT_BLOCKED 为预期 |
+
+**证据**：§10 Phase5 host `/workspace/handoffs/vendor_lake_phase5_host_20261002/`（`market_lake_end_20261002130705/PIN.json`、`RECEIPT.md`）。
+
+**红线**：START→END 键位移 ⇒ **禁止**与 START-accept overlay 直接比 PnL/收益。≠δ5 certified ≠R4；不改 MatchCore/Fees/`simulate`/VolumeCap。
