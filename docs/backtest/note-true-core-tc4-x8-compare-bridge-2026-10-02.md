@@ -7,7 +7,7 @@
 | Human GO | TC4 = 可选对照桥：仅**撮合前**意图快照 ↔ New/X1 冻结批次跑；红标签诊断 |
 | 方案 | `/workspace/handoffs/minute_engine_true_core_new_20261002/`；合同锚 [TC1](note-true-core-c-new-tc1-contract-2026-10-02.md) §5 X8 / PLAN TC4；前序 [TC2](note-true-core-tc2-x1-intent-adapter-2026-10-02.md) · [TC3](note-true-core-tc3-named-consumer-2026-10-02.md) |
 | 硬约束 | **不** mint 新经济合同 / 新 `backend_id`（runner 复用 v0/X1）；`comparison_id` ≠ backend_id；独立 comparison 根；`comparison_status` 恒 `no_ssot_compare_authorization`；**不**产成功 `summary.json`；禁止 fills→意图倒造；≠δ5≠R4；无写湖；无 4090；无 Compat；无 X2–X5 / X6 真湖 / X7 `_FAMILIES` |
-| PR | draft **勿合** |
+| PR | **#306 MERGED** `79b3995c` |
 
 > **本 note ≠ 第二套成交默认表，≠ 绿 R 资格认证，≠ fill-policy，≠ NAV 排行。** 对照桥身份 ≠ 经济合同版本。入口默认 / 绿 R·S 继续只链 [minute-fill-policy-ssot.md](minute-fill-policy-ssot.md)。
 
@@ -23,7 +23,7 @@
 | `comparison_status` 恒 `no_ssot_compare_authorization` | 进 fill-policy；NAV 榜；绿 R |
 | 薄 CLI + HELP + 合成 e2e（含 fills 拒收） | 改 MatchCore / Fees / `simulate` / VolumeCap / 旧 L1 `_ENTRIES` / `views._FAMILIES` |
 | 本 docs + TC1/TC3/industry 轻指针 | X2–X5 / X6 真湖 / X7 `_FAMILIES` / P3 / 4090 / BOOKS 默认 |
-| draft **勿合** | 默改 `simulate`；byte-compat 门禁 |
+| 本码已合 #306 | 默改 `simulate`；byte-compat 门禁 |
 
 ## 2. 身份澄清
 
@@ -117,14 +117,14 @@ docs/backtest/note-true-core-tc4-x8-compare-bridge-2026-10-02.md
 | `minute_orders_backend/cli.py` / intent_x1 经济语义 | 借本票改 |
 | 新 `backend_id` / 新合同字符串（runner） | |
 | fills→意图；成功 `summary.json`；落 research_v1 成功根 | |
-| NAV 榜；fill-policy 行；绿 R；merge 本 draft | |
+| NAV 榜；fill-policy 行；绿 R | |
 | 真湖 loader；X2–X5；X7 `_FAMILIES`；P3；BOOKS 默认 | |
 
 ## 6. ≠δ5≠R4 · 范围外
 
 - **≠δ5 certified ≠R4**；无绿 R / NAV 混比授权。
 - Out of scope：X2–X5、X6 真湖、X7 进 `_FAMILIES`、P3、4090、湖写入、Compat 主路径、BOOKS 默认、默改 `simulate`。
-- 本 draft **勿合**，等 Human「合」。
+- 本码已合 #306；后续 X6 合成差分见 [X6 note](note-true-core-x6-synthetic-attestation-2026-10-02.md)（draft 勿合）。
 
 ## 7. 指针
 
@@ -134,5 +134,6 @@ docs/backtest/note-true-core-tc4-x8-compare-bridge-2026-10-02.md
 - S4 工件隔离（对照：本刀**不**走 S4 成功 summary）：[note-l2-s4-artifacts-isolation-2026-09-29.md](note-l2-s4-artifacts-isolation-2026-09-29.md)
 - 行业索引：[industry-state-acceptance-index-2026-09-28.md](industry-state-acceptance-index-2026-09-28.md) §7
 - handoff（仓外）：`/workspace/handoffs/minute_engine_true_core_new_20261002/`
+- X6 合成差分（非真湖 · draft 勿合）：[note-true-core-x6-synthetic-attestation-2026-10-02.md](note-true-core-x6-synthetic-attestation-2026-10-02.md)
 
-**≠δ5≠R4；X8 红标签对照桥；仅撮合前意图；独立 comparison 根；无成功 summary.json；无新 contract/backend_id；无 MatchCore/Fees/simulate 重写；draft 勿合。**
+**≠δ5≠R4；X8 红标签对照桥；仅撮合前意图；独立 comparison 根；无成功 summary.json；无新 contract/backend_id；无 MatchCore/Fees/simulate 重写；#306 MERGED。**

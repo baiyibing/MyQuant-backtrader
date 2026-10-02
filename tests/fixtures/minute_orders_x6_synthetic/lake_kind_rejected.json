@@ -1,0 +1,18 @@
+{
+  "schema": "minute_orders_x6_synthetic_boundary_meta_v0",
+  "tool_id": "minute_orders_x6_synthetic",
+  "source_kind": "lake",
+  "evidence_level": "synthetic",
+  "account_origin": "synthetic_account",
+  "commands_origin": "designed_limit_batch",
+  "contract": "research contract v0 (L2-S0)",
+  "backend_id": "minute_orders_research_v1",
+  "notice": "Fixture PASS != lake PASS; no host attestation or live PASS is established.",
+  "tip_gaps": [
+    "intentional reject fixture: source_kind=lake must be refused by X6 synthetic tool"
+  ],
+  "bans": [
+    "true_lake_separate_knife"
+  ],
+  "note": "Reject fixture — source_kind=lake is out of scope for X6 synthetic differential."
+}
