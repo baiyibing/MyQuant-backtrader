@@ -68,7 +68,7 @@ PLAN 编号下一阶段 = **TC5 · 扩展包**。旁路轴 X6 **合成**已合�
 | **H-TC5-ID** | 若选触及 S0 排除的轴，新 `contract_version` / `backend_id` 命名草稿？ | 未裁前 **禁止**仓库内预占字符串当已批准身份 |
 | **H-TC5-SIM** | 该轴是否需要改 `simulate`？ | 默认 **否**（H-TC4）；要改须函数级 allowlist 另票 |
 
-**H-TC5-NEXT=C** 已裁（真湖只读边界 → #309；e2e → #310；CLI lake → #311）。**写湖残差**见 [write-lake note](note-true-core-write-lake-residual-2026-10-02.md)（staging dry-run + MUST cuts；≠生产写授权）。**≠** 批 X2–X5/X7 写仓，**≠** 批新合同 mint，**≠** 批生产写湖 / 4090（均须另 GO + cuts）。
+**H-TC5-NEXT=C** 已裁（真湖只读边界 → #309；e2e → #310；CLI lake → #311）。**写湖 staging** 已合 #312（[write-lake note](note-true-core-write-lake-residual-2026-10-02.md)；≠生产写）。Human 另点 **A·X7**：见 [Codex residual plan](note-true-core-codex-residual-plan-2026-10-02.md) · [A·X7 observe](note-true-core-ax7-observe-2026-10-02.md)（draft 勿合；新投影；不塞 `_FAMILIES`）。**≠** 批生产写湖 / 4090 / X2–X5 新身份（均须另 GO + cuts）。
 
 ## 5. 负面清单（本 PR diff 须空）
 

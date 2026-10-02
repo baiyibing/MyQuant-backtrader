@@ -7,7 +7,7 @@
 | Human GO | **「GO 写湖」** = Codex R2 · 写湖 / Phase4 残差；本刀因 **本仓 consume-only** 与污染风险，落地为 **docs + staging dry-run 骨架 + MUST Human cuts**（**非**生产写湖） |
 | 方案 | `/workspace/handoffs/minute_engine_true_core_new_20261002/`；顾问 [CODEX_RESIDUAL_GO](`/workspace/handoffs/minute_engine_true_core_new_20261002/reviews/CODEX_RESIDUAL_GO.md`)（仓外；R2 排最末） |
 | 硬约束 | **不** mint 新经济合同 / 新 `backend_id`；`tool_id`≠backend_id；**无** `--write-lake` 生产旗；**不**写 `stock_data` / 配置湖根；空 diff MatchCore/Fees/`simulate`/source_loader/CLI；≠δ5≠R4；无 4090；永 opt-in；永不 BOOKS |
-| PR | **draft · 勿合**（本刀） |
+| PR | **#312 MERGED** `3f7af6a2` |
 
 > **本 note ≠ 生产写湖授权，≠ host PASS，≠ item-4 live，≠ 绿 R，≠ 借用 vendor Phase4/Phase5 收据作本链写权，≠ 新身份 mint。**  
 > 本仓 [AGENTS.md](../../AGENTS.md)：**Consume only**；外部下载与 vendor merge 在 OSkhQuant1.3。  
