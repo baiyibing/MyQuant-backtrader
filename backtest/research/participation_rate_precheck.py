@@ -9,6 +9,9 @@ capacity certified, δ5 certified, or R4 authorization.
 
 When ``participation_rate is None`` (omitted arm): every public entry is a no-op so
 the old arm stays byte-identical at this layer.
+
+Import fence: this module must stay **pandas-free** so L2 synthetic CLI
+(``python -I -S``) can call the rate shell without pulling lake/pandas.
 """
 
 from __future__ import annotations
@@ -16,8 +19,10 @@ from __future__ import annotations
 from numbers import Integral
 from typing import Mapping
 
-from backtest.research.ashare_volume_cap import BucketVolume, VolumeKey
-from backtest.research.csv_minute_volume import UNIT, validate_participation_rate
+from backtest.research.ashare_volume_cap import BucketVolume, VolumeCap, VolumeKey
+
+# Keep in lockstep with csv_minute_volume.UNIT (do not import that module here).
+UNIT = "raw_shares_incremental"
 
 # Mirrors the continuous hm filter inside completed_minute_volumes (read-only
 # assertion surface). Do not treat this as a second completed-bucket definition.
@@ -37,7 +42,9 @@ def precheck_cli_participation_rate(
     """Fail-closed CLI/adapter shell checks. No-op when rate is omitted/None."""
     if participation_rate is None:
         return
-    validate_participation_rate(participation_rate)
+    # Same finite-[0,1] contract as csv_minute_volume.validate_participation_rate
+    # (VolumeCap ctor), without importing pandas via csv_minute_volume.
+    VolumeCap(participation_rate, None)
     if minute_source != "lake" or qlib_1min_root is not None or dividend_type != "none":
         raise ValueError("participation_rate requires raw lake minute volume in shares")
     if tail_window_buy and tail_volume_unit != "shares":

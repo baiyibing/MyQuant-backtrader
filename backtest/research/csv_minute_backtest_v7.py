@@ -25,6 +25,11 @@ if __package__ in (None, ""):
 from backtest.research.ashare_bars import _in_session, bars_from_pool
 from backtest.research.ashare_fees import DEFAULT_SCHEDULE, FeeSchedule
 from backtest.research.ashare_volume_cap import VolumeCap, VolumeLookup
+from backtest.research.csv_minute_volume import completed_minute_volumes
+from backtest.research.participation_rate_precheck import (
+    precheck_cli_participation_rate,
+    precheck_completed_bucket_samples,
+)
 from backtest.research.market_layer import (
     as_date as _as_date,
     as_datetime as _as_datetime,
@@ -906,10 +911,15 @@ def _load_cli_bars(
     daily_source: str = "lake",
     qlib_day_root: Path | None = None,
     tail_window_buy: bool = False,
+    include_volume: bool = False,
 ) -> tuple[dict, dict]:
-    if tail_window_buy:
+    # Volume / amount lake path: shell loader only (cap / tail). Not simulate.
+    if tail_window_buy or include_volume:
         if minute_source != "lake" or daily_source != "lake":
-            raise ValueError("--tail-window-buy requires --minute-source lake and --daily-source lake with raw bars")
+            raise ValueError(
+                "participation_rate / --tail-window-buy require --minute-source lake "
+                "and --daily-source lake with raw bars"
+            )
         from backtest.research.ashare_bars import load_daily_closes, load_minute_from_lake
 
         symbols = {symbol for pool in pool_days.values() for symbol in pool}
@@ -917,7 +927,8 @@ def _load_cli_bars(
             return {}, {}
         minute = load_minute_from_lake(
             symbols, start.strftime("%Y%m%d"), end.strftime("%Y%m%d"),
-            include_volume=True, include_amount=True,
+            include_volume=True,
+            **({"include_amount": True} if tail_window_buy else {}),
         )
         daily = load_daily_closes(symbols, start, end, source=daily_source, qlib_root=qlib_day_root)
         return minute, daily
@@ -962,6 +973,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="qlib my_data_1min root; implies --minute-source qlib_1min",
     )
     parser.add_argument("--qlib-day-root", help="qlib daily bin root for --daily-source qlib_day")
+    parser.add_argument(
+        "--participation-rate", type=float, default=None,
+        help="research opt-in finite [0,1]; omitted = cap off (byte-identical old arm). "
+             "Requires raw lake SHARE volume; completed bucket_end approximation. "
+             "Shell precheck (P2-B) fail-closed on unit/domain; ≠δ5 certified ≠R4 "
+             "(not capacity certified)",
+    )
     return parser
 
 
@@ -979,6 +997,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         validate_tail_options(args.tail_window_buy, args.fix_minute_cash_order, args.tail_volume_unit)
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
+    # P2-B: CLI-parse shell precheck (unit/domain). None → no-op. ≠δ5≠R4.
+    # Keep ValueError (not SystemExit) so invalid-rate contract matches API/tests.
+    minute_source_early = "qlib_1min" if args.qlib_1min_root else args.minute_source
+    precheck_cli_participation_rate(
+        args.participation_rate,
+        minute_source=minute_source_early,
+        qlib_1min_root=args.qlib_1min_root,
+        dividend_type="none",
+        tail_window_buy=args.tail_window_buy,
+        tail_volume_unit=args.tail_volume_unit,
+    )
     if args.tail_window_buy and (args.qlib_1min_root or args.minute_source != "lake" or args.daily_source != "lake"):
         raise SystemExit("--tail-window-buy requires --minute-source lake and --daily-source lake with raw bars")
     pool_value = args.pool_dir or os.environ.get("OSKH_TURTLE_POOL_DIR")
@@ -1000,6 +1029,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         daily_source=args.daily_source,
         qlib_day_root=Path(args.qlib_day_root) if args.qlib_day_root else None,
         **({"tail_window_buy": True} if args.tail_window_buy else {}),
+        **({"include_volume": True} if args.participation_rate is not None else {}),
     )
     source = f"minute={minute_source} daily={args.daily_source}"
     load_s = time.perf_counter() - load_t0
@@ -1020,13 +1050,25 @@ def main(argv: Sequence[str] | None = None) -> int:
         index_closes = [start + timedelta(days=n) for n in range((end - start).days + 1)]
     sim_t0 = time.perf_counter()
     audit = [] if args.execution_audit_file else None
+    volume_options: dict = {}
+    if args.participation_rate is not None:
+        if missing := symbols - minute.keys():
+            raise ValueError(f"missing minute volume frames: {sorted(missing)}")
+        samples = completed_minute_volumes(minute)
+        # P2-B loader-exit completed-bucket precheck (shell; does not redefine buckets).
+        precheck_completed_bucket_samples(samples)
+        volume_options = {
+            "participation_rate": args.participation_rate,
+            "volume_for_bucket": samples,
+        }
     state = simulate_v7(minute, daily, pools, index_closes, cash_total=args.cash_total,
                         start=start, end=end, exdiv=exdiv,
                         names=None if args.asof_pool_names else names,
                         names_by_day=names_by_day,
                         fix_minute_cash_order=args.fix_minute_cash_order,
                         tail_window_buy=args.tail_window_buy,
-                        tail_volume_unit=args.tail_volume_unit, audit_sink=audit)
+                        tail_volume_unit=args.tail_volume_unit, audit_sink=audit,
+                        **volume_options)
     sim_s = time.perf_counter() - sim_t0
     output = Path(args.output_dir or f"backtest_output/csv_minute_v7_{args.start}_{args.end}")
     write_run_artifacts(state, output)
@@ -1043,6 +1085,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         config.pop("tail_volume_unit", None)
     else:
         config.update(tail_policy(args.tail_volume_unit))
+    if args.participation_rate is None:
+        config.pop("participation_rate", None)
     write_run_config(output, config)
     if args.execution_audit_file:
         write_audit(args.execution_audit_file, audit, engine="csv_minute_v7",

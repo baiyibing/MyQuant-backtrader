@@ -25,6 +25,9 @@ import subprocess
 import sys
 from datetime import date, datetime
 from pathlib import Path
+
+# P2-B: capacity XOR clock/slip; shell precheck lives in fullstrat_research_* simulate facades
+# (precheck_cli_participation_rate). ≠δ5 certified ≠R4.
 from typing import Any, Optional
 
 REPO = Path(__file__).resolve().parents[2]

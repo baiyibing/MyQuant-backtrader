@@ -118,6 +118,16 @@ def main(argv=None):
         _report("input_error", stream=sys.stderr, error_type=type(error).__name__, reason=str(error))
         return INPUT_ERROR
     try:
+        # P2-B CLI shell: participation_rate unit/domain. ≠δ5≠R4. Not MatchCore.
+        from backtest.research.participation_rate_precheck import (
+            precheck_cli_participation_rate,
+        )
+
+        precheck_cli_participation_rate(float(run_input.participation_rate))
+    except (TypeError, ValueError) as error:
+        _report("input_error", stream=sys.stderr, error_type=type(error).__name__, reason=str(error))
+        return INPUT_ERROR
+    try:
         result = runner.run_minute_orders_research_with_artifacts(
             run_input, args.parent, run_id=args.run_id,
             evidence_level=args.evidence_level, code_sha=args.code_sha,
