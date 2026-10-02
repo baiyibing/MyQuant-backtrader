@@ -115,7 +115,7 @@ stop / market / replace / GTC · next-open / OHLC 路径（X3）· 多账户（X
 | **X3 第二价格** | **首包否**（H-TC3） | 不做 |
 | **X4 多账户** | 触及单账户 → 新身份；后置 | 不做 |
 | **X5 批跑** | 同合同+oracle；后置 | 不做 |
-| **X6 loader** | tip：行情 `source_kind` 为 pinned `lake` 或 `synthetic_fixture`；账户 origin 仍 `synthetic_account`；命令 origin 仍 `designed_limit_batch`；CLI `--evidence-level` 仅 `synthetic`（no lake loader）；首包若选 X6 = 合成夹具/attestation 级；真湖另刀 | 合成差分见 [X6 note](note-true-core-x6-synthetic-attestation-2026-10-02.md)（draft 勿合）；真湖仍另刀 |
+| **X6 loader** | tip：行情 `source_kind` 为 pinned `lake` 或 `synthetic_fixture`；账户 origin 仍 `synthetic_account`；命令 origin 仍 `designed_limit_batch`；CLI `--evidence-level` 仅 `synthetic`（no lake loader）；首包若选 X6 = 合成夹具/attestation 级；真湖另刀 | 合成差分见 [X6 synthetic](note-true-core-x6-synthetic-attestation-2026-10-02.md)（#307 MERGED）；真湖只读 END/边界见 [X6 lake](note-true-core-x6-lake-boundary-2026-10-02.md)（draft 勿合；不写湖；不解锁 CLI lake） |
 | **X7 观察面** | 可设计；**新**投影入口；不塞 `_FAMILIES`；观察 ≠ 绿 R | 设计句；无码 |
 | **X8 对照桥** | 仅**撮合前**意图快照；**禁止** fills→意图倒造；独立 comparison 根；`comparison_status` 恒 `no_ssot_compare_authorization`；不产成功 `summary.json`；不进 fill-policy；不排 NAV；默认不改 `simulate` | 实装见 [TC4](note-true-core-tc4-x8-compare-bridge-2026-10-02.md)（#306 MERGED） |
 
@@ -171,6 +171,7 @@ stop / market / replace / GTC · next-open / OHLC 路径（X3）· 多账户（X
 - TC2 窄 X1 适配器（码刀；复用 v0 runner；**不** mint 新 contract/backend_id）：[note-true-core-tc2-x1-intent-adapter-2026-10-02.md](note-true-core-tc2-x1-intent-adapter-2026-10-02.md)（#304 MERGED）
 - TC3 具名消费者闭环（CLI/HELP；仍无新 contract/backend_id）：[note-true-core-tc3-named-consumer-2026-10-02.md](note-true-core-tc3-named-consumer-2026-10-02.md)（#305 MERGED）
 - TC4 X8 对照桥（红标签；独立 comparison 根）：[note-true-core-tc4-x8-compare-bridge-2026-10-02.md](note-true-core-tc4-x8-compare-bridge-2026-10-02.md)（#306 MERGED）
-- X6 合成夹具/attestation 差分（非真湖；tool_id only）：[note-true-core-x6-synthetic-attestation-2026-10-02.md](note-true-core-x6-synthetic-attestation-2026-10-02.md)（draft 勿合）
+- X6 合成夹具/attestation 差分（非真湖；tool_id only）：[note-true-core-x6-synthetic-attestation-2026-10-02.md](note-true-core-x6-synthetic-attestation-2026-10-02.md)（#307 MERGED）
+- X6 真湖只读 END/loader 边界（tool_id only；不写湖）：[note-true-core-x6-lake-boundary-2026-10-02.md](note-true-core-x6-lake-boundary-2026-10-02.md)（draft 勿合）
 
-**≠δ5 certified ≠R4；TC1 docs 已合 #303；无 MatchCore/Fees/simulate 重写。TC2 X1 已合 #304；TC3 已合 #305；TC4 X8 已合 #306；X6 合成差分见 [X6 note](note-true-core-x6-synthetic-attestation-2026-10-02.md)（draft 勿合）。**
+**≠δ5 certified ≠R4；TC1 docs 已合 #303；无 MatchCore/Fees/simulate 重写。TC2 X1 已合 #304；TC3 已合 #305；TC4 X8 已合 #306；X6 合成差分已合 #307；X6 真湖只读边界见 [X6 lake](note-true-core-x6-lake-boundary-2026-10-02.md)（draft 勿合）。**

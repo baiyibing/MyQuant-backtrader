@@ -7,7 +7,7 @@
 | Human GO | 「合，继续」后下一刀：优先 **X6 合成夹具/attestation 差分**（**非**真湖）；合成-only；无写湖；复用 v0；≠δ5≠R4；永 opt-in |
 | 方案 | `/workspace/handoffs/minute_engine_true_core_new_20261002/`；合同锚 [TC1](note-true-core-c-new-tc1-contract-2026-10-02.md) §5 X6；前序 [TC2](note-true-core-tc2-x1-intent-adapter-2026-10-02.md) · [TC3](note-true-core-tc3-named-consumer-2026-10-02.md) · [TC4](note-true-core-tc4-x8-compare-bridge-2026-10-02.md) |
 | 硬约束 | **不** mint 新经济合同 / 新 `backend_id`；`tool_id` ≠ backend_id；独立 tool 根；`differential_status` 恒 `fixture_pass_not_lake_pass`；**不**产成功 `summary.json`；禁 `source_kind=lake` / `evidence_level=lake`；≠δ5≠R4；无写湖；无 4090；无 Compat；无 X2–X5 / X6 **真湖** / X7 `_FAMILIES` |
-| PR | draft **勿合** |
+| PR | **#307 MERGED** `f0620ace`；真湖另见 lake note |
 
 > **本 note ≠ 第二套成交默认表，≠ 绿 R 资格认证，≠ fill-policy，≠ 真湖 PASS。** Fixture PASS ≠ lake PASS / host attestation。工具身份 ≠ 经济合同版本。入口默认 / 绿 R·S 继续只链 [minute-fill-policy-ssot.md](minute-fill-policy-ssot.md)。
 
@@ -124,7 +124,8 @@ docs/backtest/note-true-core-x6-synthetic-attestation-2026-10-02.md
 
 - TC1 合同：[note-true-core-c-new-tc1-contract-2026-10-02.md](note-true-core-c-new-tc1-contract-2026-10-02.md) §5 X6
 - tip loader / notice：`backtest/research/minute_orders_backend/source_loader.py` · `source_provenance.FIXTURE_NOTICE`
-- 湖 ingress（真湖另刀）：[note-l2-lake-source-ingress-b-l2-01-2026-09-29.md](note-l2-lake-source-ingress-b-l2-01-2026-09-29.md)
+- 湖 ingress 合同：[note-l2-lake-source-ingress-b-l2-01-2026-09-29.md](note-l2-lake-source-ingress-b-l2-01-2026-09-29.md)
+- X6 真湖只读 END/loader 边界：[note-true-core-x6-lake-boundary-2026-10-02.md](note-true-core-x6-lake-boundary-2026-10-02.md)（draft 勿合；Human「C GO」）
 - TC4 X8（已合 #306）：[note-true-core-tc4-x8-compare-bridge-2026-10-02.md](note-true-core-tc4-x8-compare-bridge-2026-10-02.md)
 - 成交假设 SSOT：[minute-fill-policy-ssot.md](minute-fill-policy-ssot.md)
 
