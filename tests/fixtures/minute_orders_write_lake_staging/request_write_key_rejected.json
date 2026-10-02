@@ -1,0 +1,9 @@
+{
+  "schema": "minute_orders_write_lake_staging_request_v0",
+  "mode": "staging_dry_run",
+  "write_lake": true,
+  "proposed_symbols": ["002231.SZ"],
+  "proposed_periods": ["1m"],
+  "proposed_staging_layout": "hive_underscore_end_lots_sparse_a",
+  "notice": "staging dry-run plan only; not production lake write"
+}

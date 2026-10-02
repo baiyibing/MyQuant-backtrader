@@ -7,7 +7,7 @@
 | Human GO | **「GO CLI Lake」** = Codex R1 · 解锁 backend CLI `--evidence-level=lake` 窄 opt-in 消费接线 |
 | 方案 | `/workspace/handoffs/minute_engine_true_core_new_20261002/`；顾问 [CODEX_RESIDUAL_GO](`/workspace/handoffs/minute_engine_true_core_new_20261002/reviews/CODEX_RESIDUAL_GO.md`)（仓外）；合同锚 [TC1](note-true-core-c-new-tc1-contract-2026-10-02.md) |
 | 硬约束 | **不** mint 新经济合同 / 新 `backend_id`；复用 v0 (L2-S0) + `minute_orders_research_v1`；CLI `lake` → S4 **`hybrid`**；`tool_id`≠backend_id；**不**写湖；**不** 4090；空 diff MatchCore/Fees/`simulate`/source_loader；≠δ5≠R4；永 opt-in |
-| PR | **draft · 勿合**（本刀） |
+| PR | **#311 MERGED** |
 
 > **本 note ≠ host PASS，≠ item-4 live，≠ 绿 R，≠ 写湖授权，≠ 新身份 mint。**  
 > CLI `--evidence-level=lake` = **来源选择**；落盘证据等级仍是既有 S4 **`hybrid`** + `source_kind=lake`。  
@@ -102,7 +102,7 @@ pytest tests/test_minute_orders_cli_lake.py tests/test_minute_orders_cli.py -q
 | 裸传 `lake` 给 S4 | CLI 映射为 `hybrid` + provenance |
 | 缺数据转 synthetic / 空表 | 失败即停 |
 | `--code-sha` 覆盖湖路径 | 拒；hybrid 钉 git HEAD |
-| 写湖 / 建缺失分区 | 另「写湖 GO」 |
+| 写湖 / 建缺失分区 | 见 [write-lake residual](note-true-core-write-lake-residual-2026-10-02.md)（staging dry-run；生产写另裁 MUST cuts） |
 | 4090 / 填 host PASS | 另 R3 |
 | 改 MatchCore / Fees / simulate | H-TC3/4/5 |
 | BOOKS 默认 / 绿 R | H-TC9；比较权限不因成功解除 |
@@ -114,5 +114,6 @@ pytest tests/test_minute_orders_cli_lake.py tests/test_minute_orders_cli.py -q
 - #309 边界：[note-true-core-x6-lake-boundary-2026-10-02.md](note-true-core-x6-lake-boundary-2026-10-02.md)
 - CLI 历史 synthetic note：[note-minute-orders-cli-2026-09-29.md](note-minute-orders-cli-2026-09-29.md)
 - TC5 菜单：[note-true-core-tc5-go-scope-2026-10-02.md](note-true-core-tc5-go-scope-2026-10-02.md)
+- 写湖残差：[note-true-core-write-lake-residual-2026-10-02.md](note-true-core-write-lake-residual-2026-10-02.md)
 
-**≠δ5 certified ≠R4；CLI lake ≠ host PASS；无写湖；无 MatchCore/Fees/simulate/loader 重写；永 opt-in；本刀 draft 勿合。**
+**≠δ5 certified ≠R4；CLI lake ≠ host PASS；无写湖；无 MatchCore/Fees/simulate/loader 重写；永 opt-in；#311 MERGED。**
