@@ -1,0 +1,26 @@
+{
+  "schema": "minute_orders_x8_prematch_intent_snapshot_v0",
+  "snapshot_kind": "reconstructed_from_fills",
+  "adapter_id": "minute_orders_intent_x1",
+  "contract": "research contract v0 (L2-S0)",
+  "backend_id": "minute_orders_research_v1",
+  "note": "NEGATIVE fixture: must be refused by X8 fills→intent ban.",
+  "fills": [
+    {"order_id": "O1", "qty": 300, "price": "10.00"}
+  ],
+  "intents": [
+    {
+      "kind": "limit",
+      "order_id": "O1",
+      "symbol": "X",
+      "side": "BUY",
+      "qty": 300,
+      "limit": "10.00",
+      "available_at": "2026-09-28T09:29:00+08:00",
+      "submitted_at": "2026-09-28T09:29:00+08:00",
+      "effective_at": "2026-09-28T09:30:00+08:00",
+      "expires_at": "2026-09-28T09:33:00+08:00",
+      "sequence": 1
+    }
+  ]
+}
