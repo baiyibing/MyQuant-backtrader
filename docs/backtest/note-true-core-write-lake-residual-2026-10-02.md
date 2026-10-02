@@ -112,5 +112,6 @@ pytest tests/test_minute_orders_write_lake_staging.py -q
 - X6 e2e（#310）：[note-true-core-x6-lake-recipe-e2e-2026-10-02.md](note-true-core-x6-lake-recipe-e2e-2026-10-02.md)
 - Vendor staging：[vendor-three-symbol-lake-ingest-2026-10-01/PLAN.md](vendor-three-symbol-lake-ingest-2026-10-01/PLAN.md)
 - TC5 菜单：[note-true-core-tc5-go-scope-2026-10-02.md](note-true-core-tc5-go-scope-2026-10-02.md)
+- **Human cut A registered（2026-10-03）**：[note-true-core-write-lake-must-cuts-register-2026-10-03.md](note-true-core-write-lake-must-cuts-register-2026-10-03.md) — owner=host/1.3；本仓只登记 cuts、不实现生产写路径；no_borrow；rollback=禁原地覆盖；target_pin **未裁**（host 链）；本登记 ≠ 生产写授权
 
-**≠δ5 certified ≠R4；#312 已合；staging dry-run ≠ 生产写湖 ≠ host PASS；无 MatchCore/Fees/simulate 重写；永 opt-in。**
+**≠δ5 certified ≠R4；#312 已合；staging dry-run ≠ 生产写湖 ≠ host PASS；无 MatchCore/Fees/simulate 重写；永 opt-in；Human cut A 已登记 ≠ 本仓写权。**
