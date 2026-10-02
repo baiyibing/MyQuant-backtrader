@@ -44,7 +44,7 @@ D-close 本身不授权 E/F；[E 报告][host-e] 记录独立 Human「开 4090 E
 - 仅登记上述宿主 re-verify PASS，**不新增 Mode B 授权**，不派发下一轮 replay。此包下一 operational **无强制宿主门**，无需回到 B/C 重生成。
 - 不重生成 pack，不读取、改写或导出湖，不覆盖 pack、outs、旧回执或 seals；不修改 `.py`、MatchCore / Fees / Clock / SSOT；`production_C=frozen`。
 - **不授权 δ5 / B-L2 / G5 policy**；δ5、B-L2 旁路须另 GO，G5 候选政策仍须 MQ/BT 联合 Human GO，不将本次结果转为 L2 NAV 比较授权。
-- 本刀止于文档提交、PR **OPEN（非 draft）** 与回执；**合并仍须 Human「合」**。
+- 本刀文档回填 **已合 [#282](https://github.com/baiyibing/MyQuant-backtrader/pull/282)**（MERGED `2026-10-01T01:06:14Z` ≈ 09:06 CST；mergeCommit `eccc750`；提交 `4bb2b66`）；G 正文在 tip `d9238c79`（blob `e072de6e…` 与 #282 同字节）。原「OPEN + 回执、待合」停点已闭合。
 
 ## 5. 文档范围与验证
 
