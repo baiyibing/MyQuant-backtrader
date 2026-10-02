@@ -146,4 +146,4 @@ docs/backtest/note-true-core-x6-lake-boundary-2026-10-02.md
 - 成交假设 SSOT：[minute-fill-policy-ssot.md](minute-fill-policy-ssot.md)
 - X6 真湖 recipe e2e（只读 load；残差 GO）：[note-true-core-x6-lake-recipe-e2e-2026-10-02.md](note-true-core-x6-lake-recipe-e2e-2026-10-02.md)
 
-**≠δ5 certified ≠R4；无 MatchCore/Fees/simulate 重写；无写湖；无 CLI lake unlock；#309 MERGED。**
+**≠δ5 certified ≠R4；无 MatchCore/Fees/simulate 重写；无写湖；#309/#310 工具自身不解锁 CLI；backend CLI lake 见 [CLI lake note](note-true-core-cli-lake-2026-10-02.md)（draft）；#309 MERGED。**

@@ -69,12 +69,16 @@ def _parser():
             "synthetic = explicit RunInput JSON (default historical path); "
             "lake = pinned lake+END recipe → existing loader → S4 hybrid "
             "(CLI lake is source selection, not host PASS / certified / green R; "
+            "≠δ5≠R4; no lake write; no 4090; "
             "never BOOKS default; tool_id≠backend_id)."
         ),
     )
     parser.add_argument(
         "--input", type=_nonempty,
-        help="versioned RunInput JSON file (required for --evidence-level=synthetic)",
+        help=(
+            "versioned RunInput JSON file (required for synthetic; "
+            "refused by --evidence-level=lake)"
+        ),
     )
     parser.add_argument(
         "--recipe", type=_nonempty,
@@ -144,6 +148,8 @@ def _preflight_lake_recipe(recipe, *, parent, run_id):
         )
     recipe_parent = recipe.get("parent")
     if type(recipe_parent) is not str or not recipe_parent.strip():
+        raise ValueError("recipe.parent must be an absolute path string")
+    if not Path(recipe_parent).is_absolute():
         raise ValueError("recipe.parent must be an absolute path string")
     if str(Path(recipe_parent).resolve()) != str(Path(parent).resolve()):
         raise ValueError(

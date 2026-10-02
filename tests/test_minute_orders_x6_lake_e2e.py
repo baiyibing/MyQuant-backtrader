@@ -300,7 +300,7 @@ def test_package_calls_load_but_core_untouched():
 
 
 def test_core_files_byte_stable_vs_knife_base():
-    """Guard: MatchCore/Fees/simulate/source_loader/cli/VolumeCap/_ENTRIES/_FAMILIES empty this knife."""
+    """Guard: MatchCore/Fees/simulate/source_loader/VolumeCap/_ENTRIES/_FAMILIES empty this knife (cli.py is R1 CLI lake; guarded there)."""
     import subprocess as sp
     result = sp.run(
         [

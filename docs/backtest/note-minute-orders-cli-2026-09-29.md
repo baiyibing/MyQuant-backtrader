@@ -105,18 +105,18 @@ API envelope `returned` 与 CLI envelope `exited` 都不等于研究成功。
 非法输入、业务拒单、writer 注入失败和拒覆写；受控 cwd/相对路径/code_sha 下，
 native API/S4 与 native CLI/L1 CLI 全工件逐字节一致，两个 CLI 的退出及原始流一致，不 scrub。
 这只证明 synthetic 产品闭环及本家族委托 parity；无湖验证、无跨后端收益比较。
-`evidence_level=lake` 拒绝；`comparison_status=no_ssot_compare_authorization` 保持。
+截至 **2026-09-29** 当时 `evidence_level=lake` 拒绝；`comparison_status=no_ssot_compare_authorization` 保持（残差 R1 CLI lake 见文末「后续」节）。
 未改 Clock/Broker/Match/Ledger/Fees、旧家族、HELP_LOCK、presets、golden 或任何 SSOT 绿R/绿S。
 
 后续 [B-L2-01 lake source ingress 合同](note-l2-lake-source-ingress-b-l2-01-2026-09-29.md)
 的 [§7](note-l2-lake-source-ingress-b-l2-01-2026-09-29.md#7-item-3-实现接口与证据版本2026-09-30)
 记录 2026-09-30 item-3 专用 loader API / hybrid provenance 实现。
-本 CLI 仍为 synthetic-only，v1 codec 不变；item-4 / 4090 真湖验收须另行 GO。
+当时本 CLI 仍为 synthetic-only，v1 codec 不变；item-4 / 4090 真湖验收须另行 GO。
 Fixture PASS != lake PASS；该实现不构成 host attestation、L2 lake PASS 或 SSOT 比较授权。
 
 R2 三项事实门的 host-fillable packages、proof 绑定与冻结清单见
 [ingress §9](note-l2-lake-source-ingress-b-l2-01-2026-09-29.md#9-factsattestation-package-go2026-09-30)。
-这是 loader 的输入登记；本 CLI 仍 synthetic-only，4090 R3 须另一条 Human GO。
+这是 loader 的输入登记；当时本 CLI 仍 synthetic-only，4090 R3 须另一条 Human GO。
 
 ## 后续 · CLI lake（2026-10-02）
 

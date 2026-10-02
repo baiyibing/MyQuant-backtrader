@@ -5,7 +5,7 @@
 | 日期 | 2026-10-02（Asia/Shanghai / CST） |
 | tip 基线 | `6c8178ad`（master · #310 真湖 recipe e2e MERGED） |
 | Human GO | **「GO CLI Lake」** = Codex R1 · 解锁 backend CLI `--evidence-level=lake` 窄 opt-in 消费接线 |
-| 方案 | `/workspace/handoffs/minute_engine_true_core_new_20261002/`；顾问 [CODEX_RESIDUAL_GO](../../../../handoffs/minute_engine_true_core_new_20261002/reviews/CODEX_RESIDUAL_GO.md)（仓外）；合同锚 [TC1](note-true-core-c-new-tc1-contract-2026-10-02.md) |
+| 方案 | `/workspace/handoffs/minute_engine_true_core_new_20261002/`；顾问 [CODEX_RESIDUAL_GO](`/workspace/handoffs/minute_engine_true_core_new_20261002/reviews/CODEX_RESIDUAL_GO.md`)（仓外）；合同锚 [TC1](note-true-core-c-new-tc1-contract-2026-10-02.md) |
 | 硬约束 | **不** mint 新经济合同 / 新 `backend_id`；复用 v0 (L2-S0) + `minute_orders_research_v1`；CLI `lake` → S4 **`hybrid`**；`tool_id`≠backend_id；**不**写湖；**不** 4090；空 diff MatchCore/Fees/`simulate`/source_loader；≠δ5≠R4；永 opt-in |
 | PR | **draft · 勿合**（本刀） |
 

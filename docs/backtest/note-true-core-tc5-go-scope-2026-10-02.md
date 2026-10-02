@@ -21,7 +21,7 @@
 | TC3 具名消费者 | [#305](https://github.com/baiyibing/MyQuant-backtrader/pull/305) MERGED | CLI/HELP 闭环；永 opt-in |
 | TC4 X8 对照桥 | [#306](https://github.com/baiyibing/MyQuant-backtrader/pull/306) MERGED | 撮合前意图↔X1；红标签 |
 | X6 合成夹具/attestation | [#307](https://github.com/baiyibing/MyQuant-backtrader/pull/307) MERGED `f0620ace` | **非**真湖；`tool_id` only |
-| X6 真湖 END/loader 边界 | [#309](https://github.com/baiyibing/MyQuant-backtrader/pull/309) MERGED `d0804d09` | 只读；`tool_id=minute_orders_x6_lake`；不写湖；不解锁 CLI lake |
+| X6 真湖 END/loader 边界 | [#309](https://github.com/baiyibing/MyQuant-backtrader/pull/309) MERGED `d0804d09` | 只读；`tool_id=minute_orders_x6_lake`；不写湖；**该刀**不解锁 CLI lake（backend CLI lake 见 [CLI lake note](note-true-core-cli-lake-2026-10-02.md)） |
 
 PLAN 编号下一阶段 = **TC5 · 扩展包**。旁路轴 X6 **合成**已合；**真湖只读边界**已合 #309（H-TC5-NEXT=**C**）。其它码轴仍须独立实施 GO。
 

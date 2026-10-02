@@ -93,7 +93,7 @@ def meta_from_mapping(payload: Mapping[str, Any]) -> LakeBoundaryMeta:
         raise LakeBoundaryIngestError(
             f"X6 lake boundary refuses evidence_level={evidence_level!r}; "
             f"only {ALLOWED_EVIDENCE_LEVEL!r} "
-            "(does NOT unlock CLI --evidence-level=lake; not host/certified)"
+            "(this boundary tool does NOT unlock CLI --evidence-level=lake; backend CLI lake is separate; not host/certified)"
         )
 
     account_origin = payload.get("account_origin")

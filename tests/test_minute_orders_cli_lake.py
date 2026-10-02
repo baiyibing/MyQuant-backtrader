@@ -96,6 +96,10 @@ def test_cli_help_documents_lake_opt_in_and_bans(tmp_path):
     assert "--recipe" in help_text
     assert "--expected-sha256" in help_text
     assert "hybrid" in help_text.lower() or "S4 hybrid" in help_text
+    assert "≠δ5≠R4" in help_text or "delta5" in help_text.lower()
+    assert "no lake write" in help_text
+    assert "no 4090" in help_text
+    assert "refused by --evidence-level=lake" in help_text
     assert list(tmp_path.iterdir()) == []
 
 
@@ -234,6 +238,89 @@ def test_lake_missing_recipe_args_are_input_error(tmp_path, capsys):
     assert err["status"] == "input_error"
     assert "recipe" in err["reason"]
     assert list(tmp_path.iterdir()) == []
+
+
+
+
+def test_lake_cli_rejects_parent_mismatch(lake_end_case, tmp_path, capsys):
+    other = tmp_path / "other-parent"
+    other.mkdir()
+    code = cli.main(lake_argv(lake_end_case, parent=other))
+    captured = capsys.readouterr()
+    assert code == 2
+    err = json.loads(captured.err)
+    assert err["status"] == "input_error"
+    assert "parent" in err["reason"]
+    assert not Path(lake_end_case.recipe["parent"]).exists()
+    assert list(other.iterdir()) == []
+
+
+def test_lake_cli_rejects_non_bucket_end_availability(tmp_path, monkeypatch, capsys):
+    case = SyntheticCase(tmp_path, monkeypatch)
+    original = source_loader.execution_identity
+    if original()["code_dirty"]:
+        monkeypatch.setattr(
+            source_loader, "execution_identity",
+            lambda: dict(original(), code_dirty=False),
+        )
+    execution = source_loader.execution_identity()
+    case.recipe["implementation"] = {
+        "code_sha": execution["code_sha"],
+        "python_version": execution["python_version"],
+        "pyarrow_version": execution["pyarrow_version"],
+        "transform_version": case.recipe["implementation"]["transform_version"],
+    }
+    case.recipe["source_kind"] = "lake"
+    case.sidecars["attestation"]["source_kind"] = "lake"
+    for row in case.rows:
+        row["time"] = (
+            datetime.fromisoformat(row["time"]) + timedelta(minutes=1)
+        ).isoformat()
+    case.recipe["bars"][0]["time"]["label"] = "END"
+    case.recipe["bars"][0]["availability"] = "after_end"
+    for mark in case.recipe["mark_grid"]:
+        mark["prices"][0]["time"]["label"] = "END"
+    case.attest_fabricated_bindings()
+    case.freeze()
+    code = cli.main(lake_argv(case))
+    captured = capsys.readouterr()
+    assert code == 2
+    err = json.loads(captured.err)
+    assert err["status"] == "input_error"
+    assert "availability" in err["reason"] or "bucket_end" in err["reason"]
+    assert not Path(case.recipe["parent"]).exists()
+
+
+def test_lake_cli_rejects_write_lake_key(lake_end_case, capsys):
+    payload = json.loads(lake_end_case.path.read_text(encoding="utf-8"))
+    payload["write_lake"] = True
+    bad = lake_end_case.root / "bad_write_lake_recipe.json"
+    text = json.dumps(payload, ensure_ascii=False)
+    bad.write_text(text, encoding="utf-8")
+    digest = __import__("hashlib").sha256(text.encode()).hexdigest()
+    code = cli.main(lake_argv(lake_end_case, recipe=bad, expected_sha256=digest))
+    captured = capsys.readouterr()
+    assert code == 2
+    err = json.loads(captured.err)
+    assert err["status"] == "input_error"
+    assert "write_lake" in err["reason"] or "banned" in err["reason"]
+    assert not Path(lake_end_case.recipe["parent"]).exists()
+
+
+def test_lake_cli_rejects_dirty_code(lake_end_case, monkeypatch, capsys):
+    original = source_loader.execution_identity
+    monkeypatch.setattr(
+        source_loader,
+        "execution_identity",
+        lambda: dict(original(), code_dirty=True),
+    )
+    code = cli.main(lake_argv(lake_end_case))
+    captured = capsys.readouterr()
+    assert code == 2
+    err = json.loads(captured.err)
+    assert err["status"] == "input_error"
+    assert "clean pinned" in err["reason"] or "dirty" in err["reason"].lower()
+    assert not Path(lake_end_case.recipe["parent"]).exists()
 
 
 def test_empty_diff_core_vs_knife_base():
