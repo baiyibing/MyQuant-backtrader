@@ -77,7 +77,9 @@ Human H4=A：L2 `minute_orders` **永 opt-in** 对照后端。本表保护 Match
 
 **绿P / 绿C ≠ 绿R / 绿S。** ≠δ5 certified ≠R4。不改 MatchCore / Fees / `simulate` / VolumeCap。P2-A/B/C 已合 #299/#300。
 
-## 7. 统一上限指针（2026-10-02 · U1 docs）
+## 7. 统一上限 + 真核指针（2026-10-02）
 
-Human 锁定 H-U1=B / H-U2=够 / H-U3=永 opt-in / H-U4=禁碰 simulate / H-U5=暂不真核 / H-U7=仅 U1 docs。统一运行上限 = 现有 L1 Thin adapter；详见 [unify ceiling U1](note-minute-engine-unify-ceiling-u1-2026-10-02.md)。方案 handoff：`/workspace/handoffs/minute_engine_unify_plan_20261002/`。U1 draft **勿合，等待 Human「合」**；本指针不授权码或真核。
+Human 锁定 H-U1=B / H-U2=够 / H-U3=永 opt-in / H-U4=禁碰 simulate（旧入口统一语境）/ H-U7=仅 U1 docs。统一运行上限 = 现有 L1 Thin adapter；详见 [unify ceiling U1](note-minute-engine-unify-ceiling-u1-2026-10-02.md)。方案 handoff：`/workspace/handoffs/minute_engine_unify_plan_20261002/`。
+
+同日真核大票覆盖 **H-U5 开票门** → **H-U6=New**（C-New）；**H-TC1=C** 仅合同冻结 docs。L2 v0（`research contract v0 (L2-S0)` + `minute_orders_research_v1` + 三 entry）旁路冻结；语义增量 = 新 contract + 新 backend_id。详见 [真核 C-New TC1](note-true-core-c-new-tc1-contract-2026-10-02.md)；handoff `/workspace/handoffs/minute_engine_true_core_new_20261002/`。TC1 draft **勿合，等待 Human「合」**；本指针不授权 MatchCore/`simulate` 重写或码刀。
 

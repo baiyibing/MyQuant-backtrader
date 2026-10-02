@@ -25,6 +25,10 @@
 
 R1 四席（Kimi / Codex / Grok / Claude）均为 **APPROVE_WITH_NITS**（0 MUST-FIX）；清晰 nits 已回填 handoff。**评审 APPROVE ≠ 实施 GO**；本 PR 仅落仓 Human 已锁上限。
 
+### 1.1 后续覆盖（2026-10-02 · 真核 TC1 · 非本 U1 正文改写）
+
+Human 另开真核大票：**H-U5 开票门被覆盖** → **H-U6=New**（C-New）；**H-TC1=C** 仅 docs。详见 [真核 C-New TC1 合同冻结](note-true-core-c-new-tc1-contract-2026-10-02.md)。**本表 H-U1=B / H-U2 / H-U3 / H-U4 对旧入口仍有效**；L2 三 entry 的 v0 语义旁路冻结，不在覆盖范围。覆盖的是「暂不」开票门，**不**宣称 unify 方案证据条件已齐。
+
 ## 2. 统一上限一句话
 
 **统一运行停在 tip 已有 L1 Thin adapter（五家族 · 13 精确 entry）；不重造 facade；不默认加第六家；不进真核；不碰 MatchCore / Fees / `simulate`。**
@@ -105,5 +109,6 @@ Views 只投影已取得的内存证据：不读文件、不跑引擎、不生�
 - 成交假设 SSOT：[minute-fill-policy-ssot.md](minute-fill-policy-ssot.md)
 - 引擎定位：[engine-positioning-ssot.md](engine-positioning-ssot.md)
 - 统一方案 handoff（本机外部，**不是仓库文件**）：`/workspace/handoffs/minute_engine_unify_plan_20261002/`
+- 真核 C-New TC1（覆盖 H-U5 开票门 / H-U6=New）：[note-true-core-c-new-tc1-contract-2026-10-02.md](note-true-core-c-new-tc1-contract-2026-10-02.md)；handoff `/workspace/handoffs/minute_engine_true_core_new_20261002/`
 
 **≠δ5 certified ≠R4；docs-only；无 MatchCore/Fees/simulate；勿合，等待 Human「合」。**

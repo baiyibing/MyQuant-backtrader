@@ -68,7 +68,7 @@ Qlib `PortAnaRecord` 停用。Cerebro / Rolling 已退场（2026-09-16）。chip
 
 L1 已是 native CSV / v7 / JR / grid Mode B / L2-research 完整 run 的薄 facade（精确白名单委托，不是共享调度 / 定价核）。L2 `minute_orders` 为独立身份、**永 opt-in** 的可选研究后端，不进 BOOKS 默认，也不替换共享 CSV。二者不改变三件引擎分工；Cerebro 继续禁止复活，L2 ≠ `l2_analytics/` ≠ LEBS ≠ 1.3 MockQMT。
 
-2026-10-02 Human 锁定统一运行上限 = 现有 Thin adapter（档 B）；不开真核；不碰 MatchCore / Fees / `simulate`。见 [统一上限 + U1 对账](note-minute-engine-unify-ceiling-u1-2026-10-02.md)；产品边界见 [L1/L2 产品边界](note-l1-l2-research-engine-boundary-2026-09-28.md)。
+2026-10-02 Human 锁定统一运行上限 = 现有 Thin adapter（档 B）；旧入口不碰 MatchCore / Fees / `simulate`。见 [统一上限 + U1 对账](note-minute-engine-unify-ceiling-u1-2026-10-02.md)；产品边界见 [L1/L2 产品边界](note-l1-l2-research-engine-boundary-2026-09-28.md)。同日另开真核 **C-New**（H-U6=New；H-TC1=C docs-only）：旁路冻结 L2 v0，增量用新 contract + 新 backend_id；**不**要求旧入口 byte-compat；本阶段仍无 MatchCore/`simulate` 重写。见 [真核 C-New TC1](note-true-core-c-new-tc1-contract-2026-10-02.md)。
 
 ---
 

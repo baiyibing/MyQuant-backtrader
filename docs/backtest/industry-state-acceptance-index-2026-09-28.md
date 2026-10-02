@@ -115,6 +115,7 @@ P3 外置 D5 使用 s12 fix-on + 既有 transform，仅支持该冻结上下文�
 | #291 + P2-B 预检 | 本页 §1 δ5 行；`participation_rate_precheck.py`；`run_topk_cap_compare.py` | ≠δ5 certified ≠R4；≠ capacity certified |
 | P2-C L2↔共享湖 | [L1/L2 边界 §6](note-l1-l2-research-engine-boundary-2026-09-28.md)；P2 adapters §4 | 同 PIN 不同后端 → 红混比；L2 永 opt-in |
 | JR-clock G hygiene | [G 回填 note](note-jr-clock-g-host-reverify-backfill-2026-10-01.md)（#297 合入 tip） | ≠δ5≠R4 |
-| 统一上限 / U1 | [unify ceiling U1](note-minute-engine-unify-ceiling-u1-2026-10-02.md)；handoff `/workspace/handoffs/minute_engine_unify_plan_20261002/` | 上限=现有 L1/B；不开真核；不碰 MatchCore/Fees/`simulate`；本 PR draft 勿合 |
+| 统一上限 / U1 | [unify ceiling U1](note-minute-engine-unify-ceiling-u1-2026-10-02.md)；handoff `/workspace/handoffs/minute_engine_unify_plan_20261002/` | 上限=现有 L1/B（旧入口）；不碰 MatchCore/Fees/`simulate`（统一语境） |
+| 真核 C-New / TC1 | [C-New TC1 合同冻结](note-true-core-c-new-tc1-contract-2026-10-02.md)；handoff `/workspace/handoffs/minute_engine_true_core_new_20261002/` | H-U6=New；H-TC1=C docs-only；冻 L2 v0；新 contract+backend_id；无 simulate/MatchCore 重写；draft **勿合** |
 
-L2 `minute_orders` 定位：**永 opt-in**（P1 H4=A · 统一 H-U3）。G3 科创板申报数量延后（H5=A）。不授权改 MatchCore / Fees / `simulate` / VolumeCap·clamp·完成桶。统一 U1 docs draft **勿合，等待 Human「合」**。
+L2 `minute_orders` 定位：**永 opt-in**（P1 H4=A · 统一 H-U3 · 真核 H-TC9）。G3 科创板申报数量延后（H5=A）。统一语境与本 TC1 docs **均不授权**改 MatchCore / Fees / `simulate` / VolumeCap·clamp·完成桶。真核 TC1 docs draft **勿合，等待 Human「合」**。
