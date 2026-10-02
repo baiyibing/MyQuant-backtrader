@@ -7,7 +7,7 @@
 | Human GO | **「C GO」** = H-TC5-NEXT **C · X6 真湖**；本刀 = **只读 lake END / loader 边界**（**非**写湖；**非** host PASS；**非**解锁 CLI `--evidence-level=lake`） |
 | 方案 | `/workspace/handoffs/minute_engine_true_core_new_20261002/`；合同锚 [TC1](note-true-core-c-new-tc1-contract-2026-10-02.md) §5 X6；前序合成 [X6 synthetic](note-true-core-x6-synthetic-attestation-2026-10-02.md)（#307） |
 | 硬约束 | **不** mint 新经济合同 / 新 `backend_id`；`tool_id` ≠ backend_id；独立 tool 根；`differential_status` 恒 `lake_boundary_attested_not_host_pass`；**不**产成功 `summary.json`；**不**写湖；**不**调 `load_minute_orders_source`；拒 synthetic 伪装；≠δ5≠R4；无 4090；永 opt-in |
-| PR | draft **勿合** |
+| PR | **#309 MERGED** `d0804d09` |
 
 > **本 note ≠ 第二套成交默认表，≠ 绿 R，≠ fill-policy，≠ 真湖 PASS / host attestation / item-4 live。**  
 > Lake boundary attestation ≠ host PASS。Fixture PASS ≠ lake PASS（#307 仍独立）。工具身份 ≠ 经济合同版本。  
@@ -25,7 +25,7 @@
 | `differential_status` 恒 `lake_boundary_attested_not_host_pass` | 进 fill-policy；NAV 榜；绿 R；item-4 live |
 | 薄 CLI + HELP + 拒收 synthetic / START / 升级宣称 | 改 MatchCore / Fees / `simulate` / VolumeCap / 旧 L1 `_ENTRIES` / `views._FAMILIES` / backend CLI |
 | 本 docs + TC1/industry/X6-synthetic 轻指针 | 解锁 CLI `--evidence-level=lake`；调 `load_minute_orders_source`；完整真湖 recipe e2e |
-| draft **勿合** | 默改 `simulate`；把 Fixture PASS 升为 lake PASS |
+| 本码已合 #309 | 默改 `simulate`；把 Fixture PASS 升为 lake PASS |
 
 ## 2. tip 缺口（相对 TC1 §5 X6 + Phase5）
 
@@ -134,7 +134,7 @@ docs/backtest/note-true-core-x6-lake-boundary-2026-10-02.md
 | 解锁 backend CLI `--evidence-level=lake` | 须另 GO；本刀明确不解锁 |
 | 写湖 / Phase4 写路径 | 须另具名「写湖 GO」 |
 | 4090 host attestation / item-4 live | 须另 GO |
-| TC5 其它轴（X2/X3/X4/X5/X7） | 见 [TC5 GO/scope](note-true-core-tc5-go-scope-2026-10-02.md)（#308 draft，另轨） |
+| TC5 其它轴（X2/X3/X4/X5/X7） | 见 [TC5 GO/scope](note-true-core-tc5-go-scope-2026-10-02.md)（#308 本刀合入；码轴另 GO） |
 
 ## 8. 指针
 
@@ -145,4 +145,4 @@ docs/backtest/note-true-core-x6-lake-boundary-2026-10-02.md
 - Phase5 END 研究路径：[ssot/vendor-bar-alignment-ssot.md](ssot/vendor-bar-alignment-ssot.md) §10；[vendor-three-symbol-lake-ingest PLAN](vendor-three-symbol-lake-ingest-2026-10-01/PLAN.md)
 - 成交假设 SSOT：[minute-fill-policy-ssot.md](minute-fill-policy-ssot.md)
 
-**≠δ5 certified ≠R4；无 MatchCore/Fees/simulate 重写；无写湖；无 CLI lake unlock；draft 勿合。**
+**≠δ5 certified ≠R4；无 MatchCore/Fees/simulate 重写；无写湖；无 CLI lake unlock；#309 MERGED。**
