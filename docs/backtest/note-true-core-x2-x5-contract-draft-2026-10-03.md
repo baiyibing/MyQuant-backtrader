@@ -29,12 +29,12 @@ PLAN §4 的 TC5 把扩展包写成「每包新 contract + 新 backend_id + orac
 
 名称与 PLAN §3.2 对齐。状态列全部是 **NOT implemented**。
 
-| 轴 | PLAN 原句能力 | 草案合同标签（未批准） | 草案 backend 槽（未铸） | 触及的 S0 排除 | 本菜单规则 |
-|---|---|---|---|---|---|
-| **X2 · 更富订单类型** | stop / market-on-bucket / 日内模板（研究近似） | `draft-only/x2-richer-orders` | `UNMINTED_NOT_A_BACKEND_ID_x2` | Lifecycle **LIMIT-only**；无 stop / market / replace / GTC | 新 contract + 新 backend_id + 独立 GO 之后才有码。不声称交易所队列。不 undo 旧 hl / Q39。不得写回 v0 oracle |
-| **X3 · 报价路径策略包** | 新身份下可选 OHLC 路径或 next-open | `draft-only/x3-quote-path` | `UNMINTED_NOT_A_BACKEND_ID_x3` | 排除 **B（next-open）**；无 A·B·C flags | 同上。**禁止**声称修复 Q39≠hl。H-TC3：首包默认不做；本菜单不把 X3 提升为下一刀 |
-| **X4 · 多账户 / 组合层** | 显式多组合现金隔离 | `draft-only/x4-multi-account` | `UNMINTED_NOT_A_BACKEND_ID_x4` | 输入范围 **单账户** | 同上。不做净额轧差 OMS。不是 live 柜台 |
-| **X5 · 向量 / 批实例** | 多 symbol 批跑（吞吐）；PLAN 参照 Mode B fast/ref **同合同**先例 | `draft-only/x5-vector-batch` | `UNMINTED_NOT_A_BACKEND_ID_x5` | 不自动改撮合语义；**若**批跑设计触及任一 S0 排除或改变经济语义，则与 X2–X4 相同 | 本菜单仍把它登记为新合同轴：**码之前同样要新 contract + 新 backend_id + 独立 GO**。不强迫旧网格改事件核。性能须另证，不在本刀 |
+| 轴 | 状态 | PLAN 原句能力 | 草案合同标签（未批准） | 草案 backend 槽（未铸） | 触及的 S0 排除 | 本菜单规则 |
+|---|---|---|---|---|---|---|
+| **X2 · 更富订单类型** | **NOT implemented** | stop / market-on-bucket / 日内模板（研究近似） | `draft-only/x2-richer-orders` | `UNMINTED_NOT_A_BACKEND_ID_x2` | Lifecycle **LIMIT-only**；无 stop / market / replace / GTC | 新 contract + 新 backend_id + 独立 GO 之后才有码。不声称交易所队列。不 undo 旧 hl / Q39。不得写回 v0 oracle |
+| **X3 · 报价路径策略包** | **NOT implemented** | 新身份下可选 OHLC 路径或 next-open | `draft-only/x3-quote-path` | `UNMINTED_NOT_A_BACKEND_ID_x3` | 排除 **B（next-open）**；无 A·B·C flags | 同上。**禁止**声称修复 Q39≠hl。H-TC3：首包默认不做；本菜单不把 X3 提升为下一刀 |
+| **X4 · 多账户 / 组合层** | **NOT implemented** | 显式多组合现金隔离 | `draft-only/x4-multi-account` | `UNMINTED_NOT_A_BACKEND_ID_x4` | 输入范围 **单账户** | 同上。不做净额轧差 OMS。不是 live 柜台 |
+| **X5 · 向量 / 批实例** | **NOT implemented** | 多 symbol 批跑（吞吐）；PLAN 参照 Mode B fast/ref **同合同**先例 | `draft-only/x5-vector-batch` | `UNMINTED_NOT_A_BACKEND_ID_x5` | 不自动改撮合语义；**若**批跑设计触及任一 S0 排除或改变经济语义，则与 X2–X4 相同 | 本菜单仍把它登记为新合同轴：**码之前同样要新 contract + 新 backend_id + 独立 GO**。不强迫旧网格改事件核。性能须另证，不在本刀 |
 
 ### 2.1 X5 与 PLAN「同合同」句
 
