@@ -65,7 +65,7 @@ python scripts/research/run_x7_observe.py \
   --parent /tmp/x7-out \
   --run-id unique-run-id
 # 产出: /tmp/x7-out/backtest_output/minute_orders_x7_observe/unique-run-id/observation_report.json
-# 同 run_id 再写 → FileExistsError；根下无 summary.json
+# 同 run_id 再写 → ObserveError（wrapping FileExistsError）；根下无 summary.json；CLI exit 2
 ```
 
 ### 3.4 库 API

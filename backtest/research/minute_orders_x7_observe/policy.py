@@ -41,6 +41,7 @@ BANNED_SOURCE_KEYS = frozenset({
     "fills",
     "trades",
     "nav",
+    "equity",
     "equity_curve",
     "summary",
     "green_r",
@@ -48,6 +49,7 @@ BANNED_SOURCE_KEYS = frozenset({
     "write_lake",
     "lake_write",
     "production_write",
+    "views_family",
 })
 
 

@@ -38,7 +38,7 @@ Human 点了「GO 写湖」。Codex 将该轴排在残差最末：物理污染/�
 | **locks** | 空 MatchCore/Fees/simulate/loader；≠δ5≠R4；永不 BOOKS；永 opt-in；无绿 R；无 4090（除非另 GO） |
 | **budget** | 按 H-TC8 **单独重估**；「C 已开」不吞进原 1–2 人周 |
 
-未裁齐前：**任何生产写湖实施 = 越权**。本 draft 只把 cuts 落成机器可读 `MUST_HUMAN_CUTS.json`。
+未裁齐前：**任何生产写湖实施 = 越权**。cuts 清单仍是未裁齐草案，只落成机器可读 `MUST_HUMAN_CUTS.json`。
 
 ## 3. 如何调用（staging dry-run）
 
@@ -113,4 +113,4 @@ pytest tests/test_minute_orders_write_lake_staging.py -q
 - Vendor staging：[vendor-three-symbol-lake-ingest-2026-10-01/PLAN.md](vendor-three-symbol-lake-ingest-2026-10-01/PLAN.md)
 - TC5 菜单：[note-true-core-tc5-go-scope-2026-10-02.md](note-true-core-tc5-go-scope-2026-10-02.md)
 
-**≠δ5 certified ≠R4；staging dry-run ≠ 生产写湖 ≠ host PASS；无 MatchCore/Fees/simulate 重写；永 opt-in；本刀 draft 勿合。**
+**≠δ5 certified ≠R4；#312 已合；staging dry-run ≠ 生产写湖 ≠ host PASS；无 MatchCore/Fees/simulate 重写；永 opt-in。**

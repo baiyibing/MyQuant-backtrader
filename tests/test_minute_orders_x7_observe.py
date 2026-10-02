@@ -32,6 +32,8 @@ OK = FIX / "request_ok.json"
 NAV = FIX / "request_nav_rejected.json"
 FAM = FIX / "request_families_rejected.json"
 FILLS = FIX / "request_fills_rejected.json"
+NESTED = FIX / "request_nested_banned_rejected.json"
+EQUITY = FIX / "request_equity_rejected.json"
 CORE = {
     ROOT / "backtest" / "research" / "minute_orders_backend" / "match.py",
     ROOT / "backtest" / "research" / "minute_orders_backend" / "fees.py",
@@ -40,6 +42,8 @@ CORE = {
     ROOT / "backtest" / "research" / "minute_orders_backend" / "cli.py",
     ROOT / "backtest" / "research" / "run_protocol" / "views.py",
 }
+# Knife base tip for empty-diff guard (PR #314 base = #313 MERGED).
+KNIFE_BASE = "fcf3f6f364817fd06a04fb6c40697d0041e37352"
 
 
 def launch(cwd, argv=None, *, timeout=30):
@@ -101,7 +105,7 @@ def test_request_ok_memory_and_write(tmp_path):
 def test_same_run_id_refuses_overwrite(tmp_path):
     request = load_observe_request(OK)
     run_x7_observe(request=request, parent=tmp_path, run_id="dup-01")
-    with pytest.raises((ObserveError, FileExistsError)):
+    with pytest.raises(ObserveError, match="already exists"):
         run_x7_observe(request=request, parent=tmp_path, run_id="dup-01")
 
 
@@ -162,7 +166,56 @@ def test_cli_write_roundtrip(tmp_path):
     }
 
 
-def test_core_files_untouched_by_this_package():
-    """Sanity: listed core paths exist (empty-diff discipline checked at review)."""
+def test_refuse_nested_banned_blob():
+    with pytest.raises(ObserveError, match="banned|NAV|nav|fills"):
+        load_observe_request(NESTED)
+
+
+def test_refuse_bare_equity_key():
+    with pytest.raises(ObserveError, match="banned|equity"):
+        load_observe_request(EQUITY)
+
+
+def test_cli_same_run_id_exit_2(tmp_path):
+    argv = [
+        "--request", str(OK.resolve()),
+        "--parent", str(tmp_path.resolve()),
+        "--run-id", "cli-dup-01",
+    ]
+    first = launch(tmp_path, argv)
+    assert first.returncode == 0, first.stderr
+    second = launch(tmp_path, argv)
+    assert second.returncode == 2, second.stderr
+    assert "already exists" in second.stderr or "ERROR" in second.stderr
+    report = tmp_path / "backtest_output" / OBSERVATION_ROOT_NAME / "cli-dup-01" / REPORT_FILENAME
+    assert report.is_file()
+    assert FORBIDDEN_SUMMARY_NAME not in {
+        p.name for p in report.parent.iterdir()
+    }
+
+
+def test_cli_relative_request_exit_2(tmp_path):
+    process = launch(tmp_path, ["--request", "relative.json", "--memory-only"])
+    assert process.returncode == 2
+    assert "absolute" in process.stderr.lower() or "ERROR" in process.stderr
+
+
+def test_cli_missing_parent_run_id_exit_2(tmp_path):
+    process = launch(tmp_path, ["--request", str(OK.resolve())])
+    assert process.returncode == 2
+    assert "parent" in process.stderr.lower() or "run-id" in process.stderr.lower()
+
+
+def test_core_files_byte_stable_vs_knife_base():
+    """Empty-diff guard vs PR #314 base tip (MatchCore/Fees/simulate/loader/cli/views)."""
     for path in CORE:
         assert path.is_file(), path
+        rel = path.relative_to(ROOT)
+        proc = subprocess.run(
+            ["git", "diff", "--exit-code", KNIFE_BASE, "--", str(rel)],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert proc.returncode == 0, f"{rel} drifted vs {KNIFE_BASE}:\n{proc.stdout}\n{proc.stderr}"

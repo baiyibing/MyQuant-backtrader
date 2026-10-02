@@ -33,6 +33,43 @@ _RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 REQUEST_SCHEMA = "minute_orders_x7_observe_request_v0"
 
 
+def _iter_mapping_nodes(node: Any, path: str = "") -> list[tuple[str, Mapping[str, Any]]]:
+    """Yield (path, mapping) for node and every nested dict (incl. list items)."""
+    out: list[tuple[str, Mapping[str, Any]]] = []
+    if isinstance(node, Mapping):
+        out.append((path or "$", node))
+        for key, value in node.items():
+            child = f"{path}.{key}" if path else str(key)
+            out.extend(_iter_mapping_nodes(value, child))
+    elif isinstance(node, list):
+        for idx, value in enumerate(node):
+            child = f"{path}[{idx}]" if path else f"[{idx}]"
+            out.extend(_iter_mapping_nodes(value, child))
+    return out
+
+
+def _refuse_banned_keys_recursive(payload: Mapping[str, Any], *, where: str) -> None:
+    """Refuse BANNED_SOURCE_KEYS, nav/equity substrings, and views_family anywhere."""
+    for path, mapping in _iter_mapping_nodes(payload):
+        banned = sorted(BANNED_SOURCE_KEYS & set(mapping))
+        _require(
+            not banned,
+            f"banned keys under {where} at {path}: {banned}",
+        )
+        for key in mapping:
+            lowered = str(key).lower()
+            _require(
+                "nav" not in lowered and "equity" not in lowered,
+                f"X7 refuses NAV/equity rewrite field {key!r} under {where} at {path}",
+            )
+            _require(
+                lowered != "views_family",
+                f"views_family is forbidden under {where} at {path}; "
+                "X7 uses a new projection entry, never views._FAMILIES",
+            )
+
+
+
 @dataclass(frozen=True)
 class ObserveRequest:
     schema: str
@@ -67,8 +104,8 @@ def load_observe_request(path: Path) -> ObserveRequest:
 
 def request_from_mapping(payload: Mapping[str, Any]) -> ObserveRequest:
     _require(isinstance(payload, dict), "observation request must be a JSON object")
-    banned = sorted(BANNED_SOURCE_KEYS & set(payload))
-    _require(not banned, f"banned top-level keys for X7 observation: {banned}")
+    # Recursive refuse: top-level + nested dicts/lists (incl. evidence_fields blobs).
+    _refuse_banned_keys_recursive(payload, where="observation request")
 
     schema = payload.get("schema")
     _require(
@@ -94,18 +131,6 @@ def request_from_mapping(payload: Mapping[str, Any]) -> ObserveRequest:
     if evidence is None:
         evidence = {}
     _require(isinstance(evidence, dict), "evidence_fields must be an object when set")
-    nested_banned = sorted(BANNED_SOURCE_KEYS & set(evidence))
-    _require(
-        not nested_banned,
-        f"banned keys inside evidence_fields: {nested_banned}",
-    )
-    # Refuse NAV rewrite signals.
-    for key in evidence:
-        lowered = str(key).lower()
-        _require(
-            "nav" not in lowered and "equity" not in lowered,
-            f"X7 refuses NAV/equity rewrite field {key!r}",
-        )
 
     notice = payload.get("notice")
     _require(isinstance(notice, str) and notice.strip(), "notice required")
@@ -117,14 +142,6 @@ def request_from_mapping(payload: Mapping[str, Any]) -> ObserveRequest:
     _require(
         "green" in lowered_notice or "绿" in notice or "≠" in notice or "!=" in notice,
         "notice must disclaim green R / NAV upgrade",
-    )
-
-    # Refuse trying to register into old L1 families.
-    family_hint = payload.get("views_family")
-    _require(
-        family_hint is None,
-        "views_family is forbidden; X7 uses a new projection entry, "
-        "never views._FAMILIES",
     )
 
     return ObserveRequest(
@@ -213,7 +230,12 @@ def run_x7_observe(
     _require(parent_path.is_absolute(), "parent must be an absolute path")
 
     root = parent_path / "backtest_output" / OBSERVATION_ROOT_NAME / run_id
-    root.mkdir(parents=True, exist_ok=False)
+    try:
+        root.mkdir(parents=True, exist_ok=False)
+    except FileExistsError as exc:
+        raise ObserveError(
+            f"observation root already exists for run_id={run_id!r}: {root}"
+        ) from exc
     report["run_id"] = run_id
     report["parent"] = str(parent_path)
 
