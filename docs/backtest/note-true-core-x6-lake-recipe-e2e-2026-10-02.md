@@ -7,7 +7,7 @@
 | Human GO | **「GO lake e2e」** = C 残差 · **完整 `load_minute_orders_source` / lake recipe e2e**（**只读**；**非**写湖；**非**解锁 CLI `--evidence-level=lake`；**非** 4090） |
 | 方案 | `/workspace/handoffs/minute_engine_true_core_new_20261002/`；合同锚 [TC1](note-true-core-c-new-tc1-contract-2026-10-02.md) §5 X6；前序边界 [X6 lake boundary](note-true-core-x6-lake-boundary-2026-10-02.md)（#309） |
 | 硬约束 | **不** mint 新经济合同 / 新 `backend_id`；`tool_id` ≠ backend_id；复用 `tool_id=minute_orders_x6_lake`；`e2e_status` 恒 `lake_recipe_e2e_loaded_not_host_pass`；**不**产成功 `summary.json`；**不**写湖；**不**跑 MatchCore fills；≠δ5≠R4；无 4090；永 opt-in |
-| PR | **#310 draft** https://github.com/baiyibing/MyQuant-backtrader/pull/310（勿合） |
+| PR | **#310 MERGED** https://github.com/baiyibing/MyQuant-backtrader/pull/310 @ `6c8178ad` |
 
 > **本 note ≠ 第二套成交默认表，≠ 绿 R，≠ fill-policy，≠ 真湖 PASS / host attestation / item-4 live。**  
 > Lake recipe e2e load ≠ host PASS。Fixture PASS ≠ lake PASS（#307 仍独立）。边界 attestation（#309）≠ 本 e2e。工具身份 ≠ 经济合同版本。  
@@ -23,7 +23,7 @@
 | 独立根 `…/minute_orders_x6_lake/<run_id>/e2e_report.json` | 成功 `summary.json`；落 `minute_orders_research_v1` 成功根 |
 | `e2e_status` 恒 `lake_recipe_e2e_loaded_not_host_pass` | 进 fill-policy；NAV 榜；绿 R；item-4 live |
 | 薄 CLI + HELP；拒 synthetic / START / sha 错 / dirty code | 改 MatchCore / Fees / `simulate` / VolumeCap / 旧 L1 `_ENTRIES` / `views._FAMILIES` / **backend CLI** |
-| 本 docs + TC1/industry/TC5/X6-boundary 轻指针 | 解锁 CLI `--evidence-level=lake`（另 opt-in GO）；写湖 Phase4；4090 |
+| 本 docs + TC1/industry/TC5/X6-boundary 轻指针 | CLI lake 另见 [CLI lake note](note-true-core-cli-lake-2026-10-02.md)（残差 R1）；写湖 Phase4；4090 |
 
 ## 2. 相对 #309 的增量
 
@@ -125,7 +125,7 @@ docs/backtest/note-true-core-x6-lake-recipe-e2e-2026-10-02.md
 
 | 残留 | 说明 |
 |---|---|
-| 解锁 backend CLI `--evidence-level=lake` | 须另 opt-in GO；本刀明确不解锁 |
+| 解锁 backend CLI `--evidence-level=lake` | 见 [CLI lake note](note-true-core-cli-lake-2026-10-02.md)（残差 R1 · 另刀） |
 | 写湖 / Phase4 写路径 | 须另具名「写湖 GO」 |
 | 4090 host attestation / item-4 live | 须另 GO |
 | TC5 其它轴（X2/X3/X4/X5/X7） | 见 [TC5 GO/scope](note-true-core-tc5-go-scope-2026-10-02.md) |
@@ -139,4 +139,4 @@ docs/backtest/note-true-core-x6-lake-recipe-e2e-2026-10-02.md
 - 湖 ingress 合同：[note-l2-lake-source-ingress-b-l2-01-2026-09-29.md](note-l2-lake-source-ingress-b-l2-01-2026-09-29.md)
 - 成交假设 SSOT：[minute-fill-policy-ssot.md](minute-fill-policy-ssot.md)
 
-**≠δ5 certified ≠R4；无 MatchCore/Fees/simulate/backend-cli 重写；无写湖；无 CLI lake unlock；本刀 draft 勿合。**
+**≠δ5 certified ≠R4；无 MatchCore/Fees/simulate 重写；无写湖；#310 MERGED；CLI lake 另刀。**

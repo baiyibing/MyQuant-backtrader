@@ -2,7 +2,7 @@
 
 Human GO · full lake e2e (read-only) after #309. Completes the
 load_minute_orders_source / lake recipe path under tool_id=minute_orders_x6_lake.
-Does NOT unlock backend CLI --evidence-level=lake; does NOT write the lake;
+Does not itself unlock backend CLI --evidence-level=lake (residual R1); does NOT write the lake;
 does NOT run MatchCore fills / research_v1 success summary; ≠δ5≠R4.
 """
 
@@ -45,7 +45,7 @@ E2E_REPORT_FILENAME = "e2e_report.json"
 LAKE_E2E_NOTICE = (
     "真实行情驱动的合成订单研究; lake recipe e2e load != host PASS "
     "or item-4 live PASS or green R; source validation is not host certification; "
-    "does NOT unlock CLI --evidence-level=lake; no lake write."
+    "does not itself unlock CLI --evidence-level=lake (see residual R1 note); no lake write."
 )
 
 REQUIRED_PROVENANCE_NOTICE_TOKEN = "source validation is not host certification"
@@ -163,7 +163,7 @@ def build_e2e_report(
         "label": (
             "X6 lake recipe e2e · load_minute_orders_source (read-only) · "
             "lake recipe e2e load != host PASS · ≠δ5≠R4 · no lake write · "
-            "CLI --evidence-level=lake still locked"
+            "CLI lake unlock is a separate residual knife"
         ),
         "contract": CONTRACT,
         "backend_id_documented": BACKEND_ID,
@@ -171,7 +171,7 @@ def build_e2e_report(
             "tool_id is NOT a backend_id; no new economic contract; "
             "calls load_minute_orders_source only; does NOT run MatchCore fills; "
             "does NOT write minute_orders_research_v1 success summary.json; "
-            "does NOT unlock CLI --evidence-level=lake; "
+            "does not itself unlock CLI --evidence-level=lake (see residual R1 note); "
             "does NOT write the lake; forever opt-in; never BOOKS default; "
             "does NOT claim lake PASS / host attestation / item-4 live / green R"
         ),

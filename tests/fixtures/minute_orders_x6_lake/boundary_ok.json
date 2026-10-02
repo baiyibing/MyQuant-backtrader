@@ -12,7 +12,7 @@
   "notice": "lake boundary attestation != host PASS; source validation is not host certification or item-4 live PASS or green R.",
   "tip_gaps": [
     "tip source_loader accepts lake|synthetic_fixture; X6 lake tool hardens lake-only + refuses synthetic masquerade",
-    "tip CLI --evidence-level synthetic-only; this knife does NOT unlock CLI evidence_level=lake",
+    "CLI lake unlock is a separate residual (R1); this boundary knife did not unlock it",
     "account remains synthetic_account; commands remain designed_limit_batch",
     "Phase5 research path requires bar_time_label=END + availability=bucket_end (read-only)",
     "lake boundary attestation != host PASS / lake PASS / green R; no lake write"

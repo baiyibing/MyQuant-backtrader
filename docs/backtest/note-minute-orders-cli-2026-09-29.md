@@ -117,3 +117,7 @@ Fixture PASS != lake PASS；该实现不构成 host attestation、L2 lake PASS �
 R2 三项事实门的 host-fillable packages、proof 绑定与冻结清单见
 [ingress §9](note-l2-lake-source-ingress-b-l2-01-2026-09-29.md#9-factsattestation-package-go2026-09-30)。
 这是 loader 的输入登记；本 CLI 仍 synthetic-only，4090 R3 须另一条 Human GO。
+
+## 后续 · CLI lake（2026-10-02）
+
+残差 R1 解锁 `--evidence-level=lake`（pinned lake+END recipe → loader → S4 hybrid；≠ host PASS）。详见 [CLI lake note](note-true-core-cli-lake-2026-10-02.md)。synthetic 路径与上文完成判据仍适用；lake 成功 manifest 为 `evidence_level=hybrid` + `source_kind=lake`。

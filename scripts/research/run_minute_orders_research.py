@@ -1,4 +1,4 @@
-"""Dedicated minute_orders_research_v1 synthetic research CLI; no lake access."""
+"""Dedicated minute_orders_research_v1 research CLI (synthetic + opt-in lake)."""
 
 import sys
 from pathlib import Path

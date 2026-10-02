@@ -9,8 +9,7 @@ from typing import Any, Mapping
 
 BOUNDARY_META_SCHEMA = "minute_orders_x6_lake_boundary_meta_v0"
 ALLOWED_SOURCE_KIND = "lake"
-# Tool-local evidence token. Does NOT unlock backend CLI --evidence-level=lake
-# (tip CLI remains synthetic-only). Not host / certified / green R.
+# Tool-local evidence token. Not backend CLI lake unlock; not host / certified / green R.
 ALLOWED_EVIDENCE_LEVEL = "lake_boundary"
 ALLOWED_ACCOUNT_ORIGIN = "synthetic_account"
 ALLOWED_COMMANDS_ORIGIN = "designed_limit_batch"
