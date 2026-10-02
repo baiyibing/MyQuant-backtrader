@@ -106,7 +106,7 @@ P3 外置 D5 使用 s12 fix-on + 既有 transform，仅支持该冻结上下文�
 
 ## 7 P1/P2 / 统一上限指针（只读 · 非第二默认表）
 
-2026-10-02 Human：P1 docs 已合 #298；P2-A/B/C 已合 #299/#300；统一选项 H-U* 锁定为方案推荐（上限=现有 L1/B；仅 U1 docs）。**本索引不另开平行成交默认表**；入口默认继续只链 [minute-fill-policy-ssot.md](minute-fill-policy-ssot.md)。
+2026-10-02 Human：P1 docs 已合 #298；P2-A/B/C 已合 #299/#300；统一票里 H-U1=B / H-U2 / H-U3 / H-U4 / H-U7 仍是当时锁（上限=现有 L1/B；U1 docs 已合 #302）。H-U5 开票门见下表 TC1 行。**本索引不另开平行成交默认表**；入口默认继续只链 [minute-fill-policy-ssot.md](minute-fill-policy-ssot.md)。
 
 | 主题 | 指针 | 边界 |
 |---|---|---|

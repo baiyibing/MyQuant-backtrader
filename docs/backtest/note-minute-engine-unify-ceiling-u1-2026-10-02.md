@@ -4,7 +4,7 @@
 |---|---|
 | 日期 | 2026-10-02（Asia/Shanghai / CST） |
 | tip | `8c7ddc9ec6f05c5fda4602bcce98c9a3441b80c5`（master · laptop merge after #300） |
-| Human GO | 锁定全部 H-U* 为方案推荐；开 **U1 docs draft**；**勿合**，等「合」 |
+| Human GO | U1 已合 #302。下表是当时锁。H-U5 开票门见 §1.1；当前未合的是 TC1 draft。 |
 | 方案 | `/workspace/handoffs/minute_engine_unify_plan_20261002/`（`PLAN.md` / `COMPARISON.md` / `EXEC_ZH.md` / `reviews/R1_SYNTHESIS.md`） |
 | 仓内落点 | 本 note；轻指针见 [engine-positioning §3.4](engine-positioning-ssot.md) / [industry-state §7](industry-state-acceptance-index-2026-09-28.md) |
 | 硬约束 | **docs-only**；不改 MatchCore / Fees / `simulate` / VolumeCap·clamp·完成桶；≠δ5 certified ≠R4；无写湖；无 4090；无真核码 |
@@ -31,7 +31,7 @@ Human 另开真核大票：**H-U5 开票门被覆盖** → **H-U6=New**（C-New�
 
 ## 2. 统一上限一句话
 
-**统一运行停在 tip 已有 L1 Thin adapter（五家族 · 13 精确 entry）；不重造 facade；不默认加第六家；不进真核；不碰 MatchCore / Fees / `simulate`。**
+**统一运行停在 tip 已有 L1 Thin adapter（五家族 · 13 精确 entry）；不重造 facade；不默认加第六家；不进真核；不碰 MatchCore / Fees / `simulate`。** 此句只锁旧入口统一上限。真核开票见 §1.1，不在这句里。
 
 三档对照（定义详见 handoff `PLAN.md` §2）：
 
@@ -39,7 +39,7 @@ Human 另开真核大票：**H-U5 开票门被覆盖** → **H-U6=New**（C-New�
 |---|---|---|
 | A Facade-only | SSOT + 部分 views；非完整机器 catalog | 不另开；本 U1 仅文档对账 |
 | **B Thin adapter** | **已有** L1 + #298/#299/#300 | **推荐上限 · 锁定** |
-| C True unified match core | L2 是窄先例，非跨家族共同合同 | **不开票**（H-U5） |
+| C True unified match core | L2 是窄先例，非跨家族共同合同 | U1 当时不开票（H-U5）。开票门见 §1.1 / TC1。本行不改 B 档上限。 |
 
 ## 3. U1 覆盖差分（现有 L1 够不够）
 
@@ -95,8 +95,8 @@ Views 只投影已取得的内存证据：不读文件、不跑引擎、不生�
 | 锁定 H-U* 上限落仓 | 任何业务 Python / 测试 / CI / HELP_LOCK |
 | §3 覆盖差分一页 | 新 adapter、机器 catalog、O1 投影码 |
 | 轻指针校准历史「规划中」措辞 | 改 MatchCore / Fees / `simulate` / VolumeCap |
-| 引用 handoff 方案与 R1 | 开真核票、P3、δ5 certified、R4、#135、G3 码 |
-| draft **勿合**，等 Human「合」 | 写湖、4090、默认翻转、NAV 混比 |
+| 引用 handoff 方案与 R1 | U1 本页不实施真核码。合同票见 §1.1。P3、δ5 certified、R4、#135、G3 码 |
+| U1 已合 #302 | 写湖、4090、默认翻转、NAV 混比 |
 
 **U1 退出标准不是「必须发现缺口」。** Human 已裁：现有 L1 够用；本页即封口。若日后出现具名缺口，另批 U2-A/B/H 窄片；真核需求走独立 U3 合同票，**不得**藏进 adapter。
 
@@ -111,4 +111,4 @@ Views 只投影已取得的内存证据：不读文件、不跑引擎、不生�
 - 统一方案 handoff（本机外部，**不是仓库文件**）：`/workspace/handoffs/minute_engine_unify_plan_20261002/`
 - 真核 C-New TC1（覆盖 H-U5 开票门 / H-U6=New）：[note-true-core-c-new-tc1-contract-2026-10-02.md](note-true-core-c-new-tc1-contract-2026-10-02.md)；handoff `/workspace/handoffs/minute_engine_true_core_new_20261002/`
 
-**≠δ5 certified ≠R4；docs-only；无 MatchCore/Fees/simulate；勿合，等待 Human「合」。**
+**≠δ5 certified ≠R4；docs-only；无 MatchCore/Fees/simulate。U1 已合 #302。真核 TC1 draft 勿合，见 [TC1 note](note-true-core-c-new-tc1-contract-2026-10-02.md)。**
