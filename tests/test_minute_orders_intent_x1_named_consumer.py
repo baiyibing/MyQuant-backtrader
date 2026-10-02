@@ -123,6 +123,7 @@ def test_cli_help_documents_adapter_contract_backend_and_bans(tmp_path):
 
 
 def test_cli_closed_loop_sketch_a_with_fixture_meta(tmp_path):
+    meta = json.loads(FIXTURE.read_text(encoding="utf-8"))
     process = launch(tmp_path, ["--preset", "sketch_a", "--fixture", str(FIXTURE)])
     assert process.returncode == 0, process.stderr
     report = json.loads(process.stdout)
@@ -132,14 +133,13 @@ def test_cli_closed_loop_sketch_a_with_fixture_meta(tmp_path):
     assert report["command_ids"] == ["submit:O1", "submit:O2"]
     assert report["fixture_preset"] == "sketch_a"
     by_id = {o["order_id"]: o for o in report["orders"]}
-    assert by_id["O1"] == {
-        "order_id": "O1", "status": "Filled", "filled_qty": 300, "remaining_qty": 0,
-    }
-    assert by_id["O2"] == {
-        "order_id": "O2", "status": "Expired", "filled_qty": 100, "remaining_qty": 100,
-    }
-    assert report["fill_count"] == 3
-    assert D(report["fees_paid"]) == D("0")
+    for order_id, expected in meta["expected_orders"].items():
+        got = by_id[order_id]
+        assert got["status"] == expected["status"]
+        assert got["filled_qty"] == expected["filled_qty"]
+        assert got["remaining_qty"] == expected["remaining_qty"]
+    assert report["fill_count"] == meta["expected_fill_count"]
+    assert D(report["fees_paid"]) == D(meta["expected_fees_paid"])
     assert list(tmp_path.iterdir()) == []
 
 
@@ -220,6 +220,10 @@ def test_fixture_meta_identity_matches_adapter_constants():
     assert "forever_opt_in" in meta["bans"]
     assert meta["expected_orders"]["O1"]["filled_qty"] == 300
     assert meta["expected_orders"]["O2"]["status"] == "Expired"
+    assert meta["expected_orders"]["O2"]["filled_qty"] == 100
+    assert meta["expected_orders"]["O2"]["remaining_qty"] == 100
+    assert meta["expected_fill_count"] == 3
+    assert meta["expected_fees_paid"] == "0"
 
 
 def test_cli_write_artifacts_then_refuse_overwrite(tmp_path):
@@ -239,6 +243,14 @@ def test_cli_write_artifacts_then_refuse_overwrite(tmp_path):
     assert report["adapter_id"] == ADAPTER_ID
     assert report["status"] == "success"
     assert Path(report["root"]).is_dir()
+    meta = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    by_id = {o["order_id"]: o for o in report["orders"]}
+    for order_id, expected in meta["expected_orders"].items():
+        got = by_id[order_id]
+        assert got["status"] == expected["status"]
+        assert got["filled_qty"] == expected["filled_qty"]
+        assert got["remaining_qty"] == expected["remaining_qty"]
+    assert report["fill_count"] == meta["expected_fill_count"]
 
     second = launch(tmp_path, argv)
     assert second.returncode == 4, second.stdout + second.stderr

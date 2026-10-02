@@ -7,7 +7,7 @@
 | Human GO | 前 H-TC1 选项 **A**：核外、事前、冻结 LIMIT 批次 + 具名消费者调用**现有** `run_minute_orders_research` |
 | 方案 | `/workspace/handoffs/minute_engine_true_core_new_20261002/`；合同锚 [TC1](note-true-core-c-new-tc1-contract-2026-10-02.md) §5 X1 / §6 / §7 |
 | 硬约束 | 研究回测 lean；**不** mint 新经济合同 / 新 `backend_id`；复用 v0 runner 不变；≠δ5≠R4；无写湖；无 4090；无 Compat；无 X2–X8 实装 |
-| PR | draft **勿合** |
+| PR | #304 MERGED |
 
 > **本 note ≠ 第二套成交默认表，≠ 绿 R 资格认证。** 适配器身份 ≠ 经济合同版本。入口默认 / 绿 R·S 继续只链 [minute-fill-policy-ssot.md](minute-fill-policy-ssot.md)。
 
@@ -68,7 +68,7 @@ tests/test_minute_orders_intent_x1.py     # unit + handcalc e2e + import 负面�
 | VolumeCap / 旧 L1 `_ENTRIES` / `views._FAMILIES` | 借本票改 |
 | 核内 universe scan / 现金反馈 resize / StrategyPort / fills→intent | |
 | 第二价格模型；stop/market/replace/GTC；真湖 loader | |
-| 绿 R / NAV 混比；merge 本 draft | |
+| 绿 R / NAV 混比（本 note 对应码已合 #304） | |
 | 覆盖已存在工件根 | S4 已拒绝；本刀不绕过 |
 
 ## 5. 调用方法
@@ -102,6 +102,8 @@ outcome = run_x1_frozen_batch(
 python scripts/research/run_x1_frozen_batch.py
 # 打印 adapter_id / command_ids / 终态；exit 0 当 sketch A 手算终态匹配
 ```
+
+无参仍默认跑 sketch A 内存路径。argparse / `--help` / `--write-artifacts` 见 [TC3](note-true-core-tc3-named-consumer-2026-10-02.md)。
 
 ### 5.3 测试
 

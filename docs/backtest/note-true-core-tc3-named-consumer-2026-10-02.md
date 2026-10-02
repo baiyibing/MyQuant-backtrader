@@ -53,6 +53,8 @@ python scripts/research/run_x1_frozen_batch.py \
 # 打印 adapter_id / command_ids / 终态；exit 0 当 sketch A 手算终态匹配
 ```
 
+fixture 是身份与终态 attestation；桶与价仍在脚本的合成 sketch A 中（meta-only，非湖 loader）。
+
 ### 3.3 可选 S4 写（既有根策略）
 
 ```bash

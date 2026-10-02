@@ -45,9 +45,6 @@ PREV, D0, D1 = date(2026, 9, 25), date(2026, 9, 28), date(2026, 9, 29)
 ZERO_FEES = FeeModelParams(D("0"), D("0.00"), ROUND_HALF_UP)
 CONTRACT = "research contract v0 (L2-S0)"
 BACKEND_ID = "minute_orders_research_v1"
-DEFAULT_FIXTURE = (
-    REPO_ROOT / "tests" / "fixtures" / "minute_orders_intent_x1" / "sketch_a_meta.json"
-)
 
 HELP_DESCRIPTION = (
     "Named consumer for adapter_id=minute_orders_intent_x1: freeze a-priori "
@@ -183,8 +180,10 @@ def _parser() -> argparse.ArgumentParser:
         "--fixture",
         type=_nonempty,
         help=(
-            "optional attestation-level fixture meta JSON; verifies adapter_id / "
-            f"contract / backend_id identity (default repo sketch: {DEFAULT_FIXTURE})"
+            "optional path to attestation-level fixture meta JSON; loaded only when "
+            "passed; verifies adapter_id / contract / backend_id / evidence_level / "
+            "preset and expected_* terminal states; does NOT supply market data "
+            "(example: tests/fixtures/minute_orders_intent_x1/sketch_a_meta.json)"
         ),
     )
     parser.add_argument(
@@ -227,6 +226,65 @@ def _sketch_a_ok(outcome) -> bool:
     )
 
 
+def _sketch_a_orders_ok(orders) -> bool:
+    """Dict-form sketch A terminal gate (memory report or summary.json orders)."""
+    by_id = {o["order_id"]: o for o in orders}
+    o1, o2 = by_id.get("O1"), by_id.get("O2")
+    if o1 is None or o2 is None:
+        return False
+    return (
+        o1.get("status") == OrderStatus.FILLED.value
+        and o1.get("filled_qty") == 300
+        and o2.get("status") == OrderStatus.EXPIRED.value
+        and o2.get("filled_qty") == 100
+    )
+
+
+def _normalize_order_rows(orders) -> list:
+    return [
+        {
+            "order_id": o["order_id"],
+            "status": o["status"] if isinstance(o["status"], str) else str(o["status"]),
+            "filled_qty": o["filled_qty"],
+            "remaining_qty": o["remaining_qty"],
+        }
+        for o in orders
+    ]
+
+
+def _fixture_expected_ok(orders, fill_count, fees_paid, fixture_meta) -> bool:
+    """Compare report terminal state against fixture expected_* (attestation gate)."""
+    expected_orders = fixture_meta.get("expected_orders")
+    if type(expected_orders) is not dict:
+        return False
+    by_id = {o["order_id"]: o for o in orders}
+    for order_id, expected in expected_orders.items():
+        got = by_id.get(order_id)
+        if got is None:
+            return False
+        if got.get("status") != expected.get("status"):
+            return False
+        if got.get("filled_qty") != expected.get("filled_qty"):
+            return False
+        if got.get("remaining_qty") != expected.get("remaining_qty"):
+            return False
+    if fill_count != fixture_meta.get("expected_fill_count"):
+        return False
+    try:
+        if D(str(fees_paid)) != D(str(fixture_meta.get("expected_fees_paid"))):
+            return False
+    except Exception:
+        return False
+    return True
+
+
+def _terminal_ok(orders, fill_count, fees_paid, *, adapter_id, fixture_meta) -> bool:
+    ok = adapter_id == ADAPTER_ID and _sketch_a_orders_ok(orders)
+    if fixture_meta is not None:
+        ok = ok and _fixture_expected_ok(orders, fill_count, fees_paid, fixture_meta)
+    return ok
+
+
 def _memory_report(outcome) -> dict:
     return {
         "adapter_id": outcome.adapter_id,
@@ -256,7 +314,22 @@ def main(argv=None):
     args = _parser().parse_args(argv)
     fixture_meta = None
     if args.fixture is not None:
-        fixture_meta = _load_fixture_meta(Path(args.fixture))
+        try:
+            fixture_meta = _load_fixture_meta(Path(args.fixture))
+        except (OSError, ValueError, json.JSONDecodeError) as error:
+            print(
+                json.dumps(
+                    {
+                        "status": "input_error",
+                        "reason": str(error),
+                        "error_type": type(error).__name__,
+                    },
+                    ensure_ascii=True,
+                    sort_keys=True,
+                ),
+                file=sys.stderr,
+            )
+            return 2
         if fixture_meta["preset"] != args.preset:
             print(
                 json.dumps(
@@ -344,6 +417,11 @@ def main(argv=None):
             )
             return 4
         art = artifacts_outcome.artifacts
+        root = Path(getattr(art, "root", ""))
+        summary = json.loads((root / "summary.json").read_text(encoding="utf-8"))
+        orders = _normalize_order_rows(summary["orders"])
+        fill_count = summary["fill_count"]
+        fees_paid = str(summary.get("fees_paid", "0"))
         report = {
             "adapter_id": artifacts_outcome.adapter_id,
             "backend_id": BACKEND_ID,
@@ -351,17 +429,28 @@ def main(argv=None):
             "command_count": len(artifacts_outcome.commands),
             "command_ids": [c.command_id for c in artifacts_outcome.commands],
             "status": getattr(art, "status", None),
-            "root": str(getattr(art, "root", "")),
+            "root": str(root),
+            "orders": orders,
+            "fill_count": fill_count,
+            "fees_paid": fees_paid,
             "fixture_preset": None if fixture_meta is None else fixture_meta["preset"],
             "note": (
                 "adapter identity only; ≠δ5≠R4; S4 write under existing backend root; "
                 "forever opt-in; never BOOKS default"
             ),
         }
+        if fixture_meta is not None:
+            report["fixture_adapter_id"] = fixture_meta["adapter_id"]
         print(json.dumps(report, ensure_ascii=True, sort_keys=True, indent=2))
         ok = (
-            artifacts_outcome.adapter_id == ADAPTER_ID
-            and getattr(art, "status", None) == "success"
+            getattr(art, "status", None) == "success"
+            and _terminal_ok(
+                orders,
+                fill_count,
+                fees_paid,
+                adapter_id=artifacts_outcome.adapter_id,
+                fixture_meta=fixture_meta,
+            )
         )
         return 0 if ok else 1
 
@@ -371,7 +460,15 @@ def main(argv=None):
         report["fixture_preset"] = fixture_meta["preset"]
         report["fixture_adapter_id"] = fixture_meta["adapter_id"]
     print(json.dumps(report, ensure_ascii=True, sort_keys=True, indent=2))
-    return 0 if _sketch_a_ok(outcome) else 1
+    ok = _sketch_a_ok(outcome)
+    if fixture_meta is not None:
+        ok = ok and _fixture_expected_ok(
+            report["orders"],
+            report["fill_count"],
+            report["fees_paid"],
+            fixture_meta,
+        )
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":
