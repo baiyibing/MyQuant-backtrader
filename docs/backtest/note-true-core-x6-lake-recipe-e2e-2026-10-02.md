@@ -7,7 +7,7 @@
 | Human GO | **「GO lake e2e」** = C 残差 · **完整 `load_minute_orders_source` / lake recipe e2e**（**只读**；**非**写湖；**非**解锁 CLI `--evidence-level=lake`；**非** 4090） |
 | 方案 | `/workspace/handoffs/minute_engine_true_core_new_20261002/`；合同锚 [TC1](note-true-core-c-new-tc1-contract-2026-10-02.md) §5 X6；前序边界 [X6 lake boundary](note-true-core-x6-lake-boundary-2026-10-02.md)（#309） |
 | 硬约束 | **不** mint 新经济合同 / 新 `backend_id`；`tool_id` ≠ backend_id；复用 `tool_id=minute_orders_x6_lake`；`e2e_status` 恒 `lake_recipe_e2e_loaded_not_host_pass`；**不**产成功 `summary.json`；**不**写湖；**不**跑 MatchCore fills；≠δ5≠R4；无 4090；永 opt-in |
-| PR | draft（勿合） |
+| PR | **#310 draft** https://github.com/baiyibing/MyQuant-backtrader/pull/310（勿合） |
 
 > **本 note ≠ 第二套成交默认表，≠ 绿 R，≠ fill-policy，≠ 真湖 PASS / host attestation / item-4 live。**  
 > Lake recipe e2e load ≠ host PASS。Fixture PASS ≠ lake PASS（#307 仍独立）。边界 attestation（#309）≠ 本 e2e。工具身份 ≠ 经济合同版本。  
