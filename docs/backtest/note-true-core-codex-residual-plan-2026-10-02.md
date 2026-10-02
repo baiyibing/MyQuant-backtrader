@@ -34,7 +34,7 @@
 | R1 | CLI `--evidence-level=lake` | **已合 #311** | 维护；勿升格 host PASS |
 | R2 | 写湖 / Phase4 | **staging 已合 #312** | 生产写须另具名 GO + MUST cuts 齐裁；本仓默认 consume-only |
 | R5 / **A·X7** | 观察面 | **#314 MERGED** | 新投影；不塞 `views._FAMILIES`；观察 ≠ 绿 R |
-| R3 | 4090 / item-4 live | **未开** | 须具名「4090 GO」；结果不得预订 PASS |
+| R3 | 4090 / item-4 live | **边界登记**（[R3 note](note-true-core-r3-host-attestation-boundary-2026-10-03.md)；draft 勿合） | Human 已点名 R3；**本登记 ≠ live ≠ host PASS**；未裁 window/symbols/recipe_pin/code_tip 前 **不派 4090bot**；结果不得预订 PASS |
 | R4 | 暂停消化 | 可选 | 同日多刀后仍可用；≠ 自动收官 C |
 | R6 | 仅 X5 同合同批 | **未开** | 须点名；共享现金/新语义 → 新身份 |
 | — | X2 / X3 / X4 | **未开** | 必新 contract + backend_id；X3 受 H-TC3 锁 |
@@ -55,11 +55,11 @@
 ## 4. 后续 draft 建议顺序（人裁后另开）
 
 1. **生产写湖 MUST 齐裁**（若仍要本链写）— 否则停在 #312 staging  
-2. **4090 host attestation**（R3）— 独立材料与验收  
+2. **4090 host attestation**（R3）— 边界登记见 [R3 note](note-true-core-r3-host-attestation-boundary-2026-10-03.md)（**≠ live**；未裁齐不派 4090bot；≠ host PASS）  
 3. **X5 同合同批**（若吞吐成瓶颈）— 否则先 R4 消化  
 4. **X2/X4**（必新身份草稿）— 未点名不开  
 5. **X3** — 默认不推荐（H-TC3）
 
 ## 5. 非宣称
 
-本计划 **≠** 授权生产写湖 / 4090 / 改核 / 绿 R / host PASS。A·X7 **#314 MERGED**（观察 ≠ 绿 R）。生产写须另具名 GO；本仓 consume-only；target_pin 未裁，见 [MUST cuts register](note-true-core-write-lake-must-cuts-register-2026-10-03.md)。≠δ5 certified ≠R4；回测研究系统 ≠ 交易系统。
+本计划 **≠** 授权生产写湖 / 改核 / 绿 R / host PASS。A·X7 **#314 MERGED**（观察 ≠ 绿 R）。生产写须另具名 GO；本仓 consume-only；target_pin 未裁，见 [MUST cuts register](note-true-core-write-lake-must-cuts-register-2026-10-03.md)。R3 仅边界登记见 [R3 note](note-true-core-r3-host-attestation-boundary-2026-10-03.md)（**登记 ≠ item-4 live ≠ host PASS**；不派 4090）。≠δ5 certified ≠R4；回测研究系统 ≠ 交易系统。
