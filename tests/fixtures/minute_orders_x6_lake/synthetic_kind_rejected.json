@@ -1,0 +1,26 @@
+{
+  "schema": "minute_orders_x6_lake_boundary_meta_v0",
+  "tool_id": "minute_orders_x6_lake",
+  "source_kind": "synthetic_fixture",
+  "evidence_level": "lake_boundary",
+  "account_origin": "synthetic_account",
+  "commands_origin": "designed_limit_batch",
+  "bar_time_label": "END",
+  "availability": "bucket_end",
+  "contract": "research contract v0 (L2-S0)",
+  "backend_id": "minute_orders_research_v1",
+  "notice": "lake boundary attestation != host PASS; synthetic masquerade must be refused.",
+  "tip_gaps": [
+    "synthetic_fixture must not masquerade as lake boundary pass"
+  ],
+  "bans": [
+    "no_synthetic_fixture_masquerade"
+  ],
+  "claims": {
+    "lake_pass": false,
+    "host_attestation": false,
+    "green_r": false,
+    "comparison_authorization": false
+  },
+  "note": "Negative fixture: source_kind=synthetic_fixture must be refused by X6 lake knife."
+}

@@ -1,0 +1,43 @@
+{
+  "schema": "minute_orders_x6_lake_boundary_meta_v0",
+  "tool_id": "minute_orders_x6_lake",
+  "source_kind": "lake",
+  "evidence_level": "lake_boundary",
+  "account_origin": "synthetic_account",
+  "commands_origin": "designed_limit_batch",
+  "bar_time_label": "END",
+  "availability": "bucket_end",
+  "contract": "research contract v0 (L2-S0)",
+  "backend_id": "minute_orders_research_v1",
+  "notice": "lake boundary attestation != host PASS; source validation is not host certification or item-4 live PASS or green R.",
+  "tip_gaps": [
+    "tip source_loader accepts lake|synthetic_fixture; X6 lake tool hardens lake-only + refuses synthetic masquerade",
+    "tip CLI --evidence-level synthetic-only; this knife does NOT unlock CLI evidence_level=lake",
+    "account remains synthetic_account; commands remain designed_limit_batch",
+    "Phase5 research path requires bar_time_label=END + availability=bucket_end (read-only)",
+    "lake boundary attestation != host PASS / lake PASS / green R; no lake write"
+  ],
+  "bans": [
+    "no_lake_write",
+    "no_synthetic_fixture_masquerade",
+    "no_cli_evidence_level_lake_unlock",
+    "no_new_contract",
+    "no_new_backend_id",
+    "no_matchcore_fees_simulate_edit",
+    "no_host_attestation_claim",
+    "no_lake_pass_claim",
+    "not_delta5_certified",
+    "not_r4",
+    "not_books_default",
+    "forever_opt_in",
+    "read_only_lake_end_boundary"
+  ],
+  "claims": {
+    "lake_pass": false,
+    "host_attestation": false,
+    "green_r": false,
+    "comparison_authorization": false,
+    "item4_live_pass": false
+  },
+  "note": "Read-only X6 lake END / loader boundary meta. Not host PASS; not a new economic contract or backend_id; does not unlock CLI --evidence-level=lake."
+}
