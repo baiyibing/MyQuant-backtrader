@@ -7,7 +7,7 @@
 | Human GO | 前 H-TC1 选项 **A**：核外、事前、冻结 LIMIT 批次 + 具名消费者调用**现有** `run_minute_orders_research` |
 | 方案 | `/workspace/handoffs/minute_engine_true_core_new_20261002/`；合同锚 [TC1](note-true-core-c-new-tc1-contract-2026-10-02.md) §5 X1 / §6 / §7 |
 | 硬约束 | 研究回测 lean；**不** mint 新经济合同 / 新 `backend_id`；复用 v0 runner 不变；≠δ5≠R4；无写湖；无 4090；无 Compat；无 X2–X8 实装 |
-| PR | draft **勿合** |
+| PR | #304 MERGED |
 
 > **本 note ≠ 第二套成交默认表，≠ 绿 R 资格认证。** 适配器身份 ≠ 经济合同版本。入口默认 / 绿 R·S 继续只链 [minute-fill-policy-ssot.md](minute-fill-policy-ssot.md)。
 
@@ -68,7 +68,7 @@ tests/test_minute_orders_intent_x1.py     # unit + handcalc e2e + import 负面�
 | VolumeCap / 旧 L1 `_ENTRIES` / `views._FAMILIES` | 借本票改 |
 | 核内 universe scan / 现金反馈 resize / StrategyPort / fills→intent | |
 | 第二价格模型；stop/market/replace/GTC；真湖 loader | |
-| 绿 R / NAV 混比；merge 本 draft | |
+| 绿 R / NAV 混比（本 note 对应码已合 #304） | |
 | 覆盖已存在工件根 | S4 已拒绝；本刀不绕过 |
 
 ## 5. 调用方法
@@ -103,6 +103,8 @@ python scripts/research/run_x1_frozen_batch.py
 # 打印 adapter_id / command_ids / 终态；exit 0 当 sketch A 手算终态匹配
 ```
 
+无参仍默认跑 sketch A 内存路径。argparse / `--help` / `--write-artifacts` 见 [TC3](note-true-core-tc3-named-consumer-2026-10-02.md)。
+
 ### 5.3 测试
 
 ```bash
@@ -114,8 +116,9 @@ pytest tests/test_minute_orders_intent_x1.py tests/test_minute_orders_runner.py 
 ## 6. ≠δ5≠R4 · 范围外
 
 - **≠δ5 certified ≠R4**；无绿 R / NAV 混比授权。
-- Out of scope：X2–X8 实装、P3、4090、湖写入、Compat 主路径、HELP/preset、L1 `_ENTRIES` 注册。
-- 本 draft **勿合**，等 Human「合」。
+- Out of scope：X2–X8 实装、P3、4090、湖写入、Compat 主路径、L1 `_ENTRIES` 注册。
+- 具名 CLI/HELP 闭环见 [TC3](note-true-core-tc3-named-consumer-2026-10-02.md)（本 tip 后刀；draft 勿合）。
+- 本 note 对应码已合 #304；后续消费者接线见 TC3。
 
 ## 7. 指针
 
@@ -124,5 +127,6 @@ pytest tests/test_minute_orders_intent_x1.py tests/test_minute_orders_runner.py 
 - S3 runner：[note-l2-s3-clock-broker-runner-2026-09-29.md](note-l2-s3-clock-broker-runner-2026-09-29.md)
 - 统一上限 U1：[note-minute-engine-unify-ceiling-u1-2026-10-02.md](note-minute-engine-unify-ceiling-u1-2026-10-02.md)
 - handoff（仓外）：`/workspace/handoffs/minute_engine_true_core_new_20261002/`
+- TC3 具名消费者闭环：[note-true-core-tc3-named-consumer-2026-10-02.md](note-true-core-tc3-named-consumer-2026-10-02.md)
 
-**≠δ5≠R4；适配器身份 only；复用 v0 runner；无 MatchCore/Fees/simulate 重写；draft 勿合。**
+**≠δ5≠R4；适配器身份 only；复用 v0 runner；无 MatchCore/Fees/simulate 重写；#304 MERGED；消费者 CLI 见 TC3。**

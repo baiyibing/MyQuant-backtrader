@@ -168,6 +168,7 @@ stop / market / replace / GTC · next-open / OHLC 路径（X3）· 多账户（X
 - 成交假设 SSOT：[minute-fill-policy-ssot.md](minute-fill-policy-ssot.md)
 - 引擎定位：[engine-positioning-ssot.md](engine-positioning-ssot.md)
 - 真核方案 handoff（本机外部，**不是仓库文件**）：`/workspace/handoffs/minute_engine_true_core_new_20261002/`
-- TC2 窄 X1 适配器（码刀；复用 v0 runner；**不** mint 新 contract/backend_id）：[note-true-core-tc2-x1-intent-adapter-2026-10-02.md](note-true-core-tc2-x1-intent-adapter-2026-10-02.md)
+- TC2 窄 X1 适配器（码刀；复用 v0 runner；**不** mint 新 contract/backend_id）：[note-true-core-tc2-x1-intent-adapter-2026-10-02.md](note-true-core-tc2-x1-intent-adapter-2026-10-02.md)（#304 MERGED）
+- TC3 具名消费者闭环（CLI/HELP；仍无新 contract/backend_id）：[note-true-core-tc3-named-consumer-2026-10-02.md](note-true-core-tc3-named-consumer-2026-10-02.md)
 
-**≠δ5 certified ≠R4；TC1 docs 已合 #303；无 MatchCore/Fees/simulate 重写。码刀见 [TC2 X1](note-true-core-tc2-x1-intent-adapter-2026-10-02.md)（draft 勿合）。**
+**≠δ5 certified ≠R4；TC1 docs 已合 #303；无 MatchCore/Fees/simulate 重写。TC2 X1 已合 #304；消费者 CLI 见 [TC3](note-true-core-tc3-named-consumer-2026-10-02.md)（draft 勿合）。**

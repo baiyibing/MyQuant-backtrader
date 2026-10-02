@@ -1,0 +1,27 @@
+{
+  "schema": "minute_orders_intent_x1_fixture_meta_v0",
+  "adapter_id": "minute_orders_intent_x1",
+  "contract": "research contract v0 (L2-S0)",
+  "backend_id": "minute_orders_research_v1",
+  "preset": "sketch_a",
+  "evidence_level": "synthetic",
+  "timezone": "Asia/Shanghai",
+  "note": "Attestation-level synthetic sketch meta for TC3 named consumer closed loop. Not a lake loader; not a new economic contract or backend_id.",
+  "bans": [
+    "no_new_contract",
+    "no_new_backend_id",
+    "no_second_price_model",
+    "no_matchcore_fees_simulate_edit",
+    "no_lake_write",
+    "not_delta5_certified",
+    "not_r4",
+    "not_books_default",
+    "forever_opt_in"
+  ],
+  "expected_orders": {
+    "O1": {"status": "Filled", "filled_qty": 300, "remaining_qty": 0},
+    "O2": {"status": "Expired", "filled_qty": 100, "remaining_qty": 100}
+  },
+  "expected_fill_count": 3,
+  "expected_fees_paid": "0"
+}
