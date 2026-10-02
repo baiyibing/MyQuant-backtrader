@@ -7,7 +7,7 @@
 | Human GO | TC3 = notebook/runner/CLI 点名；HELP/preset 若需要；完成研究闭环；永 opt-in；不以 BOOKS 默认为验收 |
 | 方案 | `/workspace/handoffs/minute_engine_true_core_new_20261002/`；合同锚 [TC1](note-true-core-c-new-tc1-contract-2026-10-02.md) §5–7；码刀基线 [TC2 X1](note-true-core-tc2-x1-intent-adapter-2026-10-02.md) |
 | 硬约束 | **不** mint 新经济合同 / 新 `backend_id`；复用 v0 runner；≠δ5≠R4；无写湖；无 4090；无 Compat；无 X2–X8 / P3 / X6 真湖 |
-| PR | draft **勿合** |
+| PR | **#305 MERGED** `00ab1a24` |
 
 > **本 note ≠ 第二套成交默认表，≠ 绿 R 资格认证。** 适配器身份 ≠ 经济合同版本。入口默认 / 绿 R·S 继续只链 [minute-fill-policy-ssot.md](minute-fill-policy-ssot.md)。
 
@@ -19,9 +19,9 @@
 |---|---|
 | `scripts/research/run_x1_frozen_batch.py` argparse + `--help` | 膨胀 `minute_orders_backend/cli.py`（保持 v0 CLI 身份干净） |
 | 合成 fixture meta（attestation 级） | X6 真湖 loader；新 contract / backend_id |
-| 合成 closed-loop e2e（内存 + 可选 S4） | X2–X5 / X7 `_FAMILIES` / X8 对照桥 / P3 |
+| 合成 closed-loop e2e（内存 + 可选 S4） | X2–X5 / X7 `_FAMILIES` / P3；X8 见 [TC4](note-true-core-tc4-x8-compare-bridge-2026-10-02.md) |
 | 本 docs + TC1/TC2/industry 轻指针 | 改 MatchCore / Fees / `simulate` / VolumeCap / 旧 L1 `_ENTRIES` |
-| draft **勿合** | 成为 BOOKS 默认；绿 R / NAV 混比 |
+| 本码已合 #305 | 成为 BOOKS 默认；绿 R / NAV 混比 |
 
 ## 2. 身份澄清（仍 = TC2）
 
@@ -113,8 +113,9 @@ TC2 包 `backtest/research/minute_orders_intent_x1/{builders,consumer}.py` **不
 ## 6. ≠δ5≠R4 · 范围外
 
 - **≠δ5 certified ≠R4**；无绿 R / NAV 混比授权。
-- Out of scope：X2–X5、X6 真湖 loader、X7 进 `_FAMILIES`、X8 对照桥、P3、4090、湖写入、Compat 主路径、BOOKS 默认。
-- 本 draft **勿合**，等 Human「合」。
+- Out of scope：X2–X5、X6 真湖 loader、X7 进 `_FAMILIES`、P3、4090、湖写入、Compat 主路径、BOOKS 默认。
+- X8 对照桥另刀：[TC4](note-true-core-tc4-x8-compare-bridge-2026-10-02.md)（draft 勿合）。
+- 本 note 对应码已合 #305。
 
 ## 7. 指针
 
@@ -124,5 +125,6 @@ TC2 包 `backtest/research/minute_orders_intent_x1/{builders,consumer}.py` **不
 - S4 工件隔离：[note-l2-s4-artifacts-isolation-2026-09-29.md](note-l2-s4-artifacts-isolation-2026-09-29.md)
 - 行业索引：[industry-state-acceptance-index-2026-09-28.md](industry-state-acceptance-index-2026-09-28.md) §7
 - handoff（仓外）：`/workspace/handoffs/minute_engine_true_core_new_20261002/`
+- TC4 X8 对照桥：[note-true-core-tc4-x8-compare-bridge-2026-10-02.md](note-true-core-tc4-x8-compare-bridge-2026-10-02.md)
 
-**≠δ5≠R4；具名消费者闭环 on tip X1；无新 contract/backend_id；无 MatchCore/Fees/simulate 重写；draft 勿合。**
+**≠δ5≠R4；具名消费者闭环 on tip X1；无新 contract/backend_id；无 MatchCore/Fees/simulate 重写；#305 MERGED。**

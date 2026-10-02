@@ -1,0 +1,46 @@
+{
+  "schema": "minute_orders_x8_prematch_intent_snapshot_v0",
+  "snapshot_kind": "pre_match_intent",
+  "adapter_id": "minute_orders_intent_x1",
+  "contract": "research contract v0 (L2-S0)",
+  "backend_id": "minute_orders_research_v1",
+  "facts_preset": "sketch_a",
+  "evidence_level": "synthetic",
+  "timezone": "Asia/Shanghai",
+  "note": "Attestation-level pre-match LIMIT intent snapshot for TC4 X8 compare bridge. Not fills; not a lake loader; not a new economic contract or backend_id.",
+  "bans": [
+    "no_fills_to_intent",
+    "no_success_summary_json",
+    "no_new_contract",
+    "no_new_backend_id",
+    "forever_opt_in"
+  ],
+  "intents": [
+    {
+      "kind": "limit",
+      "order_id": "O1",
+      "symbol": "X",
+      "side": "BUY",
+      "qty": 300,
+      "limit": "10.00",
+      "available_at": "2026-09-28T09:29:00+08:00",
+      "submitted_at": "2026-09-28T09:29:00+08:00",
+      "effective_at": "2026-09-28T09:30:00+08:00",
+      "expires_at": "2026-09-28T09:33:00+08:00",
+      "sequence": 1
+    },
+    {
+      "kind": "limit",
+      "order_id": "O2",
+      "symbol": "X",
+      "side": "BUY",
+      "qty": 200,
+      "limit": "10.00",
+      "available_at": "2026-09-28T09:29:01+08:00",
+      "submitted_at": "2026-09-28T09:29:01+08:00",
+      "effective_at": "2026-09-28T09:30:00+08:00",
+      "expires_at": "2026-09-28T09:33:00+08:00",
+      "sequence": 2
+    }
+  ]
+}

@@ -118,6 +118,7 @@ P3 外置 D5 使用 s12 fix-on + 既有 transform，仅支持该冻结上下文�
 | 统一上限 / U1 | [unify ceiling U1](note-minute-engine-unify-ceiling-u1-2026-10-02.md)；handoff `/workspace/handoffs/minute_engine_unify_plan_20261002/` | 上限=现有 L1/B（旧入口）；不碰 MatchCore/Fees/`simulate`（统一语境） |
 | 真核 C-New / TC1 | [C-New TC1 合同冻结](note-true-core-c-new-tc1-contract-2026-10-02.md)；handoff `/workspace/handoffs/minute_engine_true_core_new_20261002/` | H-U6=New；H-TC1=C docs-only；冻 L2 v0；#303 MERGED `fee8f88d`；无 simulate/MatchCore 重写 |
 | 真核 TC2 窄 X1 | [TC2 X1 意图适配器](note-true-core-tc2-x1-intent-adapter-2026-10-02.md) | 核外冻结 LIMIT + 现有 runner；适配器身份 only；**不** mint 新 contract/backend_id；≠δ5≠R4；#304 MERGED |
-| 真核 TC3 具名消费者 | [TC3 named consumer](note-true-core-tc3-named-consumer-2026-10-02.md) | X1 CLI/HELP 闭环；合成 fixture；永 opt-in；不以 BOOKS 默认为验收；≠δ5≠R4；draft **勿合** |
+| 真核 TC3 具名消费者 | [TC3 named consumer](note-true-core-tc3-named-consumer-2026-10-02.md) | X1 CLI/HELP 闭环；合成 fixture；永 opt-in；不以 BOOKS 默认为验收；≠δ5≠R4；#305 MERGED `00ab1a24` |
+| 真核 TC4 · X8 对照桥 | [TC4 X8 compare bridge](note-true-core-tc4-x8-compare-bridge-2026-10-02.md) | 仅撮合前意图；禁 fills→意图；独立 comparison 根；恒 `no_ssot_compare_authorization`；无成功 summary.json；≠δ5≠R4；draft **勿合** |
 
-L2 `minute_orders` 定位：**永 opt-in**（P1 H4=A · 统一 H-U3 · 真核 H-TC9）。G3 科创板申报数量延后（H5=A）。统一语境与 TC1/TC2/TC3 docs **均不授权**改 MatchCore / Fees / `simulate` / VolumeCap·clamp·完成桶。TC1 已合 #303；TC2 X1 已合 #304；TC3 named consumer draft **勿合，等待 Human「合」**。
+L2 `minute_orders` 定位：**永 opt-in**（P1 H4=A · 统一 H-U3 · 真核 H-TC9）。G3 科创板申报数量延后（H5=A）。统一语境与 TC1/TC2/TC3/TC4 docs **均不授权**改 MatchCore / Fees / `simulate` / VolumeCap·clamp·完成桶。TC1 已合 #303；TC2 X1 已合 #304；TC3 已合 #305；TC4 X8 对照桥 draft **勿合，等待 Human「合」**。
