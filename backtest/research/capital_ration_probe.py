@@ -7,7 +7,7 @@ queues; it is NOT an exact skip_cash count. Ranks are zero-based file order.
 Chase BUY rows are counted separately, including dates without a pool file,
 and never enter the planned-slot denominator or pool allocation count.
 
-Pool files use the loose parse_pool_csv dialect (deduplicated, file order).
+Pool files use the loose parse_pool_csv dialect (file order; duplicates fail).
 Non-YYYYMMDD filenames are ignored; unreadable files and invalid dates fail.
 Days with pool counts selected files, including empty pools. Date bounds are
 inclusive. ISO timestamps retain their written calendar date (no UTC shift).

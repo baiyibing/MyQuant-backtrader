@@ -44,6 +44,12 @@ def simulate(
     volume_for_bucket=None,
     **kwargs,
 ):
+    # P2-B adapter shell: rate None → no-op; invalid rate fail-closed before XOR. ≠δ5≠R4.
+    from backtest.research.participation_rate_precheck import (
+        precheck_cli_participation_rate,
+    )
+
+    precheck_cli_participation_rate(participation_rate)
     if participation_rate is not None or volume_for_bucket is not None:
         raise ValueError("batch4 is clock XOR slip; capacity is a separate axis")
     hooks = loop.prepare_strategy_hooks(
@@ -58,6 +64,9 @@ def simulate(
         pool_names=pool_names,
         pool_names_by_day=pool_names_by_day,
     )
+    # This isolated experimental replay retains its original lot/clock model.
+    # Corrected independent groups belong to the public daily/minute engines.
+    st.book_state.pop("s8_independent", None)
     if exdiv_economics is not None:
         st.exdiv_economics = book.ExDivEconomics(exdiv_economics, st.stats)
     st.research_orders = []
@@ -85,7 +94,7 @@ def simulate(
             closes[code] = prev["close"].astype(float).tolist()
             ref, _ = book.mapped_prev_close(exdiv, code, ds, closes[code][-1])
             limits[code] = book.book_limit_prices(
-                code, ref, names, qlib_limit_pct=hooks.get("qlib_limit_pct")
+                code, ref, names, qlib_limit_pct=hooks.get("qlib_limit_pct"), as_of=ds
             )
 
         def candidates(code):

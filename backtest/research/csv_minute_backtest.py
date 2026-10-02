@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 import time
@@ -33,9 +34,12 @@ from backtest.research.csv_ledger import (  # noqa: E402
     QLIB_CLOSE_COST,
     QLIB_MIN_COST,
     QLIB_OPEN_COST,
+    IndependentExitPosition,
     SimState,
     chase_decision as chase_decision,
+    configure_s8,
     execute_buy as execute_buy,
+    exit_positions,
     finish_pending_chase,
     queue_limit_up_chase as queue_limit_up_chase,
     hit_limit_down,
@@ -45,6 +49,7 @@ from backtest.research.csv_ledger import (  # noqa: E402
     _sell,
     _ymd,
     rescale_position,
+    rescale_s8_groups,
     apply_exdiv_economics,
 )
 
@@ -71,6 +76,7 @@ from backtest.research.csv_strategy_books import (  # noqa: E402
     apply_csv_strategy,
     csv_run_kwargs_from_args,
     engine_book,
+    resolve_daily_quota,
     resolve_research_pool_dir,
     help_lock_all,
     help_lock_for,
@@ -113,6 +119,7 @@ from backtest.research.csv_simulate_loop import (  # noqa: E402
     append_equity_and_eod_marks,
     init_sim_state,
     prepare_strategy_hooks,
+    require_market_marks,
     run_chase_due_day,
     run_eod_exits,
     run_pool_buys_day,
@@ -120,6 +127,30 @@ from backtest.research.csv_simulate_loop import (  # noqa: E402
 )
 
 from backtest.research.ashare_volume_cap import VolumeCap, VolumeLookup  # noqa: E402
+from backtest.research.csv_minute_volume import (  # noqa: E402
+    completed_minute_volumes, validate_participation_rate,
+)
+from backtest.research.participation_rate_precheck import (  # noqa: E402
+    precheck_cli_participation_rate,
+    precheck_completed_bucket_samples,
+)
+from backtest.research.minute_audit import audit_scope, write_audit
+from backtest.research.minute_stop_trigger import (
+    blocked_bar, target_fill, validate_low, validate_minute_stop_trigger,
+)
+from backtest.research.minute_cash_order import (
+    HeldMinuteCursor,
+    advance_independent_exit,
+    run_chronological_day,
+)
+from backtest.research.tail_window_buy import (
+    resolve_tail_volume_unit,
+    tail_policy,
+    validate_tail_options,
+)
+from backtest.research.topk_minute_exec import (
+    TOPK_EXEC_HELP_LOCK, parse_topk_exec, validate_topk_exec, write_topk_exec_audit,
+)
 
 # Preserve historical loader aliases used by callers and tests.
 _ = (_annotate, _load_minute_from_lake, _read_one_minute)
@@ -276,6 +307,9 @@ def scan_held_day_python(
     h: np.ndarray,
     c: np.ndarray,
     *,
+    l: Optional[np.ndarray] = None,
+    minute_stop_trigger: str = "close",
+    take_profit_pct: Optional[float] = None,
     cost: float,
     peak: float,
     n_days: int,
@@ -304,6 +338,7 @@ def scan_held_day_python(
     close_clear=None,
 ) -> tuple[int, float, str, float, int]:
     """Python reference implementation of the minute sell scan."""
+    validate_low(minute_stop_trigger, l, c)
     del pos_trail  # reserved for future; kept for API parity with callers
     stop_enabled = isinstance(stop_pct, float) and 0 < stop_pct < 1
     trigger = cost * (1.0 - stop_pct) if stop_enabled else None
@@ -327,13 +362,16 @@ def scan_held_day_python(
             saw_close_hm = True
         px_open = float(o[i])
         px_close = float(c[i])
-        if limit_down > 0 and hit_limit_down(px_open, limit_down):
+        if blocked_bar(minute_stop_trigger, px_open, hi, limit_down):
             continue
         if stop_enabled and trigger is not None and px_open <= trigger:
             return i, px_open, "stop_loss:gap_open", new_peak, new_peak_hm
         ret = px_close / cost - 1.0
-        if stop_enabled and ret <= -stop_pct:
-            return i, px_close, "stop_loss:touch", new_peak, new_peak_hm
+        if stop_enabled:
+            touched = float(l[i]) <= trigger if minute_stop_trigger == "hl" else ret <= -stop_pct
+            if touched:
+                fill_px = trigger if minute_stop_trigger == "hl" else px_close
+                return i, fill_px, "stop_loss:touch", new_peak, new_peak_hm
         if defer_lu and limit_up > 0 and hit_limit_up(px_close, limit_up):
             lu_today = True
         if defer_lu and lu_today:
@@ -349,6 +387,10 @@ def scan_held_day_python(
                 return i, px_close, reserve_reason, new_peak, new_peak_hm
             if current_reserved and is_limit_up:
                 continue
+        if minute_stop_trigger == "hl" and not callable(exit_plan) and not callable(sell_gate):
+            fill = target_fill(px_open, hi, cost, new_peak, n_days, take_profit_pct, take_profit)
+            if fill is not None:
+                return i, fill[0], fill[1], new_peak, new_peak_hm
         peak_blocked = new_peak_hm >= 0 and peak_gap_blocks(
             cur_hm - new_peak_hm, peak_gap_min
         )
@@ -410,6 +452,9 @@ def scan_held_day(
     h: np.ndarray,
     c: np.ndarray,
     *,
+    l: Optional[np.ndarray] = None,
+    minute_stop_trigger: str = "close",
+    take_profit_pct: Optional[float] = None,
     cost: float,
     peak: float,
     n_days: int,
@@ -445,7 +490,8 @@ def scan_held_day(
     Callables (sell_gate / take_profit) and reserve_limit_up always use Python.
     """
     can_offload = (
-        _want_numba_scan(use_numba)
+        minute_stop_trigger == "close"
+        and _want_numba_scan(use_numba)
         and _NUMBA_SCAN_AVAILABLE
         and sell_gate is None
         and take_profit is None
@@ -498,6 +544,7 @@ def scan_held_day(
         o,
         h,
         c,
+        l=l, minute_stop_trigger=minute_stop_trigger, take_profit_pct=take_profit_pct,
         cost=cost,
         peak=peak,
         n_days=n_days,
@@ -616,6 +663,7 @@ def simulate(
     pool_names_by_day: Optional[dict[str, dict[str, str]]] = None,
     exdiv: Optional[dict] = None,
     exdiv_economics: EconomicLookup | None = None,
+    star_lot_declare_check: bool = False,
     scores_by_day=None,
     topk=None,
     n_drop=None,
@@ -628,12 +676,65 @@ def simulate(
     buy_cost_rate: Optional[float] = None,
     sell_cost_rate: Optional[float] = None,
     min_cost: Optional[float] = None,
+    fix_s12_price_domain: bool = False,
+    s12_price_context=None,
+    fix_s11_exit_domain: bool = False,
+    fix_s81_band_precision: bool = False,
+    signal_bars_front: dict[str, pd.DataFrame] | None = None,
+    minute_stop_trigger: str = "close",
+    exdiv_ref_fen: bool = False,
+    fix_minute_cash_order: bool = False,
+    tail_window_buy: bool = False,
+    tail_volume_unit: str | None = "shares",
+    audit_sink=None,
+    topk_exec: str = "close",
+    limit_walkdown: bool = False,
+    topk_limit_rule: str = "qlib",
 ) -> SimState:
     """Opt-in cap uses caller-attested completed minutes; daily volume is unused.
 
     exdiv_economics is an explicit (symbol, YYYYMMDD) -> ExDivEvent lookup for
     raw bars. None retains the baseline; E-R6 ratios never imply entitlements.
     """
+    validate_minute_stop_trigger(minute_stop_trigger, normalize_csv_strategy(strategy), fix_s11_exit_domain)
+    validate_topk_exec(topk_exec, strategy, limit_walkdown, topk_limit_rule)
+    validate_tail_options(tail_window_buy, fix_minute_cash_order, tail_volume_unit)
+    if tail_window_buy:
+        tail_volume_unit = resolve_tail_volume_unit(tail_volume_unit)
+    if tail_window_buy and normalize_csv_strategy(strategy) not in {
+        "version8", "version8_1", "version8_2", "version8_3",
+        "version8_4", "version8_5", "version8_6",
+    }:
+        raise ValueError("--tail-window-buy applies only to version8 / version8.x in the shared entry")
+    if fix_minute_cash_order and normalize_csv_strategy(strategy) == "version12":
+        raise ValueError("--fix-minute-cash-order is not applicable to version12")
+    if audit_sink is not None and normalize_csv_strategy(strategy) == "version12":
+        raise ValueError("X-02 execution audit is not applicable to version12")
+    if fix_s12_price_domain:
+        from backtest.research.signal_price_domain import S12PriceContext
+
+        if normalize_csv_strategy(strategy) != "version12":
+            raise ValueError("--fix-s12-price-domain applies only to version12")
+        if exdiv is not None:
+            raise ValueError("--fix-s12-price-domain requires exdiv=None (no double adjustment)")
+        if not isinstance(s12_price_context, S12PriceContext):
+            raise ValueError("--fix-s12-price-domain requires an explicit validated s12_price_context")
+        s12_price_context.validate_simulation(minute_bars, daily_bars, pool_days, start, end)
+    elif s12_price_context is not None:
+        raise ValueError("s12_price_context requires fix_s12_price_domain=True")
+    if signal_bars_front is not None and not fix_s11_exit_domain:
+        raise ValueError("signal_bars_front requires version11 + fix_s11_exit_domain=True")
+    if fix_s11_exit_domain:
+        if normalize_csv_strategy(strategy) != "version11":
+            raise ValueError("fix_s11_exit_domain is supported only by version11")
+        if signal_bars_front is None:
+            raise ValueError("fix_s11_exit_domain requires independent signal_bars_front")
+        from backtest.research.s11_exit_domain import validate_signal_bars
+
+        validate_signal_bars(
+            daily_bars, signal_bars_front, start=start, end=end,
+            required_codes={c for codes in pool_days.values() for c in codes},
+        )
     hooks = prepare_strategy_hooks(
         strategy,
         stop_pct=stop_pct,
@@ -646,6 +747,7 @@ def simulate(
         tiers=tiers,
         tier_default=tier_default,
         apply_fn=apply_csv_strategy,
+        **({"fix_s81_band_precision": True} if fix_s81_band_precision else {}),
         scores_by_day=scores_by_day,
         topk=topk,
         n_drop=n_drop,
@@ -654,6 +756,8 @@ def simulate(
         index_block_new=index_block_new,
         stop_fill=stop_fill,
     )
+    if topk_limit_rule == "real":
+        hooks["qlib_limit_pct"] = None
     stop_pct = hooks["stop_pct"]
     stop_fill = str(hooks.get("stop_fill") or "touch").strip().lower()
     if stop_fill == "close":
@@ -680,7 +784,16 @@ def simulate(
         pool_days=pool_days,
         pool_names=pool_names,
         pool_names_by_day=pool_names_by_day,
+        daily_quota=daily_quota,
     )
+    configure_s8(st, hooks)
+    if minute_stop_trigger == "hl":
+        st.stats["minute_stop_trigger"] = "hl"
+    if topk_exec != "close" or limit_walkdown or topk_limit_rule != "qlib":
+        st.stats.update(topk_limit_rule=topk_limit_rule, topk_exec=topk_exec, limit_retry_fills=0, limit_retry_expired=0)
+        st.topk_exec_audit = []
+        if limit_walkdown:
+            st.stats.update(limit_walkdown=True, walkdown_fills=0, walkdown_exhausted=0)
     if buy_cost_rate is not None:
         st.buy_cost_rate = float(buy_cost_rate)
     if sell_cost_rate is not None:
@@ -692,6 +805,7 @@ def simulate(
     st.stats["min_cost"] = st.min_cost
     if participation_rate is not None:
         st.volume_cap = VolumeCap(participation_rate, volume_for_bucket)
+    st.star_lot_declare_check = star_lot_declare_check
     if exdiv_economics is not None:
         st.exdiv_economics = ExDivEconomics(exdiv_economics, st.stats)
     allow_add = bool(hooks["allow_add"])
@@ -722,12 +836,35 @@ def simulate(
                 slice_day=lambda code, date: _slice_day(
                     minute_bars[code], day_spans.get(code, {}), date),
                 scan=scan_held_day,
+                **({"price_context": s12_price_context} if fix_s12_price_domain else {}),
+            )
+        elif fix_minute_cash_order or topk_exec != "close" or limit_walkdown:
+            run_chronological_day(
+                st, pending_chase, hooks=hooks, minute_bars=minute_bars,
+                daily_bars=daily_bars, pool_days=pool_days, day_i=i, day=day,
+                ds=ds, names=names, daily_quota=daily_quota, exdiv=exdiv,
+                calendar=calendar,
+                slice_day=lambda code, date: _slice_day(
+                    minute_bars[code], day_spans.get(code, {}), date),
+                profit_base=profit_base, pos_trail=pos_trail, audit_sink=audit_sink,
+                tail_window_buy=tail_window_buy, tail_volume_unit=tail_volume_unit,
+                exdiv_ref_fen=exdiv_ref_fen,
+                minute_stop_trigger=minute_stop_trigger,
+                topk_exec=topk_exec, limit_walkdown=limit_walkdown,
             )
         else:
             bind_opening = hooks.get("bind_opening_held")
             if callable(bind_opening):
                 bind_opening(ds, list(st.positions.keys()))
 
+            # Price-add books need the post-14:55 group scan to observe their
+            # new weighted cost. Other OFF books retain full-day exits first.
+            split_group_scan = hooks.get("name") in {
+                "version8", "version8_3", "version8_4", "version8_5",
+            } and hooks.get("sizing") == "per_name"
+            post_group_scans = []
+            confirm_peaks = {}
+            s8_confirm = hooks.get("name") == "version8_3" and hooks.get("sizing") == "per_name"
             for code in list(st.positions):
                 mdf = minute_bars.get(code)
                 ddf = daily_bars.get(code)
@@ -743,20 +880,21 @@ def simulate(
                 # E-R6: rescale before scan_held_day; never between scan and peak writeback.
                 kk = k_for(exdiv, code, ds)
                 if kk is not None:
+                    rescale_s8_groups(st, code, kk)
                     for pos in list(st.positions.get(code, [])):
                         rescale_position(pos, kk)
                         st.stats["exdiv_adjusted_lots"] = (
                             int(st.stats.get("exdiv_adjusted_lots", 0)) + 1
                         )
                 prev_close, did_map = mapped_prev_close(
-                    exdiv, code, ds, float(prev_rows.iloc[-1]["close"])
+                    exdiv, code, ds, float(prev_rows.iloc[-1]["close"]), **({"fen_round": True} if exdiv_ref_fen else {})
                 )
                 if did_map:
                     st.stats["exdiv_prev_close_mapped"] = (
                         int(st.stats.get("exdiv_prev_close_mapped", 0)) + 1
                     )
                 limits = book_limit_prices(
-                    code, prev_close, names, qlib_limit_pct=qlib_limit_pct
+                    code, prev_close, names, qlib_limit_pct=qlib_limit_pct, as_of=ds
                 )
                 if limits is None:
                     st.stats["skip_unknown_board"] += 1
@@ -766,10 +904,46 @@ def simulate(
                 h = day_m["high"].to_numpy(np.float64)
                 c = day_m["close"].to_numpy(np.float64)
                 hm = day_m["hm"].to_numpy(np.int64)
-                for pos in list(st.positions.get(code, [])):
+                if s8_confirm:
+                    prefix_high = max((float(hi) for hi in h[hm <= BUY_HM] if hi > 0), default=0.0)
+                    for pos in st.positions.get(code, []):
+                        confirm_peaks[id(pos)] = max(
+                            float(pos.peak), prefix_high if pos.entry_idx < i else 0.0,
+                        )
+                for pos in exit_positions(st, code, i, day=day):
                     if getattr(pos, "ride_with", None) is not None:
                         continue
                     n_days = i - pos.entry_idx
+                    if isinstance(pos, IndependentExitPosition):
+                        cursor = HeldMinuteCursor(
+                            o, h, c, cost=pos.cost, peak=pos.peak,
+                            l=day_m["low"].to_numpy(np.float64) if minute_stop_trigger == "hl" else None,
+                            minute_stop_trigger=minute_stop_trigger, take_profit_pct=st.stats.get("profit_target"),
+                            n_days=n_days,
+                            can_sell=t1_sellable(calendar[pos.entry_idx].date(), day.date()),
+                            stop_pct=stop_pct,
+                            profit_base=profit_base if profit_base is not None else 0.0,
+                            trail_ratio=0.0, pos_trail=pos_trail,
+                            limit_down=limit_down, hm=hm, peak_hm=int(pos.peak_hm),
+                            peak_gap_min=peak_gap_min, take_profit=take_profit,
+                            sell_gate=sell_gate, gate_code=code, gate_day=day,
+                            daily_closes_ending_yesterday=prev_rows["close"].astype(float).tolist(),
+                            force_sell_hm=force_sell_hm,
+                            reserve_limit_up=reserve_limit_up,
+                            defer_limit_up=defer_limit_up, limit_up=limit_up,
+                            reserved=bool(pos.reserved), close_clear=close_clear,
+                        )
+                        for bar_idx, at_hm in enumerate(hm):
+                            if split_group_scan and int(at_hm) > BUY_HM:
+                                continue
+                            for phase in ("open", "close"):
+                                advance_independent_exit(
+                                    st, code, pos, cursor, bar_idx, phase, limits,
+                                    day=day, day_i=i, audit_sink=audit_sink,
+                                )
+                        if split_group_scan:
+                            post_group_scans.append((code, pos, cursor, limits))
+                        continue
                     if minute_open:
                         # Only yesterday's pending EOD decision can sell, once at open.
                         if not pos.pending_exit or not t1_sellable(calendar[pos.entry_idx].date(), day.date()):
@@ -788,9 +962,10 @@ def simulate(
                             st.stats["defer_sell_limit_down"] += 1
                             continue
                         before = len(st.trades)
-                        _sell(st, code, pos, px, day, pos.pending_exit,
-                              bucket_id=AM_OPEN, at=AM_OPEN - 1, day_i=i,
-                              hm=AM_OPEN, price_rule="minute_pending_next_open")
+                        with audit_scope(audit_sink, decision_hm=AM_OPEN, phase="open", quote_hm=AM_OPEN):
+                            _sell(st, code, pos, px, day, pos.pending_exit,
+                                  bucket_id=AM_OPEN, at=AM_OPEN - 1, day_i=i,
+                                  hm=AM_OPEN, price_rule="minute_pending_next_open")
                         if any(t["side"] == "SKIP" and t["reason"].startswith("skip_volume")
                                for t in st.trades[before:]):
                             st.stats["defer_sell_volume"] += 1
@@ -801,6 +976,8 @@ def simulate(
                         o,
                         h,
                         c,
+                        l=day_m["low"].to_numpy(np.float64) if minute_stop_trigger == "hl" else None,
+                        minute_stop_trigger=minute_stop_trigger, take_profit_pct=st.stats.get("profit_target"),
                         cost=pos.cost,
                         peak=pos.peak,
                         n_days=n_days,
@@ -847,13 +1024,19 @@ def simulate(
                         # P2=B names only these two stop paths; other fills stay unlabeled.
                         price_rule = {
                             "stop_loss:gap_open": "minute_gap_open",
-                            "stop_loss:touch": "minute_trigger_bar_close",
+                            "stop_loss:touch": "minute_stop_price" if minute_stop_trigger == "hl" else "minute_trigger_bar_close",
                         }.get(reason, "")
-                        _sell(st, code, pos, px, day, reason, **volume_kwargs,
-                              hm=int(hm[idx]) if price_rule else None, price_rule=price_rule)
+                        with audit_scope(
+                            audit_sink, decision_hm=int(hm[idx]), quote_hm=int(hm[idx]),
+                            phase="open" if reason == "stop_loss:gap_open" else "close",
+                        ):
+                            _sell(st, code, pos, px, day, reason, **volume_kwargs,
+                                  hm=int(hm[idx]) if price_rule else None, price_rule=price_rule)
 
             def _volume_bucket_for(code: str, target: int, earliest: int):
                 # Mirror the quote helpers' exact/fallback row, never a later bucket.
+                if code not in minute_bars:
+                    return None
                 frame = _slice_day(minute_bars[code], day_spans.get(code, {}), ds)
                 if frame is None:
                     return None
@@ -885,23 +1068,24 @@ def simulate(
                 closes = prev_rows["close"].astype(float).tolist()
                 return open_px, px, closes
 
-            run_chase_due_day(
-                st,
-                pending_chase,
-                day_i=i,
-                day=day,
-                names=names,
-                allow_add=allow_add,
-                buy_gate=buy_gate,
-                quotes_for=_chase_quotes_for,
-                volume_bucket_for=chase_volume if st.volume_cap is not None else None,
-                exdiv=exdiv,
-                ds=ds,
-                qlib_limit_pct=qlib_limit_pct,
-                allow_new_name=hooks.get("allow_new_name"),
-                add_gate=hooks.get("add_gate"),
-                index_blocks_add=hooks.get("index_blocks_add", True),
-            )
+            with audit_scope(audit_sink, decision_hm=CHASE_HM, phase="close", quote_for=chase_volume):
+                run_chase_due_day(
+                    st,
+                    pending_chase,
+                    day_i=i,
+                    day=day,
+                    names=names,
+                    allow_add=allow_add,
+                    buy_gate=buy_gate,
+                    quotes_for=_chase_quotes_for,
+                    volume_bucket_for=chase_volume if st.volume_cap is not None else None,
+                    exdiv=exdiv, exdiv_ref_fen=exdiv_ref_fen,
+                    ds=ds,
+                    qlib_limit_pct=qlib_limit_pct,
+                    allow_new_name=hooks.get("allow_new_name"),
+                    add_gate=hooks.get("add_gate"),
+                    index_blocks_add=hooks.get("index_blocks_add", True),
+                )
 
             def _pool_quote_for(code: str):
                 mdf = minute_bars.get(code)
@@ -931,62 +1115,87 @@ def simulate(
                 return px, closes
 
             volume_skips = int(st.stats.get("skip_volume_unavailable", 0)) + int(st.stats.get("skip_volume_cap", 0))
-            run_pool_buys_day(
-                st,
-                pending_chase,
-                day_i=i,
-                day=day,
-                ds=ds,
-                pool_days=pool_days,
-                daily_quota=daily_quota,
-                names=names,
-                allow_add=allow_add,
-                buy_gate=buy_gate,
-                buy_quote_for=_pool_quote_for,
-                volume_bucket_for=pool_volume if st.volume_cap is not None else None,
-                volume_at=AM_OPEN - 1 if minute_open else None,
-                sold_today={t["code"] for t in st.trades[day_trade_start:] if t["side"] == "SELL"}
-                if hooks.get("skip_sold_today") else None,
-                sizing=hooks.get("sizing", "daily_quota"),
-                name_budget=hooks.get("name_budget", 1_000_000.0),
-                ration=hooks.get("ration", "file_order"),
-                ration_seed=hooks.get("ration_seed", 0),
-                exdiv=exdiv,
-                planned_for_day=hooks.get("planned_for_day"),
-                cash_deploy_frac=hooks.get("cash_deploy_frac"),
-                qlib_limit_pct=qlib_limit_pct,
-                limit_up_chase=limit_up_chase,
-                forbid_all_trade_at_limit=forbid_all_trade_at_limit,
-                allow_new_name=hooks.get("allow_new_name"),
-                add_gate=hooks.get("add_gate"),
-                name_lot_budget=hooks.get("name_lot_budget"),
-                index_blocks_add=hooks.get("index_blocks_add", True),
-            )
+            with audit_scope(audit_sink, decision_hm=AM_OPEN if minute_open else BUY_HM,
+                phase="open" if minute_open else "close", quote_for=pool_volume):
+                run_pool_buys_day(
+                    st,
+                    pending_chase,
+                    day_i=i,
+                    day=day,
+                    ds=ds,
+                    pool_days=pool_days,
+                    daily_quota=daily_quota,
+                    names=names,
+                    allow_add=allow_add,
+                    buy_gate=buy_gate,
+                    buy_quote_for=_pool_quote_for,
+                    volume_bucket_for=pool_volume if st.volume_cap is not None else None,
+                    volume_at=AM_OPEN - 1 if minute_open else None,
+                    sold_today={t["code"] for t in st.trades[day_trade_start:] if t["side"] == "SELL"}
+                    if hooks.get("skip_sold_today") else None,
+                    sizing=hooks.get("sizing", "daily_quota"),
+                    name_budget=hooks.get("name_budget", 1_000_000.0),
+                    ration=hooks.get("ration", "file_order"),
+                    ration_seed=hooks.get("ration_seed", 0),
+                    exdiv=exdiv, exdiv_ref_fen=exdiv_ref_fen,
+                    planned_for_day=hooks.get("planned_for_day"),
+                    cash_deploy_frac=hooks.get("cash_deploy_frac"),
+                    qlib_limit_pct=qlib_limit_pct,
+                    limit_up_chase=limit_up_chase,
+                    forbid_all_trade_at_limit=forbid_all_trade_at_limit,
+                    allow_new_name=hooks.get("allow_new_name"),
+                    add_gate=hooks.get("add_gate"),
+                    name_lot_budget=hooks.get("name_lot_budget"),
+                    index_blocks_add=hooks.get("index_blocks_add", True),
+                )
             if minute_open:
                 st.stats["skip_buy_volume"] += (
                     int(st.stats.get("skip_volume_unavailable", 0))
                     + int(st.stats.get("skip_volume_cap", 0)) - volume_skips
                 )
-            run_step_adds_day(
-                st,
-                day_i=i,
-                day=day,
-                ds=ds,
-                names=names,
-                buy_quote_for=_pool_quote_for,
-                volume_bucket_for=pool_volume if st.volume_cap is not None else None,
-                sizing=hooks.get("sizing", "daily_quota"),
-                name_budget=hooks.get("name_budget", 1_000_000.0),
-                exdiv=exdiv,
-                qlib_limit_pct=qlib_limit_pct,
-                forbid_all_trade_at_limit=forbid_all_trade_at_limit,
-                buy_gate=buy_gate,
-                name_lot_budget=hooks.get("name_lot_budget"),
-                step_add=hooks.get("step_add"),
-            )
+            with audit_scope(audit_sink, decision_hm=AM_OPEN if minute_open else BUY_HM,
+                phase="open" if minute_open else "close", quote_for=pool_volume):
+                run_step_adds_day(
+                    st,
+                    day_i=i,
+                    day=day,
+                    ds=ds,
+                    names=names,
+                    buy_quote_for=_pool_quote_for,
+                    volume_bucket_for=pool_volume if st.volume_cap is not None else None,
+                    sizing=hooks.get("sizing", "daily_quota"),
+                    name_budget=hooks.get("name_budget", 1_000_000.0),
+                    exdiv=exdiv, exdiv_ref_fen=exdiv_ref_fen,
+                    qlib_limit_pct=qlib_limit_pct,
+                    forbid_all_trade_at_limit=forbid_all_trade_at_limit,
+                    buy_gate=buy_gate,
+                    name_lot_budget=hooks.get("name_lot_budget"),
+                    step_add=hooks.get("step_add"),
+                    # Clamp, rather than change the sell scanner's peak state.
+                    # A T+0 chase lot has no snapshot and keeps its entry peak.
+                    confirm_peak_for=(
+                        lambda _code, pos: min(float(pos.peak), confirm_peaks.get(id(pos), float(pos.peak)))
+                    ) if s8_confirm else None,
+                )
+            for code, pos, cursor, limits in post_group_scans:
+                for bar_idx, at_hm in enumerate(cursor.hm):
+                    if int(at_hm) <= BUY_HM:
+                        continue
+                    for phase in ("open", "close"):
+                        advance_independent_exit(
+                            st, code, pos, cursor, bar_idx, phase, limits,
+                            day=day, day_i=i, audit_sink=audit_sink,
+                        )
 
         run_eod_exits(st, day=day, ds=ds, bars=daily_bars, eod_exit=hooks.get("eod_exit"),
-                      hold_modes=hold_modes, exdiv=exdiv)
+                      hold_modes=hold_modes, exdiv=exdiv,
+                      **({"signal_bars_front": signal_bars_front, "strategy": strategy,
+                          "fix_s11_exit_domain": True} if fix_s11_exit_domain else {}))
+        if fix_s12_price_domain:
+            require_market_marks(
+                st, ds=ds, day=day, mark_bars=daily_bars,
+                mark_source_for=s12_price_context.raw_path_for,
+            )
         append_equity_and_eod_marks(
             st,
             ds=ds,
@@ -996,6 +1205,13 @@ def simulate(
         )
 
     finish_pending_chase(st, pending_chase)
+    if fix_s12_price_domain:
+        st.stats.update(s12_price_context.metadata)
+        st.stats.update(
+            fix_s12_price_domain=True,
+            economics_enabled=exdiv_economics is not None,
+            total_return_complete=False,
+        )
     return st
 
 
@@ -1017,6 +1233,7 @@ def run(
     use_cache: bool = True,
     rebuild_cache: bool = False,
     pool_dir: Optional[Path] = None,
+    require_signal_bundle: bool = False,
     strategy: str,
     take_profit=None,
     record_params=None,
@@ -1037,13 +1254,70 @@ def run(
     buy_cost_rate: Optional[float] = None,
     sell_cost_rate: Optional[float] = None,
     min_cost: Optional[float] = None,
+    strict_pool: bool = False,
+    fix_s12_price_domain: bool = False,
+    s12_price_transform_file: Path | None = None,
+    fix_s11_exit_domain: bool = False,
+    fix_s81_band_precision: bool = False,
+    minute_stop_trigger: str = "close",
+    exdiv_ref_fen: bool = False,
+    fix_minute_cash_order: bool = False,
+    tail_window_buy: bool = False,
+    tail_volume_unit: str | None = "shares",
+    audit_sink=None,
+    topk_exec: str = "close",
+    limit_walkdown: bool = False,
+    topk_limit_rule: str = "qlib",
+    participation_rate: float | None = None,
 ) -> SimState:
+    # P2-B shell precheck (adapter surface on run facade; not simulate / VolumeCap).
+    # participation_rate=None → no-op (byte-identical old arm). ≠δ5 certified ≠R4.
+    precheck_cli_participation_rate(
+        participation_rate,
+        minute_source=minute_source,
+        qlib_1min_root=qlib_1min_root,
+        dividend_type=dividend_type,
+        tail_window_buy=tail_window_buy,
+        tail_volume_unit=tail_volume_unit,
+    )
+    if fix_s81_band_precision and normalize_csv_strategy(strategy) != "version8_1":
+        raise ValueError("fix_s81_band_precision is supported only by version8_1")
+    validate_minute_stop_trigger(minute_stop_trigger, normalize_csv_strategy(strategy), fix_s11_exit_domain)
+    validate_topk_exec(topk_exec, strategy, limit_walkdown, topk_limit_rule)
+    validate_tail_options(tail_window_buy, fix_minute_cash_order, tail_volume_unit)
+    if tail_window_buy:
+        tail_volume_unit = resolve_tail_volume_unit(tail_volume_unit)
+        if normalize_csv_strategy(strategy) not in {
+            "version8", "version8_1", "version8_2", "version8_3",
+            "version8_4", "version8_5", "version8_6",
+        }:
+            raise ValueError("--tail-window-buy applies only to version8 / version8.x in the shared entry")
+        if (minute_source != "lake" or daily_source != "lake" or dividend_type != "none"
+                or qlib_1min_root is not None or qlib_day_root is not None):
+            raise ValueError("--tail-window-buy requires raw lake minute and daily data")
+    if fix_s11_exit_domain:
+        if normalize_csv_strategy(strategy) != "version11":
+            raise ValueError("fix_s11_exit_domain is supported only by version11")
+        if (dividend_type != "none" or minute_source != "lake" or daily_source != "lake"
+            or qlib_1min_root is not None or qlib_day_root is not None):
+            raise ValueError("fix_s11_exit_domain requires raw lake execution + independent lake front")
     if str(stop_fill or "").strip().lower() == "close":
         raise SystemExit(
             "--stop-fill close is daily EOD close only; "
             "minute entry refuses it (bar close is not 当日收盘)"
         )
     book = normalize_csv_strategy(strategy)
+    if fix_s12_price_domain and (
+        book != "version12" or dividend_type != "none"
+        or minute_source != "lake" or daily_source != "lake"
+    ):
+        raise ValueError("--fix-s12-price-domain requires version12 + lake/lake + --dividend-type none")
+    if s12_price_transform_file is not None and not fix_s12_price_domain:
+        raise ValueError("--s12-price-transform-file requires --fix-s12-price-domain")
+    if fix_minute_cash_order and book == "version12":
+        raise ValueError("--fix-minute-cash-order is not applicable to version12")
+    if audit_sink is not None and book == "version12":
+        raise ValueError("X-02 execution audit is not applicable to version12")
     if book == "version12":
         if dividend_type not in ("none", "front") or minute_source != "lake" or daily_source != "lake":
             raise ValueError(
@@ -1052,7 +1326,7 @@ def run(
     elif dividend_type != "none":
         raise ValueError("minute --dividend-type front is supported only by version12")
     warn_stale_period_env()
-    volume_required = normalize_csv_strategy(strategy) == "version11"
+    volume_required = normalize_csv_strategy(strategy) == "version11" or participation_rate is not None
     if volume_required and minute_source != "lake":
         raise ValueError("version11 requires lake minute volume; qlib_1min frames do not carry it")
     if minute_source == "lake" and end > MINUTE_LAKE_END:
@@ -1063,6 +1337,20 @@ def run(
         )
     t_pool = time.perf_counter()
     actual_pool_dir = resolve_research_pool_dir(strategy, pool_dir, repo=REPO)
+    if strict_pool:
+        from backtest.research.csv_pool import PoolDuplicateCodeError, validate_pool_dir
+
+        try:
+            failures = validate_pool_dir(actual_pool_dir)
+        except PoolDuplicateCodeError as exc:
+            raise SystemExit(f"strict pool validation failed: {exc}") from None
+        if failures:
+            raise SystemExit("strict pool validation failed: " + "; ".join(failures[:8]))
+    signal_bundle = None
+    if require_signal_bundle:
+        from backtest.research.csv_pool import require_signal_bundle as _require_signal_bundle
+
+        signal_bundle = _require_signal_bundle(actual_pool_dir)
     pool_days = load_pool_day_map(
         actual_pool_dir, start, end, key="ymd", empty_in_map=False
     )
@@ -1091,66 +1379,100 @@ def run(
         f"pool {min(pool_days)}..{max(pool_days)} ({len(pool_days)} days)",
         flush=True,
     )
-    t_daily = time.perf_counter()
-    daily_domain_front = (book == "version12") or (dividend_type == "front")
-    if daily_domain_front:
-        from common.infra.data_root import resolve_period_root
+    signal_bars_front = None
+    signal_sources = None
+    s12_price_context = None
+    if fix_s12_price_domain:
+        from backtest.research.signal_price_domain import load_s12_price_context
 
-        front_daily_root = resolve_period_root("1d") / "dividend_type=front"
-        if not front_daily_root.is_dir():
-            raise FileNotFoundError(f"missing front daily partition: {front_daily_root}")
-    daily = load_daily_ohlc(
-        all_codes,
-        load_start,
-        end,
-        source=daily_source,
-        qlib_root=qlib_day_root,
-        workers=workers,
-        **({"dividend_type": "front"} if daily_domain_front else {}),
-    )
-    if book == "version12" and (missing := all_codes - daily.keys()):
-        raise ValueError(f"missing front daily bars for strategy12: {sorted(missing)}")
-    t_daily = time.perf_counter() - t_daily
-    cache_status: dict = {}
-    t_minute = time.perf_counter()
-    if dividend_type == "front":
-        root = resolve_period_root("1m") / "dividend_type=front"
-        if not root.is_dir():
-            raise FileNotFoundError(f"missing front minute partition: {root}")
-        # The existing window cache is none-domain; read the configured front tree.
-        minute = _load_minute_from_lake(
-            all_codes, minute_load_start, end, workers=workers, lake_root=root
+        t_load = time.perf_counter()
+        s12_price_context, minute = load_s12_price_context(
+            all_codes, start, end, load_start=load_start,
+            transform_file=s12_price_transform_file,
         )
-        if missing := all_codes - minute.keys():
-            raise ValueError(f"missing front minute bars for strategy12: {sorted(missing)} under {root}")
-        cache_status["cache"] = "front_uncached"
-    elif minute_source == "qlib_1min":
-        compact = _load_minute_compact(
-            all_codes,
-            minute_load_start,
-            end,
-            source="qlib_1min",
-            qlib_root=qlib_1min_root,
-            workers=workers,
-        )
-        minute = book_frames_from_compact(compact)
-        cache_status["cache"] = "qlib_1min"
+        daily = s12_price_context.raw_daily
+        t_daily = time.perf_counter() - t_load
+        t_minute = 0.0  # strict snapshot reader validates all domains together
+        cache_status = {"cache": "s12_price_domain_uncached"}
     else:
-        minute = load_minute_bars(
+        t_daily = time.perf_counter()
+        daily_domain_front = (book == "version12") or (dividend_type == "front")
+        if daily_domain_front:
+            from common.infra.data_root import resolve_period_root
+
+            front_daily_root = resolve_period_root("1d") / "dividend_type=front"
+            if not front_daily_root.is_dir():
+                raise FileNotFoundError(f"missing front daily partition: {front_daily_root}")
+        daily = load_daily_ohlc(
             all_codes,
-            minute_load_start,
+            load_start,
             end,
+            source=daily_source,
+            qlib_root=qlib_day_root,
             workers=workers,
-            use_cache=use_cache,
-            rebuild_cache=rebuild_cache,
-            status=cache_status,
-            **({"include_volume": True} if volume_required else {}),
+            **({"dividend_type": "front"} if daily_domain_front else {}),
         )
-    t_minute = time.perf_counter() - t_minute
+        if book == "version12" and (missing := all_codes - daily.keys()):
+            raise ValueError(f"missing front daily bars for strategy12: {sorted(missing)}")
+        if fix_s11_exit_domain:
+            from backtest.research.s11_exit_domain import load_signal_bars_front
+
+            signal_bars_front, signal_sources = load_signal_bars_front(
+                daily, all_codes, load_start, end,
+            )
+        t_daily = time.perf_counter() - t_daily
+        cache_status: dict = {}
+        t_minute = time.perf_counter()
+        if dividend_type == "front":
+            root = resolve_period_root("1m") / "dividend_type=front"
+            if not root.is_dir():
+                raise FileNotFoundError(f"missing front minute partition: {root}")
+            # The existing window cache is none-domain; read the configured front tree.
+            minute = _load_minute_from_lake(
+                all_codes, minute_load_start, end, workers=workers, lake_root=root
+            )
+            if missing := all_codes - minute.keys():
+                raise ValueError(f"missing front minute bars for strategy12: {sorted(missing)} under {root}")
+            cache_status["cache"] = "front_uncached"
+        elif minute_source == "qlib_1min":
+            compact = _load_minute_compact(
+                all_codes,
+                minute_load_start,
+                end,
+                source="qlib_1min",
+                qlib_root=qlib_1min_root,
+                workers=workers,
+            )
+            minute = book_frames_from_compact(compact)
+            cache_status["cache"] = "qlib_1min"
+        else:
+            minute = load_minute_bars(
+                all_codes,
+                minute_load_start,
+                end,
+                workers=workers,
+                use_cache=use_cache,
+                rebuild_cache=rebuild_cache,
+                status=cache_status,
+                **({"include_volume": True} if volume_required or tail_window_buy else {}),
+                **({"include_amount": True} if tail_window_buy else {}),
+            )
+        t_minute = time.perf_counter() - t_minute
     print(
         f"loaded daily {len(daily)} / minute {len(minute)} / pool days {len(pool_days)}",
         flush=True,
     )
+    volume_options = {}
+    if participation_rate is not None:
+        if missing := all_codes - minute.keys():
+            raise ValueError(f"missing minute volume frames: {sorted(missing)}")
+        samples = completed_minute_volumes(minute)
+        # P2-B loader-exit completed-bucket precheck (shell; does not redefine buckets).
+        precheck_completed_bucket_samples(samples)
+        volume_options = {
+            "participation_rate": participation_rate,
+            "volume_for_bucket": samples,
+        }
     if week_ma_gate:
         from backtest.research.topk_dropout_eligibility import with_week_ma_gate
 
@@ -1169,7 +1491,8 @@ def run(
     exdiv = (
         None
         if (book == "version12" or dividend_type == "front")
-        else load_exdiv_ratios(all_codes, start, end, skipped_out=skipped)
+        else load_exdiv_ratios(all_codes, start, end, skipped_out=skipped,
+                               **({"noise_eps": 0} if exdiv_ref_fen else {}))
     )
     index_block_new = None
     gate_book = normalize_csv_strategy(strategy)
@@ -1229,13 +1552,18 @@ def run(
         tier_default=tier_default,
         pos_trail=pos_trail,
         strategy=strategy,
+        **volume_options,
+        **({"fix_s81_band_precision": True} if fix_s81_band_precision else {}),
         take_profit=take_profit,
         record_params=record_params,
         name_budget=name_budget,
         ration=ration,
         ration_seed=ration_seed,
         pool_names_by_day=pool_names_by_day,
+        **({"fix_s11_exit_domain": True, "signal_bars_front": signal_bars_front}
+           if fix_s11_exit_domain else {}),
         exdiv=exdiv,
+        exdiv_ref_fen=exdiv_ref_fen,
         scores_by_day=scores_by_day,
         topk=topk,
         n_drop=n_drop,
@@ -1246,26 +1574,81 @@ def run(
         buy_cost_rate=buy_cost_rate,
         sell_cost_rate=sell_cost_rate,
         min_cost=min_cost,
+        **({"fix_s12_price_domain": True, "s12_price_context": s12_price_context}
+           if fix_s12_price_domain else {}),
+        fix_minute_cash_order=fix_minute_cash_order,
+        tail_window_buy=tail_window_buy,
+        tail_volume_unit=tail_volume_unit,
+        audit_sink=audit_sink,
+        minute_stop_trigger=minute_stop_trigger,
+        topk_exec=topk_exec, limit_walkdown=limit_walkdown,
+        topk_limit_rule=topk_limit_rule,
     )
     if skipped.get("exdiv_skipped_no_factor"):
         st.stats["exdiv_skipped_no_factor"] = int(skipped["exdiv_skipped_no_factor"])
+    # Run-level provenance only: library simulate() OFF snapshots keep old keys.
+    st.stats.update(
+        fix_minute_cash_order=bool(fix_minute_cash_order),
+        cash_order_policy="chronological" if fix_minute_cash_order else "legacy_full_day_scan",
+        same_hm_policy=("open_before_close; independent_sells_before_buys"
+                        if fix_minute_cash_order else "legacy_full_day_scan_before_buys"),
+        fallback_order_clock="target_hm; capacity_uses_quote_bucket",
+        stable_order="held_insertion_then_lot; original_ration_and_chase_queue",
+    )
+    if book == "version12":
+        st.stats.update(cash_order_policy="strategy12_existing_minute_hook",
+                        same_hm_policy="strategy12_existing_sells_then_buys",
+                        fallback_order_clock="strategy12_existing_hook",
+                        stable_order="strategy12_existing_hook")
+    if topk_exec != "close" or limit_walkdown:
+        st.stats.update(cash_order_policy="chronological",
+                        same_hm_policy="open_before_close; independent_sells_before_buys",
+                        fallback_order_clock="actual_session_open; no_open_fallback",
+                        allocation_clock="09:30_buy_dispatch")
+    if limit_walkdown and topk_exec == "close":
+        st.stats.update(fallback_order_clock="14:55_decision; _buy_px_quote_bucket",
+                        allocation_clock="14:55_buy_dispatch")
+    if topk_exec != "close" or limit_walkdown or topk_limit_rule != "qlib":
+        st.run_metadata = {**getattr(st, "run_metadata", {}), "topk_limit_rule": topk_limit_rule}
+    if tail_window_buy:
+        st.run_metadata = {**getattr(st, "run_metadata", {}), "tail_window_buy": tail_policy(tail_volume_unit)}
+    if participation_rate is not None:
+        st.run_metadata = {**getattr(st, "run_metadata", {}), "volume_capacity": {
+            "participation_rate": participation_rate, "unit": "raw_shares_incremental",
+            "available_at": "bucket_end", "auction_0930": "excluded",
+            "assumption": "caller_declares_raw_incremental_shares; no_unit_conversion",
+            "comparison_status": "no_ssot_compare_authorization",
+        }}
     st.stats["t_pool_s"] = t_pool
     st.stats["t_daily_s"] = t_daily
     st.stats["t_minute_s"] = t_minute
     st.stats["t_sim_s"] = time.perf_counter() - t_sim
     st.stats["cache"] = cache_status.get("cache", "")
     st.stats["codes_missing"] = max(0, len(all_codes) - min(len(daily), len(minute)))
+    if signal_bundle is not None:
+        st.stats["signal_bundle_sha256"] = signal_bundle["bundle_sha256"]
     if book == "version12":
         st.stats["daily_signal_domain"] = "front"
         st.stats["minute_fill_domain"] = dividend_type
         st.stats["price_domain"] = dividend_type
+    if book == "version11":
+        from backtest.research.s11_exit_domain import build_run_metadata
+
+        metadata = build_run_metadata(
+            enabled=fix_s11_exit_domain, execution_domain=dividend_type,
+            daily_source=daily_source, minute_source=minute_source,
+            exdiv=exdiv, source_metadata=signal_sources, raw_bars=daily,
+        )
+        if daily_source == "qlib_day":
+            metadata["mark_domain"] = "qlib_adjusted"
+        st.run_metadata = {**getattr(st, "run_metadata", {}), "s11_exit_domain": metadata}
     return st
 
 
 def main(argv: Optional[list] = None) -> int:
     ap = argparse.ArgumentParser(
         description="CSV-mode vectorized minute backtest (required --strategy)",
-        epilog=help_lock_all(HELP_LOCK),
+        epilog=help_lock_all(HELP_LOCK) + TOPK_EXEC_HELP_LOCK,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     add_csv_backtest_common_args(
@@ -1278,14 +1661,42 @@ def main(argv: Optional[list] = None) -> int:
         cash_total_default=DEFAULT_TOTAL_CASH,
         daily_quota_default=DEFAULT_DAILY_QUOTA,
     )
+    ap.add_argument("--exdiv-ref-fen", action="store_true",
+                    help="opt-in E-R6 mapped reference HALF_UP to fen and no event noise band; default off; version12/front unchanged")
+    ap.add_argument("--minute-stop-trigger", choices=("hl", "close"), default="close",
+                    help="close (default): legacy scan; hl: low stop/high fixed target, threshold fills; rejects version12 and --fix-s11-exit-domain; v7 does not accept this flag")
     ap.add_argument("--no-cache", action="store_true", help="skip minute window cache")
+    ap.add_argument(
+        "--participation-rate", type=float, default=None,
+        help="research opt-in finite [0,1]; omitted = cap off (byte-identical old arm). "
+             "Declares raw incremental SHARE volume in loaded lake minutes (no lots "
+             "conversion); completed bucket_end approximation, excludes 09:30 auction, "
+             "bypasses minute cache. Shell precheck (P2-B) fail-closed on unit/domain; "
+             "≠δ5 certified ≠R4 (not capacity certified)",
+    )
     ap.add_argument(
         "--rebuild-cache", action="store_true", help="reload lake and rewrite cache"
     )
     ap.add_argument("--minute-source", choices=("lake", "qlib_1min"), default="lake")
     ap.add_argument("--daily-source", choices=("lake", "qlib_day"), default="lake")
+    ap.add_argument("--topk-limit-rule", choices=("qlib", "real"), default="qlib",
+                    help="TopK limit band: qlib 0.095 (default) or real board/ST/date tiers")
+    ap.add_argument("--limit-walkdown", action="store_true",
+                    help="TopK first limit-up block hands whole seat quota to next eligible rank")
+    ap.add_argument(
+        "--topk-exec", type=parse_topk_exec, choices=("close", "open", "intraday", "vwap"),
+        default="close", help="topk_dropout only: default close = 14:55 close; open/intraday/vwap opt-in",
+    )
     ap.add_argument("--dividend-type", choices=("none", "front"), default="none",
                     help="version12 minute fills allow none/front; daily signals fixed to 1d/front")
+    ap.add_argument(
+        "--fix-s12-price-domain", action="store_true",
+        help="X-01: strategy12 raw comparison/reference/mark; lake/lake + none only (default OFF)",
+    )
+    ap.add_argument(
+        "--s12-price-transform-file", type=Path,
+        help="read-only verified as-of affine price transforms; requires --fix-s12-price-domain",
+    )
     ap.add_argument(
         "--qlib-1min-root",
         help="qlib my_data_1min root; implies --minute-source qlib_1min",
@@ -1304,28 +1715,94 @@ def main(argv: Optional[list] = None) -> int:
         default=None,
         help="artifact directory; default backtest_output/csv_minute_{book}_{start}_{end}",
     )
+    ap.add_argument(
+        "--emit-run-manifest", action="store_true",
+        help="write myquant.bt-run/1 provenance (default off)",
+    )
+    ap.add_argument(
+        "--require-signal-bundle", action="store_true",
+        help="require a valid signal-bundle.json with matching CSV hashes (default off)",
+    )
+    ap.add_argument(
+        "--strict-pool", action="store_true",
+        help="validate pool CSVs before loading bars (default off: permissive parser)",
+    )
+    ap.add_argument(
+        "--fix-s11-exit-domain", action="store_true",
+        help="version11 EOD exits use independent lake front; raw lake fills/marks (default OFF)",
+    )
+    ap.add_argument(
+        "--fix-minute-cash-order", action="store_true",
+        help="advance minute cash/holdings chronologically (default off; unavailable for version12)",
+    )
+    ap.add_argument(
+        "--tail-window-buy", action="store_true",
+        help="8.x first pool buy: 28 TWAP slices; requires --fix-minute-cash-order (default OFF); "
+             "target Q<2800 shares gives zero-share slices and no fills, without OFF supplementary 100-share fallback",
+    )
+    ap.add_argument(
+        "--tail-volume-unit", choices=("shares", "lots"), default="shares",
+        help="lake minute volume unit (default shares); lots multiplies volume by 100",
+    )
+    ap.add_argument("--execution-audit-file", help="optional execution JSON sidecar; leaves CSVs unchanged")
     args = ap.parse_args(argv if argv is not None else None)
+    # P2-B: CLI-parse shell precheck (unit/domain). None → no-op. ≠δ5≠R4.
+    # Keep ValueError (not ap.error) so invalid-rate contract matches pre-P2 tests/API.
+    minute_source_early = "qlib_1min" if args.qlib_1min_root else args.minute_source
+    precheck_cli_participation_rate(
+        args.participation_rate,
+        minute_source=minute_source_early,
+        qlib_1min_root=args.qlib_1min_root,
+        dividend_type=args.dividend_type,
+        tail_window_buy=args.tail_window_buy,
+        tail_volume_unit=args.tail_volume_unit,
+    )
+    try:
+        validate_minute_stop_trigger(args.minute_stop_trigger, normalize_csv_strategy(args.strategy), args.fix_s11_exit_domain)
+        validate_topk_exec(args.topk_exec, args.strategy, args.limit_walkdown, args.topk_limit_rule)
+    except ValueError as exc:
+        ap.error(str(exc))
     pool_dir = resolve_research_pool_dir(args.strategy, args.pool_dir, repo=REPO)
     minute_source = "qlib_1min" if args.qlib_1min_root else args.minute_source
     daily_source = "qlib_day" if args.qlib_day_root else args.daily_source
 
+    audit = [] if args.execution_audit_file else None
     st = run(
         args.start,
         args.end,
         total_cash=args.cash_total,
-        daily_quota=args.daily_quota,
+        daily_quota=resolve_daily_quota(
+            args.strategy,
+            args.daily_quota,
+            cash_total=args.cash_total,
+            fallback_quota=DEFAULT_DAILY_QUOTA,
+        ),
         workers=args.workers,
         pool_dir=pool_dir,
+        require_signal_bundle=args.require_signal_bundle,
         use_cache=not args.no_cache,
         rebuild_cache=args.rebuild_cache,
         minute_source=minute_source,
         daily_source=daily_source,
         dividend_type=args.dividend_type,
+        fix_s12_price_domain=args.fix_s12_price_domain,
+        s12_price_transform_file=args.s12_price_transform_file,
         qlib_1min_root=Path(args.qlib_1min_root) if args.qlib_1min_root else None,
         qlib_day_root=Path(args.qlib_day_root) if args.qlib_day_root else None,
         buy_cost_rate=QLIB_OPEN_COST if args.qlib_cost else None,
         sell_cost_rate=QLIB_CLOSE_COST if args.qlib_cost else None,
         min_cost=QLIB_MIN_COST if args.qlib_cost else None,
+        strict_pool=args.strict_pool,
+        **({"participation_rate": args.participation_rate} if args.participation_rate is not None else {}),
+        fix_s11_exit_domain=args.fix_s11_exit_domain,
+        fix_minute_cash_order=args.fix_minute_cash_order,
+        tail_window_buy=args.tail_window_buy,
+        tail_volume_unit=args.tail_volume_unit,
+        audit_sink=audit,
+        exdiv_ref_fen=args.exdiv_ref_fen,
+        minute_stop_trigger=args.minute_stop_trigger,
+        topk_exec=args.topk_exec, limit_walkdown=args.limit_walkdown,
+        topk_limit_rule=args.topk_limit_rule,
         **csv_run_kwargs_from_args(args),
     )
     book = engine_book(args.strategy)
@@ -1345,12 +1822,70 @@ def main(argv: Optional[list] = None) -> int:
         raise SystemExit(
             f"refuse overwrite existing {out_dir}; pick a new stamp directory"
         )
+    emit_manifest = args.emit_run_manifest or args.tail_window_buy or args.participation_rate is not None
+    manifest_args = vars(args).copy()
+    if args.participation_rate is None:
+        manifest_args.pop("participation_rate", None)
+    if not args.limit_walkdown:
+        manifest_args.pop("limit_walkdown", None)
+    if args.topk_exec == "close" and not args.limit_walkdown and args.topk_limit_rule == "qlib":
+        manifest_args.pop("topk_limit_rule", None)
+        manifest_args.pop("topk_exec", None)
+    if not args.tail_window_buy:
+        manifest_args.pop("tail_window_buy", None)
+        manifest_args.pop("tail_volume_unit", None)
     write_run_artifacts(
         out_dir,
         st,
         text,
-        help_lock_for(args.strategy, shared=HELP_LOCK),
+        help_lock_for(args.strategy, shared=HELP_LOCK)
+        + (TOPK_EXEC_HELP_LOCK if args.topk_exec != "close" or args.limit_walkdown or args.topk_limit_rule != "qlib" else ""),
+        emit_run_manifest=emit_manifest,
+        signal_bundle_sha256=st.stats.get("signal_bundle_sha256"),
+        manifest_config=(
+            {**manifest_args, "pool_dir": pool_dir, "out_dir": out_dir,
+             "minute_source": minute_source, "daily_source": daily_source,
+             **getattr(st, "run_metadata", {})}
+            if emit_manifest else None
+        ),
     )
+    if args.topk_exec != "close" or args.limit_walkdown or args.topk_limit_rule != "qlib":
+        write_topk_exec_audit(out_dir, st)
+    if normalize_csv_strategy(args.strategy) == "version12":
+        price_domain_audit = (
+            {key: st.stats[key] for key in (
+                "fix_s12_price_domain", "daily_signal_domain", "signal_comparison_domain",
+                "minute_fill_domain", "mark_domain", "reference_adjustment", "transform_model",
+                "implicit_exdiv_map", "economics_enabled", "nav_comparability",
+                "total_return_complete", "pit_anchor_validation", "source_hashes",
+                "validation_version", "cache_policy", "transform_metadata_sha256",
+                "transform_evidence_sha256", "source_snapshot_id", "source_file_hashes",
+                "source_paths", "provenance", "optional_factor", "input_price_tolerance",
+                "input_price_tolerance_mode", "input_coefficient_tolerance",
+                "real_lake_precision_validated", "front_representation",
+                "decision_precision_check",
+            ) if key in st.stats}
+            if args.fix_s12_price_domain else {
+                "fix_s12_price_domain": False,
+                "daily_signal_domain": "front",
+                "signal_comparison_domain": "legacy_unconverted",
+                "minute_fill_domain": args.dividend_type,
+                "mark_domain": "front",
+                "implicit_exdiv_map": False,
+                "economics_enabled": False,
+                "total_return_complete": False,
+                "nav_comparability": (
+                    "invalid_mixed_price_domains" if args.dividend_type == "none"
+                    else "legacy_adjusted_account_not_raw_nav"
+                ),
+            }
+        )
+        (out_dir / "price_domain_audit.json").write_text(
+            json.dumps(price_domain_audit, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
+    if args.execution_audit_file:
+        write_audit(args.execution_audit_file, audit, engine=engine,
+                    enabled=args.fix_minute_cash_order or args.topk_exec != "close" or args.limit_walkdown)
     return 0
 
 

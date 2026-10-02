@@ -1,0 +1,42 @@
+{
+  "schema_version": "bl2_raw_excerpt_v1",
+  "data": {
+    "origin": {
+      "repository": "baiyibing/OSkhQuant1.3",
+      "commit": "ec19fd6f69a52f93aa9870ad582f0173df8963f4",
+      "path": "docs/evidence/b_l2_01_4090_r3_20260930/raw/daqmt_603196_1d_none.csv",
+      "git_sha256": "2630292798ad475678d09fb63e5ff7d0d8fcb3c66ab7e6b9cbd5f6ade2a1594d",
+      "host_sha256": "7f87dbcee6baaa8ebfb3e6b75940ccc821adc417735ff1b972609ecf899d367b"
+    },
+    "extraction": {
+      "method": "CSV DictReader, strings unchanged, row order unchanged",
+      "columns": [
+        "amount",
+        "close",
+        "high",
+        "low",
+        "open",
+        "openInterest",
+        "preClose",
+        "settelementPrice",
+        "stime",
+        "suspendFlag",
+        "time",
+        "volume",
+        "datetime"
+      ],
+      "row_index": "zero-based excluding header"
+    },
+    "rows": [
+    {"amount":"74677648.0","close":"23.89","high":"23.89","low":"23.03","open":"23.25","openInterest":"15","preClose":"23.36","settelementPrice":"0.0","stime":"20251023","suspendFlag":"0","time":"1761148800000","volume":"31780","datetime":"2025-10-23 00:00:00+08:00"},
+    {"amount":"92957361.0","close":"23.89","high":"24.15","low":"23.7","open":"23.92","openInterest":"15","preClose":"23.89","settelementPrice":"0.0","stime":"20251024","suspendFlag":"0","time":"1761235200000","volume":"38872","datetime":"2025-10-24 00:00:00+08:00"},
+    {"amount":"109620351.0","close":"24.32","high":"24.49","low":"23.63","open":"23.89","openInterest":"15","preClose":"23.89","settelementPrice":"0.0","stime":"20251027","suspendFlag":"0","time":"1761494400000","volume":"45455","datetime":"2025-10-27 00:00:00+08:00"},
+    {"amount":"140591436.0","close":"23.12","high":"24.16","low":"22.76","open":"23.95","openInterest":"15","preClose":"24.32","settelementPrice":"0.0","stime":"20251028","suspendFlag":"0","time":"1761580800000","volume":"60310","datetime":"2025-10-28 00:00:00+08:00"},
+    {"amount":"75809642.0","close":"23.04","high":"23.39","low":"22.71","open":"23.19","openInterest":"15","preClose":"23.12","settelementPrice":"0.0","stime":"20251029","suspendFlag":"0","time":"1761667200000","volume":"33039","datetime":"2025-10-29 00:00:00+08:00"},
+    {"amount":"62729111.0","close":"22.94","high":"23.26","low":"22.76","open":"23.07","openInterest":"15","preClose":"23.04","settelementPrice":"0.0","stime":"20251030","suspendFlag":"0","time":"1761753600000","volume":"27312","datetime":"2025-10-30 00:00:00+08:00"},
+    {"amount":"52119297.0","close":"23.03","high":"23.37","low":"22.78","open":"22.78","openInterest":"15","preClose":"22.94","settelementPrice":"0.0","stime":"20251031","suspendFlag":"0","time":"1761840000000","volume":"22563","datetime":"2025-10-31 00:00:00+08:00"},
+    {"amount":"46473359.0","close":"23.05","high":"23.11","low":"22.66","open":"22.9","openInterest":"15","preClose":"23.03","settelementPrice":"0.0","stime":"20251103","suspendFlag":"0","time":"1762099200000","volume":"20254","datetime":"2025-11-03 00:00:00+08:00"},
+    {"amount":"53498695.0","close":"22.96","high":"23.22","low":"22.75","open":"23.11","openInterest":"15","preClose":"23.05","settelementPrice":"0.0","stime":"20251104","suspendFlag":"0","time":"1762185600000","volume":"23347","datetime":"2025-11-04 00:00:00+08:00"}
+  ]
+  }
+}

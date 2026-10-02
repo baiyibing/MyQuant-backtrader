@@ -1,0 +1,142 @@
+{
+ "schema_version": "bl2_raw_excerpt_draft_v0_host_review",
+ "source": {
+  "path": "E:\\stock_data\\stock\\period=1d\\dividend_type=none\\symbol=603196_SH\\data.parquet",
+  "sha256": "d96f2ed8903a5140d4154969d9faa7ddc66a885e1bbc2b7350901784c625155e",
+  "rows_total": 8730,
+  "schema": "time: int64\nopen: double\nhigh: double\nlow: double\nclose: double\nvolume: int64\namount: double"
+ },
+ "time_decoding": "time int64 = 上海墙钟按 UTC epoch 毫秒编码(naive Shanghai epoch ms)；日线 time=当日 00:00",
+ "rows": [
+  {
+   "row_idx": 8502,
+   "trade_date": "2025-10-20",
+   "open": "23.0",
+   "high": "23.42",
+   "low": "22.71",
+   "close": "23.19",
+   "volume": 32668,
+   "amount": "75635077.0"
+  },
+  {
+   "row_idx": 8503,
+   "trade_date": "2025-10-21",
+   "open": "23.3",
+   "high": "23.39",
+   "low": "22.82",
+   "close": "23.39",
+   "volume": 24766,
+   "amount": "57268449.0"
+  },
+  {
+   "row_idx": 8504,
+   "trade_date": "2025-10-22",
+   "open": "23.48",
+   "high": "24.2",
+   "low": "23.27",
+   "close": "23.36",
+   "volume": 45939,
+   "amount": "108656297.0"
+  },
+  {
+   "row_idx": 8505,
+   "trade_date": "2025-10-23",
+   "open": "23.25",
+   "high": "23.89",
+   "low": "23.03",
+   "close": "23.89",
+   "volume": 31780,
+   "amount": "74677648.0"
+  },
+  {
+   "row_idx": 8506,
+   "trade_date": "2025-10-24",
+   "open": "23.92",
+   "high": "24.15",
+   "low": "23.7",
+   "close": "23.89",
+   "volume": 38872,
+   "amount": "92957361.0"
+  },
+  {
+   "row_idx": 8507,
+   "trade_date": "2025-10-27",
+   "open": "23.89",
+   "high": "24.49",
+   "low": "23.63",
+   "close": "24.32",
+   "volume": 45455,
+   "amount": "109620351.0"
+  },
+  {
+   "row_idx": 8508,
+   "trade_date": "2025-10-28",
+   "open": "23.95",
+   "high": "24.16",
+   "low": "22.76",
+   "close": "23.12",
+   "volume": 60310,
+   "amount": "140591436.0"
+  },
+  {
+   "row_idx": 8509,
+   "trade_date": "2025-10-29",
+   "open": "23.19",
+   "high": "23.39",
+   "low": "22.71",
+   "close": "23.04",
+   "volume": 33039,
+   "amount": "75809642.0"
+  },
+  {
+   "row_idx": 8510,
+   "trade_date": "2025-10-30",
+   "open": "23.07",
+   "high": "23.26",
+   "low": "22.76",
+   "close": "22.94",
+   "volume": 27312,
+   "amount": "62729111.0"
+  },
+  {
+   "row_idx": 8511,
+   "trade_date": "2025-10-31",
+   "open": "22.78",
+   "high": "23.37",
+   "low": "22.78",
+   "close": "23.03",
+   "volume": 22563,
+   "amount": "52119297.0"
+  },
+  {
+   "row_idx": 8512,
+   "trade_date": "2025-11-03",
+   "open": "22.9",
+   "high": "23.11",
+   "low": "22.66",
+   "close": "23.05",
+   "volume": 20254,
+   "amount": "46473359.0"
+  },
+  {
+   "row_idx": 8513,
+   "trade_date": "2025-11-04",
+   "open": "23.11",
+   "high": "23.22",
+   "low": "22.75",
+   "close": "22.96",
+   "volume": 23347,
+   "amount": "53498695.0"
+  },
+  {
+   "row_idx": 8514,
+   "trade_date": "2025-11-05",
+   "open": "22.84",
+   "high": "23.08",
+   "low": "22.53",
+   "close": "22.55",
+   "volume": 22222,
+   "amount": "50517200.0"
+  }
+ ]
+}

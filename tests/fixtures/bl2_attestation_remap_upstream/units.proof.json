@@ -1,0 +1,79 @@
+{
+  "symbol": "603196.SH",
+  "window": [
+    "20251023",
+    "20251104"
+  ],
+  "field": "volume",
+  "basis": "source_declaration",
+  "vendor_doc_verbatim": {
+    "issuer": "迅投 (ThinkTrader) 官方文档",
+    "url": "https://dict.thinktrader.net/nativeApi/xtdata.html",
+    "kline_field_list_quote": "1m / 5m / 1d - K线数据: 'time' #时间戳 'open' #开盘价 ... 'volume' #成交量 'amount' #成交额 ... 'suspendFlag' #停牌标记 0 - 正常 1 - 停牌 -1 - 当日起复牌",
+    "instrument_detail_quote": "'VolumeMultiple' #合约乘数（对期货以外的品种，默认是1）",
+    "finding": "官方字段表只声明 volume = 成交量，未声明 K 线 volume 单位（与 MyQuant #273 地图一致）。单位须由直接对账确定。"
+  },
+  "unit_determination_direct_comparison": {
+    "method": "daqmt(QMT厂商数据) 日 volume 与 stock_finance_data(同花顺) 日 volume 逐日直接对比",
+    "result": "9 个交易日中 8 日 ratio 恰好 = 100.0000；2025-10-23 ratio = 99.9969（差 100 股 = 恰好 1 手）",
+    "conclusion": "daqmt/QMT K 线 volume 单位为手（1手 = 100股）。若单位为股则 ratio 应为 1；100 倍整比唯一对应手。",
+    "implied_shares_per_lot_mean": 99.9997,
+    "raw_material": {
+      "path": "docs/evidence/b_l2_01_4090_r3_20260930/raw/daqmt_ths_unit_ratio_table.csv",
+      "sha256": "ccb1bd575f5e4fe7f8846a8e753933a2e08281ebc15d0509d79e658a4ad762ba"
+    }
+  },
+  "incremental_nature": {
+    "method": "逐日 sum(1m volume) 与 1d volume 对账",
+    "result": "9/9 日 sum(1m) == 1d，分钟 volume 为每分钟增量桶，非累计值",
+    "raw_material": {
+      "path": "docs/evidence/b_l2_01_4090_r3_20260930/raw/daqmt_ths_unit_ratio_table.csv",
+      "sha256": "ccb1bd575f5e4fe7f8846a8e753933a2e08281ebc15d0509d79e658a4ad762ba"
+    }
+  },
+  "exchange_rule": {
+    "issuer": "上海证券交易所",
+    "document": "上海证券交易所交易规则",
+    "rule": "A股交易以手为单位，1手=100股；买入申报为100股或其整数倍（主板）。",
+    "url": "https://www.sse.com.cn/lawandrules/sselawsrules/repeal/rules/c/c_20230418_5720138.shtml"
+  },
+  "instrument_detail_corroboration": {
+    "VolumeMultiple": 1,
+    "FloatVolume_shares": 65400000,
+    "TotalVolume_shares": 240000000,
+    "note": "合约乘数=1（非期货）；总股本/流通股本字段单位为股（240000000 / 65400000），与 volume=手 字段区分。",
+    "raw_material": {
+      "path": "docs/evidence/b_l2_01_4090_r3_20260930/raw/daqmt_603196_instrument_detail.json",
+      "sha256": "3e475fb9f6e4cda110a2e6481f2d273b8e2e3a4b4e19d82e8ec36b8cd12edaf1"
+    }
+  },
+  "declared_unit": "手",
+  "shares_per_unit": 100,
+  "is_cumulative": false,
+  "raw_materials": [
+    {
+      "path": "docs/evidence/b_l2_01_4090_r3_20260930/raw/daqmt_603196_1m_none.csv",
+      "schema": "csv",
+      "sha256": "0404c9deddd777297d7c1258bea196854d0ff93560736ddeba1c182a6a8b84b0",
+      "description": "daqmt big-QMT 1m bars, 2169 rows"
+    },
+    {
+      "path": "docs/evidence/b_l2_01_4090_r3_20260930/raw/daqmt_603196_1d_none.csv",
+      "schema": "csv",
+      "sha256": "7f87dbcee6baaa8ebfb3e6b75940ccc821adc417735ff1b972609ecf899d367b",
+      "description": "daqmt big-QMT 1d bars, 9 rows"
+    },
+    {
+      "path": "docs/evidence/b_l2_01_4090_r3_20260930/raw/kimi_stock_finance_data_603196_daily.csv",
+      "schema": "csv",
+      "sha256": "6a7effd00a0d1d3533b5adb820644d57f19605c7d9cf9b9276c82f207a5fbf05",
+      "description": "stock_finance_data (THS) daily OHLCV"
+    },
+    {
+      "path": "docs/evidence/b_l2_01_4090_r3_20260930/raw/daqmt_ths_unit_ratio_table.csv",
+      "schema": "csv",
+      "sha256": "ccb1bd575f5e4fe7f8846a8e753933a2e08281ebc15d0509d79e658a4ad762ba",
+      "description": "Per-day daqmt vs THS volume ratio + sum(1m)==1d check"
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+{
+  "symbol": "603196.SH",
+  "window": [
+    "20251023",
+    "20251104"
+  ],
+  "source_refs": [
+    {
+      "path": "docs/evidence/b_l2_01_4090_r3_20260930/raw/daqmt_603196_1m_none.csv",
+      "schema": "csv",
+      "sha256": "0404c9deddd777297d7c1258bea196854d0ff93560736ddeba1c182a6a8b84b0",
+      "description": "daqmt 1m bars (fill_data=True; each bar carries vendor suspendFlag)"
+    },
+    {
+      "path": "docs/evidence/b_l2_01_4090_r3_20260930/raw/daqmt_603196_zero_volume_bars.csv",
+      "schema": "csv",
+      "sha256": "e974fa22d58c6596b61f3a765f798419a3ffc39bd45acb877f4478190cdc8643",
+      "description": "62 zero-volume bars (trading minutes, no trades)"
+    },
+    {
+      "path": "docs/evidence/b_l2_01_4090_r3_20260930/raw/kimi_stock_finance_data_603196_daily.csv",
+      "schema": "csv",
+      "sha256": "6a7effd00a0d1d3533b5adb820644d57f19605c7d9cf9b9276c82f207a5fbf05",
+      "description": "THS daily cross-validation"
+    },
+    {
+      "path": "docs/evidence/b_l2_01_4090_r3_20260930/raw/kimi_stock_finance_data_603196_announcements.csv",
+      "schema": "csv",
+      "sha256": "879992704cea5f22796df5d4dff64cca393b7032225f1bdfc6b8ec0b1c976257",
+      "description": "7 routine announcements, 0 halt-related"
+    }
+  ],
+  "vendor_field_semantics": {
+    "suspendFlag": "0 - 正常, 1 - 停牌, -1 - 当日起复牌 (thinktrader official doc)",
+    "fill_data": "daqmt read uses fill_data=True: bars emitted for every trading minute; absence of bar = no vendor data for that minute"
+  },
+  "announcement_cross_check": {
+    "source": "stock_finance_data_get_stock_announcement",
+    "window": [
+      "2025-10-20",
+      "2025-11-07"
+    ],
+    "announcements_found": 7,
+    "halt_related_announcements_found": 0
+  }
+}

@@ -1,0 +1,220 @@
+{
+  "schema_version": "minute_orders_run_input_v1",
+  "timezone": "Asia/Shanghai",
+  "data": {
+    "start_at": "2026-09-28T09:28:00+08:00",
+    "end_at": "2026-09-28T09:35:00+08:00",
+    "commands": [
+      {
+        "command_id": "submit:A",
+        "order_id": "A",
+        "symbol": "X",
+        "side": "BUY",
+        "qty": 400,
+        "limit": "10.00",
+        "available_at": "2026-09-28T09:29:00+08:00",
+        "submitted_at": "2026-09-28T09:29:00+08:00",
+        "effective_at": "2026-09-28T09:30:00+08:00",
+        "expires_at": "2026-09-28T09:35:00+08:00",
+        "sequence": 1,
+        "order_type": "LIMIT",
+        "kind": "submit"
+      },
+      {
+        "command_id": "cancel:A",
+        "order_id": "A",
+        "available_at": "2026-09-28T09:32:00+08:00",
+        "submitted_at": "2026-09-28T09:32:00+08:00",
+        "effective_at": "2026-09-28T09:32:30+08:00",
+        "sequence": 2,
+        "kind": "cancel"
+      },
+      {
+        "command_id": "submit:E",
+        "order_id": "E",
+        "symbol": "X",
+        "side": "BUY",
+        "qty": 200,
+        "limit": "10.00",
+        "available_at": "2026-09-28T09:29:00+08:00",
+        "submitted_at": "2026-09-28T09:29:00+08:00",
+        "effective_at": "2026-09-28T09:30:00+08:00",
+        "expires_at": "2026-09-28T09:34:00+08:00",
+        "sequence": 3,
+        "order_type": "LIMIT",
+        "kind": "submit"
+      }
+    ],
+    "buckets": [
+      {
+        "symbol": "X",
+        "bucket_id": "B0",
+        "start": "2026-09-28T09:30:00+08:00",
+        "end": "2026-09-28T09:31:00+08:00",
+        "close": "10.00",
+        "volume_shares": 1000,
+        "missing": false,
+        "halted": false
+      },
+      {
+        "symbol": "X",
+        "bucket_id": "B1",
+        "start": "2026-09-28T09:31:00+08:00",
+        "end": "2026-09-28T09:32:00+08:00",
+        "close": "10.00",
+        "volume_shares": 500,
+        "missing": false,
+        "halted": false
+      },
+      {
+        "symbol": "X",
+        "bucket_id": "B2",
+        "start": "2026-09-28T09:32:00+08:00",
+        "end": "2026-09-28T09:33:00+08:00",
+        "close": "10.00",
+        "volume_shares": 500,
+        "missing": false,
+        "halted": false
+      },
+      {
+        "symbol": "X",
+        "bucket_id": "B3",
+        "start": "2026-09-28T09:33:00+08:00",
+        "end": "2026-09-28T09:34:00+08:00",
+        "close": "10.00",
+        "volume_shares": 1000,
+        "missing": false,
+        "halted": false
+      }
+    ],
+    "calendar": {
+      "trading_dates": [
+        "2026-09-25",
+        "2026-09-28",
+        "2026-09-29"
+      ],
+      "session_buckets": [
+        {
+          "bucket_id": "B0",
+          "start": "2026-09-28T09:30:00+08:00",
+          "end": "2026-09-28T09:31:00+08:00",
+          "session": "continuous"
+        },
+        {
+          "bucket_id": "B1",
+          "start": "2026-09-28T09:31:00+08:00",
+          "end": "2026-09-28T09:32:00+08:00",
+          "session": "continuous"
+        },
+        {
+          "bucket_id": "B2",
+          "start": "2026-09-28T09:32:00+08:00",
+          "end": "2026-09-28T09:33:00+08:00",
+          "session": "continuous"
+        },
+        {
+          "bucket_id": "B3",
+          "start": "2026-09-28T09:33:00+08:00",
+          "end": "2026-09-28T09:34:00+08:00",
+          "session": "continuous"
+        }
+      ],
+      "company_actions_covered": true,
+      "company_actions": []
+    },
+    "instruments": [
+      {
+        "symbol": "X",
+        "trade_date": "2026-09-28",
+        "board": "main",
+        "price_domain": "raw",
+        "tick_size": "0.01",
+        "lot_size": 100,
+        "reference_price": "10.00",
+        "limit_down": "9.00",
+        "limit_up": "11.00"
+      }
+    ],
+    "initial_cash": "10000.00",
+    "initial_lots": [],
+    "buy_fees": {
+      "rate": "0.001",
+      "min_fee": "5.00",
+      "rounding": "ROUND_HALF_UP"
+    },
+    "sell_fees": {
+      "rate": "0.001",
+      "min_fee": "2.00",
+      "rounding": "ROUND_HALF_UP"
+    },
+    "participation_rate": "0.20",
+    "marks": [
+      {
+        "mark_id": "M0",
+        "event_time": "2026-09-28T09:29:00+08:00",
+        "available_at": "2026-09-28T09:29:00+08:00",
+        "prices": [
+          {
+            "symbol": "X",
+            "price": "10.00"
+          }
+        ],
+        "price_domain": "raw",
+        "source": "合成手算"
+      },
+      {
+        "mark_id": "M1",
+        "event_time": "2026-09-28T09:31:00+08:00",
+        "available_at": "2026-09-28T09:31:00+08:00",
+        "prices": [
+          {
+            "symbol": "X",
+            "price": "10.00"
+          }
+        ],
+        "price_domain": "raw",
+        "source": "合成手算"
+      },
+      {
+        "mark_id": "M2",
+        "event_time": "2026-09-28T09:32:30+08:00",
+        "available_at": "2026-09-28T09:32:30+08:00",
+        "prices": [
+          {
+            "symbol": "X",
+            "price": "10.00"
+          }
+        ],
+        "price_domain": "raw",
+        "source": "合成手算"
+      },
+      {
+        "mark_id": "M3",
+        "event_time": "2026-09-28T09:33:00+08:00",
+        "available_at": "2026-09-28T09:33:00+08:00",
+        "prices": [
+          {
+            "symbol": "X",
+            "price": "10.00"
+          }
+        ],
+        "price_domain": "raw",
+        "source": "合成手算"
+      },
+      {
+        "mark_id": "M4",
+        "event_time": "2026-09-28T09:34:00+08:00",
+        "available_at": "2026-09-28T09:34:00+08:00",
+        "prices": [
+          {
+            "symbol": "X",
+            "price": "10.00"
+          }
+        ],
+        "price_domain": "raw",
+        "source": "合成手算"
+      }
+    ],
+    "requires_marks": true
+  }
+}

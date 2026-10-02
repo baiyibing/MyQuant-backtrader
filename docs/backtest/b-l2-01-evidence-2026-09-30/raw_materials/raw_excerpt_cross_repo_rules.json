@@ -1,0 +1,793 @@
+{
+ "schema_version": "bl2_raw_excerpt_draft_v0_host_review",
+ "collected_at": "2026-09-30",
+ "collector": "ZCode(host-assist) via user request",
+ "purpose": "approved_derivation 规则材料/实现旁证行式摘录；非 bl2_proof_v1",
+ "rows": [
+  {
+   "excerpt_id": "o13_board_limit_py",
+   "original": "D:\\PycharmProjects\\OSkhQuant1.3\\oskh_core\\board_limit.py",
+   "original_sha256": "eae297c9476e74a19821421dc6e6f9bf2b183465ad997e869e759da9fb3c8cd8",
+   "repo_head": "47afc2447fa4df5b37af1400ec1aea419ed7fda1",
+   "lines": [
+    {
+     "line": 1,
+     "text": "\"\"\"Board 涨跌停幅度规则表（静态前缀规则，非 L2 指标）。"
+    },
+    {
+     "line": 2,
+     "text": ""
+    },
+    {
+     "line": 3,
+     "text": "2026-09-09 自 ``l2_analytics/board_limit.py`` 收编（迁移 plan r1.2 质证："
+    },
+    {
+     "line": 4,
+     "text": "该函数与 L2 数据/分析无关，仅物理上曾住在 l2_analytics 包内）。与"
+    },
+    {
+     "line": 5,
+     "text": "``oskh_core.a_share_symbol_normalize`` 同族——板块规则 SSOT。"
+    },
+    {
+     "line": 6,
+     "text": ""
+    },
+    {
+     "line": 7,
+     "text": "Mirrors ``hkcodex_miniqmt._get_limit_pct`` equity prefixes and adds **302**"
+    },
+    {
+     "line": 8,
+     "text": "(创业板段, SSOT in ``oskh_core.a_share_symbol_normalize``). ST 5% is not applied"
+    },
+    {
+     "line": 9,
+     "text": "here (no name feed) — treat estimates as board-rule only."
+    },
+    {
+     "line": 10,
+     "text": "\"\"\""
+    },
+    {
+     "line": 11,
+     "text": ""
+    },
+    {
+     "line": 12,
+     "text": "from __future__ import annotations"
+    },
+    {
+     "line": 13,
+     "text": ""
+    },
+    {
+     "line": 14,
+     "text": ""
+    },
+    {
+     "line": 15,
+     "text": "def board_limit_pct(stock_code: str) -> float:"
+    },
+    {
+     "line": 16,
+     "text": "    \"\"\"Return limit ratio (0.10 / 0.20 / 0.30) from bare or canonical code.\"\"\""
+    },
+    {
+     "line": 17,
+     "text": "    code = str(stock_code).strip().upper()"
+    },
+    {
+     "line": 18,
+     "text": "    if \".\" in code:"
+    },
+    {
+     "line": 19,
+     "text": "        code = code.split(\".\", 1)[0]"
+    },
+    {
+     "line": 20,
+     "text": "    if code.startswith((\"300\", \"301\", \"302\")):"
+    },
+    {
+     "line": 21,
+     "text": "        return 0.20"
+    },
+    {
+     "line": 22,
+     "text": "    if code.startswith((\"688\", \"689\")):"
+    },
+    {
+     "line": 23,
+     "text": "        return 0.20"
+    },
+    {
+     "line": 24,
+     "text": "    if code.startswith((\"8\", \"4\", \"9\")):  # BJ coarse"
+    },
+    {
+     "line": 25,
+     "text": "        return 0.30"
+    },
+    {
+     "line": 26,
+     "text": "    if code.startswith((\"11\", \"12\")):  # convertible (not used in stock templates)"
+    },
+    {
+     "line": 27,
+     "text": "        return 0.20"
+    },
+    {
+     "line": 28,
+     "text": "    return 0.10"
+    },
+    {
+     "line": 29,
+     "text": ""
+    },
+    {
+     "line": 30,
+     "text": ""
+    },
+    {
+     "line": 31,
+     "text": "# DuckDB expression on canonical ``stock_code`` (e.g. 000001.SZ)."
+    },
+    {
+     "line": 32,
+     "text": "BOARD_LIMIT_PCT_SQL = \"\"\""
+    },
+    {
+     "line": 33,
+     "text": "CASE"
+    },
+    {
+     "line": 34,
+     "text": "  WHEN split_part(stock_code, '.', 1) LIKE '300%'"
+    },
+    {
+     "line": 35,
+     "text": "    OR split_part(stock_code, '.', 1) LIKE '301%'"
+    },
+    {
+     "line": 36,
+     "text": "    OR split_part(stock_code, '.', 1) LIKE '302%' THEN 0.20"
+    },
+    {
+     "line": 37,
+     "text": "  WHEN split_part(stock_code, '.', 1) LIKE '688%'"
+    },
+    {
+     "line": 38,
+     "text": "    OR split_part(stock_code, '.', 1) LIKE '689%' THEN 0.20"
+    },
+    {
+     "line": 39,
+     "text": "  WHEN split_part(stock_code, '.', 1) LIKE '8%'"
+    },
+    {
+     "line": 40,
+     "text": "    OR split_part(stock_code, '.', 1) LIKE '4%'"
+    },
+    {
+     "line": 41,
+     "text": "    OR split_part(stock_code, '.', 1) LIKE '9%' THEN 0.30"
+    },
+    {
+     "line": 42,
+     "text": "  ELSE 0.10"
+    },
+    {
+     "line": 43,
+     "text": "END"
+    },
+    {
+     "line": 44,
+     "text": "\"\"\".strip()"
+    }
+   ],
+   "note": "1.3 板块涨跌幅规则 SSOT：主板0.10 创业/科创0.20 北交0.30；ST 5% 不在此(无名称馈源)。approved_derivation 规则材料实现旁证。"
+  },
+  {
+   "excerpt_id": "o13_limit_rate_and_prices",
+   "original": "D:\\PycharmProjects\\OSkhQuant1.3\\common\\integrations\\qmt_xtdata_mock.py",
+   "original_sha256": "3a1eea985b41adb2812dffa613cfb3d6447d11892a53de981726bd4fdc5eba05",
+   "repo_head": "47afc2447fa4df5b37af1400ec1aea419ed7fda1",
+   "lines": [
+    {
+     "line": 31,
+     "text": "def _get_limit_rate(symbol: str, *, st: bool = False) -> float:"
+    },
+    {
+     "line": 32,
+     "text": "    \"\"\"Get board-specific limit rate (#15 回测数据对齐)."
+    },
+    {
+     "line": 33,
+     "text": ""
+    },
+    {
+     "line": 34,
+     "text": "    主板(00/60) → 10%, 创业板(30)/科创板(68) → 20%, 北交所(4/8/92) → 30%."
+    },
+    {
+     "line": 35,
+     "text": "    Aligned with backtest/LimitUpDownManager.py."
+    },
+    {
+     "line": 36,
+     "text": ""
+    },
+    {
+     "line": 37,
+     "text": "    ``st=True``（研究层显式声明，LEBS ``--st-symbols``）：主板风险警示股"
+    },
+    {
+     "line": 38,
+     "text": "    ±5%；创业/科创 ST 仍 20%、北交仍 30%——ST 档只覆盖主板宽度。"
+    },
+    {
+     "line": 39,
+     "text": "    live 侧 ST 由柜台真实涨跌停价兜底，不经本旗标。"
+    },
+    {
+     "line": 40,
+     "text": "    \"\"\""
+    },
+    {
+     "line": 41,
+     "text": "    code = str(symbol).strip().upper().replace(\".SH\", \"\").replace(\".SZ\", \"\").replace(\".BJ\", \"\")"
+    },
+    {
+     "line": 42,
+     "text": "    if not code:"
+    },
+    {
+     "line": 43,
+     "text": "        return 0.05 if st else 0.10"
+    },
+    {
+     "line": 44,
+     "text": "    if code.startswith((\"30\",)):"
+    },
+    {
+     "line": 45,
+     "text": "        return 0.20"
+    },
+    {
+     "line": 46,
+     "text": "    if code.startswith((\"68\",)):"
+    },
+    {
+     "line": 47,
+     "text": "        return 0.20"
+    },
+    {
+     "line": 48,
+     "text": "    if code.startswith((\"4\", \"8\", \"92\")):"
+    },
+    {
+     "line": 49,
+     "text": "        return 0.30"
+    },
+    {
+     "line": 50,
+     "text": "    return 0.05 if st else 0.10"
+    },
+    {
+     "line": 51,
+     "text": ""
+    },
+    {
+     "line": 52,
+     "text": ""
+    },
+    {
+     "line": 53,
+     "text": "def _limit_prices(pre_close: float, symbol: str, *, st: bool = False) -> \"tuple[float, float]\":"
+    },
+    {
+     "line": 54,
+     "text": "    \"\"\"涨跌停价 = 前收盘 × (1 ± 板块率)——全 mock 体系**单源**（LEBS PR-1 统一）。"
+    },
+    {
+     "line": 55,
+     "text": ""
+    },
+    {
+     "line": 56,
+     "text": "    消费方：`_default_tick` / `inject_history_bars` / 两侧 `_tick_from_script_entry`"
+    },
+    {
+     "line": 57,
+     "text": "    / limit-info 回退。禁止在任何派生 tick 处再写死 ±1.1/0.9——主板 10% 恰好"
+    },
+    {
+     "line": 58,
+     "text": "    等于 1.1/0.9，创业/科创 20%、北交 30% 下写死值即错（2026-08-26 矛盾修复）。"
+    },
+    {
+     "line": 59,
+     "text": "    ``st`` 语义见 ``_get_limit_rate``。"
+    },
+    {
+     "line": 60,
+     "text": "    \"\"\""
+    },
+    {
+     "line": 61,
+     "text": "    rate = _get_limit_rate(symbol, st=st)"
+    },
+    {
+     "line": 62,
+     "text": "    return round(float(pre_close) * (1 + rate), 2), round(float(pre_close) * (1 - rate), 2)"
+    }
+   ],
+   "note": "1.3 mock 单源涨跌停价=前收盘×(1±板块率) round 0.01；主板 ST ±5%(研究层显式声明)；live 侧柜台真实涨跌停价兜底。"
+  },
+  {
+   "excerpt_id": "o13_download_fill_data_true",
+   "original": "D:\\PycharmProjects\\OSkhQuant1.3\\oskh_data\\download_transport.py",
+   "original_sha256": "1bdd52da49e511ea097c6ad7bba2d46384645137723e36816f730358c96ae4f7",
+   "repo_head": "47afc2447fa4df5b37af1400ec1aea419ed7fda1",
+   "lines": [
+    {
+     "line": 468,
+     "text": "            try:"
+    },
+    {
+     "line": 469,
+     "text": "                partial = xtdata_call_with_budget_sync("
+    },
+    {
+     "line": 470,
+     "text": "                    fn=lambda b=batch: xtdata.get_market_data_ex("
+    },
+    {
+     "line": 471,
+     "text": "                        field_list=["
+    },
+    {
+     "line": 472,
+     "text": "                            \"time\","
+    },
+    {
+     "line": 473,
+     "text": "                            \"open\","
+    },
+    {
+     "line": 474,
+     "text": "                            \"high\","
+    },
+    {
+     "line": 475,
+     "text": "                            \"low\","
+    },
+    {
+     "line": 476,
+     "text": "                            \"close\","
+    },
+    {
+     "line": 477,
+     "text": "                            \"volume\","
+    },
+    {
+     "line": 478,
+     "text": "                            \"amount\","
+    },
+    {
+     "line": 479,
+     "text": "                        ],"
+    },
+    {
+     "line": 480,
+     "text": "                        stock_list=b,"
+    },
+    {
+     "line": 481,
+     "text": "                        period=period,"
+    },
+    {
+     "line": 482,
+     "text": "                        start_time=start_time,"
+    },
+    {
+     "line": 483,
+     "text": "                        end_time=end_time,"
+    },
+    {
+     "line": 484,
+     "text": "                        count=-1,"
+    },
+    {
+     "line": 485,
+     "text": "                        dividend_type=adjust_type,"
+    },
+    {
+     "line": 486,
+     "text": "                        fill_data=True,"
+    }
+   ],
+   "note": "湖分钟 bar 下载：get_market_data_ex 仅取 7 列(time..amount)、fill_data=True、原样写湖(无单位换算)——量与时刻是 vendor 原值。"
+  },
+  {
+   "excerpt_id": "myquant_stage1min_vol_x100_NON_ATTESTATION",
+   "original": "D:\\PycharmProjects\\MyQuant\\qlib_scripts\\stage_1min_from_lake.py",
+   "original_sha256": "decfeff3aad626e72dc30546029a0660b71cdb463c3d10fadb8697126dac5f37",
+   "repo_head": "910abd38652b523cae07dd7a64032f0f71a06ff0",
+   "lines": [
+    {
+     "line": 90,
+     "text": "        if end_ts.hour == 0 and end_ts.minute == 0:"
+    },
+    {
+     "line": 91,
+     "text": "            end_ts = end_ts + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)"
+    },
+    {
+     "line": 92,
+     "text": "        out = out.loc[out[\"date\"] <= end_ts]"
+    },
+    {
+     "line": 93,
+     "text": "    vol = out.get(\"volume\")"
+    },
+    {
+     "line": 94,
+     "text": "    amt = out.get(\"amount\")"
+    },
+    {
+     "line": 95,
+     "text": "    if vol is not None and amt is not None:"
+    },
+    {
+     "line": 96,
+     "text": "        denom = vol.astype(\"float64\") * 100.0"
+    },
+    {
+     "line": 97,
+     "text": "        out[\"vwap\"] = (amt.astype(\"float64\") / denom).where(denom > 0)"
+    },
+    {
+     "line": 98,
+     "text": "    out = out.dropna(subset=[\"date\", \"close\"])"
+    },
+    {
+     "line": 99,
+     "text": "    out = out.drop_duplicates(\"date\").sort_values(\"date\")"
+    }
+   ],
+   "note": "NON-ATTESTATION 旁证：MyQuant 湖→qlib staging 以 vol*100 作 vwap 分母，即消费侧按湖分钟 volume=手假设。§9.2 明确该类启发式不得作 units proof。"
+  },
+  {
+   "excerpt_id": "bt_ashare_session_limit_band",
+   "original": "D:\\PycharmProjects\\MyQuant-backtrader\\backtest\\research\\ashare_session.py",
+   "original_sha256": "52c8da5f425000a78fd6cbafca3c554a6efcb7e603d0d1c547c7d7a0835a7a91",
+   "repo_head": "a268e11bc682cd1ae5a6672ab89091cea1abe937",
+   "lines": [
+    {
+     "line": 1,
+     "text": "# -*- coding: utf-8 -*-"
+    },
+    {
+     "line": 2,
+     "text": "\"\"\"A-share microstructure SSOT for daily and minute CSV engines."
+    },
+    {
+     "line": 3,
+     "text": ""
+    },
+    {
+     "line": 4,
+     "text": "Owns the facts every book must share and must not reimplement:"
+    },
+    {
+     "line": 5,
+     "text": ""
+    },
+    {
+     "line": 6,
+     "text": "- ST / board limit band (Decimal fen, fail-closed unknown prefix)"
+    },
+    {
+     "line": 7,
+     "text": "- official none 昨收 + E-R6 ex-div map"
+    },
+    {
+     "line": 8,
+     "text": "- limit-up skip / limit-down defer"
+    },
+    {
+     "line": 9,
+     "text": "- T+1 lot eligibility (``buy_date < session``)"
+    },
+    {
+     "line": 10,
+     "text": ""
+    },
+    {
+     "line": 11,
+     "text": "Strategy stops, ladders, and sizing stay in the book. This module must not"
+    },
+    {
+     "line": 12,
+     "text": "import a simulate loop or ``csv_ledger``."
+    },
+    {
+     "line": 13,
+     "text": "\"\"\""
+    },
+    {
+     "line": 14,
+     "text": ""
+    },
+    {
+     "line": 15,
+     "text": "from __future__ import annotations"
+    },
+    {
+     "line": 16,
+     "text": ""
+    },
+    {
+     "line": 17,
+     "text": "from datetime import date"
+    },
+    {
+     "line": 18,
+     "text": "from pathlib import Path"
+    },
+    {
+     "line": 19,
+     "text": "from typing import Iterable, Mapping"
+    },
+    {
+     "line": 20,
+     "text": ""
+    },
+    {
+     "line": 21,
+     "text": "from backtest.research.csv_pool import load_pool_names_by_day"
+    },
+    {
+     "line": 22,
+     "text": "from backtest.research.exdiv_map import k_for, load_exdiv_ratios, mapped_prev_close"
+    },
+    {
+     "line": 23,
+     "text": "from backtest.research.market_layer import is_st_name, limit_pct, limit_prices"
+    },
+    {
+     "line": 24,
+     "text": "from oskh_data.symbol_format import to_canonical_symbol"
+    },
+    {
+     "line": 25,
+     "text": ""
+    },
+    {
+     "line": 26,
+     "text": "LIMIT_EPS = 0.001"
+    },
+    {
+     "line": 27,
+     "text": ""
+    },
+    {
+     "line": 28,
+     "text": ""
+    },
+    {
+     "line": 29,
+     "text": "def hit_limit_up(price: float, limit_up: float) -> bool:"
+    },
+    {
+     "line": 30,
+     "text": "    \"\"\"买价达到或超过涨停价则不可买（含舍入导致买价高于算出的涨停价）。\"\"\""
+    },
+    {
+     "line": 31,
+     "text": "    return float(price) + LIMIT_EPS >= float(limit_up)"
+    },
+    {
+     "line": 32,
+     "text": ""
+    },
+    {
+     "line": 33,
+     "text": ""
+    },
+    {
+     "line": 34,
+     "text": "def hit_limit_down(price: float, limit_down: float) -> bool:"
+    },
+    {
+     "line": 35,
+     "text": "    \"\"\"卖价达到或低于跌停价则不可卖。\"\"\""
+    },
+    {
+     "line": 36,
+     "text": "    return float(price) - LIMIT_EPS <= float(limit_down)"
+    },
+    {
+     "line": 37,
+     "text": ""
+    },
+    {
+     "line": 38,
+     "text": ""
+    },
+    {
+     "line": 39,
+     "text": "def t1_sellable(buy_date: date, session: date) -> bool:"
+    },
+    {
+     "line": 40,
+     "text": "    \"\"\"A-share T+1: a lot is sellable only on a later session than ``buy_date``.\"\"\""
+    },
+    {
+     "line": 41,
+     "text": "    return buy_date < session"
+    },
+    {
+     "line": 42,
+     "text": ""
+    },
+    {
+     "line": 43,
+     "text": ""
+    },
+    {
+     "line": 44,
+     "text": "def raw_prev_close(closes: Mapping[date, float], today: date) -> float | None:"
+    },
+    {
+     "line": 45,
+     "text": "    prior = [day for day in closes if day < today]"
+    },
+    {
+     "line": 46,
+     "text": "    return float(closes[max(prior)]) if prior else None"
+    },
+    {
+     "line": 47,
+     "text": ""
+    },
+    {
+     "line": 48,
+     "text": ""
+    },
+    {
+     "line": 49,
+     "text": "def session_prev_close("
+    },
+    {
+     "line": 50,
+     "text": "    closes: Mapping[date, float],"
+    },
+    {
+     "line": 51,
+     "text": "    today: date,"
+    },
+    {
+     "line": 52,
+     "text": "    symbol: str,"
+    },
+    {
+     "line": 53,
+     "text": "    exdiv: Mapping[str, Mapping[str, float]] | None,"
+    },
+    {
+     "line": 54,
+     "text": ") -> float | None:"
+    },
+    {
+     "line": 55,
+     "text": "    \"\"\"None 昨收：上一交易日收盘，除权日乘 E-R6 ``k``。\"\"\""
+    },
+    {
+     "line": 56,
+     "text": "    raw = raw_prev_close(closes, today)"
+    },
+    {
+     "line": 57,
+     "text": "    if raw is None:"
+    },
+    {
+     "line": 58,
+     "text": "        return None"
+    },
+    {
+     "line": 59,
+     "text": "    previous, _did_map = mapped_prev_close(exdiv, symbol, today.strftime(\"%Y%m%d\"), raw)"
+    },
+    {
+     "line": 60,
+     "text": "    return previous"
+    },
+    {
+     "line": 61,
+     "text": ""
+    },
+    {
+     "line": 62,
+     "text": ""
+    },
+    {
+     "line": 63,
+     "text": "def session_limit_prices("
+    },
+    {
+     "line": 64,
+     "text": "    code: str,"
+    },
+    {
+     "line": 65,
+     "text": "    previous: float | None,"
+    },
+    {
+     "line": 66,
+     "text": "    name: str = \"\","
+    },
+    {
+     "line": 67,
+     "text": "    as_of=None,"
+    },
+    {
+     "line": 68,
+     "text": ") -> tuple[float, float] | None:"
+    },
+    {
+     "line": 69,
+     "text": "    if previous is None:"
+    },
+    {
+     "line": 70,
+     "text": "        return None"
+    },
+    {
+     "line": 71,
+     "text": "    return limit_prices(code, previous, name, as_of=as_of)"
+    },
+    {
+     "line": 72,
+     "text": ""
+    },
+    {
+     "line": 73,
+     "text": ""
+    },
+    {
+     "line": 74,
+     "text": "def skip_buy_at_limit(price: float, limits: tuple[float, float] | None) -> bool:"
+    },
+    {
+     "line": 75,
+     "text": "    return limits is not None and hit_limit_up(price, limits[0])"
+    },
+    {
+     "line": 76,
+     "text": ""
+    },
+    {
+     "line": 77,
+     "text": ""
+    },
+    {
+     "line": 78,
+     "text": "def defer_sell_at_limit(price: float, limits: tuple[float, float] | None) -> bool:"
+    },
+    {
+     "line": 79,
+     "text": "    return limits is not None and hit_limit_down(price, limits[1])"
+    },
+    {
+     "line": 80,
+     "text": ""
+    }
+   ],
+   "note": "本仓成交核档位/涨跌停命中通用模块(session_limit_prices 等)；Decimal 链与测试向量见 docs/backtest/engine-ashare-correctness.md。"
+  }
+ ]
+}

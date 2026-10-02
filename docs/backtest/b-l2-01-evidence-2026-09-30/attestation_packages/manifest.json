@@ -1,0 +1,514 @@
+{
+  "source_repository": "baiyibing/OSkhQuant1.3",
+  "source_commit": "ec19fd6f69a52f93aa9870ad582f0173df8963f4",
+  "notice": "Remapped draft only; structural checks != lake PASS; R3 BLOCKED/NOT_RUN; R4 needs separate Human「开 R4」; production_C=frozen.",
+  "r4_authorized": false,
+  "production_C": "frozen",
+  "lake_verdict": "NOT_RUN",
+  "unbound_minute_source": {
+    "id": "minute_603196",
+    "sha256": null,
+    "requirement": "Null sha256 means this catalog does not ship parquet bytes. The wall-encoding and volume-mapping pins live in time_encoding_approval.binding.source_sha256 and volume_mapping_approval.input_binding.source_sha256 (58879893f221bfe050b7a16029667c49fb65d8ec6f47592254e549374a577083), not in this field, and the loader enforces it. Host must still configure/resolve lake identity/coverage and freshly freeze; exports do not establish lake equivalence."
+  },
+  "unresolved": [
+    "Authorized mapping completes units evidence only; fresh v8 host recipe/freeze and lake identity/coverage remain unverified",
+    "v6 double-price cent-align transform implemented and attested; no fresh host freeze or lake PASS claimed",
+    "status continuous trim is Clock-aligned (237/day, 2133 rows); account/commands and scoped attestation require host recipe review and registration",
+    "host recipe, lake identity/coverage and fresh freeze; r4_authorized stays false"
+  ],
+  "transform_version": "bl2_source_transform_v8",
+  "transform_reason": "v8 applies explicitly authorized loader x100 to the pinned lots lake; output shares/1 is raw_shares_incremental; historical ratio acceptance stays retired",
+  "volume_shares_mapping": {
+    "date": "2026-10-01",
+    "path": "L",
+    "basis": "authorized_mapping",
+    "transform_version": "bl2_source_transform_v8",
+    "source_unit_at_rest": "lots",
+    "loader_multiplier": 100,
+    "output": {
+      "kind": "incremental",
+      "unit": "shares",
+      "shares_per_unit": 1,
+      "contract": "raw_shares_incremental"
+    },
+    "human_go": "HUMAN_GO_VOLUME_SHARES_SCALE.md",
+    "diagnosis": "DIAGNOSIS_VOLUME_SHARES_SCALE.md",
+    "host_export": "deferred",
+    "r4_authorized": false,
+    "production_C": "frozen"
+  },
+  "human_go_volume_shares_scale_sha256": "722632a9ff008715c277616004b0e2bfbfd5d380664574cc591a6276cce0435e",
+  "volume_shares_scale_diagnosis_sha256": "575b7a2f7c7bdf1958b3fc341229c33c17f97f5ed51811051a68b663c5758b1b",
+  "units_supersession": {
+    "date": "2026-10-01",
+    "option": "A",
+    "status": "target_satisfied_by_authorized_mapping",
+    "target": {
+      "kind": "incremental",
+      "unit": "shares",
+      "shares_per_unit": 1,
+      "contract": "raw_shares_incremental"
+    },
+    "historical_status": "historical_superseded",
+    "superseded_by": "HUMAN_GO_UNITS_SHARES.md",
+    "historical_files": {
+      "HUMAN_GO.md": {
+        "sha256": "bb287dfe9e2559e9fe05abb7401a636aa6596524cfb79ffa34a4f3ff884c2afe"
+      },
+      "sources/human_go.json": {
+        "sha256": "34c4c7e56b0fad54c4eded684b1108d3752a444d5a775ec2d8335fa3638a70ff"
+      },
+      "sources/units_comparison.json": {
+        "sha256": "52fc830cc42bdb90f36453c8f9b378f8042aeae34e2064e748c43eb5d647d442"
+      },
+      "historical/units.lots.proof.json": {
+        "sha256": "1350ad54777bd4e96e62f1682e3e8003128628edc8ffbcea8a9f1ac11c8db320"
+      }
+    },
+    "reason": "Prior option A target remains true; the separately authorized v8 loader mapping supplies shares-scale output from the lots-scale lake. Historical ratio acceptance stays superseded.",
+    "r4_authorized": false,
+    "target_satisfied_by": "HUMAN_GO_VOLUME_SHARES_SCALE.md",
+    "target_files": {
+      "HUMAN_GO_UNITS_SHARES.md": {
+        "sha256": "ff0a5f3bf74e775c66a692e7857eff22cc6d5f0fd0757d97abb38172c75613ab"
+      },
+      "DIAGNOSIS_UNITS_SHARES.md": {
+        "sha256": "c9629c96f4b8867ae82444962de675fcc7845d23a6e639cb80ccbeba0d170e4e"
+      },
+      "sources/human_go_units_shares.json": {
+        "sha256": "388ad958a4fb97c460e1436f26ef129f5db9f2b07c97a40fcf7f83bf90e532b7"
+      },
+      "sources/units_diagnosis.json": {
+        "sha256": "8bb239057320270ce8356c5aa87cb49900aa99a700ce9088b702d7c2f091492d"
+      },
+      "historical/units.shares-target.proof.json": {
+        "sha256": "15b2b3ac796e824393ebe0052c2410a0206c511b85d9f831e2cd2762a9243161"
+      }
+    }
+  },
+  "human_go_units_shares_sha256": "ff0a5f3bf74e775c66a692e7857eff22cc6d5f0fd0757d97abb38172c75613ab",
+  "units_diagnosis_sha256": "c9629c96f4b8867ae82444962de675fcc7845d23a6e639cb80ccbeba0d170e4e",
+  "price_conversion": {
+    "rule": "double_repr_cent_quantize_v1",
+    "source_type": "double",
+    "targets": [
+      "bucket.close",
+      "mark.price"
+    ],
+    "quantum": "0.01",
+    "rounding": "ROUND_HALF_EVEN",
+    "max_abs_residue": "1E-9",
+    "behavior": "Decimal(repr(float)); retain cent-aligned values; quantize only when absolute residue <= bound, otherwise SourceContractError; exact Decimal/string/int prices unchanged; volume remains exact integer shares",
+    "audit": "original, decimal_text, residue, max_abs_residue, rounding, rule, quantized; quantized_text when changed",
+    "human_go_sha256": "45ba9a99ec4d09fdb4c73c5dc2e2bf3aa6115a2c7b6a374eed79bc5448b71729"
+  },
+  "artifacts": [
+    {
+      "id": "daqmt_1m",
+      "path": "sources/daqmt_1m.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "8fa1a95e63d1253b8bfca0c077172a8089f578a1845abf74edb2810014d18d26"
+    },
+    {
+      "id": "daqmt_1d",
+      "path": "sources/daqmt_1d.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "7544d980e1d7be303b91570eaca1efbf99f07a090d856dbc28b2c4ff8bc301b8"
+    },
+    {
+      "id": "ths_daily",
+      "path": "sources/ths_daily.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "9210c5d47678a85eeab9a6249d5bb87752dc17fe391c8871bc250d48f47f283d"
+    },
+    {
+      "id": "ratio_table",
+      "path": "sources/ratio_table.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "28ff2570477febf86d9cfe94423a2534b67843d7f65759967a1a945b5b8eee03"
+    },
+    {
+      "id": "zero_volume",
+      "path": "sources/zero_volume.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "19a83136bb68ea4932bc775d40ece91bc24f8ac751c2a8077e083fb61abc28ca"
+    },
+    {
+      "id": "wind_limits",
+      "path": "sources/wind_limits.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "182c278ac7cc4c6b50d1ab80e3eb9f045aa7cefc63c26fba33b2d59c23fe41fd"
+    },
+    {
+      "id": "daqmt_detail",
+      "path": "sources/daqmt_detail.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "b73449791a2e1a81631b1f26060085a863971101de141d6c065302368034ea10"
+    },
+    {
+      "id": "sse_rule",
+      "path": "sources/sse_rule.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "bc94cbd5e4a172088fd7fb1c0eec4d2d4c0f25b183eb3e198cd7122722e5a8fd"
+    },
+    {
+      "id": "clause_excerpts",
+      "path": "sources/clause_excerpts.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "51fa8c95e4460bbaef602fbc238ccfbd20139bd0e0a0640559077ef9b91c85ed"
+    },
+    {
+      "id": "host_approval",
+      "path": "sources/host_approval.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "8d5bdee7ee57c07e5aa4d45c8d8aec8fe39e4d548ba50d0b0eb87f973f2588b6"
+    },
+    {
+      "id": "upstream_instruments",
+      "path": "sources/upstream_instruments.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "c815bd56fec8c14060f670bc9941487178bce237f0e192ff30751cff555b7569"
+    },
+    {
+      "id": "vendor_status_semantics",
+      "path": "sources/vendor_status_semantics.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "04afea19e8da07facafb06485fca6135ffb3aa45624271c37d80f8614c5c5d06"
+    },
+    {
+      "id": "vendor_units_absence",
+      "path": "sources/vendor_units_absence.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "4882c27bad7dd75bc4c5b491e4c170d9a45ab6b759988a8ca7d30f5b85afea16"
+    },
+    {
+      "id": "human_go",
+      "path": "sources/human_go.json",
+      "format": "json",
+      "schema": "bl2_human_go_v1",
+      "sha256": "34c4c7e56b0fad54c4eded684b1108d3752a444d5a775ec2d8335fa3638a70ff",
+      "status": "historical_superseded",
+      "usage": "historical input lots scale/factor and conflict disclosure; no living ratio acceptance"
+    },
+    {
+      "id": "units_comparison",
+      "path": "sources/units_comparison.json",
+      "format": "json",
+      "schema": "bl2_cross_source_ratio_v1",
+      "sha256": "52fc830cc42bdb90f36453c8f9b378f8042aeae34e2064e748c43eb5d647d442",
+      "status": "historical_superseded",
+      "usage": "historical input lots scale/factor and conflict disclosure; no living ratio acceptance"
+    },
+    {
+      "id": "human_go_units_shares",
+      "path": "sources/human_go_units_shares.json",
+      "format": "json",
+      "schema": "bl2_human_go_v1",
+      "sha256": "388ad958a4fb97c460e1436f26ef129f5db9f2b07c97a40fcf7f83bf90e532b7",
+      "status": "target_satisfied_by_authorized_mapping"
+    },
+    {
+      "id": "units_diagnosis",
+      "path": "sources/units_diagnosis.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "8bb239057320270ce8356c5aa87cb49900aa99a700ce9088b702d7c2f091492d",
+      "status": "target_satisfied_by_authorized_mapping"
+    },
+    {
+      "id": "volume_mapping_go",
+      "path": "sources/volume_mapping_go.json",
+      "format": "json",
+      "schema": "bl2_raw_document_v1",
+      "sha256": "aa5edb8aa1e278edec0f135d4f0e10def5d05778a827f250f7cd4580c5bf5a26"
+    },
+    {
+      "id": "volume_mapping_diagnosis",
+      "path": "sources/volume_mapping_diagnosis.json",
+      "format": "json",
+      "schema": "bl2_raw_document_v1",
+      "sha256": "ef382609fb151e100b9278b3bd1b95c4f5a32462a6cc2189a522d3e5935421db"
+    },
+    {
+      "id": "historical_lots_scale",
+      "path": "sources/historical_lots_scale.json",
+      "format": "json",
+      "schema": "bl2_raw_document_v1",
+      "sha256": "5d1fdb2991ae37f163b6059e67099ce1602d2f422848b3110289e74270b57998",
+      "status": "historical_superseded",
+      "usage": "historical input lots scale/factor and conflict disclosure; no living ratio acceptance"
+    },
+    {
+      "id": "volume_mapping_approval",
+      "path": "sources/volume_mapping_approval.json",
+      "format": "json",
+      "schema": "bl2_volume_mapping_approval_v1",
+      "sha256": "eec1e0a287c6f1a05fa73b3772c039ddc230792349eef5b787bfb1f72bff4a54"
+    },
+    {
+      "id": "proof_units",
+      "path": "units.proof.json",
+      "format": "json",
+      "schema": "bl2_proof_v1",
+      "sha256": "54c5e40ccd79c41f26532f1d380081052ee876c92028a272c305540797c853e6"
+    },
+    {
+      "id": "instruments",
+      "path": "instruments.json",
+      "format": "json",
+      "schema": "bl2_instruments_v1",
+      "sha256": "ffe8cdf3a1a57270d7e729c3504ee3eae88be7d267c622e404720a429ddb8320"
+    },
+    {
+      "id": "proof_instruments_sse",
+      "path": "instruments.proof.json",
+      "format": "json",
+      "schema": "bl2_proof_v1",
+      "sha256": "2f06f0ac7ca772b053c03f54ff2211f7614d7936e0e871ccca6122c9093f74dd"
+    },
+    {
+      "id": "proof_instruments_wind",
+      "path": "instruments.wind.proof.json",
+      "format": "json",
+      "schema": "bl2_proof_v1",
+      "sha256": "3e485d6abf67a5b4d6d075584ce4504d54d11bf2ca271fe869015a42a5ea6828"
+    },
+    {
+      "id": "status",
+      "path": "status.json",
+      "format": "json",
+      "schema": "bl2_status_v1",
+      "sha256": "7795a59fe82402e05a9d7a41ef6421feab00da8cdc7866fe7c55ace874e8d8f0"
+    },
+    {
+      "id": "opening_auction",
+      "path": "sources/opening_auction.json",
+      "format": "json",
+      "schema": "bl2_opening_auction_evidence_v1",
+      "sha256": "7b627ca657f70db1de966b775af1b1b9de4eef880f80f8e2b738a5fe84ff3ee9"
+    },
+    {
+      "id": "proof_status",
+      "path": "status.proof.json",
+      "format": "json",
+      "schema": "bl2_proof_v1",
+      "sha256": "5d63c82a5b04253eb63a4545cd2a114e633ede905e28de934d466ae0783f6ff9"
+    },
+    {
+      "id": "cam_sse_holidays",
+      "path": "sources/cam_sse_holidays.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "65e461db44a8f13fcb51b6483a51cd2d82893509f68b9fd55cdecdcd597abc47"
+    },
+    {
+      "id": "cam_pmc_calendar",
+      "path": "sources/cam_pmc_calendar.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "5725f74032b5e97b42fbe0c784af798f5d7d3811ca261382a2dcfa4bfafbd44a"
+    },
+    {
+      "id": "cam_calendar_cross_check",
+      "path": "sources/cam_calendar_cross_check.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "dc7f4efe352d83a27d2778cad0cb4da4409612b233c0a2bd2575d8a5745ae056"
+    },
+    {
+      "id": "cam_cninfo_analysis",
+      "path": "sources/cam_cninfo_analysis.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "641e99cd059f038580e19fbc279a74bdcb614d681967e8662dc60520e8b79127"
+    },
+    {
+      "id": "cam_ex_date_index",
+      "path": "sources/cam_ex_date_index.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "5de5792e7098e944c345ba774aa8f42b07e4ef88f786fccfebafa0b9642c7f29"
+    },
+    {
+      "id": "cam_preclose_chain",
+      "path": "sources/cam_preclose_chain.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "12096e3e8a6edd01207a81f596efe675f1802bc1e59c07300db825d88cb9e7e7"
+    },
+    {
+      "id": "cam_marks_substrate",
+      "path": "sources/cam_marks_substrate.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "f6ac7c60366ee60ed9d6e2722f33d63fce3a57072ead778c000df477c5c5d055"
+    },
+    {
+      "id": "host_cam_approval",
+      "path": "sources/host_cam_approval.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "83dce9d12663d3989f462c696980bc175a1e9538ff39d17beb3d8d710c5655a3"
+    },
+    {
+      "id": "human_go_cam",
+      "path": "sources/human_go_cam.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "b395c41ea3b645f7928019cc75f4a6f048c68118b33be45e9e908e1a32bd3377"
+    },
+    {
+      "id": "cam_cninfo_p1",
+      "path": "sources/cam_cninfo_p1.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "22417e40091d8c18ec5e925a5e5bbd7a9f6a66dea6c1f908e38d1a7e57491bab"
+    },
+    {
+      "id": "cam_cninfo_p2",
+      "path": "sources/cam_cninfo_p2.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "77f9eb9585d045f1781d9241fcca1152810ee10d2756e8f16e7bece51d57e149"
+    },
+    {
+      "id": "cam_cninfo_p3",
+      "path": "sources/cam_cninfo_p3.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "9e8e7d81b435e471c4ec5683b59541049b21ff61959db24da7fd1fb797ef732d"
+    },
+    {
+      "id": "calendar",
+      "path": "calendar.json",
+      "format": "json",
+      "schema": "bl2_calendar_v1",
+      "sha256": "2d5977284a1307274ac5c20deb28d4db9b9ae4d9fa6db0e580fad451736212a5"
+    },
+    {
+      "id": "proof_calendar",
+      "path": "calendar.proof.json",
+      "format": "json",
+      "schema": "bl2_proof_v1",
+      "sha256": "3ed1c2249fb6ffd57ca9c15b8f01024312d6a1478dceceeb98bf063e3f341108"
+    },
+    {
+      "id": "actions",
+      "path": "actions.json",
+      "format": "json",
+      "schema": "bl2_actions_v1",
+      "sha256": "c4b676e3dcabdd7c3729938c3f81aca677e8b7de9c4e75d44c1e31734aef642e"
+    },
+    {
+      "id": "proof_actions",
+      "path": "actions.proof.json",
+      "format": "json",
+      "schema": "bl2_proof_v1",
+      "sha256": "9069d9c11cf45b2d7854f1e9c9a59b98ef90aa0ccf106ebce890a3bc43f20682"
+    },
+    {
+      "id": "marks",
+      "path": "marks.json",
+      "format": "json",
+      "schema": "bl2_marks_grid_v1",
+      "sha256": "b018e4c37644a33de409312c3e861ae4c78ee2f5ad5c1fc5578fecd4df6babac"
+    },
+    {
+      "id": "proof_marks",
+      "path": "marks.proof.json",
+      "format": "json",
+      "schema": "bl2_proof_v1",
+      "sha256": "083eec4f56c40e44a486fecc013c31881a1afc0f6d1098e7ac738a4381c66cd8"
+    },
+    {
+      "id": "timing_lake_census",
+      "path": "sources/timing_lake_census.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "c6495b53c3abf257f5e71299e6b63bc4cbce4053f612896d2dffd54a9c99798b"
+    },
+    {
+      "id": "timing_xtquant_docs",
+      "path": "sources/timing_xtquant_docs.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "126726d85dcfafaddfff4813e2a10caf78a7e3000b394afee069eacd9cfca200"
+    },
+    {
+      "id": "timing_materials_map",
+      "path": "sources/timing_materials_map.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "d4a68592d452648c2fa742c2d141d6f99faf7fcb1e96006be07fe477ab4a1ba1"
+    },
+    {
+      "id": "host_timing_approval",
+      "path": "sources/host_timing_approval.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "766cec2e05f7d8b289fa6b61fe901966eb726fa35641d386cbf2417c67fb4e92"
+    },
+    {
+      "id": "human_go_timing",
+      "path": "sources/human_go_timing.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "9142b791951520a5c772615a0b21ed692b559795bdca5e35f367c7bdb6587bea"
+    },
+    {
+      "id": "proof_timing",
+      "path": "timing.proof.json",
+      "format": "json",
+      "schema": "bl2_proof_v1",
+      "sha256": "3bbe69e98f9c5201ec99d636efcc9a6bc51a19e02061d019004202cfd29372f6"
+    },
+    {
+      "id": "host_time_encoding_approval",
+      "path": "sources/host_time_encoding_approval.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "d77697d6593c670eea0ef24b48e774acf24ce848c50ad40fc7e98fae6f36bea1"
+    },
+    {
+      "id": "human_go_time_encoding",
+      "path": "sources/human_go_time_encoding.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "ab70b48c9605df52e193f9f347576d111266c1edd95b4f6251501475d220f8c8"
+    },
+    {
+      "id": "time_encoding_advice",
+      "path": "sources/time_encoding_advice.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "52309274d0c232306ad762149ef18d83ef1028a1840ac8b8137a80ebf3dafec5"
+    },
+    {
+      "id": "time_encoding_r4f",
+      "path": "sources/time_encoding_r4f.json",
+      "format": "json",
+      "schema": "bl2_raw_excerpt_v1",
+      "sha256": "a42de265ace7ffc77dba1f2864033b71848a1ca98e2da3a0bb31d49402c3c9f4"
+    },
+    {
+      "id": "time_encoding_approval",
+      "path": "sources/time_encoding_approval.json",
+      "format": "json",
+      "schema": "bl2_time_encoding_approval_v1",
+      "sha256": "8fedbb2833675a18c9d434f0c38592b2fd2f74e24cb08a283aeeeecb0b8f71b7"
+    }
+  ]
+}

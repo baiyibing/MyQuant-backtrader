@@ -1,0 +1,15 @@
+{
+  "source": "csv_analysis_export.py at master 8cb6c4a; legacy code FIFO bundle before position_id pairing; temporary paths normalized only",
+  "sha256": {
+    "human_analysis.txt": "da6bc68904b5d4e3f59cbac4dbac9233df880ef69f454f37257773d3ab6fc81d",
+    "ledger_by_stock.csv": "6be7002be8006c30e5c7880bf2a768980c161b50d24c3018eac81ad06c99f806",
+    "nav_daily.csv": "e3eaa29a215f86b909661329ddd4c0347c49cb3a9ed474bad2e71f684ff7abb6",
+    "pnl_by_stock.csv": "1202f8d394a76b7c0c67d6564c1c6002474bbf3a737995d90a350f22807b32cb",
+    "positions_daily.csv": "981696ebaf18f6bc217d42c469f8a54b5deaa681536d30bf7bf24ecbcc92aeca",
+    "round_trips.csv": "d5f95079fdcbe2f23ad99fb389d52b94d4315ff23446e00eb770e3bc13450ed5",
+    "summary.json": "c25e48c28b3519cd6f1d4e7a95faf2495d4a8d5f9698ee8d81d750f7004e3740",
+    "trades_daily.csv": "da416e5beb8ee7e997d68804dcb9efd4186c437c8f524cc25611a0aeff896137",
+    "win_by_reason.csv": "7e4c5b4fe150515edb17b4f8927936a25c8ebad0df8e21f8e3f7b51c78dd31a4",
+    "字段说明.txt": "839e039783d7f9a17f57787aaa93f52ff0e305cca8140e3fdc4f5619007d384b"
+  }
+}

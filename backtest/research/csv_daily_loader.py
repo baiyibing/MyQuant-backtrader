@@ -57,6 +57,15 @@ def warn_stale_period_env() -> None:
             )
 
 
+class DailyBarReadError(RuntimeError):
+    """An existing daily partition could not be read or converted."""
+
+    def __init__(self, code: str, path: Path) -> None:
+        self.code = code
+        self.path = path
+        super().__init__(f"failed to read daily bars for {code}: {path}")
+
+
 def _read_one_daily(
     code: str, root: Path, start: str, end: str
 ) -> Optional[pd.DataFrame]:
@@ -71,30 +80,31 @@ def _read_one_daily(
             path, columns=columns + (["volume"] if has_volume else [])
         )
         table = table.filter((pc.field("time") >= t0) & (pc.field("time") <= t1))
-    except Exception:
-        return None
-    if table.num_rows == 0:
-        return None
-    ms = table["time"].to_numpy()
-    idx = pd.to_datetime(ms, unit="ms", utc=True).tz_localize(None).normalize()
-    out = pd.DataFrame(
-        {
-            "open": table["open"].to_numpy(),
-            "high": table["high"].to_numpy(),
-            "low": table["low"].to_numpy(),
-            "close": table["close"].to_numpy(),
-            **(
-                {"_volume": table["volume"].to_numpy()}
-                if has_volume
-                else {}
-            ),
-        },
-        index=idx,
-    ).astype(np.float64)
-    out = out[~out.index.duplicated(keep="last")].sort_index()
-    if has_volume:
-        out = out.loc[out["_volume"] != 0].drop(columns="_volume")
-    return out if not out.empty else None
+        if table.num_rows == 0:
+            return None
+        ms = table["time"].to_numpy()
+        idx = pd.to_datetime(ms, unit="ms", utc=True).tz_localize(None).normalize()
+        out = pd.DataFrame(
+            {
+                "open": table["open"].to_numpy(),
+                "high": table["high"].to_numpy(),
+                "low": table["low"].to_numpy(),
+                "close": table["close"].to_numpy(),
+                **(
+                    {"_volume": table["volume"].to_numpy()}
+                    if has_volume
+                    else {}
+                ),
+            },
+            index=idx,
+        ).astype(np.float64)
+        out = out[~out.index.duplicated(keep="last")].sort_index()
+        if has_volume:
+            out = out.loc[out["_volume"] != 0].drop(columns="_volume")
+        return out if not out.empty else None
+    except Exception as exc:
+        raise DailyBarReadError(code, path) from exc
+
 
 _DIVIDEND_TYPES = ("none", "front", "back")
 
@@ -133,10 +143,7 @@ def load_daily_bars(
             done += 1
             _progress(done, total, "daily lake")
             code = futs[fut]
-            try:
-                df = fut.result()
-            except Exception:
-                continue
+            df = fut.result()
             if df is not None and not df.empty:
                 out[code] = df
     return out

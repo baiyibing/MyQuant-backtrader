@@ -1,0 +1,154 @@
+{
+  "schema_version": 2,
+  "export_id": "bt_practical_parity_limits_tick_20261001",
+  "purpose": "research-BT practical parity: static board_% limit bands + ST time-segmented regimes (NOT vnpy ±10% hardcode)",
+  "preferred_profile": "myquant_er2_bt",
+  "profiles": {
+    "myquant_er2_bt": {
+      "label": "MyQuant market_layer E-R2 (BT-preferred)",
+      "source_paths": [
+        "/workspace/MyQuant-backtrader/backtest/research/market_layer.py",
+        "/workspace/MyQuant-backtrader/backtest/research/ashare_session.py",
+        "/workspace/MyQuant-backtrader/docs/backtest/engine-ashare-correctness.md"
+      ],
+      "source_sha256_box": {
+        "market_layer.py": "b26eb06a6655253ff6fa234ca9c794c304172accc97dac368d2eff25b6c47658",
+        "ashare_session.py": "b4279cc9c13a40f74814630bac04817b3d7ab4c1077a133fd01136a088f91ae8",
+        "engine-ashare-correctness.md": "06e373763a34e7de37dd83d76762764209bf920023d8a95d141f761244561e8b"
+      },
+      "match_order": "longest_prefix_first_within_band_then_band_order_20_then_30_then_10",
+      "unknown_policy": "return_null_skip_unknown_board_do_not_default_0_10",
+      "bands": [
+        {
+          "pct": 0.2,
+          "prefixes": [
+            "300",
+            "301",
+            "302",
+            "688",
+            "689"
+          ],
+          "note": "ChiNext / STAR (incl. 689 CDR)"
+        },
+        {
+          "pct": 0.3,
+          "prefixes": [
+            "920",
+            "430",
+            "83",
+            "87",
+            "88"
+          ],
+          "note": "Beijing Stock Exchange precise prefixes (E-R2)"
+        },
+        {
+          "pct": 0.1,
+          "prefixes": [
+            "600",
+            "601",
+            "603",
+            "605",
+            "000",
+            "001",
+            "002",
+            "003"
+          ],
+          "note": "SH/SZ main + SME; fail-closed outside this set"
+        }
+      ],
+      "st_name_overlay": {
+        "in_static_board_table": true,
+        "static_regimes_file": "config/st_limit_regimes.json",
+        "rule": "name regex (?:\\*ST|(?<![A-Za-z])ST) IGNORECASE → ST regimes by board + as_of",
+        "detail": "ChiNext/STAR/BJ ST keeps board tier (0.20/0.30). Main-board ST: undated or as_of < 2026-07-06 → 0.05; as_of >= 2026-07-06 → 0.10 (ST_MAIN_LIMIT_PCT_SWITCH).",
+        "st_main_limit_pct_switch": "2026-07-06",
+        "requires_name_feed": true,
+        "engineering_ssot_pr": 225,
+        "engineering_ssot_merge": "5a3e6e20a20ac0b398e76ff82e9f30bca9510e65",
+        "practical_parity_note": "Human correction 2026-10-01: ST CAN go into static table as time-segmented regimes (public policy + MyQuant PR #225). Non-ST board bands unchanged."
+      }
+    },
+    "oskh_core_board_limit": {
+      "label": "oskh_core.board_limit.board_limit_pct (coarse BJ + convertible)",
+      "source_paths": [
+        "/workspace/OSkhQuant1.3/oskh_core/board_limit.py"
+      ],
+      "source_sha256_box": {
+        "board_limit.py": "72c72b9a89004ce35567978672d9b5b744f4df253533af3e74f4618e793be529"
+      },
+      "source_sha256_host_4090": {
+        "board_limit.py": "eae297c9476e74a19821421dc6e6f9bf2b183465ad997e869e759da9fb3c8cd8"
+      },
+      "unknown_policy": "else_default_0_10",
+      "bands": [
+        {
+          "pct": 0.2,
+          "prefixes": [
+            "300",
+            "301",
+            "302"
+          ],
+          "note": "ChiNext"
+        },
+        {
+          "pct": 0.2,
+          "prefixes": [
+            "688",
+            "689"
+          ],
+          "note": "STAR"
+        },
+        {
+          "pct": 0.3,
+          "prefixes": [
+            "8",
+            "4",
+            "9"
+          ],
+          "note": "BJ coarse (broader than E-R2 precise table)"
+        },
+        {
+          "pct": 0.2,
+          "prefixes": [
+            "11",
+            "12"
+          ],
+          "note": "convertible bonds; not used in stock templates"
+        },
+        {
+          "pct": 0.1,
+          "prefixes": [
+            "*"
+          ],
+          "note": "else default 0.10"
+        }
+      ],
+      "st_name_overlay": {
+        "in_static_board_table": false,
+        "note": "oskh_core board_limit has no name feed / no ST regimes — reference only. Prefer myquant_er2_bt + st_limit_regimes.json for ST."
+      }
+    }
+  },
+  "bt_config_binding": {
+    "prefer": "myquant_er2_bt",
+    "st_regimes": "config/st_limit_regimes.json",
+    "also_acceptable_static_only": "oskh_core_board_limit bands without ST",
+    "reject": "vnpy alpha BT cross_order pre_close*1.1/0.9 hardcode"
+  },
+  "notes": [
+    "查阅禁 import of vendor trees; rules copied into this config for research BT.",
+    "ashare_session.session_limit_prices delegates to market_layer.limit_prices (Decimal HALF_UP fen).",
+    "Survey ref: /workspace/handoffs/d5_kimi_bt_evidence_bar_survey_20261001/ — gap ① board_% fill.",
+    "ST extend 2026-10-01: see config/st_limit_regimes.json + docs/SOURCES.md policy/PR cites."
+  ],
+  "changelog": [
+    {
+      "at_cst": "2026-10-01 13:36:53 +0800",
+      "change": "ST time-segmented regimes promoted into static config (st_limit_regimes.json); board_limit_bands st_name_overlay.in_static_board_table=true; engineering SSOT = PR #225 / ST_MAIN_LIMIT_PCT_SWITCH=2026-07-06"
+    },
+    {
+      "at_cst": "2026-10-01 13:31:15 +0800",
+      "change": "initial board_% + pricetick export; ST noted as overlay-only (superseded by ST extend)"
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "schema_version": "bl2_marks_grid_v1",
+  "data": {
+    "subject": "marks",
+    "conclusion": "raw_contemporaneous_grid",
+    "purpose": "Host-facing approved grid document; not a loader role or a frozen recipe.",
+    "approval_id": "host_r4_cam_approval_20260930",
+    "transform_version": "bl2_source_transform_v8",
+    "time": {
+      "encoding": "epoch_ms_wall_shanghai_as_utc",
+      "timezone": "Asia/Shanghai",
+      "label": "END"
+    },
+    "source_identity_note": {
+      "source": "minute_603196",
+      "sha256": "58879893f221bfe050b7a16029667c49fb65d8ec6f47592254e549374a577083",
+      "binding_status": "unbound_minute_source",
+      "note": "Identity recorded in pinned #1114 substrate; parquet/census not read here. Exports do not establish lake equivalence; host must bind configured parquet identity/coverage and preserve its time/close mapping."
+    },
+    "proofs": [
+      "proof_marks"
+    ],
+    "rows": [
+    {"mark_id":"spot_20251023_close","event_time":"2025-10-23T15:00:00+08:00","available_at":"2025-10-23T15:00:00+08:00","price_domain":"raw","prices":[{"symbol":"603196.SH","price":"23.89","source":"minute_603196","abs_row":46753,"time_column":"time","price_column":"close","substrate_source":"cam_marks_substrate","substrate_row":14}]},
+    {"mark_id":"final","event_time":"2025-11-04T15:00:00+08:00","available_at":"2025-11-04T15:00:00+08:00","price_domain":"raw","prices":[{"symbol":"603196.SH","price":"22.96","source":"minute_603196","abs_row":48681,"time_column":"time","price_column":"close","substrate_source":"cam_marks_substrate","substrate_row":22}]}
+  ]
+  }
+}

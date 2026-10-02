@@ -1,0 +1,10 @@
+# Byte-pinned contract artifacts must check out as committed (LF); the local
+# autocrlf working-tree conversion broke test_schema_file_sha256_pinned and
+# the off_byte_baseline golden fixtures on Windows checkouts (2026-09-26).
+bt_contract/schema/*.json text eol=lf
+tests/fixtures/*.json text eol=lf
+
+# B-L2-01 evidence bundle carries a sha256 manifest (its README); every file in
+# it is byte-pinned to the 4090 host copies (mixed CRLF/LF as produced there).
+# Store and check out as-is: no eol conversion anywhere.
+docs/backtest/b-l2-01-evidence-2026-09-30/** -text

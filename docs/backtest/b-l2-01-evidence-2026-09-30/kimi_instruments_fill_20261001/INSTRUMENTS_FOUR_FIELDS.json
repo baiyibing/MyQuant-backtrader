@@ -1,0 +1,139 @@
+{
+  "schema": "bl2_instruments_kimi_fill_v1",
+  "symbol": "603196.SH",
+  "window": ["2025-10-23", "2025-11-04"],
+  "rows": [
+    {
+      "trade_date": "2025-10-23",
+      "reference_price": "23.36",
+      "limit_up": "25.7",
+      "limit_down": "21.02",
+      "ordinary_listing": true,
+      "vendor": {
+        "reference_price": "THS",
+        "limit_up": "Wind",
+        "limit_down": "Wind",
+        "ordinary_listing": "Wind+THS"
+      },
+      "source_refs": ["raw/ths_603196_daily.csv", "raw/wind_603196_limits.csv", "raw/wind_603196_info.csv"]
+    },
+    {
+      "trade_date": "2025-10-24",
+      "reference_price": "23.89",
+      "limit_up": "26.28",
+      "limit_down": "21.5",
+      "ordinary_listing": true,
+      "vendor": {
+        "reference_price": "THS",
+        "limit_up": "Wind",
+        "limit_down": "Wind",
+        "ordinary_listing": "Wind+THS"
+      },
+      "source_refs": ["raw/ths_603196_daily.csv", "raw/wind_603196_limits.csv", "raw/wind_603196_info.csv"]
+    },
+    {
+      "trade_date": "2025-10-27",
+      "reference_price": "23.89",
+      "limit_up": "26.28",
+      "limit_down": "21.5",
+      "ordinary_listing": true,
+      "vendor": {
+        "reference_price": "THS",
+        "limit_up": "Wind",
+        "limit_down": "Wind",
+        "ordinary_listing": "Wind+THS"
+      },
+      "source_refs": ["raw/ths_603196_daily.csv", "raw/wind_603196_limits.csv", "raw/wind_603196_info.csv"]
+    },
+    {
+      "trade_date": "2025-10-28",
+      "reference_price": "24.32",
+      "limit_up": "26.75",
+      "limit_down": "21.89",
+      "ordinary_listing": true,
+      "vendor": {
+        "reference_price": "THS",
+        "limit_up": "Wind",
+        "limit_down": "Wind",
+        "ordinary_listing": "Wind+THS"
+      },
+      "source_refs": ["raw/ths_603196_daily.csv", "raw/wind_603196_limits.csv", "raw/wind_603196_info.csv"]
+    },
+    {
+      "trade_date": "2025-10-29",
+      "reference_price": "23.12",
+      "limit_up": "25.43",
+      "limit_down": "20.81",
+      "ordinary_listing": true,
+      "vendor": {
+        "reference_price": "THS",
+        "limit_up": "Wind",
+        "limit_down": "Wind",
+        "ordinary_listing": "Wind+THS"
+      },
+      "source_refs": ["raw/ths_603196_daily.csv", "raw/wind_603196_limits.csv", "raw/wind_603196_info.csv"]
+    },
+    {
+      "trade_date": "2025-10-30",
+      "reference_price": "23.04",
+      "limit_up": "25.34",
+      "limit_down": "20.74",
+      "ordinary_listing": true,
+      "vendor": {
+        "reference_price": "THS",
+        "limit_up": "Wind",
+        "limit_down": "Wind",
+        "ordinary_listing": "Wind+THS"
+      },
+      "source_refs": ["raw/ths_603196_daily.csv", "raw/wind_603196_limits.csv", "raw/wind_603196_info.csv"]
+    },
+    {
+      "trade_date": "2025-10-31",
+      "reference_price": "22.94",
+      "limit_up": "25.23",
+      "limit_down": "20.65",
+      "ordinary_listing": true,
+      "vendor": {
+        "reference_price": "THS",
+        "limit_up": "Wind",
+        "limit_down": "Wind",
+        "ordinary_listing": "Wind+THS"
+      },
+      "source_refs": ["raw/ths_603196_daily.csv", "raw/wind_603196_limits.csv", "raw/wind_603196_info.csv"]
+    },
+    {
+      "trade_date": "2025-11-03",
+      "reference_price": "23.03",
+      "limit_up": "25.33",
+      "limit_down": "20.73",
+      "ordinary_listing": true,
+      "vendor": {
+        "reference_price": "THS",
+        "limit_up": "Wind",
+        "limit_down": "Wind",
+        "ordinary_listing": "Wind+THS"
+      },
+      "source_refs": ["raw/ths_603196_daily.csv", "raw/wind_603196_limits.csv", "raw/wind_603196_info.csv"]
+    },
+    {
+      "trade_date": "2025-11-04",
+      "reference_price": "23.05",
+      "limit_up": "25.36",
+      "limit_down": "20.75",
+      "ordinary_listing": true,
+      "vendor": {
+        "reference_price": "THS",
+        "limit_up": "Wind",
+        "limit_down": "Wind",
+        "ordinary_listing": "Wind+THS"
+      },
+      "source_refs": ["raw/ths_603196_daily.csv", "raw/wind_603196_limits.csv", "raw/wind_603196_info.csv"]
+    }
+  ],
+  "gaps": [],
+  "corroboration": {
+    "tick_size": null,
+    "lot_size": null,
+    "note": "本轮 THS/Wind 拉取均未返回 tick_size / lot_size，厂商不可得，诚实置 null；living_instruments 中 0.01/100 为 approved_derivation（sse_rule），非厂商直出，未采信。"
+  }
+}

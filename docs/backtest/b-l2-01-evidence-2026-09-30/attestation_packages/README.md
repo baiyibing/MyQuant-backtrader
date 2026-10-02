@@ -1,0 +1,580 @@
+# B-L2 remapped drafts — authorized volume shares-scale mapping (2026-10-01)
+
+**Path L: loader ×100, `bl2_source_transform_v8`.** Human「改成股啊」authorizes
+conversion of the attested lots-scale lake volume into loaded shares. Baseline:
+`3fd48612fdcfd8341796517272c71b78735d50a7` (post-merge #283).
+[HUMAN_GO_VOLUME_SHARES_SCALE.md](HUMAN_GO_VOLUME_SHARES_SCALE.md) is byte-preserved,
+SHA-256 `722632a9ff008715c277616004b0e2bfbfd5d380664574cc591a6276cce0435e`.
+[DIAGNOSIS_VOLUME_SHARES_SCALE.md](DIAGNOSIS_VOLUME_SHARES_SCALE.md) is byte-preserved,
+SHA-256 `575b7a2f7c7bdf1958b3fc341229c33c17f97f5ed51811051a68b663c5758b1b`.
+Both are pinned in [inputs.json](inputs.json) and preserved in structured raw
+source documents. Host export of shares-scale bytes is deferred.
+
+[units.proof.json](units.proof.json) is **`complete=true`**, with the new
+**`basis=authorized_mapping`**. The living contract is **post-transform**
+`raw_shares_incremental`: `kind=incremental`, `unit=shares`, `shares_per_unit=1`.
+The recipe volume section uses these same three fields. The source column stays
+`volume:int64` and **lots-scale at rest**; v8 multiplies its integer values by
+100 before emitting `volume_shares`. For example, 31780 maps to 3178000 shares.
+No source parquet is rewritten. Zero stays zero; conversion uses exact integer
+arithmetic. Synthetic explicit `source_declaration` shares/1 stays 1:1.
+
+[sources/volume_mapping_approval.json](sources/volume_mapping_approval.json)
+binds the GO, diagnosis, full historical lots proof text, historical lots GO,
+comparison, raw minute/daily excerpts, THS and ratio table by SHA-256. Its own
+hash is a loader trust anchor. Input scope is `minute_603196`, `603196.SH`,
+`volume:int64`, dates `2025-10-23..2025-11-04`, partition SHA-256
+`58879893f221bfe050b7a16029667c49fb65d8ec6f47592254e549374a577083`.
+Missing/changed mapping GO or historical scale material, changed source hash,
+column, type, symbol, window, output binding or approval fails closed. The
+loader records original integer text/type, output shares, proof references and
+`volume_mapping` with input lots, multiplier 100, output shares/1 and contract.
+Recipe/output `shares_per_unit=1` does not hide the separate ×100 mapping.
+Conflicting declaration/mapping proofs for the same input are rejected.
+
+The lake/daqmt/Tencent numbers remain **lots-scale**. On 2025-10-23 daily volume
+is **31780**, Wind/Sina **3177959**, THS **3177900**. Lake ×100 approximates Wind;
+it does not recover the exact-share residuals lost in rounded lots. Wind/THS
+are historical factor/conflict evidence, never a vendor declaration that lake
+raw volume is shares. The vendor K-line unit declaration absence remains.
+`amount/(close×volume)` heuristics do not attest units.
+
+The earlier [shares-target GO](HUMAN_GO_UNITS_SHARES.md), SHA-256
+`ff0a5f3bf74e775c66a692e7857eff22cc6d5f0fd0757d97abb38172c75613ab`,
+[diagnosis](DIAGNOSIS_UNITS_SHARES.md), and their structured sources retain their
+bytes. Lifecycle: **target_satisfied_by_authorized_mapping**. Its earlier
+incomplete proof is archived as
+[historical/units.shares-target.proof.json](historical/units.shares-target.proof.json).
+`human_target` alone remains rejected even if `complete` is flipped to true.
+The old lots [HUMAN_GO.md](HUMAN_GO.md), SHA-256
+`bb287dfe9e2559e9fe05abb7401a636aa6596524cfb79ffa34a4f3ff884c2afe`,
+`sources/human_go.json`, `sources/units_comparison.json` and
+[historical/units.lots.proof.json](historical/units.lots.proof.json) retain their
+bytes and **historical_superseded** status for living ratio acceptance.
+They support only the mapping's input lots scale/factor and conflict disclosure.
+Neither archived proof is registered as a living proof. The raw-document
+`historical_lots_scale` envelope preserves the lots proof as historical input.
+
+**`r4_authorized=false`; `production_C=frozen`; lake verdict `NOT_RUN`.**
+The v5 wall-time approval and v6 price rule retain their behavior and pins.
+Fresh v8 code/runtime, recipe, marks and scoped attestation pins are required;
+old R3/R4i PASS and freezes cannot be reused. No MatchCore/Fees/Clock/SSOT change,
+economic relaxation, lake rewrite, merge or 4090/R4 dispatch.
+Do NOT merge without Human「合」. A later host run requires land and separate
+named Human「开 R4」. δ5 still needs its own `d5_evidence_pack_v1` units pack and
+its own decision on this mapping; no δ5 pack or PASS is supplied.
+
+## Earlier fills and provenance (historical decisions; current units above)
+
+The original six consumer/proof files remap saved evidence from
+[OSkhQuant1.3 #1111](https://github.com/baiyibing/OSkhQuant1.3/pull/1111), fixed commit
+[`ec19fd6f69a52f93aa9870ad582f0173df8963f4`](https://github.com/baiyibing/OSkhQuant1.3/tree/ec19fd6f69a52f93aa9870ad582f0173df8963f4/docs/evidence/b_l2_01_4090_r3_20260930),
+against research tip `cff5ad619b284141668dcebb4bb86c713a848bfa`.
+They are drafts for a later, separately authorized 4090 copy into
+`D:\exports\b_l2_01_4090_r3_20260930\evidence\`; this PR does not perform that copy.
+**R3 stays BLOCKED/NOT_RUN; R4 needs separate Human「开 R4」; production_C=frozen.**
+No lake writes, MatchCore/Fees/SSOT changes, execution, or host certification.
+
+R4h cent-align fix (2026-09-30, Human **「开修」via bt**): baseline
+`0f009aed5f7132ae9aed93e44fd74d3d844c35b8` (#280) reached BrokerCore with
+**`FeeContractError: bucket close must be cent-aligned; no implicit rounding`**.
+The supplied `/workspace/handoffs/b_l2_r4_cent_align_20260930/HUMAN_GO.md`
+has SHA-256 `45ba9a99ec4d09fdb4c73c5dc2e2bf3aa6115a2c7b6a374eed79bc5448b71729`;
+the adjacent `DIAGNOSIS.md` traces parquet double → `Decimal(repr(float))` →
+`money_cents`. The saved [lake census](sources/timing_lake_census.json) records
+`23.310000000000002` at 13:01 and `23.830000000000002` at 14:57 on 2025-10-23.
+Those representations are not cent-aligned; the Fees rejection is correct.
+
+The R4h transform was **`bl2_source_transform_v6`** (current v8 above). For pinned parquet
+`double` prices only, **`double_repr_cent_quantize_v1`** starts with
+`Decimal(repr(float))`, retains already cent-aligned values, and otherwise
+quantizes to `Decimal("0.01")` using **`ROUND_HALF_EVEN`** only when the absolute
+residue is **≤ `Decimal("1e-9")` yuan**. This explicit bound accepts the observed
+`2e-15` noise and is far below `0.005`; `10.001` fails early with
+`SourceContractError` naming the rule. The rule uses its own Decimal context,
+independent of caller precision, rounding and traps. Bars and marks share the
+same price helper. Exact Decimal/string/int paths preserve their values;
+true sub-cents still fail validation. Volume remains exact integer shares.
+
+Each double-price conversion records `original`, `decimal_text`, `residue`,
+`max_abs_residue`, `rounding`, `rule`, and `quantized`, plus `quantized_text` when
+changed, in bar/mark provenance. [manifest.json](manifest.json) attests the rule,
+bound and GO hash. Fees, BrokerCore admission, MatchCore, Ledger and Clock stay
+unchanged. Wall encoding stays **`epoch_ms_wall_shanghai_as_utc`**;
+**`r4_authorized=false`**, `production_C=frozen`. Existing units/CAM/timing/
+time-encoding Human GO files and the byte-pinned wall-encoding approval remain
+unchanged. Their historical v5 references (including the approval's pinned
+source excerpts) are preserved; living manifest/marks/recipe and proof
+limitations required v6 for R4h and now require v8.
+
+Cent-align implementation and offline attestation are complete; account/commands
+and scoped attestation still require host recipe review and registration.
+Host lake identity/coverage, a fresh implementation/runtime pin, recipe,
+attestation `scope_hash`, and fresh freeze remain outstanding. No freeze/lake
+PASS, R4h receipt rewrite, merge, or 4090/R4 dispatch is claimed or performed.
+Remaining Human steps: **Grok review → Human「合」→ land → Human「开 R4」**.
+Merge does not authorize R4.
+
+R4 fix update (Human「开修」, 2026-09-30): the separately authorized R4 host run
+on tip `5b4ef3e` returned **BLOCKED/NOT_RUN**. Its original receipt is unchanged.
+This fix removes bare JSON floats from remapped sources and tests the host-fill
+contract; it does not authorize another host run or 4090/R5. The stored remap
+marker and manifest retain `r4_authorized=false`; `production_C=frozen`.
+
+R4 instruments host fill (2026-09-30, Human-selected available_at convention (a)):
+the four §9.3.1 evidence groups are now supplied and pinned — the archived SSE
+trading rules fulltext and clause excerpts (OSkhQuant1.3 PR #1112, commit
+`d0edd384e9bd7fc0029b380e8850920539c46a95`, directory
+`docs/evidence/b_l2_r4_host_materials_draft_20260930`), the Human decision record
+[HOST_R4_INSTRUMENTS_APPROVAL_20260930.md](HOST_R4_INSTRUMENTS_APPROVAL_20260930.md)
+(pinned by bytes SHA-256 in [inputs.json](inputs.json)), per-day `available_at`
+under the approved T-1 post-close archive convention, and approved
+`ordinary_listing=true`. Both instruments proofs are `complete=true` with
+bindings identical to the consumer rows. **The approval record awaits baiyibing
+countersign before merge. `r4_authorized` stays `false`; the host recipe,
+configured lake identity/coverage and a fresh freeze remain separate prerequisites.**
+The subsequent CAM fill below supplies the calendar/actions/marks evidence.
+
+R4 calendar/actions/marks host fill (2026-09-30, Human **「四格全批，开 packs」**):
+this packs knife builds on #276 baseline `c69f4bcc487608e8ff75e090526e50d116a4bc0a`
+and pins [OSkhQuant1.3 #1114](https://github.com/baiyibing/OSkhQuant1.3/pull/1114)
+at `42d066b81a083be49881f0dd8c5ab53ed4f422f6`, directory
+`docs/evidence/b_l2_r4_cam_host_materials_draft_20260930/`.
+The [CAM approval record](HOST_R4_CAM_APPROVAL_20260930.md) records the four-cell
+decision and awaits baiyibing countersign before merge. The supplied
+[HUMAN_GO_CAM.md](HUMAN_GO_CAM.md) is byte-preserved, SHA-256
+`e15c79acde154bd7163208f2bf0a156737a9f908ed3fb9f41b87b64d42c13feb`;
+it does not overwrite the units GO. Instruments/status/units consumer and proof
+bytes, and all their existing source excerpts, remain unchanged from #276.
+**`r4_authorized=false`; this approval is packs only, not「开 R4」.**
+
+R4d timing host fill (2026-09-30, Human **「开修」**): #277 baseline
+`55f27f7967bc98a30146dc2474b91f1ac69f46f0` reached the timing claim with
+`SourceContractError: timing: unknown proof source ref`. This fill supplies the
+independent [timing.proof.json](timing.proof.json), manifest id **`proof_timing`**,
+using existing MyQuant census/map/vendor materials. The
+[timing approval record](HOST_R4_TIMING_APPROVAL_20260930.md) awaits baiyibing
+countersign before merge. [HUMAN_GO_TIMING.md](HUMAN_GO_TIMING.md) preserves the
+supplied GO bytes, SHA-256
+`b89d99fc0fabbad5dd1e6da4ff6f3368ab84d1c7afce71832ea9e405d7e270f7`.
+The units/CAM GO documents and #1111/#1112/#1114 pins remain unchanged, as do
+all existing instruments/status/units/CAM consumer, proof and source bytes.
+**R4d stays BLOCKED/NOT_RUN as recorded; this fixes evidence registration,
+not a lake verdict. `r4_authorized=false`; `production_C=frozen`.**
+
+R4f time encoding A (2026-09-30, Human **「开修」+ confirm A**):
+[HUMAN_GO_TIME_ENCODING.md](HUMAN_GO_TIME_ENCODING.md) preserves SHA-256
+`e605e3256be64943d8026e45c4ad3ce60c34663ad9ebb45ed99b5d3e86e66538`.
+[HOST_R4_TIME_ENCODING_APPROVAL_20260930.md](HOST_R4_TIME_ENCODING_APPROVAL_20260930.md)
+records the named implementation approval. Transform **v5** adds
+`epoch_ms_wall_shanghai_as_utc` and requires the byte-pinned
+[structured approval](sources/time_encoding_approval.json) through `proof_timing`.
+R4f remains BLOCKED/NOT_RUN; this closes the encoding implementation/evidence
+gap, not host freeze or lake acceptance. That encoding approval did not authorize R4g.
+
+R4g status trim (2026-09-30, Human **「开修」via bt**): baseline
+`a8b735018cd7c936b5ccb9b4de4476ec16f56602` (#279) reached Clock with
+`RunContractError: bucket crosses lunch or continuous session endpoints`.
+The supplied GO at
+`/workspace/handoffs/b_l2_r4_status_trim_clock_20260930/HUMAN_GO.md` has SHA-256
+`d06b01b536dbd8b4c5a13eaf72ceca703ed84bc528d70de75bfc446cc35390d8`.
+This packs-only knife trims status and matching proof bindings from **240×9=2160**
+to **237×9=2133**, matching the unchanged Clock bounds: morning
+`09:30 <= start < end <= 11:30`, afternoon `13:00 <= start < end <= 14:57`.
+That status-only change retained **`bl2_source_transform_v5`**; the R4h fix above
+required v6 at R4h; current v8 is described above. Wall encoding stays
+**`epoch_ms_wall_shanghai_as_utc`**, and **`r4_authorized=false`**.
+The 15:00 marks remain legal and unchanged. R4g's receipt remains BLOCKED/NOT_RUN;
+no fresh freeze or lake PASS is claimed. No 4090/R4 dispatch or merge is performed.
+Next steps: Grok review → Human「合」→ land packs on 4090 → Human「开 R4」.
+Merge does not authorize R4. Existing units/CAM/timing/time-encoding GO files
+are unchanged.
+
+## Historical superseded Human lots exception (2026-09-30)
+
+This entire subsection describes the **historical_superseded** exception;
+v7 retired it; v8 still rejects living ratio acceptance. The byte-preserved [HUMAN_GO.md](HUMAN_GO.md) was supplied at
+`/workspace/handoffs/b_l2_remap_r4_20260930/HUMAN_GO.md`:
+
+> 人裁：①量单位接受直接对账（basis=cross_source_ratio），然后 remap
+
+The prior GO scoped that exception to `603196.SH`, inclusive `20251023–20251104`,
+unit **手**, **100 shares per unit**, **incremental**. Its structured marker is
+[sources/human_go.json](sources/human_go.json); the original document SHA-256 is
+`bb287dfe9e2559e9fe05abb7401a636aa6596524cfb79ffa34a4f3ff884c2afe`.
+The marker records the user-scoped exception; it is not a vendor declaration or
+R4 authorization. The original #1111 `source_declaration` label is deliberately
+corrected to `cross_source_ratio`. Vendor-doc absence remains quoted in limitations.
+
+Eight daily ratios equal 100. On 2025-10-23, THS is **100 shares lower** than
+daqmt daily volume ×100 (ratio 99.99685336689743). This difference is preserved.
+All nine full-day minute sums equal daily volume, **including the 09:30 bars**.
+The archived proof binding used the existing loader enum `unit="lots"` for 手; factor 100
+is explicit. No amount/close/volume inference is used.
+
+## Consumer/proof artifacts and source IDs
+
+| Artifact | Schema / intended source ID | Template mapping |
+|---|---|---|
+| [units.proof.json](units.proof.json) | `bl2_proof_v1` / `proof_units` | complete authorized_mapping; loader lots ×100 → shares/1 |
+| [instruments.json](instruments.json) | `bl2_instruments_v1` / `instruments` | **derived** template; 9 supplied daily rows |
+| [instruments.proof.json](instruments.proof.json) | `bl2_proof_v1` / `proof_instruments_sse` | instrument proof; SSE rule source |
+| [instruments.wind.proof.json](instruments.wind.proof.json) | `bl2_proof_v1` / `proof_instruments_wind` | second instrument proof; Wind daily limit source |
+| [status.json](status.json) | `bl2_status_v1` / `status` | Clock-aligned 237 × 9 = 2133 continuous minute rows |
+| [status.proof.json](status.proof.json) | `bl2_proof_v1` / `proof_status` | exact per-minute bindings |
+| [calendar.json](calendar.json) | `bl2_calendar_v1` / `calendar` | PMC subset; only `trading_dates` |
+| [calendar.proof.json](calendar.proof.json) | `bl2_proof_v1` / `proof_calendar` | calendar; `complete_trading_calendar` |
+| [actions.json](actions.json) | `bl2_actions_v1` / `actions` | approved coverage; `events=[]`, `complete=true` |
+| [actions.proof.json](actions.proof.json) | `bl2_proof_v1` / `proof_actions` | actions; `complete_no_company_actions`; `result.rows=[]` |
+| [marks.json](marks.json) | `bl2_marks_grid_v1` / `marks` | host-facing approved grid document; **not a loader role** |
+| [marks.proof.json](marks.proof.json) | `bl2_proof_v1` / `proof_marks` | marks; `raw_contemporaneous_grid` |
+| [timing.proof.json](timing.proof.json) | `bl2_proof_v1` / `proof_timing` | claim only; `completed_bucket_available_at_end`; **no timing consumer role** |
+
+The source-fact instrument template is an alternative, not another required
+package: these inputs are explicitly an `approved_derivation`. Both instrument
+proofs bind the same inputs, rule version and output values; the Wind proof is
+listed in `independent_verification`. The source issuer labels identify material,
+not signatures by SSE/Wind on these remapped JSONs. Wind's nine daily rows verify
+18/18 supplied limit values; its CSV hash is
+`31f8461a4ae7aca352db35648c0d7c60e476597b259bfecc03c9807c9f3a048b`.
+The 2026-09-30 daqmt instrument-detail snapshot is corroboration only.
+No default 10% calculation is performed by this remapper or the loader.
+
+**Instrument blockers filled 2026-09-30 (host fill):** #1111 did not supply a
+historical `available_at`, authoritative ordinary-listing coverage, or an
+archived SSE rule plus approval. Those four groups are now pinned and bound:
+`sse_rule` is re-pointed from the #1111 URL/paraphrase to the archived rules
+fulltext (292 line rows); `clause_excerpts` carries the clause excerpts and
+effective-interval delimitation; `host_approval` carries the Human decision
+record. `available_at` follows the Human-selected convention (a): `T-1` trading
+day `15:30:00+08:00` post-close archive, anchored to the pinned daily archive
+rows (daqmt preClose chain; first row's T-1 = 2025-10-22 close 23.36 in the
+pinned kimi daily CSV, now also a derivation input via `ths_daily`). The
+2026-07-06 after-hours rule change postdates the window and is not an anchor.
+`ordinary_listing=true` is the Human-approved window coverage (non-ST, zero
+corporate actions, no 3.4.13 first-day exception). `approved_rule_version`
+keeps its string and now has an approval record behind it. Both proofs bind all
+seven derivation inputs plus the `daqmt_detail` corroboration, and remain
+distinct issuers. The CAM evidence is now filled below; the host recipe, lake
+identity/coverage and the fresh freeze are **still** separate prerequisites —
+follow the [host checklist in ingress §9.3.1](../../note-l2-lake-source-ingress-b-l2-01-2026-09-29.md#931-r4-instruments-宿主补证清单2026-09-30)
+for what remained, and §9.5 for the freeze order. **Fixture PASS ≠ lake PASS;
+`r4_authorized` stays `false`.**
+
+## Calendar/actions/marks four-cell host fill
+
+The [ingress contract](../../note-l2-lake-source-ingress-b-l2-01-2026-09-29.md)
+§§3 / 3.2 / 3.3 / 9 govern this fill. All three proofs use the existing §9.1
+six-field envelope, `complete=true`; calendar/marks have non-empty observations
+with exact excerpt row indexes. Actions retains the required empty result rows.
+Instruments-only binding and second-issuer requirements are not added to CAM.
+
+1. **Calendar + first_day approved:** `first_day=2025-10-23`, with no earlier
+   initial-lot acquisition. Ten ordered unique PMC dates cover the nine execution
+   days and next possible BUY day **2025-11-05**. The two archived SSE notices
+   anchor the calendar; the census is corroboration only, never an inference
+   that presence of a bar makes a trading date.
+2. **Actions coverage + events=[] approved:** the economic coverage statement
+   is `[2025-10-23,2025-11-04]`. Four sources support it: ex_date_index zero
+   matches, cninfo 77 announcement titles, the preClose chain without adjustment,
+   and constant adj_factor. cninfo's wider **search** window is
+   `2025-06-01..2025-12-31`, not a wider no-events assertion. Contract §3.2 says
+   “`ex_date_index/adj_factor` 的 hash 只证明身份；无行、因子未变或源缺失均不单独证明无事件。”
+   The saved multi-source coverage statement and Human approval support the
+   empty events; observations belong in source excerpts, not actions proof rows.
+3. **Mark grid + row maps approved:** choose the first-day close as the independent
+   spot-check and retain the mandatory final close, both explicitly priced in
+   the CAM substrate table. `available_at=event_time` for each point.
+4. **Packs knife only approved:** manifest/remap/evidence updates; no recipe
+   freeze or R4 authorization. `r4_authorized` remains false.
+
+| mark_id | event_time = available_at | zero-based absolute parquet row | raw close |
+|---|---|---|---|
+| `spot_20251023_close` | `2025-10-23T15:00:00+08:00` | `46753` | `23.89` |
+| `final` | `2025-11-04T15:00:00+08:00` | `48681` | `22.96` |
+
+[marks.json](marks.json) is a document schema emitted by the remapper and listed
+in the manifest; the loader has no marks role. It records `time`/`close` columns,
+prices, absolute rows and zero-based substrate excerpt lines. The host must
+translate this grid into the existing recipe `mark_grid`, preserving the minute
+source's symbol/time/close mapping and matching final `end_at`; no new loader
+schema or price fallback is introduced. A 15:00 mark adds no execution bucket.
+
+Parquet SHA-256 `58879893f221bfe050b7a16029667c49fb65d8ec6f47592254e549374a577083`
+is a **saved identity** from #1114, also pinned for wall encoding by
+`time_encoding_approval.binding.source_sha256` in the
+[structured approval](sources/time_encoding_approval.json); the loader enforces
+that pin. The substrate describes the parquet pin, row table and census agreement
+supporting legal 15:00 marks. This remap does not read parquet or census bytes.
+The manifest's `unbound_minute_source.sha256` stays null because this catalog does
+not ship parquet bytes; the wall-encoding pin lives in the approval binding.
+The host must still configure/resolve lake identity/coverage and freshly freeze.
+Exports do not establish configured lake equivalence. No lake PASS.
+
+Source limitations are retained: ex_date_index's local `e8fe70ce…` snapshot is
+different from R3's `93c264ed…` pin; unchanged preClose/adj_factor are supporting
+observations only. cninfo analysis reviewed titles, not all PDFs. Three archived
+responses preserve `totalpages=2` even though rows reconcile as 30+30+17 = 77
+unique IDs and the last response has `hasMore=false`. Compact page excerpts
+retain original array indexes and selected title/identity/time/URL fields; all
+raw response bytes remain vendored and pinned. The archived materials keep their
+DRAFT wording; approval is a separate record, not an edit of upstream evidence.
+Name correction: **603196.SH 日播时尚 → 璞源材料**, not 亚士创能 (603378).
+
+## Timing host fill and R4d registration
+
+The timing proof uses the existing §9/§9.1 six-field envelope, `complete=true`
+and non-empty `source/row/observation` rows; no instruments-only basis/binding
+requirement is added. Independent sources are `timing_lake_census`,
+`timing_xtquant_docs`, `timing_materials_map`, `host_timing_approval`,
+`human_go_timing` and existing `opening_auction`/`daqmt_1m`. None is a proof or attestation.
+
+The originals are already vendored in **baiyibing/MyQuant-backtrader** at
+`55f27f7967bc98a30146dc2474b91f1ac69f46f0`, under this evidence directory;
+they are not attributed to OSkhQuant1.3. Full-file bytes are pinned in
+`inputs.json.timing_host_materials.original_files`:
+
+| Original material | SHA-256 |
+|---|---|
+| `raw_materials/raw_lake_minute_census_603196SH_20251023_20251104.json` | `b4ee473bcf7d224d635ce0f788d0d64dde8a2e421034420c2c292e9c632b7188` |
+| `raw_materials/raw_excerpt_xtquant_docs.json` | `3884f478256f96c7938cb5f0f40075ceb03f8064665be1193e2d445612bc8a12` |
+| `HOST_MATERIALS_MAP_R4.md` | `b2487a9ba20f66b8e211b22536fb92d5dc60b0c2edb8eb2427c8d4c93e0e2fba` |
+
+Compact LF fixtures in `tests/fixtures/bl2_attestation_remap_upstream/timing_host_materials/`
+have separate byte pins and reproduce their `sources/` copies exactly.
+`extract_timing_materials` reconstructs them from the hash-checked saved
+originals in offline tests. The full 2169-cell census is not duplicated in each
+sidecar. Census excerpt rows 0/1/2 hold semantics/grid/counters; rows 3–11 hold
+nine boundary samples, with `source_cell_index` into the original `/cells` and
+`row_idx` for the separate zero-based absolute parquet row. Proof `row` always
+indexes the compact source's `data.rows`, never the parquet directly.
+
+Census and map §1.1 explicitly declare END: label t covers `[t-1min,t)`.
+Contract §3.1 gives completed close/volume availability at `bucket.end=t`.
+The proof approves END and `availability=bucket_end`. Map §1.1 labels
+`1761211800000` as Shanghai 09:30 and says “不是真 UTC”, while the unchanged
+`epoch_ms` decoder returns **`2025-10-23T17:30:00+08:00`**. The pinned #1111
+vendor export instead uses `1761183000000` for Shanghai 09:30, a 28800000 ms
+difference. Tests preserve both old source semantics. The separately pinned
+Kimi advice reports 2169 rows with zero violations of `time_ms` versus the naive
+index interpreted as UTC wall. The new approval binds that saved conclusion
+to `minute_603196`, the R4f lake hash, `time:int64` and the stated window.
+The new decoder constructs UTC wall components and stamps Shanghai using
+`replace(tzinfo=None).replace(tzinfo=Asia/Shanghai)`; it applies no numeric
+offset correction. `epoch_ms` retains its original instant semantics.
+
+Host recipes for this partition **must** set both `bars[].time` and the
+same-source `mark_grid[].prices[].time` to:
+
+```json
+{"encoding": "epoch_ms_wall_shanghai_as_utc", "timezone": "Asia/Shanghai", "label": "END"}
+```
+
+Keep `availability="bucket_end"` and source ID `minute_603196`. The loader pins
+the exact `bl2_time_encoding_approval_v1` artifact, which includes HOST/GO,
+map/census, advice and R4f material hashes. The timing claim must cite its row
+and register every material; the source hash, column/type, symbol, time mapping
+and covered dates must match. Missing or changed binding/approval fails closed,
+including for marks. Other sources/windows cannot reuse this approval.
+The pure `_time` helper only decodes; both source ingestion paths apply the gate.
+There is no fixture bypass in production; synthetic tests substitute a
+fabricated trust anchor only with pytest monkeypatch and retain fixture notices.
+Bar audit records retain the original integer text and `time_source_type=int64`,
+the declared time mapping, converted ISO `start/end` and `time_proofs` references.
+
+Coverage is 2169 rows / 2133 tradable cells / zero missing / zero duplicates;
+237 tradable END labels per day are 09:31–11:30 and 13:01–14:57.
+09:30/14:58/14:59/15:00 remain off-grid; 15:00 is mark-legal. Samples preserve
+first-day 09:30→46513, 09:31→46514, 14:57→46750, 15:00→46753 and final-day
+15:00→48681, plus lunch and closing-auction boundaries. Scope is
+`603196.SH` / `2025-10-23..2025-11-04`, covering the R4d bars/marks window.
+Calendar's next possible BUY date 2025-11-05 does not widen this minute claim;
+a wider execution/mark window needs fresh timing coverage.
+
+This attests the historical completed-bar model, not live feed arrival latency.
+Known availability after end must reject adaptation. File collection time is
+not event time; vendor timestamp fields only corroborate the field mapping,
+and `fill_data` zero-fill is not event-time or actual-trade proof. Vendor export
+does not establish lake identity. `unbound_minute_source.sha256=null` means this
+catalog does not ship parquet bytes. Wall encoding still pins the saved parquet
+hash `58879893f221bfe050b7a16029667c49fb65d8ec6f47592254e549374a577083` via
+`time_encoding_approval.binding.source_sha256`, and the loader enforces it.
+The host must still configure/resolve lake identity/coverage and freshly freeze;
+this is not lake PASS.
+
+R4d-style runners register **all `manifest.artifacts`** as recipe sources, so
+the manifest automatically supplies `proof_timing` and its sidecars.
+Preserve each artifact id/schema/hash and resolve its path on the host. The
+existing attestation claim is:
+
+```json
+"timing": {
+  "conclusion": "completed_bucket_available_at_end",
+  "proofs": ["proof_timing"]
+}
+```
+
+There is no timing consumer or loader role. A host using an explicit source
+allowlist must include the new proof and all its `source_refs`; leaving the
+claim pointed at a missing id reproduces the R4d failure. Host account/commands,
+full recipe review/registration, configured lake identity/coverage and fresh
+`attestation_scope(recipe)`/freeze remain required. This catalog supplies no
+partial recipe and does not reuse or rewrite the R4d attempt/receipt as PASS.
+The v8 implementation SHA/runtime, source descriptors, time mappings and scoped
+attestation must all be freshly pinned; R4f recipe/attestation cannot be reused.
+
+## Status and lake boundary
+
+`start/end` are Shanghai `+08:00` one-minute buckets with END labels
+09:31–11:30 and 13:01–14:57: **120 morning + 117 afternoon = 237/day**.
+The R4g trim removes the 27 buckets 14:57–14:58, 14:58–14:59 and 14:59–15:00
+(three per day) and their proof bindings. Status now exactly matches the timing
+census's 2133-cell continuous grid and Clock's unchanged endpoints. A fresh
+host recipe can derive 18 continuous intervals from status (two per day),
+expanding to exactly 2133 buckets. Host recipe review and a fresh freeze remain
+required; the old R4g recipe/attestation must not be reused.
+
+The fixture labels 14:58/14:59/15:00 as `closing_auction`; these 27 rows stay
+in the raw 2169-row vendor window but are excluded from continuous status.
+The existing 15:00 marks and their proofs are unchanged: marks add no execution
+buckets. The nine 09:30 records are retained in
+[sources/opening_auction.json](sources/opening_auction.json), outside the
+2133 status rows. Zero volume does not mean missing or halted: all **62 raw**
+zero-volume rows retain explicit vendor `suspendFlag=0`; **46** remain in
+status with their exact raw row indices bound, and **16** are in the excluded
+closing-auction minutes. Raw `zero_volume` census bytes remain unchanged.
+Semantics copied from #1111: 0 normal, 1 suspended, -1 resumption day.
+The generator rejects absent minutes, duplicate labels and any changed flag;
+it never derives a halt or non-halt from silence or announcement counts.
+
+The vendor export used `fill_data=True`. Presence proves an exported record,
+not an actual trade, an unfilled feed, or presence in the configured lake.
+#1111 reports its local lake covers only 20251023, while exports cover nine days.
+Host lake identity/coverage remains a separate gate. The completed mapping binds
+minute source ID `minute_603196` and the approved partition hash/type/window.
+The catalog ships no parquet bytes; the actual resolver path and coverage
+remain host responsibilities. Do not substitute an export for lake
+data or relabel this bundle as a ready recipe.
+
+## Pins, reconstruction and later host registration
+
+[inputs.json](inputs.json) pins twelve #1111-derived inputs, including the locally
+reclassified status fixture described below, plus two host
+materials from OSkhQuant1.3 PR #1112 (commit
+`d0edd384e9bd7fc0029b380e8850920539c46a95`, directory
+`docs/evidence/b_l2_r4_host_materials_draft_20260930`) under `host_materials`,
+plus the bytes SHA-256 of the host approval record under `host_approval_sha256`.
+`cam_host_materials` additionally pins all thirteen #1114 files, including its
+manifest, three raw cninfo responses, seven calendar/actions/marks text sources,
+README and host-fill form. `host_cam_approval_sha256` pins the CAM approval;
+`human_go_cam_sha256` pins the supplied four-cell GO separately.
+`timing_host_materials` pins the three original MyQuant files and compact
+fixtures; `host_timing_approval_sha256` and `human_go_timing_sha256` separately
+pin the timing approval and GO. The R4g status fixture is the sole revised
+#1111 input: `files.status.json.git_sha256` pins its local LF bytes, and
+`status_grid_revision` retains the original #1111 hash
+`99bf3c9c531774cf9251b0287ca23ba35395efafb6a92a565470299ea77fd771`
+and the status-trim Human GO hash. Its continuous counts/roles are revised;
+daily summary zero-volume and first/last-present fields still describe the full
+raw vendor window. This classification revision is not attributed to the
+original upstream commit. All raw market inputs, other #1111/#1112/#1114 pins,
+and existing units/CAM/timing/time-encoding GO/approval hashes remain unchanged.
+Git LF bytes differ
+from original Windows CRLF bytes for daqmt artifacts. Both verified hashes are
+recorded explicitly; `read_inputs` accepts only one of those exact hashes and
+verifies newline-only equivalence. It does not accept arbitrary normalized data.
+The two host-material markdown files are pinned by exact LF bytes only.
+
+| Raw input | #1111 host SHA-256 | Git LF SHA-256 |
+|---|---|---|
+| daqmt 1m | `0404c9deddd777297d7c1258bea196854d0ff93560736ddeba1c182a6a8b84b0` | `2402104c7a02381c634257934ae31bd613d0bcdec537b4c226e1ae9a57bc703b` |
+| daqmt 1d | `7f87dbcee6baaa8ebfb3e6b75940ccc821adc417735ff1b972609ecf899d367b` | `2630292798ad475678d09fb63e5ff7d0d8fcb3c66ab7e6b9cbd5f6ade2a1594d` |
+| ratio table | `ccb1bd575f5e4fe7f8846a8e753933a2e08281ebc15d0509d79e658a4ad762ba` | `07591611041c21561d67c4908e64f8713b82dd67e7c0a404311749eb1b9a66f6` |
+| zero-volume rows | `e974fa22d58c6596b61f3a765f798419a3ffc39bd45acb877f4478190cdc8643` | `992e00c523ca0479f70ff6fc9caa171ec062e0b95c94aace97ac53b12974d405` |
+| THS daily | `6a7effd00a0d1d3533b5adb820644d57f19605c7d9cf9b9276c82f207a5fbf05` | same |
+
+Git LF inputs are vendored under `tests/fixtures/bl2_attestation_remap_upstream/` for pytest `remap.py --check` (including the two
+`sse_rule_archive/*.md` host materials and `cam_host_materials/` from #1114);
+host originals remain with #1111 / #1112 / #1114 / the host. `sources/*.json` are pinned row
+excerpts with original paths, commit, hashes, and extraction descriptions. CSV
+values remain strings and row indices are zero-based excluding the header.
+JSON fractional numbers are parsed as Decimal from the pinned source text and
+recursively emitted as finite Decimal strings, including nested metadata in
+`daqmt_detail` and `upstream_instruments`. No two-decimal quantization is applied
+to these excerpts; integers, booleans and nulls retain their types. Upstream
+raw bytes/pins are unchanged; the local status classification revision is
+described above. Regenerated artifact hashes are in the manifest.
+All package JSON is checked with the loader's `strict_json`. Fixing its Decimal
+parse error alone does not complete proofs; units completion now uses the separately authorized v8 mapping.
+The minute excerpt keeps only datetime/time/volume/suspendFlag, preserving all
+2,169 row positions. The loader accepts JSON/Parquet, so proof `source_refs`
+point to these JSON excerpts, not unsupported CSV descriptors. Each excerpt has
+its own schema and byte hash in [manifest.json](manifest.json). Markdown
+excerpts (`sse_rule`, `clause_excerpts`, `host_approval`) keep one UTF-8 line
+per row with zero-based line indices.
+
+With explicit approved Python and local copies of the pinned inputs:
+
+```bash
+"$OSKH_MERGE_PYTHON" docs/backtest/b-l2-01-evidence-2026-09-30/attestation_packages/remap.py \
+  --source-dir tests/fixtures/bl2_attestation_remap_upstream \
+  --human-go docs/backtest/b-l2-01-evidence-2026-09-30/attestation_packages/HUMAN_GO.md \
+  --host-cam-approval docs/backtest/b-l2-01-evidence-2026-09-30/attestation_packages/HOST_R4_CAM_APPROVAL_20260930.md \
+  --host-timing-approval docs/backtest/b-l2-01-evidence-2026-09-30/attestation_packages/HOST_R4_TIMING_APPROVAL_20260930.md --check
+```
+
+`--human-go` still takes the **historical** lots GO for byte-exact reconstruction;
+it does not select living authorization. The mapping GO/diagnosis default to
+`HUMAN_GO_VOLUME_SHARES_SCALE.md` / `DIAGNOSIS_VOLUME_SHARES_SCALE.md`. They and
+the prior shares-target GO/diagnosis plus all archives are independently hash-checked.
+
+`--host-approval` pins the approval record and defaults to the checked-in
+[HOST_R4_INSTRUMENTS_APPROVAL_20260930.md](HOST_R4_INSTRUMENTS_APPROVAL_20260930.md).
+`--host-cam-approval` separately pins the CAM record and defaults to
+[HOST_R4_CAM_APPROVAL_20260930.md](HOST_R4_CAM_APPROVAL_20260930.md); its approval_id
+marker is also required. `--host-timing-approval` likewise defaults to the
+checked-in [timing record](HOST_R4_TIMING_APPROVAL_20260930.md), validating its
+hash and approval_id. An external `--source-dir` must stage the original
+#1111 tree plus #1112 `sse_rule_archive/`, #1114 `cam_host_materials/` and the
+three pinned `timing_host_materials/` compact fixtures.
+It must also stage `time_encoding_host_materials/`, containing the byte-pinned
+saved Kimi advice and R4f receipt excerpts. `inputs.json` records their original
+handoff hashes separately from the compact fixture hashes. The new HOST and
+Human GO documents default to the checked-in files and are checked independently;
+earlier units/CAM/TIMING GO and approval records are never overwritten.
+`--output-dir /new/offline/directory` writes a new directory instead of checking;
+existing destinations are rejected. No network, market download, resolver, lake
+write, or research runner is called. Checked-in compact JSON retains every
+minute row, so no generator execution is necessary just to review the bundle.
+
+Later, after separate authorization, the host must review the countersigned
+approval record, copy the files, and translate catalog paths into resolved
+absolute sidecar paths.
+Register living artifacts with exact schema/hash/source ID; keep historical
+units proofs as archives, while registering all pinned mapping source materials.
+`claims.units.proofs` uses the complete `proof_units` authorized mapping;
+recipe `bars[].volume` must use incremental/shares/1. Instruments uses both `proof_instruments_sse` and
+`proof_instruments_wind`; status uses `proof_status`. The mapping approval fixes
+source IDs as well as hashes; renaming requires a newly reviewed implementation pin. Register the actual
+minute partition separately through the existing resolver. Calendar/actions roles
+and claims now use `calendar`/`actions` and `proof_calendar`/`proof_actions`;
+the marks claim uses `proof_marks`, with the approved document translated into
+recipe `mark_grid`. Timing now uses `proof_timing` through its claim only, as
+shown above. Account, commands and full recipe/attestation freeze still need
+host review and registration; this
+catalog is not a recipe or a scoped attestation.
+
+The current validator/decoder is `bl2_source_transform_v8` (package IDs remain v1).
+Earlier instruments, CAM and timing fills were evidence-only on v4; their saved
+approval records retain that historical version. The named encoding introduced
+v5 and the explicit double-price rule introduced v6. The v8 units mapping
+requires fresh manifest/marks/recipe pins. Living historical ratio acceptance is rejected,
+including inside the previously approved symbol/window/column/factor scope.
+For `source_declaration`, the referenced raw observation must now contain
+`basis="source_declaration"` and a `unit_declaration` object matching
+`column/kind/unit/shares_per_unit`. A label alone or this ratio evidence relabeled
+as a declaration fails. Existing bar-alias independence checks remain active.
+Saved statement checks do not certify authenticity or confer lake PASS.
+
+Do not merge this PR without Human「合」. Merge does not authorize R4.
+Remaining Human steps: **Grok review → Human「合」→ land → Human「开 R4」**.

@@ -1,0 +1,18 @@
+{
+  "schema_version": "bl2_raw_excerpt_v1",
+  "data": {
+    "origin": {
+      "repository": "baiyibing/OSkhQuant1.3",
+      "commit": "ec19fd6f69a52f93aa9870ad582f0173df8963f4",
+      "path": "docs/evidence/b_l2_01_4090_r3_20260930/units.proof.json",
+      "git_sha256": "e5d5bc599cdc9ddd62c68a1123032345da59b7da56199e900e05b5068d27d3f6"
+    },
+    "extraction": {
+      "json_pointer": "/vendor_doc_verbatim"
+    },
+    "limitation": "Vendor K-line volume unit declaration is absent; upstream basis label source_declaration is not adopted.",
+    "rows": [
+    {"issuer":"迅投 (ThinkTrader) 官方文档","url":"https://dict.thinktrader.net/nativeApi/xtdata.html","kline_field_list_quote":"1m / 5m / 1d - K线数据: 'time' #时间戳 'open' #开盘价 ... 'volume' #成交量 'amount' #成交额 ... 'suspendFlag' #停牌标记 0 - 正常 1 - 停牌 -1 - 当日起复牌","instrument_detail_quote":"'VolumeMultiple' #合约乘数（对期货以外的品种，默认是1）","finding":"官方字段表只声明 volume = 成交量，未声明 K 线 volume 单位（与 MyQuant #273 地图一致）。单位须由直接对账确定。"}
+  ]
+  }
+}

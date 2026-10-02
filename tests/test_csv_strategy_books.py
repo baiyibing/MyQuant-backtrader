@@ -155,7 +155,9 @@ def test_add_csv_backtest_common_args_defaults_and_end_help(tmp_path):
     assert ns.start == "20251023"
     assert ns.end == "20260909"
     assert ns.cash_total == DEFAULT_TOTAL_CASH
-    assert ns.daily_quota == 1_000_000.0
+    # CLI default is None; the money-mode pairing resolves it downstream
+    # (topk family = cash_total, other books = 1,000,000/day).
+    assert ns.daily_quota is None
     assert ns.ration == "file_order"
     assert ns.ration_seed == 0
     assert ns.workers == 16
@@ -182,6 +184,37 @@ def test_books_are_separate_modules():
     assert "策略 8" in BOOKS["version8"].help_lock
     assert "策略 9" in BOOKS["version9"].help_lock
     assert "策略 10" in BOOKS["version10"].help_lock
+
+
+@pytest.mark.parametrize("strategy", [
+    "version8", "version8_2", "version8_3", "version8_4", "version8_5", "version8_6",
+])
+def test_s8_help_locks_independent_positions_group_exits_and_strict_cash(strategy):
+    help_lock = BOOKS[strategy].help_lock
+    for sentence in (
+        "名单每个代码+信号日期各开独立持仓（position_id）",
+        "后日再现是新仓",
+        "按持仓加权成本整体评估止损/止盈/trail/stale（成本不含佣金）",
+        "peak 初始为首买价，T+1 起跟踪行情，加仓不重置；stale 从首买日计算",
+        "退出卖出该持仓全部可卖股",
+        "今日新增股遵守 T+1，次交易日首个可卖时机按原卖因加 |t1_deferred 卖出",
+        "跌停仍顺延，已挂起退出的持仓不再加仓；不同信号日期持仓互不连带",
+        "任一买单所需现金（含费用）不足即 InsufficientCashError，停止回测",
+    ):
+        assert sentence in help_lock
+    assert "上限2笔" not in "".join(help_lock.split())
+    if strategy in ("version8", "version8_4", "version8_5"):
+        assert "相对各持仓自己的首笔成本每满 +20% 加 100 万；名单外也评" in help_lock
+        assert "每持仓每日最多一级" in help_lock
+        assert "成交后记录历史级数，step lot 卖出不回退；全部 lots 卖完即关闭" in help_lock
+    elif strategy == "version8_3":
+        assert "各首买 50 万试探，不受旧仓亏损或旧仓 add_gate 限制" in help_lock
+        assert "现价≥自身首笔成本且自身峰值≥自身首笔成本×1.03 时，补剩余 50 万一次" in help_lock
+        assert "与名单无关；分钟 14:55 扫描" in help_lock
+        assert "追买绑定原信号身份且预算固定为 50 万" in help_lock
+    else:
+        assert "无价格加仓，单 lot 沿用原退出规则" in help_lock
+        assert help_lock.count("追买保留原信号身份和预算") == 1
 
 
 @pytest.mark.parametrize("strategy", ["version1", "version2"])
@@ -229,15 +262,17 @@ def _pool_buy(
     pending=None,
     ration="file_order",
     ration_seed=0,
-    ds="20251103",
+    ds=None,
 ):
+    import pandas as pd
     from backtest.research.csv_simulate_loop import run_pool_buys_day
 
+    ds = ds or (pd.Timestamp("2025-11-03") + pd.offsets.BDay(day_i)).strftime("%Y%m%d")
     run_pool_buys_day(
         st,
         {} if pending is None else pending,
         day_i=day_i,
-        day="2025-11-03",
+        day=pd.Timestamp(ds),
         ds=ds,
         pool_days={ds: codes},
         daily_quota=1_000_000,
@@ -252,21 +287,44 @@ def _pool_buy(
     )
 
 
+def _assert_per_name_cash_error(error, *, date, code, needed, available):
+    from backtest.research.csv_ledger import InsufficientCashError
+
+    assert isinstance(error, InsufficientCashError)
+    assert error.date == date
+    assert error.code == code
+    assert error.needed == pytest.approx(needed)
+    assert error.available == pytest.approx(available)
+    assert error.shortfall == pytest.approx(needed - available)
+    for token in (date, code, "needed", "available", "shortfall"):
+        assert token in str(error)
+
+
 def test_seeded_shuffle_is_stable_per_day_and_changes_cash_allocation(per_name_hooks):
+    from backtest.research.csv_ledger import InsufficientCashError
     from backtest.research.csv_simulate_loop import apply_capital_ration
 
     codes = ["600000.SH", "000001.SZ", "000002.SZ", "600001.SH", "600002.SH"]
     file_state = _money_state(per_name_hooks, 1_500_000)
-    _pool_buy(file_state, per_name_hooks, codes)
+    with pytest.raises(InsufficientCashError) as caught:
+        _pool_buy(file_state, per_name_hooks, codes)
+    _assert_per_name_cash_error(
+        caught.value, date="20251103", code="000001.SZ", needed=1_001_000, available=499_000,
+    )
     assert [t["code"] for t in file_state.trades] == ["600000.SH"]
 
     shuffled_state = _money_state(per_name_hooks, 1_500_000)
-    _pool_buy(
-        shuffled_state,
-        per_name_hooks,
-        codes,
-        ration="seeded_shuffle",
-        ration_seed=0,
+    order = apply_capital_ration(codes, ration="seeded_shuffle", ration_seed=0, ds="20251103")
+    with pytest.raises(InsufficientCashError) as caught:
+        _pool_buy(
+            shuffled_state,
+            per_name_hooks,
+            codes,
+            ration="seeded_shuffle",
+            ration_seed=0,
+        )
+    _assert_per_name_cash_error(
+        caught.value, date="20251103", code=order[1], needed=1_001_000, available=499_000,
     )
     assert [t["code"] for t in shuffled_state.trades] == ["600002.SH"]
 
@@ -294,20 +352,31 @@ def test_per_name_each_code_gets_full_budget(per_name_hooks):
     assert st.stats["name_budget"] == 1_000_000
 
 
-def test_per_name_cash_short_skips_entire_second_order(per_name_hooks):
+def test_per_name_cash_short_raises_before_entire_second_order(per_name_hooks):
+    from backtest.research.csv_ledger import InsufficientCashError
+
     st = _money_state(per_name_hooks, 1_500_000)
-    _pool_buy(st, per_name_hooks, ["600000.SH", "000001.SZ"])
+    with pytest.raises(InsufficientCashError) as caught:
+        _pool_buy(st, per_name_hooks, ["600000.SH", "000001.SZ"])
+    _assert_per_name_cash_error(
+        caught.value, date="20251103", code="000001.SZ", needed=1_001_000, available=499_000,
+    )
     assert [t["code"] for t in st.trades] == ["600000.SH"]
-    assert st.stats["skip_cash"] == 1
-    assert st.stats["skip_cash_notional"] == pytest.approx(1_000_000)
+    assert st.stats["skip_cash"] == 0
     assert st.cash == pytest.approx(499_000)
 
 
-def test_per_name_commission_short_also_skips(per_name_hooks):
+def test_per_name_commission_short_also_raises(per_name_hooks):
+    from backtest.research.csv_ledger import InsufficientCashError
+
     st = _money_state(per_name_hooks, 1_000_000)
-    _pool_buy(st, per_name_hooks, ["600000.SH"])
+    with pytest.raises(InsufficientCashError) as caught:
+        _pool_buy(st, per_name_hooks, ["600000.SH"])
+    _assert_per_name_cash_error(
+        caught.value, date="20251103", code="600000.SH", needed=1_001_000, available=1_000_000,
+    )
     assert not st.trades
-    assert st.stats["skip_cash"] == 1
+    assert st.stats["skip_cash"] == 0
 
 
 def test_per_name_adds_held_code_as_new_lot(per_name_hooks):
@@ -316,8 +385,11 @@ def test_per_name_adds_held_code_as_new_lot(per_name_hooks):
     _pool_buy(st, per_name_hooks, ["600000.SH"])
     _pool_buy(st, per_name_hooks, ["600000.SH"], day_i=1)
     assert st.stats["skip_held"] == 0
-    assert st.stats["add_lots"] == 1
+    assert st.stats["add_lots"] == 0
     assert len(st.positions["600000.SH"]) == 2
+    assert [t["position_id"] for t in st.trades] == [
+        "600000.SH@20251103", "600000.SH@20251104",
+    ]
 
 
 def test_per_name_force_min_cli_budget(per_name_hooks, tmp_path):
@@ -346,34 +418,51 @@ def test_per_name_force_min_cli_budget(per_name_hooks, tmp_path):
 
 @pytest.mark.parametrize("outcome", ["held", "cash", "buy", "shares"])
 def test_per_name_chase_budget_and_terminal_outcomes(per_name_hooks, outcome):
+    from backtest.research.csv_ledger import InsufficientCashError
     from backtest.research.csv_simulate_loop import run_chase_due_day
 
     st = _money_state(per_name_hooks)
     pending = {}
     _pool_buy(st, per_name_hooks, ["600000.SH", "000001.SZ"], px=11, pending=pending)
-    assert pending == {"600000.SH": (1_000_000, 0), "000001.SZ": (1_000_000, 0)}
-    pending.pop("000001.SZ")
+    assert pending == {"600000.SH@20251103": (1_000_000, 0), "000001.SZ@20251103": (1_000_000, 0)}
+    pending.pop("000001.SZ@20251103")
     if outcome == "held":
-        _pool_buy(st, per_name_hooks, ["600000.SH"])
+        _pool_buy(st, per_name_hooks, ["600000.SH"], day_i=1)
     elif outcome == "cash":
         st.cash = 500_000
     elif outcome == "shares":
-        pending["600000.SH"] = (0, 0)
-    run_chase_due_day(
-        st,
-        pending,
-        day_i=1,
-        day="2025-11-04",
-        names={},
-        allow_add=per_name_hooks["allow_add"],
-        buy_gate=None,
-        quotes_for=lambda code: (9.9, 10, [10]),
-    )
+        pending["600000.SH@20251103"] = (0, 0)
+
+    def chase():
+        run_chase_due_day(
+            st,
+            pending,
+            day_i=1,
+            day="2025-11-04",
+            names={},
+            allow_add=per_name_hooks["allow_add"],
+            buy_gate=None,
+            quotes_for=lambda code: (9.9, 10, [10]),
+        )
+
+    if outcome == "cash":
+        with pytest.raises(InsufficientCashError) as caught:
+            chase()
+        _assert_per_name_cash_error(
+            caught.value, date="20251104", code="600000.SH", needed=1_001_000, available=500_000,
+        )
+        assert st.stats["chase_buy_fail_cash"] == 0
+        assert not st.trades
+        return
+    chase()
     assert not pending
     assert st.daily_quota_used == 0
     if outcome == "held":
         assert st.stats["chase_skip_held"] == 0
-        assert st.stats["add_lots"] == 1
+        assert st.stats["add_lots"] == 0
+        assert {t["position_id"] for t in st.trades} == {
+            "600000.SH@20251103", "600000.SH@20251104",
+        }
     elif outcome == "buy":
         assert st.stats["chase_buy"] == 1
         assert st.trades[0]["notional"] == 1_000_000
@@ -447,3 +536,28 @@ def test_v8_daily_quota_history_keeps_allow_add(monkeypatch):
     assert st.stats["add_lots"] == 1
     assert st.stats["skip_held"] == 0
     assert [t["lot"] for t in st.trades] == [0, 1]
+
+
+def test_resolve_daily_quota_pairs_topk_family_with_cash():
+    from backtest.research.csv_strategy_books import resolve_daily_quota
+
+    assert resolve_daily_quota("topk_dropout", None, cash_total=1e8) == 1e8
+    assert resolve_daily_quota("topk", None, cash_total=5e7) == 5e7
+    assert resolve_daily_quota("topk_score_exit", None, cash_total=1e8) == 1e8
+
+
+def test_resolve_daily_quota_keeps_stock_pool_quota_default():
+    from backtest.research.csv_strategy_books import resolve_daily_quota
+
+    assert resolve_daily_quota("version8", None, cash_total=1e8) == 1_000_000.0
+    assert (
+        resolve_daily_quota("version12", None, cash_total=1e8, fallback_quota=2e6)
+        == 2e6
+    )
+
+
+def test_resolve_daily_quota_explicit_flag_wins():
+    from backtest.research.csv_strategy_books import resolve_daily_quota
+
+    assert resolve_daily_quota("topk_dropout", 2e6, cash_total=1e8) == 2e6
+    assert resolve_daily_quota("version8", 5e7, cash_total=1e8) == 5e7

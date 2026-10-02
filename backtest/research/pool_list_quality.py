@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from backtest.research.csv_pool import (
+    PoolDuplicateCodeError,
     parse_pool_csv,
     validate_pool_dir,
 )
@@ -54,6 +55,7 @@ def load_pool_codes_by_day(pool_dir: Path) -> dict[str, list[str]]:
     Non-``YYYYMMDD`` filenames are skipped for the day map (they still surface
     via ``validate_pool_dir``). Unreadable files yield an empty code list and
     are still counted as a day key when the stem is eight digits.
+    Same-day duplicate codes always raise ``PoolDuplicateCodeError``.
 
     Eight-digit stems that fail calendar validation (e.g. ``20260230``) still
     enter the map; callers can filter via ``invalid_calendar_stems``.
@@ -65,6 +67,8 @@ def load_pool_codes_by_day(pool_dir: Path) -> dict[str, list[str]]:
             continue
         try:
             codes = parse_pool_csv(path)
+        except PoolDuplicateCodeError:
+            raise
         except Exception:
             codes = []
         days[stem] = codes
@@ -547,6 +551,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         report = report_pool_list_quality(
             pool_dir, other_dir=other, top_n=int(args.top_n)
         )
+    except PoolDuplicateCodeError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
     except OSError as exc:
         print(f"error: pool directory IO: {exc}", file=sys.stderr)
         return 2

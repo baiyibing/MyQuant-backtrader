@@ -54,15 +54,23 @@ def board_limit_pct(code: str) -> Optional[float]:
     return None
 
 
-def limit_pct(code: str, name: str = "") -> Optional[float]:
-    """A-share limit ratio, or None when the board is unknown and the name is not ST.
+ST_MAIN_LIMIT_PCT_SWITCH = date(2026, 7, 6)
 
-    ST / *ST in the pool name column is 5%. Known boards without a name stay
-    tradable (600 → 10%). Unknown prefixes without a name are fail-closed.
+
+def limit_pct(code: str, name: str = "", as_of=None) -> Optional[float]:
+    """Board/date-aware tier; undated main-board ST retains the pre-switch 5%.
+
+    Callers with a trade day must supply it. Unknown named ST retains 5%;
+    unknown non-ST remains None. ChiNext/STAR/BJ ST uses the board tier.
     """
-    if is_st_name(name):
-        return 0.05
-    return board_limit_pct(code)
+    board = board_limit_pct(code)
+    if not is_st_name(name):
+        return board
+    if board in (0.20, 0.30):
+        return board
+    if board == 0.10 and as_of is not None and as_date(as_of) >= ST_MAIN_LIMIT_PCT_SWITCH:
+        return 0.10
+    return 0.05
 
 
 def round_fen(price: float) -> float:
@@ -71,10 +79,10 @@ def round_fen(price: float) -> float:
 
 
 def limit_prices(
-    code: str, prev_close: float, name: str = ""
+    code: str, prev_close: float, name: str = "", as_of=None
 ) -> Optional[tuple[float, float]]:
     """昨收 × (1±档) 先 Decimal 再 HALF_UP 到分。未知板块返回 None。"""
-    pct = limit_pct(code, name)
+    pct = limit_pct(code, name, as_of=as_of)
     if pct is None:
         return None
     prev = Decimal(str(prev_close))

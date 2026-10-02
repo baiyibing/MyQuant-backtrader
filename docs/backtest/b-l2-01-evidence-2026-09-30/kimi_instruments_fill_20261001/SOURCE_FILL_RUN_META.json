@@ -1,0 +1,66 @@
+{
+  "export_id": "bt_bl2_instruments_kimi_fill_20261001",
+  "at_cst": "2026-10-01 14:23:48 +0800",
+  "machineId": "6e8988e9-eaab-447c-ad5d-effde4604424",
+  "machine_label": "newtest_4090",
+  "kimi_bin": "C:\\Users\\wangc\\.kimi-code\\bin\\kimi.exe",
+  "kimi_version": "2.1.1",
+  "kimi_datasource_plugin": "kimi-datasource 3.4.0",
+  "lineage_tip_r4j": "6b6d0039b1f0177fbd9ae71388996ce6e022f4d0",
+  "master_tip_after_285": "f8efed23472a7603422d0707843f97e2c4ec87ad",
+  "pr_286": {
+    "number": 286,
+    "state": "OPEN",
+    "draft": true,
+    "merged": false
+  },
+  "symbol": "603196.SH",
+  "window": [
+    "2025-10-23",
+    "2025-11-04"
+  ],
+  "four_fields": [
+    "reference_price",
+    "limit_up",
+    "limit_down",
+    "ordinary_listing"
+  ],
+  "vendor_map": {
+    "reference_price": "THS (stock_finance_data get_price adjust=none)",
+    "limit_up": "Wind (wind_get_financial_data analytics)",
+    "limit_down": "Wind (wind_get_financial_data analytics)",
+    "ordinary_listing": "Wind get_stock_info + THS thsname_cn (no ST)"
+  },
+  "fill_status": "COMPLETE",
+  "rows": 9,
+  "gaps": [],
+  "sha256": {
+    "INSTRUMENTS_FOUR_FIELDS.json": "d3fbb9d088b62fafab315aa5d7f7c61fc8a66abc07482d5347693e96c3e5eb96",
+    "KIMI_FILL_REPORT.md": "f956734fd96d4b8af779794da4db448ebe84c90ecfeae8f2054f216cb7fdcfa3",
+    "raw/ths_603196_daily.csv": "8a269c0587155cb9e6e14f0189235afad4a61b1df3f23ce6c0ebeaa65f7b9e80",
+    "raw/wind_603196_limits.csv": "16220da0f6b532018e582d4e3b92ddd2eabada42e1e8d7600b5f38b0d563823b",
+    "raw/wind_603196_info.csv": "82f23b9e8ea57bbd7c4b2b55effc91f549afe771f112b5a139bed0bbe556f526"
+  },
+  "materials": [
+    "materials/living_instruments.json",
+    "materials/prior_ths_daily.json",
+    "materials/prior_wind_limits.json",
+    "materials/HOST_B_L2_01_R4J.md"
+  ],
+  "did_not": [
+    "open_R4",
+    "run_delta5",
+    "merge_PR_286_or_any",
+    "rewrite_SSOT_packs",
+    "change_MatchCore_Fees",
+    "lake_write",
+    "invent",
+    "overwrite_living_attestation_packages"
+  ],
+  "superseded": {
+    "parallel_cuts_advice": "D:\\exports\\bt_kimi_parallel_cuts_20261001 (advice-only STOPPED; see SUPERSEDED.md)"
+  },
+  "cut_b_delta5": "PARK — complete=false stubs retained; no δ5 GO",
+  "host_land": "D:\\exports\\bt_bl2_instruments_kimi_fill_20261001",
+  "box_land": "/workspace/handoffs/bt_bl2_instruments_kimi_fill_20261001"
+}

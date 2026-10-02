@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """Truncate handmade stock_pool CSVs to first K codes (M5 column ③).
 
-Uses ``parse_pool_csv`` so order and de-dup match the engine. Output is bare
+Uses ``parse_pool_csv`` so order and duplicate errors match the engine. Output is bare
 six-digit codes, UTF-8, no BOM, no header, LF. Never writes into ``stock_pool/``.
 Default destination: ``exports/m5_hand_top10_{start}_{end}/`` (gitignored).
 """

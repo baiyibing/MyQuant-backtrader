@@ -218,8 +218,13 @@ def summarize(
         ]
     )
     if "sizing" in st.stats:
+        quota_echo = (
+            f" | daily_quota={st.stats['daily_quota']:,.0f}"
+            if "daily_quota" in st.stats
+            else ""
+        )
         lines.append(
-            f"  sizing={st.stats['sizing']} | name_budget={st.stats['name_budget']:,.0f} | "
+            f"  sizing={st.stats['sizing']}{quota_echo} | name_budget={st.stats['name_budget']:,.0f} | "
             f"skip_cash={st.stats.get('skip_cash', 0)} | "
             f"skip_cash_notional={st.stats.get('skip_cash_notional', 0):,.0f} | "
             f"chase_buy_fail_cash={st.stats.get('chase_buy_fail_cash', 0)} | "
@@ -268,7 +273,11 @@ def summarize(
     return "\n".join(lines)
 
 
-def write_run_artifacts(out_dir: Path, st: SimState, text: str, help_lock: str) -> Path:
+def write_run_artifacts(
+    out_dir: Path, st: SimState, text: str, help_lock: str, *,
+    emit_run_manifest: bool = False, manifest_config: Optional[dict] = None,
+    signal_bundle_sha256: Optional[str] = None,
+) -> Path:
     """三件套：summary.txt / daily_equity.csv / trades.csv。"""
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -281,6 +290,28 @@ def write_run_artifacts(out_dir: Path, st: SimState, text: str, help_lock: str) 
     (out_dir / "summary.txt").write_text(
         text + "\n" + help_lock, encoding="utf-8", newline="\n"
     )
+    if emit_run_manifest:
+        from bt_contract import canonical_json_bytes
+        from bt_contract.run_manifest import write_bt_run_manifest
+
+        if manifest_config is None:
+            raise ValueError("emit_run_manifest requires resolved manifest_config")
+        metadata_paths = []
+        if metadata := getattr(st, "run_metadata", None):
+            metadata_path = out_dir / "run-metadata.json"
+            metadata_path.write_bytes(canonical_json_bytes(metadata))
+            metadata_paths.append(metadata_path)
+        write_bt_run_manifest(
+            out_dir / "run-manifest.json",
+            strategy=manifest_config["strategy"],
+            dividend_type=manifest_config["dividend_type"],
+            fee_schedule="QLIB_PORTANA" if manifest_config.get("qlib_cost") else "BILATERAL_10BP",
+            participation_rate=manifest_config.get("participation_rate"),
+            signal_bundle_sha256=signal_bundle_sha256,
+            config=manifest_config,
+            artifacts=[out_dir / name for name in ("trades.csv", "daily_equity.csv", "summary.txt")]
+            + metadata_paths,
+        )
     print(f"wrote {out_dir}", flush=True)
     return out_dir
 

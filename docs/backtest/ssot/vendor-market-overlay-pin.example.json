@@ -1,0 +1,38 @@
+{
+  "_comment": "P1-B docs example only — not a runtime schema validator; fail-closed loader code is a separate Human GO. Required identity quintuple: minute_label × unit × time_encoding × grid_policy × auction_policy. Cite docs/backtest/ssot/vendor-bar-alignment-ssot.md §5/§11. NOT a second fill-policy SSOT; entry defaults stay in minute-fill-policy-ssot.md. ≠δ5 certified ≠R4.",
+  "minute_label": "END",
+  "unit": "raw_shares_incremental",
+  "time_encoding": "local_wall_as_utc_ms",
+  "grid_policy": "sparseA",
+  "auction_policy": "exclude_0930_1130_1500",
+  "transformations": [],
+  "conversion_rule": {
+    "lake_at_rest": "lots",
+    "export": "volume_shares = lake_lots * 100 (integer)",
+    "sparse_policy": "A; no zero-fill; VolumeCap fail-closed on missing keys",
+    "note": "Record export-side ×100 here even when runtime transformations=[]."
+  },
+  "human_acceptance": {
+    "date": "2026-10-02",
+    "research_path": "lake_END_lots_to_shares",
+    "grid": "sparseA_host_lake_accept_PIN",
+    "no_pnl_mix_with_START_overlay": true,
+    "evidence": "/workspace/handoffs/vendor_lake_phase5_host_20261002/"
+  },
+  "source_lake_pins": [
+    {
+      "path": "REPLACE_WITH_LAKE_OR_VENDOR_PATH",
+      "sha256": "REPLACE_WITH_FILE_SHA256",
+      "role": "lake_1m_END_lots_or_vendor_raw"
+    }
+  ],
+  "window": {
+    "start": "YYYY-MM-DD",
+    "end": "YYYY-MM-DD"
+  },
+  "coverage_cross_check": {
+    "ohlcv_sample": "required before START→END relabel",
+    "missing_bars_audit": "required when grid_policy=sparseA",
+    "forbid_infer_unit_from_magnitude": true
+  }
+}

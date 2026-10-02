@@ -1,0 +1,4 @@
+line-length = 100
+src = ["bt_contract"]
+
+# CI explicitly checks bt_contract only; existing research code is out of scope.

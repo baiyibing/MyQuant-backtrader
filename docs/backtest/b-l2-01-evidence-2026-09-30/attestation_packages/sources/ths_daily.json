@@ -1,0 +1,45 @@
+{
+  "schema_version": "bl2_raw_excerpt_v1",
+  "data": {
+    "origin": {
+      "repository": "baiyibing/OSkhQuant1.3",
+      "commit": "ec19fd6f69a52f93aa9870ad582f0173df8963f4",
+      "path": "docs/evidence/b_l2_01_4090_r3_20260930/raw/kimi_stock_finance_data_603196_daily.csv",
+      "git_sha256": "6a7effd00a0d1d3533b5adb820644d57f19605c7d9cf9b9276c82f207a5fbf05",
+      "host_sha256": "6a7effd00a0d1d3533b5adb820644d57f19605c7d9cf9b9276c82f207a5fbf05"
+    },
+    "extraction": {
+      "method": "CSV DictReader, strings unchanged, row order unchanged",
+      "columns": [
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume",
+        "thscode",
+        "time",
+        "thsname_cn",
+        "thsname_en",
+        "currency"
+      ],
+      "row_index": "zero-based excluding header"
+    },
+    "rows": [
+    {"open":"23.0","high":"23.42","low":"22.71","close":"23.19","volume":"3266800.0","thscode":"603196.SH","time":"20251020","thsname_cn":"璞源材料","thsname_en":"NA","currency":"CNY"},
+    {"open":"23.3","high":"23.39","low":"22.82","close":"23.39","volume":"2476600.0","thscode":"603196.SH","time":"20251021","thsname_cn":"璞源材料","thsname_en":"NA","currency":"CNY"},
+    {"open":"23.48","high":"24.2","low":"23.27","close":"23.36","volume":"4593900.0","thscode":"603196.SH","time":"20251022","thsname_cn":"璞源材料","thsname_en":"NA","currency":"CNY"},
+    {"open":"23.25","high":"23.89","low":"23.03","close":"23.89","volume":"3177900.0","thscode":"603196.SH","time":"20251023","thsname_cn":"璞源材料","thsname_en":"NA","currency":"CNY"},
+    {"open":"23.92","high":"24.15","low":"23.7","close":"23.89","volume":"3887200.0","thscode":"603196.SH","time":"20251024","thsname_cn":"璞源材料","thsname_en":"NA","currency":"CNY"},
+    {"open":"23.89","high":"24.49","low":"23.63","close":"24.32","volume":"4545500.0","thscode":"603196.SH","time":"20251027","thsname_cn":"璞源材料","thsname_en":"NA","currency":"CNY"},
+    {"open":"23.95","high":"24.16","low":"22.76","close":"23.12","volume":"6031000.0","thscode":"603196.SH","time":"20251028","thsname_cn":"璞源材料","thsname_en":"NA","currency":"CNY"},
+    {"open":"23.19","high":"23.39","low":"22.71","close":"23.04","volume":"3303900.0","thscode":"603196.SH","time":"20251029","thsname_cn":"璞源材料","thsname_en":"NA","currency":"CNY"},
+    {"open":"23.07","high":"23.26","low":"22.76","close":"22.94","volume":"2731200.0","thscode":"603196.SH","time":"20251030","thsname_cn":"璞源材料","thsname_en":"NA","currency":"CNY"},
+    {"open":"22.78","high":"23.37","low":"22.78","close":"23.03","volume":"2256300.0","thscode":"603196.SH","time":"20251031","thsname_cn":"璞源材料","thsname_en":"NA","currency":"CNY"},
+    {"open":"22.9","high":"23.11","low":"22.66","close":"23.05","volume":"2025400.0","thscode":"603196.SH","time":"20251103","thsname_cn":"璞源材料","thsname_en":"NA","currency":"CNY"},
+    {"open":"23.11","high":"23.22","low":"22.75","close":"22.96","volume":"2334700.0","thscode":"603196.SH","time":"20251104","thsname_cn":"璞源材料","thsname_en":"NA","currency":"CNY"},
+    {"open":"22.84","high":"23.08","low":"22.53","close":"22.55","volume":"2222200.0","thscode":"603196.SH","time":"20251105","thsname_cn":"璞源材料","thsname_en":"NA","currency":"CNY"},
+    {"open":"22.5","high":"22.83","low":"22.06","close":"22.63","volume":"2557300.0","thscode":"603196.SH","time":"20251106","thsname_cn":"璞源材料","thsname_en":"NA","currency":"CNY"},
+    {"open":"22.7","high":"23.95","low":"22.62","close":"23.46","volume":"6677900.0","thscode":"603196.SH","time":"20251107","thsname_cn":"璞源材料","thsname_en":"NA","currency":"CNY"}
+  ]
+  }
+}

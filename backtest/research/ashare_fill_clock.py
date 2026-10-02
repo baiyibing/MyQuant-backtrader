@@ -1,7 +1,19 @@
-"""Names for existing research paths; no scheduling or execution policy.
+"""Naming leaf for existing research paths; no scheduling or execution policy.
 
-Session phases label the current scan window, not faithful exchange closing-call
-matching. Price rules are non-exhaustive book-engine names and exclude v7.
+SessionPhase / session_phase label the current scan window, not faithful
+exchange closing-call matching or fill eligibility. FillPriceRule contains
+non-exhaustive book-engine names and excludes v7; POOL_FILE_DAY_RULE names the
+existing file-day convention, not evidence of signal availability.
+
+This module owns no hl scan/fill loop, X-02 cash ordering, TopK buy dispatch,
+JR Mode B replay, v7 timers, or NAV marking. Those remain with their existing
+engines and callers. The fixed hot-path import fence permits csv_ledger to
+import this leaf only for write-site labels; scanners gain no import or filter.
+
+S2-E (Human GO "继续S2-E", 2026-09-28) freezes this naming boundary only.
+See docs/backtest/minute-fill-policy-ssot.md section 4 and
+docs/backtest/s2e-ashare-fill-clock-boundary-2026-09-28.md. Historical P1=A,
+P2=B label wiring and P4=A touch/mark separation keep their existing scope.
 """
 
 from enum import Enum

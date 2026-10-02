@@ -12,6 +12,8 @@ Missing/unreadable parquet → empty map + one-shot stderr (CI data-free).
 
 from __future__ import annotations
 
+from decimal import Decimal, ROUND_HALF_UP
+
 import math
 import sys
 from collections import defaultdict
@@ -79,8 +81,10 @@ def mapped_prev_close(
     code: str,
     ymd: str,
     raw_prev: float,
+    *,
+    fen_round: bool = False,
 ) -> tuple[float, bool]:
-    """Return (prev_close_ref, did_map). Empty/missing map → (raw, False)."""
+    """Return (prev_close_ref, did_map). Empty/missing map → (raw, False), never rounded."""
     if not exdiv:
         return float(raw_prev), False
     k = exdiv.get(code, {}).get(ymd)
@@ -89,7 +93,10 @@ def mapped_prev_close(
     k_f = float(k)
     if k_f <= 0 or math.isnan(k_f):
         return float(raw_prev), False
-    return float(raw_prev) * k_f, True
+    mapped = float(raw_prev) * k_f
+    if fen_round:
+        mapped = float(Decimal(str(mapped)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+    return mapped, True
 
 
 def k_for(

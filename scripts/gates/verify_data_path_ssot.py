@@ -33,6 +33,8 @@ _ALLOWLIST: Dict[str, Tuple[str, int]] = {
     # Research host helper: docstring/help mention lake hive period=1d +
     # turnover_resistance_daily.parquet labels (not production path joins).
     "scripts/data/refresh_tr_store_window.py": ("RESEARCH_HOST_HELPER", 2),
+    # Phase2 explicit out-dir staging only; never resolves or writes a lake.
+    "scripts/research/vendor_to_lake_adapter.py": ("STAGING_ONLY", 2),
 }
 
 _PATTERNS: List[Pattern[str]] = [

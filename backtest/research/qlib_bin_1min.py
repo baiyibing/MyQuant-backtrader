@@ -16,7 +16,12 @@ import numpy as np
 import pandas as pd
 
 from backtest.research.csv_common import _progress
-from backtest.research.qlib_bin_daily import calendar_slice, qlib_inst_dir, read_qlib_bin
+from backtest.research.qlib_bin_daily import (
+    QlibBinReadError,
+    calendar_slice,
+    qlib_inst_dir,
+    read_qlib_bin,
+)
 from oskh_data.symbol_format import to_canonical_symbol
 
 
@@ -112,8 +117,8 @@ def load_qlib_bin_1min_bars(
             code = futs[fut]
             try:
                 frame = fut.result()
-            except Exception:
-                continue
+            except Exception as exc:
+                raise QlibBinReadError(code) from exc
             if frame is not None and not frame.empty:
                 out[code] = frame
     return out

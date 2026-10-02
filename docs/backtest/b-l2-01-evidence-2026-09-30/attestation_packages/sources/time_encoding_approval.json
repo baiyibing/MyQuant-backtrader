@@ -1,0 +1,8 @@
+{
+  "schema_version": "bl2_time_encoding_approval_v1",
+  "data": {
+    "rows": [
+    {"approval_id":"host_r4_time_encoding_approval_20260930","approval_document_sha256":"bba1bf35212c49c7c1be10391e5eab5ff9914ac0e83236a4f7449fa4a9d83186","human_go_document_sha256":"e605e3256be64943d8026e45c4ad3ce60c34663ad9ebb45ed99b5d3e86e66538","r4_authorized":false,"decode_rule":"UTC integer milliseconds construction; replace(tzinfo=None).replace(tzinfo=Asia/Shanghai); no offset arithmetic","binding":{"source":"minute_603196","source_sha256":"58879893f221bfe050b7a16029667c49fb65d8ec6f47592254e549374a577083","column":"time","source_type":"int64","symbol":"603196.SH","encoding":"epoch_ms_wall_shanghai_as_utc","timezone":"Asia/Shanghai","label":"END","availability":"bucket_end","from_date":"2025-10-23","through_date":"2025-11-04"},"evidence_refs":{"timing_lake_census":"c6495b53c3abf257f5e71299e6b63bc4cbce4053f612896d2dffd54a9c99798b","timing_materials_map":"d4a68592d452648c2fa742c2d141d6f99faf7fcb1e96006be07fe477ab4a1ba1","host_time_encoding_approval":"d77697d6593c670eea0ef24b48e774acf24ce848c50ad40fc7e98fae6f36bea1","human_go_time_encoding":"ab70b48c9605df52e193f9f347576d111266c1edd95b4f6251501475d220f8c8","time_encoding_advice":"52309274d0c232306ad762149ef18d83ef1028a1840ac8b8137a80ebf3dafec5","time_encoding_r4f":"a42de265ace7ffc77dba1f2864033b71848a1ca98e2da3a0bb31d49402c3c9f4"}}
+  ]
+  }
+}

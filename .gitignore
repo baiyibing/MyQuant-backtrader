@@ -129,3 +129,8 @@ scripts/baselines/*_last_run.log
 /20260610112752932.dmp
 /.pytest_tmp/
 /cache/
+
+# Local agent scratch / pin backups — never commit (PR #211 review, 2026-09-26)
+/_agent_runs/
+/_tmp_*
+*.py.bak_*

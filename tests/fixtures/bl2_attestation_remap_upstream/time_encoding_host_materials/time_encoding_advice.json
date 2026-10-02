@@ -1,0 +1,507 @@
+{
+  "schema_version": "bl2_raw_excerpt_v1",
+  "data": {
+    "origin": {
+      "path": "/workspace/handoffs/b_l2_r4_time_encoding_a_20260930/KIMI_TIME_ENCODING_ADVICE.md",
+      "sha256": "b38624793095fabf698874f6999660704e62c4bc5917f9a3b702b12f73644415"
+    },
+    "extraction": {
+      "method": "All UTF-8 text lines via splitlines; original bytes hash retained; no new host probe.",
+      "row_index": "zero-based excerpt rows array"
+    },
+    "rows": [
+      {
+        "line": 0,
+        "text": "# Kimi Time-Encoding Advice — B-L2-01"
+      },
+      {
+        "line": 1,
+        "text": ""
+      },
+      {
+        "line": 2,
+        "text": "Source: Kimi Code CLI headless (`kimi -p`) on newtest_4090"
+      },
+      {
+        "line": 3,
+        "text": "Session materials: contract + loader + R4f host + packs (read-only via --add-dir)"
+      },
+      {
+        "line": 4,
+        "text": ""
+      },
+      {
+        "line": 5,
+        "text": "---"
+      },
+      {
+        "line": 6,
+        "text": ""
+      },
+      {
+        "line": 7,
+        "text": "## 1. 推荐项：**A**"
+      },
+      {
+        "line": 8,
+        "text": ""
+      },
+      {
+        "line": 9,
+        "text": ""
+      },
+      {
+        "line": 10,
+        "text": ""
+      },
+      {
+        "line": 11,
+        "text": "  新 encoding（显式声明「上海墙钟按 UTC ms 序列化」）+ 宿主证明 + loader 显式识别；不动 Clock、不加任何 offset。"
+      },
+      {
+        "line": 12,
+        "text": ""
+      },
+      {
+        "line": 13,
+        "text": ""
+      },
+      {
+        "line": 14,
+        "text": ""
+      },
+      {
+        "line": 15,
+        "text": "  ## 2. 理由"
+      },
+      {
+        "line": 16,
+        "text": ""
+      },
+      {
+        "line": 17,
+        "text": ""
+      },
+      {
+        "line": 18,
+        "text": ""
+      },
+      {
+        "line": 19,
+        "text": "  **举证可成立（已独立只读复核湖 parquet）：**"
+      },
+      {
+        "line": 20,
+        "text": ""
+      },
+      {
+        "line": 21,
+        "text": "  - 窗口 2169 行全部满足 `time(int64 ms) ≡ __index_level_0__(naive timestamp) 按 UTC 解释`，0 违例。即 `1761211800000` 的字面语义是「09:30 这个墙钟串被当成 UTC epoch ms 存下」，不是「真 epoch 存错了 8 小时」——Δ 恰好 28800000（8h 整），两端点（09:30、15:00）一致。"
+      },
+      {
+        "line": 22,
+        "text": ""
+      },
+      {
+        "line": 23,
+        "text": "  - 因此正确的修法是**给这个既成编码起名字、让 loader 按声明解码**（UTC datetime + `replace(tzinfo=Asia/Shanghai)`，无加减运算），而不是给 epoch 打补丁。"
+      },
+      {
+        "line": 24,
+        "text": ""
+      },
+      {
+        "line": 25,
+        "text": ""
+      },
+      {
+        "line": 26,
+        "text": ""
+      },
+      {
+        "line": 27,
+        "text": "  **与合同对齐：**"
+      },
+      {
+        "line": 28,
+        "text": ""
+      },
+      {
+        "line": 29,
+        "text": "  - §3.1：「明确 epoch/naive 源的**解码方法与证据**后才转为 Asia/Shanghai；记录原值和转换后起止，**不静默本地化**」——A 正是显式 decoding method + evidence，offset 为零运算。"
+      },
+      {
+        "line": 30,
+        "text": ""
+      },
+      {
+        "line": 31,
+        "text": "  - §7 bars 行：「支持带偏移文本、已声明的 naive Shanghai、整数 epoch s/ms/us、aware datetime；**不猜标签**」——现有枚举解不了此源（epoch_ms→17:30+08；naive_shanghai 要求 str；datetime_shanghai 要求 aware），新增一个具名 encoding 是该句的自然延伸，不是绕门。"
+      },
+      {
+        "line": 32,
+        "text": ""
+      },
+      {
+        "line": 33,
+        "text": "  - §5 allowlist：`source_loader.py` 本就是下一刀具名 implementation GO 的候选路径；MatchCore/Ledger/Fees/Clock 及相位原样不动。"
+      },
+      {
+        "line": 34,
+        "text": ""
+      },
+      {
+        "line": 35,
+        "text": "  - #278 timing proof 已 pin「map §1.1 把 1761211800000 标为 09:30 上海」+ 边界抽样——A 所需宿主证明的主体已在，只需把结论从 limitations 升级为正式 binding。"
+      },
+      {
+        "line": 36,
+        "text": ""
+      },
+      {
+        "line": 37,
+        "text": "  - 2169 vs 2160 的 9 行差（每日 15:00 收盘行）走既有 `outside_declared_grid` 排除 / mark 合法行路径，与本次修刀正交，无需借 A 顺手处理。"
+      },
+      {
+        "line": 38,
+        "text": ""
+      },
+      {
+        "line": 39,
+        "text": ""
+      },
+      {
+        "line": 40,
+        "text": ""
+      },
+      {
+        "line": 41,
+        "text": "  ## 3. 风险"
+      },
+      {
+        "line": 42,
+        "text": ""
+      },
+      {
+        "line": 43,
+        "text": ""
+      },
+      {
+        "line": 44,
+        "text": ""
+      },
+      {
+        "line": 45,
+        "text": "  - **版本级联**：新 encoding ⇒ transform 升 `bl2_source_transform_v5` ⇒ implementation code SHA、recipe、attestation `scope_hash`、marks 的 `time` 映射全部重 pin；R4f 的 recipe/attestation 作废，需 R4g。"
+      },
+      {
+        "line": 46,
+        "text": ""
+      },
+      {
+        "line": 47,
+        "text": "  - **逃逸口风险**：新 encoding 若不限定语义，可能变成「任何对不上的 epoch 都贴个墙钟标签」的万能胶。必须像 `cross_source_ratio` 一样收紧：encoding 名带语义（如 `epoch_ms_wall_shanghai_as_utc`）、仅在 timing proof 具名绑定该 source/列/窗口时接受、解码禁止任何数值偏移。"
+      },
+      {
+        "line": 48,
+        "text": ""
+      },
+      {
+        "line": 49,
+        "text": "  - **provenance 记录**：原值（int64）、声明编码、转换后 ISO 起止三项都要落 `transform.bars[]` audit，否则等于换皮静默 offset。"
+      },
+      {
+        "line": 50,
+        "text": ""
+      },
+      {
+        "line": 51,
+        "text": ""
+      },
+      {
+        "line": 52,
+        "text": ""
+      },
+      {
+        "line": 53,
+        "text": "  ## 4. 是否还要另开刀 / 依赖 GO"
+      },
+      {
+        "line": 54,
+        "text": ""
+      },
+      {
+        "line": 55,
+        "text": ""
+      },
+      {
+        "line": 56,
+        "text": ""
+      },
+      {
+        "line": 57,
+        "text": "  要。A 属于「下一个具名 implementation GO」范围："
+      },
+      {
+        "line": 58,
+        "text": ""
+      },
+      {
+        "line": 59,
+        "text": "  1. Human GO 点名：`_time` 新增具名 encoding + recipe schema 增该枚举值 + timing proof 补 binding；"
+      },
+      {
+        "line": 60,
+        "text": ""
+      },
+      {
+        "line": 61,
+        "text": "  2. transform 升 v5，全链重 pin（code SHA / recipe / attestation / packs）；"
+      },
+      {
+        "line": 62,
+        "text": ""
+      },
+      {
+        "line": 63,
+        "text": "  3. 4090 R4g 重跑仍按 §8.3/§9.5 需要**另一次具名 Human GO**，不沿用 R4f 的「开 R4」。"
+      },
+      {
+        "line": 64,
+        "text": ""
+      },
+      {
+        "line": 65,
+        "text": "  本次只读顾问不动任何文件；account/commands 仍未齐，freeze 即使在 A 落地后也可能再挡，属已知非声称项。"
+      },
+      {
+        "line": 66,
+        "text": ""
+      },
+      {
+        "line": 67,
+        "text": ""
+      },
+      {
+        "line": 68,
+        "text": ""
+      },
+      {
+        "line": 69,
+        "text": "  ## 5. 另三项一句评"
+      },
+      {
+        "line": 70,
+        "text": ""
+      },
+      {
+        "line": 71,
+        "text": ""
+      },
+      {
+        "line": 72,
+        "text": ""
+      },
+      {
+        "line": 73,
+        "text": "  - **B（改湖）**：双重违禁——本仓 AGENTS.md「read-only for market bars」与合同 §2「不修湖」，且改写会使 `minute_603196` sha `58879893…`、四源等价链、全部 pinned packs 失效；湖侧重钉 GO 也不在 B-L2-01 授权面内。"
+      },
+      {
+        "line": 74,
+        "text": ""
+      },
+      {
+        "line": 75,
+        "text": "  - **C（fixed_offset_ms=-28800000）**：把 Δ 魔法数烙进 recipe，语义上仍谎称该列是真 epoch 再纠偏——与已证明的事实（墙钟按 UTC 序列化）相反；recipe 拒未知字段，同样要 schema/GO，零成本优势，却给未来真 epoch 源留下「配错 offset 即静默错 8h」的隐患。"
+      },
+      {
+        "line": 76,
+        "text": ""
+      },
+      {
+        "line": 77,
+        "text": "  - **停**：不必要——Δ=28800000 的性质已被湖两端点 + 全窗 2169 行零违例 + 已 pin map §1.1 三方钉死，证据足够人裁 A；停单只会把已闭合的事实问题再挂一轮。"
+      },
+      {
+        "line": 78,
+        "text": ""
+      },
+      {
+        "line": 79,
+        "text": "---"
+      },
+      {
+        "line": 80,
+        "text": ""
+      },
+      {
+        "line": 81,
+        "text": "## Appendix: Host RO probe (NOT Kimi)"
+      },
+      {
+        "line": 82,
+        "text": ""
+      },
+      {
+        "line": 83,
+        "text": "Labeled host probe by 4090bot executor; lake read-only; no writes."
+      },
+      {
+        "line": 84,
+        "text": ""
+      },
+      {
+        "line": 85,
+        "text": "- lake path: `E:\\stock_data\\stock\\period=1m\\dividend_type=none\\symbol=603196_SH\\data.parquet`"
+      },
+      {
+        "line": 86,
+        "text": "- lake mtime (Asia/Shanghai): 2026-09-18T16:18:22+08:00"
+      },
+      {
+        "line": 87,
+        "text": "- tip: `0a1cd51299219e2ee514bfdd5cecdfdebc46c7e2` dirty=False"
+      },
+      {
+        "line": 88,
+        "text": ""
+      },
+      {
+        "line": 89,
+        "text": "### First 5 time values (whole partition)"
+      },
+      {
+        "line": 90,
+        "text": "- ms=1735810200000 | loader epoch_ms+Asia/Shanghai => 2025-01-02T17:30:00+08:00 | raw UTC wall => 2025-01-02 09:30:00Z (SH-as-UTC wall=09:30 SH)"
+      },
+      {
+        "line": 91,
+        "text": "- ms=1735810260000 | loader epoch_ms+Asia/Shanghai => 2025-01-02T17:31:00+08:00 | raw UTC wall => 2025-01-02 09:31:00Z (SH-as-UTC wall=09:31 SH)"
+      },
+      {
+        "line": 92,
+        "text": "- ms=1735810320000 | loader epoch_ms+Asia/Shanghai => 2025-01-02T17:32:00+08:00 | raw UTC wall => 2025-01-02 09:32:00Z (SH-as-UTC wall=09:32 SH)"
+      },
+      {
+        "line": 93,
+        "text": "- ms=1735810380000 | loader epoch_ms+Asia/Shanghai => 2025-01-02T17:33:00+08:00 | raw UTC wall => 2025-01-02 09:33:00Z (SH-as-UTC wall=09:33 SH)"
+      },
+      {
+        "line": 94,
+        "text": "- ms=1735810440000 | loader epoch_ms+Asia/Shanghai => 2025-01-02T17:34:00+08:00 | raw UTC wall => 2025-01-02 09:34:00Z (SH-as-UTC wall=09:34 SH)"
+      },
+      {
+        "line": 95,
+        "text": ""
+      },
+      {
+        "line": 96,
+        "text": "### 2025-10-23 first row (status-grid gap day)"
+      },
+      {
+        "line": 97,
+        "text": "- ms=1761211800000 | loader epoch_ms+Asia/Shanghai => 2025-10-23T17:30:00+08:00 | raw UTC wall => 2025-10-23 09:30:00Z (SH-as-UTC wall=09:30 SH)"
+      },
+      {
+        "line": 98,
+        "text": "- expected true 09:30+08 epoch_ms = `1761183000000`"
+      },
+      {
+        "line": 99,
+        "text": "- delta_ms = `28800000` (= 8h)"
+      },
+      {
+        "line": 100,
+        "text": "- day_row_count (approx filter) = 241"
+      },
+      {
+        "line": 101,
+        "text": ""
+      },
+      {
+        "line": 102,
+        "text": "### Interpretation"
+      },
+      {
+        "line": 103,
+        "text": "Under epoch_ms + Asia/Shanghai, stored values decode to 17:30+08; raw UTC wall clock reads 09:30 — consistent with Shanghai wall clock stored as UTC ms."
+      },
+      {
+        "line": 104,
+        "text": ""
+      },
+      {
+        "line": 105,
+        "text": "## Run meta"
+      },
+      {
+        "line": 106,
+        "text": ""
+      },
+      {
+        "line": 107,
+        "text": "```"
+      },
+      {
+        "line": 108,
+        "text": "exit_code=0"
+      },
+      {
+        "line": 109,
+        "text": "duration_sec=134.75"
+      },
+      {
+        "line": 110,
+        "text": "flags=-p <prompt+RO_guard> --add-dir repo --add-dir r4f --add-dir packs --output-format text"
+      },
+      {
+        "line": 111,
+        "text": "stdout_bytes=4358 stderr_bytes=11124"
+      },
+      {
+        "line": 112,
+        "text": "finished_local=2026-09-30 21:01:55 +0800"
+      },
+      {
+        "line": 113,
+        "text": "note=no --yolo/--plan/--auto (incompatible with -p); UTF-8 via python subprocess"
+      },
+      {
+        "line": 114,
+        "text": "session_hint_in_stdout=False"
+      },
+      {
+        "line": 115,
+        "text": "```"
+      },
+      {
+        "line": 116,
+        "text": ""
+      },
+      {
+        "line": 117,
+        "text": "## Safety confirmations"
+      },
+      {
+        "line": 118,
+        "text": "- no lake write"
+      },
+      {
+        "line": 119,
+        "text": "- no R4 started"
+      },
+      {
+        "line": 120,
+        "text": "- no PR merge"
+      },
+      {
+        "line": 121,
+        "text": "- no silent Clock/offset applied"
+      },
+      {
+        "line": 122,
+        "text": "- kimi flags: -p + --add-dir x3 + --output-format text (no --yolo/--plan/--auto; incompatible with -p on kimi 2.1.1)"
+      }
+    ]
+  }
+}

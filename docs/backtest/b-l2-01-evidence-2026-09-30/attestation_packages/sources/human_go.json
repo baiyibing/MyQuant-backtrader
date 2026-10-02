@@ -1,0 +1,8 @@
+{
+  "schema_version": "bl2_human_go_v1",
+  "data": {
+    "rows": [
+    {"approval_id":"b_l2_remap_r4_20260930","source_document_sha256":"bb287dfe9e2559e9fe05abb7401a636aa6596524cfb79ffa34a4f3ff884c2afe","cue":"人裁：①量单位接受直接对账（basis=cross_source_ratio），然后 remap","basis":"cross_source_ratio","symbols":["603196.SH"],"from_date":"2025-10-23","through_date":"2025-11-04","unit":"手","shares_per_unit":100,"kind":"incremental","scope":"docs/fixtures remap only","r4_authorized":false}
+  ]
+  }
+}

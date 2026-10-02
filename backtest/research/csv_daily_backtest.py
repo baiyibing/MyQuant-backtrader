@@ -42,6 +42,7 @@ from backtest.research.csv_strategy_books import (  # noqa: E402
     help_lock_all,
     help_lock_for as _help_lock_for,
     normalize_csv_strategy,
+    resolve_daily_quota,
     resolve_research_pool_dir,
     strategy6_kwargs_from_args,
 )
@@ -71,7 +72,9 @@ from backtest.research.csv_ledger import (  # noqa: E402
     _ymd,
     chase_decision as chase_decision,
     chase_explained as chase_explained,
+    configure_s8,
     execute_buy as execute_buy,
+    exit_positions,
     finish_pending_chase,
     hit_limit_down,
     hit_limit_up,
@@ -79,6 +82,7 @@ from backtest.research.csv_ledger import (  # noqa: E402
     peak_gap_blocks,
     queue_limit_up_chase as queue_limit_up_chase,
     rescale_position,
+    rescale_s8_groups,
     apply_exdiv_economics,
     resolve_limit_prices,
 )
@@ -225,6 +229,7 @@ def simulate(
     pool_names_by_day: Optional[dict[str, dict[str, str]]] = None,
     exdiv: Optional[dict] = None,
     exdiv_economics: EconomicLookup | None = None,
+    star_lot_declare_check: bool = False,
     scores_by_day=None,
     topk=None,
     n_drop=None,
@@ -235,6 +240,9 @@ def simulate(
     min_cost: Optional[float] = None,
     index_block_new=None,
     stop_fill: Optional[str] = None,
+    fix_s11_exit_domain: bool = False,
+    fix_s81_band_precision: bool = False,
+    signal_bars_front: dict[str, pd.DataFrame] | None = None,
 ) -> SimState:
     """核心日循环。bars/pool_days 可由测试注入；run() 负责从湖与 CSV 加载。
 
@@ -243,6 +251,19 @@ def simulate(
     默认 None 保留原行为，事件配合 raw bars 使用，不从 exdiv 的 k 推断权益。
     """
     del pos_trail
+    if signal_bars_front is not None and not fix_s11_exit_domain:
+        raise ValueError("signal_bars_front requires version11 + fix_s11_exit_domain=True")
+    if fix_s11_exit_domain:
+        if normalize_csv_strategy(strategy) != "version11":
+            raise ValueError("fix_s11_exit_domain is supported only by version11")
+        if signal_bars_front is None:
+            raise ValueError("fix_s11_exit_domain requires independent signal_bars_front")
+        from backtest.research.s11_exit_domain import validate_signal_bars
+
+        validate_signal_bars(
+            bars, signal_bars_front, start=start, end=end,
+            required_codes={c for codes in pool_days.values() for c in codes},
+        )
     hooks = prepare_strategy_hooks(
         strategy,
         stop_pct=stop_pct,
@@ -255,6 +276,7 @@ def simulate(
         tiers=tiers,
         tier_default=tier_default,
         apply_fn=apply_csv_strategy,
+        **({"fix_s81_band_precision": True} if fix_s81_band_precision else {}),
         scores_by_day=scores_by_day,
         topk=topk,
         n_drop=n_drop,
@@ -279,7 +301,10 @@ def simulate(
         pool_days=pool_days,
         pool_names=pool_names,
         pool_names_by_day=pool_names_by_day,
+        daily_quota=daily_quota,
     )
+    configure_s8(st, hooks)
+    st.star_lot_declare_check = star_lot_declare_check
     if buy_cost_rate is not None:
         st.buy_cost_rate = float(buy_cost_rate)
     if sell_cost_rate is not None:
@@ -331,6 +356,7 @@ def simulate(
                 # E-R6: rescale open lots then map prev_close before limits / lot loop.
                 kk = k_for(exdiv, code, ds)
                 if kk is not None:
+                    rescale_s8_groups(st, code, kk)
                     for pos in list(st.positions.get(code, [])):
                         rescale_position(pos, kk)
                         st.stats["exdiv_adjusted_lots"] = (
@@ -342,13 +368,13 @@ def simulate(
                         int(st.stats.get("exdiv_prev_close_mapped", 0)) + 1
                     )
                 limits = book_limit_prices(
-                    code, prev_close, names, qlib_limit_pct=qlib_limit_pct
+                    code, prev_close, names, qlib_limit_pct=qlib_limit_pct, as_of=ds
                 )
                 if limits is None:
                     st.stats["skip_unknown_board"] += 1
                     continue
                 limit_up, limit_down = limits
-                for pos in list(st.positions.get(code, [])):
+                for pos in exit_positions(st, code, i, day=day):
                     if getattr(pos, "ride_with", None) is not None:
                         continue
                     n_days = i - pos.entry_idx  # 持仓交易日数（买入日=0）
@@ -521,6 +547,7 @@ def simulate(
                 sold_today={t["code"] for t in st.trades[day_trade_start:] if t["side"] == "SELL"}
                 if hooks.get("skip_sold_today") else None,
             )
+            step_trade_start = len(st.trades)
             run_step_adds_day(
                 st,
                 day_i=i,
@@ -537,9 +564,51 @@ def simulate(
                 name_lot_budget=hooks.get("name_lot_budget"),
                 step_add=hooks.get("step_add"),
             )
+            # A price add changes the group's cost at this close. Re-evaluate
+            # only that group at the known close, never the pre-add daily low.
+            added = {
+                t["position_id"] for t in st.trades[step_trade_start:]
+                if t["side"] == "BUY" and t.get("position_id")
+            }
+            if added:
+                for code in list(st.positions):
+                    got = day_bar_and_prev_closes(bars[code], day) if code in bars else None
+                    if got is None:
+                        continue
+                    row, closes = got
+                    previous, _ = mapped_prev_close(exdiv, code, ds, float(closes[-1]))
+                    limits = book_limit_prices(code, previous, names, qlib_limit_pct=qlib_limit_pct, as_of=ds)
+                    if limits is None:
+                        continue
+                    close = float(row["close"])
+                    for pos in exit_positions(st, code, i, day=day):
+                        if pos.position_id not in added or pos.entry_idx >= i or pos.pending_exit:
+                            continue
+                        reason = None
+                        if isinstance(stop_pct, float) and 0 < stop_pct < 1:
+                            if close <= pos.cost * (1.0 - stop_pct):
+                                reason = "stop_loss:close"
+                        if not reason:
+                            reason = (
+                                sell_gate(code, close, day, closes) if callable(sell_gate)
+                                else take_profit(close, pos.cost, pos.peak, i - pos.entry_idx)
+                            )
+                        if not reason and callable(close_clear):
+                            reason = close_clear(pos.cost, pos.peak, i - pos.entry_idx)
+                        if reason:
+                            if defer_sell_at_limit(close, limits):
+                                st.stats["defer_sell_limit_down"] += 1
+                                # The group remembers this exit day. Only lots
+                                # locked on that day receive the T+1 fill marker.
+                                pos.pending_exit = reason
+                            else:
+                                _sell(st, code, pos, close, day, reason,
+                                      day_i=i, price_rule="daily_group_after_add_close")
 
         run_eod_exits(st, day=day, ds=ds, bars=bars, eod_exit=hooks.get("eod_exit"),
-                      hold_modes=hold_modes, exdiv=exdiv)
+                      hold_modes=hold_modes, exdiv=exdiv,
+                      **({"signal_bars_front": signal_bars_front, "strategy": strategy,
+                          "fix_s11_exit_domain": True} if fix_s11_exit_domain else {}))
         append_equity_and_eod_marks(
             st,
             ds=ds,
@@ -568,6 +637,7 @@ def run(
     pos_trail: float = POS_TRAIL,
     workers: int = 16,
     pool_dir: Optional[Path] = None,
+    require_signal_bundle: bool = False,
     strategy: str,
     take_profit=None,
     record_params=None,
@@ -586,7 +656,17 @@ def run(
     sell_cost_rate: Optional[float] = None,
     min_cost: Optional[float] = None,
     stop_fill: Optional[str] = None,
+    strict_pool: bool = False,
+    fix_s11_exit_domain: bool = False,
+    fix_s81_band_precision: bool = False,
 ) -> SimState:
+    if fix_s81_band_precision and normalize_csv_strategy(strategy) != "version8_1":
+        raise ValueError("fix_s81_band_precision is supported only by version8_1")
+    if fix_s11_exit_domain:
+        if normalize_csv_strategy(strategy) != "version11":
+            raise ValueError("fix_s11_exit_domain is supported only by version11")
+        if (dividend_type != "none" or qlib_data_root is not None):
+            raise ValueError("fix_s11_exit_domain requires raw lake execution + independent lake front")
     warn_stale_period_env()
     if normalize_csv_strategy(strategy) == "version12" and (
         dividend_type != "front" or qlib_data_root is not None
@@ -594,6 +674,20 @@ def run(
         raise ValueError("version12 requires lake --dividend-type front")
     t_pool = time.perf_counter()
     actual_pool_dir = resolve_research_pool_dir(strategy, pool_dir, repo=REPO)
+    if strict_pool:
+        from backtest.research.csv_pool import PoolDuplicateCodeError, validate_pool_dir
+
+        try:
+            failures = validate_pool_dir(actual_pool_dir)
+        except PoolDuplicateCodeError as exc:
+            raise SystemExit(f"strict pool validation failed: {exc}") from None
+        if failures:
+            raise SystemExit("strict pool validation failed: " + "; ".join(failures[:8]))
+    signal_bundle = None
+    if require_signal_bundle:
+        from backtest.research.csv_pool import require_signal_bundle as _require_signal_bundle
+
+        signal_bundle = _require_signal_bundle(actual_pool_dir)
     pool_days = load_pool_day_map(
         actual_pool_dir, start, end, key="ymd", empty_in_map=False
     )
@@ -644,6 +738,14 @@ def run(
     )
     if normalize_csv_strategy(strategy) == "version12" and (missing := all_codes - bars.keys()):
         raise ValueError(f"missing front daily bars for strategy12: {sorted(missing)}")
+    signal_bars_front = None
+    signal_sources = None
+    if fix_s11_exit_domain:
+        from backtest.research.s11_exit_domain import load_signal_bars_front
+
+        signal_bars_front, signal_sources = load_signal_bars_front(
+            bars, all_codes, load_start, end, daily_root=daily_root,
+        )
     t_daily = time.perf_counter() - t_daily
     print(
         f"loaded {len(bars)}/{len(all_codes)} daily series, {len(pool_days)} pool days",
@@ -724,12 +826,15 @@ def run(
         tier_default=tier_default,
         pos_trail=pos_trail,
         strategy=strategy,
+        **({"fix_s81_band_precision": True} if fix_s81_band_precision else {}),
         take_profit=take_profit,
         record_params=record_params,
         name_budget=name_budget,
         ration=ration,
         ration_seed=ration_seed,
         pool_names_by_day=pool_names_by_day,
+        **({"fix_s11_exit_domain": True, "signal_bars_front": signal_bars_front}
+           if fix_s11_exit_domain else {}),
         exdiv=exdiv,
         scores_by_day=scores_by_day,
         topk=topk,
@@ -748,6 +853,17 @@ def run(
     st.stats["t_daily_s"] = t_daily
     st.stats["t_sim_s"] = time.perf_counter() - t_sim
     st.stats["codes_missing"] = max(0, len(all_codes) - len(bars))
+    if signal_bundle is not None:
+        st.stats["signal_bundle_sha256"] = signal_bundle["bundle_sha256"]
+    if normalize_csv_strategy(strategy) == "version11":
+        from backtest.research.s11_exit_domain import build_run_metadata
+
+        st.run_metadata = {"s11_exit_domain": build_run_metadata(
+            enabled=fix_s11_exit_domain,
+            execution_domain="qlib_adjusted" if use_qlib_bins else dividend_type,
+            daily_source="qlib_day" if use_qlib_bins else "lake",
+            exdiv=exdiv, source_metadata=signal_sources, raw_bars=bars,
+        )}
     return st
 
 
@@ -806,6 +922,22 @@ def main(argv: Optional[list] = None) -> int:
         action="store_true",
         help="align fees with qlib: buy 5bp / sell 15bp / min 5 (default is 10bp both sides, no floor).",
     )
+    ap.add_argument(
+        "--emit-run-manifest", action="store_true",
+        help="write myquant.bt-run/1 provenance (default off)",
+    )
+    ap.add_argument(
+        "--require-signal-bundle", action="store_true",
+        help="require a valid signal-bundle.json with matching CSV hashes (default off)",
+    )
+    ap.add_argument(
+        "--strict-pool", action="store_true",
+        help="validate pool CSVs before loading bars (default off: permissive parser)",
+    )
+    ap.add_argument(
+        "--fix-s11-exit-domain", action="store_true",
+        help="version11 EOD exits use independent lake front; raw lake fills/marks (default OFF)",
+    )
     args = ap.parse_args(argv if argv is not None else None)
     pool_dir = resolve_research_pool_dir(args.strategy, args.pool_dir, repo=REPO)
     book = engine_book(args.strategy)
@@ -821,15 +953,23 @@ def main(argv: Optional[list] = None) -> int:
         args.start,
         args.end,
         total_cash=args.cash_total,
-        daily_quota=args.daily_quota,
+        daily_quota=resolve_daily_quota(
+            args.strategy,
+            args.daily_quota,
+            cash_total=args.cash_total,
+            fallback_quota=DEFAULT_DAILY_QUOTA,
+        ),
         workers=args.workers,
         pool_dir=pool_dir,
+        require_signal_bundle=args.require_signal_bundle,
         dividend_type=args.dividend_type,
         daily_root=args.daily_root,
         qlib_data_root=args.qlib_data_root,
         buy_cost_rate=QLIB_OPEN_COST if args.qlib_cost else None,
         sell_cost_rate=QLIB_CLOSE_COST if args.qlib_cost else None,
         min_cost=QLIB_MIN_COST if args.qlib_cost else None,
+        strict_pool=args.strict_pool,
+        fix_s11_exit_domain=args.fix_s11_exit_domain,
         **csv_run_kwargs_from_args(args),
     )
     engine = f"csv_daily_{book}"
@@ -840,6 +980,13 @@ def main(argv: Optional[list] = None) -> int:
         st,
         text,
         help_lock_for(args.strategy),
+        emit_run_manifest=args.emit_run_manifest,
+        signal_bundle_sha256=st.stats.get("signal_bundle_sha256"),
+        manifest_config=(
+            {**vars(args), "pool_dir": pool_dir, "out_dir": out_dir,
+             **getattr(st, "run_metadata", {})}
+            if args.emit_run_manifest else None
+        ),
     )
     return 0
 

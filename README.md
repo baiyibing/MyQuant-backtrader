@@ -68,7 +68,7 @@ D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_daily_backtest.py --
 
 细则与 1.3 入口：[`docs/backtest/README.md`](docs/backtest/README.md)。
 
-Cerebro / Rolling 已退场（2026-09-16）。chip / ma_chip 对照产物为静态档案，代码路径已删；纯筹码计算与 Rust TR 保留。ma_chip 默认归档，需要恢复研究时另开 version11 CSV 移植计划并重裁成交时点语义。
+Cerebro / Rolling 已退场（2026-09-16）。chip / ma_chip 对照产物为静态档案，代码路径已删；纯筹码计算与 Rust TR 保留。version11（ma_chip）已注册为 `--strategy version11`，CSV 移植 A–C 已落地；成交时点与 volume=A 已人裁，D 静态档案对照仍待完成。
 
 ## Market data (read-only)
 

@@ -1,0 +1,46 @@
+{
+  "schema_version": "bl2_raw_excerpt_v1",
+  "data": {
+    "origin": {
+      "repository": "baiyibing/MyQuant-backtrader",
+      "commit": "55f27f7967bc98a30146dc2474b91f1ac69f46f0",
+      "path": "docs/backtest/b-l2-01-evidence-2026-09-30/HOST_MATERIALS_MAP_R4.md",
+      "sha256": "b2487a9ba20f66b8e211b22536fb92d5dc60b0c2edb8eb2427c8d4c93e0e2fba"
+    },
+    "extraction": {
+      "row_index": "zero-based excerpt rows array",
+      "method": "UTF-8 lines from header through section 1.1, excluding section 1.2; original zero-based line retained."
+    },
+    "limitation": "Original host-assist DRAFT and time wording preserved. Section 1.1 supplies END semantics. Its example labels 1761211800000 as Shanghai 09:30, but the existing epoch_ms decoder gives 17:30+08:00. The separate time_encoding_approval binds this wall intent to the named encoding and R4f source/window; fresh v5 host freeze still required, no numeric offset correction.",
+    "rows": [
+    {"line":0,"text":"# B-L2-01 R4 证据材料地图（host-assist 采集，2026-09-30）"},
+    {"line":1,"text":""},
+    {"line":2,"text":"采集人：ZCode（应 host 要求协助）；采集机：本机（newtest_4090，湖 `E:\\stock_data` 本地可见，"},
+    {"line":3,"text":"`vanna312` = R3 探针同一解释器 3.12.13）。**本目录所有 `raw_*` 均为原材料/行式摘录草稿"},
+    {"line":4,"text":"（`bl2_raw_excerpt_draft_v0_host_review`），不是 `bl2_proof_v1`；host 逐行审核后才能进 proof"},
+    {"line":5,"text":"的 `source_refs`。** 生成脚本：`_gen_raw_materials.py`（可重跑核验）。"},
+    {"line":6,"text":""},
+    {"line":7,"text":"## 0. 版本指纹"},
+    {"line":8,"text":""},
+    {"line":9,"text":"| 项 | 值 |"},
+    {"line":10,"text":"|---|---|"},
+    {"line":11,"text":"| 本仓 HEAD | `a268e11bc682cd1ae5a6672ab89091cea1abe937`（= R3 `tip_expected` ✓） |"},
+    {"line":12,"text":"| OSkhQuant1.3 HEAD | `47afc2447fa4df5b37af1400ec1aea419ed7fda1` |"},
+    {"line":13,"text":"| MyQuant HEAD | `910abd38652b523cae07dd7a64032f0f71a06ff0` |"},
+    {"line":14,"text":"| xtquant | `250516.1.1`（`D:\\anaconda3\\envs\\vanna312\\Lib\\site-packages\\xtquant`） |"},
+    {"line":15,"text":"| 湖分钟分区 | `E:\\stock_data\\stock\\period=1m\\dividend_type=none\\symbol=603196_SH\\data.parquet`（sha256 见 census 包） |"},
+    {"line":16,"text":""},
+    {"line":17,"text":"## 1. 本次已采集/核验的事实（全部在本机可复算）"},
+    {"line":18,"text":""},
+    {"line":19,"text":"### 1.1 时间语义（§3.1 门，材料已够）"},
+    {"line":20,"text":"- `time:int64` = **上海墙钟按 UTC epoch 毫秒编码**（1761211800000 → 上海墙钟 2025-10-23 09:30，"},
+    {"line":21,"text":"  R3 探针同解读）。**不是真 UTC**。"},
+    {"line":22,"text":"- 分钟 bar 为 **END 标签**：标签 t 覆盖 [t−1min, t)。每日 241 行 = 09:30 集合竞价条 + 09:31–11:30 +"},
+    {"line":23,"text":"  13:01–15:00；合同可交易网格（END 标签 09:31–11:30 + 13:01–14:57 = 237 格/日）**2133/2133 全有行、"},
+    {"line":24,"text":"  零缺格、零重复**；每日另有 09:30/14:58/14:59/15:00 四条网格外行（15:00 行可作 mark，§7）。"},
+    {"line":25,"text":"- xtdata.py docstring：`fill_data=True` 对齐时缺失分钟 amount、volume 填 0、价格以前条 close 填充"},
+    {"line":26,"text":"  （1.3 下载即 fill_data=True）→ 零量行可能是 vendor 填充行。"},
+    {"line":27,"text":""}
+  ]
+  }
+}

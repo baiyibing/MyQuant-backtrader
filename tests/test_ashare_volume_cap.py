@@ -13,7 +13,9 @@ from backtest.research import csv_minute_backtest as book
 from backtest.research import csv_minute_backtest_v7 as v7
 from backtest.research.ashare_fees import QLIB_PORTANA, trade_commission
 from backtest.research.ashare_volume_cap import BucketVolume, VolumeCap
-from backtest.research.csv_ledger import Position, SimState, _sell, execute_buy
+from backtest.research.csv_ledger import (
+    IndependentGroup, IndependentPosition, Position, SimState, _sell, execute_buy,
+)
 from backtest.research.csv_simulate_loop import run_chase_due_day, run_pool_buys_day, run_step_adds_day
 
 CODE = "600000.SH"
@@ -87,9 +89,11 @@ def _snapshot(state):
 
 @pytest.mark.parametrize("engine", ["daily", "book", "v7"])
 def test_cap_off_byte_snapshot_with_p2_b_labels_and_ignores_volume(engine):
-    # Human GO P2=B: update only book hashes for additive labels. Removing those
-    # two keys reproduces the original 7428a1a snapshot hashes; v7 is unchanged.
-    expected = {"daily": "2904e7498b35e44738badb66fe29b347885e0cc46b970badfa3cb092c2b8fd35", "book": "9220b16459f230f1cbee909f1cae5eae93b28574fc19b0711f26c13a62af0dbf", "v7": "2d3c71db7e90c4286271d4a5470235511314a05adb13fc6c54ca323e7f8044ee"}
+    # Human GO P2=B labels remain. b951bec adds minute fee stats only
+    # (buy/sell_cost_rate, min_cost); capital pairing adds stats["daily_quota"].
+    # Removing daily_quota reproduces the 2904e749/4b6ccf7f pins; removing the
+    # fee stats too reproduces the prior 9220b164 snapshot; fill economics unchanged.
+    expected = {"daily": "6b8975a899049fa694aedb60d5a68cf50dbd79db18f9ed131267d448f2e453d2", "book": "e33b5ed5120d82e9340d0f380796adbb8248d71eff22c3cd974ef2cd93305c0c", "v7": "2d3c71db7e90c4286271d4a5470235511314a05adb13fc6c54ca323e7f8044ee"}
 
     def forbidden_lookup(*_):
         pytest.fail("cap off must not consult the volume provider")
@@ -346,14 +350,20 @@ def test_decimal_boundary_zero_rate_and_frozen_sample():
 
 
 def test_public_book_pool_step_share_actual_quote_bucket(monkeypatch):
-    original = book.init_sim_state
+    original = book.configure_s8
 
-    def initialized(*args, **kwargs):
-        state, pending, names = original(*args, **kwargs)
-        state.positions[CODE] = [Position(CODE, 100, 10, 0, 10)]
-        return state, pending, names
+    def initialized(state, hooks):
+        original(state, hooks)
+        # The seeded older holding must have its own signal identity and anchor.
+        pos = IndependentPosition(CODE, 100, 10, 0, 10,
+                                  position_id=f"{CODE}@20260831",
+                                  entry_signal_date="20260831")
+        state.positions[CODE] = [pos]
+        state.book_state["s8_independent"]["groups"][pos.position_id] = IndependentGroup(
+            CODE, pos.entry_signal_date, hooks["name_budget"], pos,
+        )
 
-    monkeypatch.setattr(book, "init_sim_state", initialized)
+    monkeypatch.setattr(book, "configure_s8", initialized)
     state = book.simulate(bars([(D1, 894, 12, 12)]), daily_bars((12, 12, 12, 12)),
                           {"20260901": [CODE]}, "20260901", "20260901",
                           strategy="version8", name_budget=2400, participation_rate=.1,

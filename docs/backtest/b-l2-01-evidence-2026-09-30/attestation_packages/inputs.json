@@ -1,0 +1,236 @@
+{
+  "repository": "baiyibing/OSkhQuant1.3",
+  "commit": "ec19fd6f69a52f93aa9870ad582f0173df8963f4",
+  "directory": "docs/evidence/b_l2_01_4090_r3_20260930",
+  "files": {
+    "units.proof.json": {
+      "git_sha256": "e5d5bc599cdc9ddd62c68a1123032345da59b7da56199e900e05b5068d27d3f6"
+    },
+    "instruments.json": {
+      "git_sha256": "82f1f98b814273bef1efc61158789528264280f8f4443d109448299d2f733910"
+    },
+    "instruments.proof.json": {
+      "git_sha256": "aef5fbc78ac7de5753eee95de60f94095cb0188078991ba165eb34c641114cce"
+    },
+    "status.json": {
+      "git_sha256": "3cdc1629165c4b68cffac0baee40b62d1cc31afd822f4e5b07e6902754b8496a"
+    },
+    "status.proof.json": {
+      "git_sha256": "7afd3f3d3098504a5b12c41882ad6926691d4404ff0bf4e7f9a79d527aa3fc35"
+    },
+    "raw/daqmt_603196_1m_none.csv": {
+      "git_sha256": "2402104c7a02381c634257934ae31bd613d0bcdec537b4c226e1ae9a57bc703b",
+      "host_sha256": "0404c9deddd777297d7c1258bea196854d0ff93560736ddeba1c182a6a8b84b0"
+    },
+    "raw/daqmt_603196_1d_none.csv": {
+      "git_sha256": "2630292798ad475678d09fb63e5ff7d0d8fcb3c66ab7e6b9cbd5f6ade2a1594d",
+      "host_sha256": "7f87dbcee6baaa8ebfb3e6b75940ccc821adc417735ff1b972609ecf899d367b"
+    },
+    "raw/daqmt_603196_zero_volume_bars.csv": {
+      "git_sha256": "992e00c523ca0479f70ff6fc9caa171ec062e0b95c94aace97ac53b12974d405",
+      "host_sha256": "e974fa22d58c6596b61f3a765f798419a3ffc39bd45acb877f4478190cdc8643"
+    },
+    "raw/kimi_stock_finance_data_603196_daily.csv": {
+      "git_sha256": "6a7effd00a0d1d3533b5adb820644d57f19605c7d9cf9b9276c82f207a5fbf05",
+      "host_sha256": "6a7effd00a0d1d3533b5adb820644d57f19605c7d9cf9b9276c82f207a5fbf05"
+    },
+    "raw/daqmt_ths_unit_ratio_table.csv": {
+      "git_sha256": "07591611041c21561d67c4908e64f8713b82dd67e7c0a404311749eb1b9a66f6",
+      "host_sha256": "ccb1bd575f5e4fe7f8846a8e753933a2e08281ebc15d0509d79e658a4ad762ba"
+    },
+    "raw/wind_603196_daily_limits.csv": {
+      "git_sha256": "31f8461a4ae7aca352db35648c0d7c60e476597b259bfecc03c9807c9f3a048b",
+      "host_sha256": "31f8461a4ae7aca352db35648c0d7c60e476597b259bfecc03c9807c9f3a048b"
+    },
+    "raw/daqmt_603196_instrument_detail.json": {
+      "git_sha256": "8b31697f3bb6a97d847c6a7257271a7273ca365d6cddbb7396e880a478340f21",
+      "host_sha256": "3e475fb9f6e4cda110a2e6481f2d273b8e2e3a4b4e19d82e8ec36b8cd12edaf1"
+    }
+  },
+  "human_go_sha256": "bb287dfe9e2559e9fe05abb7401a636aa6596524cfb79ffa34a4f3ff884c2afe",
+  "host_materials": {
+    "repository": "baiyibing/OSkhQuant1.3",
+    "commit": "d0edd384e9bd7fc0029b380e8850920539c46a95",
+    "directory": "docs/evidence/b_l2_r4_host_materials_draft_20260930",
+    "files": {
+      "sse_rule_archive/sse_trading_rules_fulltext_retrieved_20260930.md": {
+        "git_sha256": "599db44556e550d34f39763e4f6a357f1d651642d276ec554b85f7bfb56d4cea"
+      },
+      "sse_rule_archive/clause_excerpts.md": {
+        "git_sha256": "f70180cfb8a10c8294655084bd8e025018e4521420ee1676e48cca5068f88f7d"
+      }
+    }
+  },
+  "host_approval_sha256": "dfa318e5d22dde2f6a18d01e471ec2bec93aaee994ec66b2bfa2cdea321cd694",
+  "cam_host_materials": {
+    "repository": "baiyibing/OSkhQuant1.3",
+    "commit": "42d066b81a083be49881f0dd8c5ab53ed4f422f6",
+    "directory": "docs/evidence/b_l2_r4_cam_host_materials_draft_20260930",
+    "files": {
+      "HOST_FILL_FORM_CAM.md": {
+        "git_sha256": "7eef7f430dd4ed6b056eff93943407e1c41fb2555de5c4a19b705039a2270423"
+      },
+      "README.md": {
+        "git_sha256": "f4a2b8bee220bca0d9cc271e52a615d00501357776682a9c0f9a8bbdbefee215"
+      },
+      "actions/cninfo_603196_announcements_analysis.md": {
+        "git_sha256": "b909a9bca343e1c88bcde0bdc095f54e56077c6275cc3a049f173d5526643ed0"
+      },
+      "actions/cninfo_603196_announcements_p1.json": {
+        "git_sha256": "f359976fa48dbfe28db4d0e80a07489a92358ca7fc4476cc689f50544fc532d4"
+      },
+      "actions/cninfo_603196_announcements_p2.json": {
+        "git_sha256": "a2c1eb49bb717332fc57b18b8f8abf7baf92e48466dfc6d053876d47d4abb7f2"
+      },
+      "actions/cninfo_603196_announcements_p3.json": {
+        "git_sha256": "3d8ba8bab9607daeee44a1dfef5e0baa43fc6ef75256623e17c2dfa31d8731f1"
+      },
+      "actions/ex_date_index_local_check.md": {
+        "git_sha256": "608a8e6a9ae5c99547c245d979c04c4b7c65746d11a328d3c5383762036f40cd"
+      },
+      "actions/preclose_chain_no_ex_adjustment.md": {
+        "git_sha256": "bffbdb4da289c01130acb82f5c3167ad9bba01f27cf01270ae6b644973f14833"
+      },
+      "calendar/calendar_cross_check.md": {
+        "git_sha256": "ca539772a69ade11609e449b5dff067f7f81aab7fa21ca7f32d2f0cc7d832c62"
+      },
+      "calendar/pmc_sse_calendar_20250901_20251231.txt": {
+        "git_sha256": "ee04c7384d5a96f8d4c3b13a1012dc8c0bcf13699f486e825d05e281ff2862cb"
+      },
+      "calendar/sse_holiday_notices_2025.md": {
+        "git_sha256": "33715e169b8f400e3731dab2ca27b6cfda4fc9850ad23c2f9a127df4c9c783ae"
+      },
+      "manifest.json": {
+        "git_sha256": "652602e4997529f68107294cc5694d92f090328065c0810408cc96202bd6fd4c"
+      },
+      "marks/minute_lake_marks_substrate.md": {
+        "git_sha256": "add5b9641e27edcd8d9a2fe53d12dbb0403487ff0f0f73c9b9199ccec51eb9bb"
+      }
+    }
+  },
+  "host_cam_approval_sha256": "19c3f778986e3b86e16b28644c526d1625134c52e0416e080fa4e51e41c752d1",
+  "human_go_cam_sha256": "e15c79acde154bd7163208f2bf0a156737a9f908ed3fb9f41b87b64d42c13feb",
+  "timing_host_materials": {
+    "repository": "baiyibing/MyQuant-backtrader",
+    "commit": "55f27f7967bc98a30146dc2474b91f1ac69f46f0",
+    "directory": "docs/backtest/b-l2-01-evidence-2026-09-30",
+    "original_files": {
+      "raw_materials/raw_lake_minute_census_603196SH_20251023_20251104.json": {
+        "sha256": "b4ee473bcf7d224d635ce0f788d0d64dde8a2e421034420c2c292e9c632b7188"
+      },
+      "raw_materials/raw_excerpt_xtquant_docs.json": {
+        "sha256": "3884f478256f96c7938cb5f0f40075ceb03f8064665be1193e2d445612bc8a12"
+      },
+      "HOST_MATERIALS_MAP_R4.md": {
+        "sha256": "b2487a9ba20f66b8e211b22536fb92d5dc60b0c2edb8eb2427c8d4c93e0e2fba"
+      }
+    },
+    "files": {
+      "timing_lake_census.json": {
+        "git_sha256": "c6495b53c3abf257f5e71299e6b63bc4cbce4053f612896d2dffd54a9c99798b",
+        "original_file": "raw_materials/raw_lake_minute_census_603196SH_20251023_20251104.json"
+      },
+      "timing_xtquant_docs.json": {
+        "git_sha256": "126726d85dcfafaddfff4813e2a10caf78a7e3000b394afee069eacd9cfca200",
+        "original_file": "raw_materials/raw_excerpt_xtquant_docs.json"
+      },
+      "timing_materials_map.json": {
+        "git_sha256": "d4a68592d452648c2fa742c2d141d6f99faf7fcb1e96006be07fe477ab4a1ba1",
+        "original_file": "HOST_MATERIALS_MAP_R4.md"
+      }
+    }
+  },
+  "host_timing_approval_sha256": "c3fb7b09026ecbb9ef7796b0cb6e182bfec8b8811ca16e530fab69e5ed95245d",
+  "human_go_timing_sha256": "b89d99fc0fabbad5dd1e6da4ff6f3368ab84d1c7afce71832ea9e405d7e270f7",
+  "human_go_time_encoding_sha256": "e605e3256be64943d8026e45c4ad3ce60c34663ad9ebb45ed99b5d3e86e66538",
+  "host_time_encoding_approval_sha256": "bba1bf35212c49c7c1be10391e5eab5ff9914ac0e83236a4f7449fa4a9d83186",
+  "time_encoding_host_materials": {
+    "files": {
+      "time_encoding_advice.json": {
+        "git_sha256": "87eaa570f459d04b91c450ab0a1de13fc72a748d04e54beac5d2c48dbc75f399",
+        "original_sha256": "b38624793095fabf698874f6999660704e62c4bc5917f9a3b702b12f73644415"
+      },
+      "time_encoding_r4f.json": {
+        "git_sha256": "2f37cd3942a636dd4055e21587910af229271d5bd2ae9c51ca95e0f22fd65be8",
+        "original_sha256": "b683f4a07cc788fb1e39139773b625b82b6f6c741d4903c2615326d073a3d37a"
+      }
+    }
+  },
+  "status_grid_revision": {
+    "file": "status.json",
+    "upstream_git_sha256": "99bf3c9c531774cf9251b0287ca23ba35395efafb6a92a565470299ea77fd771",
+    "human_go_sha256": "d06b01b536dbd8b4c5a13eaf72ceca703ed84bc528d70de75bfc446cc35390d8",
+    "cue": "Human「开修」via bt",
+    "note": "Local R4g fixture classification revision, not replacement upstream evidence: 27 END labels at 14:58/14:59/15:00 become closing_auction; continuous metadata/counts align to Clock (237/day). files.status.json.git_sha256 pins these revised LF bytes. All 2169 raw minute rows and original upstream status.proof.json are unchanged."
+  },
+  "human_go_units_shares_sha256": "ff0a5f3bf74e775c66a692e7857eff22cc6d5f0fd0757d97abb38172c75613ab",
+  "units_diagnosis_sha256": "c9629c96f4b8867ae82444962de675fcc7845d23a6e639cb80ccbeba0d170e4e",
+  "units_supersession": {
+    "date": "2026-10-01",
+    "option": "A",
+    "status": "target_satisfied_by_authorized_mapping",
+    "target": {
+      "kind": "incremental",
+      "unit": "shares",
+      "shares_per_unit": 1,
+      "contract": "raw_shares_incremental"
+    },
+    "historical_status": "historical_superseded",
+    "superseded_by": "HUMAN_GO_UNITS_SHARES.md",
+    "historical_files": {
+      "HUMAN_GO.md": {
+        "sha256": "bb287dfe9e2559e9fe05abb7401a636aa6596524cfb79ffa34a4f3ff884c2afe"
+      },
+      "sources/human_go.json": {
+        "sha256": "34c4c7e56b0fad54c4eded684b1108d3752a444d5a775ec2d8335fa3638a70ff"
+      },
+      "sources/units_comparison.json": {
+        "sha256": "52fc830cc42bdb90f36453c8f9b378f8042aeae34e2064e748c43eb5d647d442"
+      },
+      "historical/units.lots.proof.json": {
+        "sha256": "1350ad54777bd4e96e62f1682e3e8003128628edc8ffbcea8a9f1ac11c8db320"
+      }
+    },
+    "reason": "Prior option A target remains true; the separately authorized v8 loader mapping supplies shares-scale output from the lots-scale lake. Historical ratio acceptance stays superseded.",
+    "r4_authorized": false,
+    "target_satisfied_by": "HUMAN_GO_VOLUME_SHARES_SCALE.md",
+    "target_files": {
+      "HUMAN_GO_UNITS_SHARES.md": {
+        "sha256": "ff0a5f3bf74e775c66a692e7857eff22cc6d5f0fd0757d97abb38172c75613ab"
+      },
+      "DIAGNOSIS_UNITS_SHARES.md": {
+        "sha256": "c9629c96f4b8867ae82444962de675fcc7845d23a6e639cb80ccbeba0d170e4e"
+      },
+      "sources/human_go_units_shares.json": {
+        "sha256": "388ad958a4fb97c460e1436f26ef129f5db9f2b07c97a40fcf7f83bf90e532b7"
+      },
+      "sources/units_diagnosis.json": {
+        "sha256": "8bb239057320270ce8356c5aa87cb49900aa99a700ce9088b702d7c2f091492d"
+      },
+      "historical/units.shares-target.proof.json": {
+        "sha256": "15b2b3ac796e824393ebe0052c2410a0206c511b85d9f831e2cd2762a9243161"
+      }
+    }
+  },
+  "human_go_volume_shares_scale_sha256": "722632a9ff008715c277616004b0e2bfbfd5d380664574cc591a6276cce0435e",
+  "volume_shares_scale_diagnosis_sha256": "575b7a2f7c7bdf1958b3fc341229c33c17f97f5ed51811051a68b663c5758b1b",
+  "volume_shares_mapping": {
+    "date": "2026-10-01",
+    "path": "L",
+    "basis": "authorized_mapping",
+    "transform_version": "bl2_source_transform_v8",
+    "source_unit_at_rest": "lots",
+    "loader_multiplier": 100,
+    "output": {
+      "kind": "incremental",
+      "unit": "shares",
+      "shares_per_unit": 1,
+      "contract": "raw_shares_incremental"
+    },
+    "human_go": "HUMAN_GO_VOLUME_SHARES_SCALE.md",
+    "diagnosis": "DIAGNOSIS_VOLUME_SHARES_SCALE.md",
+    "host_export": "deferred",
+    "r4_authorized": false,
+    "production_C": "frozen"
+  }
+}

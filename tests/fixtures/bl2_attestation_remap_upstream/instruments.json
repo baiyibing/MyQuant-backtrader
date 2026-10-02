@@ -1,0 +1,196 @@
+{
+  "origin": "approved_derivation",
+  "approved_rule_version": "sse_main_board_limit_pct10_tick0.01_lot100_v2023",
+  "symbol": "603196.SH",
+  "window": [
+    "20251023",
+    "20251104"
+  ],
+  "board": "sse_main_a",
+  "inputs": {
+    "reference_price": "daqmt 1d bar preClose (vendor field; OHLCV cross-validated vs THS stock_finance_data, exact match)",
+    "limit_rate": 0.1,
+    "tick_size_rule": "0.01 CNY",
+    "lot_size_rule": "100 shares per lot",
+    "st_status": "false (vendor_wind_st_status + 0 halt announcements in window)"
+  },
+  "second_issuer_rule_validation": {
+    "snapshot_trading_day": 20260930,
+    "PreClose": 17.84,
+    "UpStopPrice_vendor": 19.62,
+    "DownStopPrice_vendor": 16.06,
+    "UpStopPrice_derived_rule": 19.62,
+    "DownStopPrice_derived_rule": 16.06,
+    "up_match": true,
+    "down_match": true,
+    "note": "daqmt get_instrument_detail 快照（交易所原生涨跌停价）与 前收×±10% 推导值完全一致，验证推导规则在本标的上成立。"
+  },
+  "stoppricedata_probe": {
+    "result": "daqmt shim read_daily_bars(period='stoppricedata') 回落为 1m bars（模拟客户端不支持投研版特色数据），无法提供历史逐日涨跌停事实表",
+    "script": "docs/evidence/b_l2_01_4090_r3_20260930/_probe_stoppricedata.py"
+  },
+  "rows": [
+    {
+      "date": "20251023",
+      "symbol": "603196.SH",
+      "tick_size": 0.01,
+      "lot_size": 100,
+      "reference_price": 23.36,
+      "reference_price_source": "daqmt_1d_bar.preClose (vendor field, cross-validated vs THS)",
+      "limit_up": 25.7,
+      "limit_down": 21.02,
+      "limit_rule": "SSE main board ±10% of previous close, tick 0.01",
+      "today_open": 23.25,
+      "open_within_limit": true
+    },
+    {
+      "date": "20251024",
+      "symbol": "603196.SH",
+      "tick_size": 0.01,
+      "lot_size": 100,
+      "reference_price": 23.89,
+      "reference_price_source": "daqmt_1d_bar.preClose (vendor field, cross-validated vs THS)",
+      "limit_up": 26.28,
+      "limit_down": 21.5,
+      "limit_rule": "SSE main board ±10% of previous close, tick 0.01",
+      "today_open": 23.92,
+      "open_within_limit": true
+    },
+    {
+      "date": "20251027",
+      "symbol": "603196.SH",
+      "tick_size": 0.01,
+      "lot_size": 100,
+      "reference_price": 23.89,
+      "reference_price_source": "daqmt_1d_bar.preClose (vendor field, cross-validated vs THS)",
+      "limit_up": 26.28,
+      "limit_down": 21.5,
+      "limit_rule": "SSE main board ±10% of previous close, tick 0.01",
+      "today_open": 23.89,
+      "open_within_limit": true
+    },
+    {
+      "date": "20251028",
+      "symbol": "603196.SH",
+      "tick_size": 0.01,
+      "lot_size": 100,
+      "reference_price": 24.32,
+      "reference_price_source": "daqmt_1d_bar.preClose (vendor field, cross-validated vs THS)",
+      "limit_up": 26.75,
+      "limit_down": 21.89,
+      "limit_rule": "SSE main board ±10% of previous close, tick 0.01",
+      "today_open": 23.95,
+      "open_within_limit": true
+    },
+    {
+      "date": "20251029",
+      "symbol": "603196.SH",
+      "tick_size": 0.01,
+      "lot_size": 100,
+      "reference_price": 23.12,
+      "reference_price_source": "daqmt_1d_bar.preClose (vendor field, cross-validated vs THS)",
+      "limit_up": 25.43,
+      "limit_down": 20.81,
+      "limit_rule": "SSE main board ±10% of previous close, tick 0.01",
+      "today_open": 23.19,
+      "open_within_limit": true
+    },
+    {
+      "date": "20251030",
+      "symbol": "603196.SH",
+      "tick_size": 0.01,
+      "lot_size": 100,
+      "reference_price": 23.04,
+      "reference_price_source": "daqmt_1d_bar.preClose (vendor field, cross-validated vs THS)",
+      "limit_up": 25.34,
+      "limit_down": 20.74,
+      "limit_rule": "SSE main board ±10% of previous close, tick 0.01",
+      "today_open": 23.07,
+      "open_within_limit": true
+    },
+    {
+      "date": "20251031",
+      "symbol": "603196.SH",
+      "tick_size": 0.01,
+      "lot_size": 100,
+      "reference_price": 22.94,
+      "reference_price_source": "daqmt_1d_bar.preClose (vendor field, cross-validated vs THS)",
+      "limit_up": 25.23,
+      "limit_down": 20.65,
+      "limit_rule": "SSE main board ±10% of previous close, tick 0.01",
+      "today_open": 22.78,
+      "open_within_limit": true
+    },
+    {
+      "date": "20251103",
+      "symbol": "603196.SH",
+      "tick_size": 0.01,
+      "lot_size": 100,
+      "reference_price": 23.03,
+      "reference_price_source": "daqmt_1d_bar.preClose (vendor field, cross-validated vs THS)",
+      "limit_up": 25.33,
+      "limit_down": 20.73,
+      "limit_rule": "SSE main board ±10% of previous close, tick 0.01",
+      "today_open": 22.9,
+      "open_within_limit": true
+    },
+    {
+      "date": "20251104",
+      "symbol": "603196.SH",
+      "tick_size": 0.01,
+      "lot_size": 100,
+      "reference_price": 23.05,
+      "reference_price_source": "daqmt_1d_bar.preClose (vendor field, cross-validated vs THS)",
+      "limit_up": 25.36,
+      "limit_down": 20.75,
+      "limit_rule": "SSE main board ±10% of previous close, tick 0.01",
+      "today_open": 23.11,
+      "open_within_limit": true
+    }
+  ],
+  "raw_materials": [
+    {
+      "path": "docs/evidence/b_l2_01_4090_r3_20260930/raw/daqmt_603196_1d_none.csv",
+      "schema": "csv",
+      "sha256": "7f87dbcee6baaa8ebfb3e6b75940ccc821adc417735ff1b972609ecf899d367b",
+      "description": "daqmt 1d bars (reference price source)"
+    },
+    {
+      "path": "docs/evidence/b_l2_01_4090_r3_20260930/raw/daqmt_603196_instrument_detail.json",
+      "schema": "json",
+      "sha256": "3e475fb9f6e4cda110a2e6481f2d273b8e2e3a4b4e19d82e8ec36b8cd12edaf1",
+      "description": "daqmt get_instrument_detail snapshot (rule validation fact)"
+    },
+    {
+      "path": "docs/evidence/b_l2_01_4090_r3_20260930/raw/daqmt_603196_stoppricedata.json",
+      "schema": "json",
+      "sha256": "cc8eaf4026a677505d0f86bf94d7f48bd2483006704d3538dbd33866a1528ebb",
+      "description": "stoppricedata probe output (fell back to 1m bars; not a limit fact table)"
+    },
+    {
+      "path": "docs/evidence/b_l2_01_4090_r3_20260930/raw/wind_603196_daily_limits.csv",
+      "schema": "csv",
+      "sha256": "31f8461a4ae7aca352db35648c0d7c60e476597b259bfecc03c9807c9f3a048b",
+      "description": "Wind (万得) per-day limit_up/limit_down fact table for 603196.SH, 9 rows"
+    }
+  ],
+  "second_issuer_fact_table": {
+    "issuer": "Wind 万得",
+    "provenance": {
+      "source": "Wind 万得 via kimi-datasource (data_source_name='wind')",
+      "api": "wind_get_financial_data (analytics NL query)",
+      "question": "603196.SH在2025年10月23日至2025年11月4日期间每个交易日的日期、涨停价、跌停价",
+      "request_id": "ad9d109adab66a23d0611eb987cd075f",
+      "rows": 9,
+      "match_with_derivation": "18/18 values (limit_up + limit_down × 9 days) match the approved_derivation exactly"
+    },
+    "raw_material": {
+      "path": "docs/evidence/b_l2_01_4090_r3_20260930/raw/wind_603196_daily_limits.csv",
+      "schema": "csv",
+      "sha256": "31f8461a4ae7aca352db35648c0d7c60e476597b259bfecc03c9807c9f3a048b",
+      "description": "Wind (万得) per-day limit_up/limit_down fact table for 603196.SH, 9 rows"
+    },
+    "verification": "Per-day Wind 涨停价/跌停价 equals approved_derivation limit_up/limit_down for all 9 days (18/18 exact match)."
+  },
+  "residual_gap_status": "CLOSED 2026-09-30: historical per-day limit fact table obtained from Wind 万得 (kimi-datasource wind source); 18/18 values match derivation. stoppricedata probe record kept for reference."
+}

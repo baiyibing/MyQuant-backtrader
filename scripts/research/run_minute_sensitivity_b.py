@@ -34,6 +34,10 @@ from backtest.research.ashare_session import (
     defer_sell_at_limit, session_limit_prices, skip_buy_at_limit, t1_sellable,
 )
 from backtest.research.ashare_volume_cap import BucketVolume, VolumeCap
+from backtest.research.participation_rate_precheck import (
+    precheck_cli_participation_rate,
+    precheck_completed_bucket_samples,
+)
 from backtest.research.csv_ledger import Position, SimState, _sell
 from backtest.research.csv_simulate_loop import run_chase_due_day
 from backtest.research.strategy7_rules import in_add_window, ladder_decision, stop_decision
@@ -377,7 +381,18 @@ def cost_rows(clock: list[dict], modeb_rows: list[dict]) -> list[dict]:
     return rows
 
 
+def _shell_precheck_cap(rate: float | None, samples: dict) -> None:
+    """P2-B harness shell: unit + completed-bucket. None → no-op. ≠δ5≠R4."""
+    precheck_cli_participation_rate(rate)
+    if rate is None:
+        return
+    clean = {k: v for k, v in samples.items() if isinstance(v, BucketVolume)}
+    if clean:
+        precheck_completed_bucket_samples(clean)
+
+
 def capacity_rows() -> list[dict]:
+
     rows = []
     for engine, hm, px in (("Book", 585, 10.2), ("v7", 885, 10.4)):
         case = Case(engine, "cap", hm, px, [])
@@ -389,6 +404,9 @@ def capacity_rows() -> list[dict]:
             ("late", BucketVolume(1_000_000, hm + 1, "raw_shares_incremental")),
         ):
             for enabled in (False, True):
+                rate = .1 if enabled else None
+                samples = {key: sample} if sample is not None else {}
+                _shell_precheck_cap(rate, samples)
                 cap = VolumeCap(.1, {key: sample}) if enabled else None
                 result = baseline(case, cap)
                 rows.append(dict(engine=engine, case_id=sample_name, axis="capacity_close",
@@ -407,7 +425,10 @@ def gap_rows() -> list[dict]:
         for enabled in (False, True):
             hm, px = 571, 9.4
             key = (SYMBOL, DAY.strftime("%Y%m%d"), hm)
-            cap = VolumeCap(.1, {key: BucketVolume(100_000, hm, "raw_shares_incremental")}) if enabled else None
+            sample = BucketVolume(100_000, hm, "raw_shares_incremental")
+            rate = .1 if enabled else None
+            _shell_precheck_cap(rate, {key: sample} if enabled else {})
+            cap = VolumeCap(.1, {key: sample}) if enabled else None
             limits = session_limit_prices(SYMBOL, 10.0)
             if engine == "Book":
                 scan = book.scan_held_day_python(
@@ -445,7 +466,10 @@ def shared_capacity_rows() -> list[dict]:
     for engine, hm in (("Book", 585), ("v7", 885)):
         for enabled in (False, True):
             key = (SYMBOL, DAY.strftime("%Y%m%d"), hm)
-            cap = VolumeCap(.1, {key: BucketVolume(3500, hm, "raw_shares_incremental")}) if enabled else None
+            sample = BucketVolume(3500, hm, "raw_shares_incremental")
+            rate = .1 if enabled else None
+            _shell_precheck_cap(rate, {key: sample} if enabled else {})
+            cap = VolumeCap(.1, {key: sample}) if enabled else None
             if engine == "Book":
                 state = SimState(cash=1_000_000., volume_cap=cap)
                 old = Position(SYMBOL, 1000, 10., 0, 10.)
@@ -870,6 +894,7 @@ def lake_event(frame, *, engine, symbol, day, hm, stage) -> tuple[dict, list[dic
         elif not base["shares"] and base["status"] != "DATA_GAP":
             row["local_pair_status"] = "NO_FILL"
         # A missing/untyped volume lookup is intentional, never fabricated shares.
+        _shell_precheck_cap(.1, {})
         capped = lake_baseline(**kwargs, cap=VolumeCap(.1, {}))
         capacities = [dict(cap_on=False, participation_rate=None, **base),
                       dict(cap_on=True, participation_rate=.1, **capped)]

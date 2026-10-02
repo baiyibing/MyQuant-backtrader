@@ -2,8 +2,11 @@ from pathlib import Path
 
 from datetime import date
 
+import pytest
+
 from backtest.research.ashare_session import flatten_pool_names, session_limit_prices
 from backtest.research.csv_pool import (
+    PoolDuplicateCodeError,
     load_pool_day_map,
     load_pool_names_by_day,
     parse_pool_csv,
@@ -39,7 +42,10 @@ def test_parse_pool_csv_already_suffixed_and_comments(tmp_path: Path):
         encoding="utf-8",
         newline="\n",
     )
-    assert parse_pool_csv(path) == ["600000.SH", "000001.SZ"]
+    with pytest.raises(PoolDuplicateCodeError) as error:
+        parse_pool_csv(path)
+    assert error.value.code == "600000.SH"
+    assert (error.value.first_line, error.value.second_line) == (3, 5)
 
 
 def test_validate_pool_dir_rejects_prefixed_code_but_parser_stays_loose(tmp_path: Path):

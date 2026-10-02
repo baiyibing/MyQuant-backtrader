@@ -1,0 +1,64 @@
+{
+  "schema_version": "bl2_proof_v1",
+  "data": {
+    "issuer": "Human GO 2026-09-30 / MyQuant pinned host-assist census and §1.1 timing host fill",
+    "subject": "timing",
+    "source_refs": [
+      "timing_lake_census",
+      "timing_xtquant_docs",
+      "timing_materials_map",
+      "host_timing_approval",
+      "human_go_timing",
+      "opening_auction",
+      "daqmt_1m",
+      "host_time_encoding_approval",
+      "human_go_time_encoding",
+      "time_encoding_advice",
+      "time_encoding_r4f",
+      "time_encoding_approval"
+    ],
+    "filter": {
+      "symbols": [
+        "603196.SH"
+      ],
+      "from_date": "2025-10-23",
+      "through_date": "2025-11-04",
+      "predicate": "END labels map to [t-1min,t); completed close/volume available at bucket.end=t; saved Shanghai labels for bars and legal marks; named wall encoding bound by host approval"
+    },
+    "result": {
+      "complete": true,
+      "summary": "completed_bucket_available_at_end; independently pinned census END statement and boundary samples, map §1.1, vendor field corroboration and scoped approval; epoch_ms_wall_shanghai_as_utc bound to source/column/window and Human A HOST approval",
+      "rows": [
+    {"source":"timing_lake_census","row":0,"observation":"Pinned END declaration: label t covers [t-1min,t). Under §3.1 the completed bar close/volume are available at bucket.end=t (availability=bucket_end), never at bucket.start; completed_bucket_available_at_end is historical model availability."},
+    {"source":"timing_lake_census","row":1,"observation":"237 tradable END labels/day: 09:31-11:30 and 13:01-14:57. 09:30/14:58/14:59/15:00 remain off-grid; 15:00 is mark-legal, not an execution bucket."},
+    {"source":"timing_lake_census","row":2,"observation":"Saved census: window_rows=2169, grid_cells=2133, grid_missing=0, grid_dup=0. These saved counts do not bind configured lake bytes."},
+    {"source":"timing_lake_census","row":3,"observation":"603196.SH: saved absolute parquet row=46513; END label=2025-10-23T09:30:00+08:00 maps to [2025-10-23T09:29:00+08:00,2025-10-23T09:30:00+08:00); close/volume available at end under §3.1. in_tradable_grid=False; off-grid samples remain excluded from execution; 15:00 may support a mark."},
+    {"source":"timing_lake_census","row":4,"observation":"603196.SH: saved absolute parquet row=46514; END label=2025-10-23T09:31:00+08:00 maps to [2025-10-23T09:30:00+08:00,2025-10-23T09:31:00+08:00); close/volume available at end under §3.1. in_tradable_grid=True; off-grid samples remain excluded from execution; 15:00 may support a mark."},
+    {"source":"timing_lake_census","row":5,"observation":"603196.SH: saved absolute parquet row=46633; END label=2025-10-23T11:30:00+08:00 maps to [2025-10-23T11:29:00+08:00,2025-10-23T11:30:00+08:00); close/volume available at end under §3.1. in_tradable_grid=True; off-grid samples remain excluded from execution; 15:00 may support a mark."},
+    {"source":"timing_lake_census","row":6,"observation":"603196.SH: saved absolute parquet row=46634; END label=2025-10-23T13:01:00+08:00 maps to [2025-10-23T13:00:00+08:00,2025-10-23T13:01:00+08:00); close/volume available at end under §3.1. in_tradable_grid=True; off-grid samples remain excluded from execution; 15:00 may support a mark."},
+    {"source":"timing_lake_census","row":7,"observation":"603196.SH: saved absolute parquet row=46750; END label=2025-10-23T14:57:00+08:00 maps to [2025-10-23T14:56:00+08:00,2025-10-23T14:57:00+08:00); close/volume available at end under §3.1. in_tradable_grid=True; off-grid samples remain excluded from execution; 15:00 may support a mark."},
+    {"source":"timing_lake_census","row":8,"observation":"603196.SH: saved absolute parquet row=46751; END label=2025-10-23T14:58:00+08:00 maps to [2025-10-23T14:57:00+08:00,2025-10-23T14:58:00+08:00); close/volume available at end under §3.1. in_tradable_grid=False; off-grid samples remain excluded from execution; 15:00 may support a mark."},
+    {"source":"timing_lake_census","row":9,"observation":"603196.SH: saved absolute parquet row=46752; END label=2025-10-23T14:59:00+08:00 maps to [2025-10-23T14:58:00+08:00,2025-10-23T14:59:00+08:00); close/volume available at end under §3.1. in_tradable_grid=False; off-grid samples remain excluded from execution; 15:00 may support a mark."},
+    {"source":"timing_lake_census","row":10,"observation":"603196.SH: saved absolute parquet row=46753; END label=2025-10-23T15:00:00+08:00 maps to [2025-10-23T14:59:00+08:00,2025-10-23T15:00:00+08:00); close/volume available at end under §3.1. in_tradable_grid=False; off-grid samples remain excluded from execution; 15:00 may support a mark."},
+    {"source":"timing_lake_census","row":11,"observation":"603196.SH: saved absolute parquet row=48681; END label=2025-11-04T15:00:00+08:00 maps to [2025-11-04T14:59:00+08:00,2025-11-04T15:00:00+08:00); close/volume available at end under §3.1. in_tradable_grid=False; off-grid samples remain excluded from execution; 15:00 may support a mark."},
+    {"source":"timing_materials_map","row":20,"observation":"Pinned §1.1 labels 1761211800000 as Shanghai 09:30 and says '不是真 UTC'. Arithmetic check with the unchanged epoch_ms decoder instead gives 2025-10-23T17:30:00+08:00. The pinned time_encoding_approval now binds the named Shanghai wall encoding to this source/column/window; END stays unchanged, with no numeric offset correction."},
+    {"source":"timing_xtquant_docs","row":1,"observation":"Vendor K-line time is a timestamp field; corroborates the field mapping, not by itself END semantics or feed arrival latency."},
+    {"source":"timing_xtquant_docs","row":8,"observation":"fill_data=True may fill missing volume/amount with zero and prices with prior close; this is a limitation, not evidence of event time or trades."},
+    {"source":"host_timing_approval","row":35,"observation":"Scoped approval of END and completed-bucket availability from census/map §1.1 and contract §3.1; merge countersign pending; no R4 authorization."},
+    {"source":"human_go_timing","row":3,"observation":"Human「开修」authorizes this timing packs-only repair of the R4d missing id."},
+    {"source":"opening_auction","row":0,"observation":"Existing #1111 2025-10-23 09:30 opening-auction observation corroborates the boundary; it remains off-grid, and vendor export does not establish lake equivalence."},
+    {"source":"daqmt_1m","row":0,"observation":"Pinned #1111 vendor export has time=1761183000000 and datetime=2025-10-23 09:30:00+08:00, consistent with the existing epoch_ms decoder. This differs by 28800000 ms from the map's example; do not substitute vendor time for lake identity."},
+    {"source":"time_encoding_approval","row":0,"observation":"Human A GO: epoch_ms_wall_shanghai_as_utc for pinned minute_603196 time:int64, 603196.SH 2025-10-23..2025-11-04; UTC wall components stamped Asia/Shanghai, no offset arithmetic. Saved Kimi census reports 2169 rows / zero violations; HOST approval and all source materials are byte-bound. Fresh v8 freeze required for the authorized volume mapping."}
+  ]
+    },
+    "limitations": [
+      "Remapped draft only; structural checks != lake PASS; R3 BLOCKED/NOT_RUN; R4 needs separate Human「开 R4」; production_C=frozen.",
+      "R4d remains BLOCKED/NOT_RUN as recorded; this remapped draft is not lake PASS. r4_authorized stays false.",
+      "Historical completed-bar model only, not measured live feed arrival latency. Known availability later than bucket.end must reject adaptation; file collection time is not event time.",
+      "fill_data zero-fill is not event-time proof or proof of actual trades. Vendor timestamp docs do not independently declare START/END; END comes from the pinned census and host materials map §1.1.",
+      "Vendor export != lake identity. minute_603196 remains unbound only in the sense that this catalog does not ship parquet bytes; wall encoding still pins 58879893f221bfe050b7a16029667c49fb65d8ec6f47592254e549374a577083 via time_encoding_approval.binding.source_sha256, enforced by the loader. Host must still configure/resolve lake identity/coverage and freshly freeze.",
+      "Proof covers bars/marks 2025-10-23..2025-11-04, not bars on next BUY calendar date 2025-11-05. A wider execution/mark window requires fresh coverage; calendar retains its separate next-day coverage.",
+      "The old epoch_ms mapping still yields 17:30+08:00 and is not approved for this lake partition. Use epoch_ms_wall_shanghai_as_utc with the pinned source/column/window approval; v8 requires fresh implementation/recipe/attestation pins. No new lake run and no Clock/Fees/MatchCore edits; v8 maps lots to shares only via separately pinned authorized_mapping; historical ratio acceptance stays retired. The v6 bounded double-price conversion is unchanged (see manifest.price_conversion)."
+    ]
+  }
+}

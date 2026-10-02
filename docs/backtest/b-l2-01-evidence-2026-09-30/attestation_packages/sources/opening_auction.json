@@ -1,0 +1,16 @@
+{
+  "schema_version": "bl2_opening_auction_evidence_v1",
+  "data": {
+    "rows": [
+    {"source":"daqmt_1m","row":0,"datetime":"2025-10-23 09:30:00+08:00","grid_role":"opening_auction","volume":"139","suspendFlag":"0"},
+    {"source":"daqmt_1m","row":241,"datetime":"2025-10-24 09:30:00+08:00","grid_role":"opening_auction","volume":"54","suspendFlag":"0"},
+    {"source":"daqmt_1m","row":482,"datetime":"2025-10-27 09:30:00+08:00","grid_role":"opening_auction","volume":"20","suspendFlag":"0"},
+    {"source":"daqmt_1m","row":723,"datetime":"2025-10-28 09:30:00+08:00","grid_role":"opening_auction","volume":"538","suspendFlag":"0"},
+    {"source":"daqmt_1m","row":964,"datetime":"2025-10-29 09:30:00+08:00","grid_role":"opening_auction","volume":"145","suspendFlag":"0"},
+    {"source":"daqmt_1m","row":1205,"datetime":"2025-10-30 09:30:00+08:00","grid_role":"opening_auction","volume":"77","suspendFlag":"0"},
+    {"source":"daqmt_1m","row":1446,"datetime":"2025-10-31 09:30:00+08:00","grid_role":"opening_auction","volume":"52","suspendFlag":"0"},
+    {"source":"daqmt_1m","row":1687,"datetime":"2025-11-03 09:30:00+08:00","grid_role":"opening_auction","volume":"54","suspendFlag":"0"},
+    {"source":"daqmt_1m","row":1928,"datetime":"2025-11-04 09:30:00+08:00","grid_role":"opening_auction","volume":"18","suspendFlag":"0"}
+  ]
+  }
+}

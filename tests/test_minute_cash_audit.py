@@ -1,0 +1,77 @@
+"""Audit uses actual invocation clocks and is observational only."""
+
+import json
+
+import pytest
+from backtest.research.csv_ledger import InsufficientCashError
+from backtest.research.csv_minute_backtest import simulate
+
+from tests.minute_cash_fixtures import chronological_case, money
+from tests.test_minute_cash_chronology import assert_insufficient_cash
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+def test_sidecar_preserves_state_and_records_real_clock_cash(enabled):
+    trace = []
+    with pytest.raises(InsufficientCashError) as plain:
+        simulate(**chronological_case(), fix_minute_cash_order=enabled)
+    with pytest.raises(InsufficientCashError) as observed:
+        simulate(**chronological_case(), fix_minute_cash_order=enabled, audit_sink=trace)
+    assert_insufficient_cash(plain.value, date="20251105")
+    assert_insufficient_cash(observed.value, date="20251105")
+    assert vars(plain.value) == vars(observed.value)
+    assert [(row["decision_hm"], row["side"], row["cash_after"]) for row in trace] == [
+        (895, "BUY", 0)
+    ]
+
+
+def test_target_decision_clock_retains_earlier_quote_clock():
+    trace = []
+    # Capacity callback contract is tested in the chronology suite; this audit
+    # control intentionally leaves capacity disabled while retaining quote_hm.
+    state = simulate(**chronological_case(sell_hm=893, buy_hm=890),
+                     fix_minute_cash_order=True, audit_sink=trace)
+    assert money(state.cash) == money(338.46)
+    assert trace[-1]["decision_hm"] == 895
+    assert trace[-1]["quote_hm"] == 890
+    assert trace[-1]["phase"] == "close"
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+def test_shared_cli_audit_sidecar_preserves_csv_surface(tmp_path, monkeypatch, enabled):
+    from backtest.research import csv_minute_backtest as minute
+    def frozen_run(*args, **kwargs):
+        return simulate(**chronological_case(), fix_minute_cash_order=kwargs["fix_minute_cash_order"],
+                        audit_sink=kwargs["audit_sink"])
+    monkeypatch.setattr(minute, "run", frozen_run)
+    monkeypatch.setattr(minute, "maybe_compare_daily", lambda *a, **kw: None)
+    output, audit = tmp_path / "out", tmp_path / "audit.json"
+    args = ["--strategy", "version8", "--start", "20251104", "--end", "20251105",
+            "--pool-dir", str(tmp_path), "--out-dir", str(output), "--execution-audit-file", str(audit)]
+    with pytest.raises(InsufficientCashError) as exc:
+        minute.main(args + (["--fix-minute-cash-order"] if enabled else []))
+    assert_insufficient_cash(exc.value, date="20251105")
+    assert not audit.exists()
+    assert not (output / "trades.csv").exists()
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+def test_v7_cli_audit_and_run_config(tmp_path, monkeypatch, enabled):
+    from backtest.research import csv_minute_backtest_v7 as v7
+
+    from tests.test_v7_cash_chronology import chronological_case as v7_case
+    case = v7_case()
+    monkeypatch.setattr(v7, "load_pool_days", lambda *a: case["pool_days"])
+    monkeypatch.setattr(v7, "_load_cli_bars", lambda *a, **kw: (case["minute_bars"], case["daily_bars"]))
+    monkeypatch.setattr(v7, "load_limit_context", lambda *a: ({}, {}))
+    monkeypatch.setattr(v7, "load_index_daily", lambda *a: case["index_days"])
+    output, audit = tmp_path / "out", tmp_path / "audit.json"
+    args = ["--start", "20260901", "--end", "20260902", "--cash-total", "421000",
+            "--pool-dir", str(tmp_path), "--output-dir", str(output), "--execution-audit-file", str(audit)]
+    assert v7.main(args + (["--fix-minute-cash-order"] if enabled else [])) == 0
+    payload = json.loads(audit.read_text())
+    assert payload["fix_minute_cash_order"] is enabled
+    assert len(payload["events"]) == 4
+    config = json.loads((output / "run-config.json").read_text())
+    assert config["fix_minute_cash_order"] is enabled
+    assert "cash_before" not in (output / "trades.csv").read_text().splitlines()[0]

@@ -40,7 +40,7 @@ Qlib `PortAnaRecord` 停用。Cerebro / Rolling 已退场（2026-09-16）。chip
 
 - **入口**：`backtest/research/csv_daily_backtest.py`、`csv_minute_backtest.py`（`--strategy version1|…|version6|version8|version9|version10`）；`csv_minute_backtest_v7.py`（金榕元仓位机，独立，不进策略书）；`csv_minute_backtest_topk_app_dropout.py`（新策略，不改策略 7）。账本：`csv_ledger.py`。市场事实：`market_layer.py`。
 - **输入**：日名单 CSV（`parse_pool_csv`）。来源可以是 Qlib 导出、本仓技术分析、手工，下游不认来源。
-- **成交模型**：当根 close / 分钟触价；自写账本；T+1、涨跌停、整手在引擎里。细则见 [engine-ashare-correctness.md](engine-ashare-correctness.md)。**向量化跌停 = 全卖因 defer**（含 6/8 trail），不成交。档位：主板 10% / 创科 20% / 北交 30% / ST 5%；未知板块 skip。
+- **成交模型**：当根 close / 分钟触价；自写账本；T+1、涨跌停、整手在引擎里。细则见 [engine-ashare-correctness.md](engine-ashare-correctness.md)。**向量化跌停 = 全卖因 defer**（含 6/8 trail），不成交。档位：主板 10% / 创科 20% / 北交 30%；ST **时间分段**（主板/中小 ST：2026-07-06 前 5%、当日及之后 10%；创科 ST 20%；北交 ST 30%；见 [engine-ashare-correctness.md](engine-ashare-correctness.md) E-R2 与 [`ssot/st_limit_regimes.json`](ssot/st_limit_regimes.json)）；未知板块 skip。
 - **用途**：锁规则、扫参、名单质量对照。快。
 - **禁**：复刻 Redis / live；把 7 注册进 6/8；用 `simulate_v7` 跑 Alpha158。
 
@@ -61,6 +61,10 @@ Qlib `PortAnaRecord` 停用。Cerebro / Rolling 已退场（2026-09-16）。chip
 - **成交模型**：报单回报，不是回测账本。
 - **用途**：验收唯一入口。改资金/卖核/调度，单测 + 真栈 baseline。
 - **禁**：用 LEBS 或向量化净值代替真栈签字；把事故复盘（R3）先当回测做。
+
+### 3.4 规划中的 L1 / L2（P0 仅文档）
+
+L1 拟作 native CSV / v7 / JR / grid Mode B 完整 run 的薄 facade，不是共享调度 / 定价核；L2 拟作新 Human 冻结合同下、独立身份且显式 opt-in 的可选研究后端，不进 BOOKS 默认，也不替换共享 CSV。二者尚未实现或获代码 GO，不改变三件引擎分工；Cerebro 继续禁止复活，L2 ≠ `l2_analytics/` ≠ LEBS ≠ 1.3 MockQMT。切片门禁见 [L1/L2 产品边界（P0）](note-l1-l2-research-engine-boundary-2026-09-28.md)。
 
 ---
 

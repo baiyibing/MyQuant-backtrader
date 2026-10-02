@@ -1,0 +1,44 @@
+{
+  "schema_version": "bl2_proof_v1",
+  "data": {
+    "issuer": "Human GO 2026-10-01 / authorized loader x100 mapping",
+    "subject": "units",
+    "source_refs": [
+      "volume_mapping_approval",
+      "daqmt_1m",
+      "daqmt_1d",
+      "ths_daily",
+      "ratio_table",
+      "human_go",
+      "units_comparison",
+      "volume_mapping_go",
+      "volume_mapping_diagnosis",
+      "historical_lots_scale",
+      "human_go_units_shares",
+      "units_diagnosis",
+      "vendor_units_absence"
+    ],
+    "filter": {
+      "symbols": [
+        "603196.SH"
+      ],
+      "from_date": "2025-10-23",
+      "through_date": "2025-11-04",
+      "predicate": "603196.SH only; inclusive probe dates; exact source rows and bindings; units"
+    },
+    "result": {
+      "complete": true,
+      "summary": "Authorized mapping complete: lake lots x100 -> loaded shares/1, raw_shares_incremental; lake NOT_RUN",
+      "rows": [
+    {"source":"volume_mapping_approval","row":0,"observation":"Pinned lots lake volume x100 in loader v8 produces shares/1; raw_shares_incremental is the post-transform contract.","basis":"authorized_mapping","binding":{"source":"minute_603196","column":"volume","kind":"incremental","unit":"shares","shares_per_unit":1}}
+  ]
+    },
+    "limitations": [
+      "Remapped draft only; structural checks != lake PASS; R3 BLOCKED/NOT_RUN; R4 needs separate Human「开 R4」; production_C=frozen.",
+      "Lake integers remain lots-scale at rest. Shares contract applies after loader x100 only. Wind/THS are historical factor/conflict evidence, not proof that lake bytes are shares. Rounded lots cannot recover vendor exact-share residuals; no lake write or PASS claimed.",
+      "Prior shares-target GO is satisfied by the separate mapping GO; human_target alone cannot complete. Prior target GO/diagnosis/proof bytes are preserved; historical lots ratio acceptance stays historical_superseded.",
+      "Vendor-doc absence remains: 官方字段表只声明 volume = 成交量，未声明 K 线 volume 单位（与 MyQuant #273 地图一致）。单位须由直接对账确定。",
+      "No R3/R4i PASS reuse, lake PASS, R4 authorization or delta5 pack. Fresh v8 host recipe/freeze required. Human「合」then land and named「开 R4」remain required; delta5 needs its own d5_evidence_pack_v1 decision."
+    ]
+  }
+}

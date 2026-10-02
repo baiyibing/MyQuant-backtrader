@@ -195,12 +195,32 @@ class StockCodeProcessor:
 
     @staticmethod
     def read_stock_codes(file_path: str) -> Optional[pd.DataFrame]:
+        """Read a single-day pool, rejecting repeated normalized codes."""
+        from common.infra.pool_csv import (
+            PoolDuplicateCodeError,
+            iter_pool_csv_rows,
+            pool_cell_to_bare,
+            check_pool_duplicate,
+        )
+        from oskh_core.a_share_symbol_normalize import canonical_from_bare_code
+
         try:
             encoding = _check_bom(file_path)
             if encoding == "unknown":
                 encoding, _confidence = _detect_encoding(file_path)
             if encoding in {"GB2312", "gb2312"}:
                 encoding = "GBK"
+            # pandas indexes omit blank lines and count CSV records rather than
+            # physical lines. Read the source records for accurate diagnostics,
+            # including quoted fields that span several physical lines.
+            seen: dict[tuple[str | None, str], int] = {}
+            for line_number, row in iter_pool_csv_rows(Path(file_path), encoding=encoding):
+                bare = pool_cell_to_bare(row[0])
+                if bare:
+                    check_pool_duplicate(
+                        Path(file_path), seen,
+                        canonical_from_bare_code(bare), line_number,
+                    )
             df = pd.read_csv(
                 file_path,
                 header=None,
@@ -218,6 +238,8 @@ class StockCodeProcessor:
             df.rename(columns={0: "stock_code", 1: "stock_name"}, inplace=True)
             logger.info("read %s stock codes from %s", len(df), file_path)
             return df
+        except PoolDuplicateCodeError:
+            raise
         except Exception as exc:
             logger.error("read_stock_codes failed for %s: %s", file_path, exc)
             return None

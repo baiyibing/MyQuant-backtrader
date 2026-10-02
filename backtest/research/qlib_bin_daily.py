@@ -23,6 +23,14 @@ _CANON = re.compile(r"^(\d{6})\.(SH|SZ|BJ)$", re.IGNORECASE)
 _QLIB = re.compile(r"^(SH|SZ|BJ)(\d{6})$", re.IGNORECASE)
 
 
+class QlibBinReadError(RuntimeError):
+    """A qlib symbol read failed instead of yielding an absent frame."""
+
+    def __init__(self, code: str) -> None:
+        self.code = code
+        super().__init__(f"failed to read qlib bars for {code}")
+
+
 def qlib_inst_dir(code: str) -> Optional[str]:
     """``600519.SH`` / ``SH600519`` → ``sh600519`` feature folder name."""
     text = str(code or "").strip()
@@ -147,8 +155,8 @@ def load_qlib_bin_daily_bars(
             code = futs[fut]
             try:
                 df = fut.result()
-            except Exception:
-                continue
+            except Exception as exc:
+                raise QlibBinReadError(code) from exc
             if df is not None and not df.empty:
                 out[code] = df
     return out

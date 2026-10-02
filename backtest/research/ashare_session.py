@@ -64,10 +64,11 @@ def session_limit_prices(
     code: str,
     previous: float | None,
     name: str = "",
+    as_of=None,
 ) -> tuple[float, float] | None:
     if previous is None:
         return None
-    return limit_prices(code, previous, name)
+    return limit_prices(code, previous, name, as_of=as_of)
 
 
 def skip_buy_at_limit(price: float, limits: tuple[float, float] | None) -> bool:
@@ -83,6 +84,20 @@ def flatten_pool_names(names_by_day: Mapping[str, Mapping[str, str]]) -> dict[st
     for ymd in sorted(names_by_day):
         names.update(names_by_day[ymd])
     return names
+
+
+def asof_pool_name(
+    names_by_day: Mapping[str, Mapping[str, str]], ymd: str, symbol: str
+) -> str:
+    """Last non-empty pool name dated on or before the requested session."""
+    name = ""
+    for day in sorted(names_by_day):
+        if day > ymd:
+            break
+        observed = names_by_day[day].get(symbol, "")
+        if observed:
+            name = observed
+    return name
 
 
 def load_limit_context(
@@ -102,6 +117,7 @@ def load_limit_context(
 
 __all__ = [
     "LIMIT_EPS",
+    "asof_pool_name",
     "defer_sell_at_limit",
     "flatten_pool_names",
     "hit_limit_down",

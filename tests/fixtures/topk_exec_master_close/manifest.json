@@ -1,0 +1,20 @@
+{
+  "master_sha": "82abaaba2752f34e05b3f5b81d2099f00c17ba52",
+  "python": "3.12.13",
+  "pandas": "2.3.3",
+  "numpy": "2.3.5",
+  "files": {
+    "empty/daily_equity.csv": "5ffb4a79eb7739c45c3af989c5bedf923593b69bdce71d5fe20946c992601c4f",
+    "empty/stats.json": "68ce056e7a8894350517bdb5f338aea88bad73e96cb439a3047b0b36171118f9",
+    "empty/summary.txt": "6af94db73d359b686d9d3e0f68e472738d53958343cdd2dfb1d42059b9003465",
+    "empty/trades.csv": "93c06915025798fcc76654c4a3082b510e7f3c6689539730194742ec4ad0fcb7",
+    "exact/daily_equity.csv": "3be77dfa61a7609d2b2030b99c83a03290a2acc48f8ec04676e7271cd90ca470",
+    "exact/stats.json": "a081294df0f763134793b43477dad6dabdd725e93929c7a7bb000cc81a4e283b",
+    "exact/summary.txt": "77c4badb22c6a53b0d3f0a1a6eb3695359d922622bb765e5547e17d36470fe51",
+    "exact/trades.csv": "82d09be458bce85ee7488ad9bccdea6704847ebe8d895b2a0a280a1b05a25fb5",
+    "fallback/daily_equity.csv": "604e5b77b5fef0bbc8f7fef53b7e5afba1df0d5bad62acf46c9d9cd80c6185f1",
+    "fallback/stats.json": "bd26b676b3528f1fe26bad3918bb978d7698cbcd2f62884adb8fe578e33e3fa4",
+    "fallback/summary.txt": "1e9122173e4aaa92c106ef0d893e17d122d21260a26e05fa06c8335607c1ec46",
+    "fallback/trades.csv": "2e5aa8f4e72b2c3b3a0f64add340f4cd4372437a98ae2ebd82b055cbce1e1bff"
+  }
+}

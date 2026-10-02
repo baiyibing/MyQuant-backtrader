@@ -1,0 +1,49 @@
+{
+  "schema_version": "bl2_raw_excerpt_v1",
+  "data": {
+    "origin": {
+      "repository": "baiyibing/OSkhQuant1.3",
+      "commit": "42d066b81a083be49881f0dd8c5ab53ed4f422f6",
+      "path": "docs/evidence/b_l2_r4_cam_host_materials_draft_20260930/calendar/calendar_cross_check.md",
+      "git_sha256": "ca539772a69ade11609e449b5dff067f7f81aab7fa21ca7f32d2f0cc7d832c62"
+    },
+    "extraction": {
+      "method": "UTF-8 markdown lines, order unchanged, one row per line",
+      "row_index": "zero-based line number"
+    },
+    "limitation": "Pinned #1114 saved material; original DRAFT wording preserved. Human's four-cell approval is recorded separately in host_cam_approval. No local market-source retrieval or lake verification.",
+    "rows": [
+    {"line":0,"text":"# calendar 交叉核验表（DRAFT）"},
+    {"line":1,"text":""},
+    {"line":2,"text":"> 三源互证：① SSE 官方休市通知（`sse_holiday_notices_2025.md`，权威锚）；② PMC/SSE 日历（`pmc_sse_calendar_20250901_20251231.txt`，1.3 生产日历 SSOT `common/infra/trading_calendar_pmc.py` 同源生成，pandas_market_calendars 5.3.2，SSE calendar）；③ 分钟 census 覆盖日（旁证，**非**日历证据——合同 §3 明禁「有 bar 就当交易日」，此处仅一致性核对）。"},
+    {"line":3,"text":""},
+    {"line":4,"text":"## 窗口逐日核对（2025-10-23 ~ 2025-11-05）"},
+    {"line":5,"text":""},
+    {"line":6,"text":"| 日期 | 星期 | SSE 通知 | PMC 日历 | census 分钟行 | 结论 |"},
+    {"line":7,"text":"|---|---|---|---|---|---|"},
+    {"line":8,"text":"| 2025-10-23 | 四 | 无休市安排 | 交易日 | 241 行 | ✓ |"},
+    {"line":9,"text":"| 2025-10-24 | 五 | 无休市安排 | 交易日 | 241 行 | ✓ |"},
+    {"line":10,"text":"| 2025-10-25/26 | 六/日 | 周末休市 | 非交易日 | 无 | ✓ |"},
+    {"line":11,"text":"| 2025-10-27 | 一 | 无休市安排 | 交易日 | 241 行 | ✓ |"},
+    {"line":12,"text":"| 2025-10-28 | 二 | 无休市安排 | 交易日 | 241 行 | ✓ |"},
+    {"line":13,"text":"| 2025-10-29 | 三 | 无休市安排 | 交易日 | 241 行 | ✓ |"},
+    {"line":14,"text":"| 2025-10-30 | 四 | 无休市安排 | 交易日 | 241 行 | ✓ |"},
+    {"line":15,"text":"| 2025-10-31 | 五 | 无休市安排 | 交易日 | 241 行 | ✓ |"},
+    {"line":16,"text":"| 2025-11-01/02 | 六/日 | 周末休市 | 非交易日 | 无 | ✓ |"},
+    {"line":17,"text":"| 2025-11-03 | 一 | 无休市安排 | 交易日 | 241 行 | ✓ |"},
+    {"line":18,"text":"| 2025-11-04 | 二 | 无休市安排 | 交易日 | 241 行 | ✓ |"},
+    {"line":19,"text":"| 2025-11-05 | 三 | 无休市安排 | 交易日 | （窗口外） | ✓ 下一交易日 |"},
+    {"line":20,"text":""},
+    {"line":21,"text":"## 消费侧所需日期覆盖（loader 合同）"},
+    {"line":22,"text":""},
+    {"line":23,"text":"- 执行日序列：2025-10-23..2025-11-04（9 日，有序唯一）✓"},
+    {"line":24,"text":"- 末次可能 BUY 的下一交易日：**2025-11-05** ✓（BUY 命令需要「下一交易日」存在，loader `dates.index(bucket.start.date()) + 1 < len(dates)`）"},
+    {"line":25,"text":"- 初始 lots 的 acquire/sellable 校验日：若 recipe 声明窗口内 acquire，则 sellable_date = acquire 日的下一交易日（T+1），全部在 82 日表内 ✓；若 acquire 早于窗口，actions/日历的经济覆盖区间从 first_day 起算——**recipe 实际值待宿主提供**（见 HOST_FILL_FORM_CAM §1）。"},
+    {"line":26,"text":"- 国庆休市边界：窗口首日 10-23 的前一交易日为 10-22（PMC 确认 10-22 为交易日；10-09 恢复开市，10-11 周六休市）✓"},
+    {"line":27,"text":""},
+    {"line":28,"text":"## 一致性结论"},
+    {"line":29,"text":""},
+    {"line":30,"text":"三源 9/9 交易日一致；无冲突。PMC 输出去重后 82 个交易日（2025-09-01..2025-12-31），有序唯一。"}
+  ]
+  }
+}

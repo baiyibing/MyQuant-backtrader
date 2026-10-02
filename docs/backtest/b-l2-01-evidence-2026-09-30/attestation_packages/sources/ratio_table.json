@@ -1,0 +1,35 @@
+{
+  "schema_version": "bl2_raw_excerpt_v1",
+  "data": {
+    "origin": {
+      "repository": "baiyibing/OSkhQuant1.3",
+      "commit": "ec19fd6f69a52f93aa9870ad582f0173df8963f4",
+      "path": "docs/evidence/b_l2_01_4090_r3_20260930/raw/daqmt_ths_unit_ratio_table.csv",
+      "git_sha256": "07591611041c21561d67c4908e64f8713b82dd67e7c0a404311749eb1b9a66f6",
+      "host_sha256": "ccb1bd575f5e4fe7f8846a8e753933a2e08281ebc15d0509d79e658a4ad762ba"
+    },
+    "extraction": {
+      "method": "CSV DictReader, strings unchanged, row order unchanged",
+      "columns": [
+        "date",
+        "daqmt_volume_lots",
+        "ths_volume_shares",
+        "ratio_ths_per_daqmt",
+        "sum_1m_volume_lots",
+        "sum_1m_equals_1d"
+      ],
+      "row_index": "zero-based excluding header"
+    },
+    "rows": [
+    {"date":"20251023","daqmt_volume_lots":"31780","ths_volume_shares":"3177900.0","ratio_ths_per_daqmt":"99.99685336689743","sum_1m_volume_lots":"31780","sum_1m_equals_1d":"True"},
+    {"date":"20251024","daqmt_volume_lots":"38872","ths_volume_shares":"3887200.0","ratio_ths_per_daqmt":"100.0","sum_1m_volume_lots":"38872","sum_1m_equals_1d":"True"},
+    {"date":"20251027","daqmt_volume_lots":"45455","ths_volume_shares":"4545500.0","ratio_ths_per_daqmt":"100.0","sum_1m_volume_lots":"45455","sum_1m_equals_1d":"True"},
+    {"date":"20251028","daqmt_volume_lots":"60310","ths_volume_shares":"6031000.0","ratio_ths_per_daqmt":"100.0","sum_1m_volume_lots":"60310","sum_1m_equals_1d":"True"},
+    {"date":"20251029","daqmt_volume_lots":"33039","ths_volume_shares":"3303900.0","ratio_ths_per_daqmt":"100.0","sum_1m_volume_lots":"33039","sum_1m_equals_1d":"True"},
+    {"date":"20251030","daqmt_volume_lots":"27312","ths_volume_shares":"2731200.0","ratio_ths_per_daqmt":"100.0","sum_1m_volume_lots":"27312","sum_1m_equals_1d":"True"},
+    {"date":"20251031","daqmt_volume_lots":"22563","ths_volume_shares":"2256300.0","ratio_ths_per_daqmt":"100.0","sum_1m_volume_lots":"22563","sum_1m_equals_1d":"True"},
+    {"date":"20251103","daqmt_volume_lots":"20254","ths_volume_shares":"2025400.0","ratio_ths_per_daqmt":"100.0","sum_1m_volume_lots":"20254","sum_1m_equals_1d":"True"},
+    {"date":"20251104","daqmt_volume_lots":"23347","ths_volume_shares":"2334700.0","ratio_ths_per_daqmt":"100.0","sum_1m_volume_lots":"23347","sum_1m_equals_1d":"True"}
+  ]
+  }
+}

@@ -14,6 +14,7 @@ books and lock strategy8 20% stop with chase identity」；当年资金口径
 
 from __future__ import annotations
 
+from fractions import Fraction
 from typing import Optional
 
 BOOK_TAG = "v8_1"
@@ -38,8 +39,19 @@ BANDS: tuple[tuple[float, float, float], ...] = (
 )
 
 
-def band_floor(peak_ret: float) -> Optional[float]:
+def band_floor(peak_ret: float | Fraction, *, fix_s81_band_precision: bool = False) -> Optional[float]:
     """峰值涨幅所在档的止盈地板；未摸到 +6% 或已过 120% 返回 None。"""
+    if fix_s81_band_precision:
+        # Exact decimal-input contract; never round an already computed float return.
+        # Return float(floor) deliberately: only band *selection* is exact; trigger
+        # compare at take_profit_reason stays the legacy float formula.
+        ret = peak_ret if isinstance(peak_ret, Fraction) else Fraction(str(peak_ret))
+        if Fraction(str(SMALL_ARM)) <= ret <= Fraction(str(PROFIT_BASE)):
+            return float(SMALL_FLOOR)
+        for lo, hi, floor in BANDS:
+            if Fraction(str(lo)) < ret <= Fraction(str(hi)):
+                return float(floor)
+        return None
     peak_ret = float(peak_ret)
     if SMALL_ARM <= peak_ret <= PROFIT_BASE:
         return float(SMALL_FLOOR)
@@ -76,6 +88,8 @@ def take_profit_reason(
     cost: float,
     peak: float,
     n_days: int = 1,
+    *,
+    fix_s81_band_precision: bool = False,
 ) -> Optional[str]:
     """触发止盈则返回 reason（供 CSV `_sell` / Cerebro profit_take 前缀）。
 
@@ -86,11 +100,21 @@ def take_profit_reason(
         return None
     if float(px) < float(cost):
         return None
-    peak_ret = float(peak) / float(cost) - 1.0
-    floor = band_floor(peak_ret)
+    peak_ret = (
+        Fraction(str(peak)) / Fraction(str(cost)) - 1
+        if fix_s81_band_precision else float(peak) / float(cost) - 1.0
+    )
+    floor = band_floor(peak_ret, fix_s81_band_precision=fix_s81_band_precision)
+    # Trigger-price compare stays float even when ON (band selection alone is exact).
     if floor is not None and float(px) <= float(cost) * (1.0 + float(floor)):
         return f"trail:band:{int(round(floor * 100))}"
-    if peak_drawdown_hits(px, cost, peak):
+    # ON inlines exact arm here (one call site); share a helper if a second consumer appears.
+    dd_hits = (
+        peak_ret > Fraction(str(PEAK_DD_ARM))
+        and float(px) <= float(peak) * (1.0 - float(PEAK_DD_PCT))
+        if fix_s81_band_precision else peak_drawdown_hits(px, cost, peak)
+    )
+    if dd_hits:
         return "trail:peak_dd"
     return None
 

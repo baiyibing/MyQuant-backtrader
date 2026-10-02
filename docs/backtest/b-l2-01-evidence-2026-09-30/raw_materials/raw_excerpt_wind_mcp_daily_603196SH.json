@@ -1,0 +1,100 @@
+{
+ "schema_version": "bl2_raw_excerpt_draft_v0_host_review",
+ "collected_at": "2026-09-30T12:48+08:00",
+ "collector": "kimi-code host-assist (PR #272 review follow-up #2, kimi-datasource MCP data source `wind`; Human GO: 封第八包补进 PR #272)",
+ "purpose": "湖日线 vs Wind(kimi-datasource MCP) 第四独立行情源对照 + Wind MCP 自带字段目录对 volume 无单位注记(负结果)。经验一致性旁证,不是 vendor source_declaration。",
+ "subject": {
+  "symbol": "603196.SH",
+  "name_note": "东财返回现名「璞源材料」,原「日播时尚」更名;窗口 2025-10-20~2025-11-05(探针窗口 10-23~11-04 前后各留缓冲)"
+ },
+ "sources": {
+  "lake": {
+   "package": "raw_lake_daily_603196SH_20251020_20251105.json",
+   "parquet": "E:\\stock_data\\stock\\period=1d\\dividend_type=none\\symbol=603196_SH\\data.parquet",
+   "parquet_sha256": "d96f2ed8903a5140d4154969d9faa7ddc66a885e1bbc2b7350901784c625155e"
+  },
+  "wind_mcp": {
+   "channel": "kimi-datasource MCP · data source `wind`(授权 Wind 数据经 MCP 代理,非公开免费 API)",
+   "api": "wind_get_price",
+   "params": {
+    "ticker": "603196.SH",
+    "start_date": "2025-10-20",
+    "end_date": "2025-11-05",
+    "price_adj": "N",
+    "frequency": "D",
+    "fields": "price"
+   },
+   "request_id": "93850993f9067c0e5d7d3480858f7aed",
+   "response_csv": "wind_mcp_603196_daily_20251020_20251105.csv",
+   "response_csv_sha256": "0abc3b6c49fea853b92337518f49330ce1e0f8f7492df19e3fa78ed34f121b6e",
+   "columns": "[trade_date, wind_code, open, high, low, close, volume, amt]",
+   "rows_embedded": 13
+  },
+  "wind_mcp_field_catalog": {
+   "channel": "kimi-datasource MCP · data source `wind` 自带 curated 字段目录",
+   "api": "wind_search_fields",
+   "params": {
+    "query": "volume 成交量",
+    "limit": 20
+   },
+   "request_id": "cb013f28-19d6-4523-867b-394df05ab46c",
+   "response_csv": "wind_mcp_field_search_volume.csv",
+   "response_csv_sha256": "0afc4305874f59b6dec3b202114eeefc480e016dc38694c67e714e2b7240e882",
+   "matched_fields": 1
+  }
+ },
+ "vendor_rows": {
+  "wind_window": [
+   {"trade_date": "2025-10-20", "open": "23.00", "high": "23.42", "low": "22.71", "close": "23.19", "volume": "3266800", "amt": "75635077"},
+   {"trade_date": "2025-10-21", "open": "23.30", "high": "23.39", "low": "22.82", "close": "23.39", "volume": "2476600", "amt": "57268449"},
+   {"trade_date": "2025-10-22", "open": "23.48", "high": "24.20", "low": "23.27", "close": "23.36", "volume": "4593900", "amt": "108656297"},
+   {"trade_date": "2025-10-23", "open": "23.25", "high": "23.89", "low": "23.03", "close": "23.89", "volume": "3177959", "amt": "74677648"},
+   {"trade_date": "2025-10-24", "open": "23.92", "high": "24.15", "low": "23.70", "close": "23.89", "volume": "3887200", "amt": "92957361"},
+   {"trade_date": "2025-10-27", "open": "23.89", "high": "24.49", "low": "23.63", "close": "24.32", "volume": "4545500", "amt": "109620351"},
+   {"trade_date": "2025-10-28", "open": "23.95", "high": "24.16", "low": "22.76", "close": "23.12", "volume": "6031000", "amt": "140591436"},
+   {"trade_date": "2025-10-29", "open": "23.19", "high": "23.39", "low": "22.71", "close": "23.04", "volume": "3303900", "amt": "75809642"},
+   {"trade_date": "2025-10-30", "open": "23.07", "high": "23.26", "low": "22.76", "close": "22.94", "volume": "2731200", "amt": "62729111"},
+   {"trade_date": "2025-10-31", "open": "22.78", "high": "23.37", "low": "22.78", "close": "23.03", "volume": "2256300", "amt": "52119297"},
+   {"trade_date": "2025-11-03", "open": "22.90", "high": "23.11", "low": "22.66", "close": "23.05", "volume": "2025400", "amt": "46473359"},
+   {"trade_date": "2025-11-04", "open": "23.11", "high": "23.22", "low": "22.75", "close": "22.96", "volume": "2334700", "amt": "53498695"},
+   {"trade_date": "2025-11-05", "open": "22.84", "high": "23.08", "low": "22.53", "close": "22.55", "volume": "2222200", "amt": "50517200"}
+  ]
+ },
+ "field_catalog_negative_result": {
+  "query": "volume 成交量",
+  "result_row": {"field": "volume", "category": "price", "description": "Trading volume.", "aliases": "成交量"},
+  "unit_annotation": null,
+  "interpretation": "MCP 自带 Wind 字段目录对 volume 仅有别名「成交量」,无单位注记——与 xtquant 250516.1.1 官方文档 K线字段表的缺失同类(raw_excerpt_xtquant_docs.json)。Wind 权威单位规范(wsd 量化接口手册 PDF / 终端指标浏览器)在授权安装环境内,不在此 MCP 暴露面;units 门 source_declaration 锚仍缺位,本 MCP 不能自证单位语义。"
+ },
+ "comparison": {
+  "fields_compared": ["open", "high", "low", "close", "amount", "volume"],
+  "days_covered": "13/13",
+  "ohlc_all_equal": true,
+  "amount_all_equal": true,
+  "days": [
+   {"trade_date": "2025-10-20", "lake_volume": 32668, "wind_volume_shares": 3266800, "lake100_minus_wind": 0, "ohlc_equal": true, "amount_equal": true},
+   {"trade_date": "2025-10-21", "lake_volume": 24766, "wind_volume_shares": 2476600, "lake100_minus_wind": 0, "ohlc_equal": true, "amount_equal": true},
+   {"trade_date": "2025-10-22", "lake_volume": 45939, "wind_volume_shares": 4593900, "lake100_minus_wind": 0, "ohlc_equal": true, "amount_equal": true},
+   {"trade_date": "2025-10-23", "lake_volume": 31780, "wind_volume_shares": 3177959, "lake100_minus_wind": 41, "ohlc_equal": true, "amount_equal": true},
+   {"trade_date": "2025-10-24", "lake_volume": 38872, "wind_volume_shares": 3887200, "lake100_minus_wind": 0, "ohlc_equal": true, "amount_equal": true},
+   {"trade_date": "2025-10-27", "lake_volume": 45455, "wind_volume_shares": 4545500, "lake100_minus_wind": 0, "ohlc_equal": true, "amount_equal": true},
+   {"trade_date": "2025-10-28", "lake_volume": 60310, "wind_volume_shares": 6031000, "lake100_minus_wind": 0, "ohlc_equal": true, "amount_equal": true},
+   {"trade_date": "2025-10-29", "lake_volume": 33039, "wind_volume_shares": 3303900, "lake100_minus_wind": 0, "ohlc_equal": true, "amount_equal": true},
+   {"trade_date": "2025-10-30", "lake_volume": 27312, "wind_volume_shares": 2731200, "lake100_minus_wind": 0, "ohlc_equal": true, "amount_equal": true},
+   {"trade_date": "2025-10-31", "lake_volume": 22563, "wind_volume_shares": 2256300, "lake100_minus_wind": 0, "ohlc_equal": true, "amount_equal": true},
+   {"trade_date": "2025-11-03", "lake_volume": 20254, "wind_volume_shares": 2025400, "lake100_minus_wind": 0, "ohlc_equal": true, "amount_equal": true},
+   {"trade_date": "2025-11-04", "lake_volume": 23347, "wind_volume_shares": 2334700, "lake100_minus_wind": 0, "ohlc_equal": true, "amount_equal": true},
+   {"trade_date": "2025-11-05", "lake_volume": 22222, "wind_volume_shares": 2222200, "lake100_minus_wind": 0, "ohlc_equal": true, "amount_equal": true}
+  ]
+ },
+ "volume_unit_observation": {
+  "wind_mcp_unit": "股(实测:2025-10-20 volume=3,266,800,与新浪股口径逐股一致;若按手口径应为 32,668)",
+  "wind_eq_100x_lake_days": "12/13",
+  "odd_lot_day": "2025-10-23: Wind 3,177,959 股 vs 湖 31,780 手 → 湖×100 比真实成交多 41 股(零股聚合入整手);Wind 股数与新浪逐股相等,第七包零股发现获第四源独立复现",
+  "cross_vendor_share_level": "Wind(MCP) 与新浪在含零股的 2025-10-23 逐股一致(3,177,959)——零股不是单一免费源的怪癖,是交易所真实成交",
+  "unit_caveat": "公开资料惯称 Wind wsd 日线 volume 单位为手,本 MCP 返回为股——疑似 MCP 代理层做了 ×100 换算或公开资料过时。这印证「文档可能过时、以实测为准」,同时也说明锚的单位语义同样必须用声明 pin,不能想当然。",
+  "interpretation": "与第七包一致:R3 探针比率 mean≈99.98 非数据错误,是零股摩擦。本包把等价链加强到 湖=腾讯=新浪=Wind 四源。"
+ },
+ "minute_level_note": "本 MCP wind 源提供 A 股盘中分钟序列(wind_get_stock_quote 等),但 intraday 以近期为主,2025-10 窗口分钟未取(同腾讯/新浪/东财的 recency 墙);census(2133格/46零量格)仍仅湖自证,待 R4-A QMT 全字段回补。",
+ "non_attestation": "本包为跨 vendor 经验一致性旁证。按 ingress §9.2:不能作为 units 门 source_declaration(MCP 字段目录无单位注记,负结果已 pin),不能作为 instruments 门 source_fact,不能作为 status 门 explicit_status;仅可入 limitations/佐证。R3 BLOCKED/NOT_RUN 不因此解除。"
+}

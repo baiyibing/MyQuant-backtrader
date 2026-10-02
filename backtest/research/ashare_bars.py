@@ -15,6 +15,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
+import hashlib
+import json
 from pathlib import Path
 from typing import Iterable, Mapping, Optional
 
@@ -27,6 +29,15 @@ MINUTE_LAKE_END = "20260909"
 AM_OPEN, AM_CLOSE = 9 * 60 + 30, 11 * 60 + 30
 PM_OPEN, PM_CLOSE = 13 * 60, 15 * 60
 CACHE_ROOT = Path(__file__).resolve().parents[2] / "backtest_output" / "bar_cache"
+
+
+class MinuteBarReadError(RuntimeError):
+    """An existing minute partition could not be read."""
+
+    def __init__(self, code: str, path: Path) -> None:
+        self.code = code
+        self.path = path
+        super().__init__(f"failed to read minute bars for {code}: {path}")
 
 
 @dataclass(frozen=True)
@@ -235,10 +246,7 @@ def _load_minute_compact(
             done += 1
             _progress(done, total, "lake 1m")
             code = futs[fut]
-            try:
-                frame = fut.result()
-            except Exception:
-                continue
+            frame = fut.result()
             if frame is not None and not getattr(frame, "empty", True):
                 out[code] = frame
     return out
@@ -320,13 +328,22 @@ def annotate_session(frame):
     out = frame.copy()
     idx = _session_index(out.index)
     out.index = idx
-    out["ymd"] = idx.strftime("%Y%m%d")
+    # numpy calendaring (2026-09-27): strftime was a per-element hotspot on
+    # 60k-row minute frames; integer arithmetic + U8 cast is byte-identical.
+    _y, _m, _d = idx.year.to_numpy(), idx.month.to_numpy(), idx.day.to_numpy()
+    out["ymd"] = (_y * 10000 + _m * 100 + _d).astype("U8")
     out["hm"] = idx.hour * 60 + idx.minute
     return out.loc[_in_session(out["hm"].to_numpy())]
 
 
-def read_lake_minute_ohlc(code: str, root: Path, start: str, end: str, *, include_volume: bool = False):
-    """Book-engine lake frame: DatetimeIndex + open/high/low/close/ymd/hm."""
+def read_lake_minute_ohlc(code: str, root: Path, start: str, end: str, *,
+                          include_volume: bool = False, include_amount: bool = False):
+    """Book-engine lake frame: DatetimeIndex + open/high/low/close/ymd/hm.
+
+    Tail's ``include_amount`` path retains the legacy zero-day filter and
+    marks duplicate minute buckets before keep-last normalization. Volume-only
+    callers retain v11's volume=A contract, including whole zero-volume days.
+    """
     import numpy as np
     import pandas as pd
     import pyarrow.compute as pc
@@ -334,6 +351,7 @@ def read_lake_minute_ohlc(code: str, root: Path, start: str, end: str, *, includ
 
     from backtest.research.market_layer import utc_ms_range
 
+    include_volume = include_volume or include_amount
     path = Path(root) / f"symbol={to_partition_key(code)}" / "data.parquet"
     if not path.is_file():
         if include_volume:
@@ -342,15 +360,18 @@ def read_lake_minute_ohlc(code: str, root: Path, start: str, end: str, *, includ
     t0, t1 = utc_ms_range(start, end)
     try:
         columns = ["time", "open", "high", "low", "close"]
-        has_volume = "volume" in pq.read_schema(path).names
+        schema_names = pq.read_schema(path).names
+        has_volume = "volume" in schema_names
+        has_amount = include_amount and "amount" in schema_names
         if include_volume and not has_volume:
             raise ValueError(f"minute volume required: {path}")
-        table = pq.read_table(path, columns=columns + (["volume"] if has_volume else []))
+        table = pq.read_table(path, columns=columns + (["volume"] if has_volume else [])
+                              + (["amount"] if has_amount else []))
         table = table.filter((pc.field("time") >= t0) & (pc.field("time") <= t1))
-    except Exception:
+    except Exception as exc:
         if include_volume:
             raise
-        return None
+        raise MinuteBarReadError(code, path) from exc
     if table.num_rows == 0:
         return None
     utc = pd.to_datetime(table["time"].to_numpy(), unit="ms", utc=True)
@@ -368,11 +389,21 @@ def read_lake_minute_ohlc(code: str, root: Path, start: str, end: str, *, includ
             "ymd": utc.strftime("%Y%m%d"),
             "hm": hm.to_numpy()[keep],
             **({"_volume": table["volume"].to_numpy()[keep]} if has_volume else {}),
+            **({"amount": table["amount"].to_numpy()[keep]} if has_amount else {}),
         },
         index=utc.tz_localize(None),
     ).astype({"open": np.float64, "high": np.float64, "low": np.float64, "close": np.float64, "hm": np.int64})
+    if include_amount:
+        # Tail children must reject ambiguous buckets even after the historical
+        # keep-last reader normalization. Seconds within a minute also collide.
+        out["_tail_duplicate"] = out.duplicated(["ymd", "hm"], keep=False)
     out = out[~out.index.duplicated(keep="last")].sort_index()
     if include_volume:
+        if include_amount:
+            # X-04 needs extra columns, not extra sellable days. Keep the OFF
+            # aggregate-after-dedup contract; v11's volume-only path is separate.
+            day_volume = out.groupby("ymd")["_volume"].transform("sum")
+            out = out.loc[day_volume != 0]
         out = out.rename(columns={"_volume": "volume"})
     elif has_volume:
         day_volume = out.groupby("ymd")["_volume"].transform("sum")
@@ -381,7 +412,8 @@ def read_lake_minute_ohlc(code: str, root: Path, start: str, end: str, *, includ
 
 
 def load_minute_from_lake(codes: set[str] | list[str], start: str, end: str, *, workers: int = 16,
-                          lake_root=None, include_volume: bool = False):
+                          lake_root=None, include_volume: bool = False,
+                          include_amount: bool = False):
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
     from backtest.research.csv_common import _progress
@@ -394,6 +426,8 @@ def load_minute_from_lake(codes: set[str] | list[str], start: str, end: str, *, 
         return out
     with ThreadPoolExecutor(max_workers=max(1, int(workers))) as pool:
         extra = {"include_volume": True} if include_volume else {}
+        if include_amount:
+            extra.update(include_volume=True, include_amount=True)
         futs = {pool.submit(read_lake_minute_ohlc, code, root, start, end, **extra): code for code in wanted}
         done = 0
         total = len(futs)
@@ -401,20 +435,66 @@ def load_minute_from_lake(codes: set[str] | list[str], start: str, end: str, *, 
             done += 1
             _progress(done, total, "minute lake")
             code = futs[fut]
-            try:
-                frame = fut.result()
-            except Exception:
-                if include_volume:
-                    raise
-                continue
+            frame = fut.result()
             if frame is not None and not frame.empty:
                 out[code] = frame
     return out
 
 
-def minute_cache_path(start: str, end: str, cache_dir: Optional[Path] = None) -> Path:
+def _identity_hash(value) -> str:
+    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":"),
+                                     ensure_ascii=False).encode("utf-8")).hexdigest()
+
+
+def _shallow_entry_stamp(path):
+    stat = path.stat()
+    return [path.name, stat.st_mode, stat.st_size, stat.st_mtime_ns]
+
+
+def minute_cache_identity(start: str, end: str, *, lake_root=None,
+                          source_snapshot: Optional[str] = None) -> dict:
+    """G2 identity: shallow metadata snapshot, never a recursive lake read.
+
+    Deep in-place repairs require a new explicit snapshot token (see G2 note).
+    Even explicit tokens require an existing, resolved source directory.
+    """
+    from common.infra.data_root import resolve_period_root
+
+    root = (Path(lake_root) if lake_root is not None else
+            resolve_period_root("1m") / "dividend_type=none").resolve(strict=True)
+    if not root.is_dir():
+        raise NotADirectoryError(root)
+    if source_snapshot is None:
+        source_snapshot = "shallow-v1:" + _identity_hash(
+            [_shallow_entry_stamp(root),
+             [_shallow_entry_stamp(p) for p in sorted(root.iterdir(), key=lambda p: p.name)]])
+    elif not isinstance(source_snapshot, str) or not source_snapshot.strip():
+        raise ValueError("source_snapshot must be a non-empty string")
+    schema = [[field.name, str(field.type), field.nullable] for field in _cache_schema()]
+    return {"identity_version": 1, "start": _as_ymd(start), "end": _as_ymd(end),
+            "dividend_type": "none", "schema": _identity_hash(schema),
+            "resolver_identity": str(root), "source_snapshot": source_snapshot}
+
+
+def minute_cache_path(start: str, end: str, cache_dir: Optional[Path] = None, *,
+                      lake_root=None, source_snapshot: Optional[str] = None,
+                      identity: Optional[dict] = None) -> Path:
     root = Path(cache_dir) if cache_dir is not None else CACHE_ROOT
-    return root / f"minute_none_{start}_{end}.parquet"
+    if identity is None:
+        identity = minute_cache_identity(start, end, lake_root=lake_root,
+                                         source_snapshot=source_snapshot)
+    return root / (f"minute_none_{identity['start']}_{identity['end']}_"
+                   f"{_identity_hash(identity)[:12]}.parquet")
+
+
+def _cache_identity_matches(path: Path, identity: dict) -> bool:
+    try:
+        metadata = json.loads(path.with_suffix(".json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return isinstance(metadata, dict) and all(
+        key in metadata and type(metadata[key]) is type(value) and metadata[key] == value
+        for key, value in identity.items())
 
 
 def _cache_schema():
@@ -434,8 +514,9 @@ def _cache_schema():
     )
 
 
-def write_minute_cache(bars: dict, start: str, end: str, cache_dir: Optional[Path] = None) -> Path:
-    import json
+def write_minute_cache(bars: dict, start: str, end: str, cache_dir: Optional[Path] = None, *,
+                       lake_root=None, source_snapshot: Optional[str] = None,
+                       identity: Optional[dict] = None) -> Path:
 
     import numpy as np
     import pandas as pd
@@ -445,7 +526,10 @@ def write_minute_cache(bars: dict, start: str, end: str, cache_dir: Optional[Pat
     from backtest.research.csv_common import _progress
 
     schema = _cache_schema()
-    path = minute_cache_path(start, end, cache_dir)
+    if identity is None:
+        identity = minute_cache_identity(start, end, lake_root=lake_root,
+                                         source_snapshot=source_snapshot)
+    path = minute_cache_path(start, end, cache_dir, identity=identity)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".parquet.tmp")
     if tmp.exists():
@@ -490,8 +574,7 @@ def write_minute_cache(bars: dict, start: str, end: str, cache_dir: Optional[Pat
     path.with_suffix(".json").write_text(
         json.dumps(
             {
-                "start": start,
-                "end": end,
+                **identity,
                 "n_symbols": len(bars),
                 "n_rows": n_rows,
                 "created_utc": datetime.now(timezone.utc).isoformat(),
@@ -511,7 +594,8 @@ def _frame_from_cache_group(group):
     import pandas as pd
 
     frame = group.drop(columns=["symbol"])
-    frame.index = pd.DatetimeIndex(frame.pop("time"))
+    # Keep book frames aligned with the lake/cache timestamp(ns) schema.
+    frame.index = pd.DatetimeIndex(frame.pop("time")).as_unit("ns")
     frame["hm"] = frame["hm"].astype("int64", copy=False)
     if not frame.index.is_monotonic_increasing:
         frame = frame.sort_index()
@@ -571,19 +655,35 @@ def load_minute_ohlc(
     cache_dir: Optional[Path] = None,
     status: Optional[dict] = None,
     lake_root=None,
+    source_snapshot: Optional[str] = None,
     include_volume: bool = False,
+    include_amount: bool = False,
 ) -> dict:
-    """Book frames; opt-in volume bypasses the legacy volume-free cache."""
-    if include_volume:
+    """Book frames with a digested cache path and source/snapshot sidecar identity guard.
+
+    Missing or mismatched identity fails closed; volume/amount requests bypass the cache.
+    """
+    if include_volume or include_amount:
         if status is not None:
             status["cache"] = "off:volume_required"
         return load_minute_from_lake(codes, start, end, workers=workers,
-                                     lake_root=lake_root, include_volume=True)
+                                     lake_root=lake_root, include_volume=True,
+                                     **({"include_amount": True} if include_amount else {}))
     want = {to_canonical_symbol(str(code)) for code in codes}
-    path = minute_cache_path(start, end, cache_dir)
+    if not use_cache:
+        if status is not None:
+            status["cache"] = "off"
+        return load_minute_from_lake(want, start, end, workers=workers, lake_root=lake_root)
+    identity = minute_cache_identity(start, end, lake_root=lake_root,
+                                     source_snapshot=source_snapshot)
+    # Pin the fill to the exact root authenticated above, including resolver/symlink resolution.
+    lake_root = Path(identity["resolver_identity"])
+    start, end = identity["start"], identity["end"]
+    path = minute_cache_path(start, end, cache_dir, identity=identity)
     cached: dict = {}
     had_file = path.is_file()
-    if use_cache and had_file and not rebuild_cache:
+    reusable = had_file and not rebuild_cache and _cache_identity_matches(path, identity)
+    if reusable:
         print(f"minute cache hit {path}", flush=True)
         cached = read_minute_cache(path, want)
     missing = want - set(cached)
@@ -591,22 +691,22 @@ def load_minute_ohlc(
         print(f"minute lake load {len(missing)} codes ({len(cached)} cached)", flush=True)
         fresh = load_minute_from_lake(missing, start, end, workers=workers, lake_root=lake_root)
         cached.update(fresh)
-        if use_cache and fresh:
+        if fresh:
             merged = cached
-            if path.is_file() and not rebuild_cache:
+            if reusable:
                 old = read_minute_cache(path, None)
                 old.update(cached)
                 merged = old
-            write_minute_cache(merged, start, end, cache_dir)
+            write_minute_cache(merged, start, end, cache_dir, identity=identity)
     if status is not None:
-        if not use_cache:
-            status["cache"] = "off"
-        elif rebuild_cache:
+        if rebuild_cache:
             status["cache"] = "rebuild"
-        elif had_file and not missing:
+        elif reusable and not missing:
             status["cache"] = "hit"
-        elif had_file:
+        elif reusable:
             status["cache"] = "partial"
+        elif had_file:
+            status["cache"] = "miss:identity"
         else:
             status["cache"] = "miss"
     return {code: cached[code] for code in want if code in cached}
@@ -634,7 +734,9 @@ def book_frames_from_compact(minute: Mapping[str, object]) -> dict:
                 "high": high,
                 "low": low,
                 "close": close,
-                "ymd": pd.DatetimeIndex(dates).strftime("%Y%m%d").to_numpy(),
+                "ymd": (pd.DatetimeIndex(dates).year.to_numpy() * 10000
+                        + pd.DatetimeIndex(dates).month.to_numpy() * 100
+                        + pd.DatetimeIndex(dates).day.to_numpy()).astype("U8"),
                 "hm": hm,
             },
             index=pd.DatetimeIndex(idx),

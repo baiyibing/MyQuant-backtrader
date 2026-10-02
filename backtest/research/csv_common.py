@@ -59,8 +59,8 @@ def build_calendar(bars: dict[str, pd.DataFrame], start: str, end: str) -> list:
     return calendar
 
 
-def _named_limits(code: str, prev_close: float, names: dict[str, str]):
-    return resolve_limit_prices(code, prev_close, names.get(code, ""))
+def _named_limits(code: str, prev_close: float, names: dict[str, str], as_of=None):
+    return resolve_limit_prices(code, prev_close, names.get(code, ""), as_of=as_of)
 
 
 def qlib_limit_prices(prev_close: float, pct: float = 0.095) -> tuple[float, float]:
@@ -76,10 +76,11 @@ def book_limit_prices(
     names: dict[str, str],
     *,
     qlib_limit_pct: Optional[float] = None,
+    as_of=None,
 ):
     if qlib_limit_pct is not None:
         return qlib_limit_prices(prev_close, float(qlib_limit_pct))
-    return _named_limits(code, prev_close, names)
+    return _named_limits(code, prev_close, names, as_of=as_of)
 
 
 def _pool_names_asof(

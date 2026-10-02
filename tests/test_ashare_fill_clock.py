@@ -51,6 +51,8 @@ AS_BUILT_SCAN_HM_COMPARISONS = {
     "new_peak_hm >= 0",
     "force_sell_hm is not None",
     "cur_hm >= int(force_sell_hm)",
+    # 21ac511: approved opt-in 8.5/8.6 close-clear at 15:00.
+    "cur_hm == CLOSE_CLEAR_HM",
 }
 # FillPriceRule 是具名路径，不是全量选价器，不含 v7。
 NAMED_PRICE_RULES = (
