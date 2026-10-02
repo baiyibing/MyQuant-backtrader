@@ -121,8 +121,9 @@ P3 外置 D5 使用 s12 fix-on + 既有 transform，仅支持该冻结上下文�
 | 真核 TC3 具名消费者 | [TC3 named consumer](note-true-core-tc3-named-consumer-2026-10-02.md) | X1 CLI/HELP 闭环；合成 fixture；永 opt-in；不以 BOOKS 默认为验收；≠δ5≠R4；#305 MERGED `00ab1a24` |
 | 真核 TC4 · X8 对照桥 | [TC4 X8 compare bridge](note-true-core-tc4-x8-compare-bridge-2026-10-02.md) | 仅撮合前意图；禁 fills→意图；独立 comparison 根；恒 `no_ssot_compare_authorization`；无成功 summary.json；≠δ5≠R4；#306 MERGED `79b3995c` |
 | 真核 X6 合成夹具/attestation | [X6 synthetic attestation](note-true-core-x6-synthetic-attestation-2026-10-02.md) | synthetic_fixture only；Fixture PASS≠lake PASS；拒 lake；独立 tool 根；无新 contract/backend_id；≠δ5≠R4；#307 MERGED `f0620ace` |
-| 真核 X6 真湖 END/loader 边界 | [X6 lake boundary](note-true-core-x6-lake-boundary-2026-10-02.md) | lake only；END+bucket_end；只读；拒 synthetic 伪装；不写湖；不解锁 CLI lake；≠δ5≠R4；#309 MERGED `d0804d09` |
-| 真核 X6 真湖 recipe e2e | [X6 lake recipe e2e](note-true-core-x6-lake-recipe-e2e-2026-10-02.md) | 调 `load_minute_orders_source`；lake+END；只读；不写湖；不解锁 CLI lake；≠δ5≠R4；draft |
+| 真核 X6 真湖 END/loader 边界 | [X6 lake boundary](note-true-core-x6-lake-boundary-2026-10-02.md) | lake only；END+bucket_end；只读；拒 synthetic 伪装；不写湖；**该刀**不解锁 CLI lake（CLI lake 见下一行）；≠δ5≠R4；#309 MERGED `d0804d09` |
+| 真核 X6 真湖 recipe e2e | [X6 lake recipe e2e](note-true-core-x6-lake-recipe-e2e-2026-10-02.md) | 调 `load_minute_orders_source`；lake+END；只读；不写湖；≠δ5≠R4；#310 MERGED |
+| 真核 CLI lake opt-in | [CLI lake](note-true-core-cli-lake-2026-10-02.md) | CLI `lake`→S4 hybrid；lake+END；≠ host PASS；不写湖；不 4090；≠δ5≠R4；draft |
 | 真核 TC5 · 扩展包 GO/范围 | [TC5 GO/scope](note-true-core-tc5-go-scope-2026-10-02.md) | docs-only 裁断单；**不** mint 新 contract/backend_id；H-TC5-NEXT=C 已点（#309）；≠δ5≠R4；本刀合入 docs |
 
-L2 `minute_orders` 定位：**永 opt-in**（P1 H4=A · 统一 H-U3 · 真核 H-TC9）。G3 科创板申报数量延后（H5=A）。统一语境与 TC1/TC2/TC3/TC4/X6/TC5 docs **均不授权**改 MatchCore / Fees / `simulate` / VolumeCap·clamp·完成桶。TC1 已合 #303；TC2 X1 已合 #304；TC3 已合 #305；TC4 X8 已合 #306；X6 合成差分已合 #307；X6 真湖只读边界已合 #309；X6 真湖 recipe e2e 见对应 note（draft）；TC5 GO/scope docs 已合（其它码轴仍须独立实施 GO）。
+L2 `minute_orders` 定位：**永 opt-in**（P1 H4=A · 统一 H-U3 · 真核 H-TC9）。G3 科创板申报数量延后（H5=A）。统一语境与 TC1/TC2/TC3/TC4/X6/TC5 docs **均不授权**改 MatchCore / Fees / `simulate` / VolumeCap·clamp·完成桶。TC1 已合 #303；TC2 X1 已合 #304；TC3 已合 #305；TC4 X8 已合 #306；X6 合成差分已合 #307；X6 真湖只读边界已合 #309；X6 真湖 recipe e2e 已合 #310；CLI lake 见对应 note（draft）；TC5 GO/scope docs 已合（写湖/4090/其它轴仍须独立实施 GO）。

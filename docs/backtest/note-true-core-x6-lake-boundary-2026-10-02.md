@@ -130,8 +130,8 @@ docs/backtest/note-true-core-x6-lake-boundary-2026-10-02.md
 
 | 残留 | 说明 |
 |---|---|
-| 完整 `load_minute_orders_source` lake recipe e2e | 见 [X6 lake recipe e2e](note-true-core-x6-lake-recipe-e2e-2026-10-02.md)（本残差 GO · draft；只读；不写湖；不解锁 CLI lake） |
-| 解锁 backend CLI `--evidence-level=lake` | 须另 GO；本刀明确不解锁 |
+| 完整 `load_minute_orders_source` lake recipe e2e | 见 [X6 lake recipe e2e](note-true-core-x6-lake-recipe-e2e-2026-10-02.md)（#310 MERGED） |
+| 解锁 backend CLI `--evidence-level=lake` | 见 [CLI lake note](note-true-core-cli-lake-2026-10-02.md)（残差 R1） |
 | 写湖 / Phase4 写路径 | 须另具名「写湖 GO」 |
 | 4090 host attestation / item-4 live | 须另 GO |
 | TC5 其它轴（X2/X3/X4/X5/X7） | 见 [TC5 GO/scope](note-true-core-tc5-go-scope-2026-10-02.md)（#308 本刀合入；码轴另 GO） |
@@ -146,4 +146,4 @@ docs/backtest/note-true-core-x6-lake-boundary-2026-10-02.md
 - 成交假设 SSOT：[minute-fill-policy-ssot.md](minute-fill-policy-ssot.md)
 - X6 真湖 recipe e2e（只读 load；残差 GO）：[note-true-core-x6-lake-recipe-e2e-2026-10-02.md](note-true-core-x6-lake-recipe-e2e-2026-10-02.md)
 
-**≠δ5 certified ≠R4；无 MatchCore/Fees/simulate 重写；无写湖；无 CLI lake unlock；#309 MERGED。**
+**≠δ5 certified ≠R4；无 MatchCore/Fees/simulate 重写；无写湖；#309/#310 工具自身不解锁 CLI；backend CLI lake 见 [CLI lake note](note-true-core-cli-lake-2026-10-02.md)（draft）；#309 MERGED。**

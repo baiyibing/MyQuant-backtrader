@@ -53,10 +53,13 @@ TIP_GAP_CHECKS = (
     },
     {
         "id": "cli_evidence_still_synthetic_only",
-        "tip": "CLI --evidence-level choices=('synthetic',) only; no lake loader",
+        "tip": (
+            "#309/#310 X6 tools themselves do not unlock backend CLI lake; "
+            "CLI lake is a separate residual (see note-true-core-cli-lake)"
+        ),
         "harden": (
-            "boundary evidence_level=lake_boundary only; does NOT unlock "
-            "CLI --evidence-level=lake"
+            "boundary evidence_level=lake_boundary only; this tool does NOT "
+            "unlock CLI --evidence-level=lake (backend CLI lake is separate)"
         ),
     },
     {
@@ -151,7 +154,8 @@ def build_differential_report(meta: LakeBoundaryMeta) -> dict[str, Any]:
             "does not call load_minute_orders_source / MatchCore / Fees / simulate; "
             "independent tool root; no success summary.json; forever opt-in; "
             "never BOOKS default; read-only lake END boundary; "
-            "does NOT unlock CLI --evidence-level=lake; "
+            "this tool does NOT unlock CLI --evidence-level=lake "
+            "(backend CLI lake is a separate residual); "
             "does NOT claim lake PASS / host attestation / item-4 live / green R"
         ),
         "lake_boundary_notice": LAKE_BOUNDARY_NOTICE,

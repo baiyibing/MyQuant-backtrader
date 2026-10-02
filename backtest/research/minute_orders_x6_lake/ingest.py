@@ -9,8 +9,7 @@ from typing import Any, Mapping
 
 BOUNDARY_META_SCHEMA = "minute_orders_x6_lake_boundary_meta_v0"
 ALLOWED_SOURCE_KIND = "lake"
-# Tool-local evidence token. Does NOT unlock backend CLI --evidence-level=lake
-# (tip CLI remains synthetic-only). Not host / certified / green R.
+# Tool-local evidence token. Not backend CLI lake unlock; not host / certified / green R.
 ALLOWED_EVIDENCE_LEVEL = "lake_boundary"
 ALLOWED_ACCOUNT_ORIGIN = "synthetic_account"
 ALLOWED_COMMANDS_ORIGIN = "designed_limit_batch"
@@ -94,7 +93,7 @@ def meta_from_mapping(payload: Mapping[str, Any]) -> LakeBoundaryMeta:
         raise LakeBoundaryIngestError(
             f"X6 lake boundary refuses evidence_level={evidence_level!r}; "
             f"only {ALLOWED_EVIDENCE_LEVEL!r} "
-            "(does NOT unlock CLI --evidence-level=lake; not host/certified)"
+            "(this boundary tool does NOT unlock CLI --evidence-level=lake; backend CLI lake is separate; not host/certified)"
         )
 
     account_origin = payload.get("account_origin")

@@ -33,7 +33,7 @@ CORE = {
     ROOT / "backtest" / "research" / "minute_orders_backend" / "fees.py",
     ROOT / "backtest" / "research" / "csv_minute_backtest.py",
     ROOT / "backtest" / "research" / "minute_orders_backend" / "source_loader.py",
-    ROOT / "backtest" / "research" / "minute_orders_backend" / "cli.py",
+    # cli.py unlocked by residual R1 CLI lake knife (separate from #310 e2e).
     ROOT / "backtest" / "research" / "ashare_volume_cap.py",
     ROOT / "backtest" / "research" / "run_protocol" / "facade.py",
     ROOT / "backtest" / "research" / "run_protocol" / "views.py",
@@ -294,15 +294,13 @@ def test_package_calls_load_but_core_untouched():
     # Boundary differential knife still must not call loader.
     diff_text = (PKG / "differential.py").read_text(encoding="utf-8")
     assert "load_minute_orders_source(" not in diff_text
-    # Backend CLI must remain synthetic-only (this knife does not unlock lake).
-    cli_text = (
-        ROOT / "backtest" / "research" / "minute_orders_backend" / "cli.py"
-    ).read_text(encoding="utf-8")
-    assert 'choices=("synthetic",)' in cli_text or "choices=('synthetic',)" in cli_text
+    # #310 e2e did not unlock CLI lake; residual R1 may add lake choice later.
+    # Keep asserting this e2e package still does not call the research runner.
+    assert "run_minute_orders_research_with_artifacts" not in e2e_text
 
 
 def test_core_files_byte_stable_vs_knife_base():
-    """Guard: MatchCore/Fees/simulate/source_loader/cli/VolumeCap/_ENTRIES/_FAMILIES empty this knife."""
+    """Guard: MatchCore/Fees/simulate/source_loader/VolumeCap/_ENTRIES/_FAMILIES empty this knife (cli.py is R1 CLI lake; guarded there)."""
     import subprocess as sp
     result = sp.run(
         [
