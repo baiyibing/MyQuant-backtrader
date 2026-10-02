@@ -130,7 +130,7 @@ docs/backtest/note-true-core-x6-lake-boundary-2026-10-02.md
 
 | 残留 | 说明 |
 |---|---|
-| 完整 `load_minute_orders_source` lake recipe e2e | 须另 GO；implementation pin / 真源哈希 |
+| 完整 `load_minute_orders_source` lake recipe e2e | 见 [X6 lake recipe e2e](note-true-core-x6-lake-recipe-e2e-2026-10-02.md)（本残差 GO · draft；只读；不写湖；不解锁 CLI lake） |
 | 解锁 backend CLI `--evidence-level=lake` | 须另 GO；本刀明确不解锁 |
 | 写湖 / Phase4 写路径 | 须另具名「写湖 GO」 |
 | 4090 host attestation / item-4 live | 须另 GO |
@@ -144,5 +144,6 @@ docs/backtest/note-true-core-x6-lake-boundary-2026-10-02.md
 - 湖 ingress 合同：[note-l2-lake-source-ingress-b-l2-01-2026-09-29.md](note-l2-lake-source-ingress-b-l2-01-2026-09-29.md)
 - Phase5 END 研究路径：[ssot/vendor-bar-alignment-ssot.md](ssot/vendor-bar-alignment-ssot.md) §10；[vendor-three-symbol-lake-ingest PLAN](vendor-three-symbol-lake-ingest-2026-10-01/PLAN.md)
 - 成交假设 SSOT：[minute-fill-policy-ssot.md](minute-fill-policy-ssot.md)
+- X6 真湖 recipe e2e（只读 load；残差 GO）：[note-true-core-x6-lake-recipe-e2e-2026-10-02.md](note-true-core-x6-lake-recipe-e2e-2026-10-02.md)
 
 **≠δ5 certified ≠R4；无 MatchCore/Fees/simulate 重写；无写湖；无 CLI lake unlock；#309 MERGED。**
