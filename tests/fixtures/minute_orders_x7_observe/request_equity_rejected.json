@@ -1,0 +1,8 @@
+{
+  "schema": "minute_orders_x7_observe_request_v0",
+  "source_kind": "synthetic_observation_sketch",
+  "source_label": "bad_equity",
+  "equity": 100.0,
+  "evidence_fields": {},
+  "notice": "observation attempt with bare equity key; should be rejected; ≠ green R"
+}

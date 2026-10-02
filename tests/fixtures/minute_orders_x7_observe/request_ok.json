@@ -1,0 +1,11 @@
+{
+  "schema": "minute_orders_x7_observe_request_v0",
+  "source_kind": "synthetic_observation_sketch",
+  "source_label": "sketch_a_x1_named_consumer_memory",
+  "evidence_fields": {
+    "adapter_id": "minute_orders_intent_x1",
+    "tool_status": "fixture_pass_not_lake_pass",
+    "order_count": 2
+  },
+  "notice": "observation-only projection of already-obtained sketch; ≠ green R; no NAV rewrite"
+}

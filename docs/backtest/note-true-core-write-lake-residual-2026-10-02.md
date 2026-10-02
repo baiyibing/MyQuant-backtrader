@@ -7,7 +7,7 @@
 | Human GO | **「GO 写湖」** = Codex R2 · 写湖 / Phase4 残差；本刀因 **本仓 consume-only** 与污染风险，落地为 **docs + staging dry-run 骨架 + MUST Human cuts**（**非**生产写湖） |
 | 方案 | `/workspace/handoffs/minute_engine_true_core_new_20261002/`；顾问 [CODEX_RESIDUAL_GO](`/workspace/handoffs/minute_engine_true_core_new_20261002/reviews/CODEX_RESIDUAL_GO.md`)（仓外；R2 排最末） |
 | 硬约束 | **不** mint 新经济合同 / 新 `backend_id`；`tool_id`≠backend_id；**无** `--write-lake` 生产旗；**不**写 `stock_data` / 配置湖根；空 diff MatchCore/Fees/`simulate`/source_loader/CLI；≠δ5≠R4；无 4090；永 opt-in；永不 BOOKS |
-| PR | **draft · 勿合**（本刀） |
+| PR | **#312 MERGED** `3f7af6a2` |
 
 > **本 note ≠ 生产写湖授权，≠ host PASS，≠ item-4 live，≠ 绿 R，≠ 借用 vendor Phase4/Phase5 收据作本链写权，≠ 新身份 mint。**  
 > 本仓 [AGENTS.md](../../AGENTS.md)：**Consume only**；外部下载与 vendor merge 在 OSkhQuant1.3。  
@@ -38,7 +38,7 @@ Human 点了「GO 写湖」。Codex 将该轴排在残差最末：物理污染/�
 | **locks** | 空 MatchCore/Fees/simulate/loader；≠δ5≠R4；永不 BOOKS；永 opt-in；无绿 R；无 4090（除非另 GO） |
 | **budget** | 按 H-TC8 **单独重估**；「C 已开」不吞进原 1–2 人周 |
 
-未裁齐前：**任何生产写湖实施 = 越权**。本 draft 只把 cuts 落成机器可读 `MUST_HUMAN_CUTS.json`。
+未裁齐前：**任何生产写湖实施 = 越权**。cuts 清单仍是未裁齐草案，只落成机器可读 `MUST_HUMAN_CUTS.json`。
 
 ## 3. 如何调用（staging dry-run）
 
@@ -113,4 +113,4 @@ pytest tests/test_minute_orders_write_lake_staging.py -q
 - Vendor staging：[vendor-three-symbol-lake-ingest-2026-10-01/PLAN.md](vendor-three-symbol-lake-ingest-2026-10-01/PLAN.md)
 - TC5 菜单：[note-true-core-tc5-go-scope-2026-10-02.md](note-true-core-tc5-go-scope-2026-10-02.md)
 
-**≠δ5 certified ≠R4；staging dry-run ≠ 生产写湖 ≠ host PASS；无 MatchCore/Fees/simulate 重写；永 opt-in；本刀 draft 勿合。**
+**≠δ5 certified ≠R4；#312 已合；staging dry-run ≠ 生产写湖 ≠ host PASS；无 MatchCore/Fees/simulate 重写；永 opt-in。**

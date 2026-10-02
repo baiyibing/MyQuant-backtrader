@@ -33,8 +33,8 @@ PLAN 编号下一阶段 = **TC5 · 扩展包**。旁路轴 X6 **合成**已合�
 | **X3 · 第二价格**（OHLC 路径 / next-open） | 触及 S0 排除 B；H-TC3=**首包否** | **必须**新身份；对照另包 | **默认不推荐为首刀**（H-TC3） |
 | **X4 · 多账户 / 组合层** | 触及 S0 单账户 | **必须**新身份 | 候选；未点名不开 |
 | **X5 · 向量/批实例** | 同合同多 symbol 批跑 | 同合同+oracle 时可讨论；经济语义变仍须新身份 | 候选；吞吐须另证 |
-| **X6 · 真湖 loader** | 相对 tip `source_loader` 湖路径交付 | **不**用合成刀冒充；须 **具名 GO**；与 #307 合成差分分开 | **已点 C** → 边界 #309 · e2e #310 · CLI lake #311 · **写湖残差**见 [write-lake note](note-true-core-write-lake-residual-2026-10-02.md)（staging dry-run；≠生产写；draft） |
-| **X7 · 观察面** | **新**投影入口；不塞 `views._FAMILIES`；观察 ≠ 绿 R | 加法型观察片可讨论同 backend 升 artifact；**禁止**伪装绿 R | 候选；H-TC6=可设计；实施仍须点名 |
+| **X6 · 真湖 loader** | 相对 tip `source_loader` 湖路径交付 | **不**用合成刀冒充；须 **具名 GO**；与 #307 合成差分分开 | **已点 C** → 边界 #309 · e2e #310 · CLI lake #311 · **写湖 staging** [write-lake note](note-true-core-write-lake-residual-2026-10-02.md)（#312 MERGED；≠生产写） |
+| **X7 · 观察面** | **新**投影入口；不塞 `views._FAMILIES`；观察 ≠ 绿 R | 加法型观察片可讨论同 backend 升 artifact；**禁止**伪装绿 R | Human 已点 A；实装见 [ax7 note](note-true-core-ax7-observe-2026-10-02.md)（draft 勿合）；不塞 `_FAMILIES` |
 | **其它** | — | — | 须新裁；勿塞进本表默许 |
 
 ### 2.1 仍锁定的横切约束（不因点轴而松）
@@ -68,7 +68,7 @@ PLAN 编号下一阶段 = **TC5 · 扩展包**。旁路轴 X6 **合成**已合�
 | **H-TC5-ID** | 若选触及 S0 排除的轴，新 `contract_version` / `backend_id` 命名草稿？ | 未裁前 **禁止**仓库内预占字符串当已批准身份 |
 | **H-TC5-SIM** | 该轴是否需要改 `simulate`？ | 默认 **否**（H-TC4）；要改须函数级 allowlist 另票 |
 
-**H-TC5-NEXT=C** 已裁（真湖只读边界 → #309；e2e → #310；CLI lake → #311）。**写湖残差**见 [write-lake note](note-true-core-write-lake-residual-2026-10-02.md)（staging dry-run + MUST cuts；≠生产写授权）。**≠** 批 X2–X5/X7 写仓，**≠** 批新合同 mint，**≠** 批生产写湖 / 4090（均须另 GO + cuts）。
+**H-TC5-NEXT=C** 已裁（真湖只读边界 → #309；e2e → #310；CLI lake → #311）。**写湖 staging** 已合 #312（[write-lake note](note-true-core-write-lake-residual-2026-10-02.md)；≠生产写）。Human 另点 **A·X7**：见 [Codex residual plan](note-true-core-codex-residual-plan-2026-10-02.md) · [A·X7 observe](note-true-core-ax7-observe-2026-10-02.md)（draft 勿合；新投影；不塞 `_FAMILIES`）。**≠** 批生产写湖 / 4090 / X2–X5 新身份（均须另 GO + cuts）。
 
 ## 5. 负面清单（本 PR diff 须空）
 
