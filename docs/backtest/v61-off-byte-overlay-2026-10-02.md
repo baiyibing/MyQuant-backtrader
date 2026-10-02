@@ -20,6 +20,10 @@
   （要求 pandas 3.0.6；已存在则拒绝覆盖）。
 - 校验：`--check` 覆盖 27 未改历史 + 12 S8 校正 + 2 version6_1 增量 = 41 case。
 
+## 相关
+
+- 策略对照 / 入口 sol：[note-version6_1-sol-vs-version6-2026-10-02.md](note-version6_1-sol-vs-version6-2026-10-02.md)
+
 ## 非目标
 
 - 不重写 / 不触碰 TopK frozen-bytes 或其它 byte snapshot scatter。
