@@ -68,7 +68,7 @@ PLAN 编号下一阶段 = **TC5 · 扩展包**。旁路轴 X6 **合成**已合�
 | **H-TC5-ID** | 若选触及 S0 排除的轴，新 `contract_version` / `backend_id` 命名草稿？ | 未裁前 **禁止**仓库内预占字符串当已批准身份 |
 | **H-TC5-SIM** | 该轴是否需要改 `simulate`？ | 默认 **否**（H-TC4）；要改须函数级 allowlist 另票 |
 
-**H-TC5-NEXT=C** 已裁（真湖只读边界 → #309 MERGED）。**≠** 批 X2–X5/X7 写仓，**≠** 批新合同 mint，**≠** 批写湖 / CLI lake unlock（均须另 GO）。recipe e2e 见 [e2e note](note-true-core-x6-lake-recipe-e2e-2026-10-02.md)。
+**H-TC5-NEXT=C** 已裁（真湖只读边界 → #309 MERGED）。**≠** 批 X2–X5/X7 写仓，**≠** 批新合同 mint，**≠** 批写湖 / CLI lake unlock（均须另 GO）。recipe e2e 见 [e2e note](note-true-core-x6-lake-recipe-e2e-2026-10-02.md)（**#310 draft · 勿合**）。
 
 ## 5. 负面清单（本 PR diff 须空）
 

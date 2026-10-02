@@ -325,11 +325,6 @@ def run_x6_lake_recipe_e2e(
         root, report_path = write_e2e_report(
             report, parent=parent, run_id=run_id,
         )
-        # recipe.parent is documented only; this knife must not materialize it.
-        recipe_parent = Path(recipe["parent"]).resolve()
-        if recipe_parent.exists() and recipe_parent != root:
-            # Allowed only if pre-existing; we never create research_v1 success.
-            pass
     return LakeRecipeE2EOutcome(
         tool_id=TOOL_ID,
         e2e_status=E2E_STATUS,

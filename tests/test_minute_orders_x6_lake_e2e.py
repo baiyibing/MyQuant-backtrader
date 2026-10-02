@@ -26,12 +26,17 @@ from tests.test_minute_orders_source_loader import SyntheticCase
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "research" / "run_x6_lake_recipe_e2e.py"
 PKG = ROOT / "backtest" / "research" / "minute_orders_x6_lake"
+# Knife base tip (#308 MERGED). Guard compares commits, not working-tree vs HEAD.
+KNIFE_BASE = "5fe84f725a0290318fcbe6a8ab9a8d097bda3d9f"
 CORE = {
     ROOT / "backtest" / "research" / "minute_orders_backend" / "match.py",
     ROOT / "backtest" / "research" / "minute_orders_backend" / "fees.py",
     ROOT / "backtest" / "research" / "csv_minute_backtest.py",
     ROOT / "backtest" / "research" / "minute_orders_backend" / "source_loader.py",
     ROOT / "backtest" / "research" / "minute_orders_backend" / "cli.py",
+    ROOT / "backtest" / "research" / "ashare_volume_cap.py",
+    ROOT / "backtest" / "research" / "run_protocol" / "facade.py",
+    ROOT / "backtest" / "research" / "run_protocol" / "views.py",
 }
 
 
@@ -296,11 +301,14 @@ def test_package_calls_load_but_core_untouched():
     assert 'choices=("synthetic",)' in cli_text or "choices=('synthetic',)" in cli_text
 
 
-def test_core_files_byte_stable_vs_head():
-    """Guard: MatchCore/Fees/simulate/source_loader/cli stay empty this knife."""
+def test_core_files_byte_stable_vs_knife_base():
+    """Guard: MatchCore/Fees/simulate/source_loader/cli/VolumeCap/_ENTRIES/_FAMILIES empty this knife."""
     import subprocess as sp
     result = sp.run(
-        ["git", "diff", "--name-only", "HEAD", "--", *[str(p) for p in sorted(CORE)]],
+        [
+            "git", "diff", "--name-only", f"{KNIFE_BASE}..HEAD", "--",
+            *[str(p) for p in sorted(CORE)],
+        ],
         cwd=ROOT, capture_output=True, text=True, check=True,
     )
     assert result.stdout.strip() == ""

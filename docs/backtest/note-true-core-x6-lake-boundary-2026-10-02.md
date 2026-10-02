@@ -38,7 +38,7 @@
 | 命令 origin 仍 `designed_limit_batch` | meta 钉死该 origin |
 | lake notice：源校验 ≠ host certification | notice 必须含 `lake boundary attestation != host PASS`；禁升级宣称 |
 
-本刀 **不**调用完整 `load_minute_orders_source`（避免把 implementation pin / 真湖 recipe e2e / 写湖拖进本边界刀）；只对照并加固边界不变量。完整 lake recipe 接线 / 4090 仍须另具名 GO。
+本刀 **不**调用完整 `load_minute_orders_source`（避免把 implementation pin / 真湖 recipe e2e / 写湖拖进本边界刀）；只对照并加固边界不变量。本边界刀仍不调用 `load_minute_orders_source`；recipe e2e 见 [e2e note](note-true-core-x6-lake-recipe-e2e-2026-10-02.md)（**#310 draft · 勿合**，只读）；4090 仍须另 GO。
 
 ## 3. 身份澄清
 
