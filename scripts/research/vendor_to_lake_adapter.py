@@ -18,11 +18,20 @@ _spec = importlib.util.spec_from_file_location(
 xcheck = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(xcheck)
 DEFAULT_SYMBOLS = ['002231.SZ', '300379.SZ', '600200.SH']
+AUCTION_POLICY = 'exclude_0930_1130_1500'
 TRANSFORMATIONS = ['Wind continuous START -> END (+1 minute)',
                    'shares -> lots (floor division; remainder audited)',
                    'drop Wind START 09:30 auction and 11:30/15:00 boundaries before continuous mapping',
                    'sparse A: observed bars only; no zero-fill',
                    'THS daily: day keys, no minute shift']
+
+
+class StartIntervalError(ValueError):
+    """Continuous-session failure retaining the already-computed boundary audit."""
+
+    def __init__(self, audit):
+        super().__init__('outside declared continuous-session intervals; non-boundary START requires review')
+        self.excluded_start_boundary = audit
 
 
 def parser():
@@ -35,7 +44,10 @@ def parser():
     p.add_argument('--lake-label', choices=['END'], default='END')
     p.add_argument('--unit-out', choices=['lots'], default='lots')
     p.add_argument('--shares-to-lots-div', type=int, choices=[100], default=100)
-    p.add_argument('--auction-policy', choices=['exclude_0930'], default='exclude_0930')
+    p.add_argument('--auction-policy', choices=[AUCTION_POLICY, 'exclude_0930'], default=AUCTION_POLICY,
+                   help='Exclude START 09:30, 11:30 and 15:00 (hm 570/690/900) with audit; '
+                        'continuous mapping unchanged. exclude_0930 is a compatibility alias; '
+                        'PIN records the canonical policy name.')
     return p
 
 
@@ -126,7 +138,7 @@ def read_wind_start(paths, symbols):
     kept = result.loc[~dropped].copy()
     valid = ((kept.hm >= 570) & (kept.hm < 690) | (kept.hm >= 780) & (kept.hm < 900))
     if not valid.all():
-        raise ValueError('outside declared continuous-session intervals; non-boundary START requires review')
+        raise StartIntervalError(audit)
     kept['hm'] = kept.hm + 1
     return kept, result, audit
 
@@ -248,7 +260,7 @@ def main(argv=None):
         pin = dict(minute_label='END; START 09:30/11:30/15:00 excluded', excluded_start_boundary=boundary, unit='lots', unit_out='lots',
                    time_encoding='local_wall_as_utc_ms', transformations=TRANSFORMATIONS if args.ths_daily else TRANSFORMATIONS[:-1],
                    sparse_policy='A', shares_to_lots_div=args.shares_to_lots_div,
-                   auction_policy=args.auction_policy, dry_run=True, lake_writes=False,
+                   auction_policy=AUCTION_POLICY, dry_run=True, lake_writes=False,
                    sources=pins, symbols=symbols, tip=tip,
                    human_acceptance='2026-10-02 boundary exclude GO; staging only; write-lake needs separate Human GO; ≠δ5 ≠R4',
                    daily_label='trading day; no minute shift',
@@ -269,6 +281,8 @@ def main(argv=None):
             raise ValueError('source changed during staging')
         status.update(status='PASS', reason='staging contract verified; not real-vendor acceptance')
     except Exception as exc:
+        if isinstance(exc, StartIntervalError):
+            status['excluded_start_boundary'] = exc.excluded_start_boundary
         status['reason'] = str(exc)
     json_write(out / 'STATUS.json', status)
     (out / 'REPORT.md').write_text(

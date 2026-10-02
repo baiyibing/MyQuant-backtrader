@@ -22,7 +22,7 @@
   --out-dir /path/to/new_staging
 ```
 
-`--wind` 必填，可重复/多文件；`--ths-daily` 可选、可重复。默认标的为 `002231.SZ 300379.SZ 600200.SH`，可用 `--symbols` 显式筛选。参数仅支持 START→END、lots、除数 100、exclude_0930；dry-run 恒为 true，**没有 `--write-lake`**。
+`--wind` 必填，可重复/多文件；`--ths-daily` 可选、可重复。默认标的为 `002231.SZ 300379.SZ 600200.SH`，可用 `--symbols` 显式筛选。参数仅支持 START→END、lots、除数 100；`--auction-policy` 默认 `exclude_0930_1130_1500`，统一排除并审计 START 09:30 / 11:30 / 15:00（hm 570/690/900），连续映射不变。旧 `exclude_0930` 保留为等价兼容别名，传入别名时 PIN 的 `auction_policy` 仍记录规范值 `exclude_0930_1130_1500`；`auction_dropped` 仍仅计 09:30。dry-run 恒为 true，**没有 `--write-lake`**。
 
 输出 hive-like `period={1m,1d}/dividend_type=none/symbol=XXX/data.parquet`，包含 symbol/time/OHLC/volume（lots）；1m END 上海墙钟以 `local_wall_as_utc_ms` 编码，1d 用同编码的交易日午夜。另输出 PIN.json、STATUS.json、REPORT.md、remainder_audit.json 与 coverage_audit.json。PIN 逐源列实际路径、周期、sha256、转换清单、Human acceptance；覆盖审计列输入/输出/竞价排除与逐标的计数，缺失请求标的明确列出，不伪造覆盖。零行输入或全部被排除时 FAIL。
 
@@ -38,6 +38,6 @@ Phase3 真三票 staging 验收另需 Human GO，包含源 RECEIPT SHA、开盘/
 
 ## 2026-10-02 START boundary exclude 刀（Human GO）
 
-Phase3 host staging 在 `73a7e68` 因 RECEIPT 中 hm=690（11:30）/900（15:00）落在 START 连续区间外而整文件 FAIL，证据目录 `/workspace/handoffs/vendor_lake_adapter_host_20261001/`。本刀将 hm∈{570,690,900} 在 +1min 映射前排除；`excluded_start_boundary` 在 coverage/PIN/STATUS/REPORT 记录总数、逐标的/逐 hm 计数及最多 20 条原始 START 键与原因。`auction_dropped` 继续只计 09:30。其他越界行仍 fail closed；排除后无连续 bar 仍 FAIL。
+Phase3 host staging 在 `73a7e68` 因 RECEIPT 中 hm=690（11:30）/900（15:00）落在 START 连续区间外而整文件 FAIL，证据目录 `/workspace/handoffs/vendor_lake_adapter_host_20261001/`。本刀将 hm∈{570,690,900} 在 +1min 映射前排除；`excluded_start_boundary` 在 coverage/PIN/STATUS/REPORT 记录总数、逐标的/逐 hm 计数及最多 20 条原始 START 键与原因。`auction_dropped` 继续只计 09:30。其他越界行仍 fail closed，并在 FAIL STATUS/REPORT 保留已计算的边界审计；排除后无连续 bar 仍 FAIL。
 
 Sparse A、lots //100 与余数审计不变；只跑合成测试，仍 staging-only / 无湖写入 / ≠δ5 ≠R4 / 不改 MatchCore/Fees/engine/simulate。PR 保持 draft，**勿合，等待 Human「合」**。

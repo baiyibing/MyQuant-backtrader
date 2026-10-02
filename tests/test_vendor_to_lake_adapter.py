@@ -180,11 +180,35 @@ def test_only_boundaries_fail_with_audit(tmp_path, minutes):
 
 @pytest.mark.parametrize('unexpected', ['09:29', '11:31', '12:00', '15:01'])
 def test_non_boundary_still_fail_closed(tmp_path, unexpected):
-    path = source(tmp_path, ('10:00', '11:30', unexpected))
+    path = source(tmp_path, ('09:30', '10:00', '11:30', '15:00', unexpected))
     out = tmp_path / 'out'
     assert a.main(['--wind', str(path), '--out-dir', str(out)]) == 1
-    assert 'outside declared continuous-session intervals' in json.loads((out / 'STATUS.json').read_text())['reason']
+    status = json.loads((out / 'STATUS.json').read_text())
+    assert 'outside declared continuous-session intervals' in status['reason']
+    audit = status['excluded_start_boundary']
+    assert audit['count'] == 3
+    assert audit['per_hm'] == {'570': 1, '690': 1, '900': 1}
+    assert audit['per_symbol']['002231.SZ'] == 3
+    assert {row['hm'] for row in audit['samples']} == {570, 690, 900}
+    assert json.dumps(audit, ensure_ascii=False, indent=2) in (out / 'REPORT.md').read_text()
     assert not list(out.rglob('*.parquet'))
+
+
+@pytest.mark.parametrize('policy', [None, 'exclude_0930', 'exclude_0930_1130_1500'])
+def test_auction_policy_canonical_pin(tmp_path, policy):
+    path = source(tmp_path, ('09:30', '09:31', '11:30', '15:00'))
+    out = tmp_path / 'out'
+    argv = ['--wind', str(path), '--out-dir', str(out)]
+    if policy is not None:
+        argv += ['--auction-policy', policy]
+    assert a.main(argv) == 0
+    pin = json.loads((out / 'PIN.json').read_text())
+    assert pin['auction_policy'] == 'exclude_0930_1130_1500'
+    coverage = json.loads((out / 'coverage_audit.json').read_text())['1m']
+    assert coverage['excluded_start_boundary']['count'] == 3
+    assert coverage['auction_dropped'] == coverage['bars_out'] == 1
+    help_text = a.parser().format_help()
+    assert all(token in help_text for token in ('09:30', '11:30', '15:00', '570/690/900'))
 
 
 def test_boundary_audit_capped_multiple_symbols_parquet(tmp_path):
