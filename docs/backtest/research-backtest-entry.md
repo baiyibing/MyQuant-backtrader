@@ -75,7 +75,7 @@
 - Mode A/B 提案：[stock-backtest-unified-exit-proposal-2026-09-17.md](stock-backtest-unified-exit-proposal-2026-09-17.md)
 - 策略 12：[plan-strategy12-jinrongyuan-2026-09-21.md](plan-strategy12-jinrongyuan-2026-09-21.md)
 
-策略 1–6 也是 `stock_pool` 上的人工书（卖点更早、更简单）；策略 6 仍是常用对照。它们和策略 8 共用引擎，不是另一份名单。
+策略 1–6 / 6.1 也是 `stock_pool` 上的人工书；策略 6 仍是常用对照，6.1 为 2026-10-02 人裁新书（梯子止盈 + per_name）。它们和策略 8 共用引擎，不是另一份名单。
 
 ---
 
@@ -87,6 +87,7 @@
 |---------|----------|------|--------|
 | version1…5 | `stock_pool/` | 人工书 | 早期卖点（止损/回撤/涨停保留/均线/2% 止盈等）；已持通常不叠加 lot |
 | version6 | `stock_pool/` | 人工书 | 名单加仓 + 2% 止损 + 分档回撤；`daily_quota` |
+| version6_1 | `stock_pool/` | 人工书 | 无上限梯子止盈 + 5% 止损；`per_name` 100 万独立组；对照 [note-version6_1-sol-vs-version6-2026-10-02.md](note-version6_1-sol-vs-version6-2026-10-02.md) |
 | version7 | **海龟池，必填 `--pool-dir`** | 人工仓位机 | 独立入口 `csv_minute_backtest_v7.py`，不进 1–10 BOOKS |
 | version8 / 8.1 / 8.2 / 8.3 | `stock_pool/` | **人工优化主线** | per_name 100 万；8.x 为冻结里程碑，不要当现行宿主书 |
 | version9 | 导出器，拒绝 `stock_pool/` | 人工书 + 独立买点 | 底量超顶量；止损 8%、满 20 日强平 |
