@@ -10,6 +10,8 @@
 
 `production_C=frozen`：本 PR 不改变生产 fill / scan / fee / clock 默认，也不撤销此前已合入的独立 Human GO。本表记录各入口已有合同及比较资格，不建立可配置超级成交核；三仓分工仍见 [成交引擎定位][positioning]。S1 目录、S2 helper 抽取均未授权；本 PR **勿合，等待 Human「合」**。
 
+**Bar 身份正交指针（非本表行）**：`minute_label` / 股·lots / sparse·full / auction 政策见 [vendor-bar-alignment-ssot][vendor-bar]（§5/§11；P1 Human defaults）。vendor-bar **不是**第二套成交默认表；本表仍是唯一入口默认总表。
+
 本次仅只读核对代码与冻结说明；不运行 Python、测试或湖回测，不提供新 NAV / 收益数字。引用文档中的历史测试、跑数和 SHA 是来源记录，不代表本次复验。
 
 ## 2. 读表规则与勘误
@@ -110,6 +112,7 @@ S0 前后**所有行为保持一致**：成交、拒绝 / 异常、现金、持�
 - 本 PR 只改本 SSOT、`research-backtest-entry.md`、`AGENTS.md`、`engine-ashare-correctness.md` 四份 Markdown。无 `.py`、测试 / fixture / config / CI / HELP_LOCK / parser / preset 改动，无湖与新 NAV，无默认翻转。`plan-minute-fill-policy-infra-2026-09-28.md` 浏览副本保持 untracked / out of PR。
 
 [entry]: research-backtest-entry.md
+[vendor-bar]: ssot/vendor-bar-alignment-ssot.md
 [positioning]: engine-positioning-ssot.md
 [proposal]: stock-backtest-unified-exit-proposal-2026-09-17.md
 [correctness]: engine-ashare-correctness.md
