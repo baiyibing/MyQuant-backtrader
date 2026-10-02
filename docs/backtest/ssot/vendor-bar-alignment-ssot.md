@@ -75,3 +75,16 @@
 ## 9. Phase2 adapter staging（独立 Human GO）
 
 [三票 Phase2 PLAN](../vendor-three-symbol-lake-ingest-2026-10-01/PLAN.md) 与 [adapter CLI](../../../scripts/research/vendor_to_lake_adapter.py) 仅将已接受的 Wind START shares（可选 THS 1d）转换到独立 staging：sparse A、lots（//100 且审计余数）、按 2026-10-02 Human boundary GO 删除 START 09:30 竞价及 11:30/15:00 边界后连续 +1min，`excluded_start_boundary` 在 coverage/PIN/STATUS/REPORT 保留计数与封顶样本；其他越界及排除后无连续 bar 仍 FAIL，纯 xcheck 默认 fail-closed 不变。此 GO 不改变 §7 的 shares overlay，不代表真实三票验收；write-lake 仍需独立 Human GO，CLI 无写湖开关。≠δ5 ≠R4；勿合，等待 Human「合」。
+
+## 10. Phase4 三票入湖 + Phase5 研究路径（lake END）
+
+2026-10-02：三票 `002231.SZ` / `300379.SZ` / `600200.SH` 已按 Phase4 写入湖（`minute_label=END`；at-rest **lots**；sparse A；underscore hive `symbol={002231_SZ,...}`）。证据：`/workspace/handoffs/vendor_lake_adapter_host_20261001/`（写湖 RECEIPT / PIN；xcheck Wind START↔湖 END `volume_scale=100`）。
+
+研究路径可改读 **湖 END+lots → market export ×100→shares**（顶层 PIN `minute_label=END`、`unit=raw_shares_incremental`、`transformations=[]`），其余宇宙 siblings 仍按历史湖导出。稀疏 A 使 tip `run_topk_cap_compare.py` 的 full-grid 门槛 INPUT_BLOCKED；本批用 **host-only lake-accept** 松弛（仅放宽满网断言，保留 END/shares/PIN），不改 tip MatchCore/Fees/`simulate`。
+
+Phase5 宿主证据（box 镜像）：
+- 方案：`/workspace/handoffs/vendor_lake_phase5_research_path_20261002/PLAN.md`
+- 5.2 market：`D:\exports\vendor_lake_phase5_host_20261002\market_lake_end_20261002130705`（box：`/workspace/handoffs/vendor_lake_phase5_host_20261002/market_lake_end_20261002130705`）
+- 5.3 两臂：`D:\exports\vendor_lake_phase5_host_20261002\compare_lake_end_accept_20261002131446`（cap_off ~1.88% / cap_on ~1.07%；`skip_volume_unavailable` cap_on=10）
+
+**START→END 键位移 ⇒ 与 START-accept overlay 的 PnL/收益不可直接回归对比**；本条只记口径变更与指针，不宣称数值回归。≠δ5 certified ≠R4；docs-only；勿合，等待 Human「合」。
