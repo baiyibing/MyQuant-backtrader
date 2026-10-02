@@ -62,9 +62,13 @@ Qlib `PortAnaRecord` 停用。Cerebro / Rolling 已退场（2026-09-16）。chip
 - **用途**：验收唯一入口。改资金/卖核/调度，单测 + 真栈 baseline。
 - **禁**：用 LEBS 或向量化净值代替真栈签字；把事故复盘（R3）先当回测做。
 
-### 3.4 规划中的 L1 / L2（P0 仅文档）
+### 3.4 L1 / L2（tip 已交付薄层；统一上限已锁）
 
-L1 拟作 native CSV / v7 / JR / grid Mode B 完整 run 的薄 facade，不是共享调度 / 定价核；L2 拟作新 Human 冻结合同下、独立身份且显式 opt-in 的可选研究后端，不进 BOOKS 默认，也不替换共享 CSV。二者尚未实现或获代码 GO，不改变三件引擎分工；Cerebro 继续禁止复活，L2 ≠ `l2_analytics/` ≠ LEBS ≠ 1.3 MockQMT。切片门禁见 [L1/L2 产品边界（P0）](note-l1-l2-research-engine-boundary-2026-09-28.md)。
+> 历史措辞「规划中 / 尚未交付」以 P0 当时为准；**不以之倒退 tip**。
+
+L1 已是 native CSV / v7 / JR / grid Mode B / L2-research 完整 run 的薄 facade（精确白名单委托，不是共享调度 / 定价核）。L2 `minute_orders` 为独立身份、**永 opt-in** 的可选研究后端，不进 BOOKS 默认，也不替换共享 CSV。二者不改变三件引擎分工；Cerebro 继续禁止复活，L2 ≠ `l2_analytics/` ≠ LEBS ≠ 1.3 MockQMT。
+
+2026-10-02 Human 锁定统一运行上限 = 现有 Thin adapter（档 B）；不开真核；不碰 MatchCore / Fees / `simulate`。见 [统一上限 + U1 对账](note-minute-engine-unify-ceiling-u1-2026-10-02.md)；产品边界见 [L1/L2 产品边界](note-l1-l2-research-engine-boundary-2026-09-28.md)。
 
 ---
 

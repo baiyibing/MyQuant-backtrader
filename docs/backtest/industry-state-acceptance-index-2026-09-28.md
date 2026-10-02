@@ -104,9 +104,9 @@ P3 外置 D5 使用 s12 fix-on + 既有 transform，仅支持该冻结上下文�
 
 见[基线审计 §5](industry-gaps-bt-2026-09-28.md#5-与三线的交叉依赖)：先锁价格域、现金时序与输入身份，再单轴裁决 TopK/#214、参考价/权益、容量/申报量及 joint-return 独立合同；各线不互相代验，资料索引完成不构成下一刀 GO。
 
-## 7 P1/P2 bar 身份 / adapters 指针（只读 · 非第二默认表）
+## 7 P1/P2 / 统一上限指针（只读 · 非第二默认表）
 
-2026-10-02 Human：P1 docs 已合 #298；P2-A/B/C draft（H1=A / H2=A / H3=B / H4=A / H5=A / H6=B 勿合）。**本索引不另开平行成交默认表**；入口默认继续只链 [minute-fill-policy-ssot.md](minute-fill-policy-ssot.md)。
+2026-10-02 Human：P1 docs 已合 #298；P2-A/B/C 已合 #299/#300；统一选项 H-U* 锁定为方案推荐（上限=现有 L1/B；仅 U1 docs）。**本索引不另开平行成交默认表**；入口默认继续只链 [minute-fill-policy-ssot.md](minute-fill-policy-ssot.md)。
 
 | 主题 | 指针 | 边界 |
 |---|---|---|
@@ -115,5 +115,6 @@ P3 外置 D5 使用 s12 fix-on + 既有 transform，仅支持该冻结上下文�
 | #291 + P2-B 预检 | 本页 §1 δ5 行；`participation_rate_precheck.py`；`run_topk_cap_compare.py` | ≠δ5 certified ≠R4；≠ capacity certified |
 | P2-C L2↔共享湖 | [L1/L2 边界 §6](note-l1-l2-research-engine-boundary-2026-09-28.md)；P2 adapters §4 | 同 PIN 不同后端 → 红混比；L2 永 opt-in |
 | JR-clock G hygiene | [G 回填 note](note-jr-clock-g-host-reverify-backfill-2026-10-01.md)（#297 合入 tip） | ≠δ5≠R4 |
+| 统一上限 / U1 | [unify ceiling U1](note-minute-engine-unify-ceiling-u1-2026-10-02.md)；handoff `/workspace/handoffs/minute_engine_unify_plan_20261002/` | 上限=现有 L1/B；不开真核；不碰 MatchCore/Fees/`simulate`；本 PR draft 勿合 |
 
-L2 `minute_orders` 定位：**永 opt-in**（H4=A）。G3 科创板申报数量延后（H5=A）。不授权改 MatchCore / Fees / `simulate` / VolumeCap·clamp·完成桶。P2 draft **勿合，等待 Human「合」**。
+L2 `minute_orders` 定位：**永 opt-in**（P1 H4=A · 统一 H-U3）。G3 科创板申报数量延后（H5=A）。不授权改 MatchCore / Fees / `simulate` / VolumeCap·clamp·完成桶。统一 U1 docs draft **勿合，等待 Human「合」**。
