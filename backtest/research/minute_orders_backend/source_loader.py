@@ -835,6 +835,11 @@ def load_minute_orders_source(recipe_path, *, expected_sha256: str) -> LoadedSou
     object_fields(calendar, ("trading_dates",), "calendar")
     account = store.role(recipe["roles"]["account"], "account")
     object_fields(account, ("origin", "initial_cash", "initial_lots", "buy_fees", "sell_fees", "participation_rate", "requires_marks"), "account")
+    # P2-B loader-exit shell: rate unit/domain via shared precheck. ≠δ5≠R4. Not MatchCore.
+    from backtest.research.participation_rate_precheck import (
+        precheck_cli_participation_rate,
+    )
+    precheck_cli_participation_rate(float(account["participation_rate"]))
     require(account["origin"] == "synthetic_account" and account["requires_marks"] is True,
             "B-L2-01 requires explicit synthetic account and marks")
     require(type(account["initial_lots"]) is list, "initial lots required")

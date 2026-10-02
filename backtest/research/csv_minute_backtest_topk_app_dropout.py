@@ -27,6 +27,11 @@ from backtest.research.csv_minute_backtest_v7 import (
     summarize_v7,
     write_run_artifacts,
 )
+from backtest.research.csv_minute_volume import completed_minute_volumes
+from backtest.research.participation_rate_precheck import (
+    precheck_cli_participation_rate,
+    precheck_completed_bucket_samples,
+)
 from backtest.research.csv_pool import is_repo_stock_pool
 from backtest.research.market_layer import as_date as _as_date
 from backtest.research.topk_app_dropout import (
@@ -107,11 +112,22 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--dump-pool-dir", type=Path, help="Write intersect CSVs here")
     parser.add_argument("--cash-total", type=float, default=DEFAULT_CASH_TOTAL)
     parser.add_argument("--output-dir")
+    parser.add_argument(
+        "--participation-rate", type=float, default=None,
+        help="research opt-in finite [0,1]; omitted = cap off. Shell precheck (P2-B); "
+             "≠δ5 certified ≠R4 (not capacity certified). Requires raw lake SHARE volume.",
+    )
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    # P2-B shell precheck (CLI). APP defaults to lake; None → no-op. ≠δ5≠R4.
+    precheck_cli_participation_rate(
+        args.participation_rate,
+        minute_source="lake",
+        dividend_type="none",
+    )
     start, end = _as_date(args.start), _as_date(args.end)
     if end < start:
         raise SystemExit("--end must be on or after --start")
@@ -141,7 +157,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             dump_dir=dump,
         )
 
-    minute, daily = _load_cli_bars(pools, start, end)
+    minute, daily = _load_cli_bars(
+        pools, start, end,
+        **({"include_volume": True} if args.participation_rate is not None else {}),
+    )
     if pools:
         index_closes = load_index_daily(start, end)
     else:
@@ -149,6 +168,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     name_dir = args.pool_dir or args.app_pool_dir
     symbols = {symbol for values in pools.values() for symbol in values}
     exdiv, names = load_limit_context(name_dir, symbols, start, end)
+    volume_options: dict = {}
+    if args.participation_rate is not None:
+        if missing := symbols - minute.keys():
+            raise ValueError(f"missing minute volume frames: {sorted(missing)}")
+        samples = completed_minute_volumes(minute)
+        precheck_completed_bucket_samples(samples)
+        volume_options = {
+            "participation_rate": args.participation_rate,
+            "volume_for_bucket": samples,
+        }
     state = simulate_v7(
         minute,
         daily,
@@ -159,6 +188,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         end=end,
         exdiv=exdiv,
         names=names,
+        **volume_options,
     )
     output = Path(
         args.output_dir

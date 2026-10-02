@@ -44,6 +44,12 @@ def simulate(
     volume_for_bucket=None,
     **kwargs,
 ):
+    # P2-B adapter shell: rate None → no-op; invalid rate fail-closed before XOR. ≠δ5≠R4.
+    from backtest.research.participation_rate_precheck import (
+        precheck_cli_participation_rate,
+    )
+
+    precheck_cli_participation_rate(participation_rate)
     if participation_rate is not None or volume_for_bucket is not None:
         raise ValueError("batch4 is clock XOR slip; capacity is a separate axis")
     hooks = loop.prepare_strategy_hooks(

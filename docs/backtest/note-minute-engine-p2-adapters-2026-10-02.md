@@ -55,6 +55,12 @@
 | 共享 CLI `csv_minute_backtest.main` | `precheck_cli_participation_rate`（parse 后） | rate=None → **no-op**；rate 设定时 fail-closed 校验 lake/shares 域 |
 | 共享 `run()` facade | 同上 + loader 出口 `precheck_completed_bucket_samples` | 不进入 `simulate` 热路径改语义 |
 | `run_topk_cap_compare.read_bars` | `precheck_source_pin_unit` + `precheck_completed_bucket_samples` | PIN unit；完成桶 hm/unit 断言 |
+| v7 CLI `csv_minute_backtest_v7.main` | `precheck_cli_*` + cap-on 时 `precheck_completed_bucket_samples` | **不**改 `simulate_v7`；省略=旧臂 |
+| APP `csv_minute_backtest_topk_app_dropout.main` | 同上（湖默认） | 间接经 v7 loader；shell 自有 |
+| L1 `run_protocol.adapters.v7` | adapter shell 同上 | 委托前外壳；不进核 |
+| L2 `minute_orders` CLI / `source_loader` / RP-MO | `precheck_cli_participation_rate(float(rate))` | **rate 域**外壳；完成桶仍属 L2 自有合同；**不**改 MatchCore |
+| 敏感格 `run_minute_sensitivity_b` | harness `_shell_precheck_cap` | VolumeCap 构造前；≠ strategy replay |
+| batch4 `fullstrat_research_{v7,book}` | `precheck_cli_*` 后 XOR 拒绝 cap | clock/slip ≠ capacity 轴 |
 
 ### 3.1 做什么 / 不做什么
 
