@@ -61,21 +61,44 @@ def _ohlc(bar: OhlcBar, label: str) -> tuple[float, float, float, float]:
     return opening, high, low, close
 
 
+def check_fill_timing(timing: FillTiming, next_bar: OhlcBar | None) -> None:
+    """same_bar 不接收下一根。next_bar 时点可以先不给下一根，跳过时用不到。"""
+    if timing not in ("same_bar", "next_bar"):
+        raise ValueError("timing must be 'same_bar' or 'next_bar'")
+    if timing == "same_bar" and next_bar is not None:
+        raise ValueError("next_bar is only used when timing is 'next_bar'")
+
+
+def apply_fill_timing(
+    result: BarScanExit,
+    *,
+    timing: FillTiming = "same_bar",
+    next_bar: OhlcBar | None = None,
+) -> BarScanExit:
+    """本根已判定。same_bar 保持成交价。next_bar 且成交时改成下一根开盘，不重判。"""
+    check_fill_timing(timing, next_bar)
+    if timing == "same_bar" or result.decision != "fill":
+        return result
+    if next_bar is None:
+        raise ValueError("next_bar is required when timing is 'next_bar' and this bar fills")
+    next_open, _, _, _ = _ohlc(next_bar, "next_bar")
+    return BarScanExit("fill", next_open, f"{result.reason}:next_open", result.peak)
+
+
 def scan_bar_exit(
     bar: OhlcBar,
     position: HeldPosition,
     *,
     timing: FillTiming = "same_bar",
     next_bar: OhlcBar | None = None,
+    evaluate_drawdown: bool = True,
 ) -> BarScanExit:
     """给定一根 K 和一个持仓，返回成交或跳过。无跨调用状态。
 
     timing 默认 same_bar。next_bar 只在 next_bar 时点、且本根要成交时使用。
+    evaluate_drawdown 默认 True。False 时只判止损，回撤留给调用方自己的卖点。
     """
-    if timing not in ("same_bar", "next_bar"):
-        raise ValueError("timing must be 'same_bar' or 'next_bar'")
-    if timing == "same_bar" and next_bar is not None:
-        raise ValueError("next_bar is only used when timing is 'next_bar'")
+    check_fill_timing(timing, next_bar)
 
     opening, high, low, close = _ohlc(bar, "bar")
 
@@ -85,7 +108,7 @@ def scan_bar_exit(
     drawdown = float(position.drawdown_take_profit)
     if not math.isfinite(stop_pct) or not 0.0 < stop_pct < 1.0:
         raise ValueError("stop_pct must be in (0, 1)")
-    if not math.isfinite(drawdown) or not 0.0 < drawdown <= 1.0:
+    if evaluate_drawdown and (not math.isfinite(drawdown) or not 0.0 < drawdown <= 1.0):
         raise ValueError("drawdown_take_profit must be in (0, 1]")
 
     # 与 scan_held_day_python 相同：先用本根 high 抬峰值，再判止损。
@@ -96,7 +119,7 @@ def scan_bar_exit(
         result = BarScanExit("fill", opening, "stop_loss:gap_open", new_peak)
     elif low <= stop_price:
         result = BarScanExit("fill", stop_price, "stop_loss:touch", new_peak)
-    elif close >= cost and new_peak > cost:
+    elif evaluate_drawdown and close >= cost and new_peak > cost:
         retrace = (new_peak - close) / (new_peak - cost)
         if retrace >= drawdown:
             pct = int(round(drawdown * 100))
@@ -106,9 +129,4 @@ def scan_bar_exit(
     else:
         result = BarScanExit("skip", None, "", new_peak)
 
-    if timing == "same_bar" or result.decision != "fill":
-        return result
-    if next_bar is None:
-        raise ValueError("next_bar is required when timing is 'next_bar' and this bar fills")
-    next_open, _, _, _ = _ohlc(next_bar, "next_bar")
-    return BarScanExit("fill", next_open, f"{result.reason}:next_open", result.peak)
+    return apply_fill_timing(result, timing=timing, next_bar=next_bar)
