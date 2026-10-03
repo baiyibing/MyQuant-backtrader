@@ -458,10 +458,12 @@ def test_source_guards():
         assert forbidden not in source
     calls = [node for node in ast.walk(ast.parse(source)) if isinstance(node, ast.Call)
              and isinstance(node.func, ast.Name) and node.func.id == "invoke_minute_strategy"]
-    assert len(calls) == 2
+    assert len(calls) == 3
     assert sum(isinstance(call.args[0], ast.Name) and call.args[0].id == "strategy"
                for call in calls) == 1
     assert sum(isinstance(call.args[0], ast.Constant) and call.args[0].value == "version2"
+               for call in calls) == 1
+    assert sum(isinstance(call.args[0], ast.Constant) and call.args[0].value == "version3"
                for call in calls) == 1
     for flag in ("dropout_sell", "sx0_sell"):
         assert f"{flag}=True" not in source.replace(" ", "")
@@ -1060,6 +1062,97 @@ def test_version2_round_trip_carries_unsellable_same_day_peak(monkeypatch):
     summary = host.scan_version1_round_trip(
         frame, symbol=SYMBOL, pool_days={buy_day: [SYMBOL]},
         cash=2000, daily_quota=1001, strategy="version2")
+    assert calls == [(10, 12, 1)]
+    assert (summary.buys, summary.sells, summary.skips) == (1, 1, 1)
+    assert summary.equity == pytest.approx(1998)
+
+
+@pytest.mark.parametrize("reason", [None, "sentinel_take_profit"])
+def test_version3_round_trip_live_take_profit_session_count(monkeypatch, reason):
+    from backtest.research import strategy3_rules
+    days = [date(2026, 1, 9), date(2026, 1, 12), date(2026, 1, 14)]
+    frame = pd.DataFrame(dict(date=days, hm=[895, 570, 570],
+                              open=[10]*3, high=[10]*3, low=[10]*3, close=[10]*3))
+    counts = []
+    def take_profit(close, cost, peak, n_days):
+        counts.append(n_days)
+        return reason if n_days == 2 else None
+    monkeypatch.setattr(strategy3_rules, "take_profit_reason", take_profit)
+    from backtest.research import minute_true_core_wire as wire
+    # The existing wire captures this function at import time.
+    monkeypatch.setitem(wire._BOOK_TAKE, "version3", strategy3_rules.take_profit_reason)
+    results = []
+    invoke = host.invoke_minute_strategy
+    def record(*args, **kwargs):
+        assert args[0] == "version3"
+        result = invoke(*args, **kwargs)
+        results.append(result)
+        return result
+    monkeypatch.setattr(host, "invoke_minute_strategy", record)
+    summary = host.scan_version1_round_trip(
+        frame, symbol=SYMBOL, pool_days={days[0]: [SYMBOL]},
+        cash=2000, daily_quota=1001, strategy="version3")
+    assert counts == [1, 2]
+    assert summary.buys == 1
+    assert summary.sells == (1 if reason else 0)
+    assert results[-1].reason == (reason or "")
+
+
+@pytest.mark.parametrize("timing", ["same_bar", "next_bar"])
+@pytest.mark.parametrize("price", ["stop", "close"])
+def test_version3_round_trip_cli_and_fill_modes(monkeypatch, capsys, timing, price):
+    frame = _touch_round_trip_frame()
+    frame.loc[1, "low"] = 23  # Cross version3's existing 4% stop.
+    def load(*args, source_frames=None, **kwargs):
+        source_frames.append(frame)
+    monkeypatch.setattr(host, "load_scan_bars", load)
+    monkeypatch.setattr(host, "load_pool_day_map", lambda *a, **k: {frame.date[0]: [SYMBOL]})
+    calls = []
+    invoke = host.invoke_minute_strategy
+    def record(*args, **kwargs):
+        assert args[0] == "version3"
+        result = invoke(*args, **kwargs)
+        calls.append((kwargs, result))
+        return result
+    monkeypatch.setattr(host, "invoke_minute_strategy", record)
+    assert main(["--source", "lake", "--symbol", SYMBOL, "--start", "20260106",
+                 "--end", "20260108", "--strategy", "version3", "--cash", "10000",
+                 "--daily-quota", "2500", "--fill-bar", timing, "--fill-price", price]) == 0
+    output = capsys.readouterr().out
+    assert len(output.splitlines()) == 1
+    assert "version3 bars=3 buys=1 sells=1 skips=1" in output
+    fields, result = calls[0]
+    assert fields["timing"] == timing and fields["price"] == price
+    expected = 25 if timing == "next_bar" else (23.66 if price == "close" else 24.28 * .96)
+    assert result.fill_price == pytest.approx(expected)
+
+
+def test_version3_round_trip_carries_unsellable_same_day_peak(monkeypatch):
+    from backtest.research import strategy3_rules
+    buy_day, sell_day = date(2026, 1, 9), date(2026, 1, 12)
+    frame = pd.DataFrame(dict(
+        date=[buy_day, buy_day, sell_day], hm=[895, 896, 570],
+        open=[10, 10, 10], high=[10, 12, 10.5],
+        low=[10, 9.5, 10], close=[10, 10, 10],
+    ))
+    calls = []
+    def take_profit(close, cost, peak, n_days):
+        calls.append((cost, peak, n_days))
+        return "sentinel_take_profit"
+    monkeypatch.setattr(strategy3_rules, "take_profit_reason", take_profit)
+    from backtest.research import minute_true_core_wire as wire
+    # The existing wire captures this function at import time.
+    monkeypatch.setitem(wire._BOOK_TAKE, "version3", strategy3_rules.take_profit_reason)
+    invoke = host.invoke_minute_strategy
+    def sellable_only(*args, **kwargs):
+        assert args[0] == "version3"
+        assert kwargs["n_days"] == 1
+        assert kwargs["peak"] == 12
+        return invoke(*args, **kwargs)
+    monkeypatch.setattr(host, "invoke_minute_strategy", sellable_only)
+    summary = host.scan_version1_round_trip(
+        frame, symbol=SYMBOL, pool_days={buy_day: [SYMBOL]},
+        cash=2000, daily_quota=1001, strategy="version3")
     assert calls == [(10, 12, 1)]
     assert (summary.buys, summary.sells, summary.skips) == (1, 1, 1)
     assert summary.equity == pytest.approx(1998)
