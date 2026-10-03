@@ -63,7 +63,8 @@ def scan_version1_round_trip(frame, *, symbol: str, pool_days: Mapping,
                              cash: float = 100000.0,
                              daily_quota: float = DEFAULT_DAILY_QUOTA,
                              timing: FillTiming = "same_bar",
-                             price: FillPrice = "stop") -> RoundTripSummary:
+                             price: FillPrice = "stop",
+                             strategy: str = "version1") -> RoundTripSummary:
     """Flat-start, bar-scan accounting with the CSV version1 fee and lot sizer.
 
     Buy reason is pool. Only a later calendar day can close bought shares.
@@ -72,6 +73,8 @@ def scan_version1_round_trip(frame, *, symbol: str, pool_days: Mapping,
     lot is unaffordable, raise before any fill or cash mutation.
     Skips count bars with neither a buy nor a sell.
     """
+    if strategy not in ("version1", "version2"):
+        raise ValueError("round trip requires version1 or version2")
     if not math.isfinite(cash) or cash <= 0:
         raise ValueError("cash must be finite and > 0")
     if isinstance(daily_quota, bool) or not math.isfinite(daily_quota) or daily_quota <= 0:
@@ -84,9 +87,10 @@ def scan_version1_round_trip(frame, *, symbol: str, pool_days: Mapping,
     held_shares = buys = sells = 0
     cost = peak = 0.0
     buy_day = None
+    buy_session = None
     book = _version1_book()
     offset = 0
-    for day, day_frame in frame.groupby("date", sort=False):
+    for session, (day, day_frame) in enumerate(frame.groupby("date", sort=False)):
         day = _as_date(day)
         buy_index = None
         members = pool_days.get(day, [])
@@ -123,16 +127,27 @@ def scan_version1_round_trip(frame, *, symbol: str, pool_days: Mapping,
                     cash -= debit
                     held_shares = shares
                     buy_day = day
+                    buy_session = session
                     cost = peak = px
                     buys += 1
                     continue
             if held_shares:
-                result = scan_bar_exit(
-                    bar, HeldPosition(cost, peak, book.stop_pct, book.drawdown_of(1)),
-                    timing=timing, price=price,
-                    **({"next_bar": bars[offset + index + 1]}
-                       if timing == "next_bar" and offset + index + 1 < len(bars) else {}),
-                )
+                if strategy == "version2":
+                    if not t1_sellable(buy_day, day):
+                        continue
+                    result = invoke_minute_strategy(
+                        "version2", bar, cost=cost, peak=peak,
+                        n_days=session - buy_session, timing=timing, price=price,
+                        **({"next_bar": bars[offset + index + 1]}
+                           if timing == "next_bar" and offset + index + 1 < len(bars) else {}),
+                    )
+                else:
+                    result = scan_bar_exit(
+                        bar, HeldPosition(cost, peak, book.stop_pct, book.drawdown_of(1)),
+                        timing=timing, price=price,
+                        **({"next_bar": bars[offset + index + 1]}
+                           if timing == "next_bar" and offset + index + 1 < len(bars) else {}),
+                    )
                 peak = result.peak
                 if result.decision == "fill" and t1_sellable(buy_day, day):
                     notional = held_shares * result.fill_price
@@ -418,12 +433,14 @@ def load_scan_bars(
 def run_round_trip(symbol, start, end, *, pool_dir: Path, cash=100000.0,
                    daily_quota=DEFAULT_DAILY_QUOTA,
                    timing: FillTiming = "same_bar", price: FillPrice = "stop",
+                   strategy: str = "version1",
                    **source_args) -> RoundTripSummary:
     frames = []
     load_scan_bars(symbol, start, end, source_frames=frames, **source_args)
     pool_days = load_pool_day_map(pool_dir, start, end, key="date")
     return scan_version1_round_trip(frames[0], symbol=symbol, pool_days=pool_days,
-                                   cash=cash, daily_quota=daily_quota, timing=timing, price=price)
+                                   cash=cash, daily_quota=daily_quota, timing=timing, price=price,
+                                   **({"strategy": strategy} if strategy != "version1" else {}))
 
 
 def run_scan(
@@ -489,7 +506,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         args = parser.parse_args(argv)
         code = _symbol(args.symbol)
-        round_trip = args.strategy == "version1" and args.cost is None and args.peak is None
+        round_trip = args.strategy in ("version1", "version2") and args.cost is None and args.peak is None
         if not round_trip and (args.cost is None or args.peak is None):
             raise ValueError("held-only scan requires both --cost and --peak")
         # Existing reader progress belongs on stderr; stdout is one summary line.
@@ -503,6 +520,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     qlib_root=args.qlib_root, lake_root=args.lake_root,
                     timing=args.fill_bar, price=args.fill_price,
                     pool_dir=args.pool_dir, cash=args.cash, daily_quota=args.daily_quota,
+                    **({"strategy": args.strategy} if args.strategy != "version1" else {}),
                 )
             else:
                 summary = run_scan(
@@ -525,7 +543,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     if round_trip:
-        print(f"symbol={code} source={args.source} version1 bars={summary.bars} "
+        print(f"symbol={code} source={args.source} {args.strategy} bars={summary.bars} "
               f"buys={summary.buys} sells={summary.sells} skips={summary.skips} "
               f"equity={summary.equity:.2f} return_pct={summary.return_pct:.6f}")
         return 0

@@ -458,9 +458,11 @@ def test_source_guards():
         assert forbidden not in source
     calls = [node for node in ast.walk(ast.parse(source)) if isinstance(node, ast.Call)
              and isinstance(node.func, ast.Name) and node.func.id == "invoke_minute_strategy"]
-    assert len(calls) == 1
-    assert all(isinstance(call.args[0], ast.Name) and call.args[0].id == "strategy"
-               for call in calls)
+    assert len(calls) == 2
+    assert sum(isinstance(call.args[0], ast.Name) and call.args[0].id == "strategy"
+               for call in calls) == 1
+    assert sum(isinstance(call.args[0], ast.Constant) and call.args[0].value == "version2"
+               for call in calls) == 1
     for flag in ("dropout_sell", "sx0_sell"):
         assert f"{flag}=True" not in source.replace(" ", "")
 
@@ -972,3 +974,65 @@ def test_held_scan_last_trigger_raises(price):
     with pytest.raises(ValueError, match="next_bar is required"):
         scan_held_bars([OhlcBar(24, 24.1, 23.6, 23.66)], cost=24.28, peak=24.28,
                        timing="next_bar", price=price)
+
+
+@pytest.mark.parametrize("reason", [None, "sentinel_take_profit"])
+def test_version2_round_trip_live_take_profit_session_count(monkeypatch, reason):
+    from backtest.research import strategy2_rules
+    days = [date(2026, 1, 9), date(2026, 1, 12), date(2026, 1, 14)]
+    frame = pd.DataFrame(dict(date=days, hm=[895, 570, 570],
+                              open=[10]*3, high=[10]*3, low=[10]*3, close=[10]*3))
+    counts = []
+    def take_profit(close, cost, peak, n_days):
+        counts.append(n_days)
+        return reason if n_days == 2 else None
+    monkeypatch.setattr(strategy2_rules, "take_profit_reason", take_profit)
+    results = []
+    invoke = host.invoke_minute_strategy
+    def record(*args, **kwargs):
+        result = invoke(*args, **kwargs)
+        results.append(result)
+        return result
+    monkeypatch.setattr(host, "invoke_minute_strategy", record)
+    summary = host.scan_version1_round_trip(
+        frame, symbol=SYMBOL, pool_days={days[0]: [SYMBOL]},
+        cash=2000, daily_quota=1001, strategy="version2")
+    assert counts == [1, 2]
+    assert summary.buys == 1
+    assert summary.sells == (1 if reason else 0)
+    assert results[-1].reason == (reason or "")
+
+
+@pytest.mark.parametrize("timing", ["same_bar", "next_bar"])
+@pytest.mark.parametrize("price", ["stop", "close"])
+def test_version2_round_trip_cli_and_fill_modes(monkeypatch, capsys, timing, price):
+    frame = _touch_round_trip_frame()
+    def load(*args, source_frames=None, **kwargs):
+        source_frames.append(frame)
+    monkeypatch.setattr(host, "load_scan_bars", load)
+    monkeypatch.setattr(host, "load_pool_day_map", lambda *a, **k: {frame.date[0]: [SYMBOL]})
+    calls = []
+    invoke = host.invoke_minute_strategy
+    def record(*args, **kwargs):
+        result = invoke(*args, **kwargs)
+        calls.append((kwargs, result))
+        return result
+    monkeypatch.setattr(host, "invoke_minute_strategy", record)
+    assert main(["--source", "lake", "--symbol", SYMBOL, "--start", "20260106",
+                 "--end", "20260108", "--strategy", "version2", "--cash", "10000",
+                 "--daily-quota", "2500", "--fill-bar", timing, "--fill-price", price]) == 0
+    output = capsys.readouterr().out
+    assert len(output.splitlines()) == 1
+    assert "version2 bars=3 buys=1 sells=1 skips=1" in output
+    fields, result = calls[0]
+    assert fields["timing"] == timing and fields["price"] == price
+    expected = 25 if timing == "next_bar" else (23.66 if price == "close" else 24.28 * .98)
+    assert result.fill_price == pytest.approx(expected)
+
+
+@pytest.mark.parametrize("strategy", ["version1", "version2", "version3"])
+@pytest.mark.parametrize("flag", ["--cost", "--peak"])
+def test_round_trip_partial_held_flags_keep_error(capsys, strategy, flag):
+    assert main(["--source", "lake", "--symbol", SYMBOL, "--start", DAY, "--end", DAY,
+                 "--strategy", strategy, flag, "10"]) == 1
+    assert "held-only scan requires both --cost and --peak" in capsys.readouterr().err
