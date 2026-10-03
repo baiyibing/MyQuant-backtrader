@@ -8,7 +8,7 @@ import sys
 from bisect import bisect_left, bisect_right
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import redirect_stdout
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
 
@@ -19,7 +19,7 @@ from backtest.research.ashare_session import t1_sellable
 from backtest.research import strategy4_rules
 from backtest.research.ma_infra import sma_asof
 from backtest.research.bar_scan_exit import (
-    BarScanExit, FillPrice, FillTiming, HeldPosition, OhlcBar, scan_bar_exit,
+    BarScanExit, FillPrice, FillTiming, HeldPosition, OhlcBar, apply_fill_timing, scan_bar_exit,
 )
 from backtest.research.csv_minute_backtest import BUY_HM, _buy_px
 from backtest.research.csv_pool import load_pool_day_map
@@ -182,15 +182,15 @@ def scan_version1_round_trip(frame, *, symbol: str, pool_days: Mapping,
                     factor = factors_by_day.get(day)
                     if factor is None or not math.isfinite(factor) or factor <= 0:
                         raise ValueError(f"missing cumulative_adj_factor for {code} on {day}")
-                    adjusted_bar = replace(bar, close=bar.close * factor)
-                    level = sma_asof(prior_closes + [adjusted_bar.close], strategy4_rules.MA_SELL)
+                    adjusted_close = bar.close * factor
+                    level = sma_asof(prior_closes + [adjusted_close], strategy4_rules.MA_SELL)
+                    peak = bar.high if bar.high > peak else peak
                     if level is None:
-                        peak = bar.high if bar.high > peak else peak
                         continue
-                    result = invoke_minute_strategy(
-                        "version4", adjusted_bar, cost=cost, peak=peak,
-                        n_days=session - buy_session, timing=timing, price=price,
-                        level=level,
+                    result = apply_fill_timing(
+                        BarScanExit("fill", bar.close, "ma_signal:MA5", peak)
+                        if adjusted_close < level else BarScanExit("skip", None, "", peak),
+                        timing=timing,
                         **({"next_bar": bars[offset + index + 1]}
                            if timing == "next_bar" and offset + index + 1 < len(bars) else {}),
                     )
@@ -204,9 +204,6 @@ def scan_version1_round_trip(frame, *, symbol: str, pool_days: Mapping,
                 peak = result.peak
                 if result.decision == "fill" and t1_sellable(buy_day, day):
                     fill_price = result.fill_price
-                    if (strategy == "version4" and timing == "same_bar"
-                            and fill_price == adjusted_bar.close):
-                        fill_price = bar.close
                     notional = held_shares * fill_price
                     cash += notional - trade_commission(notional, COMMISSION)
                     held_shares = 0

@@ -460,7 +460,7 @@ def test_source_guards():
              and isinstance(node.func, ast.Name) and node.func.id == "invoke_minute_strategy"]
     version4_calls = [call for call in calls if isinstance(call.args[0], ast.Constant)
                       and call.args[0].value == "version4"]
-    assert len(version4_calls) == 1
+    assert len(version4_calls) == 0
     calls = [call for call in calls if call not in version4_calls]
     assert len(calls) == 3
     assert sum(isinstance(call.args[0], ast.Name) and call.args[0].id == "strategy"
@@ -1232,13 +1232,13 @@ def test_version4_round_trip_cli_sma_sell(monkeypatch, capsys, timing, price, ve
     monkeypatch.setattr(host, "load_scan_bars", load)
     monkeypatch.setattr(host, "load_pool_day_map", lambda *a, **k: {buy_day: [SYMBOL]})
     calls = []
-    invoke = host.invoke_minute_strategy
-    def record(*args, **kwargs):
-        assert args[0] == "version4"
-        result = invoke(*args, **kwargs)
+    apply = host.apply_fill_timing
+    def record(signal, **kwargs):
+        result = apply(signal, **kwargs)
         calls.append((kwargs, result))
         return result
-    monkeypatch.setattr(host, "invoke_minute_strategy", record)
+    monkeypatch.setattr(host, "apply_fill_timing", record)
+    monkeypatch.setattr(host, "invoke_minute_strategy", forbidden)
     assert main(["--source", "lake", "--symbol", SYMBOL, "--start", "20260111",
                  "--end", "20260113", "--strategy", "version4", "--cash", "2000",
                  "--daily-quota", "1001", "--fill-bar", timing, "--fill-price", price]) == 0
@@ -1251,11 +1251,10 @@ def test_version4_round_trip_cli_sma_sell(monkeypatch, capsys, timing, price, ve
     assert factor_calls == ["000739_SZ"]
     assert buy_histories == [adjusted.loc[adjusted.date.dt.date < buy_day, "close_front"].tolist() + [9.5]]
     fields, result = calls[0]
-    assert fields["level"] == pytest.approx((9.5 * 4 + 8.55) / 5)
-    assert fields["peak"] == 12 and fields["n_days"] == 1
-    assert fields["timing"] == timing and fields["price"] == price
+    assert result.peak == 12
+    assert fields["timing"] == timing
     assert result.reason == ("ma_signal:MA5:next_open" if timing == "next_bar" else "ma_signal:MA5")
-    assert result.fill_price == (8 if timing == "next_bar" else pytest.approx(8.55))
+    assert result.fill_price == (8 if timing == "next_bar" else 9)
     proceeds = 100 * (8 if timing == "next_bar" else 9)
     expected_equity = (2000 - 1000 - host.trade_commission(1000, host.COMMISSION)
                        + proceeds - host.trade_commission(proceeds, host.COMMISSION))
@@ -1399,15 +1398,42 @@ def test_version4_round_trip_recomputes_each_sellable_bar(monkeypatch, version4_
                           (sell_day, 570, 11, 12, 8, 11),
                           (sell_day, 571, 10, 12, 8, 10)],
                          columns=["date", "hm", *host.OHLC])
-    invoke = host.invoke_minute_strategy
+    sma = host.sma_asof
     calls = []
-    def record(name, bar, **kwargs):
-        calls.append((bar, kwargs["level"]))
-        return invoke(name, bar, **kwargs)
-    monkeypatch.setattr(host, "invoke_minute_strategy", record)
+    def record(closes, period):
+        level = sma(closes, period)
+        calls.append((closes[-1], level))
+        return level
+    monkeypatch.setattr(host, "sma_asof", record)
     summary = host.scan_version1_round_trip(frame, symbol=SYMBOL, pool_days={buy_day: [SYMBOL]},
                                            cash=2000, daily_quota=1200, strategy="version4")
     assert (summary.buys, summary.sells) == (1, 1)
-    assert [bar.close for bar, _ in calls] == pytest.approx([10.45, 9.5])
-    assert [level for _, level in calls] == pytest.approx([10.09, 9.9])
-    assert [(bar.open, bar.high, bar.low) for bar, _ in calls] == [(11, 12, 8), (10, 12, 8)]
+    assert calls == pytest.approx([(10.45, 10.09), (9.5, 9.9)])
+
+
+def test_version4_flat_raw_bar_sells_at_raw_close(monkeypatch, version4_adjustments):
+    _, install = version4_adjustments
+    days = pd.date_range("2026-01-01", periods=12)
+    factor_calls = install(pd.DataFrame(dict(
+        date=days, stock_code=SYMBOL, close_front=9.5,
+        close_none=10.0, cumulative_adj_factor=0.95)))
+    buy_day, sell_day = days[-2].date(), days[-1].date()
+    frame = pd.DataFrame([(buy_day, 895, 10, 10, 10, 10),
+                          (sell_day, 570, 9, 9, 9, 9)],
+                         columns=["date", "hm", *host.OHLC])
+    fills = []
+    apply = host.apply_fill_timing
+    def record(result, **kwargs):
+        result = apply(result, **kwargs)
+        fills.append(result)
+        return result
+    monkeypatch.setattr(host, "apply_fill_timing", record)
+    summary = host.scan_version1_round_trip(
+        frame, symbol=SYMBOL, pool_days={buy_day: [SYMBOL]},
+        cash=2000, daily_quota=1001, strategy="version4")
+    assert factor_calls == ["000739_SZ"]
+    assert (summary.buys, summary.sells) == (1, 1)
+    assert fills == [host.BarScanExit("fill", 9, "ma_signal:MA5", 10)]
+    assert summary.equity == pytest.approx(
+        2000 - 1000 - host.trade_commission(1000, host.COMMISSION)
+        + 900 - host.trade_commission(900, host.COMMISSION))
