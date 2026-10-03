@@ -1,4 +1,4 @@
-"""Opt-in, read-only minute scan using the existing wired strategy books."""
+"""Read-only minute host for the complete registered CSV strategy engine."""
 
 from __future__ import annotations
 
@@ -21,6 +21,8 @@ from backtest.research.ma_infra import sma_asof
 from backtest.research.bar_scan_exit import (
     BarScanExit, FillPrice, FillTiming, HeldPosition, OhlcBar, apply_fill_timing, scan_bar_exit,
 )
+from backtest.research import csv_minute_backtest
+from backtest.research.csv_strategy_books import csv_strategy_names
 from backtest.research.csv_minute_backtest import BUY_HM, _buy_px
 from backtest.research.csv_pool import load_pool_day_map
 from backtest.research.csv_common import DEFAULT_DAILY_QUOTA, STRATEGY4_CALENDAR_SLACK_DAYS
@@ -416,7 +418,7 @@ def _load_lake_window(code: str, root: Path, start: str, end: str):
     frame = frame[~frame.index.duplicated(keep="last")].sort_index()
     if has_volume:
         day_volume = frame.groupby("ymd")["_volume"].transform("sum")
-        frame = frame.loc[day_volume != 0].drop(columns="_volume")
+        frame = frame.loc[day_volume != 0].rename(columns={"_volume": "volume"})
     return frame
 
 
@@ -554,24 +556,81 @@ def run_scan(
     )
 
 
+def summarize_simulate(st, *, bars: int, total_cash: float) -> RoundTripSummary:
+    """Report only engine trades and engine end-of-day equity."""
+    equity = st.equity_curve[-1][1] if st.equity_curve else st.cash
+    return RoundTripSummary(
+        bars=bars,
+        buys=sum(t["side"] == "BUY" for t in st.trades),
+        sells=sum(t["side"] == "SELL" for t in st.trades),
+        skips=sum(t["side"] == "SKIP" for t in st.trades),
+        equity=equity, return_pct=(equity / total_cash - 1) * 100,
+    )
+
+
+def run_simulate(symbol, start, end, *, pool_dir: Path, cash=100000.0,
+                 daily_quota=DEFAULT_DAILY_QUOTA, strategy="version1",
+                 scores_by_day=None, topk=None, n_drop=None, **source_args):
+    """Adapt host readers to the complete shared minute engine, starting flat."""
+    if strategy not in csv_strategy_names():
+        raise ValueError(f"unregistered CSV book: {strategy}")
+    first = _as_date(start).strftime("%Y%m%d")
+    last = _as_date(end).strftime("%Y%m%d")
+    code = _symbol(symbol)
+    raw_pool = load_pool_day_map(pool_dir, first, last, key="date")
+    pool_days = {_as_date(day).strftime("%Y%m%d"): list(codes)
+                 for day, codes in raw_pool.items()}
+    codes = {code}
+    if strategy in UNIVERSE_BOOKS:
+        codes.update(c for members in pool_days.values() for c in members)
+        codes.update(c for scores in (scores_by_day or {}).values() for c in scores)
+    minute_bars = {}
+    for member in sorted(codes):
+        frames = []
+        load_scan_bars(member, start, end, source_frames=frames, **source_args)
+        frame = frames[0].copy()
+        frame["ymd"] = pd.to_datetime(frame["date"]).dt.strftime("%Y%m%d")
+        minute_bars[member] = frame
+    history_start = (warmup_start(first, STRATEGY4_CALENDAR_SLACK_DAYS)
+                     if strategy in ("version4", "version12") else warmup_start(first))
+    daily_bars = load_daily_ohlc(
+        sorted(codes), history_start, last,
+        **({"source": "qlib_day", "qlib_root": source_args.get("qlib_root")}
+           if source_args["source"] == "qlib_1min" else {"source": "lake"}),
+        **({"dividend_type": "front"} if strategy == "version12" else {}),
+    )
+    for member in codes:
+        if member not in daily_bars or daily_bars[member].empty:
+            raise FileNotFoundError(f"daily OHLC missing for {member}")
+    st = csv_minute_backtest.simulate(
+        minute_bars, daily_bars, pool_days, first, last, strategy=strategy,
+        total_cash=cash, daily_quota=daily_quota,
+        scores_by_day=scores_by_day, topk=topk, n_drop=n_drop,
+    )
+    return summarize_simulate(st, bars=sum(len(f) for f in minute_bars.values()),
+                              total_cash=cash)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Read-only minute bar scan")
+    parser = argparse.ArgumentParser(description="Read-only minute host (flat-start CSV simulation)")
     parser.add_argument("--source", choices=SOURCES, required=True)
     parser.add_argument("--symbol", required=True)
     parser.add_argument("--start", type=_as_date, metavar="YYYYMMDD", required=True)
     parser.add_argument("--end", type=_as_date, metavar="YYYYMMDD", required=True)
     parser.add_argument("--qlib-root", type=Path)
     parser.add_argument("--lake-root", type=Path)
-    parser.add_argument("--cost", type=float, help="held-only scan; requires --peak")
-    parser.add_argument("--peak", type=float, help="held-only scan; requires --cost")
+    parser.add_argument("--cost", type=float, help="unsupported held seed (fails closed)")
+    parser.add_argument("--peak", type=float, help="unsupported held seed (fails closed)")
     parser.add_argument("--pool-dir", type=Path, default=Path(__file__).resolve().parents[2] / "stock_pool",
-                        help="version1 flat-start daily membership CSVs; minute bars contain no pool signal")
+                        help="flat-start daily membership CSVs; minute bars contain no pool signal")
     parser.add_argument("--cash", type=float, default=100000.0, help="initial cash")
     parser.add_argument("--daily-quota", type=float, default=DEFAULT_DAILY_QUOTA,
-                        help="CSV version1 daily buy budget, split across pool members")
-    parser.add_argument("--fill-bar", choices=("same_bar", "next_bar"), default="same_bar")
-    parser.add_argument("--fill-price", choices=("stop", "close"), default="stop")
-    parser.add_argument("--strategy", choices=wired_names(), default="version1")
+                        help="CSV engine daily buy budget")
+    parser.add_argument("--fill-bar", choices=("same_bar", "next_bar"), default="same_bar",
+                        help="legacy scan option; CSV simulation uses its existing fill defaults")
+    parser.add_argument("--fill-price", choices=("stop", "close"), default="stop",
+                        help="legacy scan option; CSV simulation uses its existing fill defaults")
+    parser.add_argument("--strategy", choices=csv_strategy_names(), default="version1")
     parser.add_argument("--level", type=float, help="caller-supplied sma5 or ma10")
     parser.add_argument("--stage", choices=("trial", "four", "six", "eight", "full"))
     parser.add_argument("--entry-a", type=float)
@@ -583,33 +642,23 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         args = parser.parse_args(argv)
         code = _symbol(args.symbol)
-        round_trip = args.strategy in ("version1", "version2", "version3", "version4", "version5") and args.cost is None and args.peak is None
-        if not round_trip and (args.cost is None or args.peak is None):
-            raise ValueError("held-only scan requires both --cost and --peak")
-        # Existing reader progress belongs on stderr; stdout is one summary line.
+        if args.cost is not None or args.peak is not None or args.held:
+            raise ValueError(
+                "minute host runs csv_minute_backtest.simulate from a flat pool start "
+                "and does not accept a partial held seed (--cost/--peak/--held)"
+            )
+        # Reader and engine progress belongs on stderr; stdout is one summary.
         with redirect_stdout(sys.stderr):
             scores = None
             if args.strategy in UNIVERSE_BOOKS:
                 scores = load_scores_from_args(pred_csv=args.pred_csv, scores_dir=args.scores_dir)
-            if round_trip:
-                summary = run_round_trip(
-                    code, args.start, args.end, source=args.source,
-                    qlib_root=args.qlib_root, lake_root=args.lake_root,
-                    timing=args.fill_bar, price=args.fill_price,
-                    pool_dir=args.pool_dir, cash=args.cash, daily_quota=args.daily_quota,
-                    **({"strategy": args.strategy} if args.strategy != "version1" else {}),
-                )
-            else:
-                summary = run_scan(
-                    code, args.start, args.end, source=args.source,
-                    qlib_root=args.qlib_root, lake_root=args.lake_root,
-                    timing=args.fill_bar, price=args.fill_price,
-                    cost=args.cost, peak=args.peak,
-                    strategy=args.strategy, level=args.level, stage=args.stage,
-                    entry_a=args.entry_a,
-                    held=[code.strip() for code in args.held.split(",")] if args.held else None,
-                    scores_by_day=scores, topk=args.topk, n_drop=args.n_drop,
-                )
+            summary = run_simulate(
+                code, args.start, args.end, source=args.source,
+                qlib_root=args.qlib_root, lake_root=args.lake_root,
+                pool_dir=args.pool_dir, cash=args.cash, daily_quota=args.daily_quota,
+                strategy=args.strategy, scores_by_day=scores,
+                topk=args.topk, n_drop=args.n_drop,
+            )
     except SystemExit as exc:
         if exc.code == 0:
             return 0
@@ -619,15 +668,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     except (OSError, ValueError, RuntimeError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
-    if round_trip:
-        print(f"symbol={code} source={args.source} {args.strategy} bars={summary.bars} "
-              f"buys={summary.buys} sells={summary.sells} skips={summary.skips} "
-              f"equity={summary.equity:.2f} return_pct={summary.return_pct:.6f}")
-        return 0
-    print(
-        f"symbol={code} source={args.source} {args.strategy} "
-        f"bars={summary.bars} fills={summary.fills} skips={summary.skips}"
-    )
+    print(f"symbol={code} source={args.source} {args.strategy} bars={summary.bars} "
+          f"buys={summary.buys} sells={summary.sells} skips={summary.skips} "
+          f"equity={summary.equity:.2f} return_pct={summary.return_pct:.6f}")
     return 0
 
 
