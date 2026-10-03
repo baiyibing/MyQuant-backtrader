@@ -3,7 +3,7 @@
 一根 K、成交或跳过。默认 timing="same_bar"。止损仍是开盘穿过按开盘、
 low 触及按止损价；策略书自己的卖点用这根收盘，成交或跳过，不另造订单类型。
 
-均线、阶段这类扫线没有的数，由调用方把已经算好的数传进来。
+均线、阶段与 dropout 卖出标记，由调用方把已经算好的结果传进来。
 不在这里重算 SMA，不读湖，不挂单。
 
 一根 K 上看不见的时钟不在这次判断里：峰差分钟、涨停保留窗、14:50 强平、
@@ -74,6 +74,7 @@ from backtest.research.strategy8_rules import take_profit_reason as v8_take
 from backtest.research.strategy9_rules import STOP_PCT as V9_STOP
 from backtest.research.strategy9_rules import take_profit_reason as v9_take
 from backtest.research.strategy10_rules import STOP_PCT as V10_STOP
+from backtest.research.strategy_topk_dropout_rules import STOP_PCT as TOPK_STOP
 
 CLI_MINUTE = "backtest/research/csv_minute_backtest.py"
 CLI_V7 = "backtest/research/csv_minute_backtest_v7.py"
@@ -138,6 +139,7 @@ _PERCENT_STOP: dict[str, float] = {
     "version8_6": float(V8_6_STOP),
     "version9": float(V9_STOP),
     "version10": float(V10_STOP),
+    "topk_dropout": float(TOPK_STOP),
 }
 
 _BOOK_TAKE = {
@@ -165,9 +167,8 @@ _LEVEL_FIELD = {
     "topk_app_dropout": "stage",
 }
 
-# 卖出要整日分数排名。一个 score 比不出 bottom / SX0 计划，不把单分当成卖点。
+# SX0 卖出要整日分数排名，不把单分当成卖点。
 _BLOCKED_FIELD: dict[str, str] = {
-    "topk_dropout": "score",
     "topk_score_exit": "score",
 }
 
@@ -332,6 +333,7 @@ def invoke_minute_strategy(
     prev_close: float | None = None,
     hold_mode: str | None = None,
     session_open: bool = True,
+    dropout_sell: bool | None = None,
 ) -> BarScanExit:
     """对一个已可卖的持仓扫一根 K。``n_days`` < 1 不是可卖 bar，直接拒绝。
 
@@ -353,6 +355,15 @@ def invoke_minute_strategy(
     peak_f = float(peak)
     if cost_f <= 0 or peak_f <= 0:
         raise ValueError("cost and peak must be finite numbers > 0")
+
+    if key == "topk_dropout":
+        if dropout_sell is None:
+            raise ValueError(
+                "topk_dropout requires dropout_sell: caller must pass the already-decided "
+                "dropout sell for this name today; the scan does not rank the day"
+            )
+        if not isinstance(dropout_sell, bool):
+            raise ValueError("topk_dropout dropout_sell must be a bool")
 
     if key in _DRAWDOWN:
         book = _DRAWDOWN[key]
@@ -398,16 +409,19 @@ def invoke_minute_strategy(
         _opening, high, _low, close = _ohlc(bar, "bar")
         new_peak = high if high > peak_f else peak_f
 
-    reason = _book_reason(
-        key,
-        close,
-        cost_f,
-        new_peak,
-        held_days,
-        level,
-        prev_close,
-        hold_mode,
-    )
+    if key == "topk_dropout":
+        reason = "topk_drop:bottom" if dropout_sell else None
+    else:
+        reason = _book_reason(
+            key,
+            close,
+            cost_f,
+            new_peak,
+            held_days,
+            level,
+            prev_close,
+            hold_mode,
+        )
     if not reason:
         return BarScanExit("skip", None, "", new_peak)
     judged = BarScanExit("fill", close, reason, new_peak)
