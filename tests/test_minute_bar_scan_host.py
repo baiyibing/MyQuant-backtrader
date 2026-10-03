@@ -825,3 +825,150 @@ def test_round_trip_sell_uses_old_engine_t1_predicate(monkeypatch):
     denied = host.scan_version1_round_trip(frame, **args)
     assert (denied.buys, denied.sells, denied.skips) == (1, 0, 2)
     predicate.assert_any_call(buy_day, next_day)
+
+
+def _touch_round_trip_frame():
+    return pd.DataFrame({
+        "date": [date(2026, 1, 6), date(2026, 1, 7), date(2026, 1, 8)],
+        "hm": [895, 895, 570],
+        "open": [24.28, 24, 25], "high": [24.28, 24.1, 25],
+        "low": [24.28, 23.6, 25], "close": [24.28, 23.66, 25],
+    })
+
+
+@pytest.mark.parametrize("timing", ["same_bar", "next_bar"])
+@pytest.mark.parametrize("price", ["stop", "close"])
+def test_round_trip_fill_modes_use_sell_notional(monkeypatch, timing, price):
+    from backtest.research.ashare_fees import trade_commission
+    frame = _touch_round_trip_frame()
+    calls = []
+    original = host.scan_bar_exit
+    def checked(bar, position, **fields):
+        calls.append(fields)
+        return original(bar, position, **fields)
+    monkeypatch.setattr(host, "scan_bar_exit", checked)
+    result = host.scan_version1_round_trip(
+        frame, symbol="603196.SH", pool_days={frame.date[0]: ["603196.SH"]},
+        cash=10000, daily_quota=3000, timing=timing, price=price,
+    )
+    sell_price = 25 if timing == "next_bar" else (23.66 if price == "close" else 24.28 * 0.98)
+    assert (result.buys, result.sells, result.skips) == (1, 1, 1)
+    assert result.equity == pytest.approx(
+        10000 - 2428 - trade_commission(2428, host.COMMISSION)
+        + 100 * sell_price - trade_commission(100 * sell_price, host.COMMISSION))
+    assert len(calls) == 1
+    assert calls[0]["timing"] == timing and calls[0]["price"] == price
+    if timing == "same_bar":
+        assert "next_bar" not in calls[0]
+    else:
+        assert calls[0]["next_bar"] == OhlcBar(25, 25, 25, 25)
+
+
+def test_round_trip_default_passes_explicit_modes(monkeypatch):
+    original = host.scan_bar_exit
+    calls = []
+    def checked(bar, position, **fields):
+        calls.append(fields)
+        return original(bar, position, **fields)
+    monkeypatch.setattr(host, "scan_bar_exit", checked)
+    frame = _touch_round_trip_frame()
+    host.scan_version1_round_trip(frame, symbol="603196.SH",
+                                 pool_days={frame.date[0]: ["603196.SH"]})
+    assert calls == [{"timing": "same_bar", "price": "stop"}]
+
+
+@pytest.mark.parametrize("price", ["stop", "close"])
+def test_round_trip_next_bar_last_trigger_raises(price):
+    frame = _touch_round_trip_frame().iloc[:2]
+    with pytest.raises(ValueError, match="next_bar is required"):
+        host.scan_version1_round_trip(frame, symbol="603196.SH",
+                                     pool_days={frame.date[0]: ["603196.SH"]},
+                                     timing="next_bar", price=price)
+
+
+@pytest.mark.parametrize("timing", ["same_bar", "next_bar"])
+@pytest.mark.parametrize("price", ["stop", "close"])
+def test_held_decisions_modes(timing, price):
+    bars = [OhlcBar(24, 24.1, 23.6, 23.66), OhlcBar(24.3, 24.3, 24.3, 24.3)]
+    decisions = list(host._scan_held_decisions(bars, cost=24.28, peak=24.28,
+                                              timing=timing, price=price))
+    expected = 24.3 if timing == "next_bar" else (23.66 if price == "close" else 24.28 * 0.98)
+    assert decisions[0].fill_price == pytest.approx(expected)
+    assert decisions[1].decision == "skip"
+    assert scan_held_bars(bars, cost=24.28, peak=24.28, timing=timing, price=price).fills == 1
+
+
+@pytest.mark.parametrize("fields", [{"price": "close"}, {"timing": "next_bar"}])
+@pytest.mark.parametrize("strategy", [name for name in SINGLE_BOOKS if name != "version1"])
+def test_non_version1_rejects_fill_modes(strategy, fields):
+    with pytest.raises(ValueError, match="requires version1"):
+        scan_held_bars(FLAT_BARS, cost=10, peak=10, strategy=strategy, **fields)
+
+
+@pytest.mark.parametrize("held_only", [False, True])
+@pytest.mark.parametrize("modes", [[], ["--fill-bar", "next_bar", "--fill-price", "close"]])
+def test_cli_threads_fill_modes_without_lake(monkeypatch, held_only, modes):
+    calls = []
+    def runner(*args, **fields):
+        calls.append(fields)
+        return host.ScanSummary(1, 0, 1) if held_only else host.RoundTripSummary(1, 0, 0, 1, 100000, 0)
+    monkeypatch.setattr(host, "run_scan" if held_only else "run_round_trip", runner)
+    flags = ["--source", "lake", "--symbol", SYMBOL, "--start", DAY, "--end", DAY]
+    if held_only:
+        flags += ["--cost", "10", "--peak", "10"]
+    assert main(flags + modes) == 0
+    assert calls[0]["timing"] == ("next_bar" if modes else "same_bar")
+    assert calls[0]["price"] == ("close" if modes else "stop")
+
+
+def test_cli_rejects_invalid_fill_price(capsys):
+    assert main(["--source", "lake", "--symbol", SYMBOL, "--start", DAY, "--end", DAY,
+                 "--fill-price", "vwap"]) == 1
+    assert "invalid choice" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("price", ["stop", "close"])
+def test_next_bar_does_not_bypass_same_day_t1(price):
+    frame = _touch_round_trip_frame()
+    frame.loc[1, "date"] = frame.date[0]
+    result = host.scan_version1_round_trip(
+        frame, symbol="603196.SH", pool_days={frame.date[0]: ["603196.SH"]},
+        daily_quota=3000, timing="next_bar", price=price,
+    )
+    assert (result.buys, result.sells) == (1, 0)
+
+
+@pytest.mark.parametrize("round_trip", [False, True])
+def test_runners_thread_fill_modes(monkeypatch, round_trip):
+    frame = _touch_round_trip_frame()
+    bars = [OhlcBar(*row) for row in frame[list(host.OHLC)].itertuples(index=False, name=None)]
+    def load(*args, source_frames=None, bar_dates=None, **fields):
+        assert "timing" not in fields and "price" not in fields
+        if source_frames is not None:
+            source_frames.append(frame)
+        if bar_dates is not None:
+            bar_dates.extend(frame.date)
+        return bars
+    monkeypatch.setattr(host, "load_scan_bars", load)
+    calls = []
+    def scan(*args, **fields):
+        calls.append(fields)
+        return "summary"
+    if round_trip:
+        monkeypatch.setattr(host, "load_pool_day_map", lambda *args, **fields: {})
+        monkeypatch.setattr(host, "scan_version1_round_trip", scan)
+        result = host.run_round_trip(SYMBOL, DAY, DAY, pool_dir=Path("unused"),
+                                     source="lake", timing="next_bar", price="close")
+    else:
+        monkeypatch.setattr(host, "scan_held_bars", scan)
+        result = run_scan(SYMBOL, DAY, DAY, source="lake", cost=24.28, peak=24.28,
+                          timing="next_bar", price="close")
+    assert result == "summary"
+    assert calls[0]["timing"] == "next_bar" and calls[0]["price"] == "close"
+
+
+@pytest.mark.parametrize("price", ["stop", "close"])
+def test_held_scan_last_trigger_raises(price):
+    with pytest.raises(ValueError, match="next_bar is required"):
+        scan_held_bars([OhlcBar(24, 24.1, 23.6, 23.66)], cost=24.28, peak=24.28,
+                       timing="next_bar", price=price)

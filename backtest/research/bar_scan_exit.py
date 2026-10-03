@@ -1,9 +1,11 @@
-"""一根 K 扫一个持仓：成交或跳过。成交时点可配。
+"""一根 K 扫一个持仓：成交或跳过。成交时点与成交价模式可配。
 
 不是挂单簿，不是交易系统。不扩展订单类型，不挂单，不走事件总线，不进经纪商队列。
 默认 timing="same_bar"，与未加开关时的 scan_bar_exit 相同：
 止损开盘已经穿过则按开盘价成交；盘中 low 触及则按止损价成交。
 回撤止盈先用本根 high 抬峰值，再只看收盘是否达到回撤比例，达到则按收盘价成交。
+price 默认 "stop"；"close" 仅在 same_bar 时把触价止损改为本根收盘价。
+跳空止损仍按本根开盘价，回撤止盈仍按本根收盘价，不受 price 模式影响。
 timing="next_bar" 仍用这根 K 判断成交或跳过，但成交价改成下一根开盘，不在下一根上重判。
 同一根先看止损。本函数不记手续费。
 """
@@ -16,6 +18,7 @@ from typing import Literal
 
 Decision = Literal["fill", "skip"]
 FillTiming = Literal["same_bar", "next_bar"]
+FillPrice = Literal["stop", "close"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,15 +93,19 @@ def scan_bar_exit(
     position: HeldPosition,
     *,
     timing: FillTiming = "same_bar",
+    price: FillPrice = "stop",
     next_bar: OhlcBar | None = None,
     evaluate_drawdown: bool = True,
 ) -> BarScanExit:
     """给定一根 K 和一个持仓，返回成交或跳过。无跨调用状态。
 
     timing 默认 same_bar。next_bar 只在 next_bar 时点、且本根要成交时使用。
+    price 默认 stop；close 仅改变 same_bar 的触价止损成交价。
     evaluate_drawdown 默认 True。False 时只判止损，回撤留给调用方自己的卖点。
     """
     check_fill_timing(timing, next_bar)
+    if price not in ("stop", "close"):
+        raise ValueError("price must be 'stop' or 'close'")
 
     opening, high, low, close = _ohlc(bar, "bar")
 
@@ -118,7 +125,10 @@ def scan_bar_exit(
     if opening <= stop_price:
         result = BarScanExit("fill", opening, "stop_loss:gap_open", new_peak)
     elif low <= stop_price:
-        result = BarScanExit("fill", stop_price, "stop_loss:touch", new_peak)
+        if price == "close" and timing == "same_bar":
+            result = BarScanExit("fill", close, "stop_loss:touch:bar_close", new_peak)
+        else:
+            result = BarScanExit("fill", stop_price, "stop_loss:touch", new_peak)
     elif evaluate_drawdown and close >= cost and new_peak > cost:
         retrace = (new_peak - close) / (new_peak - cost)
         if retrace >= drawdown:
