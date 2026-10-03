@@ -1,4 +1,4 @@
-"""Read-only minute host for registered CSV books and the standalone v7 runner."""
+"""Read-only minute host for registered CSV books and standalone v7-based runners."""
 
 from __future__ import annotations
 
@@ -641,6 +641,51 @@ def run_version7(start, end, *, pool_dir: Path | None = None,
                               total_cash=cash)
 
 
+def run_topk_app_dropout(start, end, *, pool_dir=None, app_pool_dir=None,
+                         pred=None, topk=None, asof=None, cash=None):
+    """Reuse the standalone topk_app loaders without writing pool exports."""
+    from backtest.research import ashare_session, csv_minute_backtest_v7 as v7
+    from backtest.research import csv_minute_backtest_topk_app_dropout as topk_app
+    from backtest.research.topk_app_dropout import DEFAULT_TOPK
+    from backtest.research.csv_minute_backtest_topk_app_dropout import DEFAULT_CASH_TOTAL
+
+    start, end = _as_date(start), _as_date(end)
+    if end < start:
+        raise ValueError("--end must be on or after --start")
+    topk = DEFAULT_TOPK if topk is None else topk
+    cash = DEFAULT_CASH_TOTAL if cash is None else cash
+    asof = "pred_minus_one" if asof is None else asof
+    if asof not in ("pred_minus_one", "identity"):
+        raise ValueError("--asof must be pred_minus_one or identity")
+    if pool_dir is not None:
+        name_dir = Path(pool_dir)
+        pools = v7.load_pool_days(name_dir, start, end)
+    else:
+        if app_pool_dir is None or pred is None:
+            raise ValueError("--pool-dir or both --app-pool-dir and --pred are required")
+        app_dir = Path(app_pool_dir).expanduser().resolve()
+        pred_path = Path(pred).expanduser().resolve()
+        if not app_dir.is_dir():
+            raise FileNotFoundError(f"app pool dir missing: {app_dir}")
+        if not pred_path.is_file():
+            raise FileNotFoundError(f"pred missing: {pred_path}")
+        pools = topk_app.build_intersect_pool_days(
+            app_dir, pred_path, start.strftime("%Y%m%d"), end.strftime("%Y%m%d"),
+            topk=topk, asof=asof, dump_dir=None,
+        )
+        name_dir = Path(app_pool_dir)
+    minute, daily = v7._load_cli_bars(pools, start, end)
+    index = v7.load_index_daily(start, end) if pools else []
+    symbols = {code for codes in pools.values() for code in codes}
+    exdiv, names = ashare_session.load_limit_context(name_dir, symbols, start, end)
+    state = v7.simulate_v7(
+        minute, daily, pools, index, cash_total=cash,
+        start=start, end=end, exdiv=exdiv, names=names,
+    )
+    return summarize_simulate(state, bars=sum(len(f) for f in minute.values()),
+                              total_cash=cash)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Read-only minute host (flat-start CSV simulation)")
     parser.add_argument("--source", choices=SOURCES, required=True)
@@ -661,10 +706,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                         help="legacy scan option; CSV simulation uses its existing fill defaults")
     parser.add_argument("--fill-price", choices=("stop", "close"), default="stop",
                         help="legacy scan option; CSV simulation uses its existing fill defaults")
-    parser.add_argument("--strategy", choices=(*csv_strategy_names(), "version7"), default="version1")
+    parser.add_argument("--strategy", choices=(*csv_strategy_names(), "version7", "topk_app_dropout"), default="version1")
     parser.add_argument("--level", type=float, help="caller-supplied sma5 or ma10")
     parser.add_argument("--stage", choices=("trial", "four", "six", "eight", "full"))
     parser.add_argument("--entry-a", type=float)
+    parser.add_argument("--app-pool-dir", type=Path, help="topk_app_dropout app pool directory")
+    parser.add_argument("--pred", type=Path, help="topk_app_dropout prediction file")
+    parser.add_argument("--asof", choices=("pred_minus_one", "identity"),
+                        help="topk_app_dropout prediction date mapping")
     parser.add_argument("--pred-csv", type=Path)
     parser.add_argument("--scores-dir", type=Path)
     parser.add_argument("--held", help="comma-separated canonical opening held codes")
@@ -678,12 +727,26 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "minute host runs the selected CSV runner from a flat pool start "
                 "and does not accept a partial held seed (--cost/--peak/--held)"
             )
+        if args.strategy != "topk_app_dropout" and (
+            args.app_pool_dir is not None or args.pred is not None or args.asof is not None
+        ):
+            raise ValueError("--app-pool-dir/--pred/--asof require topk_app_dropout")
         # Reader and engine progress belongs on stderr; stdout is one summary.
         with redirect_stdout(sys.stderr):
             scores = None
             if args.strategy in UNIVERSE_BOOKS:
                 scores = load_scores_from_args(pred_csv=args.pred_csv, scores_dir=args.scores_dir)
-            if args.strategy == "version7":
+            if args.strategy == "topk_app_dropout":
+                if args.source != "lake" or args.qlib_root or args.lake_root:
+                    raise ValueError("topk_app_dropout host requires the existing default lake loaders")
+                if args.asof_pool_names:
+                    raise ValueError("--asof-pool-names requires version7")
+                summary = run_topk_app_dropout(
+                    args.start, args.end, pool_dir=args.pool_dir,
+                    app_pool_dir=args.app_pool_dir, pred=args.pred,
+                    topk=args.topk, asof=args.asof, cash=args.cash,
+                )
+            elif args.strategy == "version7":
                 if args.source != "lake" or args.qlib_root or args.lake_root:
                     raise ValueError("version7 host requires the existing default lake loaders")
                 summary = run_version7(
