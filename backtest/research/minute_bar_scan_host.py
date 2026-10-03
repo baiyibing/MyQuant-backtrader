@@ -1,11 +1,11 @@
-"""Opt-in, read-only version1 minute scan for one symbol and date window."""
+"""Opt-in, read-only minute scan using the existing wired strategy books."""
 
 from __future__ import annotations
 
 import argparse
 import math
 import sys
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from contextlib import redirect_stdout
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -13,7 +13,7 @@ from pathlib import Path
 
 from backtest.research.ashare_bars import MinuteBarReadError, load_minute_from_lake
 from backtest.research.bar_scan_exit import OhlcBar
-from backtest.research.minute_true_core_wire import invoke_minute_strategy
+from backtest.research.minute_true_core_wire import invoke_minute_strategy, wired_names
 from backtest.research.qlib_bin_1min import (
     calendar_slice,
     load_qlib_1min_calendar,
@@ -21,10 +21,14 @@ from backtest.research.qlib_bin_1min import (
     qlib_inst_dir,
     read_qlib_bin,
 )
+from backtest.research.topk_dropout_rules import decide_topk_dropout
+from backtest.research.topk_dropout_scores import load_scores_from_args, require_day_scores
+from backtest.research.topk_score_exit_rules import decide_topk_score_exit
 from oskh_data.symbol_format import is_canonical_symbol, to_canonical_symbol
 
 SOURCES = ("qlib_1min", "lake")
 OHLC = ("open", "high", "low", "close")
+UNIVERSE_BOOKS = ("topk_dropout", "topk_score_exit")
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,18 +39,81 @@ class ScanSummary:
 
 
 def scan_held_bars(
-    bars: Sequence[OhlcBar], *, cost: float, peak: float, n_days: int = 1
+    bars: Sequence[OhlcBar], *, cost: float, peak: float, n_days: int = 1,
+    strategy: str = "version1",
+    level: float | None = None,
+    stage: str | None = None,
+    entry_a: float | None = None,
+    symbol: str | None = None,
+    held: Sequence[str] | None = None,
+    scores_by_day: Mapping[str, Mapping[str, float]] | None = None,
+    topk: int | None = None,
+    n_drop: int | None = None,
+    bar_dates: Sequence[date | str] | None = None,
 ) -> ScanSummary:
     """Count each current-bar decision, carrying peak and keeping cost fixed."""
     if not bars:
         raise ValueError("bars must not be empty")
     if n_days != 1:
-        raise ValueError("n_days must stay 1 for the version1 scan")
+        raise ValueError("n_days must stay 1 for every strategy scan")
+    if strategy not in wired_names():
+        raise ValueError(f"unknown minute strategy {strategy!r}")
+    days = None
+    if bar_dates is not None:
+        if len(bar_dates) != len(bars):
+            raise ValueError("bar_dates must have one source date per bar")
+        days = [_as_date(day).strftime("%Y%m%d") for day in bar_dates]
+    day_flags = {}
+    score_days = days
+    if strategy in UNIVERSE_BOOKS:
+        if not scores_by_day:
+            raise ValueError(
+                "a single-symbol run cannot supply the day's cross-section; "
+                "a full score universe is required"
+            )
+        if score_days is None:
+            # Undated bars may use one explicitly supplied score day. This does
+            # not give them session dates or change the wire's session_open default.
+            if len(scores_by_day) != 1:
+                raise ValueError("bar_dates are required for multiple score days")
+            score_days = [next(iter(scores_by_day))] * len(bars)
+        day_scores = {}
+        for day in dict.fromkeys(score_days):
+            scores = require_day_scores(scores_by_day, day)
+            if len(scores) < 2:
+                raise ValueError(
+                    f"{day}: a single-symbol run cannot supply the day's cross-section; "
+                    "a full score universe is required"
+                )
+            day_scores[day] = scores
+        if not held or any(not is_canonical_symbol(code) for code in held):
+            raise ValueError("held requires the opening universe of canonical codes")
+        if len(set(held)) != len(held):
+            raise ValueError("held must not contain duplicate codes")
+        if symbol is None or _symbol(symbol) not in held:
+            raise ValueError("the scan symbol must be in held")
+        code = _symbol(symbol)
+        for field, value in (("topk", topk), ("n_drop", n_drop)):
+            if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+                raise ValueError(f"{field} requires an integer >= 0")
+        for day, scores in day_scores.items():
+            if strategy == "topk_dropout":
+                _buy, sell = decide_topk_dropout(held, scores, topk=topk, n_drop=n_drop)
+                day_flags[day] = (code in sell, None)
+            else:
+                plan = decide_topk_score_exit(held, scores, topk=topk, n_drop=n_drop)
+                day_flags[day] = (code in plan.sell_bottom, code in plan.sell_sx0)
     running_peak = peak
     fills = skips = 0
-    for bar in bars:
+    for index, bar in enumerate(bars):
+        fields = {"level": level, "stage": stage, "entry_a": entry_a}
+        if days is not None:
+            fields["session_open"] = index == 0 or days[index] != days[index - 1]
+        if strategy in UNIVERSE_BOOKS:
+            fields["dropout_sell"], fields["sx0_sell"] = day_flags[score_days[index]]
         result = invoke_minute_strategy(
-            "version1", bar, cost=cost, peak=running_peak, n_days=1, timing="same_bar"
+            strategy, bar, cost=cost, peak=running_peak, n_days=1,
+            timing="same_bar", **fields,
         )
         running_peak = result.peak
         if result.decision == "fill":
@@ -57,6 +124,8 @@ def scan_held_bars(
 
 
 def _as_date(value: date | str) -> date:
+    if isinstance(value, datetime):
+        return value.date()
     if isinstance(value, date):
         return value
     if len(value) != 8 or not value.isdigit():
@@ -93,8 +162,9 @@ def load_scan_bars(
     source: str,
     qlib_root: Path | str | None = None,
     lake_root: Path | None = None,
+    bar_dates: list[date] | None = None,
 ) -> list[OhlcBar]:
-    """Read only the explicit source, preserving its time order and real low."""
+    """Read explicit bars; optionally collect their source dates in bar order."""
     if source not in SOURCES:
         raise ValueError(f"source must be one of {SOURCES}, got {source!r}")
     code = _symbol(symbol)
@@ -153,7 +223,11 @@ def load_scan_bars(
         frame = frames.get(code)
         if frame is None or frame.empty:
             raise FileNotFoundError(f"minute bars missing for {code} under {root}")
-    return _frame_bars(frame, code, root)
+    bars = _frame_bars(frame, code, root)
+    if bar_dates is not None:
+        dates = frame["date"] if source == "qlib_1min" else frame.index
+        bar_dates.extend(_as_date(day) for day in dates)
+    return bars
 
 
 def run_scan(
@@ -166,15 +240,30 @@ def run_scan(
     lake_root: Path | None = None,
     cost: float,
     peak: float,
+    strategy: str = "version1",
+    level: float | None = None,
+    stage: str | None = None,
+    entry_a: float | None = None,
+    held: Sequence[str] | None = None,
+    scores_by_day: Mapping[str, Mapping[str, float]] | None = None,
+    topk: int | None = None,
+    n_drop: int | None = None,
 ) -> ScanSummary:
+    bar_dates = []
     bars = load_scan_bars(
-        symbol, start, end, source=source, qlib_root=qlib_root, lake_root=lake_root
+        symbol, start, end, source=source, qlib_root=qlib_root, lake_root=lake_root,
+        bar_dates=bar_dates,
     )
-    return scan_held_bars(bars, cost=cost, peak=peak)
+    return scan_held_bars(
+        bars, cost=cost, peak=peak, strategy=strategy,
+        level=level, stage=stage, entry_a=entry_a, symbol=symbol,
+        held=held, scores_by_day=scores_by_day, topk=topk, n_drop=n_drop,
+        bar_dates=bar_dates,
+    )
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Read-only version1 minute bar scan")
+    parser = argparse.ArgumentParser(description="Read-only minute bar scan")
     parser.add_argument("--source", choices=SOURCES, required=True)
     parser.add_argument("--symbol", required=True)
     parser.add_argument("--start", type=_as_date, metavar="YYYYMMDD", required=True)
@@ -183,21 +272,43 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--lake-root", type=Path)
     parser.add_argument("--cost", type=float, required=True)
     parser.add_argument("--peak", type=float, required=True)
-    args = parser.parse_args(argv)
+    parser.add_argument("--strategy", choices=wired_names(), default="version1")
+    parser.add_argument("--level", type=float, help="caller-supplied sma5 or ma10")
+    parser.add_argument("--stage", choices=("trial", "four", "six", "eight", "full"))
+    parser.add_argument("--entry-a", type=float)
+    parser.add_argument("--pred-csv", type=Path)
+    parser.add_argument("--scores-dir", type=Path)
+    parser.add_argument("--held", help="comma-separated canonical opening held codes")
+    parser.add_argument("--topk", type=int)
+    parser.add_argument("--n-drop", type=int)
     try:
+        args = parser.parse_args(argv)
         code = _symbol(args.symbol)
         # Existing reader progress belongs on stderr; stdout is one summary line.
         with redirect_stdout(sys.stderr):
+            scores = None
+            if args.strategy in UNIVERSE_BOOKS:
+                scores = load_scores_from_args(pred_csv=args.pred_csv, scores_dir=args.scores_dir)
             summary = run_scan(
                 code, args.start, args.end, source=args.source,
                 qlib_root=args.qlib_root, lake_root=args.lake_root,
                 cost=args.cost, peak=args.peak,
+                strategy=args.strategy, level=args.level, stage=args.stage,
+                entry_a=args.entry_a,
+                held=[code.strip() for code in args.held.split(",")] if args.held else None,
+                scores_by_day=scores, topk=args.topk, n_drop=args.n_drop,
             )
+    except SystemExit as exc:
+        if exc.code == 0:
+            return 0
+        if isinstance(exc.code, str):
+            print(f"error: {exc.code}", file=sys.stderr)
+        return 1
     except (OSError, ValueError, RuntimeError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     print(
-        f"symbol={code} source={args.source} version1 "
+        f"symbol={code} source={args.source} {args.strategy} "
         f"bars={summary.bars} fills={summary.fills} skips={summary.skips}"
     )
     return 0

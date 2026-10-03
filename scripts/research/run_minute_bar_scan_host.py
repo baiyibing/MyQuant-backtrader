@@ -1,4 +1,4 @@
-"""Dedicated opt-in, read-only version1 minute bar scan CLI."""
+"""Dedicated opt-in, read-only minute bar scan CLI (default version1)."""
 
 import sys
 from pathlib import Path
