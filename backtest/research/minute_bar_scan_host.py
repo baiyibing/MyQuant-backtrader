@@ -134,6 +134,7 @@ def scan_version1_round_trip(frame, *, symbol: str, pool_days: Mapping,
             if held_shares:
                 if strategy == "version2":
                     if not t1_sellable(buy_day, day):
+                        peak = bar.high if bar.high > peak else peak
                         continue
                     result = invoke_minute_strategy(
                         "version2", bar, cost=cost, peak=peak,

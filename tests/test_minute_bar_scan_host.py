@@ -1036,3 +1036,30 @@ def test_round_trip_partial_held_flags_keep_error(capsys, strategy, flag):
     assert main(["--source", "lake", "--symbol", SYMBOL, "--start", DAY, "--end", DAY,
                  "--strategy", strategy, flag, "10"]) == 1
     assert "held-only scan requires both --cost and --peak" in capsys.readouterr().err
+
+
+def test_version2_round_trip_carries_unsellable_same_day_peak(monkeypatch):
+    from backtest.research import strategy2_rules
+    buy_day, sell_day = date(2026, 1, 9), date(2026, 1, 12)
+    frame = pd.DataFrame(dict(
+        date=[buy_day, buy_day, sell_day], hm=[895, 896, 570],
+        open=[10, 10, 10], high=[10, 12, 10.5],
+        low=[10, 9.5, 10], close=[10, 10, 10],
+    ))
+    calls = []
+    def take_profit(close, cost, peak, n_days):
+        calls.append((cost, peak, n_days))
+        return "sentinel_take_profit"
+    monkeypatch.setattr(strategy2_rules, "take_profit_reason", take_profit)
+    invoke = host.invoke_minute_strategy
+    def sellable_only(*args, **kwargs):
+        assert kwargs["n_days"] == 1
+        assert kwargs["peak"] == 12
+        return invoke(*args, **kwargs)
+    monkeypatch.setattr(host, "invoke_minute_strategy", sellable_only)
+    summary = host.scan_version1_round_trip(
+        frame, symbol=SYMBOL, pool_days={buy_day: [SYMBOL]},
+        cash=2000, daily_quota=1001, strategy="version2")
+    assert calls == [(10, 12, 1)]
+    assert (summary.buys, summary.sells, summary.skips) == (1, 1, 1)
+    assert summary.equity == pytest.approx(1998)
