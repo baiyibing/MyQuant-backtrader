@@ -16,6 +16,11 @@ from backtest.research.minute_true_core_wire import (
     wired_names,
 )
 from backtest.research.topk_dropout_rules import decide_topk_dropout
+from backtest.research.topk_score_exit_rules import (
+    ScoreExitPlan,
+    decide_topk_score_exit,
+    sell_reason,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -30,6 +35,13 @@ def test_entries_are_every_minute_cli_strategy():
 
 def test_topk_dropout_is_wired_to_the_existing_minute_cli():
     entry = next(entry for entry in minute_strategy_entries() if entry.name == "topk_dropout")
+    assert entry.status == "wired"
+    assert entry.missing_field is None
+    assert entry.cli == "backtest/research/csv_minute_backtest.py"
+
+
+def test_topk_score_exit_is_wired_to_the_existing_minute_cli():
+    entry = next(entry for entry in minute_strategy_entries() if entry.name == "topk_score_exit")
     assert entry.status == "wired"
     assert entry.missing_field is None
     assert entry.cli == "backtest/research/csv_minute_backtest.py"
@@ -51,6 +63,12 @@ def test_wire_does_not_rank_topk_dropout():
     assert "decide_topk_dropout" not in text
 
 
+def test_wire_does_not_rank_topk_score_exit():
+    text = (ROOT / "backtest/research/minute_true_core_wire.py").read_text(encoding="utf-8")
+    assert "decide_topk_score_exit" not in text
+    assert "decide_topk_dropout" not in text
+
+
 def test_blocked_names_each_have_one_field():
     seen: dict[str, str] = {}
     for entry in blocked_entries():
@@ -67,14 +85,18 @@ def test_blocked_names_each_have_one_field():
             )
         assert raised.value.missing_field == entry.missing_field
         assert raised.value.name == entry.name
-    # 一个 score 比不出整日 SX0，不把单分当成卖点。
-    assert seen == {"topk_score_exit": "score"}
+    assert seen == {}
 
 
 @pytest.mark.parametrize("name", wired_names())
 def test_wired_strategy_skips_a_quiet_bar(name: str):
     # high 只抬到 10.01，回撤不到 50%；low 9.96 不触及 2% 止损。
     # level/stage 传了也不该在这根上卖。
+    kwargs = {}
+    if name == "topk_dropout":
+        kwargs = {"dropout_sell": False}
+    elif name == "topk_score_exit":
+        kwargs = {"dropout_sell": False, "sx0_sell": False}
     result = invoke_minute_strategy(
         name,
         OhlcBar(10.0, 10.01, 9.96, 10.008),
@@ -84,7 +106,7 @@ def test_wired_strategy_skips_a_quiet_bar(name: str):
         level=9.0,
         stage="trial",
         entry_a=10.0,
-        **({"dropout_sell": False} if name == "topk_dropout" else {}),
+        **kwargs,
     )
     assert result.decision == "skip"
     assert result.fill_price is None
@@ -390,3 +412,188 @@ def test_topk_dropout_consumes_the_books_decision_for_each_held_name():
             assert result.decision == "skip"
             assert result.fill_price is None
             assert result.reason == ""
+
+
+@pytest.mark.parametrize("kwargs", [{}, {"dropout_sell": False}, {"sx0_sell": False}])
+def test_topk_score_exit_requires_both_already_decided_sell_flags(kwargs):
+    with pytest.raises(ValueError, match="dropout_sell and sx0_sell") as raised:
+        invoke_minute_strategy(
+            "topk_score_exit",
+            OhlcBar(10.0, 10.01, 9.96, 10.008),
+            cost=10.0,
+            peak=10.0,
+            **kwargs,
+        )
+    message = str(raised.value)
+    assert "caller must pass the already-decided rank-dropout sell" in message
+    assert "the already-decided SX0 sell for this name today" in message
+    assert "the scan does not rank the day" in message
+    assert "does not treat a raw score as the exit" in message
+
+
+@pytest.mark.parametrize("flag", ["dropout_sell", "sx0_sell"])
+@pytest.mark.parametrize(
+    "value",
+    [
+        0,
+        1,
+        "True",
+        {"score": 0.0},
+        ScoreExitPlan(
+            buy=(),
+            sell=(),
+            buy_bottom=(),
+            sell_bottom=(),
+            sell_sx0=(),
+            also_bottom=(),
+            buy_extra=(),
+        ),
+    ],
+)
+def test_topk_score_exit_sell_flags_require_bools(flag, value):
+    kwargs = {"dropout_sell": False, "sx0_sell": False}
+    kwargs[flag] = value
+    with pytest.raises(ValueError, match=f"{flag} must be a bool"):
+        invoke_minute_strategy(
+            "topk_score_exit",
+            OhlcBar(10.0, 10.01, 9.96, 10.008),
+            cost=10.0,
+            peak=10.0,
+            **kwargs,
+        )
+
+
+@pytest.mark.parametrize(
+    "dropout_sell,sx0_sell,decision,price,reason",
+    [
+        (False, True, "fill", 10.008, "model_exit:nonpositive"),
+        (True, False, "fill", 10.008, "topk_drop:bottom"),
+        (True, True, "fill", 10.008, "model_exit:nonpositive"),
+        (False, False, "skip", None, ""),
+    ],
+)
+def test_topk_score_exit_uses_the_books_sell_reason(
+    dropout_sell, sx0_sell, decision, price, reason
+):
+    result = invoke_minute_strategy(
+        "topk_score_exit",
+        OhlcBar(10.0, 10.01, 9.96, 10.008),
+        cost=10.0,
+        peak=10.0,
+        dropout_sell=dropout_sell,
+        sx0_sell=sx0_sell,
+    )
+    assert result.decision == decision
+    assert result.fill_price == price
+    assert result.reason == reason
+    assert result.peak == 10.01
+
+
+@pytest.mark.parametrize(
+    "dropout_sell,sx0_sell", [(True, True), (True, False), (False, True), (False, False)]
+)
+@pytest.mark.parametrize(
+    "bar,price,reason",
+    [
+        (OhlcBar(8.9, 10.2, 8.8, 10.1), 8.9, "stop_loss:gap_open"),
+        (OhlcBar(10.0, 10.2, 8.9, 10.1), 9.0, "stop_loss:touch"),
+    ],
+)
+def test_topk_score_exit_stop_beats_both_sell_flags(dropout_sell, sx0_sell, bar, price, reason):
+    result = invoke_minute_strategy(
+        "topk_score_exit",
+        bar,
+        cost=10.0,
+        peak=10.0,
+        dropout_sell=dropout_sell,
+        sx0_sell=sx0_sell,
+    )
+    assert result.decision == "fill"
+    assert result.fill_price == pytest.approx(price)
+    assert result.reason == reason
+    assert result.peak == 10.2
+
+
+def test_topk_score_exit_does_not_evaluate_drawdown():
+    result = invoke_minute_strategy(
+        "topk_score_exit",
+        OhlcBar(11.5, 12.0, 9.9, 10.0),
+        cost=10.0,
+        peak=12.0,
+        dropout_sell=False,
+        sx0_sell=False,
+    )
+    assert result.decision == "skip"
+    assert result.fill_price is None
+    assert result.reason == ""
+    assert result.peak == 12.0
+
+
+@pytest.mark.parametrize(
+    "bar,dropout_sell,sx0_sell,reason",
+    [
+        (OhlcBar(10.0, 10.01, 9.96, 10.008), False, True, "model_exit:nonpositive:next_open"),
+        (OhlcBar(10.0, 10.01, 9.96, 10.008), True, False, "topk_drop:bottom:next_open"),
+        (OhlcBar(10.0, 10.01, 9.96, 10.008), True, True, "model_exit:nonpositive:next_open"),
+        (OhlcBar(8.9, 10.2, 8.8, 10.1), True, True, "stop_loss:gap_open:next_open"),
+        (OhlcBar(10.0, 10.2, 8.9, 10.1), True, True, "stop_loss:touch:next_open"),
+    ],
+)
+def test_topk_score_exit_next_bar_moves_the_judged_fill(bar, dropout_sell, sx0_sell, reason):
+    result = invoke_minute_strategy(
+        "topk_score_exit",
+        bar,
+        cost=10.0,
+        peak=10.0,
+        dropout_sell=dropout_sell,
+        sx0_sell=sx0_sell,
+        timing="next_bar",
+        next_bar=OhlcBar(10.05, 10.2, 10.0, 10.1),
+    )
+    assert result.decision == "fill"
+    assert result.fill_price == 10.05
+    assert result.reason == reason
+    assert result.peak == bar.high
+
+
+def test_topk_score_exit_consumes_the_books_decision_for_each_held_name():
+    held = ["000001.SZ", "000002.SZ"]
+    # 缺分名字可进 bottom，有限零分名字进 SX0；分类与原因均以策略书为准。
+    scores = {"000001.SZ": 0.0, "000003.SZ": 3.0}
+    plan = decide_topk_score_exit(held, scores, topk=2, n_drop=1)
+    assert set(plan.sell_bottom) - set(plan.sell_sx0)
+    assert plan.sell_sx0
+    bar = OhlcBar(10.0, 10.01, 9.96, 10.008)
+    for code in held:
+        reason = sell_reason(code, plan)
+        result = invoke_minute_strategy(
+            "topk_score_exit",
+            bar,
+            cost=10.0,
+            peak=10.0,
+            dropout_sell=(code in plan.sell_bottom),
+            sx0_sell=(code in plan.sell_sx0),
+        )
+        if reason is not None:
+            assert result.decision == "fill"
+            assert result.fill_price == bar.close
+            assert result.reason == reason
+        else:
+            assert result.decision == "skip"
+            assert result.fill_price is None
+            assert result.reason == ""
+
+
+@pytest.mark.parametrize("name", ["version1", "topk_dropout"])
+def test_other_books_ignore_sx0_sell(name):
+    result = invoke_minute_strategy(
+        name,
+        OhlcBar(10.0, 10.01, 9.96, 10.008),
+        cost=10.0,
+        peak=10.0,
+        sx0_sell={"score": 0.0},
+        **({"dropout_sell": False} if name == "topk_dropout" else {}),
+    )
+    assert result.decision == "skip"
+    assert result.fill_price is None
+    assert result.reason == ""
