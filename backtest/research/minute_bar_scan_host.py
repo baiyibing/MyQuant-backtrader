@@ -16,7 +16,9 @@ import pandas as pd
 
 from backtest.research.ashare_bars import _in_session
 from backtest.research.ashare_session import t1_sellable
-from backtest.research.bar_scan_exit import BarScanExit, HeldPosition, OhlcBar, scan_bar_exit
+from backtest.research.bar_scan_exit import (
+    BarScanExit, FillPrice, FillTiming, HeldPosition, OhlcBar, scan_bar_exit,
+)
 from backtest.research.csv_minute_backtest import BUY_HM, _buy_px
 from backtest.research.csv_pool import load_pool_day_map
 from backtest.research.csv_common import DEFAULT_DAILY_QUOTA
@@ -59,8 +61,10 @@ class RoundTripSummary:
 
 def scan_version1_round_trip(frame, *, symbol: str, pool_days: Mapping,
                              cash: float = 100000.0,
-                             daily_quota: float = DEFAULT_DAILY_QUOTA) -> RoundTripSummary:
-    """Flat-start, same-bar accounting with the CSV version1 fee and lot sizer.
+                             daily_quota: float = DEFAULT_DAILY_QUOTA,
+                             timing: FillTiming = "same_bar",
+                             price: FillPrice = "stop") -> RoundTripSummary:
+    """Flat-start, bar-scan accounting with the CSV version1 fee and lot sizer.
 
     Buy reason is pool. Only a later calendar day can close bought shares.
     A sold name may re-enter at a later eligible buy bar, including the same day.
@@ -125,7 +129,9 @@ def scan_version1_round_trip(frame, *, symbol: str, pool_days: Mapping,
             if held_shares:
                 result = scan_bar_exit(
                     bar, HeldPosition(cost, peak, book.stop_pct, book.drawdown_of(1)),
-                    timing="same_bar",
+                    timing=timing, price=price,
+                    **({"next_bar": bars[offset + index + 1]}
+                       if timing == "next_bar" and offset + index + 1 < len(bars) else {}),
                 )
                 peak = result.peak
                 if result.decision == "fill" and t1_sellable(buy_day, day):
@@ -142,6 +148,8 @@ def scan_version1_round_trip(frame, *, symbol: str, pool_days: Mapping,
 def scan_held_bars(
     bars: Sequence[OhlcBar], *, cost: float, peak: float, n_days: int = 1,
     strategy: str = "version1",
+    timing: FillTiming = "same_bar",
+    price: FillPrice = "stop",
     level: float | None = None,
     stage: str | None = None,
     entry_a: float | None = None,
@@ -161,8 +169,11 @@ def scan_held_bars(
         if bar_dates is not None and len(bar_dates) != len(bars):
             raise ValueError("bar_dates must have one source date per bar")
         fills = sum(result.decision == "fill"
-                    for result in _scan_held_decisions(bars, cost=cost, peak=peak))
+                    for result in _scan_held_decisions(bars, cost=cost, peak=peak,
+                                                      timing=timing, price=price))
         return ScanSummary(len(bars), fills, len(bars) - fills)
+    if timing != "same_bar" or price != "stop":
+        raise ValueError("non-default timing or price requires version1")
     if strategy not in wired_names():
         raise ValueError(f"unknown minute strategy {strategy!r}")
     days = None
@@ -242,7 +253,8 @@ def _version1_book():
 
 
 def _scan_held_decisions(
-    bars: Sequence[OhlcBar], *, cost: float, peak: float
+    bars: Sequence[OhlcBar], *, cost: float, peak: float,
+    timing: FillTiming = "same_bar", price: FillPrice = "stop",
 ) -> Iterator[BarScanExit]:
     """Resolve the catalog once; use the same core and book as the wire."""
     book = _version1_book()
@@ -250,10 +262,12 @@ def _scan_held_decisions(
     if cost_f <= 0 or running_peak <= 0:
         raise ValueError("cost and peak must be finite numbers > 0")
     drawdown = book.drawdown_of(1)
-    for bar in bars:
+    for index, bar in enumerate(bars):
         result = scan_bar_exit(
             bar, HeldPosition(cost_f, running_peak, book.stop_pct, drawdown),
-            timing="same_bar",
+            timing=timing, price=price,
+            **({"next_bar": bars[index + 1]}
+               if timing == "next_bar" and index + 1 < len(bars) else {}),
         )
         running_peak = result.peak
         yield result
@@ -403,12 +417,13 @@ def load_scan_bars(
 
 def run_round_trip(symbol, start, end, *, pool_dir: Path, cash=100000.0,
                    daily_quota=DEFAULT_DAILY_QUOTA,
+                   timing: FillTiming = "same_bar", price: FillPrice = "stop",
                    **source_args) -> RoundTripSummary:
     frames = []
     load_scan_bars(symbol, start, end, source_frames=frames, **source_args)
     pool_days = load_pool_day_map(pool_dir, start, end, key="date")
     return scan_version1_round_trip(frames[0], symbol=symbol, pool_days=pool_days,
-                                   cash=cash, daily_quota=daily_quota)
+                                   cash=cash, daily_quota=daily_quota, timing=timing, price=price)
 
 
 def run_scan(
@@ -422,6 +437,8 @@ def run_scan(
     cost: float,
     peak: float,
     strategy: str = "version1",
+    timing: FillTiming = "same_bar",
+    price: FillPrice = "stop",
     level: float | None = None,
     stage: str | None = None,
     entry_a: float | None = None,
@@ -436,7 +453,7 @@ def run_scan(
         bar_dates=bar_dates,
     )
     return scan_held_bars(
-        bars, cost=cost, peak=peak, strategy=strategy,
+        bars, cost=cost, peak=peak, strategy=strategy, timing=timing, price=price,
         level=level, stage=stage, entry_a=entry_a, symbol=symbol,
         held=held, scores_by_day=scores_by_day, topk=topk, n_drop=n_drop,
         bar_dates=bar_dates,
@@ -458,6 +475,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--cash", type=float, default=100000.0, help="initial cash")
     parser.add_argument("--daily-quota", type=float, default=DEFAULT_DAILY_QUOTA,
                         help="CSV version1 daily buy budget, split across pool members")
+    parser.add_argument("--fill-bar", choices=("same_bar", "next_bar"), default="same_bar")
+    parser.add_argument("--fill-price", choices=("stop", "close"), default="stop")
     parser.add_argument("--strategy", choices=wired_names(), default="version1")
     parser.add_argument("--level", type=float, help="caller-supplied sma5 or ma10")
     parser.add_argument("--stage", choices=("trial", "four", "six", "eight", "full"))
@@ -482,12 +501,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                 summary = run_round_trip(
                     code, args.start, args.end, source=args.source,
                     qlib_root=args.qlib_root, lake_root=args.lake_root,
+                    timing=args.fill_bar, price=args.fill_price,
                     pool_dir=args.pool_dir, cash=args.cash, daily_quota=args.daily_quota,
                 )
             else:
                 summary = run_scan(
                     code, args.start, args.end, source=args.source,
                     qlib_root=args.qlib_root, lake_root=args.lake_root,
+                    timing=args.fill_bar, price=args.fill_price,
                     cost=args.cost, peak=args.peak,
                     strategy=args.strategy, level=args.level, stage=args.stage,
                     entry_a=args.entry_a,

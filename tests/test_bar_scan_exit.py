@@ -168,3 +168,43 @@ def test_unknown_timing_and_same_bar_with_next_bar_raise():
             next_bar=OhlcBar(10, 10, 10, 10),
         )
 
+
+
+@pytest.mark.parametrize("mode", [None, "stop", "close"])
+@pytest.mark.parametrize("timing", ["same_bar", "next_bar"])
+def test_603196_touch_price_modes(mode, timing):
+    bar = OhlcBar(24, 24.1, 23.6, 23.66)
+    position = HeldPosition(24.28, 24.28, 0.02, 0.5)
+    fields = {} if mode is None else {"price": mode}
+    if timing == "next_bar":
+        fields["next_bar"] = OhlcBar(25, 26, 25, 26)
+    result = scan_bar_exit(bar, position, timing=timing, **fields)
+    expected = 25 if timing == "next_bar" else (23.66 if mode == "close" else 24.28 * 0.98)
+    assert result.fill_price == pytest.approx(expected)
+    reason = "stop_loss:touch"
+    if timing == "next_bar":
+        reason += ":next_open"
+    elif mode == "close":
+        reason += ":bar_close"
+    assert result.reason == reason
+    if timing == "same_bar" and mode != "close":
+        assert result.fill_price != bar.close
+
+
+@pytest.mark.parametrize("price", ["stop", "close"])
+@pytest.mark.parametrize("timing", ["same_bar", "next_bar"])
+@pytest.mark.parametrize("bar,position,reason", [
+    (OhlcBar(9.7, 10, 9.5, 9.8), _pos(), "stop_loss:gap_open"),
+    (OhlcBar(11.8, 12, 11, 11), _pos(peak=12), "profit_take:drawdown:50"),
+])
+def test_gap_and_drawdown_price_modes(price, timing, bar, position, reason):
+    fields = {"next_bar": OhlcBar(13, 13, 13, 13)} if timing == "next_bar" else {}
+    result = scan_bar_exit(bar, position, timing=timing, price=price, **fields)
+    expected = 13 if timing == "next_bar" else (bar.open if reason.startswith("stop") else bar.close)
+    assert result.fill_price == expected
+    assert result.reason == reason + (":next_open" if timing == "next_bar" else "")
+
+
+def test_unknown_price_raises():
+    with pytest.raises(ValueError, match="price"):
+        scan_bar_exit(OhlcBar(10, 10, 10, 10), _pos(), price="vwap")
