@@ -15,6 +15,7 @@ from backtest.research.minute_true_core_wire import (
     minute_strategy_names,
     wired_names,
 )
+from backtest.research.topk_dropout_rules import decide_topk_dropout
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -27,6 +28,13 @@ def test_entries_are_every_minute_cli_strategy():
     assert set(wired_names()) | {entry.name for entry in blocked_entries()} == set(names)
 
 
+def test_topk_dropout_is_wired_to_the_existing_minute_cli():
+    entry = next(entry for entry in minute_strategy_entries() if entry.name == "topk_dropout")
+    assert entry.status == "wired"
+    assert entry.missing_field is None
+    assert entry.cli == "backtest/research/csv_minute_backtest.py"
+
+
 def test_old_minute_entry_is_still_present():
     text = (ROOT / "backtest/research/csv_minute_backtest.py").read_text(encoding="utf-8")
     assert "def scan_held_day_python(" in text
@@ -36,6 +44,11 @@ def test_old_minute_entry_is_still_present():
         encoding="utf-8"
     )
     assert "topk_app_dropout" in app
+
+
+def test_wire_does_not_rank_topk_dropout():
+    text = (ROOT / "backtest/research/minute_true_core_wire.py").read_text(encoding="utf-8")
+    assert "decide_topk_dropout" not in text
 
 
 def test_blocked_names_each_have_one_field():
@@ -54,8 +67,8 @@ def test_blocked_names_each_have_one_field():
             )
         assert raised.value.missing_field == entry.missing_field
         assert raised.value.name == entry.name
-    # 一个 score 比不出整日 bottom / SX0，不把单分当成卖点。
-    assert seen == {"topk_dropout": "score", "topk_score_exit": "score"}
+    # 一个 score 比不出整日 SX0，不把单分当成卖点。
+    assert seen == {"topk_score_exit": "score"}
 
 
 @pytest.mark.parametrize("name", wired_names())
@@ -71,6 +84,7 @@ def test_wired_strategy_skips_a_quiet_bar(name: str):
         level=9.0,
         stage="trial",
         entry_a=10.0,
+        **({"dropout_sell": False} if name == "topk_dropout" else {}),
     )
     assert result.decision == "skip"
     assert result.fill_price is None
@@ -263,3 +277,116 @@ def test_level_and_stage_are_required():
         invoke_minute_strategy("version7", bar, cost=10.0, peak=10.0)
     with pytest.raises(ValueError, match="stage"):
         invoke_minute_strategy("topk_app_dropout", bar, cost=10.0, peak=10.0)
+
+
+def test_dropout_sell_is_required():
+    with pytest.raises(ValueError, match="dropout_sell") as raised:
+        invoke_minute_strategy(
+            "topk_dropout", OhlcBar(10.0, 10.1, 9.9, 10.0), cost=10.0, peak=10.0
+        )
+    assert "already-decided dropout sell for this name today" in str(raised.value)
+    assert "the scan does not rank the day" in str(raised.value)
+
+
+@pytest.mark.parametrize("dropout_sell", [0, 1, "True", {"score": 1.0}])
+def test_dropout_sell_requires_a_bool(dropout_sell):
+    with pytest.raises(ValueError, match="dropout_sell must be a bool"):
+        invoke_minute_strategy(
+            "topk_dropout",
+            OhlcBar(10.0, 10.1, 9.9, 10.0),
+            cost=10.0,
+            peak=10.0,
+            dropout_sell=dropout_sell,
+        )
+
+
+@pytest.mark.parametrize(
+    "dropout_sell,decision,price,reason",
+    [(True, "fill", 10.008, "topk_drop:bottom"), (False, "skip", None, "")],
+)
+def test_topk_dropout_uses_the_already_decided_sell_flag(dropout_sell, decision, price, reason):
+    result = invoke_minute_strategy(
+        "topk_dropout",
+        OhlcBar(10.0, 10.01, 9.96, 10.008),
+        cost=10.0,
+        peak=10.0,
+        dropout_sell=dropout_sell,
+    )
+    assert result.decision == decision
+    assert result.fill_price == price
+    assert result.reason == reason
+    assert result.peak == 10.01
+
+
+@pytest.mark.parametrize("dropout_sell", [True, False])
+@pytest.mark.parametrize(
+    "bar,price,reason",
+    [
+        (OhlcBar(8.9, 10.2, 8.8, 10.1), 8.9, "stop_loss:gap_open"),
+        (OhlcBar(10.0, 10.2, 8.9, 10.1), 9.0, "stop_loss:touch"),
+    ],
+)
+def test_topk_dropout_stop_beats_dropout_on_the_same_bar(dropout_sell, bar, price, reason):
+    result = invoke_minute_strategy(
+        "topk_dropout", bar, cost=10.0, peak=10.0, dropout_sell=dropout_sell
+    )
+    assert result.decision == "fill"
+    assert result.fill_price == pytest.approx(price)
+    assert result.reason == reason
+    assert result.peak == 10.2
+
+
+def test_topk_dropout_does_not_evaluate_drawdown():
+    result = invoke_minute_strategy(
+        "topk_dropout",
+        OhlcBar(11.5, 12.0, 9.9, 10.0),
+        cost=10.0,
+        peak=12.0,
+        dropout_sell=False,
+    )
+    assert result.decision == "skip"
+    assert result.fill_price is None
+    assert result.peak == 12.0
+
+
+@pytest.mark.parametrize(
+    "bar,reason",
+    [
+        (OhlcBar(10.0, 10.01, 9.96, 10.008), "topk_drop:bottom:next_open"),
+        (OhlcBar(8.9, 9.2, 8.8, 9.1), "stop_loss:gap_open:next_open"),
+    ],
+)
+def test_topk_dropout_next_bar_moves_the_judged_fill(bar, reason):
+    result = invoke_minute_strategy(
+        "topk_dropout",
+        bar,
+        cost=10.0,
+        peak=10.0,
+        dropout_sell=True,
+        timing="next_bar",
+        next_bar=OhlcBar(10.05, 10.2, 10.0, 10.1),
+    )
+    assert result.decision == "fill"
+    assert result.fill_price == 10.05
+    assert result.reason == reason
+
+
+def test_topk_dropout_consumes_the_books_decision_for_each_held_name():
+    held = ["000001.SZ", "000002.SZ"]
+    scores = {"000001.SZ": 2.0, "000002.SZ": 1.0, "000003.SZ": 3.0}
+    _buy, sell = decide_topk_dropout(held, scores, topk=2, n_drop=1)
+    assert sell
+    assert set(held) - set(sell)
+    bar = OhlcBar(10.0, 10.01, 9.96, 10.008)
+    for code in held:
+        result = invoke_minute_strategy(
+            "topk_dropout", bar, cost=10.0, peak=10.0, dropout_sell=(code in sell)
+        )
+        if code in sell:
+            assert result.decision == "fill"
+            assert result.fill_price == bar.close
+            assert result.reason == "topk_drop:bottom"
+        else:
+            assert result.decision == "skip"
+            assert result.fill_price is None
+            assert result.reason == ""
