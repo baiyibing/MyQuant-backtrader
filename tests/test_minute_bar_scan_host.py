@@ -492,12 +492,12 @@ def test_round_trip_cli_buys_only_pool_member(tmp_path, capsys, source, membersh
         root_flag = "--qlib-root"
     assert main(["--source", source, "--symbol", SYMBOL, "--start", DAY, "--end", DAY,
                  root_flag, str(root), "--pool-dir", str(pool), "--cash", "2000",
-                 "--shares", "100"]) == 0
+                 "--daily-quota", "1000"]) == 0
     output = capsys.readouterr().out
     assert len(output.splitlines()) == 1
     if membership == "000739":
-        assert "bars=3 buys=1 sells=1 skips=1 equity=1970.00" in output
-        assert float(output.split("return_pct=")[1]) == pytest.approx(-1.5, abs=0.000002)
+        assert "bars=3 buys=1 sells=1 skips=1 equity=1968.03" in output
+        assert float(output.split("return_pct=")[1]) == pytest.approx(-1.5985, abs=0.000002)
     else:
         assert "buys=0 sells=0 skips=3 equity=2000.00 return_pct=0.000000" in output
 
@@ -508,7 +508,7 @@ def test_round_trip_existing_buy_window_fallback(hms, buys):
                           "open": [10, 10, 9.7], "high": [10, 10, 9.8],
                           "low": [10, 10, 9.6], "close": [10, 10, 9.75]})
     result = host.scan_version1_round_trip(frame, symbol=SYMBOL,
-                                          pool_days={date(2026, 1, 6): [SYMBOL]})
+                                          daily_quota=1000, pool_days={date(2026, 1, 6): [SYMBOL]})
     assert (result.buys, result.sells) == (buys, buys)
 
 
@@ -522,11 +522,11 @@ def test_round_trip_rebuys_after_same_day_sell(buy_hm):
         "low": [10, 9.6, 10, 10.5], "close": [10, 9.75, 10, 11],
     })
     result = host.scan_version1_round_trip(
-        frame, symbol=SYMBOL, cash=2000,
+        frame, symbol=SYMBOL, cash=2000, daily_quota=1000,
         pool_days={first: [SYMBOL], second: [SYMBOL]},
     )
     assert (result.buys, result.sells, result.skips) == (2, 1, 1)
-    assert result.equity == pytest.approx(2070)
+    assert result.equity == pytest.approx(2067.03)
 
 
 def test_round_trip_reenters_later_pool_day_and_marks_open_shares():
@@ -534,16 +534,53 @@ def test_round_trip_reenters_later_pool_day_and_marks_open_shares():
     frame = pd.DataFrame({"date": days, "hm": [895, 896, 895, 896],
                           "open": [10, 9.7, 10, 10.5], "high": [10, 9.8, 10, 11],
                           "low": [10, 9.6, 10, 10.5], "close": [10, 9.75, 10, 11]})
-    result = host.scan_version1_round_trip(frame, symbol=SYMBOL, cash=2000,
+    result = host.scan_version1_round_trip(frame, symbol=SYMBOL, cash=2000, daily_quota=1000,
                                           pool_days={day: [SYMBOL] for day in days})
     assert (result.buys, result.sells, result.skips) == (2, 1, 1)
-    assert result.equity == pytest.approx(2070)
+    assert result.equity == pytest.approx(2067.03)
 
 
-@pytest.mark.parametrize("shares", [0, -100, 1, 150, True])
-def test_round_trip_rejects_non_whole_lot_shares(shares):
-    with pytest.raises(ValueError, match="shares"):
-        host.scan_version1_round_trip(pd.DataFrame(), symbol=SYMBOL, pool_days={}, shares=shares)
+@pytest.mark.parametrize("quota", [0, -100, float("inf"), float("nan"), True])
+def test_round_trip_rejects_invalid_daily_quota(quota):
+    with pytest.raises(ValueError, match="daily_quota"):
+        host.scan_version1_round_trip(pd.DataFrame(), symbol=SYMBOL, pool_days={}, daily_quota=quota)
+
+
+def test_round_trip_existing_fee_reduces_equity(monkeypatch):
+    day = date(2026, 1, 6)
+    frame = pd.DataFrame({"date": [day, day], "hm": [895, 896],
+                          "open": [10, 9.7], "high": [10, 9.8],
+                          "low": [10, 9.6], "close": [10, 9.75]})
+    args = dict(symbol=SYMBOL, pool_days={day: [SYMBOL]}, cash=10000, daily_quota=5000)
+    paid = host.scan_version1_round_trip(frame, **args)
+    monkeypatch.setattr(host, "COMMISSION", 0.0)
+    free = host.scan_version1_round_trip(frame, **args)
+    assert (paid.buys, paid.sells) == (free.buys, free.sells) == (1, 1)
+    assert paid.equity < free.equity
+    assert free.equity - paid.equity == pytest.approx(5 + 4.85)
+
+
+def test_round_trip_size_matches_existing_sizer(monkeypatch):
+    from backtest.research.csv_ledger import _buy_size
+    day = date(2026, 1, 6)
+    frame = pd.DataFrame({"date": [day, day], "hm": [895, 896],
+                          "open": [10, 11], "high": [10, 11],
+                          "low": [10, 11], "close": [10, 11]})
+    calls = []
+    def checked(per, px):
+        result = _buy_size(per, px)
+        calls.append((per, px, result[0]))
+        return result
+    monkeypatch.setattr(host, "_buy_size", checked)
+    result = host.scan_version1_round_trip(
+        frame, symbol=SYMBOL, cash=10000, daily_quota=8000,
+        pool_days={day: [SYMBOL, "600000.SH"]},
+    )
+    expected, _ = _buy_size(4000, 10)
+    assert expected > 100
+    assert calls == [(4000, 10, expected)]
+    assert result.buys == 1 and result.sells == 0
+    assert result.equity == pytest.approx(10000 - 4000 - 4 + expected * 11)
 
 
 def test_scan_matches_before_style_decisions():
@@ -642,7 +679,7 @@ def test_round_trip_resolves_once_and_matches_wire_sells(monkeypatch):
         return result
     monkeypatch.setattr(host, "minute_strategy_entries", catalog)
     monkeypatch.setattr(host, "scan_bar_exit", checked)
-    result = host.scan_version1_round_trip(frame, symbol=SYMBOL, pool_days={day: [SYMBOL]})
+    result = host.scan_version1_round_trip(frame, symbol=SYMBOL, daily_quota=1000, pool_days={day: [SYMBOL]})
     assert result.buys >= 1 and result.sells == 1
     assert calls == [1]
     assert [result.reason for result in decisions] == ["", "profit_take:drawdown:50"]
