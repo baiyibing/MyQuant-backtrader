@@ -118,7 +118,13 @@ MyQuant  →  MyQuant-backtrader  →  OSkhQuant1.3
 - **并发**：多个 bot 同时需要 4090 时，按**任务接收顺序**排队（先接到的先跑）。
 - 交给 4090bot 的活，一般：headless 调用 4090 上的 Cursor → 用 **Grok 4.7** 完成（湖路径 / Windows / 本机导出）→ 产物与回执回协调 Bot / 对口仓。
 - **Headless 不限 4090**：§3 规定 bot 在**所有**已注册物理机上调度 agent CLI 时都优先 headless；4090 上 Cursor / Grok 4.7 已是 headless 一例，其余注册机（笔记本、zcode 主机等）同口径。
-- 4090 上通常**没有**与 Bot VM 同款的 Codex CLI 作为默认实现面；不要假设「4090 也能 codex exec」除非现场已装并经用户确认。
+
+**常驻说明（Human 2026-10-03）**：
+
+- `newtest_4090` 已有 Kimi、Codex、Claude agent CLI；**没有 Grok CLI**。
+- 4090 上的 Codex 模型 ID 与 Bot VM **不同**；未经该机模型列表确认，不得假设 `gpt-6.1-sol` / `gpt-6-astra` 可用。
+- Bot VM 与 4090 上的上述全部 agent CLI 默认 **headless / 非交互**；交互 TUI 仅在 Human 明示要求排障时使用。
+- Cursor 额度已耗尽至 **2026-10-04**；该日期之前**不得派 Cursor CLI**。此项为 **Human 口述，待 4090 机器核验**。
 
 ## 7. 跨仓文档关系（一份正文 + 指针）
 
@@ -173,3 +179,4 @@ MyQuant  →  MyQuant-backtrader  →  OSkhQuant1.3
 | 2026-09-22 | 跨仓 handoff 回执薄约定（STATUS / 摘要 / blocker / 数字 / 路径） |
 | 2026-09-23 | Bot VM agent CLI 优先 headless（非交互）；同日修订：已注册物理机上 bot 调度的 agent CLI 亦优先 headless（不限 4090）；再订：headless=默认执行面、交互 TUI=调试面（仅用户明示）、登录/SSO/2FA/付费墙走人交接 |
 | 2026-10-01 | Codex 模型路由：一般 `gpt-6.1-sol`，上强度 `gpt-6-astra`（Human 当面裁定）；清单与 handoff 落点同步 |
+| 2026-10-03 | Human 常驻说明：4090 的 Kimi / Codex / Claude CLI 与无 Grok CLI、机器模型列表边界、默认 headless、Cursor 额度暂停至 2026-10-04（Human 口述，待 4090 机器核验） |
