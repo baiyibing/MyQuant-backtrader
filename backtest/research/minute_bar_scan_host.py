@@ -1,15 +1,16 @@
-"""Read-only minute host for the complete registered CSV strategy engine."""
+"""Read-only minute host for registered CSV books and the standalone v7 runner."""
 
 from __future__ import annotations
 
 import argparse
 import math
+import os
 import sys
 from bisect import bisect_left, bisect_right
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import redirect_stdout
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import pandas as pd
@@ -611,6 +612,35 @@ def run_simulate(symbol, start, end, *, pool_dir: Path, cash=100000.0,
                               total_cash=cash)
 
 
+def run_version7(start, end, *, pool_dir: Path | None = None,
+                 cash: float = 21_000_000.0, asof_pool_names: bool = False):
+    """Load the complete v7 pool through its existing CLI and invoke its runner."""
+    from backtest.research import ashare_session, csv_minute_backtest_v7 as v7
+
+    pool_value = pool_dir or os.environ.get("OSKH_TURTLE_POOL_DIR")
+    if not pool_value:
+        raise ValueError("--pool-dir or OSKH_TURTLE_POOL_DIR is required")
+    start, end = _as_date(start), _as_date(end)
+    if end < start:
+        raise ValueError("--end must be on or after --start")
+    pool_dir = Path(pool_value)
+    pool_days = v7.load_pool_days(pool_dir, start, end)
+    minute_bars, daily_bars = v7._load_cli_bars(pool_days, start, end)
+    symbols = {code for codes in pool_days.values() for code in codes}
+    exdiv, names = ashare_session.load_limit_context(pool_dir, symbols, start, end)
+    names_by_day = (v7.load_pool_names_by_day(pool_dir, start, end)
+                    if asof_pool_names else None)
+    index_days = (v7.load_index_daily(start, end) if pool_days else
+                  [start + timedelta(days=n) for n in range((end - start).days + 1)])
+    state = v7.simulate_v7(
+        minute_bars, daily_bars, pool_days, index_days, cash_total=cash,
+        start=start, end=end, exdiv=exdiv,
+        names=None if asof_pool_names else names, names_by_day=names_by_day,
+    )
+    return summarize_simulate(state, bars=sum(len(f) for f in minute_bars.values()),
+                              total_cash=cash)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Read-only minute host (flat-start CSV simulation)")
     parser.add_argument("--source", choices=SOURCES, required=True)
@@ -621,16 +651,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--lake-root", type=Path)
     parser.add_argument("--cost", type=float, help="unsupported held seed (fails closed)")
     parser.add_argument("--peak", type=float, help="unsupported held seed (fails closed)")
-    parser.add_argument("--pool-dir", type=Path, default=Path(__file__).resolve().parents[2] / "stock_pool",
+    parser.add_argument("--pool-dir", type=Path,
                         help="flat-start daily membership CSVs; minute bars contain no pool signal")
-    parser.add_argument("--cash", type=float, default=100000.0, help="initial cash")
+    parser.add_argument("--cash", type=float, help="initial cash (v7: 21000000; registered books: 100000)")
+    parser.add_argument("--asof-pool-names", action="store_true", help="v7: use pool names as of each day")
     parser.add_argument("--daily-quota", type=float, default=DEFAULT_DAILY_QUOTA,
                         help="CSV engine daily buy budget")
     parser.add_argument("--fill-bar", choices=("same_bar", "next_bar"), default="same_bar",
                         help="legacy scan option; CSV simulation uses its existing fill defaults")
     parser.add_argument("--fill-price", choices=("stop", "close"), default="stop",
                         help="legacy scan option; CSV simulation uses its existing fill defaults")
-    parser.add_argument("--strategy", choices=csv_strategy_names(), default="version1")
+    parser.add_argument("--strategy", choices=(*csv_strategy_names(), "version7"), default="version1")
     parser.add_argument("--level", type=float, help="caller-supplied sma5 or ma10")
     parser.add_argument("--stage", choices=("trial", "four", "six", "eight", "full"))
     parser.add_argument("--entry-a", type=float)
@@ -644,7 +675,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         code = _symbol(args.symbol)
         if args.cost is not None or args.peak is not None or args.held:
             raise ValueError(
-                "minute host runs csv_minute_backtest.simulate from a flat pool start "
+                "minute host runs the selected CSV runner from a flat pool start "
                 "and does not accept a partial held seed (--cost/--peak/--held)"
             )
         # Reader and engine progress belongs on stderr; stdout is one summary.
@@ -652,13 +683,25 @@ def main(argv: Sequence[str] | None = None) -> int:
             scores = None
             if args.strategy in UNIVERSE_BOOKS:
                 scores = load_scores_from_args(pred_csv=args.pred_csv, scores_dir=args.scores_dir)
-            summary = run_simulate(
-                code, args.start, args.end, source=args.source,
-                qlib_root=args.qlib_root, lake_root=args.lake_root,
-                pool_dir=args.pool_dir, cash=args.cash, daily_quota=args.daily_quota,
-                strategy=args.strategy, scores_by_day=scores,
-                topk=args.topk, n_drop=args.n_drop,
-            )
+            if args.strategy == "version7":
+                if args.source != "lake" or args.qlib_root or args.lake_root:
+                    raise ValueError("version7 host requires the existing default lake loaders")
+                summary = run_version7(
+                    args.start, args.end, pool_dir=args.pool_dir,
+                    cash=21_000_000.0 if args.cash is None else args.cash,
+                    asof_pool_names=args.asof_pool_names,
+                )
+            else:
+                if args.asof_pool_names:
+                    raise ValueError("--asof-pool-names requires version7")
+                summary = run_simulate(
+                    code, args.start, args.end, source=args.source,
+                    qlib_root=args.qlib_root, lake_root=args.lake_root,
+                    pool_dir=args.pool_dir or Path(__file__).resolve().parents[2] / "stock_pool",
+                    cash=100000.0 if args.cash is None else args.cash, daily_quota=args.daily_quota,
+                    strategy=args.strategy, scores_by_day=scores,
+                    topk=args.topk, n_drop=args.n_drop,
+                )
     except SystemExit as exc:
         if exc.code == 0:
             return 0

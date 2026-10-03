@@ -456,11 +456,12 @@ def test_cli_unknown_strategy_exits_one(lake_root, capsys):
     assert "invalid choice" in output.err
 
 
-def test_cli_strategy_choices_are_registered_books(lake_root, capsys):
+def test_cli_strategy_choices_are_registered_books_plus_explicit_v7(lake_root, capsys):
     assert main(_lake_cli_args(lake_root) + ["--strategy", "unknown"]) == 1
     error = capsys.readouterr().err
     choices = error.split("(choose from ", 1)[1].split(")", 1)[0]
-    assert tuple(choice.strip("'\"") for choice in choices.split(", ")) == host.csv_strategy_names()
+    assert tuple(choice.strip("'\"") for choice in choices.split(", ")) == (
+        *host.csv_strategy_names(), "version7")
 
 
 def test_source_guards():
