@@ -15,6 +15,7 @@ from pathlib import Path
 import pandas as pd
 
 from backtest.research.ashare_bars import _in_session
+from backtest.research.ashare_session import t1_sellable
 from backtest.research.bar_scan_exit import BarScanExit, HeldPosition, OhlcBar, scan_bar_exit
 from backtest.research.csv_minute_backtest import BUY_HM, _buy_px
 from backtest.research.csv_pool import load_pool_day_map
@@ -127,7 +128,7 @@ def scan_version1_round_trip(frame, *, symbol: str, pool_days: Mapping,
                     timing="same_bar",
                 )
                 peak = result.peak
-                if result.decision == "fill" and buy_day < day:
+                if result.decision == "fill" and t1_sellable(buy_day, day):
                     notional = held_shares * result.fill_price
                     cash += notional - trade_commission(notional, COMMISSION)
                     held_shares = 0

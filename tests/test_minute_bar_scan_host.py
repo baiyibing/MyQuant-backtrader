@@ -783,11 +783,18 @@ def test_lake_window_matches_public_reader_normalization(tmp_path, monkeypatch):
     assert calls[0]["filters"] == [("time", ">=", t0), ("time", "<=", t1)]
 
 
-@pytest.mark.parametrize("buy_day", [date(2025, 10, 27), date(2025, 10, 31), date(2025, 11, 4)])
-def test_round_trip_same_day_take_profit_waits_until_next_day(buy_day):
+def test_round_trip_sell_uses_old_engine_t1_predicate(monkeypatch):
     from datetime import timedelta
+    from unittest.mock import Mock
+    from backtest.research import ashare_session, csv_minute_backtest
     from backtest.research.bar_scan_exit import HeldPosition, OhlcBar, scan_bar_exit
 
+    buy_day = date(2026, 1, 6)
+    # Use the exact predicate already imported by the old minute engine.
+    assert csv_minute_backtest.t1_sellable is ashare_session.t1_sellable
+    assert host.t1_sellable is ashare_session.t1_sellable
+    predicate = Mock(wraps=ashare_session.t1_sellable)
+    monkeypatch.setattr(host, "t1_sellable", predicate)
     symbol = "603196.SH"
     next_day = buy_day + timedelta(days=1)
     frame = pd.DataFrame({
@@ -806,5 +813,15 @@ def test_round_trip_same_day_take_profit_waits_until_next_day(buy_day):
     args = dict(symbol=symbol, pool_days={buy_day: [symbol]}, cash=10000, daily_quota=10000)
     same_day = host.scan_version1_round_trip(frame.iloc[:2], **args)
     assert (same_day.buys, same_day.sells, same_day.skips) == (1, 0, 1)
+    predicate.assert_called_once_with(buy_day, buy_day)
+    predicate.reset_mock()
     next_day_result = host.scan_version1_round_trip(frame, **args)
     assert (next_day_result.buys, next_day_result.sells, next_day_result.skips) == (1, 1, 1)
+    assert predicate.call_args_list == [((buy_day, buy_day),), ((buy_day, next_day),)]
+
+    # Prove the host obeys the shared predicate rather than a local date formula.
+    predicate.reset_mock()
+    predicate.return_value = False
+    denied = host.scan_version1_round_trip(frame, **args)
+    assert (denied.buys, denied.sells, denied.skips) == (1, 0, 2)
+    predicate.assert_any_call(buy_day, next_day)
