@@ -13,6 +13,8 @@ from pathlib import Path
 
 from backtest.research.ashare_bars import MinuteBarReadError, load_minute_from_lake
 from backtest.research.bar_scan_exit import OhlcBar
+from backtest.research.csv_minute_backtest import BUY_HM, _buy_px
+from backtest.research.csv_pool import load_pool_day_map
 from backtest.research.minute_true_core_wire import invoke_minute_strategy, wired_names
 from backtest.research.qlib_bin_1min import (
     calendar_slice,
@@ -36,6 +38,71 @@ class ScanSummary:
     bars: int
     fills: int
     skips: int
+
+
+@dataclass(frozen=True, slots=True)
+class RoundTripSummary:
+    bars: int
+    buys: int
+    sells: int
+    skips: int
+    equity: float
+    return_pct: float
+
+
+def scan_version1_round_trip(frame, *, symbol: str, pool_days: Mapping,
+                             cash: float = 100000.0, shares: int = 100) -> RoundTripSummary:
+    """Flat-start, same-bar host accounting; no fees or old-engine parity claim.
+
+    Buy reason is pool. Only bars after the selected buy close can exit.
+    A sold name may re-enter on a later pool day, never again on the same day.
+    Skips count bars with neither a buy nor a sell.
+    """
+    if not math.isfinite(cash) or cash <= 0:
+        raise ValueError("cash must be finite and > 0")
+    if isinstance(shares, bool) or not isinstance(shares, int) or shares <= 0 or shares % 100:
+        raise ValueError("shares must be a positive whole-lot share count (multiple of 100)")
+    if frame.empty:
+        raise ValueError("bars must not be empty")
+    code = _symbol(symbol)
+    bars = _frame_bars(frame, code, Path("host-frame"))
+    initial_cash = cash
+    held_shares = buys = sells = 0
+    cost = peak = 0.0
+    strategy = "version1"
+    offset = 0
+    for day, day_frame in frame.groupby("date", sort=False):
+        buy_index = None
+        if not held_shares and code in pool_days.get(_as_date(day), []):
+            px = _buy_px(day_frame)
+            if px is not None:
+                if not math.isfinite(px) or px <= 0:
+                    raise ValueError("buy price must be finite and > 0")
+                exact = day_frame["hm"] == BUY_HM
+                eligible = (day_frame["hm"] >= 14 * 60 + 30) & (day_frame["hm"] <= BUY_HM)
+                positions = [i for i, flag in enumerate(exact if exact.any() else eligible) if flag]
+                buy_index = positions[0] if exact.any() else positions[-1]
+        for index in range(len(day_frame)):
+            bar = bars[offset + index]
+            if index == buy_index and cash >= shares * px:
+                cash -= shares * px
+                held_shares = shares
+                cost = peak = px
+                buys += 1
+                continue
+            if held_shares:
+                result = invoke_minute_strategy(
+                    strategy, bar, cost=cost, peak=peak, n_days=1, timing="same_bar",
+                )
+                peak = result.peak
+                if result.decision == "fill":
+                    cash += held_shares * result.fill_price
+                    held_shares = 0
+                    sells += 1
+        offset += len(day_frame)
+    equity = cash + held_shares * bars[-1].close
+    return RoundTripSummary(len(bars), buys, sells, len(bars) - buys - sells,
+                            equity, (equity / initial_cash - 1) * 100)
 
 
 def scan_held_bars(
@@ -163,6 +230,7 @@ def load_scan_bars(
     qlib_root: Path | str | None = None,
     lake_root: Path | None = None,
     bar_dates: list[date] | None = None,
+    source_frames: list | None = None,
 ) -> list[OhlcBar]:
     """Read explicit bars; optionally collect their source dates in bar order."""
     if source not in SOURCES:
@@ -227,7 +295,19 @@ def load_scan_bars(
     if bar_dates is not None:
         dates = frame["date"] if source == "qlib_1min" else frame.index
         bar_dates.extend(_as_date(day) for day in dates)
+    if source_frames is not None:
+        dates = frame["date"] if source == "qlib_1min" else frame.index
+        source_frames.append(frame.assign(date=[_as_date(day) for day in dates]).reset_index(drop=True))
     return bars
+
+
+def run_round_trip(symbol, start, end, *, pool_dir: Path, cash=100000.0, shares=100,
+                   **source_args) -> RoundTripSummary:
+    frames = []
+    load_scan_bars(symbol, start, end, source_frames=frames, **source_args)
+    pool_days = load_pool_day_map(pool_dir, start, end, key="date")
+    return scan_version1_round_trip(frames[0], symbol=symbol, pool_days=pool_days,
+                                   cash=cash, shares=shares)
 
 
 def run_scan(
@@ -270,8 +350,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--end", type=_as_date, metavar="YYYYMMDD", required=True)
     parser.add_argument("--qlib-root", type=Path)
     parser.add_argument("--lake-root", type=Path)
-    parser.add_argument("--cost", type=float, required=True)
-    parser.add_argument("--peak", type=float, required=True)
+    parser.add_argument("--cost", type=float, help="held-only scan; requires --peak")
+    parser.add_argument("--peak", type=float, help="held-only scan; requires --cost")
+    parser.add_argument("--pool-dir", type=Path, default=Path(__file__).resolve().parents[2] / "stock_pool",
+                        help="version1 flat-start daily membership CSVs; minute bars contain no pool signal")
+    parser.add_argument("--cash", type=float, default=100000.0, help="host-simple initial cash")
+    parser.add_argument("--shares", type=int, default=100, help="shares per pool buy, multiple of 100")
     parser.add_argument("--strategy", choices=wired_names(), default="version1")
     parser.add_argument("--level", type=float, help="caller-supplied sma5 or ma10")
     parser.add_argument("--stage", choices=("trial", "four", "six", "eight", "full"))
@@ -284,20 +368,30 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         args = parser.parse_args(argv)
         code = _symbol(args.symbol)
+        round_trip = args.strategy == "version1" and args.cost is None and args.peak is None
+        if not round_trip and (args.cost is None or args.peak is None):
+            raise ValueError("held-only scan requires both --cost and --peak")
         # Existing reader progress belongs on stderr; stdout is one summary line.
         with redirect_stdout(sys.stderr):
             scores = None
             if args.strategy in UNIVERSE_BOOKS:
                 scores = load_scores_from_args(pred_csv=args.pred_csv, scores_dir=args.scores_dir)
-            summary = run_scan(
-                code, args.start, args.end, source=args.source,
-                qlib_root=args.qlib_root, lake_root=args.lake_root,
-                cost=args.cost, peak=args.peak,
-                strategy=args.strategy, level=args.level, stage=args.stage,
-                entry_a=args.entry_a,
-                held=[code.strip() for code in args.held.split(",")] if args.held else None,
-                scores_by_day=scores, topk=args.topk, n_drop=args.n_drop,
-            )
+            if round_trip:
+                summary = run_round_trip(
+                    code, args.start, args.end, source=args.source,
+                    qlib_root=args.qlib_root, lake_root=args.lake_root,
+                    pool_dir=args.pool_dir, cash=args.cash, shares=args.shares,
+                )
+            else:
+                summary = run_scan(
+                    code, args.start, args.end, source=args.source,
+                    qlib_root=args.qlib_root, lake_root=args.lake_root,
+                    cost=args.cost, peak=args.peak,
+                    strategy=args.strategy, level=args.level, stage=args.stage,
+                    entry_a=args.entry_a,
+                    held=[code.strip() for code in args.held.split(",")] if args.held else None,
+                    scores_by_day=scores, topk=args.topk, n_drop=args.n_drop,
+                )
     except SystemExit as exc:
         if exc.code == 0:
             return 0
@@ -307,6 +401,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     except (OSError, ValueError, RuntimeError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
+    if round_trip:
+        print(f"symbol={code} source={args.source} version1 bars={summary.bars} "
+              f"buys={summary.buys} sells={summary.sells} skips={summary.skips} "
+              f"equity={summary.equity:.2f} return_pct={summary.return_pct:.6f}")
+        return 0
     print(
         f"symbol={code} source={args.source} {args.strategy} "
         f"bars={summary.bars} fills={summary.fills} skips={summary.skips}"

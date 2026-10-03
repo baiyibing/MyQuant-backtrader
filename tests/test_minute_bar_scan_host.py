@@ -468,8 +468,72 @@ def test_source_guards():
         assert forbidden not in source
     calls = [node for node in ast.walk(ast.parse(source)) if isinstance(node, ast.Call)
              and isinstance(node.func, ast.Name) and node.func.id == "invoke_minute_strategy"]
-    assert len(calls) == 1
-    assert isinstance(calls[0].args[0], ast.Name)
-    assert calls[0].args[0].id == "strategy"
+    assert len(calls) == 2
+    assert all(isinstance(call.args[0], ast.Name) and call.args[0].id == "strategy"
+               for call in calls)
     for flag in ("dropout_sell", "sx0_sell"):
         assert f"{flag}=True" not in source.replace(" ", "")
+
+
+@pytest.mark.parametrize("source", ["lake", "qlib_1min"])
+@pytest.mark.parametrize("membership", ["000739", "600000", ""])
+def test_round_trip_cli_buys_only_pool_member(tmp_path, capsys, source, membership):
+    pool = tmp_path / "pool"
+    pool.mkdir()
+    (pool / f"{DAY}.csv").write_text(membership + "\n", encoding="utf-8")
+    root = tmp_path / "bars"
+    root.mkdir()
+    stamps = ["2026-01-06 14:54", "2026-01-06 14:55", "2026-01-06 14:56"]
+    values = {"open": [10, 10, 9.7], "high": [12, 10, 9.8],
+              "low": [9, 10, 9.6], "close": [10, 10, 9.75]}
+    if source == "lake":
+        directory = root / "symbol=000739_SZ"
+        directory.mkdir()
+        pd.DataFrame(dict(time=[pd.Timestamp(stamp, tz="UTC").value // 1_000_000
+                                for stamp in stamps], **values)).to_parquet(
+            directory / "data.parquet", index=False)
+        root_flag = "--lake-root"
+    else:
+        calendar = root / "calendars"
+        calendar.mkdir()
+        (calendar / "1min.txt").write_text("\n".join(stamps) + "\n", encoding="utf-8")
+        for name, prices in values.items():
+            _write_bin(root / "features" / "sz000739" / f"{name}.1min.bin", 0, prices)
+        root_flag = "--qlib-root"
+    assert main(["--source", source, "--symbol", SYMBOL, "--start", DAY, "--end", DAY,
+                 root_flag, str(root), "--pool-dir", str(pool), "--cash", "2000",
+                 "--shares", "100"]) == 0
+    output = capsys.readouterr().out
+    assert len(output.splitlines()) == 1
+    if membership == "000739":
+        assert "bars=3 buys=1 sells=1 skips=1 equity=1970.00" in output
+        assert float(output.split("return_pct=")[1]) == pytest.approx(-1.5, abs=0.000002)
+    else:
+        assert "buys=0 sells=0 skips=3 equity=2000.00 return_pct=0.000000" in output
+
+
+@pytest.mark.parametrize("hms,buys", [([870, 894, 896], 1), ([869, 896, 897], 0)])
+def test_round_trip_existing_buy_window_fallback(hms, buys):
+    frame = pd.DataFrame({"date": [date(2026, 1, 6)] * 3, "hm": hms,
+                          "open": [10, 10, 9.7], "high": [10, 10, 9.8],
+                          "low": [10, 10, 9.6], "close": [10, 10, 9.75]})
+    result = host.scan_version1_round_trip(frame, symbol=SYMBOL,
+                                          pool_days={date(2026, 1, 6): [SYMBOL]})
+    assert (result.buys, result.sells) == (buys, buys)
+
+
+def test_round_trip_reenters_later_pool_day_and_marks_open_shares():
+    days = [date(2026, 1, 6)] * 2 + [date(2026, 1, 7)] * 2
+    frame = pd.DataFrame({"date": days, "hm": [895, 896, 895, 896],
+                          "open": [10, 9.7, 10, 10.5], "high": [10, 9.8, 10, 11],
+                          "low": [10, 9.6, 10, 10.5], "close": [10, 9.75, 10, 11]})
+    result = host.scan_version1_round_trip(frame, symbol=SYMBOL, cash=2000,
+                                          pool_days={day: [SYMBOL] for day in days})
+    assert (result.buys, result.sells, result.skips) == (2, 1, 1)
+    assert result.equity == pytest.approx(2070)
+
+
+@pytest.mark.parametrize("shares", [0, -100, 1, 150, True])
+def test_round_trip_rejects_non_whole_lot_shares(shares):
+    with pytest.raises(ValueError, match="shares"):
+        host.scan_version1_round_trip(pd.DataFrame(), symbol=SYMBOL, pool_days={}, shares=shares)
