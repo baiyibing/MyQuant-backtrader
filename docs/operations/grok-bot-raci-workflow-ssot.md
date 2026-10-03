@@ -52,12 +52,19 @@
 
 **Headless 优先**（Bot VM **与**已注册物理机 agent CLI，2026-09-23）：
 
-- **Bot VM 仍是主执行面**：在 Bot VM 上调度 Codex / Grok / Cursor agent / Kimi / Claude 时，**优先 headless**（非交互）：例如 `grok --prompt-file … --output-format plain`、`agent -p`/`--print`、`--output-format plain|json`、Codex `exec` / 非交互标志等。
+- **Bot VM 仍是主执行面**：在 Bot VM 上调度 Codex / Grok / Cursor agent / Kimi / Claude 时，**优先 headless**（非交互）：Grok 见下方已核验命令；其余例如 `agent -p`/`--print`、`--output-format plain|json`、Codex `exec` / 非交互标志等。
 - **已注册物理机同样适用**：当 bot 在任意已注册物理机（`newtest_4090`、`LAPTOP-75JKCBED`、zcode 主机等）上调度 agent CLI 时，也 **优先 headless**（非交互标志），口径与 Bot VM 相同——不限 4090。
 - **headless = 默认执行面**（Bot 托管的实现 / 核验 / 导出 / 回放）：默认走非交互标志，不挂 TUI。
 - **交互 TUI = 调试面**：仅当用户明示要看逐步轨迹或点批准时用；**禁止**把「半交互」当默认。
 - **登录 / SSO / 2FA / 付费墙**：不是 headless 能扛的，走人工或桌面交接（`request_box_help` / 人在机前）。
 - §6 的 4090bot runner（湖 / Windows / Cursor→Grok 4.7）是物理机 headless 的**一例**；本条覆盖 **全部**已注册物理机上的 agent CLI，不只 4090。
+
+**Bot VM Grok CLI 常驻说明（2026-10-03 Human；headless，已核验）**：
+
+- 使用 `grok -p "<prompt>" -m grok-4.7 --always-approve --permission-mode dontAsk --max-turns <N> --output-format plain`。
+- `--prompt-file` 与未带 `--always-approve` 的 `grok -p` 都会只打印第一句、在任何工具运行前以 exit 0 退出。
+- 无 TTY 时，不带 `-p` 的 prompt 调用会报 `No such device or address`。
+- **不要打开 TUI**。
 
 **一般不用**：Cursor Cloud Agents（云端 agent）。已误开则取消，改道 VM CLI。
 
@@ -118,7 +125,13 @@ MyQuant  →  MyQuant-backtrader  →  OSkhQuant1.3
 - **并发**：多个 bot 同时需要 4090 时，按**任务接收顺序**排队（先接到的先跑）。
 - 交给 4090bot 的活，一般：headless 调用 4090 上的 Cursor → 用 **Grok 4.7** 完成（湖路径 / Windows / 本机导出）→ 产物与回执回协调 Bot / 对口仓。
 - **Headless 不限 4090**：§3 规定 bot 在**所有**已注册物理机上调度 agent CLI 时都优先 headless；4090 上 Cursor / Grok 4.7 已是 headless 一例，其余注册机（笔记本、zcode 主机等）同口径。
-- 4090 上通常**没有**与 Bot VM 同款的 Codex CLI 作为默认实现面；不要假设「4090 也能 codex exec」除非现场已装并经用户确认。
+
+**常驻说明（2026-10-03 机器核验；headless，未消耗 generation）**：
+
+- `newtest_4090` PATH：`kimi 2.1.1`、`codex-cli 0.156.1`、`cursor 3.22.12`、`cursor agent 2026.09.18-9a7762b`。`claude` **不在 PATH**；`grok` **不在 PATH**。
+- 该机 Codex provider 为 `deepseek`；config model 为 `deepseek-flash`，profile `pro` 为 `deepseek-v4-pro`；catalog ids 为 `deepseek-flash`、`deepseek-v4-pro`。该配置没有 OpenAI `gpt-6.1-sol` / `gpt-6-astra` ids，**不得把这两个模型名传给 4090 Codex**。
+- 调用 Kimi / Codex / Cursor agent **仅走 headless / 非交互**；交互 TUI 仅在 Human 明示要求排障时使用。
+- Cursor 额度：**Human 表示 2026-10-04 恢复**；`agent about` 与 `agent status` 未打印额度耗尽或重置日期。机器显示 account `Ultra`、`wangchui@hotmail.com`、model `Grok 4.7`。**2026-10-04 之前不得派 Cursor CLI，除非 Human 表示额度已恢复**；不得为探测 billing 消耗一次 generation。
 
 ## 7. 跨仓文档关系（一份正文 + 指针）
 
@@ -173,3 +186,5 @@ MyQuant  →  MyQuant-backtrader  →  OSkhQuant1.3
 | 2026-09-22 | 跨仓 handoff 回执薄约定（STATUS / 摘要 / blocker / 数字 / 路径） |
 | 2026-09-23 | Bot VM agent CLI 优先 headless（非交互）；同日修订：已注册物理机上 bot 调度的 agent CLI 亦优先 headless（不限 4090）；再订：headless=默认执行面、交互 TUI=调试面（仅用户明示）、登录/SSO/2FA/付费墙走人交接 |
 | 2026-10-01 | Codex 模型路由：一般 `gpt-6.1-sol`，上强度 `gpt-6-astra`（Human 当面裁定）；清单与 handoff 落点同步 |
+| 2026-10-03 | headless 机器核验（未消耗 generation）：4090 PATH 版本、Claude / Grok 不在 PATH、Codex DeepSeek 配置与 catalog；仅 headless 调用；Cursor 账户 / 模型已核验，2026-10-04 额度恢复仍为 Human 口述，禁止为 billing 探测消耗 generation |
+| 2026-10-03 | Human：Bot VM Grok CLI headless 已核验命令；记录 `--prompt-file` / 缺 `--always-approve` 提前 exit 0、无 `-p` 且无 TTY 报错；不要打开 TUI |
