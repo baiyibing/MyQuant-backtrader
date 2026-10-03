@@ -65,6 +65,41 @@ def timed(label, action):
     return result
 
 
+def bench_lake_window(root):
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+    from backtest.research.ashare_bars import load_minute_from_lake
+
+    folder = root / "symbol=603196_SH"
+    folder.mkdir()
+    stamps = pd.date_range("2020-01-01", periods=1_000_000, freq="min", tz="UTC")
+    table = pa.table({
+        "time": stamps.asi8 // 1_000_000,
+        **{name: np.full(len(stamps), value) for name, value in
+           zip(("open", "high", "low", "close"), (10, 10.1, 9.95, 10.05))},
+        "volume": np.ones(len(stamps)),
+    })
+    path = folder / "data.parquet"
+    pq.write_table(table, path, row_group_size=10_000)
+    assert pq.read_metadata(path).num_row_groups == 100
+    day = stamps[900_000].strftime("%Y%m%d")
+
+    def before_read():
+        with redirect_stdout(StringIO()):
+            return load_minute_from_lake(["603196.SH"], day, day, workers=1,
+                                         lake_root=root)["603196.SH"]
+
+    frame = timed("lake full-file read (1000000 rows, one-day window)", before_read)
+    dates = []
+    loaded = timed("lake host window read (1000000 rows, one-day window)",
+                   lambda: load_scan_bars("603196.SH", day, day, source="lake",
+                                         lake_root=root, bar_dates=dates))
+    assert len(loaded) == len(frame)
+    assert dates == list(frame.index.date)
+    for name in ("open", "high", "low", "close"):
+        np.testing.assert_array_equal([getattr(bar, name) for bar in loaded], frame[name])
+
+
 def main():
     assert_scan_equivalence()
     bars = [OhlcBar(10, 10.1, 9.95, 10.05)] * 100_000
@@ -77,6 +112,7 @@ def main():
     assert before == (after.fills, after.skips)
     with TemporaryDirectory(prefix="minute-host-bench-") as directory:
         root = Path(directory)
+        bench_lake_window(root)
         stamps = pd.date_range("2020-01-01", periods=1_000_000, freq="min")
         calendar = root / "calendars" / "1min.txt"
         calendar.parent.mkdir()

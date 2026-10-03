@@ -629,3 +629,42 @@ def test_round_trip_resolves_once_and_matches_wire_sells(monkeypatch):
     assert result.buys >= 1 and result.sells == 1
     assert calls == [1]
     assert [result.reason for result in decisions] == ["", "profit_take:drawdown:50"]
+
+
+def test_lake_window_matches_public_reader_normalization(tmp_path, monkeypatch):
+    import pyarrow.parquet as pq
+    from backtest.research.ashare_bars import load_minute_from_lake
+    from backtest.research.market_layer import utc_ms_range
+
+    folder = tmp_path / "symbol=000739_SZ"
+    folder.mkdir()
+    stamps = ["2026-01-05 09:30", "2026-01-06 09:31", "2026-01-06 09:30",
+              "2026-01-06 12:00", "2026-01-06 09:31", "2026-01-07 09:30",
+              "2026-01-08 09:30", "2026-01-09 09:30"]
+    prices = np.arange(len(stamps), dtype=float) + 10
+    pd.DataFrame({
+        "time": pd.to_datetime(stamps, utc=True).asi8 // 1_000_000,
+        **{name: prices for name in host.OHLC},
+        "volume": [100, 999, 100, 100, 100, 0, 100, 100],
+    }).to_parquet(folder / "data.parquet", index=False, row_group_size=2)
+    expected = load_minute_from_lake([SYMBOL], DAY, "20260108", workers=1,
+                                     lake_root=tmp_path)[SYMBOL]
+    original = pq.read_table
+    calls = []
+
+    def read_table(*args, **kwargs):
+        calls.append(kwargs)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(pq, "read_table", read_table)
+    dates, frames = [], []
+    bars = load_scan_bars(SYMBOL, DAY, "20260108", source="lake", lake_root=tmp_path,
+                          bar_dates=dates, source_frames=frames)
+    assert bars == [OhlcBar(*row) for row in expected[list(host.OHLC)].itertuples(index=False, name=None)]
+    assert [bar.close for bar in bars] == [12, 14, 16]
+    assert dates == list(expected.index.date)
+    assert dates == [date(2026, 1, 6), date(2026, 1, 6), date(2026, 1, 8)]
+    assert frames[0]["hm"].tolist() == expected["hm"].tolist()
+    t0, t1 = utc_ms_range(DAY, "20260108")
+    assert len(calls) == 1
+    assert calls[0]["filters"] == [("time", ">=", t0), ("time", "<=", t1)]
