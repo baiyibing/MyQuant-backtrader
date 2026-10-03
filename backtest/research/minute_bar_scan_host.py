@@ -77,8 +77,8 @@ def scan_version1_round_trip(frame, *, symbol: str, pool_days: Mapping,
     lot is unaffordable, raise before any fill or cash mutation.
     Skips count bars with neither a buy nor a sell.
     """
-    if strategy not in ("version1", "version2", "version3", "version4"):
-        raise ValueError("round trip requires version1, version2, version3 or version4")
+    if strategy not in ("version1", "version2", "version3", "version4", "version5"):
+        raise ValueError("round trip requires version1, version2, version3, version4 or version5")
     if not math.isfinite(cash) or cash <= 0:
         raise ValueError("cash must be finite and > 0")
     if isinstance(daily_quota, bool) or not math.isfinite(daily_quota) or daily_quota <= 0:
@@ -191,6 +191,16 @@ def scan_version1_round_trip(frame, *, symbol: str, pool_days: Mapping,
                         BarScanExit("fill", bar.close, "ma_signal:MA5", peak)
                         if adjusted_close < level else BarScanExit("skip", None, "", peak),
                         timing=timing,
+                        **({"next_bar": bars[offset + index + 1]}
+                           if timing == "next_bar" and offset + index + 1 < len(bars) else {}),
+                    )
+                elif strategy == "version5":
+                    if not t1_sellable(buy_day, day):
+                        peak = bar.high if bar.high > peak else peak
+                        continue
+                    result = invoke_minute_strategy(
+                        "version5", bar, cost=cost, peak=peak,
+                        n_days=session - buy_session, timing=timing, price=price,
                         **({"next_bar": bars[offset + index + 1]}
                            if timing == "next_bar" and offset + index + 1 < len(bars) else {}),
                     )
@@ -573,7 +583,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         args = parser.parse_args(argv)
         code = _symbol(args.symbol)
-        round_trip = args.strategy in ("version1", "version2", "version3", "version4") and args.cost is None and args.peak is None
+        round_trip = args.strategy in ("version1", "version2", "version3", "version4", "version5") and args.cost is None and args.peak is None
         if not round_trip and (args.cost is None or args.peak is None):
             raise ValueError("held-only scan requires both --cost and --peak")
         # Existing reader progress belongs on stderr; stdout is one summary line.
