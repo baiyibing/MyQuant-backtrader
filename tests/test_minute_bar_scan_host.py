@@ -475,7 +475,8 @@ def test_source_guards():
 
 @pytest.mark.parametrize("source", ["lake", "qlib_1min"])
 @pytest.mark.parametrize("membership", ["000739", "600000", ""])
-def test_round_trip_cli_buys_only_pool_member(tmp_path, capsys, source, membership):
+def test_round_trip_cli_buys_only_pool_member(tmp_path, capsys, monkeypatch, source, membership):
+    monkeypatch.setattr(host, "load_daily_ohlc", lambda *a, **k: pytest.fail("version1 loaded daily bars"))
     pool = tmp_path / "pool"
     pool.mkdir()
     (pool / f"{DAY}.csv").write_text(membership + "\n", encoding="utf-8")
@@ -1179,12 +1180,29 @@ def _version4_history_frame(history=10, buy_px=10):
 def test_version4_round_trip_cli_sma_sell(monkeypatch, capsys, timing, price):
     from backtest.research import strategy2_rules, strategy3_rules, strategy4_rules
     frame, buy_day = _version4_history_frame()
+    # Daily-only warmup supplies SMA10; the sell session itself is absent.
+    frame = frame[frame.date >= buy_day].copy()
+    daily = pd.DataFrame({name: [10] * 6 + [8, 10, 10, 10, 10]
+                          for name in host.OHLC},
+                         index=pd.date_range("2026-01-01", periods=11))
+    daily_calls = []
+    def load_daily(codes, start, end, **kwargs):
+        daily_calls.append((codes, start, end, kwargs))
+        return {SYMBOL: daily}
+    monkeypatch.setattr(host, "load_daily_ohlc", load_daily)
+    buy_histories = []
+    buy_gate = strategy4_rules.buy_gate
+    def record_buy(code, px, day, prior_closes):
+        buy_histories.append(prior_closes)
+        return buy_gate(code, px, day, prior_closes)
+    monkeypatch.setattr(strategy4_rules, "buy_gate", record_buy)
     def forbidden(*args, **kwargs):
         pytest.fail("take-profit or generic drawdown called for version4")
     for rules in (strategy2_rules, strategy3_rules, strategy4_rules):
         monkeypatch.setattr(rules, "take_profit_reason", forbidden)
     monkeypatch.setattr(host, "scan_bar_exit", forbidden)
-    def load(*args, source_frames=None, **kwargs):
+    def load(symbol, start, end, *, source_frames=None, **kwargs):
+        assert (start, end) == (buy_day, date(2026, 1, 13))
         source_frames.append(frame)
     monkeypatch.setattr(host, "load_scan_bars", load)
     monkeypatch.setattr(host, "load_pool_day_map", lambda *a, **k: {buy_day: [SYMBOL]})
@@ -1196,14 +1214,18 @@ def test_version4_round_trip_cli_sma_sell(monkeypatch, capsys, timing, price):
         calls.append((kwargs, result))
         return result
     monkeypatch.setattr(host, "invoke_minute_strategy", record)
-    assert main(["--source", "lake", "--symbol", SYMBOL, "--start", "20260101",
+    assert main(["--source", "lake", "--symbol", SYMBOL, "--start", "20260111",
                  "--end", "20260113", "--strategy", "version4", "--cash", "2000",
                  "--daily-quota", "1001", "--fill-bar", timing, "--fill-price", price]) == 0
     output = capsys.readouterr().out
     assert len(output.splitlines()) == 1
     assert "version4" in output and "buys=1 sells=1" in output
+    assert daily_calls == [([SYMBOL], host.warmup_start("20260111", host.STRATEGY4_CALENDAR_SLACK_DAYS),
+                            "20260113", {"source": "lake"})]
+    assert daily_calls[0][1] == "20251220"
+    assert buy_histories == [daily.loc[daily.index.date < buy_day, "close"].tolist()]
     fields, result = calls[0]
-    assert fields["level"] == pytest.approx((10 * 4 + 9) / 5)
+    assert fields["level"] == pytest.approx((8 + 10 * 4) / 5)
     assert fields["peak"] == 12 and fields["n_days"] == 1
     assert fields["timing"] == timing and fields["price"] == price
     assert result.reason == ("ma_signal:MA5:next_open" if timing == "next_bar" else "ma_signal:MA5")
@@ -1249,7 +1271,32 @@ def test_version4_both_held_flags_keep_held_scan(monkeypatch, capsys):
         pytest.fail("held flags must not enter round trip")
     monkeypatch.setattr(host, "run_scan", held)
     monkeypatch.setattr(host, "run_round_trip", forbidden)
+    monkeypatch.setattr(host, "load_daily_ohlc", forbidden)
     assert main(["--source", "lake", "--symbol", SYMBOL, "--start", DAY, "--end", DAY,
                  "--strategy", "version4", "--cost", "10", "--peak", "10", "--level", "9"]) == 0
     assert calls[0]["cost"] == 10 and calls[0]["peak"] == 10 and calls[0]["level"] == 9
     capsys.readouterr()
+
+
+@pytest.mark.parametrize("missing", [False, True])
+def test_version4_qlib_round_trip_daily_source(monkeypatch, capsys, tmp_path, missing):
+    frame, buy_day = _version4_history_frame()
+    def load_minute(symbol, start, end, *, source_frames, **kwargs):
+        assert kwargs == {"source": "qlib_1min", "qlib_root": tmp_path, "lake_root": None}
+        source_frames.append(frame[frame.date >= buy_day])
+    monkeypatch.setattr(host, "load_scan_bars", load_minute)
+    monkeypatch.setattr(host, "load_pool_day_map", lambda *a, **k: {buy_day: [SYMBOL]})
+    calls = []
+    def load_daily(codes, start, end, **kwargs):
+        calls.append((codes, start, end, kwargs))
+        return {} if missing else {SYMBOL: pd.DataFrame(
+            {name: [10] * 10 for name in host.OHLC},
+            index=pd.date_range("2026-01-01", periods=10))}
+    monkeypatch.setattr(host, "load_daily_ohlc", load_daily)
+    assert main(["--source", "qlib_1min", "--qlib-root", str(tmp_path),
+                 "--symbol", SYMBOL, "--start", "20260111", "--end", "20260113",
+                 "--strategy", "version4", "--cash", "2000", "--daily-quota", "1001"]) == int(missing)
+    assert calls == [([SYMBOL], "20251220", "20260113",
+                      {"source": "qlib_day", "qlib_root": tmp_path})]
+    if missing:
+        assert "daily OHLC missing" in capsys.readouterr().err

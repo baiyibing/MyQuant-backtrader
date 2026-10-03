@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from backtest.research.ashare_bars import _in_session
+from backtest.research.ashare_bars import _in_session, load_daily_ohlc
 from backtest.research.ashare_session import t1_sellable
 from backtest.research import strategy4_rules
 from backtest.research.ma_infra import sma_asof
@@ -23,7 +23,8 @@ from backtest.research.bar_scan_exit import (
 )
 from backtest.research.csv_minute_backtest import BUY_HM, _buy_px
 from backtest.research.csv_pool import load_pool_day_map
-from backtest.research.csv_common import DEFAULT_DAILY_QUOTA
+from backtest.research.csv_common import DEFAULT_DAILY_QUOTA, STRATEGY4_CALENDAR_SLACK_DAYS
+from backtest.research.csv_daily_loader import warmup_start
 from backtest.research.ashare_fees import COMMISSION, trade_commission
 from backtest.research.minute_true_core_wire import (
     invoke_minute_strategy, wired_names, _DRAWDOWN,
@@ -66,7 +67,7 @@ def scan_version1_round_trip(frame, *, symbol: str, pool_days: Mapping,
                              daily_quota: float = DEFAULT_DAILY_QUOTA,
                              timing: FillTiming = "same_bar",
                              price: FillPrice = "stop",
-                             strategy: str = "version1") -> RoundTripSummary:
+                             strategy: str = "version1", daily_frame=None) -> RoundTripSummary:
     """Flat-start, bar-scan accounting with the CSV version1 fee and lot sizer.
 
     Buys require pool membership, plus version4's SMA10 gate when selected.
@@ -92,9 +93,15 @@ def scan_version1_round_trip(frame, *, symbol: str, pool_days: Mapping,
     buy_day = None
     buy_session = None
     book = _version1_book()
-    day_closes = ([(_as_date(day), float(group["close"].iloc[-1]))
-                   for day, group in frame.groupby("date", sort=False)]
-                  if strategy == "version4" else [])
+    day_closes = []
+    if strategy == "version4":
+        if daily_frame is not None:
+            day_closes = [(_as_date(day), float(close))
+                          for day, close in daily_frame["close"].items()]
+        else:
+            # Direct synthetic callers may use session last-closes.
+            day_closes = [(_as_date(day), float(group["close"].iloc[-1]))
+                          for day, group in frame.groupby("date", sort=False)]
     offset = 0
     for session, (day, day_frame) in enumerate(frame.groupby("date", sort=False)):
         day = _as_date(day)
@@ -470,8 +477,21 @@ def run_round_trip(symbol, start, end, *, pool_dir: Path, cash=100000.0,
     frames = []
     load_scan_bars(symbol, start, end, source_frames=frames, **source_args)
     pool_days = load_pool_day_map(pool_dir, start, end, key="date")
+    daily_args = {}
+    if strategy == "version4":
+        code = _symbol(symbol)
+        daily = load_daily_ohlc(
+            [code], warmup_start(_as_date(start).strftime("%Y%m%d"), STRATEGY4_CALENDAR_SLACK_DAYS),
+            _as_date(end).strftime("%Y%m%d"),
+            **({"source": "qlib_day", "qlib_root": source_args.get("qlib_root")}
+               if source_args["source"] == "qlib_1min" else {"source": "lake"}),
+        )
+        if daily.get(code) is None:
+            raise FileNotFoundError(f"daily OHLC missing for {code}")
+        daily_args["daily_frame"] = daily[code]
     return scan_version1_round_trip(frames[0], symbol=symbol, pool_days=pool_days,
                                    cash=cash, daily_quota=daily_quota, timing=timing, price=price,
+                                   **daily_args,
                                    **({"strategy": strategy} if strategy != "version1" else {}))
 
 
