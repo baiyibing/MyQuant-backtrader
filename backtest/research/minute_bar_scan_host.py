@@ -8,7 +8,7 @@ import sys
 from bisect import bisect_left, bisect_right
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import redirect_stdout
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime
 from pathlib import Path
 
@@ -94,19 +94,20 @@ def scan_version1_round_trip(frame, *, symbol: str, pool_days: Mapping,
     buy_session = None
     book = _version1_book()
     day_closes = []
+    factors_by_day = {}
     if strategy == "version4":
-        if daily_frame is not None:
-            day_closes = [(_as_date(day), float(close))
-                          for day, close in daily_frame["close"].items()]
-        else:
-            # Direct synthetic callers may use session last-closes.
-            day_closes = [(_as_date(day), float(group["close"].iloc[-1]))
-                          for day, group in frame.groupby("date", sort=False)]
+        # adj_factor resolves the daily lake at import, so keep it path-local.
+        from oskh_data.adj_factor import build_for_symbol
+
+        adjusted_daily = build_for_symbol(to_partition_key(code)).sort_values("date")
+        day_closes = [(_as_date(row.date), float(row.close_front))
+                      for row in adjusted_daily.itertuples()]
+        factors_by_day = {_as_date(row.date): float(row.cumulative_adj_factor)
+                          for row in adjusted_daily.itertuples()}
     offset = 0
     for session, (day, day_frame) in enumerate(frame.groupby("date", sort=False)):
         day = _as_date(day)
         prior_closes = [close for close_day, close in day_closes if close_day < day]
-        level = sma_asof(prior_closes, strategy4_rules.MA_SELL) if strategy == "version4" else None
         buy_index = None
         members = pool_days.get(day, [])
         if code in members:
@@ -121,8 +122,13 @@ def scan_version1_round_trip(frame, *, symbol: str, pool_days: Mapping,
         for index in range(len(day_frame)):
             bar = bars[offset + index]
             if not held_shares and index == buy_index:
-                if strategy == "version4" and not strategy4_rules.buy_gate(code, px, day, prior_closes):
-                    continue
+                if strategy == "version4":
+                    factor = factors_by_day.get(day)
+                    if factor is None or not math.isfinite(factor) or factor <= 0:
+                        raise ValueError(f"missing cumulative_adj_factor for {code} on {day}")
+                    live_closes = prior_closes + [bar.close * factor]
+                    if not strategy4_rules.buy_gate(code, px * factor, day, live_closes):
+                        continue
                 # run_pool_buys_day allocates current cash across the day pool.
                 per = min(daily_quota, cash) / len(members)
                 # Whole hundreds, with no supplementary 100-share top-up.
@@ -170,11 +176,19 @@ def scan_version1_round_trip(frame, *, symbol: str, pool_days: Mapping,
                            if timing == "next_bar" and offset + index + 1 < len(bars) else {}),
                     )
                 elif strategy == "version4":
-                    if not t1_sellable(buy_day, day) or level is None:
+                    if not t1_sellable(buy_day, day):
+                        peak = bar.high if bar.high > peak else peak
+                        continue
+                    factor = factors_by_day.get(day)
+                    if factor is None or not math.isfinite(factor) or factor <= 0:
+                        raise ValueError(f"missing cumulative_adj_factor for {code} on {day}")
+                    adjusted_bar = replace(bar, close=bar.close * factor)
+                    level = sma_asof(prior_closes + [adjusted_bar.close], strategy4_rules.MA_SELL)
+                    if level is None:
                         peak = bar.high if bar.high > peak else peak
                         continue
                     result = invoke_minute_strategy(
-                        "version4", bar, cost=cost, peak=peak,
+                        "version4", adjusted_bar, cost=cost, peak=peak,
                         n_days=session - buy_session, timing=timing, price=price,
                         level=level,
                         **({"next_bar": bars[offset + index + 1]}
@@ -189,7 +203,11 @@ def scan_version1_round_trip(frame, *, symbol: str, pool_days: Mapping,
                     )
                 peak = result.peak
                 if result.decision == "fill" and t1_sellable(buy_day, day):
-                    notional = held_shares * result.fill_price
+                    fill_price = result.fill_price
+                    if (strategy == "version4" and timing == "same_bar"
+                            and fill_price == adjusted_bar.close):
+                        fill_price = bar.close
+                    notional = held_shares * fill_price
                     cash += notional - trade_commission(notional, COMMISSION)
                     held_shares = 0
                     sells += 1
