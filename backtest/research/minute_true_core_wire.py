@@ -16,6 +16,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from backtest.research import strategy2_rules
 from backtest.research.bar_scan_exit import (
     BarScanExit,
     FillTiming,
@@ -39,10 +40,6 @@ from backtest.research.strategy12_rules import STOP as V12_STOP_REASON
 from backtest.research.strategy12_rules import SellLot
 from backtest.research.strategy12_rules import hold20_orders as v12_hold20
 from backtest.research.strategy12_rules import stop_line as v12_stop_line
-from backtest.research.strategy2_rules import (
-    DRAWDOWN_THRESHOLDS as V2_DRAWDOWN,
-    STOP_PCT as V2_STOP,
-)
 from backtest.research.strategy3_rules import STOP_PCT as V3_STOP
 from backtest.research.strategy3_rules import take_profit_reason as v3_take
 from backtest.research.strategy5_rules import take_profit_reason as v5_take
@@ -103,11 +100,6 @@ def _v1_drawdown(n_days: int) -> float:
     return float(V1_DRAWDOWN)
 
 
-def _v2_drawdown(n_days: int) -> float:
-    held = int(n_days)
-    return float(V2_DRAWDOWN.get(held, V2_DRAWDOWN[max(V2_DRAWDOWN)]))
-
-
 @dataclass(frozen=True, slots=True)
 class WiredBook:
     name: str
@@ -125,11 +117,11 @@ class MinuteStrategyEntry:
 
 _DRAWDOWN: dict[str, WiredBook] = {
     "version1": WiredBook("version1", float(V1_STOP), _v1_drawdown),
-    "version2": WiredBook("version2", float(V2_STOP), _v2_drawdown),
 }
 
 # 百分比止损与策略书卖点。卖点函数自己带着目标价、分档、持有期。
 _PERCENT_STOP: dict[str, float] = {
+    "version2": float(strategy2_rules.STOP_PCT),
     "version3": float(V3_STOP),
     "version6": float(V6_STOP),
     "version6_1": float(V6_1_STOP),
@@ -270,6 +262,8 @@ def _book_reason(
     prev_close: float | None,
     hold_mode: str | None,
 ) -> str | None:
+    if name == "version2":
+        return strategy2_rules.take_profit_reason(close, cost, peak, n_days)
     if name == "version4":
         sma5 = _level(name, level)
         if close < sma5:
