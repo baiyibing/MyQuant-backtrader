@@ -59,19 +59,9 @@ def test_scan_keeps_n_days_one(n_days, strategy):
         scan_held_bars(FLAT_BARS, cost=10, peak=10, n_days=n_days, strategy=strategy)
 
 
-def test_default_scan_still_invokes_version1(monkeypatch):
-    original = host.invoke_minute_strategy
-    calls = []
-
-    def invoke(name, bar, **kwargs):
-        calls.append((name, kwargs))
-        return original(name, bar, **kwargs)
-
-    monkeypatch.setattr(host, "invoke_minute_strategy", invoke)
-    scan_held_bars(FLAT_BARS, cost=10, peak=10)
-    assert [name for name, _ in calls] == ["version1", "version1"]
-    assert all(fields["n_days"] == 1 and fields["timing"] == "same_bar"
-               and fields["cost"] == 10 for _, fields in calls)
+def test_default_scan_still_invokes_version1():
+    from scripts.research.bench_minute_bar_scan_host import assert_scan_equivalence
+    assert_scan_equivalence()
 
 
 @pytest.mark.parametrize("strategy", SINGLE_BOOKS)
@@ -468,7 +458,7 @@ def test_source_guards():
         assert forbidden not in source
     calls = [node for node in ast.walk(ast.parse(source)) if isinstance(node, ast.Call)
              and isinstance(node.func, ast.Name) and node.func.id == "invoke_minute_strategy"]
-    assert len(calls) == 2
+    assert len(calls) == 1
     assert all(isinstance(call.args[0], ast.Name) and call.args[0].id == "strategy"
                for call in calls)
     for flag in ("dropout_sell", "sx0_sell"):
@@ -537,3 +527,105 @@ def test_round_trip_reenters_later_pool_day_and_marks_open_shares():
 def test_round_trip_rejects_non_whole_lot_shares(shares):
     with pytest.raises(ValueError, match="shares"):
         host.scan_version1_round_trip(pd.DataFrame(), symbol=SYMBOL, pool_days={}, shares=shares)
+
+
+def test_scan_matches_before_style_decisions():
+    from scripts.research.bench_minute_bar_scan_host import assert_scan_equivalence
+    assert_scan_equivalence()
+
+
+def test_qlib_reads_calendar_and_each_bin_once(qlib_root, monkeypatch):
+    import backtest.research.minute_bar_scan_host as host
+    calendar_calls = []
+    bin_calls = []
+    calendar_reader, bin_reader = host.load_qlib_1min_calendar, host.read_qlib_bin
+    def calendar(root):
+        calendar_calls.append(root)
+        return calendar_reader(root)
+    def feature(path, i0, i1):
+        bin_calls.append((path.name, i0, i1))
+        return bin_reader(path, i0, i1)
+    monkeypatch.setattr(host, "load_qlib_1min_calendar", calendar)
+    monkeypatch.setattr(host, "read_qlib_bin", feature)
+    load_scan_bars(SYMBOL, DAY, DAY, source="qlib_1min", qlib_root=qlib_root)
+    assert calendar_calls == [qlib_root]
+    assert bin_calls == [(f"{name}.1min.bin", 1, 4) for name in host.OHLC]
+
+
+@pytest.mark.parametrize("name", ["open", "high", "close"])
+@pytest.mark.parametrize("values", [None, [], [np.nan], [np.inf]])
+def test_qlib_required_bins_fail_closed(qlib_root, name, values):
+    path = qlib_root / "features" / "sz000739" / f"{name}.1min.bin"
+    if values is None:
+        path.unlink()
+    else:
+        _write_bin(path, 1, values)
+    with pytest.raises((FileNotFoundError, ValueError)):
+        load_scan_bars(SYMBOL, DAY, DAY, source="qlib_1min", qlib_root=qlib_root)
+
+
+def test_qlib_empty_window_raises(qlib_root):
+    with pytest.raises(FileNotFoundError, match="window"):
+        load_scan_bars(SYMBOL, "20270101", "20270101", source="qlib_1min", qlib_root=qlib_root)
+
+
+def test_scan_resolves_catalog_once(monkeypatch):
+    import backtest.research.minute_bar_scan_host as host
+    calls = []
+    original = host.minute_strategy_entries
+    def entries():
+        calls.append(1)
+        return original()
+    monkeypatch.setattr(host, "minute_strategy_entries", entries)
+    scan_held_bars([OhlcBar(10, 10.1, 9.95, 10.05)] * 100, cost=10, peak=10)
+    assert calls == [1]
+
+
+def test_scan_preserves_first_catalog_validation(monkeypatch):
+    import backtest.research.minute_true_core_wire as wire
+    monkeypatch.setattr(wire, "minute_strategy_names", lambda: ("unclassified",))
+    with pytest.raises(RuntimeError, match="not classified"):
+        scan_held_bars([OhlcBar(10, 10.1, 9.95, 10.05)], cost=10, peak=10)
+
+
+def test_qlib_kept_close_alignment_matches_public_reader(qlib_root):
+    from backtest.research.qlib_bin_1min import load_qlib_bin_1min_bars
+    frame = load_qlib_bin_1min_bars([SYMBOL], date(2026, 1, 6), date(2026, 1, 6),
+                                    qlib_root=qlib_root, workers=1, preload_days=0)[SYMBOL]
+    dates, frames = [], []
+    bars = load_scan_bars(SYMBOL, DAY, DAY, source="qlib_1min", qlib_root=qlib_root,
+                          bar_dates=dates, source_frames=frames)
+    assert dates == list(frame["date"])
+    pd.testing.assert_frame_equal(frames[0][["date", "hm"]], frame[["date", "hm"]])
+    for name in ("open", "high", "close"):
+        np.testing.assert_array_equal([getattr(bar, name) for bar in bars], frame[name])
+
+
+def test_round_trip_resolves_once_and_matches_wire_sells(monkeypatch):
+    import backtest.research.minute_bar_scan_host as host
+    from backtest.research.minute_true_core_wire import invoke_minute_strategy
+    day = date(2026, 1, 6)
+    frame = pd.DataFrame({
+        "date": [day] * 5, "hm": [895, 896, 897, 898, 899],
+        "open": [10, 11, 10.9, 10, 10], "high": [10, 12, 11, 10.1, 10.1],
+        "low": [10, 10.9, 10.8, 9.95, 9.95], "close": [10, 11.8, 10.9, 10, 10],
+    })
+    calls, decisions = [], []
+    entries, scan = host.minute_strategy_entries, host.scan_bar_exit
+    def catalog():
+        calls.append(1)
+        return entries()
+    def checked(bar, position, **fields):
+        result = scan(bar, position, **fields)
+        expected = invoke_minute_strategy("version1", bar, cost=10,
+                                         peak=10 if not decisions else decisions[-1].peak,
+                                         n_days=1, timing="same_bar")
+        assert result == expected
+        decisions.append(result)
+        return result
+    monkeypatch.setattr(host, "minute_strategy_entries", catalog)
+    monkeypatch.setattr(host, "scan_bar_exit", checked)
+    result = host.scan_version1_round_trip(frame, symbol=SYMBOL, pool_days={day: [SYMBOL]})
+    assert result.buys >= 1 and result.sells == 1
+    assert calls == [1]
+    assert [result.reason for result in decisions] == ["", "profit_take:drawdown:50"]

@@ -5,21 +5,25 @@ from __future__ import annotations
 import argparse
 import math
 import sys
-from collections.abc import Mapping, Sequence
+from bisect import bisect_left, bisect_right
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import redirect_stdout
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
 
+import pandas as pd
+
 from backtest.research.ashare_bars import MinuteBarReadError, load_minute_from_lake
-from backtest.research.bar_scan_exit import OhlcBar
+from backtest.research.bar_scan_exit import BarScanExit, HeldPosition, OhlcBar, scan_bar_exit
 from backtest.research.csv_minute_backtest import BUY_HM, _buy_px
 from backtest.research.csv_pool import load_pool_day_map
-from backtest.research.minute_true_core_wire import invoke_minute_strategy, wired_names
+from backtest.research.minute_true_core_wire import (
+    invoke_minute_strategy, wired_names, _DRAWDOWN,
+    MinuteStrategyNotOnBarScan, minute_strategy_entries,
+)
 from backtest.research.qlib_bin_1min import (
-    calendar_slice,
     load_qlib_1min_calendar,
-    load_qlib_bin_1min_bars,
     qlib_inst_dir,
     read_qlib_bin,
 )
@@ -69,7 +73,7 @@ def scan_version1_round_trip(frame, *, symbol: str, pool_days: Mapping,
     initial_cash = cash
     held_shares = buys = sells = 0
     cost = peak = 0.0
-    strategy = "version1"
+    book = _version1_book()
     offset = 0
     for day, day_frame in frame.groupby("date", sort=False):
         buy_index = None
@@ -91,8 +95,9 @@ def scan_version1_round_trip(frame, *, symbol: str, pool_days: Mapping,
                 buys += 1
                 continue
             if held_shares:
-                result = invoke_minute_strategy(
-                    strategy, bar, cost=cost, peak=peak, n_days=1, timing="same_bar",
+                result = scan_bar_exit(
+                    bar, HeldPosition(cost, peak, book.stop_pct, book.drawdown_of(1)),
+                    timing="same_bar",
                 )
                 peak = result.peak
                 if result.decision == "fill":
@@ -123,6 +128,12 @@ def scan_held_bars(
         raise ValueError("bars must not be empty")
     if n_days != 1:
         raise ValueError("n_days must stay 1 for every strategy scan")
+    if strategy == "version1":
+        if bar_dates is not None and len(bar_dates) != len(bars):
+            raise ValueError("bar_dates must have one source date per bar")
+        fills = sum(result.decision == "fill"
+                    for result in _scan_held_decisions(bars, cost=cost, peak=peak))
+        return ScanSummary(len(bars), fills, len(bars) - fills)
     if strategy not in wired_names():
         raise ValueError(f"unknown minute strategy {strategy!r}")
     days = None
@@ -190,6 +201,35 @@ def scan_held_bars(
     return ScanSummary(bars=len(bars), fills=fills, skips=skips)
 
 
+def _version1_book():
+    entries = {entry.name: entry for entry in minute_strategy_entries()}
+    entry = entries.get("version1")
+    if entry is None:
+        raise ValueError("unknown minute strategy 'version1'")
+    if entry.status != "wired":
+        raise MinuteStrategyNotOnBarScan("version1", str(entry.missing_field))
+    book = _DRAWDOWN["version1"]
+    return book
+
+
+def _scan_held_decisions(
+    bars: Sequence[OhlcBar], *, cost: float, peak: float
+) -> Iterator[BarScanExit]:
+    """Resolve the catalog once; use the same core and book as the wire."""
+    book = _version1_book()
+    cost_f, running_peak = float(cost), float(peak)
+    if cost_f <= 0 or running_peak <= 0:
+        raise ValueError("cost and peak must be finite numbers > 0")
+    drawdown = book.drawdown_of(1)
+    for bar in bars:
+        result = scan_bar_exit(
+            bar, HeldPosition(cost_f, running_peak, book.stop_pct, drawdown),
+            timing="same_bar",
+        )
+        running_peak = result.peak
+        yield result
+
+
 def _as_date(value: date | str) -> date:
     if isinstance(value, datetime):
         return value.date()
@@ -243,36 +283,37 @@ def load_scan_bars(
         if qlib_root is None:
             raise ValueError("qlib_1min source requires qlib_root")
         root = Path(qlib_root)
+        if not (root / "features").is_dir():
+            raise FileNotFoundError(f"minute features missing for {code} under {root}")
         try:
-            frames = load_qlib_bin_1min_bars(
-                [code], first, last, qlib_root=root, preload_days=0, workers=1
-            )
-        except (FileNotFoundError, SystemExit) as exc:
-            raise FileNotFoundError(f"minute bars missing for {code} under {root}: {exc}") from exc
-        frame = frames.get(code)
-        if frame is None or frame.empty:
-            raise FileNotFoundError(f"minute bars missing for {code} under {root}")
-
-        calendar = load_qlib_1min_calendar(root)
-        i0, i1 = calendar_slice(
-            calendar, f"{first.isoformat()} 00:00:00", f"{last.isoformat()} 23:59:59"
-        )
+            calendar = load_qlib_1min_calendar(root)
+        except FileNotFoundError as exc:
+            raise FileNotFoundError(f"minute calendar missing for {code} under {root}: {exc}") from exc
+        i0 = bisect_left(calendar, f"{first.isoformat()} 00:00:00")
+        i1 = bisect_right(calendar, f"{last.isoformat()} 23:59:59") - 1
+        if i0 > i1:
+            raise FileNotFoundError(f"minute window missing for {code} under {root}")
         folder = root / "features" / qlib_inst_dir(code)
-        close = read_qlib_bin(folder / "close.1min.bin", i0, i1)
-        # The public reader drops non-finite closes, then resets row indices.
-        # Recover those kept calendar positions before aligning the separate low.
-        kept = close.loc[close.map(math.isfinite)].index
-        if len(kept) != len(frame):
-            raise ValueError(f"qlib close alignment changed for {code} under {root}")
-        low = read_qlib_bin(folder / "low.1min.bin", i0, i1)
-        if low.empty:
-            raise FileNotFoundError(f"low.1min.bin missing or empty for {code} under {root}")
-        # Refuse the public reader's fallback for absent open/high feature bins.
-        for name in ("open", "high"):
+        columns = {}
+        for name in OHLC:
             values = read_qlib_bin(folder / f"{name}.1min.bin", i0, i1)
             if values.empty:
                 raise FileNotFoundError(f"{name}.1min.bin missing or empty for {code} under {root}")
-        frame = frame.assign(low=low.reindex(kept).to_numpy())
+            columns[name] = values
+        close = columns["close"]
+        kept = close.loc[close.map(math.isfinite)].index
+        # Reproduce the public reader's index union / finite-close filtering,
+        # without full-calendar conversion, thread pool or duplicate bin reads.
+        frame = pd.DataFrame({name: columns[name] for name in ("close", "open", "high")})
+        frame = frame.loc[frame["close"].map(math.isfinite)]
+        if not frame.index.equals(kept):
+            raise ValueError(f"qlib close alignment changed for {code} under {root}")
+        if frame.empty:
+            raise FileNotFoundError(f"minute bars missing for {code} under {root}")
+        frame = frame.assign(low=columns["low"].reindex(kept).to_numpy())
+        stamps = pd.to_datetime([calendar[int(index)] for index in kept])
+        frame = frame.assign(date=stamps.date, hm=stamps.hour * 60 + stamps.minute)
+        frame = frame.reset_index(drop=True)
     else:
         if lake_root is None:
             raise ValueError("lake source requires lake_root")
