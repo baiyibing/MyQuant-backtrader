@@ -512,6 +512,23 @@ def test_round_trip_existing_buy_window_fallback(hms, buys):
     assert (result.buys, result.sells) == (buys, buys)
 
 
+@pytest.mark.parametrize("buy_hm", [895, 894])
+def test_round_trip_rebuys_after_same_day_sell(buy_hm):
+    first, second = date(2026, 1, 6), date(2026, 1, 7)
+    frame = pd.DataFrame({
+        "date": [first, second, second, second],
+        "hm": [895, 870, buy_hm, 896],
+        "open": [10, 9.7, 10, 10.5], "high": [10, 9.8, 10, 11],
+        "low": [10, 9.6, 10, 10.5], "close": [10, 9.75, 10, 11],
+    })
+    result = host.scan_version1_round_trip(
+        frame, symbol=SYMBOL, cash=2000,
+        pool_days={first: [SYMBOL], second: [SYMBOL]},
+    )
+    assert (result.buys, result.sells, result.skips) == (2, 1, 1)
+    assert result.equity == pytest.approx(2070)
+
+
 def test_round_trip_reenters_later_pool_day_and_marks_open_shares():
     days = [date(2026, 1, 6)] * 2 + [date(2026, 1, 7)] * 2
     frame = pd.DataFrame({"date": days, "hm": [895, 896, 895, 896],
