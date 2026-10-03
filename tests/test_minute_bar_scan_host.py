@@ -599,28 +599,44 @@ def test_round_trip_existing_fee_reduces_equity(monkeypatch):
     assert free.equity - paid.equity == pytest.approx(5 + 4.85)
 
 
-def test_round_trip_size_matches_existing_sizer(monkeypatch):
+def test_round_trip_size_matches_existing_sizer_when_fee_fits():
     from backtest.research.csv_ledger import _buy_size
     day = date(2026, 1, 6)
     frame = pd.DataFrame({"date": [day, day], "hm": [895, 896],
                           "open": [10, 11], "high": [10, 11],
                           "low": [10, 11], "close": [10, 11]})
-    calls = []
-    def checked(per, px, *, star_declare):
-        assert star_declare is False
-        result = _buy_size(per, px, star_declare=star_declare)
-        calls.append((per, px, result[0]))
-        return result
-    monkeypatch.setattr(host, "_buy_size", checked)
     result = host.scan_version1_round_trip(
         frame, symbol=SYMBOL, cash=10000, daily_quota=8008,
         pool_days={day: [SYMBOL, "600000.SH"]},
     )
     expected, _ = _buy_size(4004, 10)
     assert expected > 100
-    assert calls == [(4004, 10, expected)]
     assert result.buys == 1 and result.sells == 0
     assert result.equity == pytest.approx(10000 - 4000 - 4 + expected * 11)
+
+
+@pytest.mark.parametrize("cash", [1_000_000, 21_000_000])
+def test_round_trip_million_quota_sizes_whole_lots_including_fee(cash):
+    from backtest.research.ashare_fees import COMMISSION, trade_commission
+    day = date(2026, 1, 6)
+    price = 23.74
+    quota = 1_000_000
+    frame = pd.DataFrame({"date": [day, day], "hm": [895, 896],
+                          **{name: [price, price + 0.01] for name in host.OHLC}})
+    result = host.scan_version1_round_trip(
+        frame, symbol="603196.SH", cash=cash, daily_quota=quota,
+        pool_days={day: ["603196.SH"]},
+    )
+    shares = 42_000
+    notional = shares * price
+    debit = notional + trade_commission(notional, COMMISSION)
+    assert COMMISSION == 0.001
+    assert shares > 100 and shares % 100 == 0
+    assert debit <= quota and debit <= cash
+    next_notional = (shares + 100) * price
+    assert next_notional + trade_commission(next_notional, COMMISSION) > quota
+    assert (result.buys, result.sells) == (1, 0)
+    assert result.equity == pytest.approx(cash - debit + shares * (price + 0.01))
 
 
 def test_scan_matches_before_style_decisions():
