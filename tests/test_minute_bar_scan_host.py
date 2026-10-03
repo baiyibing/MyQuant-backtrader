@@ -462,12 +462,14 @@ def test_source_guards():
                       and call.args[0].value == "version4"]
     assert len(version4_calls) == 0
     calls = [call for call in calls if call not in version4_calls]
-    assert len(calls) == 3
+    assert len(calls) == 4
     assert sum(isinstance(call.args[0], ast.Name) and call.args[0].id == "strategy"
                for call in calls) == 1
     assert sum(isinstance(call.args[0], ast.Constant) and call.args[0].value == "version2"
                for call in calls) == 1
     assert sum(isinstance(call.args[0], ast.Constant) and call.args[0].value == "version3"
+               for call in calls) == 1
+    assert sum(isinstance(call.args[0], ast.Constant) and call.args[0].value == "version5"
                for call in calls) == 1
     for flag in ("dropout_sell", "sx0_sell"):
         assert f"{flag}=True" not in source.replace(" ", "")
@@ -1037,7 +1039,7 @@ def test_version2_round_trip_cli_and_fill_modes(monkeypatch, capsys, timing, pri
     assert result.fill_price == pytest.approx(expected)
 
 
-@pytest.mark.parametrize("strategy", ["version1", "version2", "version3", "version4"])
+@pytest.mark.parametrize("strategy", ["version1", "version2", "version3", "version4", "version5"])
 @pytest.mark.parametrize("flag", ["--cost", "--peak"])
 def test_round_trip_partial_held_flags_keep_error(capsys, strategy, flag):
     assert main(["--source", "lake", "--symbol", SYMBOL, "--start", DAY, "--end", DAY,
@@ -1161,6 +1163,161 @@ def test_version3_round_trip_carries_unsellable_same_day_peak(monkeypatch):
     assert calls == [(10, 12, 1)]
     assert (summary.buys, summary.sells, summary.skips) == (1, 1, 1)
     assert summary.equity == pytest.approx(1998)
+
+
+@pytest.mark.parametrize("timing", ["same_bar", "next_bar"])
+@pytest.mark.parametrize("price", ["stop", "close"])
+def test_version5_round_trip_cli_and_existing_take_profit(tmp_path, monkeypatch, capsys, timing, price):
+    from backtest.research import minute_true_core_wire as wire, strategy5_rules
+
+    root = tmp_path / "bars"
+    calendar = root / "calendars" / "1min.txt"
+    calendar.parent.mkdir(parents=True)
+    calendar.write_text(
+        "2026-01-09 14:55:00\n2026-01-12 09:30:00\n2026-01-12 09:31:00\n",
+        encoding="utf-8",
+    )
+    values = dict(open=[10, 10, 10.5], high=[10, 10.4, 10.6],
+                  low=[10, 8, 10.4], close=[10, 10.3, 10.5])
+    for name, prices in values.items():
+        _write_bin(root / "features" / "sz000739" / f"{name}.1min.bin", 0, prices)
+    pool = tmp_path / "pool"
+    pool.mkdir()
+    (pool / "20260109.csv").write_text("000739\n", encoding="utf-8")
+    assert wire._BOOK_TAKE["version5"] is strategy5_rules.take_profit_reason
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("version5 must use its take-profit, without daily bars or a drawdown scan")
+
+    monkeypatch.setattr(host, "scan_bar_exit", forbidden)
+    monkeypatch.setattr(wire, "scan_bar_exit", forbidden)
+    monkeypatch.setattr(host, "load_daily_ohlc", forbidden)
+    calls = []
+    invoke = host.invoke_minute_strategy
+
+    def record(name, bar, **kwargs):
+        assert name == "version5"
+        result = invoke(name, bar, **kwargs)
+        calls.append((bar, kwargs, result))
+        return result
+
+    monkeypatch.setattr(host, "invoke_minute_strategy", record)
+    flags = [] if (timing, price) == ("same_bar", "stop") else [
+        "--fill-bar", timing, "--fill-price", price,
+    ]
+    assert main([
+        "--source", "qlib_1min", "--qlib-root", str(root), "--symbol", SYMBOL,
+        "--start", "20260109", "--end", "20260112", "--strategy", "version5",
+        "--pool-dir", str(pool), "--cash", "2000", "--daily-quota", "1001", *flags,
+    ]) == 0
+    output = capsys.readouterr().out
+    assert len(output.splitlines()) == 1
+    assert "version5 bars=3 buys=1 sells=1 skips=1" in output
+    assert len(calls) == 1
+    bar, fields, result = calls[0]
+    assert (bar.open, bar.high, bar.low, bar.close) == pytest.approx((10, 10.4, 8, 10.3))
+    assert fields["cost"] == 10 and fields["peak"] == 10 and fields["n_days"] == 1
+    assert fields["timing"] == timing and fields["price"] == price
+    if timing == "next_bar":
+        next_bar = fields["next_bar"]
+        assert (next_bar.open, next_bar.high, next_bar.low, next_bar.close) == pytest.approx(
+            (10.5, 10.6, 10.4, 10.5))
+    else:
+        assert "next_bar" not in fields
+    expected_reason = "profit_take:target:next_open" if timing == "next_bar" else "profit_take:target"
+    assert result.reason == expected_reason
+    expected_px = 10.5 if timing == "next_bar" else 10.3
+    assert result.fill_price == pytest.approx(expected_px)
+    equity = 2000 - 1000 - host.trade_commission(1000, host.COMMISSION)
+    equity += 100 * expected_px - host.trade_commission(100 * expected_px, host.COMMISSION)
+    assert f"equity={equity:.2f}" in output
+
+
+@pytest.mark.parametrize("close,sells", [(9, 0), (10.19, 0), (10.2, 1)])
+def test_version5_round_trip_target_only_at_close(close, sells):
+    buy_day, sell_day = date(2026, 1, 9), date(2026, 1, 12)
+    frame = pd.DataFrame(dict(
+        date=[buy_day, sell_day], hm=[895, 890],
+        open=[10, 10], high=[10, 12], low=[10, 8], close=[10, close],
+    ))
+    summary = host.scan_version1_round_trip(
+        frame, symbol=SYMBOL, pool_days={buy_day: [SYMBOL]},
+        cash=2000, daily_quota=1001, strategy="version5",
+    )
+    assert (summary.buys, summary.sells) == (1, sells)
+
+
+@pytest.mark.parametrize("n_days", [-1, 0])
+def test_version5_existing_take_profit_requires_one_session(n_days):
+    from backtest.research import minute_true_core_wire as wire, strategy5_rules
+
+    assert wire._BOOK_TAKE["version5"] is strategy5_rules.take_profit_reason
+    assert wire._BOOK_TAKE["version5"](12, 10, 12, n_days) is None
+
+
+def test_version5_round_trip_t1_carries_peak_and_session_age(monkeypatch):
+    from backtest.research import minute_true_core_wire as wire, strategy5_rules
+
+    buy_day, sell_day, later_day = date(2026, 1, 9), date(2026, 1, 12), date(2026, 1, 14)
+    frame = pd.DataFrame(dict(
+        date=[buy_day, buy_day, sell_day, later_day], hm=[895, 896, 570, 570],
+        open=[10, 11, 10, 10], high=[10, 12, 10.5, 10.5],
+        low=[10, 9, 10, 10], close=[10, 11, 10, 10.3],
+    ))
+    take_calls = []
+
+    def take_profit(close, cost, peak, n_days):
+        take_calls.append((close, cost, peak, n_days))
+        return strategy5_rules.take_profit_reason(close, cost, peak, n_days)
+
+    monkeypatch.setitem(wire._BOOK_TAKE, "version5", take_profit)
+    invoke = host.invoke_minute_strategy
+    wire_calls = []
+
+    def sellable_only(name, bar, **kwargs):
+        assert name == "version5"
+        assert kwargs["n_days"] >= 1 and kwargs["peak"] == 12
+        wire_calls.append(kwargs["n_days"])
+        return invoke(name, bar, **kwargs)
+
+    monkeypatch.setattr(host, "invoke_minute_strategy", sellable_only)
+    args = dict(symbol=SYMBOL, pool_days={buy_day: [SYMBOL]},
+                cash=2000, daily_quota=1001, strategy="version5")
+    same_day = host.scan_version1_round_trip(frame.iloc[:2], **args)
+    assert (same_day.buys, same_day.sells) == (1, 0)
+    assert wire_calls == take_calls == []
+    summary = host.scan_version1_round_trip(frame, **args)
+    assert wire_calls == [1, 2]
+    assert take_calls == [(10, 10, 12, 1), (10.3, 10, 12, 2)]
+    assert (summary.buys, summary.sells, summary.skips) == (1, 1, 2)
+
+
+def test_version5_both_held_flags_keep_held_scan(monkeypatch, capsys):
+    calls = []
+
+    def load(*args, bar_dates, **kwargs):
+        bar_dates.append(DAY)
+        return [OhlcBar(10, 10.4, 10, 10.3)]
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("held flags must not enter round trip or load a pool")
+
+    invoke = host.invoke_minute_strategy
+
+    def record(name, bar, **kwargs):
+        calls.append((name, kwargs["cost"], kwargs["peak"]))
+        return invoke(name, bar, **kwargs)
+
+    monkeypatch.setattr(host, "load_scan_bars", load)
+    monkeypatch.setattr(host, "run_round_trip", forbidden)
+    monkeypatch.setattr(host, "load_pool_day_map", forbidden)
+    monkeypatch.setattr(host, "invoke_minute_strategy", record)
+    assert main([
+        "--source", "lake", "--symbol", SYMBOL, "--start", DAY, "--end", DAY,
+        "--strategy", "version5", "--cost", "10", "--peak", "10",
+    ]) == 0
+    assert calls == [("version5", 10, 10)]
+    assert capsys.readouterr().out == f"symbol={SYMBOL} source=lake version5 bars=1 fills=1 skips=0\n"
 
 
 @pytest.fixture
