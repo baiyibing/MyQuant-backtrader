@@ -20,6 +20,7 @@ from backtest.research import strategy2_rules
 from backtest.research.bar_scan_exit import (
     BarScanExit,
     FillTiming,
+    FillPrice,
     HeldPosition,
     OhlcBar,
     _ohlc,
@@ -321,6 +322,7 @@ def invoke_minute_strategy(
     peak: float,
     n_days: int = 1,
     timing: FillTiming = "same_bar",
+    price: FillPrice = "stop",
     next_bar: OhlcBar | None = None,
     level: float | None = None,
     stage: str | None = None,
@@ -382,7 +384,7 @@ def invoke_minute_strategy(
             stop_pct=book.stop_pct,
             drawdown_take_profit=book.drawdown_of(held_days),
         )
-        return scan_bar_exit(bar, position, timing=timing, next_bar=next_bar)
+        return scan_bar_exit(bar, position, timing=timing, price=price, next_bar=next_bar)
 
     if key in _LEVEL_FIELD and _LEVEL_FIELD[key] == "stage":
         judged = _stage_exit(
@@ -409,6 +411,7 @@ def invoke_minute_strategy(
             timing=timing,
             next_bar=next_bar,
             evaluate_drawdown=False,
+            price=price,
         )
         if stopped.decision == "fill":
             return stopped
