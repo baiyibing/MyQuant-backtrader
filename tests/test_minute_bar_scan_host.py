@@ -492,7 +492,7 @@ def test_round_trip_cli_buys_only_pool_member(tmp_path, capsys, source, membersh
         root_flag = "--qlib-root"
     assert main(["--source", source, "--symbol", SYMBOL, "--start", DAY, "--end", DAY,
                  root_flag, str(root), "--pool-dir", str(pool), "--cash", "2000",
-                 "--daily-quota", "1000"]) == 0
+                 "--daily-quota", "1001"]) == 0
     output = capsys.readouterr().out
     assert len(output.splitlines()) == 1
     if membership == "000739":
@@ -508,7 +508,7 @@ def test_round_trip_existing_buy_window_fallback(hms, buys):
                           "open": [10, 10, 9.7], "high": [10, 10, 9.8],
                           "low": [10, 10, 9.6], "close": [10, 10, 9.75]})
     result = host.scan_version1_round_trip(frame, symbol=SYMBOL,
-                                          daily_quota=1000, pool_days={date(2026, 1, 6): [SYMBOL]})
+                                          daily_quota=1001, pool_days={date(2026, 1, 6): [SYMBOL]})
     assert (result.buys, result.sells) == (buys, buys)
 
 
@@ -522,7 +522,7 @@ def test_round_trip_rebuys_after_same_day_sell(buy_hm):
         "low": [10, 9.6, 10, 10.5], "close": [10, 9.75, 10, 11],
     })
     result = host.scan_version1_round_trip(
-        frame, symbol=SYMBOL, cash=2000, daily_quota=1000,
+        frame, symbol=SYMBOL, cash=2000, daily_quota=1001,
         pool_days={first: [SYMBOL], second: [SYMBOL]},
     )
     assert (result.buys, result.sells, result.skips) == (2, 1, 1)
@@ -534,7 +534,7 @@ def test_round_trip_reenters_later_pool_day_and_marks_open_shares():
     frame = pd.DataFrame({"date": days, "hm": [895, 896, 895, 896],
                           "open": [10, 9.7, 10, 10.5], "high": [10, 9.8, 10, 11],
                           "low": [10, 9.6, 10, 10.5], "close": [10, 9.75, 10, 11]})
-    result = host.scan_version1_round_trip(frame, symbol=SYMBOL, cash=2000, daily_quota=1000,
+    result = host.scan_version1_round_trip(frame, symbol=SYMBOL, cash=2000, daily_quota=1001,
                                           pool_days={day: [SYMBOL] for day in days})
     assert (result.buys, result.sells, result.skips) == (2, 1, 1)
     assert result.equity == pytest.approx(2067.03)
@@ -546,12 +546,51 @@ def test_round_trip_rejects_invalid_daily_quota(quota):
         host.scan_version1_round_trip(pd.DataFrame(), symbol=SYMBOL, pool_days={}, daily_quota=quota)
 
 
+@pytest.mark.parametrize("symbol", [SYMBOL, "688001.SH"])
+@pytest.mark.parametrize("cash,quota,members,budget", [
+    (2000, 999, 1, 999),
+    (999, 2000, 1, 999),
+    (2000, 1998, 2, 999),
+    (2000, 1000, 1, 1000),
+])
+def test_round_trip_unaffordable_buy_stops_before_fill(
+    monkeypatch, symbol, cash, quota, members, budget,
+):
+    day = date(2026, 1, 6)
+    frame = pd.DataFrame({"date": [day, day], "hm": [895, 896],
+                          **{name: [10, 10] for name in host.OHLC}})
+    def unexpected_exit(*args, **kwargs):
+        pytest.fail("unaffordable buy must stop before holding or scanning an exit")
+    monkeypatch.setattr(host, "scan_bar_exit", unexpected_exit)
+    pool = [symbol] + (["600000.SH"] if members == 2 else [])
+    with pytest.raises(RuntimeError) as error:
+        host.scan_version1_round_trip(
+            frame, symbol=symbol, cash=cash, daily_quota=quota, pool_days={day: pool},
+        )
+    assert str(error.value) == (
+        f"Insufficient buy budget: symbol={symbol} needed=1001.00000000 "
+        f"budget={budget:.8f} cash={cash:.8f}"
+    )
+
+
+def test_round_trip_one_lot_budget_includes_existing_fee():
+    from backtest.research.ashare_fees import COMMISSION, trade_commission
+    day = date(2026, 1, 6)
+    frame = pd.DataFrame({"date": [day], "hm": [895],
+                          **{name: [10] for name in host.OHLC}})
+    result = host.scan_version1_round_trip(
+        frame, symbol=SYMBOL, cash=1001, daily_quota=1001, pool_days={day: [SYMBOL]},
+    )
+    assert (result.buys, result.sells, result.skips) == (1, 0, 0)
+    assert result.equity == pytest.approx(1001 - trade_commission(1000, COMMISSION))
+
+
 def test_round_trip_existing_fee_reduces_equity(monkeypatch):
     day = date(2026, 1, 6)
     frame = pd.DataFrame({"date": [day, day], "hm": [895, 896],
                           "open": [10, 9.7], "high": [10, 9.8],
                           "low": [10, 9.6], "close": [10, 9.75]})
-    args = dict(symbol=SYMBOL, pool_days={day: [SYMBOL]}, cash=10000, daily_quota=5000)
+    args = dict(symbol=SYMBOL, pool_days={day: [SYMBOL]}, cash=10000, daily_quota=5005)
     paid = host.scan_version1_round_trip(frame, **args)
     monkeypatch.setattr(host, "COMMISSION", 0.0)
     free = host.scan_version1_round_trip(frame, **args)
@@ -567,18 +606,19 @@ def test_round_trip_size_matches_existing_sizer(monkeypatch):
                           "open": [10, 11], "high": [10, 11],
                           "low": [10, 11], "close": [10, 11]})
     calls = []
-    def checked(per, px):
-        result = _buy_size(per, px)
+    def checked(per, px, *, star_declare):
+        assert star_declare is False
+        result = _buy_size(per, px, star_declare=star_declare)
         calls.append((per, px, result[0]))
         return result
     monkeypatch.setattr(host, "_buy_size", checked)
     result = host.scan_version1_round_trip(
-        frame, symbol=SYMBOL, cash=10000, daily_quota=8000,
+        frame, symbol=SYMBOL, cash=10000, daily_quota=8008,
         pool_days={day: [SYMBOL, "600000.SH"]},
     )
-    expected, _ = _buy_size(4000, 10)
+    expected, _ = _buy_size(4004, 10)
     assert expected > 100
-    assert calls == [(4000, 10, expected)]
+    assert calls == [(4004, 10, expected)]
     assert result.buys == 1 and result.sells == 0
     assert result.equity == pytest.approx(10000 - 4000 - 4 + expected * 11)
 
@@ -679,7 +719,7 @@ def test_round_trip_resolves_once_and_matches_wire_sells(monkeypatch):
         return result
     monkeypatch.setattr(host, "minute_strategy_entries", catalog)
     monkeypatch.setattr(host, "scan_bar_exit", checked)
-    result = host.scan_version1_round_trip(frame, symbol=SYMBOL, daily_quota=1000, pool_days={day: [SYMBOL]})
+    result = host.scan_version1_round_trip(frame, symbol=SYMBOL, daily_quota=1001, pool_days={day: [SYMBOL]})
     assert result.buys >= 1 and result.sells == 1
     assert calls == [1]
     assert [result.reason for result in decisions] == ["", "profit_take:drawdown:50"]

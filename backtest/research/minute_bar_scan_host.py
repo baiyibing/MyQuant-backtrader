@@ -19,7 +19,8 @@ from backtest.research.bar_scan_exit import BarScanExit, HeldPosition, OhlcBar, 
 from backtest.research.csv_minute_backtest import BUY_HM, _buy_px
 from backtest.research.csv_pool import load_pool_day_map
 from backtest.research.csv_common import DEFAULT_DAILY_QUOTA
-from backtest.research.csv_ledger import _buy_size, COMMISSION, trade_commission
+from backtest.research.csv_ledger import _buy_size
+from backtest.research.ashare_fees import COMMISSION, trade_commission
 from backtest.research.minute_true_core_wire import (
     invoke_minute_strategy, wired_names, _DRAWDOWN,
     MinuteStrategyNotOnBarScan, minute_strategy_entries,
@@ -63,6 +64,7 @@ def scan_version1_round_trip(frame, *, symbol: str, pool_days: Mapping,
 
     Buy reason is pool. Only bars after the selected buy close can exit.
     A sold name may re-enter at a later eligible buy bar, including the same day.
+    An unaffordable sized buy raises before any fill or cash mutation.
     Skips count bars with neither a buy nor a sell.
     """
     if not math.isfinite(cash) or cash <= 0:
@@ -95,11 +97,16 @@ def scan_version1_round_trip(frame, *, symbol: str, pool_days: Mapping,
             if not held_shares and index == buy_index:
                 # run_pool_buys_day allocates current cash across the day pool.
                 per = min(daily_quota, cash) / len(members)
-                shares, _ = _buy_size(per, px)
+                # Match the old version1 default: STAR declaration is opt-in/off.
+                shares, _ = _buy_size(per, px, star_declare=False)
                 notional = shares * px
                 debit = notional + trade_commission(notional, COMMISSION)
-                # Preserve execute_buy cash rejection; do not invent a smaller size.
-                if shares > 0 and debit <= cash:
+                if debit > cash or debit > per:
+                    raise RuntimeError(
+                        f"Insufficient buy budget: symbol={code} needed={debit:.8f} "
+                        f"budget={per:.8f} cash={cash:.8f}"
+                    )
+                if shares > 0:
                     cash -= debit
                     held_shares = shares
                     cost = peak = px
