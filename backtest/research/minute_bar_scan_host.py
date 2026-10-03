@@ -15,6 +15,7 @@ from pathlib import Path
 import pandas as pd
 
 from backtest.research.ashare_bars import _in_session
+from backtest.research.ashare_session import t1_sellable
 from backtest.research.bar_scan_exit import BarScanExit, HeldPosition, OhlcBar, scan_bar_exit
 from backtest.research.csv_minute_backtest import BUY_HM, _buy_px
 from backtest.research.csv_pool import load_pool_day_map
@@ -61,7 +62,7 @@ def scan_version1_round_trip(frame, *, symbol: str, pool_days: Mapping,
                              daily_quota: float = DEFAULT_DAILY_QUOTA) -> RoundTripSummary:
     """Flat-start, same-bar accounting with the CSV version1 fee and lot sizer.
 
-    Buy reason is pool. Only bars after the selected buy close can exit.
+    Buy reason is pool. Only a later calendar day can close bought shares.
     A sold name may re-enter at a later eligible buy bar, including the same day.
     Whole-lot buys include commission in the allocated budget; if even one
     lot is unaffordable, raise before any fill or cash mutation.
@@ -78,11 +79,13 @@ def scan_version1_round_trip(frame, *, symbol: str, pool_days: Mapping,
     initial_cash = cash
     held_shares = buys = sells = 0
     cost = peak = 0.0
+    buy_day = None
     book = _version1_book()
     offset = 0
     for day, day_frame in frame.groupby("date", sort=False):
+        day = _as_date(day)
         buy_index = None
-        members = pool_days.get(_as_date(day), [])
+        members = pool_days.get(day, [])
         if code in members:
             px = _buy_px(day_frame)
             if px is not None:
@@ -115,6 +118,7 @@ def scan_version1_round_trip(frame, *, symbol: str, pool_days: Mapping,
                 if shares > 0:
                     cash -= debit
                     held_shares = shares
+                    buy_day = day
                     cost = peak = px
                     buys += 1
                     continue
@@ -124,7 +128,7 @@ def scan_version1_round_trip(frame, *, symbol: str, pool_days: Mapping,
                     timing="same_bar",
                 )
                 peak = result.peak
-                if result.decision == "fill":
+                if result.decision == "fill" and t1_sellable(buy_day, day):
                     notional = held_shares * result.fill_price
                     cash += notional - trade_commission(notional, COMMISSION)
                     held_shares = 0

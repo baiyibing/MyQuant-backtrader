@@ -496,8 +496,8 @@ def test_round_trip_cli_buys_only_pool_member(tmp_path, capsys, source, membersh
     output = capsys.readouterr().out
     assert len(output.splitlines()) == 1
     if membership == "000739":
-        assert "bars=3 buys=1 sells=1 skips=1 equity=1968.03" in output
-        assert float(output.split("return_pct=")[1]) == pytest.approx(-1.5985, abs=0.000002)
+        assert "bars=3 buys=1 sells=0 skips=2 equity=1974.00" in output
+        assert float(output.split("return_pct=")[1]) == pytest.approx(-1.3, abs=0.000002)
     else:
         assert "buys=0 sells=0 skips=3 equity=2000.00 return_pct=0.000000" in output
 
@@ -509,7 +509,7 @@ def test_round_trip_existing_buy_window_fallback(hms, buys):
                           "low": [10, 10, 9.6], "close": [10, 10, 9.75]})
     result = host.scan_version1_round_trip(frame, symbol=SYMBOL,
                                           daily_quota=1001, pool_days={date(2026, 1, 6): [SYMBOL]})
-    assert (result.buys, result.sells) == (buys, buys)
+    assert (result.buys, result.sells) == (buys, 0)
 
 
 @pytest.mark.parametrize("buy_hm", [895, 894])
@@ -530,13 +530,16 @@ def test_round_trip_rebuys_after_same_day_sell(buy_hm):
 
 
 def test_round_trip_reenters_later_pool_day_and_marks_open_shares():
-    days = [date(2026, 1, 6)] * 2 + [date(2026, 1, 7)] * 2
-    frame = pd.DataFrame({"date": days, "hm": [895, 896, 895, 896],
-                          "open": [10, 9.7, 10, 10.5], "high": [10, 9.8, 10, 11],
-                          "low": [10, 9.6, 10, 10.5], "close": [10, 9.75, 10, 11]})
+    first, second = date(2026, 1, 6), date(2026, 1, 7)
+    frame = pd.DataFrame({
+        "date": [first, first, second, second, second],
+        "hm": [895, 896, 870, 895, 896],
+        "open": [10, 9.7, 9.7, 10, 10.5], "high": [10, 9.8, 9.8, 10, 11],
+        "low": [10, 9.6, 9.6, 10, 10.5], "close": [10, 9.75, 9.75, 10, 11],
+    })
     result = host.scan_version1_round_trip(frame, symbol=SYMBOL, cash=2000, daily_quota=1001,
-                                          pool_days={day: [SYMBOL] for day in days})
-    assert (result.buys, result.sells, result.skips) == (2, 1, 1)
+                                          pool_days={first: [SYMBOL], second: [SYMBOL]})
+    assert (result.buys, result.sells, result.skips) == (2, 1, 2)
     assert result.equity == pytest.approx(2067.03)
 
 
@@ -587,7 +590,7 @@ def test_round_trip_one_lot_budget_includes_existing_fee():
 
 def test_round_trip_existing_fee_reduces_equity(monkeypatch):
     day = date(2026, 1, 6)
-    frame = pd.DataFrame({"date": [day, day], "hm": [895, 896],
+    frame = pd.DataFrame({"date": [day, date(2026, 1, 7)], "hm": [895, 896],
                           "open": [10, 9.7], "high": [10, 9.8],
                           "low": [10, 9.6], "close": [10, 9.75]})
     args = dict(symbol=SYMBOL, pool_days={day: [SYMBOL]}, cash=10000, daily_quota=5005)
@@ -716,7 +719,7 @@ def test_round_trip_resolves_once_and_matches_wire_sells(monkeypatch):
     from backtest.research.minute_true_core_wire import invoke_minute_strategy
     day = date(2026, 1, 6)
     frame = pd.DataFrame({
-        "date": [day] * 5, "hm": [895, 896, 897, 898, 899],
+        "date": [day] + [date(2026, 1, 7)] * 4, "hm": [895, 896, 897, 898, 899],
         "open": [10, 11, 10.9, 10, 10], "high": [10, 12, 11, 10.1, 10.1],
         "low": [10, 10.9, 10.8, 9.95, 9.95], "close": [10, 11.8, 10.9, 10, 10],
     })
@@ -778,3 +781,47 @@ def test_lake_window_matches_public_reader_normalization(tmp_path, monkeypatch):
     t0, t1 = utc_ms_range(DAY, "20260108")
     assert len(calls) == 1
     assert calls[0]["filters"] == [("time", ">=", t0), ("time", "<=", t1)]
+
+
+def test_round_trip_sell_uses_old_engine_t1_predicate(monkeypatch):
+    from datetime import timedelta
+    from unittest.mock import Mock
+    from backtest.research import ashare_session, csv_minute_backtest
+    from backtest.research.bar_scan_exit import HeldPosition, OhlcBar, scan_bar_exit
+
+    buy_day = date(2026, 1, 6)
+    # Use the exact predicate already imported by the old minute engine.
+    assert csv_minute_backtest.t1_sellable is ashare_session.t1_sellable
+    assert host.t1_sellable is ashare_session.t1_sellable
+    predicate = Mock(wraps=ashare_session.t1_sellable)
+    monkeypatch.setattr(host, "t1_sellable", predicate)
+    symbol = "603196.SH"
+    next_day = buy_day + timedelta(days=1)
+    frame = pd.DataFrame({
+        "date": [buy_day, buy_day, next_day], "hm": [895, 896, 570],
+        "open": [24.28, 27, 27], "high": [24.28, 30, 30],
+        "low": [24.28, 27, 27], "close": [24.28, 27, 27],
+    })
+    book = host._version1_book()
+    exit_result = scan_bar_exit(
+        OhlcBar(27, 30, 27, 27),
+        HeldPosition(24.28, 24.28, book.stop_pct, book.drawdown_of(1)),
+        timing="same_bar",
+    )
+    assert exit_result.decision == "fill"
+    assert exit_result.reason.startswith("profit_take:")
+    args = dict(symbol=symbol, pool_days={buy_day: [symbol]}, cash=10000, daily_quota=10000)
+    same_day = host.scan_version1_round_trip(frame.iloc[:2], **args)
+    assert (same_day.buys, same_day.sells, same_day.skips) == (1, 0, 1)
+    predicate.assert_called_once_with(buy_day, buy_day)
+    predicate.reset_mock()
+    next_day_result = host.scan_version1_round_trip(frame, **args)
+    assert (next_day_result.buys, next_day_result.sells, next_day_result.skips) == (1, 1, 1)
+    assert predicate.call_args_list == [((buy_day, buy_day),), ((buy_day, next_day),)]
+
+    # Prove the host obeys the shared predicate rather than a local date formula.
+    predicate.reset_mock()
+    predicate.return_value = False
+    denied = host.scan_version1_round_trip(frame, **args)
+    assert (denied.buys, denied.sells, denied.skips) == (1, 0, 2)
+    predicate.assert_any_call(buy_day, next_day)
