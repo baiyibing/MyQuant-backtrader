@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from backtest.research import strategy2_rules
 from backtest.research.bar_scan_exit import OhlcBar
 from backtest.research.csv_strategy_books import csv_strategy_names
 from backtest.research.minute_true_core_wire import (
@@ -131,16 +132,51 @@ def test_wired_strategy_gap_fills_at_open(name: str):
 
 
 def test_version2_uses_hold_day_drawdown_inside_the_scan():
-    # 峰值 12、收盘 11.70：回撤 15%。T+1 阈值 50% 跳过；T+5 阈值 10% 按收盘成交。
+    # 同一根 K，策略 2 的 T+1 跳过、T+5 按策略书原因成交；策略 1 仍跳过。
     bar = OhlcBar(11.90, 12.00, 11.50, 11.70)
     first = invoke_minute_strategy("version2", bar, cost=10.0, peak=12.0, n_days=1)
     assert first.decision == "skip"
     later = invoke_minute_strategy("version2", bar, cost=10.0, peak=12.0, n_days=5)
     assert later.decision == "fill"
     assert later.fill_price == 11.70
-    assert later.reason == "profit_take:drawdown:10"
+    assert later.reason == strategy2_rules.take_profit_reason(11.70, 10.0, 12.0, 5)
+    assert later.reason == "profit_take:drawdown:T+5"
     same = invoke_minute_strategy("version1", bar, cost=10.0, peak=12.0, n_days=5)
     assert same.decision == "skip"
+
+
+def test_version2_calls_live_take_profit_reason(monkeypatch):
+    calls = []
+    reason = "sentinel:version2_take_profit"
+
+    def take_profit(close, cost, peak, n_days):
+        calls.append((close, cost, peak, n_days))
+        return reason
+
+    monkeypatch.setattr(strategy2_rules, "take_profit_reason", take_profit)
+    bar = OhlcBar(11.90, 12.00, 11.50, 11.70)
+    result = invoke_minute_strategy("version2", bar, cost=10.0, peak=11.90, n_days=5)
+    assert result.decision == "fill"
+    assert result.reason == reason
+    assert result.fill_price == bar.close
+    assert calls == [(11.70, 10.0, 12.0, 5)]
+
+    reason = None
+    skipped = invoke_minute_strategy("version2", bar, cost=10.0, peak=11.90, n_days=5)
+    assert skipped.decision == "skip"
+    assert skipped.fill_price is None
+    assert calls == [(11.70, 10.0, 12.0, 5)] * 2
+
+    version1 = invoke_minute_strategy(
+        "version1",
+        OhlcBar(11.50, 12.00, 10.80, 11.00),
+        cost=10.0,
+        peak=12.0,
+        n_days=1,
+    )
+    assert version1.decision == "fill"
+    assert version1.reason == "profit_take:drawdown:50"
+    assert calls == [(11.70, 10.0, 12.0, 5)] * 2
 
 
 def test_version1_drawdown_fills_at_close():
