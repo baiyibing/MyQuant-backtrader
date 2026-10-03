@@ -16,6 +16,8 @@ import pandas as pd
 
 from backtest.research.ashare_bars import _in_session
 from backtest.research.ashare_session import t1_sellable
+from backtest.research import strategy4_rules
+from backtest.research.ma_infra import sma_asof
 from backtest.research.bar_scan_exit import (
     BarScanExit, FillPrice, FillTiming, HeldPosition, OhlcBar, scan_bar_exit,
 )
@@ -67,14 +69,15 @@ def scan_version1_round_trip(frame, *, symbol: str, pool_days: Mapping,
                              strategy: str = "version1") -> RoundTripSummary:
     """Flat-start, bar-scan accounting with the CSV version1 fee and lot sizer.
 
-    Buy reason is pool. Only a later calendar day can close bought shares.
+    Buys require pool membership, plus version4's SMA10 gate when selected.
+    Only a later calendar day can close bought shares.
     A sold name may re-enter at a later eligible buy bar, including the same day.
     Whole-lot buys include commission in the allocated budget; if even one
     lot is unaffordable, raise before any fill or cash mutation.
     Skips count bars with neither a buy nor a sell.
     """
-    if strategy not in ("version1", "version2", "version3"):
-        raise ValueError("round trip requires version1, version2 or version3")
+    if strategy not in ("version1", "version2", "version3", "version4"):
+        raise ValueError("round trip requires version1, version2, version3 or version4")
     if not math.isfinite(cash) or cash <= 0:
         raise ValueError("cash must be finite and > 0")
     if isinstance(daily_quota, bool) or not math.isfinite(daily_quota) or daily_quota <= 0:
@@ -89,9 +92,14 @@ def scan_version1_round_trip(frame, *, symbol: str, pool_days: Mapping,
     buy_day = None
     buy_session = None
     book = _version1_book()
+    day_closes = ([(_as_date(day), float(group["close"].iloc[-1]))
+                   for day, group in frame.groupby("date", sort=False)]
+                  if strategy == "version4" else [])
     offset = 0
     for session, (day, day_frame) in enumerate(frame.groupby("date", sort=False)):
         day = _as_date(day)
+        prior_closes = [close for close_day, close in day_closes if close_day < day]
+        level = sma_asof(prior_closes, strategy4_rules.MA_SELL) if strategy == "version4" else None
         buy_index = None
         members = pool_days.get(day, [])
         if code in members:
@@ -106,6 +114,8 @@ def scan_version1_round_trip(frame, *, symbol: str, pool_days: Mapping,
         for index in range(len(day_frame)):
             bar = bars[offset + index]
             if not held_shares and index == buy_index:
+                if strategy == "version4" and not strategy4_rules.buy_gate(code, px, day, prior_closes):
+                    continue
                 # run_pool_buys_day allocates current cash across the day pool.
                 per = min(daily_quota, cash) / len(members)
                 # Whole hundreds, with no supplementary 100-share top-up.
@@ -149,6 +159,17 @@ def scan_version1_round_trip(frame, *, symbol: str, pool_days: Mapping,
                     result = invoke_minute_strategy(
                         "version3", bar, cost=cost, peak=peak,
                         n_days=session - buy_session, timing=timing, price=price,
+                        **({"next_bar": bars[offset + index + 1]}
+                           if timing == "next_bar" and offset + index + 1 < len(bars) else {}),
+                    )
+                elif strategy == "version4":
+                    if not t1_sellable(buy_day, day) or level is None:
+                        peak = bar.high if bar.high > peak else peak
+                        continue
+                    result = invoke_minute_strategy(
+                        "version4", bar, cost=cost, peak=peak,
+                        n_days=session - buy_session, timing=timing, price=price,
+                        level=level,
                         **({"next_bar": bars[offset + index + 1]}
                            if timing == "next_bar" and offset + index + 1 < len(bars) else {}),
                     )
@@ -517,7 +538,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         args = parser.parse_args(argv)
         code = _symbol(args.symbol)
-        round_trip = args.strategy in ("version1", "version2", "version3") and args.cost is None and args.peak is None
+        round_trip = args.strategy in ("version1", "version2", "version3", "version4") and args.cost is None and args.peak is None
         if not round_trip and (args.cost is None or args.peak is None):
             raise ValueError("held-only scan requires both --cost and --peak")
         # Existing reader progress belongs on stderr; stdout is one summary line.

@@ -458,6 +458,10 @@ def test_source_guards():
         assert forbidden not in source
     calls = [node for node in ast.walk(ast.parse(source)) if isinstance(node, ast.Call)
              and isinstance(node.func, ast.Name) and node.func.id == "invoke_minute_strategy"]
+    version4_calls = [call for call in calls if isinstance(call.args[0], ast.Constant)
+                      and call.args[0].value == "version4"]
+    assert len(version4_calls) == 1
+    calls = [call for call in calls if call not in version4_calls]
     assert len(calls) == 3
     assert sum(isinstance(call.args[0], ast.Name) and call.args[0].id == "strategy"
                for call in calls) == 1
@@ -1032,7 +1036,7 @@ def test_version2_round_trip_cli_and_fill_modes(monkeypatch, capsys, timing, pri
     assert result.fill_price == pytest.approx(expected)
 
 
-@pytest.mark.parametrize("strategy", ["version1", "version2", "version3"])
+@pytest.mark.parametrize("strategy", ["version1", "version2", "version3", "version4"])
 @pytest.mark.parametrize("flag", ["--cost", "--peak"])
 def test_round_trip_partial_held_flags_keep_error(capsys, strategy, flag):
     assert main(["--source", "lake", "--symbol", SYMBOL, "--start", DAY, "--end", DAY,
@@ -1156,3 +1160,96 @@ def test_version3_round_trip_carries_unsellable_same_day_peak(monkeypatch):
     assert calls == [(10, 12, 1)]
     assert (summary.buys, summary.sells, summary.skips) == (1, 1, 1)
     assert summary.equity == pytest.approx(1998)
+
+
+def _version4_history_frame(history=10, buy_px=10):
+    days = list(pd.date_range("2026-01-01", periods=history + 3).date)
+    # Two bars per history day: only the last close contributes to the SMA.
+    rows = [(day, hm, px, px, px, px)
+            for day in days[:history] for hm, px in [(570, 50), (900, 10)]]
+    rows += [(days[history], 895, buy_px, buy_px, buy_px, buy_px),
+             (days[history], 896, 9, 12, 8, 9),
+             (days[history + 1], 570, 9, 9, 8, 9),
+             (days[history + 2], 570, 8, 8, 8, 8)]
+    return pd.DataFrame(rows, columns=["date", "hm", *host.OHLC]), days[history]
+
+
+@pytest.mark.parametrize("timing", ["same_bar", "next_bar"])
+@pytest.mark.parametrize("price", ["stop", "close"])
+def test_version4_round_trip_cli_sma_sell(monkeypatch, capsys, timing, price):
+    from backtest.research import strategy2_rules, strategy3_rules, strategy4_rules
+    frame, buy_day = _version4_history_frame()
+    def forbidden(*args, **kwargs):
+        pytest.fail("take-profit or generic drawdown called for version4")
+    for rules in (strategy2_rules, strategy3_rules, strategy4_rules):
+        monkeypatch.setattr(rules, "take_profit_reason", forbidden)
+    monkeypatch.setattr(host, "scan_bar_exit", forbidden)
+    def load(*args, source_frames=None, **kwargs):
+        source_frames.append(frame)
+    monkeypatch.setattr(host, "load_scan_bars", load)
+    monkeypatch.setattr(host, "load_pool_day_map", lambda *a, **k: {buy_day: [SYMBOL]})
+    calls = []
+    invoke = host.invoke_minute_strategy
+    def record(*args, **kwargs):
+        assert args[0] == "version4"
+        result = invoke(*args, **kwargs)
+        calls.append((kwargs, result))
+        return result
+    monkeypatch.setattr(host, "invoke_minute_strategy", record)
+    assert main(["--source", "lake", "--symbol", SYMBOL, "--start", "20260101",
+                 "--end", "20260113", "--strategy", "version4", "--cash", "2000",
+                 "--daily-quota", "1001", "--fill-bar", timing, "--fill-price", price]) == 0
+    output = capsys.readouterr().out
+    assert len(output.splitlines()) == 1
+    assert "version4" in output and "buys=1 sells=1" in output
+    fields, result = calls[0]
+    assert fields["level"] == pytest.approx((10 * 4 + 9) / 5)
+    assert fields["peak"] == 12 and fields["n_days"] == 1
+    assert fields["timing"] == timing and fields["price"] == price
+    assert result.reason == ("ma_signal:MA5:next_open" if timing == "next_bar" else "ma_signal:MA5")
+    assert result.fill_price == (8 if timing == "next_bar" else 9)
+
+
+def test_version4_round_trip_missing_sma5_freezes(monkeypatch):
+    frame, buy_day = _version4_history_frame(history=2)
+    monkeypatch.setattr(host.strategy4_rules, "buy_gate", lambda *a: True)
+    def forbidden(*args, **kwargs):
+        pytest.fail("wire must not receive a missing level")
+    monkeypatch.setattr(host, "invoke_minute_strategy", forbidden)
+    result = host.scan_version1_round_trip(frame, symbol=SYMBOL, pool_days={buy_day: [SYMBOL]},
+                                           cash=2000, daily_quota=1001, strategy="version4")
+    assert (result.buys, result.sells) == (1, 0)
+
+
+@pytest.mark.parametrize("history,buy_px", [(9, 10), (10, 9)])
+def test_version4_round_trip_buy_gate_false_preserves_cash(history, buy_px):
+    frame, buy_day = _version4_history_frame(history, buy_px)
+    result = host.scan_version1_round_trip(frame, symbol=SYMBOL, pool_days={buy_day: [SYMBOL]},
+                                           cash=2000, daily_quota=1, strategy="version4")
+    assert (result.buys, result.sells, result.equity, result.return_pct) == (0, 0, 2000, 0)
+
+
+def test_version4_round_trip_buy_gate_true_uses_cash_lots():
+    frame, buy_day = _version4_history_frame()
+    frame = frame[frame.date <= buy_day].copy()
+    frame.loc[frame.date == buy_day, "close"] = 10
+    result = host.scan_version1_round_trip(frame, symbol=SYMBOL, pool_days={buy_day: [SYMBOL]},
+                                           cash=4000, daily_quota=3000, strategy="version4")
+    # 300 shares plus commission exceed quota; existing sizing buys 200 shares.
+    assert (result.buys, result.sells) == (1, 0)
+    assert result.equity == pytest.approx(4000 - host.trade_commission(2000, host.COMMISSION))
+
+
+def test_version4_both_held_flags_keep_held_scan(monkeypatch, capsys):
+    calls = []
+    def held(*args, **kwargs):
+        calls.append(kwargs)
+        return host.ScanSummary(1, 0, 1)
+    def forbidden(*args, **kwargs):
+        pytest.fail("held flags must not enter round trip")
+    monkeypatch.setattr(host, "run_scan", held)
+    monkeypatch.setattr(host, "run_round_trip", forbidden)
+    assert main(["--source", "lake", "--symbol", SYMBOL, "--start", DAY, "--end", DAY,
+                 "--strategy", "version4", "--cost", "10", "--peak", "10", "--level", "9"]) == 0
+    assert calls[0]["cost"] == 10 and calls[0]["peak"] == 10 and calls[0]["level"] == 9
+    capsys.readouterr()
