@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from backtest.research.ashare_bars import MinuteBarReadError, load_minute_from_lake
+from backtest.research.ashare_bars import _in_session
 from backtest.research.bar_scan_exit import BarScanExit, HeldPosition, OhlcBar, scan_bar_exit
 from backtest.research.csv_minute_backtest import BUY_HM, _buy_px
 from backtest.research.csv_pool import load_pool_day_map
@@ -30,7 +30,7 @@ from backtest.research.qlib_bin_1min import (
 from backtest.research.topk_dropout_rules import decide_topk_dropout
 from backtest.research.topk_dropout_scores import load_scores_from_args, require_day_scores
 from backtest.research.topk_score_exit_rules import decide_topk_score_exit
-from oskh_data.symbol_format import is_canonical_symbol, to_canonical_symbol
+from oskh_data.symbol_format import is_canonical_symbol, to_canonical_symbol, to_partition_key
 
 SOURCES = ("qlib_1min", "lake")
 OHLC = ("open", "high", "low", "close")
@@ -261,6 +261,43 @@ def _frame_bars(frame, symbol: str, root: Path) -> list[OhlcBar]:
     return bars
 
 
+def _load_lake_window(code: str, root: Path, start: str, end: str):
+    """Read one closed UTC-ms window; preserve the default book-reader rules."""
+    import pyarrow.parquet as pq
+
+    from backtest.research.market_layer import utc_ms_range
+
+    path = root / f"symbol={to_partition_key(code)}" / "data.parquet"
+    if not path.is_file():
+        raise FileNotFoundError(f"minute parquet missing for {code} under {root}")
+    t0, t1 = utc_ms_range(start, end)
+    try:
+        has_volume = "volume" in pq.read_schema(path).names
+        table = pq.read_table(
+            path, columns=["time", *OHLC] + (["volume"] if has_volume else []),
+            filters=[("time", ">=", t0), ("time", "<=", t1)],
+        )
+    except Exception as exc:
+        raise FileNotFoundError(
+            f"minute OHLC unavailable for {code} under {root}: {exc}"
+        ) from exc
+    utc = pd.to_datetime(table["time"].to_numpy(), unit="ms", utc=True)
+    hm = utc.hour * 60 + utc.minute
+    keep = _in_session(hm.to_numpy())
+    utc = utc[keep]
+    frame = pd.DataFrame(
+        {**{name: table[name].to_numpy()[keep] for name in OHLC},
+         "ymd": utc.strftime("%Y%m%d"), "hm": hm.to_numpy()[keep],
+         **({"_volume": table["volume"].to_numpy()[keep]} if has_volume else {})},
+        index=utc.tz_localize(None),
+    ).astype({**{name: "float64" for name in OHLC}, "hm": "int64"})
+    frame = frame[~frame.index.duplicated(keep="last")].sort_index()
+    if has_volume:
+        day_volume = frame.groupby("ymd")["_volume"].transform("sum")
+        frame = frame.loc[day_volume != 0].drop(columns="_volume")
+    return frame
+
+
 def load_scan_bars(
     symbol: str,
     start: date | str,
@@ -320,16 +357,9 @@ def load_scan_bars(
         root = Path(lake_root)
         if not root.is_dir():
             raise FileNotFoundError(f"lake root missing for {code}: {root}")
-        try:
-            frames = load_minute_from_lake(
-                [code], first.strftime("%Y%m%d"), last.strftime("%Y%m%d"),
-                workers=1, lake_root=root,
-            )
-        except MinuteBarReadError as exc:
-            raise FileNotFoundError(
-                f"minute OHLC unavailable for {code} under {root}: {exc.__cause__ or exc}"
-            ) from exc
-        frame = frames.get(code)
+        frame = _load_lake_window(
+            code, root, first.strftime("%Y%m%d"), last.strftime("%Y%m%d"),
+        )
         if frame is None or frame.empty:
             raise FileNotFoundError(f"minute bars missing for {code} under {root}")
     bars = _frame_bars(frame, code, root)
