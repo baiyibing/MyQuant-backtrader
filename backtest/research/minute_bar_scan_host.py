@@ -18,6 +18,9 @@ from backtest.research.ashare_bars import _in_session
 from backtest.research.bar_scan_exit import BarScanExit, HeldPosition, OhlcBar, scan_bar_exit
 from backtest.research.csv_minute_backtest import BUY_HM, _buy_px
 from backtest.research.csv_pool import load_pool_day_map
+from backtest.research.csv_common import DEFAULT_DAILY_QUOTA
+from backtest.research.csv_ledger import _buy_size
+from backtest.research.ashare_fees import COMMISSION, trade_commission
 from backtest.research.minute_true_core_wire import (
     invoke_minute_strategy, wired_names, _DRAWDOWN,
     MinuteStrategyNotOnBarScan, minute_strategy_entries,
@@ -55,17 +58,19 @@ class RoundTripSummary:
 
 
 def scan_version1_round_trip(frame, *, symbol: str, pool_days: Mapping,
-                             cash: float = 100000.0, shares: int = 100) -> RoundTripSummary:
-    """Flat-start, same-bar host accounting; no fees or old-engine parity claim.
+                             cash: float = 100000.0,
+                             daily_quota: float = DEFAULT_DAILY_QUOTA) -> RoundTripSummary:
+    """Flat-start, same-bar accounting with the CSV version1 fee and lot sizer.
 
     Buy reason is pool. Only bars after the selected buy close can exit.
     A sold name may re-enter at a later eligible buy bar, including the same day.
+    An unaffordable sized buy raises before any fill or cash mutation.
     Skips count bars with neither a buy nor a sell.
     """
     if not math.isfinite(cash) or cash <= 0:
         raise ValueError("cash must be finite and > 0")
-    if isinstance(shares, bool) or not isinstance(shares, int) or shares <= 0 or shares % 100:
-        raise ValueError("shares must be a positive whole-lot share count (multiple of 100)")
+    if isinstance(daily_quota, bool) or not math.isfinite(daily_quota) or daily_quota <= 0:
+        raise ValueError("daily_quota must be finite and > 0")
     if frame.empty:
         raise ValueError("bars must not be empty")
     code = _symbol(symbol)
@@ -77,7 +82,8 @@ def scan_version1_round_trip(frame, *, symbol: str, pool_days: Mapping,
     offset = 0
     for day, day_frame in frame.groupby("date", sort=False):
         buy_index = None
-        if code in pool_days.get(_as_date(day), []):
+        members = pool_days.get(_as_date(day), [])
+        if code in members:
             px = _buy_px(day_frame)
             if px is not None:
                 if not math.isfinite(px) or px <= 0:
@@ -88,12 +94,24 @@ def scan_version1_round_trip(frame, *, symbol: str, pool_days: Mapping,
                 buy_index = positions[0] if exact.any() else positions[-1]
         for index in range(len(day_frame)):
             bar = bars[offset + index]
-            if not held_shares and index == buy_index and cash >= shares * px:
-                cash -= shares * px
-                held_shares = shares
-                cost = peak = px
-                buys += 1
-                continue
+            if not held_shares and index == buy_index:
+                # run_pool_buys_day allocates current cash across the day pool.
+                per = min(daily_quota, cash) / len(members)
+                # Match the old version1 default: STAR declaration is opt-in/off.
+                shares, _ = _buy_size(per, px, star_declare=False)
+                notional = shares * px
+                debit = notional + trade_commission(notional, COMMISSION)
+                if debit > cash or debit > per:
+                    raise RuntimeError(
+                        f"Insufficient buy budget: symbol={code} needed={debit:.8f} "
+                        f"budget={per:.8f} cash={cash:.8f}"
+                    )
+                if shares > 0:
+                    cash -= debit
+                    held_shares = shares
+                    cost = peak = px
+                    buys += 1
+                    continue
             if held_shares:
                 result = scan_bar_exit(
                     bar, HeldPosition(cost, peak, book.stop_pct, book.drawdown_of(1)),
@@ -101,7 +119,8 @@ def scan_version1_round_trip(frame, *, symbol: str, pool_days: Mapping,
                 )
                 peak = result.peak
                 if result.decision == "fill":
-                    cash += held_shares * result.fill_price
+                    notional = held_shares * result.fill_price
+                    cash += notional - trade_commission(notional, COMMISSION)
                     held_shares = 0
                     sells += 1
         offset += len(day_frame)
@@ -372,13 +391,14 @@ def load_scan_bars(
     return bars
 
 
-def run_round_trip(symbol, start, end, *, pool_dir: Path, cash=100000.0, shares=100,
+def run_round_trip(symbol, start, end, *, pool_dir: Path, cash=100000.0,
+                   daily_quota=DEFAULT_DAILY_QUOTA,
                    **source_args) -> RoundTripSummary:
     frames = []
     load_scan_bars(symbol, start, end, source_frames=frames, **source_args)
     pool_days = load_pool_day_map(pool_dir, start, end, key="date")
     return scan_version1_round_trip(frames[0], symbol=symbol, pool_days=pool_days,
-                                   cash=cash, shares=shares)
+                                   cash=cash, daily_quota=daily_quota)
 
 
 def run_scan(
@@ -425,8 +445,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--peak", type=float, help="held-only scan; requires --cost")
     parser.add_argument("--pool-dir", type=Path, default=Path(__file__).resolve().parents[2] / "stock_pool",
                         help="version1 flat-start daily membership CSVs; minute bars contain no pool signal")
-    parser.add_argument("--cash", type=float, default=100000.0, help="host-simple initial cash")
-    parser.add_argument("--shares", type=int, default=100, help="shares per pool buy, multiple of 100")
+    parser.add_argument("--cash", type=float, default=100000.0, help="initial cash")
+    parser.add_argument("--daily-quota", type=float, default=DEFAULT_DAILY_QUOTA,
+                        help="CSV version1 daily buy budget, split across pool members")
     parser.add_argument("--strategy", choices=wired_names(), default="version1")
     parser.add_argument("--level", type=float, help="caller-supplied sma5 or ma10")
     parser.add_argument("--stage", choices=("trial", "four", "six", "eight", "full"))
@@ -451,7 +472,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 summary = run_round_trip(
                     code, args.start, args.end, source=args.source,
                     qlib_root=args.qlib_root, lake_root=args.lake_root,
-                    pool_dir=args.pool_dir, cash=args.cash, shares=args.shares,
+                    pool_dir=args.pool_dir, cash=args.cash, daily_quota=args.daily_quota,
                 )
             else:
                 summary = run_scan(
