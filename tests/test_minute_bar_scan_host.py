@@ -458,6 +458,10 @@ def test_source_guards():
         assert forbidden not in source
     calls = [node for node in ast.walk(ast.parse(source)) if isinstance(node, ast.Call)
              and isinstance(node.func, ast.Name) and node.func.id == "invoke_minute_strategy"]
+    version4_calls = [call for call in calls if isinstance(call.args[0], ast.Constant)
+                      and call.args[0].value == "version4"]
+    assert len(version4_calls) == 0
+    calls = [call for call in calls if call not in version4_calls]
     assert len(calls) == 3
     assert sum(isinstance(call.args[0], ast.Name) and call.args[0].id == "strategy"
                for call in calls) == 1
@@ -471,7 +475,8 @@ def test_source_guards():
 
 @pytest.mark.parametrize("source", ["lake", "qlib_1min"])
 @pytest.mark.parametrize("membership", ["000739", "600000", ""])
-def test_round_trip_cli_buys_only_pool_member(tmp_path, capsys, source, membership):
+def test_round_trip_cli_buys_only_pool_member(tmp_path, capsys, monkeypatch, source, membership):
+    monkeypatch.setattr(host, "load_daily_ohlc", lambda *a, **k: pytest.fail("version1 loaded daily bars"))
     pool = tmp_path / "pool"
     pool.mkdir()
     (pool / f"{DAY}.csv").write_text(membership + "\n", encoding="utf-8")
@@ -1032,7 +1037,7 @@ def test_version2_round_trip_cli_and_fill_modes(monkeypatch, capsys, timing, pri
     assert result.fill_price == pytest.approx(expected)
 
 
-@pytest.mark.parametrize("strategy", ["version1", "version2", "version3"])
+@pytest.mark.parametrize("strategy", ["version1", "version2", "version3", "version4"])
 @pytest.mark.parametrize("flag", ["--cost", "--peak"])
 def test_round_trip_partial_held_flags_keep_error(capsys, strategy, flag):
     assert main(["--source", "lake", "--symbol", SYMBOL, "--start", DAY, "--end", DAY,
@@ -1156,3 +1161,279 @@ def test_version3_round_trip_carries_unsellable_same_day_peak(monkeypatch):
     assert calls == [(10, 12, 1)]
     assert (summary.buys, summary.sells, summary.skips) == (1, 1, 1)
     assert summary.equity == pytest.approx(1998)
+
+
+@pytest.fixture
+def version4_adjustments(monkeypatch, tmp_path):
+    # Configure before import: adj_factor binds its daily directories at import.
+    monkeypatch.setenv("OSKH_PERIOD_1D_ROOT", str(tmp_path))
+    from oskh_data import adj_factor
+
+    def install(frame):
+        calls = []
+        def build(symbol):
+            calls.append(symbol)
+            return frame.copy()
+        monkeypatch.setattr(adj_factor, "build_for_symbol", build)
+        return calls
+
+    days = pd.date_range("2026-01-01", periods=13)
+    install(pd.DataFrame(dict(date=days, stock_code=SYMBOL, close_front=10.0,
+                              close_none=10.0, cumulative_adj_factor=1.0)))
+    return adj_factor, install
+
+
+def _version4_history_frame(history=10, buy_px=10):
+    days = list(pd.date_range("2026-01-01", periods=history + 3).date)
+    # Minute history is deliberately different from the factor frame history.
+    rows = [(day, hm, px, px, px, px)
+            for day in days[:history] for hm, px in [(570, 50), (900, 10)]]
+    rows += [(days[history], 895, buy_px, buy_px, buy_px, buy_px),
+             (days[history], 896, 9, 12, 8, 9),
+             (days[history + 1], 570, 9, 9, 8, 9),
+             (days[history + 2], 570, 8, 8, 8, 8)]
+    return pd.DataFrame(rows, columns=["date", "hm", *host.OHLC]), days[history]
+
+
+@pytest.mark.parametrize("timing", ["same_bar", "next_bar"])
+@pytest.mark.parametrize("price", ["stop", "close"])
+def test_version4_round_trip_cli_sma_sell(monkeypatch, capsys, timing, price, version4_adjustments):
+    from backtest.research import strategy2_rules, strategy3_rules, strategy4_rules
+    frame, buy_day = _version4_history_frame()
+    # The factor frame supplies front history independently of daily OHLC.
+    frame = frame[frame.date >= buy_day].copy()
+    daily = pd.DataFrame({name: [10] * 6 + [8, 10, 10, 10, 10]
+                          for name in host.OHLC},
+                         index=pd.date_range("2026-01-01", periods=11))
+    adjusted = pd.DataFrame(dict(date=pd.date_range("2026-01-01", periods=13),
+                                 stock_code=SYMBOL, close_front=[9.5] * 6 + [7.6] + [9.5] * 6,
+                                 close_none=10.0, cumulative_adj_factor=0.95))
+    _, install = version4_adjustments
+    factor_calls = install(adjusted)
+    daily_calls = []
+    def load_daily(codes, start, end, **kwargs):
+        daily_calls.append((codes, start, end, kwargs))
+        return {SYMBOL: daily}
+    monkeypatch.setattr(host, "load_daily_ohlc", load_daily)
+    buy_histories = []
+    buy_gate = strategy4_rules.buy_gate
+    def record_buy(code, px, day, prior_closes):
+        buy_histories.append(prior_closes)
+        return buy_gate(code, px, day, prior_closes)
+    monkeypatch.setattr(strategy4_rules, "buy_gate", record_buy)
+    def forbidden(*args, **kwargs):
+        pytest.fail("take-profit or generic drawdown called for version4")
+    for rules in (strategy2_rules, strategy3_rules, strategy4_rules):
+        monkeypatch.setattr(rules, "take_profit_reason", forbidden)
+    monkeypatch.setattr(host, "scan_bar_exit", forbidden)
+    def load(symbol, start, end, *, source_frames=None, **kwargs):
+        assert (start, end) == (buy_day, date(2026, 1, 13))
+        source_frames.append(frame)
+    monkeypatch.setattr(host, "load_scan_bars", load)
+    monkeypatch.setattr(host, "load_pool_day_map", lambda *a, **k: {buy_day: [SYMBOL]})
+    calls = []
+    apply = host.apply_fill_timing
+    def record(signal, **kwargs):
+        result = apply(signal, **kwargs)
+        calls.append((kwargs, result))
+        return result
+    monkeypatch.setattr(host, "apply_fill_timing", record)
+    monkeypatch.setattr(host, "invoke_minute_strategy", forbidden)
+    assert main(["--source", "lake", "--symbol", SYMBOL, "--start", "20260111",
+                 "--end", "20260113", "--strategy", "version4", "--cash", "2000",
+                 "--daily-quota", "1001", "--fill-bar", timing, "--fill-price", price]) == 0
+    output = capsys.readouterr().out
+    assert len(output.splitlines()) == 1
+    assert "version4" in output and "buys=1 sells=1" in output
+    assert daily_calls == [([SYMBOL], host.warmup_start("20260111", host.STRATEGY4_CALENDAR_SLACK_DAYS),
+                            "20260113", {"source": "lake"})]
+    assert daily_calls[0][1] == "20251220"
+    assert factor_calls == ["000739_SZ"]
+    assert buy_histories == [adjusted.loc[adjusted.date.dt.date < buy_day, "close_front"].tolist() + [9.5]]
+    fields, result = calls[0]
+    assert result.peak == 12
+    assert fields["timing"] == timing
+    assert result.reason == ("ma_signal:MA5:next_open" if timing == "next_bar" else "ma_signal:MA5")
+    assert result.fill_price == (8 if timing == "next_bar" else 9)
+    proceeds = 100 * (8 if timing == "next_bar" else 9)
+    expected_equity = (2000 - 1000 - host.trade_commission(1000, host.COMMISSION)
+                       + proceeds - host.trade_commission(proceeds, host.COMMISSION))
+    assert f"equity={expected_equity:.2f}" in output
+
+
+def test_version4_round_trip_missing_sma5_freezes(monkeypatch, version4_adjustments):
+    frame, buy_day = _version4_history_frame(history=2)
+    frame = frame[frame.date < frame.date.max()]
+    monkeypatch.setattr(host.strategy4_rules, "buy_gate", lambda *a: True)
+    def forbidden(*args, **kwargs):
+        pytest.fail("wire must not receive a missing level")
+    monkeypatch.setattr(host, "invoke_minute_strategy", forbidden)
+    result = host.scan_version1_round_trip(frame, symbol=SYMBOL, pool_days={buy_day: [SYMBOL]},
+                                           cash=2000, daily_quota=1001, strategy="version4")
+    assert (result.buys, result.sells) == (1, 0)
+
+
+@pytest.mark.parametrize("history,buy_px", [(8, 10), (10, 9)])
+def test_version4_round_trip_buy_gate_false_preserves_cash(history, buy_px, version4_adjustments):
+    frame, buy_day = _version4_history_frame(history, buy_px)
+    result = host.scan_version1_round_trip(frame, symbol=SYMBOL, pool_days={buy_day: [SYMBOL]},
+                                           cash=2000, daily_quota=1, strategy="version4")
+    assert (result.buys, result.sells, result.equity, result.return_pct) == (0, 0, 2000, 0)
+
+
+@pytest.mark.parametrize("history", [9, 10])
+def test_version4_round_trip_buy_gate_true_uses_cash_lots(history, version4_adjustments):
+    frame, buy_day = _version4_history_frame(history)
+    frame = frame[frame.date <= buy_day].copy()
+    frame.loc[frame.date == buy_day, "close"] = 10
+    result = host.scan_version1_round_trip(frame, symbol=SYMBOL, pool_days={buy_day: [SYMBOL]},
+                                           cash=4000, daily_quota=3000, strategy="version4")
+    # 300 shares plus commission exceed quota; existing sizing buys 200 shares.
+    assert (result.buys, result.sells) == (1, 0)
+    assert result.equity == pytest.approx(4000 - host.trade_commission(2000, host.COMMISSION))
+
+
+def test_version4_both_held_flags_keep_held_scan(monkeypatch, capsys):
+    calls = []
+    def held(*args, **kwargs):
+        calls.append(kwargs)
+        return host.ScanSummary(1, 0, 1)
+    def forbidden(*args, **kwargs):
+        pytest.fail("held flags must not enter round trip")
+    monkeypatch.setattr(host, "run_scan", held)
+    monkeypatch.setattr(host, "run_round_trip", forbidden)
+    monkeypatch.setattr(host, "load_daily_ohlc", forbidden)
+    assert main(["--source", "lake", "--symbol", SYMBOL, "--start", DAY, "--end", DAY,
+                 "--strategy", "version4", "--cost", "10", "--peak", "10", "--level", "9"]) == 0
+    assert calls[0]["cost"] == 10 and calls[0]["peak"] == 10 and calls[0]["level"] == 9
+    capsys.readouterr()
+
+
+@pytest.mark.parametrize("missing", [False, True])
+def test_version4_qlib_round_trip_daily_source(monkeypatch, capsys, tmp_path, missing, version4_adjustments):
+    frame, buy_day = _version4_history_frame()
+    def load_minute(symbol, start, end, *, source_frames, **kwargs):
+        assert kwargs == {"source": "qlib_1min", "qlib_root": tmp_path, "lake_root": None}
+        source_frames.append(frame[frame.date >= buy_day])
+    monkeypatch.setattr(host, "load_scan_bars", load_minute)
+    monkeypatch.setattr(host, "load_pool_day_map", lambda *a, **k: {buy_day: [SYMBOL]})
+    calls = []
+    def load_daily(codes, start, end, **kwargs):
+        calls.append((codes, start, end, kwargs))
+        return {} if missing else {SYMBOL: pd.DataFrame(
+            {name: [10] * 10 for name in host.OHLC},
+            index=pd.date_range("2026-01-01", periods=10))}
+    monkeypatch.setattr(host, "load_daily_ohlc", load_daily)
+    assert main(["--source", "qlib_1min", "--qlib-root", str(tmp_path),
+                 "--symbol", SYMBOL, "--start", "20260111", "--end", "20260113",
+                 "--strategy", "version4", "--cash", "2000", "--daily-quota", "1001"]) == int(missing)
+    assert calls == [([SYMBOL], "20251220", "20260113",
+                      {"source": "qlib_day", "qlib_root": tmp_path})]
+    if missing:
+        assert "daily OHLC missing" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("missing", ["day", "nan"])
+def test_version4_round_trip_missing_factor_raises(version4_adjustments, missing):
+    _, install = version4_adjustments
+    frame, buy_day = _version4_history_frame()
+    days = pd.date_range("2026-01-01", periods=13)
+    adjusted = pd.DataFrame(dict(date=days, stock_code=SYMBOL, close_front=10.0,
+                                 close_none=10.0, cumulative_adj_factor=1.0))
+    if missing == "day":
+        adjusted = adjusted[adjusted.date.dt.date != buy_day]
+    else:
+        adjusted.loc[adjusted.date.dt.date == buy_day, "cumulative_adj_factor"] = np.nan
+    install(adjusted)
+    with pytest.raises(ValueError, match=f"{SYMBOL}.*{buy_day}"):
+        host.scan_version1_round_trip(frame, symbol=SYMBOL, pool_days={buy_day: [SYMBOL]},
+                                      strategy="version4")
+
+
+def test_version4_round_trip_real_factor_parquet(monkeypatch, tmp_path):
+    monkeypatch.setenv("OSKH_PERIOD_1D_ROOT", str(tmp_path))
+    from oskh_data import adj_factor
+
+    days = pd.date_range("2026-01-01", periods=10)
+    for kind, closes in [("front", [9.5] * 9 + [9.0]), ("none", [10.0] * 10)]:
+        root = tmp_path / f"dividend_type={kind}"
+        monkeypatch.setattr(adj_factor, f"{kind.upper()}_DIR", str(root))
+        path = root / "symbol=000739_SZ" / "data.parquet"
+        path.parent.mkdir(parents=True)
+        pd.DataFrame(dict(time=days.as_unit("ms").asi8, close=closes)).to_parquet(path)
+    monkeypatch.setattr(adj_factor, "BACK_DIR", str(tmp_path / "dividend_type=back"))
+    build = adj_factor.build_for_symbol
+    returned = build("000739_SZ")
+    factor = returned.iloc[-1].cumulative_adj_factor
+    assert factor != 1
+    calls = []
+    def record_build(symbol):
+        calls.append(symbol)
+        return build(symbol)
+    monkeypatch.setattr(adj_factor, "build_for_symbol", record_build)
+    gate = host.strategy4_rules.buy_gate
+    histories = []
+    def record_gate(code, px, day, closes):
+        histories.append((px, closes))
+        return gate(code, px, day, closes)
+    monkeypatch.setattr(host.strategy4_rules, "buy_gate", record_gate)
+    day = days[-1].date()
+    # Raw 12 passes the adjusted gate; raw sizing buys 200, not 300 shares.
+    frame = pd.DataFrame([(day, 895, 12, 12, 12, 12)], columns=["date", "hm", *host.OHLC])
+    summary = host.scan_version1_round_trip(frame, symbol=SYMBOL, pool_days={day: [SYMBOL]},
+                                           cash=4000, daily_quota=3000, strategy="version4")
+    assert calls == ["000739_SZ"]
+    assert histories == [(12 * factor, returned.iloc[:-1].close_front.tolist() + [12 * factor])]
+    assert summary.buys == 1 and summary.sells == 0
+    assert summary.equity == pytest.approx(4000 - host.trade_commission(2400, host.COMMISSION))
+
+
+def test_version4_round_trip_recomputes_each_sellable_bar(monkeypatch, version4_adjustments):
+    _, install = version4_adjustments
+    days = pd.date_range("2026-01-01", periods=11)
+    install(pd.DataFrame(dict(date=days, stock_code=SYMBOL, close_front=10.0,
+                             close_none=10.0, cumulative_adj_factor=0.95)))
+    buy_day, sell_day = days[-2].date(), days[-1].date()
+    frame = pd.DataFrame([(buy_day, 895, 11, 12, 8, 11),
+                          (sell_day, 570, 11, 12, 8, 11),
+                          (sell_day, 571, 10, 12, 8, 10)],
+                         columns=["date", "hm", *host.OHLC])
+    sma = host.sma_asof
+    calls = []
+    def record(closes, period):
+        level = sma(closes, period)
+        calls.append((closes[-1], level))
+        return level
+    monkeypatch.setattr(host, "sma_asof", record)
+    summary = host.scan_version1_round_trip(frame, symbol=SYMBOL, pool_days={buy_day: [SYMBOL]},
+                                           cash=2000, daily_quota=1200, strategy="version4")
+    assert (summary.buys, summary.sells) == (1, 1)
+    assert calls == pytest.approx([(10.45, 10.09), (9.5, 9.9)])
+
+
+def test_version4_flat_raw_bar_sells_at_raw_close(monkeypatch, version4_adjustments):
+    _, install = version4_adjustments
+    days = pd.date_range("2026-01-01", periods=12)
+    factor_calls = install(pd.DataFrame(dict(
+        date=days, stock_code=SYMBOL, close_front=9.5,
+        close_none=10.0, cumulative_adj_factor=0.95)))
+    buy_day, sell_day = days[-2].date(), days[-1].date()
+    frame = pd.DataFrame([(buy_day, 895, 10, 10, 10, 10),
+                          (sell_day, 570, 9, 9, 9, 9)],
+                         columns=["date", "hm", *host.OHLC])
+    fills = []
+    apply = host.apply_fill_timing
+    def record(result, **kwargs):
+        result = apply(result, **kwargs)
+        fills.append(result)
+        return result
+    monkeypatch.setattr(host, "apply_fill_timing", record)
+    summary = host.scan_version1_round_trip(
+        frame, symbol=SYMBOL, pool_days={buy_day: [SYMBOL]},
+        cash=2000, daily_quota=1001, strategy="version4")
+    assert factor_calls == ["000739_SZ"]
+    assert (summary.buys, summary.sells) == (1, 1)
+    assert fills == [host.BarScanExit("fill", 9, "ma_signal:MA5", 10)]
+    assert summary.equity == pytest.approx(
+        2000 - 1000 - host.trade_commission(1000, host.COMMISSION)
+        + 900 - host.trade_commission(900, host.COMMISSION))
