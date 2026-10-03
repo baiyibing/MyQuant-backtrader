@@ -4,6 +4,7 @@
 low 触及按止损价；策略书自己的卖点用这根收盘，成交或跳过，不另造订单类型。
 
 均线、阶段与 dropout 卖出标记，由调用方把已经算好的结果传进来。
+score-exit 的排名剔除与 SX0，也由调用方用 dropout_sell / sx0_sell 传入已经算好的卖出标记。
 不在这里重算 SMA，不读湖，不挂单。
 
 一根 K 上看不见的时钟不在这次判断里：峰差分钟、涨停保留窗、14:50 强平、
@@ -75,6 +76,8 @@ from backtest.research.strategy9_rules import STOP_PCT as V9_STOP
 from backtest.research.strategy9_rules import take_profit_reason as v9_take
 from backtest.research.strategy10_rules import STOP_PCT as V10_STOP
 from backtest.research.strategy_topk_dropout_rules import STOP_PCT as TOPK_STOP
+from backtest.research.strategy_topk_score_exit_rules import STOP_PCT as TOPK_SCORE_EXIT_STOP
+from backtest.research.topk_score_exit_rules import ScoreExitPlan, sell_reason
 
 CLI_MINUTE = "backtest/research/csv_minute_backtest.py"
 CLI_V7 = "backtest/research/csv_minute_backtest_v7.py"
@@ -140,6 +143,7 @@ _PERCENT_STOP: dict[str, float] = {
     "version9": float(V9_STOP),
     "version10": float(V10_STOP),
     "topk_dropout": float(TOPK_STOP),
+    "topk_score_exit": float(TOPK_SCORE_EXIT_STOP),
 }
 
 _BOOK_TAKE = {
@@ -167,10 +171,7 @@ _LEVEL_FIELD = {
     "topk_app_dropout": "stage",
 }
 
-# SX0 卖出要整日分数排名，不把单分当成卖点。
-_BLOCKED_FIELD: dict[str, str] = {
-    "topk_score_exit": "score",
-}
+_BLOCKED_FIELD: dict[str, str] = {}
 
 
 class MinuteStrategyNotOnBarScan(ValueError):
@@ -334,6 +335,7 @@ def invoke_minute_strategy(
     hold_mode: str | None = None,
     session_open: bool = True,
     dropout_sell: bool | None = None,
+    sx0_sell: bool | None = None,
 ) -> BarScanExit:
     """对一个已可卖的持仓扫一根 K。``n_days`` < 1 不是可卖 bar，直接拒绝。
 
@@ -364,6 +366,19 @@ def invoke_minute_strategy(
             )
         if not isinstance(dropout_sell, bool):
             raise ValueError("topk_dropout dropout_sell must be a bool")
+
+    if key == "topk_score_exit":
+        if dropout_sell is None or sx0_sell is None:
+            raise ValueError(
+                "topk_score_exit requires dropout_sell and sx0_sell: caller must pass the "
+                "already-decided rank-dropout sell and the already-decided SX0 sell for "
+                "this name today; the scan does not rank the day and does not treat a "
+                "raw score as the exit"
+            )
+        if not isinstance(dropout_sell, bool):
+            raise ValueError("topk_score_exit dropout_sell must be a bool")
+        if not isinstance(sx0_sell, bool):
+            raise ValueError("topk_score_exit sx0_sell must be a bool")
 
     if key in _DRAWDOWN:
         book = _DRAWDOWN[key]
@@ -411,6 +426,18 @@ def invoke_minute_strategy(
 
     if key == "topk_dropout":
         reason = "topk_drop:bottom" if dropout_sell else None
+    elif key == "topk_score_exit":
+        code = "held"
+        plan = ScoreExitPlan(
+            buy=(),
+            sell=(),
+            buy_bottom=(),
+            sell_bottom=(code,) if dropout_sell else (),
+            sell_sx0=(code,) if sx0_sell else (),
+            also_bottom=(),
+            buy_extra=(),
+        )
+        reason = sell_reason(code, plan)
     else:
         reason = _book_reason(
             key,
