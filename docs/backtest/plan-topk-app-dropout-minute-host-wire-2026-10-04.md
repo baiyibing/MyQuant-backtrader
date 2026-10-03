@@ -12,7 +12,7 @@
 
 在 `minute_bar_scan_host` 增加与 version7 同形的显式入口：`--strategy topk_app_dropout` 分派到**拟新增**的 `run_topk_app_dropout`。禁止 `register()`，禁止走 `run_simulate` 或 `csv_minute_backtest.simulate`。不复用 `load_scores_from_args`／`--pred-csv`，它们服务于 `topk_dropout`、`topk_score_exit`。
 
-- 新增仅供本书使用的 `--app-pool-dir`、`--pred`、`--asof`；`--asof` 默认 `pred_minus_one`，另可选 `identity`。可复用 `--pool-dir`、`--topk`，但不改其他书默认值。本书 `--topk` 默认 50（`DEFAULT_TOPK`），`--cash` 默认 `500_000_000`（旧 CLI 的 `DEFAULT_CASH_TOTAL = 500_000_000.0`），不沿用 v7 的 2100 万；`BOOK_TAG = "topk_app_dropout"`。
+- 新增仅供本书使用的 `--app-pool-dir`、`--pred`、`--asof`；`--asof` 默认 `pred_minus_one`，另可选 `identity`。可复用 `--pool-dir`、`--topk`，但不改其他书默认值。本书 `--topk` 默认 `50`（旧 CLI 的 `DEFAULT_TOPK = 50`，定义于 `topk_app_dropout.py`，由 `csv_minute_backtest_topk_app_dropout` 导入并作为 `--topk` 默认），`--cash` 默认 `500_000_000`（旧 CLI 的 `DEFAULT_CASH_TOTAL = 500_000_000.0`），不沿用 v7 的 2100 万；`BOOK_TAG = "topk_app_dropout"`。
 - 与 version7 一样要求 `--source lake`，拒绝 `--qlib-root`／`--lake-root` 覆盖，因为 `_load_cli_bars` 默认 lake。
 - **预制池路径**：设置 `--pool-dir` 时，仅调用 `csv_minute_backtest_v7.load_pool_days(pool_dir, start, end)`；无需 app/pred，也不调用 `build_intersect_pool_days`。同时给了 app 目录时仍以 pool-dir 为准。
 - **交集路径**：未设置 pool-dir 时，必须同时提供 app 目录与 pred 文件，沿用旧 CLI 的路径存在性检查；调用 `csv_minute_backtest_topk_app_dropout.build_intersect_pool_days(app_dir, pred_path, start_ymd, end_ymd, topk=topk, asof=asof, dump_dir=None)`。实际形参名为 `start/end`，此处按位置传 YYYYMMDD；返回日期 → 代码列表。
@@ -41,6 +41,6 @@ return minute_bar_scan_host.summarize_simulate(
 
 ## 后续实现 PR 的窄验收与排除项
 
-参照 `tests/test_minute_bar_scan_host_v7.py`，仅用 mock 验证两条池路径，无需 4090 真湖：`simulate_v7` 恰调用一次并收到 `exdiv`、`names`、`index` 与默认资金 `500_000_000`；空池收到 `index=[]` 且 `load_index_daily` 未调用；`csv_minute_backtest.simulate` 未调用。交集路径断言 `build_intersect_pool_days(..., dump_dir=None)`；预制池路径断言它未调用。缺池输入在任何 loader 前失败。本计划 PR 不新增或运行测试。
+参照 `tests/test_minute_bar_scan_host_v7.py`，仅用 mock 验证两条池路径，无需 4090 真湖：`simulate_v7` 恰调用一次并收到 `exdiv`、`names`、`index` 与默认资金 `500_000_000`（旧 CLI 的 `DEFAULT_CASH_TOTAL`）；空池收到 `index=[]` 且 `load_index_daily` 未调用；`csv_minute_backtest.simulate` 未调用。交集路径断言 `build_intersect_pool_days(..., dump_dir=None)`，传入的默认 topk 为旧 CLI 的 `DEFAULT_TOPK`（50）；预制池路径断言它未调用。缺池输入在任何 loader 前失败。本计划 PR 不新增或运行测试。
 
 排除：version7 重接线、`csv_minute_backtest` 默认值、000739 fixture、已合并书、bar-scan 接线（含 `scan_held_bars`、`minute_true_core_wire` 及传 `stage=` 的测试）、参与率、尾窗、新数据源、规则重写、`register()` 与合并。
