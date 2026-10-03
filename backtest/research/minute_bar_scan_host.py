@@ -59,7 +59,7 @@ def scan_version1_round_trip(frame, *, symbol: str, pool_days: Mapping,
     """Flat-start, same-bar host accounting; no fees or old-engine parity claim.
 
     Buy reason is pool. Only bars after the selected buy close can exit.
-    A sold name may re-enter on a later pool day, never again on the same day.
+    A sold name may re-enter at a later eligible buy bar, including the same day.
     Skips count bars with neither a buy nor a sell.
     """
     if not math.isfinite(cash) or cash <= 0:
@@ -77,7 +77,7 @@ def scan_version1_round_trip(frame, *, symbol: str, pool_days: Mapping,
     offset = 0
     for day, day_frame in frame.groupby("date", sort=False):
         buy_index = None
-        if not held_shares and code in pool_days.get(_as_date(day), []):
+        if code in pool_days.get(_as_date(day), []):
             px = _buy_px(day_frame)
             if px is not None:
                 if not math.isfinite(px) or px <= 0:
@@ -88,7 +88,7 @@ def scan_version1_round_trip(frame, *, symbol: str, pool_days: Mapping,
                 buy_index = positions[0] if exact.any() else positions[-1]
         for index in range(len(day_frame)):
             bar = bars[offset + index]
-            if index == buy_index and cash >= shares * px:
+            if not held_shares and index == buy_index and cash >= shares * px:
                 cash -= shares * px
                 held_shares = shares
                 cost = peak = px
