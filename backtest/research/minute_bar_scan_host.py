@@ -559,7 +559,11 @@ def run_scan(
 
 def summarize_simulate(st, *, bars: int, total_cash: float) -> RoundTripSummary:
     """Report only engine trades and engine end-of-day equity."""
-    equity = st.equity_curve[-1][1] if st.equity_curve else st.cash
+    if st.equity_curve:
+        last = st.equity_curve[-1]
+        equity = last["equity"] if isinstance(last, dict) else last[1]
+    else:
+        equity = st.cash
     return RoundTripSummary(
         bars=bars,
         buys=sum(t["side"] == "BUY" for t in st.trades),

@@ -101,7 +101,14 @@ def test_module_is_not_an_order_system():
     text = Path(mod.__file__).read_text(encoding="utf-8")
     for banned in ("SubmitOrder", "order_type", "EventBus", "Fees", "write_lake", "4090"):
         assert banned not in text
-    assert not any("minute_orders_backend" in name for name in sys.modules)
+    # Collection imports other test modules into this process. Check this module's
+    # imports in a fresh interpreter so the guard measures its own dependencies.
+    import subprocess
+    subprocess.run(
+        [sys.executable, "-c", 'import sys; import backtest.research.bar_scan_exit; '
+         'assert not any("minute_orders_backend" in name for name in sys.modules)'],
+        check=True,
+    )
     assert Path("backtest/research/csv_minute_backtest.py").is_file()
 
 def test_explicit_same_bar_matches_default():

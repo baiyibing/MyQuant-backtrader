@@ -29,7 +29,7 @@ def fills(st):
 
 
 @pytest.mark.parametrize("factor,off_first_nav,off_fills", [
-    (.5, 5_000_000, 0), (.96, 4_959_000, 1), (1, 4_999_000, 1),
+    (.5, 5_000_000, 0), (.96, 4_959_000, 1), (1, 4_999_000, 2),
     (1.05, 5_049_000, 2), (1.2, 5_199_000, 1),
 ])
 def test_constant_raw_price_off_reproduces_mixing_on_repairs_accounts(
@@ -39,18 +39,28 @@ def test_constant_raw_price_off_reproduces_mixing_on_repairs_accounts(
     on, events = replay(*data, enabled=True, factor=factor)
     assert money(off.equity_curve[0][1]) == money(off_first_nav)
     assert len(fills(off)) == off_fills
-    assert [(t["side"], t["price"], t["shares"]) for t in fills(on)] == [("BUY", 10., 100_000)]
-    assert all(money(value) == Decimal("4999000.00") for _, value in on.equity_curve)
-    assert [(t["price"], t["shares"]) for t in on.trades if t["side"] == "EOD_MARK"] == [(10., 100_000)]
+    expected_off = [] if factor == .5 else [("pool", 10., 100_000)]
+    if factor in (1, 1.05):
+        expected_off.append((rules.STOP, 10., 100_000))
+    assert [(t["reason"], t["price"], t["shares"]) for t in fills(off)] == expected_off
+    assert money(off.cash) == money(5_000_000 if factor == .5 else
+                                   4_998_000 if factor in (1, 1.05) else 3_999_000)
+    assert [(t["side"], t["price"], t["shares"]) for t in fills(on)] == [("BUY", 10., 100_000), ("SELL", 10., 100_000)]
+    assert [money(value) for _, value in on.equity_curve] == [money(4_999_000), money(4_998_000)]
+    assert [(t["reason"], t["shares"]) for t in fills(on)] == [("pool", 100_000), (rules.STOP, 100_000)]
+    assert on.positions == {} and money(on.cash) == money(4_998_000)
+    assert rules.STOP_FACTOR == 1.0
+    assert rules.buyback_plan(10., [10.] * 10, rules.Memory()) == 0
+    assert [(t["price"], t["shares"]) for t in on.trades if t["side"] == "EOD_MARK"] == []
     fees = sum(t["commission"] for t in fills(on))
-    assert money(on.cash + 100_000 * 10 + fees) == Decimal("5000000.00")
+    assert money(on.cash + fees) == Decimal("5000000.00")
     assert events[0]["hm"] == events[0]["decision_hm"] == events[0]["quote_hm"] == 895
     assert events[0]["cash_residual_fen"] == "0.00"
     assert events[0]["share_residual"] == events[0]["volume_residual"] == 0
     if factor == 1:
         assert off.trades == on.trades and off.equity_curve == on.equity_curve
     if factor == 1.05:
-        assert [(t["reason"], t["shares"]) for t in fills(off)][-1] == (rules.REDUCE, 50_000)
+        assert [(t["reason"], t["shares"]) for t in fills(off)][-1] == (rules.STOP, 100_000)
     if factor == 1.2:
         assert off.stats["defer_sell_limit_down"] == 0  # the existing scan suppresses it first
 
@@ -66,7 +76,10 @@ def test_false_limit_chase_queue_first_day_and_two_day_terminal_state():
     assert off_two.stats["chase_pending_eod"] == 0
     assert off_two.stats["chase_skip_limit"] == 1 and off_two.stats["chase_buy"] == 0
     assert on_one.stats["chase_pending_eod"] == on_two.stats["chase_pending_eod"] == 0
-    assert len(fills(on_two)) == 1 and on_two.stats["chase_buy"] == 0
+    assert [(t["reason"], t["shares"]) for t in fills(on_two)] == [("pool", 100_000), (rules.STOP, 100_000)]
+    assert on_two.stats["chase_buy"] == 0
+    assert on_two.positions == {} and money(on_two.cash) == money(4_998_000)
+    assert money(on_one.cash) == money(3_999_000)
 
 
 def test_false_chase_queue_can_propagate_to_delayed_real_buy():
@@ -80,14 +93,13 @@ def test_false_chase_queue_can_propagate_to_delayed_real_buy():
 
 
 REPLAYS = [
-    ("test_minute_cycle_rearms_same_day_and_new_buys_remain_t1_locked", ()),
-    ("test_capacity_residual_retained_rearmed_then_merged", ("reduced", 9.9, rules.REDUCE, rules.RECLAIM5)),
-    ("test_capacity_residual_retained_rearmed_then_merged", ("stopped", 8.9, rules.STOP, rules.RECLAIM10)),
-    ("test_residual_below100_qualified_reclaim_without_buy", ("reduced", 9.9, rules.REDUCE)),
-    ("test_residual_below100_qualified_reclaim_without_buy", ("stopped", 8.9, rules.STOP)),
-    ("test_cash_retry_and_capacity_failure_do_not_rearm_early", ()),
-    ("test_pool_fill_clears_both_memories_before_same_clock_buyback", ()),
-    ("test_dual_channels_reclaim_independently_after_same_day_stop", ()),
+    ("test_minute_stop_does_not_buy_back_when_price_returns_to_the_first_fill", ()),
+    ("test_capacity_limited_stop_is_not_bought_back", ()),
+    ("test_stop_dust_below_100_is_not_bought", ()),
+    ("test_stop_does_not_spend_cash_buying_back", ()),
+    ("test_later_bars_do_not_buy_back_a_capacity_limited_stop", ()),
+    ("test_pool_fill_clears_stop_memory_before_same_clock_buyback", ()),
+    ("test_same_day_return_to_the_first_price_does_not_buy_back", ()),
     ("test_chase_and_pool_use_existing_clocks_and_chase_resets_memory", ()),
 ]
 
@@ -108,7 +120,7 @@ def test_existing_s12_rules_replayed_on_nonunit_domain(monkeypatch, name, args):
 
 @pytest.mark.parametrize("name,helper", [
     ("test_step_counter_remains_monotonic_after_step_lot_is_sold", "run_step_adds_day"),
-    ("test_buyback_limit_up_preserves_whole_lot_memory", "run_buybacks_day"),
+    ("test_closed_buyback_plan_does_not_touch_limit_up_or_memory", "run_buybacks_day"),
 ])
 def test_existing_direct_helpers_replayed_with_nonunit_context(monkeypatch, name, helper):
     original = getattr(loop, helper)
@@ -190,7 +202,10 @@ def test_sell_uses_same_rounded_reference_at_limit_down_one_cent(monkeypatch, px
     monkeypatch.setattr(minute, "init_sim_state", seeded)
     st, _ = replay(*data, enabled=True, pool={})
     assert bool(fills(st)) is should_sell
-    assert sum(p.shares for p in st.positions[CODE]) == (500 if should_sell else 1000)
+    assert sum(p.shares for p in st.positions.get(CODE, [])) == (0 if should_sell else 1000)
+    assert [(t["reason"], t["price"], t["shares"]) for t in fills(st)] == (
+        [(rules.STOP, px, 1000)] if should_sell else [])
+    assert money(st.cash) == money(5_000_000 + (px * 1000 * .999 if should_sell else 0))
 
 
 def test_nonzero_offset_stop_reanchors_before_multiplying_point_nine(monkeypatch):
@@ -205,15 +220,16 @@ def test_nonzero_offset_stop_reanchors_before_multiplying_point_nine(monkeypatch
     monkeypatch.setattr(minute, "init_sim_state", seeded)
     on, _ = replay(*data, enabled=True, factor=1, offset=-1, pool={})
     off, _ = replay(*data, enabled=False, factor=1, offset=-1, pool={})
-    assert [(t["reason"], t["shares"]) for t in fills(on)] == [(rules.REDUCE, 500)]
-    # Wrong 0.9 * front-MA then inverse gives 10.9 and would sell all shares.
     ma_raw = context_for(data[2], data[1], data[0], factor=1, offset=-1).day_signal_view(
         CODE, START).previous_signal_closes_in_raw_domain
-    stop_raw = sum(ma_raw[-10:]) / 10 * .9
-    assert stop_raw == pytest.approx(10.8)
-    assert stop_raw < float(data[0][CODE].iloc[0]["close"]) < 10.9
-    assert all(t["reason"] != rules.STOP for t in fills(on))
-    assert [(t["reason"], t["shares"]) for t in fills(off)] == [(rules.REDUCE, 500)]
+    # The affine inverse restores MA10=12; current stop factor is 1.0.
+    assert rules.stop_line(sum(ma_raw[-10:]) / 10) == pytest.approx(12.)
+    assert float(data[0][CODE].iloc[0]["close"]) <= 12.
+    for st in (on, off):
+        assert [(t["reason"], t["price"], t["shares"]) for t in fills(st)] == [(rules.STOP, 10.85, 1000)]
+        assert st.positions == {}
+        assert money(st.cash) == money(5_000_000 + 10_850 - 10.85)
+        assert money(st.equity_curve[-1][1]) == money(st.cash)
 
 
 @pytest.mark.parametrize("factor,offset,future_scale,future_shift", [(.5, 0, .8, 0), (1, -1, .8, .3)])
@@ -239,7 +255,10 @@ def test_intraday_decisions_do_not_depend_on_today_close():
     normal, normal_events = replay(*first, enabled=True)
     extreme, extreme_events = replay(*second, enabled=True)
     assert fills(normal) == fills(extreme) and normal_events == extreme_events
-    assert money(extreme.equity_curve[-1][1] - normal.equity_curve[-1][1]) == Decimal("1000000.00")
+    assert [(t["reason"], t["price"], t["shares"]) for t in fills(normal)] == [("pool", 10., 100_000), (rules.STOP, 9.9, 100_000)]
+    assert normal.positions == extreme.positions == {}
+    assert money(normal.cash) == money(extreme.cash) == money(3_999_000 + 990_000 - 990)
+    assert money(extreme.equity_curve[-1][1] - normal.equity_curve[-1][1]) == Decimal("0.00")
 
 
 @pytest.mark.parametrize("economic", [False, True])
@@ -273,10 +292,20 @@ def test_ten_for_ten_cash_then_second_action_do_not_implicitly_duplicate_economi
             (CODE, "20251106"): ExDivEvent("bonus-2", 1, 0, "20251106", "20251106"),
         }
     st, _ = replay(mins, raw, front, days, enabled=True, ctx=ctx, **kwargs)
-    assert len(fills(st)) == 1
-    assert sum(p.shares for p in st.positions[CODE]) == (400_000 if economic else 100_000)
-    assert money(st.cash) == money(4_099_000 if economic else 3_999_000)
-    assert money(st.equity_curve[-1][1]) == money(4_999_000 if economic else 4_224_000)
+    expected = [("pool", 10., 100_000), (rules.STOP, 5., 100_000)]
+    if economic:
+        # First bonus is T+1 locked on Nov 4; cash entitlement posts before
+        # the remaining 100k stop on Nov 5. Nov 6 bonus has no holding to scale.
+        expected.append((rules.STOP, 4.5, 100_000))
+    assert [(t["reason"], t["price"], t["shares"]) for t in fills(st)] == expected
+    assert st.positions == {}
+    expected_cash = 3_999_000 + 500_000 - 500
+    if economic:
+        expected_cash += 50_000 + 450_000 - 450
+        assert st.stats["exdiv_econ_bonus_shares"] == 100_000
+        assert money(st.stats["exdiv_econ_cash_posted"]) == money(50_000)
+    assert money(st.cash) == money(expected_cash)
+    assert money(st.equity_curve[-1][1]) == money(expected_cash)
     assert st.stats.get("exdiv_adjusted_lots", 0) == 0
     if economic:
         assert st.stats["exdiv_econ_events"] == 3
@@ -323,6 +352,11 @@ def test_on_simulation_rejects_unmarked_holding_before_writing_equity(monkeypatc
 
 
 def test_on_run_routes_raw_daily_and_uses_only_strict_uncached_loader(monkeypatch, tmp_path):
+    # Loader bytes are synthetic; still satisfy the production root contract.
+    monkeypatch.setenv("OSKH_SOURCE_PARQUET_ROOT", str(tmp_path))
+    from backtest.research import strategy12_rules
+    # These wiring tests use synthetic stock bars and an unblocked index gate.
+    monkeypatch.setattr(strategy12_rules, "load_sse_ma10_block_new", lambda *a, **kw: {})
     from backtest.research import signal_price_domain as domain
 
     mins, raw, front, days = fixture()
@@ -356,7 +390,9 @@ def test_on_run_routes_raw_daily_and_uses_only_strict_uncached_loader(monkeypatc
     assert len(loads) == 1 and loads[0][0] == {CODE}
     assert st.stats["cache"] == "s12_price_domain_uncached"
     assert st.stats["mark_domain"] == "none"
-    assert money(st.equity_curve[-1][1]) == Decimal("4999000.00")
+    assert [(t["reason"], t["price"], t["shares"]) for t in fills(st)] == [("pool", 10., 100_000), (rules.STOP, 10., 100_000)]
+    assert st.positions == {} and money(st.cash) == money(4_998_000)
+    assert money(st.equity_curve[-1][1]) == Decimal("4998000.00")
 
 
 @pytest.mark.parametrize("kwargs", [

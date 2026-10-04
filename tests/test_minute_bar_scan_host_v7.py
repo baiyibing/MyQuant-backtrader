@@ -12,7 +12,7 @@ from backtest.research import minute_bar_scan_host as host
 @pytest.mark.parametrize("asof", [False, True])
 @pytest.mark.parametrize("empty", [False, True])
 @pytest.mark.parametrize("cash", [None, 123456.0])
-def test_v7_cli_loads_once_and_dispatches(tmp_path, monkeypatch, asof, empty, cash):
+def test_v7_cli_loads_once_and_dispatches(tmp_path, monkeypatch, capsys, asof, empty, cash):
     start, end = date(2026, 1, 9), date(2026, 1, 12)
     pools = {} if empty else {start: ["000001.SZ"], end: ["000002.SZ"]}
     minute, daily = {}, {}
@@ -29,7 +29,11 @@ def test_v7_cli_loads_once_and_dispatches(tmp_path, monkeypatch, asof, empty, ca
         monkeypatch.setattr(v7, name, loader)
     context = Mock(return_value=(exdiv, names))
     monkeypatch.setattr(ashare_session, "load_limit_context", context)
-    runner = Mock(return_value=SimpleNamespace(trades=[], equity_curve=[], cash=21000000.))
+    initial_cash = 21000000. if cash is None else cash
+    curve = [] if empty else [{"date": end, "cash": initial_cash - 1000.,
+                               "holdings": 2000., "equity": initial_cash + 1000.}]
+    runner = Mock(return_value=SimpleNamespace(
+        trades=[], equity_curve=curve, cash=initial_cash - 1000.))
     monkeypatch.setattr(v7, "simulate_v7", runner)
     shared = Mock(side_effect=AssertionError("v7 must not use shared simulate"))
     monkeypatch.setattr(host.csv_minute_backtest, "simulate", shared)
@@ -44,6 +48,10 @@ def test_v7_cli_loads_once_and_dispatches(tmp_path, monkeypatch, asof, empty, ca
     if asof:
         argv += ["--asof-pool-names"]
     assert host.main(argv) == 0
+    expected_equity = initial_cash - 1000. if empty else initial_cash + 1000.
+    output = capsys.readouterr().out
+    assert f"equity={expected_equity:.2f}" in output
+    assert f"return_pct={(expected_equity / initial_cash - 1) * 100:.6f}" in output
     loaders["load_pool_days"].assert_called_once_with(pool_dir, start, end)
     loaders["_load_cli_bars"].assert_called_once_with(pools, start, end)
     context.assert_called_once_with(pool_dir, {c for codes in pools.values() for c in codes}, start, end)

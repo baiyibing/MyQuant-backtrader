@@ -301,6 +301,14 @@ def test_package_calls_load_but_core_untouched():
 
 def test_core_files_byte_stable_vs_knife_base():
     """Guard: MatchCore/Fees/simulate/source_loader/VolumeCap/_ENTRIES/_FAMILIES empty this knife (cli.py is R1 CLI lake; guarded there)."""
+    import subprocess
+    probe = subprocess.run(
+        ["git", "cat-file", "-e", f"{KNIFE_BASE}^{{commit}}"],
+        cwd=ROOT, capture_output=True, text=True,
+    )
+    if probe.returncode:
+        pytest.skip(f"pinned guard base {KNIFE_BASE} unavailable in this checkout")
+
     import subprocess as sp
     result = sp.run(
         [
