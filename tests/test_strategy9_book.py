@@ -18,7 +18,7 @@ from backtest.research.csv_strategy_books import (
 )
 from backtest.research.strategy9_rules import (
     MAX_HOLD,
-    stop_range_amplitude,
+    mean_true_range,
     record_strategy9_params,
     take_profit_reason,
 )
@@ -51,7 +51,7 @@ def test_version9_take_profit_target_and_params():
     assert st.stats == {
         "sell_book": "v9",
         "stop_pct": None,
-        "stop_mode": "range_amp_20_trailing",
+        "stop_mode": "cost_minus_mean_true_range_20_trailing",
         "range_bars": 20,
         "profit_target": 0.10,
         "max_hold": None,
@@ -196,15 +196,15 @@ def test_range_rolls_and_excludes_today():
     days, frame = range_frame()
     # On day 21: base day 0, window days 1..20. On day 22: base day 1, days 2..21.
     frame.loc[days[22], "high"] = 100.
-    assert stop_range_amplitude(frame, days[21]) == pytest.approx((12 - 9.9) / 10)
-    assert stop_range_amplitude(frame, days[22]) == pytest.approx((10.1 - 9.9) / 10)
+    assert mean_true_range(frame, days[21]) == pytest.approx((2.1 + 19 * .2) / 20)
+    assert mean_true_range(frame, days[22]) == pytest.approx(.2)
 
 
 @pytest.mark.parametrize("engine", ["daily", "minute"])
 def test_hosts_use_rolled_range(engine):
     from backtest.research.csv_minute_backtest import simulate as minute
     days, frame = range_frame()
-    frame.loc[days[21], ["open", "high", "low", "close"]] = [10., 10.1, 9.7, 10.]
+    frame.loc[days[21], ["open", "high", "low", "close"]] = [10., 10.1, 9.75, 10.]
     frame.loc[days[22], ["open", "high", "low", "close"]] = [10., 10.1, 9.5, 10.]
     # First trigger 7.9 survives day 21. Rolled day 22 trigger is 9.6.
     start, end = days[20].strftime("%Y%m%d"), days[22].strftime("%Y%m%d")
@@ -224,19 +224,20 @@ def test_hosts_use_rolled_range(engine):
     assert len(sells) == 1
     assert sells[0]["date"] == end
     assert sells[0]["reason"] == "stop_loss:touch"
-    assert sells[0]["price"] == pytest.approx(9.6)
+    assert sells[0]["price"] == pytest.approx(10 - (19 * .2 + .35) / 20)
 
 
-@pytest.mark.parametrize("missing", ["short_history", "missing_hl", "missing_base_close"])
+@pytest.mark.parametrize("missing", ["short_history", "missing_ohlc", "bad_close"])
 def test_missing_range_does_not_fallback(missing):
     days, frame = range_frame()
     frame.loc[days[21], ["open", "high", "low", "close"]] = [10., 10., 9.1, 9.3]
     if missing == "short_history":
         frame = frame.iloc[19:]
-    elif missing == "missing_hl":
+    elif missing == "missing_ohlc":
         frame.loc[days[2], "high"] = float("nan")
     else:
-        frame.loc[days[0], "close"] = 0.
+        frame.loc[days[0], "close"] = float("nan")
+        missing = "missing_ohlc"
     start, end = days[20].strftime("%Y%m%d"), days[21].strftime("%Y%m%d")
     st = sim.simulate({"600000.SH": frame}, {start: ["600000.SH"]}, start, end, strategy="version9")
     assert st.stats["buys"] == 1
@@ -249,7 +250,7 @@ def test_unclamped_range(ratio):
     days, frame = range_frame()
     frame.loc[:, "high"] = 10. + ratio * 10.
     frame.loc[:, "low"] = 10.
-    assert stop_range_amplitude(frame, days[21]) == pytest.approx(ratio)
+    assert mean_true_range(frame, days[21]) == pytest.approx(ratio * 10)
     start, end = days[20].strftime("%Y%m%d"), days[21].strftime("%Y%m%d")
     st = sim.simulate({"600000.SH": frame}, {start: ["600000.SH"]}, start, end, strategy="version9")
     sells = [t for t in st.trades if t["side"] == "SELL"]
@@ -286,3 +287,79 @@ def test_cli_max_hold_help_and_refuse(host, capsys):
     assert "--max-hold" in capsys.readouterr().out
     with pytest.raises(SystemExit, match="--max-hold.*version9"):
         main(["--strategy", "version6", "--max-hold"])
+
+
+@pytest.mark.parametrize("book", ["version9", "version9_2"])
+@pytest.mark.parametrize("opening,low,expected,reason", [
+    (10., 9., None, None),
+    (10., 8.55, 8.55, "stop_loss:touch"),
+    (8.5, 8.4, 8.5, "stop_loss:gap_open"),
+])
+def test_mean_true_range_yuan_stop(book, opening, low, expected, reason):
+    from backtest.research.strategy9_2_rules import chosen_stop
+    days = pd.bdate_range("2026-03-02", periods=23)
+    frame = pd.DataFrame(dict(open=10., high=11., low=10., close=10.), index=days)
+    frame.loc[days[0], "close"] = 20.
+    frame.loc[days[21], ["open", "high", "low", "close"]] = [opening, 100., low, 10.]
+    assert mean_true_range(frame, days[21]) == pytest.approx(1.45)
+    assert chosen_stop(10., frame, days[21]) == pytest.approx(8.55)
+    assert mean_true_range(frame, days[22]) != pytest.approx(1.45)
+    # Seed a T+1 holding so the decision window has exactly 21 prior bars.
+    from backtest.research.csv_ledger import execute_buy
+    from backtest.research.csv_simulate_loop import init_sim_state
+    hooks = apply_csv_strategy(book)
+    st = init_sim_state(hooks, total_cash=2_000_000, bars_loaded=1, pool_days={})[0]
+    execute_buy(st, "600000.SH", 10., 400_000, 0, days[20], reason="pool")
+    if book == "version9_2":
+        from backtest.research.strategy9_2_engine import fill_stop
+        row = SimpleNamespace(open=opening, low=low, close=low)
+        fill_stop(st, "600000.SH", row, frame, days[21], day_i=1,
+                  ds=days[21].strftime("%Y%m%d"), limits=(200., 0.))
+    else:
+        # Decision follows a cost-10 entry, whose close supplies the final prior TR.
+        frame.loc[days[20], "high"] = 11.
+        start, end = days[20].strftime("%Y%m%d"), days[21].strftime("%Y%m%d")
+        # Avoid a limit-down deferral: the previous close is 10, so 8.55 lies below
+        # the exchange band. Exercise the host with a broad synthetic limit band.
+        from unittest.mock import patch
+        with patch.object(sim, "defer_sell_at_limit", return_value=False):
+            st = sim.simulate({"600000.SH": frame}, {start:["600000.SH"]}, start, end, strategy=book)
+    sells = [t for t in st.trades if t["side"] == "SELL"]
+    if expected is None:
+        assert sells == []
+    else:
+        assert sells[0]["price"] == pytest.approx(expected)
+        assert sells[0]["reason"] == reason
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf")])
+@pytest.mark.parametrize("column", ["high", "low", "close"])
+def test_mean_true_range_invalid_ohlc(column, value):
+    days, frame = range_frame()
+    frame.loc[days[2], column] = value
+    assert mean_true_range(frame, days[21]) is None
+
+
+def test_mean_true_range_zero_previous_close_is_valid():
+    days, frame = range_frame()
+    frame.loc[days[0], "close"] = 0.
+    assert mean_true_range(frame, days[21]) == pytest.approx((10.1 + 2.1 + 18 * .2) / 20)
+
+
+@pytest.mark.parametrize("distance,low,expected", [(2., 8.9, None), (2., 7.9, 8.), (None, 1., None)])
+def test_version9_no_fixed_percent_or_missing_fallback(distance, low, expected):
+    from unittest.mock import patch
+    days = pd.bdate_range("2026-03-02", periods=23)
+    frame = pd.DataFrame(dict(open=10., high=11., low=9., close=10.), index=days)
+    if distance is None:
+        frame = frame.iloc[19:]
+    frame.loc[days[21], ["high", "low", "close"]] = [10., low, 10.]
+    start, end = days[20].strftime("%Y%m%d"), days[21].strftime("%Y%m%d")
+    with patch.object(sim, "defer_sell_at_limit", return_value=False):
+        st = sim.simulate({"600000.SH": frame}, {start:["600000.SH"]}, start, end, strategy="version9")
+    sells = [t for t in st.trades if t["side"] == "SELL"]
+    if expected is None:
+        assert sells == []
+    else:
+        assert sells[0]["price"] == pytest.approx(expected)
+        assert sells[0]["reason"] == "stop_loss:touch"

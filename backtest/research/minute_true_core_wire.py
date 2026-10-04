@@ -70,7 +70,7 @@ from backtest.research.strategy8_6_rules import STOP_PCT as V8_6_STOP
 from backtest.research.strategy8_6_rules import take_profit_reason as v8_6_take
 from backtest.research.strategy8_rules import STOP_PCT as V8_STOP
 from backtest.research.strategy8_rules import take_profit_reason as v8_take
-from backtest.research.strategy9_rules import stop_range_amplitude
+from backtest.research.strategy9_rules import mean_true_range
 from backtest.research.strategy9_rules import take_profit_reason as v9_take
 from backtest.research.strategy10_rules import STOP_PCT as V10_STOP
 from backtest.research.strategy_topk_dropout_rules import STOP_PCT as TOPK_STOP
@@ -332,19 +332,18 @@ def _version9_range_stop(
     *,
     cost: float,
     peak: float,
-    ratio: float,
+    distance: float,
     timing: FillTiming,
     price: FillPrice,
     next_bar: OhlcBar | None,
 ) -> BarScanExit | None:
     """Apply today's trailing range stop. None means the bar did not hit it.
 
-    ``ratio`` is already (max high - min low) / prior close, excluding day T.
-    A ratio outside (0, 1) is kept: the trigger is still cost * (1 - ratio).
+    ``distance`` is the simple mean of 20 prior true ranges in yuan.
     """
     opening, high, low, close = _ohlc(bar, "bar")
     new_peak = high if high > peak else peak
-    trigger = float(cost) * (1.0 - float(ratio))
+    trigger = float(cost) - float(distance)
     if opening <= trigger:
         result = BarScanExit("fill", opening, "stop_loss:gap_open", new_peak)
     elif low <= trigger:
@@ -425,10 +424,10 @@ def invoke_minute_strategy(
     if key == "version9" and daily_bars is not None:
         if as_of is None:
             raise ValueError("version9 range stop requires as_of")
-        ratio = stop_range_amplitude(daily_bars, as_of)
-        if ratio is not None:
+        distance = mean_true_range(daily_bars, as_of)
+        if distance is not None:
             stopped = _version9_range_stop(
-                bar, cost=cost_f, peak=peak_f, ratio=float(ratio),
+                bar, cost=cost_f, peak=peak_f, distance=float(distance),
                 timing=timing, price=price, next_bar=next_bar,
             )
             if stopped is not None:

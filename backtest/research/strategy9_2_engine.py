@@ -64,6 +64,8 @@ def fill_stop(st, code, row, frame, day, *, day_i, ds, limits, minute=False, buc
     if not any(lot.sellable > 0 for lot in shared.sell_lots(st, code, day_i, ds)):
         return False
     trigger = rules.chosen_stop(memory_for(st, code).cost, frame, day)
+    if trigger is None:
+        return False
     if float(row.open) <= trigger:
         px, reason = float(row.open), "stop_loss:gap_open"
     elif float(row.close if minute else row.low) <= trigger:

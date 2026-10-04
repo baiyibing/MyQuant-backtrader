@@ -407,7 +407,8 @@ def simulate(
                         stop_enabled = isinstance(stop_pct, float) and 0 < stop_pct < 1
                         stop_ratio = stop_pct
                         if "stop_range" in hooks:
-                            stop_ratio = evaluate_stop_range(hooks, bars[code], day, st.stats)
+                            distance = evaluate_stop_range(hooks, bars[code], day, st.stats)
+                            stop_ratio = distance / pos.cost if distance is not None and pos.cost > 0 else None
                             stop_enabled = stop_ratio is not None
                         absolute_line = absolute_exit(code, day) if absolute_exit else None
                         if absolute_line is not None:
@@ -415,7 +416,7 @@ def simulate(
                             stop_enabled = True
                         close = float(row["close"])
                         if stop_enabled:
-                            trigger = pos.cost * (1.0 - stop_ratio)
+                            trigger = pos.cost - distance if "stop_range" in hooks else pos.cost * (1.0 - stop_ratio)
                             if stop_fill == "close":
                                 if close <= trigger:
                                     _sell(
@@ -613,10 +614,12 @@ def simulate(
                         stop_ratio = stop_pct
                         stop_enabled = isinstance(stop_pct, float) and 0 < stop_pct < 1
                         if "stop_range" in hooks:
-                            stop_ratio = evaluate_stop_range(hooks, bars[code], day, st.stats)
+                            distance = evaluate_stop_range(hooks, bars[code], day, st.stats)
+                            stop_ratio = distance / pos.cost if distance is not None and pos.cost > 0 else None
                             stop_enabled = stop_ratio is not None
                         if stop_enabled:
-                            if close <= pos.cost * (1.0 - stop_ratio):
+                            trigger = pos.cost - distance if "stop_range" in hooks else pos.cost * (1.0 - stop_ratio)
+                            if close <= trigger:
                                 reason = "stop_loss:close"
                         if not reason:
                             reason = (

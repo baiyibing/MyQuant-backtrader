@@ -73,14 +73,14 @@ def test_strategy9_2_help_stats_and_version9():
     st = SimpleNamespace(stats={})
     r.record_strategy9_2_params(st)
     assert st.stats["turtle_add_bands"] == r.TURTLE_ADD_BANDS
-    assert st.stats["absolute_stop_factor"] == .90
+    assert "absolute_stop_factor" not in st.stats
     assert st.stats["hold_days"] == 20
     assert st.stats["stop_pct"] is None
-    assert st.stats["stop_mode"] == "range_amp_20_trailing_plus_absolute_tighter"
-    assert st.stats["stop_selection"] == "higher_price"
+    assert st.stats["stop_mode"] == "cost_minus_mean_true_range_20_trailing"
+    assert "stop_selection" not in st.stats
     assert st.stats["sell_ratios"] == r.SELL_RATIOS
     assert st.stats["giveback_bands"] == r.GIVEBACK_BANDS
-    for text in ("40%", "30%/20%", "1.04/1.10", "20-bar", "0.90", "remaining", "product", "20 trading", "50%"):
+    for text in ("40%", "30%/20%", "1.04/1.10", "20 true ranges", "no 10% line", "remaining", "product", "20 trading", "50%"):
         assert text in r.HELP_LOCK
     old = apply_csv_strategy("version9")
     assert not old["allow_add"]
@@ -92,7 +92,9 @@ def fixture_bars(periods=10):
     days = pd.bdate_range("2026-03-02", periods=periods)
     frame = pd.DataFrame(dict(open=10., high=10., low=10., close=10.), index=days)
     frame.loc[days[0], ["open", "high", "low", "close"]] = 10.5
-    return days, frame
+    pre = pd.bdate_range(end=days[0] - pd.Timedelta(days=1), periods=21)
+    history = pd.DataFrame(dict(open=10., high=11., low=9., close=10.), index=pre)
+    return days, pd.concat([history, frame])
 
 
 def run_daily(frame, days, pool=None):
@@ -116,6 +118,7 @@ def test_strategy9_2_daily_same_session_multi_add():
 def test_strategy9_2_daily_no_touch_and_hold20():
     days, frame = fixture_bars(24)
     frame["high"] = 10.3
+    frame.loc[days[0], "low"] = 10.
     early = run_daily(frame, days[:7])
     assert not [t for t in early.trades if t["side"] == "SELL"]
     st = run_daily(frame, days)
@@ -135,7 +138,7 @@ def test_strategy9_2_limit_down_pending():
     st = run_daily(frame, days)
     sells = [t for t in st.trades if t["side"] == "SELL"]
     assert sells[0]["date"] == days[4].strftime("%Y%m%d")
-    assert st.stats["limit_down_pending"] == 2
+    assert st.stats["limit_down_pending"] == 1
 
 
 @pytest.mark.parametrize("merged_bar", [False, True])
@@ -238,16 +241,17 @@ def test_strategy9_2_cli_stop_refused(host, tmp_path):
 @pytest.mark.parametrize("amplitude,opening,observed,expected,reason", [
     (.05, 10., 9.3, 9.5, "stop_loss:touch"),
     (None, 10., 9.2, None, None),
-    (None, 10., 8.9, 9., "stop_loss:touch"),
-    (None, 8.8, 8.7, 8.8, "stop_loss:gap_open"),
-    (.20, 10., 7.9, 9., "stop_loss:touch"),
-    (.20, 8.8, 7.9, 8.8, "stop_loss:gap_open"),
+    (None, 10., 1., None, None),
+    (None, 1., 1., None, None),
+    (.20, 10., 8.9, None, None),
+    (.20, 10., 7.9, 8., "stop_loss:touch"),
+    (.20, 7.8, 7.7, 7.8, "stop_loss:gap_open"),
     (0., 10.1, 9.9, 10., "stop_loss:touch"),
-    (1.2, 10., 8.9, 9., "stop_loss:touch"),
+    (1.2, 10., 8.9, None, None),
 ])
 def test_strategy9_2_chosen_stop_fills(minute, amplitude, opening, observed, expected, reason):
     from backtest.research.csv_ledger import execute_buy
-    from backtest.research.strategy9_rules import stop_range_amplitude
+    from backtest.research.strategy9_rules import mean_true_range
     from backtest.research.strategy9_2_engine import fill_stop
     days = pd.bdate_range("2026-03-02", periods=23)
     history = pd.DataFrame(dict(open=10., high=10., low=10., close=10.), index=days)
@@ -257,9 +261,9 @@ def test_strategy9_2_chosen_stop_fills(minute, amplitude, opening, observed, exp
         history.loc[days[:-1], "high"] = 10 + amplitude * 10
     day = days[-1]
     if amplitude is None:
-        assert stop_range_amplitude(history, day) is None
+        assert mean_true_range(history, day) is None
     else:
-        assert stop_range_amplitude(history, day) == pytest.approx(amplitude)
+        assert mean_true_range(history, day) == pytest.approx(amplitude * 10)
     st = turtle_state()
     execute_buy(st, "600000.SH", 10., 400_000, 0, days[0], reason="pool")
     row = SimpleNamespace(open=opening, low=observed, close=observed, high=14.)
@@ -278,7 +282,8 @@ def test_strategy9_2_chosen_stop_fills(minute, amplitude, opening, observed, exp
 
 def test_strategy9_2_daily_stop_precedes_scale_out_and_hold():
     days, frame = fixture_bars(24)
-    frame.loc[days[2], ["open", "high", "low", "close"]] = [10., 14., 8.9, 14.]
+    frame.loc[days[2], ["open", "high", "low", "close"]] = [10., 14., 7.9, 14.]
+    frame.loc[days[1], "close"] = 8.5
     st = run_daily(frame, days[:3])
     sells = [t for t in st.trades if t["side"] == "SELL"]
     assert sells and {t["reason"] for t in sells} == {"stop_loss:touch"}
@@ -293,20 +298,20 @@ def test_strategy9_2_minute_low_alone_does_not_stop():
     st = turtle_state()
     execute_buy(st, "600000.SH", 10., 400_000, 0, days[0], reason="pool")
     assert not fill_stop(st, "600000.SH", SimpleNamespace(open=10., low=8., close=9.2),
-                         frame, days[1], day_i=1, ds="20260303", limits=(11.,9.), minute=True)
+                         frame, days[1], day_i=1, ds="20260303", limits=(11.,0.), minute=True)
 
 
 def test_strategy9_2_minute_stop_precedes_scale_out():
     from backtest.research.csv_minute_backtest import simulate as minute
     days, frame = fixture_bars()
-    frame.loc[days[1], "close"] = 9.5  # Gap is above today's limit-down line.
+    frame.loc[days[1], "close"] = 8.5  # Gap is above today's limit-down line.
     rows = []
     for day in days[:3]:
         for hm in (570, 895):
             stopping = day == days[2]
             rows.append(dict(time=day + pd.Timedelta(minutes=hm), hm=hm,
-                             ymd=day.strftime("%Y%m%d"), open=8.8 if stopping else 10.,
-                             high=14. if stopping else 10., low=8.8 if stopping else 10.,
+                             ymd=day.strftime("%Y%m%d"), open=7.8 if stopping else 10.,
+                             high=14. if stopping else 10., low=7.8 if stopping else 10.,
                              close=14. if stopping else 10.))
     minutes = pd.DataFrame(rows).set_index("time")
     start, end = days[1].strftime("%Y%m%d"), days[2].strftime("%Y%m%d")
@@ -314,7 +319,7 @@ def test_strategy9_2_minute_stop_precedes_scale_out():
                 start, end, strategy="version9_2")
     sells = [t for t in st.trades if t["side"] == "SELL"]
     assert sells and {t["reason"] for t in sells} == {"stop_loss:gap_open"}
-    assert all(t["price"] == 8.8 for t in sells)
+    assert all(t["price"] == 7.8 for t in sells)
     assert st.book_state["strategy9_2"]["600000.SH"].sell_band_seq == 0
 
 
@@ -323,6 +328,7 @@ def test_strategy9_2_hold_plan_threshold_and_stop_precedence():
     from backtest.research.strategy9_2_engine import plan_exit, fill_stop
     days, frame = fixture_bars(24)
     frame["high"] = 10.3
+    frame.loc[days[0], "low"] = 10.
     st = turtle_state()
     execute_buy(st, "600000.SH", 10., 400_000, 1, days[1], reason="pool")
     assert plan_exit(st, "600000.SH", 10., days[6], [], day_i=6, ds="20260310") is None
