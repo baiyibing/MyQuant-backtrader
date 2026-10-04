@@ -176,6 +176,9 @@ def summarize(
                 f"keep={keeps_txt} | 档2底+{b2 - 1.0:.0%} | 档3全局底+{b3 - 1.0:.0%} "
                 f"| T+1止盈豁免{extra}"
             )
+    elif st.stats.get("sell_book") == "v9_2":
+        from backtest.research.strategy9_2_rules import HELP_LOCK
+        lines.append(HELP_LOCK.strip())
     elif st.stats.get("sell_book") == "v9":
         max_hold = st.stats.get("max_hold")
         hold_text = f"满持有 {int(max_hold)} 日 force_sell" if max_hold is not None else "满持有强平 OFF"

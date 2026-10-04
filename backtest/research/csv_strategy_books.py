@@ -27,6 +27,7 @@ from backtest.research import (
     strategy8_5_rules,
     strategy8_6_rules,
     strategy9_rules,
+    strategy9_2_rules,
     strategy10_rules,
     strategy11_rules,
     strategy12_rules,
@@ -54,7 +55,7 @@ HELP_LOCK_V10 = strategy10_rules.HELP_LOCK
 HELP_LOCK_TOPK = strategy_topk_dropout_rules.HELP_LOCK
 HELP_LOCK_SCORE_EXIT = strategy_topk_score_exit_rules.HELP_LOCK
 
-FORBIDDEN_DEFAULT_STOCK_POOL = frozenset({"version9", "version10", "version11"})
+FORBIDDEN_DEFAULT_STOCK_POOL = frozenset({"version9", "version9_2", "version10", "version11"})
 STOP_FILL_TOUCH = "touch"
 STOP_FILL_CLOSE = "close"
 STOP_FILL_ALLOWED = (STOP_FILL_TOUCH, STOP_FILL_CLOSE)
@@ -1001,6 +1002,22 @@ def _run_kwargs_version8_6(args) -> dict:
     return {"strategy": "version8_6", "stop_pct": stop}
 
 
+def _apply_version9_2(*, stop_pct=None, **_):
+    from backtest.research import strategy9_2_rules as rules, strategy9_2_engine as engine
+    if stop_pct is not None:
+        raise SystemExit("version9_2 does not accept --stop-pct")
+    return {"stop_pct": None, "take_profit": rules.take_profit_reason,
+            "record_params": rules.record_strategy9_2_params,
+            "on_buy": engine.on_buy, "exit_plan": engine.plan_exit,
+            "run_daily_day": engine.run_daily_day, "run_minute_day": engine.run_minute_day}
+
+
+def _run_kwargs_version9_2(args):
+    if getattr(args, "stop_pct", None) is not None:
+        raise SystemExit("version9_2 does not accept --stop-pct")
+    return {"strategy": "version9_2"}
+
+
 def _apply_version9(
     *, max_hold: bool = False, stop_pct: Optional[float] = None, take_profit=None, record_params=None, **_
 ) -> dict:
@@ -1530,6 +1547,12 @@ register(
         run_kwargs=_run_kwargs_version9,
     )
 )
+register(CsvStrategyBook(
+    name="version9_2", tag=strategy9_2_rules.BOOK_TAG,
+    aliases=("9.2", "9_2", "v9.2", "v9_2", "version9_2"),
+    allow_add=True, peak_gap_min=0, help_lock=strategy9_2_rules.HELP_LOCK,
+    apply=_apply_version9_2, run_kwargs=_run_kwargs_version9_2, sizing="per_name",
+))
 register(
     CsvStrategyBook(
         name="version10",
