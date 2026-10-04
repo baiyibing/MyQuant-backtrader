@@ -26,6 +26,8 @@ if str(REPO_ROOT) not in sys.path:
 from backtest.research.bottom_vol_over_top import (  # noqa: E402
     FORWARD_HORIZONS,
     MIN_LISTED_BARS,
+    R_MIN,
+    resolve_vol_ratio,
     evaluate_at,
     forward_close_returns,
     is_main_board_code,
@@ -174,7 +176,9 @@ def event_study_rows(
     end: str,
     *,
     names: Optional[Mapping[str, str]] = None,
+    r_min: float = R_MIN,
 ) -> list[dict]:
+    r_min = resolve_vol_ratio(r_min)
     name_map = dict(names or {})
     rows: list[dict] = []
     for code, frame in frames.items():
@@ -182,7 +186,9 @@ def event_study_rows(
         t0 = pd.Timestamp(start)
         t1 = pd.Timestamp(end)
         for ts in frame.index[(frame.index >= t0) & (frame.index <= t1)]:
-            sig = evaluate_at(frame, ts, code=code, name=name_map.get(code, ""))
+            sig = evaluate_at(
+                frame, ts, code=code, name=name_map.get(code, ""), r_min=r_min
+            )
             if sig is None:
                 continue
             loc = frame.index.get_loc(pd.Timestamp(ts).normalize())
@@ -246,11 +252,17 @@ def _parse_codes(raw: Optional[str], path: Optional[Path]) -> Optional[list[str]
 
 def main(argv: Optional[list[str]] = None) -> int:
     ap = argparse.ArgumentParser(
-        description="Strategy 9 pool exporter (bottom-vol-over-top); never stock_pool/"
+        description="Strategy 9 pool exporter (bottom-vol-over-top); never stock_pool/; "
+        "buy requires bottom low <= top high * 0.60 (fixed 40% drop)"
     )
     ap.add_argument("--start", required=True, help="first buy-day filename YYYYMMDD")
     ap.add_argument("--end", required=True, help="last buy-day filename YYYYMMDD")
     ap.add_argument("--out-dir", type=Path, default=None)
+    ap.add_argument(
+        "--vol-ratio", type=resolve_vol_ratio, default=R_MIN,
+        metavar="{1.2,1.5,2}",
+        help="bottom volume must be strictly greater than top volume times this ratio (default: 1.5)",
+    )
     ap.add_argument("--workers", type=int, default=16)
     ap.add_argument("--codes", default=None, help="optional comma-separated bare codes")
     ap.add_argument("--universe-file", type=Path, default=None)
@@ -289,7 +301,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     kept = {
         code: frame for code, frame in frames.items() if len(frame) >= MIN_LISTED_BARS
     }
-    days = scan_ohlcv(kept, args.start, args.end)
+    days = scan_ohlcv(kept, args.start, args.end, r_min=args.vol_ratio)
     written = write_strategy9_pool(days, out_dir)
     failures = validate_pool_dir(out_dir)
     if failures:
@@ -299,7 +311,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         flush=True,
     )
     if args.event_study:
-        rows = event_study_rows(kept, args.start, args.end)
+        rows = event_study_rows(kept, args.start, args.end, r_min=args.vol_ratio)
         dest = write_event_study(rows, out_dir / "event_study.csv")
         print(f"s9 event-study {len(rows)} rows -> {dest}", flush=True)
     return 0

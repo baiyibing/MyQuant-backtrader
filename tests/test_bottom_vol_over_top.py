@@ -198,3 +198,76 @@ def test_scan_symbol_returns_only_hits():
     )
     assert len(hits) == 1
     assert hits[0].ymd == day.strftime("%Y%m%d")
+
+
+@pytest.mark.parametrize("ratio,next_ratio", [(1.2, 1.5), (1.5, 2.0), (2.0, None)])
+def test_volume_ratio_thresholds_and_cli(ratio, next_ratio, monkeypatch, tmp_path):
+    from scripts.data import export_strategy9_pool as exporter
+
+    frame, day = _signal_frame(bottom_vol=1000.0 * (ratio + 0.001))
+    ymd = day.strftime("%Y%m%d")
+    assert evaluate_at(frame, day, code="600000.SH", r_min=ratio) is not None
+    assert len(scan_symbol(frame, ymd, ymd, code="600000.SH", r_min=ratio)) == 1
+    assert scan_ohlcv({"600000.SH": frame}, ymd, ymd, r_min=ratio) == {
+        ymd: ["600000.SH"]
+    }
+    if next_ratio is not None:
+        assert evaluate_at(frame, day, code="600000.SH", r_min=next_ratio) is None
+        assert scan_ohlcv({"600000.SH": frame}, ymd, ymd, r_min=next_ratio) == {}
+    equal_frame, equal_day = _signal_frame(bottom_vol=1000.0 * ratio)
+    assert evaluate_at(equal_frame, equal_day, code="600000.SH", r_min=ratio) is None
+    monkeypatch.setattr(exporter, "resolve_period_root", lambda _: tmp_path)
+    monkeypatch.setattr(exporter, "load_daily_ohlcv", lambda *a, **kw: {"600000.SH": frame})
+    out = tmp_path / "pool"
+    assert export_main([
+        "--start", ymd, "--end", ymd, "--codes", "600000",
+        "--out-dir", str(out), "--vol-ratio", str(ratio), "--event-study",
+    ]) == 0
+    assert (out / f"{ymd}.csv").read_text() == "600000\n"
+    assert len(pd.read_csv(out / "event_study.csv")) == 1
+
+
+@pytest.mark.parametrize("ratio", [1, 1.3, 1.8, 3, -1, "abc", float("nan"), float("inf")])
+def test_invalid_volume_ratio_rejected_before_scanning(ratio):
+    frame, day = _signal_frame()
+    with pytest.raises(ValueError, match="volume ratio"):
+        evaluate_at(frame, day, code="600000.SH", r_min=ratio)
+    with pytest.raises(ValueError, match="volume ratio"):
+        scan_symbol(frame.iloc[:0], "20240102", "20240103", code="600000.SH", r_min=ratio)
+    with pytest.raises(ValueError, match="volume ratio"):
+        scan_ohlcv({}, "20240102", "20240103", r_min=ratio)
+    with pytest.raises(SystemExit):
+        export_main(["--start", "20240102", "--end", "20240103", f"--vol-ratio={ratio}"])
+
+
+@pytest.mark.parametrize("ratio", [1.2, 1.5, 2.0])
+def test_volume_ratio_tolerance_returns_canonical_float(ratio):
+    from backtest.research.bottom_vol_over_top import resolve_vol_ratio
+
+    assert resolve_vol_ratio(ratio + 5e-10) == ratio
+    assert resolve_vol_ratio(ratio - 5e-10) == ratio
+    with pytest.raises(ValueError):
+        resolve_vol_ratio(ratio + 2e-9)
+
+
+@pytest.mark.parametrize("bottom_low,passes", [(9.0, True), (9.0001, False)])
+def test_fixed_price_drop_boundary(bottom_low, passes):
+    # HHV 15 and LLV 9 preserve the existing top/bottom geometry.
+    frame, day = _signal_frame(top_high=15.0, bottom_low=bottom_low, close_at_t=9.4)
+    assert (evaluate_at(frame, day, code="600000.SH") is not None) is passes
+
+
+def test_omitted_volume_ratio_defaults_to_one_point_five(monkeypatch, tmp_path):
+    from scripts.data import export_strategy9_pool as exporter
+
+    frame, day = _signal_frame(bottom_vol=1300.0)
+    ymd = day.strftime("%Y%m%d")
+    assert evaluate_at(frame, day, code="600000.SH", r_min=1.2) is not None
+    assert evaluate_at(frame, day, code="600000.SH") is None
+    assert scan_symbol(frame, ymd, ymd, code="600000.SH") == []
+    assert scan_ohlcv({"600000.SH": frame}, ymd, ymd) == {}
+    monkeypatch.setattr(exporter, "resolve_period_root", lambda _: tmp_path)
+    monkeypatch.setattr(exporter, "load_daily_ohlcv", lambda *a, **kw: {"600000.SH": frame})
+    out = tmp_path / "pool"
+    assert export_main(["--start", ymd, "--end", ymd, "--codes", "600000", "--out-dir", str(out)]) == 0
+    assert not (out / f"{ymd}.csv").exists()
