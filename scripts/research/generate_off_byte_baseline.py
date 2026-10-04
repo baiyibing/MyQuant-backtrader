@@ -17,6 +17,8 @@ version9 uses the 2026-10-04 trailing 20-bar range overlay;
 version6_1 (20th book, bee0b91) is covered by a scoped additive overlay
 (precedent #212): historical golden stays 19 books / 39 cases; --record-v61
 writes only the two new cases and refuses overwrite. --record-s8 unchanged.
+version9_2 (21st book) uses the scoped additive 2026-10-04 overlay;
+--record-v92 writes only its daily/minute cases and refuses overwrite.
 See docs/backtest/s8-independent-positions-2026-09-26.md and
 docs/backtest/v61-off-byte-overlay-2026-10-02.md.
 """
@@ -72,6 +74,10 @@ V61_GOLDEN = ROOT / "tests/fixtures/off_byte_baseline_v61_20261002.json"
 V61_RULE_REVISION = "v61-unbounded-ladder-2026-10-02"
 V61_BOOK_NAMES = ("version6_1",)
 V61_CASES = tuple((book, engine) for book in V61_BOOK_NAMES for engine in ("daily", "minute"))
+V92_GOLDEN = ROOT / "tests/fixtures/off_byte_baseline_v92_20261004.json"
+V92_RULE_REVISION = "v92-sim-turtle-20261004"
+V92_BOOK_NAMES = ("version9_2",)
+V92_CASES = tuple((book, engine) for book in V92_BOOK_NAMES for engine in ("daily", "minute"))
 S12_GOLDEN = ROOT / "tests/fixtures/off_byte_baseline_s12_ma10_stop_20261004.json"
 S12_RULE_REVISION = "s12-whole-position-ma10-stop-69cf371"
 S12_BOOK_NAMES = ("version12",)
@@ -80,7 +86,7 @@ S9_GOLDEN = ROOT / "tests/fixtures/off_byte_baseline_s9_range_amp_20_trailing_20
 S9_RULE_REVISION = "s9-range-amp-20-trailing-20261004"
 S9_BOOK_NAMES = ("version9",)
 S9_CASES = tuple((book, engine) for book in S9_BOOK_NAMES for engine in ("daily", "minute"))
-BOOK_NAMES = HISTORICAL_BOOK_NAMES + V61_BOOK_NAMES
+BOOK_NAMES = HISTORICAL_BOOK_NAMES + V61_BOOK_NAMES + V92_BOOK_NAMES
 CODE = "600000.SH"
 TOPK_CODES = (CODE, "600001.SH", "600002.SH")
 CASES = tuple((book, engine) for book in BOOK_NAMES for engine in ("daily", "minute")) + (
@@ -261,6 +267,20 @@ def load_v61_golden() -> dict:
     return golden
 
 
+def load_v92_golden() -> dict:
+    """Additive overlay for version9_2 only; historical files stay immutable."""
+    assert _hash(GOLDEN.read_bytes()) == HISTORICAL_GOLDEN_SHA256
+    assert _hash(CANONICAL_GOLDEN.read_bytes()) == HISTORICAL_CANONICAL_SHA256
+    golden = json.loads(V92_GOLDEN.read_text(encoding="utf-8"))
+    assert golden["rule_revision"] == V92_RULE_REVISION
+    assert golden["historical_raw_sha256"] == HISTORICAL_GOLDEN_SHA256
+    assert golden["historical_canonical_sha256"] == HISTORICAL_CANONICAL_SHA256
+    assert golden["contract"] == CANONICAL_CONTRACT
+    assert golden["books"] == list(V92_BOOK_NAMES)
+    assert set(golden["cases"]) == {f"{book}/{engine}" for book, engine in V92_CASES}
+    return golden
+
+
 def load_s12_golden() -> dict:
     """Replacement overlay for version12 only; historical files stay immutable."""
     assert _hash(GOLDEN.read_bytes()) == HISTORICAL_GOLDEN_SHA256
@@ -299,6 +319,11 @@ def expected_case(book: str, engine: str) -> tuple[dict, dict, str]:
         return case, canonical, golden["captured_environment"]["pandas"]
     if (book, engine) in V61_CASES:
         golden = load_v61_golden()
+        case = golden["cases"][key]
+        canonical = {name: canonical_hash(table) for name, table in case["canonical_csv"].items()}
+        return case, canonical, golden["captured_environment"]["pandas"]
+    if (book, engine) in V92_CASES:
+        golden = load_v92_golden()
         case = golden["cases"][key]
         canonical = {name: canonical_hash(table) for name, table in case["canonical_csv"].items()}
         return case, canonical, golden["captured_environment"]["pandas"]
@@ -407,8 +432,8 @@ def capture_case(book: str, engine: str, output_dir: Path, *, explicit_false: bo
 def capture_matrix(output_dir: Path, *, explicit_false: bool = False):
     assert set(BOOK_NAMES) == set(BOOKS), "Update coverage explicitly when BOOKS changes"
     assert len(HISTORICAL_BOOK_NAMES) == 19 and len(HISTORICAL_CASES) == 39
-    assert len(BOOK_NAMES) == 20 and len(CASES) == 41
-    assert set(BOOK_NAMES) == set(HISTORICAL_BOOK_NAMES) | set(V61_BOOK_NAMES)
+    assert len(BOOK_NAMES) == 21 and len(CASES) == 43
+    assert set(BOOK_NAMES) == set(HISTORICAL_BOOK_NAMES) | set(V61_BOOK_NAMES) | set(V92_BOOK_NAMES)
     return {f"{book}/{engine}": capture_case(book, engine, output_dir / book / engine,
                                             explicit_false=explicit_false)
             for book, engine in CASES}
@@ -439,12 +464,16 @@ def main():
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument(
         "--check", action="store_true",
-        help="Compare historical cases plus the S8, version6_1, version12 and version9 overlays",
+        help="Compare historical cases plus the S8, version6_1, version12, version9 and version9_2 overlays",
     )
     mode.add_argument("--record-s8", action="store_true", help="Record only the 12 corrected S8 cases")
     mode.add_argument(
         "--record-v61", action="store_true",
         help="Record only the 2 additive version6_1 cases (scoped overlay)",
+    )
+    mode.add_argument(
+        "--record-v92", action="store_true",
+        help="Record only the 2 additive version9_2 cases (scoped overlay)",
     )
     mode.add_argument("--record-s12", action="store_true",
                       help="Record only the 2 version12 MA10-stop cases")
@@ -501,6 +530,32 @@ def main():
         }
         V61_GOLDEN.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         print(f"Wrote {V61_GOLDEN}: 2 additive cases / 4 production CSV hashes")
+        return
+    if args.record_v92:
+        if V92_GOLDEN.exists():
+            parser.error("The version9_2 overlay already exists; refusing to overwrite")
+        if pd.__version__ != "3.0.6":
+            parser.error("version9_2 recording requires the authorized pandas 3.0.6 environment")
+        assert _hash(GOLDEN.read_bytes()) == HISTORICAL_GOLDEN_SHA256
+        assert _hash(CANONICAL_GOLDEN.read_bytes()) == HISTORICAL_CANONICAL_SHA256
+        with tempfile.TemporaryDirectory(prefix="v92-byte-baseline-") as temp:
+            cases = {f"{book}/{engine}": capture_case(book, engine, Path(temp) / book / engine)
+                     for book, engine in V92_CASES}
+        for case in cases.values():
+            assert_case_bytes(case, case)
+            assert case["fill_counts"]["BUY"] > 0 and case["fill_counts"]["SELL"] > 0
+        payload = {
+            "rule_revision": V92_RULE_REVISION,
+            "historical_raw_sha256": HISTORICAL_GOLDEN_SHA256,
+            "historical_canonical_sha256": HISTORICAL_CANONICAL_SHA256,
+            "books": list(V92_BOOK_NAMES),
+            "captured_environment": {"python": platform.python_version(), "pandas": pd.__version__,
+                                     "platform": sys.platform},
+            "contract": CANONICAL_CONTRACT,
+            "cases": cases,
+        }
+        V92_GOLDEN.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        print(f"Wrote {V92_GOLDEN}: 2 additive cases / 4 production CSV hashes")
         return
     if args.record_s12:
         if S12_GOLDEN.exists():
@@ -590,9 +645,10 @@ def main():
         for reason in sorted(skipped):
             print(f"SKIP: {reason}")
         if not skipped:
-            print("PASS: 82 production CSV hashes + library hashes (raw bytes)")
+            print("PASS: 86 production CSV hashes + library hashes (raw bytes)")
         print(
-            "PASS: 27 unchanged + 12 S8-corrected + 2 version6_1 additive "
+            "PASS: 23 unchanged + 12 S8-corrected + 2 version12 + 2 version9 corrected "
+            " + 2 version6_1 + 2 version9_2 additive "
             f"canonical CSV/account cases; pandas={pd.__version__}"
         )
         return
