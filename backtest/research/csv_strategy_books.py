@@ -394,6 +394,8 @@ def add_csv_backtest_common_args(
     strategy book args. Callers then add mode-specific flags (daily
     ``--out-dir``; minute ``--no-cache`` / ``--rebuild-cache``).
     """
+    ap.add_argument("--max-hold", action="store_true",
+                    help="version9: enable 20-trading-day force-flat (force_sell:max_hold); default off")
     ap.add_argument("--start", default=start_default)
     ap.add_argument(
         "--fix-s81-band-precision", action="store_true",
@@ -506,6 +508,8 @@ def csv_run_kwargs_from_args(args) -> dict:
     name = normalize_csv_strategy(getattr(args, "strategy", "") or "")
     if getattr(args, "fix_s81_band_precision", False) and name != "version8_1":
         raise SystemExit("--fix-s81-band-precision is supported only by version8_1")
+    if getattr(args, "max_hold", False) and name != "version9":
+        raise SystemExit("--max-hold is supported only by version9")
     fill_s = getattr(args, "stop_fill", None)
     fill_s = None if fill_s is None else str(fill_s).strip().lower()
     if fill_s == "":
@@ -998,16 +1002,16 @@ def _run_kwargs_version8_6(args) -> dict:
 
 
 def _apply_version9(
-    *, stop_pct: Optional[float] = None, take_profit=None, record_params=None, **_
+    *, max_hold: bool = False, stop_pct: Optional[float] = None, take_profit=None, record_params=None, **_
 ) -> dict:
     if stop_pct is not None:
         raise SystemExit("version9 does not accept --stop-pct")
 
     def _tp(px, cost, peak, n_days):
-        return strategy9_rules.take_profit_reason(px, cost, peak, n_days)
+        return strategy9_rules.take_profit_reason(px, cost, peak, n_days, max_hold=max_hold)
 
     def _rec(st):
-        strategy9_rules.record_strategy9_params(st)
+        strategy9_rules.record_strategy9_params(st, max_hold=max_hold)
 
     return {
         "stop_pct": None,
@@ -1020,7 +1024,7 @@ def _apply_version9(
 def _run_kwargs_version9(args) -> dict:
     if getattr(args, "stop_pct", None) is not None:
         raise SystemExit("version9 does not accept --stop-pct")
-    return {"strategy": "version9"}
+    return {"strategy": "version9", "max_hold": bool(getattr(args, "max_hold", False))}
 
 
 def _apply_version10(

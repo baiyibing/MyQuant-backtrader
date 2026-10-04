@@ -245,6 +245,7 @@ def simulate(
     index_block_new=None,
     stop_fill: Optional[str] = None,
     fix_s11_exit_domain: bool = False,
+    max_hold: bool = False,
     fix_s81_band_precision: bool = False,
     signal_bars_front: dict[str, pd.DataFrame] | None = None,
 ) -> SimState:
@@ -254,6 +255,8 @@ def simulate(
     exdiv_economics 显式接收 (engine_symbol, YYYYMMDD) -> ExDivEvent；
     默认 None 保留原行为，事件配合 raw bars 使用，不从 exdiv 的 k 推断权益。
     """
+    if max_hold and normalize_csv_strategy(strategy) != "version9":
+        raise ValueError("max_hold is supported only by version9")
     del pos_trail
     if signal_bars_front is not None and not fix_s11_exit_domain:
         raise ValueError("signal_bars_front requires version11 + fix_s11_exit_domain=True")
@@ -280,6 +283,7 @@ def simulate(
         tiers=tiers,
         tier_default=tier_default,
         apply_fn=apply_csv_strategy,
+        **({"max_hold": True} if max_hold else {}),
         **({"fix_s81_band_precision": True} if fix_s81_band_precision else {}),
         scores_by_day=scores_by_day,
         topk=topk,
@@ -671,8 +675,11 @@ def run(
     stop_fill: Optional[str] = None,
     strict_pool: bool = False,
     fix_s11_exit_domain: bool = False,
+    max_hold: bool = False,
     fix_s81_band_precision: bool = False,
 ) -> SimState:
+    if max_hold and normalize_csv_strategy(strategy) != "version9":
+        raise ValueError("max_hold is supported only by version9")
     if fix_s81_band_precision and normalize_csv_strategy(strategy) != "version8_1":
         raise ValueError("fix_s81_band_precision is supported only by version8_1")
     if fix_s11_exit_domain:
@@ -841,6 +848,7 @@ def run(
         tier_default=tier_default,
         pos_trail=pos_trail,
         strategy=strategy,
+        **({"max_hold": True} if max_hold else {}),
         **({"fix_s81_band_precision": True} if fix_s81_band_precision else {}),
         take_profit=take_profit,
         record_params=record_params,

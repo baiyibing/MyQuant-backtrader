@@ -261,6 +261,7 @@ def _book_reason(
     level: float | None,
     prev_close: float | None,
     hold_mode: str | None,
+    max_hold: bool = False,
 ) -> str | None:
     if name == "version2":
         return strategy2_rules.take_profit_reason(close, cost, peak, n_days)
@@ -284,6 +285,8 @@ def _book_reason(
         if v12_hold20([lot], close):
             return V12_HOLD20
         return None
+    if name == "version9":
+        return v9_take(close, cost, peak, n_days, max_hold=max_hold)
     take = _BOOK_TAKE.get(name)
     if take is None:
         return None
@@ -350,6 +353,7 @@ def invoke_minute_strategy(
     cost: float,
     peak: float,
     n_days: int = 1,
+    max_hold: bool = False,
     timing: FillTiming = "same_bar",
     price: FillPrice = "stop",
     next_bar: OhlcBar | None = None,
@@ -488,6 +492,7 @@ def invoke_minute_strategy(
             level,
             prev_close,
             hold_mode,
+            max_hold,
         )
     if not reason:
         return BarScanExit("skip", None, "", new_peak)
