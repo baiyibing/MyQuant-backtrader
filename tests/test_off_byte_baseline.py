@@ -1,4 +1,4 @@
-"""Historical CSV/account + #205 quota and scoped S8 / version6_1 / version12 / version9 overlays.
+"""Historical CSV/account + #205 quota and scoped S8 / version6_1 / version12 / version9 / version9_1 overlays.
 
 After mandatory canonical and full structured assertions, compare exact raw
 writer/library SHA-256 on the golden's pandas major.minor. A different version
@@ -29,6 +29,8 @@ from scripts.research.generate_off_byte_baseline import (
     SOURCE,
     V61_BOOK_NAMES,
     V61_CASES,
+    V91_BOOK_NAMES,
+    V91_CASES,
     assert_case_bytes,
     assert_case_canonical,
     byte_skip_reason,
@@ -37,6 +39,7 @@ from scripts.research.generate_off_byte_baseline import (
     load_canonical_golden,
     load_s8_golden,
     load_v61_golden,
+    load_v91_golden,
 )
 
 
@@ -47,12 +50,12 @@ def test_off_byte_baseline_covers_current_registry_and_standalone_v7():
     canonical = load_canonical_golden()
     assert canonical["captured_environment"] == expected["captured_environment"]
     assert all(set(case) == {"trades", "equity"} for case in canonical["cases"].values())
-    # Historical golden stays frozen at 19 books / 39 cases; version6_1 is overlay-only.
+    # Historical golden stays frozen at 19 books / 39 cases; version6_1/version9_1 are overlay-only.
     assert len(HISTORICAL_BOOK_NAMES) == 19 and len(HISTORICAL_CASES) == 39
     assert set(expected["books"]) == set(HISTORICAL_BOOK_NAMES)
     assert set(expected["cases"]) == {f"{book}/{engine}" for book, engine in HISTORICAL_CASES}
-    assert len(BOOK_NAMES) == 20 and len(CASES) == 41
-    assert set(BOOK_NAMES) == set(BOOKS) == set(HISTORICAL_BOOK_NAMES) | set(V61_BOOK_NAMES)
+    assert len(BOOK_NAMES) == 21 and len(CASES) == 43
+    assert set(BOOK_NAMES) == set(BOOKS) == set(HISTORICAL_BOOK_NAMES) | set(V61_BOOK_NAMES) | set(V91_BOOK_NAMES)
     registered_cases = {(book, engine) for book in BOOKS for engine in ("daily", "minute")}
     assert set(CASES) == registered_cases | {("version7", "minute")}
     for case in expected["cases"].values():
@@ -100,6 +103,25 @@ def test_v61_overlay_only_adds_authorized_cases_and_preserves_historical_files()
     assert "version6_1/daily" not in historical["cases"]
     assert "version6_1/minute" not in historical["cases"]
     for book, engine in V61_CASES:
+        actual, _, _ = expected_case(book, engine)
+        assert actual["sha256_csv_bytes"] == golden["cases"][f"{book}/{engine}"]["sha256_csv_bytes"]
+        assert actual["fill_counts"]["BUY"] > 0
+        assert actual["fill_counts"]["SELL"] > 0
+
+
+def test_v91_overlay_only_adds_authorized_cases_and_preserves_historical_files():
+    assert sha256(GOLDEN.read_bytes()).hexdigest() == HISTORICAL_GOLDEN_SHA256
+    assert sha256(CANONICAL_GOLDEN.read_bytes()).hexdigest() == HISTORICAL_CANONICAL_SHA256
+    golden = load_v91_golden()
+    assert len(V91_CASES) == len(golden["cases"]) == 2
+    assert golden["captured_environment"]["pandas"] == "3.0.6"
+    assert set(V91_BOOK_NAMES) == {"version9_1"}
+    assert set(golden["cases"]) == {"version9_1/daily", "version9_1/minute"}
+    historical = json.loads(GOLDEN.read_text(encoding="utf-8"))
+    assert "version9_1" not in historical["books"]
+    assert "version9_1/daily" not in historical["cases"]
+    assert "version9_1/minute" not in historical["cases"]
+    for book, engine in V91_CASES:
         actual, _, _ = expected_case(book, engine)
         assert actual["sha256_csv_bytes"] == golden["cases"][f"{book}/{engine}"]["sha256_csv_bytes"]
         assert actual["fill_counts"]["BUY"] > 0

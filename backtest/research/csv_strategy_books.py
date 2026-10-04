@@ -27,6 +27,7 @@ from backtest.research import (
     strategy8_5_rules,
     strategy8_6_rules,
     strategy9_rules,
+    strategy9_1_rules,
     strategy10_rules,
     strategy11_rules,
     strategy12_rules,
@@ -54,7 +55,7 @@ HELP_LOCK_V10 = strategy10_rules.HELP_LOCK
 HELP_LOCK_TOPK = strategy_topk_dropout_rules.HELP_LOCK
 HELP_LOCK_SCORE_EXIT = strategy_topk_score_exit_rules.HELP_LOCK
 
-FORBIDDEN_DEFAULT_STOCK_POOL = frozenset({"version9", "version10", "version11"})
+FORBIDDEN_DEFAULT_STOCK_POOL = frozenset({"version9", "version9_1", "version10", "version11"})
 STOP_FILL_TOUCH = "touch"
 STOP_FILL_CLOSE = "close"
 STOP_FILL_ALLOWED = (STOP_FILL_TOUCH, STOP_FILL_CLOSE)
@@ -1593,3 +1594,26 @@ register(
         run_kwargs=_run_kwargs_topk_score_exit,
     )
 )
+
+
+def _apply_version9_1(*, stop_pct=None, **_):
+    if stop_pct is not None:
+        raise SystemExit("version9_1 does not accept --stop-pct")
+    return dict(stop_pct=None, take_profit=lambda *a: None,
+                record_params=strategy9_1_rules.record_strategy9_1_params,
+                bind_absolute_exit=strategy9_1_rules.bind,
+                limit_up_chase=False, step_add=lambda lots, px: True)
+
+
+def _run_kwargs_version9_1(args):
+    if getattr(args, "stop_pct", None) is not None:
+        raise SystemExit("version9_1 does not accept --stop-pct")
+    return {"strategy": "version9_1"}
+
+register(CsvStrategyBook(
+    name="version9_1", tag="v9_1",
+    aliases=("9.1", "9_1", "v9.1", "v9_1", "version9_1"),
+    allow_add=True, peak_gap_min=0, help_lock=strategy9_1_rules.HELP_LOCK,
+    apply=_apply_version9_1, run_kwargs=_run_kwargs_version9_1,
+    sizing="per_name", name_budget=strategy9_1_rules.NAME_BUDGET,
+))
