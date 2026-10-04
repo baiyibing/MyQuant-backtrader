@@ -325,6 +325,14 @@ def test_lake_cli_rejects_dirty_code(lake_end_case, monkeypatch, capsys):
 
 def test_empty_diff_core_vs_knife_base():
     """CLI lake knife must not touch MatchCore / Fees / simulate / loader / views."""
+    import subprocess
+    probe = subprocess.run(
+        ["git", "cat-file", "-e", f"{KNIFE_BASE}^{{commit}}"],
+        cwd=ROOT, capture_output=True, text=True,
+    )
+    if probe.returncode:
+        pytest.skip(f"pinned guard base {KNIFE_BASE} unavailable in this checkout")
+
     import subprocess as sp
     dirty = sp.run(
         ["git", "diff", "--name-only", KNIFE_BASE, "--", *[str(p.relative_to(ROOT)) for p in sorted(CORE)]],

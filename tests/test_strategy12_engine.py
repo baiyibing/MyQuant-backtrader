@@ -425,6 +425,11 @@ def test_daily_run_rejects_wrong_price_domain_before_data_reads():
 
 
 def test_minute_run_accepts_none_price_domain_and_uses_none_loader(monkeypatch, tmp_path):
+    # Loader bytes are synthetic; still satisfy the production root contract.
+    monkeypatch.setenv("OSKH_SOURCE_PARQUET_ROOT", str(tmp_path))
+    from backtest.research import strategy12_rules
+    # These wiring tests use synthetic stock bars and an unblocked index gate.
+    monkeypatch.setattr(strategy12_rules, "load_sse_ma10_block_new", lambda *a, **kw: {})
     from common.infra import data_root
 
     mins, days, _ = bars_for([[(895, 10)]])
@@ -473,6 +478,11 @@ def test_non_strategy12_minute_rejects_front_dividend_type(book):
 
 @pytest.mark.parametrize("engine", [daily, minute])
 def test_front_loader_uses_matching_partitions_and_disables_er6(monkeypatch, tmp_path, engine):
+    # Loader bytes are synthetic; still satisfy the production root contract.
+    monkeypatch.setenv("OSKH_SOURCE_PARQUET_ROOT", str(tmp_path))
+    from backtest.research import strategy12_rules
+    # These wiring tests use synthetic stock bars and an unblocked index gate.
+    monkeypatch.setattr(strategy12_rules, "load_sse_ma10_block_new", lambda *a, **kw: {})
     from common.infra import data_root
 
     mins, days, dates = bars_for([[(895, 10)]])

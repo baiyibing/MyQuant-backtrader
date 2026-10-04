@@ -80,14 +80,13 @@ def test_false_chase_queue_can_propagate_to_delayed_real_buy():
 
 
 REPLAYS = [
-    ("test_minute_cycle_rearms_same_day_and_new_buys_remain_t1_locked", ()),
-    ("test_capacity_residual_retained_rearmed_then_merged", ("reduced", 9.9, rules.REDUCE, rules.RECLAIM5)),
-    ("test_capacity_residual_retained_rearmed_then_merged", ("stopped", 8.9, rules.STOP, rules.RECLAIM10)),
-    ("test_residual_below100_qualified_reclaim_without_buy", ("reduced", 9.9, rules.REDUCE)),
-    ("test_residual_below100_qualified_reclaim_without_buy", ("stopped", 8.9, rules.STOP)),
-    ("test_cash_retry_and_capacity_failure_do_not_rearm_early", ()),
-    ("test_pool_fill_clears_both_memories_before_same_clock_buyback", ()),
-    ("test_dual_channels_reclaim_independently_after_same_day_stop", ()),
+    ("test_minute_stop_does_not_buy_back_when_price_returns_to_the_first_fill", ()),
+    ("test_capacity_limited_stop_is_not_bought_back", ()),
+    ("test_stop_dust_below_100_is_not_bought", ()),
+    ("test_stop_does_not_spend_cash_buying_back", ()),
+    ("test_later_bars_do_not_buy_back_a_capacity_limited_stop", ()),
+    ("test_pool_fill_clears_stop_memory_before_same_clock_buyback", ()),
+    ("test_same_day_return_to_the_first_price_does_not_buy_back", ()),
     ("test_chase_and_pool_use_existing_clocks_and_chase_resets_memory", ()),
 ]
 
@@ -108,7 +107,7 @@ def test_existing_s12_rules_replayed_on_nonunit_domain(monkeypatch, name, args):
 
 @pytest.mark.parametrize("name,helper", [
     ("test_step_counter_remains_monotonic_after_step_lot_is_sold", "run_step_adds_day"),
-    ("test_buyback_limit_up_preserves_whole_lot_memory", "run_buybacks_day"),
+    ("test_closed_buyback_plan_does_not_touch_limit_up_or_memory", "run_buybacks_day"),
 ])
 def test_existing_direct_helpers_replayed_with_nonunit_context(monkeypatch, name, helper):
     original = getattr(loop, helper)
@@ -323,6 +322,11 @@ def test_on_simulation_rejects_unmarked_holding_before_writing_equity(monkeypatc
 
 
 def test_on_run_routes_raw_daily_and_uses_only_strict_uncached_loader(monkeypatch, tmp_path):
+    # Loader bytes are synthetic; still satisfy the production root contract.
+    monkeypatch.setenv("OSKH_SOURCE_PARQUET_ROOT", str(tmp_path))
+    from backtest.research import strategy12_rules
+    # These wiring tests use synthetic stock bars and an unblocked index gate.
+    monkeypatch.setattr(strategy12_rules, "load_sse_ma10_block_new", lambda *a, **kw: {})
     from backtest.research import signal_price_domain as domain
 
     mins, raw, front, days = fixture()

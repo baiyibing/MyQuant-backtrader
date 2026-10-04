@@ -208,6 +208,14 @@ def test_cli_missing_parent_run_id_exit_2(tmp_path):
 
 def test_core_files_byte_stable_vs_knife_base():
     """Empty-diff guard vs PR #314 base tip (MatchCore/Fees/simulate/loader/cli/views)."""
+    import subprocess
+    probe = subprocess.run(
+        ["git", "cat-file", "-e", f"{KNIFE_BASE}^{{commit}}"],
+        cwd=ROOT, capture_output=True, text=True,
+    )
+    if probe.returncode:
+        pytest.skip(f"pinned guard base {KNIFE_BASE} unavailable in this checkout")
+
     for path in CORE:
         assert path.is_file(), path
         rel = path.relative_to(ROOT)

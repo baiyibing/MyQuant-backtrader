@@ -58,6 +58,11 @@ def test_minute_limit_base_and_off_state(monkeypatch, cash_order, raw, expected)
 @pytest.mark.parametrize("flag", [False, True])
 @pytest.mark.parametrize("strategy,front", [("version1", False), ("version12", False), ("version12", True)])
 def test_run_loader_and_simulate_wiring(tmp_path, monkeypatch, flag, strategy, front):
+    # Loader bytes are synthetic; still satisfy the production root contract.
+    monkeypatch.setenv("OSKH_SOURCE_PARQUET_ROOT", str(tmp_path))
+    from backtest.research import strategy12_rules
+    # These wiring tests use synthetic stock bars and an unblocked index gate.
+    monkeypatch.setattr(strategy12_rules, "load_sse_ma10_block_new", lambda *a, **kw: {})
     _, loader, simulate, _ = _d2_stub_book_entry(monkeypatch, minute, tmp_path)
     monkeypatch.setattr(minute, "load_minute_bars", Mock(return_value={CODE: object()}))
     from common.infra import data_root

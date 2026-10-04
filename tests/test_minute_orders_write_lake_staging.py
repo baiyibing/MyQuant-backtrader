@@ -42,6 +42,15 @@ CORE = {
 }
 
 
+@pytest.fixture(autouse=True)
+def isolated_protected_roots(monkeypatch):
+    # CI's workspace root contains pytest basetemp; it is not this fixture's lake.
+    # Individual protection tests explicitly configure their own protected root.
+    for key in ("OSKH_SOURCE_PARQUET_ROOT", "OSKH_PERIOD_1D_ROOT",
+                "OSKH_PERIOD_1M_ROOT", "OSKH_AUTHORITY_HINT_ROOT", "OSKH_DATA_ROOT"):
+        monkeypatch.delenv(key, raising=False)
+
+
 def launch(cwd, argv=None, *, timeout=30, env=None):
     merged = os.environ.copy()
     if env:
