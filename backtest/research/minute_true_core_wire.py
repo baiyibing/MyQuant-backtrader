@@ -138,6 +138,11 @@ _PERCENT_STOP: dict[str, float] = {
     "topk_score_exit": float(TOPK_SCORE_EXIT_STOP),
 }
 
+
+def _version9_1_take(*args: object) -> None:
+    return None
+
+
 _BOOK_TAKE = {
     "version3": v3_take,
     "version5": v5_take,
@@ -151,6 +156,7 @@ _BOOK_TAKE = {
     "version8_5": v8_5_take,
     "version8_6": v8_6_take,
     "version9": v9_take,
+    "version9_1": _version9_1_take,
     "version10": v10_take,
 }
 
