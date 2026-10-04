@@ -277,6 +277,17 @@ def test_volume_ratio_tolerance_returns_canonical_float(ratio):
         resolve_vol_ratio(ratio + 2e-9)
 
 
+def test_export_help_states_live_buy_defaults(capsys):
+    with pytest.raises(SystemExit) as exc:
+        export_main(["--help"])
+    assert exc.value.code == 0
+    help_text = " ".join(capsys.readouterr().out.split())
+    assert "--vol-ratio {1.2,1.5,2}" in help_text
+    assert "times this ratio (default: 2)" in help_text
+    assert "--top-lead {10,20,30,40}" in help_text
+    assert "this many trading bars (default: 40)" in help_text
+
+
 @pytest.mark.parametrize("bottom_low,passes", [(9.0, True), (9.0001, False)])
 def test_fixed_price_drop_boundary(bottom_low, passes):
     # HHV 15 and LLV 9 preserve the existing top/bottom geometry.
@@ -284,20 +295,24 @@ def test_fixed_price_drop_boundary(bottom_low, passes):
     assert (evaluate_at(frame, day, code="600000.SH") is not None) is passes
 
 
-def test_omitted_volume_ratio_defaults_to_one_point_five(monkeypatch, tmp_path):
+@pytest.mark.parametrize("bottom_vol,passes", [(1600.0, False), (2000.0, False), (2001.0, True)])
+def test_omitted_volume_ratio_defaults_to_two(bottom_vol, passes, monkeypatch, tmp_path):
     from scripts.data import export_strategy9_pool as exporter
 
-    frame, day = _signal_frame(bottom_vol=1300.0)
+    frame, day = _signal_frame(bottom_vol=bottom_vol)
     ymd = day.strftime("%Y%m%d")
-    assert evaluate_at(frame, day, code="600000.SH", r_min=1.2) is not None
-    assert evaluate_at(frame, day, code="600000.SH") is None
-    assert scan_symbol(frame, ymd, ymd, code="600000.SH") == []
-    assert scan_ohlcv({"600000.SH": frame}, ymd, ymd) == {}
+    assert evaluate_at(frame, day, code="600000.SH", r_min=1.5) is not None
+    assert (evaluate_at(frame, day, code="600000.SH") is not None) is passes
+    assert bool(scan_symbol(frame, ymd, ymd, code="600000.SH")) is passes
+    assert bool(scan_ohlcv({"600000.SH": frame}, ymd, ymd)) is passes
+    assert bool(exporter.event_study_rows({"600000.SH": frame}, ymd, ymd)) is passes
     monkeypatch.setattr(exporter, "resolve_period_root", lambda _: tmp_path)
     monkeypatch.setattr(exporter, "load_daily_ohlcv", lambda *a, **kw: {"600000.SH": frame})
     out = tmp_path / "pool"
-    assert export_main(["--start", ymd, "--end", ymd, "--codes", "600000", "--out-dir", str(out)]) == 0
-    assert not (out / f"{ymd}.csv").exists()
+    assert export_main(["--start", ymd, "--end", ymd, "--codes", "600000",
+                        "--out-dir", str(out), "--event-study"]) == 0
+    assert (out / f"{ymd}.csv").exists() is passes
+    assert bool(len(pd.read_csv(out / "event_study.csv"))) is passes
 
 
 @pytest.mark.parametrize("lead", [10, 20, 30, 40])
@@ -326,8 +341,8 @@ def test_top_lead_strict_boundaries_and_cli(lead, extra, passes, monkeypatch, tm
     assert bool(len(pd.read_csv(out / "event_study.csv"))) is passes
 
 
-@pytest.mark.parametrize("gap,passes", [(11, False), (21, True)])
-def test_omitted_top_lead_defaults_to_twenty(gap, passes, monkeypatch, tmp_path):
+@pytest.mark.parametrize("gap,passes", [(21, False), (40, False), (41, True)])
+def test_omitted_top_lead_defaults_to_forty(gap, passes, monkeypatch, tmp_path):
     from scripts.data import export_strategy9_pool as exporter
 
     frame, day = _signal_frame(top_ago=10 + gap)
@@ -349,7 +364,7 @@ def test_omitted_top_lead_defaults_to_twenty(gap, passes, monkeypatch, tmp_path)
     assert bool(len(pd.read_csv(out / "event_study.csv"))) is passes
 
 
-@pytest.mark.parametrize("lead", [0, 15, 25, 50, -10, "abc", float("nan"), float("inf")])
+@pytest.mark.parametrize("lead", [0, 15, 25, 41, 50, -10, "abc", float("nan"), float("inf")])
 def test_invalid_top_lead_rejected_before_scanning(lead):
     from scripts.data.export_strategy9_pool import event_study_rows
 

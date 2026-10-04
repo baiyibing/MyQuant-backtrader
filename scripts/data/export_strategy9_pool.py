@@ -267,12 +267,12 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap.add_argument(
         "--vol-ratio", type=resolve_vol_ratio, default=R_MIN,
         metavar="{1.2,1.5,2}",
-        help="bottom volume must be strictly greater than top volume times this ratio (default: 1.5)",
+        help="bottom volume must be strictly greater than top volume times this ratio (default: 2)",
     )
     ap.add_argument(
         "--top-lead", type=resolve_top_lead, default=MIN_TOP_LEAD,
         metavar="{10,20,30,40}",
-        help="top must precede bottom by strictly more than this many trading bars (default: 20)",
+        help="top must precede bottom by strictly more than this many trading bars (default: 40)",
     )
     ap.add_argument(
         "--turnover-check", action="store_true", default=False,
