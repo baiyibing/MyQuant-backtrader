@@ -70,7 +70,7 @@ from backtest.research.strategy8_6_rules import STOP_PCT as V8_6_STOP
 from backtest.research.strategy8_6_rules import take_profit_reason as v8_6_take
 from backtest.research.strategy8_rules import STOP_PCT as V8_STOP
 from backtest.research.strategy8_rules import take_profit_reason as v8_take
-from backtest.research.strategy9_rules import STOP_PCT as V9_STOP
+from backtest.research.strategy9_rules import stop_range_amplitude
 from backtest.research.strategy9_rules import take_profit_reason as v9_take
 from backtest.research.strategy10_rules import STOP_PCT as V10_STOP
 from backtest.research.strategy_topk_dropout_rules import STOP_PCT as TOPK_STOP
@@ -133,7 +133,6 @@ _PERCENT_STOP: dict[str, float] = {
     "version8_4": float(V8_4_STOP),
     "version8_5": float(V8_5_STOP),
     "version8_6": float(V8_6_STOP),
-    "version9": float(V9_STOP),
     "version10": float(V10_STOP),
     "topk_dropout": float(TOPK_STOP),
     "topk_score_exit": float(TOPK_SCORE_EXIT_STOP),
@@ -314,6 +313,36 @@ def _stage_exit(
     return BarScanExit("skip", None, "", new_peak)
 
 
+def _version9_range_stop(
+    bar: OhlcBar,
+    *,
+    cost: float,
+    peak: float,
+    ratio: float,
+    timing: FillTiming,
+    price: FillPrice,
+    next_bar: OhlcBar | None,
+) -> BarScanExit | None:
+    """Apply today's trailing range stop. None means the bar did not hit it.
+
+    ``ratio`` is already (max high - min low) / prior close, excluding day T.
+    A ratio outside (0, 1) is kept: the trigger is still cost * (1 - ratio).
+    """
+    opening, high, low, close = _ohlc(bar, "bar")
+    new_peak = high if high > peak else peak
+    trigger = float(cost) * (1.0 - float(ratio))
+    if opening <= trigger:
+        result = BarScanExit("fill", opening, "stop_loss:gap_open", new_peak)
+    elif low <= trigger:
+        if price == "close" and timing == "same_bar":
+            result = BarScanExit("fill", close, "stop_loss:touch:bar_close", new_peak)
+        else:
+            result = BarScanExit("fill", trigger, "stop_loss:touch", new_peak)
+    else:
+        return None
+    return apply_fill_timing(result, timing=timing, next_bar=next_bar)
+
+
 def invoke_minute_strategy(
     name: str,
     bar: OhlcBar,
@@ -332,6 +361,8 @@ def invoke_minute_strategy(
     session_open: bool = True,
     dropout_sell: bool | None = None,
     sx0_sell: bool | None = None,
+    daily_bars=None,
+    as_of=None,
 ) -> BarScanExit:
     """对一个已可卖的持仓扫一根 K。``n_days`` < 1 不是可卖 bar，直接拒绝。
 
@@ -375,6 +406,18 @@ def invoke_minute_strategy(
             raise ValueError("topk_score_exit dropout_sell must be a bool")
         if not isinstance(sx0_sell, bool):
             raise ValueError("topk_score_exit sx0_sell must be a bool")
+
+    if key == "version9" and daily_bars is not None:
+        if as_of is None:
+            raise ValueError("version9 range stop requires as_of")
+        ratio = stop_range_amplitude(daily_bars, as_of)
+        if ratio is not None:
+            stopped = _version9_range_stop(
+                bar, cost=cost_f, peak=peak_f, ratio=float(ratio),
+                timing=timing, price=price, next_bar=next_bar,
+            )
+            if stopped is not None:
+                return stopped
 
     if key in _DRAWDOWN:
         book = _DRAWDOWN[key]

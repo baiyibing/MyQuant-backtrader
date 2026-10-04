@@ -212,7 +212,7 @@ def add_strategy6_ratio_args(ap: argparse.ArgumentParser) -> None:
         "--stop-pct",
         type=float,
         default=None,
-        help="stop-loss fraction override (v6 0.06, v8 0.20, v9 0.08)",
+        help="stop-loss fraction override (v6 0.06, v8 0.20, v9 trailing range (no override))",
     )
     ap.add_argument(
         "--profit-base",
@@ -1000,23 +1000,27 @@ def _run_kwargs_version8_6(args) -> dict:
 def _apply_version9(
     *, stop_pct: Optional[float] = None, take_profit=None, record_params=None, **_
 ) -> dict:
-    resolved = strategy9_rules.STOP_PCT if stop_pct is None else float(stop_pct)
+    if stop_pct is not None:
+        raise SystemExit("version9 does not accept --stop-pct")
 
     def _tp(px, cost, peak, n_days):
         return strategy9_rules.take_profit_reason(px, cost, peak, n_days)
 
     def _rec(st):
-        strategy9_rules.record_strategy9_params(st, stop_pct=resolved)
+        strategy9_rules.record_strategy9_params(st)
 
     return {
-        "stop_pct": resolved,
+        "stop_pct": None,
+        "stop_range": strategy9_rules.stop_range_amplitude,
         "take_profit": _tp if take_profit is None else take_profit,
         "record_params": _rec if record_params is None else record_params,
     }
 
 
 def _run_kwargs_version9(args) -> dict:
-    return {"strategy": "version9", "stop_pct": _stop_override_from_args(args)}
+    if getattr(args, "stop_pct", None) is not None:
+        raise SystemExit("version9 does not accept --stop-pct")
+    return {"strategy": "version9"}
 
 
 def _apply_version10(

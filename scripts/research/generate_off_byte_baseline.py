@@ -12,7 +12,7 @@ Six per_name strategy-8 books use the explicit 2026-09-26 correction overlay;
 other historical cases use the immutable files unless explicitly overlaid.
 version12 uses the 2026-10-04 whole-position MA10-stop overlay (69cf371);
 --record-s12 records only its daily/minute cases and refuses overwrite.
-version9 uses the 2026-10-04 10% take-profit overlay (f7475a98);
+version9 uses the 2026-10-04 trailing 20-bar range overlay;
 --record-s9 records only its daily/minute cases and refuses overwrite.
 version6_1 (20th book, bee0b91) is covered by a scoped additive overlay
 (precedent #212): historical golden stays 19 books / 39 cases; --record-v61
@@ -76,8 +76,8 @@ S12_GOLDEN = ROOT / "tests/fixtures/off_byte_baseline_s12_ma10_stop_20261004.jso
 S12_RULE_REVISION = "s12-whole-position-ma10-stop-69cf371"
 S12_BOOK_NAMES = ("version12",)
 S12_CASES = tuple((book, engine) for book in S12_BOOK_NAMES for engine in ("daily", "minute"))
-S9_GOLDEN = ROOT / "tests/fixtures/off_byte_baseline_s9_take_profit_10pct_20261004.json"
-S9_RULE_REVISION = "s9-take-profit-10pct-f7475a98"
+S9_GOLDEN = ROOT / "tests/fixtures/off_byte_baseline_s9_range_amp_20_trailing_20261004.json"
+S9_RULE_REVISION = "s9-range-amp-20-trailing-20261004"
 S9_BOOK_NAMES = ("version9",)
 S9_CASES = tuple((book, engine) for book in S9_BOOK_NAMES for engine in ("daily", "minute"))
 BOOK_NAMES = HISTORICAL_BOOK_NAMES + V61_BOOK_NAMES
@@ -134,6 +134,19 @@ def _eligible_buy(_code, _day):
 
 def run_case(book: str, engine: str, *, explicit_false: bool = False):
     bars, minutes, pools, start, end, dates = frozen_inputs()
+    if book == "version9":
+        # First evaluation is dates[13]: 13 prior frozen bars need 8 extra bars.
+        extra = pd.bdate_range(end=dates[0] - pd.Timedelta(days=1), periods=8)
+        prefix = pd.DataFrame([bars.iloc[0].to_dict()] * len(extra), index=extra)
+        rows = []
+        for day in extra:
+            for _, row in minutes.loc[minutes["ymd"] == dates[0].strftime("%Y%m%d")].iterrows():
+                values = row.to_dict()
+                values["ymd"] = day.strftime("%Y%m%d")
+                values["time"] = day + pd.Timedelta(minutes=int(values["hm"]))
+                rows.append(values)
+        bars = pd.concat([prefix, bars])
+        minutes = pd.concat([pd.DataFrame(rows).set_index("time"), minutes])
     daily_bars, minute_bars = {CODE: bars}, {CODE: minutes}
     index_gate = {d.strftime("%Y%m%d"): False for d in dates[12:]}
     kwargs = {"strategy": book, "ration": "file_order", "ration_seed": 0,
@@ -434,7 +447,7 @@ def main():
     mode.add_argument("--record-s12", action="store_true",
                       help="Record only the 2 version12 MA10-stop cases")
     mode.add_argument("--record-s9", action="store_true",
-                      help="Record only the 2 version9 10% take-profit cases")
+                      help="Record only the 2 version9 trailing range cases")
     args = parser.parse_args()
     if args.record_s8:
         if S8_GOLDEN.exists():
@@ -521,7 +534,7 @@ def main():
         print(f"Wrote {S12_GOLDEN}: 2 corrected cases / 4 production CSV hashes")
         return
     if args.record_s9:
-        if S9_GOLDEN.exists():
+        if S9_GOLDEN.name == "off_byte_baseline_s9_take_profit_10pct_20261004.json" or S9_GOLDEN.exists():
             parser.error("The version9 overlay already exists; refusing to overwrite")
         if pd.__version__ != "3.0.6":
             parser.error("version9 recording requires the authorized pandas 3.0.6 environment")
@@ -534,13 +547,14 @@ def main():
             assert_case_bytes(case, case)
             assert case["fill_counts"]["BUY"] > 0 and case["fill_counts"]["SELL"] > 0
         from backtest.research import strategy9_rules as rules
-        assert rules.STOP_PCT == 0.08
         assert rules.TAKE_PROFIT_PCT == 0.10
         assert rules.MAX_HOLD == 20
         for case in cases.values():
             assert case["structured"]["stats"]["profit_target"] == 0.10
-            assert all(row["reason"] == "profit_take:target"
-                       for row in case["structured"]["fills"] if row["side"] == "SELL")
+            assert case["structured"]["stats"]["max_hold"] == 20
+            assert all(row["reason"] in {"stop_loss:gap_open", "stop_loss:touch", "stop_loss:close"}
+                       for row in case["structured"]["fills"]
+                       if row["side"] == "SELL" and row["reason"].startswith("stop_loss"))
         payload = {
             "rule_revision": S9_RULE_REVISION,
             "historical_raw_sha256": HISTORICAL_GOLDEN_SHA256,

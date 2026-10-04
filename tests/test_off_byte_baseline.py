@@ -122,7 +122,7 @@ def test_version12_overlay_only_replaces_ma10_stop_cases():
             ("ma_signal:MA10-stop", n) for n in (93000, 100000, 108100)]
 
 
-def test_version9_overlay_only_replaces_take_profit_cases():
+def test_version9_overlay_only_replaces_range_stop_cases():
     golden = load_s9_golden()
     assert golden["captured_environment"]["pandas"] == "3.0.6"
     assert set(golden["cases"]) == {"version9/daily", "version9/minute"}
@@ -133,10 +133,12 @@ def test_version9_overlay_only_replaces_take_profit_cases():
         assert_case_canonical(book, actual, case, canonical)
         assert recorded == "3.0.6"
         assert case["structured"]["stats"]["profit_target"] == 0.10
-        assert case["structured"]["stats"]["sell_profit_take"] == 2
+        assert case["structured"]["stats"]["max_hold"] == 20
+        assert case["fill_counts"]["BUY"] > 0
+        assert case["fill_counts"]["SELL"] > 0
         sells = [t for t in case["structured"]["fills"] if t["side"] == "SELL"]
-        assert [(t["reason"], t["shares"]) for t in sells] == [
-            ("profit_take:target", n) for n in (100000, 108100)]
+        assert all(t["reason"] in {"stop_loss:gap_open", "stop_loss:touch", "stop_loss:close"}
+                   for t in sells if t["reason"].startswith("stop_loss"))
 
 
 @pytest.mark.parametrize("explicit_false", [False, True], ids=["omitted", "explicit-off"])

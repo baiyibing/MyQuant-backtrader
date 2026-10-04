@@ -1,0 +1,17 @@
+{
+  "rule_revision": "s9-range-amp-20-trailing-20261004",
+  "historical_sha256": "2f578d6fe9e601ad84a94bb6a269e1b5193c51ca4dd908366022769f0e1f31c2",
+  "captured_environment": {
+    "pandas": "3.0.6"
+  },
+  "sha256_csv_bytes": {
+    "version9/daily": {
+      "trades": "19e2b0f92ee11747d3ac8e8dd888f65d1c1a8237b5d2621968a42cd4a2147389",
+      "equity": "18ebf7697d504f56f1ab72090fd2aef4f0a94741eadfa8152e3a1b8d6344d483"
+    },
+    "version9/minute": {
+      "trades": "8da500dba1db59c8f7c403bb9d4c2084b4d90828605da99688b26df99d0d64a1",
+      "equity": "21f2e6a3376ff5fa5b05d233fe754d43838b8fb0710cf28bd5838db9f27ed1db"
+    }
+  }
+}
