@@ -24,16 +24,18 @@ from backtest.research.strategy9_rules import (
 )
 
 
-def test_version9_hooks_and_max_hold():
-    hooks = apply_csv_strategy("version9")
+@pytest.mark.parametrize("enabled", [False, True])
+def test_version9_hooks_and_max_hold(enabled):
+    hooks = apply_csv_strategy("version9", max_hold=enabled)
     assert hooks["name"] == "version9"
     assert hooks["book"] == "v9"
     assert hooks["allow_add"] is False
     assert hooks["peak_gap_min"] == 0
     assert hooks["stop_pct"] is None
     assert hooks["take_profit"](10.0, 10.0, 10.0, MAX_HOLD - 1) is None
-    assert hooks["take_profit"](10.0, 10.0, 10.0, MAX_HOLD) == "force_sell:max_hold"
-    assert take_profit_reason(1, 1, 1, MAX_HOLD) == "force_sell:max_hold"
+    assert hooks["take_profit"](10.0, 10.0, 10.0, MAX_HOLD) == ("force_sell:max_hold" if enabled else None)
+    assert take_profit_reason(1, 1, 1, MAX_HOLD, max_hold=enabled) == ("force_sell:max_hold" if enabled else None)
+    assert hooks["take_profit"](11., 10., 11., MAX_HOLD) == "profit_take:target"
     assert get_book("9").tag == "v9"
     assert get_book("v9").name == "version9"
 
@@ -52,7 +54,7 @@ def test_version9_take_profit_target_and_params():
         "stop_mode": "range_amp_20_trailing",
         "range_bars": 20,
         "profit_target": 0.10,
-        "max_hold": 20,
+        "max_hold": None,
     }
 
 
@@ -78,7 +80,11 @@ def test_daily_cli_version9_refuses_stock_pool(monkeypatch):
         sim.main(["--strategy", "version9", "--start", "20260303", "--end", "20260323"])
 
 
-def test_daily_cli_version9_accepts_explicit_pool(tmp_path, monkeypatch):
+@pytest.mark.parametrize("host", ["daily", "minute"])
+@pytest.mark.parametrize("enabled", [False, True])
+def test_cli_version9_accepts_explicit_pool(tmp_path, monkeypatch, enabled, host):
+    import backtest.research.csv_minute_backtest as minute
+    cli = sim if host == "daily" else minute
     seen = {}
 
     def _run(*_a, **kwargs):
@@ -89,12 +95,12 @@ def test_daily_cli_version9_accepts_explicit_pool(tmp_path, monkeypatch):
         st.stats["stop_pct"] = None
         return st
 
-    monkeypatch.setattr(sim, "run", _run)
+    monkeypatch.setattr(cli, "run", _run)
     dest = tmp_path / "s9"
     dest.mkdir()
     (dest / "20260303.csv").write_text("600000\n", encoding="utf-8", newline="\n")
     out = tmp_path / "out"
-    rc = sim.main(
+    rc = cli.main(
         [
             "--strategy",
             "version9",
@@ -106,14 +112,16 @@ def test_daily_cli_version9_accepts_explicit_pool(tmp_path, monkeypatch):
             str(dest),
             "--out-dir",
             str(out),
-        ]
+        ] + (["--max-hold"] if enabled else [])
     )
+    assert seen["max_hold"] is enabled
     assert rc == 0
     assert Path(seen["pool_dir"]) == dest
     assert (out / "summary.txt").is_file()
 
 
-def test_version9_force_sells_after_max_hold():
+@pytest.mark.parametrize("enabled", [False, True])
+def test_version9_force_sells_after_max_hold(enabled):
     idx = pd.bdate_range("2025-11-03", periods=26)
     pre = pd.bdate_range(end=idx[0] - pd.Timedelta(days=1), periods=21)
     full = pre.append(idx)
@@ -132,9 +140,14 @@ def test_version9_force_sells_after_max_hold():
         start,
         end,
         strategy="version9",
+        max_hold=enabled,
     )
     sells = [t for t in st.trades if t["side"] == "SELL"]
     assert st.stats["buys"] == 1
+    assert st.stats["max_hold"] == (20 if enabled else None)
+    if not enabled:
+        assert sells == []
+        return
     assert st.stats["sell_force"] == 1
     assert sells[0]["reason"] == "force_sell:max_hold"
     assert sells[0]["date"] == idx[MAX_HOLD + 1].strftime("%Y%m%d")
@@ -261,3 +274,15 @@ def test_cli_refuses_stop_override(host, tmp_path):
         (sim.main if host == "daily" else minute_main)([
             "--strategy", "version9", "--start", "20260303", "--end", "20260323",
             "--pool-dir", str(tmp_path), "--stop-pct", "0.08"])
+
+
+@pytest.mark.parametrize("host", ["daily", "minute"])
+def test_cli_max_hold_help_and_refuse(host, capsys):
+    from backtest.research.csv_minute_backtest import main as minute_main
+    main = sim.main if host == "daily" else minute_main
+    with pytest.raises(SystemExit) as exc:
+        main(["--help"])
+    assert exc.value.code == 0
+    assert "--max-hold" in capsys.readouterr().out
+    with pytest.raises(SystemExit, match="--max-hold.*version9"):
+        main(["--strategy", "version6", "--max-hold"])

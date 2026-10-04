@@ -232,7 +232,7 @@ _FILL = [
     ("version8_4", OhlcBar(11.0, 12.1, 10.5, 12.0), {}, "fill", 12.0, "profit_take:target"),
     ("version8_5", OhlcBar(10.2, 10.5, 10.1, 10.4), {}, "fill", 10.4, "profit_take:target"),
     ("version8_6", OhlcBar(10.6, 11.0, 10.4, 10.5), {"peak": 11.0}, "fill", 10.5, "trail:max1004_80"),
-    ("version9", OhlcBar(10.0, 10.05, 9.95, 10.04), {"n_days": 20}, "fill", 10.04, "force_sell:max_hold"),
+    ("version9", OhlcBar(10.0, 10.05, 9.95, 10.04), {"n_days": 20, "max_hold": True}, "fill", 10.04, "force_sell:max_hold"),
     ("version10", OhlcBar(10.5, 11.0, 10.2, 10.30), {"peak": 11.0}, "fill", 10.30, "trail:T+1"),
     ("version11", OhlcBar(10.2, 10.3, 10.0, 10.0), {"level": 10.5}, "fill", 10.0, "ma_signal:SMA5"),
     ("version12", OhlcBar(10.2, 10.3, 10.0, 10.0), {"level": 10.5}, "fill", 10.0, "ma_signal:MA10-stop"),

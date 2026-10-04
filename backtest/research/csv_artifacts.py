@@ -177,10 +177,9 @@ def summarize(
                 f"| T+1止盈豁免{extra}"
             )
     elif st.stats.get("sell_book") == "v9":
-        lines.append(
-            f"  参数: 止损 {stop_text} | 满持有 "
-            f"{int(st.stats.get('max_hold', 20))} 日 force_sell"
-        )
+        max_hold = st.stats.get("max_hold")
+        hold_text = f"满持有 {int(max_hold)} 日 force_sell" if max_hold is not None else "满持有强平 OFF"
+        lines.append(f"  参数: 止损 {stop_text} | {hold_text}")
     elif st.stats.get("sell_book") == "v6_1":
         lines.append(
             f"  参数: 止损 {stop_text} | T+1起评止盈 | 峰值涨幅每"

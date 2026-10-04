@@ -152,6 +152,8 @@ def run_case(book: str, engine: str, *, explicit_false: bool = False):
     kwargs = {"strategy": book, "ration": "file_order", "ration_seed": 0,
               "total_cash": 5_000_000., "daily_quota": 1_000_000.,
               "index_block_new": index_gate}
+    if book == "version9":
+        kwargs["max_hold"] = True
     if book.startswith("topk_"):
         daily_bars = {code: bars.copy() for code in TOPK_CODES}
         minute_bars = {code: minutes.copy() for code in TOPK_CODES}

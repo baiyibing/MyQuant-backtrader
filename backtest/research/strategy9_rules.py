@@ -2,7 +2,7 @@
 
 买点不在本模块：由 ``export_strategy9_pool.py`` 写成契约日 CSV，引擎按名单买。
 卖：止损幅度每个交易日从此前 20 根日线重算，不在入场锁定；盈利达到成本的 10% 返回已有 reason
-``profit_take:target``（不是新订单类型）。满 20 个交易日仍是
+``profit_take:target``（不是新订单类型）。启用 --max-hold 后满 20 个交易日记
 ``force_sell:max_hold``，次日开盘离场。无分档回撤止盈；不加仓。
 禁止默认 ``stock_pool/``（那是隔夜手工池，不是本信号）。
 """
@@ -33,7 +33,7 @@ HELP_LOCK = """
   缺窗口当天不止损、不回落固定比例；--stop-pct 不接受。
   盈利达到成本的 10% 返回已有 reason
   profit_take:target（不是新订单类型），次日开盘卖。无分档回撤止盈；不加仓。
-  持仓交易日数 n_days>=20 收盘记 force_sell:max_hold，次日开盘卖
+  20 交易日强平默认 OFF；启用 --max-hold 后，持仓交易日数 n_days>=20 收盘记 force_sell:max_hold，次日开盘卖
   （跌停则 defer）。已持仓票跳过，不叠加 lot；peak_gap_min=0。
   落盘：backtest_output/csv_{daily|minute}_v9_{start}_{end}/
 """
@@ -44,25 +44,26 @@ def take_profit_reason(
     cost: float,
     peak: float,
     n_days: int = 1,
+    *, max_hold: bool = False,
 ) -> Optional[str]:
-    """T+1 后价格达到成本的 10% 优先止盈，否则满持有期强平。"""
+    """T+1 后价格达到成本的 10% 优先止盈，启用 max_hold 时否则满持有期强平。"""
     del peak
     if n_days < 1:
         return None
     if cost > 0 and float(px) >= float(cost) * (1.0 + TAKE_PROFIT_PCT):
         return "profit_take:target"
-    if int(n_days) >= MAX_HOLD:
+    if max_hold and int(n_days) >= MAX_HOLD:
         return "force_sell:max_hold"
     return None
 
 
-def record_strategy9_params(st) -> None:
+def record_strategy9_params(st, *, max_hold: bool = False) -> None:
     st.stats["sell_book"] = BOOK_TAG
     st.stats["stop_pct"] = None
     st.stats["stop_mode"] = "range_amp_20_trailing"
     st.stats["range_bars"] = RANGE_BARS
     st.stats["profit_target"] = TAKE_PROFIT_PCT
-    st.stats["max_hold"] = MAX_HOLD
+    st.stats["max_hold"] = MAX_HOLD if max_hold else None
 
 
 def stop_range_status(frame, day):
