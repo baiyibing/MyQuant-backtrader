@@ -26,6 +26,8 @@ if str(REPO_ROOT) not in sys.path:
 from backtest.research.bottom_vol_over_top import (  # noqa: E402
     FORWARD_HORIZONS,
     MIN_LISTED_BARS,
+    MIN_TOP_LEAD,
+    resolve_top_lead,
     R_MIN,
     resolve_vol_ratio,
     evaluate_at,
@@ -177,9 +179,11 @@ def event_study_rows(
     *,
     names: Optional[Mapping[str, str]] = None,
     r_min: float = R_MIN,
+    top_lead: int = MIN_TOP_LEAD,
     turnover_check: bool = False,
 ) -> list[dict]:
     r_min = resolve_vol_ratio(r_min)
+    top_lead = resolve_top_lead(top_lead)
     name_map = dict(names or {})
     rows: list[dict] = []
     for code, frame in frames.items():
@@ -189,7 +193,7 @@ def event_study_rows(
         for ts in frame.index[(frame.index >= t0) & (frame.index <= t1)]:
             sig = evaluate_at(
                 frame, ts, code=code, name=name_map.get(code, ""), r_min=r_min,
-                turnover_check=turnover_check,
+                top_lead=top_lead, turnover_check=turnover_check,
             )
             if sig is None:
                 continue
@@ -266,6 +270,11 @@ def main(argv: Optional[list[str]] = None) -> int:
         help="bottom volume must be strictly greater than top volume times this ratio (default: 1.5)",
     )
     ap.add_argument(
+        "--top-lead", type=resolve_top_lead, default=MIN_TOP_LEAD,
+        metavar="{10,20,30,40}",
+        help="top must precede bottom by strictly more than this many trading bars (default: 20)",
+    )
+    ap.add_argument(
         "--turnover-check", action="store_true", default=False,
         help="require bottom/top max float-share turnover >= 0.10/0.02 when both are computable (default: off)",
     )
@@ -309,7 +318,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     }
     days = scan_ohlcv(
         kept, args.start, args.end, r_min=args.vol_ratio,
-        turnover_check=args.turnover_check,
+        top_lead=args.top_lead, turnover_check=args.turnover_check,
     )
     written = write_strategy9_pool(days, out_dir)
     failures = validate_pool_dir(out_dir)
@@ -322,7 +331,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     if args.event_study:
         rows = event_study_rows(
             kept, args.start, args.end, r_min=args.vol_ratio,
-            turnover_check=args.turnover_check,
+            top_lead=args.top_lead, turnover_check=args.turnover_check,
         )
         dest = write_event_study(rows, out_dir / "event_study.csv")
         print(f"s9 event-study {len(rows)} rows -> {dest}", flush=True)

@@ -18,7 +18,8 @@ from backtest.research.market_layer import board_limit_pct, is_st_name
 
 LOOKBACK = 120
 VOL_HALF = 3
-MIN_TOP_LEAD = 10
+MIN_TOP_LEAD = 20
+TOP_LEADS = (10, 20, 30, 40)
 MIN_BOTTOM_AGE = 1
 MAX_BOTTOM_AGE = 15
 R_MIN = 1.5
@@ -51,6 +52,18 @@ def resolve_vol_ratio(value: float) -> float:
         if abs(ratio - allowed) <= 1e-9:
             return allowed
     raise ValueError("volume ratio must be 1.2, 1.5, or 2")
+
+
+def resolve_top_lead(value: float) -> int:
+    """Validate the trading-bar lead and canonicalize with absolute tolerance."""
+    try:
+        lead = float(value)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError("top lead must be 10, 20, 30, or 40") from exc
+    for allowed in TOP_LEADS:
+        if abs(lead - allowed) <= 1e-9:
+            return allowed
+    raise ValueError("top lead must be 10, 20, 30, or 40")
 
 
 def is_main_board_code(code: str) -> bool:
@@ -150,10 +163,12 @@ def evaluate_at(
     float_shares: Optional[pd.Series] = None,
     lookback: int = LOOKBACK,
     r_min: float = R_MIN,
+    top_lead: int = MIN_TOP_LEAD,
     turnover_check: bool = False,
 ) -> Optional[BottomVolSignal]:
     """Return a signal when T is a valid 底量超顶量 bar; else None."""
     r_min = resolve_vol_ratio(r_min)
+    top_lead = resolve_top_lead(top_lead)
     if not is_main_board_code(code) or is_st_name(name):
         return None
     if any(col not in df.columns for col in REQUIRED_OHLCV):
@@ -176,7 +191,7 @@ def evaluate_at(
         return None
     if not (MIN_BOTTOM_AGE <= bottom_ago <= MAX_BOTTOM_AGE):
         return None
-    if top_ago <= bottom_ago + MIN_TOP_LEAD:
+    if top_ago <= bottom_ago + top_lead:
         return None
 
     bottom_i = t - bottom_ago
@@ -226,17 +241,19 @@ def scan_symbol(
     name: str = "",
     float_shares: Optional[pd.Series] = None,
     r_min: float = R_MIN,
+    top_lead: int = MIN_TOP_LEAD,
     turnover_check: bool = False,
 ) -> list[BottomVolSignal]:
     """Evaluate every bar in ``[start, end]`` that exists on ``df``."""
     r_min = resolve_vol_ratio(r_min)
+    top_lead = resolve_top_lead(top_lead)
     t0 = pd.Timestamp(start)
     t1 = pd.Timestamp(end)
     hits: list[BottomVolSignal] = []
     for ts in df.index[(df.index >= t0) & (df.index <= t1)]:
         sig = evaluate_at(
             df, ts, code=code, name=name, float_shares=float_shares, r_min=r_min,
-            turnover_check=turnover_check,
+            top_lead=top_lead, turnover_check=turnover_check,
         )
         if sig is not None:
             hits.append(sig)
@@ -250,16 +267,18 @@ def scan_ohlcv(
     *,
     names: Optional[Mapping[str, str]] = None,
     r_min: float = R_MIN,
+    top_lead: int = MIN_TOP_LEAD,
     turnover_check: bool = False,
 ) -> dict[str, list[str]]:
     """``{YYYYMMDD: [canonical codes]}`` for days that have at least one hit."""
     r_min = resolve_vol_ratio(r_min)
+    top_lead = resolve_top_lead(top_lead)
     name_map = dict(names or {})
     days: dict[str, list[str]] = {}
     for code, frame in frames.items():
         for sig in scan_symbol(
             frame, start, end, code=code, name=name_map.get(code, ""), r_min=r_min,
-            turnover_check=turnover_check,
+            top_lead=top_lead, turnover_check=turnover_check,
         ):
             days.setdefault(sig.ymd, []).append(code)
     return {ymd: sorted(set(codes)) for ymd, codes in days.items() if codes}

@@ -104,8 +104,8 @@ def test_does_not_fire_on_the_bottom_bar():
 
 
 def test_top_must_lead_bottom_by_more_than_ten_bars():
-    frame, day = _signal_frame(top_ago=15, bottom_ago=10)
-    assert evaluate_at(frame, day, code="600000.SH") is None
+    frame, day = _signal_frame(top_ago=20, bottom_ago=10)
+    assert evaluate_at(frame, day, code="600000.SH", top_lead=10) is None
 
 
 def test_rejects_close_above_bottom_cap():
@@ -298,3 +298,80 @@ def test_omitted_volume_ratio_defaults_to_one_point_five(monkeypatch, tmp_path):
     out = tmp_path / "pool"
     assert export_main(["--start", ymd, "--end", ymd, "--codes", "600000", "--out-dir", str(out)]) == 0
     assert not (out / f"{ymd}.csv").exists()
+
+
+@pytest.mark.parametrize("lead", [10, 20, 30, 40])
+@pytest.mark.parametrize("extra,passes", [(0, False), (1, True)])
+def test_top_lead_strict_boundaries_and_cli(lead, extra, passes, monkeypatch, tmp_path):
+    from scripts.data import export_strategy9_pool as exporter
+
+    frame, day = _signal_frame(top_ago=10 + lead + extra)
+    ymd = day.strftime("%Y%m%d")
+    frames = {"600000.SH": frame}
+    sig = evaluate_at(frame, day, code="600000.SH", top_lead=lead)
+    assert (sig is not None) is passes
+    if sig is not None:
+        assert (sig.top_ago, sig.bottom_ago) == (10 + lead + extra, 10)
+    assert bool(scan_symbol(frame, ymd, ymd, code="600000.SH", top_lead=lead)) is passes
+    assert bool(scan_ohlcv(frames, ymd, ymd, top_lead=lead)) is passes
+    assert bool(exporter.event_study_rows(frames, ymd, ymd, top_lead=lead)) is passes
+    monkeypatch.setattr(exporter, "resolve_period_root", lambda _: tmp_path)
+    monkeypatch.setattr(exporter, "load_daily_ohlcv", lambda *a, **kw: frames)
+    out = tmp_path / "pool"
+    assert export_main([
+        "--start", ymd, "--end", ymd, "--codes", "600000",
+        "--out-dir", str(out), "--top-lead", str(lead), "--event-study",
+    ]) == 0
+    assert (out / f"{ymd}.csv").exists() is passes
+    assert bool(len(pd.read_csv(out / "event_study.csv"))) is passes
+
+
+@pytest.mark.parametrize("gap,passes", [(11, False), (21, True)])
+def test_omitted_top_lead_defaults_to_twenty(gap, passes, monkeypatch, tmp_path):
+    from scripts.data import export_strategy9_pool as exporter
+
+    frame, day = _signal_frame(top_ago=10 + gap)
+    ymd = day.strftime("%Y%m%d")
+    frames = {"600000.SH": frame}
+    assert evaluate_at(frame, day, code="600000.SH", top_lead=10) is not None
+    assert (evaluate_at(frame, day, code="600000.SH") is not None) is passes
+    assert bool(scan_symbol(frame, ymd, ymd, code="600000.SH")) is passes
+    assert bool(scan_ohlcv(frames, ymd, ymd)) is passes
+    assert bool(exporter.event_study_rows(frames, ymd, ymd)) is passes
+    monkeypatch.setattr(exporter, "resolve_period_root", lambda _: tmp_path)
+    monkeypatch.setattr(exporter, "load_daily_ohlcv", lambda *a, **kw: frames)
+    out = tmp_path / "pool"
+    assert export_main([
+        "--start", ymd, "--end", ymd, "--codes", "600000",
+        "--out-dir", str(out), "--event-study",
+    ]) == 0
+    assert (out / f"{ymd}.csv").exists() is passes
+    assert bool(len(pd.read_csv(out / "event_study.csv"))) is passes
+
+
+@pytest.mark.parametrize("lead", [0, 15, 25, 50, -10, "abc", float("nan"), float("inf")])
+def test_invalid_top_lead_rejected_before_scanning(lead):
+    from scripts.data.export_strategy9_pool import event_study_rows
+
+    with pytest.raises(ValueError, match="top lead"):
+        evaluate_at(pd.DataFrame(), "20240102", code="600000.SH", top_lead=lead)
+    with pytest.raises(ValueError, match="top lead"):
+        scan_symbol(pd.DataFrame(), "20240102", "20240103", code="600000.SH", top_lead=lead)
+    with pytest.raises(ValueError, match="top lead"):
+        scan_ohlcv({}, "20240102", "20240103", top_lead=lead)
+    with pytest.raises(ValueError, match="top lead"):
+        event_study_rows({}, "20240102", "20240103", top_lead=lead)
+    with pytest.raises(SystemExit):
+        export_main(["--start", "20240102", "--end", "20240103", f"--top-lead={lead}"])
+
+
+@pytest.mark.parametrize("lead", [10, 20, 30, 40])
+def test_top_lead_tolerance_returns_canonical_int(lead):
+    from backtest.research.bottom_vol_over_top import resolve_top_lead
+
+    for delta in (-5e-10, 0, 5e-10):
+        got = resolve_top_lead(lead + delta)
+        assert got == lead
+        assert type(got) is int
+    with pytest.raises(ValueError):
+        resolve_top_lead(lead + 2e-9)
