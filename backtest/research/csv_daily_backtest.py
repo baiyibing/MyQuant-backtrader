@@ -29,6 +29,10 @@ import pandas as pd
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, REPO)
 
+from backtest.research.strategy9_rules import (  # noqa: E402
+    evaluate_stop_range, RANGE_LOOKBACK_CALENDAR_DAYS,
+)
+
 from backtest.research.csv_strategy_books import (  # noqa: E402
     HELP_LOCK_V6,
     HELP_LOCK_V8,
@@ -390,9 +394,13 @@ def simulate(
 
                     if t1_sellable(calendar[pos.entry_idx].date(), day.date()):
                         stop_enabled = isinstance(stop_pct, float) and 0 < stop_pct < 1
+                        stop_ratio = stop_pct
+                        if "stop_range" in hooks:
+                            stop_ratio = evaluate_stop_range(hooks, bars[code], day, st.stats)
+                            stop_enabled = stop_ratio is not None
                         close = float(row["close"])
                         if stop_enabled:
-                            trigger = pos.cost * (1.0 - stop_pct)
+                            trigger = pos.cost * (1.0 - stop_ratio)
                             if stop_fill == "close":
                                 if close <= trigger:
                                     _sell(
@@ -585,8 +593,13 @@ def simulate(
                         if pos.position_id not in added or pos.entry_idx >= i or pos.pending_exit:
                             continue
                         reason = None
-                        if isinstance(stop_pct, float) and 0 < stop_pct < 1:
-                            if close <= pos.cost * (1.0 - stop_pct):
+                        stop_ratio = stop_pct
+                        stop_enabled = isinstance(stop_pct, float) and 0 < stop_pct < 1
+                        if "stop_range" in hooks:
+                            stop_ratio = evaluate_stop_range(hooks, bars[code], day, st.stats)
+                            stop_enabled = stop_ratio is not None
+                        if stop_enabled:
+                            if close <= pos.cost * (1.0 - stop_ratio):
                                 reason = "stop_loss:close"
                         if not reason:
                             reason = (
@@ -704,6 +717,8 @@ def run(
         if normalize_csv_strategy(strategy) in ("version4", "version12")
         else (20 if return_threshold_filter else WARMUP_DAYS)
     )
+    if normalize_csv_strategy(strategy) == "version9":
+        warm_days = max(warm_days, RANGE_LOOKBACK_CALENDAR_DAYS)
     if week_ma_gate:
         from backtest.research.topk_dropout_eligibility import WEEK_MA_WARMUP_DAYS
 

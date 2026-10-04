@@ -27,6 +27,10 @@ import pandas as pd
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, REPO)
 
+from backtest.research.strategy9_rules import (  # noqa: E402
+    evaluate_stop_range, RANGE_LOOKBACK_CALENDAR_DAYS,
+)
+
 from backtest.research.csv_ledger import (  # noqa: E402
     CHASE_HM,
     DEFAULT_TOTAL_CASH,
@@ -315,6 +319,7 @@ def scan_held_day_python(
     n_days: int,
     can_sell: bool,
     stop_pct: Optional[float],
+    stop_range_ratio: Optional[float] = None,
     profit_base: float,
     trail_ratio: float,
     pos_trail: float = 0.0,
@@ -341,6 +346,9 @@ def scan_held_day_python(
     validate_low(minute_stop_trigger, l, c)
     del pos_trail  # reserved for future; kept for API parity with callers
     stop_enabled = isinstance(stop_pct, float) and 0 < stop_pct < 1
+    if stop_range_ratio is not None:
+        stop_pct = stop_range_ratio
+        stop_enabled = True
     trigger = cost * (1.0 - stop_pct) if stop_enabled else None
     new_peak = float(peak)
     new_peak_hm = int(peak_hm)
@@ -460,6 +468,7 @@ def scan_held_day(
     n_days: int,
     can_sell: bool,
     stop_pct: Optional[float],
+    stop_range_ratio: Optional[float] = None,
     profit_base: float,
     trail_ratio: float,
     pos_trail: float = 0.0,
@@ -491,6 +500,7 @@ def scan_held_day(
     """
     can_offload = (
         minute_stop_trigger == "close"
+        and stop_range_ratio is None
         and _want_numba_scan(use_numba)
         and _NUMBA_SCAN_AVAILABLE
         and sell_gate is None
@@ -550,6 +560,7 @@ def scan_held_day(
         n_days=n_days,
         can_sell=can_sell,
         stop_pct=stop_pct,
+        stop_range_ratio=stop_range_ratio,
         profit_base=profit_base,
         trail_ratio=trail_ratio,
         pos_trail=pos_trail,
@@ -983,6 +994,8 @@ def simulate(
                         n_days=n_days,
                         can_sell=t1_sellable(calendar[pos.entry_idx].date(), day.date()),
                         stop_pct=stop_pct,
+                        stop_range_ratio=(evaluate_stop_range(hooks, ddf, day, st.stats)
+                                          if "stop_range" in hooks and n_days >= 1 else None),
                         profit_base=profit_base if profit_base is not None else 0.0,
                         trail_ratio=0.0,
                         pos_trail=pos_trail,
@@ -1367,6 +1380,8 @@ def run(
         if book in ("version4", "version12")
         else (20 if return_threshold_filter else WARMUP_DAYS)
     )
+    if normalize_csv_strategy(strategy) == "version9":
+        warm_days = max(warm_days, RANGE_LOOKBACK_CALENDAR_DAYS)
     if week_ma_gate:
         from backtest.research.topk_dropout_eligibility import WEEK_MA_WARMUP_DAYS
 
