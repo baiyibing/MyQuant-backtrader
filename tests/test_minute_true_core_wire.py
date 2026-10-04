@@ -633,3 +633,34 @@ def test_other_books_ignore_sx0_sell(name):
     assert result.decision == "skip"
     assert result.fill_price is None
     assert result.reason == ""
+
+
+def test_version9_bar_scan_uses_prior_range_not_fixed_eight_percent():
+    import pandas as pd
+
+    days = pd.bdate_range("2025-09-01", periods=23)
+    frame = pd.DataFrame(
+        {"open": 10.0, "high": 10.2, "low": 10.0, "close": 10.0}, index=days
+    )
+    as_of = days[-1]
+    frame.loc[as_of, "high"] = 100.0
+    bar = OhlcBar(10.0, 10.1, 9.1, 9.5)
+    bare = invoke_minute_strategy("version9", bar, cost=10.0, peak=10.0, n_days=1)
+    assert bare.decision == "skip"
+    assert bare.fill_price is None
+    hit = invoke_minute_strategy(
+        "version9",
+        bar,
+        cost=10.0,
+        peak=10.0,
+        n_days=1,
+        daily_bars=frame,
+        as_of=as_of,
+    )
+    assert hit.decision == "fill"
+    assert hit.reason == "stop_loss:touch"
+    assert hit.fill_price == pytest.approx(9.8)
+    with pytest.raises(ValueError, match="as_of"):
+        invoke_minute_strategy(
+            "version9", bar, cost=10.0, peak=10.0, daily_bars=frame
+        )
