@@ -461,7 +461,7 @@ def test_cli_strategy_choices_are_registered_books_plus_explicit_v7(lake_root, c
     error = capsys.readouterr().err
     choices = error.split("(choose from ", 1)[1].split(")", 1)[0]
     assert tuple(choice.strip("'\"") for choice in choices.split(", ")) == (
-        *host.csv_strategy_names(), "version7")
+        *host.csv_strategy_names(), "version7", "topk_app_dropout")
 
 
 def test_source_guards():
@@ -783,7 +783,7 @@ def test_lake_window_matches_public_reader_normalization(tmp_path, monkeypatch):
               "2026-01-08 09:30", "2026-01-09 09:30"]
     prices = np.arange(len(stamps), dtype=float) + 10
     pd.DataFrame({
-        "time": pd.to_datetime(stamps, utc=True).asi8 // 1_000_000,
+        "time": pd.to_datetime(stamps, utc=True).as_unit("ms").asi8,
         **{name: prices for name in host.OHLC},
         "volume": [100, 999, 100, 100, 100, 0, 100, 100],
     }).to_parquet(folder / "data.parquet", index=False, row_group_size=2)
