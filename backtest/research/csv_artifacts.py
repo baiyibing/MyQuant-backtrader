@@ -178,6 +178,9 @@ def summarize(
             )
     elif st.stats.get("sell_book") == "v9_1":
         lines.append("  ATR(20) frozen: unit risk 10_000 / ATR, max 4 units; add +0.5 ATR; whole stop last_fill - 2 ATR; prior 10-day low exit")
+    elif st.stats.get("sell_book") == "v9_2":
+        from backtest.research.strategy9_2_rules import HELP_LOCK
+        lines.append(HELP_LOCK.strip())
     elif st.stats.get("sell_book") == "v9":
         max_hold = st.stats.get("max_hold")
         hold_text = f"满持有 {int(max_hold)} 日 force_sell" if max_hold is not None else "满持有强平 OFF"
