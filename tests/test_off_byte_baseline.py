@@ -1,4 +1,4 @@
-"""Historical CSV/account + #205 quota and scoped S8 / version6_1 overlays.
+"""Historical CSV/account + #205 quota and scoped S8 / version6_1 / version12 / version9 overlays.
 
 After mandatory canonical and full structured assertions, compare exact raw
 writer/library SHA-256 on the golden's pandas major.minor. A different version
@@ -20,6 +20,8 @@ from scripts.research.generate_off_byte_baseline import (
     HISTORICAL_CASES,
     HISTORICAL_CANONICAL_SHA256,
     HISTORICAL_GOLDEN_SHA256,
+    S9_CASES,
+    load_s9_golden,
     S12_CASES,
     load_s12_golden,
     S8_BOOK_NAMES,
@@ -75,8 +77,8 @@ def test_s8_overlay_only_replaces_authorized_cases_and_preserves_historical_file
     assert set(S8_BOOK_NAMES) == {
         "version8", "version8_2", "version8_3", "version8_4", "version8_5", "version8_6",
     }
-    historical_non_overlay = set(HISTORICAL_CASES) - set(S8_CASES) - set(S12_CASES)
-    assert len(historical_non_overlay) == 25
+    historical_non_overlay = set(HISTORICAL_CASES) - set(S8_CASES) - set(S12_CASES) - set(S9_CASES)
+    assert len(historical_non_overlay) == 23
     historical = json.loads(GOLDEN.read_text(encoding="utf-8"))
     for book, engine in historical_non_overlay:
         actual, _, _ = expected_case(book, engine)
@@ -118,6 +120,23 @@ def test_version12_overlay_only_replaces_ma10_stop_cases():
         sells = [t for t in case["structured"]["fills"] if t["side"] == "SELL"]
         assert [(t["reason"], t["shares"]) for t in sells] == [
             ("ma_signal:MA10-stop", n) for n in (93000, 100000, 108100)]
+
+
+def test_version9_overlay_only_replaces_take_profit_cases():
+    golden = load_s9_golden()
+    assert golden["captured_environment"]["pandas"] == "3.0.6"
+    assert set(golden["cases"]) == {"version9/daily", "version9/minute"}
+    for book, engine in S9_CASES:
+        actual, canonical, recorded = expected_case(book, engine)
+        case = golden["cases"][f"{book}/{engine}"]
+        assert actual == case
+        assert_case_canonical(book, actual, case, canonical)
+        assert recorded == "3.0.6"
+        assert case["structured"]["stats"]["profit_target"] == 0.10
+        assert case["structured"]["stats"]["sell_profit_take"] == 2
+        sells = [t for t in case["structured"]["fills"] if t["side"] == "SELL"]
+        assert [(t["reason"], t["shares"]) for t in sells] == [
+            ("profit_take:target", n) for n in (100000, 108100)]
 
 
 @pytest.mark.parametrize("explicit_false", [False, True], ids=["omitted", "explicit-off"])

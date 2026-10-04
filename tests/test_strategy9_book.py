@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
@@ -15,7 +16,12 @@ from backtest.research.csv_strategy_books import (
     get_book,
     resolve_research_pool_dir,
 )
-from backtest.research.strategy9_rules import MAX_HOLD, STOP_PCT, take_profit_reason
+from backtest.research.strategy9_rules import (
+    MAX_HOLD,
+    STOP_PCT,
+    record_strategy9_params,
+    take_profit_reason,
+)
 
 
 def test_version9_hooks_and_max_hold():
@@ -25,11 +31,28 @@ def test_version9_hooks_and_max_hold():
     assert hooks["allow_add"] is False
     assert hooks["peak_gap_min"] == 0
     assert hooks["stop_pct"] == pytest.approx(STOP_PCT)
+    assert hooks["stop_pct"] == pytest.approx(0.08)
     assert hooks["take_profit"](10.0, 10.0, 10.0, MAX_HOLD - 1) is None
     assert hooks["take_profit"](10.0, 10.0, 10.0, MAX_HOLD) == "force_sell:max_hold"
     assert take_profit_reason(1, 1, 1, MAX_HOLD) == "force_sell:max_hold"
     assert get_book("9").tag == "v9"
     assert get_book("v9").name == "version9"
+
+
+def test_version9_take_profit_target_and_params():
+    take_profit = apply_csv_strategy("version9")["take_profit"]
+    assert take_profit(11.0, 10.0, 99.0, 1) == "profit_take:target"
+    assert take_profit(10.99, 10.0, 99.0, MAX_HOLD - 1) is None
+    assert take_profit(11.0, 10.0, 99.0, 0) is None
+    assert take_profit(11.0, 10.0, 99.0, MAX_HOLD) == "profit_take:target"
+    st = SimpleNamespace(stats={})
+    record_strategy9_params(st)
+    assert st.stats == {
+        "sell_book": "v9",
+        "stop_pct": 0.08,
+        "profit_target": 0.10,
+        "max_hold": 20,
+    }
 
 
 def test_version9_refuses_default_and_repo_stock_pool(tmp_path):
@@ -115,3 +138,34 @@ def test_version9_force_sells_after_max_hold():
     assert sells[0]["reason"] == "force_sell:max_hold"
     assert sells[0]["date"] == idx[MAX_HOLD + 1].strftime("%Y%m%d")
     assert sells[0]["price"] == pytest.approx(10.0)
+
+
+def test_version9_take_profit_sells_next_open():
+    idx = pd.bdate_range("2025-11-03", periods=8)
+    pre = pd.DatetimeIndex([idx[0] - pd.Timedelta(days=3)])
+    full = pre.append(idx)
+    px = {
+        "open": np.full(len(full), 10.0),
+        "high": np.full(len(full), 10.1),
+        "low": np.full(len(full), 9.9),
+        "close": np.full(len(full), 10.0),
+    }
+    bars = {"600000.SH": pd.DataFrame(px, index=full).astype(np.float64)}
+    bars["600000.SH"].loc[idx[3], ["high", "close"]] = 11.0
+    bars["600000.SH"].loc[idx[4], ["open", "high", "low", "close"]] = 10.5
+    start = idx[0].strftime("%Y%m%d")
+    end = idx[-1].strftime("%Y%m%d")
+    st = sim.simulate(
+        bars,
+        {start: ["600000.SH"]},
+        start,
+        end,
+        strategy="version9",
+    )
+    sells = [t for t in st.trades if t["side"] == "SELL"]
+    assert st.stats["buys"] == 1
+    assert st.stats["profit_target"] == pytest.approx(0.10)
+    assert len(sells) == 1
+    assert sells[0]["reason"] == "profit_take:target"
+    assert sells[0]["date"] == idx[4].strftime("%Y%m%d")
+    assert sells[0]["price"] == pytest.approx(10.5)
