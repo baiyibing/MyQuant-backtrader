@@ -9,7 +9,9 @@ Checks retain the eff77f3 bytes/account contract and require the single #205
 metadata addition. Canonical CSV/account checks always run; raw byte checks
 require the golden's pandas major.minor (otherwise --check reports SKIP).
 Six per_name strategy-8 books use the explicit 2026-09-26 correction overlay;
-the other historical non-S8 cases still use the immutable historical files.
+other historical cases use the immutable files unless explicitly overlaid.
+version12 uses the 2026-10-04 whole-position MA10-stop overlay (69cf371);
+--record-s12 records only its daily/minute cases and refuses overwrite.
 version6_1 (20th book, bee0b91) is covered by a scoped additive overlay
 (precedent #212): historical golden stays 19 books / 39 cases; --record-v61
 writes only the two new cases and refuses overwrite. --record-s8 unchanged.
@@ -68,6 +70,10 @@ V61_GOLDEN = ROOT / "tests/fixtures/off_byte_baseline_v61_20261002.json"
 V61_RULE_REVISION = "v61-unbounded-ladder-2026-10-02"
 V61_BOOK_NAMES = ("version6_1",)
 V61_CASES = tuple((book, engine) for book in V61_BOOK_NAMES for engine in ("daily", "minute"))
+S12_GOLDEN = ROOT / "tests/fixtures/off_byte_baseline_s12_ma10_stop_20261004.json"
+S12_RULE_REVISION = "s12-whole-position-ma10-stop-69cf371"
+S12_BOOK_NAMES = ("version12",)
+S12_CASES = tuple((book, engine) for book in S12_BOOK_NAMES for engine in ("daily", "minute"))
 BOOK_NAMES = HISTORICAL_BOOK_NAMES + V61_BOOK_NAMES
 CODE = "600000.SH"
 TOPK_CODES = (CODE, "600001.SH", "600002.SH")
@@ -234,6 +240,20 @@ def load_v61_golden() -> dict:
     return golden
 
 
+def load_s12_golden() -> dict:
+    """Replacement overlay for version12 only; historical files stay immutable."""
+    assert _hash(GOLDEN.read_bytes()) == HISTORICAL_GOLDEN_SHA256
+    assert _hash(CANONICAL_GOLDEN.read_bytes()) == HISTORICAL_CANONICAL_SHA256
+    golden = json.loads(S12_GOLDEN.read_text(encoding="utf-8"))
+    assert golden["rule_revision"] == S12_RULE_REVISION
+    assert golden["historical_raw_sha256"] == HISTORICAL_GOLDEN_SHA256
+    assert golden["historical_canonical_sha256"] == HISTORICAL_CANONICAL_SHA256
+    assert golden["contract"] == CANONICAL_CONTRACT
+    assert golden["books"] == list(S12_BOOK_NAMES)
+    assert set(golden["cases"]) == {f"{book}/{engine}" for book, engine in S12_CASES}
+    return golden
+
+
 def expected_case(book: str, engine: str) -> tuple[dict, dict, str]:
     """Return account/raw, canonical hashes, and the recorded pandas version."""
     key = f"{book}/{engine}"
@@ -244,6 +264,11 @@ def expected_case(book: str, engine: str) -> tuple[dict, dict, str]:
         return case, canonical, golden["captured_environment"]["pandas"]
     if (book, engine) in V61_CASES:
         golden = load_v61_golden()
+        case = golden["cases"][key]
+        canonical = {name: canonical_hash(table) for name, table in case["canonical_csv"].items()}
+        return case, canonical, golden["captured_environment"]["pandas"]
+    if (book, engine) in S12_CASES:
+        golden = load_s12_golden()
         case = golden["cases"][key]
         canonical = {name: canonical_hash(table) for name, table in case["canonical_csv"].items()}
         return case, canonical, golden["captured_environment"]["pandas"]
@@ -374,13 +399,15 @@ def main():
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument(
         "--check", action="store_true",
-        help="Compare historical cases plus the S8 and version6_1 overlays",
+        help="Compare historical cases plus the S8, version6_1 and version12 overlays",
     )
     mode.add_argument("--record-s8", action="store_true", help="Record only the 12 corrected S8 cases")
     mode.add_argument(
         "--record-v61", action="store_true",
         help="Record only the 2 additive version6_1 cases (scoped overlay)",
     )
+    mode.add_argument("--record-s12", action="store_true",
+                      help="Record only the 2 version12 MA10-stop cases")
     args = parser.parse_args()
     if args.record_s8:
         if S8_GOLDEN.exists():
@@ -432,6 +459,39 @@ def main():
         }
         V61_GOLDEN.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         print(f"Wrote {V61_GOLDEN}: 2 additive cases / 4 production CSV hashes")
+        return
+    if args.record_s12:
+        if S12_GOLDEN.exists():
+            parser.error("The version12 overlay already exists; refusing to overwrite")
+        if pd.__version__ != "3.0.6":
+            parser.error("version12 recording requires the authorized pandas 3.0.6 environment")
+        assert _hash(GOLDEN.read_bytes()) == HISTORICAL_GOLDEN_SHA256
+        assert _hash(CANONICAL_GOLDEN.read_bytes()) == HISTORICAL_CANONICAL_SHA256
+        with tempfile.TemporaryDirectory(prefix="s12-byte-baseline-") as temp:
+            cases = {f"{book}/{engine}": capture_case(book, engine, Path(temp) / book / engine)
+                     for book, engine in S12_CASES}
+        for case in cases.values():
+            assert_case_bytes(case, case)
+            assert case["fill_counts"]["BUY"] > 0 and case["fill_counts"]["SELL"] > 0
+        from backtest.research import strategy12_rules as rules
+        assert rules.STOP_FACTOR == 1.0
+        assert rules.buyback_plan(10., [10.] * 10, rules.Memory()) == 0
+        for case in cases.values():
+            assert not case["structured"]["positions"]
+            assert all(row["reason"] == rules.STOP for row in case["structured"]["fills"]
+                       if row["side"] == "SELL")
+        payload = {
+            "rule_revision": S12_RULE_REVISION,
+            "historical_raw_sha256": HISTORICAL_GOLDEN_SHA256,
+            "historical_canonical_sha256": HISTORICAL_CANONICAL_SHA256,
+            "books": list(S12_BOOK_NAMES),
+            "captured_environment": {"python": platform.python_version(), "pandas": pd.__version__,
+                                     "platform": sys.platform},
+            "contract": CANONICAL_CONTRACT,
+            "cases": cases,
+        }
+        S12_GOLDEN.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        print(f"Wrote {S12_GOLDEN}: 2 corrected cases / 4 production CSV hashes")
         return
     if not args.check:
         head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
