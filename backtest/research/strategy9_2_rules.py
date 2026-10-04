@@ -2,34 +2,37 @@
 from dataclasses import dataclass
 from math import prod
 
+from backtest.research.strategy9_rules import RANGE_BARS, stop_range_amplitude
+
 BOOK_TAG = "v9_2"
 ALLOW_ADD = True
 PEAK_GAP_MIN = 0
 INIT_POS_RATIO = 0.40
 TURTLE_ADD_BANDS = ((0.04, 0.30), (0.10, 0.20))
 MAX_UNITS = 3
-STOP_FACTORS = (0.96, 1.01, 1.02)
-TICK = 0.01
+ABSOLUTE_STOP_FACTOR = 0.90
 SELL_BANDS = (1.3, 1.5, 1.8, 2.0)
 SELL_RATIOS = (0.30, 0.20, 0.30, 0.20)
-HOLD_DAYS = 5
+HOLD_DAYS = 20
 GIVEBACK_BANDS = ((0.20, 0.50), (0.50, 0.40), (float("inf"), 0.20))
 HELP_LOCK = """
 version9_2: OSkhQuant1.3 paper turtle; SCAN export_strategy9_pool.py only.
 Explicit --pool-dir required; stock_pool/ and --stop-pct refused.
 Budget 1_000_000: first 40%, adds 30%/20% at first-fill ×1.04/1.10;
 max 3 units, multiple touched adds per session. No touch means no add.
-Whole-position stop: weighted cost ×0.96/1.01/1.02;
-after adds max(tier, last_add_price - 0.01), unknown tick uses tier alone.
+Whole-position stop: version9 trailing 20-bar range plus weighted cost ×0.90;
+higher trigger wins; missing range leaves only the absolute stop.
 At cost ×1.3/1.5/1.8/2.0 sell 30%/20%/30%/20% of remaining shares.
 Newly crossed bands merge frac = 1 - product(1 - ratios); highest dispatched
 band never re-fires. Partial quantity rounds down to 100 shares.
-Held >=5 trading days since first/last add, units<3, price<next line: flatten.
+Held >=20 trading days since first/last add, units<3, price<next line: flatten.
 After 3 units profit giveback thresholds: peak gain <=20%:50%, <=50%:40%, else:20%.
 Daily SCAN first buy fills open; then high-touched adds fill max(open, line).
-Daily close exits fill next open; OHLC assumes open -> high -> close.
+Daily stops: open <= trigger fills open, else low <= trigger fills trigger.
+Other daily close exits fill next open; OHLC assumes open -> high -> close.
 Minute buys first at 14:55 (existing fallback), adds evaluate highs of subsequent bars at max(open, line);
-stops and giveback evaluate closes, peak uses observed high after entry.
+Minute stops: open <= trigger fills open, else close <= trigger fills close.
+Stops precede scale-out, hold flatten and giveback; peak uses observed high after entry.
 Limit-up buys skip; limit-down pending and T+1 residual retry next session.
 """
 
@@ -57,9 +60,11 @@ def lot_budget(budget, units):
     return budget * (INIT_POS_RATIO if units == 0 else TURTLE_ADD_BANDS[units - 1][1]) if units < MAX_UNITS else 0.0
 
 
-def stop_line(cost, units, last_add_price=0.0, tick=TICK):
-    tier = cost * STOP_FACTORS[min(max(units - 1, 0), 2)]
-    return max(tier, last_add_price - tick) if units >= 2 and tick is not None else tier
+def chosen_stop(cost, frame, day):
+    """Use version9's trailing range and the absolute line; higher price wins."""
+    amplitude = stop_range_amplitude(frame, day)
+    absolute = cost * ABSOLUTE_STOP_FACTOR
+    return absolute if amplitude is None else max(absolute, cost * (1 - amplitude))
 
 
 def scale_out(price, cost, seq=0):
@@ -80,9 +85,10 @@ def giveback(price, cost, high, units):
 
 
 def record_strategy9_2_params(st):
-    st.stats.update(sell_book=BOOK_TAG, stop_pct=None, stop_mode="turtle_position_tiers",
+    st.stats.update(sell_book=BOOK_TAG, stop_pct=None, stop_mode="range_amp_20_trailing_plus_absolute_tighter",
                     init_pos_ratio=INIT_POS_RATIO, turtle_add_bands=TURTLE_ADD_BANDS,
-                    max_units=MAX_UNITS, stop_factors=STOP_FACTORS, tick=TICK,
+                    max_units=MAX_UNITS, range_bars=RANGE_BARS, absolute_stop_factor=ABSOLUTE_STOP_FACTOR,
+                    stop_selection="higher_price",
                     sell_bands=SELL_BANDS, sell_ratios=SELL_RATIOS, hold_days=HOLD_DAYS,
                     giveback_bands=GIVEBACK_BANDS, scale_merge="1-product(1-ratios)")
 
