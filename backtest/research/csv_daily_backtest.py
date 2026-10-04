@@ -311,6 +311,7 @@ def simulate(
         pool_names_by_day=pool_names_by_day,
         daily_quota=daily_quota,
     )
+    absolute_exit = hooks["bind_absolute_exit"](st, bars) if "bind_absolute_exit" in hooks else None
     configure_s8(st, hooks)
     st.star_lot_declare_check = star_lot_declare_check
     if buy_cost_rate is not None:
@@ -382,6 +383,12 @@ def simulate(
                     st.stats["skip_unknown_board"] += 1
                     continue
                 limit_up, limit_down = limits
+                if absolute_exit:
+                    line = absolute_exit(code, day)
+                    if line is not None and float(row["low"]) <= line:
+                        for lot in st.positions.get(code, []):
+                            if lot.entry_idx >= i:
+                                lot.pending_exit = "stop_loss:touch|t1_deferred"
                 for pos in exit_positions(st, code, i, day=day):
                     if getattr(pos, "ride_with", None) is not None:
                         continue
@@ -402,6 +409,10 @@ def simulate(
                         if "stop_range" in hooks:
                             stop_ratio = evaluate_stop_range(hooks, bars[code], day, st.stats)
                             stop_enabled = stop_ratio is not None
+                        absolute_line = absolute_exit(code, day) if absolute_exit else None
+                        if absolute_line is not None:
+                            stop_ratio = 1 - absolute_line / pos.cost
+                            stop_enabled = True
                         close = float(row["close"])
                         if stop_enabled:
                             trigger = pos.cost * (1.0 - stop_ratio)
@@ -420,6 +431,8 @@ def simulate(
                             elif float(row["open"]) <= trigger:
                                 if defer_sell_at_limit(float(row["open"]), limits):
                                     st.stats["defer_sell_limit_down"] += 1
+                                    if absolute_exit:
+                                        pos.pending_exit = "stop_loss:gap_open"
                                 else:
                                     _sell(
                                         st,
@@ -724,7 +737,7 @@ def run(
         if normalize_csv_strategy(strategy) in ("version4", "version12")
         else (20 if return_threshold_filter else WARMUP_DAYS)
     )
-    if normalize_csv_strategy(strategy) == "version9":
+    if normalize_csv_strategy(strategy) in {"version9", "version9_1"}:
         warm_days = max(warm_days, RANGE_LOOKBACK_CALENDAR_DAYS)
     if week_ma_gate:
         from backtest.research.topk_dropout_eligibility import WEEK_MA_WARMUP_DAYS

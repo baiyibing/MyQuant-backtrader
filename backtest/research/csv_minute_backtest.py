@@ -720,6 +720,8 @@ def simulate(
         "version8_4", "version8_5", "version8_6",
     }:
         raise ValueError("--tail-window-buy applies only to version8 / version8.x in the shared entry")
+    if fix_minute_cash_order and normalize_csv_strategy(strategy) == "version9_1":
+        raise ValueError("--fix-minute-cash-order is not applicable to version9_1")
     if fix_minute_cash_order and normalize_csv_strategy(strategy) == "version12":
         raise ValueError("--fix-minute-cash-order is not applicable to version12")
     if audit_sink is not None and normalize_csv_strategy(strategy) == "version12":
@@ -801,8 +803,9 @@ def simulate(
         pool_names_by_day=pool_names_by_day,
         daily_quota=daily_quota,
     )
+    absolute_exit = hooks["bind_absolute_exit"](st, daily_bars) if "bind_absolute_exit" in hooks else None
     configure_s8(st, hooks)
-    if minute_stop_trigger == "hl":
+    if minute_stop_trigger == "hl" or absolute_exit:
         st.stats["minute_stop_trigger"] = "hl"
     if topk_exec != "close" or limit_walkdown or topk_limit_rule != "qlib":
         st.stats.update(topk_limit_rule=topk_limit_rule, topk_exec=topk_exec, limit_retry_fills=0, limit_retry_expired=0)
@@ -925,6 +928,12 @@ def simulate(
                         confirm_peaks[id(pos)] = max(
                             float(pos.peak), prefix_high if pos.entry_idx < i else 0.0,
                         )
+                if absolute_exit:
+                    line = absolute_exit(code, day)
+                    if line is not None and float(day_m["low"].min()) <= line:
+                        for lot in st.positions.get(code, []):
+                            if lot.entry_idx >= i:
+                                lot.pending_exit = "stop_loss:touch|t1_deferred"
                 for pos in exit_positions(st, code, i, day=day):
                     if getattr(pos, "ride_with", None) is not None:
                         continue
@@ -932,8 +941,8 @@ def simulate(
                     if isinstance(pos, IndependentExitPosition):
                         cursor = HeldMinuteCursor(
                             o, h, c, cost=pos.cost, peak=pos.peak,
-                            l=day_m["low"].to_numpy(np.float64) if minute_stop_trigger == "hl" else None,
-                            minute_stop_trigger=minute_stop_trigger, take_profit_pct=st.stats.get("profit_target"),
+                            l=day_m["low"].to_numpy(np.float64) if minute_stop_trigger == "hl" or absolute_exit else None,
+                            minute_stop_trigger="hl" if absolute_exit else minute_stop_trigger, take_profit_pct=st.stats.get("profit_target"),
                             n_days=n_days,
                             can_sell=t1_sellable(calendar[pos.entry_idx].date(), day.date()),
                             stop_pct=stop_pct,
@@ -991,15 +1000,15 @@ def simulate(
                         o,
                         h,
                         c,
-                        l=day_m["low"].to_numpy(np.float64) if minute_stop_trigger == "hl" else None,
-                        minute_stop_trigger=minute_stop_trigger, take_profit_pct=st.stats.get("profit_target"),
+                        l=day_m["low"].to_numpy(np.float64) if minute_stop_trigger == "hl" or absolute_exit else None,
+                        minute_stop_trigger="hl" if absolute_exit else minute_stop_trigger, take_profit_pct=st.stats.get("profit_target"),
                         cost=pos.cost,
                         peak=pos.peak,
                         n_days=n_days,
                         can_sell=t1_sellable(calendar[pos.entry_idx].date(), day.date()),
                         stop_pct=stop_pct,
-                        stop_range_ratio=(evaluate_stop_range(hooks, ddf, day, st.stats)
-                                          if "stop_range" in hooks and n_days >= 1 else None),
+                        stop_range_ratio=((1 - absolute_exit(code, day) / pos.cost) if absolute_exit else evaluate_stop_range(hooks, ddf, day, st.stats)
+                                          if (absolute_exit or "stop_range" in hooks) and n_days >= 1 else None),
                         profit_base=profit_base if profit_base is not None else 0.0,
                         trail_ratio=0.0,
                         pos_trail=pos_trail,
@@ -1022,6 +1031,8 @@ def simulate(
                         reserve_state=reserve_state,
                         close_clear=close_clear,
                     )
+                    if absolute_exit and idx < 0 and float(day_m["low"].min()) <= absolute_exit(code, day):
+                        pos.pending_exit = "stop_loss:touch"
                     pos.peak = new_peak
                     pos.peak_hm = new_peak_hm
                     pos.reserved = bool(reserve_state["reserved"])
@@ -1334,6 +1345,8 @@ def run(
         raise ValueError("--fix-s12-price-domain requires version12 + lake/lake + --dividend-type none")
     if s12_price_transform_file is not None and not fix_s12_price_domain:
         raise ValueError("--s12-price-transform-file requires --fix-s12-price-domain")
+    if fix_minute_cash_order and book == "version9_1":
+        raise ValueError("--fix-minute-cash-order is not applicable to version9_1")
     if fix_minute_cash_order and book == "version12":
         raise ValueError("--fix-minute-cash-order is not applicable to version12")
     if audit_sink is not None and book == "version12":
@@ -1387,7 +1400,7 @@ def run(
         if book in ("version4", "version12")
         else (20 if return_threshold_filter else WARMUP_DAYS)
     )
-    if normalize_csv_strategy(strategy) == "version9":
+    if normalize_csv_strategy(strategy) in {"version9", "version9_1"}:
         warm_days = max(warm_days, RANGE_LOOKBACK_CALENDAR_DAYS)
     if week_ma_gate:
         from backtest.research.topk_dropout_eligibility import WEEK_MA_WARMUP_DAYS

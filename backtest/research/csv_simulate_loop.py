@@ -387,6 +387,13 @@ def run_pool_buys_day(
             if len(closes) < 10:
                 st.stats["skip_sma_warmup"] += 1
             continue
+        unit_shares = None
+        prepare_unit = st.book_state.get("prepare_unit")
+        if prepare_unit is not None:
+            unit_shares = prepare_unit(code, px, day)
+            if not unit_shares:
+                continue
+            per = unit_shares * px
         lots = [] if independent else st.positions.get(code, [])
         if lots and callable(add_gate) and not add_gate(lots, px):
             st.stats["skip_add_loser"] += 1
@@ -404,9 +411,13 @@ def run_pool_buys_day(
             volume_kwargs["hm"] = buy_hm
         if order_budget is not None:
             volume_kwargs["shares_override"] = int(per / px / 100.) * 100
+        if unit_shares is not None:
+            volume_kwargs["shares_override"] = unit_shares
         if independent:
             volume_kwargs.update(position_id=f"{code}@{ds}", entry_signal_date=ds)
         if sizing == "per_name":
+            if unit_shares is not None:
+                per = unit_shares * px
             shares, _ = _buy_size(per, px)
             notional = shares * px
             if (
@@ -503,9 +514,18 @@ def run_step_adds_day(
         if callable(buy_gate) and not buy_gate(code, px, day, closes):
             st.stats["skip_buy_gate"] += 1
             continue
+        unit_shares = None
+        prepare_unit = st.book_state.get("prepare_unit")
+        if prepare_unit is not None:
+            unit_shares = prepare_unit(code, px, day)
+            if not unit_shares:
+                continue
+            per = unit_shares * px
         per = float(name_budget)
         if callable(name_lot_budget):
             per = float(name_lot_budget(name_budget, lots))
+        if unit_shares is not None:
+            per = unit_shares * px
         shares, _ = _buy_size(per, px)
         notional = shares * px
         if (
@@ -524,6 +544,8 @@ def run_step_adds_day(
             if volume_bucket_for is not None
             else {}
         )
+        if unit_shares is not None:
+            volume_kwargs["shares_override"] = unit_shares
         execute_buy(
             st,
             code,
