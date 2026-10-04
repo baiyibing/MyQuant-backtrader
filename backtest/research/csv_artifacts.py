@@ -179,7 +179,7 @@ def summarize(
     elif st.stats.get("sell_book") == "v9":
         max_hold = st.stats.get("max_hold")
         hold_text = f"满持有 {int(max_hold)} 日 force_sell" if max_hold is not None else "满持有强平 OFF"
-        lines.append(f"  参数: 止损 {stop_text} | {hold_text}")
+        lines.append(f"  参数: 止损 rolling range（每日重算，缺窗口无替代） + 固定成本 × 0.90（10%） | {hold_text}")
     elif st.stats.get("sell_book") == "v6_1":
         lines.append(
             f"  参数: 止损 {stop_text} | T+1起评止盈 | 峰值涨幅每"

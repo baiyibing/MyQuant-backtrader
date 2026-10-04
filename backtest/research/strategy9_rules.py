@@ -1,7 +1,7 @@
 """策略 9（底量超顶量）卖点纯函数。
 
 买点不在本模块：由 ``export_strategy9_pool.py`` 写成契约日 CSV，引擎按名单买。
-卖：止损幅度每个交易日从此前 20 根日线重算，不在入场锁定；盈利达到成本的 10% 返回已有 reason
+卖：另有成本 × 0.90 固定止损；range 止损幅度每个交易日从此前 20 根日线重算，不在入场锁定；盈利达到成本的 10% 返回已有 reason
 ``profit_take:target``（不是新订单类型）。启用 --max-hold 后满 20 个交易日记
 ``force_sell:max_hold``，次日开盘离场。无分档回撤止盈；不加仓。
 禁止默认 ``stock_pool/``（那是隔夜手工池，不是本信号）。
@@ -30,7 +30,8 @@ HELP_LOCK = """
   必须显式 --pool-dir；指向本仓 stock_pool/ 立即退出。
   止损幅度每个交易日从此前 20 根日线重算，不在入场锁定。
   幅度=(20 根最高 high - 最低 low)/窗口前一根 close；触发价=成本*(1-幅度)。
-  缺窗口当天不止损、不回落固定比例；--stop-pct 不接受。
+  缺窗口当天无 range 止损、不回落固定比例；成本 × 0.90 固定止损仍生效。
+  两条止损取较高触发价；--stop-pct 不接受。
   盈利达到成本的 10% 返回已有 reason
   profit_take:target（不是新订单类型），次日开盘卖。无分档回撤止盈；不加仓。
   20 交易日强平默认 OFF；启用 --max-hold 后，持仓交易日数 n_days>=20 收盘记 force_sell:max_hold，次日开盘卖
@@ -100,3 +101,8 @@ def evaluate_stop_range(hooks, frame, day, stats):
         key = f"skip_stop_range:{reason}"
         stats[key] = stats.get(key, 0) + 1
     return ratio
+
+
+def effective_stop_ratio(range_ratio):
+    """Keep the range leg unclamped; the higher stop wins over cost * 0.90."""
+    return min(range_ratio, 0.10) if range_ratio is not None else 0.10

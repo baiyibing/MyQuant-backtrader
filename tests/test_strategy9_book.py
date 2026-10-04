@@ -118,6 +118,9 @@ def test_cli_version9_accepts_explicit_pool(tmp_path, monkeypatch, enabled, host
     assert rc == 0
     assert Path(seen["pool_dir"]) == dest
     assert (out / "summary.txt").is_file()
+    summary = (out / "summary.txt").read_text(encoding="utf-8")
+    assert "rolling range" in summary and "0.90" in summary
+    assert "止损 关闭" not in summary
 
 
 @pytest.mark.parametrize("enabled", [False, True])
@@ -283,6 +286,53 @@ def test_cli_max_hold_help_and_refuse(host, capsys):
     with pytest.raises(SystemExit) as exc:
         main(["--help"])
     assert exc.value.code == 0
-    assert "--max-hold" in capsys.readouterr().out
+    help_text = capsys.readouterr().out
+    assert "--max-hold" in help_text
+    assert "0.90" in help_text and "不回落固定比例" in help_text
     with pytest.raises(SystemExit, match="--max-hold.*version9"):
         main(["--strategy", "version6", "--max-hold"])
+
+
+@pytest.mark.parametrize("engine", ["daily", "minute"])
+@pytest.mark.parametrize("amplitude,opening,low,close,price,reason", [
+    (None, 10., 9.1, 10., None, None),
+    (None, 10., 8.9, 10., 9., "stop_loss:touch"),
+    (.21, 10., 7.8, 10., 9., "stop_loss:touch"),
+    (.04, 10., 8.8, 10., 9.6, "stop_loss:touch"),
+    (.21, 8.9, 8.8, 11., 8.9, "stop_loss:gap_open"),
+    (.04, 10., 8.8, 11., 11., "profit_take:target"),
+    (1.2, 10., 8.8, 10., 9., "stop_loss:touch"),
+    (0., 10.1, 9.9, 10., 10., "stop_loss:touch"),
+])
+def test_version9_combined_stops(engine, amplitude, opening, low, close, price, reason):
+    from backtest.research.csv_minute_backtest import simulate as minute
+    days, frame = range_frame()
+    frame.loc[:, "high"] = 10.1
+    frame.loc[:, "low"] = 9.9
+    if amplitude is None:
+        frame = frame.iloc[19:].copy()
+    else:
+        frame.loc[days[2], "high"] = 9.9 + amplitude * 10.
+        if amplitude == 0.:
+            frame.loc[:days[20], ["high", "low"]] = 10.
+    frame.loc[days[21], ["open", "high", "low", "close"]] = [opening, max(opening, close, 10.1), low, close]
+    frame.loc[days[22], ["open", "high", "low", "close"]] = 11.
+    start, end = days[20].strftime("%Y%m%d"), days[22].strftime("%Y%m%d")
+    pool = {start: ["300000.SZ"]}
+    if engine == "daily":
+        st = sim.simulate({"300000.SZ": frame}, pool, start, end, strategy="version9")
+    else:
+        rows = [dict(row, time=day + pd.Timedelta(minutes=hm), hm=hm, ymd=day.strftime("%Y%m%d"))
+                for day, row in frame.iterrows() for hm in (570, 895, 900)]
+        minutes = pd.DataFrame(rows).set_index("time")
+        st = minute({"300000.SZ": minutes}, {"300000.SZ": frame}, pool, start, end,
+                    strategy="version9", minute_stop_trigger="hl")
+    sells = [t for t in st.trades if t["side"] == "SELL"]
+    # Restrict the no-touch case to its first sellable day (day 22 reaches target).
+    if reason is None:
+        assert not [t for t in sells if t["date"] == days[21].strftime("%Y%m%d")]
+    else:
+        assert sells[0]["reason"] == reason
+        assert sells[0]["price"] == pytest.approx(price)
+    if amplitude is None:
+        assert st.stats["skip_stop_range:short_history"] >= 1
