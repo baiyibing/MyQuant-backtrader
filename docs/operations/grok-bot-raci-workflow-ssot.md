@@ -8,6 +8,7 @@
 > **OSkhQuant1.3 / MyQuant 只放指针到本文，不镜像、不另写第二份 SSOT。**  
 > 物理机发起 → 主管接手的七步手续薄指针：[`docs/backtest/workflow-codex-handoff.md`](../backtest/workflow-codex-handoff.md)。  
 > 人机沟通与研究复现词典：[`research-ops-glossary.md`](research-ops-glossary.md)。
+> A 股数据补缺的 Kimi 权威来源与边界见 [`kimi-financial-data-fill-pointer.md`](kimi-financial-data-fill-pointer.md)。
 > 1.3 安装细节仍看该仓 `linux-vm-grokbot-ci.md` / `linux-ci-02-agent-cli-setup.md`（步骤）；**Grok Bot 场景下的角色 / 模型 / 流水线以本文为准**。
 
 ## 0. 非适用声明（先读）
