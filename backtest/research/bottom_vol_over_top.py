@@ -150,6 +150,7 @@ def evaluate_at(
     float_shares: Optional[pd.Series] = None,
     lookback: int = LOOKBACK,
     r_min: float = R_MIN,
+    turnover_check: bool = False,
 ) -> Optional[BottomVolSignal]:
     """Return a signal when T is a valid 底量超顶量 bar; else None."""
     r_min = resolve_vol_ratio(r_min)
@@ -193,13 +194,16 @@ def evaluate_at(
     if top_vol <= 0 or bottom_vol <= top_vol * float(r_min):
         return None
 
-    shares = _optional_float_shares(df, float_shares)
+    shares = _optional_float_shares(df, float_shares) if turnover_check else None
     if shares is not None:
         b_lo, b_hi = max(0, bottom_i - VOL_HALF), min(t, bottom_i + VOL_HALF)
         t_lo, t_hi = max(0, top_i - VOL_HALF), min(t, top_i + VOL_HALF)
         bottom_to = _window_max_turnover(volume, shares, b_lo, b_hi)
         top_to = _window_max_turnover(volume, shares, t_lo, t_hi)
-        if bottom_to is not None and top_to is not None:
+        if (
+            bottom_to is not None and top_to is not None
+            and np.isfinite(bottom_to) and np.isfinite(top_to)
+        ):
             if bottom_to < TURNOVER_MIN or top_to < TINY_TOP_TURNOVER:
                 return None
 
@@ -222,6 +226,7 @@ def scan_symbol(
     name: str = "",
     float_shares: Optional[pd.Series] = None,
     r_min: float = R_MIN,
+    turnover_check: bool = False,
 ) -> list[BottomVolSignal]:
     """Evaluate every bar in ``[start, end]`` that exists on ``df``."""
     r_min = resolve_vol_ratio(r_min)
@@ -230,7 +235,8 @@ def scan_symbol(
     hits: list[BottomVolSignal] = []
     for ts in df.index[(df.index >= t0) & (df.index <= t1)]:
         sig = evaluate_at(
-            df, ts, code=code, name=name, float_shares=float_shares, r_min=r_min
+            df, ts, code=code, name=name, float_shares=float_shares, r_min=r_min,
+            turnover_check=turnover_check,
         )
         if sig is not None:
             hits.append(sig)
@@ -244,6 +250,7 @@ def scan_ohlcv(
     *,
     names: Optional[Mapping[str, str]] = None,
     r_min: float = R_MIN,
+    turnover_check: bool = False,
 ) -> dict[str, list[str]]:
     """``{YYYYMMDD: [canonical codes]}`` for days that have at least one hit."""
     r_min = resolve_vol_ratio(r_min)
@@ -251,7 +258,8 @@ def scan_ohlcv(
     days: dict[str, list[str]] = {}
     for code, frame in frames.items():
         for sig in scan_symbol(
-            frame, start, end, code=code, name=name_map.get(code, ""), r_min=r_min
+            frame, start, end, code=code, name=name_map.get(code, ""), r_min=r_min,
+            turnover_check=turnover_check,
         ):
             days.setdefault(sig.ymd, []).append(code)
     return {ymd: sorted(set(codes)) for ymd, codes in days.items() if codes}

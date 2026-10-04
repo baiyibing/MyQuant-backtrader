@@ -177,6 +177,7 @@ def event_study_rows(
     *,
     names: Optional[Mapping[str, str]] = None,
     r_min: float = R_MIN,
+    turnover_check: bool = False,
 ) -> list[dict]:
     r_min = resolve_vol_ratio(r_min)
     name_map = dict(names or {})
@@ -187,7 +188,8 @@ def event_study_rows(
         t1 = pd.Timestamp(end)
         for ts in frame.index[(frame.index >= t0) & (frame.index <= t1)]:
             sig = evaluate_at(
-                frame, ts, code=code, name=name_map.get(code, ""), r_min=r_min
+                frame, ts, code=code, name=name_map.get(code, ""), r_min=r_min,
+                turnover_check=turnover_check,
             )
             if sig is None:
                 continue
@@ -263,6 +265,10 @@ def main(argv: Optional[list[str]] = None) -> int:
         metavar="{1.2,1.5,2}",
         help="bottom volume must be strictly greater than top volume times this ratio (default: 1.5)",
     )
+    ap.add_argument(
+        "--turnover-check", action="store_true", default=False,
+        help="require bottom/top max float-share turnover >= 0.10/0.02 when both are computable (default: off)",
+    )
     ap.add_argument("--workers", type=int, default=16)
     ap.add_argument("--codes", default=None, help="optional comma-separated bare codes")
     ap.add_argument("--universe-file", type=Path, default=None)
@@ -301,7 +307,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     kept = {
         code: frame for code, frame in frames.items() if len(frame) >= MIN_LISTED_BARS
     }
-    days = scan_ohlcv(kept, args.start, args.end, r_min=args.vol_ratio)
+    days = scan_ohlcv(
+        kept, args.start, args.end, r_min=args.vol_ratio,
+        turnover_check=args.turnover_check,
+    )
     written = write_strategy9_pool(days, out_dir)
     failures = validate_pool_dir(out_dir)
     if failures:
@@ -311,7 +320,10 @@ def main(argv: Optional[list[str]] = None) -> int:
         flush=True,
     )
     if args.event_study:
-        rows = event_study_rows(kept, args.start, args.end, r_min=args.vol_ratio)
+        rows = event_study_rows(
+            kept, args.start, args.end, r_min=args.vol_ratio,
+            turnover_check=args.turnover_check,
+        )
         dest = write_event_study(rows, out_dir / "event_study.csv")
         print(f"s9 event-study {len(rows)} rows -> {dest}", flush=True)
     return 0

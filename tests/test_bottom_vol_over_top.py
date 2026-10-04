@@ -131,15 +131,42 @@ def test_rejects_short_listing():
 
 def test_tiny_top_turnover_rejected_only_when_float_is_complete():
     frame, day = _signal_frame()
-    assert evaluate_at(frame, day, code="600000.SH") is not None
-    shares = pd.Series(1.0e9, index=frame.index)
-    # bottom window 8000/1e9 = 0.0008 < 10% → reject
-    assert evaluate_at(frame, day, code="600000.SH", float_shares=shares) is None
-    # hole in the bottom window → skip enhancement, keep base hit
-    loc = frame.index.get_loc(day)
-    t = int(loc.stop - 1) if isinstance(loc, slice) else int(loc)
-    shares.iloc[t - 10] = np.nan
+    assert evaluate_at(frame, day, code="600000.SH", turnover_check=True) is not None
+    shares = pd.Series(60000.0, index=frame.index)
+    # Bottom 8000/60000 >= 10%, but top 1000/60000 < 2%.
     assert evaluate_at(frame, day, code="600000.SH", float_shares=shares) is not None
+    assert evaluate_at(
+        frame, day, code="600000.SH", float_shares=shares, turnover_check=True
+    ) is None
+
+
+@pytest.mark.parametrize("shares_value", [60000.0, 1e9, np.nan, 0.0, -1.0])
+def test_turnover_check_library_and_cli(shares_value, monkeypatch, tmp_path):
+    from scripts.data import export_strategy9_pool as exporter
+
+    frame, day = _signal_frame()
+    frame["float_shares"] = 60000.0
+    # A missing/non-positive value anywhere in either window skips the check.
+    frame.loc[day - pd.tseries.offsets.BDay(10), "float_shares"] = shares_value
+    ymd = day.strftime("%Y%m%d")
+    frames = {"600000.SH": frame}
+    rejects = np.isfinite(shares_value) and shares_value > 0
+    for enabled in (False, True):
+        hit = not (enabled and rejects)
+        assert (evaluate_at(frame, day, code="600000.SH", turnover_check=enabled) is not None) is hit
+        assert bool(scan_symbol(frame, ymd, ymd, code="600000.SH", turnover_check=enabled)) is hit
+        assert bool(scan_ohlcv(frames, ymd, ymd, turnover_check=enabled)) is hit
+        assert bool(exporter.event_study_rows(frames, ymd, ymd, turnover_check=enabled)) is hit
+        monkeypatch.setattr(exporter, "resolve_period_root", lambda _: tmp_path)
+        monkeypatch.setattr(exporter, "load_daily_ohlcv", lambda *a, **kw: frames)
+        out = tmp_path / str(enabled)
+        args = ["--start", ymd, "--end", ymd, "--codes", "600000",
+                "--out-dir", str(out), "--event-study"]
+        if enabled:
+            args.append("--turnover-check")
+        assert export_main(args) == 0
+        assert (out / f"{ymd}.csv").exists() is hit
+        assert bool(len(pd.read_csv(out / "event_study.csv"))) is hit
 
 
 def test_scan_skips_empty_days_and_writes_contract_bytes(tmp_path):
