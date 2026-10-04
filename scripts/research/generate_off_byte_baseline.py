@@ -20,7 +20,7 @@ writes only the two new cases and refuses overwrite. --record-s8 unchanged.
 version9_1 (21st book) uses a scoped additive overlay; --record-v91 writes
 only its daily/minute cases and refuses overwrite.
 version9_2 (22nd book) uses the scoped additive 2026-10-04 overlay;
---record-v92 writes only its daily/minute cases and refuses overwrite.
+--record-v92 writes only its daily/minute cases; a new rule revision may replace that overlay.
 See docs/backtest/s8-independent-positions-2026-09-26.md and
 docs/backtest/v61-off-byte-overlay-2026-10-02.md.
 """
@@ -81,7 +81,7 @@ V91_RULE_REVISION = "v91-atr-turtle-20261004"
 V91_BOOK_NAMES = ("version9_1",)
 V91_CASES = tuple((book, engine) for book in V91_BOOK_NAMES for engine in ("daily", "minute"))
 V92_GOLDEN = ROOT / "tests/fixtures/off_byte_baseline_v92_20261004.json"
-V92_RULE_REVISION = "v92-sim-turtle-20261004"
+V92_RULE_REVISION = "v92-range-absolute-stop-hold20-20261005"
 V92_BOOK_NAMES = ("version9_2",)
 V92_CASES = tuple((book, engine) for book in V92_BOOK_NAMES for engine in ("daily", "minute"))
 S12_GOLDEN = ROOT / "tests/fixtures/off_byte_baseline_s12_ma10_stop_20261004.json"
@@ -600,8 +600,8 @@ def main():
         print(f"Wrote {V91_GOLDEN}: 2 additive cases / 4 production CSV hashes")
         return
     if args.record_v92:
-        if V92_GOLDEN.exists():
-            parser.error("The version9_2 overlay already exists; refusing to overwrite")
+        if V92_GOLDEN.exists() and json.loads(V92_GOLDEN.read_text(encoding="utf-8"))["rule_revision"] == V92_RULE_REVISION:
+            parser.error("The version9_2 overlay already exists for this rule revision; refusing to overwrite")
         if pd.__version__ != "3.0.6":
             parser.error("version9_2 recording requires the authorized pandas 3.0.6 environment")
         assert _hash(GOLDEN.read_bytes()) == HISTORICAL_GOLDEN_SHA256

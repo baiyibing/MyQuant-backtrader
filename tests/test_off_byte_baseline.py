@@ -148,6 +148,8 @@ def test_v92_overlay_only_adds_authorized_cases_and_preserves_historical_files()
         assert actual["sha256_csv_bytes"] == golden["cases"][f"{book}/{engine}"]["sha256_csv_bytes"]
         assert actual["fill_counts"]["BUY"] > 0
         assert actual["fill_counts"]["SELL"] > 0
+        assert all(row.get("reason") != "stop_loss:turtle_tier"
+                   for row in actual["canonical_csv"]["trades"]["rows"])
 
 
 def test_version12_overlay_only_replaces_ma10_stop_cases():

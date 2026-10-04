@@ -42,10 +42,8 @@ def plan_exit(st, code, px, day, closes, *, day_i, ds):
     cost = mem.cost
     mem.peak = max(mem.peak, px)
     reason = None
-    if px <= rules.stop_line(cost, mem.units, mem.last_add_price):
-        reason = "stop_loss:turtle_tier"
-    elif rules.time_stop(px, mem.entry, mem.units, day_i - mem.anchor_idx):
-        reason = "force_sell:hold_days_5"
+    if rules.time_stop(px, mem.entry, mem.units, day_i - mem.anchor_idx):
+        reason = "force_sell:hold_days_20"
     elif rules.giveback(px, cost, mem.peak, mem.units):
         reason = "trail:profit_drawdown"
     if reason:
@@ -57,6 +55,26 @@ def plan_exit(st, code, px, day, closes, *, day_i, ds):
         if wanted:
             return f"profit_take:band:{seq}", wanted
     return None
+
+
+def fill_stop(st, code, row, frame, day, *, day_i, ds, limits, minute=False, bucket=None):
+    """Dispatch one chosen stop through the existing limit/T+1 residual path."""
+    if code in st.book_state.setdefault("turtle_pending", {}):
+        return False
+    if not any(lot.sellable > 0 for lot in shared.sell_lots(st, code, day_i, ds)):
+        return False
+    trigger = rules.chosen_stop(memory_for(st, code).cost, frame, day)
+    if float(row.open) <= trigger:
+        px, reason = float(row.open), "stop_loss:gap_open"
+    elif float(row.close if minute else row.low) <= trigger:
+        px = float(row.close) if minute else trigger
+        reason = "stop_loss:touch"
+    else:
+        return False
+    st.book_state["turtle_pending"][code] = reason, sum(p.shares for p in st.positions[code])
+    fill_pending(st, code, SimpleNamespace(open=px), day, day_i=day_i, ds=ds,
+                 limits=limits, bucket=bucket)
+    return True
 
 
 def fill_pending(st, code, row, day, *, day_i, ds, limits, bucket=None):
@@ -170,6 +188,10 @@ def run_daily_day(st, pending_chase, *, hooks, bars, pool_days, day_i, day,
         if got is None or code in pending:
             continue
         row, closes = got
+        limits = shared._limits(st, code, closes, ds, names, exdiv)
+        if limits is not None and fill_stop(st, code, row, bars[code], day,
+                                           day_i=day_i, ds=ds, limits=limits):
+            continue
         memory_for(st, code).peak = max(memory_for(st, code).peak, float(row.high))
         plan = plan_exit(st, code, float(row.close), day, closes, day_i=day_i, ds=ds)
         if plan:
@@ -212,6 +234,9 @@ def run_minute_day(st, pending_chase, *, hooks, minute_bars, daily_bars, pool_da
                 continue
             fill_pending(st, code, row, day, day_i=day_i, ds=ds, limits=limits[code], bucket=hm)
             if not st.positions.get(code):
+                continue
+            if fill_stop(st, code, row, daily_bars[code], day, day_i=day_i,
+                         ds=ds, limits=limits[code], minute=True, bucket=hm):
                 continue
             mem = memory_for(st, code)
             mem.peak = max(mem.peak, float(row.high))
