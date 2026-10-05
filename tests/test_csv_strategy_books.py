@@ -47,6 +47,7 @@ def test_registered_books_are_explicit():
         "version6_20",
         "version6_21",
         "version6_22",
+        "version6_23",
         "version8",
         "version8_1",
         "version8_2",
@@ -180,6 +181,16 @@ def test_apply_version6_17_hooks():
     assert hooks["step_frac"] == pytest.approx(1.0)
     assert hooks["scale_out_step"] == pytest.approx(0.05)
     assert hooks["peak_dd_exit"] == pytest.approx(0.15)
+
+
+def test_apply_version6_23_concentrated():
+    hooks = apply_csv_strategy("v6.23")
+    assert hooks["name"] == "version6_23"
+    sched = hooks["add_schedule"]
+    assert sched[0] == (0.10, 0.30)
+    assert sched[1] == (0.20, 2.50)  # 50 满基 + 200 基数
+    assert sched[2] == (0.40, 2.00)
+    assert sched[3] == (0.60, 2.00)
 
 
 def test_apply_version6_22_simple_ladder():

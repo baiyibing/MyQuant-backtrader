@@ -185,6 +185,8 @@ def summarize(
         max_hold = st.stats.get("max_hold")
         hold_text = f"满持有 {int(max_hold)} 日 force_sell" if max_hold is not None else "满持有强平 OFF"
         lines.append(f"  参数: 止损 rolling range（每日重算，缺窗口无替代） + 固定成本 × 0.90（10%） | {hold_text}")
+    elif st.stats.get("sell_book") == "v6_23":
+        lines.append("  参数: 首仓20万→+10%加30→+20%加250(50满基+200基数)→+40%起每+20%加200万 | B=5%+3%×档 | 止损−5%+step止损−10% | 减仓:每+5%卖5% | 峰值兜底15%/15日")
     elif st.stats.get("sell_book") == "v6_22":
         lines.append("  参数: 首仓20万 + 每+20%加300万(无上限,不计入首仓成本) | B=5%+3%×档 | 止损−5%+step止损−10% | 减仓:每+5%卖5% | 峰值兜底15%/15日")
     elif st.stats.get("sell_book") == "v6_21":
