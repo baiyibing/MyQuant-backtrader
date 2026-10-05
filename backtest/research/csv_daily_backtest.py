@@ -30,7 +30,7 @@ REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, REPO)
 
 from backtest.research.strategy9_rules import (  # noqa: E402
-    evaluate_stop_range, RANGE_LOOKBACK_CALENDAR_DAYS,
+    evaluate_stop_range, RANGE_LOOKBACK_CALENDAR_DAYS, protective_line,
 )
 
 from backtest.research.csv_strategy_books import (  # noqa: E402
@@ -415,8 +415,9 @@ def simulate(
                             stop_enabled = True
                         close = float(row["close"])
                         if stop_enabled:
-                            trigger = (pos.cost - stop_ratio if "stop_range" in hooks
-                                       else pos.cost * (1.0 - stop_ratio))
+                            trigger, stop_kind = (protective_line(pos.cost, pos.peak, stop_ratio)
+                                                  if "stop_range" in hooks else
+                                                  (pos.cost * (1.0 - stop_ratio), "stop_loss"))
                             if stop_fill == "close":
                                 if close <= trigger:
                                     _sell(
@@ -425,7 +426,7 @@ def simulate(
                                         pos,
                                         close,
                                         day,
-                                        "stop_loss:close",
+                                        ("trail:atr" if stop_kind == "trail" else "stop_loss:close"),
                                         price_rule="daily_stop_close",
                                     )
                                     continue
@@ -433,7 +434,7 @@ def simulate(
                                 if defer_sell_at_limit(float(row["open"]), limits):
                                     st.stats["defer_sell_limit_down"] += 1
                                     if absolute_exit:
-                                        pos.pending_exit = "stop_loss:gap_open"
+                                        pos.pending_exit = ("trail:atr" if stop_kind == "trail" else "stop_loss:gap_open")
                                 else:
                                     _sell(
                                         st,
@@ -441,7 +442,7 @@ def simulate(
                                         pos,
                                         float(row["open"]),
                                         day,
-                                        "stop_loss:gap_open",
+                                        ("trail:atr" if stop_kind == "trail" else "stop_loss:gap_open"),
                                         price_rule="daily_stop_gap_open",
                                     )
                                 continue
@@ -449,9 +450,9 @@ def simulate(
                                 if defer_sell_at_limit(trigger, limits):
                                     st.stats["defer_sell_limit_down"] += 1
                                     if limit_down_pending:
-                                        pos.pending_exit = "stop_loss:touch"
+                                        pos.pending_exit = ("trail:atr" if stop_kind == "trail" else "stop_loss:touch")
                                 else:
-                                    _sell(st, code, pos, trigger, day, "stop_loss:touch",
+                                    _sell(st, code, pos, trigger, day, ("trail:atr" if stop_kind == "trail" else "stop_loss:touch"),
                                           price_rule="daily_stop_touch_at_trigger")
                                 continue
 
@@ -617,9 +618,11 @@ def simulate(
                             stop_ratio = evaluate_stop_range(hooks, bars[code], day, st.stats)
                             stop_enabled = stop_ratio is not None
                         if stop_enabled:
-                            if close <= (pos.cost - stop_ratio if "stop_range" in hooks
-                                         else pos.cost * (1.0 - stop_ratio)):
-                                reason = "stop_loss:close"
+                            trigger, stop_kind = (protective_line(pos.cost, pos.peak, stop_ratio)
+                                                  if "stop_range" in hooks else
+                                                  (pos.cost * (1.0 - stop_ratio), "stop_loss"))
+                            if close <= trigger:
+                                reason = "trail:atr" if stop_kind == "trail" else "stop_loss:close"
                         if not reason:
                             reason = (
                                 sell_gate(code, close, day, closes) if callable(sell_gate)

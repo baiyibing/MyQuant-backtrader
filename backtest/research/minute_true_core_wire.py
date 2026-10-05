@@ -70,7 +70,7 @@ from backtest.research.strategy8_6_rules import STOP_PCT as V8_6_STOP
 from backtest.research.strategy8_6_rules import take_profit_reason as v8_6_take
 from backtest.research.strategy8_rules import STOP_PCT as V8_STOP
 from backtest.research.strategy8_rules import take_profit_reason as v8_take
-from backtest.research.strategy9_rules import stop_mean_true_range_distance
+from backtest.research.strategy9_rules import stop_mean_true_range_distance, protective_line
 from backtest.research.strategy9_rules import take_profit_reason as v9_take
 from backtest.research.strategy10_rules import STOP_PCT as V10_STOP
 from backtest.research.strategy_topk_dropout_rules import STOP_PCT as TOPK_STOP
@@ -340,18 +340,18 @@ def _version9_range_stop(
     """Apply today's trailing range stop. None means the bar did not hit it.
 
     ``distance`` is twice the prior 20 true ranges' simple mean in yuan.
-    Subtract it even when it exceeds cost; day T is excluded.
+    Use the passed pre-bar peak to arm and price the line; day T is excluded.
     """
     opening, high, low, close = _ohlc(bar, "bar")
     new_peak = high if high > peak else peak
-    trigger = float(cost) - float(distance)
+    trigger, kind = protective_line(float(cost), float(peak), float(distance))
     if opening <= trigger:
-        result = BarScanExit("fill", opening, "stop_loss:gap_open", new_peak)
+        result = BarScanExit("fill", opening, ("trail:atr" if kind == "trail" else "stop_loss:gap_open"), new_peak)
     elif low <= trigger:
         if price == "close" and timing == "same_bar":
-            result = BarScanExit("fill", close, "stop_loss:touch:bar_close", new_peak)
+            result = BarScanExit("fill", close, ("trail:atr" if kind == "trail" else "stop_loss:touch:bar_close"), new_peak)
         else:
-            result = BarScanExit("fill", trigger, "stop_loss:touch", new_peak)
+            result = BarScanExit("fill", trigger, ("trail:atr" if kind == "trail" else "stop_loss:touch"), new_peak)
     else:
         return None
     return apply_fill_timing(result, timing=timing, next_bar=next_bar)

@@ -1,9 +1,11 @@
 """策略 9（底量超顶量）卖点纯函数。
 
 买点不在本模块：由 ``export_strategy9_pool.py`` 写成契约日 CSV，引擎按名单买。
-卖：止损距离每个交易日从此前 20 个真实波幅的简单算术均值重算，不在入场锁定；盈利达到成本的 10% 返回已有 reason
+卖：ATR20 为 T 前 20 个真实波幅的简单算术均值（元），每日重算、不在入场锁定。
+未启用跟踪时止损价=成本 -2 ATR20；使用本 bar 更新前峰值判断 +1 ATR20 启用条件。
+缺窗口当天不止损、不跟踪退出。盈利达到成本的 10% 返回已有 reason
 ``profit_take:target``（不是新订单类型）。启用 --max-hold 后满 20 个交易日记
-``force_sell:max_hold``，次日开盘离场。无分档回撤止盈；不加仓。
+``force_sell:max_hold``，次日开盘离场。峰值达到成本 +1 ATR20 后保本，以峰值 -2 ATR20 跟踪退出；不分批卖、不加仓。
 禁止默认 ``stock_pool/``（那是隔夜手工池，不是本信号）。
 """
 
@@ -29,11 +31,13 @@ HELP_LOCK = """
   买点 = 底量超顶量名单（export_strategy9_pool.py），不是 stock_pool/。
   必须显式 --pool-dir；指向本仓 stock_pool/ 立即退出。
   止损距离每个交易日从此前 20 个真实波幅的简单算术均值重算，不在入场锁定。
-  触发价=成本 - 2 × 前20日真实波幅简单算术均值（元）；非百分比、非 Wilder。
+  未启用跟踪时触发价=成本 - 2 × 前20日真实波幅简单算术均值（元）；非百分比、非 Wilder。
   使用 T 前21根日线，TR=max(high-low, abs(high-prev_close), abs(low-prev_close))；排除 T。
-  缺窗口当天不止损、不回落固定比例；--stop-pct 不接受。
+  ATR20=上述距离/2；使用本 bar 更新前峰值，达到成本+1 ATR20 时启用 max(成本, 峰值-2 ATR20)。
+  每日重新判断是否启用；缺窗口当天不止损、不跟踪退出、不回落固定比例；--stop-pct 不接受。
   盈利达到成本的 10% 返回已有 reason
-  profit_take:target（不是新订单类型），次日开盘卖。无分档回撤止盈；不加仓。
+  profit_take:target（不是新订单类型）；日线收盘信号次日开盘卖，分钟沿用原成交价。
+  保护线触达优先于 10% 目标；不分批卖、不加仓。
   20 交易日强平默认 OFF；启用 --max-hold 后，持仓交易日数 n_days>=20 收盘记 force_sell:max_hold，次日开盘卖
   （跌停则 defer）。已持仓票跳过，不叠加 lot；peak_gap_min=0。
   落盘：backtest_output/csv_{daily|minute}_v9_{start}_{end}/
@@ -58,10 +62,17 @@ def take_profit_reason(
     return None
 
 
+def protective_line(cost: float, peak: float, distance: float) -> tuple[float, str]:
+    """Use the pre-bar peak and today's twice-mean TR distance, in yuan."""
+    if peak >= cost + distance / 2:
+        return max(cost, peak - distance), "trail"
+    return cost - distance, "stop_loss"
+
+
 def record_strategy9_params(st, *, max_hold: bool = False) -> None:
     st.stats["sell_book"] = BOOK_TAG
     st.stats["stop_pct"] = None
-    st.stats["stop_mode"] = "cost_minus_2x_mean_true_range_20_yuan_trailing_daily"
+    st.stats["stop_mode"] = "atr20_daily_initial_2atr_arm_1atr_trail_2atr"
     st.stats["range_bars"] = RANGE_BARS
     st.stats["profit_target"] = TAKE_PROFIT_PCT
     st.stats["max_hold"] = MAX_HOLD if max_hold else None
