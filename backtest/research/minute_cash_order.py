@@ -36,7 +36,7 @@ from backtest.research.csv_common import book_limit_prices
 from backtest.research.csv_ledger import (
     CHASE_HM,
     IndependentExitPosition,
-    InsufficientCashError,
+    check_buy_cash,
     _sell,
     apply_exdiv_economics,
     exit_positions,
@@ -49,6 +49,7 @@ from backtest.research.csv_ledger import (
     s8_policy,
     trade_commission,
 )
+from backtest.research.minute_audit import record_rejection
 from backtest.research.csv_simulate_loop import (
     apply_capital_ration,
     run_chase_due_day,
@@ -615,10 +616,13 @@ def run_chronological_day(
             parent = TailParent.from_budget(budget, px)
             if independent_policy is not None:
                 needed = parent.opening_debit(px, debit)
-                if needed > st.cash:
-                    raise InsufficientCashError(
-                        date=ds, code=code, needed=needed, available=st.cash,
+                if not check_buy_cash(st, needed=needed, available=st.cash, date=ds, code=code):
+                    st.stats["skip_cash"] = st.stats.get("skip_cash", 0) + 1
+                    st.stats["skip_cash_notional"] = (
+                        st.stats.get("skip_cash_notional", 0.0) + parent.target_shares * px
                     )
+                    record_rejection(st, code, day, "skip_cash", px)
+                    continue
             tail_orders[code] = [parent, None, limits]
 
     def fill_tail_slice(at_hm, only_code=None):
@@ -845,3 +849,54 @@ def run_chronological_day(
                     audit_sink, decision_hm=BUY_HM, phase="close", quote_for=pool_bucket
                 ):
                     pool_and_step()
+
+
+def run_symbol_major_day(state, day, calendar, symbols_today, ordered, pool_today,
+                         closes, last_prices, cleared_today, *, exdiv=None, names=None,
+                         names_by_day=None, blocked_new=False, fee=None, audit_sink=None,
+                         session):
+    """Main-owned v7 OFF traversal; book callbacks handle individual events."""
+    from backtest.research.strategy7_engine import _event
+    from backtest.research.minute_audit import audit_scope
+
+    for symbol in ordered:
+        records = symbols_today.get(symbol, [])
+        if not records:
+            if symbol in pool_today:
+                _event(state, day, symbol, None, "skip", 0, None, "skip_no_1455")
+            continue
+        previous, limits, name = session.begin_symbol(
+            state, symbol, day, closes, exdiv, names, names_by_day)
+        first = True
+        open_checked = False
+        for row_index, row in enumerate(records):
+            hm = int(row["hm"])
+            with audit_scope(audit_sink, decision_hm=hm, phase="close"):
+                open_px, close_px, high_px = session.observe_row(
+                    state, symbol, row, last_prices)
+                position = state.positions.get(symbol)
+                if position is not None:
+                    session.stop(
+                        state, position, symbol, day, hm, first, open_px,
+                        close_px, high_px, previous, limits, fee, audit_sink)
+                    if symbol not in state.positions:
+                        cleared_today.add(symbol)
+                    position = state.positions.get(symbol)
+                    session.add(
+                        state, position, symbol, day, hm, close_px, previous, limits, fee)
+                if (hm == 895 and symbol in pool_today and symbol not in state.positions
+                        and symbol not in cleared_today):
+                    open_checked = True
+                    session.trial(
+                        state, symbol, day, hm, close_px, blocked_new,
+                        previous, name, fee)
+                with audit_scope(audit_sink, decision_hm=hm, phase="timer"):
+                    if row_index == len(records) - 1:
+                        session.timer(
+                            state, symbol, day, hm, close_px, calendar,
+                            previous, limits, fee, cleared_today)
+                first = False
+
+        session.finish_symbol(
+            state, symbol, day, symbol in pool_today, open_checked,
+            records)

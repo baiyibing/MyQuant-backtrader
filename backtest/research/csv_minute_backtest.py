@@ -47,6 +47,7 @@ from backtest.research.csv_ledger import (  # noqa: E402
     SimState,
     chase_decision as chase_decision,
     configure_s8,
+    reject_short_cash_override,
     execute_buy as execute_buy,
     exit_positions,
     held_fill_key,
@@ -77,6 +78,10 @@ from backtest.research.csv_common import (  # noqa: E402
     _pool_names_asof as _pool_names_asof,
     _progress as _progress,
 )
+from backtest.research.minute_engine_policies import (  # noqa: E402
+    MinutePolicyContext, minute_policy_for,
+)
+
 from backtest.research.csv_pool import (  # noqa: E402
     load_pool_day_map,
     load_pool_names_by_day,
@@ -84,6 +89,7 @@ from backtest.research.csv_pool import (  # noqa: E402
 from backtest.research.csv_strategy_books import (  # noqa: E402
     add_csv_backtest_common_args,
     apply_csv_strategy,
+    get_minute_book,
     csv_run_kwargs_from_args,
     engine_book,
     resolve_daily_quota,
@@ -659,146 +665,198 @@ def simulate(
     topk_exec: str = "close",
     limit_walkdown: bool = False,
     topk_limit_rule: str = "qlib",
+    policy_context: MinutePolicyContext | None = None,
 ) -> SimState:
     """Opt-in cap uses caller-attested completed minutes; daily volume is unused.
 
     exdiv_economics is an explicit (symbol, YYYYMMDD) -> ExDivEvent lookup for
     raw bars. None retains the baseline; E-R6 ratios never imply entitlements.
     """
-    validate_minute_entry(strategy, stage="sell", version9_sell=version9_sell, max_hold=max_hold)
-    validate_minute_stop_trigger(minute_stop_trigger, normalize_csv_strategy(strategy), fix_s11_exit_domain)
-    validate_topk_exec(topk_exec, strategy, limit_walkdown, topk_limit_rule)
-    validate_tail_options(tail_window_buy, fix_minute_cash_order, tail_volume_unit)
-    if tail_window_buy:
-        tail_volume_unit = resolve_tail_volume_unit(tail_volume_unit)
-    validate_minute_entry(strategy, stage="tail", tail_window_buy=tail_window_buy)
-    validate_minute_entry(strategy, stage="cash", fix_minute_cash_order=fix_minute_cash_order)
-    if audit_sink is not None and normalize_csv_strategy(strategy) == "version12":
-        raise ValueError("X-02 execution audit is not applicable to version12")
-    if fix_s12_price_domain:
-        from backtest.research.signal_price_domain import S12PriceContext
+    book = get_minute_book(strategy)
+    native_symbol_major = book.name == "version7"
+    if native_symbol_major:
+        if fix_minute_cash_order or tail_window_buy or fill_config is not None:
+            raise ValueError("version7 main currently supports its native OFF schedule only")
+        hooks = book.apply()
+        policy = minute_policy_for(hooks)
+        if policy.schedule != "symbol_major":
+            raise ValueError("version7 requires its registered symbol-major policy")
+        from backtest.research import strategy7_engine as v7
+        from backtest.research.ashare_fees import DEFAULT_SCHEDULE
+        from backtest.research.minute_cash_order import run_symbol_major_day
+        frames, minutes, closes, pools, calendar, gate = v7.prepare_main_inputs(
+            minute_bars, daily_bars, pool_days, start, end, policy_context)
+        st = v7.SimResult(float(total_cash))
+        configure_s8(st, hooks)
+        if exdiv_economics is not None:
+            st.exdiv_economics = ExDivEconomics(exdiv_economics)
+        if participation_rate is not None:
+            st.volume_cap = VolumeCap(participation_rate, volume_for_bucket)
+        fee = (policy_context.fee_schedule if policy_context and
+               policy_context.fee_schedule is not None else DEFAULT_SCHEDULE)
+        last_prices = {}
+    if not native_symbol_major:
+        validate_minute_entry(strategy, stage="sell", version9_sell=version9_sell, max_hold=max_hold)
+        validate_minute_stop_trigger(minute_stop_trigger, normalize_csv_strategy(strategy), fix_s11_exit_domain)
+        validate_topk_exec(topk_exec, strategy, limit_walkdown, topk_limit_rule)
+        validate_tail_options(tail_window_buy, fix_minute_cash_order, tail_volume_unit)
+        if tail_window_buy:
+            tail_volume_unit = resolve_tail_volume_unit(tail_volume_unit)
+        validate_minute_entry(strategy, stage="tail", tail_window_buy=tail_window_buy)
+        validate_minute_entry(strategy, stage="cash", fix_minute_cash_order=fix_minute_cash_order)
+        if audit_sink is not None and normalize_csv_strategy(strategy) == "version12":
+            raise ValueError("X-02 execution audit is not applicable to version12")
+        if fix_s12_price_domain:
+            from backtest.research.signal_price_domain import S12PriceContext
 
-        if normalize_csv_strategy(strategy) != "version12":
-            raise ValueError("--fix-s12-price-domain applies only to version12")
-        if exdiv is not None:
-            raise ValueError("--fix-s12-price-domain requires exdiv=None (no double adjustment)")
-        if not isinstance(s12_price_context, S12PriceContext):
-            raise ValueError("--fix-s12-price-domain requires an explicit validated s12_price_context")
-        s12_price_context.validate_simulation(minute_bars, daily_bars, pool_days, start, end)
-    elif s12_price_context is not None:
-        raise ValueError("s12_price_context requires fix_s12_price_domain=True")
-    if signal_bars_front is not None and not fix_s11_exit_domain:
-        raise ValueError("signal_bars_front requires version11 + fix_s11_exit_domain=True")
-    if fix_s11_exit_domain:
-        validate_minute_entry(strategy, stage="s11", fix_s11_exit_domain=fix_s11_exit_domain)
-        if signal_bars_front is None:
-            raise ValueError("fix_s11_exit_domain requires independent signal_bars_front")
-        from backtest.research.s11_exit_domain import validate_signal_bars
+            if normalize_csv_strategy(strategy) != "version12":
+                raise ValueError("--fix-s12-price-domain applies only to version12")
+            if exdiv is not None:
+                raise ValueError("--fix-s12-price-domain requires exdiv=None (no double adjustment)")
+            if not isinstance(s12_price_context, S12PriceContext):
+                raise ValueError("--fix-s12-price-domain requires an explicit validated s12_price_context")
+            s12_price_context.validate_simulation(minute_bars, daily_bars, pool_days, start, end)
+        elif s12_price_context is not None:
+            raise ValueError("s12_price_context requires fix_s12_price_domain=True")
+        if signal_bars_front is not None and not fix_s11_exit_domain:
+            raise ValueError("signal_bars_front requires version11 + fix_s11_exit_domain=True")
+        if fix_s11_exit_domain:
+            validate_minute_entry(strategy, stage="s11", fix_s11_exit_domain=fix_s11_exit_domain)
+            if signal_bars_front is None:
+                raise ValueError("fix_s11_exit_domain requires independent signal_bars_front")
+            from backtest.research.s11_exit_domain import validate_signal_bars
 
-        validate_signal_bars(
-            daily_bars, signal_bars_front, start=start, end=end,
-            required_codes={c for codes in pool_days.values() for c in codes},
+            validate_signal_bars(
+                daily_bars, signal_bars_front, start=start, end=end,
+                required_codes={c for codes in pool_days.values() for c in codes},
+            )
+        hooks = prepare_strategy_hooks(
+            strategy,
+            stop_pct=stop_pct,
+            take_profit=take_profit,
+            record_params=record_params,
+            name_budget=name_budget,
+            ration=ration,
+            ration_seed=ration_seed,
+            profit_base=profit_base,
+            tiers=tiers,
+            tier_default=tier_default,
+            apply_fn=apply_csv_strategy,
+            **({"version9_sell": version9_sell} if version9_sell is not None else {}),
+            **({"max_hold": True} if max_hold else {}),
+            **({"fix_s81_band_precision": True} if fix_s81_band_precision else {}),
+            scores_by_day=scores_by_day,
+            topk=topk,
+            n_drop=n_drop,
+            eligible_buy=eligible_buy,
+            keep_buy_vacancy=keep_buy_vacancy,
+            index_block_new=index_block_new,
+            stop_fill=stop_fill,
         )
-    hooks = prepare_strategy_hooks(
-        strategy,
-        stop_pct=stop_pct,
-        take_profit=take_profit,
-        record_params=record_params,
-        name_budget=name_budget,
-        ration=ration,
-        ration_seed=ration_seed,
-        profit_base=profit_base,
-        tiers=tiers,
-        tier_default=tier_default,
-        apply_fn=apply_csv_strategy,
-        **({"version9_sell": version9_sell} if version9_sell is not None else {}),
-        **({"max_hold": True} if max_hold else {}),
-        **({"fix_s81_band_precision": True} if fix_s81_band_precision else {}),
-        scores_by_day=scores_by_day,
-        topk=topk,
-        n_drop=n_drop,
-        eligible_buy=eligible_buy,
-        keep_buy_vacancy=keep_buy_vacancy,
-        index_block_new=index_block_new,
-        stop_fill=stop_fill,
-    )
-    if topk_limit_rule == "real":
-        hooks["qlib_limit_pct"] = None
-    stop_pct = hooks["stop_pct"]
-    stop_fill = str(hooks.get("stop_fill") or "touch").strip().lower()
-    if stop_fill == "close":
-        raise SystemExit(
-            "--stop-fill close is daily EOD close only; "
-            "minute entry refuses it (bar close is not 当日收盘)"
-        )
-    if stop_fill != "touch":
-        raise SystemExit(f"--stop-fill must be touch or close, got {stop_fill}")
-    take_profit = hooks["take_profit"]
-    buy_gate = hooks.get("buy_gate")
-    sell_gate = hooks.get("sell_gate")
-    peak_gap_min = int(hooks["peak_gap_min"])
-    force_sell_hm = hooks.get("force_sell_hm")
-    close_clear = hooks.get("close_clear")
-    reserve_limit_up = bool(hooks.get("reserve_limit_up"))
-    defer_limit_up = bool(hooks.get("defer_limit_up"))
-    calendar = build_calendar(daily_bars, start, end)
+        if topk_exec != "close" or limit_walkdown:
+            reject_short_cash_override(hooks, "topk_minute_exec")
+        if topk_limit_rule == "real":
+            hooks["qlib_limit_pct"] = None
+        stop_pct = hooks["stop_pct"]
+        stop_fill = str(hooks.get("stop_fill") or "touch").strip().lower()
+        if stop_fill == "close":
+            raise SystemExit(
+                "--stop-fill close is daily EOD close only; "
+                "minute entry refuses it (bar close is not 当日收盘)"
+            )
+        if stop_fill != "touch":
+            raise SystemExit(f"--stop-fill must be touch or close, got {stop_fill}")
+        take_profit = hooks["take_profit"]
+        buy_gate = hooks.get("buy_gate")
+        sell_gate = hooks.get("sell_gate")
+        peak_gap_min = int(hooks["peak_gap_min"])
+        force_sell_hm = hooks.get("force_sell_hm")
+        close_clear = hooks.get("close_clear")
+        reserve_limit_up = bool(hooks.get("reserve_limit_up"))
+        defer_limit_up = bool(hooks.get("defer_limit_up"))
+        policy = minute_policy_for(hooks)
+        calendar = (build_calendar(daily_bars, start, end) if policy.calendar is None
+                    else policy.calendar(minute_bars=minute_bars, daily_bars=daily_bars,
+                                         pool_days=pool_days, start=start, end=end,
+                                         context=policy_context))
 
-    st, pending_chase, names_asof = init_sim_state(
-        hooks,
-        total_cash=total_cash,
-        bars_loaded=len(minute_bars),
-        pool_days=pool_days,
-        pool_names=pool_names,
-        pool_names_by_day=pool_names_by_day,
-        daily_quota=daily_quota,
-    )
-    defaults = book_fill_defaults(hooks, minute_stop_trigger)
-    if hooks.get("run_minute_day") is not None:
-        raise ValueError("run_minute_day is retired; use minute_session with HeldMinuteCursor")
-    if fill_config is not None and fill_config != defaults["stop"]:
-        if "bind_absolute_exit" in hooks and fill_config.trigger_basis != "bar_low":
-            raise ValueError("absolute_exit requires trigger_basis=bar_low")
-    if hooks.get("minute_open") and fill_config is None:
-        fill_config = defaults["stop"]
-    side_fill_config = None if fill_config == defaults["stop"] else fill_config
-    held_fill_states = {}
-    st.held_fill_states = held_fill_states
-    absolute_exit = hooks["bind_absolute_exit"](st, daily_bars) if "bind_absolute_exit" in hooks else None
-    configure_s8(st, hooks)
-    if minute_stop_trigger == "hl" or absolute_exit:
-        st.stats["minute_stop_trigger"] = "hl"
-    if topk_exec != "close" or limit_walkdown or topk_limit_rule != "qlib":
-        st.stats.update(topk_limit_rule=topk_limit_rule, topk_exec=topk_exec, limit_retry_fills=0, limit_retry_expired=0)
-        st.topk_exec_audit = []
-        if limit_walkdown:
-            st.stats.update(limit_walkdown=True, walkdown_fills=0, walkdown_exhausted=0)
-    if buy_cost_rate is not None:
-        st.buy_cost_rate = float(buy_cost_rate)
-    if sell_cost_rate is not None:
-        st.sell_cost_rate = float(sell_cost_rate)
-    if min_cost is not None:
-        st.min_cost = float(min_cost)
-    st.stats["buy_cost_rate"] = st.buy_cost_rate
-    st.stats["sell_cost_rate"] = st.sell_cost_rate
-    st.stats["min_cost"] = st.min_cost
-    if participation_rate is not None:
-        st.volume_cap = VolumeCap(participation_rate, volume_for_bucket)
-    st.star_lot_declare_check = star_lot_declare_check
-    if exdiv_economics is not None:
-        st.exdiv_economics = ExDivEconomics(exdiv_economics, st.stats)
-    allow_add = bool(hooks["allow_add"])
-    qlib_limit_pct = hooks.get("qlib_limit_pct")
-    limit_up_chase = bool(hooks.get("limit_up_chase", True))
-    forbid_all_trade_at_limit = bool(hooks.get("forbid_all_trade_at_limit", False))
-    minute_open = bool(hooks.get("minute_open"))
-    if minute_open:
-        for code, frame in minute_bars.items():
-            if "volume" not in frame:
-                raise ValueError(f"{hooks['name']} requires minute volume for {code}; use the lake volume path")
-    hold_modes = {}
-    day_spans = {code: build_day_spans(df) for code, df in minute_bars.items()}
+        initialize = init_sim_state if policy.initialize is None else policy.initialize
+        st, pending_chase, names_asof = initialize(
+            hooks,
+            total_cash=total_cash,
+            bars_loaded=len(minute_bars),
+            pool_days=pool_days,
+            pool_names=pool_names,
+            pool_names_by_day=pool_names_by_day,
+            daily_quota=daily_quota,
+            **({"context": policy_context} if policy.initialize is not None else {}),
+        )
+        defaults = book_fill_defaults(hooks, minute_stop_trigger)
+        if hooks.get("run_minute_day") is not None:
+            raise ValueError("run_minute_day is retired; use minute_session with HeldMinuteCursor")
+        if fill_config is not None and fill_config != defaults["stop"]:
+            if "bind_absolute_exit" in hooks and fill_config.trigger_basis != "bar_low":
+                raise ValueError("absolute_exit requires trigger_basis=bar_low")
+        if hooks.get("minute_open") and fill_config is None:
+            fill_config = defaults["stop"]
+        side_fill_config = None if fill_config == defaults["stop"] else fill_config
+        held_fill_states = {}
+        st.held_fill_states = held_fill_states
+        absolute_exit = hooks["bind_absolute_exit"](st, daily_bars) if "bind_absolute_exit" in hooks else None
+        configure_s8(st, hooks)
+        if minute_stop_trigger == "hl" or absolute_exit:
+            st.stats["minute_stop_trigger"] = "hl"
+        if topk_exec != "close" or limit_walkdown or topk_limit_rule != "qlib":
+            st.stats.update(topk_limit_rule=topk_limit_rule, topk_exec=topk_exec, limit_retry_fills=0, limit_retry_expired=0)
+            st.topk_exec_audit = []
+            if limit_walkdown:
+                st.stats.update(limit_walkdown=True, walkdown_fills=0, walkdown_exhausted=0)
+        if buy_cost_rate is not None:
+            st.buy_cost_rate = float(buy_cost_rate)
+        if sell_cost_rate is not None:
+            st.sell_cost_rate = float(sell_cost_rate)
+        if min_cost is not None:
+            st.min_cost = float(min_cost)
+        st.stats["buy_cost_rate"] = st.buy_cost_rate
+        st.stats["sell_cost_rate"] = st.sell_cost_rate
+        st.stats["min_cost"] = st.min_cost
+        if participation_rate is not None:
+            st.volume_cap = VolumeCap(participation_rate, volume_for_bucket)
+        st.star_lot_declare_check = star_lot_declare_check
+        if exdiv_economics is not None:
+            st.exdiv_economics = ExDivEconomics(exdiv_economics, st.stats)
+        allow_add = bool(hooks["allow_add"])
+        qlib_limit_pct = hooks.get("qlib_limit_pct")
+        limit_up_chase = bool(hooks.get("limit_up_chase", True))
+        forbid_all_trade_at_limit = bool(hooks.get("forbid_all_trade_at_limit", False))
+        minute_open = bool(hooks.get("minute_open"))
+        if minute_open:
+            for code, frame in minute_bars.items():
+                if "volume" not in frame:
+                    raise ValueError(f"{hooks['name']} requires minute volume for {code}; use the lake volume path")
+        hold_modes = {}
+        day_spans = {code: build_day_spans(df) for code, df in minute_bars.items()}
 
     for i, day in enumerate(calendar):
+        if native_symbol_major:
+            policy.day_start(st, day=day, day_i=i, context=policy_context)
+            cleared_today = set()
+            needed = list(dict.fromkeys(pools.get(day, []) + list(st.positions)))
+            if frames is not None:
+                symbols_today = {symbol: rows for symbol in needed
+                                 if (rows := v7._day_frame_records(frames.get(symbol), day))}
+                ordered = needed
+            else:
+                symbols_today = minutes.get(day, {})
+                ordered = list(dict.fromkeys(needed + list(symbols_today)))
+            run_symbol_major_day(
+                st, day, calendar, symbols_today, ordered, pools.get(day, []),
+                closes, last_prices, cleared_today, exdiv=exdiv, names=pool_names,
+                names_by_day=pool_names_by_day, blocked_new=gate.get(day, False),
+                fee=fee, audit_sink=audit_sink, session=hooks["minute_session"])
+            policy.append_marks(st, day=day, last_prices=last_prices,
+                                context=policy_context)
+            continue
         ds = _ymd(day)
         day_trade_start = len(st.trades)
         if st.exdiv_economics is not None:
@@ -806,7 +864,11 @@ def simulate(
         names = names_asof(ds)
         st.daily_quota_used = 0.0
 
-        if hooks.get("minute_session") or fix_minute_cash_order or topk_exec != "close" or limit_walkdown:
+        if policy.day_start is not None:
+            policy.day_start(st, day=day, ds=ds, day_i=i, context=policy_context)
+
+        if policy.chronological(hooks, fix_cash_order=fix_minute_cash_order,
+                                topk_exec=topk_exec, limit_walkdown=limit_walkdown):
             run_chronological_day(
                 st, pending_chase, hooks=hooks, minute_bars=minute_bars,
                 daily_bars=daily_bars, pool_days=pool_days, day_i=i, day=day,
@@ -1211,13 +1273,22 @@ def simulate(
             st, ds, lambda code: _slice_day(minute_bars[code], day_spans.get(code, {}), ds)
             if code in minute_bars else None,
         )
-        append_equity_and_eod_marks(
-            st,
-            ds=ds,
-            day=day,
-            calendar_last=calendar[-1],
-            mark_bars=daily_bars,
-        )
+        if policy.append_marks is None:
+            append_equity_and_eod_marks(
+                st,
+                ds=ds,
+                day=day,
+                calendar_last=calendar[-1],
+                mark_bars=daily_bars,
+            )
+        else:
+            policy.append_marks(
+                st, ds=ds, day=day, calendar_last=calendar[-1],
+                mark_bars=daily_bars, context=policy_context,
+            )
+
+    if native_symbol_major:
+        return st
 
     finish_pending_sells(st)
     finish_pending_chase(st, pending_chase)

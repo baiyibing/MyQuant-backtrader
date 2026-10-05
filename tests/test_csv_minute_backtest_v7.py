@@ -318,7 +318,11 @@ def test_d4_timer_none_limits_respects_t1_and_records(cause, outcome, monkeypatc
                            lots=[v7.Lot(100, buy_date, 100, "trial")])
     before = asdict(position)
     result_type = v7.SimResult
+    from backtest.research import strategy7_engine
+
     monkeypatch.setattr(v7, "SimResult", lambda cash: result_type(cash, positions={code: position}))
+    monkeypatch.setattr(strategy7_engine, "SimResult",
+                        lambda cash: result_type(cash, positions={code: position}))
     assert v7.timer_due(sessions, D1, timer_day, position.stage) is True
     timer_calls, gate_calls = [], []
     real_timer, real_gate = v7.timer_due, v7.defer_sell_at_limit
@@ -333,6 +337,8 @@ def test_d4_timer_none_limits_respects_t1_and_records(cause, outcome, monkeypatc
         gate_calls.append((price, limits, blocked))
         return blocked
 
+    monkeypatch.setattr(strategy7_engine, "timer_due", observe_timer)
+    monkeypatch.setattr(strategy7_engine, "defer_sell_at_limit", observe_gate)
     monkeypatch.setattr(v7, "timer_due", observe_timer)
     monkeypatch.setattr(v7, "defer_sell_at_limit", observe_gate)
     # Prices avoid stop and add. Only the final record is the timer fill clock.
@@ -529,6 +535,9 @@ def test_d2_v7_public_multilot_fields_once_and_economic_delta(monkeypatch):
         real(pos, k)
         snapshots.append((old, asdict(pos)))
 
+    from backtest.research import strategy7_engine
+
+    monkeypatch.setattr(strategy7_engine, "_rescale_position", observe)
     monkeypatch.setattr(v7, "_rescale_position", observe)
     after = simulate_v7(minutes, closes, {D1: [SYMBOL]}, [D1, D2, D3],
                         exdiv={SYMBOL: {"20260903": 0.5}})
@@ -593,7 +602,9 @@ def test_d2_v7_new_trial_on_exday_is_not_rescaled():
 def test_d6_v7_production_conservation_and_pay_without_symbol_bar(monkeypatch, bonus, cash, price):
     from backtest.research.ashare_exdiv_economics import ExDivEvent
 
-    monkeypatch.setattr(v7, "NAME_BUDGET", 1000 / v7.TRIAL_FRACTION)  # trial=1000 => 100 shares
+    from backtest.research import strategy7_engine
+
+    monkeypatch.setattr(strategy7_engine, "NAME_BUDGET", 1000 / v7.TRIAL_FRACTION)  # trial=1000 => 100 shares
     minutes = {SYMBOL: [bar(D1, 895, 10), bar(D2, 570, price)]}
     closes = {SYMBOL: {D1 - timedelta(days=1): 10, D1: 10, D2: price}}
     event = ExDivEvent("rights", bonus, cash, "20260902", "20260903")
@@ -619,7 +630,9 @@ def test_d6_v7_bonus_t1_and_cap_consumes_only_real_fills(monkeypatch):
     from backtest.research.ashare_exdiv_economics import ExDivEvent
     from backtest.research.ashare_volume_cap import BucketVolume
 
-    monkeypatch.setattr(v7, "NAME_BUDGET", 1000 / v7.TRIAL_FRACTION)
+    from backtest.research import strategy7_engine
+
+    monkeypatch.setattr(strategy7_engine, "NAME_BUDGET", 1000 / v7.TRIAL_FRACTION)
     event = ExDivEvent("bonus", 1, 0, "20260902", "20260902")
     minutes = {SYMBOL: [bar(D1, 895, 10), bar(D2, 570, 5),
                          bar(D2, 571, 4.4), bar(D3, 570, 4.4)]}

@@ -124,8 +124,23 @@ def _assert_daily_mark_schedule(tree, bars_name):
     ]
     assert len(calls) == 1
     call = calls[0]
-    # A mark is an unconditional statement of the day loop, outside touch loops.
-    assert any(isinstance(node, ast.Expr) and node.value is call for node in day_loop.body)
+    # Legacy marks remain unconditional with respect to touch eligibility.
+    # A book may select native accounting; both branches must append marks.
+    statements = day_loop.body
+    policy_choices = [node for node in statements if isinstance(node, ast.If)
+                      and ast.unparse(node.test) == "policy.append_marks is None"]
+    if policy_choices:
+        choice, = policy_choices
+        assert len(choice.body) == len(choice.orelse) == 1
+        native = choice.orelse[0]
+        assert isinstance(native, ast.Expr) and isinstance(native.value, ast.Call)
+        assert ast.unparse(native.value.func) == "policy.append_marks"
+        assert {kw.arg: ast.unparse(kw.value) for kw in native.value.keywords} == {
+            "ds": "ds", "day": "day", "calendar_last": "calendar[-1]",
+            "mark_bars": bars_name, "context": "policy_context",
+        }
+        statements = choice.body
+    assert any(isinstance(node, ast.Expr) and node.value is call for node in statements)
     kwargs = {kw.arg: ast.unparse(kw.value) for kw in call.keywords}
     assert kwargs == {
         "ds": "ds", "day": "day", "calendar_last": "calendar[-1]", "mark_bars": bars_name,
@@ -143,6 +158,21 @@ def _assert_daily_mark_schedule(tree, bars_name):
             assert_no_day_bypass(child, nested_loops)
 
     for statement in day_loop.body:
+        if isinstance(statement, ast.If) and ast.unparse(statement.test) == "native_symbol_major":
+            # The registered v7 ledger has its own minute-close marks. Its
+            # main-owned day branch must append them before bypassing shared
+            # daily accounting, with no row/clock-dependent mark guard.
+            assert not statement.orelse
+            assert isinstance(statement.body[-1], ast.Continue)
+            native_mark = statement.body[-2]
+            assert isinstance(native_mark, ast.Expr) and isinstance(native_mark.value, ast.Call)
+            assert ast.unparse(native_mark.value.func) == "policy.append_marks"
+            assert {kw.arg: ast.unparse(kw.value) for kw in native_mark.value.keywords} == {
+                "day": "day", "last_prices": "last_prices", "context": "policy_context",
+            }
+            for native_statement in statement.body[:-1]:
+                assert_no_day_bypass(native_statement)
+            continue
         assert_no_day_bypass(statement)
 
 
@@ -171,18 +201,41 @@ def test_schedule_pin_rejects_gating_bypassing_or_replacing_daily_marks(mutation
     tree = _tree("csv_minute_backtest")
     simulate = _function(tree, "simulate")
     day_loop = next(n for n in simulate.body if isinstance(n, ast.For))
-    mark = next(n for n in day_loop.body if isinstance(n, ast.Expr)
+    statements = day_loop.body
+    choice = next((n for n in statements if isinstance(n, ast.If)
+                   and ast.unparse(n.test) == "policy.append_marks is None"), None)
+    if choice is not None:
+        statements = choice.body
+    mark = next(n for n in statements if isinstance(n, ast.Expr)
                 and isinstance(n.value, ast.Call)
                 and isinstance(n.value.func, ast.Name)
                 and n.value.func.id == "append_equity_and_eod_marks")
     if mutation == "gate":
-        day_loop.body[day_loop.body.index(mark)] = ast.If(
+        statements[statements.index(mark)] = ast.If(
             test=ast.parse("hm < 900", mode="eval").body, body=[mark], orelse=[],
         )
     elif mutation == "minute_bars":
         next(kw for kw in mark.value.keywords if kw.arg == "mark_bars").value.id = "minute_bars"
     else:
         day_loop.body.insert(0, ast.parse(f"if hm >= 900:\n    {mutation}").body[0])
+    with pytest.raises(AssertionError):
+        _assert_daily_mark_schedule(tree, "daily_bars")
+
+
+@pytest.mark.parametrize("mutation", ["remove", "gate", "after_continue"])
+def test_native_schedule_pin_requires_unconditional_marks_before_continue(mutation):
+    tree = _tree("csv_minute_backtest")
+    day_loop = next(n for n in _function(tree, "simulate").body if isinstance(n, ast.For))
+    native = next(n for n in day_loop.body if isinstance(n, ast.If)
+                  and ast.unparse(n.test) == "native_symbol_major")
+    mark = native.body[-2]
+    if mutation == "remove":
+        native.body.remove(mark)
+    elif mutation == "gate":
+        native.body[-2] = ast.If(test=ast.parse("hm < 900", mode="eval").body,
+                               body=[mark], orelse=[])
+    else:
+        native.body[-2:] = list(reversed(native.body[-2:]))
     with pytest.raises(AssertionError):
         _assert_daily_mark_schedule(tree, "daily_bars")
 

@@ -6,7 +6,7 @@ from math import isfinite
 from numbers import Real
 from typing import Literal
 
-from backtest.research.csv_strategy_books import apply_csv_strategy, csv_strategy_names
+from backtest.research.csv_strategy_books import apply_csv_strategy, csv_strategy_names, get_minute_book, MINUTE_ONLY_BOOKS
 
 CLI_MINUTE = "backtest/research/csv_minute_backtest.py"
 CLI_V7 = "backtest/research/csv_minute_backtest_v7.py"
@@ -32,7 +32,8 @@ def minute_strategy_names() -> tuple[str, ...]:
     overlap = [name for name in EXTRA_MINUTE_STRATEGIES if name in books]
     if overlap:
         raise RuntimeError(f"extra minute strategy already registered: {overlap}")
-    return books + EXTRA_MINUTE_STRATEGIES
+    additional = tuple(name for name in MINUTE_ONLY_BOOKS if name not in EXTRA_MINUTE_STRATEGIES)
+    return books + additional + EXTRA_MINUTE_STRATEGIES
 
 
 def minute_strategy_entries() -> tuple[MinuteStrategyEntry, ...]:
@@ -42,11 +43,14 @@ def minute_strategy_entries() -> tuple[MinuteStrategyEntry, ...]:
         cli = CLI_MINUTE
         if name in EXTRA_MINUTE_STRATEGIES:
             cli = CLI_V7 if name == "version7" else CLI_TOPK_APP
-        else:
+        execution_name = "version7" if name == "topk_app_dropout" else name
+        if name not in EXTRA_MINUTE_STRATEGIES or execution_name in MINUTE_ONLY_BOOKS:
             try:
                 # TopK registration requires scores; these synthetic inputs never run.
                 kwargs = {"scores_by_day": {"20260101": {"000001": 1.0}}} if name.startswith("topk_") else {}
-                hooks = apply_csv_strategy(name, **kwargs)
+                book = get_minute_book(execution_name)
+                hooks = (book.apply(**kwargs) if execution_name in MINUTE_ONLY_BOOKS
+                         else apply_csv_strategy(name, **kwargs))
                 stop = hooks.get("stop_pct")
                 take = hooks.get("take_profit")
                 percent = isinstance(stop, Real) and not isinstance(stop, bool) and isfinite(stop) and callable(take)

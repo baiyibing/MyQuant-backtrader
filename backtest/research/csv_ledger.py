@@ -236,12 +236,61 @@ class InsufficientCashError(RuntimeError):
         )
 
 
+def reject_short_cash_override(hooks: dict, entry: str) -> None:
+    """Dedicated engines retain their frozen cash and counting contracts."""
+    if "on_short_cash" in hooks:
+        raise ValueError(f"on_short_cash is unsupported for {entry}")
+
+
+def resolve_buy_cash_mode(st, hooks: dict) -> None:
+    """Resolve after policy binding; keep configuration out of snapshots."""
+    if "on_short_cash" in hooks:
+        mode = hooks["on_short_cash"]
+        if mode not in ("raise", "skip"):
+            raise ValueError("on_short_cash must be 'raise' or 'skip'")
+    else:
+        mode = "raise" if s8_policy(st) is not None else "skip"
+    st.on_short_cash = mode
+
+
 def configure_s8(st, hooks: dict) -> None:
+    if hooks.get("name") == "version9_2":
+        reject_short_cash_override(hooks, "strategy9_2_engine")
+    _configure_s8(st, hooks)
+    resolve_buy_cash_mode(st, hooks)
+
+
+def check_buy_cash(st, *, needed, available, date, code) -> bool:
+    """Decide an existing whole-order debit without counting or resizing."""
+    if needed > available:
+        mode = getattr(st, "on_short_cash", None)
+        if mode is None:
+            mode = "raise" if s8_policy(st) is not None else "skip"
+        if mode == "raise":
+            raise InsufficientCashError(
+                date=date, code=code, needed=needed, available=available,
+            )
+        return False
+    return True
+
+
+def uses_s8_independent(name: str | None, sizing: str | None) -> bool:
+    """True iff this book should bind S8 and default on_short_cash to raise."""
+    if sizing != "per_name" or not name:
+        return False
+    if name.startswith("version6_"):
+        return True
+    if name == "version8":
+        return True
+    if name.startswith("version8_") and name != "version8_1":
+        return True
+    return False
+
+
+def _configure_s8(st, hooks: dict) -> None:
     """Bind the selected per-name hooks once, including direct shared-loop use."""
     name = hooks.get("name")
-    if hooks.get("sizing") != "per_name" or name not in {
-        "version6_1", "version6_2", "version6_3", "version6_4", "version6_5", "version6_6", "version6_7", "version6_8", "version6_9", "version6_10", "version6_11", "version6_12", "version6_13", "version6_14", "version6_15", "version6_16", "version6_17", "version6_18", "version6_19", "version6_20", "version6_21", "version6_22", "version6_23", "version6_24", "version6_25", "version6_26", "version6_27", "version6_28", "version6_29", "version6_30", "version6_31", "version6_32", "version6_33", "version6_34", "version6_35", "version6_36", "version6_37", "version6_38", "version6_39", "version6_40", "version6_41", "version6_42", "version6_43", "version6_44", "version8", "version8_2", "version8_3", "version8_4", "version8_5", "version8_6",
-    }:
+    if not uses_s8_independent(name, hooks.get("sizing")):
         return
     if s8_policy(st) is not None:
         return
@@ -351,6 +400,7 @@ class SimState:
     def __post_init__(self):
         # Runtime diagnostics deliberately stay outside dataclasses.asdict:
         # account snapshots and the frozen OFF artifacts must not gain fields.
+        self.on_short_cash = None
         self.sell_pending_events = []
         self.sell_pending_open = []
         self._sell_pending_history = {}
@@ -572,11 +622,8 @@ def execute_buy(
         return False
     notional = shares * px
     comm = trade_commission(notional, st.buy_cost_rate, st.min_cost)
-    if notional + comm > st.cash:
-        if policy is not None:
-            raise InsufficientCashError(
-                date=_ymd(day), code=code, needed=notional + comm, available=st.cash,
-            )
+    if not check_buy_cash(st, needed=notional + comm, available=st.cash,
+                          date=_ymd(day), code=code):
         record_rejection(st, code, day, "skip_cash", px)
         return False
     if st.volume_cap is not None:
