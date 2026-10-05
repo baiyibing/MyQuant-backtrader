@@ -783,7 +783,9 @@ def test_lake_window_matches_public_reader_normalization(tmp_path, monkeypatch):
               "2026-01-08 09:30", "2026-01-09 09:30"]
     prices = np.arange(len(stamps), dtype=float) + 10
     pd.DataFrame({
-        "time": pd.to_datetime(stamps, utc=True).as_unit("ms").asi8,
+        # pandas 3 stores this UTC index at microsecond resolution; convert
+        # explicitly to the millisecond unit consumed by the lake reader.
+        "time": pd.to_datetime(stamps, utc=True).to_numpy(dtype="datetime64[ms]").astype("int64"),
         **{name: prices for name in host.OHLC},
         "volume": [100, 999, 100, 100, 100, 0, 100, 100],
     }).to_parquet(folder / "data.parquet", index=False, row_group_size=2)
