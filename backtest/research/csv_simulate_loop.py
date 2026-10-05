@@ -40,6 +40,7 @@ from backtest.research.csv_ledger import (
 from backtest.research.csv_strategy_books import apply_csv_strategy
 from backtest.research.exdiv_map import mapped_prev_close
 from backtest.research.minute_audit import record_rejection
+from backtest.research.lot_rounding import budget_board_lots
 
 # quotes_for(code) -> (open_px, buy_px, closes_ending_yesterday) or None to keep pending
 ChaseQuotesFn = Callable[[str], Optional[tuple[float, float, list[float]]]]
@@ -410,7 +411,7 @@ def run_pool_buys_day(
         if buy_hm is not None:
             volume_kwargs["hm"] = buy_hm
         if order_budget is not None:
-            volume_kwargs["shares_override"] = int(per / px / 100.) * 100
+            volume_kwargs["shares_override"] = budget_board_lots(per, px)
         if unit_shares is not None:
             volume_kwargs["shares_override"] = unit_shares
         if independent:

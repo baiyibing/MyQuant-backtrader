@@ -26,6 +26,14 @@ from backtest.research.ashare_volume_cap import VolumeCap
 from backtest.research.ashare_exdiv_economics import ExDivEconomics
 from backtest.research.market_layer import _digit_prefix, limit_prices
 from backtest.research.minute_audit import record_fill, record_rejection
+from backtest.research.lot_rounding import (
+    BOARD_LOT,
+    STAR_MIN_DECLARE,
+    budget_board_lots,
+    budget_integer_shares,
+    nonnegative_override_board_lots,
+    supplementary_notional,
+)
 
 DEFAULT_TOTAL_CASH = 21_000_000.0
 PEAK_GAP_MIN = 15
@@ -534,13 +542,13 @@ def _buy_size(per_quota: float, price: float, *, star_declare: bool = False) -> 
         return 0, 0.0
     if star_declare:
         # D23 X-10: integer shares, min 200 checked at entry; no top-up.
-        return int(per_quota / price), 0.0
-    shares = int(per_quota / price / 100.0) * 100
+        return budget_integer_shares(per_quota, price), 0.0
+    shares = budget_board_lots(per_quota, price)
     supp = 0.0
     if shares == 0:
-        notional = 100 * price
-        supp = max(0.0, notional - per_quota)
-        shares = 100
+        notional = BOARD_LOT * price
+        supp = supplementary_notional(notional, per_quota)
+        shares = BOARD_LOT
     return shares, supp
 
 
@@ -607,13 +615,13 @@ def execute_buy(
         if isinstance(shares_override, bool) or not isinstance(shares_override, Integral):
             raise ValueError("shares_override must be an integer share count")
         shares, supp = (
-            int(shares_override) if star_declare else max(0, int(shares_override)) // 100 * 100
+            int(shares_override) if star_declare else nonnegative_override_board_lots(shares_override)
         ), 0.0
         per = shares * px
     # This is the new buy declaration, not its eventual fill. A later cap may
     # fill <200; a subsequent execute_buy call is a NEW declaration, including
     # residual retries / merge_lot. Held-position sell unwinds stay separate.
-    if star_declare and shares < 200:
+    if star_declare and shares < STAR_MIN_DECLARE:
         reason_code = "skip_star_buy_declare_qty"
         st.stats[reason_code] = st.stats.get(reason_code, 0) + 1
         record_rejection(st, code, day, reason_code, px)
@@ -639,7 +647,7 @@ def execute_buy(
         comm = trade_commission(notional, st.buy_cost_rate, st.min_cost)
         if shares_override is not None:
             per = notional
-        supp = max(0.0, notional - per)
+        supp = supplementary_notional(notional, per)
     cash_before = st.cash
     st.cash -= notional + comm
     st.daily_quota_used += min(per, notional)
