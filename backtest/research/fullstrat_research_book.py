@@ -49,12 +49,15 @@ def simulate(
         precheck_cli_participation_rate,
     )
 
+    from backtest.research.csv_ledger import reject_short_cash_override
+    reject_short_cash_override(kwargs, "fullstrat_research_book")
     precheck_cli_participation_rate(participation_rate)
     if participation_rate is not None or volume_for_bucket is not None:
         raise ValueError("batch4 is clock XOR slip; capacity is a separate axis")
     hooks = loop.prepare_strategy_hooks(
         strategy, apply_fn=book.apply_csv_strategy, **kwargs
     )
+    reject_short_cash_override(hooks, "fullstrat_research_book")
     calendar = book.build_calendar(daily_bars, start, end)
     st, pending_chase, names_asof = loop.init_sim_state(
         hooks,

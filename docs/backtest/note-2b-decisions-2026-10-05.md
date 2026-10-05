@@ -19,7 +19,7 @@
 - **A3：保持现状并文档化。** numba 仅支持默认 fill policy；custom `FillConfig` = Python backend only，non-default 在 numba 分流时 raises。
 - **B9 与 C：保持现状并文档化。** engine exclusions 与 per-book strategy semantics 不改。
 - **B6：version7 书规则，文档化且不改。** v7 在跌停价不买，与 qlib `TopkDropoutStrategy` 默认 `forbid_all_trade_at_limit=True` 一致。
-- **B7 / B8：deferred。** B7 拟加 `on_short_cash` 参数、默认 `raise`；B8 拟统一一个 lot-rounding 函数、zero diff；本轮不做。
+- **B7：2026-10-05 23:08 Human GO，已实施。** H-B7-01..07 全部采用推荐选项；B8 仍 deferred。
 - **A1 limit pair 与 B5：ADOPT（2026-10-05 16:08 CST）。** 统一采用共享 open+fill pair：bar OPEN 或成交价达到跌停即顺延，沿用单一 shared eps；不改 `defer_sell_at_limit` 定义。
 - **A1 pipe：do now，独立 PR。** 将 6.x side sells（`step_stop` / `scale_out` / `peak_dd_exit`；version6_8、6_10、6_13–6_17）接入 `FillConfig`；defaults byte-identical，不夹带 limit-pair rules。
 - **A2：用户覆盖 brainstorm 的五席 drop。Do it。** 将 version9_2（`strategy9_2_engine`）、version12（`strategy12_engine`）及 version11 `minute_open` 收进主引擎 `csv_minute_backtest.simulate` / `HeldMinuteCursor`，只留一个 minute loop。新 baselines / overlays 单独记录，旧 ones 永不覆盖；version9_1 untouched。独立 PR，大则每书一票。
@@ -98,7 +98,7 @@ Golden ownership 以 `scripts/research/generate_off_byte_baseline.py` 为准：�
 
 ### B7. Independent-position cash short raises
 
-`csv_ledger.py:567–572` 在 policy 存在时抛 `InsufficientCashError`，否则 `skip_cash`；同类抛错在 `csv_simulate_loop.py:428` / `minute_cash_order.py:532`。v7 :259 记 `skip_cash`。受影响为 per_name 的 version6_1–6_17、version8 / 8_2–8_6，raise 是已写明的书契约。**Deferred：** 拟 `on_short_cash="raise"|"skip"`，默认 raise；默认基线应不动，opt-in skip 会让原本停止的长窗继续，合计可变。
+2026-10-05 23:08 Human GO：H-B7-01..07 全部采用推荐选项，已实施 hooks-only `on_short_cash="raise"|"skip"`。省略时实际绑定 S8 per_name 的 50 本（version6_1–6_44、version8、version8_2–8_6）默认 raise，其余 skip；非 strict tail clip 保留。H-B7-03 保持原本金、费用和容量前门槛，B8 不实施；H-B7-04 仅共享买侧，专用入口显式 override 启动失败；H-B7-05 按授权逐路径表保留计数和生命周期（chase consume，breakout/price-add preserve，strict tail parent 新增 caller 计数）；H-B7-06 默认字节一致、旧 fixtures 不覆盖；H-B7-07 不加 CLI、不改 HELP_LOCK。详见 [B7 实施说明](note-b7-on-short-cash-2026-10-05.md)。
 
 ### B8. Lot rounding 多处各有选项
 

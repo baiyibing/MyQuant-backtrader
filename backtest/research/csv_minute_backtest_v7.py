@@ -623,7 +623,8 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
                 fix_minute_cash_order: bool = False,
                 tail_window_buy: bool = False,
                 tail_volume_unit: str | None = "shares",
-                audit_sink: Any = None) -> SimResult:
+                audit_sink: Any = None,
+                **unsupported_options) -> SimResult:
     """Run the matcher; optional cap uses caller-attested completed minutes.
 
     Same-bar close capacity is a completed-bar approximation. Gap opens cannot
@@ -634,6 +635,10 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
     unioned with pool dates, matching the records-path calendar contract.
     Dates absent from all frames and pools are not backfilled, as with records.
     """
+    from backtest.research.csv_ledger import reject_short_cash_override
+    reject_short_cash_override(unsupported_options, "v7 simulate")
+    if unsupported_options:
+        raise TypeError(f"Unexpected v7 options: {sorted(unsupported_options)}")
     validate_tail_options(tail_window_buy, fix_minute_cash_order, tail_volume_unit)
     if tail_window_buy:
         tail_volume_unit = resolve_tail_volume_unit(tail_volume_unit)

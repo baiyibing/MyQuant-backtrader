@@ -22,7 +22,7 @@ from backtest.research.csv_common import (
     day_bar_and_prev_closes,
 )
 from backtest.research.csv_ledger import (
-    InsufficientCashError,
+    check_buy_cash,
     SimState,
     _buy_size,
     chase_decision,
@@ -420,16 +420,10 @@ def run_pool_buys_day(
                 per = unit_shares * px
             shares, _ = _buy_size(per, px)
             notional = shares * px
-            if (
-                notional + trade_commission(notional, st.buy_cost_rate, st.min_cost)
-                > st.cash
+            if not check_buy_cash(
+                st, needed=notional + trade_commission(notional, st.buy_cost_rate, st.min_cost),
+                available=st.cash, date=ds, code=code,
             ):
-                if independent:
-                    raise InsufficientCashError(
-                        date=ds, code=code,
-                        needed=notional + trade_commission(notional, st.buy_cost_rate, st.min_cost),
-                        available=st.cash,
-                    )
                 st.stats["skip_cash"] = st.stats.setdefault("skip_cash", 0) + 1
                 st.stats["skip_cash_notional"] = (
                     st.stats.setdefault("skip_cash_notional", 0.0) + per
@@ -528,9 +522,9 @@ def run_step_adds_day(
             per = unit_shares * px
         shares, _ = _buy_size(per, px)
         notional = shares * px
-        if (
-            notional + trade_commission(notional, st.buy_cost_rate, st.min_cost)
-            > st.cash
+        if not check_buy_cash(
+            st, needed=notional + trade_commission(notional, st.buy_cost_rate, st.min_cost),
+            available=st.cash, date=ds, code=code,
         ):
             st.stats["skip_cash"] = int(st.stats.get("skip_cash", 0)) + 1
             st.stats["skip_cash_notional"] = (
@@ -732,9 +726,9 @@ def run_buybacks_day(
                 st.stats["skip_limit_up"] += 1
                 continue
             notional = shares * px
-            if (
-                notional + trade_commission(notional, st.buy_cost_rate, st.min_cost)
-                > st.cash
+            if not check_buy_cash(
+                st, needed=notional + trade_commission(notional, st.buy_cost_rate, st.min_cost),
+                available=st.cash, date=ds, code=code,
             ):
                 st.stats["skip_cash"] = st.stats.get("skip_cash", 0) + 1
                 st.stats["skip_cash_notional"] = (
