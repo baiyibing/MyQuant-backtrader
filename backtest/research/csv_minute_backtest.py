@@ -324,7 +324,6 @@ def scan_held_day_python(
     version9_plan=None,
     version9_max_hold=False,
     stop_range_ratio: Optional[float] = None,
-    stop_range_distance: Optional[float] = None,
     profit_base: float,
     trail_ratio: float,
     pos_trail: float = 0.0,
@@ -351,8 +350,8 @@ def scan_held_day_python(
     validate_low(minute_stop_trigger, l, c)
     del pos_trail  # reserved for future; kept for API parity with callers
     stop_enabled = isinstance(stop_pct, float) and 0 < stop_pct < 1
-    if version9_stop or stop_range_ratio is not None:
-        stop_pct = effective_stop_ratio(stop_range_ratio) if version9_stop else stop_range_ratio
+    if stop_range_ratio is not None:
+        stop_pct = stop_range_ratio
         stop_enabled = True
     trigger = cost * (1.0 - stop_pct) if stop_enabled else None
     if version9_plan is not None:
@@ -372,9 +371,6 @@ def scan_held_day_python(
         # T+0 不卖、不更新峰值（历史最高价从 T+1 起算）
         if (not can_sell) or n_days < 1:
             continue
-        stop_kind = "stop_loss"
-        if stop_range_distance is not None:
-            trigger, stop_kind = protective_line(cost, new_peak, stop_range_distance)
         hi = float(h[i])
         cur_hm = int(hm[i]) if hm is not None else i
         if hi > new_peak:
@@ -387,13 +383,13 @@ def scan_held_day_python(
         if blocked_bar(minute_stop_trigger, px_open, hi, limit_down):
             continue
         if stop_enabled and trigger is not None and px_open <= trigger:
-            return i, px_open, ("trail:atr" if stop_kind == "trail" else "stop_loss:gap_open"), new_peak, new_peak_hm
+            return i, px_open, "stop_loss:gap_open", new_peak, new_peak_hm
         ret = px_close / cost - 1.0
         if stop_enabled:
             touched = float(l[i]) <= trigger if minute_stop_trigger == "hl" else (px_close <= trigger if version9_plan is not None else ret <= -stop_pct)
             if touched:
                 fill_px = trigger if minute_stop_trigger == "hl" else px_close
-                return i, fill_px, ("trail:atr" if stop_kind == "trail" else "stop_loss:touch"), new_peak, new_peak_hm
+                return i, fill_px, "stop_loss:touch", new_peak, new_peak_hm
         if defer_lu and limit_up > 0 and hit_limit_up(px_close, limit_up):
             lu_today = True
         if defer_lu and lu_today:
@@ -495,7 +491,6 @@ def scan_held_day(
     version9_plan=None,
     version9_max_hold=False,
     stop_range_ratio: Optional[float] = None,
-    stop_range_distance: Optional[float] = None,
     profit_base: float,
     trail_ratio: float,
     pos_trail: float = 0.0,
@@ -529,7 +524,6 @@ def scan_held_day(
         minute_stop_trigger == "close"
         and version9_plan is None
         and stop_range_ratio is None
-        and stop_range_distance is None
         and _want_numba_scan(use_numba)
         and _NUMBA_SCAN_AVAILABLE
         and sell_gate is None
@@ -591,7 +585,6 @@ def scan_held_day(
         stop_pct=stop_pct,
         version9_plan=version9_plan, version9_max_hold=version9_max_hold,
         stop_range_ratio=stop_range_ratio,
-        stop_range_distance=stop_range_distance,
         profit_base=profit_base,
         trail_ratio=trail_ratio,
         pos_trail=pos_trail,
@@ -1036,14 +1029,6 @@ def simulate(
                             st.stats["defer_sell_volume"] += 1
                         continue
                     # Resolve dates here; only the eligibility bool reaches the scanner.
-                    stop_range_ratio = None
-                    if n_days >= 1:
-                        if absolute_exit:
-                            stop_range_ratio = 1 - absolute_exit(code, day) / pos.cost
-                        elif "stop_range" in hooks:
-                            distance = evaluate_stop_range(hooks, ddf, day, st.stats)
-                            if distance is not None and pos.cost > 0:
-                                stop_range_ratio = distance / pos.cost
                     reserve_state = {"reserved": bool(pos.reserved)}
                     v9_plan = (evaluate_version9_exit(hooks, ddf, day, st.stats)
                                if "version9_exit" in hooks and n_days >= 1 else None)

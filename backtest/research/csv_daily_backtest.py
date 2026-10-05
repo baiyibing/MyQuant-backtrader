@@ -417,8 +417,7 @@ def simulate(
                             v9_trigger = plan_stop_price(v9_plan, pos.cost)
                             stop_enabled = v9_trigger is not None
                         if "stop_range" in hooks:
-                            distance = evaluate_stop_range(hooks, bars[code], day, st.stats)
-                            stop_ratio = distance / pos.cost if distance is not None and pos.cost > 0 else None
+                            stop_ratio = evaluate_stop_range(hooks, bars[code], day, st.stats)
                             stop_enabled = stop_ratio is not None
                         absolute_line = absolute_exit(code, day) if absolute_exit else None
                         if absolute_line is not None:
@@ -428,16 +427,14 @@ def simulate(
                         if stop_enabled:
                             trigger = v9_trigger if v9_plan is not None else pos.cost * (1.0 - stop_ratio)
                             if stop_fill == "close":
-                                if (close <= trigger and not ("stop_range" in hooks and
-                                        float(row["open"]) > trigger and
-                                        take_profit(close, pos.cost, pos.peak, n_days) == "profit_take:target")):
+                                if close <= trigger:
                                     _sell(
                                         st,
                                         code,
                                         pos,
                                         close,
                                         day,
-                                        ("trail:atr" if stop_kind == "trail" else "stop_loss:close"),
+                                        "stop_loss:close",
                                         price_rule="daily_stop_close",
                                     )
                                     continue
@@ -445,7 +442,7 @@ def simulate(
                                 if defer_sell_at_limit(float(row["open"]), limits):
                                     st.stats["defer_sell_limit_down"] += 1
                                     if absolute_exit:
-                                        pos.pending_exit = ("trail:atr" if stop_kind == "trail" else "stop_loss:gap_open")
+                                        pos.pending_exit = "stop_loss:gap_open"
                                 else:
                                     _sell(
                                         st,
@@ -453,19 +450,17 @@ def simulate(
                                         pos,
                                         float(row["open"]),
                                         day,
-                                        ("trail:atr" if stop_kind == "trail" else "stop_loss:gap_open"),
+                                        "stop_loss:gap_open",
                                         price_rule="daily_stop_gap_open",
                                     )
                                 continue
-                            elif (float(row["low"]) <= trigger
-                                  and not ("stop_range" in hooks and
-                                           take_profit(close, pos.cost, pos.peak, n_days) == "profit_take:target")):
+                            elif float(row["low"]) <= trigger:
                                 if defer_sell_at_limit(trigger, limits):
                                     st.stats["defer_sell_limit_down"] += 1
                                     if limit_down_pending:
-                                        pos.pending_exit = ("trail:atr" if stop_kind == "trail" else "stop_loss:touch")
+                                        pos.pending_exit = "stop_loss:touch"
                                 else:
-                                    _sell(st, code, pos, trigger, day, ("trail:atr" if stop_kind == "trail" else "stop_loss:touch"),
+                                    _sell(st, code, pos, trigger, day, "stop_loss:touch",
                                           price_rule="daily_stop_touch_at_trigger")
                                 continue
 
@@ -634,8 +629,7 @@ def simulate(
                             v9_trigger = plan_stop_price(v9_plan, pos.cost)
                             stop_enabled = v9_trigger is not None
                         if "stop_range" in hooks:
-                            distance = evaluate_stop_range(hooks, bars[code], day, st.stats)
-                            stop_ratio = distance / pos.cost if distance is not None and pos.cost > 0 else None
+                            stop_ratio = evaluate_stop_range(hooks, bars[code], day, st.stats)
                             stop_enabled = stop_ratio is not None
                         if stop_enabled:
                             if close <= (v9_trigger if v9_plan is not None else pos.cost * (1.0 - stop_ratio)):
