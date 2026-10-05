@@ -56,6 +56,7 @@ from backtest.research.csv_simulate_loop import (
 )
 from backtest.research.exdiv_map import k_for, mapped_prev_close
 from backtest.research.minute_held_scan_core import HeldMinuteCursor
+from backtest.research.fill_config import is_open_fill
 from backtest.research.minute_audit import audit_scope
 from backtest.research.strategy9_rules import evaluate_version9_exit
 from backtest.research.tail_window_buy import (
@@ -122,6 +123,8 @@ def advance_independent_exit(
             "stop_loss:gap_open": "minute_gap_open",
             "stop_loss:touch": "minute_stop_price" if cursor.minute_stop_trigger == "hl" else "minute_trigger_bar_close",
         }.get(reason, "")
+        if reason.endswith(":next_open"):
+            price_rule = "minute_pending_next_open"
     with audit_scope(audit_sink, decision_hm=at_hm, quote_hm=at_hm, phase=phase):
         _sell(
             st, code, pos, px, day, reason, day_i=day_i, **volume_kwargs,
@@ -231,6 +234,8 @@ def run_chronological_day(
     tail_volume_unit="shares",
     exdiv_ref_fen=False,
     minute_stop_trigger="close",
+    fill_config=None,
+    held_fill_states=None,
     topk_exec="close",
     limit_walkdown=False,
 ):
@@ -253,6 +258,9 @@ def run_chronological_day(
         bind_opening(ds, list(st.positions))
 
     frames = {}
+
+    if held_fill_states is None:
+        held_fill_states = {}
 
     def frame_for(code):
         if code not in frames:
@@ -313,7 +321,9 @@ def run_chronological_day(
                 o,
                 h,
                 c,
-                l=frame["low"].to_numpy(np.float64) if minute_stop_trigger == "hl" else None,
+                l=frame["low"].to_numpy(np.float64) if minute_stop_trigger == "hl" or (fill_config and fill_config.trigger_basis == "bar_low") else None,
+                fill_config=fill_config,
+                fill_state=held_fill_states.setdefault(getattr(pos, "position_id", None) or id(pos), {}),
                 minute_stop_trigger=minute_stop_trigger, take_profit_pct=st.stats.get("profit_target"),
                 cost=pos.cost,
                 peak=pos.peak,
@@ -669,12 +679,14 @@ def run_chronological_day(
                     volume_kwargs = {
                         "bucket_id": at_hm,
                         "day_i": day_i,
-                        "at": at_hm - 1 if reason == "stop_loss:gap_open" else at_hm,
+                        "at": at_hm - 1 if is_open_fill(reason) else at_hm,
                     }
                 price_rule = {
                     "stop_loss:gap_open": "minute_gap_open",
                     "stop_loss:touch": "minute_stop_price" if cursor.minute_stop_trigger == "hl" else "minute_trigger_bar_close",
                 }.get(reason, "")
+                if reason.endswith(":next_open"):
+                    price_rule = "minute_pending_next_open"
                 with audit_scope(audit_sink, decision_hm=at_hm, quote_hm=at_hm, phase=phase):
                     _sell(
                         st,
