@@ -201,7 +201,7 @@ def get_book(strategy: str) -> CsvStrategyBook:
 
 
 # API-only execution books. Shared/daily CLI names and HELP_LOCK use BOOKS.
-# Version7 is deliberately not registered until its main-owned schedule lands.
+# Version7 keeps its native CLI while using the main minute scheduler.
 MINUTE_ONLY_BOOKS: dict[str, CsvStrategyBook] = {}
 
 
@@ -4021,4 +4021,13 @@ register(CsvStrategyBook(
     allow_add=True, peak_gap_min=0, help_lock=strategy9_1_rules.HELP_LOCK,
     apply=_apply_version9_1, run_kwargs=_run_kwargs_version9_1,
     sizing="per_name", name_budget=strategy9_1_rules.NAME_BUDGET,
+))
+
+
+from backtest.research.strategy7_engine import minute_hooks as _apply_version7
+
+register_minute_book(CsvStrategyBook(
+    name="version7", tag="v7", aliases=("7", "v7", "version7"),
+    allow_add=True, peak_gap_min=0, help_lock="", apply=_apply_version7,
+    run_kwargs=lambda args: {"strategy": "version7"}, sizing="per_name",
 ))

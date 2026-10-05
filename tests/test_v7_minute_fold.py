@@ -1,4 +1,4 @@
-"""Single-event contracts while the two native schedulers remain active."""
+"""V7 event contracts and the main-owned OFF schedule boundary."""
 from dataclasses import asdict
 from datetime import date, timedelta
 
@@ -175,3 +175,114 @@ def test_finish_symbol_reads_target_only_when_needed():
 @pytest.mark.parametrize("first", [False, True])
 def test_nan_close_does_not_trigger_stop(first):
     assert engine.MinuteSession.stop_candidate(held(), 570, first, 10, float("nan")) is None
+
+
+def test_off_delegates_to_main_and_returns_identical_object(monkeypatch):
+    import ast
+    import inspect
+    from backtest.research import csv_minute_backtest as main
+    from backtest.research import minute_cash_order as scheduler
+    from backtest.research.minute_engine_policies import MinutePolicyContext
+
+    calls = []
+    days = []
+    original = main.simulate
+    run_day = scheduler.run_symbol_major_day
+    def spy(*args, **kwargs):
+        result = original(*args, **kwargs)
+        calls.append((args, kwargs, result))
+        return result
+    def day_spy(*args, **kwargs):
+        days.append(args[1])
+        return run_day(*args, **kwargs)
+    def retired(*args, **kwargs):
+        pytest.fail('OFF entered the old chronological runner')
+    monkeypatch.setattr(main, 'simulate', spy)
+    monkeypatch.setattr(scheduler, 'run_symbol_major_day', day_spy)
+    monkeypatch.setattr(native, '_run_chronological_day', retired)
+    bars = {S: [dict(datetime=D.isoformat(), hm=895, open=10, close=10)]}
+    closes = {S: {D - timedelta(days=1): 10}}
+    result = native.simulate_v7(bars, closes, {D: [S]}, [D], fee=FEE)
+    assert len(calls) == 1 and calls[0][2] is result
+    assert calls[0][1]['strategy'] == 'version7'
+    assert days == [D]
+    direct = original(bars, closes, {D: [S]}, None, None, strategy='version7',
+                      total_cash=21_000_000,
+                      policy_context=MinutePolicyContext(index_days=[D], fee_schedule=FEE))
+    assert asdict(direct) == asdict(result)
+    # Only the retained ON day loop remains in the shim; symbol/row traversal
+    # is owned by minute_cash_order, never a fallback after main failure.
+    tree = ast.parse(inspect.getsource(native.simulate_v7))
+    loops = [node for node in ast.walk(tree) if isinstance(node, (ast.For, ast.While))]
+    assert len(loops) == 1
+    assert isinstance(loops[0].target, ast.Name) and loops[0].target.id == 'day'
+    def failing(*args, **kwargs):
+        raise RuntimeError('main failed')
+    monkeypatch.setattr(main, 'simulate', failing)
+    with pytest.raises(RuntimeError, match='main failed'):
+        native.simulate_v7(bars, closes, {D: [S]}, [D])
+
+
+def test_on_keeps_native_chronological_route(monkeypatch):
+    from backtest.research import csv_minute_backtest as main
+    def forbidden(*args, **kwargs):
+        pytest.fail('X02 moved before PR4')
+    monkeypatch.setattr(main, 'simulate', forbidden)
+    assert native.simulate_v7({}, {}, {}, [D], fix_minute_cash_order=True).equity_curve
+
+
+def test_registered_v7_cash_binding_is_skip_with_and_without_explicit_default():
+    from backtest.research import csv_ledger
+    from backtest.research.csv_strategy_books import get_minute_book
+    from backtest.research import csv_minute_backtest as main
+    for explicit in (True, False):
+        hooks = get_minute_book('version7').apply()
+        if not explicit:
+            hooks.pop('on_short_cash')
+        state = csv_ledger.SimState()
+        csv_ledger.configure_s8(state, hooks)
+        assert not csv_ledger.uses_s8_independent('version7', 'per_name')
+        assert csv_ledger.s8_policy(state) is None
+        assert state.on_short_cash == 'skip'
+    result = main.simulate(
+        {S: [dict(datetime=D.isoformat(), hm=895, open=10, close=10)]},
+        {S: {D - timedelta(days=1): 10}}, {D: [S]}, None, None,
+        strategy='version7', total_cash=1)
+    assert result.on_short_cash == 'skip'
+    assert result.trades[-1]['reason'] == 'skip_cash'
+
+
+def test_sell_limit_checks_fill_only_even_when_open_is_at_limit():
+    state = engine.SimResult(0, {S: held()})
+    day = D + timedelta(days=1)
+    # A non-first open at the lower limit must not veto a valid close stop.
+    engine.MinuteSession.stop(state, state.positions[S], S, day, 571, False,
+                              8, 8.9, 10, 10, (12, 8), FEE, None)
+    assert state.trades[-1]['side'] == 'sell'
+    assert state.trades[-1]['price'] == 8.9
+
+
+@pytest.mark.parametrize('case', [
+    'default', 'short_cash', 'participation', 'exdiv', 'economics',
+    'index_gate', 'frame_calendar', 'names', 'names_by_day', 'audit', 'sell_fill_only',
+])
+def test_direct_main_matches_frozen_native_off_cases(case, monkeypatch, tmp_path):
+    import json
+    from backtest.research import csv_minute_backtest as main
+    from backtest.research.minute_engine_policies import MinutePolicyContext
+    from scripts.research.generate_v7_app_baseline import FIXTURE, capture_case
+
+    def direct(minute_bars, daily_bars, pool_days, index_days=None, **kwargs):
+        return main.simulate(
+            minute_bars, daily_bars, pool_days,
+            kwargs.pop('start', None), kwargs.pop('end', None), strategy='version7',
+            total_cash=kwargs.pop('cash_total', 21_000_000),
+            pool_names=kwargs.pop('names', None),
+            pool_names_by_day=kwargs.pop('names_by_day', None),
+            policy_context=MinutePolicyContext(index_days=index_days,
+                                               fee_schedule=kwargs.pop('fee', None)),
+            **kwargs)
+    monkeypatch.setattr(native, 'simulate_v7', direct)
+    actual = capture_case(case, tmp_path / case)
+    expected = json.loads(FIXTURE.read_text(encoding='utf-8'))['cases'][case]
+    assert actual == expected

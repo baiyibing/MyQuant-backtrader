@@ -158,6 +158,21 @@ def _assert_daily_mark_schedule(tree, bars_name):
             assert_no_day_bypass(child, nested_loops)
 
     for statement in day_loop.body:
+        if isinstance(statement, ast.If) and ast.unparse(statement.test) == "native_symbol_major":
+            # The registered v7 ledger has its own minute-close marks. Its
+            # main-owned day branch must append them before bypassing shared
+            # daily accounting, with no row/clock-dependent mark guard.
+            assert not statement.orelse
+            assert isinstance(statement.body[-1], ast.Continue)
+            native_mark = statement.body[-2]
+            assert isinstance(native_mark, ast.Expr) and isinstance(native_mark.value, ast.Call)
+            assert ast.unparse(native_mark.value.func) == "policy.append_marks"
+            assert {kw.arg: ast.unparse(kw.value) for kw in native_mark.value.keywords} == {
+                "day": "day", "last_prices": "last_prices", "context": "policy_context",
+            }
+            for native_statement in statement.body[:-1]:
+                assert_no_day_bypass(native_statement)
+            continue
         assert_no_day_bypass(statement)
 
 
@@ -203,6 +218,24 @@ def test_schedule_pin_rejects_gating_bypassing_or_replacing_daily_marks(mutation
         next(kw for kw in mark.value.keywords if kw.arg == "mark_bars").value.id = "minute_bars"
     else:
         day_loop.body.insert(0, ast.parse(f"if hm >= 900:\n    {mutation}").body[0])
+    with pytest.raises(AssertionError):
+        _assert_daily_mark_schedule(tree, "daily_bars")
+
+
+@pytest.mark.parametrize("mutation", ["remove", "gate", "after_continue"])
+def test_native_schedule_pin_requires_unconditional_marks_before_continue(mutation):
+    tree = _tree("csv_minute_backtest")
+    day_loop = next(n for n in _function(tree, "simulate").body if isinstance(n, ast.For))
+    native = next(n for n in day_loop.body if isinstance(n, ast.If)
+                  and ast.unparse(n.test) == "native_symbol_major")
+    mark = native.body[-2]
+    if mutation == "remove":
+        native.body.remove(mark)
+    elif mutation == "gate":
+        native.body[-2] = ast.If(test=ast.parse("hm < 900", mode="eval").body,
+                               body=[mark], orelse=[])
+    else:
+        native.body[-2:] = list(reversed(native.body[-2:]))
     with pytest.raises(AssertionError):
         _assert_daily_mark_schedule(tree, "daily_bars")
 

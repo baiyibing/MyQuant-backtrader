@@ -318,7 +318,11 @@ def test_d4_timer_none_limits_respects_t1_and_records(cause, outcome, monkeypatc
                            lots=[v7.Lot(100, buy_date, 100, "trial")])
     before = asdict(position)
     result_type = v7.SimResult
+    from backtest.research import strategy7_engine
+
     monkeypatch.setattr(v7, "SimResult", lambda cash: result_type(cash, positions={code: position}))
+    monkeypatch.setattr(strategy7_engine, "SimResult",
+                        lambda cash: result_type(cash, positions={code: position}))
     assert v7.timer_due(sessions, D1, timer_day, position.stage) is True
     timer_calls, gate_calls = [], []
     real_timer, real_gate = v7.timer_due, v7.defer_sell_at_limit
@@ -332,8 +336,6 @@ def test_d4_timer_none_limits_respects_t1_and_records(cause, outcome, monkeypatc
         blocked = real_gate(price, limits)
         gate_calls.append((price, limits, blocked))
         return blocked
-
-    from backtest.research import strategy7_engine
 
     monkeypatch.setattr(strategy7_engine, "timer_due", observe_timer)
     monkeypatch.setattr(strategy7_engine, "defer_sell_at_limit", observe_gate)

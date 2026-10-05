@@ -99,3 +99,21 @@ def test_gate_reports_failure_and_success(monkeypatch, capsys):
     assert captured.err.startswith("Minute classification gate FAILED:\n")
     assert "version_fake" in captured.err
     assert "csv_strategy_books" in captured.err
+
+
+def test_v7_and_app_classification_inspects_registered_execution_hooks(monkeypatch):
+    book = registry.get_minute_book('version7')
+    calls = []
+    def apply(**kwargs):
+        calls.append(kwargs)
+        return book.apply(**kwargs)
+    monkeypatch.setitem(registry.MINUTE_ONLY_BOOKS, 'version7', replace(book, apply=apply))
+    entries = classification.minute_strategy_entries()
+    assert len(calls) == 2
+    assert [(entry.name, entry.cli) for entry in entries[-2:]] == [
+        ('version7', classification.CLI_V7), ('topk_app_dropout', classification.CLI_TOPK_APP)]
+    monkeypatch.setitem(registry.MINUTE_ONLY_BOOKS, 'version7', replace(book, apply=lambda **kw: {}))
+    with pytest.raises(RuntimeError) as error:
+        classification.minute_strategy_entries()
+    assert 'version7: missing minute exit hooks' in str(error.value)
+    assert 'topk_app_dropout: missing minute exit hooks' in str(error.value)

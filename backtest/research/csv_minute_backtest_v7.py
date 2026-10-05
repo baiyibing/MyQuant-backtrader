@@ -342,7 +342,7 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
                 tail_volume_unit: str | None = "shares",
                 audit_sink: Any = None,
                 **unsupported_options) -> SimResult:
-    """Run the matcher; optional cap uses caller-attested completed minutes.
+    """Delegate OFF to main; retain the native X02 loop until PR4.
 
     Same-bar close capacity is a completed-bar approximation. Gap opens cannot
     use that bucket. An index date->close mapping enables the new-open gate.
@@ -359,6 +359,17 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
     validate_tail_options(tail_window_buy, fix_minute_cash_order, tail_volume_unit)
     if tail_window_buy:
         tail_volume_unit = resolve_tail_volume_unit(tail_volume_unit)
+    if not fix_minute_cash_order:
+        from backtest.research.csv_minute_backtest import simulate
+        from backtest.research.minute_engine_policies import MinutePolicyContext
+        return simulate(
+            minute_bars, daily_bars, pool_days, start, end, strategy="version7",
+            total_cash=cash_total, exdiv=exdiv, exdiv_economics=exdiv_economics,
+            pool_names=names, pool_names_by_day=names_by_day,
+            participation_rate=participation_rate, volume_for_bucket=volume_for_bucket,
+            audit_sink=audit_sink,
+            policy_context=MinutePolicyContext(index_days=index_days, fee_schedule=fee),
+        )
     frames = minute_bars if _is_frame_map(minute_bars) else None
     minutes = {} if frames is not None else _minute_records(minute_bars)
     closes = _daily_closes(daily_bars)
@@ -382,57 +393,14 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
         else:
             symbols_today = minutes.get(day, {})
             ordered = list(dict.fromkeys(needed + list(symbols_today)))
-        if fix_minute_cash_order:
-            _run_chronological_day(
-                state, day, calendar, symbols_today, ordered, pools.get(day, []),
-                closes, last_prices, cleared_today, exdiv=exdiv, names=names,
-                names_by_day=names_by_day, blocked_new=gate.get(day, False), fee=fee,
-                audit_sink=audit_sink,
-                tail_window_buy=tail_window_buy,
-                tail_volume_unit=tail_volume_unit,
-            )
-        else:
-            for symbol in ordered:
-                records = symbols_today.get(symbol, [])
-                if not records:
-                    if symbol in pools.get(day, []):
-                        _event(state, day, symbol, None, "skip", 0, None, "skip_no_1455")
-                    continue
-                previous, limits, name = MinuteSession.begin_symbol(
-                    state, symbol, day, closes, exdiv, names, names_by_day)
-                first = True
-                open_checked = False
-                for row_index, row in enumerate(records):
-                    hm = int(row["hm"])
-                    with audit_scope(audit_sink, decision_hm=hm, phase="close"):
-                        open_px, close_px, high_px = MinuteSession.observe_row(
-                            state, symbol, row, last_prices)
-                        position = state.positions.get(symbol)
-                        if position is not None:
-                            MinuteSession.stop(
-                                state, position, symbol, day, hm, first, open_px,
-                                close_px, high_px, previous, limits, fee, audit_sink)
-                            if symbol not in state.positions:
-                                cleared_today.add(symbol)
-                            position = state.positions.get(symbol)
-                            MinuteSession.add(
-                                state, position, symbol, day, hm, close_px, previous, limits, fee)
-                        if (hm == 895 and symbol in pools.get(day, []) and symbol not in state.positions
-                                and symbol not in cleared_today):
-                            open_checked = True
-                            MinuteSession.trial(
-                                state, symbol, day, hm, close_px, gate.get(day, False),
-                                previous, name, fee)
-                        with audit_scope(audit_sink, decision_hm=hm, phase="timer"):
-                            if row_index == len(records) - 1:
-                                MinuteSession.timer(
-                                    state, symbol, day, hm, close_px, calendar,
-                                    previous, limits, fee, cleared_today)
-                        first = False
-
-                MinuteSession.finish_symbol(
-                    state, symbol, day, symbol in pools.get(day, []), open_checked,
-                    records)
+        _run_chronological_day(
+            state, day, calendar, symbols_today, ordered, pools.get(day, []),
+            closes, last_prices, cleared_today, exdiv=exdiv, names=names,
+            names_by_day=names_by_day, blocked_new=gate.get(day, False), fee=fee,
+            audit_sink=audit_sink,
+            tail_window_buy=tail_window_buy,
+            tail_volume_unit=tail_volume_unit,
+        )
 
         AccountingPolicy.append_equity(state, day, last_prices)
     return state

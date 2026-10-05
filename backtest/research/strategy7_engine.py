@@ -1,6 +1,6 @@
 """V7 native state, accounting and single-event book callbacks.
 
-Scheduling remains in csv_minute_backtest_v7 during the extraction slice.
+OFF scheduling belongs to main; X02 remains in csv_minute_backtest_v7.
 Callbacks consume one symbol preparation or one row event, never traverse days.
 """
 from __future__ import annotations
@@ -520,3 +520,31 @@ class AccountingPolicy:
             equity += state.exdiv_economics.receivable_total
         state.equity_curve.append({"date": day.isoformat(), "cash": state.cash,
                                    "holdings": holdings, "equity": equity})
+
+
+def prepare_main_inputs(minute_bars, daily_bars, pool_days, start, end, context):
+    """Conversion only; main owns state construction and day advancement."""
+    frames = minute_bars if _is_frame_map(minute_bars) else None
+    minutes = {} if frames is not None else _minute_records(minute_bars)
+    closes = _daily_closes(daily_bars)
+    pools = _pool(pool_days)
+    calendar, gate = prepare_calendar(
+        context.index_days if context else None, frames, minutes, pools, start, end)
+    return frames, minutes, closes, pools, calendar, gate
+
+
+def minute_hooks(**kwargs):
+    from backtest.research.minute_engine_policies import MinuteEnginePolicy
+    return {"minute_session": MinuteSession,
+            "minute_policy": MinuteEnginePolicy(
+                schedule="symbol_major", day_start=_main_day_start,
+                append_marks=_main_append_marks, writer=MinuteSession.write_artifacts),
+            "on_short_cash": "skip", "name": "version7", "sizing": "per_name"}
+
+
+def _main_day_start(state, *, day, **kwargs):
+    AccountingPolicy.settle_day(state, day)
+
+
+def _main_append_marks(state, *, day, last_prices, **kwargs):
+    AccountingPolicy.append_equity(state, day, last_prices)
