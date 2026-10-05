@@ -82,6 +82,7 @@ class HeldMinuteCursor:
     session_exit_reason: str | None = None
     session_volume: object = None
     session_stats: dict | None = None
+    pending_log: object = None
     current_reserved: bool = field(init=False)
     lu_today: bool = field(default=False, init=False)
     saw_close_hm: bool = field(default=False, init=False)
@@ -112,9 +113,14 @@ class HeldMinuteCursor:
         self.first_exit_attempted = True
         return idx, float(px), reason
 
+    def _pending_event(self, idx, reason):
+        if self.pending_log is not None:
+            self.pending_log(reason, int(self.hm[idx]) if self.hm is not None else idx)
+
     def _price_exit(self, idx, px, reason, line=None, gap=False, intrabar=False):
         if self.fill_config.fill_timing == "next_bar_open":
             self.fill_state["pending"] = reason + ":next_open"
+            self._pending_event(idx, "next_bar_open_queued")
             return None
         if self._custom_fill and not gap:
             at = self.fill_config.fill_at
@@ -164,9 +170,11 @@ class HeldMinuteCursor:
             volume = float(self.session_volume[idx])
             if not math.isfinite(volume) or volume <= 0:
                 self.session_stats["defer_sell_volume"] += 1
+                self._pending_event(idx, "no_volume")
                 return None
             if limit_down_blocks(px, self.limit_down):
                 self.session_stats["defer_sell_limit_down"] += 1
+                self._pending_event(idx, "limit_down_open")
                 return None
             return self._exit(idx, px, self.session_exit_reason)
         cur_hm = int(self.hm[idx]) if self.hm is not None else idx
@@ -190,6 +198,7 @@ class HeldMinuteCursor:
             if "pending" in self.fill_state:
                 if not skip_bar:
                     return self._exit(idx, px_open, self.fill_state.pop("pending"))
+                self._pending_event(idx, "limit_down_open")
                 return None
             if not skip_bar and stop_enabled and gap_stop(px_open, trigger):
                 return self._price_exit(idx, px_open, "stop_loss:gap_open", trigger, gap=True)

@@ -1,4 +1,5 @@
 """Book-local turtle orchestration using the shared A-share fill ledger."""
+from backtest.research.sell_pending_observability import pending_callback, record_limit
 from types import SimpleNamespace
 
 from backtest.research import strategy9_2_rules as rules
@@ -93,6 +94,8 @@ def fill_pending(st, code, row, day, *, day_i, ds, limits, bucket=None, at=None,
         retry[code] = day_i + 1
         st.stats["defer_sell_limit_down"] += 1
         st.stats["limit_down_pending"] = st.stats.get("limit_down_pending", 0) + 1
+        record_limit(st, code, wanted, ds, bucket, px if limit_open is None else limit_open, limits,
+                     path="v9_2_turtle", key=("turtle", code))
         return
     filled = 0
     for lot in shared.sell_lots(st, code, day_i, ds):
@@ -106,6 +109,7 @@ def fill_pending(st, code, row, day, *, day_i, ds, limits, bucket=None, at=None,
                            if at is not None else {}))
     if filled >= wanted or not st.positions.get(code):
         pending.pop(code, None)
+        st._sell_pending_history.pop(("turtle", code), None)
     else:
         pending[code] = reason, wanted - filled
 
@@ -322,6 +326,9 @@ class MinuteSession:
                 can_sell=any(lot.sellable > 0 for lot in shared.sell_lots(st, code, day_i, ds)),
                 stop_pct=None, profit_base=0., trail_ratio=0.,
                 phase_exit=decision, fill_config=self.fill_config, fill_state=state,
+                pending_log=pending_callback(st, code, st.positions[code][0], ds,
+                                             path="v9_2_turtle", key=("turtle", code),
+                                             shares=lambda: pending[code][1]),
             )
             settle(cursor.advance(0, "open"))
             settle(cursor.advance(0, "close"))

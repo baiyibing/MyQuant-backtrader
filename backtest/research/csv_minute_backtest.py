@@ -27,6 +27,10 @@ import pandas as pd
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, REPO)
 
+from backtest.research.sell_pending_observability import (  # noqa: E402
+    pending_callback, carry_session, finish_pending_sells, record_limit,
+)
+
 from backtest.research.strategy9_rules import (  # noqa: E402
     evaluate_stop_range, RANGE_LOOKBACK_CALENDAR_DAYS,
     evaluate_version9_exit, plan_stop_price, plan_close_reason,
@@ -339,6 +343,7 @@ def scan_held_day_python(
     stop_pct: Optional[float],
     fill_state: dict | None = None,
     session_exit_reason=None, session_volume=None, session_stats=None,
+    pending_log=None,
     version9_plan=None,
     version9_max_hold=False,
     stop_range_ratio: Optional[float] = None,
@@ -377,7 +382,7 @@ def scan_held_day_python(
         defer_limit_up=defer_limit_up, limit_up=limit_up, reserved=reserved,
         reserve_state=reserve_state, exit_plan=exit_plan, exit_state=exit_state,
         close_clear=close_clear, l=l, minute_stop_trigger=minute_stop_trigger,
-        fill_config=fill_config, fill_state=fill_state,
+        fill_config=fill_config, fill_state=fill_state, pending_log=pending_log,
         session_exit_reason=session_exit_reason, session_volume=session_volume, session_stats=session_stats,
         take_profit_pct=take_profit_pct, version9_plan=version9_plan,
         version9_max_hold=version9_max_hold,
@@ -408,6 +413,7 @@ def scan_held_day(
     stop_pct: Optional[float],
     fill_state: dict | None = None,
     session_exit_reason=None, session_volume=None, session_stats=None,
+    pending_log=None,
     version9_plan=None,
     version9_max_hold=False,
     stop_range_ratio: Optional[float] = None,
@@ -501,7 +507,7 @@ def scan_held_day(
         h,
         c,
         l=l, minute_stop_trigger=minute_stop_trigger, take_profit_pct=take_profit_pct,
-        fill_config=fill_config, fill_state=fill_state,
+        fill_config=fill_config, fill_state=fill_state, pending_log=pending_log,
         session_exit_reason=session_exit_reason, session_volume=session_volume, session_stats=session_stats,
         cost=cost,
         peak=peak,
@@ -889,6 +895,7 @@ def simulate(
                             o, h, c, cost=pos.cost, peak=pos.peak,
                             l=day_m["low"].to_numpy(np.float64) if minute_stop_trigger == "hl" or absolute_exit or (fill_config and fill_config.trigger_basis == "bar_low") else None,
                             fill_config=fill_config, fill_state=held_fill_states.setdefault(held_fill_key(pos), {}),
+                            pending_log=pending_callback(st, code, pos, day),
                             minute_stop_trigger="hl" if absolute_exit else minute_stop_trigger,
                             take_profit_pct=st.stats.get("profit_target"),
                             n_days=n_days,
@@ -959,6 +966,7 @@ def simulate(
                         session_stats=st.stats,
                         minute_stop_trigger="hl" if absolute_exit else minute_stop_trigger,
                         fill_config=fill_config, fill_state=held_fill_states.setdefault(held_fill_key(pos), {}),
+                        pending_log=pending_callback(st, code, pos, day),
                         take_profit_pct=v9_plan["take_profit_pct"] if v9_plan is not None else st.stats.get("profit_target"),
                         cost=pos.cost,
                         peak=pos.peak,
@@ -1001,6 +1009,7 @@ def simulate(
                             defer_sell_open_or_fill(fill_open, float(px), limits)
                         ):
                             st.stats["defer_sell_limit_down"] += 1
+                            record_limit(st, code, pos.shares, day, int(hm[idx]), fill_open, limits, key=held_fill_key(pos))
                             continue
                         volume_kwargs = {}
                         if st.volume_cap is not None:
@@ -1198,6 +1207,10 @@ def simulate(
                 st, ds=ds, day=day, mark_bars=daily_bars,
                 mark_source_for=s12_price_context.raw_path_for,
             )
+        carry_session(
+            st, ds, lambda code: _slice_day(minute_bars[code], day_spans.get(code, {}), ds)
+            if code in minute_bars else None,
+        )
         append_equity_and_eod_marks(
             st,
             ds=ds,
@@ -1206,6 +1219,7 @@ def simulate(
             mark_bars=daily_bars,
         )
 
+    finish_pending_sells(st)
     finish_pending_chase(st, pending_chase)
     if fix_s12_price_domain:
         st.stats.update(s12_price_context.metadata)
