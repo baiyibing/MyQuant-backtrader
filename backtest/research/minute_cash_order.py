@@ -133,6 +133,39 @@ def advance_independent_exit(
         )
 
 
+def step_stop_exits(st, code, pos, px, day, day_i, limits, *, step_stop_pct, hm=None):
+    """6.8：step lot 自带独立止损（相对自身买价 −step_stop_pct，触发只卖该 lot）。
+
+    在组级退出评估之后逐分钟 close 调用；组已同分钟离场则 lots 已空、自然不触发。
+    T+1 按 lot entry_idx；跌停顺延次日再评；止损线随 E-R6 缩放后的 lot 成本走。
+    """
+    if not step_stop_pct or px <= 0 or not position_is_open(st, pos):
+        return 0
+    sold = 0
+    for lot in list(st.positions.get(code, [])):
+        if (
+            getattr(lot, "position_id", None) != pos.position_id
+            or not getattr(lot, "is_step", False)
+            or lot.entry_idx >= day_i
+        ):
+            continue
+        line = float(lot.cost) * (1.0 - float(step_stop_pct))
+        if float(px) > line:
+            continue
+        if defer_sell_at_limit(px, limits):
+            st.stats["defer_sell_limit_down"] += 1
+            continue
+        filled = _sell(
+            st, code, lot, px, day,
+            f"stop_loss:step{round(float(step_stop_pct) * 100)}", day_i=day_i,
+            hm=hm, price_rule="minute_trigger_bar_close",
+        )
+        if filled:
+            sold += 1
+            st.stats["sell_stop_step"] = int(st.stats.get("sell_stop_step", 0)) + 1
+    return sold
+
+
 @dataclass
 class HeldMinuteCursor:
     """One lot's resumable equivalent of ``scan_held_day_python``.
