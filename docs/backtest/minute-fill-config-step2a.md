@@ -57,7 +57,7 @@ retains the original predicates, including floating-point comparison order.
   `ValueError` for `use_numba=True` or the numba environment backend. Select
   Python explicitly for custom policies. Existing numba-ineligible paths
   remain Python; the numba implementation is unchanged.
-- Separate minute engines (version9_2, version12) reject custom
+- Separate minute engine (version9_2) rejects custom
   config instead of silently ignoring it. Daily, v7, bar_scan_exit and the
   minute wire registry are untouched.
 - A1 (2026-10-05): `step_stop`, `scale_out`, and `peak_dd_clear_exits`
@@ -117,7 +117,7 @@ may return no exit). H/L remains opt-in for supported shared books.
 | version9_2 | Separate run_minute_day (excluded) |
 | version10 | shared; take_profit |
 | version11 | EOD pending session exit; next_bar_open at AM_OPEN |
-| version12 | Separate run_minute_day (excluded) |
+| version12 | Main chronological loop + HeldMinuteCursor callback; custom FillConfig accepted |
 | topk_dropout | shared; sell_gate; take_profit |
 | topk_score_exit | shared; sell_gate; take_profit |
 | version9_1 | absolute_exit; inert take_profit callback |
@@ -136,7 +136,7 @@ Test names below are in `tests/test_minute_fill_config.py` unless a file is spec
 | 14:55/15:00 this_bar time exits | `test_time_exits_stay_this_bar` |
 | numba raises on non-default config, explicit and environment dispatch | `test_numba_refuses` |
 | Default numba parity | `tests/test_scan_held_day_numba_parity.py::test_numba_gap_open_stop`, `test_numba_t0_no_sell_no_peak_update`, `test_numba_trail_hit`, `test_numba_force_sell_time` |
-| version9_2/version12 reject custom config through simulate | `test_simulate_separate_engine_rejects_custom_config` |
+| version9_2 rejects custom config through simulate | `test_simulate_separate_engine_rejects_custom_config` |
 | absolute_exit bar_low guard | `test_simulate_absolute_exit_requires_bar_low` (version9_1) |
 | Side sells accept custom configs; default/None unchanged | `test_simulate_side_sells_accept_custom_config`, `test_simulate_side_sells_default_config_unchanged`; `tests/test_side_sell_fill_config.py` (next-open, session carry, limit retry, no duplicate, other-exit cleanup, low trigger and look-ahead rejection) |
 | Look-ahead rejects | `test_lookahead`, `test_callback_low_rejected_at_decision`, `test_target_cannot_assume_low_after_high` |
@@ -207,8 +207,8 @@ Version11 held sells now use `scan_held_day` / `HeldMinuteCursor` in both
 `simulate` and the chronological cash-order loop. The EOD rule still sets
 `Position.pending_exit`; its hook-derived default is `next_bar_open`, eligible
 only at AM_OPEN (09:30) in the next session. It does not retry later that day.
-AM_OPEN buys and daily rules are unchanged. Version12 / version9_2 remain
-separate pending their own PRs; version9_1 is untouched.
+AM_OPEN buys and daily rules are unchanged. Version12 is folded in the A2
+follow-up below; version9_2 remains separate pending its PR. Version9_1 is untouched.
 
 Default behavior differences: none in the off-byte cases. Price validity,
 positive finite opening volume, limit-down and T+1 checks retain their results;
@@ -233,3 +233,58 @@ base `origin/master 34bfdd73`):
 - Full suite (`-p no:cacheprovider -q -m "not production and not benchmark"`):
   **7650 passed, 4 skipped, 24 deselected, 29 warnings, 0 failed**, 143.75 s.
 - `git diff --stat origin/master -- tests/fixtures`: **empty**.
+
+
+## Step 2b A2 — version12 minute fold (2026-10-05)
+
+Version12 now always uses `minute_cash_order.run_chronological_day`.
+`strategy12_engine.MinuteSession` prepares exdiv, price-domain references and
+quote clocks, then supplies held and buy callbacks; it owns no minute loop.
+Each code/bar uses `HeldMinuteCursor.exit_plan / exit_state`, with live lot
+allocation and `fill_exit` clamp/memory updates. A new row cursor preserves
+partial/rejected-fill retries on later bars. `run_daily_day` and strategy12_rules
+are unchanged. Version9_2 is deferred; version9_1 is untouched.
+
+Default differences: none in the frozen daily/minute CSV bytes and account
+snapshots, participation 0.1 replay, or validated identity/nonunit X-01 replays.
+All opens precede closes in the main loop; S12 default decisions remain at close,
+with held sells before chase → pool → step-add → closed buyback at each hm.
+The max-available 09:30–09:45 and 14:30–14:55 clocks, open/fill limit checks,
+T+1/bonus lock, lot clamp, exdiv preparation and reference conversion remain.
+The existing S12 MA10-stop overlay stays active and unmodified; no new overlay.
+
+Interface differences: `fix_minute_cash_order=True` formerly raised an
+inapplicable-book error; it now accepts S12 and produces the same fills/NAV as
+omission. The old rejection tests now assert flag-on/off equality, including
+X-01. Custom FillConfig formerly failed the separate-engine guard; it now reaches
+the cursor. Positive-price execution uses that price; next_bar_open pins the
+signal-time lot allocation and executes at the next eligible open, including
+across sessions. It clamps against current T+1/bonus eligibility and cannot
+reallocate onto later buys. Opening fills use `at=hm-1` with execution-hm capacity and
+`minute_pending_next_open` metadata. With participation enabled the completed
+execution bucket is therefore unavailable at open, matching the shared
+fail-closed policy; no previous-bucket capacity is borrowed.
+Default close metadata/buckets stay unchanged. Callback low-print look-ahead
+and missing-line configurations fail through shared cursor validation; the
+book's MA decision still uses close. X-02 audit_sink remains excluded.
+The dedicated X-01 audit now reads live callback context instead of deleted
+run_minute_day locals.
+
+
+A2 version12 verification (Python `/tmp/mq-v6/bin/python`, pandas 3.0.6,
+base `origin/master bedfef4`):
+
+- `tests/test_off_byte_baseline.py`: **165 passed, 0 failed**, 3.87 s;
+  version12 daily/minute raw CSV hashes and complete account snapshots match
+  the branch base and the active frozen S12 overlay.
+- `test_v12_minute_fold.py`, `test_strategy12_engine.py`,
+  `test_s12_price_domain.py`, `test_partial_sell.py`,
+  `test_minute_cash_chronology.py`, `test_minute_fill_config.py`:
+  **258 passed, 0 failed**, 4.11 s.
+- Final full suite (`-p no:cacheprovider -q -m "not production and not benchmark"`):
+  **7679 passed, 5 skipped, 24 deselected, 29 warnings, 0 failed**, 145.26 s (0:02:25).
+- `git diff --stat origin/master -- tests/fixtures`: **empty**.
+- Baseline replay: default and X-01 identity/front=raw*0.5 each retain
+  **3 BUY / 3 SELL**, final equity **4,892,514.7375**; participation 0.1 retains
+  **3 BUY / 3 SELL**, final equity **4,998,941.0**. All trade rows match.
+  Cash-order flag-on was rejected at the base; now it matches default.

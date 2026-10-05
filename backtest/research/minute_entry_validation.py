@@ -18,7 +18,7 @@ def validate_minute_entry(strategy, *, stage, version9_sell=None, max_hold=False
         }:
             raise ValueError("--tail-window-buy applies only to version8 / version8.x in the shared entry")
     elif stage == "cash":
-        if fix_minute_cash_order and book in ("version9_1", "version12"):
+        if fix_minute_cash_order and book == "version9_1":
             raise ValueError(f"--fix-minute-cash-order is not applicable to {book}")
     elif stage == "s11":
         if fix_s11_exit_domain and book != "version11":

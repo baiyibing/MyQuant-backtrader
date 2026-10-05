@@ -1476,7 +1476,7 @@ def _apply_version12(*, index_block_new=None, **_) -> dict:
         "on_buy": strategy12_engine.on_buy,
         "on_exdiv": strategy12_engine.on_exdiv,
         "run_daily_day": strategy12_engine.run_daily_day,
-        "run_minute_day": strategy12_engine.run_minute_day,
+        "minute_session": strategy12_engine.MinuteSession,
     }
 
 

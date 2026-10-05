@@ -510,22 +510,22 @@ def test_explicit_off_matches_omission_complete_state():
 
 
 @pytest.mark.parametrize("fix_s12_price_domain", [False, True], ids=["x01-off", "x01-on"])
-def test_strategy12_explicitly_rejects_cash_order_flag(fix_s12_price_domain):
-    ms, ds = frames({A: [(D1, 895, 10, 10, 10)]})
-    with pytest.raises(ValueError, match="--fix-minute-cash-order is not applicable to version12"):
-        minute.simulate(
-            ms, ds, {}, D1, D2, strategy="version12", fix_minute_cash_order=True,
-            fix_s12_price_domain=fix_s12_price_domain,
-        )
+def test_strategy12_cash_order_flag_uses_same_main_loop(fix_s12_price_domain):
+    from scripts.research.audit_s12_price_domain import context_for
+    ms, ds = frames({A: [(D1, 895, 10, 10, 10), (D2, 895, 10, 10, 10)]})
+    extra = ({"fix_s12_price_domain": True,
+              "s12_price_context": context_for(ds, ds, ms, factor=1)}
+             if fix_s12_price_domain else {})
+    args = (ms, ds, {}, D1, D2)
+    off = minute.simulate(*args, strategy="version12", **extra)
+    on = minute.simulate(*args, strategy="version12", fix_minute_cash_order=True, **extra)
+    assert on.trades == off.trades
+    assert on.equity_curve == off.equity_curve
 
 
-@pytest.mark.parametrize("fix_s12_price_domain", [False, True], ids=["x01-off", "x01-on"])
-def test_strategy12_run_rejects_cash_order_before_loading(tmp_path, fix_s12_price_domain):
-    with pytest.raises(ValueError, match="--fix-minute-cash-order is not applicable to version12"):
-        minute.run(
-            D1, D2, pool_dir=tmp_path, strategy="version12", fix_minute_cash_order=True,
-            fix_s12_price_domain=fix_s12_price_domain,
-        )
+def test_strategy91_run_still_rejects_cash_order_before_loading(tmp_path):
+    with pytest.raises(ValueError, match="--fix-minute-cash-order is not applicable to version9_1"):
+        minute.run(D1, D2, pool_dir=tmp_path, strategy="version9_1", fix_minute_cash_order=True)
 
 
 def force_on(monkeypatch):

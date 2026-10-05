@@ -101,12 +101,14 @@ def _actual_minute_context():
     try:
         frame = frame.f_back
         while frame is not None:
-            if frame.f_code is engine.run_minute_day.__code__:
-                return dict(frame.f_locals)
+            if frame.f_code in (engine.MinuteSession.advance_held.__code__,
+                                engine.MinuteSession.after_close.__code__):
+                return {**frame.f_locals["self"].context, **frame.f_locals,
+                        "closes_by_code": frame.f_locals["self"].closes}
             frame = frame.f_back
     finally:
         del frame
-    raise AssertionError("fill audit requires an actual run_minute_day caller")
+    raise AssertionError("fill audit requires an actual shared-loop minute session callback")
 
 
 @contextmanager
@@ -153,7 +155,7 @@ def capture_fills(events, *, ctx=None, rejected_calls=None):
                     "price": price, "shares": quantity, "reason": trade["reason"],
                     "cash_before": cash_before, "cash_after": cash_after, "hm": hm,
                     "append_seq": seq, "decision_hm": hm, "quote_hm": hm,
-                    "fill_phase": "close", "lot_id": trade["lot"], "commission": fee,
+                    "fill_phase": call_context.get("phase", "close"), "lot_id": trade["lot"], "commission": fee,
                     "bucket_id": kwargs.get("bucket_id"),
                     "volume_at": kwargs.get("at", kwargs.get("bucket_id")),
                     "signal_domain": "raw_at_session_D" if ctx else "front",

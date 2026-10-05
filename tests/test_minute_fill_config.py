@@ -149,8 +149,7 @@ def minute_fixture():
                 pool_days={days[0]: ['600000.SH']}, start=days[0], end=days[-1])
 
 
-@pytest.mark.parametrize('strategy,hook', [('version9_2', 'run_minute_day'),
-                                         ('version12', 'run_minute_day')])
+@pytest.mark.parametrize('strategy,hook', [('version9_2', 'run_minute_day')])
 def test_simulate_separate_engine_rejects_custom_config(strategy, hook):
     from backtest.research.csv_minute_backtest import simulate
     from backtest.research.csv_strategy_books import apply_csv_strategy

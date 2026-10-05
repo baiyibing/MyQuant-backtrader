@@ -265,7 +265,7 @@ class HeldMinuteCursor:
                     if self.exit_state is None:
                         raise ValueError("partial exit_plan requires exit_state out-param")
                     self.exit_state["shares"] = shares
-                    return self._exit(idx, px_close, reason)
+                    return self._price_exit(idx, px_close, reason)
             elif callable(self.sell_gate):
                 reason = self.sell_gate(
                     self.gate_code,
