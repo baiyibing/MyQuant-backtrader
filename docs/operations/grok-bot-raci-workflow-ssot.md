@@ -134,6 +134,9 @@ MyQuant  →  MyQuant-backtrader  →  OSkhQuant1.3
 - 调用 Kimi / Codex / Cursor agent **仅走 headless / 非交互**；交互 TUI 仅在 Human 明示要求排障时使用。
 - Cursor 额度：**Human 表示 2026-10-04 恢复**；`agent about` 与 `agent status` 未打印额度耗尽或重置日期。机器显示 account `Ultra`、`wangchui@hotmail.com`、model `Grok 4.7`。**2026-10-04 之前不得派 Cursor CLI，除非 Human 表示额度已恢复**；不得为探测 billing 消耗一次 generation。
 
+**4090 湖与除权 / SMA 说明**：分钟线仅有 `dividend_type=none`（`E:\stock_data\stock\period=1m\dividend_type=none`）；日线有 none（5605 个 parquet）和 front（5593 个 parquet），back 不完整。1.3 的 `oskh_data/adj_factor.py` 使用已存储的日线 `dividend_type=front` 和 `dividend_type=none` 数据，按 `cumulative_adj_factor = close_front / close_none` 计算因子；`get_divid_factors` 不是因子来源，它下载除权事件记录并写入 `ex_date_index.parquet`。回测已有历史除权数据，可将不复权分钟收盘价乘以已知的日线因子；实盘不能用「今日前复权收盘价 ÷ 今日不复权收盘价」求今日因子，应以已公告的除权因子乘当前不复权分钟价，今日无除权则用最近一次已公告因子。人的动态盘中 SMA 方案是将应用该因子后的最新分钟收盘价视为今日收盘价，属于回测方法，**尚未实现、尚未纳入 draft #338**；#338 的 SMA 仍只用此前日线收盘价，lake 调用未传 `dividend_type`，因此读取 none。`603196.SH` 在 2026-09-21 的 none / front 收盘均为 19.14；两者重叠的 2265 个交易日中有 1711 天不同。
+人裁确定：回测即时调用既有 `oskh_data/adj_factor.py` 模块，由该模块读取已存储的日线 `dividend_type=front` 与 `dividend_type=none` 数据并写出 `cumulative_adj_factor = close_front / close_none`。
+
 ## 7. 跨仓文档关系（一份正文 + 指针）
 
 | 仓 | 做法 |
