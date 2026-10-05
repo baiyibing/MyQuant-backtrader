@@ -13,9 +13,9 @@
 
 ## 勘误 / 2026-10-05 更新
 
-本文原基线 `386d1dc4` 的分析与评审保留为历史。用户 **2026-10-05 11:05 CST** 裁定：一台共享分钟引擎 `csv_minute_backtest.simulate`；第 1 步共享核心；第 2 步把行业惯例与 fill 配置放进核心，各书默认复现现状；第 3 步在测试迁移后退役 `bar_scan_exit` / `minute_true_core_wire` / host round-trip。授权来源为本次用户修订指令；讨论记录见 `/tmp/bs365/summary.md`、`/tmp/bs365/r2_codex.md`、`/tmp/bs365/r2_cursor.md`。文首「授权：无」及 §4、§6.3、§7 的四席否决 / 未批准 / 永久冻结口径均 **superseded（已被此次人裁覆盖）**，不能作为当前停工依据。
+本文原基线 `386d1dc4` 的分析与评审保留为历史。用户 **2026-10-05 11:05 CST** 裁定：一台共享分钟引擎 `csv_minute_backtest.simulate`；第 1 步共享核心；第 2 步把行业惯例与 fill 配置放进核心，各书默认复现现状；第 3 步在测试迁移后退役 `bar_scan_exit` / `minute_true_core_wire` / host round-trip。授权来源为本次用户修订指令；讨论记录为 2026-10-05 11:31–11:47 CST 五席两轮头脑风暴（codex / grok / cursor / kimi / glm，R2 收敛：2a / 2b 拆票、默认零 diff、第 3 步测试迁移后退役扫线）。文首「授权：无」及 §4、§6.3、§7 的四席否决 / 未批准 / 永久冻结口径均 **superseded（已被此次人裁覆盖）**，不能作为当前停工依据。
 
-**第 1 步已完成。** PR #364 于 **2026-10-05 11:28 CST** 合并为 `d007213e`（以 `git show d007213e` 的 merge 信息与 CommitDate 为证）。本节代码事实在只读 `/workspace/wt-step2a` 的该提交核对：共享的是整个 `HeldMinuteCursor`，移至 `backtest/research/minute_held_scan_core.py`，`minute_cash_order.py` 导入它；`csv_minute_backtest.scan_held_day_python` 创建同一游标，逐 bar 按 open / close 驱动 `advance`，不是只抽出几个谓词。numba `_scan_held_day_numba_trail` 通过 `numba.extending.register_jitable` 共用谓词，注册返回值在 `@njit` 前重绑定；限价容差来自 `ashare_session.LIMIT_EPS`，峰值间隔谓词来自 `csv_ledger.peak_gap_blocks`（证据：上述文件的导入、`scan_held_day_python`、`_scan_held_day_numba_trail` 与注册块）。本分支仍基于旧 master；本次只修文档，不搬代码。
+**第 1 步已完成。** PR #364 于 **2026-10-05 11:28 CST** 合并为 `d007213e`（以 `git show d007213e` 的 merge 信息与 CommitDate 为证）。本节代码事实按 master `d007213e` 核对：共享的是整个 `HeldMinuteCursor`，移至 `backtest/research/minute_held_scan_core.py`，`minute_cash_order.py` 导入它；`csv_minute_backtest.scan_held_day_python` 创建同一游标，逐 bar 按 open / close 驱动 `advance`，不是只抽出几个谓词。numba `_scan_held_day_numba_trail` 通过 `numba.extending.register_jitable` 共用谓词，注册返回值在 `@njit` 前重绑定；限价容差来自 `ashare_session.LIMIT_EPS`，峰值间隔谓词来自 `csv_ledger.peak_gap_blocks`（证据：上述文件的导入、`scan_held_day_python`、`_scan_held_day_numba_trail` 与注册块）。本分支仍基于旧 master；本次只修文档，不搬代码。
 
 **默认不是所有书都 close。** `csv_minute_backtest.simulate` 绑定 `absolute_exit` 后，独立仓游标和普通 `scan_held_day` 调用都传 `minute_stop_trigger="hl" if absolute_exit else minute_stop_trigger`，并提供 low；普通路径另以绝对退出线 / 成本算 `stop_range_ratio`。`HeldMinuteCursor._close` 在 hl 域以 low≤line 触发、按 line 报价；跳空仍按既有 open 路径。因此 2a 必须保留 absolute_exit 的 low 触发，不能用共享 close 默认覆盖它（证据：`csv_minute_backtest.py::simulate`；`minute_held_scan_core.py::HeldMinuteCursor.__post_init__/_close/advance`）。
 
@@ -23,14 +23,14 @@
 
 ### 第 2 步拆为 2a / 2b
 
-**2a 是机制与现状显式化。** fill timing / fill price 配置只在 `minute_held_scan_core.py::HeldMinuteCursor` 内解释；使用区分时机与报价的新配置名称，不用含糊的单词 `close` 作配置总名，也不把 bar_scan 的 `FillTiming` / `FillPrice` 直接当核心接口。新配置名约定为 `fill_timing_policy` / `fill_price_policy`（2a 待实现名称，不声明已有 API / CLI）；取值须明确时机与报价，不能只写 `close`。逐书默认复现当前行为：共享分钟默认收盘触发 / 本根收盘成交，hl / absolute_exit 保留 low 触发 / 线价成交及既有跳空 open、顺序、拒绝与记账行为（现状证据：`csv_minute_backtest.py::simulate/scan_held_day`；`HeldMinuteCursor.advance/_close`）。
+**2a 是机制与现状显式化。** fill timing / fill price 配置只在 `minute_held_scan_core.py::HeldMinuteCursor` 内解释；使用区分时机与报价的新配置名称，不用含糊的单词 `close` 作配置总名，也不把 bar_scan 的 `FillTiming` / `FillPrice` 直接当核心接口。2a 实现为 `backtest/research/fill_config.py::FillConfig(trigger_basis, fill_timing, fill_at)`（取值 `bar_last` / `bar_low`；`this_bar` / `next_bar_open`；`bar_open` / `bar_high` / `bar_low` / `bar_last` / `line` / 指定正价），不用单词 `close` 作取值，不新增 CLI。逐书默认复现当前行为：共享分钟默认收盘触发 / 本根收盘成交，hl / absolute_exit 保留 low 触发 / 线价成交及既有跳空 open、顺序、拒绝与记账行为（现状证据：`csv_minute_backtest.py::simulate/scan_held_day`；`HeldMinuteCursor.advance/_close`）。
 
 2a 验收与限制：
 
 - 现有 off-byte 基线必须逐字节一致，不重录、不新增 skip；不能只对最终 NAV（基线合同：`tests/test_off_byte_baseline.py`）。
 - 非默认配置不得静默走 numba：请求 numba 且配置非默认时必须抛错；本票不实现 numba 非 close 路径（现有分流证据：`csv_minute_backtest.py::scan_held_day` 的 `can_offload`）。
 - 禁止前视组合：按本根 high 成交、收盘判定却按本根 open 成交。触发信息可得时点与成交相位须分开；现有相位证据为 `HeldMinuteCursor.advance/_close`，不据此把新报价合法化。
-- next-bar 边界须在 2a 实现与测试中明确：当日末根无 next bar 时不成交、不跨日携带；下一根跌停不得直接按 open 强行成交，须过原方向限价门；14:55 清仓若配置次根成交，只能在当日存在的后续合格 bar 执行，15:00 / 当日末根清仓不得回填本根或跨日。不得借这些非默认边界改变既有清仓默认；改变默认 / 结果的提案归 2b（现状边界核对点：`HeldMinuteCursor.advance/_close` 的 `force_sell_hm` / `close_clear`；`csv_minute_backtest.py::simulate` 的限价与成交记账）。
+- next-bar 边界（2a 已实现并测试，按 backtrader 式「下一根可成交 bar 的开盘」）：当日末根信号顺延到下一交易时段首根开盘成交，理由加 `:next_open`；下一根跌停沿用既有开盘跌停门，挡住即顺延重试，不新增限价语义；14:55 / 15:00 时间类清仓保持本根末价成交，不受 next_bar_open 影响；已排队的价格类退出优先于其后信号。不得借这些非默认边界改变既有清仓默认；改变默认 / 结果的提案归 2b（现状边界核对点：`HeldMinuteCursor.advance/_close` 的 `force_sell_hm` / `close_clear`；`csv_minute_backtest.py::simulate` 的限价与成交记账）。
 - 明确排除日线引擎、v7、`strategy9_2_engine`、version12 的 `strategy12_engine.run_minute_day`、numba 非 close 路径；不得扩为多引擎合并（路径证据：§5 实现表及 `csv_minute_backtest.py::simulate/scan_held_day` 分派）。
 
 **2b 未开始。** 行业惯例只提供待裁选项；每一处改变行为的统一都须用户逐项决定、各自 golden 重录，不覆盖 2a 的旧基线。包括触发域统一、跳空报价、默认本根→次根、拒单后继续扫描与现金释放顺序等，均不得从 2a 的机制授权推导为默认翻转（差异核对点：`HeldMinuteCursor.advance/_exit/_close` 与 `bar_scan_exit.py::apply_fill_timing`）。
