@@ -231,9 +231,16 @@ try:
 
     from numba.extending import register_jitable
 
-    for _helper in (sell_allowed, stop_touch, limit_down_blocks, stop_trigger, gap_stop,
-                    force_due, peak_gap_blocks, trail_hits):
-        register_jitable(_helper)
+    # register_jitable returns the callable numba will compile; rebind so the
+    # njit kernel closes over the registered helpers, not the raw Python ones.
+    sell_allowed = register_jitable(sell_allowed)
+    stop_touch = register_jitable(stop_touch)
+    limit_down_blocks = register_jitable(limit_down_blocks)
+    stop_trigger = register_jitable(stop_trigger)
+    gap_stop = register_jitable(gap_stop)
+    force_due = register_jitable(force_due)
+    peak_gap_blocks = register_jitable(peak_gap_blocks)
+    trail_hits = register_jitable(trail_hits)
 
     @_njit(cache=True)
     def _scan_held_day_numba_trail(
