@@ -59,6 +59,9 @@ def seed(monkeypatch, engine, code, buy_date, entry_idx=0):
             return result_type(cash, positions={code: pos})
 
         monkeypatch.setattr(v7, "SimResult", initial)
+        from backtest.research import strategy7_engine
+
+        monkeypatch.setattr(strategy7_engine, "SimResult", initial)
     else:
         module = daily if engine == "daily" else minute
         init = module.init_sim_state
