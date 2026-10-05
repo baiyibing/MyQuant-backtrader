@@ -26,6 +26,8 @@ and S2-B hl cross-reference. This documentation does not change scheduling.
 
 from __future__ import annotations
 
+from backtest.research.sell_pending_observability import pending_callback, record_sell_pending, record_limit, side_path
+
 import numpy as np
 
 from backtest.research.ashare_bars import AM_CLOSE, AM_OPEN, PM_CLOSE, PM_OPEN
@@ -107,6 +109,7 @@ def advance_independent_exit(
         defer_sell_open_or_fill(px if pending else float(cursor.o[idx]), px, limits)
     ):
         st.stats["defer_sell_limit_down"] += 1
+        record_limit(st, code, pos.shares, day, at_hm, px if pending else float(cursor.o[idx]), limits, key=held_fill_key(pos))
         return
     volume_kwargs = {}
     if st.volume_cap is not None:
@@ -158,6 +161,10 @@ def _side_sell(st, code, pos, px, day, reason, *, fill_config=None, **kwargs):
     if fill_config is not None and fill_config.fill_timing == "next_bar_open":
         state = st.held_fill_states.setdefault(held_fill_key(pos), {})
         state.setdefault("side_pending", []).append((pos, reason, kwargs.get("wanted_shares")))
+        path = side_path(reason)
+        record_sell_pending(st, ds=day, hm=kwargs.get("hm"), code=code,
+                            shares=kwargs.get("wanted_shares", pos.shares), path=path,
+                            reason="next_bar_open_queued", key=(held_fill_key(pos), path, id(pos)))
         return 0
     return _sell(st, code, pos, px, day, reason, **kwargs)
 
@@ -175,6 +182,8 @@ def fill_side_pending(st, code, pos, px, day, day_i, limits, *, hm):
             continue
         if defer_sell_at_limit(px, limits):
             st.stats["defer_sell_limit_down"] += 1
+            record_limit(st, code, wanted if wanted is not None else target.shares, day, hm, px, limits,
+                         path=side_path(reason), key=(held_fill_key(pos), side_path(reason), id(target)))
             continue
         filled = _sell(st, code, target, px, day, reason + ":next_open",
                        day_i=day_i, hm=hm, price_rule="minute_pending_next_open",
@@ -217,6 +226,7 @@ def peak_dd_clear_exits(st, code, pos, px, day, day_i, limits, *,
     px = _side_price(fill_config, px)
     if (fill_config is None or fill_config.fill_timing != "next_bar_open") and defer_sell_open_or_fill(px if open_px is None else open_px, px, limits):
         st.stats["defer_sell_limit_down"] += 1
+        record_limit(st, code, pos.shares, day, hm, px if open_px is None else open_px, limits, path="peak_dd_clear")
         return 0
     # 全组清仓：走组级卖出（复用 _sell 的 IndependentExitPosition 路径）
     filled = _side_sell(
@@ -263,6 +273,7 @@ def scale_out_exits(st, code, pos, px, day, day_i, limits, *, scale_step, scale_
                 continue
             if (fill_config is None or fill_config.fill_timing != "next_bar_open") and defer_sell_open_or_fill(px if open_px is None else open_px, px, limits):
                 st.stats["defer_sell_limit_down"] += 1
+                record_limit(st, code, chunk, day, hm, px if open_px is None else open_px, limits, path="scale_out")
                 return sold
             filled = _side_sell(
                 st, code, lot, px, day, "scale_out:5pct", day_i=day_i,
@@ -302,6 +313,7 @@ def step_stop_exits(st, code, pos, px, day, day_i, limits, *, step_stop_pct, hm=
         fill_px = _side_price(fill_config, px, line=line, low=low)
         if (fill_config is None or fill_config.fill_timing != "next_bar_open") and defer_sell_open_or_fill(fill_px if open_px is None else open_px, fill_px, limits):
             st.stats["defer_sell_limit_down"] += 1
+            record_limit(st, code, lot.shares, day, hm, fill_px if open_px is None else open_px, limits, path="step_stop")
             continue
         filled = _side_sell(
             st, code, lot, fill_px, day,
@@ -434,6 +446,7 @@ def run_chronological_day(
                 session_stats=st.stats,
                 fill_config=fill_config,
                 fill_state=held_fill_states.setdefault(held_fill_key(pos), {}),
+                pending_log=pending_callback(st, code, pos, day),
                 minute_stop_trigger=minute_stop_trigger, take_profit_pct=st.stats.get("profit_target"),
                 cost=pos.cost,
                 peak=pos.peak,
@@ -760,6 +773,7 @@ def run_chronological_day(
                     defer_sell_open_or_fill(float(cursor.o[idx]), px, limits)
                 ):
                     st.stats["defer_sell_limit_down"] += 1
+                    record_limit(st, code, pos.shares, day, at_hm, float(cursor.o[idx]), limits, key=held_fill_key(pos))
                     continue
                 volume_kwargs = {}
                 if st.volume_cap is not None:
