@@ -3,7 +3,7 @@
 | 字段 | 值 |
 |---|---|
 | 日期 / 人裁 | 2026-10-05 14:13 CST（Asia/Shanghai） |
-| Evidence base | 当前 master `b57ec047c844eca2b61e4cc5a1110224a5c6b1be`（Merge concurrent） |
+| Evidence base | 行号按 master `b57ec047c844eca2b61e4cc5a1110224a5c6b1be` 复核；之后 #372（`a37c5322`）只新增 V6F v7 fixture 与 generator 两行常量，不影响下文行号 |
 | 性质 | Docs-only；记录授权与 corrected item list，本 PR 不实施代码 |
 | 输入 | `.2b-items-draft.md`；`/tmp/bs2b/summary.md`、`host_facts.md`、R1 / R2 五席讨论 |
 
@@ -44,14 +44,14 @@ B9 的「保持排除」不撤销 A2 的明确迁移授权：日线、v7 等仍�
 
 统一讨论口径：bar-scan backtest 在配置的 bar / 配置价成交，或带原因 skip / defer；不能由「行业惯例」推导所有书应改成同一种策略。open+fill 双检是需要单独裁决的保守研究假设。
 
-Golden ownership 以 `scripts/research/generate_off_byte_baseline.py` 为准：历史 19 本及 `version7/minute` 冻结；S8、V61、V91、V92、S12、S9 为独立 overlays。当前 V6F 是 **v6**，文件 `tests/fixtures/off_byte_baseline_v6_family_v6_20261006.json`，revision **`strategy6-family-v6-6_2-to-6_17-20261006`**（generator:99–106）。名称中的 20261006 是 tree 内 revision 名，不改写成人裁日期。迁移目标复现 defaults；如需新 baseline / overlay，新增记录，永不覆盖历史版本。
+Golden ownership 以 `scripts/research/generate_off_byte_baseline.py` 为准：历史 19 本及 `version7/minute` 冻结；S8、V61、V91、V92、S12、S9 为独立 overlays。当前 V6F 是 **v7**，文件 `tests/fixtures/off_byte_baseline_v6_family_v7_20261006.json`，revision **`strategy6-family-v7-6_2-to-6_17-20261006`**（generator:99–106；#372 因 v6 把 version6_17 首仓录成 100 万而非规则的 20 万而新增 v7，v6 保留不动）。名称中的 20261006 是 tree 内 revision 名，不改写成人裁日期。迁移目标复现 defaults；如需新 baseline / overlay，新增记录，永不覆盖历史版本。
 
 ### A1. Side sells 绕过 FillConfig（管道与限价对分票）
 
 - **现状 / 证据：** `csv_minute_backtest.py:918–938` 在 close 相位传 `c[bar_idx]` 给三个 side-sell 函数。`minute_cash_order.py:134/171/216` 分别为 peak-dd / scale-out / step-stop；成交价检查为 :157/:201/:235，报价审计为 :163/:206/:241 的 `minute_trigger_bar_close`。step lot 另以 :229 保证 T+1。非默认配置在 `csv_minute_backtest.py:745–746` fail-closed。
 - **勘误：** open+fill 对照在 `minute_cash_order.py:107–108`，属于外层 `advance_independent_exit` 闸门，**不是 HeldMinuteCursor 内部**；open 检查带 **`not pending`** 条件，fill 检查仍执行。不能把它描述成无条件双检。
 - **受影响书：** version6_8 / 6_10（step）、6_13（step + scale）、6_14–6_17（step + scale + peak-dd）。已实际调用 `apply_csv_strategy` 核对；6_17 同样设置这三种 hooks（`csv_strategy_books.py:1361–1364`）。
-- **裁定 / baseline：** pipe 独立 PR do-now，default byte-identical，V6F 不动；自定义时机 / 价格通过 FillConfig。限价对先只读 count「开盘跌停、成交价脱离」候选，尚无计数结果、不改规则；若以后批准且有差异，另录 V6F revision。排队、部分卖出、跨日 carry 与优先级需在实施票验收。
+- **裁定 / baseline：** pipe 独立 PR do-now，default byte-identical，V6F 不动；自定义时机 / 价格通过 FillConfig。限价对先只读 count「开盘跌停、成交价脱离」候选，不改规则；只读计数结果（2026-10-05，master `b57ec04`，脚本 `/tmp/count2b/count_limit_pair.py`，未提交）：V92 与 V6F 共 34 个 case，目标 side-sell / touch-stop 成交 23 笔，限价对拦截 **0**，成交与净值变化 **0**。但 V92 与 7 本受影响 6.x 书的 fixture **没有任何跌停 bar**，故 0 是构造使然，fixture 无法衡量该规则；仅 6_11/6_12 突破 fixture 含跌停 bar（2 根日线 / 10 根分钟），且这两本不开 side-sell hook。本机未配置行情湖，未跑全窗。若以后批准且有差异，另录 V6F revision。排队、部分卖出、跨日 carry 与优先级需在实施票验收。
 
 ### A2. Separate minute engines / minute_open 收口
 
@@ -84,7 +84,7 @@ Golden ownership 以 `scripts/research/generate_off_byte_baseline.py` 为准：�
 
 - **现状 / 证据：** `strategy9_2_engine.py:69–73` 的 gap 分支 `px = open`，所以 **gap 已检查真实 open**。只有 touch 分支将 minute close / daily trigger 作为 px，:77 包成 `SimpleNamespace(open=px)`，:92 仅检查该价；缺的是真实 bar open。
 - **对照：** `csv_minute_backtest.py:1017–1019`、`strategy12_engine.py:107`、`fullstrat_research_book.py:210–212` 采用 open+fill；独立退出闸门另有 A1 所述 `not pending` 条件。
-- **裁定 / baseline：** 与 A1 limit pair 一起先只读 count；no change yet。只影响 version9_2，version9 / version9_1 不动。若日后批准并命中 touch 候选，V92 可变，需新 revision；本票没有 count 结果。
+- **裁定 / baseline：** 与 A1 limit pair 一起先只读 count；no change yet。只影响 version9_2，version9 / version9_1 不动。若日后批准并命中 touch 候选，V92 可变，需新 revision；只读 count 见 A1（V92 fixture 无跌停 bar、无 touch-stop 触发，计数 0 不具代表性）。
 
 ### B6. Version7 跌停价不买是书规则
 
@@ -121,4 +121,4 @@ Golden ownership 以 `scripts/research/generate_off_byte_baseline.py` 为准：�
 
 [分钟扫描现状](note-minute-scan-status-2026-10-05.md) 的 11:05 人裁与 step 3 测试迁移顺序继续有效；本票补齐 14:13 的逐项裁定。[Step 2a](minute-fill-config-step2a.md) 是已交付范围锁，不能把 A1 / A2 的后续 GO 写成 2a 已支持；A3 / B9 排除保持。
 
-本 PR 只写这份决策与 step2a 的一行 exclusions pointer。A1 pipe / A2 后续独立 PR；A1 limit pair / B5 尚待只读 count；B7 / B8 deferred。没有重跑回测、没有湖访问、没有改代码或重录 golden。
+本 PR 只写这份决策与 step2a 的一行 exclusions pointer。A1 pipe / A2 后续独立 PR；A1 limit pair / B5 只读 count 已完成（fixture 计数 0，见 A1），是否改规则待人裁；B7 / B8 deferred。没有重跑回测、没有湖访问、没有改代码或重录 golden。
