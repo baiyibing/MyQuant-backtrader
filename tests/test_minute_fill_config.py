@@ -168,22 +168,22 @@ def test_simulate_absolute_exit_requires_bar_low():
                  fill_config=FillConfig(trigger_basis='bar_last'))
 
 
-@pytest.mark.parametrize('strategy', ['version6_13', 'version6_14', 'version6_8'])
+@pytest.mark.parametrize('strategy', ['version6_13', 'version6_14', 'version6_15', 'version6_8'])
 def test_simulate_side_sells_reject_custom_config(strategy):
     from backtest.research.csv_minute_backtest import simulate
     from backtest.research.csv_strategy_books import apply_csv_strategy
     hooks = apply_csv_strategy(strategy)
     assert hooks['step_stop_pct']
-    if strategy in ('version6_13', 'version6_14'):
+    if strategy in ('version6_13', 'version6_14', 'version6_15'):
         assert hooks['scale_out_step']
-    if strategy == 'version6_14':
+    if strategy in ('version6_14', 'version6_15'):
         assert hooks['peak_dd_exit']
     with pytest.raises(ValueError, match='step_stop/scale_out/peak_dd_exit side sells'):
         simulate(**minute_fixture(), strategy=strategy,
                  fill_config=FillConfig(fill_timing='next_bar_open'))
 
 
-@pytest.mark.parametrize('strategy', ['version6_13', 'version6_14', 'version6_8'])
+@pytest.mark.parametrize('strategy', ['version6_13', 'version6_14', 'version6_15', 'version6_8'])
 def test_simulate_side_sells_default_config_unchanged(strategy):
     from backtest.research.csv_minute_backtest import simulate
     from backtest.research.csv_strategy_books import apply_csv_strategy

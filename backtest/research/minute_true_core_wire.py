@@ -72,6 +72,8 @@ from backtest.research.strategy6_13_rules import STOP_PCT as V6_13_STOP
 from backtest.research.strategy6_13_rules import take_profit_reason as v6_13_take
 from backtest.research.strategy6_14_rules import STOP_PCT as V6_14_STOP
 from backtest.research.strategy6_14_rules import take_profit_reason as v6_14_take
+from backtest.research.strategy6_15_rules import STOP_PCT as V6_15_STOP
+from backtest.research.strategy6_15_rules import take_profit_reason as v6_15_take
 from backtest.research.strategy6_rules import STOP_PCT as V6_STOP
 from backtest.research.strategy6_rules import take_profit_reason as v6_take
 from backtest.research.strategy7_rules import (
@@ -165,6 +167,7 @@ _PERCENT_STOP: dict[str, float] = {
     "version6_12": float(V6_12_STOP),
     "version6_13": float(V6_13_STOP),
     "version6_14": float(V6_14_STOP),
+    "version6_15": float(V6_15_STOP),
     "version8": float(V8_STOP),
     "version8_1": float(V8_1_STOP),
     "version8_2": float(V8_2_STOP),
@@ -204,6 +207,7 @@ _BOOK_TAKE = {
     "version6_12": v6_12_take,
     "version6_13": v6_13_take,
     "version6_14": v6_14_take,
+    "version6_15": v6_15_take,
     "version8": v8_take,
     "version8_1": v8_1_take,
     "version8_2": v8_2_take,

@@ -92,6 +92,7 @@ may return no exit). H/L remains opt-in for supported shared books.
 | version6_12 | shared; take_profit |
 | version6_13 | shared; take_profit; step_stop / scale_out side sells (default only; reproduces current behavior) |
 | version6_14 | shared; take_profit; step_stop / scale_out / peak_dd_clear_exits side sells (default only; reproduces current behavior) |
+| version6_15 | shared; take_profit; step_stop / scale_out / peak_dd_clear_exits side sells (default only; reproduces current behavior) |
 | version8 | shared; take_profit |
 | version8_1 | shared; take_profit |
 | version8_2 | shared; take_profit |
@@ -124,7 +125,7 @@ Test names below are in `tests/test_minute_fill_config.py` unless a file is spec
 | Default numba parity | `tests/test_scan_held_day_numba_parity.py::test_numba_gap_open_stop`, `test_numba_t0_no_sell_no_peak_update`, `test_numba_trail_hit`, `test_numba_force_sell_time` |
 | version9_2/version12/minute_open reject custom config through simulate | `test_simulate_separate_engine_rejects_custom_config` (minute_open = version11) |
 | absolute_exit bar_low guard | `test_simulate_absolute_exit_requires_bar_low` (version9_1) |
-| step_stop/scale_out/peak_dd_exit reject custom config; default/None unchanged | `test_simulate_side_sells_reject_custom_config`, `test_simulate_side_sells_default_config_unchanged` (version6_13/version6_14/version6_8); `test_simulate_peak_dd_exit_only_rejects_custom_config` |
+| step_stop/scale_out/peak_dd_exit reject custom config; default/None unchanged | `test_simulate_side_sells_reject_custom_config`, `test_simulate_side_sells_default_config_unchanged` (version6_13/version6_14/version6_15/version6_8); `test_simulate_peak_dd_exit_only_rejects_custom_config` |
 | Look-ahead rejects | `test_lookahead`, `test_callback_low_rejected_at_decision`, `test_target_cannot_assume_low_after_high` |
 | Callback and trail timing | `test_target_and_trail` |
 | Missing carry out-param fails closed | `test_missing_carry_state_fails_closed` |
@@ -140,13 +141,20 @@ lifetime keys, and the absence of a stale next-open SELL on the new position.
 
 Using `/tmp/mq-v6/bin/python` and `-p no:cacheprovider`:
 
-version6_14 classification and peak_dd_exit guard follow-up (PR #368) on master `a475fa0`
-(which carries the v6f off-byte overlay v3 with version6_14, 35 books / 71 cases):
+version6_14/version6_15 classification and peak_dd_exit guard follow-up (PR #368)
+on master `2e3ef2e` (v6f off-byte overlay v4, 36 books):
 
-- Full suite, `-m "not production and not benchmark"`: **7508 passed,
-  4 skipped, 24 deselected**, 29 warnings; off-byte fixtures unchanged.
-- An independent recording of the v6f v3 overlay on post-#366 master matched
-  every case hash (26 cases) in `a475fa0`'s committed v3 fixture.
+- Touched tests (`tests/test_minute_bar_scan_host.py`,
+  `tests/test_minute_fill_config.py`) plus `tests/test_off_byte_baseline.py`:
+  **630 passed**, 6.62 s; off-byte fixtures unchanged.
+- Full suite, `-m "not production and not benchmark"`: **7523 passed,
+  1 failed, 5 skipped, 24 deselected**, 29 warnings, 139.09 s.
+- The inherited failure is
+  `tests/test_csv_strategy_books.py::test_registered_books_are_explicit`:
+  master `2e3ef2e` registers version6_15 but omits it from the test's expected
+  book list. Both that test and the registry are unchanged by this follow-up.
+- All four changed Python/Markdown files are UTF-8 without BOM with zero
+  NUL bytes; `git diff --check` passes.
 
 Side-sell fail-closed follow-up after rebase on master `a55e3c85`:
 

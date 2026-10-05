@@ -66,7 +66,7 @@ def test_default_scan_still_invokes_version1():
 
 @pytest.mark.parametrize("strategy", SINGLE_BOOKS)
 def test_all_single_symbol_books_scan_two_flat_bars(strategy):
-    assert len(SINGLE_BOOKS) == 35
+    assert len(SINGLE_BOOKS) == 36
     fields = {}
     if strategy in ("version4", "version11", "version12"):
         fields["level"] = 10
