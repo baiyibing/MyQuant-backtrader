@@ -140,19 +140,13 @@ lifetime keys, and the absence of a stale next-open SELL on the new position.
 
 Using `/tmp/mq-v6/bin/python` and `-p no:cacheprovider`:
 
-version6_14 classification and peak_dd_exit guard follow-up on master `00dbead`:
+version6_14 classification and peak_dd_exit guard follow-up (PR #368) on master `a475fa0`
+(which carries the v6f off-byte overlay v3 with version6_14, 35 books / 71 cases):
 
-- Touched tests (`test_minute_bar_scan_host.py`, `test_minute_true_core_wire.py`,
-  `test_minute_fill_config.py`): **608 passed**, 1.90 s.
-- `tests/test_off_byte_baseline.py`: **144 passed, 1 failed**, 3.95 s.
-- Full suite, `-m "not production and not benchmark"`: **7502 passed,
-  1 failed, 5 skipped, 24 deselected**, 29 warnings, 256.57 s.
-- The sole failure in both runs is the existing master registry coverage test,
-  `test_off_byte_baseline_covers_current_registry_and_standalone_v7` at line 62:
-  `generate_off_byte_baseline.V6F_BOOK_NAMES` ends at version6_13, so the frozen
-  34-book / 69-case baseline omits registered version6_14. Fixtures are unchanged.
-- All five changed files are UTF-8 without BOM with zero NUL bytes;
-  `git diff --check` passes.
+- Full suite, `-m "not production and not benchmark"`: **7508 passed,
+  4 skipped, 24 deselected**, 29 warnings; off-byte fixtures unchanged.
+- An independent recording of the v6f v3 overlay on post-#366 master matched
+  every case hash (26 cases) in `a475fa0`'s committed v3 fixture.
 
 Side-sell fail-closed follow-up after rebase on master `a55e3c85`:
 
