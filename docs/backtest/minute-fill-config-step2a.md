@@ -271,17 +271,19 @@ The dedicated X-01 audit now reads live callback context instead of deleted
 run_minute_day locals.
 
 
-A2 version12 verification (Python `/tmp/mq-v6/bin/python`, pandas 3.0.6):
+A2 version12 verification (Python `/tmp/mq-v6/bin/python`, pandas 3.0.6,
+base `origin/master bedfef4`):
 
-- `tests/test_off_byte_baseline.py`: **161 passed, 0 failed**, 3.64 s;
+- `tests/test_off_byte_baseline.py`: **165 passed, 0 failed**, 3.87 s;
   version12 daily/minute raw CSV hashes and complete account snapshots match
   the branch base and the active frozen S12 overlay.
 - `test_v12_minute_fold.py`, `test_strategy12_engine.py`,
   `test_s12_price_domain.py`, `test_partial_sell.py`,
   `test_minute_cash_chronology.py`, `test_minute_fill_config.py`:
-  **258 passed, 0 failed**, 5.19 s.
+  **258 passed, 0 failed**, 4.11 s.
 - Final full suite (`-p no:cacheprovider -q -m "not production and not benchmark"`):
-  **7663 passed, 5 skipped, 24 deselected, 29 warnings, 0 failed**, 152.84 s.
+  **7679 passed, 5 skipped, 24 deselected, 29 warnings, 0 failed**, 145.26 s (0:02:25).
+- `git diff --stat origin/master -- tests/fixtures`: **empty**.
 - Baseline replay: default and X-01 identity/front=raw*0.5 each retain
   **3 BUY / 3 SELL**, final equity **4,892,514.7375**; participation 0.1 retains
   **3 BUY / 3 SELL**, final equity **4,998,941.0**. All trade rows match.
