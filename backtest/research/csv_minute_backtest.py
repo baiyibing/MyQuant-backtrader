@@ -149,6 +149,7 @@ from backtest.research.minute_cash_order import (
     HeldMinuteCursor,
     advance_independent_exit,
     peak_dd_clear_exits,
+    fill_side_pending,
     run_chronological_day,
     scale_out_exits,
     step_stop_exits,
@@ -337,6 +338,7 @@ def scan_held_day_python(
     can_sell: bool,
     stop_pct: Optional[float],
     fill_state: dict | None = None,
+    session_exit_reason=None, session_volume=None, session_stats=None,
     version9_plan=None,
     version9_max_hold=False,
     stop_range_ratio: Optional[float] = None,
@@ -376,6 +378,7 @@ def scan_held_day_python(
         reserve_state=reserve_state, exit_plan=exit_plan, exit_state=exit_state,
         close_clear=close_clear, l=l, minute_stop_trigger=minute_stop_trigger,
         fill_config=fill_config, fill_state=fill_state,
+        session_exit_reason=session_exit_reason, session_volume=session_volume, session_stats=session_stats,
         take_profit_pct=take_profit_pct, version9_plan=version9_plan,
         version9_max_hold=version9_max_hold,
     )
@@ -404,6 +407,7 @@ def scan_held_day(
     can_sell: bool,
     stop_pct: Optional[float],
     fill_state: dict | None = None,
+    session_exit_reason=None, session_volume=None, session_stats=None,
     version9_plan=None,
     version9_max_hold=False,
     stop_range_ratio: Optional[float] = None,
@@ -437,7 +441,8 @@ def scan_held_day(
     Callables (sell_gate / take_profit) and reserve_limit_up always use Python.
     """
     can_offload = (
-        minute_stop_trigger == "close"
+        session_volume is None
+        and minute_stop_trigger == "close"
         and version9_plan is None
         and stop_range_ratio is None
         and _want_numba_scan(use_numba)
@@ -497,6 +502,7 @@ def scan_held_day(
         c,
         l=l, minute_stop_trigger=minute_stop_trigger, take_profit_pct=take_profit_pct,
         fill_config=fill_config, fill_state=fill_state,
+        session_exit_reason=session_exit_reason, session_volume=session_volume, session_stats=session_stats,
         cost=cost,
         peak=peak,
         n_days=n_days,
@@ -742,12 +748,13 @@ def simulate(
     )
     defaults = book_fill_defaults(hooks, minute_stop_trigger)
     if fill_config is not None and fill_config != defaults["stop"]:
-        if hooks.get("step_stop_pct") or hooks.get("scale_out_step") or hooks.get("peak_dd_exit"):
-            raise ValueError("fill_config is not yet applied to step_stop/scale_out/peak_dd_exit side sells; use the default fill config for this book")
-        if hooks.get("run_minute_day") or hooks.get("minute_open"):
+        if hooks.get("run_minute_day"):
             raise ValueError("fill_config is only supported by HeldMinuteCursor, not this book's separate minute engine")
         if "bind_absolute_exit" in hooks and fill_config.trigger_basis != "bar_low":
             raise ValueError("absolute_exit requires trigger_basis=bar_low")
+    if hooks.get("minute_open") and fill_config is None:
+        fill_config = defaults["stop"]
+    side_fill_config = None if fill_config == defaults["stop"] else fill_config
     held_fill_states = {}
     st.held_fill_states = held_fill_states
     absolute_exit = hooks["bind_absolute_exit"](st, daily_bars) if "bind_absolute_exit" in hooks else None
@@ -915,10 +922,16 @@ def simulate(
                                     st, code, pos, cursor, bar_idx, phase, limits,
                                     day=day, day_i=i, audit_sink=audit_sink,
                                 )
+                                if phase == "open":
+                                    fill_side_pending(st, code, pos, float(o[bar_idx]), day, i,
+                                                      limits, hm=int(at_hm))
                                 if phase == "close" and hooks.get("step_stop_pct"):
                                     step_stop_exits(
                                         st, code, pos, float(c[bar_idx]), day, i,
                                         limits, step_stop_pct=hooks["step_stop_pct"],
+                                        fill_config=side_fill_config,
+                                        low=(float(day_m["low"].iloc[bar_idx])
+                                             if side_fill_config and side_fill_config.trigger_basis == "bar_low" else None),
                                         hm=int(at_hm),
                                     )
                                 if phase == "close" and hooks.get("scale_out_step"):
@@ -926,6 +939,7 @@ def simulate(
                                         st, code, pos, float(c[bar_idx]), day, i,
                                         limits, scale_step=hooks["scale_out_step"],
                                         scale_frac=hooks.get("scale_out_frac", 0.05),
+                                        fill_config=side_fill_config,
                                         hm=int(at_hm),
                                     )
                                 if phase == "close" and hooks.get("peak_dd_exit"):
@@ -933,37 +947,12 @@ def simulate(
                                         st, code, pos, float(c[bar_idx]), day, i,
                                         limits,
                                         peak_dd_exit=hooks["peak_dd_exit"],
+                                        fill_config=side_fill_config,
                                         peak_dd_sessions=hooks.get("peak_dd_sessions", 15),
                                         hm=int(at_hm),
                                     )
                         if split_group_scan:
                             post_group_scans.append((code, pos, cursor, limits))
-                        continue
-                    if minute_open:
-                        # Only yesterday's pending EOD decision can sell, once at open.
-                        if not pos.pending_exit or not t1_sellable(calendar[pos.entry_idx].date(), day.date()):
-                            continue
-                        opening = _open_quote_for(day_m)
-                        if opening is None:
-                            continue
-                        px = float(opening["open"])
-                        volume = float(opening["volume"])
-                        if not np.isfinite(px) or px <= 0:
-                            continue
-                        if not np.isfinite(volume) or volume <= 0:
-                            st.stats["defer_sell_volume"] += 1
-                            continue
-                        if defer_sell_at_limit(px, limits):
-                            st.stats["defer_sell_limit_down"] += 1
-                            continue
-                        before = len(st.trades)
-                        with audit_scope(audit_sink, decision_hm=AM_OPEN, phase="open", quote_hm=AM_OPEN):
-                            _sell(st, code, pos, px, day, pos.pending_exit,
-                                  bucket_id=AM_OPEN, at=AM_OPEN - 1, day_i=i,
-                                  hm=AM_OPEN, price_rule="minute_pending_next_open")
-                        if any(t["side"] == "SKIP" and t["reason"].startswith("skip_volume")
-                               for t in st.trades[before:]):
-                            st.stats["defer_sell_volume"] += 1
                         continue
                     # Resolve dates here; only the eligibility bool reaches the scanner.
                     reserve_state = {"reserved": bool(pos.reserved)}
@@ -974,6 +963,9 @@ def simulate(
                         h,
                         c,
                         l=day_m["low"].to_numpy(np.float64) if minute_stop_trigger == "hl" or absolute_exit or (fill_config and fill_config.trigger_basis == "bar_low") else None,
+                        session_exit_reason=pos.pending_exit,
+                        session_volume=day_m["volume"].to_numpy(np.float64) if minute_open else None,
+                        session_stats=st.stats,
                         minute_stop_trigger="hl" if absolute_exit else minute_stop_trigger,
                         fill_config=fill_config, fill_state=held_fill_states.setdefault(held_fill_key(pos), {}),
                         take_profit_pct=v9_plan["take_profit_pct"] if v9_plan is not None else st.stats.get("profit_target"),
@@ -1024,20 +1016,25 @@ def simulate(
                         if st.volume_cap is not None:
                             bucket = int(hm[idx])
                             volume_kwargs = {"bucket_id": bucket, "day_i": i,
-                                             "at": bucket - 1 if is_open_fill(reason) else bucket}
+                                             "at": bucket - 1 if is_open_fill(reason) or (minute_open and fill_config.fill_timing == "next_bar_open") else bucket}
                         # P2=B names only these two stop paths; other fills stay unlabeled.
                         price_rule = {
                             "stop_loss:gap_open": "minute_gap_open",
                             "stop_loss:touch": "minute_stop_price" if minute_stop_trigger == "hl" else "minute_trigger_bar_close",
                         }.get(reason, "")
-                        if reason.endswith(":next_open"):
+                        if minute_open:
+                            price_rule = "minute_trigger_bar_close"
+                        if reason.endswith(":next_open") or (minute_open and fill_config.fill_timing == "next_bar_open"):
                             price_rule = "minute_pending_next_open"
                         with audit_scope(
                             audit_sink, decision_hm=int(hm[idx]), quote_hm=int(hm[idx]),
-                            phase="open" if is_open_fill(reason) else "close",
+                            phase="open" if is_open_fill(reason) or (minute_open and fill_config.fill_timing == "next_bar_open") else "close",
                         ):
+                            before = len(st.trades)
                             _sell(st, code, pos, px, day, reason, **volume_kwargs,
                                   hm=int(hm[idx]) if price_rule else None, price_rule=price_rule)
+                        if minute_open and any(t["side"] == "SKIP" and t["reason"].startswith("skip_volume") for t in st.trades[before:]):
+                            st.stats["defer_sell_volume"] += 1
 
             def _volume_bucket_for(code: str, target: int, earliest: int):
                 # Mirror the quote helpers' exact/fallback row, never a later bucket.
@@ -1198,6 +1195,9 @@ def simulate(
                             st, code, pos, cursor, bar_idx, phase, limits,
                             day=day, day_i=i, audit_sink=audit_sink,
                         )
+                        if phase == "open":
+                            fill_side_pending(st, code, pos, float(cursor.o[bar_idx]), day, i,
+                                              limits, hm=int(at_hm))
 
         run_eod_exits(st, day=day, ds=ds, bars=daily_bars, eod_exit=hooks.get("eod_exit"),
                       hold_modes=hold_modes, exdiv=exdiv,

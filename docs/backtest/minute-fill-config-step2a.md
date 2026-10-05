@@ -9,6 +9,7 @@ strategy rules or registry entries change.
 
 | Path | trigger_basis | fill_timing | fill_at (touch) | Gap fill |
 | --- | --- | --- | --- | --- |
+| version11 EOD pending (A2) | bar_last | next_bar_open | opening price | AM_OPEN next session |
 | shared default | bar_last | this_bar | bar_last | bar_open |
 | hl stop | bar_low | this_bar | line | bar_open |
 | absolute_exit | bar_low (required) | this_bar | line | bar_open |
@@ -56,18 +57,28 @@ retains the original predicates, including floating-point comparison order.
   `ValueError` for `use_numba=True` or the numba environment backend. Select
   Python explicitly for custom policies. Existing numba-ineligible paths
   remain Python; the numba implementation is unchanged.
-- Separate minute engines (version9_2, version12, minute_open) reject custom
+- Separate minute engines (version9_2, version12) reject custom
   config instead of silently ignoring it. Daily, v7, bar_scan_exit and the
   minute wire registry are untouched.
-- `step_stop` / `scale_out` / `peak_dd_clear_exits` side sells are excluded
-  from 2a: books with a truthy `step_stop_pct`, `scale_out_step`, or `peak_dd_exit` reject non-default config.
-  Default/None config reproduces their current same-bar-close execution
-  (`minute_trigger_bar_close`).
+- A1 (2026-10-05): `step_stop`, `scale_out`, and `peak_dd_clear_exits`
+  now consume FillConfig. None and the hook-derived stop default preserve
+  existing predicates, float order, metadata and event order. Step stops may
+  trigger on bar low and fill at their lot line, last print, low or a positive
+  specified price. Scale-out and peak drawdown still decide on last prints;
+  this-bar low and line fills fail closed for those decisions.
+- Next-open side orders retain lot identity and decided scale-out quantities in
+  `held_fill_states[held_fill_key(pos)]`, carrying across sessions. They use
+  `:next_open` reasons and `minute_pending_next_open`, with only the existing
+  limit check on the execution open. There is no open+fill limit-pair rule.
+  Closed lots are removed from carry by the ledger; repeated decisions cannot
+  duplicate an outstanding lot order or count a scale step twice.
+
+- 2026-10-05 14:13 人裁：A3 / B9 stay excluded；A1 pipe / A2 follow in separate PRs，见 [step-2b decisions](note-2b-decisions-2026-10-05.md)。
 
 ## Registered CSV books and default paths
 
 All shared rows use this_bar, with bar_last touch / bar_open stop gap unless
-marked absolute_exit. Callback columns describe existing hooks (a callback
+marked absolute_exit or version11 EOD pending. Callback columns describe existing hooks (a callback
 may return no exit). H/L remains opt-in for supported shared books.
 
 | Registered book | Default path(s) |
@@ -85,14 +96,16 @@ may return no exit). H/L remains opt-in for supported shared books.
 | version6_5 | shared; take_profit |
 | version6_6 | shared; take_profit |
 | version6_7 | shared; take_profit |
-| version6_8 | shared; take_profit; step_stop side sells (default only) |
+| version6_8 | shared; take_profit; step_stop side sells (A1 FillConfig) |
 | version6_9 | shared; take_profit |
-| version6_10 | shared; take_profit; step_stop side sells (default only) |
+| version6_10 | shared; take_profit; step_stop side sells (A1 FillConfig) |
 | version6_11 | shared; take_profit |
 | version6_12 | shared; take_profit |
-| version6_13 | shared; take_profit; step_stop / scale_out side sells (default only; reproduces current behavior) |
-| version6_14 | shared; take_profit; step_stop / scale_out / peak_dd_clear_exits side sells (default only; reproduces current behavior) |
-| version6_15 | shared; take_profit; step_stop / scale_out / peak_dd_clear_exits side sells (default only; reproduces current behavior) |
+| version6_13 | shared; take_profit; step_stop / scale_out side sells (A1 FillConfig) |
+| version6_14 | shared; take_profit; step_stop / scale_out / peak_dd_clear_exits side sells (A1 FillConfig) |
+| version6_15 | shared; take_profit; step_stop / scale_out / peak_dd_clear_exits side sells (A1 FillConfig) |
+| version6_16 | shared; take_profit; step_stop / scale_out / peak_dd_clear_exits side sells (A1 FillConfig) |
+| version6_17 | shared; take_profit; step_stop / scale_out / peak_dd_clear_exits side sells (A1 FillConfig) |
 | version8 | shared; take_profit |
 | version8_1 | shared; take_profit |
 | version8_2 | shared; take_profit |
@@ -103,7 +116,7 @@ may return no exit). H/L remains opt-in for supported shared books.
 | version9 | shared range stop; take_profit; version9_plan only with existing version9_sell opt-in |
 | version9_2 | Separate run_minute_day (excluded) |
 | version10 | shared; take_profit |
-| version11 | shared; take_profit |
+| version11 | EOD pending session exit; next_bar_open at AM_OPEN |
 | version12 | Separate run_minute_day (excluded) |
 | topk_dropout | shared; sell_gate; take_profit |
 | topk_score_exit | shared; sell_gate; take_profit |
@@ -123,9 +136,9 @@ Test names below are in `tests/test_minute_fill_config.py` unless a file is spec
 | 14:55/15:00 this_bar time exits | `test_time_exits_stay_this_bar` |
 | numba raises on non-default config, explicit and environment dispatch | `test_numba_refuses` |
 | Default numba parity | `tests/test_scan_held_day_numba_parity.py::test_numba_gap_open_stop`, `test_numba_t0_no_sell_no_peak_update`, `test_numba_trail_hit`, `test_numba_force_sell_time` |
-| version9_2/version12/minute_open reject custom config through simulate | `test_simulate_separate_engine_rejects_custom_config` (minute_open = version11) |
+| version9_2/version12 reject custom config through simulate | `test_simulate_separate_engine_rejects_custom_config` |
 | absolute_exit bar_low guard | `test_simulate_absolute_exit_requires_bar_low` (version9_1) |
-| step_stop/scale_out/peak_dd_exit reject custom config; default/None unchanged | `test_simulate_side_sells_reject_custom_config`, `test_simulate_side_sells_default_config_unchanged` (version6_13/version6_14/version6_15/version6_8); `test_simulate_peak_dd_exit_only_rejects_custom_config` |
+| Side sells accept custom configs; default/None unchanged | `test_simulate_side_sells_accept_custom_config`, `test_simulate_side_sells_default_config_unchanged`; `tests/test_side_sell_fill_config.py` (next-open, session carry, limit retry, no duplicate, other-exit cleanup, low trigger and look-ahead rejection) |
 | Look-ahead rejects | `test_lookahead`, `test_callback_low_rejected_at_decision`, `test_target_cannot_assume_low_after_high` |
 | Callback and trail timing | `test_target_and_trail` |
 | Missing carry out-param fails closed | `test_missing_carry_state_fails_closed` |
@@ -172,3 +185,51 @@ Original step 2a validation before this follow-up:
   The 7429 selected cases comprise the 7424 passes and 5 existing skips.
 - No golden rewrites or new skips. All six written Python/Markdown files
   decode as UTF-8 without BOM and contain zero NUL bytes; `git diff --check` passes.
+
+A1 side-sell pipe validation after rebase (Human “A1 pipe”, 2026-10-05;
+branch base `origin/master ccac8e2a`, `/tmp/mq-v6/bin/python`):
+
+- Requested four files, run with `-p no:cacheprovider -q`:
+  `tests/test_side_sell_fill_config.py`, `tests/test_minute_fill_config.py`,
+  `tests/test_scan_held_day_numba_parity.py`, and
+  `tests/test_off_byte_baseline.py`: **248 passed, 0 failed**, 5.62 s.
+- Full suite, run with `-p no:cacheprovider -q
+  -m "not production and not benchmark"`: **7636 passed, 4 skipped,
+  24 deselected, 0 failed**, 29 warnings, 142.15 s.
+- `git diff --stat origin/master -- tests/fixtures` is empty.
+- The updated Markdown file decodes as UTF-8, has no BOM and zero NUL
+  bytes; `git diff --check` passes.
+
+
+## Step 2b A2 — version11 minute fold (2026-10-05)
+
+Version11 held sells now use `scan_held_day` / `HeldMinuteCursor` in both
+`simulate` and the chronological cash-order loop. The EOD rule still sets
+`Position.pending_exit`; its hook-derived default is `next_bar_open`, eligible
+only at AM_OPEN (09:30) in the next session. It does not retry later that day.
+AM_OPEN buys and daily rules are unchanged. Version12 / version9_2 remain
+separate pending their own PRs; version9_1 is untouched.
+
+Default behavior differences: none in the off-byte cases. Price validity,
+positive finite opening volume, limit-down and T+1 checks retain their results;
+volume is checked before limit-down. Zero/nonfinite volume or a blocked open
+carries the EOD decision to another session. Legacy reasons and opening audit
+fields are retained without adding a `:next_open` suffix. Historical fixtures
+remain frozen; no overlay is needed.
+
+New opt-in behavior: version11 accepts custom FillConfig through the cursor.
+`this_bar` fills the pending decision at the AM_OPEN bar's last print or a
+specified positive price, with the shared outer open/fill limit checks and
+close-phase volume capacity. `next_bar_open` keeps the session opening rule and
+ignores `fill_at`. Callback low/high/open look-ahead combinations and a missing
+explicit line fail closed as elsewhere. No intraday strategy decision is added.
+
+
+A2 version11 post-rebase verification (Python `/tmp/mq-v6/bin/python`,
+base `origin/master 34bfdd73`):
+
+- Off-byte and fold tests (`-p no:cacheprovider -q tests/test_off_byte_baseline.py tests/test_v11_minute_fold.py`):
+  **176 passed, 0 failed**, 4.43 s.
+- Full suite (`-p no:cacheprovider -q -m "not production and not benchmark"`):
+  **7650 passed, 4 skipped, 24 deselected, 29 warnings, 0 failed**, 143.75 s.
+- `git diff --stat origin/master -- tests/fixtures`: **empty**.
