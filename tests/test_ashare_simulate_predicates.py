@@ -349,7 +349,9 @@ def test_d3_held_name_chain_sell_and_add_bands(engine, action, monkeypatch):
               else {D0: 100, D1: 100, D2: 105, D3: 105})
     pool = {D2: [CODE], D3: [CODE]} if action == "add" else {}
     observed = []
-    module = {"daily": daily, "minute": minute, "v7": v7}[engine]
+    from backtest.research import strategy7_engine
+
+    module = {"daily": daily, "minute": minute, "v7": strategy7_engine}[engine]
     binding = "session_limit_prices" if engine == "v7" else "book_limit_prices"
     real_limits = getattr(module, binding)
 
