@@ -116,6 +116,7 @@ def get_book(strategy: str) -> CsvStrategyBook:
 
 def apply_csv_strategy(strategy: str, **kwargs) -> dict:
     book = get_book(strategy)
+    strategy9_rules.validate_sell_mode(book.name, kwargs.get("version9_sell"), kwargs.get("max_hold", False))
     if kwargs.get("fix_s81_band_precision") and book.name != "version8_1":
         raise ValueError("fix_s81_band_precision is supported only by version8_1")
     name_budget = kwargs.pop("name_budget", None)
@@ -396,6 +397,7 @@ def add_csv_backtest_common_args(
     strategy book args. Callers then add mode-specific flags (daily
     ``--out-dir``; minute ``--no-cache`` / ``--rebuild-cache``).
     """
+    ap.add_argument("--version9-sell", choices=strategy9_rules.SELL_MODES, default=None)
     ap.add_argument("--max-hold", action="store_true",
                     help="version9: enable 20-trading-day force-flat (force_sell:max_hold); default off")
     ap.add_argument("--start", default=start_default)
@@ -508,6 +510,10 @@ def resolve_stop_fill(raw) -> str:
 
 def csv_run_kwargs_from_args(args) -> dict:
     name = normalize_csv_strategy(getattr(args, "strategy", "") or "")
+    try:
+        strategy9_rules.validate_sell_mode(name, getattr(args, "version9_sell", None), getattr(args, "max_hold", False))
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
     if getattr(args, "fix_s81_band_precision", False) and name != "version8_1":
         raise SystemExit("--fix-s81-band-precision is supported only by version8_1")
     if getattr(args, "max_hold", False) and name != "version9":
@@ -1020,10 +1026,22 @@ def _run_kwargs_version9_2(args):
 
 
 def _apply_version9(
-    *, max_hold: bool = False, stop_pct: Optional[float] = None, take_profit=None, record_params=None, **_
+    *, version9_sell=None, max_hold: bool = False, stop_pct: Optional[float] = None, take_profit=None, record_params=None, **_
 ) -> dict:
     if stop_pct is not None:
         raise SystemExit("version9 does not accept --stop-pct")
+
+    strategy9_rules.validate_sell_mode("version9", version9_sell, max_hold)
+    if version9_sell is not None:
+        def record(st):
+            strategy9_rules.record_strategy9_params(st, max_hold=max_hold)
+            st.stats.update(sell_mode=version9_sell,
+                            stop_mode=("range_amp_20_trailing" if version9_sell == "range_amp_tp_amp" else
+                                       "mean_tr_20_yuan_" + ("3" if version9_sell == "mean_tr3_tp10" else "2")),
+                            profit_target=(0.10 if version9_sell == "mean_tr3_tp10" else
+                                           "range_amp_20_trailing" if version9_sell == "range_amp_tp_amp" else None))
+        return dict(stop_pct=None, version9_exit=lambda frame, day: strategy9_rules.version9_exit(frame, day, version9_sell),
+                    take_profit=lambda *args: None, record_params=record)
 
     def _tp(px, cost, peak, n_days):
         return strategy9_rules.take_profit_reason(px, cost, peak, n_days, max_hold=max_hold)
@@ -1042,7 +1060,7 @@ def _apply_version9(
 def _run_kwargs_version9(args) -> dict:
     if getattr(args, "stop_pct", None) is not None:
         raise SystemExit("version9 does not accept --stop-pct")
-    return {"strategy": "version9", "max_hold": bool(getattr(args, "max_hold", False))}
+    return {"strategy": "version9", "max_hold": bool(getattr(args, "max_hold", False)), "version9_sell": getattr(args, "version9_sell", None)}
 
 
 def _apply_version10(
