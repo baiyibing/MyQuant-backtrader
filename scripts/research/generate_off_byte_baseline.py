@@ -102,11 +102,7 @@ V6F_BOOK_NAMES = (
     "version6_12", "version6_13", "version6_14", "version6_15", "version6_16", "version6_17", "version6_18", "version6_19", "version6_20", "version6_21",
 )
 V6F_GOLDEN = ROOT / "tests/fixtures/off_byte_baseline_v6_family_v11_20261006.json"
-<<<<<<< HEAD
-V6F_RULE_REVISION = "strategy6-family-v11-6_2-to-6_21-20261006"
-=======
-V6F_RULE_REVISION = "strategy6-family-v7-6_2-to-6_17-20261006"
->>>>>>> github/master
+V6F_RULE_REVISION = 'strategy6-family-v11-6_2-to-6_21-20261006'
 V6F_CASES = tuple((book, engine) for book in V6F_BOOK_NAMES for engine in ("daily", "minute"))
 BOOK_NAMES = HISTORICAL_BOOK_NAMES + V61_BOOK_NAMES + V91_BOOK_NAMES + V92_BOOK_NAMES + V6F_BOOK_NAMES
 CODE = "600000.SH"
