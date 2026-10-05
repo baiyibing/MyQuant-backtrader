@@ -274,12 +274,23 @@ def check_buy_cash(st, *, needed, available, date, code) -> bool:
     return True
 
 
+def uses_s8_independent(name: str | None, sizing: str | None) -> bool:
+    """True iff this book should bind S8 and default on_short_cash to raise."""
+    if sizing != "per_name" or not name:
+        return False
+    if name.startswith("version6_"):
+        return True
+    if name == "version8":
+        return True
+    if name.startswith("version8_") and name != "version8_1":
+        return True
+    return False
+
+
 def _configure_s8(st, hooks: dict) -> None:
     """Bind the selected per-name hooks once, including direct shared-loop use."""
     name = hooks.get("name")
-    if hooks.get("sizing") != "per_name" or name not in {
-        "version6_1", "version6_2", "version6_3", "version6_4", "version6_5", "version6_6", "version6_7", "version6_8", "version6_9", "version6_10", "version6_11", "version6_12", "version6_13", "version6_14", "version6_15", "version6_16", "version6_17", "version6_18", "version6_19", "version6_20", "version6_21", "version6_22", "version6_23", "version6_24", "version6_25", "version6_26", "version6_27", "version6_28", "version6_29", "version6_30", "version6_31", "version6_32", "version6_33", "version6_34", "version6_35", "version6_36", "version6_37", "version6_38", "version6_39", "version6_40", "version6_41", "version6_42", "version6_43", "version6_44", "version8", "version8_2", "version8_3", "version8_4", "version8_5", "version8_6",
-    }:
+    if not uses_s8_independent(name, hooks.get("sizing")):
         return
     if s8_policy(st) is not None:
         return
