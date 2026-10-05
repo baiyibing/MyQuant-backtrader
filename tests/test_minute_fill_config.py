@@ -168,8 +168,8 @@ def test_simulate_absolute_exit_requires_bar_low():
                  fill_config=FillConfig(trigger_basis='bar_last'))
 
 
-@pytest.mark.parametrize('strategy', ['version6_13', 'version6_14', 'version6_15', 'version6_8'])
-def test_simulate_side_sells_reject_custom_config(strategy):
+@pytest.mark.parametrize('strategy', ['version6_13', 'version6_14', 'version6_15', 'version6_8', 'version6_10'])
+def test_simulate_side_sells_accept_custom_config(strategy):
     from backtest.research.csv_minute_backtest import simulate
     from backtest.research.csv_strategy_books import apply_csv_strategy
     hooks = apply_csv_strategy(strategy)
@@ -178,24 +178,26 @@ def test_simulate_side_sells_reject_custom_config(strategy):
         assert hooks['scale_out_step']
     if strategy in ('version6_14', 'version6_15'):
         assert hooks['peak_dd_exit']
-    with pytest.raises(ValueError, match='step_stop/scale_out/peak_dd_exit side sells'):
-        simulate(**minute_fixture(), strategy=strategy,
+    simulate(**minute_fixture(), strategy=strategy,
                  fill_config=FillConfig(fill_timing='next_bar_open'))
 
 
-@pytest.mark.parametrize('strategy', ['version6_13', 'version6_14', 'version6_15', 'version6_8'])
-def test_simulate_side_sells_default_config_unchanged(strategy):
+@pytest.mark.parametrize('strategy', ['version6_13', 'version6_14', 'version6_15', 'version6_8', 'version6_10'])
+@pytest.mark.parametrize('minute_stop_trigger', ['close', 'hl'])
+def test_simulate_side_sells_default_config_unchanged(strategy, minute_stop_trigger):
     from backtest.research.csv_minute_backtest import simulate
     from backtest.research.csv_strategy_books import apply_csv_strategy
     from backtest.research.fill_config import book_fill_defaults
-    kwargs = dict(strategy=strategy, total_cash=100_000., daily_quota=10_000.,
+    kwargs = dict(strategy=strategy, minute_stop_trigger=minute_stop_trigger,
+                  total_cash=100_000., daily_quota=10_000.,
                   name_budget=10_000.)
     legacy = simulate(**minute_fixture(), **kwargs, fill_config=None)
     explicit = simulate(**minute_fixture(), **kwargs,
-                        fill_config=book_fill_defaults(apply_csv_strategy(strategy))['stop'])
+                        fill_config=book_fill_defaults(apply_csv_strategy(strategy), minute_stop_trigger)['stop'])
     assert legacy.trades
-    assert explicit.trades == legacy.trades
-    assert explicit.equity_curve == legacy.equity_curve
+    omitted = simulate(**minute_fixture(), **kwargs)
+    assert omitted.trades == explicit.trades == legacy.trades
+    assert omitted.equity_curve == explicit.equity_curve == legacy.equity_curve
 
 
 def test_stale_carry_cleared_on_other_exit_and_same_code_reentry(monkeypatch):
@@ -262,7 +264,7 @@ def test_carry_retained_on_partial_sell_cleared_on_full_sell():
     assert st.held_fill_states == {}
 
 
-def test_simulate_peak_dd_exit_only_rejects_custom_config(monkeypatch):
+def test_simulate_peak_dd_exit_only_accepts_custom_config(monkeypatch):
     import backtest.research.csv_minute_backtest as m
     from backtest.research.csv_strategy_books import apply_csv_strategy
     hooks = apply_csv_strategy('version6_14')
@@ -270,6 +272,5 @@ def test_simulate_peak_dd_exit_only_rejects_custom_config(monkeypatch):
     hooks.pop('scale_out_step')
     assert hooks['peak_dd_exit']
     monkeypatch.setattr(m, 'apply_csv_strategy', lambda strategy, **kwargs: hooks)
-    with pytest.raises(ValueError, match='peak_dd_exit side sells'):
-        m.simulate(**minute_fixture(), strategy='version6_14',
+    m.simulate(**minute_fixture(), strategy='version6_14',
                    fill_config=FillConfig(fill_timing='next_bar_open'))

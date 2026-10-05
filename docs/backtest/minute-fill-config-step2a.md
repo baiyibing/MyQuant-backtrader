@@ -59,10 +59,18 @@ retains the original predicates, including floating-point comparison order.
 - Separate minute engines (version9_2, version12, minute_open) reject custom
   config instead of silently ignoring it. Daily, v7, bar_scan_exit and the
   minute wire registry are untouched.
-- `step_stop` / `scale_out` / `peak_dd_clear_exits` side sells are excluded
-  from 2a: books with a truthy `step_stop_pct`, `scale_out_step`, or `peak_dd_exit` reject non-default config.
-  Default/None config reproduces their current same-bar-close execution
-  (`minute_trigger_bar_close`).
+- A1 (2026-10-05): `step_stop`, `scale_out`, and `peak_dd_clear_exits`
+  now consume FillConfig. None and the hook-derived stop default preserve
+  existing predicates, float order, metadata and event order. Step stops may
+  trigger on bar low and fill at their lot line, last print, low or a positive
+  specified price. Scale-out and peak drawdown still decide on last prints;
+  this-bar low and line fills fail closed for those decisions.
+- Next-open side orders retain lot identity and decided scale-out quantities in
+  `held_fill_states[held_fill_key(pos)]`, carrying across sessions. They use
+  `:next_open` reasons and `minute_pending_next_open`, with only the existing
+  limit check on the execution open. There is no open+fill limit-pair rule.
+  Closed lots are removed from carry by the ledger; repeated decisions cannot
+  duplicate an outstanding lot order or count a scale step twice.
 
 - 2026-10-05 14:13 人裁：A3 / B9 stay excluded；A1 pipe / A2 follow in separate PRs，见 [step-2b decisions](note-2b-decisions-2026-10-05.md)。
 
@@ -87,14 +95,16 @@ may return no exit). H/L remains opt-in for supported shared books.
 | version6_5 | shared; take_profit |
 | version6_6 | shared; take_profit |
 | version6_7 | shared; take_profit |
-| version6_8 | shared; take_profit; step_stop side sells (default only) |
+| version6_8 | shared; take_profit; step_stop side sells (A1 FillConfig) |
 | version6_9 | shared; take_profit |
-| version6_10 | shared; take_profit; step_stop side sells (default only) |
+| version6_10 | shared; take_profit; step_stop side sells (A1 FillConfig) |
 | version6_11 | shared; take_profit |
 | version6_12 | shared; take_profit |
-| version6_13 | shared; take_profit; step_stop / scale_out side sells (default only; reproduces current behavior) |
-| version6_14 | shared; take_profit; step_stop / scale_out / peak_dd_clear_exits side sells (default only; reproduces current behavior) |
-| version6_15 | shared; take_profit; step_stop / scale_out / peak_dd_clear_exits side sells (default only; reproduces current behavior) |
+| version6_13 | shared; take_profit; step_stop / scale_out side sells (A1 FillConfig) |
+| version6_14 | shared; take_profit; step_stop / scale_out / peak_dd_clear_exits side sells (A1 FillConfig) |
+| version6_15 | shared; take_profit; step_stop / scale_out / peak_dd_clear_exits side sells (A1 FillConfig) |
+| version6_16 | shared; take_profit; step_stop / scale_out / peak_dd_clear_exits side sells (A1 FillConfig) |
+| version6_17 | shared; take_profit; step_stop / scale_out / peak_dd_clear_exits side sells (A1 FillConfig) |
 | version8 | shared; take_profit |
 | version8_1 | shared; take_profit |
 | version8_2 | shared; take_profit |
@@ -127,7 +137,7 @@ Test names below are in `tests/test_minute_fill_config.py` unless a file is spec
 | Default numba parity | `tests/test_scan_held_day_numba_parity.py::test_numba_gap_open_stop`, `test_numba_t0_no_sell_no_peak_update`, `test_numba_trail_hit`, `test_numba_force_sell_time` |
 | version9_2/version12/minute_open reject custom config through simulate | `test_simulate_separate_engine_rejects_custom_config` (minute_open = version11) |
 | absolute_exit bar_low guard | `test_simulate_absolute_exit_requires_bar_low` (version9_1) |
-| step_stop/scale_out/peak_dd_exit reject custom config; default/None unchanged | `test_simulate_side_sells_reject_custom_config`, `test_simulate_side_sells_default_config_unchanged` (version6_13/version6_14/version6_15/version6_8); `test_simulate_peak_dd_exit_only_rejects_custom_config` |
+| Side sells accept custom configs; default/None unchanged | `test_simulate_side_sells_accept_custom_config`, `test_simulate_side_sells_default_config_unchanged`; `tests/test_side_sell_fill_config.py` (next-open, session carry, limit retry, no duplicate, other-exit cleanup, low trigger and look-ahead rejection) |
 | Look-ahead rejects | `test_lookahead`, `test_callback_low_rejected_at_decision`, `test_target_cannot_assume_low_after_high` |
 | Callback and trail timing | `test_target_and_trail` |
 | Missing carry out-param fails closed | `test_missing_carry_state_fails_closed` |
@@ -174,3 +184,30 @@ Original step 2a validation before this follow-up:
   The 7429 selected cases comprise the 7424 passes and 5 existing skips.
 - No golden rewrites or new skips. All six written Python/Markdown files
   decode as UTF-8 without BOM and contain zero NUL bytes; `git diff --check` passes.
+
+A1 side-sell pipe validation (Human “A1 pipe”, 2026-10-05 14:13 CST;
+branch base `b57ec04`, `/tmp/mq-v6/bin/python`):
+
+- `tests/test_side_sell_fill_config.py`: **24 passed**; simulate routing for
+  version6_8/version6_10/version6_13/version6_14 covers the next bar and next
+  session, in addition to direct step/scale/peak carry and cleanup checks.
+- `tests/test_minute_fill_config.py`: **58 passed**, including omitted/None/
+  explicit hook-derived defaults under both close and hl stop modes.
+- `tests/test_scan_held_day_numba_parity.py`: **5 passed**.
+- `tests/test_off_byte_baseline.py`: **157 passed, 4 failed**. The four
+  version6_17 daily/minute × omitted/explicit-off canonical CSV failures also
+  reproduce in an untouched `b57ec04` checkout. No fixture was edited.
+- Combined requested files: **244 passed, 4 failed**, 5.60 s.
+- Full suite `-m "not production and not benchmark"`: **7631 passed,
+  5 skipped, 24 deselected, 4 failed**, 29 warnings, 137.91 s. Only the same
+  four pre-existing version6_17 off-byte cases fail.
+- Direct before/after capture of all seven affected books × daily/minute ×
+  omitted/explicit-off: **28 cases identical**, including raw writer/library
+  CSV hashes and full structured trades/equity/account/stats.
+- `git diff --stat b57ec04 -- tests/fixtures` is empty. The requested comparison
+  against `origin/master` is not empty because that ref is already `a37c532`
+  (#372), which adds `off_byte_baseline_v6_family_v7_20261006.json` and corrects
+  the version6_17 fixture. This branch retains its requested base for later
+  rebase; the pre-existing fixture difference is not part of A1.
+- All six changed Python/Markdown files decode as UTF-8, have no BOM and zero
+  NUL bytes; `git diff --check` passes.

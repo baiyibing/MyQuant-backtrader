@@ -55,7 +55,7 @@ from backtest.research.csv_simulate_loop import (
 )
 from backtest.research.exdiv_map import k_for, mapped_prev_close
 from backtest.research.minute_held_scan_core import HeldMinuteCursor
-from backtest.research.fill_config import is_open_fill
+from backtest.research.fill_config import FillConfig, is_open_fill
 from backtest.research.minute_audit import audit_scope
 from backtest.research.strategy9_rules import evaluate_version9_exit
 from backtest.research.tail_window_buy import (
@@ -131,14 +131,75 @@ def advance_independent_exit(
         )
 
 
+def _side_price(config, px, *, line=None, low=None):
+    if config is None or config == FillConfig() or config.fill_timing == "next_bar_open":
+        return px
+    at = config.fill_at
+    if at == "line":
+        if line is None:
+            raise ValueError("fill_at=line requires an explicit stop/target line")
+        return line
+    if at == "bar_low":
+        if line is None:
+            raise ValueError("look-ahead: bar_low is not a causal fill for a last-print decision")
+        return float(low)
+    return px if at == "bar_last" else float(at)
+
+
+def _side_pending(st, pos):
+    return getattr(st, "held_fill_states", {}).get(held_fill_key(pos), {}).get("side_pending", [])
+
+
+def _side_queued(st, pos):
+    return any(order[0] is pos or isinstance(order[0], IndependentExitPosition)
+               for order in _side_pending(st, pos))
+
+
+def _side_sell(st, code, pos, px, day, reason, *, fill_config=None, **kwargs):
+    if fill_config is not None and fill_config.fill_timing == "next_bar_open":
+        state = st.held_fill_states.setdefault(held_fill_key(pos), {})
+        state.setdefault("side_pending", []).append((pos, reason, kwargs.get("wanted_shares")))
+        return 0
+    return _sell(st, code, pos, px, day, reason, **kwargs)
+
+
+def fill_side_pending(st, code, pos, px, day, day_i, limits, *, hm):
+    """Consume side orders at eligible opens; the ledger owns lifetime cleanup."""
+    orders = _side_pending(st, pos)
+    counted_scale = False
+    for order in list(orders):
+        target, reason, wanted = order
+        if not position_is_open(st, target):
+            orders.remove(order)
+            continue
+        if not np.isfinite(px) or px <= 0 or target.entry_idx >= day_i:
+            continue
+        if defer_sell_at_limit(px, limits):
+            st.stats["defer_sell_limit_down"] += 1
+            continue
+        filled = _sell(st, code, target, px, day, reason + ":next_open",
+                       day_i=day_i, hm=hm, price_rule="minute_pending_next_open",
+                       **({"wanted_shares": wanted} if wanted is not None else {}))
+        if filled:
+            if order in orders:
+                orders.remove(order)
+            stat = ("sell_stop_step" if reason.startswith("stop_loss:step") else
+                    "sell_scale_out" if reason.startswith("scale_out:") else "sell_peak_dd_clear")
+            if stat != "sell_scale_out" or not counted_scale:
+                st.stats[stat] = int(st.stats.get(stat, 0)) + 1
+            counted_scale = counted_scale or stat == "sell_scale_out"
+            if reason == "peak_dd_clear":
+                target.group.peak_dd_start = None
+
+
 def peak_dd_clear_exits(st, code, pos, px, day, day_i, limits, *,
-                         peak_dd_exit=0.15, peak_dd_sessions=15, hm=None):
+                         peak_dd_exit=0.15, peak_dd_sessions=15, hm=None, fill_config=None):
     """6.14：从峰值回撤 >peak_dd_exit 且 peak_dd_sessions 个交易日内未收复 → 全组清仓。
 
     每日一次评估（close 相位、首次触线那分钟记录起始日）；峰值回撤重置为
     None（px ≥ peak 时清零计数）；与梯子/减仓并行，组级清仓走 _sell_s8_group。
     """
-    if not peak_dd_exit or px <= 0 or not position_is_open(st, pos):
+    if _side_pending(st, pos) or not peak_dd_exit or px <= 0 or not position_is_open(st, pos):
         return 0
     peak = float(pos.peak)
     if peak <= 0:
@@ -154,13 +215,14 @@ def peak_dd_clear_exits(st, code, pos, px, day, day_i, limits, *,
         return 0
     if day_i - pos.group.peak_dd_start < int(peak_dd_sessions):
         return 0
-    if defer_sell_at_limit(px, limits):
+    px = _side_price(fill_config, px)
+    if (fill_config is None or fill_config.fill_timing != "next_bar_open") and defer_sell_at_limit(px, limits):
         st.stats["defer_sell_limit_down"] += 1
         return 0
     # 全组清仓：走组级卖出（复用 _sell 的 IndependentExitPosition 路径）
-    filled = _sell(
+    filled = _side_sell(
         st, code, pos, px, day, "peak_dd_clear", day_i=day_i,
-        hm=hm, price_rule="minute_trigger_bar_close",
+        hm=hm, price_rule="minute_trigger_bar_close", fill_config=fill_config,
     )
     if filled:
         st.stats["sell_peak_dd_clear"] = int(st.stats.get("sell_peak_dd_clear", 0)) + 1
@@ -168,13 +230,13 @@ def peak_dd_clear_exits(st, code, pos, px, day, day_i, limits, *,
     return 1 if filled else 0
 
 
-def scale_out_exits(st, code, pos, px, day, day_i, limits, *, scale_step, scale_frac, hm=None):
+def scale_out_exits(st, code, pos, px, day, day_i, limits, *, scale_step, scale_frac, hm=None, fill_config=None):
     """6.13：相对首仓锚价每满 scale_step 涨幅，卖出当时剩余持仓的 scale_frac。
 
     逐分钟 close 相位调用；每档一次（组计数器）；整百股向下、FIFO 切 lot；
     lot 级 T+1 由 _sell(wanted_shares) 保证；跌停顺延；组已同分钟离场则不触发。
     """
-    if not scale_step or px <= 0 or not position_is_open(st, pos):
+    if _side_pending(st, pos) or not scale_step or px <= 0 or not position_is_open(st, pos):
         return 0
     anchor_cost = float(getattr(pos.group, "anchor_cost", None) or pos.group.first_lot.cost)
     if anchor_cost <= 0 or float(px) < anchor_cost:
@@ -189,31 +251,35 @@ def scale_out_exits(st, code, pos, px, day, day_i, limits, *, scale_step, scale_
         pos.group.scale_steps = allowed
         return 0
     target = int(shares_now * float(scale_frac) // 100) * 100
+    px = _side_price(fill_config, px)
     sold = 0
+    queued = 0
     if target > 0:
         for lot in lots:
-            if sold >= target:
+            if sold + queued >= target:
                 break
-            chunk = min(lot.shares, target - sold)
+            chunk = min(lot.shares, target - sold - queued)
             chunk = chunk // 100 * 100
             if chunk <= 0 or lot.entry_idx >= day_i:
                 continue
-            if defer_sell_at_limit(px, limits):
+            if (fill_config is None or fill_config.fill_timing != "next_bar_open") and defer_sell_at_limit(px, limits):
                 st.stats["defer_sell_limit_down"] += 1
                 return sold
-            filled = _sell(
+            filled = _side_sell(
                 st, code, lot, px, day, "scale_out:5pct", day_i=day_i,
-                hm=hm, price_rule="minute_trigger_bar_close",
+                hm=hm, price_rule="minute_trigger_bar_close", fill_config=fill_config,
                 wanted_shares=chunk,
             )
             sold += int(filled)
+            if fill_config is not None and fill_config.fill_timing == "next_bar_open":
+                queued += chunk
     pos.group.scale_steps = allowed
     if sold:
         st.stats["sell_scale_out"] = int(st.stats.get("sell_scale_out", 0)) + 1
     return sold
 
 
-def step_stop_exits(st, code, pos, px, day, day_i, limits, *, step_stop_pct, hm=None):
+def step_stop_exits(st, code, pos, px, day, day_i, limits, *, step_stop_pct, hm=None, fill_config=None, low=None):
     """6.8：step lot 自带独立止损（相对自身买价 −step_stop_pct，触发只卖该 lot）。
 
     在组级退出评估之后逐分钟 close 调用；组已同分钟离场则 lots 已空、自然不触发。
@@ -225,20 +291,23 @@ def step_stop_exits(st, code, pos, px, day, day_i, limits, *, step_stop_pct, hm=
     for lot in list(st.positions.get(code, [])):
         if (
             getattr(lot, "position_id", None) != pos.position_id
+            or _side_queued(st, lot)
             or not getattr(lot, "is_step", False)
             or lot.entry_idx >= day_i
         ):
             continue
         line = float(lot.cost) * (1.0 - float(step_stop_pct))
-        if float(px) > line:
+        trigger_px = low if fill_config is not None and fill_config.trigger_basis == "bar_low" else px
+        if float(trigger_px) > line:
             continue
-        if defer_sell_at_limit(px, limits):
+        fill_px = _side_price(fill_config, px, line=line, low=low)
+        if (fill_config is None or fill_config.fill_timing != "next_bar_open") and defer_sell_at_limit(fill_px, limits):
             st.stats["defer_sell_limit_down"] += 1
             continue
-        filled = _sell(
-            st, code, lot, px, day,
+        filled = _side_sell(
+            st, code, lot, fill_px, day,
             f"stop_loss:step{round(float(step_stop_pct) * 100)}", day_i=day_i,
-            hm=hm, price_rule="minute_trigger_bar_close",
+            hm=hm, price_rule="minute_trigger_bar_close", fill_config=fill_config,
         )
         if filled:
             sold += 1

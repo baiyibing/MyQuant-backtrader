@@ -804,6 +804,9 @@ def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str, *
             policy["groups"][pos.position_id].closed = True
     carry_states = getattr(st, "held_fill_states", None)
     if carry_states is not None:
+        state = carry_states.get(held_fill_key(pos), {})
+        orders = state.get("side_pending", [])
+        orders[:] = [order for order in orders if order[0] is not pos]
         position_id = getattr(pos, "position_id", None)
         if not position_id or not any(
             getattr(p, "position_id", None) == position_id
