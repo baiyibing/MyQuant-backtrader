@@ -45,6 +45,7 @@ from backtest.research.csv_ledger import (  # noqa: E402
     configure_s8,
     execute_buy as execute_buy,
     exit_positions,
+    held_fill_key,
     finish_pending_chase,
     queue_limit_up_chase as queue_limit_up_chase,
     hit_limit_down,
@@ -140,6 +141,7 @@ from backtest.research.participation_rate_precheck import (  # noqa: E402
     precheck_completed_bucket_samples,
 )
 from backtest.research.minute_audit import audit_scope, write_audit
+from backtest.research.fill_config import FillConfig, default_fill_config, book_fill_defaults, is_open_fill
 from backtest.research.minute_stop_trigger import (
     blocked_bar, target_fill, validate_low, validate_minute_stop_trigger,
 )
@@ -327,12 +329,14 @@ def scan_held_day_python(
     *,
     l: Optional[np.ndarray] = None,
     minute_stop_trigger: str = "close",
+    fill_config: FillConfig | None = None,
     take_profit_pct: Optional[float] = None,
     cost: float,
     peak: float,
     n_days: int,
     can_sell: bool,
     stop_pct: Optional[float],
+    fill_state: dict | None = None,
     version9_plan=None,
     version9_max_hold=False,
     stop_range_ratio: Optional[float] = None,
@@ -371,6 +375,7 @@ def scan_held_day_python(
         defer_limit_up=defer_limit_up, limit_up=limit_up, reserved=reserved,
         reserve_state=reserve_state, exit_plan=exit_plan, exit_state=exit_state,
         close_clear=close_clear, l=l, minute_stop_trigger=minute_stop_trigger,
+        fill_config=fill_config, fill_state=fill_state,
         take_profit_pct=take_profit_pct, version9_plan=version9_plan,
         version9_max_hold=version9_max_hold,
     )
@@ -379,6 +384,8 @@ def scan_held_day_python(
             event = cursor.advance(i, phase)
             if event is not None:
                 return (*event, cursor.peak, cursor.peak_hm)
+    if "pending" in cursor.fill_state and fill_state is None:
+        raise ValueError("next_bar_open carry requires a fill_state out-param across sessions")
     return -1, float("nan"), "", cursor.peak, cursor.peak_hm
 
 
@@ -389,12 +396,14 @@ def scan_held_day(
     *,
     l: Optional[np.ndarray] = None,
     minute_stop_trigger: str = "close",
+    fill_config: FillConfig | None = None,
     take_profit_pct: Optional[float] = None,
     cost: float,
     peak: float,
     n_days: int,
     can_sell: bool,
     stop_pct: Optional[float],
+    fill_state: dict | None = None,
     version9_plan=None,
     version9_max_hold=False,
     stop_range_ratio: Optional[float] = None,
@@ -441,6 +450,8 @@ def scan_held_day(
         and reserve_state is None
         and exit_plan is None
     )
+    if can_offload and fill_config is not None and fill_config != default_fill_config(minute_stop_trigger):
+        raise ValueError("non-default fill_config is unsupported by numba; select the Python backend")
     if can_offload:
         o64 = np.asarray(o, dtype=np.float64)
         h64 = np.asarray(h, dtype=np.float64)
@@ -485,6 +496,7 @@ def scan_held_day(
         h,
         c,
         l=l, minute_stop_trigger=minute_stop_trigger, take_profit_pct=take_profit_pct,
+        fill_config=fill_config, fill_state=fill_state,
         cost=cost,
         peak=peak,
         n_days=n_days,
@@ -626,6 +638,7 @@ def simulate(
     fix_s81_band_precision: bool = False,
     signal_bars_front: dict[str, pd.DataFrame] | None = None,
     minute_stop_trigger: str = "close",
+    fill_config: FillConfig | None = None,
     exdiv_ref_fen: bool = False,
     fix_minute_cash_order: bool = False,
     tail_window_buy: bool = False,
@@ -727,6 +740,16 @@ def simulate(
         pool_names_by_day=pool_names_by_day,
         daily_quota=daily_quota,
     )
+    defaults = book_fill_defaults(hooks, minute_stop_trigger)
+    if fill_config is not None and fill_config != defaults["stop"]:
+        if hooks.get("step_stop_pct") or hooks.get("scale_out_step"):
+            raise ValueError("fill_config is not yet applied to step_stop/scale_out side sells; use the default fill config for this book")
+        if hooks.get("run_minute_day") or hooks.get("minute_open"):
+            raise ValueError("fill_config is only supported by HeldMinuteCursor, not this book's separate minute engine")
+        if "bind_absolute_exit" in hooks and fill_config.trigger_basis != "bar_low":
+            raise ValueError("absolute_exit requires trigger_basis=bar_low")
+    held_fill_states = {}
+    st.held_fill_states = held_fill_states
     absolute_exit = hooks["bind_absolute_exit"](st, daily_bars) if "bind_absolute_exit" in hooks else None
     configure_s8(st, hooks)
     if minute_stop_trigger == "hl" or absolute_exit:
@@ -792,6 +815,7 @@ def simulate(
                 tail_window_buy=tail_window_buy, tail_volume_unit=tail_volume_unit,
                 exdiv_ref_fen=exdiv_ref_fen,
                 minute_stop_trigger=minute_stop_trigger,
+                fill_config=fill_config, held_fill_states=held_fill_states,
                 topk_exec=topk_exec, limit_walkdown=limit_walkdown,
             )
         else:
@@ -865,8 +889,10 @@ def simulate(
                     if isinstance(pos, IndependentExitPosition):
                         cursor = HeldMinuteCursor(
                             o, h, c, cost=pos.cost, peak=pos.peak,
-                            l=day_m["low"].to_numpy(np.float64) if minute_stop_trigger == "hl" or absolute_exit else None,
-                            minute_stop_trigger="hl" if absolute_exit else minute_stop_trigger, take_profit_pct=st.stats.get("profit_target"),
+                            l=day_m["low"].to_numpy(np.float64) if minute_stop_trigger == "hl" or absolute_exit or (fill_config and fill_config.trigger_basis == "bar_low") else None,
+                            fill_config=fill_config, fill_state=held_fill_states.setdefault(held_fill_key(pos), {}),
+                            minute_stop_trigger="hl" if absolute_exit else minute_stop_trigger,
+                            take_profit_pct=st.stats.get("profit_target"),
                             n_days=n_days,
                             can_sell=t1_sellable(calendar[pos.entry_idx].date(), day.date()),
                             stop_pct=stop_pct,
@@ -947,8 +973,9 @@ def simulate(
                         o,
                         h,
                         c,
-                        l=day_m["low"].to_numpy(np.float64) if minute_stop_trigger == "hl" or absolute_exit else None,
+                        l=day_m["low"].to_numpy(np.float64) if minute_stop_trigger == "hl" or absolute_exit or (fill_config and fill_config.trigger_basis == "bar_low") else None,
                         minute_stop_trigger="hl" if absolute_exit else minute_stop_trigger,
+                        fill_config=fill_config, fill_state=held_fill_states.setdefault(held_fill_key(pos), {}),
                         take_profit_pct=v9_plan["take_profit_pct"] if v9_plan is not None else st.stats.get("profit_target"),
                         cost=pos.cost,
                         peak=pos.peak,
@@ -997,15 +1024,17 @@ def simulate(
                         if st.volume_cap is not None:
                             bucket = int(hm[idx])
                             volume_kwargs = {"bucket_id": bucket, "day_i": i,
-                                             "at": bucket - 1 if reason == "stop_loss:gap_open" else bucket}
+                                             "at": bucket - 1 if is_open_fill(reason) else bucket}
                         # P2=B names only these two stop paths; other fills stay unlabeled.
                         price_rule = {
                             "stop_loss:gap_open": "minute_gap_open",
                             "stop_loss:touch": "minute_stop_price" if minute_stop_trigger == "hl" else "minute_trigger_bar_close",
                         }.get(reason, "")
+                        if reason.endswith(":next_open"):
+                            price_rule = "minute_pending_next_open"
                         with audit_scope(
                             audit_sink, decision_hm=int(hm[idx]), quote_hm=int(hm[idx]),
-                            phase="open" if reason == "stop_loss:gap_open" else "close",
+                            phase="open" if is_open_fill(reason) else "close",
                         ):
                             _sell(st, code, pos, px, day, reason, **volume_kwargs,
                                   hm=int(hm[idx]) if price_rule else None, price_rule=price_rule)
@@ -1245,6 +1274,7 @@ def run(
     max_hold: bool = False,
     fix_s81_band_precision: bool = False,
     minute_stop_trigger: str = "close",
+    fill_config: FillConfig | None = None,
     exdiv_ref_fen: bool = False,
     fix_minute_cash_order: bool = False,
     tail_window_buy: bool = False,
@@ -1525,6 +1555,7 @@ def run(
         tail_volume_unit=tail_volume_unit,
         audit_sink=audit_sink,
         minute_stop_trigger=minute_stop_trigger,
+        fill_config=fill_config,
         topk_exec=topk_exec, limit_walkdown=limit_walkdown,
         topk_limit_rule=topk_limit_rule,
     )
