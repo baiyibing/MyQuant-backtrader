@@ -103,3 +103,68 @@ def test_module_is_not_an_order_system():
         assert banned not in text
     assert not any("minute_orders_backend" in name for name in sys.modules)
     assert Path("backtest/research/csv_minute_backtest.py").is_file()
+
+def test_explicit_same_bar_matches_default():
+    bar = OhlcBar(10.10, 10.20, 9.70, 10.00)
+    assert scan_bar_exit(bar, _pos(), timing="same_bar") == scan_bar_exit(bar, _pos())
+
+
+def test_next_bar_touch_fills_at_next_open_not_stop():
+    signal = OhlcBar(10.10, 10.20, 9.70, 10.00)
+    nxt = OhlcBar(9.50, 9.60, 9.40, 9.55)
+    result = scan_bar_exit(signal, _pos(), timing="next_bar", next_bar=nxt)
+    assert result.decision == "fill"
+    assert result.fill_price == 9.50
+    assert result.reason == "stop_loss:touch:next_open"
+    same = scan_bar_exit(signal, _pos())
+    assert same.fill_price == pytest.approx(9.80)
+    assert same.reason == "stop_loss:touch"
+
+
+def test_next_bar_gap_fills_at_next_open_not_signal_open():
+    signal = OhlcBar(9.70, 9.90, 9.50, 9.85)
+    nxt = OhlcBar(9.40, 9.80, 9.30, 9.60)
+    result = scan_bar_exit(signal, _pos(), timing="next_bar", next_bar=nxt)
+    assert result.fill_price == 9.40
+    assert result.reason == "stop_loss:gap_open:next_open"
+    assert result.fill_price != signal.open
+
+
+def test_next_bar_drawdown_fills_at_next_open():
+    signal = OhlcBar(11.80, 12.00, 11.00, 11.00)
+    nxt = OhlcBar(10.90, 11.20, 10.80, 11.10)
+    result = scan_bar_exit(signal, _pos(peak=12.0), timing="next_bar", next_bar=nxt)
+    assert result.decision == "fill"
+    assert result.fill_price == 10.90
+    assert result.reason == "profit_take:drawdown:50:next_open"
+    assert result.peak == 12.0
+
+
+def test_next_bar_skip_does_not_need_a_following_bar():
+    result = scan_bar_exit(
+        OhlcBar(10.60, 10.80, 10.50, 10.70),
+        _pos(peak=11.0),
+        timing="next_bar",
+    )
+    assert result.decision == "skip"
+    assert result.fill_price is None
+    assert result.reason == ""
+    assert result.peak == 11.0
+
+
+def test_next_bar_fill_without_next_bar_raises():
+    with pytest.raises(ValueError):
+        scan_bar_exit(OhlcBar(10.10, 10.20, 9.70, 10.00), _pos(), timing="next_bar")
+
+
+def test_unknown_timing_and_same_bar_with_next_bar_raise():
+    with pytest.raises(ValueError):
+        scan_bar_exit(OhlcBar(10, 10, 10, 10), _pos(), timing="limit_book")
+    with pytest.raises(ValueError):
+        scan_bar_exit(
+            OhlcBar(10, 10, 10, 10),
+            _pos(),
+            timing="same_bar",
+            next_bar=OhlcBar(10, 10, 10, 10),
+        )
+
