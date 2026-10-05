@@ -1,5 +1,7 @@
 # 分钟策略接到真核扫线（2026-10-03）
 
+**RETIRED (2026-10-05, step 3):** Bar-scan / true-core-wire / host round-trip probes removed; production fills use `csv_minute_backtest.simulate` / `HeldMinuteCursor` / `FillConfig`, classification uses registry `minute_classification` (#384). History retained below.
+
 旧分钟入口保留。`csv_minute_backtest.py`、`csv_minute_backtest_v7.py`、`csv_minute_backtest_topk_app_dropout.py` 都不删、不关。
 
 本分支从 `master` `19b7be5` 拉出，并带上未合的当根扫线与 `same_bar` / `next_bar`（#320 / #321 的规则，基线不再是 `6a4e6d7`）。

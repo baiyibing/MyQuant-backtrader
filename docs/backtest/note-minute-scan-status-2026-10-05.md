@@ -1,5 +1,7 @@
 # 分钟扫描现状 · 供后续 agent 决定下一步（2026-10-05）
 
+**STEP 3 DONE / RETIRED (2026-10-05, this PR):** `bar_scan_exit` / `minute_true_core_wire` / host round-trip probe line 已退役；probe bench 与 wire-only 测试删除。生产成交仍由 `csv_minute_backtest.simulate` / `HeldMinuteCursor` / `FillConfig` 负责；v7 / topk_app 独立 runner 保留。分类栅栏为 registry `minute_classification`（#384），核心与逐书覆盖已迁移（#385–#389）；pending-sell observability 保留。默认 fills / trades / equity 与 frozen fixtures 不变。下文旧扫线分析保留为历史。
+
 | 字段 | 值 |
 |---|---|
 | 日期 | 2026-10-05（Asia/Shanghai） |

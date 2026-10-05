@@ -25,7 +25,6 @@ def inputs(monkeypatch):
     monkeypatch.setattr(host, "load_scan_bars", load)
     monkeypatch.setattr(host, "load_daily_ohlc", lambda *a, **k: {CODE: daily})
     monkeypatch.setattr(host, "load_pool_day_map", lambda *a, **k: {days[0].date(): [CODE]})
-    monkeypatch.setattr(host, "invoke_minute_strategy", lambda *a, **k: pytest.fail("partial host called"))
     return minute, daily
 
 
@@ -59,8 +58,6 @@ def test_main_uses_simulate_entry(monkeypatch, capsys, book):
         calls.append(kw)
         return host.RoundTripSummary(2, 1, 1, 0, 2001, .05)
     monkeypatch.setattr(host, "run_simulate", runner)
-    for name in ("run_scan", "run_round_trip", "invoke_minute_strategy"):
-        monkeypatch.setattr(host, name, lambda *a, **k: pytest.fail("partial route called"))
     assert host.main(["--source", "lake", "--symbol", CODE, "--start", "20260105",
                       "--end", "20260106", "--strategy", book]) == 0
     assert calls[0]["strategy"] == book
@@ -69,7 +66,7 @@ def test_main_uses_simulate_entry(monkeypatch, capsys, book):
 
 @pytest.mark.parametrize("book", csv_strategy_names())
 def test_main_rejects_held_seed(monkeypatch, capsys, book):
-    monkeypatch.setattr(host, "run_scan", lambda *a, **k: pytest.fail("held route called"))
+    monkeypatch.setattr(host, "run_simulate", lambda *a, **k: pytest.fail("held route called"))
     assert host.main(["--source", "lake", "--symbol", CODE, "--start", "20260105",
                       "--end", "20260106", "--strategy", book, "--cost", "10", "--peak", "12"]) == 1
     output = capsys.readouterr()

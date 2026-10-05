@@ -106,7 +106,7 @@ def test_quiet_bar_reports_lifted_peak():
 
 
 def test_zero_stop_pct_disables_stop():
-    # bar_scan_exit raised on stop_pct=0; HeldMinuteCursor treats stop_pct outside
+    # Formerly bar_scan_exit raised on stop_pct=0; HeldMinuteCursor treats stop_pct outside
     # (0,1) as stop disabled (minute_held_scan_core.advance: stop_enabled).
     cursor = _cursor((9.70, 9.90, 9.50, 9.60), stop_pct=0.0)
     assert cursor.advance(0, "open") is None
@@ -123,7 +123,7 @@ def test_zero_stop_pct_disables_stop():
 
 
 def test_broken_ohlc_is_not_validated_by_cursor():
-    # bar_scan_exit raised ValueError on inconsistent OHLC; the shared cursor
+    # Formerly bar_scan_exit raised ValueError on inconsistent OHLC; the shared cursor
     # does not validate bars — callers/loaders own bar consistency. This test
     # pins that so the dropped check is explicit, not silent.
     cursor = _cursor((10.00, 9.00, 8.00, 10.00))
@@ -172,7 +172,7 @@ def test_next_bar_skip_does_not_need_a_following_bar():
 
 
 def test_next_bar_signal_without_following_bar_stays_pending():
-    # bar_scan_exit raised when next_bar was missing on a fill; the cursor carries
+    # Formerly bar_scan_exit raised when next_bar was missing on a fill; the cursor carries
     # the pending exit in fill_state to the next session (next_bar_open carry).
     cursor = _cursor((10.10, 10.20, 9.70, 10.00),
                      fill_config=_touch_config("next_bar_open"))
