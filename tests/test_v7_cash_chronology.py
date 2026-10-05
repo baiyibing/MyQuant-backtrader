@@ -139,8 +139,9 @@ def test_limit_down_defer_does_not_create_cash():
 
 
 def _seed(monkeypatch, positions):
-    result_type = v7.SimResult
-    monkeypatch.setattr(v7, "SimResult", lambda cash: result_type(cash, positions=deepcopy(positions)))
+    from backtest.research import strategy7_engine
+    result_type = strategy7_engine.SimResult
+    monkeypatch.setattr(strategy7_engine, "SimResult", lambda cash: result_type(cash, positions=deepcopy(positions)))
 
 
 def _position(symbol, *, shares=20_000, stage=v7.TRIAL, anchor=D1):
