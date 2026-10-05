@@ -29,6 +29,10 @@ import pandas as pd
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, REPO)
 
+from backtest.research.strategy9_rules import (  # noqa: E402
+    evaluate_stop_range, RANGE_LOOKBACK_CALENDAR_DAYS,
+)
+
 from backtest.research.csv_strategy_books import (  # noqa: E402
     HELP_LOCK_V6,
     HELP_LOCK_V8,
@@ -241,6 +245,7 @@ def simulate(
     index_block_new=None,
     stop_fill: Optional[str] = None,
     fix_s11_exit_domain: bool = False,
+    max_hold: bool = False,
     fix_s81_band_precision: bool = False,
     signal_bars_front: dict[str, pd.DataFrame] | None = None,
 ) -> SimState:
@@ -250,6 +255,8 @@ def simulate(
     exdiv_economics 显式接收 (engine_symbol, YYYYMMDD) -> ExDivEvent；
     默认 None 保留原行为，事件配合 raw bars 使用，不从 exdiv 的 k 推断权益。
     """
+    if max_hold and normalize_csv_strategy(strategy) != "version9":
+        raise ValueError("max_hold is supported only by version9")
     del pos_trail
     if signal_bars_front is not None and not fix_s11_exit_domain:
         raise ValueError("signal_bars_front requires version11 + fix_s11_exit_domain=True")
@@ -276,6 +283,7 @@ def simulate(
         tiers=tiers,
         tier_default=tier_default,
         apply_fn=apply_csv_strategy,
+        **({"max_hold": True} if max_hold else {}),
         **({"fix_s81_band_precision": True} if fix_s81_band_precision else {}),
         scores_by_day=scores_by_day,
         topk=topk,
@@ -303,6 +311,7 @@ def simulate(
         pool_names_by_day=pool_names_by_day,
         daily_quota=daily_quota,
     )
+    absolute_exit = hooks["bind_absolute_exit"](st, bars) if "bind_absolute_exit" in hooks else None
     configure_s8(st, hooks)
     st.star_lot_declare_check = star_lot_declare_check
     if buy_cost_rate is not None:
@@ -374,6 +383,12 @@ def simulate(
                     st.stats["skip_unknown_board"] += 1
                     continue
                 limit_up, limit_down = limits
+                if absolute_exit:
+                    line = absolute_exit(code, day)
+                    if line is not None and float(row["low"]) <= line:
+                        for lot in st.positions.get(code, []):
+                            if lot.entry_idx >= i:
+                                lot.pending_exit = "stop_loss:touch|t1_deferred"
                 for pos in exit_positions(st, code, i, day=day):
                     if getattr(pos, "ride_with", None) is not None:
                         continue
@@ -390,9 +405,17 @@ def simulate(
 
                     if t1_sellable(calendar[pos.entry_idx].date(), day.date()):
                         stop_enabled = isinstance(stop_pct, float) and 0 < stop_pct < 1
+                        stop_ratio = stop_pct
+                        if "stop_range" in hooks:
+                            stop_ratio = evaluate_stop_range(hooks, bars[code], day, st.stats)
+                            stop_enabled = stop_ratio is not None
+                        absolute_line = absolute_exit(code, day) if absolute_exit else None
+                        if absolute_line is not None:
+                            stop_ratio = 1 - absolute_line / pos.cost
+                            stop_enabled = True
                         close = float(row["close"])
                         if stop_enabled:
-                            trigger = pos.cost * (1.0 - stop_pct)
+                            trigger = pos.cost * (1.0 - stop_ratio)
                             if stop_fill == "close":
                                 if close <= trigger:
                                     _sell(
@@ -408,6 +431,8 @@ def simulate(
                             elif float(row["open"]) <= trigger:
                                 if defer_sell_at_limit(float(row["open"]), limits):
                                     st.stats["defer_sell_limit_down"] += 1
+                                    if absolute_exit:
+                                        pos.pending_exit = "stop_loss:gap_open"
                                 else:
                                     _sell(
                                         st,
@@ -585,8 +610,13 @@ def simulate(
                         if pos.position_id not in added or pos.entry_idx >= i or pos.pending_exit:
                             continue
                         reason = None
-                        if isinstance(stop_pct, float) and 0 < stop_pct < 1:
-                            if close <= pos.cost * (1.0 - stop_pct):
+                        stop_ratio = stop_pct
+                        stop_enabled = isinstance(stop_pct, float) and 0 < stop_pct < 1
+                        if "stop_range" in hooks:
+                            stop_ratio = evaluate_stop_range(hooks, bars[code], day, st.stats)
+                            stop_enabled = stop_ratio is not None
+                        if stop_enabled:
+                            if close <= pos.cost * (1.0 - stop_ratio):
                                 reason = "stop_loss:close"
                         if not reason:
                             reason = (
@@ -658,8 +688,11 @@ def run(
     stop_fill: Optional[str] = None,
     strict_pool: bool = False,
     fix_s11_exit_domain: bool = False,
+    max_hold: bool = False,
     fix_s81_band_precision: bool = False,
 ) -> SimState:
+    if max_hold and normalize_csv_strategy(strategy) != "version9":
+        raise ValueError("max_hold is supported only by version9")
     if fix_s81_band_precision and normalize_csv_strategy(strategy) != "version8_1":
         raise ValueError("fix_s81_band_precision is supported only by version8_1")
     if fix_s11_exit_domain:
@@ -704,6 +737,8 @@ def run(
         if normalize_csv_strategy(strategy) in ("version4", "version12")
         else (20 if return_threshold_filter else WARMUP_DAYS)
     )
+    if normalize_csv_strategy(strategy) in {"version9", "version9_1"}:
+        warm_days = max(warm_days, RANGE_LOOKBACK_CALENDAR_DAYS)
     if week_ma_gate:
         from backtest.research.topk_dropout_eligibility import WEEK_MA_WARMUP_DAYS
 
@@ -826,6 +861,7 @@ def run(
         tier_default=tier_default,
         pos_trail=pos_trail,
         strategy=strategy,
+        **({"max_hold": True} if max_hold else {}),
         **({"fix_s81_band_precision": True} if fix_s81_band_precision else {}),
         take_profit=take_profit,
         record_params=record_params,

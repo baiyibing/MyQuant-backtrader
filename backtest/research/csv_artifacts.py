@@ -176,11 +176,15 @@ def summarize(
                 f"keep={keeps_txt} | 档2底+{b2 - 1.0:.0%} | 档3全局底+{b3 - 1.0:.0%} "
                 f"| T+1止盈豁免{extra}"
             )
+    elif st.stats.get("sell_book") == "v9_1":
+        lines.append("  ATR(20) frozen: unit risk 10_000 / ATR, max 4 units; add +0.5 ATR; whole stop last_fill - 2 ATR; prior 10-day low exit")
+    elif st.stats.get("sell_book") == "v9_2":
+        from backtest.research.strategy9_2_rules import HELP_LOCK
+        lines.append(HELP_LOCK.strip())
     elif st.stats.get("sell_book") == "v9":
-        lines.append(
-            f"  参数: 止损 {stop_text} | 满持有 "
-            f"{int(st.stats.get('max_hold', 20))} 日 force_sell"
-        )
+        max_hold = st.stats.get("max_hold")
+        hold_text = f"满持有 {int(max_hold)} 日 force_sell" if max_hold is not None else "满持有强平 OFF"
+        lines.append(f"  参数: 止损 {stop_text} | {hold_text}")
     elif st.stats.get("sell_book") == "v6_12":
         lines.append(
             f"  参数: 突破买侧: A0×{float(st.stats.get('breakout_mult', 1.2)):.1f} 首买1基(信号无限期,涨停续等)"

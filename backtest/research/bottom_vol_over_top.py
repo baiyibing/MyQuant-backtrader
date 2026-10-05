@@ -2,7 +2,9 @@
 
 通达信式 ``SUM(VOL, 底距今-3, 底距今+3)`` 在底靠近 T 时会读到 T+1..T+3。
 本模块把量能窗裁到 ``[0, T]``。顶/底取最近 N 根（含 T）的 HHV(H)/LLV(L)，
-并列取最近一根（BARSLAST）。不写 ``stock_pool/``，不 import qlib。
+并列取最近一根（BARSLAST）。买点要求底价 <= 顶价 × 0.60，底量严格大于
+顶量 × r_min（仅 1.2 / 1.5 / 2，默认 2），顶须早于底严格超过 top_lead 根交易 bar
+（仅 10 / 20 / 30 / 40，默认 40），沿用同一裁剪量能窗。不写 ``stock_pool/``，不 import qlib。
 """
 
 from __future__ import annotations
@@ -17,10 +19,12 @@ from backtest.research.market_layer import board_limit_pct, is_st_name
 
 LOOKBACK = 120
 VOL_HALF = 3
-MIN_TOP_LEAD = 10
+MIN_TOP_LEAD = 40
+TOP_LEADS = (10, 20, 30, 40)
 MIN_BOTTOM_AGE = 1
 MAX_BOTTOM_AGE = 15
-R_MIN = 1.2
+R_MIN = 2.0
+VOL_RATIOS = (1.2, 1.5, 2.0)
 CLOSE_CAP = 1.10
 MIN_LISTED_BARS = 250
 TURNOVER_MIN = 0.10
@@ -37,6 +41,30 @@ class BottomVolSignal:
     top_vol: float
     bottom_vol: float
     ratio: float
+
+
+def resolve_vol_ratio(value: float) -> float:
+    """Validate the buy ratio with absolute tolerance and canonicalize it."""
+    try:
+        ratio = float(value)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError("volume ratio must be 1.2, 1.5, or 2") from exc
+    for allowed in VOL_RATIOS:
+        if abs(ratio - allowed) <= 1e-9:
+            return allowed
+    raise ValueError("volume ratio must be 1.2, 1.5, or 2")
+
+
+def resolve_top_lead(value: float) -> int:
+    """Validate the trading-bar lead and canonicalize with absolute tolerance."""
+    try:
+        lead = float(value)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError("top lead must be 10, 20, 30, or 40") from exc
+    for allowed in TOP_LEADS:
+        if abs(lead - allowed) <= 1e-9:
+            return allowed
+    raise ValueError("top lead must be 10, 20, 30, or 40")
 
 
 def is_main_board_code(code: str) -> bool:
@@ -136,8 +164,12 @@ def evaluate_at(
     float_shares: Optional[pd.Series] = None,
     lookback: int = LOOKBACK,
     r_min: float = R_MIN,
+    top_lead: int = MIN_TOP_LEAD,
+    turnover_check: bool = False,
 ) -> Optional[BottomVolSignal]:
     """Return a signal when T is a valid 底量超顶量 bar; else None."""
+    r_min = resolve_vol_ratio(r_min)
+    top_lead = resolve_top_lead(top_lead)
     if not is_main_board_code(code) or is_st_name(name):
         return None
     if any(col not in df.columns for col in REQUIRED_OHLCV):
@@ -160,11 +192,13 @@ def evaluate_at(
         return None
     if not (MIN_BOTTOM_AGE <= bottom_ago <= MAX_BOTTOM_AGE):
         return None
-    if top_ago <= bottom_ago + MIN_TOP_LEAD:
+    if top_ago <= bottom_ago + top_lead:
         return None
 
     bottom_i = t - bottom_ago
     top_i = t - top_ago
+    if float(low[bottom_i]) > float(high[top_i]) * 0.60:
+        return None
     after = low[bottom_i + 1 : t + 1]
     if after.size == 0 or float(np.min(after)) <= float(low[bottom_i]):
         return None
@@ -176,13 +210,16 @@ def evaluate_at(
     if top_vol <= 0 or bottom_vol <= top_vol * float(r_min):
         return None
 
-    shares = _optional_float_shares(df, float_shares)
+    shares = _optional_float_shares(df, float_shares) if turnover_check else None
     if shares is not None:
         b_lo, b_hi = max(0, bottom_i - VOL_HALF), min(t, bottom_i + VOL_HALF)
         t_lo, t_hi = max(0, top_i - VOL_HALF), min(t, top_i + VOL_HALF)
         bottom_to = _window_max_turnover(volume, shares, b_lo, b_hi)
         top_to = _window_max_turnover(volume, shares, t_lo, t_hi)
-        if bottom_to is not None and top_to is not None:
+        if (
+            bottom_to is not None and top_to is not None
+            and np.isfinite(bottom_to) and np.isfinite(top_to)
+        ):
             if bottom_to < TURNOVER_MIN or top_to < TINY_TOP_TURNOVER:
                 return None
 
@@ -204,13 +241,21 @@ def scan_symbol(
     code: str,
     name: str = "",
     float_shares: Optional[pd.Series] = None,
+    r_min: float = R_MIN,
+    top_lead: int = MIN_TOP_LEAD,
+    turnover_check: bool = False,
 ) -> list[BottomVolSignal]:
     """Evaluate every bar in ``[start, end]`` that exists on ``df``."""
+    r_min = resolve_vol_ratio(r_min)
+    top_lead = resolve_top_lead(top_lead)
     t0 = pd.Timestamp(start)
     t1 = pd.Timestamp(end)
     hits: list[BottomVolSignal] = []
     for ts in df.index[(df.index >= t0) & (df.index <= t1)]:
-        sig = evaluate_at(df, ts, code=code, name=name, float_shares=float_shares)
+        sig = evaluate_at(
+            df, ts, code=code, name=name, float_shares=float_shares, r_min=r_min,
+            top_lead=top_lead, turnover_check=turnover_check,
+        )
         if sig is not None:
             hits.append(sig)
     return hits
@@ -222,13 +267,19 @@ def scan_ohlcv(
     end: str,
     *,
     names: Optional[Mapping[str, str]] = None,
+    r_min: float = R_MIN,
+    top_lead: int = MIN_TOP_LEAD,
+    turnover_check: bool = False,
 ) -> dict[str, list[str]]:
     """``{YYYYMMDD: [canonical codes]}`` for days that have at least one hit."""
+    r_min = resolve_vol_ratio(r_min)
+    top_lead = resolve_top_lead(top_lead)
     name_map = dict(names or {})
     days: dict[str, list[str]] = {}
     for code, frame in frames.items():
         for sig in scan_symbol(
-            frame, start, end, code=code, name=name_map.get(code, "")
+            frame, start, end, code=code, name=name_map.get(code, ""), r_min=r_min,
+            top_lead=top_lead, turnover_check=turnover_check,
         ):
             days.setdefault(sig.ymd, []).append(code)
     return {ymd: sorted(set(codes)) for ymd, codes in days.items() if codes}

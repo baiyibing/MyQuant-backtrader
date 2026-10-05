@@ -104,9 +104,9 @@ P3 外置 D5 使用 s12 fix-on + 既有 transform，仅支持该冻结上下文�
 
 见[基线审计 §5](industry-gaps-bt-2026-09-28.md#5-与三线的交叉依赖)：先锁价格域、现金时序与输入身份，再单轴裁决 TopK/#214、参考价/权益、容量/申报量及 joint-return 独立合同；各线不互相代验，资料索引完成不构成下一刀 GO。
 
-## 7 P1/P2 bar 身份 / adapters 指针（只读 · 非第二默认表）
+## 7 P1/P2 / 统一上限指针（只读 · 非第二默认表）
 
-2026-10-02 Human：P1 docs 已合 #298；P2-A/B/C draft（H1=A / H2=A / H3=B / H4=A / H5=A / H6=B 勿合）。**本索引不另开平行成交默认表**；入口默认继续只链 [minute-fill-policy-ssot.md](minute-fill-policy-ssot.md)。
+2026-10-02 Human：P1 docs 已合 #298；P2-A/B/C 已合 #299/#300；统一票里 H-U1=B / H-U2 / H-U3 / H-U4 / H-U7 仍是当时锁（上限=现有 L1/B；U1 docs 已合 #302）。H-U5 开票门见下表 TC1 行。**本索引不另开平行成交默认表**；入口默认继续只链 [minute-fill-policy-ssot.md](minute-fill-policy-ssot.md)。
 
 | 主题 | 指针 | 边界 |
 |---|---|---|
@@ -115,5 +115,22 @@ P3 外置 D5 使用 s12 fix-on + 既有 transform，仅支持该冻结上下文�
 | #291 + P2-B 预检 | 本页 §1 δ5 行；`participation_rate_precheck.py`；`run_topk_cap_compare.py` | ≠δ5 certified ≠R4；≠ capacity certified |
 | P2-C L2↔共享湖 | [L1/L2 边界 §6](note-l1-l2-research-engine-boundary-2026-09-28.md)；P2 adapters §4 | 同 PIN 不同后端 → 红混比；L2 永 opt-in |
 | JR-clock G hygiene | [G 回填 note](note-jr-clock-g-host-reverify-backfill-2026-10-01.md)（#297 合入 tip） | ≠δ5≠R4 |
+| 统一上限 / U1 | [unify ceiling U1](note-minute-engine-unify-ceiling-u1-2026-10-02.md)；handoff `/workspace/handoffs/minute_engine_unify_plan_20261002/` | 上限=现有 L1/B（旧入口）；不碰 MatchCore/Fees/`simulate`（统一语境） |
+| 真核 C-New / TC1 | [C-New TC1 合同冻结](note-true-core-c-new-tc1-contract-2026-10-02.md)；handoff `/workspace/handoffs/minute_engine_true_core_new_20261002/` | H-U6=New；H-TC1=C docs-only；冻 L2 v0；#303 MERGED `fee8f88d`；无 simulate/MatchCore 重写 |
+| 真核 TC2 窄 X1 | [TC2 X1 意图适配器](note-true-core-tc2-x1-intent-adapter-2026-10-02.md) | 核外冻结 LIMIT + 现有 runner；适配器身份 only；**不** mint 新 contract/backend_id；≠δ5≠R4；#304 MERGED |
+| 真核 TC3 具名消费者 | [TC3 named consumer](note-true-core-tc3-named-consumer-2026-10-02.md) | X1 CLI/HELP 闭环；合成 fixture；永 opt-in；不以 BOOKS 默认为验收；≠δ5≠R4；#305 MERGED `00ab1a24` |
+| 真核 TC4 · X8 对照桥 | [TC4 X8 compare bridge](note-true-core-tc4-x8-compare-bridge-2026-10-02.md) | 仅撮合前意图；禁 fills→意图；独立 comparison 根；恒 `no_ssot_compare_authorization`；无成功 summary.json；≠δ5≠R4；#306 MERGED `79b3995c` |
+| 真核 X6 合成夹具/attestation | [X6 synthetic attestation](note-true-core-x6-synthetic-attestation-2026-10-02.md) | synthetic_fixture only；Fixture PASS≠lake PASS；拒 lake；独立 tool 根；无新 contract/backend_id；≠δ5≠R4；#307 MERGED `f0620ace` |
+| 真核 X6 真湖 END/loader 边界 | [X6 lake boundary](note-true-core-x6-lake-boundary-2026-10-02.md) | lake only；END+bucket_end；只读；拒 synthetic 伪装；不写湖；**该刀**不解锁 CLI lake（CLI lake 见下一行）；≠δ5≠R4；#309 MERGED `d0804d09` |
+| 真核 X6 真湖 recipe e2e | [X6 lake recipe e2e](note-true-core-x6-lake-recipe-e2e-2026-10-02.md) | 调 `load_minute_orders_source`；lake+END；只读；不写湖；≠δ5≠R4；#310 MERGED |
+| 真核 CLI lake opt-in | [CLI lake](note-true-core-cli-lake-2026-10-02.md) | CLI `lake`→S4 hybrid；lake+END；≠ host PASS；不写湖；不 4090；≠δ5≠R4；#311 MERGED |
+| 真核写湖残差 · staging dry-run | [write-lake residual](note-true-core-write-lake-residual-2026-10-02.md) | docs+骨架；MUST Human cuts 草案；**无**生产写；无 `--write-lake`；拒 stock_data；≠δ5≠R4；#312 MERGED `3f7af6a2` |
+| 真核写湖 MUST cuts · Human A | [MUST cuts register A](note-true-core-write-lake-must-cuts-register-2026-10-03.md) | **Human cut A**：owner=host/1.3；本仓只登记、不写路径；no_borrow；rollback=禁原地覆盖；target_pin 未裁；登记≠授权；≠δ5≠R4；docs-only |
+| 真核 Codex 残差实施计划 | [Codex residual plan](note-true-core-codex-residual-plan-2026-10-02.md) | R1/R2 已合后按序清单；A·X7 同票已合；≠一次写完生产写/4090/X2–X5；≠δ5≠R4；#314 MERGED |
+| 真核 A·X7 观察面 | [A·X7 observe](note-true-core-ax7-observe-2026-10-02.md) | 新投影入口；不塞 `views._FAMILIES`；观察≠绿 R；无 NAV 重写；无生产写/4090；≠δ5≠R4；#314 MERGED |
+| 真核 R3 · 4090/host attestation 边界 | [R3 boundary](note-true-core-r3-host-attestation-boundary-2026-10-03.md) | **边界登记 ≠ live ≠ host PASS**；未裁 window/pin/tip 不派 4090bot；不借既有收据；≠δ5≠R4；无生产写；永 opt-in |
+| 真核 TC5 · 扩展包 GO/范围 | [TC5 GO/scope](note-true-core-tc5-go-scope-2026-10-02.md) | docs-only 裁断单；**不** mint 新 contract/backend_id；H-TC5-NEXT=C 已点（#309）；≠δ5≠R4；本刀合入 docs |
+| 真核 X2–X5 合同菜单 | [X2–X5 contract draft](note-true-core-x2-x5-contract-draft-2026-10-03.md) | **菜单 ≠ mint**；四轴 **NOT implemented**；码之前须新 contract + 新 backend_id + 独立 GO；触及 S0 排除禁复用 v0；≠δ5≠R4；无 4090；无写湖；空核；draft 勿合 |
 
-L2 `minute_orders` 定位：**永 opt-in**（H4=A）。G3 科创板申报数量延后（H5=A）。不授权改 MatchCore / Fees / `simulate` / VolumeCap·clamp·完成桶。P2 draft **勿合，等待 Human「合」**。
+L2 `minute_orders` 定位：**永 opt-in**（P1 H4=A · 统一 H-U3 · 真核 H-TC9）。G3 科创板申报数量延后（H5=A）。统一语境与 TC1/TC2/TC3/TC4/X6/TC5 docs **均不授权**改 MatchCore / Fees / `simulate` / VolumeCap·clamp·完成桶。TC1 已合 #303；TC2 X1 已合 #304；TC3 已合 #305；TC4 X8 已合 #306；X6 合成差分已合 #307；X6 真湖只读边界已合 #309；X6 真湖 recipe e2e 已合 #310；CLI lake 已合 #311；写湖 staging dry-run 已合 #312（≠生产写）；**Human cut A registered**（owner=host/1.3；本仓不实现写路径；登记≠授权；见 MUST cuts register note）；v6.1 sol 已合 #313；Codex 残差计划 + A·X7 已合 #314（新投影；不塞 `_FAMILIES`）；TC5 GO/scope docs 已合（生产写执行在 host/1.3；target_pin 未裁）。**R3 边界登记**见 [R3 note](note-true-core-r3-host-attestation-boundary-2026-10-03.md)（≠ item-4 live ≠ host PASS；未裁齐不派 4090；X2–X5 仍须独立 GO）。
+**X2–X5 合同菜单**见 [X2–X5 draft](note-true-core-x2-x5-contract-draft-2026-10-03.md)（菜单 ≠ mint；未实现；须新 contract + 新 backend_id + 独立 GO；触及 S0 排除禁复用 v0；≠δ5≠R4；无 4090；无写湖；空核；draft 勿合）。

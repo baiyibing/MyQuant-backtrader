@@ -151,7 +151,7 @@ def test_required_arguments_have_no_defaults(flag, tmp_path):
 
 
 @pytest.mark.parametrize("flag,value", [
-    ("--evidence-level", "lake"), ("--run-id", "../escape"), ("--code-sha", "short"),
+    ("--evidence-level", "real"), ("--run-id", "../escape"), ("--code-sha", "short"),
     ("--parent", ""), ("--input", ""), ("--input", "missing.json"),
 ])
 def test_invalid_arguments_never_create_output(flag, value, tmp_path):

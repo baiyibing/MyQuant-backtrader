@@ -1,0 +1,9 @@
+{
+  "schema": "minute_orders_x7_observe_request_v0",
+  "source_kind": "synthetic_observation_sketch",
+  "source_label": "bad_nested_blob",
+  "evidence_fields": {
+    "blob": {"fills": [{"order_id": "O1"}], "nav": 1.2, "green_r": true}
+  },
+  "notice": "observation attempt with nested banned keys; should be rejected; ≠ green R"
+}

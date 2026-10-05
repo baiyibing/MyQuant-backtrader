@@ -1,0 +1,17 @@
+{
+  "rule_revision": "s9-take-profit-10pct-f7475a98",
+  "historical_sha256": "2f578d6fe9e601ad84a94bb6a269e1b5193c51ca4dd908366022769f0e1f31c2",
+  "captured_environment": {
+    "pandas": "3.0.6"
+  },
+  "sha256_csv_bytes": {
+    "version9/daily": {
+      "trades": "19e2b0f92ee11747d3ac8e8dd888f65d1c1a8237b5d2621968a42cd4a2147389",
+      "equity": "18ebf7697d504f56f1ab72090fd2aef4f0a94741eadfa8152e3a1b8d6344d483"
+    },
+    "version9/minute": {
+      "trades": "c6eeb2ad2e98bcaaa355d98b55d9795f13fc5d2de2096e804a00799b77c70c73",
+      "equity": "5c5751e6dc7debd11db1afb3130320c72b30b19d1ab5d083a4be092db041f431"
+    }
+  }
+}

@@ -25,7 +25,7 @@ ST 名称时间合同：[engine-ashare-correctness §2.2](engine-ashare-correctn
 名单：`YYYYMMDD.csv`，首列裸六位码，`parse_pool_csv` 补交易所后缀。缺日 / 空文件 = 当日不买。6/8 默认读本仓 **可变** `stock_pool/`（不是快照）；实验/冻结跑用 `exports/` + `--pool-dir`；7 / **9** / **10** 必须 `--pool-dir`，9/10 拒绝 `stock_pool/`。生命周期 SSOT：[pool-csv-contract.md](pool-csv-contract.md)#lifecycle-ssot-stock_pool-vs-exports。
 
 ```text
-# 策略 1 / 2 / 3 / 4 / 5 / 6 / 8 / 9 / 10：共用引擎，策略书换卖点与加仓。必须 --strategy，无缺省。
+# 策略 1 / 2 / 3 / 4 / 5 / 6 / 6.1 / 8 / 9 / 10：共用引擎，策略书换卖点与加仓。必须 --strategy，无缺省。
 # 日线近似（收盘成交；分钟湖短于窗口时用这个接到今天）
 D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_daily_backtest.py ^
   --strategy version6 --start 20251023 --end 20260909 ^
@@ -82,6 +82,8 @@ R5 的 `--start/--end` 必须跟导出的首末文件名走：H0 / `pred_minus_o
 落盘：`backtest_output/csv_daily_{book}_{start}_{end}/`、`csv_minute_{book}_{start}_{end}/`、`csv_minute_v7_{start}_{end}/`、`csv_minute_topk_app_dropout_{start}_{end}/`（`summary.txt`、`daily_equity.csv`、`trades.csv`）。日线可用 `--out-dir` 改目录（M5 三列必须显式指定，见 [m5-list-attribution-2026-03.md](m5-list-attribution-2026-03.md)）。
 
 **策略 6（list-add-tp-t1-stop2-dd70-50）**：`daily_quota` 日额度均分。已持再进当日名单加一笔（输家也加，独立 lot）。止损 2%（T+1 起）。T+1 起评止盈：峰值涨幅 &lt;6% 回撤 70%，≥6% 回撤 50%。峰差 15 分钟。计划：[plan-v6-stop2-2026-09-18.md](plan-v6-stop2-2026-09-18.md)。归档勿覆盖 `_v6_list_add_t1_dd70_50` / `_v6_list_add_tp_t1_dd70_50`。
+
+**策略 6.1（unbounded-ladder · per_name 100万独立组）**：`--strategy version6_1`（别名 `6.1` / `v6.1`）。**新书，不改 version6**。止损 5%（T+1 起）。T+1 起无上限梯子止盈：峰值涨幅 A 每 5% 一档，离场回撤 B=5%+2%×档号，离场价=峰值−成本×B（允许成本下方触发）。`per_name` 每笔 100 万；+20% step 并入首次仓同进同出，名单再现=新独立组。对照与 OFF baseline 盘点：[note-version6_1-sol-vs-version6-2026-10-02.md](note-version6_1-sol-vs-version6-2026-10-02.md) · [v61-off-byte-overlay-2026-10-02.md](v61-off-byte-overlay-2026-10-02.md)。
 
 **策略 8（stop10-max101-80-gap15-reserve-stale8）**：默认 `per_name`，每股票 100 万整笔（`--name-budget` 可覆盖）。已持再现当日名单加一个 100 万（输家也加，独立 lot）。相对第一笔成本每满 +20% 再加一个独立台阶。止损 10%（T+1 起）。T+1 起峰值≥买价×1.01 后，离场线 = max(买价×1.01, 买价+涨幅×80%)，现价≤该线 → `trail:max101_80`。峰值判定延时 15 分钟。遇涨停保留至开板（策略 3 同一分钟窗 09:30–09:40；开板按该分钟收盘卖）。满 8 日仍持有 → `force_sell:stale`（止盈先于僵持）。上证十日线两日下方停开新仓、已持可加。无六档、无 giveback、无未武装快切。现金不足支付整笔股款与佣金时记 `skip_cash`，按名单行序先到先得、不缩量。小预算不足 100 股时仍补足 100 股，现金不足则跳过。策略 1–6/9/10 保持 `daily_quota` 日额度均分。计划：[plan-v8-stop10-max101-80-gap15-reserve-stale8-2026-09-19.md](plan-v8-stop10-max101-80-gap15-reserve-stale8-2026-09-19.md)。归档勿覆盖 `_stop10` / `_v8_3` / `_v8_livermore` / `_v8_3_hold5` / `_v8_3_hold5_stale8` / `_v8_stop10_t4` / `_v8_t4_stop30_add` / `_v8_t4_stop30_add20` / `_v8_t4_stop10_add20` / `_v8_t4_stop30_last12_keep20` / `_v8_stop10_b78` / `_v8_stop10_b78_split` / `_v8_stop10_b78_split_last12` / `_v8_stop6_list_or_last12` / `_v8_blend_stop10_keep20_dead3` / `_v8_blend_list_step20_ride` / `_v8_list_nostep_cap10` / `_v8_t4_list_step20_ind_stale30` / `_v8_stop10_bands6` / `_v8_bands6_addall_step20_stale30_stop20` / `_v8_stop10_tp10_reserve` / `_v8_stop10_tp10_firstonly` / `_v8_stop20_tp10_floor102_cyb_defer` / `_v8_stop10_keep50_floor110_defer` / `_v8_stop10_gap15_floors_stale30_defer` / `_v8_stop2_gap30_floor102_stale30_defer` / `_v8_stop6_gap30_floor102_stale30_defer` / `_v8_stop30_gap30_max110_max120_stale30_defer` / `_v8_stop30_unarmed10_stale6_max120_defer` / `_v8_stop10_stale20_unarmed6_max120_defer` / `_v8_stop30_stale8_unarmed6_max120_defer` / `_v8_stop20_unarmed10_stale8_max120_defer` / `_v8_stop10_tp2_reserve_stale8` / `_v8_stop10_tp2_reserve_stale8_sseopen`。
 

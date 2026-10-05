@@ -38,6 +38,8 @@ from backtest.research import (
     strategy8_5_rules,
     strategy8_6_rules,
     strategy9_rules,
+    strategy9_1_rules,
+    strategy9_2_rules,
     strategy10_rules,
     strategy11_rules,
     strategy12_rules,
@@ -76,7 +78,7 @@ HELP_LOCK_V10 = strategy10_rules.HELP_LOCK
 HELP_LOCK_TOPK = strategy_topk_dropout_rules.HELP_LOCK
 HELP_LOCK_SCORE_EXIT = strategy_topk_score_exit_rules.HELP_LOCK
 
-FORBIDDEN_DEFAULT_STOCK_POOL = frozenset({"version9", "version10", "version11"})
+FORBIDDEN_DEFAULT_STOCK_POOL = frozenset({"version9", "version9_1", "version9_2", "version10", "version11"})
 STOP_FILL_TOUCH = "touch"
 STOP_FILL_CLOSE = "close"
 STOP_FILL_ALLOWED = (STOP_FILL_TOUCH, STOP_FILL_CLOSE)
@@ -245,7 +247,7 @@ def add_strategy6_ratio_args(ap: argparse.ArgumentParser) -> None:
         "--stop-pct",
         type=float,
         default=None,
-        help="stop-loss fraction override (v6 0.06, v8 0.20, v9 0.08)",
+        help="stop-loss fraction override (v6 0.06, v8 0.20, v9 trailing range (no override))",
     )
     ap.add_argument(
         "--profit-base",
@@ -427,6 +429,8 @@ def add_csv_backtest_common_args(
     strategy book args. Callers then add mode-specific flags (daily
     ``--out-dir``; minute ``--no-cache`` / ``--rebuild-cache``).
     """
+    ap.add_argument("--max-hold", action="store_true",
+                    help="version9: enable 20-trading-day force-flat (force_sell:max_hold); default off")
     ap.add_argument("--start", default=start_default)
     ap.add_argument(
         "--fix-s81-band-precision", action="store_true",
@@ -539,6 +543,8 @@ def csv_run_kwargs_from_args(args) -> dict:
     name = normalize_csv_strategy(getattr(args, "strategy", "") or "")
     if getattr(args, "fix_s81_band_precision", False) and name != "version8_1":
         raise SystemExit("--fix-s81-band-precision is supported only by version8_1")
+    if getattr(args, "max_hold", False) and name != "version9":
+        raise SystemExit("--max-hold is supported only by version9")
     fill_s = getattr(args, "stop_fill", None)
     fill_s = None if fill_s is None else str(fill_s).strip().lower()
     if fill_s == "":
@@ -1426,26 +1432,46 @@ def _run_kwargs_version8_6(args) -> dict:
     return {"strategy": "version8_6", "stop_pct": stop}
 
 
+def _apply_version9_2(*, stop_pct=None, **_):
+    from backtest.research import strategy9_2_rules as rules, strategy9_2_engine as engine
+    if stop_pct is not None:
+        raise SystemExit("version9_2 does not accept --stop-pct")
+    return {"stop_pct": None, "take_profit": rules.take_profit_reason,
+            "record_params": rules.record_strategy9_2_params,
+            "on_buy": engine.on_buy, "exit_plan": engine.plan_exit,
+            "run_daily_day": engine.run_daily_day, "run_minute_day": engine.run_minute_day}
+
+
+def _run_kwargs_version9_2(args):
+    if getattr(args, "stop_pct", None) is not None:
+        raise SystemExit("version9_2 does not accept --stop-pct")
+    return {"strategy": "version9_2"}
+
+
 def _apply_version9(
-    *, stop_pct: Optional[float] = None, take_profit=None, record_params=None, **_
+    *, max_hold: bool = False, stop_pct: Optional[float] = None, take_profit=None, record_params=None, **_
 ) -> dict:
-    resolved = strategy9_rules.STOP_PCT if stop_pct is None else float(stop_pct)
+    if stop_pct is not None:
+        raise SystemExit("version9 does not accept --stop-pct")
 
     def _tp(px, cost, peak, n_days):
-        return strategy9_rules.take_profit_reason(px, cost, peak, n_days)
+        return strategy9_rules.take_profit_reason(px, cost, peak, n_days, max_hold=max_hold)
 
     def _rec(st):
-        strategy9_rules.record_strategy9_params(st, stop_pct=resolved)
+        strategy9_rules.record_strategy9_params(st, max_hold=max_hold)
 
     return {
-        "stop_pct": resolved,
+        "stop_pct": None,
+        "stop_range": strategy9_rules.stop_range_amplitude,
         "take_profit": _tp if take_profit is None else take_profit,
         "record_params": _rec if record_params is None else record_params,
     }
 
 
 def _run_kwargs_version9(args) -> dict:
-    return {"strategy": "version9", "stop_pct": _stop_override_from_args(args)}
+    if getattr(args, "stop_pct", None) is not None:
+        raise SystemExit("version9 does not accept --stop-pct")
+    return {"strategy": "version9", "max_hold": bool(getattr(args, "max_hold", False))}
 
 
 def _apply_version10(
@@ -2105,6 +2131,12 @@ register(
         run_kwargs=_run_kwargs_version9,
     )
 )
+register(CsvStrategyBook(
+    name="version9_2", tag=strategy9_2_rules.BOOK_TAG,
+    aliases=("9.2", "9_2", "v9.2", "v9_2", "version9_2"),
+    allow_add=True, peak_gap_min=0, help_lock=strategy9_2_rules.HELP_LOCK,
+    apply=_apply_version9_2, run_kwargs=_run_kwargs_version9_2, sizing="per_name",
+))
 register(
     CsvStrategyBook(
         name="version10",
@@ -2168,3 +2200,26 @@ register(
         run_kwargs=_run_kwargs_topk_score_exit,
     )
 )
+
+
+def _apply_version9_1(*, stop_pct=None, **_):
+    if stop_pct is not None:
+        raise SystemExit("version9_1 does not accept --stop-pct")
+    return dict(stop_pct=None, take_profit=lambda *a: None,
+                record_params=strategy9_1_rules.record_strategy9_1_params,
+                bind_absolute_exit=strategy9_1_rules.bind,
+                limit_up_chase=False, step_add=lambda lots, px: True)
+
+
+def _run_kwargs_version9_1(args):
+    if getattr(args, "stop_pct", None) is not None:
+        raise SystemExit("version9_1 does not accept --stop-pct")
+    return {"strategy": "version9_1"}
+
+register(CsvStrategyBook(
+    name="version9_1", tag="v9_1",
+    aliases=("9.1", "9_1", "v9.1", "v9_1", "version9_1"),
+    allow_add=True, peak_gap_min=0, help_lock=strategy9_1_rules.HELP_LOCK,
+    apply=_apply_version9_1, run_kwargs=_run_kwargs_version9_1,
+    sizing="per_name", name_budget=strategy9_1_rules.NAME_BUDGET,
+))

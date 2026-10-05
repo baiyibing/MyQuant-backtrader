@@ -27,6 +27,10 @@ import pandas as pd
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, REPO)
 
+from backtest.research.strategy9_rules import (  # noqa: E402
+    evaluate_stop_range, RANGE_LOOKBACK_CALENDAR_DAYS,
+)
+
 from backtest.research.csv_ledger import (  # noqa: E402
     CHASE_HM,
     DEFAULT_TOTAL_CASH,
@@ -316,6 +320,7 @@ def scan_held_day_python(
     n_days: int,
     can_sell: bool,
     stop_pct: Optional[float],
+    stop_range_ratio: Optional[float] = None,
     profit_base: float,
     trail_ratio: float,
     pos_trail: float = 0.0,
@@ -342,6 +347,9 @@ def scan_held_day_python(
     validate_low(minute_stop_trigger, l, c)
     del pos_trail  # reserved for future; kept for API parity with callers
     stop_enabled = isinstance(stop_pct, float) and 0 < stop_pct < 1
+    if stop_range_ratio is not None:
+        stop_pct = stop_range_ratio
+        stop_enabled = True
     trigger = cost * (1.0 - stop_pct) if stop_enabled else None
     new_peak = float(peak)
     new_peak_hm = int(peak_hm)
@@ -461,6 +469,7 @@ def scan_held_day(
     n_days: int,
     can_sell: bool,
     stop_pct: Optional[float],
+    stop_range_ratio: Optional[float] = None,
     profit_base: float,
     trail_ratio: float,
     pos_trail: float = 0.0,
@@ -492,6 +501,7 @@ def scan_held_day(
     """
     can_offload = (
         minute_stop_trigger == "close"
+        and stop_range_ratio is None
         and _want_numba_scan(use_numba)
         and _NUMBA_SCAN_AVAILABLE
         and sell_gate is None
@@ -551,6 +561,7 @@ def scan_held_day(
         n_days=n_days,
         can_sell=can_sell,
         stop_pct=stop_pct,
+        stop_range_ratio=stop_range_ratio,
         profit_base=profit_base,
         trail_ratio=trail_ratio,
         pos_trail=pos_trail,
@@ -680,6 +691,7 @@ def simulate(
     fix_s12_price_domain: bool = False,
     s12_price_context=None,
     fix_s11_exit_domain: bool = False,
+    max_hold: bool = False,
     fix_s81_band_precision: bool = False,
     signal_bars_front: dict[str, pd.DataFrame] | None = None,
     minute_stop_trigger: str = "close",
@@ -697,6 +709,8 @@ def simulate(
     exdiv_economics is an explicit (symbol, YYYYMMDD) -> ExDivEvent lookup for
     raw bars. None retains the baseline; E-R6 ratios never imply entitlements.
     """
+    if max_hold and normalize_csv_strategy(strategy) != "version9":
+        raise ValueError("max_hold is supported only by version9")
     validate_minute_stop_trigger(minute_stop_trigger, normalize_csv_strategy(strategy), fix_s11_exit_domain)
     validate_topk_exec(topk_exec, strategy, limit_walkdown, topk_limit_rule)
     validate_tail_options(tail_window_buy, fix_minute_cash_order, tail_volume_unit)
@@ -707,6 +721,8 @@ def simulate(
         "version8_4", "version8_5", "version8_6",
     }:
         raise ValueError("--tail-window-buy applies only to version8 / version8.x in the shared entry")
+    if fix_minute_cash_order and normalize_csv_strategy(strategy) == "version9_1":
+        raise ValueError("--fix-minute-cash-order is not applicable to version9_1")
     if fix_minute_cash_order and normalize_csv_strategy(strategy) == "version12":
         raise ValueError("--fix-minute-cash-order is not applicable to version12")
     if audit_sink is not None and normalize_csv_strategy(strategy) == "version12":
@@ -748,6 +764,7 @@ def simulate(
         tiers=tiers,
         tier_default=tier_default,
         apply_fn=apply_csv_strategy,
+        **({"max_hold": True} if max_hold else {}),
         **({"fix_s81_band_precision": True} if fix_s81_band_precision else {}),
         scores_by_day=scores_by_day,
         topk=topk,
@@ -787,8 +804,9 @@ def simulate(
         pool_names_by_day=pool_names_by_day,
         daily_quota=daily_quota,
     )
+    absolute_exit = hooks["bind_absolute_exit"](st, daily_bars) if "bind_absolute_exit" in hooks else None
     configure_s8(st, hooks)
-    if minute_stop_trigger == "hl":
+    if minute_stop_trigger == "hl" or absolute_exit:
         st.stats["minute_stop_trigger"] = "hl"
     if topk_exec != "close" or limit_walkdown or topk_limit_rule != "qlib":
         st.stats.update(topk_limit_rule=topk_limit_rule, topk_exec=topk_exec, limit_retry_fills=0, limit_retry_expired=0)
@@ -911,6 +929,12 @@ def simulate(
                         confirm_peaks[id(pos)] = max(
                             float(pos.peak), prefix_high if pos.entry_idx < i else 0.0,
                         )
+                if absolute_exit:
+                    line = absolute_exit(code, day)
+                    if line is not None and float(day_m["low"].min()) <= line:
+                        for lot in st.positions.get(code, []):
+                            if lot.entry_idx >= i:
+                                lot.pending_exit = "stop_loss:touch|t1_deferred"
                 for pos in exit_positions(st, code, i, day=day):
                     if getattr(pos, "ride_with", None) is not None:
                         continue
@@ -918,8 +942,8 @@ def simulate(
                     if isinstance(pos, IndependentExitPosition):
                         cursor = HeldMinuteCursor(
                             o, h, c, cost=pos.cost, peak=pos.peak,
-                            l=day_m["low"].to_numpy(np.float64) if minute_stop_trigger == "hl" else None,
-                            minute_stop_trigger=minute_stop_trigger, take_profit_pct=st.stats.get("profit_target"),
+                            l=day_m["low"].to_numpy(np.float64) if minute_stop_trigger == "hl" or absolute_exit else None,
+                            minute_stop_trigger="hl" if absolute_exit else minute_stop_trigger, take_profit_pct=st.stats.get("profit_target"),
                             n_days=n_days,
                             can_sell=t1_sellable(calendar[pos.entry_idx].date(), day.date()),
                             stop_pct=stop_pct,
@@ -983,13 +1007,15 @@ def simulate(
                         o,
                         h,
                         c,
-                        l=day_m["low"].to_numpy(np.float64) if minute_stop_trigger == "hl" else None,
-                        minute_stop_trigger=minute_stop_trigger, take_profit_pct=st.stats.get("profit_target"),
+                        l=day_m["low"].to_numpy(np.float64) if minute_stop_trigger == "hl" or absolute_exit else None,
+                        minute_stop_trigger="hl" if absolute_exit else minute_stop_trigger, take_profit_pct=st.stats.get("profit_target"),
                         cost=pos.cost,
                         peak=pos.peak,
                         n_days=n_days,
                         can_sell=t1_sellable(calendar[pos.entry_idx].date(), day.date()),
                         stop_pct=stop_pct,
+                        stop_range_ratio=((1 - absolute_exit(code, day) / pos.cost) if absolute_exit else evaluate_stop_range(hooks, ddf, day, st.stats)
+                                          if (absolute_exit or "stop_range" in hooks) and n_days >= 1 else None),
                         profit_base=profit_base if profit_base is not None else 0.0,
                         trail_ratio=0.0,
                         pos_trail=pos_trail,
@@ -1012,6 +1038,8 @@ def simulate(
                         reserve_state=reserve_state,
                         close_clear=close_clear,
                     )
+                    if absolute_exit and idx < 0 and float(day_m["low"].min()) <= absolute_exit(code, day):
+                        pos.pending_exit = "stop_loss:touch"
                     pos.peak = new_peak
                     pos.peak_hm = new_peak_hm
                     pos.reserved = bool(reserve_state["reserved"])
@@ -1271,6 +1299,7 @@ def run(
     fix_s12_price_domain: bool = False,
     s12_price_transform_file: Path | None = None,
     fix_s11_exit_domain: bool = False,
+    max_hold: bool = False,
     fix_s81_band_precision: bool = False,
     minute_stop_trigger: str = "close",
     exdiv_ref_fen: bool = False,
@@ -1283,6 +1312,8 @@ def run(
     topk_limit_rule: str = "qlib",
     participation_rate: float | None = None,
 ) -> SimState:
+    if max_hold and normalize_csv_strategy(strategy) != "version9":
+        raise ValueError("max_hold is supported only by version9")
     # P2-B shell precheck (adapter surface on run facade; not simulate / VolumeCap).
     # participation_rate=None → no-op (byte-identical old arm). ≠δ5 certified ≠R4.
     precheck_cli_participation_rate(
@@ -1327,6 +1358,8 @@ def run(
         raise ValueError("--fix-s12-price-domain requires version12 + lake/lake + --dividend-type none")
     if s12_price_transform_file is not None and not fix_s12_price_domain:
         raise ValueError("--s12-price-transform-file requires --fix-s12-price-domain")
+    if fix_minute_cash_order and book == "version9_1":
+        raise ValueError("--fix-minute-cash-order is not applicable to version9_1")
     if fix_minute_cash_order and book == "version12":
         raise ValueError("--fix-minute-cash-order is not applicable to version12")
     if audit_sink is not None and book == "version12":
@@ -1380,6 +1413,8 @@ def run(
         if book in ("version4", "version12")
         else (20 if return_threshold_filter else WARMUP_DAYS)
     )
+    if normalize_csv_strategy(strategy) in {"version9", "version9_1"}:
+        warm_days = max(warm_days, RANGE_LOOKBACK_CALENDAR_DAYS)
     if week_ma_gate:
         from backtest.research.topk_dropout_eligibility import WEEK_MA_WARMUP_DAYS
 
@@ -1566,6 +1601,7 @@ def run(
         pos_trail=pos_trail,
         strategy=strategy,
         **volume_options,
+        **({"max_hold": True} if max_hold else {}),
         **({"fix_s81_band_precision": True} if fix_s81_band_precision else {}),
         take_profit=take_profit,
         record_params=record_params,
