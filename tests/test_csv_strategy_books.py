@@ -189,32 +189,32 @@ def test_apply_version6_17_hooks():
 def test_apply_version6_26_500w():
     hooks = apply_csv_strategy("v6.26")
     sched = hooks["add_schedule"]
-    assert sched[2] == (0.40, 5.00)
+    assert sched[2] == pytest.approx((0.40, 5.00))
 
 
 def test_apply_version6_25_400w():
     hooks = apply_csv_strategy("v6.25")
     sched = hooks["add_schedule"]
-    assert sched[:2] == [(0.10, 0.30), (0.20, 0.50)]
-    assert sched[2] == (0.40, 4.00)
+    assert sched[:2] == [pytest.approx((0.10, 0.30)), pytest.approx((0.20, 0.50))]
+    assert sched[2] == pytest.approx((0.40, 4.00))
 
 
 def test_apply_version6_24_300w():
     hooks = apply_csv_strategy("v6.24")
     sched = hooks["add_schedule"]
-    assert sched[:2] == [(0.10, 0.30), (0.20, 0.50)]
-    assert sched[2] == (0.40, 3.00)
-    assert sched[3] == (0.60, 3.00)
+    assert sched[:2] == [pytest.approx((0.10, 0.30)), pytest.approx((0.20, 0.50))]
+    assert sched[2] == pytest.approx((0.40, 3.00))
+    assert sched[3] == pytest.approx((0.60, 3.00))
 
 
 def test_apply_version6_23_concentrated():
     hooks = apply_csv_strategy("v6.23")
     assert hooks["name"] == "version6_23"
     sched = hooks["add_schedule"]
-    assert sched[0] == (0.10, 0.30)
-    assert sched[1] == (0.20, 2.50)  # 50 满基 + 200 基数
-    assert sched[2] == (0.40, 2.00)
-    assert sched[3] == (0.60, 2.00)
+    assert sched[0] == pytest.approx((0.10, 0.30))
+    assert sched[1] == pytest.approx((0.20, 2.50))  # 50 满基 + 200 基数
+    assert sched[2] == pytest.approx((0.40, 2.00))
+    assert sched[3] == pytest.approx((0.60, 2.00))
 
 
 def test_apply_version6_22_simple_ladder():
@@ -232,8 +232,8 @@ def test_apply_version6_21_double_base():
     assert hooks["name"] == "version6_21"
     assert hooks["name_lot_budget"](1_000_000.0, []) == pytest.approx(200_000.0)
     sched = hooks["add_schedule"]
-    assert sched[:2] == [(0.10, 0.30), (0.20, 0.50)]
-    assert sched[2] == (0.40, 2.0)
+    assert sched[:2] == [pytest.approx((0.10, 0.30)), pytest.approx((0.20, 0.50))]
+    assert sched[2] == pytest.approx((0.40, 2.0))
     # Band 5: B = 5% + 3% * 5 = 20%; exit line = 12.50 - 10 * 20% = 10.50.
     assert hooks["take_profit"](10.50, 10.0, 12.50, 1) == "trail:ladder:25"
     assert hooks["take_profit"](10.51, 10.0, 12.50, 1) is None
