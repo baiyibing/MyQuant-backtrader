@@ -13,6 +13,8 @@ T+1（n_days<2）只评止损不评止盈；峰值从 T+1 累计。
 
 from __future__ import annotations
 
+from backtest.research import strategy_book_helpers as _book_helpers
+
 from typing import Optional
 
 BOOK_TAG = "v8_2"
@@ -30,9 +32,7 @@ BAND3_GLOBAL_MULT = 1.15
 
 
 def stop_hits(px: float, cost: float, stop_pct: float = STOP_PCT) -> bool:
-    if cost <= 0 or px <= 0:
-        return False
-    return float(px) / float(cost) - 1.0 <= -float(stop_pct)
+    return _book_helpers.stop_hits(px, cost, stop_pct)
 
 
 def band_of(cost: float, peak: float) -> Optional[int]:

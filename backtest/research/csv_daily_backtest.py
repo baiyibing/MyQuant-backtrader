@@ -830,49 +830,9 @@ def run(
         exdiv = None
     else:
         exdiv = load_exdiv_ratios(all_codes, start, end, skipped_out=skipped)
-    index_block_new = None
-    gate_book = normalize_csv_strategy(strategy)
-    if gate_book == "version12":
-        from backtest.research.strategy12_rules import (
-            INDEX_GATE_ON,
-            load_sse_ma10_block_new,
-        )
+    from backtest.research.strategy_book_helpers import load_book_index_gate
 
-        if INDEX_GATE_ON:
-            index_block_new = load_sse_ma10_block_new(start, end)
-    elif gate_book == "version8_4":
-        from backtest.research.strategy8_4_rules import (
-            INDEX_GATE_ON,
-            load_sse_ma10_block_new,
-        )
-
-        if INDEX_GATE_ON:
-            index_block_new = load_sse_ma10_block_new(start, end)
-    elif gate_book == "version8_5":
-        from backtest.research.strategy8_5_rules import (
-            INDEX_GATE_ON,
-            load_sse_ma10_block_new,
-        )
-
-        if INDEX_GATE_ON:
-            index_block_new = load_sse_ma10_block_new(start, end)
-    elif gate_book == "version8_6":
-        from backtest.research.strategy8_6_rules import (
-            INDEX_GATE_ON,
-            load_sse_ma10_block_new,
-        )
-
-        if INDEX_GATE_ON:
-            index_block_new = load_sse_ma10_block_new(start, end)
-    elif gate_book in ("version8", "version8_3"):
-        from backtest.research.strategy8_rules import (
-            INDEX_GATE_ON,
-            load_sse_ma10_block_new,
-        )
-
-        # 8.3 冻结包闸门无条件开（历史年代无开关，默认即开）。
-        if INDEX_GATE_ON or gate_book == "version8_3":
-            index_block_new = load_sse_ma10_block_new(start, end)
+    index_block_new = load_book_index_gate(normalize_csv_strategy(strategy), start, end)
     t_sim = time.perf_counter()
     st = simulate(
         bars,

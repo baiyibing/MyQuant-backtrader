@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+from backtest.research import strategy_book_helpers as _book_helpers
+
 from datetime import date
 from typing import Callable, Mapping, Optional
 
@@ -33,57 +35,41 @@ SAME_BAR_PREFIXES = ("open_board", T1_CLOSE_REASON)
 
 
 def stop_hits(px: float, cost: float, stop_pct: float = STOP_PCT) -> bool:
-    if cost <= 0 or px <= 0:
-        return False
-    return float(px) / float(cost) - 1.0 <= -float(stop_pct)
+    return _book_helpers.stop_hits(px, cost, stop_pct)
 
 
 def lot_budget(name_budget: float, _lots) -> float:
     """每笔都是整笔 name_budget。"""
-    return float(name_budget)
+    return _book_helpers.lot_budget(name_budget, _lots)
 
 
 def may_add(lots, px: float) -> bool:
     """已持且现价有效即加（输家也加）。"""
-    return bool(lots) and float(px) > 0
+    return _book_helpers.may_add(lots, px)
 
 
 def build_sse_ma10_block_new(
     closes: Mapping[date, float], *, symbol: str = INDEX_SYMBOL
 ) -> dict[date, bool]:
     """上证连续两日收于十日线下 → 次日（第三日）起 `True`=停买新票。"""
-    return build_index_gate(closes, symbol=symbol)
+    return _book_helpers.build_sse_ma10_block_new(closes, symbol=symbol)
 
 
 def allow_new_name_from_gate(
     block_new: Optional[Mapping[date, bool]],
 ) -> Optional[Callable]:
     """`allow_new_name(day) -> bool`。本包 INDEX_GATE_ON=True，十日线下方停开新仓。"""
-    if not INDEX_GATE_ON or block_new is None:
-        return None
-
-    def allow(day) -> bool:
-        return not bool(block_new.get(as_date(day), False))
-
-    return allow
+    return _book_helpers.allow_new_name_from_gate(block_new, INDEX_GATE_ON=INDEX_GATE_ON)
 
 
 def load_sse_ma10_block_new(start: str, end: str, *, root=None) -> dict[date, bool]:
     """从指数日线湖装载上证收盘并生成停买表。"""
-    from backtest.research.csv_minute_backtest_v7 import load_index_daily
-
-    def _ymd(value) -> date:
-        text = str(value).replace("-", "")[:8]
-        return date(int(text[:4]), int(text[4:6]), int(text[6:8]))
-
-    closes = load_index_daily(_ymd(start), _ymd(end), root=root)
-    return build_sse_ma10_block_new(closes)
+    return _book_helpers.load_sse_ma10_block_new(start, end, root=root, build_sse_ma10_block_new=build_sse_ma10_block_new)
 
 
 def trail_line(cost: float, peak: float) -> float:
     """max(买价×1.004, 买价+最高涨幅×80%)。"""
-    rise = max(0.0, float(peak) - float(cost))
-    return max(float(cost) * float(FLOOR_MULT), float(cost) + float(KEEP_FRAC) * rise)
+    return _book_helpers.trail_line(cost, peak, FLOOR_MULT=FLOOR_MULT, KEEP_FRAC=KEEP_FRAC)
 
 
 def take_profit_reason(
@@ -109,13 +95,7 @@ def take_profit_reason(
 
 def t1_close_reason(cost: float, peak: float, n_days: int) -> Optional[str]:
     """持仓最高价一直 < 买价×1.004 时，T+1 及之后的收盘清仓。"""
-    if int(n_days) < int(T1_CLOSE_DAYS):
-        return None
-    if float(cost) <= 0 or float(peak) <= 0:
-        return None
-    if float(peak) < float(cost) * float(FLOOR_MULT):
-        return T1_CLOSE_REASON
-    return None
+    return _book_helpers.close_unarmed_reason(cost, peak, n_days, T1_CLOSE_DAYS, FLOOR_MULT, T1_CLOSE_REASON)
 
 
 HELP_LOCK = """

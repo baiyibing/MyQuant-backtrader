@@ -6,6 +6,8 @@ T+1/bonus-filtered sellable lots and owns the per-run Memory instances.
 
 from __future__ import annotations
 
+from backtest.research import strategy_book_helpers as _book_helpers
+
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
@@ -187,32 +189,19 @@ def build_sse_ma10_block_new(
     closes: Mapping[date, float], *, symbol: str = INDEX_SYMBOL
 ) -> dict[date, bool]:
     """上证连续两日收于十日线下 → 次日（第三日）起 `True`=停买新票。"""
-    return build_index_gate(closes, symbol=symbol)
+    return _book_helpers.build_sse_ma10_block_new(closes, symbol=symbol)
 
 
 def allow_new_name_from_gate(
     block_new: Optional[Mapping[date, bool]],
 ) -> Optional[Callable]:
     """`allow_new_name(day) -> bool`。关闸只挡未持仓的新开，已持仓加仓不挡。"""
-    if not INDEX_GATE_ON or block_new is None:
-        return None
-
-    def allow(day) -> bool:
-        return not bool(block_new.get(as_date(day), False))
-
-    return allow
+    return _book_helpers.allow_new_name_from_gate(block_new, INDEX_GATE_ON=INDEX_GATE_ON)
 
 
 def load_sse_ma10_block_new(start: str, end: str, *, root=None) -> dict[date, bool]:
     """从指数日线湖装载上证收盘并生成停买表。缺数据即失败。"""
-    from backtest.research.csv_minute_backtest_v7 import load_index_daily
-
-    def _ymd(value) -> date:
-        text = str(value).replace("-", "")[:8]
-        return date(int(text[:4]), int(text[4:6]), int(text[6:8]))
-
-    closes = load_index_daily(_ymd(start), _ymd(end), root=root)
-    return build_sse_ma10_block_new(closes)
+    return _book_helpers.load_sse_ma10_block_new(start, end, root=root, build_sse_ma10_block_new=build_sse_ma10_block_new)
 
 
 def scale_memory(memory: CodeMemory, share_factor) -> dict[str, float]:

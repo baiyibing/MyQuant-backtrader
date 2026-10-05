@@ -9,6 +9,8 @@
 
 from __future__ import annotations
 
+from backtest.research import strategy_book_helpers as _book_helpers
+
 from datetime import date
 from typing import Callable, Mapping, Optional
 
@@ -34,66 +36,41 @@ DEFER_LIMIT_UP = False
 
 
 def stop_hits(px: float, cost: float, stop_pct: float = STOP_PCT) -> bool:
-    if cost <= 0 or px <= 0:
-        return False
-    return float(px) / float(cost) - 1.0 <= -float(stop_pct)
+    return _book_helpers.stop_hits(px, cost, stop_pct)
 
 
 def lot_budget(name_budget: float, _lots) -> float:
     """每笔都是整笔 name_budget。"""
-    return float(name_budget)
+    return _book_helpers.lot_budget(name_budget, _lots)
 
 
 def may_add(lots, px: float) -> bool:
     """已持且现价有效即加（输家也加）。"""
-    return bool(lots) and float(px) > 0
+    return _book_helpers.may_add(lots, px)
 
 
 def step_add_due(lots, px: float, step: float = ADD_STEP) -> bool:
     """相对仍开着的 lot 0 成本，每满 +step 且已有 is_step 数不足则加。"""
-    if float(step) <= 0 or float(px) <= 0 or not lots:
-        return False
-    parent = next((p for p in lots if int(getattr(p, "lot_id", -1)) == 0), None)
-    if parent is None:
-        return False
-    cost = float(getattr(parent, "cost", 0) or 0)
-    if cost <= 0:
-        return False
-    n_steps = sum(1 for p in lots if getattr(p, "is_step", False))
-    allowed = int((float(px) / cost - 1.0) / float(step) + 1e-12)
-    return allowed > n_steps
+    return _book_helpers.step_add_due(lots, px, step)
 
 
 def build_sse_ma10_block_new(
     closes: Mapping[date, float], *, symbol: str = INDEX_SYMBOL
 ) -> dict[date, bool]:
     """上证连续两日收于十日线下 → 次日（第三日）起 `True`=停买新票。"""
-    return build_index_gate(closes, symbol=symbol)
+    return _book_helpers.build_sse_ma10_block_new(closes, symbol=symbol)
 
 
 def allow_new_name_from_gate(
     block_new: Optional[Mapping[date, bool]],
 ) -> Optional[Callable]:
     """`allow_new_name(day) -> bool`。本包 INDEX_GATE_ON=True，十日线下方停开新仓。"""
-    if not INDEX_GATE_ON or block_new is None:
-        return None
-
-    def allow(day) -> bool:
-        return not bool(block_new.get(as_date(day), False))
-
-    return allow
+    return _book_helpers.allow_new_name_from_gate(block_new, INDEX_GATE_ON=INDEX_GATE_ON)
 
 
 def load_sse_ma10_block_new(start: str, end: str, *, root=None) -> dict[date, bool]:
     """从指数日线湖装载上证收盘并生成停买表。"""
-    from backtest.research.csv_minute_backtest_v7 import load_index_daily
-
-    def _ymd(value) -> date:
-        text = str(value).replace("-", "")[:8]
-        return date(int(text[:4]), int(text[4:6]), int(text[6:8]))
-
-    closes = load_index_daily(_ymd(start), _ymd(end), root=root)
-    return build_sse_ma10_block_new(closes)
+    return _book_helpers.load_sse_ma10_block_new(start, end, root=root, build_sse_ma10_block_new=build_sse_ma10_block_new)
 
 
 def take_profit_reason(
@@ -108,8 +85,7 @@ def take_profit_reason(
         return None
     if cost <= 0 or px <= 0:
         return None
-    if float(px) >= float(cost) * (1.0 + float(PROFIT_TARGET)):
-        return "profit_take:target"
+    return _book_helpers.fixed_target_reason(float(px), float(cost), float(PROFIT_TARGET))
     return None
 
 
