@@ -123,3 +123,14 @@
 - 根因：`core.autocrlf=true` 的旧检出状态 + 事后才补的 `.gitattributes eol=lf`——git 认为文件「未修改」（clean 过滤后一致），但工作区字节就是 CRLF；`rm + git checkout --` 恢复 LF 的操作一旦路径列表含中文/引号就会半途失败。
 - **纪律**：①byte-pin（golden sha256）类测试在本机挂而 CI 绿时，第一动作 `git ls-files --eol` 查 `w/crlf`；②恢复用 `git ls-files -z` 空分隔管道（或 Python `subprocess` 批处理），禁止裸 xargs 处理含中文路径的列表；③批量字节操作后 `git status` 必须**核对 M 文件名单与预期完全一致**，多一个少一个都停下重查；④重要未提交编辑在动工作区字节前先 `git stash` 或先提交。
 
+
+### 教训 27：统一 LF 要修写入器，不要跳过平台（2026-10-05，c211078）
+
+- 症状：Windows + pandas 3.0.6 上 off-byte 基线字节阶段全红——`write_run_artifacts` 产出 CRLF、金标钉 LF。一度误判为「Windows 天生不配承担字节契约」，在 pandas 2.3.3/3.0.6 间来回摆，并给 `byte_skip_reason` 加平台跳过（掩盖而非修复）。另有两例长期存量红同源：`strategy12_default_outputs.json` 被 CRLF 改写致自钉 sha256 漂移；`test_partial_sell` 谱系钉着已被「最后版本为准」取代的 v9 修订。
+- 根因：**写入器行为不对称**——库侧序列化（`_library_bytes`）显式 `lineterminator="\n"`，而生产写入器（`csv_artifacts.write_run_artifacts`）不钉、跟随 OS；金标在 Linux 录制（默认即 LF）→ Linux 两路径一致、Windows 必炸。是代码不对称，不是平台能力差异。
+- 修法：写入器两处 `to_csv` 显式 `lineterminator="\n"`。关键性质：**原录制环境（Linux）字节逐位不变**（钉与不钉同值）→ 全部历史金标零迁移保持有效；Windows 从此产出与 Linux 逐字节一致 → 字节契约平台无关，overlay 录制（`--record-v6f` / `--record-v61-v2`）可在任意 OS 的 pandas 3.0.6 上完成。撤平台跳过与录制平台守卫后，off-byte 全套 141 项（含字节阶段）在 Windows 首次全绿。
+- **纪律**：
+  1. 任何进字节契约的写路径（`to_csv`/`write_text`/手写文件）必须显式钉行尾；发现「平台不符即跳过」类补丁时，先找两路径的**不对称点**，对称化通常比跳过更便宜；
+  2. 修改写入器字节行为前，必须先证明「原录制环境字节不变」（本例：Linux 默认 LF = 钉 LF），否则必须走 overlay 重录流程，不许让历史金标静默失效；
+  3. 冻结 fixture 若用 `pathlib.write_text` 在 Windows 落盘会把 `\n` 翻译成 CRLF（`newline=None` 默认翻译）——json 解析不受影响，但**文件自身被 sha256 钉死时**必须用 `write_bytes` 或 `newline="\n"` 写（教训 26 的 `git ls-files --eol` 同样适用：git autocrlf 归一只发生在 checkout/touch 时，工作区存量 CRLF 不会自愈）；
+  4. 存量红先做「同因归并」再逐个修：哈希漂移第一动作是对文件字节直接数 CRLF/LF（本例 101 个 CRLF，LF 归一后哈希与钉值精确吻合）。
