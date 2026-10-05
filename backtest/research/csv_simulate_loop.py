@@ -567,7 +567,7 @@ def _run_s8_price_adds_day(
 ) -> None:
     policy = s8_policy(st)
     book = policy["name"]
-    if sizing != "per_name" or book not in {"version6_1", "version6_2", "version6_3", "version6_4", "version6_5", "version6_6", "version6_7", "version6_8", "version6_9", "version6_10", "version6_11", "version6_12", "version6_13", "version6_14", "version6_15", "version6_16", "version6_17", "version6_18", "version6_19", "version6_20", "version6_21", "version6_22", "version6_23", "version6_24", "version6_25", "version6_26", "version6_27", "version6_28", "version6_29", "version6_30", "version6_31", "version6_32", "version6_33", "version6_34", "version6_35", "version6_36", "version6_37", "version6_38", "version8", "version8_3", "version8_4", "version8_5"}:
+    if sizing != "per_name" or book not in {"version6_1", "version6_2", "version6_3", "version6_4", "version6_5", "version6_6", "version6_7", "version6_8", "version6_9", "version6_10", "version6_11", "version6_12", "version6_13", "version6_14", "version6_15", "version6_16", "version6_17", "version6_18", "version6_19", "version6_20", "version6_21", "version6_22", "version6_23", "version6_24", "version6_25", "version6_26", "version6_27", "version6_28", "version6_29", "version6_30", "version6_31", "version6_32", "version6_33", "version6_34", "version6_35", "version6_36", "version6_37", "version6_38", "version6_39", "version6_40", "version6_41", "version8", "version8_3", "version8_4", "version8_5"}:
         return
     confirm = book == "version8_3"
     gate = policy["allow_new_name"]
