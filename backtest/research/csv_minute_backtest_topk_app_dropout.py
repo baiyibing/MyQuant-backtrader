@@ -23,10 +23,10 @@ from backtest.research.csv_minute_backtest_v7 import (
     _load_cli_bars,
     load_index_daily,
     load_pool_days,
-    simulate_v7,
     summarize_v7,
     write_run_artifacts,
 )
+from backtest.research.strategy7_engine import simulate_native
 from backtest.research.csv_minute_volume import completed_minute_volumes
 from backtest.research.participation_rate_precheck import (
     precheck_cli_participation_rate,
@@ -178,7 +178,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "participation_rate": args.participation_rate,
             "volume_for_bucket": samples,
         }
-    state = simulate_v7(
+    state = simulate_native(
         minute,
         daily,
         pools,
