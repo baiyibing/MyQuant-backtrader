@@ -94,6 +94,8 @@ def load_book_index_gate(book, start, end):
         module = import_module("backtest.research.strategy8_rules")
     elif book in ("version12", "version8_4", "version8_5", "version8_6"):
         module = import_module("backtest.research.strategy" + book[7:] + "_rules")
+    elif book == "version6_45":
+        module = import_module("backtest.research.strategy6_45_rules")
     else:
         return None
     # 8.3 冻结包闸门无条件开，仍沿用 8 的 loader。

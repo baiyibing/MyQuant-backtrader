@@ -62,6 +62,7 @@ from backtest.research import (
     strategy6_42_rules,
     strategy6_43_rules,
     strategy6_44_rules,
+    strategy6_45_rules,
     strategy8_rules,
     strategy8_1_rules,
     strategy8_2_rules,
@@ -130,6 +131,7 @@ HELP_LOCK_V6_41 = strategy6_41_rules.HELP_LOCK
 HELP_LOCK_V6_42 = strategy6_42_rules.HELP_LOCK
 HELP_LOCK_V6_43 = strategy6_43_rules.HELP_LOCK
 HELP_LOCK_V6_44 = strategy6_44_rules.HELP_LOCK
+HELP_LOCK_V6_45 = strategy6_45_rules.HELP_LOCK
 HELP_LOCK_V8 = strategy8_rules.HELP_LOCK
 HELP_LOCK_V8_1 = strategy8_1_rules.HELP_LOCK
 HELP_LOCK_V8_2 = strategy8_2_rules.HELP_LOCK
@@ -4031,3 +4033,66 @@ register_minute_book(CsvStrategyBook(
     allow_add=True, peak_gap_min=0, help_lock="", apply=_apply_version7,
     run_kwargs=lambda args: {"strategy": "version7"}, sizing="per_name",
 ))
+
+
+def _apply_version6_45(
+    *,
+    stop_pct: Optional[float] = None,
+    take_profit=None,
+    record_params=None,
+    index_block_new=None,
+    **_,
+) -> dict:
+    resolved = strategy6_45_rules.STOP_PCT if stop_pct is None else float(stop_pct)
+    def _tp(px, cost, peak, n_days=1):
+        return strategy6_45_rules.take_profit_reason(px, cost, peak, n_days)
+    def _rec(st):
+        strategy6_45_rules.record_strategy6_45_params(st, stop_pct=resolved)
+        st.stats["index_gate_on"] = bool(strategy6_45_rules.INDEX_GATE_ON)
+        st.stats["index_symbol"] = strategy6_45_rules.INDEX_SYMBOL
+        st.stats["index_blocks_add"] = bool(strategy6_45_rules.INDEX_BLOCKS_ADD)
+
+    # 上证闸门：allow_new_name 在 gate 为 None 时不闸（等 CLI 传入 block map）
+    from backtest.research import strategy_book_helpers as _bh
+    from backtest.research.strategy6_45_rules import INDEX_GATE_ON as _gate_on
+    _allow = _bh.allow_new_name_from_gate(index_block_new, INDEX_GATE_ON=_gate_on)
+
+    return {
+        "stop_pct": resolved,
+        "take_profit": take_profit if take_profit is not None else _tp,
+        "record_params": record_params if record_params is not None else _rec,
+        "name_lot_budget": strategy6_45_rules.lot_budget,
+        "add_step": strategy6_45_rules.ADD_STEP,
+        "step_frac": strategy6_45_rules.STEP_FRAC,
+        "step_cap": strategy6_45_rules.STEP_CAP_PER_CODE,
+        "cost_anchor": "first_lot",
+        "step_stop_pct": strategy6_45_rules.STEP_STOP_PCT,
+        "scale_out_step": strategy6_45_rules.SCALE_OUT_STEP,
+        "scale_out_frac": strategy6_45_rules.SCALE_OUT_FRAC,
+        "peak_dd_exit": strategy6_45_rules.PEAK_DD_EXIT,
+        "peak_dd_sessions": strategy6_45_rules.PEAK_DD_SESSIONS,
+        "add_schedule": strategy6_45_rules.ADD_SCHEDULE,
+        "allow_new_name": _allow,
+        "index_blocks_add": strategy6_45_rules.INDEX_BLOCKS_ADD,
+    }
+
+def _run_kwargs_version6_45(args) -> dict:
+    stop = getattr(args, "stop_pct", None)
+    if stop is not None and not 0 < float(stop) < 1:
+        raise SystemExit(f"--stop-pct must be in (0, 1), got {stop}")
+    return {"strategy": "version6_45", "stop_pct": stop}
+
+register(
+    CsvStrategyBook(
+        name="version6_45",
+        sizing="per_name",
+        name_budget=1_000_000.0,
+        tag=strategy6_45_rules.BOOK_TAG,
+        aliases=("6.45", "6_45", "v6.45", "v6_45", "version6_45"),
+        allow_add=strategy6_45_rules.ALLOW_ADD,
+        peak_gap_min=strategy6_45_rules.PEAK_GAP_MIN,
+        help_lock=strategy6_45_rules.HELP_LOCK,
+        apply=_apply_version6_45,
+        run_kwargs=_run_kwargs_version6_45,
+    )
+)
