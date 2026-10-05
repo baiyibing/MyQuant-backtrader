@@ -158,7 +158,7 @@ def _assert_daily_mark_schedule(tree, bars_name):
             assert_no_day_bypass(child, nested_loops)
 
     for statement in day_loop.body:
-        if isinstance(statement, ast.If) and ast.unparse(statement.test) == "native_symbol_major":
+        if isinstance(statement, ast.If) and ast.unparse(statement.test) == "native_v7":
             # The registered v7 ledger has its own minute-close marks. Its
             # main-owned day branch must append them before bypassing shared
             # daily accounting, with no row/clock-dependent mark guard.
@@ -227,7 +227,7 @@ def test_native_schedule_pin_requires_unconditional_marks_before_continue(mutati
     tree = _tree("csv_minute_backtest")
     day_loop = next(n for n in _function(tree, "simulate").body if isinstance(n, ast.For))
     native = next(n for n in day_loop.body if isinstance(n, ast.If)
-                  and ast.unparse(n.test) == "native_symbol_major")
+                  and ast.unparse(n.test) == "native_v7")
     mark = native.body[-2]
     if mutation == "remove":
         native.body.remove(mark)

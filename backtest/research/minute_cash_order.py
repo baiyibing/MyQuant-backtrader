@@ -12,8 +12,8 @@ and is refused ON for version12. Valid TopK non-close execution or walkdown
 also selects chronological dispatch with the flag OFF; real limits alone do
 not. Quotes, fallback buckets, book rules and ledger gates retain their own
 contracts. Same-hm close sell proceeds may fund later close buys, never earlier
-open buys. The independent v7 scheduler and its post-buy timer stay in
-``csv_minute_backtest_v7``; this module does not own their order.
+open buys. The native v7 schedule preserves its separate phase sequence and post-buy
+timer here; book callbacks only decide individual events.
 
 The cursor preserves the research scanner's high-before-gap-open approximation.
 Gap stops settle in the open phase; hl touches and fixed-target checks run in
@@ -25,6 +25,12 @@ and S2-B hl cross-reference. This documentation does not change scheduling.
 """
 
 from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import date
+from typing import Any, Mapping, Sequence
+
+from backtest.research.minute_engine_policies import MinuteRowToken
 
 from backtest.research.sell_pending_observability import pending_callback, record_sell_pending, record_limit, side_path
 
@@ -325,7 +331,6 @@ def step_stop_exits(st, code, pos, px, day, day_i, limits, *, step_stop_pct, hm=
             sold += 1
             st.stats["sell_stop_step"] = int(st.stats.get("sell_stop_step", 0)) + 1
     return sold
-
 
 
 def run_chronological_day(
@@ -900,3 +905,135 @@ def run_symbol_major_day(state, day, calendar, symbols_today, ordered, pool_toda
         session.finish_symbol(
             state, symbol, day, symbol in pool_today, open_checked,
             records)
+
+
+@dataclass
+class _V7DayCursor:
+    symbol: str
+    tokens: list[MinuteRowToken]
+    previous: float | None
+    limits: tuple[float, float] | None
+    open_checked: bool = False
+
+
+def run_v7_chronological_day(
+    state: Any, day: date, calendar: Sequence[date],
+    symbols_today: Mapping[str, list[dict[str, Any]]], ordered: Sequence[str],
+    pool: Sequence[str], closes: Mapping[str, Mapping[date, float]],
+    last_prices: dict[str, float], cleared_today: set[str], *,
+    exdiv: Mapping[str, Mapping[str, float]] | None,
+    names: Mapping[str, str] | None,
+    names_by_day: Mapping[str, Mapping[str, str]] | None,
+    blocked_new: bool, fee: Any, audit_sink: Any,
+    tail_window_buy: bool = False,
+    tail_volume_unit: str | None = "shares",
+    session,
+) -> None:
+    """Main-owned v7 clock phases; timers observe the completed buy phase.
+
+    Quote and decision clocks coincide: v7 has no target-minute fallback or
+    chase. Stable ties retain the legacy pool/held/input-symbol order. All daily
+    reference/economic work snapshots only positions held before any new buy.
+    Missing-bar entitlement behavior deliberately remains the legacy X-13 rule.
+    """
+    from backtest.research.strategy7_engine import _event
+    from backtest.research.minute_audit import audit_scope
+    from backtest.research.tail_window_buy import TAIL_MINUTES, TAIL_START, resolve_tail_volume_unit
+    if tail_window_buy:
+        tail_volume_unit = resolve_tail_volume_unit(tail_volume_unit)
+    cursors: list[_V7DayCursor] = []
+    tail_parents: dict[str, TailParent] = {}
+    tail_attempted: set[tuple[str, int]] = set()
+    by_hm: dict[int, list[tuple[_V7DayCursor, int, dict[str, Any]]]] = {}
+    for symbol in ordered:
+        source = symbols_today.get(symbol, [])
+        tokens = session.chronological_tokens(symbol, source)
+        if not tokens:
+            if symbol in pool:
+                _event(state, day, symbol, None, "skip", 0, None,
+                       "skip_no_tail_start" if tail_window_buy else "skip_no_1455")
+            continue
+        previous, limits, name = session.begin_symbol(
+            state, symbol, day, closes, exdiv, names, names_by_day)
+        cursor = _V7DayCursor(symbol, tokens, previous, limits)
+        cursors.append(cursor)
+        for token in tokens:
+            by_hm.setdefault(token.hm, []).append((cursor, token.ordinal, token.row))
+
+    if tail_window_buy:
+        for tail_hm in TAIL_MINUTES:
+            by_hm.setdefault(tail_hm, [])
+    for hm, rows in sorted(by_hm.items()):
+        duplicate_tail_symbols: set[str] = set()
+        if tail_window_buy and hm in TAIL_MINUTES:
+            seen: set[str] = set()
+            for cursor, _, row in rows:
+                if cursor.symbol in seen or row.get("_tail_duplicate", False):
+                    duplicate_tail_symbols.add(cursor.symbol)
+                seen.add(cursor.symbol)
+        # As in the original scanner, this bar's high is observed before its
+        # gap-open stop. It never advances a different, later minute.
+        for cursor, _, row in rows:
+            session.chronological_observe(
+                state, cursor.symbol, row, last_prices, cursor.symbol in tail_parents)
+
+        # Independent stop sells precede close buys. Opening fills settle first;
+        # the original first-row-only gap rule and completed-volume clock stay.
+        stopped_rows: set[tuple[str, int]] = set()
+        for phase in ("open", "close"):
+            for cursor, index, row in rows:
+                symbol = cursor.symbol
+                if (symbol, index) in stopped_rows:
+                    continue
+                position = state.positions.get(symbol)
+                if position is None:
+                    continue
+                session.chronological_stop(
+                    state, cursor, index, row, phase, stopped_rows, day, hm, audit_sink, fee,
+                    cleared_today,
+                )
+
+            # The opening quote fixes quantity before the completed 14:30 bar
+            # exists; cash only constrains each later close-phase child fill.
+            if tail_window_buy and hm == TAIL_START and phase == "open":
+                for cursor, _, row in rows:
+                    symbol = cursor.symbol
+                    if (symbol not in pool or symbol in state.positions
+                            or symbol in cleared_today or cursor.open_checked):
+                        continue
+                    session.chronological_parent(
+                        state, cursor, row, day, hm, duplicate_tail_symbols, blocked_new,
+                        tail_parents, audit_sink,
+                    )
+
+        if tail_window_buy and hm in TAIL_MINUTES:
+            present = {cursor.symbol for cursor, _, _ in rows}
+            for symbol in tail_parents:
+                if symbol not in present:
+                    with audit_scope(audit_sink, decision_hm=hm, phase="close"):
+                        _event(state, day, symbol, hm, "skip", 0, None, "skip_tail_quote")
+        for cursor, _, row in rows:
+            session.chronological_buy(
+                state, cursor, row, day, hm, audit_sink, tail_window_buy, tail_parents,
+                tail_attempted, duplicate_tail_symbols, tail_volume_unit, fee, pool,
+                cleared_today, blocked_new,
+            )
+
+        # The last-bar timer depends on last_add_date and stage AFTER all buys.
+        # Its proceeds never retry a failed buy in this hm.
+        for cursor, index, row in rows:
+            if index != len(cursor.tokens) - 1:
+                continue
+            session.chronological_timer(
+                state, cursor, row, day, hm, calendar, audit_sink, fee, cleared_today,
+            )
+
+    for cursor in cursors:
+        symbol = cursor.symbol
+        if tail_window_buy:
+            if symbol in pool and symbol not in state.positions and not cursor.open_checked:
+                _event(state, day, symbol, None, "skip", 0, None, "skip_no_tail_start")
+            continue
+        if (symbol in pool and symbol not in state.positions and not cursor.open_checked
+                and not any(token.hm == 895 for token in cursor.tokens)):
+            _event(state, day, symbol, None, "skip", 0, None, "skip_no_1455")

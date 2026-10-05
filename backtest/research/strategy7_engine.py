@@ -1,9 +1,10 @@
 """V7 native state, accounting and single-event book callbacks.
 
-OFF scheduling belongs to main; X02 remains in csv_minute_backtest_v7.
+Both native schedules belong to main/minute_cash_order.
 Callbacks consume one symbol preparation or one row event, never traverse days.
 """
 from __future__ import annotations
+from math import isfinite
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, Iterable, Mapping, Sequence
@@ -20,7 +21,7 @@ from backtest.research.ashare_session import (
     session_limit_prices, skip_buy_at_limit, defer_sell_at_limit,
 )
 from backtest.research.minute_audit import record_fill, audit_scope
-from backtest.research.tail_window_buy import TailParent, tail_quote
+from backtest.research.tail_window_buy import TAIL_MINUTES, TailParent, tail_quote
 from oskh_data.symbol_format import to_canonical_symbol
 
 NAME_BUDGET = 1_000_000.0
@@ -537,7 +538,8 @@ def minute_hooks(**kwargs):
     from backtest.research.minute_engine_policies import MinuteEnginePolicy
     return {"minute_session": MinuteSession,
             "minute_policy": MinuteEnginePolicy(
-                schedule="symbol_major", day_start=_main_day_start,
+                schedule="chronological" if kwargs.get("fix_minute_cash_order") else "symbol_major",
+                day_start=_main_day_start,
                 append_marks=_main_append_marks, writer=MinuteSession.write_artifacts),
             "on_short_cash": "skip", "name": "version7", "sizing": "per_name"}
 
@@ -548,3 +550,157 @@ def _main_day_start(state, *, day, **kwargs):
 
 def _main_append_marks(state, *, day, last_prices, **kwargs):
     AccountingPolicy.append_equity(state, day, last_prices)
+
+
+def chronological_stop(
+    state, cursor, index, row, phase, stopped_rows, day, hm, audit_sink, fee, cleared_today,
+):
+    symbol = cursor.symbol
+    position = state.positions[symbol]
+    decision = stop_decision(position.stage, entry_a=position.entry_A,
+                             average_cost=position.avg_cost)
+    open_px, close_px = float(row.get("open", row["close"])), float(row["close"])
+    gap_open = index == 0 and decision.line is not None and open_px <= decision.line
+    if phase != ("open" if gap_open else "close"):
+        return
+    check_px = open_px if gap_open else close_px
+    if decision.line is None or check_px > decision.line:
+        return
+    stopped_rows.add((symbol, index))
+    with audit_scope(audit_sink, decision_hm=hm, phase=phase):
+        if cursor.limits is None:
+            _event(state, day, symbol, hm, "skip", 0, check_px,
+                   "skip_no_prev_close" if cursor.previous is None else "skip_unknown_board")
+        elif defer_sell_at_limit(check_px, cursor.limits):
+            _event(state, day, symbol, hm, "defer", 0, check_px, "defer_limit_down")
+        else:
+            reasons_stop = {
+                "dump_trial": "stop:trial_a090", "clear_four": "stop:four_avg095",
+                "clear_six": "stop:six_avg0965", "clear_eight": "stop:eight_avg0975",
+                "clear_full": "stop:full_avg098",
+            }
+            _sell_lots(state, position, day, hm, check_px,
+                       reasons_stop.get(decision.action, f"stop:{decision.action}"),
+                       fee=fee, at=hm - 1 if gap_open else hm)
+    if symbol not in state.positions:
+        cleared_today.add(symbol)
+
+
+def chronological_parent(
+    state, cursor, row, day, hm, duplicate_tail_symbols, blocked_new, tail_parents, audit_sink,
+):
+    symbol = cursor.symbol
+    cursor.open_checked = True
+    with audit_scope(audit_sink, decision_hm=hm, phase="open"):
+        if symbol in duplicate_tail_symbols:
+            _event(state, day, symbol, hm, "skip", 0, None, "skip_duplicate_tail_start")
+        elif blocked_new:
+            _event(state, day, symbol, hm, "skip", 0, None, "skip_index_gate")
+        elif cursor.previous is None:
+            _event(state, day, symbol, hm, "skip", 0, None, "skip_no_prev_close")
+        elif cursor.limits is None:
+            _event(state, day, symbol, hm, "skip", 0, None, "skip_unknown_board")
+        else:
+            try:
+                opening = float(row["open"])
+            except (KeyError, TypeError, ValueError):
+                opening = 0.0
+            if isfinite(opening) and opening > 0:
+                tail_parents[symbol] = TailParent.from_budget(NAME_BUDGET * TRIAL_FRACTION, opening)
+            else:
+                _event(state, day, symbol, hm, "skip", 0, None, "skip_no_tail_start")
+
+
+def chronological_buy(
+    state, cursor, row, day, hm, audit_sink, tail_window_buy, tail_parents, tail_attempted,
+    duplicate_tail_symbols, tail_volume_unit, fee, pool, cleared_today, blocked_new,
+):
+    symbol, close_px = cursor.symbol, float(row["close"])
+    with audit_scope(audit_sink, decision_hm=hm, phase="close"):
+        if (tail_window_buy and hm in TAIL_MINUTES and symbol in tail_parents
+                and (symbol, hm) not in tail_attempted):
+            tail_attempted.add((symbol, hm))
+            quote = (None if symbol in duplicate_tail_symbols
+                     else tail_quote(row, hm, tail_volume_unit))
+            if symbol in duplicate_tail_symbols:
+                _event(state, day, symbol, hm, "skip", 0, None, "skip_duplicate_tail_bar")
+            elif quote is not None and skip_buy_at_limit(quote.price, cursor.limits):
+                _event(state, day, symbol, hm, "skip", 0, quote.price, "skip_limit_up")
+            elif quote is not None and defer_sell_at_limit(quote.price, cursor.limits):
+                _event(state, day, symbol, hm, "skip", 0, quote.price, "skip_limit_down")
+            else:
+                _buy_tail_slice(state, tail_parents[symbol], symbol, day, hm, row, tail_volume_unit, fee)
+        position = state.positions.get(symbol)
+        if position is not None and in_add_window(hm):
+            ladder = ladder_decision(position.stage, close_px, entry_a=position.entry_A)
+            if ladder.action != "none":
+                if cursor.limits is None:
+                    _event(state, day, symbol, hm, "skip", 0, close_px,
+                           "skip_no_prev_close" if cursor.previous is None else "skip_unknown_board")
+                elif skip_buy_at_limit(close_px, cursor.limits):
+                    _event(state, day, symbol, hm, "skip", 0, close_px, "skip_limit_up")
+                elif (not defer_sell_at_limit(close_px, cursor.limits)
+                      and _buy(state, position, symbol, day, hm, close_px, ladder.fraction,
+                               f"buy:{ladder.action}", ladder.action, fee=fee)):
+                    position.stage = {"add_a104": FOUR, "add_a108": SIX,
+                                      "add_a112": EIGHT, "add_a116": FULL}[ladder.action]
+        if (not tail_window_buy and hm == 895 and symbol in pool and symbol not in state.positions
+                and symbol not in cleared_today):
+            cursor.open_checked = True
+            if blocked_new:
+                _event(state, day, symbol, hm, "skip", 0, close_px, "skip_index_gate")
+            elif cursor.previous is None:
+                _event(state, day, symbol, hm, "skip", 0, close_px, "skip_no_prev_close")
+            elif cursor.limits is None:
+                _event(state, day, symbol, hm, "skip", 0, close_px, "skip_unknown_board")
+            elif skip_buy_at_limit(close_px, cursor.limits):
+                _event(state, day, symbol, hm, "skip", 0, close_px, "skip_limit_up")
+            elif not defer_sell_at_limit(close_px, cursor.limits):
+                _buy(state, None, symbol, day, hm, close_px, TRIAL_FRACTION,
+                     "buy:trial", "trial", fee=fee)
+
+
+def chronological_timer(state, cursor, row, day, hm, calendar, audit_sink, fee, cleared_today):
+    symbol, close_px = cursor.symbol, float(row["close"])
+    position = state.positions.get(symbol)
+    if (position is None or position.last_add_date is None
+            or not timer_due(calendar, position.last_add_date, day, position.stage)):
+        return
+    with audit_scope(audit_sink, decision_hm=hm, phase="timer"):
+        if cursor.limits is None:
+            _event(state, day, symbol, hm, "skip", 0, close_px,
+                   "skip_no_prev_close" if cursor.previous is None else "skip_unknown_board")
+        elif defer_sell_at_limit(close_px, cursor.limits):
+            _event(state, day, symbol, hm, "defer", 0, close_px, "defer_limit_down")
+        elif (_sell_lots(state, position, day, hm, close_px, "exit:timer10", fee=fee)
+              and symbol not in state.positions):
+            cleared_today.add(symbol)
+
+
+# Single-event phase decisions selected by the registered native session.
+MinuteSession.chronological_stop = staticmethod(chronological_stop)
+MinuteSession.chronological_parent = staticmethod(chronological_parent)
+MinuteSession.chronological_buy = staticmethod(chronological_buy)
+MinuteSession.chronological_timer = staticmethod(chronological_timer)
+
+def chronological_tokens(symbol, source):
+    """Supply stable session rows; duplicate clocks remain separate tokens."""
+    from backtest.research.ashare_bars import _in_session
+    keep = _in_session([int(row["hm"]) for row in source])
+    from backtest.research.minute_engine_policies import MinuteRowToken
+    records = [row for row, valid in zip(source, keep) if valid]
+    return [MinuteRowToken(symbol, index, int(row["hm"]), row)
+            for index, row in enumerate(records)]
+
+
+def chronological_observe(state, symbol, row, last_prices, tail_parent):
+    close_px = float(row["close"])
+    open_px = float(row.get("open", close_px))
+    last_prices[symbol] = close_px
+    position = state.positions.get(symbol)
+    if position is not None and not tail_parent:
+        position.peak = max(position.peak, float(row.get("high", max(open_px, close_px))))
+
+
+MinuteSession.chronological_tokens = staticmethod(chronological_tokens)
+MinuteSession.chronological_observe = staticmethod(chronological_observe)
