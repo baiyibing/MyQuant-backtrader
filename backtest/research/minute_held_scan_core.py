@@ -1,6 +1,7 @@
 """Shared held-minute decision core and resumable scan state."""
 from __future__ import annotations
 from dataclasses import dataclass, field
+from backtest.research.fill_config import FillConfig, default_fill_config
 from backtest.research.csv_ledger import PEAK_GAP_MIN, peak_gap_blocks, hit_limit_down, hit_limit_up
 from backtest.research.ashare_session import LIMIT_EPS as _LIMIT_EPS
 from backtest.research.minute_stop_trigger import blocked_bar, target_fill, validate_low
@@ -74,6 +75,8 @@ class HeldMinuteCursor:
     version9_plan: dict | None = None
     version9_max_hold: bool = False
     stop_range_ratio: float | None = None
+    fill_config: FillConfig | None = None
+    fill_state: dict | None = None
     current_reserved: bool = field(init=False)
     lu_today: bool = field(default=False, init=False)
     saw_close_hm: bool = field(default=False, init=False)
@@ -82,7 +85,12 @@ class HeldMinuteCursor:
     _open_state: dict[int, tuple[bool, float, int]] = field(default_factory=dict, init=False)
 
     def __post_init__(self):
-        validate_low(self.minute_stop_trigger, self.l, self.c)
+        self._default_config = default_fill_config(self.minute_stop_trigger)
+        self._custom_fill = self.fill_config is not None and self.fill_config != self._default_config
+        self.fill_config = self.fill_config or self._default_config
+        if self.fill_state is None:
+            self.fill_state = {}
+        validate_low("hl" if self.fill_config.trigger_basis == "bar_low" else self.minute_stop_trigger, self.l, self.c)
         self.peak = float(self.peak)
         self.peak_hm = int(self.peak_hm)
         self.current_reserved = bool(self.reserved)
@@ -98,6 +106,25 @@ class HeldMinuteCursor:
     def _exit(self, idx, px, reason):
         self.first_exit_attempted = True
         return idx, float(px), reason
+
+    def _price_exit(self, idx, px, reason, line=None, gap=False, intrabar=False):
+        if self.fill_config.fill_timing == "next_bar_open":
+            self.fill_state["pending"] = reason + ":next_open"
+            return None
+        if self._custom_fill and not gap:
+            at = self.fill_config.fill_at
+            if at == "bar_low" and not intrabar:
+                raise ValueError("look-ahead: bar_low is not a causal fill for a target/callback/trail decision")
+            if at == "line":
+                if line is None:
+                    raise ValueError("fill_at=line requires an explicit stop/target line")
+                px = line
+            elif isinstance(at, str):
+                px = {"bar_open": self.o, "bar_high": self.h,
+                      "bar_low": self.l, "bar_last": self.c}[at][idx]
+            else:
+                px = at
+        return self._exit(idx, px, reason)
 
     def advance(self, idx: int, phase: str):
         """Observe one phase and return ``(idx, price, reason)`` or None."""
@@ -124,14 +151,21 @@ class HeldMinuteCursor:
                 self.saw_close_hm = True
             skip_bar = blocked_bar(self.minute_stop_trigger, px_open, hi, self.limit_down)
             self._open_state[idx] = skip_bar, self.peak, self.peak_hm
+            if "pending" in self.fill_state:
+                if not skip_bar:
+                    return self._exit(idx, px_open, self.fill_state.pop("pending"))
+                return None
             if not skip_bar and stop_enabled and gap_stop(px_open, trigger):
-                return self._exit(idx, px_open, "stop_loss:gap_open")
+                return self._price_exit(idx, px_open, "stop_loss:gap_open", trigger, gap=True)
             return None
         # All opens in this hm have already run. Each close uses only its own
         # open's skip flag and peak, as in the row-wise scanner; later rows must
         # not change an earlier row's close predicate or exit peak.
         observed_peak = self.peak, self.peak_hm
         skip_bar, self.peak, self.peak_hm = self._open_state.pop(idx)
+        if "pending" in self.fill_state:
+            self.peak, self.peak_hm = observed_peak
+            return None
         if not skip_bar:
             event = self._close(idx, cur_hm, px_close, stop_enabled)
             if event is not None:
@@ -139,7 +173,8 @@ class HeldMinuteCursor:
         # The legacy fallback follows the full loop, even if its last row used
         # continue (limit-open, defer_limit_up or reserve). Never run on a pause.
         if (
-            self.close_clear is not None
+            "pending" not in self.fill_state
+            and self.close_clear is not None
             and self.is_true_day_last
             and not self.saw_close_hm
             and not (self.limit_down > 0 and hit_limit_down(px_close, self.limit_down))
@@ -155,11 +190,11 @@ class HeldMinuteCursor:
         trigger = (plan_stop_price(self.version9_plan, self.cost) if self.version9_plan is not None
                    else stop_trigger(self.cost, self.stop_pct) if stop_enabled else None)
         if stop_enabled:
-            touched = (float(self.l[idx]) <= trigger if self.minute_stop_trigger == "hl"
+            touched = (float(self.l[idx]) <= trigger if self.fill_config.trigger_basis == "bar_low"
                        else (px_close <= trigger if self.version9_plan is not None else stop_touch(ret, self.stop_pct)))
             if touched:
                 fill_px = trigger if self.minute_stop_trigger == "hl" else px_close
-                return self._exit(idx, fill_px, "stop_loss:touch")
+                return self._price_exit(idx, fill_px, "stop_loss:touch", trigger, intrabar=self.fill_config.trigger_basis == "bar_low")
         if self.defer_limit_up and self.limit_up > 0 and hit_limit_up(px_close, self.limit_up):
             self.lu_today = True
         if self.defer_limit_up and self.lu_today:
@@ -185,7 +220,7 @@ class HeldMinuteCursor:
             fill = target_fill(float(self.o[idx]), float(self.h[idx]), self.cost, self.peak,
                                self.n_days, self.take_profit_pct, self.take_profit)
             if fill is not None:
-                return self._exit(idx, *fill)
+                return self._price_exit(idx, *fill, line=self.cost * (1 + self.take_profit_pct), gap=float(self.o[idx]) >= self.cost * (1 + self.take_profit_pct))
         blocked = self.peak_hm >= 0 and peak_gap_blocks(cur_hm - self.peak_hm, self.peak_gap_min)
         if not blocked:
             if callable(self.exit_plan):
@@ -213,9 +248,10 @@ class HeldMinuteCursor:
             elif self.take_profit is not None:
                 reason = self.take_profit(px_close, self.cost, self.peak, self.n_days)
                 if reason:
-                    return self._exit(idx, px_close, reason)
+                    line = self.cost * (1 + self.take_profit_pct) if self.take_profit_pct else None
+                    return self._price_exit(idx, px_close, reason, line)
             elif trail_hits(px_close, self.cost, self.peak, self.profit_base, self.trail_ratio):
-                return self._exit(idx, px_close, f"trail:T+{max(1, self.n_days)}")
+                return self._price_exit(idx, px_close, f"trail:T+{max(1, self.n_days)}", self.cost * (1 + self.profit_base + self.trail_ratio * (self.peak / self.cost - 1 - self.profit_base)))
         if self.force_sell_hm is not None and force_due(cur_hm, self.force_sell_hm):
             if self.limit_down > 0 and hit_limit_down(px_close, self.limit_down):
                 return None
