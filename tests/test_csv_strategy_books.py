@@ -187,7 +187,9 @@ def test_apply_version6_20_uniform_schedule():
     sched = hooks["add_schedule"]
     assert sched[:4] == [(0.05, 0.20), (0.10, 0.20), (0.15, 0.20), (0.20, 0.20)]
     assert sched[4] == (0.40, 1.0)
-    assert hooks["take_profit"](10.30, 10.0, 11.00, 1) == "trail:ladder:10"
+    # Band 2: B = 5% + 2% * 2 = 9%; exit line = 11 - 10 * 9% = 10.10.
+    assert hooks["take_profit"](10.10, 10.0, 11.00, 1) == "trail:ladder:10"
+    assert hooks["take_profit"](10.11, 10.0, 11.00, 1) is None
 
 
 def test_apply_version6_19_capped_schedule():
