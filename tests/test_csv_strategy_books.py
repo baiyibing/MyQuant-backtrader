@@ -39,6 +39,7 @@ def test_registered_books_are_explicit():
         "version6_12",
         "version6_13",
         "version6_14",
+        "version6_15",
         "version8",
         "version8_1",
         "version8_2",

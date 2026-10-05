@@ -147,13 +147,11 @@ on master `2e3ef2e` (v6f off-byte overlay v4, 36 books):
 - Touched tests (`tests/test_minute_bar_scan_host.py`,
   `tests/test_minute_fill_config.py`) plus `tests/test_off_byte_baseline.py`:
   **630 passed**, 6.62 s; off-byte fixtures unchanged.
-- Full suite, `-m "not production and not benchmark"`: **7523 passed,
-  1 failed, 5 skipped, 24 deselected**, 29 warnings, 139.09 s.
-- The inherited failure is
-  `tests/test_csv_strategy_books.py::test_registered_books_are_explicit`:
-  master `2e3ef2e` registers version6_15 but omits it from the test's expected
-  book list. Both that test and the registry are unchanged by this follow-up.
-- All four changed Python/Markdown files are UTF-8 without BOM with zero
+- `tests/test_csv_strategy_books.py::test_registered_books_are_explicit` gains
+  version6_15 (master `2e3ef2e` registered it without updating that list).
+- Full suite, `-m "not production and not benchmark"`: **7524 passed,
+  5 skipped, 24 deselected**, 29 warnings.
+- All changed Python/Markdown files are UTF-8 without BOM with zero
   NUL bytes; `git diff --check` passes.
 
 Side-sell fail-closed follow-up after rebase on master `a55e3c85`:
