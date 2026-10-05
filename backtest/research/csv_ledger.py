@@ -99,6 +99,7 @@ class IndependentGroup:
     next_lot_id: int = 1
     executed_steps: int = 0
     scale_steps: int = 0  # 分批减仓已卖档数（6.13+）
+    peak_dd_start: int | None = None  # 回撤 >15% 起始日 idx（6.14 峰值兜底）
     executed_steps2: int = 0  # 第二梯子（基数腿）计数，仅双梯子书使用
     anchor_cost: float | None = None  # 梯子/止损锚价；None = 首仓成本（默认）
     supplement_done: bool = False
@@ -239,7 +240,7 @@ def configure_s8(st, hooks: dict) -> None:
     """Bind the selected per-name hooks once, including direct shared-loop use."""
     name = hooks.get("name")
     if hooks.get("sizing") != "per_name" or name not in {
-        "version6_1", "version6_2", "version6_3", "version6_4", "version6_5", "version6_6", "version6_7", "version6_8", "version6_9", "version6_10", "version6_11", "version6_12", "version6_13", "version8", "version8_2", "version8_3", "version8_4", "version8_5", "version8_6",
+        "version6_1", "version6_2", "version6_3", "version6_4", "version6_5", "version6_6", "version6_7", "version6_8", "version6_9", "version6_10", "version6_11", "version6_12", "version6_13", "version6_14", "version8", "version8_2", "version8_3", "version8_4", "version8_5", "version8_6",
     }:
         return
     if s8_policy(st) is not None:

@@ -33,7 +33,6 @@ from backtest.research.ashare_session import defer_sell_at_limit, skip_buy_at_li
 from backtest.research.csv_common import book_limit_prices
 from backtest.research.csv_ledger import (
     CHASE_HM,
-    PEAK_GAP_MIN,
     IndependentExitPosition,
     InsufficientCashError,
     _sell,
@@ -41,7 +40,6 @@ from backtest.research.csv_ledger import (
     exit_positions,
     execute_buy,
     hit_limit_down,
-    hit_limit_up,
     position_is_open,
     rescale_position,
     rescale_s8_groups,
@@ -127,6 +125,43 @@ def advance_independent_exit(
             st, code, pos, px, day, reason, day_i=day_i, **volume_kwargs,
             hm=at_hm if price_rule else None, price_rule=price_rule,
         )
+
+
+def peak_dd_clear_exits(st, code, pos, px, day, day_i, limits, *,
+                         peak_dd_exit=0.15, peak_dd_sessions=15, hm=None):
+    """6.14：从峰值回撤 >peak_dd_exit 且 peak_dd_sessions 个交易日内未收复 → 全组清仓。
+
+    每日一次评估（close 相位、首次触线那分钟记录起始日）；峰值回撤重置为
+    None（px ≥ peak 时清零计数）；与梯子/减仓并行，组级清仓走 _sell_s8_group。
+    """
+    if not peak_dd_exit or px <= 0 or not position_is_open(st, pos):
+        return 0
+    peak = float(pos.peak)
+    if peak <= 0:
+        return 0
+    dd = (peak - float(px)) / peak
+    if dd <= 0:
+        pos.group.peak_dd_start = None
+        return 0
+    if dd < float(peak_dd_exit):
+        return 0
+    if pos.group.peak_dd_start is None:
+        pos.group.peak_dd_start = day_i
+        return 0
+    if day_i - pos.group.peak_dd_start < int(peak_dd_sessions):
+        return 0
+    if defer_sell_at_limit(px, limits):
+        st.stats["defer_sell_limit_down"] += 1
+        return 0
+    # 全组清仓：走组级卖出（复用 _sell 的 IndependentExitPosition 路径）
+    filled = _sell(
+        st, code, pos, px, day, "peak_dd_clear", day_i=day_i,
+        hm=hm, price_rule="minute_trigger_bar_close",
+    )
+    if filled:
+        st.stats["sell_peak_dd_clear"] = int(st.stats.get("sell_peak_dd_clear", 0)) + 1
+        pos.group.peak_dd_start = None
+    return 1 if filled else 0
 
 
 def scale_out_exits(st, code, pos, px, day, day_i, limits, *, scale_step, scale_frac, hm=None):

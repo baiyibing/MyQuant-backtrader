@@ -38,6 +38,7 @@ def test_registered_books_are_explicit():
         "version6_11",
         "version6_12",
         "version6_13",
+        "version6_14",
         "version8",
         "version8_1",
         "version8_2",
@@ -161,6 +162,16 @@ def test_apply_version6_3_widens_give_step_to_3pct():
     # 档 2（A=10%）：B=11% → 线 = 11 − 1.10；首档不变。
     assert hooks["take_profit"](9.90, 10.0, 11.00, 1) == "trail:ladder:10"
     assert hooks["take_profit"](9.70, 10.0, 10.20, 1) == "trail:ladder:0"
+
+
+def test_apply_version6_14_hooks():
+    hooks = apply_csv_strategy("v6.14")
+    assert hooks["name"] == "version6_14"
+    assert hooks["scale_out_step"] == pytest.approx(0.10)
+    assert hooks["scale_out_frac"] == pytest.approx(0.10)
+    assert hooks["peak_dd_exit"] == pytest.approx(0.15)
+    assert hooks["peak_dd_sessions"] == 15
+    assert hooks["step_stop_pct"] == pytest.approx(0.10)
 
 
 def test_apply_version6_13_scale_out_hooks():
