@@ -7,6 +7,8 @@ simulate_native validates and normalizes tail options before translating native
 arguments to the registered main book.
 """
 from __future__ import annotations
+
+from backtest.research.lot_rounding import native_budget_board_lots
 from math import isfinite
 from dataclasses import dataclass, field
 from datetime import date
@@ -206,7 +208,7 @@ def _buy(state: SimResult, position: Position | None, symbol: str, day: date, hm
          price: float, fraction: float, reason: str, kind: str,
          fee: FeeSchedule = DEFAULT_SCHEDULE) -> Position | None:
     target = NAME_BUDGET * fraction
-    shares = int(target / price / 100) * 100
+    shares = native_budget_board_lots(target, price)
     cost = fee.debit_buy(shares * price)
     if shares <= 0 or cost > state.cash:
         _event(state, day, symbol, hm, "skip", 0, price, "skip_cash")

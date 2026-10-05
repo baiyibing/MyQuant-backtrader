@@ -1,4 +1,6 @@
 """Book-local turtle orchestration using the shared A-share fill ledger."""
+
+from backtest.research.lot_rounding import rounded_partial_board_lots
 from backtest.research.sell_pending_observability import pending_callback, record_limit
 from types import SimpleNamespace
 
@@ -52,7 +54,7 @@ def plan_exit(st, code, px, day, closes, *, day_i, ds):
     seq, fraction = rules.scale_out(px, cost, mem.sell_band_seq)
     if fraction:
         mem.sell_band_seq = seq
-        wanted = int(round(shares * fraction, 8)) // 100 * 100
+        wanted = rounded_partial_board_lots(shares, fraction)
         if wanted:
             return f"profit_take:band:{seq}", wanted
     return None

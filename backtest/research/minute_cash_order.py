@@ -26,6 +26,8 @@ and S2-B hl cross-reference. This documentation does not change scheduling.
 
 from __future__ import annotations
 
+from backtest.research.lot_rounding import scale_out_board_lots, floor_board_lots
+
 from dataclasses import dataclass
 from datetime import date
 from typing import Any, Mapping, Sequence
@@ -275,7 +277,7 @@ def scale_out_exits(st, code, pos, px, day, day_i, limits, *, scale_step, scale_
     if shares_now <= 0:
         pos.group.scale_steps = allowed
         return 0
-    target = int(shares_now * float(scale_frac) // 100) * 100
+    target = scale_out_board_lots(shares_now, scale_frac)
     px = _side_price(fill_config, px)
     sold = 0
     queued = 0
@@ -284,7 +286,7 @@ def scale_out_exits(st, code, pos, px, day, day_i, limits, *, scale_step, scale_
             if sold + queued >= target:
                 break
             chunk = min(lot.shares, target - sold - queued)
-            chunk = chunk // 100 * 100
+            chunk = floor_board_lots(chunk)
             if chunk <= 0 or lot.entry_idx >= day_i:
                 continue
             if (fill_config is None or fill_config.fill_timing != "next_bar_open") and (defer_sell_open_or_fill(px if open_px is None else open_px, px, limits) or _hit_limit_up_safe(px, limits)):
