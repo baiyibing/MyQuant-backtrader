@@ -1,7 +1,7 @@
 """策略 9（底量超顶量）卖点纯函数。
 
 买点不在本模块：由 ``export_strategy9_pool.py`` 写成契约日 CSV，引擎按名单买。
-卖：止损幅度每个交易日从此前 20 根日线重算，不在入场锁定；盈利达到成本的 10% 返回已有 reason
+卖：另有成本 × 0.90 固定止损；range 止损幅度每个交易日从此前 20 根日线重算，不在入场锁定；盈利达到成本的 10% 返回已有 reason
 ``profit_take:target``（不是新订单类型）。启用 --max-hold 后满 20 个交易日记
 ``force_sell:max_hold``，次日开盘离场。无分档回撤止盈；不加仓。
 禁止默认 ``stock_pool/``（那是隔夜手工池，不是本信号）。
@@ -30,7 +30,8 @@ HELP_LOCK = """
   必须显式 --pool-dir；指向本仓 stock_pool/ 立即退出。
   止损幅度每个交易日从此前 20 根日线重算，不在入场锁定。
   幅度=(20 根最高 high - 最低 low)/窗口前一根 close；触发价=成本*(1-幅度)。
-  缺窗口当天不止损、不回落固定比例；--stop-pct 不接受。
+  缺窗口当天无 range 止损、不回落固定比例；成本 × 0.90 固定止损仍生效。
+  两条止损取较高触发价；--stop-pct 不接受。
   盈利达到成本的 10% 返回已有 reason
   profit_take:target（不是新订单类型），次日开盘卖。无分档回撤止盈；不加仓。
   20 交易日强平默认 OFF；启用 --max-hold 后，持仓交易日数 n_days>=20 收盘记 force_sell:max_hold，次日开盘卖
@@ -102,71 +103,6 @@ def evaluate_stop_range(hooks, frame, day, stats):
     return ratio
 
 
-SELL_MODES = ("mean_tr3_tp10", "range_amp_tp_amp", "mean_tr2_or_prior10_low")
-
-
-def validate_sell_mode(strategy, mode, max_hold=False):
-    if mode is None:
-        return
-    if strategy != "version9" or mode not in SELL_MODES:
-        raise ValueError("version9_sell requires version9 and one of " + repr(SELL_MODES))
-    if mode == "mean_tr2_or_prior10_low" and max_hold:
-        raise ValueError("mean_tr2_or_prior10_low rejects max_hold")
-
-
-def version9_exit(frame, day, mode):
-    """Session plan from strictly prior bars; distances are in yuan."""
-    prior = frame.loc[frame.index < pd.Timestamp(day)]
-    plan = dict(stop_ratio=None, stop_yuan=None, take_profit_pct=None, channel_low=None)
-    window = prior.tail(21)
-    valid = len(window) == 21 and {"open", "high", "low", "close"}.issubset(window.columns)
-    if valid:
-        values = window[["open", "high", "low", "close"]].apply(pd.to_numeric, errors="coerce").to_numpy(float)
-        valid = np.isfinite(values).all() and (values[:, 1] >= values[:, 2]).all() and (values[:, 3] > 0).all()
-    if valid:
-        if mode == "range_amp_tp_amp":
-            amplitude = stop_range_amplitude(frame, day)
-            plan.update(stop_ratio=amplitude, take_profit_pct=amplitude)
-        else:
-            high, low, previous = values[1:, 1], values[1:, 2], values[:-1, 3]
-            mean = float(np.maximum.reduce([high-low, abs(high-previous), abs(low-previous)]).mean())
-            plan["stop_yuan"] = mean * (3 if mode == "mean_tr3_tp10" else 2)
-            if mode == "mean_tr3_tp10":
-                plan["take_profit_pct"] = TAKE_PROFIT_PCT
-    if mode == "mean_tr2_or_prior10_low":
-        channel = prior.tail(10)
-        if len(channel) == 10 and {"open", "high", "low", "close"}.issubset(channel.columns):
-            vals = channel[["open", "high", "low", "close"]].apply(pd.to_numeric, errors="coerce").to_numpy(float)
-            if np.isfinite(vals).all() and (vals[:, 1] >= vals[:, 2]).all():
-                plan["channel_low"] = float(vals[:, 2].min())
-    return plan
-
-
-def evaluate_version9_exit(hooks, frame, day, stats):
-    plan = hooks["version9_exit"](frame, day)
-    if plan["stop_ratio"] is None and plan["stop_yuan"] is None:
-        key = "skip_version9_exit:stop_window"
-        stats[key] = stats.get(key, 0) + 1
-    if stats.get("sell_mode") == "mean_tr2_or_prior10_low" and plan["channel_low"] is None:
-        key = "skip_version9_exit:channel_window"
-        stats[key] = stats.get(key, 0) + 1
-    return plan
-
-
-def plan_stop_price(plan, cost):
-    if plan["stop_yuan"] is not None:
-        return cost - plan["stop_yuan"]
-    if plan["stop_ratio"] is not None:
-        return cost * (1 - plan["stop_ratio"])
-    return None
-
-
-def plan_close_reason(plan, close, cost, n_days, max_hold=False):
-    if plan["channel_low"] is not None and close < plan["channel_low"]:
-        return "close_below:prior_10d_low"
-    pct = plan["take_profit_pct"]
-    if pct is not None and close >= cost * (1 + pct):
-        return "profit_take:target"
-    if max_hold and n_days >= MAX_HOLD:
-        return "force_sell:max_hold"
-    return None
+def effective_stop_ratio(range_ratio):
+    """Keep the range leg unclamped; the higher stop wins over cost * 0.90."""
+    return min(range_ratio, 0.10) if range_ratio is not None else 0.10

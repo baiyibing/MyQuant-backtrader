@@ -30,8 +30,7 @@ REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, REPO)
 
 from backtest.research.strategy9_rules import (  # noqa: E402
-    evaluate_stop_range, RANGE_LOOKBACK_CALENDAR_DAYS,
-    evaluate_version9_exit, plan_stop_price, plan_close_reason,
+    evaluate_stop_range, effective_stop_ratio, RANGE_LOOKBACK_CALENDAR_DAYS,
 )
 
 from backtest.research.csv_strategy_books import (  # noqa: E402
@@ -418,16 +417,15 @@ def simulate(
                             stop_enabled = v9_trigger is not None
                         if "stop_range" in hooks:
                             stop_ratio = evaluate_stop_range(hooks, bars[code], day, st.stats)
-                            stop_enabled = stop_ratio is not None
-                        absolute_line = absolute_exit(code, day) if absolute_exit else None
-                        if absolute_line is not None:
-                            stop_ratio = 1 - absolute_line / pos.cost
+                            stop_ratio = effective_stop_ratio(stop_ratio)
                             stop_enabled = True
                         close = float(row["close"])
                         if stop_enabled:
                             trigger = v9_trigger if v9_plan is not None else pos.cost * (1.0 - stop_ratio)
                             if stop_fill == "close":
-                                if close <= trigger:
+                                if (close <= trigger and not ("stop_range" in hooks and
+                                        float(row["open"]) > trigger and
+                                        take_profit(close, pos.cost, pos.peak, n_days) == "profit_take:target")):
                                     _sell(
                                         st,
                                         code,
@@ -454,7 +452,9 @@ def simulate(
                                         price_rule="daily_stop_gap_open",
                                     )
                                 continue
-                            elif float(row["low"]) <= trigger:
+                            elif (float(row["low"]) <= trigger
+                                  and not ("stop_range" in hooks and
+                                           take_profit(close, pos.cost, pos.peak, n_days) == "profit_take:target")):
                                 if defer_sell_at_limit(trigger, limits):
                                     st.stats["defer_sell_limit_down"] += 1
                                     if limit_down_pending:
@@ -630,7 +630,8 @@ def simulate(
                             stop_enabled = v9_trigger is not None
                         if "stop_range" in hooks:
                             stop_ratio = evaluate_stop_range(hooks, bars[code], day, st.stats)
-                            stop_enabled = stop_ratio is not None
+                            stop_ratio = effective_stop_ratio(stop_ratio)
+                            stop_enabled = True
                         if stop_enabled:
                             if close <= (v9_trigger if v9_plan is not None else pos.cost * (1.0 - stop_ratio)):
                                 reason = "stop_loss:close"

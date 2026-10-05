@@ -28,8 +28,7 @@ REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, REPO)
 
 from backtest.research.strategy9_rules import (  # noqa: E402
-    evaluate_stop_range, RANGE_LOOKBACK_CALENDAR_DAYS,
-    evaluate_version9_exit, plan_stop_price, plan_close_reason,
+    evaluate_stop_range, effective_stop_ratio, RANGE_LOOKBACK_CALENDAR_DAYS,
 )
 
 from backtest.research.csv_ledger import (  # noqa: E402
@@ -324,6 +323,7 @@ def scan_held_day_python(
     version9_plan=None,
     version9_max_hold=False,
     stop_range_ratio: Optional[float] = None,
+    version9_stop: bool = False,
     profit_base: float,
     trail_ratio: float,
     pos_trail: float = 0.0,
@@ -350,8 +350,8 @@ def scan_held_day_python(
     validate_low(minute_stop_trigger, l, c)
     del pos_trail  # reserved for future; kept for API parity with callers
     stop_enabled = isinstance(stop_pct, float) and 0 < stop_pct < 1
-    if stop_range_ratio is not None:
-        stop_pct = stop_range_ratio
+    if version9_stop or stop_range_ratio is not None:
+        stop_pct = effective_stop_ratio(stop_range_ratio) if version9_stop else stop_range_ratio
         stop_enabled = True
     trigger = cost * (1.0 - stop_pct) if stop_enabled else None
     if version9_plan is not None:
@@ -384,6 +384,13 @@ def scan_held_day_python(
             continue
         if stop_enabled and trigger is not None and px_open <= trigger:
             return i, px_open, "stop_loss:gap_open", new_peak, new_peak_hm
+        if version9_stop:
+            if minute_stop_trigger == "hl":
+                fill = target_fill(px_open, hi, cost, new_peak, n_days, take_profit_pct, take_profit)
+                if fill is not None:
+                    return i, fill[0], fill[1], new_peak, new_peak_hm
+            elif take_profit(px_close, cost, new_peak, n_days) == "profit_take:target":
+                return i, px_close, "profit_take:target", new_peak, new_peak_hm
         ret = px_close / cost - 1.0
         if stop_enabled:
             touched = float(l[i]) <= trigger if minute_stop_trigger == "hl" else (px_close <= trigger if version9_plan is not None else ret <= -stop_pct)
@@ -491,6 +498,7 @@ def scan_held_day(
     version9_plan=None,
     version9_max_hold=False,
     stop_range_ratio: Optional[float] = None,
+    version9_stop: bool = False,
     profit_base: float,
     trail_ratio: float,
     pos_trail: float = 0.0,
@@ -524,6 +532,7 @@ def scan_held_day(
         minute_stop_trigger == "close"
         and version9_plan is None
         and stop_range_ratio is None
+        and not version9_stop
         and _want_numba_scan(use_numba)
         and _NUMBA_SCAN_AVAILABLE
         and sell_gate is None
@@ -585,6 +594,7 @@ def scan_held_day(
         stop_pct=stop_pct,
         version9_plan=version9_plan, version9_max_hold=version9_max_hold,
         stop_range_ratio=stop_range_ratio,
+        version9_stop=version9_stop,
         profit_base=profit_base,
         trail_ratio=trail_ratio,
         pos_trail=pos_trail,
@@ -1044,9 +1054,9 @@ def simulate(
                         n_days=n_days,
                         can_sell=t1_sellable(calendar[pos.entry_idx].date(), day.date()),
                         stop_pct=stop_pct,
-                        version9_plan=v9_plan, version9_max_hold=max_hold,
-                        stop_range_ratio=((1 - absolute_exit(code, day) / pos.cost) if absolute_exit else evaluate_stop_range(hooks, ddf, day, st.stats)
-                                          if (absolute_exit or "stop_range" in hooks) and n_days >= 1 else None),
+                        version9_stop="stop_range" in hooks,
+                        stop_range_ratio=(evaluate_stop_range(hooks, ddf, day, st.stats)
+                                          if "stop_range" in hooks and n_days >= 1 else None),
                         profit_base=profit_base if profit_base is not None else 0.0,
                         trail_ratio=0.0,
                         pos_trail=pos_trail,

@@ -70,7 +70,7 @@ from backtest.research.strategy8_6_rules import STOP_PCT as V8_6_STOP
 from backtest.research.strategy8_6_rules import take_profit_reason as v8_6_take
 from backtest.research.strategy8_rules import STOP_PCT as V8_STOP
 from backtest.research.strategy8_rules import take_profit_reason as v8_take
-from backtest.research.strategy9_rules import stop_range_amplitude
+from backtest.research.strategy9_rules import stop_range_amplitude, effective_stop_ratio
 from backtest.research.strategy9_rules import take_profit_reason as v9_take
 from backtest.research.strategy10_rules import STOP_PCT as V10_STOP
 from backtest.research.strategy_topk_dropout_rules import STOP_PCT as TOPK_STOP
@@ -337,16 +337,18 @@ def _version9_range_stop(
     price: FillPrice,
     next_bar: OhlcBar | None,
 ) -> BarScanExit | None:
-    """Apply today's trailing range stop. None means the bar did not hit it.
+    """Apply the higher of today's range stop and the fixed cost stop.
 
-    ``ratio`` is already (max high - min low) / prior close, excluding day T.
-    A ratio outside (0, 1) is kept: the trigger is still cost * (1 - ratio).
+    ``ratio`` is the effective ratio after comparing the two unclamped prices.
+    Gap stops precede the existing close-based target; targets precede touches.
     """
     opening, high, low, close = _ohlc(bar, "bar")
     new_peak = high if high > peak else peak
     trigger = float(cost) * (1.0 - float(ratio))
     if opening <= trigger:
         result = BarScanExit("fill", opening, "stop_loss:gap_open", new_peak)
+    elif v9_take(close, cost, new_peak, 1) == "profit_take:target":
+        result = BarScanExit("fill", close, "profit_take:target", new_peak)
     elif low <= trigger:
         if price == "close" and timing == "same_bar":
             result = BarScanExit("fill", close, "stop_loss:touch:bar_close", new_peak)
@@ -422,17 +424,18 @@ def invoke_minute_strategy(
         if not isinstance(sx0_sell, bool):
             raise ValueError("topk_score_exit sx0_sell must be a bool")
 
-    if key == "version9" and daily_bars is not None:
-        if as_of is None:
-            raise ValueError("version9 range stop requires as_of")
-        ratio = stop_range_amplitude(daily_bars, as_of)
-        if ratio is not None:
-            stopped = _version9_range_stop(
-                bar, cost=cost_f, peak=peak_f, ratio=float(ratio),
-                timing=timing, price=price, next_bar=next_bar,
-            )
-            if stopped is not None:
-                return stopped
+    if key == "version9":
+        ratio = None
+        if daily_bars is not None:
+            if as_of is None:
+                raise ValueError("version9 range stop requires as_of")
+            ratio = stop_range_amplitude(daily_bars, as_of)
+        stopped = _version9_range_stop(
+            bar, cost=cost_f, peak=peak_f, ratio=effective_stop_ratio(ratio),
+            timing=timing, price=price, next_bar=next_bar,
+        )
+        if stopped is not None:
+            return stopped
 
     if key in _DRAWDOWN:
         book = _DRAWDOWN[key]

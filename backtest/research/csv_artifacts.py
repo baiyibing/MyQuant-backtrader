@@ -184,82 +184,8 @@ def summarize(
     elif st.stats.get("sell_book") == "v9":
         max_hold = st.stats.get("max_hold")
         hold_text = f"满持有 {int(max_hold)} 日 force_sell" if max_hold is not None else "满持有强平 OFF"
-        lines.append(f"  参数: 止损 {stop_text} | {hold_text}")
-    elif st.stats.get("sell_book") == "v6_12":
-        lines.append(
-            f"  参数: 突破买侧: A0×{float(st.stats.get('breakout_mult', 1.2)):.1f} 首买1基(信号无限期,涨停续等)"
-            f" +A0×1.25/1.30/1.35/1.40 各1基(封顶{int(st.stats.get('tranche_max', 4))}) |"
-            f" 卖侧=6.7三段梯子+止损{stop_text}(锚A0=T0收盘) | 再现=新信号新A0"
-        )
-    elif st.stats.get("sell_book") == "v6_11":
-        lines.append(
-            f"  参数: 突破买侧: A0×{float(st.stats.get('breakout_mult', 1.2)):.1f} 首买1基(信号无限期,涨停续等)"
-            f" +A0×1.3/1.4/1.5/1.6 各1基(封顶{int(st.stats.get('tranche_max', 4))}) |"
-            f" 卖侧=6.7三段梯子+止损{stop_text}(锚A0=T0收盘) | 再现=新信号新A0"
-        )
-    elif st.stats.get("sell_book") == "v6_10":
-        caps = st.stats.get('base_zone_caps', [2, 4])
-        lines.append(
-            f"  参数: 止损 {stop_text}（锚A0）+ step 止损 −{float(st.stats.get('step_stop_pct', 0.05)):.0%} |"
-            f" 卖侧=6.7三段梯子（>100% 峰值×80% / [15%,100%] max(梯子,峰值×85%) /"
-            f" <15% 保底带） | 买侧: T0买20% +5%×20%分批 +20%×整基"
-            f"（上限<100%:{int(caps[0])}个/≥100%:{int(caps[1])}个） | 再现独立组"
-        )
-    elif st.stats.get("sell_book") == "v6_9":
-        caps = st.stats.get('base_zone_caps', [2, 4])
-        lines.append(
-            f"  参数: 止损 {stop_text}（锚A0） | 卖侧=6.7三段梯子（>100% 峰值×80% /"
-            f" [15%,100%] max(梯子,峰值×85%) / <15% 保底带 B=5%+3%×档） | 买侧: T0买"
-            f"{float(st.stats.get('open_frac', 0.20)):.0%} +5%×20%分批至满仓"
-            f" +20%×整基(上限<100%:{int(caps[0])}个/≥100%:{int(caps[1])}个) | 再现独立组"
-        )
-    elif st.stats.get("sell_book") == "v6_8":
-        lines.append(
-            f"  参数: 同 v6.7 三段离场线（>100% 峰值×80% / [15%,100%] max(梯子,峰值×85%) /"
-            f" <15% 保底带 B=5%+3%×档） | step lot 独立止损 −{float(st.stats.get('step_stop_pct', 0.10)):.0%}"
-            f" | step+{float(st.stats.get('add_step', 0.10)):.0%} 单票上限{int(st.stats.get('step_cap_per_code', 8))}笔 | 再现独立组"
-        )
-    elif st.stats.get("sell_book") == "v6_7":
-        lines.append(
-            f"  参数: 止损 {stop_text} | T+1起评止盈 | 峰值>{float(st.stats.get('peak_dd_rise', 1.0)):.0%}"
-            f" 离场=峰值×{1 - float(st.stats.get('peak_dd_pct', 0.20)):.0%}"
-            f" | [{float(st.stats.get('mid_peak_dd_rise', 0.15)):.0%},100%]"
-            f" max(梯子线,峰值×{1 - float(st.stats.get('mid_peak_dd_pct', 0.15)):.0%})"
-            f" | <15% B={float(st.stats.get('ladder_give_base', 0.05)):.0%}"
-            f"+{float(st.stats.get('ladder_give_step', 0.03)):.0%}×档 保底[0,3%)成本/[3,5%)+1%/[5,10%)+1%/[10,15%)+3% | step+"
-            f"{float(st.stats.get('add_step', 0.10)):.0%} 同进出 单票step上限{int(st.stats.get('step_cap_per_code', 8))}笔 | 再现独立组"
-        )
-    elif st.stats.get("sell_book") == "v6_6":
-        lines.append(
-            f"  参数: 止损 {stop_text} | T+1起评止盈 | 峰值>{float(st.stats.get('peak_dd_rise', 1.0)):.0%}"
-            f" 离场=峰值×{1 - float(st.stats.get('peak_dd_pct', 0.20)):.0%} | 其余档 B="
-            f"{float(st.stats.get('ladder_give_base', 0.05)):.0%}"
-            f"+{float(st.stats.get('ladder_give_step', 0.03)):.0%}×档 "
-            f"离场=max(峰值−首仓成本×B,保底) 保底[0,3%)成本/[3,5%)+1%/[5,10%)+1%/[10,15%)+3%/其余无 | step+"
-            f"{float(st.stats.get('add_step', 0.10)):.0%} 同进同出 "
-            f"单票step上限{int(st.stats.get('step_cap_per_code', 8))}笔 | 再现独立组"
-        )
-    elif st.stats.get("sell_book") == "v6_5":
-        lines.append(
-            f"  参数: 止损 {stop_text} | T+1起评止盈 | 峰值>{float(st.stats.get('peak_dd_rise', 1.0)):.0%}"
-            f" 离场=峰值×{1 - float(st.stats.get('peak_dd_pct', 0.15)):.0%} | 其余档 B="
-            f"{float(st.stats.get('ladder_give_base', 0.05)):.0%}"
-            f"+{float(st.stats.get('ladder_give_step', 0.03)):.0%}×档 "
-            f"离场=max(峰值−首仓成本×B,保底) 档0保本/档1保底+1%/档2保底+3%/其余无 | step+"
-            f"{float(st.stats.get('add_step', 0.20)):.0%} 同进同出 "
-            f"单票step上限{int(st.stats.get('step_cap_per_code', 4))}笔 | 再现独立组"
-        )
-    elif st.stats.get("sell_book") == "v6_4":
-        lines.append(
-            f"  参数: 止损 {stop_text} | T+1起评止盈 | 峰值涨幅每"
-            f"{float(st.stats.get('ladder_band_width', 0.05)):.0%}一档 "
-            f"B={float(st.stats.get('ladder_give_base', 0.05)):.0%}"
-            f"+{float(st.stats.get('ladder_give_step', 0.03)):.0%}×档 "
-            f"离场=max(峰值−首仓成本×B,保底) 档1保底+1%/档2保底+3%/其余无 | step+"
-            f"{float(st.stats.get('add_step', 0.20)):.0%} 同进同出 "
-            f"单票step上限{int(st.stats.get('step_cap_per_code', 4))}笔 | 再现独立组"
-        )
-    elif st.stats.get("sell_book") in {"v6_1", "v6_3"}:
+        lines.append(f"  参数: 止损 rolling range（每日重算，缺窗口无替代） + 固定成本 × 0.90（10%） | {hold_text}")
+    elif st.stats.get("sell_book") == "v6_1":
         lines.append(
             f"  参数: 止损 {stop_text} | T+1起评止盈 | 峰值涨幅每"
             f"{float(st.stats.get('ladder_band_width', 0.05)):.0%}一档 "
