@@ -18,7 +18,7 @@
 - **B9 与 C：保持现状并文档化。** engine exclusions 与 per-book strategy semantics 不改。
 - **B6：version7 书规则，文档化且不改。** v7 在跌停价不买，与 qlib `TopkDropoutStrategy` 默认 `forbid_all_trade_at_limit=True` 一致。
 - **B7 / B8：deferred。** B7 拟加 `on_short_cash` 参数、默认 `raise`；B8 拟统一一个 lot-rounding 函数、zero diff；本轮不做。
-- **A1 limit pair 与 B5：先做只读计数，pending。** side sells 的 open+fill 跌停双检尚未批准变更；未计数前不改。
+- **A1 limit pair 与 B5：ADOPT（2026-10-05 16:08 CST）。** 统一采用共享 open+fill pair：bar OPEN 或成交价达到跌停即顺延，沿用单一 shared eps；不改 `defer_sell_at_limit` 定义。
 - **A1 pipe：do now，独立 PR。** 将 6.x side sells（`step_stop` / `scale_out` / `peak_dd_exit`；version6_8、6_10、6_13–6_17）接入 `FillConfig`；defaults byte-identical，不夹带 limit-pair rules。
 - **A2：用户覆盖 brainstorm 的五席 drop。Do it。** 将 version9_2（`strategy9_2_engine`）、version12（`strategy12_engine`）及 version11 `minute_open` 收进主引擎 `csv_minute_backtest.simulate` / `HeldMinuteCursor`，只留一个 minute loop。新 baselines / overlays 单独记录，旧 ones 永不覆盖；version9_1 untouched。独立 PR，大则每书一票。
 
@@ -51,7 +51,7 @@ Golden ownership 以 `scripts/research/generate_off_byte_baseline.py` 为准：�
 - **现状 / 证据：** `csv_minute_backtest.py:918–938` 在 close 相位传 `c[bar_idx]` 给三个 side-sell 函数。`minute_cash_order.py:134/171/216` 分别为 peak-dd / scale-out / step-stop；成交价检查为 :157/:201/:235，报价审计为 :163/:206/:241 的 `minute_trigger_bar_close`。step lot 另以 :229 保证 T+1。非默认配置在 `csv_minute_backtest.py:745–746` fail-closed。
 - **勘误：** open+fill 对照在 `minute_cash_order.py:107–108`，属于外层 `advance_independent_exit` 闸门，**不是 HeldMinuteCursor 内部**；open 检查带 **`not pending`** 条件，fill 检查仍执行。不能把它描述成无条件双检。
 - **受影响书：** version6_8 / 6_10（step）、6_13（step + scale）、6_14–6_17（step + scale + peak-dd）。已实际调用 `apply_csv_strategy` 核对；6_17 同样设置这三种 hooks（`csv_strategy_books.py:1361–1364`）。
-- **裁定 / baseline：** pipe 独立 PR do-now，default byte-identical，V6F 不动；自定义时机 / 价格通过 FillConfig。限价对先只读 count「开盘跌停、成交价脱离」候选，不改规则；只读计数结果（2026-10-05，master `b57ec04`，脚本 `/tmp/count2b/count_limit_pair.py`，未提交）：V92 与 V6F 共 34 个 case，目标 side-sell / touch-stop 成交 23 笔，限价对拦截 **0**，成交与净值变化 **0**。但 V92 与 7 本受影响 6.x 书的 fixture **没有任何跌停 bar**，故 0 是构造使然，fixture 无法衡量该规则；仅 6_11/6_12 突破 fixture 含跌停 bar（2 根日线 / 10 根分钟），且这两本不开 side-sell hook。本机未配置行情湖，未跑全窗。若以后批准且有差异，另录 V6F revision。排队、部分卖出、跨日 carry 与优先级需在实施票验收。
+- **裁定 / baseline：** pipe 独立 PR do-now，default byte-identical，V6F 不动；自定义时机 / 价格通过 FillConfig。限价对已于 **2026-10-05 16:08 CST ADOPT**；同 bar side sells 检查 OPEN 或 fill，next_bar_open 在执行 open 检查（open == fill）。历史只读 count「开盘跌停、成交价脱离」候选：只读计数结果（2026-10-05，master `b57ec04`，脚本 `/tmp/count2b/count_limit_pair.py`，未提交）：V92 与 V6F 共 34 个 case，目标 side-sell / touch-stop 成交 23 笔，限价对拦截 **0**，成交与净值变化 **0**。但 V92 与 7 本受影响 6.x 书的 fixture **没有任何跌停 bar**，故 0 是构造使然，fixture 无法衡量该规则；仅 6_11/6_12 突破 fixture 含跌停 bar（2 根日线 / 10 根分钟），且这两本不开 side-sell hook。本机未配置行情湖，未跑全窗。实施后如 frozen case 有差异，另录 V6F revision，旧文件保留。排队、部分卖出、跨日 carry 与优先级需在实施票验收。
 
 ### A2. Separate minute engines / minute_open 收口
 
@@ -84,7 +84,7 @@ Golden ownership 以 `scripts/research/generate_off_byte_baseline.py` 为准：�
 
 - **现状 / 证据：** `strategy9_2_engine.py:69–73` 的 gap 分支 `px = open`，所以 **gap 已检查真实 open**。只有 touch 分支将 minute close / daily trigger 作为 px，:77 包成 `SimpleNamespace(open=px)`，:92 仅检查该价；缺的是真实 bar open。
 - **对照：** `csv_minute_backtest.py:1017–1019`、`strategy12_engine.py:107`、`fullstrat_research_book.py:210–212` 采用 open+fill；独立退出闸门另有 A1 所述 `not pending` 条件。
-- **裁定 / baseline：** 与 A1 limit pair 一起先只读 count；no change yet。只影响 version9_2，version9 / version9_1 不动。若日后批准并命中 touch 候选，V92 可变，需新 revision；只读 count 见 A1（V92 fixture 无跌停 bar、无 touch-stop 触发，计数 0 不具代表性）。
+- **裁定 / baseline：** 与 A1 limit pair 一起于 **2026-10-05 16:08 CST ADOPT**。分钟 touch 检查当根 OPEN 与 cursor fill；日线 touch 检查日 OPEN 与 stop-line fill。受阻保留 turtle pending reason/quantity，两个计数器各加一，retry_day=day_i+1，当日后续 bar 不重试，次日按 open 沿用残余成交路径。只影响 version9_2，version9 / version9_1 不动。若实施命中 frozen touch 候选，V92 可变，需新增 revision；只读 count 见 A1（V92 fixture 无跌停 bar、无 touch-stop 触发，计数 0 不具代表性）。
 
 ### B6. Version7 跌停价不买是书规则
 
@@ -121,4 +121,4 @@ Golden ownership 以 `scripts/research/generate_off_byte_baseline.py` 为准：�
 
 [分钟扫描现状](note-minute-scan-status-2026-10-05.md) 的 11:05 人裁与 step 3 测试迁移顺序继续有效；本票补齐 14:13 的逐项裁定。[Step 2a](minute-fill-config-step2a.md) 是已交付范围锁，不能把 A1 / A2 的后续 GO 写成 2a 已支持；A3 / B9 排除保持。
 
-本 PR 只写这份决策与 step2a 的一行 exclusions pointer。A1 pipe / A2 后续独立 PR；A1 limit pair / B5 只读 count 已完成（fixture 计数 0，见 A1），是否改规则待人裁；B7 / B8 deferred。没有重跑回测、没有湖访问、没有改代码或重录 golden。
+原决策 PR 仅文档；A1 pipe / A2 已由后续独立 PR 交付。16:08 CST 人裁授权本次 A1 limit pair / B5 实施；B7 / B8 deferred。本次执行 frozen off-byte 与合成测试，无湖访问；逐书差异见 worktree 未提交的 `LIMIT_PAIR_DELTA.md`。

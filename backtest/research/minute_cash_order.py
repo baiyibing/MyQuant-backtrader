@@ -29,7 +29,7 @@ from __future__ import annotations
 import numpy as np
 
 from backtest.research.ashare_bars import AM_CLOSE, AM_OPEN, PM_CLOSE, PM_OPEN
-from backtest.research.ashare_session import defer_sell_at_limit, skip_buy_at_limit, t1_sellable
+from backtest.research.ashare_session import defer_sell_open_or_fill, defer_sell_at_limit, skip_buy_at_limit, t1_sellable
 from backtest.research.csv_common import book_limit_prices
 from backtest.research.csv_ledger import (
     CHASE_HM,
@@ -104,8 +104,7 @@ def advance_independent_exit(
     if not np.isfinite(px) or px <= 0:
         return
     if (
-        (not pending and defer_sell_at_limit(float(cursor.o[idx]), limits))
-        or defer_sell_at_limit(px, limits)
+        defer_sell_open_or_fill(px if pending else float(cursor.o[idx]), px, limits)
     ):
         st.stats["defer_sell_limit_down"] += 1
         return
@@ -193,7 +192,7 @@ def fill_side_pending(st, code, pos, px, day, day_i, limits, *, hm):
 
 
 def peak_dd_clear_exits(st, code, pos, px, day, day_i, limits, *,
-                         peak_dd_exit=0.15, peak_dd_sessions=15, hm=None, fill_config=None):
+                         peak_dd_exit=0.15, peak_dd_sessions=15, hm=None, fill_config=None, open_px=None):
     """6.14：从峰值回撤 >peak_dd_exit 且 peak_dd_sessions 个交易日内未收复 → 全组清仓。
 
     每日一次评估（close 相位、首次触线那分钟记录起始日）；峰值回撤重置为
@@ -216,7 +215,7 @@ def peak_dd_clear_exits(st, code, pos, px, day, day_i, limits, *,
     if day_i - pos.group.peak_dd_start < int(peak_dd_sessions):
         return 0
     px = _side_price(fill_config, px)
-    if (fill_config is None or fill_config.fill_timing != "next_bar_open") and defer_sell_at_limit(px, limits):
+    if (fill_config is None or fill_config.fill_timing != "next_bar_open") and defer_sell_open_or_fill(px if open_px is None else open_px, px, limits):
         st.stats["defer_sell_limit_down"] += 1
         return 0
     # 全组清仓：走组级卖出（复用 _sell 的 IndependentExitPosition 路径）
@@ -230,7 +229,7 @@ def peak_dd_clear_exits(st, code, pos, px, day, day_i, limits, *,
     return 1 if filled else 0
 
 
-def scale_out_exits(st, code, pos, px, day, day_i, limits, *, scale_step, scale_frac, hm=None, fill_config=None):
+def scale_out_exits(st, code, pos, px, day, day_i, limits, *, scale_step, scale_frac, hm=None, fill_config=None, open_px=None):
     """6.13：相对首仓锚价每满 scale_step 涨幅，卖出当时剩余持仓的 scale_frac。
 
     逐分钟 close 相位调用；每档一次（组计数器）；整百股向下、FIFO 切 lot；
@@ -262,7 +261,7 @@ def scale_out_exits(st, code, pos, px, day, day_i, limits, *, scale_step, scale_
             chunk = chunk // 100 * 100
             if chunk <= 0 or lot.entry_idx >= day_i:
                 continue
-            if (fill_config is None or fill_config.fill_timing != "next_bar_open") and defer_sell_at_limit(px, limits):
+            if (fill_config is None or fill_config.fill_timing != "next_bar_open") and defer_sell_open_or_fill(px if open_px is None else open_px, px, limits):
                 st.stats["defer_sell_limit_down"] += 1
                 return sold
             filled = _side_sell(
@@ -279,7 +278,7 @@ def scale_out_exits(st, code, pos, px, day, day_i, limits, *, scale_step, scale_
     return sold
 
 
-def step_stop_exits(st, code, pos, px, day, day_i, limits, *, step_stop_pct, hm=None, fill_config=None, low=None):
+def step_stop_exits(st, code, pos, px, day, day_i, limits, *, step_stop_pct, hm=None, fill_config=None, low=None, open_px=None):
     """6.8：step lot 自带独立止损（相对自身买价 −step_stop_pct，触发只卖该 lot）。
 
     在组级退出评估之后逐分钟 close 调用；组已同分钟离场则 lots 已空、自然不触发。
@@ -301,7 +300,7 @@ def step_stop_exits(st, code, pos, px, day, day_i, limits, *, step_stop_pct, hm=
         if float(trigger_px) > line:
             continue
         fill_px = _side_price(fill_config, px, line=line, low=low)
-        if (fill_config is None or fill_config.fill_timing != "next_bar_open") and defer_sell_at_limit(fill_px, limits):
+        if (fill_config is None or fill_config.fill_timing != "next_bar_open") and defer_sell_open_or_fill(fill_px if open_px is None else open_px, fill_px, limits):
             st.stats["defer_sell_limit_down"] += 1
             continue
         filled = _side_sell(
@@ -758,8 +757,7 @@ def run_chronological_day(
                     continue
                 _, px, reason = event
                 if limits[1] > 0 and (
-                    defer_sell_at_limit(float(cursor.o[idx]), limits)
-                    or defer_sell_at_limit(px, limits)
+                    defer_sell_open_or_fill(float(cursor.o[idx]), px, limits)
                 ):
                     st.stats["defer_sell_limit_down"] += 1
                     continue

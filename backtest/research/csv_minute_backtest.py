@@ -62,7 +62,7 @@ from backtest.research.csv_ledger import (  # noqa: E402
 from backtest.research.ashare_exdiv_economics import EconomicLookup, ExDivEconomics  # noqa: E402
 
 from backtest.research.exdiv_map import k_for, load_exdiv_ratios, mapped_prev_close  # noqa: E402
-from backtest.research.ashare_session import defer_sell_at_limit, t1_sellable  # noqa: E402
+from backtest.research.ashare_session import defer_sell_open_or_fill, t1_sellable  # noqa: E402
 from backtest.research.csv_common import (  # noqa: E402
     DEFAULT_DAILY_QUOTA,
     STRATEGY4_CALENDAR_SLACK_DAYS,
@@ -920,7 +920,7 @@ def simulate(
                                     step_stop_exits(
                                         st, code, pos, float(c[bar_idx]), day, i,
                                         limits, step_stop_pct=hooks["step_stop_pct"],
-                                        fill_config=side_fill_config,
+                                        fill_config=side_fill_config, open_px=float(o[bar_idx]),
                                         low=(float(day_m["low"].iloc[bar_idx])
                                              if side_fill_config and side_fill_config.trigger_basis == "bar_low" else None),
                                         hm=int(at_hm),
@@ -930,7 +930,7 @@ def simulate(
                                         st, code, pos, float(c[bar_idx]), day, i,
                                         limits, scale_step=hooks["scale_out_step"],
                                         scale_frac=hooks.get("scale_out_frac", 0.05),
-                                        fill_config=side_fill_config,
+                                        fill_config=side_fill_config, open_px=float(o[bar_idx]),
                                         hm=int(at_hm),
                                     )
                                 if phase == "close" and hooks.get("peak_dd_exit"):
@@ -938,7 +938,7 @@ def simulate(
                                         st, code, pos, float(c[bar_idx]), day, i,
                                         limits,
                                         peak_dd_exit=hooks["peak_dd_exit"],
-                                        fill_config=side_fill_config,
+                                        fill_config=side_fill_config, open_px=float(o[bar_idx]),
                                         peak_dd_sessions=hooks.get("peak_dd_sessions", 15),
                                         hm=int(at_hm),
                                     )
@@ -998,8 +998,7 @@ def simulate(
                     if idx >= 0:
                         fill_open = float(o[idx])
                         if limit_down > 0 and (
-                            defer_sell_at_limit(fill_open, limits)
-                            or defer_sell_at_limit(float(px), limits)
+                            defer_sell_open_or_fill(fill_open, float(px), limits)
                         ):
                             st.stats["defer_sell_limit_down"] += 1
                             continue

@@ -62,14 +62,16 @@ retains the original predicates, including floating-point comparison order.
   minute wire registry are untouched.
 - A1 (2026-10-05): `step_stop`, `scale_out`, and `peak_dd_clear_exits`
   now consume FillConfig. None and the hook-derived stop default preserve
-  existing predicates, float order, metadata and event order. Step stops may
+  existing FillConfig defaults, float order, metadata and event order. The
+  adopted A1/B5 rule below adds the current-bar opening limit check. Step stops may
   trigger on bar low and fill at their lot line, last print, low or a positive
   specified price. Scale-out and peak drawdown still decide on last prints;
   this-bar low and line fills fail closed for those decisions.
 - Next-open side orders retain lot identity and decided scale-out quantities in
   `held_fill_states[held_fill_key(pos)]`, carrying across sessions. They use
   `:next_open` reasons and `minute_pending_next_open`, with only the existing
-  limit check on the execution open. There is no open+fill limit-pair rule.
+  limit check on the execution open (open equals fill). Same-bar side sells
+  use the shared open+fill pair adopted on 2026-10-05 16:08 CST.
   Closed lots are removed from carry by the ledger; repeated decisions cannot
   duplicate an outstanding lot order or count a scale step twice.
 
@@ -326,3 +328,36 @@ base `origin/master 3409347`):
 - Full suite (`-p no:cacheprovider -q -m "not production and not benchmark"`):
   **7755 passed, 5 skipped, 24 deselected, 29 warnings in 140.41s (0:02:20)**.
 - `git diff --stat origin/master -- tests/fixtures`: **empty**.
+
+### A1 limit-pair + B5 adoption (2026-10-05 16:08 CST)
+
+`ashare_session.defer_sell_open_or_fill(open_px, fill_px, limits)` calls the
+existing `defer_sell_at_limit` for each quote, sharing its single eps. A same-bar
+sell is deferred if OPEN or fill reaches limit-down. This applies to 6.x
+step-stop, scale-out and peak drawdown side sells and version9_2 touch stops
+(minute cursor fill; daily stop-line fill). Production side-sell calls pass
+`o[bar_idx]`. Existing isolated callers without OHLC may omit `open_px`,
+which uses fill for both quotes. Main held exits use the same helper while
+retaining the independent pending branch’s fill-only semantics.
+
+Queued side orders check only their execution open, which equals fill.
+version9_2 retains turtle reason/quantity, increments `defer_sell_limit_down`
+and `limit_down_pending`, and sets retry day to the next trading-day index.
+Later bars that day cannot retry; the next day retries at open through the
+existing T+1, volume and residual path. Gap fills already have open == fill.
+Other plans and version9_1 retain their behavior.
+Final A1/B5 verification on Python `/tmp/mq-v6/bin/python`, pandas 3.0.6:
+
+- `-p no:cacheprovider -q tests/test_limit_pair_b5.py tests/test_off_byte_baseline.py`:
+  **208 passed, 0 failed**, 4.60 s (31 new pair tests, 177 off-byte tests).
+- Direct `origin/master` (`02036df`) versus worktree `run_case` comparison:
+  **85 unique daily/minute cases unchanged**, including all V6F and V92 cases;
+  BUY/SELL rows and complete equity curves identical. No fixture added or
+  modified; V6F v11 and the existing V92 revision remain active.
+- Direct synthetic old/new executions: step-stop **1→0**, scale-out **2→0**,
+  peak-clear **2→0**, version9_2 touch **1→0** SELL rows when open is at the
+  floor and fill is above it. Each new execution increments the defer count
+  once; the turtle touch also increments `limit_down_pending` once.
+- Full suite (`-p no:cacheprovider -q -m "not production and not benchmark"`):
+  **7786 passed, 5 skipped, 24 deselected, 0 failed**, 29 warnings,
+  204.67 s (0:03:24).
