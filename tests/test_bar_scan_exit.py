@@ -96,12 +96,9 @@ def test_rejects_bad_stop_and_broken_bar():
 
 def test_module_is_not_an_order_system():
     import backtest.research.bar_scan_exit as mod
-    import sys
-
     text = Path(mod.__file__).read_text(encoding="utf-8")
-    for banned in ("SubmitOrder", "order_type", "EventBus", "Fees", "write_lake", "4090"):
+    for banned in ("SubmitOrder", "order_type", "EventBus", "Fees", "write_lake", "4090", "minute_orders_backend"):
         assert banned not in text
-    assert not any("minute_orders_backend" in name for name in sys.modules)
     assert Path("backtest/research/csv_minute_backtest.py").is_file()
 
 def test_explicit_same_bar_matches_default():

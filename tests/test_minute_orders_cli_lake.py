@@ -17,7 +17,7 @@ from tests.test_minute_orders_source_loader import SyntheticCase
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts/research/run_minute_orders_research.py"
 # Knife base tip (#310 MERGED). Empty-diff guard for MatchCore/Fees/simulate/loader.
-KNIFE_BASE = "6c8178ad8f3f987da6075a4fa69250a2f7855744"
+KNIFE_BASE = "501de569d5d46eca2c1766988231a2dbaac3849d"
 CORE = {
     ROOT / "backtest" / "research" / "minute_orders_backend" / "match.py",
     ROOT / "backtest" / "research" / "minute_orders_backend" / "fees.py",

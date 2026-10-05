@@ -43,7 +43,7 @@ CORE = {
     ROOT / "backtest" / "research" / "run_protocol" / "views.py",
 }
 # Knife base tip for empty-diff guard (PR #314 base = #313 MERGED).
-KNIFE_BASE = "fcf3f6f364817fd06a04fb6c40697d0041e37352"
+KNIFE_BASE = "501de569d5d46eca2c1766988231a2dbaac3849d"
 
 
 def launch(cwd, argv=None, *, timeout=30):

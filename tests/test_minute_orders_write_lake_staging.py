@@ -206,7 +206,7 @@ def test_core_files_untouched_in_this_branch():
     import subprocess as sp
 
     diff = sp.run(
-        ["git", "diff", "--name-only", "master...HEAD"],
+        ["git", "diff", "--name-only", "origin/master...HEAD"],
         cwd=ROOT,
         capture_output=True,
         text=True,

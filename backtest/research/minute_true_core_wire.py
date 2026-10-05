@@ -46,6 +46,28 @@ from backtest.research.strategy3_rules import take_profit_reason as v3_take
 from backtest.research.strategy5_rules import take_profit_reason as v5_take
 from backtest.research.strategy6_1_rules import STOP_PCT as V6_1_STOP
 from backtest.research.strategy6_1_rules import take_profit_reason as v6_1_take
+from backtest.research.strategy6_2_rules import STOP_PCT as V6_2_STOP
+from backtest.research.strategy6_2_rules import take_profit_reason as v6_2_take
+from backtest.research.strategy6_3_rules import STOP_PCT as V6_3_STOP
+from backtest.research.strategy6_3_rules import take_profit_reason as v6_3_take
+from backtest.research.strategy6_4_rules import STOP_PCT as V6_4_STOP
+from backtest.research.strategy6_4_rules import take_profit_reason as v6_4_take
+from backtest.research.strategy6_5_rules import STOP_PCT as V6_5_STOP
+from backtest.research.strategy6_5_rules import take_profit_reason as v6_5_take
+from backtest.research.strategy6_6_rules import STOP_PCT as V6_6_STOP
+from backtest.research.strategy6_6_rules import take_profit_reason as v6_6_take
+from backtest.research.strategy6_7_rules import STOP_PCT as V6_7_STOP
+from backtest.research.strategy6_7_rules import take_profit_reason as v6_7_take
+from backtest.research.strategy6_8_rules import STOP_PCT as V6_8_STOP
+from backtest.research.strategy6_8_rules import take_profit_reason as v6_8_take
+from backtest.research.strategy6_9_rules import STOP_PCT as V6_9_STOP
+from backtest.research.strategy6_9_rules import take_profit_reason as v6_9_take
+from backtest.research.strategy6_10_rules import STOP_PCT as V6_10_STOP
+from backtest.research.strategy6_10_rules import take_profit_reason as v6_10_take
+from backtest.research.strategy6_11_rules import STOP_PCT as V6_11_STOP
+from backtest.research.strategy6_11_rules import take_profit_reason as v6_11_take
+from backtest.research.strategy6_12_rules import STOP_PCT as V6_12_STOP
+from backtest.research.strategy6_12_rules import take_profit_reason as v6_12_take
 from backtest.research.strategy6_rules import STOP_PCT as V6_STOP
 from backtest.research.strategy6_rules import take_profit_reason as v6_take
 from backtest.research.strategy7_rules import (
@@ -70,7 +92,7 @@ from backtest.research.strategy8_6_rules import STOP_PCT as V8_6_STOP
 from backtest.research.strategy8_6_rules import take_profit_reason as v8_6_take
 from backtest.research.strategy8_rules import STOP_PCT as V8_STOP
 from backtest.research.strategy8_rules import take_profit_reason as v8_take
-from backtest.research.strategy9_rules import stop_mean_true_range_distance, protective_line
+from backtest.research.strategy9_rules import stop_range_amplitude
 from backtest.research.strategy9_rules import take_profit_reason as v9_take
 from backtest.research.strategy10_rules import STOP_PCT as V10_STOP
 from backtest.research.strategy_topk_dropout_rules import STOP_PCT as TOPK_STOP
@@ -126,6 +148,17 @@ _PERCENT_STOP: dict[str, float] = {
     "version3": float(V3_STOP),
     "version6": float(V6_STOP),
     "version6_1": float(V6_1_STOP),
+    "version6_2": float(V6_2_STOP),
+    "version6_3": float(V6_3_STOP),
+    "version6_4": float(V6_4_STOP),
+    "version6_5": float(V6_5_STOP),
+    "version6_6": float(V6_6_STOP),
+    "version6_7": float(V6_7_STOP),
+    "version6_8": float(V6_8_STOP),
+    "version6_9": float(V6_9_STOP),
+    "version6_10": float(V6_10_STOP),
+    "version6_11": float(V6_11_STOP),
+    "version6_12": float(V6_12_STOP),
     "version8": float(V8_STOP),
     "version8_1": float(V8_1_STOP),
     "version8_2": float(V8_2_STOP),
@@ -152,6 +185,17 @@ _BOOK_TAKE = {
     "version5": v5_take,
     "version6": v6_take,
     "version6_1": v6_1_take,
+    "version6_2": v6_2_take,
+    "version6_3": v6_3_take,
+    "version6_4": v6_4_take,
+    "version6_5": v6_5_take,
+    "version6_6": v6_6_take,
+    "version6_7": v6_7_take,
+    "version6_8": v6_8_take,
+    "version6_9": v6_9_take,
+    "version6_10": v6_10_take,
+    "version6_11": v6_11_take,
+    "version6_12": v6_12_take,
     "version8": v8_take,
     "version8_1": v8_1_take,
     "version8_2": v8_2_take,
@@ -332,26 +376,26 @@ def _version9_range_stop(
     *,
     cost: float,
     peak: float,
-    distance: float,
+    ratio: float,
     timing: FillTiming,
     price: FillPrice,
     next_bar: OhlcBar | None,
 ) -> BarScanExit | None:
-    """Apply the higher of today's range stop and the fixed cost stop.
+    """Apply today's trailing range stop. None means the bar did not hit it.
 
-    ``distance`` is twice the prior 20 true ranges' simple mean in yuan.
-    Use the passed pre-bar peak to arm and price the line; day T is excluded.
+    ``ratio`` is already (max high - min low) / prior close, excluding day T.
+    A ratio outside (0, 1) is kept: the trigger is still cost * (1 - ratio).
     """
     opening, high, low, close = _ohlc(bar, "bar")
     new_peak = high if high > peak else peak
-    trigger, kind = protective_line(float(cost), float(peak), float(distance))
+    trigger = float(cost) * (1.0 - float(ratio))
     if opening <= trigger:
-        result = BarScanExit("fill", opening, ("trail:atr" if kind == "trail" else "stop_loss:gap_open"), new_peak)
+        result = BarScanExit("fill", opening, "stop_loss:gap_open", new_peak)
     elif low <= trigger:
         if price == "close" and timing == "same_bar":
-            result = BarScanExit("fill", close, ("trail:atr" if kind == "trail" else "stop_loss:touch:bar_close"), new_peak)
+            result = BarScanExit("fill", close, "stop_loss:touch:bar_close", new_peak)
         else:
-            result = BarScanExit("fill", trigger, ("trail:atr" if kind == "trail" else "stop_loss:touch"), new_peak)
+            result = BarScanExit("fill", trigger, "stop_loss:touch", new_peak)
     else:
         return None
     return apply_fill_timing(result, timing=timing, next_bar=next_bar)
@@ -425,10 +469,10 @@ def invoke_minute_strategy(
     if key == "version9" and daily_bars is not None:
         if as_of is None:
             raise ValueError("version9 range stop requires as_of")
-        distance = stop_mean_true_range_distance(daily_bars, as_of)
-        if distance is not None:
+        ratio = stop_range_amplitude(daily_bars, as_of)
+        if ratio is not None:
             stopped = _version9_range_stop(
-                bar, cost=cost_f, peak=peak_f, distance=float(distance),
+                bar, cost=cost_f, peak=peak_f, ratio=float(ratio),
                 timing=timing, price=price, next_bar=next_bar,
             )
             if stopped is not None:
