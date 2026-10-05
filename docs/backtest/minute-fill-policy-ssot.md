@@ -1,5 +1,17 @@
 # 分钟成交假设 SSOT（S0，2026-09-28）
 
+## 2026-10-05 限定增补：允许第 2 步 2a
+
+依据用户 2026-10-05 11:05 CST 三步决定及本次 A/B 锁文档修订指令，本页旧锁仅在以下范围增加 **2a 授权**；旧正文保留为历史，其余锁不变。第 1 步已随 PR #364 合入 `d007213e`，共享的是整个 `minute_held_scan_core.py::HeldMinuteCursor`；`csv_minute_backtest.py::scan_held_day_python` 驱动该游标，`minute_cash_order.py` 导入同一核心（代码在只读 `/workspace/wt-step2a` 的该提交核对）。
+
+- 允许 fill timing / fill price 配置在 **HeldMinuteCursor 内**解释，采用区分时机 / 报价的新配置名称，不用含糊的 `close` 总名；新配置名约定为 `fill_timing_policy` / `fill_price_policy`（2a 待实现名称），不声明已有新 CLI。每书默认复现当前行为：共享分钟默认仍为收盘触发 / 收盘成交；hl / absolute_exit 仍为 low 触发 / 线价成交，既有跳空 open 及相位顺序保留。`simulate` 对 absolute_exit 在独立仓与普通扫描调用中强制传 hl，不能被共享 close 默认覆盖（证据：`csv_minute_backtest.py::simulate`；`HeldMinuteCursor.advance/_close`）。
+- 现有 off-byte 基线逐字节一致，不重录、不加 skip，不以最终 NAV 代替完整产物验收（合同：`tests/test_off_byte_baseline.py`）。numba 对非默认配置必须拒绝并抛错，不得静默按旧配置执行；不实现 numba 非 close 路径（现有分流：`csv_minute_backtest.py::scan_held_day`）。
+- 禁止按本根 high 成交、收盘判定却按本根 open 成交等前视组合。next-bar 须明确当日末根无后续 bar 不成交 / 不跨日、下一根跌停须过原限价门、14:55 清仓仅可在当日后续合格 bar 成交、15:00 / 末根不回填或跨日；不得改变原默认（现状核对点：`HeldMinuteCursor.advance/_close` 的清仓相位；`csv_minute_backtest.py::simulate` 的限价与记账）。
+- 2a 排除日线引擎、v7、`strategy9_2_engine`、version12 的 `strategy12_engine.run_minute_day`、numba 非 close 路径；不放宽 MatchCore / Fees / VolumeCap、数据、现金、默认输出或其他既有锁（入口核对点：`csv_minute_backtest.py::simulate/scan_held_day` 及各独立引擎）。
+
+**2b 未开始，仍需用户逐项决定。** 每一项改变行为的统一各自裁定、各自 golden 重录；不得借 2a 改默认或覆盖旧基线。当前顺序与完整勘误见 [分钟扫描现状更新](note-minute-scan-status-2026-10-05.md)。
+
+
 ## 1. 状态与范围
 
 **S0 docs-only 已获 Human「批 S0，开干」；仅发布成交假设总表、指针与旧文档勘误。** 核查基线为 `fad804a99f36e084f57f98bf57d2cf7a462e1522`（`fad804a`，G7 #237）。合同来源为评审交接 `PLAN_MINUTE_FILL_POLICY_INFRA.md` §1、§4–§6；Kimi 计划评审及 R1+R2 共识均为 APPROVE，本表纳入 `R2_CONSENSUS.md` §Nits。计划浏览副本不入本 PR，不作为本表链接依赖。

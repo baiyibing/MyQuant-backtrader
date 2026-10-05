@@ -5,11 +5,37 @@
 | 日期 | 2026-10-05（Asia/Shanghai） |
 | 基线 | `master` `386d1dc4e8443a0558127e81dfe8be3bac6abe70`（Merge PR #363） |
 | 性质 | 现状分析。汇总当日人机会话与四席两轮只读评审 |
-| 授权 | **无。** 本文不批准改 `simulate`、不批准合并扫描、不批准改默认成交、不批准开新策略版本 |
+| 授权（历史，已 superseded） | **无。** 本文不批准改 `simulate`、不批准合并扫描、不批准改默认成交、不批准开新策略版本 |
 
-后续 agent 若要动代码，先读本文第 8 节。缺单独的人裁 GO 时，停在文档。
+上述授权栏为 `386d1dc4` 时的历史记录，已被下述 11:05 人裁覆盖；后续 agent 先读勘误与第 7 节，再按第 8 节核对证据。
 
 ---
+
+## 勘误 / 2026-10-05 更新
+
+本文原基线 `386d1dc4` 的分析与评审保留为历史。用户 **2026-10-05 11:05 CST** 裁定：一台共享分钟引擎 `csv_minute_backtest.simulate`；第 1 步共享核心；第 2 步把行业惯例与 fill 配置放进核心，各书默认复现现状；第 3 步在测试迁移后退役 `bar_scan_exit` / `minute_true_core_wire` / host round-trip。授权来源为本次用户修订指令；讨论记录见 `/tmp/bs365/summary.md`、`/tmp/bs365/r2_codex.md`、`/tmp/bs365/r2_cursor.md`。文首「授权：无」及 §4、§6.3、§7 的四席否决 / 未批准 / 永久冻结口径均 **superseded（已被此次人裁覆盖）**，不能作为当前停工依据。
+
+**第 1 步已完成。** PR #364 于 **2026-10-05 11:28 CST** 合并为 `d007213e`（以 `git show d007213e` 的 merge 信息与 CommitDate 为证）。本节代码事实在只读 `/workspace/wt-step2a` 的该提交核对：共享的是整个 `HeldMinuteCursor`，移至 `backtest/research/minute_held_scan_core.py`，`minute_cash_order.py` 导入它；`csv_minute_backtest.scan_held_day_python` 创建同一游标，逐 bar 按 open / close 驱动 `advance`，不是只抽出几个谓词。numba `_scan_held_day_numba_trail` 通过 `numba.extending.register_jitable` 共用谓词，注册返回值在 `@njit` 前重绑定；限价容差来自 `ashare_session.LIMIT_EPS`，峰值间隔谓词来自 `csv_ledger.peak_gap_blocks`（证据：上述文件的导入、`scan_held_day_python`、`_scan_held_day_numba_trail` 与注册块）。本分支仍基于旧 master；本次只修文档，不搬代码。
+
+**默认不是所有书都 close。** `csv_minute_backtest.simulate` 绑定 `absolute_exit` 后，独立仓游标和普通 `scan_held_day` 调用都传 `minute_stop_trigger="hl" if absolute_exit else minute_stop_trigger`，并提供 low；普通路径另以绝对退出线 / 成本算 `stop_range_ratio`。`HeldMinuteCursor._close` 在 hl 域以 low≤line 触发、按 line 报价；跳空仍按既有 open 路径。因此 2a 必须保留 absolute_exit 的 low 触发，不能用共享 close 默认覆盖它（证据：`csv_minute_backtest.py::simulate`；`minute_held_scan_core.py::HeldMinuteCursor.__post_init__/_close/advance`）。
+
+「只有 simulate 算 NAV」须限定为共享入口：`csv_minute_backtest_v7.py::simulate_v7` 也按现金 + 持仓（有显式 economics 时加应收）计算权益并写 `state.equity_curve`。一台共享引擎的目标不把 v7 收进本次 2a，也不抹去其独立账本（证据：`simulate_v7` 日末 equity 计算；§2 的 host 调用关系）。
+
+### 第 2 步拆为 2a / 2b
+
+**2a 是机制与现状显式化。** fill timing / fill price 配置只在 `minute_held_scan_core.py::HeldMinuteCursor` 内解释；使用区分时机与报价的新配置名称，不用含糊的单词 `close` 作配置总名，也不把 bar_scan 的 `FillTiming` / `FillPrice` 直接当核心接口。新配置名约定为 `fill_timing_policy` / `fill_price_policy`（2a 待实现名称，不声明已有 API / CLI）；取值须明确时机与报价，不能只写 `close`。逐书默认复现当前行为：共享分钟默认收盘触发 / 本根收盘成交，hl / absolute_exit 保留 low 触发 / 线价成交及既有跳空 open、顺序、拒绝与记账行为（现状证据：`csv_minute_backtest.py::simulate/scan_held_day`；`HeldMinuteCursor.advance/_close`）。
+
+2a 验收与限制：
+
+- 现有 off-byte 基线必须逐字节一致，不重录、不新增 skip；不能只对最终 NAV（基线合同：`tests/test_off_byte_baseline.py`）。
+- 非默认配置不得静默走 numba：请求 numba 且配置非默认时必须抛错；本票不实现 numba 非 close 路径（现有分流证据：`csv_minute_backtest.py::scan_held_day` 的 `can_offload`）。
+- 禁止前视组合：按本根 high 成交、收盘判定却按本根 open 成交。触发信息可得时点与成交相位须分开；现有相位证据为 `HeldMinuteCursor.advance/_close`，不据此把新报价合法化。
+- next-bar 边界须在 2a 实现与测试中明确：当日末根无 next bar 时不成交、不跨日携带；下一根跌停不得直接按 open 强行成交，须过原方向限价门；14:55 清仓若配置次根成交，只能在当日存在的后续合格 bar 执行，15:00 / 当日末根清仓不得回填本根或跨日。不得借这些非默认边界改变既有清仓默认；改变默认 / 结果的提案归 2b（现状边界核对点：`HeldMinuteCursor.advance/_close` 的 `force_sell_hm` / `close_clear`；`csv_minute_backtest.py::simulate` 的限价与成交记账）。
+- 明确排除日线引擎、v7、`strategy9_2_engine`、version12 的 `strategy12_engine.run_minute_day`、numba 非 close 路径；不得扩为多引擎合并（路径证据：§5 实现表及 `csv_minute_backtest.py::simulate/scan_held_day` 分派）。
+
+**2b 未开始。** 行业惯例只提供待裁选项；每一处改变行为的统一都须用户逐项决定、各自 golden 重录，不覆盖 2a 的旧基线。包括触发域统一、跳空报价、默认本根→次根、拒单后继续扫描与现金释放顺序等，均不得从 2a 的机制授权推导为默认翻转（差异核对点：`HeldMinuteCursor.advance/_exit/_close` 与 `bar_scan_exit.py::apply_fill_timing`）。
+
+三个 `close` 必须分开：`minute_stop_trigger=close` 是共享分钟止损判定域；bar_scan `FillPrice="close"` 是 `same_bar` 触价止损改按本根收盘报价；CLI `--stop-fill close` 是日线日终成交，分钟 `simulate` 拒绝。它们不能互换，也不能用新配置名称遮住差异（证据：`csv_minute_backtest.py::simulate`；`bar_scan_exit.py::scan_bar_exit`；`csv_daily_backtest.py::simulate`；原 §3.2、§6.3）。
 
 ## 1. 人要解决的问题
 
@@ -95,11 +121,11 @@ Host 文件头是 “Read-only minute host”。`main()` 拒绝 `--cost` / `--pe
 | 扫线多出来的是可配的开高低收或指定价，并入主引擎后 version1 自动用上 | 说大了 | `FillPrice` 只有 `stop\|close`。生产分钟默认是 `minute_stop_trigger=close`。扫线默认是跳空按开盘、low 触及按止损价，对应另选的 `hl`。`--stop-fill close` 在分钟路径被拒绝（日线日终专用） |
 | 「33 书 + off-byte 全绿」在 `386d1dc4` 上还没核、CI 还没出来 | 已过时 | 同上，`python-tests` 已成功。本文没有在本机重跑 off-byte |
 
-第二轮对「把 timing/price 收成主引擎全局配置，退役扫线，version1 自动用上」：四席 **REJECT**。
+第二轮对「把 timing/price 收成主引擎全局配置，退役扫线，version1 自动用上」：四席 **REJECT**。**此历史票已 superseded，当前按文首 11:05 人裁及 2a / 2b 边界执行。**
 
 ---
 
-## 5. 分钟卖出扫描现在有几份
+## 5. 分钟卖出扫描现在有几份（386d1dc4 历史；当前见勘误）
 
 「三份」不是仓库里的锁定术语。和「收成同一份」相关的是下面这些，不要和扫线混在一个合并里。
 
@@ -125,7 +151,7 @@ Host 文件头是 “Read-only minute host”。`main()` 拒绝 `--cost` / `--pe
 
 ---
 
-## 6. 收成同一份扫描：必要、可行、和全局配置的关系
+## 6. 收成同一份扫描：必要、可行、和全局配置的关系（历史评审）
 
 ### 6.1 有没有必要
 
@@ -159,11 +185,24 @@ numba、日线、version7、strategy9_2、strategy12 不要放进这次「同一
 
 配置若以后要做，只能是默认关闭的开关，并且不要把 `FillTiming` / `FillPrice` 当作扫描核心的接口。分钟路径拒绝 `--stop-fill close`，那个开关和扫线的 `price=close` 不是同一个词。version1 的生产路径不读这两个枚举，统一扫描不会让它自动用上扫线。
 
-四席对「并进全局配置后退役扫线」的一致意见是拒绝。扫线留下，身份是探针和分类栅栏。
+四席对「并进全局配置后退役扫线」的一致意见是拒绝。扫线留下，身份是探针和分类栅栏。**此否决及保留口径已 superseded；第 3 步在测试迁移后退役，见勘误与 §7。**
 
 ---
 
-## 7. 建议的下一步（未批准）
+## 7. 建议的下一步（2026-10-05 修订）
+
+当前顺序依据文首所列用户 11:05 人裁与本次 A/B 修订指令：
+
+1. **A/B 文档修订。** 本文勘误，并同步 H-U4、S2-B、成交假设 SSOT 的 2026-10-05 限定增补；只修文档。
+2. **2a。** 在共享 `HeldMinuteCursor` 内解释时机 / 报价配置，逐书默认复现现状，按文首限制验收；不重录 off-byte。
+3. **2b 待裁清单。** 列出每个改变行为的统一项，用户逐项决定，每项各自 golden；目前未开始。
+4. **第 3 步。** 先把扫线 / wire / host round-trip 的等价与栅栏测试迁移到共享核心及新配置，再退役 `bar_scan_exit`、`minute_true_core_wire` 和 host round-trip；不提前删除测试覆盖（迁移核对点：`tests/` 的相关模块引用；`minute_bar_scan_host.py::scan_version1_round_trip/run_round_trip`）。
+
+### 原 §7（历史保留，整节 superseded）
+
+以下原建议不再是当前授权 / 顺序；其中四席否决、未批准、扫线冻结与可配另票口径均由上文替代。
+
+
 
 供其他 agent 讨论。人还没有对下面任何一条说「批准实施」。
 
