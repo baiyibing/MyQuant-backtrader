@@ -8,3 +8,6 @@ tests/fixtures/*.json text eol=lf
 # it is byte-pinned to the 4090 host copies (mixed CRLF/LF as produced there).
 # Store and check out as-is: no eol conversion anywhere.
 docs/backtest/b-l2-01-evidence-2026-09-30/** -text
+
+.githooks/* text eol=lf
+scripts/install-git-hooks.sh text eol=lf
