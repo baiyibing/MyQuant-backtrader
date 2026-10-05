@@ -2,7 +2,7 @@
 
 B1/B2: stop basis and take-profit come from the registry hooks and shared
 HeldMinuteCursor, not hand-copied rule tables. Synthetic arrays require no lake.
-The wire, bar_scan_exit and their tests remain until the final removal PR.
+The probe modules are retired; registry hooks and cursor tests retain coverage.
 """
 
 import math

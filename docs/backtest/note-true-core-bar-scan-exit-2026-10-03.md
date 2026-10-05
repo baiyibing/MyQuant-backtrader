@@ -1,5 +1,7 @@
 # 当根 K 扫持仓 · 成交或跳过（2026-10-03）
 
+**RETIRED (2026-10-05, step 3):** Bar-scan / true-core-wire / host round-trip probes removed; production fills use `csv_minute_backtest.simulate` / `HeldMinuteCursor` / `FillConfig`, classification uses registry `minute_classification` (#384). History retained below.
+
 这是研究路径上的**一根 K、一个持仓**成交规则，不是交易系统。
 
 | 字段 | 值 |

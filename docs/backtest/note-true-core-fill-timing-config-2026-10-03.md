@@ -1,5 +1,7 @@
 # 成交时点可配 · same_bar / next_bar（2026-10-03）
 
+**RETIRED (2026-10-05, step 3):** Bar-scan / true-core-wire / host round-trip probes removed; production fills use `csv_minute_backtest.simulate` / `HeldMinuteCursor` / `FillConfig`, classification uses registry `minute_classification` (#384). History retained below.
+
 研究路径纯函数 `scan_bar_exit` 上的一个开关。不是挂单簿，不是交易系统。
 
 | 字段 | 值 |

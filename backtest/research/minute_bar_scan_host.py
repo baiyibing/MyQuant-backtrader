@@ -1,4 +1,6 @@
-"""Read-only minute host for registered CSV books and standalone v7-based runners."""
+"""Read-only minute host: load bars and call csv_minute_backtest.simulate,
+v7 or topk_app runners. The bar-scan / true-core-wire probe path is retired.
+"""
 
 from __future__ import annotations
 
@@ -7,7 +9,7 @@ import math
 import os
 import sys
 from bisect import bisect_left, bisect_right
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Sequence
 from contextlib import redirect_stdout
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -16,31 +18,17 @@ from pathlib import Path
 import pandas as pd
 
 from backtest.research.ashare_bars import _in_session, load_daily_ohlc
-from backtest.research.ashare_session import t1_sellable
-from backtest.research import strategy4_rules
-from backtest.research.ma_infra import sma_asof
-from backtest.research.bar_scan_exit import (
-    BarScanExit, FillPrice, FillTiming, HeldPosition, OhlcBar, apply_fill_timing, scan_bar_exit,
-)
 from backtest.research import csv_minute_backtest
 from backtest.research.csv_strategy_books import csv_strategy_names
-from backtest.research.csv_minute_backtest import BUY_HM, _buy_px
 from backtest.research.csv_pool import load_pool_day_map
 from backtest.research.csv_common import DEFAULT_DAILY_QUOTA, STRATEGY4_CALENDAR_SLACK_DAYS
 from backtest.research.csv_daily_loader import warmup_start
-from backtest.research.ashare_fees import COMMISSION, trade_commission
-from backtest.research.minute_true_core_wire import (
-    invoke_minute_strategy, wired_names, _DRAWDOWN,
-    MinuteStrategyNotOnBarScan, minute_strategy_entries,
-)
 from backtest.research.qlib_bin_1min import (
     load_qlib_1min_calendar,
     qlib_inst_dir,
     read_qlib_bin,
 )
-from backtest.research.topk_dropout_rules import decide_topk_dropout
-from backtest.research.topk_dropout_scores import load_scores_from_args, require_day_scores
-from backtest.research.topk_score_exit_rules import decide_topk_score_exit
+from backtest.research.topk_dropout_scores import load_scores_from_args
 from oskh_data.symbol_format import is_canonical_symbol, to_canonical_symbol, to_partition_key
 
 SOURCES = ("qlib_1min", "lake")
@@ -49,10 +37,11 @@ UNIVERSE_BOOKS = ("topk_dropout", "topk_score_exit")
 
 
 @dataclass(frozen=True, slots=True)
-class ScanSummary:
-    bars: int
-    fills: int
-    skips: int
+class OhlcBar:
+    open: float
+    high: float
+    low: float
+    close: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,306 +52,6 @@ class RoundTripSummary:
     skips: int
     equity: float
     return_pct: float
-
-
-def scan_version1_round_trip(frame, *, symbol: str, pool_days: Mapping,
-                             cash: float = 100000.0,
-                             daily_quota: float = DEFAULT_DAILY_QUOTA,
-                             timing: FillTiming = "same_bar",
-                             price: FillPrice = "stop",
-                             strategy: str = "version1", daily_frame=None) -> RoundTripSummary:
-    """Flat-start, bar-scan accounting with the CSV version1 fee and lot sizer.
-
-    Buys require pool membership, plus version4's SMA10 gate when selected.
-    Only a later calendar day can close bought shares.
-    A sold name may re-enter at a later eligible buy bar, including the same day.
-    Whole-lot buys include commission in the allocated budget; if even one
-    lot is unaffordable, raise before any fill or cash mutation.
-    Skips count bars with neither a buy nor a sell.
-    """
-    if strategy not in ("version1", "version2", "version3", "version4", "version5", "version6"):
-        raise ValueError("round trip requires version1, version2, version3, version4, version5 or version6")
-    if not math.isfinite(cash) or cash <= 0:
-        raise ValueError("cash must be finite and > 0")
-    if isinstance(daily_quota, bool) or not math.isfinite(daily_quota) or daily_quota <= 0:
-        raise ValueError("daily_quota must be finite and > 0")
-    if frame.empty:
-        raise ValueError("bars must not be empty")
-    code = _symbol(symbol)
-    bars = _frame_bars(frame, code, Path("host-frame"))
-    initial_cash = cash
-    held_shares = buys = sells = 0
-    cost = peak = 0.0
-    buy_day = None
-    buy_session = None
-    book = _version1_book()
-    day_closes = []
-    factors_by_day = {}
-    if strategy == "version4":
-        # adj_factor resolves the daily lake at import, so keep it path-local.
-        from oskh_data.adj_factor import build_for_symbol
-
-        adjusted_daily = build_for_symbol(to_partition_key(code)).sort_values("date")
-        day_closes = [(_as_date(row.date), float(row.close_front))
-                      for row in adjusted_daily.itertuples()]
-        factors_by_day = {_as_date(row.date): float(row.cumulative_adj_factor)
-                          for row in adjusted_daily.itertuples()}
-    offset = 0
-    for session, (day, day_frame) in enumerate(frame.groupby("date", sort=False)):
-        day = _as_date(day)
-        prior_closes = [close for close_day, close in day_closes if close_day < day]
-        buy_index = None
-        members = pool_days.get(day, [])
-        if code in members:
-            px = _buy_px(day_frame)
-            if px is not None:
-                if not math.isfinite(px) or px <= 0:
-                    raise ValueError("buy price must be finite and > 0")
-                exact = day_frame["hm"] == BUY_HM
-                eligible = (day_frame["hm"] >= 14 * 60 + 30) & (day_frame["hm"] <= BUY_HM)
-                positions = [i for i, flag in enumerate(exact if exact.any() else eligible) if flag]
-                buy_index = positions[0] if exact.any() else positions[-1]
-        for index in range(len(day_frame)):
-            bar = bars[offset + index]
-            if not held_shares and index == buy_index:
-                if strategy == "version4":
-                    factor = factors_by_day.get(day)
-                    if factor is None or not math.isfinite(factor) or factor <= 0:
-                        raise ValueError(f"missing cumulative_adj_factor for {code} on {day}")
-                    live_closes = prior_closes + [bar.close * factor]
-                    if not strategy4_rules.buy_gate(code, px * factor, day, live_closes):
-                        continue
-                # run_pool_buys_day allocates current cash across the day pool.
-                per = min(daily_quota, cash) / len(members)
-                # Whole hundreds, with no supplementary 100-share top-up.
-                shares = int(per / px / 100.0) * 100
-                while shares > 100:
-                    notional = shares * px
-                    if notional + trade_commission(notional, COMMISSION) <= per:
-                        break
-                    shares -= 100
-                # Price one lot for the existing insufficient-budget error.
-                notional = max(shares, 100) * px
-                debit = notional + trade_commission(notional, COMMISSION)
-                if shares == 0 or debit > cash or debit > per:
-                    raise RuntimeError(
-                        f"Insufficient buy budget: symbol={code} needed={debit:.8f} "
-                        f"budget={per:.8f} cash={cash:.8f}"
-                    )
-                if shares > 0:
-                    cash -= debit
-                    held_shares = shares
-                    buy_day = day
-                    buy_session = session
-                    cost = peak = px
-                    buys += 1
-                    continue
-            if held_shares:
-                if strategy == "version2":
-                    if not t1_sellable(buy_day, day):
-                        peak = bar.high if bar.high > peak else peak
-                        continue
-                    result = invoke_minute_strategy(
-                        "version2", bar, cost=cost, peak=peak,
-                        n_days=session - buy_session, timing=timing, price=price,
-                        **({"next_bar": bars[offset + index + 1]}
-                           if timing == "next_bar" and offset + index + 1 < len(bars) else {}),
-                    )
-                elif strategy == "version3":
-                    if not t1_sellable(buy_day, day):
-                        peak = bar.high if bar.high > peak else peak
-                        continue
-                    result = invoke_minute_strategy(
-                        "version3", bar, cost=cost, peak=peak,
-                        n_days=session - buy_session, timing=timing, price=price,
-                        **({"next_bar": bars[offset + index + 1]}
-                           if timing == "next_bar" and offset + index + 1 < len(bars) else {}),
-                    )
-                elif strategy == "version4":
-                    if not t1_sellable(buy_day, day):
-                        peak = bar.high if bar.high > peak else peak
-                        continue
-                    factor = factors_by_day.get(day)
-                    if factor is None or not math.isfinite(factor) or factor <= 0:
-                        raise ValueError(f"missing cumulative_adj_factor for {code} on {day}")
-                    adjusted_close = bar.close * factor
-                    level = sma_asof(prior_closes + [adjusted_close], strategy4_rules.MA_SELL)
-                    peak = bar.high if bar.high > peak else peak
-                    if level is None:
-                        continue
-                    result = apply_fill_timing(
-                        BarScanExit("fill", bar.close, "ma_signal:MA5", peak)
-                        if adjusted_close < level else BarScanExit("skip", None, "", peak),
-                        timing=timing,
-                        **({"next_bar": bars[offset + index + 1]}
-                           if timing == "next_bar" and offset + index + 1 < len(bars) else {}),
-                    )
-                elif strategy == "version5":
-                    if not t1_sellable(buy_day, day):
-                        peak = bar.high if bar.high > peak else peak
-                        continue
-                    result = invoke_minute_strategy(
-                        "version5", bar, cost=cost, peak=peak,
-                        n_days=session - buy_session, timing=timing, price=price,
-                        **({"next_bar": bars[offset + index + 1]}
-                           if timing == "next_bar" and offset + index + 1 < len(bars) else {}),
-                    )
-                elif strategy == "version6":
-                    if not t1_sellable(buy_day, day):
-                        peak = bar.high if bar.high > peak else peak
-                        continue
-                    result = invoke_minute_strategy(
-                        "version6", bar, cost=cost, peak=peak,
-                        n_days=session - buy_session, timing=timing, price=price,
-                        **({"next_bar": bars[offset + index + 1]}
-                           if timing == "next_bar" and offset + index + 1 < len(bars) else {}),
-                    )
-                else:
-                    result = scan_bar_exit(
-                        bar, HeldPosition(cost, peak, book.stop_pct, book.drawdown_of(1)),
-                        timing=timing, price=price,
-                        **({"next_bar": bars[offset + index + 1]}
-                           if timing == "next_bar" and offset + index + 1 < len(bars) else {}),
-                    )
-                peak = result.peak
-                if result.decision == "fill" and t1_sellable(buy_day, day):
-                    fill_price = result.fill_price
-                    notional = held_shares * fill_price
-                    cash += notional - trade_commission(notional, COMMISSION)
-                    held_shares = 0
-                    sells += 1
-        offset += len(day_frame)
-    equity = cash + held_shares * bars[-1].close
-    return RoundTripSummary(len(bars), buys, sells, len(bars) - buys - sells,
-                            equity, (equity / initial_cash - 1) * 100)
-
-
-def scan_held_bars(
-    bars: Sequence[OhlcBar], *, cost: float, peak: float, n_days: int = 1,
-    strategy: str = "version1",
-    timing: FillTiming = "same_bar",
-    price: FillPrice = "stop",
-    level: float | None = None,
-    stage: str | None = None,
-    entry_a: float | None = None,
-    symbol: str | None = None,
-    held: Sequence[str] | None = None,
-    scores_by_day: Mapping[str, Mapping[str, float]] | None = None,
-    topk: int | None = None,
-    n_drop: int | None = None,
-    bar_dates: Sequence[date | str] | None = None,
-) -> ScanSummary:
-    """Count each current-bar decision, carrying peak and keeping cost fixed."""
-    if not bars:
-        raise ValueError("bars must not be empty")
-    if n_days != 1:
-        raise ValueError("n_days must stay 1 for every strategy scan")
-    if strategy == "version1":
-        if bar_dates is not None and len(bar_dates) != len(bars):
-            raise ValueError("bar_dates must have one source date per bar")
-        fills = sum(result.decision == "fill"
-                    for result in _scan_held_decisions(bars, cost=cost, peak=peak,
-                                                      timing=timing, price=price))
-        return ScanSummary(len(bars), fills, len(bars) - fills)
-    if timing != "same_bar" or price != "stop":
-        raise ValueError("non-default timing or price requires version1")
-    if strategy not in wired_names():
-        raise ValueError(f"unknown minute strategy {strategy!r}")
-    days = None
-    if bar_dates is not None:
-        if len(bar_dates) != len(bars):
-            raise ValueError("bar_dates must have one source date per bar")
-        days = [_as_date(day).strftime("%Y%m%d") for day in bar_dates]
-    day_flags = {}
-    score_days = days
-    if strategy in UNIVERSE_BOOKS:
-        if not scores_by_day:
-            raise ValueError(
-                "a single-symbol run cannot supply the day's cross-section; "
-                "a full score universe is required"
-            )
-        if score_days is None:
-            # Undated bars may use one explicitly supplied score day. This does
-            # not give them session dates or change the wire's session_open default.
-            if len(scores_by_day) != 1:
-                raise ValueError("bar_dates are required for multiple score days")
-            score_days = [next(iter(scores_by_day))] * len(bars)
-        day_scores = {}
-        for day in dict.fromkeys(score_days):
-            scores = require_day_scores(scores_by_day, day)
-            if len(scores) < 2:
-                raise ValueError(
-                    f"{day}: a single-symbol run cannot supply the day's cross-section; "
-                    "a full score universe is required"
-                )
-            day_scores[day] = scores
-        if not held or any(not is_canonical_symbol(code) for code in held):
-            raise ValueError("held requires the opening universe of canonical codes")
-        if len(set(held)) != len(held):
-            raise ValueError("held must not contain duplicate codes")
-        if symbol is None or _symbol(symbol) not in held:
-            raise ValueError("the scan symbol must be in held")
-        code = _symbol(symbol)
-        for field, value in (("topk", topk), ("n_drop", n_drop)):
-            if not isinstance(value, int) or isinstance(value, bool) or value < 0:
-                raise ValueError(f"{field} requires an integer >= 0")
-        for day, scores in day_scores.items():
-            if strategy == "topk_dropout":
-                _buy, sell = decide_topk_dropout(held, scores, topk=topk, n_drop=n_drop)
-                day_flags[day] = (code in sell, None)
-            else:
-                plan = decide_topk_score_exit(held, scores, topk=topk, n_drop=n_drop)
-                day_flags[day] = (code in plan.sell_bottom, code in plan.sell_sx0)
-    running_peak = peak
-    fills = skips = 0
-    for index, bar in enumerate(bars):
-        fields = {"level": level, "stage": stage, "entry_a": entry_a}
-        if days is not None:
-            fields["session_open"] = index == 0 or days[index] != days[index - 1]
-        if strategy in UNIVERSE_BOOKS:
-            fields["dropout_sell"], fields["sx0_sell"] = day_flags[score_days[index]]
-        result = invoke_minute_strategy(
-            strategy, bar, cost=cost, peak=running_peak, n_days=1,
-            timing="same_bar", **fields,
-        )
-        running_peak = result.peak
-        if result.decision == "fill":
-            fills += 1
-        else:
-            skips += 1
-    return ScanSummary(bars=len(bars), fills=fills, skips=skips)
-
-
-def _version1_book():
-    entries = {entry.name: entry for entry in minute_strategy_entries()}
-    entry = entries.get("version1")
-    if entry is None:
-        raise ValueError("unknown minute strategy 'version1'")
-    if entry.status != "wired":
-        raise MinuteStrategyNotOnBarScan("version1", str(entry.missing_field))
-    book = _DRAWDOWN["version1"]
-    return book
-
-
-def _scan_held_decisions(
-    bars: Sequence[OhlcBar], *, cost: float, peak: float,
-    timing: FillTiming = "same_bar", price: FillPrice = "stop",
-) -> Iterator[BarScanExit]:
-    """Resolve the catalog once; use the same core and book as the wire."""
-    book = _version1_book()
-    cost_f, running_peak = float(cost), float(peak)
-    if cost_f <= 0 or running_peak <= 0:
-        raise ValueError("cost and peak must be finite numbers > 0")
-    drawdown = book.drawdown_of(1)
-    for index, bar in enumerate(bars):
-        result = scan_bar_exit(
-            bar, HeldPosition(cost_f, running_peak, book.stop_pct, drawdown),
-            timing=timing, price=price,
-            **({"next_bar": bars[index + 1]}
-               if timing == "next_bar" and index + 1 < len(bars) else {}),
-        )
-        running_peak = result.peak
-        yield result
 
 
 def _as_date(value: date | str) -> date:
@@ -505,66 +194,6 @@ def load_scan_bars(
         dates = frame["date"] if source == "qlib_1min" else frame.index
         source_frames.append(frame.assign(date=[_as_date(day) for day in dates]).reset_index(drop=True))
     return bars
-
-
-def run_round_trip(symbol, start, end, *, pool_dir: Path, cash=100000.0,
-                   daily_quota=DEFAULT_DAILY_QUOTA,
-                   timing: FillTiming = "same_bar", price: FillPrice = "stop",
-                   strategy: str = "version1",
-                   **source_args) -> RoundTripSummary:
-    frames = []
-    load_scan_bars(symbol, start, end, source_frames=frames, **source_args)
-    pool_days = load_pool_day_map(pool_dir, start, end, key="date")
-    daily_args = {}
-    if strategy == "version4":
-        code = _symbol(symbol)
-        daily = load_daily_ohlc(
-            [code], warmup_start(_as_date(start).strftime("%Y%m%d"), STRATEGY4_CALENDAR_SLACK_DAYS),
-            _as_date(end).strftime("%Y%m%d"),
-            **({"source": "qlib_day", "qlib_root": source_args.get("qlib_root")}
-               if source_args["source"] == "qlib_1min" else {"source": "lake"}),
-        )
-        if daily.get(code) is None:
-            raise FileNotFoundError(f"daily OHLC missing for {code}")
-        daily_args["daily_frame"] = daily[code]
-    return scan_version1_round_trip(frames[0], symbol=symbol, pool_days=pool_days,
-                                   cash=cash, daily_quota=daily_quota, timing=timing, price=price,
-                                   **daily_args,
-                                   **({"strategy": strategy} if strategy != "version1" else {}))
-
-
-def run_scan(
-    symbol: str,
-    start: date | str,
-    end: date | str,
-    *,
-    source: str,
-    qlib_root: Path | str | None = None,
-    lake_root: Path | None = None,
-    cost: float,
-    peak: float,
-    strategy: str = "version1",
-    timing: FillTiming = "same_bar",
-    price: FillPrice = "stop",
-    level: float | None = None,
-    stage: str | None = None,
-    entry_a: float | None = None,
-    held: Sequence[str] | None = None,
-    scores_by_day: Mapping[str, Mapping[str, float]] | None = None,
-    topk: int | None = None,
-    n_drop: int | None = None,
-) -> ScanSummary:
-    bar_dates = []
-    bars = load_scan_bars(
-        symbol, start, end, source=source, qlib_root=qlib_root, lake_root=lake_root,
-        bar_dates=bar_dates,
-    )
-    return scan_held_bars(
-        bars, cost=cost, peak=peak, strategy=strategy, timing=timing, price=price,
-        level=level, stage=stage, entry_a=entry_a, symbol=symbol,
-        held=held, scores_by_day=scores_by_day, topk=topk, n_drop=n_drop,
-        bar_dates=bar_dates,
-    )
 
 
 def summarize_simulate(st, *, bars: int, total_cash: float) -> RoundTripSummary:
@@ -716,14 +345,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--asof-pool-names", action="store_true", help="v7: use pool names as of each day")
     parser.add_argument("--daily-quota", type=float, default=DEFAULT_DAILY_QUOTA,
                         help="CSV engine daily buy budget")
-    parser.add_argument("--fill-bar", choices=("same_bar", "next_bar"), default="same_bar",
-                        help="legacy scan option; CSV simulation uses its existing fill defaults")
-    parser.add_argument("--fill-price", choices=("stop", "close"), default="stop",
-                        help="legacy scan option; CSV simulation uses its existing fill defaults")
     parser.add_argument("--strategy", choices=(*csv_strategy_names(), "version7", "topk_app_dropout"), default="version1")
-    parser.add_argument("--level", type=float, help="caller-supplied sma5 or ma10")
-    parser.add_argument("--stage", choices=("trial", "four", "six", "eight", "full"))
-    parser.add_argument("--entry-a", type=float)
     parser.add_argument("--app-pool-dir", type=Path, help="topk_app_dropout app pool directory")
     parser.add_argument("--pred", type=Path, help="topk_app_dropout prediction file")
     parser.add_argument("--asof", choices=("pred_minus_one", "identity"),
