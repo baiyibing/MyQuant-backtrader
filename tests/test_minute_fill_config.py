@@ -133,3 +133,100 @@ def test_simulate_carries_next_session(strategy,cash_order):
 def test_target_cannot_assume_low_after_high():
     with pytest.raises(ValueError,match='look-ahead'):
         scan(o=(100.,106.),h=(111.,107.),c=(105.,106.),l=np.array([99.,105.]),minute_stop_trigger='hl',stop_pct=None,take_profit=lambda *a:'profit_take:target',take_profit_pct=.1,fill_config=FillConfig('bar_low','this_bar','bar_low'))
+
+
+def minute_fixture():
+    import pandas as pd
+    days = ['20260901', '20260902', '20260903']
+    hm = [895, 900, 570]
+    frame = pd.DataFrame([(10., 10., 10., 10.), (10., 10., 9.3, 9.4),
+                          (10., 10., 10., 10.)], columns=['open', 'high', 'low', 'close'])
+    frame['ymd'], frame['hm'], frame['volume'] = days, hm, 100_000
+    frame.index = pd.to_datetime(days) + pd.to_timedelta(hm, unit='m')
+    daily = pd.DataFrame({k: [10.] * 4 for k in ['open', 'high', 'low', 'close']},
+                         index=pd.to_datetime(['20260831'] + days))
+    return dict(minute_bars={'600000.SH': frame}, daily_bars={'600000.SH': daily},
+                pool_days={days[0]: ['600000.SH']}, start=days[0], end=days[-1])
+
+
+@pytest.mark.parametrize('strategy,hook', [('version9_2', 'run_minute_day'),
+                                         ('version12', 'run_minute_day'),
+                                         ('version11', 'minute_open')])
+def test_simulate_separate_engine_rejects_custom_config(strategy, hook):
+    from backtest.research.csv_minute_backtest import simulate
+    from backtest.research.csv_strategy_books import apply_csv_strategy
+    assert apply_csv_strategy(strategy)[hook]
+    with pytest.raises(ValueError, match="separate minute engine"):
+        simulate(**minute_fixture(), strategy=strategy,
+                 fill_config=FillConfig(fill_timing='next_bar_open'))
+
+
+def test_simulate_absolute_exit_requires_bar_low():
+    from backtest.research.csv_minute_backtest import simulate
+    with pytest.raises(ValueError, match='absolute_exit requires trigger_basis=bar_low'):
+        simulate(**minute_fixture(), strategy='version9_1',
+                 fill_config=FillConfig(trigger_basis='bar_last'))
+
+
+def test_stale_carry_cleared_on_other_exit_and_same_code_reentry(monkeypatch):
+    import backtest.research.csv_minute_backtest as m
+    from backtest.research.csv_ledger import _sell, held_fill_key
+    original_scan = m.scan_held_day
+    original_init = m.init_sim_state
+    captured = {}
+
+    def init(*args, **kwargs):
+        result = original_init(*args, **kwargs)
+        captured['st'] = result[0]
+        return result
+
+    def scan_then_other_exit(*args, **kwargs):
+        result = original_scan(*args, **kwargs)
+        st = captured['st']
+        if kwargs['fill_state'].get('pending'):
+            old = st.positions['600000.SH'][0]
+            captured['old_key'] = held_fill_key(old)
+            captured['queued'] = dict(kwargs['fill_state'])
+            _sell(st, old.code, old, 9.4, '20260902', 'close_clear')
+            assert captured['old_key'] not in st.held_fill_states
+        return result
+
+    # Deterministically model allocator ID reuse: the old implementation used
+    # this module's id() fallback for every shared position.
+    monkeypatch.setattr(m, 'id', lambda obj: 7, raising=False)
+    monkeypatch.setattr(m, 'init_sim_state', init)
+    monkeypatch.setattr(m, 'scan_held_day', scan_then_other_exit)
+    data = minute_fixture()
+    import pandas as pd
+    data['pool_days']['20260903'] = ['600000.SH']
+    frame = data['minute_bars']['600000.SH']
+    frame.loc[frame['ymd'] == '20260903', 'hm'] = 895
+    extra = frame.iloc[[-1]].copy()
+    extra['ymd'], extra['hm'] = '20260904', 570
+    extra.index = pd.to_datetime(['20260904']) + pd.to_timedelta([570], unit='m')
+    data['minute_bars']['600000.SH'] = pd.concat([frame, extra])
+    daily = data['daily_bars']['600000.SH']
+    daily.loc[pd.Timestamp('20260904')] = [10.] * 4
+    data['end'] = '20260904'
+    st = m.simulate(**data, strategy='version3', total_cash=100_000.,
+                    daily_quota=10_000., stop_pct=.05,
+                    fill_config=FillConfig(fill_timing='next_bar_open'))
+    assert captured['queued'] == {'pending': 'stop_loss:touch:next_open'}
+    assert len([t for t in st.trades if t['side'] == 'BUY']) == 2
+    assert [t['reason'] for t in st.trades if t['side'] == 'SELL'] == ['close_clear']
+    new = st.positions['600000.SH'][0]
+    assert held_fill_key(new) != captured['old_key']
+    assert captured['old_key'] not in st.held_fill_states
+
+
+def test_carry_retained_on_partial_sell_cleared_on_full_sell():
+    from backtest.research.csv_ledger import Position, SimState, _sell, held_fill_key
+    pos = Position('600000.SH', 1000, 10., 0, 10.)
+    st = SimState(positions={pos.code: [pos]})
+    key = held_fill_key(pos)
+    st.held_fill_states = {key: {'pending': 'stop_loss:touch:next_open'}}
+    _sell(st, pos.code, pos, 10., '20260902', 'other_exit',
+          wanted_shares=500, day_i=1)
+    assert key in st.held_fill_states
+    _sell(st, pos.code, pos, 10., '20260902', 'other_exit')
+    assert st.held_fill_states == {}

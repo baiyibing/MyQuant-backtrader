@@ -298,6 +298,16 @@ def exit_positions(st, code: str, day_i: int | None = None, *, day=None) -> list
     ]
 
 
+def held_fill_key(pos):
+    """Stable group ID or a lifetime token retained by its lot (never recycled)."""
+    position_id = getattr(pos, "position_id", None)
+    if position_id:
+        return position_id
+    if not hasattr(pos, "_held_fill_token"):
+        pos._held_fill_token = object()
+    return pos._held_fill_token
+
+
 def position_is_open(st, pos) -> bool:
     if isinstance(pos, IndependentExitPosition):
         return not pos.group.closed and pos.shares > 0
@@ -791,6 +801,14 @@ def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str, *
             for p in st.positions.get(code, [])
         ):
             policy["groups"][pos.position_id].closed = True
+    carry_states = getattr(st, "held_fill_states", None)
+    if carry_states is not None:
+        position_id = getattr(pos, "position_id", None)
+        if not position_id or not any(
+            getattr(p, "position_id", None) == position_id
+            for p in st.positions.get(code, [])
+        ):
+            carry_states.pop(held_fill_key(pos), None)
     if getattr(pos, "ride_with", None) is not None:
         return shares
     riders = [

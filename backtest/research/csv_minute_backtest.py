@@ -45,6 +45,7 @@ from backtest.research.csv_ledger import (  # noqa: E402
     configure_s8,
     execute_buy as execute_buy,
     exit_positions,
+    held_fill_key,
     finish_pending_chase,
     queue_limit_up_chase as queue_limit_up_chase,
     hit_limit_down,
@@ -745,6 +746,7 @@ def simulate(
         if "bind_absolute_exit" in hooks and fill_config.trigger_basis != "bar_low":
             raise ValueError("absolute_exit requires trigger_basis=bar_low")
     held_fill_states = {}
+    st.held_fill_states = held_fill_states
     absolute_exit = hooks["bind_absolute_exit"](st, daily_bars) if "bind_absolute_exit" in hooks else None
     configure_s8(st, hooks)
     if minute_stop_trigger == "hl" or absolute_exit:
@@ -885,7 +887,7 @@ def simulate(
                         cursor = HeldMinuteCursor(
                             o, h, c, cost=pos.cost, peak=pos.peak,
                             l=day_m["low"].to_numpy(np.float64) if minute_stop_trigger == "hl" or absolute_exit or (fill_config and fill_config.trigger_basis == "bar_low") else None,
-                            fill_config=fill_config, fill_state=held_fill_states.setdefault(getattr(pos, "position_id", None) or id(pos), {}),
+                            fill_config=fill_config, fill_state=held_fill_states.setdefault(held_fill_key(pos), {}),
                             minute_stop_trigger="hl" if absolute_exit else minute_stop_trigger,
                             take_profit_pct=st.stats.get("profit_target"),
                             n_days=n_days,
@@ -962,7 +964,7 @@ def simulate(
                         c,
                         l=day_m["low"].to_numpy(np.float64) if minute_stop_trigger == "hl" or absolute_exit or (fill_config and fill_config.trigger_basis == "bar_low") else None,
                         minute_stop_trigger="hl" if absolute_exit else minute_stop_trigger,
-                        fill_config=fill_config, fill_state=held_fill_states.setdefault(getattr(pos, "position_id", None) or id(pos), {}),
+                        fill_config=fill_config, fill_state=held_fill_states.setdefault(held_fill_key(pos), {}),
                         take_profit_pct=v9_plan["take_profit_pct"] if v9_plan is not None else st.stats.get("profit_target"),
                         cost=pos.cost,
                         peak=pos.peak,

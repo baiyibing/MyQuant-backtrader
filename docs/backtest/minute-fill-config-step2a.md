@@ -36,7 +36,10 @@ retains the original predicates, including floating-point comparison order.
   opens; there are no new limit, T+1, capacity or partial-fill rules.
   Queued fills use opening-quote audit metadata and the existing opening
   completed-volume timing (the previous minute, where a cap is configured).
-- `simulate` carries state by signal position ID or lot identity. Low-level
+- `simulate` and the chronological adapter key carry by signal position ID
+  or a position-owned lifetime token, never a recyclable Python object ID.
+  The ledger removes carry on full closure (including linked lots); partial
+  sells keep it until the remaining lot/group closes. Low-level
   scans accept a mutable `fill_state` out-param: reuse it across sessions.
   A scan that needs to carry but has no out-param raises instead of losing it.
   A direct cursor exposes its `fill_state` for resumption.
@@ -98,3 +101,42 @@ may return no exit). H/L remains opt-in for supported shared books.
 | topk_dropout | shared; sell_gate; take_profit |
 | topk_score_exit | shared; sell_gate; take_profit |
 | version9_1 | absolute_exit; inert take_profit callback |
+
+## Claim → test
+
+Test names below are in `tests/test_minute_fill_config.py` unless a file is specified.
+
+| Claim | Named test |
+| --- | --- |
+| Default path unchanged; golden bytes preserved | `test_defaults`, `test_version9_plan_defaults`; `tests/test_off_byte_baseline.py::test_off_byte_baseline_trades_equity_and_account`; `tests/test_partial_sell.py::test_default_trades_and_equity_byte_identical_to_pre_s1_head` |
+| Hook-derived defaults for every registered book | `test_mapping`, `test_all_book_defaults_derived_from_hooks` |
+| Explicit this-bar prices and next-open price independence | `test_this_bar_prices`, `test_next_open_prices`, `test_gap` |
+| next_bar_open cross-day carry in both schedules, shared and independent positions | `test_simulate_carries_next_session` |
+| Limit-down retry | `test_carry_and_limit_retry` |
+| 14:55/15:00 this_bar time exits | `test_time_exits_stay_this_bar` |
+| numba raises on non-default config, explicit and environment dispatch | `test_numba_refuses` |
+| Default numba parity | `tests/test_scan_held_day_numba_parity.py::test_numba_gap_open_stop`, `test_numba_t0_no_sell_no_peak_update`, `test_numba_trail_hit`, `test_numba_force_sell_time` |
+| version9_2/version12/minute_open reject custom config through simulate | `test_simulate_separate_engine_rejects_custom_config` (minute_open = version11) |
+| absolute_exit bar_low guard | `test_simulate_absolute_exit_requires_bar_low` (version9_1) |
+| Look-ahead rejects | `test_lookahead`, `test_callback_low_rejected_at_decision`, `test_target_cannot_assume_low_after_high` |
+| Callback and trail timing | `test_target_and_trail` |
+| Missing carry out-param fails closed | `test_missing_carry_state_fails_closed` |
+| Stale carry cleared on other exit; same-code re-entry has no stale fill | `test_stale_carry_cleared_on_other_exit_and_same_code_reentry` |
+| Partial sell retains carry; full sell clears it | `test_carry_retained_on_partial_sell_cleared_on_full_sell`; `tests/test_partial_sell.py::test_s1_partial_sell_conserves_cash_and_nonzero_lot`, `test_s1_deletes_only_empty_and_t1_blocks_override` |
+
+The stale-state regression deterministically models object-ID reuse, queues an
+actual last-bar next-open stop, then closes through the ledger with close_clear
+before a later same-code entry. It checks immediate carry removal, distinct
+lifetime keys, and the absence of a stale next-open SELL on the new position.
+
+## Validation
+
+Using `/tmp/mq-v6/bin/python` and `-p no:cacheprovider`:
+
+- Requested four files: **196 passed** (42 fill-config cases), 4.01 s.
+- Full suite, `-m "not production and not benchmark"`: **7424 passed,
+  5 skipped, 24 deselected**, 29 warnings, 145.22 s.
+- Exact collection: **7453 total collected; 7429 selected; 24 deselected**.
+  The 7429 selected cases comprise the 7424 passes and 5 existing skips.
+- No golden rewrites or new skips. All six written Python/Markdown files
+  decode as UTF-8 without BOM and contain zero NUL bytes; `git diff --check` passes.
