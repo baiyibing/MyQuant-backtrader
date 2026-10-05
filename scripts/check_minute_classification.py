@@ -1,11 +1,11 @@
-"""Fast, data-free gate for the registered minute bar-scan catalog."""
+"""Fast, data-free gate for the registered minute strategy catalog."""
 
 from pathlib import Path
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from backtest.research.minute_true_core_wire import minute_strategy_entries
+from backtest.research.minute_classification import minute_strategy_entries
 
 
 def main() -> int:
