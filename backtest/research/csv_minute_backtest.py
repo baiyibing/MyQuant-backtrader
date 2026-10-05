@@ -28,7 +28,7 @@ REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, REPO)
 
 from backtest.research.strategy9_rules import (  # noqa: E402
-    evaluate_stop_range, effective_stop_ratio, RANGE_LOOKBACK_CALENDAR_DAYS,
+    evaluate_stop_range, RANGE_LOOKBACK_CALENDAR_DAYS, protective_line,
 )
 
 from backtest.research.csv_ledger import (  # noqa: E402
@@ -368,6 +368,9 @@ def scan_held_day_python(
         # T+0 不卖、不更新峰值（历史最高价从 T+1 起算）
         if (not can_sell) or n_days < 1:
             continue
+        stop_kind = "stop_loss"
+        if stop_range_distance is not None:
+            trigger, stop_kind = protective_line(cost, new_peak, stop_range_distance)
         hi = float(h[i])
         cur_hm = int(hm[i]) if hm is not None else i
         if hi > new_peak:
@@ -380,20 +383,13 @@ def scan_held_day_python(
         if blocked_bar(minute_stop_trigger, px_open, hi, limit_down):
             continue
         if stop_enabled and trigger is not None and px_open <= trigger:
-            return i, px_open, "stop_loss:gap_open", new_peak, new_peak_hm
-        if version9_stop:
-            if minute_stop_trigger == "hl":
-                fill = target_fill(px_open, hi, cost, new_peak, n_days, take_profit_pct, take_profit)
-                if fill is not None:
-                    return i, fill[0], fill[1], new_peak, new_peak_hm
-            elif take_profit(px_close, cost, new_peak, n_days) == "profit_take:target":
-                return i, px_close, "profit_take:target", new_peak, new_peak_hm
+            return i, px_open, ("trail:atr" if stop_kind == "trail" else "stop_loss:gap_open"), new_peak, new_peak_hm
         ret = px_close / cost - 1.0
         if stop_enabled:
             touched = float(l[i]) <= trigger if minute_stop_trigger == "hl" else (px_close <= trigger if stop_range_distance is not None else ret <= -stop_pct)
             if touched:
                 fill_px = trigger if minute_stop_trigger == "hl" else px_close
-                return i, fill_px, "stop_loss:touch", new_peak, new_peak_hm
+                return i, fill_px, ("trail:atr" if stop_kind == "trail" else "stop_loss:touch"), new_peak, new_peak_hm
         if defer_lu and limit_up > 0 and hit_limit_up(px_close, limit_up):
             lu_today = True
         if defer_lu and lu_today:

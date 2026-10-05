@@ -52,7 +52,7 @@ def test_version9_take_profit_target_and_params():
     assert st.stats == {
         "sell_book": "v9",
         "stop_pct": None,
-        "stop_mode": "cost_minus_2x_mean_true_range_20_yuan_trailing_daily",
+        "stop_mode": "atr20_daily_initial_2atr_arm_1atr_trail_2atr",
         "range_bars": 20,
         "profit_target": 0.10,
         "max_hold": None,
@@ -360,3 +360,154 @@ def test_wire_distance_above_cost_is_not_a_ratio():
     hit = invoke_minute_strategy("version9", OhlcBar(10., 10., 1., 10.), cost=10., peak=10.,
                                  daily_bars=frame, as_of=days[21])
     assert hit.decision == "skip"
+
+
+def flat_atr_history():
+    days = pd.bdate_range("2025-09-01", periods=24)
+    frame = pd.DataFrame({"open": 10., "high": 10.1, "low": 9.9, "close": 10.}, index=days)
+    assert stop_mean_true_range_distance(frame, days[21]) == pytest.approx(.4)
+    return days, frame
+
+
+@pytest.mark.parametrize("engine", ["minute", "wire"])
+@pytest.mark.parametrize("peak,bar,reason,price", [
+    (10., (10., 10.15, 9.75, 10.), "", None),
+    (10.15, (10., 10.15, 9.6, 10.), "stop_loss:touch", 9.6),
+    (10., (10., 10.2, 9.9, 10.), "", None),
+    (10.2, (10.1, 10.2, 10., 10.1), "trail:atr", 10.),
+    (10.4, (10.1, 10.4, 10., 10.1), "trail:atr", 10.),
+    (10.7, (10.5, 10.7, 10.2, 10.5), "trail:atr", 10.3),
+    (10.7, (10.5, 11., 10.4, 11.), "profit_take:target", 11.),
+    (10.7, (10.5, 11., 10.2, 10.5), "trail:atr", 10.3),
+    (10., (10., 11., 9.5, 10.), "stop_loss:touch", 9.6),
+    (11.7, (11.1, 11.8, 11., 11.2), "trail:atr", 11.1),
+])
+def test_flat_atr_protective_line_hosts(engine, peak, bar, reason, price):
+    from backtest.research.csv_minute_backtest import scan_held_day_python
+    from backtest.research.minute_true_core_wire import invoke_minute_strategy, OhlcBar
+    days, frame = flat_atr_history()
+    if engine == "wire":
+        hit = invoke_minute_strategy("version9", OhlcBar(*bar), cost=10., peak=peak,
+                                     daily_bars=frame, as_of=days[21])
+        assert hit.reason == reason
+        assert hit.decision == ("fill" if reason else "skip")
+        fill = hit.fill_price
+        returned_peak = hit.peak
+    else:
+        o, h, l, c = (np.array([v]) for v in bar)
+        idx, fill, got_reason, returned_peak, _ = scan_held_day_python(
+            o, h, c, cost=10., peak=peak, peak_hm=-1, n_days=1, can_sell=True,
+            stop_pct=None, profit_base=0., trail_ratio=0.,
+            peak_gap_min=0, limit_down=0., l=l,
+            stop_range_distance=stop_mean_true_range_distance(frame, days[21]),
+            minute_stop_trigger="hl", take_profit=take_profit_reason,
+            take_profit_pct=.10)
+        assert got_reason == reason
+        assert (idx >= 0) is bool(reason)
+    assert returned_peak == max(peak, bar[1])
+    if reason:
+        assert fill == pytest.approx(price)
+
+
+@pytest.mark.parametrize("engine", ["daily", "minute"])
+@pytest.mark.parametrize("scenario", ["unarmed", "initial_touch", "breakeven", "chandelier", "precedence", "target"])
+def test_flat_atr_simulation(engine, scenario):
+    from backtest.research.csv_minute_backtest import simulate as minute
+    days, frame = flat_atr_history()
+    # Entry day stays flat; the first sellable high must not protect that same bar.
+    first = [10., 10.2, 10., 10.1]
+    second = [10.1, 10.2, 10., 10.1]
+    reason, expected = "trail:atr", 10.
+    if scenario in ("unarmed", "initial_touch"):
+        first = [10., 10.15, 9.75 if scenario == "unarmed" else 9.6, 10.]
+        second = [10., 10.15, 9.75, 10.]
+        reason = "" if scenario == "unarmed" else "stop_loss:touch"
+        expected = 9.6
+    elif scenario in ("chandelier", "precedence", "target"):
+        first = [10., 10.7, 10., 10.6]
+        # The next daily ATR rolls in the first sellable day's TR=.7.
+        distance = 2 * (19 * .2 + .7) / 20
+        expected = 10.7 - distance
+        second = [10.5, 11. if scenario != "chandelier" else 10.7,
+                  10.4 if scenario == "target" else 10.2,
+                  11. if scenario == "target" else 10.5]
+        if scenario == "target":
+            reason, expected = "profit_take:target", (10.5 if engine == "daily" else 11.)
+    frame.loc[days[21], ["open", "high", "low", "close"]] = first
+    frame.loc[days[22], ["open", "high", "low", "close"]] = second
+    frame.loc[days[23], ["open", "high", "low", "close"]] = [10.5, 10.6, 10.4, 10.5]
+    start, end = (days[i].strftime("%Y%m%d") for i in (20, 23))
+    pool = {start: ["600000.SH"]}
+    if engine == "daily":
+        st = sim.simulate({"600000.SH": frame}, pool, start, end, strategy="version9")
+    else:
+        # One sellable bar per day keeps the daily/minute path directly comparable.
+        rows = [dict(row, time=day + pd.Timedelta(minutes=895), hm=895, ymd=day.strftime("%Y%m%d"))
+                for day, row in frame.iterrows()]
+        st = minute({"600000.SH": pd.DataFrame(rows).set_index("time")},
+                    {"600000.SH": frame}, pool, start, end, strategy="version9", minute_stop_trigger="hl")
+    sells = [t for t in st.trades if t["side"] == "SELL"]
+    assert st.stats["buys"] == 1
+    assert len(sells) == (1 if reason else 0)
+    if reason:
+        assert sells[0]["reason"] == reason
+        assert sells[0]["price"] == pytest.approx(expected)
+        exit_day = 21 if scenario == "initial_touch" else (23 if scenario == "target" and engine == "daily" else 22)
+        assert sells[0]["date"] == days[exit_day].strftime("%Y%m%d")
+
+
+def test_minute_next_bar_uses_stored_high_and_wider_atr_disarms():
+    from backtest.research.csv_minute_backtest import scan_held_day_python
+    from backtest.research.strategy9_rules import protective_line
+    common = dict(cost=10., peak=10., peak_hm=-1, n_days=1, can_sell=True,
+                  stop_pct=None, profit_base=0., trail_ratio=0.,
+                  peak_gap_min=0, limit_down=0.,
+                  minute_stop_trigger="hl", take_profit=take_profit_reason, take_profit_pct=.10)
+    hit = scan_held_day_python(np.array([10., 10.1]), np.array([10.2, 10.2]),
+                              np.array([10.1, 10.1]), l=np.array([9.9, 10.]),
+                              stop_range_distance=.4, **common)
+    assert hit[0] == 1
+    assert hit[1] == pytest.approx(10.)
+    assert hit[2] == "trail:atr"
+    assert protective_line(10., 10.2, .4) == (10., "trail")
+    assert protective_line(10., 10.2, .6) == (9.4, "stop_loss")
+
+
+@pytest.mark.parametrize("price", ["stop", "close"])
+def test_wire_trail_close_fill_and_missing_window(price):
+    from backtest.research.minute_true_core_wire import invoke_minute_strategy, OhlcBar
+    days, frame = flat_atr_history()
+    hit = invoke_minute_strategy("version9", OhlcBar(10.5, 10.7, 10.2, 10.5),
+                                 cost=10., peak=10.7, daily_bars=frame, as_of=days[21], price=price)
+    assert hit.reason == "trail:atr"
+    assert hit.fill_price == pytest.approx(10.5 if price == "close" else 10.3)
+    hit = invoke_minute_strategy("version9", OhlcBar(10., 10., 9., 9.5),
+                                 cost=10., peak=10.7, daily_bars=frame.iloc[19:], as_of=days[21], price=price)
+    assert hit.decision == "skip"
+
+
+@pytest.mark.parametrize("peak,bar,reason,expected", [
+    (10.7, [10.5, 10.7, 10.2, 10.5], "trail:atr", 10.3),
+    (10.7, [10.5, 11., 10.2, 10.5], "trail:atr", 10.3),
+    (11.7, [11.1, 11.8, 11., 11.2], "trail:atr", 11.1),
+])
+def test_daily_existing_peak_with_flat_atr(monkeypatch, peak, bar, reason, expected):
+    days, frame = flat_atr_history()
+    frame.loc[days[21], ["open", "high", "low", "close"]] = bar
+    original = sim.exit_positions
+
+    def held_with_peak(*args, **kwargs):
+        positions = original(*args, **kwargs)
+        # Supply an existing held peak without introducing a spike into the ATR window.
+        for pos in positions:
+            if kwargs.get("day") == days[21]:
+                pos.peak = peak
+            yield pos
+
+    monkeypatch.setattr(sim, "exit_positions", held_with_peak)
+    start, end = (days[i].strftime("%Y%m%d") for i in (20, 21))
+    st = sim.simulate({"600000.SH": frame}, {start: ["600000.SH"]}, start, end, strategy="version9")
+    sells = [t for t in st.trades if t["side"] == "SELL"]
+    assert len(sells) == 1
+    assert sells[0]["reason"] == reason
+    assert sells[0]["price"] == pytest.approx(expected)
