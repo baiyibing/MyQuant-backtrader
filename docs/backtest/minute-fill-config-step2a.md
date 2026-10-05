@@ -185,29 +185,16 @@ Original step 2a validation before this follow-up:
 - No golden rewrites or new skips. All six written Python/Markdown files
   decode as UTF-8 without BOM and contain zero NUL bytes; `git diff --check` passes.
 
-A1 side-sell pipe validation (Human “A1 pipe”, 2026-10-05 14:13 CST;
-branch base `b57ec04`, `/tmp/mq-v6/bin/python`):
+A1 side-sell pipe validation after rebase (Human “A1 pipe”, 2026-10-05;
+branch base `origin/master ccac8e2a`, `/tmp/mq-v6/bin/python`):
 
-- `tests/test_side_sell_fill_config.py`: **24 passed**; simulate routing for
-  version6_8/version6_10/version6_13/version6_14 covers the next bar and next
-  session, in addition to direct step/scale/peak carry and cleanup checks.
-- `tests/test_minute_fill_config.py`: **58 passed**, including omitted/None/
-  explicit hook-derived defaults under both close and hl stop modes.
-- `tests/test_scan_held_day_numba_parity.py`: **5 passed**.
-- `tests/test_off_byte_baseline.py`: **157 passed, 4 failed**. The four
-  version6_17 daily/minute × omitted/explicit-off canonical CSV failures also
-  reproduce in an untouched `b57ec04` checkout. No fixture was edited.
-- Combined requested files: **244 passed, 4 failed**, 5.60 s.
-- Full suite `-m "not production and not benchmark"`: **7631 passed,
-  5 skipped, 24 deselected, 4 failed**, 29 warnings, 137.91 s. Only the same
-  four pre-existing version6_17 off-byte cases fail.
-- Direct before/after capture of all seven affected books × daily/minute ×
-  omitted/explicit-off: **28 cases identical**, including raw writer/library
-  CSV hashes and full structured trades/equity/account/stats.
-- `git diff --stat b57ec04 -- tests/fixtures` is empty. The requested comparison
-  against `origin/master` is not empty because that ref is already `a37c532`
-  (#372), which adds `off_byte_baseline_v6_family_v7_20261006.json` and corrects
-  the version6_17 fixture. This branch retains its requested base for later
-  rebase; the pre-existing fixture difference is not part of A1.
-- All six changed Python/Markdown files decode as UTF-8, have no BOM and zero
-  NUL bytes; `git diff --check` passes.
+- Requested four files, run with `-p no:cacheprovider -q`:
+  `tests/test_side_sell_fill_config.py`, `tests/test_minute_fill_config.py`,
+  `tests/test_scan_held_day_numba_parity.py`, and
+  `tests/test_off_byte_baseline.py`: **248 passed, 0 failed**, 5.62 s.
+- Full suite, run with `-p no:cacheprovider -q
+  -m "not production and not benchmark"`: **7636 passed, 4 skipped,
+  24 deselected, 0 failed**, 29 warnings, 142.15 s.
+- `git diff --stat origin/master -- tests/fixtures` is empty.
+- The updated Markdown file decodes as UTF-8, has no BOM and zero NUL
+  bytes; `git diff --check` passes.
