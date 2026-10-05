@@ -198,9 +198,9 @@ def test_apply_version6_22_simple_ladder():
     assert hooks["name"] == "version6_22"
     assert hooks["name_lot_budget"](1_000_000.0, []) == pytest.approx(200_000.0)
     sched = hooks["add_schedule"]
-    assert sched[0] == (0.20, 3.0)  # 每 +20% 加 300 万
-    assert sched[1] == (0.40, 3.0)
-    assert sched[2] == (0.60, 3.0)
+    assert sched[0] == pytest.approx((0.20, 3.0))  # 每 +20% 加 300 万
+    assert sched[1] == pytest.approx((0.40, 3.0))
+    assert sched[2] == pytest.approx((0.60, 3.0))
 
 
 def test_apply_version6_21_double_base():
