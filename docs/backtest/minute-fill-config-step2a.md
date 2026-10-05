@@ -64,6 +64,8 @@ retains the original predicates, including floating-point comparison order.
   Default/None config reproduces their current same-bar-close execution
   (`minute_trigger_bar_close`).
 
+- 2026-10-05 14:13 人裁：A3 / B9 stay excluded；A1 pipe / A2 follow in separate PRs，见 [step-2b decisions](note-2b-decisions-2026-10-05.md)。
+
 ## Registered CSV books and default paths
 
 All shared rows use this_bar, with bar_last touch / bar_open stop gap unless
