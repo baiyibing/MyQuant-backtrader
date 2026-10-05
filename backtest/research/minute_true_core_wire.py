@@ -15,6 +15,9 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from inspect import signature
+from math import isfinite
+from numbers import Real
 
 from backtest.research import strategy2_rules
 from backtest.research.bar_scan_exit import (
@@ -28,7 +31,7 @@ from backtest.research.bar_scan_exit import (
     check_fill_timing,
     scan_bar_exit,
 )
-from backtest.research.csv_strategy_books import csv_strategy_names
+from backtest.research.csv_strategy_books import apply_csv_strategy, csv_strategy_names
 from backtest.research.strategy1_rules import (
     PROFIT_DRAWDOWN_PCT as V1_DRAWDOWN,
     STOP_PCT as V1_STOP,
@@ -233,6 +236,40 @@ _LEVEL_FIELD = {
 _BLOCKED_FIELD: dict[str, str] = {}
 
 
+# These books need explicit wiring even if their hooks include a percent stop.
+_AUTO_DERIVE_EXCLUDED = frozenset({
+    "version1", "version4", "version7", "version9", "version9_1", "version9_2",
+    "version11", "version12", "topk_dropout", "topk_score_exit", "topk_app_dropout",
+})
+
+
+def derive_percent_stop(name: str) -> tuple[float, Callable]:
+    """Read registered defaults without changing the historical literal tables."""
+    try:
+        if name in _AUTO_DERIVE_EXCLUDED:
+            raise ValueError("requires a special wire")
+        hooks = apply_csv_strategy(name)
+        stop = hooks.get("stop_pct")
+        take = hooks.get("take_profit")
+        if isinstance(stop, bool) or not isinstance(stop, Real) or not isfinite(stop):
+            raise ValueError("requires numeric finite stop_pct")
+        if not callable(take):
+            raise ValueError("requires callable take_profit")
+        signature(take).bind(10.0, 10.0, 10.0, 1)
+        for field in ("stop_range", "version9_exit", "exit_plan", "run_minute_day",
+                      "drawdown_of", "drawdown_take_profit", "stage"):
+            if hooks.get(field) is not None:
+                raise ValueError(f"requires a special wire for {field}")
+        return float(stop), take
+    except (Exception, SystemExit) as exc:
+        raise RuntimeError(
+            f"minute strategy not classified for bar scan: {name}: {exc}; "
+            "edit backtest/research/minute_true_core_wire.py "
+            "(_PERCENT_STOP/_BOOK_TAKE, _DRAWDOWN, _LEVEL_FIELD or _BLOCKED_FIELD); "
+            "add special books to _AUTO_DERIVE_EXCLUDED"
+        ) from exc
+
+
 class MinuteStrategyNotOnBarScan(ValueError):
     """这本书不能接到扫线。``missing_field`` 是扫线没有的那一个字段。"""
 
@@ -271,9 +308,15 @@ def _known(name: str) -> bool:
 
 def minute_strategy_entries() -> tuple[MinuteStrategyEntry, ...]:
     names = minute_strategy_names()
-    unknown = [name for name in names if not _known(name)]
-    if unknown:
-        raise RuntimeError(f"minute strategy not classified for bar scan: {unknown}")
+    errors = []
+    for name in names:
+        if not _known(name):
+            try:
+                derive_percent_stop(name)
+            except RuntimeError as exc:
+                errors.append(str(exc))
+    if errors:
+        raise RuntimeError("\n".join(errors))
     stale = [
         name
         for name in (*_DRAWDOWN, *_PERCENT_STOP, *_BOOK_TAKE, *_LEVEL_FIELD, *_BLOCKED_FIELD)
@@ -355,6 +398,8 @@ def _book_reason(
     if name == "version9":
         return v9_take(close, cost, peak, n_days, max_hold=max_hold)
     take = _BOOK_TAKE.get(name)
+    if not _known(name):
+        _, take = derive_percent_stop(name)
     if take is None:
         return None
     return take(close, cost, peak, n_days)
@@ -513,13 +558,16 @@ def invoke_minute_strategy(
         return apply_fill_timing(judged, timing=timing, next_bar=next_bar)
 
     new_peak = peak_f
-    if key in _PERCENT_STOP:
+    stop_pct = _PERCENT_STOP.get(key)
+    if not _known(key):
+        stop_pct, _ = derive_percent_stop(key)
+    if stop_pct is not None:
         stopped = scan_bar_exit(
             bar,
             HeldPosition(
                 cost=cost_f,
                 peak=peak_f,
-                stop_pct=_PERCENT_STOP[key],
+                stop_pct=stop_pct,
                 drawdown_take_profit=1.0,
             ),
             timing=timing,
