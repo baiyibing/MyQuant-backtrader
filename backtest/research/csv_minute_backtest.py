@@ -742,8 +742,8 @@ def simulate(
     )
     defaults = book_fill_defaults(hooks, minute_stop_trigger)
     if fill_config is not None and fill_config != defaults["stop"]:
-        if hooks.get("step_stop_pct") or hooks.get("scale_out_step"):
-            raise ValueError("fill_config is not yet applied to step_stop/scale_out side sells; use the default fill config for this book")
+        if hooks.get("step_stop_pct") or hooks.get("scale_out_step") or hooks.get("peak_dd_exit"):
+            raise ValueError("fill_config is not yet applied to step_stop/scale_out/peak_dd_exit side sells; use the default fill config for this book")
         if hooks.get("run_minute_day") or hooks.get("minute_open"):
             raise ValueError("fill_config is only supported by HeldMinuteCursor, not this book's separate minute engine")
         if "bind_absolute_exit" in hooks and fill_config.trigger_basis != "bar_low":
