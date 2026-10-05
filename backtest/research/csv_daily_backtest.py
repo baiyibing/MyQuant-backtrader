@@ -425,7 +425,8 @@ def simulate(
                             stop_enabled = True
                         close = float(row["close"])
                         if stop_enabled:
-                            trigger = pos.cost - distance if "stop_range" in hooks else pos.cost * (1.0 - stop_ratio)
+                            trigger = (pos.cost - stop_ratio if "stop_range" in hooks
+                                       else pos.cost * (1.0 - stop_ratio))
                             if stop_fill == "close":
                                 if (close <= trigger and not ("stop_range" in hooks and
                                         float(row["open"]) > trigger and
@@ -637,8 +638,8 @@ def simulate(
                             stop_ratio = distance / pos.cost if distance is not None and pos.cost > 0 else None
                             stop_enabled = stop_ratio is not None
                         if stop_enabled:
-                            trigger = pos.cost - distance if "stop_range" in hooks else pos.cost * (1.0 - stop_ratio)
-                            if close <= trigger:
+                            if close <= (pos.cost - stop_ratio if "stop_range" in hooks
+                                         else pos.cost * (1.0 - stop_ratio)):
                                 reason = "stop_loss:close"
                         if not reason:
                             reason = (

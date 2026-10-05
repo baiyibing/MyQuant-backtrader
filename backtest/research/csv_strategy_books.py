@@ -1480,7 +1480,7 @@ def _apply_version9(
 
     return {
         "stop_pct": None,
-        "stop_range": strategy9_rules.mean_true_range,
+        "stop_range": strategy9_rules.stop_mean_true_range_distance,
         "take_profit": _tp if take_profit is None else take_profit,
         "record_params": _rec if record_params is None else record_params,
     }

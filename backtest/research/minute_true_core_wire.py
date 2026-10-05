@@ -70,7 +70,7 @@ from backtest.research.strategy8_6_rules import STOP_PCT as V8_6_STOP
 from backtest.research.strategy8_6_rules import take_profit_reason as v8_6_take
 from backtest.research.strategy8_rules import STOP_PCT as V8_STOP
 from backtest.research.strategy8_rules import take_profit_reason as v8_take
-from backtest.research.strategy9_rules import mean_true_range
+from backtest.research.strategy9_rules import stop_mean_true_range_distance
 from backtest.research.strategy9_rules import take_profit_reason as v9_take
 from backtest.research.strategy10_rules import STOP_PCT as V10_STOP
 from backtest.research.strategy_topk_dropout_rules import STOP_PCT as TOPK_STOP
@@ -339,7 +339,8 @@ def _version9_range_stop(
 ) -> BarScanExit | None:
     """Apply the higher of today's range stop and the fixed cost stop.
 
-    ``distance`` is the simple mean of 20 prior true ranges in yuan.
+    ``distance`` is twice the prior 20 true ranges' simple mean in yuan.
+    Subtract it even when it exceeds cost; day T is excluded.
     """
     opening, high, low, close = _ohlc(bar, "bar")
     new_peak = high if high > peak else peak
@@ -426,7 +427,7 @@ def invoke_minute_strategy(
     if key == "version9" and daily_bars is not None:
         if as_of is None:
             raise ValueError("version9 range stop requires as_of")
-        distance = mean_true_range(daily_bars, as_of)
+        distance = stop_mean_true_range_distance(daily_bars, as_of)
         if distance is not None:
             stopped = _version9_range_stop(
                 bar, cost=cost_f, peak=peak_f, distance=float(distance),

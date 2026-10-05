@@ -660,7 +660,7 @@ def test_version9_bar_scan_uses_prior_range_not_fixed_eight_percent():
     )
     assert hit.decision == "fill"
     assert hit.reason == "stop_loss:touch"
-    assert hit.fill_price == pytest.approx(8.55)
+    assert hit.fill_price == pytest.approx(9.6)
     with pytest.raises(ValueError, match="as_of"):
         invoke_minute_strategy(
             "version9", bar, cost=10.0, peak=10.0, daily_bars=frame
