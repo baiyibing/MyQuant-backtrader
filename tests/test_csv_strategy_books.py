@@ -183,7 +183,9 @@ def test_apply_version6_18_schedule():
     assert hooks["name"] == "version6_18"
     assert hooks["name_lot_budget"](1_000_000.0, []) == pytest.approx(100_000.0)
     assert hooks["add_schedule"][:3] == [(0.05, 0.10), (0.10, 0.30), (0.20, 0.50)]
-    assert hooks["add_schedule"][4] == (0.40, 1.0)
+    assert hooks["add_schedule"][3] == (0.40, 1.0)
+    assert hooks["add_schedule"][4] == (pytest.approx(0.60), 1.0)
+    assert len(hooks["add_schedule"]) == 53
     assert hooks["scale_out_step"] == pytest.approx(0.05)
 
 
