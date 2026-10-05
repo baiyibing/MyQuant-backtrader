@@ -140,7 +140,7 @@ MyQuant  →  MyQuant-backtrader  →  OSkhQuant1.3
 
 ### 6.1 newtest_4090 可用 agent CLI（实测 2026-10-05）
 
-> **以实测为准**（主机权威）：本表仅为 newtest_4090 快照；后续派活以本机 `--version` / `agent --list-models` / `agent about` / Codex·kimi·Claude 配置 **新测** 为准，表内旧行败给新测。**4090 与 Bot VM 模型目录分开**（同名 CLI 不套用 VM `-m`）。**本表不含任何密钥 / token**。
+> **以实测为准**（主机权威）：本表仅为 newtest_4090 快照；后续派活以本机 `--version` / `agent --list-models` / `agent about` / Codex·kimi·Claude·zcode 配置 **新测** 为准，表内旧行败给新测。**4090 与 Bot VM 模型目录分开**（同名 CLI 不套用 VM `-m`）。**本表不含任何密钥 / token**。
 
 | CLI | PATH 命中（示例） | 版本 | 默认/常用模型 | Headless 调用（默认） | 备注 |
 |---|---|---|---|---|---|
@@ -148,6 +148,7 @@ MyQuant  →  MyQuant-backtrader  →  OSkhQuant1.3
 | cursor-agent / `agent` | `C:\Users\wangc\AppData\Local\cursor-agent\agent.ps1` | 2026.10.01-e373342 | `agent about` 当前 **Grok 4.7 256K High**；Ultra `wangchui@hotmail.com`；`--list-models` 含 grok-4.7-{low,medium,high,xhigh}[+fast]、cursor-grok-4.6\*、cursor-grok-4.5\*、composer-2.5\*、kimi-k3\*、kimi-k2.7-code、glm-5.2\*、auto | **4090bot 默认**：`agent -p --force --trust --model grok-4.7-high "..."`（或 `grok-4.7-high-fast`）；可加 `--output-format text\|json` | §6 主路径 |
 | codex | `C:\nvm4w\nodejs\codex.ps1` | codex-cli 0.160.0 | 默认 `deepseek-flash`（provider deepseek）；`--profile pro` → `deepseek-v4-pro`；catalog `~/.codex/models.json` 仅这两档 | `codex exec --ephemeral "..."`（远程 shell 须 stdin=DEVNULL，否则挂在 Reading stdin）；`-m` / `-p pro`；full-auto 已由 configure 脚本维持 | **已安装**；非默认 Doer，4090 默认真刀仍 Cursor + Grok 4.7；勿传 `gpt-6.*` |
 | claude（Claude Code） | `C:\Users\wangc\AppData\Roaming\npm\claude.exe` | 2.1.289 | 经 `open.bigmodel.cn`：默认 Haiku=`glm-5.3-flash[1m]`，Sonnet/Opus=`glm-5.3[1m]` | `claude -p "..." --output-format text`；需要跳过权限时才加 `--dangerously-skip-permissions` | 可能有 `unrecognized_model` 警告，headless 仍可用（2026-10-05 冒烟回 `CLAUDE_OK`）；**勿把 token 写入文档** |
+| zcode（ZCode） | 桌面 `D:\ZCode\ZCode.exe`（安装树 3.14.4）；PATH CLI `C:\nvm4w\nodejs\zcode.cmd`（`npm i -g zcode-app-cli@latest`） | `zcode --version`：zcode-app-cli 3.14.4-32 / zcode-runtime 0.16.9 / zcode 0.16.9 | 本机 v2 config（已脱敏）：provider `builtin:bigmodel` → `https://open.bigmodel.cn/api/anthropic`，模型 `GLM-5.3` / `GLM-5.3-Flash` / `GLM-5.3-FlashX`；zai providers 已禁用 | `zcode -p "..." --mode yolo`（`--help`：`--prompt` 默认权限模式即 yolo）；健康检查 `zcode doctor --json`（2026-10-05：`configuration.ok` true） | 2026-10-05 冒烟 `zcode -p "Reply with exactly: ZCODE_OK" --mode yolo` → 回 `ZCODE_OK`、exit 0，伴 `ZCode Built-in missing` 警告；PATH CLI 为**社区非官方** wrapper（驱动桌面 runtime），官方独立非交互 `-p` 仍在 zai-org/feedback#29（P1）跟踪；**勿把 token 写入文档** |
 | qodercli | `C:\nvm4w\nodejs\qodercli.ps1` | 1.1.65（历史） | — | — | **长期停用（与 Bot VM / Linux 相同）**—4090bot 不派活、不升级依赖 |
 | grok CLI | PATH 无 | — | — | — | Win11 按 1.3 升级提示 **SKIP**；不要装 |
 
@@ -158,6 +159,7 @@ MyQuant  →  MyQuant-backtrader  →  OSkhQuant1.3
 - 4090bot 派活默认 **headless**；禁止默认挂交互 TUI。
 - 登录 / SSO / 2FA 墙 → 人机交接，不半交互硬扛。
 - qodercli：**长期停用**（与 Bot VM / Linux 相同）—不派活、不升级依赖。
+- zcode：官方文档 <https://zcode.z.ai/cn/docs/agents>、<https://github.com/zai-org/ZCode>；PATH `zcode` 来自社区包 [`zcode-app-cli`](https://www.npmjs.com/package/zcode-app-cli)（源码 <https://github.com/kingsword09/zcode-cli>），是包装桌面 runtime 的**非官方** wrapper，不是官方独立 CLI；官方独立非交互 `-p` 仍在 [zai-org/feedback#29](https://github.com/zai-org/feedback/issues/29)（P1）跟踪。升级桌面版或该 npm 包后须重测 `zcode --version` / `zcode doctor --json` / `-p` 冒烟；模型以本机 v2 config **实测为准**（4090≠VM catalog）。
 - 密钥只在本机 settings，**不进仓**。
 
 ## 7. 跨仓文档关系（一份正文 + 指针）
@@ -218,3 +220,4 @@ MyQuant  →  MyQuant-backtrader  →  OSkhQuant1.3
 | 2026-10-03 | Human：Bot VM Grok CLI headless 已核验命令；记录 `--prompt-file` / 缺 `--always-approve` 提前 exit 0、无 `-p` 且无 TTY 报错；不要打开 TUI |
 | 2026-10-05 | 新增 §6.1 newtest_4090 agent CLI 实测清单（kimi 2.1.1、cursor-agent 2026.10.01-e373342、codex 0.160.0 / DeepSeek、Claude Code 2.1.289 经 GLM、qodercli 1.1.65 长期停用、grok SKIP）与调用约定；§6 注明 4090 已装 Codex 但默认刀仍 Cursor + Grok 4.7，2026-10-03 PATH 快照标过期并改指 §6.1 |
 | 2026-10-05 | Human：qoder 长期停用（与 Bot VM / Linux 相同）—4090bot 不派活、不升级依赖；明确 **4090 与 Bot VM 模型目录分开**（同名 CLI 不得套用 VM `-m`/catalog）；清单/**以实测为准**（新测 `--version`/`--list-models`/`about`/config 优先于表内旧行） |
+| 2026-10-05 | §6.1 新增 zcode 行（实测）：桌面 `D:\ZCode\ZCode.exe`（3.14.4）；PATH CLI `npm i -g zcode-app-cli@latest` → `zcode.cmd`，`--version` zcode-app-cli 3.14.4-32 / runtime 0.16.9（社区非官方 wrapper；官方独立 `-p` 仍为 zai-org/feedback#29 P1）；模型 `builtin:bigmodel` GLM-5.3 / -Flash / -FlashX（zai providers 禁用）；headless `zcode -p … --mode yolo` 冒烟回 `ZCODE_OK`（exit 0，`ZCode Built-in missing` 警告），`doctor --json` configuration.ok true；调用约定补 zcode 文档指针；以实测为准、4090≠VM catalog；未写任何 token |
