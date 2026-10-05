@@ -125,17 +125,38 @@ MyQuant  →  MyQuant-backtrader  →  OSkhQuant1.3
 - 仍只有 **4090bot** 作为物理机 runner；发起方是 §5 的物理机 agent 时，与「跑湖的 4090bot」角色分开。
 - **并发**：多个 bot 同时需要 4090 时，按**任务接收顺序**排队（先接到的先跑）。
 - 交给 4090bot 的活，一般：headless 调用 4090 上的 Cursor → 用 **Grok 4.7** 完成（湖路径 / Windows / 本机导出）→ 产物与回执回协调 Bot / 对口仓。
+- 4090 **已装 Codex**（`codex-cli 0.160.0`，provider DeepSeek），但 4090 **默认实现刀仍是 Cursor agent + Grok 4.7**；**勿**把 Bot VM 的 Codex `gpt-6.*` 流水线默认搬到 4090（该机无这些模型 id）。清单见 §6.1。
 - **Headless 不限 4090**：§3 规定 bot 在**所有**已注册物理机上调度 agent CLI 时都优先 headless；4090 上 Cursor / Grok 4.7 已是 headless 一例，其余注册机（笔记本、zcode 主机等）同口径。
 
 **常驻说明（2026-10-03 机器核验；headless，未消耗 generation）**：
 
-- `newtest_4090` PATH：`kimi 2.1.1`、`codex-cli 0.156.1`、`cursor 3.22.12`、`cursor agent 2026.09.18-9a7762b`。`claude` **不在 PATH**；`grok` **不在 PATH**。
+- `newtest_4090` PATH（2026-10-03 快照，**已过期**）：`kimi 2.1.1`、`codex-cli 0.156.1`、`cursor 3.22.12`、`cursor agent 2026.09.18-9a7762b`；当时 `claude` / `grok` 不在 PATH。**现以 §6.1（2026-10-05 实测）为准**。
 - 该机 Codex provider 为 `deepseek`；config model 为 `deepseek-flash`，profile `pro` 为 `deepseek-v4-pro`；catalog ids 为 `deepseek-flash`、`deepseek-v4-pro`。该配置没有 OpenAI `gpt-6.1-sol` / `gpt-6-astra` ids，**不得把这两个模型名传给 4090 Codex**。
 - 调用 Kimi / Codex / Cursor agent **仅走 headless / 非交互**；交互 TUI 仅在 Human 明示要求排障时使用。
 - Cursor 额度：**Human 表示 2026-10-04 恢复**；`agent about` 与 `agent status` 未打印额度耗尽或重置日期。机器显示 account `Ultra`、`wangchui@hotmail.com`、model `Grok 4.7`。**2026-10-04 之前不得派 Cursor CLI，除非 Human 表示额度已恢复**；不得为探测 billing 消耗一次 generation。
 
 **4090 湖与除权 / SMA 说明**：分钟线仅有 `dividend_type=none`（`E:\stock_data\stock\period=1m\dividend_type=none`）；日线有 none（5605 个 parquet）和 front（5593 个 parquet），back 不完整。1.3 的 `oskh_data/adj_factor.py` 使用已存储的日线 `dividend_type=front` 和 `dividend_type=none` 数据，按 `cumulative_adj_factor = close_front / close_none` 计算因子；`get_divid_factors` 不是因子来源，它下载除权事件记录并写入 `ex_date_index.parquet`。回测已有历史除权数据，可将不复权分钟收盘价乘以已知的日线因子；实盘不能用「今日前复权收盘价 ÷ 今日不复权收盘价」求今日因子，应以已公告的除权因子乘当前不复权分钟价，今日无除权则用最近一次已公告因子。人的动态盘中 SMA 方案是将应用该因子后的最新分钟收盘价视为今日收盘价，属于回测方法，**尚未实现、尚未纳入 draft #338**；#338 的 SMA 仍只用此前日线收盘价，lake 调用未传 `dividend_type`，因此读取 none。`603196.SH` 在 2026-09-21 的 none / front 收盘均为 19.14；两者重叠的 2265 个交易日中有 1711 天不同。
 人裁确定：回测即时调用既有 `oskh_data/adj_factor.py` 模块，由该模块读取已存储的日线 `dividend_type=front` 与 `dividend_type=none` 数据并写出 `cumulative_adj_factor = close_front / close_none`。
+
+### 6.1 newtest_4090 可用 agent CLI（实测 2026-10-05）
+
+> 本机 headless 实测；版本以本机 `--version` / `agent about` 为准，过期重测。**本表不含任何密钥 / token**。
+
+| CLI | PATH 命中（示例） | 版本 | 默认/常用模型 | Headless 调用（默认） | 备注 |
+|---|---|---|---|---|---|
+| kimi | `C:\Users\wangc\.kimi-code\bin\kimi.exe` | 2.1.1 | 默认 `kimi-code/k3`；另有 `kimi-code/kimi-for-coding`、`kimi-for-coding-highspeed`、`kimi-code/k3-256k` | `kimi -m kimi-code/k3 -p "..." --output-format text`；全自动加 `--auto`；Ask When Needed 用 `-y/--yolo` | OK |
+| cursor-agent / `agent` | `C:\Users\wangc\AppData\Local\cursor-agent\agent.ps1` | 2026.10.01-e373342 | `agent about` 当前 **Grok 4.7 256K High**；Ultra `wangchui@hotmail.com`；`--list-models` 含 grok-4.7-{low,medium,high,xhigh}[+fast]、cursor-grok-4.6\*、cursor-grok-4.5\*、composer-2.5\*、kimi-k3\*、kimi-k2.7-code、glm-5.2\*、auto | **4090bot 默认**：`agent -p --force --trust --model grok-4.7-high "..."`（或 `grok-4.7-high-fast`）；可加 `--output-format text\|json` | §6 主路径 |
+| codex | `C:\nvm4w\nodejs\codex.ps1` | codex-cli 0.160.0 | 默认 `deepseek-flash`（provider deepseek）；`--profile pro` → `deepseek-v4-pro`；catalog `~/.codex/models.json` 仅这两档 | `codex exec --ephemeral "..."`（远程 shell 须 stdin=DEVNULL，否则挂在 Reading stdin）；`-m` / `-p pro`；full-auto 已由 configure 脚本维持 | **已安装**；非默认 Doer，4090 默认真刀仍 Cursor + Grok 4.7；勿传 `gpt-6.*` |
+| claude（Claude Code） | `C:\Users\wangc\AppData\Roaming\npm\claude.exe` | 2.1.289 | 经 `open.bigmodel.cn`：默认 Haiku=`glm-5.3-flash[1m]`，Sonnet/Opus=`glm-5.3[1m]` | `claude -p "..." --output-format text`；需要跳过权限时才加 `--dangerously-skip-permissions` | 可能有 `unrecognized_model` 警告，headless 仍可用（2026-10-05 冒烟回 `CLAUDE_OK`）；**勿把 token 写入文档** |
+| qodercli | `C:\nvm4w\nodejs\qodercli.ps1` | 1.1.65 | （未登录，list-models 不可用） | `qodercli -p --no-session-persistence --permission-mode bypass_permissions -m <model> "..."` | **Not logged in**：未登录前 4090bot 不要派活 |
+| grok CLI | PATH 无 | — | — | — | Win11 按 1.3 升级提示 **SKIP**；不要装 |
+
+**调用约定**：
+
+- 4090bot 派活默认 **headless**；禁止默认挂交互 TUI。
+- 登录 / SSO / 2FA 墙 → 人机交接，不半交互硬扛。
+- 版本以本机 `--version` / `agent about` 实测为准；本表日期 2026-10-05，过期则重测。
+- 密钥只在本机 settings，**不进仓**。
 
 ## 7. 跨仓文档关系（一份正文 + 指针）
 
@@ -192,3 +213,4 @@ MyQuant  →  MyQuant-backtrader  →  OSkhQuant1.3
 | 2026-10-01 | Codex 模型路由：一般 `gpt-6.1-sol`，上强度 `gpt-6-astra`（Human 当面裁定）；清单与 handoff 落点同步 |
 | 2026-10-03 | headless 机器核验（未消耗 generation）：4090 PATH 版本、Claude / Grok 不在 PATH、Codex DeepSeek 配置与 catalog；仅 headless 调用；Cursor 账户 / 模型已核验，2026-10-04 额度恢复仍为 Human 口述，禁止为 billing 探测消耗 generation |
 | 2026-10-03 | Human：Bot VM Grok CLI headless 已核验命令；记录 `--prompt-file` / 缺 `--always-approve` 提前 exit 0、无 `-p` 且无 TTY 报错；不要打开 TUI |
+| 2026-10-05 | 新增 §6.1 newtest_4090 agent CLI 实测清单（kimi 2.1.1、cursor-agent 2026.10.01-e373342、codex 0.160.0 / DeepSeek、Claude Code 2.1.289 经 GLM、qodercli 1.1.65 未登录、grok SKIP）与调用约定；§6 注明 4090 已装 Codex 但默认刀仍 Cursor + Grok 4.7，2026-10-03 PATH 快照标过期并改指 §6.1 |
