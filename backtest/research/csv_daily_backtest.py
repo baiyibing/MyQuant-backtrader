@@ -30,7 +30,8 @@ REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, REPO)
 
 from backtest.research.strategy9_rules import (  # noqa: E402
-    evaluate_stop_range, RANGE_LOOKBACK_CALENDAR_DAYS, protective_line,
+    evaluate_stop_range, RANGE_LOOKBACK_CALENDAR_DAYS,
+    evaluate_version9_exit, plan_stop_price, plan_close_reason,
 )
 
 from backtest.research.csv_strategy_books import (  # noqa: E402
@@ -425,9 +426,7 @@ def simulate(
                             stop_enabled = True
                         close = float(row["close"])
                         if stop_enabled:
-                            trigger, stop_kind = (protective_line(pos.cost, pos.peak, stop_ratio)
-                                                  if "stop_range" in hooks else
-                                                  (pos.cost * (1.0 - stop_ratio), "stop_loss"))
+                            trigger = v9_trigger if v9_plan is not None else pos.cost * (1.0 - stop_ratio)
                             if stop_fill == "close":
                                 if (close <= trigger and not ("stop_range" in hooks and
                                         float(row["open"]) > trigger and
@@ -639,11 +638,8 @@ def simulate(
                             stop_ratio = distance / pos.cost if distance is not None and pos.cost > 0 else None
                             stop_enabled = stop_ratio is not None
                         if stop_enabled:
-                            trigger, stop_kind = (protective_line(pos.cost, pos.peak, stop_ratio)
-                                                  if "stop_range" in hooks else
-                                                  (pos.cost * (1.0 - stop_ratio), "stop_loss"))
-                            if close <= trigger:
-                                reason = "trail:atr" if stop_kind == "trail" else "stop_loss:close"
+                            if close <= (v9_trigger if v9_plan is not None else pos.cost * (1.0 - stop_ratio)):
+                                reason = "stop_loss:close"
                         if not reason:
                             reason = (
                                 sell_gate(code, close, day, closes) if callable(sell_gate)
