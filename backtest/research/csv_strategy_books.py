@@ -3279,6 +3279,49 @@ register(
 
 register(
     CsvStrategyBook(
+        name="version6_33",
+        sizing="per_name",
+        name_budget=1_000_000.0,
+        tag=strategy6_33_rules.BOOK_TAG,
+        aliases=("6.33", "6_33", "v6.33", "v6_33", "version6_33"),
+        allow_add=strategy6_33_rules.ALLOW_ADD,
+        peak_gap_min=strategy6_33_rules.PEAK_GAP_MIN,
+        help_lock=strategy6_33_rules.HELP_LOCK,
+        apply=_apply_version6_33,
+        run_kwargs=_run_kwargs_version6_33,
+    )
+)
+register(
+    CsvStrategyBook(
+        name="version6_34",
+        sizing="per_name",
+        name_budget=1_000_000.0,
+        tag=strategy6_34_rules.BOOK_TAG,
+        aliases=("6.34", "6_34", "v6.34", "v6_34", "version6_34"),
+        allow_add=strategy6_34_rules.ALLOW_ADD,
+        peak_gap_min=strategy6_34_rules.PEAK_GAP_MIN,
+        help_lock=strategy6_34_rules.HELP_LOCK,
+        apply=_apply_version6_34,
+        run_kwargs=_run_kwargs_version6_34,
+    )
+)
+register(
+    CsvStrategyBook(
+        name="version6_35",
+        sizing="per_name",
+        name_budget=1_000_000.0,
+        tag=strategy6_35_rules.BOOK_TAG,
+        aliases=("6.35", "6_35", "v6.35", "v6_35", "version6_35"),
+        allow_add=strategy6_35_rules.ALLOW_ADD,
+        peak_gap_min=strategy6_35_rules.PEAK_GAP_MIN,
+        help_lock=strategy6_35_rules.HELP_LOCK,
+        apply=_apply_version6_35,
+        run_kwargs=_run_kwargs_version6_35,
+    )
+)
+
+register(
+    CsvStrategyBook(
         name="version8",
         sizing="per_name",
         name_budget=1_000_000.0,
@@ -3477,89 +3520,3 @@ register(CsvStrategyBook(
     apply=_apply_version9_1, run_kwargs=_run_kwargs_version9_1,
     sizing="per_name", name_budget=strategy9_1_rules.NAME_BUDGET,
 ))
-
-register(
-    CsvStrategyBook(
-        name="version6_30",
-        sizing="per_name",
-        name_budget=1_000_000.0,
-        tag=strategy6_30_rules.BOOK_TAG,
-        aliases=("6.30", "6_30", "v6.30", "v6_30", "version6_30"),
-        allow_add=strategy6_30_rules.ALLOW_ADD,
-        peak_gap_min=strategy6_30_rules.PEAK_GAP_MIN,
-        help_lock=strategy6_30_rules.HELP_LOCK,
-        apply=_apply_version6_30,
-        run_kwargs=_run_kwargs_version6_30,
-    )
-)
-register(
-    CsvStrategyBook(
-        name="version6_31",
-        sizing="per_name",
-        name_budget=1_000_000.0,
-        tag=strategy6_31_rules.BOOK_TAG,
-        aliases=("6.31", "6_31", "v6.31", "v6_31", "version6_31"),
-        allow_add=strategy6_31_rules.ALLOW_ADD,
-        peak_gap_min=strategy6_31_rules.PEAK_GAP_MIN,
-        help_lock=strategy6_31_rules.HELP_LOCK,
-        apply=_apply_version6_31,
-        run_kwargs=_run_kwargs_version6_31,
-    )
-)
-register(
-    CsvStrategyBook(
-        name="version6_32",
-        sizing="per_name",
-        name_budget=1_000_000.0,
-        tag=strategy6_32_rules.BOOK_TAG,
-        aliases=("6.32", "6_32", "v6.32", "v6_32", "version6_32"),
-        allow_add=strategy6_32_rules.ALLOW_ADD,
-        peak_gap_min=strategy6_32_rules.PEAK_GAP_MIN,
-        help_lock=strategy6_32_rules.HELP_LOCK,
-        apply=_apply_version6_32,
-        run_kwargs=_run_kwargs_version6_32,
-    )
-)
-
-register(
-    CsvStrategyBook(
-        name="version6_33",
-        sizing="per_name",
-        name_budget=1_000_000.0,
-        tag=strategy6_33_rules.BOOK_TAG,
-        aliases=("6.33", "6_33", "v6.33", "v6_33", "version6_33"),
-        allow_add=strategy6_33_rules.ALLOW_ADD,
-        peak_gap_min=strategy6_33_rules.PEAK_GAP_MIN,
-        help_lock=strategy6_33_rules.HELP_LOCK,
-        apply=_apply_version6_33,
-        run_kwargs=_run_kwargs_version6_33,
-    )
-)
-register(
-    CsvStrategyBook(
-        name="version6_34",
-        sizing="per_name",
-        name_budget=1_000_000.0,
-        tag=strategy6_34_rules.BOOK_TAG,
-        aliases=("6.34", "6_34", "v6.34", "v6_34", "version6_34"),
-        allow_add=strategy6_34_rules.ALLOW_ADD,
-        peak_gap_min=strategy6_34_rules.PEAK_GAP_MIN,
-        help_lock=strategy6_34_rules.HELP_LOCK,
-        apply=_apply_version6_34,
-        run_kwargs=_run_kwargs_version6_34,
-    )
-)
-register(
-    CsvStrategyBook(
-        name="version6_35",
-        sizing="per_name",
-        name_budget=1_000_000.0,
-        tag=strategy6_35_rules.BOOK_TAG,
-        aliases=("6.35", "6_35", "v6.35", "v6_35", "version6_35"),
-        allow_add=strategy6_35_rules.ALLOW_ADD,
-        peak_gap_min=strategy6_35_rules.PEAK_GAP_MIN,
-        help_lock=strategy6_35_rules.HELP_LOCK,
-        apply=_apply_version6_35,
-        run_kwargs=_run_kwargs_version6_35,
-    )
-)
