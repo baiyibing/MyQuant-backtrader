@@ -634,7 +634,7 @@ def _run_s8_price_adds_day(
                     )
                 if not _sched_due and not due1 and not due2:
                     continue
-                use2 = not due1
+                use2 = not due1 and not _sched_due  # schedule 模式走 executed_steps，不走 steps2
             if reference_price_for is None:
                 prev_close, did_map = mapped_prev_close(exdiv, code, ds, float(closes[-1]), **({"fen_round": True} if exdiv_ref_fen else {}))
             else:
