@@ -31,6 +31,7 @@ sys.path.insert(0, REPO)
 
 from backtest.research.strategy9_rules import (  # noqa: E402
     evaluate_stop_range, RANGE_LOOKBACK_CALENDAR_DAYS,
+    evaluate_version9_exit, plan_stop_price, plan_close_reason,
 )
 
 from backtest.research.csv_strategy_books import (  # noqa: E402
@@ -245,6 +246,7 @@ def simulate(
     index_block_new=None,
     stop_fill: Optional[str] = None,
     fix_s11_exit_domain: bool = False,
+    version9_sell=None,
     max_hold: bool = False,
     fix_s81_band_precision: bool = False,
     signal_bars_front: dict[str, pd.DataFrame] | None = None,
@@ -255,6 +257,8 @@ def simulate(
     exdiv_economics 显式接收 (engine_symbol, YYYYMMDD) -> ExDivEvent；
     默认 None 保留原行为，事件配合 raw bars 使用，不从 exdiv 的 k 推断权益。
     """
+    from backtest.research.strategy9_rules import validate_sell_mode
+    validate_sell_mode(normalize_csv_strategy(strategy), version9_sell, max_hold)
     if max_hold and normalize_csv_strategy(strategy) != "version9":
         raise ValueError("max_hold is supported only by version9")
     del pos_trail
@@ -283,6 +287,7 @@ def simulate(
         tiers=tiers,
         tier_default=tier_default,
         apply_fn=apply_csv_strategy,
+        **({"version9_sell": version9_sell} if version9_sell is not None else {}),
         **({"max_hold": True} if max_hold else {}),
         **({"fix_s81_band_precision": True} if fix_s81_band_precision else {}),
         scores_by_day=scores_by_day,
@@ -406,6 +411,11 @@ def simulate(
                     if t1_sellable(calendar[pos.entry_idx].date(), day.date()):
                         stop_enabled = isinstance(stop_pct, float) and 0 < stop_pct < 1
                         stop_ratio = stop_pct
+                        v9_plan = None
+                        if "version9_exit" in hooks:
+                            v9_plan = evaluate_version9_exit(hooks, bars[code], day, st.stats)
+                            v9_trigger = plan_stop_price(v9_plan, pos.cost)
+                            stop_enabled = v9_trigger is not None
                         if "stop_range" in hooks:
                             stop_ratio = evaluate_stop_range(hooks, bars[code], day, st.stats)
                             stop_enabled = stop_ratio is not None
@@ -415,7 +425,7 @@ def simulate(
                             stop_enabled = True
                         close = float(row["close"])
                         if stop_enabled:
-                            trigger = pos.cost * (1.0 - stop_ratio)
+                            trigger = v9_trigger if v9_plan is not None else pos.cost * (1.0 - stop_ratio)
                             if stop_fill == "close":
                                 if close <= trigger:
                                     _sell(
@@ -468,6 +478,7 @@ def simulate(
                             reason = (
                                 sell_gate(code, close, day, closes)
                                 if callable(sell_gate)
+                                else plan_close_reason(v9_plan, close, pos.cost, n_days, max_hold) if v9_plan is not None
                                 else take_profit(close, pos.cost, pos.peak, n_days)
                             )
                         if not reason and callable(close_clear):
@@ -612,15 +623,21 @@ def simulate(
                         reason = None
                         stop_ratio = stop_pct
                         stop_enabled = isinstance(stop_pct, float) and 0 < stop_pct < 1
+                        v9_plan = None
+                        if "version9_exit" in hooks:
+                            v9_plan = evaluate_version9_exit(hooks, bars[code], day, st.stats)
+                            v9_trigger = plan_stop_price(v9_plan, pos.cost)
+                            stop_enabled = v9_trigger is not None
                         if "stop_range" in hooks:
                             stop_ratio = evaluate_stop_range(hooks, bars[code], day, st.stats)
                             stop_enabled = stop_ratio is not None
                         if stop_enabled:
-                            if close <= pos.cost * (1.0 - stop_ratio):
+                            if close <= (v9_trigger if v9_plan is not None else pos.cost * (1.0 - stop_ratio)):
                                 reason = "stop_loss:close"
                         if not reason:
                             reason = (
                                 sell_gate(code, close, day, closes) if callable(sell_gate)
+                                else plan_close_reason(v9_plan, close, pos.cost, i - pos.entry_idx, max_hold) if v9_plan is not None
                                 else take_profit(close, pos.cost, pos.peak, i - pos.entry_idx)
                             )
                         if not reason and callable(close_clear):
@@ -688,9 +705,12 @@ def run(
     stop_fill: Optional[str] = None,
     strict_pool: bool = False,
     fix_s11_exit_domain: bool = False,
+    version9_sell=None,
     max_hold: bool = False,
     fix_s81_band_precision: bool = False,
 ) -> SimState:
+    from backtest.research.strategy9_rules import validate_sell_mode
+    validate_sell_mode(normalize_csv_strategy(strategy), version9_sell, max_hold)
     if max_hold and normalize_csv_strategy(strategy) != "version9":
         raise ValueError("max_hold is supported only by version9")
     if fix_s81_band_precision and normalize_csv_strategy(strategy) != "version8_1":
@@ -861,6 +881,7 @@ def run(
         tier_default=tier_default,
         pos_trail=pos_trail,
         strategy=strategy,
+        **({"version9_sell": version9_sell} if version9_sell is not None else {}),
         **({"max_hold": True} if max_hold else {}),
         **({"fix_s81_band_precision": True} if fix_s81_band_precision else {}),
         take_profit=take_profit,

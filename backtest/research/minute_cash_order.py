@@ -59,6 +59,7 @@ from backtest.research.csv_simulate_loop import (
 )
 from backtest.research.exdiv_map import k_for, mapped_prev_close
 from backtest.research.minute_audit import audit_scope
+from backtest.research.strategy9_rules import evaluate_version9_exit, plan_stop_price, plan_close_reason
 from backtest.research.minute_stop_trigger import blocked_bar, target_fill, validate_low
 from backtest.research.strategy3_rules import reserve_step_minute
 from backtest.research.strategy6_rules import trail_hits
@@ -174,6 +175,8 @@ class HeldMinuteCursor:
     l: object = None
     minute_stop_trigger: str = "close"
     take_profit_pct: float | None = None
+    version9_plan: dict | None = None
+    version9_max_hold: bool = False
     current_reserved: bool = field(init=False)
     lu_today: bool = field(default=False, init=False)
     saw_close_hm: bool = field(default=False, init=False)
@@ -186,6 +189,10 @@ class HeldMinuteCursor:
         self.peak = float(self.peak)
         self.peak_hm = int(self.peak_hm)
         self.current_reserved = bool(self.reserved)
+        if self.version9_plan is not None:
+            self.take_profit_pct = self.version9_plan["take_profit_pct"]
+            self.take_profit = lambda px, cost, peak, n_days: plan_close_reason(
+                dict(self.version9_plan, channel_low=None), px, cost, n_days, self.version9_max_hold)
 
     def _exit(self, idx, px, reason):
         self.first_exit_attempted = True
@@ -200,6 +207,10 @@ class HeldMinuteCursor:
             return None
         cur_hm = int(self.hm[idx]) if self.hm is not None else idx
         stop_enabled = isinstance(self.stop_pct, float) and 0 < self.stop_pct < 1
+        trigger = self.cost * (1.0 - self.stop_pct) if stop_enabled else None
+        if self.version9_plan is not None:
+            trigger = plan_stop_price(self.version9_plan, self.cost)
+            stop_enabled = trigger is not None
         px_open, px_close = float(self.o[idx]), float(self.c[idx])
         if phase == "open":
             # Keep the original scanner's OHLC ordering, including rejected fills.
@@ -210,7 +221,7 @@ class HeldMinuteCursor:
                 self.saw_close_hm = True
             skip_bar = blocked_bar(self.minute_stop_trigger, px_open, hi, self.limit_down)
             self._open_state[idx] = skip_bar, self.peak, self.peak_hm
-            if not skip_bar and stop_enabled and px_open <= self.cost * (1.0 - self.stop_pct):
+            if not skip_bar and stop_enabled and px_open <= trigger:
                 return self._exit(idx, px_open, "stop_loss:gap_open")
             return None
         # All opens in this hm have already run. Each close uses only its own
@@ -238,10 +249,11 @@ class HeldMinuteCursor:
 
     def _close(self, idx, cur_hm, px_close, stop_enabled):
         ret = px_close / self.cost - 1.0
-        trigger = self.cost * (1.0 - self.stop_pct) if stop_enabled else None
+        trigger = (plan_stop_price(self.version9_plan, self.cost) if self.version9_plan is not None
+                   else self.cost * (1.0 - self.stop_pct) if stop_enabled else None)
         if stop_enabled:
             touched = (float(self.l[idx]) <= trigger if self.minute_stop_trigger == "hl"
-                       else ret <= -self.stop_pct)
+                       else (px_close <= trigger if self.version9_plan is not None else ret <= -self.stop_pct))
             if touched:
                 fill_px = trigger if self.minute_stop_trigger == "hl" else px_close
                 return self._exit(idx, fill_px, "stop_loss:touch")
@@ -262,6 +274,10 @@ class HeldMinuteCursor:
                 return self._exit(idx, px_close, reason)
             if self.current_reserved and is_limit_up:
                 return None
+        if self.version9_plan is not None and self.is_true_day_last:
+            reason = plan_close_reason(dict(self.version9_plan, take_profit_pct=None), px_close, self.cost, self.n_days)
+            if reason:
+                return self._exit(idx, px_close, reason)
         if self.minute_stop_trigger == "hl" and not callable(self.exit_plan) and not callable(self.sell_gate):
             fill = target_fill(float(self.o[idx]), float(self.h[idx]), self.cost, self.peak,
                                self.n_days, self.take_profit_pct, self.take_profit)
@@ -411,6 +427,8 @@ def run_chronological_day(
                 if pos.pending_exit and sellable and opening is not None:
                     pending_open.append((code, pos, opening, limits))
                 continue
+            v9_plan = (evaluate_version9_exit(hooks, daily_bars[code], day, st.stats)
+                       if "version9_exit" in hooks and day_i > pos.entry_idx else None)
             cursor = HeldMinuteCursor(
                 o,
                 h,
@@ -422,6 +440,7 @@ def run_chronological_day(
                 n_days=day_i - pos.entry_idx,
                 can_sell=sellable,
                 stop_pct=hooks["stop_pct"],
+                version9_plan=v9_plan, version9_max_hold=bool(st.stats.get("max_hold")),
                 profit_base=profit_base if profit_base is not None else 0.0,
                 trail_ratio=0.0,
                 pos_trail=pos_trail,
