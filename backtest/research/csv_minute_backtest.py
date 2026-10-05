@@ -1039,6 +1039,14 @@ def simulate(
                             st.stats["defer_sell_volume"] += 1
                         continue
                     # Resolve dates here; only the eligibility bool reaches the scanner.
+                    stop_range_ratio = None
+                    if n_days >= 1:
+                        if absolute_exit:
+                            stop_range_ratio = 1 - absolute_exit(code, day) / pos.cost
+                        elif "stop_range" in hooks:
+                            distance = evaluate_stop_range(hooks, ddf, day, st.stats)
+                            if distance is not None and pos.cost > 0:
+                                stop_range_ratio = distance / pos.cost
                     reserve_state = {"reserved": bool(pos.reserved)}
                     v9_plan = (evaluate_version9_exit(hooks, ddf, day, st.stats)
                                if "version9_exit" in hooks and n_days >= 1 else None)
@@ -1054,9 +1062,7 @@ def simulate(
                         n_days=n_days,
                         can_sell=t1_sellable(calendar[pos.entry_idx].date(), day.date()),
                         stop_pct=stop_pct,
-                        version9_stop="stop_range" in hooks,
-                        stop_range_ratio=(evaluate_stop_range(hooks, ddf, day, st.stats)
-                                          if "stop_range" in hooks and n_days >= 1 else None),
+                        stop_range_ratio=stop_range_ratio,
                         profit_base=profit_base if profit_base is not None else 0.0,
                         trail_ratio=0.0,
                         pos_trail=pos_trail,

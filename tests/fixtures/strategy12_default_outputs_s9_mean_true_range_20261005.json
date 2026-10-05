@@ -1,0 +1,17 @@
+{
+  "rule_revision": "s9-mean-true-range-20-trailing-20261005",
+  "historical_sha256": "2f578d6fe9e601ad84a94bb6a269e1b5193c51ca4dd908366022769f0e1f31c2",
+  "captured_environment": {
+    "pandas": "3.0.6"
+  },
+  "sha256_csv_bytes": {
+    "version9/daily": {
+      "trades": "19e2b0f92ee11747d3ac8e8dd888f65d1c1a8237b5d2621968a42cd4a2147389",
+      "equity": "18ebf7697d504f56f1ab72090fd2aef4f0a94741eadfa8152e3a1b8d6344d483"
+    },
+    "version9/minute": {
+      "trades": "f8975f1371a19d4a48b1705ef078ab99a4930555c80cceeaecf0ededbe4dd10d",
+      "equity": "4d09025a0d080b8a0a0ed735a71b35e37509c7c914026f1092a4949e74bdaa7e"
+    }
+  }
+}

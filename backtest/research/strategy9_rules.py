@@ -29,9 +29,8 @@ HELP_LOCK = """
   买点 = 底量超顶量名单（export_strategy9_pool.py），不是 stock_pool/。
   必须显式 --pool-dir；指向本仓 stock_pool/ 立即退出。
   止损幅度每个交易日从此前 20 根日线重算，不在入场锁定。
-  幅度=(20 根最高 high - 最低 low)/窗口前一根 close；触发价=成本*(1-幅度)。
-  缺窗口当天无 range 止损、不回落固定比例；成本 × 0.90 固定止损仍生效。
-  两条止损取较高触发价；--stop-pct 不接受。
+  触发价=成本减去此前 20 根 true range 的简单算术均值（元），需 21 根历史；每日重算，无固定百分比。
+  缺窗口当天不止损、不回落固定比例；--stop-pct 不接受。
   盈利达到成本的 10% 返回已有 reason
   profit_take:target（不是新订单类型），次日开盘卖。无分档回撤止盈；不加仓。
   20 交易日强平默认 OFF；启用 --max-hold 后，持仓交易日数 n_days>=20 收盘记 force_sell:max_hold，次日开盘卖
@@ -61,48 +60,40 @@ def take_profit_reason(
 def record_strategy9_params(st, *, max_hold: bool = False) -> None:
     st.stats["sell_book"] = BOOK_TAG
     st.stats["stop_pct"] = None
-    st.stats["stop_mode"] = "range_amp_20_trailing"
+    st.stats["stop_mode"] = "cost_minus_mean_true_range_20_trailing"
     st.stats["range_bars"] = RANGE_BARS
     st.stats["profit_target"] = TAKE_PROFIT_PCT
     st.stats["max_hold"] = MAX_HOLD if max_hold else None
 
 
-def stop_range_status(frame, day):
-    """Return (daily range amplitude, missing-window reason), using bars before day."""
+def mean_true_range(frame, day):
+    """Simple mean of 20 true ranges in yuan, using only bars strictly before T."""
     prior = frame.loc[frame.index < pd.Timestamp(day)].tail(RANGE_BARS + 1)
-    if len(prior) < RANGE_BARS + 1:
-        return None, "short_history"
-    window = prior.iloc[1:]
-    if not {"high", "low"}.issubset(window.columns):
-        return None, "missing_hl"
-    high = pd.to_numeric(window["high"], errors="coerce").to_numpy(float)
-    low = pd.to_numeric(window["low"], errors="coerce").to_numpy(float)
-    if not (np.isfinite(high).all() and np.isfinite(low).all()) or (high < low).any():
-        return None, "missing_hl"
-    base = pd.to_numeric(pd.Series([prior.iloc[0].get("close")]), errors="coerce").iloc[0]
-    if not np.isfinite(base) or base <= 0:
-        return None, "missing_base_close"
-    ratio = float((high.max() - low.min()) / base)
-    if not np.isfinite(ratio):
-        return None, "missing_hl"
-    return ratio, None
+    if len(prior) < RANGE_BARS + 1 or not {"high", "low", "close"}.issubset(prior.columns):
+        return None
+    values = prior[["high", "low", "close"]].apply(pd.to_numeric, errors="coerce").to_numpy(float)
+    if not np.isfinite(values).all() or (values[:, 0] < values[:, 1]).any():
+        return None
+    high, low = values[1:, 0], values[1:, 1]
+    prev_close = values[:-1, 2]
+    ranges = np.maximum.reduce((high - low, np.abs(high - prev_close), np.abs(low - prev_close)))
+    average = float(ranges.mean())
+    return average if np.isfinite(average) else None
 
 
-def stop_range_amplitude(frame, day) -> Optional[float]:
-    """(max(high) - min(low)) of prior 20 bars / close of prior 21st bar."""
-    return stop_range_status(frame, day)[0]
+def stop_range_status(frame, day):
+    distance = mean_true_range(frame, day)
+    if distance is not None:
+        return distance, None
+    prior = frame.loc[frame.index < pd.Timestamp(day)].tail(RANGE_BARS + 1)
+    return None, "short_history" if len(prior) < RANGE_BARS + 1 else "missing_ohlc"
 
 
 def evaluate_stop_range(hooks, frame, day, stats):
     """Evaluate the version9 hook once per session evaluation; count missing inputs."""
-    ratio = hooks["stop_range"](frame, day)
-    if ratio is None:
+    distance = hooks["stop_range"](frame, day)
+    if distance is None:
         reason = stop_range_status(frame, day)[1]
         key = f"skip_stop_range:{reason}"
         stats[key] = stats.get(key, 0) + 1
-    return ratio
-
-
-def effective_stop_ratio(range_ratio):
-    """Keep the range leg unclamped; the higher stop wins over cost * 0.90."""
-    return min(range_ratio, 0.10) if range_ratio is not None else 0.10
+    return distance

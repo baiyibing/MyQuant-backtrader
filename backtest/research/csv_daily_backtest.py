@@ -416,12 +416,16 @@ def simulate(
                             v9_trigger = plan_stop_price(v9_plan, pos.cost)
                             stop_enabled = v9_trigger is not None
                         if "stop_range" in hooks:
-                            stop_ratio = evaluate_stop_range(hooks, bars[code], day, st.stats)
-                            stop_ratio = effective_stop_ratio(stop_ratio)
+                            distance = evaluate_stop_range(hooks, bars[code], day, st.stats)
+                            stop_ratio = distance / pos.cost if distance is not None and pos.cost > 0 else None
+                            stop_enabled = stop_ratio is not None
+                        absolute_line = absolute_exit(code, day) if absolute_exit else None
+                        if absolute_line is not None:
+                            stop_ratio = 1 - absolute_line / pos.cost
                             stop_enabled = True
                         close = float(row["close"])
                         if stop_enabled:
-                            trigger = v9_trigger if v9_plan is not None else pos.cost * (1.0 - stop_ratio)
+                            trigger = pos.cost - distance if "stop_range" in hooks else pos.cost * (1.0 - stop_ratio)
                             if stop_fill == "close":
                                 if (close <= trigger and not ("stop_range" in hooks and
                                         float(row["open"]) > trigger and
@@ -629,11 +633,12 @@ def simulate(
                             v9_trigger = plan_stop_price(v9_plan, pos.cost)
                             stop_enabled = v9_trigger is not None
                         if "stop_range" in hooks:
-                            stop_ratio = evaluate_stop_range(hooks, bars[code], day, st.stats)
-                            stop_ratio = effective_stop_ratio(stop_ratio)
-                            stop_enabled = True
+                            distance = evaluate_stop_range(hooks, bars[code], day, st.stats)
+                            stop_ratio = distance / pos.cost if distance is not None and pos.cost > 0 else None
+                            stop_enabled = stop_ratio is not None
                         if stop_enabled:
-                            if close <= (v9_trigger if v9_plan is not None else pos.cost * (1.0 - stop_ratio)):
+                            trigger = pos.cost - distance if "stop_range" in hooks else pos.cost * (1.0 - stop_ratio)
+                            if close <= trigger:
                                 reason = "stop_loss:close"
                         if not reason:
                             reason = (
