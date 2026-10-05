@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
 """Strategy 7 compatibility entry, native writer and small standalone CLI.
 
-Main executes both native schedules from injected records. Lake discovery belongs to the
-CLI edge; lot ``buy_date`` values are the sole source of T+1 eligibility.
+simulate_v7 forwards native arguments to strategy7_engine.simulate_native and main.
+Main/minute_cash_order own both schedules; this module retains loaders, CLI, CRLF
+writers and helper/class exports consumed by isolated fullstrat research.
+Lot ``buy_date`` values remain the sole source of T+1 eligibility.
 """
 
 from __future__ import annotations
@@ -13,18 +15,16 @@ import json
 import os
 import sys
 import time
-from dataclasses import dataclass, field
 from datetime import date, timedelta
-from math import isfinite
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from backtest.research.ashare_bars import _in_session, bars_from_pool
+from backtest.research.ashare_bars import bars_from_pool
 from backtest.research.ashare_fees import DEFAULT_SCHEDULE, FeeSchedule
-from backtest.research.ashare_volume_cap import VolumeCap, VolumeLookup
+from backtest.research.ashare_volume_cap import VolumeLookup
 from backtest.research.csv_minute_volume import completed_minute_volumes
 from backtest.research.participation_rate_precheck import (
     precheck_cli_participation_rate,
@@ -60,14 +60,9 @@ from backtest.research.ashare_session import (
 )
 from backtest.research.csv_pool import load_pool_day_map, load_pool_names_by_day
 from backtest.research.ashare_exdiv_economics import EconomicLookup, ExDivEconomics
-from backtest.research.minute_audit import audit_scope, record_fill, write_audit
+from backtest.research.minute_audit import write_audit
 from backtest.research.tail_window_buy import (
-    TAIL_MINUTES,
-    TAIL_START,
-    TailParent,
-    resolve_tail_volume_unit,
     tail_policy,
-    tail_quote,
     validate_tail_options,
 )
 from common.infra.data_root import resolve_index_daily_root
@@ -113,7 +108,7 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
                 tail_volume_unit: str | None = "shares",
                 audit_sink: Any = None,
                 **unsupported_options) -> SimResult:
-    """Delegate both native schedules to the main minute engine.
+    """Forward native arguments; the adapter validates/normalizes tail options before main.
 
     Same-bar close capacity is a completed-bar approximation. Gap opens cannot
     use that bucket. An index date->close mapping enables the new-open gate.
@@ -127,9 +122,6 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
     reject_short_cash_override(unsupported_options, "v7 simulate")
     if unsupported_options:
         raise TypeError(f"Unexpected v7 options: {sorted(unsupported_options)}")
-    validate_tail_options(tail_window_buy, fix_minute_cash_order, tail_volume_unit)
-    if tail_window_buy:
-        tail_volume_unit = resolve_tail_volume_unit(tail_volume_unit)
     from backtest.research.strategy7_engine import simulate_native
     return simulate_native(
         minute_bars, daily_bars, pool_days, index_days, cash_total=cash_total,

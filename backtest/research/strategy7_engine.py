@@ -1,7 +1,10 @@
 """V7 native state, accounting and single-event book callbacks.
 
 Both native schedules belong to main/minute_cash_order.
-Callbacks consume one symbol preparation or one row event, never traverse days.
+Input adapters may traverse records; accounting may traverse lots. Production
+callbacks consume one symbol preparation or one row event, never schedule days.
+simulate_native validates and normalizes tail options before translating native
+arguments to the registered main book.
 """
 from __future__ import annotations
 from math import isfinite
@@ -721,7 +724,12 @@ def simulate_native(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, S
                 tail_volume_unit: str | None = "shares",
                 audit_sink: Any = None,
                 ) -> SimResult:
-    """Translate native v7/APP arguments to the registered main execution book."""
+    """Validate/normalize tail options, then translate native v7/APP arguments."""
+    # Reject invalid native tail options before loading main (facade lazy-import contract).
+    from backtest.research.tail_window_buy import validate_tail_options, resolve_tail_volume_unit
+    validate_tail_options(tail_window_buy, fix_minute_cash_order, tail_volume_unit)
+    if tail_window_buy:
+        tail_volume_unit = resolve_tail_volume_unit(tail_volume_unit)
     from backtest.research.csv_minute_backtest import simulate
     from backtest.research.minute_engine_policies import MinutePolicyContext
     return simulate(
