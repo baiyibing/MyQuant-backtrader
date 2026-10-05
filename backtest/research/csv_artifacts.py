@@ -305,10 +305,10 @@ def write_run_artifacts(
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     pd.DataFrame(st.trades).to_csv(
-        out_dir / "trades.csv", index=False, encoding="utf-8"
+        out_dir / "trades.csv", index=False, encoding="utf-8", lineterminator="\n"
     )
     pd.DataFrame(st.equity_curve, columns=["date", "equity"]).to_csv(
-        out_dir / "daily_equity.csv", index=False, encoding="utf-8"
+        out_dir / "daily_equity.csv", index=False, encoding="utf-8", lineterminator="\n"
     )
     (out_dir / "summary.txt").write_text(
         text + "\n" + help_lock, encoding="utf-8", newline="\n"

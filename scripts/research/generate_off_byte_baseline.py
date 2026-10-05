@@ -77,7 +77,7 @@ HISTORICAL_CASES = tuple(
 # v61 第一代 overlay（20261002）被首仓锚修复（stats 新增 cost_anchor 等）取代；
 # 新修订路径未录制前，v6_1 用例跳过（见 test 端守卫）。
 V61_GOLDEN = ROOT / "tests/fixtures/off_byte_baseline_v61_anchorfix_20261005.json"
-V61_RULE_REVISION = "v61-unbounded-ladder-2026-10-02"
+V61_RULE_REVISION = "v61-first-lot-anchor-20261005"
 V61_BOOK_NAMES = ("version6_1",)
 V61_CASES = tuple((book, engine) for book in V61_BOOK_NAMES for engine in ("daily", "minute"))
 V91_GOLDEN = ROOT / "tests/fixtures/off_byte_baseline_v91_20261004.json"
@@ -710,8 +710,8 @@ def main():
     if args.record_v61_v2:
         if V61_GOLDEN.exists():
             parser.error("The version6_1 v2 overlay already exists; refusing to overwrite")
-        if pd.__version__ != "3.0.6" or sys.platform.startswith("win"):
-            parser.error("version6_1 v2 recording requires the authorized pandas 3.0.6 Linux environment")
+        if pd.__version__ != "3.0.6":
+            parser.error("version6_1 v2 recording requires the authorized pandas 3.0.6 environment")
         assert _hash(GOLDEN.read_bytes()) == HISTORICAL_GOLDEN_SHA256
         assert _hash(CANONICAL_GOLDEN.read_bytes()) == HISTORICAL_CANONICAL_SHA256
         with tempfile.TemporaryDirectory(prefix="v61v2-byte-baseline-") as temp:

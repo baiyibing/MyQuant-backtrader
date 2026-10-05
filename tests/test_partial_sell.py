@@ -14,7 +14,7 @@ CODE = "600000.SH"
 BASELINE = Path(__file__).parent / "fixtures/strategy12_default_outputs.json"
 BASELINE_SHA256 = "2f578d6fe9e601ad84a94bb6a269e1b5193c51ca4dd908366022769f0e1f31c2"
 S8_BASELINE = Path(__file__).parent / "fixtures/strategy12_default_outputs_s8_independent_20260926.json"
-S9_BASELINE = Path(__file__).parent / "fixtures/strategy12_default_outputs_s9_2x_mean_tr_20_yuan_trailing_20261005.json"
+S9_BASELINE = Path(__file__).parent / "fixtures/strategy12_default_outputs_s9_range_amp_20_trailing_20261004.json"
 S8_BASELINE_BOOKS = ("version8", "version8_2", "version8_3")
 LEGACY_BOOKS = ("version1", "version2", "version3", "version4", "version5",
                 "version6", "version8", "version8_1", "version8_2", "version8_3",
@@ -66,7 +66,7 @@ def test_default_trades_and_equity_byte_identical_to_pre_s1_head():
     assert len(corrected_cases) == 6
     assert len(set(expected["sha256_csv_bytes"]) - set(corrected_cases)) == 18
     s9 = json.loads(S9_BASELINE.read_text(encoding="utf-8"))
-    assert s9["rule_revision"] == "s9-2x-mean-tr-20-yuan-trailing-20261005"
+    assert s9["rule_revision"] == "s9-range-amp-20-trailing-20261004"
     assert s9["historical_sha256"] == BASELINE_SHA256
     assert s9["captured_environment"]["pandas"] == "3.0.6"
     s9_cases = s9["sha256_csv_bytes"]
