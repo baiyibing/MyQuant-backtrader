@@ -12,7 +12,26 @@ ROOT = Path(__file__).resolve().parents[1]
 HOOK = ROOT / '.githooks' / 'pre-push'
 
 
+def clean_env():
+    env = os.environ.copy()
+    # A pre-push self-run must not redirect temporary Git repos to the real repo.
+    for name in (
+        'GIT_DIR',
+        'GIT_WORK_TREE',
+        'GIT_INDEX_FILE',
+        'GIT_OBJECT_DIRECTORY',
+        'GIT_ALTERNATE_OBJECT_DIRECTORIES',
+        'GIT_COMMON_DIR',
+        'GIT_PREFIX',
+        'GIT_CEILING_DIRECTORIES',
+        'SKIP_PREPUSH',
+    ):
+        env.pop(name, None)
+    return env
+
+
 def run(args, cwd, **kwargs):
+    kwargs.setdefault('env', clean_env())
     return subprocess.run(
         args, cwd=cwd, capture_output=True, text=True, timeout=30, **kwargs
     )
@@ -24,10 +43,11 @@ def test_hook_format():
     assert b'\r\n' not in content
 
 
-def test_hook_executable_index():
+@pytest.mark.parametrize('path', ['.githooks/pre-push', 'scripts/install-git-hooks.sh'])
+def test_hook_executable_index(path):
     if not shutil.which('git'):
         pytest.skip('git unavailable')
-    result = run(['git', 'ls-files', '-s', '.githooks/pre-push'], ROOT)
+    result = run(['git', 'ls-files', '-s', path], ROOT)
     assert result.returncode == 0, result.stderr
     assert result.stdout.startswith('100755 ')
 
@@ -48,8 +68,7 @@ def test_marker_checks(tmp_path):
         return git('rev-parse', 'HEAD')
 
     def push(sha, skip=False):
-        env = os.environ.copy()
-        env.pop('SKIP_PREPUSH', None)
+        env = clean_env()
         if skip:
             env['SKIP_PREPUSH'] = '1'
         return run(
