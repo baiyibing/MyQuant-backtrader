@@ -130,16 +130,14 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
     validate_tail_options(tail_window_buy, fix_minute_cash_order, tail_volume_unit)
     if tail_window_buy:
         tail_volume_unit = resolve_tail_volume_unit(tail_volume_unit)
-    from backtest.research.csv_minute_backtest import simulate
-    from backtest.research.minute_engine_policies import MinutePolicyContext
-    return simulate(
-        minute_bars, daily_bars, pool_days, start, end, strategy="version7",
-        total_cash=cash_total, exdiv=exdiv, exdiv_economics=exdiv_economics,
-        pool_names=names, pool_names_by_day=names_by_day,
+    from backtest.research.strategy7_engine import simulate_native
+    return simulate_native(
+        minute_bars, daily_bars, pool_days, index_days, cash_total=cash_total,
+        start=start, end=end, exdiv=exdiv, exdiv_economics=exdiv_economics,
+        names=names, names_by_day=names_by_day, fee=fee,
         participation_rate=participation_rate, volume_for_bucket=volume_for_bucket,
         audit_sink=audit_sink, fix_minute_cash_order=fix_minute_cash_order,
         tail_window_buy=tail_window_buy, tail_volume_unit=tail_volume_unit,
-        policy_context=MinutePolicyContext(index_days=index_days, fee_schedule=fee),
     )
 
 

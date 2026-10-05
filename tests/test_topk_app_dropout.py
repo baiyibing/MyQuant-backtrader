@@ -112,3 +112,61 @@ def test_load_pred_frame_requires_columns(tmp_path: Path):
     p.write_text("datetime,instrument\n2026-01-05,SZ000001\n", encoding="utf-8")
     with pytest.raises(ValueError, match="score"):
         load_pred_frame(p)
+
+
+@pytest.mark.parametrize('entry', ['cli', 'host'])
+@pytest.mark.parametrize('cash', [None, 123456.0])
+def test_app_entries_reach_registered_main_once(tmp_path, monkeypatch, entry, cash):
+    from datetime import date
+    from backtest.research import csv_minute_backtest as main
+    from backtest.research import csv_minute_backtest_v7 as native
+    from backtest.research import csv_minute_backtest_topk_app_dropout as app
+    from backtest.research import minute_bar_scan_host as host, ashare_session
+    from backtest.research.ashare_fees import DEFAULT_SCHEDULE
+    from backtest.research.minute_engine_policies import MinutePolicyContext
+
+    day = date(2026, 1, 9)
+    symbol = '000001.SZ'
+    pools = {day: [symbol]}
+    minute = {symbol: [dict(datetime='2026-01-09 14:55:00', hm=895, open=10.0,
+                            high=10.0, low=10.0, close=10.0)]}
+    daily = {symbol: [dict(date='2026-01-08', close=10.0)]}
+    for module in (native, app):
+        monkeypatch.setattr(module, 'load_pool_days', lambda *a: pools)
+        monkeypatch.setattr(module, '_load_cli_bars', lambda *a, **kw: (minute, daily))
+        monkeypatch.setattr(module, 'load_index_daily', lambda *a: [day])
+    monkeypatch.setattr(app, 'load_limit_context', lambda *a: ({}, {}))
+    monkeypatch.setattr(ashare_session, 'load_limit_context', lambda *a: ({}, {}))
+    def forbidden(*a, **kw):
+        raise AssertionError('APP must bypass simulate_v7')
+    monkeypatch.setattr(native, 'simulate_v7', forbidden)
+    calls = []
+    original = main.simulate
+    def spy(*args, **kwargs):
+        result = original(*args, **kwargs)
+        calls.append((args, kwargs, result))
+        return result
+    monkeypatch.setattr(main, 'simulate', spy)
+    actual_cash = app.DEFAULT_CASH_TOTAL if cash is None else cash
+    if entry == 'cli':
+        argv = ['--start', '20260109', '--end', '20260109', '--pool-dir', str(tmp_path),
+                '--output-dir', str(tmp_path / 'out')]
+        if cash is not None:
+            argv += ['--cash-total', str(cash)]
+        assert app.main(argv) == 0
+    else:
+        summary = host.run_topk_app_dropout(day, day, pool_dir=tmp_path, cash=cash)
+        assert summary.bars == 1
+    assert len(calls) == 1
+    args, kwargs, result = calls[0]
+    assert args == (minute, daily, pools, day, day)
+    assert kwargs['strategy'] == 'version7'
+    assert kwargs['total_cash'] == actual_cash
+    assert kwargs['policy_context'] == MinutePolicyContext(index_days=[day], fee_schedule=DEFAULT_SCHEDULE)
+    assert kwargs['fix_minute_cash_order'] is False
+    assert kwargs['tail_window_buy'] is False
+    assert isinstance(result, native.SimResult)
+    if cash is not None:
+        assert result.cash == cash
+        assert not result.positions
+        assert result.trades[0]['reason'] == 'skip_cash'
