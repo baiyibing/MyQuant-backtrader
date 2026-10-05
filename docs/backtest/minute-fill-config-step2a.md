@@ -315,24 +315,14 @@ to omission. Default CSV bytes match base `322c36a`; no new overlay is needed
 and no existing fixture was modified.
 
 
-A2 version9_2 final verification (Python `/tmp/mq-v6/bin/python`,
-pandas 3.0.6, branch base `322c36a`):
+A2 version9_2 post-rebase verification (Python `/tmp/mq-v6/bin/python`,
+base `origin/master 3409347`):
 
 - Off-byte (`-p no:cacheprovider -q tests/test_off_byte_baseline.py`):
-  **165 passed, 0 failed**, 4.24 s.
-- Fold/book/config (`test_v92_minute_fold.py`, `test_strategy9_2_book.py`,
-  `test_minute_fill_config.py`, same pytest options):
-  **129 passed, 0 failed**, 1.17 s.
+  **177 passed in 4.66s**.
+- Fold/book/config (`tests/test_v92_minute_fold.py`,
+  `tests/test_v12_minute_fold.py`, `tests/test_minute_fill_config.py`,
+  same pytest options): **100 passed in 1.06s**.
 - Full suite (`-p no:cacheprovider -q -m "not production and not benchmark"`):
-  **7707 passed, 5 skipped, 24 deselected, 29 warnings, 0 failed**,
-  129.82 s (0:02:09).
-- Base/final replay, default and `fix_minute_cash_order=True`: each
-  **6 BUY / 6 SELL**, final equity **5,054,460.412500001**.
-  Daily: **6 BUY / 6 SELL**, final equity **5,005,689.371**.
-  All trade rows, equity curves, stats and both production CSV hashes match.
-- Participation 0.1: **0 BUY / 0 SELL**, final equity **5,000,000.0**
-  on both revisions. The bare option has no volume lookup and fails closed;
-  an additional replay with raw incremental fixture BucketVolume also has
-  no fills. This checks equality, not successful partial-volume executions.
-- `git diff 322c36a -- tests/fixtures`: **empty**. The local, uncommitted
-  `A2_V92_DELTA.md` records all interface differences and per-case deltas.
+  **7755 passed, 5 skipped, 24 deselected, 29 warnings in 140.41s (0:02:20)**.
+- `git diff --stat origin/master -- tests/fixtures`: **empty**.
