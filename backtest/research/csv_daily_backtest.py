@@ -554,6 +554,12 @@ def simulate(
                 row, closes = got
                 return float(row["close"]), closes
 
+            if callable(hooks.get("breakout_day")):
+                hooks["breakout_day"](
+                    st, day_i=i, day=day, ds=ds, names=names, pool_days=pool_days,
+                    buy_quote_for=_pool_quote_for, exdiv=exdiv,
+                    qlib_limit_pct=qlib_limit_pct,
+                )
             run_pool_buys_day(
                 st,
                 pending_chase,

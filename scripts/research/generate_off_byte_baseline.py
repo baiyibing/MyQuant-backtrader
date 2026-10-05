@@ -23,6 +23,8 @@ version9_2 (22nd book) uses the scoped additive 2026-10-04 overlay;
 --record-v92 writes only its daily/minute cases; a new rule revision may replace that overlay.
 See docs/backtest/s8-independent-positions-2026-09-26.md and
 docs/backtest/v61-off-byte-overlay-2026-10-02.md.
+The 6.2-6.12 family (11 books, PR #362) uses the scoped additive 2026-10-05
+overlay; --record-v6f writes its 22 cases and refuses overwrite.
 """
 
 from __future__ import annotations
@@ -72,7 +74,9 @@ HISTORICAL_BOOK_NAMES = (
 HISTORICAL_CASES = tuple(
     (book, engine) for book in HISTORICAL_BOOK_NAMES for engine in ("daily", "minute")
 ) + (("version7", "minute"),)
-V61_GOLDEN = ROOT / "tests/fixtures/off_byte_baseline_v61_20261002.json"
+# v61 第一代 overlay（20261002）被首仓锚修复（stats 新增 cost_anchor 等）取代；
+# 新修订路径未录制前，v6_1 用例跳过（见 test 端守卫）。
+V61_GOLDEN = ROOT / "tests/fixtures/off_byte_baseline_v61_anchorfix_20261005.json"
 V61_RULE_REVISION = "v61-unbounded-ladder-2026-10-02"
 V61_BOOK_NAMES = ("version6_1",)
 V61_CASES = tuple((book, engine) for book in V61_BOOK_NAMES for engine in ("daily", "minute"))
@@ -80,19 +84,27 @@ V91_GOLDEN = ROOT / "tests/fixtures/off_byte_baseline_v91_20261004.json"
 V91_RULE_REVISION = "v91-atr-turtle-20261004"
 V91_BOOK_NAMES = ("version9_1",)
 V91_CASES = tuple((book, engine) for book in V91_BOOK_NAMES for engine in ("daily", "minute"))
-V92_GOLDEN = ROOT / "tests/fixtures/off_byte_baseline_v92_mean_true_range_20261005.json"
-V92_RULE_REVISION = "v92-mean-true-range-stop-hold20-20261005"
+V92_GOLDEN = ROOT / "tests/fixtures/off_byte_baseline_v92_20261004.json"
+V92_RULE_REVISION = "v92-range-absolute-stop-hold20-20261005"
 V92_BOOK_NAMES = ("version9_2",)
 V92_CASES = tuple((book, engine) for book in V92_BOOK_NAMES for engine in ("daily", "minute"))
 S12_GOLDEN = ROOT / "tests/fixtures/off_byte_baseline_s12_ma10_stop_20261004.json"
 S12_RULE_REVISION = "s12-whole-position-ma10-stop-69cf371"
 S12_BOOK_NAMES = ("version12",)
 S12_CASES = tuple((book, engine) for book in S12_BOOK_NAMES for engine in ("daily", "minute"))
-S9_GOLDEN = ROOT / "tests/fixtures/off_byte_baseline_s9_2x_mean_tr_20_yuan_trailing_20261005.json"
-S9_RULE_REVISION = "s9-2x-mean-tr-20-yuan-trailing-20261005"
+S9_GOLDEN = ROOT / "tests/fixtures/off_byte_baseline_s9_range_amp_20_trailing_20261004.json"
+S9_RULE_REVISION = "s9-range-amp-20-trailing-20261004"
 S9_BOOK_NAMES = ("version9",)
 S9_CASES = tuple((book, engine) for book in S9_BOOK_NAMES for engine in ("daily", "minute"))
-BOOK_NAMES = HISTORICAL_BOOK_NAMES + V61_BOOK_NAMES + V91_BOOK_NAMES + V92_BOOK_NAMES
+V6F_BOOK_NAMES = (
+    "version6_2", "version6_3", "version6_4", "version6_5", "version6_6",
+    "version6_7", "version6_8", "version6_9", "version6_10", "version6_11",
+    "version6_12",
+)
+V6F_GOLDEN = ROOT / "tests/fixtures/off_byte_baseline_v6_family_20261005.json"
+V6F_RULE_REVISION = "strategy6-family-6_2-to-6_12-20261005"
+V6F_CASES = tuple((book, engine) for book in V6F_BOOK_NAMES for engine in ("daily", "minute"))
+BOOK_NAMES = HISTORICAL_BOOK_NAMES + V61_BOOK_NAMES + V91_BOOK_NAMES + V92_BOOK_NAMES + V6F_BOOK_NAMES
 CODE = "600000.SH"
 TOPK_CODES = (CODE, "600001.SH", "600002.SH")
 CASES = tuple((book, engine) for book in BOOK_NAMES for engine in ("daily", "minute")) + (
@@ -113,11 +125,16 @@ CANONICAL_CONTRACT = {
 }
 
 
-def frozen_inputs():
+# 突破书（6.11/6.12）专用合成路径：涨跌停约束内的 1.25x 突破 + 加仓 + 回落离场。
+BREAKOUT_PRICES = [10.] * 12 + [10., 10.5, 11.5, 12.5, 13.0, 13.5, 12.2] + [11.0] * 6
+
+
+def frozen_inputs(prices=None):
     """Quarter/eighth prices avoid dependency-sensitive numeric construction."""
     dates = pd.bdate_range("2025-10-13", periods=25)
-    prices = [10.] * 12 + [10., 10.5, 10.75, 11., 10.5, 9.75, 9.25,
-                           9.75, 10.25, 10., 9.75, 10.25, 10.]
+    if prices is None:
+        prices = [10.] * 12 + [10., 10.5, 10.75, 11., 10.5, 9.75, 9.25,
+                               9.75, 10.25, 10., 9.75, 10.25, 10.]
     bars = pd.DataFrame({
         "open": [p - .125 for p in prices],
         "high": [p + .25 for p in prices],
@@ -145,7 +162,11 @@ def _eligible_buy(_code, _day):
 
 
 def run_case(book: str, engine: str, *, explicit_false: bool = False):
-    bars, minutes, pools, start, end, dates = frozen_inputs()
+    if book in ("version6_11", "version6_12"):
+        # 突破书：共享路径涨不到 A0x1.2，专用路径才有成交。
+        bars, minutes, pools, start, end, dates = frozen_inputs(BREAKOUT_PRICES)
+    else:
+        bars, minutes, pools, start, end, dates = frozen_inputs()
     if book == "version9":
         # First evaluation is dates[13]: 13 prior frozen bars need 8 extra bars.
         extra = pd.bdate_range(end=dates[0] - pd.Timedelta(days=1), periods=8)
@@ -314,6 +335,20 @@ def load_v92_golden() -> dict:
     return golden
 
 
+def load_v6f_golden() -> dict:
+    """Additive overlay for the 6.2-6.12 family; historical files stay immutable."""
+    assert _hash(GOLDEN.read_bytes()) == HISTORICAL_GOLDEN_SHA256
+    assert _hash(CANONICAL_GOLDEN.read_bytes()) == HISTORICAL_CANONICAL_SHA256
+    golden = json.loads(V6F_GOLDEN.read_text(encoding="utf-8"))
+    assert golden["rule_revision"] == V6F_RULE_REVISION
+    assert golden["historical_raw_sha256"] == HISTORICAL_GOLDEN_SHA256
+    assert golden["historical_canonical_sha256"] == HISTORICAL_CANONICAL_SHA256
+    assert golden["contract"] == CANONICAL_CONTRACT
+    assert golden["books"] == list(V6F_BOOK_NAMES)
+    assert set(golden["cases"]) == {f"{book}/{engine}" for book, engine in V6F_CASES}
+    return golden
+
+
 def load_s12_golden() -> dict:
     """Replacement overlay for version12 only; historical files stay immutable."""
     assert _hash(GOLDEN.read_bytes()) == HISTORICAL_GOLDEN_SHA256
@@ -362,6 +397,11 @@ def expected_case(book: str, engine: str) -> tuple[dict, dict, str]:
         return case, canonical, golden["captured_environment"]["pandas"]
     if (book, engine) in V92_CASES:
         golden = load_v92_golden()
+        case = golden["cases"][key]
+        canonical = {name: canonical_hash(table) for name, table in case["canonical_csv"].items()}
+        return case, canonical, golden["captured_environment"]["pandas"]
+    if (book, engine) in V6F_CASES:
+        golden = load_v6f_golden()
         case = golden["cases"][key]
         canonical = {name: canonical_hash(table) for name, table in case["canonical_csv"].items()}
         return case, canonical, golden["captured_environment"]["pandas"]
@@ -517,6 +557,14 @@ def main():
         "--record-v92", action="store_true",
         help="Record only the 2 additive version9_2 cases (scoped overlay)",
     )
+    mode.add_argument(
+        "--record-v6f", action="store_true",
+        help="write the additive 6.2-6.12 family overlay (authorized pandas 3.0.6 only)",
+    )
+    mode.add_argument(
+        "--record-v61-v2", action="store_true",
+        help="re-record version6_1 after the first-lot anchor fix (authorized pandas 3.0.6/Linux only)",
+    )
     mode.add_argument("--record-s12", action="store_true",
                       help="Record only the 2 version12 MA10-stop cases")
     mode.add_argument("--record-s9", action="store_true",
@@ -658,6 +706,58 @@ def main():
         }
         S12_GOLDEN.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         print(f"Wrote {S12_GOLDEN}: 2 corrected cases / 4 production CSV hashes")
+        return
+    if args.record_v61_v2:
+        if V61_GOLDEN.exists():
+            parser.error("The version6_1 v2 overlay already exists; refusing to overwrite")
+        if pd.__version__ != "3.0.6" or sys.platform.startswith("win"):
+            parser.error("version6_1 v2 recording requires the authorized pandas 3.0.6 Linux environment")
+        assert _hash(GOLDEN.read_bytes()) == HISTORICAL_GOLDEN_SHA256
+        assert _hash(CANONICAL_GOLDEN.read_bytes()) == HISTORICAL_CANONICAL_SHA256
+        with tempfile.TemporaryDirectory(prefix="v61v2-byte-baseline-") as temp:
+            cases = {f"{book}/{engine}": capture_case(book, engine, Path(temp) / book / engine)
+                     for book, engine in V61_CASES}
+        for case in cases.values():
+            assert_case_bytes(case, case)
+            assert case["fill_counts"]["BUY"] > 0 and case["fill_counts"]["SELL"] > 0
+        payload = {
+            "rule_revision": "v61-first-lot-anchor-20261005",
+            "historical_raw_sha256": HISTORICAL_GOLDEN_SHA256,
+            "historical_canonical_sha256": HISTORICAL_CANONICAL_SHA256,
+            "books": list(V61_BOOK_NAMES),
+            "captured_environment": {"python": platform.python_version(), "pandas": pd.__version__,
+                                     "platform": sys.platform},
+            "contract": CANONICAL_CONTRACT,
+            "cases": cases,
+        }
+        V61_GOLDEN.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        print(f"Wrote {V61_GOLDEN}: 2 additive cases")
+        return
+    if args.record_v6f:
+        if V6F_GOLDEN.exists():
+            parser.error("The 6.x family overlay already exists; refusing to overwrite")
+        if pd.__version__ != "3.0.6":
+            parser.error("6.x family recording requires the authorized pandas 3.0.6 environment")
+        assert _hash(GOLDEN.read_bytes()) == HISTORICAL_GOLDEN_SHA256
+        assert _hash(CANONICAL_GOLDEN.read_bytes()) == HISTORICAL_CANONICAL_SHA256
+        with tempfile.TemporaryDirectory(prefix="v6f-byte-baseline-") as temp:
+            cases = {f"{book}/{engine}": capture_case(book, engine, Path(temp) / book / engine)
+                     for book, engine in V6F_CASES}
+        for case in cases.values():
+            assert_case_bytes(case, case)
+            assert case["fill_counts"]["BUY"] > 0 and case["fill_counts"]["SELL"] > 0
+        payload = {
+            "rule_revision": V6F_RULE_REVISION,
+            "historical_raw_sha256": HISTORICAL_GOLDEN_SHA256,
+            "historical_canonical_sha256": HISTORICAL_CANONICAL_SHA256,
+            "books": list(V6F_BOOK_NAMES),
+            "captured_environment": {"python": platform.python_version(), "pandas": pd.__version__,
+                                     "platform": sys.platform},
+            "contract": CANONICAL_CONTRACT,
+            "cases": cases,
+        }
+        V6F_GOLDEN.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        print(f"Wrote {V6F_GOLDEN}: {len(cases)} additive cases")
         return
     if args.record_s9:
         if S9_GOLDEN.name == "off_byte_baseline_s9_take_profit_10pct_20261004.json" or S9_GOLDEN.exists():

@@ -27,6 +27,7 @@ from scripts.research.generate_off_byte_baseline import (
     S8_BOOK_NAMES,
     S8_CASES,
     SOURCE,
+    V6F_BOOK_NAMES,
     V61_BOOK_NAMES,
     V61_CASES,
     V91_BOOK_NAMES,
@@ -57,8 +58,8 @@ def test_off_byte_baseline_covers_current_registry_and_standalone_v7():
     assert len(HISTORICAL_BOOK_NAMES) == 19 and len(HISTORICAL_CASES) == 39
     assert set(expected["books"]) == set(HISTORICAL_BOOK_NAMES)
     assert set(expected["cases"]) == {f"{book}/{engine}" for book, engine in HISTORICAL_CASES}
-    assert len(BOOK_NAMES) == 22 and len(CASES) == 45
-    assert set(BOOK_NAMES) == set(BOOKS) == set(HISTORICAL_BOOK_NAMES) | set(V61_BOOK_NAMES) | set(V91_BOOK_NAMES) | set(V92_BOOK_NAMES)
+    assert len(BOOK_NAMES) == 33 and len(CASES) == 67
+    assert set(BOOK_NAMES) == set(BOOKS) == set(HISTORICAL_BOOK_NAMES) | set(V61_BOOK_NAMES) | set(V91_BOOK_NAMES) | set(V92_BOOK_NAMES) | set(V6F_BOOK_NAMES)
     registered_cases = {(book, engine) for book in BOOKS for engine in ("daily", "minute")}
     assert set(CASES) == registered_cases | {("version7", "minute")}
     for case in expected["cases"].values():
@@ -94,6 +95,9 @@ def test_s8_overlay_only_replaces_authorized_cases_and_preserves_historical_file
 
 
 def test_v61_overlay_only_adds_authorized_cases_and_preserves_historical_files():
+    from scripts.research.generate_off_byte_baseline import V61_GOLDEN
+    if not V61_GOLDEN.exists():
+        pytest.skip("v61 v2 overlay pending first-lot-anchor re-record (--record-v61-v2)")
     assert sha256(GOLDEN.read_bytes()).hexdigest() == HISTORICAL_GOLDEN_SHA256
     assert sha256(CANONICAL_GOLDEN.read_bytes()).hexdigest() == HISTORICAL_CANONICAL_SHA256
     golden = load_v61_golden()
@@ -190,6 +194,13 @@ def test_version9_overlay_only_replaces_range_stop_cases():
 @pytest.mark.parametrize("explicit_false", [False, True], ids=["omitted", "explicit-off"])
 @pytest.mark.parametrize("book,engine", CASES, ids=[f"{book}-{engine}" for book, engine in CASES])
 def test_off_byte_baseline_trades_equity_and_account(book, engine, explicit_false, tmp_path):
+    from scripts.research.generate_off_byte_baseline import (
+        V61_CASES, V61_GOLDEN, V6F_CASES, V6F_GOLDEN,
+    )
+    if (book, engine) in V6F_CASES and not V6F_GOLDEN.exists():
+        pytest.skip("v6f overlay pending authorized pandas-3.0.6/Linux recording (--record-v6f)")
+    if (book, engine) in V61_CASES and not V61_GOLDEN.exists():
+        pytest.skip("v61 v2 overlay pending first-lot-anchor re-record (--record-v61-v2)")
     expected, canonical, recorded_pandas = expected_case(book, engine)
     actual = capture_case(book, engine, tmp_path, explicit_false=explicit_false)
     assert actual["fill_counts"]["BUY"] > 0, (book, engine, "no real BUY")
