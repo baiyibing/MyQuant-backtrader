@@ -735,6 +735,8 @@ def run_chronological_day(
     for at_hm in sorted(clocks):
         for phase in ("open", "close"):
             if session is not None:
+                if phase == "close" and callable(getattr(session, "before_close", None)):
+                    session.before_close(at_hm)
                 for code in list(st.positions):
                     session.advance_held(code, at_hm, phase)
                 if phase == "close":

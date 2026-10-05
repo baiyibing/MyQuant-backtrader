@@ -79,7 +79,7 @@ def fill_stop(st, code, row, frame, day, *, day_i, ds, limits, minute=False, buc
     return True
 
 
-def fill_pending(st, code, row, day, *, day_i, ds, limits, bucket=None):
+def fill_pending(st, code, row, day, *, day_i, ds, limits, bucket=None, at=None):
     pending = st.book_state.setdefault("turtle_pending", {})
     plan = pending.get(code)
     if plan is None:
@@ -101,7 +101,9 @@ def fill_pending(st, code, row, day, *, day_i, ds, limits, bucket=None):
             continue
         pos = next(p for p in st.positions[code] if p.lot_id == lot.lot_id)
         filled += _sell(st, code, pos, px, day, reason, wanted_shares=amount,
-                        day_i=day_i, bucket_id=bucket)
+                        day_i=day_i, bucket_id=bucket,
+                        **({"at": at, "hm": bucket, "price_rule": "minute_pending_next_open"}
+                           if at is not None else {}))
     if filled >= wanted or not st.positions.get(code):
         pending.pop(code, None)
     else:
@@ -200,56 +202,140 @@ def run_daily_day(st, pending_chase, *, hooks, bars, pool_days, day_i, day,
             pending[code] = plan
 
 
-def run_minute_day(st, pending_chase, *, hooks, minute_bars, daily_bars, pool_days,
-                   day_i, day, ds, names, daily_quota, exdiv, slice_day, scan):
-    codes = list(dict.fromkeys([*st.positions, *pool_days.get(ds, [])]))
-    prepare_day(st, codes, ds, exdiv)
-    frames, closes, limits, pool_at = {}, {}, {}, {}
-    for code in codes:
-        if code not in daily_bars or code not in minute_bars:
-            continue
-        prev = daily_bars[code].loc[daily_bars[code].index < day, "close"].astype(float).tolist()
-        frame = slice_day(code, ds)
-        if not prev or frame is None or frame.empty:
-            continue
-        frames[code] = {int(row.hm): row for row in frame.itertuples()}
-        closes[code] = prev
-        limits[code] = shared._limits(st, code, prev, ds, names, exdiv)
-        late = [hm for hm in frames[code] if 870 <= hm <= 895]
-        if late:
-            pool_at[code] = max(late)
-    pending = st.book_state.setdefault("turtle_pending", {})
-    for hm in sorted({hm for frame in frames.values() for hm in frame}):
+class MinuteSession:
+    """Turtle hooks hosted by the shared clock, with cursor-owned exit prices.
+
+    The legacy OHLC convention observes adds first, then each code's open and
+    close exits in holding order. Keep that account order in the close phase;
+    a gap quote still uses the cursor's open phase. This is not tick ordering.
+    """
+
+    def __init__(self, st, pending_chase, *, hooks, minute_bars, daily_bars,
+                 pool_days, day_i, day, ds, names, daily_quota, exdiv, slice_day,
+                 price_context=None, fill_config=None, held_fill_states=None):
+        codes = list(dict.fromkeys([*st.positions, *pool_days.get(ds, [])]))
+        prepare_day(st, codes, ds, exdiv)
+        self.frames, self.closes, self.limits, self.pool_at = {}, {}, {}, {}
+        for code in codes:
+            if code not in daily_bars or code not in minute_bars:
+                continue
+            prev = daily_bars[code].loc[daily_bars[code].index < day, "close"].astype(float).tolist()
+            frame = slice_day(code, ds)
+            if not prev or frame is None or frame.empty:
+                continue
+            self.frames[code] = {int(row.hm): row for row in frame.itertuples()}
+            self.closes[code] = prev
+            self.limits[code] = shared._limits(st, code, prev, ds, names, exdiv)
+            late = [hm for hm in self.frames[code] if 870 <= hm <= 895]
+            if late:
+                self.pool_at[code] = max(late)
+        self.clocks = {hm for frame in self.frames.values() for hm in frame}
+        self.context = dict(st=st, pending_chase=pending_chase, hooks=hooks,
+                            day_i=day_i, day=day, ds=ds, names=names,
+                            daily_quota=daily_quota, exdiv=exdiv)
+        self.pool_codes = list(pool_days.get(ds, []))
+        self.daily_bars = daily_bars
+        self.fill_config = fill_config
+        self.fill_states = held_fill_states if held_fill_states is not None else {}
+
+    def before_close(self, hm):
         def quote(code):
-            row = frames.get(code, {}).get(hm)
-            return (float(row.close), closes[code]) if row is not None else None
+            row = self.frames.get(code, {}).get(hm)
+            return (float(row.high), self.closes[code], float(row.open)) if row is not None else None
+        adds(**{k: v for k, v in self.context.items() if k not in ("pending_chase", "daily_quota")},
+             quote=quote, bucket=hm)
 
-        def add_quote(code):
-            row = frames.get(code, {}).get(hm)
-            return (float(row.high), closes[code], float(row.open)) if row is not None else None
+    def advance_held(self, code, hm, phase):
+        import numpy as np
+        from backtest.research.minute_held_scan_core import HeldMinuteCursor
 
-        adds(st, hooks=hooks, day_i=day_i, day=day, ds=ds, names=names,
-             quote=add_quote, exdiv=exdiv, bucket=hm)
-        for code in list(st.positions):
-            row = frames.get(code, {}).get(hm)
-            if row is None or limits.get(code) is None:
-                continue
-            fill_pending(st, code, row, day, day_i=day_i, ds=ds, limits=limits[code], bucket=hm)
-            if not st.positions.get(code):
-                continue
-            if fill_stop(st, code, row, daily_bars[code], day, day_i=day_i,
-                         ds=ds, limits=limits[code], minute=True, bucket=hm):
-                continue
+        if phase != "close":
+            return
+        ctx = self.context
+        st, day_i, ds = ctx["st"], ctx["day_i"], ctx["ds"]
+        row = self.frames.get(code, {}).get(hm)
+        limits = self.limits.get(code)
+        if row is None or limits is None:
+            return
+        pending = st.book_state.setdefault("turtle_pending", {})
+        state = self.fill_states.setdefault(("strategy9_2", code), {})
+
+        def settle(event):
+            if event is None:
+                return
+            _, px, _reason = event
+            # Keep turtle reasons/memory and the historical ledger byte schema.
+            fill_pending(st, code, SimpleNamespace(open=px), ctx["day"],
+                         day_i=day_i, ds=ds, limits=limits, bucket=hm,
+                         **({"at": hm - 1} if _reason.endswith(":next_open") else {}))
+
+        def decision(cursor, idx, at_phase):
+            if stage == "pending":
+                if at_phase != "open" or code not in pending:
+                    return None
+                if day_i < st.book_state.setdefault("turtle_retry_day", {}).get(code, day_i):
+                    return None
+                delayed = state.get("pending")
+                # A decision queued on this row cannot execute on its own open.
+                if delayed and state.get("queued_at") == (ds, hm):
+                    return None
+                state.pop("pending", None)
+                state.pop("queued_at", None)
+                return cursor._exit(idx, row.open, delayed or pending[code][0])
+            if stage == "stop":
+                if code in pending or not any(lot.sellable > 0 for lot in shared.sell_lots(st, code, day_i, ds)):
+                    return None
+                line = rules.chosen_stop(memory_for(st, code).cost, self.daily_bars[code], ctx["day"])
+                if line is None:
+                    return None
+                gap = float(row.open) <= line
+                if at_phase == "open" and gap:
+                    px, reason = float(row.open), "stop_loss:gap_open"
+                elif at_phase == "close" and not gap and float(row.low if cursor.fill_config.trigger_basis == "bar_low" else row.close) <= line:
+                    px, reason = float(row.close), "stop_loss:touch"
+                else:
+                    return None
+                pending[code] = reason, sum(p.shares for p in st.positions[code])
+                return cursor._price_exit(idx, px, reason, line=line, gap=gap,
+                                          intrabar=cursor.fill_config.trigger_basis == "bar_low")
+            if at_phase != "close":
+                return None
             mem = memory_for(st, code)
             mem.peak = max(mem.peak, float(row.high))
-            if code not in pending:
-                plan = plan_exit(st, code, float(row.close), day, closes[code], day_i=day_i, ds=ds)
-                if plan:
-                    pending[code] = plan
-                    # Close-triggered exit fills at the observed close, never a prior open.
-                    fill_pending(st, code, SimpleNamespace(open=row.close), day,
-                                 day_i=day_i, ds=ds, limits=limits[code], bucket=hm)
+            if code in pending:
+                return None
+            plan = plan_exit(st, code, float(row.close), ctx["day"], self.closes[code], day_i=day_i, ds=ds)
+            if plan is None:
+                return None
+            pending[code] = plan
+            return cursor._price_exit(idx, row.close, plan[0])
 
-        buys(st, pending_chase, hooks=hooks, day_i=day_i, day=day, ds=ds, names=names,
-             pool_days={ds: [c for c in pool_days.get(ds, []) if pool_at.get(c) == hm]},
-             daily_quota=daily_quota, quote=quote, exdiv=exdiv, bucket=hm)
+        for stage in ("pending", "stop", "plan"):
+            if not st.positions.get(code):
+                break
+            cursor = HeldMinuteCursor(
+                np.array([row.open]), np.array([row.high]), np.array([row.close]),
+                l=np.array([row.low]), hm=np.array([hm]),
+                cost=memory_for(st, code).cost, peak=memory_for(st, code).peak,
+                n_days=day_i - min(p.entry_idx for p in st.positions[code]),
+                can_sell=any(lot.sellable > 0 for lot in shared.sell_lots(st, code, day_i, ds)),
+                stop_pct=None, profit_base=0., trail_ratio=0.,
+                phase_exit=decision, fill_config=self.fill_config, fill_state=state,
+            )
+            settle(cursor.advance(0, "open"))
+            settle(cursor.advance(0, "close"))
+            if state.get("pending"):
+                state.setdefault("queued_at", (ds, hm))
+            if stage == "stop" and cursor.first_exit_attempted:
+                break
+            if stage == "stop" and state.get("pending"):
+                break
+
+    def after_close(self, hm):
+        def quote(code):
+            row = self.frames.get(code, {}).get(hm)
+            return (float(row.close), self.closes[code]) if row is not None else None
+        ds = self.context["ds"]
+        buys(**self.context,
+             pool_days={ds: [c for c in self.pool_codes if self.pool_at.get(c) == hm]},
+             quote=quote, bucket=hm)

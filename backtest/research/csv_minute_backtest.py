@@ -747,9 +747,9 @@ def simulate(
         daily_quota=daily_quota,
     )
     defaults = book_fill_defaults(hooks, minute_stop_trigger)
+    if hooks.get("run_minute_day") is not None:
+        raise ValueError("run_minute_day is retired; use minute_session with HeldMinuteCursor")
     if fill_config is not None and fill_config != defaults["stop"]:
-        if hooks.get("run_minute_day"):
-            raise ValueError("fill_config is only supported by HeldMinuteCursor, not this book's separate minute engine")
         if "bind_absolute_exit" in hooks and fill_config.trigger_basis != "bar_low":
             raise ValueError("absolute_exit requires trigger_basis=bar_low")
     if hooks.get("minute_open") and fill_config is None:
@@ -800,17 +800,7 @@ def simulate(
         names = names_asof(ds)
         st.daily_quota_used = 0.0
 
-        if callable(hooks.get("run_minute_day")):
-            hooks["run_minute_day"](
-                st, pending_chase, hooks=hooks, minute_bars=minute_bars,
-                daily_bars=daily_bars, pool_days=pool_days, day_i=i, day=day,
-                ds=ds, names=names, daily_quota=daily_quota, exdiv=exdiv,
-                slice_day=lambda code, date: _slice_day(
-                    minute_bars[code], day_spans.get(code, {}), date),
-                scan=scan_held_day,
-                **({"price_context": s12_price_context} if fix_s12_price_domain else {}),
-            )
-        elif hooks.get("minute_session") or fix_minute_cash_order or topk_exec != "close" or limit_walkdown:
+        if hooks.get("minute_session") or fix_minute_cash_order or topk_exec != "close" or limit_walkdown:
             run_chronological_day(
                 st, pending_chase, hooks=hooks, minute_bars=minute_bars,
                 daily_bars=daily_bars, pool_days=pool_days, day_i=i, day=day,

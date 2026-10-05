@@ -67,6 +67,7 @@ class HeldMinuteCursor:
     limit_up: float = 0.0
     reserved: bool = False
     reserve_state: dict | None = None
+    phase_exit: object = None
     exit_plan: object = None
     exit_state: dict | None = None
     close_clear: object = None
@@ -135,7 +136,12 @@ class HeldMinuteCursor:
         if phase not in ("open", "close"):
             raise ValueError(f"unsupported minute phase: {phase}")
         self.is_true_day_last = idx == len(self.c) - 1
-        if self.first_exit_attempted or not sell_allowed(self.can_sell, self.n_days):
+        if self.first_exit_attempted:
+            return None
+        if callable(self.phase_exit):
+            # Whole-code callbacks own lot eligibility and may queue T+1 tails.
+            return self.phase_exit(self, idx, phase)
+        if not sell_allowed(self.can_sell, self.n_days):
             return None
         if self.session_volume is not None:
             # An EOD decision is eligible only at the next session's opening
