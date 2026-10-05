@@ -26,3 +26,11 @@ PR 写清问题、改动与验证结果，使用 GitHub Actions 的 [Python 测�
 仅在 presets 契约已在两仓有意同步后刷新：在 OSkhQuant1.3 运行 `git rev-parse HEAD`，并对其 `trade_decision/presets.py` 计算完整 SHA-256；将结果分别写入 fixture 的 `upstream_commit` 与 `presets_sha256`。确认本仓同名文件的 SHA-256 相同，再运行 `pytest -q tests/test_presets_cross_repo_snapshot.py`。fixture 与本仓 presets 变更应在同一 PR 中接受审查。
 
 本地 Python 按 [AGENTS.md](AGENTS.md#python) 解析解释器，不隐式使用系统 `python` / `pip`；Rust 在 `turnover-resist/` 内构建。文本使用 UTF-8 无 BOM，写入 `.py` / `.md` 后确认 NUL 为 0。
+
+## 本地 pre-push 钩子（推 master 前自检）
+
+可选安装：Linux / Git Bash 运行 `sh scripts/install-git-hooks.sh`；PowerShell 运行 `powershell -ExecutionPolicy Bypass -File scripts/install-git-hooks.ps1`，也可直接 `git config core.hooksPath .githooks`。
+
+所有推送检查待推提交的改动文件是否含冲突标记（跳过二进制及独立的 `=======` 下划线）；推 master / main 另跑 CI 同口径 pytest：`not production and not benchmark`，首错即停。找不到 diff base 时警告并跳过该 ref 的标记检查。`PYTHON` 可指定解释器可执行文件；默认依次尝试 python、python3、py -3。`PREPUSH_PYTEST_ARGS` 可追加空白分隔的 pytest 参数以缩小范围（不解析引号）。
+
+临时绕过：Git Bash / Linux 用 `SKIP_PREPUSH=1 git push`；PowerShell 用 `$env:SKIP_PREPUSH=1; git push; Remove-Item Env:SKIP_PREPUSH`；或用 `git push --no-verify`。卸载：`git config --unset core.hooksPath`。
