@@ -113,6 +113,8 @@ class TopkMinuteBuys:
     def __init__(self, st, *, mode, hooks, previous_and_frame, open_quote_for,
                  day_i, day, ds, names, daily_quota, exdiv, audit_sink=None,
                  limit_walkdown=False, close_quote_for=None, exdiv_ref_fen=False):
+        from backtest.research.csv_ledger import reject_short_cash_override
+        reject_short_cash_override(hooks, "topk_minute_exec")
         self.st, self.mode, self.hooks = st, mode, hooks
         self.day_i, self.day, self.ds = day_i, day, ds
         self.names, self.daily_quota, self.exdiv = names, daily_quota, exdiv

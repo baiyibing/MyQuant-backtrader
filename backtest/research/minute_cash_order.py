@@ -36,7 +36,7 @@ from backtest.research.csv_common import book_limit_prices
 from backtest.research.csv_ledger import (
     CHASE_HM,
     IndependentExitPosition,
-    InsufficientCashError,
+    check_buy_cash,
     _sell,
     apply_exdiv_economics,
     exit_positions,
@@ -49,6 +49,7 @@ from backtest.research.csv_ledger import (
     s8_policy,
     trade_commission,
 )
+from backtest.research.minute_audit import record_rejection
 from backtest.research.csv_simulate_loop import (
     apply_capital_ration,
     run_chase_due_day,
@@ -615,10 +616,13 @@ def run_chronological_day(
             parent = TailParent.from_budget(budget, px)
             if independent_policy is not None:
                 needed = parent.opening_debit(px, debit)
-                if needed > st.cash:
-                    raise InsufficientCashError(
-                        date=ds, code=code, needed=needed, available=st.cash,
+                if not check_buy_cash(st, needed=needed, available=st.cash, date=ds, code=code):
+                    st.stats["skip_cash"] = st.stats.get("skip_cash", 0) + 1
+                    st.stats["skip_cash_notional"] = (
+                        st.stats.get("skip_cash_notional", 0.0) + parent.target_shares * px
                     )
+                    record_rejection(st, code, day, "skip_cash", px)
+                    continue
             tail_orders[code] = [parent, None, limits]
 
     def fill_tail_slice(at_hm, only_code=None):
