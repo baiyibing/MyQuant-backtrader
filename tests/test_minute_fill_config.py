@@ -149,14 +149,16 @@ def minute_fixture():
                 pool_days={days[0]: ['600000.SH']}, start=days[0], end=days[-1])
 
 
-@pytest.mark.parametrize('strategy,hook', [('version9_2', 'run_minute_day')])
-def test_simulate_separate_engine_rejects_custom_config(strategy, hook):
+@pytest.mark.parametrize('strategy', ['version11', 'version12', 'version9_2'])
+def test_simulate_folded_books_accept_custom_config(strategy):
     from backtest.research.csv_minute_backtest import simulate
     from backtest.research.csv_strategy_books import apply_csv_strategy
-    assert apply_csv_strategy(strategy)[hook]
-    with pytest.raises(ValueError, match="separate minute engine"):
-        simulate(**minute_fixture(), strategy=strategy,
-                 fill_config=FillConfig(fill_timing='next_bar_open'))
+    assert not apply_csv_strategy(strategy).get('run_minute_day')
+    fixture = minute_fixture()
+    for frame in fixture["minute_bars"].values():
+        frame["volume"] = 10000.
+    simulate(**fixture, strategy=strategy,
+             fill_config=FillConfig(fill_timing='next_bar_open'))
 
 
 def test_simulate_absolute_exit_requires_bar_low():
@@ -176,7 +178,10 @@ def test_simulate_side_sells_accept_custom_config(strategy):
         assert hooks['scale_out_step']
     if strategy in ('version6_14', 'version6_15'):
         assert hooks['peak_dd_exit']
-    simulate(**minute_fixture(), strategy=strategy,
+    fixture = minute_fixture()
+    for frame in fixture["minute_bars"].values():
+        frame["volume"] = 10000.
+    simulate(**fixture, strategy=strategy,
                  fill_config=FillConfig(fill_timing='next_bar_open'))
 
 

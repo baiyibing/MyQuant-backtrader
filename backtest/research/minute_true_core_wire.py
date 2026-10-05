@@ -256,7 +256,7 @@ def derive_percent_stop(name: str) -> tuple[float, Callable]:
         if not callable(take):
             raise ValueError("requires callable take_profit")
         signature(take).bind(10.0, 10.0, 10.0, 1)
-        for field in ("stop_range", "version9_exit", "exit_plan", "run_minute_day",
+        for field in ("stop_range", "version9_exit", "exit_plan", "minute_session",
                       "drawdown_of", "drawdown_take_profit", "stage"):
             if hooks.get(field) is not None:
                 raise ValueError(f"requires a special wire for {field}")
