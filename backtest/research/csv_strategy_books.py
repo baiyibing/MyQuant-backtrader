@@ -59,6 +59,9 @@ from backtest.research import (
     strategy6_39_rules,
     strategy6_40_rules,
     strategy6_41_rules,
+    strategy6_42_rules,
+    strategy6_43_rules,
+    strategy6_44_rules,
     strategy8_rules,
     strategy8_1_rules,
     strategy8_2_rules,
@@ -124,6 +127,9 @@ HELP_LOCK_V6_38 = strategy6_38_rules.HELP_LOCK
 HELP_LOCK_V6_39 = strategy6_39_rules.HELP_LOCK
 HELP_LOCK_V6_40 = strategy6_40_rules.HELP_LOCK
 HELP_LOCK_V6_41 = strategy6_41_rules.HELP_LOCK
+HELP_LOCK_V6_42 = strategy6_42_rules.HELP_LOCK
+HELP_LOCK_V6_43 = strategy6_43_rules.HELP_LOCK
+HELP_LOCK_V6_44 = strategy6_44_rules.HELP_LOCK
 HELP_LOCK_V8 = strategy8_rules.HELP_LOCK
 HELP_LOCK_V8_1 = strategy8_1_rules.HELP_LOCK
 HELP_LOCK_V8_2 = strategy8_2_rules.HELP_LOCK
@@ -3801,49 +3807,6 @@ register(CsvStrategyBook(
 
 register(
     CsvStrategyBook(
-        name="version6_36",
-        sizing="per_name",
-        name_budget=1_000_000.0,
-        tag=strategy6_36_rules.BOOK_TAG,
-        aliases=("6.36", "6_36", "v6.36", "v6_36", "version6_36"),
-        allow_add=strategy6_36_rules.ALLOW_ADD,
-        peak_gap_min=strategy6_36_rules.PEAK_GAP_MIN,
-        help_lock=strategy6_36_rules.HELP_LOCK,
-        apply=_apply_version6_36,
-        run_kwargs=_run_kwargs_version6_36,
-    )
-)
-register(
-    CsvStrategyBook(
-        name="version6_37",
-        sizing="per_name",
-        name_budget=1_000_000.0,
-        tag=strategy6_37_rules.BOOK_TAG,
-        aliases=("6.37", "6_37", "v6.37", "v6_37", "version6_37"),
-        allow_add=strategy6_37_rules.ALLOW_ADD,
-        peak_gap_min=strategy6_37_rules.PEAK_GAP_MIN,
-        help_lock=strategy6_37_rules.HELP_LOCK,
-        apply=_apply_version6_37,
-        run_kwargs=_run_kwargs_version6_37,
-    )
-)
-register(
-    CsvStrategyBook(
-        name="version6_38",
-        sizing="per_name",
-        name_budget=1_000_000.0,
-        tag=strategy6_38_rules.BOOK_TAG,
-        aliases=("6.38", "6_38", "v6.38", "v6_38", "version6_38"),
-        allow_add=strategy6_38_rules.ALLOW_ADD,
-        peak_gap_min=strategy6_38_rules.PEAK_GAP_MIN,
-        help_lock=strategy6_38_rules.HELP_LOCK,
-        apply=_apply_version6_38,
-        run_kwargs=_run_kwargs_version6_38,
-    )
-)
-
-register(
-    CsvStrategyBook(
         name="version6_39",
         sizing="per_name",
         name_budget=1_000_000.0,
@@ -3882,5 +3845,154 @@ register(
         help_lock=strategy6_41_rules.HELP_LOCK,
         apply=_apply_version6_41,
         run_kwargs=_run_kwargs_version6_41,
+    )
+)
+
+
+def _apply_version6_42(
+    *,
+    stop_pct: Optional[float] = None,
+    take_profit=None,
+    record_params=None,
+    **_,
+) -> dict:
+    resolved = strategy6_42_rules.STOP_PCT if stop_pct is None else float(stop_pct)
+    def _tp(px, cost, peak, n_days=1):
+        return strategy6_42_rules.take_profit_reason(px, cost, peak, n_days)
+    def _rec(st):
+        strategy6_42_rules.record_strategy6_42_params(st, stop_pct=resolved)
+    return {
+        "stop_pct": resolved,
+        "take_profit": take_profit if take_profit is not None else _tp,
+        "record_params": record_params if record_params is not None else _rec,
+        "name_lot_budget": strategy6_42_rules.lot_budget,
+        "add_step": strategy6_42_rules.ADD_STEP,
+        "step_frac": strategy6_42_rules.STEP_FRAC,
+        "step_cap": strategy6_42_rules.STEP_CAP_PER_CODE,
+        "cost_anchor": "first_lot",
+        "step_stop_pct": strategy6_42_rules.STEP_STOP_PCT,
+        "scale_out_step": strategy6_42_rules.SCALE_OUT_STEP,
+        "scale_out_frac": strategy6_42_rules.SCALE_OUT_FRAC,
+        "peak_dd_exit": strategy6_42_rules.PEAK_DD_EXIT,
+        "peak_dd_sessions": strategy6_42_rules.PEAK_DD_SESSIONS,
+        "add_schedule": strategy6_42_rules.ADD_SCHEDULE,
+    }
+
+def _run_kwargs_version6_42(args) -> dict:
+    stop = getattr(args, "stop_pct", None)
+    if stop is not None and not 0 < float(stop) < 1:
+        raise SystemExit(f"--stop-pct must be in (0, 1), got {stop}")
+    return {"strategy": "version6_42", "stop_pct": stop}
+
+def _apply_version6_43(
+    *,
+    stop_pct: Optional[float] = None,
+    take_profit=None,
+    record_params=None,
+    **_,
+) -> dict:
+    resolved = strategy6_43_rules.STOP_PCT if stop_pct is None else float(stop_pct)
+    def _tp(px, cost, peak, n_days=1):
+        return strategy6_43_rules.take_profit_reason(px, cost, peak, n_days)
+    def _rec(st):
+        strategy6_43_rules.record_strategy6_43_params(st, stop_pct=resolved)
+    return {
+        "stop_pct": resolved,
+        "take_profit": take_profit if take_profit is not None else _tp,
+        "record_params": record_params if record_params is not None else _rec,
+        "name_lot_budget": strategy6_43_rules.lot_budget,
+        "add_step": strategy6_43_rules.ADD_STEP,
+        "step_frac": strategy6_43_rules.STEP_FRAC,
+        "step_cap": strategy6_43_rules.STEP_CAP_PER_CODE,
+        "cost_anchor": "first_lot",
+        "step_stop_pct": strategy6_43_rules.STEP_STOP_PCT,
+        "scale_out_step": strategy6_43_rules.SCALE_OUT_STEP,
+        "scale_out_frac": strategy6_43_rules.SCALE_OUT_FRAC,
+        "peak_dd_exit": strategy6_43_rules.PEAK_DD_EXIT,
+        "peak_dd_sessions": strategy6_43_rules.PEAK_DD_SESSIONS,
+        "add_schedule": strategy6_43_rules.ADD_SCHEDULE,
+    }
+
+def _run_kwargs_version6_43(args) -> dict:
+    stop = getattr(args, "stop_pct", None)
+    if stop is not None and not 0 < float(stop) < 1:
+        raise SystemExit(f"--stop-pct must be in (0, 1), got {stop}")
+    return {"strategy": "version6_43", "stop_pct": stop}
+
+def _apply_version6_44(
+    *,
+    stop_pct: Optional[float] = None,
+    take_profit=None,
+    record_params=None,
+    **_,
+) -> dict:
+    resolved = strategy6_44_rules.STOP_PCT if stop_pct is None else float(stop_pct)
+    def _tp(px, cost, peak, n_days=1):
+        return strategy6_44_rules.take_profit_reason(px, cost, peak, n_days)
+    def _rec(st):
+        strategy6_44_rules.record_strategy6_44_params(st, stop_pct=resolved)
+    return {
+        "stop_pct": resolved,
+        "take_profit": take_profit if take_profit is not None else _tp,
+        "record_params": record_params if record_params is not None else _rec,
+        "name_lot_budget": strategy6_44_rules.lot_budget,
+        "add_step": strategy6_44_rules.ADD_STEP,
+        "step_frac": strategy6_44_rules.STEP_FRAC,
+        "step_cap": strategy6_44_rules.STEP_CAP_PER_CODE,
+        "cost_anchor": "first_lot",
+        "step_stop_pct": strategy6_44_rules.STEP_STOP_PCT,
+        "scale_out_step": strategy6_44_rules.SCALE_OUT_STEP,
+        "scale_out_frac": strategy6_44_rules.SCALE_OUT_FRAC,
+        "peak_dd_exit": strategy6_44_rules.PEAK_DD_EXIT,
+        "peak_dd_sessions": strategy6_44_rules.PEAK_DD_SESSIONS,
+        "add_schedule": strategy6_44_rules.ADD_SCHEDULE,
+    }
+
+def _run_kwargs_version6_44(args) -> dict:
+    stop = getattr(args, "stop_pct", None)
+    if stop is not None and not 0 < float(stop) < 1:
+        raise SystemExit(f"--stop-pct must be in (0, 1), got {stop}")
+    return {"strategy": "version6_44", "stop_pct": stop}
+
+register(
+    CsvStrategyBook(
+        name="version6_42",
+        sizing="per_name",
+        name_budget=1_000_000.0,
+        tag=strategy6_42_rules.BOOK_TAG,
+        aliases=("6.42", "6_42", "v6.42", "v6_42", "version6_42"),
+        allow_add=strategy6_42_rules.ALLOW_ADD,
+        peak_gap_min=strategy6_42_rules.PEAK_GAP_MIN,
+        help_lock=strategy6_42_rules.HELP_LOCK,
+        apply=_apply_version6_42,
+        run_kwargs=_run_kwargs_version6_42,
+    )
+)
+register(
+    CsvStrategyBook(
+        name="version6_43",
+        sizing="per_name",
+        name_budget=1_000_000.0,
+        tag=strategy6_43_rules.BOOK_TAG,
+        aliases=("6.43", "6_43", "v6.43", "v6_43", "version6_43"),
+        allow_add=strategy6_43_rules.ALLOW_ADD,
+        peak_gap_min=strategy6_43_rules.PEAK_GAP_MIN,
+        help_lock=strategy6_43_rules.HELP_LOCK,
+        apply=_apply_version6_43,
+        run_kwargs=_run_kwargs_version6_43,
+    )
+)
+register(
+    CsvStrategyBook(
+        name="version6_44",
+        sizing="per_name",
+        name_budget=1_000_000.0,
+        tag=strategy6_44_rules.BOOK_TAG,
+        aliases=("6.44", "6_44", "v6.44", "v6_44", "version6_44"),
+        allow_add=strategy6_44_rules.ALLOW_ADD,
+        peak_gap_min=strategy6_44_rules.PEAK_GAP_MIN,
+        help_lock=strategy6_44_rules.HELP_LOCK,
+        apply=_apply_version6_44,
+        run_kwargs=_run_kwargs_version6_44,
     )
 )
