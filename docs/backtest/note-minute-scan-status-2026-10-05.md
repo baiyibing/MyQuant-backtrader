@@ -13,9 +13,11 @@
 
 ## 勘误 / 2026-10-05 更新
 
+- 截至 master `a55e3c85`，已注册书为 **34 本**：`1324108` 新增 `version6_13`，PR #367（squash `a55e3c85`）补齐其分钟 bar-scan 分类，并修复 `f720bed` 引入的 `--name-budget` 默认值回归。下文 `386d1dc4` 快照及外部说法中的 33 保留为历史。
+
 本文原基线 `386d1dc4` 的分析与评审保留为历史。用户 **2026-10-05 11:05 CST** 裁定：一台共享分钟引擎 `csv_minute_backtest.simulate`；第 1 步共享核心；第 2 步把行业惯例与 fill 配置放进核心，各书默认复现现状；第 3 步在测试迁移后退役 `bar_scan_exit` / `minute_true_core_wire` / host round-trip。授权来源为本次用户修订指令；讨论记录为 2026-10-05 11:31–11:47 CST 五席两轮头脑风暴（codex / grok / cursor / kimi / glm，R2 收敛：2a / 2b 拆票、默认零 diff、第 3 步测试迁移后退役扫线）。文首「授权：无」及 §4、§6.3、§7 的四席否决 / 未批准 / 永久冻结口径均 **superseded（已被此次人裁覆盖）**，不能作为当前停工依据。
 
-**第 1 步已完成。** PR #364 于 **2026-10-05 11:28 CST** 合并为 `d007213e`（以 `git show d007213e` 的 merge 信息与 CommitDate 为证）。本节代码事实按 master `d007213e` 核对：共享的是整个 `HeldMinuteCursor`，移至 `backtest/research/minute_held_scan_core.py`，`minute_cash_order.py` 导入它；`csv_minute_backtest.scan_held_day_python` 创建同一游标，逐 bar 按 open / close 驱动 `advance`，不是只抽出几个谓词。numba `_scan_held_day_numba_trail` 通过 `numba.extending.register_jitable` 共用谓词，注册返回值在 `@njit` 前重绑定；限价容差来自 `ashare_session.LIMIT_EPS`，峰值间隔谓词来自 `csv_ledger.peak_gap_blocks`（证据：上述文件的导入、`scan_held_day_python`、`_scan_held_day_numba_trail` 与注册块）。本分支仍基于旧 master；本次只修文档，不搬代码。
+**第 1 步已完成。** PR #364 于 **2026-10-05 11:28 CST** 合并为 `d007213e`（以 `git show d007213e` 的 merge 信息与 CommitDate 为证）。本节代码事实按 master `d007213e` 核对：共享的是整个 `HeldMinuteCursor`，移至 `backtest/research/minute_held_scan_core.py`，`minute_cash_order.py` 导入它；`csv_minute_backtest.scan_held_day_python` 创建同一游标，逐 bar 按 open / close 驱动 `advance`，不是只抽出几个谓词。numba `_scan_held_day_numba_trail` 通过 `numba.extending.register_jitable` 共用谓词，注册返回值在 `@njit` 前重绑定；限价容差来自 `ashare_session.LIMIT_EPS`，峰值间隔谓词来自 `csv_ledger.peak_gap_blocks`（证据：上述文件的导入、`scan_held_day_python`、`_scan_held_day_numba_trail` 与注册块）。本分支只修文档，不搬代码。
 
 **默认不是所有书都 close。** `csv_minute_backtest.simulate` 绑定 `absolute_exit` 后，独立仓游标和普通 `scan_held_day` 调用都传 `minute_stop_trigger="hl" if absolute_exit else minute_stop_trigger`，并提供 low；普通路径另以绝对退出线 / 成本算 `stop_range_ratio`。`HeldMinuteCursor._close` 在 hl 域以 low≤line 触发、按 line 报价；跳空仍按既有 open 路径。因此 2a 必须保留 absolute_exit 的 low 触发，不能用共享 close 默认覆盖它（证据：`csv_minute_backtest.py::simulate`；`minute_held_scan_core.py::HeldMinuteCursor.__post_init__/_close/advance`）。
 
@@ -108,7 +110,7 @@ Host 文件头是 “Read-only minute host”。`main()` 拒绝 `--cost` / `--pe
 
 | 说法 | 判定 | 证据 |
 |---|---|---|
-| 33 本书全部注册 | 成立 | `csv_strategy_books.py` 的 `register()`；`tests/test_off_byte_baseline.py` 覆盖当前注册表 |
+| 34 本书全部注册（截至 `a55e3c85`） | 成立 | `csv_strategy_books.py` 的 `register()`；`1324108` 新增 `version6_13`，#367 补齐其分钟 bar-scan 分类；`tests/test_off_byte_baseline.py` 覆盖当前注册表 |
 | 双引擎可用 | 说大了 | host CLI 调用 `simulate` / `simulate_v7`。生产成交只有主 CSV 引擎 |
 | off-byte 含字节阶段全绿、平台无关 | 说大了 | `386d1dc4` 的 `python-tests` 已成功（GitHub Actions run `37257115086`，约 3 分钟）。工作流以 `pytest -m "not production and not benchmark"` 会收集 `tests/test_off_byte_baseline.py`。字节阶段在 pandas 版本不一致时 `pytest.skip`，跳过前语义断言必须先过。祖先提交 `4ffb1fa` 说明仍写「待授权机录制」 |
 | version9 三书 = #361 形态 | 成立 | `git diff f708c43 HEAD -- strategy9_rules.py strategy9_1_rules.py strategy9_2_rules.py` 为空。`f708c43` 是 #361 |
