@@ -14,6 +14,8 @@ books and lock strategy8 20% stop with chase identity」；当年资金口径
 
 from __future__ import annotations
 
+from backtest.research import strategy_book_helpers as _book_helpers
+
 from fractions import Fraction
 from typing import Optional
 
@@ -62,9 +64,7 @@ def band_floor(peak_ret: float | Fraction, *, fix_s81_band_precision: bool = Fal
 
 
 def stop_hits(px: float, cost: float, stop_pct: float = STOP_PCT) -> bool:
-    if cost <= 0 or px <= 0:
-        return False
-    return float(px) / float(cost) - 1.0 <= -float(stop_pct)
+    return _book_helpers.stop_hits(px, cost, stop_pct)
 
 
 def peak_drawdown_hits(

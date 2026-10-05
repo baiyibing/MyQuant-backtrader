@@ -118,3 +118,30 @@ def test_numba_force_sell_time():
     )
     _assert_same(py, nb)
     assert py[2] == "force_sell:time"
+
+
+def test_cursor_range_ratio_replaces_percent_stop_directly():
+    """Shared core applies stop_range_ratio itself, not only via the wrapper."""
+    import numpy as np
+    from backtest.research.minute_held_scan_core import HeldMinuteCursor
+
+    hm = np.array([570, 571], dtype=np.int64)
+
+    def run(closes, **kw):
+        bars = np.array(closes, dtype=np.float64)
+        cursor = HeldMinuteCursor(bars, bars, bars, 10.0, 10.0, 1, True, 0.02, 0.01, 0.5, hm=hm, **kw)
+        for i in range(len(bars)):
+            for phase in ("open", "close"):
+                event = cursor.advance(i, phase)
+                if event is not None:
+                    return cursor, event
+        return cursor, None
+
+    # 2% percent stop alone: 9.6 is a gap through 9.8.
+    _, event = run([10.0, 9.6])
+    assert event == (1, 9.6, "stop_loss:gap_open")
+    # 5% range ratio replaces it: line 9.5, so 9.6 does not stop, 9.4 does.
+    cursor, event = run([10.0, 9.6], stop_range_ratio=0.05)
+    assert cursor.stop_pct == 0.05 and event is None
+    _, event = run([10.0, 9.4], stop_range_ratio=0.05)
+    assert event == (1, 9.4, "stop_loss:gap_open")

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from backtest.research import strategy_book_helpers as _book_helpers
+
 from typing import Optional
 
 BOOK_TAG = "v3"
@@ -32,8 +34,8 @@ def take_profit_reason(
         return None
     px = float(px)
     cost = float(cost)
-    if cost > 0 and px >= cost * (1.0 + PROFIT_TARGET):
-        return "profit_take:target"
+    if cost > 0:
+        return _book_helpers.fixed_target_reason(px, cost, PROFIT_TARGET)
     return None
 
 

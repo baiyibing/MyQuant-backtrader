@@ -37,7 +37,7 @@ EQUITY = FIX / "request_equity_rejected.json"
 CORE = {
     ROOT / "backtest" / "research" / "minute_orders_backend" / "match.py",
     ROOT / "backtest" / "research" / "minute_orders_backend" / "fees.py",
-    ROOT / "backtest" / "research" / "csv_minute_backtest.py",
+    # CSV scan/run/simulate dedupe is authorized; its CLI is pinned separately.
     ROOT / "backtest" / "research" / "minute_orders_backend" / "source_loader.py",
     ROOT / "backtest" / "research" / "minute_orders_backend" / "cli.py",
     ROOT / "backtest" / "research" / "run_protocol" / "views.py",
@@ -208,6 +208,9 @@ def test_cli_missing_parent_run_id_exit_2(tmp_path):
 
 def test_core_files_byte_stable_vs_knife_base():
     """Empty-diff guard vs PR #314 base tip (MatchCore/Fees/simulate/loader/cli/views)."""
+    from tests.minute_entry_refactor_guard import assert_shared_minute_cli_unchanged
+
+    assert_shared_minute_cli_unchanged(ROOT)
     import subprocess
     probe = subprocess.run(
         ["git", "cat-file", "-e", f"{KNIFE_BASE}^{{commit}}"],

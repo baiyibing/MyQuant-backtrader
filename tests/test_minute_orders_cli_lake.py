@@ -21,7 +21,7 @@ KNIFE_BASE = "501de569d5d46eca2c1766988231a2dbaac3849d"
 CORE = {
     ROOT / "backtest" / "research" / "minute_orders_backend" / "match.py",
     ROOT / "backtest" / "research" / "minute_orders_backend" / "fees.py",
-    ROOT / "backtest" / "research" / "csv_minute_backtest.py",
+    # CSV scan/run/simulate dedupe is authorized; its CLI is pinned separately.
     ROOT / "backtest" / "research" / "minute_orders_backend" / "source_loader.py",
     ROOT / "backtest" / "research" / "ashare_volume_cap.py",
     ROOT / "backtest" / "research" / "run_protocol" / "facade.py",
@@ -325,6 +325,9 @@ def test_lake_cli_rejects_dirty_code(lake_end_case, monkeypatch, capsys):
 
 def test_empty_diff_core_vs_knife_base():
     """CLI lake knife must not touch MatchCore / Fees / simulate / loader / views."""
+    from tests.minute_entry_refactor_guard import assert_shared_minute_cli_unchanged
+
+    assert_shared_minute_cli_unchanged(ROOT)
     import subprocess
     probe = subprocess.run(
         ["git", "cat-file", "-e", f"{KNIFE_BASE}^{{commit}}"],

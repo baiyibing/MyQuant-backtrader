@@ -13,6 +13,8 @@ B = 5% + 2%×档号，离场价 = 峰值 − 成本×B（Q1=G），允许在成�
 
 from __future__ import annotations
 
+from backtest.research import strategy_book_helpers as _book_helpers
+
 from typing import Optional
 
 BOOK_TAG = "v6_1"
@@ -30,10 +32,7 @@ ADD_STEP = 0.20
 
 def give_band(peak: float, cost: float) -> int:
     """峰值涨幅落入的第几档（[0,5%)=0、[5,10%)=1、…），无上限。"""
-    if float(cost) <= 0 or float(peak) <= float(cost):
-        raise ValueError("peak must be above positive cost")
-    rise = float(peak) / float(cost) - 1.0
-    return int((rise + 1e-12) / BAND_WIDTH)
+    return _book_helpers.give_band(peak, cost, BAND_WIDTH=BAND_WIDTH)
 
 
 def exit_line(cost: float, peak: float) -> float:
@@ -64,7 +63,7 @@ def take_profit_reason(
 
 def lot_budget(name_budget: float, _lots) -> float:
     """每笔都是整笔 name_budget（新组 / step / 再现组同口径）。"""
-    return float(name_budget)
+    return _book_helpers.lot_budget(name_budget, _lots)
 
 
 def record_strategy6_1_params(st, *, stop_pct: float) -> None:

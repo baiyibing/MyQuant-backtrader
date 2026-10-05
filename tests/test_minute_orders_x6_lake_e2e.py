@@ -31,7 +31,7 @@ KNIFE_BASE = "501de569d5d46eca2c1766988231a2dbaac3849d"
 CORE = {
     ROOT / "backtest" / "research" / "minute_orders_backend" / "match.py",
     ROOT / "backtest" / "research" / "minute_orders_backend" / "fees.py",
-    ROOT / "backtest" / "research" / "csv_minute_backtest.py",
+    # CSV scan/run/simulate dedupe is authorized; its CLI is pinned separately.
     ROOT / "backtest" / "research" / "minute_orders_backend" / "source_loader.py",
     # cli.py unlocked by residual R1 CLI lake knife (separate from #310 e2e).
     ROOT / "backtest" / "research" / "ashare_volume_cap.py",
@@ -301,6 +301,9 @@ def test_package_calls_load_but_core_untouched():
 
 def test_core_files_byte_stable_vs_knife_base():
     """Guard: MatchCore/Fees/simulate/source_loader/VolumeCap/_ENTRIES/_FAMILIES empty this knife (cli.py is R1 CLI lake; guarded there)."""
+    from tests.minute_entry_refactor_guard import assert_shared_minute_cli_unchanged
+
+    assert_shared_minute_cli_unchanged(ROOT)
     import subprocess
     probe = subprocess.run(
         ["git", "cat-file", "-e", f"{KNIFE_BASE}^{{commit}}"],

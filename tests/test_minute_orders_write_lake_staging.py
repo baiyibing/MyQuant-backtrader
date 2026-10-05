@@ -36,7 +36,7 @@ PROD_MODE = FIX / "request_production_mode_rejected.json"
 CORE = {
     ROOT / "backtest" / "research" / "minute_orders_backend" / "match.py",
     ROOT / "backtest" / "research" / "minute_orders_backend" / "fees.py",
-    ROOT / "backtest" / "research" / "csv_minute_backtest.py",
+    # CSV scan/run/simulate dedupe is authorized; its CLI is pinned separately.
     ROOT / "backtest" / "research" / "minute_orders_backend" / "source_loader.py",
     ROOT / "backtest" / "research" / "minute_orders_backend" / "cli.py",
 }
@@ -203,6 +203,9 @@ def test_must_human_cuts_payload_stable():
 
 def test_core_files_untouched_in_this_branch():
     """Guard: this residual must keep MatchCore/Fees/simulate/loader/cli empty."""
+    from tests.minute_entry_refactor_guard import assert_shared_minute_cli_unchanged
+
+    assert_shared_minute_cli_unchanged(ROOT)
     import subprocess as sp
 
     diff = sp.run(

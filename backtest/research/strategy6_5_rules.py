@@ -11,6 +11,8 @@
 
 from __future__ import annotations
 
+from backtest.research import strategy_book_helpers as _book_helpers
+
 from typing import Optional
 
 BOOK_TAG = "v6_5"
@@ -35,15 +37,12 @@ STEP_CAP_PER_CODE = 4  # 单票 step 总额 400 万 = 4 笔 × 整基 100 万
 
 def give_band(peak: float, cost: float) -> int:
     """峰值涨幅落入的第几档（[0,5%)=0、[5,10%)=1、…），无上限。"""
-    if float(cost) <= 0 or float(peak) <= float(cost):
-        raise ValueError("peak must be above positive cost")
-    rise = float(peak) / float(cost) - 1.0
-    return int((rise + 1e-12) / BAND_WIDTH)
+    return _book_helpers.give_band(peak, cost, BAND_WIDTH=BAND_WIDTH)
 
 
 def peak_dd_active(peak: float, cost: float) -> bool:
     """峰值涨幅 > 100% 时启用峰值回撤线。"""
-    return float(peak) / float(cost) - 1.0 + 1e-12 > PEAK_DD_RISE
+    return _book_helpers.peak_dd_active(peak, cost, PEAK_DD_RISE=PEAK_DD_RISE)
 
 
 def exit_line(cost: float, peak: float) -> float:
@@ -82,7 +81,7 @@ def take_profit_reason(
 
 def lot_budget(name_budget: float, _lots) -> float:
     """开仓每笔仍是整笔 name_budget；step 上限由引擎参数控制。"""
-    return float(name_budget)
+    return _book_helpers.lot_budget(name_budget, _lots)
 
 
 def record_strategy6_5_params(st, *, stop_pct: float) -> None:

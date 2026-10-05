@@ -220,10 +220,27 @@ HELP_LOCK = """
         4) 除权只走显式 economics/文档路径，禁止与 front 日线信号形成静默双重调整。
 """
 
-_LIMIT_EPS = 0.001  # mirror csv_ledger.LIMIT_EPS for numba core
+from backtest.research.minute_entry_validation import validate_minute_entry
+from backtest.research.minute_held_scan_core import (
+    HeldMinuteCursor, _LIMIT_EPS, sell_allowed, stop_touch, limit_down_blocks,
+    stop_trigger, gap_stop, force_due,
+)
 
 try:
     from numba import njit as _njit  # type: ignore
+
+    from numba.extending import register_jitable
+
+    # register_jitable returns the callable numba will compile; rebind so the
+    # njit kernel closes over the registered helpers, not the raw Python ones.
+    sell_allowed = register_jitable(sell_allowed)
+    stop_touch = register_jitable(stop_touch)
+    limit_down_blocks = register_jitable(limit_down_blocks)
+    stop_trigger = register_jitable(stop_trigger)
+    gap_stop = register_jitable(gap_stop)
+    force_due = register_jitable(force_due)
+    peak_gap_blocks = register_jitable(peak_gap_blocks)
+    trail_hits = register_jitable(trail_hits)
 
     @_njit(cache=True)
     def _scan_held_day_numba_trail(
@@ -246,12 +263,12 @@ try:
         has_force,
     ):
         """Pure trail path (no sell_gate / take_profit / reserve). Reasons as int codes."""
-        trigger = cost * (1.0 - stop_pct) if stop_enabled else 0.0
+        trigger = stop_trigger(cost, stop_pct) if stop_enabled else 0.0
         new_peak = peak
         new_peak_hm = peak_hm
         n = len(c)
         for i in range(n):
-            if (not can_sell) or n_days < 1:
+            if not sell_allowed(can_sell, n_days):
                 continue
             hi = h[i]
             cur_hm = hm[i]
@@ -260,27 +277,20 @@ try:
                 new_peak_hm = cur_hm
             px_open = o[i]
             px_close = c[i]
-            if limit_down > 0.0 and (px_open - _LIMIT_EPS) <= limit_down:
+            if limit_down_blocks(px_open, limit_down):
                 continue
-            if stop_enabled and px_open <= trigger:
+            if stop_enabled and gap_stop(px_open, trigger):
                 return i, px_open, 1, new_peak, new_peak_hm
             ret = px_close / cost - 1.0
-            if stop_enabled and ret <= -stop_pct:
+            if stop_enabled and stop_touch(ret, stop_pct):
                 return i, px_close, 2, new_peak, new_peak_hm
             gap = cur_hm - new_peak_hm
-            peak_blocked = new_peak_hm >= 0 and (0 <= gap < peak_gap_min)
+            peak_blocked = new_peak_hm >= 0 and peak_gap_blocks(gap, peak_gap_min)
             if not peak_blocked:
-                # inline trail_hits
-                if px_close >= cost:
-                    peak_excess = new_peak / cost - 1.0 - profit_base
-                    if peak_excess > 0.0:
-                        if (
-                            px_close / cost - 1.0 - profit_base
-                            <= trail_ratio * peak_excess
-                        ):
-                            return i, px_close, 3, new_peak, new_peak_hm
-            if has_force and cur_hm >= force_sell_hm:
-                if limit_down > 0.0 and (px_close - _LIMIT_EPS) <= limit_down:
+                if trail_hits(px_close, cost, new_peak, profit_base, trail_ratio):
+                    return i, px_close, 3, new_peak, new_peak_hm
+            if has_force and force_due(cur_hm, force_sell_hm):
+                if limit_down_blocks(px_close, limit_down):
                     continue
                 return i, px_close, 4, new_peak, new_peak_hm
         return -1, np.nan, 0, new_peak, new_peak_hm
@@ -348,131 +358,26 @@ def scan_held_day_python(
 ) -> tuple[int, float, str, float, int]:
     """Python reference implementation of the minute sell scan."""
     validate_low(minute_stop_trigger, l, c)
-    del pos_trail  # reserved for future; kept for API parity with callers
-    stop_enabled = isinstance(stop_pct, float) and 0 < stop_pct < 1
-    if stop_range_ratio is not None:
-        stop_pct = stop_range_ratio
-        stop_enabled = True
-    trigger = cost * (1.0 - stop_pct) if stop_enabled else None
-    if version9_plan is not None:
-        trigger = plan_stop_price(version9_plan, cost)
-        stop_enabled = trigger is not None
-        take_profit_pct = version9_plan["take_profit_pct"]
-        def take_profit(px, cost, peak, n_days):
-            return plan_close_reason(dict(version9_plan, channel_low=None), px, cost, n_days, version9_max_hold)
-    new_peak = float(peak)
-    new_peak_hm = int(peak_hm)
-    current_reserved = bool(reserved)
-    lu_today = False
-    defer_lu = bool(defer_limit_up)
-    saw_close_hm = False
-    n = int(len(c))
-    for i in range(n):
-        # T+0 不卖、不更新峰值（历史最高价从 T+1 起算）
-        if (not can_sell) or n_days < 1:
-            continue
-        hi = float(h[i])
-        cur_hm = int(hm[i]) if hm is not None else i
-        if hi > new_peak:
-            new_peak = hi
-            new_peak_hm = cur_hm
-        if cur_hm == CLOSE_CLEAR_HM:
-            saw_close_hm = True
-        px_open = float(o[i])
-        px_close = float(c[i])
-        if blocked_bar(minute_stop_trigger, px_open, hi, limit_down):
-            continue
-        if stop_enabled and trigger is not None and px_open <= trigger:
-            return i, px_open, "stop_loss:gap_open", new_peak, new_peak_hm
-        ret = px_close / cost - 1.0
-        if stop_enabled:
-            touched = float(l[i]) <= trigger if minute_stop_trigger == "hl" else (px_close <= trigger if version9_plan is not None else ret <= -stop_pct)
-            if touched:
-                fill_px = trigger if minute_stop_trigger == "hl" else px_close
-                return i, fill_px, "stop_loss:touch", new_peak, new_peak_hm
-        if defer_lu and limit_up > 0 and hit_limit_up(px_close, limit_up):
-            lu_today = True
-        if defer_lu and lu_today:
-            continue
-        if reserve_limit_up:
-            is_limit_up = limit_up > 0 and hit_limit_up(px_close, limit_up)
-            current_reserved, reserve_reason = reserve_step_minute(
-                reserved=current_reserved, hm=cur_hm, is_limit_up=is_limit_up
-            )
-            if reserve_state is not None:
-                reserve_state["reserved"] = current_reserved
-            if reserve_reason:
-                return i, px_close, reserve_reason, new_peak, new_peak_hm
-            if current_reserved and is_limit_up:
-                continue
-        if version9_plan is not None:
-            channel_plan = dict(version9_plan, take_profit_pct=None)
-            reason = plan_close_reason(channel_plan, px_close, cost, n_days) if i == n - 1 else None
-            if reason:
-                return i, px_close, reason, new_peak, new_peak_hm
-        if minute_stop_trigger == "hl" and not callable(exit_plan) and not callable(sell_gate):
-            fill = target_fill(px_open, hi, cost, new_peak, n_days, take_profit_pct, take_profit)
-            if fill is not None:
-                return i, fill[0], fill[1], new_peak, new_peak_hm
-        peak_blocked = new_peak_hm >= 0 and peak_gap_blocks(
-            cur_hm - new_peak_hm, peak_gap_min
-        )
-        if not peak_blocked:
-            if callable(exit_plan):
-                plan = exit_plan(gate_code, px_close, gate_day,
-                                 daily_closes_ending_yesterday or [])
-                if plan is not None:
-                    reason, shares = plan
-                    if exit_state is None:
-                        raise ValueError("partial exit_plan requires exit_state out-param")
-                    exit_state["shares"] = shares
-                    return i, px_close, reason, new_peak, new_peak_hm
-            elif callable(sell_gate):
-                reason = sell_gate(
-                    gate_code,
-                    px_close,
-                    gate_day,
-                    daily_closes_ending_yesterday or [],
-                )
-                if reason:
-                    return i, px_close, reason, new_peak, new_peak_hm
-            elif version9_plan is not None:
-                intraday_plan = dict(version9_plan, channel_low=None)
-                reason = plan_close_reason(intraday_plan, px_close, cost, n_days, version9_max_hold)
-                if reason:
-                    return i, px_close, reason, new_peak, new_peak_hm
-            elif take_profit is not None:
-                reason = take_profit(px_close, cost, new_peak, n_days)
-                if reason:
-                    return i, px_close, reason, new_peak, new_peak_hm
-            elif trail_hits(px_close, cost, new_peak, profit_base, trail_ratio):
-                return i, px_close, f"trail:T+{max(1, n_days)}", new_peak, new_peak_hm
-        if force_sell_hm is not None and cur_hm >= int(force_sell_hm):
-            if limit_down > 0 and hit_limit_down(px_close, limit_down):
-                continue
-            return i, px_close, "force_sell:time", new_peak, new_peak_hm
-        if (
-            close_clear is not None
-            and cur_hm == CLOSE_CLEAR_HM
-            and not (limit_down > 0 and hit_limit_down(px_close, limit_down))
-        ):
-            clear_reason = close_clear(cost, new_peak, n_days)
-            if clear_reason:
-                return i, px_close, clear_reason, new_peak, new_peak_hm
-    if (
-        close_clear is not None
-        and not saw_close_hm
-        and can_sell
-        and n_days >= 1
-        and n > 0
-    ):
-        last = n - 1
-        last_close = float(c[last])
-        if not (limit_down > 0 and hit_limit_down(last_close, limit_down)):
-            clear_reason = close_clear(cost, new_peak, n_days)
-            if clear_reason:
-                return last, last_close, clear_reason, new_peak, new_peak_hm
-    return -1, float("nan"), "", new_peak, new_peak_hm
+    cursor = HeldMinuteCursor(
+        o, h, c, cost, peak, n_days, can_sell, stop_pct, profit_base, trail_ratio,
+        stop_range_ratio=stop_range_ratio,
+        pos_trail=pos_trail, limit_down=limit_down, hm=hm, peak_hm=peak_hm,
+        peak_gap_min=peak_gap_min, take_profit=take_profit, sell_gate=sell_gate,
+        gate_code=gate_code, gate_day=gate_day,
+        daily_closes_ending_yesterday=daily_closes_ending_yesterday,
+        force_sell_hm=force_sell_hm, reserve_limit_up=reserve_limit_up,
+        defer_limit_up=defer_limit_up, limit_up=limit_up, reserved=reserved,
+        reserve_state=reserve_state, exit_plan=exit_plan, exit_state=exit_state,
+        close_clear=close_clear, l=l, minute_stop_trigger=minute_stop_trigger,
+        take_profit_pct=take_profit_pct, version9_plan=version9_plan,
+        version9_max_hold=version9_max_hold,
+    )
+    for i in range(len(c)):
+        for phase in ("open", "close"):
+            event = cursor.advance(i, phase)
+            if event is not None:
+                return (*event, cursor.peak, cursor.peak_hm)
+    return -1, float("nan"), "", cursor.peak, cursor.peak_hm
 
 
 def scan_held_day(
@@ -733,24 +638,14 @@ def simulate(
     exdiv_economics is an explicit (symbol, YYYYMMDD) -> ExDivEvent lookup for
     raw bars. None retains the baseline; E-R6 ratios never imply entitlements.
     """
-    from backtest.research.strategy9_rules import validate_sell_mode
-    validate_sell_mode(normalize_csv_strategy(strategy), version9_sell, max_hold)
-    if max_hold and normalize_csv_strategy(strategy) != "version9":
-        raise ValueError("max_hold is supported only by version9")
+    validate_minute_entry(strategy, stage="sell", version9_sell=version9_sell, max_hold=max_hold)
     validate_minute_stop_trigger(minute_stop_trigger, normalize_csv_strategy(strategy), fix_s11_exit_domain)
     validate_topk_exec(topk_exec, strategy, limit_walkdown, topk_limit_rule)
     validate_tail_options(tail_window_buy, fix_minute_cash_order, tail_volume_unit)
     if tail_window_buy:
         tail_volume_unit = resolve_tail_volume_unit(tail_volume_unit)
-    if tail_window_buy and normalize_csv_strategy(strategy) not in {
-        "version8", "version8_1", "version8_2", "version8_3",
-        "version8_4", "version8_5", "version8_6",
-    }:
-        raise ValueError("--tail-window-buy applies only to version8 / version8.x in the shared entry")
-    if fix_minute_cash_order and normalize_csv_strategy(strategy) == "version9_1":
-        raise ValueError("--fix-minute-cash-order is not applicable to version9_1")
-    if fix_minute_cash_order and normalize_csv_strategy(strategy) == "version12":
-        raise ValueError("--fix-minute-cash-order is not applicable to version12")
+    validate_minute_entry(strategy, stage="tail", tail_window_buy=tail_window_buy)
+    validate_minute_entry(strategy, stage="cash", fix_minute_cash_order=fix_minute_cash_order)
     if audit_sink is not None and normalize_csv_strategy(strategy) == "version12":
         raise ValueError("X-02 execution audit is not applicable to version12")
     if fix_s12_price_domain:
@@ -768,8 +663,7 @@ def simulate(
     if signal_bars_front is not None and not fix_s11_exit_domain:
         raise ValueError("signal_bars_front requires version11 + fix_s11_exit_domain=True")
     if fix_s11_exit_domain:
-        if normalize_csv_strategy(strategy) != "version11":
-            raise ValueError("fix_s11_exit_domain is supported only by version11")
+        validate_minute_entry(strategy, stage="s11", fix_s11_exit_domain=fix_s11_exit_domain)
         if signal_bars_front is None:
             raise ValueError("fix_s11_exit_domain requires independent signal_bars_front")
         from backtest.research.s11_exit_domain import validate_signal_bars
@@ -1344,10 +1238,7 @@ def run(
     topk_limit_rule: str = "qlib",
     participation_rate: float | None = None,
 ) -> SimState:
-    from backtest.research.strategy9_rules import validate_sell_mode
-    validate_sell_mode(normalize_csv_strategy(strategy), version9_sell, max_hold)
-    if max_hold and normalize_csv_strategy(strategy) != "version9":
-        raise ValueError("max_hold is supported only by version9")
+    validate_minute_entry(strategy, stage="sell", version9_sell=version9_sell, max_hold=max_hold)
     # P2-B shell precheck (adapter surface on run facade; not simulate / VolumeCap).
     # participation_rate=None → no-op (byte-identical old arm). ≠δ5 certified ≠R4.
     precheck_cli_participation_rate(
@@ -1365,17 +1256,12 @@ def run(
     validate_tail_options(tail_window_buy, fix_minute_cash_order, tail_volume_unit)
     if tail_window_buy:
         tail_volume_unit = resolve_tail_volume_unit(tail_volume_unit)
-        if normalize_csv_strategy(strategy) not in {
-            "version8", "version8_1", "version8_2", "version8_3",
-            "version8_4", "version8_5", "version8_6",
-        }:
-            raise ValueError("--tail-window-buy applies only to version8 / version8.x in the shared entry")
+        validate_minute_entry(strategy, stage="tail", tail_window_buy=tail_window_buy)
         if (minute_source != "lake" or daily_source != "lake" or dividend_type != "none"
                 or qlib_1min_root is not None or qlib_day_root is not None):
             raise ValueError("--tail-window-buy requires raw lake minute and daily data")
     if fix_s11_exit_domain:
-        if normalize_csv_strategy(strategy) != "version11":
-            raise ValueError("fix_s11_exit_domain is supported only by version11")
+        validate_minute_entry(strategy, stage="s11", fix_s11_exit_domain=fix_s11_exit_domain)
         if (dividend_type != "none" or minute_source != "lake" or daily_source != "lake"
             or qlib_1min_root is not None or qlib_day_root is not None):
             raise ValueError("fix_s11_exit_domain requires raw lake execution + independent lake front")
@@ -1392,10 +1278,7 @@ def run(
         raise ValueError("--fix-s12-price-domain requires version12 + lake/lake + --dividend-type none")
     if s12_price_transform_file is not None and not fix_s12_price_domain:
         raise ValueError("--s12-price-transform-file requires --fix-s12-price-domain")
-    if fix_minute_cash_order and book == "version9_1":
-        raise ValueError("--fix-minute-cash-order is not applicable to version9_1")
-    if fix_minute_cash_order and book == "version12":
-        raise ValueError("--fix-minute-cash-order is not applicable to version12")
+    validate_minute_entry(strategy, stage="cash", fix_minute_cash_order=fix_minute_cash_order)
     if audit_sink is not None and book == "version12":
         raise ValueError("X-02 execution audit is not applicable to version12")
     if book == "version12":
@@ -1576,49 +1459,9 @@ def run(
         else load_exdiv_ratios(all_codes, start, end, skipped_out=skipped,
                                **({"noise_eps": 0} if exdiv_ref_fen else {}))
     )
-    index_block_new = None
-    gate_book = normalize_csv_strategy(strategy)
-    if gate_book == "version12":
-        from backtest.research.strategy12_rules import (
-            INDEX_GATE_ON,
-            load_sse_ma10_block_new,
-        )
+    from backtest.research.strategy_book_helpers import load_book_index_gate
 
-        if INDEX_GATE_ON:
-            index_block_new = load_sse_ma10_block_new(start, end)
-    elif gate_book == "version8_4":
-        from backtest.research.strategy8_4_rules import (
-            INDEX_GATE_ON,
-            load_sse_ma10_block_new,
-        )
-
-        if INDEX_GATE_ON:
-            index_block_new = load_sse_ma10_block_new(start, end)
-    elif gate_book == "version8_5":
-        from backtest.research.strategy8_5_rules import (
-            INDEX_GATE_ON,
-            load_sse_ma10_block_new,
-        )
-
-        if INDEX_GATE_ON:
-            index_block_new = load_sse_ma10_block_new(start, end)
-    elif gate_book == "version8_6":
-        from backtest.research.strategy8_6_rules import (
-            INDEX_GATE_ON,
-            load_sse_ma10_block_new,
-        )
-
-        if INDEX_GATE_ON:
-            index_block_new = load_sse_ma10_block_new(start, end)
-    elif gate_book in ("version8", "version8_3"):
-        from backtest.research.strategy8_rules import (
-            INDEX_GATE_ON,
-            load_sse_ma10_block_new,
-        )
-
-        # 8.3 冻结包闸门无条件开（历史年代无开关，默认即开）。
-        if INDEX_GATE_ON or gate_book == "version8_3":
-            index_block_new = load_sse_ma10_block_new(start, end)
+    index_block_new = load_book_index_gate(normalize_csv_strategy(strategy), start, end)
     t_sim = time.perf_counter()
     st = simulate(
         minute,

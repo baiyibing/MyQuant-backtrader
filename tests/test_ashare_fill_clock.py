@@ -341,7 +341,22 @@ def test_scan_held_day_python_hm_comparisons_stay_as_built():
         node for node in tree.body
         if isinstance(node, ast.FunctionDef) and node.name == "scan_held_day_python"
     )
-    assert _scan_hm_comparisons(scan) == AS_BUILT_SCAN_HM_COMPARISONS
+    # The public scanner now delegates to the shared cursor. Pin its actual
+    # comparisons too, normalizing only the old local/state variable names.
+    core_source = (path.parent / "minute_held_scan_core.py").read_text(encoding="utf-8")
+    assert _phase_filter_references(core_source) == set()
+    core = ast.parse(core_source)
+
+    class CursorNames(ast.NodeTransformer):
+        def visit_Attribute(self, node):
+            if isinstance(node.value, ast.Name) and node.value.id == "self":
+                name = "new_peak_hm" if node.attr == "peak_hm" else node.attr
+                return ast.copy_location(ast.Name(id=name, ctx=ast.Load()), node)
+            return self.generic_visit(node)
+
+    core = CursorNames().visit(core)
+    comparisons = _scan_hm_comparisons(scan) | _scan_hm_comparisons(core)
+    assert comparisons == AS_BUILT_SCAN_HM_COMPARISONS
 
 
 @pytest.mark.parametrize("condition", [

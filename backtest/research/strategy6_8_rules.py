@@ -10,6 +10,8 @@ B = 5%+3%×档号、step +10%×单票 8 笔、首仓锚全部维持。
 
 from __future__ import annotations
 
+from backtest.research import strategy_book_helpers as _book_helpers
+
 from typing import Optional
 
 BOOK_TAG = "v6_8"
@@ -36,30 +38,22 @@ STEP_STOP_PCT = 0.10  # step lot 独立止损（相对自身买价；引擎侧�
 
 def give_band(peak: float, cost: float) -> int:
     """峰值涨幅落入的第几档（[0,5%)=0、[5,10%)=1、…），无上限。"""
-    if float(cost) <= 0 or float(peak) <= float(cost):
-        raise ValueError("peak must be above positive cost")
-    rise = float(peak) / float(cost) - 1.0
-    return int((rise + 1e-12) / BAND_WIDTH)
+    return _book_helpers.give_band(peak, cost, BAND_WIDTH=BAND_WIDTH)
 
 
 def peak_dd_active(peak: float, cost: float) -> bool:
     """峰值涨幅 > 100% 时启用峰值回撤线（替代梯子与中段线）。"""
-    return float(peak) / float(cost) - 1.0 + 1e-12 > PEAK_DD_RISE
+    return _book_helpers.peak_dd_active(peak, cost, PEAK_DD_RISE=PEAK_DD_RISE)
 
 
 def mid_peak_dd_active(peak: float, cost: float) -> bool:
     """峰值涨幅 ∈ [15%, 100%] 时中段保护线（峰值×0.85）参与取 max。"""
-    rise = float(peak) / float(cost) - 1.0
-    return rise + 1e-12 >= MID_PEAK_DD_RISE and not peak_dd_active(peak, cost)
+    return _book_helpers.mid_peak_dd_active(peak, cost, MID_PEAK_DD_RISE=MID_PEAK_DD_RISE, peak_dd_active=peak_dd_active)
 
 
 def floor_gain(peak: float, cost: float) -> Optional[float]:
     """峰值涨幅对应的保底涨幅；> 15% 无保底（None）。"""
-    rise = float(peak) / float(cost) - 1.0
-    for upper, gain in FLOOR_STEPS:
-        if rise + 1e-12 < upper:
-            return gain
-    return None
+    return _book_helpers.floor_gain(peak, cost, FLOOR_STEPS=FLOOR_STEPS)
 
 
 def exit_line(cost: float, peak: float) -> float:
@@ -100,7 +94,7 @@ def take_profit_reason(
 
 def lot_budget(name_budget: float, _lots) -> float:
     """开仓每笔仍是整笔 name_budget；step 档距/上限由引擎参数控制。"""
-    return float(name_budget)
+    return _book_helpers.lot_budget(name_budget, _lots)
 
 
 def record_strategy6_8_params(st, *, stop_pct: float) -> None:
