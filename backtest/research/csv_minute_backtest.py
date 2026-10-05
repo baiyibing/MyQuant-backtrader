@@ -6,6 +6,9 @@
 成交。必须从已注册策略中显式指定 `--strategy`，无缺省。买入用 14:55 分钟收盘
 （湖内时间为「中国交易时钟标成 UTC」——09:30 UTC = 09:30 CST）。
 
+version7 为 minute-only 注册书：main 拥有日循环与状态，minute_cash_order 拥有
+symbol-major 默认与 X02 chronological 调度；v7 / APP 保留各自 CLI 与原生账本。
+
 用法：
     python backtest/research/csv_minute_backtest.py --strategy version6 --start 20251023 --end 20251104
     python backtest/research/csv_minute_backtest.py --strategy version8 --start 20251023 --end 20260909

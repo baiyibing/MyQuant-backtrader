@@ -206,6 +206,8 @@ def test_both_schedules_delegate_to_main_and_return_identical_object(monkeypatch
     result = native.simulate_v7(bars, closes, {D: [S]}, [D], fee=FEE,
                                 fix_minute_cash_order=chronological)
     assert len(calls) == 1 and calls[0][2] is result
+    assert type(result) is native.SimResult is engine.SimResult
+    assert calls[0][1]['fix_minute_cash_order'] is chronological
     assert calls[0][1]['strategy'] == 'version7'
     assert days == [D]
     direct = original(bars, closes, {D: [S]}, None, None, strategy='version7',
@@ -220,6 +222,56 @@ def test_both_schedules_delegate_to_main_and_return_identical_object(monkeypatch
     with pytest.raises(RuntimeError, match='main failed'):
         native.simulate_v7(bars, closes, {D: [S]}, [D],
                            fix_minute_cash_order=chronological)
+
+
+def test_no_production_traversal_in_native_shim_or_book():
+    import ast
+    import inspect
+
+    # Only input conversion and aggregate lot settlement may contain loops.
+    # Keep this list explicit: a new production day/row runner must fail here.
+    conversion_and_ledger = {
+        '_record_stamp', '_minute_records', '_iter_records', '_daily_closes',
+        '_sell_lots',
+    }
+    for module in (native, engine):
+        assert not hasattr(module, '_DayCursor')
+        assert not hasattr(module, '_run_chronological_day')
+    tree = ast.parse(inspect.getsource(engine))
+    for definition in tree.body:
+        if isinstance(definition, (ast.FunctionDef, ast.ClassDef)):
+            if definition.name not in conversion_and_ledger:
+                assert not any(isinstance(node, (ast.For, ast.While, ast.AsyncFor))
+                               for node in ast.walk(definition)), definition.name
+    shim = ast.parse(inspect.getsource(native.simulate_v7))
+    assert not any(isinstance(node, (ast.For, ast.While, ast.AsyncFor, ast.comprehension))
+                   for node in ast.walk(shim))
+
+
+@pytest.mark.parametrize('chronological', [False, True])
+def test_shim_normalizes_tail_unit_before_main(monkeypatch, chronological):
+    import inspect
+
+    # Signature/defaults match the conversion adapter, plus legacy unknown-option rejection.
+    shim = inspect.signature(native.simulate_v7)
+    adapter = inspect.signature(engine.simulate_native)
+    assert [p for p in shim.parameters.values() if p.name != 'unsupported_options'] == list(
+        adapter.parameters.values())
+    sentinel = engine.SimResult(1)
+    calls = []
+    def spy(*args, **kwargs):
+        calls.append((args, kwargs))
+        return sentinel
+    from backtest.research import csv_minute_backtest as main
+    monkeypatch.setattr(main, 'simulate', spy)
+    bars, closes, pools, index = {}, {}, {}, []
+    assert native.simulate_v7(
+        bars, closes, pools, index, fix_minute_cash_order=chronological,
+        tail_window_buy=chronological, tail_volume_unit=None) is sentinel
+    assert calls[0][0][:3] == (bars, closes, pools)
+    assert calls[0][1]['policy_context'].index_days is index
+    assert calls[0][1]['fix_minute_cash_order'] is chronological
+    assert calls[0][1]['tail_volume_unit'] == ('shares' if chronological else None)
 
 
 def test_registered_v7_cash_binding_is_skip_with_and_without_explicit_default():
@@ -311,3 +363,30 @@ def test_main_v7_never_applies_open_and_fill_sell_limit_gate(monkeypatch, chrono
     assert result.trades == [dict(date=day.isoformat(), symbol=S, hm=571,
                                  side="sell", shares=300, price=8.9,
                                  reason="stop:trial_a090")]
+
+
+@pytest.mark.parametrize('entry', ['shim', 'app'])
+@pytest.mark.parametrize('chronological,unit,message', [
+    (True, 'invalid', 'tail volume unit (--tail-volume-unit) must be shares or lots'),
+    (False, 'shares', '--tail-window-buy requires --fix-minute-cash-order'),
+    (False, 'invalid', '--tail-window-buy requires --fix-minute-cash-order'),
+])
+def test_native_tail_error_parity_before_main(monkeypatch, entry, chronological, unit, message):
+    from backtest.research import csv_minute_backtest as main
+    from backtest.research import csv_minute_backtest_topk_app_dropout as app
+    from backtest.research.tail_window_buy import validate_tail_options, resolve_tail_volume_unit
+
+    # Exact pre-PR6 sequence from origin/master: validate, then resolve when enabled.
+    with pytest.raises(ValueError) as old:
+        validate_tail_options(True, chronological, unit)
+        resolve_tail_volume_unit(unit)
+    assert str(old.value) == message
+
+    def forbidden(*args, **kwargs):
+        pytest.fail('invalid tail options reached main simulate')
+    monkeypatch.setattr(main, 'simulate', forbidden)
+    call = native.simulate_v7 if entry == 'shim' else app.simulate_native
+    with pytest.raises(type(old.value)) as current:
+        call({}, {}, {}, [], tail_window_buy=True,
+             fix_minute_cash_order=chronological, tail_volume_unit=unit)
+    assert str(current.value) == str(old.value)
