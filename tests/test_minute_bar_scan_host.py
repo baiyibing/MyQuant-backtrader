@@ -16,7 +16,8 @@ from backtest.research.minute_bar_scan_host import (
     run_scan,
     scan_held_bars,
 )
-from backtest.research.minute_true_core_wire import wired_names
+from backtest.research.csv_strategy_books import csv_strategy_names
+from backtest.research.minute_true_core_wire import EXTRA_MINUTE_STRATEGIES, minute_strategy_names
 from backtest.research.topk_dropout_rules import decide_topk_dropout
 from backtest.research.topk_score_exit_rules import decide_topk_score_exit
 
@@ -25,7 +26,7 @@ SYMBOL = "000739.SZ"
 DAY = "20260106"
 OTHER = "600000.SH"
 UNIVERSE_BOOKS = ("topk_dropout", "topk_score_exit")
-SINGLE_BOOKS = tuple(name for name in wired_names() if name not in UNIVERSE_BOOKS)
+SINGLE_BOOKS = tuple(name for name in minute_strategy_names() if name not in UNIVERSE_BOOKS)
 FLAT_BARS = [OhlcBar(10, 10, 10, 10), OhlcBar(10, 10, 10, 10)]
 
 
@@ -52,7 +53,7 @@ def test_empty_bars_raise():
         scan_held_bars([], cost=10.0, peak=10.0)
 
 
-@pytest.mark.parametrize("strategy", wired_names())
+@pytest.mark.parametrize("strategy", minute_strategy_names())
 @pytest.mark.parametrize("n_days", [0, 2])
 def test_scan_keeps_n_days_one(n_days, strategy):
     with pytest.raises(ValueError, match="n_days"):
@@ -66,7 +67,7 @@ def test_default_scan_still_invokes_version1():
 
 @pytest.mark.parametrize("strategy", SINGLE_BOOKS)
 def test_all_single_symbol_books_scan_two_flat_bars(strategy):
-    assert len(SINGLE_BOOKS) == 36
+    assert set(SINGLE_BOOKS) == (set(csv_strategy_names()) | set(EXTRA_MINUTE_STRATEGIES)) - set(UNIVERSE_BOOKS)
     fields = {}
     if strategy in ("version4", "version11", "version12"):
         fields["level"] = 10

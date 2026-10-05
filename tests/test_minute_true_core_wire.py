@@ -89,7 +89,7 @@ def test_blocked_names_each_have_one_field():
     assert seen == {}
 
 
-@pytest.mark.parametrize("name", wired_names())
+@pytest.mark.parametrize("name", minute_strategy_names())
 def test_wired_strategy_skips_a_quiet_bar(name: str):
     # high 只抬到 10.01，回撤不到 50%；low 9.96 不触及 2% 止损。
     # level/stage 传了也不该在这根上卖。

@@ -1,0 +1,10 @@
+# Opt-in: install pre-commit and run `pre-commit install` to enable locally.
+repos:
+  - repo: local
+    hooks:
+      - id: minute-classification
+        name: Check minute bar-scan classification
+        entry: python scripts/check_minute_classification.py
+        language: system
+        pass_filenames: false
+        always_run: true
