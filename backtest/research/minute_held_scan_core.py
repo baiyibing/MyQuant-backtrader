@@ -86,6 +86,10 @@ class HeldMinuteCursor:
         self.peak = float(self.peak)
         self.peak_hm = int(self.peak_hm)
         self.current_reserved = bool(self.reserved)
+        if self.stop_range_ratio is not None:
+            # Range stop replaces the percent stop for trigger and touch, as the
+            # original scan_held_day_python did before the shared core existed.
+            self.stop_pct = self.stop_range_ratio
         if self.version9_plan is not None:
             self.take_profit_pct = self.version9_plan["take_profit_pct"]
             self.take_profit = lambda px, cost, peak, n_days: plan_close_reason(

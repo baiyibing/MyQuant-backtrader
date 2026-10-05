@@ -358,8 +358,6 @@ def scan_held_day_python(
 ) -> tuple[int, float, str, float, int]:
     """Python reference implementation of the minute sell scan."""
     validate_low(minute_stop_trigger, l, c)
-    if stop_range_ratio is not None:
-        stop_pct = stop_range_ratio
     cursor = HeldMinuteCursor(
         o, h, c, cost, peak, n_days, can_sell, stop_pct, profit_base, trail_ratio,
         stop_range_ratio=stop_range_ratio,
