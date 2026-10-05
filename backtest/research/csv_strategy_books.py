@@ -460,8 +460,8 @@ def add_csv_backtest_common_args(
     ap.add_argument(
         "--name-budget",
         type=float,
-        default=1_000_000.0,
-        help="per-name budget; effective only for per_name strategy books",
+        default=None,
+        help="per-name budget override; only for per_name books; default = the book's own name_budget",
     )
     ap.add_argument(
         "--ration",
@@ -573,7 +573,11 @@ def csv_run_kwargs_from_args(args) -> dict:
     kwargs["ration"] = getattr(args, "ration", "file_order")
     kwargs["ration_seed"] = int(getattr(args, "ration_seed", 0))
     if get_book(name).sizing == "per_name":
-        kwargs["name_budget"] = getattr(args, "name_budget", get_book(name).name_budget)
+        kwargs["name_budget"] = (
+            float(budget_override)
+            if budget_override is not None
+            else float(get_book(name).name_budget)
+        )
     return kwargs
 
 
@@ -599,7 +603,7 @@ def _apply_version1(
         "stop_pct": resolved,
         "take_profit": _tp if take_profit is None else take_profit,
         "record_params": _rec if record_params is None else record_params,
-}
+    }
 
 
 def _run_kwargs_version1(args) -> dict:

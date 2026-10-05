@@ -575,6 +575,60 @@ def test_per_name_adds_held_code_as_new_lot(per_name_hooks):
     ]
 
 
+@pytest.fixture
+def budget_parser(tmp_path):
+    from backtest.research.csv_strategy_books import add_csv_backtest_common_args
+
+    ap = argparse.ArgumentParser()
+    add_csv_backtest_common_args(
+        ap,
+        repo=tmp_path,
+        end_default="20260909",
+        cash_total_default=21_000_000,
+        daily_quota_default=1_000_000,
+    )
+    return ap
+
+
+@pytest.mark.parametrize("strategy", ["version6", "version8_1", "version9"])
+def test_daily_quota_default_name_budget(budget_parser, strategy):
+    from backtest.research.csv_strategy_books import csv_run_kwargs_from_args
+
+    args = budget_parser.parse_args(["--strategy", strategy])
+    assert args.name_budget is None
+    kwargs = csv_run_kwargs_from_args(args)
+    assert kwargs["strategy"] == strategy
+    assert "name_budget" not in kwargs
+
+
+@pytest.mark.parametrize("strategy", ["version6", "version8_1", "version9"])
+def test_daily_quota_explicit_name_budget_rejected(budget_parser, strategy):
+    from backtest.research.csv_strategy_books import csv_run_kwargs_from_args
+
+    args = budget_parser.parse_args(["--strategy", strategy, "--name-budget", "1000000"])
+    with pytest.raises(SystemExit, match=f"--name-budget applies only to per_name books; {strategy} is daily_quota"):
+        csv_run_kwargs_from_args(args)
+
+
+@pytest.mark.parametrize("strategy", [name for name, book in BOOKS.items() if book.sizing == "per_name"])
+def test_per_name_default_budget_is_float(budget_parser, strategy):
+    from backtest.research.csv_strategy_books import csv_run_kwargs_from_args
+
+    args = budget_parser.parse_args(["--strategy", strategy])
+    budget = csv_run_kwargs_from_args(args)["name_budget"]
+    assert type(budget) is float
+    assert budget == 1_000_000.0
+
+
+@pytest.mark.parametrize("budget", ["0", "-1"])
+def test_nonpositive_name_budget_rejected(budget_parser, budget):
+    from backtest.research.csv_strategy_books import csv_run_kwargs_from_args
+
+    args = budget_parser.parse_args(["--strategy", "version8", "--name-budget", budget])
+    with pytest.raises(SystemExit, match="--name-budget must be positive"):
+        csv_run_kwargs_from_args(args)
+
+
 def test_per_name_force_min_cli_budget(per_name_hooks, tmp_path):
     from backtest.research.csv_strategy_books import (
         add_csv_backtest_common_args,
