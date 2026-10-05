@@ -79,6 +79,11 @@ def defer_sell_at_limit(price: float, limits: tuple[float, float] | None) -> boo
     return limits is not None and hit_limit_down(price, limits[1])
 
 
+def defer_sell_open_or_fill(open_px: float, fill_px: float, limits: tuple[float, float] | None) -> bool:
+    """Defer a sell if either quote reaches the shared limit-down threshold."""
+    return defer_sell_at_limit(open_px, limits) or defer_sell_at_limit(fill_px, limits)
+
+
 def flatten_pool_names(names_by_day: Mapping[str, Mapping[str, str]]) -> dict[str, str]:
     names: dict[str, str] = {}
     for ymd in sorted(names_by_day):
@@ -119,6 +124,7 @@ __all__ = [
     "LIMIT_EPS",
     "asof_pool_name",
     "defer_sell_at_limit",
+    "defer_sell_open_or_fill",
     "flatten_pool_names",
     "hit_limit_down",
     "hit_limit_up",

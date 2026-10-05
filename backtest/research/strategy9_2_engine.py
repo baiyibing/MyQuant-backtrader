@@ -7,7 +7,7 @@ from backtest.research.csv_common import day_bar_and_prev_closes
 from backtest.research.exdiv_map import k_for
 from backtest.research.csv_ledger import execute_buy, _sell
 from backtest.research.csv_simulate_loop import run_pool_buys_day
-from backtest.research.ashare_session import defer_sell_at_limit
+from backtest.research.ashare_session import defer_sell_open_or_fill
 from backtest.research.ashare_session import hit_limit_up
 
 
@@ -75,11 +75,11 @@ def fill_stop(st, code, row, frame, day, *, day_i, ds, limits, minute=False, buc
         return False
     st.book_state["turtle_pending"][code] = reason, sum(p.shares for p in st.positions[code])
     fill_pending(st, code, SimpleNamespace(open=px), day, day_i=day_i, ds=ds,
-                 limits=limits, bucket=bucket)
+                 limits=limits, bucket=bucket, limit_open=float(row.open))
     return True
 
 
-def fill_pending(st, code, row, day, *, day_i, ds, limits, bucket=None, at=None):
+def fill_pending(st, code, row, day, *, day_i, ds, limits, bucket=None, at=None, limit_open=None):
     pending = st.book_state.setdefault("turtle_pending", {})
     plan = pending.get(code)
     if plan is None:
@@ -89,7 +89,7 @@ def fill_pending(st, code, row, day, *, day_i, ds, limits, bucket=None, at=None)
     if day_i < retry.get(code, day_i):
         return
     px = float(row.open)
-    if defer_sell_at_limit(px, limits):
+    if defer_sell_open_or_fill(px if limit_open is None else limit_open, px, limits):
         retry[code] = day_i + 1
         st.stats["defer_sell_limit_down"] += 1
         st.stats["limit_down_pending"] = st.stats.get("limit_down_pending", 0) + 1
@@ -267,6 +267,7 @@ class MinuteSession:
             # Keep turtle reasons/memory and the historical ledger byte schema.
             fill_pending(st, code, SimpleNamespace(open=px), ctx["day"],
                          day_i=day_i, ds=ds, limits=limits, bucket=hm,
+                         limit_open=(float(row.open) if stage == "stop" and _reason == "stop_loss:touch" else px),
                          **({"at": hm - 1} if _reason.endswith(":next_open") else {}))
 
         def decision(cursor, idx, at_phase):
