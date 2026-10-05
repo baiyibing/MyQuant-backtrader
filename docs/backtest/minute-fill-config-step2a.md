@@ -1,5 +1,7 @@
 # Step 2a: shared held-minute fill configuration
 
+**Current status (2026-10-05, step 3):** The bar-scan / true-core-wire / host round-trip probe line is retired. Production fills remain `csv_minute_backtest.simulate` / `HeldMinuteCursor` / `FillConfig`; classification uses registry `minute_classification` (#384). Historical probe references below describe the earlier step-2a scope.
+
 `FillConfig` is a frozen global sell-price policy accepted by `run`, `simulate`,
 `scan_held_day`, `scan_held_day_python`, and `HeldMinuteCursor`. No CLI changes.
 `book_fill_defaults` derives the path mapping from existing hooks/flags; no
@@ -58,8 +60,8 @@ retains the original predicates, including floating-point comparison order.
   Python explicitly for custom policies. Existing numba-ineligible paths
   remain Python; the numba implementation is unchanged.
 - Folded version9_2 accepts custom
-  config instead of rejecting it at the separate-engine guard. Daily, v7, bar_scan_exit and the
-  minute wire registry are untouched.
+  config instead of rejecting it at the separate-engine guard. Daily and v7 remain
+  unchanged; the historical bar-scan and minute wire probes were later retired in step 3.
 - A1 (2026-10-05): `step_stop`, `scale_out`, and `peak_dd_clear_exits`
   now consume FillConfig. None and the hook-derived stop default preserve
   existing FillConfig defaults, float order, metadata and event order. The

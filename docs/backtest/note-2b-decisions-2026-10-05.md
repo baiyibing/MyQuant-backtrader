@@ -1,5 +1,7 @@
 # Step 2b 决策与勘误清单（2026-10-05 14:13 CST）
 
+**STEP 3 DONE (2026-10-05, this PR):** B1–B4 已通过删除 bar-scan / true-core-wire / host round-trip probe 路径 folded / retired（probe only）；不单独对齐旧探针规则，goldens 不变。生产路径为 `csv_minute_backtest.simulate` / `HeldMinuteCursor` / `FillConfig`，分类栅栏为 registry `minute_classification`（#384）。以下 B1–B4 证据为删除前历史。
+
 | 字段 | 值 |
 |---|---|
 | 日期 / 人裁 | 2026-10-05 14:13 CST（Asia/Shanghai） |
