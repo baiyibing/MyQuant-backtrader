@@ -147,6 +147,7 @@ from backtest.research.minute_cash_order import (
     HeldMinuteCursor,
     advance_independent_exit,
     run_chronological_day,
+    step_stop_exits,
 )
 from backtest.research.tail_window_buy import (
     resolve_tail_volume_unit,
@@ -905,7 +906,7 @@ def simulate(
             # Price-add books need the post-14:55 group scan to observe their
             # new weighted cost. Other OFF books retain full-day exits first.
             split_group_scan = hooks.get("name") in {
-                "version6_1", "version8", "version8_3", "version8_4", "version8_5",
+                "version6_1", "version6_2", "version6_3", "version6_4", "version6_5", "version6_6", "version6_7", "version6_8", "version6_9", "version6_10", "version6_11", "version6_12", "version8", "version8_3", "version8_4", "version8_5",
             } and hooks.get("sizing") == "per_name"
             post_group_scans = []
             confirm_peaks = {}
@@ -992,6 +993,12 @@ def simulate(
                                     st, code, pos, cursor, bar_idx, phase, limits,
                                     day=day, day_i=i, audit_sink=audit_sink,
                                 )
+                                if phase == "close" and hooks.get("step_stop_pct"):
+                                    step_stop_exits(
+                                        st, code, pos, float(c[bar_idx]), day, i,
+                                        limits, step_stop_pct=hooks["step_stop_pct"],
+                                        hm=int(at_hm),
+                                    )
                         if split_group_scan:
                             post_group_scans.append((code, pos, cursor, limits))
                         continue
@@ -1174,6 +1181,12 @@ def simulate(
                 return px, closes
 
             volume_skips = int(st.stats.get("skip_volume_unavailable", 0)) + int(st.stats.get("skip_volume_cap", 0))
+            if callable(hooks.get("breakout_day")):
+                hooks["breakout_day"](
+                    st, day_i=i, day=day, ds=ds, names=names, pool_days=pool_days,
+                    buy_quote_for=_pool_quote_for, exdiv=exdiv,
+                    exdiv_ref_fen=exdiv_ref_fen, qlib_limit_pct=qlib_limit_pct,
+                )
             with audit_scope(audit_sink, decision_hm=AM_OPEN if minute_open else BUY_HM,
                 phase="open" if minute_open else "close", quote_for=pool_volume):
                 run_pool_buys_day(

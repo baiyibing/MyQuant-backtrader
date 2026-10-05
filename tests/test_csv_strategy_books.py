@@ -26,6 +26,17 @@ def test_registered_books_are_explicit():
         "version5",
         "version6",
         "version6_1",
+        "version6_2",
+        "version6_3",
+        "version6_4",
+        "version6_5",
+        "version6_6",
+        "version6_7",
+        "version6_8",
+        "version6_9",
+        "version6_10",
+        "version6_11",
+        "version6_12",
         "version8",
         "version8_1",
         "version8_2",
@@ -111,6 +122,20 @@ def test_apply_version6_1_registers_per_name_ladder_book():
     assert hooks["take_profit"](9.71, 10.0, 10.20, 1) is None
 
 
+def test_apply_version6_2_band0_breakeven_and_half_step():
+    hooks = apply_csv_strategy("v6.2")
+    assert hooks["name"] == "version6_2"
+    assert hooks["sizing"] == "per_name"
+    assert hooks["stop_pct"] == pytest.approx(0.10)
+    assert hooks["add_step"] == pytest.approx(0.10)
+    assert hooks["step_frac"] == pytest.approx(0.5)
+    # band0 保本锚：成本触发、上方不触发。
+    assert hooks["take_profit"](10.00, 10.0, 10.20, 1) == "trail:ladder:0"
+    assert hooks["take_profit"](10.01, 10.0, 10.20, 1) is None
+    # band≥1 沿用 6.1 公式。
+    assert hooks["take_profit"](10.10, 10.0, 11.00, 1) == "trail:ladder:10"
+
+
 def test_version6_1_cli_stop_override():
     book = get_book("version6_1")
     assert book.run_kwargs(argparse.Namespace(stop_pct=None)) == {
@@ -123,6 +148,118 @@ def test_version6_1_cli_stop_override():
     }
     with pytest.raises(SystemExit, match="--stop-pct"):
         book.run_kwargs(argparse.Namespace(stop_pct=1.5))
+
+
+def test_apply_version6_3_widens_give_step_to_3pct():
+    hooks = apply_csv_strategy("v6.3")
+    assert hooks["name"] == "version6_3"
+    assert hooks["sizing"] == "per_name"
+    assert hooks["stop_pct"] == pytest.approx(0.05)
+    assert hooks["add_step"] == pytest.approx(0.20)
+    assert hooks["step_frac"] == pytest.approx(1.0)
+    # 档 2（A=10%）：B=11% → 线 = 11 − 1.10；首档不变。
+    assert hooks["take_profit"](9.90, 10.0, 11.00, 1) == "trail:ladder:10"
+    assert hooks["take_profit"](9.70, 10.0, 10.20, 1) == "trail:ladder:0"
+
+
+def test_apply_version6_12_finer_add_ladder():
+    hooks = apply_csv_strategy("v6.12")
+    assert hooks["name"] == "version6_12"
+    assert hooks["add_step"] == pytest.approx(0.05)
+    assert hooks["add_offset"] == 4
+    assert hooks["tranche_max"] == 4
+    assert callable(hooks["breakout_day"])
+
+
+def test_apply_version6_11_breakout_hooks():
+    hooks = apply_csv_strategy("v6.11")
+    assert hooks["name"] == "version6_11"
+    assert hooks["stop_pct"] == pytest.approx(0.10)
+    assert hooks["add_step"] == pytest.approx(0.10)
+    assert hooks["add_offset"] == 2
+    assert hooks["tranche_max"] == 4
+    assert hooks["step_frac"] == pytest.approx(1.0)
+    assert callable(hooks["breakout_day"])
+    assert hooks["planned_for_day"]("20260101", []) == []
+
+
+def test_apply_version6_10_dual_5pct_stops():
+    hooks = apply_csv_strategy("v6.10")
+    assert hooks["name"] == "version6_10"
+    assert hooks["stop_pct"] == pytest.approx(0.05)
+    assert hooks["step_stop_pct"] == pytest.approx(0.05)
+    # 双梯子与 6.9 相同。
+    assert hooks["add_step"] == pytest.approx(0.05)
+    assert hooks["add_step2"] == pytest.approx(0.20)
+    assert hooks["base_zone_caps"] == (2, 4)
+    assert hooks["name_lot_budget"](1_000_000.0, []) == pytest.approx(200_000.0)
+
+
+def test_apply_version6_9_dual_ladder_hooks():
+    hooks = apply_csv_strategy("v6.9")
+    assert hooks["name"] == "version6_9"
+    assert hooks["stop_pct"] == pytest.approx(0.10)
+    assert hooks["add_step"] == pytest.approx(0.05)
+    assert hooks["step_frac"] == pytest.approx(0.20)
+    assert hooks["add_step2"] == pytest.approx(0.20)
+    assert hooks["step_frac2"] == pytest.approx(1.0)
+    assert hooks["tranche_max"] == 4
+    assert hooks["base_zone_caps"] == (2, 4)
+    assert hooks["step_cap"] is None
+    assert hooks["name_lot_budget"](1_000_000.0, []) == pytest.approx(200_000.0)
+    assert hooks["take_profit"](16.00, 10.0, 20.01, 1) == "trail:peakdd20"
+
+
+def test_apply_version6_8_step_stop_hook():
+    hooks = apply_csv_strategy("v6.8")
+    assert hooks["name"] == "version6_8"
+    assert hooks["step_stop_pct"] == pytest.approx(0.10)
+    assert hooks["step_cap"] == 8
+    # 离场线纯函数继承 6.7。
+    assert hooks["take_profit"](10.62, 10.0, 12.50, 1) == "trail:ladder:25"
+
+
+def test_apply_version6_7_mid_band_peak_line():
+    hooks = apply_csv_strategy("v6.7")
+    assert hooks["name"] == "version6_7"
+    assert hooks["sizing"] == "per_name"
+    assert hooks["stop_pct"] == pytest.approx(0.05)
+    assert hooks["add_step"] == pytest.approx(0.10)
+    assert hooks["step_cap"] == 8
+    # 中段：A=25% 线 = 峰值×0.85 = 10.625。
+    assert hooks["take_profit"](10.62, 10.0, 12.50, 1) == "trail:ladder:25"
+    assert hooks["take_profit"](10.63, 10.0, 12.50, 1) is None
+    # >100%：峰值×0.80。
+    assert hooks["take_profit"](16.00, 10.0, 20.01, 1) == "trail:peakdd20"
+
+
+def test_apply_version6_4_floors_and_step_cap():
+    hooks = apply_csv_strategy("v6.4")
+    assert hooks["name"] == "version6_4"
+    assert hooks["sizing"] == "per_name"
+    assert hooks["stop_pct"] == pytest.approx(0.05)
+    assert hooks["cost_anchor"] == "first_lot"
+    assert hooks["step_cap"] == 4
+    # 档 1 保底 +1%：线 = max(计算线, 10.10)。
+    assert hooks["take_profit"](10.10, 10.0, 10.50, 1) == "trail:ladder:5"
+    assert hooks["take_profit"](10.11, 10.0, 10.50, 1) is None
+    # 档 0 与档 ≥3 无保底。
+    assert hooks["take_profit"](9.70, 10.0, 10.20, 1) == "trail:ladder:0"
+    assert hooks["take_profit"](10.10, 10.0, 11.50, 1) == "trail:ladder:15"
+
+
+def test_version6_2_cli_stop_override():
+    book = get_book("version6_2")
+    assert book.run_kwargs(argparse.Namespace(stop_pct=None)) == {
+        "strategy": "version6_2",
+        "stop_pct": None,
+    }
+    assert book.run_kwargs(argparse.Namespace(stop_pct=0.12)) == {
+        "strategy": "version6_2",
+        "stop_pct": 0.12,
+    }
+    with pytest.raises(SystemExit, match="--stop-pct"):
+        book.run_kwargs(argparse.Namespace(stop_pct=0.0))
 
 
 def test_apply_version5_has_no_stop_and_has_minute_clock():

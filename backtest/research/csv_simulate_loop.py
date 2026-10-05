@@ -15,7 +15,7 @@ from typing import Callable, Optional
 
 import pandas as pd
 
-from backtest.research.ashare_session import skip_buy_at_limit
+from backtest.research.ashare_session import k_for, skip_buy_at_limit
 from backtest.research.csv_common import (
     _pool_names_asof,
     book_limit_prices,
@@ -567,13 +567,14 @@ def _run_s8_price_adds_day(
 ) -> None:
     policy = s8_policy(st)
     book = policy["name"]
-    if sizing != "per_name" or book not in {"version6_1", "version8", "version8_3", "version8_4", "version8_5"}:
+    if sizing != "per_name" or book not in {"version6_1", "version6_2", "version6_3", "version6_4", "version6_5", "version6_6", "version6_7", "version6_8", "version6_9", "version6_10", "version6_11", "version6_12", "version8", "version8_3", "version8_4", "version8_5"}:
         return
     confirm = book == "version8_3"
     gate = policy["allow_new_name"]
     if confirm and callable(gate) and not gate(day):
         # 8.3 has always blocked both new positions and adds at the index gate.
         return
+    step_cap = policy.get("step_cap")
     for code in list(st.positions):
         quoted = buy_quote_for(code)
         if quoted is None:
@@ -585,9 +586,19 @@ def _run_s8_price_adds_day(
         for position_id, group in groups:
             if group.last_add_date == ds or group.first_lot.pending_exit:
                 continue
-            cost = float(group.first_lot.cost)
+            if (
+                step_cap is not None
+                and policy["code_steps"].get(code, 0) >= int(step_cap)
+            ):
+                # 票级上限在同一次访问的多组之间同样生效。
+                st.stats["skip_step_cap"] = int(st.stats.get("skip_step_cap", 0)) + 1
+                continue
+            cost = float(getattr(group, "anchor_cost", None) or group.first_lot.cost)
             if cost <= 0:
                 continue
+            # 双梯子书：分批腿(1)优先、基数腿(2)次之；单梯子书 use2 恒 False、行为不变。
+            use2 = False
+            rise = float(px) / cost - 1.0
             if confirm:
                 peak = (
                     confirm_peak_for(code, group.first_lot)
@@ -595,8 +606,27 @@ def _run_s8_price_adds_day(
                 )
                 if group.supplement_done or px < cost or peak < cost * 1.03:
                     continue
-            elif int((float(px) / cost - 1.0) / 0.20 + 1e-12) <= group.executed_steps:
-                continue
+            else:
+                tranche_max = policy.get("tranche_max")
+                offset = int(policy.get("add_offset") or 0)
+                allowed1 = int((rise + 1e-12) / float(policy["add_step"])) - offset
+                due1 = allowed1 > group.executed_steps and (
+                    tranche_max is None or group.executed_steps < int(tranche_max)
+                )
+                due2 = False
+                add_step2 = policy.get("add_step2")
+                if add_step2:
+                    allowed2 = int((rise + 1e-12) / float(add_step2))
+                    cap2 = None
+                    zone_caps = policy.get("base_zone_caps")
+                    if zone_caps is not None:
+                        cap2 = int(zone_caps[1]) if rise + 1e-12 >= 1.0 else int(zone_caps[0])
+                    due2 = allowed2 > group.executed_steps2 and (
+                        cap2 is None or group.executed_steps2 < cap2
+                    )
+                if not due1 and not due2:
+                    continue
+                use2 = not due1
             if reference_price_for is None:
                 prev_close, did_map = mapped_prev_close(exdiv, code, ds, float(closes[-1]), **({"fen_round": True} if exdiv_ref_fen else {}))
             else:
@@ -618,7 +648,9 @@ def _run_s8_price_adds_day(
             if callable(buy_gate) and not buy_gate(code, px, day, closes):
                 st.stats["skip_buy_gate"] += 1
                 continue
-            per = group.budget * (0.50 if confirm else 1.0)
+            per = group.budget * (
+                0.50 if confirm else float(policy["step_frac2" if use2 else "step_frac"])
+            )
             quota_used = st.daily_quota_used
             volume_kwargs = (
                 {"bucket_id": volume_bucket_for(code)}
@@ -626,7 +658,7 @@ def _run_s8_price_adds_day(
             )
             filled = execute_buy(
                 st, code, px, per, day_i, day,
-                reason="add:confirm3" if confirm else "add:step20",
+                reason="add:confirm3" if confirm else ("add:base20" if use2 else "add:step20"),
                 is_step=not confirm, position_id=position_id,
                 entry_signal_date=group.entry_signal_date, **volume_kwargs,
             )
@@ -635,8 +667,12 @@ def _run_s8_price_adds_day(
                 group.last_add_date = ds
                 if confirm:
                     group.supplement_done = True
+                elif use2:
+                    group.executed_steps2 += 1
                 else:
                     group.executed_steps += 1
+                if step_cap is not None:
+                    policy["code_steps"][code] = policy["code_steps"].get(code, 0) + 1
 
 
 def run_buybacks_day(
@@ -829,3 +865,71 @@ def append_equity_and_eod_marks(
                         **position_identity(pos),
                     }
                 )
+
+
+def run_breakout_day(
+    st, *, day_i, day, ds, names, pool_days, buy_quote_for,
+    exdiv=None, exdiv_ref_fen=False, qlib_limit_pct=None, breakout_mult=1.2,
+):
+    """v6.11 突破书：T0 名单日记 A0=14:55 收盘；自 T+1 起 px ≥ A0×mult 即买 1 基。
+
+    信号无限期有效；突破日 14:55 涨停则继续等；开组后 anchor_cost=A0。
+    持仓期除权对 A0 等比缩放（与组内 lot 同口径）。
+    """
+    policy = s8_policy(st)
+    if policy is None:
+        return
+    pending = st.book_state.setdefault("breakout_pending", {})
+    for code in pool_days.get(ds, []):
+        key = f"{code}@{ds}"
+        if key in pending or key in policy["groups"]:
+            continue
+        quoted = buy_quote_for(code)
+        if quoted is None:
+            continue
+        px, closes = quoted
+        if not closes or float(px) <= 0:
+            continue
+        pending[key] = (float(px), day_i)
+        st.stats["breakout_signals"] = int(st.stats.get("breakout_signals", 0)) + 1
+    for key in list(pending):
+        code, sig_ds = key.split("@", 1)
+        a0, sig_idx = pending[key]
+        if sig_idx >= day_i:
+            continue
+        kk = k_for(exdiv, code, ds) if exdiv is not None else None
+        if kk is not None:
+            a0 *= float(kk)
+            pending[key] = (a0, sig_idx)
+        if key in policy["groups"]:
+            del pending[key]
+            continue
+        quoted = buy_quote_for(code)
+        if quoted is None:
+            continue
+        px, closes = quoted
+        if not closes or float(px) <= 0:
+            continue
+        if float(px) < a0 * float(breakout_mult):
+            continue
+        prev_close, _ = mapped_prev_close(
+            exdiv, code, ds, float(closes[-1]),
+            **({"fen_round": True} if exdiv_ref_fen else {}),
+        )
+        limits = book_limit_prices(
+            code, prev_close, names, qlib_limit_pct=qlib_limit_pct, as_of=ds
+        )
+        if limits is None:
+            st.stats["skip_unknown_board"] += 1
+            continue
+        if skip_buy_at_limit(px, limits):
+            st.stats["skip_limit_up"] += 1
+            continue
+        filled = execute_buy(
+            st, code, px, float(policy["name_budget"]), day_i, day,
+            reason="breakout", position_id=key, entry_signal_date=sig_ds,
+        )
+        if filled:
+            del pending[key]
+            policy["groups"][key].anchor_cost = a0
+            st.stats["breakout_buys"] = int(st.stats.get("breakout_buys", 0)) + 1

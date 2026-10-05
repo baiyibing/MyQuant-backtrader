@@ -81,3 +81,31 @@ def test_book_constants_and_lot_budget():
     assert PEAK_GAP_MIN == 15
     # 每笔整基：新组 / step / 再现组同口径。
     assert lot_budget(1_000_000.0, None) == pytest.approx(1_000_000.0)
+
+
+def test_step_lots_do_not_enter_exit_cost_basis():
+    """人裁纠偏 2026-10-02：step 加仓仅同进同出，退出成本基数锚首仓买入价。
+
+    v8 系保持加权均价（weighted 锚）不变。
+    """
+    from backtest.research.csv_ledger import configure_s8, execute_buy, exit_positions
+    from backtest.research.csv_simulate_loop import init_sim_state, run_step_adds_day
+    from backtest.research.csv_strategy_books import apply_csv_strategy
+
+    def _group_cost(strategy: str) -> float:
+        hooks = apply_csv_strategy(strategy)
+        st = init_sim_state(hooks, total_cash=5_000_000, bars_loaded=1, pool_days={})[0]
+        configure_s8(st, hooks)
+        execute_buy(st, "600000.SH", 10.0, 1_000_000, 0, "2025-11-03")
+        run_step_adds_day(
+            st, day_i=1, day="2025-11-04", ds="20251104", names={},
+            buy_quote_for=lambda _c: (12.0, [12.0]), sizing="per_name",
+            name_budget=1_000_000,
+        )
+        (view,) = exit_positions(st, "600000.SH")
+        return view.cost
+
+    # 6.1：step @12 不进基数 → 退出成本仍是首仓 10.0。
+    assert _group_cost("version6_1") == pytest.approx(10.0)
+    # v8：仍是组内加权均价（(10.0 + 12.0) / 2 股价加权 ≈ 10.9x）。
+    assert _group_cost("version8") == pytest.approx(10.9, abs=0.1)

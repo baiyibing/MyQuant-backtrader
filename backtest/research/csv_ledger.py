@@ -98,6 +98,8 @@ class IndependentGroup:
     first_lot: IndependentPosition
     next_lot_id: int = 1
     executed_steps: int = 0
+    executed_steps2: int = 0  # 第二梯子（基数腿）计数，仅双梯子书使用
+    anchor_cost: float | None = None  # 梯子/止损锚价；None = 首仓成本（默认）
     supplement_done: bool = False
     last_add_date: str = ""
     closed: bool = False
@@ -141,6 +143,12 @@ class IndependentExitPosition:
 
     @property
     def cost(self):
+        anchor = (s8_policy(self.st) or {}).get("cost_anchor", "weighted")
+        if anchor == "first_lot":
+            # 6.x 书：step 加仓仅同进同出，不进止损/梯子的成本基数。
+            # v6.11 突破书：锚 = 信号日 A0（T0 收盘），优先于首仓成交价。
+            base = getattr(self.group, "anchor_cost", None)
+            return float(base) if base else float(self.group.first_lot.cost)
         lots = self.lots
         if len(lots) == 1:
             return lots[0].cost  # Preserve single-lot float boundaries exactly.
@@ -230,7 +238,7 @@ def configure_s8(st, hooks: dict) -> None:
     """Bind the selected per-name hooks once, including direct shared-loop use."""
     name = hooks.get("name")
     if hooks.get("sizing") != "per_name" or name not in {
-        "version6_1", "version8", "version8_2", "version8_3", "version8_4", "version8_5", "version8_6",
+        "version6_1", "version6_2", "version6_3", "version6_4", "version6_5", "version6_6", "version6_7", "version6_8", "version6_9", "version6_10", "version6_11", "version6_12", "version8", "version8_2", "version8_3", "version8_4", "version8_5", "version8_6",
     }:
         return
     if s8_policy(st) is not None:
@@ -239,6 +247,16 @@ def configure_s8(st, hooks: dict) -> None:
         "name": name,
         "name_budget": float(hooks["name_budget"]),
         "allow_new_name": hooks.get("allow_new_name"),
+        "add_step": float(hooks.get("add_step") or 0.20),
+        "step_frac": float(hooks.get("step_frac") or 1.0),
+        "cost_anchor": str(hooks.get("cost_anchor") or "weighted"),
+        "step_cap": hooks.get("step_cap"),  # per-code step lot cap; None = unlimited
+        "code_steps": {},
+        "add_step2": hooks.get("add_step2"),  # 第二梯子档距；None = 单梯子（v8 系）
+        "step_frac2": hooks.get("step_frac2"),
+        "tranche_max": hooks.get("tranche_max"),  # 第一梯子（分批腿）每组上限笔数
+        "add_offset": int(hooks.get("add_offset") or 0),  # 首档前跳过的档数（v6.11）
+        "base_zone_caps": hooks.get("base_zone_caps"),  # (涨幅<100% 上限, ≥100% 上限)
         "groups": {},
     }
 
@@ -292,6 +310,8 @@ def rescale_s8_groups(st, code: str, k: float) -> None:
     """
     live_ids = {id(p) for p in st.positions.get(code, [])}
     for _position_id, group in s8_open_groups(st, code):
+        if group.anchor_cost:
+            group.anchor_cost *= float(k)
         if id(group.first_lot) not in live_ids:
             rescale_position(group.first_lot, k)
 
