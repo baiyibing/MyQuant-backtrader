@@ -320,6 +320,7 @@ def scan_held_day_python(
     can_sell: bool,
     stop_pct: Optional[float],
     stop_range_ratio: Optional[float] = None,
+    stop_range_distance: Optional[float] = None,
     profit_base: float,
     trail_ratio: float,
     pos_trail: float = 0.0,
@@ -350,6 +351,9 @@ def scan_held_day_python(
         stop_pct = stop_range_ratio
         stop_enabled = True
     trigger = cost * (1.0 - stop_pct) if stop_enabled else None
+    if stop_range_distance is not None:
+        trigger = cost - stop_range_distance
+        stop_enabled = True
     new_peak = float(peak)
     new_peak_hm = int(peak_hm)
     current_reserved = bool(reserved)
@@ -376,7 +380,7 @@ def scan_held_day_python(
             return i, px_open, "stop_loss:gap_open", new_peak, new_peak_hm
         ret = px_close / cost - 1.0
         if stop_enabled:
-            touched = float(l[i]) <= trigger if minute_stop_trigger == "hl" else ret <= -stop_pct
+            touched = float(l[i]) <= trigger if minute_stop_trigger == "hl" else (px_close <= trigger if stop_range_distance is not None else ret <= -stop_pct)
             if touched:
                 fill_px = trigger if minute_stop_trigger == "hl" else px_close
                 return i, fill_px, "stop_loss:touch", new_peak, new_peak_hm
@@ -469,6 +473,7 @@ def scan_held_day(
     can_sell: bool,
     stop_pct: Optional[float],
     stop_range_ratio: Optional[float] = None,
+    stop_range_distance: Optional[float] = None,
     profit_base: float,
     trail_ratio: float,
     pos_trail: float = 0.0,
@@ -501,6 +506,7 @@ def scan_held_day(
     can_offload = (
         minute_stop_trigger == "close"
         and stop_range_ratio is None
+        and stop_range_distance is None
         and _want_numba_scan(use_numba)
         and _NUMBA_SCAN_AVAILABLE
         and sell_gate is None
@@ -561,6 +567,7 @@ def scan_held_day(
         can_sell=can_sell,
         stop_pct=stop_pct,
         stop_range_ratio=stop_range_ratio,
+        stop_range_distance=stop_range_distance,
         profit_base=profit_base,
         trail_ratio=trail_ratio,
         pos_trail=pos_trail,
@@ -1007,8 +1014,9 @@ def simulate(
                         n_days=n_days,
                         can_sell=t1_sellable(calendar[pos.entry_idx].date(), day.date()),
                         stop_pct=stop_pct,
-                        stop_range_ratio=((1 - absolute_exit(code, day) / pos.cost) if absolute_exit else evaluate_stop_range(hooks, ddf, day, st.stats)
-                                          if (absolute_exit or "stop_range" in hooks) and n_days >= 1 else None),
+                        stop_range_ratio=(1 - absolute_exit(code, day) / pos.cost) if absolute_exit and n_days >= 1 else None,
+                        stop_range_distance=(evaluate_stop_range(hooks, ddf, day, st.stats)
+                                             if "stop_range" in hooks and n_days >= 1 else None),
                         profit_base=profit_base if profit_base is not None else 0.0,
                         trail_ratio=0.0,
                         pos_trail=pos_trail,

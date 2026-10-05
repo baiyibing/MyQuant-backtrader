@@ -415,7 +415,8 @@ def simulate(
                             stop_enabled = True
                         close = float(row["close"])
                         if stop_enabled:
-                            trigger = pos.cost * (1.0 - stop_ratio)
+                            trigger = (pos.cost - stop_ratio if "stop_range" in hooks
+                                       else pos.cost * (1.0 - stop_ratio))
                             if stop_fill == "close":
                                 if close <= trigger:
                                     _sell(
@@ -616,7 +617,8 @@ def simulate(
                             stop_ratio = evaluate_stop_range(hooks, bars[code], day, st.stats)
                             stop_enabled = stop_ratio is not None
                         if stop_enabled:
-                            if close <= pos.cost * (1.0 - stop_ratio):
+                            if close <= (pos.cost - stop_ratio if "stop_range" in hooks
+                                         else pos.cost * (1.0 - stop_ratio)):
                                 reason = "stop_loss:close"
                         if not reason:
                             reason = (

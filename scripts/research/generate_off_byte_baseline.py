@@ -12,7 +12,7 @@ Six per_name strategy-8 books use the explicit 2026-09-26 correction overlay;
 other historical cases use the immutable files unless explicitly overlaid.
 version12 uses the 2026-10-04 whole-position MA10-stop overlay (69cf371);
 --record-s12 records only its daily/minute cases and refuses overwrite.
-version9 uses the 2026-10-04 trailing 20-bar range overlay;
+version9 uses the 2026-10-05 trailing 20-day twice mean true range overlay;
 --record-s9 records only its daily/minute cases and refuses overwrite.
 version6_1 (20th book, bee0b91) is covered by a scoped additive overlay
 (precedent #212): historical golden stays 19 books / 39 cases; --record-v61
@@ -88,8 +88,8 @@ S12_GOLDEN = ROOT / "tests/fixtures/off_byte_baseline_s12_ma10_stop_20261004.jso
 S12_RULE_REVISION = "s12-whole-position-ma10-stop-69cf371"
 S12_BOOK_NAMES = ("version12",)
 S12_CASES = tuple((book, engine) for book in S12_BOOK_NAMES for engine in ("daily", "minute"))
-S9_GOLDEN = ROOT / "tests/fixtures/off_byte_baseline_s9_range_amp_20_trailing_20261004.json"
-S9_RULE_REVISION = "s9-range-amp-20-trailing-20261004"
+S9_GOLDEN = ROOT / "tests/fixtures/off_byte_baseline_s9_2x_mean_tr_20_yuan_trailing_20261005.json"
+S9_RULE_REVISION = "s9-2x-mean-tr-20-yuan-trailing-20261005"
 S9_BOOK_NAMES = ("version9",)
 S9_CASES = tuple((book, engine) for book in S9_BOOK_NAMES for engine in ("daily", "minute"))
 BOOK_NAMES = HISTORICAL_BOOK_NAMES + V61_BOOK_NAMES + V91_BOOK_NAMES + V92_BOOK_NAMES
@@ -520,7 +520,7 @@ def main():
     mode.add_argument("--record-s12", action="store_true",
                       help="Record only the 2 version12 MA10-stop cases")
     mode.add_argument("--record-s9", action="store_true",
-                      help="Record only the 2 version9 trailing range cases")
+                      help="Record only the 2 version9 trailing 2x mean true range cases")
     args = parser.parse_args()
     if args.record_s8:
         if S8_GOLDEN.exists():
