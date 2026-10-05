@@ -59,6 +59,10 @@ retains the original predicates, including floating-point comparison order.
 - Separate minute engines (version9_2, version12, minute_open) reject custom
   config instead of silently ignoring it. Daily, v7, bar_scan_exit and the
   minute wire registry are untouched.
+- `step_stop` / `scale_out` side sells are excluded from 2a: books with a
+  truthy `step_stop_pct` or `scale_out_step` reject non-default config.
+  Default/None config reproduces their current same-bar-close execution
+  (`minute_trigger_bar_close`).
 
 ## Registered CSV books and default paths
 
@@ -81,11 +85,12 @@ may return no exit). H/L remains opt-in for supported shared books.
 | version6_5 | shared; take_profit |
 | version6_6 | shared; take_profit |
 | version6_7 | shared; take_profit |
-| version6_8 | shared; take_profit |
+| version6_8 | shared; take_profit; step_stop side sells (default only) |
 | version6_9 | shared; take_profit |
-| version6_10 | shared; take_profit |
+| version6_10 | shared; take_profit; step_stop side sells (default only) |
 | version6_11 | shared; take_profit |
 | version6_12 | shared; take_profit |
+| version6_13 | shared; take_profit; step_stop / scale_out side sells (default only; reproduces current behavior) |
 | version8 | shared; take_profit |
 | version8_1 | shared; take_profit |
 | version8_2 | shared; take_profit |
@@ -118,6 +123,7 @@ Test names below are in `tests/test_minute_fill_config.py` unless a file is spec
 | Default numba parity | `tests/test_scan_held_day_numba_parity.py::test_numba_gap_open_stop`, `test_numba_t0_no_sell_no_peak_update`, `test_numba_trail_hit`, `test_numba_force_sell_time` |
 | version9_2/version12/minute_open reject custom config through simulate | `test_simulate_separate_engine_rejects_custom_config` (minute_open = version11) |
 | absolute_exit bar_low guard | `test_simulate_absolute_exit_requires_bar_low` (version9_1) |
+| step_stop/scale_out reject custom config; default/None unchanged | `test_simulate_side_sells_reject_custom_config`, `test_simulate_side_sells_default_config_unchanged` (version6_13/version6_8) |
 | Look-ahead rejects | `test_lookahead`, `test_callback_low_rejected_at_decision`, `test_target_cannot_assume_low_after_high` |
 | Callback and trail timing | `test_target_and_trail` |
 | Missing carry out-param fails closed | `test_missing_carry_state_fails_closed` |
@@ -132,6 +138,17 @@ lifetime keys, and the absence of a stale next-open SELL on the new position.
 ## Validation
 
 Using `/tmp/mq-v6/bin/python` and `-p no:cacheprovider`:
+
+Side-sell fail-closed follow-up after rebase on master `a55e3c85`:
+
+- `tests/test_minute_fill_config.py` and `tests/test_off_byte_baseline.py`:
+  **191 passed**, 4.11 s; off-byte fixtures unchanged.
+- Full suite, `-m "not production and not benchmark"`: **7480 passed,
+  5 skipped, 24 deselected**, 29 warnings, 173.41 s.
+- The three changed Python/Markdown files are UTF-8 without BOM with zero
+  NUL bytes; `git diff --check` passes.
+
+Original step 2a validation before this follow-up:
 
 - Requested four files: **196 passed** (42 fill-config cases), 4.01 s.
 - Full suite, `-m "not production and not benchmark"`: **7424 passed,

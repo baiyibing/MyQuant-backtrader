@@ -168,6 +168,34 @@ def test_simulate_absolute_exit_requires_bar_low():
                  fill_config=FillConfig(trigger_basis='bar_last'))
 
 
+@pytest.mark.parametrize('strategy', ['version6_13', 'version6_8'])
+def test_simulate_side_sells_reject_custom_config(strategy):
+    from backtest.research.csv_minute_backtest import simulate
+    from backtest.research.csv_strategy_books import apply_csv_strategy
+    hooks = apply_csv_strategy(strategy)
+    assert hooks['step_stop_pct']
+    if strategy == 'version6_13':
+        assert hooks['scale_out_step']
+    with pytest.raises(ValueError, match='step_stop/scale_out side sells'):
+        simulate(**minute_fixture(), strategy=strategy,
+                 fill_config=FillConfig(fill_timing='next_bar_open'))
+
+
+@pytest.mark.parametrize('strategy', ['version6_13', 'version6_8'])
+def test_simulate_side_sells_default_config_unchanged(strategy):
+    from backtest.research.csv_minute_backtest import simulate
+    from backtest.research.csv_strategy_books import apply_csv_strategy
+    from backtest.research.fill_config import book_fill_defaults
+    kwargs = dict(strategy=strategy, total_cash=100_000., daily_quota=10_000.,
+                  name_budget=10_000.)
+    legacy = simulate(**minute_fixture(), **kwargs, fill_config=None)
+    explicit = simulate(**minute_fixture(), **kwargs,
+                        fill_config=book_fill_defaults(apply_csv_strategy(strategy))['stop'])
+    assert legacy.trades
+    assert explicit.trades == legacy.trades
+    assert explicit.equity_curve == legacy.equity_curve
+
+
 def test_stale_carry_cleared_on_other_exit_and_same_code_reentry(monkeypatch):
     import backtest.research.csv_minute_backtest as m
     from backtest.research.csv_ledger import _sell, held_fill_key
