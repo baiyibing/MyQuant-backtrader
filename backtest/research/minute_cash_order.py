@@ -343,6 +343,7 @@ def run_chronological_day(
     held_fill_states=None,
     topk_exec="close",
     limit_walkdown=False,
+    price_context=None,
 ):
     """Advance holdings and cash at (hm, open/close, existing stable order)."""
     if tail_window_buy:
@@ -380,8 +381,16 @@ def run_chronological_day(
             frames[code] = frame
         return frames[code]
 
+    session_factory = hooks.get("minute_session")
+    session = (session_factory(
+        st, pending_chase, hooks=hooks, minute_bars=minute_bars,
+        daily_bars=daily_bars, pool_days=pool_days, day_i=day_i, day=day,
+        ds=ds, names=names, daily_quota=daily_quota, exdiv=exdiv,
+        slice_day=slice_day, price_context=price_context,
+        fill_config=fill_config, held_fill_states=held_fill_states,
+    ) if callable(session_factory) else None)
     events = {}
-    for code in list(st.positions):
+    for code in ([] if session is not None else list(st.positions)):
         ddf = daily_bars.get(code)
         if ddf is None or day not in ddf.index:
             continue
@@ -721,8 +730,16 @@ def run_chronological_day(
         clocks.update(topk_buys.clocks)
     if tail_window_buy:
         clocks.update(TAIL_MINUTES)
+    if session is not None:
+        clocks = session.clocks
     for at_hm in sorted(clocks):
         for phase in ("open", "close"):
+            if session is not None:
+                for code in list(st.positions):
+                    session.advance_held(code, at_hm, phase)
+                if phase == "close":
+                    session.after_close(at_hm)
+                continue
             for code, pos, cursor, idx, limits in events.get(at_hm, []):
                 if isinstance(pos, IndependentExitPosition):
                     advance_independent_exit(
