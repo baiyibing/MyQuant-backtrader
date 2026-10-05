@@ -169,6 +169,8 @@ def prepare_day(st, codes, ds, exdiv):
 
 def run_daily_day(st, pending_chase, *, hooks, bars, pool_days, day_i, day,
                   ds, names, daily_quota, exdiv):
+    from backtest.research.csv_ledger import reject_short_cash_override
+    reject_short_cash_override(hooks, "strategy9_2_engine")
     prepare_day(st, list(st.positions), ds, exdiv)
     pending = st.book_state.setdefault("turtle_pending", {})
     for code in list(st.positions):
@@ -217,6 +219,8 @@ class MinuteSession:
     def __init__(self, st, pending_chase, *, hooks, minute_bars, daily_bars,
                  pool_days, day_i, day, ds, names, daily_quota, exdiv, slice_day,
                  price_context=None, fill_config=None, held_fill_states=None):
+        from backtest.research.csv_ledger import reject_short_cash_override
+        reject_short_cash_override(hooks, "strategy9_2_engine")
         codes = list(dict.fromkeys([*st.positions, *pool_days.get(ds, [])]))
         prepare_day(st, codes, ds, exdiv)
         self.frames, self.closes, self.limits, self.pool_at = {}, {}, {}, {}

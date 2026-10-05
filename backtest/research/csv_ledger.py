@@ -236,7 +236,45 @@ class InsufficientCashError(RuntimeError):
         )
 
 
+def reject_short_cash_override(hooks: dict, entry: str) -> None:
+    """Dedicated engines retain their frozen cash and counting contracts."""
+    if "on_short_cash" in hooks:
+        raise ValueError(f"on_short_cash is unsupported for {entry}")
+
+
+def resolve_buy_cash_mode(st, hooks: dict) -> None:
+    """Resolve after policy binding; keep configuration out of snapshots."""
+    if "on_short_cash" in hooks:
+        mode = hooks["on_short_cash"]
+        if mode not in ("raise", "skip"):
+            raise ValueError("on_short_cash must be 'raise' or 'skip'")
+    else:
+        mode = "raise" if s8_policy(st) is not None else "skip"
+    st.on_short_cash = mode
+
+
 def configure_s8(st, hooks: dict) -> None:
+    if hooks.get("name") == "version9_2":
+        reject_short_cash_override(hooks, "strategy9_2_engine")
+    _configure_s8(st, hooks)
+    resolve_buy_cash_mode(st, hooks)
+
+
+def check_buy_cash(st, *, needed, available, date, code) -> bool:
+    """Decide an existing whole-order debit without counting or resizing."""
+    if needed > available:
+        mode = getattr(st, "on_short_cash", None)
+        if mode is None:
+            mode = "raise" if s8_policy(st) is not None else "skip"
+        if mode == "raise":
+            raise InsufficientCashError(
+                date=date, code=code, needed=needed, available=available,
+            )
+        return False
+    return True
+
+
+def _configure_s8(st, hooks: dict) -> None:
     """Bind the selected per-name hooks once, including direct shared-loop use."""
     name = hooks.get("name")
     if hooks.get("sizing") != "per_name" or name not in {
@@ -351,6 +389,7 @@ class SimState:
     def __post_init__(self):
         # Runtime diagnostics deliberately stay outside dataclasses.asdict:
         # account snapshots and the frozen OFF artifacts must not gain fields.
+        self.on_short_cash = None
         self.sell_pending_events = []
         self.sell_pending_open = []
         self._sell_pending_history = {}
@@ -572,11 +611,8 @@ def execute_buy(
         return False
     notional = shares * px
     comm = trade_commission(notional, st.buy_cost_rate, st.min_cost)
-    if notional + comm > st.cash:
-        if policy is not None:
-            raise InsufficientCashError(
-                date=_ymd(day), code=code, needed=notional + comm, available=st.cash,
-            )
+    if not check_buy_cash(st, needed=notional + comm, available=st.cash,
+                          date=_ymd(day), code=code):
         record_rejection(st, code, day, "skip_cash", px)
         return False
     if st.volume_cap is not None:

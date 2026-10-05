@@ -47,6 +47,7 @@ from backtest.research.csv_ledger import (  # noqa: E402
     SimState,
     chase_decision as chase_decision,
     configure_s8,
+    reject_short_cash_override,
     execute_buy as execute_buy,
     exit_positions,
     held_fill_key,
@@ -722,6 +723,8 @@ def simulate(
         index_block_new=index_block_new,
         stop_fill=stop_fill,
     )
+    if topk_exec != "close" or limit_walkdown:
+        reject_short_cash_override(hooks, "topk_minute_exec")
     if topk_limit_rule == "real":
         hooks["qlib_limit_pct"] = None
     stop_pct = hooks["stop_pct"]
