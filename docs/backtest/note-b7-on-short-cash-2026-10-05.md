@@ -2,7 +2,9 @@
 
 2026-10-05 23:08 Human GO：H-B7-01..07 推荐选项全部获准并实施。
 
-共享 hooks 可设 `on_short_cash: "raise" | "skip"`；非法值初始化抛 ValueError。省略时 configure_s8 实际绑定的 per_name 44 本（version6_1–6_38、version8、version8_2–8_6）默认 raise，其余 skip。bare SimState 未解析时按当时 policy 推导。运行配置不进入 dataclass fields、book_state 或默认输出。
+共享 hooks 可设 `on_short_cash: "raise" | "skip"`；非法值初始化抛 ValueError。省略时 configure_s8 实际绑定的 per_name 50 本（version6_1–6_44、version8、version8_2–8_6）默认 raise，其余 skip。bare SimState 未解析时按当时 policy 推导。运行配置不进入 dataclass fields、book_state 或默认输出。
+
+分支 tip 已 rebase 到 #394 V6F v21 的 master `d18df2f`；_configure_s8 已包含 version6_42–6_44，本次仅同步文档计数与范围。
 
 支持 csv_ledger、csv_simulate_loop 的共享买侧与 minute_cash_order strict tail parent。v7、topk_minute_exec 专用执行、fullstrat_research_book、strategy9_2_engine 不接受显式 override，启动 fail-closed；共享 reclaim/topk 支持。无新 CLI flag，HELP_LOCK 原字节保留。共享 HELP 说 per_name skip_cash，与 S8 docstrings/书契约的不足停止存在历史冲突，本票如实保留。
 

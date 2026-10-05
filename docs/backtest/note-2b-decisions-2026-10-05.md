@@ -98,7 +98,7 @@ Golden ownership 以 `scripts/research/generate_off_byte_baseline.py` 为准：�
 
 ### B7. Independent-position cash short raises
 
-2026-10-05 23:08 Human GO：H-B7-01..07 全部采用推荐选项，已实施 hooks-only `on_short_cash="raise"|"skip"`。省略时实际绑定 S8 per_name 的 44 本默认 raise，其余 skip；非 strict tail clip 保留。H-B7-03 保持原本金、费用和容量前门槛，B8 不实施；H-B7-04 仅共享买侧，专用入口显式 override 启动失败；H-B7-05 按授权逐路径表保留计数和生命周期（chase consume，breakout/price-add preserve，strict tail parent 新增 caller 计数）；H-B7-06 默认字节一致、旧 fixtures 不覆盖；H-B7-07 不加 CLI、不改 HELP_LOCK。详见 [B7 实施说明](note-b7-on-short-cash-2026-10-05.md)。
+2026-10-05 23:08 Human GO：H-B7-01..07 全部采用推荐选项，已实施 hooks-only `on_short_cash="raise"|"skip"`。省略时实际绑定 S8 per_name 的 50 本（version6_1–6_44、version8、version8_2–8_6）默认 raise，其余 skip；非 strict tail clip 保留。H-B7-03 保持原本金、费用和容量前门槛，B8 不实施；H-B7-04 仅共享买侧，专用入口显式 override 启动失败；H-B7-05 按授权逐路径表保留计数和生命周期（chase consume，breakout/price-add preserve，strict tail parent 新增 caller 计数）；H-B7-06 默认字节一致、旧 fixtures 不覆盖；H-B7-07 不加 CLI、不改 HELP_LOCK。详见 [B7 实施说明](note-b7-on-short-cash-2026-10-05.md)。
 
 ### B8. Lot rounding 多处各有选项
 
