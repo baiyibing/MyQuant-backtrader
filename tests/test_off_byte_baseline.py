@@ -58,7 +58,7 @@ def test_off_byte_baseline_covers_current_registry_and_standalone_v7():
     assert len(HISTORICAL_BOOK_NAMES) == 19 and len(HISTORICAL_CASES) == 39
     assert set(expected["books"]) == set(HISTORICAL_BOOK_NAMES)
     assert set(expected["cases"]) == {f"{book}/{engine}" for book, engine in HISTORICAL_CASES}
-    assert len(BOOK_NAMES) == 46 and len(CASES) == 93
+    assert len(BOOK_NAMES) == 47 and len(CASES) == 95
     assert set(BOOK_NAMES) == set(BOOKS) == set(HISTORICAL_BOOK_NAMES) | set(V61_BOOK_NAMES) | set(V91_BOOK_NAMES) | set(V92_BOOK_NAMES) | set(V6F_BOOK_NAMES)
     registered_cases = {(book, engine) for book in BOOKS for engine in ("daily", "minute")}
     assert set(CASES) == registered_cases | {("version7", "minute")}

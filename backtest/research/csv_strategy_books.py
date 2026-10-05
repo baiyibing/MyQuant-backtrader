@@ -43,6 +43,7 @@ from backtest.research import (
     strategy6_23_rules,
     strategy6_24_rules,
     strategy6_25_rules,
+    strategy6_26_rules,
     strategy8_rules,
     strategy8_1_rules,
     strategy8_2_rules,
@@ -92,6 +93,7 @@ HELP_LOCK_V6_22 = strategy6_22_rules.HELP_LOCK
 HELP_LOCK_V6_23 = strategy6_23_rules.HELP_LOCK
 HELP_LOCK_V6_24 = strategy6_24_rules.HELP_LOCK
 HELP_LOCK_V6_25 = strategy6_25_rules.HELP_LOCK
+HELP_LOCK_V6_26 = strategy6_26_rules.HELP_LOCK
 HELP_LOCK_V8 = strategy8_rules.HELP_LOCK
 HELP_LOCK_V8_1 = strategy8_1_rules.HELP_LOCK
 HELP_LOCK_V8_2 = strategy8_2_rules.HELP_LOCK
@@ -1709,6 +1711,46 @@ def _run_kwargs_version6_25(args) -> dict:
     return {"strategy": "version6_25", "stop_pct": stop}
 
 
+def _apply_version6_26(
+    *,
+    stop_pct: Optional[float] = None,
+    take_profit=None,
+    record_params=None,
+    **_,
+) -> dict:
+    resolved = strategy6_26_rules.STOP_PCT if stop_pct is None else float(stop_pct)
+
+    def _tp(px, cost, peak, n_days=1):
+        return strategy6_26_rules.take_profit_reason(px, cost, peak, n_days)
+
+    def _rec(st):
+        strategy6_26_rules.record_strategy6_26_params(st, stop_pct=resolved)
+
+    return {
+        "stop_pct": resolved,
+        "take_profit": take_profit if take_profit is not None else _tp,
+        "record_params": record_params if record_params is not None else _rec,
+        "name_lot_budget": strategy6_26_rules.lot_budget,
+        "add_step": strategy6_26_rules.ADD_STEP,
+        "step_frac": strategy6_26_rules.STEP_FRAC,
+        "step_cap": strategy6_26_rules.STEP_CAP_PER_CODE,
+        "cost_anchor": "first_lot",
+        "step_stop_pct": strategy6_26_rules.STEP_STOP_PCT,
+        "scale_out_step": strategy6_26_rules.SCALE_OUT_STEP,
+        "scale_out_frac": strategy6_26_rules.SCALE_OUT_FRAC,
+        "peak_dd_exit": strategy6_26_rules.PEAK_DD_EXIT,
+        "peak_dd_sessions": strategy6_26_rules.PEAK_DD_SESSIONS,
+        "add_schedule": strategy6_26_rules.ADD_SCHEDULE,
+    }
+
+
+def _run_kwargs_version6_26(args) -> dict:
+    stop = getattr(args, "stop_pct", None)
+    if stop is not None and not 0 < float(stop) < 1:
+        raise SystemExit(f"--stop-pct must be in (0, 1), got {stop}")
+    return {"strategy": "version6_26", "stop_pct": stop}
+
+
 def _apply_version12(*, index_block_new=None, **_) -> dict:
     from backtest.research import strategy12_engine
 
@@ -2774,6 +2816,20 @@ register(
         help_lock=strategy6_25_rules.HELP_LOCK,
         apply=_apply_version6_25,
         run_kwargs=_run_kwargs_version6_25,
+    )
+)
+register(
+    CsvStrategyBook(
+        name="version6_26",
+        sizing="per_name",
+        name_budget=1_000_000.0,
+        tag=strategy6_26_rules.BOOK_TAG,
+        aliases=("6.26", "6_26", "v6.26", "v6_26", "version6_26"),
+        allow_add=strategy6_26_rules.ALLOW_ADD,
+        peak_gap_min=strategy6_26_rules.PEAK_GAP_MIN,
+        help_lock=strategy6_26_rules.HELP_LOCK,
+        apply=_apply_version6_26,
+        run_kwargs=_run_kwargs_version6_26,
     )
 )
 register(
