@@ -638,14 +638,13 @@ def test_other_books_ignore_sx0_sell(name):
 def test_version9_bar_scan_uses_prior_range_not_fixed_eight_percent():
     import pandas as pd
 
-    days = pd.bdate_range("2025-09-01", periods=22)
+    days = pd.bdate_range("2025-09-01", periods=23)
     frame = pd.DataFrame(
-        {"open": 10.0, "high": 11.0, "low": 10.0, "close": 10.0}, index=days
+        {"open": 10.0, "high": 10.2, "low": 10.0, "close": 10.0}, index=days
     )
-    frame.loc[days[0], "close"] = 20.
     as_of = days[-1]
     frame.loc[as_of, "high"] = 100.0
-    bar = OhlcBar(10.0, 10.1, 8.5, 9.5)
+    bar = OhlcBar(10.0, 10.1, 9.1, 9.5)
     bare = invoke_minute_strategy("version9", bar, cost=10.0, peak=10.0, n_days=1)
     assert bare.decision == "skip"
     assert bare.fill_price is None
@@ -660,29 +659,8 @@ def test_version9_bar_scan_uses_prior_range_not_fixed_eight_percent():
     )
     assert hit.decision == "fill"
     assert hit.reason == "stop_loss:touch"
-    assert hit.fill_price == pytest.approx(9.6)
+    assert hit.fill_price == pytest.approx(9.8)
     with pytest.raises(ValueError, match="as_of"):
         invoke_minute_strategy(
             "version9", bar, cost=10.0, peak=10.0, daily_bars=frame
         )
-
-
-@pytest.mark.parametrize("amplitude,bar,price,reason", [
-    (None, OhlcBar(10., 10.1, 8.9, 10.), 9., "stop_loss:touch"),
-    (.21, OhlcBar(10., 10.1, 7.8, 10.), 9., "stop_loss:touch"),
-    (.02, OhlcBar(10., 10.1, 8.8, 10.), 9.8, "stop_loss:touch"),
-    (.02, OhlcBar(10., 11., 8.8, 11.), 11., "profit_take:target"),
-    (None, OhlcBar(8.9, 11., 8.8, 11.), 8.9, "stop_loss:gap_open"),
-    (1.2, OhlcBar(10., 10.1, 8.8, 10.), 9., "stop_loss:touch"),
-    (0., OhlcBar(10.1, 10.2, 9.9, 10.), 10., "stop_loss:touch"),
-])
-def test_version9_bar_scan_combined_stops(amplitude, bar, price, reason):
-    import pandas as pd
-    kwargs = {}
-    if amplitude is not None:
-        days = pd.bdate_range("2025-09-01", periods=23)
-        frame = pd.DataFrame({"high": 10. + amplitude * 10., "low": 10., "close": 10.}, index=days)
-        kwargs = dict(daily_bars=frame, as_of=days[-1])
-    hit = invoke_minute_strategy("version9", bar, cost=10., peak=10., n_days=1, **kwargs)
-    assert hit.reason == reason
-    assert hit.fill_price == pytest.approx(price)

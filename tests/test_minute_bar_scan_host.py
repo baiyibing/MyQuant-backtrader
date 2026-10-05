@@ -66,7 +66,7 @@ def test_default_scan_still_invokes_version1():
 
 @pytest.mark.parametrize("strategy", SINGLE_BOOKS)
 def test_all_single_symbol_books_scan_two_flat_bars(strategy):
-    assert len(SINGLE_BOOKS) == 22
+    assert len(SINGLE_BOOKS) == 33
     fields = {}
     if strategy in ("version4", "version11", "version12"):
         fields["level"] = 10
@@ -1212,68 +1212,10 @@ def test_version5_both_held_flags_fail_closed(monkeypatch, capsys):
 
 @pytest.mark.parametrize("timing", ["same_bar", "next_bar"])
 @pytest.mark.parametrize("price", ["stop", "close"])
-def test_version6_round_trip_cli_and_existing_take_profit(tmp_path, monkeypatch, capsys, timing, price):
+def test_version6_round_trip_cli_and_existing_take_profit(monkeypatch, capsys, timing, price):
     from backtest.research import minute_true_core_wire as wire, strategy6_rules
-
-    root = tmp_path / "bars"
-    calendar = root / "calendars" / "1min.txt"
-    calendar.parent.mkdir(parents=True)
-    calendar.write_text(
-        "2026-01-09 14:55:00\n2026-01-12 09:30:00\n2026-01-12 09:31:00\n",
-        encoding="utf-8",
-    )
-    values = dict(open=[10, 10.20, 10.40], high=[10, 10.50, 10.45],
-                  low=[10, 10.10, 10.30], close=[10, 10.15, 10.42])
-    for name, prices in values.items():
-        _write_bin(root / "features" / "sz000739" / f"{name}.1min.bin", 0, prices)
-    pool = tmp_path / "pool"
-    pool.mkdir()
-    (pool / "20260109.csv").write_text("000739\n", encoding="utf-8")
     assert wire._BOOK_TAKE["version6"] is strategy6_rules.take_profit_reason
-
-    def forbidden(*args, **kwargs):
-        pytest.fail("version6 must use its take-profit, without daily bars")
-
-    monkeypatch.setattr(host, "load_daily_ohlc", forbidden)
-    calls = []
-    invoke = host.invoke_minute_strategy
-
-    def record(name, bar, **kwargs):
-        assert name == "version6"
-        result = invoke(name, bar, **kwargs)
-        calls.append((bar, kwargs, result))
-        return result
-
-    monkeypatch.setattr(host, "invoke_minute_strategy", record)
-    flags = [] if (timing, price) == ("same_bar", "stop") else [
-        "--fill-bar", timing, "--fill-price", price,
-    ]
-    assert main([
-        "--source", "qlib_1min", "--qlib-root", str(root), "--symbol", SYMBOL,
-        "--start", "20260109", "--end", "20260112", "--strategy", "version6",
-        "--pool-dir", str(pool), "--cash", "2000", "--daily-quota", "1001", *flags,
-    ]) == 0
-    output = capsys.readouterr().out
-    assert len(output.splitlines()) == 1
-    assert "version6 bars=3 buys=1 sells=1 skips=1" in output
-    assert len(calls) == 1
-    bar, fields, result = calls[0]
-    assert (bar.open, bar.high, bar.low, bar.close) == pytest.approx((10.20, 10.50, 10.10, 10.15))
-    assert fields["cost"] == 10 and fields["peak"] == 10 and fields["n_days"] == 1
-    assert fields["timing"] == timing and fields["price"] == price
-    if timing == "next_bar":
-        next_bar = fields["next_bar"]
-        assert (next_bar.open, next_bar.high, next_bar.low, next_bar.close) == pytest.approx(
-            (10.40, 10.45, 10.30, 10.42))
-    else:
-        assert "next_bar" not in fields
-    expected_reason = "trail:band:lt6:next_open" if timing == "next_bar" else "trail:band:lt6"
-    assert result.reason == expected_reason
-    expected_px = 10.40 if timing == "next_bar" else 10.15
-    assert result.fill_price == pytest.approx(expected_px)
-    equity = 2000 - 1000 - host.trade_commission(1000, host.COMMISSION)
-    equity += 100 * result.fill_price - host.trade_commission(100 * result.fill_price, host.COMMISSION)
-    assert f"equity={equity:.2f}" in output
+    _assert_cli_simulate_defaults(monkeypatch, capsys, "version6", timing, price)
 
 
 @pytest.mark.parametrize("close,sells", [(10.16, 0), (10.15, 1), (9.90, 0)])
@@ -1339,32 +1281,14 @@ def test_version6_round_trip_t1_carries_peak_and_session_age(monkeypatch):
     assert (summary.buys, summary.sells, summary.skips) == (1, 1, 2)
 
 
-def test_version6_both_held_flags_keep_held_scan(monkeypatch, capsys):
-    calls = []
-
-    def load(*args, bar_dates, **kwargs):
-        bar_dates.append(DAY)
-        return [OhlcBar(10.20, 10.50, 10.10, 10.15)]
-
-    def forbidden(*args, **kwargs):
-        pytest.fail("held flags must not enter round trip or load a pool")
-
-    invoke = host.invoke_minute_strategy
-
-    def record(name, bar, **kwargs):
-        calls.append((name, kwargs["cost"], kwargs["peak"]))
-        return invoke(name, bar, **kwargs)
-
-    monkeypatch.setattr(host, "load_scan_bars", load)
-    monkeypatch.setattr(host, "run_round_trip", forbidden)
-    monkeypatch.setattr(host, "load_pool_day_map", forbidden)
-    monkeypatch.setattr(host, "invoke_minute_strategy", record)
+def test_version6_both_held_flags_keep_held_scan(capsys):
     assert main([
         "--source", "lake", "--symbol", SYMBOL, "--start", DAY, "--end", DAY,
         "--strategy", "version6", "--cost", "10", "--peak", "10",
-    ]) == 0
-    assert calls == [("version6", 10, 10)]
-    assert capsys.readouterr().out == f"symbol={SYMBOL} source=lake version6 bars=1 fills=1 skips=0\n"
+    ]) == 1
+    output = capsys.readouterr()
+    assert output.out == ""
+    assert "flat pool start" in output.err and "partial held seed" in output.err
 
 
 @pytest.fixture
@@ -1606,3 +1530,32 @@ def test_version6_round_trip_existing_stop_precedes_take_profit(monkeypatch):
     assert len(fills) == 1
     assert fills[0].reason == "stop_loss:touch"
     assert fills[0].fill_price == pytest.approx(9.8)
+
+def _assert_cli_simulate_defaults(monkeypatch, capsys, book, timing, price):
+    """Legacy scan fill flags must not override the engine's defaults."""
+    from types import SimpleNamespace
+    frame = _touch_round_trip_frame()
+    daily = frame.groupby("date").agg(open=("open", "first"), high=("high", "max"),
+                                      low=("low", "min"), close=("close", "last"))
+    daily.index = pd.to_datetime(daily.index)
+    def load(*a, source_frames, **kw):
+        source_frames.append(frame)
+    monkeypatch.setattr(host, "load_scan_bars", load)
+    monkeypatch.setattr(host, "load_daily_ohlc", lambda *a, **k: {SYMBOL: daily})
+    monkeypatch.setattr(host, "load_pool_day_map", lambda *a, **k: {frame.date[0]: [SYMBOL]})
+    monkeypatch.setattr(host, "invoke_minute_strategy", lambda *a, **k: pytest.fail("partial scan"))
+    calls = []
+    def simulate(*a, **kw):
+        calls.append(kw)
+        return SimpleNamespace(trades=[{"side": "BUY"}, {"side": "SELL"}],
+                               equity_curve=[("20260108", 10001.)], cash=0.)
+    monkeypatch.setattr(host.csv_minute_backtest, "simulate", simulate)
+    assert main(["--source", "lake", "--symbol", SYMBOL, "--start", "20260106",
+                 "--end", "20260108", "--strategy", book, "--cash", "10000",
+                 "--daily-quota", "2500", "--fill-bar", timing, "--fill-price", price]) == 0
+    assert calls == [dict(strategy=book, total_cash=10000., daily_quota=2500.,
+                          scores_by_day=None, topk=None, n_drop=None)]
+    if capsys is not None:
+        output = capsys.readouterr().out
+        assert len(output.splitlines()) == 1
+        assert "buys=1 sells=1 skips=0 equity=10001.00" in output

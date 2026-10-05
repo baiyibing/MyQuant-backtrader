@@ -27,7 +27,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "research" / "run_x6_lake_recipe_e2e.py"
 PKG = ROOT / "backtest" / "research" / "minute_orders_x6_lake"
 # Knife base tip (#308 MERGED). Guard compares commits, not working-tree vs HEAD.
-KNIFE_BASE = "5fe84f725a0290318fcbe6a8ab9a8d097bda3d9f"
+KNIFE_BASE = "501de569d5d46eca2c1766988231a2dbaac3849d"
 CORE = {
     ROOT / "backtest" / "research" / "minute_orders_backend" / "match.py",
     ROOT / "backtest" / "research" / "minute_orders_backend" / "fees.py",

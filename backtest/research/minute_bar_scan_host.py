@@ -736,9 +736,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         args = parser.parse_args(argv)
         code = _symbol(args.symbol)
-        round_trip = args.strategy in ("version1", "version2", "version3", "version4", "version5", "version6") and args.cost is None and args.peak is None
-        if not round_trip and (args.cost is None or args.peak is None):
-            raise ValueError("held-only scan requires both --cost and --peak")
+        if args.cost is not None or args.peak is not None or args.held:
+            raise ValueError(
+                "minute host runs csv_minute_backtest.simulate from a flat pool start "
+                "and does not accept a partial held seed (--cost/--peak/--held)"
+            )
         # Existing reader progress belongs on stderr; stdout is one summary line.
         with redirect_stdout(sys.stderr):
             scores = None

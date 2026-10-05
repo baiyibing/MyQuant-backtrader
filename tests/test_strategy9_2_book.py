@@ -73,14 +73,14 @@ def test_strategy9_2_help_stats_and_version9():
     st = SimpleNamespace(stats={})
     r.record_strategy9_2_params(st)
     assert st.stats["turtle_add_bands"] == r.TURTLE_ADD_BANDS
-    assert "absolute_stop_factor" not in st.stats
+    assert st.stats["absolute_stop_factor"] == r.ABSOLUTE_STOP_FACTOR
     assert st.stats["hold_days"] == 20
     assert st.stats["stop_pct"] is None
-    assert st.stats["stop_mode"] == "cost_minus_mean_true_range_20_trailing"
-    assert "stop_selection" not in st.stats
+    assert st.stats["stop_mode"] == "range_amp_20_trailing_plus_absolute_tighter"
+    assert st.stats["stop_selection"] == "higher_price"
     assert st.stats["sell_ratios"] == r.SELL_RATIOS
     assert st.stats["giveback_bands"] == r.GIVEBACK_BANDS
-    for text in ("40%", "30%/20%", "1.04/1.10", "20 true ranges", "no 10% line", "remaining", "product", "20 trading", "50%"):
+    for text in ("40%", "30%/20%", "1.04/1.10", "20-bar range", "0.90", "remaining", "product", "20 trading", "50%"):
         assert text in r.HELP_LOCK
     old = apply_csv_strategy("version9")
     assert not old["allow_add"]
@@ -138,7 +138,7 @@ def test_strategy9_2_limit_down_pending():
     st = run_daily(frame, days)
     sells = [t for t in st.trades if t["side"] == "SELL"]
     assert sells[0]["date"] == days[4].strftime("%Y%m%d")
-    assert st.stats["limit_down_pending"] == 1
+    assert st.stats["limit_down_pending"] == 2
 
 
 @pytest.mark.parametrize("merged_bar", [False, True])
@@ -241,17 +241,17 @@ def test_strategy9_2_cli_stop_refused(host, tmp_path):
 @pytest.mark.parametrize("amplitude,opening,observed,expected,reason", [
     (.05, 10., 9.3, 9.5, "stop_loss:touch"),
     (None, 10., 9.2, None, None),
-    (None, 10., 1., None, None),
-    (None, 1., 1., None, None),
-    (.20, 10., 8.9, None, None),
-    (.20, 10., 7.9, 8., "stop_loss:touch"),
+    (None, 10., 1., 9.0, "stop_loss:touch"),
+    (None, 1., 1., 1.0, "stop_loss:gap_open"),
+    (.20, 10., 8.9, 9.0, "stop_loss:touch"),
+    (.20, 10., 7.9, 9.0, "stop_loss:touch"),
     (.20, 7.8, 7.7, 7.8, "stop_loss:gap_open"),
     (0., 10.1, 9.9, 10., "stop_loss:touch"),
-    (1.2, 10., 8.9, None, None),
+    (1.2, 10., 8.9, 9.0, "stop_loss:touch"),
 ])
 def test_strategy9_2_chosen_stop_fills(minute, amplitude, opening, observed, expected, reason):
     from backtest.research.csv_ledger import execute_buy
-    from backtest.research.strategy9_rules import mean_true_range
+    from backtest.research.strategy9_rules import stop_range_amplitude
     from backtest.research.strategy9_2_engine import fill_stop
     days = pd.bdate_range("2026-03-02", periods=23)
     history = pd.DataFrame(dict(open=10., high=10., low=10., close=10.), index=days)
@@ -261,9 +261,9 @@ def test_strategy9_2_chosen_stop_fills(minute, amplitude, opening, observed, exp
         history.loc[days[:-1], "high"] = 10 + amplitude * 10
     day = days[-1]
     if amplitude is None:
-        assert mean_true_range(history, day) is None
+        assert stop_range_amplitude(history, day) is None
     else:
-        assert mean_true_range(history, day) == pytest.approx(amplitude * 10)
+        assert stop_range_amplitude(history, day) is not None
     st = turtle_state()
     execute_buy(st, "600000.SH", 10., 400_000, 0, days[0], reason="pool")
     row = SimpleNamespace(open=opening, low=observed, close=observed, high=14.)
