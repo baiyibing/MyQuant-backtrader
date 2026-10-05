@@ -207,6 +207,15 @@ def fill_side_pending(st, code, pos, px, day, day_i, limits, *, hm):
                 target.group.peak_dd_start = None
 
 
+def _hit_limit_up_safe(px: float, limits) -> bool:
+    """6.x 卖出 helper 共用：涨停也 defer（不影响主引擎梯子/止损路径）。"""
+    try:
+        from backtest.research.ashare_session import hit_limit_up
+        return limits is not None and hit_limit_up(px, limits[0])
+    except Exception:
+        return False
+
+
 def peak_dd_clear_exits(st, code, pos, px, day, day_i, limits, *,
                          peak_dd_exit=0.15, peak_dd_sessions=15, hm=None, fill_config=None, open_px=None):
     """6.14：从峰值回撤 >peak_dd_exit 且 peak_dd_sessions 个交易日内未收复 → 全组清仓。
@@ -231,7 +240,7 @@ def peak_dd_clear_exits(st, code, pos, px, day, day_i, limits, *,
     if day_i - pos.group.peak_dd_start < int(peak_dd_sessions):
         return 0
     px = _side_price(fill_config, px)
-    if (fill_config is None or fill_config.fill_timing != "next_bar_open") and defer_sell_open_or_fill(px if open_px is None else open_px, px, limits):
+    if (fill_config is None or fill_config.fill_timing != "next_bar_open") and (defer_sell_open_or_fill(px if open_px is None else open_px, px, limits) or _hit_limit_up_safe(px, limits)):
         st.stats["defer_sell_limit_down"] += 1
         record_limit(st, code, pos.shares, day, hm, px if open_px is None else open_px, limits, path="peak_dd_clear")
         return 0
@@ -278,7 +287,7 @@ def scale_out_exits(st, code, pos, px, day, day_i, limits, *, scale_step, scale_
             chunk = chunk // 100 * 100
             if chunk <= 0 or lot.entry_idx >= day_i:
                 continue
-            if (fill_config is None or fill_config.fill_timing != "next_bar_open") and defer_sell_open_or_fill(px if open_px is None else open_px, px, limits):
+            if (fill_config is None or fill_config.fill_timing != "next_bar_open") and (defer_sell_open_or_fill(px if open_px is None else open_px, px, limits) or _hit_limit_up_safe(px, limits)):
                 st.stats["defer_sell_limit_down"] += 1
                 record_limit(st, code, chunk, day, hm, px if open_px is None else open_px, limits, path="scale_out")
                 return sold
@@ -318,7 +327,7 @@ def step_stop_exits(st, code, pos, px, day, day_i, limits, *, step_stop_pct, hm=
         if float(trigger_px) > line:
             continue
         fill_px = _side_price(fill_config, px, line=line, low=low)
-        if (fill_config is None or fill_config.fill_timing != "next_bar_open") and defer_sell_open_or_fill(fill_px if open_px is None else open_px, fill_px, limits):
+        if (fill_config is None or fill_config.fill_timing != "next_bar_open") and (defer_sell_open_or_fill(fill_px if open_px is None else open_px, fill_px, limits) or _hit_limit_up_safe(fill_px, limits)):
             st.stats["defer_sell_limit_down"] += 1
             record_limit(st, code, lot.shares, day, hm, fill_px if open_px is None else open_px, limits, path="step_stop")
             continue

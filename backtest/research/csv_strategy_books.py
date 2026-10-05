@@ -64,6 +64,7 @@ from backtest.research import (
     strategy6_44_rules,
     strategy6_45_rules,
     strategy6_46_rules,
+    strategy6_47_rules,
     strategy8_rules,
     strategy8_1_rules,
     strategy8_2_rules,
@@ -134,6 +135,7 @@ HELP_LOCK_V6_43 = strategy6_43_rules.HELP_LOCK
 HELP_LOCK_V6_44 = strategy6_44_rules.HELP_LOCK
 HELP_LOCK_V6_45 = strategy6_45_rules.HELP_LOCK
 HELP_LOCK_V6_46 = strategy6_46_rules.HELP_LOCK
+HELP_LOCK_V6_47 = strategy6_47_rules.HELP_LOCK
 HELP_LOCK_V8 = strategy8_rules.HELP_LOCK
 HELP_LOCK_V8_1 = strategy8_1_rules.HELP_LOCK
 HELP_LOCK_V8_2 = strategy8_2_rules.HELP_LOCK
@@ -4145,5 +4147,29 @@ register(
         help_lock=strategy6_46_rules.HELP_LOCK,
         apply=_apply_version6_46,
         run_kwargs=_run_kwargs_version6_46,
+    )
+)
+
+def _apply_version6_47(*, stop_pct=None, take_profit=None, record_params=None, index_block_new=None, **_):
+    base = _apply_version6_46(stop_pct=stop_pct, take_profit=take_profit, record_params=record_params, index_block_new=index_block_new)
+    base['name'] = 'version6_47'
+    return base
+
+def _run_kwargs_version6_47(args) -> dict:
+    stop = getattr(args, 'stop_pct', None)
+    if stop is not None and not 0 < float(stop) < 1:
+        raise SystemExit(f'--stop-pct must be in (0, 1), got {stop}')
+    return {'strategy': 'version6_47', 'stop_pct': stop}
+
+register(
+    CsvStrategyBook(
+        name='version6_47', sizing='per_name', name_budget=1_000_000.0,
+        tag=strategy6_47_rules.BOOK_TAG,
+        aliases=('6.47', '6_47', 'v6.47', 'v6_47', 'version6_47'),
+        allow_add=strategy6_47_rules.ALLOW_ADD,
+        peak_gap_min=strategy6_47_rules.PEAK_GAP_MIN,
+        help_lock=strategy6_47_rules.HELP_LOCK,
+        apply=_apply_version6_47,
+        run_kwargs=_run_kwargs_version6_47,
     )
 )
