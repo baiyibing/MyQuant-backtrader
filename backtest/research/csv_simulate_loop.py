@@ -567,7 +567,7 @@ def _run_s8_price_adds_day(
 ) -> None:
     policy = s8_policy(st)
     book = policy["name"]
-    if sizing != "per_name" or book not in {"version6_1", "version6_2", "version6_3", "version6_4", "version6_5", "version6_6", "version6_7", "version6_8", "version6_9", "version6_10", "version6_11", "version6_12", "version6_13", "version6_14", "version6_15", "version6_16", "version6_17", "version8", "version8_3", "version8_4", "version8_5"}:
+    if sizing != "per_name" or book not in {"version6_1", "version6_2", "version6_3", "version6_4", "version6_5", "version6_6", "version6_7", "version6_8", "version6_9", "version6_10", "version6_11", "version6_12", "version6_13", "version6_14", "version6_15", "version6_16", "version6_17", "version6_18", "version8", "version8_3", "version8_4", "version8_5"}:
         return
     confirm = book == "version8_3"
     gate = policy["allow_new_name"]
@@ -596,6 +596,14 @@ def _run_s8_price_adds_day(
             cost = float(getattr(group, "anchor_cost", None) or group.first_lot.cost)
             if cost <= 0:
                 continue
+            _sched_due = False
+            schedule = policy.get("add_schedule")
+            if schedule and not confirm:
+                rise_now = float(px) / cost - 1.0
+                allowed_sched = sum(1 for t, _f in schedule if rise_now + 1e-12 >= t)
+                if allowed_sched > group.executed_steps:
+                    _sched_frac = schedule[min(group.executed_steps, len(schedule) - 1)][1]
+                    _sched_due = True
             # 双梯子书：分批腿(1)优先、基数腿(2)次之；单梯子书 use2 恒 False、行为不变。
             use2 = False
             rise = float(px) / cost - 1.0
@@ -624,7 +632,7 @@ def _run_s8_price_adds_day(
                     due2 = allowed2 > group.executed_steps2 and (
                         cap2 is None or group.executed_steps2 < cap2
                     )
-                if not due1 and not due2:
+                if not _sched_due and not due1 and not due2:
                     continue
                 use2 = not due1
             if reference_price_for is None:
@@ -648,9 +656,12 @@ def _run_s8_price_adds_day(
             if callable(buy_gate) and not buy_gate(code, px, day, closes):
                 st.stats["skip_buy_gate"] += 1
                 continue
-            per = group.budget * (
-                0.50 if confirm else float(policy["step_frac2" if use2 else "step_frac"])
-            )
+            if _sched_due:
+                per = group.budget * float(_sched_frac)
+            else:
+                per = group.budget * (
+                    0.50 if confirm else float(policy["step_frac2" if use2 else "step_frac"])
+                )
             quota_used = st.daily_quota_used
             volume_kwargs = (
                 {"bucket_id": volume_bucket_for(code)}
@@ -658,7 +669,7 @@ def _run_s8_price_adds_day(
             )
             filled = execute_buy(
                 st, code, px, per, day_i, day,
-                reason="add:confirm3" if confirm else ("add:base20" if use2 else "add:step20"),
+                reason="add:tranche" if _sched_due else ("add:confirm3" if confirm else ("add:base20" if use2 else "add:step20")),
                 is_step=not confirm, position_id=position_id,
                 entry_signal_date=group.entry_signal_date, **volume_kwargs,
             )

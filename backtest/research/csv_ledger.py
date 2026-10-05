@@ -240,7 +240,7 @@ def configure_s8(st, hooks: dict) -> None:
     """Bind the selected per-name hooks once, including direct shared-loop use."""
     name = hooks.get("name")
     if hooks.get("sizing") != "per_name" or name not in {
-        "version6_1", "version6_2", "version6_3", "version6_4", "version6_5", "version6_6", "version6_7", "version6_8", "version6_9", "version6_10", "version6_11", "version6_12", "version6_13", "version6_14", "version6_15", "version6_16", "version6_17", "version8", "version8_2", "version8_3", "version8_4", "version8_5", "version8_6",
+        "version6_1", "version6_2", "version6_3", "version6_4", "version6_5", "version6_6", "version6_7", "version6_8", "version6_9", "version6_10", "version6_11", "version6_12", "version6_13", "version6_14", "version6_15", "version6_16", "version6_17", "version6_18", "version8", "version8_2", "version8_3", "version8_4", "version8_5", "version8_6",
     }:
         return
     if s8_policy(st) is not None:
@@ -258,6 +258,7 @@ def configure_s8(st, hooks: dict) -> None:
         "step_frac2": hooks.get("step_frac2"),
         "tranche_max": hooks.get("tranche_max"),  # 第一梯子（分批腿）每组上限笔数
         "add_offset": int(hooks.get("add_offset") or 0),  # 首档前跳过的档数（v6.11）
+        "add_schedule": hooks.get("add_schedule"),  # [(阈值涨幅, 占基数比)]（v6.18）
         "base_zone_caps": hooks.get("base_zone_caps"),  # (涨幅<100% 上限, ≥100% 上限)
         "groups": {},
     }
