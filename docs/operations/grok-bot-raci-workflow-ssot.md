@@ -140,7 +140,7 @@ MyQuant  →  MyQuant-backtrader  →  OSkhQuant1.3
 
 ### 6.1 newtest_4090 可用 agent CLI（实测 2026-10-05）
 
-> 本机 headless 实测；版本以本机 `--version` / `agent about` 为准，过期重测。**本表不含任何密钥 / token**。
+> **以实测为准**（主机权威）：本表仅为 newtest_4090 快照；后续派活以本机 `--version` / `agent --list-models` / `agent about` / Codex·kimi·Claude 配置 **新测** 为准，表内旧行败给新测。**4090 与 Bot VM 模型目录分开**（同名 CLI 不套用 VM `-m`）。**本表不含任何密钥 / token**。
 
 | CLI | PATH 命中（示例） | 版本 | 默认/常用模型 | Headless 调用（默认） | 备注 |
 |---|---|---|---|---|---|
@@ -148,14 +148,16 @@ MyQuant  →  MyQuant-backtrader  →  OSkhQuant1.3
 | cursor-agent / `agent` | `C:\Users\wangc\AppData\Local\cursor-agent\agent.ps1` | 2026.10.01-e373342 | `agent about` 当前 **Grok 4.7 256K High**；Ultra `wangchui@hotmail.com`；`--list-models` 含 grok-4.7-{low,medium,high,xhigh}[+fast]、cursor-grok-4.6\*、cursor-grok-4.5\*、composer-2.5\*、kimi-k3\*、kimi-k2.7-code、glm-5.2\*、auto | **4090bot 默认**：`agent -p --force --trust --model grok-4.7-high "..."`（或 `grok-4.7-high-fast`）；可加 `--output-format text\|json` | §6 主路径 |
 | codex | `C:\nvm4w\nodejs\codex.ps1` | codex-cli 0.160.0 | 默认 `deepseek-flash`（provider deepseek）；`--profile pro` → `deepseek-v4-pro`；catalog `~/.codex/models.json` 仅这两档 | `codex exec --ephemeral "..."`（远程 shell 须 stdin=DEVNULL，否则挂在 Reading stdin）；`-m` / `-p pro`；full-auto 已由 configure 脚本维持 | **已安装**；非默认 Doer，4090 默认真刀仍 Cursor + Grok 4.7；勿传 `gpt-6.*` |
 | claude（Claude Code） | `C:\Users\wangc\AppData\Roaming\npm\claude.exe` | 2.1.289 | 经 `open.bigmodel.cn`：默认 Haiku=`glm-5.3-flash[1m]`，Sonnet/Opus=`glm-5.3[1m]` | `claude -p "..." --output-format text`；需要跳过权限时才加 `--dangerously-skip-permissions` | 可能有 `unrecognized_model` 警告，headless 仍可用（2026-10-05 冒烟回 `CLAUDE_OK`）；**勿把 token 写入文档** |
-| qodercli | `C:\nvm4w\nodejs\qodercli.ps1` | 1.1.65 | （未登录，list-models 不可用） | `qodercli -p --no-session-persistence --permission-mode bypass_permissions -m <model> "..."` | **Not logged in**：未登录前 4090bot 不要派活 |
+| qodercli | `C:\nvm4w\nodejs\qodercli.ps1` | 1.1.65（历史） | — | — | **长期停用（与 Bot VM / Linux 相同）**—4090bot 不派活、不升级依赖 |
 | grok CLI | PATH 无 | — | — | — | Win11 按 1.3 升级提示 **SKIP**；不要装 |
 
 **调用约定**：
 
+- **以实测为准**：本表与后续派活均以 **newtest_4090 当前主机实测** 为唯一权威；`--version` / `agent --list-models` / `agent about` / `~/.codex/config.toml` / kimi config / Claude settings 新测结果 **优先于** 表内旧行（旧行仅作历史）。
+- **4090 与 Bot VM 的模型目录分开**；同名 CLI（codex / kimi / agent / claude）也不得套用 VM 的 `-m` / catalog。Bot VM 的 `gpt-6.*` / grok CLI 4.7 流水线默认 **不** 自动搬到 4090。
 - 4090bot 派活默认 **headless**；禁止默认挂交互 TUI。
 - 登录 / SSO / 2FA 墙 → 人机交接，不半交互硬扛。
-- 版本以本机 `--version` / `agent about` 实测为准；本表日期 2026-10-05，过期则重测。
+- qodercli：**长期停用**（与 Bot VM / Linux 相同）—不派活、不升级依赖。
 - 密钥只在本机 settings，**不进仓**。
 
 ## 7. 跨仓文档关系（一份正文 + 指针）
@@ -193,10 +195,11 @@ MyQuant  →  MyQuant-backtrader  →  OSkhQuant1.3
 - [ ] 本刀 Owner 是否正确？
 - [ ] 跨仓是否只经 handoff 目录，未直接改对方业务仓？
 - [ ] 若走 `codex-impl-handoff`：发起方是否为物理机 agent，接手是否为仓主管？
-- [ ] 实现是否走 `codex … -m gpt-6.1-sol`（一般）或 `-m gpt-6-astra`（上强度）？核是否走 `grok … -m grok-4.7`？
+- [ ] **Bot VM** 实现是否走 `codex … -m gpt-6.1-sol`（一般）或 `-m gpt-6-astra`（上强度）？核是否走 `grok … -m grok-4.7`？**4090** 则按 §6.1 本机实测（默认 Cursor agent + Grok 4.7；不套用 VM `gpt-6.*` / grok CLI）。
 - [ ] 执行面（Bot VM **与**已注册物理机 agent CLI）是否均 headless？交互 TUI 是否仅用户明示调试？
 - [ ] 是否只有一把 PR / 一个分支在干活？
 - [ ] 需要 4090 时，是否由 **正在干这活的 bot** 派 4090bot，且按接收顺序排队？
+- [ ] 在 4090 上派 agent CLI 前：是否按 §6.1 **以实测为准**？是否避免套用 Bot VM `-m`/catalog？qoder 是否仍按 **长期停用** 不派？
 - [ ] Codex 是否只开 PR；CI 绿 + 核过关后，才人裁合？
 - [ ] 跨仓下游是否已按 §8 写回执（STATUS / 摘要 / blocker / 数字 / 路径）？
 
@@ -213,4 +216,5 @@ MyQuant  →  MyQuant-backtrader  →  OSkhQuant1.3
 | 2026-10-01 | Codex 模型路由：一般 `gpt-6.1-sol`，上强度 `gpt-6-astra`（Human 当面裁定）；清单与 handoff 落点同步 |
 | 2026-10-03 | headless 机器核验（未消耗 generation）：4090 PATH 版本、Claude / Grok 不在 PATH、Codex DeepSeek 配置与 catalog；仅 headless 调用；Cursor 账户 / 模型已核验，2026-10-04 额度恢复仍为 Human 口述，禁止为 billing 探测消耗 generation |
 | 2026-10-03 | Human：Bot VM Grok CLI headless 已核验命令；记录 `--prompt-file` / 缺 `--always-approve` 提前 exit 0、无 `-p` 且无 TTY 报错；不要打开 TUI |
-| 2026-10-05 | 新增 §6.1 newtest_4090 agent CLI 实测清单（kimi 2.1.1、cursor-agent 2026.10.01-e373342、codex 0.160.0 / DeepSeek、Claude Code 2.1.289 经 GLM、qodercli 1.1.65 未登录、grok SKIP）与调用约定；§6 注明 4090 已装 Codex 但默认刀仍 Cursor + Grok 4.7，2026-10-03 PATH 快照标过期并改指 §6.1 |
+| 2026-10-05 | 新增 §6.1 newtest_4090 agent CLI 实测清单（kimi 2.1.1、cursor-agent 2026.10.01-e373342、codex 0.160.0 / DeepSeek、Claude Code 2.1.289 经 GLM、qodercli 1.1.65 长期停用、grok SKIP）与调用约定；§6 注明 4090 已装 Codex 但默认刀仍 Cursor + Grok 4.7，2026-10-03 PATH 快照标过期并改指 §6.1 |
+| 2026-10-05 | Human：qoder 长期停用（与 Bot VM / Linux 相同）—4090bot 不派活、不升级依赖；明确 **4090 与 Bot VM 模型目录分开**（同名 CLI 不得套用 VM `-m`/catalog）；清单/**以实测为准**（新测 `--version`/`--list-models`/`about`/config 优先于表内旧行） |
