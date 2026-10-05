@@ -200,6 +200,33 @@ def get_book(strategy: str) -> CsvStrategyBook:
     return BOOKS[normalize_csv_strategy(strategy)]
 
 
+# API-only execution books. Shared/daily CLI names and HELP_LOCK use BOOKS.
+# Version7 is deliberately not registered until its main-owned schedule lands.
+MINUTE_ONLY_BOOKS: dict[str, CsvStrategyBook] = {}
+
+
+def register_minute_book(book: CsvStrategyBook) -> None:
+    occupied = set(_alias_map()) | set(BOOKS) | set(MINUTE_ONLY_BOOKS)
+    for registered in MINUTE_ONLY_BOOKS.values():
+        occupied.update(registered.aliases)
+    if book.name in occupied or any(alias in occupied for alias in book.aliases):
+        raise ValueError(f"minute strategy {book.name!r} already registered")
+    MINUTE_ONLY_BOOKS[book.name] = book
+
+
+def normalize_minute_strategy(strategy: str) -> str:
+    raw = (strategy or "").strip().lower()
+    for book in MINUTE_ONLY_BOOKS.values():
+        if raw == book.name or raw in book.aliases:
+            return book.name
+    return normalize_csv_strategy(strategy)
+
+
+def get_minute_book(strategy: str) -> CsvStrategyBook:
+    name = normalize_minute_strategy(strategy)
+    return MINUTE_ONLY_BOOKS[name] if name in MINUTE_ONLY_BOOKS else BOOKS[name]
+
+
 def apply_csv_strategy(strategy: str, **kwargs) -> dict:
     book = get_book(strategy)
     strategy9_rules.validate_sell_mode(book.name, kwargs.get("version9_sell"), kwargs.get("max_hold", False))

@@ -78,6 +78,10 @@ from backtest.research.csv_common import (  # noqa: E402
     _pool_names_asof as _pool_names_asof,
     _progress as _progress,
 )
+from backtest.research.minute_engine_policies import (  # noqa: E402
+    MinutePolicyContext, minute_policy_for,
+)
+
 from backtest.research.csv_pool import (  # noqa: E402
     load_pool_day_map,
     load_pool_names_by_day,
@@ -85,6 +89,7 @@ from backtest.research.csv_pool import (  # noqa: E402
 from backtest.research.csv_strategy_books import (  # noqa: E402
     add_csv_backtest_common_args,
     apply_csv_strategy,
+    get_minute_book,
     csv_run_kwargs_from_args,
     engine_book,
     resolve_daily_quota,
@@ -660,12 +665,14 @@ def simulate(
     topk_exec: str = "close",
     limit_walkdown: bool = False,
     topk_limit_rule: str = "qlib",
+    policy_context: MinutePolicyContext | None = None,
 ) -> SimState:
     """Opt-in cap uses caller-attested completed minutes; daily volume is unused.
 
     exdiv_economics is an explicit (symbol, YYYYMMDD) -> ExDivEvent lookup for
     raw bars. None retains the baseline; E-R6 ratios never imply entitlements.
     """
+    get_minute_book(strategy)
     validate_minute_entry(strategy, stage="sell", version9_sell=version9_sell, max_hold=max_hold)
     validate_minute_stop_trigger(minute_stop_trigger, normalize_csv_strategy(strategy), fix_s11_exit_domain)
     validate_topk_exec(topk_exec, strategy, limit_walkdown, topk_limit_rule)
@@ -744,9 +751,14 @@ def simulate(
     close_clear = hooks.get("close_clear")
     reserve_limit_up = bool(hooks.get("reserve_limit_up"))
     defer_limit_up = bool(hooks.get("defer_limit_up"))
-    calendar = build_calendar(daily_bars, start, end)
+    policy = minute_policy_for(hooks)
+    calendar = (build_calendar(daily_bars, start, end) if policy.calendar is None
+                else policy.calendar(minute_bars=minute_bars, daily_bars=daily_bars,
+                                     pool_days=pool_days, start=start, end=end,
+                                     context=policy_context))
 
-    st, pending_chase, names_asof = init_sim_state(
+    initialize = init_sim_state if policy.initialize is None else policy.initialize
+    st, pending_chase, names_asof = initialize(
         hooks,
         total_cash=total_cash,
         bars_loaded=len(minute_bars),
@@ -754,6 +766,7 @@ def simulate(
         pool_names=pool_names,
         pool_names_by_day=pool_names_by_day,
         daily_quota=daily_quota,
+        **({"context": policy_context} if policy.initialize is not None else {}),
     )
     defaults = book_fill_defaults(hooks, minute_stop_trigger)
     if hooks.get("run_minute_day") is not None:
@@ -809,7 +822,11 @@ def simulate(
         names = names_asof(ds)
         st.daily_quota_used = 0.0
 
-        if hooks.get("minute_session") or fix_minute_cash_order or topk_exec != "close" or limit_walkdown:
+        if policy.day_start is not None:
+            policy.day_start(st, day=day, ds=ds, day_i=i, context=policy_context)
+
+        if policy.chronological(hooks, fix_cash_order=fix_minute_cash_order,
+                                topk_exec=topk_exec, limit_walkdown=limit_walkdown):
             run_chronological_day(
                 st, pending_chase, hooks=hooks, minute_bars=minute_bars,
                 daily_bars=daily_bars, pool_days=pool_days, day_i=i, day=day,
@@ -1214,13 +1231,19 @@ def simulate(
             st, ds, lambda code: _slice_day(minute_bars[code], day_spans.get(code, {}), ds)
             if code in minute_bars else None,
         )
-        append_equity_and_eod_marks(
-            st,
-            ds=ds,
-            day=day,
-            calendar_last=calendar[-1],
-            mark_bars=daily_bars,
-        )
+        if policy.append_marks is None:
+            append_equity_and_eod_marks(
+                st,
+                ds=ds,
+                day=day,
+                calendar_last=calendar[-1],
+                mark_bars=daily_bars,
+            )
+        else:
+            policy.append_marks(
+                st, ds=ds, day=day, calendar_last=calendar[-1],
+                mark_bars=daily_bars, context=policy_context,
+            )
 
     finish_pending_sells(st)
     finish_pending_chase(st, pending_chase)
