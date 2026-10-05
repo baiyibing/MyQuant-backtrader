@@ -362,6 +362,15 @@ def write_run_artifacts(
     (out_dir / "summary.txt").write_text(
         text + "\n" + help_lock, encoding="utf-8", newline="\n"
     )
+    from backtest.research.sell_pending_observability import HEADER, artifact_rows
+    pending_rows = list(artifact_rows(st))
+    if pending_rows:
+        pd.DataFrame(pending_rows, columns=HEADER).to_csv(
+            out_dir / "pending_sells.csv", index=False, encoding="utf-8", lineterminator="\n"
+        )
+    else:
+        # Reusing an output directory must not leave diagnostics from an old run.
+        (out_dir / "pending_sells.csv").unlink(missing_ok=True)
     if emit_run_manifest:
         from bt_contract import canonical_json_bytes
         from bt_contract.run_manifest import write_bt_run_manifest

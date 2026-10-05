@@ -348,6 +348,13 @@ class SimState:
     book_on_exdiv: object = field(default=None, repr=False, compare=False)
     star_lot_declare_check: bool = field(default=False, repr=False, compare=False, kw_only=True)
 
+    def __post_init__(self):
+        # Runtime diagnostics deliberately stay outside dataclasses.asdict:
+        # account snapshots and the frozen OFF artifacts must not gain fields.
+        self.sell_pending_events = []
+        self.sell_pending_open = []
+        self._sell_pending_history = {}
+
 
 def _ymd(ts) -> str:
     return pd.Timestamp(ts).strftime("%Y%m%d")

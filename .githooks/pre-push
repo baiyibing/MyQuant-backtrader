@@ -1,0 +1,83 @@
+#!/bin/sh
+# Opt-in gate: SKIP_PREPUSH=1 or git push --no-verify bypasses all checks.
+# PYTHON selects an executable; PREPUSH_PYTEST_ARGS adds whitespace-separated
+# pytest arguments (no shell quoting or evaluation), e.g. tests/test_example.py.
+if [ "${SKIP_PREPUSH:-}" = 1 ]; then
+    echo 'pre-push: SKIP_PREPUSH=1, skipping checks' >&2
+    exit 0
+fi
+fail() {
+    echo "pre-push: $*" >&2
+    echo 'Bypass: SKIP_PREPUSH=1 git push ... or git push --no-verify' >&2
+    exit 1
+}
+root=$(git rev-parse --show-toplevel) || fail 'cannot locate repository'
+cd "$root" || fail 'cannot enter repository'
+tmp=$(mktemp -d) || fail 'cannot create temporary directory'
+trap 'rm -rf "$tmp"' 0
+trap 'exit 1' 1 2 3 15
+protected=0
+markers=0
+while read -r local_ref local_sha remote_ref remote_sha; do
+    case "$local_sha" in ''|*[!0]*) ;; *) continue ;; esac
+    case "$remote_ref" in refs/heads/master|refs/heads/main) protected=1 ;; esac
+    base=
+    case "$remote_sha" in
+        ''|*[!0]*)
+            if [ -n "$remote_sha" ] && git cat-file -e "$remote_sha^{commit}" 2>/dev/null; then
+                base=$remote_sha
+            fi ;;
+    esac
+    if [ -z "$base" ]; then
+        base=$(git merge-base "$local_sha" origin/master 2>/dev/null) ||
+            base=$(git merge-base "$local_sha" origin/main 2>/dev/null) || base=
+    fi
+    if [ -z "$base" ]; then
+        echo "pre-push: warning: no diff base for $local_ref; marker check skipped" >&2
+        continue
+    fi
+    git -c core.quotePath=false diff --name-only --diff-filter=ACMR "$base" "$local_sha" > "$tmp/files" ||
+        fail "cannot list changed files for $local_ref"
+    while IFS= read -r path; do
+        # -I skips binary blobs; inspect the pushed commit, never the worktree.
+        git grep -I -n -e '^<<<<<<< ' -e '^>>>>>>> ' "$local_sha" -- ":(literal)$path" > "$tmp/edges"
+        status=$?
+        [ "$status" -le 1 ] || fail "cannot inspect $path"
+        if [ "$status" = 0 ]; then
+            markers=1
+            git grep -I -n -e '^<<<<<<< ' -e '^=======$' -e '^>>>>>>> ' \
+                "$local_sha" -- ":(literal)$path" >&2
+        fi
+    done < "$tmp/files"
+done
+[ "$markers" = 0 ] || fail 'conflict markers found in pushed commits'
+if [ "$protected" = 0 ]; then
+    echo 'pre-push: marker check passed; pytest skipped (no master/main push)' >&2
+    exit 0
+fi
+launcher=0
+if [ -n "${PYTHON:-}" ]; then
+    PY=$PYTHON
+elif command -v python >/dev/null 2>&1 && python --version >/dev/null 2>&1; then
+    PY=python
+elif command -v python3 >/dev/null 2>&1 && python3 --version >/dev/null 2>&1; then
+    PY=python3
+elif command -v py >/dev/null 2>&1 && py -3 --version >/dev/null 2>&1; then
+    PY=py
+    launcher=1
+else
+    fail 'no working Python interpreter found; set PYTHON'
+fi
+run_python() {
+    if [ "$launcher" = 1 ]; then "$PY" -3 "$@"; else "$PY" "$@"; fi
+}
+echo "pre-push: interpreter: $PY (Windows launcher -3: $launcher)" >&2
+run_python --version || fail 'selected Python cannot run'
+start=$(date +%s)
+# Intentional field splitting for optional arguments; disable filename expansion.
+set -f
+run_python -m pytest -p no:cacheprovider -q -x -m 'not production and not benchmark' ${PREPUSH_PYTEST_ARGS:-}
+status=$?
+end=$(date +%s)
+echo "pre-push: pytest elapsed $((end - start)) seconds" >&2
+[ "$status" = 0 ] || fail 'pytest failed'
