@@ -188,7 +188,9 @@ def test_apply_version6_21_double_base():
     sched = hooks["add_schedule"]
     assert sched[:2] == [(0.10, 0.30), (0.20, 0.50)]
     assert sched[2] == (0.40, 2.0)
-    assert hooks["take_profit"](10.62, 10.0, 12.50, 1) == "trail:ladder:25"
+    # Band 5: B = 5% + 3% * 5 = 20%; exit line = 12.50 - 10 * 20% = 10.50.
+    assert hooks["take_profit"](10.50, 10.0, 12.50, 1) == "trail:ladder:25"
+    assert hooks["take_profit"](10.51, 10.0, 12.50, 1) is None
 
 
 def test_apply_version6_20_uniform_schedule():
@@ -198,7 +200,9 @@ def test_apply_version6_20_uniform_schedule():
     sched = hooks["add_schedule"]
     assert sched[:4] == [(0.05, 0.20), (0.10, 0.20), (0.15, 0.20), (0.20, 0.20)]
     assert sched[4] == (0.40, 1.0)
-    assert hooks["take_profit"](10.30, 10.0, 11.00, 1) == "trail:ladder:10"
+    # Band 2: B = 5% + 2% * 2 = 9%; exit line = 11 - 10 * 9% = 10.10.
+    assert hooks["take_profit"](10.10, 10.0, 11.00, 1) == "trail:ladder:10"
+    assert hooks["take_profit"](10.11, 10.0, 11.00, 1) is None
 
 
 def test_apply_version6_19_capped_schedule():

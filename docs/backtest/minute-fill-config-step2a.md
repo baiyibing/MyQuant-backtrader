@@ -57,19 +57,21 @@ retains the original predicates, including floating-point comparison order.
   `ValueError` for `use_numba=True` or the numba environment backend. Select
   Python explicitly for custom policies. Existing numba-ineligible paths
   remain Python; the numba implementation is unchanged.
-- Separate minute engine (version9_2) rejects custom
-  config instead of silently ignoring it. Daily, v7, bar_scan_exit and the
+- Folded version9_2 accepts custom
+  config instead of rejecting it at the separate-engine guard. Daily, v7, bar_scan_exit and the
   minute wire registry are untouched.
 - A1 (2026-10-05): `step_stop`, `scale_out`, and `peak_dd_clear_exits`
   now consume FillConfig. None and the hook-derived stop default preserve
-  existing predicates, float order, metadata and event order. Step stops may
+  existing FillConfig defaults, float order, metadata and event order. The
+  adopted A1/B5 rule below adds the current-bar opening limit check. Step stops may
   trigger on bar low and fill at their lot line, last print, low or a positive
   specified price. Scale-out and peak drawdown still decide on last prints;
   this-bar low and line fills fail closed for those decisions.
 - Next-open side orders retain lot identity and decided scale-out quantities in
   `held_fill_states[held_fill_key(pos)]`, carrying across sessions. They use
   `:next_open` reasons and `minute_pending_next_open`, with only the existing
-  limit check on the execution open. There is no open+fill limit-pair rule.
+  limit check on the execution open (open equals fill). Same-bar side sells
+  use the shared open+fill pair adopted on 2026-10-05 16:08 CST.
   Closed lots are removed from carry by the ledger; repeated decisions cannot
   duplicate an outstanding lot order or count a scale step twice.
 
@@ -114,7 +116,7 @@ may return no exit). H/L remains opt-in for supported shared books.
 | version8_5 | shared; take_profit; close_clear |
 | version8_6 | shared; take_profit; close_clear |
 | version9 | shared range stop; take_profit; version9_plan only with existing version9_sell opt-in |
-| version9_2 | Separate run_minute_day (excluded) |
+| version9_2 | Shared minute_session / HeldMinuteCursor; explicit chosen-stop line |
 | version10 | shared; take_profit |
 | version11 | EOD pending session exit; next_bar_open at AM_OPEN |
 | version12 | Main chronological loop + HeldMinuteCursor callback; custom FillConfig accepted |
@@ -136,7 +138,7 @@ Test names below are in `tests/test_minute_fill_config.py` unless a file is spec
 | 14:55/15:00 this_bar time exits | `test_time_exits_stay_this_bar` |
 | numba raises on non-default config, explicit and environment dispatch | `test_numba_refuses` |
 | Default numba parity | `tests/test_scan_held_day_numba_parity.py::test_numba_gap_open_stop`, `test_numba_t0_no_sell_no_peak_update`, `test_numba_trail_hit`, `test_numba_force_sell_time` |
-| version9_2 rejects custom config through simulate | `test_simulate_separate_engine_rejects_custom_config` |
+| Folded books accept custom config through simulate | `test_simulate_folded_books_accept_custom_config` |
 | absolute_exit bar_low guard | `test_simulate_absolute_exit_requires_bar_low` (version9_1) |
 | Side sells accept custom configs; default/None unchanged | `test_simulate_side_sells_accept_custom_config`, `test_simulate_side_sells_default_config_unchanged`; `tests/test_side_sell_fill_config.py` (next-open, session carry, limit retry, no duplicate, other-exit cleanup, low trigger and look-ahead rejection) |
 | Look-ahead rejects | `test_lookahead`, `test_callback_low_rejected_at_decision`, `test_target_cannot_assume_low_after_high` |
@@ -208,7 +210,7 @@ Version11 held sells now use `scan_held_day` / `HeldMinuteCursor` in both
 `Position.pending_exit`; its hook-derived default is `next_bar_open`, eligible
 only at AM_OPEN (09:30) in the next session. It does not retry later that day.
 AM_OPEN buys and daily rules are unchanged. Version12 is folded in the A2
-follow-up below; version9_2 remains separate pending its PR. Version9_1 is untouched.
+follow-ups below, including the final version9_2 fold. Version9_1 is untouched.
 
 Default behavior differences: none in the off-byte cases. Price validity,
 positive finite opening volume, limit-down and T+1 checks retain their results;
@@ -243,7 +245,7 @@ quote clocks, then supplies held and buy callbacks; it owns no minute loop.
 Each code/bar uses `HeldMinuteCursor.exit_plan / exit_state`, with live lot
 allocation and `fill_exit` clamp/memory updates. A new row cursor preserves
 partial/rejected-fill retries on later bars. `run_daily_day` and strategy12_rules
-are unchanged. Version9_2 is deferred; version9_1 is untouched.
+are unchanged. Version9_2 is folded below; version9_1 is untouched.
 
 Default differences: none in the frozen daily/minute CSV bytes and account
 snapshots, participation 0.1 replay, or validated identity/nonunit X-01 replays.
@@ -288,3 +290,74 @@ base `origin/master bedfef4`):
   **3 BUY / 3 SELL**, final equity **4,892,514.7375**; participation 0.1 retains
   **3 BUY / 3 SELL**, final equity **4,998,941.0**. All trade rows match.
   Cash-order flag-on was rejected at the base; now it matches default.
+
+
+## Step 2b A2 — version9_2 minute fold (2026-10-05)
+
+Version9_2 now uses `minute_cash_order.run_chronological_day` with
+`strategy9_2_engine.MinuteSession` and `HeldMinuteCursor.phase_exit`.
+No book retains a `run_minute_day` hook; external retired hooks fail clearly.
+Only one shared chronological minute loop remains for the folded books.
+Version9_1, strategy9_2_rules and the version9_2 daily engine are unchanged.
+
+Default ordering remains adds first, then each held code's pending retry,
+chosen stop, peak/plan exit, then pool buys at its maximum available
+14:30–14:55 bar. Gap-open quotes are observed inside the close callback to
+preserve legacy per-code settlement order after adds. Default chosen stops
+use open for gaps and close for touches; limit-down retries wait until the
+next day. Turtle quantities, scale-band memory and T+1 residuals are retained.
+
+Non-default FillConfig now reaches the cursor. Low-only stops are opt-in;
+touch stops have an explicit chosen-stop line. Plans without a line reject
+line pricing and noncausal low pricing. Next-open orders retain pending reason
+and quantity across sessions and use opening metadata (`at=hm-1`, execution
+hm/bucket, `minute_pending_next_open`). Participation cannot consume the
+uncompleted opening bucket. `fix_minute_cash_order=True` remains equivalent
+to omission. Default CSV bytes match base `322c36a`; no new overlay is needed
+and no existing fixture was modified.
+
+
+A2 version9_2 post-rebase verification (Python `/tmp/mq-v6/bin/python`,
+base `origin/master 3409347`):
+
+- Off-byte (`-p no:cacheprovider -q tests/test_off_byte_baseline.py`):
+  **177 passed in 4.66s**.
+- Fold/book/config (`tests/test_v92_minute_fold.py`,
+  `tests/test_v12_minute_fold.py`, `tests/test_minute_fill_config.py`,
+  same pytest options): **100 passed in 1.06s**.
+- Full suite (`-p no:cacheprovider -q -m "not production and not benchmark"`):
+  **7755 passed, 5 skipped, 24 deselected, 29 warnings in 140.41s (0:02:20)**.
+- `git diff --stat origin/master -- tests/fixtures`: **empty**.
+
+### A1 limit-pair + B5 adoption (2026-10-05 16:08 CST)
+
+`ashare_session.defer_sell_open_or_fill(open_px, fill_px, limits)` calls the
+existing `defer_sell_at_limit` for each quote, sharing its single eps. A same-bar
+sell is deferred if OPEN or fill reaches limit-down. This applies to 6.x
+step-stop, scale-out and peak drawdown side sells and version9_2 touch stops
+(minute cursor fill; daily stop-line fill). Production side-sell calls pass
+`o[bar_idx]`. Existing isolated callers without OHLC may omit `open_px`,
+which uses fill for both quotes. Main held exits use the same helper while
+retaining the independent pending branch’s fill-only semantics.
+
+Queued side orders check only their execution open, which equals fill.
+version9_2 retains turtle reason/quantity, increments `defer_sell_limit_down`
+and `limit_down_pending`, and sets retry day to the next trading-day index.
+Later bars that day cannot retry; the next day retries at open through the
+existing T+1, volume and residual path. Gap fills already have open == fill.
+Other plans and version9_1 retain their behavior.
+Final A1/B5 verification on Python `/tmp/mq-v6/bin/python`, pandas 3.0.6:
+
+- `-p no:cacheprovider -q tests/test_limit_pair_b5.py tests/test_off_byte_baseline.py`:
+  **208 passed, 0 failed**, 4.60 s (31 new pair tests, 177 off-byte tests).
+- Direct `origin/master` (`02036df`) versus worktree `run_case` comparison:
+  **85 unique daily/minute cases unchanged**, including all V6F and V92 cases;
+  BUY/SELL rows and complete equity curves identical. No fixture added or
+  modified; V6F v11 and the existing V92 revision remain active.
+- Direct synthetic old/new executions: step-stop **1→0**, scale-out **2→0**,
+  peak-clear **2→0**, version9_2 touch **1→0** SELL rows when open is at the
+  floor and fill is above it. Each new execution increments the defer count
+  once; the turtle touch also increments `limit_down_pending` once.
+- Full suite (`-p no:cacheprovider -q -m "not production and not benchmark"`):
+  **7786 passed, 5 skipped, 24 deselected, 0 failed**, 29 warnings,
+  204.67 s (0:03:24).

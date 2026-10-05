@@ -211,7 +211,6 @@ def apply_csv_strategy(strategy: str, **kwargs) -> dict:
     hooks.setdefault("on_buy", None)
     hooks.setdefault("on_exdiv", None)
     hooks.setdefault("run_daily_day", None)
-    hooks.setdefault("run_minute_day", None)
     hooks.setdefault("cash_deploy_frac", None)
     hooks.setdefault("qlib_limit_pct", None)
     hooks.setdefault("limit_up_chase", True)
@@ -1831,7 +1830,7 @@ def _apply_version9_2(*, stop_pct=None, **_):
     return {"stop_pct": None, "take_profit": rules.take_profit_reason,
             "record_params": rules.record_strategy9_2_params,
             "on_buy": engine.on_buy, "exit_plan": engine.plan_exit,
-            "run_daily_day": engine.run_daily_day, "run_minute_day": engine.run_minute_day}
+            "run_daily_day": engine.run_daily_day, "minute_session": engine.MinuteSession}
 
 
 def _run_kwargs_version9_2(args):

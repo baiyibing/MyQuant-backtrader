@@ -21,7 +21,7 @@ def run(paths, **kwargs):
 
 def test_no_separate_minute_engine():
     hooks = apply_csv_strategy("version12")
-    assert hooks["run_minute_day"] is None
+    assert hooks.get("run_minute_day") is None
     assert not hasattr(engine, "run_minute_day")
     assert hooks["run_daily_day"] is engine.run_daily_day
     assert book_fill_defaults(hooks)["stop"] == FillConfig()

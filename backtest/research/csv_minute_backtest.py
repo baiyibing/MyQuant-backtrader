@@ -62,7 +62,7 @@ from backtest.research.csv_ledger import (  # noqa: E402
 from backtest.research.ashare_exdiv_economics import EconomicLookup, ExDivEconomics  # noqa: E402
 
 from backtest.research.exdiv_map import k_for, load_exdiv_ratios, mapped_prev_close  # noqa: E402
-from backtest.research.ashare_session import defer_sell_at_limit, t1_sellable  # noqa: E402
+from backtest.research.ashare_session import defer_sell_open_or_fill, t1_sellable  # noqa: E402
 from backtest.research.csv_common import (  # noqa: E402
     DEFAULT_DAILY_QUOTA,
     STRATEGY4_CALENDAR_SLACK_DAYS,
@@ -747,9 +747,9 @@ def simulate(
         daily_quota=daily_quota,
     )
     defaults = book_fill_defaults(hooks, minute_stop_trigger)
+    if hooks.get("run_minute_day") is not None:
+        raise ValueError("run_minute_day is retired; use minute_session with HeldMinuteCursor")
     if fill_config is not None and fill_config != defaults["stop"]:
-        if hooks.get("run_minute_day"):
-            raise ValueError("fill_config is only supported by HeldMinuteCursor, not this book's separate minute engine")
         if "bind_absolute_exit" in hooks and fill_config.trigger_basis != "bar_low":
             raise ValueError("absolute_exit requires trigger_basis=bar_low")
     if hooks.get("minute_open") and fill_config is None:
@@ -800,17 +800,7 @@ def simulate(
         names = names_asof(ds)
         st.daily_quota_used = 0.0
 
-        if callable(hooks.get("run_minute_day")):
-            hooks["run_minute_day"](
-                st, pending_chase, hooks=hooks, minute_bars=minute_bars,
-                daily_bars=daily_bars, pool_days=pool_days, day_i=i, day=day,
-                ds=ds, names=names, daily_quota=daily_quota, exdiv=exdiv,
-                slice_day=lambda code, date: _slice_day(
-                    minute_bars[code], day_spans.get(code, {}), date),
-                scan=scan_held_day,
-                **({"price_context": s12_price_context} if fix_s12_price_domain else {}),
-            )
-        elif hooks.get("minute_session") or fix_minute_cash_order or topk_exec != "close" or limit_walkdown:
+        if hooks.get("minute_session") or fix_minute_cash_order or topk_exec != "close" or limit_walkdown:
             run_chronological_day(
                 st, pending_chase, hooks=hooks, minute_bars=minute_bars,
                 daily_bars=daily_bars, pool_days=pool_days, day_i=i, day=day,
@@ -930,7 +920,7 @@ def simulate(
                                     step_stop_exits(
                                         st, code, pos, float(c[bar_idx]), day, i,
                                         limits, step_stop_pct=hooks["step_stop_pct"],
-                                        fill_config=side_fill_config,
+                                        fill_config=side_fill_config, open_px=float(o[bar_idx]),
                                         low=(float(day_m["low"].iloc[bar_idx])
                                              if side_fill_config and side_fill_config.trigger_basis == "bar_low" else None),
                                         hm=int(at_hm),
@@ -940,7 +930,7 @@ def simulate(
                                         st, code, pos, float(c[bar_idx]), day, i,
                                         limits, scale_step=hooks["scale_out_step"],
                                         scale_frac=hooks.get("scale_out_frac", 0.05),
-                                        fill_config=side_fill_config,
+                                        fill_config=side_fill_config, open_px=float(o[bar_idx]),
                                         hm=int(at_hm),
                                     )
                                 if phase == "close" and hooks.get("peak_dd_exit"):
@@ -948,7 +938,7 @@ def simulate(
                                         st, code, pos, float(c[bar_idx]), day, i,
                                         limits,
                                         peak_dd_exit=hooks["peak_dd_exit"],
-                                        fill_config=side_fill_config,
+                                        fill_config=side_fill_config, open_px=float(o[bar_idx]),
                                         peak_dd_sessions=hooks.get("peak_dd_sessions", 15),
                                         hm=int(at_hm),
                                     )
@@ -1008,8 +998,7 @@ def simulate(
                     if idx >= 0:
                         fill_open = float(o[idx])
                         if limit_down > 0 and (
-                            defer_sell_at_limit(fill_open, limits)
-                            or defer_sell_at_limit(float(px), limits)
+                            defer_sell_open_or_fill(fill_open, float(px), limits)
                         ):
                             st.stats["defer_sell_limit_down"] += 1
                             continue
