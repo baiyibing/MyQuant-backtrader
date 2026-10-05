@@ -44,6 +44,7 @@ def test_registered_books_are_explicit():
         "version6_17",
         "version6_18",
         "version6_19",
+        "version6_20",
         "version8",
         "version8_1",
         "version8_2",
@@ -177,6 +178,16 @@ def test_apply_version6_17_hooks():
     assert hooks["step_frac"] == pytest.approx(1.0)
     assert hooks["scale_out_step"] == pytest.approx(0.05)
     assert hooks["peak_dd_exit"] == pytest.approx(0.15)
+
+
+def test_apply_version6_20_uniform_schedule():
+    hooks = apply_csv_strategy("v6.20")
+    assert hooks["name"] == "version6_20"
+    assert hooks["name_lot_budget"](1_000_000.0, []) == pytest.approx(200_000.0)
+    sched = hooks["add_schedule"]
+    assert sched[:4] == [(0.05, 0.20), (0.10, 0.20), (0.15, 0.20), (0.20, 0.20)]
+    assert sched[4] == (0.40, 1.0)
+    assert hooks["take_profit"](10.30, 10.0, 11.00, 1) == "trail:ladder:10"
 
 
 def test_apply_version6_19_capped_schedule():
