@@ -810,7 +810,7 @@ def simulate(
                 scan=scan_held_day,
                 **({"price_context": s12_price_context} if fix_s12_price_domain else {}),
             )
-        elif fix_minute_cash_order or topk_exec != "close" or limit_walkdown:
+        elif hooks.get("minute_session") or fix_minute_cash_order or topk_exec != "close" or limit_walkdown:
             run_chronological_day(
                 st, pending_chase, hooks=hooks, minute_bars=minute_bars,
                 daily_bars=daily_bars, pool_days=pool_days, day_i=i, day=day,
@@ -824,6 +824,7 @@ def simulate(
                 minute_stop_trigger=minute_stop_trigger,
                 fill_config=fill_config, held_fill_states=held_fill_states,
                 topk_exec=topk_exec, limit_walkdown=limit_walkdown,
+                price_context=s12_price_context if fix_s12_price_domain else None,
             )
         else:
             bind_opening = hooks.get("bind_opening_held")
