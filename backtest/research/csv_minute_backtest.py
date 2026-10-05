@@ -149,6 +149,7 @@ from backtest.research.minute_cash_order import (
     HeldMinuteCursor,
     advance_independent_exit,
     peak_dd_clear_exits,
+    fill_side_pending,
     run_chronological_day,
     scale_out_exits,
     step_stop_exits,
@@ -742,12 +743,11 @@ def simulate(
     )
     defaults = book_fill_defaults(hooks, minute_stop_trigger)
     if fill_config is not None and fill_config != defaults["stop"]:
-        if hooks.get("step_stop_pct") or hooks.get("scale_out_step") or hooks.get("peak_dd_exit"):
-            raise ValueError("fill_config is not yet applied to step_stop/scale_out/peak_dd_exit side sells; use the default fill config for this book")
         if hooks.get("run_minute_day") or hooks.get("minute_open"):
             raise ValueError("fill_config is only supported by HeldMinuteCursor, not this book's separate minute engine")
         if "bind_absolute_exit" in hooks and fill_config.trigger_basis != "bar_low":
             raise ValueError("absolute_exit requires trigger_basis=bar_low")
+    side_fill_config = None if fill_config == defaults["stop"] else fill_config
     held_fill_states = {}
     st.held_fill_states = held_fill_states
     absolute_exit = hooks["bind_absolute_exit"](st, daily_bars) if "bind_absolute_exit" in hooks else None
@@ -915,10 +915,16 @@ def simulate(
                                     st, code, pos, cursor, bar_idx, phase, limits,
                                     day=day, day_i=i, audit_sink=audit_sink,
                                 )
+                                if phase == "open":
+                                    fill_side_pending(st, code, pos, float(o[bar_idx]), day, i,
+                                                      limits, hm=int(at_hm))
                                 if phase == "close" and hooks.get("step_stop_pct"):
                                     step_stop_exits(
                                         st, code, pos, float(c[bar_idx]), day, i,
                                         limits, step_stop_pct=hooks["step_stop_pct"],
+                                        fill_config=side_fill_config,
+                                        low=(float(day_m["low"].iloc[bar_idx])
+                                             if side_fill_config and side_fill_config.trigger_basis == "bar_low" else None),
                                         hm=int(at_hm),
                                     )
                                 if phase == "close" and hooks.get("scale_out_step"):
@@ -926,6 +932,7 @@ def simulate(
                                         st, code, pos, float(c[bar_idx]), day, i,
                                         limits, scale_step=hooks["scale_out_step"],
                                         scale_frac=hooks.get("scale_out_frac", 0.05),
+                                        fill_config=side_fill_config,
                                         hm=int(at_hm),
                                     )
                                 if phase == "close" and hooks.get("peak_dd_exit"):
@@ -933,6 +940,7 @@ def simulate(
                                         st, code, pos, float(c[bar_idx]), day, i,
                                         limits,
                                         peak_dd_exit=hooks["peak_dd_exit"],
+                                        fill_config=side_fill_config,
                                         peak_dd_sessions=hooks.get("peak_dd_sessions", 15),
                                         hm=int(at_hm),
                                     )
@@ -1198,6 +1206,9 @@ def simulate(
                             st, code, pos, cursor, bar_idx, phase, limits,
                             day=day, day_i=i, audit_sink=audit_sink,
                         )
+                        if phase == "open":
+                            fill_side_pending(st, code, pos, float(cursor.o[bar_idx]), day, i,
+                                              limits, hm=int(at_hm))
 
         run_eod_exits(st, day=day, ds=ds, bars=daily_bars, eod_exit=hooks.get("eod_exit"),
                       hold_modes=hold_modes, exdiv=exdiv,
