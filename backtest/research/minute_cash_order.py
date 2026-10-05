@@ -381,7 +381,6 @@ def run_chronological_day(
         return frames[code]
 
     events = {}
-    pending_open = []
     for code in list(st.positions):
         ddf = daily_bars.get(code)
         if ddf is None or day not in ddf.index:
@@ -415,11 +414,6 @@ def run_chronological_day(
             if pos.ride_with is not None:
                 continue
             sellable = t1_sellable(calendar[pos.entry_idx].date(), day.date())
-            if minute_open:
-                opening = _open_quote_for(frame)
-                if pos.pending_exit and sellable and opening is not None:
-                    pending_open.append((code, pos, opening, limits))
-                continue
             v9_plan = (evaluate_version9_exit(hooks, daily_bars[code], day, st.stats)
                        if "version9_exit" in hooks and day_i > pos.entry_idx else None)
             cursor = HeldMinuteCursor(
@@ -427,6 +421,9 @@ def run_chronological_day(
                 h,
                 c,
                 l=frame["low"].to_numpy(np.float64) if minute_stop_trigger == "hl" or (fill_config and fill_config.trigger_basis == "bar_low") else None,
+                session_exit_reason=pos.pending_exit,
+                session_volume=frame["volume"].to_numpy(np.float64) if minute_open else None,
+                session_stats=st.stats,
                 fill_config=fill_config,
                 fill_state=held_fill_states.setdefault(held_fill_key(pos), {}),
                 minute_stop_trigger=minute_stop_trigger, take_profit_pct=st.stats.get("profit_target"),
@@ -719,38 +716,6 @@ def run_chronological_day(
             )
         run_step_adds_day(st, **common, step_add=hooks.get("step_add"))
 
-    def sell_pending_open():
-        for code, pos, opening, limits in pending_open:
-            px, volume = float(opening["open"]), float(opening["volume"])
-            if not np.isfinite(px) or px <= 0:
-                continue
-            if not np.isfinite(volume) or volume <= 0:
-                st.stats["defer_sell_volume"] += 1
-                continue
-            if defer_sell_at_limit(px, limits):
-                st.stats["defer_sell_limit_down"] += 1
-                continue
-            before = len(st.trades)
-            with audit_scope(audit_sink, decision_hm=AM_OPEN, quote_hm=AM_OPEN, phase="open"):
-                _sell(
-                    st,
-                    code,
-                    pos,
-                    px,
-                    day,
-                    pos.pending_exit,
-                    bucket_id=AM_OPEN,
-                    at=AM_OPEN - 1,
-                    day_i=day_i,
-                    hm=AM_OPEN,
-                    price_rule="minute_pending_next_open",
-                )
-            if any(
-                t["side"] == "SKIP" and t["reason"].startswith("skip_volume")
-                for t in st.trades[before:]
-            ):
-                st.stats["defer_sell_volume"] += 1
-
     clocks = set(events) | {CHASE_HM, AM_OPEN if minute_open else BUY_HM}
     if topk_buys is not None:
         clocks.update(topk_buys.clocks)
@@ -784,15 +749,18 @@ def run_chronological_day(
                     volume_kwargs = {
                         "bucket_id": at_hm,
                         "day_i": day_i,
-                        "at": at_hm - 1 if is_open_fill(reason) else at_hm,
+                        "at": at_hm - 1 if is_open_fill(reason) or (minute_open and fill_config.fill_timing == "next_bar_open") else at_hm,
                     }
                 price_rule = {
                     "stop_loss:gap_open": "minute_gap_open",
                     "stop_loss:touch": "minute_stop_price" if cursor.minute_stop_trigger == "hl" else "minute_trigger_bar_close",
                 }.get(reason, "")
-                if reason.endswith(":next_open"):
+                if minute_open:
+                    price_rule = "minute_trigger_bar_close"
+                if reason.endswith(":next_open") or (minute_open and fill_config.fill_timing == "next_bar_open"):
                     price_rule = "minute_pending_next_open"
                 with audit_scope(audit_sink, decision_hm=at_hm, quote_hm=at_hm, phase=phase):
+                    before = len(st.trades)
                     _sell(
                         st,
                         code,
@@ -804,6 +772,8 @@ def run_chronological_day(
                         hm=at_hm if price_rule else None,
                         price_rule=price_rule,
                     )
+                if minute_open and any(t["side"] == "SKIP" and t["reason"].startswith("skip_volume") for t in st.trades[before:]):
+                    st.stats["defer_sell_volume"] += 1
             if topk_buys is not None and phase == ("close" if topk_exec == "close" else "open"):
                 topk_buys.advance(at_hm)
             if tail_window_buy and at_hm == TAIL_START and phase == "open":
@@ -814,7 +784,6 @@ def run_chronological_day(
                 with audit_scope(audit_sink, decision_hm=at_hm, phase="close", quote_hm=at_hm):
                     fill_tail_slice(at_hm)
             if minute_open and at_hm == AM_OPEN and phase == "open":
-                sell_pending_open()
                 with audit_scope(
                     audit_sink, decision_hm=AM_OPEN, phase="open", quote_for=pool_bucket
                 ):

@@ -9,6 +9,7 @@ strategy rules or registry entries change.
 
 | Path | trigger_basis | fill_timing | fill_at (touch) | Gap fill |
 | --- | --- | --- | --- | --- |
+| version11 EOD pending (A2) | bar_last | next_bar_open | opening price | AM_OPEN next session |
 | shared default | bar_last | this_bar | bar_last | bar_open |
 | hl stop | bar_low | this_bar | line | bar_open |
 | absolute_exit | bar_low (required) | this_bar | line | bar_open |
@@ -56,7 +57,7 @@ retains the original predicates, including floating-point comparison order.
   `ValueError` for `use_numba=True` or the numba environment backend. Select
   Python explicitly for custom policies. Existing numba-ineligible paths
   remain Python; the numba implementation is unchanged.
-- Separate minute engines (version9_2, version12, minute_open) reject custom
+- Separate minute engines (version9_2, version12) reject custom
   config instead of silently ignoring it. Daily, v7, bar_scan_exit and the
   minute wire registry are untouched.
 - A1 (2026-10-05): `step_stop`, `scale_out`, and `peak_dd_clear_exits`
@@ -77,7 +78,7 @@ retains the original predicates, including floating-point comparison order.
 ## Registered CSV books and default paths
 
 All shared rows use this_bar, with bar_last touch / bar_open stop gap unless
-marked absolute_exit. Callback columns describe existing hooks (a callback
+marked absolute_exit or version11 EOD pending. Callback columns describe existing hooks (a callback
 may return no exit). H/L remains opt-in for supported shared books.
 
 | Registered book | Default path(s) |
@@ -115,7 +116,7 @@ may return no exit). H/L remains opt-in for supported shared books.
 | version9 | shared range stop; take_profit; version9_plan only with existing version9_sell opt-in |
 | version9_2 | Separate run_minute_day (excluded) |
 | version10 | shared; take_profit |
-| version11 | shared; take_profit |
+| version11 | EOD pending session exit; next_bar_open at AM_OPEN |
 | version12 | Separate run_minute_day (excluded) |
 | topk_dropout | shared; sell_gate; take_profit |
 | topk_score_exit | shared; sell_gate; take_profit |
@@ -135,7 +136,7 @@ Test names below are in `tests/test_minute_fill_config.py` unless a file is spec
 | 14:55/15:00 this_bar time exits | `test_time_exits_stay_this_bar` |
 | numba raises on non-default config, explicit and environment dispatch | `test_numba_refuses` |
 | Default numba parity | `tests/test_scan_held_day_numba_parity.py::test_numba_gap_open_stop`, `test_numba_t0_no_sell_no_peak_update`, `test_numba_trail_hit`, `test_numba_force_sell_time` |
-| version9_2/version12/minute_open reject custom config through simulate | `test_simulate_separate_engine_rejects_custom_config` (minute_open = version11) |
+| version9_2/version12 reject custom config through simulate | `test_simulate_separate_engine_rejects_custom_config` |
 | absolute_exit bar_low guard | `test_simulate_absolute_exit_requires_bar_low` (version9_1) |
 | Side sells accept custom configs; default/None unchanged | `test_simulate_side_sells_accept_custom_config`, `test_simulate_side_sells_default_config_unchanged`; `tests/test_side_sell_fill_config.py` (next-open, session carry, limit retry, no duplicate, other-exit cleanup, low trigger and look-ahead rejection) |
 | Look-ahead rejects | `test_lookahead`, `test_callback_low_rejected_at_decision`, `test_target_cannot_assume_low_after_high` |
@@ -198,3 +199,37 @@ branch base `origin/master ccac8e2a`, `/tmp/mq-v6/bin/python`):
 - `git diff --stat origin/master -- tests/fixtures` is empty.
 - The updated Markdown file decodes as UTF-8, has no BOM and zero NUL
   bytes; `git diff --check` passes.
+
+
+## Step 2b A2 — version11 minute fold (2026-10-05)
+
+Version11 held sells now use `scan_held_day` / `HeldMinuteCursor` in both
+`simulate` and the chronological cash-order loop. The EOD rule still sets
+`Position.pending_exit`; its hook-derived default is `next_bar_open`, eligible
+only at AM_OPEN (09:30) in the next session. It does not retry later that day.
+AM_OPEN buys and daily rules are unchanged. Version12 / version9_2 remain
+separate pending their own PRs; version9_1 is untouched.
+
+Default behavior differences: none in the off-byte cases. Price validity,
+positive finite opening volume, limit-down and T+1 checks retain their results;
+volume is checked before limit-down. Zero/nonfinite volume or a blocked open
+carries the EOD decision to another session. Legacy reasons and opening audit
+fields are retained without adding a `:next_open` suffix. Historical fixtures
+remain frozen; no overlay is needed.
+
+New opt-in behavior: version11 accepts custom FillConfig through the cursor.
+`this_bar` fills the pending decision at the AM_OPEN bar's last print or a
+specified positive price, with the shared outer open/fill limit checks and
+close-phase volume capacity. `next_bar_open` keeps the session opening rule and
+ignores `fill_at`. Callback low/high/open look-ahead combinations and a missing
+explicit line fail closed as elsewhere. No intraday strategy decision is added.
+
+
+A2 version11 verification (Python `/tmp/mq-v6/bin/python`, pandas 3.0.6):
+
+- `tests/test_off_byte_baseline.py`: **161 passed, 0 failed**, 3.91 s;
+  all CSV bytes and canonical snapshots match, including version11 daily/minute.
+- Fold tests plus off-byte: **176 passed, 0 failed**, 3.96 s.
+- Clock fence, TopK metadata and fold tests: **221 passed, 0 failed**, 3.32 s.
+- Final full suite (`-p no:cacheprovider -q -m "not production and not benchmark"`):
+  **7649 passed, 5 skipped, 24 deselected, 29 warnings, 0 failed**, 148.59 s.

@@ -104,7 +104,7 @@ def test_all_book_defaults_derived_from_hooks():
     for name in BOOKS:
         hooks = apply_csv_strategy(name,scores_by_day={'20260101': {'000001': 1.}})
         defaults = book_fill_defaults(hooks)
-        assert defaults['stop'] == (DEFAULT_FILL_CONFIGS['absolute_exit'] if 'bind_absolute_exit' in hooks else FillConfig())
+        assert defaults['stop'] == (FillConfig(fill_timing='next_bar_open') if hooks.get('minute_open') else DEFAULT_FILL_CONFIGS['absolute_exit'] if 'bind_absolute_exit' in hooks else FillConfig())
         assert defaults['force_sell'] == FillConfig()
         assert defaults['close_clear'] == FillConfig()
 
@@ -150,8 +150,7 @@ def minute_fixture():
 
 
 @pytest.mark.parametrize('strategy,hook', [('version9_2', 'run_minute_day'),
-                                         ('version12', 'run_minute_day'),
-                                         ('version11', 'minute_open')])
+                                         ('version12', 'run_minute_day')])
 def test_simulate_separate_engine_rejects_custom_config(strategy, hook):
     from backtest.research.csv_minute_backtest import simulate
     from backtest.research.csv_strategy_books import apply_csv_strategy

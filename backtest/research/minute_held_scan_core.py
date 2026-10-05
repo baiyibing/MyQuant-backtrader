@@ -1,6 +1,7 @@
 """Shared held-minute decision core and resumable scan state."""
 from __future__ import annotations
 from dataclasses import dataclass, field
+import math
 from backtest.research.fill_config import FillConfig, default_fill_config
 from backtest.research.csv_ledger import PEAK_GAP_MIN, peak_gap_blocks, hit_limit_down, hit_limit_up
 from backtest.research.ashare_session import LIMIT_EPS as _LIMIT_EPS
@@ -77,6 +78,9 @@ class HeldMinuteCursor:
     stop_range_ratio: float | None = None
     fill_config: FillConfig | None = None
     fill_state: dict | None = None
+    session_exit_reason: str | None = None
+    session_volume: object = None
+    session_stats: dict | None = None
     current_reserved: bool = field(init=False)
     lu_today: bool = field(default=False, init=False)
     saw_close_hm: bool = field(default=False, init=False)
@@ -133,6 +137,32 @@ class HeldMinuteCursor:
         self.is_true_day_last = idx == len(self.c) - 1
         if self.first_exit_attempted or not sell_allowed(self.can_sell, self.n_days):
             return None
+        if self.session_volume is not None:
+            # An EOD decision is eligible only at the next session's opening
+            # bucket. Rejection carries the position's decision to another day.
+            if int(self.hm[idx]) != 9 * 60 + 30 or not self.session_exit_reason:
+                return None
+            opening = self.fill_config.fill_timing == "next_bar_open"
+            if phase != ("open" if opening else "close"):
+                return None
+            self.first_exit_attempted = True
+            at = "bar_open" if opening else self.fill_config.fill_at
+            if at == "bar_low":
+                raise ValueError("look-ahead: bar_low is not a causal fill for a session callback decision")
+            if at == "line":
+                raise ValueError("fill_at=line requires an explicit stop/target line")
+            px = float({"bar_open": self.o, "bar_last": self.c, "bar_low": self.l}[at][idx]
+                       if isinstance(at, str) else at)
+            if not math.isfinite(px) or px <= 0:
+                return None
+            volume = float(self.session_volume[idx])
+            if not math.isfinite(volume) or volume <= 0:
+                self.session_stats["defer_sell_volume"] += 1
+                return None
+            if limit_down_blocks(px, self.limit_down):
+                self.session_stats["defer_sell_limit_down"] += 1
+                return None
+            return self._exit(idx, px, self.session_exit_reason)
         cur_hm = int(self.hm[idx]) if self.hm is not None else idx
         stop_enabled = isinstance(self.stop_pct, float) and 0 < self.stop_pct < 1
         if self.stop_range_ratio is not None:
