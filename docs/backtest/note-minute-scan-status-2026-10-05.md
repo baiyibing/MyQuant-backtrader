@@ -23,14 +23,14 @@
 
 ### 第 2 步拆为 2a / 2b
 
-**2a 是机制与现状显式化。** fill timing / fill price 配置只在 `minute_held_scan_core.py::HeldMinuteCursor` 内解释；使用区分时机与报价的新配置名称，不用含糊的单词 `close` 作配置总名，也不把 bar_scan 的 `FillTiming` / `FillPrice` 直接当核心接口。2a 实现为 `backtest/research/fill_config.py::FillConfig(trigger_basis, fill_timing, fill_at)`（取值 `bar_last` / `bar_low`；`this_bar` / `next_bar_open`；`bar_open` / `bar_high` / `bar_low` / `bar_last` / `line` / 指定正价），不用单词 `close` 作取值，不新增 CLI。逐书默认复现当前行为：共享分钟默认收盘触发 / 本根收盘成交，hl / absolute_exit 保留 low 触发 / 线价成交及既有跳空 open、顺序、拒绝与记账行为（现状证据：`csv_minute_backtest.py::simulate/scan_held_day`；`HeldMinuteCursor.advance/_close`）。
+**2a 是机制与现状显式化。** fill timing / fill price 配置只在 `minute_held_scan_core.py::HeldMinuteCursor` 内解释；使用区分时机与报价的新配置名称，不用含糊的单词 `close` 作配置总名，也不把 bar_scan 的 `FillTiming` / `FillPrice` 直接当核心接口。2a 已在独立代码 PR #366（分支 `feat/minute-core-fill-2a`）实现，撰写时尚未合并；本 docs PR #365 仅授权并描述该实现。实现接口为 `backtest/research/fill_config.py::FillConfig(trigger_basis, fill_timing, fill_at)`（取值 `bar_last` / `bar_low`；`this_bar` / `next_bar_open`；`bar_open` / `bar_high` / `bar_low` / `bar_last` / `line` / 指定正价），不用单词 `close` 作取值，不新增 CLI。逐书默认复现当前行为：共享分钟默认收盘触发 / 本根收盘成交，hl / absolute_exit 保留 low 触发 / 线价成交及既有跳空 open、顺序、拒绝与记账行为（现状证据：`csv_minute_backtest.py::simulate/scan_held_day`；`HeldMinuteCursor.advance/_close`）。
 
 2a 验收与限制：
 
 - 现有 off-byte 基线必须逐字节一致，不重录、不新增 skip；不能只对最终 NAV（基线合同：`tests/test_off_byte_baseline.py`）。
 - 非默认配置不得静默走 numba：请求 numba 且配置非默认时必须抛错；本票不实现 numba 非 close 路径（现有分流证据：`csv_minute_backtest.py::scan_held_day` 的 `can_offload`）。
 - 禁止前视组合：按本根 high 成交、收盘判定却按本根 open 成交。触发信息可得时点与成交相位须分开；现有相位证据为 `HeldMinuteCursor.advance/_close`，不据此把新报价合法化。
-- next-bar 边界（2a 已实现并测试，按 backtrader 式「下一根可成交 bar 的开盘」）：当日末根信号顺延到下一交易时段首根开盘成交，理由加 `:next_open`；下一根跌停沿用既有开盘跌停门，挡住即顺延重试，不新增限价语义；14:55 / 15:00 时间类清仓保持本根末价成交，不受 next_bar_open 影响；已排队的价格类退出优先于其后信号。不得借这些非默认边界改变既有清仓默认；改变默认 / 结果的提案归 2b（现状边界核对点：`HeldMinuteCursor.advance/_close` 的 `force_sell_hm` / `close_clear`；`csv_minute_backtest.py::simulate` 的限价与成交记账）。
+- PR #366 定义并测试的边界：next-bar 按 backtrader 式「下一根可成交 bar 的开盘」；当日末根信号顺延到下一交易时段首根开盘成交，理由加 `:next_open`；下一根跌停沿用既有开盘跌停门，挡住即顺延重试，不新增限价语义；14:55 / 15:00 时间类清仓保持本根末价成交，不受 next_bar_open 影响；已排队的价格类退出优先于其后信号。不得借这些非默认边界改变既有清仓默认；改变默认 / 结果的提案归 2b（PR #366 测试证据：`tests/test_minute_fill_config.py`；现状边界核对点：`HeldMinuteCursor.advance/_close` 的 `force_sell_hm` / `close_clear`；`csv_minute_backtest.py::simulate` 的限价与成交记账）。
 - 明确排除日线引擎、v7、`strategy9_2_engine`、version12 的 `strategy12_engine.run_minute_day`、numba 非 close 路径；不得扩为多引擎合并（路径证据：§5 实现表及 `csv_minute_backtest.py::simulate/scan_held_day` 分派）。
 
 **2b 未开始。** 行业惯例只提供待裁选项；每一处改变行为的统一都须用户逐项决定、各自 golden 重录，不覆盖 2a 的旧基线。包括触发域统一、跳空报价、默认本根→次根、拒单后继续扫描与现金释放顺序等，均不得从 2a 的机制授权推导为默认翻转（差异核对点：`HeldMinuteCursor.advance/_exit/_close` 与 `bar_scan_exit.py::apply_fill_timing`）。
@@ -194,7 +194,7 @@ numba、日线、version7、strategy9_2、strategy12 不要放进这次「同一
 当前顺序依据文首所列用户 11:05 人裁与本次 A/B 修订指令：
 
 1. **A/B 文档修订。** 本文勘误，并同步 H-U4、S2-B、成交假设 SSOT 的 2026-10-05 限定增补；只修文档。
-2. **2a。** 在共享 `HeldMinuteCursor` 内解释时机 / 报价配置，逐书默认复现现状，按文首限制验收；不重录 off-byte。
+2. **2a：PR #366 待合并。** 在共享 `HeldMinuteCursor` 内解释时机 / 报价配置，逐书默认复现现状，按文首限制验收；不重录 off-byte。
 3. **2b 待裁清单。** 列出每个改变行为的统一项，用户逐项决定，每项各自 golden；目前未开始。
 4. **第 3 步。** 先把扫线 / wire / host round-trip 的等价与栅栏测试迁移到共享核心及新配置，再退役 `bar_scan_exit`、`minute_true_core_wire` 和 host round-trip；不提前删除测试覆盖（迁移核对点：`tests/` 的相关模块引用；`minute_bar_scan_host.py::scan_version1_round_trip/run_round_trip`）。
 
@@ -229,6 +229,10 @@ numba、日线、version7、strategy9_2、strategy12 不要放进这次「同一
 - 扫线范围：`docs/backtest/note-true-core-bar-scan-exit-2026-10-03.md`、`docs/backtest/note-true-core-fill-timing-config-2026-10-03.md`、`docs/backtest/note-minute-strategies-bar-scan-wire-2026-10-03.md`
 - #304 身份：`docs/backtest/note-true-core-tc2-x1-intent-adapter-2026-10-02.md`
 - 扫描落点：`docs/backtest/s2b-hl-helper-boundary-2026-09-28.md`
-- 代码：`csv_minute_backtest.py`（`scan_held_day_python`、`scan_held_day`、`_scan_held_day_numba_trail`）、`minute_cash_order.py`（`HeldMinuteCursor`）、`bar_scan_exit.py`、`minute_true_core_wire.py`、`minute_bar_scan_host.py`
+- 当前代码（master `d007213e` 起）：`backtest/research/minute_held_scan_core.py::HeldMinuteCursor` 是共享核心，由 `backtest/research/minute_cash_order.py` 导入，并由 `backtest/research/csv_minute_backtest.py::scan_held_day_python` 按 open / close 相位驱动；`scan_held_day` 保留分流。
+- numba 子集（master `d007213e` 起）：`backtest/research/csv_minute_backtest.py::_scan_held_day_numba_trail` 共用谓词；同文件 `register_jitable` 注册返回值在 `@njit` 前重绑定。
+- 共享辅助文件（master `d007213e` 起）：`backtest/research/strategy_book_helpers.py`（书辅助逻辑）、`backtest/research/minute_entry_validation.py::validate_minute_entry`（分钟入口校验）。
+- 2a 代码与测试（PR #366，撰写时待合并）：`backtest/research/fill_config.py::FillConfig`、`tests/test_minute_fill_config.py`；分支 `feat/minute-core-fill-2a`，合入前以该 PR 为准。
+- 历史代码（`386d1dc4`）：`csv_minute_backtest.py`（`scan_held_day_python`、`scan_held_day`、`_scan_held_day_numba_trail`）、`minute_cash_order.py`（当时持有 `HeldMinuteCursor`）、`bar_scan_exit.py`、`minute_true_core_wire.py`、`minute_bar_scan_host.py`
 - 基线：`tests/test_off_byte_baseline.py`，`scripts/research/generate_off_byte_baseline.py`
-- 合并点：`386d1dc4`；扫线断点当时在祖先 `501de569`（缺 `FillPrice`）；version9 规则文件对齐 #361 的 `f708c43`
+- 当前共享核心合并点：PR #364 → `d007213e`。历史合并点（`386d1dc4`）：PR #363 → `386d1dc4`；扫线断点当时在祖先 `501de569`（缺 `FillPrice`）；version9 规则文件对齐 #361 的 `f708c43`
