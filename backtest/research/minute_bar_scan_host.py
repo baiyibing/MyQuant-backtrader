@@ -321,7 +321,8 @@ def run_topk_app_dropout(start, end, *, pool_dir=None, app_pool_dir=None,
     index = v7.load_index_daily(start, end) if pools else []
     symbols = {code for codes in pools.values() for code in codes}
     exdiv, names = ashare_session.load_limit_context(name_dir, symbols, start, end)
-    state = v7.simulate_v7(
+    from backtest.research.strategy7_engine import simulate_native
+    state = simulate_native(
         minute, daily, pools, index, cash_total=cash,
         start=start, end=end, exdiv=exdiv, names=names,
     )

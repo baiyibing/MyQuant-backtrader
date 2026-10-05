@@ -1,6 +1,6 @@
 # 分钟扫描现状 · 供后续 agent 决定下一步（2026-10-05）
 
-**STEP 3 DONE / RETIRED (2026-10-05, this PR):** `bar_scan_exit` / `minute_true_core_wire` / host round-trip probe line 已退役；probe bench 与 wire-only 测试删除。生产成交仍由 `csv_minute_backtest.simulate` / `HeldMinuteCursor` / `FillConfig` 负责；v7 / topk_app 独立 runner 保留。分类栅栏为 registry `minute_classification`（#384），核心与逐书覆盖已迁移（#385–#389）；pending-sell observability 保留。默认 fills / trades / equity 与 frozen fixtures 不变。下文旧扫线分析保留为历史。
+**STEP 3 DONE / RETIRED (2026-10-05, this PR):** `bar_scan_exit` / `minute_true_core_wire` / host round-trip probe line 已退役；probe bench 与 wire-only 测试删除。生产成交仍由 `csv_minute_backtest.simulate` / `HeldMinuteCursor` / `FillConfig` 负责；v7 / topk_app 保留独立 CLI，生产调度已归 main 的 version7 执行书（2026-10-06）。分类栅栏为 registry `minute_classification`（#384），核心与逐书覆盖已迁移（#385–#389）；pending-sell observability 保留。默认 fills / trades / equity 与 frozen fixtures 不变。下文旧扫线分析保留为历史。
 
 | 字段 | 值 |
 |---|---|
@@ -23,7 +23,7 @@
 
 **默认不是所有书都 close。** `csv_minute_backtest.simulate` 绑定 `absolute_exit` 后，独立仓游标和普通 `scan_held_day` 调用都传 `minute_stop_trigger="hl" if absolute_exit else minute_stop_trigger`，并提供 low；普通路径另以绝对退出线 / 成本算 `stop_range_ratio`。`HeldMinuteCursor._close` 在 hl 域以 low≤line 触发、按 line 报价；跳空仍按既有 open 路径。因此 2a 必须保留 absolute_exit 的 low 触发，不能用共享 close 默认覆盖它（证据：`csv_minute_backtest.py::simulate`；`minute_held_scan_core.py::HeldMinuteCursor.__post_init__/_close/advance`）。
 
-「只有 simulate 算 NAV」须限定为共享入口：`csv_minute_backtest_v7.py::simulate_v7` 也按现金 + 持仓（有显式 economics 时加应收）计算权益并写 `state.equity_curve`。一台共享引擎的目标不把 v7 收进本次 2a，也不抹去其独立账本（证据：`simulate_v7` 日末 equity 计算；§2 的 host 调用关系）。
+2026-10-06 更新：`csv_minute_backtest_v7.py::simulate_v7` 已为薄转发 shim，main 拥有日循环，`strategy7_engine.AccountingPolicy` 按现金 + 分钟持仓 + 显式 economics 应收追加权益。v7 原生账本保留；2a 的历史范围不变。见 [迁移记录](v7-main-engine-migration-2026-10-06.md)。
 
 ### 第 2 步拆为 2a / 2b
 
@@ -60,8 +60,8 @@
 
 | 块 | 路径 | 实际职责 | 谁在用它算订单 |
 |---|---|---|---|
-| 主 CSV 引擎 | `backtest/research/csv_minute_backtest.py` 的 `simulate` → `scan_held_day`；日线是 `csv_daily_backtest.py`；version7 / topk_app 走 `simulate_v7` | 名单、现金、费用、整手、T+1、涨跌停、卖出扫描、净值 | 已注册书的研究回测 |
-| 分钟 bar-scan host | `backtest/research/minute_bar_scan_host.py` 的 `main` / `run_simulate` / `run_version7` / `run_topk_app_dropout` | 读 qlib 1 分钟或数据湖，从空仓把已注册书转去调上面的 `simulate` 或 `simulate_v7` | 不单独撮合。CLI 打印的 `equity` / `return_pct` 来自旧账本收盘权益 |
+| 主 CSV 引擎 | `backtest/research/csv_minute_backtest.py` 的 `simulate` → `scan_held_day`；日线是 `csv_daily_backtest.py`；version7 shim / APP 适配器均到 main 的 version7 执行书 | 名单、现金、费用、整手、T+1、涨跌停、卖出扫描、净值 | 已注册书的研究回测 |
+| 分钟 bar-scan host | `backtest/research/minute_bar_scan_host.py` 的 `main` / `run_simulate` / `run_version7` / `run_topk_app_dropout` | 读 qlib 1 分钟或数据湖，从空仓把已注册书转去 main；version7 经 `simulate_v7` shim，APP 经 `simulate_native` | 不单独撮合。CLI 打印的 `equity` / `return_pct` 来自旧账本收盘权益 |
 | 扫线 | `backtest/research/bar_scan_exit.py` + `minute_true_core_wire.py` | 一根 K、一个持仓，成交或跳过；分类表把书挂到止损比例和书内卖点函数上 | 没有。`csv_minute_backtest.py` 不引用这两份模块 |
 
 Host 文件头是 “Read-only minute host”。`main()` 拒绝 `--cost` / `--peak` / `--held`。`--fill-bar` / `--fill-price` 标成 legacy，不传入 `simulate`。

@@ -6,6 +6,9 @@
 成交。必须从已注册策略中显式指定 `--strategy`，无缺省。买入用 14:55 分钟收盘
 （湖内时间为「中国交易时钟标成 UTC」——09:30 UTC = 09:30 CST）。
 
+version7 为 minute-only 注册书：main 拥有日循环与状态，minute_cash_order 拥有
+symbol-major 默认与 X02 chronological 调度；v7 / APP 保留各自 CLI 与原生账本。
+
 用法：
     python backtest/research/csv_minute_backtest.py --strategy version6 --start 20251023 --end 20251104
     python backtest/research/csv_minute_backtest.py --strategy version8 --start 20251023 --end 20260909
@@ -673,17 +676,20 @@ def simulate(
     raw bars. None retains the baseline; E-R6 ratios never imply entitlements.
     """
     book = get_minute_book(strategy)
-    native_symbol_major = book.name == "version7"
-    if native_symbol_major:
-        if fix_minute_cash_order or tail_window_buy or fill_config is not None:
-            raise ValueError("version7 main currently supports its native OFF schedule only")
-        hooks = book.apply()
+    native_v7 = book.name == "version7"
+    if native_v7:
+        if fill_config is not None:
+            raise ValueError("version7 does not accept FillConfig overrides")
+        validate_tail_options(tail_window_buy, fix_minute_cash_order, tail_volume_unit)
+        if tail_window_buy:
+            tail_volume_unit = resolve_tail_volume_unit(tail_volume_unit)
+        hooks = book.apply(fix_minute_cash_order=fix_minute_cash_order)
         policy = minute_policy_for(hooks)
-        if policy.schedule != "symbol_major":
-            raise ValueError("version7 requires its registered symbol-major policy")
+        if policy.schedule not in {"symbol_major", "chronological"}:
+            raise ValueError("version7 requires a native schedule policy")
         from backtest.research import strategy7_engine as v7
         from backtest.research.ashare_fees import DEFAULT_SCHEDULE
-        from backtest.research.minute_cash_order import run_symbol_major_day
+        from backtest.research.minute_cash_order import run_symbol_major_day, run_v7_chronological_day
         frames, minutes, closes, pools, calendar, gate = v7.prepare_main_inputs(
             minute_bars, daily_bars, pool_days, start, end, policy_context)
         st = v7.SimResult(float(total_cash))
@@ -695,7 +701,7 @@ def simulate(
         fee = (policy_context.fee_schedule if policy_context and
                policy_context.fee_schedule is not None else DEFAULT_SCHEDULE)
         last_prices = {}
-    if not native_symbol_major:
+    if not native_v7:
         validate_minute_entry(strategy, stage="sell", version9_sell=version9_sell, max_hold=max_hold)
         validate_minute_stop_trigger(minute_stop_trigger, normalize_csv_strategy(strategy), fix_s11_exit_domain)
         validate_topk_exec(topk_exec, strategy, limit_walkdown, topk_limit_rule)
@@ -838,7 +844,7 @@ def simulate(
         day_spans = {code: build_day_spans(df) for code, df in minute_bars.items()}
 
     for i, day in enumerate(calendar):
-        if native_symbol_major:
+        if native_v7:
             policy.day_start(st, day=day, day_i=i, context=policy_context)
             cleared_today = set()
             needed = list(dict.fromkeys(pools.get(day, []) + list(st.positions)))
@@ -849,11 +855,15 @@ def simulate(
             else:
                 symbols_today = minutes.get(day, {})
                 ordered = list(dict.fromkeys(needed + list(symbols_today)))
-            run_symbol_major_day(
+            run_native_day = (run_v7_chronological_day if policy.schedule == "chronological"
+                              else run_symbol_major_day)
+            run_native_day(
                 st, day, calendar, symbols_today, ordered, pools.get(day, []),
                 closes, last_prices, cleared_today, exdiv=exdiv, names=pool_names,
                 names_by_day=pool_names_by_day, blocked_new=gate.get(day, False),
-                fee=fee, audit_sink=audit_sink, session=hooks["minute_session"])
+                fee=fee, audit_sink=audit_sink, session=hooks["minute_session"],
+                **({"tail_window_buy": tail_window_buy, "tail_volume_unit": tail_volume_unit}
+                   if policy.schedule == "chronological" else {}))
             policy.append_marks(st, day=day, last_prices=last_prices,
                                 context=policy_context)
             continue
@@ -1287,7 +1297,7 @@ def simulate(
                 mark_bars=daily_bars, context=policy_context,
             )
 
-    if native_symbol_major:
+    if native_v7:
         return st
 
     finish_pending_sells(st)

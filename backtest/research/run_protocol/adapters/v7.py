@@ -1,4 +1,4 @@
-"""v7 delegation only; native stages, validators and CLI writers remain owners."""
+"""v7 facade → thin native shim → main; preserve native_value and native CLI writers."""
 
 from __future__ import annotations
 

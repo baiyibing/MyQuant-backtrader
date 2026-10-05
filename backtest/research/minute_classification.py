@@ -1,4 +1,6 @@
-"""Data-free minute strategy classification from registered strategy hooks."""
+"""Data-free minute strategy classification from registered strategy hooks.
+
+v7 and APP retain native CLI identities; both inspect main's version7 execution book."""
 
 from dataclasses import dataclass
 from inspect import signature

@@ -234,14 +234,15 @@ def capture_case(case, output):
                 )
             captured = []
             module = v7 if case == "host_version7" else app
-            simulator = module.simulate_v7
+            target = "simulate_v7" if case == "host_version7" else "simulate_native"
+            simulator = getattr(module, target)
 
             def observe(*args, **kwargs):
                 state = simulator(*args, **kwargs)
                 captured.append(state)
                 return state
 
-            stack.enter_context(patch.object(module, "simulate_v7", side_effect=observe))
+            stack.enter_context(patch.object(module, target, side_effect=observe))
             if case == "host_version7":
                 result = host.run_version7(days[0], days[-1], pool_dir=app_dir)
                 extra["host"] = asdict(result)

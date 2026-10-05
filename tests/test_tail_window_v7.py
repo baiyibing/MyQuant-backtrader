@@ -33,8 +33,9 @@ def buys(state, *, symbol=A):
 
 
 def seed(monkeypatch, positions):
-    result_type = v7.SimResult
-    monkeypatch.setattr(v7, "SimResult", lambda cash: result_type(cash, positions=deepcopy(positions)))
+    from backtest.research import strategy7_engine
+    result_type = strategy7_engine.SimResult
+    monkeypatch.setattr(strategy7_engine, "SimResult", lambda cash: result_type(cash, positions=deepcopy(positions)))
 
 
 def test_trial_28_equal_slices_merge_one_lot_and_discard_parent_rounding():

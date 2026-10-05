@@ -92,7 +92,7 @@ def test_compact_to_book_matches_human_ruling(case, tmp_path, monkeypatch):
         assert topk._load_cli_bars is v7._load_cli_bars
         topk_minute, topk_daily = topk._load_cli_bars(POOLS, D1, D2)
         assert sum(len(frame) for frame in topk_minute.values()) > 0
-        assert topk.simulate_v7(topk_minute, topk_daily, POOLS, [D1, D2]).trades == after.trades
+        assert topk.simulate_native(topk_minute, topk_daily, POOLS, [D1, D2]).trades == after.trades
 
 
 @pytest.mark.parametrize("contract", ["ymd", "datetime_index", "compact_date"])

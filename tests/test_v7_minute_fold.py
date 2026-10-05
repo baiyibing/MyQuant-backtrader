@@ -1,4 +1,4 @@
-"""V7 event contracts and the main-owned OFF schedule boundary."""
+"""V7 event contracts and the main-owned schedules."""
 from dataclasses import asdict
 from datetime import date, timedelta
 
@@ -177,7 +177,8 @@ def test_nan_close_does_not_trigger_stop(first):
     assert engine.MinuteSession.stop_candidate(held(), 570, first, 10, float("nan")) is None
 
 
-def test_off_delegates_to_main_and_returns_identical_object(monkeypatch):
+@pytest.mark.parametrize("chronological", [False, True])
+def test_both_schedules_delegate_to_main_and_return_identical_object(monkeypatch, chronological):
     import ast
     import inspect
     from backtest.research import csv_minute_backtest as main
@@ -187,7 +188,8 @@ def test_off_delegates_to_main_and_returns_identical_object(monkeypatch):
     calls = []
     days = []
     original = main.simulate
-    run_day = scheduler.run_symbol_major_day
+    schedule = "run_v7_chronological_day" if chronological else "run_symbol_major_day"
+    run_day = getattr(scheduler, schedule)
     def spy(*args, **kwargs):
         result = original(*args, **kwargs)
         calls.append((args, kwargs, result))
@@ -195,40 +197,81 @@ def test_off_delegates_to_main_and_returns_identical_object(monkeypatch):
     def day_spy(*args, **kwargs):
         days.append(args[1])
         return run_day(*args, **kwargs)
-    def retired(*args, **kwargs):
-        pytest.fail('OFF entered the old chronological runner')
     monkeypatch.setattr(main, 'simulate', spy)
-    monkeypatch.setattr(scheduler, 'run_symbol_major_day', day_spy)
-    monkeypatch.setattr(native, '_run_chronological_day', retired)
+    monkeypatch.setattr(scheduler, schedule, day_spy)
+    assert not hasattr(native, '_run_chronological_day')
+    assert not hasattr(native, '_DayCursor')
     bars = {S: [dict(datetime=D.isoformat(), hm=895, open=10, close=10)]}
     closes = {S: {D - timedelta(days=1): 10}}
-    result = native.simulate_v7(bars, closes, {D: [S]}, [D], fee=FEE)
+    result = native.simulate_v7(bars, closes, {D: [S]}, [D], fee=FEE,
+                                fix_minute_cash_order=chronological)
     assert len(calls) == 1 and calls[0][2] is result
+    assert type(result) is native.SimResult is engine.SimResult
+    assert calls[0][1]['fix_minute_cash_order'] is chronological
     assert calls[0][1]['strategy'] == 'version7'
     assert days == [D]
     direct = original(bars, closes, {D: [S]}, None, None, strategy='version7',
-                      total_cash=21_000_000,
+                      total_cash=21_000_000, fix_minute_cash_order=chronological,
                       policy_context=MinutePolicyContext(index_days=[D], fee_schedule=FEE))
     assert asdict(direct) == asdict(result)
-    # Only the retained ON day loop remains in the shim; symbol/row traversal
-    # is owned by minute_cash_order, never a fallback after main failure.
     tree = ast.parse(inspect.getsource(native.simulate_v7))
-    loops = [node for node in ast.walk(tree) if isinstance(node, (ast.For, ast.While))]
-    assert len(loops) == 1
-    assert isinstance(loops[0].target, ast.Name) and loops[0].target.id == 'day'
+    assert not any(isinstance(node, (ast.For, ast.While)) for node in ast.walk(tree))
     def failing(*args, **kwargs):
         raise RuntimeError('main failed')
     monkeypatch.setattr(main, 'simulate', failing)
     with pytest.raises(RuntimeError, match='main failed'):
-        native.simulate_v7(bars, closes, {D: [S]}, [D])
+        native.simulate_v7(bars, closes, {D: [S]}, [D],
+                           fix_minute_cash_order=chronological)
 
 
-def test_on_keeps_native_chronological_route(monkeypatch):
+def test_no_production_traversal_in_native_shim_or_book():
+    import ast
+    import inspect
+
+    # Only input conversion and aggregate lot settlement may contain loops.
+    # Keep this list explicit: a new production day/row runner must fail here.
+    conversion_and_ledger = {
+        '_record_stamp', '_minute_records', '_iter_records', '_daily_closes',
+        '_sell_lots',
+    }
+    for module in (native, engine):
+        assert not hasattr(module, '_DayCursor')
+        assert not hasattr(module, '_run_chronological_day')
+    tree = ast.parse(inspect.getsource(engine))
+    for definition in tree.body:
+        if isinstance(definition, (ast.FunctionDef, ast.ClassDef)):
+            if definition.name not in conversion_and_ledger:
+                assert not any(isinstance(node, (ast.For, ast.While, ast.AsyncFor))
+                               for node in ast.walk(definition)), definition.name
+    shim = ast.parse(inspect.getsource(native.simulate_v7))
+    assert not any(isinstance(node, (ast.For, ast.While, ast.AsyncFor, ast.comprehension))
+                   for node in ast.walk(shim))
+
+
+@pytest.mark.parametrize('chronological', [False, True])
+def test_shim_normalizes_tail_unit_before_main(monkeypatch, chronological):
+    import inspect
+
+    # Signature/defaults match the conversion adapter, plus legacy unknown-option rejection.
+    shim = inspect.signature(native.simulate_v7)
+    adapter = inspect.signature(engine.simulate_native)
+    assert [p for p in shim.parameters.values() if p.name != 'unsupported_options'] == list(
+        adapter.parameters.values())
+    sentinel = engine.SimResult(1)
+    calls = []
+    def spy(*args, **kwargs):
+        calls.append((args, kwargs))
+        return sentinel
     from backtest.research import csv_minute_backtest as main
-    def forbidden(*args, **kwargs):
-        pytest.fail('X02 moved before PR4')
-    monkeypatch.setattr(main, 'simulate', forbidden)
-    assert native.simulate_v7({}, {}, {}, [D], fix_minute_cash_order=True).equity_curve
+    monkeypatch.setattr(main, 'simulate', spy)
+    bars, closes, pools, index = {}, {}, {}, []
+    assert native.simulate_v7(
+        bars, closes, pools, index, fix_minute_cash_order=chronological,
+        tail_window_buy=chronological, tail_volume_unit=None) is sentinel
+    assert calls[0][0][:3] == (bars, closes, pools)
+    assert calls[0][1]['policy_context'].index_days is index
+    assert calls[0][1]['fix_minute_cash_order'] is chronological
+    assert calls[0][1]['tail_volume_unit'] == ('shares' if chronological else None)
 
 
 def test_registered_v7_cash_binding_is_skip_with_and_without_explicit_default():
@@ -265,8 +308,9 @@ def test_sell_limit_checks_fill_only_even_when_open_is_at_limit():
 @pytest.mark.parametrize('case', [
     'default', 'short_cash', 'participation', 'exdiv', 'economics',
     'index_gate', 'frame_calendar', 'names', 'names_by_day', 'audit', 'sell_fill_only',
+    'chronological', 'tail_default', 'tail_none', 'tail_shares', 'tail_lots',
 ])
-def test_direct_main_matches_frozen_native_off_cases(case, monkeypatch, tmp_path):
+def test_direct_main_matches_frozen_native_cases(case, monkeypatch, tmp_path):
     import json
     from backtest.research import csv_minute_backtest as main
     from backtest.research.minute_engine_policies import MinutePolicyContext
@@ -286,3 +330,63 @@ def test_direct_main_matches_frozen_native_off_cases(case, monkeypatch, tmp_path
     actual = capture_case(case, tmp_path / case)
     expected = json.loads(FIXTURE.read_text(encoding='utf-8'))['cases'][case]
     assert actual == expected
+
+
+@pytest.mark.parametrize("chronological", [False, True])
+def test_v7_policy_selects_schedule_and_callbacks_do_not_traverse(chronological):
+    import ast
+    import inspect
+    from backtest.research.csv_strategy_books import get_minute_book
+    hooks = get_minute_book("version7").apply(fix_minute_cash_order=chronological)
+    assert hooks["minute_policy"].schedule == (
+        "chronological" if chronological else "symbol_major")
+    for name in ("chronological_stop", "chronological_parent", "chronological_buy",
+                 "chronological_timer", "chronological_observe"):
+        callback = getattr(hooks["minute_session"], name)
+        tree = ast.parse(inspect.getsource(callback))
+        assert not any(isinstance(node, (ast.For, ast.While)) for node in ast.walk(tree))
+
+
+@pytest.mark.parametrize("chronological", [False, True])
+def test_main_v7_never_applies_open_and_fill_sell_limit_gate(monkeypatch, chronological):
+    from backtest.research import csv_minute_backtest as main
+    from backtest.research.minute_engine_policies import MinutePolicyContext
+    result_type = engine.SimResult
+    monkeypatch.setattr(engine, "SimResult", lambda cash: result_type(cash, {S: held()}))
+    day = D + timedelta(days=1)
+    result = main.simulate(
+        {S: [dict(datetime=day.isoformat(), hm=570, open=10, close=10),
+             dict(datetime=day.isoformat(), hm=571, open=8, close=8.9)]},
+        {S: {D: 10}}, {}, None, None, strategy="version7", total_cash=0,
+        fix_minute_cash_order=chronological,
+        policy_context=MinutePolicyContext(index_days=[day], fee_schedule=FEE))
+    assert result.trades == [dict(date=day.isoformat(), symbol=S, hm=571,
+                                 side="sell", shares=300, price=8.9,
+                                 reason="stop:trial_a090")]
+
+
+@pytest.mark.parametrize('entry', ['shim', 'app'])
+@pytest.mark.parametrize('chronological,unit,message', [
+    (True, 'invalid', 'tail volume unit (--tail-volume-unit) must be shares or lots'),
+    (False, 'shares', '--tail-window-buy requires --fix-minute-cash-order'),
+    (False, 'invalid', '--tail-window-buy requires --fix-minute-cash-order'),
+])
+def test_native_tail_error_parity_before_main(monkeypatch, entry, chronological, unit, message):
+    from backtest.research import csv_minute_backtest as main
+    from backtest.research import csv_minute_backtest_topk_app_dropout as app
+    from backtest.research.tail_window_buy import validate_tail_options, resolve_tail_volume_unit
+
+    # Exact pre-PR6 sequence from origin/master: validate, then resolve when enabled.
+    with pytest.raises(ValueError) as old:
+        validate_tail_options(True, chronological, unit)
+        resolve_tail_volume_unit(unit)
+    assert str(old.value) == message
+
+    def forbidden(*args, **kwargs):
+        pytest.fail('invalid tail options reached main simulate')
+    monkeypatch.setattr(main, 'simulate', forbidden)
+    call = native.simulate_v7 if entry == 'shim' else app.simulate_native
+    with pytest.raises(type(old.value)) as current:
+        call({}, {}, {}, [], tail_window_buy=True,
+             fix_minute_cash_order=chronological, tail_volume_unit=unit)
+    assert str(current.value) == str(old.value)

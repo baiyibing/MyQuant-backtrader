@@ -7,7 +7,7 @@ import pytest
 
 from backtest.research import ashare_session, csv_minute_backtest_v7 as v7
 from backtest.research import csv_minute_backtest_topk_app_dropout as app
-from backtest.research import minute_bar_scan_host as host
+from backtest.research import minute_bar_scan_host as host, strategy7_engine
 from backtest.research.topk_app_dropout import DEFAULT_TOPK
 from backtest.research.csv_minute_backtest_topk_app_dropout import DEFAULT_CASH_TOTAL
 
@@ -22,7 +22,7 @@ def wiring(monkeypatch):
         (v7, 'load_pool_days', pools), (app, 'build_intersect_pool_days', pools),
         (v7, '_load_cli_bars', (minute, daily)), (v7, 'load_index_daily', index),
         (ashare_session, 'load_limit_context', (exdiv, names)),
-        (v7, 'simulate_v7', SimpleNamespace(trades=[], equity_curve=[], cash=DEFAULT_CASH_TOTAL)),
+        (strategy7_engine, 'simulate_native', SimpleNamespace(trades=[], equity_curve=[], cash=DEFAULT_CASH_TOTAL)),
     ]:
         mocks[name] = Mock(return_value=result)
         monkeypatch.setattr(module, name, mocks[name])
@@ -80,7 +80,7 @@ def test_cli_loads_once(tmp_path, wiring, capsys, prebuilt, empty, custom):
         w.mocks['load_index_daily'].assert_not_called()
     else:
         w.mocks['load_index_daily'].assert_called_once_with(start, end)
-    w.mocks['simulate_v7'].assert_called_once_with(
+    w.mocks['simulate_native'].assert_called_once_with(
         w.minute, w.daily, pools, [] if empty else w.index, cash_total=cash,
         start=start, end=end, exdiv=w.exdiv, names=w.names)
     w.mocks['shared'].assert_not_called()
