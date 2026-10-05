@@ -356,7 +356,8 @@ def test_scan_held_day_python_hm_comparisons_stay_as_built():
 
     core = CursorNames().visit(core)
     comparisons = _scan_hm_comparisons(scan) | _scan_hm_comparisons(core)
-    assert comparisons == AS_BUILT_SCAN_HM_COMPARISONS
+    # A2 version11 moves its existing AM_OPEN eligibility into this cursor.
+    assert comparisons == AS_BUILT_SCAN_HM_COMPARISONS | {"int(hm[idx]) != 9 * 60 + 30"}
 
 
 @pytest.mark.parametrize("condition", [

@@ -57,7 +57,8 @@ def book_fill_defaults(hooks, minute_stop_trigger="close"):
     Callback and time exits still decide on the last print. H/L fixed upward
     targets retain their line/open fill; custom callbacks retain last prints.
     """
-    stop = default_fill_config(minute_stop_trigger, hooks=hooks)
+    stop = (FillConfig(fill_timing="next_bar_open") if hooks.get("minute_open")
+            else default_fill_config(minute_stop_trigger, hooks=hooks))
     target = (DEFAULT_FILL_CONFIGS["hl"] if minute_stop_trigger == "hl"
               and not callable(hooks.get("exit_plan"))
               and not callable(hooks.get("sell_gate")) else DEFAULT_FILL_CONFIGS["take_profit"])
