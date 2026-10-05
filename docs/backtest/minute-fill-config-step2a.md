@@ -225,11 +225,11 @@ ignores `fill_at`. Callback low/high/open look-ahead combinations and a missing
 explicit line fail closed as elsewhere. No intraday strategy decision is added.
 
 
-A2 version11 verification (Python `/tmp/mq-v6/bin/python`, pandas 3.0.6):
+A2 version11 post-rebase verification (Python `/tmp/mq-v6/bin/python`,
+base `origin/master 34bfdd73`):
 
-- `tests/test_off_byte_baseline.py`: **161 passed, 0 failed**, 3.91 s;
-  all CSV bytes and canonical snapshots match, including version11 daily/minute.
-- Fold tests plus off-byte: **176 passed, 0 failed**, 3.96 s.
-- Clock fence, TopK metadata and fold tests: **221 passed, 0 failed**, 3.32 s.
-- Final full suite (`-p no:cacheprovider -q -m "not production and not benchmark"`):
-  **7649 passed, 5 skipped, 24 deselected, 29 warnings, 0 failed**, 148.59 s.
+- Off-byte and fold tests (`-p no:cacheprovider -q tests/test_off_byte_baseline.py tests/test_v11_minute_fold.py`):
+  **176 passed, 0 failed**, 4.43 s.
+- Full suite (`-p no:cacheprovider -q -m "not production and not benchmark"`):
+  **7650 passed, 4 skipped, 24 deselected, 29 warnings, 0 failed**, 143.75 s.
+- `git diff --stat origin/master -- tests/fixtures`: **empty**.
