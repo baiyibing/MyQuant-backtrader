@@ -547,6 +547,12 @@ def csv_run_kwargs_from_args(args) -> dict:
         strategy9_rules.validate_sell_mode(name, getattr(args, "version9_sell", None), getattr(args, "max_hold", False))
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
+    budget_override = getattr(args, "name_budget", None)
+    if budget_override is not None:
+        if not budget_override > 0:
+            raise SystemExit(f"--name-budget must be positive, got {budget_override}")
+        if BOOKS[name].sizing != "per_name":
+            raise SystemExit(f"--name-budget applies only to per_name books; {name} is {BOOKS[name].sizing}")
     if getattr(args, "fix_s81_band_precision", False) and name != "version8_1":
         raise SystemExit("--fix-s81-band-precision is supported only by version8_1")
     if getattr(args, "max_hold", False) and name != "version9":
@@ -589,7 +595,7 @@ def _apply_version1(
         "stop_pct": resolved,
         "take_profit": _tp if take_profit is None else take_profit,
         "record_params": _rec if record_params is None else record_params,
-    }
+}
 
 
 def _run_kwargs_version1(args) -> dict:
