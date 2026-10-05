@@ -63,6 +63,7 @@ from backtest.research import (
     strategy6_43_rules,
     strategy6_44_rules,
     strategy6_45_rules,
+    strategy6_46_rules,
     strategy8_rules,
     strategy8_1_rules,
     strategy8_2_rules,
@@ -132,6 +133,7 @@ HELP_LOCK_V6_42 = strategy6_42_rules.HELP_LOCK
 HELP_LOCK_V6_43 = strategy6_43_rules.HELP_LOCK
 HELP_LOCK_V6_44 = strategy6_44_rules.HELP_LOCK
 HELP_LOCK_V6_45 = strategy6_45_rules.HELP_LOCK
+HELP_LOCK_V6_46 = strategy6_46_rules.HELP_LOCK
 HELP_LOCK_V8 = strategy8_rules.HELP_LOCK
 HELP_LOCK_V8_1 = strategy8_1_rules.HELP_LOCK
 HELP_LOCK_V8_2 = strategy8_2_rules.HELP_LOCK
@@ -4094,5 +4096,54 @@ register(
         help_lock=strategy6_45_rules.HELP_LOCK,
         apply=_apply_version6_45,
         run_kwargs=_run_kwargs_version6_45,
+    )
+)
+
+
+def _apply_version6_46(
+    *,
+    stop_pct=None,
+    take_profit=None,
+    record_params=None,
+    index_block_new=None,
+    **_,
+) -> dict:
+    from backtest.research import strategy_book_helpers as _bh
+    from backtest.research.strategy6_46_rules import INDEX_GATE_ON as _gate_on
+    resolved = strategy6_46_rules.STOP_PCT if stop_pct is None else float(stop_pct)
+    def _tp(px, cost, peak, n_days=1):
+        return strategy6_46_rules.take_profit_reason(px, cost, peak, n_days)
+    def _rec(st):
+        strategy6_46_rules.record_strategy6_46_params(st, stop_pct=resolved)
+        st.stats["index_gate_on"] = bool(strategy6_46_rules.INDEX_GATE_ON)
+        st.stats["parking_symbol"] = strategy6_46_rules.PARKING_SYMBOL
+        st.stats["parking_frac"] = strategy6_46_rules.PARKING_FRAC
+    _allow = _bh.allow_new_name_from_gate(index_block_new, INDEX_GATE_ON=_gate_on)
+    base = _apply_version6_45(stop_pct=resolved, take_profit=_tp, record_params=_rec,
+                                index_block_new=index_block_new)
+    base["name"] = "version6_46"
+    base["parking_symbol"] = strategy6_46_rules.PARKING_SYMBOL
+    base["parking_frac"] = strategy6_46_rules.PARKING_FRAC
+    base["parking_buffer"] = strategy6_46_rules.PARKING_BUFFER
+    return base
+
+def _run_kwargs_version6_46(args) -> dict:
+    stop = getattr(args, "stop_pct", None)
+    if stop is not None and not 0 < float(stop) < 1:
+        raise SystemExit(f"--stop-pct must be in (0, 1), got {stop}")
+    return {"strategy": "version6_46", "stop_pct": stop}
+
+register(
+    CsvStrategyBook(
+        name="version6_46",
+        sizing="per_name",
+        name_budget=1_000_000.0,
+        tag=strategy6_46_rules.BOOK_TAG,
+        aliases=("6.46", "6_46", "v6.46", "v6_46", "version6_46"),
+        allow_add=strategy6_46_rules.ALLOW_ADD,
+        peak_gap_min=strategy6_46_rules.PEAK_GAP_MIN,
+        help_lock=strategy6_46_rules.HELP_LOCK,
+        apply=_apply_version6_46,
+        run_kwargs=_run_kwargs_version6_46,
     )
 )
