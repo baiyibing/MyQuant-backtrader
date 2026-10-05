@@ -1,8 +1,10 @@
 """Data-free minute strategy classification from registered strategy hooks."""
 
 from dataclasses import dataclass
+from inspect import signature
 from math import isfinite
 from numbers import Real
+from typing import Literal
 
 from backtest.research.csv_strategy_books import apply_csv_strategy, csv_strategy_names
 
@@ -21,7 +23,7 @@ _SPECIAL_HOOKS = (
 class MinuteStrategyEntry:
     name: str
     cli: str
-    status: str
+    status: Literal["wired"]
     missing_field: str | None
 
 
@@ -48,7 +50,18 @@ def minute_strategy_entries() -> tuple[MinuteStrategyEntry, ...]:
                 stop = hooks.get("stop_pct")
                 take = hooks.get("take_profit")
                 percent = isinstance(stop, Real) and not isinstance(stop, bool) and isfinite(stop) and callable(take)
-                if not (percent or callable(take) or any(hooks.get(field) is not None for field in _SPECIAL_HOOKS)):
+                if percent:
+                    try:
+                        signature(take).bind(10.0, 10.0, 10.0, 1)
+                    except (TypeError, ValueError):
+                        percent = False
+                special = any(hooks.get(field) is not None for field in _SPECIAL_HOOKS)
+                main_engine = (
+                    callable(hooks.get("bind_absolute_exit"))
+                    or hooks.get("force_sell_hm") is not None
+                    or (callable(hooks.get("buy_gate")) and callable(take))
+                )
+                if not (percent or special or main_engine):
                     raise ValueError("missing minute exit hooks")
             except (Exception, SystemExit) as exc:
                 errors.append(
@@ -64,7 +77,3 @@ def minute_strategy_entries() -> tuple[MinuteStrategyEntry, ...]:
 
 def wired_names() -> tuple[str, ...]:
     return tuple(entry.name for entry in minute_strategy_entries() if entry.status == "wired")
-
-
-def blocked_entries() -> tuple[MinuteStrategyEntry, ...]:
-    return tuple(entry for entry in minute_strategy_entries() if entry.status == "blocked")

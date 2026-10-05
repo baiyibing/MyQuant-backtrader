@@ -11,7 +11,7 @@ from backtest.research import minute_classification as classification
 
 def register_fake(monkeypatch, **hooks):
     name = "version_fake"
-    defaults = dict(stop_pct=0.05, take_profit=lambda *args: None,
+    defaults = dict(stop_pct=0.05, take_profit=lambda px, cost, peak, n_days: None,
                     record_params=lambda st: None)
     defaults.update(hooks)
     book = replace(registry.BOOKS["version6"], name=name, aliases=(name,), apply=lambda **kwargs: defaults)
@@ -25,7 +25,7 @@ def test_every_registered_book_is_minute_classified():
     assert classification.minute_strategy_names() == names
     assert tuple(entry.name for entry in entries) == names
     assert classification.wired_names() == names
-    assert classification.blocked_entries() == ()
+    assert {"version4", "version5", "version9_1"} <= set(classification.wired_names())
     for entry in entries:
         expected_cli = {
             "version7": classification.CLI_V7,
@@ -45,9 +45,13 @@ def test_new_percent_book_is_wired(monkeypatch):
     assert name in classification.wired_names()
 
 
-@pytest.mark.parametrize("stop", [None, float("nan"), True, "0.05"])
-def test_callable_take_alone_is_wired(monkeypatch, stop):
-    name = register_fake(monkeypatch, stop_pct=stop)
+@pytest.mark.parametrize("hooks", [
+    {"bind_absolute_exit": lambda *args: None},
+    {"force_sell_hm": "14:55"},
+    {"buy_gate": lambda *args: True},
+])
+def test_main_engine_hook_is_wired(monkeypatch, hooks):
+    name = register_fake(monkeypatch, stop_pct=None, **hooks)
     assert name in classification.wired_names()
 
 
@@ -58,6 +62,17 @@ def test_special_hook_is_wired(monkeypatch, field):
 
 
 @pytest.mark.parametrize("hooks", [
+    {"stop_pct": None, "take_profit": lambda *a: None},
+    {"stop_pct": None},
+    {"stop_pct": float("nan")},
+    {"stop_pct": float("inf")},
+    {"stop_pct": True},
+    {"stop_pct": "0.05"},
+    {"take_profit": lambda px, cost, peak: None},
+    {"take_profit": lambda px, cost, peak, n_days, extra: None},
+    {"stop_pct": None, "bind_absolute_exit": 42},
+    {"stop_pct": None, "buy_gate": 42},
+    {"stop_pct": None, "buy_gate": lambda *args: True, "take_profit": 42},
     {"stop_pct": None, "take_profit": None},
     {"take_profit": 42},
     {"stop_pct": float("nan"), "take_profit": 42},
