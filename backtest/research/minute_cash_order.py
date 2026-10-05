@@ -129,6 +129,51 @@ def advance_independent_exit(
         )
 
 
+def scale_out_exits(st, code, pos, px, day, day_i, limits, *, scale_step, scale_frac, hm=None):
+    """6.13：相对首仓锚价每满 scale_step 涨幅，卖出当时剩余持仓的 scale_frac。
+
+    逐分钟 close 相位调用；每档一次（组计数器）；整百股向下、FIFO 切 lot；
+    lot 级 T+1 由 _sell(wanted_shares) 保证；跌停顺延；组已同分钟离场则不触发。
+    """
+    if not scale_step or px <= 0 or not position_is_open(st, pos):
+        return 0
+    anchor_cost = float(getattr(pos.group, "anchor_cost", None) or pos.group.first_lot.cost)
+    if anchor_cost <= 0 or float(px) < anchor_cost:
+        return 0
+    allowed = int((float(px) / anchor_cost - 1.0 + 1e-12) / float(scale_step))
+    if allowed <= pos.group.scale_steps:
+        return 0
+    lots = [lot for lot in st.positions.get(code, [])
+            if getattr(lot, "position_id", None) == pos.position_id]
+    shares_now = sum(lot.shares for lot in lots)
+    if shares_now <= 0:
+        pos.group.scale_steps = allowed
+        return 0
+    target = int(shares_now * float(scale_frac) // 100) * 100
+    sold = 0
+    if target > 0:
+        for lot in lots:
+            if sold >= target:
+                break
+            chunk = min(lot.shares, target - sold)
+            chunk = chunk // 100 * 100
+            if chunk <= 0 or lot.entry_idx >= day_i:
+                continue
+            if defer_sell_at_limit(px, limits):
+                st.stats["defer_sell_limit_down"] += 1
+                return sold
+            filled = _sell(
+                st, code, lot, px, day, "scale_out:5pct", day_i=day_i,
+                hm=hm, price_rule="minute_trigger_bar_close",
+                wanted_shares=chunk,
+            )
+            sold += int(filled)
+    pos.group.scale_steps = allowed
+    if sold:
+        st.stats["sell_scale_out"] = int(st.stats.get("sell_scale_out", 0)) + 1
+    return sold
+
+
 def step_stop_exits(st, code, pos, px, day, day_i, limits, *, step_stop_pct, hm=None):
     """6.8：step lot 自带独立止损（相对自身买价 −step_stop_pct，触发只卖该 lot）。
 
