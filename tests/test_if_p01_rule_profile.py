@@ -44,9 +44,10 @@ def test_resolve_rule_profile_and_frozen_switches():
     assert switches.pop("shrink_on_short_cash") is True
     assert switches.pop("exchange_quantity_rules") is True
     assert switches.pop("account_odd_lot_exit") is True
+    assert switches.pop("chronological_v7") is True
     assert not any(switches.values())
     assert LEGACY.slippage_bp == INDUSTRY.slippage_bp == 0
-    assert INDUSTRY.revision == "industry-p10-20261006"
+    assert INDUSTRY.revision == "industry-p11-20261006"
     with pytest.raises(FrozenInstanceError):
         INDUSTRY.account_fee_schedule = True
     with pytest.raises(ValueError, match="legacy.*industry.*RuleProfile"):
@@ -304,7 +305,11 @@ def test_v7_run_config_keeps_industry_profile_only(tmp_path):
         )
 
     assert "rule_profile" not in configs["legacy"]
+    assert configs["legacy"]["fix_minute_cash_order"] is False
+    assert configs["legacy"]["cash_order_policy"] == "legacy_symbol_day"
     assert configs["industry"]["rule_profile"] == "industry"
+    assert configs["industry"]["fix_minute_cash_order"] is True
+    assert configs["industry"]["cash_order_policy"] == "chronological"
 
 
 def test_profile_keys_do_not_change_run_manifest_config(tmp_path):

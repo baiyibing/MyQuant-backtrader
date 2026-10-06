@@ -872,6 +872,9 @@ def simulate_native(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, S
                 ) -> SimResult:
     """Validate/normalize tail options, then translate native v7/APP arguments."""
     profile = resolve_rule_profile(rule_profile)
+    fix_minute_cash_order = bool(
+        fix_minute_cash_order or profile.chronological_v7
+    )
     # Reject invalid native tail options before loading main (facade lazy-import contract).
     from backtest.research.tail_window_buy import validate_tail_options, resolve_tail_volume_unit
     validate_tail_options(tail_window_buy, fix_minute_cash_order, tail_volume_unit)

@@ -1,7 +1,7 @@
 # Industry rule profile
 
 - Date: 2026-10-06
-- Status: P10 account-level odd-lot exits delivered; later trade-rule slices pending
+- Status: P11 v7 chronological cash scheduling delivered; later trade-rule slices pending
 - Principle SSOT: [backtest-rule-principles-ssot.md](ssot/backtest-rule-principles-ssot.md)
 
 ## Purpose
@@ -58,6 +58,14 @@ it is never applied independently to each source lot. S8 group exits retain
 P03's one-order identity, and each 9_2/12 or S8 scale-out tranche remains one
 order. T+1 and volume capacity remain fill constraints and are not bypassed.
 
+P11 enables `chronological_v7` for both the shared-minute native version7
+branch and the standalone v7 facade. Industry mode selects the existing
+`fix_minute_cash_order` scheduler, so cross-symbol buys can spend only proceeds
+realized at or before their decision minute. An explicit
+`--fix-minute-cash-order` remains valid and selects the same path. Equal-minute
+ordering is unchanged: original pool/opening-position/input-symbol order remains
+the stable tie-break. Legacy omitted and explicit-off runs remain symbol-major.
+
 ## Switch status
 
 The values below are locked by `industry-fix/adopted-decisions.md`; pending
@@ -72,7 +80,7 @@ switches remain `false` until their behavior PR and opt-in baseline are admitted
 | `fee_aware_affordability` | P07 delivered / `true` | B8-04: choose the largest currently valid buy quantity for which notional plus all buy fees is no greater than both budget and available cash. Source: `industry-fix/adopted-decisions.md`, “B8-04: size including fees: the largest valid quantity with notional + all buy fees <= budget (and <= cash).” Buy fees reuse that file's adopted JoinQuant-style commission (0.0003 each side, CNY 5 minimum per order; [example](https://www.cnblogs.com/henry2019/p/11700075.html), [reference](https://easyquant.ai/e/joinquant/set-trading-costs-slippage)) and bilateral transfer-fee decision sourced to 中国结算 2022-04-28 ([contemporaneous copy](https://finance.sina.com.cn/roll/2022-04-28/doc-imcwiwst4557332.shtml)) plus the 2015 change ([People.cn](http://m.people.cn/n4/2022/0429/c125-20026334.html)). B8-11 retains legacy cash-vs-capacity gate order. |
 | `shrink_on_short_cash` | P08 delivered / `true` | B8-06: when cash cannot pay the intended buy, choose the largest currently valid quantity whose notional plus all buy fees is affordable; skip if that quantity is zero and never raise. Source: `industry-fix/adopted-decisions.md`, “B8-06: short cash → shrink to the largest affordable valid quantity (fees included); skip if 0. (qlib-style clip; never raise.)” The same source locks B8-11 to the legacy cash-before-capacity gate order. |
 | `account_fee_schedule` | P05 commission + stamp duty + transfer fee delivered / `true` | Commission is 0.0003 each side with a CNY 5 minimum per strategy order. Source locked in `industry-fix/adopted-decisions.md`: JoinQuant stock `OrderCost` default (`open_commission=close_commission=0.0003`, `min_commission=5`), with [example](https://www.cnblogs.com/henry2019/p/11700075.html) and [reference](https://easyquant.ai/e/joinquant/set-trading-costs-slippage). Stamp duty is sell-side only: 0.001 before 2023-08-28 and 0.0005 from that date, sourced there to 财政部、税务总局公告 2023 年第 39 号（减半征收证券交易印花税）. Transfer fee is bilateral with no minimum and charged by fill notional: SH/SZ A-shares are 0.00002 before 2022-04-29 (the adopted decision uses the 2015-08-01 rate for earlier dates as a documented simplification) and 0.00001 from 2022-04-29; BSE is 0.000025 before and 0.00001 from that date. The adopted sources are 中国结算《关于降低股票交易过户费收费标准的通知》2022-04-28 ([contemporaneous copy](https://finance.sina.com.cn/roll/2022-04-28/doc-imcwiwst4557332.shtml)) and the 2015 change ([People.cn](http://m.people.cn/n4/2022/0429/c125-20026334.html)). Board classification reuses `market_layer`. One strategy order is one fee order: S8 whole-group exit is one order; each scale-out tranche and each tail/TWAP minute child is a separate order; capacity continuation retains its order identity. Fill-row commission, stamp, and transfer components retain that order identity and are recorded separately. Explicit legacy cost schedules such as `--qlib-cost` / `QLIB_PORTANA` conflict and fail fast. |
-| `chronological_v7` | pending / `false` | Industry mode will select the existing `fix_minute_cash_order` chronological behavior; same-clock tie-breaking is unchanged. |
+| `chronological_v7` | P11 delivered / `true` | V7 multi-stock cash scheduling is chronological by selecting the existing `fix_minute_cash_order` path in the shared-minute native version7 branch and standalone v7. Source locked in `industry-fix/adopted-decisions.md`: “V7 multi-stock cash order: chronological (= existing fix_minute_cash_order behaviour).” The design reuses that scheduler rather than adding a parallel knob; same-clock stable ordering is unchanged. Explicit `--fix-minute-cash-order` under industry selects the same behavior. |
 | `s12_domain_stamp` | delivered / `true` | S12 records its actual valuation source: daily=`front`; minute with X-01 off=`front`; minute with X-01 on=`none`. This is metadata only and does not change fills. |
 | `slippage_bp` | documented `0` | Mainstream backtester default adopted as zero; sensitivity research continues through the existing research fill configuration. |
 
@@ -170,3 +178,14 @@ from the data-free `tests/fixtures/industry/odd_lot_exit.json`. Its STAR
 version9_2 scale-out starts from the same synthetic 200-share buy in both
 profiles. Legacy sells 100 and strands a 100-share STAR residue; industry adds
 that remainder to the same scale-out order, sells 200, and closes the position.
+
+P11 keeps every earlier baseline immutable and adds
+`tests/fixtures/off_byte_baseline_industry_p11_v7_chronological_20261006.json`
+from the data-free `tests/fixtures/industry/v7_chronological.json`. Its
+shared-minute native-v7 and standalone-v7 cases each contain BUY and SELL
+fills under tight cash. Legacy symbol-major traversal lets a 15:00 sell fund
+another symbol's 14:45 add of 19,200 shares, while industry chronological
+traversal can afford only 2,100 shares at 14:45 and realizes the sell only at
+15:00. The adopted source is
+`industry-fix/adopted-decisions.md`: “V7 multi-stock cash order:
+chronological (= existing fix_minute_cash_order behaviour).”

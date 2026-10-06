@@ -36,6 +36,8 @@ from scripts.research.generate_off_byte_baseline import (
     P09_GOLDEN,
     P10_CASES,
     P10_GOLDEN,
+    P11_CASES,
+    P11_GOLDEN,
     S9_CASES,
     load_s9_golden,
     S12_CASES,
@@ -67,6 +69,7 @@ from scripts.research.generate_off_byte_baseline import (
     load_p08_golden,
     load_p09_golden,
     load_p10_golden,
+    load_p11_golden,
     load_s8_golden,
     load_v61_golden,
     load_v91_golden,
@@ -352,21 +355,37 @@ def test_industry_p09_quantity_overlay_stays_immutable_after_later_profile_slice
         assert case["fill_counts"] == {"BUY": 1, "SELL": 1}
 
 
-def test_industry_p10_odd_lot_overlay_is_active_and_legacy_stays_frozen(tmp_path):
+def test_industry_p10_odd_lot_overlay_stays_immutable():
     assert sha256(GOLDEN.read_bytes()).hexdigest() == HISTORICAL_GOLDEN_SHA256
     assert sha256(CANONICAL_GOLDEN.read_bytes()).hexdigest() == HISTORICAL_CANONICAL_SHA256
     golden = load_p10_golden()
     assert P10_GOLDEN.exists()
     assert set(golden["cases"]) == {f"{book}/{engine}" for book, engine in P10_CASES}
     assert golden["captured_environment"]["pandas"] == "3.0.6"
+    case = golden["cases"]["version9_2/scale-out-star"]
+    assert case["fill_counts"] == {"BUY": 1, "SELL": 1}
+    sell = next(
+        row for row in case["structured"]["fills"] if row["side"].upper() == "SELL"
+    )
+    assert sell["shares"] == 200
+    assert case["structured"]["positions"] == {}
 
-    for book, engine in P10_CASES:
+
+def test_industry_p11_v7_chronological_overlay_is_active_and_legacy_stays_frozen(tmp_path):
+    assert sha256(GOLDEN.read_bytes()).hexdigest() == HISTORICAL_GOLDEN_SHA256
+    assert sha256(CANONICAL_GOLDEN.read_bytes()).hexdigest() == HISTORICAL_CANONICAL_SHA256
+    golden = load_p11_golden()
+    assert P11_GOLDEN.exists()
+    assert set(golden["cases"]) == {f"{book}/{engine}" for book, engine in P11_CASES}
+    assert golden["captured_environment"]["pandas"] == "3.0.6"
+
+    for book, engine in P11_CASES:
         industry = capture_case(
             book,
             engine,
-            tmp_path / "industry-p10" / book / engine,
+            tmp_path / "industry-p11" / book / engine,
             rule_profile="industry",
-            fixture="p10",
+            fixture="p11",
         )
         expected, canonical, recorded = expected_case(
             book, engine, rule_profile="industry"
@@ -375,27 +394,27 @@ def test_industry_p10_odd_lot_overlay_is_active_and_legacy_stays_frozen(tmp_path
         assert recorded == "3.0.6"
         if byte_skip_reason(recorded) is None:
             assert_case_bytes(industry, expected)
-        assert industry["fill_counts"] == {"BUY": 1, "SELL": 1}
+        assert industry["fill_counts"] == {"BUY": 3, "SELL": 1}
 
         legacy = capture_case(
             book,
             engine,
-            tmp_path / "legacy-p10" / book / engine,
+            tmp_path / "legacy-p11" / book / engine,
             rule_profile="legacy",
-            fixture="p10",
+            fixture="p11",
         )
-        assert legacy["fill_counts"] == {"BUY": 1, "SELL": 1}
+        assert legacy["fill_counts"] == {"BUY": 3, "SELL": 1}
         assert industry["canonical_csv"] != legacy["canonical_csv"]
-        industry_sell = next(
-            row for row in industry["structured"]["fills"] if row["side"].upper() == "SELL"
+        industry_add = next(
+            row for row in industry["structured"]["fills"]
+            if row["reason"] == "buy:add_a104"
         )
-        legacy_sell = next(
-            row for row in legacy["structured"]["fills"] if row["side"].upper() == "SELL"
+        legacy_add = next(
+            row for row in legacy["structured"]["fills"]
+            if row["reason"] == "buy:add_a104"
         )
-        assert industry_sell["shares"] == 200
-        assert legacy_sell["shares"] == 100
-        assert industry["structured"]["positions"] == {}
-        assert legacy["structured"]["positions"]["688001.SH"][0]["shares"] == 100
+        assert industry_add["shares"] == 2100
+        assert legacy_add["shares"] == 19200
 
 
 @pytest.mark.parametrize("explicit_false", [False, True], ids=["omitted", "explicit-off"])

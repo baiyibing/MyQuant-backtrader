@@ -29,9 +29,9 @@ The 6.2-6.47 family (46 books, V6F overlay through v22) uses a scoped additive
 overlay; --record-v6f writes its daily/minute cases and refuses overwrite.
 Coverage for --check is asserted via assert_baseline_coverage() (registry-derived;
 no hardcoded book/case totals beyond the frozen historical 19/39).
-Industry overlays are additive and profile-scoped. P03-P09 stay immutable;
---record-industry-p10 uses only tests/fixtures/industry/odd_lot_exit.json
-and refuses overwrite. P10 is the active industry revision.
+Industry overlays are additive and profile-scoped. P03-P10 stay immutable;
+--record-industry-p11 uses only tests/fixtures/industry/v7_chronological.json
+and refuses overwrite. P11 is the active industry revision.
 """
 
 from __future__ import annotations
@@ -200,6 +200,14 @@ P10_RULE_REVISION = "industry-p10-odd-lot-exit-20261006"
 P10_BOOK_NAMES = ("version9_2",)
 P10_CASES = (("version9_2", "scale-out-star"),)
 P10_FIXTURE = ROOT / "tests/fixtures/industry/odd_lot_exit.json"
+P11_GOLDEN = ROOT / "tests/fixtures/off_byte_baseline_industry_p11_v7_chronological_20261006.json"
+P11_RULE_REVISION = "industry-p11-v7-chronological-20261006"
+P11_BOOK_NAMES = ("version7",)
+P11_CASES = (
+    ("version7", "minute-native"),
+    ("version7", "standalone"),
+)
+P11_FIXTURE = ROOT / "tests/fixtures/industry/v7_chronological.json"
 BOOK_NAMES = (
     HISTORICAL_BOOK_NAMES + V61_BOOK_NAMES + V91_BOOK_NAMES + V92_BOOK_NAMES
     + V93_BOOK_NAMES + V6F_BOOK_NAMES
@@ -235,6 +243,7 @@ P07_CANONICAL_CONTRACT = P05_CANONICAL_CONTRACT
 P08_CANONICAL_CONTRACT = P05_CANONICAL_CONTRACT
 P09_CANONICAL_CONTRACT = P05_CANONICAL_CONTRACT
 P10_CANONICAL_CONTRACT = P05_CANONICAL_CONTRACT
+P11_CANONICAL_CONTRACT = P05_CANONICAL_CONTRACT
 
 
 # 突破书（6.11/6.12）专用合成路径：涨跌停约束内的 1.25x 突破 + 加仓 + 回落离场。
@@ -1079,6 +1088,60 @@ def run_p10_case(book: str, engine: str, *, rule_profile: str = "industry"):
     return state
 
 
+def run_p11_case(book: str, engine: str, *, rule_profile: str = "industry"):
+    """Exercise v7 tight cash where a later sell cannot fund an earlier buy."""
+    if (book, engine) not in P11_CASES:
+        raise KeyError((book, engine))
+    fixture = json.loads(P11_FIXTURE.read_text(encoding="utf-8"))
+    days = [date.fromisoformat(value) for value in fixture["days"]]
+    minute_records = {
+        symbol: [
+            {
+                "date": date.fromisoformat(day),
+                "hm": hm,
+                "open": opening,
+                "high": max(opening, close),
+                "low": min(opening, close),
+                "close": close,
+            }
+            for day, hm, opening, close in fixture["minute_rows"][symbol]
+        ]
+        for symbol in fixture["symbols"]
+    }
+    daily_closes = {
+        symbol: {
+            date.fromisoformat(day): close
+            for day, close in fixture["daily_closes"][symbol].items()
+        }
+        for symbol in fixture["symbols"]
+    }
+    pools = {
+        date.fromisoformat(fixture["pool_day"]): list(fixture["symbols"])
+    }
+    if engine == "minute-native":
+        from backtest.research.minute_engine_policies import MinutePolicyContext
+
+        return minute.simulate(
+            minute_records,
+            daily_closes,
+            pools,
+            days[0],
+            days[-1],
+            strategy="version7",
+            total_cash=fixture["cash_total"],
+            policy_context=MinutePolicyContext(index_days=days),
+            rule_profile=rule_profile,
+        )
+    return v7.simulate_v7(
+        minute_records,
+        daily_closes,
+        pools,
+        days,
+        cash_total=fixture["cash_total"],
+        rule_profile=rule_profile,
+    )
+
+
 def run_case(
     book: str,
     engine: str,
@@ -1103,6 +1166,8 @@ def run_case(
         return run_p09_case(book, engine, rule_profile=rule_profile)
     if fixture == "p10":
         return run_p10_case(book, engine, rule_profile=rule_profile)
+    if fixture == "p11":
+        return run_p11_case(book, engine, rule_profile=rule_profile)
     if book in ("version6_11", "version6_12"):
         # 突破书：共享路径涨不到 A0x1.2，专用路径才有成交。
         bars, minutes, pools, start, end, dates = frozen_inputs(BREAKOUT_PRICES)
@@ -1432,7 +1497,7 @@ def load_p09_golden() -> dict:
 
 
 def load_p10_golden() -> dict:
-    """Active opt-in industry profile overlay; all earlier files stay immutable."""
+    """Immutable P10 profile overlay retained for registry verification."""
     assert _hash(GOLDEN.read_bytes()) == HISTORICAL_GOLDEN_SHA256
     assert _hash(CANONICAL_GOLDEN.read_bytes()) == HISTORICAL_CANONICAL_SHA256
     golden = json.loads(P10_GOLDEN.read_text(encoding="utf-8"))
@@ -1445,13 +1510,29 @@ def load_p10_golden() -> dict:
     return golden
 
 
+def load_p11_golden() -> dict:
+    """Active opt-in industry profile overlay; all earlier files stay immutable."""
+    assert _hash(GOLDEN.read_bytes()) == HISTORICAL_GOLDEN_SHA256
+    assert _hash(CANONICAL_GOLDEN.read_bytes()) == HISTORICAL_CANONICAL_SHA256
+    golden = json.loads(P11_GOLDEN.read_text(encoding="utf-8"))
+    assert golden["rule_revision"] == P11_RULE_REVISION
+    assert golden["historical_raw_sha256"] == HISTORICAL_GOLDEN_SHA256
+    assert golden["historical_canonical_sha256"] == HISTORICAL_CANONICAL_SHA256
+    assert golden["contract"] == P11_CANONICAL_CONTRACT
+    assert golden["books"] == list(P11_BOOK_NAMES)
+    assert set(golden["cases"]) == {f"{book}/{engine}" for book, engine in P11_CASES}
+    return golden
+
+
 def expected_case(
     book: str, engine: str, *, rule_profile: str = "legacy"
 ) -> tuple[dict, dict, str]:
     """Return account/raw, canonical hashes, and the recorded pandas version."""
     key = f"{book}/{engine}"
     if rule_profile == "industry":
-        if (book, engine) in P10_CASES:
+        if (book, engine) in P11_CASES:
+            golden = load_p11_golden()
+        elif (book, engine) in P10_CASES:
             golden = load_p10_golden()
         elif (book, engine) in P09_CASES:
             golden = load_p09_golden()
@@ -1704,6 +1785,12 @@ def assert_baseline_coverage():
     assert set(P10_BOOK_NAMES) <= set(BOOK_NAMES)
     assert set(P10_CASES) == {("version9_2", "scale-out-star")}
     assert P10_FIXTURE.is_file()
+    assert set(P11_BOOK_NAMES) <= set(BOOK_NAMES) | {"version7"}
+    assert set(P11_CASES) == {
+        ("version7", "minute-native"),
+        ("version7", "standalone"),
+    }
+    assert P11_FIXTURE.is_file()
 
 
 def capture_matrix(output_dir: Path, *, explicit_false: bool = False):
@@ -1809,7 +1896,75 @@ def main():
         action="store_true",
         help="Record the synthetic industry P10 STAR odd-lot scale-out case",
     )
+    mode.add_argument(
+        "--record-industry-p11",
+        action="store_true",
+        help="Record the two synthetic industry P11 v7 chronological cash-order cases",
+    )
     args = parser.parse_args()
+    if args.record_industry_p11:
+        if P11_GOLDEN.exists():
+            parser.error("The industry P11 overlay already exists; refusing to overwrite")
+        if pd.__version__ != "3.0.6":
+            parser.error("industry P11 recording requires the authorized pandas 3.0.6 environment")
+        assert _hash(GOLDEN.read_bytes()) == HISTORICAL_GOLDEN_SHA256
+        assert _hash(CANONICAL_GOLDEN.read_bytes()) == HISTORICAL_CANONICAL_SHA256
+        with tempfile.TemporaryDirectory(prefix="industry-p11-byte-baseline-") as temp:
+            root = Path(temp)
+            cases = {
+                f"{book}/{engine}": capture_case(
+                    book,
+                    engine,
+                    root / "industry" / book / engine,
+                    rule_profile="industry",
+                    fixture="p11",
+                )
+                for book, engine in P11_CASES
+            }
+            legacy_cases = {
+                f"{book}/{engine}": capture_case(
+                    book,
+                    engine,
+                    root / "legacy" / book / engine,
+                    rule_profile="legacy",
+                    fixture="p11",
+                )
+                for book, engine in P11_CASES
+            }
+        for key, case in cases.items():
+            assert_case_bytes(case, case)
+            assert case["fill_counts"] == {"BUY": 3, "SELL": 1}
+            assert legacy_cases[key]["fill_counts"] == {"BUY": 3, "SELL": 1}
+            assert case["canonical_csv"] != legacy_cases[key]["canonical_csv"]
+            industry_add = next(
+                row for row in case["structured"]["fills"]
+                if row["reason"] == "buy:add_a104"
+            )
+            legacy_add = next(
+                row for row in legacy_cases[key]["structured"]["fills"]
+                if row["reason"] == "buy:add_a104"
+            )
+            assert industry_add["shares"] == 2100
+            assert legacy_add["shares"] == 19200
+        payload = {
+            "rule_revision": P11_RULE_REVISION,
+            "historical_raw_sha256": HISTORICAL_GOLDEN_SHA256,
+            "historical_canonical_sha256": HISTORICAL_CANONICAL_SHA256,
+            "books": list(P11_BOOK_NAMES),
+            "captured_environment": {
+                "python": platform.python_version(),
+                "pandas": pd.__version__,
+                "platform": sys.platform,
+            },
+            "contract": P11_CANONICAL_CONTRACT,
+            "cases": cases,
+        }
+        P11_GOLDEN.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        print(f"Wrote {P11_GOLDEN}: {len(cases)} industry cases")
+        return
     if args.record_industry_p10:
         if P10_GOLDEN.exists():
             parser.error("The industry P10 overlay already exists; refusing to overwrite")
@@ -2532,13 +2687,13 @@ def main():
                 skipped.add(reason)
             else:
                 assert_case_bytes(actual, expected)
-        with tempfile.TemporaryDirectory(prefix="industry-p10-check-") as temp:
+        with tempfile.TemporaryDirectory(prefix="industry-p11-check-") as temp:
             industry_cases = {
                 (book, engine): capture_case(
                     book, engine, Path(temp) / book / engine,
-                    rule_profile="industry", fixture="p10",
+                    rule_profile="industry", fixture="p11",
                 )
-                for book, engine in P10_CASES
+                for book, engine in P11_CASES
             }
         for (book, engine), actual in industry_cases.items():
             expected, canonical_expected, recorded_pandas = expected_case(
@@ -2556,7 +2711,7 @@ def main():
             print(f"PASS: production CSV + library hashes (raw bytes) for {len(CASES)} cases")
         print(
             f"PASS: {len(CASES)} canonical CSV/account cases across current registry "
-            f"and overlays plus {len(P10_CASES)} industry P10 cases; pandas={pd.__version__}"
+            f"and overlays plus {len(P11_CASES)} industry P11 cases; pandas={pd.__version__}"
         )
         return
     for case in cases.values():

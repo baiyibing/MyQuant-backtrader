@@ -121,6 +121,9 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
     Dates absent from all frames and pools are not backfilled, as with records.
     """
     profile = resolve_rule_profile(rule_profile)
+    fix_minute_cash_order = bool(
+        fix_minute_cash_order or profile.chronological_v7
+    )
     from backtest.research.csv_ledger import reject_short_cash_override
     reject_short_cash_override(unsupported_options, "v7 simulate")
     if unsupported_options:
@@ -334,8 +337,12 @@ def write_run_config(output: Path, config: dict) -> None:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    profile = resolve_rule_profile(args.rule_profile)
+    fix_minute_cash_order = bool(
+        args.fix_minute_cash_order or profile.chronological_v7
+    )
     try:
-        validate_tail_options(args.tail_window_buy, args.fix_minute_cash_order, args.tail_volume_unit)
+        validate_tail_options(args.tail_window_buy, fix_minute_cash_order, args.tail_volume_unit)
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
     # P2-B: CLI-parse shell precheck (unit/domain). None → no-op. ≠δ5≠R4.
@@ -406,19 +413,20 @@ def main(argv: Sequence[str] | None = None) -> int:
                         start=start, end=end, exdiv=exdiv,
                         names=None if args.asof_pool_names else names,
                         names_by_day=names_by_day,
-                        fix_minute_cash_order=args.fix_minute_cash_order,
+                        fix_minute_cash_order=fix_minute_cash_order,
                         tail_window_buy=args.tail_window_buy,
                         tail_volume_unit=args.tail_volume_unit, audit_sink=audit,
-                        rule_profile=args.rule_profile,
+                        rule_profile=profile,
                         **volume_options)
     sim_s = time.perf_counter() - sim_t0
     output = Path(args.output_dir or f"backtest_output/csv_minute_v7_{args.start}_{args.end}")
     write_run_artifacts(state, output)
     config = {
         **vars(args),
-        "cash_order_policy": "chronological" if args.fix_minute_cash_order else "legacy_symbol_day",
+        "fix_minute_cash_order": fix_minute_cash_order,
+        "cash_order_policy": "chronological" if fix_minute_cash_order else "legacy_symbol_day",
         "same_hm_policy": ("open_stop_then_close_stop_then_buy_then_timer"
-                           if args.fix_minute_cash_order else "legacy_symbol_scan"),
+                           if fix_minute_cash_order else "legacy_symbol_scan"),
         "fallback_order_clock": "exact_quote_only_no_chase",
         "stable_order": "pool_then_opening_held_then_input_symbols",
     }
@@ -434,7 +442,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     write_run_config(output, config)
     if args.execution_audit_file:
         write_audit(args.execution_audit_file, audit, engine="csv_minute_v7",
-                    enabled=args.fix_minute_cash_order)
+                    enabled=fix_minute_cash_order)
     print(summarize_v7(state), end="")
     print(f"timing load={load_s:.2f}s simulate={sim_s:.2f}s total={load_s + sim_s:.2f}s", flush=True)
     return 0

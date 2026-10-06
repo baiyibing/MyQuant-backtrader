@@ -694,6 +694,9 @@ def simulate(
     book = get_minute_book(strategy)
     validate_hold_days(book.name, hold_days)
     native_v7 = book.name == "version7"
+    fix_minute_cash_order = bool(
+        fix_minute_cash_order or (native_v7 and profile.chronological_v7)
+    )
     if native_v7:
         context = policy_context or MinutePolicyContext()
         native_fee_schedule = resolve_account_fee_schedule(
@@ -1473,6 +1476,10 @@ def run(
     rule_profile: str | RuleProfile = "legacy",
 ) -> SimState:
     profile = resolve_rule_profile(rule_profile)
+    book = normalize_csv_strategy(strategy)
+    fix_minute_cash_order = bool(
+        fix_minute_cash_order or (book == "version7" and profile.chronological_v7)
+    )
     resolve_account_fee_schedule(
         profile.account_fee_schedule,
         explicit_rates=(buy_cost_rate, sell_cost_rate, min_cost),
@@ -1515,7 +1522,6 @@ def run(
             "--stop-fill close is daily EOD close only; "
             "minute entry refuses it (bar close is not 当日收盘)"
         )
-    book = normalize_csv_strategy(strategy)
     if fix_s12_price_domain and (
         book != "version12" or dividend_type != "none"
         or minute_source != "lake" or daily_source != "lake"
