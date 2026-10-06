@@ -48,7 +48,19 @@ def test_aliases_and_hooks(alias):
     assert hooks["limit_up_chase"] is False
     assert hooks["pool_buy_at_open"] is True
     assert callable(hooks["bind_absolute_exit"])
-    assert hooks["take_profit"](11.0, 10.0, 11.0, 1) is None
+    assert hooks["take_profit"](11.0, 10.0, 11.0, 1) == "profit_take:target"
+    assert hooks["take_profit"](10.99, 10.0, 11.0, 1) is None
+    assert hooks["take_profit"](11.0, 10.0, 11.0, 0) is None
+
+
+def test_help_lock_and_recorded_take_profit_contract():
+    assert "cost ×1.10" in rules.HELP_LOCK
+    assert "profit_take:target" in rules.HELP_LOCK
+    assert "no 10% take-profit" not in rules.HELP_LOCK
+    st = SimpleNamespace(stats={})
+    rules.record_strategy9_3_params(st)
+    assert st.stats["profit_target"] == pytest.approx(0.10)
+    assert st.stats["max_hold"] == 20
 
 
 def test_t_plus_three_daily_open_and_no_early_buy():
@@ -122,6 +134,20 @@ def test_twenty_day_exit_marks_at_close_and_fills_next_open():
     assert sells[0]["reason"] == "force_sell:max_hold"
     assert sells[0]["date"] == days[rules.DELAY_DAYS + rules.MAX_HOLD + 1].strftime("%Y%m%d")
     assert sells[0]["price"] == pytest.approx(10.0)
+
+
+def test_daily_take_profit_marks_at_close_and_fills_next_open():
+    days, frame = daily_frame(8)
+    trigger_day = days[rules.DELAY_DAYS + 1]
+    fill_day = days[rules.DELAY_DAYS + 2]
+    frame.loc[trigger_day, ["open", "high", "low", "close"]] = [10.0, 11.1, 9.5, 11.0]
+    st = run_daily(frame, days, {days[0].strftime("%Y%m%d"): [CODE]})
+    sells = [trade for trade in st.trades if trade["side"] == "SELL"]
+    assert len(sells) == 1
+    assert sells[0]["reason"] == "profit_take:target"
+    assert sells[0]["date"] == fill_day.strftime("%Y%m%d")
+    assert sells[0]["price"] == pytest.approx(10.0)
+    assert sells[0]["price_rule"] == "daily_pending_next_open"
 
 
 @pytest.mark.parametrize(
@@ -213,6 +239,41 @@ def test_minute_mode_delayed_buy_smoke():
     assert buys[0]["date"] == days[3].strftime("%Y%m%d")
     assert buys[0]["price"] == pytest.approx(10.2)
     assert not [trade for trade in st.trades if trade["side"] == "SELL"]
+
+
+def test_minute_take_profit_fills_intraday_at_target():
+    days, frame = daily_frame(8)
+    rows = []
+    for day in days:
+        for hm in (570, 895, 900):
+            rows.append(
+                {
+                    "time": day + pd.Timedelta(minutes=hm),
+                    "ymd": day.strftime("%Y%m%d"),
+                    "hm": hm,
+                    "open": 10.0,
+                    "high": 10.05,
+                    "low": 9.95,
+                    "close": 10.0,
+                }
+            )
+    minutes = pd.DataFrame(rows).set_index("time")
+    trigger_day = days[rules.DELAY_DAYS + 1]
+    trigger_time = trigger_day + pd.Timedelta(minutes=895)
+    minutes.loc[trigger_time, ["open", "high", "low", "close"]] = [10.0, 11.0, 10.0, 11.0]
+    st = minute.simulate(
+        {CODE: minutes},
+        {CODE: frame},
+        {days[0].strftime("%Y%m%d"): [CODE]},
+        days[0].strftime("%Y%m%d"),
+        days[-1].strftime("%Y%m%d"),
+        strategy="version9_3",
+    )
+    sells = [trade for trade in st.trades if trade["side"] == "SELL"]
+    assert len(sells) == 1
+    assert sells[0]["reason"] == "profit_take:target"
+    assert sells[0]["date"] == trigger_day.strftime("%Y%m%d")
+    assert sells[0]["price"] == pytest.approx(11.0)
 
 
 def test_minute_max_hold_limit_down_open_defers_once():

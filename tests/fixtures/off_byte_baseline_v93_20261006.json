@@ -1,5 +1,5 @@
 {
-  "rule_revision": "v93-delay3-fixed-stop-hold20-20261006",
+  "rule_revision": "v93-delay3-fixed-stop-tp10-hold20-20261006",
   "historical_raw_sha256": "3bfe51b6d3e20b665c3fed0449ebf8569988022719da275b7fcc9635a9988c6c",
   "historical_canonical_sha256": "34f611da359f1a1d059bc78be75b2e9e2458c533b1dc3b46cfd61130fca7a04e",
   "books": [
@@ -457,7 +457,7 @@
           "stop_frac": 0.9,
           "delay_days": 3,
           "max_hold": 20,
-          "profit_target": null,
+          "profit_target": 0.1,
           "skip_v9_3_delay_out_of_window": 0,
           "skip_v9_3_no_bar": 0,
           "sizing": "daily_quota",
@@ -902,7 +902,7 @@
           "stop_frac": 0.9,
           "delay_days": 3,
           "max_hold": 20,
-          "profit_target": null,
+          "profit_target": 0.1,
           "skip_v9_3_delay_out_of_window": 0,
           "skip_v9_3_no_bar": 0,
           "sizing": "daily_quota",
