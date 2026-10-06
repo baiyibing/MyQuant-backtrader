@@ -1,5 +1,7 @@
 """Classic ATR turtle sell book; first entry consumes strategy9 SCAN pools."""
 from __future__ import annotations
+
+from backtest.research.lot_rounding import risk_unit_board_lots
 import numpy as np
 import pandas as pd
 
@@ -42,7 +44,7 @@ def atr(frame, day):
     return value if value > 0 else None
 
 def unit_shares(value):
-    return int((NAME_BUDGET * UNIT_RISK_FRAC / value) // 100) * 100
+    return risk_unit_board_lots(NAME_BUDGET, UNIT_RISK_FRAC, value)
 
 def may_add(lots, px, value, units):
     cost = sum(p.cost*p.shares for p in lots)/sum(p.shares for p in lots)

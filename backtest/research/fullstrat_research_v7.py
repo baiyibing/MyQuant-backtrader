@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from backtest.research.lot_rounding import native_budget_board_lots
+
 from copy import deepcopy
 from functools import partial
 from collections.abc import Mapping
@@ -149,7 +151,7 @@ def simulate(
                         "buy",
                         available_at(day, hm),
                         px,
-                        int(v7.NAME_BUDGET * fraction / px / 100) * 100,
+                        native_budget_board_lots(v7.NAME_BUDGET * fraction, px),
                         commit,
                         candidates,
                         reject_buy_limit_down=True,

@@ -81,3 +81,30 @@ def test_buy_size_frozen_body():
         for per in [-1e6, 0.0, 1e6]:
             for star in [False, True]:
                 assert _buy_size(per, px, star_declare=star) == frozen_buy_size(per, px, star_declare=star)
+
+
+def test_slice2_quantity_profiles_exact_literals():
+    from decimal import Decimal
+    from backtest.research import lot_rounding as lr
+
+    values = SHARES + [299.99999999, 300.00000001, 1 / 0.1, 1e6, 10**18 + 1]
+    values += [math.nextafter(x, direction) for x in [100.0, 200.0, 300.0]
+               for direction in [-math.inf, math.inf]]
+    for x in values:
+        assert lr.floor_board_lots(x) == x // 100 * 100
+        scaled = Decimal(str(x))
+        assert lr.floordiv_board_lots(scaled) == int(scaled // 100) * 100
+        assert lr.tail_capacity_board_lots(scaled) == int(scaled) // 10 // 100 * 100
+        for count in [1, 10, 28, 100]:
+            assert lr.tail_slice_board_lots(int(x), count) == int(x) // count // 100 * 100
+        for fraction in [-1.0, 0.0, 0.05, 0.1, 0.3, 0.5, 1.0, 1 / 0.1]:
+            assert lr.scale_out_board_lots(x, fraction) == int(x * float(fraction) // 100) * 100
+            assert lr.rounded_partial_board_lots(x, fraction) == int(round(x * fraction, 8)) // 100 * 100
+            for px in [0.1, 0.3, 9.99, 33.33]:
+                assert lr.risk_unit_board_lots(x, fraction, px) == int((x * fraction / px) // 100) * 100
+    for per, px in budget_cases():
+        assert lr.native_budget_board_lots(per, px) == int(per / px / 100) * 100
+        assert lr.double_floordiv_budget_board_lots(per, px) == int(per // px // 100) * 100
+        assert lr.tail_budget_board_lots(per, px) == int(Decimal(str(per)) / Decimal(str(px)) / 100) * 100
+    for x in [299.99999999, 299.999999995, 299.999999999, 300.000000001]:
+        assert lr.rounded_partial_board_lots(x, 1.0) == int(round(x * 1.0, 8)) // 100 * 100

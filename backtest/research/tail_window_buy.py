@@ -7,6 +7,8 @@ defaults to the lake's shares unit; callers can select lots (100 shares).
 
 from __future__ import annotations
 
+from backtest.research.lot_rounding import tail_capacity_board_lots, tail_slice_board_lots, tail_budget_board_lots
+
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from math import isfinite
@@ -55,7 +57,7 @@ def tail_quote(row, hm: int, volume_unit: str | None = None) -> TailQuote | None
         shares = volume * (100 if volume_unit == "lots" else 1)
         if shares != shares.to_integral_value():
             return None
-        capacity = int(shares) // 10 // 100 * 100
+        capacity = tail_capacity_board_lots(shares)
         if hm != 900 and "amount" in row:
             amount = float(row["amount"])
             if not isfinite(amount) or amount <= 0:
@@ -98,8 +100,8 @@ class TailParent:
             raise ValueError("tail parent requires a finite budget and positive 14:30 open")
         # Decimal prevents a mathematically exact hand from losing one share
         # due to binary division. Every child has exactly the same planned size.
-        target = int(Decimal(str(budget)) / Decimal(str(price)) / 100) * 100
-        return cls(target, target // len(TAIL_MINUTES) // 100 * 100, float(budget))
+        target = tail_budget_board_lots(budget, price)
+        return cls(target, tail_slice_board_lots(target, len(TAIL_MINUTES)), float(budget))
 
     def requested_shares(self, quote: TailQuote) -> int:
         """Apply slice, market capacity and nominal budget limits, never cash."""
