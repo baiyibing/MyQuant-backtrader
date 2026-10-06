@@ -9,6 +9,7 @@ baselines、HELP_LOCK、书顺序、注册逻辑或 capabilities，不实施 RB-
 
 ## 当前引擎与合同
 
+- [回测交易规则站位原则 SSOT](ssot/backtest-rule-principles-ssot.md)。
 - 当前研究成交引擎为向量化 CSV 日线 / 分钟书，见
   [成交引擎定位 SSOT](engine-positioning-ssot.md)。Cerebro / Rolling
   已于 2026-09-16 退场，禁止复活或为新策略开启。
