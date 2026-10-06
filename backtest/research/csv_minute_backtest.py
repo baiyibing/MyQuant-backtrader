@@ -843,6 +843,8 @@ def simulate(
             daily_quota=daily_quota,
             **({"context": policy_context} if policy.initialize is not None else {}),
         )
+        if profile.supplementary_min_lot:
+            st.rule_profile = profile
         if delayed_pool_stats is not None:
             st.stats.update(delayed_pool_stats)
         defaults = book_fill_defaults(hooks, minute_stop_trigger)

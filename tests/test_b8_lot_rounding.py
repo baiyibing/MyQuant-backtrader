@@ -2,11 +2,17 @@
 import math
 import struct
 
-from backtest.research.csv_ledger import _buy_size
+import pandas as pd
+from backtest.research.csv_ledger import SimState, _buy_size, execute_buy
 from backtest.research.lot_rounding import (
-    BOARD_LOT, STAR_MIN_DECLARE, budget_board_lots, budget_integer_shares,
-    nonnegative_override_board_lots, supplementary_notional,
+    BOARD_LOT,
+    STAR_MIN_DECLARE,
+    budget_board_lots,
+    budget_integer_shares,
+    nonnegative_override_board_lots,
+    supplementary_notional,
 )
+
 
 def frozen_buy_size(per_quota: float, price: float, *, star_declare: bool = False) -> tuple[int, float]:
     """默认整百且可补足 100 股；STAR opt-in 按整数股、不补足，由入口校验。"""
@@ -83,8 +89,26 @@ def test_buy_size_frozen_body():
                 assert _buy_size(per, px, star_declare=star) == frozen_buy_size(per, px, star_declare=star)
 
 
+def test_industry_b8_03_skips_budget_below_one_lot_without_touching_legacy():
+    from backtest.research.rule_profile import INDUSTRY
+
+    assert _buy_size(999.0, 10.0) == (100, 1.0)
+    assert _buy_size(999.0, 10.0, top_up_min_lot=False) == (0, 0.0)
+
+    state = SimState(cash=10_000.0)
+    state.rule_profile = INDUSTRY
+    assert not execute_buy(
+        state, "600000.SH", 10.0, 999.0, 0, pd.Timestamp("2026-10-06")
+    )
+    assert state.positions == {}
+    assert state.trades == []
+    assert state.stats["skip_min_lot_budget"] == 1
+    assert state.stats["supplementary_used"] == 0.0
+
+
 def test_slice2_quantity_profiles_exact_literals():
     from decimal import Decimal
+
     from backtest.research import lot_rounding as lr
 
     values = SHARES + [299.99999999, 300.00000001, 1 / 0.1, 1e6, 10**18 + 1]

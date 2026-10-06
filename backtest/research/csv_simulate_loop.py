@@ -23,6 +23,7 @@ from backtest.research.csv_common import (
     day_bar_and_prev_closes,
 )
 from backtest.research.csv_ledger import (
+    allows_min_lot_top_up,
     check_buy_cash,
     SimState,
     _buy_size,
@@ -234,7 +235,9 @@ def run_chase_due_day(
             st, code, buy_px, per_ch, day_i, day, reason="chase:T+1", **volume_kwargs
         ):
             st.stats["chase_buy_fail"] += 1
-            shares, _ = _buy_size(per_ch, buy_px)
+            shares, _ = _buy_size(
+                per_ch, buy_px, top_up_min_lot=allows_min_lot_top_up(st)
+            )
             if (
                 sum(
                     int(st.stats.get(k, 0))
@@ -420,7 +423,9 @@ def run_pool_buys_day(
         if sizing == "per_name":
             if unit_shares is not None:
                 per = unit_shares * px
-            shares, _ = _buy_size(per, px)
+            shares, _ = _buy_size(
+                per, px, top_up_min_lot=allows_min_lot_top_up(st)
+            )
             notional = shares * px
             if not check_buy_cash(
                 st, needed=notional + trade_commission(notional, st.buy_cost_rate, st.min_cost),
@@ -522,7 +527,9 @@ def run_step_adds_day(
             per = float(name_lot_budget(name_budget, lots))
         if unit_shares is not None:
             per = unit_shares * px
-        shares, _ = _buy_size(per, px)
+        shares, _ = _buy_size(
+            per, px, top_up_min_lot=allows_min_lot_top_up(st)
+        )
         notional = shares * px
         if not check_buy_cash(
             st, needed=notional + trade_commission(notional, st.buy_cost_rate, st.min_cost),

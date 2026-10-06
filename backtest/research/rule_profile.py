@@ -28,7 +28,8 @@ class RuleProfile:
 LEGACY = RuleProfile(name="legacy", revision="legacy")
 INDUSTRY = RuleProfile(
     name="industry",
-    revision="industry-p05-20261006",
+    revision="industry-p06-20261006",
+    supplementary_min_lot=True,
     account_fee_schedule=True,
     s12_domain_stamp=True,
 )

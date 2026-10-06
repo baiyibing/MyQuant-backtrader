@@ -344,6 +344,8 @@ def simulate(
         pool_names_by_day=pool_names_by_day,
         daily_quota=daily_quota,
     )
+    if profile.supplementary_min_lot:
+        st.rule_profile = profile
     if delayed_pool_stats is not None:
         st.stats.update(delayed_pool_stats)
     absolute_exit = hooks["bind_absolute_exit"](st, bars) if "bind_absolute_exit" in hooks else None
