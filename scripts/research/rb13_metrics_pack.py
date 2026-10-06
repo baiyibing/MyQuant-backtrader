@@ -24,7 +24,7 @@ def main(argv=None):
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--benchmark", type=Path)
     parser.add_argument("--risk-free", type=float, default=0.0)
-    parser.add_argument("--periods-per-year", type=float, default=PERIODS_PER_YEAR)
+    parser.add_argument("--periods-per-year", type=int, default=PERIODS_PER_YEAR)
     args = parser.parse_args(argv)
     benchmark = None
     if args.benchmark is not None:
@@ -42,11 +42,13 @@ def main(argv=None):
         periods_per_year=args.periods_per_year,
     )
     # The legacy loader supplies zero commissions when absent; preserve missingness.
-    if (
-        trades is not None
-        and "commission" not in pd.read_csv(args.run_dir / "trades.csv", nrows=0).columns
-    ):
-        pack["fee_drag"] = {"status": "unavailable", "reason": "commission column not supplied"}
+    if trades is not None:
+        raw = pd.read_csv(args.run_dir / "trades.csv")
+        columns = {str(c).strip().lower(): c for c in raw.columns}
+        if "commission" not in columns:
+            pack["fee_drag"] = {"status": "unavailable", "reason": "commission column not supplied"}
+        elif pd.to_numeric(raw[columns["commission"]], errors="coerce").isna().any():
+            pack["fee_drag"] = {"status": "unavailable", "reason": "commission values partially missing or invalid"}
     if args.benchmark is not None and benchmark is None:
         for key in ("benchmark_excess", "beta", "tracking_error"):
             pack[key] = {"status": "unavailable", "reason": benchmark_reason}

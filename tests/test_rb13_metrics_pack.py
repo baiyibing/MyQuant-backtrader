@@ -97,7 +97,7 @@ def test_opt_in_and_network_fences():
             continue
         assert "metrics_pack" not in path.read_text(encoding="utf-8"), path
     for relative in ("backtest/research/metrics_pack.py", "scripts/research/rb13_metrics_pack.py"):
-        tree = ast.parse((root / relative).read_text())
+        tree = ast.parse((root / relative).read_text(encoding="utf-8"))
         imports = []
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
@@ -127,6 +127,36 @@ def test_standalone_only_writes_explicit_output(tmp_path):
     )
     import json
 
-    pack = json.loads(out.read_text())
+    pack = json.loads(out.read_text(encoding="utf-8"))
     assert pack["beta"]["status"] == "unavailable"
     assert {p.name for p in tmp_path.iterdir()} == {"daily_equity.csv", "explicit.json"}
+
+
+def test_overflow_is_unavailable_and_pack_still_writable(tmp_path):
+    pack = compute_metrics_pack(nav().iloc[:2].assign(equity=[1.0, 1e100]))
+    assert pack["annualised_return"]["status"] == "unavailable"
+    assert pack["annualised_return"]["reason"]
+    assert pack["annualised_volatility"] is not pack["sharpe"]
+    write_metrics_pack(tmp_path / "overflow.json", pack)
+    from backtest.research.metrics_pack import _metric
+    assert _metric(float("inf"))["status"] == "unavailable"
+
+
+@pytest.mark.parametrize("commissions,available", [([1.0, None], False), ([1.0, 2.0], True)])
+def test_script_preserves_commission_missingness_and_case(tmp_path, commissions, available):
+    import json
+    from scripts.research.rb13_metrics_pack import main
+
+    nav().to_csv(tmp_path / "daily_equity.csv", index=False)
+    pd.DataFrame({"date": ["2026-01-01", "2026-01-02"], "code": ["000001.SZ"] * 2,
+                  "side": ["BUY", "SELL"], "price": [10, 11], "shares": [10, 10],
+                  " Commission ": commissions}).to_csv(tmp_path / "trades.csv", index=False)
+    out = tmp_path / "pack.json"
+    assert main(["--run-dir", str(tmp_path), "--out", str(out), "--periods-per-year", "252"]) == 0
+    pack = json.loads(out.read_text(encoding="utf-8"))
+    assert type(pack["periods_per_year"]) is int
+    assert pack["fee_drag"]["status"] == ("available" if available else "unavailable")
+    if available:
+        assert pack["fee_drag"]["value"] == pytest.approx(9 / 309)
+    else:
+        assert pack["fee_drag"]["reason"]
