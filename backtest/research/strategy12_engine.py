@@ -11,10 +11,12 @@ from backtest.research.csv_common import book_limit_prices, day_bar_and_prev_clo
 from backtest.research.csv_ledger import (
     _locked_bonus,
     _sell,
+    account_sell_quantity,
     apply_exdiv_economics,
     fee_order_id,
     release_fee_order,
     rescale_position,
+    uses_account_odd_lot_exit,
 )
 from backtest.research.csv_simulate_loop import (
     apply_capital_ration,
@@ -97,10 +99,14 @@ def queue_exit(st, code, plan, *, day_i, ds, px=None):
     """
     reason, wanted = plan[0], plan[1]
     lots = sell_lots(st, code, day_i, ds)
+    held = sum(pos.shares for pos in st.positions.get(code, []))
+    declared_wanted = wanted
+    wanted = account_sell_quantity(st, code, held, wanted)
+    keep_anchor = reason == rules.REDUCE and wanted <= declared_wanted
     if reason == rules.HOLD20:
         pinned = rules.hold20_orders(lots, 0.0 if px is None else px)
     else:
-        pinned = rules.allocate_exit(lots, wanted, keep_anchor=reason == rules.REDUCE)
+        pinned = rules.allocate_exit(lots, wanted, keep_anchor=keep_anchor)
     return reason, wanted, pinned
 
 
@@ -110,11 +116,27 @@ def fill_exit(st, code, px, day, *, day_i, ds, plan, limits, open_px,
         st.stats["defer_sell_limit_down"] += 1
         return 0
     reason, wanted, planned = plan[0], plan[1], plan[2] if len(plan) > 2 else None
+    declared_wanted = wanted
     lots = sell_lots(st, code, day_i, ds)
+    held = sum(pos.shares for pos in st.positions.get(code, []))
+    wanted = account_sell_quantity(st, code, held, wanted)
+    if planned is not None and wanted > declared_wanted:
+        planned = None
+    full_planned_exit = (
+        uses_account_odd_lot_exit(st)
+        and planned is not None
+        and wanted == held
+        and sum(shares for _, shares in planned) >= held
+    )
+    keep_anchor = (
+        reason == rules.REDUCE
+        and wanted <= declared_wanted
+        and not full_planned_exit
+    )
     if reason == rules.HOLD20 and planned is None:
         planned = rules.hold20_orders(lots, px)
-    orders = (rules.clamp_exit(lots, planned, keep_anchor=reason == rules.REDUCE) if planned is not None
-              else rules.allocate_exit(lots, wanted, keep_anchor=reason == rules.REDUCE))
+    orders = (rules.clamp_exit(lots, planned, keep_anchor=keep_anchor) if planned is not None
+              else rules.allocate_exit(lots, wanted, keep_anchor=keep_anchor))
     order_key = ("strategy12-exit", code, reason)
     order_id = fee_order_id(st, order_key)
     filled = 0

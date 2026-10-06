@@ -23,6 +23,7 @@ from typing import Any, Iterable, Mapping, Sequence
 from backtest.research.ashare_fees import DEFAULT_SCHEDULE, FeeSchedule
 from backtest.research.csv_ledger import (
     _accrue_order_fee,
+    account_sell_quantity,
     fee_order_id,
     preview_order_fees,
     release_fee_order,
@@ -333,6 +334,12 @@ def _sell_lots(state: SimResult, position: Position, day: date, hm: int, price: 
     )
     if wanted <= 0:
         return 0
+    adjusted = account_sell_quantity(state, position.symbol, position.shares, wanted)
+    include_other_kinds = adjusted > wanted and sum(
+        lot.shares for lot in position.lots if t1_sellable(lot.buy_date, day)
+    ) >= adjusted
+    if include_other_kinds:
+        wanted = adjusted
     order_key = ("v7-sell", id(position), reason, kind)
     order_id = fee_order_id(state, order_key)
     requested = wanted
@@ -345,7 +352,9 @@ def _sell_lots(state: SimResult, position: Position, day: date, hm: int, price: 
     remaining = wanted
     kept: list[Lot] = []
     for lot in position.lots:
-        eligible = t1_sellable(lot.buy_date, day) and (kind is None or lot.kind == kind)
+        eligible = t1_sellable(lot.buy_date, day) and (
+            include_other_kinds or kind is None or lot.kind == kind
+        )
         take = min(lot.shares, remaining) if eligible else 0
         if lot.shares > take:
             kept.append(Lot(lot.shares - take, lot.buy_date, lot.price, lot.kind))

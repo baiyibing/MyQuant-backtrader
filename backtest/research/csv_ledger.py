@@ -716,6 +716,38 @@ def uses_exchange_quantity_rules(st) -> bool:
     )
 
 
+def uses_account_odd_lot_exit(st) -> bool:
+    """Return whether partial sells must absorb an account-level odd remainder."""
+    return bool(
+        getattr(getattr(st, "rule_profile", None), "account_odd_lot_exit", False)
+    )
+
+
+def sell_board_lot(code: str) -> int:
+    """Return the remainder threshold used by an account-level sell order."""
+    return STAR_MIN_DECLARE if buy_quantity_market(code) == "STAR" else BOARD_LOT
+
+
+def account_sell_quantity(
+    st: SimState, code: str, held_shares: int, wanted_shares: int
+) -> int:
+    """Expand a partial order to include the whole sub-lot account remainder.
+
+    Lot-row allocation happens after this calculation.  This deliberately
+    avoids applying the rule independently to each source lot.
+    """
+    held = max(0, int(held_shares))
+    wanted = max(0, int(wanted_shares))
+    if not uses_account_odd_lot_exit(st):
+        return wanted
+    if wanted == 0 or wanted >= held:
+        return wanted
+    remainder = held - wanted
+    if 0 < remainder < sell_board_lot(code):
+        return held
+    return wanted
+
+
 def active_buy_quantity_rule(st, code: str) -> str:
     """Resolve the exact declaration rule used by preview and execution."""
     return buy_quantity_rule(

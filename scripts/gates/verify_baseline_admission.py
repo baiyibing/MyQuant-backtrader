@@ -17,7 +17,7 @@ from scripts.research import generate_off_byte_baseline as baseline
 AUTHORIZED_PANDAS = "3.0.6"
 SCOPED_OVERLAYS = (
     "S8", "V61", "V91", "V92", "V6F", "S12", "S9", "P03", "P04", "P05",
-    "P06", "P07", "P08", "P09",
+    "P06", "P07", "P08", "P09", "P10",
 )
 REQUIRED_KEYS = (
     "rule_revision", "books", "cases", "captured_environment", "contract",

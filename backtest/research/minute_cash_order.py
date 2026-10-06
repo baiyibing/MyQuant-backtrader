@@ -49,6 +49,7 @@ from backtest.research.csv_common import book_limit_prices
 from backtest.research.csv_ledger import (
     CHASE_HM,
     IndependentExitPosition,
+    account_sell_quantity,
     active_buy_quantity_rule,
     check_buy_cash,
     _sell,
@@ -274,7 +275,9 @@ def peak_dd_clear_exits(st, code, pos, px, day, day_i, limits, *,
 def scale_out_exits(st, code, pos, px, day, day_i, limits, *, scale_step, scale_frac, hm=None, fill_config=None, open_px=None):
     """6.13：相对首仓锚价每满 scale_step 涨幅，卖出当时剩余持仓的 scale_frac。
 
-    逐分钟 close 相位调用；每档一次（组计数器）；整百股向下、FIFO 切 lot；
+    逐分钟 close 相位调用；每档一次（组计数器）；legacy 整百股向下、
+    FIFO 切 lot。industry 若该档会留下不足一手的组级余额，则同一订单卖完
+    该余额；规则只在组总量上应用，不能逐 lot 制造或保留零股。
     lot 级 T+1 由 _sell(wanted_shares) 保证；跌停顺延；组已同分钟离场则不触发。
     """
     if _side_pending(st, pos) or not scale_step or px <= 0 or not position_is_open(st, pos):
@@ -291,7 +294,9 @@ def scale_out_exits(st, code, pos, px, day, day_i, limits, *, scale_step, scale_
     if shares_now <= 0:
         pos.group.scale_steps = allowed
         return 0
-    target = scale_out_board_lots(shares_now, scale_frac)
+    rounded_target = scale_out_board_lots(shares_now, scale_frac)
+    target = account_sell_quantity(st, code, shares_now, rounded_target)
+    absorbs_odd_remainder = target > rounded_target
     px = _side_price(fill_config, px)
     sold = 0
     queued = 0
@@ -301,7 +306,8 @@ def scale_out_exits(st, code, pos, px, day, day_i, limits, *, scale_step, scale_
             if sold + queued >= target:
                 break
             chunk = min(lot.shares, target - sold - queued)
-            chunk = floor_board_lots(chunk)
+            if not absorbs_odd_remainder:
+                chunk = floor_board_lots(chunk)
             if chunk <= 0 or lot.entry_idx >= day_i:
                 continue
             if (fill_config is None or fill_config.fill_timing != "next_bar_open") and (defer_sell_open_or_fill(px if open_px is None else open_px, px, limits) or _hit_limit_up_safe(px, limits)):

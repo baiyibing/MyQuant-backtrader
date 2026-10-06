@@ -9,6 +9,7 @@ from backtest.research import strategy12_engine as shared
 from backtest.research.csv_common import day_bar_and_prev_closes
 from backtest.research.exdiv_map import k_for
 from backtest.research.csv_ledger import (
+    account_sell_quantity,
     execute_buy,
     fee_order_id,
     release_fee_order,
@@ -60,6 +61,7 @@ def plan_exit(st, code, px, day, closes, *, day_i, ds):
     if fraction:
         mem.sell_band_seq = seq
         wanted = rounded_partial_board_lots(shares, fraction)
+        wanted = account_sell_quantity(st, code, shares, wanted)
         if wanted:
             return f"profit_take:band:{seq}", wanted
     return None
