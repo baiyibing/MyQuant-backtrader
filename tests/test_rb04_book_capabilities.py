@@ -100,5 +100,39 @@ def test_new_books_require_explicit_admission(name):
 
 
 def test_no_prefix_inheritance_in_production_helpers():
-    assert "startswith" not in inspect.getsource(caps)
+    assert "startswith" not in inspect.getsource(caps.allows_price_add)
+    assert "startswith" not in inspect.getsource(caps.uses_s8_independent)
     assert "startswith" not in inspect.getsource(csv_ledger.uses_s8_independent)
+
+
+def test_current_prefix_family_classified():
+    registered = BOOKS.keys() | MINUTE_ONLY_BOOKS.keys()
+    assert sum(caps.in_prefix_family(name) for name in registered) == 54
+    assert caps.PREFIX_FAMILY_OPT_OUT["version8_1"]
+    assert caps.unclassified_prefix_family_books(registered) == []
+    caps.assert_prefix_family_classified(registered)
+
+
+@pytest.mark.parametrize("name, expected", [
+    ("version6", False), ("version6_48", True), ("version8", True),
+    ("version8_1", True), ("version8_7", True), ("version80", False),
+    ("version7", False),
+])
+def test_frozen_admission_family(name, expected):
+    assert caps.in_prefix_family(name) is expected
+
+
+@pytest.mark.parametrize("name", ["version6_48", "version8_7"])
+def test_unclassified_registered_book_fails_then_explicit_opt_out_passes(monkeypatch, name):
+    monkeypatch.setitem(BOOKS, name, object())
+    registered = BOOKS.keys() | MINUTE_ONLY_BOOKS.keys()
+    assert caps.unclassified_prefix_family_books(registered) == [name]
+    with pytest.raises(AssertionError) as error:
+        caps.assert_prefix_family_classified(registered)
+    for text in (name, "book_capabilities.py", "PRICE_ADD_ELIGIBLE_BOOKS",
+                 "S8_INDEPENDENT_BOOKS", "MC-5", "PREFIX_FAMILY_OPT_OUT"):
+        assert text in str(error.value)
+    monkeypatch.setitem(caps.PREFIX_FAMILY_OPT_OUT, name, "Synthetic book: no capabilities.")
+    caps.assert_prefix_family_classified(registered)
+    assert not caps.allows_price_add(name, "per_name")
+    assert not caps.uses_s8_independent(name, "per_name")
