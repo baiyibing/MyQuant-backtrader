@@ -126,4 +126,6 @@ Golden ownership 以 `scripts/research/generate_off_byte_baseline.py` 为准：�
 
 [分钟扫描现状](note-minute-scan-status-2026-10-05.md) 的 11:05 人裁与 step 3 测试迁移顺序继续有效；本票补齐 14:13 的逐项裁定。[Step 2a](minute-fill-config-step2a.md) 是已交付范围锁，不能把 A1 / A2 的后续 GO 写成 2a 已支持；A3 / B9 排除保持。
 
+> **历史记录 / superseded（2026-10-06）：** 下段“B7 / B8 deferred”仅记录 16:08 时点，已由本页 §B7 / §B8 的“已实施”状态及 [B7 实施说明](note-b7-on-short-cash-2026-10-05.md)、[B8 实施说明](note-b8-lot-rounding-2026-10-06.md) 覆盖；当前导航见 [RB-06 as-built 索引](rb06-as-built-ssot-index-2026-10-06.md)。
+
 原决策 PR 仅文档；A1 pipe / A2 已由后续独立 PR 交付。16:08 CST 人裁授权本次 A1 limit pair / B5 实施；B7 / B8 deferred。本次执行 frozen off-byte 与合成测试，无湖访问；逐书差异见 worktree 未提交的 `LIMIT_PAIR_DELTA.md`。
