@@ -40,7 +40,8 @@ def simulate(rows, *, pool=None, start=D1, end=D1, **kwargs):
     options = {"strategy": "version8", "total_cash": 1_000_000,
                "name_budget": 28_000, "fix_minute_cash_order": True,
                "tail_window_buy": True,
-               "buy_cost_rate": 0, "sell_cost_rate": 0, "min_cost": 0}
+               "buy_cost_rate": 0, "sell_cost_rate": 0, "min_cost": 0,
+               "rule_profile": "legacy"}
     options.update(kwargs)
     return minute.simulate(minutes, daily, pool or {D1: [A]}, start, end, **options)
 
@@ -262,7 +263,7 @@ def test_minimum_commission_applies_per_child_and_cash_is_never_negative():
 def test_tail_option_dependency_errors_precede_data_loading():
     with pytest.raises(ValueError, match="requires --fix-minute-cash-order"):
         minute.run(D1, D1, strategy="version8", tail_window_buy=True,
-                   fix_minute_cash_order=False)
+                   fix_minute_cash_order=False, rule_profile="legacy")
 
 
 @pytest.mark.parametrize("unit", ["foo", "", "Shares"])
@@ -271,7 +272,8 @@ def test_invalid_volume_units_raise_value_error_before_data_loading(unit, entry)
     with pytest.raises(ValueError, match="tail-volume-unit"):
         if entry == "run":
             minute.run(D1, D1, strategy="version8", tail_window_buy=True,
-                       fix_minute_cash_order=True, tail_volume_unit=unit)
+                       fix_minute_cash_order=True, tail_volume_unit=unit,
+                       rule_profile="legacy")
         else:
             simulate({A: [bar(hm) for hm in TAIL_MINUTES]}, tail_volume_unit=unit)
 
@@ -280,7 +282,8 @@ def test_invalid_volume_units_raise_value_error_before_data_loading(unit, entry)
 def test_cli_invalid_volume_unit_is_argparse_error(unit, capsys):
     with pytest.raises(SystemExit) as exc:
         minute.main(["--strategy", "version8", "--start", D1, "--end", D1,
-                     "--tail-window-buy", "--fix-minute-cash-order", "--tail-volume-unit", unit])
+                     "--tail-window-buy", "--fix-minute-cash-order", "--tail-volume-unit", unit,
+                     "--rule-profile", "legacy"])
     assert exc.value.code == 2
     assert "invalid choice" in capsys.readouterr().err
 
@@ -289,13 +292,15 @@ def test_cli_invalid_volume_unit_is_argparse_error(unit, capsys):
 def test_unsupported_books_reject_on_before_data_loading(strategy):
     with pytest.raises(ValueError, match="applies only to version8"):
         minute.run(D1, D1, strategy=strategy, tail_window_buy=True,
-                   fix_minute_cash_order=True, tail_volume_unit="shares")
+                   fix_minute_cash_order=True, tail_volume_unit="shares",
+                   rule_profile="legacy")
 
 
 @pytest.mark.parametrize("unit_options", [{}, {"tail_volume_unit": None}], ids=["omitted", "none"])
 def test_run_default_volume_unit_equals_explicit_shares_with_metadata(synthetic_run, unit_options):
     options = {"strategy": "version8_2", "name_budget": 28_000,
-               "tail_window_buy": True, "fix_minute_cash_order": True}
+               "tail_window_buy": True, "fix_minute_cash_order": True,
+               "rule_profile": "legacy"}
     actual = minute.run(D1, D1, **options, **unit_options)
     explicit = minute.run(D1, D1, **options, tail_volume_unit="shares")
     assert asdict(actual) == asdict(explicit)
@@ -306,7 +311,8 @@ def test_run_default_volume_unit_equals_explicit_shares_with_metadata(synthetic_
 
 def test_run_tail_loader_requests_volume_amount_and_outer_only_metadata(synthetic_run):
     state = minute.run(D1, D1, strategy="version8_2", name_budget=28_000,
-                       tail_window_buy=True, tail_volume_unit="shares", fix_minute_cash_order=True)
+                       tail_window_buy=True, tail_volume_unit="shares", fix_minute_cash_order=True,
+                       rule_profile="legacy")
     assert synthetic_run[0]["include_volume"] and synthetic_run[0]["include_amount"]
     assert state.run_metadata["tail_window_buy"]["tail_slice_count"] == 28
     assert not any(key.startswith("tail_") for key in state.stats)
@@ -324,7 +330,8 @@ def test_cli_default_volume_unit_matches_shares_results_and_manifest(
     monkeypatch.setattr(minute, "write_run_artifacts", capture)
     argv = ["--strategy", "version8_2", "--start", D1, "--end", D1,
             "--name-budget", "28000", "--out-dir", str(tmp_path / "run"),
-            "--tail-window-buy", "--fix-minute-cash-order"]
+            "--tail-window-buy", "--fix-minute-cash-order",
+            "--rule-profile", "legacy"]
     assert minute.main(argv) == 0
     default_output = capsys.readouterr().out
     assert minute.main([*argv, "--tail-volume-unit", "shares"]) == 0
@@ -342,7 +349,7 @@ def test_cli_default_volume_unit_matches_shares_results_and_manifest(
 def test_explicit_off_equals_omitted_for_both_cash_modes(fix_cash):
     minutes, daily = inputs({A: [bar(hm) for hm in TAIL_MINUTES]})
     kwargs = {"strategy": "version8", "total_cash": 1_000_000, "name_budget": 28_000,
-              "fix_minute_cash_order": fix_cash}
+              "fix_minute_cash_order": fix_cash, "rule_profile": "legacy"}
     omitted = minute.simulate(minutes, daily, {D1: [A]}, D1, D1, **kwargs)
     off = minute.simulate(minutes, daily, {D1: [A]}, D1, D1, tail_window_buy=False, **kwargs)
     assert asdict(omitted) == asdict(off)
@@ -403,7 +410,7 @@ def test_main_tail_automatically_emits_existing_manifest_and_off_keeps_old_confi
     monkeypatch.setattr(minute, "maybe_compare_daily", lambda *args, **kwargs: None)
     monkeypatch.setattr(minute, "write_run_artifacts", lambda *args, **kwargs: captured.append(kwargs))
     argv = ["--strategy", "version8_2", "--start", D1, "--end", D1,
-            "--out-dir", str(tmp_path / "run")]
+            "--out-dir", str(tmp_path / "run"), "--rule-profile", "legacy"]
     if tail_enabled:
         argv.extend(["--tail-window-buy", "--fix-minute-cash-order", "--tail-volume-unit", "shares"])
     if explicit_manifest:

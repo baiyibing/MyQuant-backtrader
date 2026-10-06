@@ -181,6 +181,7 @@ def test_s8_bonus_engine_writer_analysis_conserves_nav(tmp_path: Path, mode: str
         exdiv_economics={
             (CODE, _ds(1)): ExDivEvent("bonus", 1, 0, _ds(1), _ds(1), _ds(2 if deferred else 1)),
         },
+        rule_profile="legacy",
     )
     buys = [trade for trade in st.trades if trade["side"] == "BUY"]
     sells = [trade for trade in st.trades if trade["side"] == "SELL"]

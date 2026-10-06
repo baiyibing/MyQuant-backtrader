@@ -77,11 +77,17 @@ def test_main_rejects_held_seed(monkeypatch, capsys, book):
 def test_real_simulate_summary_matches_engine_trades(monkeypatch, inputs, capsys):
     minute, daily = inputs
     real = host.csv_minute_backtest.simulate
+
+    def legacy_simulate(*args, **kwargs):
+        kwargs.setdefault("rule_profile", "legacy")
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(host.csv_minute_backtest, "simulate", legacy_simulate)
     # Real loop baseline, followed by real loop through the host CLI.
     frame = minute.assign(ymd=["20260105", "20260106"])
     st = real({CODE: frame}, {CODE: daily}, {"20260105": [CODE]},
               "20260105", "20260106", strategy="version5", total_cash=2000,
-              daily_quota=1001)
+              daily_quota=1001, rule_profile="legacy")
     buys = sum(t["side"] == "BUY" for t in st.trades)
     sells = sum(t["side"] == "SELL" for t in st.trades)
     assert (buys, sells) == (1, 1)

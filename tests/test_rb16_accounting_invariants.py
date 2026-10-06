@@ -105,6 +105,7 @@ def test_real_daily_s8_independent_positions_have_no_violations():
         days[-1].strftime("%Y%m%d"),
         strategy="version8",
         take_profit=lambda *_args: None,
+        rule_profile="legacy",
     )
     buys = [row for row in state.trades if row["side"] == "BUY"]
     assert len(buys) == 2
@@ -143,7 +144,9 @@ def test_real_v7_t1_output_has_no_violations():
         ]
     }
     daily = {CODE: {date(2026, 8, 31): 100.0, d1: 98.0}}
-    state = simulate_v7(minute, daily, {d1: [CODE]}, [d1, d2])
+    state = simulate_v7(
+        minute, daily, {d1: [CODE]}, [d1, d2], rule_profile="legacy"
+    )
     fills = [row for row in state.trades if row["side"] in {"buy", "sell"}]
     assert [row["date"] for row in fills] == [d1.isoformat(), d2.isoformat()]
     assert (

@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable, Literal, Mapping, Protocol
 
-from backtest.research.rule_profile import LEGACY, RuleProfile
+from backtest.research.rule_profile import INDUSTRY, RuleProfile
 
 
 @dataclass(frozen=True)
@@ -19,7 +19,7 @@ class MinutePolicyContext:
     index_days: Any = None
     fee_schedule: Any = None
     native_inputs: Any = None
-    rule_profile: RuleProfile = LEGACY
+    rule_profile: RuleProfile = INDUSTRY
 
 
 @dataclass(frozen=True)

@@ -34,7 +34,8 @@ def frames(rows):
 def run_case(rows, *, scores=None, end=D1, **kwargs):
     ms, ds = frames(rows)
     options = dict(strategy="topk_dropout", total_cash=100_000.,
-                   daily_quota=100_000., stop_pct=0, topk=1, n_drop=1)
+                   daily_quota=100_000., stop_pct=0, topk=1, n_drop=1,
+                   rule_profile="legacy")
     options.update(kwargs)
     scores = scores or {D1: {code: float(len(rows) - i) for i, code in enumerate(rows)}}
     return minute.simulate(ms, ds, {day: list(rank) for day, rank in scores.items()},
@@ -244,14 +245,16 @@ def test_no_future_or_same_close_sale_credit_and_cash_failure_not_retry(sell_hm,
 @pytest.mark.parametrize("mode,message", [("bad", "unknown --topk-exec")])
 def test_api_rejects_unshipped_modes_before_data_loading(mode, message):
     with pytest.raises(ValueError, match=message):
-        minute.run(D1, D1, strategy="topk_dropout", topk_exec=mode)
+        minute.run(D1, D1, strategy="topk_dropout", topk_exec=mode,
+                   rule_profile="legacy")
 
 
 @pytest.mark.parametrize("strategy", ["version6", "topk_score_exit"])
 @pytest.mark.parametrize("mode", ["open", "intraday", "vwap"])
 def test_api_scope_is_topk_dropout_only(strategy, mode):
     with pytest.raises(ValueError, match="only to topk_dropout"):
-        minute.simulate({}, {}, {}, D1, D1, strategy=strategy, topk_exec=mode)
+        minute.simulate({}, {}, {}, D1, D1, strategy=strategy, topk_exec=mode,
+                        rule_profile="legacy")
 
 
 def test_cli_help_and_rejections(capsys):
@@ -268,7 +271,7 @@ def test_cli_help_and_rejections(capsys):
     for args, message in [(["--topk-exec", "bad"], "unknown --topk-exec"),
                           (["--topk-exec", "vwap", "--limit-walkdown"], "is refused")]:
         with pytest.raises(SystemExit) as exit:
-            minute.main(["--strategy", "topk_dropout", *args])
+            minute.main(["--strategy", "topk_dropout", "--rule-profile", "legacy", *args])
         assert exit.value.code == 2
         assert message in capsys.readouterr().err
 
@@ -314,6 +317,7 @@ def synthetic_loaders(monkeypatch):
     monkeypatch.setattr(minute, "maybe_compare_daily", lambda *args, **kwargs: None)
     monkeypatch.setattr(minute, "csv_run_kwargs_from_args", lambda args: dict(
         strategy=args.strategy, scores_by_day={D1: {A: 1.}}, topk=1, n_drop=1, stop_pct=0,
+        rule_profile=args.rule_profile,
     ))
 
 
@@ -322,7 +326,7 @@ def test_cli_run_simulate_and_artifact_contract(tmp_path, synthetic_loaders, mod
     out = tmp_path / "out"
     args = ["--strategy", "topk_dropout", "--start", D1, "--end", D1,
             "--pool-dir", str(tmp_path), "--out-dir", str(out), "--cash-total", "100000",
-            "--emit-run-manifest"]
+            "--emit-run-manifest", "--rule-profile", "legacy"]
     assert minute.main(args + ([] if mode is None else ["--topk-exec", mode])) == 0
     manifest = json.loads((out / "run-manifest.json").read_text())
     if mode in (None, "close"):
@@ -346,7 +350,8 @@ def test_cli_run_simulate_and_artifact_contract(tmp_path, synthetic_loaders, mod
 
 def test_run_close_default_and_explicit_products_match(tmp_path, synthetic_loaders):
     options = dict(strategy="topk_dropout", scores_by_day={D1: {A: 1.}}, topk=1,
-                   n_drop=1, stop_pct=0, total_cash=100_000., daily_quota=100_000., pool_dir=tmp_path)
+                   n_drop=1, stop_pct=0, total_cash=100_000., daily_quota=100_000.,
+                   pool_dir=tmp_path, rule_profile="legacy")
     implicit = minute.run(D1, D1, **options)
     explicit = minute.run(D1, D1, **options, topk_exec="close")
     assert implicit.stats == explicit.stats
@@ -640,9 +645,11 @@ def test_walkdown_non_limit_failure_ends_chain(monkeypatch, mode, failure):
 def test_walkdown_validation_before_load_and_cli(capsys, strategy, mode, message):
     for api in (minute.run, lambda start, end, **kw: minute.simulate({}, {}, {}, start, end, **kw)):
         with pytest.raises(ValueError, match=message):
-            api(D1, D1, strategy=strategy, topk_exec=mode, limit_walkdown=True)
+            api(D1, D1, strategy=strategy, topk_exec=mode, limit_walkdown=True,
+                rule_profile="legacy")
     with pytest.raises(SystemExit) as exc:
-        minute.main(["--strategy", strategy, "--topk-exec", mode, "--limit-walkdown"])
+        minute.main(["--strategy", strategy, "--topk-exec", mode, "--limit-walkdown",
+                     "--rule-profile", "legacy"])
     assert exc.value.code == 2
     assert message in capsys.readouterr().err
 
@@ -660,7 +667,8 @@ def test_walkdown_cli_opt_in_products(tmp_path, synthetic_loaders, mode, monkeyp
     out = tmp_path / "walkdown"
     assert minute.main(["--strategy", "topk_dropout", "--start", D1, "--end", D1,
                         "--pool-dir", str(tmp_path), "--out-dir", str(out),
-                        "--topk-exec", mode, "--limit-walkdown", "--emit-run-manifest"]) == 0
+                        "--topk-exec", mode, "--limit-walkdown", "--emit-run-manifest",
+                        "--rule-profile", "legacy"]) == 0
     audit = json.loads((out / "topk_execution.json").read_text())
     assert audit["limit_walkdown"] is True
     assert audit["walkdown_fills"] == 0
@@ -770,9 +778,11 @@ def test_real_limit_tiers_reach_all_minute_dispatches(mode, walkdown, code, name
 ])
 def test_limit_rule_api_validation(strategy, rule, message):
     with pytest.raises(ValueError, match=message):
-        minute.run(D1, D1, strategy=strategy, topk_limit_rule=rule)
+        minute.run(D1, D1, strategy=strategy, topk_limit_rule=rule,
+                   rule_profile="legacy")
     with pytest.raises(ValueError, match=message):
-        minute.simulate({}, {}, {}, D1, D1, strategy=strategy, topk_limit_rule=rule)
+        minute.simulate({}, {}, {}, D1, D1, strategy=strategy, topk_limit_rule=rule,
+                        rule_profile="legacy")
 
 
 @pytest.mark.parametrize("strategy,rule", [
@@ -780,7 +790,8 @@ def test_limit_rule_api_validation(strategy, rule, message):
 ])
 def test_limit_rule_cli_validation(strategy, rule, capsys):
     with pytest.raises(SystemExit) as exc:
-        minute.main(["--strategy", strategy, "--topk-limit-rule", rule])
+        minute.main(["--strategy", strategy, "--topk-limit-rule", rule,
+                     "--rule-profile", "legacy"])
     assert exc.value.code == 2
     assert "--topk-limit-rule" in capsys.readouterr().err
 
@@ -791,7 +802,8 @@ def test_limit_rule_cli_artifacts(tmp_path, synthetic_loaders, rule, mode):
     out = tmp_path / "out"
     minute.main(["--strategy", "topk_dropout", "--start", D1, "--end", D1,
                  "--pool-dir", str(tmp_path), "--out-dir", str(out),
-                 "--topk-limit-rule", rule, "--topk-exec", mode, "--emit-run-manifest"])
+                 "--topk-limit-rule", rule, "--topk-exec", mode, "--emit-run-manifest",
+                 "--rule-profile", "legacy"])
     manifest = json.loads((out / "run-manifest.json").read_text())
     if rule == "qlib" and mode == "close":
         assert "topk_limit_rule" not in json.dumps(manifest)
@@ -811,7 +823,8 @@ def test_real_st_trade_day_crosses_switch():
         ds[A].index = pd.to_datetime(["20260704", "20260705", "20260706"])
         st = minute.simulate(ms, ds, {day: [A]}, day, day, strategy="topk_dropout",
                              scores_by_day={day: {A: 1.}}, topk=1, n_drop=1,
-                             stop_pct=0, pool_names={A: "*ST测试"}, topk_limit_rule="real")
+                             stop_pct=0, pool_names={A: "*ST测试"}, topk_limit_rule="real",
+                             rule_profile="legacy")
         assert bool(buys(st)) == expected
 
 

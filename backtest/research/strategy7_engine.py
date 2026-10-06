@@ -868,7 +868,7 @@ def simulate_native(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, S
                 tail_window_buy: bool = False,
                 tail_volume_unit: str | None = "shares",
                 audit_sink: Any = None,
-                rule_profile: str | RuleProfile = "legacy",
+                rule_profile: str | RuleProfile = "industry",
                 ) -> SimResult:
     """Validate/normalize tail options, then translate native v7/APP arguments."""
     profile = resolve_rule_profile(rule_profile)

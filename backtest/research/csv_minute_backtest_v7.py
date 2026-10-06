@@ -108,7 +108,7 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
                 tail_window_buy: bool = False,
                 tail_volume_unit: str | None = "shares",
                 audit_sink: Any = None,
-                rule_profile: str | RuleProfile = "legacy",
+                rule_profile: str | RuleProfile = "industry",
                 **unsupported_options) -> SimResult:
     """Forward native arguments; the adapter validates/normalizes tail options before main.
 
@@ -307,7 +307,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--rule-profile",
         choices=("legacy", "industry"),
-        default="legacy",
+        default="industry",
     )
     parser.add_argument("--output-dir")
     parser.add_argument("--minute-source", choices=("lake", "qlib_1min"), default="lake")
@@ -430,7 +430,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "fallback_order_clock": "exact_quote_only_no_chase",
         "stable_order": "pool_then_opening_held_then_input_symbols",
     }
-    if args.rule_profile == "legacy":
+    if args.rule_profile == "industry":
         config.pop("rule_profile", None)
     if not args.tail_window_buy:
         config.pop("tail_window_buy", None)

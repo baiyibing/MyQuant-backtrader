@@ -26,16 +26,12 @@ PROFILE_STATS = {
 }
 
 
-def _assert_profile_stamp_only(omitted, legacy, industry, expected_domain: str) -> None:
-    assert omitted.stats == legacy.stats
-    assert "valuation_price_domain" not in omitted.stats
+def _assert_profile_stamp_only(legacy, industry, expected_domain: str) -> None:
     assert "valuation_price_domain" not in legacy.stats
     assert industry.stats["valuation_price_domain"] == expected_domain
     assert {
         key: value for key, value in industry.stats.items() if key not in PROFILE_STATS
     } == {key: value for key, value in legacy.stats.items() if key not in PROFILE_STATS}
-    assert omitted.trades == legacy.trades
-    assert omitted.equity_curve == legacy.equity_curve
 
 
 def test_daily_s12_industry_stamps_front_valuation_without_legacy_stats_change():
@@ -46,13 +42,12 @@ def test_daily_s12_industry_stamps_front_valuation_without_legacy_stats_change()
         "20251103",
         "20251103",
     )
-    omitted = daily.simulate(*args, strategy="version12")
     legacy = daily.simulate(*args, strategy="version12", rule_profile="legacy")
     industry = daily.simulate(
         *args, strategy="version12", rule_profile=P02_COMPONENT_PROFILE
     )
 
-    _assert_profile_stamp_only(omitted, legacy, industry, "front")
+    _assert_profile_stamp_only(legacy, industry, "front")
 
 
 @pytest.mark.parametrize(
@@ -64,10 +59,9 @@ def test_minute_s12_industry_stamps_actual_valuation_domain_only(
     x01_enabled: bool, expected_domain: str
 ):
     data = fixture()
-    omitted, _ = replay(*data, enabled=x01_enabled)
     legacy, _ = replay(*data, enabled=x01_enabled, rule_profile="legacy")
     industry, _ = replay(
         *data, enabled=x01_enabled, rule_profile=P02_COMPONENT_PROFILE
     )
 
-    _assert_profile_stamp_only(omitted, legacy, industry, expected_domain)
+    _assert_profile_stamp_only(legacy, industry, expected_domain)

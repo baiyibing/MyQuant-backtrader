@@ -38,12 +38,13 @@ def bars_for(paths, *, daily_closes=None):
 def minute_run(prices, *, caps=None, total_cash=100_000, extra_days=(), pool=None):
     paths = [[(895, 10.)], prices, *extra_days]
     mins, days, dates = bars_for(paths)
-    kwargs = {}
+    kwargs = {"rule_profile": "legacy"}
     if caps is not None:
         lookup = {(CODE, "20251103", 895): BucketVolume(1000, 895, "raw_shares_incremental")}
         lookup.update({(CODE, "20251104", hm): BucketVolume(q, hm, "raw_shares_incremental")
                        for (hm, _), q in zip(prices, caps)})
         kwargs = dict(participation_rate=1, volume_for_bucket=lookup)
+    kwargs.setdefault("rule_profile", "legacy")
     return minute.simulate(mins, days, {"20251103": [CODE]} if pool is None else pool,
                            "20251103", dates[-1].strftime("%Y%m%d"), strategy="12",
                            name_budget=10000, total_cash=total_cash, **kwargs)
@@ -141,7 +142,8 @@ def test_chase_and_pool_use_existing_clocks_and_chase_resets_memory():
     paths = [[(895, 12.)], [(570, 10.), (585, 10.1), (600, 9.9), (895, 10.)]]
     mins, days, dates = bars_for(paths)
     st = minute.simulate(mins, days, {"20251103": [CODE], "20251104": [CODE]},
-                          "20251103", "20251104", strategy="12", name_budget=10000)
+                          "20251103", "20251104", strategy="12", name_budget=10000,
+                          rule_profile="legacy")
     assert [t[0] for t in fills(st)] == ["chase:T+1", "pool"]
     assert st.stats["chase_buy"] == 1 and st.stats["chase_explained"] == 1
     assert all(p.entry_idx == 1 for p in st.positions[CODE])
@@ -192,9 +194,13 @@ def test_exdiv_scaling_is_explicit_deduplicated_and_covers_flat_memory(monkeypat
     mins, days, dates = bars_for([[(600, 10.2), (601, 10.2)]], daily_closes=[10.2])
     event = ExDivEvent("s12-bonus", .5, 0, "20251103", "20251103", "20251105")
     args = (days, {}, "20251103", "20251103") if engine is daily else (mins, days, {}, "20251103", "20251103")
-    baseline = engine.simulate(*args, strategy="12")
+    baseline = engine.simulate(*args, strategy="12", rule_profile="legacy")
     assert book.memory_for(baseline, CODE).reduced.shares == 150
-    st = engine.simulate(*args, strategy="12", exdiv_economics={(CODE, "20251103"): event})
+    st = engine.simulate(
+        *args, strategy="12",
+        exdiv_economics={(CODE, "20251103"): event},
+        rule_profile="legacy",
+    )
     assert book.memory_for(st, CODE).reduced.shares == 200
     assert book.memory_for(st, CODE).stopped.shares == 300
     assert st.stats["strategy12_exdiv_reduced_residual"] == 25
@@ -221,7 +227,7 @@ def test_daily_signal_uses_next_open_and_does_not_buy_back():
     _, bars, dates = bars_for([[(895, 10)], [(895, 8.9)], [(895, 10)]], daily_closes=[10, 8.9, 10])
     bars[CODE].loc[dates[2], "open"] = 9.8
     st = daily.simulate(bars, {"20251103": [CODE]}, "20251103", "20251105",
-                        strategy="12", name_budget=10000)
+                        strategy="12", name_budget=10000, rule_profile="legacy")
     assert fills(st) == [("pool", 1000), (rules.STOP, 1000)]
     sale = next(t for t in st.trades if t["side"] == "SELL")
     assert (sale["date"], sale["price"], sale["price_rule"]) == ("20251105", 9.8, "daily_pending_next_open")
@@ -234,7 +240,7 @@ def test_daily_limit_down_defers_independent_partial_queue():
     bars[CODE].loc[dates[2], "open"] = 7.12
     bars[CODE].loc[dates[3], "open"] = 8.8
     st = daily.simulate(bars, {"20251103": [CODE]}, "20251103", "20251106",
-                        strategy="12", name_budget=10000)
+                        strategy="12", name_budget=10000, rule_profile="legacy")
     assert fills(st) == [("pool", 1000), (rules.STOP, 1000)]
     sale = next(t for t in st.trades if t["side"] == "SELL")
     assert sale["date"] == "20251106" and st.stats["defer_sell_limit_down"] == 1
@@ -245,7 +251,8 @@ def test_daily_deferred_derisk_sells_signal_time_lot_not_the_same_day_add():
                               daily_closes=[10.1, 10.1, 10.1])
     bars[CODE].loc[dates[2], "open"] = 10.1
     st = daily.simulate(bars, {"20251103": [CODE], "20251104": [CODE]},
-                        "20251103", "20251105", strategy="12", name_budget=10000)
+                        "20251103", "20251105", strategy="12", name_budget=10000,
+                        rule_profile="legacy")
     assert fills(st) == [("pool", 900), ("pool", 900)]
     assert {p.lot_id: p.shares for p in st.positions[CODE]} == {0: 900, 1: 900}
     assert book.memory_for(st, CODE).stopped == rules.Memory()
@@ -256,7 +263,8 @@ def test_daily_deferred_stop_clears_signal_time_lot_and_keeps_the_add():
                               daily_closes=[10, 8.9, 9.5])
     bars[CODE].loc[dates[2], "open"] = 8.9
     st = daily.simulate(bars, {"20251103": [CODE], "20251104": [CODE]},
-                        "20251103", "20251105", strategy="12", name_budget=10000)
+                        "20251103", "20251105", strategy="12", name_budget=10000,
+                        rule_profile="legacy")
     assert fills(st) == [("pool", 1000), ("pool", 1100), (rules.STOP, 1000)]
     assert {p.lot_id: p.shares for p in st.positions[CODE]} == {1: 1100}
     assert book.memory_for(st, CODE).stopped == rules.Memory(1000, True)
@@ -273,7 +281,7 @@ def test_daily_deferred_exit_keeps_same_day_chase_lot(
     bars[CODE].loc[dates[2], "open"] = px - .1
     pool = {"20251103": [CODE], "20251104": [CODE]}
     queued = daily.simulate(bars, pool, "20251103", "20251105",
-                            strategy="12", name_budget=10000)
+                            strategy="12", name_budget=10000, rule_profile="legacy")
     assert fills(queued) == [("pool", 1000), ("chase:T+1", chased)]
     assert queued.stats["chase_buy"] == 1
     assert queued.book_state["partial_exits"][CODE] == (reason, sold, [(0, sold)])
@@ -281,7 +289,7 @@ def test_daily_deferred_exit_keeps_same_day_chase_lot(
     assert {p.lot_id: p.shares for p in queued.positions[CODE]} == {0: 1000, 1: chased}
 
     st = daily.simulate(bars, pool, "20251103", "20251106",
-                        strategy="12", name_budget=10000)
+                        strategy="12", name_budget=10000, rule_profile="legacy")
     assert fills(st) == [("pool", 1000), ("chase:T+1", chased), (reason, sold)]
     assert {p.lot_id: p.shares for p in st.positions[CODE]} == remaining
     assert getattr(book.memory_for(st, CODE), channel) == rules.Memory(sold, True)
@@ -302,7 +310,8 @@ def test_daily_deferred_derisk_keeps_same_day_step_lot(monkeypatch):
     _, bars, _ = bars_for([[(895, 10.20)], [(895, 10.20)]], daily_closes=[10.20, 10.20])
     queued = daily.simulate(bars, {}, "20251103", "20251103",
                             strategy="12", name_budget=10000,
-                            index_block_new={pd.Timestamp("20251103").date(): True})
+                            index_block_new={pd.Timestamp("20251103").date(): True},
+                            rule_profile="legacy")
     assert fills(queued) == [("add:step20", 900)]
     assert CODE not in queued.book_state.get("partial_exits", {})
     assert {p.lot_id: p.shares for p in queued.positions[CODE]} == {0: 1400, 1: 900}
@@ -310,7 +319,8 @@ def test_daily_deferred_derisk_keeps_same_day_step_lot(monkeypatch):
     st = daily.simulate(bars, {}, "20251103", "20251104",
                         strategy="12", name_budget=10000,
                         index_block_new={pd.Timestamp("20251103").date(): True,
-                                         pd.Timestamp("20251104").date(): True})
+                                         pd.Timestamp("20251104").date(): True},
+                        rule_profile="legacy")
     assert fills(st) == [("add:step20", 900)]
     assert {p.lot_id: p.shares for p in st.positions[CODE]} == {0: 1400, 1: 900}
     assert st.positions[CODE][-1].is_step
@@ -359,6 +369,7 @@ def test_sse_gate_blocks_new_names_and_keeps_held_adds_and_steps():
         mins, days, {"20251103": [CODE], "20251104": [CODE]},
         "20251103", "20251104", strategy="12", name_budget=10000,
         index_block_new={blocked: True},
+        rule_profile="legacy",
     )
     assert [reason for reason, _shares in fills(held)] == ["pool", "pool"]
     assert held.stats["skip_index_gate"] == 0
@@ -367,6 +378,7 @@ def test_sse_gate_blocks_new_names_and_keeps_held_adds_and_steps():
         mins, days, {"20251104": [CODE]},
         "20251103", "20251104", strategy="12", name_budget=10000,
         index_block_new={blocked: True},
+        rule_profile="legacy",
     )
     assert fills(fresh) == []
     assert fresh.stats["skip_index_gate"] >= 1
@@ -376,6 +388,7 @@ def test_sse_gate_blocks_new_names_and_keeps_held_adds_and_steps():
         chase_mins, chase_days, {"20251103": [CODE]},
         "20251103", "20251104", strategy="12", name_budget=10000,
         index_block_new={chase_dates[1].date(): True},
+        rule_profile="legacy",
     )
     assert fills(chased) == []
     assert chased.stats["chase_buy"] == 0
@@ -421,7 +434,7 @@ def test_new_cli_aliases_do_not_expand_existing_book_cli_contract():
 
 def test_daily_run_rejects_wrong_price_domain_before_data_reads():
     with pytest.raises(ValueError, match="front"):
-        daily.run("20251103", "20251104", strategy="12")
+        daily.run("20251103", "20251104", strategy="12", rule_profile="legacy")
 
 
 def test_minute_run_accepts_none_price_domain_and_uses_none_loader(monkeypatch, tmp_path):
@@ -460,7 +473,10 @@ def test_minute_run_accepts_none_price_domain_and_uses_none_loader(monkeypatch, 
         raise AssertionError("front minute loader must not be used for dividend_type=none")
 
     monkeypatch.setattr(minute, "_load_minute_from_lake", forbid_front_loader)
-    st = minute.run("20251103", "20251103", strategy="12", dividend_type="none")
+    st = minute.run(
+        "20251103", "20251103", strategy="12", dividend_type="none",
+        rule_profile="legacy",
+    )
     assert seen["daily_kwargs"] is not None
     assert seen["daily_kwargs"]["dividend_type"] == "front"
     assert seen["minute_kwargs"] is not None and "lake_root" not in seen["minute_kwargs"]
@@ -473,7 +489,10 @@ def test_minute_run_accepts_none_price_domain_and_uses_none_loader(monkeypatch, 
 @pytest.mark.parametrize("book", ["version8", "version8_1", "version8_2", "version8_3"])
 def test_non_strategy12_minute_rejects_front_dividend_type(book):
     with pytest.raises(ValueError, match="supported only by version12"):
-        minute.run("20251103", "20251103", strategy=book, dividend_type="front")
+        minute.run(
+            "20251103", "20251103", strategy=book, dividend_type="front",
+            rule_profile="legacy",
+        )
 
 
 @pytest.mark.parametrize("engine", [daily, minute])
@@ -518,7 +537,10 @@ def test_front_loader_uses_matching_partitions_and_disables_er6(monkeypatch, tmp
     monkeypatch.setattr(engine, "simulate", simulate)
     if engine is minute:
         monkeypatch.setattr(engine, "_load_minute_from_lake", minute_load)
-    st = engine.run("20251103", "20251103", strategy="12", dividend_type="front")
+    st = engine.run(
+        "20251103", "20251103", strategy="12", dividend_type="front",
+        rule_profile="legacy",
+    )
     assert captured["exdiv"] is None
     if engine is minute:
         assert st.stats["daily_signal_domain"] == "front"
@@ -539,7 +561,10 @@ def test_front_missing_partition_fails_instead_of_empty_data(monkeypatch, tmp_pa
     monkeypatch.setattr(engine, "load_pool_day_map", lambda *a, **kw: {"20251103": [CODE]})
     monkeypatch.setattr(engine, "load_pool_names_by_day", lambda *a, **kw: {})
     with pytest.raises(FileNotFoundError, match="front daily partition"):
-        engine.run("20251103", "20251103", strategy="12", dividend_type="front")
+        engine.run(
+            "20251103", "20251103", strategy="12", dividend_type="front",
+            rule_profile="legacy",
+        )
 
 
 def test_minute_front_missing_minute_partition_fails_closed(monkeypatch, tmp_path):
@@ -553,7 +578,10 @@ def test_minute_front_missing_minute_partition_fails_closed(monkeypatch, tmp_pat
     monkeypatch.setattr(minute, "load_daily_ohlc", lambda *_a, **_kw: days)
 
     with pytest.raises(FileNotFoundError, match="missing front minute partition"):
-        minute.run("20251103", "20251103", strategy="12", dividend_type="front")
+        minute.run(
+            "20251103", "20251103", strategy="12", dividend_type="front",
+            rule_profile="legacy",
+        )
 
 
 def test_locked_bonus_is_excluded_from_reduction_base_and_fill_memory():
@@ -584,7 +612,10 @@ def test_daily_sub100_stop_memory_is_not_bought_at_the_first_price(monkeypatch):
 
     monkeypatch.setattr(daily, "init_sim_state", seeded)
     _, bars, _ = bars_for([[(895, 10)]])
-    st = daily.simulate(bars, {}, "20251103", "20251103", strategy="12")
+    st = daily.simulate(
+        bars, {}, "20251103", "20251103", strategy="12",
+        rule_profile="legacy",
+    )
     assert book.memory_for(st, CODE).stopped == rules.Memory(50, True)
     assert fills(st) == []
 
@@ -602,7 +633,10 @@ def test_daily_stop_keeps_odd_residual_and_merges_next_stop(monkeypatch):
                               daily_closes=[8.8, 10, 8.8, 10])
     bars[CODE].loc[dates[1], "open"] = 8.8
     bars[CODE].loc[dates[3], "open"] = 8.8
-    st = daily.simulate(bars, {}, "20251103", "20251106", strategy="12")
+    st = daily.simulate(
+        bars, {}, "20251103", "20251106", strategy="12",
+        rule_profile="legacy",
+    )
     assert fills(st) == [(rules.STOP, 1050)]
     assert book.memory_for(st, CODE).stopped == rules.Memory(1050, True)
     assert CODE not in st.positions

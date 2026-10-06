@@ -33,7 +33,7 @@ def _simulate(rows, *, pool, start=D1, **kwargs):
         "strategy": "version8", "total_cash": 30_000, "name_budget": 28_000,
         "fix_minute_cash_order": True, "tail_window_buy": True,
         "tail_volume_unit": "shares", "buy_cost_rate": 0,
-        "sell_cost_rate": 0, "min_cost": 0,
+        "sell_cost_rate": 0, "min_cost": 0, "rule_profile": "legacy",
     }
     options.update(kwargs)
     return minute.simulate(minutes, daily, {D1: pool}, start, D1, **options)

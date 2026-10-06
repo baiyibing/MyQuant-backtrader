@@ -56,6 +56,7 @@ def _run(mode, strategy, prices, signals, *, rows=None, minute_rows=None, prev_c
     )}
     pool = {_ds(i): [CODE] for i in signals}
     options = {"total_cash": 21_000_000, **kwargs, "strategy": strategy}
+    options.setdefault("rule_profile", "legacy")
     if mode == "daily":
         return daily_engine.simulate(daily, pool, _ds(0), _ds(len(rows) - 1), **options)
     records = []

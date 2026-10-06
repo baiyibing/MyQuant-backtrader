@@ -45,7 +45,19 @@ def _bars(days: list[str], rows: dict[str, list[tuple]], start_offset: int = 1) 
 
 def _run(pool: dict, bars: dict, **kwargs):
     kwargs.setdefault("strategy", "version6")
+    kwargs.setdefault("rule_profile", "legacy")
     return sim.simulate(bars, pool, "20251103", "20251107", **kwargs)
+
+
+@pytest.fixture(autouse=True)
+def _legacy_rule_profile(monkeypatch):
+    original = sim.simulate
+
+    def simulate(*args, **kwargs):
+        kwargs.setdefault("rule_profile", "legacy")
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(sim, "simulate", simulate)
 
 
 def _write_daily_lake_frame(tmp_path, code: str, frame: pd.DataFrame) -> None:

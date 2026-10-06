@@ -868,7 +868,7 @@ def test_per_name_chase_budget_and_terminal_outcomes(per_name_hooks, outcome):
 
 
 @pytest.mark.parametrize("strategy", ["version1"])
-def test_daily_quota_trades_byte_identical(strategy):
+def test_daily_quota_trades_byte_identical(strategy, monkeypatch):
     """Anchors captured at 9f4303c, before slice A; never regenerate pre_er1.
 
     version6 已改为名单加仓 + 两档回撤，不再对照这份旧 golden。
@@ -877,6 +877,15 @@ def test_daily_quota_trades_byte_identical(strategy):
     from pathlib import Path
     import runpy
     import pandas as pd
+    from backtest.research import csv_daily_backtest
+
+    original = csv_daily_backtest.simulate
+
+    def simulate(*args, **kwargs):
+        kwargs.setdefault("rule_profile", "legacy")
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(csv_daily_backtest, "simulate", simulate)
 
     fixture = Path(__file__).parent / "fixtures"
     helpers = runpy.run_path(str(fixture / "csv_engine_pre_er1/generate_snapshot.py"))

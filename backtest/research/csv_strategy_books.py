@@ -695,7 +695,7 @@ def add_csv_backtest_common_args(
     ap.add_argument(
         "--rule-profile",
         choices=("legacy", "industry"),
-        default="legacy",
+        default="industry",
     )
     ap.add_argument(
         "--daily-quota",
@@ -827,8 +827,8 @@ def csv_run_kwargs_from_args(args) -> dict:
     kwargs = get_book(name).run_kwargs(args)
     kwargs["ration"] = getattr(args, "ration", "file_order")
     kwargs["ration_seed"] = int(getattr(args, "ration_seed", 0))
-    rule_profile = getattr(args, "rule_profile", "legacy")
-    if rule_profile != "legacy":
+    rule_profile = getattr(args, "rule_profile", "industry")
+    if rule_profile != "industry":
         kwargs["rule_profile"] = rule_profile
     if get_book(name).sizing == "per_name":
         kwargs["name_budget"] = (

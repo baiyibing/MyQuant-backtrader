@@ -1,15 +1,17 @@
 # Industry rule profile
 
 - Date: 2026-10-06
-- Status: P11 v7 chronological cash scheduling delivered; later trade-rule slices pending
+- Status: P11 delivered; CLI/library default flipped to `industry`
 - Principle SSOT: [backtest-rule-principles-ssot.md](ssot/backtest-rule-principles-ssot.md)
 
 ## Purpose
 
-`rule_profile` provides one named opt-in boundary for adopting mainstream
-A-share backtester conventions. It is not a collection of public fee, lot, or
-lifecycle flags. The default remains `legacy`; omitted and explicit
-`rule_profile="legacy"` runs keep the existing behavior and output bytes.
+`rule_profile` provides one named boundary for mainstream A-share backtester
+conventions. It is not a collection of public fee, lot, or lifecycle flags.
+The CLI and library default is `industry`; omitted and explicit
+`rule_profile="industry"` runs are identical. The `legacy` profile remains
+available through `--rule-profile legacy` or `rule_profile="legacy"` for
+byte-identical reproduction of existing baselines.
 
 P01 carries the frozen profile through the daily, shared-minute, and
 standalone-v7 paths. P02 enables the zero-trade `s12_domain_stamp` metadata
@@ -21,8 +23,7 @@ fill notional: SH/SZ A-shares use 0.00002 before 2022-04-29 and 0.00001 from
 that date; BSE uses 0.000025 before the cutover and 0.00001 from it. P06's
 `supplementary_min_lot` switch applies adopted decision B8-03: when a
 budget cannot buy one valid lot, the order is skipped instead of receiving
-supplementary funds for 100 shares. The default `legacy` profile, including
-omitted profile arguments, retains its
+supplementary funds for 100 shares. An explicit `legacy` profile retains its
 original per-call fee formula and output bytes.
 
 P07 enables `fee_aware_affordability` for adopted decision B8-04. Each buy is
@@ -64,7 +65,8 @@ branch and the standalone v7 facade. Industry mode selects the existing
 realized at or before their decision minute. An explicit
 `--fix-minute-cash-order` remains valid and selects the same path. Equal-minute
 ordering is unchanged: original pool/opening-position/input-symbol order remains
-the stable tie-break. Legacy omitted and explicit-off runs remain symbol-major.
+the stable tie-break. Explicit legacy runs with the cash-order flag off remain
+symbol-major.
 
 ## Switch status
 
@@ -87,6 +89,9 @@ switches remain `false` until their behavior PR and opt-in baseline are admitted
 Corporate-action cash and bonus accounting follows the same adopted
 DATA-MISSING rule as lifecycle facts: real industry runs must use explicit
 per-event facts and must not derive entitlements from adjustment-factor ratios.
+The current 4090 `corp_actions` source is empty, so default industry runs do not
+account for dividends or bonus shares. `special_no_limit_days` also remains
+DATA-MISSING, and slippage remains `0`.
 
 ## Slippage
 
@@ -122,9 +127,10 @@ book's existing default (`raise` for S8-bound books, `skip` otherwise). An
 explicit non-default mode conflicts with P08 and fails fast instead of silently
 overriding shrink-or-skip.
 
-Defaults are unchanged. Existing goldens, fixtures, off-byte baselines,
-overlays, book order, output files, and stats keys are never refreshed or
-moved. P03's
+The default identity is now omitted ≡ explicit `industry`. Existing goldens,
+fixtures, off-byte baselines, overlays, book order, output files, and stats
+keys are never refreshed or moved; their capture and verification paths pin
+`legacy` explicitly. P03's
 `tests/fixtures/off_byte_baseline_industry_p03_order_commission_20261006.json`
 remains immutable. P04 adds
 `tests/fixtures/off_byte_baseline_industry_p04_stamp_duty_20261006.json` from
