@@ -334,9 +334,6 @@ def simulate(
     st.stats["buy_cost_rate"] = st.buy_cost_rate
     st.stats["sell_cost_rate"] = st.sell_cost_rate
     st.stats["min_cost"] = st.min_cost
-    if profile.name == "industry":
-        st.stats["rule_profile"] = profile.name
-        st.stats["rule_profile_revision"] = profile.revision
     if exdiv_economics is not None:
         st.exdiv_economics = ExDivEconomics(exdiv_economics, st.stats)
     allow_add = bool(hooks["allow_add"])
@@ -680,6 +677,11 @@ def simulate(
         )
 
     finish_pending_chase(st, pending_chase)
+    if profile.name == "industry":
+        st.stats.pop("rule_profile", None)
+        st.stats.pop("rule_profile_revision", None)
+        st.stats["rule_profile"] = profile.name
+        st.stats["rule_profile_revision"] = profile.revision
     return st
 
 
@@ -899,6 +901,11 @@ def run(
             daily_source="qlib_day" if use_qlib_bins else "lake",
             exdiv=exdiv, source_metadata=signal_sources, raw_bars=bars,
         )}
+    if profile.name == "industry":
+        st.stats.pop("rule_profile", None)
+        st.stats.pop("rule_profile_revision", None)
+        st.stats["rule_profile"] = profile.name
+        st.stats["rule_profile_revision"] = profile.revision
     return st
 
 

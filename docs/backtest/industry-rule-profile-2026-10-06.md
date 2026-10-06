@@ -14,7 +14,10 @@ lifecycle flags. The default remains `legacy`; omitted and explicit
 P01 only carries the frozen profile through the daily, shared-minute, and
 standalone-v7 paths. No switch is read by trading behavior yet. An `industry`
 run therefore has the same trades as `legacy`, while its in-memory stats add
-`rule_profile` and `rule_profile_revision`.
+`rule_profile` and `rule_profile_revision` after all legacy stats are final.
+Those two keys are append-only: removing them from industry stats yields the
+exact legacy stats for daily, shared minute, shared native-v7, and standalone
+v7 paths.
 
 ## Switch status
 
@@ -45,6 +48,11 @@ CLI:
 --rule-profile legacy
 --rule-profile industry
 ```
+
+Accordingly, argparse `--help` gains one additive
+`--rule-profile {legacy,industry}` option line. This is intended. The daily and
+shared-minute `HELP_LOCK` constant bytes remain identical to the P01 base
+commit, and the existing shared-minute guarded source hashes remain unchanged.
 
 Python APIs accept `"legacy"`, `"industry"`, or a resolved frozen
 `RuleProfile` object. Invalid names fail with `ValueError`.

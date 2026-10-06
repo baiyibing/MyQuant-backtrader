@@ -858,12 +858,6 @@ def simulate(
         hold_modes = {}
         day_spans = {code: build_day_spans(df) for code, df in minute_bars.items()}
 
-    if profile.name == "industry":
-        if native_v7:
-            st.stats = {}
-        st.stats["rule_profile"] = profile.name
-        st.stats["rule_profile_revision"] = profile.revision
-
     for i, day in enumerate(calendar):
         if native_v7:
             policy.day_start(st, day=day, day_i=i, context=policy_context)
@@ -1317,6 +1311,15 @@ def simulate(
             )
 
     if native_v7:
+        if profile.name == "industry":
+            stats = getattr(st, "stats", None)
+            if stats is None:
+                stats = {}
+                st.stats = stats
+            stats.pop("rule_profile", None)
+            stats.pop("rule_profile_revision", None)
+            stats["rule_profile"] = profile.name
+            stats["rule_profile_revision"] = profile.revision
         return st
 
     finish_pending_sells(st)
@@ -1328,6 +1331,11 @@ def simulate(
             economics_enabled=exdiv_economics is not None,
             total_return_complete=False,
         )
+    if profile.name == "industry":
+        st.stats.pop("rule_profile", None)
+        st.stats.pop("rule_profile_revision", None)
+        st.stats["rule_profile"] = profile.name
+        st.stats["rule_profile_revision"] = profile.revision
     return st
 
 
@@ -1724,6 +1732,11 @@ def run(
         if daily_source == "qlib_day":
             metadata["mark_domain"] = "qlib_adjusted"
         st.run_metadata = {**getattr(st, "run_metadata", {}), "s11_exit_domain": metadata}
+    if profile.name == "industry":
+        st.stats.pop("rule_profile", None)
+        st.stats.pop("rule_profile_revision", None)
+        st.stats["rule_profile"] = profile.name
+        st.stats["rule_profile_revision"] = profile.revision
     return st
 
 

@@ -406,7 +406,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         "fallback_order_clock": "exact_quote_only_no_chase",
         "stable_order": "pool_then_opening_held_then_input_symbols",
     }
-    config.pop("rule_profile", None)
+    if args.rule_profile == "legacy":
+        config.pop("rule_profile", None)
     if not args.tail_window_buy:
         config.pop("tail_window_buy", None)
         config.pop("tail_volume_unit", None)
