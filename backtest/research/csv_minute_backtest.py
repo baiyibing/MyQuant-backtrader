@@ -50,6 +50,7 @@ from backtest.research.csv_ledger import (  # noqa: E402
     QLIB_OPEN_COST,
     IndependentExitPosition,
     SimState,
+    bind_account_fee_schedule,
     chase_decision as chase_decision,
     configure_s8,
     reject_short_cash_override,
@@ -68,6 +69,7 @@ from backtest.research.csv_ledger import (  # noqa: E402
     rescale_s8_groups,
     apply_exdiv_economics,
 )
+from backtest.research.ashare_fees import resolve_account_fee_schedule  # noqa: E402
 
 from backtest.research.ashare_exdiv_economics import EconomicLookup, ExDivEconomics  # noqa: E402
 
@@ -683,10 +685,18 @@ def simulate(
     raw bars. None retains the baseline; E-R6 ratios never imply entitlements.
     """
     profile = resolve_rule_profile(rule_profile)
+    shared_fee_schedule = resolve_account_fee_schedule(
+        profile.account_fee_schedule,
+        explicit_rates=(buy_cost_rate, sell_cost_rate, min_cost),
+    )
     book = get_minute_book(strategy)
     native_v7 = book.name == "version7"
     if native_v7:
         context = policy_context or MinutePolicyContext()
+        native_fee_schedule = resolve_account_fee_schedule(
+            profile.account_fee_schedule,
+            fee_schedule=context.fee_schedule,
+        )
         policy_context = MinutePolicyContext(
             index_days=context.index_days,
             fee_schedule=context.fee_schedule,
@@ -703,7 +713,6 @@ def simulate(
         if policy.schedule not in {"symbol_major", "chronological"}:
             raise ValueError("version7 requires a native schedule policy")
         from backtest.research import strategy7_engine as v7
-        from backtest.research.ashare_fees import DEFAULT_SCHEDULE
         from backtest.research.minute_cash_order import run_symbol_major_day, run_v7_chronological_day
         frames, minutes, closes, pools, calendar, gate = v7.prepare_main_inputs(
             minute_bars, daily_bars, pool_days, start, end, policy_context)
@@ -713,8 +722,9 @@ def simulate(
             st.exdiv_economics = ExDivEconomics(exdiv_economics)
         if participation_rate is not None:
             st.volume_cap = VolumeCap(participation_rate, volume_for_bucket)
-        fee = (policy_context.fee_schedule if policy_context and
-               policy_context.fee_schedule is not None else DEFAULT_SCHEDULE)
+        fee = native_fee_schedule
+        if profile.account_fee_schedule:
+            bind_account_fee_schedule(st, fee)
         last_prices = {}
     if not native_v7:
         validate_minute_entry(strategy, stage="sell", version9_sell=version9_sell, max_hold=max_hold)
@@ -838,6 +848,8 @@ def simulate(
             st.sell_cost_rate = float(sell_cost_rate)
         if min_cost is not None:
             st.min_cost = float(min_cost)
+        if profile.account_fee_schedule:
+            bind_account_fee_schedule(st, shared_fee_schedule)
         st.stats["buy_cost_rate"] = st.buy_cost_rate
         st.stats["sell_cost_rate"] = st.sell_cost_rate
         st.stats["min_cost"] = st.min_cost
@@ -1401,6 +1413,10 @@ def run(
     rule_profile: str | RuleProfile = "legacy",
 ) -> SimState:
     profile = resolve_rule_profile(rule_profile)
+    resolve_account_fee_schedule(
+        profile.account_fee_schedule,
+        explicit_rates=(buy_cost_rate, sell_cost_rate, min_cost),
+    )
     validate_minute_entry(strategy, stage="sell", version9_sell=version9_sell, max_hold=max_hold)
     # P2-B shell precheck (adapter surface on run facade; not simulate / VolumeCap).
     # participation_rate=None → no-op (byte-identical old arm). ≠δ5 certified ≠R4.

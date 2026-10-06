@@ -48,6 +48,7 @@ from backtest.research.csv_ledger import (
     _sell,
     apply_exdiv_economics,
     exit_positions,
+    fee_order_id,
     held_fill_key,
     execute_buy,
     hit_limit_down,
@@ -169,7 +170,10 @@ def _side_queued(st, pos):
 def _side_sell(st, code, pos, px, day, reason, *, fill_config=None, **kwargs):
     if fill_config is not None and fill_config.fill_timing == "next_bar_open":
         state = st.held_fill_states.setdefault(held_fill_key(pos), {})
-        state.setdefault("side_pending", []).append((pos, reason, kwargs.get("wanted_shares")))
+        order = (pos, reason, kwargs.get("wanted_shares"))
+        if kwargs.get("order_id") is not None:
+            order = (*order, kwargs["order_id"])
+        state.setdefault("side_pending", []).append(order)
         path = side_path(reason)
         record_sell_pending(st, ds=day, hm=kwargs.get("hm"), code=code,
                             shares=kwargs.get("wanted_shares", pos.shares), path=path,
@@ -183,7 +187,8 @@ def fill_side_pending(st, code, pos, px, day, day_i, limits, *, hm):
     orders = _side_pending(st, pos)
     counted_scale = False
     for order in list(orders):
-        target, reason, wanted = order
+        target, reason, wanted = order[:3]
+        order_id = order[3] if len(order) > 3 else None
         if not position_is_open(st, target):
             orders.remove(order)
             continue
@@ -196,7 +201,8 @@ def fill_side_pending(st, code, pos, px, day, day_i, limits, *, hm):
             continue
         filled = _sell(st, code, target, px, day, reason + ":next_open",
                        day_i=day_i, hm=hm, price_rule="minute_pending_next_open",
-                       **({"wanted_shares": wanted} if wanted is not None else {}))
+                       **({"wanted_shares": wanted} if wanted is not None else {}),
+                       **({"order_id": order_id} if order_id is not None else {}))
         if filled:
             if order in orders:
                 orders.remove(order)
@@ -281,6 +287,7 @@ def scale_out_exits(st, code, pos, px, day, day_i, limits, *, scale_step, scale_
     px = _side_price(fill_config, px)
     sold = 0
     queued = 0
+    order_id = fee_order_id(st) if target > 0 else None
     if target > 0:
         for lot in lots:
             if sold + queued >= target:
@@ -297,6 +304,7 @@ def scale_out_exits(st, code, pos, px, day, day_i, limits, *, scale_step, scale_
                 st, code, lot, px, day, "scale_out:5pct", day_i=day_i,
                 hm=hm, price_rule="minute_trigger_bar_close", fill_config=fill_config,
                 wanted_shares=chunk,
+                **({"order_id": order_id} if order_id is not None else {}),
             )
             sold += int(filled)
             if fill_config is not None and fill_config.fill_timing == "next_bar_open":

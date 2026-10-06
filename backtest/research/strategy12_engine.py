@@ -12,6 +12,8 @@ from backtest.research.csv_ledger import (
     _locked_bonus,
     _sell,
     apply_exdiv_economics,
+    fee_order_id,
+    release_fee_order,
     rescale_position,
 )
 from backtest.research.csv_simulate_loop import (
@@ -113,12 +115,16 @@ def fill_exit(st, code, px, day, *, day_i, ds, plan, limits, open_px,
         planned = rules.hold20_orders(lots, px)
     orders = (rules.clamp_exit(lots, planned, keep_anchor=reason == rules.REDUCE) if planned is not None
               else rules.allocate_exit(lots, wanted, keep_anchor=reason == rules.REDUCE))
+    order_key = ("strategy12-exit", code, reason)
+    order_id = fee_order_id(st, order_key)
     filled = 0
     for lot_id, shares in orders:
         pos = next(p for p in st.positions[code] if p.lot_id == lot_id)
         filled += _sell(st, code, pos, px, day, reason, wanted_shares=shares,
                         day_i=day_i, bucket_id=bucket_id, price_rule=price_rule,
-                        at=at, hm=hm)
+                        at=at, hm=hm, order_id=order_id)
+    if filled >= wanted or not st.positions.get(code):
+        release_fee_order(st, order_key)
     if reason == rules.STOP:
         memory_for(st, code).stopped.sold(filled)
     elif reason == rules.REDUCE:

@@ -38,9 +38,10 @@ def test_resolve_rule_profile_and_frozen_switches():
         if key not in {"name", "revision", "slippage_bp"}
     }
     assert switches.pop("s12_domain_stamp") is True
+    assert switches.pop("account_fee_schedule") is True
     assert not any(switches.values())
     assert LEGACY.slippage_bp == INDUSTRY.slippage_bp == 0
-    assert INDUSTRY.revision == "industry-p02-20261006"
+    assert INDUSTRY.revision == "industry-p03-20261006"
     with pytest.raises(FrozenInstanceError):
         INDUSTRY.account_fee_schedule = True
     with pytest.raises(ValueError, match="legacy.*industry.*RuleProfile"):
@@ -232,7 +233,7 @@ def _write_shared(state, root: Path, engine: str):
         ("standalone-v7", _v7_case, v7.write_run_artifacts),
     ],
 )
-def test_legacy_omitted_and_explicit_are_byte_identical_and_industry_is_stats_only(
+def test_legacy_omitted_and_explicit_are_byte_identical_and_industry_fee_differs(
     tmp_path, engine, factory, writer
 ):
     omitted = factory()
@@ -249,7 +250,10 @@ def test_legacy_omitted_and_explicit_are_byte_identical_and_industry_is_stats_on
     filenames = ("summary.txt", "daily_equity.csv", "trades.csv")
     for filename in filenames:
         assert (omitted_dir / filename).read_bytes() == (explicit_dir / filename).read_bytes()
-        assert (omitted_dir / filename).read_bytes() == (industry_dir / filename).read_bytes()
+    assert any(
+        (omitted_dir / filename).read_bytes() != (industry_dir / filename).read_bytes()
+        for filename in filenames
+    )
 
     assert omitted.trades
     assert any(str(row["side"]).lower() == "buy" for row in omitted.trades)
@@ -259,20 +263,15 @@ def test_legacy_omitted_and_explicit_are_byte_identical_and_industry_is_stats_on
     assert "rule_profile" not in omitted_stats
     assert "rule_profile_revision" not in explicit_stats
     industry_stats = industry.stats
-    assert set(industry_stats) - set(omitted_stats) == {
-        "rule_profile",
-        "rule_profile_revision",
-    }
-    assert {
-        key: value
-        for key, value in industry_stats.items()
-        if key not in {"rule_profile", "rule_profile_revision"}
-    } == omitted_stats
-    assert industry_stats == {
-        **omitted_stats,
-        "rule_profile": "industry",
-        "rule_profile_revision": INDUSTRY.revision,
-    }
+    assert industry_stats["rule_profile"] == "industry"
+    assert industry_stats["rule_profile_revision"] == INDUSTRY.revision
+    if engine in {"daily", "minute"}:
+        assert industry_stats["buy_cost_rate"] == 0.0003
+        assert industry_stats["sell_cost_rate"] == 0.0003
+        assert industry_stats["min_cost"] == 5.0
+    legacy_fills = [row for row in omitted.trades if str(row["side"]).lower() in {"buy", "sell"}]
+    industry_fills = [row for row in industry.trades if str(row["side"]).lower() in {"buy", "sell"}]
+    assert legacy_fills != industry_fills
 
 
 def test_v7_run_config_keeps_industry_profile_only(tmp_path):

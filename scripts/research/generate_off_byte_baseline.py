@@ -27,6 +27,8 @@ The 6.2-6.47 family (46 books, V6F overlay through v22) uses a scoped additive
 overlay; --record-v6f writes its daily/minute cases and refuses overwrite.
 Coverage for --check is asserted via assert_baseline_coverage() (registry-derived;
 no hardcoded book/case totals beyond the frozen historical 19/39).
+The industry P03 overlay is additive and profile-scoped; --record-industry-p03
+uses only tests/fixtures/industry/order_commission.json and refuses overwrite.
 """
 
 from __future__ import annotations
@@ -43,6 +45,7 @@ import subprocess
 import sys
 import tempfile
 from dataclasses import asdict
+from datetime import date
 from decimal import ROUND_HALF_EVEN, Decimal, localcontext
 from pathlib import Path
 
@@ -112,6 +115,17 @@ V6F_BOOK_NAMES = (
 V6F_GOLDEN = ROOT / "tests/fixtures/off_byte_baseline_v6_family_v22_20261006.json"
 V6F_RULE_REVISION = 'strategy6-family-v22-6_2-to-6_47-20261006'
 V6F_CASES = tuple((book, engine) for book in V6F_BOOK_NAMES for engine in ("daily", "minute"))
+P03_GOLDEN = ROOT / "tests/fixtures/off_byte_baseline_industry_p03_order_commission_20261006.json"
+P03_RULE_REVISION = "industry-p03-order-commission-20261006"
+P03_BOOK_NAMES = ("version6", "version7", "version8")
+P03_CASES = (
+    ("version6", "daily"),
+    ("version6", "minute"),
+    ("version7", "minute-native"),
+    ("version7", "standalone"),
+    ("version8", "s8-group"),
+)
+P03_FIXTURE = ROOT / "tests/fixtures/industry/order_commission.json"
 BOOK_NAMES = HISTORICAL_BOOK_NAMES + V61_BOOK_NAMES + V91_BOOK_NAMES + V92_BOOK_NAMES + V6F_BOOK_NAMES
 CODE = "600000.SH"
 TOPK_CODES = (CODE, "600001.SH", "600002.SH")
@@ -169,7 +183,147 @@ def _eligible_buy(_code, _day):
     return True
 
 
-def run_case(book: str, engine: str, *, explicit_false: bool = False):
+def _p03_inputs():
+    fixture = json.loads(P03_FIXTURE.read_text(encoding="utf-8"))
+    daily_index = pd.to_datetime(fixture["daily_days"])
+    bars = pd.DataFrame(
+        fixture["daily_rows"],
+        columns=["open", "high", "low", "close"],
+        index=daily_index,
+        dtype="float64",
+    )
+    minute_rows = fixture["minute_rows"]
+    minutes = pd.DataFrame(
+        [row[1:5] + [pd.Timestamp(row[0]).strftime("%Y%m%d"), row[5]] for row in minute_rows],
+        columns=["open", "high", "low", "close", "ymd", "hm"],
+        index=pd.to_datetime([row[0] for row in minute_rows]),
+    ).astype({"open": "float64", "high": "float64", "low": "float64", "close": "float64"})
+    return fixture, {fixture["symbol"]: bars}, {fixture["symbol"]: minutes}
+
+
+def _run_p03_s8_group(rule_profile):
+    from backtest.research.ashare_fees import resolve_account_fee_schedule
+    from backtest.research.csv_ledger import (
+        SimState,
+        _sell,
+        bind_account_fee_schedule,
+        configure_s8,
+        execute_buy,
+        exit_positions,
+    )
+    from backtest.research.rule_profile import resolve_rule_profile
+
+    fixture, _daily_bars, _minute_bars = _p03_inputs()
+    profile = resolve_rule_profile(rule_profile)
+    state = SimState(cash=fixture["cash_total"])
+    configure_s8(
+        state,
+        {"name": "version8", "sizing": "per_name", "name_budget": fixture["daily_quota"]},
+    )
+    if profile.account_fee_schedule:
+        bind_account_fee_schedule(
+            state, resolve_account_fee_schedule(profile.account_fee_schedule)
+        )
+    state.stats.update(
+        buy_cost_rate=state.buy_cost_rate,
+        sell_cost_rate=state.sell_cost_rate,
+        min_cost=state.min_cost,
+    )
+    symbol = fixture["symbol"]
+    position_id = f"{symbol}@20251103"
+    assert execute_buy(
+        state, symbol, 10.0, 1000.0, 0, pd.Timestamp("2025-11-03"),
+        position_id=position_id, entry_signal_date="20251103",
+    )
+    assert execute_buy(
+        state, symbol, 10.0, 1000.0, 1, pd.Timestamp("2025-11-04"),
+        reason="add:step20", position_id=position_id, entry_signal_date="20251103",
+    )
+    position = exit_positions(
+        state, symbol, 2, day=pd.Timestamp("2025-11-05")
+    )[0]
+    assert _sell(
+        state, symbol, position, 10.0, pd.Timestamp("2025-11-05"),
+        "force_sell", day_i=2,
+    ) == 200
+    state.stats["chase_explained"] = 0
+    if profile.name == "industry":
+        state.stats["rule_profile"] = profile.name
+        state.stats["rule_profile_revision"] = profile.revision
+    state.equity_curve.append(("20251105", state.cash))
+    return state
+
+
+def run_p03_case(book: str, engine: str, *, rule_profile: str = "industry"):
+    fixture, daily_bars, minute_bars = _p03_inputs()
+    common = dict(
+        total_cash=fixture["cash_total"],
+        daily_quota=fixture["daily_quota"],
+        strategy=book,
+        stop_pct=0.02,
+        rule_profile=rule_profile,
+    )
+    if (book, engine) == ("version6", "daily"):
+        return daily.simulate(
+            daily_bars, fixture["pool_days"], fixture["start"], fixture["end"], **common
+        )
+    if (book, engine) == ("version6", "minute"):
+        return minute.simulate(
+            minute_bars, daily_bars, fixture["pool_days"],
+            fixture["start"], fixture["end"], **common,
+        )
+    if book == "version7":
+        symbol = fixture["symbol"]
+        days = [date.fromisoformat(value) for value in fixture["v7_days"]]
+        prices = fixture["v7_prices"]
+        minute_records = {
+            symbol: [
+                {
+                    "date": days[0], "hm": 895, "open": prices[0], "high": prices[0],
+                    "low": prices[0], "close": prices[0],
+                },
+                {
+                    "date": days[1], "hm": 570, "open": prices[1], "high": prices[1],
+                    "low": prices[1], "close": prices[1],
+                },
+            ]
+        }
+        v7_daily = {
+            symbol: {
+                days[0] - pd.Timedelta(days=1): prices[0],
+                days[0]: fixture["v7_signal_close"],
+            }
+        }
+        pools = {days[0]: [symbol]}
+        if engine == "minute-native":
+            from backtest.research.minute_engine_policies import MinutePolicyContext
+
+            return minute.simulate(
+                minute_records, v7_daily, pools, days[0], days[-1],
+                strategy="version7", total_cash=fixture["cash_total"],
+                policy_context=MinutePolicyContext(index_days=days),
+                rule_profile=rule_profile,
+            )
+        if engine == "standalone":
+            return v7.simulate_v7(
+                minute_records, v7_daily, pools, days,
+                cash_total=fixture["cash_total"], rule_profile=rule_profile,
+            )
+    if (book, engine) == ("version8", "s8-group"):
+        return _run_p03_s8_group(rule_profile)
+    raise KeyError((book, engine))
+
+
+def run_case(
+    book: str,
+    engine: str,
+    *,
+    explicit_false: bool = False,
+    rule_profile: str = "legacy",
+    fixture: str | None = None,
+):
+    if fixture == "p03":
+        return run_p03_case(book, engine, rule_profile=rule_profile)
     if book in ("version6_11", "version6_12"):
         # 突破书：共享路径涨不到 A0x1.2，专用路径才有成交。
         bars, minutes, pools, start, end, dates = frozen_inputs(BREAKOUT_PRICES)
@@ -221,7 +375,8 @@ def run_case(book: str, engine: str, *, explicit_false: bool = False):
     if book == "version7":
         return v7.simulate_v7(minute_bars, daily_bars, pools,
                               index_days={day.date(): 3000. for day in dates},
-                              cash_total=5_000_000., start=start, end=end)
+                              cash_total=5_000_000., start=start, end=end,
+                              rule_profile=rule_profile)
     simulate = daily.simulate if engine == "daily" else minute.simulate
     if explicit_false:
         # The pre-change commit has no new API. Once added, every supported
@@ -229,7 +384,7 @@ def run_case(book: str, engine: str, *, explicit_false: bool = False):
         kwargs.update({name: False for name in inspect.signature(simulate).parameters
                        if name.startswith("fix_")})
     args = (daily_bars,) if engine == "daily" else (minute_bars, daily_bars)
-    return simulate(*args, pools, start, end, **kwargs)
+    return simulate(*args, pools, start, end, rule_profile=rule_profile, **kwargs)
 
 
 def _hash(blob: bytes) -> str:
@@ -385,9 +540,36 @@ def load_s9_golden() -> dict:
     return golden
 
 
-def expected_case(book: str, engine: str) -> tuple[dict, dict, str]:
+def load_p03_golden() -> dict:
+    """Opt-in industry profile overlay; all legacy files stay immutable."""
+    assert _hash(GOLDEN.read_bytes()) == HISTORICAL_GOLDEN_SHA256
+    assert _hash(CANONICAL_GOLDEN.read_bytes()) == HISTORICAL_CANONICAL_SHA256
+    golden = json.loads(P03_GOLDEN.read_text(encoding="utf-8"))
+    assert golden["rule_revision"] == P03_RULE_REVISION
+    assert golden["historical_raw_sha256"] == HISTORICAL_GOLDEN_SHA256
+    assert golden["historical_canonical_sha256"] == HISTORICAL_CANONICAL_SHA256
+    assert golden["contract"] == CANONICAL_CONTRACT
+    assert golden["books"] == list(P03_BOOK_NAMES)
+    assert set(golden["cases"]) == {f"{book}/{engine}" for book, engine in P03_CASES}
+    return golden
+
+
+def expected_case(
+    book: str, engine: str, *, rule_profile: str = "legacy"
+) -> tuple[dict, dict, str]:
     """Return account/raw, canonical hashes, and the recorded pandas version."""
     key = f"{book}/{engine}"
+    if rule_profile == "industry":
+        if (book, engine) not in P03_CASES:
+            raise KeyError(f"no P03 industry baseline case: {key}")
+        golden = load_p03_golden()
+        case = golden["cases"][key]
+        canonical = {
+            name: canonical_hash(table) for name, table in case["canonical_csv"].items()
+        }
+        return case, canonical, golden["captured_environment"]["pandas"]
+    if rule_profile != "legacy":
+        raise ValueError(f"unsupported baseline rule_profile: {rule_profile!r}")
     if (book, engine) in S8_CASES:
         golden = load_s8_golden()
         case = golden["cases"][key]
@@ -466,8 +648,14 @@ def _library_bytes(state, book: str):
                 index=False, lineterminator="\n").encode("utf-8"),
         }
     result = {}
+    trade_fields = ("date", "symbol", "hm", "side", "shares", "price", "reason")
+    if any("commission" in row for row in state.trades):
+        trade_fields = (
+            "date", "symbol", "hm", "side", "shares", "price",
+            "notional", "commission", "reason",
+        )
     for name, rows, fields in (
-        ("trades", state.trades, ("date", "symbol", "hm", "side", "shares", "price", "reason")),
+        ("trades", state.trades, trade_fields),
         ("equity", state.equity_curve, ("date", "cash", "holdings", "equity")),
     ):
         stream = io.StringIO(newline="")
@@ -478,8 +666,19 @@ def _library_bytes(state, book: str):
     return result
 
 
-def capture_case(book: str, engine: str, output_dir: Path, *, explicit_false: bool = False):
-    state = run_case(book, engine, explicit_false=explicit_false)
+def capture_case(
+    book: str,
+    engine: str,
+    output_dir: Path,
+    *,
+    explicit_false: bool = False,
+    rule_profile: str = "legacy",
+    fixture: str | None = None,
+):
+    state = run_case(
+        book, engine, explicit_false=explicit_false,
+        rule_profile=rule_profile, fixture=fixture,
+    )
     trades = [row for row in state.trades if row["side"].upper() in ("BUY", "SELL")]
     assert any(row["side"].upper() == "BUY" for row in trades), (book, engine, "no BUY")
     assert any(row["side"].upper() == "SELL" for row in trades), (book, engine, "no SELL")
@@ -526,6 +725,15 @@ def assert_baseline_coverage():
     assert set(CASES) == {
         (book, engine) for book in BOOK_NAMES for engine in ("daily", "minute")
     } | {("version7", "minute")}
+    assert set(P03_BOOK_NAMES) <= set(BOOK_NAMES) | {"version7"}
+    assert set(P03_CASES) == {
+        ("version6", "daily"),
+        ("version6", "minute"),
+        ("version7", "minute-native"),
+        ("version7", "standalone"),
+        ("version8", "s8-group"),
+    }
+    assert P03_FIXTURE.is_file()
 
 
 def capture_matrix(output_dir: Path, *, explicit_false: bool = False):
@@ -587,7 +795,55 @@ def main():
                       help="Record only the 2 version12 MA10-stop cases")
     mode.add_argument("--record-s9", action="store_true",
                       help="Record only the 2 version9 trailing 2x mean true range cases")
+    mode.add_argument(
+        "--record-industry-p03",
+        action="store_true",
+        help="Record the five synthetic industry P03 per-order commission cases",
+    )
     args = parser.parse_args()
+    if args.record_industry_p03:
+        if P03_GOLDEN.exists():
+            parser.error("The industry P03 overlay already exists; refusing to overwrite")
+        if pd.__version__ != "3.0.6":
+            parser.error("industry P03 recording requires the authorized pandas 3.0.6 environment")
+        assert _hash(GOLDEN.read_bytes()) == HISTORICAL_GOLDEN_SHA256
+        assert _hash(CANONICAL_GOLDEN.read_bytes()) == HISTORICAL_CANONICAL_SHA256
+        with tempfile.TemporaryDirectory(prefix="industry-p03-byte-baseline-") as temp:
+            cases = {
+                f"{book}/{engine}": capture_case(
+                    book, engine, Path(temp) / book / engine,
+                    rule_profile="industry", fixture="p03",
+                )
+                for book, engine in P03_CASES
+            }
+        for case in cases.values():
+            assert_case_bytes(case, case)
+            assert case["fill_counts"]["BUY"] > 0 and case["fill_counts"]["SELL"] > 0
+        s8_fills = cases["version8/s8-group"]["structured"]["fills"]
+        s8_sells = [row for row in s8_fills if row["side"] == "SELL"]
+        assert len(s8_sells) == 2
+        assert sum(row["commission"] for row in s8_sells) == 5.0
+        assert any(row["commission"] == 5.0 for case in cases.values()
+                   for row in case["structured"]["fills"])
+        payload = {
+            "rule_revision": P03_RULE_REVISION,
+            "historical_raw_sha256": HISTORICAL_GOLDEN_SHA256,
+            "historical_canonical_sha256": HISTORICAL_CANONICAL_SHA256,
+            "books": list(P03_BOOK_NAMES),
+            "captured_environment": {
+                "python": platform.python_version(),
+                "pandas": pd.__version__,
+                "platform": sys.platform,
+            },
+            "contract": CANONICAL_CONTRACT,
+            "cases": cases,
+        }
+        P03_GOLDEN.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        print(f"Wrote {P03_GOLDEN}: {len(cases)} industry cases")
+        return
     if args.record_s8:
         if S8_GOLDEN.exists():
             parser.error("The S8 correction overlay already exists; refusing to overwrite")
@@ -829,13 +1085,31 @@ def main():
                 skipped.add(reason)
             else:
                 assert_case_bytes(actual, expected)
+        with tempfile.TemporaryDirectory(prefix="industry-p03-check-") as temp:
+            industry_cases = {
+                (book, engine): capture_case(
+                    book, engine, Path(temp) / book / engine,
+                    rule_profile="industry", fixture="p03",
+                )
+                for book, engine in P03_CASES
+            }
+        for (book, engine), actual in industry_cases.items():
+            expected, canonical_expected, recorded_pandas = expected_case(
+                book, engine, rule_profile="industry"
+            )
+            assert_case_canonical(book, actual, expected, canonical_expected)
+            reason = byte_skip_reason(recorded_pandas)
+            if reason:
+                skipped.add(reason)
+            else:
+                assert_case_bytes(actual, expected)
         for reason in sorted(skipped):
             print(f"SKIP: {reason}")
         if not skipped:
             print(f"PASS: production CSV + library hashes (raw bytes) for {len(CASES)} cases")
         print(
             f"PASS: {len(CASES)} canonical CSV/account cases across current registry "
-            f"and overlays; pandas={pd.__version__}"
+            f"and overlays plus {len(P03_CASES)} industry P03 cases; pandas={pd.__version__}"
         )
         return
     for case in cases.values():

@@ -77,6 +77,7 @@ from backtest.research.csv_ledger import (  # noqa: E402
     _ymd,
     chase_decision as chase_decision,
     chase_explained as chase_explained,
+    bind_account_fee_schedule,
     configure_s8,
     execute_buy as execute_buy,
     exit_positions,
@@ -91,6 +92,7 @@ from backtest.research.csv_ledger import (  # noqa: E402
     apply_exdiv_economics,
     resolve_limit_prices,
 )
+from backtest.research.ashare_fees import resolve_account_fee_schedule  # noqa: E402
 from backtest.research.ashare_exdiv_economics import EconomicLookup, ExDivEconomics  # noqa: E402
 from backtest.research.rule_profile import (  # noqa: E402
     RuleProfile,
@@ -264,6 +266,10 @@ def simulate(
     默认 None 保留原行为，事件配合 raw bars 使用，不从 exdiv 的 k 推断权益。
     """
     profile = resolve_rule_profile(rule_profile)
+    fee_schedule = resolve_account_fee_schedule(
+        profile.account_fee_schedule,
+        explicit_rates=(buy_cost_rate, sell_cost_rate, min_cost),
+    )
     from backtest.research.strategy9_rules import validate_sell_mode
     validate_sell_mode(normalize_csv_strategy(strategy), version9_sell, max_hold)
     if max_hold and normalize_csv_strategy(strategy) != "version9":
@@ -332,6 +338,8 @@ def simulate(
         st.sell_cost_rate = float(sell_cost_rate)
     if min_cost is not None:
         st.min_cost = float(min_cost)
+    if profile.account_fee_schedule:
+        bind_account_fee_schedule(st, fee_schedule)
     st.stats["buy_cost_rate"] = st.buy_cost_rate
     st.stats["sell_cost_rate"] = st.sell_cost_rate
     st.stats["min_cost"] = st.min_cost
@@ -731,6 +739,10 @@ def run(
     rule_profile: str | RuleProfile = "legacy",
 ) -> SimState:
     profile = resolve_rule_profile(rule_profile)
+    resolve_account_fee_schedule(
+        profile.account_fee_schedule,
+        explicit_rates=(buy_cost_rate, sell_cost_rate, min_cost),
+    )
     from backtest.research.strategy9_rules import validate_sell_mode
     validate_sell_mode(normalize_csv_strategy(strategy), version9_sell, max_hold)
     if max_hold and normalize_csv_strategy(strategy) != "version9":

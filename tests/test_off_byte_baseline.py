@@ -20,6 +20,8 @@ from scripts.research.generate_off_byte_baseline import (
     HISTORICAL_CASES,
     HISTORICAL_CANONICAL_SHA256,
     HISTORICAL_GOLDEN_SHA256,
+    P03_CASES,
+    P03_GOLDEN,
     S9_CASES,
     load_s9_golden,
     S12_CASES,
@@ -41,6 +43,7 @@ from scripts.research.generate_off_byte_baseline import (
     capture_case,
     expected_case,
     load_canonical_golden,
+    load_p03_golden,
     load_s8_golden,
     load_v61_golden,
     load_v91_golden,
@@ -195,6 +198,44 @@ def test_version9_overlay_only_replaces_range_stop_cases():
         sells = [t for t in case["structured"]["fills"] if t["side"] == "SELL"]
         assert all(t["reason"] in {"stop_loss:gap_open", "stop_loss:touch", "stop_loss:close"}
                    for t in sells if t["reason"].startswith("stop_loss"))
+
+
+def test_industry_p03_overlay_is_opt_in_and_legacy_goldens_stay_frozen(tmp_path):
+    assert sha256(GOLDEN.read_bytes()).hexdigest() == HISTORICAL_GOLDEN_SHA256
+    assert sha256(CANONICAL_GOLDEN.read_bytes()).hexdigest() == HISTORICAL_CANONICAL_SHA256
+    golden = load_p03_golden()
+    assert P03_GOLDEN.exists()
+    assert set(golden["cases"]) == {f"{book}/{engine}" for book, engine in P03_CASES}
+    assert golden["captured_environment"]["pandas"] == "3.0.6"
+
+    for book, engine in P03_CASES:
+        industry = capture_case(
+            book, engine, tmp_path / "industry" / book / engine,
+            rule_profile="industry", fixture="p03",
+        )
+        expected, canonical, recorded = expected_case(
+            book, engine, rule_profile="industry"
+        )
+        assert_case_canonical(book, industry, expected, canonical)
+        assert recorded == "3.0.6"
+        if byte_skip_reason(recorded) is None:
+            assert_case_bytes(industry, expected)
+        assert industry["fill_counts"]["BUY"] > 0
+        assert industry["fill_counts"]["SELL"] > 0
+
+        legacy = capture_case(
+            book, engine, tmp_path / "legacy" / book / engine,
+            rule_profile="legacy", fixture="p03",
+        )
+        assert legacy["structured"] != industry["structured"]
+        assert legacy["sha256_csv_bytes"] != industry["sha256_csv_bytes"]
+
+    s8_sells = [
+        row
+        for row in golden["cases"]["version8/s8-group"]["structured"]["fills"]
+        if row["side"] == "SELL"
+    ]
+    assert [row["commission"] for row in s8_sells] == [2.5, 2.5]
 
 
 @pytest.mark.parametrize("explicit_false", [False, True], ids=["omitted", "explicit-off"])

@@ -14,6 +14,11 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, Iterable, Mapping, Sequence
 from backtest.research.ashare_fees import DEFAULT_SCHEDULE, FeeSchedule
+from backtest.research.csv_ledger import (
+    _accrue_order_fee,
+    fee_order_id,
+    release_fee_order,
+)
 from backtest.research.ashare_volume_cap import VolumeCap, VolumeLookup
 from backtest.research.ashare_exdiv_economics import ExDivEconomics, EconomicLookup
 from backtest.research.market_layer import as_date as _as_date, as_datetime as _as_datetime
@@ -192,11 +197,17 @@ def _apply_exdiv_economics(state: SimResult, position: Position, ds: str) -> Non
 
 
 def _event(state: SimResult, day: date, symbol: str, hm: int | None, side: str, shares: int,
-           price: float | None, reason: str, *, cash_before: float | None = None) -> None:
-    state.trades.append({"date": day.isoformat(), "symbol": symbol, "hm": hm, "side": side,
-                         "shares": shares, "price": price, "reason": reason})
+           price: float | None, reason: str, *, cash_before: float | None = None,
+           order_id=None) -> None:
+    trade = {"date": day.isoformat(), "symbol": symbol, "hm": hm, "side": side,
+             "shares": shares, "price": price, "reason": reason}
+    if order_id is not None and price is not None:
+        trade.update(notional=shares * price, commission=0.0)
+    state.trades.append(trade)
     commission = 0.0
-    if cash_before is not None and price is not None:
+    if order_id is not None:
+        commission = _accrue_order_fee(state, side.upper(), order_id, trade)
+    elif cash_before is not None and price is not None:
         if side == "buy":
             commission = cash_before - state.cash - shares * price
         elif side == "sell":
@@ -210,7 +221,13 @@ def _buy(state: SimResult, position: Position | None, symbol: str, day: date, hm
          fee: FeeSchedule = DEFAULT_SCHEDULE) -> Position | None:
     target = NAME_BUDGET * fraction
     shares = native_budget_board_lots(target, price)
-    cost = fee.debit_buy(shares * price)
+    order_id = fee_order_id(state)
+    if order_id is None:
+        cost = fee.debit_buy(shares * price)
+    else:
+        cost = shares * price + state._fee_accumulators["BUY"].preview(
+            order_id, shares * price
+        ).fee_delta
     if shares <= 0 or cost > state.cash:
         _event(state, day, symbol, hm, "skip", 0, price, "skip_cash")
         return None
@@ -220,7 +237,12 @@ def _buy(state: SimResult, position: Position | None, symbol: str, day: date, hm
         if not shares:
             _event(state, day, symbol, hm, "skip", 0, price, skip)
             return None
-        cost = fee.debit_buy(shares * price)
+        if order_id is None:
+            cost = fee.debit_buy(shares * price)
+        else:
+            cost = shares * price + state._fee_accumulators["BUY"].preview(
+                order_id, shares * price
+            ).fee_delta
     cash_before = state.cash
     state.cash -= cost
     if position is None:
@@ -230,7 +252,10 @@ def _buy(state: SimResult, position: Position | None, symbol: str, day: date, hm
     position.avg_cost = ((position.avg_cost * old_shares) + price * shares) / (old_shares + shares)
     position.lots.append(Lot(shares, day, price, kind))
     position.last_add_date = day
-    _event(state, day, symbol, hm, "buy", shares, price, reason, cash_before=cash_before)
+    _event(
+        state, day, symbol, hm, "buy", shares, price, reason,
+        cash_before=cash_before, order_id=order_id,
+    )
     if state.volume_cap is not None:
         state.volume_cap.consume(key, shares)
     return position
@@ -245,6 +270,9 @@ def _sell_lots(state: SimResult, position: Position, day: date, hm: int, price: 
     )
     if wanted <= 0:
         return 0
+    order_key = ("v7-sell", id(position), reason, kind)
+    order_id = fee_order_id(state, order_key)
+    requested = wanted
     if state.volume_cap is not None:
         key = (position.symbol, day.strftime("%Y%m%d"), hm)
         wanted, skip = state.volume_cap.clamp(key, hm if at is None else at, wanted)
@@ -262,8 +290,19 @@ def _sell_lots(state: SimResult, position: Position, day: date, hm: int, price: 
     sold = wanted - remaining
     position.lots = kept
     cash_before = state.cash
-    state.cash += fee.credit_sell(sold * price)
-    _event(state, day, position.symbol, hm, "sell", sold, price, reason, cash_before=cash_before)
+    if order_id is None:
+        state.cash += fee.credit_sell(sold * price)
+    else:
+        fee_delta = state._fee_accumulators["SELL"].preview(
+            order_id, sold * price
+        ).fee_delta
+        state.cash += sold * price - fee_delta
+    _event(
+        state, day, position.symbol, hm, "sell", sold, price, reason,
+        cash_before=cash_before, order_id=order_id,
+    )
+    if order_id is not None and sold >= requested:
+        release_fee_order(state, order_key)
     if state.volume_cap is not None:
         state.volume_cap.consume(key, sold)
     if position.shares:
@@ -290,8 +329,15 @@ def _buy_tail_slice(state: SimResult, parent: TailParent, symbol: str, day: date
         if not shares:
             _event(state, day, symbol, hm, "skip", 0, quote.price, skip)
             return
+    order_id = fee_order_id(state)
     cash_before = state.cash
-    state.cash -= fee.debit_buy(shares * quote.price)
+    if order_id is None:
+        state.cash -= fee.debit_buy(shares * quote.price)
+    else:
+        fee_delta = state._fee_accumulators["BUY"].preview(
+            order_id, shares * quote.price
+        ).fee_delta
+        state.cash -= shares * quote.price + fee_delta
     position = state.positions.get(symbol)
     if position is None:
         position = Position(symbol=symbol, entry_A=quote.price, last_add_date=day,
@@ -308,7 +354,10 @@ def _buy_tail_slice(state: SimResult, parent: TailParent, symbol: str, day: date
     position.last_add_date = day
     # Merged T+0 children change size and weighted cost, never the initial peak.
     parent.book(shares, quote.price)
-    _event(state, day, symbol, hm, "buy", shares, quote.price, "buy:trial", cash_before=cash_before)
+    _event(
+        state, day, symbol, hm, "buy", shares, quote.price, "buy:trial",
+        cash_before=cash_before, order_id=order_id,
+    )
     if state.volume_cap is not None:
         state.volume_cap.consume(key, shares)
 
@@ -719,7 +768,7 @@ def simulate_native(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, S
                 exdiv_economics: EconomicLookup | None = None,
                 names: Mapping[str, str] | None = None,
                 names_by_day: Mapping[str, Mapping[str, str]] | None = None,
-                fee: FeeSchedule = DEFAULT_SCHEDULE,
+                fee: FeeSchedule | None = None,
                 participation_rate: float | None = None,
                 volume_for_bucket: VolumeLookup | None = None,
                 fix_minute_cash_order: bool = False,
@@ -735,6 +784,11 @@ def simulate_native(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, S
     validate_tail_options(tail_window_buy, fix_minute_cash_order, tail_volume_unit)
     if tail_window_buy:
         tail_volume_unit = resolve_tail_volume_unit(tail_volume_unit)
+    context_fee = (
+        DEFAULT_SCHEDULE
+        if fee is None and not profile.account_fee_schedule
+        else fee
+    )
     from backtest.research.csv_minute_backtest import simulate
     from backtest.research.minute_engine_policies import MinutePolicyContext
     return simulate(
@@ -745,7 +799,7 @@ def simulate_native(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, S
         audit_sink=audit_sink, fix_minute_cash_order=fix_minute_cash_order,
         tail_window_buy=tail_window_buy, tail_volume_unit=tail_volume_unit,
         policy_context=MinutePolicyContext(
-            index_days=index_days, fee_schedule=fee, rule_profile=profile,
+            index_days=index_days, fee_schedule=context_fee, rule_profile=profile,
         ),
         rule_profile=profile,
     )

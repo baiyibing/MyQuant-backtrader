@@ -16,7 +16,7 @@ from scripts.research import generate_off_byte_baseline as baseline
 def format_coverage_failure(error: AssertionError) -> str:
     missing = sorted(set(BOOKS) - set(baseline.BOOK_NAMES))
     extra = sorted(set(baseline.BOOK_NAMES) - set(BOOKS))
-    groups = ("HISTORICAL", "V61", "V91", "V92", "V6F", "S8", "S12", "S9")
+    groups = ("HISTORICAL", "V61", "V91", "V92", "V6F", "S8", "S12", "S9", "P03")
     covered = set().union(*(set(getattr(baseline, f"{group}_BOOK_NAMES")) for group in groups))
     lines = [
         "FAIL: book admission baseline coverage",
