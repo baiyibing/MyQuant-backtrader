@@ -58,6 +58,7 @@ from backtest.research.csv_ledger import (
     s8_policy,
     trade_commission,
     uses_fee_aware_affordability,
+    uses_shrink_on_short_cash,
 )
 from backtest.research.minute_audit import record_rejection
 from backtest.research.csv_simulate_loop import (
@@ -640,6 +641,7 @@ def run_chronological_day(
                 continue
             parent = TailParent.from_budget(budget, px)
             fee_aware = uses_fee_aware_affordability(st)
+            shrink_short_cash = uses_shrink_on_short_cash(st)
             if fee_aware:
                 order_debit = (
                     lambda notional, code=code: st.account_fee_schedule.debit_buy(
@@ -648,7 +650,7 @@ def run_chronological_day(
                 )
             else:
                 order_debit = debit
-            if independent_policy is not None and not fee_aware:
+            if independent_policy is not None and not shrink_short_cash:
                 needed = parent.opening_debit(px, order_debit)
                 if not check_buy_cash(st, needed=needed, available=st.cash, date=ds, code=code):
                     st.stats["skip_cash"] = st.stats.get("skip_cash", 0) + 1
@@ -685,11 +687,12 @@ def run_chronological_day(
                 reject_tail("limit_down")
                 continue
             fee_aware = uses_fee_aware_affordability(st)
+            shrink_short_cash = uses_shrink_on_short_cash(st)
             shares = (
                 parent.requested_shares(
                     quote, order_debit if fee_aware else None
                 )
-                if independent_policy is not None and not fee_aware
+                if independent_policy is not None and not shrink_short_cash
                 else parent.allocation(
                     quote,
                     st.cash,

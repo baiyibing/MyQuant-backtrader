@@ -344,7 +344,11 @@ def simulate(
         pool_names_by_day=pool_names_by_day,
         daily_quota=daily_quota,
     )
-    if profile.supplementary_min_lot or profile.fee_aware_affordability:
+    if (
+        profile.supplementary_min_lot
+        or profile.fee_aware_affordability
+        or profile.shrink_on_short_cash
+    ):
         st.rule_profile = profile
     if delayed_pool_stats is not None:
         st.stats.update(delayed_pool_stats)

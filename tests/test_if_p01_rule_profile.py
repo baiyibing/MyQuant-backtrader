@@ -41,9 +41,10 @@ def test_resolve_rule_profile_and_frozen_switches():
     assert switches.pop("account_fee_schedule") is True
     assert switches.pop("supplementary_min_lot") is True
     assert switches.pop("fee_aware_affordability") is True
+    assert switches.pop("shrink_on_short_cash") is True
     assert not any(switches.values())
     assert LEGACY.slippage_bp == INDUSTRY.slippage_bp == 0
-    assert INDUSTRY.revision == "industry-p07-20261006"
+    assert INDUSTRY.revision == "industry-p08-20261006"
     with pytest.raises(FrozenInstanceError):
         INDUSTRY.account_fee_schedule = True
     with pytest.raises(ValueError, match="legacy.*industry.*RuleProfile"):

@@ -153,7 +153,7 @@ def test_industry_b8_04_sizes_one_lot_down_for_all_buy_fees():
     )
 
 
-def test_industry_b8_04_also_limits_quantity_by_available_cash():
+def test_industry_b8_06_helper_limits_quantity_by_available_cash():
     debit = lambda notional: INDUSTRY_ACCOUNT_FEES.debit_buy(
         notional, pd.Timestamp("2026-10-06"), "600000.SH"
     )

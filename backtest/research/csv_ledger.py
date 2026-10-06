@@ -260,12 +260,22 @@ def reject_short_cash_override(hooks: dict, entry: str) -> None:
 
 def resolve_buy_cash_mode(st, hooks: dict) -> None:
     """Resolve after policy binding; keep configuration out of snapshots."""
+    default_mode = (
+        "raise"
+        if getattr(st, "book_state", {}).get("s8_independent") is not None
+        else "skip"
+    )
     if "on_short_cash" in hooks:
         mode = hooks["on_short_cash"]
         if mode not in ("raise", "skip"):
             raise ValueError("on_short_cash must be 'raise' or 'skip'")
+        if uses_shrink_on_short_cash(st) and mode != default_mode:
+            raise ValueError(
+                "rule_profile='industry' shrink_on_short_cash conflicts with "
+                f"explicit non-default on_short_cash={mode!r}; remove the override"
+            )
     else:
-        mode = "raise" if s8_policy(st) is not None else "skip"
+        mode = default_mode
     st.on_short_cash = mode
 
 
@@ -683,6 +693,13 @@ def uses_fee_aware_affordability(st) -> bool:
     )
 
 
+def uses_shrink_on_short_cash(st) -> bool:
+    """Return whether short cash shrinks the declaration instead of using B7."""
+    return bool(
+        getattr(getattr(st, "rule_profile", None), "shrink_on_short_cash", False)
+    )
+
+
 def execute_buy(
     st: SimState,
     code: str,
@@ -743,6 +760,7 @@ def execute_buy(
     star_declare = st.star_lot_declare_check and _digit_prefix(code).startswith(("688", "689"))
     no_min_lot_top_up = not allows_min_lot_top_up(st)
     fee_aware = uses_fee_aware_affordability(st)
+    shrink_short_cash = uses_shrink_on_short_cash(st)
     if shares_override is None:
         shares, supp = _buy_size(
             per,
@@ -765,7 +783,7 @@ def execute_buy(
             shares,
             px,
             per,
-            st.cash,
+            st.cash if shrink_short_cash else per,
             debit,
             increment=1 if star_declare else BOARD_LOT,
             minimum=STAR_MIN_DECLARE if star_declare else BOARD_LOT,

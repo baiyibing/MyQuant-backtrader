@@ -429,4 +429,3 @@ def test_summary_params_reflect_hold_days():
         "  参数: SCAN T+3 买入 | 固定止损 weighted cost ×0.90 | "
         "满持有 30 日收盘决定、次开 force_sell:max_hold | 不加仓"
     ) in text30.splitlines()
-

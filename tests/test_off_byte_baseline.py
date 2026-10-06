@@ -30,6 +30,8 @@ from scripts.research.generate_off_byte_baseline import (
     P06_GOLDEN,
     P07_CASES,
     P07_GOLDEN,
+    P08_CASES,
+    P08_GOLDEN,
     S9_CASES,
     load_s9_golden,
     S12_CASES,
@@ -58,6 +60,7 @@ from scripts.research.generate_off_byte_baseline import (
     load_p05_golden,
     load_p06_golden,
     load_p07_golden,
+    load_p08_golden,
     load_s8_golden,
     load_v61_golden,
     load_v91_golden,
@@ -297,9 +300,7 @@ def test_industry_p06_overlay_stays_immutable_after_later_profile_slices():
         assert case["structured"]["stats"]["supplementary_used"] == 0.0
 
 
-def test_industry_p07_fee_aware_sizing_overlay_is_active_and_legacy_stays_frozen(
-    tmp_path,
-):
+def test_industry_p07_overlay_stays_immutable_after_later_profile_slices():
     assert sha256(GOLDEN.read_bytes()).hexdigest() == HISTORICAL_GOLDEN_SHA256
     assert sha256(CANONICAL_GOLDEN.read_bytes()).hexdigest() == HISTORICAL_CANONICAL_SHA256
     golden = load_p07_golden()
@@ -307,13 +308,29 @@ def test_industry_p07_fee_aware_sizing_overlay_is_active_and_legacy_stays_frozen
     assert set(golden["cases"]) == {f"{book}/{engine}" for book, engine in P07_CASES}
     assert golden["captured_environment"]["pandas"] == "3.0.6"
 
-    for book, engine in P07_CASES:
+    for case in golden["cases"].values():
+        assert case["fill_counts"] == {"BUY": 1, "SELL": 1}
+
+
+def test_industry_p08_short_cash_overlay_is_active_and_legacy_stays_frozen(
+    tmp_path,
+):
+    from backtest.research.csv_ledger import InsufficientCashError
+
+    assert sha256(GOLDEN.read_bytes()).hexdigest() == HISTORICAL_GOLDEN_SHA256
+    assert sha256(CANONICAL_GOLDEN.read_bytes()).hexdigest() == HISTORICAL_CANONICAL_SHA256
+    golden = load_p08_golden()
+    assert P08_GOLDEN.exists()
+    assert set(golden["cases"]) == {f"{book}/{engine}" for book, engine in P08_CASES}
+    assert golden["captured_environment"]["pandas"] == "3.0.6"
+
+    for book, engine in P08_CASES:
         industry = capture_case(
             book,
             engine,
-            tmp_path / "industry-p07" / book / engine,
+            tmp_path / "industry-p08" / book / engine,
             rule_profile="industry",
-            fixture="p07",
+            fixture="p08",
         )
         expected, canonical, recorded = expected_case(
             book, engine, rule_profile="industry"
@@ -324,38 +341,24 @@ def test_industry_p07_fee_aware_sizing_overlay_is_active_and_legacy_stays_frozen
             assert_case_bytes(industry, expected)
         assert industry["fill_counts"] == {"BUY": 1, "SELL": 1}
 
-        legacy = capture_case(
-            book,
-            engine,
-            tmp_path / "legacy-p07" / book / engine,
-            rule_profile="legacy",
-            fixture="p07",
-        )
-        assert legacy["fill_counts"] == {"BUY": 1, "SELL": 1}
+        with pytest.raises(InsufficientCashError):
+            capture_case(
+                book,
+                engine,
+                tmp_path / "legacy-p08" / book / engine,
+                rule_profile="legacy",
+                fixture="p08",
+            )
         industry_buy = next(
             row for row in industry["structured"]["fills"] if row["side"].upper() == "BUY"
         )
-        legacy_buy = next(
-            row for row in legacy["structured"]["fills"] if row["side"].upper() == "BUY"
-        )
-        budget = 2000.0 if book == "version6" else 200000.0
-        assert legacy_buy["shares"] == industry_buy["shares"] + 100
-        assert (
-            legacy_buy["shares"] * legacy_buy["price"]
-            + legacy_buy.get(
-                "commission",
-                legacy_buy["shares"] * legacy_buy["price"] * 0.001,
-            )
-            > budget
-        )
+        assert industry_buy["shares"] == 1400
         assert (
             industry_buy["notional"]
             + industry_buy["commission"]
             + industry_buy["transfer_fee"]
-            <= budget
+            <= 15000.0
         )
-        assert legacy["structured"] != industry["structured"]
-        assert legacy["sha256_csv_bytes"] != industry["sha256_csv_bytes"]
 
 
 @pytest.mark.parametrize("explicit_false", [False, True], ids=["omitted", "explicit-off"])
