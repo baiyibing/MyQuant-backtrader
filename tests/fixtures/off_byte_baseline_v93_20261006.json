@@ -1,0 +1,926 @@
+{
+  "rule_revision": "v93-delay3-fixed-stop-tp10-hold20-20261006",
+  "historical_raw_sha256": "3bfe51b6d3e20b665c3fed0449ebf8569988022719da275b7fcc9635a9988c6c",
+  "historical_canonical_sha256": "34f611da359f1a1d059bc78be75b2e9e2458c533b1dc3b46cfd61130fca7a04e",
+  "books": [
+    "version9_3"
+  ],
+  "captured_environment": {
+    "python": "3.13.5",
+    "pandas": "3.0.6",
+    "platform": "linux"
+  },
+  "contract": {
+    "schema": 1,
+    "money_quantum": "1E-8",
+    "rounding": "ROUND_HALF_EVEN",
+    "money_fields": [
+      "cash",
+      "commission",
+      "equity",
+      "holdings",
+      "notional",
+      "price"
+    ],
+    "integer_fields": [
+      "hm",
+      "lot",
+      "shares"
+    ],
+    "text": "verbatim; preserve all columns and row/column order, including EOD_MARK",
+    "hash": "sha256 of UTF-8 JSON; ensure_ascii=False, sort_keys=True, separators=(',', ':')"
+  },
+  "cases": {
+    "version9_3/daily": {
+      "sha256_csv_bytes": {
+        "trades": "56706c78d6b3d4f3b2685f9fd218490545294e03afe0e2776716f9709187f0df",
+        "equity": "e34be598c2ece39b580103f583d855889340bd1ceb830fd46f9d82bb4099244f"
+      },
+      "library_sha256_csv_bytes": {
+        "trades": "56706c78d6b3d4f3b2685f9fd218490545294e03afe0e2776716f9709187f0df",
+        "equity": "e34be598c2ece39b580103f583d855889340bd1ceb830fd46f9d82bb4099244f"
+      },
+      "canonical_csv": {
+        "trades": {
+          "columns": [
+            "date",
+            "code",
+            "side",
+            "price",
+            "shares",
+            "notional",
+            "commission",
+            "reason",
+            "lot",
+            "session_phase",
+            "price_rule"
+          ],
+          "rows": [
+            {
+              "date": "20251103",
+              "code": "600000.SH",
+              "side": "BUY",
+              "price": "10.87500000",
+              "shares": 91900,
+              "notional": "999412.50000000",
+              "commission": "999.41250000",
+              "reason": "pool",
+              "lot": 0,
+              "session_phase": "",
+              "price_rule": ""
+            },
+            {
+              "date": "20251105",
+              "code": "600000.SH",
+              "side": "SELL",
+              "price": "9.62500000",
+              "shares": 91900,
+              "notional": "884537.50000000",
+              "commission": "884.53750000",
+              "reason": "stop_loss:gap_open",
+              "lot": 0,
+              "session_phase": "",
+              "price_rule": "daily_stop_gap_open"
+            },
+            {
+              "date": "20251105",
+              "code": "600000.SH",
+              "side": "BUY",
+              "price": "9.62500000",
+              "shares": 103800,
+              "notional": "999075.00000000",
+              "commission": "999.07500000",
+              "reason": "pool",
+              "lot": 0,
+              "session_phase": "",
+              "price_rule": ""
+            },
+            {
+              "date": "20251114",
+              "code": "600000.SH",
+              "side": "EOD_MARK",
+              "price": "10.00000000",
+              "shares": 103800,
+              "notional": "1038000.00000000",
+              "commission": "0.00000000",
+              "reason": "",
+              "lot": 0,
+              "session_phase": "",
+              "price_rule": ""
+            }
+          ]
+        },
+        "equity": {
+          "columns": [
+            "date",
+            "equity"
+          ],
+          "rows": [
+            {
+              "date": "20251029",
+              "equity": "5000000.00000000"
+            },
+            {
+              "date": "20251030",
+              "equity": "5000000.00000000"
+            },
+            {
+              "date": "20251031",
+              "equity": "5000000.00000000"
+            },
+            {
+              "date": "20251103",
+              "equity": "5010488.08750000"
+            },
+            {
+              "date": "20251104",
+              "equity": "4964538.08750000"
+            },
+            {
+              "date": "20251105",
+              "equity": "4895216.97500000"
+            },
+            {
+              "date": "20251106",
+              "equity": "4843316.97500000"
+            },
+            {
+              "date": "20251107",
+              "equity": "4895216.97500000"
+            },
+            {
+              "date": "20251110",
+              "equity": "4947116.97500000"
+            },
+            {
+              "date": "20251111",
+              "equity": "4921166.97500000"
+            },
+            {
+              "date": "20251112",
+              "equity": "4895216.97500000"
+            },
+            {
+              "date": "20251113",
+              "equity": "4947116.97500000"
+            },
+            {
+              "date": "20251114",
+              "equity": "4921166.97500000"
+            }
+          ]
+        }
+      },
+      "library_canonical_csv": {
+        "trades": {
+          "columns": [
+            "date",
+            "code",
+            "side",
+            "price",
+            "shares",
+            "notional",
+            "commission",
+            "reason",
+            "lot",
+            "session_phase",
+            "price_rule"
+          ],
+          "rows": [
+            {
+              "date": "20251103",
+              "code": "600000.SH",
+              "side": "BUY",
+              "price": "10.87500000",
+              "shares": 91900,
+              "notional": "999412.50000000",
+              "commission": "999.41250000",
+              "reason": "pool",
+              "lot": 0,
+              "session_phase": "",
+              "price_rule": ""
+            },
+            {
+              "date": "20251105",
+              "code": "600000.SH",
+              "side": "SELL",
+              "price": "9.62500000",
+              "shares": 91900,
+              "notional": "884537.50000000",
+              "commission": "884.53750000",
+              "reason": "stop_loss:gap_open",
+              "lot": 0,
+              "session_phase": "",
+              "price_rule": "daily_stop_gap_open"
+            },
+            {
+              "date": "20251105",
+              "code": "600000.SH",
+              "side": "BUY",
+              "price": "9.62500000",
+              "shares": 103800,
+              "notional": "999075.00000000",
+              "commission": "999.07500000",
+              "reason": "pool",
+              "lot": 0,
+              "session_phase": "",
+              "price_rule": ""
+            },
+            {
+              "date": "20251114",
+              "code": "600000.SH",
+              "side": "EOD_MARK",
+              "price": "10.00000000",
+              "shares": 103800,
+              "notional": "1038000.00000000",
+              "commission": "0.00000000",
+              "reason": "",
+              "lot": 0,
+              "session_phase": "",
+              "price_rule": ""
+            }
+          ]
+        },
+        "equity": {
+          "columns": [
+            "date",
+            "equity"
+          ],
+          "rows": [
+            {
+              "date": "20251029",
+              "equity": "5000000.00000000"
+            },
+            {
+              "date": "20251030",
+              "equity": "5000000.00000000"
+            },
+            {
+              "date": "20251031",
+              "equity": "5000000.00000000"
+            },
+            {
+              "date": "20251103",
+              "equity": "5010488.08750000"
+            },
+            {
+              "date": "20251104",
+              "equity": "4964538.08750000"
+            },
+            {
+              "date": "20251105",
+              "equity": "4895216.97500000"
+            },
+            {
+              "date": "20251106",
+              "equity": "4843316.97500000"
+            },
+            {
+              "date": "20251107",
+              "equity": "4895216.97500000"
+            },
+            {
+              "date": "20251110",
+              "equity": "4947116.97500000"
+            },
+            {
+              "date": "20251111",
+              "equity": "4921166.97500000"
+            },
+            {
+              "date": "20251112",
+              "equity": "4895216.97500000"
+            },
+            {
+              "date": "20251113",
+              "equity": "4947116.97500000"
+            },
+            {
+              "date": "20251114",
+              "equity": "4921166.97500000"
+            }
+          ]
+        }
+      },
+      "fill_counts": {
+        "BUY": 2,
+        "SELL": 1
+      },
+      "structured": {
+        "fills": [
+          {
+            "date": "20251103",
+            "code": "600000.SH",
+            "side": "BUY",
+            "price": 10.875,
+            "shares": 91900,
+            "notional": 999412.5,
+            "commission": 999.4125,
+            "reason": "pool",
+            "lot": 0,
+            "session_phase": "",
+            "price_rule": ""
+          },
+          {
+            "date": "20251105",
+            "code": "600000.SH",
+            "side": "SELL",
+            "price": 9.625,
+            "shares": 91900,
+            "notional": 884537.5,
+            "commission": 884.5375,
+            "reason": "stop_loss:gap_open",
+            "lot": 0,
+            "session_phase": "",
+            "price_rule": "daily_stop_gap_open"
+          },
+          {
+            "date": "20251105",
+            "code": "600000.SH",
+            "side": "BUY",
+            "price": 9.625,
+            "shares": 103800,
+            "notional": 999075.0,
+            "commission": 999.075,
+            "reason": "pool",
+            "lot": 0,
+            "session_phase": "",
+            "price_rule": ""
+          }
+        ],
+        "cash": 3883166.9749999996,
+        "positions": {
+          "600000.SH": [
+            {
+              "code": "600000.SH",
+              "shares": 103800,
+              "cost": 9.625,
+              "entry_idx": 5,
+              "peak": 10.5,
+              "peak_hm": -1,
+              "lot_id": 0,
+              "pending_exit": "",
+              "reserved": false,
+              "ride_with": null,
+              "is_step": false
+            }
+          ]
+        },
+        "equity_curve": [
+          [
+            "20251029",
+            5000000.0
+          ],
+          [
+            "20251030",
+            5000000.0
+          ],
+          [
+            "20251031",
+            5000000.0
+          ],
+          [
+            "20251103",
+            5010488.0875
+          ],
+          [
+            "20251104",
+            4964538.0875
+          ],
+          [
+            "20251105",
+            4895216.975
+          ],
+          [
+            "20251106",
+            4843316.975
+          ],
+          [
+            "20251107",
+            4895216.975
+          ],
+          [
+            "20251110",
+            4947116.975
+          ],
+          [
+            "20251111",
+            4921166.975
+          ],
+          [
+            "20251112",
+            4895216.975
+          ],
+          [
+            "20251113",
+            4947116.975
+          ],
+          [
+            "20251114",
+            4921166.975
+          ]
+        ],
+        "stats": {
+          "buys": 2,
+          "skip_limit_up": 0,
+          "skip_unknown_board": 0,
+          "chase_buy": 0,
+          "chase_abandon": 0,
+          "chase_skip_limit": 0,
+          "chase_no_bar": 0,
+          "chase_overwrite": 0,
+          "chase_buy_fail": 0,
+          "chase_pending_eod": 0,
+          "chase_skip_held": 0,
+          "skip_held": 1,
+          "skip_index_gate": 0,
+          "skip_add_loser": 0,
+          "add_lots": 0,
+          "skip_no_bar": 0,
+          "skip_buy_gate": 0,
+          "skip_sma_warmup": 0,
+          "sell_stop": 1,
+          "sell_trail": 0,
+          "sell_pos_trail": 0,
+          "sell_profit_take": 0,
+          "sell_open_board": 0,
+          "sell_force": 0,
+          "sell_ma": 0,
+          "defer_sell_limit_down": 0,
+          "invested_notional": 1998487.5,
+          "supplementary_used": 0.0,
+          "bars_loaded": 1,
+          "pool_days": 3,
+          "sell_book": "v9_3",
+          "stop_pct": null,
+          "stop_mode": "weighted_entry_cost_fixed_10pct",
+          "stop_frac": 0.9,
+          "delay_days": 3,
+          "max_hold": 20,
+          "profit_target": 0.1,
+          "skip_v9_3_delay_out_of_window": 0,
+          "skip_v9_3_no_bar": 0,
+          "sizing": "daily_quota",
+          "name_budget": 1000000.0,
+          "ration": "file_order",
+          "ration_seed": 0,
+          "skip_cash": 0,
+          "skip_cash_notional": 0,
+          "chase_buy_fail_cash": 0,
+          "chase_buy_fail_shares": 0,
+          "daily_quota": 1000000.0,
+          "buy_cost_rate": 0.001,
+          "sell_cost_rate": 0.001,
+          "min_cost": 0.0,
+          "chase_explained": 0
+        }
+      }
+    },
+    "version9_3/minute": {
+      "sha256_csv_bytes": {
+        "trades": "83c2242543f08dcb5834c9e38ada756f871e200eb40c820da4c0bed13a17efb8",
+        "equity": "3eeb0649bbf5c4b44344adde0f6602f1c5f5089dac3f2db5dc296bec90d4c71e"
+      },
+      "library_sha256_csv_bytes": {
+        "trades": "83c2242543f08dcb5834c9e38ada756f871e200eb40c820da4c0bed13a17efb8",
+        "equity": "3eeb0649bbf5c4b44344adde0f6602f1c5f5089dac3f2db5dc296bec90d4c71e"
+      },
+      "canonical_csv": {
+        "trades": {
+          "columns": [
+            "date",
+            "code",
+            "side",
+            "price",
+            "shares",
+            "notional",
+            "commission",
+            "reason",
+            "lot",
+            "session_phase",
+            "price_rule"
+          ],
+          "rows": [
+            {
+              "date": "20251103",
+              "code": "600000.SH",
+              "side": "BUY",
+              "price": "11.00000000",
+              "shares": 90900,
+              "notional": "999900.00000000",
+              "commission": "999.90000000",
+              "reason": "pool",
+              "lot": 0,
+              "session_phase": "",
+              "price_rule": ""
+            },
+            {
+              "date": "20251105",
+              "code": "600000.SH",
+              "side": "SELL",
+              "price": "9.62500000",
+              "shares": 90900,
+              "notional": "874912.50000000",
+              "commission": "874.91250000",
+              "reason": "stop_loss:gap_open",
+              "lot": 0,
+              "session_phase": "continuous",
+              "price_rule": "minute_gap_open"
+            },
+            {
+              "date": "20251105",
+              "code": "600000.SH",
+              "side": "BUY",
+              "price": "9.75000000",
+              "shares": 102500,
+              "notional": "999375.00000000",
+              "commission": "999.37500000",
+              "reason": "pool",
+              "lot": 0,
+              "session_phase": "",
+              "price_rule": ""
+            },
+            {
+              "date": "20251114",
+              "code": "600000.SH",
+              "side": "EOD_MARK",
+              "price": "10.00000000",
+              "shares": 102500,
+              "notional": "1025000.00000000",
+              "commission": "0.00000000",
+              "reason": "",
+              "lot": 0,
+              "session_phase": "",
+              "price_rule": ""
+            }
+          ]
+        },
+        "equity": {
+          "columns": [
+            "date",
+            "equity"
+          ],
+          "rows": [
+            {
+              "date": "20251029",
+              "equity": "5000000.00000000"
+            },
+            {
+              "date": "20251030",
+              "equity": "5000000.00000000"
+            },
+            {
+              "date": "20251031",
+              "equity": "5000000.00000000"
+            },
+            {
+              "date": "20251103",
+              "equity": "4999000.10000000"
+            },
+            {
+              "date": "20251104",
+              "equity": "4953550.10000000"
+            },
+            {
+              "date": "20251105",
+              "equity": "4872138.31250000"
+            },
+            {
+              "date": "20251106",
+              "equity": "4820888.31250000"
+            },
+            {
+              "date": "20251107",
+              "equity": "4872138.31250000"
+            },
+            {
+              "date": "20251110",
+              "equity": "4923388.31250000"
+            },
+            {
+              "date": "20251111",
+              "equity": "4897763.31250000"
+            },
+            {
+              "date": "20251112",
+              "equity": "4872138.31250000"
+            },
+            {
+              "date": "20251113",
+              "equity": "4923388.31250000"
+            },
+            {
+              "date": "20251114",
+              "equity": "4897763.31250000"
+            }
+          ]
+        }
+      },
+      "library_canonical_csv": {
+        "trades": {
+          "columns": [
+            "date",
+            "code",
+            "side",
+            "price",
+            "shares",
+            "notional",
+            "commission",
+            "reason",
+            "lot",
+            "session_phase",
+            "price_rule"
+          ],
+          "rows": [
+            {
+              "date": "20251103",
+              "code": "600000.SH",
+              "side": "BUY",
+              "price": "11.00000000",
+              "shares": 90900,
+              "notional": "999900.00000000",
+              "commission": "999.90000000",
+              "reason": "pool",
+              "lot": 0,
+              "session_phase": "",
+              "price_rule": ""
+            },
+            {
+              "date": "20251105",
+              "code": "600000.SH",
+              "side": "SELL",
+              "price": "9.62500000",
+              "shares": 90900,
+              "notional": "874912.50000000",
+              "commission": "874.91250000",
+              "reason": "stop_loss:gap_open",
+              "lot": 0,
+              "session_phase": "continuous",
+              "price_rule": "minute_gap_open"
+            },
+            {
+              "date": "20251105",
+              "code": "600000.SH",
+              "side": "BUY",
+              "price": "9.75000000",
+              "shares": 102500,
+              "notional": "999375.00000000",
+              "commission": "999.37500000",
+              "reason": "pool",
+              "lot": 0,
+              "session_phase": "",
+              "price_rule": ""
+            },
+            {
+              "date": "20251114",
+              "code": "600000.SH",
+              "side": "EOD_MARK",
+              "price": "10.00000000",
+              "shares": 102500,
+              "notional": "1025000.00000000",
+              "commission": "0.00000000",
+              "reason": "",
+              "lot": 0,
+              "session_phase": "",
+              "price_rule": ""
+            }
+          ]
+        },
+        "equity": {
+          "columns": [
+            "date",
+            "equity"
+          ],
+          "rows": [
+            {
+              "date": "20251029",
+              "equity": "5000000.00000000"
+            },
+            {
+              "date": "20251030",
+              "equity": "5000000.00000000"
+            },
+            {
+              "date": "20251031",
+              "equity": "5000000.00000000"
+            },
+            {
+              "date": "20251103",
+              "equity": "4999000.10000000"
+            },
+            {
+              "date": "20251104",
+              "equity": "4953550.10000000"
+            },
+            {
+              "date": "20251105",
+              "equity": "4872138.31250000"
+            },
+            {
+              "date": "20251106",
+              "equity": "4820888.31250000"
+            },
+            {
+              "date": "20251107",
+              "equity": "4872138.31250000"
+            },
+            {
+              "date": "20251110",
+              "equity": "4923388.31250000"
+            },
+            {
+              "date": "20251111",
+              "equity": "4897763.31250000"
+            },
+            {
+              "date": "20251112",
+              "equity": "4872138.31250000"
+            },
+            {
+              "date": "20251113",
+              "equity": "4923388.31250000"
+            },
+            {
+              "date": "20251114",
+              "equity": "4897763.31250000"
+            }
+          ]
+        }
+      },
+      "fill_counts": {
+        "BUY": 2,
+        "SELL": 1
+      },
+      "structured": {
+        "fills": [
+          {
+            "date": "20251103",
+            "code": "600000.SH",
+            "side": "BUY",
+            "price": 11.0,
+            "shares": 90900,
+            "notional": 999900.0,
+            "commission": 999.9,
+            "reason": "pool",
+            "lot": 0,
+            "session_phase": "",
+            "price_rule": ""
+          },
+          {
+            "date": "20251105",
+            "code": "600000.SH",
+            "side": "SELL",
+            "price": 9.625,
+            "shares": 90900,
+            "notional": 874912.5,
+            "commission": 874.9125,
+            "reason": "stop_loss:gap_open",
+            "lot": 0,
+            "session_phase": "continuous",
+            "price_rule": "minute_gap_open"
+          },
+          {
+            "date": "20251105",
+            "code": "600000.SH",
+            "side": "BUY",
+            "price": 9.75,
+            "shares": 102500,
+            "notional": 999375.0,
+            "commission": 999.375,
+            "reason": "pool",
+            "lot": 0,
+            "session_phase": "",
+            "price_rule": ""
+          }
+        ],
+        "cash": 3872763.3125,
+        "positions": {
+          "600000.SH": [
+            {
+              "code": "600000.SH",
+              "shares": 102500,
+              "cost": 9.75,
+              "entry_idx": 5,
+              "peak": 10.5,
+              "peak_hm": 570,
+              "lot_id": 0,
+              "pending_exit": "",
+              "reserved": false,
+              "ride_with": null,
+              "is_step": false
+            }
+          ]
+        },
+        "equity_curve": [
+          [
+            "20251029",
+            5000000.0
+          ],
+          [
+            "20251030",
+            5000000.0
+          ],
+          [
+            "20251031",
+            5000000.0
+          ],
+          [
+            "20251103",
+            4999000.1
+          ],
+          [
+            "20251104",
+            4953550.1
+          ],
+          [
+            "20251105",
+            4872138.3125
+          ],
+          [
+            "20251106",
+            4820888.3125
+          ],
+          [
+            "20251107",
+            4872138.3125
+          ],
+          [
+            "20251110",
+            4923388.3125
+          ],
+          [
+            "20251111",
+            4897763.3125
+          ],
+          [
+            "20251112",
+            4872138.3125
+          ],
+          [
+            "20251113",
+            4923388.3125
+          ],
+          [
+            "20251114",
+            4897763.3125
+          ]
+        ],
+        "stats": {
+          "buys": 2,
+          "skip_limit_up": 0,
+          "skip_unknown_board": 0,
+          "chase_buy": 0,
+          "chase_abandon": 0,
+          "chase_skip_limit": 0,
+          "chase_no_bar": 0,
+          "chase_overwrite": 0,
+          "chase_buy_fail": 0,
+          "chase_pending_eod": 0,
+          "chase_skip_held": 0,
+          "skip_held": 1,
+          "skip_index_gate": 0,
+          "skip_add_loser": 0,
+          "add_lots": 0,
+          "skip_no_bar": 0,
+          "skip_buy_gate": 0,
+          "skip_sma_warmup": 0,
+          "sell_stop": 1,
+          "sell_trail": 0,
+          "sell_pos_trail": 0,
+          "sell_profit_take": 0,
+          "sell_open_board": 0,
+          "sell_force": 0,
+          "sell_ma": 0,
+          "defer_sell_limit_down": 0,
+          "invested_notional": 1999275.0,
+          "supplementary_used": 0.0,
+          "bars_loaded": 1,
+          "pool_days": 3,
+          "sell_book": "v9_3",
+          "stop_pct": null,
+          "stop_mode": "weighted_entry_cost_fixed_10pct",
+          "stop_frac": 0.9,
+          "delay_days": 3,
+          "max_hold": 20,
+          "profit_target": 0.1,
+          "skip_v9_3_delay_out_of_window": 0,
+          "skip_v9_3_no_bar": 0,
+          "sizing": "daily_quota",
+          "name_budget": 1000000.0,
+          "ration": "file_order",
+          "ration_seed": 0,
+          "skip_cash": 0,
+          "skip_cash_notional": 0,
+          "chase_buy_fail_cash": 0,
+          "chase_buy_fail_shares": 0,
+          "daily_quota": 1000000.0,
+          "minute_stop_trigger": "hl",
+          "buy_cost_rate": 0.001,
+          "sell_cost_rate": 0.001,
+          "min_cost": 0.0,
+          "chase_explained": 0
+        }
+      }
+    }
+  }
+}

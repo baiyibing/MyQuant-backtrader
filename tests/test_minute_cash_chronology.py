@@ -528,6 +528,11 @@ def test_strategy91_run_still_rejects_cash_order_before_loading(tmp_path):
         minute.run(D1, D2, pool_dir=tmp_path, strategy="version9_1", fix_minute_cash_order=True)
 
 
+def test_strategy93_run_rejects_cash_order_before_loading(tmp_path):
+    with pytest.raises(ValueError, match="--fix-minute-cash-order is not applicable to version9_3"):
+        minute.run(D1, D2, pool_dir=tmp_path, strategy="version9_3", fix_minute_cash_order=True)
+
+
 def force_on(monkeypatch):
     real = minute.simulate
 
