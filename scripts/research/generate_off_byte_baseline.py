@@ -27,9 +27,9 @@ The 6.2-6.47 family (46 books, V6F overlay through v22) uses a scoped additive
 overlay; --record-v6f writes its daily/minute cases and refuses overwrite.
 Coverage for --check is asserted via assert_baseline_coverage() (registry-derived;
 no hardcoded book/case totals beyond the frozen historical 19/39).
-Industry overlays are additive and profile-scoped. P03-P07 stay immutable;
---record-industry-p08 uses only tests/fixtures/industry/shrink_on_short_cash.json
-and refuses overwrite. P08 is the active industry revision.
+Industry overlays are additive and profile-scoped. P03-P08 stay immutable;
+--record-industry-p09 uses only tests/fixtures/industry/quantity_rules.json
+and refuses overwrite. P09 is the active industry revision.
 """
 
 from __future__ import annotations
@@ -175,6 +175,19 @@ P08_CASES = (
     ("version8", "minute"),
 )
 P08_FIXTURE = ROOT / "tests/fixtures/industry/shrink_on_short_cash.json"
+P09_GOLDEN = ROOT / "tests/fixtures/off_byte_baseline_industry_p09_quantity_rules_20261006.json"
+P09_RULE_REVISION = "industry-p09-quantity-rules-20261006"
+P09_BOOK_NAMES = ("version6", "version7")
+P09_CASES = tuple(
+    (book, f"{engine}-{board}")
+    for book, engines in (
+        ("version6", ("daily", "minute")),
+        ("version7", ("minute-native", "standalone")),
+    )
+    for engine in engines
+    for board in ("star", "bse")
+)
+P09_FIXTURE = ROOT / "tests/fixtures/industry/quantity_rules.json"
 BOOK_NAMES = HISTORICAL_BOOK_NAMES + V61_BOOK_NAMES + V91_BOOK_NAMES + V92_BOOK_NAMES + V6F_BOOK_NAMES
 CODE = "600000.SH"
 TOPK_CODES = (CODE, "600001.SH", "600002.SH")
@@ -205,6 +218,7 @@ P05_CANONICAL_CONTRACT = {
 P06_CANONICAL_CONTRACT = P05_CANONICAL_CONTRACT
 P07_CANONICAL_CONTRACT = P05_CANONICAL_CONTRACT
 P08_CANONICAL_CONTRACT = P05_CANONICAL_CONTRACT
+P09_CANONICAL_CONTRACT = P05_CANONICAL_CONTRACT
 
 
 # 突破书（6.11/6.12）专用合成路径：涨跌停约束内的 1.25x 突破 + 加仓 + 回落离场。
@@ -863,6 +877,119 @@ def run_p08_case(book: str, engine: str, *, rule_profile: str = "industry"):
     )
 
 
+def _p09_inputs(board: str):
+    fixture = json.loads(P09_FIXTURE.read_text(encoding="utf-8"))
+    values = fixture["boards"][board]
+    symbol = values["symbol"]
+    bars = pd.DataFrame(
+        values["daily_rows"],
+        columns=["open", "high", "low", "close"],
+        index=pd.to_datetime(values["daily_days"]),
+        dtype="float64",
+    )
+    minute_rows = values["minute_rows"]
+    minutes = pd.DataFrame(
+        [
+            row[1:5] + [pd.Timestamp(row[0]).strftime("%Y%m%d"), row[5]]
+            for row in minute_rows
+        ],
+        columns=["open", "high", "low", "close", "ymd", "hm"],
+        index=pd.to_datetime([row[0] for row in minute_rows]),
+    ).astype(
+        {"open": "float64", "high": "float64", "low": "float64", "close": "float64"}
+    )
+    return fixture, values, {symbol: bars}, {symbol: minutes}
+
+
+def run_p09_case(book: str, engine: str, *, rule_profile: str = "industry"):
+    if (book, engine) not in P09_CASES:
+        raise KeyError((book, engine))
+    engine_kind, board = engine.rsplit("-", 1)
+    fixture, values, daily_bars, minute_bars = _p09_inputs(board)
+    symbol = values["symbol"]
+    names = {symbol: values["name"]}
+    pools = {fixture["start"]: [symbol]}
+    common = dict(
+        total_cash=fixture["cash_total"],
+        strategy=book,
+        stop_pct=0.02,
+        pool_names=names,
+        rule_profile=rule_profile,
+    )
+    if engine_kind == "daily":
+        return daily.simulate(
+            daily_bars,
+            pools,
+            fixture["start"],
+            fixture["end"],
+            daily_quota=fixture["daily_quota"],
+            **common,
+        )
+    if engine_kind == "minute":
+        return minute.simulate(
+            minute_bars,
+            daily_bars,
+            pools,
+            fixture["start"],
+            fixture["end"],
+            daily_quota=fixture["daily_quota"],
+            **common,
+        )
+    days = [date.fromisoformat(value) for value in values["v7_days"]]
+    prices = values["v7_prices"]
+    minute_records = {
+        symbol: [
+            {
+                "date": days[0],
+                "hm": 895,
+                "open": prices[0],
+                "high": prices[0],
+                "low": prices[0],
+                "close": prices[0],
+            },
+            {
+                "date": days[1],
+                "hm": 570,
+                "open": prices[1],
+                "high": prices[1],
+                "low": prices[1],
+                "close": prices[1],
+            },
+        ]
+    }
+    v7_daily = {
+        symbol: {
+            days[0] - pd.Timedelta(days=1): prices[0],
+            days[0]: values["v7_signal_close"],
+        }
+    }
+    v7_pools = {days[0]: [symbol]}
+    if engine_kind == "minute-native":
+        from backtest.research.minute_engine_policies import MinutePolicyContext
+
+        return minute.simulate(
+            minute_records,
+            v7_daily,
+            v7_pools,
+            days[0],
+            days[-1],
+            strategy="version7",
+            total_cash=fixture["cash_total"],
+            pool_names=names,
+            policy_context=MinutePolicyContext(index_days=days),
+            rule_profile=rule_profile,
+        )
+    return v7.simulate_v7(
+        minute_records,
+        v7_daily,
+        v7_pools,
+        days,
+        cash_total=fixture["cash_total"],
+        names=names,
+        rule_profile=rule_profile,
+    )
+
+
 def run_case(
     book: str,
     engine: str,
@@ -883,6 +1010,8 @@ def run_case(
         return run_p07_case(book, engine, rule_profile=rule_profile)
     if fixture == "p08":
         return run_p08_case(book, engine, rule_profile=rule_profile)
+    if fixture == "p09":
+        return run_p09_case(book, engine, rule_profile=rule_profile)
     if book in ("version6_11", "version6_12"):
         # 突破书：共享路径涨不到 A0x1.2，专用路径才有成交。
         bars, minutes, pools, start, end, dates = frozen_inputs(BREAKOUT_PRICES)
@@ -1170,7 +1299,7 @@ def load_p07_golden() -> dict:
 
 
 def load_p08_golden() -> dict:
-    """Active opt-in industry profile overlay; all earlier files stay immutable."""
+    """Immutable P08 profile overlay retained for registry verification."""
     assert _hash(GOLDEN.read_bytes()) == HISTORICAL_GOLDEN_SHA256
     assert _hash(CANONICAL_GOLDEN.read_bytes()) == HISTORICAL_CANONICAL_SHA256
     golden = json.loads(P08_GOLDEN.read_text(encoding="utf-8"))
@@ -1183,13 +1312,29 @@ def load_p08_golden() -> dict:
     return golden
 
 
+def load_p09_golden() -> dict:
+    """Active opt-in industry profile overlay; all earlier files stay immutable."""
+    assert _hash(GOLDEN.read_bytes()) == HISTORICAL_GOLDEN_SHA256
+    assert _hash(CANONICAL_GOLDEN.read_bytes()) == HISTORICAL_CANONICAL_SHA256
+    golden = json.loads(P09_GOLDEN.read_text(encoding="utf-8"))
+    assert golden["rule_revision"] == P09_RULE_REVISION
+    assert golden["historical_raw_sha256"] == HISTORICAL_GOLDEN_SHA256
+    assert golden["historical_canonical_sha256"] == HISTORICAL_CANONICAL_SHA256
+    assert golden["contract"] == P09_CANONICAL_CONTRACT
+    assert golden["books"] == list(P09_BOOK_NAMES)
+    assert set(golden["cases"]) == {f"{book}/{engine}" for book, engine in P09_CASES}
+    return golden
+
+
 def expected_case(
     book: str, engine: str, *, rule_profile: str = "legacy"
 ) -> tuple[dict, dict, str]:
     """Return account/raw, canonical hashes, and the recorded pandas version."""
     key = f"{book}/{engine}"
     if rule_profile == "industry":
-        if (book, engine) in P08_CASES:
+        if (book, engine) in P09_CASES:
+            golden = load_p09_golden()
+        elif (book, engine) in P08_CASES:
             golden = load_p08_golden()
         elif (book, engine) in P07_CASES:
             golden = load_p07_golden()
@@ -1418,6 +1563,18 @@ def assert_baseline_coverage():
         ("version8", "minute"),
     }
     assert P08_FIXTURE.is_file()
+    assert set(P09_BOOK_NAMES) <= set(BOOK_NAMES) | {"version7"}
+    assert set(P09_CASES) == {
+        ("version6", "daily-star"),
+        ("version6", "daily-bse"),
+        ("version6", "minute-star"),
+        ("version6", "minute-bse"),
+        ("version7", "minute-native-star"),
+        ("version7", "minute-native-bse"),
+        ("version7", "standalone-star"),
+        ("version7", "standalone-bse"),
+    }
+    assert P09_FIXTURE.is_file()
 
 
 def capture_matrix(output_dir: Path, *, explicit_false: bool = False):
@@ -1509,7 +1666,70 @@ def main():
         action="store_true",
         help="Record the two synthetic industry P08 short-cash shrink cases",
     )
+    mode.add_argument(
+        "--record-industry-p09",
+        action="store_true",
+        help="Record the eight synthetic industry P09 STAR/BSE quantity cases",
+    )
     args = parser.parse_args()
+    if args.record_industry_p09:
+        if P09_GOLDEN.exists():
+            parser.error("The industry P09 overlay already exists; refusing to overwrite")
+        if pd.__version__ != "3.0.6":
+            parser.error("industry P09 recording requires the authorized pandas 3.0.6 environment")
+        assert _hash(GOLDEN.read_bytes()) == HISTORICAL_GOLDEN_SHA256
+        assert _hash(CANONICAL_GOLDEN.read_bytes()) == HISTORICAL_CANONICAL_SHA256
+        with tempfile.TemporaryDirectory(prefix="industry-p09-byte-baseline-") as temp:
+            root = Path(temp)
+            cases = {
+                f"{book}/{engine}": capture_case(
+                    book,
+                    engine,
+                    root / "industry" / book / engine,
+                    rule_profile="industry",
+                    fixture="p09",
+                )
+                for book, engine in P09_CASES
+            }
+            legacy_cases = {
+                f"{book}/{engine}": capture_case(
+                    book,
+                    engine,
+                    root / "legacy" / book / engine,
+                    rule_profile="legacy",
+                    fixture="p09",
+                )
+                for book, engine in P09_CASES
+            }
+        for key, case in cases.items():
+            assert_case_bytes(case, case)
+            assert case["fill_counts"] == {"BUY": 1, "SELL": 1}
+            assert case["canonical_csv"] != legacy_cases[key]["canonical_csv"]
+            buy = next(
+                row for row in case["structured"]["fills"] if row["side"].upper() == "BUY"
+            )
+            board = key.rsplit("-", 1)[1]
+            assert buy["shares"] >= (200 if board == "star" else 100)
+            assert buy["shares"] % 100 != 0
+        payload = {
+            "rule_revision": P09_RULE_REVISION,
+            "historical_raw_sha256": HISTORICAL_GOLDEN_SHA256,
+            "historical_canonical_sha256": HISTORICAL_CANONICAL_SHA256,
+            "books": list(P09_BOOK_NAMES),
+            "captured_environment": {
+                "python": platform.python_version(),
+                "pandas": pd.__version__,
+                "platform": sys.platform,
+            },
+            "contract": P09_CANONICAL_CONTRACT,
+            "cases": cases,
+        }
+        P09_GOLDEN.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        print(f"Wrote {P09_GOLDEN}: {len(cases)} industry cases")
+        return
     if args.record_industry_p08:
         if P08_GOLDEN.exists():
             parser.error("The industry P08 overlay already exists; refusing to overwrite")
@@ -2070,13 +2290,13 @@ def main():
                 skipped.add(reason)
             else:
                 assert_case_bytes(actual, expected)
-        with tempfile.TemporaryDirectory(prefix="industry-p08-check-") as temp:
+        with tempfile.TemporaryDirectory(prefix="industry-p09-check-") as temp:
             industry_cases = {
                 (book, engine): capture_case(
                     book, engine, Path(temp) / book / engine,
-                    rule_profile="industry", fixture="p08",
+                    rule_profile="industry", fixture="p09",
                 )
-                for book, engine in P08_CASES
+                for book, engine in P09_CASES
             }
         for (book, engine), actual in industry_cases.items():
             expected, canonical_expected, recorded_pandas = expected_case(
@@ -2094,7 +2314,7 @@ def main():
             print(f"PASS: production CSV + library hashes (raw bytes) for {len(CASES)} cases")
         print(
             f"PASS: {len(CASES)} canonical CSV/account cases across current registry "
-            f"and overlays plus {len(P08_CASES)} industry P08 cases; pandas={pd.__version__}"
+            f"and overlays plus {len(P09_CASES)} industry P09 cases; pandas={pd.__version__}"
         )
         return
     for case in cases.values():

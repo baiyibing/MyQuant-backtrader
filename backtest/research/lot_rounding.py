@@ -3,6 +3,44 @@
 BOARD_LOT = 100
 STAR_MIN_DECLARE = 200
 
+BOARD_BUY_QUANTITY = "board"
+STAR_BUY_QUANTITY = "STAR"
+BSE_BUY_QUANTITY = "BSE"
+
+
+def buy_quantity_rule(
+    market: str,
+    *,
+    exchange_quantity_rules: bool = False,
+    star_lot_declare_check: bool = False,
+) -> str:
+    """Resolve arithmetic from a market-layer classification.
+
+    The pre-existing STAR check remains an independent opt-in.  The industry
+    switch additionally enables BSE's one-share increment after 100 shares.
+    """
+    if market == "STAR" and (
+        exchange_quantity_rules or star_lot_declare_check
+    ):
+        return STAR_BUY_QUANTITY
+    if exchange_quantity_rules and market == "BSE":
+        return BSE_BUY_QUANTITY
+    return BOARD_BUY_QUANTITY
+
+
+def buy_quantity_minimum(rule: str) -> int:
+    """Minimum valid declaration for an arithmetic quantity rule."""
+    if rule == STAR_BUY_QUANTITY:
+        return STAR_MIN_DECLARE
+    return BOARD_LOT
+
+
+def buy_quantity_increment(rule: str) -> int:
+    """Valid declaration increment after the minimum."""
+    if rule in (STAR_BUY_QUANTITY, BSE_BUY_QUANTITY):
+        return 1
+    return BOARD_LOT
+
 
 def budget_board_lots(per: float, price: float) -> int:
     """Reproduce int(per / price / 100.0) * 100 for ledger and pool order_budget.
@@ -18,11 +56,29 @@ def budget_integer_shares(per: float, price: float) -> int:
     return int(per / price)
 
 
+def budget_buy_quantity(
+    per: float, price: float, rule: str
+) -> int:
+    """Floor a budget to the active declaration increment."""
+    if rule in (STAR_BUY_QUANTITY, BSE_BUY_QUANTITY):
+        return int(per / price)
+    return int(per / price / 100.0) * 100
+
+
 def nonnegative_override_board_lots(shares: int) -> int:
     """Reproduce max(0, int(shares)) // 100 * 100 for ledger.execute_buy.
 
     The caller retains Integral/bool validation before this arithmetic.
     """
+    return max(0, int(shares)) // 100 * 100
+
+
+def nonnegative_override_buy_quantity(
+    shares: int, rule: str
+) -> int:
+    """Normalize an explicit declaration to its active increment."""
+    if rule in (STAR_BUY_QUANTITY, BSE_BUY_QUANTITY):
+        return max(0, int(shares))
     return max(0, int(shares)) // 100 * 100
 
 

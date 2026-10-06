@@ -1,7 +1,7 @@
 # Industry rule profile
 
 - Date: 2026-10-06
-- Status: P08 short-cash shrink-or-skip delivered; later trade-rule slices pending
+- Status: P09 exchange buy-quantity rules delivered; later trade-rule slices pending
 - Principle SSOT: [backtest-rule-principles-ssot.md](ssot/backtest-rule-principles-ssot.md)
 
 ## Purpose
@@ -40,6 +40,15 @@ paid; zero affordable quantity is skipped, and industry mode never raises
 primitive introduced by P07. Cash is still evaluated before the capacity gate,
 preserving the adopted B8-11 legacy gate order.
 
+P09 enables `exchange_quantity_rules` and adopted decision B8-12. Main-board
+and ChiNext buy declarations remain multiples of 100 shares. STAR symbols
+`688`/`689` require at least 200 shares and then permit one-share increments;
+BSE symbols classified by `market_layer` require at least 100 shares and then
+permit one-share increments. Shared daily/minute and native/standalone-v7 use
+the same quantity rule. A volume cap may partially fill an already-valid
+declaration and is not treated as a new declaration. Loop cash pre-checks now
+preview the same final fee-aware declared quantity that the ledger submits.
+
 ## Switch status
 
 The values below are locked by `industry-fix/adopted-decisions.md`; pending
@@ -48,7 +57,7 @@ switches remain `false` until their behavior PR and opt-in baseline are admitted
 | Switch | Status | Adopted rule and source |
 |---|---:|---|
 | `special_no_limit_days` | pending / `false` | IPO, relist, and resumption facts must come from a PIT lifecycle provider; missing data fails closed and is never inferred from bars. |
-| `exchange_quantity_rules` | pending / `false` | Main board/ChiNext buy lots are multiples of 100; STAR starts at 200 then permits one-share increments; BSE starts at 100 then permits one-share increments. Sources: SSE STAR special rules; BSE Rule 3.3.8 ([CSRC copy](https://www.csrc.gov.cn/shenzhen/c105632/c1562694/1562694/files/1638524949335_40064.pdf)). |
+| `exchange_quantity_rules` | P09 delivered / `true` | Main board/ChiNext buy declarations are multiples of 100; STAR (`688`/`689`) starts at 200 and then permits one-share increments; BSE, classified through `market_layer`, starts at 100 and then permits one-share increments. Source locked in `industry-fix/adopted-decisions.md`: 上交所《科创板股票交易特别规定》 (200 起、1 股递增) and 北交所交易规则 3.3.8 ([CSRC copy](https://www.csrc.gov.cn/shenzhen/c105632/c1562694/1562694/files/1638524949335_40064.pdf)). The same adopted file locks B8-12: “loop cash pre-check uses the final declared quantity (incl. STAR rule).” Volume-cap partial fills remain fills of the accepted declaration, not new declarations. |
 | `account_odd_lot_exit` | pending / `false` | An odd remainder below one board lot is sold in one account-level order, not stranded per source lot. |
 | `supplementary_min_lot` | P06 delivered / `true` | B8-03: a budget below one valid lot buys zero and records `skip_min_lot_budget`; there is no 100-share top-up. Source: `industry-fix/adopted-decisions.md`, “B8-03: when budget buys < 1 valid lot → buy 0 (skip), no top-up to 100.” |
 | `fee_aware_affordability` | P07 delivered / `true` | B8-04: choose the largest currently valid buy quantity for which notional plus all buy fees is no greater than both budget and available cash. Source: `industry-fix/adopted-decisions.md`, “B8-04: size including fees: the largest valid quantity with notional + all buy fees <= budget (and <= cash).” Buy fees reuse that file's adopted JoinQuant-style commission (0.0003 each side, CNY 5 minimum per order; [example](https://www.cnblogs.com/henry2019/p/11700075.html), [reference](https://easyquant.ai/e/joinquant/set-trading-costs-slippage)) and bilateral transfer-fee decision sourced to 中国结算 2022-04-28 ([contemporaneous copy](https://finance.sina.com.cn/roll/2022-04-28/doc-imcwiwst4557332.shtml)) plus the 2015 change ([People.cn](http://m.people.cn/n4/2022/0429/c125-20026334.html)). B8-11 retains legacy cash-vs-capacity gate order. |
@@ -137,3 +146,11 @@ Legacy reaches B7's `raise` mode and throws `InsufficientCashError`; industry
 shrinks to 1,400 shares, pays commission and transfer fee without negative
 cash, and later sells the position. Both recorded industry cases contain a BUY
 and SELL.
+
+P09 keeps every earlier baseline immutable and adds
+`tests/fixtures/off_byte_baseline_industry_p09_quantity_rules_20261006.json`
+from the data-free `tests/fixtures/industry/quantity_rules.json`. Its eight
+cases cover STAR and BSE synthetic names in shared daily/minute and
+native/standalone-v7. Each industry case contains one BUY and SELL, uses a
+non-round-hundred valid declaration (2014 shares in shared version6; 1999 in
+v7), and differs from the corresponding legacy 2000-share declaration.

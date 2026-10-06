@@ -50,6 +50,18 @@ def transfer_fee_market(code: str) -> str:
     raise ValueError(f"unknown A-share board for transfer fee: {code!r}")
 
 
+def buy_quantity_market(code: str) -> str:
+    """Classify STAR separately from the shared SH/SZ fee market."""
+    num = _digit_prefix(code)
+    if num.startswith(("688", "689")):
+        return "STAR"
+    if num.startswith(_BOARD_30):
+        return "BSE"
+    if num.startswith(_BOARD_20) or num.startswith(_BOARD_10):
+        return "SH_SZ"
+    return "UNKNOWN"
+
+
 def board_limit_pct(code: str) -> Optional[float]:
     """Board-only limit ratio, or None when the prefix is not a known A-share board."""
     num = _digit_prefix(code)

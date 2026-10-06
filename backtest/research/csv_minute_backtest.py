@@ -717,7 +717,11 @@ def simulate(
         frames, minutes, closes, pools, calendar, gate = v7.prepare_main_inputs(
             minute_bars, daily_bars, pool_days, start, end, policy_context)
         st = v7.SimResult(float(total_cash))
-        if profile.fee_aware_affordability or profile.shrink_on_short_cash:
+        if (
+            profile.exchange_quantity_rules
+            or profile.fee_aware_affordability
+            or profile.shrink_on_short_cash
+        ):
             st.rule_profile = profile
         configure_s8(st, hooks)
         if exdiv_economics is not None:
@@ -825,7 +829,8 @@ def simulate(
             **({"context": policy_context} if policy.initialize is not None else {}),
         )
         if (
-            profile.supplementary_min_lot
+            profile.exchange_quantity_rules
+            or profile.supplementary_min_lot
             or profile.fee_aware_affordability
             or profile.shrink_on_short_cash
         ):

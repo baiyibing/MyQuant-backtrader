@@ -8,7 +8,14 @@ arguments to the registered main book.
 """
 from __future__ import annotations
 
-from backtest.research.lot_rounding import native_budget_board_lots
+from backtest.research.lot_rounding import (
+    BOARD_BUY_QUANTITY,
+    budget_buy_quantity,
+    buy_quantity_increment,
+    buy_quantity_minimum,
+    buy_quantity_rule,
+    native_budget_board_lots,
+)
 from math import isfinite
 from dataclasses import dataclass, field
 from datetime import date
@@ -22,7 +29,11 @@ from backtest.research.csv_ledger import (
 )
 from backtest.research.ashare_volume_cap import VolumeCap, VolumeLookup
 from backtest.research.ashare_exdiv_economics import ExDivEconomics, EconomicLookup
-from backtest.research.market_layer import as_date as _as_date, as_datetime as _as_datetime
+from backtest.research.market_layer import (
+    as_date as _as_date,
+    as_datetime as _as_datetime,
+    buy_quantity_market,
+)
 from backtest.research.rule_profile import RuleProfile, resolve_rule_profile
 from backtest.research.strategy7_rules import (
     TRIAL, FOUR, SIX, EIGHT, FULL, TRIAL_FRACTION, build_index_gate,
@@ -246,16 +257,23 @@ def _buy(state: SimResult, position: Position | None, symbol: str, day: date, hm
          price: float, fraction: float, reason: str, kind: str,
          fee: FeeSchedule = DEFAULT_SCHEDULE) -> Position | None:
     target = NAME_BUDGET * fraction
-    shares = native_budget_board_lots(target, price)
+    profile = getattr(state, "rule_profile", None)
+    quantity_rule = buy_quantity_rule(
+        buy_quantity_market(symbol),
+        exchange_quantity_rules=bool(
+            getattr(profile, "exchange_quantity_rules", False)
+        ),
+    )
+    shares = (
+        native_budget_board_lots(target, price)
+        if quantity_rule == BOARD_BUY_QUANTITY
+        else budget_buy_quantity(target, price, quantity_rule)
+    )
     if getattr(
-        getattr(state, "rule_profile", None), "fee_aware_affordability", False
+        profile, "fee_aware_affordability", False
     ):
         shrink_short_cash = bool(
-            getattr(
-                getattr(state, "rule_profile", None),
-                "shrink_on_short_cash",
-                False,
-            )
+            getattr(profile, "shrink_on_short_cash", False)
         )
         shares = fee_aware_buy_quantity(
             shares,
@@ -263,6 +281,8 @@ def _buy(state: SimResult, position: Position | None, symbol: str, day: date, hm
             target,
             state.cash if shrink_short_cash else target,
             lambda notional: fee.debit_buy(notional, day, symbol),
+            increment=buy_quantity_increment(quantity_rule),
+            minimum=buy_quantity_minimum(quantity_rule),
         )
     order_id = fee_order_id(state)
     if order_id is None:
@@ -271,7 +291,7 @@ def _buy(state: SimResult, position: Position | None, symbol: str, day: date, hm
         cost = shares * price + preview_order_fees(
             state, "BUY", order_id, shares * price, day, symbol
         )
-    if shares <= 0 or cost > state.cash:
+    if shares < buy_quantity_minimum(quantity_rule) or cost > state.cash:
         _event(state, day, symbol, hm, "skip", 0, price, "skip_cash")
         return None
     if state.volume_cap is not None:
@@ -713,7 +733,19 @@ def chronological_parent(
             except (KeyError, TypeError, ValueError):
                 opening = 0.0
             if isfinite(opening) and opening > 0:
-                tail_parents[symbol] = TailParent.from_budget(NAME_BUDGET * TRIAL_FRACTION, opening)
+                profile = getattr(state, "rule_profile", None)
+                quantity_rule = buy_quantity_rule(
+                    buy_quantity_market(symbol),
+                    exchange_quantity_rules=bool(
+                        getattr(profile, "exchange_quantity_rules", False)
+                    ),
+                )
+                tail_parents[symbol] = TailParent.from_budget(
+                    NAME_BUDGET * TRIAL_FRACTION,
+                    opening,
+                    declaration_increment=buy_quantity_increment(quantity_rule),
+                    declaration_minimum=buy_quantity_minimum(quantity_rule),
+                )
             else:
                 _event(state, day, symbol, hm, "skip", 0, None, "skip_no_tail_start")
 

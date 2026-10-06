@@ -132,15 +132,43 @@ class TailParent:
     budget: float
     filled_shares: int = 0
     spent: float = 0.0
+    declaration_increment: int = BOARD_LOT
+    declaration_minimum: int = BOARD_LOT
 
     @classmethod
-    def from_budget(cls, budget: float, price: float) -> TailParent:
+    def from_budget(
+        cls,
+        budget: float,
+        price: float,
+        *,
+        declaration_increment: int = BOARD_LOT,
+        declaration_minimum: int = BOARD_LOT,
+    ) -> TailParent:
         if not isfinite(budget) or budget < 0 or not isfinite(price) or price <= 0:
             raise ValueError("tail parent requires a finite budget and positive 14:30 open")
+        if declaration_increment <= 0 or declaration_minimum < 0:
+            raise ValueError("tail parent requires positive increment and nonnegative minimum")
         # Decimal prevents a mathematically exact hand from losing one share
         # due to binary division. Every child has exactly the same planned size.
-        target = tail_budget_board_lots(budget, price)
-        return cls(target, tail_slice_board_lots(target, len(TAIL_MINUTES)), float(budget))
+        if declaration_increment == BOARD_LOT:
+            target = tail_budget_board_lots(budget, price)
+            slice_shares = tail_slice_board_lots(target, len(TAIL_MINUTES))
+        else:
+            raw_target = int(Decimal(str(budget)) / Decimal(str(price)))
+            target = raw_target // declaration_increment * declaration_increment
+            slice_shares = (
+                target // len(TAIL_MINUTES) // declaration_increment
+            ) * declaration_increment
+        if target < declaration_minimum:
+            target = 0
+            slice_shares = 0
+        return cls(
+            target,
+            slice_shares,
+            float(budget),
+            declaration_increment=declaration_increment,
+            declaration_minimum=declaration_minimum,
+        )
 
     def requested_shares(self, quote: TailQuote, debit_fn=None) -> int:
         """Apply slice, market capacity and nominal budget limits, never cash."""
@@ -148,17 +176,26 @@ class TailParent:
                      self.target_shares - self.filled_shares)
         # Legacy limits the parent by notional. Industry can include each
         # child order's fees in the same remaining parent budget.
-        return affordable_shares(wanted, quote.price,
-                                 max(0.0, self.budget - self.spent),
-                                 (lambda x: x) if debit_fn is None else debit_fn)
+        return fee_aware_buy_quantity(
+            wanted,
+            quote.price,
+            max(0.0, self.budget - self.spent),
+            max(0.0, self.budget - self.spent),
+            (lambda x: x) if debit_fn is None else debit_fn,
+            increment=self.declaration_increment,
+            minimum=self.declaration_minimum,
+        )
 
     def allocation(self, quote: TailQuote, cash: float, debit_fn, *, budget_debit_fn=None) -> int:
         """Non-strict books size each child against cash available right now."""
-        return affordable_shares(
+        return fee_aware_buy_quantity(
             self.requested_shares(quote, budget_debit_fn),
             quote.price,
             cash,
+            cash,
             debit_fn,
+            increment=self.declaration_increment,
+            minimum=self.declaration_minimum,
         )
 
     def opening_debit(self, price: float, debit_fn) -> float:
