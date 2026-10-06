@@ -54,7 +54,8 @@ def test_s8_group_exit_is_one_order_and_legacy_remains_per_call():
     assert [row["commission"] for row in legacy_sells] == [1.0, 1.0]
     assert [row["commission"] for row in industry_sells] == [2.5, 2.5]
     assert sum(row["commission"] for row in industry_sells) == 5.0
-    assert industry.cash == pytest.approx(legacy.cash - 11.0)
+    # P04 stacks the post-2023 sell stamp on top of the P03 commission delta.
+    assert industry.cash == pytest.approx(legacy.cash - 12.0)
 
 
 def test_tail_children_are_separate_orders_even_when_the_lot_merges():
@@ -124,7 +125,7 @@ def test_capacity_continuation_reuses_order_and_reallocates_floor():
         bucket_id=571, at=571, day_i=1,
     ) == 100
     assert [row["commission"] for row in state.trades] == [2.5, 2.5]
-    assert state.cash == 1995.0
+    assert state.cash == 1994.0
 
 
 def test_industry_rejects_explicit_legacy_cost_schedules():

@@ -60,8 +60,9 @@ def _metrics(state, trace):
         inventory[row.get("code", row.get("symbol"))] += row["shares"] * (1 if side == "BUY" else -1)
         commission = row.get("commission")
         if commission is not None:
-            expected = (row["cash_before"] - notional - commission if side == "BUY"
-                        else row["cash_before"] + notional - commission)
+            fees = commission + row.get("stamp_duty", 0.0)
+            expected = (row["cash_before"] - notional - fees if side == "BUY"
+                        else row["cash_before"] + notional - fees)
             if money(expected) != money(row["cash_after"]):
                 residuals.append(index)
     inversions = [{"index": i, "previous": trace[i - 1], "current": row}
