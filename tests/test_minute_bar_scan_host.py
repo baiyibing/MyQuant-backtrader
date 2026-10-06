@@ -14,6 +14,17 @@ OTHER = "600000.SH"
 UNIVERSE_BOOKS = ("topk_dropout", "topk_score_exit")
 
 
+@pytest.fixture(autouse=True)
+def _legacy_rule_profile(monkeypatch):
+    original = host.csv_minute_backtest.simulate
+
+    def simulate(*args, **kwargs):
+        kwargs.setdefault("rule_profile", "legacy")
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(host.csv_minute_backtest, "simulate", simulate)
+
+
 @pytest.mark.parametrize("source,root_arg", [("qlib_1min", "qlib_root"), ("lake", "lake_root")])
 @pytest.mark.parametrize("existing_root", [False, True])
 def test_missing_data_never_becomes_a_zero_summary(tmp_path, source, root_arg, existing_root):

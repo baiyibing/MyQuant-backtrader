@@ -35,7 +35,12 @@ def loaded(monkeypatch, tmp_path):
     monkeypatch.setattr(minute, "load_exdiv_ratios", lambda *a, **k: None)
     monkeypatch.setattr(minute, "warn_stale_period_env", lambda: None)
     monkeypatch.setattr(minute.time, "perf_counter", lambda: 1.)
-    return dict(strategy="version6", pool_dir=pool, daily_quota=5000), bars, loads
+    return dict(
+        strategy="version6",
+        pool_dir=pool,
+        daily_quota=5000,
+        rule_profile="legacy",
+    ), bars, loads
 
 
 def buys(state):
@@ -86,14 +91,17 @@ def test_cli_parses_optional_rate(monkeypatch, flag, expected):
 
     monkeypatch.setattr(minute, "run", run)
     with pytest.raises(Captured):
-        minute.main(["--strategy", "version6", *flag])
+        minute.main(["--strategy", "version6", "--rule-profile", "legacy", *flag])
 
 
 @pytest.mark.parametrize("value", ["nan", "inf", "-inf", "-0.01", "1.01"])
 def test_invalid_rate_raises_value_error_before_io(monkeypatch, value):
     monkeypatch.setattr(minute, "run", lambda *a, **k: pytest.fail("invalid rate reached run"))
     with pytest.raises(ValueError, match="finite and in"):
-        minute.main(["--strategy", "version6", f"--participation-rate={value}"])
+        minute.main([
+            "--strategy", "version6", "--rule-profile", "legacy",
+            f"--participation-rate={value}",
+        ])
 
 
 @pytest.mark.parametrize("change", ["missing_volume", "missing_frame", "fractional", "nan", "negative", "duplicate"])
@@ -139,6 +147,7 @@ def test_cli_cap_emits_rate_and_assumption_manifest(loaded, monkeypatch, tmp_pat
     out = tmp_path / "arm"
     assert minute.main(["--strategy", "version6", "--start", DAY, "--end", DAY,
                         "--pool-dir", str(options["pool_dir"]), "--out-dir", str(out),
+                        "--rule-profile", "legacy",
                         "--participation-rate", ".1"]) == 0
     manifest = json.loads((out / "run-manifest.json").read_text())
     assert manifest["participation_rate"] == .1

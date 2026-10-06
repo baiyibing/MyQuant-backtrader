@@ -45,6 +45,18 @@ SCAN_WINDOW_NOTE = "标签描述当前扫描窗口，不是交易所忠实 closi
 PHASE_FILTER_NAMES = {"continuous", "closing_call", "session_phase", "CLOSING_CALL_OPEN", "SessionPhase"}
 # Only these trade writers may contain phase labels. Scanners remain forbidden.
 PHASE_LABEL_WRITE_PATHS = {"csv_ledger", "csv_simulate_loop"}
+
+
+@pytest.fixture(autouse=True)
+def _legacy_rule_profile(monkeypatch):
+    for module in (daily_sim, minute_sim):
+        original = module.simulate
+
+        def simulate(*args, _original=original, **kwargs):
+            kwargs.setdefault("rule_profile", "legacy")
+            return _original(*args, **kwargs)
+
+        monkeypatch.setattr(module, "simulate", simulate)
 # Existing time comparisons only; no 14:57 (897 minutes) auction-policy cutoff.
 AS_BUILT_SCAN_HM_COMPARISONS = {
     "hm is not None",

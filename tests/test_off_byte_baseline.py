@@ -127,7 +127,7 @@ def test_s8_overlay_only_replaces_authorized_cases_and_preserves_historical_file
     assert len(historical_non_overlay) == 23
     historical = json.loads(GOLDEN.read_text(encoding="utf-8"))
     for book, engine in historical_non_overlay:
-        actual, _, _ = expected_case(book, engine)
+        actual, _, _ = expected_case(book, engine, rule_profile="legacy")
         frozen = historical["cases"][f"{book}/{engine}"]
         assert actual["sha256_csv_bytes"] == frozen["sha256_csv_bytes"]
         assert actual["library_sha256_csv_bytes"] == frozen["library_sha256_csv_bytes"]
@@ -149,7 +149,7 @@ def test_v61_overlay_only_adds_authorized_cases_and_preserves_historical_files()
     assert "version6_1/daily" not in historical["cases"]
     assert "version6_1/minute" not in historical["cases"]
     for book, engine in V61_CASES:
-        actual, _, _ = expected_case(book, engine)
+        actual, _, _ = expected_case(book, engine, rule_profile="legacy")
         assert actual["sha256_csv_bytes"] == golden["cases"][f"{book}/{engine}"]["sha256_csv_bytes"]
         assert actual["fill_counts"]["BUY"] > 0
         assert actual["fill_counts"]["SELL"] > 0
@@ -168,7 +168,7 @@ def test_v91_overlay_only_adds_authorized_cases_and_preserves_historical_files()
     assert "version9_1/daily" not in historical["cases"]
     assert "version9_1/minute" not in historical["cases"]
     for book, engine in V91_CASES:
-        actual, _, _ = expected_case(book, engine)
+        actual, _, _ = expected_case(book, engine, rule_profile="legacy")
         assert actual["sha256_csv_bytes"] == golden["cases"][f"{book}/{engine}"]["sha256_csv_bytes"]
         assert actual["fill_counts"]["BUY"] > 0
         assert actual["fill_counts"]["SELL"] > 0
@@ -187,7 +187,7 @@ def test_v92_overlay_only_adds_authorized_cases_and_preserves_historical_files()
     assert "version9_2/daily" not in historical["cases"]
     assert "version9_2/minute" not in historical["cases"]
     for book, engine in V92_CASES:
-        actual, _, _ = expected_case(book, engine)
+        actual, _, _ = expected_case(book, engine, rule_profile="legacy")
         assert actual["sha256_csv_bytes"] == golden["cases"][f"{book}/{engine}"]["sha256_csv_bytes"]
         assert actual["fill_counts"]["BUY"] > 0
         assert actual["fill_counts"]["SELL"] > 0
@@ -208,7 +208,7 @@ def test_v93_overlay_only_adds_authorized_cases_and_preserves_historical_files()
     assert "version9_3/daily" not in historical["cases"]
     assert "version9_3/minute" not in historical["cases"]
     for book, engine in V93_CASES:
-        actual, _, _ = expected_case(book, engine)
+        actual, _, _ = expected_case(book, engine, rule_profile="legacy")
         assert actual["sha256_csv_bytes"] == golden["cases"][f"{book}/{engine}"]["sha256_csv_bytes"]
         assert actual["structured"]["stats"]["profit_target"] == pytest.approx(0.10)
         assert actual["fill_counts"]["BUY"] > 0
@@ -220,7 +220,9 @@ def test_version12_overlay_only_replaces_ma10_stop_cases():
     assert golden["captured_environment"]["pandas"] == "3.0.6"
     assert set(golden["cases"]) == {"version12/daily", "version12/minute"}
     for book, engine in S12_CASES:
-        actual, canonical, recorded = expected_case(book, engine)
+        actual, canonical, recorded = expected_case(
+            book, engine, rule_profile="legacy"
+        )
         case = golden["cases"][f"{book}/{engine}"]
         assert actual == case
         assert_case_canonical(book, actual, case, canonical)
@@ -236,7 +238,9 @@ def test_version9_overlay_only_replaces_range_stop_cases():
     assert golden["captured_environment"]["pandas"] == "3.0.6"
     assert set(golden["cases"]) == {"version9/daily", "version9/minute"}
     for book, engine in S9_CASES:
-        actual, canonical, recorded = expected_case(book, engine)
+        actual, canonical, recorded = expected_case(
+            book, engine, rule_profile="legacy"
+        )
         case = golden["cases"][f"{book}/{engine}"]
         assert actual == case
         assert_case_canonical(book, actual, case, canonical)
@@ -427,8 +431,16 @@ def test_off_byte_baseline_trades_equity_and_account(book, engine, explicit_fals
         pytest.skip("v6f overlay pending authorized pandas-3.0.6/Linux recording (--record-v6f)")
     if (book, engine) in V61_CASES and not V61_GOLDEN.exists():
         pytest.skip("v61 v2 overlay pending first-lot-anchor re-record (--record-v61-v2)")
-    expected, canonical, recorded_pandas = expected_case(book, engine)
-    actual = capture_case(book, engine, tmp_path, explicit_false=explicit_false)
+    expected, canonical, recorded_pandas = expected_case(
+        book, engine, rule_profile="legacy"
+    )
+    actual = capture_case(
+        book,
+        engine,
+        tmp_path,
+        explicit_false=explicit_false,
+        rule_profile="legacy",
+    )
     assert actual["fill_counts"]["BUY"] > 0, (book, engine, "no real BUY")
     assert actual["fill_counts"]["SELL"] > 0, (book, engine, "no real SELL")
     assert len(actual["structured"]["fills"]) == sum(actual["fill_counts"].values())

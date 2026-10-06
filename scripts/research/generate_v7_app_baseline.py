@@ -238,6 +238,7 @@ def capture_case(case, output):
             simulator = getattr(module, target)
 
             def observe(*args, **kwargs):
+                kwargs.setdefault("rule_profile", "legacy")
                 state = simulator(*args, **kwargs)
                 captured.append(state)
                 return state
@@ -282,7 +283,12 @@ def capture_case(case, output):
                 assert app.DEFAULT_CASH_TOTAL == 500_000_000.0
     else:
         state = v7.simulate_v7(
-            frames, daily, pool, None if case == "frame_calendar" else index, **opts
+            frames,
+            daily,
+            pool,
+            None if case == "frame_calendar" else index,
+            rule_profile="legacy",
+            **opts,
         )
         v7.write_run_artifacts(state, output)
     counts = Counter(t["reason"] for t in state.trades)

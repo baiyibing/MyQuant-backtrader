@@ -86,7 +86,7 @@ def _common_parser(repo: Path) -> argparse.ArgumentParser:
 def test_shared_csv_cli_rule_profile_default_choices_and_invalid(tmp_path):
     parser = _common_parser(tmp_path)
     base = ["--strategy", "version6"]
-    assert parser.parse_args(base).rule_profile == "legacy"
+    assert parser.parse_args(base).rule_profile == "industry"
     assert parser.parse_args([*base, "--rule-profile", "legacy"]).rule_profile == "legacy"
     assert parser.parse_args([*base, "--rule-profile", "industry"]).rule_profile == "industry"
     assert "--rule-profile {legacy,industry}" in parser.format_help()
@@ -95,16 +95,16 @@ def test_shared_csv_cli_rule_profile_default_choices_and_invalid(tmp_path):
     assert raised.value.code == 2
 
 
-def test_csv_run_kwargs_omits_legacy_rule_profile(tmp_path):
+def test_csv_run_kwargs_omits_industry_rule_profile(tmp_path):
     parser = _common_parser(tmp_path)
     base = ["--strategy", "version6"]
     assert "rule_profile" not in csv_run_kwargs_from_args(parser.parse_args(base))
     assert "rule_profile" not in csv_run_kwargs_from_args(
-        parser.parse_args([*base, "--rule-profile", "legacy"])
+        parser.parse_args([*base, "--rule-profile", "industry"])
     )
     assert csv_run_kwargs_from_args(
-        parser.parse_args([*base, "--rule-profile", "industry"])
-    )["rule_profile"] == "industry"
+        parser.parse_args([*base, "--rule-profile", "legacy"])
+    )["rule_profile"] == "legacy"
 
 
 def test_v7_cli_rule_profile_default_choices_and_invalid(tmp_path):
@@ -117,7 +117,7 @@ def test_v7_cli_rule_profile_default_choices_and_invalid(tmp_path):
         "--pool-dir",
         str(tmp_path),
     ]
-    assert parser.parse_args(base).rule_profile == "legacy"
+    assert parser.parse_args(base).rule_profile == "industry"
     assert parser.parse_args([*base, "--rule-profile", "legacy"]).rule_profile == "legacy"
     assert parser.parse_args([*base, "--rule-profile", "industry"]).rule_profile == "industry"
     assert "--rule-profile {legacy,industry}" in parser.format_help()
@@ -139,7 +139,7 @@ def test_help_lock_constants_and_guarded_minute_source_match_base_commit():
     assert_shared_minute_cli_unchanged(Path(__file__).resolve().parents[1])
 
 
-def _daily_case(rule_profile: str | RuleProfile = "legacy"):
+def _daily_case(rule_profile: str | RuleProfile | None = None):
     index = pd.to_datetime(["2025-10-31", "2025-11-03", "2025-11-04"])
     bars = {
         SYMBOL: pd.DataFrame(
@@ -152,18 +152,19 @@ def _daily_case(rule_profile: str | RuleProfile = "legacy"):
             index=index,
         )
     }
+    kwargs = {"strategy": "version6", "stop_pct": 0.02}
+    if rule_profile is not None:
+        kwargs["rule_profile"] = rule_profile
     return daily.simulate(
         bars,
         {"20251103": [SYMBOL]},
         "20251103",
         "20251104",
-        strategy="version6",
-        stop_pct=0.02,
-        rule_profile=rule_profile,
+        **kwargs,
     )
 
 
-def _minute_case(rule_profile: str | RuleProfile = "legacy"):
+def _minute_case(rule_profile: str | RuleProfile | None = None):
     minute_index = pd.to_datetime(
         ["2025-11-03 14:55:00", "2025-11-04 09:30:00", "2025-11-04 14:55:00"]
     )
@@ -186,15 +187,16 @@ def _minute_case(rule_profile: str | RuleProfile = "legacy"):
             index=pd.to_datetime(["2025-10-31", "2025-11-03", "2025-11-04"]),
         )
     }
+    kwargs = {"strategy": "version6", "stop_pct": 0.02}
+    if rule_profile is not None:
+        kwargs["rule_profile"] = rule_profile
     return minute.simulate(
         minute_bars,
         daily_bars,
         {"20251103": [SYMBOL]},
         "20251103",
         "20251104",
-        strategy="version6",
-        stop_pct=0.02,
-        rule_profile=rule_profile,
+        **kwargs,
     )
 
 
@@ -219,8 +221,11 @@ def _v7_inputs():
     )
 
 
-def _minute_native_v7_case(rule_profile: str | RuleProfile = "legacy"):
+def _minute_native_v7_case(rule_profile: str | RuleProfile | None = None):
     minute_bars, daily_bars, pool_days, index_days = _v7_inputs()
+    kwargs = {}
+    if rule_profile is not None:
+        kwargs["rule_profile"] = rule_profile
     return minute.simulate(
         minute_bars,
         daily_bars,
@@ -229,15 +234,15 @@ def _minute_native_v7_case(rule_profile: str | RuleProfile = "legacy"):
         index_days[-1],
         strategy="version7",
         policy_context=MinutePolicyContext(index_days=index_days),
-        rule_profile=rule_profile,
+        **kwargs,
     )
 
 
-def _v7_case(rule_profile: str | RuleProfile = "legacy"):
-    return v7.simulate_v7(
-        *_v7_inputs(),
-        rule_profile=rule_profile,
-    )
+def _v7_case(rule_profile: str | RuleProfile | None = None):
+    kwargs = {}
+    if rule_profile is not None:
+        kwargs["rule_profile"] = rule_profile
+    return v7.simulate_v7(*_v7_inputs(), **kwargs)
 
 
 def _write_shared(state, root: Path, engine: str):
@@ -254,48 +259,54 @@ def _write_shared(state, root: Path, engine: str):
         ("standalone-v7", _v7_case, v7.write_run_artifacts),
     ],
 )
-def test_legacy_omitted_and_explicit_are_byte_identical_and_industry_fee_differs(
+def test_industry_omitted_and_explicit_are_byte_identical_and_legacy_fee_differs(
     tmp_path, engine, factory, writer
 ):
     omitted = factory()
-    explicit = factory("legacy")
-    industry = factory("industry")
+    explicit = factory("industry")
+    legacy = factory("legacy")
 
     omitted_dir = tmp_path / engine / "omitted"
     explicit_dir = tmp_path / engine / "explicit"
-    industry_dir = tmp_path / engine / "industry"
+    legacy_dir = tmp_path / engine / "legacy"
     writer(omitted, omitted_dir)
     writer(explicit, explicit_dir)
-    writer(industry, industry_dir)
+    writer(legacy, legacy_dir)
 
     filenames = ("summary.txt", "daily_equity.csv", "trades.csv")
     for filename in filenames:
         assert (omitted_dir / filename).read_bytes() == (explicit_dir / filename).read_bytes()
     assert any(
-        (omitted_dir / filename).read_bytes() != (industry_dir / filename).read_bytes()
+        (omitted_dir / filename).read_bytes() != (legacy_dir / filename).read_bytes()
         for filename in filenames
     )
 
     assert omitted.trades
     assert any(str(row["side"]).lower() == "buy" for row in omitted.trades)
     assert any(str(row["side"]).lower() == "sell" for row in omitted.trades)
-    omitted_stats = getattr(omitted, "stats", {})
-    explicit_stats = getattr(explicit, "stats", {})
-    assert "rule_profile" not in omitted_stats
-    assert "rule_profile_revision" not in explicit_stats
-    industry_stats = industry.stats
+    industry_stats = omitted.stats
+    explicit_stats = explicit.stats
+    legacy_stats = getattr(legacy, "stats", {})
     assert industry_stats["rule_profile"] == "industry"
     assert industry_stats["rule_profile_revision"] == INDUSTRY.revision
+    assert explicit_stats["rule_profile"] == "industry"
+    assert explicit_stats["rule_profile_revision"] == INDUSTRY.revision
+    assert "rule_profile" not in legacy_stats
+    assert "rule_profile_revision" not in legacy_stats
     if engine in {"daily", "minute"}:
         assert industry_stats["buy_cost_rate"] == 0.0003
         assert industry_stats["sell_cost_rate"] == 0.0003
         assert industry_stats["min_cost"] == 5.0
-    legacy_fills = [row for row in omitted.trades if str(row["side"]).lower() in {"buy", "sell"}]
-    industry_fills = [row for row in industry.trades if str(row["side"]).lower() in {"buy", "sell"}]
+    industry_fills = [
+        row for row in omitted.trades if str(row["side"]).lower() in {"buy", "sell"}
+    ]
+    legacy_fills = [
+        row for row in legacy.trades if str(row["side"]).lower() in {"buy", "sell"}
+    ]
     assert legacy_fills != industry_fills
 
 
-def test_v7_run_config_keeps_industry_profile_only(tmp_path):
+def test_v7_run_config_omits_industry_profile_and_keeps_legacy(tmp_path):
     configs = {}
     for profile in ("legacy", "industry"):
         pool_dir = tmp_path / profile / "pool"
@@ -319,10 +330,10 @@ def test_v7_run_config_keeps_industry_profile_only(tmp_path):
             (output_dir / "run-config.json").read_text(encoding="utf-8")
         )
 
-    assert "rule_profile" not in configs["legacy"]
+    assert configs["legacy"]["rule_profile"] == "legacy"
     assert configs["legacy"]["fix_minute_cash_order"] is False
     assert configs["legacy"]["cash_order_policy"] == "legacy_symbol_day"
-    assert configs["industry"]["rule_profile"] == "industry"
+    assert "rule_profile" not in configs["industry"]
     assert configs["industry"]["fix_minute_cash_order"] is True
     assert configs["industry"]["cash_order_policy"] == "chronological"
 

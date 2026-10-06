@@ -679,7 +679,7 @@ def simulate(
     limit_walkdown: bool = False,
     topk_limit_rule: str = "qlib",
     policy_context: MinutePolicyContext | None = None,
-    rule_profile: str | RuleProfile = "legacy",
+    rule_profile: str | RuleProfile = "industry",
 ) -> SimState:
     """Opt-in cap uses caller-attested completed minutes; daily volume is unused.
 
@@ -1473,7 +1473,7 @@ def run(
     limit_walkdown: bool = False,
     topk_limit_rule: str = "qlib",
     participation_rate: float | None = None,
-    rule_profile: str | RuleProfile = "legacy",
+    rule_profile: str | RuleProfile = "industry",
 ) -> SimState:
     profile = resolve_rule_profile(rule_profile)
     book = normalize_csv_strategy(strategy)

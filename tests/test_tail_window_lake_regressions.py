@@ -93,13 +93,15 @@ def test_duplicate_lake_minute_cannot_fill_tail_child(tmp_path, engine, duplicat
             frames, daily, {START: [SYMBOL]}, START, START, strategy="version8",
             total_cash=1_000_000, name_budget=28_000, audit_sink=audit,
             buy_cost_rate=0, sell_cost_rate=0, min_cost=0, **on,
+            rule_profile="legacy",
         )
         assert [row["hm"] for row in audit if row["side"] == "BUY"] == expected
         assert sum(row["shares"] for row in state.trades if row["side"] == "BUY") == len(expected) * 100
     else:
         day = date(2026, 9, 1)
         state = v7.simulate_v7(
-            frames, {SYMBOL: {date(2026, 8, 31): 10.0}}, {day: [SYMBOL]}, [day], **on,
+            frames, {SYMBOL: {date(2026, 8, 31): 10.0}}, {day: [SYMBOL]}, [day],
+            rule_profile="legacy", **on,
         )
         fills = [row for row in state.trades if row["side"] == "buy"]
         assert [row["hm"] for row in fills] == expected

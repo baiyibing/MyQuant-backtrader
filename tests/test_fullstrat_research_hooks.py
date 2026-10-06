@@ -18,8 +18,8 @@ from backtest.research.fullstrat_research_hooks import (
     ResearchOrder,
     ResearchSession,
     available_at,
-    simulate_book,
-    simulate_v7,
+    simulate_book as _simulate_book,
+    simulate_v7 as _simulate_v7,
     stamp,
     run_modeb,
 )
@@ -27,6 +27,20 @@ from scripts.research import run_minute_sensitivity_b_batch4_fullstrat as harnes
 
 CODE = "600000.SH"
 DAY = date(2026, 9, 1)
+
+
+def simulate_book(*args, **kwargs):
+    kwargs.setdefault("rule_profile", "legacy")
+    return _simulate_book(*args, **kwargs)
+
+
+def simulate_v7(*args, **kwargs):
+    if (
+        kwargs.get("clock_mode", "production_default") == "production_default"
+        and kwargs.get("slip_bp_per_side", 0) == 0
+    ):
+        kwargs.setdefault("rule_profile", "legacy")
+    return _simulate_v7(*args, **kwargs)
 
 
 def bars(rows):
@@ -355,11 +369,14 @@ def test_default_zero_trade_and_equity_bytes_equal_original(engine):
     ds = daily([10, 10, 9.7])
     if engine == "book":
         args = (minute, ds, {"20260901": [CODE]}, "20260901", "20260902")
-        base = book.simulate(*args, strategy="version1")
+        base = book.simulate(*args, strategy="version1", rule_profile="legacy")
         actual = simulate_book(*args, strategy="version1")
     else:
         args = (minute, ds, {DAY: [CODE]}, [DAY, DAY + timedelta(days=1)])
-        base, actual = v7.simulate_v7(*args), simulate_v7(*args)
+        base, actual = (
+            v7.simulate_v7(*args, rule_profile="legacy"),
+            simulate_v7(*args),
+        )
 
     def serialized(st):
         return json.dumps([st.trades, st.equity_curve], sort_keys=True).encode()
@@ -688,13 +705,14 @@ def test_experimental_loop_same_economics_matches_original_at_zero_impact(engine
     ds = daily([10, 10, 9.7])
     if engine == "book":
         args = (minute, ds, {"20260901": [CODE]}, "20260901", "20260902")
-        baseline = book.simulate(*args, strategy="version1")
+        baseline = book.simulate(*args, strategy="version1", rule_profile="legacy")
         actual = research_book.simulate(
-            *args, strategy="version1", config=ResearchFillConfig()
+            *args, strategy="version1", config=ResearchFillConfig(),
+            rule_profile="legacy",
         )
     else:
         args = (minute, ds, {DAY: [CODE]}, [DAY, DAY + timedelta(days=1)])
-        baseline = v7.simulate_v7(*args)
+        baseline = v7.simulate_v7(*args, rule_profile="legacy")
         actual = research_v7.simulate(*args, config=ResearchFillConfig())
 
     def economics(state):

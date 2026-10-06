@@ -310,7 +310,9 @@ def test_registered_version6_books_have_current_baseline_owner(name):
     from scripts.research.generate_off_byte_baseline import expected_case
 
     for engine in ('daily', 'minute'):
-        case, canonical, _ = expected_case(name, engine)
+        case, canonical, _ = expected_case(
+            name, engine, rule_profile="legacy"
+        )
         assert case and canonical, f'{name}/{engine}: missing current baseline owner'
 
 

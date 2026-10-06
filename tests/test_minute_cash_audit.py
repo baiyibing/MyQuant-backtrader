@@ -14,9 +14,14 @@ from tests.test_minute_cash_chronology import assert_insufficient_cash
 def test_sidecar_preserves_state_and_records_real_clock_cash(enabled):
     trace = []
     with pytest.raises(InsufficientCashError) as plain:
-        simulate(**chronological_case(), fix_minute_cash_order=enabled)
+        simulate(**chronological_case(), fix_minute_cash_order=enabled, rule_profile="legacy")
     with pytest.raises(InsufficientCashError) as observed:
-        simulate(**chronological_case(), fix_minute_cash_order=enabled, audit_sink=trace)
+        simulate(
+            **chronological_case(),
+            fix_minute_cash_order=enabled,
+            audit_sink=trace,
+            rule_profile="legacy",
+        )
     assert_insufficient_cash(plain.value, date="20251105")
     assert_insufficient_cash(observed.value, date="20251105")
     assert vars(plain.value) == vars(observed.value)
@@ -29,8 +34,12 @@ def test_target_decision_clock_retains_earlier_quote_clock():
     trace = []
     # Capacity callback contract is tested in the chronology suite; this audit
     # control intentionally leaves capacity disabled while retaining quote_hm.
-    state = simulate(**chronological_case(sell_hm=893, buy_hm=890),
-                     fix_minute_cash_order=True, audit_sink=trace)
+    state = simulate(
+        **chronological_case(sell_hm=893, buy_hm=890),
+        fix_minute_cash_order=True,
+        audit_sink=trace,
+        rule_profile="legacy",
+    )
     assert money(state.cash) == money(338.46)
     assert trace[-1]["decision_hm"] == 895
     assert trace[-1]["quote_hm"] == 890
@@ -42,11 +51,12 @@ def test_shared_cli_audit_sidecar_preserves_csv_surface(tmp_path, monkeypatch, e
     from backtest.research import csv_minute_backtest as minute
     def frozen_run(*args, **kwargs):
         return simulate(**chronological_case(), fix_minute_cash_order=kwargs["fix_minute_cash_order"],
-                        audit_sink=kwargs["audit_sink"])
+                        audit_sink=kwargs["audit_sink"], rule_profile=kwargs["rule_profile"])
     monkeypatch.setattr(minute, "run", frozen_run)
     monkeypatch.setattr(minute, "maybe_compare_daily", lambda *a, **kw: None)
     output, audit = tmp_path / "out", tmp_path / "audit.json"
-    args = ["--strategy", "version8", "--start", "20251104", "--end", "20251105",
+    args = ["--strategy", "version8", "--rule-profile", "legacy",
+            "--start", "20251104", "--end", "20251105",
             "--pool-dir", str(tmp_path), "--out-dir", str(output), "--execution-audit-file", str(audit)]
     with pytest.raises(InsufficientCashError) as exc:
         minute.main(args + (["--fix-minute-cash-order"] if enabled else []))
@@ -67,6 +77,7 @@ def test_v7_cli_audit_and_run_config(tmp_path, monkeypatch, enabled):
     monkeypatch.setattr(v7, "load_index_daily", lambda *a: case["index_days"])
     output, audit = tmp_path / "out", tmp_path / "audit.json"
     args = ["--start", "20260901", "--end", "20260902", "--cash-total", "421000",
+            "--rule-profile", "legacy",
             "--pool-dir", str(tmp_path), "--output-dir", str(output), "--execution-audit-file", str(audit)]
     assert v7.main(args + (["--fix-minute-cash-order"] if enabled else [])) == 0
     payload = json.loads(audit.read_text())

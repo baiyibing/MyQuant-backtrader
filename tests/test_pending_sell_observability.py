@@ -11,7 +11,12 @@ from backtest.research import csv_minute_backtest as minute
 from backtest.research.csv_artifacts import write_run_artifacts
 from backtest.research.fill_config import FillConfig
 from tests.test_side_sell_fill_config import CODE, state, sells
-from tests.test_v92_minute_fold import run_seeded
+from tests.test_v92_minute_fold import run_seeded as _run_seeded
+
+
+def run_seeded(*args, **kwargs):
+    kwargs.setdefault("rule_profile", "legacy")
+    return _run_seeded(*args, **kwargs)
 
 
 def account_hash(st):
@@ -34,7 +39,8 @@ def run_main(kind, cash_order=False):
     return minute.simulate(minute_bars={CODE: frame}, daily_bars={CODE: daily},
         pool_days={days[0]: [CODE]}, start=days[0], end=days[-1], strategy='version3',
         total_cash=100_000., daily_quota=10_000., name_budget=10_000., stop_pct=.05,
-        fix_minute_cash_order=cash_order, fill_config=FillConfig(fill_timing='next_bar_open'))
+        fix_minute_cash_order=cash_order, fill_config=FillConfig(fill_timing='next_bar_open'),
+        rule_profile="legacy")
 
 
 def run_side(opening=5., fill=10.):

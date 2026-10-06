@@ -24,6 +24,18 @@ from scripts.research import verify_delta5_real_volume_ingress as harness
 from tests.fixtures.delta5_ingress import CODE, DAYS, SOURCE_SYMBOL, UNIT, fixture
 
 
+@pytest.fixture(autouse=True)
+def _legacy_rule_profile(monkeypatch):
+    original = harness.options
+
+    def options(*args, **kwargs):
+        result = original(*args, **kwargs)
+        result["rule_profile"] = "legacy"
+        return result
+
+    monkeypatch.setattr(harness, "options", options)
+
+
 def passed(f, rate=.1):
     result = harness.compare(f, rate)
     assert result["status"] == "PASS", result["oracle"]
@@ -428,7 +440,16 @@ def cli_args(root, f=None, run_id="run"):
 
 def test_cli_success_provenance_isolation_and_overwrite(external):
     args = cli_args(external)
-    proc = subprocess.run([sys.executable, str(Path(harness.__file__)), *args], capture_output=True, text=True)
+    bootstrap = (
+        "import sys; "
+        "from scripts.research import verify_delta5_real_volume_ingress as h; "
+        "original = h.options; "
+        "h.options = lambda params: {**original(params), 'rule_profile': 'legacy'}; "
+        "raise SystemExit(h.main(sys.argv[1:]))"
+    )
+    proc = subprocess.run(
+        [sys.executable, "-c", bootstrap, *args], capture_output=True, text=True
+    )
     assert proc.returncode == 0, proc.stdout + proc.stderr
     root = external / "outputs" / "run"
     receipt = json.loads((root / "receipt.json").read_text())

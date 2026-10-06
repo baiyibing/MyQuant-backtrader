@@ -100,7 +100,7 @@ def fixture_bars(periods=10):
 def run_daily(frame, days, pool=None):
     start, end = days[1].strftime("%Y%m%d"), days[-1].strftime("%Y%m%d")
     return simulate({"600000.SH": frame}, pool or {start: ["600000.SH"]}, start, end,
-                    strategy="version9_2")
+                    strategy="version9_2", rule_profile="legacy")
 
 
 def test_strategy9_2_daily_same_session_multi_add():
@@ -158,7 +158,7 @@ def test_strategy9_2_minute_same_day_and_t1_residual(merged_bar):
     minutes = pd.DataFrame(rows).set_index("time")
     start, end = days[1].strftime("%Y%m%d"), days[-1].strftime("%Y%m%d")
     st = minute({"600000.SH": minutes}, {"600000.SH":frame}, {start:["600000.SH"]},
-                start, end, strategy="version9_2")
+                start, end, strategy="version9_2", rule_profile="legacy")
     buys = [t for t in st.trades if t["side"] == "BUY"]
     sells = [t for t in st.trades if t["side"] == "SELL"]
     assert [t["price"] for t in buys] == [10.,10.4,11.]
@@ -234,7 +234,8 @@ def test_strategy9_2_cli_stop_refused(host, tmp_path):
     with pytest.raises(SystemExit, match="stop-pct"):
         (daily_main if host == "daily" else minute_main)([
             "--strategy", "version9_2", "--start", "20260302", "--end", "20260303",
-            "--pool-dir", str(tmp_path), "--stop-pct", ".1"])
+            "--pool-dir", str(tmp_path), "--stop-pct", ".1",
+            "--rule-profile", "legacy"])
 
 
 @pytest.mark.parametrize("minute", [False, True])
@@ -316,7 +317,7 @@ def test_strategy9_2_minute_stop_precedes_scale_out():
     minutes = pd.DataFrame(rows).set_index("time")
     start, end = days[1].strftime("%Y%m%d"), days[2].strftime("%Y%m%d")
     st = minute({"600000.SH":minutes}, {"600000.SH":frame}, {start:["600000.SH"]},
-                start, end, strategy="version9_2")
+                start, end, strategy="version9_2", rule_profile="legacy")
     sells = [t for t in st.trades if t["side"] == "SELL"]
     assert sells and {t["reason"] for t in sells} == {"stop_loss:gap_open"}
     assert all(t["price"] == 7.8 for t in sells)

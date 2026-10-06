@@ -38,7 +38,9 @@ def test_invalid_csv_cannot_be_canonicalized(blob):
 
 @pytest.fixture
 def captured_case(tmp_path, monkeypatch):
-    actual = baseline.capture_case("version3", "daily", tmp_path)
+    actual = baseline.capture_case(
+        "version3", "daily", tmp_path, rule_profile="legacy"
+    )
     monkeypatch.setattr(matrix, "capture_case", lambda *args, **kwargs: actual)
     return actual
 

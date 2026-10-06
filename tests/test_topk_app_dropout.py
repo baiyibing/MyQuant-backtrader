@@ -121,9 +121,11 @@ def test_app_entries_reach_registered_main_once(tmp_path, monkeypatch, entry, ca
     from backtest.research import csv_minute_backtest as main
     from backtest.research import csv_minute_backtest_v7 as native
     from backtest.research import csv_minute_backtest_topk_app_dropout as app
+    from backtest.research import strategy7_engine
     from backtest.research import minute_bar_scan_host as host, ashare_session
     from backtest.research.ashare_fees import DEFAULT_SCHEDULE
     from backtest.research.minute_engine_policies import MinutePolicyContext
+    from backtest.research.rule_profile import LEGACY
 
     day = date(2026, 1, 9)
     symbol = '000001.SZ'
@@ -137,6 +139,15 @@ def test_app_entries_reach_registered_main_once(tmp_path, monkeypatch, entry, ca
         monkeypatch.setattr(module, 'load_index_daily', lambda *a: [day])
     monkeypatch.setattr(app, 'load_limit_context', lambda *a: ({}, {}))
     monkeypatch.setattr(ashare_session, 'load_limit_context', lambda *a: ({}, {}))
+    original_native = strategy7_engine.simulate_native
+
+    def legacy_native(*args, **kwargs):
+        kwargs.setdefault("rule_profile", "legacy")
+        return original_native(*args, **kwargs)
+
+    monkeypatch.setattr(app, "simulate_native", legacy_native)
+    monkeypatch.setattr(strategy7_engine, "simulate_native", legacy_native)
+
     def forbidden(*a, **kw):
         raise AssertionError('APP must bypass simulate_v7')
     monkeypatch.setattr(native, 'simulate_v7', forbidden)
@@ -162,7 +173,9 @@ def test_app_entries_reach_registered_main_once(tmp_path, monkeypatch, entry, ca
     assert args == (minute, daily, pools, day, day)
     assert kwargs['strategy'] == 'version7'
     assert kwargs['total_cash'] == actual_cash
-    assert kwargs['policy_context'] == MinutePolicyContext(index_days=[day], fee_schedule=DEFAULT_SCHEDULE)
+    assert kwargs['policy_context'] == MinutePolicyContext(
+        index_days=[day], fee_schedule=DEFAULT_SCHEDULE, rule_profile=LEGACY
+    )
     assert kwargs['fix_minute_cash_order'] is False
     assert kwargs['tail_window_buy'] is False
     assert isinstance(result, native.SimResult)

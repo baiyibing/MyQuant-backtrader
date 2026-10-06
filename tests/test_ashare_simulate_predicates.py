@@ -75,6 +75,7 @@ def seed(monkeypatch, engine, code, buy_date, entry_idx=0):
 
 
 def run(engine, prices, start, end, *, code=CODE, pool=None, anchor=None, **kwargs):
+    kwargs.setdefault("rule_profile", "legacy")
     pool = {} if pool is None else pool
     if engine == "v7":
         return v7.simulate_v7(
@@ -239,6 +240,7 @@ def test_v7_held_add_none_limits_rejects_regardless_of_cash(cause, cash, monkeyp
         start=D1,
         end=D1,
         cash_total=cash,
+        rule_profile="legacy",
     )
     pos = state.positions[code]
     reason = "skip_no_prev_close" if cause == "no_previous_close" else "skip_unknown_board"
@@ -260,6 +262,7 @@ def test_v7_held_add_real_limits_cash_controls_fill(cash, monkeypatch):
     state = v7.simulate_v7(
         {code: minutes({D1: 104.0})}, {code: {D0: 100, D1: 104}}, {}, [D1],
         cash_total=cash,
+        rule_profile="legacy",
     )
     pos = state.positions[code]
     assert pos.entry_A == 100 and pos.add1_A1 is None and pos.peak == 104

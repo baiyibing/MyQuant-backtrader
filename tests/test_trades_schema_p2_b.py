@@ -30,7 +30,7 @@ def _minute_state(hhmm, row):
         ])},
         {TARGET: _daily_marks(days, [10.0, row[-1]])},
         {"20251103": [TARGET]}, "20251103", "20251104",
-        strategy="version6", stop_pct=0.02,
+        strategy="version6", stop_pct=0.02, rule_profile="legacy",
     )
 
 

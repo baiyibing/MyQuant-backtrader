@@ -14,6 +14,7 @@ from tests.test_strategy12_engine import CODE, bars_for, fills
 def run(paths, **kwargs):
     mins, days, dates = bars_for(paths)
     mins[CODE]["low"] = mins[CODE]["close"]
+    kwargs.setdefault("rule_profile", "legacy")
     return minute.simulate(mins, days, {"20251103": [CODE]},
                            "20251103", dates[-1].strftime("%Y%m%d"),
                            strategy="12", name_budget=10000, **kwargs)
@@ -76,7 +77,8 @@ def test_partial_hold20_pins_only_due_lot_and_keeps_t1_lot(monkeypatch):
 
     monkeypatch.setattr(minute, "init_sim_state", seeded)
     mins, days, _ = bars_for([[(600, 10.5), (601, 10.5)]])
-    st = minute.simulate(mins, days, {}, "20251103", "20251103", strategy="12")
+    st = minute.simulate(mins, days, {}, "20251103", "20251103", strategy="12",
+                         rule_profile="legacy")
     assert fills(st) == [(rules.HOLD20, 1000)]
     assert [(p.lot_id, p.shares) for p in st.positions[CODE]] == [(1, 400)]
 
@@ -85,7 +87,8 @@ def test_next_open_carries_plan_across_session_and_pins_signal_lots():
     mins, days, _ = bars_for([[(895, 10)], [(895, 8.9)], [(570, 9.5)]])
     st = minute.simulate(mins, days, {"20251103": [CODE], "20251104": [CODE]},
                          "20251103", "20251105", strategy="12", name_budget=10000,
-                         fill_config=FillConfig(fill_timing="next_bar_open"))
+                         fill_config=FillConfig(fill_timing="next_bar_open"),
+                         rule_profile="legacy")
     sell = next(t for t in st.trades if t["side"] == "SELL")
     assert (sell["date"], sell["price"], sell["shares"]) == ("20251105", 9.5, 1000)
     # The 1100-share pool lot purchased after the close signal is now T+1

@@ -20,6 +20,9 @@ vn.py backtest、JoinQuant / RiceQuant 类平台），不是交易所撮合引�
 - 快路径成交采用 bar-scan fill-or-skip；研究热路径不虚构 resting / limit order book。
 - 不把研究规则压缩成交易所级撮合或券商 OMS 细节。
 - 任何改变结果的规则变更都须建立新的 opt-in baseline；旧 baseline 永不刷新或覆盖；实施前由用户确认变更清单。
+- 自 2026-10-06 起，CLI / library 的 `rule_profile` 默认值为 `industry`；
+  旧 baseline 复现须显式使用 `--rule-profile legacy` 或
+  `rule_profile="legacy"`。
 
 ## 相关 SSOT
 

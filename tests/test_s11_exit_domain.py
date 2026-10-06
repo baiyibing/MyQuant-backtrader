@@ -51,6 +51,7 @@ def discontinuity():
 
 def simulate(engine, raw, front=None, *, start=T, end=NEXT, pools=None, **kwargs):
     args = ({CODE: raw},) if engine is daily else (minute_bars(raw), {CODE: raw})
+    kwargs.setdefault("rule_profile", "legacy")
     if front is not None:
         kwargs.update(fix_s11_exit_domain=True, signal_bars_front={CODE: front})
     return engine.simulate(
@@ -285,7 +286,8 @@ def test_simulate_rejects_bad_front_before_any_account_or_fill(engine, defect, m
     args = ({CODE: raw},) if engine is daily else (minute_bars(raw), {CODE: raw})
     with pytest.raises(ValueError, match="s11 exit domain"):
         engine.simulate(*args, {T: [CODE]}, T, NEXT, strategy="version11",
-                        fix_s11_exit_domain=True, signal_bars_front=signal)
+                        fix_s11_exit_domain=True, signal_bars_front=signal,
+                        rule_profile="legacy")
 
 
 @pytest.mark.parametrize("engine", [daily, minute], ids=["daily", "minute"])
@@ -299,7 +301,8 @@ def test_simulate_rejects_signal_without_version11_and_on(engine, strategy, enab
     with pytest.raises(ValueError, match="version11|signal_bars_front"):
         engine.simulate(*args, {T: [CODE]}, T, NEXT, strategy=strategy,
                         fix_s11_exit_domain=enabled,
-                        signal_bars_front={CODE: front} if supplied else None)
+                        signal_bars_front={CODE: front} if supplied else None,
+                        rule_profile="legacy")
 
 
 @pytest.mark.parametrize("engine", [daily, minute], ids=["daily", "minute"])

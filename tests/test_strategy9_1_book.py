@@ -85,7 +85,8 @@ def test_daily_signal_entry_add_and_whole_low_exit():
     f.loc[dates[23], ['open', 'high', 'low', 'close']] = [98, 100, 97, 98]
     st = daily.simulate({'600000': f}, {dates[21].strftime('%Y%m%d'): ['600000']},
                         dates[21].strftime('%Y%m%d'), dates[24].strftime('%Y%m%d'),
-                        strategy='version9_1', total_cash=5_000_000)
+                        strategy='version9_1', total_cash=5_000_000,
+                        rule_profile="legacy")
     buys = [t for t in st.trades if t['side'] == 'BUY']
     sells = [t for t in st.trades if t['side'] == 'SELL']
     assert len(buys) == 2
@@ -98,7 +99,7 @@ def test_short_history_skips():
     f = frame().iloc[:10]
     ds = f.index[5].strftime('%Y%m%d')
     st = daily.simulate({'600000': f}, {ds: ['600000']}, ds, ds,
-                        strategy='version9_1')
+                        strategy='version9_1', rule_profile="legacy")
     assert st.stats['skip_atr_history'] == 1
     assert not st.positions
 
@@ -118,7 +119,8 @@ def test_minute_low_trigger_and_exact_units():
     st = minute.simulate({'600000': m}, {'600000': f},
                          {days[0].strftime('%Y%m%d'): ['600000']},
                          days[0].strftime('%Y%m%d'), days[-1].strftime('%Y%m%d'),
-                         strategy='version9_1', total_cash=5_000_000)
+                         strategy='version9_1', total_cash=5_000_000,
+                         rule_profile="legacy")
     buys = [t for t in st.trades if t['side'] == 'BUY']
     sells = [t for t in st.trades if t['side'] == 'SELL']
     assert len(buys) == 2 and all(t['shares'] == 5000 for t in buys)
@@ -135,7 +137,8 @@ def test_daily_limit_up_add_skip_and_limit_down_defer():
     # Day 23 lower band is 99 (prior close 110): exit must persist.
     st = daily.simulate({'600000': f}, {dates[21].strftime('%Y%m%d'): ['600000']},
                         dates[21].strftime('%Y%m%d'), dates[24].strftime('%Y%m%d'),
-                        strategy='version9_1', total_cash=5_000_000)
+                        strategy='version9_1', total_cash=5_000_000,
+                        rule_profile="legacy")
     assert len([t for t in st.trades if t['side'] == 'BUY']) == 1
     assert st.stats['skip_limit_up'] >= 1
     assert st.stats['defer_sell_limit_down'] >= 1

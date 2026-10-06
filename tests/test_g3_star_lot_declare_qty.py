@@ -121,7 +121,7 @@ def test_shared_simulate_wiring(engine, enabled, quota, expected):
     args = (ds,) if engine == "daily" else (ms, ds)
     fn = daily.simulate if engine == "daily" else minute.simulate
     st = fn(*args, {"20260901": [CODE]}, "20260901", "20260901", strategy="version6",
-            daily_quota=quota, star_lot_declare_check=enabled)
+            daily_quota=quota, star_lot_declare_check=enabled, rule_profile="legacy")
     buys = [t for t in st.trades if t["side"] == "BUY"]
     assert sum(t["shares"] for t in buys) == expected
     if enabled:

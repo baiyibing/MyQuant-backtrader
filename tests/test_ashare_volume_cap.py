@@ -23,6 +23,18 @@ D1, D2, D3 = date(2026, 9, 1), date(2026, 9, 2), date(2026, 9, 3)
 UNIT = "raw_shares_incremental"
 
 
+@pytest.fixture(autouse=True)
+def _legacy_rule_profile(monkeypatch):
+    for module, name in ((daily, "simulate"), (book, "simulate"), (v7, "simulate_v7")):
+        original = getattr(module, name)
+
+        def simulate(*args, _original=original, **kwargs):
+            kwargs.setdefault("rule_profile", "legacy")
+            return _original(*args, **kwargs)
+
+        monkeypatch.setattr(module, name, simulate)
+
+
 def volume(shares, hm=895, unit=UNIT):
     return BucketVolume(shares, hm, unit)
 

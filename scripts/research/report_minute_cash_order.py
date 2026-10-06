@@ -95,7 +95,12 @@ def capture_case(name, simulate, kwargs, output):
     for enabled in (False, True):
         leg = "on" if enabled else "off"
         trace = []
-        state = simulate(**kwargs, fix_minute_cash_order=enabled, audit_sink=trace)
+        state = simulate(
+            **kwargs,
+            fix_minute_cash_order=enabled,
+            audit_sink=trace,
+            rule_profile="legacy",
+        )
         traces[leg] = trace
         legs[leg] = _metrics(state, trace)
         assert not legs[leg]["cash_conservation_residuals"]

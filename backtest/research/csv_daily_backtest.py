@@ -259,7 +259,7 @@ def simulate(
     hold_days: int = 20,
     fix_s81_band_precision: bool = False,
     signal_bars_front: dict[str, pd.DataFrame] | None = None,
-    rule_profile: str | RuleProfile = "legacy",
+    rule_profile: str | RuleProfile = "industry",
 ) -> SimState:
     """核心日循环。bars/pool_days 可由测试注入；run() 负责从湖与 CSV 加载。
 
@@ -762,7 +762,7 @@ def run(
     max_hold: bool = False,
     hold_days: int = 20,
     fix_s81_band_precision: bool = False,
-    rule_profile: str | RuleProfile = "legacy",
+    rule_profile: str | RuleProfile = "industry",
 ) -> SimState:
     profile = resolve_rule_profile(rule_profile)
     resolve_account_fee_schedule(
