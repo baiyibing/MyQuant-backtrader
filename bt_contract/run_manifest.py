@@ -7,7 +7,7 @@ import math
 import re
 import subprocess
 from collections.abc import Iterable, Mapping
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any
 
 from .signal_bundle import canonical_json_bytes
@@ -23,6 +23,25 @@ def _json_config(value: Any) -> Any:
     return value
 
 
+def _identity_string(value: Any, field: str) -> str:
+    if not isinstance(value, str):
+        raise TypeError(f"{field} must be an already-stringified identity")
+    if not value.strip():
+        raise ValueError(f"{field} must be a non-empty string")
+    if value.startswith("/") or PureWindowsPath(value).is_absolute():
+        raise ValueError(f"{field} must not contain an absolute host path")
+    return value
+
+
+def _identity_mapping(value: Any, field: str) -> dict[str, str]:
+    if not isinstance(value, Mapping):
+        raise TypeError(f"{field} must be a mapping")
+    return {
+        _identity_string(key, f"{field} key"): _identity_string(item, field)
+        for key, item in value.items()
+    }
+
+
 def build_bt_run_manifest(
     *,
     strategy: str,
@@ -33,6 +52,11 @@ def build_bt_run_manifest(
     participation_rate: float | None = None,
     signal_bundle_sha256: str | None = None,
     git_commit: str = "UNKNOWN",
+    book_rule_revision: str | None = None,
+    pool_identity: str | None = None,
+    price_domain: str | None = None,
+    input_tokens: Mapping[str, str] | None = None,
+    environment: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
     """Hash resolved flags and caller-supplied artifacts, without changing them.
 
@@ -61,6 +85,17 @@ def build_bt_run_manifest(
         or re.fullmatch(r"[0-9a-f]{64}", signal_bundle_sha256) is None
     ):
         raise ValueError("invalid signal_bundle_sha256")
+    run_identity = {}
+    for field, value in (
+        ("book_rule_revision", book_rule_revision),
+        ("pool_identity", pool_identity),
+        ("price_domain", price_domain),
+    ):
+        if value is not None:
+            run_identity[field] = _identity_string(value, field)
+    for field, value in (("input_tokens", input_tokens), ("environment", environment)):
+        if value is not None:
+            run_identity[field] = _identity_mapping(value, field)
     artifact_rows = []
     for artifact in artifacts:
         path = Path(artifact)
@@ -70,7 +105,7 @@ def build_bt_run_manifest(
             "md5": hashlib.md5(data).hexdigest(),
             "sha256": hashlib.sha256(data).hexdigest(),
         })
-    return {
+    manifest = {
         "schema": "myquant.bt-run/1",
         "git_commit": git_commit,
         "strategy": strategy,
@@ -82,6 +117,12 @@ def build_bt_run_manifest(
         "config_sha256": hashlib.sha256(canonical_json_bytes(_json_config(config))).hexdigest(),
         "artifacts": artifact_rows,
     }
+    if run_identity:
+        manifest["run_identity"] = run_identity
+        manifest["run_identity_sha256"] = hashlib.sha256(
+            canonical_json_bytes(run_identity)
+        ).hexdigest()
+    return manifest
 
 
 def _git_commit() -> str:
@@ -101,3 +142,12 @@ def write_bt_run_manifest(path: str | Path, **kwargs: Any) -> dict[str, Any]:
     manifest = build_bt_run_manifest(**kwargs)
     Path(path).write_bytes(canonical_json_bytes(manifest))
     return manifest
+
+
+def write_run_identity_sidecar(path: str | Path, manifest: Mapping[str, Any]) -> None:
+    """Write the supplied run manifest as canonical JSON only when called.
+
+    The caller selects the sidecar path next to its outputs. No simulation,
+    input discovery, environment inspection, or git lookup is performed.
+    """
+    Path(path).write_bytes(canonical_json_bytes(manifest))
