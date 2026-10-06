@@ -92,6 +92,10 @@ from backtest.research.csv_ledger import (  # noqa: E402
     resolve_limit_prices,
 )
 from backtest.research.ashare_exdiv_economics import EconomicLookup, ExDivEconomics  # noqa: E402
+from backtest.research.rule_profile import (  # noqa: E402
+    RuleProfile,
+    resolve_rule_profile,
+)
 
 from backtest.research.exdiv_map import (  # noqa: E402
     k_for,
@@ -250,6 +254,7 @@ def simulate(
     max_hold: bool = False,
     fix_s81_band_precision: bool = False,
     signal_bars_front: dict[str, pd.DataFrame] | None = None,
+    rule_profile: str | RuleProfile = "legacy",
 ) -> SimState:
     """核心日循环。bars/pool_days 可由测试注入；run() 负责从湖与 CSV 加载。
 
@@ -257,6 +262,7 @@ def simulate(
     exdiv_economics 显式接收 (engine_symbol, YYYYMMDD) -> ExDivEvent；
     默认 None 保留原行为，事件配合 raw bars 使用，不从 exdiv 的 k 推断权益。
     """
+    profile = resolve_rule_profile(rule_profile)
     from backtest.research.strategy9_rules import validate_sell_mode
     validate_sell_mode(normalize_csv_strategy(strategy), version9_sell, max_hold)
     if max_hold and normalize_csv_strategy(strategy) != "version9":
@@ -328,6 +334,9 @@ def simulate(
     st.stats["buy_cost_rate"] = st.buy_cost_rate
     st.stats["sell_cost_rate"] = st.sell_cost_rate
     st.stats["min_cost"] = st.min_cost
+    if profile.name == "industry":
+        st.stats["rule_profile"] = profile.name
+        st.stats["rule_profile_revision"] = profile.revision
     if exdiv_economics is not None:
         st.exdiv_economics = ExDivEconomics(exdiv_economics, st.stats)
     allow_add = bool(hooks["allow_add"])
@@ -714,7 +723,9 @@ def run(
     version9_sell=None,
     max_hold: bool = False,
     fix_s81_band_precision: bool = False,
+    rule_profile: str | RuleProfile = "legacy",
 ) -> SimState:
+    profile = resolve_rule_profile(rule_profile)
     from backtest.research.strategy9_rules import validate_sell_mode
     validate_sell_mode(normalize_csv_strategy(strategy), version9_sell, max_hold)
     if max_hold and normalize_csv_strategy(strategy) != "version9":
@@ -869,6 +880,7 @@ def run(
         min_cost=min_cost,
         index_block_new=index_block_new,
         stop_fill=stop_fill,
+        rule_profile=profile,
     )
     if skipped.get("exdiv_skipped_no_factor"):
         st.stats["exdiv_skipped_no_factor"] = int(skipped["exdiv_skipped_no_factor"])

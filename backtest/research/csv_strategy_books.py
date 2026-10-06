@@ -656,6 +656,11 @@ def add_csv_backtest_common_args(
         ap.add_argument("--end", default=end_default, help=end_help)
     ap.add_argument("--cash-total", type=float, default=cash_total_default)
     ap.add_argument(
+        "--rule-profile",
+        choices=("legacy", "industry"),
+        default="legacy",
+    )
+    ap.add_argument(
         "--daily-quota",
         type=float,
         default=None,
@@ -780,6 +785,9 @@ def csv_run_kwargs_from_args(args) -> dict:
     kwargs = get_book(name).run_kwargs(args)
     kwargs["ration"] = getattr(args, "ration", "file_order")
     kwargs["ration_seed"] = int(getattr(args, "ration_seed", 0))
+    rule_profile = getattr(args, "rule_profile", "legacy")
+    if rule_profile != "legacy":
+        kwargs["rule_profile"] = rule_profile
     if get_book(name).sizing == "per_name":
         kwargs["name_budget"] = (
             float(budget_override)
