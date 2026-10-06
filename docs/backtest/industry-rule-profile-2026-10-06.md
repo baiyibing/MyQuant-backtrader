@@ -1,7 +1,7 @@
 # Industry rule profile
 
 - Date: 2026-10-06
-- Status: P09 exchange buy-quantity rules delivered; later trade-rule slices pending
+- Status: P10 account-level odd-lot exits delivered; later trade-rule slices pending
 - Principle SSOT: [backtest-rule-principles-ssot.md](ssot/backtest-rule-principles-ssot.md)
 
 ## Purpose
@@ -49,6 +49,15 @@ the same quantity rule. A volume cap may partially fill an already-valid
 declaration and is not treated as a new declaration. Loop cash pre-checks now
 preview the same final fee-aware declared quantity that the ledger submits.
 
+P10 enables `account_odd_lot_exit`. The adopted
+JoinQuant/RQAlpha-style convention is a whole-remainder sell order: when a
+partial exit would leave fewer than 100 shares, or fewer than 200 shares for
+STAR, that remainder is added to the same strategy order. The calculation is
+made once against the account/group position before FIFO lot-row allocation;
+it is never applied independently to each source lot. S8 group exits retain
+P03's one-order identity, and each 9_2/12 or S8 scale-out tranche remains one
+order. T+1 and volume capacity remain fill constraints and are not bypassed.
+
 ## Switch status
 
 The values below are locked by `industry-fix/adopted-decisions.md`; pending
@@ -58,7 +67,7 @@ switches remain `false` until their behavior PR and opt-in baseline are admitted
 |---|---:|---|
 | `special_no_limit_days` | pending / `false` | IPO, relist, and resumption facts must come from a PIT lifecycle provider; missing data fails closed and is never inferred from bars. |
 | `exchange_quantity_rules` | P09 delivered / `true` | Main board/ChiNext buy declarations are multiples of 100; STAR (`688`/`689`) starts at 200 and then permits one-share increments; BSE, classified through `market_layer`, starts at 100 and then permits one-share increments. Source locked in `industry-fix/adopted-decisions.md`: 上交所《科创板股票交易特别规定》 (200 起、1 股递增) and 北交所交易规则 3.3.8 ([CSRC copy](https://www.csrc.gov.cn/shenzhen/c105632/c1562694/1562694/files/1638524949335_40064.pdf)). The same adopted file locks B8-12: “loop cash pre-check uses the final declared quantity (incl. STAR rule).” Volume-cap partial fills remain fills of the accepted declaration, not new declarations. |
-| `account_odd_lot_exit` | pending / `false` | An odd remainder below one board lot is sold in one account-level order, not stranded per source lot. |
+| `account_odd_lot_exit` | P10 delivered / `true` | A partial sell that would leave an account/group remainder below one board lot includes that whole remainder in the same order: 100 shares generally and 200 for STAR. Source locked in `industry-fix/adopted-decisions.md`: “Sell quantity: an odd remainder below one board lot (100; STAR 200) must be sold in ONE order together (no stranded per-lot residues).” That file also locks P03 order boundaries: S8 whole-group exit is one order and each scale-out tranche is one order. The implementation uses the mainstream JoinQuant/RQAlpha-style whole-remainder order convention rather than rounding a tranche down and stranding dust; FIFO lot rows are allocations of that order. |
 | `supplementary_min_lot` | P06 delivered / `true` | B8-03: a budget below one valid lot buys zero and records `skip_min_lot_budget`; there is no 100-share top-up. Source: `industry-fix/adopted-decisions.md`, “B8-03: when budget buys < 1 valid lot → buy 0 (skip), no top-up to 100.” |
 | `fee_aware_affordability` | P07 delivered / `true` | B8-04: choose the largest currently valid buy quantity for which notional plus all buy fees is no greater than both budget and available cash. Source: `industry-fix/adopted-decisions.md`, “B8-04: size including fees: the largest valid quantity with notional + all buy fees <= budget (and <= cash).” Buy fees reuse that file's adopted JoinQuant-style commission (0.0003 each side, CNY 5 minimum per order; [example](https://www.cnblogs.com/henry2019/p/11700075.html), [reference](https://easyquant.ai/e/joinquant/set-trading-costs-slippage)) and bilateral transfer-fee decision sourced to 中国结算 2022-04-28 ([contemporaneous copy](https://finance.sina.com.cn/roll/2022-04-28/doc-imcwiwst4557332.shtml)) plus the 2015 change ([People.cn](http://m.people.cn/n4/2022/0429/c125-20026334.html)). B8-11 retains legacy cash-vs-capacity gate order. |
 | `shrink_on_short_cash` | P08 delivered / `true` | B8-06: when cash cannot pay the intended buy, choose the largest currently valid quantity whose notional plus all buy fees is affordable; skip if that quantity is zero and never raise. Source: `industry-fix/adopted-decisions.md`, “B8-06: short cash → shrink to the largest affordable valid quantity (fees included); skip if 0. (qlib-style clip; never raise.)” The same source locks B8-11 to the legacy cash-before-capacity gate order. |
@@ -154,3 +163,10 @@ cases cover STAR and BSE synthetic names in shared daily/minute and
 native/standalone-v7. Each industry case contains one BUY and SELL, uses a
 non-round-hundred valid declaration (2014 shares in shared version6; 1999 in
 v7), and differs from the corresponding legacy 2000-share declaration.
+
+P10 keeps every earlier baseline immutable and adds
+`tests/fixtures/off_byte_baseline_industry_p10_odd_lot_exit_20261006.json`
+from the data-free `tests/fixtures/industry/odd_lot_exit.json`. Its STAR
+version9_2 scale-out starts from the same synthetic 200-share buy in both
+profiles. Legacy sells 100 and strands a 100-share STAR residue; industry adds
+that remainder to the same scale-out order, sells 200, and closes the position.

@@ -29,8 +29,9 @@ class RuleProfile:
 LEGACY = RuleProfile(name="legacy", revision="legacy")
 INDUSTRY = RuleProfile(
     name="industry",
-    revision="industry-p09-20261006",
+    revision="industry-p10-20261006",
     exchange_quantity_rules=True,
+    account_odd_lot_exit=True,
     supplementary_min_lot=True,
     fee_aware_affordability=True,
     shrink_on_short_cash=True,

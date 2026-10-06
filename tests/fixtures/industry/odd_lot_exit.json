@@ -1,0 +1,10 @@
+{
+  "symbol": "688001.SH",
+  "buy_day": "2026-10-05",
+  "sell_day": "2026-10-06",
+  "buy_price": 10.0,
+  "buy_budget": 2100.0,
+  "sell_price": 20.0,
+  "shares": 200,
+  "cash_total": 10000.0
+}
