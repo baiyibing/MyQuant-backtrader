@@ -75,6 +75,7 @@ from backtest.research import (
     strategy9_rules,
     strategy9_1_rules,
     strategy9_2_rules,
+    strategy9_3_rules,
     strategy10_rules,
     strategy11_rules,
     strategy12_rules,
@@ -244,7 +245,9 @@ HELP_LOCK_V10 = strategy10_rules.HELP_LOCK
 HELP_LOCK_TOPK = strategy_topk_dropout_rules.HELP_LOCK
 HELP_LOCK_SCORE_EXIT = strategy_topk_score_exit_rules.HELP_LOCK
 
-FORBIDDEN_DEFAULT_STOCK_POOL = frozenset({"version9", "version9_1", "version9_2", "version10", "version11"})
+FORBIDDEN_DEFAULT_STOCK_POOL = frozenset({
+    "version9", "version9_1", "version9_2", "version9_3", "version10", "version11",
+})
 STOP_FILL_TOUCH = "touch"
 STOP_FILL_CLOSE = "close"
 STOP_FILL_ALLOWED = (STOP_FILL_TOUCH, STOP_FILL_CLOSE)
@@ -317,6 +320,28 @@ def get_book(strategy: str) -> CsvStrategyBook:
     return BOOKS[normalize_csv_strategy(strategy)]
 
 
+def validate_hold_days(
+    strategy: str, hold_days: int, *, cli_option: bool = False
+) -> int:
+    label = "--hold-days" if cli_option else "hold_days"
+    if hold_days not in (20, 30):
+        raise ValueError(f"{label} must be 20 or 30, got {hold_days}")
+    raw = (strategy or "").strip().lower()
+    name = next(
+        (
+            book.name
+            for book in MINUTE_ONLY_BOOKS.values()
+            if raw == book.name or raw in book.aliases
+        ),
+        None,
+    )
+    if name is None:
+        name = normalize_csv_strategy(strategy)
+    if hold_days != 20 and name != "version9_3":
+        raise ValueError(f"{label} is supported only by version9_3")
+    return hold_days
+
+
 # API-only execution books. Shared/daily CLI names and HELP_LOCK use BOOKS.
 # Version7 keeps its native CLI while using the main minute scheduler.
 MINUTE_ONLY_BOOKS: dict[str, CsvStrategyBook] = {}
@@ -347,6 +372,7 @@ def get_minute_book(strategy: str) -> CsvStrategyBook:
 def apply_csv_strategy(strategy: str, **kwargs) -> dict:
     book = get_book(strategy)
     strategy9_rules.validate_sell_mode(book.name, kwargs.get("version9_sell"), kwargs.get("max_hold", False))
+    validate_hold_days(book.name, kwargs.get("hold_days", 20))
     if kwargs.get("fix_s81_band_precision") and book.name != "version8_1":
         raise ValueError("fix_s81_band_precision is supported only by version8_1")
     name_budget = kwargs.pop("name_budget", None)
@@ -442,8 +468,12 @@ def add_csv_strategy_arg(ap: argparse.ArgumentParser) -> None:
     )
 
 
-def engine_book(strategy: str) -> str:
-    return get_book(strategy).tag
+def engine_book(strategy: str, *, hold_days: int = 20) -> str:
+    book = get_book(strategy)
+    validate_hold_days(book.name, hold_days)
+    if book.name == "version9_3" and hold_days == 30:
+        return f"{book.tag}_h30"
+    return book.tag
 
 
 def help_lock_for(strategy: str, *, shared: str) -> str:
@@ -645,6 +675,13 @@ def add_csv_backtest_common_args(
     ap.add_argument("--version9-sell", choices=strategy9_rules.SELL_MODES, default=None)
     ap.add_argument("--max-hold", action="store_true",
                     help="version9: enable 20-trading-day force-flat (force_sell:max_hold); default off")
+    ap.add_argument(
+        "--hold-days",
+        type=int,
+        choices=(20, 30),
+        default=20,
+        help="version9_3 maximum hold in trading days (default 20)",
+    )
     ap.add_argument("--start", default=start_default)
     ap.add_argument(
         "--fix-s81-band-precision", action="store_true",
@@ -760,6 +797,11 @@ def resolve_stop_fill(raw) -> str:
 
 def csv_run_kwargs_from_args(args) -> dict:
     name = normalize_csv_strategy(getattr(args, "strategy", "") or "")
+    hold_days = getattr(args, "hold_days", 20)
+    try:
+        validate_hold_days(name, hold_days, cli_option=True)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
     try:
         strategy9_rules.validate_sell_mode(name, getattr(args, "version9_sell", None), getattr(args, "max_hold", False))
     except ValueError as exc:
@@ -1256,6 +1298,54 @@ def _run_kwargs_version9_2(args):
     if getattr(args, "stop_pct", None) is not None:
         raise SystemExit("version9_2 does not accept --stop-pct")
     return {"strategy": "version9_2"}
+
+
+def _apply_version9_3(*, hold_days=20, stop_pct=None, **_):
+    if stop_pct is not None:
+        raise SystemExit("version9_3 does not accept --stop-pct")
+
+    def take_profit(px, cost, peak, n_days):
+        reason = strategy9_rules.take_profit_reason(
+            px, cost, peak, n_days, max_hold=False
+        )
+        if reason:
+            return reason
+        return strategy9_3_rules.max_hold_reason(
+            px, cost, peak, n_days, hold_days=hold_days
+        )
+
+    def minute_take_profit(px, cost, peak, n_days):
+        return strategy9_rules.take_profit_reason(
+            px, cost, peak, n_days, max_hold=False
+        )
+
+    def minute_next_open_exit(px, cost, peak, n_days):
+        return strategy9_3_rules.max_hold_reason(
+            px, cost, peak, n_days, hold_days=hold_days
+        )
+
+    def record_params(st):
+        strategy9_3_rules.record_strategy9_3_params(st, hold_days=hold_days)
+
+    return {
+        "stop_pct": None,
+        "take_profit": take_profit,
+        "record_params": record_params,
+        "bind_absolute_exit": strategy9_3_rules.bind_absolute_exit,
+        "limit_up_chase": False,
+        "pool_buy_at_open": True,
+        "minute_take_profit": minute_take_profit,
+        "minute_next_open_exit": minute_next_open_exit,
+    }
+
+
+def _run_kwargs_version9_3(args):
+    if getattr(args, "stop_pct", None) is not None:
+        raise SystemExit("version9_3 does not accept --stop-pct")
+    return {
+        "strategy": "version9_3",
+        "hold_days": getattr(args, "hold_days", 20),
+    }
 
 
 def _apply_version9(
@@ -2457,6 +2547,14 @@ register(CsvStrategyBook(
     aliases=("9.2", "9_2", "v9.2", "v9_2", "version9_2"),
     allow_add=True, peak_gap_min=0, help_lock=strategy9_2_rules.HELP_LOCK,
     apply=_apply_version9_2, run_kwargs=_run_kwargs_version9_2, sizing="per_name",
+))
+register(CsvStrategyBook(
+    name="version9_3", tag=strategy9_3_rules.BOOK_TAG,
+    aliases=("9.3", "9_3", "v9.3", "v9_3", "version9_3"),
+    allow_add=strategy9_3_rules.ALLOW_ADD,
+    peak_gap_min=strategy9_3_rules.PEAK_GAP_MIN,
+    help_lock=strategy9_3_rules.HELP_LOCK,
+    apply=_apply_version9_3, run_kwargs=_run_kwargs_version9_3,
 ))
 register(
     CsvStrategyBook(
