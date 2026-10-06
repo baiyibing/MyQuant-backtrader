@@ -95,7 +95,7 @@ def test_every_registered_book_has_main_engine_dispatch(name):
         assert callable(hooks["exit_plan"])
     elif name == "version11":
         assert hooks["minute_open"] is True
-    elif name == "version9_1":
+    elif name in {"version9_1", "version9_3"}:
         assert callable(hooks["bind_absolute_exit"])
     elif name == "version9":
         assert callable(hooks["stop_range"])

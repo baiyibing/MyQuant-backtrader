@@ -42,6 +42,8 @@ from scripts.research.generate_off_byte_baseline import (
     V91_CASES,
     V92_BOOK_NAMES,
     V92_CASES,
+    V93_BOOK_NAMES,
+    V93_CASES,
     assert_baseline_coverage,
     assert_case_bytes,
     assert_case_canonical,
@@ -57,6 +59,7 @@ from scripts.research.generate_off_byte_baseline import (
     load_v61_golden,
     load_v91_golden,
     load_v92_golden,
+    load_v93_golden,
 )
 
 
@@ -77,7 +80,10 @@ def test_off_byte_baseline_covers_current_registry_and_standalone_v7():
     assert set(expected["cases"]) == {f"{book}/{engine}" for book, engine in HISTORICAL_CASES}
     assert len(BOOK_NAMES) == len(BOOKS)
     assert len(CASES) == 2 * len(BOOKS) + 1
-    assert set(BOOK_NAMES) == set(BOOKS) == set(HISTORICAL_BOOK_NAMES) | set(V61_BOOK_NAMES) | set(V91_BOOK_NAMES) | set(V92_BOOK_NAMES) | set(V6F_BOOK_NAMES)
+    assert set(BOOK_NAMES) == set(BOOKS) == (
+        set(HISTORICAL_BOOK_NAMES) | set(V61_BOOK_NAMES) | set(V91_BOOK_NAMES)
+        | set(V92_BOOK_NAMES) | set(V93_BOOK_NAMES) | set(V6F_BOOK_NAMES)
+    )
     registered_cases = {(book, engine) for book in BOOKS for engine in ("daily", "minute")}
     assert set(CASES) == registered_cases | {("version7", "minute")}
     for case in expected["cases"].values():
@@ -172,6 +178,26 @@ def test_v92_overlay_only_adds_authorized_cases_and_preserves_historical_files()
         assert actual["fill_counts"]["SELL"] > 0
         assert all(row.get("reason") != "stop_loss:turtle_tier"
                    for row in actual["canonical_csv"]["trades"]["rows"])
+
+
+def test_v93_overlay_only_adds_authorized_cases_and_preserves_historical_files():
+    assert sha256(GOLDEN.read_bytes()).hexdigest() == HISTORICAL_GOLDEN_SHA256
+    assert sha256(CANONICAL_GOLDEN.read_bytes()).hexdigest() == HISTORICAL_CANONICAL_SHA256
+    golden = load_v93_golden()
+    assert len(V93_CASES) == len(golden["cases"]) == 2
+    assert golden["captured_environment"]["pandas"] == "3.0.6"
+    assert set(V93_BOOK_NAMES) == {"version9_3"}
+    assert set(golden["cases"]) == {"version9_3/daily", "version9_3/minute"}
+    historical = json.loads(GOLDEN.read_text(encoding="utf-8"))
+    assert "version9_3" not in historical["books"]
+    assert "version9_3/daily" not in historical["cases"]
+    assert "version9_3/minute" not in historical["cases"]
+    for book, engine in V93_CASES:
+        actual, _, _ = expected_case(book, engine)
+        assert actual["sha256_csv_bytes"] == golden["cases"][f"{book}/{engine}"]["sha256_csv_bytes"]
+        assert actual["structured"]["stats"]["profit_target"] == pytest.approx(0.10)
+        assert actual["fill_counts"]["BUY"] > 0
+        assert actual["fill_counts"]["SELL"] > 0
 
 
 def test_version12_overlay_only_replaces_ma10_stop_cases():

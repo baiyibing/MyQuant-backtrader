@@ -810,6 +810,17 @@ def simulate(
                     else policy.calendar(minute_bars=minute_bars, daily_bars=daily_bars,
                                          pool_days=pool_days, start=start, end=end,
                                          context=policy_context))
+        delayed_pool_stats = None
+        if normalize_csv_strategy(strategy) == "version9_3":
+            from backtest.research.strategy9_3_rules import shift_pool_days
+
+            shifted = shift_pool_days(
+                pool_days, calendar, minute_bars,
+                pool_names_by_day=pool_names_by_day,
+            )
+            pool_days = shifted.pool_days
+            pool_names_by_day = shifted.pool_names_by_day
+            delayed_pool_stats = shifted.stats
 
         initialize = init_sim_state if policy.initialize is None else policy.initialize
         st, pending_chase, names_asof = initialize(
@@ -824,6 +835,8 @@ def simulate(
         )
         if profile.supplementary_min_lot:
             st.rule_profile = profile
+        if delayed_pool_stats is not None:
+            st.stats.update(delayed_pool_stats)
         defaults = book_fill_defaults(hooks, minute_stop_trigger)
         if hooks.get("run_minute_day") is not None:
             raise ValueError("run_minute_day is retired; use minute_session with HeldMinuteCursor")
@@ -1053,6 +1066,8 @@ def simulate(
                         continue
                     # Resolve dates here; only the eligibility bool reaches the scanner.
                     reserve_state = {"reserved": bool(pos.reserved)}
+                    fill_state = held_fill_states.setdefault(held_fill_key(pos), {})
+                    pending_at_open = "pending" in fill_state
                     v9_plan = (evaluate_version9_exit(hooks, ddf, day, st.stats)
                                if "version9_exit" in hooks and n_days >= 1 else None)
                     idx, px, reason, new_peak, new_peak_hm = scan_held_day(
@@ -1064,7 +1079,7 @@ def simulate(
                         session_volume=day_m["volume"].to_numpy(np.float64) if minute_open else None,
                         session_stats=st.stats,
                         minute_stop_trigger="hl" if absolute_exit else minute_stop_trigger,
-                        fill_config=fill_config, fill_state=held_fill_states.setdefault(held_fill_key(pos), {}),
+                        fill_config=fill_config, fill_state=fill_state,
                         pending_log=pending_callback(st, code, pos, day),
                         take_profit_pct=v9_plan["take_profit_pct"] if v9_plan is not None else st.stats.get("profit_target"),
                         cost=pos.cost,
@@ -1082,7 +1097,7 @@ def simulate(
                         hm=hm,
                         peak_hm=int(pos.peak_hm),
                         peak_gap_min=peak_gap_min,
-                        take_profit=take_profit,
+                        take_profit=hooks.get("minute_take_profit", take_profit),
                         sell_gate=sell_gate,
                         gate_code=code,
                         gate_day=day,
@@ -1099,6 +1114,27 @@ def simulate(
                     )
                     if absolute_exit and idx < 0 and float(day_m["low"].min()) <= absolute_exit(code, day):
                         pos.pending_exit = "stop_loss:touch"
+                    if (
+                        idx < 0
+                        and pending_at_open
+                        and "pending" in fill_state
+                        and callable(hooks.get("minute_next_open_exit"))
+                        and limit_down > 0
+                        and hit_limit_down(float(o[0]), limit_down)
+                    ):
+                        st.stats["defer_sell_limit_down"] += 1
+                    minute_next_open_exit = hooks.get("minute_next_open_exit")
+                    if (
+                        idx < 0
+                        and not pos.pending_exit
+                        and "pending" not in fill_state
+                        and callable(minute_next_open_exit)
+                    ):
+                        exit_reason = minute_next_open_exit(
+                            float(c[-1]), pos.cost, new_peak, n_days
+                        )
+                        if exit_reason:
+                            fill_state["pending"] = exit_reason
                     pos.peak = new_peak
                     pos.peak_hm = new_peak_hm
                     pos.reserved = bool(reserve_state["reserved"])
