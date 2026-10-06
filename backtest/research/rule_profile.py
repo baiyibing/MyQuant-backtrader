@@ -25,6 +25,13 @@ class RuleProfile:
     s12_domain_stamp: bool = False
     slippage_bp: float = 0.0
 
+    def __post_init__(self) -> None:
+        if self.special_no_limit_days:
+            raise NotImplementedError(
+                "DATA-MISSING: special_no_limit_days requires a PIT lifecycle provider "
+                "(IPO/relist/resumption facts); not inferred from bars"
+            )
+
 
 LEGACY = RuleProfile(name="legacy", revision="legacy")
 INDUSTRY = RuleProfile(

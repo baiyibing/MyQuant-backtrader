@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-from dataclasses import FrozenInstanceError, asdict
+from dataclasses import FrozenInstanceError, asdict, replace
 from datetime import date
 from pathlib import Path
 
@@ -54,6 +54,21 @@ def test_resolve_rule_profile_and_frozen_switches():
         resolve_rule_profile("unknown")
     with pytest.raises(ValueError, match="got 7"):
         resolve_rule_profile(7)  # type: ignore[arg-type]
+
+
+def test_special_no_limit_days_requires_pit_lifecycle_provider():
+    message = (
+        r"DATA-MISSING: special_no_limit_days requires a PIT lifecycle provider "
+        r"\(IPO/relist/resumption facts\); not inferred from bars"
+    )
+    with pytest.raises(NotImplementedError, match=message):
+        RuleProfile(
+            name="test",
+            revision="test",
+            special_no_limit_days=True,
+        )
+    with pytest.raises(NotImplementedError, match=message):
+        replace(INDUSTRY, special_no_limit_days=True)
 
 
 def _common_parser(repo: Path) -> argparse.ArgumentParser:
