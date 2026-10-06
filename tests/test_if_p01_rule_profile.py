@@ -37,9 +37,10 @@ def test_resolve_rule_profile_and_frozen_switches():
         for key, value in asdict(INDUSTRY).items()
         if key not in {"name", "revision", "slippage_bp"}
     }
-    assert switches and not any(switches.values())
+    assert switches.pop("s12_domain_stamp") is True
+    assert not any(switches.values())
     assert LEGACY.slippage_bp == INDUSTRY.slippage_bp == 0
-    assert INDUSTRY.revision == "industry-p01-20261006"
+    assert INDUSTRY.revision == "industry-p02-20261006"
     with pytest.raises(FrozenInstanceError):
         INDUSTRY.account_fee_schedule = True
     with pytest.raises(ValueError, match="legacy.*industry.*RuleProfile"):

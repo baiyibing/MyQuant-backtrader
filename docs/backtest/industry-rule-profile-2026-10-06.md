@@ -1,7 +1,7 @@
 # Industry rule profile
 
 - Date: 2026-10-06
-- Status: P01 plumbing delivered; all behavior switches pending
+- Status: P02 metadata stamp delivered; all trade-changing switches pending
 - Principle SSOT: [backtest-rule-principles-ssot.md](ssot/backtest-rule-principles-ssot.md)
 
 ## Purpose
@@ -11,13 +11,13 @@ A-share backtester conventions. It is not a collection of public fee, lot, or
 lifecycle flags. The default remains `legacy`; omitted and explicit
 `rule_profile="legacy"` runs keep the existing behavior and output bytes.
 
-P01 only carries the frozen profile through the daily, shared-minute, and
-standalone-v7 paths. No switch is read by trading behavior yet. An `industry`
-run therefore has the same trades as `legacy`, while its in-memory stats add
-`rule_profile` and `rule_profile_revision` after all legacy stats are final.
-Those two keys are append-only: removing them from industry stats yields the
-exact legacy stats for daily, shared minute, shared native-v7, and standalone
-v7 paths.
+P01 carries the frozen profile through the daily, shared-minute, and
+standalone-v7 paths. P02 enables only the zero-trade `s12_domain_stamp`
+metadata switch. No switch is read by trading behavior yet. An `industry` run
+therefore has the same trades as `legacy`; its in-memory stats add
+`rule_profile` and `rule_profile_revision`, and S12 additionally records
+`valuation_price_domain`. Removing those profile-only keys yields the exact
+legacy stats.
 
 ## Switch status
 
@@ -33,12 +33,23 @@ remains `false` until its own behavior PR and opt-in baseline are admitted.
 | `fee_aware_affordability` | pending / `false` | B8-04/B8-06/B8-12: choose the largest valid quantity affordable after fees, shrink on short cash, and pre-check the final declared quantity; B8-11 keeps legacy gate order. |
 | `account_fee_schedule` | pending / `false` | Commission is 0.0003 each side with a CNY 5 minimum per strategy order (JoinQuant `OrderCost`: [example](https://www.cnblogs.com/henry2019/p/11700075.html), [reference](https://easyquant.ai/e/joinquant/set-trading-costs-slippage)); sell stamp duty is 0.001 before 2023-08-28 and 0.0005 from that date (财政部、税务总局公告 2023 年第 39 号); transfer fees follow the adopted SH/SZ/BSE date table ([2022 notice report](https://finance.sina.com.cn/roll/2022-04-28/doc-imcwiwst4557332.shtml), [2015/2022 summary](http://m.people.cn/n4/2022/0429/c125-20026334.html)). One strategy order is one fee order; S8 group exits aggregate, scale-out tranches and TWAP children remain separate, and capacity continuation retains its order identity. |
 | `chronological_v7` | pending / `false` | Industry mode will select the existing `fix_minute_cash_order` chronological behavior; same-clock tie-breaking is unchanged. |
-| `s12_domain_stamp` | pending / `false` | A later zero-trade PR records the actual S12 valuation domain without changing fills. |
+| `s12_domain_stamp` | delivered / `true` | S12 records its actual valuation source: daily=`front`; minute with X-01 off=`front`; minute with X-01 on=`none`. This is metadata only and does not change fills. |
 | `slippage_bp` | documented `0` | Mainstream backtester default adopted as zero; sensitivity research continues through the existing research fill configuration. |
 
 Corporate-action cash and bonus accounting follows the same adopted
 DATA-MISSING rule as lifecycle facts: real industry runs must use explicit
 per-event facts and must not derive entitlements from adjustment-factor ratios.
+
+## Slippage
+
+The industry profile keeps slippage at `0`, the default in qlib, RQAlpha, and
+JoinQuant unless explicitly configured. This follows the adopted
+“Slippage: 0 (most backtesters' default); document only” decision; it does not
+claim that realized execution has zero market impact. Sensitivity analysis
+continues through the existing
+`fullstrat_research_hooks.ResearchFillConfig` research hook, including its
+explicit per-side basis-point scenarios. No production fill-path code changes
+in P02.
 
 ## Use
 

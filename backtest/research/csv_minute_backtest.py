@@ -1331,6 +1331,8 @@ def simulate(
             economics_enabled=exdiv_economics is not None,
             total_return_complete=False,
         )
+    if profile.s12_domain_stamp and normalize_csv_strategy(strategy) == "version12":
+        st.stats["valuation_price_domain"] = "none" if fix_s12_price_domain else "front"
     if profile.name == "industry":
         st.stats.pop("rule_profile", None)
         st.stats.pop("rule_profile_revision", None)

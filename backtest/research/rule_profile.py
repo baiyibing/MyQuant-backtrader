@@ -1,7 +1,6 @@
 """Named rule profiles for opt-in backtest convention changes.
 
-This leaf is intentionally stdlib-only.  P01 wires the profile through the
-engines but leaves every behavior switch disabled.
+This leaf is intentionally stdlib-only.
 """
 
 from __future__ import annotations
@@ -27,7 +26,11 @@ class RuleProfile:
 
 
 LEGACY = RuleProfile(name="legacy", revision="legacy")
-INDUSTRY = RuleProfile(name="industry", revision="industry-p01-20261006")
+INDUSTRY = RuleProfile(
+    name="industry",
+    revision="industry-p02-20261006",
+    s12_domain_stamp=True,
+)
 
 
 def resolve_rule_profile(name_or_obj: str | RuleProfile) -> RuleProfile:

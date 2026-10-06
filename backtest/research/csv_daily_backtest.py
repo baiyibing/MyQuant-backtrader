@@ -678,6 +678,8 @@ def simulate(
         )
 
     finish_pending_chase(st, pending_chase)
+    if profile.s12_domain_stamp and normalize_csv_strategy(strategy) == "version12":
+        st.stats["valuation_price_domain"] = "front"
     if profile.name == "industry":
         st.stats.pop("rule_profile", None)
         st.stats.pop("rule_profile_revision", None)
