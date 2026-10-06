@@ -34,6 +34,7 @@ from scripts.research.generate_off_byte_baseline import (
     V91_CASES,
     V92_BOOK_NAMES,
     V92_CASES,
+    assert_baseline_coverage,
     assert_case_bytes,
     assert_case_canonical,
     byte_skip_reason,
@@ -45,6 +46,10 @@ from scripts.research.generate_off_byte_baseline import (
     load_v91_golden,
     load_v92_golden,
 )
+
+
+def test_off_byte_baseline_coverage_guard():
+    assert_baseline_coverage()
 
 
 def test_off_byte_baseline_covers_current_registry_and_standalone_v7():

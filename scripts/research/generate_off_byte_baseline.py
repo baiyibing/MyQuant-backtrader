@@ -23,8 +23,10 @@ version9_2 (22nd book) uses the scoped additive 2026-10-04 overlay;
 --record-v92 writes only its daily/minute cases; a new rule revision may replace that overlay.
 See docs/backtest/s8-independent-positions-2026-09-26.md and
 docs/backtest/v61-off-byte-overlay-2026-10-02.md.
-The 6.2-6.12 family (11 books, PR #362) uses the scoped additive 2026-10-05
-overlay; --record-v6f writes its 22 cases and refuses overwrite.
+The 6.2-6.47 family (46 books, V6F overlay through v22) uses a scoped additive
+overlay; --record-v6f writes its daily/minute cases and refuses overwrite.
+Coverage for --check is asserted via assert_baseline_coverage() (registry-derived;
+no hardcoded book/case totals beyond the frozen historical 19/39).
 """
 
 from __future__ import annotations
@@ -342,7 +344,7 @@ def load_v92_golden() -> dict:
 
 
 def load_v6f_golden() -> dict:
-    """Additive overlay for the 6.2-6.12 family; historical files stay immutable."""
+    """Additive overlay for the 6.2-6.47 family; historical files stay immutable."""
     assert _hash(GOLDEN.read_bytes()) == HISTORICAL_GOLDEN_SHA256
     assert _hash(CANONICAL_GOLDEN.read_bytes()) == HISTORICAL_CANONICAL_SHA256
     golden = json.loads(V6F_GOLDEN.read_text(encoding="utf-8"))
@@ -513,11 +515,21 @@ def capture_case(book: str, engine: str, output_dir: Path, *, explicit_false: bo
     }
 
 
-def capture_matrix(output_dir: Path, *, explicit_false: bool = False):
+def assert_baseline_coverage():
+    """Check registry and overlay coverage without running simulations."""
     assert set(BOOK_NAMES) == set(BOOKS), "Update coverage explicitly when BOOKS changes"
     assert len(HISTORICAL_BOOK_NAMES) == 19 and len(HISTORICAL_CASES) == 39
-    assert len(BOOK_NAMES) == 22 and len(CASES) == 45
-    assert set(BOOK_NAMES) == set(HISTORICAL_BOOK_NAMES) | set(V61_BOOK_NAMES) | set(V91_BOOK_NAMES) | set(V92_BOOK_NAMES)
+    assert set(BOOK_NAMES) == (
+        set(HISTORICAL_BOOK_NAMES) | set(V61_BOOK_NAMES) | set(V91_BOOK_NAMES)
+        | set(V92_BOOK_NAMES) | set(V6F_BOOK_NAMES)
+    )
+    assert set(CASES) == {
+        (book, engine) for book in BOOK_NAMES for engine in ("daily", "minute")
+    } | {("version7", "minute")}
+
+
+def capture_matrix(output_dir: Path, *, explicit_false: bool = False):
+    assert_baseline_coverage()
     return {f"{book}/{engine}": capture_case(book, engine, output_dir / book / engine,
                                             explicit_false=explicit_false)
             for book, engine in CASES}
@@ -565,7 +577,7 @@ def main():
     )
     mode.add_argument(
         "--record-v6f", action="store_true",
-        help="write the additive 6.2-6.12 family overlay (authorized pandas 3.0.6 only)",
+        help="write the additive 6.2-6.47 family overlay (authorized pandas 3.0.6 only)",
     )
     mode.add_argument(
         "--record-v61-v2", action="store_true",
@@ -820,12 +832,10 @@ def main():
         for reason in sorted(skipped):
             print(f"SKIP: {reason}")
         if not skipped:
-            print("PASS: 86 production CSV hashes + library hashes (raw bytes)")
+            print(f"PASS: production CSV + library hashes (raw bytes) for {len(CASES)} cases")
         print(
-            "PASS: 23 unchanged + 12 S8-corrected + 2 version12-corrected + "
-            "2 version9-corrected + 2 version6_1 additive + 2 version9_1 additive + "
-            "2 version9_2 additive "
-            f"canonical CSV/account cases; pandas={pd.__version__}"
+            f"PASS: {len(CASES)} canonical CSV/account cases across current registry "
+            f"and overlays; pandas={pd.__version__}"
         )
         return
     for case in cases.values():
