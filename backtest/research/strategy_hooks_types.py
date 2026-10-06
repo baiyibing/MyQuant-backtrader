@@ -6,7 +6,7 @@ signatures vary by book, so their arguments stay intentionally unconstrained.
 """
 
 from collections.abc import Callable, Mapping
-from typing import Any, Protocol, TypedDict
+from typing import Any, TypedDict
 
 
 class StrategyHooks(TypedDict, total=False):
@@ -33,7 +33,5 @@ class StrategyHooks(TypedDict, total=False):
     step_stop_pct: float | None
 
 
-class StrategyApply(Protocol):
-    """Describe apply callables without requiring TypedDict return objects."""
-
-    def __call__(self, **kwargs: Any) -> Mapping[str, Any]: ...
+# Book apply functions have different named parameters.
+StrategyApply = Callable[..., Mapping[str, Any]]

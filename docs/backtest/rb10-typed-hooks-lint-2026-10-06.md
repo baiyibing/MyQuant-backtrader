@@ -4,8 +4,8 @@ RB-10 is **ZERO-DIFF**: static typing descriptions and a narrow CI lint extensio
 `backtest/research/strategy_hooks_types.py` is a standalone leaf importing only
 standard-library `typing` and `collections.abc` modules. It exports `StrategyHooks`, a
 `TypedDict(total=False)` describing a practical subset of common apply-output
-keys, and `StrategyApply`, a callable protocol accepting keyword arguments and
-returning `Mapping[str, Any]`.
+keys, and `StrategyApply`, a `Callable[..., Mapping[str, Any]]` alias accepting book-specific named
+parameters.
 
 All described keys are optional; the subset is not an exhaustive schema.
 Callbacks retain flexible signatures because books have different contracts.
@@ -14,7 +14,8 @@ There are no runtime validators, coercions, wrappers, or default injections.
 The registry and its `CsvStrategyBook.apply` annotation remain untouched.
 
 ```python
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 from backtest.research.strategy_hooks_types import StrategyHooks
 
 hooks: StrategyHooks = {"name": "example", "stop_pct": None}
@@ -26,8 +27,7 @@ gate ordering, and existing lint rules remain unchanged. Other research modules
 are outside this lint expansion.
 
 `tests/test_rb10_strategy_hooks_types.py` checks TypedDict identity, optional
-keys, plain-dict subset construction and Mapping use, the protocol return
-annotation, and an AST fence permitting only those standard-library imports and no calls.
+keys, plain-dict subset construction and Mapping use, the callable alias and named-parameter assignment, and an AST fence permitting only those standard-library imports and no calls.
 The existing CI lint-scope test locks the exact two targets. These runtime
 tests illustrate static assignment shapes; they do not run a type checker.
 
