@@ -7,6 +7,8 @@
 
 ## 1. 模块
 
+> **Superseded / 当前指针（2026-10-06）：** 下列 `csv_minute_backtest_v7` 的“独立仓位机”及旧循环定位是迁移前记录；version7 生产执行现由 `csv_minute_backtest.simulate` / native fold 承担，v7 shim 可保留。见 [v7 / APP 主分钟引擎迁移](v7-main-engine-migration-2026-10-06.md) 与 [RB-06 as-built 索引](rb06-as-built-ssot-index-2026-10-06.md)。旧 v7 路径/行号按其记录时点阅读；费用聚合与 schema 等仍有用的合同记录保留，不因 host 迁移作废。
+
 ```
 market_layer.py     叶子：时间 / limit_pct / limit_prices(Decimal HALF_UP) / round_fen
 ashare_session.py   日线/分钟共用微结构：ST 档、官方 none 昨收+E-R6、涨跌停命中、T+1
