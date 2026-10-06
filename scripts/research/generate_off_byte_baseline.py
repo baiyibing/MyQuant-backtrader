@@ -23,8 +23,10 @@ version9_2 (22nd book) uses the scoped additive 2026-10-04 overlay;
 --record-v92 writes only its daily/minute cases; a new rule revision may replace that overlay.
 See docs/backtest/s8-independent-positions-2026-09-26.md and
 docs/backtest/v61-off-byte-overlay-2026-10-02.md.
-The 6.2-6.12 family (11 books, PR #362) uses the scoped additive 2026-10-05
-overlay; --record-v6f writes its 22 cases and refuses overwrite.
+The 6.2-6.47 family (46 books, V6F overlay through v22) uses a scoped additive
+overlay; --record-v6f writes its daily/minute cases and refuses overwrite.
+Coverage for --check is asserted via assert_baseline_coverage() (registry-derived;
+no hardcoded book/case totals beyond the frozen historical 19/39).
 """
 
 from __future__ import annotations
@@ -342,7 +344,7 @@ def load_v92_golden() -> dict:
 
 
 def load_v6f_golden() -> dict:
-    """Additive overlay for the 6.2-6.12 family; historical files stay immutable."""
+    """Additive overlay for the 6.2-6.47 family; historical files stay immutable."""
     assert _hash(GOLDEN.read_bytes()) == HISTORICAL_GOLDEN_SHA256
     assert _hash(CANONICAL_GOLDEN.read_bytes()) == HISTORICAL_CANONICAL_SHA256
     golden = json.loads(V6F_GOLDEN.read_text(encoding="utf-8"))
@@ -575,7 +577,7 @@ def main():
     )
     mode.add_argument(
         "--record-v6f", action="store_true",
-        help="write the additive 6.2-6.12 family overlay (authorized pandas 3.0.6 only)",
+        help="write the additive 6.2-6.47 family overlay (authorized pandas 3.0.6 only)",
     )
     mode.add_argument(
         "--record-v61-v2", action="store_true",
