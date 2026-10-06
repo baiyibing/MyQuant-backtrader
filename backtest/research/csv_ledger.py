@@ -24,6 +24,7 @@ from backtest.research.ashare_fill_clock import session_phase as _session_phase
 from backtest.research.ashare_session import LIMIT_EPS, hit_limit_down as hit_limit_down, hit_limit_up
 from backtest.research.ashare_volume_cap import VolumeCap
 from backtest.research.ashare_exdiv_economics import ExDivEconomics
+from backtest.research.book_capabilities import uses_s8_independent as _uses_s8_independent
 from backtest.research.market_layer import _digit_prefix, limit_prices
 from backtest.research.minute_audit import record_fill, record_rejection
 from backtest.research.lot_rounding import (
@@ -284,15 +285,7 @@ def check_buy_cash(st, *, needed, available, date, code) -> bool:
 
 def uses_s8_independent(name: str | None, sizing: str | None) -> bool:
     """True iff this book should bind S8 and default on_short_cash to raise."""
-    if sizing != "per_name" or not name:
-        return False
-    if name.startswith("version6_"):
-        return True
-    if name == "version8":
-        return True
-    if name.startswith("version8_") and name != "version8_1":
-        return True
-    return False
+    return _uses_s8_independent(name, sizing)
 
 
 def _configure_s8(st, hooks: dict) -> None:
