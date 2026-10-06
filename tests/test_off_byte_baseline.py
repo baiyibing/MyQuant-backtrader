@@ -183,6 +183,7 @@ def test_v93_overlay_only_adds_authorized_cases_and_preserves_historical_files()
     for book, engine in V93_CASES:
         actual, _, _ = expected_case(book, engine)
         assert actual["sha256_csv_bytes"] == golden["cases"][f"{book}/{engine}"]["sha256_csv_bytes"]
+        assert actual["structured"]["stats"]["profit_target"] == pytest.approx(0.10)
         assert actual["fill_counts"]["BUY"] > 0
         assert actual["fill_counts"]["SELL"] > 0
 

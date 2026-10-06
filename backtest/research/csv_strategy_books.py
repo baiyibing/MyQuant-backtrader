@@ -1264,14 +1264,25 @@ def _run_kwargs_version9_2(args):
 def _apply_version9_3(*, stop_pct=None, **_):
     if stop_pct is not None:
         raise SystemExit("version9_3 does not accept --stop-pct")
+
+    def take_profit(px, cost, peak, n_days):
+        return strategy9_rules.take_profit_reason(
+            px, cost, peak, n_days, max_hold=True
+        )
+
+    def minute_take_profit(px, cost, peak, n_days):
+        return strategy9_rules.take_profit_reason(
+            px, cost, peak, n_days, max_hold=False
+        )
+
     return {
         "stop_pct": None,
-        "take_profit": strategy9_3_rules.max_hold_reason,
+        "take_profit": take_profit,
         "record_params": strategy9_3_rules.record_strategy9_3_params,
         "bind_absolute_exit": strategy9_3_rules.bind_absolute_exit,
         "limit_up_chase": False,
         "pool_buy_at_open": True,
-        "minute_take_profit": strategy9_3_rules.no_intraday_exit,
+        "minute_take_profit": minute_take_profit,
         "minute_next_open_exit": strategy9_3_rules.max_hold_reason,
     }
 
