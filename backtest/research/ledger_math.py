@@ -12,4 +12,3 @@ def trade_commission(notional: float, rate: float, min_cost: float = 0.0) -> flo
     if floor > 0:
         return max(fee, floor)
     return fee
-
