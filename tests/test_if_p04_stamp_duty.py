@@ -9,7 +9,14 @@ from backtest.research.ledger_math import (
     sell_stamp_duty,
     stamp_duty_rate,
 )
+from backtest.research.rule_profile import RuleProfile
 from scripts.research.generate_off_byte_baseline import P04_CASES, run_p04_case
+
+P04_COMPONENT_PROFILE = RuleProfile(
+    name="industry",
+    revision="industry-p04-stamp-duty-20261006",
+    account_fee_schedule=True,
+)
 
 
 @pytest.mark.parametrize(
@@ -53,7 +60,7 @@ def test_industry_schedule_requires_a_date_for_direct_sell_credit():
     ids=[f"{book}-{engine}" for book, engine in P04_CASES],
 )
 def test_industry_stamp_duty_components_cover_shared_and_native_paths(book, engine):
-    state = run_p04_case(book, engine, rule_profile="industry")
+    state = run_p04_case(book, engine, rule_profile=P04_COMPONENT_PROFILE)
     fills = [row for row in state.trades if str(row["side"]).upper() in {"BUY", "SELL"}]
     buys = [row for row in fills if str(row["side"]).upper() == "BUY"]
     sells = [row for row in fills if str(row["side"]).upper() == "SELL"]

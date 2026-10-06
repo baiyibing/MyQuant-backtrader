@@ -3,7 +3,13 @@ import math
 import struct
 
 import pandas as pd
-from backtest.research.csv_ledger import SimState, _buy_size, execute_buy
+from backtest.research.ashare_fees import INDUSTRY_ACCOUNT_FEES
+from backtest.research.csv_ledger import (
+    SimState,
+    _buy_size,
+    bind_account_fee_schedule,
+    execute_buy,
+)
 from backtest.research.lot_rounding import (
     BOARD_LOT,
     STAR_MIN_DECLARE,
@@ -12,6 +18,7 @@ from backtest.research.lot_rounding import (
     nonnegative_override_board_lots,
     supplementary_notional,
 )
+from backtest.research.tail_window_buy import fee_aware_buy_quantity
 
 
 def frozen_buy_size(per_quota: float, price: float, *, star_declare: bool = False) -> tuple[int, float]:
@@ -104,6 +111,54 @@ def test_industry_b8_03_skips_budget_below_one_lot_without_touching_legacy():
     assert state.trades == []
     assert state.stats["skip_min_lot_budget"] == 1
     assert state.stats["supplementary_used"] == 0.0
+
+
+def test_industry_b8_04_sizes_one_lot_down_for_all_buy_fees():
+    from backtest.research.rule_profile import INDUSTRY
+
+    debit = lambda notional: INDUSTRY_ACCOUNT_FEES.debit_buy(
+        notional, pd.Timestamp("2026-10-06"), "600000.SH"
+    )
+    assert fee_aware_buy_quantity(200, 10.0, 2000.0, 10_000.0, debit) == 100
+    assert fee_aware_buy_quantity(
+        250,
+        10.0,
+        2500.0,
+        10_000.0,
+        debit,
+        increment=1,
+        minimum=STAR_MIN_DECLARE,
+    ) == 249
+    assert debit(2000.0) > 2000.0
+    assert debit(1000.0) <= 2000.0
+
+    legacy = SimState(cash=10_000.0)
+    assert execute_buy(
+        legacy, "600000.SH", 10.0, 2000.0, 0, pd.Timestamp("2026-10-06")
+    )
+    assert legacy.trades[-1]["shares"] == 200
+
+    industry = SimState(cash=10_000.0)
+    industry.rule_profile = INDUSTRY
+    bind_account_fee_schedule(industry, INDUSTRY_ACCOUNT_FEES)
+    assert execute_buy(
+        industry, "600000.SH", 10.0, 2000.0, 0, pd.Timestamp("2026-10-06")
+    )
+    assert industry.trades[-1]["shares"] == 100
+    assert (
+        industry.trades[-1]["notional"]
+        + industry.trades[-1]["commission"]
+        + industry.trades[-1]["transfer_fee"]
+        <= 2000.0
+    )
+
+
+def test_industry_b8_04_also_limits_quantity_by_available_cash():
+    debit = lambda notional: INDUSTRY_ACCOUNT_FEES.debit_buy(
+        notional, pd.Timestamp("2026-10-06"), "600000.SH"
+    )
+    assert fee_aware_buy_quantity(200, 10.0, 2000.0, 1005.01, debit) == 100
+    assert fee_aware_buy_quantity(200, 10.0, 2000.0, 1005.00, debit) == 0
 
 
 def test_slice2_quantity_profiles_exact_literals():

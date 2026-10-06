@@ -28,6 +28,8 @@ from scripts.research.generate_off_byte_baseline import (
     P05_GOLDEN,
     P06_CASES,
     P06_GOLDEN,
+    P07_CASES,
+    P07_GOLDEN,
     S9_CASES,
     load_s9_golden,
     S12_CASES,
@@ -55,6 +57,7 @@ from scripts.research.generate_off_byte_baseline import (
     load_p04_golden,
     load_p05_golden,
     load_p06_golden,
+    load_p07_golden,
     load_s8_golden,
     load_v61_golden,
     load_v91_golden,
@@ -281,21 +284,36 @@ def test_industry_p05_overlay_stays_immutable_after_later_profile_slices():
     assert [row["transfer_fee"] for row in s8_sells] == [0.01, 0.01]
 
 
-def test_industry_p06_no_topup_overlay_is_active_and_legacy_stays_frozen(tmp_path):
+def test_industry_p06_overlay_stays_immutable_after_later_profile_slices():
     assert sha256(GOLDEN.read_bytes()).hexdigest() == HISTORICAL_GOLDEN_SHA256
     assert sha256(CANONICAL_GOLDEN.read_bytes()).hexdigest() == HISTORICAL_CANONICAL_SHA256
     golden = load_p06_golden()
     assert P06_GOLDEN.exists()
     assert set(golden["cases"]) == {f"{book}/{engine}" for book, engine in P06_CASES}
     assert golden["captured_environment"]["pandas"] == "3.0.6"
+    for case in golden["cases"].values():
+        assert case["fill_counts"] == {"BUY": 1, "SELL": 1}
+        assert case["structured"]["stats"]["skip_min_lot_budget"] == 1
+        assert case["structured"]["stats"]["supplementary_used"] == 0.0
 
-    for book, engine in P06_CASES:
+
+def test_industry_p07_fee_aware_sizing_overlay_is_active_and_legacy_stays_frozen(
+    tmp_path,
+):
+    assert sha256(GOLDEN.read_bytes()).hexdigest() == HISTORICAL_GOLDEN_SHA256
+    assert sha256(CANONICAL_GOLDEN.read_bytes()).hexdigest() == HISTORICAL_CANONICAL_SHA256
+    golden = load_p07_golden()
+    assert P07_GOLDEN.exists()
+    assert set(golden["cases"]) == {f"{book}/{engine}" for book, engine in P07_CASES}
+    assert golden["captured_environment"]["pandas"] == "3.0.6"
+
+    for book, engine in P07_CASES:
         industry = capture_case(
             book,
             engine,
-            tmp_path / "industry-p06" / book / engine,
+            tmp_path / "industry-p07" / book / engine,
             rule_profile="industry",
-            fixture="p06",
+            fixture="p07",
         )
         expected, canonical, recorded = expected_case(
             book, engine, rule_profile="industry"
@@ -305,19 +323,37 @@ def test_industry_p06_no_topup_overlay_is_active_and_legacy_stays_frozen(tmp_pat
         if byte_skip_reason(recorded) is None:
             assert_case_bytes(industry, expected)
         assert industry["fill_counts"] == {"BUY": 1, "SELL": 1}
-        assert industry["structured"]["stats"]["skip_min_lot_budget"] == 1
-        assert industry["structured"]["stats"]["supplementary_used"] == 0.0
 
         legacy = capture_case(
             book,
             engine,
-            tmp_path / "legacy-p06" / book / engine,
+            tmp_path / "legacy-p07" / book / engine,
             rule_profile="legacy",
-            fixture="p06",
+            fixture="p07",
         )
-        assert legacy["fill_counts"] == {"BUY": 2, "SELL": 2}
-        assert legacy["structured"]["stats"]["supplementary_used"] == 1000.0
-        assert "skip_min_lot_budget" not in legacy["structured"]["stats"]
+        assert legacy["fill_counts"] == {"BUY": 1, "SELL": 1}
+        industry_buy = next(
+            row for row in industry["structured"]["fills"] if row["side"].upper() == "BUY"
+        )
+        legacy_buy = next(
+            row for row in legacy["structured"]["fills"] if row["side"].upper() == "BUY"
+        )
+        budget = 2000.0 if book == "version6" else 200000.0
+        assert legacy_buy["shares"] == industry_buy["shares"] + 100
+        assert (
+            legacy_buy["shares"] * legacy_buy["price"]
+            + legacy_buy.get(
+                "commission",
+                legacy_buy["shares"] * legacy_buy["price"] * 0.001,
+            )
+            > budget
+        )
+        assert (
+            industry_buy["notional"]
+            + industry_buy["commission"]
+            + industry_buy["transfer_fee"]
+            <= budget
+        )
         assert legacy["structured"] != industry["structured"]
         assert legacy["sha256_csv_bytes"] != industry["sha256_csv_bytes"]
 

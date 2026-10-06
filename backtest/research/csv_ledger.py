@@ -41,6 +41,7 @@ from backtest.research.lot_rounding import (
     nonnegative_override_board_lots,
     supplementary_notional,
 )
+from backtest.research.tail_window_buy import fee_aware_buy_quantity
 
 DEFAULT_TOTAL_CASH = 21_000_000.0
 PEAK_GAP_MIN = 15
@@ -675,6 +676,13 @@ def allows_min_lot_top_up(st) -> bool:
     )
 
 
+def uses_fee_aware_affordability(st) -> bool:
+    """Return whether buy declarations must include all industry buy fees."""
+    return bool(
+        getattr(getattr(st, "rule_profile", None), "fee_aware_affordability", False)
+    )
+
+
 def execute_buy(
     st: SimState,
     code: str,
@@ -734,6 +742,7 @@ def execute_buy(
         raise ValueError("merge_lot must be an existing same-code, same-day buy lot")
     star_declare = st.star_lot_declare_check and _digit_prefix(code).startswith(("688", "689"))
     no_min_lot_top_up = not allows_min_lot_top_up(st)
+    fee_aware = uses_fee_aware_affordability(st)
     if shares_override is None:
         shares, supp = _buy_size(
             per,
@@ -747,7 +756,21 @@ def execute_buy(
         shares, supp = (
             int(shares_override) if star_declare else nonnegative_override_board_lots(shares_override)
         ), 0.0
-        per = shares * px
+        if not fee_aware:
+            per = shares * px
+    wanted_shares = shares
+    if fee_aware and shares > 0:
+        debit = lambda notional: st.account_fee_schedule.debit_buy(notional, day, code)
+        shares = fee_aware_buy_quantity(
+            shares,
+            px,
+            per,
+            st.cash,
+            debit,
+            increment=1 if star_declare else BOARD_LOT,
+            minimum=STAR_MIN_DECLARE if star_declare else BOARD_LOT,
+        )
+        supp = 0.0
     # This is the new buy declaration, not its eventual fill. A later cap may
     # fill <200; a subsequent execute_buy call is a NEW declaration, including
     # residual retries / merge_lot. Held-position sell unwinds stay separate.
@@ -757,10 +780,28 @@ def execute_buy(
         record_rejection(st, code, day, reason_code, px)
         return False
     if shares <= 0:
-        if shares_override is None and no_min_lot_top_up and not star_declare:
+        if (
+            shares_override is None
+            and no_min_lot_top_up
+            and not star_declare
+            and (
+                not fee_aware
+                or wanted_shares <= 0
+                or fee_aware_buy_quantity(
+                    wanted_shares,
+                    px,
+                    per,
+                    per,
+                    debit,
+                )
+                <= 0
+            )
+        ):
             reason_code = "skip_min_lot_budget"
             st.stats[reason_code] = st.stats.get(reason_code, 0) + 1
             record_rejection(st, code, day, reason_code, px)
+        elif fee_aware:
+            record_rejection(st, code, day, "skip_cash", px)
         return False
     per_order_fees = hasattr(st, "_fee_accumulators")
     if per_order_fees:
@@ -771,7 +812,12 @@ def execute_buy(
         if per_order_fees
         else trade_commission(notional, st.buy_cost_rate, st.min_cost)
     )
-    if not check_buy_cash(st, needed=notional + comm, available=st.cash,
+    needed = (
+        st.account_fee_schedule.debit_buy(notional, day, code)
+        if fee_aware
+        else notional + comm
+    )
+    if not check_buy_cash(st, needed=needed, available=st.cash,
                           date=_ymd(day), code=code):
         record_rejection(st, code, day, "skip_cash", px)
         return False

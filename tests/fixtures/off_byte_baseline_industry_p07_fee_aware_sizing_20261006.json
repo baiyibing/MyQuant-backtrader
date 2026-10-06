@@ -1,0 +1,926 @@
+{
+  "rule_revision": "industry-p07-fee-aware-sizing-20261006",
+  "historical_raw_sha256": "3bfe51b6d3e20b665c3fed0449ebf8569988022719da275b7fcc9635a9988c6c",
+  "historical_canonical_sha256": "34f611da359f1a1d059bc78be75b2e9e2458c533b1dc3b46cfd61130fca7a04e",
+  "books": [
+    "version6",
+    "version7"
+  ],
+  "captured_environment": {
+    "python": "3.13.5",
+    "pandas": "3.0.6",
+    "platform": "linux"
+  },
+  "contract": {
+    "schema": 1,
+    "money_quantum": "1E-8",
+    "rounding": "ROUND_HALF_EVEN",
+    "money_fields": [
+      "cash",
+      "commission",
+      "equity",
+      "holdings",
+      "notional",
+      "price",
+      "stamp_duty",
+      "transfer_fee"
+    ],
+    "integer_fields": [
+      "hm",
+      "lot",
+      "shares"
+    ],
+    "text": "verbatim; preserve all columns and row/column order, including EOD_MARK",
+    "hash": "sha256 of UTF-8 JSON; ensure_ascii=False, sort_keys=True, separators=(',', ':')"
+  },
+  "cases": {
+    "version6/daily": {
+      "sha256_csv_bytes": {
+        "trades": "92dddbddf760c324a40f8621550a98f4c2e1040e7a59524bd6330cfb73aefd03",
+        "equity": "de437d7a567b164bcd68e54000c5729fe60c8f30d1629953893a027f8546474e"
+      },
+      "library_sha256_csv_bytes": {
+        "trades": "92dddbddf760c324a40f8621550a98f4c2e1040e7a59524bd6330cfb73aefd03",
+        "equity": "de437d7a567b164bcd68e54000c5729fe60c8f30d1629953893a027f8546474e"
+      },
+      "canonical_csv": {
+        "trades": {
+          "columns": [
+            "date",
+            "code",
+            "side",
+            "price",
+            "shares",
+            "notional",
+            "commission",
+            "reason",
+            "lot",
+            "session_phase",
+            "price_rule",
+            "stamp_duty",
+            "transfer_fee"
+          ],
+          "rows": [
+            {
+              "date": "20251103",
+              "code": "600000.SH",
+              "side": "BUY",
+              "price": "10.00000000",
+              "shares": 100,
+              "notional": "1000.00000000",
+              "commission": "5.00000000",
+              "reason": "pool",
+              "lot": 0,
+              "session_phase": "",
+              "price_rule": "",
+              "stamp_duty": "0.00000000",
+              "transfer_fee": "0.01000000"
+            },
+            {
+              "date": "20251104",
+              "code": "600000.SH",
+              "side": "SELL",
+              "price": "9.40000000",
+              "shares": 100,
+              "notional": "940.00000000",
+              "commission": "5.00000000",
+              "reason": "stop_loss:gap_open",
+              "lot": 0,
+              "session_phase": "",
+              "price_rule": "daily_stop_gap_open",
+              "stamp_duty": "0.47000000",
+              "transfer_fee": "0.00940000"
+            }
+          ]
+        },
+        "equity": {
+          "columns": [
+            "date",
+            "equity"
+          ],
+          "rows": [
+            {
+              "date": "20251103",
+              "equity": "999994.99000000"
+            },
+            {
+              "date": "20251104",
+              "equity": "999929.51060000"
+            }
+          ]
+        }
+      },
+      "library_canonical_csv": {
+        "trades": {
+          "columns": [
+            "date",
+            "code",
+            "side",
+            "price",
+            "shares",
+            "notional",
+            "commission",
+            "reason",
+            "lot",
+            "session_phase",
+            "price_rule",
+            "stamp_duty",
+            "transfer_fee"
+          ],
+          "rows": [
+            {
+              "date": "20251103",
+              "code": "600000.SH",
+              "side": "BUY",
+              "price": "10.00000000",
+              "shares": 100,
+              "notional": "1000.00000000",
+              "commission": "5.00000000",
+              "reason": "pool",
+              "lot": 0,
+              "session_phase": "",
+              "price_rule": "",
+              "stamp_duty": "0.00000000",
+              "transfer_fee": "0.01000000"
+            },
+            {
+              "date": "20251104",
+              "code": "600000.SH",
+              "side": "SELL",
+              "price": "9.40000000",
+              "shares": 100,
+              "notional": "940.00000000",
+              "commission": "5.00000000",
+              "reason": "stop_loss:gap_open",
+              "lot": 0,
+              "session_phase": "",
+              "price_rule": "daily_stop_gap_open",
+              "stamp_duty": "0.47000000",
+              "transfer_fee": "0.00940000"
+            }
+          ]
+        },
+        "equity": {
+          "columns": [
+            "date",
+            "equity"
+          ],
+          "rows": [
+            {
+              "date": "20251103",
+              "equity": "999994.99000000"
+            },
+            {
+              "date": "20251104",
+              "equity": "999929.51060000"
+            }
+          ]
+        }
+      },
+      "fill_counts": {
+        "BUY": 1,
+        "SELL": 1
+      },
+      "structured": {
+        "fills": [
+          {
+            "date": "20251103",
+            "code": "600000.SH",
+            "side": "BUY",
+            "price": 10.0,
+            "shares": 100,
+            "notional": 1000.0,
+            "commission": 5.0,
+            "reason": "pool",
+            "lot": 0,
+            "session_phase": "",
+            "price_rule": "",
+            "stamp_duty": 0.0,
+            "transfer_fee": 0.01
+          },
+          {
+            "date": "20251104",
+            "code": "600000.SH",
+            "side": "SELL",
+            "price": 9.4,
+            "shares": 100,
+            "notional": 940.0,
+            "commission": 5.0,
+            "reason": "stop_loss:gap_open",
+            "lot": 0,
+            "session_phase": "",
+            "price_rule": "daily_stop_gap_open",
+            "stamp_duty": 0.47000000000000003,
+            "transfer_fee": 0.0094
+          }
+        ],
+        "cash": 999929.5106,
+        "positions": {},
+        "equity_curve": [
+          [
+            "20251103",
+            999994.99
+          ],
+          [
+            "20251104",
+            999929.5106
+          ]
+        ],
+        "stats": {
+          "buys": 1,
+          "skip_limit_up": 0,
+          "skip_unknown_board": 0,
+          "chase_buy": 0,
+          "chase_abandon": 0,
+          "chase_skip_limit": 0,
+          "chase_no_bar": 0,
+          "chase_overwrite": 0,
+          "chase_buy_fail": 0,
+          "chase_pending_eod": 0,
+          "chase_skip_held": 0,
+          "skip_held": 0,
+          "skip_index_gate": 0,
+          "skip_add_loser": 0,
+          "add_lots": 0,
+          "skip_no_bar": 0,
+          "skip_buy_gate": 0,
+          "skip_sma_warmup": 0,
+          "sell_stop": 1,
+          "sell_trail": 0,
+          "sell_pos_trail": 0,
+          "sell_profit_take": 0,
+          "sell_open_board": 0,
+          "sell_force": 0,
+          "sell_ma": 0,
+          "defer_sell_limit_down": 0,
+          "invested_notional": 1000.0,
+          "supplementary_used": 0.0,
+          "bars_loaded": 1,
+          "pool_days": 1,
+          "sell_book": "v6",
+          "stop_pct": 0.02,
+          "tp_min_days": 1,
+          "v6_dd_bands": true,
+          "dd_lt6": 0.7,
+          "dd_ge6": 0.5,
+          "allow_add": true,
+          "sizing": "daily_quota",
+          "name_budget": 1000000.0,
+          "ration": "file_order",
+          "ration_seed": 0,
+          "skip_cash": 0,
+          "skip_cash_notional": 0,
+          "chase_buy_fail_cash": 0,
+          "chase_buy_fail_shares": 0,
+          "daily_quota": 2000.0,
+          "stamp_duty_total": 0.47000000000000003,
+          "transfer_fee_total": 0.0194,
+          "buy_cost_rate": 0.0003,
+          "sell_cost_rate": 0.0003,
+          "min_cost": 5.0,
+          "chase_explained": 0,
+          "rule_profile": "industry",
+          "rule_profile_revision": "industry-p07-20261006"
+        }
+      }
+    },
+    "version6/minute": {
+      "sha256_csv_bytes": {
+        "trades": "1d1b1da43e6eb186818cb1b8bf627770e110024a76bc43ebb978c354a81a805d",
+        "equity": "de437d7a567b164bcd68e54000c5729fe60c8f30d1629953893a027f8546474e"
+      },
+      "library_sha256_csv_bytes": {
+        "trades": "1d1b1da43e6eb186818cb1b8bf627770e110024a76bc43ebb978c354a81a805d",
+        "equity": "de437d7a567b164bcd68e54000c5729fe60c8f30d1629953893a027f8546474e"
+      },
+      "canonical_csv": {
+        "trades": {
+          "columns": [
+            "date",
+            "code",
+            "side",
+            "price",
+            "shares",
+            "notional",
+            "commission",
+            "reason",
+            "lot",
+            "session_phase",
+            "price_rule",
+            "stamp_duty",
+            "transfer_fee"
+          ],
+          "rows": [
+            {
+              "date": "20251103",
+              "code": "600000.SH",
+              "side": "BUY",
+              "price": "10.00000000",
+              "shares": 100,
+              "notional": "1000.00000000",
+              "commission": "5.00000000",
+              "reason": "pool",
+              "lot": 0,
+              "session_phase": "",
+              "price_rule": "",
+              "stamp_duty": "0.00000000",
+              "transfer_fee": "0.01000000"
+            },
+            {
+              "date": "20251104",
+              "code": "600000.SH",
+              "side": "SELL",
+              "price": "9.40000000",
+              "shares": 100,
+              "notional": "940.00000000",
+              "commission": "5.00000000",
+              "reason": "stop_loss:gap_open",
+              "lot": 0,
+              "session_phase": "continuous",
+              "price_rule": "minute_gap_open",
+              "stamp_duty": "0.47000000",
+              "transfer_fee": "0.00940000"
+            }
+          ]
+        },
+        "equity": {
+          "columns": [
+            "date",
+            "equity"
+          ],
+          "rows": [
+            {
+              "date": "20251103",
+              "equity": "999994.99000000"
+            },
+            {
+              "date": "20251104",
+              "equity": "999929.51060000"
+            }
+          ]
+        }
+      },
+      "library_canonical_csv": {
+        "trades": {
+          "columns": [
+            "date",
+            "code",
+            "side",
+            "price",
+            "shares",
+            "notional",
+            "commission",
+            "reason",
+            "lot",
+            "session_phase",
+            "price_rule",
+            "stamp_duty",
+            "transfer_fee"
+          ],
+          "rows": [
+            {
+              "date": "20251103",
+              "code": "600000.SH",
+              "side": "BUY",
+              "price": "10.00000000",
+              "shares": 100,
+              "notional": "1000.00000000",
+              "commission": "5.00000000",
+              "reason": "pool",
+              "lot": 0,
+              "session_phase": "",
+              "price_rule": "",
+              "stamp_duty": "0.00000000",
+              "transfer_fee": "0.01000000"
+            },
+            {
+              "date": "20251104",
+              "code": "600000.SH",
+              "side": "SELL",
+              "price": "9.40000000",
+              "shares": 100,
+              "notional": "940.00000000",
+              "commission": "5.00000000",
+              "reason": "stop_loss:gap_open",
+              "lot": 0,
+              "session_phase": "continuous",
+              "price_rule": "minute_gap_open",
+              "stamp_duty": "0.47000000",
+              "transfer_fee": "0.00940000"
+            }
+          ]
+        },
+        "equity": {
+          "columns": [
+            "date",
+            "equity"
+          ],
+          "rows": [
+            {
+              "date": "20251103",
+              "equity": "999994.99000000"
+            },
+            {
+              "date": "20251104",
+              "equity": "999929.51060000"
+            }
+          ]
+        }
+      },
+      "fill_counts": {
+        "BUY": 1,
+        "SELL": 1
+      },
+      "structured": {
+        "fills": [
+          {
+            "date": "20251103",
+            "code": "600000.SH",
+            "side": "BUY",
+            "price": 10.0,
+            "shares": 100,
+            "notional": 1000.0,
+            "commission": 5.0,
+            "reason": "pool",
+            "lot": 0,
+            "session_phase": "",
+            "price_rule": "",
+            "stamp_duty": 0.0,
+            "transfer_fee": 0.01
+          },
+          {
+            "date": "20251104",
+            "code": "600000.SH",
+            "side": "SELL",
+            "price": 9.4,
+            "shares": 100,
+            "notional": 940.0,
+            "commission": 5.0,
+            "reason": "stop_loss:gap_open",
+            "lot": 0,
+            "session_phase": "continuous",
+            "price_rule": "minute_gap_open",
+            "stamp_duty": 0.47000000000000003,
+            "transfer_fee": 0.0094
+          }
+        ],
+        "cash": 999929.5106,
+        "positions": {},
+        "equity_curve": [
+          [
+            "20251103",
+            999994.99
+          ],
+          [
+            "20251104",
+            999929.5106
+          ]
+        ],
+        "stats": {
+          "buys": 1,
+          "skip_limit_up": 0,
+          "skip_unknown_board": 0,
+          "chase_buy": 0,
+          "chase_abandon": 0,
+          "chase_skip_limit": 0,
+          "chase_no_bar": 0,
+          "chase_overwrite": 0,
+          "chase_buy_fail": 0,
+          "chase_pending_eod": 0,
+          "chase_skip_held": 0,
+          "skip_held": 0,
+          "skip_index_gate": 0,
+          "skip_add_loser": 0,
+          "add_lots": 0,
+          "skip_no_bar": 0,
+          "skip_buy_gate": 0,
+          "skip_sma_warmup": 0,
+          "sell_stop": 1,
+          "sell_trail": 0,
+          "sell_pos_trail": 0,
+          "sell_profit_take": 0,
+          "sell_open_board": 0,
+          "sell_force": 0,
+          "sell_ma": 0,
+          "defer_sell_limit_down": 0,
+          "invested_notional": 1000.0,
+          "supplementary_used": 0.0,
+          "bars_loaded": 1,
+          "pool_days": 1,
+          "sell_book": "v6",
+          "stop_pct": 0.02,
+          "tp_min_days": 1,
+          "v6_dd_bands": true,
+          "dd_lt6": 0.7,
+          "dd_ge6": 0.5,
+          "allow_add": true,
+          "sizing": "daily_quota",
+          "name_budget": 1000000.0,
+          "ration": "file_order",
+          "ration_seed": 0,
+          "skip_cash": 0,
+          "skip_cash_notional": 0,
+          "chase_buy_fail_cash": 0,
+          "chase_buy_fail_shares": 0,
+          "daily_quota": 2000.0,
+          "stamp_duty_total": 0.47000000000000003,
+          "transfer_fee_total": 0.0194,
+          "buy_cost_rate": 0.0003,
+          "sell_cost_rate": 0.0003,
+          "min_cost": 5.0,
+          "chase_explained": 0,
+          "rule_profile": "industry",
+          "rule_profile_revision": "industry-p07-20261006"
+        }
+      }
+    },
+    "version7/minute-native": {
+      "sha256_csv_bytes": {
+        "trades": "90ccd4d9d3f233c1939fa3ec928f79eca711cb0d8793c360722108552e945d04",
+        "equity": "83b0d8b339130fc7438c21c70d1aa20cc1452cfeca7d3442a3792c2d77b84a3a"
+      },
+      "library_sha256_csv_bytes": {
+        "trades": "90ccd4d9d3f233c1939fa3ec928f79eca711cb0d8793c360722108552e945d04",
+        "equity": "83b0d8b339130fc7438c21c70d1aa20cc1452cfeca7d3442a3792c2d77b84a3a"
+      },
+      "canonical_csv": {
+        "trades": {
+          "columns": [
+            "date",
+            "symbol",
+            "hm",
+            "side",
+            "shares",
+            "price",
+            "notional",
+            "commission",
+            "stamp_duty",
+            "transfer_fee",
+            "reason"
+          ],
+          "rows": [
+            {
+              "date": "2026-09-01",
+              "symbol": "600000.SH",
+              "hm": 895,
+              "side": "buy",
+              "shares": 1900,
+              "price": "100.00000000",
+              "notional": "190000.00000000",
+              "commission": "57.00000000",
+              "stamp_duty": "0.00000000",
+              "transfer_fee": "1.90000000",
+              "reason": "buy:trial"
+            },
+            {
+              "date": "2026-09-02",
+              "symbol": "600000.SH",
+              "hm": 570,
+              "side": "sell",
+              "shares": 1900,
+              "price": "89.00000000",
+              "notional": "169100.00000000",
+              "commission": "50.73000000",
+              "stamp_duty": "84.55000000",
+              "transfer_fee": "1.69100000",
+              "reason": "stop:trial_a090"
+            }
+          ]
+        },
+        "equity": {
+          "columns": [
+            "date",
+            "cash",
+            "holdings",
+            "equity"
+          ],
+          "rows": [
+            {
+              "date": "2026-09-01",
+              "cash": "809941.10000000",
+              "holdings": "190000.00000000",
+              "equity": "999941.10000000"
+            },
+            {
+              "date": "2026-09-02",
+              "cash": "978904.12900000",
+              "holdings": "0.00000000",
+              "equity": "978904.12900000"
+            }
+          ]
+        }
+      },
+      "library_canonical_csv": {
+        "trades": {
+          "columns": [
+            "date",
+            "symbol",
+            "hm",
+            "side",
+            "shares",
+            "price",
+            "notional",
+            "commission",
+            "stamp_duty",
+            "transfer_fee",
+            "reason"
+          ],
+          "rows": [
+            {
+              "date": "2026-09-01",
+              "symbol": "600000.SH",
+              "hm": 895,
+              "side": "buy",
+              "shares": 1900,
+              "price": "100.00000000",
+              "notional": "190000.00000000",
+              "commission": "57.00000000",
+              "stamp_duty": "0.00000000",
+              "transfer_fee": "1.90000000",
+              "reason": "buy:trial"
+            },
+            {
+              "date": "2026-09-02",
+              "symbol": "600000.SH",
+              "hm": 570,
+              "side": "sell",
+              "shares": 1900,
+              "price": "89.00000000",
+              "notional": "169100.00000000",
+              "commission": "50.73000000",
+              "stamp_duty": "84.55000000",
+              "transfer_fee": "1.69100000",
+              "reason": "stop:trial_a090"
+            }
+          ]
+        },
+        "equity": {
+          "columns": [
+            "date",
+            "cash",
+            "holdings",
+            "equity"
+          ],
+          "rows": [
+            {
+              "date": "2026-09-01",
+              "cash": "809941.10000000",
+              "holdings": "190000.00000000",
+              "equity": "999941.10000000"
+            },
+            {
+              "date": "2026-09-02",
+              "cash": "978904.12900000",
+              "holdings": "0.00000000",
+              "equity": "978904.12900000"
+            }
+          ]
+        }
+      },
+      "fill_counts": {
+        "BUY": 1,
+        "SELL": 1
+      },
+      "structured": {
+        "fills": [
+          {
+            "date": "2026-09-01",
+            "symbol": "600000.SH",
+            "hm": 895,
+            "side": "buy",
+            "shares": 1900,
+            "price": 100.0,
+            "reason": "buy:trial",
+            "notional": 190000.0,
+            "commission": 56.99999999999999,
+            "stamp_duty": 0.0,
+            "transfer_fee": 1.9000000000000001
+          },
+          {
+            "date": "2026-09-02",
+            "symbol": "600000.SH",
+            "hm": 570,
+            "side": "sell",
+            "shares": 1900,
+            "price": 89.0,
+            "reason": "stop:trial_a090",
+            "notional": 169100.0,
+            "commission": 50.73,
+            "stamp_duty": 84.55,
+            "transfer_fee": 1.691
+          }
+        ],
+        "cash": 978904.129,
+        "positions": {},
+        "equity_curve": [
+          {
+            "date": "2026-09-01",
+            "cash": 809941.1,
+            "holdings": 190000.0,
+            "equity": 999941.1
+          },
+          {
+            "date": "2026-09-02",
+            "cash": 978904.129,
+            "holdings": 0,
+            "equity": 978904.129
+          }
+        ]
+      }
+    },
+    "version7/standalone": {
+      "sha256_csv_bytes": {
+        "trades": "90ccd4d9d3f233c1939fa3ec928f79eca711cb0d8793c360722108552e945d04",
+        "equity": "83b0d8b339130fc7438c21c70d1aa20cc1452cfeca7d3442a3792c2d77b84a3a"
+      },
+      "library_sha256_csv_bytes": {
+        "trades": "90ccd4d9d3f233c1939fa3ec928f79eca711cb0d8793c360722108552e945d04",
+        "equity": "83b0d8b339130fc7438c21c70d1aa20cc1452cfeca7d3442a3792c2d77b84a3a"
+      },
+      "canonical_csv": {
+        "trades": {
+          "columns": [
+            "date",
+            "symbol",
+            "hm",
+            "side",
+            "shares",
+            "price",
+            "notional",
+            "commission",
+            "stamp_duty",
+            "transfer_fee",
+            "reason"
+          ],
+          "rows": [
+            {
+              "date": "2026-09-01",
+              "symbol": "600000.SH",
+              "hm": 895,
+              "side": "buy",
+              "shares": 1900,
+              "price": "100.00000000",
+              "notional": "190000.00000000",
+              "commission": "57.00000000",
+              "stamp_duty": "0.00000000",
+              "transfer_fee": "1.90000000",
+              "reason": "buy:trial"
+            },
+            {
+              "date": "2026-09-02",
+              "symbol": "600000.SH",
+              "hm": 570,
+              "side": "sell",
+              "shares": 1900,
+              "price": "89.00000000",
+              "notional": "169100.00000000",
+              "commission": "50.73000000",
+              "stamp_duty": "84.55000000",
+              "transfer_fee": "1.69100000",
+              "reason": "stop:trial_a090"
+            }
+          ]
+        },
+        "equity": {
+          "columns": [
+            "date",
+            "cash",
+            "holdings",
+            "equity"
+          ],
+          "rows": [
+            {
+              "date": "2026-09-01",
+              "cash": "809941.10000000",
+              "holdings": "190000.00000000",
+              "equity": "999941.10000000"
+            },
+            {
+              "date": "2026-09-02",
+              "cash": "978904.12900000",
+              "holdings": "0.00000000",
+              "equity": "978904.12900000"
+            }
+          ]
+        }
+      },
+      "library_canonical_csv": {
+        "trades": {
+          "columns": [
+            "date",
+            "symbol",
+            "hm",
+            "side",
+            "shares",
+            "price",
+            "notional",
+            "commission",
+            "stamp_duty",
+            "transfer_fee",
+            "reason"
+          ],
+          "rows": [
+            {
+              "date": "2026-09-01",
+              "symbol": "600000.SH",
+              "hm": 895,
+              "side": "buy",
+              "shares": 1900,
+              "price": "100.00000000",
+              "notional": "190000.00000000",
+              "commission": "57.00000000",
+              "stamp_duty": "0.00000000",
+              "transfer_fee": "1.90000000",
+              "reason": "buy:trial"
+            },
+            {
+              "date": "2026-09-02",
+              "symbol": "600000.SH",
+              "hm": 570,
+              "side": "sell",
+              "shares": 1900,
+              "price": "89.00000000",
+              "notional": "169100.00000000",
+              "commission": "50.73000000",
+              "stamp_duty": "84.55000000",
+              "transfer_fee": "1.69100000",
+              "reason": "stop:trial_a090"
+            }
+          ]
+        },
+        "equity": {
+          "columns": [
+            "date",
+            "cash",
+            "holdings",
+            "equity"
+          ],
+          "rows": [
+            {
+              "date": "2026-09-01",
+              "cash": "809941.10000000",
+              "holdings": "190000.00000000",
+              "equity": "999941.10000000"
+            },
+            {
+              "date": "2026-09-02",
+              "cash": "978904.12900000",
+              "holdings": "0.00000000",
+              "equity": "978904.12900000"
+            }
+          ]
+        }
+      },
+      "fill_counts": {
+        "BUY": 1,
+        "SELL": 1
+      },
+      "structured": {
+        "fills": [
+          {
+            "date": "2026-09-01",
+            "symbol": "600000.SH",
+            "hm": 895,
+            "side": "buy",
+            "shares": 1900,
+            "price": 100.0,
+            "reason": "buy:trial",
+            "notional": 190000.0,
+            "commission": 56.99999999999999,
+            "stamp_duty": 0.0,
+            "transfer_fee": 1.9000000000000001
+          },
+          {
+            "date": "2026-09-02",
+            "symbol": "600000.SH",
+            "hm": 570,
+            "side": "sell",
+            "shares": 1900,
+            "price": 89.0,
+            "reason": "stop:trial_a090",
+            "notional": 169100.0,
+            "commission": 50.73,
+            "stamp_duty": 84.55,
+            "transfer_fee": 1.691
+          }
+        ],
+        "cash": 978904.129,
+        "positions": {},
+        "equity_curve": [
+          {
+            "date": "2026-09-01",
+            "cash": 809941.1,
+            "holdings": 190000.0,
+            "equity": 999941.1
+          },
+          {
+            "date": "2026-09-02",
+            "cash": 978904.129,
+            "holdings": 0,
+            "equity": 978904.129
+          }
+        ]
+      }
+    }
+  }
+}
