@@ -108,6 +108,7 @@ from backtest.research.csv_strategy_books import (  # noqa: E402
     help_lock_all,
     help_lock_for,
     normalize_csv_strategy,
+    validate_hold_days,
 )
 from backtest.research.strategy6_rules import (  # noqa: E402
     POS_TRAIL,
@@ -664,6 +665,7 @@ def simulate(
     fix_s11_exit_domain: bool = False,
     version9_sell=None,
     max_hold: bool = False,
+    hold_days: int = 20,
     fix_s81_band_precision: bool = False,
     signal_bars_front: dict[str, pd.DataFrame] | None = None,
     minute_stop_trigger: str = "close",
@@ -690,6 +692,7 @@ def simulate(
         explicit_rates=(buy_cost_rate, sell_cost_rate, min_cost),
     )
     book = get_minute_book(strategy)
+    validate_hold_days(book.name, hold_days)
     native_v7 = book.name == "version7"
     if native_v7:
         context = policy_context or MinutePolicyContext()
@@ -727,7 +730,13 @@ def simulate(
             bind_account_fee_schedule(st, fee)
         last_prices = {}
     if not native_v7:
-        validate_minute_entry(strategy, stage="sell", version9_sell=version9_sell, max_hold=max_hold)
+        validate_minute_entry(
+            strategy,
+            stage="sell",
+            version9_sell=version9_sell,
+            max_hold=max_hold,
+            hold_days=hold_days,
+        )
         validate_minute_stop_trigger(minute_stop_trigger, normalize_csv_strategy(strategy), fix_s11_exit_domain)
         validate_topk_exec(topk_exec, strategy, limit_walkdown, topk_limit_rule)
         validate_tail_options(tail_window_buy, fix_minute_cash_order, tail_volume_unit)
@@ -775,6 +784,7 @@ def simulate(
             apply_fn=apply_csv_strategy,
             **({"version9_sell": version9_sell} if version9_sell is not None else {}),
             **({"max_hold": True} if max_hold else {}),
+            hold_days=hold_days,
             **({"fix_s81_band_precision": True} if fix_s81_band_precision else {}),
             scores_by_day=scores_by_day,
             topk=topk,
@@ -1436,6 +1446,7 @@ def run(
     fix_s11_exit_domain: bool = False,
     version9_sell=None,
     max_hold: bool = False,
+    hold_days: int = 20,
     fix_s81_band_precision: bool = False,
     minute_stop_trigger: str = "close",
     fill_config: FillConfig | None = None,
@@ -1455,7 +1466,13 @@ def run(
         profile.account_fee_schedule,
         explicit_rates=(buy_cost_rate, sell_cost_rate, min_cost),
     )
-    validate_minute_entry(strategy, stage="sell", version9_sell=version9_sell, max_hold=max_hold)
+    validate_minute_entry(
+        strategy,
+        stage="sell",
+        version9_sell=version9_sell,
+        max_hold=max_hold,
+        hold_days=hold_days,
+    )
     # P2-B shell precheck (adapter surface on run facade; not simulate / VolumeCap).
     # participation_rate=None → no-op (byte-identical old arm). ≠δ5 certified ≠R4.
     precheck_cli_participation_rate(
@@ -1697,6 +1714,7 @@ def run(
         **volume_options,
         **({"version9_sell": version9_sell} if version9_sell is not None else {}),
         **({"max_hold": True} if max_hold else {}),
+        hold_days=hold_days,
         **({"fix_s81_band_precision": True} if fix_s81_band_precision else {}),
         take_profit=take_profit,
         record_params=record_params,
@@ -1956,7 +1974,7 @@ def main(argv: Optional[list] = None) -> int:
         topk_limit_rule=args.topk_limit_rule,
         **csv_run_kwargs_from_args(args),
     )
-    book = engine_book(args.strategy)
+    book = engine_book(args.strategy, hold_days=args.hold_days)
     engine = f"csv_minute_{book}"
     text = summarize(st, args.cash_total, args.start, args.end, engine=engine)
     cmp = maybe_compare_daily(

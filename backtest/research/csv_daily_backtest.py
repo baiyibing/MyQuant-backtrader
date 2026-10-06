@@ -50,6 +50,7 @@ from backtest.research.csv_strategy_books import (  # noqa: E402
     resolve_daily_quota,
     resolve_research_pool_dir,
     strategy6_kwargs_from_args,
+    validate_hold_days,
 )
 from backtest.research.strategy6_rules import (  # noqa: E402
     POS_TRAIL,
@@ -255,6 +256,7 @@ def simulate(
     fix_s11_exit_domain: bool = False,
     version9_sell=None,
     max_hold: bool = False,
+    hold_days: int = 20,
     fix_s81_band_precision: bool = False,
     signal_bars_front: dict[str, pd.DataFrame] | None = None,
     rule_profile: str | RuleProfile = "legacy",
@@ -270,10 +272,12 @@ def simulate(
         profile.account_fee_schedule,
         explicit_rates=(buy_cost_rate, sell_cost_rate, min_cost),
     )
+    strategy_name = normalize_csv_strategy(strategy)
     from backtest.research.strategy9_rules import validate_sell_mode
-    validate_sell_mode(normalize_csv_strategy(strategy), version9_sell, max_hold)
-    if max_hold and normalize_csv_strategy(strategy) != "version9":
+    validate_sell_mode(strategy_name, version9_sell, max_hold)
+    if max_hold and strategy_name != "version9":
         raise ValueError("max_hold is supported only by version9")
+    validate_hold_days(strategy_name, hold_days)
     del pos_trail
     if signal_bars_front is not None and not fix_s11_exit_domain:
         raise ValueError("signal_bars_front requires version11 + fix_s11_exit_domain=True")
@@ -302,6 +306,7 @@ def simulate(
         apply_fn=apply_csv_strategy,
         **({"version9_sell": version9_sell} if version9_sell is not None else {}),
         **({"max_hold": True} if max_hold else {}),
+        hold_days=hold_days,
         **({"fix_s81_band_precision": True} if fix_s81_band_precision else {}),
         scores_by_day=scores_by_day,
         topk=topk,
@@ -750,6 +755,7 @@ def run(
     fix_s11_exit_domain: bool = False,
     version9_sell=None,
     max_hold: bool = False,
+    hold_days: int = 20,
     fix_s81_band_precision: bool = False,
     rule_profile: str | RuleProfile = "legacy",
 ) -> SimState:
@@ -758,10 +764,12 @@ def run(
         profile.account_fee_schedule,
         explicit_rates=(buy_cost_rate, sell_cost_rate, min_cost),
     )
+    strategy_name = normalize_csv_strategy(strategy)
     from backtest.research.strategy9_rules import validate_sell_mode
-    validate_sell_mode(normalize_csv_strategy(strategy), version9_sell, max_hold)
-    if max_hold and normalize_csv_strategy(strategy) != "version9":
+    validate_sell_mode(strategy_name, version9_sell, max_hold)
+    if max_hold and strategy_name != "version9":
         raise ValueError("max_hold is supported only by version9")
+    validate_hold_days(strategy_name, hold_days)
     if fix_s81_band_precision and normalize_csv_strategy(strategy) != "version8_1":
         raise ValueError("fix_s81_band_precision is supported only by version8_1")
     if fix_s11_exit_domain:
@@ -892,6 +900,7 @@ def run(
         strategy=strategy,
         **({"version9_sell": version9_sell} if version9_sell is not None else {}),
         **({"max_hold": True} if max_hold else {}),
+        hold_days=hold_days,
         **({"fix_s81_band_precision": True} if fix_s81_band_precision else {}),
         take_profit=take_profit,
         record_params=record_params,
@@ -1011,8 +1020,12 @@ def main(argv: Optional[list] = None) -> int:
         help="version11 EOD exits use independent lake front; raw lake fills/marks (default OFF)",
     )
     args = ap.parse_args(argv if argv is not None else None)
+    try:
+        validate_hold_days(args.strategy, args.hold_days, cli_option=True)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
     pool_dir = resolve_research_pool_dir(args.strategy, args.pool_dir, repo=REPO)
-    book = engine_book(args.strategy)
+    book = engine_book(args.strategy, hold_days=args.hold_days)
     out_dir = resolve_csv_daily_out_dir(
         args.out_dir, book=book, start=args.start, end=args.end
     )
