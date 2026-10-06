@@ -173,8 +173,18 @@ BOOKS: dict[str, CsvStrategyBook] = {}
 
 
 def register(book: CsvStrategyBook) -> None:
-    if book.name in BOOKS:
-        raise ValueError(f"csv strategy {book.name!r} already registered")
+    shared_tokens = set(BOOKS) | set(_alias_map())
+    minute_tokens = set(MINUTE_ONLY_BOOKS)
+    for registered in MINUTE_ONLY_BOOKS.values():
+        minute_tokens.update(registered.aliases)
+    occupied = shared_tokens | minute_tokens
+    for token in (book.name, *book.aliases):
+        if token in occupied:
+            domain = "shared" if token in shared_tokens else "minute-only"
+            raise ValueError(
+                f"cannot register csv strategy {book.name!r}: token {token!r} "
+                f"is already claimed by a {domain} strategy"
+            )
     BOOKS[book.name] = book
 
 
@@ -186,6 +196,11 @@ def _alias_map() -> dict[str, str]:
     out: dict[str, str] = {}
     for book in BOOKS.values():
         for alias in book.aliases:
+            if alias in out and out[alias] != book.name:
+                raise ValueError(
+                    f"csv strategy alias {alias!r} is already claimed by "
+                    f"{out[alias]!r}; cannot also map to {book.name!r}"
+                )
             out[alias] = book.name
     return out
 
