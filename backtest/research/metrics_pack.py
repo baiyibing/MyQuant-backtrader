@@ -20,8 +20,15 @@ def _unavailable(reason):
 def _metric(value):
     value = float(value)
     if not math.isfinite(value):
-        raise ValueError("metric is nonfinite")
+        return _unavailable("computed metric is nonfinite")
     return {"status": "available", "value": value}
+
+
+def _annualised_return(eq, periods_per_year, n):
+    try:
+        return _metric(float(eq.iloc[-1] / eq.iloc[0]) ** (periods_per_year / n) - 1)
+    except OverflowError:
+        return _unavailable("computed metric overflow")
 
 
 def _numbers(values, *, positive=False):
@@ -60,7 +67,6 @@ def compute_metrics_pack(
     eq = nav["equity"]
     returns = eq.pct_change(fill_method=None).iloc[1:]
     n = len(returns)
-    short = _unavailable("fewer than two daily returns")
     pack = {
         "schema": "rb13-v1",
         "periods_per_year": periods_per_year,
@@ -69,11 +75,11 @@ def compute_metrics_pack(
         "daily_returns": [
             {"date": nav.at[i, "date"], "value": float(r)} for i, r in returns.items()
         ],
-        "annualised_return": _metric((eq.iloc[-1] / eq.iloc[0]) ** (periods_per_year / n) - 1)
+        "annualised_return": _annualised_return(eq, periods_per_year, n)
         if n
         else _unavailable("no daily return intervals"),
-        "annualised_volatility": short,
-        "sharpe": short,
+        "annualised_volatility": _unavailable("fewer than two daily returns"),
+        "sharpe": _unavailable("fewer than two daily returns"),
         "benchmark_excess": _unavailable("benchmark not supplied"),
         "beta": _unavailable("benchmark not supplied"),
         "tracking_error": _unavailable("benchmark not supplied"),

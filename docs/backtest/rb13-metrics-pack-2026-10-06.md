@@ -45,11 +45,14 @@ inferred initial account; N observations produce N-1 observed daily returns.
 
 No new drawdown calculation, alpha, attribution, tax decomposition, benchmark
 fetch, position reconstruction for exposure, cashflow-adjusted return, or RB-14+
-metrics. Nonfinite/invalid supplied values fail explicitly. Insufficient samples
+metrics. Nonfinite/invalid supplied values fail explicitly. Computed scalar overflow or
+nonfinite results make only that metric unavailable with a reason. The script
+preserves missing commissions (including partial NaN) as unavailable fee drag;
+commission column matching is case-insensitive. Insufficient samples
 use `{status: unavailable, reason: ...}`; available scalar metrics use
 `{status: available, value: ...}`. Canonical JSON sorts keys, uses UTF-8 without
 BOM, two-space indentation, rejects NaN, and ends with one newline.
 
-Standalone use: `/workspace/venv/bin/python scripts/research/rb13_metrics_pack.py
+Standalone use: `D:\anaconda3\envs\vanna312\python.exe scripts/research/rb13_metrics_pack.py
 --run-dir <existing-run> --out <explicit-json-path>`; optional `--benchmark`
 accepts a local CSV only, and `--risk-free` / `--periods-per-year` record scaling.
