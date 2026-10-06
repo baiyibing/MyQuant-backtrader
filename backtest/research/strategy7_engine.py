@@ -17,6 +17,7 @@ from backtest.research.ashare_fees import DEFAULT_SCHEDULE, FeeSchedule
 from backtest.research.ashare_volume_cap import VolumeCap, VolumeLookup
 from backtest.research.ashare_exdiv_economics import ExDivEconomics, EconomicLookup
 from backtest.research.market_layer import as_date as _as_date, as_datetime as _as_datetime
+from backtest.research.rule_profile import RuleProfile, resolve_rule_profile
 from backtest.research.strategy7_rules import (
     TRIAL, FOUR, SIX, EIGHT, FULL, TRIAL_FRACTION, build_index_gate,
     in_add_window, ladder_decision, stop_decision, timer_due,
@@ -725,8 +726,10 @@ def simulate_native(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, S
                 tail_window_buy: bool = False,
                 tail_volume_unit: str | None = "shares",
                 audit_sink: Any = None,
+                rule_profile: str | RuleProfile = "legacy",
                 ) -> SimResult:
     """Validate/normalize tail options, then translate native v7/APP arguments."""
+    profile = resolve_rule_profile(rule_profile)
     # Reject invalid native tail options before loading main (facade lazy-import contract).
     from backtest.research.tail_window_buy import validate_tail_options, resolve_tail_volume_unit
     validate_tail_options(tail_window_buy, fix_minute_cash_order, tail_volume_unit)
@@ -741,5 +744,8 @@ def simulate_native(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, S
         participation_rate=participation_rate, volume_for_bucket=volume_for_bucket,
         audit_sink=audit_sink, fix_minute_cash_order=fix_minute_cash_order,
         tail_window_buy=tail_window_buy, tail_volume_unit=tail_volume_unit,
-        policy_context=MinutePolicyContext(index_days=index_days, fee_schedule=fee),
+        policy_context=MinutePolicyContext(
+            index_days=index_days, fee_schedule=fee, rule_profile=profile,
+        ),
+        rule_profile=profile,
     )
