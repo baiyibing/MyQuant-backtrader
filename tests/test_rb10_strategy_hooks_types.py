@@ -2,8 +2,8 @@
 
 import ast
 import inspect
-from collections.abc import Mapping
-from typing import Any, get_type_hints, is_typeddict
+from collections.abc import Callable, Mapping
+from typing import Any, is_typeddict
 
 from backtest.research import strategy_hooks_types
 from backtest.research.strategy_hooks_types import StrategyApply, StrategyHooks
@@ -28,13 +28,13 @@ def test_subset_literal_remains_a_plain_mapping():
     assert mapping == {"name": "example", "stop_pct": None}
 
 
-def test_apply_protocol_accepts_plain_dict_return():
-    def apply(**kwargs: Any) -> Mapping[str, Any]:
-        return {"name": kwargs["name"], "legacy_extra": True}
+def test_apply_alias_accepts_named_params_and_plain_dict_return():
+    def apply(name: str, *, budget: float = 1.0) -> Mapping[str, Any]:
+        return {"name": name, "legacy_extra": budget > 0}
 
     callback: StrategyApply = apply
     assert callback(name="example") == {"name": "example", "legacy_extra": True}
-    assert get_type_hints(StrategyApply.__call__)["return"] == Mapping[str, Any]
+    assert StrategyApply == Callable[..., Mapping[str, Any]]
 
 
 def test_leaf_imports_only_standard_library_types_and_no_engines():
