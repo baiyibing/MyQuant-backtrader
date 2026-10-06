@@ -20,22 +20,40 @@ def _lot(node):
     )
 
 
-def _floor_chain(node, lot):
+def _floor_chain(node, lot, is_lot=_lot):
     # Only follow the quantity operand through truncation/rounding wrappers.
     # Do not mistake a division buried in an unrelated call argument for sizing.
     if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Div, ast.FloorDiv)):
-        if ast.dump(node.right) == ast.dump(lot) or _lot(node.right) and _lot(lot):
+        if ast.dump(node.right) == ast.dump(lot) or is_lot(node.right) and is_lot(lot):
             return True
         # Decimal contracts sometimes divide by price * 100.
         if isinstance(node.right, ast.BinOp) and isinstance(node.right.op, ast.Mult):
-            if any(_lot(x) for x in (node.right.left, node.right.right)):
+            if any(is_lot(x) for x in (node.right.left, node.right.right)):
                 return True
-        return _floor_chain(node.left, lot)
+        return _floor_chain(node.left, lot, is_lot)
     if isinstance(node, ast.Call):
-        if isinstance(node.func, ast.Name) and node.func.id in {'int', 'round', 'floor'}:
-            return bool(node.args) and _floor_chain(node.args[0], lot)
-        if isinstance(node.func, ast.Attribute) and node.func.attr == 'to_integral_value':
-            return _floor_chain(node.func.value, lot)
+        if isinstance(node.func, ast.Name) and node.func.id in {'int', 'round', 'floor', 'trunc', 'Decimal'}:
+            return bool(node.args) and _floor_chain(node.args[0], lot, is_lot)
+        if (isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name)
+                and node.func.value.id == 'math' and node.func.attr in {'floor', 'trunc'}):
+            return bool(node.args) and _floor_chain(node.args[0], lot, is_lot)
+        if isinstance(node.func, ast.Attribute) and node.func.attr in {'to_integral_value', 'quantize'}:
+            return _floor_chain(node.func.value, lot, is_lot)
+    return False
+
+
+def _decimal_hundred(node):
+    # Decimal quantize changes the exponent, not the coefficient: only 1E2
+    # (or an equivalent exponent-bearing literal) actually rounds to hundreds.
+    if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+            and node.func.id == 'Decimal' and len(node.args) == 1
+            and isinstance(node.args[0], ast.Constant)):
+        from decimal import Decimal, InvalidOperation
+        try:
+            value = Decimal(str(node.args[0].value))
+            return value.is_finite() and value.as_tuple().exponent == 2
+        except InvalidOperation:
+            return False
     return False
 
 
@@ -46,11 +64,27 @@ def scan_source(source, relative_file):
     class Visitor(ast.NodeVisitor):
         def __init__(self):
             self.scope = []
+            self.lot_aliases = [set()]
+
+        def is_lot(self, node):
+            return _lot(node) or (isinstance(node, ast.Name)
+                                 and node.id in self.lot_aliases[-1])
 
         def scoped(self, node):
             self.scope.append(node.name)
+            # Conservative local aliases: every assignment must be literal 100.
+            assignments = {}
+            for statement in node.body:
+                if isinstance(statement, (ast.Assign, ast.AnnAssign)):
+                    targets = statement.targets if isinstance(statement, ast.Assign) else [statement.target]
+                    for target in targets:
+                        if isinstance(target, ast.Name):
+                            assignments.setdefault(target.id, []).append(statement.value)
+            self.lot_aliases.append({name for name, values in assignments.items()
+                                     if all(_lot(value) for value in values)})
             self.generic_visit(node)
             self.scope.pop()
+            self.lot_aliases.pop()
 
         visit_ClassDef = scoped
         visit_FunctionDef = scoped
@@ -62,25 +96,62 @@ def scan_source(source, relative_file):
         def visit_BinOp(self, node):
             if isinstance(node.op, ast.Mult):
                 for lot, quantity in ((node.right, node.left), (node.left, node.right)):
-                    if _lot(lot) and _floor_chain(quantity, lot):
+                    if self.is_lot(lot) and _floor_chain(quantity, lot, self.is_lot):
                         self.record(node)
+            if (isinstance(node.op, ast.Sub) and isinstance(node.right, ast.BinOp)
+                    and isinstance(node.right.op, ast.Mod) and self.is_lot(node.right.right)
+                    and ast.dump(node.left) == ast.dump(node.right.left)):
+                self.record(node)
+            self.generic_visit(node)
+
+        def visit_Call(self, node):
+            if isinstance(node.func, ast.Name) and node.func.id == 'bool' and node.args:
+                self.truth_test(node.args[0])
+            if (isinstance(node.func, ast.Name) and node.func.id == 'divmod'
+                    and len(node.args) == 2 and self.is_lot(node.args[1])):
+                self.record(node)
+            if (isinstance(node.func, ast.Attribute) and node.func.attr == 'quantize'
+                    and node.args and _decimal_hundred(node.args[0])):
+                self.record(node)
             self.generic_visit(node)
 
         def visit_Compare(self, node):
             operands = [node.left, *node.comparators]
             for left, op, right in zip(operands, node.ops, operands[1:]):
-                if isinstance(op, ast.Eq):
+                if isinstance(op, (ast.Eq, ast.NotEq)):
                     for mod, zero in ((left, right), (right, left)):
                         if (isinstance(mod, ast.BinOp) and isinstance(mod.op, ast.Mod)
-                                and _lot(mod.right) and isinstance(zero, ast.Constant)
+                                and self.is_lot(mod.right) and isinstance(zero, ast.Constant)
                                 and zero.value == 0):
                             self.record(node)
             self.generic_visit(node)
 
+        def truth_test(self, node):
+            if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Mod) and self.is_lot(node.right):
+                self.record(node)
+            elif isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
+                self.truth_test(node.operand)
+            elif isinstance(node, ast.BoolOp):
+                for value in node.values:
+                    self.truth_test(value)
+
         def visit_If(self, node):
-            # L2's typed-lot divisibility contracts use truthy remainders.
-            if isinstance(node.test, ast.BinOp) and isinstance(node.test.op, ast.Mod) and _lot(node.test.right):
-                self.record(node.test)
+            self.truth_test(node.test)
+            self.generic_visit(node)
+
+        visit_While = visit_If
+        visit_IfExp = visit_If
+
+        def visit_BoolOp(self, node):
+            self.truth_test(node)
+            self.generic_visit(node)
+
+        def visit_UnaryOp(self, node):
+            self.truth_test(node)
+            self.generic_visit(node)
+
+        def visit_Assert(self, node):
+            self.truth_test(node.test)
             self.generic_visit(node)
 
     Visitor().visit(ast.parse(source))
@@ -152,6 +223,12 @@ def test_allowlist_has_no_stale_entries():
     'x//100*100', 'x // 100.0 * 100.0', 'int(x / 100) * 100',
     'int(x / 100.0) * 100', 'int(x // 100) * 100',
     'x // 10 // 100 * 100', 'int(round(x * fraction, 8)) // 100 * 100',
+    'x - x % 100', 'x % 100 != 0', '100 * (x // 100)',
+    'math.floor(x / 100) * 100', 'floor(x / 100) * 100',
+    'math.trunc(x / 100) * 100', 'trunc(x / 100) * 100',
+    'Decimal(x / 100).to_integral_value(rounding=ROUND_FLOOR) * 100',
+    'Decimal(x / 100).quantize(Decimal("1")) * 100',
+    'Decimal(x).quantize(Decimal("1E2"))', 'divmod(x, 100)',
     'round(x // 100) * 100', 'q % 100 == 0', '100 * int(x / 100)',
 ])
 def test_injected_sizing_is_rejected(expr):
@@ -207,9 +284,9 @@ def test_migrated_call_site_uses_imported_helper(site, expected):
 
 
 @pytest.mark.parametrize('name', csv_strategy_names())
-def test_registered_books_are_scanned_without_a_version_allowlist(name):
-    # No book-name filter participates in discovery or expression matching.
-    # Exercise the same detector for every registered name, including TopK.
+def test_synthetic_book_names_do_not_filter_detector(name):
+    # Synthetic detector inputs only; real file coverage is repository_hits()
+    # over SCAN_ROOTS, independent of registered book names.
     relative = f'backtest/research/nested/{name}_rules.py'
     hits = scan_source('def size(x):\n    return x // 100 * 100\n', relative)
     assert hits == {(relative, 'size', 'x // 100 * 100')}
@@ -237,13 +314,17 @@ def test_registered_version6_books_have_current_baseline_owner(name):
         assert case and canonical, f'{name}/{engine}: missing current baseline owner'
 
 
-def test_lot_rounding_is_pure():
-    tree = ast.parse((ROOT / HELPER).read_text(encoding='utf-8'))
+def assert_pure_helper(source):
+    tree = ast.parse(source)
     for node in ast.walk(tree):
         if isinstance(node, (ast.Import, ast.ImportFrom)):
             modules = [alias.name for alias in node.names] if isinstance(node, ast.Import) else [node.module]
             assert all(module in {'decimal', 'typing', '__future__'} for module in modules)
         assert not isinstance(node, (ast.Global, ast.Nonlocal, ast.With, ast.AsyncWith))
+        assert not isinstance(node, (ast.For, ast.AsyncFor, ast.While, ast.Try,
+                                     ast.TryStar, ast.Lambda, ast.ListComp, ast.SetComp,
+                                     ast.DictComp, ast.GeneratorExp, ast.Attribute))
+        # If is permitted for early arithmetic guards; current bodies have none.
         if isinstance(node, ast.Call):
             # Positive arithmetic-only call vocabulary excludes I/O, dynamic
             # imports, attribute mutation and hidden external function calls.
@@ -257,3 +338,48 @@ def test_lot_rounding_is_pure():
             assert type(node.value.value) in (int, float, str, bool, type(None))
         else:
             assert isinstance(node, (ast.FunctionDef, ast.Import, ast.ImportFrom))
+
+
+def test_lot_rounding_is_pure():
+    assert_pure_helper((ROOT / HELPER).read_text(encoding='utf-8'))
+
+
+@pytest.mark.parametrize('statement', [
+    'if x % 100: return 0', 'if not x % 100: return 0',
+    'while x % 100: break', 'assert x % 100',
+    'return 1 if x % 100 else 0', 'return x % 100 and valid',
+    'lot = 100; return x - x % lot',
+    'return bool(x % 100)', 'return not (x % 100)',
+])
+def test_synthetic_remainder_validity_and_literal_lot_alias_are_rejected(statement):
+    hits = scan_source(f'def buy(x):\n    {statement}\n', 'new.py')
+    assert hits
+    with pytest.raises(AssertionError, match='Ad-hoc board-lot'):
+        assert_allowed(hits)
+
+
+@pytest.mark.parametrize('expr', [
+    'round(price, 2)', 'math.floor(price * 100) / 100',
+    'math.trunc(price * 100) / 100', 'x / 100', 'shares < 100',
+    'Decimal(price).quantize(Decimal("0.01"))',
+    'Decimal(price).to_integral_value()', 'divmod(cents, 10)',
+    'price - price % 0.01', 'x % 7 != 0',
+    'Decimal(price).quantize(Decimal("100"))',
+])
+def test_synthetic_non_sizing_lookalikes_are_not_flagged(expr):
+    assert not scan_source(f'result = {expr}\n', 'new.py')
+
+
+@pytest.mark.parametrize('body', [
+    'for x in (): pass', 'while False: pass', 'try:\n        pass\n    except: pass',
+    'return lambda: 1', 'return [x for x in ()]', 'return {x for x in ()}',
+    'return {x: x for x in ()}', 'return (x for x in ())',
+    'return x.attribute', 'return Decimal(x).to_integral_value()', 'return open(x)',
+])
+def test_synthetic_impure_helper_bodies_are_rejected(body):
+    with pytest.raises(AssertionError):
+        assert_pure_helper(f'def helper(x):\n    {body}\n')
+
+
+def test_purity_allows_arithmetic_if_guard():
+    assert_pure_helper('def helper(x):\n    if x < 0: return 0\n    return int(x)\n')

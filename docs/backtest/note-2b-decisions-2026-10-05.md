@@ -103,7 +103,7 @@ Golden ownership 以 `scripts/research/generate_off_byte_baseline.py` 为准：�
 
 ### B8. Lot rounding 多处各有选项
 
-`csv_ledger.py:473` 的 `_buy_size` 含 top-up，STAR integer / 200 下限见 :478/:556–558；override :552 整百。host 含费递减、无 top-up。其他取整：`strategy9_1_rules.py:45`、`strategy9_2_engine.py:54`、`strategy12_rules.py:222`、`ashare_volume_cap.py:84`、`tail_window_buy.py:58/102`。数量分片、容量取整、风险定仓不能混成同一种金额预算。**Deferred：** 一个 lot-rounding 函数，各调用保留当前选项和浮点顺序，zero diff；若以后改选项，另裁并新增所属 historical / V91 / V92 / S12 overlay。
+`csv_ledger.py:473` 的 `_buy_size` 含 top-up，STAR integer / 200 下限见 :478/:556–558；override :552 整百。host 含费递减、无 top-up。其他取整：`strategy9_1_rules.py:45`、`strategy9_2_engine.py:54`、`strategy12_rules.py:222`、`ashare_volume_cap.py:84`、`tail_window_buy.py:58/102`。数量分片、容量取整、风险定仓不能混成同一种金额预算。**原裁定（2026-10-05，已于 2026-10-06 实施）：** 一个 lot-rounding 函数，各调用保留当前选项和浮点顺序，zero diff；若以后改选项，另裁并新增所属 historical / V91 / V92 / S12 overlay。
 
 2026-10-06 07:31 Human GO：H-B8-01..12 全部 A。已实施 `backtest/research/lot_rounding.py` 显式 profile helper（#405 ledger/loop，#406 minute/tail/9_1/9_2/12/v7/modea），并加 `tests/test_b8_lot_rounding_guard.py`；结果、fixtures、baselines 逐字节不变，规则统一（STAR 扩围、补量、含费、零股、clip、佣金、cap/cash 顺序、预检 STAR）均未实施。详见 [B8 实施说明](note-b8-lot-rounding-2026-10-06.md)。
 

@@ -21,7 +21,21 @@
 
 ## Guard（H-B8-10）
 
-AST 扫描 `backtest/research/**`，helper 之外出现整百 floor / `% 100` 手数校验即失败；allowlist 条目失效也失败；锁定已迁移调用点必须调用对应 helper；扫描按文件而非书名，6.45–6.47 及以后的 6_* 自动覆盖；`lot_rounding.py` 只允许纯算术。
+`SCAN_ROOTS` 精确为 `backtest/research` 和 `strategies`；递归读取两树内所有 `.py`，仅排除 `backtest/research/lot_rounding.py`。真实文件覆盖来自 `repository_hits()`，不按注册书名过滤；每书名合成测试只验证 detector 不按名称过滤，不代表读取真实书文件。未来文件发现另有临时目录合成测试。
+
+检测的 AST 形状（lot 为数值字面量 `100` / `100.0`、`lot_size` / 属性 `.lot_size`，或当前函数/类直接赋值且各次均为 literal 100 的局部别名）：
+
+- 两侧任一侧为 lot 的乘法，另一侧沿 `/`、`//` 左操作数链或 `int` / `round` / `floor` / `trunc` / `Decimal`、`math.floor` / `math.trunc`、`.to_integral_value` / `.quantize` 包装追踪到除 lot（也包括分母 `price * lot`）。覆盖 `x // 100 * 100`、`100 * (x // 100)`、`floor(x / 100) * 100`、`Decimal(x / 100).to_integral_value(...) * 100`、除 lot 后 quantize 再乘回。
+- 同一 AST 操作数的余数扣除 `x - x % lot`。
+- `% lot == 0` / `% lot != 0`（含零在左侧）；`if` / `while` / 条件表达式 / `assert`、`bool(...)`、`not`、布尔组合中的余数真值检查。
+- `divmod(x, lot)`。
+- `.quantize(Decimal("1E2"))` 等 Decimal 字面量 exponent=2 的直接百位量化。`Decimal("100")` 的 exponent=0，不按百位量化处理。
+
+单独 `x / 100`、`shares < 100`、价格分位 round / quantize、`floor(price * 100) / 100` 等有非 sizing 合成测试。此 guard 是 **best-effort AST pattern guard，不是证明**：不做类型/数据流分析，不展开任意别名、包装函数或跨语句运算；同形状的非 sizing 表达式仍可能命中，应逐条审计并给出诚实理由。allowlist 精确锁定 文件 + 函数 + canonical expression，条目失效也失败。已迁移调用点测试仅检查对应 helper import/call 和局部 rebinding，不证明参数、运算顺序或零差异。
+
+Purity 测试的静态范围：helper 全 AST 限制 import 为 `decimal` / `typing` / `__future__`，call 为裸名 `int` / `float` / `str` / `max` / `round` / `Decimal`；禁止 `global` / `nonlocal` / `with`、`For`（含 async）/ `While` / `Try`（含 TryStar）/ `Lambda` / 所有 comprehension 及一切属性访问（Decimal 构造结果的方法也禁止）。模块顶层仅允许 docstring、常量赋值、函数定义和 import。允许 `If` 算术早返 guard（不分析其用途）；当前 helper 函数体无 `if`。这是语法约束，不是完整无副作用证明。
+
+本次扩展重扫：10 个 hits，均为既有 allowlist；新增 allowlist 0，新增未迁移 sizing 0。
 
 ## 验收（对照 `.github/workflows/python-tests.yml` 的 pytest-and-gates）
 
