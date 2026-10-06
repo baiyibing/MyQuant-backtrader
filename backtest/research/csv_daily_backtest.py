@@ -92,6 +92,10 @@ from backtest.research.csv_ledger import (  # noqa: E402
     resolve_limit_prices,
 )
 from backtest.research.ashare_exdiv_economics import EconomicLookup, ExDivEconomics  # noqa: E402
+from backtest.research.rule_profile import (  # noqa: E402
+    RuleProfile,
+    resolve_rule_profile,
+)
 
 from backtest.research.exdiv_map import (  # noqa: E402
     k_for,
@@ -177,7 +181,8 @@ HELP_LOCK = """
         否则日内 low 触价 → 触发价成交。
   跌停禁卖：任何卖因在成交前若开盘或成交价跌停 → 不成交、顺延（含 trail /
         profit_take / force / ma_signal / open_board / pending）。
-  档位：主板 10% / 创科 20%（含 302、689）/ 北交 30%；名单第二列 ST/*ST=5%。
+  档位：主板 10% / 创科 20%（含 302、689）/ 北交 30%；主板 ST/*ST：
+        2026-07-06 前 5%，当日起 10%；创科/BJ ST 随板块档位。
         未知板块且无 ST 名 → skip_unknown_board，不交易。
   止盈 / 峰值：见下方对应策略书。峰值从 T+1 起用当日 high 更新；T+0 固定为买入价。
         v8：T+1 只评止损不评止盈；日线收盘评估、次日开盘离场（隔夜间隔已 ≥ 15 分钟）。
@@ -250,6 +255,7 @@ def simulate(
     max_hold: bool = False,
     fix_s81_band_precision: bool = False,
     signal_bars_front: dict[str, pd.DataFrame] | None = None,
+    rule_profile: str | RuleProfile = "legacy",
 ) -> SimState:
     """核心日循环。bars/pool_days 可由测试注入；run() 负责从湖与 CSV 加载。
 
@@ -257,6 +263,7 @@ def simulate(
     exdiv_economics 显式接收 (engine_symbol, YYYYMMDD) -> ExDivEvent；
     默认 None 保留原行为，事件配合 raw bars 使用，不从 exdiv 的 k 推断权益。
     """
+    profile = resolve_rule_profile(rule_profile)
     from backtest.research.strategy9_rules import validate_sell_mode
     validate_sell_mode(normalize_csv_strategy(strategy), version9_sell, max_hold)
     if max_hold and normalize_csv_strategy(strategy) != "version9":
@@ -684,6 +691,13 @@ def simulate(
         )
 
     finish_pending_chase(st, pending_chase)
+    if profile.s12_domain_stamp and normalize_csv_strategy(strategy) == "version12":
+        st.stats["valuation_price_domain"] = "front"
+    if profile.name == "industry":
+        st.stats.pop("rule_profile", None)
+        st.stats.pop("rule_profile_revision", None)
+        st.stats["rule_profile"] = profile.name
+        st.stats["rule_profile_revision"] = profile.revision
     return st
 
 
@@ -727,7 +741,9 @@ def run(
     version9_sell=None,
     max_hold: bool = False,
     fix_s81_band_precision: bool = False,
+    rule_profile: str | RuleProfile = "legacy",
 ) -> SimState:
+    profile = resolve_rule_profile(rule_profile)
     from backtest.research.strategy9_rules import validate_sell_mode
     validate_sell_mode(normalize_csv_strategy(strategy), version9_sell, max_hold)
     if max_hold and normalize_csv_strategy(strategy) != "version9":
@@ -882,6 +898,7 @@ def run(
         min_cost=min_cost,
         index_block_new=index_block_new,
         stop_fill=stop_fill,
+        rule_profile=profile,
     )
     if skipped.get("exdiv_skipped_no_factor"):
         st.stats["exdiv_skipped_no_factor"] = int(skipped["exdiv_skipped_no_factor"])
@@ -900,6 +917,11 @@ def run(
             daily_source="qlib_day" if use_qlib_bins else "lake",
             exdiv=exdiv, source_metadata=signal_sources, raw_bars=bars,
         )}
+    if profile.name == "industry":
+        st.stats.pop("rule_profile", None)
+        st.stats.pop("rule_profile_revision", None)
+        st.stats["rule_profile"] = profile.name
+        st.stats["rule_profile_revision"] = profile.revision
     return st
 
 

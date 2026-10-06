@@ -30,6 +30,7 @@ from backtest.research.participation_rate_precheck import (
     precheck_cli_participation_rate,
     precheck_completed_bucket_samples,
 )
+from backtest.research.rule_profile import RuleProfile, resolve_rule_profile
 from backtest.research.market_layer import (
     as_date as _as_date,
     as_datetime as _as_datetime,
@@ -107,6 +108,7 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
                 tail_window_buy: bool = False,
                 tail_volume_unit: str | None = "shares",
                 audit_sink: Any = None,
+                rule_profile: str | RuleProfile = "legacy",
                 **unsupported_options) -> SimResult:
     """Forward native arguments; the adapter validates/normalizes tail options before main.
 
@@ -118,6 +120,7 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
     unioned with pool dates, matching the records-path calendar contract.
     Dates absent from all frames and pools are not backfilled, as with records.
     """
+    profile = resolve_rule_profile(rule_profile)
     from backtest.research.csv_ledger import reject_short_cash_override
     reject_short_cash_override(unsupported_options, "v7 simulate")
     if unsupported_options:
@@ -130,6 +133,7 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
         participation_rate=participation_rate, volume_for_bucket=volume_for_bucket,
         audit_sink=audit_sink, fix_minute_cash_order=fix_minute_cash_order,
         tail_window_buy=tail_window_buy, tail_volume_unit=tail_volume_unit,
+        rule_profile=profile,
     )
 
 
@@ -281,6 +285,11 @@ def build_parser() -> argparse.ArgumentParser:
                         help="lake minute volume unit (default shares); lots multiplies volume by 100")
     parser.add_argument("--execution-audit-file", help="optional execution JSON sidecar; leaves CSVs unchanged")
     parser.add_argument("--cash-total", type=float, default=21_000_000.0)
+    parser.add_argument(
+        "--rule-profile",
+        choices=("legacy", "industry"),
+        default="legacy",
+    )
     parser.add_argument("--output-dir")
     parser.add_argument("--minute-source", choices=("lake", "qlib_1min"), default="lake")
     parser.add_argument("--daily-source", choices=("lake", "qlib_day"), default="lake")
@@ -384,6 +393,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                         fix_minute_cash_order=args.fix_minute_cash_order,
                         tail_window_buy=args.tail_window_buy,
                         tail_volume_unit=args.tail_volume_unit, audit_sink=audit,
+                        rule_profile=args.rule_profile,
                         **volume_options)
     sim_s = time.perf_counter() - sim_t0
     output = Path(args.output_dir or f"backtest_output/csv_minute_v7_{args.start}_{args.end}")
@@ -396,6 +406,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         "fallback_order_clock": "exact_quote_only_no_chase",
         "stable_order": "pool_then_opening_held_then_input_symbols",
     }
+    if args.rule_profile == "legacy":
+        config.pop("rule_profile", None)
     if not args.tail_window_buy:
         config.pop("tail_window_buy", None)
         config.pop("tail_volume_unit", None)

@@ -382,6 +382,9 @@ def write_run_artifacts(
 
         if manifest_config is None:
             raise ValueError("emit_run_manifest requires resolved manifest_config")
+        manifest_config = dict(manifest_config)
+        manifest_config.pop("rule_profile", None)
+        manifest_config.pop("rule_profile_revision", None)
         metadata_paths = []
         if metadata := getattr(st, "run_metadata", None):
             metadata_path = out_dir / "run-metadata.json"

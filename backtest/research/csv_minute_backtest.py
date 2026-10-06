@@ -86,6 +86,10 @@ from backtest.research.csv_common import (  # noqa: E402
 from backtest.research.minute_engine_policies import (  # noqa: E402
     MinutePolicyContext, minute_policy_for,
 )
+from backtest.research.rule_profile import (  # noqa: E402
+    RuleProfile,
+    resolve_rule_profile,
+)
 
 from backtest.research.csv_pool import (  # noqa: E402
     load_pool_day_map,
@@ -671,15 +675,24 @@ def simulate(
     limit_walkdown: bool = False,
     topk_limit_rule: str = "qlib",
     policy_context: MinutePolicyContext | None = None,
+    rule_profile: str | RuleProfile = "legacy",
 ) -> SimState:
     """Opt-in cap uses caller-attested completed minutes; daily volume is unused.
 
     exdiv_economics is an explicit (symbol, YYYYMMDD) -> ExDivEvent lookup for
     raw bars. None retains the baseline; E-R6 ratios never imply entitlements.
     """
+    profile = resolve_rule_profile(rule_profile)
     book = get_minute_book(strategy)
     native_v7 = book.name == "version7"
     if native_v7:
+        context = policy_context or MinutePolicyContext()
+        policy_context = MinutePolicyContext(
+            index_days=context.index_days,
+            fee_schedule=context.fee_schedule,
+            native_inputs=context.native_inputs,
+            rule_profile=profile,
+        )
         if fill_config is not None:
             raise ValueError("version7 does not accept FillConfig overrides")
         validate_tail_options(tail_window_buy, fix_minute_cash_order, tail_volume_unit)
@@ -1334,6 +1347,15 @@ def simulate(
             )
 
     if native_v7:
+        if profile.name == "industry":
+            stats = getattr(st, "stats", None)
+            if stats is None:
+                stats = {}
+                st.stats = stats
+            stats.pop("rule_profile", None)
+            stats.pop("rule_profile_revision", None)
+            stats["rule_profile"] = profile.name
+            stats["rule_profile_revision"] = profile.revision
         return st
 
     finish_pending_sells(st)
@@ -1345,6 +1367,13 @@ def simulate(
             economics_enabled=exdiv_economics is not None,
             total_return_complete=False,
         )
+    if profile.s12_domain_stamp and normalize_csv_strategy(strategy) == "version12":
+        st.stats["valuation_price_domain"] = "none" if fix_s12_price_domain else "front"
+    if profile.name == "industry":
+        st.stats.pop("rule_profile", None)
+        st.stats.pop("rule_profile_revision", None)
+        st.stats["rule_profile"] = profile.name
+        st.stats["rule_profile_revision"] = profile.revision
     return st
 
 
@@ -1405,7 +1434,9 @@ def run(
     limit_walkdown: bool = False,
     topk_limit_rule: str = "qlib",
     participation_rate: float | None = None,
+    rule_profile: str | RuleProfile = "legacy",
 ) -> SimState:
+    profile = resolve_rule_profile(rule_profile)
     validate_minute_entry(strategy, stage="sell", version9_sell=version9_sell, max_hold=max_hold)
     # P2-B shell precheck (adapter surface on run facade; not simulate / VolumeCap).
     # participation_rate=None → no-op (byte-identical old arm). ≠δ5 certified ≠R4.
@@ -1679,6 +1710,7 @@ def run(
         fill_config=fill_config,
         topk_exec=topk_exec, limit_walkdown=limit_walkdown,
         topk_limit_rule=topk_limit_rule,
+        rule_profile=profile,
     )
     if skipped.get("exdiv_skipped_no_factor"):
         st.stats["exdiv_skipped_no_factor"] = int(skipped["exdiv_skipped_no_factor"])
@@ -1738,6 +1770,11 @@ def run(
         if daily_source == "qlib_day":
             metadata["mark_domain"] = "qlib_adjusted"
         st.run_metadata = {**getattr(st, "run_metadata", {}), "s11_exit_domain": metadata}
+    if profile.name == "industry":
+        st.stats.pop("rule_profile", None)
+        st.stats.pop("rule_profile_revision", None)
+        st.stats["rule_profile"] = profile.name
+        st.stats["rule_profile_revision"] = profile.revision
     return st
 
 
