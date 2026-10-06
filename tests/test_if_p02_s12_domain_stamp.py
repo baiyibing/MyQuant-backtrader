@@ -14,6 +14,7 @@ PROFILE_STATS = {
     "buy_cost_rate",
     "sell_cost_rate",
     "min_cost",
+    "stamp_duty_total",
 }
 
 

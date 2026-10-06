@@ -22,6 +22,8 @@ from scripts.research.generate_off_byte_baseline import (
     HISTORICAL_GOLDEN_SHA256,
     P03_CASES,
     P03_GOLDEN,
+    P04_CASES,
+    P04_GOLDEN,
     S9_CASES,
     load_s9_golden,
     S12_CASES,
@@ -46,6 +48,7 @@ from scripts.research.generate_off_byte_baseline import (
     expected_case,
     load_canonical_golden,
     load_p03_golden,
+    load_p04_golden,
     load_s8_golden,
     load_v61_golden,
     load_v91_golden,
@@ -226,18 +229,30 @@ def test_version9_overlay_only_replaces_range_stop_cases():
                    for t in sells if t["reason"].startswith("stop_loss"))
 
 
-def test_industry_p03_overlay_is_opt_in_and_legacy_goldens_stay_frozen(tmp_path):
+def test_industry_p03_overlay_stays_immutable_after_later_profile_slices():
     assert sha256(GOLDEN.read_bytes()).hexdigest() == HISTORICAL_GOLDEN_SHA256
     assert sha256(CANONICAL_GOLDEN.read_bytes()).hexdigest() == HISTORICAL_CANONICAL_SHA256
     golden = load_p03_golden()
     assert P03_GOLDEN.exists()
     assert set(golden["cases"]) == {f"{book}/{engine}" for book, engine in P03_CASES}
     assert golden["captured_environment"]["pandas"] == "3.0.6"
+    for case in golden["cases"].values():
+        assert case["fill_counts"]["BUY"] > 0
+        assert case["fill_counts"]["SELL"] > 0
 
-    for book, engine in P03_CASES:
+
+def test_industry_p04_overlay_is_active_and_legacy_goldens_stay_frozen(tmp_path):
+    assert sha256(GOLDEN.read_bytes()).hexdigest() == HISTORICAL_GOLDEN_SHA256
+    assert sha256(CANONICAL_GOLDEN.read_bytes()).hexdigest() == HISTORICAL_CANONICAL_SHA256
+    golden = load_p04_golden()
+    assert P04_GOLDEN.exists()
+    assert set(golden["cases"]) == {f"{book}/{engine}" for book, engine in P04_CASES}
+    assert golden["captured_environment"]["pandas"] == "3.0.6"
+
+    for book, engine in P04_CASES:
         industry = capture_case(
             book, engine, tmp_path / "industry" / book / engine,
-            rule_profile="industry", fixture="p03",
+            rule_profile="industry", fixture="p04",
         )
         expected, canonical, recorded = expected_case(
             book, engine, rule_profile="industry"
@@ -251,17 +266,18 @@ def test_industry_p03_overlay_is_opt_in_and_legacy_goldens_stay_frozen(tmp_path)
 
         legacy = capture_case(
             book, engine, tmp_path / "legacy" / book / engine,
-            rule_profile="legacy", fixture="p03",
+            rule_profile="legacy", fixture="p04",
         )
         assert legacy["structured"] != industry["structured"]
         assert legacy["sha256_csv_bytes"] != industry["sha256_csv_bytes"]
 
     s8_sells = [
         row
-        for row in golden["cases"]["version8/s8-group"]["structured"]["fills"]
+        for row in golden["cases"]["version8/s8-group-post-cutover"]["structured"]["fills"]
         if row["side"] == "SELL"
     ]
     assert [row["commission"] for row in s8_sells] == [2.5, 2.5]
+    assert [row["stamp_duty"] for row in s8_sells] == [0.5, 0.5]
 
 
 @pytest.mark.parametrize("explicit_false", [False, True], ids=["omitted", "explicit-off"])

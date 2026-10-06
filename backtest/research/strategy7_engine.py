@@ -17,6 +17,7 @@ from backtest.research.ashare_fees import DEFAULT_SCHEDULE, FeeSchedule
 from backtest.research.csv_ledger import (
     _accrue_order_fee,
     fee_order_id,
+    preview_order_fees,
     release_fee_order,
 )
 from backtest.research.ashare_volume_cap import VolumeCap, VolumeLookup
@@ -201,6 +202,14 @@ def _event(state: SimResult, day: date, symbol: str, hm: int | None, side: str, 
            order_id=None) -> None:
     trade = {"date": day.isoformat(), "symbol": symbol, "hm": hm, "side": side,
              "shares": shares, "price": price, "reason": reason}
+    if getattr(
+        getattr(state, "account_fee_schedule", None), "dated_sell_stamp_duty", False
+    ):
+        trade.update(
+            notional=shares * price if price is not None else 0.0,
+            commission=0.0,
+            stamp_duty=0.0,
+        )
     if order_id is not None and price is not None:
         trade.update(notional=shares * price, commission=0.0)
     state.trades.append(trade)
@@ -212,8 +221,14 @@ def _event(state: SimResult, day: date, symbol: str, hm: int | None, side: str, 
             commission = cash_before - state.cash - shares * price
         elif side == "sell":
             commission = shares * price - (state.cash - cash_before)
-    record_fill(state, {**state.trades[-1], "commission": commission},
-                state.cash if cash_before is None else cash_before)
+    audit_trade = (
+        state.trades[-1]
+        if order_id is not None
+        else {**state.trades[-1], "commission": commission}
+    )
+    record_fill(
+        state, audit_trade, state.cash if cash_before is None else cash_before
+    )
 
 
 def _buy(state: SimResult, position: Position | None, symbol: str, day: date, hm: int,
@@ -293,9 +308,9 @@ def _sell_lots(state: SimResult, position: Position, day: date, hm: int, price: 
     if order_id is None:
         state.cash += fee.credit_sell(sold * price)
     else:
-        fee_delta = state._fee_accumulators["SELL"].preview(
-            order_id, sold * price
-        ).fee_delta
+        fee_delta = preview_order_fees(
+            state, "SELL", order_id, sold * price, day
+        )
         state.cash += sold * price - fee_delta
     _event(
         state, day, position.symbol, hm, "sell", sold, price, reason,

@@ -206,7 +206,12 @@ def write_run_artifacts(state: SimResult, output_dir: Path) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / "summary.txt").write_text(summarize_v7(state), encoding="utf-8")
     trade_fields = ("date", "symbol", "hm", "side", "shares", "price", "reason")
-    if any("commission" in row for row in state.trades):
+    if any("stamp_duty" in row for row in state.trades):
+        trade_fields = (
+            "date", "symbol", "hm", "side", "shares", "price",
+            "notional", "commission", "stamp_duty", "reason",
+        )
+    elif any("commission" in row for row in state.trades):
         trade_fields = (
             "date", "symbol", "hm", "side", "shares", "price",
             "notional", "commission", "reason",

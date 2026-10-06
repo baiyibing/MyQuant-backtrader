@@ -215,7 +215,10 @@ def run_arms(args, pool, scores, bars, daily, samples):
                          "final_equity": equity, "return_pct": (equity / args.cash_total - 1) * 100,
                          "buy_shares": sum(row["shares"] for row in fills if row["side"] == "BUY"),
                          "sell_shares": sum(row["shares"] for row in fills if row["side"] == "SELL"),
-                         "fees": sum(row["commission"] for row in fills),
+                         "fees": sum(
+                             row["commission"] + row.get("stamp_duty", 0.0)
+                             for row in fills
+                         ),
                          "skip_volume_unavailable": state.stats.get("skip_volume_unavailable", 0)}
     return result
 

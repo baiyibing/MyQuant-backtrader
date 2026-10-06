@@ -28,7 +28,7 @@ from backtest.research.ashare_exdiv_economics import ExDivEconomics
 from backtest.research.book_capabilities import uses_s8_independent as _uses_s8_independent
 from backtest.research.market_layer import _digit_prefix, limit_prices
 from backtest.research.minute_audit import record_fill, record_rejection
-from backtest.research.ledger_math import FeeAccumulator
+from backtest.research.ledger_math import FeeAccumulator, StampDutyAccumulator
 from backtest.research.lot_rounding import (
     BOARD_LOT,
     STAR_MIN_DECLARE,
@@ -418,12 +418,20 @@ def bind_account_fee_schedule(st, schedule: FeeSchedule) -> None:
         "BUY": FeeAccumulator(schedule.buy_rate, schedule.min_cost),
         "SELL": FeeAccumulator(schedule.sell_rate, schedule.min_cost),
     }
+    st._stamp_duty_accumulator = (
+        StampDutyAccumulator() if schedule.dated_sell_stamp_duty else None
+    )
+    st._fee_totals = {"commission": 0.0, "stamp_duty": 0.0}
     st._fee_order_rows = {}
     st._fee_order_keys = {}
     st._fee_order_seq = 0
     st.buy_cost_rate = schedule.buy_rate
     st.sell_cost_rate = schedule.sell_rate
     st.min_cost = schedule.min_cost
+    if not hasattr(st, "stats"):
+        st.stats = {}
+    if schedule.dated_sell_stamp_duty:
+        st.stats["stamp_duty_total"] = 0.0
 
 
 def fee_order_id(st, key=None):
@@ -444,15 +452,43 @@ def release_fee_order(st, key) -> None:
         st._fee_order_keys.pop(key, None)
 
 
+def preview_order_fees(st, side: str, order_id, notional: float, trade_date=None) -> float:
+    """Preview the total fee delta for one order fill without mutating state."""
+    commission = st._fee_accumulators[side].preview(order_id, notional).fee_delta
+    stamp_duty = 0.0
+    if side == "SELL" and st._stamp_duty_accumulator is not None:
+        if trade_date is None:
+            raise ValueError("sell stamp duty requires a trade date")
+        stamp_duty = st._stamp_duty_accumulator.preview(
+            order_id, notional, trade_date
+        ).fee_delta
+    return commission + stamp_duty
+
+
 def _accrue_order_fee(st, side: str, order_id, row: dict) -> float:
-    """Book one fill and rewrite all rows to the order's proportional allocation."""
+    """Book one fill and rewrite per-order commission and stamp allocations."""
     accumulator = st._fee_accumulators[side]
     rows = st._fee_order_rows.setdefault(order_id, [])
     rows.append(row)
     accrual = accumulator.add_fill(order_id, row["notional"])
     for fill, commission in zip(rows, accrual.allocations):
         fill["commission"] = commission
-    return accrual.fee_delta
+    stamp_delta = 0.0
+    if side == "SELL" and st._stamp_duty_accumulator is not None:
+        stamp = st._stamp_duty_accumulator.add_fill(
+            order_id, row["notional"], row["date"]
+        )
+        for fill, amount in zip(rows, stamp.allocations):
+            fill["stamp_duty"] = amount
+        stamp_delta = stamp.fee_delta
+    elif st.account_fee_schedule.dated_sell_stamp_duty:
+        for fill in rows:
+            fill["stamp_duty"] = 0.0
+    st._fee_totals["commission"] += accrual.fee_delta
+    st._fee_totals["stamp_duty"] += stamp_delta
+    if st.account_fee_schedule.dated_sell_stamp_duty:
+        st.stats["stamp_duty_total"] = st._fee_totals["stamp_duty"]
+    return accrual.fee_delta + stamp_delta
 
 
 def _ymd(ts) -> str:
@@ -788,10 +824,13 @@ def _volume_skip(st: SimState, code: str, px: float, day, reason: str,
         {"position_id": position_id, "entry_signal_date": entry_signal_date}
         if s8_policy(st) is not None and position_id is not None else {}
     )
-    st.trades.append({"date": _ymd(day), "code": code, "side": "SKIP",
-                      "price": px, "shares": 0, "notional": 0.0,
-                      "commission": 0.0, "reason": reason, "bucket": bucket_id,
-                      "session_phase": "", "price_rule": "", **identity})
+    trade = {"date": _ymd(day), "code": code, "side": "SKIP",
+             "price": px, "shares": 0, "notional": 0.0,
+             "commission": 0.0, "reason": reason, "bucket": bucket_id,
+             "session_phase": "", "price_rule": "", **identity}
+    if getattr(getattr(st, "account_fee_schedule", None), "dated_sell_stamp_duty", False):
+        trade["stamp_duty"] = 0.0
+    st.trades.append(trade)
     record_fill(st, st.trades[-1], st.cash)
 
 
