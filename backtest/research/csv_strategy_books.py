@@ -75,6 +75,7 @@ from backtest.research import (
     strategy9_rules,
     strategy9_1_rules,
     strategy9_2_rules,
+    strategy9_3_rules,
     strategy10_rules,
     strategy11_rules,
     strategy12_rules,
@@ -244,7 +245,9 @@ HELP_LOCK_V10 = strategy10_rules.HELP_LOCK
 HELP_LOCK_TOPK = strategy_topk_dropout_rules.HELP_LOCK
 HELP_LOCK_SCORE_EXIT = strategy_topk_score_exit_rules.HELP_LOCK
 
-FORBIDDEN_DEFAULT_STOCK_POOL = frozenset({"version9", "version9_1", "version9_2", "version10", "version11"})
+FORBIDDEN_DEFAULT_STOCK_POOL = frozenset({
+    "version9", "version9_1", "version9_2", "version9_3", "version10", "version11",
+})
 STOP_FILL_TOUCH = "touch"
 STOP_FILL_CLOSE = "close"
 STOP_FILL_ALLOWED = (STOP_FILL_TOUCH, STOP_FILL_CLOSE)
@@ -1248,6 +1251,27 @@ def _run_kwargs_version9_2(args):
     if getattr(args, "stop_pct", None) is not None:
         raise SystemExit("version9_2 does not accept --stop-pct")
     return {"strategy": "version9_2"}
+
+
+def _apply_version9_3(*, stop_pct=None, **_):
+    if stop_pct is not None:
+        raise SystemExit("version9_3 does not accept --stop-pct")
+    return {
+        "stop_pct": None,
+        "take_profit": strategy9_3_rules.max_hold_reason,
+        "record_params": strategy9_3_rules.record_strategy9_3_params,
+        "bind_absolute_exit": strategy9_3_rules.bind_absolute_exit,
+        "limit_up_chase": False,
+        "pool_buy_at_open": True,
+        "minute_take_profit": strategy9_3_rules.no_intraday_exit,
+        "minute_next_open_exit": strategy9_3_rules.max_hold_reason,
+    }
+
+
+def _run_kwargs_version9_3(args):
+    if getattr(args, "stop_pct", None) is not None:
+        raise SystemExit("version9_3 does not accept --stop-pct")
+    return {"strategy": "version9_3"}
 
 
 def _apply_version9(
@@ -2449,6 +2473,14 @@ register(CsvStrategyBook(
     aliases=("9.2", "9_2", "v9.2", "v9_2", "version9_2"),
     allow_add=True, peak_gap_min=0, help_lock=strategy9_2_rules.HELP_LOCK,
     apply=_apply_version9_2, run_kwargs=_run_kwargs_version9_2, sizing="per_name",
+))
+register(CsvStrategyBook(
+    name="version9_3", tag=strategy9_3_rules.BOOK_TAG,
+    aliases=("9.3", "9_3", "v9.3", "v9_3", "version9_3"),
+    allow_add=strategy9_3_rules.ALLOW_ADD,
+    peak_gap_min=strategy9_3_rules.PEAK_GAP_MIN,
+    help_lock=strategy9_3_rules.HELP_LOCK,
+    apply=_apply_version9_3, run_kwargs=_run_kwargs_version9_3,
 ))
 register(
     CsvStrategyBook(

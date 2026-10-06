@@ -31,7 +31,7 @@ def test_registered_book_s8_cash_default(name):
     (None, False), ('', False), ('version6', False), ('version6_45', True),
     ('version6_999', False), ('version8', True), ('version8_1', False),
     ('version8_7', False), ('version9_1', False), ('version9_2', False),
-    ('version12', False),
+    ('version9_3', False), ('version12', False),
 ])
 def test_explicit_admission_including_future_books(name, expected):
     assert csv_ledger.uses_s8_independent(name, 'per_name') is expected

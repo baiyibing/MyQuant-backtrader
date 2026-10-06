@@ -25,7 +25,9 @@ def test_every_registered_book_is_minute_classified():
     assert classification.minute_strategy_names() == names
     assert tuple(entry.name for entry in entries) == names
     assert classification.wired_names() == names
-    assert {"version4", "version5", "version9_1"} <= set(classification.wired_names())
+    assert {"version4", "version5", "version9_1", "version9_3"} <= set(
+        classification.wired_names()
+    )
     for entry in entries:
         expected_cli = {
             "version7": classification.CLI_V7,
