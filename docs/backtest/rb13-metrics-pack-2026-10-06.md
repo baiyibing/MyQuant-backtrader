@@ -53,9 +53,10 @@ use `{status: unavailable, reason: ...}`; available scalar metrics use
 `{status: available, value: ...}`. Canonical JSON sorts keys, uses UTF-8 without
 BOM, two-space indentation, rejects NaN, and ends with one newline.
 
-Standalone use: `D:\anaconda3\envs\vanna312\python.exe scripts/research/rb13_metrics_pack.py
---run-dir <existing-run> --out <explicit-json-path>`; optional `--benchmark`
-accepts a local CSV only, and `--risk-free` / `--periods-per-year` record scaling.
+Standalone use: `python scripts/research/rb13_metrics_pack.py --run-dir
+<existing-run> --out <explicit-json-path>` using the repo-resolved interpreter
+(see `AGENTS.md`); optional `--benchmark` accepts a local CSV only, and
+`--risk-free` / `--periods-per-year` record scaling.
 
 `--periods-per-year` accepts float scaling (for example 365.25); whole values
 are emitted as JSON integers (252 remains 252).
