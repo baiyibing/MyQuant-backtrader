@@ -61,9 +61,9 @@ CLI:
 ```
 
 Accordingly, argparse `--help` gains one additive
-`--rule-profile {legacy,industry}` option line. This is intended. The daily and
-shared-minute `HELP_LOCK` constant bytes remain identical to the P01 base
-commit, and the existing shared-minute guarded source hashes remain unchanged.
+`--rule-profile {legacy,industry}` option line. This is intended. The minute
+`HELP_LOCK` is unchanged; the daily `HELP_LOCK` changed only through P02's ST
+text fix. The existing shared-minute guarded source hashes remain unchanged.
 
 Python APIs accept `"legacy"`, `"industry"`, or a resolved frozen
 `RuleProfile` object. Invalid names fail with `ValueError`.
