@@ -7,6 +7,8 @@ from dataclasses import dataclass
 
 import pandas as pd
 
+from backtest.research import strategy9_rules
+
 BOOK_TAG = "v9_3"
 ALLOW_ADD = False
 PEAK_GAP_MIN = 0
@@ -23,7 +25,9 @@ are read; buy on the third engine trading day after T (T+3).
 Daily fills at the T+3 open; minute fills through the existing 14:55 first-buy
 fallback. A T+3 limit-up, missing name bar, held name, or target outside the
 backtest calendar is skipped without retry. Colliding signal days are stable-unioned.
-No adds, no chase, no 10% take-profit, and no 20-bar range stop.
+No adds, no chase, and no 20-bar range stop. Profit reaching weighted entry
+cost ×1.10 returns profit_take:target, the same as version9: daily decides at
+the close and sells at the next open; minute sells intraday at the target.
 Whole-position stop = weighted entry cost ×0.90. Daily gap fills at open and
 touch fills at the line; minute uses the shared absolute-exit cursor convention.
 T+1 and limit-down deferral apply. At n_days>=20, decide force_sell:max_hold at
@@ -111,11 +115,6 @@ def max_hold_reason(px, cost, peak, n_days):
     return "force_sell:max_hold" if int(n_days) >= MAX_HOLD else None
 
 
-def no_intraday_exit(px, cost, peak, n_days):
-    """Keep the cursor's legacy trail fallback disabled before the EOD decision."""
-    del px, cost, peak, n_days
-
-
 def weighted_entry_cost(lots) -> float | None:
     live = [(float(lot.cost), int(lot.shares)) for lot in lots if int(lot.shares) > 0]
     shares = sum(quantity for _, quantity in live)
@@ -146,7 +145,7 @@ def record_strategy9_3_params(st) -> None:
         stop_frac=STOP_FRAC,
         delay_days=DELAY_DAYS,
         max_hold=MAX_HOLD,
-        profit_target=None,
+        profit_target=strategy9_rules.TAKE_PROFIT_PCT,
         skip_v9_3_delay_out_of_window=0,
         skip_v9_3_no_bar=0,
     )
