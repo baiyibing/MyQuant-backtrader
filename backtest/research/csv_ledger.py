@@ -15,6 +15,7 @@ import pandas as pd
 
 from backtest.research.ashare_fees import (
     COMMISSION,
+    FeeSchedule,
     QLIB_CLOSE_COST as QLIB_CLOSE_COST,
     QLIB_MIN_COST as QLIB_MIN_COST,
     QLIB_OPEN_COST as QLIB_OPEN_COST,
@@ -27,6 +28,7 @@ from backtest.research.ashare_exdiv_economics import ExDivEconomics
 from backtest.research.book_capabilities import uses_s8_independent as _uses_s8_independent
 from backtest.research.market_layer import _digit_prefix, limit_prices
 from backtest.research.minute_audit import record_fill, record_rejection
+from backtest.research.ledger_math import FeeAccumulator
 from backtest.research.lot_rounding import (
     BOARD_LOT,
     STAR_MIN_DECLARE,
@@ -407,6 +409,52 @@ class SimState:
         self._sell_pending_history = {}
 
 
+def bind_account_fee_schedule(st, schedule: FeeSchedule) -> None:
+    """Bind an opt-in runtime schedule without changing SimState snapshots."""
+    if not schedule.per_order:
+        raise ValueError("account fee schedule must use per-order commission")
+    st.account_fee_schedule = schedule
+    st._fee_accumulators = {
+        "BUY": FeeAccumulator(schedule.buy_rate, schedule.min_cost),
+        "SELL": FeeAccumulator(schedule.sell_rate, schedule.min_cost),
+    }
+    st._fee_order_rows = {}
+    st._fee_order_keys = {}
+    st._fee_order_seq = 0
+    st.buy_cost_rate = schedule.buy_rate
+    st.sell_cost_rate = schedule.sell_rate
+    st.min_cost = schedule.min_cost
+
+
+def fee_order_id(st, key=None):
+    """Return a unique order id, optionally retained by a continuation key."""
+    if not hasattr(st, "_fee_accumulators"):
+        return None
+    if key is not None and key in st._fee_order_keys:
+        return st._fee_order_keys[key]
+    st._fee_order_seq += 1
+    order_id = st._fee_order_seq
+    if key is not None:
+        st._fee_order_keys[key] = order_id
+    return order_id
+
+
+def release_fee_order(st, key) -> None:
+    if hasattr(st, "_fee_order_keys"):
+        st._fee_order_keys.pop(key, None)
+
+
+def _accrue_order_fee(st, side: str, order_id, row: dict) -> float:
+    """Book one fill and rewrite all rows to the order's proportional allocation."""
+    accumulator = st._fee_accumulators[side]
+    rows = st._fee_order_rows.setdefault(order_id, [])
+    rows.append(row)
+    accrual = accumulator.add_fill(order_id, row["notional"])
+    for fill, commission in zip(rows, accrual.allocations):
+        fill["commission"] = commission
+    return accrual.fee_delta
+
+
 def _ymd(ts) -> str:
     return pd.Timestamp(ts).strftime("%Y%m%d")
 
@@ -563,6 +611,7 @@ def execute_buy(
     entry_signal_date: str | None = None,
     merge_lot: Position | None = None,
     hm: int | None = None,
+    order_id=None,
 ) -> bool:
     """常规/追买共用；open 调用方显式传 at，默认仍为 bucket 收盘。"""
     if px <= 0:
@@ -621,8 +670,15 @@ def execute_buy(
         return False
     if shares <= 0:
         return False
+    per_order_fees = hasattr(st, "_fee_accumulators")
+    if per_order_fees:
+        order_id = fee_order_id(st) if order_id is None else order_id
     notional = shares * px
-    comm = trade_commission(notional, st.buy_cost_rate, st.min_cost)
+    comm = (
+        st.account_fee_schedule.buy_fee(notional)
+        if per_order_fees
+        else trade_commission(notional, st.buy_cost_rate, st.min_cost)
+    )
     if not check_buy_cash(st, needed=notional + comm, available=st.cash,
                           date=_ymd(day), code=code):
         record_rejection(st, code, day, "skip_cash", px)
@@ -637,12 +693,17 @@ def execute_buy(
                          position_id=position_id, entry_signal_date=entry_signal_date)
             return False
         notional = shares * px
-        comm = trade_commission(notional, st.buy_cost_rate, st.min_cost)
+        comm = (
+            st.account_fee_schedule.buy_fee(notional)
+            if per_order_fees
+            else trade_commission(notional, st.buy_cost_rate, st.min_cost)
+        )
         if shares_override is not None:
             per = notional
         supp = supplementary_notional(notional, per)
     cash_before = st.cash
-    st.cash -= notional + comm
+    if not per_order_fees:
+        st.cash -= notional + comm
     st.daily_quota_used += min(per, notional)
     st.stats["supplementary_used"] += supp
     st.stats["invested_notional"] += notional
@@ -684,22 +745,24 @@ def execute_buy(
         # The original scanner starts updating that peak only from T+1.
         # The group's first_lot remains this object, so its price-add anchor is
         # the weighted initial-lot cost known at the time of the add decision.
-    st.trades.append(
-        {
-            "date": _ymd(day),
-            "code": code,
-            "side": "BUY",
-            "price": px,
-            "shares": shares,
-            "notional": notional,
-            "commission": comm,
-            "reason": reason,
-            "lot": lot_id,
-            "session_phase": "",
-            "price_rule": "",
-            **identity,
-        }
-    )
+    trade = {
+        "date": _ymd(day),
+        "code": code,
+        "side": "BUY",
+        "price": px,
+        "shares": shares,
+        "notional": notional,
+        "commission": comm if not per_order_fees else 0.0,
+        "reason": reason,
+        "lot": lot_id,
+        "session_phase": "",
+        "price_rule": "",
+        **identity,
+    }
+    st.trades.append(trade)
+    if per_order_fees:
+        comm = _accrue_order_fee(st, "BUY", order_id, trade)
+        st.cash -= notional + comm
     if hm is not None:
         # Opt-in tail fills carry their execution clock; OFF keeps its columns.
         st.trades[-1]["hm"] = int(hm)
@@ -736,7 +799,8 @@ def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str, *
           bucket_id: int | None = None, at: int | None = None,
           day_i: int | None = None, hm: int | None = None,
           session_phase: str = "", price_rule: str = "",
-          wanted_shares: int | None = None, _group_exit: bool = False) -> int:
+          wanted_shares: int | None = None, _group_exit: bool = False,
+          order_id=None) -> int:
     if isinstance(pos, IndependentExitPosition):
         return _sell_s8_group(
             st, code, pos, px, day, reason,
@@ -772,6 +836,13 @@ def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str, *
         shares = min(shares, int(wanted_shares))
     if shares <= 0:
         return 0
+    requested_shares = shares
+    per_order_fees = hasattr(st, "_fee_accumulators")
+    order_key = None
+    if per_order_fees and order_id is None:
+        base_reason = reason.replace(":next_open", "").replace("|t1_deferred", "")
+        order_key = ("sell", held_fill_key(pos), base_reason)
+        order_id = fee_order_id(st, order_key)
     if st.volume_cap is not None:
         # Linked exits stay atomic: no orphan riders or new pending queues.
         group = [pos] + [p for p in st.positions.get(code, [])
@@ -797,31 +868,36 @@ def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str, *
             return 0
         shares = min(shares, allocated)
     notional = shares * px
-    comm = trade_commission(notional, st.sell_cost_rate, st.min_cost)
+    comm = (
+        st.account_fee_schedule.sell_fee(notional)
+        if per_order_fees
+        else trade_commission(notional, st.sell_cost_rate, st.min_cost)
+    )
     cash_before = st.cash
-    st.cash += notional - comm
     # Human GO P2=B: annotate only after fill eligibility/price/size are settled.
     if hm is not None and not session_phase:
         try:
             session_phase = _session_phase(hm).value
         except ValueError:
             pass  # Unknown phase must never reject an otherwise valid fill.
-    st.trades.append(
-        {
-            "date": _ymd(day),
-            "code": code,
-            "side": "SELL",
-            "price": px,
-            "shares": shares,
-            "notional": notional,
-            "commission": comm,
-            "reason": reason,
-            "lot": pos.lot_id,
-            "session_phase": session_phase,
-            "price_rule": price_rule,
-            **position_identity(pos),
-        }
-    )
+    trade = {
+        "date": _ymd(day),
+        "code": code,
+        "side": "SELL",
+        "price": px,
+        "shares": shares,
+        "notional": notional,
+        "commission": comm if not per_order_fees else 0.0,
+        "reason": reason,
+        "lot": pos.lot_id,
+        "session_phase": session_phase,
+        "price_rule": price_rule,
+        **position_identity(pos),
+    }
+    st.trades.append(trade)
+    if per_order_fees:
+        comm = _accrue_order_fee(st, "SELL", order_id, trade)
+    st.cash += notional - comm
     record_fill(st, st.trades[-1], cash_before)
     if reason.startswith("stop_loss"):
         st.stats["sell_stop"] += 1
@@ -839,6 +915,8 @@ def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str, *
         st.stats["sell_pos_trail"] += 1
     if st.volume_cap is not None:
         st.volume_cap.consume(key, shares)
+    if order_key is not None and shares >= requested_shares:
+        release_fee_order(st, order_key)
     # S1: every booked sell decrements shares, including the default path.
     pos.shares -= shares
     if st.exdiv_economics is not None:
@@ -879,7 +957,8 @@ def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str, *
     for child in riders:
         _sell(st, code, child, px, day, reason,
               bucket_id=bucket_id, at=at, day_i=day_i, hm=hm,
-              session_phase=session_phase, price_rule=price_rule)
+              session_phase=session_phase, price_rule=price_rule,
+              order_id=order_id)
     return shares
 
 
@@ -891,9 +970,9 @@ def _sell_s8_group(
 ) -> int:
     """Latch one group exit and retain its T+1-locked shares for the next open.
 
-    A group is one exit decision, while each fill lot retains its trade row and
-    existing commission calculation. Completed-volume limits retain their
-    per-lot partial fills; any unfilled shares keep the group's pending exit.
+    A group is one exit order, while each fill lot retains its trade row.
+    Completed-volume limits retain their per-lot partial fills; any unfilled
+    shares keep the group's pending exit and fee-order identity.
     """
     if wanted_shares is not None:
         raise ValueError("independent-position exits must target the whole position")
@@ -924,6 +1003,8 @@ def _sell_s8_group(
     sellable = [p for p in lots if p.entry_idx < day_i]
     if not sellable:
         return 0
+    order_key = ("s8-group-exit", pos.position_id)
+    order_id = fee_order_id(st, order_key)
     filled = 0
     for lot in sellable:
         lot_reason = reason
@@ -936,5 +1017,8 @@ def _sell_s8_group(
             st, code, lot, px, day, lot_reason,
             bucket_id=bucket_id, at=at, day_i=day_i, hm=hm,
             session_phase=session_phase, price_rule=price_rule, _group_exit=True,
+            order_id=order_id,
         )
+    if pos.group.closed:
+        release_fee_order(st, order_key)
     return filled

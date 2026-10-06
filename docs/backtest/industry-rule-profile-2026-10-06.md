@@ -1,7 +1,7 @@
 # Industry rule profile
 
 - Date: 2026-10-06
-- Status: P02 metadata stamp delivered; all trade-changing switches pending
+- Status: P03 per-order commission delivered; later trade-rule slices pending
 - Principle SSOT: [backtest-rule-principles-ssot.md](ssot/backtest-rule-principles-ssot.md)
 
 ## Purpose
@@ -12,26 +12,25 @@ lifecycle flags. The default remains `legacy`; omitted and explicit
 `rule_profile="legacy"` runs keep the existing behavior and output bytes.
 
 P01 carries the frozen profile through the daily, shared-minute, and
-standalone-v7 paths. P02 enables only the zero-trade `s12_domain_stamp`
-metadata switch. No switch is read by trading behavior yet. An `industry` run
-therefore has the same trades as `legacy`; its in-memory stats add
-`rule_profile` and `rule_profile_revision`, and S12 additionally records
-`valuation_price_domain`. Removing those profile-only keys yields the exact
-legacy stats.
+standalone-v7 paths. P02 enables the zero-trade `s12_domain_stamp` metadata
+switch. P03 enables the commission component of `account_fee_schedule`:
+0.0003 on buys and sells with a CNY 5 minimum per strategy order. The default
+`legacy` profile, including omitted profile arguments, retains its original
+per-call fee formula and output bytes.
 
 ## Switch status
 
-The values below are locked by `industry-fix/adopted-decisions.md`; each switch
-remains `false` until its own behavior PR and opt-in baseline are admitted.
+The values below are locked by `industry-fix/adopted-decisions.md`; pending
+switches remain `false` until their behavior PR and opt-in baseline are admitted.
 
-| Switch | P01 | Adopted rule and source |
+| Switch | Status | Adopted rule and source |
 |---|---:|---|
 | `special_no_limit_days` | pending / `false` | IPO, relist, and resumption facts must come from a PIT lifecycle provider; missing data fails closed and is never inferred from bars. |
 | `exchange_quantity_rules` | pending / `false` | Main board/ChiNext buy lots are multiples of 100; STAR starts at 200 then permits one-share increments; BSE starts at 100 then permits one-share increments. Sources: SSE STAR special rules; BSE Rule 3.3.8 ([CSRC copy](https://www.csrc.gov.cn/shenzhen/c105632/c1562694/1562694/files/1638524949335_40064.pdf)). |
 | `account_odd_lot_exit` | pending / `false` | An odd remainder below one board lot is sold in one account-level order, not stranded per source lot. |
 | `supplementary_min_lot` | pending / `false` | B8-03: a budget below one valid lot buys zero; there is no 100-share top-up. |
 | `fee_aware_affordability` | pending / `false` | B8-04/B8-06/B8-12: choose the largest valid quantity affordable after fees, shrink on short cash, and pre-check the final declared quantity; B8-11 keeps legacy gate order. |
-| `account_fee_schedule` | pending / `false` | Commission is 0.0003 each side with a CNY 5 minimum per strategy order (JoinQuant `OrderCost`: [example](https://www.cnblogs.com/henry2019/p/11700075.html), [reference](https://easyquant.ai/e/joinquant/set-trading-costs-slippage)); sell stamp duty is 0.001 before 2023-08-28 and 0.0005 from that date (财政部、税务总局公告 2023 年第 39 号); transfer fees follow the adopted SH/SZ/BSE date table ([2022 notice report](https://finance.sina.com.cn/roll/2022-04-28/doc-imcwiwst4557332.shtml), [2015/2022 summary](http://m.people.cn/n4/2022/0429/c125-20026334.html)). One strategy order is one fee order; S8 group exits aggregate, scale-out tranches and TWAP children remain separate, and capacity continuation retains its order identity. |
+| `account_fee_schedule` | P03 commission delivered / `true`; stamp and transfer components pending | Commission is 0.0003 each side with a CNY 5 minimum per strategy order. Source locked in `industry-fix/adopted-decisions.md`: JoinQuant stock `OrderCost` default (`open_commission=close_commission=0.0003`, `min_commission=5`), with [example](https://www.cnblogs.com/henry2019/p/11700075.html) and [reference](https://easyquant.ai/e/joinquant/set-trading-costs-slippage). One strategy order is one fee order: S8 whole-group exit is one order; each scale-out tranche and each tail/TWAP minute child is a separate order; capacity continuation retains its order identity. Fill-row commissions are proportional allocations and the last row takes the floating remainder. Explicit legacy cost schedules such as `--qlib-cost` / `QLIB_PORTANA` conflict and fail fast. The adopted dated stamp-duty and transfer-fee tables are not enabled by P03; they remain separate later slices. |
 | `chronological_v7` | pending / `false` | Industry mode will select the existing `fix_minute_cash_order` chronological behavior; same-clock tie-breaking is unchanged. |
 | `s12_domain_stamp` | delivered / `true` | S12 records its actual valuation source: daily=`front`; minute with X-01 off=`front`; minute with X-01 on=`none`. This is metadata only and does not change fills. |
 | `slippage_bp` | documented `0` | Mainstream backtester default adopted as zero; sensitivity research continues through the existing research fill configuration. |
@@ -48,8 +47,7 @@ JoinQuant unless explicitly configured. This follows the adopted
 claim that realized execution has zero market impact. Sensitivity analysis
 continues through the existing
 `fullstrat_research_hooks.ResearchFillConfig` research hook, including its
-explicit per-side basis-point scenarios. No production fill-path code changes
-in P02.
+explicit per-side basis-point scenarios. P03 does not change slippage.
 
 ## Use
 
@@ -70,5 +68,8 @@ Python APIs accept `"legacy"`, `"industry"`, or a resolved frozen
 
 Defaults are unchanged. Existing goldens, fixtures, off-byte baselines,
 overlays, book order, output files, and stats keys are never refreshed or
-moved. Every later PR that changes results must add its own synthetic,
-opt-in industry baseline; old baselines remain immutable.
+moved. P03 adds
+`tests/fixtures/off_byte_baseline_industry_p03_order_commission_20261006.json`
+from the data-free `tests/fixtures/industry/order_commission.json` cases. It
+covers shared daily/minute, native and standalone v7, a multi-lot S8 group
+exit, and floor-binding CNY 5 orders.

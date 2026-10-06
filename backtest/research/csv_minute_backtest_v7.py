@@ -101,7 +101,7 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
                 exdiv_economics: EconomicLookup | None = None,
                 names: Mapping[str, str] | None = None,
                 names_by_day: Mapping[str, Mapping[str, str]] | None = None,
-                fee: FeeSchedule = DEFAULT_SCHEDULE,
+                fee: FeeSchedule | None = None,
                 participation_rate: float | None = None,
                 volume_for_bucket: VolumeLookup | None = None,
                 fix_minute_cash_order: bool = False,
@@ -205,9 +205,15 @@ def summarize_v7(state: SimResult) -> str:
 def write_run_artifacts(state: SimResult, output_dir: Path) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / "summary.txt").write_text(summarize_v7(state), encoding="utf-8")
+    trade_fields = ("date", "symbol", "hm", "side", "shares", "price", "reason")
+    if any("commission" in row for row in state.trades):
+        trade_fields = (
+            "date", "symbol", "hm", "side", "shares", "price",
+            "notional", "commission", "reason",
+        )
     for filename, rows, fields in (
         ("daily_equity.csv", state.equity_curve, ("date", "cash", "holdings", "equity")),
-        ("trades.csv", state.trades, ("date", "symbol", "hm", "side", "shares", "price", "reason")),
+        ("trades.csv", state.trades, trade_fields),
     ):
         with (output_dir / filename).open("w", newline="", encoding="utf-8") as handle:
             writer = csv.DictWriter(handle, fieldnames=fields)

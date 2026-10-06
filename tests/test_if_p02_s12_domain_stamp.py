@@ -11,6 +11,9 @@ PROFILE_STATS = {
     "rule_profile",
     "rule_profile_revision",
     "valuation_price_domain",
+    "buy_cost_rate",
+    "sell_cost_rate",
+    "min_cost",
 }
 
 
@@ -21,9 +24,9 @@ def _assert_profile_stamp_only(omitted, legacy, industry, expected_domain: str) 
     assert industry.stats["valuation_price_domain"] == expected_domain
     assert {
         key: value for key, value in industry.stats.items() if key not in PROFILE_STATS
-    } == legacy.stats
-    assert omitted.trades == legacy.trades == industry.trades
-    assert omitted.equity_curve == legacy.equity_curve == industry.equity_curve
+    } == {key: value for key, value in legacy.stats.items() if key not in PROFILE_STATS}
+    assert omitted.trades == legacy.trades
+    assert omitted.equity_curve == legacy.equity_curve
 
 
 def test_daily_s12_industry_stamps_front_valuation_without_legacy_stats_change():
