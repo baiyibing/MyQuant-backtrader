@@ -20,3 +20,23 @@ public helper signature through a thin delegate. Registered-book equivalence
 and admission guards live in `tests/test_rb04_book_capabilities.py`.
 
 RB-04 adds no other capabilities, module split, CI gate, or lake backtest.
+
+## RB-04 follow-up: classification admission guard (ZERO-DIFF)
+
+The frozen admission family is `name.startswith("version6_")`, bare
+`version8`, or `name.startswith("version8_")`; bare `version6` is excluded.
+This predicate scans registration only and grants no capabilities.
+Every new registered 6.x/8.x family book must appear in
+`PRICE_ADD_ELIGIBLE_BOOKS` and/or `S8_INDEPENDENT_BOOKS`, keeping MC-5 purposes
+distinct, or in `PREFIX_FAMILY_OPT_OUT` with a reason in `book_capabilities.py`.
+
+`version8_1` is an explicit opt-out: the band/float book intentionally has
+neither capability, matching the pre-#412 prefix exception. All 54 currently
+registered family names are classified; every registered book retains its tip
+capability membership. The focused RB-04 tests freeze that equivalence and
+exercise synthetic rejection and opt-out without granting capabilities.
+
+The data-free `scripts/gates/verify_book_capability_classification.py` gate
+runs after baseline admission in CI. Missing classifications fail with book
+names and the file/sets to edit. No fixtures, baselines, HELP_LOCK, registry
+order, or simulation paths change; RB-05/07+ remain out of scope.
