@@ -1,8 +1,9 @@
 """Common minute entry checks, staged to preserve caller error precedence."""
-from backtest.research.csv_strategy_books import normalize_csv_strategy
+from backtest.research.csv_strategy_books import normalize_csv_strategy, validate_hold_days
 
 
 def validate_minute_entry(strategy, *, stage, version9_sell=None, max_hold=False,
+                          hold_days=20,
                           tail_window_buy=False, fix_minute_cash_order=False,
                           fix_s11_exit_domain=False):
     book = normalize_csv_strategy(strategy)
@@ -11,6 +12,7 @@ def validate_minute_entry(strategy, *, stage, version9_sell=None, max_hold=False
         validate_sell_mode(book, version9_sell, max_hold)
         if max_hold and book != "version9":
             raise ValueError("max_hold is supported only by version9")
+        validate_hold_days(book, hold_days)
     elif stage == "tail":
         if tail_window_buy and book not in {
             "version8", "version8_1", "version8_2", "version8_3",

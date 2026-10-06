@@ -30,9 +30,11 @@ cost ×1.10 returns profit_take:target, the same as version9: daily decides at
 the close and sells at the next open; minute sells intraday at the target.
 Whole-position stop = weighted entry cost ×0.90. Daily gap fills at open and
 touch fills at the line; minute uses the shared absolute-exit cursor convention.
-T+1 and limit-down deferral apply. At n_days>=20, decide force_sell:max_hold at
-the close and sell at the next open, deferring limit-down sessions.
---stop-pct is refused. Output: csv_{daily|minute}_v9_3_{start}_{end}/.
+T+1 and limit-down deferral apply. --hold-days {20,30} (default 20) selects
+the maximum hold. At n_days>=hold_days, decide force_sell:max_hold at the close
+and sell at the next open, deferring limit-down sessions. --stop-pct is refused.
+Output for 20: csv_{daily|minute}_v9_3_{start}_{end}/; for 30 the path includes
+_h30_: csv_{daily|minute}_v9_3_h30_{start}_{end}/.
 """
 
 
@@ -109,10 +111,10 @@ def shift_pool_days(
     )
 
 
-def max_hold_reason(px, cost, peak, n_days):
-    """At the 20th held-session close, queue the existing next-open reason."""
+def max_hold_reason(px, cost, peak, n_days, *, hold_days: int = MAX_HOLD):
+    """At the configured held-session close, queue the existing next-open reason."""
     del px, cost, peak
-    return "force_sell:max_hold" if int(n_days) >= MAX_HOLD else None
+    return "force_sell:max_hold" if int(n_days) >= hold_days else None
 
 
 def weighted_entry_cost(lots) -> float | None:
@@ -137,14 +139,14 @@ def bind_absolute_exit(st, frames):
     return line
 
 
-def record_strategy9_3_params(st) -> None:
+def record_strategy9_3_params(st, *, hold_days: int = MAX_HOLD) -> None:
     st.stats.update(
         sell_book=BOOK_TAG,
         stop_pct=None,
         stop_mode="weighted_entry_cost_fixed_10pct",
         stop_frac=STOP_FRAC,
         delay_days=DELAY_DAYS,
-        max_hold=MAX_HOLD,
+        max_hold=hold_days,
         profit_target=strategy9_rules.TAKE_PROFIT_PCT,
         skip_v9_3_delay_out_of_window=0,
         skip_v9_3_no_bar=0,
