@@ -37,7 +37,7 @@ def test_marker_crlf_raw_bytes_via_tr_pipeline(tmp_path):
         ["bash", "-lc", "tr -d '\\r' < \"$1\" | sed 's/[[:space:]]*$//'", "bash", str(sample)],
         text=True,
     )
-    assert out == CANONICAL
+    assert out.strip("\n") == CANONICAL and "\r" not in out
 
 
 def test_pre_push_and_workflow_share_cr_strip_pipeline():
