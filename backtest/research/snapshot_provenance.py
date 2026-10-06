@@ -12,6 +12,7 @@ from bt_contract.run_manifest import _identity_mapping
 def snapshot_provenance_tokens(sidecar_or_identity) -> dict[str, str]:
     """Read only the supplied JSON sidecar or mapping; absent tokens return {}.
 
+    A str argument is treated as a filesystem path, not inline JSON.
     Invalid JSON/path errors propagate. Invalid token types and absolute host
     paths use RB-09's existing validation. No authenticity or PIT certification.
     """
