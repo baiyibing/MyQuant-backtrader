@@ -26,9 +26,13 @@ from backtest.research.ashare_session import LIMIT_EPS, hit_limit_down as hit_li
 from backtest.research.ashare_volume_cap import VolumeCap
 from backtest.research.ashare_exdiv_economics import ExDivEconomics
 from backtest.research.book_capabilities import uses_s8_independent as _uses_s8_independent
-from backtest.research.market_layer import _digit_prefix, limit_prices
+from backtest.research.market_layer import _digit_prefix, limit_prices, transfer_fee_market
 from backtest.research.minute_audit import record_fill, record_rejection
-from backtest.research.ledger_math import FeeAccumulator, StampDutyAccumulator
+from backtest.research.ledger_math import (
+    FeeAccumulator,
+    StampDutyAccumulator,
+    TransferFeeAccumulator,
+)
 from backtest.research.lot_rounding import (
     BOARD_LOT,
     STAR_MIN_DECLARE,
@@ -421,7 +425,10 @@ def bind_account_fee_schedule(st, schedule: FeeSchedule) -> None:
     st._stamp_duty_accumulator = (
         StampDutyAccumulator() if schedule.dated_sell_stamp_duty else None
     )
-    st._fee_totals = {"commission": 0.0, "stamp_duty": 0.0}
+    st._transfer_fee_accumulator = (
+        TransferFeeAccumulator() if schedule.dated_bilateral_transfer_fee else None
+    )
+    st._fee_totals = {"commission": 0.0, "stamp_duty": 0.0, "transfer_fee": 0.0}
     st._fee_order_rows = {}
     st._fee_order_keys = {}
     st._fee_order_seq = 0
@@ -432,6 +439,8 @@ def bind_account_fee_schedule(st, schedule: FeeSchedule) -> None:
         st.stats = {}
     if schedule.dated_sell_stamp_duty:
         st.stats["stamp_duty_total"] = 0.0
+    if schedule.dated_bilateral_transfer_fee:
+        st.stats["transfer_fee_total"] = 0.0
 
 
 def fee_order_id(st, key=None):
@@ -452,7 +461,9 @@ def release_fee_order(st, key) -> None:
         st._fee_order_keys.pop(key, None)
 
 
-def preview_order_fees(st, side: str, order_id, notional: float, trade_date=None) -> float:
+def preview_order_fees(
+    st, side: str, order_id, notional: float, trade_date=None, symbol: str | None = None
+) -> float:
     """Preview the total fee delta for one order fill without mutating state."""
     commission = st._fee_accumulators[side].preview(order_id, notional).fee_delta
     stamp_duty = 0.0
@@ -462,7 +473,14 @@ def preview_order_fees(st, side: str, order_id, notional: float, trade_date=None
         stamp_duty = st._stamp_duty_accumulator.preview(
             order_id, notional, trade_date
         ).fee_delta
-    return commission + stamp_duty
+    transfer_fee = 0.0
+    if st._transfer_fee_accumulator is not None:
+        if trade_date is None or symbol is None:
+            raise ValueError("transfer fee requires trade date and symbol")
+        transfer_fee = st._transfer_fee_accumulator.preview(
+            order_id, notional, transfer_fee_market(symbol), trade_date
+        ).fee_delta
+    return commission + stamp_duty + transfer_fee
 
 
 def _accrue_order_fee(st, side: str, order_id, row: dict) -> float:
@@ -484,11 +502,26 @@ def _accrue_order_fee(st, side: str, order_id, row: dict) -> float:
     elif st.account_fee_schedule.dated_sell_stamp_duty:
         for fill in rows:
             fill["stamp_duty"] = 0.0
+    transfer_delta = 0.0
+    if st._transfer_fee_accumulator is not None:
+        symbol = row.get("code", row.get("symbol"))
+        transfer = st._transfer_fee_accumulator.add_fill(
+            order_id,
+            row["notional"],
+            transfer_fee_market(symbol),
+            row["date"],
+        )
+        for fill, amount in zip(rows, transfer.allocations):
+            fill["transfer_fee"] = amount
+        transfer_delta = transfer.fee_delta
     st._fee_totals["commission"] += accrual.fee_delta
     st._fee_totals["stamp_duty"] += stamp_delta
+    st._fee_totals["transfer_fee"] += transfer_delta
     if st.account_fee_schedule.dated_sell_stamp_duty:
         st.stats["stamp_duty_total"] = st._fee_totals["stamp_duty"]
-    return accrual.fee_delta + stamp_delta
+    if st.account_fee_schedule.dated_bilateral_transfer_fee:
+        st.stats["transfer_fee_total"] = st._fee_totals["transfer_fee"]
+    return accrual.fee_delta + stamp_delta + transfer_delta
 
 
 def _ymd(ts) -> str:
@@ -830,6 +863,10 @@ def _volume_skip(st: SimState, code: str, px: float, day, reason: str,
              "session_phase": "", "price_rule": "", **identity}
     if getattr(getattr(st, "account_fee_schedule", None), "dated_sell_stamp_duty", False):
         trade["stamp_duty"] = 0.0
+    if getattr(
+        getattr(st, "account_fee_schedule", None), "dated_bilateral_transfer_fee", False
+    ):
+        trade["transfer_fee"] = 0.0
     st.trades.append(trade)
     record_fill(st, st.trades[-1], st.cash)
 

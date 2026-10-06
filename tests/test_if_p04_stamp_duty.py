@@ -39,8 +39,12 @@ def test_stamp_duty_is_sell_notional_only_and_keeps_order_identity():
 def test_industry_schedule_requires_a_date_for_direct_sell_credit():
     with pytest.raises(ValueError, match="requires trade_date"):
         INDUSTRY_ACCOUNT_FEES.credit_sell(1_000.0)
-    assert INDUSTRY_ACCOUNT_FEES.credit_sell(1_000.0, "2023-08-27") == 994.0
-    assert INDUSTRY_ACCOUNT_FEES.credit_sell(1_000.0, "2023-08-28") == 994.5
+    assert INDUSTRY_ACCOUNT_FEES.credit_sell(
+        1_000.0, "2023-08-27", "600000.SH"
+    ) == 993.99
+    assert INDUSTRY_ACCOUNT_FEES.credit_sell(
+        1_000.0, "2023-08-28", "600000.SH"
+    ) == 994.49
 
 
 @pytest.mark.parametrize(

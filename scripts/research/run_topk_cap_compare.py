@@ -216,7 +216,9 @@ def run_arms(args, pool, scores, bars, daily, samples):
                          "buy_shares": sum(row["shares"] for row in fills if row["side"] == "BUY"),
                          "sell_shares": sum(row["shares"] for row in fills if row["side"] == "SELL"),
                          "fees": sum(
-                             row["commission"] + row.get("stamp_duty", 0.0)
+                             row["commission"]
+                             + row.get("stamp_duty", 0.0)
+                             + row.get("transfer_fee", 0.0)
                              for row in fills
                          ),
                          "skip_volume_unavailable": state.stats.get("skip_volume_unavailable", 0)}

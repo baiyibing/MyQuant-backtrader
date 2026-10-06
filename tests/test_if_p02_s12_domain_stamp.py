@@ -15,6 +15,7 @@ PROFILE_STATS = {
     "sell_cost_rate",
     "min_cost",
     "stamp_duty_total",
+    "transfer_fee_total",
 }
 
 

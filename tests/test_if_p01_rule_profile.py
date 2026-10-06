@@ -41,7 +41,7 @@ def test_resolve_rule_profile_and_frozen_switches():
     assert switches.pop("account_fee_schedule") is True
     assert not any(switches.values())
     assert LEGACY.slippage_bp == INDUSTRY.slippage_bp == 0
-    assert INDUSTRY.revision == "industry-p04-20261006"
+    assert INDUSTRY.revision == "industry-p05-20261006"
     with pytest.raises(FrozenInstanceError):
         INDUSTRY.account_fee_schedule = True
     with pytest.raises(ValueError, match="legacy.*industry.*RuleProfile"):

@@ -210,6 +210,12 @@ def _event(state: SimResult, day: date, symbol: str, hm: int | None, side: str, 
             commission=0.0,
             stamp_duty=0.0,
         )
+    if getattr(
+        getattr(state, "account_fee_schedule", None),
+        "dated_bilateral_transfer_fee",
+        False,
+    ):
+        trade["transfer_fee"] = 0.0
     if order_id is not None and price is not None:
         trade.update(notional=shares * price, commission=0.0)
     state.trades.append(trade)
@@ -240,9 +246,9 @@ def _buy(state: SimResult, position: Position | None, symbol: str, day: date, hm
     if order_id is None:
         cost = fee.debit_buy(shares * price)
     else:
-        cost = shares * price + state._fee_accumulators["BUY"].preview(
-            order_id, shares * price
-        ).fee_delta
+        cost = shares * price + preview_order_fees(
+            state, "BUY", order_id, shares * price, day, symbol
+        )
     if shares <= 0 or cost > state.cash:
         _event(state, day, symbol, hm, "skip", 0, price, "skip_cash")
         return None
@@ -255,9 +261,9 @@ def _buy(state: SimResult, position: Position | None, symbol: str, day: date, hm
         if order_id is None:
             cost = fee.debit_buy(shares * price)
         else:
-            cost = shares * price + state._fee_accumulators["BUY"].preview(
-                order_id, shares * price
-            ).fee_delta
+            cost = shares * price + preview_order_fees(
+                state, "BUY", order_id, shares * price, day, symbol
+            )
     cash_before = state.cash
     state.cash -= cost
     if position is None:
@@ -309,7 +315,7 @@ def _sell_lots(state: SimResult, position: Position, day: date, hm: int, price: 
         state.cash += fee.credit_sell(sold * price)
     else:
         fee_delta = preview_order_fees(
-            state, "SELL", order_id, sold * price, day
+            state, "SELL", order_id, sold * price, day, position.symbol
         )
         state.cash += sold * price - fee_delta
     _event(
@@ -334,7 +340,9 @@ def _buy_tail_slice(state: SimResult, parent: TailParent, symbol: str, day: date
     if quote is None:
         _event(state, day, symbol, hm, "skip", 0, None, "skip_tail_quote")
         return
-    shares = parent.allocation(quote, state.cash, fee.debit_buy)
+    shares = parent.allocation(
+        quote, state.cash, lambda value: fee.debit_buy(value, day, symbol)
+    )
     if not shares:
         _event(state, day, symbol, hm, "skip", 0, quote.price, "skip_tail_allocation")
         return
@@ -349,9 +357,9 @@ def _buy_tail_slice(state: SimResult, parent: TailParent, symbol: str, day: date
     if order_id is None:
         state.cash -= fee.debit_buy(shares * quote.price)
     else:
-        fee_delta = state._fee_accumulators["BUY"].preview(
-            order_id, shares * quote.price
-        ).fee_delta
+        fee_delta = preview_order_fees(
+            state, "BUY", order_id, shares * quote.price, day, symbol
+        )
         state.cash -= shares * quote.price + fee_delta
     position = state.positions.get(symbol)
     if position is None:
