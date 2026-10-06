@@ -319,6 +319,16 @@ def simulate(
     buy_gate = hooks.get("buy_gate")
     sell_gate = hooks.get("sell_gate")
     calendar = build_calendar(bars, start, end)
+    delayed_pool_stats = None
+    if normalize_csv_strategy(strategy) == "version9_3":
+        from backtest.research.strategy9_3_rules import shift_pool_days
+
+        shifted = shift_pool_days(
+            pool_days, calendar, bars, pool_names_by_day=pool_names_by_day
+        )
+        pool_days = shifted.pool_days
+        pool_names_by_day = shifted.pool_names_by_day
+        delayed_pool_stats = shifted.stats
 
     st, pending_chase, names_asof = init_sim_state(
         hooks,
@@ -329,6 +339,8 @@ def simulate(
         pool_names_by_day=pool_names_by_day,
         daily_quota=daily_quota,
     )
+    if delayed_pool_stats is not None:
+        st.stats.update(delayed_pool_stats)
     absolute_exit = hooks["bind_absolute_exit"](st, bars) if "bind_absolute_exit" in hooks else None
     configure_s8(st, hooks)
     st.star_lot_declare_check = star_lot_declare_check
@@ -567,7 +579,8 @@ def simulate(
                 if got is None:
                     return None
                 row, closes = got
-                return float(row["close"]), closes
+                price_field = "open" if hooks.get("pool_buy_at_open") else "close"
+                return float(row[price_field]), closes
 
             if callable(hooks.get("breakout_day")):
                 hooks["breakout_day"](
