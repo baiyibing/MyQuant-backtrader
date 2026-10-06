@@ -54,3 +54,5 @@ MC-6：CI workflow 与 [pre-push hook](../../.githooks/pre-push) 共用 pytest
 marker 表达式 `not production and not benchmark`；hook 仅推 master / main 时
 运行该 pytest。本次只记录一致性，保留现有引号与 Windows 行为，不提取
 共享 marker 文件，不重设计 workflow。
+
+- [RB-11 synthetic profiling harness and measured candidates](rb11-perf-hotspot-harness-2026-10-06.md)（ZERO-DIFF；优化另行授权）。
