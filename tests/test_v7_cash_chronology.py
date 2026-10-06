@@ -2,15 +2,18 @@
 
 import json
 from copy import deepcopy
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
 import pandas as pd
 import pytest
 from backtest.research import csv_minute_backtest_v7 as v7
+from backtest.research import csv_minute_backtest as shared_minute
 from backtest.research.ashare_bars import annotate_session
 from backtest.research.ashare_volume_cap import BucketVolume
+from backtest.research.minute_engine_policies import MinutePolicyContext
+from backtest.research.rule_profile import INDUSTRY
 
 A, B = "600000.SH", "000001.SZ"
 D1, D2 = date(2026, 9, 1), date(2026, 9, 2)
@@ -255,6 +258,52 @@ def test_omitted_and_explicit_off_state_and_writer_bytes_match(tmp_path):
     v7.write_run_artifacts(explicit, tmp_path / "explicit")
     for name in ("trades.csv", "daily_equity.csv"):
         assert (tmp_path / "implicit" / name).read_bytes() == (tmp_path / "explicit" / name).read_bytes()
+
+
+@pytest.mark.parametrize("entry", ["shared-native", "standalone"])
+def test_industry_profile_selects_existing_chronological_cash_order(entry):
+    case = v7_cross_symbol_case()
+    if entry == "standalone":
+        def run(**kwargs):
+            return v7.simulate_v7(**case, **kwargs)
+    else:
+        native = dict(case)
+        index_days = native.pop("index_days")
+        native["total_cash"] = native.pop("cash_total")
+
+        def run(**kwargs):
+            return shared_minute.simulate(
+                **native,
+                start=index_days[0],
+                end=index_days[-1],
+                strategy="version7",
+                policy_context=MinutePolicyContext(index_days=index_days),
+                **kwargs,
+            )
+
+    legacy = run(rule_profile="legacy")
+    industry = run(rule_profile="industry")
+    industry_symbol_major = run(
+        rule_profile=replace(INDUSTRY, chronological_v7=False),
+    )
+    industry_explicit = run(
+        rule_profile="industry",
+        fix_minute_cash_order=True,
+    )
+
+    assert len(fills(legacy, "buy")) == 3
+    assert len(fills(industry, "buy")) == 3
+    chronological_add = next(
+        row for row in fills(industry, "buy") if row["reason"] == "buy:add_a104"
+    )
+    symbol_major_add = next(
+        row for row in fills(industry_symbol_major, "buy")
+        if row["reason"] == "buy:add_a104"
+    )
+    assert chronological_add["shares"] == 2100
+    assert symbol_major_add["shares"] == 19200
+    assert asdict(industry) == asdict(industry_explicit)
+    assert industry.stats["rule_profile_revision"] == "industry-p11-20261006"
 
 
 def test_single_symbol_ample_cash_keeps_legacy_trade_tuples_and_state():
