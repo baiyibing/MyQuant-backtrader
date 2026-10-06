@@ -23,3 +23,7 @@ No lake-backed gates are added. Durations have not been measured.
 Parallelization is deferred to keep the branch-protection required check
 `pytest-and-gates` stable. The RB-01 cancel-in-progress policy, pandas pin,
 `byte_skip_reason`, fixtures, baselines, HELP_LOCK, and simulation are unchanged.
+
+## Windows CRLF marker reads
+
+Both `.githooks/pre-push` and `.github/workflows/python-tests.yml` normalize `scripts/ci_pytest_marker.txt` with `tr -d '\r'` before `pytest -m`, so a CRLF checkout cannot leave a stray CR inside the marker expression.
