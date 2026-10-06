@@ -54,6 +54,9 @@ jobs:
       - name: Contract gates (book admission)
         run: python scripts/gates/verify_book_admission.py
 
+      - name: Contract gates (baseline admission)
+        run: python scripts/gates/verify_baseline_admission.py
+
       - name: Minute classification gate
         run: python scripts/check_minute_classification.py
 

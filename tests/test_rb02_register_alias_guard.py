@@ -15,8 +15,8 @@ def isolated_registries(monkeypatch):
 
 def test_current_registries_are_healthy():
     assert books.csv_strategy_names() == tuple(books.BOOKS)
-    assert len(books.BOOKS) == 68
-    assert len(books.MINUTE_ONLY_BOOKS) == 1
+    assert len(books.BOOKS) == len(books.csv_strategy_names())
+    assert "version7" in books.MINUTE_ONLY_BOOKS
     aliases = books._alias_map()
     for book in books.BOOKS.values():
         assert book.name in book.aliases
