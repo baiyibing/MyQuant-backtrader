@@ -11,7 +11,14 @@ from backtest.research.ledger_math import (
     transfer_fee_rate,
 )
 from backtest.research.market_layer import transfer_fee_market
+from backtest.research.rule_profile import RuleProfile
 from scripts.research.generate_off_byte_baseline import P05_CASES, run_p05_case
+
+P05_COMPONENT_PROFILE = RuleProfile(
+    name="industry",
+    revision="industry-p05-transfer-fee-20261006",
+    account_fee_schedule=True,
+)
 
 
 @pytest.mark.parametrize(
@@ -70,7 +77,7 @@ def test_industry_schedule_debits_transfer_fee_on_both_sides():
     ids=[f"{book}-{engine}" for book, engine in P05_CASES],
 )
 def test_industry_transfer_fee_components_cover_shared_and_native_paths(book, engine):
-    state = run_p05_case(book, engine, rule_profile="industry")
+    state = run_p05_case(book, engine, rule_profile=P05_COMPONENT_PROFILE)
     fills = [row for row in state.trades if str(row["side"]).upper() in {"BUY", "SELL"}]
 
     assert any(str(row["side"]).upper() == "BUY" for row in fills)

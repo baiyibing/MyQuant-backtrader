@@ -7,7 +7,12 @@ defaults to the lake's shares unit; callers can select lots (100 shares).
 
 from __future__ import annotations
 
-from backtest.research.lot_rounding import tail_capacity_board_lots, tail_slice_board_lots, tail_budget_board_lots
+from backtest.research.lot_rounding import (
+    BOARD_LOT,
+    tail_budget_board_lots,
+    tail_capacity_board_lots,
+    tail_slice_board_lots,
+)
 
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
@@ -72,18 +77,52 @@ def tail_quote(row, hm: int, volume_unit: str | None = None) -> TailQuote | None
     return TailQuote(price, capacity)
 
 
-def affordable_shares(wanted: int, price: float, cash: float, debit_fn) -> int:
-    """Largest 100-share child payable now, including its own minimum fee."""
-    if not isfinite(price) or price <= 0 or not isfinite(cash) or cash <= 0:
+def fee_aware_buy_quantity(
+    wanted: int,
+    price: float,
+    budget: float,
+    cash: float,
+    debit_fn,
+    *,
+    increment: int = BOARD_LOT,
+    minimum: int = BOARD_LOT,
+) -> int:
+    """Largest active-lot quantity whose all-in debit fits budget and cash."""
+    if (
+        isinstance(wanted, bool)
+        or not isinstance(wanted, int)
+        or wanted <= 0
+        or increment <= 0
+        or minimum < 0
+        or not isfinite(price)
+        or price <= 0
+        or not isfinite(budget)
+        or budget <= 0
+        or not isfinite(cash)
+        or cash <= 0
+    ):
         return 0
-    lo, hi = 0, max(0, int(wanted)) // 100
+    limit = min(float(budget), float(cash))
+    lo, hi = 0, wanted // increment
     while lo < hi:
         mid = (lo + hi + 1) // 2
-        if debit_fn(mid * 100 * price) <= cash:
+        if debit_fn(mid * increment * price) <= limit:
             lo = mid
         else:
             hi = mid - 1
-    return lo * 100
+    quantity = lo * increment
+    return quantity if quantity >= minimum else 0
+
+
+def affordable_shares(wanted: int, price: float, cash: float, debit_fn) -> int:
+    """Largest 100-share child payable now, including its own minimum fee."""
+    return fee_aware_buy_quantity(
+        max(0, int(wanted)),
+        price,
+        cash,
+        cash,
+        debit_fn,
+    )
 
 
 @dataclass
@@ -103,18 +142,24 @@ class TailParent:
         target = tail_budget_board_lots(budget, price)
         return cls(target, tail_slice_board_lots(target, len(TAIL_MINUTES)), float(budget))
 
-    def requested_shares(self, quote: TailQuote) -> int:
+    def requested_shares(self, quote: TailQuote, debit_fn=None) -> int:
         """Apply slice, market capacity and nominal budget limits, never cash."""
         wanted = min(self.slice_shares, quote.capacity,
                      self.target_shares - self.filled_shares)
-        # Rising prices must not enlarge the original strategy's notional
-        # allocation. Fees remain an additional cash constraint, as in ledger.
+        # Legacy limits the parent by notional. Industry can include each
+        # child order's fees in the same remaining parent budget.
         return affordable_shares(wanted, quote.price,
-                                 max(0.0, self.budget - self.spent), lambda x: x)
+                                 max(0.0, self.budget - self.spent),
+                                 (lambda x: x) if debit_fn is None else debit_fn)
 
-    def allocation(self, quote: TailQuote, cash: float, debit_fn) -> int:
+    def allocation(self, quote: TailQuote, cash: float, debit_fn, *, budget_debit_fn=None) -> int:
         """Non-strict books size each child against cash available right now."""
-        return affordable_shares(self.requested_shares(quote), quote.price, cash, debit_fn)
+        return affordable_shares(
+            self.requested_shares(quote, budget_debit_fn),
+            quote.price,
+            cash,
+            debit_fn,
+        )
 
     def opening_debit(self, price: float, debit_fn) -> float:
         """Known-price funding check; no cash reservation or future quotes.
@@ -126,9 +171,10 @@ class TailParent:
         children = len(TAIL_MINUTES) * debit_fn(self.slice_shares * price) if self.slice_shares else 0.0
         return max(whole, children)
 
-    def book(self, shares: int, price: float) -> None:
+    def book(self, shares: int, price: float, debit_fn=None) -> None:
         self.filled_shares += shares
-        self.spent += shares * price
+        notional = shares * price
+        self.spent += notional if debit_fn is None else debit_fn(notional)
 
 
 def tail_policy(volume_unit: str | None = "shares") -> dict:

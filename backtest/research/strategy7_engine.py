@@ -33,7 +33,12 @@ from backtest.research.ashare_session import (
     session_limit_prices, skip_buy_at_limit, defer_sell_at_limit,
 )
 from backtest.research.minute_audit import record_fill, audit_scope
-from backtest.research.tail_window_buy import TAIL_MINUTES, TailParent, tail_quote
+from backtest.research.tail_window_buy import (
+    TAIL_MINUTES,
+    TailParent,
+    fee_aware_buy_quantity,
+    tail_quote,
+)
 from oskh_data.symbol_format import to_canonical_symbol
 
 NAME_BUDGET = 1_000_000.0
@@ -242,6 +247,16 @@ def _buy(state: SimResult, position: Position | None, symbol: str, day: date, hm
          fee: FeeSchedule = DEFAULT_SCHEDULE) -> Position | None:
     target = NAME_BUDGET * fraction
     shares = native_budget_board_lots(target, price)
+    if getattr(
+        getattr(state, "rule_profile", None), "fee_aware_affordability", False
+    ):
+        shares = fee_aware_buy_quantity(
+            shares,
+            price,
+            target,
+            state.cash,
+            lambda notional: fee.debit_buy(notional, day, symbol),
+        )
     order_id = fee_order_id(state)
     if order_id is None:
         cost = fee.debit_buy(shares * price)
@@ -340,8 +355,15 @@ def _buy_tail_slice(state: SimResult, parent: TailParent, symbol: str, day: date
     if quote is None:
         _event(state, day, symbol, hm, "skip", 0, None, "skip_tail_quote")
         return
+    debit = lambda value: fee.debit_buy(value, day, symbol)
+    fee_aware = getattr(
+        getattr(state, "rule_profile", None), "fee_aware_affordability", False
+    )
     shares = parent.allocation(
-        quote, state.cash, lambda value: fee.debit_buy(value, day, symbol)
+        quote,
+        state.cash,
+        debit,
+        budget_debit_fn=debit if fee_aware else None,
     )
     if not shares:
         _event(state, day, symbol, hm, "skip", 0, quote.price, "skip_tail_allocation")
@@ -376,7 +398,7 @@ def _buy_tail_slice(state: SimResult, parent: TailParent, symbol: str, day: date
         trial_lot.shares += shares
     position.last_add_date = day
     # Merged T+0 children change size and weighted cost, never the initial peak.
-    parent.book(shares, quote.price)
+    parent.book(shares, quote.price, debit if fee_aware else None)
     _event(
         state, day, symbol, hm, "buy", shares, quote.price, "buy:trial",
         cash_before=cash_before, order_id=order_id,

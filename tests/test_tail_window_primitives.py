@@ -193,6 +193,23 @@ def test_28_independent_child_fees_are_charged_from_cash(schedule, fees):
     assert cash == pytest.approx(0)
 
 
+def test_fee_aware_parent_budget_includes_each_child_order_fee():
+    parent = TailParent.from_budget(28_000, 10)
+    fills = []
+    for _ in TAIL_MINUTES:
+        shares = parent.allocation(
+            TailQuote(10, 100_000),
+            100_000,
+            QLIB_PORTANA.debit_buy,
+            budget_debit_fn=QLIB_PORTANA.debit_buy,
+        )
+        fills.append(shares)
+        parent.book(shares, 10, QLIB_PORTANA.debit_buy)
+    assert fills == [100] * 27 + [0]
+    assert parent.filled_shares == 2700
+    assert parent.spent == 27_135
+
+
 def test_rising_prices_cannot_expand_parent_notional_budget():
     parent = TailParent.from_budget(28_000, 10)
     fills = []

@@ -3,8 +3,15 @@ from __future__ import annotations
 import pytest
 
 from backtest.research import csv_daily_backtest as daily
+from backtest.research.rule_profile import RuleProfile
 from scripts.research.audit_s12_price_domain import fixture, replay
 from tests.test_strategy12_engine import bars_for
+
+P02_COMPONENT_PROFILE = RuleProfile(
+    name="industry",
+    revision="industry-p02-20261006",
+    s12_domain_stamp=True,
+)
 
 
 PROFILE_STATS = {
@@ -41,7 +48,9 @@ def test_daily_s12_industry_stamps_front_valuation_without_legacy_stats_change()
     )
     omitted = daily.simulate(*args, strategy="version12")
     legacy = daily.simulate(*args, strategy="version12", rule_profile="legacy")
-    industry = daily.simulate(*args, strategy="version12", rule_profile="industry")
+    industry = daily.simulate(
+        *args, strategy="version12", rule_profile=P02_COMPONENT_PROFILE
+    )
 
     _assert_profile_stamp_only(omitted, legacy, industry, "front")
 
@@ -57,6 +66,8 @@ def test_minute_s12_industry_stamps_actual_valuation_domain_only(
     data = fixture()
     omitted, _ = replay(*data, enabled=x01_enabled)
     legacy, _ = replay(*data, enabled=x01_enabled, rule_profile="legacy")
-    industry, _ = replay(*data, enabled=x01_enabled, rule_profile="industry")
+    industry, _ = replay(
+        *data, enabled=x01_enabled, rule_profile=P02_COMPONENT_PROFILE
+    )
 
     _assert_profile_stamp_only(omitted, legacy, industry, expected_domain)

@@ -57,6 +57,7 @@ from backtest.research.csv_ledger import (
     rescale_s8_groups,
     s8_policy,
     trade_commission,
+    uses_fee_aware_affordability,
 )
 from backtest.research.minute_audit import record_rejection
 from backtest.research.csv_simulate_loop import (
@@ -638,8 +639,17 @@ def run_chronological_day(
                 st.stats["skip_buy_gate"] += 1
                 continue
             parent = TailParent.from_budget(budget, px)
-            if independent_policy is not None:
-                needed = parent.opening_debit(px, debit)
+            fee_aware = uses_fee_aware_affordability(st)
+            if fee_aware:
+                order_debit = (
+                    lambda notional, code=code: st.account_fee_schedule.debit_buy(
+                        notional, day, code
+                    )
+                )
+            else:
+                order_debit = debit
+            if independent_policy is not None and not fee_aware:
+                needed = parent.opening_debit(px, order_debit)
                 if not check_buy_cash(st, needed=needed, available=st.cash, date=ds, code=code):
                     st.stats["skip_cash"] = st.stats.get("skip_cash", 0) + 1
                     st.stats["skip_cash_notional"] = (
@@ -647,7 +657,7 @@ def run_chronological_day(
                     )
                     record_rejection(st, code, day, "skip_cash", px)
                     continue
-            tail_orders[code] = [parent, None, limits]
+            tail_orders[code] = [parent, None, limits, order_debit]
 
     def fill_tail_slice(at_hm, only_code=None):
         nonlocal tail_settled_debits
@@ -657,7 +667,7 @@ def run_chronological_day(
             if (code, at_hm) in tail_attempted:
                 continue
             tail_attempted.add((code, at_hm))
-            parent, merge_lot, limits = order
+            parent, merge_lot, limits, order_debit = order
             frame = frame_for(code)
             rows = frame.loc[frame["hm"] == at_hm]
             if len(rows) != 1 or bool(rows.iloc[0].get("_tail_duplicate", False)):
@@ -674,22 +684,47 @@ def run_chronological_day(
                     and hit_limit_down(quote.price, limits[1])):
                 reject_tail("limit_down")
                 continue
-            shares = (parent.requested_shares(quote) if independent_policy is not None
-                      else parent.allocation(quote, st.cash, debit))
+            fee_aware = uses_fee_aware_affordability(st)
+            shares = (
+                parent.requested_shares(
+                    quote, order_debit if fee_aware else None
+                )
+                if independent_policy is not None and not fee_aware
+                else parent.allocation(
+                    quote,
+                    st.cash,
+                    order_debit,
+                    budget_debit_fn=order_debit if fee_aware else None,
+                )
+            )
             if shares <= 0:
                 continue
+            remaining_budget = max(0.0, parent.budget - parent.spent)
             quota_used = st.daily_quota_used
             if execute_buy(
-                st, code, quote.price, shares * quote.price, day_i, day,
+                st,
+                code,
+                quote.price,
+                remaining_budget if fee_aware else shares * quote.price,
+                day_i,
+                day,
                 reason="pool:tail_window", bucket_id=at_hm,
                 shares_override=shares, merge_lot=merge_lot, hm=at_hm,
                 **({"position_id": f"{code}@{ds}", "entry_signal_date": ds}
                    if independent_policy is not None else {}),
             ):
                 order[1] = st.positions[code][-1] if merge_lot is None else merge_lot
-                parent.book(int(st.trades[-1]["shares"]), quote.price)
+                parent.book(
+                    int(st.trades[-1]["shares"]),
+                    quote.price,
+                    order_debit if fee_aware else None,
+                )
                 if hooks.get("sizing", "daily_quota") == "daily_quota":
-                    tail_settled_debits += st.trades[-1]["notional"] + st.trades[-1]["commission"]
+                    tail_settled_debits += (
+                        st.trades[-1]["notional"]
+                        + st.trades[-1]["commission"]
+                        + st.trades[-1].get("transfer_fee", 0.0)
+                    )
             if hooks.get("sizing") == "per_name":
                 st.daily_quota_used = quota_used
 

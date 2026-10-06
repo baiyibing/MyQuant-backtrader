@@ -38,6 +38,7 @@ from backtest.research.csv_ledger import (
     position_identity,
     s8_open_groups,
     s8_policy,
+    uses_fee_aware_affordability,
 )
 from backtest.research.csv_strategy_books import apply_csv_strategy
 from backtest.research.exdiv_map import mapped_prev_close
@@ -427,7 +428,7 @@ def run_pool_buys_day(
                 per, px, top_up_min_lot=allows_min_lot_top_up(st)
             )
             notional = shares * px
-            if not check_buy_cash(
+            if not uses_fee_aware_affordability(st) and not check_buy_cash(
                 st, needed=notional + trade_commission(notional, st.buy_cost_rate, st.min_cost),
                 available=st.cash, date=ds, code=code,
             ):
@@ -531,7 +532,7 @@ def run_step_adds_day(
             per, px, top_up_min_lot=allows_min_lot_top_up(st)
         )
         notional = shares * px
-        if not check_buy_cash(
+        if not uses_fee_aware_affordability(st) and not check_buy_cash(
             st, needed=notional + trade_commission(notional, st.buy_cost_rate, st.min_cost),
             available=st.cash, date=ds, code=code,
         ):
@@ -735,7 +736,7 @@ def run_buybacks_day(
                 st.stats["skip_limit_up"] += 1
                 continue
             notional = shares * px
-            if not check_buy_cash(
+            if not uses_fee_aware_affordability(st) and not check_buy_cash(
                 st, needed=notional + trade_commission(notional, st.buy_cost_rate, st.min_cost),
                 available=st.cash, date=ds, code=code,
             ):
