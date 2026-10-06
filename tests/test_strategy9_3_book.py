@@ -215,20 +215,22 @@ def test_minute_mode_delayed_buy_smoke():
     assert not [trade for trade in st.trades if trade["side"] == "SELL"]
 
 
-def test_minute_max_hold_queues_next_session_open():
-    days, frame = daily_frame(27)
+def test_minute_max_hold_limit_down_open_defers_once():
+    days, frame = daily_frame(28)
+    deferred_day = days[rules.DELAY_DAYS + rules.MAX_HOLD + 1]
     rows = []
     for day in days:
         for hm in (570, 895, 900):
+            px = 9.0 if day == deferred_day else 10.0
             rows.append(
                 {
                     "time": day + pd.Timedelta(minutes=hm),
                     "ymd": day.strftime("%Y%m%d"),
                     "hm": hm,
-                    "open": 10.0,
-                    "high": 10.1,
-                    "low": 9.5,
-                    "close": 10.0,
+                    "open": px,
+                    "high": px if day == deferred_day else 10.1,
+                    "low": px if day == deferred_day else 9.5,
+                    "close": px,
                 }
             )
     minutes = pd.DataFrame(rows).set_index("time")
@@ -243,5 +245,6 @@ def test_minute_max_hold_queues_next_session_open():
     sells = [trade for trade in st.trades if trade["side"] == "SELL"]
     assert len(sells) == 1
     assert sells[0]["reason"] == "force_sell:max_hold"
-    assert sells[0]["date"] == days[rules.DELAY_DAYS + rules.MAX_HOLD + 1].strftime("%Y%m%d")
+    assert sells[0]["date"] == days[rules.DELAY_DAYS + rules.MAX_HOLD + 2].strftime("%Y%m%d")
     assert sells[0]["price"] == pytest.approx(10.0)
+    assert st.stats["defer_sell_limit_down"] == 1
