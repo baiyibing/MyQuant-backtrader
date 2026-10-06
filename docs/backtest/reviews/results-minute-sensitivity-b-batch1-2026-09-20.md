@@ -2,6 +2,10 @@
 
 **Human GO B 首批已完成，范围是合成局部价格敏感性，非完整策略重放。** BASE `f2fe15124ffbc62d3c0526fc90fed78d014b1bb1`（Merge #136）。未配置生产分钟湖，Book/v7/Mode B 的全策略净收益、最大回撤、策略排名均为 **DATA_GAP**，数值空白。下述数值仅属于人工构造的独立事件，不推断实盘收益偏差、影响方向或引擎优劣。
 
+复跑脚本默认严格校验所依赖源码与上述 BASE 一致；当前源码漂移时会 fail closed。
+标准复跑方式是在冻结提交创建隔离目录：`git worktree add --detach <dir> f2fe15124ffbc62d3c0526fc90fed78d014b1bb1`，然后在该目录运行脚本。
+`--allow-source-drift` 仅供显式研究当前源码；manifest 会记录不匹配及漂移路径，并警告结果**不是**本页的冻结实验。
+
 依据：[SSOT §C](eval-minute-pitfall-vs-asbuilt-2026-09-20.md#c-收束与人裁选项)；[本轮计划](plan-minute-sensitivity-b-2026-09-20.md)；[复跑 README](../../../backtest/research/exports/minute_sensitivity_b_20260920/README.md)；[manifest](../../../backtest/research/exports/minute_sensitivity_b_20260920/batch1/manifest.json)。本轮仅新增研究脚本、验证工具、文档和独立 CSV/JSON；不修改生产成交/扫描/费用/仓位/估值/默认参数/CLI，不 monkeypatch，不覆盖基线，不开 PR、不 push。
 
 ## 1. 样本与可得性

@@ -613,20 +613,69 @@ def summaries(rows: list[dict]) -> list[dict]:
     return out
 
 
-def check_source_fence() -> dict:
+class SourceFenceHashes(dict):
+    """Source hashes plus BASE-fence provenance (serializes as the old dict)."""
+
+    def __init__(self, hashes: dict, drifted_paths: list[str]) -> None:
+        super().__init__(hashes)
+        self.drifted_paths = tuple(drifted_paths)
+
+
+def _source_fence_error(drifted_paths: list[str], missing_at_base: list[str]) -> ValueError:
+    details = [f"Drifted source paths: {', '.join(drifted_paths)}."]
+    if missing_at_base:
+        details.append(f"Missing or unreadable at BASE: {', '.join(missing_at_base)}.")
+    return ValueError(
+        "Sensitivity-B source fence failed. "
+        + " ".join(details)
+        + f" This script reproduces the frozen sensitivity-B experiment at BASE {BASE}. "
+        + f"Run it there, for example: git worktree add --detach <dir> {BASE}. "
+        + "Alternatively, pass --allow-source-drift to run current sources; "
+        + "those results are NOT the frozen experiment."
+    )
+
+
+def source_fence_manifest(source_fence: SourceFenceHashes) -> dict:
+    """Manifest fields; preserve the frozen-run shape when the fence matches."""
+    drifted_paths = list(source_fence.drifted_paths)
+    fields = {"checked_sources_match_base": not drifted_paths}
+    if drifted_paths:
+        fields["drifted_source_paths"] = drifted_paths
+    return fields
+
+
+def check_source_fence(*, allow_source_drift: bool = False) -> SourceFenceHashes:
     before = source_hashes()
+    drifted_paths = []
+    missing_at_base = []
     for path, digest in before.items():
-        base_bytes = subprocess.check_output(["git", "show", f"{BASE}:{path}"], cwd=ROOT)
+        try:
+            base_bytes = subprocess.check_output(
+                ["git", "show", f"{BASE}:{path}"], cwd=ROOT, stderr=subprocess.PIPE,
+            )
+        except subprocess.CalledProcessError:
+            drifted_paths.append(path)
+            missing_at_base.append(path)
+            continue
         if hashlib.sha256(base_bytes).hexdigest() != digest:
-            raise ValueError(f"Production source differs from experiment BASE: {path}")
-    return before
+            drifted_paths.append(path)
+    if drifted_paths and not allow_source_drift:
+        raise _source_fence_error(drifted_paths, missing_at_base)
+    if drifted_paths:
+        print(
+            "WARNING: --allow-source-drift bypassed the sensitivity-B BASE fence; "
+            f"{len(drifted_paths)} source path(s) differ from {BASE}. "
+            "RESULTS ARE NOT THE FROZEN SENSITIVITY-B EXPERIMENT.",
+            file=sys.stderr,
+        )
+    return SourceFenceHashes(before, drifted_paths)
 
 
-def run(output: Path) -> dict:
+def run(output: Path, *, allow_source_drift: bool = False) -> dict:
     # Fail closed before any output mutation; never reuse baseline/artifact dirs.
     if output.exists():
         raise FileExistsError(f"Refusing to overwrite output directory: {output}")
-    before = check_source_fence()
+    before = check_source_fence(allow_source_drift=allow_source_drift)
     cases = fixtures()
     clocks, audits = clock_rows(cases)
     mb = modeb_baselines()
@@ -655,7 +704,7 @@ def run(output: Path) -> dict:
         python=sys.version, pandas=pd.__version__, numpy=np.__version__,
         timezone="Asia/Shanghai", bar_label="end", order_delay_ms=1,
         source_hashes_before=before, source_hashes_after=source_hashes(),
-        checked_sources_match_base=True,
+        **source_fence_manifest(before),
         harness_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         production_replay="DATA_GAP", source="constructed_synthetic_not_handoff_market_sample",
         quantities="frozen_from_baseline_for_clock_and_cost; no_strategy_sizing_replay",
@@ -1050,11 +1099,14 @@ def load_minute_frames(symbols: list[str], start: str, end: str, *,
 
 
 def run_lake(output: Path, *, symbols=None, start="20260916", end="20260918",
-             qlib_1min_root: Path | str | None = None) -> dict:
+             qlib_1min_root: Path | str | None = None,
+             allow_source_drift: bool = False) -> dict:
     if output.exists() or output.is_symlink():
         raise FileExistsError(f"Refusing to overwrite output directory: {output}")
     dates, symbols = lake_dates(start, end), lake_symbols(symbols)
-    before = check_source_fence()  # Fatal drift is never downgraded to DATA_GAP.
+    before = check_source_fence(
+        allow_source_drift=allow_source_drift,
+    )  # Fatal default drift is never downgraded to DATA_GAP.
     reader_sources = {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest() for name in
                       ("backtest/research/ashare_bars.py", "common/infra/data_root.py",
                        "backtest/research/qlib_bin_1min.py")}
@@ -1156,7 +1208,8 @@ def run_lake(output: Path, *, symbols=None, start="20260916", end="20260918",
         volume_cap="separate p=0.1 scenario with unavailable typed volume, no fabricated volume",
         local_rank="NOT_RUN", quantities="clock/cost frozen from original baseline ledger",
         python=sys.version, pandas=pd.__version__, numpy=np.__version__,
-        checked_sources_match_base=True, source_hashes_before=before, source_hashes_after=source_hashes(),
+        **source_fence_manifest(before),
+        source_hashes_before=before, source_hashes_after=source_hashes(),
         reader_source_hashes=reader_sources,
         harness_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         input_files=inventory, input_provenance="qlib bin or parquet source; no full partition hash; no drive letter probing",
@@ -1392,13 +1445,14 @@ def modeb_summaries(trades: list[dict]) -> list[dict]:
 
 
 def run_modeb(output: Path, *, symbols=None, start="20260916", end="20260918",
-              qlib_1min_root: Path | str | None = None) -> dict:
+              qlib_1min_root: Path | str | None = None,
+              allow_source_drift: bool = False) -> dict:
     """Batch 3 Mode B clock axis; independent export dir; production C frozen."""
     if output.exists() or output.is_symlink():
         raise FileExistsError(f"Refusing to overwrite output directory: {output}")
     dates = lake_dates(start, end)
     symbols = lake_symbols(symbols if symbols is not None else [",".join(BATCH2_SYMBOLS)])
-    before = check_source_fence()
+    before = check_source_fence(allow_source_drift=allow_source_drift)
     reader_sources = {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest() for name in
                       ("backtest/research/ashare_bars.py", "common/infra/data_root.py",
                        "backtest/research/qlib_bin_1min.py",
@@ -1558,7 +1612,8 @@ def run_modeb(output: Path, *, symbols=None, start="20260916", end="20260918",
         note_same_dataset="qlib_bin is derived materialization of parquet lake; not a competing universe",
         note_no_book_v7_nav_compare="Do not compare Mode B total NAV to Book/v7 as engine superiority",
         python=sys.version, pandas=pd.__version__, numpy=np.__version__,
-        checked_sources_match_base=True, source_hashes_before=before,
+        **source_fence_manifest(before),
+        source_hashes_before=before,
         source_hashes_after=source_hashes(), reader_source_hashes=reader_sources,
         harness_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         input_files=inventory,
@@ -1583,6 +1638,10 @@ def main() -> None:
     parser.add_argument("--end", default="20260918", help="Minute window end YYYYMMDD")
     parser.add_argument("--qlib-1min-root", type=Path, default=None,
                         help="Preferred qlib 1min bin root (default 4090 my_data_1min; env QLIB_1MIN_ROOT)")
+    parser.add_argument(
+        "--allow-source-drift", action="store_true",
+        help="Run current sources despite BASE drift; manifest marks results as not frozen",
+    )
     args = parser.parse_args()
     alias = {1: "synthetic", 2: "lake", 3: "modeb"}.get(args.batch)
     if alias and args.mode and args.mode != alias:
@@ -1590,12 +1649,14 @@ def main() -> None:
     mode = args.mode or alias or "synthetic"
     if mode == "lake":
         result = run_lake(args.output_dir, symbols=args.symbols, start=args.start, end=args.end,
-                          qlib_1min_root=args.qlib_1min_root)
+                          qlib_1min_root=args.qlib_1min_root,
+                          allow_source_drift=args.allow_source_drift)
     elif mode == "modeb":
         result = run_modeb(args.output_dir, symbols=args.symbols, start=args.start, end=args.end,
-                           qlib_1min_root=args.qlib_1min_root)
+                           qlib_1min_root=args.qlib_1min_root,
+                           allow_source_drift=args.allow_source_drift)
     else:
-        result = run(args.output_dir)
+        result = run(args.output_dir, allow_source_drift=args.allow_source_drift)
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 
