@@ -822,6 +822,8 @@ def simulate(
             daily_quota=daily_quota,
             **({"context": policy_context} if policy.initialize is not None else {}),
         )
+        if profile.supplementary_min_lot:
+            st.rule_profile = profile
         defaults = book_fill_defaults(hooks, minute_stop_trigger)
         if hooks.get("run_minute_day") is not None:
             raise ValueError("run_minute_day is retired; use minute_session with HeldMinuteCursor")

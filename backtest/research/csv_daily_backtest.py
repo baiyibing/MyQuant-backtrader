@@ -329,6 +329,8 @@ def simulate(
         pool_names_by_day=pool_names_by_day,
         daily_quota=daily_quota,
     )
+    if profile.supplementary_min_lot:
+        st.rule_profile = profile
     absolute_exit = hooks["bind_absolute_exit"](st, bars) if "bind_absolute_exit" in hooks else None
     configure_s8(st, hooks)
     st.star_lot_declare_check = star_lot_declare_check

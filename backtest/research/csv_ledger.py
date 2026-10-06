@@ -646,8 +646,14 @@ def last_close_mark(df, day, fallback: float) -> float:
     return float(fallback) if m is None else m
 
 
-def _buy_size(per_quota: float, price: float, *, star_declare: bool = False) -> tuple[int, float]:
-    """默认整百且可补足 100 股；STAR opt-in 按整数股、不补足，由入口校验。"""
+def _buy_size(
+    per_quota: float,
+    price: float,
+    *,
+    star_declare: bool = False,
+    top_up_min_lot: bool = True,
+) -> tuple[int, float]:
+    """Size a buy; legacy may top up one board lot, industry B8-03 may not."""
     if price <= 0 or per_quota <= 0:
         return 0, 0.0
     if star_declare:
@@ -655,11 +661,18 @@ def _buy_size(per_quota: float, price: float, *, star_declare: bool = False) -> 
         return budget_integer_shares(per_quota, price), 0.0
     shares = budget_board_lots(per_quota, price)
     supp = 0.0
-    if shares == 0:
+    if shares == 0 and top_up_min_lot:
         notional = BOARD_LOT * price
         supp = supplementary_notional(notional, per_quota)
         shares = BOARD_LOT
     return shares, supp
+
+
+def allows_min_lot_top_up(st) -> bool:
+    """Return whether the active profile preserves legacy one-lot supplementation."""
+    return not bool(
+        getattr(getattr(st, "rule_profile", None), "supplementary_min_lot", False)
+    )
 
 
 def execute_buy(
@@ -720,8 +733,14 @@ def execute_buy(
     ):
         raise ValueError("merge_lot must be an existing same-code, same-day buy lot")
     star_declare = st.star_lot_declare_check and _digit_prefix(code).startswith(("688", "689"))
+    no_min_lot_top_up = not allows_min_lot_top_up(st)
     if shares_override is None:
-        shares, supp = _buy_size(per, px, star_declare=star_declare)
+        shares, supp = _buy_size(
+            per,
+            px,
+            star_declare=star_declare,
+            top_up_min_lot=not no_min_lot_top_up,
+        )
     else:
         if isinstance(shares_override, bool) or not isinstance(shares_override, Integral):
             raise ValueError("shares_override must be an integer share count")
@@ -738,6 +757,10 @@ def execute_buy(
         record_rejection(st, code, day, reason_code, px)
         return False
     if shares <= 0:
+        if shares_override is None and no_min_lot_top_up and not star_declare:
+            reason_code = "skip_min_lot_budget"
+            st.stats[reason_code] = st.stats.get(reason_code, 0) + 1
+            record_rejection(st, code, day, reason_code, px)
         return False
     per_order_fees = hasattr(st, "_fee_accumulators")
     if per_order_fees:
