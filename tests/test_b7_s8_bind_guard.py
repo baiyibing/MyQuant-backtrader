@@ -1,4 +1,4 @@
-"""Keep S8 binding and cash defaults automatic as book families grow."""
+"""Keep S8 binding and cash defaults aligned with explicit book admission."""
 import ast
 import inspect
 
@@ -29,11 +29,11 @@ def test_registered_book_s8_cash_default(name):
 
 @pytest.mark.parametrize('name,expected', [
     (None, False), ('', False), ('version6', False), ('version6_45', True),
-    ('version6_999', True), ('version8', True), ('version8_1', False),
-    ('version8_7', True), ('version9_1', False), ('version9_2', False),
+    ('version6_999', False), ('version8', True), ('version8_1', False),
+    ('version8_7', False), ('version9_1', False), ('version9_2', False),
     ('version12', False),
 ])
-def test_family_rule_including_future_books(name, expected):
+def test_explicit_admission_including_future_books(name, expected):
     assert csv_ledger.uses_s8_independent(name, 'per_name') is expected
     assert not csv_ledger.uses_s8_independent(name, None)
     assert not csv_ledger.uses_s8_independent(name, 'daily_quota')
