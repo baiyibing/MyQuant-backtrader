@@ -345,7 +345,8 @@ def simulate(
         daily_quota=daily_quota,
     )
     if (
-        profile.supplementary_min_lot
+        profile.exchange_quantity_rules
+        or profile.supplementary_min_lot
         or profile.fee_aware_affordability
         or profile.shrink_on_short_cash
     ):

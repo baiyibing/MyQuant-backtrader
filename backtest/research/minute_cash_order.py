@@ -26,7 +26,12 @@ and S2-B hl cross-reference. This documentation does not change scheduling.
 
 from __future__ import annotations
 
-from backtest.research.lot_rounding import scale_out_board_lots, floor_board_lots
+from backtest.research.lot_rounding import (
+    buy_quantity_increment,
+    buy_quantity_minimum,
+    floor_board_lots,
+    scale_out_board_lots,
+)
 
 from dataclasses import dataclass
 from datetime import date
@@ -44,6 +49,7 @@ from backtest.research.csv_common import book_limit_prices
 from backtest.research.csv_ledger import (
     CHASE_HM,
     IndependentExitPosition,
+    active_buy_quantity_rule,
     check_buy_cash,
     _sell,
     apply_exdiv_economics,
@@ -639,7 +645,13 @@ def run_chronological_day(
             if callable(buy_gate) and not buy_gate(code, px, day, closes):
                 st.stats["skip_buy_gate"] += 1
                 continue
-            parent = TailParent.from_budget(budget, px)
+            quantity_rule = active_buy_quantity_rule(st, code)
+            parent = TailParent.from_budget(
+                budget,
+                px,
+                declaration_increment=buy_quantity_increment(quantity_rule),
+                declaration_minimum=buy_quantity_minimum(quantity_rule),
+            )
             fee_aware = uses_fee_aware_affordability(st)
             shrink_short_cash = uses_shrink_on_short_cash(st)
             if fee_aware:

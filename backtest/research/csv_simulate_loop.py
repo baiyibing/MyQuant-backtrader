@@ -23,17 +23,17 @@ from backtest.research.csv_common import (
     day_bar_and_prev_closes,
 )
 from backtest.research.csv_ledger import (
-    allows_min_lot_top_up,
     check_buy_cash,
     SimState,
-    _buy_size,
     chase_decision,
     configure_s8,
     execute_buy,
-    trade_commission,
+    trade_commission as trade_commission,
     hit_limit_down,
     hit_limit_up,
     market_close_mark,
+    preview_buy_cash_needed,
+    preview_final_buy_declaration,
     queue_limit_up_chase,
     position_identity,
     s8_open_groups,
@@ -236,8 +236,8 @@ def run_chase_due_day(
             st, code, buy_px, per_ch, day_i, day, reason="chase:T+1", **volume_kwargs
         ):
             st.stats["chase_buy_fail"] += 1
-            shares, _ = _buy_size(
-                per_ch, buy_px, top_up_min_lot=allows_min_lot_top_up(st)
+            shares, _, _, _ = preview_final_buy_declaration(
+                st, code, buy_px, per_ch, day
             )
             if (
                 sum(
@@ -424,12 +424,17 @@ def run_pool_buys_day(
         if sizing == "per_name":
             if unit_shares is not None:
                 per = unit_shares * px
-            shares, _ = _buy_size(
-                per, px, top_up_min_lot=allows_min_lot_top_up(st)
+            shares, _, _, _ = preview_final_buy_declaration(
+                st,
+                code,
+                px,
+                per,
+                day,
+                shares_override=volume_kwargs.get("shares_override"),
             )
-            notional = shares * px
             if not uses_shrink_on_short_cash(st) and not check_buy_cash(
-                st, needed=notional + trade_commission(notional, st.buy_cost_rate, st.min_cost),
+                st,
+                needed=preview_buy_cash_needed(st, code, px, shares, day),
                 available=st.cash, date=ds, code=code,
             ):
                 st.stats["skip_cash"] = st.stats.setdefault("skip_cash", 0) + 1
@@ -528,12 +533,17 @@ def run_step_adds_day(
             per = float(name_lot_budget(name_budget, lots))
         if unit_shares is not None:
             per = unit_shares * px
-        shares, _ = _buy_size(
-            per, px, top_up_min_lot=allows_min_lot_top_up(st)
+        shares, _, _, _ = preview_final_buy_declaration(
+            st,
+            code,
+            px,
+            per,
+            day,
+            shares_override=unit_shares,
         )
-        notional = shares * px
         if not uses_shrink_on_short_cash(st) and not check_buy_cash(
-            st, needed=notional + trade_commission(notional, st.buy_cost_rate, st.min_cost),
+            st,
+            needed=preview_buy_cash_needed(st, code, px, shares, day),
             available=st.cash, date=ds, code=code,
         ):
             st.stats["skip_cash"] = int(st.stats.get("skip_cash", 0)) + 1
@@ -735,9 +745,18 @@ def run_buybacks_day(
             if skip_buy_at_limit(px, limits):
                 st.stats["skip_limit_up"] += 1
                 continue
-            notional = shares * px
+            declared, _, _, _ = preview_final_buy_declaration(
+                st,
+                code,
+                px,
+                shares * px,
+                day,
+                shares_override=shares,
+            )
+            notional = declared * px
             if not uses_shrink_on_short_cash(st) and not check_buy_cash(
-                st, needed=notional + trade_commission(notional, st.buy_cost_rate, st.min_cost),
+                st,
+                needed=preview_buy_cash_needed(st, code, px, declared, day),
                 available=st.cash, date=ds, code=code,
             ):
                 st.stats["skip_cash"] = st.stats.get("skip_cash", 0) + 1

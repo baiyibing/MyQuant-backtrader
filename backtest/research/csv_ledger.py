@@ -26,7 +26,11 @@ from backtest.research.ashare_session import LIMIT_EPS, hit_limit_down as hit_li
 from backtest.research.ashare_volume_cap import VolumeCap
 from backtest.research.ashare_exdiv_economics import ExDivEconomics
 from backtest.research.book_capabilities import uses_s8_independent as _uses_s8_independent
-from backtest.research.market_layer import _digit_prefix, limit_prices, transfer_fee_market
+from backtest.research.market_layer import (
+    buy_quantity_market,
+    limit_prices,
+    transfer_fee_market,
+)
 from backtest.research.minute_audit import record_fill, record_rejection
 from backtest.research.ledger_math import (
     FeeAccumulator,
@@ -36,8 +40,13 @@ from backtest.research.ledger_math import (
 from backtest.research.lot_rounding import (
     BOARD_LOT,
     STAR_MIN_DECLARE,
+    budget_buy_quantity,
     budget_board_lots,
     budget_integer_shares,
+    buy_quantity_increment,
+    buy_quantity_minimum,
+    buy_quantity_rule,
+    nonnegative_override_buy_quantity,
     nonnegative_override_board_lots,
     supplementary_notional,
 )
@@ -700,6 +709,91 @@ def uses_shrink_on_short_cash(st) -> bool:
     )
 
 
+def uses_exchange_quantity_rules(st) -> bool:
+    """Return whether exchange-specific buy declarations are active."""
+    return bool(
+        getattr(getattr(st, "rule_profile", None), "exchange_quantity_rules", False)
+    )
+
+
+def active_buy_quantity_rule(st, code: str) -> str:
+    """Resolve the exact declaration rule used by preview and execution."""
+    return buy_quantity_rule(
+        buy_quantity_market(code),
+        exchange_quantity_rules=uses_exchange_quantity_rules(st),
+        star_lot_declare_check=st.star_lot_declare_check,
+    )
+
+
+def preview_buy_declaration(
+    st: SimState,
+    code: str,
+    px: float,
+    per: float,
+    *,
+    shares_override: int | None = None,
+) -> tuple[int, float, int, str]:
+    """Return final declared shares before any volume-cap partial fill.
+
+    Loop cash gates call this same primitive as ``execute_buy`` so B8-12 cannot
+    check a board-lot quantity and later submit a different STAR/BSE quantity.
+    """
+    rule = active_buy_quantity_rule(st, code)
+    if shares_override is None:
+        if buy_quantity_increment(rule) == BOARD_LOT:
+            shares, supp = _buy_size(
+                per,
+                px,
+                top_up_min_lot=allows_min_lot_top_up(st),
+            )
+        elif px <= 0 or per <= 0:
+            shares, supp = 0, 0.0
+        else:
+            shares, supp = budget_buy_quantity(per, px, rule), 0.0
+    else:
+        if isinstance(shares_override, bool) or not isinstance(shares_override, Integral):
+            raise ValueError("shares_override must be an integer share count")
+        shares = nonnegative_override_buy_quantity(shares_override, rule)
+        supp = 0.0
+    wanted_shares = shares
+    return shares, supp, wanted_shares, rule
+
+
+def preview_final_buy_declaration(
+    st: SimState,
+    code: str,
+    px: float,
+    per: float,
+    day,
+    *,
+    shares_override: int | None = None,
+) -> tuple[int, float, int, str]:
+    """Preview the fee-aware final declaration for one strategy order."""
+    shares, supp, wanted_shares, rule = preview_buy_declaration(
+        st, code, px, per, shares_override=shares_override
+    )
+    if uses_fee_aware_affordability(st) and shares > 0:
+        shares = fee_aware_buy_quantity(
+            shares,
+            px,
+            per,
+            st.cash if uses_shrink_on_short_cash(st) else per,
+            lambda notional: st.account_fee_schedule.debit_buy(notional, day, code),
+            increment=buy_quantity_increment(rule),
+            minimum=buy_quantity_minimum(rule),
+        )
+        supp = 0.0
+    return shares, supp, wanted_shares, rule
+
+
+def preview_buy_cash_needed(st: SimState, code: str, px: float, shares: int, day) -> float:
+    """Cash debit for the declaration used by loop and ledger pre-checks."""
+    notional = shares * px
+    if uses_fee_aware_affordability(st):
+        return st.account_fee_schedule.debit_buy(notional, day, code)
+    return notional + trade_commission(notional, st.buy_cost_rate, st.min_cost)
+
+
 def execute_buy(
     st: SimState,
     code: str,
@@ -757,51 +851,41 @@ def execute_buy(
         or not any(lot is merge_lot for lot in st.positions.get(code, []))
     ):
         raise ValueError("merge_lot must be an existing same-code, same-day buy lot")
-    star_declare = st.star_lot_declare_check and _digit_prefix(code).startswith(("688", "689"))
     no_min_lot_top_up = not allows_min_lot_top_up(st)
     fee_aware = uses_fee_aware_affordability(st)
-    shrink_short_cash = uses_shrink_on_short_cash(st)
-    if shares_override is None:
-        shares, supp = _buy_size(
-            per,
-            px,
-            star_declare=star_declare,
-            top_up_min_lot=not no_min_lot_top_up,
-        )
-    else:
-        if isinstance(shares_override, bool) or not isinstance(shares_override, Integral):
-            raise ValueError("shares_override must be an integer share count")
-        shares, supp = (
-            int(shares_override) if star_declare else nonnegative_override_board_lots(shares_override)
-        ), 0.0
+    shares, supp, wanted_shares, quantity_rule = preview_final_buy_declaration(
+        st, code, px, per, day, shares_override=shares_override
+    )
+    if (
+        shares_override is not None
+        and buy_quantity_increment(quantity_rule) == BOARD_LOT
+    ):
+        # Keep the frozen B8 helper call at the ledger boundary; preview and
+        # execution intentionally normalize the same explicit declaration.
+        normalized_board_override = nonnegative_override_board_lots(shares_override)
         if not fee_aware:
-            per = shares * px
-    wanted_shares = shares
-    if fee_aware and shares > 0:
-        debit = lambda notional: st.account_fee_schedule.debit_buy(notional, day, code)
-        shares = fee_aware_buy_quantity(
-            shares,
-            px,
-            per,
-            st.cash if shrink_short_cash else per,
-            debit,
-            increment=1 if star_declare else BOARD_LOT,
-            minimum=STAR_MIN_DECLARE if star_declare else BOARD_LOT,
-        )
-        supp = 0.0
+            shares = normalized_board_override
+    if shares_override is not None and not fee_aware:
+        per = shares * px
     # This is the new buy declaration, not its eventual fill. A later cap may
     # fill <200; a subsequent execute_buy call is a NEW declaration, including
     # residual retries / merge_lot. Held-position sell unwinds stay separate.
-    if star_declare and shares < STAR_MIN_DECLARE:
+    if quantity_rule == "STAR" and shares < STAR_MIN_DECLARE:
         reason_code = "skip_star_buy_declare_qty"
         st.stats[reason_code] = st.stats.get(reason_code, 0) + 1
         record_rejection(st, code, day, reason_code, px)
+        return False
+    if quantity_rule == "BSE" and shares < BOARD_LOT:
+        if shares_override is None and no_min_lot_top_up:
+            reason_code = "skip_min_lot_budget"
+            st.stats[reason_code] = st.stats.get(reason_code, 0) + 1
+            record_rejection(st, code, day, reason_code, px)
         return False
     if shares <= 0:
         if (
             shares_override is None
             and no_min_lot_top_up
-            and not star_declare
+            and quantity_rule != "STAR"
             and (
                 not fee_aware
                 or wanted_shares <= 0
@@ -810,7 +894,9 @@ def execute_buy(
                     px,
                     per,
                     per,
-                    debit,
+                    lambda notional: st.account_fee_schedule.debit_buy(
+                        notional, day, code
+                    ),
                 )
                 <= 0
             )
