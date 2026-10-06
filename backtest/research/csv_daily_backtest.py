@@ -181,7 +181,8 @@ HELP_LOCK = """
         否则日内 low 触价 → 触发价成交。
   跌停禁卖：任何卖因在成交前若开盘或成交价跌停 → 不成交、顺延（含 trail /
         profit_take / force / ma_signal / open_board / pending）。
-  档位：主板 10% / 创科 20%（含 302、689）/ 北交 30%；名单第二列 ST/*ST=5%。
+  档位：主板 10% / 创科 20%（含 302、689）/ 北交 30%；主板 ST/*ST：
+        2026-07-06 前 5%，当日起 10%；创科/BJ ST 随板块档位。
         未知板块且无 ST 名 → skip_unknown_board，不交易。
   止盈 / 峰值：见下方对应策略书。峰值从 T+1 起用当日 high 更新；T+0 固定为买入价。
         v8：T+1 只评止损不评止盈；日线收盘评估、次日开盘离场（隔夜间隔已 ≥ 15 分钟）。
@@ -677,6 +678,8 @@ def simulate(
         )
 
     finish_pending_chase(st, pending_chase)
+    if profile.s12_domain_stamp and normalize_csv_strategy(strategy) == "version12":
+        st.stats["valuation_price_domain"] = "front"
     if profile.name == "industry":
         st.stats.pop("rule_profile", None)
         st.stats.pop("rule_profile_revision", None)

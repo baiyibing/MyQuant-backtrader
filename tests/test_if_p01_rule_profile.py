@@ -37,9 +37,10 @@ def test_resolve_rule_profile_and_frozen_switches():
         for key, value in asdict(INDUSTRY).items()
         if key not in {"name", "revision", "slippage_bp"}
     }
-    assert switches and not any(switches.values())
+    assert switches.pop("s12_domain_stamp") is True
+    assert not any(switches.values())
     assert LEGACY.slippage_bp == INDUSTRY.slippage_bp == 0
-    assert INDUSTRY.revision == "industry-p01-20261006"
+    assert INDUSTRY.revision == "industry-p02-20261006"
     with pytest.raises(FrozenInstanceError):
         INDUSTRY.account_fee_schedule = True
     with pytest.raises(ValueError, match="legacy.*industry.*RuleProfile"):
@@ -105,7 +106,7 @@ def test_v7_cli_rule_profile_default_choices_and_invalid(tmp_path):
 
 def test_help_lock_constants_and_guarded_minute_source_match_base_commit():
     expected = {
-        "daily": "b5cde94d8836d13a7bba33670d7e4d56138999d1902a457a5b26c8d2785031f0",
+        "daily": "c8dfaedc006f8704e632d58a2a934ecf9930dbce5239924a3eea9afa5b86d7f8",
         "minute": "b74cb493e46cd730d2c349fe05bbd801228d3c19a11dd723ca342c2f54b1d473",
     }
     assert hashlib.sha256(daily.HELP_LOCK.encode("utf-8")).hexdigest() == expected["daily"]

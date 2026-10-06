@@ -75,6 +75,14 @@ def _v4_bars(prior_closes, rows):
     }
 
 
+def test_help_lock_documents_date_aware_st_limit_bands():
+    assert (
+        "主板 ST/*ST：\n"
+        "        2026-07-06 前 5%，当日起 10%；创科/BJ ST 随板块档位。"
+    ) in sim.HELP_LOCK
+    assert "ST/*ST=5%" not in sim.HELP_LOCK
+
+
 def test_read_one_daily_drops_zero_volume_rows(tmp_path):
     _write_daily_lake_frame(
         tmp_path,
