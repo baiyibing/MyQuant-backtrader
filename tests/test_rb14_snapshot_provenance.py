@@ -65,3 +65,17 @@ def test_opt_in_hot_path_and_no_directory_walking():
             assert ast.unparse(node.func) not in {"os.walk", "walk", "rglob"}
             if isinstance(node.func, ast.Attribute):
                 assert node.func.attr not in {"walk", "rglob", "glob", "iterdir", "stat"}
+
+
+def test_string_argument_is_path(tmp_path):
+    path = tmp_path / "identity.json"
+    path.write_text('{"source_snapshot": "upstream:release-17"}', encoding="utf-8")
+    assert snapshot_provenance_tokens(str(path)) == snapshot_provenance_tokens(path)
+    with pytest.raises(FileNotFoundError):
+        snapshot_provenance_tokens('{"source_snapshot": "inline"}')
+
+
+def test_documented_empty_token_composition_preserves_default_manifest():
+    tokens = snapshot_provenance_tokens({})
+    options = dict(strategy="version6", dividend_type="none", config={})
+    assert build_bt_run_manifest(**options, input_tokens=tokens or None) == build_bt_run_manifest(**options)

@@ -24,7 +24,7 @@ def main(argv=None):
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--benchmark", type=Path)
     parser.add_argument("--risk-free", type=float, default=0.0)
-    parser.add_argument("--periods-per-year", type=int, default=PERIODS_PER_YEAR)
+    parser.add_argument("--periods-per-year", type=float, default=PERIODS_PER_YEAR)
     args = parser.parse_args(argv)
     benchmark = None
     if args.benchmark is not None:
@@ -41,6 +41,8 @@ def main(argv=None):
         risk_free=args.risk_free,
         periods_per_year=args.periods_per_year,
     )
+    if float(args.periods_per_year).is_integer():
+        pack["periods_per_year"] = int(args.periods_per_year)
     # The legacy loader supplies zero commissions when absent; preserve missingness.
     if trades is not None:
         raw = pd.read_csv(args.run_dir / "trades.csv")

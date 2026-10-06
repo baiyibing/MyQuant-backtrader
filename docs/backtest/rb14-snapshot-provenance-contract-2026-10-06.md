@@ -42,7 +42,7 @@ from bt_contract.run_manifest import build_bt_run_manifest
 tokens = snapshot_provenance_tokens(selected_existing_sidecar)
 manifest = build_bt_run_manifest(
     strategy="version6", dividend_type="none", config=config,
-    input_tokens=tokens,
+    input_tokens=tokens or None,
 )
 ```
 

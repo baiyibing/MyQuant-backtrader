@@ -160,3 +160,17 @@ def test_script_preserves_commission_missingness_and_case(tmp_path, commissions,
         assert pack["fee_drag"]["value"] == pytest.approx(9 / 309)
     else:
         assert pack["fee_drag"]["reason"]
+
+
+@pytest.mark.parametrize("value,expected,kind", [("252", 252, int), ("252.0", 252, int), ("365.25", 365.25, float)])
+def test_script_period_scaling_json_type(tmp_path, value, expected, kind):
+    import json
+    from scripts.research.rb13_metrics_pack import main
+    nav().to_csv(tmp_path / "daily_equity.csv", index=False)
+    out = tmp_path / "pack.json"
+    assert main(["--run-dir", str(tmp_path), "--out", str(out), "--periods-per-year", value]) == 0
+    pack = json.loads(out.read_text())
+    assert pack["periods_per_year"] == expected
+    assert type(pack["periods_per_year"]) is kind
+    reference = compute_metrics_pack(nav(), periods_per_year=expected)
+    assert pack["annualised_return"] == reference["annualised_return"]
