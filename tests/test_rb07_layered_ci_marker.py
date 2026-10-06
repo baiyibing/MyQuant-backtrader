@@ -20,3 +20,16 @@ def test_workflow_uses_shared_marker_and_required_job():
 def test_pre_push_uses_shared_marker():
     hook = (ROOT / ".githooks/pre-push").read_text(encoding="utf-8")
     assert "ci_pytest_marker.txt" in hook
+
+
+def test_marker_crlf_raw_bytes_normalize_to_canonical():
+    """Simulate a Windows CRLF checkout of the marker file (raw bytes)."""
+    raw = b"not production and not benchmark\r\n"
+    assert b"\r" in raw
+    normalized = raw.replace(b"\r", b"").decode("utf-8").strip()
+    assert normalized == "not production and not benchmark"
+
+
+def test_pre_push_strips_cr_when_reading_marker():
+    hook = (ROOT / ".githooks/pre-push").read_text(encoding="utf-8")
+    assert "tr -d '\\r'" in hook or 'tr -d "\\r"' in hook

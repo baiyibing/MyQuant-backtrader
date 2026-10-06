@@ -80,5 +80,5 @@ jobs:
       # L3: required pytest suite; MC-6 marker SSOT shared with pre-push.
       - name: Pytest (exclude production / benchmark)
         run: |
-          marker=$(cat scripts/ci_pytest_marker.txt)
+          marker=$(tr -d '\r' < scripts/ci_pytest_marker.txt | sed 's/[[:space:]]*$//')
           python -m pytest -p no:cacheprovider -q -m "$marker"

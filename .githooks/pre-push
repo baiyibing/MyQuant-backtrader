@@ -75,7 +75,7 @@ echo "pre-push: interpreter: $PY (Windows launcher -3: $launcher)" >&2
 run_python --version || fail 'selected Python cannot run'
 marker_file="$root/scripts/ci_pytest_marker.txt"
 [ -f "$marker_file" ] || fail "missing pytest marker file: $marker_file"
-pytest_marker=$(cat "$marker_file") || fail "cannot read pytest marker file: $marker_file"
+pytest_marker=$(tr -d '\r' < "$marker_file" | sed 's/[[:space:]]*$//') || fail "cannot read pytest marker file: $marker_file"
 start=$(date +%s)
 # Intentional field splitting for optional arguments; disable filename expansion.
 set -f
