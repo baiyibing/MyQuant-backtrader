@@ -6,10 +6,9 @@ Two locked schedules:
 - ``BILATERAL_10BP``: 0.1% each side, no floor (CSV books 1–10 / v7 default)
 - ``QLIB_PORTANA``: open 5bp / close 15bp / min 5 (qlib Exchange, ``--qlib-cost``)
 - ``INDUSTRY_ACCOUNT_FEES``: 3bp each side / min 5 per strategy order,
-  plus dated sell-side stamp duty
+  plus dated sell-side stamp duty and dated bilateral transfer fee
 
-Transfer fees remain disabled until their own industry-profile slice. This
-module must not import a simulate loop.
+This module must not import a simulate loop.
 """
 
 from __future__ import annotations
@@ -17,9 +16,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from backtest.research.ledger_math import (
+    bilateral_transfer_fee as bilateral_transfer_fee,
     sell_stamp_duty as sell_stamp_duty,
     trade_commission as trade_commission,
 )
+from backtest.research.market_layer import transfer_fee_market
 
 COMMISSION = 0.001
 QLIB_OPEN_COST = 0.0005
@@ -36,6 +37,7 @@ class FeeSchedule:
     min_cost: float = 0.0
     per_order: bool = False
     dated_sell_stamp_duty: bool = False
+    dated_bilateral_transfer_fee: bool = False
 
     def buy_fee(self, notional: float) -> float:
         return trade_commission(notional, self.buy_rate, self.min_cost)
@@ -48,16 +50,34 @@ class FeeSchedule:
             return 0.0
         return sell_stamp_duty(notional, trade_date)
 
-    def debit_buy(self, notional: float) -> float:
-        return float(notional) + self.buy_fee(notional)
+    def transfer_fee(self, notional: float, trade_date, symbol: str) -> float:
+        if not self.dated_bilateral_transfer_fee:
+            return 0.0
+        return bilateral_transfer_fee(
+            notional, transfer_fee_market(symbol), trade_date
+        )
 
-    def credit_sell(self, notional: float, trade_date=None) -> float:
+    def debit_buy(self, notional: float, trade_date=None, symbol: str | None = None) -> float:
+        if self.dated_bilateral_transfer_fee and (trade_date is None or symbol is None):
+            raise ValueError("dated bilateral transfer fee requires trade_date and symbol")
+        return (
+            float(notional)
+            + self.buy_fee(notional)
+            + self.transfer_fee(notional, trade_date, symbol)
+        )
+
+    def credit_sell(
+        self, notional: float, trade_date=None, symbol: str | None = None
+    ) -> float:
         if self.dated_sell_stamp_duty and trade_date is None:
             raise ValueError("dated sell stamp duty requires trade_date")
+        if self.dated_bilateral_transfer_fee and symbol is None:
+            raise ValueError("dated bilateral transfer fee requires trade_date and symbol")
         return (
             float(notional)
             - self.sell_fee(notional)
             - self.stamp_duty_fee(notional, trade_date)
+            - self.transfer_fee(notional, trade_date, symbol)
         )
 
 
@@ -69,9 +89,10 @@ INDUSTRY_ACCOUNT_FEES = FeeSchedule(
     INDUSTRY_MIN_COMMISSION,
     per_order=True,
     dated_sell_stamp_duty=True,
+    dated_bilateral_transfer_fee=True,
 )
-# Compatibility name introduced by P03; the active industry schedule now also
-# includes P04 stamp duty.
+# Compatibility name introduced by P03; the active industry schedule includes
+# all components admitted through P05.
 INDUSTRY_ORDER_COMMISSION = INDUSTRY_ACCOUNT_FEES
 DEFAULT_SCHEDULE = BILATERAL_10BP
 
@@ -95,6 +116,7 @@ def resolve_account_fee_schedule(
 
 __all__ = [
     "BILATERAL_10BP",
+    "bilateral_transfer_fee",
     "COMMISSION",
     "DEFAULT_SCHEDULE",
     "FeeSchedule",

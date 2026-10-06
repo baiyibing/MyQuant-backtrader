@@ -60,7 +60,11 @@ def _metrics(state, trace):
         inventory[row.get("code", row.get("symbol"))] += row["shares"] * (1 if side == "BUY" else -1)
         commission = row.get("commission")
         if commission is not None:
-            fees = commission + row.get("stamp_duty", 0.0)
+            fees = (
+                commission
+                + row.get("stamp_duty", 0.0)
+                + row.get("transfer_fee", 0.0)
+            )
             expected = (row["cash_before"] - notional - fees if side == "BUY"
                         else row["cash_before"] + notional - fees)
             if money(expected) != money(row["cash_after"]):

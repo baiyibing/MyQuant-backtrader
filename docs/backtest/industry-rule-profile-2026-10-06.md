@@ -1,7 +1,7 @@
 # Industry rule profile
 
 - Date: 2026-10-06
-- Status: P04 dated sell-side stamp duty delivered; later trade-rule slices pending
+- Status: P05 dated bilateral transfer fee delivered; later trade-rule slices pending
 - Principle SSOT: [backtest-rule-principles-ssot.md](ssot/backtest-rule-principles-ssot.md)
 
 ## Purpose
@@ -16,9 +16,11 @@ standalone-v7 paths. P02 enables the zero-trade `s12_domain_stamp` metadata
 switch. P03 enables the commission component of `account_fee_schedule`:
 0.0003 on buys and sells with a CNY 5 minimum per strategy order. P04 adds
 sell-side stamp duty to the same strategy-order identity: 0.001 before
-2023-08-28 and 0.0005 from 2023-08-28. The default `legacy` profile, including
-omitted profile arguments, retains its original per-call fee formula and
-output bytes.
+2023-08-28 and 0.0005 from 2023-08-28. P05 adds bilateral transfer fees by
+fill notional: SH/SZ A-shares use 0.00002 before 2022-04-29 and 0.00001 from
+that date; BSE uses 0.000025 before the cutover and 0.00001 from it. The
+default `legacy` profile, including omitted profile arguments, retains its
+original per-call fee formula and output bytes.
 
 ## Switch status
 
@@ -32,7 +34,7 @@ switches remain `false` until their behavior PR and opt-in baseline are admitted
 | `account_odd_lot_exit` | pending / `false` | An odd remainder below one board lot is sold in one account-level order, not stranded per source lot. |
 | `supplementary_min_lot` | pending / `false` | B8-03: a budget below one valid lot buys zero; there is no 100-share top-up. |
 | `fee_aware_affordability` | pending / `false` | B8-04/B8-06/B8-12: choose the largest valid quantity affordable after fees, shrink on short cash, and pre-check the final declared quantity; B8-11 keeps legacy gate order. |
-| `account_fee_schedule` | P04 commission + stamp duty delivered / `true`; transfer component pending | Commission is 0.0003 each side with a CNY 5 minimum per strategy order. Source locked in `industry-fix/adopted-decisions.md`: JoinQuant stock `OrderCost` default (`open_commission=close_commission=0.0003`, `min_commission=5`), with [example](https://www.cnblogs.com/henry2019/p/11700075.html) and [reference](https://easyquant.ai/e/joinquant/set-trading-costs-slippage). Stamp duty is sell-side only: 0.001 for trade dates before 2023-08-28 and 0.0005 from 2023-08-28, sourced in `industry-fix/adopted-decisions.md` to 财政部、税务总局公告 2023 年第 39 号（减半征收证券交易印花税）. One strategy order is one fee order: S8 whole-group exit is one order; each scale-out tranche and each tail/TWAP minute child is a separate order; capacity continuation retains its order identity. Fill-row commission and stamp components retain that order identity; each component is recorded separately. Explicit legacy cost schedules such as `--qlib-cost` / `QLIB_PORTANA` conflict and fail fast. The adopted dated transfer-fee table is not enabled by P04 and remains a separate later slice. |
+| `account_fee_schedule` | P05 commission + stamp duty + transfer fee delivered / `true` | Commission is 0.0003 each side with a CNY 5 minimum per strategy order. Source locked in `industry-fix/adopted-decisions.md`: JoinQuant stock `OrderCost` default (`open_commission=close_commission=0.0003`, `min_commission=5`), with [example](https://www.cnblogs.com/henry2019/p/11700075.html) and [reference](https://easyquant.ai/e/joinquant/set-trading-costs-slippage). Stamp duty is sell-side only: 0.001 before 2023-08-28 and 0.0005 from that date, sourced there to 财政部、税务总局公告 2023 年第 39 号（减半征收证券交易印花税）. Transfer fee is bilateral with no minimum and charged by fill notional: SH/SZ A-shares are 0.00002 before 2022-04-29 (the adopted decision uses the 2015-08-01 rate for earlier dates as a documented simplification) and 0.00001 from 2022-04-29; BSE is 0.000025 before and 0.00001 from that date. The adopted sources are 中国结算《关于降低股票交易过户费收费标准的通知》2022-04-28 ([contemporaneous copy](https://finance.sina.com.cn/roll/2022-04-28/doc-imcwiwst4557332.shtml)) and the 2015 change ([People.cn](http://m.people.cn/n4/2022/0429/c125-20026334.html)). Board classification reuses `market_layer`. One strategy order is one fee order: S8 whole-group exit is one order; each scale-out tranche and each tail/TWAP minute child is a separate order; capacity continuation retains its order identity. Fill-row commission, stamp, and transfer components retain that order identity and are recorded separately. Explicit legacy cost schedules such as `--qlib-cost` / `QLIB_PORTANA` conflict and fail fast. |
 | `chronological_v7` | pending / `false` | Industry mode will select the existing `fix_minute_cash_order` chronological behavior; same-clock tie-breaking is unchanged. |
 | `s12_domain_stamp` | delivered / `true` | S12 records its actual valuation source: daily=`front`; minute with X-01 off=`front`; minute with X-01 on=`none`. This is metadata only and does not change fills. |
 | `slippage_bp` | documented `0` | Mainstream backtester default adopted as zero; sensitivity research continues through the existing research fill configuration. |
@@ -49,7 +51,7 @@ JoinQuant unless explicitly configured. This follows the adopted
 claim that realized execution has zero market impact. Sensitivity analysis
 continues through the existing
 `fullstrat_research_hooks.ResearchFillConfig` research hook, including its
-explicit per-side basis-point scenarios. P04 does not change slippage.
+explicit per-side basis-point scenarios. P05 does not change slippage.
 
 ## Use
 
@@ -77,3 +79,9 @@ remains immutable. P04 adds
 the data-free `tests/fixtures/industry/stamp_duty.json` cases. It covers shared
 daily/minute, native and standalone v7, a multi-lot S8 group exit, and sells
 on both sides of the 2023-08-28 rate boundary.
+
+P05 keeps those files immutable and adds
+`tests/fixtures/off_byte_baseline_industry_p05_transfer_fee_20261006.json`
+from `tests/fixtures/industry/transfer_fee.json`. Its synthetic trades span
+both sides of 2022-04-29 and cover shared daily/minute, native and standalone
+v7, BSE and SH/SZ classification, and the S8 one-order allocation path.
