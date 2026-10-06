@@ -181,6 +181,11 @@ def summarize(
     elif st.stats.get("sell_book") == "v9_2":
         from backtest.research.strategy9_2_rules import HELP_LOCK
         lines.append(HELP_LOCK.strip())
+    elif st.stats.get("sell_book") == "v9_3":
+        lines.append(
+            "  参数: SCAN T+3 买入 | 固定止损 weighted cost ×0.90 | "
+            "满持有 20 日收盘决定、次开 force_sell:max_hold | 不加仓"
+        )
     elif st.stats.get("sell_book") == "v9":
         max_hold = st.stats.get("max_hold")
         hold_text = f"满持有 {int(max_hold)} 日 force_sell" if max_hold is not None else "满持有强平 OFF"

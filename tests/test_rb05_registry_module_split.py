@@ -30,14 +30,14 @@ FROZEN_NAMES = (
     "version6_41", "version6_42", "version6_43", "version6_44", "version6_45",
     "version6_46", "version6_47", "version8", "version8_1", "version8_2",
     "version8_3", "version8_4", "version8_5", "version8_6", "version9",
-    "version9_2", "version10", "version11", "version12", "topk_dropout",
+    "version9_2", "version9_3", "version10", "version11", "version12", "topk_dropout",
     "topk_score_exit", "version9_1",
 )
 
 
 def test_registry_names_and_aliases():
     assert csv_strategy_names() == FROZEN_NAMES == tuple(BOOKS)
-    assert len(csv_strategy_names()) == len(BOOKS) == 68
+    assert len(csv_strategy_names()) == len(BOOKS) == len(FROZEN_NAMES)
     for name, book in BOOKS.items():
         assert callable(book.apply)
         assert get_book(name).name == name

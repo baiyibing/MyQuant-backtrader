@@ -30,6 +30,7 @@ CASES = [
     ({'strategy': 'version12', 'daily_source': 'qlib'}, ValueError, 'version12 minute requires lake daily/minute and --dividend-type none|front'),
     ({'dividend_type': 'front'}, ValueError, 'minute --dividend-type front is supported only by version12'),
     ({'strategy': 'version11', 'minute_source': 'qlib_1min'}, ValueError, 'version11 requires lake minute volume; qlib_1min frames do not carry it'),
+    ({'strategy': 'version9_3', 'fix_minute_cash_order': True}, ValueError, '--fix-minute-cash-order is not applicable to version9_3'),
  ]
 
 @pytest.mark.parametrize("overrides,kind,message", CASES)
