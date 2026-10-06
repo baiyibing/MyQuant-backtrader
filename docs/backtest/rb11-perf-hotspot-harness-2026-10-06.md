@@ -27,8 +27,8 @@ measure other workloads and are not duplicated.
 ## Run and report boundaries
 
 ```sh
-/workspace/venv/bin/python scripts/research/rb11_profile_synthetic.py \
-  --out-dir /tmp/rb11-version6-profile --names 16 --days 30 --minutes 240 --top 20
+"$OSKH_MERGE_PYTHON" scripts/research/rb11_profile_synthetic.py \
+  --out-dir "<out-dir>" --names 16 --days 30 --minutes 240 --top 20
 ```
 
 `--out-dir` is required; choose a disposable directory outside tracked outputs,

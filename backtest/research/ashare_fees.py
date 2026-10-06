@@ -14,21 +14,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from backtest.research.ledger_math import trade_commission as trade_commission
+
 COMMISSION = 0.001
 QLIB_OPEN_COST = 0.0005
 QLIB_CLOSE_COST = 0.0015
 QLIB_MIN_COST = 5.0
-
-
-def trade_commission(notional: float, rate: float, min_cost: float = 0.0) -> float:
-    """Fee on ``notional``. Floor applies only when ``min_cost > 0``."""
-    if notional <= 0 or rate < 0:
-        return 0.0
-    fee = float(notional) * float(rate)
-    floor = float(min_cost)
-    if floor > 0:
-        return max(fee, floor)
-    return fee
 
 
 @dataclass(frozen=True)
