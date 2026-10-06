@@ -250,11 +250,18 @@ def _buy(state: SimResult, position: Position | None, symbol: str, day: date, hm
     if getattr(
         getattr(state, "rule_profile", None), "fee_aware_affordability", False
     ):
+        shrink_short_cash = bool(
+            getattr(
+                getattr(state, "rule_profile", None),
+                "shrink_on_short_cash",
+                False,
+            )
+        )
         shares = fee_aware_buy_quantity(
             shares,
             price,
             target,
-            state.cash,
+            state.cash if shrink_short_cash else target,
             lambda notional: fee.debit_buy(notional, day, symbol),
         )
     order_id = fee_order_id(state)

@@ -329,7 +329,11 @@ def simulate(
         pool_names_by_day=pool_names_by_day,
         daily_quota=daily_quota,
     )
-    if profile.supplementary_min_lot or profile.fee_aware_affordability:
+    if (
+        profile.supplementary_min_lot
+        or profile.fee_aware_affordability
+        or profile.shrink_on_short_cash
+    ):
         st.rule_profile = profile
     absolute_exit = hooks["bind_absolute_exit"](st, bars) if "bind_absolute_exit" in hooks else None
     configure_s8(st, hooks)

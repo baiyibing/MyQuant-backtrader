@@ -19,6 +19,7 @@ class RuleProfile:
     account_odd_lot_exit: bool = False
     supplementary_min_lot: bool = False
     fee_aware_affordability: bool = False
+    shrink_on_short_cash: bool = False
     account_fee_schedule: bool = False
     chronological_v7: bool = False
     s12_domain_stamp: bool = False
@@ -28,9 +29,10 @@ class RuleProfile:
 LEGACY = RuleProfile(name="legacy", revision="legacy")
 INDUSTRY = RuleProfile(
     name="industry",
-    revision="industry-p07-20261006",
+    revision="industry-p08-20261006",
     supplementary_min_lot=True,
     fee_aware_affordability=True,
+    shrink_on_short_cash=True,
     account_fee_schedule=True,
     s12_domain_stamp=True,
 )

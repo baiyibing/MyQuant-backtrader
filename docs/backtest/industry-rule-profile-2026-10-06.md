@@ -1,7 +1,7 @@
 # Industry rule profile
 
 - Date: 2026-10-06
-- Status: P07 fee-inclusive buy sizing delivered; later trade-rule slices pending
+- Status: P08 short-cash shrink-or-skip delivered; later trade-rule slices pending
 - Principle SSOT: [backtest-rule-principles-ssot.md](ssot/backtest-rule-principles-ssot.md)
 
 ## Purpose
@@ -32,6 +32,14 @@ and bilateral transfer fee fits both the strategy budget and available cash.
 This uses the already-adopted P03/P05 fee schedule; legacy nominal-only sizing
 is unchanged.
 
+P08 enables `shrink_on_short_cash` for adopted decision B8-06. After the
+fee-aware intended declaration is known, insufficient available cash shrinks it
+to the largest currently valid quantity whose notional plus all buy fees can be
+paid; zero affordable quantity is skipped, and industry mode never raises
+`InsufficientCashError`. The helper is the same binary-search affordability
+primitive introduced by P07. Cash is still evaluated before the capacity gate,
+preserving the adopted B8-11 legacy gate order.
+
 ## Switch status
 
 The values below are locked by `industry-fix/adopted-decisions.md`; pending
@@ -44,6 +52,7 @@ switches remain `false` until their behavior PR and opt-in baseline are admitted
 | `account_odd_lot_exit` | pending / `false` | An odd remainder below one board lot is sold in one account-level order, not stranded per source lot. |
 | `supplementary_min_lot` | P06 delivered / `true` | B8-03: a budget below one valid lot buys zero and records `skip_min_lot_budget`; there is no 100-share top-up. Source: `industry-fix/adopted-decisions.md`, “B8-03: when budget buys < 1 valid lot → buy 0 (skip), no top-up to 100.” |
 | `fee_aware_affordability` | P07 delivered / `true` | B8-04: choose the largest currently valid buy quantity for which notional plus all buy fees is no greater than both budget and available cash. Source: `industry-fix/adopted-decisions.md`, “B8-04: size including fees: the largest valid quantity with notional + all buy fees <= budget (and <= cash).” Buy fees reuse that file's adopted JoinQuant-style commission (0.0003 each side, CNY 5 minimum per order; [example](https://www.cnblogs.com/henry2019/p/11700075.html), [reference](https://easyquant.ai/e/joinquant/set-trading-costs-slippage)) and bilateral transfer-fee decision sourced to 中国结算 2022-04-28 ([contemporaneous copy](https://finance.sina.com.cn/roll/2022-04-28/doc-imcwiwst4557332.shtml)) plus the 2015 change ([People.cn](http://m.people.cn/n4/2022/0429/c125-20026334.html)). B8-11 retains legacy cash-vs-capacity gate order. |
+| `shrink_on_short_cash` | P08 delivered / `true` | B8-06: when cash cannot pay the intended buy, choose the largest currently valid quantity whose notional plus all buy fees is affordable; skip if that quantity is zero and never raise. Source: `industry-fix/adopted-decisions.md`, “B8-06: short cash → shrink to the largest affordable valid quantity (fees included); skip if 0. (qlib-style clip; never raise.)” The same source locks B8-11 to the legacy cash-before-capacity gate order. |
 | `account_fee_schedule` | P05 commission + stamp duty + transfer fee delivered / `true` | Commission is 0.0003 each side with a CNY 5 minimum per strategy order. Source locked in `industry-fix/adopted-decisions.md`: JoinQuant stock `OrderCost` default (`open_commission=close_commission=0.0003`, `min_commission=5`), with [example](https://www.cnblogs.com/henry2019/p/11700075.html) and [reference](https://easyquant.ai/e/joinquant/set-trading-costs-slippage). Stamp duty is sell-side only: 0.001 before 2023-08-28 and 0.0005 from that date, sourced there to 财政部、税务总局公告 2023 年第 39 号（减半征收证券交易印花税）. Transfer fee is bilateral with no minimum and charged by fill notional: SH/SZ A-shares are 0.00002 before 2022-04-29 (the adopted decision uses the 2015-08-01 rate for earlier dates as a documented simplification) and 0.00001 from 2022-04-29; BSE is 0.000025 before and 0.00001 from that date. The adopted sources are 中国结算《关于降低股票交易过户费收费标准的通知》2022-04-28 ([contemporaneous copy](https://finance.sina.com.cn/roll/2022-04-28/doc-imcwiwst4557332.shtml)) and the 2015 change ([People.cn](http://m.people.cn/n4/2022/0429/c125-20026334.html)). Board classification reuses `market_layer`. One strategy order is one fee order: S8 whole-group exit is one order; each scale-out tranche and each tail/TWAP minute child is a separate order; capacity continuation retains its order identity. Fill-row commission, stamp, and transfer components retain that order identity and are recorded separately. Explicit legacy cost schedules such as `--qlib-cost` / `QLIB_PORTANA` conflict and fail fast. |
 | `chronological_v7` | pending / `false` | Industry mode will select the existing `fix_minute_cash_order` chronological behavior; same-clock tie-breaking is unchanged. |
 | `s12_domain_stamp` | delivered / `true` | S12 records its actual valuation source: daily=`front`; minute with X-01 off=`front`; minute with X-01 on=`none`. This is metadata only and does not change fills. |
@@ -80,6 +89,13 @@ text fix. The existing shared-minute guarded source hashes remain unchanged.
 Python APIs accept `"legacy"`, `"industry"`, or a resolved frozen
 `RuleProfile` object. Invalid names fail with `ValueError`.
 
+B7 remains a hooks-only internal policy and this programme does not register a
+public `--on-short-cash` CLI option; argparse therefore rejects that spelling.
+If an adapter supplies explicit `on_short_cash`, industry accepts only the
+book's existing default (`raise` for S8-bound books, `skip` otherwise). An
+explicit non-default mode conflicts with P08 and fails fast instead of silently
+overriding shrink-or-skip.
+
 Defaults are unchanged. Existing goldens, fixtures, off-byte baselines,
 overlays, book order, output files, and stats keys are never refreshed or
 moved. P03's
@@ -112,3 +128,12 @@ daily/minute and native/standalone-v7 cases each contain a BUY and SELL. The
 legacy buy consumes the full nominal budget and therefore exceeds that budget
 after commission; industry sizes exactly one 100-share lot lower so notional,
 minimum commission, and transfer fee fit the budget and cash.
+
+P08 keeps every earlier baseline immutable and adds
+`tests/fixtures/off_byte_baseline_industry_p08_shrink_on_short_cash_20261006.json`
+from the data-free `tests/fixtures/industry/shrink_on_short_cash.json`. Its S8
+daily and minute cases intend a CNY 20,000 buy with only CNY 15,000 cash.
+Legacy reaches B7's `raise` mode and throws `InsufficientCashError`; industry
+shrinks to 1,400 shares, pays commission and transfer fee without negative
+cash, and later sells the position. Both recorded industry cases contain a BUY
+and SELL.
