@@ -17,8 +17,8 @@ def format_coverage_failure(error: AssertionError) -> str:
     missing = sorted(set(BOOKS) - set(baseline.BOOK_NAMES))
     extra = sorted(set(baseline.BOOK_NAMES) - set(BOOKS))
     groups = (
-        "HISTORICAL", "V61", "V91", "V92", "V6F", "S8", "S12", "S9",
-        "P03", "P04", "P05", "P06", "P07", "P08", "P09",
+        "HISTORICAL", "V61", "V91", "V92", "V93", "V6F", "S8", "S12",
+        "S9", "P03", "P04", "P05", "P06", "P07", "P08", "P09",
     )
     covered = set().union(*(set(getattr(baseline, f"{group}_BOOK_NAMES")) for group in groups))
     lines = [
