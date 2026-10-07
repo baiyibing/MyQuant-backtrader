@@ -335,6 +335,8 @@ def _configure_s8(st, hooks: dict) -> None:
         "tranche_max": hooks.get("tranche_max"),  # 第一梯子（分批腿）每组上限笔数
         "add_offset": int(hooks.get("add_offset") or 0),  # 首档前跳过的档数（v6.11）
         "add_schedule": hooks.get("add_schedule"),  # [(阈值涨幅, 占基数比)]（v6.18）
+        # "peak" = 组峰值触发档位（v6.49）；None/其他 = 现价对首仓成本的涨幅触发
+        "add_schedule_trigger": hooks.get("add_schedule_trigger"),
         "base_zone_caps": hooks.get("base_zone_caps"),  # (涨幅<100% 上限, ≥100% 上限)
         "groups": {},
     }

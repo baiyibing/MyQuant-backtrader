@@ -66,6 +66,7 @@ from backtest.research import (
     strategy6_46_rules,
     strategy6_47_rules,
     strategy6_48_rules,
+    strategy6_49_rules,
     strategy8_rules,
     strategy8_1_rules,
     strategy8_2_rules,
@@ -179,6 +180,10 @@ from backtest.research.csv_strategy_books_v6_family import (
     _run_kwargs_version6_46,
     _apply_version6_47,
     _run_kwargs_version6_47,
+    _apply_version6_48,
+    _run_kwargs_version6_48,
+    _apply_version6_49,
+    _run_kwargs_version6_49,
 )
 
 HELP_LOCK_V1 = strategy1_rules.HELP_LOCK
@@ -235,6 +240,7 @@ HELP_LOCK_V6_45 = strategy6_45_rules.HELP_LOCK
 HELP_LOCK_V6_46 = strategy6_46_rules.HELP_LOCK
 HELP_LOCK_V6_47 = strategy6_47_rules.HELP_LOCK
 HELP_LOCK_V6_48 = strategy6_48_rules.HELP_LOCK
+HELP_LOCK_V6_49 = strategy6_49_rules.HELP_LOCK
 HELP_LOCK_V8 = strategy8_rules.HELP_LOCK
 HELP_LOCK_V8_1 = strategy8_1_rules.HELP_LOCK
 HELP_LOCK_V8_2 = strategy8_2_rules.HELP_LOCK
@@ -417,6 +423,7 @@ def apply_csv_strategy(strategy: str, **kwargs) -> dict:
     hooks.setdefault("peak_dd_exit", None)  # peak drawdown clear; None = off
     hooks.setdefault("peak_dd_sessions", 15)
     hooks.setdefault("add_schedule", None)
+    hooks.setdefault("add_schedule_trigger", None)  # "peak" = group peak arms a tier; None = px/cost
     hooks.setdefault("add_step2", None)  # second (base) ladder step; None = single ladder
     hooks.setdefault("step_frac2", None)
     hooks.setdefault("tranche_max", None)
@@ -2438,6 +2445,36 @@ register(
 
 register(
     CsvStrategyBook(
+        name="version6_48",
+        sizing="per_name",
+        name_budget=1_000_000.0,
+        tag=strategy6_48_rules.BOOK_TAG,
+        aliases=("6.48", "6_48", "v6.48", "v6_48", "version6_48"),
+        allow_add=strategy6_48_rules.ALLOW_ADD,
+        peak_gap_min=strategy6_48_rules.PEAK_GAP_MIN,
+        help_lock=strategy6_48_rules.HELP_LOCK,
+        apply=_apply_version6_48,
+        run_kwargs=_run_kwargs_version6_48,
+    )
+)
+
+register(
+    CsvStrategyBook(
+        name="version6_49",
+        sizing="per_name",
+        name_budget=1_000_000.0,
+        tag=strategy6_49_rules.BOOK_TAG,
+        aliases=("6.49", "6_49", "v6.49", "v6_49", "version6_49"),
+        allow_add=strategy6_49_rules.ALLOW_ADD,
+        peak_gap_min=strategy6_49_rules.PEAK_GAP_MIN,
+        help_lock=strategy6_49_rules.HELP_LOCK,
+        apply=_apply_version6_49,
+        run_kwargs=_run_kwargs_version6_49,
+    )
+)
+
+register(
+    CsvStrategyBook(
         name="version8",
         sizing="per_name",
         name_budget=1_000_000.0,
@@ -2653,64 +2690,3 @@ register_minute_book(CsvStrategyBook(
     allow_add=True, peak_gap_min=0, help_lock="", apply=_apply_version7,
     run_kwargs=lambda args: {"strategy": "version7"}, sizing="per_name",
 ))
-
-from backtest.research import strategy6_49_rules
-def _apply_version6_48(*, stop_pct=None, take_profit=None, record_params=None, index_block_new=None, **_):
-    resolved = strategy6_48_rules.STOP_PCT if stop_pct is None else float(stop_pct)
-    base = _apply_version6_47(stop_pct=resolved, take_profit=take_profit, record_params=record_params, index_block_new=index_block_new)
-    base['name'] = 'version6_48'
-    base['stop_pct'] = resolved
-    return base
-
-def _run_kwargs_version6_48(args) -> dict:
-    stop = getattr(args, 'stop_pct', None)
-    if stop is not None and not 0 < float(stop) < 1:
-        raise SystemExit(f'--stop-pct must be in (0, 1), got {stop}')
-    return {'strategy': 'version6_48', 'stop_pct': stop}
-
-register(
-    CsvStrategyBook(
-        name='version6_48', sizing='per_name', name_budget=1_000_000.0,
-        tag=strategy6_48_rules.BOOK_TAG,
-        aliases=('6.48', '6_48', 'v6.48', 'v6_48', 'version6_48'),
-        allow_add=strategy6_48_rules.ALLOW_ADD,
-        peak_gap_min=strategy6_48_rules.PEAK_GAP_MIN,
-        help_lock=strategy6_48_rules.HELP_LOCK,
-        apply=_apply_version6_48,
-        run_kwargs=_run_kwargs_version6_48,
-    )
-)
-
-from backtest.research import strategy6_49_rules
-
-def _apply_version6_49(*, stop_pct=None, take_profit=None, record_params=None, index_block_new=None, **_):
-    resolved = strategy6_49_rules.STOP_PCT if stop_pct is None else float(stop_pct)
-    def _tp(px, cost, peak, n_days=1):
-        return strategy6_49_rules.take_profit_reason(px, cost, peak, n_days)
-    def _rec(st):
-        strategy6_49_rules.record_strategy6_49_params(st, stop_pct=resolved)
-        st.stats["index_gate_on"] = bool(strategy6_49_rules.INDEX_GATE_ON)
-    base = _apply_version6_46(stop_pct=resolved, take_profit=_tp, record_params=_rec, index_block_new=index_block_new)
-    base["name"] = "version6_49"
-    return base
-
-def _run_kwargs_version6_49(args) -> dict:
-    stop = getattr(args, "stop_pct", None)
-    if stop is not None and not 0 < float(stop) < 1:
-        raise SystemExit(f"--stop-pct must be in (0, 1), got {stop}")
-    return {"strategy": "version6_49", "stop_pct": stop}
-
-register(
-    CsvStrategyBook(
-        name="version6_49",
-        sizing="per_name",
-        name_budget=1_000_000.0,
-        tag=strategy6_49_rules.BOOK_TAG,
-        aliases=("6.49", "6_49", "v6.49", "v6_49", "version6_49"),
-        allow_add=strategy6_49_rules.ALLOW_ADD,
-        peak_gap_min=strategy6_49_rules.PEAK_GAP_MIN,
-        help_lock=strategy6_49_rules.HELP_LOCK,
-        apply=_apply_version6_49,
-        run_kwargs=_run_kwargs_version6_49,
-    )
-)

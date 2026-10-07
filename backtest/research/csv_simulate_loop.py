@@ -613,12 +613,19 @@ def _run_s8_price_adds_day(
             _sched_due = False
             schedule = policy.get("add_schedule")
             if schedule and not confirm:
-                # 6.49 语义：档位以组峰值触发（盘中触线即记档），14:55 价成交；
-                # 已止损的 lot 不回补档位，executed_steps 继续往前走；价格低于成本不补档。
-                peak_px = float(getattr(group.first_lot, "peak", 0) or 0)
-                trig_rise = (peak_px / cost - 1.0) if peak_px > cost else (float(px) / cost - 1.0)
+                if policy.get("add_schedule_trigger") == "peak":
+                    # 6.49 语义：档位以组峰值触发（盘中触线即记档），14:55 价成交；
+                    # 已止损的 lot 不回补档位，executed_steps 继续往前走；价格低于成本不补档。
+                    peak_px = float(getattr(group.first_lot, "peak", 0) or 0)
+                    trig_rise = (
+                        peak_px / cost - 1.0 if peak_px > cost else float(px) / cost - 1.0
+                    )
+                    sched_gate = float(px) > cost
+                else:
+                    trig_rise = float(px) / cost - 1.0
+                    sched_gate = True
                 allowed_sched = sum(1 for t, _f in schedule if trig_rise + 1e-12 >= t)
-                if allowed_sched > group.executed_steps and float(px) > cost:
+                if allowed_sched > group.executed_steps and sched_gate:
                     _sched_frac = schedule[min(group.executed_steps, len(schedule) - 1)][1]
                     _sched_due = True
             # 双梯子书：分批腿(1)优先、基数腿(2)次之；单梯子书 use2 恒 False、行为不变。

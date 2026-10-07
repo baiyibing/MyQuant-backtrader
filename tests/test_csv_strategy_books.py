@@ -72,6 +72,8 @@ def test_registered_books_are_explicit():
         "version6_45",
         "version6_46",
         "version6_47",
+        "version6_48",
+        "version6_49",
         "version8",
         "version8_1",
         "version8_2",
@@ -88,8 +90,6 @@ def test_registered_books_are_explicit():
         "topk_dropout",
         "topk_score_exit",
         "version9_1",
-        "version6_48",
-        "version6_49",
     )
     assert get_book("version1").allow_add is False
     assert get_book("version1").peak_gap_min == 0

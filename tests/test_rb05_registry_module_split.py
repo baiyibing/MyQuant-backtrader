@@ -16,7 +16,8 @@ from backtest.research.csv_strategy_books import (
     normalize_csv_strategy,
 )
 
-# Literal order frozen from origin/master tip b1c1080 (pre-RB-05), not live self-compare.
+# Literal order frozen from origin/master tip b1c1080 (pre-RB-05) plus the 6.48/6.49
+# admissions, which register next to 6.47; not a live self-compare.
 FROZEN_NAMES = (
     "version1", "version2", "version3", "version4", "version5", "version6",
     "version6_1", "version6_2", "version6_3", "version6_4", "version6_5",
@@ -28,7 +29,8 @@ FROZEN_NAMES = (
     "version6_31", "version6_32", "version6_33", "version6_34", "version6_35",
     "version6_36", "version6_37", "version6_38", "version6_39", "version6_40",
     "version6_41", "version6_42", "version6_43", "version6_44", "version6_45",
-    "version6_46", "version6_47", "version8", "version8_1", "version8_2",
+    "version6_46", "version6_47", "version6_48", "version6_49",
+    "version8", "version8_1", "version8_2",
     "version8_3", "version8_4", "version8_5", "version8_6", "version9",
     "version9_2", "version9_3", "version10", "version11", "version12", "topk_dropout",
     "topk_score_exit", "version9_1",
@@ -51,7 +53,8 @@ def test_registry_names_and_aliases():
 
 @pytest.mark.parametrize(
     "name",
-    ("version6_1", "version6_11", "version6_45", "version6_46", "version6_47", "version8", "version1"),
+    ("version6_1", "version6_11", "version6_45", "version6_46", "version6_47",
+     "version6_48", "version6_49", "version8", "version1"),
 )
 def test_default_apply_keys(name):
     hooks = apply_csv_strategy(name)
@@ -71,7 +74,7 @@ def test_import_identity_and_helper_location():
     family_src = Path(inspect.getsourcefile(family)).read_text(encoding="utf-8")
     assert "register(" not in family_src
     assert Path(inspect.getsourcefile(get_book("version6").apply)).name == "csv_strategy_books.py"
-    for i in range(1, 48):
+    for i in range(1, 50):
         for prefix in ("_apply_version6_", "_run_kwargs_version6_"):
             helper = getattr(family, f"{prefix}{i}")
             assert getattr(registry, f"{prefix}{i}") is helper
