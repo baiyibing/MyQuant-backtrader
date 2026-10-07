@@ -39,8 +39,22 @@ def legacy_outputs(books=LEGACY_BOOKS):
     pool = {dates[j].strftime("%Y%m%d"): [CODE] for j in (12, 14, 18)}
     out = {}
     for book in books:
-        for engine, run in (("daily", lambda: daily({CODE: bars}, pool, start, end, strategy=book)),
-                            ("minute", lambda: minute({CODE: mins}, {CODE: bars}, pool, start, end, strategy=book))):
+        for engine, run in (
+            (
+                "daily",
+                lambda: daily(
+                    {CODE: bars}, pool, start, end,
+                    strategy=book, rule_profile="legacy",
+                ),
+            ),
+            (
+                "minute",
+                lambda: minute(
+                    {CODE: mins}, {CODE: bars}, pool, start, end,
+                    strategy=book, rule_profile="legacy",
+                ),
+            ),
+        ):
             st = run()
             out[f"{book}/{engine}"] = {
                 # Golden bytes are LF-pinned: pandas to_csv defaults to

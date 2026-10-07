@@ -75,6 +75,7 @@ def run_case(rows, *, pools=None, references=None, **kwargs):
         "total_cash": 1001,
         "stop_pct": 0.05,
         "fix_minute_cash_order": True,
+        "rule_profile": "legacy",
     }
     options.update(kwargs)
     return minute.simulate(ms, ds, pools or {}, D1, D2, **options)
@@ -466,6 +467,7 @@ def test_on_lunch_bars_are_filtered_by_production_annotation():
         stop_pct=0.05,
         fix_minute_cash_order=True,
         audit_sink=trace,
+        rule_profile="legacy",
     )
     assert [t["side"] for t in fills(state)] == ["BUY"]
     assert all(not 690 < t["hm"] < 780 for t in trace)
@@ -501,9 +503,13 @@ def test_chase_queue_order_and_unfixed_x04_pool_budget_match_off():
 def test_explicit_off_matches_omission_complete_state():
     ms, ds = frames({A: [(D1, 895, 10, 10, 10), (D2, 899, 10, 10, 9.4)]})
     args = (ms, ds, {D1: [A]}, D1, D2)
-    omitted = minute.simulate(*args, strategy="version8", name_budget=1000, stop_pct=0.05)
+    omitted = minute.simulate(
+        *args, strategy="version8", name_budget=1000, stop_pct=0.05,
+        rule_profile="legacy",
+    )
     explicit = minute.simulate(
-        *args, strategy="version8", name_budget=1000, stop_pct=0.05, fix_minute_cash_order=False
+        *args, strategy="version8", name_budget=1000, stop_pct=0.05,
+        fix_minute_cash_order=False, rule_profile="legacy",
     )
     assert asdict(explicit) == asdict(omitted)
     assert "fix_minute_cash_order" not in explicit.stats
@@ -517,15 +523,29 @@ def test_strategy12_cash_order_flag_uses_same_main_loop(fix_s12_price_domain):
               "s12_price_context": context_for(ds, ds, ms, factor=1)}
              if fix_s12_price_domain else {})
     args = (ms, ds, {}, D1, D2)
-    off = minute.simulate(*args, strategy="version12", **extra)
-    on = minute.simulate(*args, strategy="version12", fix_minute_cash_order=True, **extra)
+    off = minute.simulate(*args, strategy="version12", rule_profile="legacy", **extra)
+    on = minute.simulate(
+        *args, strategy="version12", fix_minute_cash_order=True,
+        rule_profile="legacy", **extra,
+    )
     assert on.trades == off.trades
     assert on.equity_curve == off.equity_curve
 
 
 def test_strategy91_run_still_rejects_cash_order_before_loading(tmp_path):
     with pytest.raises(ValueError, match="--fix-minute-cash-order is not applicable to version9_1"):
-        minute.run(D1, D2, pool_dir=tmp_path, strategy="version9_1", fix_minute_cash_order=True)
+        minute.run(
+            D1, D2, pool_dir=tmp_path, strategy="version9_1",
+            fix_minute_cash_order=True, rule_profile="legacy",
+        )
+
+
+def test_strategy93_run_rejects_cash_order_before_loading(tmp_path):
+    with pytest.raises(ValueError, match="--fix-minute-cash-order is not applicable to version9_3"):
+        minute.run(
+            D1, D2, pool_dir=tmp_path, strategy="version9_3",
+            fix_minute_cash_order=True, rule_profile="legacy",
+        )
 
 
 def force_on(monkeypatch):
@@ -533,6 +553,7 @@ def force_on(monkeypatch):
 
     def enabled(*args, **kwargs):
         kwargs["fix_minute_cash_order"] = True
+        kwargs.setdefault("rule_profile", "legacy")
         return real(*args, **kwargs)
 
     monkeypatch.setattr(minute, "simulate", enabled)
@@ -796,6 +817,7 @@ def test_close_clear_milestones_with_chronological_clock(strategy, n_days, reaso
         stop_pct=0.10,
         fix_minute_cash_order=True,
         audit_sink=trace,
+        rule_profile="legacy",
     )
     if not can_buy:
         with pytest.raises(InsufficientCashError) as exc:

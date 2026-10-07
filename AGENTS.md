@@ -4,6 +4,8 @@ Standalone research-face fork (see [README.md](README.md)). Since migration S2 (
 
 **成交引擎定位**：本仓 = 向量化。1.3 = LEBS + MockQMT 真栈。Qlib PortAnaRecord 停用；Cerebro / Rolling 已退场（2026-09-16）。见 [`docs/backtest/engine-positioning-ssot.md`](docs/backtest/engine-positioning-ssot.md)。成交核（档位 / 全卖因跌停 / Decimal 涨跌停价）见 [`docs/backtest/engine-ashare-correctness.md`](docs/backtest/engine-ashare-correctness.md)。分钟成交假设、默认锁与混比边界见 [`docs/backtest/minute-fill-policy-ssot.md`](docs/backtest/minute-fill-policy-ssot.md)。研究问题地图（三份名单 × 收益最大化）见 [`docs/backtest/research-backtest-entry.md`](docs/backtest/research-backtest-entry.md)。入口命令见 [`docs/backtest/README.md`](docs/backtest/README.md)。
 
+交易规则站位原则（行业惯例 · 回测≠交易系统）：[`docs/backtest/ssot/backtest-rule-principles-ssot.md`](docs/backtest/ssot/backtest-rule-principles-ssot.md)。
+
 规划中的 L1 薄 run facade / L2 可选研究后端见 [P0 产品边界](docs/backtest/note-l1-l2-research-engine-boundary-2026-09-28.md)（仅文档 GO；P0 后停在 Q1，不授权 types / adapters / L2 代码，不替换共享 CSV，L2 ≠ `l2_analytics/`）。
 
 后续逐片 GO 状态：L2 S1–S5 已交付；2026-09-29 Human「A GO」新增 [minute_orders 专用 synthetic CLI](docs/backtest/note-minute-orders-cli-2026-09-29.md)（显式 JSON/parent/run-id/evidence，L1 仅一条 CLI 注册）。P0 原文为历史停点；无湖接入、无默认 family，`no_ssot_compare_authorization` 不变。
@@ -63,7 +65,7 @@ Consume only. All external downloads and vendor merges live in OSkhQuant1.3. Thi
 - `TURNOVER_RESIST_DATA_DIR` is opt-in rollback to an old workspace path; default follows the parquet container.
 - This fork is read-only for market bars. New code must use resolvers, not cwd `stock_data/` literals.
 - **申万一级（只消费）**：`oskh_data/industry_sw_l1.py` 读 `vendor_wind_sw_l1/` 下的 `sw_l1_map.csv` / `wind_l1_map.csv`（两份都要有）。采集与 merge 只在 1.3。Mode A/B 用 `--industry` 才分层，缺表即失败。
-- **CI data-free gates** (no F lake): `verify_oskh_data_contract.py`, `verify_data_path_ssot.py`, `verify_no_hardcoded_machine_paths.py`, `verify_tr_bridge_import_ssot.py` in `.github/workflows/python-tests.yml` before pip. See `docs/backtest/plan-h10-ci-path-gates-2026-09-15.md` · `docs/backtest/plan-h12-ci-tr-bridge-gate-2026-09-15.md`.
+- **CI data-free gates** (no F lake): `verify_oskh_data_contract.py`, `verify_data_path_ssot.py`, `verify_no_hardcoded_machine_paths.py`, `verify_tr_bridge_import_ssot.py` in `.github/workflows/python-tests.yml` before pip; post-pip admission gates: `verify_book_admission.py` and `verify_baseline_admission.py` (require installed dependencies). See `docs/backtest/plan-h10-ci-path-gates-2026-09-15.md` · `docs/backtest/plan-h12-ci-tr-bridge-gate-2026-09-15.md`.
 
 ## Encoding
 

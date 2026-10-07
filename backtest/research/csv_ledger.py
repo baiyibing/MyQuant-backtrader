@@ -15,6 +15,7 @@ import pandas as pd
 
 from backtest.research.ashare_fees import (
     COMMISSION,
+    FeeSchedule,
     QLIB_CLOSE_COST as QLIB_CLOSE_COST,
     QLIB_MIN_COST as QLIB_MIN_COST,
     QLIB_OPEN_COST as QLIB_OPEN_COST,
@@ -24,8 +25,32 @@ from backtest.research.ashare_fill_clock import session_phase as _session_phase
 from backtest.research.ashare_session import LIMIT_EPS, hit_limit_down as hit_limit_down, hit_limit_up
 from backtest.research.ashare_volume_cap import VolumeCap
 from backtest.research.ashare_exdiv_economics import ExDivEconomics
-from backtest.research.market_layer import _digit_prefix, limit_prices
+from backtest.research.book_capabilities import uses_s8_independent as _uses_s8_independent
+from backtest.research.market_layer import (
+    buy_quantity_market,
+    limit_prices,
+    transfer_fee_market,
+)
 from backtest.research.minute_audit import record_fill, record_rejection
+from backtest.research.ledger_math import (
+    FeeAccumulator,
+    StampDutyAccumulator,
+    TransferFeeAccumulator,
+)
+from backtest.research.lot_rounding import (
+    BOARD_LOT,
+    STAR_MIN_DECLARE,
+    budget_buy_quantity,
+    budget_board_lots,
+    budget_integer_shares,
+    buy_quantity_increment,
+    buy_quantity_minimum,
+    buy_quantity_rule,
+    nonnegative_override_buy_quantity,
+    nonnegative_override_board_lots,
+    supplementary_notional,
+)
+from backtest.research.tail_window_buy import fee_aware_buy_quantity
 
 DEFAULT_TOTAL_CASH = 21_000_000.0
 PEAK_GAP_MIN = 15
@@ -244,12 +269,22 @@ def reject_short_cash_override(hooks: dict, entry: str) -> None:
 
 def resolve_buy_cash_mode(st, hooks: dict) -> None:
     """Resolve after policy binding; keep configuration out of snapshots."""
+    default_mode = (
+        "raise"
+        if getattr(st, "book_state", {}).get("s8_independent") is not None
+        else "skip"
+    )
     if "on_short_cash" in hooks:
         mode = hooks["on_short_cash"]
         if mode not in ("raise", "skip"):
             raise ValueError("on_short_cash must be 'raise' or 'skip'")
+        if uses_shrink_on_short_cash(st) and mode != default_mode:
+            raise ValueError(
+                "rule_profile='industry' shrink_on_short_cash conflicts with "
+                f"explicit non-default on_short_cash={mode!r}; remove the override"
+            )
     else:
-        mode = "raise" if s8_policy(st) is not None else "skip"
+        mode = default_mode
     st.on_short_cash = mode
 
 
@@ -276,15 +311,7 @@ def check_buy_cash(st, *, needed, available, date, code) -> bool:
 
 def uses_s8_independent(name: str | None, sizing: str | None) -> bool:
     """True iff this book should bind S8 and default on_short_cash to raise."""
-    if sizing != "per_name" or not name:
-        return False
-    if name.startswith("version6_"):
-        return True
-    if name == "version8":
-        return True
-    if name.startswith("version8_") and name != "version8_1":
-        return True
-    return False
+    return _uses_s8_independent(name, sizing)
 
 
 def _configure_s8(st, hooks: dict) -> None:
@@ -404,6 +431,117 @@ class SimState:
         self.sell_pending_events = []
         self.sell_pending_open = []
         self._sell_pending_history = {}
+
+
+def bind_account_fee_schedule(st, schedule: FeeSchedule) -> None:
+    """Bind an opt-in runtime schedule without changing SimState snapshots."""
+    if not schedule.per_order:
+        raise ValueError("account fee schedule must use per-order commission")
+    st.account_fee_schedule = schedule
+    st._fee_accumulators = {
+        "BUY": FeeAccumulator(schedule.buy_rate, schedule.min_cost),
+        "SELL": FeeAccumulator(schedule.sell_rate, schedule.min_cost),
+    }
+    st._stamp_duty_accumulator = (
+        StampDutyAccumulator() if schedule.dated_sell_stamp_duty else None
+    )
+    st._transfer_fee_accumulator = (
+        TransferFeeAccumulator() if schedule.dated_bilateral_transfer_fee else None
+    )
+    st._fee_totals = {"commission": 0.0, "stamp_duty": 0.0, "transfer_fee": 0.0}
+    st._fee_order_rows = {}
+    st._fee_order_keys = {}
+    st._fee_order_seq = 0
+    st.buy_cost_rate = schedule.buy_rate
+    st.sell_cost_rate = schedule.sell_rate
+    st.min_cost = schedule.min_cost
+    if not hasattr(st, "stats"):
+        st.stats = {}
+    if schedule.dated_sell_stamp_duty:
+        st.stats["stamp_duty_total"] = 0.0
+    if schedule.dated_bilateral_transfer_fee:
+        st.stats["transfer_fee_total"] = 0.0
+
+
+def fee_order_id(st, key=None):
+    """Return a unique order id, optionally retained by a continuation key."""
+    if not hasattr(st, "_fee_accumulators"):
+        return None
+    if key is not None and key in st._fee_order_keys:
+        return st._fee_order_keys[key]
+    st._fee_order_seq += 1
+    order_id = st._fee_order_seq
+    if key is not None:
+        st._fee_order_keys[key] = order_id
+    return order_id
+
+
+def release_fee_order(st, key) -> None:
+    if hasattr(st, "_fee_order_keys"):
+        st._fee_order_keys.pop(key, None)
+
+
+def preview_order_fees(
+    st, side: str, order_id, notional: float, trade_date=None, symbol: str | None = None
+) -> float:
+    """Preview the total fee delta for one order fill without mutating state."""
+    commission = st._fee_accumulators[side].preview(order_id, notional).fee_delta
+    stamp_duty = 0.0
+    if side == "SELL" and st._stamp_duty_accumulator is not None:
+        if trade_date is None:
+            raise ValueError("sell stamp duty requires a trade date")
+        stamp_duty = st._stamp_duty_accumulator.preview(
+            order_id, notional, trade_date
+        ).fee_delta
+    transfer_fee = 0.0
+    if st._transfer_fee_accumulator is not None:
+        if trade_date is None or symbol is None:
+            raise ValueError("transfer fee requires trade date and symbol")
+        transfer_fee = st._transfer_fee_accumulator.preview(
+            order_id, notional, transfer_fee_market(symbol), trade_date
+        ).fee_delta
+    return commission + stamp_duty + transfer_fee
+
+
+def _accrue_order_fee(st, side: str, order_id, row: dict) -> float:
+    """Book one fill and rewrite per-order commission and stamp allocations."""
+    accumulator = st._fee_accumulators[side]
+    rows = st._fee_order_rows.setdefault(order_id, [])
+    rows.append(row)
+    accrual = accumulator.add_fill(order_id, row["notional"])
+    for fill, commission in zip(rows, accrual.allocations):
+        fill["commission"] = commission
+    stamp_delta = 0.0
+    if side == "SELL" and st._stamp_duty_accumulator is not None:
+        stamp = st._stamp_duty_accumulator.add_fill(
+            order_id, row["notional"], row["date"]
+        )
+        for fill, amount in zip(rows, stamp.allocations):
+            fill["stamp_duty"] = amount
+        stamp_delta = stamp.fee_delta
+    elif st.account_fee_schedule.dated_sell_stamp_duty:
+        for fill in rows:
+            fill["stamp_duty"] = 0.0
+    transfer_delta = 0.0
+    if st._transfer_fee_accumulator is not None:
+        symbol = row.get("code", row.get("symbol"))
+        transfer = st._transfer_fee_accumulator.add_fill(
+            order_id,
+            row["notional"],
+            transfer_fee_market(symbol),
+            row["date"],
+        )
+        for fill, amount in zip(rows, transfer.allocations):
+            fill["transfer_fee"] = amount
+        transfer_delta = transfer.fee_delta
+    st._fee_totals["commission"] += accrual.fee_delta
+    st._fee_totals["stamp_duty"] += stamp_delta
+    st._fee_totals["transfer_fee"] += transfer_delta
+    if st.account_fee_schedule.dated_sell_stamp_duty:
+        st.stats["stamp_duty_total"] = st._fee_totals["stamp_duty"]
+    if st.account_fee_schedule.dated_bilateral_transfer_fee:
+        st.stats["transfer_fee_total"] = st._fee_totals["transfer_fee"]
+    return accrual.fee_delta + stamp_delta + transfer_delta
 
 
 def _ymd(ts) -> str:
@@ -528,20 +666,164 @@ def last_close_mark(df, day, fallback: float) -> float:
     return float(fallback) if m is None else m
 
 
-def _buy_size(per_quota: float, price: float, *, star_declare: bool = False) -> tuple[int, float]:
-    """默认整百且可补足 100 股；STAR opt-in 按整数股、不补足，由入口校验。"""
+def _buy_size(
+    per_quota: float,
+    price: float,
+    *,
+    star_declare: bool = False,
+    top_up_min_lot: bool = True,
+) -> tuple[int, float]:
+    """Size a buy; legacy may top up one board lot, industry B8-03 may not."""
     if price <= 0 or per_quota <= 0:
         return 0, 0.0
     if star_declare:
         # D23 X-10: integer shares, min 200 checked at entry; no top-up.
-        return int(per_quota / price), 0.0
-    shares = int(per_quota / price / 100.0) * 100
+        return budget_integer_shares(per_quota, price), 0.0
+    shares = budget_board_lots(per_quota, price)
     supp = 0.0
-    if shares == 0:
-        notional = 100 * price
-        supp = max(0.0, notional - per_quota)
-        shares = 100
+    if shares == 0 and top_up_min_lot:
+        notional = BOARD_LOT * price
+        supp = supplementary_notional(notional, per_quota)
+        shares = BOARD_LOT
     return shares, supp
+
+
+def allows_min_lot_top_up(st) -> bool:
+    """Return whether the active profile preserves legacy one-lot supplementation."""
+    return not bool(
+        getattr(getattr(st, "rule_profile", None), "supplementary_min_lot", False)
+    )
+
+
+def uses_fee_aware_affordability(st) -> bool:
+    """Return whether buy declarations must include all industry buy fees."""
+    return bool(
+        getattr(getattr(st, "rule_profile", None), "fee_aware_affordability", False)
+    )
+
+
+def uses_shrink_on_short_cash(st) -> bool:
+    """Return whether short cash shrinks the declaration instead of using B7."""
+    return bool(
+        getattr(getattr(st, "rule_profile", None), "shrink_on_short_cash", False)
+    )
+
+
+def uses_exchange_quantity_rules(st) -> bool:
+    """Return whether exchange-specific buy declarations are active."""
+    return bool(
+        getattr(getattr(st, "rule_profile", None), "exchange_quantity_rules", False)
+    )
+
+
+def uses_account_odd_lot_exit(st) -> bool:
+    """Return whether partial sells must absorb an account-level odd remainder."""
+    return bool(
+        getattr(getattr(st, "rule_profile", None), "account_odd_lot_exit", False)
+    )
+
+
+def sell_board_lot(code: str) -> int:
+    """Return the remainder threshold used by an account-level sell order."""
+    return STAR_MIN_DECLARE if buy_quantity_market(code) == "STAR" else BOARD_LOT
+
+
+def account_sell_quantity(
+    st: SimState, code: str, held_shares: int, wanted_shares: int
+) -> int:
+    """Expand a partial order to include the whole sub-lot account remainder.
+
+    Lot-row allocation happens after this calculation.  This deliberately
+    avoids applying the rule independently to each source lot.
+    """
+    held = max(0, int(held_shares))
+    wanted = max(0, int(wanted_shares))
+    if not uses_account_odd_lot_exit(st):
+        return wanted
+    if wanted == 0 or wanted >= held:
+        return wanted
+    remainder = held - wanted
+    if 0 < remainder < sell_board_lot(code):
+        return held
+    return wanted
+
+
+def active_buy_quantity_rule(st, code: str) -> str:
+    """Resolve the exact declaration rule used by preview and execution."""
+    return buy_quantity_rule(
+        buy_quantity_market(code),
+        exchange_quantity_rules=uses_exchange_quantity_rules(st),
+        star_lot_declare_check=st.star_lot_declare_check,
+    )
+
+
+def preview_buy_declaration(
+    st: SimState,
+    code: str,
+    px: float,
+    per: float,
+    *,
+    shares_override: int | None = None,
+) -> tuple[int, float, int, str]:
+    """Return final declared shares before any volume-cap partial fill.
+
+    Loop cash gates call this same primitive as ``execute_buy`` so B8-12 cannot
+    check a board-lot quantity and later submit a different STAR/BSE quantity.
+    """
+    rule = active_buy_quantity_rule(st, code)
+    if shares_override is None:
+        if buy_quantity_increment(rule) == BOARD_LOT:
+            shares, supp = _buy_size(
+                per,
+                px,
+                top_up_min_lot=allows_min_lot_top_up(st),
+            )
+        elif px <= 0 or per <= 0:
+            shares, supp = 0, 0.0
+        else:
+            shares, supp = budget_buy_quantity(per, px, rule), 0.0
+    else:
+        if isinstance(shares_override, bool) or not isinstance(shares_override, Integral):
+            raise ValueError("shares_override must be an integer share count")
+        shares = nonnegative_override_buy_quantity(shares_override, rule)
+        supp = 0.0
+    wanted_shares = shares
+    return shares, supp, wanted_shares, rule
+
+
+def preview_final_buy_declaration(
+    st: SimState,
+    code: str,
+    px: float,
+    per: float,
+    day,
+    *,
+    shares_override: int | None = None,
+) -> tuple[int, float, int, str]:
+    """Preview the fee-aware final declaration for one strategy order."""
+    shares, supp, wanted_shares, rule = preview_buy_declaration(
+        st, code, px, per, shares_override=shares_override
+    )
+    if uses_fee_aware_affordability(st) and shares > 0:
+        shares = fee_aware_buy_quantity(
+            shares,
+            px,
+            per,
+            st.cash if uses_shrink_on_short_cash(st) else per,
+            lambda notional: st.account_fee_schedule.debit_buy(notional, day, code),
+            increment=buy_quantity_increment(rule),
+            minimum=buy_quantity_minimum(rule),
+        )
+        supp = 0.0
+    return shares, supp, wanted_shares, rule
+
+
+def preview_buy_cash_needed(st: SimState, code: str, px: float, shares: int, day) -> float:
+    """Cash debit for the declaration used by loop and ledger pre-checks."""
+    notional = shares * px
+    if uses_fee_aware_affordability(st):
+        return st.account_fee_schedule.debit_buy(notional, day, code)
+    return notional + trade_commission(notional, st.buy_cost_rate, st.min_cost)
 
 
 def execute_buy(
@@ -562,6 +844,7 @@ def execute_buy(
     entry_signal_date: str | None = None,
     merge_lot: Position | None = None,
     hm: int | None = None,
+    order_id=None,
 ) -> bool:
     """常规/追买共用；open 调用方显式传 at，默认仍为 bucket 收盘。"""
     if px <= 0:
@@ -600,29 +883,77 @@ def execute_buy(
         or not any(lot is merge_lot for lot in st.positions.get(code, []))
     ):
         raise ValueError("merge_lot must be an existing same-code, same-day buy lot")
-    star_declare = st.star_lot_declare_check and _digit_prefix(code).startswith(("688", "689"))
-    if shares_override is None:
-        shares, supp = _buy_size(per, px, star_declare=star_declare)
-    else:
-        if isinstance(shares_override, bool) or not isinstance(shares_override, Integral):
-            raise ValueError("shares_override must be an integer share count")
-        shares, supp = (
-            int(shares_override) if star_declare else max(0, int(shares_override)) // 100 * 100
-        ), 0.0
+    no_min_lot_top_up = not allows_min_lot_top_up(st)
+    fee_aware = uses_fee_aware_affordability(st)
+    shares, supp, wanted_shares, quantity_rule = preview_final_buy_declaration(
+        st, code, px, per, day, shares_override=shares_override
+    )
+    if (
+        shares_override is not None
+        and buy_quantity_increment(quantity_rule) == BOARD_LOT
+    ):
+        # Keep the frozen B8 helper call at the ledger boundary; preview and
+        # execution intentionally normalize the same explicit declaration.
+        normalized_board_override = nonnegative_override_board_lots(shares_override)
+        if not fee_aware:
+            shares = normalized_board_override
+    if shares_override is not None and not fee_aware:
         per = shares * px
     # This is the new buy declaration, not its eventual fill. A later cap may
     # fill <200; a subsequent execute_buy call is a NEW declaration, including
     # residual retries / merge_lot. Held-position sell unwinds stay separate.
-    if star_declare and shares < 200:
+    if quantity_rule == "STAR" and shares < STAR_MIN_DECLARE:
         reason_code = "skip_star_buy_declare_qty"
         st.stats[reason_code] = st.stats.get(reason_code, 0) + 1
         record_rejection(st, code, day, reason_code, px)
         return False
-    if shares <= 0:
+    if quantity_rule == "BSE" and shares < BOARD_LOT:
+        if shares_override is None and no_min_lot_top_up:
+            reason_code = "skip_min_lot_budget"
+            st.stats[reason_code] = st.stats.get(reason_code, 0) + 1
+            record_rejection(st, code, day, reason_code, px)
         return False
+    if shares <= 0:
+        if (
+            shares_override is None
+            and no_min_lot_top_up
+            and quantity_rule != "STAR"
+            and (
+                not fee_aware
+                or wanted_shares <= 0
+                or fee_aware_buy_quantity(
+                    wanted_shares,
+                    px,
+                    per,
+                    per,
+                    lambda notional: st.account_fee_schedule.debit_buy(
+                        notional, day, code
+                    ),
+                )
+                <= 0
+            )
+        ):
+            reason_code = "skip_min_lot_budget"
+            st.stats[reason_code] = st.stats.get(reason_code, 0) + 1
+            record_rejection(st, code, day, reason_code, px)
+        elif fee_aware:
+            record_rejection(st, code, day, "skip_cash", px)
+        return False
+    per_order_fees = hasattr(st, "_fee_accumulators")
+    if per_order_fees:
+        order_id = fee_order_id(st) if order_id is None else order_id
     notional = shares * px
-    comm = trade_commission(notional, st.buy_cost_rate, st.min_cost)
-    if not check_buy_cash(st, needed=notional + comm, available=st.cash,
+    comm = (
+        st.account_fee_schedule.buy_fee(notional)
+        if per_order_fees
+        else trade_commission(notional, st.buy_cost_rate, st.min_cost)
+    )
+    needed = (
+        st.account_fee_schedule.debit_buy(notional, day, code)
+        if fee_aware
+        else notional + comm
+    )
+    if not check_buy_cash(st, needed=needed, available=st.cash,
                           date=_ymd(day), code=code):
         record_rejection(st, code, day, "skip_cash", px)
         return False
@@ -636,12 +967,17 @@ def execute_buy(
                          position_id=position_id, entry_signal_date=entry_signal_date)
             return False
         notional = shares * px
-        comm = trade_commission(notional, st.buy_cost_rate, st.min_cost)
+        comm = (
+            st.account_fee_schedule.buy_fee(notional)
+            if per_order_fees
+            else trade_commission(notional, st.buy_cost_rate, st.min_cost)
+        )
         if shares_override is not None:
             per = notional
-        supp = max(0.0, notional - per)
+        supp = supplementary_notional(notional, per)
     cash_before = st.cash
-    st.cash -= notional + comm
+    if not per_order_fees:
+        st.cash -= notional + comm
     st.daily_quota_used += min(per, notional)
     st.stats["supplementary_used"] += supp
     st.stats["invested_notional"] += notional
@@ -683,22 +1019,24 @@ def execute_buy(
         # The original scanner starts updating that peak only from T+1.
         # The group's first_lot remains this object, so its price-add anchor is
         # the weighted initial-lot cost known at the time of the add decision.
-    st.trades.append(
-        {
-            "date": _ymd(day),
-            "code": code,
-            "side": "BUY",
-            "price": px,
-            "shares": shares,
-            "notional": notional,
-            "commission": comm,
-            "reason": reason,
-            "lot": lot_id,
-            "session_phase": "",
-            "price_rule": "",
-            **identity,
-        }
-    )
+    trade = {
+        "date": _ymd(day),
+        "code": code,
+        "side": "BUY",
+        "price": px,
+        "shares": shares,
+        "notional": notional,
+        "commission": comm if not per_order_fees else 0.0,
+        "reason": reason,
+        "lot": lot_id,
+        "session_phase": "",
+        "price_rule": "",
+        **identity,
+    }
+    st.trades.append(trade)
+    if per_order_fees:
+        comm = _accrue_order_fee(st, "BUY", order_id, trade)
+        st.cash -= notional + comm
     if hm is not None:
         # Opt-in tail fills carry their execution clock; OFF keeps its columns.
         st.trades[-1]["hm"] = int(hm)
@@ -724,10 +1062,17 @@ def _volume_skip(st: SimState, code: str, px: float, day, reason: str,
         {"position_id": position_id, "entry_signal_date": entry_signal_date}
         if s8_policy(st) is not None and position_id is not None else {}
     )
-    st.trades.append({"date": _ymd(day), "code": code, "side": "SKIP",
-                      "price": px, "shares": 0, "notional": 0.0,
-                      "commission": 0.0, "reason": reason, "bucket": bucket_id,
-                      "session_phase": "", "price_rule": "", **identity})
+    trade = {"date": _ymd(day), "code": code, "side": "SKIP",
+             "price": px, "shares": 0, "notional": 0.0,
+             "commission": 0.0, "reason": reason, "bucket": bucket_id,
+             "session_phase": "", "price_rule": "", **identity}
+    if getattr(getattr(st, "account_fee_schedule", None), "dated_sell_stamp_duty", False):
+        trade["stamp_duty"] = 0.0
+    if getattr(
+        getattr(st, "account_fee_schedule", None), "dated_bilateral_transfer_fee", False
+    ):
+        trade["transfer_fee"] = 0.0
+    st.trades.append(trade)
     record_fill(st, st.trades[-1], st.cash)
 
 
@@ -735,7 +1080,8 @@ def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str, *
           bucket_id: int | None = None, at: int | None = None,
           day_i: int | None = None, hm: int | None = None,
           session_phase: str = "", price_rule: str = "",
-          wanted_shares: int | None = None, _group_exit: bool = False) -> int:
+          wanted_shares: int | None = None, _group_exit: bool = False,
+          order_id=None) -> int:
     if isinstance(pos, IndependentExitPosition):
         return _sell_s8_group(
             st, code, pos, px, day, reason,
@@ -771,6 +1117,13 @@ def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str, *
         shares = min(shares, int(wanted_shares))
     if shares <= 0:
         return 0
+    requested_shares = shares
+    per_order_fees = hasattr(st, "_fee_accumulators")
+    order_key = None
+    if per_order_fees and order_id is None:
+        base_reason = reason.replace(":next_open", "").replace("|t1_deferred", "")
+        order_key = ("sell", held_fill_key(pos), base_reason)
+        order_id = fee_order_id(st, order_key)
     if st.volume_cap is not None:
         # Linked exits stay atomic: no orphan riders or new pending queues.
         group = [pos] + [p for p in st.positions.get(code, [])
@@ -796,31 +1149,36 @@ def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str, *
             return 0
         shares = min(shares, allocated)
     notional = shares * px
-    comm = trade_commission(notional, st.sell_cost_rate, st.min_cost)
+    comm = (
+        st.account_fee_schedule.sell_fee(notional)
+        if per_order_fees
+        else trade_commission(notional, st.sell_cost_rate, st.min_cost)
+    )
     cash_before = st.cash
-    st.cash += notional - comm
     # Human GO P2=B: annotate only after fill eligibility/price/size are settled.
     if hm is not None and not session_phase:
         try:
             session_phase = _session_phase(hm).value
         except ValueError:
             pass  # Unknown phase must never reject an otherwise valid fill.
-    st.trades.append(
-        {
-            "date": _ymd(day),
-            "code": code,
-            "side": "SELL",
-            "price": px,
-            "shares": shares,
-            "notional": notional,
-            "commission": comm,
-            "reason": reason,
-            "lot": pos.lot_id,
-            "session_phase": session_phase,
-            "price_rule": price_rule,
-            **position_identity(pos),
-        }
-    )
+    trade = {
+        "date": _ymd(day),
+        "code": code,
+        "side": "SELL",
+        "price": px,
+        "shares": shares,
+        "notional": notional,
+        "commission": comm if not per_order_fees else 0.0,
+        "reason": reason,
+        "lot": pos.lot_id,
+        "session_phase": session_phase,
+        "price_rule": price_rule,
+        **position_identity(pos),
+    }
+    st.trades.append(trade)
+    if per_order_fees:
+        comm = _accrue_order_fee(st, "SELL", order_id, trade)
+    st.cash += notional - comm
     record_fill(st, st.trades[-1], cash_before)
     if reason.startswith("stop_loss"):
         st.stats["sell_stop"] += 1
@@ -838,6 +1196,8 @@ def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str, *
         st.stats["sell_pos_trail"] += 1
     if st.volume_cap is not None:
         st.volume_cap.consume(key, shares)
+    if order_key is not None and shares >= requested_shares:
+        release_fee_order(st, order_key)
     # S1: every booked sell decrements shares, including the default path.
     pos.shares -= shares
     if st.exdiv_economics is not None:
@@ -878,7 +1238,8 @@ def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str, *
     for child in riders:
         _sell(st, code, child, px, day, reason,
               bucket_id=bucket_id, at=at, day_i=day_i, hm=hm,
-              session_phase=session_phase, price_rule=price_rule)
+              session_phase=session_phase, price_rule=price_rule,
+              order_id=order_id)
     return shares
 
 
@@ -890,9 +1251,9 @@ def _sell_s8_group(
 ) -> int:
     """Latch one group exit and retain its T+1-locked shares for the next open.
 
-    A group is one exit decision, while each fill lot retains its trade row and
-    existing commission calculation. Completed-volume limits retain their
-    per-lot partial fills; any unfilled shares keep the group's pending exit.
+    A group is one exit order, while each fill lot retains its trade row.
+    Completed-volume limits retain their per-lot partial fills; any unfilled
+    shares keep the group's pending exit and fee-order identity.
     """
     if wanted_shares is not None:
         raise ValueError("independent-position exits must target the whole position")
@@ -923,6 +1284,8 @@ def _sell_s8_group(
     sellable = [p for p in lots if p.entry_idx < day_i]
     if not sellable:
         return 0
+    order_key = ("s8-group-exit", pos.position_id)
+    order_id = fee_order_id(st, order_key)
     filled = 0
     for lot in sellable:
         lot_reason = reason
@@ -935,5 +1298,8 @@ def _sell_s8_group(
             st, code, lot, px, day, lot_reason,
             bucket_id=bucket_id, at=at, day_i=day_i, hm=hm,
             session_phase=session_phase, price_rule=price_rule, _group_exit=True,
+            order_id=order_id,
         )
+    if pos.group.closed:
+        release_fee_order(st, order_key)
     return filled

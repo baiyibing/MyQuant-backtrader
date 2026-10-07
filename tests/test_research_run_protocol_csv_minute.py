@@ -46,7 +46,11 @@ def cli_python(monkeypatch):
 
 @pytest.mark.parametrize("trigger", [OMITTED, "close", "hl"])
 def test_simulate_full_state_parity_and_reference_identity(bars, trigger, monkeypatch):
-    kwargs = {"strategy": "version6", "stop_pct": 0.05}
+    kwargs = {
+        "strategy": "version6",
+        "stop_pct": 0.05,
+        "rule_profile": "legacy",
+    }
     if trigger is not OMITTED:
         kwargs["minute_stop_trigger"] = trigger
     before = deepcopy(bars)
@@ -98,7 +102,7 @@ def test_simulate_full_state_parity_and_reference_identity(bars, trigger, monkey
 ])
 def test_real_native_failure_is_same_instance_once(bars, entry, problem, error_type, monkeypatch):
     args = bars if entry == "simulate" else bars[3:]
-    kwargs = {"strategy": "version8"}
+    kwargs = {"strategy": "version8", "rule_profile": "legacy"}
     if problem == "cash":
         kwargs["total_cash"] = 1_000_000.
     elif problem == "stop_fill":

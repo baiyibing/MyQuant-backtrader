@@ -2,18 +2,26 @@
 
 import json
 from copy import deepcopy
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
 import pandas as pd
 import pytest
 from backtest.research import csv_minute_backtest_v7 as v7
+from backtest.research import csv_minute_backtest as shared_minute
 from backtest.research.ashare_bars import annotate_session
 from backtest.research.ashare_volume_cap import BucketVolume
+from backtest.research.minute_engine_policies import MinutePolicyContext
+from backtest.research.rule_profile import INDUSTRY
 
 A, B = "600000.SH", "000001.SZ"
 D1, D2 = date(2026, 9, 1), date(2026, 9, 2)
+
+
+def simulate_v7_legacy(*args, **kwargs):
+    kwargs.setdefault("rule_profile", "legacy")
+    return v7.simulate_v7(*args, **kwargs)
 
 
 def fen(value):
@@ -57,8 +65,10 @@ def fills(state, side=None):
 
 def test_future_1500_stop_cannot_finance_1445_add_and_audit_is_real():
     off_rows, on_rows = [], []
-    off = v7.simulate_v7(**v7_cross_symbol_case(), audit_sink=off_rows)
-    on = v7.simulate_v7(**v7_cross_symbol_case(), fix_minute_cash_order=True, audit_sink=on_rows)
+    off = simulate_v7_legacy(**v7_cross_symbol_case(), audit_sink=off_rows)
+    on = simulate_v7_legacy(
+        **v7_cross_symbol_case(), fix_minute_cash_order=True, audit_sink=on_rows
+    )
     assert fen(off.cash) == Decimal("540.32")
     assert fen(on.cash) == Decimal("200420.00")
     assert len(fills(off, "buy")) == 3 and len(fills(on, "buy")) == 2
@@ -82,8 +92,10 @@ def test_future_1500_stop_cannot_finance_1445_add_and_audit_is_real():
 
 
 def test_cross_hm_economics_do_not_depend_on_input_symbol_order():
-    left = v7.simulate_v7(**v7_cross_symbol_case(), fix_minute_cash_order=True)
-    right = v7.simulate_v7(**v7_cross_symbol_case(reverse=True), fix_minute_cash_order=True)
+    left = simulate_v7_legacy(**v7_cross_symbol_case(), fix_minute_cash_order=True)
+    right = simulate_v7_legacy(
+        **v7_cross_symbol_case(reverse=True), fix_minute_cash_order=True
+    )
     assert fen(left.cash) == fen(right.cash)
     assert {key: asdict(value) for key, value in left.positions.items()} == {
         key: asdict(value) for key, value in right.positions.items()}
@@ -96,8 +108,11 @@ def test_cross_hm_economics_do_not_depend_on_input_symbol_order():
 @pytest.mark.parametrize("sell_hm,bought", [(884, True), (885, True), (886, False)])
 def test_close_sell_boundary_and_b11_same_close_can_finance_add(sell_hm, bought):
     rows = []
-    state = v7.simulate_v7(**v7_cross_symbol_case(sell_hm=sell_hm, reverse=True),
-                           fix_minute_cash_order=True, audit_sink=rows)
+    state = simulate_v7_legacy(
+        **v7_cross_symbol_case(sell_hm=sell_hm, reverse=True),
+        fix_minute_cash_order=True,
+        audit_sink=rows,
+    )
     assert any(row["reason"] == "buy:add_a104" for row in fills(state)) is bought
     if sell_hm == 885:
         same = [r for r in rows if r["date"] == D2.isoformat() and r["hm"] == 885]
@@ -114,8 +129,13 @@ def test_only_actual_net_proceeds_from_close_sell_are_spendable(volume):
     if volume is not None:
         volumes[(A, "20260902", 885)] = BucketVolume(volume, 885, "raw_shares_incremental")
     rows = []
-    state = v7.simulate_v7(**case, fix_minute_cash_order=True, participation_rate=1,
-                           volume_for_bucket=volumes, audit_sink=rows)
+    state = simulate_v7_legacy(
+        **case,
+        fix_minute_cash_order=True,
+        participation_rate=1,
+        volume_for_bucket=volumes,
+        audit_sink=rows,
+    )
     sold = sum(r["shares"] for r in fills(state, "sell"))
     assert sold == (volume or 0)
     bought = any(r["reason"] == "buy:add_a104" for r in fills(state))
@@ -131,7 +151,7 @@ def test_only_actual_net_proceeds_from_close_sell_are_spendable(volume):
 def test_limit_down_defer_does_not_create_cash():
     case = v7_cross_symbol_case(sell_hm=885)
     case["daily_bars"][A][D1] = 10
-    state = v7.simulate_v7(**case, fix_minute_cash_order=True)
+    state = simulate_v7_legacy(**case, fix_minute_cash_order=True)
     assert not fills(state, "sell")
     assert fen(state.cash) == Decimal("20600.00")
     assert state.positions[A].shares == state.positions[B].shares == 20_000
@@ -155,7 +175,7 @@ def test_last_bar_timer_observes_buy_then_never_retries_failed_buy(monkeypatch, 
     timer_day = calendar[-1]
     _seed(monkeypatch, {A: _position(A)})
     rows = []
-    state = v7.simulate_v7(
+    state = simulate_v7_legacy(
         {A: [bar(timer_day, 895, 10.4)]}, {A: {timer_day - timedelta(days=1): 10}}, {}, calendar,
         cash_total=cash, fix_minute_cash_order=True, audit_sink=rows,
     )
@@ -176,7 +196,7 @@ def test_same_hm_other_stock_timer_also_follows_all_buy_attempts(monkeypatch):
     timer_day = calendar[-1]
     _seed(monkeypatch, {A: _position(A), B: _position(B, anchor=D2)})
     rows = []
-    state = v7.simulate_v7(
+    state = simulate_v7_legacy(
         {A: [bar(timer_day, 895, 10)], B: [bar(timer_day, 895, 10.4)]},
         {symbol: {timer_day - timedelta(days=1): 10} for symbol in (A, B)}, {}, calendar,
         cash_total=0, fix_minute_cash_order=True, audit_sink=rows,
@@ -189,7 +209,7 @@ def test_open_stop_volume_reject_is_not_retried_at_close_same_bar(monkeypatch):
     _seed(monkeypatch, {A: _position(A)})
     volumes = {(A, "20260902", 570): BucketVolume(10_000, 570, "raw_shares_incremental")}
     rows = []
-    state = v7.simulate_v7(
+    state = simulate_v7_legacy(
         {A: [bar(D2, 570, 8.9, 9)]}, {A: {D1: 9.5}}, {}, [D1, D2], cash_total=0,
         participation_rate=1, volume_for_bucket=volumes, fix_minute_cash_order=True, audit_sink=rows,
     )
@@ -203,7 +223,7 @@ def test_duplicate_hm_open_rejection_stops_only_its_own_row(monkeypatch):
     _seed(monkeypatch, {A: _position(A)})
     volumes = {(A, "20260902", 570): BucketVolume(10_000, 570, "raw_shares_incremental")}
     rows = []
-    state = v7.simulate_v7(
+    state = simulate_v7_legacy(
         {A: [bar(D2, 570, 8.9, 9), bar(D2, 570, 8.8, 10)]},
         {A: {D1: 9.5}}, {}, [D1, D2], cash_total=0,
         participation_rate=1, volume_for_bucket=volumes, fix_minute_cash_order=True, audit_sink=rows,
@@ -220,7 +240,7 @@ def test_duplicate_hm_open_rejection_stops_only_its_own_row(monkeypatch):
 
 def test_same_hm_cash_competition_keeps_original_pool_order():
     for symbols in ([A, B], [B, A]):
-        state = v7.simulate_v7(
+        state = simulate_v7_legacy(
             {symbol: [bar(D1, 895, 10)] for symbol in (A, B)},
             {symbol: {D1 - timedelta(days=1): 10} for symbol in (A, B)},
             {D1: symbols}, [D1], cash_total=200_200, fix_minute_cash_order=True,
@@ -239,17 +259,30 @@ def test_lunch_rows_match_production_filter_and_never_emit_events(monkeypatch):
     assert filtered.hm.tolist() == [570, 600, 690, 780, 900]
     raw = frame.assign(hm=hms, ymd=D2.strftime("%Y%m%d"))
     rows = []
-    unfiltered = v7.simulate_v7({A: raw}, {A: {D1: 9.5}}, {}, [D1, D2],
-                                fix_minute_cash_order=True, audit_sink=rows)
-    reference = v7.simulate_v7({A: filtered}, {A: {D1: 9.5}}, {}, [D1, D2],
-                               fix_minute_cash_order=True)
+    unfiltered = simulate_v7_legacy(
+        {A: raw},
+        {A: {D1: 9.5}},
+        {},
+        [D1, D2],
+        fix_minute_cash_order=True,
+        audit_sink=rows,
+    )
+    reference = simulate_v7_legacy(
+        {A: filtered},
+        {A: {D1: 9.5}},
+        {},
+        [D1, D2],
+        fix_minute_cash_order=True,
+    )
     assert asdict(unfiltered) == asdict(reference)
     assert rows == [] and unfiltered.positions[A].shares == 20_000
 
 
 def test_omitted_and_explicit_off_state_and_writer_bytes_match(tmp_path):
-    implicit = v7.simulate_v7(**v7_cross_symbol_case())
-    explicit = v7.simulate_v7(**v7_cross_symbol_case(), fix_minute_cash_order=False)
+    implicit = simulate_v7_legacy(**v7_cross_symbol_case())
+    explicit = simulate_v7_legacy(
+        **v7_cross_symbol_case(), fix_minute_cash_order=False
+    )
     assert asdict(implicit) == asdict(explicit)
     v7.write_run_artifacts(implicit, tmp_path / "implicit")
     v7.write_run_artifacts(explicit, tmp_path / "explicit")
@@ -257,13 +290,59 @@ def test_omitted_and_explicit_off_state_and_writer_bytes_match(tmp_path):
         assert (tmp_path / "implicit" / name).read_bytes() == (tmp_path / "explicit" / name).read_bytes()
 
 
+@pytest.mark.parametrize("entry", ["shared-native", "standalone"])
+def test_industry_profile_selects_existing_chronological_cash_order(entry):
+    case = v7_cross_symbol_case()
+    if entry == "standalone":
+        def run(**kwargs):
+            return simulate_v7_legacy(**case, **kwargs)
+    else:
+        native = dict(case)
+        index_days = native.pop("index_days")
+        native["total_cash"] = native.pop("cash_total")
+
+        def run(**kwargs):
+            return shared_minute.simulate(
+                **native,
+                start=index_days[0],
+                end=index_days[-1],
+                strategy="version7",
+                policy_context=MinutePolicyContext(index_days=index_days),
+                **kwargs,
+            )
+
+    legacy = run(rule_profile="legacy")
+    industry = run(rule_profile="industry")
+    industry_symbol_major = run(
+        rule_profile=replace(INDUSTRY, chronological_v7=False),
+    )
+    industry_explicit = run(
+        rule_profile="industry",
+        fix_minute_cash_order=True,
+    )
+
+    assert len(fills(legacy, "buy")) == 3
+    assert len(fills(industry, "buy")) == 3
+    chronological_add = next(
+        row for row in fills(industry, "buy") if row["reason"] == "buy:add_a104"
+    )
+    symbol_major_add = next(
+        row for row in fills(industry_symbol_major, "buy")
+        if row["reason"] == "buy:add_a104"
+    )
+    assert chronological_add["shares"] == 2100
+    assert symbol_major_add["shares"] == 19200
+    assert asdict(industry) == asdict(industry_explicit)
+    assert industry.stats["rule_profile_revision"] == "industry-p11-20261006"
+
+
 def test_single_symbol_ample_cash_keeps_legacy_trade_tuples_and_state():
     case = v7_cross_symbol_case()
     case["minute_bars"] = {B: case["minute_bars"][B]}
     case["pool_days"] = {D1: [B]}
     case["cash_total"] = 1_000_000
-    off = v7.simulate_v7(**case)
-    on = v7.simulate_v7(**case, fix_minute_cash_order=True)
+    off = simulate_v7_legacy(**case)
+    on = simulate_v7_legacy(**case, fix_minute_cash_order=True)
     assert asdict(off) == asdict(on)
 
 

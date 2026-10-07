@@ -181,6 +181,12 @@ def summarize(
     elif st.stats.get("sell_book") == "v9_2":
         from backtest.research.strategy9_2_rules import HELP_LOCK
         lines.append(HELP_LOCK.strip())
+    elif st.stats.get("sell_book") == "v9_3":
+        hold_days = int(st.stats["max_hold"])
+        lines.append(
+            "  参数: SCAN T+3 买入 | 固定止损 weighted cost ×0.90 | "
+            f"满持有 {hold_days} 日收盘决定、次开 force_sell:max_hold | 不加仓"
+        )
     elif st.stats.get("sell_book") == "v9":
         max_hold = st.stats.get("max_hold")
         hold_text = f"满持有 {int(max_hold)} 日 force_sell" if max_hold is not None else "满持有强平 OFF"
@@ -377,6 +383,9 @@ def write_run_artifacts(
 
         if manifest_config is None:
             raise ValueError("emit_run_manifest requires resolved manifest_config")
+        manifest_config = dict(manifest_config)
+        manifest_config.pop("rule_profile", None)
+        manifest_config.pop("rule_profile_revision", None)
         metadata_paths = []
         if metadata := getattr(st, "run_metadata", None):
             metadata_path = out_dir / "run-metadata.json"

@@ -16,6 +16,7 @@ from typing import Callable, Optional
 import pandas as pd
 
 from backtest.research.ashare_session import k_for, skip_buy_at_limit
+from backtest.research.book_capabilities import allows_price_add
 from backtest.research.csv_common import (
     _pool_names_asof,
     book_limit_prices,
@@ -24,22 +25,25 @@ from backtest.research.csv_common import (
 from backtest.research.csv_ledger import (
     check_buy_cash,
     SimState,
-    _buy_size,
     chase_decision,
     configure_s8,
     execute_buy,
-    trade_commission,
+    trade_commission as trade_commission,
     hit_limit_down,
     hit_limit_up,
     market_close_mark,
+    preview_buy_cash_needed,
+    preview_final_buy_declaration,
     queue_limit_up_chase,
     position_identity,
     s8_open_groups,
     s8_policy,
+    uses_shrink_on_short_cash,
 )
 from backtest.research.csv_strategy_books import apply_csv_strategy
 from backtest.research.exdiv_map import mapped_prev_close
 from backtest.research.minute_audit import record_rejection
+from backtest.research.lot_rounding import budget_board_lots
 
 # quotes_for(code) -> (open_px, buy_px, closes_ending_yesterday) or None to keep pending
 ChaseQuotesFn = Callable[[str], Optional[tuple[float, float, list[float]]]]
@@ -232,7 +236,9 @@ def run_chase_due_day(
             st, code, buy_px, per_ch, day_i, day, reason="chase:T+1", **volume_kwargs
         ):
             st.stats["chase_buy_fail"] += 1
-            shares, _ = _buy_size(per_ch, buy_px)
+            shares, _, _, _ = preview_final_buy_declaration(
+                st, code, buy_px, per_ch, day
+            )
             if (
                 sum(
                     int(st.stats.get(k, 0))
@@ -410,7 +416,7 @@ def run_pool_buys_day(
         if buy_hm is not None:
             volume_kwargs["hm"] = buy_hm
         if order_budget is not None:
-            volume_kwargs["shares_override"] = int(per / px / 100.) * 100
+            volume_kwargs["shares_override"] = budget_board_lots(per, px)
         if unit_shares is not None:
             volume_kwargs["shares_override"] = unit_shares
         if independent:
@@ -418,10 +424,17 @@ def run_pool_buys_day(
         if sizing == "per_name":
             if unit_shares is not None:
                 per = unit_shares * px
-            shares, _ = _buy_size(per, px)
-            notional = shares * px
-            if not check_buy_cash(
-                st, needed=notional + trade_commission(notional, st.buy_cost_rate, st.min_cost),
+            shares, _, _, _ = preview_final_buy_declaration(
+                st,
+                code,
+                px,
+                per,
+                day,
+                shares_override=volume_kwargs.get("shares_override"),
+            )
+            if not uses_shrink_on_short_cash(st) and not check_buy_cash(
+                st,
+                needed=preview_buy_cash_needed(st, code, px, shares, day),
                 available=st.cash, date=ds, code=code,
             ):
                 st.stats["skip_cash"] = st.stats.setdefault("skip_cash", 0) + 1
@@ -520,10 +533,17 @@ def run_step_adds_day(
             per = float(name_lot_budget(name_budget, lots))
         if unit_shares is not None:
             per = unit_shares * px
-        shares, _ = _buy_size(per, px)
-        notional = shares * px
-        if not check_buy_cash(
-            st, needed=notional + trade_commission(notional, st.buy_cost_rate, st.min_cost),
+        shares, _, _, _ = preview_final_buy_declaration(
+            st,
+            code,
+            px,
+            per,
+            day,
+            shares_override=unit_shares,
+        )
+        if not uses_shrink_on_short_cash(st) and not check_buy_cash(
+            st,
+            needed=preview_buy_cash_needed(st, code, px, shares, day),
             available=st.cash, date=ds, code=code,
         ):
             st.stats["skip_cash"] = int(st.stats.get("skip_cash", 0)) + 1
@@ -561,10 +581,7 @@ def _run_s8_price_adds_day(
 ) -> None:
     policy = s8_policy(st)
     book = policy["name"]
-    if sizing != "per_name" or not (
-        book.startswith("version6_")
-        or book in {"version8", "version8_3", "version8_4", "version8_5"}
-    ):
+    if not allows_price_add(book, sizing):
         return
     confirm = book == "version8_3"
     gate = policy["allow_new_name"]
@@ -731,9 +748,18 @@ def run_buybacks_day(
             if skip_buy_at_limit(px, limits):
                 st.stats["skip_limit_up"] += 1
                 continue
-            notional = shares * px
-            if not check_buy_cash(
-                st, needed=notional + trade_commission(notional, st.buy_cost_rate, st.min_cost),
+            declared, _, _, _ = preview_final_buy_declaration(
+                st,
+                code,
+                px,
+                shares * px,
+                day,
+                shares_override=shares,
+            )
+            notional = declared * px
+            if not uses_shrink_on_short_cash(st) and not check_buy_cash(
+                st,
+                needed=preview_buy_cash_needed(st, code, px, declared, day),
                 available=st.cash, date=ds, code=code,
             ):
                 st.stats["skip_cash"] = st.stats.get("skip_cash", 0) + 1

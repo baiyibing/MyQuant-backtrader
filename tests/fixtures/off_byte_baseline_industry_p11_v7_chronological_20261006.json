@@ -1,0 +1,629 @@
+{
+  "rule_revision": "industry-p11-v7-chronological-20261006",
+  "historical_raw_sha256": "3bfe51b6d3e20b665c3fed0449ebf8569988022719da275b7fcc9635a9988c6c",
+  "historical_canonical_sha256": "34f611da359f1a1d059bc78be75b2e9e2458c533b1dc3b46cfd61130fca7a04e",
+  "books": [
+    "version7"
+  ],
+  "captured_environment": {
+    "python": "3.13.5",
+    "pandas": "3.0.6",
+    "platform": "linux"
+  },
+  "contract": {
+    "schema": 1,
+    "money_quantum": "1E-8",
+    "rounding": "ROUND_HALF_EVEN",
+    "money_fields": [
+      "cash",
+      "commission",
+      "equity",
+      "holdings",
+      "notional",
+      "price",
+      "stamp_duty",
+      "transfer_fee"
+    ],
+    "integer_fields": [
+      "hm",
+      "lot",
+      "shares"
+    ],
+    "text": "verbatim; preserve all columns and row/column order, including EOD_MARK",
+    "hash": "sha256 of UTF-8 JSON; ensure_ascii=False, sort_keys=True, separators=(',', ':')"
+  },
+  "cases": {
+    "version7/minute-native": {
+      "sha256_csv_bytes": {
+        "trades": "fdf2f0f3c0dc3a2e5145a3aba3614b2bebafa117b648b0a9814c61b89f4bbd2d",
+        "equity": "ddeba05cee29089b4b8c4edc66bc5dfb2c16030179d0f393b18fd1d096b98c07"
+      },
+      "library_sha256_csv_bytes": {
+        "trades": "fdf2f0f3c0dc3a2e5145a3aba3614b2bebafa117b648b0a9814c61b89f4bbd2d",
+        "equity": "ddeba05cee29089b4b8c4edc66bc5dfb2c16030179d0f393b18fd1d096b98c07"
+      },
+      "canonical_csv": {
+        "trades": {
+          "columns": [
+            "date",
+            "symbol",
+            "hm",
+            "side",
+            "shares",
+            "price",
+            "notional",
+            "commission",
+            "stamp_duty",
+            "transfer_fee",
+            "reason"
+          ],
+          "rows": [
+            {
+              "date": "2026-09-01",
+              "symbol": "600000.SH",
+              "hm": 895,
+              "side": "buy",
+              "shares": 19900,
+              "price": "10.00000000",
+              "notional": "199000.00000000",
+              "commission": "59.70000000",
+              "stamp_duty": "0.00000000",
+              "transfer_fee": "1.99000000",
+              "reason": "buy:trial"
+            },
+            {
+              "date": "2026-09-01",
+              "symbol": "000001.SZ",
+              "hm": 895,
+              "side": "buy",
+              "shares": 19900,
+              "price": "10.00000000",
+              "notional": "199000.00000000",
+              "commission": "59.70000000",
+              "stamp_duty": "0.00000000",
+              "transfer_fee": "1.99000000",
+              "reason": "buy:trial"
+            },
+            {
+              "date": "2026-09-02",
+              "symbol": "000001.SZ",
+              "hm": 885,
+              "side": "buy",
+              "shares": 2100,
+              "price": "10.40000000",
+              "notional": "21840.00000000",
+              "commission": "6.55200000",
+              "stamp_duty": "0.00000000",
+              "transfer_fee": "0.21840000",
+              "reason": "buy:add_a104"
+            },
+            {
+              "date": "2026-09-02",
+              "symbol": "600000.SH",
+              "hm": 900,
+              "side": "sell",
+              "shares": 19900,
+              "price": "9.00000000",
+              "notional": "179100.00000000",
+              "commission": "53.73000000",
+              "stamp_duty": "89.55000000",
+              "transfer_fee": "1.79100000",
+              "reason": "stop:trial_a090"
+            }
+          ]
+        },
+        "equity": {
+          "columns": [
+            "date",
+            "cash",
+            "holdings",
+            "equity"
+          ],
+          "rows": [
+            {
+              "date": "2026-09-01",
+              "cash": "22876.62000000",
+              "holdings": "398000.00000000",
+              "equity": "420876.62000000"
+            },
+            {
+              "date": "2026-09-02",
+              "cash": "179984.77860000",
+              "holdings": "228800.00000000",
+              "equity": "408784.77860000"
+            }
+          ]
+        }
+      },
+      "library_canonical_csv": {
+        "trades": {
+          "columns": [
+            "date",
+            "symbol",
+            "hm",
+            "side",
+            "shares",
+            "price",
+            "notional",
+            "commission",
+            "stamp_duty",
+            "transfer_fee",
+            "reason"
+          ],
+          "rows": [
+            {
+              "date": "2026-09-01",
+              "symbol": "600000.SH",
+              "hm": 895,
+              "side": "buy",
+              "shares": 19900,
+              "price": "10.00000000",
+              "notional": "199000.00000000",
+              "commission": "59.70000000",
+              "stamp_duty": "0.00000000",
+              "transfer_fee": "1.99000000",
+              "reason": "buy:trial"
+            },
+            {
+              "date": "2026-09-01",
+              "symbol": "000001.SZ",
+              "hm": 895,
+              "side": "buy",
+              "shares": 19900,
+              "price": "10.00000000",
+              "notional": "199000.00000000",
+              "commission": "59.70000000",
+              "stamp_duty": "0.00000000",
+              "transfer_fee": "1.99000000",
+              "reason": "buy:trial"
+            },
+            {
+              "date": "2026-09-02",
+              "symbol": "000001.SZ",
+              "hm": 885,
+              "side": "buy",
+              "shares": 2100,
+              "price": "10.40000000",
+              "notional": "21840.00000000",
+              "commission": "6.55200000",
+              "stamp_duty": "0.00000000",
+              "transfer_fee": "0.21840000",
+              "reason": "buy:add_a104"
+            },
+            {
+              "date": "2026-09-02",
+              "symbol": "600000.SH",
+              "hm": 900,
+              "side": "sell",
+              "shares": 19900,
+              "price": "9.00000000",
+              "notional": "179100.00000000",
+              "commission": "53.73000000",
+              "stamp_duty": "89.55000000",
+              "transfer_fee": "1.79100000",
+              "reason": "stop:trial_a090"
+            }
+          ]
+        },
+        "equity": {
+          "columns": [
+            "date",
+            "cash",
+            "holdings",
+            "equity"
+          ],
+          "rows": [
+            {
+              "date": "2026-09-01",
+              "cash": "22876.62000000",
+              "holdings": "398000.00000000",
+              "equity": "420876.62000000"
+            },
+            {
+              "date": "2026-09-02",
+              "cash": "179984.77860000",
+              "holdings": "228800.00000000",
+              "equity": "408784.77860000"
+            }
+          ]
+        }
+      },
+      "fill_counts": {
+        "BUY": 3,
+        "SELL": 1
+      },
+      "structured": {
+        "fills": [
+          {
+            "date": "2026-09-01",
+            "symbol": "600000.SH",
+            "hm": 895,
+            "side": "buy",
+            "shares": 19900,
+            "price": 10.0,
+            "reason": "buy:trial",
+            "notional": 199000.0,
+            "commission": 59.699999999999996,
+            "stamp_duty": 0.0,
+            "transfer_fee": 1.9900000000000002
+          },
+          {
+            "date": "2026-09-01",
+            "symbol": "000001.SZ",
+            "hm": 895,
+            "side": "buy",
+            "shares": 19900,
+            "price": 10.0,
+            "reason": "buy:trial",
+            "notional": 199000.0,
+            "commission": 59.699999999999996,
+            "stamp_duty": 0.0,
+            "transfer_fee": 1.9900000000000002
+          },
+          {
+            "date": "2026-09-02",
+            "symbol": "000001.SZ",
+            "hm": 885,
+            "side": "buy",
+            "shares": 2100,
+            "price": 10.4,
+            "reason": "buy:add_a104",
+            "notional": 21840.0,
+            "commission": 6.552,
+            "stamp_duty": 0.0,
+            "transfer_fee": 0.2184
+          },
+          {
+            "date": "2026-09-02",
+            "symbol": "600000.SH",
+            "hm": 900,
+            "side": "sell",
+            "shares": 19900,
+            "price": 9.0,
+            "reason": "stop:trial_a090",
+            "notional": 179100.0,
+            "commission": 53.73,
+            "stamp_duty": 89.55,
+            "transfer_fee": 1.7910000000000001
+          }
+        ],
+        "cash": 179984.7786,
+        "positions": {
+          "000001.SZ": {
+            "symbol": "000001.SZ",
+            "entry_A": 10.0,
+            "stage": "four",
+            "add1_A1": null,
+            "lots": [
+              {
+                "shares": 19900,
+                "buy_date": "2026-09-01",
+                "price": 10.0,
+                "kind": "trial"
+              },
+              {
+                "shares": 2100,
+                "buy_date": "2026-09-02",
+                "price": 10.4,
+                "kind": "add_a104"
+              }
+            ],
+            "avg_cost": 10.038181818181819,
+            "last_add_date": "2026-09-02",
+            "peak": 10.4
+          }
+        },
+        "equity_curve": [
+          {
+            "date": "2026-09-01",
+            "cash": 22876.619999999995,
+            "holdings": 398000.0,
+            "equity": 420876.62
+          },
+          {
+            "date": "2026-09-02",
+            "cash": 179984.7786,
+            "holdings": 228800.0,
+            "equity": 408784.77859999996
+          }
+        ]
+      }
+    },
+    "version7/standalone": {
+      "sha256_csv_bytes": {
+        "trades": "fdf2f0f3c0dc3a2e5145a3aba3614b2bebafa117b648b0a9814c61b89f4bbd2d",
+        "equity": "ddeba05cee29089b4b8c4edc66bc5dfb2c16030179d0f393b18fd1d096b98c07"
+      },
+      "library_sha256_csv_bytes": {
+        "trades": "fdf2f0f3c0dc3a2e5145a3aba3614b2bebafa117b648b0a9814c61b89f4bbd2d",
+        "equity": "ddeba05cee29089b4b8c4edc66bc5dfb2c16030179d0f393b18fd1d096b98c07"
+      },
+      "canonical_csv": {
+        "trades": {
+          "columns": [
+            "date",
+            "symbol",
+            "hm",
+            "side",
+            "shares",
+            "price",
+            "notional",
+            "commission",
+            "stamp_duty",
+            "transfer_fee",
+            "reason"
+          ],
+          "rows": [
+            {
+              "date": "2026-09-01",
+              "symbol": "600000.SH",
+              "hm": 895,
+              "side": "buy",
+              "shares": 19900,
+              "price": "10.00000000",
+              "notional": "199000.00000000",
+              "commission": "59.70000000",
+              "stamp_duty": "0.00000000",
+              "transfer_fee": "1.99000000",
+              "reason": "buy:trial"
+            },
+            {
+              "date": "2026-09-01",
+              "symbol": "000001.SZ",
+              "hm": 895,
+              "side": "buy",
+              "shares": 19900,
+              "price": "10.00000000",
+              "notional": "199000.00000000",
+              "commission": "59.70000000",
+              "stamp_duty": "0.00000000",
+              "transfer_fee": "1.99000000",
+              "reason": "buy:trial"
+            },
+            {
+              "date": "2026-09-02",
+              "symbol": "000001.SZ",
+              "hm": 885,
+              "side": "buy",
+              "shares": 2100,
+              "price": "10.40000000",
+              "notional": "21840.00000000",
+              "commission": "6.55200000",
+              "stamp_duty": "0.00000000",
+              "transfer_fee": "0.21840000",
+              "reason": "buy:add_a104"
+            },
+            {
+              "date": "2026-09-02",
+              "symbol": "600000.SH",
+              "hm": 900,
+              "side": "sell",
+              "shares": 19900,
+              "price": "9.00000000",
+              "notional": "179100.00000000",
+              "commission": "53.73000000",
+              "stamp_duty": "89.55000000",
+              "transfer_fee": "1.79100000",
+              "reason": "stop:trial_a090"
+            }
+          ]
+        },
+        "equity": {
+          "columns": [
+            "date",
+            "cash",
+            "holdings",
+            "equity"
+          ],
+          "rows": [
+            {
+              "date": "2026-09-01",
+              "cash": "22876.62000000",
+              "holdings": "398000.00000000",
+              "equity": "420876.62000000"
+            },
+            {
+              "date": "2026-09-02",
+              "cash": "179984.77860000",
+              "holdings": "228800.00000000",
+              "equity": "408784.77860000"
+            }
+          ]
+        }
+      },
+      "library_canonical_csv": {
+        "trades": {
+          "columns": [
+            "date",
+            "symbol",
+            "hm",
+            "side",
+            "shares",
+            "price",
+            "notional",
+            "commission",
+            "stamp_duty",
+            "transfer_fee",
+            "reason"
+          ],
+          "rows": [
+            {
+              "date": "2026-09-01",
+              "symbol": "600000.SH",
+              "hm": 895,
+              "side": "buy",
+              "shares": 19900,
+              "price": "10.00000000",
+              "notional": "199000.00000000",
+              "commission": "59.70000000",
+              "stamp_duty": "0.00000000",
+              "transfer_fee": "1.99000000",
+              "reason": "buy:trial"
+            },
+            {
+              "date": "2026-09-01",
+              "symbol": "000001.SZ",
+              "hm": 895,
+              "side": "buy",
+              "shares": 19900,
+              "price": "10.00000000",
+              "notional": "199000.00000000",
+              "commission": "59.70000000",
+              "stamp_duty": "0.00000000",
+              "transfer_fee": "1.99000000",
+              "reason": "buy:trial"
+            },
+            {
+              "date": "2026-09-02",
+              "symbol": "000001.SZ",
+              "hm": 885,
+              "side": "buy",
+              "shares": 2100,
+              "price": "10.40000000",
+              "notional": "21840.00000000",
+              "commission": "6.55200000",
+              "stamp_duty": "0.00000000",
+              "transfer_fee": "0.21840000",
+              "reason": "buy:add_a104"
+            },
+            {
+              "date": "2026-09-02",
+              "symbol": "600000.SH",
+              "hm": 900,
+              "side": "sell",
+              "shares": 19900,
+              "price": "9.00000000",
+              "notional": "179100.00000000",
+              "commission": "53.73000000",
+              "stamp_duty": "89.55000000",
+              "transfer_fee": "1.79100000",
+              "reason": "stop:trial_a090"
+            }
+          ]
+        },
+        "equity": {
+          "columns": [
+            "date",
+            "cash",
+            "holdings",
+            "equity"
+          ],
+          "rows": [
+            {
+              "date": "2026-09-01",
+              "cash": "22876.62000000",
+              "holdings": "398000.00000000",
+              "equity": "420876.62000000"
+            },
+            {
+              "date": "2026-09-02",
+              "cash": "179984.77860000",
+              "holdings": "228800.00000000",
+              "equity": "408784.77860000"
+            }
+          ]
+        }
+      },
+      "fill_counts": {
+        "BUY": 3,
+        "SELL": 1
+      },
+      "structured": {
+        "fills": [
+          {
+            "date": "2026-09-01",
+            "symbol": "600000.SH",
+            "hm": 895,
+            "side": "buy",
+            "shares": 19900,
+            "price": 10.0,
+            "reason": "buy:trial",
+            "notional": 199000.0,
+            "commission": 59.699999999999996,
+            "stamp_duty": 0.0,
+            "transfer_fee": 1.9900000000000002
+          },
+          {
+            "date": "2026-09-01",
+            "symbol": "000001.SZ",
+            "hm": 895,
+            "side": "buy",
+            "shares": 19900,
+            "price": 10.0,
+            "reason": "buy:trial",
+            "notional": 199000.0,
+            "commission": 59.699999999999996,
+            "stamp_duty": 0.0,
+            "transfer_fee": 1.9900000000000002
+          },
+          {
+            "date": "2026-09-02",
+            "symbol": "000001.SZ",
+            "hm": 885,
+            "side": "buy",
+            "shares": 2100,
+            "price": 10.4,
+            "reason": "buy:add_a104",
+            "notional": 21840.0,
+            "commission": 6.552,
+            "stamp_duty": 0.0,
+            "transfer_fee": 0.2184
+          },
+          {
+            "date": "2026-09-02",
+            "symbol": "600000.SH",
+            "hm": 900,
+            "side": "sell",
+            "shares": 19900,
+            "price": 9.0,
+            "reason": "stop:trial_a090",
+            "notional": 179100.0,
+            "commission": 53.73,
+            "stamp_duty": 89.55,
+            "transfer_fee": 1.7910000000000001
+          }
+        ],
+        "cash": 179984.7786,
+        "positions": {
+          "000001.SZ": {
+            "symbol": "000001.SZ",
+            "entry_A": 10.0,
+            "stage": "four",
+            "add1_A1": null,
+            "lots": [
+              {
+                "shares": 19900,
+                "buy_date": "2026-09-01",
+                "price": 10.0,
+                "kind": "trial"
+              },
+              {
+                "shares": 2100,
+                "buy_date": "2026-09-02",
+                "price": 10.4,
+                "kind": "add_a104"
+              }
+            ],
+            "avg_cost": 10.038181818181819,
+            "last_add_date": "2026-09-02",
+            "peak": 10.4
+          }
+        },
+        "equity_curve": [
+          {
+            "date": "2026-09-01",
+            "cash": 22876.619999999995,
+            "holdings": 398000.0,
+            "equity": 420876.62
+          },
+          {
+            "date": "2026-09-02",
+            "cash": 179984.7786,
+            "holdings": 228800.0,
+            "equity": 408784.77859999996
+          }
+        ]
+      }
+    }
+  }
+}

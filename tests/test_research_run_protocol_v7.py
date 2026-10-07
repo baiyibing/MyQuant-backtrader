@@ -36,7 +36,7 @@ def cli_python(monkeypatch):
 @pytest.mark.parametrize("case", ["frame_trial", "skip_cash", "add"])
 @pytest.mark.parametrize("cash_order", [OMITTED, False], ids=["omitted", "explicit_off"])
 def test_simulate_full_state_parity_and_reference_identity(case, cash_order, monkeypatch):
-    kwargs = {}
+    kwargs = {"rule_profile": "legacy"}
     if cash_order is not OMITTED:
         kwargs["fix_minute_cash_order"] = cash_order
     if case == "frame_trial":
@@ -112,6 +112,7 @@ def test_real_native_failure_is_same_instance_once(problem, match, monkeypatch):
     args, kwargs = ({}, {}, {}, index_closes([100.0] * 11)), {}
     if problem == "tail_without_cash_order":
         args, kwargs = (None, None, None), {"tail_window_buy": True}
+    kwargs.setdefault("rule_profile", "legacy")
     simulate = native.simulate_v7
     with pytest.raises(ValueError, match=match) as direct:
         simulate(*args, **kwargs)
@@ -321,7 +322,8 @@ def test_fresh_import_and_v7_dispatch_are_lazy():
         try:
             run(protocol.NativeApiRequest(
                 family='v7', native_entry='csv_minute_backtest_v7.simulate_v7',
-                args=(None, None, None), kwargs={'tail_window_buy': True}))
+                args=(None, None, None),
+                kwargs={'tail_window_buy': True, 'rule_profile': 'legacy'}))
         except ValueError as exc:
             assert 'fix-minute-cash-order' in str(exc)
         else:

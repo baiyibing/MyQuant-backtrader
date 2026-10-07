@@ -54,6 +54,7 @@ def _daily_bars(
 def _daily_run(pool, bars, **kwargs):
     kwargs.setdefault("strategy", "version1")
     kwargs.setdefault("total_cash", 21_000_000.0)
+    kwargs.setdefault("rule_profile", "legacy")
     return daily.simulate(bars, pool, "20251103", "20251107", **kwargs)
 
 
@@ -402,7 +403,8 @@ def test_t1_minute_false_gap_open_disappears():
     }
     pool = {"20251103": [CODE]}
     st_false = minute.simulate(
-        minute_bars, daily_bars, pool, "20251103", "20251105", strategy="version1"
+        minute_bars, daily_bars, pool, "20251103", "20251105",
+        strategy="version1", rule_profile="legacy",
     )
     assert any(
         t["reason"] == "stop_loss:gap_open"
@@ -416,6 +418,7 @@ def test_t1_minute_false_gap_open_disappears():
         "20251103",
         "20251105",
         strategy="version1",
+        rule_profile="legacy",
         exdiv=EXDIV_MILD,
     )
     assert not any(
@@ -449,6 +452,7 @@ def _d2_book_run(engine, prices, *, pool=None, missing=None, exdiv=None, **kwarg
         minutes[CODE] = minutes[CODE].loc[minutes[CODE]["ymd"] != "20251105"]
     kwargs.setdefault("strategy", "version1")
     kwargs.setdefault("take_profit", lambda *args: None)
+    kwargs.setdefault("rule_profile", "legacy")
     pool = {"20251103": [CODE]} if pool is None else pool
     args = (bars,) if engine is daily else (minutes, bars)
     return engine.simulate(*args, pool, "20251103", dates[-1].replace("-", ""),
@@ -698,7 +702,7 @@ def test_d2_v7_main_keeps_real_context_chain_with_nonempty_pool(
     monkeypatch.setattr(v7, "write_run_config", config_writer)
     assert v7.main(["--start", "20251103", "--end", "20251105", "--pool-dir", str(tmp_path),
                     "--output-dir", str(tmp_path / "out"), "--daily-source", daily_source,
-                    "--minute-source", minute_source]) == 0
+                    "--minute-source", minute_source, "--rule-profile", "legacy"]) == 0
     assert bars.call_args.kwargs["daily_source"] == daily_source
     assert bars.call_args.kwargs["minute_source"] == minute_source
     loader.assert_called_once_with([CODE], "20251103", "20251105")

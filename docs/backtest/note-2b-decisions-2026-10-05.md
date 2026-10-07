@@ -19,7 +19,8 @@
 - **A3：保持现状并文档化。** numba 仅支持默认 fill policy；custom `FillConfig` = Python backend only，non-default 在 numba 分流时 raises。
 - **B9 与 C：保持现状并文档化。** engine exclusions 与 per-book strategy semantics 不改。
 - **B6：version7 书规则，文档化且不改。** v7 在跌停价不买，与 qlib `TopkDropoutStrategy` 默认 `forbid_all_trade_at_limit=True` 一致。
-- **B7：2026-10-05 23:08 Human GO，已实施。** H-B7-01..07 全部采用推荐选项；B8 仍 deferred。
+- **B7：2026-10-05 23:08 Human GO，已实施。** H-B7-01..07 全部采用推荐选项。
+- **B8：2026-10-06 07:31 Human GO，已实施零差异重构。** H-B8-01..12 全部采用推荐 A；见 [B8 实施说明](note-b8-lot-rounding-2026-10-06.md)。
 - **A1 limit pair 与 B5：ADOPT（2026-10-05 16:08 CST）。** 统一采用共享 open+fill pair：bar OPEN 或成交价达到跌停即顺延，沿用单一 shared eps；不改 `defer_sell_at_limit` 定义。
 - **A1 pipe：do now，独立 PR。** 将 6.x side sells（`step_stop` / `scale_out` / `peak_dd_exit`；version6_8、6_10、6_13–6_17）接入 `FillConfig`；defaults byte-identical，不夹带 limit-pair rules。
 - **A2：用户覆盖 brainstorm 的五席 drop。Do it。** 将 version9_2（`strategy9_2_engine`）、version12（`strategy12_engine`）及 version11 `minute_open` 收进主引擎 `csv_minute_backtest.simulate` / `HeldMinuteCursor`，只留一个 minute loop。新 baselines / overlays 单独记录，旧 ones 永不覆盖；version9_1 untouched。独立 PR，大则每书一票。
@@ -102,7 +103,9 @@ Golden ownership 以 `scripts/research/generate_off_byte_baseline.py` 为准：�
 
 ### B8. Lot rounding 多处各有选项
 
-`csv_ledger.py:473` 的 `_buy_size` 含 top-up，STAR integer / 200 下限见 :478/:556–558；override :552 整百。host 含费递减、无 top-up。其他取整：`strategy9_1_rules.py:45`、`strategy9_2_engine.py:54`、`strategy12_rules.py:222`、`ashare_volume_cap.py:84`、`tail_window_buy.py:58/102`。数量分片、容量取整、风险定仓不能混成同一种金额预算。**Deferred：** 一个 lot-rounding 函数，各调用保留当前选项和浮点顺序，zero diff；若以后改选项，另裁并新增所属 historical / V91 / V92 / S12 overlay。
+`csv_ledger.py:473` 的 `_buy_size` 含 top-up，STAR integer / 200 下限见 :478/:556–558；override :552 整百。host 含费递减、无 top-up。其他取整：`strategy9_1_rules.py:45`、`strategy9_2_engine.py:54`、`strategy12_rules.py:222`、`ashare_volume_cap.py:84`、`tail_window_buy.py:58/102`。数量分片、容量取整、风险定仓不能混成同一种金额预算。**原裁定（2026-10-05，已于 2026-10-06 实施）：** 一个 lot-rounding 函数，各调用保留当前选项和浮点顺序，zero diff；若以后改选项，另裁并新增所属 historical / V91 / V92 / S12 overlay。
+
+2026-10-06 07:31 Human GO：H-B8-01..12 全部 A。已实施 `backtest/research/lot_rounding.py` 显式 profile helper（#405 ledger/loop，#406 minute/tail/9_1/9_2/12/v7/modea），并加 `tests/test_b8_lot_rounding_guard.py`；结果、fixtures、baselines 逐字节不变，规则统一（STAR 扩围、补量、含费、零股、clip、佣金、cap/cash 顺序、预检 STAR）均未实施。详见 [B8 实施说明](note-b8-lot-rounding-2026-10-06.md)。
 
 ### B9. Residual engine exclusions
 
@@ -122,5 +125,7 @@ Golden ownership 以 `scripts/research/generate_off_byte_baseline.py` 为准：�
 ## 4. 后续入口与文档锁
 
 [分钟扫描现状](note-minute-scan-status-2026-10-05.md) 的 11:05 人裁与 step 3 测试迁移顺序继续有效；本票补齐 14:13 的逐项裁定。[Step 2a](minute-fill-config-step2a.md) 是已交付范围锁，不能把 A1 / A2 的后续 GO 写成 2a 已支持；A3 / B9 排除保持。
+
+> **历史记录 / superseded（2026-10-06）：** 下段“B7 / B8 deferred”仅记录 16:08 时点，已由本页 §B7 / §B8 的“已实施”状态及 [B7 实施说明](note-b7-on-short-cash-2026-10-05.md)、[B8 实施说明](note-b8-lot-rounding-2026-10-06.md) 覆盖；当前导航见 [RB-06 as-built 索引](rb06-as-built-ssot-index-2026-10-06.md)。
 
 原决策 PR 仅文档；A1 pipe / A2 已由后续独立 PR 交付。16:08 CST 人裁授权本次 A1 limit pair / B5 实施；B7 / B8 deferred。本次执行 frozen off-byte 与合成测试，无湖访问；逐书差异见 worktree 未提交的 `LIMIT_PAIR_DELTA.md`。

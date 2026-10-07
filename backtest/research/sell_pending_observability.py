@@ -57,7 +57,8 @@ def pending_orders(st):
             state = states.get(key, {})
             if state.get("pending") or key in latched or any(p.pending_exit for p in members):
                 yield key, code, sum(p.shares for p in members), "held"
-            for target, reason, wanted in state.get("side_pending", []):
+            for order in state.get("side_pending", []):
+                target, reason, wanted = order[:3]
                 path = side_path(reason)
                 yield (key, path, id(target)), code, wanted if wanted is not None else target.shares, path
     for code, (_, wanted) in st.book_state.get("turtle_pending", {}).items():

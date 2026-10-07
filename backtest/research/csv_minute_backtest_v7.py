@@ -30,6 +30,7 @@ from backtest.research.participation_rate_precheck import (
     precheck_cli_participation_rate,
     precheck_completed_bucket_samples,
 )
+from backtest.research.rule_profile import RuleProfile, resolve_rule_profile
 from backtest.research.market_layer import (
     as_date as _as_date,
     as_datetime as _as_datetime,
@@ -100,13 +101,14 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
                 exdiv_economics: EconomicLookup | None = None,
                 names: Mapping[str, str] | None = None,
                 names_by_day: Mapping[str, Mapping[str, str]] | None = None,
-                fee: FeeSchedule = DEFAULT_SCHEDULE,
+                fee: FeeSchedule | None = None,
                 participation_rate: float | None = None,
                 volume_for_bucket: VolumeLookup | None = None,
                 fix_minute_cash_order: bool = False,
                 tail_window_buy: bool = False,
                 tail_volume_unit: str | None = "shares",
                 audit_sink: Any = None,
+                rule_profile: str | RuleProfile = "industry",
                 **unsupported_options) -> SimResult:
     """Forward native arguments; the adapter validates/normalizes tail options before main.
 
@@ -118,6 +120,10 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
     unioned with pool dates, matching the records-path calendar contract.
     Dates absent from all frames and pools are not backfilled, as with records.
     """
+    profile = resolve_rule_profile(rule_profile)
+    fix_minute_cash_order = bool(
+        fix_minute_cash_order or profile.chronological_v7
+    )
     from backtest.research.csv_ledger import reject_short_cash_override
     reject_short_cash_override(unsupported_options, "v7 simulate")
     if unsupported_options:
@@ -130,6 +136,7 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
         participation_rate=participation_rate, volume_for_bucket=volume_for_bucket,
         audit_sink=audit_sink, fix_minute_cash_order=fix_minute_cash_order,
         tail_window_buy=tail_window_buy, tail_volume_unit=tail_volume_unit,
+        rule_profile=profile,
     )
 
 
@@ -201,9 +208,25 @@ def summarize_v7(state: SimResult) -> str:
 def write_run_artifacts(state: SimResult, output_dir: Path) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / "summary.txt").write_text(summarize_v7(state), encoding="utf-8")
+    trade_fields = ("date", "symbol", "hm", "side", "shares", "price", "reason")
+    if any("transfer_fee" in row for row in state.trades):
+        trade_fields = (
+            "date", "symbol", "hm", "side", "shares", "price",
+            "notional", "commission", "stamp_duty", "transfer_fee", "reason",
+        )
+    elif any("stamp_duty" in row for row in state.trades):
+        trade_fields = (
+            "date", "symbol", "hm", "side", "shares", "price",
+            "notional", "commission", "stamp_duty", "reason",
+        )
+    elif any("commission" in row for row in state.trades):
+        trade_fields = (
+            "date", "symbol", "hm", "side", "shares", "price",
+            "notional", "commission", "reason",
+        )
     for filename, rows, fields in (
         ("daily_equity.csv", state.equity_curve, ("date", "cash", "holdings", "equity")),
-        ("trades.csv", state.trades, ("date", "symbol", "hm", "side", "shares", "price", "reason")),
+        ("trades.csv", state.trades, trade_fields),
     ):
         with (output_dir / filename).open("w", newline="", encoding="utf-8") as handle:
             writer = csv.DictWriter(handle, fieldnames=fields)
@@ -281,6 +304,11 @@ def build_parser() -> argparse.ArgumentParser:
                         help="lake minute volume unit (default shares); lots multiplies volume by 100")
     parser.add_argument("--execution-audit-file", help="optional execution JSON sidecar; leaves CSVs unchanged")
     parser.add_argument("--cash-total", type=float, default=21_000_000.0)
+    parser.add_argument(
+        "--rule-profile",
+        choices=("legacy", "industry"),
+        default="industry",
+    )
     parser.add_argument("--output-dir")
     parser.add_argument("--minute-source", choices=("lake", "qlib_1min"), default="lake")
     parser.add_argument("--daily-source", choices=("lake", "qlib_day"), default="lake")
@@ -309,8 +337,12 @@ def write_run_config(output: Path, config: dict) -> None:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    profile = resolve_rule_profile(args.rule_profile)
+    fix_minute_cash_order = bool(
+        args.fix_minute_cash_order or profile.chronological_v7
+    )
     try:
-        validate_tail_options(args.tail_window_buy, args.fix_minute_cash_order, args.tail_volume_unit)
+        validate_tail_options(args.tail_window_buy, fix_minute_cash_order, args.tail_volume_unit)
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
     # P2-B: CLI-parse shell precheck (unit/domain). None → no-op. ≠δ5≠R4.
@@ -381,21 +413,25 @@ def main(argv: Sequence[str] | None = None) -> int:
                         start=start, end=end, exdiv=exdiv,
                         names=None if args.asof_pool_names else names,
                         names_by_day=names_by_day,
-                        fix_minute_cash_order=args.fix_minute_cash_order,
+                        fix_minute_cash_order=fix_minute_cash_order,
                         tail_window_buy=args.tail_window_buy,
                         tail_volume_unit=args.tail_volume_unit, audit_sink=audit,
+                        rule_profile=profile,
                         **volume_options)
     sim_s = time.perf_counter() - sim_t0
     output = Path(args.output_dir or f"backtest_output/csv_minute_v7_{args.start}_{args.end}")
     write_run_artifacts(state, output)
     config = {
         **vars(args),
-        "cash_order_policy": "chronological" if args.fix_minute_cash_order else "legacy_symbol_day",
+        "fix_minute_cash_order": fix_minute_cash_order,
+        "cash_order_policy": "chronological" if fix_minute_cash_order else "legacy_symbol_day",
         "same_hm_policy": ("open_stop_then_close_stop_then_buy_then_timer"
-                           if args.fix_minute_cash_order else "legacy_symbol_scan"),
+                           if fix_minute_cash_order else "legacy_symbol_scan"),
         "fallback_order_clock": "exact_quote_only_no_chase",
         "stable_order": "pool_then_opening_held_then_input_symbols",
     }
+    if args.rule_profile == "industry":
+        config.pop("rule_profile", None)
     if not args.tail_window_buy:
         config.pop("tail_window_buy", None)
         config.pop("tail_volume_unit", None)
@@ -406,7 +442,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     write_run_config(output, config)
     if args.execution_audit_file:
         write_audit(args.execution_audit_file, audit, engine="csv_minute_v7",
-                    enabled=args.fix_minute_cash_order)
+                    enabled=fix_minute_cash_order)
     print(summarize_v7(state), end="")
     print(f"timing load={load_s:.2f}s simulate={sim_s:.2f}s total={load_s + sim_s:.2f}s", flush=True)
     return 0

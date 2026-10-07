@@ -12,7 +12,7 @@ from backtest.research.tail_window_buy import TAIL_MINUTES, TailParent
 A = "600000.SH"
 D = date(2026, 9, 1)
 ON = {"tail_window_buy": True, "fix_minute_cash_order": True,
-      "tail_volume_unit": "shares"}
+      "tail_volume_unit": "shares", "rule_profile": "legacy"}
 
 
 def _bar(hm, price=10.0, *, opening=None, volume=1_000_000):

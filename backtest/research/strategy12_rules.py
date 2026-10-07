@@ -6,6 +6,8 @@ T+1/bonus-filtered sellable lots and owns the per-run Memory instances.
 
 from __future__ import annotations
 
+from backtest.research.lot_rounding import floordiv_board_lots
+
 from backtest.research import strategy_book_helpers as _book_helpers
 
 from dataclasses import dataclass, field
@@ -219,7 +221,7 @@ def scale_memory(memory: CodeMemory, share_factor) -> dict[str, float]:
     for channel in ("reduced", "stopped"):
         item = getattr(memory, channel)
         scaled = Decimal(item.shares) * factor
-        item.shares = int(scaled // 100) * 100
+        item.shares = floordiv_board_lots(scaled)
         residuals[channel] = float(scaled - item.shares)
     return residuals
 

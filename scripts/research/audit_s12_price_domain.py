@@ -141,7 +141,12 @@ def capture_fills(events, *, ctx=None, rejected_calls=None):
             for seq, trade in enumerate(appended, start=append_seq):
                 if trade["side"] not in ("BUY", "SELL"):
                     continue
-                fee, quantity, price = trade["commission"], trade["shares"], trade["price"]
+                fee = (
+                    trade["commission"]
+                    + trade.get("stamp_duty", 0.0)
+                    + trade.get("transfer_fee", 0.0)
+                )
+                quantity, price = trade["shares"], trade["price"]
                 sign = 1 if trade["side"] == "BUY" else -1
                 cash_after, shares_after = st.cash, _shares(st, code)
                 assert money(cash_after) == money(cash_before - sign * quantity * price - fee)

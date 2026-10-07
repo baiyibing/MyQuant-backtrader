@@ -24,6 +24,18 @@ BUY = {"buy:trial": 1}
 SKIP = {"skip_no_1455": 1}
 
 
+@pytest.fixture(autouse=True)
+def _legacy_rule_profile(monkeypatch):
+    for module, name in ((v7, "simulate_v7"), (topk, "simulate_native")):
+        original = getattr(module, name)
+
+        def simulate(*args, _original=original, **kwargs):
+            kwargs.setdefault("rule_profile", "legacy")
+            return _original(*args, **kwargs)
+
+        monkeypatch.setattr(module, name, simulate)
+
+
 def row(day, clock, price, volume=100):
     stamp = pd.Timestamp(f"{day.isoformat()} {clock}", tz="UTC")
     return {"time": stamp.value // 1_000_000, "open": float(price),

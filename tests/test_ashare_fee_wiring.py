@@ -143,7 +143,7 @@ def test_daily_simulate_default_and_qlib_override_two_state():
     pool = {"20251103": [CODE]}
 
     st_default = daily_sim.simulate(
-        bars, pool, "20251103", "20251105", strategy="version6"
+        bars, pool, "20251103", "20251105", strategy="version6", rule_profile="legacy"
     )
     buy_d = next(t for t in st_default.trades if t["side"] == "BUY")
     assert st_default.stats["buy_cost_rate"] == COMMISSION
@@ -159,6 +159,7 @@ def test_daily_simulate_default_and_qlib_override_two_state():
         "20251103",
         "20251105",
         strategy="version6",
+        rule_profile="legacy",
         buy_cost_rate=QLIB_OPEN_COST,
         sell_cost_rate=QLIB_CLOSE_COST,
         min_cost=QLIB_MIN_COST,
@@ -193,6 +194,7 @@ def test_minute_simulate_inherits_simstate_default_rates():
         "20251103",
         "20251104",
         strategy="version6",
+        rule_profile="legacy",
     )
     assert (st.buy_cost_rate, st.sell_cost_rate, st.min_cost) == (
         COMMISSION,
@@ -243,12 +245,16 @@ def test_v7_custom_fee_schedule_passthrough_without_monkeypatch():
     assert pos is not None
     assert state_buy.cash == pytest.approx(1_000_000.0 - expected_debit)
 
-    st_portana = simulate_v7(minutes, daily, {D1: [CODE]}, [D1], fee=QLIB_PORTANA)
+    st_portana = simulate_v7(
+        minutes, daily, {D1: [CODE]}, [D1], fee=QLIB_PORTANA, rule_profile="legacy"
+    )
     assert st_portana.cash == pytest.approx(
         21_000_000.0 - QLIB_PORTANA.debit_buy(2000 * 100.0)
     )
 
-    st_default = simulate_v7(minutes, daily, {D1: [CODE]}, [D1])
+    st_default = simulate_v7(
+        minutes, daily, {D1: [CODE]}, [D1], rule_profile="legacy"
+    )
     assert st_default.cash == pytest.approx(
         21_000_000.0 - BILATERAL_10BP.debit_buy(2000 * 100.0)
     )

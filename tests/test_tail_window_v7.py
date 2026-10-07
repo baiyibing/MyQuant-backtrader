@@ -14,6 +14,7 @@ A, B = "600000.SH", "000001.SZ"
 D1 = date(2026, 9, 1)
 D2 = D1 + timedelta(days=1)
 ON = {"tail_window_buy": True, "fix_minute_cash_order": True, "tail_volume_unit": "shares"}
+ON["rule_profile"] = "legacy"
 
 
 def bar(hm, price=10.0, *, day=D1, volume=1_000_000, opening=None, **extra):
@@ -185,7 +186,8 @@ def test_all_new_trial_slices_t_plus_one_then_sell_once_next_day():
 @pytest.mark.parametrize("cash_order", [False, True])
 def test_off_and_omitted_match_entire_state_and_writer(tmp_path, cash_order):
     args = {"minute_bars": {A: [bar(895)]}, "daily_bars": {A: {D1 - timedelta(days=1): 10}},
-                "pool_days": {D1: [A]}, "index_days": [D1], "fix_minute_cash_order": cash_order}
+                "pool_days": {D1: [A]}, "index_days": [D1], "fix_minute_cash_order": cash_order,
+                "rule_profile": "legacy"}
     omitted = v7.simulate_v7(**args)
     explicit = v7.simulate_v7(**args, tail_window_buy=False)
     assert asdict(omitted) == asdict(explicit)
@@ -197,8 +199,9 @@ def test_off_and_omitted_match_entire_state_and_writer(tmp_path, cash_order):
 
 def test_switch_errors_precede_data_access():
     with pytest.raises(ValueError, match="fix-minute-cash-order"):
-        v7.simulate_v7(None, None, None, tail_window_buy=True)
-    argv = ["--start", "20260901", "--end", "20260901", "--tail-window-buy"]
+        v7.simulate_v7(None, None, None, tail_window_buy=True, rule_profile="legacy")
+    argv = ["--start", "20260901", "--end", "20260901", "--tail-window-buy",
+            "--rule-profile", "legacy"]
     with pytest.raises(SystemExit, match="fix-minute-cash-order"):
         v7.main(argv)
     with pytest.raises(SystemExit, match="minute-source lake"):
@@ -212,7 +215,8 @@ def test_on_default_volume_unit_matches_explicit_shares(unit_kwargs):
     args = {"minute_bars": {A: [bar(hm, volume=3500, amount=35_000) for hm in TAIL_MINUTES]},
             "daily_bars": {A: {D1 - timedelta(days=1): 10}},
             "pool_days": {D1: [A]}, "index_days": [D1],
-            "tail_window_buy": True, "fix_minute_cash_order": True}
+            "tail_window_buy": True, "fix_minute_cash_order": True,
+            "rule_profile": "legacy"}
     default_audit, shares_audit = [], []
     default = v7.simulate_v7(**args, **unit_kwargs, audit_sink=default_audit)
     shares = v7.simulate_v7(**args, tail_volume_unit="shares", audit_sink=shares_audit)
@@ -225,10 +229,12 @@ def test_on_default_volume_unit_matches_explicit_shares(unit_kwargs):
 def test_invalid_volume_unit_errors_before_data_access(unit, capsys):
     with pytest.raises(ValueError, match="tail-volume-unit"):
         v7.simulate_v7(None, None, None, tail_window_buy=True,
-                       fix_minute_cash_order=True, tail_volume_unit=unit)
+                       fix_minute_cash_order=True, tail_volume_unit=unit,
+                       rule_profile="legacy")
     with pytest.raises(SystemExit) as exc:
         v7.main(["--start", "20260901", "--end", "20260901", "--tail-window-buy",
-                 "--fix-minute-cash-order", "--tail-volume-unit", unit])
+                 "--fix-minute-cash-order", "--tail-volume-unit", unit,
+                 "--rule-profile", "legacy"])
     assert exc.value.code == 2
     assert "--tail-volume-unit: invalid choice" in capsys.readouterr().err
 
@@ -249,7 +255,8 @@ def test_duplicate_minute_cannot_retry_or_double_its_equal_share():
 
 
 def test_cli_default_off_keeps_run_config_and_on_records_policy(tmp_path):
-    argv = ["--start", "20260901", "--end", "20260901", "--pool-dir", str(tmp_path)]
+    argv = ["--start", "20260901", "--end", "20260901", "--pool-dir", str(tmp_path),
+            "--rule-profile", "legacy"]
     parsed = v7.build_parser().parse_args(argv)
     assert parsed.tail_window_buy is False and parsed.tail_volume_unit == "shares"
     off_dir, on_dir = tmp_path / "off", tmp_path / "on"
@@ -276,7 +283,7 @@ def test_cli_on_default_volume_unit_matches_explicit_shares(tmp_path, monkeypatc
     output = tmp_path / "run"
     argv = ["--start", "20260901", "--end", "20260901", "--pool-dir", str(tmp_path),
             "--output-dir", str(output), "--execution-audit-file", str(output / "audit.json"),
-            "--tail-window-buy", "--fix-minute-cash-order"]
+            "--tail-window-buy", "--fix-minute-cash-order", "--rule-profile", "legacy"]
     assert v7.main(argv) == 0
     default_stdout = capsys.readouterr().out
     default_files = {path.name: path.read_bytes() for path in output.iterdir()}

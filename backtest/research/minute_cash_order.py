@@ -26,6 +26,13 @@ and S2-B hl cross-reference. This documentation does not change scheduling.
 
 from __future__ import annotations
 
+from backtest.research.lot_rounding import (
+    buy_quantity_increment,
+    buy_quantity_minimum,
+    floor_board_lots,
+    scale_out_board_lots,
+)
+
 from dataclasses import dataclass
 from datetime import date
 from typing import Any, Mapping, Sequence
@@ -42,10 +49,13 @@ from backtest.research.csv_common import book_limit_prices
 from backtest.research.csv_ledger import (
     CHASE_HM,
     IndependentExitPosition,
+    account_sell_quantity,
+    active_buy_quantity_rule,
     check_buy_cash,
     _sell,
     apply_exdiv_economics,
     exit_positions,
+    fee_order_id,
     held_fill_key,
     execute_buy,
     hit_limit_down,
@@ -54,6 +64,8 @@ from backtest.research.csv_ledger import (
     rescale_s8_groups,
     s8_policy,
     trade_commission,
+    uses_fee_aware_affordability,
+    uses_shrink_on_short_cash,
 )
 from backtest.research.minute_audit import record_rejection
 from backtest.research.csv_simulate_loop import (
@@ -167,7 +179,10 @@ def _side_queued(st, pos):
 def _side_sell(st, code, pos, px, day, reason, *, fill_config=None, **kwargs):
     if fill_config is not None and fill_config.fill_timing == "next_bar_open":
         state = st.held_fill_states.setdefault(held_fill_key(pos), {})
-        state.setdefault("side_pending", []).append((pos, reason, kwargs.get("wanted_shares")))
+        order = (pos, reason, kwargs.get("wanted_shares"))
+        if kwargs.get("order_id") is not None:
+            order = (*order, kwargs["order_id"])
+        state.setdefault("side_pending", []).append(order)
         path = side_path(reason)
         record_sell_pending(st, ds=day, hm=kwargs.get("hm"), code=code,
                             shares=kwargs.get("wanted_shares", pos.shares), path=path,
@@ -181,7 +196,8 @@ def fill_side_pending(st, code, pos, px, day, day_i, limits, *, hm):
     orders = _side_pending(st, pos)
     counted_scale = False
     for order in list(orders):
-        target, reason, wanted = order
+        target, reason, wanted = order[:3]
+        order_id = order[3] if len(order) > 3 else None
         if not position_is_open(st, target):
             orders.remove(order)
             continue
@@ -194,7 +210,8 @@ def fill_side_pending(st, code, pos, px, day, day_i, limits, *, hm):
             continue
         filled = _sell(st, code, target, px, day, reason + ":next_open",
                        day_i=day_i, hm=hm, price_rule="minute_pending_next_open",
-                       **({"wanted_shares": wanted} if wanted is not None else {}))
+                       **({"wanted_shares": wanted} if wanted is not None else {}),
+                       **({"order_id": order_id} if order_id is not None else {}))
         if filled:
             if order in orders:
                 orders.remove(order)
@@ -258,7 +275,9 @@ def peak_dd_clear_exits(st, code, pos, px, day, day_i, limits, *,
 def scale_out_exits(st, code, pos, px, day, day_i, limits, *, scale_step, scale_frac, hm=None, fill_config=None, open_px=None):
     """6.13：相对首仓锚价每满 scale_step 涨幅，卖出当时剩余持仓的 scale_frac。
 
-    逐分钟 close 相位调用；每档一次（组计数器）；整百股向下、FIFO 切 lot；
+    逐分钟 close 相位调用；每档一次（组计数器）；legacy 整百股向下、
+    FIFO 切 lot。industry 若该档会留下不足一手的组级余额，则同一订单卖完
+    该余额；规则只在组总量上应用，不能逐 lot 制造或保留零股。
     lot 级 T+1 由 _sell(wanted_shares) 保证；跌停顺延；组已同分钟离场则不触发。
     """
     if _side_pending(st, pos) or not scale_step or px <= 0 or not position_is_open(st, pos):
@@ -275,16 +294,20 @@ def scale_out_exits(st, code, pos, px, day, day_i, limits, *, scale_step, scale_
     if shares_now <= 0:
         pos.group.scale_steps = allowed
         return 0
-    target = int(shares_now * float(scale_frac) // 100) * 100
+    rounded_target = scale_out_board_lots(shares_now, scale_frac)
+    target = account_sell_quantity(st, code, shares_now, rounded_target)
+    absorbs_odd_remainder = target > rounded_target
     px = _side_price(fill_config, px)
     sold = 0
     queued = 0
+    order_id = fee_order_id(st) if target > 0 else None
     if target > 0:
         for lot in lots:
             if sold + queued >= target:
                 break
             chunk = min(lot.shares, target - sold - queued)
-            chunk = chunk // 100 * 100
+            if not absorbs_odd_remainder:
+                chunk = floor_board_lots(chunk)
             if chunk <= 0 or lot.entry_idx >= day_i:
                 continue
             if (fill_config is None or fill_config.fill_timing != "next_bar_open") and (defer_sell_open_or_fill(px if open_px is None else open_px, px, limits) or _hit_limit_up_safe(px, limits)):
@@ -295,6 +318,7 @@ def scale_out_exits(st, code, pos, px, day, day_i, limits, *, scale_step, scale_
                 st, code, lot, px, day, "scale_out:5pct", day_i=day_i,
                 hm=hm, price_rule="minute_trigger_bar_close", fill_config=fill_config,
                 wanted_shares=chunk,
+                **({"order_id": order_id} if order_id is not None else {}),
             )
             sold += int(filled)
             if fill_config is not None and fill_config.fill_timing == "next_bar_open":
@@ -627,9 +651,25 @@ def run_chronological_day(
             if callable(buy_gate) and not buy_gate(code, px, day, closes):
                 st.stats["skip_buy_gate"] += 1
                 continue
-            parent = TailParent.from_budget(budget, px)
-            if independent_policy is not None:
-                needed = parent.opening_debit(px, debit)
+            quantity_rule = active_buy_quantity_rule(st, code)
+            parent = TailParent.from_budget(
+                budget,
+                px,
+                declaration_increment=buy_quantity_increment(quantity_rule),
+                declaration_minimum=buy_quantity_minimum(quantity_rule),
+            )
+            fee_aware = uses_fee_aware_affordability(st)
+            shrink_short_cash = uses_shrink_on_short_cash(st)
+            if fee_aware:
+                order_debit = (
+                    lambda notional, code=code: st.account_fee_schedule.debit_buy(
+                        notional, day, code
+                    )
+                )
+            else:
+                order_debit = debit
+            if independent_policy is not None and not shrink_short_cash:
+                needed = parent.opening_debit(px, order_debit)
                 if not check_buy_cash(st, needed=needed, available=st.cash, date=ds, code=code):
                     st.stats["skip_cash"] = st.stats.get("skip_cash", 0) + 1
                     st.stats["skip_cash_notional"] = (
@@ -637,7 +677,7 @@ def run_chronological_day(
                     )
                     record_rejection(st, code, day, "skip_cash", px)
                     continue
-            tail_orders[code] = [parent, None, limits]
+            tail_orders[code] = [parent, None, limits, order_debit]
 
     def fill_tail_slice(at_hm, only_code=None):
         nonlocal tail_settled_debits
@@ -647,7 +687,7 @@ def run_chronological_day(
             if (code, at_hm) in tail_attempted:
                 continue
             tail_attempted.add((code, at_hm))
-            parent, merge_lot, limits = order
+            parent, merge_lot, limits, order_debit = order
             frame = frame_for(code)
             rows = frame.loc[frame["hm"] == at_hm]
             if len(rows) != 1 or bool(rows.iloc[0].get("_tail_duplicate", False)):
@@ -664,22 +704,48 @@ def run_chronological_day(
                     and hit_limit_down(quote.price, limits[1])):
                 reject_tail("limit_down")
                 continue
-            shares = (parent.requested_shares(quote) if independent_policy is not None
-                      else parent.allocation(quote, st.cash, debit))
+            fee_aware = uses_fee_aware_affordability(st)
+            shrink_short_cash = uses_shrink_on_short_cash(st)
+            shares = (
+                parent.requested_shares(
+                    quote, order_debit if fee_aware else None
+                )
+                if independent_policy is not None and not shrink_short_cash
+                else parent.allocation(
+                    quote,
+                    st.cash,
+                    order_debit,
+                    budget_debit_fn=order_debit if fee_aware else None,
+                )
+            )
             if shares <= 0:
                 continue
+            remaining_budget = max(0.0, parent.budget - parent.spent)
             quota_used = st.daily_quota_used
             if execute_buy(
-                st, code, quote.price, shares * quote.price, day_i, day,
+                st,
+                code,
+                quote.price,
+                remaining_budget if fee_aware else shares * quote.price,
+                day_i,
+                day,
                 reason="pool:tail_window", bucket_id=at_hm,
                 shares_override=shares, merge_lot=merge_lot, hm=at_hm,
                 **({"position_id": f"{code}@{ds}", "entry_signal_date": ds}
                    if independent_policy is not None else {}),
             ):
                 order[1] = st.positions[code][-1] if merge_lot is None else merge_lot
-                parent.book(int(st.trades[-1]["shares"]), quote.price)
+                parent.book(
+                    int(st.trades[-1]["shares"]),
+                    quote.price,
+                    order_debit if fee_aware else None,
+                )
                 if hooks.get("sizing", "daily_quota") == "daily_quota":
-                    tail_settled_debits += st.trades[-1]["notional"] + st.trades[-1]["commission"]
+                    tail_settled_debits += (
+                        st.trades[-1]["notional"]
+                        + st.trades[-1]["commission"]
+                        + st.trades[-1].get("transfer_fee", 0.0)
+                    )
             if hooks.get("sizing") == "per_name":
                 st.daily_quota_used = quota_used
 

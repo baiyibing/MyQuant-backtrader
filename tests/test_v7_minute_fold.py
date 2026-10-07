@@ -81,7 +81,8 @@ def test_manual_trial_add_callbacks_match_native_settlement(chronological):
                 dict(datetime=day2.isoformat(), hm=895, open=10.5, close=10.5)]}
     closes = {S: {D - timedelta(days=1): 10, D: 10}}
     actual = native.simulate_v7(bars, closes, {D: [S]}, [D, day2], fee=FEE,
-                                fix_minute_cash_order=chronological)
+                                fix_minute_cash_order=chronological,
+                                rule_profile="legacy")
     state = engine.SimResult(21_000_000)
     engine.MinuteSession.trial(state, S, D, 895, 10, False, 10, "", FEE)
     pos = state.positions[S]
@@ -204,7 +205,8 @@ def test_both_schedules_delegate_to_main_and_return_identical_object(monkeypatch
     bars = {S: [dict(datetime=D.isoformat(), hm=895, open=10, close=10)]}
     closes = {S: {D - timedelta(days=1): 10}}
     result = native.simulate_v7(bars, closes, {D: [S]}, [D], fee=FEE,
-                                fix_minute_cash_order=chronological)
+                                fix_minute_cash_order=chronological,
+                                rule_profile="legacy")
     assert len(calls) == 1 and calls[0][2] is result
     assert type(result) is native.SimResult is engine.SimResult
     assert calls[0][1]['fix_minute_cash_order'] is chronological
@@ -212,7 +214,8 @@ def test_both_schedules_delegate_to_main_and_return_identical_object(monkeypatch
     assert days == [D]
     direct = original(bars, closes, {D: [S]}, None, None, strategy='version7',
                       total_cash=21_000_000, fix_minute_cash_order=chronological,
-                      policy_context=MinutePolicyContext(index_days=[D], fee_schedule=FEE))
+                      policy_context=MinutePolicyContext(index_days=[D], fee_schedule=FEE),
+                      rule_profile="legacy")
     assert asdict(direct) == asdict(result)
     tree = ast.parse(inspect.getsource(native.simulate_v7))
     assert not any(isinstance(node, (ast.For, ast.While)) for node in ast.walk(tree))
@@ -221,7 +224,8 @@ def test_both_schedules_delegate_to_main_and_return_identical_object(monkeypatch
     monkeypatch.setattr(main, 'simulate', failing)
     with pytest.raises(RuntimeError, match='main failed'):
         native.simulate_v7(bars, closes, {D: [S]}, [D],
-                           fix_minute_cash_order=chronological)
+                           fix_minute_cash_order=chronological,
+                           rule_profile="legacy")
 
 
 def test_no_production_traversal_in_native_shim_or_book():
@@ -267,7 +271,8 @@ def test_shim_normalizes_tail_unit_before_main(monkeypatch, chronological):
     bars, closes, pools, index = {}, {}, {}, []
     assert native.simulate_v7(
         bars, closes, pools, index, fix_minute_cash_order=chronological,
-        tail_window_buy=chronological, tail_volume_unit=None) is sentinel
+        tail_window_buy=chronological, tail_volume_unit=None,
+        rule_profile="legacy") is sentinel
     assert calls[0][0][:3] == (bars, closes, pools)
     assert calls[0][1]['policy_context'].index_days is index
     assert calls[0][1]['fix_minute_cash_order'] is chronological
@@ -290,7 +295,7 @@ def test_registered_v7_cash_binding_is_skip_with_and_without_explicit_default():
     result = main.simulate(
         {S: [dict(datetime=D.isoformat(), hm=895, open=10, close=10)]},
         {S: {D - timedelta(days=1): 10}}, {D: [S]}, None, None,
-        strategy='version7', total_cash=1)
+        strategy='version7', total_cash=1, rule_profile="legacy")
     assert result.on_short_cash == 'skip'
     assert result.trades[-1]['reason'] == 'skip_cash'
 
@@ -317,6 +322,7 @@ def test_direct_main_matches_frozen_native_cases(case, monkeypatch, tmp_path):
     from scripts.research.generate_v7_app_baseline import FIXTURE, capture_case
 
     def direct(minute_bars, daily_bars, pool_days, index_days=None, **kwargs):
+        kwargs.setdefault("rule_profile", "legacy")
         return main.simulate(
             minute_bars, daily_bars, pool_days,
             kwargs.pop('start', None), kwargs.pop('end', None), strategy='version7',
@@ -359,7 +365,8 @@ def test_main_v7_never_applies_open_and_fill_sell_limit_gate(monkeypatch, chrono
              dict(datetime=day.isoformat(), hm=571, open=8, close=8.9)]},
         {S: {D: 10}}, {}, None, None, strategy="version7", total_cash=0,
         fix_minute_cash_order=chronological,
-        policy_context=MinutePolicyContext(index_days=[day], fee_schedule=FEE))
+        policy_context=MinutePolicyContext(index_days=[day], fee_schedule=FEE),
+        rule_profile="legacy")
     assert result.trades == [dict(date=day.isoformat(), symbol=S, hm=571,
                                  side="sell", shares=300, price=8.9,
                                  reason="stop:trial_a090")]
@@ -388,5 +395,6 @@ def test_native_tail_error_parity_before_main(monkeypatch, entry, chronological,
     call = native.simulate_v7 if entry == 'shim' else app.simulate_native
     with pytest.raises(type(old.value)) as current:
         call({}, {}, {}, [], tail_window_buy=True,
-             fix_minute_cash_order=chronological, tail_volume_unit=unit)
+             fix_minute_cash_order=chronological, tail_volume_unit=unit,
+             rule_profile="legacy")
     assert str(current.value) == str(old.value)

@@ -11,7 +11,7 @@ symbol-major 默认与 X02 chronological 调度；v7 / APP 保留各自 CLI 与�
 
 用法：
     python backtest/research/csv_minute_backtest.py --strategy version6 --start 20251023 --end 20251104
-    python backtest/research/csv_minute_backtest.py --strategy version8 --start 20251023 --end 20260909
+    python backtest/research/csv_minute_backtest.py --strategy version8 --start 20251023 --end 20260918
 """
 
 from __future__ import annotations
@@ -39,6 +39,8 @@ from backtest.research.strategy9_rules import (  # noqa: E402
     evaluate_version9_exit, plan_stop_price, plan_close_reason,
 )
 
+from backtest.research.book_capabilities import allows_price_add  # noqa: E402
+
 from backtest.research.csv_ledger import (  # noqa: E402
     CHASE_HM,
     DEFAULT_TOTAL_CASH,
@@ -48,6 +50,7 @@ from backtest.research.csv_ledger import (  # noqa: E402
     QLIB_OPEN_COST,
     IndependentExitPosition,
     SimState,
+    bind_account_fee_schedule,
     chase_decision as chase_decision,
     configure_s8,
     reject_short_cash_override,
@@ -66,6 +69,7 @@ from backtest.research.csv_ledger import (  # noqa: E402
     rescale_s8_groups,
     apply_exdiv_economics,
 )
+from backtest.research.ashare_fees import resolve_account_fee_schedule  # noqa: E402
 
 from backtest.research.ashare_exdiv_economics import EconomicLookup, ExDivEconomics  # noqa: E402
 
@@ -84,6 +88,10 @@ from backtest.research.csv_common import (  # noqa: E402
 from backtest.research.minute_engine_policies import (  # noqa: E402
     MinutePolicyContext, minute_policy_for,
 )
+from backtest.research.rule_profile import (  # noqa: E402
+    RuleProfile,
+    resolve_rule_profile,
+)
 
 from backtest.research.csv_pool import (  # noqa: E402
     load_pool_day_map,
@@ -100,6 +108,7 @@ from backtest.research.csv_strategy_books import (  # noqa: E402
     help_lock_all,
     help_lock_for,
     normalize_csv_strategy,
+    validate_hold_days,
 )
 from backtest.research.strategy6_rules import (  # noqa: E402
     POS_TRAIL,
@@ -656,6 +665,7 @@ def simulate(
     fix_s11_exit_domain: bool = False,
     version9_sell=None,
     max_hold: bool = False,
+    hold_days: int = 20,
     fix_s81_band_precision: bool = False,
     signal_bars_front: dict[str, pd.DataFrame] | None = None,
     minute_stop_trigger: str = "close",
@@ -669,15 +679,36 @@ def simulate(
     limit_walkdown: bool = False,
     topk_limit_rule: str = "qlib",
     policy_context: MinutePolicyContext | None = None,
+    rule_profile: str | RuleProfile = "industry",
 ) -> SimState:
     """Opt-in cap uses caller-attested completed minutes; daily volume is unused.
 
     exdiv_economics is an explicit (symbol, YYYYMMDD) -> ExDivEvent lookup for
     raw bars. None retains the baseline; E-R6 ratios never imply entitlements.
     """
+    profile = resolve_rule_profile(rule_profile)
+    shared_fee_schedule = resolve_account_fee_schedule(
+        profile.account_fee_schedule,
+        explicit_rates=(buy_cost_rate, sell_cost_rate, min_cost),
+    )
     book = get_minute_book(strategy)
+    validate_hold_days(book.name, hold_days)
     native_v7 = book.name == "version7"
+    fix_minute_cash_order = bool(
+        fix_minute_cash_order or (native_v7 and profile.chronological_v7)
+    )
     if native_v7:
+        context = policy_context or MinutePolicyContext()
+        native_fee_schedule = resolve_account_fee_schedule(
+            profile.account_fee_schedule,
+            fee_schedule=context.fee_schedule,
+        )
+        policy_context = MinutePolicyContext(
+            index_days=context.index_days,
+            fee_schedule=context.fee_schedule,
+            native_inputs=context.native_inputs,
+            rule_profile=profile,
+        )
         if fill_config is not None:
             raise ValueError("version7 does not accept FillConfig overrides")
         validate_tail_options(tail_window_buy, fix_minute_cash_order, tail_volume_unit)
@@ -688,21 +719,33 @@ def simulate(
         if policy.schedule not in {"symbol_major", "chronological"}:
             raise ValueError("version7 requires a native schedule policy")
         from backtest.research import strategy7_engine as v7
-        from backtest.research.ashare_fees import DEFAULT_SCHEDULE
         from backtest.research.minute_cash_order import run_symbol_major_day, run_v7_chronological_day
         frames, minutes, closes, pools, calendar, gate = v7.prepare_main_inputs(
             minute_bars, daily_bars, pool_days, start, end, policy_context)
         st = v7.SimResult(float(total_cash))
+        if (
+            profile.exchange_quantity_rules
+            or profile.fee_aware_affordability
+            or profile.shrink_on_short_cash
+        ):
+            st.rule_profile = profile
         configure_s8(st, hooks)
         if exdiv_economics is not None:
             st.exdiv_economics = ExDivEconomics(exdiv_economics)
         if participation_rate is not None:
             st.volume_cap = VolumeCap(participation_rate, volume_for_bucket)
-        fee = (policy_context.fee_schedule if policy_context and
-               policy_context.fee_schedule is not None else DEFAULT_SCHEDULE)
+        fee = native_fee_schedule
+        if profile.account_fee_schedule:
+            bind_account_fee_schedule(st, fee)
         last_prices = {}
     if not native_v7:
-        validate_minute_entry(strategy, stage="sell", version9_sell=version9_sell, max_hold=max_hold)
+        validate_minute_entry(
+            strategy,
+            stage="sell",
+            version9_sell=version9_sell,
+            max_hold=max_hold,
+            hold_days=hold_days,
+        )
         validate_minute_stop_trigger(minute_stop_trigger, normalize_csv_strategy(strategy), fix_s11_exit_domain)
         validate_topk_exec(topk_exec, strategy, limit_walkdown, topk_limit_rule)
         validate_tail_options(tail_window_buy, fix_minute_cash_order, tail_volume_unit)
@@ -750,6 +793,7 @@ def simulate(
             apply_fn=apply_csv_strategy,
             **({"version9_sell": version9_sell} if version9_sell is not None else {}),
             **({"max_hold": True} if max_hold else {}),
+            hold_days=hold_days,
             **({"fix_s81_band_precision": True} if fix_s81_band_precision else {}),
             scores_by_day=scores_by_day,
             topk=topk,
@@ -785,6 +829,17 @@ def simulate(
                     else policy.calendar(minute_bars=minute_bars, daily_bars=daily_bars,
                                          pool_days=pool_days, start=start, end=end,
                                          context=policy_context))
+        delayed_pool_stats = None
+        if normalize_csv_strategy(strategy) == "version9_3":
+            from backtest.research.strategy9_3_rules import shift_pool_days
+
+            shifted = shift_pool_days(
+                pool_days, calendar, minute_bars,
+                pool_names_by_day=pool_names_by_day,
+            )
+            pool_days = shifted.pool_days
+            pool_names_by_day = shifted.pool_names_by_day
+            delayed_pool_stats = shifted.stats
 
         initialize = init_sim_state if policy.initialize is None else policy.initialize
         st, pending_chase, names_asof = initialize(
@@ -797,6 +852,15 @@ def simulate(
             daily_quota=daily_quota,
             **({"context": policy_context} if policy.initialize is not None else {}),
         )
+        if (
+            profile.exchange_quantity_rules
+            or profile.supplementary_min_lot
+            or profile.fee_aware_affordability
+            or profile.shrink_on_short_cash
+        ):
+            st.rule_profile = profile
+        if delayed_pool_stats is not None:
+            st.stats.update(delayed_pool_stats)
         defaults = book_fill_defaults(hooks, minute_stop_trigger)
         if hooks.get("run_minute_day") is not None:
             raise ValueError("run_minute_day is retired; use minute_session with HeldMinuteCursor")
@@ -823,6 +887,8 @@ def simulate(
             st.sell_cost_rate = float(sell_cost_rate)
         if min_cost is not None:
             st.min_cost = float(min_cost)
+        if profile.account_fee_schedule:
+            bind_account_fee_schedule(st, shared_fee_schedule)
         st.stats["buy_cost_rate"] = st.buy_cost_rate
         st.stats["sell_cost_rate"] = st.sell_cost_rate
         st.stats["min_cost"] = st.min_cost
@@ -901,9 +967,7 @@ def simulate(
 
             # Price-add books need the post-14:55 group scan to observe their
             # new weighted cost. Other OFF books retain full-day exits first.
-            split_group_scan = hooks.get("name") in {
-                "version6_1", "version6_2", "version6_3", "version6_4", "version6_5", "version6_6", "version6_7", "version6_8", "version6_9", "version6_10", "version6_11", "version6_12", "version6_13", "version6_14", "version6_15", "version6_16", "version6_17", "version6_18", "version6_19", "version6_20", "version6_21", "version6_22", "version6_23", "version6_24", "version6_25", "version6_26", "version6_27", "version6_28", "version6_29", "version6_30", "version6_31", "version6_32", "version6_33", "version6_34", "version6_35", "version6_36", "version6_37", "version6_38", "version6_39", "version6_40", "version6_41", "version6_42", "version6_43", "version6_44", "version6_45", "version8", "version8_3", "version8_4", "version8_5",
-            } and hooks.get("sizing") == "per_name"
+            split_group_scan = allows_price_add(hooks.get("name"), hooks.get("sizing"))
             post_group_scans = []
             confirm_peaks = {}
             s8_confirm = hooks.get("name") == "version8_3" and hooks.get("sizing") == "per_name"
@@ -1026,6 +1090,8 @@ def simulate(
                         continue
                     # Resolve dates here; only the eligibility bool reaches the scanner.
                     reserve_state = {"reserved": bool(pos.reserved)}
+                    fill_state = held_fill_states.setdefault(held_fill_key(pos), {})
+                    pending_at_open = "pending" in fill_state
                     v9_plan = (evaluate_version9_exit(hooks, ddf, day, st.stats)
                                if "version9_exit" in hooks and n_days >= 1 else None)
                     idx, px, reason, new_peak, new_peak_hm = scan_held_day(
@@ -1037,7 +1103,7 @@ def simulate(
                         session_volume=day_m["volume"].to_numpy(np.float64) if minute_open else None,
                         session_stats=st.stats,
                         minute_stop_trigger="hl" if absolute_exit else minute_stop_trigger,
-                        fill_config=fill_config, fill_state=held_fill_states.setdefault(held_fill_key(pos), {}),
+                        fill_config=fill_config, fill_state=fill_state,
                         pending_log=pending_callback(st, code, pos, day),
                         take_profit_pct=v9_plan["take_profit_pct"] if v9_plan is not None else st.stats.get("profit_target"),
                         cost=pos.cost,
@@ -1055,7 +1121,7 @@ def simulate(
                         hm=hm,
                         peak_hm=int(pos.peak_hm),
                         peak_gap_min=peak_gap_min,
-                        take_profit=take_profit,
+                        take_profit=hooks.get("minute_take_profit", take_profit),
                         sell_gate=sell_gate,
                         gate_code=code,
                         gate_day=day,
@@ -1072,6 +1138,27 @@ def simulate(
                     )
                     if absolute_exit and idx < 0 and float(day_m["low"].min()) <= absolute_exit(code, day):
                         pos.pending_exit = "stop_loss:touch"
+                    if (
+                        idx < 0
+                        and pending_at_open
+                        and "pending" in fill_state
+                        and callable(hooks.get("minute_next_open_exit"))
+                        and limit_down > 0
+                        and hit_limit_down(float(o[0]), limit_down)
+                    ):
+                        st.stats["defer_sell_limit_down"] += 1
+                    minute_next_open_exit = hooks.get("minute_next_open_exit")
+                    if (
+                        idx < 0
+                        and not pos.pending_exit
+                        and "pending" not in fill_state
+                        and callable(minute_next_open_exit)
+                    ):
+                        exit_reason = minute_next_open_exit(
+                            float(c[-1]), pos.cost, new_peak, n_days
+                        )
+                        if exit_reason:
+                            fill_state["pending"] = exit_reason
                     pos.peak = new_peak
                     pos.peak_hm = new_peak_hm
                     pos.reserved = bool(reserve_state["reserved"])
@@ -1298,6 +1385,15 @@ def simulate(
             )
 
     if native_v7:
+        if profile.name == "industry":
+            stats = getattr(st, "stats", None)
+            if stats is None:
+                stats = {}
+                st.stats = stats
+            stats.pop("rule_profile", None)
+            stats.pop("rule_profile_revision", None)
+            stats["rule_profile"] = profile.name
+            stats["rule_profile_revision"] = profile.revision
         return st
 
     finish_pending_sells(st)
@@ -1309,6 +1405,13 @@ def simulate(
             economics_enabled=exdiv_economics is not None,
             total_return_complete=False,
         )
+    if profile.s12_domain_stamp and normalize_csv_strategy(strategy) == "version12":
+        st.stats["valuation_price_domain"] = "none" if fix_s12_price_domain else "front"
+    if profile.name == "industry":
+        st.stats.pop("rule_profile", None)
+        st.stats.pop("rule_profile_revision", None)
+        st.stats["rule_profile"] = profile.name
+        st.stats["rule_profile_revision"] = profile.revision
     return st
 
 
@@ -1357,6 +1460,7 @@ def run(
     fix_s11_exit_domain: bool = False,
     version9_sell=None,
     max_hold: bool = False,
+    hold_days: int = 20,
     fix_s81_band_precision: bool = False,
     minute_stop_trigger: str = "close",
     fill_config: FillConfig | None = None,
@@ -1369,8 +1473,24 @@ def run(
     limit_walkdown: bool = False,
     topk_limit_rule: str = "qlib",
     participation_rate: float | None = None,
+    rule_profile: str | RuleProfile = "industry",
 ) -> SimState:
-    validate_minute_entry(strategy, stage="sell", version9_sell=version9_sell, max_hold=max_hold)
+    profile = resolve_rule_profile(rule_profile)
+    book = normalize_csv_strategy(strategy)
+    fix_minute_cash_order = bool(
+        fix_minute_cash_order or (book == "version7" and profile.chronological_v7)
+    )
+    resolve_account_fee_schedule(
+        profile.account_fee_schedule,
+        explicit_rates=(buy_cost_rate, sell_cost_rate, min_cost),
+    )
+    validate_minute_entry(
+        strategy,
+        stage="sell",
+        version9_sell=version9_sell,
+        max_hold=max_hold,
+        hold_days=hold_days,
+    )
     # P2-B shell precheck (adapter surface on run facade; not simulate / VolumeCap).
     # participation_rate=None → no-op (byte-identical old arm). ≠δ5 certified ≠R4.
     precheck_cli_participation_rate(
@@ -1402,7 +1522,6 @@ def run(
             "--stop-fill close is daily EOD close only; "
             "minute entry refuses it (bar close is not 当日收盘)"
         )
-    book = normalize_csv_strategy(strategy)
     if fix_s12_price_domain and (
         book != "version12" or dividend_type != "none"
         or minute_source != "lake" or daily_source != "lake"
@@ -1612,6 +1731,7 @@ def run(
         **volume_options,
         **({"version9_sell": version9_sell} if version9_sell is not None else {}),
         **({"max_hold": True} if max_hold else {}),
+        hold_days=hold_days,
         **({"fix_s81_band_precision": True} if fix_s81_band_precision else {}),
         take_profit=take_profit,
         record_params=record_params,
@@ -1643,6 +1763,7 @@ def run(
         fill_config=fill_config,
         topk_exec=topk_exec, limit_walkdown=limit_walkdown,
         topk_limit_rule=topk_limit_rule,
+        rule_profile=profile,
     )
     if skipped.get("exdiv_skipped_no_factor"):
         st.stats["exdiv_skipped_no_factor"] = int(skipped["exdiv_skipped_no_factor"])
@@ -1702,6 +1823,11 @@ def run(
         if daily_source == "qlib_day":
             metadata["mark_domain"] = "qlib_adjusted"
         st.run_metadata = {**getattr(st, "run_metadata", {}), "s11_exit_domain": metadata}
+    if profile.name == "industry":
+        st.stats.pop("rule_profile", None)
+        st.stats.pop("rule_profile_revision", None)
+        st.stats["rule_profile"] = profile.name
+        st.stats["rule_profile_revision"] = profile.revision
     return st
 
 
@@ -1865,7 +1991,7 @@ def main(argv: Optional[list] = None) -> int:
         topk_limit_rule=args.topk_limit_rule,
         **csv_run_kwargs_from_args(args),
     )
-    book = engine_book(args.strategy)
+    book = engine_book(args.strategy, hold_days=args.hold_days)
     engine = f"csv_minute_{book}"
     text = summarize(st, args.cash_total, args.start, args.end, engine=engine)
     cmp = maybe_compare_daily(

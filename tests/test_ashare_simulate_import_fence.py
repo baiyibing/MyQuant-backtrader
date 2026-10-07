@@ -11,6 +11,11 @@ import re
 
 import pytest
 
+from backtest.research.research_family_tags import (
+    ISOLATED_RESEARCH_FAMILIES,
+    isolated_import_prefixes,
+)
+
 
 ROOT = Path(__file__).resolve().parents[1]
 # Names and order must match plan §5-C byte for byte. This is not an rglob.
@@ -53,7 +58,10 @@ def forbidden_imports(source, package="backtest.research", *, module_name=""):
                     or "trade_fee_policy" in name.split(".")
                     or name == "backtest.lebs" or name.startswith("backtest.lebs.")
                     or ("ashare_fill_clock" in name.split(".")
-                        and module_name not in FILL_CLOCK_WRITE_PATHS)):
+                        and module_name not in FILL_CLOCK_WRITE_PATHS)
+                    or any(name == prefix or name.startswith(prefix + ".")
+                           or name.startswith(prefix + "_")
+                           for prefix in isolated_import_prefixes())):
                 violations.append((node.lineno, name))
     return violations
 
@@ -64,6 +72,40 @@ def test_hot_path_list_matches_plan_bytes():
     declared = row.split("**热路径=枚举清单**：", 1)[1].split("（禁 rglob", 1)[0]
     names = re.findall(r"`([^`]+)`", declared)
     assert "\n".join(SIMULATE_HOT_PATH).encode("utf-8") == "\n".join(names).encode("utf-8")
+
+
+def test_hot_path_excludes_isolated_families():
+    for name in SIMULATE_HOT_PATH:
+        assert not any(
+            name == prefix or name.startswith(prefix + ".")
+            or name.startswith(prefix + "_")
+            for prefix in isolated_import_prefixes()
+        ), name
+
+
+def test_isolated_family_inventory_exists():
+    for modules in ISOLATED_RESEARCH_FAMILIES.values():
+        for name in modules:
+            path = ROOT / "backtest/research" / name.replace(".", "/")
+            assert path.with_suffix(".py").is_file() or (path / "__init__.py").is_file(), name
+
+
+@pytest.mark.parametrize("prefix", isolated_import_prefixes())
+def test_fence_rejects_isolated_family_imports(prefix):
+    for source in (
+        f"import {prefix} as family",
+        f"from {prefix} import runner as run",
+        f"def deferred():\n    import {prefix}.runner",
+    ):
+        assert forbidden_imports(source, module_name="csv_ledger")
+    parent, _, leaf = prefix.rpartition(".")
+    if parent:
+        assert forbidden_imports(f"from {parent} import {leaf} as family")
+    if prefix.startswith("backtest.research."):
+        relative = prefix.removeprefix("backtest.research.")
+        assert forbidden_imports(f"from .{relative} import runner")
+        parent, _, leaf = relative.rpartition(".")
+        assert forbidden_imports(f"from .{parent} import {leaf}")
 
 
 @pytest.mark.parametrize("name", SIMULATE_HOT_PATH)

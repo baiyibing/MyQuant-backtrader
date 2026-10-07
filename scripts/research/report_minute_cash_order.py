@@ -60,8 +60,13 @@ def _metrics(state, trace):
         inventory[row.get("code", row.get("symbol"))] += row["shares"] * (1 if side == "BUY" else -1)
         commission = row.get("commission")
         if commission is not None:
-            expected = (row["cash_before"] - notional - commission if side == "BUY"
-                        else row["cash_before"] + notional - commission)
+            fees = (
+                commission
+                + row.get("stamp_duty", 0.0)
+                + row.get("transfer_fee", 0.0)
+            )
+            expected = (row["cash_before"] - notional - fees if side == "BUY"
+                        else row["cash_before"] + notional - fees)
             if money(expected) != money(row["cash_after"]):
                 residuals.append(index)
     inversions = [{"index": i, "previous": trace[i - 1], "current": row}
@@ -90,7 +95,12 @@ def capture_case(name, simulate, kwargs, output):
     for enabled in (False, True):
         leg = "on" if enabled else "off"
         trace = []
-        state = simulate(**kwargs, fix_minute_cash_order=enabled, audit_sink=trace)
+        state = simulate(
+            **kwargs,
+            fix_minute_cash_order=enabled,
+            audit_sink=trace,
+            rule_profile="legacy",
+        )
         traces[leg] = trace
         legs[leg] = _metrics(state, trace)
         assert not legs[leg]["cash_conservation_residuals"]

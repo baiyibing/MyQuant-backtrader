@@ -10,6 +10,8 @@ Entry set is strategy-independent (nominal cash pool 1.1e9 never caps).
 
 from __future__ import annotations
 
+from backtest.research.lot_rounding import double_floordiv_budget_board_lots
+
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import date
@@ -179,7 +181,7 @@ def _prev_close_on(df: pd.DataFrame, ymd: str) -> Optional[float]:
 def _lot_shares(buy_price: float) -> int:
     if buy_price <= 0:
         return 0
-    return int(LOT_NOTIONAL // buy_price // 100) * 100
+    return double_floordiv_budget_board_lots(LOT_NOTIONAL, buy_price)
 
 
 def _is_limit_up(

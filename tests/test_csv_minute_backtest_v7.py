@@ -27,7 +27,19 @@ D3 = date(2026, 9, 3)
 @pytest.fixture(params=[False, True], ids=["cash_order_off", "cash_order_on"])
 def cash_order_engine(request, monkeypatch):
     monkeypatch.setattr(sys.modules[__name__], "simulate_v7",
-                        partial(v7.simulate_v7, fix_minute_cash_order=request.param))
+                        partial(
+                            v7.simulate_v7,
+                            fix_minute_cash_order=request.param,
+                            rule_profile="legacy",
+                        ))
+
+
+def _legacy_simulate_v7(*args, **kwargs):
+    kwargs.setdefault("rule_profile", "legacy")
+    return v7.simulate_v7(*args, **kwargs)
+
+
+simulate_v7 = _legacy_simulate_v7
 
 
 def test_load_pool_days_adds_exchange_suffix(tmp_path):
@@ -232,6 +244,8 @@ def test_cli_empty_pool_is_legal_and_missing_pool_is_system_exit(tmp_path, monke
                 "20260902",
                 "--pool-dir",
                 str(tmp_path),
+                "--rule-profile",
+                "legacy",
                 "--output-dir",
                 str(out),
             ]

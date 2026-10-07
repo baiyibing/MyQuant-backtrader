@@ -156,7 +156,12 @@ class Replay:
         row = fills[0]
         assert float(row["price"]) == quote_price
         sign = -1 if side == "BUY" else 1
-        expected_cash = before + sign * row["shares"] * row["price"] - row["commission"]
+        expected_cash = (
+            before + sign * row["shares"] * row["price"]
+            - row["commission"]
+            - row.get("stamp_duty", 0.0)
+            - row.get("transfer_fee", 0.0)
+        )
         assert money(st.cash) == money(expected_cash)
         expected_shares = shares_before.get(code, 0) - sign * row["shares"]
         assert shares_after.get(code, 0) == expected_shares

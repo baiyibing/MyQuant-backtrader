@@ -69,6 +69,9 @@ def test_registered_books_are_explicit():
         "version6_42",
         "version6_43",
         "version6_44",
+        "version6_45",
+        "version6_46",
+        "version6_47",
         "version8",
         "version8_1",
         "version8_2",
@@ -78,15 +81,13 @@ def test_registered_books_are_explicit():
         "version8_6",
         "version9",
         "version9_2",
+        "version9_3",
         "version10",
         "version11",
         "version12",
         "topk_dropout",
         "topk_score_exit",
         "version9_1",
-        "version6_45",
-        "version6_46",
-        "version6_47",
         "version6_48",
         "version6_49",
     )
@@ -869,7 +870,7 @@ def test_per_name_chase_budget_and_terminal_outcomes(per_name_hooks, outcome):
 
 
 @pytest.mark.parametrize("strategy", ["version1"])
-def test_daily_quota_trades_byte_identical(strategy):
+def test_daily_quota_trades_byte_identical(strategy, monkeypatch):
     """Anchors captured at 9f4303c, before slice A; never regenerate pre_er1.
 
     version6 已改为名单加仓 + 两档回撤，不再对照这份旧 golden。
@@ -878,6 +879,15 @@ def test_daily_quota_trades_byte_identical(strategy):
     from pathlib import Path
     import runpy
     import pandas as pd
+    from backtest.research import csv_daily_backtest
+
+    original = csv_daily_backtest.simulate
+
+    def simulate(*args, **kwargs):
+        kwargs.setdefault("rule_profile", "legacy")
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(csv_daily_backtest, "simulate", simulate)
 
     fixture = Path(__file__).parent / "fixtures"
     helpers = runpy.run_path(str(fixture / "csv_engine_pre_er1/generate_snapshot.py"))

@@ -50,6 +50,7 @@ from backtest.research.csv_strategy_books import (  # noqa: E402
     resolve_daily_quota,
     resolve_research_pool_dir,
     strategy6_kwargs_from_args,
+    validate_hold_days,
 )
 from backtest.research.strategy6_rules import (  # noqa: E402
     POS_TRAIL,
@@ -77,6 +78,7 @@ from backtest.research.csv_ledger import (  # noqa: E402
     _ymd,
     chase_decision as chase_decision,
     chase_explained as chase_explained,
+    bind_account_fee_schedule,
     configure_s8,
     execute_buy as execute_buy,
     exit_positions,
@@ -91,7 +93,12 @@ from backtest.research.csv_ledger import (  # noqa: E402
     apply_exdiv_economics,
     resolve_limit_prices,
 )
+from backtest.research.ashare_fees import resolve_account_fee_schedule  # noqa: E402
 from backtest.research.ashare_exdiv_economics import EconomicLookup, ExDivEconomics  # noqa: E402
+from backtest.research.rule_profile import (  # noqa: E402
+    RuleProfile,
+    resolve_rule_profile,
+)
 
 from backtest.research.exdiv_map import (  # noqa: E402
     k_for,
@@ -177,7 +184,8 @@ HELP_LOCK = """
         否则日内 low 触价 → 触发价成交。
   跌停禁卖：任何卖因在成交前若开盘或成交价跌停 → 不成交、顺延（含 trail /
         profit_take / force / ma_signal / open_board / pending）。
-  档位：主板 10% / 创科 20%（含 302、689）/ 北交 30%；名单第二列 ST/*ST=5%。
+  档位：主板 10% / 创科 20%（含 302、689）/ 北交 30%；主板 ST/*ST：
+        2026-07-06 前 5%，当日起 10%；创科/BJ ST 随板块档位。
         未知板块且无 ST 名 → skip_unknown_board，不交易。
   止盈 / 峰值：见下方对应策略书。峰值从 T+1 起用当日 high 更新；T+0 固定为买入价。
         v8：T+1 只评止损不评止盈；日线收盘评估、次日开盘离场（隔夜间隔已 ≥ 15 分钟）。
@@ -248,8 +256,10 @@ def simulate(
     fix_s11_exit_domain: bool = False,
     version9_sell=None,
     max_hold: bool = False,
+    hold_days: int = 20,
     fix_s81_band_precision: bool = False,
     signal_bars_front: dict[str, pd.DataFrame] | None = None,
+    rule_profile: str | RuleProfile = "industry",
 ) -> SimState:
     """核心日循环。bars/pool_days 可由测试注入；run() 负责从湖与 CSV 加载。
 
@@ -257,10 +267,17 @@ def simulate(
     exdiv_economics 显式接收 (engine_symbol, YYYYMMDD) -> ExDivEvent；
     默认 None 保留原行为，事件配合 raw bars 使用，不从 exdiv 的 k 推断权益。
     """
+    profile = resolve_rule_profile(rule_profile)
+    fee_schedule = resolve_account_fee_schedule(
+        profile.account_fee_schedule,
+        explicit_rates=(buy_cost_rate, sell_cost_rate, min_cost),
+    )
+    strategy_name = normalize_csv_strategy(strategy)
     from backtest.research.strategy9_rules import validate_sell_mode
-    validate_sell_mode(normalize_csv_strategy(strategy), version9_sell, max_hold)
-    if max_hold and normalize_csv_strategy(strategy) != "version9":
+    validate_sell_mode(strategy_name, version9_sell, max_hold)
+    if max_hold and strategy_name != "version9":
         raise ValueError("max_hold is supported only by version9")
+    validate_hold_days(strategy_name, hold_days)
     del pos_trail
     if signal_bars_front is not None and not fix_s11_exit_domain:
         raise ValueError("signal_bars_front requires version11 + fix_s11_exit_domain=True")
@@ -289,6 +306,7 @@ def simulate(
         apply_fn=apply_csv_strategy,
         **({"version9_sell": version9_sell} if version9_sell is not None else {}),
         **({"max_hold": True} if max_hold else {}),
+        hold_days=hold_days,
         **({"fix_s81_band_precision": True} if fix_s81_band_precision else {}),
         scores_by_day=scores_by_day,
         topk=topk,
@@ -306,6 +324,16 @@ def simulate(
     buy_gate = hooks.get("buy_gate")
     sell_gate = hooks.get("sell_gate")
     calendar = build_calendar(bars, start, end)
+    delayed_pool_stats = None
+    if normalize_csv_strategy(strategy) == "version9_3":
+        from backtest.research.strategy9_3_rules import shift_pool_days
+
+        shifted = shift_pool_days(
+            pool_days, calendar, bars, pool_names_by_day=pool_names_by_day
+        )
+        pool_days = shifted.pool_days
+        pool_names_by_day = shifted.pool_names_by_day
+        delayed_pool_stats = shifted.stats
 
     st, pending_chase, names_asof = init_sim_state(
         hooks,
@@ -316,6 +344,15 @@ def simulate(
         pool_names_by_day=pool_names_by_day,
         daily_quota=daily_quota,
     )
+    if (
+        profile.exchange_quantity_rules
+        or profile.supplementary_min_lot
+        or profile.fee_aware_affordability
+        or profile.shrink_on_short_cash
+    ):
+        st.rule_profile = profile
+    if delayed_pool_stats is not None:
+        st.stats.update(delayed_pool_stats)
     absolute_exit = hooks["bind_absolute_exit"](st, bars) if "bind_absolute_exit" in hooks else None
     configure_s8(st, hooks)
     st.star_lot_declare_check = star_lot_declare_check
@@ -325,6 +362,8 @@ def simulate(
         st.sell_cost_rate = float(sell_cost_rate)
     if min_cost is not None:
         st.min_cost = float(min_cost)
+    if profile.account_fee_schedule:
+        bind_account_fee_schedule(st, fee_schedule)
     st.stats["buy_cost_rate"] = st.buy_cost_rate
     st.stats["sell_cost_rate"] = st.sell_cost_rate
     st.stats["min_cost"] = st.min_cost
@@ -552,7 +591,8 @@ def simulate(
                 if got is None:
                     return None
                 row, closes = got
-                return float(row["close"]), closes
+                price_field = "open" if hooks.get("pool_buy_at_open") else "close"
+                return float(row[price_field]), closes
 
             if callable(hooks.get("breakout_day")):
                 hooks["breakout_day"](
@@ -671,6 +711,13 @@ def simulate(
         )
 
     finish_pending_chase(st, pending_chase)
+    if profile.s12_domain_stamp and normalize_csv_strategy(strategy) == "version12":
+        st.stats["valuation_price_domain"] = "front"
+    if profile.name == "industry":
+        st.stats.pop("rule_profile", None)
+        st.stats.pop("rule_profile_revision", None)
+        st.stats["rule_profile"] = profile.name
+        st.stats["rule_profile_revision"] = profile.revision
     return st
 
 
@@ -713,12 +760,21 @@ def run(
     fix_s11_exit_domain: bool = False,
     version9_sell=None,
     max_hold: bool = False,
+    hold_days: int = 20,
     fix_s81_band_precision: bool = False,
+    rule_profile: str | RuleProfile = "industry",
 ) -> SimState:
+    profile = resolve_rule_profile(rule_profile)
+    resolve_account_fee_schedule(
+        profile.account_fee_schedule,
+        explicit_rates=(buy_cost_rate, sell_cost_rate, min_cost),
+    )
+    strategy_name = normalize_csv_strategy(strategy)
     from backtest.research.strategy9_rules import validate_sell_mode
-    validate_sell_mode(normalize_csv_strategy(strategy), version9_sell, max_hold)
-    if max_hold and normalize_csv_strategy(strategy) != "version9":
+    validate_sell_mode(strategy_name, version9_sell, max_hold)
+    if max_hold and strategy_name != "version9":
         raise ValueError("max_hold is supported only by version9")
+    validate_hold_days(strategy_name, hold_days)
     if fix_s81_band_precision and normalize_csv_strategy(strategy) != "version8_1":
         raise ValueError("fix_s81_band_precision is supported only by version8_1")
     if fix_s11_exit_domain:
@@ -849,6 +905,7 @@ def run(
         strategy=strategy,
         **({"version9_sell": version9_sell} if version9_sell is not None else {}),
         **({"max_hold": True} if max_hold else {}),
+        hold_days=hold_days,
         **({"fix_s81_band_precision": True} if fix_s81_band_precision else {}),
         take_profit=take_profit,
         record_params=record_params,
@@ -869,6 +926,7 @@ def run(
         min_cost=min_cost,
         index_block_new=index_block_new,
         stop_fill=stop_fill,
+        rule_profile=profile,
     )
     if skipped.get("exdiv_skipped_no_factor"):
         st.stats["exdiv_skipped_no_factor"] = int(skipped["exdiv_skipped_no_factor"])
@@ -887,6 +945,11 @@ def run(
             daily_source="qlib_day" if use_qlib_bins else "lake",
             exdiv=exdiv, source_metadata=signal_sources, raw_bars=bars,
         )}
+    if profile.name == "industry":
+        st.stats.pop("rule_profile", None)
+        st.stats.pop("rule_profile_revision", None)
+        st.stats["rule_profile"] = profile.name
+        st.stats["rule_profile_revision"] = profile.revision
     return st
 
 
@@ -962,8 +1025,12 @@ def main(argv: Optional[list] = None) -> int:
         help="version11 EOD exits use independent lake front; raw lake fills/marks (default OFF)",
     )
     args = ap.parse_args(argv if argv is not None else None)
+    try:
+        validate_hold_days(args.strategy, args.hold_days, cli_option=True)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
     pool_dir = resolve_research_pool_dir(args.strategy, args.pool_dir, repo=REPO)
-    book = engine_book(args.strategy)
+    book = engine_book(args.strategy, hold_days=args.hold_days)
     out_dir = resolve_csv_daily_out_dir(
         args.out_dir, book=book, start=args.start, end=args.end
     )

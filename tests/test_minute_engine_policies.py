@@ -7,6 +7,7 @@ from backtest.research.minute_engine_policies import (
     LEGACY_MINUTE_POLICY, MinuteEnginePolicy, MinutePolicyContext,
     MinuteRowToken, minute_policy_for,
 )
+from backtest.research.rule_profile import INDUSTRY
 
 @pytest.mark.parametrize('hooks,fix,execution,walk,expected', [
     ({}, False, 'close', False, False),
@@ -30,6 +31,7 @@ def test_native_policy_and_context():
                                     topk_exec='close', limit_walkdown=False)
     context = MinutePolicyContext(index_days=[], fee_schedule=object(), native_inputs={})
     assert context.index_days == []
+    assert context.rule_profile is INDUSTRY
     with pytest.raises(FrozenInstanceError):
         context.index_days = None
     with pytest.raises(ValueError):

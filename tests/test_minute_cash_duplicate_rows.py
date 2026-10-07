@@ -21,7 +21,9 @@ def test_duplicate_hm_limit_open_only_skips_its_own_close(opens, enabled):
     frame.loc[1:, "close"] = 9.4
     frame.loc[1:, "low"] = np.minimum(opens, 9.4)
     case["pool_days"].pop("20251105")
-    state = minute.simulate(**case, fix_minute_cash_order=enabled)
+    state = minute.simulate(
+        **case, fix_minute_cash_order=enabled, rule_profile="legacy"
+    )
 
     assert [(t["code"], t["side"], t["shares"]) for t in state.trades] == [
         (code, "BUY", 100), (code, "SELL", 100),

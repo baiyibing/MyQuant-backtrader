@@ -88,6 +88,21 @@ Codex 做  →  Grok CLI 核  →  CI 绿  →  （再核，若需要）  →  �
 - 用户明确说「绿了就合」且核已过关时，协调 Bot 可直接合，不必再问一次。
 - 禁止对同一把刀平行开第二个 Codex/Grok 实现 PR；跟刀在原 PR 上改。
 
+### 3.1 Bot VM agent CLI 额度查询（已核验 2026-10-06）
+
+> **主机**：Grok Bot VM（box）。**账号面**：Cursor 用 `~/.config/cursor/auth.json`；Codex / Grok 用各自 `~/.codex/auth.json`、`~/.grok/auth.json`（ChatGPT / xAI OAuth）；Kimi（kimi-code）用 `~/.kimi-code/config.toml`。**禁止**把 token / api_key 值 / 手机号写入文档或 PR。
+
+| CLI | 账户 / 计划（示例） | 权威查询 | 读什么 | 备注 |
+|---|---|---|---|---|
+| **Codex** | ChatGPT（例 `baiyibing@gmail.com`）；`plan_type` 以接口为准（例 `prolite`） | `GET https://chatgpt.com/backend-api/codex/usage`，Header：`Authorization: Bearer <tokens.access_token>` + `ChatGPT-Account-Id: <tokens.account_id>`（均来自 `~/.codex/auth.json`） | `rate_limit.primary_window.used_percent`；`limit_window_seconds`（常 604800=7d）；`reset_at`（Unix s→Asia/Shanghai）；`limit_reached` / `allowed`；`model_usage`（如 `gpt-6-astra.available`）；`credits.balance` | `codex login status` 仅确认登录面，不含额度。token 过期时先让 CLI 刷新后再查。 |
+| **Cursor**（Ultra 等） | 例 `wangchui@hotmail.com`；周期以接口为准 | `POST https://api2.cursor.sh/aiserver.v1.DashboardService/GetCurrentPeriodUsage`，body `{}`，Header：`Authorization: Bearer <accessToken>`（`~/.config/cursor/auth.json`）+ `Content-Type: application/json` + `Connect-Protocol-Version: 1` | `displayMessage`；`planUsage.includedSpend` / `limit` / `remaining`；`billingCycleStart` / `billingCycleEnd`（**毫秒** epoch→Asia/Shanghai） | bare token 可能 401：先跑一次可刷新会话的 headless CLI（如 `agent about` / `agent status`）再 POST。**不要**为「只看额度」无意义开长会话烧 included usage。 |
+| **Grok CLI** | xAI OAuth（例 SuperGrok；`subscription_tier_display` 见 settings cache） | `GET https://cli-chat-proxy.grok.com/v1/billing?format=credits`，Header：`Authorization: Bearer <key>`（`~/.grok/auth.json` 里对应 issuer 条目的 `key`） | `config.creditUsagePercent`；`config.productUsage[]`（如 `GrokBuild`）；`config.currentPeriod` / `billingPeriodStart` / `billingPeriodEnd`（ISO→Asia/Shanghai）；`onDemandUsed` / `prepaidBalance` | 不带 `?format=credits` 的 `/v1/billing` 可能只回美元 monthlyLimit/used=0，**不能**当 credits 窗口。`grok usage <session>` 是本地 session token，不是账户额度。settings 里 `subscription_tier_display` 仅展示档，不是 used%。 |
+| **Kimi**（kimi-code） | `~/.kimi-code/config.toml` → `[providers.kimi].base_url`（默认 `https://api.kimi.com/coding/v1`）+ `api_key` | `GET {base_url}/usages`（注意复数 **usages**；`/usage` 404），Header：`Authorization: Bearer <api_key>` + `Accept: application/json` | 主看 `usages.limit_7d.used_ratio`、`usages.limit_5h.used_ratio` 与各自 `reset_time`（ISO→Asia/Shanghai）；兼容字段 `usage.{limit,used,remaining,resetTime}`；可选 `booster_wallet.status` / balance | 账户展示可用 `GET {base_url}/me` 的 `user_level_name`（例 Allegro），**勿**把手机号写进文档或对话回执。 |
+
+**报告口径（给 Human）**：一律换算到 **Asia/Shanghai**；写清 used%（或 spend/limit / used_ratio）、窗口起止、是否触顶、相关模型是否 available。勿把某次探测的瞬时数字钉进本文。
+
+**维护**：endpoint / 字段变更后以 Bot VM 新测为准，改本小节并在 §10 记一行；勿在 OSkhQuant1.3 / MyQuant 另起第二份。
+
 ## 4. 三仓配合顺序（上下游）
 
 ```
@@ -192,6 +207,7 @@ MyQuant  →  MyQuant-backtrader  →  OSkhQuant1.3
 
 ## 9. 检查清单（Grok Bot 派活 / 开刀前）
 
+- [ ] 查 Bot VM agent CLI 额度是否走 §3.1（勿另开平行 SSOT / 勿为探测额度无意义开长会话烧 included usage）？
 - [ ] 当前是否确属 Grok Bot 协作（否则不要套用本文）？
 - [ ] 是否误开了 Cloud Agent？有则取消。
 - [ ] 本刀 Owner 是否正确？
@@ -222,3 +238,4 @@ MyQuant  →  MyQuant-backtrader  →  OSkhQuant1.3
 | 2026-10-05 | Human：qoder 长期停用（与 Bot VM / Linux 相同）—4090bot 不派活、不升级依赖；明确 **4090 与 Bot VM 模型目录分开**（同名 CLI 不得套用 VM `-m`/catalog）；清单/**以实测为准**（新测 `--version`/`--list-models`/`about`/config 优先于表内旧行） |
 | 2026-10-05 | §6.1 新增 zcode 行（实测）：桌面 `D:\ZCode\ZCode.exe`（3.14.4）；PATH CLI `npm i -g zcode-app-cli@latest` → `zcode.cmd`，`--version` zcode-app-cli 3.14.4-32 / runtime 0.16.9（社区非官方 wrapper；官方独立 `-p` 仍为 zai-org/feedback#29 P1）；模型 `builtin:bigmodel` GLM-5.3 / -Flash / -FlashX（zai providers 禁用）；headless `zcode -p … --mode yolo` 冒烟回 `ZCODE_OK`（exit 0，`ZCode Built-in missing` 警告），`doctor --json` configuration.ok true；调用约定补 zcode 文档指针；以实测为准、4090≠VM catalog；未写任何 token |
 | 2026-10-05 | Human：PATH zcode 为社区非官方 `zcode-app-cli` → **暂时不用 zcode CLI 模式**；4090bot **不派** `zcode -p` / headless，直至官方 CLI；桌面安装可留作库存；§6.1 表行 / 调用约定 / §9 同步 |
+| 2026-10-06 | 新增 §3.1：Bot VM 上 Codex / Cursor / Grok / Kimi CLI 额度权威查询（路径与 endpoint；禁止写 token / api_key 值 / 手机号）；§9 清单加「查额度走 §3.1」 |

@@ -1,4 +1,6 @@
 """Book-local turtle orchestration using the shared A-share fill ledger."""
+
+from backtest.research.lot_rounding import rounded_partial_board_lots
 from backtest.research.sell_pending_observability import pending_callback, record_limit
 from types import SimpleNamespace
 
@@ -6,7 +8,13 @@ from backtest.research import strategy9_2_rules as rules
 from backtest.research import strategy12_engine as shared
 from backtest.research.csv_common import day_bar_and_prev_closes
 from backtest.research.exdiv_map import k_for
-from backtest.research.csv_ledger import execute_buy, _sell
+from backtest.research.csv_ledger import (
+    account_sell_quantity,
+    execute_buy,
+    fee_order_id,
+    release_fee_order,
+    _sell,
+)
 from backtest.research.csv_simulate_loop import run_pool_buys_day
 from backtest.research.ashare_session import defer_sell_open_or_fill
 from backtest.research.ashare_session import hit_limit_up
@@ -52,7 +60,8 @@ def plan_exit(st, code, px, day, closes, *, day_i, ds):
     seq, fraction = rules.scale_out(px, cost, mem.sell_band_seq)
     if fraction:
         mem.sell_band_seq = seq
-        wanted = int(round(shares * fraction, 8)) // 100 * 100
+        wanted = rounded_partial_board_lots(shares, fraction)
+        wanted = account_sell_quantity(st, code, shares, wanted)
         if wanted:
             return f"profit_take:band:{seq}", wanted
     return None
@@ -97,6 +106,8 @@ def fill_pending(st, code, row, day, *, day_i, ds, limits, bucket=None, at=None,
         record_limit(st, code, wanted, ds, bucket, px if limit_open is None else limit_open, limits,
                      path="v9_2_turtle", key=("turtle", code))
         return
+    order_key = ("strategy9_2-exit", code, reason)
+    order_id = fee_order_id(st, order_key)
     filled = 0
     for lot in shared.sell_lots(st, code, day_i, ds):
         amount = min(lot.sellable, wanted - filled)
@@ -105,11 +116,13 @@ def fill_pending(st, code, row, day, *, day_i, ds, limits, bucket=None, at=None,
         pos = next(p for p in st.positions[code] if p.lot_id == lot.lot_id)
         filled += _sell(st, code, pos, px, day, reason, wanted_shares=amount,
                         day_i=day_i, bucket_id=bucket,
+                        order_id=order_id,
                         **({"at": at, "hm": bucket, "price_rule": "minute_pending_next_open"}
                            if at is not None else {}))
     if filled >= wanted or not st.positions.get(code):
         pending.pop(code, None)
         st._sell_pending_history.pop(("turtle", code), None)
+        release_fee_order(st, order_key)
     else:
         pending[code] = reason, wanted - filled
 

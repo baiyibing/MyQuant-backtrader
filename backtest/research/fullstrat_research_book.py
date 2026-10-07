@@ -114,7 +114,9 @@ def simulate(
             return None if rows.empty else rows.iloc[-1]
 
         def buy(code, px, per, hm, reason, *, is_step=False):
-            tentative, _ = ledger._buy_size(per, px)
+            tentative, _ = ledger._buy_size(
+                per, px, top_up_min_lot=ledger.allows_min_lot_top_up(st)
+            )
 
             def commit(fill_px, at):
                 used = st.daily_quota_used

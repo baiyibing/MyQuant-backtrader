@@ -68,6 +68,7 @@ def test_version11_cash_clock_uses_selected_eod_domain_and_raw_open(
         fix_s11_exit_domain=fix_exit_domain,
         signal_bars_front={CODE: front} if fix_exit_domain else None,
         audit_sink=trace,
+        rule_profile="legacy",
     )
 
     exits = not fix_exit_domain or front_ex_close == 8.5

@@ -17,11 +17,16 @@ from scripts.research.audit_s12_price_domain import (
     context_for,
     fixture,
     money,
-    replay,
+    replay as _replay,
     transformed,
 )
 
 from tests import test_strategy12_engine as legacy
+
+
+def replay(*args, **kwargs):
+    kwargs.setdefault("rule_profile", "legacy")
+    return _replay(*args, **kwargs)
 
 
 def fills(st):
@@ -111,6 +116,7 @@ def test_existing_s12_rules_replayed_on_nonunit_domain(monkeypatch, name, args):
     def with_context(mins, raw, *positional, **kwargs):
         front = transformed(raw, .5)
         ctx = context_for(front, raw, mins)
+        kwargs.setdefault("rule_profile", "legacy")
         return original(mins, raw, *positional, fix_s12_price_domain=True,
                         s12_price_context=ctx, **kwargs)
 
@@ -347,7 +353,8 @@ def test_on_simulation_rejects_unmarked_holding_before_writing_equity(monkeypatc
     monkeypatch.setattr(minute, "init_sim_state", seeded)
     with pytest.raises(ValueError, match=f"raw mark code={missing_code}.*domain=none"):
         minute.simulate(mins, raw, {}, START, START, strategy="12",
-                        fix_s12_price_domain=True, s12_price_context=ctx)
+                        fix_s12_price_domain=True, s12_price_context=ctx,
+                        rule_profile="legacy")
     assert states[0].trades == [] and states[0].equity_curve == []
 
 
@@ -386,7 +393,7 @@ def test_on_run_routes_raw_daily_and_uses_only_strict_uncached_loader(monkeypatc
     for name in ("load_daily_ohlc", "load_minute_bars", "_load_minute_from_lake", "load_exdiv_ratios"):
         monkeypatch.setattr(minute, name, no_legacy_read)
     st = minute.run(START, days[-1].strftime("%Y%m%d"), strategy="12", total_cash=5_000_000,
-                    fix_s12_price_domain=True)
+                    fix_s12_price_domain=True, rule_profile="legacy")
     assert len(loads) == 1 and loads[0][0] == {CODE}
     assert st.stats["cache"] == "s12_price_domain_uncached"
     assert st.stats["mark_domain"] == "none"
@@ -404,7 +411,12 @@ def test_on_unsupported_cli_combinations_fail_before_loading(monkeypatch, kwargs
         raise AssertionError("unsupported ON configuration must fail before any data reads")
 
     monkeypatch.setattr(minute, "load_pool_day_map", no_load)
-    params = {"strategy": "12", "dividend_type": "none", "fix_s12_price_domain": True}
+    params = {
+        "strategy": "12",
+        "dividend_type": "none",
+        "fix_s12_price_domain": True,
+        "rule_profile": "legacy",
+    }
     params.update(kwargs)
     with pytest.raises((ValueError, SystemExit), match="(?i)(s12|version12|none|lake)"):
         minute.run(START, START, **params)
@@ -414,11 +426,12 @@ def test_on_library_requires_explicit_context_and_rejects_second_exdiv():
     mins, raw, front, _days = fixture()
     with pytest.raises(ValueError, match="context"):
         minute.simulate(mins, raw, {START: [CODE]}, START, "20251104", strategy="12",
-                        fix_s12_price_domain=True)
+                        fix_s12_price_domain=True, rule_profile="legacy")
     ctx = context_for(front, raw, mins)
     with pytest.raises(ValueError, match="exdiv"):
         minute.simulate(mins, raw, {START: [CODE]}, START, "20251104", strategy="12",
-                        fix_s12_price_domain=True, s12_price_context=ctx, exdiv={})
+                        fix_s12_price_domain=True, s12_price_context=ctx, exdiv={},
+                        rule_profile="legacy")
 
 
 def test_on_metadata_is_truthful_and_off_stats_gain_no_fix_keys():
