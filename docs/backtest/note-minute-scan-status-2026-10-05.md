@@ -2,6 +2,7 @@
 
 **STEP 3 DONE / RETIRED (2026-10-05, this PR):** `bar_scan_exit` / `minute_true_core_wire` / host round-trip probe line 已退役；probe bench 与 wire-only 测试删除。生产成交仍由 `csv_minute_backtest.simulate` / `HeldMinuteCursor` / `FillConfig` 负责；v7 / topk_app 保留独立 CLI，生产调度已归 main 的 version7 执行书（2026-10-06）。分类栅栏为 registry `minute_classification`（#384），核心与逐书覆盖已迁移（#385–#389）；pending-sell observability 保留。默认 fills / trades / equity 与 frozen fixtures 不变。下文旧扫线分析保留为历史。
 
+
 | 字段 | 值 |
 |---|---|
 | 日期 | 2026-10-05（Asia/Shanghai） |
@@ -41,6 +42,13 @@
 
 三个 `close` 必须分开：`minute_stop_trigger=close` 是共享分钟止损判定域；bar_scan `FillPrice="close"` 是 `same_bar` 触价止损改按本根收盘报价；CLI `--stop-fill close` 是日线日终成交，分钟 `simulate` 拒绝。它们不能互换，也不能用新配置名称遮住差异（证据：`csv_minute_backtest.py::simulate`；`bar_scan_exit.py::scan_bar_exit`；`csv_daily_backtest.py::simulate`；原 §3.2、§6.3）。
 
+
+| 授权 | **无。** 本文不批准改 `simulate`、不批准合并扫描、不批准改默认成交、不批准开新策略版本 |
+
+后续 agent 若要动代码，先读本文第 8 节。缺单独的人裁 GO 时，停在文档。
+
+---
+
 ## 1. 人要解决的问题
 
 人的原意是统一分钟线回测引擎，为此做了多日「新引擎」工作。外部说法把仓库描述成「33 本策略书、主 CSV 引擎 + 分钟 bar-scan host 双引擎可用」。人要求核对：
@@ -62,6 +70,9 @@
 |---|---|---|---|
 | 主 CSV 引擎 | `backtest/research/csv_minute_backtest.py` 的 `simulate` → `scan_held_day`；日线是 `csv_daily_backtest.py`；version7 shim / APP 适配器均到 main 的 version7 执行书 | 名单、现金、费用、整手、T+1、涨跌停、卖出扫描、净值 | 已注册书的研究回测 |
 | 分钟 bar-scan host | `backtest/research/minute_bar_scan_host.py` 的 `main` / `run_simulate` / `run_version7` / `run_topk_app_dropout` | 读 qlib 1 分钟或数据湖，从空仓把已注册书转去 main；version7 经 `simulate_v7` shim，APP 经 `simulate_native` | 不单独撮合。CLI 打印的 `equity` / `return_pct` 来自旧账本收盘权益 |
+
+| 主 CSV 引擎 | `backtest/research/csv_minute_backtest.py` 的 `simulate` → `scan_held_day`；日线是 `csv_daily_backtest.py`；version7 / topk_app 走 `simulate_v7` | 名单、现金、费用、整手、T+1、涨跌停、卖出扫描、净值 | 已注册书的研究回测 |
+| 分钟 bar-scan host | `backtest/research/minute_bar_scan_host.py` 的 `main` / `run_simulate` / `run_version7` / `run_topk_app_dropout` | 读 qlib 1 分钟或数据湖，从空仓把已注册书转去调上面的 `simulate` 或 `simulate_v7` | 不单独撮合。CLI 打印的 `equity` / `return_pct` 来自旧账本收盘权益 |
 | 扫线 | `backtest/research/bar_scan_exit.py` + `minute_true_core_wire.py` | 一根 K、一个持仓，成交或跳过；分类表把书挂到止损比例和书内卖点函数上 | 没有。`csv_minute_backtest.py` 不引用这两份模块 |
 
 Host 文件头是 “Read-only minute host”。`main()` 拒绝 `--cost` / `--peak` / `--held`。`--fill-bar` / `--fill-price` 标成 legacy，不传入 `simulate`。
@@ -113,6 +124,8 @@ Host 文件头是 “Read-only minute host”。`main()` 拒绝 `--cost` / `--pe
 | 说法 | 判定 | 证据 |
 |---|---|---|
 | 34 本书全部注册（截至 `a55e3c85`） | 成立 | `csv_strategy_books.py` 的 `register()`；`1324108` 新增 `version6_13`，#367 补齐其分钟 bar-scan 分类；`tests/test_off_byte_baseline.py` 覆盖当前注册表 |
+
+| 33 本书全部注册 | 成立 | `csv_strategy_books.py` 的 `register()`；`tests/test_off_byte_baseline.py` 覆盖当前注册表 |
 | 双引擎可用 | 说大了 | host CLI 调用 `simulate` / `simulate_v7`。生产成交只有主 CSV 引擎 |
 | off-byte 含字节阶段全绿、平台无关 | 说大了 | `386d1dc4` 的 `python-tests` 已成功（GitHub Actions run `37257115086`，约 3 分钟）。工作流以 `pytest -m "not production and not benchmark"` 会收集 `tests/test_off_byte_baseline.py`。字节阶段在 pandas 版本不一致时 `pytest.skip`，跳过前语义断言必须先过。祖先提交 `4ffb1fa` 说明仍写「待授权机录制」 |
 | version9 三书 = #361 形态 | 成立 | `git diff f708c43 HEAD -- strategy9_rules.py strategy9_1_rules.py strategy9_2_rules.py` 为空。`f708c43` 是 #361 |
@@ -130,6 +143,12 @@ Host 文件头是 “Read-only minute host”。`main()` 拒绝 `--cost` / `--pe
 ---
 
 ## 5. 分钟卖出扫描现在有几份（386d1dc4 历史；当前见勘误）
+
+第二轮对「把 timing/price 收成主引擎全局配置，退役扫线，version1 自动用上」：四席 **REJECT**。
+
+---
+
+## 5. 分钟卖出扫描现在有几份
 
 「三份」不是仓库里的锁定术语。和「收成同一份」相关的是下面这些，不要和扫线混在一个合并里。
 
@@ -156,6 +175,8 @@ Host 文件头是 “Read-only minute host”。`main()` 拒绝 `--cost` / `--pe
 ---
 
 ## 6. 收成同一份扫描：必要、可行、和全局配置的关系（历史评审）
+
+## 6. 收成同一份扫描：必要、可行、和全局配置的关系
 
 ### 6.1 有没有必要
 
@@ -208,6 +229,12 @@ numba、日线、version7、strategy9_2、strategy12 不要放进这次「同一
 
 
 
+四席对「并进全局配置后退役扫线」的一致意见是拒绝。扫线留下，身份是探针和分类栅栏。
+
+---
+
+## 7. 建议的下一步（未批准）
+
 供其他 agent 讨论。人还没有对下面任何一条说「批准实施」。
 
 1. **跑数继续只用主入口。** 日线 `csv_daily_backtest.py`，分钟 `csv_minute_backtest.py`。version7、topk_app 仍走各自入口。Host 的 `return_pct` 与 `scan_version1_round_trip` 的权益不作为研究结果。
@@ -240,3 +267,7 @@ numba、日线、version7、strategy9_2、strategy12 不要放进这次「同一
 - 历史代码（`386d1dc4`）：`csv_minute_backtest.py`（`scan_held_day_python`、`scan_held_day`、`_scan_held_day_numba_trail`）、`minute_cash_order.py`（当时持有 `HeldMinuteCursor`）、`bar_scan_exit.py`、`minute_true_core_wire.py`、`minute_bar_scan_host.py`
 - 基线：`tests/test_off_byte_baseline.py`，`scripts/research/generate_off_byte_baseline.py`
 - 当前共享核心合并点：PR #364 → `d007213e`。历史合并点（`386d1dc4`）：PR #363 → `386d1dc4`；扫线断点当时在祖先 `501de569`（缺 `FillPrice`）；version9 规则文件对齐 #361 的 `f708c43`
+
+- 代码：`csv_minute_backtest.py`（`scan_held_day_python`、`scan_held_day`、`_scan_held_day_numba_trail`）、`minute_cash_order.py`（`HeldMinuteCursor`）、`bar_scan_exit.py`、`minute_true_core_wire.py`、`minute_bar_scan_host.py`
+- 基线：`tests/test_off_byte_baseline.py`，`scripts/research/generate_off_byte_baseline.py`
+- 合并点：`386d1dc4`；扫线断点当时在祖先 `501de569`（缺 `FillPrice`）；version9 规则文件对齐 #361 的 `f708c43`
