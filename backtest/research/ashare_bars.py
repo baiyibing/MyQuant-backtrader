@@ -25,7 +25,7 @@ from oskh_data.symbol_format import to_canonical_symbol, to_partition_key
 MINUTE_SOURCES = ("lake", "qlib_1min")
 DAILY_SOURCES = ("lake", "qlib_day")
 DAILY_PRELOAD_DAYS = 40
-MINUTE_LAKE_END = "20260909"
+MINUTE_LAKE_END = "20260918"
 AM_OPEN, AM_CLOSE = 9 * 60 + 30, 11 * 60 + 30
 PM_OPEN, PM_CLOSE = 13 * 60, 15 * 60
 CACHE_ROOT = Path(__file__).resolve().parents[2] / "backtest_output" / "bar_cache"
