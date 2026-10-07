@@ -11,7 +11,7 @@ symbol-major 默认与 X02 chronological 调度；v7 / APP 保留各自 CLI 与�
 
 用法：
     python backtest/research/csv_minute_backtest.py --strategy version6 --start 20251023 --end 20251104
-    python backtest/research/csv_minute_backtest.py --strategy version8 --start 20251023 --end 20260909
+    python backtest/research/csv_minute_backtest.py --strategy version8 --start 20251023 --end 20260918
 """
 
 from __future__ import annotations

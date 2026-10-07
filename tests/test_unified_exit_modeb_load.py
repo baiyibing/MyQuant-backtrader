@@ -67,7 +67,7 @@ def test_coverage():
     assert b.minute_coverage({"600998.SH"}, {})["missing_codes"] == ["600998.SH"]
     report = b.minute_coverage(["600998.SH"] * 2, {"600998.SH": minute_frame()})
     assert report["requested_codes"] == report["covered_codes"] == 1
-    assert report["minute_lake_end"] == "20260909"
+    assert report["minute_lake_end"] == "20260918"
     assert b.minute_coverage({"600998.SH"}, {"600998.SH": minute_frame()}, end="20251023")["covered_codes"] == 0
 
 
