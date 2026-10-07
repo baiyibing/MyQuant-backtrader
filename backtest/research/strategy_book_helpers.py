@@ -94,7 +94,8 @@ def load_book_index_gate(book, start, end):
         module = import_module("backtest.research.strategy8_rules")
     elif book in ("version12", "version8_4", "version8_5", "version8_6"):
         module = import_module("backtest.research.strategy" + book[7:] + "_rules")
-    elif book == "version6_45":
+    elif book.startswith("version6_4"):
+        # 6.45+ 全部继承 6.45 的闸门 loader
         module = import_module("backtest.research.strategy6_45_rules")
     else:
         return None

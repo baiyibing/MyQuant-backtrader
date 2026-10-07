@@ -561,7 +561,10 @@ def _run_s8_price_adds_day(
 ) -> None:
     policy = s8_policy(st)
     book = policy["name"]
-    if sizing != "per_name" or book not in {"version6_1", "version6_2", "version6_3", "version6_4", "version6_5", "version6_6", "version6_7", "version6_8", "version6_9", "version6_10", "version6_11", "version6_12", "version6_13", "version6_14", "version6_15", "version6_16", "version6_17", "version6_18", "version6_19", "version6_20", "version6_21", "version6_22", "version6_23", "version6_24", "version6_25", "version6_26", "version6_27", "version6_28", "version6_29", "version6_30", "version6_31", "version6_32", "version6_33", "version6_34", "version6_35", "version6_36", "version6_37", "version6_38", "version6_39", "version6_40", "version6_41", "version6_42", "version6_43", "version6_44", "version6_45", "version8", "version8_3", "version8_4", "version8_5"}:
+    if sizing != "per_name" or not (
+        book.startswith("version6_")
+        or book in {"version8", "version8_3", "version8_4", "version8_5"}
+    ):
         return
     confirm = book == "version8_3"
     gate = policy["allow_new_name"]
@@ -593,9 +596,12 @@ def _run_s8_price_adds_day(
             _sched_due = False
             schedule = policy.get("add_schedule")
             if schedule and not confirm:
-                rise_now = float(px) / cost - 1.0
-                allowed_sched = sum(1 for t, _f in schedule if rise_now + 1e-12 >= t)
-                if allowed_sched > group.executed_steps:
+                # 6.49 语义：档位以组峰值触发（盘中触线即记档），14:55 价成交；
+                # 已止损的 lot 不回补档位，executed_steps 继续往前走；价格低于成本不补档。
+                peak_px = float(getattr(group.first_lot, "peak", 0) or 0)
+                trig_rise = (peak_px / cost - 1.0) if peak_px > cost else (float(px) / cost - 1.0)
+                allowed_sched = sum(1 for t, _f in schedule if trig_rise + 1e-12 >= t)
+                if allowed_sched > group.executed_steps and float(px) > cost:
                     _sched_frac = schedule[min(group.executed_steps, len(schedule) - 1)][1]
                     _sched_due = True
             # 双梯子书：分批腿(1)优先、基数腿(2)次之；单梯子书 use2 恒 False、行为不变。
