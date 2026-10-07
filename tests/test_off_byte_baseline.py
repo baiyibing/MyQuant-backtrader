@@ -9,6 +9,7 @@ Thus a skipped case has already passed canonical; semantic drift still fails.
 import json
 from hashlib import sha256
 
+import pandas as pd
 import pytest
 from backtest.research.csv_strategy_books import BOOKS
 from scripts.research.generate_off_byte_baseline import (
@@ -20,6 +21,10 @@ from scripts.research.generate_off_byte_baseline import (
     HISTORICAL_CASES,
     HISTORICAL_CANONICAL_SHA256,
     HISTORICAL_GOLDEN_SHA256,
+    INDUSTRY_DEFAULT_BOOK_NAMES,
+    INDUSTRY_DEFAULT_CASES,
+    INDUSTRY_DEFAULT_GOLDEN,
+    INDUSTRY_DEFAULT_RULE_REVISION,
     P03_CASES,
     P03_GOLDEN,
     P04_CASES,
@@ -58,9 +63,11 @@ from scripts.research.generate_off_byte_baseline import (
     assert_case_bytes,
     assert_case_canonical,
     byte_skip_reason,
+    canonical_hash,
     capture_case,
     expected_case,
     load_canonical_golden,
+    load_industry_default_golden,
     load_p03_golden,
     load_p04_golden,
     load_p05_golden,
@@ -78,8 +85,53 @@ from scripts.research.generate_off_byte_baseline import (
 )
 
 
+IMMUTABLE_INDUSTRY_GOLDEN_SHA256 = {
+    P03_GOLDEN: "974f3a6ddde64ee927d8ec84614d869e3e31333f65e41e1a0cdb635f4a0422b1",
+    P04_GOLDEN: "03096626f94a9437a37677d0a4c444edeef0e8cb9c2601a230f700527cbc0cfa",
+    P05_GOLDEN: "7f6ed4169db193b1992576ebbb7586e07ffc3b74bb060bbc20da8dc306ac552e",
+    P06_GOLDEN: "49b892672971454289eaaed2903034d1bf97ca301a6ae7ed50577285c0a90ed1",
+    P07_GOLDEN: "77639773bbdfdb8c49915b453c70f333d94c7f845ee953dbcab0f42727d2fcfd",
+    P08_GOLDEN: "f9d073802f5ee442d5ccc9ec7ebb6629576539fb428542091c65a0c14f07e9a2",
+    P09_GOLDEN: "67fabc7ce07a96c84b268e21da9b528b599c088d8f44e253c93ada7283fc527b",
+    P10_GOLDEN: "bb746f5cc8f6cf72f38914d866603dbeb8f297b15b33d6052d7e094bf78f62db",
+    P11_GOLDEN: "fb8ae86b183f0bf6cc8c8c40613876dc47305d480f7a4e75b8245ec4e74c07ee",
+}
+
+
 def test_off_byte_baseline_coverage_guard():
     assert_baseline_coverage()
+
+
+def test_industry_default_overlay_covers_full_registry_without_specialty_fixture(tmp_path):
+    assert pd.__version__ == "3.0.6"
+    assert sha256(GOLDEN.read_bytes()).hexdigest() == HISTORICAL_GOLDEN_SHA256
+    for path, digest in IMMUTABLE_INDUSTRY_GOLDEN_SHA256.items():
+        assert sha256(path.read_bytes()).hexdigest() == digest
+
+    golden = load_industry_default_golden()
+    assert INDUSTRY_DEFAULT_GOLDEN.exists()
+    assert golden["rule_revision"] == INDUSTRY_DEFAULT_RULE_REVISION
+    assert golden["captured_environment"]["pandas"] == "3.0.6"
+    assert INDUSTRY_DEFAULT_BOOK_NAMES == BOOK_NAMES
+    assert INDUSTRY_DEFAULT_CASES == CASES
+    assert set(golden["cases"]) == {
+        f"{book}/{engine}" for book, engine in INDUSTRY_DEFAULT_CASES
+    }
+
+    for book, engine in INDUSTRY_DEFAULT_CASES:
+        actual = capture_case(
+            book,
+            engine,
+            tmp_path / book / engine,
+            rule_profile="industry",
+        )
+        expected = golden["cases"][f"{book}/{engine}"]
+        canonical = {
+            name: canonical_hash(table)
+            for name, table in expected["canonical_csv"].items()
+        }
+        assert_case_canonical(book, actual, expected, canonical)
+        assert_case_bytes(actual, expected)
 
 
 def test_off_byte_baseline_covers_current_registry_and_standalone_v7():
