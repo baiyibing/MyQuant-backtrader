@@ -32,6 +32,9 @@ no hardcoded book/case totals beyond the frozen historical 19/39).
 Industry overlays are additive and profile-scoped. P03-P10 stay immutable;
 --record-industry-p11 uses only tests/fixtures/industry/v7_chronological.json
 and refuses overwrite. P11 is the active industry revision.
+--record-industry-default records the full CASES matrix with rule_profile
+"industry" and the historical frozen_inputs path (no specialty fixture), while
+leaving every historical and P03-P11 golden immutable.
 """
 
 from __future__ import annotations
@@ -217,6 +220,12 @@ TOPK_CODES = (CODE, "600001.SH", "600002.SH")
 CASES = tuple((book, engine) for book in BOOK_NAMES for engine in ("daily", "minute")) + (
     ("version7", "minute"),
 )
+INDUSTRY_DEFAULT_GOLDEN = (
+    ROOT / "tests/fixtures/off_byte_baseline_industry_default_20261006.json"
+)
+INDUSTRY_DEFAULT_RULE_REVISION = "industry-default-20261006"
+INDUSTRY_DEFAULT_BOOK_NAMES = BOOK_NAMES
+INDUSTRY_DEFAULT_CASES = CASES
 # Eight decimal places retain sub-cent fills/fees while removing float tails.
 MONEY_QUANTUM = Decimal("0.00000001")
 MONEY_FIELDS = frozenset({"price", "notional", "commission", "cash", "holdings", "equity"})
@@ -244,6 +253,12 @@ P08_CANONICAL_CONTRACT = P05_CANONICAL_CONTRACT
 P09_CANONICAL_CONTRACT = P05_CANONICAL_CONTRACT
 P10_CANONICAL_CONTRACT = P05_CANONICAL_CONTRACT
 P11_CANONICAL_CONTRACT = P05_CANONICAL_CONTRACT
+INDUSTRY_DEFAULT_CANONICAL_CONTRACT = {
+    **P11_CANONICAL_CONTRACT,
+    "empty_numeric": (
+        "preserve empty string when an EOD_MARK row predates a later-added fee column"
+    ),
+}
 
 
 # 突破书（6.11/6.12）专用合成路径：涨跌停约束内的 1.25x 突破 + 加仓 + 回落离场。
@@ -1236,6 +1251,8 @@ def _hash(blob: bytes) -> str:
 
 
 def _canonical_value(field: str, value):
+    if value == "":
+        return ""
     if field in MONEY_FIELDS | INTEGER_FIELDS | {"stamp_duty", "transfer_fee"}:
         number = Decimal(str(value))
         assert number.is_finite(), (field, value, "non-finite number")
@@ -1524,11 +1541,36 @@ def load_p11_golden() -> dict:
     return golden
 
 
+def load_industry_default_golden() -> dict:
+    """Full synthetic matrix for the industry CLI/library default."""
+    assert _hash(GOLDEN.read_bytes()) == HISTORICAL_GOLDEN_SHA256
+    assert _hash(CANONICAL_GOLDEN.read_bytes()) == HISTORICAL_CANONICAL_SHA256
+    golden = json.loads(INDUSTRY_DEFAULT_GOLDEN.read_text(encoding="utf-8"))
+    assert golden["rule_revision"] == INDUSTRY_DEFAULT_RULE_REVISION
+    assert golden["historical_raw_sha256"] == HISTORICAL_GOLDEN_SHA256
+    assert golden["historical_canonical_sha256"] == HISTORICAL_CANONICAL_SHA256
+    assert golden["contract"] == INDUSTRY_DEFAULT_CANONICAL_CONTRACT
+    assert golden["books"] == list(INDUSTRY_DEFAULT_BOOK_NAMES)
+    assert set(golden["cases"]) == {
+        f"{book}/{engine}" for book, engine in INDUSTRY_DEFAULT_CASES
+    }
+    return golden
+
+
 def expected_case(
     book: str, engine: str, *, rule_profile: str = "legacy"
 ) -> tuple[dict, dict, str]:
     """Return account/raw, canonical hashes, and the recorded pandas version."""
     key = f"{book}/{engine}"
+    if rule_profile == "industry-default":
+        golden = load_industry_default_golden()
+        if (book, engine) not in INDUSTRY_DEFAULT_CASES:
+            raise KeyError(f"no industry-default baseline case: {key}")
+        case = golden["cases"][key]
+        canonical = {
+            name: canonical_hash(table) for name, table in case["canonical_csv"].items()
+        }
+        return case, canonical, golden["captured_environment"]["pandas"]
     if rule_profile == "industry":
         if (book, engine) in P11_CASES:
             golden = load_p11_golden()
@@ -1723,6 +1765,8 @@ def assert_baseline_coverage():
     assert set(CASES) == {
         (book, engine) for book in BOOK_NAMES for engine in ("daily", "minute")
     } | {("version7", "minute")}
+    assert INDUSTRY_DEFAULT_BOOK_NAMES == BOOK_NAMES
+    assert INDUSTRY_DEFAULT_CASES == CASES
     assert set(P03_BOOK_NAMES) <= set(BOOK_NAMES) | {"version7"}
     assert set(P03_CASES) == {
         ("version6", "daily"),
@@ -1901,7 +1945,56 @@ def main():
         action="store_true",
         help="Record the two synthetic industry P11 v7 chronological cash-order cases",
     )
+    mode.add_argument(
+        "--record-industry-default",
+        action="store_true",
+        help="Record the full synthetic CASES matrix under the industry default profile",
+    )
     args = parser.parse_args()
+    if args.record_industry_default:
+        if INDUSTRY_DEFAULT_GOLDEN.exists():
+            parser.error("The industry-default overlay already exists; refusing to overwrite")
+        if pd.__version__ != "3.0.6":
+            parser.error(
+                "industry-default recording requires the authorized pandas 3.0.6 environment"
+            )
+        assert _hash(GOLDEN.read_bytes()) == HISTORICAL_GOLDEN_SHA256
+        assert _hash(CANONICAL_GOLDEN.read_bytes()) == HISTORICAL_CANONICAL_SHA256
+        with tempfile.TemporaryDirectory(prefix="industry-default-byte-baseline-") as temp:
+            root = Path(temp)
+            cases = {
+                f"{book}/{engine}": capture_case(
+                    book,
+                    engine,
+                    root / book / engine,
+                    rule_profile="industry",
+                )
+                for book, engine in INDUSTRY_DEFAULT_CASES
+            }
+        for case in cases.values():
+            assert_case_bytes(case, case)
+        payload = {
+            "rule_revision": INDUSTRY_DEFAULT_RULE_REVISION,
+            "historical_raw_sha256": HISTORICAL_GOLDEN_SHA256,
+            "historical_canonical_sha256": HISTORICAL_CANONICAL_SHA256,
+            "books": list(INDUSTRY_DEFAULT_BOOK_NAMES),
+            "captured_environment": {
+                "python": platform.python_version(),
+                "pandas": pd.__version__,
+                "platform": sys.platform,
+            },
+            "contract": INDUSTRY_DEFAULT_CANONICAL_CONTRACT,
+            "cases": cases,
+        }
+        INDUSTRY_DEFAULT_GOLDEN.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        print(
+            f"Wrote {INDUSTRY_DEFAULT_GOLDEN}: "
+            f"{len(cases)} industry-default cases"
+        )
+        return
     if args.record_industry_p11:
         if P11_GOLDEN.exists():
             parser.error("The industry P11 overlay already exists; refusing to overwrite")
@@ -2687,6 +2780,26 @@ def main():
                 skipped.add(reason)
             else:
                 assert_case_bytes(actual, expected)
+        with tempfile.TemporaryDirectory(prefix="industry-default-check-") as temp:
+            industry_default_cases = {
+                (book, engine): capture_case(
+                    book,
+                    engine,
+                    Path(temp) / book / engine,
+                    rule_profile="industry",
+                )
+                for book, engine in INDUSTRY_DEFAULT_CASES
+            }
+        for (book, engine), actual in industry_default_cases.items():
+            expected, canonical_expected, recorded_pandas = expected_case(
+                book, engine, rule_profile="industry-default"
+            )
+            assert_case_canonical(book, actual, expected, canonical_expected)
+            reason = byte_skip_reason(recorded_pandas)
+            if reason:
+                skipped.add(reason)
+            else:
+                assert_case_bytes(actual, expected)
         with tempfile.TemporaryDirectory(prefix="industry-p11-check-") as temp:
             industry_cases = {
                 (book, engine): capture_case(
@@ -2708,10 +2821,15 @@ def main():
         for reason in sorted(skipped):
             print(f"SKIP: {reason}")
         if not skipped:
-            print(f"PASS: production CSV + library hashes (raw bytes) for {len(CASES)} cases")
+            print(
+                "PASS: production CSV + library hashes (raw bytes) for "
+                f"{len(CASES)} legacy, {len(INDUSTRY_DEFAULT_CASES)} "
+                f"industry-default, and {len(P11_CASES)} industry P11 cases"
+            )
         print(
-            f"PASS: {len(CASES)} canonical CSV/account cases across current registry "
-            f"and overlays plus {len(P11_CASES)} industry P11 cases; pandas={pd.__version__}"
+            f"PASS: {len(CASES)} legacy and {len(INDUSTRY_DEFAULT_CASES)} "
+            "industry-default canonical CSV/account cases across the current registry "
+            f"plus {len(P11_CASES)} industry P11 cases; pandas={pd.__version__}"
         )
         return
     for case in cases.values():

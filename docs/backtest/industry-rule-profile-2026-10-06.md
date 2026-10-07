@@ -138,6 +138,14 @@ the data-free `tests/fixtures/industry/stamp_duty.json` cases. It covers shared
 daily/minute, native and standalone v7, a multi-lot S8 group exit, and sells
 on both sides of the 2023-08-28 rate boundary.
 
+CI additionally records the full synthetic `CASES` matrix, using the historical
+`frozen_inputs` path without a specialty fixture, in
+`tests/fixtures/off_byte_baseline_industry_default_20261006.json` at revision
+`industry-default-20261006`. It pins explicit `rule_profile="industry"` as the
+equivalent of the omitted CLI/library default. The historical and P03-P11
+goldens remain legacy/specialty-pinned and immutable. This synthetic CI overlay
+is not the host 4090 archive and makes no claim that the archive is a CI golden.
+
 P05 keeps those files immutable and adds
 `tests/fixtures/off_byte_baseline_industry_p05_transfer_fee_20261006.json`
 from `tests/fixtures/industry/transfer_fee.json`. Its synthetic trades span
