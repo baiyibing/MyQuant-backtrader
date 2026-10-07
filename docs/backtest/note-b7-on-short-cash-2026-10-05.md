@@ -2,7 +2,11 @@
 
 2026-10-05 23:08 Human GO：H-B7-01..07 推荐选项全部获准并实施。
 
+<<<<<<< HEAD
 共享 hooks 可设 `on_short_cash: "raise" | "skip"`；非法值初始化抛 ValueError。省略时 configure_s8 按规则实际绑定 S8 的 per_name 书（version6_*、version8、version8_N≠8_1）默认 raise，其余 skip。bare SimState 未解析时按当时 policy 推导。运行配置不进入 dataclass fields、book_state 或默认输出。
+=======
+共享 hooks 可设 `on_short_cash: "raise" | "skip"`；非法值初始化抛 ValueError。省略时 configure_s8 实际绑定的 per_name 50 本（version6_1–6_44、version8、version8_2–8_6）默认 raise，其余 skip。bare SimState 未解析时按当时 policy 推导。运行配置不进入 dataclass fields、book_state 或默认输出。
+>>>>>>> github/feat/b7-on-short-cash
 
 分支 tip 已 rebase 到 #394 V6F v21 的 master `d18df2f`；_configure_s8 已包含 version6_42–6_44，本次仅同步文档计数与范围。
 
