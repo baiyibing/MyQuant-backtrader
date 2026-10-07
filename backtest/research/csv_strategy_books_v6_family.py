@@ -52,6 +52,8 @@ from backtest.research import (
     strategy6_45_rules,
     strategy6_46_rules,
     strategy6_47_rules,
+    strategy6_48_rules,
+    strategy6_49_rules,
 )
 
 
@@ -1777,8 +1779,12 @@ def _apply_version6_46(
         st.stats["parking_symbol"] = strategy6_46_rules.PARKING_SYMBOL
         st.stats["parking_frac"] = strategy6_46_rules.PARKING_FRAC
     _allow = _bh.allow_new_name_from_gate(index_block_new, INDEX_GATE_ON=_gate_on)
-    base = _apply_version6_45(stop_pct=resolved, take_profit=_tp, record_params=_rec,
-                                index_block_new=index_block_new)
+    base = _apply_version6_45(
+        stop_pct=resolved,
+        take_profit=take_profit if take_profit is not None else _tp,
+        record_params=record_params if record_params is not None else _rec,
+        index_block_new=index_block_new,
+    )
     base["name"] = "version6_46"
     base["parking_symbol"] = strategy6_46_rules.PARKING_SYMBOL
     base["parking_frac"] = strategy6_46_rules.PARKING_FRAC
@@ -1804,3 +1810,63 @@ def _run_kwargs_version6_47(args) -> dict:
     if stop is not None and not 0 < float(stop) < 1:
         raise SystemExit(f'--stop-pct must be in (0, 1), got {stop}')
     return {'strategy': 'version6_47', 'stop_pct': stop}
+
+
+def _apply_version6_48(
+    *,
+    stop_pct=None,
+    take_profit=None,
+    record_params=None,
+    index_block_new=None,
+    **_,
+) -> dict:
+    resolved = strategy6_48_rules.STOP_PCT if stop_pct is None else float(stop_pct)
+    base = _apply_version6_47(
+        stop_pct=resolved,
+        take_profit=take_profit,
+        record_params=record_params,
+        index_block_new=index_block_new,
+    )
+    base["name"] = "version6_48"
+    base["stop_pct"] = resolved
+    return base
+
+
+def _run_kwargs_version6_48(args) -> dict:
+    stop = getattr(args, "stop_pct", None)
+    if stop is not None and not 0 < float(stop) < 1:
+        raise SystemExit(f"--stop-pct must be in (0, 1), got {stop}")
+    return {"strategy": "version6_48", "stop_pct": stop}
+
+
+def _apply_version6_49(
+    *,
+    stop_pct=None,
+    take_profit=None,
+    record_params=None,
+    index_block_new=None,
+    **_,
+) -> dict:
+    resolved = strategy6_49_rules.STOP_PCT if stop_pct is None else float(stop_pct)
+    def _tp(px, cost, peak, n_days=1):
+        return strategy6_49_rules.take_profit_reason(px, cost, peak, n_days)
+    def _rec(st):
+        strategy6_49_rules.record_strategy6_49_params(st, stop_pct=resolved)
+        st.stats["index_gate_on"] = bool(strategy6_49_rules.INDEX_GATE_ON)
+    base = _apply_version6_46(
+        stop_pct=resolved,
+        take_profit=take_profit if take_profit is not None else _tp,
+        record_params=record_params if record_params is not None else _rec,
+        index_block_new=index_block_new,
+    )
+    base["name"] = "version6_49"
+    # 6.49 独有：加仓档以组峰值触发（盘中触线即记档、14:55 成交）。其他书保持 px/成本触发。
+    base["add_schedule_trigger"] = "peak"
+    return base
+
+
+def _run_kwargs_version6_49(args) -> dict:
+    stop = getattr(args, "stop_pct", None)
+    if stop is not None and not 0 < float(stop) < 1:
+        raise SystemExit(f"--stop-pct must be in (0, 1), got {stop}")
+    return {"strategy": "version6_49", "stop_pct": stop}

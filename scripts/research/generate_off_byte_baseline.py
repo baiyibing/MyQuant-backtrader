@@ -25,7 +25,7 @@ version9_3 uses a scoped additive overlay; --record-v93 writes only its
 daily/minute cases; a new rule revision may replace that overlay.
 See docs/backtest/s8-independent-positions-2026-09-26.md and
 docs/backtest/v61-off-byte-overlay-2026-10-02.md.
-The 6.2-6.47 family (46 books, V6F overlay through v22) uses a scoped additive
+The 6.2-6.49 family (48 books, V6F overlay through v23) uses a scoped additive
 overlay; --record-v6f writes its daily/minute cases and refuses overwrite.
 Coverage for --check is asserted via assert_baseline_coverage() (registry-derived;
 no hardcoded book/case totals beyond the frozen historical 19/39).
@@ -122,9 +122,10 @@ V6F_BOOK_NAMES = (
     "version6_39", "version6_40", "version6_41",
     "version6_42", "version6_43", "version6_44",
     "version6_45", "version6_46", "version6_47",
+    "version6_48", "version6_49",
 )
-V6F_GOLDEN = ROOT / "tests/fixtures/off_byte_baseline_v6_family_v22_20261006.json"
-V6F_RULE_REVISION = 'strategy6-family-v22-6_2-to-6_47-20261006'
+V6F_GOLDEN = ROOT / "tests/fixtures/off_byte_baseline_v6_family_v23_20261007.json"
+V6F_RULE_REVISION = 'strategy6-family-v23-6_2-to-6_49-20261007'
 V6F_CASES = tuple((book, engine) for book in V6F_BOOK_NAMES for engine in ("daily", "minute"))
 P03_GOLDEN = ROOT / "tests/fixtures/off_byte_baseline_industry_p03_order_commission_20261006.json"
 P03_RULE_REVISION = "industry-p03-order-commission-20261006"
@@ -221,9 +222,9 @@ CASES = tuple((book, engine) for book in BOOK_NAMES for engine in ("daily", "min
     ("version7", "minute"),
 )
 INDUSTRY_DEFAULT_GOLDEN = (
-    ROOT / "tests/fixtures/off_byte_baseline_industry_default_20261006.json"
+    ROOT / "tests/fixtures/off_byte_baseline_industry_default_20261007.json"
 )
-INDUSTRY_DEFAULT_RULE_REVISION = "industry-default-20261006"
+INDUSTRY_DEFAULT_RULE_REVISION = "industry-default-20261007"
 INDUSTRY_DEFAULT_BOOK_NAMES = BOOK_NAMES
 INDUSTRY_DEFAULT_CASES = CASES
 # Eight decimal places retain sub-cent fills/fees while removing float tails.
@@ -1374,7 +1375,7 @@ def load_v93_golden() -> dict:
 
 
 def load_v6f_golden() -> dict:
-    """Additive overlay for the 6.2-6.47 family; historical files stay immutable."""
+    """Additive overlay for the 6.2-6.49 family; historical files stay immutable."""
     assert _hash(GOLDEN.read_bytes()) == HISTORICAL_GOLDEN_SHA256
     assert _hash(CANONICAL_GOLDEN.read_bytes()) == HISTORICAL_CANONICAL_SHA256
     golden = json.loads(V6F_GOLDEN.read_text(encoding="utf-8"))
@@ -1890,7 +1891,7 @@ def main():
     )
     mode.add_argument(
         "--record-v6f", action="store_true",
-        help="write the additive 6.2-6.47 family overlay (authorized pandas 3.0.6 only)",
+        help="write the additive 6.2-6.49 family overlay (authorized pandas 3.0.6 only)",
     )
     mode.add_argument(
         "--record-v61-v2", action="store_true",

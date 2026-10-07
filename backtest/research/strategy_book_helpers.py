@@ -1,5 +1,6 @@
 """Pure book helpers; policy constants remain in each strategy book."""
 from __future__ import annotations
+import re
 from datetime import date
 from typing import Callable, Mapping, Optional
 from backtest.research.market_layer import as_date
@@ -87,6 +88,15 @@ def fixed_target_reason(px, cost, target):
         return "profit_take:target"
     return None
 
+_VERSION6_MINOR = re.compile(r"version6_(\d+)\Z")
+
+
+def _version6_suffix(book):
+    """Minor number of a version6_N book, or None for anything else."""
+    match = _VERSION6_MINOR.match(book or "")
+    return int(match.group(1)) if match else None
+
+
 def load_book_index_gate(book, start, end):
     from importlib import import_module
 
@@ -94,8 +104,8 @@ def load_book_index_gate(book, start, end):
         module = import_module("backtest.research.strategy8_rules")
     elif book in ("version12", "version8_4", "version8_5", "version8_6"):
         module = import_module("backtest.research.strategy" + book[7:] + "_rules")
-    elif book.startswith("version6_4"):
-        # 6.45+ 全部继承 6.45 的闸门 loader
+    elif (_suffix := _version6_suffix(book)) is not None and _suffix >= 45:
+        # 6.45 起的书继承 6.45 的闸门 loader；6.4 / 6.40-6.44 没有指数闸。
         module = import_module("backtest.research.strategy6_45_rules")
     else:
         return None
