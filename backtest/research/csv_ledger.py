@@ -365,14 +365,28 @@ def s8_policy(st):
     return st.book_state.get("s8_independent")
 
 
+def _identity_tagged(bucket, pos) -> bool:
+    return any(item is pos for item in bucket)
+
+
+def _tag_identity(bucket, pos) -> None:
+    if not _identity_tagged(bucket, pos):
+        bucket.append(pos)
+
+
 def is_parking_lot(st, pos) -> bool:
-    """True for cash-sleeve lots that must not take strategy exits."""
-    return id(pos) in st.book_state.get("parking_lot_ids", ())
+    """True for cash-sleeve lots that must not take strategy exits.
+
+    Tags the Position object, not ``id(pos)``. CPython reuses freed ids, so a
+    later strategy lot can be skipped by index_cut / skim if only the integer
+    address is stored.
+    """
+    return _identity_tagged(st.book_state.get("parking_lot_ids", ()), pos)
 
 
 def is_principal_lot(st, pos) -> bool:
     """True for skim-locked 600036 lots that stay in NAV as 本金."""
-    return id(pos) in st.book_state.get("parking_principal_ids", ())
+    return _identity_tagged(st.book_state.get("parking_principal_ids", ()), pos)
 
 
 def parking_lots(st, symbol: str) -> list:
@@ -393,12 +407,12 @@ def unpark_parking_lots(st, symbol: str) -> list:
 
 
 def register_parking_lot(st, pos) -> None:
-    st.book_state.setdefault("parking_lot_ids", set()).add(id(pos))
+    _tag_identity(st.book_state.setdefault("parking_lot_ids", []), pos)
 
 
 def register_principal_lot(st, pos) -> None:
     register_parking_lot(st, pos)
-    st.book_state.setdefault("parking_principal_ids", set()).add(id(pos))
+    _tag_identity(st.book_state.setdefault("parking_principal_ids", []), pos)
 
 
 def note_cont_open(group: IndependentGroup, lot_id: int, rise: float, *, from_rise: float) -> None:
@@ -420,12 +434,23 @@ def arm_cont_stop_rebuy(st, group: IndependentGroup | None, lot_id: int) -> bool
     return True
 
 
+def held_codes(st) -> list[str]:
+    """Lexicographic live codes. Cash-competing loops must not use insert order."""
+    return sorted(st.positions)
+
+
+def held_position_items(st) -> list[tuple[str, list]]:
+    """``(code, lots)`` in ``held_codes`` order. Lots stay in ledger list order."""
+    return [(code, list(st.positions[code])) for code in held_codes(st)]
+
+
 def s8_open_groups(st, code: str):
-    """Visit each live signal group once in the code's current lot order."""
+    """Visit each live signal group once, sorted by position_id."""
     policy = s8_policy(st)
     if policy is None:
         return
     seen = set()
+    rows = []
     for pos in st.positions.get(code, []):
         if is_parking_lot(st, pos):
             continue
@@ -435,7 +460,9 @@ def s8_open_groups(st, code: str):
         seen.add(position_id)
         group = policy["groups"][position_id]
         if not group.closed:
-            yield position_id, group
+            rows.append((position_id, group))
+    rows.sort(key=lambda item: item[0])
+    yield from rows
 
 
 def position_identity(pos) -> dict:
@@ -706,14 +733,14 @@ def apply_exdiv_economics(st: SimState, code: str, ds: str) -> None:
         if added:
             pos.shares += added
             date = entitlement.list_date
-            locks = account.bonus_locks.setdefault(id(pos), {})
+            locks = account.locks_for(pos)
             locks[date] = locks.get(date, 0) + added
     st.cash += account.settle(ds)  # pay_date == ex_date is allowed
 
 
 def _locked_bonus(account: ExDivEconomics, pos: Position, ds: str) -> int:
     # Same strict date ordering as t1_sellable; a later list_date stays locked.
-    return sum(q for acquired, q in account.bonus_locks.get(id(pos), {}).items() if ds <= acquired)
+    return sum(q for acquired, q in account.peek_locks(pos).items() if ds <= acquired)
 
 
 def resolve_limit_prices(
@@ -1449,9 +1476,9 @@ def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str, *
     # S1: every booked sell decrements shares, including the default path.
     pos.shares -= shares
     if st.exdiv_economics is not None:
-        locks = st.exdiv_economics.bonus_locks.pop(id(pos), {})
+        locks = st.exdiv_economics.pop_locks(pos)
         if pos.shares and (locked := {d: q for d, q in locks.items() if ds <= d}):
-            st.exdiv_economics.bonus_locks[id(pos)] = locked
+            st.exdiv_economics.locks_for(pos).update(locked)
     if pos.shares:
         return shares
     lots = st.positions.get(code) or []

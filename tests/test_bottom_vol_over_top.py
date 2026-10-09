@@ -25,7 +25,7 @@ from scripts.data.export_strategy9_pool import (
 
 def _signal_frame(
     *,
-    n: int = 280,
+    n: int = 360,
     top_ago: int = 80,
     bottom_ago: int = 10,
     top_high: float = 20.0,

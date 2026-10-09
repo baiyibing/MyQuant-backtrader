@@ -1,8 +1,8 @@
 """底量超顶量（策略 9）买点：只看 ``date<=T`` 的 OHLCV，禁止未来函数。
 
 通达信式 ``SUM(VOL, 底距今-3, 底距今+3)`` 在底靠近 T 时会读到 T+1..T+3。
-本模块把量能窗裁到 ``[0, T]``。顶/底取最近 N 根（含 T）的 HHV(H)/LLV(L)，
-并列取最近一根（BARSLAST）。买点要求底价 <= 顶价 × 0.60，底量严格大于
+本模块把量能窗裁到 ``[0, T]``。顶/底取最近 250 根（含 T）的 HHV(H)/LLV(L)，
+并列取最近一根（BARSLAST）。决策日须已有 300 根日线。买点要求底价 <= 顶价 × 0.60，底量严格大于
 顶量 × r_min（仅 1.2 / 1.5 / 2，默认 2），顶须早于底严格超过 top_lead 根交易 bar
 （仅 10 / 20 / 30 / 40，默认 40），沿用同一裁剪量能窗。不写 ``stock_pool/``，不 import qlib。
 """
@@ -17,7 +17,7 @@ import pandas as pd
 
 from backtest.research.market_layer import board_limit_pct, is_st_name
 
-LOOKBACK = 120
+LOOKBACK = 250
 VOL_HALF = 3
 MIN_TOP_LEAD = 40
 TOP_LEADS = (10, 20, 30, 40)
@@ -26,7 +26,7 @@ MAX_BOTTOM_AGE = 15
 R_MIN = 2.0
 VOL_RATIOS = (1.2, 1.5, 2.0)
 CLOSE_CAP = 1.10
-MIN_LISTED_BARS = 250
+MIN_LISTED_BARS = 300
 TURNOVER_MIN = 0.10
 TINY_TOP_TURNOVER = 0.02
 FORWARD_HORIZONS = (1, 5, 10, 20, 30)

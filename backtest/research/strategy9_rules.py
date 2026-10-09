@@ -57,11 +57,11 @@ def take_profit_reason(
     return None
 
 
-def record_strategy9_params(st, *, max_hold: bool = False) -> None:
+def record_strategy9_params(st, *, max_hold: bool = False, range_stop: bool = True) -> None:
     st.stats["sell_book"] = BOOK_TAG
     st.stats["stop_pct"] = None
-    st.stats["stop_mode"] = "range_amp_20_trailing"
-    st.stats["range_bars"] = RANGE_BARS
+    st.stats["stop_mode"] = "range_amp_20_trailing" if range_stop else "off"
+    st.stats["range_bars"] = RANGE_BARS if range_stop else None
     st.stats["profit_target"] = TAKE_PROFIT_PCT
     st.stats["max_hold"] = MAX_HOLD if max_hold else None
 

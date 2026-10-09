@@ -40,6 +40,7 @@ from backtest.research.strategy9_rules import (  # noqa: E402
 )
 
 from backtest.research.book_capabilities import allows_price_add  # noqa: E402
+from backtest.research.bar_store import build_day_spans  # noqa: E402
 
 from backtest.research.csv_ledger import (  # noqa: E402
     CHASE_HM,
@@ -57,6 +58,7 @@ from backtest.research.csv_ledger import (  # noqa: E402
     reject_short_cash_override,
     execute_buy as execute_buy,
     exit_positions,
+    held_codes,
     held_fill_key,
     finish_pending_chase,
     queue_limit_up_chase as queue_limit_up_chase,
@@ -533,6 +535,9 @@ def _independent_numba_prefix(
     hm_hi: int,
 ) -> int:
     """Write prefix peak and return first Python bar, or -1 if none in this slice."""
+    flag = (os.environ.get("OSKH_INDEPENDENT_NUMBA") or "1").strip().lower()
+    if flag in {"0", "false", "off", "no"}:
+        return 0
     ladder = _ladder_numba_params(st)
     if (
         ladder is None
@@ -602,6 +607,79 @@ def _independent_numba_prefix(
 
 def _side_pending_host(st, pos) -> bool:
     return bool(getattr(st, "held_fill_states", {}).get(held_fill_key(pos), {}).get("side_pending"))
+
+
+def _maybe_dump_independent_prefix(
+    *,
+    code,
+    ds,
+    label,
+    pos,
+    cursor,
+    python_from,
+    hm_lo,
+    hm_hi,
+    peak0,
+    peak_hm0,
+    n_days,
+    can_sell,
+    take_profit,
+):
+    want = (os.environ.get("OSKH_DUMP_CODE") or "").strip()
+    dayw = (os.environ.get("OSKH_DUMP_DAY") or "").strip().replace("-", "")
+    path = (os.environ.get("OSKH_DUMP_PATH") or "").strip()
+    ds_key = str(ds).replace("-", "")[:8]
+    if not path or not want or want != code or (dayw and dayw != ds_key):
+        return
+    peak = float(peak0)
+    peak_hm = int(peak_hm0)
+    cost = float(cursor.cost)
+    allowed = bool(can_sell) and int(n_days) >= 1
+    first_tp = None
+    for idx, at_hm in enumerate(cursor.hm):
+        cur_hm = int(at_hm)
+        if cur_hm < hm_lo or cur_hm > hm_hi:
+            continue
+        hi = float(cursor.h[idx])
+        px = float(cursor.c[idx])
+        if allowed and hi > peak:
+            peak = hi
+            peak_hm = cur_hm
+        if not allowed or take_profit is None:
+            continue
+        gap = cur_hm - peak_hm
+        blocked = peak_hm >= 0 and peak_gap_blocks(gap, cursor.peak_gap_min)
+        if blocked:
+            continue
+        reason = take_profit(px, cost, peak, n_days)
+        if reason:
+            first_tp = {
+                "idx": int(idx),
+                "hm": cur_hm,
+                "close": px,
+                "peak": peak,
+                "reason": str(reason),
+            }
+            break
+    rec = {
+        "ds": ds_key,
+        "code": code,
+        "label": label,
+        "python_from": int(python_from),
+        "n_days": int(n_days),
+        "can_sell": bool(can_sell),
+        "cost": cost,
+        "peak0": float(peak0),
+        "peak_hm0": int(peak_hm0),
+        "peak_after": float(pos.peak),
+        "peak_hm_after": int(pos.peak_hm),
+        "hm_lo": int(hm_lo),
+        "hm_hi": int(hm_hi),
+        "first_tp": first_tp,
+        "n_bars": int(len(cursor.c)),
+    }
+    with open(path, "a", encoding="utf-8", newline="\n") as fh:
+        fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
 
 
 def scan_held_day_python(
@@ -822,19 +900,6 @@ def _day_arrays(df: pd.DataFrame, ymd: str) -> Optional[pd.DataFrame]:
     return sl if not sl.empty else None
 
 
-def build_day_spans(df: pd.DataFrame) -> dict[str, tuple[int, int]]:
-    """按 ymd 切 iloc 区间。要求时间升序；乱序则返回空，调用方回退 _day_arrays。"""
-    if df is None or df.empty or "ymd" not in df.columns:
-        return {}
-    ymd = df["ymd"].to_numpy()
-    if len(ymd) >= 2 and np.any(ymd[1:] < ymd[:-1]):
-        return {}
-    change = np.flatnonzero(ymd[1:] != ymd[:-1]) + 1
-    starts = np.concatenate(([0], change))
-    ends = np.concatenate((change, [len(ymd)]))
-    return {str(ymd[s]): (int(s), int(e)) for s, e in zip(starts, ends)}
-
-
 def _slice_day(
     df: pd.DataFrame, spans: dict[str, tuple[int, int]], ymd: str
 ) -> Optional[pd.DataFrame]:
@@ -924,6 +989,7 @@ def simulate(
     fix_s11_exit_domain: bool = False,
     version9_sell=None,
     max_hold: bool = False,
+    range_stop: bool = True,
     hold_days: int = 20,
     fix_s81_band_precision: bool = False,
     signal_bars_front: dict[str, pd.DataFrame] | None = None,
@@ -941,6 +1007,7 @@ def simulate(
     min_lot_top_up: bool | None = None,
     rule_profile: str | RuleProfile = "industry",
     sim_profile: SimPhaseClock | None = None,
+    day_spans: dict | None = None,
 ) -> SimState:
     """Opt-in cap uses caller-attested completed minutes; daily volume is unused.
 
@@ -1055,6 +1122,7 @@ def simulate(
             apply_fn=apply_csv_strategy,
             **({"version9_sell": version9_sell} if version9_sell is not None else {}),
             **({"max_hold": True} if max_hold else {}),
+            **({"range_stop": False} if not range_stop else {}),
             hold_days=hold_days,
             **({"fix_s81_band_precision": True} if fix_s81_band_precision else {}),
             scores_by_day=scores_by_day,
@@ -1171,7 +1239,8 @@ def simulate(
                     raise ValueError(f"{hooks['name']} requires minute volume for {code}; use the lake volume path")
         hold_modes = {}
         clock.begin("day_spans")
-        day_spans = {code: build_day_spans(df) for code, df in minute_bars.items()}
+        if day_spans is None:
+            day_spans = {code: build_day_spans(df) for code, df in minute_bars.items()}
         clock.end("day_spans")
 
     clock.begin("day_loop")
@@ -1274,7 +1343,7 @@ def simulate(
             clock.begin("held_scan")
             bind_opening = hooks.get("bind_opening_held")
             if callable(bind_opening):
-                bind_opening(ds, list(st.positions.keys()))
+                bind_opening(ds, held_codes(st))
 
             # Price-add books need the post-14:55 group scan to observe their
             # new weighted cost. Other OFF books retain full-day exits first.
@@ -1282,7 +1351,7 @@ def simulate(
             post_group_scans = []
             confirm_peaks = {}
             s8_confirm = hooks.get("name") == "version8_3" and hooks.get("sizing") == "per_name"
-            for code in list(st.positions):
+            for code in held_codes(st):
                 clock.count("held_codes")
                 mdf = minute_bars.get(code)
                 ddf = daily_bars.get(code)
@@ -1379,9 +1448,17 @@ def simulate(
                         }
                         quiet = 0
                         evaluated = 0
+                        peak0, peak_hm0 = float(pos.peak), int(pos.peak_hm)
+                        hm_hi = BUY_HM if split_group_scan else 24 * 60
                         python_from = _independent_numba_prefix(
                             st, pos, cursor, day_i=i, side_hooks=side_hooks,
-                            hm_lo=0, hm_hi=BUY_HM if split_group_scan else 24 * 60,
+                            hm_lo=0, hm_hi=hm_hi,
+                        )
+                        _maybe_dump_independent_prefix(
+                            code=code, ds=ds, label="morning", pos=pos, cursor=cursor,
+                            python_from=python_from, hm_lo=0, hm_hi=hm_hi,
+                            peak0=peak0, peak_hm0=peak_hm0, n_days=n_days,
+                            can_sell=cursor.can_sell, take_profit=take_profit,
                         )
                         for bar_idx, at_hm in enumerate(hm):
                             if python_from < 0 or not position_is_open(st, pos):
@@ -1430,7 +1507,7 @@ def simulate(
                         if python_from < 0:
                             clock.count("held_numba_slices")
                         if quiet:
-                            clock.count("held_quiet_bars", quiet)
+                            clock.count("held_numba_prefix_bars", quiet)
                         if evaluated:
                             clock.count("held_eval_bars", evaluated)
                         if split_group_scan:
@@ -1645,6 +1722,7 @@ def simulate(
                     names=names,
                     allow_add=allow_add,
                     buy_gate=buy_gate,
+                    st_on=hooks.get("st_on"),
                     buy_quote_for=_pool_quote_for,
                     volume_bucket_for=pool_volume if st.volume_cap is not None else None,
                     volume_at=AM_OPEN - 1 if minute_open else None,
@@ -1699,9 +1777,16 @@ def simulate(
             for code, pos, cursor, limits in post_group_scans:
                 quiet = 0
                 evaluated = 0
+                peak0, peak_hm0 = float(pos.peak), int(pos.peak_hm)
                 python_from = _independent_numba_prefix(
                     st, pos, cursor, day_i=i, side_hooks=None,
                     hm_lo=BUY_HM + 1, hm_hi=24 * 60,
+                )
+                _maybe_dump_independent_prefix(
+                    code=code, ds=ds, label="post_group", pos=pos, cursor=cursor,
+                    python_from=python_from, hm_lo=BUY_HM + 1, hm_hi=24 * 60,
+                    peak0=peak0, peak_hm0=peak_hm0, n_days=i - pos.entry_idx,
+                    can_sell=cursor.can_sell, take_profit=take_profit,
                 )
                 for bar_idx, at_hm in enumerate(cursor.hm):
                     if python_from < 0 or not position_is_open(st, pos):
@@ -1723,7 +1808,7 @@ def simulate(
                 if python_from < 0:
                     clock.count("held_numba_slices")
                 if quiet:
-                    clock.count("held_quiet_bars", quiet)
+                    clock.count("held_numba_prefix_bars", quiet)
                 if evaluated:
                     clock.count("held_eval_bars", evaluated)
             clock.end("post_group")
@@ -1860,6 +1945,7 @@ def run(
     fix_s11_exit_domain: bool = False,
     version9_sell=None,
     max_hold: bool = False,
+    range_stop: bool = True,
     hold_days: int = 20,
     fix_s81_band_precision: bool = False,
     minute_stop_trigger: str = "close",
@@ -2002,6 +2088,7 @@ def run(
     signal_bars_front = None
     signal_sources = None
     s12_price_context = None
+    daily_cache_status: dict = {}
     if fix_s12_price_domain:
         from backtest.research.signal_price_domain import load_s12_price_context
 
@@ -2030,6 +2117,7 @@ def run(
             source=daily_source,
             qlib_root=qlib_day_root,
             workers=workers,
+            status=daily_cache_status,
             **({"dividend_type": "front"} if daily_domain_front else {}),
         )
         if book == "version12" and (missing := all_codes - daily.keys()):
@@ -2146,6 +2234,7 @@ def run(
         **volume_options,
         **({"version9_sell": version9_sell} if version9_sell is not None else {}),
         **({"max_hold": True} if max_hold else {}),
+        **({"range_stop": False} if not range_stop else {}),
         hold_days=hold_days,
         **({"fix_s81_band_precision": True} if fix_s81_band_precision else {}),
         take_profit=take_profit,
@@ -2181,6 +2270,7 @@ def run(
         **({"min_lot_top_up": min_lot_top_up} if min_lot_top_up is not None else {}),
         rule_profile=profile,
         sim_profile=sim_clock,
+        day_spans=cache_status.get("day_spans"),
     )
     if skipped.get("exdiv_skipped_no_factor"):
         st.stats["exdiv_skipped_no_factor"] = int(skipped["exdiv_skipped_no_factor"])
@@ -2224,6 +2314,7 @@ def run(
     st.stats["t_index_gate_s"] = t_index_gate
     st.stats["t_sim_s"] = time.perf_counter() - t_sim
     st.stats["cache"] = cache_status.get("cache", "")
+    st.stats["daily_cache"] = daily_cache_status.get("cache", "")
     if sim_clock is not None:
         attach_host_profile(
             st,

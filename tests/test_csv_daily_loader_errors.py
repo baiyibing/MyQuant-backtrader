@@ -95,8 +95,86 @@ def test_load_daily_bars_corrupt_symbol_fails_closed(tmp_path):
     path.write_bytes(b"not a parquet")
 
     with pytest.raises(loader.DailyBarReadError) as caught:
-        loader.load_daily_bars(
-            {VALID_CODE, OTHER_CODE}, START, END, workers=1, daily_root=tmp_path
-        )
+        loader.load_daily_bars({VALID_CODE, OTHER_CODE}, START, END, workers=1, daily_root=tmp_path)
 
     _assert_read_error(caught.value, OTHER_CODE, path)
+
+
+def test_load_daily_bars_default_skips_file_cache(tmp_path):
+    from backtest.research.bar_store import mem_clear
+
+    mem_clear()
+    expected = _write_valid_partition(tmp_path / "dividend_type=none", VALID_CODE)
+    cache = tmp_path / "cache"
+
+    result = loader.load_daily_bars(
+        {VALID_CODE}, START, END, workers=1, daily_root=tmp_path, cache_dir=cache
+    )
+
+    assert set(result) == {VALID_CODE}
+    assert list(cache.glob("daily_*.parquet")) == []
+    got = result[VALID_CODE].copy()
+    got.index = got.index.as_unit("ns")
+    pd.testing.assert_frame_equal(got, expected)
+
+
+def test_load_daily_bars_file_cache_then_mem(tmp_path, monkeypatch):
+    from backtest.research.bar_store import mem_clear
+
+    mem_clear()
+    monkeypatch.delenv("OSKH_BAR_MEM", raising=False)
+    _write_valid_partition(tmp_path / "dividend_type=none", VALID_CODE)
+    cache = tmp_path / "cache"
+    lake_calls = []
+    original = loader._load_daily_from_lake
+
+    def spy(*args, **kwargs):
+        lake_calls.append(args[0])
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(loader, "_load_daily_from_lake", spy)
+    status = {}
+    first = loader.load_daily_bars(
+        {VALID_CODE},
+        START,
+        END,
+        workers=1,
+        daily_root=tmp_path,
+        use_cache=True,
+        cache_dir=cache,
+        status=status,
+    )
+    assert status["cache"] == "miss"
+    assert len(lake_calls) == 1
+    assert list(cache.glob("daily_*.parquet"))
+
+    status = {}
+    second = loader.load_daily_bars(
+        {VALID_CODE},
+        START,
+        END,
+        workers=1,
+        daily_root=tmp_path,
+        use_cache=True,
+        cache_dir=cache,
+        status=status,
+    )
+    assert status["cache"] == "mem"
+    assert len(lake_calls) == 1
+    pd.testing.assert_frame_equal(first[VALID_CODE], second[VALID_CODE])
+
+    mem_clear()
+    status = {}
+    third = loader.load_daily_bars(
+        {VALID_CODE},
+        START,
+        END,
+        workers=1,
+        daily_root=tmp_path,
+        use_cache=True,
+        cache_dir=cache,
+        status=status,
+    )
+    assert status["cache"] == "hit"
+    assert len(lake_calls) == 1
+    pd.testing.assert_frame_equal(first[VALID_CODE], third[VALID_CODE])

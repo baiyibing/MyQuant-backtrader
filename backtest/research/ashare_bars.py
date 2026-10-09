@@ -20,6 +20,14 @@ import json
 from pathlib import Path
 from typing import Iterable, Mapping, Optional
 
+from backtest.research.bar_store import (
+    mem_drop,
+    mem_get,
+    mem_key,
+    mem_put,
+    resolve_day_spans,
+    write_span_sidecar,
+)
 from oskh_data.symbol_format import to_canonical_symbol, to_partition_key
 
 MINUTE_SOURCES = ("lake", "qlib_1min")
@@ -99,11 +107,17 @@ def load_daily_ohlc(
     dividend_type: str = "none",
     daily_root: Path | str | None = None,
     workers: int = 16,
+    status: Optional[dict] = None,
+    cache_dir: Path | str | None = None,
+    use_cache: bool = True,
+    rebuild_cache: bool = False,
 ) -> dict[str, object]:
     """Daily OHLC frames for the book engines (DatetimeIndex)."""
     kind = _check_source(source, DAILY_SOURCES, "daily")
     codes = set(_canonical_symbols(symbols))
     if not codes:
+        if status is not None:
+            status["cache"] = "empty"
         return {}
     start_ymd, end_ymd = _as_ymd(start), _as_ymd(end)
     if kind == "qlib_day":
@@ -111,6 +125,8 @@ def load_daily_ohlc(
             raise ValueError("qlib_day source requires qlib_root")
         from backtest.research.qlib_bin_daily import load_qlib_bin_daily_bars
 
+        if status is not None:
+            status["cache"] = "qlib_day"
         return load_qlib_bin_daily_bars(codes, start_ymd, end_ymd, qlib_root=qlib_root, workers=workers)
     from backtest.research.csv_daily_loader import load_daily_bars
 
@@ -121,6 +137,10 @@ def load_daily_ohlc(
         workers=workers,
         dividend_type=dividend_type,
         daily_root=daily_root,
+        use_cache=use_cache,
+        rebuild_cache=rebuild_cache,
+        cache_dir=Path(cache_dir) if cache_dir is not None else None,
+        status=status,
     )
 
 
@@ -587,6 +607,7 @@ def write_minute_cache(bars: dict, start: str, end: str, cache_dir: Optional[Pat
         newline="\n",
     )
     print(f"wrote minute cache {path} symbols={len(bars)} rows={n_rows}", flush=True)
+    write_span_sidecar(path, identity, bars)
     return path
 
 
@@ -680,6 +701,18 @@ def load_minute_ohlc(
     lake_root = Path(identity["resolver_identity"])
     start, end = identity["start"], identity["end"]
     path = minute_cache_path(start, end, cache_dir, identity=identity)
+    store_key = mem_key("minute", identity)
+    if rebuild_cache:
+        mem_drop(store_key)
+    else:
+        remembered = mem_get(store_key, want)
+        if remembered is not None:
+            if status is not None:
+                status["cache"] = "mem"
+                status["day_spans"] = resolve_day_spans(
+                    remembered, identity=identity, cache_path=path, mem_id=store_key
+                )
+            return remembered
     cached: dict = {}
     had_file = path.is_file()
     reusable = had_file and not rebuild_cache and _cache_identity_matches(path, identity)
@@ -698,6 +731,9 @@ def load_minute_ohlc(
                 old.update(cached)
                 merged = old
             write_minute_cache(merged, start, end, cache_dir, identity=identity)
+    got = {code: cached[code] for code in want if code in cached}
+    mem_put(store_key, got)
+    spans = resolve_day_spans(got, identity=identity, cache_path=path, mem_id=store_key)
     if status is not None:
         if rebuild_cache:
             status["cache"] = "rebuild"
@@ -709,7 +745,8 @@ def load_minute_ohlc(
             status["cache"] = "miss:identity"
         else:
             status["cache"] = "miss"
-    return {code: cached[code] for code in want if code in cached}
+        status["day_spans"] = spans
+    return got
 
 
 def book_frames_from_compact(minute: Mapping[str, object]) -> dict:

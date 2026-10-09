@@ -877,6 +877,11 @@ def test_summarize_engine_tag_and_timings():
     assert "参数: 止损 2%" in text
     assert "T+5+ 70%" in text
     assert "缓存 hit" in text
+    st.stats["daily_cache"] = "mem"
+    text = artifacts.summarize(
+        st, 21_000_000.0, "20251103", "20251103", engine="csv_minute_v6"
+    )
+    assert "日线缓存 mem" in text
     assert "模拟 1.3s" in text or "模拟 1.2s" in text
 
 

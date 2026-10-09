@@ -32,7 +32,7 @@
 
 人裁：别再跳。跳来跳去总有漂移。
 
-宿主早晨与 `post_group` 已不再调用 `skip_quiet_independent_bar`。`minute_cash_order` 里仍留着跳过辅助和 `drive_independent_exit_bars`，只给单元测试用；`OSKH_SKIP_QUIET_INDEPENDENT` 默认仍是开，但宿主读不到它。
+宿主早晨与 `post_group` 已不再调用跳过。`skip_quiet_independent_bar` / `drive_independent_exit_bars` 已从 `minute_cash_order.py` 删除。关核用 `OSKH_INDEPENDENT_NUMBA=0`（默认开）。
 
 ### 2.2 回调怎么进 Numba
 
@@ -59,7 +59,7 @@ Numba `nopython` 核调不了任意 Python 回调（闭包、`Optional[str]`、l
 - `post_group`：`hm_lo=BUY_HM+1`，`side_hooks=None`（下午本来就不跑减仓/回撤/加仓止损）。
 - `python_from >= 0`：从该 bar 起走原来的 `advance_independent_exit` + 侧钩。
 - `python_from < 0`：只计 `held_numba_slices`，不再逐根 Python。
-- 前缀 bar 计入 `held_quiet_bars`（含义变成「核已扫过、Python 未评」，不再是启发式跳过）。
+- 前缀 bar 计入 `held_numba_prefix_bars`（核已扫过、Python 未评）。
 
 `write_profile_sim` 补了 `mkdir`。首次 Numba 全窗跑完后写 profile 时目录还不存在，当时只保住了主机打印数字。
 
@@ -75,25 +75,52 @@ Numba `nopython` 核调不了任意 Python 回调（闭包、`Optional[str]`、l
 | 启发式跳过 hash0（`skipon_h0`，已弃） | 260.8s | 211.1s | 140.4s | 11.5s | 712,359 | 9428 | +65.11% |
 | Numba 前缀 hash0（本次） | 145.9s | 100.2s | 46.4s | 0.4s | 548,468 | 9497 | +65.25% |
 
-本次 Numba 额外计数：`held_numba_slices=33299`，`held_quiet_bars=281354`，`held_codes=20113`。期末净值 44,616,440.23 / 27,000,000。叶子占比上 held_scan 从约 76% 降到约 43%；下一刀时间在日切片（约 24s）和名单买入（约 22s）。
+本次 Numba 额外计数：`held_numba_slices=33299`，前缀 bar 281354（当时计数名仍是 `held_quiet_bars`），`held_codes=20113`。期末净值 44,616,440.23 / 27,000,000。叶子占比上 held_scan 从约 76% 降到约 43%；下一刀时间在日切片（约 24s）和名单买入（约 22s）。
 
 相对上次不跳 hash0：持仓扫描约 5.5×，模拟约 3.3×，墙钟约 2.6×。规则未改。
 
-单元测试：`tests/test_independent_numba_ladder.py` + `tests/test_independent_held_skip.py`，19 passed。对照包括 T+0 不写峰值、300017 止损、000422 回撤、减仓动作，以及 Numba 前缀对完整 Python 的成交/峰值/闩锁对齐。
+单元测试：`tests/test_independent_numba_ladder.py`。对照包括 T+0 不写峰值、300017 / 002291 止损、000422 / 002556 / 301265 回撤、减仓，以及 Numba 前缀对完整 Python 的成交/峰值/闩锁对齐。`OSKH_INDEPENDENT_NUMBA=0` 强制整段 Python。
 
 适用范围：`st.stats` 带 `ladder_band_width` / `ladder_give_base` / `ladder_give_step` 的独立持仓书（6.x 梯子族）。旧 trail 核仍只服务无回调 lot。非独立持仓、`sell_gate`、自定义成交配置不走这条核。
 
 ---
 
+### 2.4 宿主确定性（本刀）
+
+同一进程两次开核仍 DIFF：成交键集合不同，`held_eval_bars` 也对不上。根因不是梯子核。
+
+1. **现金竞争跟插入序。** `st.positions` 是先买先到；全卖再买会把该码插到队尾。同日加仓 / 指数减半 / 抽离谁先拿到现金，就会分叉。现已收口：`held_codes(st)` 按代码排序；`s8_open_groups` 按 `position_id` 排序；指数买回按 `position_id`；抽离可卖 lot 按 `(code, entry_idx, lot_id)`。只锁遍历，不改 6.53 卖点。
+2. **停泊标签用了会回收的 `id(pos)`。** `register_parking_lot` 把整数地址放进 set。lot 卖掉被回收后，CPython 会把同一地址给新的策略 `Position`。`index_cut` / 抽离把误标的策略仓当停泊跳过，组内 `held` 变了，减半股数就漂。现改为按对象身份登记（列表 + `is`）。`Position` 是 dataclass，不能放进 set。
+
+短窗 20251023–20260206、`PYTHONHASHSEED=0`、分钟缓存命中、同一进程连开三次核：净值 25,983,138.16，成交 5572，`index_cut` 716000 股 / 518 次，成交键与权益曲线三次对齐。排序单独上时计数已经对齐，但 20260203 的 `index_cut` lot 仍三分叉；换掉 `id(pos)` 后才 MATCH。
+
+全窗 20251023–20260909 同一配方、`python,numba`：净值 44,594,778.35（+65.17%），成交 9662，成交键与权益对齐。产物 `backtest_output/csv_minute_v6_53_20251023_20260909_industry_hostdet_h0/`。关核墙钟 334.4s / 模拟 282.5s / held_scan 216.2s；开核墙钟 150.9s / 模拟 101.6s / held_scan 45.8s。不是锁定比分（宿主锁会改历史成交；6.53 仍 PENDING）。
+
+对照：`tests/test_independent_held_order.py`。关核：`OSKH_INDEPENDENT_NUMBA=0`。转储：`OSKH_DUMP_CODE` / `OSKH_DUMP_DAY` / `OSKH_DUMP_PATH`。
+
+---
+
+### 2.5 引擎装载栈（本刀）
+
+宿主锁住之后，全窗开核大头变成装载：日切片 26.3s、分钟缓存解码 26.8s、日线湖 13.2s。这刀不改 6.53 卖点，只给日线/分钟引擎共用：
+
+1. **`bonus_locks` 改对象身份。** 与停泊标签同一类 CPython 地址回收。`ExDivEconomics.peek_locks` / `locks_for` / `pop_locks` 用 `is`，不再 `id(pos)`。6.53 默认仍 `exdiv_economics=None`。
+2. **分钟 `day_spans` sidecar。** 写在 `{minute_cache_stem}.spans.json`，指纹是 `[n, first_ymd, last_ymd]`。`run()` 把 `status["day_spans"]` 交给 `simulate()`，命中后日切片接近 0。
+3. **日线文件缓存。** `daily_{div}_{start}_{end}_{hash12}.parquet`，身份与分钟同款浅湖戳。`load_daily_bars` 默认 `use_cache=False`（测试湖不写仓库 cache）；`load_daily_ohlc` 打开。
+4. **进程内 `bar_store`。** `OSKH_BAR_MEM` 默认开。同一进程第二次 `run()` 分钟/日线/spans 不再解码。帧只读，文件缓存仍是跨进程真源。未做 mmap/Redis。
+
+关：`OSKH_BAR_MEM=0`。对照：`tests/test_bar_store.py`、`tests/test_independent_held_order.py`。
+
+短窗 20251023–20260206 同进程两次开核：成交键/净值 MATCH（25,983,138.16 / 5572）。第一次分钟文件命中 18.2s、日线文件命中 4.5s；第二次 `cache=mem` / `daily_cache=mem`，分钟 0.1s、日线 0.3s。日切片两次都是 0.0s（sidecar + `run()` 预注入）。墙钟 77.1s → 53.5s，省下的是解码，不是 held_scan。
+
+---
+
 ## 4. 遗留问题
 
-1. **全窗宿主成交未锁。** 本次 +65.25% / 9497 笔，对不上上次不跳 hash0 的 +65.72% / 9493。跌停顺延计数也差一截（1203 vs 4151）。不跳路径自己也不稳，不能把任一 NAV 写成 golden。原因未拆清：字典顺序、缓存、并行读湖、还是核与 Python 谓词在极限价上的差。
-2. **首次 Numba 跑没有 `trades.csv` / `daily_equity.csv`。** 只有主机打印和补写的 `summary.txt`。要比成交必须再跑一遍落盘。
-3. **跳过代码还在。** `skip_quiet_independent_bar` / `_independent_bar_needed` / `drive_independent_exit_bars` 仍在 `minute_cash_order.py`，宿主不用。删掉要另批，并改/删 `tests/test_independent_held_skip.py`。
-4. **真回调仍走 Python。** `sell_gate`、`exit_plan`、`force_sell_hm`、`close_clear`、pending、自定义 `fill_config`、`session_volume` 失败则 `python_from=0`。不要对它们 `objmode`。
-5. **6.53 仍在 `PENDING_BOOK_NAMES`。** 行业默认 off-byte 未授权。本刀不录 golden。
-6. **`held_quiet_bars` 语义变了。** 旧义是启发式跳过；现义是 Numba 前缀未评 Python 的 bar。比历史 skip 跑的这个计数没有意义。
-7. **HELP_LOCK / CLI 未动。** 分钟 `main()` 字节冻结。埋点仍走 `run()` + 默认 `OSKH_PROFILE_SIM`。
-8. **held_scan 之后。** 日切片和名单买入变成大头。共享分钟文件缓存还在；日线湖仍按码扫。未做 mmap/Redis。
+1. **开核=关核已到全窗。** 短窗与全窗 `python,numba` 成交键、权益、净值都对齐。全窗 +65.17% / 44,594,778.35 / 9662。关核多评 bar，`defer_sell_limit_down` 计数仍不同（全窗 4382 vs 1433），不进成交。不要用这次净值覆盖 `_opt` / `_prof`。
+2. **真回调仍走 Python。** `sell_gate`、`exit_plan`、`force_sell_hm`、`close_clear`、pending、自定义 `fill_config`、`session_volume` 失败则 `python_from=0`。不要对它们 `objmode`。
+3. **6.53 仍在 `PENDING_BOOK_NAMES`。** 行业默认 off-byte 未授权。本刀不录 golden。排序和停泊标签会改历史成交，预期如此。
+4. **HELP_LOCK / CLI 未动。** 分钟 `main()` 字节冻结。埋点仍走 `run()` + 默认 `OSKH_PROFILE_SIM`。
+5. **名单买入仍是模拟大头。** 装载复用之后，`pool_buy`（全窗约 21.6s）还在 Python。不把账本编进 Numba。未做 mmap/Redis。
 
 未授权：开新策略版本、改 6.53 卖点、把跳过重新接回宿主、把账本编进 Numba、用本次 NAV 覆盖 `_opt` / `_prof` 比分。

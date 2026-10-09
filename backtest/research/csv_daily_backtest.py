@@ -82,6 +82,7 @@ from backtest.research.csv_ledger import (  # noqa: E402
     configure_s8,
     execute_buy as execute_buy,
     exit_positions,
+    held_codes,
     finish_pending_chase,
     hit_limit_down,
     hit_limit_up,
@@ -268,6 +269,7 @@ def simulate(
     fix_s11_exit_domain: bool = False,
     version9_sell=None,
     max_hold: bool = False,
+    range_stop: bool = True,
     hold_days: int = 20,
     fix_s81_band_precision: bool = False,
     signal_bars_front: dict[str, pd.DataFrame] | None = None,
@@ -321,6 +323,7 @@ def simulate(
         apply_fn=apply_csv_strategy,
         **({"version9_sell": version9_sell} if version9_sell is not None else {}),
         **({"max_hold": True} if max_hold else {}),
+        **({"range_stop": False} if not range_stop else {}),
         hold_days=hold_days,
         **({"fix_s81_band_precision": True} if fix_s81_band_precision else {}),
         scores_by_day=scores_by_day,
@@ -456,9 +459,9 @@ def simulate(
             clock.begin("held_scan")
             bind_opening = hooks.get("bind_opening_held")
             if callable(bind_opening):
-                bind_opening(ds, list(st.positions.keys()))
+                bind_opening(ds, held_codes(st))
 
-            for code in list(st.positions):
+            for code in held_codes(st):
                 clock.count("held_codes")
                 if code not in bars:
                     continue
@@ -689,6 +692,7 @@ def simulate(
                 forbid_all_trade_at_limit=forbid_all_trade_at_limit,
                 allow_new_name=hooks.get("allow_new_name"),
                 add_gate=hooks.get("add_gate"),
+                st_on=hooks.get("st_on"),
                 name_lot_budget=hooks.get("name_lot_budget"),
                 index_blocks_add=hooks.get("index_blocks_add", True),
                 sold_today={t["code"] for t in st.trades[day_trade_start:] if t["side"] == "SELL"}
@@ -720,7 +724,7 @@ def simulate(
             }
             clock.begin("post_add")
             if added:
-                for code in list(st.positions):
+                for code in held_codes(st):
                     got = day_bar_and_prev_closes(bars[code], day) if code in bars else None
                     if got is None:
                         continue
@@ -857,6 +861,7 @@ def run(
     fix_s11_exit_domain: bool = False,
     version9_sell=None,
     max_hold: bool = False,
+    range_stop: bool = True,
     hold_days: int = 20,
     fix_s81_band_precision: bool = False,
     min_lot_top_up: bool | None = None,
@@ -944,6 +949,7 @@ def run(
         flush=True,
     )
     t_daily = time.perf_counter()
+    daily_cache_status: dict = {}
     bars = load_daily_ohlc(
         all_codes,
         load_start,
@@ -953,6 +959,7 @@ def run(
         workers=workers,
         dividend_type=dividend_type,
         daily_root=daily_root,
+        status=daily_cache_status,
     )
     if normalize_csv_strategy(strategy) == "version12" and (missing := all_codes - bars.keys()):
         raise ValueError(f"missing front daily bars for strategy12: {sorted(missing)}")
@@ -1017,6 +1024,7 @@ def run(
         strategy=strategy,
         **({"version9_sell": version9_sell} if version9_sell is not None else {}),
         **({"max_hold": True} if max_hold else {}),
+        **({"range_stop": False} if not range_stop else {}),
         hold_days=hold_days,
         **({"fix_s81_band_precision": True} if fix_s81_band_precision else {}),
         take_profit=take_profit,
@@ -1049,6 +1057,7 @@ def run(
     st.stats["t_exdiv_s"] = t_exdiv
     st.stats["t_index_gate_s"] = t_index_gate
     st.stats["t_sim_s"] = time.perf_counter() - t_sim
+    st.stats["daily_cache"] = daily_cache_status.get("cache", "")
     if sim_clock is not None:
         attach_host_profile(
             st,

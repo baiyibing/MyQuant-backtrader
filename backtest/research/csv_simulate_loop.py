@@ -33,6 +33,8 @@ from backtest.research.csv_ledger import (
     configure_s8,
     execute_buy,
     execute_parking_buy,
+    held_codes,
+    held_position_items,
     is_parking_lot,
     parking_lots,
     Position,
@@ -324,6 +326,7 @@ def run_pool_buys_day(
     buy_hm: int | None = None,
     strict_limit_up: bool = False,
     order_budget: float | None = None,
+    st_on=None,
 ) -> None:
     """Pool buys for ``ds``; ``buy_quote_for`` supplies buy price + prev closes.
 
@@ -344,8 +347,7 @@ def run_pool_buys_day(
     independent = policy is not None
     raw = list(pool_days.get(ds, []))
     if callable(planned_for_day):
-        held_codes = list(st.positions.keys())
-        raw = list(planned_for_day(ds, held_codes))
+        raw = list(planned_for_day(ds, held_codes(st)))
     if sold_today:
         st.stats["skip_sold_today"] += sum(code in sold_today for code in raw)
         raw = [code for code in raw if code not in sold_today]
@@ -372,6 +374,10 @@ def run_pool_buys_day(
         if code in st.positions and not allow_add:
             st.stats["skip_held"] += 1
             record_rejection(st, code, day, "skip_held")
+            continue
+        if callable(st_on) and st_on(code, ds):
+            st.stats["skip_st"] = int(st.stats.get("skip_st", 0)) + 1
+            record_rejection(st, code, day, "skip_st")
             continue
         if callable(allow_new_name) and not allow_new_name(day):
             if not (not independent and code in st.positions and not index_blocks_add):
@@ -530,7 +536,7 @@ def run_step_adds_day(
         return
     if not callable(step_add) or sizing != "per_name":
         return
-    for code in list(st.positions.keys()):
+    for code in held_codes(st):
         lots = st.positions.get(code) or []
         if not lots:
             continue
@@ -669,7 +675,7 @@ def _run_s8_price_adds_day(
     if policy.get("index_blocks_s8_add") and callable(gate) and not gate(day):
         return
     step_cap = policy.get("step_cap")
-    for code in list(st.positions):
+    for code in held_codes(st):
         quoted = buy_quote_for(code)
         if quoted is None:
             continue
@@ -972,7 +978,7 @@ def run_eod_exits(
     if not callable(eod_exit):
         return
     live = set()
-    for code, lots in st.positions.items():
+    for code, lots in held_position_items(st):
         if signal_bars_front is None:
             got = day_bar_and_prev_closes(bars[code], day) if code in bars else None
         else:
@@ -1197,7 +1203,7 @@ def _execute_index_cuts(
     frac = float(hooks.get("index_cut_frac") or 0.50)
     min_keep = int(hooks.get("index_cut_min_keep") or 100)
     memory = _index_cut_state(st)["memory"]
-    for code in list(st.positions):
+    for code in held_codes(st):
         for position_id, _group in list(s8_open_groups(st, code)):
             lots = _index_group_lots(st, code, position_id)
             held = sum(int(pos.shares) for pos in lots)
@@ -1261,7 +1267,7 @@ def _execute_index_rebuys(
     if policy is None:
         return
     memory = _index_cut_state(st)["memory"]
-    for position_id, shares in list(memory.items()):
+    for position_id, shares in sorted(memory.items()):
         want = int(shares)
         if want <= 0:
             memory.pop(position_id, None)
@@ -1367,7 +1373,7 @@ def working_equity(st: SimState, day, mark_bars: dict) -> float:
     eq = float(st.cash)
     if st.exdiv_economics is not None:
         eq += st.exdiv_economics.receivable_total
-    for code, lots in st.positions.items():
+    for code, lots in held_position_items(st):
         mark = market_close_mark(mark_bars.get(code), day) if mark_bars else None
         for pos in lots:
             last = float(pos.cost) if mark is None else mark
@@ -1460,7 +1466,7 @@ def _sell_skim_chunk(
             filled = _try_lot(symbol, lot, "parking:profit_skim")
             if filled:
                 return filled
-    for code, lots in list(st.positions.items()):
+    for code, lots in held_position_items(st):
         for lot in list(lots):
             if is_parking_lot(st, lot):
                 continue
@@ -1484,7 +1490,7 @@ def _sellable_strategy_skim_lots(
 ) -> list[tuple[str, object, float, float]]:
     """Strategy lots that can sell at EOD close. Parking excluded."""
     rows: list[tuple[str, object, float, float]] = []
-    for code, lots in list(st.positions.items()):
+    for code, lots in held_position_items(st):
         for lot in list(lots):
             if is_parking_lot(st, lot):
                 continue
@@ -1514,6 +1520,13 @@ def _sellable_strategy_skim_lots(
             if mtm <= 0:
                 continue
             rows.append((code, lot, px, mtm))
+    rows.sort(
+        key=lambda row: (
+            row[0],
+            int(getattr(row[1], "entry_idx", 0) or 0),
+            int(getattr(row[1], "lot_id", 0) or 0),
+        )
+    )
     return rows
 
 
@@ -1570,7 +1583,14 @@ def _sell_skim_pro_rata(
         sold += filled
     if sold:
         return sold
-    leftovers.sort(key=lambda row: row[3], reverse=True)
+    leftovers.sort(
+        key=lambda row: (
+            -row[3],
+            row[0],
+            int(getattr(row[1], "entry_idx", 0) or 0),
+            int(getattr(row[1], "lot_id", 0) or 0),
+        )
+    )
     for code, lot, px, _mtm in leftovers:
         if int(getattr(lot, "shares", 0) or 0) < BOARD_LOT:
             continue
@@ -2101,7 +2121,7 @@ def require_market_marks(
     mark_source_for: Callable[[str], str] | None = None,
 ) -> None:
     """Validate all held marks before any equity/EOD writes, regardless of fills."""
-    for code, lots in st.positions.items():
+    for code, lots in held_position_items(st):
         if not lots:
             continue
         mark = market_close_mark(mark_bars.get(code), day)
@@ -2133,7 +2153,7 @@ def append_equity_and_eod_marks(
         eq += st.exdiv_economics.receivable_total
     # code -> market close, or None => use per-lot cost fallback
     mark_by_code: dict[str, Optional[float]] = {}
-    for code, lots in st.positions.items():
+    for code, lots in held_position_items(st):
         if code not in mark_by_code:
             mark_by_code[code] = market_close_mark(mark_bars.get(code), day)
         m = mark_by_code[code]
@@ -2143,7 +2163,7 @@ def append_equity_and_eod_marks(
     st.equity_curve.append((ds, eq))
 
     if day == calendar_last and st.positions:
-        for code, lots in st.positions.items():
+        for code, lots in held_position_items(st):
             m = mark_by_code[code]
             for pos in lots:
                 last = float(pos.cost) if m is None else m

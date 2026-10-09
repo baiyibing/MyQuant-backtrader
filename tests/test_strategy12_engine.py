@@ -591,7 +591,7 @@ def test_locked_bonus_is_excluded_from_reduction_base_and_fill_memory():
     pos = Position(CODE, 1500, 10, 0, 10)
     st.positions[CODE] = [pos]
     st.exdiv_economics = ExDivEconomics({})
-    st.exdiv_economics.bonus_locks[id(pos)] = {"20251105": 500}
+    st.exdiv_economics.locks_for(pos).update({"20251105": 500})
     plan = book.plan_exit(st, CODE, 8.9, "20251104", [10.] * 10, day_i=1, ds="20251104")
     assert plan == (rules.STOP, 1000)
     assert book.fill_exit(st, CODE, 8.9, "20251104", day_i=1, ds="20251104", plan=plan,

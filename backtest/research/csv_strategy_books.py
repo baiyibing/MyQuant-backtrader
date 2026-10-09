@@ -732,6 +732,8 @@ def add_csv_backtest_common_args(
     ap.add_argument("--version9-sell", choices=strategy9_rules.SELL_MODES, default=None)
     ap.add_argument("--max-hold", action="store_true",
                     help="version9: enable 20-trading-day force-flat (force_sell:max_hold); default off")
+    ap.add_argument("--no-range-stop", action="store_true",
+                    help="version9: turn off the rolling 20-bar range stop; default on")
     ap.add_argument(
         "--hold-days",
         type=int,
@@ -873,6 +875,10 @@ def csv_run_kwargs_from_args(args) -> dict:
         raise SystemExit("--fix-s81-band-precision is supported only by version8_1")
     if getattr(args, "max_hold", False) and name != "version9":
         raise SystemExit("--max-hold is supported only by version9")
+    if getattr(args, "no_range_stop", False) and name != "version9":
+        raise SystemExit("--no-range-stop is supported only by version9")
+    if getattr(args, "no_range_stop", False) and getattr(args, "version9_sell", None) is not None:
+        raise SystemExit("--no-range-stop cannot be combined with --version9-sell")
     fill_s = getattr(args, "stop_fill", None)
     fill_s = None if fill_s is None else str(fill_s).strip().lower()
     if fill_s == "":
@@ -1408,10 +1414,12 @@ def _run_kwargs_version9_3(args):
 
 
 def _apply_version9(
-    *, version9_sell=None, max_hold: bool = False, stop_pct: Optional[float] = None, take_profit=None, record_params=None, **_
+    *, version9_sell=None, max_hold: bool = False, range_stop: bool = True, stop_pct: Optional[float] = None, take_profit=None, record_params=None, **_
 ) -> dict:
     if stop_pct is not None:
         raise SystemExit("version9 does not accept --stop-pct")
+    if version9_sell is not None and not range_stop:
+        raise SystemExit("--no-range-stop cannot be combined with --version9-sell")
 
     strategy9_rules.validate_sell_mode("version9", version9_sell, max_hold)
     if version9_sell is not None:
@@ -1422,27 +1430,38 @@ def _apply_version9(
                                        "mean_tr_20_yuan_" + ("3" if version9_sell == "mean_tr3_tp10" else "2")),
                             profit_target=(0.10 if version9_sell == "mean_tr3_tp10" else
                                            "range_amp_20_trailing" if version9_sell == "range_amp_tp_amp" else None))
+        from backtest.research.st_status import is_st_on as _is_st_on
         return dict(stop_pct=None, version9_exit=lambda frame, day: strategy9_rules.version9_exit(frame, day, version9_sell),
-                    take_profit=lambda *args: None, record_params=record)
+                    take_profit=lambda *args: None, record_params=record, st_on=_is_st_on)
 
     def _tp(px, cost, peak, n_days):
         return strategy9_rules.take_profit_reason(px, cost, peak, n_days, max_hold=max_hold)
 
     def _rec(st):
-        strategy9_rules.record_strategy9_params(st, max_hold=max_hold)
+        strategy9_rules.record_strategy9_params(st, max_hold=max_hold, range_stop=range_stop)
 
-    return {
+    from backtest.research.st_status import is_st_on
+
+    hooks = {
         "stop_pct": None,
-        "stop_range": strategy9_rules.stop_range_amplitude,
         "take_profit": _tp if take_profit is None else take_profit,
         "record_params": _rec if record_params is None else record_params,
+        "st_on": is_st_on,
     }
+    if range_stop:
+        hooks["stop_range"] = strategy9_rules.stop_range_amplitude
+    return hooks
 
 
 def _run_kwargs_version9(args) -> dict:
     if getattr(args, "stop_pct", None) is not None:
         raise SystemExit("version9 does not accept --stop-pct")
-    return {"strategy": "version9", "max_hold": bool(getattr(args, "max_hold", False)), "version9_sell": getattr(args, "version9_sell", None)}
+    return {
+        "strategy": "version9",
+        "max_hold": bool(getattr(args, "max_hold", False)),
+        "range_stop": not bool(getattr(args, "no_range_stop", False)),
+        "version9_sell": getattr(args, "version9_sell", None),
+    }
 
 
 def _apply_version10(

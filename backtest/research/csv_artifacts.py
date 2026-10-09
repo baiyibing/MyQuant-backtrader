@@ -191,7 +191,11 @@ def summarize(
     elif st.stats.get("sell_book") == "v9":
         max_hold = st.stats.get("max_hold")
         hold_text = f"满持有 {int(max_hold)} 日 force_sell" if max_hold is not None else "满持有强平 OFF"
-        lines.append(f"  参数: 止损 rolling range（每日重算，缺窗口无替代） + 固定成本 × 0.90（10%） | {hold_text}")
+        if st.stats.get("stop_mode") == "off":
+            stop_text = "20日波幅止损 OFF"
+        else:
+            stop_text = "止损 rolling range（每日重算，缺窗口无替代）"
+        lines.append(f"  参数: {stop_text} | 止盈成本×1.10 | {hold_text}")
     elif st.stats.get("sell_book") == "v6_26":
         lines.append("  参数: 首仓20→+10%加30→+20%加50→+40%起每+20%加500万 | B=5%+3%×档 | 止损−5%+step止损−10% | 减仓:每+5%卖5% | 峰值兜底15%/15日")
     elif st.stats.get("sell_book") == "v6_25":
@@ -361,6 +365,9 @@ def summarize(
     cache = st.stats.get("cache")
     if cache:
         timing_parts.append(f"缓存 {cache}")
+    daily_cache = st.stats.get("daily_cache")
+    if daily_cache:
+        timing_parts.append(f"日线缓存 {daily_cache}")
     if timing_parts:
         lines.append("  耗时: " + " | ".join(timing_parts))
     profile = getattr(st, "sim_profile", None)

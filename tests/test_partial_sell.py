@@ -141,9 +141,9 @@ def test_partial_sell_deducts_locked_bonus_before_wanted_cap():
 
     pos = Position(CODE, 1200, 10, 0, 10)
     st = SimState(positions={CODE: [pos]}, exdiv_economics=ExDivEconomics({}))
-    st.exdiv_economics.bonus_locks[id(pos)] = {"20251105": 200}
+    st.exdiv_economics.locks_for(pos).update({"20251105": 200})
     assert _sell(st, CODE, pos, 10, "20251104", "ma_signal:x", wanted_shares=500, day_i=1) == 500
     assert pos.shares == 700
-    assert st.exdiv_economics.bonus_locks[id(pos)] == {"20251105": 200}
+    assert st.exdiv_economics.peek_locks(pos) == {"20251105": 200}
     assert _sell(st, CODE, pos, 10, "20251104", "ma_signal:x", wanted_shares=700, day_i=1) == 500
     assert pos.shares == 200 and st.positions[CODE] == [pos]
