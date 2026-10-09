@@ -352,6 +352,8 @@ def summarize(
         ("t_pool_s", "池"),
         ("t_daily_s", "日线"),
         ("t_minute_s", "分钟"),
+        ("t_exdiv_s", "除权"),
+        ("t_index_gate_s", "指数闸"),
         ("t_sim_s", "模拟"),
     ):
         if key in st.stats:

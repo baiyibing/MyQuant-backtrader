@@ -14,6 +14,7 @@ from backtest.research import exdiv_map as em
 @pytest.fixture(autouse=True)
 def _forbid_source_resolver(monkeypatch):
     """MC-2: every loader fixture must supply BOTH temporary paths."""
+
     def forbidden(*args, **kwargs):
         pytest.fail("data-free exdiv tests must not resolve the lake")
 
@@ -32,9 +33,9 @@ def _write_adj(path: Path, rows: list[tuple[str, str, float]]) -> Path:
 
 
 def _write_ex(path: Path, rows: list[tuple[str, str]]) -> Path:
-    pd.DataFrame(
-        {"stock_code": [r[0] for r in rows], "ex_date": [r[1] for r in rows]}
-    ).to_parquet(path, index=False)
+    pd.DataFrame({"stock_code": [r[0] for r in rows], "ex_date": [r[1] for r in rows]}).to_parquet(
+        path, index=False
+    )
     return path
 
 
@@ -210,7 +211,9 @@ def test_warmup_boundary_keeps_first_event_k(tmp_path: Path):
 
 
 def test_mapped_prev_close_helper():
-    raw, mapped = em.mapped_prev_close({"600000.SH": {"20251105": 0.5}}, "600000.SH", "20251105", 10.0)
+    raw, mapped = em.mapped_prev_close(
+        {"600000.SH": {"20251105": 0.5}}, "600000.SH", "20251105", 10.0
+    )
     assert mapped is True
     assert raw == pytest.approx(5.0)
     raw2, mapped2 = em.mapped_prev_close(None, "600000.SH", "20251105", 10.0)
@@ -222,24 +225,42 @@ def test_mapped_prev_close_helper():
 @pytest.mark.parametrize("direction", [-1, 1], ids=["k-above-one", "k-below-one"])
 @pytest.mark.parametrize(
     "delta,ex_adjust,fallback_adjust",
-    [(0.9, False, False), (1.0, False, False), (1.1, True, False),
-     (1.6, True, False), (1.9, True, False), (2.0, True, False),
-     (2.1, True, True)],
-    ids=["below-noise", "equal-noise", "above-noise", "0.8-percent",
-         "below-fallback", "equal-fallback", "above-fallback"],
+    [
+        (0.9, False, False),
+        (1.0, False, False),
+        (1.1, True, False),
+        (1.6, True, False),
+        (1.9, True, False),
+        (2.0, True, False),
+        (2.1, True, True),
+    ],
+    ids=[
+        "below-noise",
+        "equal-noise",
+        "above-noise",
+        "0.8-percent",
+        "below-fallback",
+        "equal-fallback",
+        "above-fallback",
+    ],
 )
-def test_d2_event_threshold_matrix(
-    tmp_path, has_ex, direction, delta, ex_adjust, fallback_adjust
-):
+def test_d2_event_threshold_matrix(tmp_path, has_ex, direction, delta, ex_adjust, fallback_adjust):
     # 200→201 / 202 gives exact existing float comparisons at .005 / .01.
     current = 200.0 + direction * delta
-    adj = _write_adj(tmp_path / "adj.parquet", [
-        ("20251103", "600000.SH", 200.0), ("20251104", "600000.SH", current),
-    ])
+    adj = _write_adj(
+        tmp_path / "adj.parquet",
+        [
+            ("20251103", "600000.SH", 200.0),
+            ("20251104", "600000.SH", current),
+        ],
+    )
     ex = _write_ex(tmp_path / "ex.parquet", [("600000.SH", "20251104")] if has_ex else [])
     ratios = em.load_exdiv_ratios(
-        ["600000.SH"], "20251104", "20251104",
-        adj_factor_path=adj, ex_date_index_path=ex,
+        ["600000.SH"],
+        "20251104",
+        "20251104",
+        adj_factor_path=adj,
+        ex_date_index_path=ex,
     )
     should_adjust = ex_adjust if has_ex else fallback_adjust
     if should_adjust:
@@ -250,14 +271,18 @@ def test_d2_event_threshold_matrix(
 
 @pytest.mark.parametrize("invalid", [0.0, -1.0, float("nan"), float("inf")])
 def test_d2_cleaned_lag_and_synthetic_prefix_consistency(tmp_path, invalid):
-    rows = [("20251103", "600000.SH", 1.0), ("20251104", "600000.SH", invalid),
-            ("20251105", "600000.SH", 2.0)]
+    rows = [
+        ("20251103", "600000.SH", 1.0),
+        ("20251104", "600000.SH", invalid),
+        ("20251105", "600000.SH", 2.0),
+    ]
     adj = _write_adj(tmp_path / "adj.parquet", rows)
     ex = _write_ex(tmp_path / "ex.parquet", [("600000.SH", "20251104")])
 
     def load(end):
-        return em.load_exdiv_ratios(["600000.SH"], "20251104", end,
-                                   adj_factor_path=adj, ex_date_index_path=ex)
+        return em.load_exdiv_ratios(
+            ["600000.SH"], "20251104", end, adj_factor_path=adj, ex_date_index_path=ex
+        )
 
     assert load("20251104") == {}  # Never borrow a future factor.
     prefix = load("20251105")
@@ -268,20 +293,51 @@ def test_d2_cleaned_lag_and_synthetic_prefix_consistency(tmp_path, invalid):
 
 @pytest.mark.parametrize("prior_day,expected", [("20251024", 0.5), ("20251023", None)])
 def test_d2_ten_calendar_day_warmup_boundary(tmp_path, prior_day, expected):
-    adj = _write_adj(tmp_path / "adj.parquet", [
-        (prior_day, "600000.SH", 1.0), ("20251103", "600000.SH", 2.0),
-    ])
+    adj = _write_adj(
+        tmp_path / "adj.parquet",
+        [
+            (prior_day, "600000.SH", 1.0),
+            ("20251103", "600000.SH", 2.0),
+        ],
+    )
     ex = _write_ex(tmp_path / "ex.parquet", [("600000.SH", "20251103")])
-    ratios = em.load_exdiv_ratios(["600000.SH"], "20251103", "20251103",
-                                adj_factor_path=adj, ex_date_index_path=ex)
+    ratios = em.load_exdiv_ratios(
+        ["600000.SH"], "20251103", "20251103", adj_factor_path=adj, ex_date_index_path=ex
+    )
     assert ratios.get("600000.SH", {}).get("20251103") == expected
 
 
+def test_bare_six_digit_factor_rows_match_suffixed_query(tmp_path: Path):
+    adj = _write_adj(
+        tmp_path / "adj_factor.parquet",
+        [
+            ("20251103", "600000", 1.0),
+            ("20251105", "600000", 2.0),
+        ],
+    )
+    ex = _write_ex(tmp_path / "ex_date_index.parquet", [("600000", "20251105")])
+    ratios = em.load_exdiv_ratios(
+        ["600000.SH"],
+        "20251103",
+        "20251107",
+        adj_factor_path=adj,
+        ex_date_index_path=ex,
+    )
+    assert ratios["600000.SH"]["20251105"] == pytest.approx(0.5)
+
+
 def test_d2_missing_ex_file_uses_factor_fallback(tmp_path):
-    adj = _write_adj(tmp_path / "adj.parquet", [
-        ("20251103", "600000.SH", 1.0), ("20251104", "600000.SH", 2.0),
-    ])
+    adj = _write_adj(
+        tmp_path / "adj.parquet",
+        [
+            ("20251103", "600000.SH", 1.0),
+            ("20251104", "600000.SH", 2.0),
+        ],
+    )
     assert em.load_exdiv_ratios(
-        ["600000.SH"], "20251104", "20251104", adj_factor_path=adj,
+        ["600000.SH"],
+        "20251104",
+        "20251104",
+        adj_factor_path=adj,
         ex_date_index_path=tmp_path / "missing-ex.parquet",
     ) == {"600000.SH": {"20251104": 0.5}}

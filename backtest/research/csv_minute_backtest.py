@@ -51,6 +51,7 @@ from backtest.research.csv_ledger import (  # noqa: E402
     IndependentExitPosition,
     SimState,
     bind_account_fee_schedule,
+    position_is_open,
     chase_decision as chase_decision,
     configure_s8,
     reject_short_cash_override,
@@ -95,6 +96,7 @@ from backtest.research.rule_profile import (  # noqa: E402
 from backtest.research.csv_sim_profile import (  # noqa: E402
     NULL_CLOCK,
     SimPhaseClock,
+    attach_host_profile,
     profile_sim_enabled,
 )
 
@@ -1074,6 +1076,13 @@ def simulate(
                 h = day_m["high"].to_numpy(np.float64)
                 c = day_m["close"].to_numpy(np.float64)
                 hm = day_m["hm"].to_numpy(np.int64)
+                need_low = (
+                    minute_stop_trigger == "hl"
+                    or bool(absolute_exit)
+                    or (fill_config is not None and fill_config.trigger_basis == "bar_low")
+                )
+                low_arr = day_m["low"].to_numpy(np.float64) if need_low else None
+                prev_closes = prev_rows["close"].astype(float).tolist()
                 if s8_confirm:
                     prefix_high = max((float(hi) for hi in h[hm <= BUY_HM] if hi > 0), default=0.0)
                     for pos in st.positions.get(code, []):
@@ -1093,7 +1102,7 @@ def simulate(
                     if isinstance(pos, IndependentExitPosition):
                         cursor = HeldMinuteCursor(
                             o, h, c, cost=pos.cost, peak=pos.peak,
-                            l=day_m["low"].to_numpy(np.float64) if minute_stop_trigger == "hl" or absolute_exit or (fill_config and fill_config.trigger_basis == "bar_low") else None,
+                            l=low_arr,
                             fill_config=fill_config, fill_state=held_fill_states.setdefault(held_fill_key(pos), {}),
                             pending_log=pending_callback(st, code, pos, day),
                             minute_stop_trigger="hl" if absolute_exit else minute_stop_trigger,
@@ -1106,13 +1115,15 @@ def simulate(
                             limit_down=limit_down, hm=hm, peak_hm=int(pos.peak_hm),
                             peak_gap_min=peak_gap_min, take_profit=take_profit,
                             sell_gate=sell_gate, gate_code=code, gate_day=day,
-                            daily_closes_ending_yesterday=prev_rows["close"].astype(float).tolist(),
+                            daily_closes_ending_yesterday=prev_closes,
                             force_sell_hm=force_sell_hm,
                             reserve_limit_up=reserve_limit_up,
                             defer_limit_up=defer_limit_up, limit_up=limit_up,
                             reserved=bool(pos.reserved), close_clear=close_clear,
                         )
                         for bar_idx, at_hm in enumerate(hm):
+                            if not position_is_open(st, pos):
+                                break
                             if split_group_scan and int(at_hm) > BUY_HM:
                                 continue
                             for phase in ("open", "close"):
@@ -1128,8 +1139,8 @@ def simulate(
                                         st, code, pos, float(c[bar_idx]), day, i,
                                         limits, step_stop_pct=hooks["step_stop_pct"],
                                         fill_config=side_fill_config, open_px=float(o[bar_idx]),
-                                        low=(float(day_m["low"].iloc[bar_idx])
-                                             if side_fill_config and side_fill_config.trigger_basis == "bar_low" else None),
+                                        low=(float(low_arr[bar_idx])
+                                             if low_arr is not None and side_fill_config and side_fill_config.trigger_basis == "bar_low" else None),
                                         hm=int(at_hm),
                                     )
                                 if phase == "close" and hooks.get("scale_out_step"):
@@ -1163,7 +1174,7 @@ def simulate(
                         o,
                         h,
                         c,
-                        l=day_m["low"].to_numpy(np.float64) if minute_stop_trigger == "hl" or absolute_exit or (fill_config and fill_config.trigger_basis == "bar_low") else None,
+                        l=low_arr,
                         session_exit_reason=pos.pending_exit,
                         session_volume=day_m["volume"].to_numpy(np.float64) if minute_open else None,
                         session_stats=st.stats,
@@ -1190,9 +1201,7 @@ def simulate(
                         sell_gate=sell_gate,
                         gate_code=code,
                         gate_day=day,
-                        daily_closes_ending_yesterday=prev_rows["close"]
-                        .astype(float)
-                        .tolist(),
+                        daily_closes_ending_yesterday=prev_closes,
                         force_sell_hm=force_sell_hm,
                         reserve_limit_up=reserve_limit_up,
                         defer_limit_up=defer_limit_up,
@@ -1417,6 +1426,8 @@ def simulate(
             clock.begin("post_group")
             for code, pos, cursor, limits in post_group_scans:
                 for bar_idx, at_hm in enumerate(cursor.hm):
+                    if not position_is_open(st, pos):
+                        break
                     if int(at_hm) <= BUY_HM:
                         continue
                     for phase in ("open", "close"):
@@ -1809,15 +1820,26 @@ def run(
     skipped: dict[str, int] = {}
     # Human cut #151 option 2: mixed-domain strategy12 (daily front + minute none)
     # must avoid silent ex-div double adjustment. Keep ex-div explicit-only there.
+    if sim_clock is not None:
+        sim_clock.begin("exdiv")
+    t_exdiv = time.perf_counter()
     exdiv = (
         None
         if (book == "version12" or dividend_type == "front")
         else load_exdiv_ratios(all_codes, start, end, skipped_out=skipped,
                                **({"noise_eps": 0} if exdiv_ref_fen else {}))
     )
+    t_exdiv = time.perf_counter() - t_exdiv
+    if sim_clock is not None:
+        sim_clock.end("exdiv")
+        sim_clock.begin("index_gate")
+    t_index_gate = time.perf_counter()
     from backtest.research.strategy_book_helpers import load_book_index_gate
 
     index_block_new = load_book_index_gate(normalize_csv_strategy(strategy), start, end)
+    t_index_gate = time.perf_counter() - t_index_gate
+    if sim_clock is not None:
+        sim_clock.end("index_gate")
     t_sim = time.perf_counter()
     st = simulate(
         minute,
@@ -1910,24 +1932,22 @@ def run(
     st.stats["t_pool_s"] = t_pool
     st.stats["t_daily_s"] = t_daily
     st.stats["t_minute_s"] = t_minute
+    st.stats["t_exdiv_s"] = t_exdiv
+    st.stats["t_index_gate_s"] = t_index_gate
     st.stats["t_sim_s"] = time.perf_counter() - t_sim
     st.stats["cache"] = cache_status.get("cache", "")
     if sim_clock is not None:
-        sim_clock.count("trades", len(st.trades))
-        phases_now = dict(sim_clock.seconds)
-        leftover_init = (
-            float(st.stats["t_sim_s"])
-            - float(phases_now.get("day_loop", 0.0))
-            - float(phases_now.get("finish", 0.0))
-        )
-        st.sim_profile = sim_clock.report(
+        attach_host_profile(
+            st,
+            sim_clock,
             strategy=book,
             rule_profile=profile.name,
-            leftover_init_s=round(leftover_init, 3),
             load_s={
                 "t_pool_s": round(float(t_pool), 3),
                 "t_daily_s": round(float(t_daily), 3),
                 "t_minute_s": round(float(t_minute), 3),
+                "t_exdiv_s": round(float(t_exdiv), 3),
+                "t_index_gate_s": round(float(t_index_gate), 3),
                 "t_sim_s": round(float(st.stats["t_sim_s"]), 3),
             },
             cache=cache_status.get("cache", ""),
