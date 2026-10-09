@@ -51,6 +51,7 @@ from backtest.research.csv_ledger import (
     IndependentExitPosition,
     account_sell_quantity,
     active_buy_quantity_rule,
+    arm_cont_stop_rebuy,
     check_buy_cash,
     _sell,
     apply_exdiv_economics,
@@ -215,6 +216,8 @@ def fill_side_pending(st, code, pos, px, day, day_i, limits, *, hm):
         if filled:
             if order in orders:
                 orders.remove(order)
+            if reason.startswith("stop_loss:step") and getattr(target, "shares", 1) <= 0:
+                arm_cont_stop_rebuy(st, getattr(pos, "group", None), target.lot_id)
             stat = ("sell_stop_step" if reason.startswith("stop_loss:step") else
                     "sell_scale_out" if reason.startswith("scale_out:") else "sell_peak_dd_clear")
             if stat != "sell_scale_out" or not counted_scale:
@@ -272,25 +275,35 @@ def peak_dd_clear_exits(st, code, pos, px, day, day_i, limits, *,
     return 1 if filled else 0
 
 
-def scale_out_exits(st, code, pos, px, day, day_i, limits, *, scale_step, scale_frac, hm=None, fill_config=None, open_px=None):
-    """6.13：相对首仓锚价每满 scale_step 涨幅，卖出当时剩余持仓的 scale_frac。
+def scale_out_exits(st, code, pos, px, day, day_i, limits, *, scale_step, scale_frac, scale_anchor="first_lot", hm=None, fill_config=None, open_px=None):
+    """6.13：相对减仓锚价每满 scale_step 涨幅，卖出当时剩余持仓的 scale_frac。
 
+    默认锚为首仓 A0（group.anchor_cost / first_lot.cost）。
+    scale_anchor=\"weighted\"（6.51）改为组内剩余 lot 的股数加权均价。
     逐分钟 close 相位调用；每档一次（组计数器）；legacy 整百股向下、
     FIFO 切 lot。industry 若该档会留下不足一手的组级余额，则同一订单卖完
     该余额；规则只在组总量上应用，不能逐 lot 制造或保留零股。
     lot 级 T+1 由 _sell(wanted_shares) 保证；跌停顺延；组已同分钟离场则不触发。
+    均价上移后不重置 scale_steps；allowed 低于已走档则本分钟不减仓。
     """
     if _side_pending(st, pos) or not scale_step or px <= 0 or not position_is_open(st, pos):
         return 0
-    anchor_cost = float(getattr(pos.group, "anchor_cost", None) or pos.group.first_lot.cost)
+    lots = [lot for lot in st.positions.get(code, [])
+            if getattr(lot, "position_id", None) == pos.position_id]
+    shares_now = sum(lot.shares for lot in lots)
+    if str(scale_anchor) == "weighted":
+        if shares_now <= 0:
+            return 0
+        anchor_cost = (
+            sum(float(lot.shares) * float(lot.cost) for lot in lots) / float(shares_now)
+        )
+    else:
+        anchor_cost = float(getattr(pos.group, "anchor_cost", None) or pos.group.first_lot.cost)
     if anchor_cost <= 0 or float(px) < anchor_cost:
         return 0
     allowed = int((float(px) / anchor_cost - 1.0 + 1e-12) / float(scale_step))
     if allowed <= pos.group.scale_steps:
         return 0
-    lots = [lot for lot in st.positions.get(code, [])
-            if getattr(lot, "position_id", None) == pos.position_id]
-    shares_now = sum(lot.shares for lot in lots)
     if shares_now <= 0:
         pos.group.scale_steps = allowed
         return 0
@@ -363,6 +376,8 @@ def step_stop_exits(st, code, pos, px, day, day_i, limits, *, step_stop_pct, hm=
         if filled:
             sold += 1
             st.stats["sell_stop_step"] = int(st.stats.get("sell_stop_step", 0)) + 1
+            if lot.shares <= 0:
+                arm_cont_stop_rebuy(st, getattr(pos, "group", None), lot.lot_id)
     return sold
 
 

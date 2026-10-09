@@ -308,6 +308,30 @@ def summarize(
             f"chase_buy_fail_cash={st.stats.get('chase_buy_fail_cash', 0)} | "
             f"chase_buy_fail_shares={st.stats.get('chase_buy_fail_shares', 0)}"
         )
+        if (
+            st.stats.get("profit_skim_events")
+            or st.stats.get("profit_skim_withdrawn")
+            or st.stats.get("profit_skim_parked")
+        ):
+            lines.append(
+                f"  profit_skim parked={float(st.stats.get('profit_skim_parked', 0)):,.0f} | "
+                f"transferred={float(st.stats.get('profit_skim_transferred', 0)):,.0f} | "
+                f"pending={float(st.stats.get('profit_skim_pending_notional', 0)):,.0f} | "
+                f"lock_drawn={float(st.stats.get('profit_skim_lock_drawn', 0)):,.0f} | "
+                f"lock_restored={float(st.stats.get('profit_skim_lock_restored', 0)):,.0f} | "
+                f"events={int(st.stats.get('profit_skim_events', 0))}"
+            )
+        if (
+            st.stats.get("index_cut_events")
+            or st.stats.get("index_rebuy_events")
+            or st.stats.get("index_cut_shares")
+        ):
+            lines.append(
+                f"  index_cut shares={int(st.stats.get('index_cut_shares', 0))} | "
+                f"events={int(st.stats.get('index_cut_events', 0))} | "
+                f"rebuy_shares={int(st.stats.get('index_rebuy_shares', 0))} | "
+                f"rebuy_events={int(st.stats.get('index_rebuy_events', 0))}"
+            )
         if st.stats.get("skip_index_gate") or st.stats.get("skip_add_loser"):
             lines.append(
                 f"  skip_index_gate={int(st.stats.get('skip_index_gate', 0))} | "

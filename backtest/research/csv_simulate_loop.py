@@ -15,7 +15,11 @@ from typing import Callable, Optional
 
 import pandas as pd
 
-from backtest.research.ashare_session import k_for, skip_buy_at_limit
+from backtest.research.ashare_session import (
+    defer_sell_at_limit,
+    k_for,
+    skip_buy_at_limit,
+)
 from backtest.research.book_capabilities import allows_price_add
 from backtest.research.csv_common import (
     _pool_names_asof,
@@ -28,22 +32,32 @@ from backtest.research.csv_ledger import (
     chase_decision,
     configure_s8,
     execute_buy,
+    execute_parking_buy,
+    is_parking_lot,
+    parking_lots,
+    Position,
+    register_principal_lot,
+    sleeve_parking_lots,
     trade_commission as trade_commission,
     hit_limit_down,
     hit_limit_up,
     market_close_mark,
     preview_buy_cash_needed,
     preview_final_buy_declaration,
+    release_parking_cash,
     queue_limit_up_chase,
+    note_cont_open,
     position_identity,
     s8_open_groups,
     s8_policy,
     uses_shrink_on_short_cash,
+    _sell,
 )
 from backtest.research.csv_strategy_books import apply_csv_strategy
+from backtest.research.strategy6_50_rules import due_cont_rebuy_rise
 from backtest.research.exdiv_map import mapped_prev_close
 from backtest.research.minute_audit import record_rejection
-from backtest.research.lot_rounding import budget_board_lots
+from backtest.research.lot_rounding import BOARD_LOT, budget_board_lots
 
 # quotes_for(code) -> (open_px, buy_px, closes_ending_yesterday) or None to keep pending
 ChaseQuotesFn = Callable[[str], Optional[tuple[float, float, list[float]]]]
@@ -129,6 +143,21 @@ def init_sim_state(
     st.book_on_buy = hooks.get("on_buy")
     st.book_on_exdiv = hooks.get("on_exdiv")
     hooks["record_params"](st)
+    if hooks.get("profit_skim"):
+        st.stats.setdefault("profit_skim_base", float(total_cash))
+        st.stats.setdefault("profit_skim_withdrawn", 0.0)
+        st.stats.setdefault("profit_skim_events", 0)
+        if hooks.get("profit_skim_frac") is not None:
+            st.stats.setdefault("profit_skim_frac", float(hooks["profit_skim_frac"]))
+        st.stats.setdefault("profit_skim_pro_rata", bool(hooks.get("profit_skim_pro_rata")))
+        st.stats.setdefault("profit_skim_keep_idle", bool(hooks.get("profit_skim_keep_idle")))
+        st.stats.setdefault(
+            "profit_skim_to_parking", bool(hooks.get("profit_skim_to_parking"))
+        )
+        st.stats.setdefault("profit_skim_parked", 0.0)
+        st.stats.setdefault("profit_skim_cash_hold", 0.0)
+        st.stats.setdefault("profit_skim_lock_drawn", 0.0)
+        st.stats.setdefault("profit_skim_lock_restored", 0.0)
     configure_s8(st, hooks)
     if daily_quota is not None:
         st.stats["daily_quota"] = float(daily_quota)
@@ -432,9 +461,23 @@ def run_pool_buys_day(
                 day,
                 shares_override=volume_kwargs.get("shares_override"),
             )
+            needed = preview_buy_cash_needed(st, code, px, shares, day)
+            if needed > st.cash:
+                release_parking_cash(st, needed)
+            if (
+                not uses_shrink_on_short_cash(st)
+                and needed > st.cash + 1e-9
+                and st.stats.get("parking_open_cover")
+            ):
+                st.stats["skip_cash"] = st.stats.setdefault("skip_cash", 0) + 1
+                st.stats["skip_cash_notional"] = (
+                    st.stats.setdefault("skip_cash_notional", 0.0) + per
+                )
+                record_rejection(st, code, day, "skip_cash", px)
+                continue
             if not uses_shrink_on_short_cash(st) and not check_buy_cash(
                 st,
-                needed=preview_buy_cash_needed(st, code, px, shares, day),
+                needed=needed,
                 available=st.cash, date=ds, code=code,
             ):
                 st.stats["skip_cash"] = st.stats.setdefault("skip_cash", 0) + 1
@@ -574,6 +617,39 @@ def run_step_adds_day(
         st.daily_quota_used = quota_used
 
 
+def _execute_s8_price_add(
+    st,
+    *,
+    code,
+    px,
+    per,
+    day_i,
+    day,
+    reason,
+    is_step,
+    position_id,
+    entry_signal_date,
+    volume_kwargs,
+) -> bool:
+    """One S8 add fill; daily_quota stays vestigial for per_name books."""
+    quota_used = st.daily_quota_used
+    filled = execute_buy(
+        st,
+        code,
+        px,
+        per,
+        day_i,
+        day,
+        reason=reason,
+        is_step=is_step,
+        position_id=position_id,
+        entry_signal_date=entry_signal_date,
+        **volume_kwargs,
+    )
+    st.daily_quota_used = quota_used
+    return bool(filled)
+
+
 def _run_s8_price_adds_day(
     st, *, day_i, day, ds, names, buy_quote_for, sizing, exdiv,
     qlib_limit_pct, forbid_all_trade_at_limit, buy_gate, volume_bucket_for,
@@ -587,6 +663,8 @@ def _run_s8_price_adds_day(
     gate = policy["allow_new_name"]
     if confirm and callable(gate) and not gate(day):
         # 8.3 has always blocked both new positions and adds at the index gate.
+        return
+    if policy.get("index_blocks_s8_add") and callable(gate) and not gate(day):
         return
     step_cap = policy.get("step_cap")
     for code in list(st.positions):
@@ -610,7 +688,15 @@ def _run_s8_price_adds_day(
             cost = float(getattr(group, "anchor_cost", None) or group.first_lot.cost)
             if cost <= 0:
                 continue
+            _rebuy_rise = None
+            if policy.get("cont_stop_rebuy") and group.cont_rebuy_armed:
+                lift = float(policy.get("cont_stop_rebuy_lift") or 0.20)
+                _rebuy_rise = due_cont_rebuy_rise(
+                    group.cont_rebuy_armed, px, cost, lift=lift,
+                )
+            _rebuy_due = _rebuy_rise is not None
             _sched_due = False
+            _sched_rise = None
             schedule = policy.get("add_schedule")
             if schedule and not confirm:
                 if policy.get("add_schedule_trigger") == "peak":
@@ -626,7 +712,8 @@ def _run_s8_price_adds_day(
                     sched_gate = True
                 allowed_sched = sum(1 for t, _f in schedule if trig_rise + 1e-12 >= t)
                 if allowed_sched > group.executed_steps and sched_gate:
-                    _sched_frac = schedule[min(group.executed_steps, len(schedule) - 1)][1]
+                    _sched_idx = min(group.executed_steps, len(schedule) - 1)
+                    _sched_rise, _sched_frac = schedule[_sched_idx]
                     _sched_due = True
             # 双梯子书：分批腿(1)优先、基数腿(2)次之；单梯子书 use2 恒 False、行为不变。
             use2 = False
@@ -656,9 +743,9 @@ def _run_s8_price_adds_day(
                     due2 = allowed2 > group.executed_steps2 and (
                         cap2 is None or group.executed_steps2 < cap2
                     )
-                if not _sched_due and not due1 and not due2:
+                if not _rebuy_due and not _sched_due and not due1 and not due2:
                     continue
-                use2 = not due1 and not _sched_due  # schedule 模式走 executed_steps，不走 steps2
+                use2 = not due1 and not _sched_due and not _rebuy_due  # schedule/rebuy 走 executed_steps，不走 steps2
             if reference_price_for is None:
                 prev_close, did_map = mapped_prev_close(exdiv, code, ds, float(closes[-1]), **({"fen_round": True} if exdiv_ref_fen else {}))
             else:
@@ -680,24 +767,87 @@ def _run_s8_price_adds_day(
             if callable(buy_gate) and not buy_gate(code, px, day, closes):
                 st.stats["skip_buy_gate"] += 1
                 continue
-            if _sched_due:
-                per = group.budget * float(_sched_frac)
-            else:
-                per = group.budget * (
-                    0.50 if confirm else float(policy["step_frac2" if use2 else "step_frac"])
-                )
-            quota_used = st.daily_quota_used
             volume_kwargs = (
                 {"bucket_id": volume_bucket_for(code)}
                 if volume_bucket_for is not None else {}
             )
-            filled = execute_buy(
-                st, code, px, per, day_i, day,
-                reason="add:tranche" if _sched_due else ("add:confirm3" if confirm else ("add:base20" if use2 else "add:step20")),
-                is_step=not confirm, position_id=position_id,
-                entry_signal_date=group.entry_signal_date, **volume_kwargs,
+            add_kw = dict(
+                code=code,
+                px=px,
+                day_i=day_i,
+                day=day,
+                position_id=position_id,
+                entry_signal_date=group.entry_signal_date,
+                volume_kwargs=volume_kwargs,
             )
-            st.daily_quota_used = quota_used
+            if _rebuy_due:
+                any_fill = False
+                step_fills = 0
+                open_frac = policy.get("cont_stop_rebuy_open_frac")
+                if open_frac:
+                    if _execute_s8_price_add(
+                        st,
+                        per=group.budget * float(open_frac),
+                        reason="add:cont_rebuy_open",
+                        is_step=False,
+                        **add_kw,
+                    ):
+                        any_fill = True
+                        st.stats["add_cont_rebuy_open"] = (
+                            int(st.stats.get("add_cont_rebuy_open", 0)) + 1
+                        )
+                if _execute_s8_price_add(
+                    st,
+                    per=group.budget * float(policy.get("cont_stop_rebuy_frac") or 1.0),
+                    reason="add:cont_rebuy",
+                    is_step=True,
+                    **add_kw,
+                ):
+                    any_fill = True
+                    step_fills += 1
+                    group.cont_rebuy_armed.remove(_rebuy_rise)
+                    group.cont_rebuy_done.append(_rebuy_rise)
+                    st.stats["add_cont_rebuy"] = int(st.stats.get("add_cont_rebuy", 0)) + 1
+                if _sched_due and policy.get("cont_stop_rebuy_with_schedule"):
+                    if _execute_s8_price_add(
+                        st,
+                        per=group.budget * float(_sched_frac),
+                        reason="add:tranche",
+                        is_step=True,
+                        **add_kw,
+                    ):
+                        any_fill = True
+                        step_fills += 1
+                        group.executed_steps += 1
+                        if _sched_rise is not None:
+                            note_cont_open(
+                                group,
+                                group.next_lot_id - 1,
+                                float(_sched_rise),
+                                from_rise=float(policy.get("cont_from_rise") or 0.40),
+                            )
+                if any_fill:
+                    group.last_add_date = ds
+                    if step_cap is not None and step_fills:
+                        policy["code_steps"][code] = (
+                            policy["code_steps"].get(code, 0) + step_fills
+                        )
+                continue
+            if _sched_due:
+                per = group.budget * float(_sched_frac)
+                reason = "add:tranche"
+            else:
+                per = group.budget * (
+                    0.50 if confirm else float(policy["step_frac2" if use2 else "step_frac"])
+                )
+                reason = "add:confirm3" if confirm else ("add:base20" if use2 else "add:step20")
+            filled = _execute_s8_price_add(
+                st,
+                per=per,
+                reason=reason,
+                is_step=not confirm,
+                **add_kw,
+            )
             if filled:
                 group.last_add_date = ds
                 if confirm:
@@ -706,6 +856,13 @@ def _run_s8_price_adds_day(
                     group.executed_steps2 += 1
                 else:
                     group.executed_steps += 1
+                    if _sched_due and policy.get("cont_stop_rebuy") and _sched_rise is not None:
+                        note_cont_open(
+                            group,
+                            group.next_lot_id - 1,
+                            float(_sched_rise),
+                            from_rise=float(policy.get("cont_from_rise") or 0.40),
+                        )
                 if step_cap is not None:
                     policy["code_steps"][code] = policy["code_steps"].get(code, 0) + 1
 
@@ -819,6 +976,8 @@ def run_eod_exits(
         else:
             got = day_bar_and_prev_closes(signal_bars_front[code], day)
         for pos in lots:
+            if is_parking_lot(st, pos):
+                continue
             key = (code, pos.entry_idx, pos.lot_id)
             live.add(key)
             if got is None or pos.pending_exit:
@@ -837,6 +996,1098 @@ def run_eod_exits(
                 pos.pending_exit = decision.reason
     for key in hold_modes.keys() - live:
         del hold_modes[key]
+
+
+def extra_load_codes_for_strategy(strategy: str) -> set[str]:
+    """Codes the lake must load even when they are absent from the pool."""
+    from backtest.research.csv_strategy_books import normalize_csv_strategy
+
+    name = normalize_csv_strategy(strategy)
+    if name in {"version6_47", "version6_50", "version6_51", "version6_52", "version6_53"}:
+        from backtest.research.strategy6_47_rules import PARKING_SYMBOL
+
+        return {PARKING_SYMBOL}
+    return set()
+
+
+def bind_parking_session(
+    st: SimState,
+    hooks: dict,
+    *,
+    day_i: int,
+    day,
+    ds: str,
+    names: dict,
+    daily_bars: dict,
+    exdiv=None,
+    qlib_limit_pct=None,
+) -> None:
+    """Publish today's parking quote so strategy buys can unpark if cash is short."""
+    st.book_state.pop("parking_session", None)
+    if not hooks.get("parking_execute"):
+        return
+    symbol = hooks.get("parking_symbol")
+    if not symbol:
+        return
+    got = (
+        day_bar_and_prev_closes(daily_bars[symbol], day)
+        if symbol in daily_bars else None
+    )
+    if got is None:
+        return
+    row, closes = got
+    px = float(row["close"])
+    if px <= 0 or not math.isfinite(px):
+        return
+    previous, _ = mapped_prev_close(exdiv, symbol, ds, float(closes[-1]))
+    limits = book_limit_prices(
+        symbol, previous, names, qlib_limit_pct=qlib_limit_pct, as_of=ds
+    )
+    if limits is None:
+        return
+    st.book_state["parking_session"] = {
+        "symbol": symbol,
+        "px": px,
+        "day_i": day_i,
+        "day": day,
+        "ds": ds,
+        "limits": limits,
+    }
+
+
+def run_parking_open_cover_day(
+    st: SimState,
+    hooks: dict,
+    *,
+    day_i: int,
+    day,
+    ds: str,
+    names: dict,
+    daily_bars: dict,
+    exdiv=None,
+    qlib_limit_pct=None,
+    forbid_all_trade_at_limit: bool = False,
+) -> None:
+    """At the open, sell parking only to bring cash up to the buffer.
+
+    Strategy buys run after this. Same-day parking stays T+1 locked. Limit-down
+    defers; leftover shortfall still goes through ``release_parking_cash``.
+    """
+    if not hooks.get("parking_execute") or not hooks.get("parking_open_cover"):
+        return
+    symbol = hooks.get("parking_symbol")
+    buffer = float(hooks.get("parking_buffer") or 0.0)
+    if not symbol or buffer <= 0 or float(st.cash) + 1e-9 >= buffer:
+        return
+    lots = sleeve_parking_lots(st, symbol)
+    if not lots:
+        return
+    got = (
+        day_bar_and_prev_closes(daily_bars[symbol], day)
+        if symbol in daily_bars else None
+    )
+    if got is None:
+        return
+    row, closes = got
+    px = float(row["open"])
+    if px <= 0 or not math.isfinite(px):
+        return
+    previous, _ = mapped_prev_close(exdiv, symbol, ds, float(closes[-1]))
+    limits = book_limit_prices(
+        symbol, previous, names, qlib_limit_pct=qlib_limit_pct, as_of=ds
+    )
+    if limits is None:
+        return
+    if defer_sell_at_limit(px, limits) or (
+        forbid_all_trade_at_limit and (
+            skip_buy_at_limit(px, limits) or defer_sell_at_limit(px, limits)
+        )
+    ):
+        st.stats["skip_parking_limit"] = int(st.stats.get("skip_parking_limit", 0)) + 1
+        return
+    sold_any = False
+    for lot in lots:
+        while float(st.cash) + 1e-9 < buffer and int(getattr(lot, "shares", 0) or 0) >= BOARD_LOT:
+            if lot.entry_idx >= day_i:
+                st.stats["skip_parking_t1"] = int(st.stats.get("skip_parking_t1", 0)) + 1
+                break
+            shortfall = buffer - float(st.cash)
+            raw = int(math.ceil(shortfall / px / BOARD_LOT) * BOARD_LOT)
+            chunk = min(int(lot.shares), max(BOARD_LOT, raw))
+            filled = _sell(
+                st,
+                symbol,
+                lot,
+                px,
+                day,
+                "parking:open_cover",
+                day_i=day_i,
+                wanted_shares=chunk,
+                price_rule="parking_open",
+            )
+            if not filled:
+                break
+            sold_any = True
+            st.stats["parking_sold_shares"] = (
+                int(st.stats.get("parking_sold_shares", 0)) + int(filled)
+            )
+    if sold_any:
+        st.stats["parking_open_cover_days"] = (
+            int(st.stats.get("parking_open_cover_days", 0)) + 1
+        )
+        st.stats["parking_sells"] = int(st.stats.get("parking_sells", 0)) + 1
+
+
+def _index_cut_state(st: SimState) -> dict:
+    return st.book_state.setdefault("index_cut", {"latched": False, "memory": {}})
+
+
+def _index_group_lots(st: SimState, code: str, position_id: str) -> list:
+    return [
+        pos
+        for pos in st.positions.get(code, [])
+        if getattr(pos, "position_id", None) == position_id and not is_parking_lot(st, pos)
+    ]
+
+
+def _index_open_quote(
+    daily_bars: dict,
+    code: str,
+    day,
+    ds: str,
+    names: dict,
+    exdiv,
+    qlib_limit_pct,
+):
+    if not daily_bars or code not in daily_bars:
+        return None
+    got = day_bar_and_prev_closes(daily_bars[code], day)
+    if got is None:
+        return None
+    row, closes = got
+    px = float(row["open"])
+    if px <= 0 or not math.isfinite(px):
+        return None
+    previous, _ = mapped_prev_close(exdiv, code, ds, float(closes[-1]))
+    limits = book_limit_prices(
+        code, previous, names, qlib_limit_pct=qlib_limit_pct, as_of=ds
+    )
+    if limits is None:
+        return None
+    return px, limits
+
+
+def _execute_index_cuts(
+    st: SimState,
+    hooks: dict,
+    *,
+    day_i: int,
+    day,
+    ds: str,
+    names: dict,
+    daily_bars: dict,
+    exdiv=None,
+    qlib_limit_pct=None,
+    forbid_all_trade_at_limit: bool = False,
+) -> None:
+    from backtest.research.strategy6_53_rules import index_cut_shares
+
+    frac = float(hooks.get("index_cut_frac") or 0.50)
+    min_keep = int(hooks.get("index_cut_min_keep") or 100)
+    memory = _index_cut_state(st)["memory"]
+    for code in list(st.positions):
+        for position_id, _group in list(s8_open_groups(st, code)):
+            lots = _index_group_lots(st, code, position_id)
+            held = sum(int(pos.shares) for pos in lots)
+            sell_n = index_cut_shares(held, frac=frac, min_keep=min_keep)
+            if sell_n <= 0:
+                continue
+            quoted = _index_open_quote(
+                daily_bars, code, day, ds, names, exdiv, qlib_limit_pct
+            )
+            if quoted is None:
+                continue
+            px, limits = quoted
+            if defer_sell_at_limit(px, limits) or (
+                forbid_all_trade_at_limit and hit_limit_up(px, limits[0])
+            ):
+                st.stats["defer_sell_limit_down"] = (
+                    int(st.stats.get("defer_sell_limit_down", 0)) + 1
+                )
+                continue
+            remain = sell_n
+            sold = 0
+            for lot in sorted(lots, key=lambda pos: (int(pos.entry_idx), int(pos.lot_id))):
+                if remain <= 0:
+                    break
+                filled = _sell(
+                    st,
+                    code,
+                    lot,
+                    px,
+                    day,
+                    "index_cut",
+                    day_i=day_i,
+                    wanted_shares=remain,
+                    price_rule="index_cut_open",
+                )
+                if filled:
+                    sold += int(filled)
+                    remain -= int(filled)
+            if sold:
+                memory[position_id] = int(memory.get(position_id, 0)) + sold
+                st.stats["index_cut_shares"] = (
+                    int(st.stats.get("index_cut_shares", 0)) + sold
+                )
+                st.stats["index_cut_events"] = int(st.stats.get("index_cut_events", 0)) + 1
+
+
+def _execute_index_rebuys(
+    st: SimState,
+    hooks: dict,
+    *,
+    day_i: int,
+    day,
+    ds: str,
+    names: dict,
+    daily_bars: dict,
+    exdiv=None,
+    qlib_limit_pct=None,
+    forbid_all_trade_at_limit: bool = False,
+) -> None:
+    policy = s8_policy(st)
+    if policy is None:
+        return
+    memory = _index_cut_state(st)["memory"]
+    for position_id, shares in list(memory.items()):
+        want = int(shares)
+        if want <= 0:
+            memory.pop(position_id, None)
+            continue
+        group = policy["groups"].get(position_id)
+        if group is None or group.closed:
+            memory.pop(position_id, None)
+            continue
+        code = position_id.split("@", 1)[0]
+        quoted = _index_open_quote(
+            daily_bars, code, day, ds, names, exdiv, qlib_limit_pct
+        )
+        if quoted is None:
+            continue
+        px, limits = quoted
+        if skip_buy_at_limit(px, limits) or (
+            forbid_all_trade_at_limit and hit_limit_down(px, limits[1])
+        ):
+            st.stats["skip_limit_up"] = int(st.stats.get("skip_limit_up", 0)) + 1
+            continue
+        filled = execute_buy(
+            st,
+            code,
+            px,
+            want * px,
+            day_i,
+            day,
+            reason="add:index_rebuy",
+            shares_override=want,
+            is_step=False,
+            position_id=position_id,
+            entry_signal_date=group.entry_signal_date,
+        )
+        if not filled:
+            continue
+        got = int(st.trades[-1]["shares"])
+        left = want - got
+        if left <= 0:
+            memory.pop(position_id, None)
+        else:
+            memory[position_id] = left
+        st.stats["index_rebuy_shares"] = int(st.stats.get("index_rebuy_shares", 0)) + got
+        st.stats["index_rebuy_events"] = int(st.stats.get("index_rebuy_events", 0)) + 1
+
+
+def run_index_gate_cut_day(
+    st: SimState,
+    hooks: dict,
+    *,
+    day_i: int,
+    day,
+    ds: str,
+    names: dict,
+    daily_bars: dict,
+    exdiv=None,
+    qlib_limit_pct=None,
+    forbid_all_trade_at_limit: bool = False,
+) -> None:
+    """Open of a blocked SSE-MA10 episode: halt new chips and halve strategy book.
+
+    Same episode is cut once. When the gate lifts, buy back remembered shares
+    at the open before pool/adds. Parking lots are not touched.
+    """
+    if not hooks.get("index_cut"):
+        return
+    allow = hooks.get("allow_new_name")
+    blocked = callable(allow) and not allow(day)
+    state = _index_cut_state(st)
+    if blocked:
+        if not state["latched"]:
+            _execute_index_cuts(
+                st,
+                hooks,
+                day_i=day_i,
+                day=day,
+                ds=ds,
+                names=names,
+                daily_bars=daily_bars,
+                exdiv=exdiv,
+                qlib_limit_pct=qlib_limit_pct,
+                forbid_all_trade_at_limit=forbid_all_trade_at_limit,
+            )
+            state["latched"] = True
+        return
+    if state["memory"]:
+        _execute_index_rebuys(
+            st,
+            hooks,
+            day_i=day_i,
+            day=day,
+            ds=ds,
+            names=names,
+            daily_bars=daily_bars,
+            exdiv=exdiv,
+            qlib_limit_pct=qlib_limit_pct,
+            forbid_all_trade_at_limit=forbid_all_trade_at_limit,
+        )
+    state["latched"] = False
+
+
+def working_equity(st: SimState, day, mark_bars: dict) -> float:
+    """Cash + position marks; same sum as ``append_equity_and_eod_marks``."""
+    eq = float(st.cash)
+    if st.exdiv_economics is not None:
+        eq += st.exdiv_economics.receivable_total
+    for code, lots in st.positions.items():
+        mark = market_close_mark(mark_bars.get(code), day) if mark_bars else None
+        for pos in lots:
+            last = float(pos.cost) if mark is None else mark
+            eq += int(pos.shares) * last
+    return eq
+
+
+def _skim_quote(daily_bars, code, day, ds, names, exdiv, qlib_limit_pct):
+    if not daily_bars or code not in daily_bars:
+        return None
+    got = day_bar_and_prev_closes(daily_bars[code], day)
+    if got is None:
+        return None
+    row, closes = got
+    px = float(row["close"])
+    if px <= 0 or not math.isfinite(px):
+        return None
+    previous, _ = mapped_prev_close(exdiv, code, ds, float(closes[-1]))
+    limits = book_limit_prices(
+        code, previous, names, qlib_limit_pct=qlib_limit_pct, as_of=ds
+    )
+    return px, limits
+
+
+def _skim_chunk_shares(gap: float, px: float, lot_shares: int) -> int:
+    if gap <= 1e-9 or px <= 0 or lot_shares < BOARD_LOT:
+        return 0
+    raw = int(math.ceil(gap / px / BOARD_LOT) * BOARD_LOT)
+    return min(int(lot_shares), max(BOARD_LOT, raw))
+
+
+def _sell_skim_chunk(
+    st: SimState,
+    hooks: dict,
+    *,
+    gap: float,
+    day_i: int,
+    day,
+    ds: str,
+    names: dict,
+    daily_bars: dict,
+    exdiv=None,
+    qlib_limit_pct=None,
+    forbid_all_trade_at_limit: bool = False,
+) -> int:
+    """Sell one parking-then-strategy chunk to raise ``gap`` cash. Returns shares."""
+
+    def _try_lot(code, lot, reason):
+        if int(getattr(lot, "shares", 0) or 0) < BOARD_LOT:
+            return 0
+        if lot.entry_idx >= day_i:
+            st.stats["skip_profit_skim_t1"] = int(st.stats.get("skip_profit_skim_t1", 0)) + 1
+            return 0
+        quote = _skim_quote(daily_bars, code, day, ds, names, exdiv, qlib_limit_pct)
+        if quote is None:
+            return 0
+        px, limits = quote
+        if limits is None:
+            return 0
+        if defer_sell_at_limit(px, limits) or (
+            forbid_all_trade_at_limit and (
+                skip_buy_at_limit(px, limits) or defer_sell_at_limit(px, limits)
+            )
+        ):
+            st.stats["skip_profit_skim_limit"] = (
+                int(st.stats.get("skip_profit_skim_limit", 0)) + 1
+            )
+            return 0
+        chunk = _skim_chunk_shares(gap, px, int(lot.shares))
+        if chunk < BOARD_LOT:
+            return 0
+        return int(
+            _sell(
+                st,
+                code,
+                lot,
+                px,
+                day,
+                reason,
+                day_i=day_i,
+                wanted_shares=chunk,
+                price_rule="profit_skim_eod_close",
+            )
+            or 0
+        )
+
+    symbol = hooks.get("parking_symbol")
+    if symbol:
+        for lot in list(parking_lots(st, symbol)):
+            filled = _try_lot(symbol, lot, "parking:profit_skim")
+            if filled:
+                return filled
+    for code, lots in list(st.positions.items()):
+        for lot in list(lots):
+            if is_parking_lot(st, lot):
+                continue
+            filled = _try_lot(code, lot, "profit_skim")
+            if filled:
+                return filled
+    return 0
+
+
+def _sellable_strategy_skim_lots(
+    st: SimState,
+    *,
+    day_i: int,
+    day,
+    ds: str,
+    names: dict,
+    daily_bars: dict,
+    exdiv=None,
+    qlib_limit_pct=None,
+    forbid_all_trade_at_limit: bool = False,
+) -> list[tuple[str, object, float, float]]:
+    """Strategy lots that can sell at EOD close. Parking excluded."""
+    rows: list[tuple[str, object, float, float]] = []
+    for code, lots in list(st.positions.items()):
+        for lot in list(lots):
+            if is_parking_lot(st, lot):
+                continue
+            if int(getattr(lot, "shares", 0) or 0) < BOARD_LOT:
+                continue
+            if lot.entry_idx >= day_i:
+                st.stats["skip_profit_skim_t1"] = (
+                    int(st.stats.get("skip_profit_skim_t1", 0)) + 1
+                )
+                continue
+            quote = _skim_quote(daily_bars, code, day, ds, names, exdiv, qlib_limit_pct)
+            if quote is None:
+                continue
+            px, limits = quote
+            if limits is None:
+                continue
+            if defer_sell_at_limit(px, limits) or (
+                forbid_all_trade_at_limit and (
+                    skip_buy_at_limit(px, limits) or defer_sell_at_limit(px, limits)
+                )
+            ):
+                st.stats["skip_profit_skim_limit"] = (
+                    int(st.stats.get("skip_profit_skim_limit", 0)) + 1
+                )
+                continue
+            mtm = int(lot.shares) * px
+            if mtm <= 0:
+                continue
+            rows.append((code, lot, px, mtm))
+    return rows
+
+
+def _sell_skim_pro_rata(
+    st: SimState,
+    *,
+    gap: float,
+    day_i: int,
+    day,
+    ds: str,
+    names: dict,
+    daily_bars: dict,
+    exdiv=None,
+    qlib_limit_pct=None,
+    forbid_all_trade_at_limit: bool = False,
+) -> int:
+    """Sell the same MV fraction of every sellable strategy lot. Returns shares."""
+    rows = _sellable_strategy_skim_lots(
+        st,
+        day_i=day_i,
+        day=day,
+        ds=ds,
+        names=names,
+        daily_bars=daily_bars,
+        exdiv=exdiv,
+        qlib_limit_pct=qlib_limit_pct,
+        forbid_all_trade_at_limit=forbid_all_trade_at_limit,
+    )
+    total = sum(mtm for *_, mtm in rows)
+    if gap <= 1e-9 or total <= 1e-9:
+        return 0
+    frac = min(1.0, gap / total)
+    sold = 0
+    leftovers: list[tuple[str, object, float, float]] = []
+    for code, lot, px, mtm in rows:
+        want = int(math.floor(int(lot.shares) * frac / BOARD_LOT) * BOARD_LOT)
+        leftovers.append((code, lot, px, mtm))
+        if want < BOARD_LOT:
+            continue
+        filled = int(
+            _sell(
+                st,
+                code,
+                lot,
+                px,
+                day,
+                "profit_skim",
+                day_i=day_i,
+                wanted_shares=want,
+                price_rule="profit_skim_eod_close",
+            )
+            or 0
+        )
+        sold += filled
+    if sold:
+        return sold
+    leftovers.sort(key=lambda row: row[3], reverse=True)
+    for code, lot, px, _mtm in leftovers:
+        if int(getattr(lot, "shares", 0) or 0) < BOARD_LOT:
+            continue
+        if px * BOARD_LOT > gap + 1e-9:
+            continue
+        filled = int(
+            _sell(
+                st,
+                code,
+                lot,
+                px,
+                day,
+                "profit_skim",
+                day_i=day_i,
+                wanted_shares=BOARD_LOT,
+                price_rule="profit_skim_eod_close",
+            )
+            or 0
+        )
+        if filled:
+            return filled
+    return 0
+
+
+def _transfer_sleeve_to_principal(
+    st: SimState,
+    symbol: str,
+    *,
+    need: float,
+    px: float,
+    count_skim: bool = True,
+) -> float:
+    """Re-tag idle 600036 sleeve lots as 本金. Returns close-mark transferred."""
+    if need <= 1e-6 or px <= 0 or not symbol:
+        return 0.0
+    transferred = 0.0
+    lots = st.positions.setdefault(symbol, [])
+    for lot in list(sleeve_parking_lots(st, symbol)):
+        if transferred + 1e-6 >= need:
+            break
+        shares = int(getattr(lot, "shares", 0) or 0)
+        if shares < BOARD_LOT:
+            continue
+        remain = need - transferred
+        want = int(math.floor(remain / px / BOARD_LOT) * BOARD_LOT)
+        if want < BOARD_LOT:
+            continue
+        chunk = min(shares, want)
+        if chunk <= 0:
+            continue
+        if chunk >= shares:
+            register_principal_lot(st, lot)
+            transferred += shares * px
+            st.stats["profit_skim_transfer_lots"] = (
+                int(st.stats.get("profit_skim_transfer_lots", 0)) + 1
+            )
+            continue
+        lot.shares = shares - chunk
+        next_id = max((int(p.lot_id) for p in lots), default=-1) + 1
+        moved = Position(
+            code=symbol,
+            shares=chunk,
+            cost=float(lot.cost),
+            entry_idx=int(lot.entry_idx),
+            peak=float(lot.peak),
+            peak_hm=int(getattr(lot, "peak_hm", -1)),
+            lot_id=next_id,
+        )
+        lots.append(moved)
+        register_principal_lot(st, moved)
+        transferred += chunk * px
+        st.stats["profit_skim_transfer_lots"] = (
+            int(st.stats.get("profit_skim_transfer_lots", 0)) + 1
+        )
+    if transferred > 1e-6 and count_skim:
+        st.stats["profit_skim_transferred"] = (
+            float(st.stats.get("profit_skim_transferred", 0.0)) + transferred
+        )
+    return transferred
+
+
+def _buy_skim_principal(
+    st: SimState,
+    hooks: dict,
+    *,
+    budget: float,
+    day_i: int,
+    day,
+    ds: str,
+    names: dict,
+    daily_bars: dict,
+    exdiv=None,
+    qlib_limit_pct=None,
+    forbid_all_trade_at_limit: bool = False,
+    reason: str = "parking:profit_skim",
+    count_skim: bool = True,
+) -> float:
+    """Lock idle cash into 600036 as 本金. Returns cash actually spent."""
+    symbol = hooks.get("parking_symbol")
+    if not symbol or budget <= 1e-6:
+        return 0.0
+    quote = _skim_quote(daily_bars, symbol, day, ds, names, exdiv, qlib_limit_pct)
+    if quote is None:
+        st.stats["skip_profit_skim_no_bar"] = (
+            int(st.stats.get("skip_profit_skim_no_bar", 0)) + 1
+        )
+        return 0.0
+    px, limits = quote
+    if limits is None:
+        st.stats["skip_profit_skim_unknown_board"] = (
+            int(st.stats.get("skip_profit_skim_unknown_board", 0)) + 1
+        )
+        return 0.0
+    at_limit = skip_buy_at_limit(px, limits) or defer_sell_at_limit(px, limits)
+    if skip_buy_at_limit(px, limits) or (
+        forbid_all_trade_at_limit and at_limit
+    ):
+        st.stats["skip_profit_skim_limit"] = (
+            int(st.stats.get("skip_profit_skim_limit", 0)) + 1
+        )
+        return 0.0
+    before = {id(lot) for lot in parking_lots(st, symbol)}
+    cash0 = float(st.cash)
+    execute_parking_buy(
+        st, symbol, px, budget, day_i, day, reason=reason
+    )
+    for lot in parking_lots(st, symbol):
+        if id(lot) not in before:
+            register_principal_lot(st, lot)
+    spent = max(0.0, cash0 - float(st.cash))
+    if spent > 1e-6 and count_skim:
+        st.stats["profit_skim_park_buys"] = (
+            int(st.stats.get("profit_skim_park_buys", 0)) + 1
+        )
+    return spent
+
+
+def _profit_skim_extracted(st: SimState) -> float:
+    return (
+        float(st.stats.get("profit_skim_parked", 0.0))
+        + float(st.stats.get("profit_skim_withdrawn", 0.0))
+    )
+
+
+def _idle_fill_principal(
+    st: SimState,
+    hooks: dict,
+    *,
+    need: float,
+    count_skim: bool,
+    reason: str,
+    day_i: int,
+    day,
+    ds: str,
+    names: dict,
+    daily_bars: dict,
+    exdiv=None,
+    qlib_limit_pct=None,
+    forbid_all_trade_at_limit: bool = False,
+) -> float:
+    """Move idle sleeve / cash-above-buffer into 本金. Returns notional filled."""
+    if need <= 1e-6:
+        return 0.0
+    symbol = hooks.get("parking_symbol")
+    buffer = float(hooks.get("parking_buffer") or 0.0)
+    filled = 0.0
+    if symbol:
+        quote = _skim_quote(daily_bars, symbol, day, ds, names, exdiv, qlib_limit_pct)
+        if quote is not None:
+            px, limits = quote
+            if limits is not None and px > 0:
+                filled += _transfer_sleeve_to_principal(
+                    st, symbol, need=need, px=px, count_skim=count_skim
+                )
+    remain = max(0.0, need - filled)
+    if remain > 1e-6:
+        avail = max(0.0, float(st.cash) - buffer)
+        if avail > 1e-6:
+            spent = _buy_skim_principal(
+                st,
+                hooks,
+                budget=min(remain, avail),
+                day_i=day_i,
+                day=day,
+                ds=ds,
+                names=names,
+                daily_bars=daily_bars,
+                exdiv=exdiv,
+                qlib_limit_pct=qlib_limit_pct,
+                forbid_all_trade_at_limit=forbid_all_trade_at_limit,
+                reason=reason,
+                count_skim=count_skim,
+            )
+            filled += spent
+    return filled
+
+
+def _profit_skim_owed(equity: float, *, base: float, step: float, frac: float, withdrawn: float) -> float:
+    """Lifetime frac-of-base per completed +step rung, minus already withdrawn."""
+    if base <= 0 or step <= 0 or frac <= 0:
+        return 0.0
+    gain = float(equity) / float(base) - 1.0
+    rungs = int(gain / step + 1e-12) if gain > 0 else 0
+    if rungs <= 0:
+        return 0.0
+    return max(0.0, rungs * frac * base - float(withdrawn))
+
+
+def _run_profit_skim_to_parking(
+    st: SimState,
+    hooks: dict,
+    *,
+    owed: float,
+    day_i: int,
+    day,
+    ds: str,
+    names: dict,
+    daily_bars: dict,
+    exdiv=None,
+    qlib_limit_pct=None,
+    forbid_all_trade_at_limit: bool = False,
+) -> None:
+    """Lock owed rungs into 600036 from idle only. No strategy sells."""
+    got = _idle_fill_principal(
+        st,
+        hooks,
+        need=owed,
+        count_skim=True,
+        reason="parking:profit_skim",
+        day_i=day_i,
+        day=day,
+        ds=ds,
+        names=names,
+        daily_bars=daily_bars,
+        exdiv=exdiv,
+        qlib_limit_pct=qlib_limit_pct,
+        forbid_all_trade_at_limit=forbid_all_trade_at_limit,
+    )
+    if got > 1e-6:
+        st.stats["profit_skim_parked"] = (
+            float(st.stats.get("profit_skim_parked", 0.0)) + got
+        )
+        st.stats["profit_skim_events"] = int(st.stats.get("profit_skim_events", 0)) + 1
+    leftover = max(0.0, owed - got)
+    st.stats["profit_skim_pending_notional"] = leftover
+    if leftover > 1e-6:
+        st.stats["profit_skim_pending"] = int(st.stats.get("profit_skim_pending", 0)) + 1
+
+
+def _restore_lock_from_idle(
+    st: SimState,
+    hooks: dict,
+    *,
+    day_i: int,
+    day,
+    ds: str,
+    names: dict,
+    daily_bars: dict,
+    exdiv=None,
+    qlib_limit_pct=None,
+    forbid_all_trade_at_limit: bool = False,
+) -> None:
+    """Buy back 锁仓 sold for adds, after pending skim, before sleeve rebalance."""
+    drawn = float(st.stats.get("profit_skim_lock_drawn", 0.0))
+    if drawn <= 1e-6:
+        return
+    got = _idle_fill_principal(
+        st,
+        hooks,
+        need=drawn,
+        count_skim=False,
+        reason="parking:lock_restore",
+        day_i=day_i,
+        day=day,
+        ds=ds,
+        names=names,
+        daily_bars=daily_bars,
+        exdiv=exdiv,
+        qlib_limit_pct=qlib_limit_pct,
+        forbid_all_trade_at_limit=forbid_all_trade_at_limit,
+    )
+    if got <= 1e-6:
+        return
+    st.stats["profit_skim_lock_drawn"] = max(0.0, drawn - got)
+    st.stats["profit_skim_lock_restored"] = (
+        float(st.stats.get("profit_skim_lock_restored", 0.0)) + got
+    )
+    st.stats["profit_skim_lock_restore_events"] = (
+        int(st.stats.get("profit_skim_lock_restore_events", 0)) + 1
+    )
+
+
+def run_profit_skim_day(
+    st: SimState,
+    hooks: dict,
+    *,
+    day_i: int,
+    day,
+    ds: str,
+    names: dict,
+    daily_bars: dict,
+    exdiv=None,
+    qlib_limit_pct=None,
+    forbid_all_trade_at_limit: bool = False,
+) -> None:
+    """Each +20% rung locks that gain into 600036 本金 from idle only.
+
+    Order: transfer idle parking, spend cash above the parking buffer, leave
+    unpaid rungs pending. Then restore 锁仓 sold for adds. Sleeve rebalance
+    runs after this. Never sells strategy chips.
+    """
+    if not hooks.get("profit_skim"):
+        return
+    step = float(hooks.get("profit_skim_step") or 0.0)
+    frac = float(
+        hooks.get("profit_skim_frac")
+        or st.stats.get("profit_skim_frac")
+        or 0.0
+    )
+    base = float(hooks.get("profit_skim_base") or st.stats.get("profit_skim_base") or 0.0)
+    if step <= 0 or frac <= 0 or base <= 0:
+        return
+    extracted = _profit_skim_extracted(st)
+    to_parking = bool(hooks.get("profit_skim_to_parking"))
+    equity = working_equity(st, day, daily_bars)
+    owed = _profit_skim_owed(
+        equity, base=base, step=step, frac=frac, withdrawn=extracted
+    )
+    if to_parking:
+        if owed > 1e-6:
+            _run_profit_skim_to_parking(
+                st,
+                hooks,
+                owed=owed,
+                day_i=day_i,
+                day=day,
+                ds=ds,
+                names=names,
+                daily_bars=daily_bars,
+                exdiv=exdiv,
+                qlib_limit_pct=qlib_limit_pct,
+                forbid_all_trade_at_limit=forbid_all_trade_at_limit,
+            )
+        _restore_lock_from_idle(
+            st,
+            hooks,
+            day_i=day_i,
+            day=day,
+            ds=ds,
+            names=names,
+            daily_bars=daily_bars,
+            exdiv=exdiv,
+            qlib_limit_pct=qlib_limit_pct,
+            forbid_all_trade_at_limit=forbid_all_trade_at_limit,
+        )
+        return
+    if owed <= 1e-6:
+        return
+    cash0 = float(st.cash)
+    keep_idle = bool(hooks.get("profit_skim_keep_idle"))
+    pro_rata = bool(hooks.get("profit_skim_pro_rata"))
+    sold_shares = 0
+    for _ in range(256):
+        raised = max(0.0, float(st.cash) - cash0)
+        need = owed - raised
+        if need <= 1e-6:
+            break
+        if pro_rata:
+            filled = _sell_skim_pro_rata(
+                st,
+                gap=need,
+                day_i=day_i,
+                day=day,
+                ds=ds,
+                names=names,
+                daily_bars=daily_bars,
+                exdiv=exdiv,
+                qlib_limit_pct=qlib_limit_pct,
+                forbid_all_trade_at_limit=forbid_all_trade_at_limit,
+            )
+        else:
+            filled = _sell_skim_chunk(
+                st,
+                hooks,
+                gap=need,
+                day_i=day_i,
+                day=day,
+                ds=ds,
+                names=names,
+                daily_bars=daily_bars,
+                exdiv=exdiv,
+                qlib_limit_pct=qlib_limit_pct,
+                forbid_all_trade_at_limit=forbid_all_trade_at_limit,
+            )
+        if filled:
+            sold_shares += filled
+            continue
+        break
+    raised = max(0.0, float(st.cash) - cash0)
+    if keep_idle:
+        take = min(owed, raised)
+    else:
+        take = min(owed, float(st.cash))
+    if take > 1e-6:
+        st.cash = float(st.cash) - take
+        st.stats["profit_skim_withdrawn"] = (
+            float(st.stats.get("profit_skim_withdrawn", 0.0)) + take
+        )
+        st.stats["profit_skim_events"] = int(st.stats.get("profit_skim_events", 0)) + 1
+        leftover = owed - take
+    else:
+        leftover = owed
+    if leftover > 1e-6:
+        st.stats["profit_skim_pending"] = int(st.stats.get("profit_skim_pending", 0)) + 1
+    if sold_shares:
+        st.stats["profit_skim_sold_shares"] = (
+            int(st.stats.get("profit_skim_sold_shares", 0)) + sold_shares
+        )
+        st.stats["profit_skim_sells"] = int(st.stats.get("profit_skim_sells", 0)) + 1
+
+
+def run_parking_rebalance_day(
+    st: SimState,
+    hooks: dict,
+    *,
+    day_i: int,
+    day,
+    ds: str,
+    names: dict,
+    daily_bars: dict,
+    exdiv=None,
+    qlib_limit_pct=None,
+    forbid_all_trade_at_limit: bool = False,
+) -> None:
+    """Put idle cash into 600036 after the strategy day; flatten below buffer.
+
+    Lots are plain Position rows (not S8 groups) so trail / step / scale / peak
+    scanners never sell them. Equity marks include their market value.
+    """
+    if not hooks.get("parking_execute"):
+        return
+    symbol = hooks.get("parking_symbol")
+    if not symbol:
+        return
+    frac = float(hooks.get("parking_frac") or 0.0)
+    buffer = float(hooks.get("parking_buffer") or 0.0)
+    if frac <= 0:
+        return
+    got = (
+        day_bar_and_prev_closes(daily_bars[symbol], day)
+        if symbol in daily_bars else None
+    )
+    if got is None:
+        st.stats["skip_parking_no_bar"] = int(st.stats.get("skip_parking_no_bar", 0)) + 1
+        return
+    row, closes = got
+    px = float(row["close"])
+    if px <= 0 or not math.isfinite(px):
+        st.stats["skip_parking_no_bar"] = int(st.stats.get("skip_parking_no_bar", 0)) + 1
+        return
+    previous, _ = mapped_prev_close(exdiv, symbol, ds, float(closes[-1]))
+    limits = book_limit_prices(
+        symbol, previous, names, qlib_limit_pct=qlib_limit_pct, as_of=ds
+    )
+    if limits is None:
+        st.stats["skip_parking_unknown_board"] = (
+            int(st.stats.get("skip_parking_unknown_board", 0)) + 1
+        )
+        return
+    lots = sleeve_parking_lots(st, symbol)
+    held = sum(int(p.shares) for p in lots)
+    mtm = held * px
+    idle = float(st.cash) + mtm
+    if idle <= buffer + 1e-9:
+        target_shares = 0
+    else:
+        target_shares = budget_board_lots(max(0.0, idle - buffer) * frac, px)
+    delta = int(target_shares) - held
+    if abs(delta) < BOARD_LOT:
+        return
+    at_limit = skip_buy_at_limit(px, limits) or defer_sell_at_limit(px, limits)
+    if forbid_all_trade_at_limit and at_limit:
+        st.stats["skip_parking_limit"] = int(st.stats.get("skip_parking_limit", 0)) + 1
+        return
+    if delta >= BOARD_LOT:
+        if skip_buy_at_limit(px, limits):
+            st.stats["skip_parking_limit"] = int(st.stats.get("skip_parking_limit", 0)) + 1
+            return
+        execute_parking_buy(st, symbol, px, float(delta) * px, day_i, day)
+        return
+    if defer_sell_at_limit(px, limits):
+        st.stats["skip_parking_limit"] = int(st.stats.get("skip_parking_limit", 0)) + 1
+        return
+    want = -delta
+    sold = 0
+    for lot in lots:
+        if sold >= want:
+            break
+        if lot.entry_idx >= day_i:
+            st.stats["skip_parking_t1"] = int(st.stats.get("skip_parking_t1", 0)) + 1
+            continue
+        chunk = min(int(lot.shares), want - sold)
+        filled = _sell(
+            st,
+            symbol,
+            lot,
+            px,
+            day,
+            "parking:rebalance",
+            day_i=day_i,
+            wanted_shares=chunk,
+            price_rule="parking_daily_close",
+        )
+        sold += int(filled)
+    if sold:
+        st.stats["parking_sells"] = int(st.stats.get("parking_sells", 0)) + 1
+        st.stats["parking_sold_shares"] = (
+            int(st.stats.get("parking_sold_shares", 0)) + sold
+        )
 
 
 def require_market_marks(

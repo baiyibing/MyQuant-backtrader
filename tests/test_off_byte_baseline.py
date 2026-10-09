@@ -24,6 +24,7 @@ from scripts.research.generate_off_byte_baseline import (
     INDUSTRY_DEFAULT_BOOK_NAMES,
     INDUSTRY_DEFAULT_CASES,
     INDUSTRY_DEFAULT_GOLDEN,
+    INDUSTRY_DEFAULT_PREVIOUS_GOLDEN,
     INDUSTRY_DEFAULT_RULE_REVISION,
     P03_CASES,
     P03_GOLDEN,
@@ -59,6 +60,9 @@ from scripts.research.generate_off_byte_baseline import (
     V92_CASES,
     V93_BOOK_NAMES,
     V93_CASES,
+    V650_BOOK_NAMES,
+    V650_CASES,
+    PENDING_BOOK_NAMES,
     assert_baseline_coverage,
     assert_case_bytes,
     assert_case_canonical,
@@ -82,6 +86,7 @@ from scripts.research.generate_off_byte_baseline import (
     load_v91_golden,
     load_v92_golden,
     load_v93_golden,
+    load_v650_golden,
 )
 
 
@@ -95,6 +100,9 @@ IMMUTABLE_INDUSTRY_GOLDEN_SHA256 = {
     P09_GOLDEN: "67fabc7ce07a96c84b268e21da9b528b599c088d8f44e253c93ada7283fc527b",
     P10_GOLDEN: "bb746f5cc8f6cf72f38914d866603dbeb8f297b15b33d6052d7e094bf78f62db",
     P11_GOLDEN: "fb8ae86b183f0bf6cc8c8c40613876dc47305d480f7a4e75b8245ec4e74c07ee",
+    INDUSTRY_DEFAULT_PREVIOUS_GOLDEN: (
+        "e1ed21cb83f961fe393e43fc617fa5e54f2634a2bc1b1cfe51986f1a2f522f50"
+    ),
 }
 
 
@@ -145,13 +153,16 @@ def test_off_byte_baseline_covers_current_registry_and_standalone_v7():
     assert len(HISTORICAL_BOOK_NAMES) == 19 and len(HISTORICAL_CASES) == 39
     assert set(expected["books"]) == set(HISTORICAL_BOOK_NAMES)
     assert set(expected["cases"]) == {f"{book}/{engine}" for book, engine in HISTORICAL_CASES}
-    assert len(BOOK_NAMES) == len(BOOKS)
-    assert len(CASES) == 2 * len(BOOKS) + 1
-    assert set(BOOK_NAMES) == set(BOOKS) == (
+    assert set(PENDING_BOOK_NAMES) == {"version6_51", "version6_52", "version6_53"}
+    assert set(BOOKS) == set(BOOK_NAMES) | set(PENDING_BOOK_NAMES)
+    assert len(BOOK_NAMES) + len(PENDING_BOOK_NAMES) == len(BOOKS)
+    assert len(CASES) == 2 * len(BOOK_NAMES) + 1
+    assert set(BOOK_NAMES) == (
         set(HISTORICAL_BOOK_NAMES) | set(V61_BOOK_NAMES) | set(V91_BOOK_NAMES)
         | set(V92_BOOK_NAMES) | set(V93_BOOK_NAMES) | set(V6F_BOOK_NAMES)
+        | set(V650_BOOK_NAMES)
     )
-    registered_cases = {(book, engine) for book in BOOKS for engine in ("daily", "minute")}
+    registered_cases = {(book, engine) for book in BOOK_NAMES for engine in ("daily", "minute")}
     assert set(CASES) == registered_cases | {("version7", "minute")}
     for case in expected["cases"].values():
         assert set(case["sha256_csv_bytes"]) == {"trades", "equity"}
@@ -263,6 +274,28 @@ def test_v93_overlay_only_adds_authorized_cases_and_preserves_historical_files()
         actual, _, _ = expected_case(book, engine, rule_profile="legacy")
         assert actual["sha256_csv_bytes"] == golden["cases"][f"{book}/{engine}"]["sha256_csv_bytes"]
         assert actual["structured"]["stats"]["profit_target"] == pytest.approx(0.10)
+        assert actual["fill_counts"]["BUY"] > 0
+        assert actual["fill_counts"]["SELL"] > 0
+
+
+def test_v650_overlay_only_adds_authorized_cases_and_preserves_historical_files():
+    assert sha256(GOLDEN.read_bytes()).hexdigest() == HISTORICAL_GOLDEN_SHA256
+    assert sha256(CANONICAL_GOLDEN.read_bytes()).hexdigest() == HISTORICAL_CANONICAL_SHA256
+    golden = load_v650_golden()
+    assert len(V650_CASES) == len(golden["cases"]) == 2
+    assert golden["captured_environment"]["pandas"] == "3.0.6"
+    assert set(V650_BOOK_NAMES) == {"version6_50"}
+    assert set(golden["cases"]) == {"version6_50/daily", "version6_50/minute"}
+    historical = json.loads(GOLDEN.read_text(encoding="utf-8"))
+    assert "version6_50" not in historical["books"]
+    assert "version6_50/daily" not in historical["cases"]
+    assert "version6_50/minute" not in historical["cases"]
+    for book, engine in V650_CASES:
+        actual, _, _ = expected_case(book, engine, rule_profile="legacy")
+        assert actual["sha256_csv_bytes"] == golden["cases"][f"{book}/{engine}"]["sha256_csv_bytes"]
+        assert actual["structured"]["stats"]["sell_book"] == "v6_50"
+        assert actual["structured"]["stats"]["cont_stop_rebuy"] is True
+        assert actual["structured"]["stats"]["parking_execute"] is True
         assert actual["fill_counts"]["BUY"] > 0
         assert actual["fill_counts"]["SELL"] > 0
 
@@ -477,10 +510,12 @@ def test_industry_p11_v7_chronological_overlay_is_active_and_legacy_stays_frozen
 @pytest.mark.parametrize("book,engine", CASES, ids=[f"{book}-{engine}" for book, engine in CASES])
 def test_off_byte_baseline_trades_equity_and_account(book, engine, explicit_false, tmp_path):
     from scripts.research.generate_off_byte_baseline import (
-        V61_CASES, V61_GOLDEN, V6F_CASES, V6F_GOLDEN,
+        V61_CASES, V61_GOLDEN, V6F_CASES, V6F_GOLDEN, V650_CASES, V650_GOLDEN,
     )
     if (book, engine) in V6F_CASES and not V6F_GOLDEN.exists():
         pytest.skip("v6f overlay pending authorized pandas-3.0.6/Linux recording (--record-v6f)")
+    if (book, engine) in V650_CASES and not V650_GOLDEN.exists():
+        pytest.skip("v650 overlay pending authorized pandas-3.0.6 recording (--record-v650)")
     if (book, engine) in V61_CASES and not V61_GOLDEN.exists():
         pytest.skip("v61 v2 overlay pending first-lot-anchor re-record (--record-v61-v2)")
     expected, canonical, recorded_pandas = expected_case(

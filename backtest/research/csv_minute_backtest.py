@@ -145,11 +145,17 @@ from oskh_data.symbol_format import to_partition_key as to_partition_key  # noqa
 from backtest.research.strategy3_rules import reserve_step_minute  # noqa: E402
 from backtest.research.csv_simulate_loop import (  # noqa: E402
     append_equity_and_eod_marks,
+    bind_parking_session,
+    extra_load_codes_for_strategy,
     init_sim_state,
     prepare_strategy_hooks,
     require_market_marks,
     run_chase_due_day,
     run_eod_exits,
+    run_index_gate_cut_day,
+    run_parking_open_cover_day,
+    run_parking_rebalance_day,
+    run_profit_skim_day,
     run_pool_buys_day,
     run_step_adds_day,
 )
@@ -939,6 +945,41 @@ def simulate(
             st.cash += st.exdiv_economics.settle(ds)
         names = names_asof(ds)
         st.daily_quota_used = 0.0
+        bind_parking_session(
+            st,
+            hooks,
+            day_i=i,
+            day=day,
+            ds=ds,
+            names=names,
+            daily_bars=daily_bars,
+            exdiv=exdiv,
+            qlib_limit_pct=qlib_limit_pct,
+        )
+        run_parking_open_cover_day(
+            st,
+            hooks,
+            day_i=i,
+            day=day,
+            ds=ds,
+            names=names,
+            daily_bars=daily_bars,
+            exdiv=exdiv,
+            qlib_limit_pct=qlib_limit_pct,
+            forbid_all_trade_at_limit=forbid_all_trade_at_limit,
+        )
+        run_index_gate_cut_day(
+            st,
+            hooks,
+            day_i=i,
+            day=day,
+            ds=ds,
+            names=names,
+            daily_bars=daily_bars,
+            exdiv=exdiv,
+            qlib_limit_pct=qlib_limit_pct,
+            forbid_all_trade_at_limit=forbid_all_trade_at_limit,
+        )
 
         if policy.day_start is not None:
             policy.day_start(st, day=day, ds=ds, day_i=i, context=policy_context)
@@ -1073,6 +1114,7 @@ def simulate(
                                         st, code, pos, float(c[bar_idx]), day, i,
                                         limits, scale_step=hooks["scale_out_step"],
                                         scale_frac=hooks.get("scale_out_frac", 0.05),
+                                        scale_anchor=hooks.get("scale_out_anchor", "first_lot"),
                                         fill_config=side_fill_config, open_px=float(o[bar_idx]),
                                         hm=int(at_hm),
                                     )
@@ -1361,6 +1403,30 @@ def simulate(
                       hold_modes=hold_modes, exdiv=exdiv,
                       **({"signal_bars_front": signal_bars_front, "strategy": strategy,
                           "fix_s11_exit_domain": True} if fix_s11_exit_domain else {}))
+        run_profit_skim_day(
+            st,
+            hooks,
+            day_i=i,
+            day=day,
+            ds=ds,
+            names=names,
+            daily_bars=daily_bars,
+            exdiv=exdiv,
+            qlib_limit_pct=qlib_limit_pct,
+            forbid_all_trade_at_limit=forbid_all_trade_at_limit,
+        )
+        run_parking_rebalance_day(
+            st,
+            hooks,
+            day_i=i,
+            day=day,
+            ds=ds,
+            names=names,
+            daily_bars=daily_bars,
+            exdiv=exdiv,
+            qlib_limit_pct=qlib_limit_pct,
+            forbid_all_trade_at_limit=forbid_all_trade_at_limit,
+        )
         if fix_s12_price_domain:
             require_market_marks(
                 st, ds=ds, day=day, mark_bars=daily_bars,
@@ -1576,6 +1642,7 @@ def run(
     from backtest.research.topk_dropout_scores import codes_from_scores
 
     all_codes |= codes_from_scores(scores_by_day)
+    all_codes |= extra_load_codes_for_strategy(strategy)
     warm_days = (
         STRATEGY4_CALENDAR_SLACK_DAYS
         if book in ("version4", "version12")

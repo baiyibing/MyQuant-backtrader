@@ -121,8 +121,14 @@ from backtest.research.csv_simulate_loop import (  # noqa: E402
     append_equity_and_eod_marks,
     init_sim_state,
     prepare_strategy_hooks,
+    bind_parking_session,
+    extra_load_codes_for_strategy,
     run_chase_due_day,
     run_eod_exits,
+    run_index_gate_cut_day,
+    run_parking_open_cover_day,
+    run_parking_rebalance_day,
+    run_profit_skim_day,
     run_pool_buys_day,
     run_step_adds_day,
 )
@@ -387,6 +393,41 @@ def simulate(
             st.cash += st.exdiv_economics.settle(ds)
         names = names_asof(ds)
         st.daily_quota_used = 0.0  # 每个交易日开盘重置常规额度
+        bind_parking_session(
+            st,
+            hooks,
+            day_i=i,
+            day=day,
+            ds=ds,
+            names=names,
+            daily_bars=bars,
+            exdiv=exdiv,
+            qlib_limit_pct=qlib_limit_pct,
+        )
+        run_parking_open_cover_day(
+            st,
+            hooks,
+            day_i=i,
+            day=day,
+            ds=ds,
+            names=names,
+            daily_bars=bars,
+            exdiv=exdiv,
+            qlib_limit_pct=qlib_limit_pct,
+            forbid_all_trade_at_limit=forbid_all_trade_at_limit,
+        )
+        run_index_gate_cut_day(
+            st,
+            hooks,
+            day_i=i,
+            day=day,
+            ds=ds,
+            names=names,
+            daily_bars=bars,
+            exdiv=exdiv,
+            qlib_limit_pct=qlib_limit_pct,
+            forbid_all_trade_at_limit=forbid_all_trade_at_limit,
+        )
 
         if callable(hooks.get("run_daily_day")):
             hooks["run_daily_day"](
@@ -702,6 +743,30 @@ def simulate(
                       hold_modes=hold_modes, exdiv=exdiv,
                       **({"signal_bars_front": signal_bars_front, "strategy": strategy,
                           "fix_s11_exit_domain": True} if fix_s11_exit_domain else {}))
+        run_profit_skim_day(
+            st,
+            hooks,
+            day_i=i,
+            day=day,
+            ds=ds,
+            names=names,
+            daily_bars=bars,
+            exdiv=exdiv,
+            qlib_limit_pct=qlib_limit_pct,
+            forbid_all_trade_at_limit=forbid_all_trade_at_limit,
+        )
+        run_parking_rebalance_day(
+            st,
+            hooks,
+            day_i=i,
+            day=day,
+            ds=ds,
+            names=names,
+            daily_bars=bars,
+            exdiv=exdiv,
+            qlib_limit_pct=qlib_limit_pct,
+            forbid_all_trade_at_limit=forbid_all_trade_at_limit,
+        )
         append_equity_and_eod_marks(
             st,
             ds=ds,
@@ -814,6 +879,7 @@ def run(
     from backtest.research.topk_dropout_scores import codes_from_scores
 
     all_codes |= codes_from_scores(scores_by_day)
+    all_codes |= extra_load_codes_for_strategy(strategy)
     warm_days = (
         STRATEGY4_CALENDAR_SLACK_DAYS
         if normalize_csv_strategy(strategy) in ("version4", "version12")

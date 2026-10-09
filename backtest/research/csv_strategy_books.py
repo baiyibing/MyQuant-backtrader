@@ -67,6 +67,10 @@ from backtest.research import (
     strategy6_47_rules,
     strategy6_48_rules,
     strategy6_49_rules,
+    strategy6_50_rules,
+    strategy6_51_rules,
+    strategy6_52_rules,
+    strategy6_53_rules,
     strategy8_rules,
     strategy8_1_rules,
     strategy8_2_rules,
@@ -184,6 +188,14 @@ from backtest.research.csv_strategy_books_v6_family import (
     _run_kwargs_version6_48,
     _apply_version6_49,
     _run_kwargs_version6_49,
+    _apply_version6_50,
+    _run_kwargs_version6_50,
+    _apply_version6_51,
+    _run_kwargs_version6_51,
+    _apply_version6_52,
+    _run_kwargs_version6_52,
+    _apply_version6_53,
+    _run_kwargs_version6_53,
 )
 
 HELP_LOCK_V1 = strategy1_rules.HELP_LOCK
@@ -241,6 +253,10 @@ HELP_LOCK_V6_46 = strategy6_46_rules.HELP_LOCK
 HELP_LOCK_V6_47 = strategy6_47_rules.HELP_LOCK
 HELP_LOCK_V6_48 = strategy6_48_rules.HELP_LOCK
 HELP_LOCK_V6_49 = strategy6_49_rules.HELP_LOCK
+HELP_LOCK_V6_50 = strategy6_50_rules.HELP_LOCK
+HELP_LOCK_V6_51 = strategy6_51_rules.HELP_LOCK
+HELP_LOCK_V6_52 = strategy6_52_rules.HELP_LOCK
+HELP_LOCK_V6_53 = strategy6_53_rules.HELP_LOCK
 HELP_LOCK_V8 = strategy8_rules.HELP_LOCK
 HELP_LOCK_V8_1 = strategy8_1_rules.HELP_LOCK
 HELP_LOCK_V8_2 = strategy8_2_rules.HELP_LOCK
@@ -420,10 +436,29 @@ def apply_csv_strategy(strategy: str, **kwargs) -> dict:
     hooks.setdefault("step_stop_pct", None)  # per-step-lot own stop; None = off
     hooks.setdefault("scale_out_step", None)  # per +rise ladder selling a fraction; None = off
     hooks.setdefault("scale_out_frac", 0.05)
+    hooks.setdefault("scale_out_anchor", "first_lot")  # 6.51 = weighted remaining avg
     hooks.setdefault("peak_dd_exit", None)  # peak drawdown clear; None = off
     hooks.setdefault("peak_dd_sessions", 15)
     hooks.setdefault("add_schedule", None)
     hooks.setdefault("add_schedule_trigger", None)  # "peak" = group peak arms a tier; None = px/cost
+    hooks.setdefault("cont_stop_rebuy", False)
+    hooks.setdefault("cont_from_rise", None)
+    hooks.setdefault("cont_stop_rebuy_lift", None)
+    hooks.setdefault("cont_stop_rebuy_frac", None)
+    hooks.setdefault("cont_stop_rebuy_open_frac", None)
+    hooks.setdefault("cont_stop_rebuy_with_schedule", False)
+    hooks.setdefault("min_lot_top_up", False)
+    hooks.setdefault("profit_skim", False)
+    hooks.setdefault("profit_skim_step", None)
+    hooks.setdefault("profit_skim_frac", None)
+    hooks.setdefault("profit_skim_pro_rata", False)
+    hooks.setdefault("profit_skim_keep_idle", False)
+    hooks.setdefault("profit_skim_to_parking", False)
+    hooks.setdefault("profit_skim_base", None)
+    hooks.setdefault("index_cut", False)
+    hooks.setdefault("index_cut_frac", None)
+    hooks.setdefault("index_cut_min_keep", None)
+    hooks.setdefault("index_blocks_s8_add", False)
     hooks.setdefault("add_step2", None)  # second (base) ladder step; None = single ladder
     hooks.setdefault("step_frac2", None)
     hooks.setdefault("tranche_max", None)
@@ -2470,6 +2505,66 @@ register(
         help_lock=strategy6_49_rules.HELP_LOCK,
         apply=_apply_version6_49,
         run_kwargs=_run_kwargs_version6_49,
+    )
+)
+
+register(
+    CsvStrategyBook(
+        name="version6_50",
+        sizing="per_name",
+        name_budget=1_000_000.0,
+        tag=strategy6_50_rules.BOOK_TAG,
+        aliases=("6.50", "6_50", "v6.50", "v6_50", "version6_50"),
+        allow_add=strategy6_50_rules.ALLOW_ADD,
+        peak_gap_min=strategy6_50_rules.PEAK_GAP_MIN,
+        help_lock=strategy6_50_rules.HELP_LOCK,
+        apply=_apply_version6_50,
+        run_kwargs=_run_kwargs_version6_50,
+    )
+)
+
+register(
+    CsvStrategyBook(
+        name="version6_51",
+        sizing="per_name",
+        name_budget=1_000_000.0,
+        tag=strategy6_51_rules.BOOK_TAG,
+        aliases=("6.51", "6_51", "v6.51", "v6_51", "version6_51"),
+        allow_add=strategy6_51_rules.ALLOW_ADD,
+        peak_gap_min=strategy6_51_rules.PEAK_GAP_MIN,
+        help_lock=strategy6_51_rules.HELP_LOCK,
+        apply=_apply_version6_51,
+        run_kwargs=_run_kwargs_version6_51,
+    )
+)
+
+register(
+    CsvStrategyBook(
+        name="version6_52",
+        sizing="per_name",
+        name_budget=1_000_000.0,
+        tag=strategy6_52_rules.BOOK_TAG,
+        aliases=("6.52", "6_52", "v6.52", "v6_52", "version6_52"),
+        allow_add=strategy6_52_rules.ALLOW_ADD,
+        peak_gap_min=strategy6_52_rules.PEAK_GAP_MIN,
+        help_lock=strategy6_52_rules.HELP_LOCK,
+        apply=_apply_version6_52,
+        run_kwargs=_run_kwargs_version6_52,
+    )
+)
+
+register(
+    CsvStrategyBook(
+        name="version6_53",
+        sizing="per_name",
+        name_budget=1_000_000.0,
+        tag=strategy6_53_rules.BOOK_TAG,
+        aliases=("6.53", "6_53", "v6.53", "v6_53", "version6_53"),
+        allow_add=strategy6_53_rules.ALLOW_ADD,
+        peak_gap_min=strategy6_53_rules.PEAK_GAP_MIN,
+        help_lock=strategy6_53_rules.HELP_LOCK,
+        apply=_apply_version6_53,
+        run_kwargs=_run_kwargs_version6_53,
     )
 )
 

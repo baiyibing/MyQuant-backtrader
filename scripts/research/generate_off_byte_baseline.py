@@ -27,6 +27,9 @@ See docs/backtest/s8-independent-positions-2026-09-26.md and
 docs/backtest/v61-off-byte-overlay-2026-10-02.md.
 The 6.2-6.49 family (48 books, V6F overlay through v23) uses a scoped additive
 overlay; --record-v6f writes its daily/minute cases and refuses overwrite.
+version6_50 uses a scoped additive overlay; --record-v650 writes only its
+daily/minute cases and refuses overwrite of this revision. Parking execution
+is a new 20261008-park revision; the prior cont-rebuy overlay file stays.
 Coverage for --check is asserted via assert_baseline_coverage() (registry-derived;
 no hardcoded book/case totals beyond the frozen historical 19/39).
 Industry overlays are additive and profile-scoped. P03-P10 stay immutable;
@@ -34,7 +37,7 @@ Industry overlays are additive and profile-scoped. P03-P10 stay immutable;
 and refuses overwrite. P11 is the active industry revision.
 --record-industry-default records the full CASES matrix with rule_profile
 "industry" and the historical frozen_inputs path (no specialty fixture), while
-leaving every historical and P03-P11 golden immutable.
+leaving every historical, P03-P11, and prior industry-default golden immutable.
 """
 
 from __future__ import annotations
@@ -127,6 +130,12 @@ V6F_BOOK_NAMES = (
 V6F_GOLDEN = ROOT / "tests/fixtures/off_byte_baseline_v6_family_v23_20261007.json"
 V6F_RULE_REVISION = 'strategy6-family-v23-6_2-to-6_49-20261007'
 V6F_CASES = tuple((book, engine) for book in V6F_BOOK_NAMES for engine in ("daily", "minute"))
+V650_GOLDEN = ROOT / "tests/fixtures/off_byte_baseline_v650_parking_exec_20261008.json"
+V650_RULE_REVISION = "v650-parking-exec-20261008"
+V650_BOOK_NAMES = ("version6_50",)
+V650_CASES = tuple((book, engine) for book in V650_BOOK_NAMES for engine in ("daily", "minute"))
+# Registered in BOOKS but not yet in an authorized off-byte overlay.
+PENDING_BOOK_NAMES = ("version6_51", "version6_52", "version6_53")
 P03_GOLDEN = ROOT / "tests/fixtures/off_byte_baseline_industry_p03_order_commission_20261006.json"
 P03_RULE_REVISION = "industry-p03-order-commission-20261006"
 P03_BOOK_NAMES = ("version6", "version7", "version8")
@@ -214,17 +223,20 @@ P11_CASES = (
 P11_FIXTURE = ROOT / "tests/fixtures/industry/v7_chronological.json"
 BOOK_NAMES = (
     HISTORICAL_BOOK_NAMES + V61_BOOK_NAMES + V91_BOOK_NAMES + V92_BOOK_NAMES
-    + V93_BOOK_NAMES + V6F_BOOK_NAMES
+    + V93_BOOK_NAMES + V6F_BOOK_NAMES + V650_BOOK_NAMES
 )
 CODE = "600000.SH"
 TOPK_CODES = (CODE, "600001.SH", "600002.SH")
 CASES = tuple((book, engine) for book in BOOK_NAMES for engine in ("daily", "minute")) + (
     ("version7", "minute"),
 )
-INDUSTRY_DEFAULT_GOLDEN = (
-    ROOT / "tests/fixtures/off_byte_baseline_industry_default_20261007.json"
+INDUSTRY_DEFAULT_PREVIOUS_GOLDEN = (
+    ROOT / "tests/fixtures/off_byte_baseline_industry_default_20261008.json"
 )
-INDUSTRY_DEFAULT_RULE_REVISION = "industry-default-20261007"
+INDUSTRY_DEFAULT_GOLDEN = (
+    ROOT / "tests/fixtures/off_byte_baseline_industry_default_20261008_park.json"
+)
+INDUSTRY_DEFAULT_RULE_REVISION = "industry-default-20261008-park"
 INDUSTRY_DEFAULT_BOOK_NAMES = BOOK_NAMES
 INDUSTRY_DEFAULT_CASES = CASES
 # Eight decimal places retain sub-cent fills/fees while removing float tails.
@@ -1374,6 +1386,20 @@ def load_v93_golden() -> dict:
     return golden
 
 
+def load_v650_golden() -> dict:
+    """Additive overlay for version6_50 only; historical files stay immutable."""
+    assert _hash(GOLDEN.read_bytes()) == HISTORICAL_GOLDEN_SHA256
+    assert _hash(CANONICAL_GOLDEN.read_bytes()) == HISTORICAL_CANONICAL_SHA256
+    golden = json.loads(V650_GOLDEN.read_text(encoding="utf-8"))
+    assert golden["rule_revision"] == V650_RULE_REVISION
+    assert golden["historical_raw_sha256"] == HISTORICAL_GOLDEN_SHA256
+    assert golden["historical_canonical_sha256"] == HISTORICAL_CANONICAL_SHA256
+    assert golden["contract"] == CANONICAL_CONTRACT
+    assert golden["books"] == list(V650_BOOK_NAMES)
+    assert set(golden["cases"]) == {f"{book}/{engine}" for book, engine in V650_CASES}
+    return golden
+
+
 def load_v6f_golden() -> dict:
     """Additive overlay for the 6.2-6.49 family; historical files stay immutable."""
     assert _hash(GOLDEN.read_bytes()) == HISTORICAL_GOLDEN_SHA256
@@ -1621,6 +1647,11 @@ def expected_case(
         case = golden["cases"][key]
         canonical = {name: canonical_hash(table) for name, table in case["canonical_csv"].items()}
         return case, canonical, golden["captured_environment"]["pandas"]
+    if (book, engine) in V650_CASES:
+        golden = load_v650_golden()
+        case = golden["cases"][key]
+        canonical = {name: canonical_hash(table) for name, table in case["canonical_csv"].items()}
+        return case, canonical, golden["captured_environment"]["pandas"]
     if (book, engine) in V6F_CASES:
         golden = load_v6f_golden()
         case = golden["cases"][key]
@@ -1757,11 +1788,15 @@ def capture_case(
 
 def assert_baseline_coverage():
     """Check registry and overlay coverage without running simulations."""
-    assert set(BOOK_NAMES) == set(BOOKS), "Update coverage explicitly when BOOKS changes"
+    assert set(BOOKS) == set(BOOK_NAMES) | set(PENDING_BOOK_NAMES), (
+        "Update coverage explicitly when BOOKS changes"
+    )
+    assert set(PENDING_BOOK_NAMES).isdisjoint(BOOK_NAMES)
     assert len(HISTORICAL_BOOK_NAMES) == 19 and len(HISTORICAL_CASES) == 39
     assert set(BOOK_NAMES) == (
         set(HISTORICAL_BOOK_NAMES) | set(V61_BOOK_NAMES) | set(V91_BOOK_NAMES)
         | set(V92_BOOK_NAMES) | set(V93_BOOK_NAMES) | set(V6F_BOOK_NAMES)
+        | set(V650_BOOK_NAMES)
     )
     assert set(CASES) == {
         (book, engine) for book in BOOK_NAMES for engine in ("daily", "minute")
@@ -1888,6 +1923,10 @@ def main():
     mode.add_argument(
         "--record-v93", action="store_true",
         help="Record only the 2 additive version9_3 cases (scoped overlay)",
+    )
+    mode.add_argument(
+        "--record-v650", action="store_true",
+        help="Record only the 2 additive version6_50 cases (scoped overlay)",
     )
     mode.add_argument(
         "--record-v6f", action="store_true",
@@ -2643,6 +2682,48 @@ def main():
             encoding="utf-8",
         )
         print(f"Wrote {V93_GOLDEN}: 2 additive cases / 4 production CSV hashes")
+        return
+    if args.record_v650:
+        if V650_GOLDEN.exists() and json.loads(
+            V650_GOLDEN.read_text(encoding="utf-8")
+        )["rule_revision"] == V650_RULE_REVISION:
+            parser.error(
+                "The version6_50 overlay already exists for this rule revision; "
+                "refusing to overwrite"
+            )
+        if pd.__version__ != "3.0.6":
+            parser.error("version6_50 recording requires the authorized pandas 3.0.6 environment")
+        assert _hash(GOLDEN.read_bytes()) == HISTORICAL_GOLDEN_SHA256
+        assert _hash(CANONICAL_GOLDEN.read_bytes()) == HISTORICAL_CANONICAL_SHA256
+        with tempfile.TemporaryDirectory(prefix="v650-byte-baseline-") as temp:
+            cases = {
+                f"{book}/{engine}": capture_case(
+                    book, engine, Path(temp) / book / engine
+                )
+                for book, engine in V650_CASES
+            }
+        for case in cases.values():
+            assert_case_bytes(case, case)
+            assert case["fill_counts"]["BUY"] > 0
+            assert case["fill_counts"]["SELL"] > 0
+        payload = {
+            "rule_revision": V650_RULE_REVISION,
+            "historical_raw_sha256": HISTORICAL_GOLDEN_SHA256,
+            "historical_canonical_sha256": HISTORICAL_CANONICAL_SHA256,
+            "books": list(V650_BOOK_NAMES),
+            "captured_environment": {
+                "python": platform.python_version(),
+                "pandas": pd.__version__,
+                "platform": sys.platform,
+            },
+            "contract": CANONICAL_CONTRACT,
+            "cases": cases,
+        }
+        V650_GOLDEN.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        print(f"Wrote {V650_GOLDEN}: 2 additive cases / 4 production CSV hashes")
         return
     if args.record_s12:
         if S12_GOLDEN.exists():

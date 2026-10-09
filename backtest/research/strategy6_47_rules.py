@@ -43,8 +43,9 @@ INDEX_BLOCKS_ADD = False  # 只闸新开，不闸延续档加仓
 
 # 闲置资金管理（600036 招商银行现金停泊）
 PARKING_SYMBOL = "600036.SH"
-PARKING_FRAC = 0.60     # 闲置现金的 60% 买入
+PARKING_FRAC = 0.80     # 闲置现金的 80% 买入
 PARKING_BUFFER = 2_000_000  # 最低现金缓冲（元），200 万
+PARKING_EXECUTE = True
 SCALE_OUT_STEP = 0.05  # 每涨 5% 一档（回退 6.14 拉宽实验）
 SCALE_OUT_FRAC = 0.05  # 卖出当时剩余持仓的 5%
 PEAK_DD_EXIT = 0.15  # 峰值回撤阈值（6.14 修改②）
@@ -108,6 +109,10 @@ def record_strategy6_47_params(st, *, stop_pct: float) -> None:
     st.stats["cost_anchor"] = "first_lot"
     st.stats["open_frac"] = float(OPEN_FRAC)
     st.stats["add_schedule_head"] = [list(x) for x in ADD_SCHEDULE[:4]]
+    st.stats["parking_symbol"] = PARKING_SYMBOL
+    st.stats["parking_frac"] = float(PARKING_FRAC)
+    st.stats["parking_buffer"] = float(PARKING_BUFFER)
+    st.stats["parking_execute"] = bool(PARKING_EXECUTE)
 
 
 
@@ -136,5 +141,7 @@ HELP_LOCK = """
   各自止损止盈，同日可与 step 并存（两笔各 100 万）。
   单股预算 100 万 / 每笔整基；全局现金 --cash-total（人裁 40 亿）。无指数闸。
   T+1 09:45 追买：市价 > 开盘 买入；市价 < 开盘 或涨停 弃买（引擎既有合同）。
+  停泊：闲置（现金+停泊市值）高于 200 万时，80% 买 600036（真实成交）；否则清仓。
+  停泊 lot 不走止盈/止损/减仓；净值含停泊市值。策略买单不足时按当日停泊价 unpark。
   落盘：backtest_output/csv_minute_v6_47_{start}_{end}/
 """
