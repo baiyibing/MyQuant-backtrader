@@ -769,7 +769,8 @@ def _buy_size(
 def allows_min_lot_top_up(st) -> bool:
     """Return whether one board lot may be funded from the cash pool.
 
-    Industry B8-03 turns this off. version6_50 opts back in via min_lot_top_up.
+    Book/CLI ``min_lot_top_up`` is the business switch (6.50+ default on).
+    Industry B8-03 stays off unless that switch is on.
     """
     policy = s8_policy(st)
     if policy and bool(policy.get("min_lot_top_up")):

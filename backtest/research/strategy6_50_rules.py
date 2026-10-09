@@ -151,7 +151,8 @@ HELP_LOCK = """
   停泊 lot 不走 6.50 止盈/止损/减仓；净值含停泊市值。T+1 / 涨跌停随引擎。
   开盘评估现金：低于 100 万则按开盘价卖停泊补到 100 万（reason parking:open_cover），再做策略买入。
   策略买单仍不足时，再卖停泊（reason parking:unpark）；补完仍不够则跳过该笔（skip_cash），不停跑。
-  补一手：预算整百不足 100 股时，从资金池补到 100 股（industry 亦开；差额记 supplementary）。
+  补一手：默认开。预算整百不足 100 股时，从账户现金池补到 100 股（差额记 supplementary）。
+  --no-min-lot-top-up 关掉（不够一手则 skip_min_lot_budget，对齐 industry B8-03）。
   延续档止损买回：+40% 起的建仓梯 lot 被 step 止损清仓后，股价回到该档阈值
   +20 个百分点（例：A0×1.60 加仓后止损，涨到 A0×1.80）时，同组再加 1 个基数
   （reason add:cont_rebuy；不推进该笔的 executed_steps；每档一次），并同时买回

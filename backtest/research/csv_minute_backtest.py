@@ -685,6 +685,7 @@ def simulate(
     limit_walkdown: bool = False,
     topk_limit_rule: str = "qlib",
     policy_context: MinutePolicyContext | None = None,
+    min_lot_top_up: bool | None = None,
     rule_profile: str | RuleProfile = "industry",
 ) -> SimState:
     """Opt-in cap uses caller-attested completed minutes; daily volume is unused.
@@ -808,6 +809,7 @@ def simulate(
             keep_buy_vacancy=keep_buy_vacancy,
             index_block_new=index_block_new,
             stop_fill=stop_fill,
+            **({"min_lot_top_up": min_lot_top_up} if min_lot_top_up is not None else {}),
         )
         if topk_exec != "close" or limit_walkdown:
             reject_short_cash_override(hooks, "topk_minute_exec")
@@ -1539,6 +1541,7 @@ def run(
     limit_walkdown: bool = False,
     topk_limit_rule: str = "qlib",
     participation_rate: float | None = None,
+    min_lot_top_up: bool | None = None,
     rule_profile: str | RuleProfile = "industry",
 ) -> SimState:
     profile = resolve_rule_profile(rule_profile)
@@ -1830,6 +1833,7 @@ def run(
         fill_config=fill_config,
         topk_exec=topk_exec, limit_walkdown=limit_walkdown,
         topk_limit_rule=topk_limit_rule,
+        **({"min_lot_top_up": min_lot_top_up} if min_lot_top_up is not None else {}),
         rule_profile=profile,
     )
     if skipped.get("exdiv_skipped_no_factor"):

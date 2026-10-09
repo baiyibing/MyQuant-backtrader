@@ -265,6 +265,7 @@ def simulate(
     hold_days: int = 20,
     fix_s81_band_precision: bool = False,
     signal_bars_front: dict[str, pd.DataFrame] | None = None,
+    min_lot_top_up: bool | None = None,
     rule_profile: str | RuleProfile = "industry",
 ) -> SimState:
     """核心日循环。bars/pool_days 可由测试注入；run() 负责从湖与 CSV 加载。
@@ -321,6 +322,7 @@ def simulate(
         keep_buy_vacancy=keep_buy_vacancy,
         index_block_new=index_block_new,
         stop_fill=stop_fill,
+        **({"min_lot_top_up": min_lot_top_up} if min_lot_top_up is not None else {}),
     )
     stop_pct = hooks["stop_pct"]
     stop_fill = str(hooks.get("stop_fill") or "touch").strip().lower()
@@ -827,6 +829,7 @@ def run(
     max_hold: bool = False,
     hold_days: int = 20,
     fix_s81_band_precision: bool = False,
+    min_lot_top_up: bool | None = None,
     rule_profile: str | RuleProfile = "industry",
 ) -> SimState:
     profile = resolve_rule_profile(rule_profile)
@@ -992,6 +995,7 @@ def run(
         min_cost=min_cost,
         index_block_new=index_block_new,
         stop_fill=stop_fill,
+        **({"min_lot_top_up": min_lot_top_up} if min_lot_top_up is not None else {}),
         rule_profile=profile,
     )
     if skipped.get("exdiv_skipped_no_factor"):

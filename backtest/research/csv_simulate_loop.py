@@ -143,6 +143,8 @@ def init_sim_state(
     st.book_on_buy = hooks.get("on_buy")
     st.book_on_exdiv = hooks.get("on_exdiv")
     hooks["record_params"](st)
+    if hooks.get("min_lot_top_up") or "min_lot_top_up" in st.stats:
+        st.stats["min_lot_top_up"] = bool(hooks.get("min_lot_top_up", False))
     if hooks.get("profit_skim"):
         st.stats.setdefault("profit_skim_base", float(total_cash))
         st.stats.setdefault("profit_skim_withdrawn", 0.0)

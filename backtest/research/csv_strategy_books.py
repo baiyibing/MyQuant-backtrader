@@ -402,6 +402,7 @@ def apply_csv_strategy(strategy: str, **kwargs) -> dict:
     name_budget = kwargs.pop("name_budget", None)
     ration = kwargs.pop("ration", "file_order")
     ration_seed = int(kwargs.pop("ration_seed", 0))
+    min_lot_top_up = kwargs.pop("min_lot_top_up", None)
     hooks = dict(book.apply(**kwargs))
     hooks["sizing"] = book.sizing
     hooks["name_budget"] = (
@@ -448,6 +449,8 @@ def apply_csv_strategy(strategy: str, **kwargs) -> dict:
     hooks.setdefault("cont_stop_rebuy_open_frac", None)
     hooks.setdefault("cont_stop_rebuy_with_schedule", False)
     hooks.setdefault("min_lot_top_up", False)
+    if min_lot_top_up is not None:
+        hooks["min_lot_top_up"] = bool(min_lot_top_up)
     hooks.setdefault("profit_skim", False)
     hooks.setdefault("profit_skim_step", None)
     hooks.setdefault("profit_skim_frac", None)
@@ -571,6 +574,16 @@ def add_strategy6_ratio_args(ap: argparse.ArgumentParser) -> None:
         type=float,
         default=strategy6_rules.TIER_DEFAULT,
         help=f"version6 T+5+ retain ratio (default {strategy6_rules.TIER_DEFAULT:g})",
+    )
+    ap.add_argument(
+        "--min-lot-top-up",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=(
+            "top up a short name budget to one board lot from account cash "
+            "(6.50+ default on; other books default off). "
+            "--no-min-lot-top-up skips the order (industry B8-03)"
+        ),
     )
 
 
@@ -880,6 +893,8 @@ def csv_run_kwargs_from_args(args) -> dict:
             if budget_override is not None
             else float(get_book(name).name_budget)
         )
+    if getattr(args, "min_lot_top_up", None) is not None:
+        kwargs["min_lot_top_up"] = bool(args.min_lot_top_up)
     return kwargs
 
 

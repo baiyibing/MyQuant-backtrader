@@ -229,6 +229,49 @@ def test_version6_50_industry_tops_up_short_lot_from_cash_pool():
     assert st.stats["supplementary_used"] == pytest.approx(500.0)
 
 
+def test_version6_50_can_turn_min_lot_top_up_off():
+    from argparse import ArgumentParser
+    from pathlib import Path
+
+    from backtest.research.ashare_fees import INDUSTRY_ACCOUNT_FEES
+    from backtest.research.csv_strategy_books import (
+        add_csv_backtest_common_args,
+        csv_run_kwargs_from_args,
+    )
+    from backtest.research.rule_profile import INDUSTRY
+
+    hooks = apply_csv_strategy("version6_50", min_lot_top_up=False)
+    assert hooks["min_lot_top_up"] is False
+    st = init_sim_state(hooks, total_cash=2_000_000.0, bars_loaded=1, pool_days={})[0]
+    st.rule_profile = INDUSTRY
+    bind_account_fee_schedule(st, INDUSTRY_ACCOUNT_FEES)
+    configure_s8(st, hooks)
+    assert s8_policy(st)["min_lot_top_up"] is False
+    assert not execute_buy(st, CODE, 25.0, 2_000.0, 0, "2025-11-03")
+    assert st.stats.get("skip_min_lot_budget") == 1
+    assert st.stats["min_lot_top_up"] is False
+    assert st.stats.get("supplementary_used", 0.0) == 0.0
+
+    parser = ArgumentParser()
+    add_csv_backtest_common_args(
+        parser,
+        repo=Path("."),
+        end_default="20261006",
+        cash_total_default=21_000_000,
+        daily_quota_default=1_000_000,
+    )
+    omitted = parser.parse_args(["--strategy", "version6_50"])
+    assert omitted.min_lot_top_up is None
+    assert "min_lot_top_up" not in csv_run_kwargs_from_args(omitted)
+    off = parser.parse_args(["--strategy", "version6_50", "--no-min-lot-top-up"])
+    assert csv_run_kwargs_from_args(off)["min_lot_top_up"] is False
+    on = parser.parse_args(["--strategy", "version6_50", "--min-lot-top-up"])
+    assert csv_run_kwargs_from_args(on)["min_lot_top_up"] is True
+    assert apply_csv_strategy("version6_51", min_lot_top_up=False)["min_lot_top_up"] is False
+    assert apply_csv_strategy("version6_52", min_lot_top_up=False)["min_lot_top_up"] is False
+    assert apply_csv_strategy("version6_53", min_lot_top_up=False)["min_lot_top_up"] is False
+
+
 def test_version6_47_industry_still_skips_below_one_lot():
     from backtest.research.ashare_fees import INDUSTRY_ACCOUNT_FEES
     from backtest.research.rule_profile import INDUSTRY
