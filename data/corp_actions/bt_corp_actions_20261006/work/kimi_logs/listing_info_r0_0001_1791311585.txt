@@ -1,0 +1,4 @@
+
+kimi version 2.1.1
+error: failed to run prompt: EPERM: EPERM: operation not permitted, rename 'C:\Users\wangc\.kimi-code\credentials\kimi-code.json.tmp.39072.ab75371e' -> 'C:\Users\wangc\.kimi-code\credentials\kimi-code.json'
+See log: C:\Users\wangc\.kimi-code\logs\kimi-code.log

@@ -1,0 +1,3 @@
+QUOTA_STOP 2026-10-08 15:29:15 CST phase=events
+listing_missing_codes=12 of 2774; raw_listing_files=202; raw_events_files=39
+Kimi weekly/usage limit (403 auth_error). Runner stopped instead of sleeping; quota hits are not counted as attempts.

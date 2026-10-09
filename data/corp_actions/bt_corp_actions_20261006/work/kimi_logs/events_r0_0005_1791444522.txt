@@ -1,0 +1,6 @@
+
+kimi version 2.1.1
+• Simple batch: call desc once, then 12 calls. Start with desc call.
+
+error: failed to run prompt: provider.auth_error: 403 You've reached your 5-hour usage limit. Your quota will reset when the current 5-hour window ends. To continue now, purchase extra usage or upgrade your plan: https://www.kimi.com/membership/subscription?tab=quota
+See log: C:\Users\wangc\.kimi-code\logs\kimi-code.log

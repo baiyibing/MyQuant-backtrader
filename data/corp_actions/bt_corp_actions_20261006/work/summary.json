@@ -1,0 +1,34 @@
+{
+ "generated": "2026-10-09 11:31:40 CST",
+ "universe": 2774,
+ "event_rows": 9096,
+ "codes_with_events": 1078,
+ "codes_covered_events": 1083,
+ "codes_no_events_in_window": 5,
+ "listing_rows": 2762,
+ "listing_with_ipo": 2762,
+ "delisted": 7,
+ "failure_rows": 186,
+ "failure_codes": 174,
+ "pending_events": 1529,
+ "pending_listing": 0,
+ "raw_event_rows": 9250,
+ "dropped_outside_window": 61,
+ "dropped_no_exdate": 93,
+ "ex_date_min": "2015-01-26",
+ "ex_date_max": "2026-09-30",
+ "ratio_max": 3.0,
+ "progress": {
+  "实施完毕": 9096
+ },
+ "err_patterns": {
+  " the current N-day window ends. To continue now, purchase extra usage or upgrade your plan": 162,
+  "no RESULT_JSON entry": 12,
+  "<system>ERROR: Tool execution failed.</system> Request timed out after N seconds.": 9,
+  "Request timed out after N seconds.": 3
+ },
+ "rows_with_record_date": 9096,
+ "rows_with_pay_date": 8918,
+ "rows_with_bonus_list": 1228,
+ "rows_with_bonus_or_transfer": 1229
+}

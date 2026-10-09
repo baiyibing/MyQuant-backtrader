@@ -1,0 +1,4 @@
+
+kimi version 2.1.1
+error: failed to run prompt: storage write failed: permission denied
+See log: C:\Users\wangc\.kimi-code\logs\kimi-code.log
