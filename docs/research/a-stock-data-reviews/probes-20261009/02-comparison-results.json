@@ -1,0 +1,23 @@
+{
+  "authoritative_today_comparison": "BLOCKED: OSKH_SOURCE_PARQUET_ROOT unset; no maps in requested 1.3 checkout; no remote access attempted",
+  "fallback_snapshot_root": "/workspace/wt-myquant-next-knife-after-ami1/exports/m3d_industry",
+  "snapshot_generated_at": "2026-09-13T07:32:35Z",
+  "snapshot_rows": 5240,
+  "codebook_rows": 31,
+  "as_of": "2026-10-09",
+  "status_counts": {
+    "agree": 5238,
+    "only_sw": 690,
+    "conflict": 2
+  },
+  "source_hashes": {
+    "wind_l1_map.csv": "d1f60c58130071722a7b590cc099797f585b37acf5c28e3ced05df4c0b6364f1",
+    "sw_l1_map.csv": "482c64871fa88868b6769ada47d7b209d018bc1cf67a549c82fe20e004c9152d",
+    "wind_crosscheck.json": "56d6c154f5a82b51b5a321321d5ec9174d8f8ec6f41de03432e44736579c0f86"
+  },
+  "historical_control": {
+    "as_of": "2026-09-13",
+    "overlap": 5240,
+    "agree": 5240
+  }
+}

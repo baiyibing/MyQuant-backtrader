@@ -1,0 +1,21 @@
+{
+  "python": "3.13.5",
+  "venv": "/workspace/a-stock-data-reviews/probes-20261009/.venv",
+  "repositories": {
+    "a-stock-data": {
+      "root": "/workspace/a-stock-data",
+      "head": "8f6a6a53a59813bf5f010875f16f794fdc4f44f4"
+    },
+    "OSkhQuant1.3": {
+      "root": "/workspace/OSkhQuant1.3",
+      "head": "42d066b81a083be49881f0dd8c5ab53ed4f422f6"
+    },
+    "MyQuant-backtrader": {
+      "root": "/workspace/MyQuant-backtrader",
+      "head": "95bb20eebdfd4cda3c202e4c26805f295045b895"
+    }
+  },
+  "skill_sha256": "736e99c363f6237a82c765f44a7ea75a9bff7d2d71aac742ab5af8d63082bb9e",
+  "a_stock_git_status": "",
+  "hostname": "grok-bot-vm-344089598"
+}

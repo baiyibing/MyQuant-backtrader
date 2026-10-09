@@ -1,0 +1,171 @@
+{
+  "tests": 177,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 4,
+  "offline_network_blocked": true,
+  "observations": [
+    {
+      "case": "empty",
+      "result": [],
+      "type": "list"
+    },
+    {
+      "case": "bad_business",
+      "result": [],
+      "type": "list"
+    },
+    {
+      "case": "bad_schema",
+      "result": [],
+      "type": "list"
+    },
+    {
+      "case": "wrong_data_type",
+      "result": "BAD",
+      "type": "str"
+    },
+    {
+      "case": "factor",
+      "input": "nan",
+      "kind": "qfq",
+      "result": [
+        {
+          "date": "2026-09-30",
+          "close": "nan",
+          "adj_factor": "nan"
+        }
+      ],
+      "finite": false
+    },
+    {
+      "case": "factor",
+      "input": "nan",
+      "kind": "hfq",
+      "result": [
+        {
+          "date": "2026-09-30",
+          "close": "nan",
+          "adj_factor": "nan"
+        }
+      ],
+      "finite": false
+    },
+    {
+      "case": "factor",
+      "input": "inf",
+      "kind": "qfq",
+      "result": [
+        {
+          "date": "2026-09-30",
+          "close": 0.0,
+          "adj_factor": "inf"
+        }
+      ],
+      "finite": true
+    },
+    {
+      "case": "factor",
+      "input": "inf",
+      "kind": "hfq",
+      "result": [
+        {
+          "date": "2026-09-30",
+          "close": "inf",
+          "adj_factor": "inf"
+        }
+      ],
+      "finite": false
+    },
+    {
+      "case": "factor",
+      "input": "-inf",
+      "kind": "qfq",
+      "result": [
+        {
+          "date": "2026-09-30",
+          "close": -0.0,
+          "adj_factor": "-inf"
+        }
+      ],
+      "finite": true
+    },
+    {
+      "case": "factor",
+      "input": "-inf",
+      "kind": "hfq",
+      "result": [
+        {
+          "date": "2026-09-30",
+          "close": "-inf",
+          "adj_factor": "-inf"
+        }
+      ],
+      "finite": false
+    },
+    {
+      "case": "factor",
+      "input": "-1",
+      "kind": "qfq",
+      "result": [
+        {
+          "date": "2026-09-30",
+          "close": -10.0,
+          "adj_factor": -1.0
+        }
+      ],
+      "finite": true
+    },
+    {
+      "case": "factor",
+      "input": "-1",
+      "kind": "hfq",
+      "result": [
+        {
+          "date": "2026-09-30",
+          "close": -10.0,
+          "adj_factor": -1.0
+        }
+      ],
+      "finite": true
+    },
+    {
+      "case": "factor",
+      "input": "0",
+      "kind": "qfq",
+      "error": "RuntimeError('复权因子为 0（2026-09-30），无法换算')"
+    },
+    {
+      "case": "factor",
+      "input": "0",
+      "kind": "hfq",
+      "error": "RuntimeError('复权因子为 0（2026-09-30），无法换算')"
+    },
+    {
+      "case": "factor",
+      "input": "1",
+      "kind": "qfq",
+      "result": [
+        {
+          "date": "2026-09-30",
+          "close": 10.0,
+          "adj_factor": 1.0
+        }
+      ],
+      "finite": true
+    },
+    {
+      "case": "factor",
+      "input": "1",
+      "kind": "hfq",
+      "result": [
+        {
+          "date": "2026-09-30",
+          "close": 10.0,
+          "adj_factor": 1.0
+        }
+      ],
+      "finite": true
+    }
+  ]
+}

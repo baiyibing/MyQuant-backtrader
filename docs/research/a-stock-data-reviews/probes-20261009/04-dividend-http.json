@@ -1,0 +1,6 @@
+{
+  "url": "https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPT_SHAREBONUS_DET&columns=ALL&filter=%28SECURITY_CODE%3D%22600519%22%29&pageNumber=1&pageSize=20&sortColumns=EX_DIVIDEND_DATE&sortTypes=-1&source=WEB&client=WEB",
+  "status": 200,
+  "at": "2026-10-09T07:58:12.182840+00:00",
+  "sha256": "2d3ceaa74df02349575249affb44842b710b4f4f0d5239e96011dc131989a298"
+}
