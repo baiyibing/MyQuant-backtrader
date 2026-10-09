@@ -187,6 +187,7 @@ from backtest.research.minute_cash_order import (
     fill_side_pending,
     run_chronological_day,
     scale_out_exits,
+    _independent_skip_supported,
     step_stop_exits,
 )
 from backtest.research.tail_window_buy import (
@@ -335,10 +336,102 @@ try:
                 return i, px_close, 4, new_peak, new_peak_hm
         return -1, np.nan, 0, new_peak, new_peak_hm
 
+    @_njit(cache=True)
+    def _scan_independent_ladder_first(
+        o,
+        h,
+        c,
+        hm,
+        cost,
+        peak,
+        n_days,
+        can_sell,
+        stop_pct,
+        stop_enabled,
+        limit_down,
+        peak_hm,
+        peak_gap_min,
+        tp_min_days,
+        band_width,
+        give_base,
+        give_step,
+        scale_step,
+        scale_steps,
+        scale_anchor,
+        peak_dd,
+        peak_dd_start,
+        peak_dd_sessions,
+        day_i,
+        step_costs,
+        step_stop_pct,
+        hm_lo,
+        hm_hi,
+    ):
+        """First bar that Python must see. Peak returned is the prefix before that bar."""
+        new_peak = peak
+        new_peak_hm = peak_hm
+        allowed = can_sell and n_days >= 1
+        n = len(c)
+        n_step = len(step_costs)
+        for i in range(n):
+            cur_hm = hm[i]
+            if cur_hm < hm_lo or cur_hm > hm_hi:
+                continue
+            peak_before = new_peak
+            peak_hm_before = new_peak_hm
+            px_open = o[i]
+            px_close = c[i]
+            hi = h[i]
+            if allowed and hi > new_peak:
+                new_peak = hi
+                new_peak_hm = cur_hm
+            if not allowed:
+                continue
+            blocked_open = limit_down > 0.0 and limit_down_blocks(px_open, limit_down)
+            if not blocked_open and stop_enabled and gap_stop(px_open, stop_trigger(cost, stop_pct)):
+                return i, peak_before, peak_hm_before
+            if blocked_open:
+                continue
+            if stop_enabled and stop_touch(px_close / cost - 1.0, stop_pct):
+                return i, peak_before, peak_hm_before
+            gap = cur_hm - new_peak_hm
+            peak_blocked = new_peak_hm >= 0 and peak_gap_blocks(gap, peak_gap_min)
+            if (
+                (not peak_blocked)
+                and n_days >= tp_min_days
+                and cost > 0.0
+                and px_close > 0.0
+                and new_peak > cost
+            ):
+                band = int((new_peak / cost - 1.0 + 1e-12) / band_width)
+                line = new_peak - cost * (give_base + give_step * band)
+                if px_close <= line:
+                    return i, peak_before, peak_hm_before
+            if scale_step > 0.0 and scale_anchor > 0.0 and px_close >= scale_anchor:
+                allowed_steps = int((px_close / scale_anchor - 1.0 + 1e-12) / scale_step)
+                if allowed_steps > scale_steps:
+                    return i, peak_before, peak_hm_before
+            if peak_dd > 0.0 and new_peak > 0.0:
+                dd = (new_peak - px_close) / new_peak
+                if dd <= 0.0 and peak_dd_start >= 0:
+                    return i, peak_before, peak_hm_before
+                if dd >= peak_dd:
+                    if peak_dd_start < 0:
+                        return i, peak_before, peak_hm_before
+                    if day_i - peak_dd_start >= peak_dd_sessions:
+                        return i, peak_before, peak_hm_before
+            if step_stop_pct > 0.0 and n_step > 0:
+                line_mult = 1.0 - step_stop_pct
+                for j in range(n_step):
+                    if px_close <= step_costs[j] * line_mult:
+                        return i, peak_before, peak_hm_before
+        return -1, new_peak, new_peak_hm
+
     _NUMBA_SCAN_AVAILABLE = True
 except Exception:  # pragma: no cover - optional dep
     _NUMBA_SCAN_AVAILABLE = False
     _scan_held_day_numba_trail = None  # type: ignore
+    _scan_independent_ladder_first = None  # type: ignore
 
 
 _NUMBA_REASON = {
@@ -356,6 +449,159 @@ def _want_numba_scan(use_numba: Optional[bool]) -> bool:
         return False
     backend = (os.environ.get("CSV_SCAN_HELD_DAY_BACKEND") or "python").strip().lower()
     return backend in {"numba", "jit"}
+
+
+def _ladder_numba_params(st):
+    try:
+        width = float(st.stats["ladder_band_width"])
+        give_base = float(st.stats["ladder_give_base"])
+        give_step = float(st.stats["ladder_give_step"])
+        tp_min = int(st.stats.get("tp_min_days", 1))
+    except (KeyError, TypeError, ValueError):
+        return None
+    if width <= 0.0:
+        return None
+    return width, give_base, give_step, tp_min
+
+
+def independent_ladder_first_bar(
+    cursor,
+    *,
+    day_i: int,
+    tp_min_days: int,
+    band_width: float,
+    give_base: float,
+    give_step: float,
+    scale_step: float,
+    scale_steps: int,
+    scale_anchor: float,
+    peak_dd: float,
+    peak_dd_start: int,
+    peak_dd_sessions: int,
+    step_costs,
+    step_stop_pct: float,
+    hm_lo: int,
+    hm_hi: int,
+):
+    """Return ``(idx, peak, peak_hm)``. ``idx<0`` means the slice has no Python action."""
+    if _scan_independent_ladder_first is None:
+        return 0, float(cursor.peak), int(cursor.peak_hm)
+    stop_pct = cursor.stop_pct
+    stop_enabled = isinstance(stop_pct, float) and 0 < float(stop_pct) < 1
+    costs = np.asarray(step_costs, dtype=np.float64)
+    idx, peak, peak_hm = _scan_independent_ladder_first(
+        np.asarray(cursor.o, dtype=np.float64),
+        np.asarray(cursor.h, dtype=np.float64),
+        np.asarray(cursor.c, dtype=np.float64),
+        np.asarray(cursor.hm, dtype=np.int64),
+        float(cursor.cost),
+        float(cursor.peak),
+        int(cursor.n_days),
+        bool(cursor.can_sell),
+        float(stop_pct) if stop_enabled else 0.0,
+        bool(stop_enabled),
+        float(cursor.limit_down),
+        int(cursor.peak_hm),
+        int(cursor.peak_gap_min),
+        int(tp_min_days),
+        float(band_width),
+        float(give_base),
+        float(give_step),
+        float(scale_step),
+        int(scale_steps),
+        float(scale_anchor),
+        float(peak_dd),
+        int(peak_dd_start),
+        int(peak_dd_sessions),
+        int(day_i),
+        costs,
+        float(step_stop_pct),
+        int(hm_lo),
+        int(hm_hi),
+    )
+    return int(idx), float(peak), int(peak_hm)
+
+
+def _independent_numba_prefix(
+    st,
+    pos,
+    cursor,
+    *,
+    day_i: int,
+    side_hooks,
+    hm_lo: int,
+    hm_hi: int,
+) -> int:
+    """Write prefix peak and return first Python bar, or -1 if none in this slice."""
+    ladder = _ladder_numba_params(st)
+    if (
+        ladder is None
+        or not _NUMBA_SCAN_AVAILABLE
+        or not _independent_skip_supported(cursor)
+        or cursor.force_sell_hm is not None
+        or cursor.close_clear is not None
+        or (cursor.fill_state and "pending" in cursor.fill_state)
+        or pos.pending_exit
+        or _side_pending_host(st, pos)
+    ):
+        return 0
+    width, give_base, give_step, tp_min = ladder
+    step_pct = float((side_hooks or {}).get("step_stop_pct") or 0.0)
+    step_costs = []
+    if step_pct:
+        for lot in st.positions.get(pos.code, []):
+            if (
+                getattr(lot, "position_id", None) == pos.position_id
+                and getattr(lot, "is_step", False)
+                and lot.entry_idx < day_i
+            ):
+                step_costs.append(float(lot.cost))
+        if len(step_costs) > 32:
+            return 0
+    scale_step = float((side_hooks or {}).get("scale_out_step") or 0.0)
+    scale_anchor = 0.0
+    scale_steps = 0
+    if scale_step:
+        lots = [
+            lot
+            for lot in st.positions.get(pos.code, [])
+            if getattr(lot, "position_id", None) == pos.position_id
+        ]
+        shares_now = sum(lot.shares for lot in lots)
+        if str((side_hooks or {}).get("scale_out_anchor", "first_lot")) == "weighted" and shares_now > 0:
+            scale_anchor = sum(float(lot.shares) * float(lot.cost) for lot in lots) / float(shares_now)
+        else:
+            scale_anchor = float(getattr(pos.group, "anchor_cost", None) or pos.group.first_lot.cost)
+        scale_steps = int(pos.group.scale_steps)
+    peak_dd = float((side_hooks or {}).get("peak_dd_exit") or 0.0)
+    start = pos.group.peak_dd_start
+    idx, peak, peak_hm = independent_ladder_first_bar(
+        cursor,
+        day_i=day_i,
+        tp_min_days=tp_min,
+        band_width=width,
+        give_base=give_base,
+        give_step=give_step,
+        scale_step=scale_step,
+        scale_steps=scale_steps,
+        scale_anchor=scale_anchor,
+        peak_dd=peak_dd,
+        peak_dd_start=-1 if start is None else int(start),
+        peak_dd_sessions=int((side_hooks or {}).get("peak_dd_sessions", 15)),
+        step_costs=step_costs,
+        step_stop_pct=step_pct,
+        hm_lo=hm_lo,
+        hm_hi=hm_hi,
+    )
+    pos.peak = peak
+    pos.peak_hm = peak_hm
+    cursor.peak = peak
+    cursor.peak_hm = peak_hm
+    return idx
+
+
+def _side_pending_host(st, pos) -> bool:
+    return bool(getattr(st, "held_fill_states", {}).get(held_fill_key(pos), {}).get("side_pending"))
 
 
 def scan_held_day_python(
@@ -1121,11 +1367,31 @@ def simulate(
                             defer_limit_up=defer_limit_up, limit_up=limit_up,
                             reserved=bool(pos.reserved), close_clear=close_clear,
                         )
+                        side_hooks = {
+                            "step_stop_pct": hooks.get("step_stop_pct"),
+                            "scale_out_step": hooks.get("scale_out_step"),
+                            "scale_out_frac": hooks.get("scale_out_frac", 0.05),
+                            "scale_out_anchor": hooks.get("scale_out_anchor", "first_lot"),
+                            "peak_dd_exit": hooks.get("peak_dd_exit"),
+                            "peak_dd_sessions": hooks.get("peak_dd_sessions", 15),
+                            "fill_config": side_fill_config,
+                            "low_arr": low_arr,
+                        }
+                        quiet = 0
+                        evaluated = 0
+                        python_from = _independent_numba_prefix(
+                            st, pos, cursor, day_i=i, side_hooks=side_hooks,
+                            hm_lo=0, hm_hi=BUY_HM if split_group_scan else 24 * 60,
+                        )
                         for bar_idx, at_hm in enumerate(hm):
-                            if not position_is_open(st, pos):
+                            if python_from < 0 or not position_is_open(st, pos):
                                 break
                             if split_group_scan and int(at_hm) > BUY_HM:
                                 continue
+                            if bar_idx < python_from:
+                                quiet += 1
+                                continue
+                            evaluated += 1
                             for phase in ("open", "close"):
                                 advance_independent_exit(
                                     st, code, pos, cursor, bar_idx, phase, limits,
@@ -1161,6 +1427,12 @@ def simulate(
                                         peak_dd_sessions=hooks.get("peak_dd_sessions", 15),
                                         hm=int(at_hm),
                                     )
+                        if python_from < 0:
+                            clock.count("held_numba_slices")
+                        if quiet:
+                            clock.count("held_quiet_bars", quiet)
+                        if evaluated:
+                            clock.count("held_eval_bars", evaluated)
                         if split_group_scan:
                             post_group_scans.append((code, pos, cursor, limits))
                         continue
@@ -1425,11 +1697,21 @@ def simulate(
             clock.end("pool_buy")
             clock.begin("post_group")
             for code, pos, cursor, limits in post_group_scans:
+                quiet = 0
+                evaluated = 0
+                python_from = _independent_numba_prefix(
+                    st, pos, cursor, day_i=i, side_hooks=None,
+                    hm_lo=BUY_HM + 1, hm_hi=24 * 60,
+                )
                 for bar_idx, at_hm in enumerate(cursor.hm):
-                    if not position_is_open(st, pos):
+                    if python_from < 0 or not position_is_open(st, pos):
                         break
                     if int(at_hm) <= BUY_HM:
                         continue
+                    if bar_idx < python_from:
+                        quiet += 1
+                        continue
+                    evaluated += 1
                     for phase in ("open", "close"):
                         advance_independent_exit(
                             st, code, pos, cursor, bar_idx, phase, limits,
@@ -1438,6 +1720,12 @@ def simulate(
                         if phase == "open":
                             fill_side_pending(st, code, pos, float(cursor.o[bar_idx]), day, i,
                                               limits, hm=int(at_hm))
+                if python_from < 0:
+                    clock.count("held_numba_slices")
+                if quiet:
+                    clock.count("held_quiet_bars", quiet)
+                if evaluated:
+                    clock.count("held_eval_bars", evaluated)
             clock.end("post_group")
 
         clock.begin("eod")

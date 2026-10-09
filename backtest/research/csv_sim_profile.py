@@ -176,7 +176,9 @@ def attach_host_profile(
 
 
 def write_profile_sim(out_dir: Path, report: dict[str, Any]) -> Path:
-    path = Path(out_dir) / "profile_sim.json"
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / "profile_sim.json"
     path.write_text(
         json.dumps(report, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",

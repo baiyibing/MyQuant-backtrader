@@ -60,6 +60,7 @@ from backtest.research.csv_ledger import (
     held_fill_key,
     execute_buy,
     hit_limit_down,
+    peak_gap_blocks,
     position_is_open,
     rescale_position,
     rescale_s8_groups,
@@ -76,7 +77,12 @@ from backtest.research.csv_simulate_loop import (
     run_step_adds_day,
 )
 from backtest.research.exdiv_map import k_for, mapped_prev_close
-from backtest.research.minute_held_scan_core import HeldMinuteCursor
+from backtest.research.minute_held_scan_core import (
+    HeldMinuteCursor,
+    sell_allowed,
+    stop_touch,
+    stop_trigger,
+)
 from backtest.research.fill_config import FillConfig, is_open_fill
 from backtest.research.minute_audit import audit_scope
 from backtest.research.strategy9_rules import evaluate_version9_exit
@@ -379,6 +385,335 @@ def step_stop_exits(st, code, pos, px, day, day_i, limits, *, step_stop_pct, hm=
             if lot.shares <= 0:
                 arm_cont_stop_rebuy(st, getattr(pos, "group", None), lot.lot_id)
     return sold
+
+
+def _independent_skip_supported(cursor) -> bool:
+    """Fail closed: unknown cursor features keep the full Python bar loop."""
+    if getattr(cursor, "_custom_fill", False):
+        return False
+    if cursor.session_volume is not None:
+        return False
+    if cursor.reserve_limit_up or cursor.defer_limit_up:
+        return False
+    if cursor.version9_plan is not None:
+        return False
+    if callable(getattr(cursor, "exit_plan", None)):
+        return False
+    if callable(getattr(cursor, "sell_gate", None)):
+        return False
+    if callable(getattr(cursor, "phase_exit", None)):
+        return False
+    return True
+
+
+def _stop_pct_value(cursor) -> float | None:
+    raw = cursor.stop_range_ratio if cursor.stop_range_ratio is not None else cursor.stop_pct
+    try:
+        value = float(raw) if raw is not None else 0.0
+    except (TypeError, ValueError):
+        return None
+    return value if 0 < value < 1 else None
+
+
+def _projected_peak(pos, px_high: float, at_hm: int) -> tuple[float, int]:
+    if px_high > float(pos.peak):
+        return float(px_high), int(at_hm)
+    return float(pos.peak), int(pos.peak_hm)
+
+
+def _independent_bar_needed(
+    st,
+    pos,
+    cursor,
+    *,
+    bar_idx: int,
+    at_hm: int,
+    px_open: float,
+    px_high: float,
+    px_close: float,
+    px_low: float | None,
+    day_i: int,
+    side_hooks: Mapping[str, Any] | None,
+) -> bool:
+    if pos.pending_exit or getattr(cursor, "first_exit_attempted", False):
+        return True
+    if cursor.fill_state and "pending" in cursor.fill_state:
+        return True
+    if _side_pending(st, pos):
+        return True
+    if cursor.force_sell_hm is not None and at_hm >= int(cursor.force_sell_hm):
+        return True
+    if cursor.close_clear is not None and (
+        at_hm == CLOSE_CLEAR_HM or bar_idx == len(cursor.c) - 1
+    ):
+        return True
+    # Buy day and first T+1 must match the full host bar loop (peak + side latches).
+    if int(cursor.n_days) <= 1:
+        return True
+    if bar_idx == 0:
+        return True
+    if bar_idx > 0 and int(cursor.hm[bar_idx - 1]) <= BUY_HM < int(at_hm):
+        return True
+
+    peak, peak_hm = _projected_peak(pos, px_high, at_hm)
+    cost = float(pos.cost)
+    can_sell = sell_allowed(cursor.can_sell, cursor.n_days)
+    if can_sell and px_high > float(pos.peak):
+        return True
+    stop_pct = _stop_pct_value(cursor)
+    if stop_pct is not None and cost > 0 and can_sell:
+        trigger = stop_trigger(cost, stop_pct)
+        if px_open <= trigger or stop_touch(px_close / cost - 1.0, stop_pct):
+            return True
+        if px_low is not None and float(px_low) <= trigger:
+            return True
+
+    if can_sell:
+        blocked = peak_hm >= 0 and peak_gap_blocks(at_hm - peak_hm, cursor.peak_gap_min)
+        if not blocked and callable(cursor.take_profit):
+            if cursor.take_profit(px_close, cost, peak, cursor.n_days):
+                return True
+
+    if not side_hooks:
+        return False
+
+    step_pct = side_hooks.get("step_stop_pct")
+    if step_pct:
+        fill_config = side_hooks.get("fill_config")
+        use_low = fill_config is not None and fill_config.trigger_basis == "bar_low"
+        trigger_px = float(px_low) if use_low and px_low is not None else px_close
+        line_mult = 1.0 - float(step_pct)
+        for lot in st.positions.get(pos.code, []):
+            if (
+                getattr(lot, "position_id", None) == pos.position_id
+                and getattr(lot, "is_step", False)
+                and lot.entry_idx < day_i
+                and trigger_px <= float(lot.cost) * line_mult
+            ):
+                return True
+
+    scale_step = side_hooks.get("scale_out_step")
+    if scale_step and px_close > 0:
+        lots = [
+            lot
+            for lot in st.positions.get(pos.code, [])
+            if getattr(lot, "position_id", None) == pos.position_id
+        ]
+        shares_now = sum(lot.shares for lot in lots)
+        if shares_now > 0:
+            if str(side_hooks.get("scale_out_anchor", "first_lot")) == "weighted":
+                anchor = sum(float(lot.shares) * float(lot.cost) for lot in lots) / float(
+                    shares_now
+                )
+            else:
+                anchor = float(
+                    getattr(pos.group, "anchor_cost", None) or pos.group.first_lot.cost
+                )
+            if anchor > 0 and px_close >= anchor:
+                allowed = int((px_close / anchor - 1.0 + 1e-12) / float(scale_step))
+                if allowed > int(pos.group.scale_steps):
+                    return True
+
+    peak_dd = side_hooks.get("peak_dd_exit")
+    if peak_dd and peak > 0:
+        dd = (peak - px_close) / peak
+        if dd >= float(peak_dd):
+            start = pos.group.peak_dd_start
+            if start is None:
+                return True
+            if day_i - int(start) >= int(side_hooks.get("peak_dd_sessions", 15)):
+                return True
+    return False
+
+
+def _apply_quiet_independent_bar(
+    pos, cursor, *, px_high: float, px_close: float, at_hm: int, side_hooks
+):
+    """Keep peak / peak-dd latch identical to a no-exit full bar.
+
+    T+0 ``advance`` returns before the open-phase peak write, so buy-day
+    highs after 14:55 must not move the peak.
+    """
+    if sell_allowed(cursor.can_sell, cursor.n_days) and px_high > float(pos.peak):
+        pos.peak = float(px_high)
+        pos.peak_hm = int(at_hm)
+        cursor.peak = float(px_high)
+        cursor.peak_hm = int(at_hm)
+    if side_hooks and side_hooks.get("peak_dd_exit") and float(pos.peak) > 0:
+        if (float(pos.peak) - float(px_close)) / float(pos.peak) <= 0:
+            pos.group.peak_dd_start = None
+
+
+def skip_quiet_independent_bar(
+    st,
+    pos,
+    cursor,
+    *,
+    bar_idx: int,
+    at_hm: int,
+    px_open: float,
+    px_high: float,
+    px_close: float,
+    px_low: float | None,
+    day_i: int,
+    side_hooks: Mapping[str, Any] | None,
+) -> bool:
+    """Return True after applying the quiet latch; False means run the host body."""
+    import os
+    if os.environ.get("OSKH_SKIP_QUIET_INDEPENDENT", "1").strip().lower() in {
+        "0", "false", "off", "no",
+    }:
+        return False
+    if not _independent_skip_supported(cursor):
+        return False
+    if _independent_bar_needed(
+        st,
+        pos,
+        cursor,
+        bar_idx=bar_idx,
+        at_hm=at_hm,
+        px_open=px_open,
+        px_high=px_high,
+        px_close=px_close,
+        px_low=px_low,
+        day_i=day_i,
+        side_hooks=side_hooks,
+    ):
+        return False
+    _apply_quiet_independent_bar(
+        pos,
+        cursor,
+        px_high=px_high,
+        px_close=px_close,
+        at_hm=at_hm,
+        side_hooks=side_hooks,
+    )
+    return True
+
+
+def _run_independent_bar(
+    st,
+    code,
+    pos,
+    cursor,
+    limits,
+    *,
+    bar_idx: int,
+    day,
+    day_i: int,
+    audit_sink,
+    side_hooks: Mapping[str, Any] | None,
+) -> None:
+    at_hm = int(cursor.hm[bar_idx])
+    step_stop_pct = side_hooks.get("step_stop_pct") if side_hooks else None
+    scale_out_step = side_hooks.get("scale_out_step") if side_hooks else None
+    peak_dd_exit = side_hooks.get("peak_dd_exit") if side_hooks else None
+    fill_config = side_hooks.get("fill_config") if side_hooks else None
+    low_arr = side_hooks.get("low_arr") if side_hooks else None
+    for phase in ("open", "close"):
+        advance_independent_exit(
+            st, code, pos, cursor, bar_idx, phase, limits,
+            day=day, day_i=day_i, audit_sink=audit_sink,
+        )
+        if phase == "open":
+            fill_side_pending(
+                st, code, pos, float(cursor.o[bar_idx]), day, day_i, limits, hm=at_hm,
+            )
+        if phase == "close" and step_stop_pct:
+            step_stop_exits(
+                st, code, pos, float(cursor.c[bar_idx]), day, day_i, limits,
+                step_stop_pct=step_stop_pct,
+                fill_config=fill_config, open_px=float(cursor.o[bar_idx]),
+                low=(
+                    float(low_arr[bar_idx])
+                    if low_arr is not None
+                    and fill_config is not None
+                    and fill_config.trigger_basis == "bar_low"
+                    else None
+                ),
+                hm=at_hm,
+            )
+        if phase == "close" and scale_out_step:
+            scale_out_exits(
+                st, code, pos, float(cursor.c[bar_idx]), day, day_i, limits,
+                scale_step=scale_out_step,
+                scale_frac=side_hooks.get("scale_out_frac", 0.05),
+                scale_anchor=side_hooks.get("scale_out_anchor", "first_lot"),
+                fill_config=fill_config, open_px=float(cursor.o[bar_idx]),
+                hm=at_hm,
+            )
+        if phase == "close" and peak_dd_exit:
+            peak_dd_clear_exits(
+                st, code, pos, float(cursor.c[bar_idx]), day, day_i, limits,
+                peak_dd_exit=peak_dd_exit,
+                fill_config=fill_config, open_px=float(cursor.o[bar_idx]),
+                peak_dd_sessions=side_hooks.get("peak_dd_sessions", 15),
+                hm=at_hm,
+            )
+
+
+def drive_independent_exit_bars(
+    st,
+    code,
+    pos,
+    cursor,
+    limits,
+    *,
+    day,
+    day_i: int,
+    audit_sink=None,
+    bar_indices: Sequence[int] | None = None,
+    side_hooks: Mapping[str, Any] | None = None,
+    skip_quiet: bool = True,
+    clock=None,
+) -> tuple[int, int]:
+    """Scan one independent position, skipping bars that cannot exit.
+
+    Quiet bars still apply the peak / peak-dd latch that a no-exit
+    ``advance`` + ``peak_dd_clear_exits`` would have written. Candidate
+    bars keep the original Python helpers. Returns ``(quiet, eval)``.
+    """
+    hm = cursor.hm
+    indices = range(len(hm)) if bar_indices is None else bar_indices
+    can_skip = bool(skip_quiet)
+    quiet = 0
+    evaluated = 0
+    for bar_idx in indices:
+        if not position_is_open(st, pos):
+            break
+        at_hm = int(hm[bar_idx])
+        px_low = None
+        if cursor.l is not None:
+            px_low = float(cursor.l[bar_idx])
+        elif side_hooks is not None and side_hooks.get("low_arr") is not None:
+            px_low = float(side_hooks["low_arr"][bar_idx])
+        if can_skip and skip_quiet_independent_bar(
+            st,
+            pos,
+            cursor,
+            bar_idx=int(bar_idx),
+            at_hm=at_hm,
+            px_open=float(cursor.o[bar_idx]),
+            px_high=float(cursor.h[bar_idx]),
+            px_close=float(cursor.c[bar_idx]),
+            px_low=px_low,
+            day_i=day_i,
+            side_hooks=side_hooks,
+        ):
+            quiet += 1
+            continue
+        _run_independent_bar(
+            st, code, pos, cursor, limits,
+            bar_idx=int(bar_idx), day=day, day_i=day_i,
+            audit_sink=audit_sink, side_hooks=side_hooks,
+        )
+        evaluated += 1
+    if clock is not None:
+        if quiet:
+            clock.count("held_quiet_bars", quiet)
+        if evaluated:
+            clock.count("held_eval_bars", evaluated)
+    return quiet, evaluated
 
 
 def run_chronological_day(
