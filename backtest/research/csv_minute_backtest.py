@@ -92,6 +92,11 @@ from backtest.research.rule_profile import (  # noqa: E402
     RuleProfile,
     resolve_rule_profile,
 )
+from backtest.research.csv_sim_profile import (  # noqa: E402
+    NULL_CLOCK,
+    SimPhaseClock,
+    profile_sim_enabled,
+)
 
 from backtest.research.csv_pool import (  # noqa: E402
     load_pool_day_map,
@@ -687,6 +692,7 @@ def simulate(
     policy_context: MinutePolicyContext | None = None,
     min_lot_top_up: bool | None = None,
     rule_profile: str | RuleProfile = "industry",
+    sim_profile: SimPhaseClock | None = None,
 ) -> SimState:
     """Opt-in cap uses caller-attested completed minutes; daily volume is unused.
 
@@ -694,6 +700,7 @@ def simulate(
     raw bars. None retains the baseline; E-R6 ratios never imply entitlements.
     """
     profile = resolve_rule_profile(rule_profile)
+    clock = sim_profile if sim_profile is not None else NULL_CLOCK
     shared_fee_schedule = resolve_account_fee_schedule(
         profile.account_fee_schedule,
         explicit_rates=(buy_cost_rate, sell_cost_rate, min_cost),
@@ -915,10 +922,15 @@ def simulate(
                 if "volume" not in frame:
                     raise ValueError(f"{hooks['name']} requires minute volume for {code}; use the lake volume path")
         hold_modes = {}
+        clock.begin("day_spans")
         day_spans = {code: build_day_spans(df) for code, df in minute_bars.items()}
+        clock.end("day_spans")
 
+    clock.begin("day_loop")
     for i, day in enumerate(calendar):
+        clock.count("calendar_days")
         if native_v7:
+            clock.begin("v7_day")
             policy.day_start(st, day=day, day_i=i, context=policy_context)
             cleared_today = set()
             needed = list(dict.fromkeys(pools.get(day, []) + list(st.positions)))
@@ -940,6 +952,7 @@ def simulate(
                    if policy.schedule == "chronological" else {}))
             policy.append_marks(st, day=day, last_prices=last_prices,
                                 context=policy_context)
+            clock.end("v7_day")
             continue
         ds = _ymd(day)
         day_trade_start = len(st.trades)
@@ -947,6 +960,7 @@ def simulate(
             st.cash += st.exdiv_economics.settle(ds)
         names = names_asof(ds)
         st.daily_quota_used = 0.0
+        clock.begin("parking")
         bind_parking_session(
             st,
             hooks,
@@ -970,6 +984,8 @@ def simulate(
             qlib_limit_pct=qlib_limit_pct,
             forbid_all_trade_at_limit=forbid_all_trade_at_limit,
         )
+        clock.end("parking")
+        clock.begin("index_cut")
         run_index_gate_cut_day(
             st,
             hooks,
@@ -982,12 +998,14 @@ def simulate(
             qlib_limit_pct=qlib_limit_pct,
             forbid_all_trade_at_limit=forbid_all_trade_at_limit,
         )
+        clock.end("index_cut")
 
         if policy.day_start is not None:
             policy.day_start(st, day=day, ds=ds, day_i=i, context=policy_context)
 
         if policy.chronological(hooks, fix_cash_order=fix_minute_cash_order,
                                 topk_exec=topk_exec, limit_walkdown=limit_walkdown):
+            clock.begin("chronological_day")
             run_chronological_day(
                 st, pending_chase, hooks=hooks, minute_bars=minute_bars,
                 daily_bars=daily_bars, pool_days=pool_days, day_i=i, day=day,
@@ -1003,7 +1021,9 @@ def simulate(
                 topk_exec=topk_exec, limit_walkdown=limit_walkdown,
                 price_context=s12_price_context if fix_s12_price_domain else None,
             )
+            clock.end("chronological_day")
         else:
+            clock.begin("held_scan")
             bind_opening = hooks.get("bind_opening_held")
             if callable(bind_opening):
                 bind_opening(ds, list(st.positions.keys()))
@@ -1015,6 +1035,7 @@ def simulate(
             confirm_peaks = {}
             s8_confirm = hooks.get("name") == "version8_3" and hooks.get("sizing") == "per_name"
             for code in list(st.positions):
+                clock.count("held_codes")
                 mdf = minute_bars.get(code)
                 ddf = daily_bars.get(code)
                 if mdf is None or ddf is None or day not in ddf.index:
@@ -1237,6 +1258,7 @@ def simulate(
                                   hm=int(hm[idx]) if price_rule else None, price_rule=price_rule)
                         if minute_open and any(t["side"] == "SKIP" and t["reason"].startswith("skip_volume") for t in st.trades[before:]):
                             st.stats["defer_sell_volume"] += 1
+            clock.end("held_scan")
 
             def _volume_bucket_for(code: str, target: int, earliest: int):
                 # Mirror the quote helpers' exact/fallback row, never a later bucket.
@@ -1273,6 +1295,7 @@ def simulate(
                 closes = prev_rows["close"].astype(float).tolist()
                 return open_px, px, closes
 
+            clock.begin("chase")
             with audit_scope(audit_sink, decision_hm=CHASE_HM, phase="close", quote_for=chase_volume):
                 run_chase_due_day(
                     st,
@@ -1291,6 +1314,7 @@ def simulate(
                     add_gate=hooks.get("add_gate"),
                     index_blocks_add=hooks.get("index_blocks_add", True),
                 )
+            clock.end("chase")
 
             def _pool_quote_for(code: str):
                 mdf = minute_bars.get(code)
@@ -1320,6 +1344,7 @@ def simulate(
                 return px, closes
 
             volume_skips = int(st.stats.get("skip_volume_unavailable", 0)) + int(st.stats.get("skip_volume_cap", 0))
+            clock.begin("pool_buy")
             if callable(hooks.get("breakout_day")):
                 hooks["breakout_day"](
                     st, day_i=i, day=day, ds=ds, names=names, pool_days=pool_days,
@@ -1388,6 +1413,8 @@ def simulate(
                         lambda _code, pos: min(float(pos.peak), confirm_peaks.get(id(pos), float(pos.peak)))
                     ) if s8_confirm else None,
                 )
+            clock.end("pool_buy")
+            clock.begin("post_group")
             for code, pos, cursor, limits in post_group_scans:
                 for bar_idx, at_hm in enumerate(cursor.hm):
                     if int(at_hm) <= BUY_HM:
@@ -1400,7 +1427,9 @@ def simulate(
                         if phase == "open":
                             fill_side_pending(st, code, pos, float(cursor.o[bar_idx]), day, i,
                                               limits, hm=int(at_hm))
+            clock.end("post_group")
 
+        clock.begin("eod")
         run_eod_exits(st, day=day, ds=ds, bars=daily_bars, eod_exit=hooks.get("eod_exit"),
                       hold_modes=hold_modes, exdiv=exdiv,
                       **({"signal_bars_front": signal_bars_front, "strategy": strategy,
@@ -1451,6 +1480,8 @@ def simulate(
                 st, ds=ds, day=day, calendar_last=calendar[-1],
                 mark_bars=daily_bars, context=policy_context,
             )
+        clock.end("eod")
+    clock.end("day_loop")
 
     if native_v7:
         if profile.name == "industry":
@@ -1464,6 +1495,7 @@ def simulate(
             stats["rule_profile_revision"] = profile.revision
         return st
 
+    clock.begin("finish")
     finish_pending_sells(st)
     finish_pending_chase(st, pending_chase)
     if fix_s12_price_domain:
@@ -1480,6 +1512,7 @@ def simulate(
         st.stats.pop("rule_profile_revision", None)
         st.stats["rule_profile"] = profile.name
         st.stats["rule_profile_revision"] = profile.revision
+    clock.end("finish")
     return st
 
 
@@ -1543,8 +1576,10 @@ def run(
     participation_rate: float | None = None,
     min_lot_top_up: bool | None = None,
     rule_profile: str | RuleProfile = "industry",
+    profile_sim: bool | None = None,
 ) -> SimState:
     profile = resolve_rule_profile(rule_profile)
+    sim_clock = SimPhaseClock() if profile_sim_enabled(profile_sim) else None
     book = normalize_csv_strategy(strategy)
     fix_minute_cash_order = bool(
         fix_minute_cash_order or (book == "version7" and profile.chronological_v7)
@@ -1835,6 +1870,7 @@ def run(
         topk_limit_rule=topk_limit_rule,
         **({"min_lot_top_up": min_lot_top_up} if min_lot_top_up is not None else {}),
         rule_profile=profile,
+        sim_profile=sim_clock,
     )
     if skipped.get("exdiv_skipped_no_factor"):
         st.stats["exdiv_skipped_no_factor"] = int(skipped["exdiv_skipped_no_factor"])
@@ -1876,6 +1912,26 @@ def run(
     st.stats["t_minute_s"] = t_minute
     st.stats["t_sim_s"] = time.perf_counter() - t_sim
     st.stats["cache"] = cache_status.get("cache", "")
+    if sim_clock is not None:
+        sim_clock.count("trades", len(st.trades))
+        phases_now = dict(sim_clock.seconds)
+        leftover_init = (
+            float(st.stats["t_sim_s"])
+            - float(phases_now.get("day_loop", 0.0))
+            - float(phases_now.get("finish", 0.0))
+        )
+        st.sim_profile = sim_clock.report(
+            strategy=book,
+            rule_profile=profile.name,
+            leftover_init_s=round(leftover_init, 3),
+            load_s={
+                "t_pool_s": round(float(t_pool), 3),
+                "t_daily_s": round(float(t_daily), 3),
+                "t_minute_s": round(float(t_minute), 3),
+                "t_sim_s": round(float(st.stats["t_sim_s"]), 3),
+            },
+            cache=cache_status.get("cache", ""),
+        )
     st.stats["codes_missing"] = max(0, len(all_codes) - min(len(daily), len(minute)))
     if signal_bundle is not None:
         st.stats["signal_bundle_sha256"] = signal_bundle["bundle_sha256"]

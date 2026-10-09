@@ -13,6 +13,7 @@ from typing import Optional
 import pandas as pd
 
 from backtest.research.csv_ledger import SimState, chase_explained
+from backtest.research.csv_sim_profile import format_profile_lines, write_profile_sim
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
@@ -360,6 +361,9 @@ def summarize(
         timing_parts.append(f"缓存 {cache}")
     if timing_parts:
         lines.append("  耗时: " + " | ".join(timing_parts))
+    profile = getattr(st, "sim_profile", None)
+    if isinstance(profile, dict) and profile:
+        lines.extend(format_profile_lines(profile))
     missing = st.stats.get("codes_missing")
     if missing:
         lines.append(f"  缺行情 {int(missing)}")
@@ -426,6 +430,9 @@ def write_run_artifacts(
             artifacts=[out_dir / name for name in ("trades.csv", "daily_equity.csv", "summary.txt")]
             + metadata_paths,
         )
+    profile = getattr(st, "sim_profile", None)
+    if isinstance(profile, dict) and profile:
+        write_profile_sim(out_dir, profile)
     print(f"wrote {out_dir}", flush=True)
     return out_dir
 
