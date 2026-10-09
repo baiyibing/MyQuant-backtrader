@@ -1,0 +1,35 @@
+{
+  "source": "/workspace/MyQuant-backtrader/data/corp_actions/bt_corp_actions_20261006",
+  "rows": 9096,
+  "codes": 1078,
+  "columns": [
+    "code",
+    "event_id",
+    "ex_date",
+    "record_date",
+    "pay_date",
+    "cash_div_per_share",
+    "bonus_ratio",
+    "transfer_ratio",
+    "bonus_list_date",
+    "source"
+  ],
+  "blank_counts": {
+    "code": 0,
+    "event_id": 0,
+    "ex_date": 0,
+    "record_date": 0,
+    "pay_date": 178,
+    "cash_div_per_share": 178,
+    "bonus_ratio": 8985,
+    "transfer_ratio": 7927,
+    "bonus_list_date": 7868,
+    "source": 0
+  },
+  "share_events": 1229,
+  "share_events_missing_list_date": 1,
+  "duplicate_event_id": 0,
+  "ex_date_min": "2015-01-26",
+  "ex_date_max": "2026-09-30",
+  "sha256": "9b8f79ae516e375375116aa646b6ee16ccb271ce16a06494b87fa693ae739f5a"
+}

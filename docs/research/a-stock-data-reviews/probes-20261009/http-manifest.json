@@ -1,0 +1,74 @@
+[
+  {
+    "n": 1,
+    "url": "https://www.swsresearch.com/swindex/pdf/SwClass2021/StockClassifyUse_stock.xls",
+    "error": "SSLError(MaxRetryError(\"HTTPSConnectionPool(host='www.swsresearch.com', port=443): Max retries exceeded with url: /swindex/pdf/SwClass2021/StockClassifyUse_stock.xls (Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1029)')))\"))"
+  },
+  {
+    "n": 2,
+    "url": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh600519%2Cday%2C%2C%2C10%2C",
+    "status": 200,
+    "bytes": 2376,
+    "sha256": "1b9c9dd7b42da2e4ba5c6006f2134e03849c8a2eb03db6134b86e170bb49e327",
+    "file": "raw/http-02.bin",
+    "at": "2026-10-09T07:55:47.852668+00:00",
+    "headers": {
+      "Date": "Fri, 09 Oct 2026 07:55:47 GMT",
+      "Content-Type": "text/html; charset=UTF-8"
+    }
+  },
+  {
+    "n": 3,
+    "url": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sz300750%2Cday%2C%2C%2C10%2C",
+    "status": 200,
+    "bytes": 2335,
+    "sha256": "752f11d10a3ffa100b6bcf757feaf419ce42bd1abba277f0fb2c9fca46e06052",
+    "file": "raw/http-03.bin",
+    "at": "2026-10-09T07:55:48.715207+00:00",
+    "headers": {
+      "Date": "Fri, 09 Oct 2026 07:55:48 GMT",
+      "Content-Type": "text/html; charset=UTF-8"
+    }
+  },
+  {
+    "n": 4,
+    "url": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh688981%2Cday%2C%2C%2C10%2C",
+    "status": 200,
+    "bytes": 2386,
+    "sha256": "dad094e701464c99882cfef5a972ed8a2cbd802d62f9dcc1d679bb0258117dc6",
+    "file": "raw/http-04.bin",
+    "at": "2026-10-09T07:55:49.587672+00:00",
+    "headers": {
+      "Date": "Fri, 09 Oct 2026 07:55:49 GMT",
+      "Content-Type": "text/html; charset=UTF-8"
+    }
+  },
+  {
+    "n": 5,
+    "url": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh588000%2Cday%2C%2C%2C10%2C",
+    "status": 200,
+    "bytes": 2291,
+    "sha256": "d06b6c27c790a7f3cccaf005e87b24c6f03365a5e8b3bb949a5562425a6c8f97",
+    "file": "raw/http-05.bin",
+    "at": "2026-10-09T07:55:50.481276+00:00",
+    "headers": {
+      "Date": "Fri, 09 Oct 2026 07:55:50 GMT",
+      "Content-Type": "text/html; charset=UTF-8"
+    }
+  },
+  {
+    "n": 6,
+    "url": "https://www.tdx.com.cn/products/data/data/g4day/20261008.zip",
+    "status": 200,
+    "bytes": 2719184,
+    "sha256": "6896f18668b84c5aa74a11d650ff4cd2e8e05c35eafd97052558c3e61008d3bd",
+    "file": "raw/http-06.bin",
+    "at": "2026-10-09T07:56:01.887888+00:00",
+    "headers": {
+      "Date": "Fri, 09 Oct 2026 07:55:52 GMT",
+      "Content-Type": "application/zip",
+      "Content-Length": "2719184",
+      "Last-Modified": "Thu, 08 Oct 2026 08:10:06 GMT"
+    }
+  }
+]

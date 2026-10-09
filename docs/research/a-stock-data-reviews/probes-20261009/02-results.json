@@ -1,0 +1,36 @@
+{
+  "rows": 12925,
+  "codes": 5930,
+  "l1_history": 38,
+  "today_rows": 5930,
+  "today_l1": 38,
+  "start_max": "2026-09-24 10:53:00",
+  "null_start": 0,
+  "duplicate_code_start": 0,
+  "samples": [
+    {
+      "code": "000001",
+      "as_of": "2013-01-01",
+      "industry_code": "440101",
+      "l1_code": "440000",
+      "l2_code": "440100",
+      "since": "1991-04-03"
+    },
+    {
+      "code": "000001",
+      "as_of": "2016-01-01",
+      "industry_code": "480101",
+      "l1_code": "480000",
+      "l2_code": "480100",
+      "since": "2014-02-21"
+    },
+    {
+      "code": "000001",
+      "as_of": "2026-10-09",
+      "industry_code": "480301",
+      "l1_code": "480000",
+      "l2_code": "480300",
+      "since": "2021-07-30"
+    }
+  ]
+}

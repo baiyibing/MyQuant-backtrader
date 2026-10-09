@@ -1,0 +1,17 @@
+[
+  {
+    "n": 1,
+    "url": "https://www.swsresearch.com/swindex/pdf/SwClass2021/StockClassifyUse_stock.xls",
+    "status": 200,
+    "bytes": 1166336,
+    "sha256": "e40465505abc09c07e6b34c747783c09045420660f08ce5071ddcefcb949f1da",
+    "file": "raw/sw-http-01.bin",
+    "at": "2026-10-09T07:57:21.356131+00:00",
+    "headers": {
+      "Date": "Fri, 09 Oct 2026 07:57:19 GMT",
+      "Content-Type": "application/vnd.ms-excel",
+      "Content-Length": "1166336",
+      "Last-Modified": "Thu, 08 Oct 2026 07:55:22 GMT"
+    }
+  }
+]
