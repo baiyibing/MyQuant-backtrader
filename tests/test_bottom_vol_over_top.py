@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 
 from backtest.research.bottom_vol_over_top import (
-    CLOSE_CAP,
+    MA_BARS,
     evaluate_at,
     forward_close_returns,
     is_main_board_code,
@@ -56,6 +56,9 @@ def _signal_frame(
     close[t] = close_at_t
     open_[t] = close_at_t
     high[t] = max(close_at_t + 0.1, float(low[t]) + 0.1)
+    # Default geometry stands above MA5(T): the prior four closes sit just under today's close.
+    ma_start = max(0, t - (MA_BARS - 1))
+    close[ma_start:t] = close_at_t * 0.98
     volume[max(0, top_i - 3) : top_i + 4] = top_vol
     volume[max(0, bot_i - 3) : bot_i + 4] = bottom_vol
     if extra_future:
@@ -108,8 +111,10 @@ def test_top_must_lead_bottom_by_more_than_ten_bars():
     assert evaluate_at(frame, day, code="600000.SH", top_lead=10) is None
 
 
-def test_rejects_close_above_bottom_cap():
-    frame, day = _signal_frame(close_at_t=5.0 * CLOSE_CAP + 0.05)
+def test_rejects_close_not_above_ma5():
+    frame, day = _signal_frame(close_at_t=5.2)
+    t = frame.index.get_loc(day)
+    frame.iloc[t - 4 : t, frame.columns.get_loc("close")] = 8.0
     assert evaluate_at(frame, day, code="600000.SH") is None
 
 

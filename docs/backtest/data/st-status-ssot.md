@@ -5,7 +5,7 @@
 - 依据：当日对湖容器的只读核查，以及「三份材料不合成一张日表」的分工。
 - 本仓只消费。采集、补洞、写湖在 OSkhQuant1.3。本文件不授权在本仓 merge vendor 或再做一份 ST 采集。见 [plan-ashare-engine-refactor-2026-09-18.md](../plan-ashare-engine-refactor-2026-09-18.md) §0.2。
 
-路径都相对 `resolve_parquet_container()`。不写死盘符。文件不存在就失败，不把缺文件当成「没有 ST」。
+路径都相对 `resolve_parquet_container()`。不写死盘符。日表文件或当日行缺失按 §2 免责放行，不把缺文件写成「已证明没有 ST」。
 
 ---
 
@@ -41,7 +41,7 @@ Wind 日表现状只存放 `is_st=True` 的行。消费以这张表现有的行�
 
 QMT 快照仍只用来事后核对采集缺了谁。不把快照日的 ST 名单写回更早的交易日。巨潮目录在出现可消费的表之前，不参与判断。
 
-策略 9 原书已经接上这道闸：`scripts/data/export_strategy9_pool.py` 在写名单前丢掉当日 ST；日线和分钟买入经 `st_on` 再查一次。实现是 `backtest/research/st_status.py`。
+买入闸是引擎基础设施，不是某本书的 hook。产品 `run()`（含共享日线/分钟入口和 v7 CLI）给账本挂上 Wind 日表；库内 `simulate()` 默认不读湖，避免单元测试和冻结 fold 吃到宿主日表。`execute_buy`（以及 v7 `_buy`）在账本已绑定时拒绝当日 `is_st` 为真的买入：名单、追买、加仓、指数买回都走同一处。名单导出仍可先丢掉 ST（策略 9 的 `drop_st_names`），那只是上游过滤，成交核还会再查。关闸：`OSKH_ST_GATE=0`。库路径要闸时显式 `st_gate=True` 或 `bind_st_gate(st)`。实现：`backtest/research/st_status.py`。
 
 ---
 
@@ -49,7 +49,7 @@ QMT 快照仍只用来事后核对采集缺了谁。不把快照日的 ST 名单
 
 | 用途 | 输入 | 现状 |
 |---|---|---|
-| 某日是否因 ST 不得进新仓 | Wind `st_daily` 的当日 `is_st` | topk 可选 `--st-daily-file`，缺文件失败。策略 9 导出和买入走 `st_status.is_st_on` |
+| 某日是否因 ST 不得进新仓 | Wind `st_daily` 的当日 `is_st` | 共享引擎默认开。缺表免责放行。topk 规划层 `--st-daily-file` 仍是显式路径、缺文件失败 |
 | 涨跌停幅度里的 ST 档 | 名单 CSV 第二列简称，`is_st_name` 认 `ST` / `*ST` | 书引擎按名单日期 as-of。空简称不当成 ST。见 [plan-industry-align-p3-d3-st-pit-2026-09-19.md](../plan-industry-align-p3-d3-st-pit-2026-09-19.md) |
 
 策略 9 的名单文件只有六位代码，简称过滤仍然为空。ST 排除走 §2 的 Wind 日表，不走简称。

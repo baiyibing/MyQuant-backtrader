@@ -71,6 +71,7 @@ def _session(
     take_profit=_tp,
     sell_gate=None,
     attach_low=True,
+    limit_down=0.01,
 ):
     hm = np.arange(570, 570 + n, dtype=np.int64)
     o = np.full(n, base if opens is None else 0.0, dtype=np.float64)
@@ -109,15 +110,15 @@ def _session(
     cursor = HeldMinuteCursor(
         o, h, c, cost=cost, peak=peak, n_days=n_days, can_sell=can_sell,
         stop_pct=stop_pct, profit_base=0.0, trail_ratio=0.0,
-        pos_trail=0.0, limit_down=0.01, hm=hm, peak_hm=peak_hm,
+        pos_trail=0.0, limit_down=limit_down, hm=hm, peak_hm=peak_hm,
         peak_gap_min=15, take_profit=take_profit, sell_gate=sell_gate,
         l=low if attach_low else None,
         minute_stop_trigger="close",
     )
-    return st, pos, cursor, (1000.0, 0.01)
+    return st, pos, cursor, (1000.0, float(limit_down))
 
 
-def _cursor(*, opens, highs, closes, cost, peak, peak_hm, n_days, can_sell=True):
+def _cursor(*, opens, highs, closes, cost, peak, peak_hm, n_days, can_sell=True, limit_down=0.01):
     n = len(closes)
     hm = np.arange(570, 570 + n, dtype=np.int64)
     return HeldMinuteCursor(
@@ -126,7 +127,7 @@ def _cursor(*, opens, highs, closes, cost, peak, peak_hm, n_days, can_sell=True)
         np.asarray(closes, dtype=np.float64),
         cost=cost, peak=peak, n_days=n_days, can_sell=can_sell,
         stop_pct=0.05, profit_base=0.0, trail_ratio=0.0,
-        pos_trail=0.0, limit_down=0.01, hm=hm, peak_hm=peak_hm,
+        pos_trail=0.0, limit_down=limit_down, hm=hm, peak_hm=peak_hm,
         peak_gap_min=15, take_profit=take_profit_reason,
         minute_stop_trigger="close",
     )
@@ -177,7 +178,8 @@ def _run_bars(st, pos, cursor, limits, hooks, python_from=0):
             if phase == "close" and hooks.get("step_stop_pct"):
                 step_stop_exits(
                     st, CODE, pos, float(cursor.c[bar_idx]), DAY, 1,
-                    limits, step_stop_pct=hooks["step_stop_pct"], hm=int(at_hm),
+                    limits, step_stop_pct=hooks["step_stop_pct"],
+                    open_px=float(cursor.o[bar_idx]), hm=int(at_hm),
                 )
             if phase == "close" and hooks.get("scale_out_step"):
                 scale_out_exits(
@@ -185,14 +187,14 @@ def _run_bars(st, pos, cursor, limits, hooks, python_from=0):
                     limits, scale_step=hooks["scale_out_step"],
                     scale_frac=hooks.get("scale_out_frac", 0.05),
                     scale_anchor=hooks.get("scale_out_anchor", "first_lot"),
-                    hm=int(at_hm),
+                    open_px=float(cursor.o[bar_idx]), hm=int(at_hm),
                 )
             if phase == "close" and hooks.get("peak_dd_exit"):
                 peak_dd_clear_exits(
                     st, CODE, pos, float(cursor.c[bar_idx]), DAY, 1,
                     limits, peak_dd_exit=hooks["peak_dd_exit"],
                     peak_dd_sessions=hooks.get("peak_dd_sessions", 15),
-                    hm=int(at_hm),
+                    open_px=float(cursor.o[bar_idx]), hm=int(at_hm),
                 )
     return st, pos
 
@@ -225,6 +227,9 @@ def _same_trades(left, right):
     assert pos_l.group.scale_steps == pos_r.group.scale_steps
     assert pos_l.group.peak_dd_start == pos_r.group.peak_dd_start
     assert pos_l.shares == pos_r.shares
+    assert int(st_l.stats.get("defer_sell_limit_down", 0)) == int(
+        st_r.stats.get("defer_sell_limit_down", 0)
+    )
 
 
 def test_numba_t0_writes_no_peak_and_no_action():
@@ -422,3 +427,33 @@ def test_env_off_forces_full_python(monkeypatch):
     )
     assert idx == 0
     assert pos.peak == 10.0
+
+
+def test_numba_limit_down_open_still_returns_scale_out_bar():
+    n = 8
+    opens = [10.0] * n
+    highs = [10.05] * n
+    closes = [10.0] * 4 + [10.60] * 4
+    highs[4:] = [10.60] * 4
+    cursor = _cursor(
+        opens=opens, highs=highs, closes=closes,
+        cost=10.0, peak=10.0, peak_hm=570, n_days=2, limit_down=10.0,
+    )
+    idx, peak, _hm = _first(cursor, scale_step=0.05, scale_anchor=10.0, scale_steps=0)
+    assert idx == 4
+    assert peak == 10.05
+
+
+def test_numba_prefix_limit_down_open_counts_scale_out_defer():
+    n = 8
+    kwargs = dict(
+        n=n, n_days=2, limit_down=10.0, shares=2000,
+        opens=[10.0] * n,
+        highs=[10.05] * 4 + [10.60] * 4,
+        lows=[9.90] * n,
+        closes=[10.0] * 4 + [10.60] * 4,
+    )
+    nb, py = _drive_numba_prefix(**kwargs), _drive_python(**kwargs)
+    _same_trades(nb, py)
+    assert nb[0].trades == []
+    assert int(nb[0].stats["defer_sell_limit_down"]) == 4

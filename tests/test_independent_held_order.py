@@ -10,6 +10,7 @@ from backtest.research.csv_ledger import (
     held_position_items,
     is_parking_lot,
     is_principal_lot,
+    lot_identity,
     register_principal_lot,
     s8_open_groups,
 )
@@ -89,3 +90,19 @@ def test_bonus_locks_use_object_identity():
     gc.collect()
     twins = [Position("600000.SH", 100, 10.0, 0, 10.0) for _ in range(64)]
     assert all(account.peek_locks(pos) == {} for pos in twins)
+
+
+def test_lot_identity_is_object_owned_not_recycled_id():
+    first = Position("600000.SH", 100, 10.0, 0, 10.0)
+    second = Position("000001.SZ", 100, 10.0, 0, 10.0)
+    token = lot_identity(first)
+    recycled = id(first)
+    assert lot_identity(first) is token
+    assert lot_identity(second) is not token
+    del first
+    import gc
+
+    gc.collect()
+    twins = [Position("600000.SH", 100, 10.0, 0, 10.0) for _ in range(64)]
+    reused = [pos for pos in twins if id(pos) == recycled]
+    assert all(lot_identity(pos) is not token for pos in reused)

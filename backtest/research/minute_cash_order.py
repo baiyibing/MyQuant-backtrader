@@ -58,6 +58,7 @@ from backtest.research.csv_ledger import (
     exit_positions,
     fee_order_id,
     held_fill_key,
+    lot_identity,
     execute_buy,
     hit_limit_down,
     peak_gap_blocks,
@@ -71,6 +72,7 @@ from backtest.research.csv_ledger import (
 )
 from backtest.research.minute_audit import record_rejection
 from backtest.research.csv_simulate_loop import (
+    DayBuyQuotes,
     apply_capital_ration,
     run_chase_due_day,
     run_pool_buys_day,
@@ -192,7 +194,7 @@ def _side_sell(st, code, pos, px, day, reason, *, fill_config=None, **kwargs):
         path = side_path(reason)
         record_sell_pending(st, ds=day, hm=kwargs.get("hm"), code=code,
                             shares=kwargs.get("wanted_shares", pos.shares), path=path,
-                            reason="next_bar_open_queued", key=(held_fill_key(pos), path, id(pos)))
+                            reason="next_bar_open_queued", key=(held_fill_key(pos), path, lot_identity(pos)))
         return 0
     return _sell(st, code, pos, px, day, reason, **kwargs)
 
@@ -212,7 +214,7 @@ def fill_side_pending(st, code, pos, px, day, day_i, limits, *, hm):
         if defer_sell_at_limit(px, limits):
             st.stats["defer_sell_limit_down"] += 1
             record_limit(st, code, wanted if wanted is not None else target.shares, day, hm, px, limits,
-                         path=side_path(reason), key=(held_fill_key(pos), side_path(reason), id(target)))
+                         path=side_path(reason), key=(held_fill_key(pos), side_path(reason), lot_identity(target)))
             continue
         filled = _sell(st, code, target, px, day, reason + ":next_open",
                        day_i=day_i, hm=hm, price_rule="minute_pending_next_open",
@@ -792,12 +794,21 @@ def run_chronological_day(
         skips = int(st.stats.get("skip_volume_unavailable", 0)) + int(
             st.stats.get("skip_volume_cap", 0)
         )
+        day_quotes = DayBuyQuotes(
+            pool_quote,
+            ds=ds,
+            names=names,
+            exdiv=exdiv,
+            exdiv_ref_fen=exdiv_ref_fen,
+            qlib_limit_pct=qlib_limit_pct,
+        )
         common = {
             "day_i": day_i,
             "day": day,
             "ds": ds,
             "names": names,
             "buy_quote_for": pool_quote,
+            "day_buy_quotes": day_quotes,
             "volume_bucket_for": pool_bucket if st.volume_cap is not None else None,
             "sizing": hooks.get("sizing", "daily_quota"),
             "name_budget": hooks.get("name_budget", 1_000_000.0),
@@ -845,7 +856,6 @@ def run_chronological_day(
             allow_new_name=hooks.get("allow_new_name"),
             add_gate=hooks.get("add_gate"),
             index_blocks_add=hooks.get("index_blocks_add", True),
-            st_on=hooks.get("st_on"),
             handle_planned_code=handle_planned_code,
             # Restore the pool's unsliced cash basis; today's settled sells are
             # included, while new parent budgets stay frozen at 14:30.

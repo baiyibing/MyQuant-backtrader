@@ -77,6 +77,7 @@ def _empty_stats() -> dict:
         "chase_pending_eod": 0,
         "chase_skip_held": 0,
         "skip_held": 0,
+        "skip_st": 0,
         "skip_index_gate": 0,
         "skip_add_loser": 0,
         "add_lots": 0,
@@ -489,6 +490,15 @@ def held_fill_key(pos):
     if not hasattr(pos, "_held_fill_token"):
         pos._held_fill_token = object()
     return pos._held_fill_token
+
+
+def lot_identity(pos):
+    """Per-object token for same-day maps. Not CPython's recycled ``id(pos)``."""
+    token = getattr(pos, "_lot_identity", None)
+    if token is None:
+        token = object()
+        pos._lot_identity = token
+    return token
 
 
 def position_is_open(st, pos) -> bool:
@@ -969,6 +979,12 @@ def execute_buy(
 ) -> bool:
     """常规/追买共用；open 调用方显式传 at，默认仍为 bucket 收盘。"""
     if px <= 0:
+        return False
+    from backtest.research.st_status import st_blocks_buy
+
+    if st_blocks_buy(st, code, _ymd(day)):
+        st.stats["skip_st"] = int(st.stats.get("skip_st", 0)) + 1
+        record_rejection(st, code, day, "skip_st", px)
         return False
     policy = s8_policy(st)
     group = None

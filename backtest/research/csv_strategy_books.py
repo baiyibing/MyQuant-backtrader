@@ -1430,9 +1430,8 @@ def _apply_version9(
                                        "mean_tr_20_yuan_" + ("3" if version9_sell == "mean_tr3_tp10" else "2")),
                             profit_target=(0.10 if version9_sell == "mean_tr3_tp10" else
                                            "range_amp_20_trailing" if version9_sell == "range_amp_tp_amp" else None))
-        from backtest.research.st_status import is_st_on as _is_st_on
         return dict(stop_pct=None, version9_exit=lambda frame, day: strategy9_rules.version9_exit(frame, day, version9_sell),
-                    take_profit=lambda *args: None, record_params=record, st_on=_is_st_on)
+                    take_profit=lambda *args: None, record_params=record)
 
     def _tp(px, cost, peak, n_days):
         return strategy9_rules.take_profit_reason(px, cost, peak, n_days, max_hold=max_hold)
@@ -1440,13 +1439,10 @@ def _apply_version9(
     def _rec(st):
         strategy9_rules.record_strategy9_params(st, max_hold=max_hold, range_stop=range_stop)
 
-    from backtest.research.st_status import is_st_on
-
     hooks = {
         "stop_pct": None,
         "take_profit": _tp if take_profit is None else take_profit,
         "record_params": _rec if record_params is None else record_params,
-        "st_on": is_st_on,
     }
     if range_stop:
         hooks["stop_range"] = strategy9_rules.stop_range_amplitude

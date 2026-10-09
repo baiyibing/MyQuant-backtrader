@@ -109,6 +109,7 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
                 tail_volume_unit: str | None = "shares",
                 audit_sink: Any = None,
                 rule_profile: str | RuleProfile = "industry",
+                st_gate: bool = False,
                 **unsupported_options) -> SimResult:
     """Forward native arguments; the adapter validates/normalizes tail options before main.
 
@@ -137,6 +138,7 @@ def simulate_v7(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, Seque
         audit_sink=audit_sink, fix_minute_cash_order=fix_minute_cash_order,
         tail_window_buy=tail_window_buy, tail_volume_unit=tail_volume_unit,
         rule_profile=profile,
+        st_gate=st_gate,
     )
 
 
@@ -207,7 +209,9 @@ def summarize_v7(state: SimResult) -> str:
 
 def write_run_artifacts(state: SimResult, output_dir: Path) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
-    (output_dir / "summary.txt").write_text(summarize_v7(state), encoding="utf-8")
+    (output_dir / "summary.txt").write_text(
+        summarize_v7(state), encoding="utf-8", newline="\n"
+    )
     trade_fields = ("date", "symbol", "hm", "side", "shares", "price", "reason")
     if any("transfer_fee" in row for row in state.trades):
         trade_fields = (
@@ -417,6 +421,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                         tail_window_buy=args.tail_window_buy,
                         tail_volume_unit=args.tail_volume_unit, audit_sink=audit,
                         rule_profile=profile,
+                        st_gate=True,
                         **volume_options)
     sim_s = time.perf_counter() - sim_t0
     output = Path(args.output_dir or f"backtest_output/csv_minute_v7_{args.start}_{args.end}")

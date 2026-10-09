@@ -342,6 +342,8 @@ def summarize(
                 f"  skip_index_gate={int(st.stats.get('skip_index_gate', 0))} | "
                 f"skip_add_loser={int(st.stats.get('skip_add_loser', 0))}"
             )
+        if st.stats.get("skip_st"):
+            lines.append(f"  skip_st={int(st.stats.get('skip_st', 0))}")
     if "buy_cost_rate" in st.stats:
         lines.append(
             f"  cost buy={st.stats['buy_cost_rate']:g} sell={st.stats['sell_cost_rate']:g} "

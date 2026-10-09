@@ -136,6 +136,7 @@ from backtest.research.csv_simulate_loop import (  # noqa: E402
     run_parking_open_cover_day,
     run_parking_rebalance_day,
     run_profit_skim_day,
+    DayBuyQuotes,
     run_pool_buys_day,
     run_step_adds_day,
 )
@@ -276,12 +277,14 @@ def simulate(
     min_lot_top_up: bool | None = None,
     rule_profile: str | RuleProfile = "industry",
     sim_profile: SimPhaseClock | None = None,
+    st_gate: bool = False,
 ) -> SimState:
     """核心日循环。bars/pool_days 可由测试注入；run() 负责从湖与 CSV 加载。
 
     strategy 必填；take_profit(...) 仍可显式覆盖。
     exdiv_economics 显式接收 (engine_symbol, YYYYMMDD) -> ExDivEvent；
     默认 None 保留原行为，事件配合 raw bars 使用，不从 exdiv 的 k 推断权益。
+    st_gate 默认关：库调用不读 Wind 日表。产品 run() 打开。
     """
     profile = resolve_rule_profile(rule_profile)
     clock = sim_profile if sim_profile is not None else NULL_CLOCK
@@ -362,6 +365,7 @@ def simulate(
         pool_names=pool_names,
         pool_names_by_day=pool_names_by_day,
         daily_quota=daily_quota,
+        st_gate=st_gate,
     )
     if (
         profile.exchange_quantity_rules
@@ -662,10 +666,17 @@ def simulate(
                 return float(row[price_field]), closes
 
             clock.begin("pool_buy")
+            day_quotes = DayBuyQuotes(
+                _pool_quote_for,
+                ds=ds,
+                names=names,
+                exdiv=exdiv,
+                qlib_limit_pct=qlib_limit_pct,
+            )
             if callable(hooks.get("breakout_day")):
                 hooks["breakout_day"](
                     st, day_i=i, day=day, ds=ds, names=names, pool_days=pool_days,
-                    buy_quote_for=_pool_quote_for, exdiv=exdiv,
+                    buy_quote_for=day_quotes.as_quote_fn(), exdiv=exdiv,
                     qlib_limit_pct=qlib_limit_pct,
                 )
             run_pool_buys_day(
@@ -680,6 +691,7 @@ def simulate(
                 allow_add=allow_add,
                 buy_gate=buy_gate,
                 buy_quote_for=_pool_quote_for,
+                day_buy_quotes=day_quotes,
                 sizing=hooks.get("sizing", "daily_quota"),
                 name_budget=hooks.get("name_budget", 1_000_000.0),
                 ration=hooks.get("ration", "file_order"),
@@ -692,7 +704,6 @@ def simulate(
                 forbid_all_trade_at_limit=forbid_all_trade_at_limit,
                 allow_new_name=hooks.get("allow_new_name"),
                 add_gate=hooks.get("add_gate"),
-                st_on=hooks.get("st_on"),
                 name_lot_budget=hooks.get("name_lot_budget"),
                 index_blocks_add=hooks.get("index_blocks_add", True),
                 sold_today={t["code"] for t in st.trades[day_trade_start:] if t["side"] == "SELL"}
@@ -706,6 +717,7 @@ def simulate(
                 ds=ds,
                 names=names,
                 buy_quote_for=_pool_quote_for,
+                day_buy_quotes=day_quotes,
                 sizing=hooks.get("sizing", "daily_quota"),
                 name_budget=hooks.get("name_budget", 1_000_000.0),
                 exdiv=exdiv,
@@ -1049,6 +1061,7 @@ def run(
         **({"min_lot_top_up": min_lot_top_up} if min_lot_top_up is not None else {}),
         rule_profile=profile,
         sim_profile=sim_clock,
+        st_gate=True,
     )
     if skipped.get("exdiv_skipped_no_factor"):
         st.stats["exdiv_skipped_no_factor"] = int(skipped["exdiv_skipped_no_factor"])

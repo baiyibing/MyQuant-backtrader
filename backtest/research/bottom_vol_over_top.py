@@ -2,7 +2,8 @@
 
 通达信式 ``SUM(VOL, 底距今-3, 底距今+3)`` 在底靠近 T 时会读到 T+1..T+3。
 本模块把量能窗裁到 ``[0, T]``。顶/底取最近 250 根（含 T）的 HHV(H)/LLV(L)，
-并列取最近一根（BARSLAST）。决策日须已有 300 根日线。买点要求底价 <= 顶价 × 0.60，底量严格大于
+并列取最近一根（BARSLAST）。决策日须已有 300 根日线。买点要求底价 <= 顶价 × 0.60，
+当日收盘站上含当日的 5 日均线，底量严格大于
 顶量 × r_min（仅 1.2 / 1.5 / 2，默认 2），顶须早于底严格超过 top_lead 根交易 bar
 （仅 10 / 20 / 30 / 40，默认 40），沿用同一裁剪量能窗。不写 ``stock_pool/``，不 import qlib。
 """
@@ -25,7 +26,7 @@ MIN_BOTTOM_AGE = 1
 MAX_BOTTOM_AGE = 15
 R_MIN = 2.0
 VOL_RATIOS = (1.2, 1.5, 2.0)
-CLOSE_CAP = 1.10
+MA_BARS = 5
 MIN_LISTED_BARS = 300
 TURNOVER_MIN = 0.10
 TINY_TOP_TURNOVER = 0.02
@@ -90,6 +91,17 @@ def last_extreme_ago(
         raise ValueError(f"which must be 'high' or 'low', got {which!r}")
     rel = int(np.flatnonzero(window == target)[-1])
     return int(t - (start + rel))
+
+
+def close_above_ma(close: np.ndarray, t: int, bars: int = MA_BARS) -> bool:
+    """True when close[T] is strictly above the mean of the last ``bars`` closes, including T."""
+    start = int(t) - int(bars) + 1
+    if start < 0 or t >= len(close):
+        return False
+    window = np.asarray(close[start : t + 1], dtype=np.float64)
+    if window.size != int(bars) or not np.isfinite(window).all():
+        return False
+    return float(window[-1]) > float(window.mean())
 
 
 def clipped_volume_sum(
@@ -202,7 +214,7 @@ def evaluate_at(
     after = low[bottom_i + 1 : t + 1]
     if after.size == 0 or float(np.min(after)) <= float(low[bottom_i]):
         return None
-    if float(close[t]) > float(low[bottom_i]) * float(CLOSE_CAP):
+    if not close_above_ma(close, t):
         return None
 
     top_vol = clipped_volume_sum(volume, top_i, t)

@@ -37,6 +37,7 @@ def test_version9_hooks_and_max_hold(enabled):
     assert take_profit_reason(1, 1, 1, MAX_HOLD, max_hold=enabled) == ("force_sell:max_hold" if enabled else None)
     assert hooks["take_profit"](11., 10., 11., MAX_HOLD) == "profit_take:target"
     assert "stop_range" in hooks
+    assert "st_on" not in hooks
 
 
 def test_version9_can_turn_range_stop_off():

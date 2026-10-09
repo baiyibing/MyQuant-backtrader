@@ -67,6 +67,115 @@ ChaseQuotesFn = Callable[[str], Optional[tuple[float, float, list[float]]]]
 PoolQuoteFn = Callable[[str], Optional[tuple[float, list[float]]]]
 
 
+class PreparedBuyQuote:
+    """One name's pool-buy numbers for a session. Not a ledger fill."""
+
+    __slots__ = ("px", "closes", "limits", "did_map")
+
+    def __init__(self, px, closes, limits, did_map):
+        self.px = float(px)
+        self.closes = closes
+        self.limits = limits
+        self.did_map = bool(did_map)
+
+
+class DayBuyQuotes:
+    """Per-day buy px, prior closes, and limit band.
+
+    The cash loop still calls ``execute_buy``. This only stops the same
+    DataFrame / board lookup from running twice for pool adds and step adds.
+    """
+
+    def __init__(
+        self,
+        buy_quote_for: PoolQuoteFn,
+        *,
+        ds: str,
+        names: dict[str, str],
+        exdiv=None,
+        exdiv_ref_fen: bool = False,
+        qlib_limit_pct=None,
+        reference_price_for=None,
+    ):
+        self._buy_quote_for = buy_quote_for
+        self._ds = ds
+        self._names = names
+        self._exdiv = exdiv
+        self._exdiv_ref_fen = exdiv_ref_fen
+        self._qlib_limit_pct = qlib_limit_pct
+        self._reference_price_for = reference_price_for
+        self._rows: dict[str, PreparedBuyQuote | None] = {}
+
+    def prefetch(self, codes) -> None:
+        for code in codes:
+            self.get(code)
+
+    def get(self, code: str) -> PreparedBuyQuote | None:
+        if code in self._rows:
+            return self._rows[code]
+        quoted = self._buy_quote_for(code)
+        if quoted is None:
+            self._rows[code] = None
+            return None
+        px, closes = quoted
+        if not closes:
+            self._rows[code] = None
+            return None
+        if self._reference_price_for is None:
+            prev_close, did_map = mapped_prev_close(
+                self._exdiv,
+                code,
+                self._ds,
+                float(closes[-1]),
+                **({"fen_round": True} if self._exdiv_ref_fen else {}),
+            )
+        else:
+            prev_close, did_map = self._reference_price_for(code, self._ds), False
+        limits = book_limit_prices(
+            code,
+            prev_close,
+            self._names,
+            qlib_limit_pct=self._qlib_limit_pct,
+            as_of=self._ds,
+        )
+        row = PreparedBuyQuote(px, closes, limits, did_map)
+        self._rows[code] = row
+        return row
+
+    def as_quote_fn(self) -> PoolQuoteFn:
+        def quote(code: str):
+            row = self.get(code)
+            if row is None:
+                return None
+            return row.px, row.closes
+
+        return quote
+
+
+def _day_buy_quotes(
+    day_buy_quotes: DayBuyQuotes | None,
+    buy_quote_for: PoolQuoteFn,
+    *,
+    ds: str,
+    names: dict[str, str],
+    exdiv=None,
+    exdiv_ref_fen: bool = False,
+    qlib_limit_pct=None,
+    reference_price_for=None,
+) -> DayBuyQuotes:
+    if day_buy_quotes is not None:
+        return day_buy_quotes
+    return DayBuyQuotes(
+        buy_quote_for,
+        ds=ds,
+        names=names,
+        exdiv=exdiv,
+        exdiv_ref_fen=exdiv_ref_fen,
+        qlib_limit_pct=qlib_limit_pct,
+        reference_price_for=reference_price_for,
+    )
+
+
 def prepare_strategy_hooks(
     strategy: str,
     *,
@@ -139,6 +248,7 @@ def init_sim_state(
     pool_names: Optional[dict[str, str]] = None,
     pool_names_by_day: Optional[dict[str, dict[str, str]]] = None,
     daily_quota: Optional[float] = None,
+    st_gate: bool = False,
 ) -> tuple[SimState, dict[str, tuple[float, int]], Callable[[str], dict[str, str]]]:
     """SimState + pending_chase + names_asof after strategy hooks are applied."""
     st = SimState(cash=float(total_cash))
@@ -163,6 +273,10 @@ def init_sim_state(
         st.stats.setdefault("profit_skim_lock_drawn", 0.0)
         st.stats.setdefault("profit_skim_lock_restored", 0.0)
     configure_s8(st, hooks)
+    if st_gate:
+        from backtest.research.st_status import bind_st_gate
+
+        bind_st_gate(st)
     if daily_quota is not None:
         st.stats["daily_quota"] = float(daily_quota)
     st.stats["bars_loaded"] = int(bars_loaded)
@@ -265,9 +379,12 @@ def run_chase_due_day(
             int(st.stats.get(k, 0))
             for k in ("skip_volume_cap", "skip_volume_unavailable")
         )
+        skip_st_before = int(st.stats.get("skip_st", 0))
         if not execute_buy(
             st, code, buy_px, per_ch, day_i, day, reason="chase:T+1", **volume_kwargs
         ):
+            if int(st.stats.get("skip_st", 0)) > skip_st_before:
+                continue
             st.stats["chase_buy_fail"] += 1
             shares, _, _, _ = preview_final_buy_declaration(
                 st, code, buy_px, per_ch, day
@@ -326,7 +443,7 @@ def run_pool_buys_day(
     buy_hm: int | None = None,
     strict_limit_up: bool = False,
     order_budget: float | None = None,
-    st_on=None,
+    day_buy_quotes: DayBuyQuotes | None = None,
 ) -> None:
     """Pool buys for ``ds``; ``buy_quote_for`` supplies buy price + prev closes.
 
@@ -340,6 +457,7 @@ def run_pool_buys_day(
     default retains the legacy epsilon comparison.
     ``order_budget`` overrides the opt-in child order notional and floors to
     whole lots without the legacy supplementary 100-share fallback.
+    ``day_buy_quotes`` reuses one day's px/limit table with step adds.
     """
     # Opt-in fixed slices use a hard notional budget without supplementary lots.
     # Default books retain their existing sizing and 100-share fallback.
@@ -366,6 +484,17 @@ def run_pool_buys_day(
         per = min(daily_quota, cash_basis) * frac / _buy_denom(planned, planned_for_day)
     if order_budget is not None:
         per = order_budget
+    quotes = _day_buy_quotes(
+        day_buy_quotes,
+        buy_quote_for,
+        ds=ds,
+        names=names,
+        exdiv=exdiv,
+        exdiv_ref_fen=exdiv_ref_fen,
+        qlib_limit_pct=qlib_limit_pct,
+        reference_price_for=reference_price_for,
+    )
+    quotes.prefetch(planned)
     for code in planned:
         if handle_planned_code is not None and handle_planned_code(code):
             continue
@@ -375,37 +504,24 @@ def run_pool_buys_day(
             st.stats["skip_held"] += 1
             record_rejection(st, code, day, "skip_held")
             continue
-        if callable(st_on) and st_on(code, ds):
-            st.stats["skip_st"] = int(st.stats.get("skip_st", 0)) + 1
-            record_rejection(st, code, day, "skip_st")
-            continue
         if callable(allow_new_name) and not allow_new_name(day):
             if not (not independent and code in st.positions and not index_blocks_add):
                 st.stats["skip_index_gate"] += 1
                 continue
-        quoted = buy_quote_for(code)
-        if quoted is None:
+        row = quotes.get(code)
+        if row is None:
             st.stats["skip_no_bar"] += 1
             continue
-        px, closes = quoted
-        if not closes:
-            st.stats["skip_no_bar"] += 1
-            continue
-        if reference_price_for is None:
-            prev_close, did_map = mapped_prev_close(exdiv, code, ds, float(closes[-1]), **({"fen_round": True} if exdiv_ref_fen else {}))
-        else:
-            prev_close, did_map = reference_price_for(code, ds), False
-        if did_map:
+        px, closes = row.px, row.closes
+        if row.did_map:
             st.stats["exdiv_prev_close_mapped"] = (
                 int(st.stats.get("exdiv_prev_close_mapped", 0)) + 1
             )
-        limits = book_limit_prices(
-            code, prev_close, names, qlib_limit_pct=qlib_limit_pct, as_of=ds
-        )
-        if limits is None:
+        if row.limits is None:
             st.stats["skip_unknown_board"] += 1
             continue
-        limit_up, limit_down = limits
+        limit_up, limit_down = row.limits
+        limits = row.limits
         if independent:
             # Price/limit checks must see this signal's own initial budget.
             per = (
@@ -522,6 +638,7 @@ def run_step_adds_day(
     volume_bucket_for: Callable[[str], int | None] | None = None,
     reference_price_for: Callable[[str, str], float] | None = None,
     confirm_peak_for: Callable[[str, object], float] | None = None,
+    day_buy_quotes: DayBuyQuotes | None = None,
 ) -> None:
     """Off-list scan; selected 8.x books add once per independent group/day."""
     if s8_policy(st) is not None:
@@ -532,37 +649,40 @@ def run_step_adds_day(
             buy_gate=buy_gate, volume_bucket_for=volume_bucket_for,
             reference_price_for=reference_price_for,
             confirm_peak_for=confirm_peak_for,
+            day_buy_quotes=day_buy_quotes,
         )
         return
     if not callable(step_add) or sizing != "per_name":
         return
+    quotes = _day_buy_quotes(
+        day_buy_quotes,
+        buy_quote_for,
+        ds=ds,
+        names=names,
+        exdiv=exdiv,
+        exdiv_ref_fen=exdiv_ref_fen,
+        qlib_limit_pct=qlib_limit_pct,
+        reference_price_for=reference_price_for,
+    )
     for code in held_codes(st):
         lots = st.positions.get(code) or []
         if not lots:
             continue
-        quoted = buy_quote_for(code)
-        if quoted is None:
+        row = quotes.get(code)
+        if row is None or float(row.px) <= 0:
             continue
-        px, closes = quoted
-        if not closes or float(px) <= 0:
-            continue
+        px, closes = row.px, row.closes
         if not step_add(lots, px):
             continue
-        if reference_price_for is None:
-            prev_close, did_map = mapped_prev_close(exdiv, code, ds, float(closes[-1]), **({"fen_round": True} if exdiv_ref_fen else {}))
-        else:
-            prev_close, did_map = reference_price_for(code, ds), False
-        if did_map:
+        if row.did_map:
             st.stats["exdiv_prev_close_mapped"] = (
                 int(st.stats.get("exdiv_prev_close_mapped", 0)) + 1
             )
-        limits = book_limit_prices(
-            code, prev_close, names, qlib_limit_pct=qlib_limit_pct, as_of=ds
-        )
-        if limits is None:
+        if row.limits is None:
             st.stats["skip_unknown_board"] += 1
             continue
-        limit_up, limit_down = limits
+        limit_up, limit_down = row.limits
+        limits = row.limits
         blocked = hit_limit_up(px, limit_up) or (
             forbid_all_trade_at_limit and hit_limit_down(px, limit_down)
         )
@@ -662,6 +782,7 @@ def _run_s8_price_adds_day(
     st, *, day_i, day, ds, names, buy_quote_for, sizing, exdiv,
     qlib_limit_pct, forbid_all_trade_at_limit, buy_gate, volume_bucket_for,
     reference_price_for, confirm_peak_for, exdiv_ref_fen=False,
+    day_buy_quotes=None,
 ) -> None:
     policy = s8_policy(st)
     book = policy["name"]
@@ -675,13 +796,21 @@ def _run_s8_price_adds_day(
     if policy.get("index_blocks_s8_add") and callable(gate) and not gate(day):
         return
     step_cap = policy.get("step_cap")
+    quotes = _day_buy_quotes(
+        day_buy_quotes,
+        buy_quote_for,
+        ds=ds,
+        names=names,
+        exdiv=exdiv,
+        exdiv_ref_fen=exdiv_ref_fen,
+        qlib_limit_pct=qlib_limit_pct,
+        reference_price_for=reference_price_for,
+    )
     for code in held_codes(st):
-        quoted = buy_quote_for(code)
-        if quoted is None:
+        row = quotes.get(code)
+        if row is None or float(row.px) <= 0:
             continue
-        px, closes = quoted
-        if not closes or float(px) <= 0:
-            continue
+        px, closes = row.px, row.closes
         groups = list(s8_open_groups(st, code))
         for position_id, group in groups:
             if group.last_add_date == ds or group.first_lot.pending_exit:
@@ -754,18 +883,14 @@ def _run_s8_price_adds_day(
                 if not _rebuy_due and not _sched_due and not due1 and not due2:
                     continue
                 use2 = not due1 and not _sched_due and not _rebuy_due  # schedule/rebuy 走 executed_steps，不走 steps2
-            if reference_price_for is None:
-                prev_close, did_map = mapped_prev_close(exdiv, code, ds, float(closes[-1]), **({"fen_round": True} if exdiv_ref_fen else {}))
-            else:
-                prev_close, did_map = reference_price_for(code, ds), False
-            if did_map:
+            if row.did_map:
                 st.stats["exdiv_prev_close_mapped"] = (
                     int(st.stats.get("exdiv_prev_close_mapped", 0)) + 1
                 )
-            limits = book_limit_prices(code, prev_close, names, qlib_limit_pct=qlib_limit_pct, as_of=ds)
-            if limits is None:
+            if row.limits is None:
                 st.stats["skip_unknown_board"] += 1
                 continue
+            limits = row.limits
             limit_up, limit_down = limits
             if hit_limit_up(px, limit_up) or (
                 forbid_all_trade_at_limit and hit_limit_down(px, limit_down)

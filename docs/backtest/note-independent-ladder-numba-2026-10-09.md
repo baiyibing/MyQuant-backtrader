@@ -115,12 +115,49 @@ Numba `nopython` 核调不了任意 Python 回调（闭包、`Optional[str]`、l
 
 ---
 
+### 2.6 名单报价预计算、同日身份、跌停计数（本刀）
+
+装载复用之后，全窗叶子还剩 `pool_buy` ~22s，以及两处同日 `id(pos)`。本刀不动账本、不把 `execute_buy` 编进 Numba、不锁 6.53 golden。
+
+1. **`DayBuyQuotes`。** 按日缓存买价、昨收、涨跌停带。现金循环仍走 `execute_buy` 和一手取整。日线 / 默认分钟 / 时序买入共用同一张表；突破钩子走 `as_quote_fn()`。分钟有 `day_spans` 时用 numpy 切片取 14:55，不再对池里每只股票做 DataFrame `.loc`。
+2. **同日身份收尾。** 8.3 确认峰值改挂 `pos._session_confirm_peak`。分钟排队键与 pending 诊断改 `lot_identity(pos)`（对象自带 token），不再用会回收的 `id(pos)`。
+3. **`defer_sell_limit_down`。** Numba 不再在开盘跌停时 `continue` 整根 bar。缺口止损仍只在 `not blocked_open` 时返回。收盘谓词（减仓 / 台阶止损 / 峰值回撤）仍交给 Python 计数。成交本来就对齐；这只修埋点。
+4. **6.53 不录 golden。** 仍在 `PENDING_BOOK_NAMES`。行业默认 off-byte 未授权。不要用宿主锁之后的 +65.17% 覆盖 `_opt` / `_prof`。
+
+对照：`tests/test_day_buy_quotes.py`、`tests/test_independent_held_order.py`、`tests/test_independent_numba_ladder.py`。
+
+---
+
+### 2.7 全窗重测（DayBuyQuotes 之后）
+
+同一配方、`PYTHONHASHSEED=0`、默认分钟（不开 `--fix-minute-cash-order`）、产品 `run()`（ST 闸开）。产物 `backtest_output/csv_minute_v6_53_20251023_20260909_industry_quotes_h0/`。
+
+对照上一刀宿主锁全窗（`industry_hostdet_h0`，模拟 101.6s，当时还没有 ST 闸、日切片 sidecar 未打进该次全窗）：
+
+| 项 | hostdet | 本次 quotes | 说明 |
+|---|---|---|---|
+| 模拟 | 101.6s | 66.4s | 叶子合计下降 |
+| held_scan | 45.8s (42%) | 43.4s (59%) | 仍是模拟大头 |
+| pool_buy | 21.6s (20%) | 9.7s (13%) | 报价预计算削掉约 12s |
+| day_spans | 26.3s | 0.0s | sidecar 命中 |
+| 墙钟 | 150.9s | 199.9s | 本次日线 cache miss、分钟文件解码 91.2s；不是模拟变慢 |
+| 净值 | 44,594,778.35 / +65.17% | 44,341,528.00 / +64.23% | `skip_st=5`；不是报价缓存改成交 |
+| 成交 | 9662 | 9621 | 买入 4479→4459，加仓 1280→1268 |
+| defer_sell_limit_down | 1433 | 4147 | 开盘跌停漏计已收口；关核旧数 4382 |
+
+下一刀如果还要动引擎：只剩持仓扫描的 Python 评估段（`held_eval_bars=542018`）。名单买入的现金循环还在 Python，但 9.7s 不值得再把 `execute_buy` 编进 Numba。时序买入的 DataFrame `pool_quote` 仍未动——默认 6.53 不走那条路。
+
+6.53 仍 PENDING。这次净值更不是锁定比分（ST 闸改了成交）。
+
+---
+
 ## 4. 遗留问题
 
-1. **开核=关核已到全窗。** 短窗与全窗 `python,numba` 成交键、权益、净值都对齐。全窗 +65.17% / 44,594,778.35 / 9662。关核多评 bar，`defer_sell_limit_down` 计数仍不同（全窗 4382 vs 1433），不进成交。不要用这次净值覆盖 `_opt` / `_prof`。
-2. **真回调仍走 Python。** `sell_gate`、`exit_plan`、`force_sell_hm`、`close_clear`、pending、自定义 `fill_config`、`session_volume` 失败则 `python_from=0`。不要对它们 `objmode`。
-3. **6.53 仍在 `PENDING_BOOK_NAMES`。** 行业默认 off-byte 未授权。本刀不录 golden。排序和停泊标签会改历史成交，预期如此。
+1. **模拟大头是 held_scan。** 全窗开核 43.4s / 59%。Numba 前缀已经在；剩下是真有动作的 Python bar 和侧钩。不要对回调 `objmode`，不要把账本编进 Numba。
+2. **真回调仍走 Python。** `sell_gate`、`exit_plan`、`force_sell_hm`、`close_clear`、pending、自定义 `fill_config`、`session_volume` 失败则 `python_from=0`。
+3. **6.53 仍在 `PENDING_BOOK_NAMES`。** 行业默认 off-byte 未授权。经济除权默认仍关。本刀不录 golden。ST 闸会改历史成交，预期如此。
 4. **HELP_LOCK / CLI 未动。** 分钟 `main()` 字节冻结。埋点仍走 `run()` + 默认 `OSKH_PROFILE_SIM`。
-5. **名单买入仍是模拟大头。** 装载复用之后，`pool_buy`（全窗约 21.6s）还在 Python。不把账本编进 Numba。未做 mmap/Redis。
+5. **时序买入报价未动。** `minute_cash_order.pool_quote` 仍是 DataFrame。只有开了 `--fix-minute-cash-order` 才值得改。
+6. **装载仍吃墙钟。** 同进程第二次 `run()` 走 `bar_store`；跨进程仍是文件缓存。未做 mmap/Redis。
 
-未授权：开新策略版本、改 6.53 卖点、把跳过重新接回宿主、把账本编进 Numba、用本次 NAV 覆盖 `_opt` / `_prof` 比分。
+未授权：开新策略版本、改 6.53 卖点、把跳过重新接回宿主、把账本编进 Numba、用本次 NAV 覆盖 `_opt` / `_prof` 比分、把 6.53 锁成 golden、打开默认经济除权。

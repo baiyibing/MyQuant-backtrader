@@ -36,7 +36,7 @@ from backtest.research.sell_pending_observability import (  # noqa: E402
 
 from backtest.research.strategy9_rules import (  # noqa: E402
     evaluate_stop_range, RANGE_LOOKBACK_CALENDAR_DAYS,
-    evaluate_version9_exit, plan_stop_price, plan_close_reason,
+    evaluate_version9_exit,
 )
 
 from backtest.research.book_capabilities import allows_price_add  # noqa: E402
@@ -63,7 +63,6 @@ from backtest.research.csv_ledger import (  # noqa: E402
     finish_pending_chase,
     queue_limit_up_chase as queue_limit_up_chase,
     hit_limit_down,
-    hit_limit_up,
     last_close_mark as last_close_mark,
     peak_gap_blocks,
     _sell,
@@ -84,6 +83,7 @@ from backtest.research.csv_common import (  # noqa: E402
     WARMUP_DAYS,
     book_limit_prices,
     build_calendar,
+    day_bar_and_prev_closes,
     _named_limits as _named_limits,
     _pool_names_asof as _pool_names_asof,
     _progress as _progress,
@@ -151,8 +151,8 @@ from backtest.research.csv_daily_loader import (  # noqa: E402
     warmup_start,
 )
 from oskh_data.symbol_format import to_partition_key as to_partition_key  # noqa: E402
-from backtest.research.strategy3_rules import reserve_step_minute  # noqa: E402
 from backtest.research.csv_simulate_loop import (  # noqa: E402
+    DayBuyQuotes,
     append_equity_and_eod_marks,
     bind_parking_session,
     extra_load_codes_for_strategy,
@@ -171,7 +171,7 @@ from backtest.research.csv_simulate_loop import (  # noqa: E402
 
 from backtest.research.ashare_volume_cap import VolumeCap, VolumeLookup  # noqa: E402
 from backtest.research.csv_minute_volume import (  # noqa: E402
-    completed_minute_volumes, validate_participation_rate,
+    completed_minute_volumes,
 )
 from backtest.research.participation_rate_precheck import (  # noqa: E402
     precheck_cli_participation_rate,
@@ -180,7 +180,7 @@ from backtest.research.participation_rate_precheck import (  # noqa: E402
 from backtest.research.minute_audit import audit_scope, write_audit
 from backtest.research.fill_config import FillConfig, default_fill_config, book_fill_defaults, is_open_fill
 from backtest.research.minute_stop_trigger import (
-    blocked_bar, target_fill, validate_low, validate_minute_stop_trigger,
+    validate_low, validate_minute_stop_trigger,
 )
 from backtest.research.minute_cash_order import (
     HeldMinuteCursor,
@@ -265,7 +265,7 @@ HELP_LOCK = """
 
 from backtest.research.minute_entry_validation import validate_minute_entry
 from backtest.research.minute_held_scan_core import (
-    HeldMinuteCursor, _LIMIT_EPS, sell_allowed, stop_touch, limit_down_blocks,
+    HeldMinuteCursor, sell_allowed, stop_touch, limit_down_blocks,
     stop_trigger, gap_stop, force_due,
 )
 
@@ -392,8 +392,6 @@ try:
             blocked_open = limit_down > 0.0 and limit_down_blocks(px_open, limit_down)
             if not blocked_open and stop_enabled and gap_stop(px_open, stop_trigger(cost, stop_pct)):
                 return i, peak_before, peak_hm_before
-            if blocked_open:
-                continue
             if stop_enabled and stop_touch(px_close / cost - 1.0, stop_pct):
                 return i, peak_before, peak_hm_before
             gap = cur_hm - new_peak_hm
@@ -917,14 +915,26 @@ def _previous_rows(df: pd.DataFrame, day) -> pd.DataFrame:
     return df.loc[df.index < day]
 
 
-def _buy_px(day_df: pd.DataFrame) -> Optional[float]:
-    hit = day_df.loc[day_df["hm"] == BUY_HM]
-    if not hit.empty:
-        return float(hit["close"].iloc[0])
-    late = day_df.loc[(day_df["hm"] >= 14 * 60 + 30) & (day_df["hm"] <= BUY_HM)]
-    if late.empty:
+def _buy_px_from_arrays(hm: np.ndarray, close: np.ndarray) -> Optional[float]:
+    """14:55 close, else last close in 14:30–14:55. Arrays stay in bar order."""
+    if hm.size == 0:
         return None
-    return float(late["close"].iloc[-1])
+    exact = np.flatnonzero(hm == BUY_HM)
+    if exact.size:
+        return float(close[int(exact[0])])
+    late = np.flatnonzero((hm >= 14 * 60 + 30) & (hm <= BUY_HM))
+    if late.size:
+        return float(close[int(late[-1])])
+    return None
+
+
+def _buy_px(day_df: pd.DataFrame) -> Optional[float]:
+    if day_df is None or day_df.empty:
+        return None
+    return _buy_px_from_arrays(
+        day_df["hm"].to_numpy(np.int64, copy=False),
+        day_df["close"].to_numpy(np.float64, copy=False),
+    )
 
 
 def _chase_quotes(day_df: pd.DataFrame) -> Optional[tuple[float, float]]:
@@ -1008,11 +1018,13 @@ def simulate(
     rule_profile: str | RuleProfile = "industry",
     sim_profile: SimPhaseClock | None = None,
     day_spans: dict | None = None,
+    st_gate: bool = False,
 ) -> SimState:
     """Opt-in cap uses caller-attested completed minutes; daily volume is unused.
 
     exdiv_economics is an explicit (symbol, YYYYMMDD) -> ExDivEvent lookup for
     raw bars. None retains the baseline; E-R6 ratios never imply entitlements.
+    st_gate defaults off so library calls do not read the Wind table; run() turns it on.
     """
     profile = resolve_rule_profile(rule_profile)
     clock = sim_profile if sim_profile is not None else NULL_CLOCK
@@ -1052,6 +1064,10 @@ def simulate(
         frames, minutes, closes, pools, calendar, gate = v7.prepare_main_inputs(
             minute_bars, daily_bars, pool_days, start, end, policy_context)
         st = v7.SimResult(float(total_cash))
+        if st_gate:
+            from backtest.research.st_status import bind_st_gate
+
+            bind_st_gate(st)
         if (
             profile.exchange_quantity_rules
             or profile.fee_aware_affordability
@@ -1181,6 +1197,7 @@ def simulate(
             pool_names=pool_names,
             pool_names_by_day=pool_names_by_day,
             daily_quota=daily_quota,
+            st_gate=st_gate,
             **({"context": policy_context} if policy.initialize is not None else {}),
         )
         if (
@@ -1349,7 +1366,6 @@ def simulate(
             # new weighted cost. Other OFF books retain full-day exits first.
             split_group_scan = allows_price_add(hooks.get("name"), hooks.get("sizing"))
             post_group_scans = []
-            confirm_peaks = {}
             s8_confirm = hooks.get("name") == "version8_3" and hooks.get("sizing") == "per_name"
             for code in held_codes(st):
                 clock.count("held_codes")
@@ -1401,7 +1417,7 @@ def simulate(
                 if s8_confirm:
                     prefix_high = max((float(hi) for hi in h[hm <= BUY_HM] if hi > 0), default=0.0)
                     for pos in st.positions.get(code, []):
-                        confirm_peaks[id(pos)] = max(
+                        pos._session_confirm_peak = max(
                             float(pos.peak), prefix_high if pos.entry_idx < i else 0.0,
                         )
                 if absolute_exit:
@@ -1677,36 +1693,65 @@ def simulate(
             def _pool_quote_for(code: str):
                 mdf = minute_bars.get(code)
                 ddf = daily_bars.get(code)
-                if mdf is None or ddf is None or day not in ddf.index:
+                if mdf is None or ddf is None:
                     return None
-                day_m = _slice_day(mdf, day_spans.get(code, {}), ds)
-                if day_m is None:
+                got = day_bar_and_prev_closes(ddf, day)
+                if got is None:
                     return None
-                prev_rows = _previous_rows(ddf, day)
-                if prev_rows.empty:
-                    return None
-                if minute_open:
-                    opening = _open_quote_for(day_m)
-                    if opening is None:
+                _row, closes = got
+                span = day_spans.get(code, {}).get(ds)
+                if span is not None:
+                    lo, hi = span
+                    if lo >= hi:
                         return None
-                    volume = float(opening["volume"])
-                    if not np.isfinite(volume) or volume <= 0:
-                        st.stats["skip_buy_volume"] += 1
-                        return None
-                    px = float(opening["open"])
+                    hm = mdf["hm"].to_numpy(np.int64, copy=False)[lo:hi]
+                    if minute_open:
+                        hit = np.flatnonzero(hm == AM_OPEN)
+                        if not hit.size:
+                            return None
+                        idx = int(hit[0])
+                        volume = float(mdf["volume"].to_numpy(np.float64, copy=False)[lo:hi][idx])
+                        if not np.isfinite(volume) or volume <= 0:
+                            st.stats["skip_buy_volume"] += 1
+                            return None
+                        px = float(mdf["open"].to_numpy(np.float64, copy=False)[lo:hi][idx])
+                    else:
+                        px = _buy_px_from_arrays(
+                            hm, mdf["close"].to_numpy(np.float64, copy=False)[lo:hi]
+                        )
                 else:
-                    px = _buy_px(day_m)
+                    day_m = _slice_day(mdf, day_spans.get(code, {}), ds)
+                    if day_m is None:
+                        return None
+                    if minute_open:
+                        opening = _open_quote_for(day_m)
+                        if opening is None:
+                            return None
+                        volume = float(opening["volume"])
+                        if not np.isfinite(volume) or volume <= 0:
+                            st.stats["skip_buy_volume"] += 1
+                            return None
+                        px = float(opening["open"])
+                    else:
+                        px = _buy_px(day_m)
                 if px is None or px <= 0 or (minute_open and not np.isfinite(px)):
                     return None
-                closes = prev_rows["close"].astype(float).tolist()
                 return px, closes
 
             volume_skips = int(st.stats.get("skip_volume_unavailable", 0)) + int(st.stats.get("skip_volume_cap", 0))
             clock.begin("pool_buy")
+            day_quotes = DayBuyQuotes(
+                _pool_quote_for,
+                ds=ds,
+                names=names,
+                exdiv=exdiv,
+                exdiv_ref_fen=exdiv_ref_fen,
+                qlib_limit_pct=qlib_limit_pct,
+            )
             if callable(hooks.get("breakout_day")):
                 hooks["breakout_day"](
                     st, day_i=i, day=day, ds=ds, names=names, pool_days=pool_days,
-                    buy_quote_for=_pool_quote_for, exdiv=exdiv,
+                    buy_quote_for=day_quotes.as_quote_fn(), exdiv=exdiv,
                     exdiv_ref_fen=exdiv_ref_fen, qlib_limit_pct=qlib_limit_pct,
                 )
             with audit_scope(audit_sink, decision_hm=AM_OPEN if minute_open else BUY_HM,
@@ -1722,8 +1767,8 @@ def simulate(
                     names=names,
                     allow_add=allow_add,
                     buy_gate=buy_gate,
-                    st_on=hooks.get("st_on"),
                     buy_quote_for=_pool_quote_for,
+                    day_buy_quotes=day_quotes,
                     volume_bucket_for=pool_volume if st.volume_cap is not None else None,
                     volume_at=AM_OPEN - 1 if minute_open else None,
                     sold_today={t["code"] for t in st.trades[day_trade_start:] if t["side"] == "SELL"}
@@ -1757,6 +1802,7 @@ def simulate(
                     ds=ds,
                     names=names,
                     buy_quote_for=_pool_quote_for,
+                    day_buy_quotes=day_quotes,
                     volume_bucket_for=pool_volume if st.volume_cap is not None else None,
                     sizing=hooks.get("sizing", "daily_quota"),
                     name_budget=hooks.get("name_budget", 1_000_000.0),
@@ -1769,7 +1815,10 @@ def simulate(
                     # Clamp, rather than change the sell scanner's peak state.
                     # A T+0 chase lot has no snapshot and keeps its entry peak.
                     confirm_peak_for=(
-                        lambda _code, pos: min(float(pos.peak), confirm_peaks.get(id(pos), float(pos.peak)))
+                        lambda _code, pos: min(
+                            float(pos.peak),
+                            float(getattr(pos, "_session_confirm_peak", pos.peak)),
+                        )
                     ) if s8_confirm else None,
                 )
             clock.end("pool_buy")
@@ -2271,6 +2320,7 @@ def run(
         rule_profile=profile,
         sim_profile=sim_clock,
         day_spans=cache_status.get("day_spans"),
+        st_gate=True,
     )
     if skipped.get("exdiv_skipped_no_factor"):
         st.stats["exdiv_skipped_no_factor"] = int(skipped["exdiv_skipped_no_factor"])

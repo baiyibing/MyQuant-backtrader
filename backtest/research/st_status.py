@@ -3,15 +3,18 @@
 Reads ``vendor_wind_st_status/st_daily.parquet`` under the parquet container.
 A code is ST on a session only when that file has ``is_st`` true for the date.
 A missing file or a missing row is a waiver: the name is not treated as ST.
+
+The shared buy ledger binds this table once per run. It is engine
+infrastructure, not a per-book hook. ``OSKH_ST_GATE=0`` turns the gate off.
 """
 
 from __future__ import annotations
 
+import os
 from functools import lru_cache
 from pathlib import Path
 
 import pandas as pd
-
 from oskh_core.a_share_symbol_normalize import canonical_from_bare_code
 
 _ST_RELATIVE = Path("vendor_wind_st_status") / "st_daily.parquet"
@@ -88,3 +91,36 @@ def drop_st_names(days: dict, membership: dict | None = None) -> tuple[dict, int
         if accepted:
             kept[raw_day] = accepted
     return kept, dropped
+
+
+def st_gate_enabled() -> bool:
+    flag = (os.environ.get("OSKH_ST_GATE") or "1").strip().lower()
+    return flag not in {"0", "false", "off", "no"}
+
+
+def bind_st_gate(st, membership: dict | None = None, *, path: Path | str | None = None) -> None:
+    """Mount the Wind table on a run state. Missing file is a waiver."""
+    if not st_gate_enabled():
+        st.st_membership = None
+        _stamp_gate(st, "off")
+        return
+    table = membership if membership is not None else load_st_membership(path)
+    st.st_membership = table
+    _stamp_gate(st, "lake" if table else "waiver")
+
+
+def st_blocks_buy(st, code: str, ymd: str) -> bool:
+    """True when this run bound a table and that table marks the name ST."""
+    table = getattr(st, "st_membership", None)
+    if table is None:
+        return False
+    return is_st_on(code, ymd, table)
+
+
+def _stamp_gate(st, label: str) -> None:
+    stats = getattr(st, "stats", None)
+    if not isinstance(stats, dict):
+        return
+    stats["st_gate"] = label
+    table = getattr(st, "st_membership", None)
+    stats["st_days"] = 0 if not table else len(table)

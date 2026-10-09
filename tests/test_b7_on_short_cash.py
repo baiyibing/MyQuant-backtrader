@@ -4,13 +4,13 @@ import json
 
 import pytest
 from backtest.research.csv_ledger import (
-    SimState, InsufficientCashError, check_buy_cash, configure_s8, execute_buy,
+    SimState, InsufficientCashError, check_buy_cash, execute_buy,
 )
 from backtest.research.csv_simulate_loop import init_sim_state, run_pool_buys_day
 from backtest.research.csv_strategy_books import apply_csv_strategy
 from backtest.research.minute_audit import audit_scope
 from tests.test_s8_independent_positions import DAYS, CODE, _pool
-from tests.test_tail_window_shared import A, D1, bar, simulate, minute
+from tests.test_tail_window_shared import A, bar, simulate, minute
 from backtest.research.tail_window_buy import TAIL_MINUTES
 
 
@@ -87,16 +87,12 @@ def test_strict_tail_parent_skip(monkeypatch):
         return {**original(*args, **kwargs), 'on_short_cash': 'skip'}
     monkeypatch.setattr(minute, 'apply_csv_strategy', hooks)
     trace = []
-<<<<<<< HEAD
     st = simulate(
         {A: [bar(hm) for hm in TAIL_MINUTES]},
         total_cash=27999,
         audit_sink=trace,
         rule_profile="legacy",
     )
-=======
-    st = simulate({A: [bar(hm) for hm in TAIL_MINUTES]}, total_cash=27999, audit_sink=trace)
->>>>>>> github/feat/b7-on-short-cash
     assert not st.trades and not st.positions
     assert st.stats['skip_cash'] == 1
     assert st.stats['skip_cash_notional'] == 28000
@@ -136,11 +132,7 @@ def test_price_add_skip_preserves_success_markers(monkeypatch, clock):
     monkeypatch.setattr(engine, 'apply_csv_strategy',
                         lambda *args, **kwargs: {**original(*args, **kwargs), 'on_short_cash': 'skip'})
     st = _run(clock, 'version8', [10., 11., 12.1], [0],
-<<<<<<< HEAD
               total_cash=1001100, take_profit=_no_exit, rule_profile='legacy')
-=======
-              total_cash=1001100, take_profit=_no_exit)
->>>>>>> github/feat/b7-on-short-cash
     group, = st.book_state['s8_independent']['groups'].values()
     assert group.executed_steps == 0
     assert group.last_add_date == ''
