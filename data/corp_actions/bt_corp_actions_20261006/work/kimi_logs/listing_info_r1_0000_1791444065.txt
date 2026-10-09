@@ -1,0 +1,7 @@
+• RESULT_JSON: [{"id":"info_301119_301122_301123","status":"error","rows":null,"error":"Request timed out after 30 seconds."}]
+
+
+kimi version 2.1.1
+• Failed with timeout; don't retry. Output RESULT_JSON.
+
+To resume this session: kimi -r session_d00da9da-e318-4c19-a3dd-4287dd461c48

@@ -1,0 +1,6 @@
+只读数据测试。只用 kimi-datasource 插件 wind 数据源（data_source_name="wind"）。不要运行 shell 命令，不要读写其他文件；结果只通过 file_path 参数写到 D:\exports\bt_corp_actions_20261006\work\test\ 下。
+先调用 get_data_source_desc(name="wind") 一次。然后依次做下面 3 次 call_data_source_tool 调用，失败不要重试，打印错误原文：
+1) api_name=wind_get_stock_events，question="000567.SZ,000568.SZ,000570.SZ,000571.SZ,000581.SZ,000582.SZ,000586.SZ,000589.SZ,000591.SZ,000592.SZ,000595.SZ,000596.SZ,000598.SZ,000599.SZ,000600.SZ 2014年1月1日至2026年10月6日 分红送配 除权除息日 股权登记日 派息日 税前每股派息 送股比例 转增比例 红股上市日"，file_path="D:\exports\bt_corp_actions_20261006\work\test\multi15.csv"
+2) api_name=wind_get_stock_info，ticker="600519.SH,000001.SZ,300750.SZ"，fields="ipo_date"，file_path="D:\exports\bt_corp_actions_20261006\work\test\info3_ipo.csv"
+3) api_name=wind_get_stock_info，ticker="002231.SZ,688981.SH"，fields="ipo_date,delist_date"，file_path="D:\exports\bt_corp_actions_20261006\work\test\info2_delist.csv"
+最后只打印每次调用的结果行数或错误原文。

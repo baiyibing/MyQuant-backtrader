@@ -1,0 +1,5 @@
+只读数据测试。只用 kimi-datasource 插件 wind 数据源（data_source_name="wind"），不要调用 get_data_source_desc 之外的其他数据源，不要写任何文件除了通过 file_path 参数写到 D:\exports\bt_corp_actions_20261006\work\test\ 下。不要运行 shell 命令。
+先调用 get_data_source_desc(name="wind") 一次。然后依次做下面 2 次 call_data_source_tool 调用（api_name=wind_get_stock_events），每次失败时把错误原文简要打印出来即可，不要重试：
+1) question="600519.SH,000001.SZ,300750.SZ,002594.SZ,601318.SH 2015年1月1日至2026年10月6日 分红送配 除权除息日 股权登记日 派息日 税前每股派息 送股比例 转增比例 红股上市日"，file_path="D:\exports\bt_corp_actions_20261006\work\test\multi5.csv"
+2) api_name=wind_get_stock_info，params ticker="600519.SH,000001.SZ,300750.SZ"，fields="ipo_date,delist_date"，file_path="D:\exports\bt_corp_actions_20261006\work\test\info3.csv"
+最后只打印每次调用的结果行数或错误原文。

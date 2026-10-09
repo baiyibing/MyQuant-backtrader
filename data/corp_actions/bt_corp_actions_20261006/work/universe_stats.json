@@ -1,0 +1,107 @@
+{
+ "stats": [
+  {
+   "source": "repo stock_pool",
+   "path": "D:\\PycharmProjects\\MyQuant-backtrader\\stock_pool",
+   "files": 215,
+   "unique": 2322
+  },
+  {
+   "source": "repo stock_pool_xls",
+   "path": "D:\\PycharmProjects\\MyQuant-backtrader\\stock_pool_xls",
+   "files": 156,
+   "unique": 2217
+  },
+  {
+   "source": "strategy9_pool_20260101_20261004",
+   "path": "D:\\exports\\strategy9_pool_20260101_20261004",
+   "files": 175,
+   "unique": 424
+  },
+  {
+   "source": "strategy9_pool_20260101_20261004_2dae7019",
+   "path": "D:\\exports\\strategy9_pool_20260101_20261004_2dae7019",
+   "files": 77,
+   "unique": 22
+  },
+  {
+   "source": "strategy9_pool_20260101_20261004_61f105c6_lead20",
+   "path": "D:\\exports\\strategy9_pool_20260101_20261004_61f105c6_lead20",
+   "files": 122,
+   "unique": 67
+  },
+  {
+   "source": "strategy9_pool_20260101_20261004_61f105c6_lead30",
+   "path": "D:\\exports\\strategy9_pool_20260101_20261004_61f105c6_lead30",
+   "files": 122,
+   "unique": 67
+  },
+  {
+   "source": "strategy9_pool_20260101_20261004_61f105c6_lead40",
+   "path": "D:\\exports\\strategy9_pool_20260101_20261004_61f105c6_lead40",
+   "files": 122,
+   "unique": 66
+  },
+  {
+   "source": "strategy9_pool_20260101_20261004_6b946ab3",
+   "path": "D:\\exports\\strategy9_pool_20260101_20261004_6b946ab3",
+   "files": 77,
+   "unique": 22
+  },
+  {
+   "source": "strategy9_pool_20260101_20261004_755c307f",
+   "path": "D:\\exports\\strategy9_pool_20260101_20261004_755c307f",
+   "files": 77,
+   "unique": 22
+  },
+  {
+   "source": "strategy9_pool_20260101_20261004_8342dd23",
+   "path": "D:\\exports\\strategy9_pool_20260101_20261004_8342dd23",
+   "files": 122,
+   "unique": 67
+  },
+  {
+   "source": "strategy9_pool_20260101_20261004_90280105",
+   "path": "D:\\exports\\strategy9_pool_20260101_20261004_90280105",
+   "files": 77,
+   "unique": 22
+  },
+  {
+   "source": "strategy9_pool_20260101_20261004_afaf1401",
+   "path": "D:\\exports\\strategy9_pool_20260101_20261004_afaf1401",
+   "files": 175,
+   "unique": 424
+  },
+  {
+   "source": "strategy9_pool_20260101_20261004_e54e2db9",
+   "path": "D:\\exports\\strategy9_pool_20260101_20261004_e54e2db9",
+   "files": 77,
+   "unique": 22
+  },
+  {
+   "source": "s10_tr_bb1000",
+   "path": "D:\\exports\\s10_tr_bb1000_20260825_20260909",
+   "files": 12,
+   "unique": 83
+  },
+  {
+   "source": "v11 seed30_export_b pool",
+   "path": "D:\\exports\\v11_slice_d_20260921\\seed30_export_b\\pool",
+   "files": 322,
+   "unique": 30
+  },
+  {
+   "source": "topk signals pool",
+   "path": "D:\\exports\\topk_s1_cap_cli_host_20261001\\signals\\pool",
+   "files": 3,
+   "unique": 126
+  }
+ ],
+ "total": 2774,
+ "unmapped": [],
+ "by_exch": {
+  "SZ": 1674,
+  "SH": 1094,
+  "BJ": 6
+ }
+}

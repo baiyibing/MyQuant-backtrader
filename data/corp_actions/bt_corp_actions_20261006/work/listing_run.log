@@ -1,0 +1,18 @@
+== listing round 0: 70 pending of 70
+[18:35:05] listing_r0_0002_1791282766: 10 calls in 139s; ok=9
+[18:35:34] listing_r0_0001_1791282766: 10 calls in 167s; ok=8
+[18:36:06] listing_r0_0000_1791282766: 10 calls in 200s; ok=9
+[18:36:11] listing_r0_0004_1791282766: 10 calls in 37s; ok=3
+[18:36:12] listing_r0_0005_1791282766: 10 calls in 6s; ok=0
+[18:36:12] listing_r0_0006_1791282766: 10 calls in 2s; ok=0
+[18:36:22] listing_r0_0003_1791282766: 10 calls in 77s; ok=2
+== listing round 1: 39 pending of 70
+[18:36:23] listing_r1_0001_1791282982: 10 calls in 2s; ok=0
+[18:36:23] listing_r1_0000_1791282982: 10 calls in 2s; ok=0
+[18:36:23] listing_r1_0002_1791282982: 10 calls in 2s; ok=0
+[18:36:25] listing_r1_0003_1791282982: 9 calls in 2s; ok=0
+== listing round 2: 39 pending of 70
+[18:36:27] listing_r2_0002_1791282985: 10 calls in 2s; ok=0
+[18:36:27] listing_r2_0000_1791282985: 10 calls in 2s; ok=0
+[18:36:27] listing_r2_0001_1791282985: 10 calls in 2s; ok=0
+[18:36:28] listing_r2_0003_1791282985: 9 calls in 2s; ok=0

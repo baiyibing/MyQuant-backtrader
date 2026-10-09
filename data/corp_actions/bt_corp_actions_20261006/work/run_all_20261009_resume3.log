@@ -1,0 +1,9 @@
+
+==== launch 2026-10-09 09:14:38 ====
+[2026-10-09 09:14:38] driver start pid=49160 (2026-10-08 patch: quota/infra not attempts; stop on quota)
+== listing round 0: 0 pending of 59
+== listing_info round 0: 0 pending of 4
+== events round 0: 373 pending of 463
+[09:18:25] events_r0_0000_1791508478: 12 calls in 228s; ok=12
+[09:20:05] events_r0_0002_1791508478: 12 calls in 327s; ok=12
+[09:20:23] events_r0_0001_1791508478: 12 calls in 345s; ok=12

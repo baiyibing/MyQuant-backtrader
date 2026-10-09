@@ -1,0 +1,11 @@
+[2026-10-08 20:22:13] driver start pid=42180 (2026-10-08 patch: quota/infra not attempts; stop on quota)
+== listing round 0: 0 pending of 59
+== listing_info round 0: 0 pending of 4
+== events round 0: 424 pending of 463
+[20:26:04] events_r0_0002_1791462133: 12 calls in 231s; ok=12
+[20:26:23] events_r0_0001_1791462133: 12 calls in 250s; ok=12
+[20:27:13] events_r0_0000_1791462133: 12 calls in 300s; ok=12
+[20:28:08] events_r0_0005_1791462433: 12 calls in 55s; ok=4
+[20:28:13] events_r0_0003_1791462364: 12 calls in 129s; ok=6
+[20:28:13] events_r0_0004_1791462383: 12 calls in 111s; ok=5
+[20:28:13] QUOTA HIT in events: stopping (see D:\exports\bt_corp_actions_20261006\work\QUOTA_STOP.txt)

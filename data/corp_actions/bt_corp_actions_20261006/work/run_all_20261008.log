@@ -1,0 +1,16 @@
+[2026-10-08 12:22:48] driver start pid=39060 (2026-10-08 patch: quota/infra not attempts; stop on quota)
+== listing round 0: 2 pending of 59
+[12:24:07] listing_r0_0000_1791433368: 2 calls in 79s; ok=1
+== listing round 1: 1 pending of 59
+[12:26:52] listing_r1_0000_1791433447: 1 calls in 165s; ok=1
+== listing round 2: 0 pending of 59
+== listing_info round 0: 63 pending of 63
+[12:31:26] listing_info_r0_0000_1791433612: 15 calls in 274s; ok=9
+[12:33:25] listing_info_r0_0001_1791433612: 15 calls in 393s; ok=8
+[12:34:43] listing_info_r0_0004_1791434005: 3 calls in 78s; ok=2
+[12:39:07] listing_info_r0_0002_1791433612: 15 calls in 735s; ok=12
+[12:43:25] listing_info_r0_0003_1791433886: 15 calls in 719s; ok=7
+== listing_info round 1: 23 pending of 63
+[12:46:30] listing_info_r1_0000_1791434605: 15 calls in 186s; ok=5
+[12:46:34] listing_info_r1_0001_1791434605: 8 calls in 190s; ok=5
+[12:46:34] QUOTA HIT in listing_info: stopping (see D:\exports\bt_corp_actions_20261006\work\QUOTA_STOP.txt)
