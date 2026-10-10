@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Explicit cash-dividend events for 6.54 (overnight shares x cash per share).
+"""Explicit cash-dividend events for 6.54/6.55 (overnight shares x cash per share).
 
 600036 uses A-share implementation-notice cash. Other names reuse the 2026-10-08
 overlay filter: lake ``ex_date_index`` dr in (1, 1.12] and implied cash/share
@@ -20,6 +20,7 @@ from common.infra.data_root import resolve_source_parquet
 PARK = "600036.SH"
 CASH_DR_MAX = 1.12
 CASH_PS_MIN = 0.30
+CASH_DIV_BOOKS = frozenset({"version6_54", "version6_55"})
 # 巨潮 2026-01-10 / 1224927640 ；巨潮 2026-07-04 / 公告 2026-029
 CMB_CASH_PS: dict[tuple[str, str], float] = {
     (PARK, "20260116"): 1.013,
@@ -130,12 +131,12 @@ def bind_book_cash_div_economics(
     bars: dict | None = None,
     workers: int = 8,
 ) -> Mapping | None:
-    """Product run() only: 6.54 gets the lake lookup when the caller omitted one."""
+    """Product run() only: 6.54/6.55 get the lake lookup when the caller omitted one."""
     if existing is not None:
         return existing
     from backtest.research.csv_strategy_books import normalize_csv_strategy
 
-    if normalize_csv_strategy(strategy) != "version6_54":
+    if normalize_csv_strategy(strategy) not in CASH_DIV_BOOKS:
         return None
     return load_cash_div_lookup(
         start, end, workers=workers, codes=codes, bars=bars

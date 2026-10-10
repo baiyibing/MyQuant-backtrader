@@ -45,6 +45,9 @@ def test_div_to_parking_hooks_and_scope():
     assert "version6_54" in __import__(
         "backtest.research.strategy6_53_rules", fromlist=["HELP_LOCK"]
     ).HELP_LOCK
+    assert "version6_55" in __import__(
+        "backtest.research.strategy6_54_rules", fromlist=["HELP_LOCK"]
+    ).HELP_LOCK
 
 
 def test_official_cmb_events_are_explicit():

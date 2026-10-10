@@ -59,6 +59,7 @@ from backtest.research import (
     strategy6_52_rules,
     strategy6_53_rules,
     strategy6_54_rules,
+    strategy6_55_rules,
 )
 
 
@@ -2212,3 +2213,47 @@ def _run_kwargs_version6_54(args) -> dict:
     if stop is not None and not 0 < float(stop) < 1:
         raise SystemExit(f"--stop-pct must be in (0, 1), got {stop}")
     return {"strategy": "version6_54", "stop_pct": stop}
+
+
+def _apply_version6_55(
+    *,
+    stop_pct=None,
+    take_profit=None,
+    record_params=None,
+    index_block_new=None,
+    **_,
+) -> dict:
+    resolved = strategy6_55_rules.STOP_PCT if stop_pct is None else float(stop_pct)
+
+    def _tp(px, cost, peak, n_days=1):
+        return strategy6_55_rules.take_profit_reason(px, cost, peak, n_days)
+
+    def _rec(st):
+        strategy6_55_rules.record_strategy6_55_params(st, stop_pct=resolved)
+        st.stats["index_gate_on"] = bool(strategy6_55_rules.INDEX_GATE_ON)
+        st.stats["parking_symbol"] = strategy6_55_rules.PARKING_SYMBOL
+        st.stats["parking_frac"] = strategy6_55_rules.PARKING_FRAC
+        st.stats["parking_execute"] = bool(strategy6_55_rules.PARKING_EXECUTE)
+        st.stats["parking_open_cover"] = bool(strategy6_55_rules.PARKING_OPEN_COVER)
+        st.stats["cont_stop_rebuy"] = bool(strategy6_55_rules.CONT_STOP_REBUY)
+        st.stats["profit_skim"] = bool(strategy6_55_rules.PROFIT_SKIM)
+        st.stats["index_cut"] = bool(strategy6_55_rules.INDEX_CUT)
+        st.stats["div_to_parking"] = bool(strategy6_55_rules.DIV_TO_PARKING)
+        st.stats["ladder_give_step"] = float(strategy6_55_rules.GIVE_STEP)
+
+    base = _apply_version6_54(
+        stop_pct=resolved,
+        take_profit=take_profit if take_profit is not None else _tp,
+        record_params=record_params if record_params is not None else _rec,
+        index_block_new=index_block_new,
+    )
+    base["name"] = "version6_55"
+    base["div_to_parking"] = bool(strategy6_55_rules.DIV_TO_PARKING)
+    return base
+
+
+def _run_kwargs_version6_55(args) -> dict:
+    stop = getattr(args, "stop_pct", None)
+    if stop is not None and not 0 < float(stop) < 1:
+        raise SystemExit(f"--stop-pct must be in (0, 1), got {stop}")
+    return {"strategy": "version6_55", "stop_pct": stop}

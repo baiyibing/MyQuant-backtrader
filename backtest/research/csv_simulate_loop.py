@@ -1149,6 +1149,7 @@ def extra_load_codes_for_strategy(strategy: str) -> set[str]:
         "version6_52",
         "version6_53",
         "version6_54",
+        "version6_55",
     }:
         from backtest.research.strategy6_47_rules import PARKING_SYMBOL
 
