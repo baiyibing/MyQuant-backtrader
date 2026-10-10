@@ -368,14 +368,19 @@ try:
         step_stop_pct,
         hm_lo,
         hm_hi,
+        start,
     ):
-        """First bar that Python must see. Peak returned is the prefix before that bar."""
+        """First bar at or after ``start`` that Python must see.
+
+        Peak returned is the prefix before that bar, including highs from ``start``.
+        """
         new_peak = peak
         new_peak_hm = peak_hm
         allowed = can_sell and n_days >= 1
         n = len(c)
         n_step = len(step_costs)
-        for i in range(n):
+        begin = start if start > 0 else 0
+        for i in range(begin, n):
             cur_hm = hm[i]
             if cur_hm < hm_lo or cur_hm > hm_hi:
                 continue
@@ -482,6 +487,7 @@ def independent_ladder_first_bar(
     step_stop_pct: float,
     hm_lo: int,
     hm_hi: int,
+    bar_start: int = 0,
 ):
     """Return ``(idx, peak, peak_hm)``. ``idx<0`` means the slice has no Python action."""
     if _scan_independent_ladder_first is None:
@@ -518,6 +524,7 @@ def independent_ladder_first_bar(
         float(step_stop_pct),
         int(hm_lo),
         int(hm_hi),
+        int(bar_start),
     )
     return int(idx), float(peak), int(peak_hm)
 
@@ -531,23 +538,15 @@ def _independent_numba_prefix(
     side_hooks,
     hm_lo: int,
     hm_hi: int,
+    bar_start: int = 0,
 ) -> int:
-    """Write prefix peak and return first Python bar, or -1 if none in this slice."""
-    flag = (os.environ.get("OSKH_INDEPENDENT_NUMBA") or "1").strip().lower()
-    if flag in {"0", "false", "off", "no"}:
+    """Write prefix peak and return first Python bar, or -1 if none in this slice.
+
+    ``-2`` means the scan gave up (too many step lots): Python from ``bar_start``.
+    """
+    if _independent_numba_blocked(st, pos, cursor):
         return 0
     ladder = _ladder_numba_params(st)
-    if (
-        ladder is None
-        or not _NUMBA_SCAN_AVAILABLE
-        or not _independent_skip_supported(cursor)
-        or cursor.force_sell_hm is not None
-        or cursor.close_clear is not None
-        or (cursor.fill_state and "pending" in cursor.fill_state)
-        or pos.pending_exit
-        or _side_pending_host(st, pos)
-    ):
-        return 0
     width, give_base, give_step, tp_min = ladder
     step_pct = float((side_hooks or {}).get("step_stop_pct") or 0.0)
     step_costs = []
@@ -560,7 +559,7 @@ def _independent_numba_prefix(
             ):
                 step_costs.append(float(lot.cost))
         if len(step_costs) > 32:
-            return 0
+            return -2 if bar_start else 0
     scale_step = float((side_hooks or {}).get("scale_out_step") or 0.0)
     scale_anchor = 0.0
     scale_steps = 0
@@ -595,6 +594,7 @@ def _independent_numba_prefix(
         step_stop_pct=step_pct,
         hm_lo=hm_lo,
         hm_hi=hm_hi,
+        bar_start=bar_start,
     )
     pos.peak = peak
     pos.peak_hm = peak_hm
@@ -605,6 +605,201 @@ def _independent_numba_prefix(
 
 def _side_pending_host(st, pos) -> bool:
     return bool(getattr(st, "held_fill_states", {}).get(held_fill_key(pos), {}).get("side_pending"))
+
+
+def _independent_resume_enabled() -> bool:
+    flag = (os.environ.get("OSKH_INDEPENDENT_RESUME") or "1").strip().lower()
+    return flag not in {"0", "false", "off", "no"}
+
+
+def _independent_numba_blocked(st, pos, cursor) -> bool:
+    """True when the whole remaining window must stay on the Python bar loop."""
+    flag = (os.environ.get("OSKH_INDEPENDENT_NUMBA") or "1").strip().lower()
+    if flag in {"0", "false", "off", "no"}:
+        return True
+    if (
+        _ladder_numba_params(st) is None
+        or not _NUMBA_SCAN_AVAILABLE
+        or not _independent_skip_supported(cursor)
+        or cursor.force_sell_hm is not None
+        or cursor.close_clear is not None
+        or (cursor.fill_state and "pending" in cursor.fill_state)
+        or pos.pending_exit
+        or _side_pending_host(st, pos)
+    ):
+        return True
+    return False
+
+
+def _drive_independent_window(
+    st,
+    code,
+    pos,
+    cursor,
+    limits,
+    *,
+    day,
+    day_i,
+    side_hooks,
+    hm_lo,
+    hm_hi,
+    audit_sink=None,
+    dump_label=None,
+    dump_ds=None,
+):
+    """Scan one held window. Return ``(prefix_bars, resume_bars, eval_bars, quiet_slice)``.
+
+    Default path re-enters Numba after each Python bar so quiet gaps are not
+    evaluated in Python. ``OSKH_INDEPENDENT_RESUME=0`` keeps one prefix plus a
+    Python tail. After a cursor exit attempt, peak stays frozen and the tail
+    stays in Python.
+    """
+    hm = cursor.hm
+    n = len(hm)
+    prefix_bars = 0
+    resume_bars = 0
+    evaluated = 0
+    quiet_slice = False
+    peak0 = float(pos.peak)
+    peak_hm0 = int(pos.peak_hm)
+    dumped = False
+
+    def in_window(idx):
+        at = int(hm[idx])
+        return hm_lo <= at <= hm_hi
+
+    def first_from(idx):
+        while idx < n and int(hm[idx]) < hm_lo:
+            idx += 1
+        if idx >= n or int(hm[idx]) > hm_hi:
+            return n
+        return idx
+
+    def count_quiet(lo_idx, hi_idx):
+        total = 0
+        stop = n if hi_idx is None else hi_idx
+        for bar_idx in range(lo_idx, stop):
+            if int(hm[bar_idx]) > hm_hi:
+                break
+            if in_window(bar_idx):
+                total += 1
+        return total
+
+    def dump(python_from):
+        nonlocal dumped
+        if dumped or not dump_label:
+            return
+        dumped = True
+        _maybe_dump_independent_prefix(
+            code=code, ds=dump_ds, label=dump_label, pos=pos, cursor=cursor,
+            python_from=python_from, hm_lo=hm_lo, hm_hi=hm_hi,
+            peak0=peak0, peak_hm0=peak_hm0, n_days=cursor.n_days,
+            can_sell=cursor.can_sell, take_profit=cursor.take_profit,
+        )
+
+    def exec_bar(bar_idx):
+        at_hm = int(hm[bar_idx])
+        o_px = float(cursor.o[bar_idx])
+        c_px = float(cursor.c[bar_idx])
+        for phase in ("open", "close"):
+            advance_independent_exit(
+                st, code, pos, cursor, bar_idx, phase, limits,
+                day=day, day_i=day_i, audit_sink=audit_sink,
+            )
+            if phase == "open":
+                fill_side_pending(st, code, pos, o_px, day, day_i, limits, hm=at_hm)
+            if phase != "close" or not side_hooks:
+                continue
+            fill_config = side_hooks.get("fill_config")
+            low_arr = side_hooks.get("low_arr")
+            if side_hooks.get("step_stop_pct"):
+                step_stop_exits(
+                    st, code, pos, c_px, day, day_i, limits,
+                    step_stop_pct=side_hooks["step_stop_pct"],
+                    fill_config=fill_config, open_px=o_px,
+                    low=(float(low_arr[bar_idx])
+                         if low_arr is not None and fill_config and fill_config.trigger_basis == "bar_low" else None),
+                    hm=at_hm,
+                )
+            if side_hooks.get("scale_out_step"):
+                scale_out_exits(
+                    st, code, pos, c_px, day, day_i, limits,
+                    scale_step=side_hooks["scale_out_step"],
+                    scale_frac=side_hooks.get("scale_out_frac", 0.05),
+                    scale_anchor=side_hooks.get("scale_out_anchor", "first_lot"),
+                    fill_config=fill_config, open_px=o_px, hm=at_hm,
+                )
+            if side_hooks.get("peak_dd_exit"):
+                peak_dd_clear_exits(
+                    st, code, pos, c_px, day, day_i, limits,
+                    peak_dd_exit=side_hooks["peak_dd_exit"],
+                    fill_config=fill_config, open_px=o_px,
+                    peak_dd_sessions=side_hooks.get("peak_dd_sessions", 15),
+                    hm=at_hm,
+                )
+
+    def python_tail(start_idx):
+        nonlocal evaluated
+        for bar_idx in range(start_idx, n):
+            if not position_is_open(st, pos):
+                break
+            if int(hm[bar_idx]) > hm_hi:
+                break
+            if not in_window(bar_idx):
+                continue
+            exec_bar(bar_idx)
+            evaluated += 1
+
+    if not _independent_resume_enabled():
+        python_from = _independent_numba_prefix(
+            st, pos, cursor, day_i=day_i, side_hooks=side_hooks,
+            hm_lo=hm_lo, hm_hi=hm_hi,
+        )
+        dump(python_from)
+        if python_from < 0:
+            return 0, 0, 0, True
+        prefix_bars = count_quiet(0, python_from)
+        python_tail(python_from)
+        return prefix_bars, 0, evaluated, False
+
+    start_idx = first_from(0)
+    seen_python = False
+    while start_idx < n and position_is_open(st, pos):
+        if (
+            _independent_numba_blocked(st, pos, cursor)
+            or getattr(cursor, "first_exit_attempted", False)
+        ):
+            dump(0 if not seen_python else start_idx)
+            python_tail(start_idx)
+            break
+        cursor.cost = pos.cost
+        python_from = _independent_numba_prefix(
+            st, pos, cursor, day_i=day_i, side_hooks=side_hooks,
+            hm_lo=hm_lo, hm_hi=hm_hi, bar_start=start_idx,
+        )
+        dump(python_from)
+        if python_from == -2:
+            python_tail(start_idx)
+            break
+        if python_from < 0:
+            if not seen_python:
+                quiet_slice = True
+            else:
+                resume_bars += count_quiet(start_idx, None)
+            break
+        if python_from < start_idx:
+            python_tail(start_idx)
+            break
+        gap = count_quiet(start_idx, python_from)
+        if seen_python:
+            resume_bars += gap
+        else:
+            prefix_bars += gap
+        exec_bar(python_from)
+        evaluated += 1
+        seen_python = True
+        start_idx = first_from(python_from + 1)
+    return prefix_bars, resume_bars, evaluated, quiet_slice
 
 
 def _maybe_dump_independent_prefix(
@@ -1462,68 +1657,19 @@ def simulate(
                             "fill_config": side_fill_config,
                             "low_arr": low_arr,
                         }
-                        quiet = 0
-                        evaluated = 0
-                        peak0, peak_hm0 = float(pos.peak), int(pos.peak_hm)
                         hm_hi = BUY_HM if split_group_scan else 24 * 60
-                        python_from = _independent_numba_prefix(
-                            st, pos, cursor, day_i=i, side_hooks=side_hooks,
-                            hm_lo=0, hm_hi=hm_hi,
+                        quiet, resumed, evaluated, quiet_slice = _drive_independent_window(
+                            st, code, pos, cursor, limits,
+                            day=day, day_i=i, side_hooks=side_hooks,
+                            hm_lo=0, hm_hi=hm_hi, audit_sink=audit_sink,
+                            dump_label="morning", dump_ds=ds,
                         )
-                        _maybe_dump_independent_prefix(
-                            code=code, ds=ds, label="morning", pos=pos, cursor=cursor,
-                            python_from=python_from, hm_lo=0, hm_hi=hm_hi,
-                            peak0=peak0, peak_hm0=peak_hm0, n_days=n_days,
-                            can_sell=cursor.can_sell, take_profit=take_profit,
-                        )
-                        for bar_idx, at_hm in enumerate(hm):
-                            if python_from < 0 or not position_is_open(st, pos):
-                                break
-                            if split_group_scan and int(at_hm) > BUY_HM:
-                                continue
-                            if bar_idx < python_from:
-                                quiet += 1
-                                continue
-                            evaluated += 1
-                            for phase in ("open", "close"):
-                                advance_independent_exit(
-                                    st, code, pos, cursor, bar_idx, phase, limits,
-                                    day=day, day_i=i, audit_sink=audit_sink,
-                                )
-                                if phase == "open":
-                                    fill_side_pending(st, code, pos, float(o[bar_idx]), day, i,
-                                                      limits, hm=int(at_hm))
-                                if phase == "close" and hooks.get("step_stop_pct"):
-                                    step_stop_exits(
-                                        st, code, pos, float(c[bar_idx]), day, i,
-                                        limits, step_stop_pct=hooks["step_stop_pct"],
-                                        fill_config=side_fill_config, open_px=float(o[bar_idx]),
-                                        low=(float(low_arr[bar_idx])
-                                             if low_arr is not None and side_fill_config and side_fill_config.trigger_basis == "bar_low" else None),
-                                        hm=int(at_hm),
-                                    )
-                                if phase == "close" and hooks.get("scale_out_step"):
-                                    scale_out_exits(
-                                        st, code, pos, float(c[bar_idx]), day, i,
-                                        limits, scale_step=hooks["scale_out_step"],
-                                        scale_frac=hooks.get("scale_out_frac", 0.05),
-                                        scale_anchor=hooks.get("scale_out_anchor", "first_lot"),
-                                        fill_config=side_fill_config, open_px=float(o[bar_idx]),
-                                        hm=int(at_hm),
-                                    )
-                                if phase == "close" and hooks.get("peak_dd_exit"):
-                                    peak_dd_clear_exits(
-                                        st, code, pos, float(c[bar_idx]), day, i,
-                                        limits,
-                                        peak_dd_exit=hooks["peak_dd_exit"],
-                                        fill_config=side_fill_config, open_px=float(o[bar_idx]),
-                                        peak_dd_sessions=hooks.get("peak_dd_sessions", 15),
-                                        hm=int(at_hm),
-                                    )
-                        if python_from < 0:
+                        if quiet_slice:
                             clock.count("held_numba_slices")
                         if quiet:
                             clock.count("held_numba_prefix_bars", quiet)
+                        if resumed:
+                            clock.count("held_numba_resume_bars", resumed)
                         if evaluated:
                             clock.count("held_eval_bars", evaluated)
                         if split_group_scan:
@@ -1824,40 +1970,18 @@ def simulate(
             clock.end("pool_buy")
             clock.begin("post_group")
             for code, pos, cursor, limits in post_group_scans:
-                quiet = 0
-                evaluated = 0
-                peak0, peak_hm0 = float(pos.peak), int(pos.peak_hm)
-                python_from = _independent_numba_prefix(
-                    st, pos, cursor, day_i=i, side_hooks=None,
-                    hm_lo=BUY_HM + 1, hm_hi=24 * 60,
+                quiet, resumed, evaluated, quiet_slice = _drive_independent_window(
+                    st, code, pos, cursor, limits,
+                    day=day, day_i=i, side_hooks=None,
+                    hm_lo=BUY_HM + 1, hm_hi=24 * 60, audit_sink=audit_sink,
+                    dump_label="post_group", dump_ds=ds,
                 )
-                _maybe_dump_independent_prefix(
-                    code=code, ds=ds, label="post_group", pos=pos, cursor=cursor,
-                    python_from=python_from, hm_lo=BUY_HM + 1, hm_hi=24 * 60,
-                    peak0=peak0, peak_hm0=peak_hm0, n_days=i - pos.entry_idx,
-                    can_sell=cursor.can_sell, take_profit=take_profit,
-                )
-                for bar_idx, at_hm in enumerate(cursor.hm):
-                    if python_from < 0 or not position_is_open(st, pos):
-                        break
-                    if int(at_hm) <= BUY_HM:
-                        continue
-                    if bar_idx < python_from:
-                        quiet += 1
-                        continue
-                    evaluated += 1
-                    for phase in ("open", "close"):
-                        advance_independent_exit(
-                            st, code, pos, cursor, bar_idx, phase, limits,
-                            day=day, day_i=i, audit_sink=audit_sink,
-                        )
-                        if phase == "open":
-                            fill_side_pending(st, code, pos, float(cursor.o[bar_idx]), day, i,
-                                              limits, hm=int(at_hm))
-                if python_from < 0:
+                if quiet_slice:
                     clock.count("held_numba_slices")
                 if quiet:
                     clock.count("held_numba_prefix_bars", quiet)
+                if resumed:
+                    clock.count("held_numba_resume_bars", resumed)
                 if evaluated:
                     clock.count("held_eval_bars", evaluated)
             clock.end("post_group")
