@@ -133,7 +133,7 @@ def _cursor(*, opens, highs, closes, cost, peak, peak_hm, n_days, can_sell=True,
     )
 
 
-def _first(cursor, **overrides):
+def _first_full(cursor, **overrides):
     args = dict(
         day_i=2,
         tp_min_days=1,
@@ -153,6 +153,11 @@ def _first(cursor, **overrides):
     )
     args.update(overrides)
     return independent_ladder_first_bar(cursor, **args)
+
+
+def _first(cursor, **overrides):
+    idx, peak, peak_hm = _first_full(cursor, **overrides)[:3]
+    return idx, peak, peak_hm
 
 
 def _run_bars(st, pos, cursor, limits, hooks, python_from=0):
@@ -430,7 +435,7 @@ def test_env_off_forces_full_python(monkeypatch):
     assert pos.peak == 10.0
 
 
-def test_numba_limit_down_open_still_returns_scale_out_bar():
+def test_numba_limit_down_open_counts_scale_out_without_handoff():
     n = 8
     opens = [10.0] * n
     highs = [10.05] * n
@@ -440,9 +445,32 @@ def test_numba_limit_down_open_still_returns_scale_out_bar():
         opens=opens, highs=highs, closes=closes,
         cost=10.0, peak=10.0, peak_hm=570, n_days=2, limit_down=10.0,
     )
-    idx, peak, _hm = _first(cursor, scale_step=0.05, scale_anchor=10.0, scale_steps=0)
-    assert idx == 4
-    assert peak == 10.05
+    idx, peak, peak_hm, defer, dd_start, advance_latched = _first_full(
+        cursor, scale_step=0.05, scale_anchor=10.0, scale_steps=0,
+    )
+    assert idx == -1
+    assert peak == 10.60
+    assert peak_hm == 574
+    assert defer == 4
+    assert dd_start == -1
+    assert advance_latched is False
+
+
+def test_numba_limit_down_open_defers_until_fillable_scale_out():
+    opens = [10.0] * 6 + [10.50, 10.50]
+    highs = [10.05] * 4 + [10.60] * 4
+    closes = [10.0] * 4 + [10.60] * 4
+    cursor = _cursor(
+        opens=opens, highs=highs, closes=closes,
+        cost=10.0, peak=10.0, peak_hm=570, n_days=2, limit_down=10.0,
+    )
+    idx, peak, _hm, defer, _dd, advance_latched = _first_full(
+        cursor, scale_step=0.05, scale_anchor=10.0, scale_steps=0,
+    )
+    assert idx == 6
+    assert defer == 2
+    assert peak == 10.60
+    assert advance_latched is False
 
 
 def test_numba_prefix_limit_down_open_counts_scale_out_defer():
@@ -458,3 +486,55 @@ def test_numba_prefix_limit_down_open_counts_scale_out_defer():
     _same_trades(nb, py)
     assert nb[0].trades == []
     assert int(nb[0].stats["defer_sell_limit_down"]) == 4
+
+
+def test_numba_prefix_peak_dd_latch_matches_python():
+    kwargs = dict(
+        n=4, n_days=2, cost=10.0, peak=10.0, stop_pct=0.0,
+        opens=[10.0, 8.4, 8.4, 8.4],
+        highs=[10.0, 8.4, 8.4, 8.4],
+        lows=[9.9, 8.3, 8.3, 8.3],
+        closes=[10.0, 8.4, 8.4, 8.4],
+    )
+    nb, py = _drive_numba_prefix(**kwargs), _drive_python(**kwargs)
+    _same_trades(nb, py)
+    assert nb[1].group.peak_dd_start == 1
+    assert py[1].group.peak_dd_start == 1
+
+
+def test_numba_prefix_blocked_open_skips_close_trail():
+    kwargs = dict(
+        n=8, n_days=2, cost=10.0, peak=12.0, peak_hm=500,
+        limit_down=10.0, shares=1000, stop_pct=0.0,
+        opens=[10.0] * 8,
+        highs=[10.05] * 8,
+        lows=[9.90] * 8,
+        closes=[10.0] * 8,
+    )
+    nb, py = _drive_numba_prefix(**kwargs, side_hooks=None), _drive_python(**kwargs, side_hooks=None)
+    _same_trades(nb, py)
+    assert nb[0].trades == []
+    st, pos, cursor, _limits = _session(**kwargs)
+    record_strategy6_53_params(st, stop_pct=0.0)
+    idx = _independent_numba_prefix(
+        st, pos, cursor, day_i=1, side_hooks=None, hm_lo=0, hm_hi=24 * 60,
+    )
+    assert idx == -1
+    assert cursor.first_exit_attempted is False
+    assert int(st.stats.get("defer_sell_limit_down", 0)) == 0
+
+
+def test_numba_prefix_blocked_then_fillable_scale_matches_python():
+    kwargs = dict(
+        n=8, n_days=2, cost=10.0, peak=12.0, peak_hm=500,
+        limit_down=10.0, shares=2000,
+        opens=[10.0] * 6 + [10.50, 10.50],
+        highs=[10.05] * 8,
+        lows=[9.90] * 8,
+        closes=[10.0] * 6 + [10.60, 10.60],
+    )
+    nb, py = _drive_numba_prefix(**kwargs), _drive_python(**kwargs)
+    _same_trades(nb, py)
+    sold = [t for t in nb[0].trades if str(t["reason"]).startswith("scale_out:")]
+    assert sold
+    assert not any(str(t["reason"]).startswith("trail:") for t in nb[0].trades)

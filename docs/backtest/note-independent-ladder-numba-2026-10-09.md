@@ -151,13 +151,46 @@ Numba `nopython` 核调不了任意 Python 回调（闭包、`Optional[str]`、l
 
 ---
 
+### 2.8 开盘跌停侧钩顺延（本刀）
+
+`held_eval_bars=542018` 的根因：核一旦在开盘跌停 bar 上看到收盘谓词，就把该 bar 交给 Python，Python 再把当天剩下的 bar 全部评完。本刀让核自己跨过「只会顺延、不成交」的开盘跌停 bar，只把第一根能成交的 bar 交出去。
+
+核里现在这样走：
+
+1. **侧钩**（减仓 / 加仓止损 / 峰值回撤卖出）在开盘跌停时计 `defer_sell_limit_down`，继续扫。
+2. **峰值回撤闩**（首次触线 / 收复）在核里写回 `peak_dd_start`，不再为了闩本身交棒。
+3. **`cursor.advance` 的止损 / 梯子**在开盘跌停时不算、不闩。Python 的 `_close` 在 `blocked_bar` 时根本不会跑，不能把这次当成 `first_exit_attempted`。第一次全窗把回撤记成已消费，下午切片又当新离场，净值漂到 44,642,343.84 / +65.34%。收回这条之后对齐。
+4. 前缀回写峰值、顺延次数、回撤闩；已消费的 `advance` 写回 `cursor.first_exit_attempted`。
+
+返回值是 `(idx, peak, peak_hm, defer, dd_start, advance_latched)`。账本、`execute_buy`、跳 bar 都没动。
+
+对照：`tests/test_independent_numba_ladder.py`（开盘跌停减仓不交棒、跌停后再减仓、开盘跌停不消费梯子、回撤闩对齐）。
+
+同一配方、`PYTHONHASHSEED=0`、缓存命中、产品 `run()`（ST 闸开）。产物 `backtest_output/csv_minute_v6_53_20251023_20260909_industry_defercont2_h0/`。
+
+| 项 | quotes_h0 | 本次 defercont2 | 说明 |
+|---|---|---|---|
+| 模拟 | 66.4s | 59.7s | 缓存命中后的叶子 |
+| held_scan | 43.4s (59%) | 38.7s (61%) | 少走一段只会顺延的 Python |
+| pool_buy | 9.7s | 9.6s | 未再动 |
+| held_eval_bars | 542018 | 488862 | 少评约 5.3 万根 |
+| 墙钟 | 199.9s | 106.8s | 上次日线/分钟 cache miss；这次 hit |
+| 净值 | 44,341,528.00 / +64.23% | 44,341,528.00 / +64.23% | 成交对齐 |
+| 成交 | 9621 | 9621 | 买入 4459，加仓 1268 |
+| defer_sell_limit_down | 4147 | 4147 | 与 quotes 对齐 |
+| skip_st | 5 | 5 | |
+
+6.53 仍 PENDING。本刀不录 golden。
+
+---
+
 ## 4. 遗留问题
 
-1. **模拟大头是 held_scan。** 全窗开核 43.4s / 59%。Numba 前缀已经在；剩下是真有动作的 Python bar 和侧钩。不要对回调 `objmode`，不要把账本编进 Numba。
+1. **模拟大头还是 held_scan。** 全窗开核 38.7s / 61%。第一根真正能成交的 bar 之后，当天剩下的 Python 评估还在（减仓后继续找下一档）。不要对回调 `objmode`，不要把账本编进 Numba。
 2. **真回调仍走 Python。** `sell_gate`、`exit_plan`、`force_sell_hm`、`close_clear`、pending、自定义 `fill_config`、`session_volume` 失败则 `python_from=0`。
 3. **6.53 仍在 `PENDING_BOOK_NAMES`。** 行业默认 off-byte 未授权。经济除权默认仍关。本刀不录 golden。ST 闸会改历史成交，预期如此。
 4. **HELP_LOCK / CLI 未动。** 分钟 `main()` 字节冻结。埋点仍走 `run()` + 默认 `OSKH_PROFILE_SIM`。
 5. **时序买入报价未动。** `minute_cash_order.pool_quote` 仍是 DataFrame。只有开了 `--fix-minute-cash-order` 才值得改。
-6. **装载仍吃墙钟。** 同进程第二次 `run()` 走 `bar_store`；跨进程仍是文件缓存。未做 mmap/Redis。
+6. **装载仍吃墙钟。** 同进程第二次 `run()` 走 `bar_store`；跨进程仍是文件缓存。未做 mmap/Redis。开盘跌停顺延的 pending 事件少记（只记计数，不写每根 `record_limit`）。
 
 未授权：开新策略版本、改 6.53 卖点、把跳过重新接回宿主、把账本编进 Numba、用本次 NAV 覆盖 `_opt` / `_prof` 比分、把 6.53 锁成 golden、打开默认经济除权。
