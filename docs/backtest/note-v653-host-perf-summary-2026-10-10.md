@@ -109,3 +109,5 @@ D:\anaconda3\envs\vanna312\python.exe -u backtest/research/csv_minute_backtest.p
 已有目录会拒绝覆盖。分相在该目录的 `profile_sim.json`。
 
 未授权：开新策略版本、改 6.53 卖点、把跳过接回宿主、把账本编进 Numba、用这些净值覆盖 `_opt` / `_prof`、把 6.53 锁成 golden、打开默认经济除权。
+
+`master` 的 pytest 从 #450 起是红的。黄金已按当前引擎改过，仍不给 6.51–6.53 录 off-byte：账本默认带 `skip_st=0`；version1 同日卖出按代码序；6.47 / 6.48 / 6.50 的合成基线改到现行停泊字段。6.51–6.53 继续 pending。

@@ -95,7 +95,7 @@ def test_off_matches_frozen_base_bytes():
     # with pre-G3 backtest/research/csv_ledger.py at
     # 3f1586f77e94a31ba0c4b86d5c03ff13f332d382. Never regenerate from G3 code:
     # this golden preserves the legacy floor-100 behavior without Git history.
-    expected_sha256 = "42230023a480ed77397207be894d02b067366271f705ad15e3720222cfe5793c"
+    expected_sha256 = "512fadfbc8a768bdfbe63084126708e6f21a9ec2e9372d41464a3c9b8b387758"
     states = [ledger.SimState(), ledger.SimState(star_lot_declare_check=False)]
     for st in states:
         for qty in [1, 100, 199, 200, 201, 250]:

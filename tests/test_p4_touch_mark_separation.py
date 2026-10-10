@@ -164,7 +164,15 @@ def _assert_daily_mark_schedule(tree, bars_name):
             # daily accounting, with no row/clock-dependent mark guard.
             assert not statement.orelse
             assert isinstance(statement.body[-1], ast.Continue)
-            native_mark = statement.body[-2]
+            prefix = statement.body[:-1]
+            while (
+                prefix
+                and isinstance(prefix[-1], ast.Expr)
+                and isinstance(prefix[-1].value, ast.Call)
+                and ast.unparse(prefix[-1].value.func) == "clock.end"
+            ):
+                prefix = prefix[:-1]
+            native_mark = prefix[-1]
             assert isinstance(native_mark, ast.Expr) and isinstance(native_mark.value, ast.Call)
             assert ast.unparse(native_mark.value.func) == "policy.append_marks"
             assert {kw.arg: ast.unparse(kw.value) for kw in native_mark.value.keywords} == {
@@ -228,14 +236,25 @@ def test_native_schedule_pin_requires_unconditional_marks_before_continue(mutati
     day_loop = next(n for n in _function(tree, "simulate").body if isinstance(n, ast.For))
     native = next(n for n in day_loop.body if isinstance(n, ast.If)
                   and ast.unparse(n.test) == "native_v7")
-    mark = native.body[-2]
+    mark = next(
+        node for node in native.body
+        if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call)
+        and ast.unparse(node.value.func) == "policy.append_marks"
+    )
     if mutation == "remove":
         native.body.remove(mark)
     elif mutation == "gate":
-        native.body[-2] = ast.If(test=ast.parse("hm < 900", mode="eval").body,
-                               body=[mark], orelse=[])
+        native.body[native.body.index(mark)] = ast.If(
+            test=ast.parse("hm < 900", mode="eval").body, body=[mark], orelse=[],
+        )
     else:
-        native.body[-2:] = list(reversed(native.body[-2:]))
+        mark_at = native.body.index(mark)
+        continue_at = next(
+            i for i, node in enumerate(native.body) if isinstance(node, ast.Continue)
+        )
+        native.body[mark_at], native.body[continue_at] = (
+            native.body[continue_at], native.body[mark_at],
+        )
     with pytest.raises(AssertionError):
         _assert_daily_mark_schedule(tree, "daily_bars")
 
