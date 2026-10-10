@@ -88,7 +88,7 @@
 | version1…5 | `stock_pool/` | 人工书 | 早期卖点（止损/回撤/涨停保留/均线/2% 止盈等）；已持通常不叠加 lot |
 | version6 | `stock_pool/` | 人工书 | 名单加仓 + 2% 止损 + 分档回撤；`daily_quota` |
 | version6_1 | `stock_pool/` | 人工书 | 无上限梯子止盈 + 5% 止损；`per_name` 100 万独立组；对照 [note-version6_1-sol-vs-version6-2026-10-02.md](note-version6_1-sol-vs-version6-2026-10-02.md) |
-| version6_50–6_56 | `stock_pool/` | 人工书 | 6.47 栈上的停泊 / 续档买回 / 抽离 / 上证减半 / 现金分红买 600036；**6.56 已归档**（give 5%+5%×档，不锁 golden）；分钟独立持仓扫描见 [note-independent-ladder-numba-2026-10-09.md](note-independent-ladder-numba-2026-10-09.md) |
+| version6_50–6_56 | `stock_pool/` | 人工书 | 6.47 栈上的停泊 / 续档买回 / 抽离 / 上证减半 / 现金分红买 600036；**6.55 已归档回官方 `_industry`**（give 5%+4%×档，均价减仓仍是每 +5% 减 5%，抽水 20%/20%，峰值随时 15%/15 日，其余同 6.54；官方章 `csv_minute_v6_55_20251023_20260909_industry`，不锁 golden）；**6.56 已归档**（延续档同进同出 / 峰值>100% 才 15%/15 日 / 闲置 95% / 抽水 10%）；分钟独立持仓扫描见 [note-independent-ladder-numba-2026-10-09.md](note-independent-ladder-numba-2026-10-09.md) |
 | version7 | **海龟池，必填 `--pool-dir`** | 人工仓位机 | 独立入口 `csv_minute_backtest_v7.py`，不进 1–10 BOOKS |
 | version8 / 8.1 / 8.2 / 8.3 | `stock_pool/` | **人工优化主线** | per_name 100 万；8.x 为冻结里程碑，不要当现行宿主书 |
 | version9 | 导出器，拒绝 `stock_pool/` | 人工书 + 独立买点 | 底量超顶量；止损 8%、满 20 日强平 |

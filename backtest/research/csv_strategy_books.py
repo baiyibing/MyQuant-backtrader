@@ -447,14 +447,18 @@ def apply_csv_strategy(strategy: str, **kwargs) -> dict:
     hooks.setdefault("cost_anchor", "weighted")  # group exit-cost basis; 6.x uses first_lot
     hooks.setdefault("step_cap", None)  # per-code step lot cap; None = unlimited
     hooks.setdefault("step_stop_pct", None)  # per-step-lot own stop; None = off
+    hooks.setdefault("cont_step_stop_pct", None)  # continuation-lot stop; None = use step_stop_pct
     hooks.setdefault("scale_out_step", None)  # per +rise ladder selling a fraction; None = off
     hooks.setdefault("scale_out_frac", 0.05)
     hooks.setdefault("scale_out_anchor", "first_lot")  # 6.51 = weighted remaining avg
     hooks.setdefault("peak_dd_exit", None)  # peak drawdown clear; None = off
     hooks.setdefault("peak_dd_sessions", 15)
+    hooks.setdefault("peak_dd_min_rise", None)  # arm peak-dd only after this rise; None = any peak
     hooks.setdefault("add_schedule", None)
     hooks.setdefault("add_schedule_trigger", None)  # "peak" = group peak arms a tier; None = px/cost
+    hooks.setdefault("cont_live_max", None)  # live continuation lots; None = unlimited
     hooks.setdefault("cont_stop_rebuy", False)
+    hooks.setdefault("cont_ride_trial", False)
     hooks.setdefault("cont_from_rise", None)
     hooks.setdefault("cont_stop_rebuy_lift", None)
     hooks.setdefault("cont_stop_rebuy_frac", None)
@@ -474,6 +478,8 @@ def apply_csv_strategy(strategy: str, **kwargs) -> dict:
     hooks.setdefault("index_cut_frac", None)
     hooks.setdefault("index_cut_min_keep", None)
     hooks.setdefault("index_blocks_s8_add", False)
+    hooks.setdefault("post_exit_cont", False)
+    hooks.setdefault("post_exit_cont_bypass_index", False)
     hooks.setdefault("div_to_parking", False)
     hooks.setdefault("add_step2", None)  # second (base) ladder step; None = single ladder
     hooks.setdefault("step_frac2", None)

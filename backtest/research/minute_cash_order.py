@@ -244,17 +244,24 @@ def _hit_limit_up_safe(px: float, limits) -> bool:
 
 
 def peak_dd_clear_exits(st, code, pos, px, day, day_i, limits, *,
-                         peak_dd_exit=0.15, peak_dd_sessions=15, hm=None, fill_config=None, open_px=None):
+                         peak_dd_exit=0.15, peak_dd_sessions=15, peak_dd_min_rise=0.0,
+                         hm=None, fill_config=None, open_px=None):
     """6.14：从峰值回撤 >peak_dd_exit 且 peak_dd_sessions 个交易日内未收复 → 全组清仓。
 
     每日一次评估（close 相位、首次触线那分钟记录起始日）；峰值回撤重置为
     None（px ≥ peak 时清零计数）；与梯子/减仓并行，组级清仓走 _sell_s8_group。
+    ``peak_dd_min_rise``：峰值相对首仓成本未超过该涨幅时不启动；None/0 = 随时。
     """
     if _side_pending(st, pos) or not peak_dd_exit or px <= 0 or not position_is_open(st, pos):
         return 0
     peak = float(pos.peak)
     if peak <= 0:
         return 0
+    if peak_dd_min_rise:
+        cost = float(getattr(pos.group.first_lot, "cost", 0) or 0)
+        if cost <= 0 or peak <= cost * (1.0 + float(peak_dd_min_rise)):
+            pos.group.peak_dd_start = None
+            return 0
     dd = (peak - float(px)) / peak
     if dd <= 0:
         pos.group.peak_dd_start = None
@@ -349,15 +356,35 @@ def scale_out_exits(st, code, pos, px, day, day_i, limits, *, scale_step, scale_
     return sold
 
 
-def step_stop_exits(st, code, pos, px, day, day_i, limits, *, step_stop_pct, hm=None, fill_config=None, low=None, open_px=None):
+def step_stop_exits(
+    st,
+    code,
+    pos,
+    px,
+    day,
+    day_i,
+    limits,
+    *,
+    step_stop_pct,
+    cont_step_stop_pct=None,
+    hm=None,
+    fill_config=None,
+    low=None,
+    open_px=None,
+):
     """6.8：step lot 自带独立止损（相对自身买价 −step_stop_pct，触发只卖该 lot）。
 
     在组级退出评估之后逐分钟 close 调用；组已同分钟离场则 lots 已空、自然不触发。
     T+1 按 lot entry_idx；跌停顺延次日再评；止损线随 E-R6 缩放后的 lot 成本走。
+    ``cont_step_stop_pct`` 只套在 ``group.cont_open`` 里的延续档 lot 上。
     """
-    if not step_stop_pct or px <= 0 or not position_is_open(st, pos):
+    if px <= 0 or not position_is_open(st, pos):
+        return 0
+    if not step_stop_pct and not cont_step_stop_pct:
         return 0
     sold = 0
+    group = getattr(pos, "group", None)
+    cont_ids = getattr(group, "cont_open", None) or {}
     for lot in list(st.positions.get(code, [])):
         if (
             getattr(lot, "position_id", None) != pos.position_id
@@ -366,7 +393,14 @@ def step_stop_exits(st, code, pos, px, day, day_i, limits, *, step_stop_pct, hm=
             or lot.entry_idx >= day_i
         ):
             continue
-        line = float(lot.cost) * (1.0 - float(step_stop_pct))
+        pct = (
+            float(cont_step_stop_pct)
+            if cont_step_stop_pct and int(lot.lot_id) in cont_ids
+            else float(step_stop_pct or 0.0)
+        )
+        if not pct:
+            continue
+        line = float(lot.cost) * (1.0 - pct)
         trigger_px = low if fill_config is not None and fill_config.trigger_basis == "bar_low" else px
         if float(trigger_px) > line:
             continue
@@ -377,7 +411,7 @@ def step_stop_exits(st, code, pos, px, day, day_i, limits, *, step_stop_pct, hm=
             continue
         filled = _side_sell(
             st, code, lot, fill_px, day,
-            f"stop_loss:step{round(float(step_stop_pct) * 100)}", day_i=day_i,
+            f"stop_loss:step{round(pct * 100)}", day_i=day_i,
             hm=hm, price_rule="minute_trigger_bar_close", fill_config=fill_config,
         )
         if filled:

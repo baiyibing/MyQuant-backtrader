@@ -49,10 +49,13 @@ from backtest.research.csv_ledger import (
     preview_final_buy_declaration,
     release_parking_cash,
     queue_limit_up_chase,
+    live_cont_count,
     note_cont_open,
     position_identity,
+    s8_closed_groups,
     s8_open_groups,
     s8_policy,
+    s8_price_add_codes,
     uses_shrink_on_short_cash,
     _sell,
 )
@@ -216,11 +219,7 @@ def prepare_strategy_hooks(
 
 def _buy_denom(planned: list[str], planned_for_day) -> int:
     """Vacancy mode sizes off the original buy list, so an empty seat stays cash."""
-    slots = (
-        getattr(planned_for_day, "slot_count", None)
-        if callable(planned_for_day)
-        else None
-    )
+    slots = getattr(planned_for_day, "slot_count", None) if callable(planned_for_day) else None
     if slots:
         return int(slots)
     return len(planned)
@@ -266,9 +265,7 @@ def init_sim_state(
             st.stats.setdefault("profit_skim_frac", float(hooks["profit_skim_frac"]))
         st.stats.setdefault("profit_skim_pro_rata", bool(hooks.get("profit_skim_pro_rata")))
         st.stats.setdefault("profit_skim_keep_idle", bool(hooks.get("profit_skim_keep_idle")))
-        st.stats.setdefault(
-            "profit_skim_to_parking", bool(hooks.get("profit_skim_to_parking"))
-        )
+        st.stats.setdefault("profit_skim_to_parking", bool(hooks.get("profit_skim_to_parking")))
         st.stats.setdefault("profit_skim_parked", 0.0)
         st.stats.setdefault("profit_skim_cash_hold", 0.0)
         st.stats.setdefault("profit_skim_lock_drawn", 0.0)
@@ -337,16 +334,20 @@ def run_chase_due_day(
         pending_chase.pop(chase_key)
         ymd = ds if ds is not None else pd.Timestamp(day).strftime("%Y%m%d")
         if reference_price_for is None:
-            prev_close, did_map = mapped_prev_close(exdiv, code, ymd, float(closes[-1]), **({"fen_round": True} if exdiv_ref_fen else {}))
+            prev_close, did_map = mapped_prev_close(
+                exdiv,
+                code,
+                ymd,
+                float(closes[-1]),
+                **({"fen_round": True} if exdiv_ref_fen else {}),
+            )
         else:
             prev_close, did_map = reference_price_for(code, ymd), False
         if did_map:
             st.stats["exdiv_prev_close_mapped"] = (
                 int(st.stats.get("exdiv_prev_close_mapped", 0)) + 1
             )
-        limits = book_limit_prices(
-            code, prev_close, names, qlib_limit_pct=qlib_limit_pct, as_of=ds
-        )
+        limits = book_limit_prices(code, prev_close, names, qlib_limit_pct=qlib_limit_pct, as_of=ds)
         if limits is None:
             st.stats["skip_unknown_board"] += 1
             continue
@@ -373,17 +374,15 @@ def run_chase_due_day(
             continue
         quota_used = st.daily_quota_used
         volume_kwargs = (
-            {"bucket_id": volume_bucket_for(code)}
-            if volume_bucket_for is not None
-            else {}
+            {"bucket_id": volume_bucket_for(code)} if volume_bucket_for is not None else {}
         )
         if independent:
             volume_kwargs.update(
-                position_id=chase_key, entry_signal_date=chase_key.split("@", 1)[1],
+                position_id=chase_key,
+                entry_signal_date=chase_key.split("@", 1)[1],
             )
         volume_skips = sum(
-            int(st.stats.get(k, 0))
-            for k in ("skip_volume_cap", "skip_volume_unavailable")
+            int(st.stats.get(k, 0)) for k in ("skip_volume_cap", "skip_volume_unavailable")
         )
         skip_st_before = int(st.stats.get("skip_st", 0))
         if not execute_buy(
@@ -392,14 +391,9 @@ def run_chase_due_day(
             if int(st.stats.get("skip_st", 0)) > skip_st_before:
                 continue
             st.stats["chase_buy_fail"] += 1
-            shares, _, _, _ = preview_final_buy_declaration(
-                st, code, buy_px, per_ch, day
-            )
+            shares, _, _, _ = preview_final_buy_declaration(st, code, buy_px, per_ch, day)
             if (
-                sum(
-                    int(st.stats.get(k, 0))
-                    for k in ("skip_volume_cap", "skip_volume_unavailable")
-                )
+                sum(int(st.stats.get(k, 0)) for k in ("skip_volume_cap", "skip_volume_unavailable"))
                 > volume_skips
             ):
                 key = "chase_buy_fail_volume"
@@ -483,9 +477,7 @@ def run_pool_buys_day(
     else:
         frac = 1.0 if cash_deploy_frac is None else float(cash_deploy_frac)
         if not 0 < frac <= 1:
-            raise ValueError(
-                f"cash_deploy_frac must be in (0, 1], got {cash_deploy_frac!r}"
-            )
+            raise ValueError(f"cash_deploy_frac must be in (0, 1], got {cash_deploy_frac!r}")
         cash_basis = st.cash if allocation_cash is None else allocation_cash
         per = min(daily_quota, cash_basis) * frac / _buy_denom(planned, planned_for_day)
     if order_budget is not None:
@@ -532,16 +524,19 @@ def run_pool_buys_day(
             # Price/limit checks must see this signal's own initial budget.
             per = (
                 float(name_lot_budget(name_budget, []))
-                if callable(name_lot_budget) else float(name_budget)
+                if callable(name_lot_budget)
+                else float(name_budget)
             )
         upper_blocked = px >= limit_up if strict_limit_up else skip_buy_at_limit(px, limits)
-        blocked = upper_blocked or (
-            forbid_all_trade_at_limit and hit_limit_down(px, limit_down)
-        )
+        blocked = upper_blocked or (forbid_all_trade_at_limit and hit_limit_down(px, limit_down))
         if blocked:
             if limit_up_chase:
                 queue_limit_up_chase(
-                    st, pending_chase, code, per, day_i,
+                    st,
+                    pending_chase,
+                    code,
+                    per,
+                    day_i,
                     **({"entry_signal_date": ds} if independent else {}),
                 )
             else:
@@ -566,9 +561,7 @@ def run_pool_buys_day(
         if sizing == "per_name" and callable(name_lot_budget):
             per = float(name_lot_budget(name_budget, lots))
         volume_kwargs = (
-            {"bucket_id": volume_bucket_for(code)}
-            if volume_bucket_for is not None
-            else {}
+            {"bucket_id": volume_bucket_for(code)} if volume_bucket_for is not None else {}
         )
         if volume_at is not None:
             volume_kwargs["at"] = volume_at
@@ -608,7 +601,9 @@ def run_pool_buys_day(
             if not uses_shrink_on_short_cash(st) and not check_buy_cash(
                 st,
                 needed=needed,
-                available=st.cash, date=ds, code=code,
+                available=st.cash,
+                date=ds,
+                code=code,
             ):
                 st.stats["skip_cash"] = st.stats.setdefault("skip_cash", 0) + 1
                 st.stats["skip_cash_notional"] = (
@@ -622,6 +617,22 @@ def run_pool_buys_day(
             st.daily_quota_used = quota_used
         else:
             execute_buy(st, code, px, per, day_i, day, reason=buy_reason, **volume_kwargs)
+
+
+def _sched_is_continuation(policy, rise, frac=None) -> bool:
+    cap = policy.get("cont_frac")
+    if frac is not None and cap is not None:
+        return float(frac) + 1e-12 >= float(cap)
+    if rise is None:
+        return False
+    return float(rise) + 1e-12 >= float(policy.get("cont_from_rise") or 0.40)
+
+
+def _cont_live_full(st, code, group, policy) -> bool:
+    cap = policy.get("cont_live_max")
+    if cap is None:
+        return False
+    return live_cont_count(st, code, group) >= int(cap)
 
 
 def run_step_adds_day(
@@ -649,10 +660,19 @@ def run_step_adds_day(
     """Off-list scan; selected 8.x books add once per independent group/day."""
     if s8_policy(st) is not None:
         _run_s8_price_adds_day(
-            st, day_i=day_i, day=day, ds=ds, names=names,
-            buy_quote_for=buy_quote_for, sizing=sizing, exdiv=exdiv, exdiv_ref_fen=exdiv_ref_fen,
-            qlib_limit_pct=qlib_limit_pct, forbid_all_trade_at_limit=forbid_all_trade_at_limit,
-            buy_gate=buy_gate, volume_bucket_for=volume_bucket_for,
+            st,
+            day_i=day_i,
+            day=day,
+            ds=ds,
+            names=names,
+            buy_quote_for=buy_quote_for,
+            sizing=sizing,
+            exdiv=exdiv,
+            exdiv_ref_fen=exdiv_ref_fen,
+            qlib_limit_pct=qlib_limit_pct,
+            forbid_all_trade_at_limit=forbid_all_trade_at_limit,
+            buy_gate=buy_gate,
+            volume_bucket_for=volume_bucket_for,
             reference_price_for=reference_price_for,
             confirm_peak_for=confirm_peak_for,
             day_buy_quotes=day_buy_quotes,
@@ -721,19 +741,17 @@ def run_step_adds_day(
         if not uses_shrink_on_short_cash(st) and not check_buy_cash(
             st,
             needed=preview_buy_cash_needed(st, code, px, shares, day),
-            available=st.cash, date=ds, code=code,
+            available=st.cash,
+            date=ds,
+            code=code,
         ):
             st.stats["skip_cash"] = int(st.stats.get("skip_cash", 0)) + 1
-            st.stats["skip_cash_notional"] = (
-                float(st.stats.get("skip_cash_notional", 0.0)) + per
-            )
+            st.stats["skip_cash_notional"] = float(st.stats.get("skip_cash_notional", 0.0)) + per
             record_rejection(st, code, day, "skip_cash", px)
             continue
         quota_used = st.daily_quota_used
         volume_kwargs = (
-            {"bucket_id": volume_bucket_for(code)}
-            if volume_bucket_for is not None
-            else {}
+            {"bucket_id": volume_bucket_for(code)} if volume_bucket_for is not None else {}
         )
         if unit_shares is not None:
             volume_kwargs["shares_override"] = unit_shares
@@ -784,10 +802,72 @@ def _execute_s8_price_add(
     return bool(filled)
 
 
+def _live_trial_lot(st, group):
+    """试错仓：仍在账的首仓，或清仓后补回的非 step / 非延续档 lot。"""
+    first = getattr(group, "first_lot", None)
+    code = getattr(group, "code", None)
+    pid = getattr(first, "position_id", None) if first is not None else None
+    if first is not None and int(getattr(first, "shares", 0) or 0) > 0:
+        if any(p is first for p in st.positions.get(code, [])):
+            return first
+    cont_ids = getattr(group, "cont_open", None) or {}
+    for lot in st.positions.get(code, []):
+        if getattr(lot, "position_id", None) != pid:
+            continue
+        if int(getattr(lot, "shares", 0) or 0) <= 0:
+            continue
+        if int(getattr(lot, "lot_id", -1)) in cont_ids:
+            continue
+        if getattr(lot, "is_step", False):
+            continue
+        return lot
+    return None
+
+
+def _ensure_trial_for_cont(st, group, add_kw) -> bool:
+    """同进：开 42 万前必须有试错仓；没有则先按 OPEN_FRAC 补一笔。"""
+    if _live_trial_lot(st, group) is not None:
+        return True
+    policy = s8_policy(st) or {}
+    open_frac = policy.get("cont_stop_rebuy_open_frac")
+    if not open_frac:
+        return False
+    if _execute_s8_price_add(
+        st,
+        per=group.budget * float(open_frac),
+        reason="add:cont_rebuy_open",
+        is_step=False,
+        **add_kw,
+    ):
+        st.stats["add_cont_rebuy_open"] = int(st.stats.get("add_cont_rebuy_open", 0)) + 1
+    return _live_trial_lot(st, group) is not None
+
+
+def _schedule_rung_floor(schedule, rise: float) -> int:
+    """First schedule index whose threshold is at/above ``rise``."""
+    for i, (threshold, _frac) in enumerate(schedule):
+        if float(threshold) + 1e-12 >= float(rise):
+            return i
+    return len(schedule)
+
+
 def _run_s8_price_adds_day(
-    st, *, day_i, day, ds, names, buy_quote_for, sizing, exdiv,
-    qlib_limit_pct, forbid_all_trade_at_limit, buy_gate, volume_bucket_for,
-    reference_price_for, confirm_peak_for, exdiv_ref_fen=False,
+    st,
+    *,
+    day_i,
+    day,
+    ds,
+    names,
+    buy_quote_for,
+    sizing,
+    exdiv,
+    qlib_limit_pct,
+    forbid_all_trade_at_limit,
+    buy_gate,
+    volume_bucket_for,
+    reference_price_for,
+    confirm_peak_for,
+    exdiv_ref_fen=False,
     day_buy_quotes=None,
 ) -> None:
     policy = s8_policy(st)
@@ -799,7 +879,10 @@ def _run_s8_price_adds_day(
     if confirm and callable(gate) and not gate(day):
         # 8.3 has always blocked both new positions and adds at the index gate.
         return
-    if policy.get("index_blocks_s8_add") and callable(gate) and not gate(day):
+    index_blocks_add = bool(policy.get("index_blocks_s8_add") and callable(gate) and not gate(day))
+    include_closed = bool(policy.get("post_exit_cont"))
+    post_exit_bypass = include_closed and bool(policy.get("post_exit_cont_bypass_index"))
+    if index_blocks_add and not post_exit_bypass:
         return
     step_cap = policy.get("step_cap")
     quotes = _day_buy_quotes(
@@ -812,19 +895,23 @@ def _run_s8_price_adds_day(
         qlib_limit_pct=qlib_limit_pct,
         reference_price_for=reference_price_for,
     )
-    for code in held_codes(st):
+    for code in s8_price_add_codes(st, include_closed=include_closed):
         row = quotes.get(code)
         if row is None or float(row.px) <= 0:
             continue
         px, closes = row.px, row.closes
-        groups = list(s8_open_groups(st, code))
+        groups = [] if index_blocks_add else list(s8_open_groups(st, code))
+        if include_closed:
+            groups.extend(s8_closed_groups(st, code))
         for position_id, group in groups:
-            if group.last_add_date == ds or group.first_lot.pending_exit:
+            if group.last_add_date == ds:
                 continue
-            if (
-                step_cap is not None
-                and policy["code_steps"].get(code, 0) >= int(step_cap)
-            ):
+            idle_group = include_closed and not any(
+                getattr(p, "position_id", None) == position_id for p in st.positions.get(code, [])
+            )
+            if group.first_lot.pending_exit and not idle_group:
+                continue
+            if step_cap is not None and policy["code_steps"].get(code, 0) >= int(step_cap):
                 # 票级上限在同一次访问的多组之间同样生效。
                 st.stats["skip_step_cap"] = int(st.stats.get("skip_step_cap", 0)) + 1
                 continue
@@ -832,10 +919,13 @@ def _run_s8_price_adds_day(
             if cost <= 0:
                 continue
             _rebuy_rise = None
-            if policy.get("cont_stop_rebuy") and group.cont_rebuy_armed:
+            if (not idle_group) and policy.get("cont_stop_rebuy") and group.cont_rebuy_armed:
                 lift = float(policy.get("cont_stop_rebuy_lift") or 0.20)
                 _rebuy_rise = due_cont_rebuy_rise(
-                    group.cont_rebuy_armed, px, cost, lift=lift,
+                    group.cont_rebuy_armed,
+                    px,
+                    cost,
+                    lift=lift,
                 )
             _rebuy_due = _rebuy_rise is not None
             _sched_due = False
@@ -846,17 +936,35 @@ def _run_s8_price_adds_day(
                     # 6.49 语义：档位以组峰值触发（盘中触线即记档），14:55 价成交；
                     # 已止损的 lot 不回补档位，executed_steps 继续往前走；价格低于成本不补档。
                     peak_px = float(getattr(group.first_lot, "peak", 0) or 0)
-                    trig_rise = (
-                        peak_px / cost - 1.0 if peak_px > cost else float(px) / cost - 1.0
-                    )
+                    trig_rise = peak_px / cost - 1.0 if peak_px > cost else float(px) / cost - 1.0
                     sched_gate = float(px) > cost
                 else:
                     trig_rise = float(px) / cost - 1.0
                     sched_gate = True
+                if idle_group:
+                    remembered = getattr(group, "post_exit_cont_rise", None)
+                    if remembered is None:
+                        continue
+                    floor_fn = policy.get("post_exit_schedule_floor")
+                    if callable(floor_fn):
+                        floor = int(floor_fn(schedule, float(remembered)))
+                    else:
+                        floor = _schedule_rung_floor(schedule, float(remembered))
+                    if group.executed_steps != floor:
+                        group.executed_steps = floor
+                    if trig_rise + 1e-12 < float(remembered):
+                        continue
                 allowed_sched = sum(1 for t, _f in schedule if trig_rise + 1e-12 >= t)
                 if allowed_sched > group.executed_steps and sched_gate:
                     _sched_idx = min(group.executed_steps, len(schedule) - 1)
                     _sched_rise, _sched_frac = schedule[_sched_idx]
+                    if _sched_is_continuation(policy, _sched_rise, _sched_frac) and _cont_live_full(
+                        st, code, group, policy
+                    ):
+                        st.stats["skip_cont_live_max"] = (
+                            int(st.stats.get("skip_cont_live_max", 0)) + 1
+                        )
+                        continue
                     _sched_due = True
             # 双梯子书：分批腿(1)优先、基数腿(2)次之；单梯子书 use2 恒 False、行为不变。
             use2 = False
@@ -864,7 +972,8 @@ def _run_s8_price_adds_day(
             if confirm:
                 peak = (
                     confirm_peak_for(code, group.first_lot)
-                    if confirm_peak_for is not None else group.first_lot.peak
+                    if confirm_peak_for is not None
+                    else group.first_lot.peak
                 )
                 if group.supplement_done or px < cost or peak < cost * 1.03:
                     continue
@@ -888,7 +997,9 @@ def _run_s8_price_adds_day(
                     )
                 if not _rebuy_due and not _sched_due and not due1 and not due2:
                     continue
-                use2 = not due1 and not _sched_due and not _rebuy_due  # schedule/rebuy 走 executed_steps，不走 steps2
+                use2 = (
+                    not due1 and not _sched_due and not _rebuy_due
+                )  # schedule/rebuy 走 executed_steps，不走 steps2
             if row.did_map:
                 st.stats["exdiv_prev_close_mapped"] = (
                     int(st.stats.get("exdiv_prev_close_mapped", 0)) + 1
@@ -907,8 +1018,7 @@ def _run_s8_price_adds_day(
                 st.stats["skip_buy_gate"] += 1
                 continue
             volume_kwargs = (
-                {"bucket_id": volume_bucket_for(code)}
-                if volume_bucket_for is not None else {}
+                {"bucket_id": volume_bucket_for(code)} if volume_bucket_for is not None else {}
             )
             add_kw = dict(
                 code=code,
@@ -939,20 +1049,37 @@ def _run_s8_price_adds_day(
                     st,
                     per=group.budget * float(policy.get("cont_stop_rebuy_frac") or 1.0),
                     reason="add:cont_rebuy",
-                    is_step=True,
+                    is_step=not bool(policy.get("cont_ride_trial")),
                     **add_kw,
                 ):
                     any_fill = True
                     step_fills += 1
                     group.cont_rebuy_armed.remove(_rebuy_rise)
                     group.cont_rebuy_done.append(_rebuy_rise)
+                    note_cont_open(
+                        group,
+                        group.next_lot_id - 1,
+                        float(_rebuy_rise),
+                        from_rise=float(policy.get("cont_from_rise") or 0.40),
+                        frac=policy.get("cont_frac"),
+                        cont_frac=policy.get("cont_frac"),
+                    )
                     st.stats["add_cont_rebuy"] = int(st.stats.get("add_cont_rebuy", 0)) + 1
                 if _sched_due and policy.get("cont_stop_rebuy_with_schedule"):
-                    if _execute_s8_price_add(
+                    if _sched_is_continuation(policy, _sched_rise, _sched_frac) and _cont_live_full(
+                        st, code, group, policy
+                    ):
+                        st.stats["skip_cont_live_max"] = (
+                            int(st.stats.get("skip_cont_live_max", 0)) + 1
+                        )
+                    elif _execute_s8_price_add(
                         st,
                         per=group.budget * float(_sched_frac),
                         reason="add:tranche",
-                        is_step=True,
+                        is_step=not (
+                            bool(policy.get("cont_ride_trial"))
+                            and _sched_is_continuation(policy, _sched_rise, _sched_frac)
+                        ),
                         **add_kw,
                     ):
                         any_fill = True
@@ -964,13 +1091,17 @@ def _run_s8_price_adds_day(
                                 group.next_lot_id - 1,
                                 float(_sched_rise),
                                 from_rise=float(policy.get("cont_from_rise") or 0.40),
+                                frac=_sched_frac,
+                                cont_frac=policy.get("cont_frac"),
                             )
                 if any_fill:
                     group.last_add_date = ds
-                    if step_cap is not None and step_fills:
-                        policy["code_steps"][code] = (
-                            policy["code_steps"].get(code, 0) + step_fills
+                    if idle_group:
+                        st.stats["add_post_exit_cont"] = (
+                            int(st.stats.get("add_post_exit_cont", 0)) + 1
                         )
+                    if step_cap is not None and step_fills:
+                        policy["code_steps"][code] = policy["code_steps"].get(code, 0) + step_fills
                 continue
             if _sched_due:
                 per = group.budget * float(_sched_frac)
@@ -980,15 +1111,24 @@ def _run_s8_price_adds_day(
                     0.50 if confirm else float(policy["step_frac2" if use2 else "step_frac"])
                 )
                 reason = "add:confirm3" if confirm else ("add:base20" if use2 else "add:step20")
+            ride = bool(policy.get("cont_ride_trial"))
+            is_cont = bool(
+                _sched_due and _sched_is_continuation(policy, _sched_rise, _sched_frac)
+            )
+            if is_cont and ride and not _ensure_trial_for_cont(st, group, add_kw):
+                st.stats["skip_cont_no_trial"] = int(st.stats.get("skip_cont_no_trial", 0)) + 1
+                continue
             filled = _execute_s8_price_add(
                 st,
                 per=per,
                 reason=reason,
-                is_step=not confirm,
+                is_step=not confirm and not (is_cont and ride),
                 **add_kw,
             )
             if filled:
                 group.last_add_date = ds
+                if idle_group:
+                    st.stats["add_post_exit_cont"] = int(st.stats.get("add_post_exit_cont", 0)) + 1
                 if confirm:
                     group.supplement_done = True
                 elif use2:
@@ -1001,6 +1141,8 @@ def _run_s8_price_adds_day(
                             group.next_lot_id - 1,
                             float(_sched_rise),
                             from_rise=float(policy.get("cont_from_rise") or 0.40),
+                            frac=_sched_frac,
+                            cont_frac=policy.get("cont_frac"),
                         )
                 if step_cap is not None:
                     policy["code_steps"][code] = policy["code_steps"].get(code, 0) + 1
@@ -1063,18 +1205,16 @@ def run_buybacks_day(
             if not uses_shrink_on_short_cash(st) and not check_buy_cash(
                 st,
                 needed=preview_buy_cash_needed(st, code, px, declared, day),
-                available=st.cash, date=ds, code=code,
+                available=st.cash,
+                date=ds,
+                code=code,
             ):
                 st.stats["skip_cash"] = st.stats.get("skip_cash", 0) + 1
-                st.stats["skip_cash_notional"] = (
-                    st.stats.get("skip_cash_notional", 0.0) + notional
-                )
+                st.stats["skip_cash_notional"] = st.stats.get("skip_cash_notional", 0.0) + notional
                 continue
             quota_used = st.daily_quota_used
             volume_kwargs = (
-                {"bucket_id": volume_bucket_for(code)}
-                if volume_bucket_for is not None
-                else {}
+                {"bucket_id": volume_bucket_for(code)} if volume_bucket_for is not None else {}
             )
             if execute_buy(
                 st,
@@ -1092,8 +1232,17 @@ def run_buybacks_day(
 
 
 def run_eod_exits(
-    st, *, day, ds, bars, eod_exit, hold_modes, exdiv=None,
-    signal_bars_front=None, strategy=None, fix_s11_exit_domain=False,
+    st,
+    *,
+    day,
+    ds,
+    bars,
+    eod_exit,
+    hold_modes,
+    exdiv=None,
+    signal_bars_front=None,
+    strategy=None,
+    fix_s11_exit_domain=False,
 ):
     """Evaluate opt-in book exits after buys; only schedule the next open.
 
@@ -1103,8 +1252,11 @@ def run_eod_exits(
     if signal_bars_front is not None or fix_s11_exit_domain:
         from backtest.research.csv_strategy_books import normalize_csv_strategy
 
-        if (not fix_s11_exit_domain or signal_bars_front is None
-                or normalize_csv_strategy(strategy) != "version11"):
+        if (
+            not fix_s11_exit_domain
+            or signal_bars_front is None
+            or normalize_csv_strategy(strategy) != "version11"
+        ):
             raise ValueError("signal_bars_front requires version11 + fix_s11_exit_domain=True")
     if not callable(eod_exit):
         return
@@ -1127,9 +1279,7 @@ def run_eod_exits(
             else:
                 # INITIAL uses strictly pre-T front; only SMA's input appends T.
                 previous = closes[-1]
-            decision = eod_exit(
-                closes + [float(row["close"])], previous, hold_modes.get(key)
-            )
+            decision = eod_exit(closes + [float(row["close"])], previous, hold_modes.get(key))
             hold_modes[key] = decision.hold_mode
             if decision.reason:
                 pos.pending_exit = decision.reason
@@ -1188,10 +1338,7 @@ def bind_parking_session(
     symbol = hooks.get("parking_symbol")
     if not symbol:
         return
-    got = (
-        day_bar_and_prev_closes(daily_bars[symbol], day)
-        if symbol in daily_bars else None
-    )
+    got = day_bar_and_prev_closes(daily_bars[symbol], day) if symbol in daily_bars else None
     if got is None:
         return
     row, closes = got
@@ -1199,9 +1346,7 @@ def bind_parking_session(
     if px <= 0 or not math.isfinite(px):
         return
     previous, _ = mapped_prev_close(exdiv, symbol, ds, float(closes[-1]))
-    limits = book_limit_prices(
-        symbol, previous, names, qlib_limit_pct=qlib_limit_pct, as_of=ds
-    )
+    limits = book_limit_prices(symbol, previous, names, qlib_limit_pct=qlib_limit_pct, as_of=ds)
     if limits is None:
         return
     st.book_state["parking_session"] = {
@@ -1241,10 +1386,7 @@ def run_parking_open_cover_day(
     lots = sleeve_parking_lots(st, symbol)
     if not lots:
         return
-    got = (
-        day_bar_and_prev_closes(daily_bars[symbol], day)
-        if symbol in daily_bars else None
-    )
+    got = day_bar_and_prev_closes(daily_bars[symbol], day) if symbol in daily_bars else None
     if got is None:
         return
     row, closes = got
@@ -1252,15 +1394,12 @@ def run_parking_open_cover_day(
     if px <= 0 or not math.isfinite(px):
         return
     previous, _ = mapped_prev_close(exdiv, symbol, ds, float(closes[-1]))
-    limits = book_limit_prices(
-        symbol, previous, names, qlib_limit_pct=qlib_limit_pct, as_of=ds
-    )
+    limits = book_limit_prices(symbol, previous, names, qlib_limit_pct=qlib_limit_pct, as_of=ds)
     if limits is None:
         return
     if defer_sell_at_limit(px, limits) or (
-        forbid_all_trade_at_limit and (
-            skip_buy_at_limit(px, limits) or defer_sell_at_limit(px, limits)
-        )
+        forbid_all_trade_at_limit
+        and (skip_buy_at_limit(px, limits) or defer_sell_at_limit(px, limits))
     ):
         st.stats["skip_parking_limit"] = int(st.stats.get("skip_parking_limit", 0)) + 1
         return
@@ -1287,13 +1426,11 @@ def run_parking_open_cover_day(
             if not filled:
                 break
             sold_any = True
-            st.stats["parking_sold_shares"] = (
-                int(st.stats.get("parking_sold_shares", 0)) + int(filled)
+            st.stats["parking_sold_shares"] = int(st.stats.get("parking_sold_shares", 0)) + int(
+                filled
             )
     if sold_any:
-        st.stats["parking_open_cover_days"] = (
-            int(st.stats.get("parking_open_cover_days", 0)) + 1
-        )
+        st.stats["parking_open_cover_days"] = int(st.stats.get("parking_open_cover_days", 0)) + 1
         st.stats["parking_sells"] = int(st.stats.get("parking_sells", 0)) + 1
 
 
@@ -1328,9 +1465,7 @@ def _index_open_quote(
     if px <= 0 or not math.isfinite(px):
         return None
     previous, _ = mapped_prev_close(exdiv, code, ds, float(closes[-1]))
-    limits = book_limit_prices(
-        code, previous, names, qlib_limit_pct=qlib_limit_pct, as_of=ds
-    )
+    limits = book_limit_prices(code, previous, names, qlib_limit_pct=qlib_limit_pct, as_of=ds)
     if limits is None:
         return None
     return px, limits
@@ -1361,9 +1496,7 @@ def _execute_index_cuts(
             sell_n = index_cut_shares(held, frac=frac, min_keep=min_keep)
             if sell_n <= 0:
                 continue
-            quoted = _index_open_quote(
-                daily_bars, code, day, ds, names, exdiv, qlib_limit_pct
-            )
+            quoted = _index_open_quote(daily_bars, code, day, ds, names, exdiv, qlib_limit_pct)
             if quoted is None:
                 continue
             px, limits = quoted
@@ -1395,9 +1528,7 @@ def _execute_index_cuts(
                     remain -= int(filled)
             if sold:
                 memory[position_id] = int(memory.get(position_id, 0)) + sold
-                st.stats["index_cut_shares"] = (
-                    int(st.stats.get("index_cut_shares", 0)) + sold
-                )
+                st.stats["index_cut_shares"] = int(st.stats.get("index_cut_shares", 0)) + sold
                 st.stats["index_cut_events"] = int(st.stats.get("index_cut_events", 0)) + 1
 
 
@@ -1428,9 +1559,7 @@ def _execute_index_rebuys(
             memory.pop(position_id, None)
             continue
         code = position_id.split("@", 1)[0]
-        quoted = _index_open_quote(
-            daily_bars, code, day, ds, names, exdiv, qlib_limit_pct
-        )
+        quoted = _index_open_quote(daily_bars, code, day, ds, names, exdiv, qlib_limit_pct)
         if quoted is None:
             continue
         px, limits = quoted
@@ -1543,9 +1672,7 @@ def _skim_quote(daily_bars, code, day, ds, names, exdiv, qlib_limit_pct):
     if px <= 0 or not math.isfinite(px):
         return None
     previous, _ = mapped_prev_close(exdiv, code, ds, float(closes[-1]))
-    limits = book_limit_prices(
-        code, previous, names, qlib_limit_pct=qlib_limit_pct, as_of=ds
-    )
+    limits = book_limit_prices(code, previous, names, qlib_limit_pct=qlib_limit_pct, as_of=ds)
     return px, limits
 
 
@@ -1585,13 +1712,10 @@ def _sell_skim_chunk(
         if limits is None:
             return 0
         if defer_sell_at_limit(px, limits) or (
-            forbid_all_trade_at_limit and (
-                skip_buy_at_limit(px, limits) or defer_sell_at_limit(px, limits)
-            )
+            forbid_all_trade_at_limit
+            and (skip_buy_at_limit(px, limits) or defer_sell_at_limit(px, limits))
         ):
-            st.stats["skip_profit_skim_limit"] = (
-                int(st.stats.get("skip_profit_skim_limit", 0)) + 1
-            )
+            st.stats["skip_profit_skim_limit"] = int(st.stats.get("skip_profit_skim_limit", 0)) + 1
             return 0
         chunk = _skim_chunk_shares(gap, px, int(lot.shares))
         if chunk < BOARD_LOT:
@@ -1648,9 +1772,7 @@ def _sellable_strategy_skim_lots(
             if int(getattr(lot, "shares", 0) or 0) < BOARD_LOT:
                 continue
             if lot.entry_idx >= day_i:
-                st.stats["skip_profit_skim_t1"] = (
-                    int(st.stats.get("skip_profit_skim_t1", 0)) + 1
-                )
+                st.stats["skip_profit_skim_t1"] = int(st.stats.get("skip_profit_skim_t1", 0)) + 1
                 continue
             quote = _skim_quote(daily_bars, code, day, ds, names, exdiv, qlib_limit_pct)
             if quote is None:
@@ -1659,9 +1781,8 @@ def _sellable_strategy_skim_lots(
             if limits is None:
                 continue
             if defer_sell_at_limit(px, limits) or (
-                forbid_all_trade_at_limit and (
-                    skip_buy_at_limit(px, limits) or defer_sell_at_limit(px, limits)
-                )
+                forbid_all_trade_at_limit
+                and (skip_buy_at_limit(px, limits) or defer_sell_at_limit(px, limits))
             ):
                 st.stats["skip_profit_skim_limit"] = (
                     int(st.stats.get("skip_profit_skim_limit", 0)) + 1
@@ -1845,9 +1966,7 @@ def _buy_skim_principal(
         return 0.0
     quote = _skim_quote(daily_bars, symbol, day, ds, names, exdiv, qlib_limit_pct)
     if quote is None:
-        st.stats["skip_profit_skim_no_bar"] = (
-            int(st.stats.get("skip_profit_skim_no_bar", 0)) + 1
-        )
+        st.stats["skip_profit_skim_no_bar"] = int(st.stats.get("skip_profit_skim_no_bar", 0)) + 1
         return 0.0
     px, limits = quote
     if limits is None:
@@ -1856,33 +1975,24 @@ def _buy_skim_principal(
         )
         return 0.0
     at_limit = skip_buy_at_limit(px, limits) or defer_sell_at_limit(px, limits)
-    if skip_buy_at_limit(px, limits) or (
-        forbid_all_trade_at_limit and at_limit
-    ):
-        st.stats["skip_profit_skim_limit"] = (
-            int(st.stats.get("skip_profit_skim_limit", 0)) + 1
-        )
+    if skip_buy_at_limit(px, limits) or (forbid_all_trade_at_limit and at_limit):
+        st.stats["skip_profit_skim_limit"] = int(st.stats.get("skip_profit_skim_limit", 0)) + 1
         return 0.0
     before = {id(lot) for lot in parking_lots(st, symbol)}
     cash0 = float(st.cash)
-    execute_parking_buy(
-        st, symbol, px, budget, day_i, day, reason=reason
-    )
+    execute_parking_buy(st, symbol, px, budget, day_i, day, reason=reason)
     for lot in parking_lots(st, symbol):
         if id(lot) not in before:
             register_principal_lot(st, lot)
     spent = max(0.0, cash0 - float(st.cash))
     if spent > 1e-6 and count_skim:
-        st.stats["profit_skim_park_buys"] = (
-            int(st.stats.get("profit_skim_park_buys", 0)) + 1
-        )
+        st.stats["profit_skim_park_buys"] = int(st.stats.get("profit_skim_park_buys", 0)) + 1
     return spent
 
 
 def _profit_skim_extracted(st: SimState) -> float:
-    return (
-        float(st.stats.get("profit_skim_parked", 0.0))
-        + float(st.stats.get("profit_skim_withdrawn", 0.0))
+    return float(st.stats.get("profit_skim_parked", 0.0)) + float(
+        st.stats.get("profit_skim_withdrawn", 0.0)
     )
 
 
@@ -1976,16 +2086,14 @@ def run_div_to_parking_day(
     leftover = max(0.0, pending - spent)
     st.stats["div_to_parking_pending"] = leftover
     if spent > 1e-6:
-        st.stats["div_to_parking_spent"] = (
-            float(st.stats.get("div_to_parking_spent", 0.0)) + spent
-        )
-        st.stats["div_to_parking_events"] = (
-            int(st.stats.get("div_to_parking_events", 0)) + 1
-        )
+        st.stats["div_to_parking_spent"] = float(st.stats.get("div_to_parking_spent", 0.0)) + spent
+        st.stats["div_to_parking_events"] = int(st.stats.get("div_to_parking_events", 0)) + 1
     return spent
 
 
-def _profit_skim_owed(equity: float, *, base: float, step: float, frac: float, withdrawn: float) -> float:
+def _profit_skim_owed(
+    equity: float, *, base: float, step: float, frac: float, withdrawn: float
+) -> float:
     """Lifetime frac-of-base per completed +step rung, minus already withdrawn."""
     if base <= 0 or step <= 0 or frac <= 0:
         return 0.0
@@ -2027,9 +2135,7 @@ def _run_profit_skim_to_parking(
         forbid_all_trade_at_limit=forbid_all_trade_at_limit,
     )
     if got > 1e-6:
-        st.stats["profit_skim_parked"] = (
-            float(st.stats.get("profit_skim_parked", 0.0)) + got
-        )
+        st.stats["profit_skim_parked"] = float(st.stats.get("profit_skim_parked", 0.0)) + got
         st.stats["profit_skim_events"] = int(st.stats.get("profit_skim_events", 0)) + 1
     leftover = max(0.0, owed - got)
     st.stats["profit_skim_pending_notional"] = leftover
@@ -2102,20 +2208,14 @@ def run_profit_skim_day(
     if not hooks.get("profit_skim"):
         return
     step = float(hooks.get("profit_skim_step") or 0.0)
-    frac = float(
-        hooks.get("profit_skim_frac")
-        or st.stats.get("profit_skim_frac")
-        or 0.0
-    )
+    frac = float(hooks.get("profit_skim_frac") or st.stats.get("profit_skim_frac") or 0.0)
     base = float(hooks.get("profit_skim_base") or st.stats.get("profit_skim_base") or 0.0)
     if step <= 0 or frac <= 0 or base <= 0:
         return
     extracted = _profit_skim_extracted(st)
     to_parking = bool(hooks.get("profit_skim_to_parking"))
     equity = working_equity(st, day, daily_bars)
-    owed = _profit_skim_owed(
-        equity, base=base, step=step, frac=frac, withdrawn=extracted
-    )
+    owed = _profit_skim_owed(equity, base=base, step=step, frac=frac, withdrawn=extracted)
     if to_parking:
         if owed > 1e-6:
             _run_profit_skim_to_parking(
@@ -2193,9 +2293,7 @@ def run_profit_skim_day(
         take = min(owed, float(st.cash))
     if take > 1e-6:
         st.cash = float(st.cash) - take
-        st.stats["profit_skim_withdrawn"] = (
-            float(st.stats.get("profit_skim_withdrawn", 0.0)) + take
-        )
+        st.stats["profit_skim_withdrawn"] = float(st.stats.get("profit_skim_withdrawn", 0.0)) + take
         st.stats["profit_skim_events"] = int(st.stats.get("profit_skim_events", 0)) + 1
         leftover = owed - take
     else:
@@ -2236,10 +2334,7 @@ def run_parking_rebalance_day(
     buffer = float(hooks.get("parking_buffer") or 0.0)
     if frac <= 0:
         return
-    got = (
-        day_bar_and_prev_closes(daily_bars[symbol], day)
-        if symbol in daily_bars else None
-    )
+    got = day_bar_and_prev_closes(daily_bars[symbol], day) if symbol in daily_bars else None
     if got is None:
         st.stats["skip_parking_no_bar"] = int(st.stats.get("skip_parking_no_bar", 0)) + 1
         return
@@ -2249,9 +2344,7 @@ def run_parking_rebalance_day(
         st.stats["skip_parking_no_bar"] = int(st.stats.get("skip_parking_no_bar", 0)) + 1
         return
     previous, _ = mapped_prev_close(exdiv, symbol, ds, float(closes[-1]))
-    limits = book_limit_prices(
-        symbol, previous, names, qlib_limit_pct=qlib_limit_pct, as_of=ds
-    )
+    limits = book_limit_prices(symbol, previous, names, qlib_limit_pct=qlib_limit_pct, as_of=ds)
     if limits is None:
         st.stats["skip_parking_unknown_board"] = (
             int(st.stats.get("skip_parking_unknown_board", 0)) + 1
@@ -2304,9 +2397,7 @@ def run_parking_rebalance_day(
         sold += int(filled)
     if sold:
         st.stats["parking_sells"] = int(st.stats.get("parking_sells", 0)) + 1
-        st.stats["parking_sold_shares"] = (
-            int(st.stats.get("parking_sold_shares", 0)) + sold
-        )
+        st.stats["parking_sold_shares"] = int(st.stats.get("parking_sold_shares", 0)) + sold
 
 
 def require_market_marks(
@@ -2324,7 +2415,9 @@ def require_market_marks(
         mark = market_close_mark(mark_bars.get(code), day)
         if mark is None or not math.isfinite(mark) or mark <= 0:
             source = mark_source_for(code) if mark_source_for is not None else "raw_daily"
-            raise ValueError(f"missing valid raw mark code={code} date={ds} domain=none path={source}")
+            raise ValueError(
+                f"missing valid raw mark code={code} date={ds} domain=none path={source}"
+            )
 
 
 def append_equity_and_eod_marks(
@@ -2343,8 +2436,9 @@ def append_equity_and_eod_marks(
     close for every lot; ``pos.cost`` only when no on/prior bar exists.
     """
     if require_market_mark:
-        require_market_marks(st, ds=ds, day=day, mark_bars=mark_bars,
-                             mark_source_for=mark_source_for)
+        require_market_marks(
+            st, ds=ds, day=day, mark_bars=mark_bars, mark_source_for=mark_source_for
+        )
     eq = st.cash
     if st.exdiv_economics is not None:
         eq += st.exdiv_economics.receivable_total
@@ -2382,8 +2476,18 @@ def append_equity_and_eod_marks(
 
 
 def run_breakout_day(
-    st, *, day_i, day, ds, names, pool_days, buy_quote_for,
-    exdiv=None, exdiv_ref_fen=False, qlib_limit_pct=None, breakout_mult=1.2,
+    st,
+    *,
+    day_i,
+    day,
+    ds,
+    names,
+    pool_days,
+    buy_quote_for,
+    exdiv=None,
+    exdiv_ref_fen=False,
+    qlib_limit_pct=None,
+    breakout_mult=1.2,
 ):
     """v6.11 突破书：T0 名单日记 A0=14:55 收盘；自 T+1 起 px ≥ A0×mult 即买 1 基。
 
@@ -2427,12 +2531,13 @@ def run_breakout_day(
         if float(px) < a0 * float(breakout_mult):
             continue
         prev_close, _ = mapped_prev_close(
-            exdiv, code, ds, float(closes[-1]),
+            exdiv,
+            code,
+            ds,
+            float(closes[-1]),
             **({"fen_round": True} if exdiv_ref_fen else {}),
         )
-        limits = book_limit_prices(
-            code, prev_close, names, qlib_limit_pct=qlib_limit_pct, as_of=ds
-        )
+        limits = book_limit_prices(code, prev_close, names, qlib_limit_pct=qlib_limit_pct, as_of=ds)
         if limits is None:
             st.stats["skip_unknown_board"] += 1
             continue
@@ -2440,8 +2545,15 @@ def run_breakout_day(
             st.stats["skip_limit_up"] += 1
             continue
         filled = execute_buy(
-            st, code, px, float(policy["name_budget"]), day_i, day,
-            reason="breakout", position_id=key, entry_signal_date=sig_ds,
+            st,
+            code,
+            px,
+            float(policy["name_budget"]),
+            day_i,
+            day,
+            reason="breakout",
+            position_id=key,
+            entry_signal_date=sig_ds,
         )
         if filled:
             del pending[key]

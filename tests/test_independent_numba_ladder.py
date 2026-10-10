@@ -194,6 +194,7 @@ def _run_bars(st, pos, cursor, limits, hooks, python_from=0):
                     st, CODE, pos, float(cursor.c[bar_idx]), DAY, 1,
                     limits, peak_dd_exit=hooks["peak_dd_exit"],
                     peak_dd_sessions=hooks.get("peak_dd_sessions", 15),
+                    peak_dd_min_rise=hooks.get("peak_dd_min_rise") or 0.0,
                     open_px=float(cursor.o[bar_idx]), hm=int(at_hm),
                 )
     return st, pos
