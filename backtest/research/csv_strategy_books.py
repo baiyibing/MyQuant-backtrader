@@ -73,6 +73,7 @@ from backtest.research import (
     strategy6_53_rules,
     strategy6_54_rules,
     strategy6_55_rules,
+    strategy6_56_rules,
     strategy8_rules,
     strategy8_1_rules,
     strategy8_2_rules,
@@ -202,6 +203,8 @@ from backtest.research.csv_strategy_books_v6_family import (
     _run_kwargs_version6_54,
     _apply_version6_55,
     _run_kwargs_version6_55,
+    _apply_version6_56,
+    _run_kwargs_version6_56,
 )
 
 HELP_LOCK_V1 = strategy1_rules.HELP_LOCK
@@ -265,6 +268,7 @@ HELP_LOCK_V6_52 = strategy6_52_rules.HELP_LOCK
 HELP_LOCK_V6_53 = strategy6_53_rules.HELP_LOCK
 HELP_LOCK_V6_54 = strategy6_54_rules.HELP_LOCK
 HELP_LOCK_V6_55 = strategy6_55_rules.HELP_LOCK
+HELP_LOCK_V6_56 = strategy6_56_rules.HELP_LOCK
 HELP_LOCK_V8 = strategy8_rules.HELP_LOCK
 HELP_LOCK_V8_1 = strategy8_1_rules.HELP_LOCK
 HELP_LOCK_V8_2 = strategy8_2_rules.HELP_LOCK
@@ -2634,6 +2638,21 @@ register(
         help_lock=strategy6_55_rules.HELP_LOCK,
         apply=_apply_version6_55,
         run_kwargs=_run_kwargs_version6_55,
+    )
+)
+
+register(
+    CsvStrategyBook(
+        name="version6_56",
+        sizing="per_name",
+        name_budget=1_000_000.0,
+        tag=strategy6_56_rules.BOOK_TAG,
+        aliases=("6.56", "6_56", "v6.56", "v6_56", "version6_56"),
+        allow_add=strategy6_56_rules.ALLOW_ADD,
+        peak_gap_min=strategy6_56_rules.PEAK_GAP_MIN,
+        help_lock=strategy6_56_rules.HELP_LOCK,
+        apply=_apply_version6_56,
+        run_kwargs=_run_kwargs_version6_56,
     )
 )
 

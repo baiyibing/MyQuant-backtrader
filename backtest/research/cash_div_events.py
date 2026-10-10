@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Explicit cash-dividend events for 6.54/6.55 (overnight shares x cash per share).
+"""Explicit cash-dividend events for 6.54+ (overnight shares x cash per share).
 
 600036 uses A-share implementation-notice cash. Other names reuse the 2026-10-08
 overlay filter: lake ``ex_date_index`` dr in (1, 1.12] and implied cash/share
@@ -20,7 +20,7 @@ from common.infra.data_root import resolve_source_parquet
 PARK = "600036.SH"
 CASH_DR_MAX = 1.12
 CASH_PS_MIN = 0.30
-CASH_DIV_BOOKS = frozenset({"version6_54", "version6_55"})
+CASH_DIV_BOOKS = frozenset({"version6_54", "version6_55", "version6_56"})
 # 巨潮 2026-01-10 / 1224927640 ；巨潮 2026-07-04 / 公告 2026-029
 CMB_CASH_PS: dict[tuple[str, str], float] = {
     (PARK, "20260116"): 1.013,

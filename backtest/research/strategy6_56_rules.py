@@ -1,15 +1,15 @@
 # -*- coding: utf-8 -*-
-"""策略 6.55 — 6.54 栈 + 梯子 give 改为 5%+4%×档。
+"""策略 6.56 — 6.55 栈 + 梯子 give 改为 5%+5%×档。
 
-6.54 全部（均价减仓、停泊、抽离、上证闸门、现金分红买 600036）不变。
-exit_line / 分钟扫描用本模块 GIVE_STEP，不沿用 6.53 的 3%。
+6.55 全部（均价减仓、停泊、抽离、上证闸门、现金分红买 600036）不变。
+exit_line / 分钟扫描用本模块 GIVE_STEP，不沿用 6.55 的 4%。
 """
 
 from __future__ import annotations
 
 from typing import Optional
 
-from backtest.research.strategy6_54_rules import (  # noqa: F401
+from backtest.research.strategy6_55_rules import (  # noqa: F401
     ADD_SCHEDULE,
     ADD_STEP,
     ALLOW_ADD,
@@ -62,11 +62,11 @@ from backtest.research.strategy6_54_rules import (  # noqa: F401
     is_continuation_rise,
     load_sse_ma10_block_new,
     lot_budget,
-    record_strategy6_54_params,
+    record_strategy6_55_params,
 )
 
-BOOK_TAG = "v6_55"
-GIVE_STEP = 0.04
+BOOK_TAG = "v6_56"
+GIVE_STEP = 0.05
 
 
 def exit_line(cost: float, peak: float) -> float:
@@ -93,19 +93,19 @@ def take_profit_reason(
     return None
 
 
-def record_strategy6_55_params(st, *, stop_pct: float) -> None:
-    record_strategy6_54_params(st, stop_pct=stop_pct)
+def record_strategy6_56_params(st, *, stop_pct: float) -> None:
+    record_strategy6_55_params(st, stop_pct=stop_pct)
     st.stats["sell_book"] = BOOK_TAG
     st.stats["ladder_give_step"] = float(GIVE_STEP)
     st.stats["div_to_parking"] = bool(DIV_TO_PARKING)
 
 
 HELP_LOCK = """
-策略 6.55 卖点（--strategy version6_55，人裁 2026-10-10；6.54 + give 5%+4%×档）：
-  6.54 全部（均价减仓、停泊 80%/100 万、开盘补缺口、延续档止损买回、补一手默认开、
+策略 6.56 卖点（--strategy version6_56，人裁 2026-10-10；6.55 + give 5%+5%×档）：
+  6.55 全部（均价减仓、停泊 80%/100 万、开盘补缺口、延续档止损买回、补一手默认开、
   总收益抽离锁进 600036、加仓先闲置后锁仓、上证连续两日 MA10 下方减半、收复买回、
   现金分红入账后买 600036）不变。
-  梯子回撤 give 从 5%+3%×档 改为 5%+4%×档。
-  落盘：backtest_output/csv_minute_v6_55_{start}_{end}/
-  已归档（2026-10-10）。继任 version6_56（give 5%+5%×档）。
+  梯子回撤 give 从 5%+4%×档 改为 5%+5%×档。
+  落盘：backtest_output/csv_minute_v6_56_{start}_{end}/
+  已归档（2026-10-10）。当前书。不锁 golden。
 """

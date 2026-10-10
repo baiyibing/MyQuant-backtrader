@@ -31,7 +31,7 @@ FROZEN_NAMES = (
     "version6_41", "version6_42", "version6_43", "version6_44", "version6_45",
     "version6_46", "version6_47", "version6_48", "version6_49",
     "version6_50", "version6_51", "version6_52", "version6_53",
-    "version6_54", "version6_55",
+    "version6_54", "version6_55", "version6_56",
     "version8", "version8_1", "version8_2",
     "version8_3", "version8_4", "version8_5", "version8_6", "version9",
     "version9_2", "version9_3", "version10", "version11", "version12", "topk_dropout",
@@ -57,7 +57,7 @@ def test_registry_names_and_aliases():
     "name",
     ("version6_1", "version6_11", "version6_45", "version6_46", "version6_47",
      "version6_48", "version6_49", "version6_50", "version6_51",
-     "version6_52", "version6_53", "version6_54", "version6_55", "version8", "version1"),
+     "version6_52", "version6_53", "version6_54", "version6_55", "version6_56", "version8", "version1"),
 )
 def test_default_apply_keys(name):
     hooks = apply_csv_strategy(name)
@@ -77,7 +77,7 @@ def test_import_identity_and_helper_location():
     family_src = Path(inspect.getsourcefile(family)).read_text(encoding="utf-8")
     assert "register(" not in family_src
     assert Path(inspect.getsourcefile(get_book("version6").apply)).name == "csv_strategy_books.py"
-    for i in range(1, 56):
+    for i in range(1, 57):
         for prefix in ("_apply_version6_", "_run_kwargs_version6_"):
             helper = getattr(family, f"{prefix}{i}")
             assert getattr(registry, f"{prefix}{i}") is helper

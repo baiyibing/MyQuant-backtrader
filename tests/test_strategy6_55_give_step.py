@@ -58,6 +58,9 @@ def test_hooks_and_scope():
     assert "version6_55" in __import__(
         "backtest.research.strategy6_54_rules", fromlist=["HELP_LOCK"]
     ).HELP_LOCK
+    assert "version6_56" in __import__(
+        "backtest.research.strategy6_55_rules", fromlist=["HELP_LOCK"]
+    ).HELP_LOCK
 
 
 def test_product_bind_includes_655(monkeypatch):

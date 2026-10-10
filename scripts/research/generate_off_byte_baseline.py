@@ -135,7 +135,7 @@ V650_RULE_REVISION = "v650-parking-exec-20261008"
 V650_BOOK_NAMES = ("version6_50",)
 V650_CASES = tuple((book, engine) for book in V650_BOOK_NAMES for engine in ("daily", "minute"))
 # Registered in BOOKS but not yet in an authorized off-byte overlay.
-PENDING_BOOK_NAMES = ("version6_51", "version6_52", "version6_53", "version6_54", "version6_55")
+PENDING_BOOK_NAMES = ("version6_51", "version6_52", "version6_53", "version6_54", "version6_55", "version6_56")
 P03_GOLDEN = ROOT / "tests/fixtures/off_byte_baseline_industry_p03_order_commission_20261006.json"
 P03_RULE_REVISION = "industry-p03-order-commission-20261006"
 P03_BOOK_NAMES = ("version6", "version7", "version8")
