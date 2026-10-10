@@ -136,6 +136,62 @@ def test_later_window_is_scored_and_not_cited(tmp_path):
     assert (out / "window_split.json").is_file()
 
 
+def test_walkforward_compounds_only_test_folds():
+    from backtest.research.result_analysis import walkforward_folds
+
+    nav = _nav([100.0, 110.0, 100.0, 110.0, 100.0, 110.0, 100.0, 110.0])
+    got = walkforward_folds(nav, folds=4)
+    assert got["parameters_reselected"] is False
+    assert got["segments"][0]["role"] == "selection"
+    assert [row["role"] for row in got["segments"][1:]] == ["test", "test", "test"]
+    assert got["oos_period_return"]["value"] == pytest.approx(1.1 ** 3 - 1.0)
+
+
+def test_citation_adds_geometric_excess_only_when_the_benchmark_is_present():
+    from backtest.research.result_analysis import citation_lines
+
+    missing = {"payoff_ratio": {"status": "unavailable"}, "profit_factor": {"status": "unavailable"}}
+    plain, _ = citation_lines(account_curve(_nav([100.0, 110.0])), missing)
+    assert "几何超额" not in plain
+    marked, _ = citation_lines(
+        account_curve(_nav([100.0, 110.0]), benchmark=_nav([100.0, 100.0])),
+        missing,
+    )
+    assert "几何超额" in marked
+
+
+def test_slippage_and_caps_stay_off_unless_configured():
+    from types import SimpleNamespace
+
+    from backtest.research.research_overlay import (
+        PortfolioConstraints,
+        constrain_planned,
+        resolve_slippage,
+    )
+
+    assert resolve_slippage("none", None) is None
+    assert resolve_slippage("fixed_bp", 0) is None
+    model = resolve_slippage("fixed_bp", 10)
+    assert model.buy_price(10) == pytest.approx(10.01)
+    assert model.sell_price(10) == pytest.approx(9.99)
+    same = ["AAA", "BBB"]
+    assert constrain_planned(SimpleNamespace(positions={}, stats={}), same) is same
+    held = SimpleNamespace(positions={"AAA": [object()]}, stats={}, portfolio_constraints=PortfolioConstraints(max_names=1))
+    assert constrain_planned(held, ["AAA", "BBB"]) == ["AAA"]
+    assert held.stats["skip_max_names"] == 1
+    industries = SimpleNamespace(
+        positions={},
+        stats={},
+        portfolio_constraints=PortfolioConstraints(
+            industry_cap=1,
+            industry_of=lambda code: "bank" if code != "CCC" else None,
+        ),
+    )
+    assert constrain_planned(industries, ["AAA", "BBB", "CCC"]) == ["AAA"]
+    assert industries.stats["skip_industry_cap"] == 1
+    assert industries.stats["skip_industry_unknown"] == 1
+
+
 def test_benchmark_csv_rejects_a_close_column(tmp_path):
     from backtest.research.csv_analysis_export import load_benchmark_csv
 

@@ -1,5 +1,5 @@
 {
-  "source": "csv_analysis_export.py after result-analysis P1-P3; legacy code FIFO bundle before position_id pairing; paths and CRLF normalized before hash",
+  "source": "csv_analysis_export.py after walkforward and concentration; paths and CRLF normalized before hash",
   "sha256": {
     "account_curve.json": "ce7f5022f686ee43158a72f3ec150f891e1a7163979d202bb381ad8d70a912d6",
     "human_analysis.txt": "5b35540f0ac5f015bd65206de31ae40163490e568a2c3f9287f3082dbae3c664",
@@ -8,11 +8,12 @@
     "pnl_by_stock.csv": "abaa558118a96aae964564aea643708406668bb29d960f19526106d471d8448f",
     "positions_daily.csv": "981696ebaf18f6bc217d42c469f8a54b5deaa681536d30bf7bf24ecbcc92aeca",
     "round_trips.csv": "d5f95079fdcbe2f23ad99fb389d52b94d4315ff23446e00eb770e3bc13450ed5",
-    "summary.json": "44cd8ba70739741f6e6c71a401df97271fcfcfa3241139db94adc16c1f4f5719",
+    "summary.json": "d47eb184da99d18c73e7bc71cb58249e3fc55d942976843331105118a5ebf723",
     "trade_payoff.json": "ffdfec47c12afb6b8fb5d1e43991661d96a6dbdb710cab5c3edace2f479ea075",
     "trades_daily.csv": "da416e5beb8ee7e997d68804dcb9efd4186c437c8f524cc25611a0aeff896137",
+    "walkforward.json": "abdd05780091318cf4133fcac3f9766a47ad54ae4a20546cd0cab639db12b40a",
     "win_by_reason.csv": "7e4c5b4fe150515edb17b4f8927936a25c8ebad0df8e21f8e3f7b51c78dd31a4",
     "window_split.json": "f667d1b0f77e7e4470a1156dbee92d8f4e2c93309165975f8d3cdcdac2e01c15",
-    "字段说明.txt": "816d8377db02014c56695fd4c28ae8d2a087ba0c60770a377687fd858bbbc4a0"
+    "字段说明.txt": "6943378224f3b9cb95298baa763e9c6e210e19b60032cd2d9f99e61272f06f57"
   }
 }

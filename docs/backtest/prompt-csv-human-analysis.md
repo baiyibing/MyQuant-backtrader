@@ -22,6 +22,7 @@
 | `account_curve.json` | **每次导出必写**。相对净值首行、复利年化、回撤长度、可选超额、月度、换手、费用。不要手算 |
 | `trade_payoff.json` | **每次导出必写**。已平仓盈亏比和获利因子，按卖因拆开。不要手算 |
 | `window_split.json` | **每次导出必写**。后半段净值的收益和回撤。不要写进结论，也不要据此改参数 |
+| `walkforward.json` | **每次导出必写**。四段里后三段的收益。不要写进结论，也不要据此改参数 |
 | `win_by_reason.csv` | 已平仓按 `sell_reason` 的笔数、胜率、盈亏 |
 | `summary.json` | 天数 / 买卖笔数 / 已实现+期末浮盈 / 与净值变动对账（`pnl_nav_diff`），并含上面的回撤和胜率字段 |
 | `nav_daily.csv` | 组合日净值、回撤（来自 run 的 `daily_equity.csv`） |

@@ -209,6 +209,7 @@ def account_curve(
     *,
     commission_total: float | None = None,
     risk_free: float = 0.0,
+    benchmark_label: str | None = None,
 ) -> dict[str, Any]:
     """Account metrics from a full equity curve. Benchmark is optional."""
     if not math.isfinite(risk_free) or risk_free <= -1:
@@ -233,6 +234,8 @@ def account_curve(
     if benchmark is not None:
         bench = _levels(benchmark)
         bench_block = _excess_block(levels, bench, n)
+        if benchmark_label and bench_block.get("status") == "available":
+            bench_block["label"] = benchmark_label
         _attach_month_excess(months, bench)
     else:
         for row in months:
@@ -393,6 +396,59 @@ def window_split(nav: pd.DataFrame) -> dict[str, Any]:
     }
 
 
+def walkforward_folds(nav: pd.DataFrame, folds: int = 4) -> dict[str, Any]:
+    """Score each later chunk of an existing curve. The first chunk is not a score."""
+    if folds < 2:
+        raise ValueError("walkforward folds must be at least 2")
+    levels = _levels(nav)
+    n = len(levels)
+    size = n // folds
+    if size < 2:
+        return {
+            "schema": "result-analysis-p3",
+            "parameters_reselected": False,
+            "folds": folds,
+            "oos_period_return": _unavailable("each fold needs at least two equity rows"),
+            "segments": [],
+        }
+    segments = []
+    oos_returns: list[float] = []
+    for i in range(folds):
+        start = i * size
+        stop = n if i == folds - 1 else (i + 1) * size
+        chunk = levels.iloc[start:stop].reset_index(drop=True)
+        role = "selection" if i == 0 else "test"
+        scored = account_curve(chunk) if len(chunk) >= 2 else None
+        period = scored["period_return"] if scored else _unavailable("fold has fewer than two equity rows")
+        if role == "test" and period.get("status") == "available":
+            oos_returns.append(float(period["value"]))
+        segments.append(
+            {
+                "fold": i,
+                "role": role,
+                "start": chunk["date"].iloc[0].strftime("%Y-%m-%d"),
+                "end": chunk["date"].iloc[-1].strftime("%Y-%m-%d"),
+                "period_return": period,
+                "annualised_return": scored["annualised_return"] if scored else _unavailable("fold has fewer than two equity rows"),
+                "max_drawdown": scored["max_drawdown"] if scored else _unavailable("fold has fewer than two equity rows"),
+            }
+        )
+    if not oos_returns:
+        oos = _unavailable("no scored test fold")
+    else:
+        compound = 1.0
+        for value in oos_returns:
+            compound *= 1.0 + value
+        oos = _metric(compound - 1.0)
+    return {
+        "schema": "result-analysis-p3",
+        "parameters_reselected": False,
+        "folds": folds,
+        "oos_period_return": oos,
+        "segments": segments,
+    }
+
+
 def citation_lines(account: dict[str, Any], payoff: dict[str, Any]) -> tuple[str, str]:
     """Two readout lines. Numbers come only from the JSON objects."""
 
@@ -402,10 +458,16 @@ def citation_lines(account: dict[str, Any], payoff: dict[str, Any]) -> tuple[str
         value = float(node["value"])
         return f"{value:+.2%}" if percent else f"{value:.4f}"
 
+    excess = ""
+    benchmark = account.get("benchmark")
+    if isinstance(benchmark, dict):
+        geometric = benchmark.get("geometric_excess")
+        if isinstance(geometric, dict) and geometric.get("status") == "available":
+            excess = f"，几何超额 {shown(geometric, percent=True)}"
     account_line = (
         "净值页: 相对净值首行 "
         f"{shown(account.get('period_return'), percent=True)}，复利年化 "
-        f"{shown(account.get('annualised_return'), percent=True)}，见 account_curve.json。"
+        f"{shown(account.get('annualised_return'), percent=True)}{excess}，见 account_curve.json。"
     )
     trade_line = (
         "交易页: 盈亏比 "

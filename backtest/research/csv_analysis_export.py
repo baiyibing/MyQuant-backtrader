@@ -24,6 +24,7 @@ from backtest.research.result_analysis import (
     account_curve,
     citation_lines,
     trade_payoff,
+    walkforward_folds,
     window_split,
     with_realized_share,
 )
@@ -1127,6 +1128,7 @@ def write_bundle(
     account: float | None = None,
     xlsx: bool = False,
     benchmark: pd.DataFrame | None = None,
+    benchmark_label: str | None = None,
 ) -> dict[str, Any]:
     run_dir = Path(run_dir)
     out_dir = Path(out_dir)
@@ -1226,7 +1228,13 @@ def write_bundle(
         "has_buy_state": bool(state_map),
         "paths": paths,
     }
-    curve = account_curve(nav, trades, benchmark, commission_total=commission_total(run_dir))
+    curve = account_curve(
+        nav,
+        trades,
+        benchmark,
+        commission_total=commission_total(run_dir),
+        benchmark_label=benchmark_label,
+    )
     payoff = trade_payoff(trip_df)
     curve_path = out_dir / "account_curve.json"
     payoff_path = out_dir / "trade_payoff.json"
@@ -1250,6 +1258,14 @@ def write_bundle(
         newline="\n",
     )
     paths["window_split"] = str(split_path)
+    folds = walkforward_folds(nav)
+    folds_path = out_dir / "walkforward.json"
+    folds_path.write_text(
+        json.dumps(folds, ensure_ascii=False, indent=2, allow_nan=False) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    paths["walkforward"] = str(folds_path)
     analysis_text = format_human_analysis(perf, n_closed=n_closed, n_open=n_open)
     extra = "\n".join(citation_lines(curve, payoff))
     analysis_text = analysis_text.rstrip("\n") + "\n" + extra + "\n"
@@ -1347,6 +1363,11 @@ def main(argv=None) -> int:
         benchmark = load_benchmark_csv(args.benchmark_csv)
     elif args.benchmark_index is not None:
         benchmark = load_benchmark_index(args.benchmark_index, args.benchmark_dividend)
+    benchmark_label = None
+    if args.benchmark_csv is not None:
+        benchmark_label = args.benchmark_csv.name
+    elif args.benchmark_index is not None:
+        benchmark_label = f"{args.benchmark_index}:{args.benchmark_dividend}"
     run_dir = args.run_dir
     out_dir = args.out_dir or (run_dir / "analysis")
     scores_by_day = None
@@ -1376,6 +1397,7 @@ def main(argv=None) -> int:
         account=args.account,
         xlsx=bool(args.xlsx),
         benchmark=benchmark,
+        benchmark_label=benchmark_label,
     )
     s = product["summary"]
     print(

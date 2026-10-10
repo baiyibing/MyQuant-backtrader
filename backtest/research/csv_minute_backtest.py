@@ -1348,6 +1348,7 @@ def simulate(
     sim_profile: SimPhaseClock | None = None,
     day_spans: dict | None = None,
     st_gate: bool = False,
+    research_overlay=None,
 ) -> SimState:
     """Opt-in cap uses caller-attested completed minutes; daily volume is unused.
 
@@ -1529,6 +1530,10 @@ def simulate(
             st_gate=st_gate,
             **({"context": policy_context} if policy.initialize is not None else {}),
         )
+        if research_overlay is not None:
+            from backtest.research.research_overlay import bind_research_overlay
+
+            bind_research_overlay(st, research_overlay)
         if (
             profile.exchange_quantity_rules
             or profile.supplementary_min_lot
@@ -2284,8 +2289,20 @@ def run(
     profile_sim: bool | None = None,
     minute_length: str | None = None,
     minute_store: str | None = None,
+    slippage: str | None = None,
+    slippage_bp: float | None = None,
+    max_names: int | None = None,
+    industry_cap: int | None = None,
 ) -> SimState:
     profile = resolve_rule_profile(rule_profile)
+    from backtest.research.research_overlay import build_research_overlay
+
+    research_overlay = build_research_overlay(
+        slippage=slippage,
+        slippage_bp=slippage_bp,
+        max_names=max_names,
+        industry_cap=industry_cap,
+    )
     sim_clock = SimPhaseClock() if profile_sim_enabled(profile_sim) else None
     book = normalize_csv_strategy(strategy)
     fix_minute_cash_order = bool(
@@ -2601,6 +2618,7 @@ def run(
         sim_profile=sim_clock,
         day_spans=laid_spans,
         st_gate=True,
+        research_overlay=research_overlay,
     )
     if skipped.get("exdiv_skipped_no_factor"):
         st.stats["exdiv_skipped_no_factor"] = int(skipped["exdiv_skipped_no_factor"])
@@ -2804,6 +2822,9 @@ def main(argv: Optional[list] = None) -> int:
         help="lake minute volume unit (default shares); lots multiplies volume by 100",
     )
     ap.add_argument("--execution-audit-file", help="optional execution JSON sidecar; leaves CSVs unchanged")
+    from backtest.research.research_overlay import add_research_overlay_args
+
+    add_research_overlay_args(ap)
     args = ap.parse_args(argv if argv is not None else None)
     # P2-B: CLI-parse shell precheck (unit/domain). None → no-op. ≠δ5≠R4.
     # Keep ValueError (not ap.error) so invalid-rate contract matches pre-P2 tests/API.
@@ -2864,6 +2885,10 @@ def main(argv: Optional[list] = None) -> int:
         topk_limit_rule=args.topk_limit_rule,
         minute_length=args.minute_length,
         minute_store=args.minute_store,
+        slippage=args.slippage,
+        slippage_bp=args.slippage_bp,
+        max_names=args.max_names,
+        industry_cap=args.industry_cap,
         **csv_run_kwargs_from_args(args),
     )
     book = engine_book(args.strategy, hold_days=args.hold_days)
@@ -2891,6 +2916,13 @@ def main(argv: Optional[list] = None) -> int:
         manifest_args.pop("minute_length", None)
     if args.minute_store in (None, "frame"):
         manifest_args.pop("minute_store", None)
+    if args.slippage in (None, "none"):
+        manifest_args.pop("slippage", None)
+        manifest_args.pop("slippage_bp", None)
+    if args.max_names is None:
+        manifest_args.pop("max_names", None)
+    if args.industry_cap is None:
+        manifest_args.pop("industry_cap", None)
     if not args.limit_walkdown:
         manifest_args.pop("limit_walkdown", None)
     if args.topk_exec == "close" and not args.limit_walkdown and args.topk_limit_rule == "qlib":

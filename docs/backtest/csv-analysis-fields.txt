@@ -49,6 +49,10 @@ window_split.json
   把已有净值按行数切成前后两段。后段只出收益和回撤，不重选参数。
   不要把后段分数写进结论。
 
+walkforward.json
+  把已有净值切成 4 段。第一段不当分数。后面每一段单独出收益和回撤，
+  再把这些段的收益连乘成 oos_period_return。不重选参数，不重跑回测。
+
 
 二、summary.json
 
