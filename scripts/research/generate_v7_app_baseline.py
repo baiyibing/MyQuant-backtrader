@@ -348,7 +348,9 @@ def capture_case(case, output):
         assert any(t["symbol"] == codes[5] and t["price"] == 9.0 for t in state.trades)
     if audit:
         (output / "audit.json").write_text(
-            json.dumps(audit, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+            json.dumps(audit, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+            newline="\n",
         )
     artifacts = {
         p.name: p.read_bytes()

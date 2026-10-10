@@ -13,6 +13,7 @@ from typing import Optional
 import pandas as pd
 
 from backtest.research.csv_ledger import SimState, chase_explained
+from backtest.research.csv_sim_profile import format_profile_lines, write_profile_sim
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
@@ -190,7 +191,11 @@ def summarize(
     elif st.stats.get("sell_book") == "v9":
         max_hold = st.stats.get("max_hold")
         hold_text = f"满持有 {int(max_hold)} 日 force_sell" if max_hold is not None else "满持有强平 OFF"
-        lines.append(f"  参数: 止损 rolling range（每日重算，缺窗口无替代） + 固定成本 × 0.90（10%） | {hold_text}")
+        if st.stats.get("stop_mode") == "off":
+            stop_text = "20日波幅止损 OFF"
+        else:
+            stop_text = "止损 rolling range（每日重算，缺窗口无替代）"
+        lines.append(f"  参数: {stop_text} | 止盈成本×1.10 | {hold_text}")
     elif st.stats.get("sell_book") == "v6_26":
         lines.append("  参数: 首仓20→+10%加30→+20%加50→+40%起每+20%加500万 | B=5%+3%×档 | 止损−5%+step止损−10% | 减仓:每+5%卖5% | 峰值兜底15%/15日")
     elif st.stats.get("sell_book") == "v6_25":
@@ -308,11 +313,37 @@ def summarize(
             f"chase_buy_fail_cash={st.stats.get('chase_buy_fail_cash', 0)} | "
             f"chase_buy_fail_shares={st.stats.get('chase_buy_fail_shares', 0)}"
         )
+        if (
+            st.stats.get("profit_skim_events")
+            or st.stats.get("profit_skim_withdrawn")
+            or st.stats.get("profit_skim_parked")
+        ):
+            lines.append(
+                f"  profit_skim parked={float(st.stats.get('profit_skim_parked', 0)):,.0f} | "
+                f"transferred={float(st.stats.get('profit_skim_transferred', 0)):,.0f} | "
+                f"pending={float(st.stats.get('profit_skim_pending_notional', 0)):,.0f} | "
+                f"lock_drawn={float(st.stats.get('profit_skim_lock_drawn', 0)):,.0f} | "
+                f"lock_restored={float(st.stats.get('profit_skim_lock_restored', 0)):,.0f} | "
+                f"events={int(st.stats.get('profit_skim_events', 0))}"
+            )
+        if (
+            st.stats.get("index_cut_events")
+            or st.stats.get("index_rebuy_events")
+            or st.stats.get("index_cut_shares")
+        ):
+            lines.append(
+                f"  index_cut shares={int(st.stats.get('index_cut_shares', 0))} | "
+                f"events={int(st.stats.get('index_cut_events', 0))} | "
+                f"rebuy_shares={int(st.stats.get('index_rebuy_shares', 0))} | "
+                f"rebuy_events={int(st.stats.get('index_rebuy_events', 0))}"
+            )
         if st.stats.get("skip_index_gate") or st.stats.get("skip_add_loser"):
             lines.append(
                 f"  skip_index_gate={int(st.stats.get('skip_index_gate', 0))} | "
                 f"skip_add_loser={int(st.stats.get('skip_add_loser', 0))}"
             )
+        if st.stats.get("skip_st"):
+            lines.append(f"  skip_st={int(st.stats.get('skip_st', 0))}")
     if "buy_cost_rate" in st.stats:
         lines.append(
             f"  cost buy={st.stats['buy_cost_rate']:g} sell={st.stats['sell_cost_rate']:g} "
@@ -327,6 +358,8 @@ def summarize(
         ("t_pool_s", "池"),
         ("t_daily_s", "日线"),
         ("t_minute_s", "分钟"),
+        ("t_exdiv_s", "除权"),
+        ("t_index_gate_s", "指数闸"),
         ("t_sim_s", "模拟"),
     ):
         if key in st.stats:
@@ -334,8 +367,14 @@ def summarize(
     cache = st.stats.get("cache")
     if cache:
         timing_parts.append(f"缓存 {cache}")
+    daily_cache = st.stats.get("daily_cache")
+    if daily_cache:
+        timing_parts.append(f"日线缓存 {daily_cache}")
     if timing_parts:
         lines.append("  耗时: " + " | ".join(timing_parts))
+    profile = getattr(st, "sim_profile", None)
+    if isinstance(profile, dict) and profile:
+        lines.extend(format_profile_lines(profile))
     missing = st.stats.get("codes_missing")
     if missing:
         lines.append(f"  缺行情 {int(missing)}")
@@ -402,6 +441,9 @@ def write_run_artifacts(
             artifacts=[out_dir / name for name in ("trades.csv", "daily_equity.csv", "summary.txt")]
             + metadata_paths,
         )
+    profile = getattr(st, "sim_profile", None)
+    if isinstance(profile, dict) and profile:
+        write_profile_sim(out_dir, profile)
     print(f"wrote {out_dir}", flush=True)
     return out_dir
 

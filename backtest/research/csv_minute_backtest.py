@@ -36,10 +36,11 @@ from backtest.research.sell_pending_observability import (  # noqa: E402
 
 from backtest.research.strategy9_rules import (  # noqa: E402
     evaluate_stop_range, RANGE_LOOKBACK_CALENDAR_DAYS,
-    evaluate_version9_exit, plan_stop_price, plan_close_reason,
+    evaluate_version9_exit,
 )
 
 from backtest.research.book_capabilities import allows_price_add  # noqa: E402
+from backtest.research.bar_store import build_day_spans  # noqa: E402
 
 from backtest.research.csv_ledger import (  # noqa: E402
     CHASE_HM,
@@ -51,16 +52,17 @@ from backtest.research.csv_ledger import (  # noqa: E402
     IndependentExitPosition,
     SimState,
     bind_account_fee_schedule,
+    position_is_open,
     chase_decision as chase_decision,
     configure_s8,
     reject_short_cash_override,
     execute_buy as execute_buy,
     exit_positions,
+    held_codes,
     held_fill_key,
     finish_pending_chase,
     queue_limit_up_chase as queue_limit_up_chase,
     hit_limit_down,
-    hit_limit_up,
     last_close_mark as last_close_mark,
     peak_gap_blocks,
     _sell,
@@ -81,6 +83,7 @@ from backtest.research.csv_common import (  # noqa: E402
     WARMUP_DAYS,
     book_limit_prices,
     build_calendar,
+    day_bar_and_prev_closes,
     _named_limits as _named_limits,
     _pool_names_asof as _pool_names_asof,
     _progress as _progress,
@@ -91,6 +94,12 @@ from backtest.research.minute_engine_policies import (  # noqa: E402
 from backtest.research.rule_profile import (  # noqa: E402
     RuleProfile,
     resolve_rule_profile,
+)
+from backtest.research.csv_sim_profile import (  # noqa: E402
+    NULL_CLOCK,
+    SimPhaseClock,
+    attach_host_profile,
+    profile_sim_enabled,
 )
 
 from backtest.research.csv_pool import (  # noqa: E402
@@ -142,21 +151,27 @@ from backtest.research.csv_daily_loader import (  # noqa: E402
     warmup_start,
 )
 from oskh_data.symbol_format import to_partition_key as to_partition_key  # noqa: E402
-from backtest.research.strategy3_rules import reserve_step_minute  # noqa: E402
 from backtest.research.csv_simulate_loop import (  # noqa: E402
+    DayBuyQuotes,
     append_equity_and_eod_marks,
+    bind_parking_session,
+    extra_load_codes_for_strategy,
     init_sim_state,
     prepare_strategy_hooks,
     require_market_marks,
     run_chase_due_day,
     run_eod_exits,
+    run_index_gate_cut_day,
+    run_parking_open_cover_day,
+    run_parking_rebalance_day,
+    run_profit_skim_day,
     run_pool_buys_day,
     run_step_adds_day,
 )
 
 from backtest.research.ashare_volume_cap import VolumeCap, VolumeLookup  # noqa: E402
 from backtest.research.csv_minute_volume import (  # noqa: E402
-    completed_minute_volumes, validate_participation_rate,
+    completed_minute_volumes,
 )
 from backtest.research.participation_rate_precheck import (  # noqa: E402
     precheck_cli_participation_rate,
@@ -165,7 +180,7 @@ from backtest.research.participation_rate_precheck import (  # noqa: E402
 from backtest.research.minute_audit import audit_scope, write_audit
 from backtest.research.fill_config import FillConfig, default_fill_config, book_fill_defaults, is_open_fill
 from backtest.research.minute_stop_trigger import (
-    blocked_bar, target_fill, validate_low, validate_minute_stop_trigger,
+    validate_low, validate_minute_stop_trigger,
 )
 from backtest.research.minute_cash_order import (
     HeldMinuteCursor,
@@ -174,6 +189,7 @@ from backtest.research.minute_cash_order import (
     fill_side_pending,
     run_chronological_day,
     scale_out_exits,
+    _independent_skip_supported,
     step_stop_exits,
 )
 from backtest.research.tail_window_buy import (
@@ -249,7 +265,7 @@ HELP_LOCK = """
 
 from backtest.research.minute_entry_validation import validate_minute_entry
 from backtest.research.minute_held_scan_core import (
-    HeldMinuteCursor, _LIMIT_EPS, sell_allowed, stop_touch, limit_down_blocks,
+    HeldMinuteCursor, sell_allowed, stop_touch, limit_down_blocks,
     stop_trigger, gap_stop, force_due,
 )
 
@@ -322,10 +338,100 @@ try:
                 return i, px_close, 4, new_peak, new_peak_hm
         return -1, np.nan, 0, new_peak, new_peak_hm
 
+    @_njit(cache=True)
+    def _scan_independent_ladder_first(
+        o,
+        h,
+        c,
+        hm,
+        cost,
+        peak,
+        n_days,
+        can_sell,
+        stop_pct,
+        stop_enabled,
+        limit_down,
+        peak_hm,
+        peak_gap_min,
+        tp_min_days,
+        band_width,
+        give_base,
+        give_step,
+        scale_step,
+        scale_steps,
+        scale_anchor,
+        peak_dd,
+        peak_dd_start,
+        peak_dd_sessions,
+        day_i,
+        step_costs,
+        step_stop_pct,
+        hm_lo,
+        hm_hi,
+    ):
+        """First bar that Python must see. Peak returned is the prefix before that bar."""
+        new_peak = peak
+        new_peak_hm = peak_hm
+        allowed = can_sell and n_days >= 1
+        n = len(c)
+        n_step = len(step_costs)
+        for i in range(n):
+            cur_hm = hm[i]
+            if cur_hm < hm_lo or cur_hm > hm_hi:
+                continue
+            peak_before = new_peak
+            peak_hm_before = new_peak_hm
+            px_open = o[i]
+            px_close = c[i]
+            hi = h[i]
+            if allowed and hi > new_peak:
+                new_peak = hi
+                new_peak_hm = cur_hm
+            if not allowed:
+                continue
+            blocked_open = limit_down > 0.0 and limit_down_blocks(px_open, limit_down)
+            if not blocked_open and stop_enabled and gap_stop(px_open, stop_trigger(cost, stop_pct)):
+                return i, peak_before, peak_hm_before
+            if stop_enabled and stop_touch(px_close / cost - 1.0, stop_pct):
+                return i, peak_before, peak_hm_before
+            gap = cur_hm - new_peak_hm
+            peak_blocked = new_peak_hm >= 0 and peak_gap_blocks(gap, peak_gap_min)
+            if (
+                (not peak_blocked)
+                and n_days >= tp_min_days
+                and cost > 0.0
+                and px_close > 0.0
+                and new_peak > cost
+            ):
+                band = int((new_peak / cost - 1.0 + 1e-12) / band_width)
+                line = new_peak - cost * (give_base + give_step * band)
+                if px_close <= line:
+                    return i, peak_before, peak_hm_before
+            if scale_step > 0.0 and scale_anchor > 0.0 and px_close >= scale_anchor:
+                allowed_steps = int((px_close / scale_anchor - 1.0 + 1e-12) / scale_step)
+                if allowed_steps > scale_steps:
+                    return i, peak_before, peak_hm_before
+            if peak_dd > 0.0 and new_peak > 0.0:
+                dd = (new_peak - px_close) / new_peak
+                if dd <= 0.0 and peak_dd_start >= 0:
+                    return i, peak_before, peak_hm_before
+                if dd >= peak_dd:
+                    if peak_dd_start < 0:
+                        return i, peak_before, peak_hm_before
+                    if day_i - peak_dd_start >= peak_dd_sessions:
+                        return i, peak_before, peak_hm_before
+            if step_stop_pct > 0.0 and n_step > 0:
+                line_mult = 1.0 - step_stop_pct
+                for j in range(n_step):
+                    if px_close <= step_costs[j] * line_mult:
+                        return i, peak_before, peak_hm_before
+        return -1, new_peak, new_peak_hm
+
     _NUMBA_SCAN_AVAILABLE = True
 except Exception:  # pragma: no cover - optional dep
     _NUMBA_SCAN_AVAILABLE = False
     _scan_held_day_numba_trail = None  # type: ignore
+    _scan_independent_ladder_first = None  # type: ignore
 
 
 _NUMBA_REASON = {
@@ -343,6 +449,235 @@ def _want_numba_scan(use_numba: Optional[bool]) -> bool:
         return False
     backend = (os.environ.get("CSV_SCAN_HELD_DAY_BACKEND") or "python").strip().lower()
     return backend in {"numba", "jit"}
+
+
+def _ladder_numba_params(st):
+    try:
+        width = float(st.stats["ladder_band_width"])
+        give_base = float(st.stats["ladder_give_base"])
+        give_step = float(st.stats["ladder_give_step"])
+        tp_min = int(st.stats.get("tp_min_days", 1))
+    except (KeyError, TypeError, ValueError):
+        return None
+    if width <= 0.0:
+        return None
+    return width, give_base, give_step, tp_min
+
+
+def independent_ladder_first_bar(
+    cursor,
+    *,
+    day_i: int,
+    tp_min_days: int,
+    band_width: float,
+    give_base: float,
+    give_step: float,
+    scale_step: float,
+    scale_steps: int,
+    scale_anchor: float,
+    peak_dd: float,
+    peak_dd_start: int,
+    peak_dd_sessions: int,
+    step_costs,
+    step_stop_pct: float,
+    hm_lo: int,
+    hm_hi: int,
+):
+    """Return ``(idx, peak, peak_hm)``. ``idx<0`` means the slice has no Python action."""
+    if _scan_independent_ladder_first is None:
+        return 0, float(cursor.peak), int(cursor.peak_hm)
+    stop_pct = cursor.stop_pct
+    stop_enabled = isinstance(stop_pct, float) and 0 < float(stop_pct) < 1
+    costs = np.asarray(step_costs, dtype=np.float64)
+    idx, peak, peak_hm = _scan_independent_ladder_first(
+        np.asarray(cursor.o, dtype=np.float64),
+        np.asarray(cursor.h, dtype=np.float64),
+        np.asarray(cursor.c, dtype=np.float64),
+        np.asarray(cursor.hm, dtype=np.int64),
+        float(cursor.cost),
+        float(cursor.peak),
+        int(cursor.n_days),
+        bool(cursor.can_sell),
+        float(stop_pct) if stop_enabled else 0.0,
+        bool(stop_enabled),
+        float(cursor.limit_down),
+        int(cursor.peak_hm),
+        int(cursor.peak_gap_min),
+        int(tp_min_days),
+        float(band_width),
+        float(give_base),
+        float(give_step),
+        float(scale_step),
+        int(scale_steps),
+        float(scale_anchor),
+        float(peak_dd),
+        int(peak_dd_start),
+        int(peak_dd_sessions),
+        int(day_i),
+        costs,
+        float(step_stop_pct),
+        int(hm_lo),
+        int(hm_hi),
+    )
+    return int(idx), float(peak), int(peak_hm)
+
+
+def _independent_numba_prefix(
+    st,
+    pos,
+    cursor,
+    *,
+    day_i: int,
+    side_hooks,
+    hm_lo: int,
+    hm_hi: int,
+) -> int:
+    """Write prefix peak and return first Python bar, or -1 if none in this slice."""
+    flag = (os.environ.get("OSKH_INDEPENDENT_NUMBA") or "1").strip().lower()
+    if flag in {"0", "false", "off", "no"}:
+        return 0
+    ladder = _ladder_numba_params(st)
+    if (
+        ladder is None
+        or not _NUMBA_SCAN_AVAILABLE
+        or not _independent_skip_supported(cursor)
+        or cursor.force_sell_hm is not None
+        or cursor.close_clear is not None
+        or (cursor.fill_state and "pending" in cursor.fill_state)
+        or pos.pending_exit
+        or _side_pending_host(st, pos)
+    ):
+        return 0
+    width, give_base, give_step, tp_min = ladder
+    step_pct = float((side_hooks or {}).get("step_stop_pct") or 0.0)
+    step_costs = []
+    if step_pct:
+        for lot in st.positions.get(pos.code, []):
+            if (
+                getattr(lot, "position_id", None) == pos.position_id
+                and getattr(lot, "is_step", False)
+                and lot.entry_idx < day_i
+            ):
+                step_costs.append(float(lot.cost))
+        if len(step_costs) > 32:
+            return 0
+    scale_step = float((side_hooks or {}).get("scale_out_step") or 0.0)
+    scale_anchor = 0.0
+    scale_steps = 0
+    if scale_step:
+        lots = [
+            lot
+            for lot in st.positions.get(pos.code, [])
+            if getattr(lot, "position_id", None) == pos.position_id
+        ]
+        shares_now = sum(lot.shares for lot in lots)
+        if str((side_hooks or {}).get("scale_out_anchor", "first_lot")) == "weighted" and shares_now > 0:
+            scale_anchor = sum(float(lot.shares) * float(lot.cost) for lot in lots) / float(shares_now)
+        else:
+            scale_anchor = float(getattr(pos.group, "anchor_cost", None) or pos.group.first_lot.cost)
+        scale_steps = int(pos.group.scale_steps)
+    peak_dd = float((side_hooks or {}).get("peak_dd_exit") or 0.0)
+    start = pos.group.peak_dd_start
+    idx, peak, peak_hm = independent_ladder_first_bar(
+        cursor,
+        day_i=day_i,
+        tp_min_days=tp_min,
+        band_width=width,
+        give_base=give_base,
+        give_step=give_step,
+        scale_step=scale_step,
+        scale_steps=scale_steps,
+        scale_anchor=scale_anchor,
+        peak_dd=peak_dd,
+        peak_dd_start=-1 if start is None else int(start),
+        peak_dd_sessions=int((side_hooks or {}).get("peak_dd_sessions", 15)),
+        step_costs=step_costs,
+        step_stop_pct=step_pct,
+        hm_lo=hm_lo,
+        hm_hi=hm_hi,
+    )
+    pos.peak = peak
+    pos.peak_hm = peak_hm
+    cursor.peak = peak
+    cursor.peak_hm = peak_hm
+    return idx
+
+
+def _side_pending_host(st, pos) -> bool:
+    return bool(getattr(st, "held_fill_states", {}).get(held_fill_key(pos), {}).get("side_pending"))
+
+
+def _maybe_dump_independent_prefix(
+    *,
+    code,
+    ds,
+    label,
+    pos,
+    cursor,
+    python_from,
+    hm_lo,
+    hm_hi,
+    peak0,
+    peak_hm0,
+    n_days,
+    can_sell,
+    take_profit,
+):
+    want = (os.environ.get("OSKH_DUMP_CODE") or "").strip()
+    dayw = (os.environ.get("OSKH_DUMP_DAY") or "").strip().replace("-", "")
+    path = (os.environ.get("OSKH_DUMP_PATH") or "").strip()
+    ds_key = str(ds).replace("-", "")[:8]
+    if not path or not want or want != code or (dayw and dayw != ds_key):
+        return
+    peak = float(peak0)
+    peak_hm = int(peak_hm0)
+    cost = float(cursor.cost)
+    allowed = bool(can_sell) and int(n_days) >= 1
+    first_tp = None
+    for idx, at_hm in enumerate(cursor.hm):
+        cur_hm = int(at_hm)
+        if cur_hm < hm_lo or cur_hm > hm_hi:
+            continue
+        hi = float(cursor.h[idx])
+        px = float(cursor.c[idx])
+        if allowed and hi > peak:
+            peak = hi
+            peak_hm = cur_hm
+        if not allowed or take_profit is None:
+            continue
+        gap = cur_hm - peak_hm
+        blocked = peak_hm >= 0 and peak_gap_blocks(gap, cursor.peak_gap_min)
+        if blocked:
+            continue
+        reason = take_profit(px, cost, peak, n_days)
+        if reason:
+            first_tp = {
+                "idx": int(idx),
+                "hm": cur_hm,
+                "close": px,
+                "peak": peak,
+                "reason": str(reason),
+            }
+            break
+    rec = {
+        "ds": ds_key,
+        "code": code,
+        "label": label,
+        "python_from": int(python_from),
+        "n_days": int(n_days),
+        "can_sell": bool(can_sell),
+        "cost": cost,
+        "peak0": float(peak0),
+        "peak_hm0": int(peak_hm0),
+        "peak_after": float(pos.peak),
+        "peak_hm_after": int(pos.peak_hm),
+        "hm_lo": int(hm_lo),
+        "hm_hi": int(hm_hi),
+        "first_tp": first_tp,
+        "n_bars": int(len(cursor.c)),
+    }
+    with open(path, "a", encoding="utf-8", newline="\n") as fh:
+        fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
 
 
 def scan_held_day_python(
@@ -563,19 +898,6 @@ def _day_arrays(df: pd.DataFrame, ymd: str) -> Optional[pd.DataFrame]:
     return sl if not sl.empty else None
 
 
-def build_day_spans(df: pd.DataFrame) -> dict[str, tuple[int, int]]:
-    """按 ymd 切 iloc 区间。要求时间升序；乱序则返回空，调用方回退 _day_arrays。"""
-    if df is None or df.empty or "ymd" not in df.columns:
-        return {}
-    ymd = df["ymd"].to_numpy()
-    if len(ymd) >= 2 and np.any(ymd[1:] < ymd[:-1]):
-        return {}
-    change = np.flatnonzero(ymd[1:] != ymd[:-1]) + 1
-    starts = np.concatenate(([0], change))
-    ends = np.concatenate((change, [len(ymd)]))
-    return {str(ymd[s]): (int(s), int(e)) for s, e in zip(starts, ends)}
-
-
 def _slice_day(
     df: pd.DataFrame, spans: dict[str, tuple[int, int]], ymd: str
 ) -> Optional[pd.DataFrame]:
@@ -593,14 +915,26 @@ def _previous_rows(df: pd.DataFrame, day) -> pd.DataFrame:
     return df.loc[df.index < day]
 
 
-def _buy_px(day_df: pd.DataFrame) -> Optional[float]:
-    hit = day_df.loc[day_df["hm"] == BUY_HM]
-    if not hit.empty:
-        return float(hit["close"].iloc[0])
-    late = day_df.loc[(day_df["hm"] >= 14 * 60 + 30) & (day_df["hm"] <= BUY_HM)]
-    if late.empty:
+def _buy_px_from_arrays(hm: np.ndarray, close: np.ndarray) -> Optional[float]:
+    """14:55 close, else last close in 14:30–14:55. Arrays stay in bar order."""
+    if hm.size == 0:
         return None
-    return float(late["close"].iloc[-1])
+    exact = np.flatnonzero(hm == BUY_HM)
+    if exact.size:
+        return float(close[int(exact[0])])
+    late = np.flatnonzero((hm >= 14 * 60 + 30) & (hm <= BUY_HM))
+    if late.size:
+        return float(close[int(late[-1])])
+    return None
+
+
+def _buy_px(day_df: pd.DataFrame) -> Optional[float]:
+    if day_df is None or day_df.empty:
+        return None
+    return _buy_px_from_arrays(
+        day_df["hm"].to_numpy(np.int64, copy=False),
+        day_df["close"].to_numpy(np.float64, copy=False),
+    )
 
 
 def _chase_quotes(day_df: pd.DataFrame) -> Optional[tuple[float, float]]:
@@ -665,6 +999,7 @@ def simulate(
     fix_s11_exit_domain: bool = False,
     version9_sell=None,
     max_hold: bool = False,
+    range_stop: bool = True,
     hold_days: int = 20,
     fix_s81_band_precision: bool = False,
     signal_bars_front: dict[str, pd.DataFrame] | None = None,
@@ -679,14 +1014,20 @@ def simulate(
     limit_walkdown: bool = False,
     topk_limit_rule: str = "qlib",
     policy_context: MinutePolicyContext | None = None,
+    min_lot_top_up: bool | None = None,
     rule_profile: str | RuleProfile = "industry",
+    sim_profile: SimPhaseClock | None = None,
+    day_spans: dict | None = None,
+    st_gate: bool = False,
 ) -> SimState:
     """Opt-in cap uses caller-attested completed minutes; daily volume is unused.
 
     exdiv_economics is an explicit (symbol, YYYYMMDD) -> ExDivEvent lookup for
     raw bars. None retains the baseline; E-R6 ratios never imply entitlements.
+    st_gate defaults off so library calls do not read the Wind table; run() turns it on.
     """
     profile = resolve_rule_profile(rule_profile)
+    clock = sim_profile if sim_profile is not None else NULL_CLOCK
     shared_fee_schedule = resolve_account_fee_schedule(
         profile.account_fee_schedule,
         explicit_rates=(buy_cost_rate, sell_cost_rate, min_cost),
@@ -723,6 +1064,10 @@ def simulate(
         frames, minutes, closes, pools, calendar, gate = v7.prepare_main_inputs(
             minute_bars, daily_bars, pool_days, start, end, policy_context)
         st = v7.SimResult(float(total_cash))
+        if st_gate:
+            from backtest.research.st_status import bind_st_gate
+
+            bind_st_gate(st)
         if (
             profile.exchange_quantity_rules
             or profile.fee_aware_affordability
@@ -793,6 +1138,7 @@ def simulate(
             apply_fn=apply_csv_strategy,
             **({"version9_sell": version9_sell} if version9_sell is not None else {}),
             **({"max_hold": True} if max_hold else {}),
+            **({"range_stop": False} if not range_stop else {}),
             hold_days=hold_days,
             **({"fix_s81_band_precision": True} if fix_s81_band_precision else {}),
             scores_by_day=scores_by_day,
@@ -802,6 +1148,7 @@ def simulate(
             keep_buy_vacancy=keep_buy_vacancy,
             index_block_new=index_block_new,
             stop_fill=stop_fill,
+            **({"min_lot_top_up": min_lot_top_up} if min_lot_top_up is not None else {}),
         )
         if topk_exec != "close" or limit_walkdown:
             reject_short_cash_override(hooks, "topk_minute_exec")
@@ -850,6 +1197,7 @@ def simulate(
             pool_names=pool_names,
             pool_names_by_day=pool_names_by_day,
             daily_quota=daily_quota,
+            st_gate=st_gate,
             **({"context": policy_context} if policy.initialize is not None else {}),
         )
         if (
@@ -907,10 +1255,16 @@ def simulate(
                 if "volume" not in frame:
                     raise ValueError(f"{hooks['name']} requires minute volume for {code}; use the lake volume path")
         hold_modes = {}
-        day_spans = {code: build_day_spans(df) for code, df in minute_bars.items()}
+        clock.begin("day_spans")
+        if day_spans is None:
+            day_spans = {code: build_day_spans(df) for code, df in minute_bars.items()}
+        clock.end("day_spans")
 
+    clock.begin("day_loop")
     for i, day in enumerate(calendar):
+        clock.count("calendar_days")
         if native_v7:
+            clock.begin("v7_day")
             policy.day_start(st, day=day, day_i=i, context=policy_context)
             cleared_today = set()
             needed = list(dict.fromkeys(pools.get(day, []) + list(st.positions)))
@@ -932,6 +1286,7 @@ def simulate(
                    if policy.schedule == "chronological" else {}))
             policy.append_marks(st, day=day, last_prices=last_prices,
                                 context=policy_context)
+            clock.end("v7_day")
             continue
         ds = _ymd(day)
         day_trade_start = len(st.trades)
@@ -939,12 +1294,52 @@ def simulate(
             st.cash += st.exdiv_economics.settle(ds)
         names = names_asof(ds)
         st.daily_quota_used = 0.0
+        clock.begin("parking")
+        bind_parking_session(
+            st,
+            hooks,
+            day_i=i,
+            day=day,
+            ds=ds,
+            names=names,
+            daily_bars=daily_bars,
+            exdiv=exdiv,
+            qlib_limit_pct=qlib_limit_pct,
+        )
+        run_parking_open_cover_day(
+            st,
+            hooks,
+            day_i=i,
+            day=day,
+            ds=ds,
+            names=names,
+            daily_bars=daily_bars,
+            exdiv=exdiv,
+            qlib_limit_pct=qlib_limit_pct,
+            forbid_all_trade_at_limit=forbid_all_trade_at_limit,
+        )
+        clock.end("parking")
+        clock.begin("index_cut")
+        run_index_gate_cut_day(
+            st,
+            hooks,
+            day_i=i,
+            day=day,
+            ds=ds,
+            names=names,
+            daily_bars=daily_bars,
+            exdiv=exdiv,
+            qlib_limit_pct=qlib_limit_pct,
+            forbid_all_trade_at_limit=forbid_all_trade_at_limit,
+        )
+        clock.end("index_cut")
 
         if policy.day_start is not None:
             policy.day_start(st, day=day, ds=ds, day_i=i, context=policy_context)
 
         if policy.chronological(hooks, fix_cash_order=fix_minute_cash_order,
                                 topk_exec=topk_exec, limit_walkdown=limit_walkdown):
+            clock.begin("chronological_day")
             run_chronological_day(
                 st, pending_chase, hooks=hooks, minute_bars=minute_bars,
                 daily_bars=daily_bars, pool_days=pool_days, day_i=i, day=day,
@@ -960,18 +1355,20 @@ def simulate(
                 topk_exec=topk_exec, limit_walkdown=limit_walkdown,
                 price_context=s12_price_context if fix_s12_price_domain else None,
             )
+            clock.end("chronological_day")
         else:
+            clock.begin("held_scan")
             bind_opening = hooks.get("bind_opening_held")
             if callable(bind_opening):
-                bind_opening(ds, list(st.positions.keys()))
+                bind_opening(ds, held_codes(st))
 
             # Price-add books need the post-14:55 group scan to observe their
             # new weighted cost. Other OFF books retain full-day exits first.
             split_group_scan = allows_price_add(hooks.get("name"), hooks.get("sizing"))
             post_group_scans = []
-            confirm_peaks = {}
             s8_confirm = hooks.get("name") == "version8_3" and hooks.get("sizing") == "per_name"
-            for code in list(st.positions):
+            for code in held_codes(st):
+                clock.count("held_codes")
                 mdf = minute_bars.get(code)
                 ddf = daily_bars.get(code)
                 if mdf is None or ddf is None or day not in ddf.index:
@@ -1010,10 +1407,17 @@ def simulate(
                 h = day_m["high"].to_numpy(np.float64)
                 c = day_m["close"].to_numpy(np.float64)
                 hm = day_m["hm"].to_numpy(np.int64)
+                need_low = (
+                    minute_stop_trigger == "hl"
+                    or bool(absolute_exit)
+                    or (fill_config is not None and fill_config.trigger_basis == "bar_low")
+                )
+                low_arr = day_m["low"].to_numpy(np.float64) if need_low else None
+                prev_closes = prev_rows["close"].astype(float).tolist()
                 if s8_confirm:
                     prefix_high = max((float(hi) for hi in h[hm <= BUY_HM] if hi > 0), default=0.0)
                     for pos in st.positions.get(code, []):
-                        confirm_peaks[id(pos)] = max(
+                        pos._session_confirm_peak = max(
                             float(pos.peak), prefix_high if pos.entry_idx < i else 0.0,
                         )
                 if absolute_exit:
@@ -1029,7 +1433,7 @@ def simulate(
                     if isinstance(pos, IndependentExitPosition):
                         cursor = HeldMinuteCursor(
                             o, h, c, cost=pos.cost, peak=pos.peak,
-                            l=day_m["low"].to_numpy(np.float64) if minute_stop_trigger == "hl" or absolute_exit or (fill_config and fill_config.trigger_basis == "bar_low") else None,
+                            l=low_arr,
                             fill_config=fill_config, fill_state=held_fill_states.setdefault(held_fill_key(pos), {}),
                             pending_log=pending_callback(st, code, pos, day),
                             minute_stop_trigger="hl" if absolute_exit else minute_stop_trigger,
@@ -1042,15 +1446,45 @@ def simulate(
                             limit_down=limit_down, hm=hm, peak_hm=int(pos.peak_hm),
                             peak_gap_min=peak_gap_min, take_profit=take_profit,
                             sell_gate=sell_gate, gate_code=code, gate_day=day,
-                            daily_closes_ending_yesterday=prev_rows["close"].astype(float).tolist(),
+                            daily_closes_ending_yesterday=prev_closes,
                             force_sell_hm=force_sell_hm,
                             reserve_limit_up=reserve_limit_up,
                             defer_limit_up=defer_limit_up, limit_up=limit_up,
                             reserved=bool(pos.reserved), close_clear=close_clear,
                         )
+                        side_hooks = {
+                            "step_stop_pct": hooks.get("step_stop_pct"),
+                            "scale_out_step": hooks.get("scale_out_step"),
+                            "scale_out_frac": hooks.get("scale_out_frac", 0.05),
+                            "scale_out_anchor": hooks.get("scale_out_anchor", "first_lot"),
+                            "peak_dd_exit": hooks.get("peak_dd_exit"),
+                            "peak_dd_sessions": hooks.get("peak_dd_sessions", 15),
+                            "fill_config": side_fill_config,
+                            "low_arr": low_arr,
+                        }
+                        quiet = 0
+                        evaluated = 0
+                        peak0, peak_hm0 = float(pos.peak), int(pos.peak_hm)
+                        hm_hi = BUY_HM if split_group_scan else 24 * 60
+                        python_from = _independent_numba_prefix(
+                            st, pos, cursor, day_i=i, side_hooks=side_hooks,
+                            hm_lo=0, hm_hi=hm_hi,
+                        )
+                        _maybe_dump_independent_prefix(
+                            code=code, ds=ds, label="morning", pos=pos, cursor=cursor,
+                            python_from=python_from, hm_lo=0, hm_hi=hm_hi,
+                            peak0=peak0, peak_hm0=peak_hm0, n_days=n_days,
+                            can_sell=cursor.can_sell, take_profit=take_profit,
+                        )
                         for bar_idx, at_hm in enumerate(hm):
+                            if python_from < 0 or not position_is_open(st, pos):
+                                break
                             if split_group_scan and int(at_hm) > BUY_HM:
                                 continue
+                            if bar_idx < python_from:
+                                quiet += 1
+                                continue
+                            evaluated += 1
                             for phase in ("open", "close"):
                                 advance_independent_exit(
                                     st, code, pos, cursor, bar_idx, phase, limits,
@@ -1064,8 +1498,8 @@ def simulate(
                                         st, code, pos, float(c[bar_idx]), day, i,
                                         limits, step_stop_pct=hooks["step_stop_pct"],
                                         fill_config=side_fill_config, open_px=float(o[bar_idx]),
-                                        low=(float(day_m["low"].iloc[bar_idx])
-                                             if side_fill_config and side_fill_config.trigger_basis == "bar_low" else None),
+                                        low=(float(low_arr[bar_idx])
+                                             if low_arr is not None and side_fill_config and side_fill_config.trigger_basis == "bar_low" else None),
                                         hm=int(at_hm),
                                     )
                                 if phase == "close" and hooks.get("scale_out_step"):
@@ -1073,6 +1507,7 @@ def simulate(
                                         st, code, pos, float(c[bar_idx]), day, i,
                                         limits, scale_step=hooks["scale_out_step"],
                                         scale_frac=hooks.get("scale_out_frac", 0.05),
+                                        scale_anchor=hooks.get("scale_out_anchor", "first_lot"),
                                         fill_config=side_fill_config, open_px=float(o[bar_idx]),
                                         hm=int(at_hm),
                                     )
@@ -1085,6 +1520,12 @@ def simulate(
                                         peak_dd_sessions=hooks.get("peak_dd_sessions", 15),
                                         hm=int(at_hm),
                                     )
+                        if python_from < 0:
+                            clock.count("held_numba_slices")
+                        if quiet:
+                            clock.count("held_numba_prefix_bars", quiet)
+                        if evaluated:
+                            clock.count("held_eval_bars", evaluated)
                         if split_group_scan:
                             post_group_scans.append((code, pos, cursor, limits))
                         continue
@@ -1098,7 +1539,7 @@ def simulate(
                         o,
                         h,
                         c,
-                        l=day_m["low"].to_numpy(np.float64) if minute_stop_trigger == "hl" or absolute_exit or (fill_config and fill_config.trigger_basis == "bar_low") else None,
+                        l=low_arr,
                         session_exit_reason=pos.pending_exit,
                         session_volume=day_m["volume"].to_numpy(np.float64) if minute_open else None,
                         session_stats=st.stats,
@@ -1125,9 +1566,7 @@ def simulate(
                         sell_gate=sell_gate,
                         gate_code=code,
                         gate_day=day,
-                        daily_closes_ending_yesterday=prev_rows["close"]
-                        .astype(float)
-                        .tolist(),
+                        daily_closes_ending_yesterday=prev_closes,
                         force_sell_hm=force_sell_hm,
                         reserve_limit_up=reserve_limit_up,
                         defer_limit_up=defer_limit_up,
@@ -1193,6 +1632,7 @@ def simulate(
                                   hm=int(hm[idx]) if price_rule else None, price_rule=price_rule)
                         if minute_open and any(t["side"] == "SKIP" and t["reason"].startswith("skip_volume") for t in st.trades[before:]):
                             st.stats["defer_sell_volume"] += 1
+            clock.end("held_scan")
 
             def _volume_bucket_for(code: str, target: int, earliest: int):
                 # Mirror the quote helpers' exact/fallback row, never a later bucket.
@@ -1229,6 +1669,7 @@ def simulate(
                 closes = prev_rows["close"].astype(float).tolist()
                 return open_px, px, closes
 
+            clock.begin("chase")
             with audit_scope(audit_sink, decision_hm=CHASE_HM, phase="close", quote_for=chase_volume):
                 run_chase_due_day(
                     st,
@@ -1247,39 +1688,70 @@ def simulate(
                     add_gate=hooks.get("add_gate"),
                     index_blocks_add=hooks.get("index_blocks_add", True),
                 )
+            clock.end("chase")
 
             def _pool_quote_for(code: str):
                 mdf = minute_bars.get(code)
                 ddf = daily_bars.get(code)
-                if mdf is None or ddf is None or day not in ddf.index:
+                if mdf is None or ddf is None:
                     return None
-                day_m = _slice_day(mdf, day_spans.get(code, {}), ds)
-                if day_m is None:
+                got = day_bar_and_prev_closes(ddf, day)
+                if got is None:
                     return None
-                prev_rows = _previous_rows(ddf, day)
-                if prev_rows.empty:
-                    return None
-                if minute_open:
-                    opening = _open_quote_for(day_m)
-                    if opening is None:
+                _row, closes = got
+                span = day_spans.get(code, {}).get(ds)
+                if span is not None:
+                    lo, hi = span
+                    if lo >= hi:
                         return None
-                    volume = float(opening["volume"])
-                    if not np.isfinite(volume) or volume <= 0:
-                        st.stats["skip_buy_volume"] += 1
-                        return None
-                    px = float(opening["open"])
+                    hm = mdf["hm"].to_numpy(np.int64, copy=False)[lo:hi]
+                    if minute_open:
+                        hit = np.flatnonzero(hm == AM_OPEN)
+                        if not hit.size:
+                            return None
+                        idx = int(hit[0])
+                        volume = float(mdf["volume"].to_numpy(np.float64, copy=False)[lo:hi][idx])
+                        if not np.isfinite(volume) or volume <= 0:
+                            st.stats["skip_buy_volume"] += 1
+                            return None
+                        px = float(mdf["open"].to_numpy(np.float64, copy=False)[lo:hi][idx])
+                    else:
+                        px = _buy_px_from_arrays(
+                            hm, mdf["close"].to_numpy(np.float64, copy=False)[lo:hi]
+                        )
                 else:
-                    px = _buy_px(day_m)
+                    day_m = _slice_day(mdf, day_spans.get(code, {}), ds)
+                    if day_m is None:
+                        return None
+                    if minute_open:
+                        opening = _open_quote_for(day_m)
+                        if opening is None:
+                            return None
+                        volume = float(opening["volume"])
+                        if not np.isfinite(volume) or volume <= 0:
+                            st.stats["skip_buy_volume"] += 1
+                            return None
+                        px = float(opening["open"])
+                    else:
+                        px = _buy_px(day_m)
                 if px is None or px <= 0 or (minute_open and not np.isfinite(px)):
                     return None
-                closes = prev_rows["close"].astype(float).tolist()
                 return px, closes
 
             volume_skips = int(st.stats.get("skip_volume_unavailable", 0)) + int(st.stats.get("skip_volume_cap", 0))
+            clock.begin("pool_buy")
+            day_quotes = DayBuyQuotes(
+                _pool_quote_for,
+                ds=ds,
+                names=names,
+                exdiv=exdiv,
+                exdiv_ref_fen=exdiv_ref_fen,
+                qlib_limit_pct=qlib_limit_pct,
+            )
             if callable(hooks.get("breakout_day")):
                 hooks["breakout_day"](
                     st, day_i=i, day=day, ds=ds, names=names, pool_days=pool_days,
-                    buy_quote_for=_pool_quote_for, exdiv=exdiv,
+                    buy_quote_for=day_quotes.as_quote_fn(), exdiv=exdiv,
                     exdiv_ref_fen=exdiv_ref_fen, qlib_limit_pct=qlib_limit_pct,
                 )
             with audit_scope(audit_sink, decision_hm=AM_OPEN if minute_open else BUY_HM,
@@ -1296,6 +1768,7 @@ def simulate(
                     allow_add=allow_add,
                     buy_gate=buy_gate,
                     buy_quote_for=_pool_quote_for,
+                    day_buy_quotes=day_quotes,
                     volume_bucket_for=pool_volume if st.volume_cap is not None else None,
                     volume_at=AM_OPEN - 1 if minute_open else None,
                     sold_today={t["code"] for t in st.trades[day_trade_start:] if t["side"] == "SELL"}
@@ -1329,6 +1802,7 @@ def simulate(
                     ds=ds,
                     names=names,
                     buy_quote_for=_pool_quote_for,
+                    day_buy_quotes=day_quotes,
                     volume_bucket_for=pool_volume if st.volume_cap is not None else None,
                     sizing=hooks.get("sizing", "daily_quota"),
                     name_budget=hooks.get("name_budget", 1_000_000.0),
@@ -1341,13 +1815,37 @@ def simulate(
                     # Clamp, rather than change the sell scanner's peak state.
                     # A T+0 chase lot has no snapshot and keeps its entry peak.
                     confirm_peak_for=(
-                        lambda _code, pos: min(float(pos.peak), confirm_peaks.get(id(pos), float(pos.peak)))
+                        lambda _code, pos: min(
+                            float(pos.peak),
+                            float(getattr(pos, "_session_confirm_peak", pos.peak)),
+                        )
                     ) if s8_confirm else None,
                 )
+            clock.end("pool_buy")
+            clock.begin("post_group")
             for code, pos, cursor, limits in post_group_scans:
+                quiet = 0
+                evaluated = 0
+                peak0, peak_hm0 = float(pos.peak), int(pos.peak_hm)
+                python_from = _independent_numba_prefix(
+                    st, pos, cursor, day_i=i, side_hooks=None,
+                    hm_lo=BUY_HM + 1, hm_hi=24 * 60,
+                )
+                _maybe_dump_independent_prefix(
+                    code=code, ds=ds, label="post_group", pos=pos, cursor=cursor,
+                    python_from=python_from, hm_lo=BUY_HM + 1, hm_hi=24 * 60,
+                    peak0=peak0, peak_hm0=peak_hm0, n_days=i - pos.entry_idx,
+                    can_sell=cursor.can_sell, take_profit=take_profit,
+                )
                 for bar_idx, at_hm in enumerate(cursor.hm):
+                    if python_from < 0 or not position_is_open(st, pos):
+                        break
                     if int(at_hm) <= BUY_HM:
                         continue
+                    if bar_idx < python_from:
+                        quiet += 1
+                        continue
+                    evaluated += 1
                     for phase in ("open", "close"):
                         advance_independent_exit(
                             st, code, pos, cursor, bar_idx, phase, limits,
@@ -1356,11 +1854,43 @@ def simulate(
                         if phase == "open":
                             fill_side_pending(st, code, pos, float(cursor.o[bar_idx]), day, i,
                                               limits, hm=int(at_hm))
+                if python_from < 0:
+                    clock.count("held_numba_slices")
+                if quiet:
+                    clock.count("held_numba_prefix_bars", quiet)
+                if evaluated:
+                    clock.count("held_eval_bars", evaluated)
+            clock.end("post_group")
 
+        clock.begin("eod")
         run_eod_exits(st, day=day, ds=ds, bars=daily_bars, eod_exit=hooks.get("eod_exit"),
                       hold_modes=hold_modes, exdiv=exdiv,
                       **({"signal_bars_front": signal_bars_front, "strategy": strategy,
                           "fix_s11_exit_domain": True} if fix_s11_exit_domain else {}))
+        run_profit_skim_day(
+            st,
+            hooks,
+            day_i=i,
+            day=day,
+            ds=ds,
+            names=names,
+            daily_bars=daily_bars,
+            exdiv=exdiv,
+            qlib_limit_pct=qlib_limit_pct,
+            forbid_all_trade_at_limit=forbid_all_trade_at_limit,
+        )
+        run_parking_rebalance_day(
+            st,
+            hooks,
+            day_i=i,
+            day=day,
+            ds=ds,
+            names=names,
+            daily_bars=daily_bars,
+            exdiv=exdiv,
+            qlib_limit_pct=qlib_limit_pct,
+            forbid_all_trade_at_limit=forbid_all_trade_at_limit,
+        )
         if fix_s12_price_domain:
             require_market_marks(
                 st, ds=ds, day=day, mark_bars=daily_bars,
@@ -1383,6 +1913,8 @@ def simulate(
                 st, ds=ds, day=day, calendar_last=calendar[-1],
                 mark_bars=daily_bars, context=policy_context,
             )
+        clock.end("eod")
+    clock.end("day_loop")
 
     if native_v7:
         if profile.name == "industry":
@@ -1396,6 +1928,7 @@ def simulate(
             stats["rule_profile_revision"] = profile.revision
         return st
 
+    clock.begin("finish")
     finish_pending_sells(st)
     finish_pending_chase(st, pending_chase)
     if fix_s12_price_domain:
@@ -1412,6 +1945,7 @@ def simulate(
         st.stats.pop("rule_profile_revision", None)
         st.stats["rule_profile"] = profile.name
         st.stats["rule_profile_revision"] = profile.revision
+    clock.end("finish")
     return st
 
 
@@ -1460,6 +1994,7 @@ def run(
     fix_s11_exit_domain: bool = False,
     version9_sell=None,
     max_hold: bool = False,
+    range_stop: bool = True,
     hold_days: int = 20,
     fix_s81_band_precision: bool = False,
     minute_stop_trigger: str = "close",
@@ -1473,9 +2008,12 @@ def run(
     limit_walkdown: bool = False,
     topk_limit_rule: str = "qlib",
     participation_rate: float | None = None,
+    min_lot_top_up: bool | None = None,
     rule_profile: str | RuleProfile = "industry",
+    profile_sim: bool | None = None,
 ) -> SimState:
     profile = resolve_rule_profile(rule_profile)
+    sim_clock = SimPhaseClock() if profile_sim_enabled(profile_sim) else None
     book = normalize_csv_strategy(strategy)
     fix_minute_cash_order = bool(
         fix_minute_cash_order or (book == "version7" and profile.chronological_v7)
@@ -1576,6 +2114,7 @@ def run(
     from backtest.research.topk_dropout_scores import codes_from_scores
 
     all_codes |= codes_from_scores(scores_by_day)
+    all_codes |= extra_load_codes_for_strategy(strategy)
     warm_days = (
         STRATEGY4_CALENDAR_SLACK_DAYS
         if book in ("version4", "version12")
@@ -1598,6 +2137,7 @@ def run(
     signal_bars_front = None
     signal_sources = None
     s12_price_context = None
+    daily_cache_status: dict = {}
     if fix_s12_price_domain:
         from backtest.research.signal_price_domain import load_s12_price_context
 
@@ -1626,6 +2166,7 @@ def run(
             source=daily_source,
             qlib_root=qlib_day_root,
             workers=workers,
+            status=daily_cache_status,
             **({"dividend_type": "front"} if daily_domain_front else {}),
         )
         if book == "version12" and (missing := all_codes - daily.keys()):
@@ -1704,15 +2245,26 @@ def run(
     skipped: dict[str, int] = {}
     # Human cut #151 option 2: mixed-domain strategy12 (daily front + minute none)
     # must avoid silent ex-div double adjustment. Keep ex-div explicit-only there.
+    if sim_clock is not None:
+        sim_clock.begin("exdiv")
+    t_exdiv = time.perf_counter()
     exdiv = (
         None
         if (book == "version12" or dividend_type == "front")
         else load_exdiv_ratios(all_codes, start, end, skipped_out=skipped,
                                **({"noise_eps": 0} if exdiv_ref_fen else {}))
     )
+    t_exdiv = time.perf_counter() - t_exdiv
+    if sim_clock is not None:
+        sim_clock.end("exdiv")
+        sim_clock.begin("index_gate")
+    t_index_gate = time.perf_counter()
     from backtest.research.strategy_book_helpers import load_book_index_gate
 
     index_block_new = load_book_index_gate(normalize_csv_strategy(strategy), start, end)
+    t_index_gate = time.perf_counter() - t_index_gate
+    if sim_clock is not None:
+        sim_clock.end("index_gate")
     t_sim = time.perf_counter()
     st = simulate(
         minute,
@@ -1731,6 +2283,7 @@ def run(
         **volume_options,
         **({"version9_sell": version9_sell} if version9_sell is not None else {}),
         **({"max_hold": True} if max_hold else {}),
+        **({"range_stop": False} if not range_stop else {}),
         hold_days=hold_days,
         **({"fix_s81_band_precision": True} if fix_s81_band_precision else {}),
         take_profit=take_profit,
@@ -1763,7 +2316,11 @@ def run(
         fill_config=fill_config,
         topk_exec=topk_exec, limit_walkdown=limit_walkdown,
         topk_limit_rule=topk_limit_rule,
+        **({"min_lot_top_up": min_lot_top_up} if min_lot_top_up is not None else {}),
         rule_profile=profile,
+        sim_profile=sim_clock,
+        day_spans=cache_status.get("day_spans"),
+        st_gate=True,
     )
     if skipped.get("exdiv_skipped_no_factor"):
         st.stats["exdiv_skipped_no_factor"] = int(skipped["exdiv_skipped_no_factor"])
@@ -1803,8 +2360,27 @@ def run(
     st.stats["t_pool_s"] = t_pool
     st.stats["t_daily_s"] = t_daily
     st.stats["t_minute_s"] = t_minute
+    st.stats["t_exdiv_s"] = t_exdiv
+    st.stats["t_index_gate_s"] = t_index_gate
     st.stats["t_sim_s"] = time.perf_counter() - t_sim
     st.stats["cache"] = cache_status.get("cache", "")
+    st.stats["daily_cache"] = daily_cache_status.get("cache", "")
+    if sim_clock is not None:
+        attach_host_profile(
+            st,
+            sim_clock,
+            strategy=book,
+            rule_profile=profile.name,
+            load_s={
+                "t_pool_s": round(float(t_pool), 3),
+                "t_daily_s": round(float(t_daily), 3),
+                "t_minute_s": round(float(t_minute), 3),
+                "t_exdiv_s": round(float(t_exdiv), 3),
+                "t_index_gate_s": round(float(t_index_gate), 3),
+                "t_sim_s": round(float(st.stats["t_sim_s"]), 3),
+            },
+            cache=cache_status.get("cache", ""),
+        )
     st.stats["codes_missing"] = max(0, len(all_codes) - min(len(daily), len(minute)))
     if signal_bundle is not None:
         st.stats["signal_bundle_sha256"] = signal_bundle["bundle_sha256"]

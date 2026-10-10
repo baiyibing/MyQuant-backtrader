@@ -76,21 +76,21 @@ def run_turtle():
         return run_seeded(patch, [[(600, 8.1, 8.1, 8.1, 8.1)]])
 
 
-# Captured using these same synthetic inputs in origin/master (927d75d).
+# Same synthetics as origin/master (927d75d); stats now include skip_st=0.
 MASTER_HASHES = {
-    "filled/False": "c6d7aa71dd8798d2e0d0ea0d4b20fb6152674c431a6043e2a01fa9dc10f04029",
-    "filled/True": "c6d7aa71dd8798d2e0d0ea0d4b20fb6152674c431a6043e2a01fa9dc10f04029",
-    "blocked/False": "4647e0bedf359084f1857033c06a438831798b685d429a32f2e87ade4aae719c",
-    "blocked/True": "4647e0bedf359084f1857033c06a438831798b685d429a32f2e87ade4aae719c",
-    "suspended/False": "4647e0bedf359084f1857033c06a438831798b685d429a32f2e87ade4aae719c",
-    "suspended/True": "4647e0bedf359084f1857033c06a438831798b685d429a32f2e87ade4aae719c",
-    "side/limit_down_open": "4ce01d203bcccc28aad20e8ddf4bd556c8891ebb930e8d4d66a8fd9ffdca5850",
-    "side/limit_down_fill": "4ce01d203bcccc28aad20e8ddf4bd556c8891ebb930e8d4d66a8fd9ffdca5850",
-    "turtle": "f1743b29ec57880d5f93c78a6aaf2658bc64576bb4f7f7af749e5ed393a10a51",
-    "side_queue/False": "4ce01d203bcccc28aad20e8ddf4bd556c8891ebb930e8d4d66a8fd9ffdca5850",
-    "side_queue/True": "59cd098420b3cbf61071fc96c6dbac342f58f68ba5b4741154f0549cd53fc453",
-    "turtle_fill_limit": "f1743b29ec57880d5f93c78a6aaf2658bc64576bb4f7f7af749e5ed393a10a51",
-    "turtle_partial_queue": "691a6f2de55f7e5fff24d82bea5444f568cb0bb7367321a09f46b108386376c7"
+    "filled/False": "027b06b7e06169f97e3586a18c6006f45a33f91792a5aa56498eee33011875c0",
+    "filled/True": "027b06b7e06169f97e3586a18c6006f45a33f91792a5aa56498eee33011875c0",
+    "blocked/False": "c5d6633587e5d61c3a5c6c4abf9d7737087ba084723c94cb753c84bae9b9bd79",
+    "blocked/True": "c5d6633587e5d61c3a5c6c4abf9d7737087ba084723c94cb753c84bae9b9bd79",
+    "suspended/False": "c5d6633587e5d61c3a5c6c4abf9d7737087ba084723c94cb753c84bae9b9bd79",
+    "suspended/True": "c5d6633587e5d61c3a5c6c4abf9d7737087ba084723c94cb753c84bae9b9bd79",
+    "side/limit_down_open": "5b350be9b2e03853778027d9e396dfea6a5a83fadfb1b721a64efd9ae98ba4b9",
+    "side/limit_down_fill": "5b350be9b2e03853778027d9e396dfea6a5a83fadfb1b721a64efd9ae98ba4b9",
+    "turtle": "5f4058b63a955f9dfe79078a2d39d409e498d94989f7cf8efaf003a112585faa",
+    "side_queue/False": "5b350be9b2e03853778027d9e396dfea6a5a83fadfb1b721a64efd9ae98ba4b9",
+    "side_queue/True": "3d68171cbe2ac31daaec43449c6e29629228ea32fabc4a251c946fb8a98fc36d",
+    "turtle_fill_limit": "5f4058b63a955f9dfe79078a2d39d409e498d94989f7cf8efaf003a112585faa",
+    "turtle_partial_queue": "2f605a44a9af6f69e12b3ee4091ef134ccf187f852c47fb222396dcd5bd27d1a"
 }
 
 

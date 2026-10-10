@@ -29,8 +29,32 @@ class StrategyHooks(TypedDict, total=False):
     sell_gate: Callable[..., Any] | None
     step_add: Callable[..., Any] | None
     cost_anchor: str
+    scale_out_anchor: str
     step_cap: int | None
     step_stop_pct: float | None
+    cont_stop_rebuy: bool
+    cont_from_rise: float | None
+    cont_stop_rebuy_lift: float | None
+    cont_stop_rebuy_frac: float | None
+    cont_stop_rebuy_open_frac: float | None
+    cont_stop_rebuy_with_schedule: bool
+    min_lot_top_up: bool
+    parking_symbol: str
+    parking_frac: float
+    parking_buffer: float
+    parking_execute: bool
+    parking_open_cover: bool
+    profit_skim: bool
+    profit_skim_step: float | None
+    profit_skim_frac: float | None
+    profit_skim_pro_rata: bool
+    profit_skim_keep_idle: bool
+    profit_skim_to_parking: bool
+    profit_skim_base: float | None
+    index_cut: bool
+    index_cut_frac: float | None
+    index_cut_min_keep: int | None
+    index_blocks_s8_add: bool
 
 
 # Book apply functions have different named parameters.

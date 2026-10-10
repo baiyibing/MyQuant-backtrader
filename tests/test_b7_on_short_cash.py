@@ -4,13 +4,13 @@ import json
 
 import pytest
 from backtest.research.csv_ledger import (
-    SimState, InsufficientCashError, check_buy_cash, configure_s8, execute_buy,
+    SimState, InsufficientCashError, check_buy_cash, execute_buy,
 )
 from backtest.research.csv_simulate_loop import init_sim_state, run_pool_buys_day
 from backtest.research.csv_strategy_books import apply_csv_strategy
 from backtest.research.minute_audit import audit_scope
 from tests.test_s8_independent_positions import DAYS, CODE, _pool
-from tests.test_tail_window_shared import A, D1, bar, simulate, minute
+from tests.test_tail_window_shared import A, bar, simulate, minute
 from backtest.research.tail_window_buy import TAIL_MINUTES
 
 

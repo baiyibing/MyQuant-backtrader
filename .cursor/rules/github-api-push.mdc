@@ -1,0 +1,14 @@
+---
+description: Publish branches/PRs via the repo GitHub API helper when git HTTPS fails
+alwaysApply: true
+---
+
+When pushing a feature branch or opening a GitHub PR from this repo:
+
+1. Try `git push` / `gh pr create` first.
+2. If `github.com:443` is blocked but `api.github.com` works, use
+   `scripts/ops/push_github_pr_via_api.py` (needs `gh auth`).
+3. Do not rewrite a one-off Git Data API uploader. Extend that script.
+
+The helper recreates `base..HEAD` on the remote (SHAs differ) and refuses
+`master` / `main`.

@@ -292,6 +292,11 @@ def _buy(state: SimResult, position: Position | None, symbol: str, day: date, hm
         cost = shares * price + preview_order_fees(
             state, "BUY", order_id, shares * price, day, symbol
         )
+    from backtest.research.st_status import st_blocks_buy
+
+    if st_blocks_buy(state, symbol, day.strftime("%Y%m%d")):
+        _event(state, day, symbol, hm, "skip", 0, price, "skip_st")
+        return None
     if shares < buy_quantity_minimum(quantity_rule) or cost > state.cash:
         _event(state, day, symbol, hm, "skip", 0, price, "skip_cash")
         return None
@@ -869,6 +874,7 @@ def simulate_native(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, S
                 tail_volume_unit: str | None = "shares",
                 audit_sink: Any = None,
                 rule_profile: str | RuleProfile = "industry",
+                st_gate: bool = False,
                 ) -> SimResult:
     """Validate/normalize tail options, then translate native v7/APP arguments."""
     profile = resolve_rule_profile(rule_profile)
@@ -898,4 +904,5 @@ def simulate_native(minute_bars: Any, daily_bars: Any, pool_days: Mapping[Any, S
             index_days=index_days, fee_schedule=context_fee, rule_profile=profile,
         ),
         rule_profile=profile,
+        st_gate=st_gate,
     )

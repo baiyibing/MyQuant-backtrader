@@ -17,9 +17,12 @@ from decimal import Decimal, ROUND_HALF_UP
 import math
 import sys
 from collections import defaultdict
+from datetime import date as date_cls
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Iterable, Mapping, MutableMapping, Optional, Sequence, Union
+
+import pandas as pd
 
 from common.infra.data_root import resolve_source_parquet
 from oskh_core.a_share_symbol_normalize import normalize_a_share_code
@@ -115,14 +118,18 @@ def k_for(
     return k_f
 
 
-def _read_parquet_cols(
-    path: Path, columns: Sequence[str], *, code_filter: Optional[set[str]] = None
-) -> list[dict]:
-    """Read selected columns; optional stock_code pushdown via pyarrow."""
-    import pyarrow.parquet as pq
+def _code_filter_values(codes: set[str]) -> list[str]:
+    """Push both suffixed and bare-6 forms so parquet filters still hit."""
+    values: set[str] = set()
+    for code in codes:
+        values.add(code)
+        six = code.split(".", 1)[0]
+        values.add(six)
+        values.add(normalize_a_share_code(code))
+    return sorted(values)
 
-    schema_names = set(pq.ParquetFile(path).schema_arrow.names)
-    # Tolerate alternate column spellings.
+
+def _resolve_columns(schema_names: set[str], columns: Sequence[str]) -> list[str]:
     wanted: list[str] = []
     for col in columns:
         if col in schema_names:
@@ -150,77 +157,152 @@ def _read_parquet_cols(
                     alt = name
                     break
         if alt is None:
-            raise KeyError(f"{path.name} missing column {col!r}; have {sorted(schema_names)}")
+            raise KeyError(f"missing column {col!r}; have {sorted(schema_names)}")
         wanted.append(alt)
+    return wanted
 
-    filters = None
+
+def _date_filter_bounds(arrow_type, start: str, end: str):
+    import pyarrow as pa
+
+    start_d = datetime.strptime(start, "%Y%m%d")
+    end_d = datetime.strptime(end, "%Y%m%d")
+    if pa.types.is_date(arrow_type):
+        return start_d.date(), end_d.date()
+    if pa.types.is_timestamp(arrow_type):
+        return start_d, end_d
+    return start, end
+
+
+def _read_parquet_frame(
+    path: Path,
+    columns: Sequence[str],
+    *,
+    code_filter: Optional[set[str]] = None,
+    date_start: Optional[str] = None,
+    date_end: Optional[str] = None,
+    date_column: Optional[str] = None,
+) -> pd.DataFrame:
+    """Read selected columns as a frame. Date/code filters are best-effort pushdown."""
+    import pyarrow.parquet as pq
+
+    parquet = pq.ParquetFile(path)
+    schema = parquet.schema_arrow
+    wanted = _resolve_columns(set(schema.names), columns)
+    rename = {got: want for got, want in zip(wanted, columns)}
+    filters: list = []
     code_col = next((c for c in wanted if c.lower() in {"stock_code", "code"}), None)
     if code_filter is not None and code_col is not None:
-        # Include both raw and normalized forms when possible.
-        filters = [(code_col, "in", sorted(code_filter))]
+        filters.append((code_col, "in", _code_filter_values(code_filter)))
+    date_col = None
+    if date_start and date_end:
+        date_col = date_column or next(
+            (c for c in wanted if c.lower() in {"date", "ex_date"}), None
+        )
+        if date_col is not None:
+            lo, hi = _date_filter_bounds(schema.field(date_col).type, date_start, date_end)
+            filters.append((date_col, ">=", lo))
+            filters.append((date_col, "<=", hi))
 
-    try:
-        table = pq.read_table(path, columns=wanted, filters=filters)
-    except Exception:
-        # filters may fail on some writers; fall back to full column read.
+    def _load(use_filters: Optional[list]):
+        try:
+            return pq.read_table(path, columns=wanted, filters=use_filters or None)
+        except Exception:
+            return None
+
+    table = _load(filters) if filters else _load(None)
+    if table is None or (table.num_rows == 0 and date_col is not None and filters):
+        without_date = [item for item in filters if item[0] != date_col]
+        retry = _load(without_date)
+        if retry is not None:
+            table = retry
+    if table is None:
         table = pq.read_table(path, columns=wanted)
-    # Normalize column names to requested logical names.
-    rename = {got: want for got, want in zip(wanted, columns)}
-    frame_cols = {rename.get(name, name): table.column(name) for name in table.column_names}
-    import pandas as pd
+    frame = table.rename_columns(
+        [rename.get(name, name) for name in table.column_names]
+    ).to_pandas()
+    return frame if isinstance(frame, pd.DataFrame) else pd.DataFrame(frame)
 
-    frame = pd.DataFrame({k: v.to_pylist() for k, v in frame_cols.items()})
-    if code_filter is not None and "stock_code" in frame.columns:
-        # Post-filter after normalize.
-        pass
-    return frame.to_dict(orient="records")
+
+def _normalize_date_series(values: pd.Series) -> pd.Series:
+    """Vectorized cousin of ``normalize_date``; invalid cells become NA."""
+    if pd.api.types.is_datetime64_any_dtype(values):
+        return values.dt.strftime("%Y%m%d")
+    if values.dtype == object and values.map(lambda x: isinstance(x, date_cls)).any():
+        parsed = pd.to_datetime(values, errors="coerce")
+        return parsed.dt.strftime("%Y%m%d")
+    text = values.astype(str).str.strip()
+    invalid = text.eq("") | text.str.lower().isin({"nan", "none", "nat", "null"})
+    ymd = text.str.fullmatch(r"\d{8}")
+    iso = text.str.match(r"^\d{4}-\d{2}-\d{2}")
+    out = pd.Series(pd.NA, index=values.index, dtype="object")
+    out.loc[ymd & ~invalid] = text.loc[ymd & ~invalid]
+    out.loc[iso & ~invalid] = (
+        text.loc[iso & ~invalid].str.slice(0, 10).str.replace("-", "", n=2, regex=False)
+    )
+    rest = ~(ymd | iso) & ~invalid
+    if rest.any():
+        parsed = pd.to_datetime(text.loc[rest], errors="coerce")
+        out.loc[rest] = parsed.dt.strftime("%Y%m%d")
+    return out
 
 
 def _load_ex_events(
     path: Path, *, start: str, end: str, codes: Optional[set[str]]
 ) -> dict[str, set[str]]:
-    rows = _read_parquet_cols(path, ["stock_code", "ex_date"], code_filter=codes)
+    frame = _read_parquet_frame(
+        path,
+        ["stock_code", "ex_date"],
+        code_filter=codes,
+        date_start=start,
+        date_end=end,
+        date_column="ex_date",
+    )
+    if frame.empty:
+        return {}
+    frame = frame.copy()
+    frame["ds"] = _normalize_date_series(frame["ex_date"])
+    frame = frame[frame["ds"].notna() & (frame["ds"] >= start) & (frame["ds"] <= end)]
+    frame["code"] = frame["stock_code"].astype(str).str.strip().map(normalize_a_share_code)
+    if codes is not None:
+        frame = frame[frame["code"].isin(codes)]
     by_code: dict[str, set[str]] = defaultdict(set)
-    for row in rows:
-        try:
-            ds = normalize_date(row["ex_date"])
-        except ValueError:
-            continue
-        if not start <= ds <= end:
-            continue
-        code = normalize_a_share_code(str(row["stock_code"]).strip())
-        if codes is not None and code not in codes:
-            continue
-        by_code[code].add(ds)
+    for code, ds in zip(frame["code"].tolist(), frame["ds"].tolist()):
+        by_code[str(code)].add(str(ds))
     return by_code
 
 
 def _load_factor_series(
     path: Path, *, start: str, end: str, codes: Optional[set[str]]
 ) -> tuple[dict[str, list[tuple[str, float]]], dict[str, dict[str, Optional[float]]]]:
-    rows = _read_parquet_cols(
+    frame = _read_parquet_frame(
         path,
         ["date", "stock_code", "cumulative_adj_factor"],
         code_filter=codes,
+        date_start=start,
+        date_end=end,
+        date_column="date",
     )
-    series: dict[str, list[tuple[str, Optional[float]]]] = defaultdict(list)
-    for row in rows:
-        try:
-            ds = normalize_date(row["date"])
-        except ValueError:
-            continue
-        if not start <= ds <= end:
-            continue
-        code = normalize_a_share_code(str(row["stock_code"]).strip())
-        if codes is not None and code not in codes:
-            continue
-        series[code].append((ds, _as_float(row["cumulative_adj_factor"])))
     cleaned: dict[str, list[tuple[str, float]]] = {}
     raw_by_date: dict[str, dict[str, Optional[float]]] = {}
-    for code, points in series.items():
-        points.sort(key=lambda x: x[0])
-        raw_by_date[code] = {ds: val for ds, val in points}
-        cleaned[code] = [(ds, val) for ds, val in points if val is not None]
+    if frame.empty:
+        return cleaned, raw_by_date
+    frame = frame.copy()
+    frame["ds"] = _normalize_date_series(frame["date"])
+    frame = frame[frame["ds"].notna() & (frame["ds"] >= start) & (frame["ds"] <= end)]
+    frame["code"] = frame["stock_code"].astype(str).str.strip().map(normalize_a_share_code)
+    if codes is not None:
+        frame = frame[frame["code"].isin(codes)]
+    if frame.empty:
+        return cleaned, raw_by_date
+    frame = frame.sort_values(["code", "ds"], kind="mergesort")
+    for code, group in frame.groupby("code", sort=False):
+        points = [
+            (str(ds), _as_float(val))
+            for ds, val in zip(group["ds"].tolist(), group["cumulative_adj_factor"].tolist())
+        ]
+        raw_by_date[str(code)] = {ds: val for ds, val in points}
+        cleaned[str(code)] = [(ds, val) for ds, val in points if val is not None]
     return cleaned, raw_by_date
 
 
@@ -250,8 +332,8 @@ def load_exdiv_ratios(
     else:
         code_set = {normalize_a_share_code(c) for c in codes}
 
-    adj_path = Path(adj_factor_path) if adj_factor_path else resolve_source_parquet(
-        "adj_factor.parquet"
+    adj_path = (
+        Path(adj_factor_path) if adj_factor_path else resolve_source_parquet("adj_factor.parquet")
     )
     ex_path = (
         Path(ex_date_index_path)
@@ -281,17 +363,13 @@ def load_exdiv_ratios(
     ex_by_code: dict[str, set[str]] = {}
     if ex_path.is_file():
         try:
-            ex_by_code = _load_ex_events(
-                ex_path, start=start_n, end=end_n, codes=code_set
-            )
+            ex_by_code = _load_ex_events(ex_path, start=start_n, end=end_n, codes=code_set)
         except Exception as exc:  # noqa: BLE001
             _warn_missing_once(
                 f"ex_date_index read failed: {ex_path} ({exc!r}); factor-jump fallback only"
             )
     else:
-        _warn_missing_once(
-            f"ex_date_index missing: {ex_path} (factor-jump fallback only)"
-        )
+        _warn_missing_once(f"ex_date_index missing: {ex_path} (factor-jump fallback only)")
 
     for code, points in factor_clean.items():
         if len(points) < 2:

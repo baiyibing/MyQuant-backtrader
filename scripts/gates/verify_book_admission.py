@@ -14,10 +14,12 @@ from scripts.research import generate_off_byte_baseline as baseline
 
 
 def format_coverage_failure(error: AssertionError) -> str:
-    missing = sorted(set(BOOKS) - set(baseline.BOOK_NAMES))
+    missing = sorted(
+        set(BOOKS) - set(baseline.BOOK_NAMES) - set(baseline.PENDING_BOOK_NAMES)
+    )
     extra = sorted(set(baseline.BOOK_NAMES) - set(BOOKS))
     groups = (
-        "HISTORICAL", "V61", "V91", "V92", "V93", "V6F", "S8", "S12",
+        "HISTORICAL", "V61", "V91", "V92", "V93", "V6F", "V650", "S8", "S12",
         "S9", "P03", "P04", "P05", "P06", "P07", "P08", "P09", "P10", "P11",
     )
     covered = set().union(*(set(getattr(baseline, f"{group}_BOOK_NAMES")) for group in groups))
@@ -25,7 +27,8 @@ def format_coverage_failure(error: AssertionError) -> str:
         "FAIL: book admission baseline coverage",
         f"AssertionError: {error or '(unnamed coverage assertion)'}",
         f"BOOKS missing from BOOK_NAMES: {', '.join(missing) or 'none'}",
-        f"BOOKS missing from historical/overlay lists: {', '.join(sorted(set(BOOKS) - covered)) or 'none'}",
+        f"Pending overlay (registered, no golden yet): {', '.join(baseline.PENDING_BOOK_NAMES) or 'none'}",
+        f"BOOKS missing from historical/overlay lists: {', '.join(sorted(set(BOOKS) - covered - set(baseline.PENDING_BOOK_NAMES))) or 'none'}",
         f"BOOK_NAMES absent from BOOKS: {', '.join(extra) or 'none'}",
         "Human action: update scripts/research/generate_off_byte_baseline.py explicitly:",
         "  BOOK_NAMES, the appropriate scoped *_BOOK_NAMES / *_CASES, and CASES.",

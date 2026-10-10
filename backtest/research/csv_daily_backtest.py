@@ -82,6 +82,7 @@ from backtest.research.csv_ledger import (  # noqa: E402
     configure_s8,
     execute_buy as execute_buy,
     exit_positions,
+    held_codes,
     finish_pending_chase,
     hit_limit_down,
     hit_limit_up,
@@ -98,6 +99,12 @@ from backtest.research.ashare_exdiv_economics import EconomicLookup, ExDivEconom
 from backtest.research.rule_profile import (  # noqa: E402
     RuleProfile,
     resolve_rule_profile,
+)
+from backtest.research.csv_sim_profile import (  # noqa: E402
+    NULL_CLOCK,
+    SimPhaseClock,
+    attach_host_profile,
+    profile_sim_enabled,
 )
 
 from backtest.research.exdiv_map import (  # noqa: E402
@@ -121,8 +128,15 @@ from backtest.research.csv_simulate_loop import (  # noqa: E402
     append_equity_and_eod_marks,
     init_sim_state,
     prepare_strategy_hooks,
+    bind_parking_session,
+    extra_load_codes_for_strategy,
     run_chase_due_day,
     run_eod_exits,
+    run_index_gate_cut_day,
+    run_parking_open_cover_day,
+    run_parking_rebalance_day,
+    run_profit_skim_day,
+    DayBuyQuotes,
     run_pool_buys_day,
     run_step_adds_day,
 )
@@ -256,18 +270,24 @@ def simulate(
     fix_s11_exit_domain: bool = False,
     version9_sell=None,
     max_hold: bool = False,
+    range_stop: bool = True,
     hold_days: int = 20,
     fix_s81_band_precision: bool = False,
     signal_bars_front: dict[str, pd.DataFrame] | None = None,
+    min_lot_top_up: bool | None = None,
     rule_profile: str | RuleProfile = "industry",
+    sim_profile: SimPhaseClock | None = None,
+    st_gate: bool = False,
 ) -> SimState:
     """核心日循环。bars/pool_days 可由测试注入；run() 负责从湖与 CSV 加载。
 
     strategy 必填；take_profit(...) 仍可显式覆盖。
     exdiv_economics 显式接收 (engine_symbol, YYYYMMDD) -> ExDivEvent；
     默认 None 保留原行为，事件配合 raw bars 使用，不从 exdiv 的 k 推断权益。
+    st_gate 默认关：库调用不读 Wind 日表。产品 run() 打开。
     """
     profile = resolve_rule_profile(rule_profile)
+    clock = sim_profile if sim_profile is not None else NULL_CLOCK
     fee_schedule = resolve_account_fee_schedule(
         profile.account_fee_schedule,
         explicit_rates=(buy_cost_rate, sell_cost_rate, min_cost),
@@ -306,6 +326,7 @@ def simulate(
         apply_fn=apply_csv_strategy,
         **({"version9_sell": version9_sell} if version9_sell is not None else {}),
         **({"max_hold": True} if max_hold else {}),
+        **({"range_stop": False} if not range_stop else {}),
         hold_days=hold_days,
         **({"fix_s81_band_precision": True} if fix_s81_band_precision else {}),
         scores_by_day=scores_by_day,
@@ -315,6 +336,7 @@ def simulate(
         keep_buy_vacancy=keep_buy_vacancy,
         index_block_new=index_block_new,
         stop_fill=stop_fill,
+        **({"min_lot_top_up": min_lot_top_up} if min_lot_top_up is not None else {}),
     )
     stop_pct = hooks["stop_pct"]
     stop_fill = str(hooks.get("stop_fill") or "touch").strip().lower()
@@ -343,6 +365,7 @@ def simulate(
         pool_names=pool_names,
         pool_names_by_day=pool_names_by_day,
         daily_quota=daily_quota,
+        st_gate=st_gate,
     )
     if (
         profile.exchange_quantity_rules
@@ -380,25 +403,70 @@ def simulate(
     forbid_all_trade_at_limit = bool(hooks.get("forbid_all_trade_at_limit", False))
     hold_modes = {}
 
+    clock.begin("day_loop")
     for i, day in enumerate(calendar):
+        clock.count("calendar_days")
         ds = _ymd(day)
         day_trade_start = len(st.trades)
         if st.exdiv_economics is not None:
             st.cash += st.exdiv_economics.settle(ds)
         names = names_asof(ds)
         st.daily_quota_used = 0.0  # 每个交易日开盘重置常规额度
+        clock.begin("parking")
+        bind_parking_session(
+            st,
+            hooks,
+            day_i=i,
+            day=day,
+            ds=ds,
+            names=names,
+            daily_bars=bars,
+            exdiv=exdiv,
+            qlib_limit_pct=qlib_limit_pct,
+        )
+        run_parking_open_cover_day(
+            st,
+            hooks,
+            day_i=i,
+            day=day,
+            ds=ds,
+            names=names,
+            daily_bars=bars,
+            exdiv=exdiv,
+            qlib_limit_pct=qlib_limit_pct,
+            forbid_all_trade_at_limit=forbid_all_trade_at_limit,
+        )
+        clock.end("parking")
+        clock.begin("index_cut")
+        run_index_gate_cut_day(
+            st,
+            hooks,
+            day_i=i,
+            day=day,
+            ds=ds,
+            names=names,
+            daily_bars=bars,
+            exdiv=exdiv,
+            qlib_limit_pct=qlib_limit_pct,
+            forbid_all_trade_at_limit=forbid_all_trade_at_limit,
+        )
+        clock.end("index_cut")
 
         if callable(hooks.get("run_daily_day")):
+            clock.begin("run_daily_day")
             hooks["run_daily_day"](
                 st, pending_chase, hooks=hooks, bars=bars, pool_days=pool_days,
                 day_i=i, day=day, ds=ds, names=names, daily_quota=daily_quota, exdiv=exdiv,
             )
+            clock.end("run_daily_day")
         else:
+            clock.begin("held_scan")
             bind_opening = hooks.get("bind_opening_held")
             if callable(bind_opening):
-                bind_opening(ds, list(st.positions.keys()))
+                bind_opening(ds, held_codes(st))
 
-            for code in list(st.positions):
+            for code in held_codes(st):
+                clock.count("held_codes")
                 if code not in bars:
                     continue
                 got = day_bar_and_prev_closes(bars[code], day)
@@ -557,6 +625,7 @@ def simulate(
                                       if reason.startswith("open_board") else "")
                             else:
                                 pos.pending_exit = reason
+            clock.end("held_scan")
 
             def _chase_quotes_for(code: str):
                 if code not in bars:
@@ -567,6 +636,7 @@ def simulate(
                 row, closes = got
                 return float(row["open"]), float(row["close"]), closes
 
+            clock.begin("chase")
             run_chase_due_day(
                 st,
                 pending_chase,
@@ -583,6 +653,7 @@ def simulate(
                 add_gate=hooks.get("add_gate"),
                 index_blocks_add=hooks.get("index_blocks_add", True),
             )
+            clock.end("chase")
 
             def _pool_quote_for(code: str):
                 if code not in bars:
@@ -594,10 +665,18 @@ def simulate(
                 price_field = "open" if hooks.get("pool_buy_at_open") else "close"
                 return float(row[price_field]), closes
 
+            clock.begin("pool_buy")
+            day_quotes = DayBuyQuotes(
+                _pool_quote_for,
+                ds=ds,
+                names=names,
+                exdiv=exdiv,
+                qlib_limit_pct=qlib_limit_pct,
+            )
             if callable(hooks.get("breakout_day")):
                 hooks["breakout_day"](
                     st, day_i=i, day=day, ds=ds, names=names, pool_days=pool_days,
-                    buy_quote_for=_pool_quote_for, exdiv=exdiv,
+                    buy_quote_for=day_quotes.as_quote_fn(), exdiv=exdiv,
                     qlib_limit_pct=qlib_limit_pct,
                 )
             run_pool_buys_day(
@@ -612,6 +691,7 @@ def simulate(
                 allow_add=allow_add,
                 buy_gate=buy_gate,
                 buy_quote_for=_pool_quote_for,
+                day_buy_quotes=day_quotes,
                 sizing=hooks.get("sizing", "daily_quota"),
                 name_budget=hooks.get("name_budget", 1_000_000.0),
                 ration=hooks.get("ration", "file_order"),
@@ -637,6 +717,7 @@ def simulate(
                 ds=ds,
                 names=names,
                 buy_quote_for=_pool_quote_for,
+                day_buy_quotes=day_quotes,
                 sizing=hooks.get("sizing", "daily_quota"),
                 name_budget=hooks.get("name_budget", 1_000_000.0),
                 exdiv=exdiv,
@@ -646,14 +727,16 @@ def simulate(
                 name_lot_budget=hooks.get("name_lot_budget"),
                 step_add=hooks.get("step_add"),
             )
+            clock.end("pool_buy")
             # A price add changes the group's cost at this close. Re-evaluate
             # only that group at the known close, never the pre-add daily low.
             added = {
                 t["position_id"] for t in st.trades[step_trade_start:]
                 if t["side"] == "BUY" and t.get("position_id")
             }
+            clock.begin("post_add")
             if added:
-                for code in list(st.positions):
+                for code in held_codes(st):
                     got = day_bar_and_prev_closes(bars[code], day) if code in bars else None
                     if got is None:
                         continue
@@ -697,11 +780,37 @@ def simulate(
                             else:
                                 _sell(st, code, pos, close, day, reason,
                                       day_i=i, price_rule="daily_group_after_add_close")
+            clock.end("post_add")
 
+        clock.begin("eod")
         run_eod_exits(st, day=day, ds=ds, bars=bars, eod_exit=hooks.get("eod_exit"),
                       hold_modes=hold_modes, exdiv=exdiv,
                       **({"signal_bars_front": signal_bars_front, "strategy": strategy,
                           "fix_s11_exit_domain": True} if fix_s11_exit_domain else {}))
+        run_profit_skim_day(
+            st,
+            hooks,
+            day_i=i,
+            day=day,
+            ds=ds,
+            names=names,
+            daily_bars=bars,
+            exdiv=exdiv,
+            qlib_limit_pct=qlib_limit_pct,
+            forbid_all_trade_at_limit=forbid_all_trade_at_limit,
+        )
+        run_parking_rebalance_day(
+            st,
+            hooks,
+            day_i=i,
+            day=day,
+            ds=ds,
+            names=names,
+            daily_bars=bars,
+            exdiv=exdiv,
+            qlib_limit_pct=qlib_limit_pct,
+            forbid_all_trade_at_limit=forbid_all_trade_at_limit,
+        )
         append_equity_and_eod_marks(
             st,
             ds=ds,
@@ -709,7 +818,10 @@ def simulate(
             calendar_last=calendar[-1],
             mark_bars=bars,
         )
+        clock.end("eod")
+    clock.end("day_loop")
 
+    clock.begin("finish")
     finish_pending_chase(st, pending_chase)
     if profile.s12_domain_stamp and normalize_csv_strategy(strategy) == "version12":
         st.stats["valuation_price_domain"] = "front"
@@ -718,6 +830,7 @@ def simulate(
         st.stats.pop("rule_profile_revision", None)
         st.stats["rule_profile"] = profile.name
         st.stats["rule_profile_revision"] = profile.revision
+    clock.end("finish")
     return st
 
 
@@ -760,11 +873,15 @@ def run(
     fix_s11_exit_domain: bool = False,
     version9_sell=None,
     max_hold: bool = False,
+    range_stop: bool = True,
     hold_days: int = 20,
     fix_s81_band_precision: bool = False,
+    min_lot_top_up: bool | None = None,
     rule_profile: str | RuleProfile = "industry",
+    profile_sim: bool | None = None,
 ) -> SimState:
     profile = resolve_rule_profile(rule_profile)
+    sim_clock = SimPhaseClock() if profile_sim_enabled(profile_sim) else None
     resolve_account_fee_schedule(
         profile.account_fee_schedule,
         explicit_rates=(buy_cost_rate, sell_cost_rate, min_cost),
@@ -814,6 +931,7 @@ def run(
     from backtest.research.topk_dropout_scores import codes_from_scores
 
     all_codes |= codes_from_scores(scores_by_day)
+    all_codes |= extra_load_codes_for_strategy(strategy)
     warm_days = (
         STRATEGY4_CALENDAR_SLACK_DAYS
         if normalize_csv_strategy(strategy) in ("version4", "version12")
@@ -843,6 +961,7 @@ def run(
         flush=True,
     )
     t_daily = time.perf_counter()
+    daily_cache_status: dict = {}
     bars = load_daily_ohlc(
         all_codes,
         load_start,
@@ -852,6 +971,7 @@ def run(
         workers=workers,
         dividend_type=dividend_type,
         daily_root=daily_root,
+        status=daily_cache_status,
     )
     if normalize_csv_strategy(strategy) == "version12" and (missing := all_codes - bars.keys()):
         raise ValueError(f"missing front daily bars for strategy12: {sorted(missing)}")
@@ -882,13 +1002,24 @@ def run(
         eligible_buy = with_return_threshold(eligible_buy, bars)
     skipped: dict[str, int] = {}
     # lake none only: E-R6 remap. front/back/qlib $close already continuous.
+    if sim_clock is not None:
+        sim_clock.begin("exdiv")
+    t_exdiv = time.perf_counter()
     if use_qlib_bins or str(dividend_type or "none").strip().lower() != "none":
         exdiv = None
     else:
         exdiv = load_exdiv_ratios(all_codes, start, end, skipped_out=skipped)
+    t_exdiv = time.perf_counter() - t_exdiv
+    if sim_clock is not None:
+        sim_clock.end("exdiv")
+        sim_clock.begin("index_gate")
+    t_index_gate = time.perf_counter()
     from backtest.research.strategy_book_helpers import load_book_index_gate
 
     index_block_new = load_book_index_gate(normalize_csv_strategy(strategy), start, end)
+    t_index_gate = time.perf_counter() - t_index_gate
+    if sim_clock is not None:
+        sim_clock.end("index_gate")
     t_sim = time.perf_counter()
     st = simulate(
         bars,
@@ -905,6 +1036,7 @@ def run(
         strategy=strategy,
         **({"version9_sell": version9_sell} if version9_sell is not None else {}),
         **({"max_hold": True} if max_hold else {}),
+        **({"range_stop": False} if not range_stop else {}),
         hold_days=hold_days,
         **({"fix_s81_band_precision": True} if fix_s81_band_precision else {}),
         take_profit=take_profit,
@@ -926,13 +1058,33 @@ def run(
         min_cost=min_cost,
         index_block_new=index_block_new,
         stop_fill=stop_fill,
+        **({"min_lot_top_up": min_lot_top_up} if min_lot_top_up is not None else {}),
         rule_profile=profile,
+        sim_profile=sim_clock,
+        st_gate=True,
     )
     if skipped.get("exdiv_skipped_no_factor"):
         st.stats["exdiv_skipped_no_factor"] = int(skipped["exdiv_skipped_no_factor"])
     st.stats["t_pool_s"] = t_pool
     st.stats["t_daily_s"] = t_daily
+    st.stats["t_exdiv_s"] = t_exdiv
+    st.stats["t_index_gate_s"] = t_index_gate
     st.stats["t_sim_s"] = time.perf_counter() - t_sim
+    st.stats["daily_cache"] = daily_cache_status.get("cache", "")
+    if sim_clock is not None:
+        attach_host_profile(
+            st,
+            sim_clock,
+            strategy=strategy_name,
+            rule_profile=profile.name,
+            load_s={
+                "t_pool_s": round(float(t_pool), 3),
+                "t_daily_s": round(float(t_daily), 3),
+                "t_exdiv_s": round(float(t_exdiv), 3),
+                "t_index_gate_s": round(float(t_index_gate), 3),
+                "t_sim_s": round(float(st.stats["t_sim_s"]), 3),
+            },
+        )
     st.stats["codes_missing"] = max(0, len(all_codes) - len(bars))
     if signal_bundle is not None:
         st.stats["signal_bundle_sha256"] = signal_bundle["bundle_sha256"]

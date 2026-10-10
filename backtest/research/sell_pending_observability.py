@@ -6,7 +6,7 @@ The CSV's detail is the path; event since/last timestamps both equal ds/hm.
 Open since is the first observation of that order, last its latest observation.
 Missing-session hm is blank. These runtime lists are excluded from asdict.
 """
-from backtest.research.csv_ledger import held_fill_key, _ymd, hit_limit_down, s8_open_groups
+from backtest.research.csv_ledger import held_fill_key, lot_identity, _ymd, hit_limit_down, s8_open_groups
 
 HEADER = ["kind", "code", "shares", "reason", "since_ds", "since_hm",
           "last_ds", "last_hm", "detail"]
@@ -60,7 +60,7 @@ def pending_orders(st):
             for order in state.get("side_pending", []):
                 target, reason, wanted = order[:3]
                 path = side_path(reason)
-                yield (key, path, id(target)), code, wanted if wanted is not None else target.shares, path
+                yield (key, path, lot_identity(target)), code, wanted if wanted is not None else target.shares, path
     for code, (_, wanted) in st.book_state.get("turtle_pending", {}).items():
         if st.positions.get(code):
             yield ("turtle", code), code, wanted, "v9_2_turtle"

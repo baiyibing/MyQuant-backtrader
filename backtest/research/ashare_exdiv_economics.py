@@ -72,7 +72,28 @@ class ExDivEconomics:
         self.stats = stats if stats is not None else {}
         self.applied_ids: set[str] = set()
         self.receivables: dict[str, CashReceivable] = {}
-        self.bonus_locks: dict[int, dict[str, int]] = {}  # book lot identity -> list-date quantities
+        # Object identity, not id(pos): CPython reuses freed addresses.
+        self.bonus_locks: list[tuple[object, dict[str, int]]] = []
+
+    def peek_locks(self, pos) -> dict[str, int]:
+        for item in self.bonus_locks:
+            if item[0] is pos:
+                return item[1]
+        return {}
+
+    def locks_for(self, pos) -> dict[str, int]:
+        for item in self.bonus_locks:
+            if item[0] is pos:
+                return item[1]
+        bucket: dict[str, int] = {}
+        self.bonus_locks.append((pos, bucket))
+        return bucket
+
+    def pop_locks(self, pos) -> dict[str, int]:
+        for index, item in enumerate(self.bonus_locks):
+            if item[0] is pos:
+                return self.bonus_locks.pop(index)[1]
+        return {}
 
     @property
     def receivable_total(self) -> float:

@@ -44,7 +44,8 @@ from common.infra.data_root import resolve_period_root  # noqa: E402
 from oskh_core.a_share_symbol_normalize import canonical_from_bare_code  # noqa: E402
 from oskh_data.symbol_format import to_canonical_symbol, to_partition_key  # noqa: E402
 
-SCAN_CALENDAR_SLACK_DAYS = 400
+# 扫描首日就要凑满 MIN_LISTED_BARS 根交易日。520 个自然日盖住 300 根加长假。
+SCAN_CALENDAR_SLACK_DAYS = 520
 
 
 def default_out_dir(start: str, end: str) -> Path:
@@ -296,7 +297,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     if is_repo_stock_pool(out_dir):
         raise SystemExit(f"refusing to write into stock_pool/: {out_dir}")
 
-    lake = resolve_period_root("1d") / "dividend_type=none"
+    lake = resolve_period_root("1d") / "dividend_type=front"
     injected = _parse_codes(args.codes, args.universe_file)
     if injected is None:
         symbols = list_main_board_from_lake(lake)
@@ -316,16 +317,20 @@ def main(argv: Optional[list[str]] = None) -> int:
     kept = {
         code: frame for code, frame in frames.items() if len(frame) >= MIN_LISTED_BARS
     }
+    from backtest.research.st_status import drop_st_names
+
     days = scan_ohlcv(
         kept, args.start, args.end, r_min=args.vol_ratio,
         top_lead=args.top_lead, turnover_check=args.turnover_check,
     )
+    days, st_dropped = drop_st_names(days)
     written = write_strategy9_pool(days, out_dir)
     failures = validate_pool_dir(out_dir)
     if failures:
         raise SystemExit("validate_pool_dir failed: " + "; ".join(failures[:8]))
     print(
-        f"s9 wrote {len(written)} files, {sum(len(v) for v in days.values())} names",
+        f"s9 wrote {len(written)} files, {sum(len(v) for v in days.values())} names"
+        f", st_filtered {st_dropped}",
         flush=True,
     )
     if args.event_study:

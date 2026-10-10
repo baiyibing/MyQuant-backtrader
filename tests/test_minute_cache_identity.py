@@ -13,6 +13,7 @@ A, B = "600000.SH", "600001.SH"
 
 @pytest.fixture
 def case(tmp_path, monkeypatch):
+    monkeypatch.setenv("OSKH_BAR_MEM", "0")
     root = tmp_path / "lake"
     root.mkdir()
     cache = tmp_path / "cache"

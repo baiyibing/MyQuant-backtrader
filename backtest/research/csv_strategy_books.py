@@ -67,6 +67,10 @@ from backtest.research import (
     strategy6_47_rules,
     strategy6_48_rules,
     strategy6_49_rules,
+    strategy6_50_rules,
+    strategy6_51_rules,
+    strategy6_52_rules,
+    strategy6_53_rules,
     strategy8_rules,
     strategy8_1_rules,
     strategy8_2_rules,
@@ -184,6 +188,14 @@ from backtest.research.csv_strategy_books_v6_family import (
     _run_kwargs_version6_48,
     _apply_version6_49,
     _run_kwargs_version6_49,
+    _apply_version6_50,
+    _run_kwargs_version6_50,
+    _apply_version6_51,
+    _run_kwargs_version6_51,
+    _apply_version6_52,
+    _run_kwargs_version6_52,
+    _apply_version6_53,
+    _run_kwargs_version6_53,
 )
 
 HELP_LOCK_V1 = strategy1_rules.HELP_LOCK
@@ -241,6 +253,10 @@ HELP_LOCK_V6_46 = strategy6_46_rules.HELP_LOCK
 HELP_LOCK_V6_47 = strategy6_47_rules.HELP_LOCK
 HELP_LOCK_V6_48 = strategy6_48_rules.HELP_LOCK
 HELP_LOCK_V6_49 = strategy6_49_rules.HELP_LOCK
+HELP_LOCK_V6_50 = strategy6_50_rules.HELP_LOCK
+HELP_LOCK_V6_51 = strategy6_51_rules.HELP_LOCK
+HELP_LOCK_V6_52 = strategy6_52_rules.HELP_LOCK
+HELP_LOCK_V6_53 = strategy6_53_rules.HELP_LOCK
 HELP_LOCK_V8 = strategy8_rules.HELP_LOCK
 HELP_LOCK_V8_1 = strategy8_1_rules.HELP_LOCK
 HELP_LOCK_V8_2 = strategy8_2_rules.HELP_LOCK
@@ -386,6 +402,7 @@ def apply_csv_strategy(strategy: str, **kwargs) -> dict:
     name_budget = kwargs.pop("name_budget", None)
     ration = kwargs.pop("ration", "file_order")
     ration_seed = int(kwargs.pop("ration_seed", 0))
+    min_lot_top_up = kwargs.pop("min_lot_top_up", None)
     hooks = dict(book.apply(**kwargs))
     hooks["sizing"] = book.sizing
     hooks["name_budget"] = (
@@ -420,10 +437,31 @@ def apply_csv_strategy(strategy: str, **kwargs) -> dict:
     hooks.setdefault("step_stop_pct", None)  # per-step-lot own stop; None = off
     hooks.setdefault("scale_out_step", None)  # per +rise ladder selling a fraction; None = off
     hooks.setdefault("scale_out_frac", 0.05)
+    hooks.setdefault("scale_out_anchor", "first_lot")  # 6.51 = weighted remaining avg
     hooks.setdefault("peak_dd_exit", None)  # peak drawdown clear; None = off
     hooks.setdefault("peak_dd_sessions", 15)
     hooks.setdefault("add_schedule", None)
     hooks.setdefault("add_schedule_trigger", None)  # "peak" = group peak arms a tier; None = px/cost
+    hooks.setdefault("cont_stop_rebuy", False)
+    hooks.setdefault("cont_from_rise", None)
+    hooks.setdefault("cont_stop_rebuy_lift", None)
+    hooks.setdefault("cont_stop_rebuy_frac", None)
+    hooks.setdefault("cont_stop_rebuy_open_frac", None)
+    hooks.setdefault("cont_stop_rebuy_with_schedule", False)
+    hooks.setdefault("min_lot_top_up", False)
+    if min_lot_top_up is not None:
+        hooks["min_lot_top_up"] = bool(min_lot_top_up)
+    hooks.setdefault("profit_skim", False)
+    hooks.setdefault("profit_skim_step", None)
+    hooks.setdefault("profit_skim_frac", None)
+    hooks.setdefault("profit_skim_pro_rata", False)
+    hooks.setdefault("profit_skim_keep_idle", False)
+    hooks.setdefault("profit_skim_to_parking", False)
+    hooks.setdefault("profit_skim_base", None)
+    hooks.setdefault("index_cut", False)
+    hooks.setdefault("index_cut_frac", None)
+    hooks.setdefault("index_cut_min_keep", None)
+    hooks.setdefault("index_blocks_s8_add", False)
     hooks.setdefault("add_step2", None)  # second (base) ladder step; None = single ladder
     hooks.setdefault("step_frac2", None)
     hooks.setdefault("tranche_max", None)
@@ -536,6 +574,16 @@ def add_strategy6_ratio_args(ap: argparse.ArgumentParser) -> None:
         type=float,
         default=strategy6_rules.TIER_DEFAULT,
         help=f"version6 T+5+ retain ratio (default {strategy6_rules.TIER_DEFAULT:g})",
+    )
+    ap.add_argument(
+        "--min-lot-top-up",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=(
+            "top up a short name budget to one board lot from account cash "
+            "(6.50+ default on; other books default off). "
+            "--no-min-lot-top-up skips the order (industry B8-03)"
+        ),
     )
 
 
@@ -684,6 +732,8 @@ def add_csv_backtest_common_args(
     ap.add_argument("--version9-sell", choices=strategy9_rules.SELL_MODES, default=None)
     ap.add_argument("--max-hold", action="store_true",
                     help="version9: enable 20-trading-day force-flat (force_sell:max_hold); default off")
+    ap.add_argument("--no-range-stop", action="store_true",
+                    help="version9: turn off the rolling 20-bar range stop; default on")
     ap.add_argument(
         "--hold-days",
         type=int,
@@ -825,6 +875,10 @@ def csv_run_kwargs_from_args(args) -> dict:
         raise SystemExit("--fix-s81-band-precision is supported only by version8_1")
     if getattr(args, "max_hold", False) and name != "version9":
         raise SystemExit("--max-hold is supported only by version9")
+    if getattr(args, "no_range_stop", False) and name != "version9":
+        raise SystemExit("--no-range-stop is supported only by version9")
+    if getattr(args, "no_range_stop", False) and getattr(args, "version9_sell", None) is not None:
+        raise SystemExit("--no-range-stop cannot be combined with --version9-sell")
     fill_s = getattr(args, "stop_fill", None)
     fill_s = None if fill_s is None else str(fill_s).strip().lower()
     if fill_s == "":
@@ -845,6 +899,8 @@ def csv_run_kwargs_from_args(args) -> dict:
             if budget_override is not None
             else float(get_book(name).name_budget)
         )
+    if getattr(args, "min_lot_top_up", None) is not None:
+        kwargs["min_lot_top_up"] = bool(args.min_lot_top_up)
     return kwargs
 
 
@@ -1358,10 +1414,12 @@ def _run_kwargs_version9_3(args):
 
 
 def _apply_version9(
-    *, version9_sell=None, max_hold: bool = False, stop_pct: Optional[float] = None, take_profit=None, record_params=None, **_
+    *, version9_sell=None, max_hold: bool = False, range_stop: bool = True, stop_pct: Optional[float] = None, take_profit=None, record_params=None, **_
 ) -> dict:
     if stop_pct is not None:
         raise SystemExit("version9 does not accept --stop-pct")
+    if version9_sell is not None and not range_stop:
+        raise SystemExit("--no-range-stop cannot be combined with --version9-sell")
 
     strategy9_rules.validate_sell_mode("version9", version9_sell, max_hold)
     if version9_sell is not None:
@@ -1379,20 +1437,27 @@ def _apply_version9(
         return strategy9_rules.take_profit_reason(px, cost, peak, n_days, max_hold=max_hold)
 
     def _rec(st):
-        strategy9_rules.record_strategy9_params(st, max_hold=max_hold)
+        strategy9_rules.record_strategy9_params(st, max_hold=max_hold, range_stop=range_stop)
 
-    return {
+    hooks = {
         "stop_pct": None,
-        "stop_range": strategy9_rules.stop_range_amplitude,
         "take_profit": _tp if take_profit is None else take_profit,
         "record_params": _rec if record_params is None else record_params,
     }
+    if range_stop:
+        hooks["stop_range"] = strategy9_rules.stop_range_amplitude
+    return hooks
 
 
 def _run_kwargs_version9(args) -> dict:
     if getattr(args, "stop_pct", None) is not None:
         raise SystemExit("version9 does not accept --stop-pct")
-    return {"strategy": "version9", "max_hold": bool(getattr(args, "max_hold", False)), "version9_sell": getattr(args, "version9_sell", None)}
+    return {
+        "strategy": "version9",
+        "max_hold": bool(getattr(args, "max_hold", False)),
+        "range_stop": not bool(getattr(args, "no_range_stop", False)),
+        "version9_sell": getattr(args, "version9_sell", None),
+    }
 
 
 def _apply_version10(
@@ -2470,6 +2535,66 @@ register(
         help_lock=strategy6_49_rules.HELP_LOCK,
         apply=_apply_version6_49,
         run_kwargs=_run_kwargs_version6_49,
+    )
+)
+
+register(
+    CsvStrategyBook(
+        name="version6_50",
+        sizing="per_name",
+        name_budget=1_000_000.0,
+        tag=strategy6_50_rules.BOOK_TAG,
+        aliases=("6.50", "6_50", "v6.50", "v6_50", "version6_50"),
+        allow_add=strategy6_50_rules.ALLOW_ADD,
+        peak_gap_min=strategy6_50_rules.PEAK_GAP_MIN,
+        help_lock=strategy6_50_rules.HELP_LOCK,
+        apply=_apply_version6_50,
+        run_kwargs=_run_kwargs_version6_50,
+    )
+)
+
+register(
+    CsvStrategyBook(
+        name="version6_51",
+        sizing="per_name",
+        name_budget=1_000_000.0,
+        tag=strategy6_51_rules.BOOK_TAG,
+        aliases=("6.51", "6_51", "v6.51", "v6_51", "version6_51"),
+        allow_add=strategy6_51_rules.ALLOW_ADD,
+        peak_gap_min=strategy6_51_rules.PEAK_GAP_MIN,
+        help_lock=strategy6_51_rules.HELP_LOCK,
+        apply=_apply_version6_51,
+        run_kwargs=_run_kwargs_version6_51,
+    )
+)
+
+register(
+    CsvStrategyBook(
+        name="version6_52",
+        sizing="per_name",
+        name_budget=1_000_000.0,
+        tag=strategy6_52_rules.BOOK_TAG,
+        aliases=("6.52", "6_52", "v6.52", "v6_52", "version6_52"),
+        allow_add=strategy6_52_rules.ALLOW_ADD,
+        peak_gap_min=strategy6_52_rules.PEAK_GAP_MIN,
+        help_lock=strategy6_52_rules.HELP_LOCK,
+        apply=_apply_version6_52,
+        run_kwargs=_run_kwargs_version6_52,
+    )
+)
+
+register(
+    CsvStrategyBook(
+        name="version6_53",
+        sizing="per_name",
+        name_budget=1_000_000.0,
+        tag=strategy6_53_rules.BOOK_TAG,
+        aliases=("6.53", "6_53", "v6.53", "v6_53", "version6_53"),
+        allow_add=strategy6_53_rules.ALLOW_ADD,
+        peak_gap_min=strategy6_53_rules.PEAK_GAP_MIN,
+        help_lock=strategy6_53_rules.HELP_LOCK,
+        apply=_apply_version6_53,
+        run_kwargs=_run_kwargs_version6_53,
     )
 )
 

@@ -51,14 +51,17 @@ from backtest.research.csv_ledger import (
     IndependentExitPosition,
     account_sell_quantity,
     active_buy_quantity_rule,
+    arm_cont_stop_rebuy,
     check_buy_cash,
     _sell,
     apply_exdiv_economics,
     exit_positions,
     fee_order_id,
     held_fill_key,
+    lot_identity,
     execute_buy,
     hit_limit_down,
+    peak_gap_blocks,
     position_is_open,
     rescale_position,
     rescale_s8_groups,
@@ -69,13 +72,19 @@ from backtest.research.csv_ledger import (
 )
 from backtest.research.minute_audit import record_rejection
 from backtest.research.csv_simulate_loop import (
+    DayBuyQuotes,
     apply_capital_ration,
     run_chase_due_day,
     run_pool_buys_day,
     run_step_adds_day,
 )
 from backtest.research.exdiv_map import k_for, mapped_prev_close
-from backtest.research.minute_held_scan_core import HeldMinuteCursor
+from backtest.research.minute_held_scan_core import (
+    HeldMinuteCursor,
+    sell_allowed,
+    stop_touch,
+    stop_trigger,
+)
 from backtest.research.fill_config import FillConfig, is_open_fill
 from backtest.research.minute_audit import audit_scope
 from backtest.research.strategy9_rules import evaluate_version9_exit
@@ -88,7 +97,6 @@ from backtest.research.tail_window_buy import (
 )
 
 BUY_HM = 14 * 60 + 55
-CLOSE_CLEAR_HM = 15 * 60
 
 
 def advance_independent_exit(
@@ -186,7 +194,7 @@ def _side_sell(st, code, pos, px, day, reason, *, fill_config=None, **kwargs):
         path = side_path(reason)
         record_sell_pending(st, ds=day, hm=kwargs.get("hm"), code=code,
                             shares=kwargs.get("wanted_shares", pos.shares), path=path,
-                            reason="next_bar_open_queued", key=(held_fill_key(pos), path, id(pos)))
+                            reason="next_bar_open_queued", key=(held_fill_key(pos), path, lot_identity(pos)))
         return 0
     return _sell(st, code, pos, px, day, reason, **kwargs)
 
@@ -206,7 +214,7 @@ def fill_side_pending(st, code, pos, px, day, day_i, limits, *, hm):
         if defer_sell_at_limit(px, limits):
             st.stats["defer_sell_limit_down"] += 1
             record_limit(st, code, wanted if wanted is not None else target.shares, day, hm, px, limits,
-                         path=side_path(reason), key=(held_fill_key(pos), side_path(reason), id(target)))
+                         path=side_path(reason), key=(held_fill_key(pos), side_path(reason), lot_identity(target)))
             continue
         filled = _sell(st, code, target, px, day, reason + ":next_open",
                        day_i=day_i, hm=hm, price_rule="minute_pending_next_open",
@@ -215,6 +223,8 @@ def fill_side_pending(st, code, pos, px, day, day_i, limits, *, hm):
         if filled:
             if order in orders:
                 orders.remove(order)
+            if reason.startswith("stop_loss:step") and getattr(target, "shares", 1) <= 0:
+                arm_cont_stop_rebuy(st, getattr(pos, "group", None), target.lot_id)
             stat = ("sell_stop_step" if reason.startswith("stop_loss:step") else
                     "sell_scale_out" if reason.startswith("scale_out:") else "sell_peak_dd_clear")
             if stat != "sell_scale_out" or not counted_scale:
@@ -272,25 +282,35 @@ def peak_dd_clear_exits(st, code, pos, px, day, day_i, limits, *,
     return 1 if filled else 0
 
 
-def scale_out_exits(st, code, pos, px, day, day_i, limits, *, scale_step, scale_frac, hm=None, fill_config=None, open_px=None):
-    """6.13：相对首仓锚价每满 scale_step 涨幅，卖出当时剩余持仓的 scale_frac。
+def scale_out_exits(st, code, pos, px, day, day_i, limits, *, scale_step, scale_frac, scale_anchor="first_lot", hm=None, fill_config=None, open_px=None):
+    """6.13：相对减仓锚价每满 scale_step 涨幅，卖出当时剩余持仓的 scale_frac。
 
+    默认锚为首仓 A0（group.anchor_cost / first_lot.cost）。
+    scale_anchor=\"weighted\"（6.51）改为组内剩余 lot 的股数加权均价。
     逐分钟 close 相位调用；每档一次（组计数器）；legacy 整百股向下、
     FIFO 切 lot。industry 若该档会留下不足一手的组级余额，则同一订单卖完
     该余额；规则只在组总量上应用，不能逐 lot 制造或保留零股。
     lot 级 T+1 由 _sell(wanted_shares) 保证；跌停顺延；组已同分钟离场则不触发。
+    均价上移后不重置 scale_steps；allowed 低于已走档则本分钟不减仓。
     """
     if _side_pending(st, pos) or not scale_step or px <= 0 or not position_is_open(st, pos):
         return 0
-    anchor_cost = float(getattr(pos.group, "anchor_cost", None) or pos.group.first_lot.cost)
+    lots = [lot for lot in st.positions.get(code, [])
+            if getattr(lot, "position_id", None) == pos.position_id]
+    shares_now = sum(lot.shares for lot in lots)
+    if str(scale_anchor) == "weighted":
+        if shares_now <= 0:
+            return 0
+        anchor_cost = (
+            sum(float(lot.shares) * float(lot.cost) for lot in lots) / float(shares_now)
+        )
+    else:
+        anchor_cost = float(getattr(pos.group, "anchor_cost", None) or pos.group.first_lot.cost)
     if anchor_cost <= 0 or float(px) < anchor_cost:
         return 0
     allowed = int((float(px) / anchor_cost - 1.0 + 1e-12) / float(scale_step))
     if allowed <= pos.group.scale_steps:
         return 0
-    lots = [lot for lot in st.positions.get(code, [])
-            if getattr(lot, "position_id", None) == pos.position_id]
-    shares_now = sum(lot.shares for lot in lots)
     if shares_now <= 0:
         pos.group.scale_steps = allowed
         return 0
@@ -363,7 +383,28 @@ def step_stop_exits(st, code, pos, px, day, day_i, limits, *, step_stop_pct, hm=
         if filled:
             sold += 1
             st.stats["sell_stop_step"] = int(st.stats.get("sell_stop_step", 0)) + 1
+            if lot.shares <= 0:
+                arm_cont_stop_rebuy(st, getattr(pos, "group", None), lot.lot_id)
     return sold
+
+
+def _independent_skip_supported(cursor) -> bool:
+    """Fail closed: unknown cursor features keep the full Python bar loop."""
+    if getattr(cursor, "_custom_fill", False):
+        return False
+    if cursor.session_volume is not None:
+        return False
+    if cursor.reserve_limit_up or cursor.defer_limit_up:
+        return False
+    if cursor.version9_plan is not None:
+        return False
+    if callable(getattr(cursor, "exit_plan", None)):
+        return False
+    if callable(getattr(cursor, "sell_gate", None)):
+        return False
+    if callable(getattr(cursor, "phase_exit", None)):
+        return False
+    return True
 
 
 def run_chronological_day(
@@ -753,12 +794,21 @@ def run_chronological_day(
         skips = int(st.stats.get("skip_volume_unavailable", 0)) + int(
             st.stats.get("skip_volume_cap", 0)
         )
+        day_quotes = DayBuyQuotes(
+            pool_quote,
+            ds=ds,
+            names=names,
+            exdiv=exdiv,
+            exdiv_ref_fen=exdiv_ref_fen,
+            qlib_limit_pct=qlib_limit_pct,
+        )
         common = {
             "day_i": day_i,
             "day": day,
             "ds": ds,
             "names": names,
             "buy_quote_for": pool_quote,
+            "day_buy_quotes": day_quotes,
             "volume_bucket_for": pool_bucket if st.volume_cap is not None else None,
             "sizing": hooks.get("sizing", "daily_quota"),
             "name_budget": hooks.get("name_budget", 1_000_000.0),

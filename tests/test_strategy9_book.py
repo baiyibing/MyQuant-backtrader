@@ -36,6 +36,15 @@ def test_version9_hooks_and_max_hold(enabled):
     assert hooks["take_profit"](10.0, 10.0, 10.0, MAX_HOLD) == ("force_sell:max_hold" if enabled else None)
     assert take_profit_reason(1, 1, 1, MAX_HOLD, max_hold=enabled) == ("force_sell:max_hold" if enabled else None)
     assert hooks["take_profit"](11., 10., 11., MAX_HOLD) == "profit_take:target"
+    assert "stop_range" in hooks
+    assert "st_on" not in hooks
+
+
+def test_version9_can_turn_range_stop_off():
+    hooks = apply_csv_strategy("version9", max_hold=True, range_stop=False)
+    assert "stop_range" not in hooks
+    assert hooks["take_profit"](10.0, 10.0, 10.0, MAX_HOLD) == "force_sell:max_hold"
+    assert hooks["take_profit"](11.0, 10.0, 11.0, 1) == "profit_take:target"
     assert get_book("9").tag == "v9"
     assert get_book("v9").name == "version9"
 

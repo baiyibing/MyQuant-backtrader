@@ -7,6 +7,7 @@ two simulate loops stay thin. This module must not import either engine.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from numbers import Integral
 from typing import Optional
@@ -22,7 +23,12 @@ from backtest.research.ashare_fees import (
     trade_commission,
 )
 from backtest.research.ashare_fill_clock import session_phase as _session_phase
-from backtest.research.ashare_session import LIMIT_EPS, hit_limit_down as hit_limit_down, hit_limit_up
+from backtest.research.ashare_session import (
+    LIMIT_EPS,
+    defer_sell_at_limit,
+    hit_limit_down as hit_limit_down,
+    hit_limit_up,
+)
 from backtest.research.ashare_volume_cap import VolumeCap
 from backtest.research.ashare_exdiv_economics import ExDivEconomics
 from backtest.research.book_capabilities import uses_s8_independent as _uses_s8_independent
@@ -71,6 +77,7 @@ def _empty_stats() -> dict:
         "chase_pending_eod": 0,
         "chase_skip_held": 0,
         "skip_held": 0,
+        "skip_st": 0,
         "skip_index_gate": 0,
         "skip_add_loser": 0,
         "add_lots": 0,
@@ -132,6 +139,9 @@ class IndependentGroup:
     closed: bool = False
     exit_day_idx: int | None = None
     t1_deferred_bonus_lots: set[int] = field(default_factory=set)
+    cont_open: dict[int, float] = field(default_factory=dict)
+    cont_rebuy_armed: list[float] = field(default_factory=list)
+    cont_rebuy_done: list[float] = field(default_factory=list)
 
 
 class IndependentExitPosition:
@@ -338,6 +348,16 @@ def _configure_s8(st, hooks: dict) -> None:
         # "peak" = 组峰值触发档位（v6.49）；None/其他 = 现价对首仓成本的涨幅触发
         "add_schedule_trigger": hooks.get("add_schedule_trigger"),
         "base_zone_caps": hooks.get("base_zone_caps"),  # (涨幅<100% 上限, ≥100% 上限)
+        "cont_stop_rebuy": bool(hooks.get("cont_stop_rebuy")),
+        "cont_from_rise": hooks.get("cont_from_rise"),
+        "cont_stop_rebuy_lift": hooks.get("cont_stop_rebuy_lift"),
+        "cont_stop_rebuy_frac": hooks.get("cont_stop_rebuy_frac"),
+        "cont_stop_rebuy_open_frac": hooks.get("cont_stop_rebuy_open_frac"),
+        "cont_stop_rebuy_with_schedule": bool(
+            hooks.get("cont_stop_rebuy_with_schedule")
+        ),
+        "min_lot_top_up": bool(hooks.get("min_lot_top_up")),
+        "index_blocks_s8_add": bool(hooks.get("index_blocks_s8_add")),
         "groups": {},
     }
 
@@ -346,20 +366,104 @@ def s8_policy(st):
     return st.book_state.get("s8_independent")
 
 
+def _identity_tagged(bucket, pos) -> bool:
+    return any(item is pos for item in bucket)
+
+
+def _tag_identity(bucket, pos) -> None:
+    if not _identity_tagged(bucket, pos):
+        bucket.append(pos)
+
+
+def is_parking_lot(st, pos) -> bool:
+    """True for cash-sleeve lots that must not take strategy exits.
+
+    Tags the Position object, not ``id(pos)``. CPython reuses freed ids, so a
+    later strategy lot can be skipped by index_cut / skim if only the integer
+    address is stored.
+    """
+    return _identity_tagged(st.book_state.get("parking_lot_ids", ()), pos)
+
+
+def is_principal_lot(st, pos) -> bool:
+    """True for skim-locked 600036 lots that stay in NAV as 本金."""
+    return _identity_tagged(st.book_state.get("parking_principal_ids", ()), pos)
+
+
+def parking_lots(st, symbol: str) -> list:
+    return [p for p in st.positions.get(symbol, []) if is_parking_lot(st, p)]
+
+
+def sleeve_parking_lots(st, symbol: str) -> list:
+    return [p for p in parking_lots(st, symbol) if not is_principal_lot(st, p)]
+
+
+def principal_parking_lots(st, symbol: str) -> list:
+    return [p for p in parking_lots(st, symbol) if is_principal_lot(st, p)]
+
+
+def unpark_parking_lots(st, symbol: str) -> list:
+    """Idle sleeve first, then lock. 6.50/6.51 have sleeve only."""
+    return sleeve_parking_lots(st, symbol) + principal_parking_lots(st, symbol)
+
+
+def register_parking_lot(st, pos) -> None:
+    _tag_identity(st.book_state.setdefault("parking_lot_ids", []), pos)
+
+
+def register_principal_lot(st, pos) -> None:
+    register_parking_lot(st, pos)
+    _tag_identity(st.book_state.setdefault("parking_principal_ids", []), pos)
+
+
+def note_cont_open(group: IndependentGroup, lot_id: int, rise: float, *, from_rise: float) -> None:
+    """Remember a live continuation-tranche lot so a later step-stop can re-arm it."""
+    if float(rise) + 1e-12 >= float(from_rise):
+        group.cont_open[int(lot_id)] = float(rise)
+
+
+def arm_cont_stop_rebuy(st, group: IndependentGroup | None, lot_id: int) -> bool:
+    """Move a fully stopped continuation lot onto the group's one-shot rebuy queue."""
+    policy = s8_policy(st)
+    if group is None or not policy or not policy.get("cont_stop_rebuy"):
+        return False
+    rise = group.cont_open.pop(int(lot_id), None)
+    if rise is None or rise in group.cont_rebuy_armed or rise in group.cont_rebuy_done:
+        return False
+    group.cont_rebuy_armed.append(float(rise))
+    st.stats["arm_cont_rebuy"] = int(st.stats.get("arm_cont_rebuy", 0)) + 1
+    return True
+
+
+def held_codes(st) -> list[str]:
+    """Lexicographic live codes. Cash-competing loops must not use insert order."""
+    return sorted(st.positions)
+
+
+def held_position_items(st) -> list[tuple[str, list]]:
+    """``(code, lots)`` in ``held_codes`` order. Lots stay in ledger list order."""
+    return [(code, list(st.positions[code])) for code in held_codes(st)]
+
+
 def s8_open_groups(st, code: str):
-    """Visit each live signal group once in the code's current lot order."""
+    """Visit each live signal group once, sorted by position_id."""
     policy = s8_policy(st)
     if policy is None:
         return
     seen = set()
+    rows = []
     for pos in st.positions.get(code, []):
+        if is_parking_lot(st, pos):
+            continue
         position_id = getattr(pos, "position_id", None)
         if position_id is None or position_id in seen:
             continue
         seen.add(position_id)
         group = policy["groups"][position_id]
         if not group.closed:
-            yield position_id, group
+            rows.append((position_id, group))
+    rows.sort(key=lambda item: item[0])
+    yield from rows
 
 
 def position_identity(pos) -> dict:
@@ -386,6 +490,15 @@ def held_fill_key(pos):
     if not hasattr(pos, "_held_fill_token"):
         pos._held_fill_token = object()
     return pos._held_fill_token
+
+
+def lot_identity(pos):
+    """Per-object token for same-day maps. Not CPython's recycled ``id(pos)``."""
+    token = getattr(pos, "_lot_identity", None)
+    if token is None:
+        token = object()
+        pos._lot_identity = token
+    return token
 
 
 def position_is_open(st, pos) -> bool:
@@ -630,14 +743,14 @@ def apply_exdiv_economics(st: SimState, code: str, ds: str) -> None:
         if added:
             pos.shares += added
             date = entitlement.list_date
-            locks = account.bonus_locks.setdefault(id(pos), {})
+            locks = account.locks_for(pos)
             locks[date] = locks.get(date, 0) + added
     st.cash += account.settle(ds)  # pay_date == ex_date is allowed
 
 
 def _locked_bonus(account: ExDivEconomics, pos: Position, ds: str) -> int:
     # Same strict date ordering as t1_sellable; a later list_date stays locked.
-    return sum(q for acquired, q in account.bonus_locks.get(id(pos), {}).items() if ds <= acquired)
+    return sum(q for acquired, q in account.peek_locks(pos).items() if ds <= acquired)
 
 
 def resolve_limit_prices(
@@ -691,7 +804,14 @@ def _buy_size(
 
 
 def allows_min_lot_top_up(st) -> bool:
-    """Return whether the active profile preserves legacy one-lot supplementation."""
+    """Return whether one board lot may be funded from the cash pool.
+
+    Book/CLI ``min_lot_top_up`` is the business switch (6.50+ default on).
+    Industry B8-03 stays off unless that switch is on.
+    """
+    policy = s8_policy(st)
+    if policy and bool(policy.get("min_lot_top_up")):
+        return True
     return not bool(
         getattr(getattr(st, "rule_profile", None), "supplementary_min_lot", False)
     )
@@ -784,6 +904,9 @@ def preview_buy_declaration(
             shares, supp = 0, 0.0
         else:
             shares, supp = budget_buy_quantity(per, px, rule), 0.0
+            if allows_min_lot_top_up(st) and shares < BOARD_LOT:
+                shares = BOARD_LOT
+                supp = supplementary_notional(shares * px, per)
     else:
         if isinstance(shares_override, bool) or not isinstance(shares_override, Integral):
             raise ValueError("shares_override must be an integer share count")
@@ -807,16 +930,22 @@ def preview_final_buy_declaration(
         st, code, px, per, shares_override=shares_override
     )
     if uses_fee_aware_affordability(st) and shares > 0:
+        topped = supp > 0 and allows_min_lot_top_up(st)
+        budget = float(st.cash) if topped else per
+        cash_cap = st.cash if (topped or uses_shrink_on_short_cash(st)) else per
         shares = fee_aware_buy_quantity(
             shares,
             px,
-            per,
-            st.cash if uses_shrink_on_short_cash(st) else per,
+            budget,
+            cash_cap,
             lambda notional: st.account_fee_schedule.debit_buy(notional, day, code),
             increment=buy_quantity_increment(rule),
             minimum=buy_quantity_minimum(rule),
         )
-        supp = 0.0
+        if topped and shares > 0:
+            supp = supplementary_notional(shares * px, per)
+        else:
+            supp = 0.0
     return shares, supp, wanted_shares, rule
 
 
@@ -850,6 +979,12 @@ def execute_buy(
 ) -> bool:
     """常规/追买共用；open 调用方显式传 at，默认仍为 bucket 收盘。"""
     if px <= 0:
+        return False
+    from backtest.research.st_status import st_blocks_buy
+
+    if st_blocks_buy(st, code, _ymd(day)):
+        st.stats["skip_st"] = int(st.stats.get("skip_st", 0)) + 1
+        record_rejection(st, code, day, "skip_st", px)
         return False
     policy = s8_policy(st)
     group = None
@@ -955,6 +1090,15 @@ def execute_buy(
         if fee_aware
         else notional + comm
     )
+    if needed > st.cash:
+        release_parking_cash(st, needed)
+    if needed > st.cash + 1e-9 and st.stats.get("parking_open_cover"):
+        st.stats["skip_cash"] = int(st.stats.get("skip_cash", 0)) + 1
+        st.stats["skip_cash_notional"] = (
+            float(st.stats.get("skip_cash_notional", 0.0)) + float(needed)
+        )
+        record_rejection(st, code, day, "skip_cash", px)
+        return False
     if not check_buy_cash(st, needed=needed, available=st.cash,
                           date=_ymd(day), code=code):
         record_rejection(st, code, day, "skip_cash", px)
@@ -1053,6 +1197,151 @@ def execute_buy(
     if callable(st.book_on_buy):
         st.book_on_buy(st, code, reason, shares)
     return True
+
+
+def execute_parking_buy(
+    st: SimState,
+    code: str,
+    px: float,
+    per: float,
+    entry_idx: int,
+    day,
+    *,
+    reason: str = "parking:rebalance",
+    bucket_id: int | None = None,
+    at: int | None = None,
+    hm: int | None = None,
+) -> bool:
+    """Buy the cash-sleeve name without creating an S8 group or using quota."""
+    if px <= 0 or per <= 0:
+        return False
+    shares, _supp, _wanted, _rule = preview_final_buy_declaration(
+        st, code, px, per, day
+    )
+    if shares <= 0:
+        st.stats["skip_parking_size"] = int(st.stats.get("skip_parking_size", 0)) + 1
+        return False
+    per_order_fees = hasattr(st, "_fee_accumulators")
+    order_id = fee_order_id(st) if per_order_fees else None
+    notional = shares * px
+    fee_aware = uses_fee_aware_affordability(st)
+    comm = (
+        st.account_fee_schedule.buy_fee(notional)
+        if per_order_fees
+        else trade_commission(notional, st.buy_cost_rate, st.min_cost)
+    )
+    needed = (
+        st.account_fee_schedule.debit_buy(notional, day, code)
+        if fee_aware
+        else notional + comm
+    )
+    if needed > st.cash:
+        st.stats["skip_parking_cash"] = int(st.stats.get("skip_parking_cash", 0)) + 1
+        return False
+    key = (code, _ymd(day), bucket_id)
+    if st.volume_cap is not None:
+        shares, skip = st.volume_cap.clamp(
+            key, bucket_id if at is None else at, shares, buy=True,
+        )
+        if not shares:
+            st.stats["skip_parking_volume"] = int(st.stats.get("skip_parking_volume", 0)) + 1
+            _volume_skip(st, code, px, day, skip, bucket_id)
+            return False
+        notional = shares * px
+        comm = (
+            st.account_fee_schedule.buy_fee(notional)
+            if per_order_fees
+            else trade_commission(notional, st.buy_cost_rate, st.min_cost)
+        )
+    cash_before = st.cash
+    if not per_order_fees:
+        st.cash -= notional + comm
+    lots = st.positions.setdefault(code, [])
+    lot_id = lots[-1].lot_id + 1 if lots else 0
+    pos = Position(code, shares, px, entry_idx, px, lot_id=lot_id)
+    lots.append(pos)
+    register_parking_lot(st, pos)
+    trade = {
+        "date": _ymd(day),
+        "code": code,
+        "side": "BUY",
+        "price": px,
+        "shares": shares,
+        "notional": notional,
+        "commission": comm if not per_order_fees else 0.0,
+        "reason": reason,
+        "lot": lot_id,
+        "session_phase": "",
+        "price_rule": "",
+    }
+    st.trades.append(trade)
+    if per_order_fees:
+        comm = _accrue_order_fee(st, "BUY", order_id, trade)
+        st.cash -= notional + comm
+    if hm is not None:
+        st.trades[-1]["hm"] = int(hm)
+    record_fill(st, st.trades[-1], cash_before)
+    st.stats["buys"] += 1
+    st.stats["parking_buys"] = int(st.stats.get("parking_buys", 0)) + 1
+    st.stats["parking_notional"] = float(st.stats.get("parking_notional", 0.0)) + notional
+    if st.volume_cap is not None:
+        st.volume_cap.consume(key, shares)
+    return True
+
+
+def release_parking_cash(st: SimState, needed: float) -> None:
+    """Sell T+1 parking lots so a strategy buy can debit ``needed`` cash."""
+    session = st.book_state.get("parking_session")
+    if session is None or needed <= st.cash + 1e-9:
+        return
+    symbol = session["symbol"]
+    px = float(session["px"])
+    day_i = int(session["day_i"])
+    day = session["day"]
+    limits = session["limits"]
+    if px <= 0 or not math.isfinite(px):
+        return
+    if defer_sell_at_limit(px, limits):
+        st.stats["skip_parking_limit"] = int(st.stats.get("skip_parking_limit", 0)) + 1
+        return
+    sold_any = False
+    lock_raised = 0.0
+    for lot in unpark_parking_lots(st, symbol):
+        if st.cash + 1e-9 >= needed:
+            break
+        if lot.entry_idx >= day_i:
+            st.stats["skip_parking_t1"] = int(st.stats.get("skip_parking_t1", 0)) + 1
+            continue
+        shortfall = needed - st.cash
+        raw = int(math.ceil(shortfall / px / BOARD_LOT) * BOARD_LOT)
+        chunk = min(int(lot.shares), max(BOARD_LOT, raw))
+        draw_lock = is_principal_lot(st, lot)
+        cash_before = float(st.cash)
+        filled = _sell(
+            st,
+            symbol,
+            lot,
+            px,
+            day,
+            "parking:unpark",
+            day_i=day_i,
+            wanted_shares=chunk,
+            price_rule="parking_daily_close",
+        )
+        if filled:
+            sold_any = True
+            st.stats["parking_sold_shares"] = (
+                int(st.stats.get("parking_sold_shares", 0)) + int(filled)
+            )
+            if draw_lock:
+                lock_raised += max(0.0, float(st.cash) - cash_before)
+    if sold_any:
+        st.stats["parking_unpark"] = int(st.stats.get("parking_unpark", 0)) + 1
+        st.stats["parking_sells"] = int(st.stats.get("parking_sells", 0)) + 1
+        if lock_raised > 1e-6 and st.stats.get("profit_skim_to_parking"):
+            st.stats["profit_skim_lock_drawn"] = (
+                float(st.stats.get("profit_skim_lock_drawn", 0.0)) + lock_raised
+            )
 
 
 def _volume_skip(st: SimState, code: str, px: float, day, reason: str,
@@ -1203,9 +1492,9 @@ def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str, *
     # S1: every booked sell decrements shares, including the default path.
     pos.shares -= shares
     if st.exdiv_economics is not None:
-        locks = st.exdiv_economics.bonus_locks.pop(id(pos), {})
+        locks = st.exdiv_economics.pop_locks(pos)
         if pos.shares and (locked := {d: q for d, q in locks.items() if ds <= d}):
-            st.exdiv_economics.bonus_locks[id(pos)] = locked
+            st.exdiv_economics.locks_for(pos).update(locked)
     if pos.shares:
         return shares
     lots = st.positions.get(code) or []
