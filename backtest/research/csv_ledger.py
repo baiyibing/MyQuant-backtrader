@@ -142,6 +142,7 @@ class IndependentGroup:
     cont_open: dict[int, float] = field(default_factory=dict)
     cont_rebuy_armed: list[float] = field(default_factory=list)
     cont_rebuy_done: list[float] = field(default_factory=list)
+    post_exit_cont_rise: float | None = None
 
 
 class IndependentExitPosition:
@@ -162,7 +163,8 @@ class IndependentExitPosition:
     @property
     def lots(self):
         return [
-            p for p in self.st.positions.get(self.code, [])
+            p
+            for p in self.st.positions.get(self.code, [])
             if getattr(p, "position_id", None) == self.position_id
         ]
 
@@ -191,8 +193,7 @@ class IndependentExitPosition:
             return lots[0].cost  # Preserve single-lot float boundaries exactly.
         shares = sum(p.shares for p in lots)
         return (
-            sum(p.shares * p.cost for p in lots) / shares
-            if shares else self.group.first_lot.cost
+            sum(p.shares * p.cost for p in lots) / shares if shares else self.group.first_lot.cost
         )
 
     @property
@@ -246,7 +247,8 @@ class IndependentExitPosition:
             if self.day is not None and self.st.exdiv_economics is not None:
                 # Some daily exits latch without attempting a fill that day.
                 self.group.t1_deferred_bonus_lots.update(
-                    p.lot_id for p in self.lots
+                    p.lot_id
+                    for p in self.lots
                     if _locked_bonus(self.st.exdiv_economics, p, _ymd(self.day))
                 )
         elif not value:
@@ -280,9 +282,7 @@ def reject_short_cash_override(hooks: dict, entry: str) -> None:
 def resolve_buy_cash_mode(st, hooks: dict) -> None:
     """Resolve after policy binding; keep configuration out of snapshots."""
     default_mode = (
-        "raise"
-        if getattr(st, "book_state", {}).get("s8_independent") is not None
-        else "skip"
+        "raise" if getattr(st, "book_state", {}).get("s8_independent") is not None else "skip"
     )
     if "on_short_cash" in hooks:
         mode = hooks["on_short_cash"]
@@ -313,7 +313,10 @@ def check_buy_cash(st, *, needed, available, date, code) -> bool:
             mode = "raise" if s8_policy(st) is not None else "skip"
         if mode == "raise":
             raise InsufficientCashError(
-                date=date, code=code, needed=needed, available=available,
+                date=date,
+                code=code,
+                needed=needed,
+                available=available,
             )
         return False
     return True
@@ -350,14 +353,19 @@ def _configure_s8(st, hooks: dict) -> None:
         "base_zone_caps": hooks.get("base_zone_caps"),  # (涨幅<100% 上限, ≥100% 上限)
         "cont_stop_rebuy": bool(hooks.get("cont_stop_rebuy")),
         "cont_from_rise": hooks.get("cont_from_rise"),
+        "cont_frac": hooks.get("cont_frac"),
+        "cont_ride_trial": bool(hooks.get("cont_ride_trial")),
+        "post_exit_schedule_floor": hooks.get("post_exit_schedule_floor"),
         "cont_stop_rebuy_lift": hooks.get("cont_stop_rebuy_lift"),
         "cont_stop_rebuy_frac": hooks.get("cont_stop_rebuy_frac"),
         "cont_stop_rebuy_open_frac": hooks.get("cont_stop_rebuy_open_frac"),
-        "cont_stop_rebuy_with_schedule": bool(
-            hooks.get("cont_stop_rebuy_with_schedule")
-        ),
+        "cont_stop_rebuy_with_schedule": bool(hooks.get("cont_stop_rebuy_with_schedule")),
         "min_lot_top_up": bool(hooks.get("min_lot_top_up")),
         "index_blocks_s8_add": bool(hooks.get("index_blocks_s8_add")),
+        "post_exit_cont": bool(hooks.get("post_exit_cont")),
+        "post_exit_cont_rise": hooks.get("post_exit_cont_rise"),
+        "post_exit_cont_bypass_index": bool(hooks.get("post_exit_cont_bypass_index")),
+        "cont_live_max": hooks.get("cont_live_max"),
         "groups": {},
     }
 
@@ -416,10 +424,34 @@ def register_principal_lot(st, pos) -> None:
     _tag_identity(st.book_state.setdefault("parking_principal_ids", []), pos)
 
 
-def note_cont_open(group: IndependentGroup, lot_id: int, rise: float, *, from_rise: float) -> None:
+def note_cont_open(
+    group: IndependentGroup,
+    lot_id: int,
+    rise: float,
+    *,
+    from_rise: float,
+    frac: float | None = None,
+    cont_frac: float | None = None,
+) -> None:
     """Remember a live continuation-tranche lot so a later step-stop can re-arm it."""
-    if float(rise) + 1e-12 >= float(from_rise):
-        group.cont_open[int(lot_id)] = float(rise)
+    if frac is not None and cont_frac is not None:
+        if float(frac) + 1e-12 < float(cont_frac):
+            return
+    elif float(rise) + 1e-12 < float(from_rise):
+        return
+    group.cont_open[int(lot_id)] = float(rise)
+
+
+def live_cont_count(st, code: str, group: IndependentGroup) -> int:
+    """Continuation lots still in the book. Stale ``cont_open`` keys do not count."""
+    ids = getattr(group, "cont_open", None) or {}
+    if not ids:
+        return 0
+    return sum(
+        1
+        for lot in st.positions.get(code, [])
+        if lot.shares > 0 and int(getattr(lot, "lot_id", -1)) in ids
+    )
 
 
 def arm_cont_stop_rebuy(st, group: IndependentGroup | None, lot_id: int) -> bool:
@@ -464,6 +496,60 @@ def s8_open_groups(st, code: str):
             rows.append((position_id, group))
     rows.sort(key=lambda item: item[0])
     yield from rows
+
+
+def s8_live_position_ids(st) -> set[str]:
+    """Signal-group ids that still have a lot in the ledger."""
+    live: set[str] = set()
+    for lots in st.positions.values():
+        for pos in lots:
+            position_id = getattr(pos, "position_id", None)
+            if position_id:
+                live.add(position_id)
+    return live
+
+
+def s8_closed_groups(st, code: str):
+    """Remembered groups with no live lots for one code, sorted by position_id."""
+    policy = s8_policy(st)
+    if policy is None:
+        return
+    live = s8_live_position_ids(st)
+    rows = [
+        (position_id, group)
+        for position_id, group in policy["groups"].items()
+        if group.code == code and position_id not in live
+    ]
+    rows.sort(key=lambda item: item[0])
+    yield from rows
+
+
+def s8_price_add_codes(st, *, include_closed: bool) -> list[str]:
+    """Held codes first; flat remembered names appended sorted when resurrect is on."""
+    codes = list(held_codes(st))
+    if not include_closed:
+        return codes
+    policy = s8_policy(st)
+    if policy is None:
+        return codes
+    live = s8_live_position_ids(st)
+    held = set(codes)
+    extra = []
+    for position_id, group in policy["groups"].items():
+        if position_id not in live and group.code not in held:
+            extra.append(group.code)
+            held.add(group.code)
+    extra.sort()
+    return codes + extra
+
+
+def reopen_s8_group(group: IndependentGroup) -> None:
+    """Clear the full-exit latch so a remembered group can take a price add."""
+    group.closed = False
+    group.first_lot.pending_exit = ""
+    group.exit_day_idx = None
+    group.t1_deferred_bonus_lots.clear()
+    group.peak_dd_start = None
 
 
 def position_identity(pos) -> dict:
@@ -557,9 +643,7 @@ def bind_account_fee_schedule(st, schedule: FeeSchedule) -> None:
         "BUY": FeeAccumulator(schedule.buy_rate, schedule.min_cost),
         "SELL": FeeAccumulator(schedule.sell_rate, schedule.min_cost),
     }
-    st._stamp_duty_accumulator = (
-        StampDutyAccumulator() if schedule.dated_sell_stamp_duty else None
-    )
+    st._stamp_duty_accumulator = StampDutyAccumulator() if schedule.dated_sell_stamp_duty else None
     st._transfer_fee_accumulator = (
         TransferFeeAccumulator() if schedule.dated_bilateral_transfer_fee else None
     )
@@ -605,9 +689,7 @@ def preview_order_fees(
     if side == "SELL" and st._stamp_duty_accumulator is not None:
         if trade_date is None:
             raise ValueError("sell stamp duty requires a trade date")
-        stamp_duty = st._stamp_duty_accumulator.preview(
-            order_id, notional, trade_date
-        ).fee_delta
+        stamp_duty = st._stamp_duty_accumulator.preview(order_id, notional, trade_date).fee_delta
     transfer_fee = 0.0
     if st._transfer_fee_accumulator is not None:
         if trade_date is None or symbol is None:
@@ -628,9 +710,7 @@ def _accrue_order_fee(st, side: str, order_id, row: dict) -> float:
         fill["commission"] = commission
     stamp_delta = 0.0
     if side == "SELL" and st._stamp_duty_accumulator is not None:
-        stamp = st._stamp_duty_accumulator.add_fill(
-            order_id, row["notional"], row["date"]
-        )
+        stamp = st._stamp_duty_accumulator.add_fill(order_id, row["notional"], row["date"])
         for fill, amount in zip(rows, stamp.allocations):
             fill["stamp_duty"] = amount
         stamp_delta = stamp.fee_delta
@@ -683,8 +763,13 @@ def chase_decision(open_px: float, px: float, limit_up: float) -> str:
 
 
 def queue_limit_up_chase(
-    st: SimState, pending_chase: dict, code: str, per: float, sig_idx: int,
-    *, entry_signal_date: str | None = None,
+    st: SimState,
+    pending_chase: dict,
+    code: str,
+    per: float,
+    sig_idx: int,
+    *,
+    entry_signal_date: str | None = None,
 ) -> None:
     st.stats["skip_limit_up"] += 1
     key = f"{code}@{entry_signal_date}" if entry_signal_date is not None else code
@@ -724,28 +809,34 @@ def rescale_position(pos: Position, k: float) -> None:
     pos.peak = float(pos.peak) * factor
 
 
-def apply_exdiv_economics(st: SimState, code: str, ds: str) -> None:
+def apply_exdiv_economics(st: SimState, code: str, ds: str) -> float:
     """Ex-date snapshot before scan/buys; keep refs and lot identity unchanged.
 
     Bonus shares join their source lot, with a separate list-date T+1 lock.
     They are marked from ex-date, including shares awaiting a later listing.
+    Returns cash posted on this call (same-day pay or 0).
     """
     account = st.exdiv_economics
     if account is None:
-        return
+        return 0.0
     lots = st.positions.get(code, [])
-    callback = ({"on_event": lambda event: st.book_on_exdiv(st, code, event)}
-                if callable(st.book_on_exdiv) else {})
+    callback = (
+        {"on_event": lambda event: st.book_on_exdiv(st, code, event)}
+        if callable(st.book_on_exdiv)
+        else {}
+    )
     entitlement = account.entitle(code, ds, [p.shares for p in lots], **callback)
     if entitlement is None:
-        return
+        return 0.0
     for pos, added in zip(lots, entitlement.bonus_shares):
         if added:
             pos.shares += added
             date = entitlement.list_date
             locks = account.locks_for(pos)
             locks[date] = locks.get(date, 0) + added
-    st.cash += account.settle(ds)  # pay_date == ex_date is allowed
+    posted = account.settle(ds)  # pay_date == ex_date is allowed
+    st.cash += posted
+    return float(posted)
 
 
 def _locked_bonus(account: ExDivEconomics, pos: Position, ds: str) -> int:
@@ -812,37 +903,27 @@ def allows_min_lot_top_up(st) -> bool:
     policy = s8_policy(st)
     if policy and bool(policy.get("min_lot_top_up")):
         return True
-    return not bool(
-        getattr(getattr(st, "rule_profile", None), "supplementary_min_lot", False)
-    )
+    return not bool(getattr(getattr(st, "rule_profile", None), "supplementary_min_lot", False))
 
 
 def uses_fee_aware_affordability(st) -> bool:
     """Return whether buy declarations must include all industry buy fees."""
-    return bool(
-        getattr(getattr(st, "rule_profile", None), "fee_aware_affordability", False)
-    )
+    return bool(getattr(getattr(st, "rule_profile", None), "fee_aware_affordability", False))
 
 
 def uses_shrink_on_short_cash(st) -> bool:
     """Return whether short cash shrinks the declaration instead of using B7."""
-    return bool(
-        getattr(getattr(st, "rule_profile", None), "shrink_on_short_cash", False)
-    )
+    return bool(getattr(getattr(st, "rule_profile", None), "shrink_on_short_cash", False))
 
 
 def uses_exchange_quantity_rules(st) -> bool:
     """Return whether exchange-specific buy declarations are active."""
-    return bool(
-        getattr(getattr(st, "rule_profile", None), "exchange_quantity_rules", False)
-    )
+    return bool(getattr(getattr(st, "rule_profile", None), "exchange_quantity_rules", False))
 
 
 def uses_account_odd_lot_exit(st) -> bool:
     """Return whether partial sells must absorb an account-level odd remainder."""
-    return bool(
-        getattr(getattr(st, "rule_profile", None), "account_odd_lot_exit", False)
-    )
+    return bool(getattr(getattr(st, "rule_profile", None), "account_odd_lot_exit", False))
 
 
 def sell_board_lot(code: str) -> int:
@@ -850,9 +931,7 @@ def sell_board_lot(code: str) -> int:
     return STAR_MIN_DECLARE if buy_quantity_market(code) == "STAR" else BOARD_LOT
 
 
-def account_sell_quantity(
-    st: SimState, code: str, held_shares: int, wanted_shares: int
-) -> int:
+def account_sell_quantity(st: SimState, code: str, held_shares: int, wanted_shares: int) -> int:
     """Expand a partial order to include the whole sub-lot account remainder.
 
     Lot-row allocation happens after this calculation.  This deliberately
@@ -988,10 +1067,9 @@ def execute_buy(
         return False
     policy = s8_policy(st)
     group = None
+    post_exit_add = False
     if policy is not None:
-        if position_id is not None and (
-            not isinstance(position_id, str) or "@" not in position_id
-        ):
+        if position_id is not None and (not isinstance(position_id, str) or "@" not in position_id):
             raise ValueError(
                 f"position_id must have the form code@entry_signal_date: {position_id!r}"
             )
@@ -1004,19 +1082,31 @@ def execute_buy(
             not isinstance(merge_lot, IndependentPosition)
             or merge_lot.position_id != position_id
             or merge_lot.entry_signal_date != entry_signal_date
-            or group is None or group.first_lot is not merge_lot
+            or group is None
+            or group.first_lot is not merge_lot
         ):
             raise ValueError("merge_lot must be the same signal position's initial lot")
+        post_exit_add = bool(
+            group is not None
+            and not any(
+                getattr(p, "position_id", None) == position_id for p in st.positions.get(code, [])
+            )
+            and str(reason).startswith("add:")
+            and policy.get("post_exit_cont")
+        )
         if group is not None and (
-            group.closed or group.first_lot.pending_exit
-            or reason == "pool" or reason.startswith("chase")
+            (group.closed and not post_exit_add)
+            or (group.first_lot.pending_exit and not post_exit_add)
+            or reason == "pool"
+            or reason.startswith("chase")
             or (reason == "pool:tail_window" and merge_lot is None)
         ):
             return False  # One initial fill per source signal, even if called twice.
         if reason.startswith("add:") and group is None:
             raise ValueError(f"price add requires an open position_id: {position_id}")
     if merge_lot is not None and (
-        merge_lot.code != code or merge_lot.entry_idx != entry_idx
+        merge_lot.code != code
+        or merge_lot.entry_idx != entry_idx
         or not any(lot is merge_lot for lot in st.positions.get(code, []))
     ):
         raise ValueError("merge_lot must be an existing same-code, same-day buy lot")
@@ -1025,10 +1115,7 @@ def execute_buy(
     shares, supp, wanted_shares, quantity_rule = preview_final_buy_declaration(
         st, code, px, per, day, shares_override=shares_override
     )
-    if (
-        shares_override is not None
-        and buy_quantity_increment(quantity_rule) == BOARD_LOT
-    ):
+    if shares_override is not None and buy_quantity_increment(quantity_rule) == BOARD_LOT:
         # Keep the frozen B8 helper call at the ledger boundary; preview and
         # execution intentionally normalize the same explicit declaration.
         normalized_board_override = nonnegative_override_board_lots(shares_override)
@@ -1063,9 +1150,7 @@ def execute_buy(
                     px,
                     per,
                     per,
-                    lambda notional: st.account_fee_schedule.debit_buy(
-                        notional, day, code
-                    ),
+                    lambda notional: st.account_fee_schedule.debit_buy(notional, day, code),
                 )
                 <= 0
             )
@@ -1086,31 +1171,39 @@ def execute_buy(
         else trade_commission(notional, st.buy_cost_rate, st.min_cost)
     )
     needed = (
-        st.account_fee_schedule.debit_buy(notional, day, code)
-        if fee_aware
-        else notional + comm
+        st.account_fee_schedule.debit_buy(notional, day, code) if fee_aware else notional + comm
     )
     if needed > st.cash:
         release_parking_cash(st, needed)
     if needed > st.cash + 1e-9 and st.stats.get("parking_open_cover"):
         st.stats["skip_cash"] = int(st.stats.get("skip_cash", 0)) + 1
-        st.stats["skip_cash_notional"] = (
-            float(st.stats.get("skip_cash_notional", 0.0)) + float(needed)
+        st.stats["skip_cash_notional"] = float(st.stats.get("skip_cash_notional", 0.0)) + float(
+            needed
         )
         record_rejection(st, code, day, "skip_cash", px)
         return False
-    if not check_buy_cash(st, needed=needed, available=st.cash,
-                          date=_ymd(day), code=code):
+    if not check_buy_cash(st, needed=needed, available=st.cash, date=_ymd(day), code=code):
         record_rejection(st, code, day, "skip_cash", px)
         return False
     if st.volume_cap is not None:
         key = (code, _ymd(day), bucket_id)
         shares, skip = st.volume_cap.clamp(
-            key, bucket_id if at is None else at, shares, buy=True,
+            key,
+            bucket_id if at is None else at,
+            shares,
+            buy=True,
         )
         if not shares:
-            _volume_skip(st, code, px, day, skip, bucket_id,
-                         position_id=position_id, entry_signal_date=entry_signal_date)
+            _volume_skip(
+                st,
+                code,
+                px,
+                day,
+                skip,
+                bucket_id,
+                position_id=position_id,
+                entry_signal_date=entry_signal_date,
+            )
             return False
         notional = shares * px
         comm = (
@@ -1130,7 +1223,8 @@ def execute_buy(
     lots = st.positions.setdefault(code, [])
     identity = (
         {"position_id": position_id, "entry_signal_date": entry_signal_date}
-        if policy is not None else {}
+        if policy is not None
+        else {}
     )
     if merge_lot is None:
         lot_id = lots[-1].lot_id + 1 if lots else 0
@@ -1152,14 +1246,20 @@ def execute_buy(
         if policy is not None:
             if group is None:
                 policy["groups"][position_id] = IndependentGroup(
-                    code, entry_signal_date, policy["name_budget"], pos,
+                    code,
+                    entry_signal_date,
+                    policy["name_budget"],
+                    pos,
                 )
             else:
                 group.next_lot_id += 1
+                if post_exit_add:
+                    reopen_s8_group(group)
     else:
         lot_id = merge_lot.lot_id
-        merge_lot.cost = ((merge_lot.cost * merge_lot.shares + px * shares)
-                          / (merge_lot.shares + shares))
+        merge_lot.cost = (merge_lot.cost * merge_lot.shares + px * shares) / (
+            merge_lot.shares + shares
+        )
         merge_lot.shares += shares
         # Children are one T+0 lot: keep the first fill's peak and its -1 clock.
         # The original scanner starts updating that peak only from T+1.
@@ -1215,9 +1315,7 @@ def execute_parking_buy(
     """Buy the cash-sleeve name without creating an S8 group or using quota."""
     if px <= 0 or per <= 0:
         return False
-    shares, _supp, _wanted, _rule = preview_final_buy_declaration(
-        st, code, px, per, day
-    )
+    shares, _supp, _wanted, _rule = preview_final_buy_declaration(st, code, px, per, day)
     if shares <= 0:
         st.stats["skip_parking_size"] = int(st.stats.get("skip_parking_size", 0)) + 1
         return False
@@ -1231,9 +1329,7 @@ def execute_parking_buy(
         else trade_commission(notional, st.buy_cost_rate, st.min_cost)
     )
     needed = (
-        st.account_fee_schedule.debit_buy(notional, day, code)
-        if fee_aware
-        else notional + comm
+        st.account_fee_schedule.debit_buy(notional, day, code) if fee_aware else notional + comm
     )
     if needed > st.cash:
         st.stats["skip_parking_cash"] = int(st.stats.get("skip_parking_cash", 0)) + 1
@@ -1241,7 +1337,10 @@ def execute_parking_buy(
     key = (code, _ymd(day), bucket_id)
     if st.volume_cap is not None:
         shares, skip = st.volume_cap.clamp(
-            key, bucket_id if at is None else at, shares, buy=True,
+            key,
+            bucket_id if at is None else at,
+            shares,
+            buy=True,
         )
         if not shares:
             st.stats["skip_parking_volume"] = int(st.stats.get("skip_parking_volume", 0)) + 1
@@ -1330,8 +1429,8 @@ def release_parking_cash(st: SimState, needed: float) -> None:
         )
         if filled:
             sold_any = True
-            st.stats["parking_sold_shares"] = (
-                int(st.stats.get("parking_sold_shares", 0)) + int(filled)
+            st.stats["parking_sold_shares"] = int(st.stats.get("parking_sold_shares", 0)) + int(
+                filled
             )
             if draw_lock:
                 lock_raised += max(0.0, float(st.cash) - cash_before)
@@ -1344,40 +1443,78 @@ def release_parking_cash(st: SimState, needed: float) -> None:
             )
 
 
-def _volume_skip(st: SimState, code: str, px: float, day, reason: str,
-                 bucket_id: int | None, *, position_id: str | None = None,
-                 entry_signal_date: str | None = None) -> None:
+def _volume_skip(
+    st: SimState,
+    code: str,
+    px: float,
+    day,
+    reason: str,
+    bucket_id: int | None,
+    *,
+    position_id: str | None = None,
+    entry_signal_date: str | None = None,
+) -> None:
     family = reason.split(":", 1)[0]
     st.stats[family] = int(st.stats.get(family, 0)) + 1
     identity = (
         {"position_id": position_id, "entry_signal_date": entry_signal_date}
-        if s8_policy(st) is not None and position_id is not None else {}
+        if s8_policy(st) is not None and position_id is not None
+        else {}
     )
-    trade = {"date": _ymd(day), "code": code, "side": "SKIP",
-             "price": px, "shares": 0, "notional": 0.0,
-             "commission": 0.0, "reason": reason, "bucket": bucket_id,
-             "session_phase": "", "price_rule": "", **identity}
+    trade = {
+        "date": _ymd(day),
+        "code": code,
+        "side": "SKIP",
+        "price": px,
+        "shares": 0,
+        "notional": 0.0,
+        "commission": 0.0,
+        "reason": reason,
+        "bucket": bucket_id,
+        "session_phase": "",
+        "price_rule": "",
+        **identity,
+    }
     if getattr(getattr(st, "account_fee_schedule", None), "dated_sell_stamp_duty", False):
         trade["stamp_duty"] = 0.0
-    if getattr(
-        getattr(st, "account_fee_schedule", None), "dated_bilateral_transfer_fee", False
-    ):
+    if getattr(getattr(st, "account_fee_schedule", None), "dated_bilateral_transfer_fee", False):
         trade["transfer_fee"] = 0.0
     st.trades.append(trade)
     record_fill(st, st.trades[-1], st.cash)
 
 
-def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str, *,
-          bucket_id: int | None = None, at: int | None = None,
-          day_i: int | None = None, hm: int | None = None,
-          session_phase: str = "", price_rule: str = "",
-          wanted_shares: int | None = None, _group_exit: bool = False,
-          order_id=None) -> int:
+def _sell(
+    st: SimState,
+    code: str,
+    pos: Position,
+    px: float,
+    day,
+    reason: str,
+    *,
+    bucket_id: int | None = None,
+    at: int | None = None,
+    day_i: int | None = None,
+    hm: int | None = None,
+    session_phase: str = "",
+    price_rule: str = "",
+    wanted_shares: int | None = None,
+    _group_exit: bool = False,
+    order_id=None,
+) -> int:
     if isinstance(pos, IndependentExitPosition):
         return _sell_s8_group(
-            st, code, pos, px, day, reason,
-            bucket_id=bucket_id, at=at, day_i=day_i, hm=hm,
-            session_phase=session_phase, price_rule=price_rule,
+            st,
+            code,
+            pos,
+            px,
+            day,
+            reason,
+            bucket_id=bucket_id,
+            at=at,
+            day_i=day_i,
+            hm=hm,
+            session_phase=session_phase,
+            price_rule=price_rule,
             wanted_shares=wanted_shares,
         )
     shares = pos.shares
@@ -1388,19 +1525,28 @@ def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str, *
             return 0
     if st.exdiv_economics is not None:
         ds = _ymd(day)
-        group = [pos] + [p for p in st.positions.get(code, [])
-                         if p.ride_with == pos.lot_id and p is not pos]
+        group = [pos] + [
+            p for p in st.positions.get(code, []) if p.ride_with == pos.lot_id and p is not pos
+        ]
         # Linked exits remain atomic; wait for all bonus shares to unlock.
         if (len(group) > 1 or pos.ride_with is not None) and any(
             _locked_bonus(st.exdiv_economics, p, ds) for p in group
         ):
-            st.stats["exdiv_econ_defer_linked_t1"] = st.stats.get("exdiv_econ_defer_linked_t1", 0) + 1
+            st.stats["exdiv_econ_defer_linked_t1"] = (
+                st.stats.get("exdiv_econ_defer_linked_t1", 0) + 1
+            )
             return 0
         shares -= _locked_bonus(st.exdiv_economics, pos, ds)
-        if (st.volume_cap is not None and pos.pending_exit and not _group_exit
-                and shares < pos.shares):
+        if (
+            st.volume_cap is not None
+            and pos.pending_exit
+            and not _group_exit
+            and shares < pos.shares
+        ):
             # δ5 pending exits are all-or-none, including when bonus is locked.
-            st.stats["exdiv_econ_defer_pending_t1"] = st.stats.get("exdiv_econ_defer_pending_t1", 0) + 1
+            st.stats["exdiv_econ_defer_pending_t1"] = (
+                st.stats.get("exdiv_econ_defer_pending_t1", 0) + 1
+            )
             return 0
         if shares <= 0:
             return 0
@@ -1417,23 +1563,37 @@ def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str, *
         order_id = fee_order_id(st, order_key)
     if st.volume_cap is not None:
         # Linked exits stay atomic: no orphan riders or new pending queues.
-        group = [pos] + [p for p in st.positions.get(code, [])
-                         if p.ride_with == pos.lot_id and p is not pos]
+        group = [pos] + [
+            p for p in st.positions.get(code, []) if p.ride_with == pos.lot_id and p is not pos
+        ]
         child_ids = {p.lot_id for p in group if p is not pos}
         if any(p.ride_with in child_ids for p in st.positions.get(code, [])):
-            _volume_skip(st, code, px, day, "skip_volume_cap:unsupported_ride_tree", bucket_id,
-                         **position_identity(pos))
+            _volume_skip(
+                st,
+                code,
+                px,
+                day,
+                "skip_volume_cap:unsupported_ride_tree",
+                bucket_id,
+                **position_identity(pos),
+            )
             return 0
         if day_i is None or any(p.entry_idx >= day_i for p in group):
-            _volume_skip(st, code, px, day, "skip_volume_cap:t1", bucket_id,
-                         **position_identity(pos))
+            _volume_skip(
+                st, code, px, day, "skip_volume_cap:t1", bucket_id, **position_identity(pos)
+            )
             return 0
         key = (code, _ymd(day), bucket_id)
         wanted = shares if len(group) == 1 else sum(p.shares for p in group)
         allocated, skip = st.volume_cap.clamp(
-            key, bucket_id if at is None else at, wanted,
-            atomic=(len(group) > 1 or pos.ride_with is not None
-                    or (bool(pos.pending_exit) and not _group_exit)),
+            key,
+            bucket_id if at is None else at,
+            wanted,
+            atomic=(
+                len(group) > 1
+                or pos.ride_with is not None
+                or (bool(pos.pending_exit) and not _group_exit)
+            ),
         )
         if not allocated:
             _volume_skip(st, code, px, day, skip, bucket_id, **position_identity(pos))
@@ -1504,10 +1664,20 @@ def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str, *
     policy = s8_policy(st)
     if policy is not None and isinstance(pos, IndependentPosition):
         if not any(
-            getattr(p, "position_id", None) == pos.position_id
-            for p in st.positions.get(code, [])
+            getattr(p, "position_id", None) == pos.position_id for p in st.positions.get(code, [])
         ):
-            policy["groups"][pos.position_id].closed = True
+            group = policy["groups"][pos.position_id]
+            group.closed = True
+            if policy.get("post_exit_cont"):
+                from backtest.research.strategy6_56_rules import last_continuation_rise
+
+                group.post_exit_cont_rise = last_continuation_rise(
+                    group,
+                    policy.get("add_schedule"),
+                    from_rise=float(policy.get("cont_from_rise") or 0.40),
+                )
+                group.cont_open.clear()
+                group.cont_rebuy_armed.clear()
     carry_states = getattr(st, "held_fill_states", None)
     if carry_states is not None:
         state = carry_states.get(held_fill_key(pos), {})
@@ -1515,29 +1685,47 @@ def _sell(st: SimState, code: str, pos: Position, px: float, day, reason: str, *
         orders[:] = [order for order in orders if order[0] is not pos]
         position_id = getattr(pos, "position_id", None)
         if not position_id or not any(
-            getattr(p, "position_id", None) == position_id
-            for p in st.positions.get(code, [])
+            getattr(p, "position_id", None) == position_id for p in st.positions.get(code, [])
         ):
             carry_states.pop(held_fill_key(pos), None)
     if getattr(pos, "ride_with", None) is not None:
         return shares
     riders = [
-        p
-        for p in (st.positions.get(code) or [])
-        if getattr(p, "ride_with", None) == pos.lot_id
+        p for p in (st.positions.get(code) or []) if getattr(p, "ride_with", None) == pos.lot_id
     ]
     for child in riders:
-        _sell(st, code, child, px, day, reason,
-              bucket_id=bucket_id, at=at, day_i=day_i, hm=hm,
-              session_phase=session_phase, price_rule=price_rule,
-              order_id=order_id)
+        _sell(
+            st,
+            code,
+            child,
+            px,
+            day,
+            reason,
+            bucket_id=bucket_id,
+            at=at,
+            day_i=day_i,
+            hm=hm,
+            session_phase=session_phase,
+            price_rule=price_rule,
+            order_id=order_id,
+        )
     return shares
 
 
 def _sell_s8_group(
-    st: SimState, code: str, pos: IndependentExitPosition, px: float, day,
-    reason: str, *, bucket_id: int | None, at: int | None,
-    day_i: int | None, hm: int | None, session_phase: str, price_rule: str,
+    st: SimState,
+    code: str,
+    pos: IndependentExitPosition,
+    px: float,
+    day,
+    reason: str,
+    *,
+    bucket_id: int | None,
+    at: int | None,
+    day_i: int | None,
+    hm: int | None,
+    session_phase: str,
+    price_rule: str,
     wanted_shares: int | None,
 ) -> int:
     """Latch one group exit and retain its T+1-locked shares for the next open.
@@ -1560,9 +1748,18 @@ def _sell_s8_group(
         if lots[0].entry_idx >= day_i:
             return 0
         return _sell(
-            st, code, lots[0], px, day, reason,
-            bucket_id=bucket_id, at=at, day_i=day_i, hm=hm,
-            session_phase=session_phase, price_rule=price_rule,
+            st,
+            code,
+            lots[0],
+            px,
+            day,
+            reason,
+            bucket_id=bucket_id,
+            at=at,
+            day_i=day_i,
+            hm=hm,
+            session_phase=session_phase,
+            price_rule=price_rule,
         )
     pos.pending_exit = reason
     if pos.group.exit_day_idx is None:
@@ -1586,9 +1783,19 @@ def _sell_s8_group(
         ):
             lot_reason += "|t1_deferred"
         filled += _sell(
-            st, code, lot, px, day, lot_reason,
-            bucket_id=bucket_id, at=at, day_i=day_i, hm=hm,
-            session_phase=session_phase, price_rule=price_rule, _group_exit=True,
+            st,
+            code,
+            lot,
+            px,
+            day,
+            lot_reason,
+            bucket_id=bucket_id,
+            at=at,
+            day_i=day_i,
+            hm=hm,
+            session_phase=session_phase,
+            price_rule=price_rule,
+            _group_exit=True,
             order_id=order_id,
         )
     if pos.group.closed:

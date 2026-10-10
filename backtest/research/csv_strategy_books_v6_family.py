@@ -58,6 +58,9 @@ from backtest.research import (
     strategy6_51_rules,
     strategy6_52_rules,
     strategy6_53_rules,
+    strategy6_54_rules,
+    strategy6_55_rules,
+    strategy6_56_rules,
 )
 
 
@@ -1168,10 +1171,13 @@ def _apply_version6_30(
     **_,
 ) -> dict:
     resolved = strategy6_30_rules.STOP_PCT if stop_pct is None else float(stop_pct)
+
     def _tp(px, cost, peak, n_days=1):
         return strategy6_30_rules.take_profit_reason(px, cost, peak, n_days)
+
     def _rec(st):
         strategy6_30_rules.record_strategy6_30_params(st, stop_pct=resolved)
+
     return {
         "stop_pct": resolved,
         "take_profit": take_profit if take_profit is not None else _tp,
@@ -1205,10 +1211,13 @@ def _apply_version6_31(
     **_,
 ) -> dict:
     resolved = strategy6_31_rules.STOP_PCT if stop_pct is None else float(stop_pct)
+
     def _tp(px, cost, peak, n_days=1):
         return strategy6_31_rules.take_profit_reason(px, cost, peak, n_days)
+
     def _rec(st):
         strategy6_31_rules.record_strategy6_31_params(st, stop_pct=resolved)
+
     return {
         "stop_pct": resolved,
         "take_profit": take_profit if take_profit is not None else _tp,
@@ -1242,10 +1251,13 @@ def _apply_version6_32(
     **_,
 ) -> dict:
     resolved = strategy6_32_rules.STOP_PCT if stop_pct is None else float(stop_pct)
+
     def _tp(px, cost, peak, n_days=1):
         return strategy6_32_rules.take_profit_reason(px, cost, peak, n_days)
+
     def _rec(st):
         strategy6_32_rules.record_strategy6_32_params(st, stop_pct=resolved)
+
     return {
         "stop_pct": resolved,
         "take_profit": take_profit if take_profit is not None else _tp,
@@ -1279,10 +1291,13 @@ def _apply_version6_33(
     **_,
 ) -> dict:
     resolved = strategy6_33_rules.STOP_PCT if stop_pct is None else float(stop_pct)
+
     def _tp(px, cost, peak, n_days=1):
         return strategy6_33_rules.take_profit_reason(px, cost, peak, n_days)
+
     def _rec(st):
         strategy6_33_rules.record_strategy6_33_params(st, stop_pct=resolved)
+
     return {
         "stop_pct": resolved,
         "take_profit": take_profit if take_profit is not None else _tp,
@@ -1316,10 +1331,13 @@ def _apply_version6_34(
     **_,
 ) -> dict:
     resolved = strategy6_34_rules.STOP_PCT if stop_pct is None else float(stop_pct)
+
     def _tp(px, cost, peak, n_days=1):
         return strategy6_34_rules.take_profit_reason(px, cost, peak, n_days)
+
     def _rec(st):
         strategy6_34_rules.record_strategy6_34_params(st, stop_pct=resolved)
+
     return {
         "stop_pct": resolved,
         "take_profit": take_profit if take_profit is not None else _tp,
@@ -1353,10 +1371,13 @@ def _apply_version6_35(
     **_,
 ) -> dict:
     resolved = strategy6_35_rules.STOP_PCT if stop_pct is None else float(stop_pct)
+
     def _tp(px, cost, peak, n_days=1):
         return strategy6_35_rules.take_profit_reason(px, cost, peak, n_days)
+
     def _rec(st):
         strategy6_35_rules.record_strategy6_35_params(st, stop_pct=resolved)
+
     return {
         "stop_pct": resolved,
         "take_profit": take_profit if take_profit is not None else _tp,
@@ -1390,10 +1411,13 @@ def _apply_version6_36(
     **_,
 ) -> dict:
     resolved = strategy6_36_rules.STOP_PCT if stop_pct is None else float(stop_pct)
+
     def _tp(px, cost, peak, n_days=1):
         return strategy6_36_rules.take_profit_reason(px, cost, peak, n_days)
+
     def _rec(st):
         strategy6_36_rules.record_strategy6_36_params(st, stop_pct=resolved)
+
     return {
         "stop_pct": resolved,
         "take_profit": take_profit if take_profit is not None else _tp,
@@ -1427,10 +1451,13 @@ def _apply_version6_37(
     **_,
 ) -> dict:
     resolved = strategy6_37_rules.STOP_PCT if stop_pct is None else float(stop_pct)
+
     def _tp(px, cost, peak, n_days=1):
         return strategy6_37_rules.take_profit_reason(px, cost, peak, n_days)
+
     def _rec(st):
         strategy6_37_rules.record_strategy6_37_params(st, stop_pct=resolved)
+
     return {
         "stop_pct": resolved,
         "take_profit": take_profit if take_profit is not None else _tp,
@@ -1464,10 +1491,13 @@ def _apply_version6_38(
     **_,
 ) -> dict:
     resolved = strategy6_38_rules.STOP_PCT if stop_pct is None else float(stop_pct)
+
     def _tp(px, cost, peak, n_days=1):
         return strategy6_38_rules.take_profit_reason(px, cost, peak, n_days)
+
     def _rec(st):
         strategy6_38_rules.record_strategy6_38_params(st, stop_pct=resolved)
+
     return {
         "stop_pct": resolved,
         "take_profit": take_profit if take_profit is not None else _tp,
@@ -1501,10 +1531,13 @@ def _apply_version6_39(
     **_,
 ) -> dict:
     resolved = strategy6_39_rules.STOP_PCT if stop_pct is None else float(stop_pct)
+
     def _tp(px, cost, peak, n_days=1):
         return strategy6_39_rules.take_profit_reason(px, cost, peak, n_days)
+
     def _rec(st):
         strategy6_39_rules.record_strategy6_39_params(st, stop_pct=resolved)
+
     return {
         "stop_pct": resolved,
         "take_profit": take_profit if take_profit is not None else _tp,
@@ -1538,10 +1571,13 @@ def _apply_version6_40(
     **_,
 ) -> dict:
     resolved = strategy6_40_rules.STOP_PCT if stop_pct is None else float(stop_pct)
+
     def _tp(px, cost, peak, n_days=1):
         return strategy6_40_rules.take_profit_reason(px, cost, peak, n_days)
+
     def _rec(st):
         strategy6_40_rules.record_strategy6_40_params(st, stop_pct=resolved)
+
     return {
         "stop_pct": resolved,
         "take_profit": take_profit if take_profit is not None else _tp,
@@ -1575,10 +1611,13 @@ def _apply_version6_41(
     **_,
 ) -> dict:
     resolved = strategy6_41_rules.STOP_PCT if stop_pct is None else float(stop_pct)
+
     def _tp(px, cost, peak, n_days=1):
         return strategy6_41_rules.take_profit_reason(px, cost, peak, n_days)
+
     def _rec(st):
         strategy6_41_rules.record_strategy6_41_params(st, stop_pct=resolved)
+
     return {
         "stop_pct": resolved,
         "take_profit": take_profit if take_profit is not None else _tp,
@@ -1612,10 +1651,13 @@ def _apply_version6_42(
     **_,
 ) -> dict:
     resolved = strategy6_42_rules.STOP_PCT if stop_pct is None else float(stop_pct)
+
     def _tp(px, cost, peak, n_days=1):
         return strategy6_42_rules.take_profit_reason(px, cost, peak, n_days)
+
     def _rec(st):
         strategy6_42_rules.record_strategy6_42_params(st, stop_pct=resolved)
+
     return {
         "stop_pct": resolved,
         "take_profit": take_profit if take_profit is not None else _tp,
@@ -1649,10 +1691,13 @@ def _apply_version6_43(
     **_,
 ) -> dict:
     resolved = strategy6_43_rules.STOP_PCT if stop_pct is None else float(stop_pct)
+
     def _tp(px, cost, peak, n_days=1):
         return strategy6_43_rules.take_profit_reason(px, cost, peak, n_days)
+
     def _rec(st):
         strategy6_43_rules.record_strategy6_43_params(st, stop_pct=resolved)
+
     return {
         "stop_pct": resolved,
         "take_profit": take_profit if take_profit is not None else _tp,
@@ -1686,10 +1731,13 @@ def _apply_version6_44(
     **_,
 ) -> dict:
     resolved = strategy6_44_rules.STOP_PCT if stop_pct is None else float(stop_pct)
+
     def _tp(px, cost, peak, n_days=1):
         return strategy6_44_rules.take_profit_reason(px, cost, peak, n_days)
+
     def _rec(st):
         strategy6_44_rules.record_strategy6_44_params(st, stop_pct=resolved)
+
     return {
         "stop_pct": resolved,
         "take_profit": take_profit if take_profit is not None else _tp,
@@ -1724,8 +1772,10 @@ def _apply_version6_45(
     **_,
 ) -> dict:
     resolved = strategy6_45_rules.STOP_PCT if stop_pct is None else float(stop_pct)
+
     def _tp(px, cost, peak, n_days=1):
         return strategy6_45_rules.take_profit_reason(px, cost, peak, n_days)
+
     def _rec(st):
         strategy6_45_rules.record_strategy6_45_params(st, stop_pct=resolved)
         st.stats["index_gate_on"] = bool(strategy6_45_rules.INDEX_GATE_ON)
@@ -1735,6 +1785,7 @@ def _apply_version6_45(
     # 上证闸门：allow_new_name 在 gate 为 None 时不闸（等 CLI 传入 block map）
     from backtest.research import strategy_book_helpers as _bh
     from backtest.research.strategy6_45_rules import INDEX_GATE_ON as _gate_on
+
     _allow = _bh.allow_new_name_from_gate(index_block_new, INDEX_GATE_ON=_gate_on)
 
     return {
@@ -1774,14 +1825,18 @@ def _apply_version6_46(
 ) -> dict:
     from backtest.research import strategy_book_helpers as _bh
     from backtest.research.strategy6_46_rules import INDEX_GATE_ON as _gate_on
+
     resolved = strategy6_46_rules.STOP_PCT if stop_pct is None else float(stop_pct)
+
     def _tp(px, cost, peak, n_days=1):
         return strategy6_46_rules.take_profit_reason(px, cost, peak, n_days)
+
     def _rec(st):
         strategy6_46_rules.record_strategy6_46_params(st, stop_pct=resolved)
         st.stats["index_gate_on"] = bool(strategy6_46_rules.INDEX_GATE_ON)
         st.stats["parking_symbol"] = strategy6_46_rules.PARKING_SYMBOL
         st.stats["parking_frac"] = strategy6_46_rules.PARKING_FRAC
+
     _allow = _bh.allow_new_name_from_gate(index_block_new, INDEX_GATE_ON=_gate_on)
     base = _apply_version6_45(
         stop_pct=resolved,
@@ -1803,7 +1858,9 @@ def _run_kwargs_version6_46(args) -> dict:
     return {"strategy": "version6_46", "stop_pct": stop}
 
 
-def _apply_version6_47(*, stop_pct=None, take_profit=None, record_params=None, index_block_new=None, **_):
+def _apply_version6_47(
+    *, stop_pct=None, take_profit=None, record_params=None, index_block_new=None, **_
+):
     resolved = strategy6_47_rules.STOP_PCT if stop_pct is None else float(stop_pct)
 
     def _rec(st):
@@ -1825,10 +1882,10 @@ def _apply_version6_47(*, stop_pct=None, take_profit=None, record_params=None, i
 
 
 def _run_kwargs_version6_47(args) -> dict:
-    stop = getattr(args, 'stop_pct', None)
+    stop = getattr(args, "stop_pct", None)
     if stop is not None and not 0 < float(stop) < 1:
-        raise SystemExit(f'--stop-pct must be in (0, 1), got {stop}')
-    return {'strategy': 'version6_47', 'stop_pct': stop}
+        raise SystemExit(f"--stop-pct must be in (0, 1), got {stop}")
+    return {"strategy": "version6_47", "stop_pct": stop}
 
 
 def _apply_version6_48(
@@ -1877,11 +1934,14 @@ def _apply_version6_49(
     **_,
 ) -> dict:
     resolved = strategy6_49_rules.STOP_PCT if stop_pct is None else float(stop_pct)
+
     def _tp(px, cost, peak, n_days=1):
         return strategy6_49_rules.take_profit_reason(px, cost, peak, n_days)
+
     def _rec(st):
         strategy6_49_rules.record_strategy6_49_params(st, stop_pct=resolved)
         st.stats["index_gate_on"] = bool(strategy6_49_rules.INDEX_GATE_ON)
+
     base = _apply_version6_46(
         stop_pct=resolved,
         take_profit=take_profit if take_profit is not None else _tp,
@@ -1939,12 +1999,8 @@ def _apply_version6_50(
     base["cont_from_rise"] = float(strategy6_50_rules.CONT_FROM_RISE)
     base["cont_stop_rebuy_lift"] = float(strategy6_50_rules.CONT_STOP_REBUY_LIFT)
     base["cont_stop_rebuy_frac"] = float(strategy6_50_rules.CONT_STOP_REBUY_FRAC)
-    base["cont_stop_rebuy_open_frac"] = float(
-        strategy6_50_rules.CONT_STOP_REBUY_OPEN_FRAC
-    )
-    base["cont_stop_rebuy_with_schedule"] = bool(
-        strategy6_50_rules.CONT_STOP_REBUY_WITH_SCHEDULE
-    )
+    base["cont_stop_rebuy_open_frac"] = float(strategy6_50_rules.CONT_STOP_REBUY_OPEN_FRAC)
+    base["cont_stop_rebuy_with_schedule"] = bool(strategy6_50_rules.CONT_STOP_REBUY_WITH_SCHEDULE)
     base["min_lot_top_up"] = bool(strategy6_50_rules.MIN_LOT_TOP_UP)
     return base
 
@@ -1995,12 +2051,8 @@ def _apply_version6_51(
     base["cont_from_rise"] = float(strategy6_51_rules.CONT_FROM_RISE)
     base["cont_stop_rebuy_lift"] = float(strategy6_51_rules.CONT_STOP_REBUY_LIFT)
     base["cont_stop_rebuy_frac"] = float(strategy6_51_rules.CONT_STOP_REBUY_FRAC)
-    base["cont_stop_rebuy_open_frac"] = float(
-        strategy6_51_rules.CONT_STOP_REBUY_OPEN_FRAC
-    )
-    base["cont_stop_rebuy_with_schedule"] = bool(
-        strategy6_51_rules.CONT_STOP_REBUY_WITH_SCHEDULE
-    )
+    base["cont_stop_rebuy_open_frac"] = float(strategy6_51_rules.CONT_STOP_REBUY_OPEN_FRAC)
+    base["cont_stop_rebuy_with_schedule"] = bool(strategy6_51_rules.CONT_STOP_REBUY_WITH_SCHEDULE)
     base["min_lot_top_up"] = bool(strategy6_51_rules.MIN_LOT_TOP_UP)
     return base
 
@@ -2052,12 +2104,8 @@ def _apply_version6_52(
     base["cont_from_rise"] = float(strategy6_52_rules.CONT_FROM_RISE)
     base["cont_stop_rebuy_lift"] = float(strategy6_52_rules.CONT_STOP_REBUY_LIFT)
     base["cont_stop_rebuy_frac"] = float(strategy6_52_rules.CONT_STOP_REBUY_FRAC)
-    base["cont_stop_rebuy_open_frac"] = float(
-        strategy6_52_rules.CONT_STOP_REBUY_OPEN_FRAC
-    )
-    base["cont_stop_rebuy_with_schedule"] = bool(
-        strategy6_52_rules.CONT_STOP_REBUY_WITH_SCHEDULE
-    )
+    base["cont_stop_rebuy_open_frac"] = float(strategy6_52_rules.CONT_STOP_REBUY_OPEN_FRAC)
+    base["cont_stop_rebuy_with_schedule"] = bool(strategy6_52_rules.CONT_STOP_REBUY_WITH_SCHEDULE)
     base["min_lot_top_up"] = bool(strategy6_52_rules.MIN_LOT_TOP_UP)
     base["profit_skim"] = bool(strategy6_52_rules.PROFIT_SKIM)
     base["profit_skim_step"] = float(strategy6_52_rules.PROFIT_SKIM_STEP)
@@ -2116,12 +2164,8 @@ def _apply_version6_53(
     base["cont_from_rise"] = float(strategy6_53_rules.CONT_FROM_RISE)
     base["cont_stop_rebuy_lift"] = float(strategy6_53_rules.CONT_STOP_REBUY_LIFT)
     base["cont_stop_rebuy_frac"] = float(strategy6_53_rules.CONT_STOP_REBUY_FRAC)
-    base["cont_stop_rebuy_open_frac"] = float(
-        strategy6_53_rules.CONT_STOP_REBUY_OPEN_FRAC
-    )
-    base["cont_stop_rebuy_with_schedule"] = bool(
-        strategy6_53_rules.CONT_STOP_REBUY_WITH_SCHEDULE
-    )
+    base["cont_stop_rebuy_open_frac"] = float(strategy6_53_rules.CONT_STOP_REBUY_OPEN_FRAC)
+    base["cont_stop_rebuy_with_schedule"] = bool(strategy6_53_rules.CONT_STOP_REBUY_WITH_SCHEDULE)
     base["min_lot_top_up"] = bool(strategy6_53_rules.MIN_LOT_TOP_UP)
     base["profit_skim"] = bool(strategy6_53_rules.PROFIT_SKIM)
     base["profit_skim_step"] = float(strategy6_53_rules.PROFIT_SKIM_STEP)
@@ -2141,3 +2185,205 @@ def _run_kwargs_version6_53(args) -> dict:
     if stop is not None and not 0 < float(stop) < 1:
         raise SystemExit(f"--stop-pct must be in (0, 1), got {stop}")
     return {"strategy": "version6_53", "stop_pct": stop}
+
+
+def _apply_version6_54(
+    *,
+    stop_pct=None,
+    take_profit=None,
+    record_params=None,
+    index_block_new=None,
+    **_,
+) -> dict:
+    resolved = strategy6_54_rules.STOP_PCT if stop_pct is None else float(stop_pct)
+
+    def _tp(px, cost, peak, n_days=1):
+        return strategy6_54_rules.take_profit_reason(px, cost, peak, n_days)
+
+    def _rec(st):
+        strategy6_54_rules.record_strategy6_54_params(st, stop_pct=resolved)
+        st.stats["index_gate_on"] = bool(strategy6_54_rules.INDEX_GATE_ON)
+        st.stats["parking_symbol"] = strategy6_54_rules.PARKING_SYMBOL
+        st.stats["parking_frac"] = strategy6_54_rules.PARKING_FRAC
+        st.stats["parking_execute"] = bool(strategy6_54_rules.PARKING_EXECUTE)
+        st.stats["parking_open_cover"] = bool(strategy6_54_rules.PARKING_OPEN_COVER)
+        st.stats["cont_stop_rebuy"] = bool(strategy6_54_rules.CONT_STOP_REBUY)
+        st.stats["profit_skim"] = bool(strategy6_54_rules.PROFIT_SKIM)
+        st.stats["index_cut"] = bool(strategy6_54_rules.INDEX_CUT)
+        st.stats["div_to_parking"] = bool(strategy6_54_rules.DIV_TO_PARKING)
+
+    base = _apply_version6_53(
+        stop_pct=resolved,
+        take_profit=take_profit if take_profit is not None else _tp,
+        record_params=record_params if record_params is not None else _rec,
+        index_block_new=index_block_new,
+    )
+    base["name"] = "version6_54"
+    base["scale_out_anchor"] = strategy6_54_rules.SCALE_OUT_ANCHOR
+    base["parking_symbol"] = strategy6_54_rules.PARKING_SYMBOL
+    base["parking_frac"] = float(strategy6_54_rules.PARKING_FRAC)
+    base["parking_buffer"] = float(strategy6_54_rules.PARKING_BUFFER)
+    base["parking_execute"] = bool(strategy6_54_rules.PARKING_EXECUTE)
+    base["parking_open_cover"] = bool(strategy6_54_rules.PARKING_OPEN_COVER)
+    base["cont_stop_rebuy"] = bool(strategy6_54_rules.CONT_STOP_REBUY)
+    base["cont_from_rise"] = float(strategy6_54_rules.CONT_FROM_RISE)
+    base["cont_stop_rebuy_lift"] = float(strategy6_54_rules.CONT_STOP_REBUY_LIFT)
+    base["cont_stop_rebuy_frac"] = float(strategy6_54_rules.CONT_STOP_REBUY_FRAC)
+    base["cont_stop_rebuy_open_frac"] = float(strategy6_54_rules.CONT_STOP_REBUY_OPEN_FRAC)
+    base["cont_stop_rebuy_with_schedule"] = bool(strategy6_54_rules.CONT_STOP_REBUY_WITH_SCHEDULE)
+    base["min_lot_top_up"] = bool(strategy6_54_rules.MIN_LOT_TOP_UP)
+    base["profit_skim"] = bool(strategy6_54_rules.PROFIT_SKIM)
+    base["profit_skim_step"] = float(strategy6_54_rules.PROFIT_SKIM_STEP)
+    base["profit_skim_frac"] = float(strategy6_54_rules.PROFIT_SKIM_FRAC)
+    base["profit_skim_pro_rata"] = bool(strategy6_54_rules.PROFIT_SKIM_PRO_RATA)
+    base["profit_skim_keep_idle"] = bool(strategy6_54_rules.PROFIT_SKIM_KEEP_IDLE)
+    base["profit_skim_to_parking"] = bool(strategy6_54_rules.PROFIT_SKIM_TO_PARKING)
+    base["index_cut"] = bool(strategy6_54_rules.INDEX_CUT)
+    base["index_cut_frac"] = float(strategy6_54_rules.INDEX_CUT_FRAC)
+    base["index_cut_min_keep"] = int(strategy6_54_rules.INDEX_CUT_MIN_KEEP)
+    base["index_blocks_s8_add"] = bool(strategy6_54_rules.INDEX_BLOCKS_S8_ADD)
+    base["div_to_parking"] = bool(strategy6_54_rules.DIV_TO_PARKING)
+    return base
+
+
+def _run_kwargs_version6_54(args) -> dict:
+    stop = getattr(args, "stop_pct", None)
+    if stop is not None and not 0 < float(stop) < 1:
+        raise SystemExit(f"--stop-pct must be in (0, 1), got {stop}")
+    return {"strategy": "version6_54", "stop_pct": stop}
+
+
+def _apply_version6_55(
+    *,
+    stop_pct=None,
+    take_profit=None,
+    record_params=None,
+    index_block_new=None,
+    **_,
+) -> dict:
+    resolved = strategy6_55_rules.STOP_PCT if stop_pct is None else float(stop_pct)
+
+    def _tp(px, cost, peak, n_days=1):
+        return strategy6_55_rules.take_profit_reason(px, cost, peak, n_days)
+
+    def _rec(st):
+        strategy6_55_rules.record_strategy6_55_params(st, stop_pct=resolved)
+        st.stats["index_gate_on"] = bool(strategy6_55_rules.INDEX_GATE_ON)
+        st.stats["parking_symbol"] = strategy6_55_rules.PARKING_SYMBOL
+        st.stats["parking_frac"] = strategy6_55_rules.PARKING_FRAC
+        st.stats["parking_execute"] = bool(strategy6_55_rules.PARKING_EXECUTE)
+        st.stats["parking_open_cover"] = bool(strategy6_55_rules.PARKING_OPEN_COVER)
+        st.stats["cont_stop_rebuy"] = bool(strategy6_55_rules.CONT_STOP_REBUY)
+        st.stats["profit_skim"] = bool(strategy6_55_rules.PROFIT_SKIM)
+        st.stats["index_cut"] = bool(strategy6_55_rules.INDEX_CUT)
+        st.stats["div_to_parking"] = bool(strategy6_55_rules.DIV_TO_PARKING)
+        st.stats["ladder_give_step"] = float(strategy6_55_rules.GIVE_STEP)
+        st.stats["scale_out_step"] = float(strategy6_55_rules.SCALE_OUT_STEP)
+        st.stats["scale_out_frac"] = float(strategy6_55_rules.SCALE_OUT_FRAC)
+        st.stats["profit_skim_step"] = float(strategy6_55_rules.PROFIT_SKIM_STEP)
+        st.stats["profit_skim_frac"] = float(strategy6_55_rules.PROFIT_SKIM_FRAC)
+        st.stats["peak_dd_exit"] = float(strategy6_55_rules.PEAK_DD_EXIT)
+
+    base = _apply_version6_54(
+        stop_pct=resolved,
+        take_profit=take_profit if take_profit is not None else _tp,
+        record_params=record_params if record_params is not None else _rec,
+        index_block_new=index_block_new,
+    )
+    base["name"] = "version6_55"
+    base["div_to_parking"] = bool(strategy6_55_rules.DIV_TO_PARKING)
+    base["scale_out_step"] = float(strategy6_55_rules.SCALE_OUT_STEP)
+    base["scale_out_frac"] = float(strategy6_55_rules.SCALE_OUT_FRAC)
+    base["profit_skim_step"] = float(strategy6_55_rules.PROFIT_SKIM_STEP)
+    base["profit_skim_frac"] = float(strategy6_55_rules.PROFIT_SKIM_FRAC)
+    base["peak_dd_exit"] = float(strategy6_55_rules.PEAK_DD_EXIT)
+    return base
+
+
+def _run_kwargs_version6_55(args) -> dict:
+    stop = getattr(args, "stop_pct", None)
+    if stop is not None and not 0 < float(stop) < 1:
+        raise SystemExit(f"--stop-pct must be in (0, 1), got {stop}")
+    return {"strategy": "version6_55", "stop_pct": stop}
+
+
+def _apply_version6_56(
+    *,
+    stop_pct=None,
+    take_profit=None,
+    record_params=None,
+    index_block_new=None,
+    **_,
+) -> dict:
+    resolved = strategy6_56_rules.STOP_PCT if stop_pct is None else float(stop_pct)
+
+    def _tp(px, cost, peak, n_days=1):
+        return strategy6_56_rules.take_profit_reason(px, cost, peak, n_days)
+
+    def _rec(st):
+        strategy6_56_rules.record_strategy6_56_params(st, stop_pct=resolved)
+        st.stats["index_gate_on"] = bool(strategy6_56_rules.INDEX_GATE_ON)
+        st.stats["parking_symbol"] = strategy6_56_rules.PARKING_SYMBOL
+        st.stats["parking_frac"] = strategy6_56_rules.PARKING_FRAC
+        st.stats["parking_execute"] = bool(strategy6_56_rules.PARKING_EXECUTE)
+        st.stats["parking_open_cover"] = bool(strategy6_56_rules.PARKING_OPEN_COVER)
+        st.stats["cont_stop_rebuy"] = bool(strategy6_56_rules.CONT_STOP_REBUY)
+        st.stats["profit_skim"] = bool(strategy6_56_rules.PROFIT_SKIM)
+        st.stats["index_cut"] = bool(strategy6_56_rules.INDEX_CUT)
+        st.stats["div_to_parking"] = bool(strategy6_56_rules.DIV_TO_PARKING)
+        st.stats["ladder_give_step"] = float(strategy6_56_rules.GIVE_STEP)
+        st.stats["stop_pct"] = float(resolved)
+        st.stats["profit_skim_step"] = float(strategy6_56_rules.PROFIT_SKIM_STEP)
+        st.stats["profit_skim_frac"] = float(strategy6_56_rules.PROFIT_SKIM_FRAC)
+        st.stats["step_stop_pct"] = float(strategy6_56_rules.STEP_STOP_PCT)
+        st.stats["cont_step_stop_pct"] = strategy6_56_rules.CONT_STEP_STOP_PCT
+        st.stats["cont_ride_trial"] = bool(strategy6_56_rules.CONT_RIDE_TRIAL)
+        st.stats["scale_out_step"] = strategy6_56_rules.SCALE_OUT_STEP
+        st.stats["scale_out_frac"] = strategy6_56_rules.SCALE_OUT_FRAC
+        st.stats["cont_from_rise"] = float(strategy6_56_rules.CONT_FROM_RISE)
+        st.stats["cont_frac"] = float(strategy6_56_rules.CONT_FRAC)
+        st.stats["peak_dd_exit"] = float(strategy6_56_rules.PEAK_DD_EXIT)
+        st.stats["peak_dd_min_rise"] = float(strategy6_56_rules.PEAK_DD_MIN_RISE)
+        st.stats["post_exit_cont"] = bool(strategy6_56_rules.POST_EXIT_CONT)
+        st.stats["post_exit_cont_bypass_index"] = bool(
+            strategy6_56_rules.POST_EXIT_CONT_BYPASS_INDEX
+        )
+        st.stats["cont_live_max"] = strategy6_56_rules.CONT_MAX
+
+    base = _apply_version6_55(
+        stop_pct=resolved,
+        take_profit=take_profit if take_profit is not None else _tp,
+        record_params=record_params if record_params is not None else _rec,
+        index_block_new=index_block_new,
+    )
+    base["name"] = "version6_56"
+    base["stop_pct"] = resolved
+    base["div_to_parking"] = bool(strategy6_56_rules.DIV_TO_PARKING)
+    base["add_schedule"] = list(strategy6_56_rules.ADD_SCHEDULE)
+    base["index_cut_min_keep"] = int(strategy6_56_rules.INDEX_CUT_MIN_KEEP)
+    base["min_lot_top_up"] = bool(strategy6_56_rules.MIN_LOT_TOP_UP)
+    base["profit_skim_step"] = float(strategy6_56_rules.PROFIT_SKIM_STEP)
+    base["profit_skim_frac"] = float(strategy6_56_rules.PROFIT_SKIM_FRAC)
+    base["step_stop_pct"] = float(strategy6_56_rules.STEP_STOP_PCT)
+    base["cont_step_stop_pct"] = strategy6_56_rules.CONT_STEP_STOP_PCT
+    base["cont_ride_trial"] = bool(strategy6_56_rules.CONT_RIDE_TRIAL)
+    base["scale_out_step"] = strategy6_56_rules.SCALE_OUT_STEP
+    base["scale_out_frac"] = strategy6_56_rules.SCALE_OUT_FRAC
+    base["cont_from_rise"] = float(strategy6_56_rules.CONT_FROM_RISE)
+    base["cont_frac"] = float(strategy6_56_rules.CONT_FRAC)
+    base["peak_dd_exit"] = float(strategy6_56_rules.PEAK_DD_EXIT)
+    base["peak_dd_min_rise"] = float(strategy6_56_rules.PEAK_DD_MIN_RISE)
+    base["post_exit_cont"] = bool(strategy6_56_rules.POST_EXIT_CONT)
+    base["post_exit_cont_bypass_index"] = bool(strategy6_56_rules.POST_EXIT_CONT_BYPASS_INDEX)
+    base["post_exit_schedule_floor"] = strategy6_56_rules.post_exit_schedule_floor
+    base["cont_live_max"] = strategy6_56_rules.CONT_MAX
+    base["parking_frac"] = float(strategy6_56_rules.PARKING_FRAC)
+    base["parking_buffer"] = float(strategy6_56_rules.PARKING_BUFFER)
+    return base
+
+
+def _run_kwargs_version6_56(args) -> dict:
+    stop = getattr(args, "stop_pct", None)
+    if stop is not None and not 0 < float(stop) < 1:
+        raise SystemExit(f"--stop-pct must be in (0, 1), got {stop}")
+    return {"strategy": "version6_56", "stop_pct": stop}

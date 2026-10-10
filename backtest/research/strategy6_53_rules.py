@@ -193,4 +193,5 @@ HELP_LOCK = """
   策略持仓减半（整手），每组至少留 100 股；同一段闸门只减一次。
   上证收复后开盘按记忆买回减仓筹码（reason add:index_rebuy）。不停泊仓。
   落盘：backtest_output/csv_minute_v6_53_{start}_{end}/
+  已归档（2026-10-10）。继任 version6_54（现金分红入账后买入 600036）。
 """

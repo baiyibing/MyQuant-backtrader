@@ -32,7 +32,13 @@ class StrategyHooks(TypedDict, total=False):
     scale_out_anchor: str
     step_cap: int | None
     step_stop_pct: float | None
+    peak_dd_exit: float | None
+    peak_dd_sessions: int
+    peak_dd_min_rise: float | None
+    cont_step_stop_pct: float | None
+    cont_live_max: int | None
     cont_stop_rebuy: bool
+    cont_ride_trial: bool
     cont_from_rise: float | None
     cont_stop_rebuy_lift: float | None
     cont_stop_rebuy_frac: float | None
@@ -55,6 +61,7 @@ class StrategyHooks(TypedDict, total=False):
     index_cut_frac: float | None
     index_cut_min_keep: int | None
     index_blocks_s8_add: bool
+    div_to_parking: bool
 
 
 # Book apply functions have different named parameters.

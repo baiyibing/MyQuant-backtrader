@@ -74,6 +74,7 @@ from backtest.research.csv_ledger import (  # noqa: E402
 from backtest.research.ashare_fees import resolve_account_fee_schedule  # noqa: E402
 
 from backtest.research.ashare_exdiv_economics import EconomicLookup, ExDivEconomics  # noqa: E402
+from backtest.research.cash_div_events import bind_book_cash_div_economics  # noqa: E402
 
 from backtest.research.exdiv_map import k_for, load_exdiv_ratios, mapped_prev_close  # noqa: E402
 from backtest.research.ashare_session import defer_sell_open_or_fill, t1_sellable  # noqa: E402
@@ -162,9 +163,11 @@ from backtest.research.csv_simulate_loop import (  # noqa: E402
     run_chase_due_day,
     run_eod_exits,
     run_index_gate_cut_day,
+    run_div_to_parking_day,
     run_parking_open_cover_day,
     run_parking_rebalance_day,
     run_profit_skim_day,
+    accrue_overnight_cash_div,
     run_pool_buys_day,
     run_step_adds_day,
 )
@@ -550,8 +553,13 @@ def _independent_numba_prefix(
         return 0
     width, give_base, give_step, tp_min = ladder
     step_pct = float((side_hooks or {}).get("step_stop_pct") or 0.0)
+    cont_pct = float((side_hooks or {}).get("cont_step_stop_pct") or 0.0)
+    if step_pct > 0.0 and cont_pct > 0.0:
+        wake_pct = min(step_pct, cont_pct)
+    else:
+        wake_pct = step_pct or cont_pct
     step_costs = []
-    if step_pct:
+    if wake_pct:
         for lot in st.positions.get(pos.code, []):
             if (
                 getattr(lot, "position_id", None) == pos.position_id
@@ -577,6 +585,11 @@ def _independent_numba_prefix(
             scale_anchor = float(getattr(pos.group, "anchor_cost", None) or pos.group.first_lot.cost)
         scale_steps = int(pos.group.scale_steps)
     peak_dd = float((side_hooks or {}).get("peak_dd_exit") or 0.0)
+    min_rise = float((side_hooks or {}).get("peak_dd_min_rise") or 0.0)
+    if min_rise > 0.0 and peak_dd > 0.0:
+        cost0 = float(getattr(pos.group.first_lot, "cost", 0) or cursor.cost or 0)
+        if cost0 > 0.0 and float(pos.peak) <= cost0 * (1.0 + min_rise):
+            return 0
     start = pos.group.peak_dd_start
     idx, peak, peak_hm = independent_ladder_first_bar(
         cursor,
@@ -592,7 +605,7 @@ def _independent_numba_prefix(
         peak_dd_start=-1 if start is None else int(start),
         peak_dd_sessions=int((side_hooks or {}).get("peak_dd_sessions", 15)),
         step_costs=step_costs,
-        step_stop_pct=step_pct,
+        step_stop_pct=wake_pct,
         hm_lo=hm_lo,
         hm_hi=hm_hi,
     )
@@ -1290,7 +1303,13 @@ def simulate(
             continue
         ds = _ymd(day)
         day_trade_start = len(st.trades)
-        if st.exdiv_economics is not None:
+        if hooks.get("div_to_parking"):
+            posted = accrue_overnight_cash_div(st, ds)
+            if posted > 1e-6:
+                st.stats["div_to_parking_pending"] = (
+                    float(st.stats.get("div_to_parking_pending", 0.0)) + posted
+                )
+        elif st.exdiv_economics is not None:
             st.cash += st.exdiv_economics.settle(ds)
         names = names_asof(ds)
         st.daily_quota_used = 0.0
@@ -1306,6 +1325,19 @@ def simulate(
             exdiv=exdiv,
             qlib_limit_pct=qlib_limit_pct,
         )
+        if hooks.get("div_to_parking"):
+            run_div_to_parking_day(
+                st,
+                hooks,
+                day_i=i,
+                day=day,
+                ds=ds,
+                names=names,
+                daily_bars=daily_bars,
+                exdiv=exdiv,
+                qlib_limit_pct=qlib_limit_pct,
+                forbid_all_trade_at_limit=forbid_all_trade_at_limit,
+            )
         run_parking_open_cover_day(
             st,
             hooks,
@@ -1454,11 +1486,13 @@ def simulate(
                         )
                         side_hooks = {
                             "step_stop_pct": hooks.get("step_stop_pct"),
+                            "cont_step_stop_pct": hooks.get("cont_step_stop_pct"),
                             "scale_out_step": hooks.get("scale_out_step"),
                             "scale_out_frac": hooks.get("scale_out_frac", 0.05),
                             "scale_out_anchor": hooks.get("scale_out_anchor", "first_lot"),
                             "peak_dd_exit": hooks.get("peak_dd_exit"),
                             "peak_dd_sessions": hooks.get("peak_dd_sessions", 15),
+                            "peak_dd_min_rise": hooks.get("peak_dd_min_rise") or 0.0,
                             "fill_config": side_fill_config,
                             "low_arr": low_arr,
                         }
@@ -1493,10 +1527,14 @@ def simulate(
                                 if phase == "open":
                                     fill_side_pending(st, code, pos, float(o[bar_idx]), day, i,
                                                       limits, hm=int(at_hm))
-                                if phase == "close" and hooks.get("step_stop_pct"):
+                                if phase == "close" and (
+                                    hooks.get("step_stop_pct") or hooks.get("cont_step_stop_pct")
+                                ):
                                     step_stop_exits(
                                         st, code, pos, float(c[bar_idx]), day, i,
-                                        limits, step_stop_pct=hooks["step_stop_pct"],
+                                        limits,
+                                        step_stop_pct=hooks.get("step_stop_pct") or 0.0,
+                                        cont_step_stop_pct=hooks.get("cont_step_stop_pct"),
                                         fill_config=side_fill_config, open_px=float(o[bar_idx]),
                                         low=(float(low_arr[bar_idx])
                                              if low_arr is not None and side_fill_config and side_fill_config.trigger_basis == "bar_low" else None),
@@ -1518,6 +1556,7 @@ def simulate(
                                         peak_dd_exit=hooks["peak_dd_exit"],
                                         fill_config=side_fill_config, open_px=float(o[bar_idx]),
                                         peak_dd_sessions=hooks.get("peak_dd_sessions", 15),
+                                        peak_dd_min_rise=hooks.get("peak_dd_min_rise") or 0.0,
                                         hm=int(at_hm),
                                     )
                         if python_from < 0:
@@ -2321,6 +2360,10 @@ def run(
         sim_profile=sim_clock,
         day_spans=cache_status.get("day_spans"),
         st_gate=True,
+        exdiv_economics=bind_book_cash_div_economics(
+            strategy, start, end, None,
+            codes=all_codes, bars=daily, workers=workers,
+        ),
     )
     if skipped.get("exdiv_skipped_no_factor"):
         st.stats["exdiv_skipped_no_factor"] = int(skipped["exdiv_skipped_no_factor"])

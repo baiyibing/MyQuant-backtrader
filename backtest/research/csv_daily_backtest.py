@@ -96,6 +96,7 @@ from backtest.research.csv_ledger import (  # noqa: E402
 )
 from backtest.research.ashare_fees import resolve_account_fee_schedule  # noqa: E402
 from backtest.research.ashare_exdiv_economics import EconomicLookup, ExDivEconomics  # noqa: E402
+from backtest.research.cash_div_events import bind_book_cash_div_economics  # noqa: E402
 from backtest.research.rule_profile import (  # noqa: E402
     RuleProfile,
     resolve_rule_profile,
@@ -133,9 +134,11 @@ from backtest.research.csv_simulate_loop import (  # noqa: E402
     run_chase_due_day,
     run_eod_exits,
     run_index_gate_cut_day,
+    run_div_to_parking_day,
     run_parking_open_cover_day,
     run_parking_rebalance_day,
     run_profit_skim_day,
+    accrue_overnight_cash_div,
     DayBuyQuotes,
     run_pool_buys_day,
     run_step_adds_day,
@@ -408,7 +411,13 @@ def simulate(
         clock.count("calendar_days")
         ds = _ymd(day)
         day_trade_start = len(st.trades)
-        if st.exdiv_economics is not None:
+        if hooks.get("div_to_parking"):
+            posted = accrue_overnight_cash_div(st, ds)
+            if posted > 1e-6:
+                st.stats["div_to_parking_pending"] = (
+                    float(st.stats.get("div_to_parking_pending", 0.0)) + posted
+                )
+        elif st.exdiv_economics is not None:
             st.cash += st.exdiv_economics.settle(ds)
         names = names_asof(ds)
         st.daily_quota_used = 0.0  # 每个交易日开盘重置常规额度
@@ -424,6 +433,19 @@ def simulate(
             exdiv=exdiv,
             qlib_limit_pct=qlib_limit_pct,
         )
+        if hooks.get("div_to_parking"):
+            run_div_to_parking_day(
+                st,
+                hooks,
+                day_i=i,
+                day=day,
+                ds=ds,
+                names=names,
+                daily_bars=bars,
+                exdiv=exdiv,
+                qlib_limit_pct=qlib_limit_pct,
+                forbid_all_trade_at_limit=forbid_all_trade_at_limit,
+            )
         run_parking_open_cover_day(
             st,
             hooks,
@@ -1062,6 +1084,10 @@ def run(
         rule_profile=profile,
         sim_profile=sim_clock,
         st_gate=True,
+        exdiv_economics=bind_book_cash_div_economics(
+            strategy, start, end, None,
+            codes=all_codes, bars=bars, workers=workers,
+        ),
     )
     if skipped.get("exdiv_skipped_no_factor"):
         st.stats["exdiv_skipped_no_factor"] = int(skipped["exdiv_skipped_no_factor"])

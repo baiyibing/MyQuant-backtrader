@@ -344,6 +344,13 @@ def summarize(
             )
         if st.stats.get("skip_st"):
             lines.append(f"  skip_st={int(st.stats.get('skip_st', 0))}")
+        if st.stats.get("div_to_parking") or st.stats.get("div_to_parking_events"):
+            lines.append(
+                f"  div_to_parking posted={float(st.stats.get('exdiv_econ_cash_posted', 0)):,.0f} | "
+                f"spent={float(st.stats.get('div_to_parking_spent', 0)):,.0f} | "
+                f"pending={float(st.stats.get('div_to_parking_pending', 0)):,.0f} | "
+                f"events={int(st.stats.get('div_to_parking_events', 0))}"
+            )
     if "buy_cost_rate" in st.stats:
         lines.append(
             f"  cost buy={st.stats['buy_cost_rate']:g} sell={st.stats['sell_cost_rate']:g} "
