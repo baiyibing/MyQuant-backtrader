@@ -20,6 +20,13 @@ from typing import Any
 
 import pandas as pd
 
+from backtest.research.result_analysis import (
+    account_curve,
+    citation_lines,
+    trade_payoff,
+    window_split,
+    with_realized_share,
+)
 from backtest.research.topk_dropout_eligibility import (
     WINRATIO_LT,
     buy_state_oral_ok,
@@ -824,6 +831,9 @@ def pnl_from_trips(trips: pd.DataFrame) -> pd.DataFrame:
         "first_buy",
         "last_exit",
         "still_held",
+        "realized_pnl_share",
+        "top_profit_count",
+        "top_profit_share",
     ]
     if trips.empty:
         return pd.DataFrame(columns=cols)
@@ -853,9 +863,10 @@ def pnl_from_trips(trips: pd.DataFrame) -> pd.DataFrame:
                 "still_held": bool(len(opened)),
             }
         )
-    return pd.DataFrame(rows).sort_values(
+    ranked = pd.DataFrame(rows).sort_values(
         "total_pnl", ascending=False, ignore_index=True
     )
+    return with_realized_share(ranked)
 
 
 def positions_daily(trades: pd.DataFrame, nav: pd.DataFrame) -> pd.DataFrame:
@@ -1049,6 +1060,61 @@ def daily_picks_frame(
     return pd.DataFrame(rows)
 
 
+def commission_total(run_dir: Path) -> float | None:
+    """Sum of the raw commission column. Missing or non-numeric is unknown."""
+    path = Path(run_dir) / "trades.csv"
+    header = pd.read_csv(path, nrows=0)
+    cols = {str(name).strip().lower(): name for name in header.columns}
+    if "commission" not in cols:
+        return None
+    raw = pd.read_csv(path, usecols=[cols["commission"]])[cols["commission"]]
+    numeric = pd.to_numeric(raw, errors="coerce")
+    text = raw.map(lambda value: "" if pd.isna(value) else str(value).strip())
+    if (text.ne("") & numeric.isna()).any():
+        return None
+    return float(numeric.fillna(0.0).sum())
+
+
+def load_benchmark_csv(path: Path) -> pd.DataFrame:
+    frame = pd.read_csv(path)
+    if list(frame.columns) != ["date", "equity"]:
+        raise ValueError(f"benchmark CSV must have columns date,equity: {path}")
+    return frame
+
+
+def load_benchmark_index(symbol: str, dividend: str) -> pd.DataFrame:
+    """Index daily close as date,equity. Missing root or partition fails closed."""
+    if dividend not in {"none", "front"}:
+        raise ValueError("benchmark dividend must be none or front")
+    from common.infra.data_root import resolve_index_daily_root
+    from oskh_data.symbol_format import to_partition_key
+
+    root = resolve_index_daily_root()
+    if not root.is_dir():
+        raise FileNotFoundError(f"index daily root is not a directory: {root}")
+    directory = root / f"dividend_type={dividend}" / f"symbol={to_partition_key(symbol)}"
+    files = sorted(directory.glob("*.parquet"))
+    if not files:
+        raise FileNotFoundError(f"index daily partition missing: {directory}")
+    frame = pd.concat((pd.read_parquet(path) for path in files), ignore_index=True)
+    day_col = next(
+        (name for name in ("date", "datetime", "timestamp", "time") if name in frame.columns),
+        None,
+    )
+    if day_col is None or "close" not in frame.columns:
+        raise ValueError(f"index parquet needs a date column and close: {directory}")
+    out = pd.DataFrame(
+        {
+            "date": frame[day_col],
+            "equity": pd.to_numeric(frame["close"], errors="coerce"),
+        }
+    )
+    out = out[out["equity"].map(lambda value: value == value and value > 0)]
+    if out.empty:
+        raise FileNotFoundError(f"index daily has no positive close: {directory}")
+    return out.reset_index(drop=True)
+
+
 def write_bundle(
     run_dir: Path,
     out_dir: Path,
@@ -1060,6 +1126,7 @@ def write_bundle(
     topk: int = 50,
     account: float | None = None,
     xlsx: bool = False,
+    benchmark: pd.DataFrame | None = None,
 ) -> dict[str, Any]:
     run_dir = Path(run_dir)
     out_dir = Path(out_dir)
@@ -1159,7 +1226,33 @@ def write_bundle(
         "has_buy_state": bool(state_map),
         "paths": paths,
     }
+    curve = account_curve(nav, trades, benchmark, commission_total=commission_total(run_dir))
+    payoff = trade_payoff(trip_df)
+    curve_path = out_dir / "account_curve.json"
+    payoff_path = out_dir / "trade_payoff.json"
+    curve_path.write_text(
+        json.dumps(curve, ensure_ascii=False, indent=2, allow_nan=False) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    payoff_path.write_text(
+        json.dumps(payoff, ensure_ascii=False, indent=2, allow_nan=False) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    paths["account_curve"] = str(curve_path)
+    paths["trade_payoff"] = str(payoff_path)
+    split = window_split(nav)
+    split_path = out_dir / "window_split.json"
+    split_path.write_text(
+        json.dumps(split, ensure_ascii=False, indent=2, allow_nan=False) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    paths["window_split"] = str(split_path)
     analysis_text = format_human_analysis(perf, n_closed=n_closed, n_open=n_open)
+    extra = "\n".join(citation_lines(curve, payoff))
+    analysis_text = analysis_text.rstrip("\n") + "\n" + extra + "\n"
     analysis_path = out_dir / HUMAN_ANALYSIS_NAME
     analysis_path.write_text(analysis_text, encoding="utf-8", newline="\n")
     paths["human_analysis"] = str(analysis_path)
@@ -1232,11 +1325,28 @@ def parse_cli(argv=None) -> argparse.Namespace:
         help="override cash; else parse summary.txt",
     )
     p.add_argument("--xlsx", action="store_true", help="also write human_review.xlsx")
+    p.add_argument("--benchmark-csv", type=Path, default=None, help="date,equity benchmark; optional")
+    p.add_argument("--benchmark-index", default=None, help="index symbol such as 000300.SH; optional")
+    p.add_argument(
+        "--benchmark-dividend",
+        choices=("none", "front"),
+        default=None,
+        help="required with --benchmark-index; not inferred from the run",
+    )
     return p.parse_args(argv)
 
 
 def main(argv=None) -> int:
     args = parse_cli(argv)
+    if args.benchmark_csv is not None and args.benchmark_index is not None:
+        raise SystemExit("pass only one of --benchmark-csv and --benchmark-index")
+    if args.benchmark_index is not None and args.benchmark_dividend is None:
+        raise SystemExit("--benchmark-index requires --benchmark-dividend none or front")
+    benchmark = None
+    if args.benchmark_csv is not None:
+        benchmark = load_benchmark_csv(args.benchmark_csv)
+    elif args.benchmark_index is not None:
+        benchmark = load_benchmark_index(args.benchmark_index, args.benchmark_dividend)
     run_dir = args.run_dir
     out_dir = args.out_dir or (run_dir / "analysis")
     scores_by_day = None
@@ -1265,6 +1375,7 @@ def main(argv=None) -> int:
         topk=args.topk,
         account=args.account,
         xlsx=bool(args.xlsx),
+        benchmark=benchmark,
     )
     s = product["summary"]
     print(

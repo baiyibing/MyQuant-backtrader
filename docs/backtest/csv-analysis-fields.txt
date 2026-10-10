@@ -37,6 +37,18 @@ daily_picks.csv
 human_review.xlsx
   传了 --xlsx 才有。上面各表各一张，另加 meta。
 
+account_curve.json
+  相对净值首行的收益、复利年化、回撤起止与长度、可选基准超额、月度收益、单边换手、费用。
+  没传基准时超额为缺失。佣金列缺失时费用为缺失，不把空佣金当成 0。
+
+trade_payoff.json
+  已平仓的胜率、平均盈利、平均亏损、盈亏比、获利因子，并按卖因再拆。
+  盈亏为 0 的笔算进胜率分母，不进入平均亏损。没有亏损笔时盈亏比和获利因子为缺失。
+
+window_split.json
+  把已有净值按行数切成前后两段。后段只出收益和回撤，不重选参数。
+  不要把后段分数写进结论。
+
 
 二、summary.json
 
@@ -151,6 +163,10 @@ return_on_cost           total_pnl / total_entry_value。
 first_buy                最早买入日。
 last_exit                最晚卖出日或估值日。
 still_held               true 表示期末还有仓。
+realized_pnl_share       该票已实现盈亏 / 全部已实现盈亏。合计为 0 时为空。
+top_profit_count         有正已实现盈亏的股票里，实际拿来算集中度的只数，最多 5。
+top_profit_share         这几只的正已实现盈亏 / 全部正已实现盈亏。没有正盈利时为空。
+                         后两列是整本账的同一个数，写在每一行上。
 
 
 七、positions_daily.csv
