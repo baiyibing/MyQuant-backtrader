@@ -1673,8 +1673,23 @@ def expected_case(
     return case, canonical, golden["captured_environment"]["pandas"]
 
 
+def _expect_skip_st(expected: dict) -> dict:
+    """Host stats now always include skip_st. Frozen overlays stay untouched."""
+    structured = expected.get("structured")
+    if not isinstance(structured, dict):
+        return expected
+    stats = structured.get("stats")
+    if not isinstance(stats, dict) or "skip_st" in stats:
+        return expected
+    return {
+        **expected,
+        "structured": {**structured, "stats": {**stats, "skip_st": 0}},
+    }
+
+
 def assert_case_canonical(book: str, actual: dict, expected: dict, canonical_expected: dict):
     """Mandatory on every pandas version, before any byte-check skip."""
+    expected = _expect_skip_st(expected)
     for field, label in (("canonical_csv", "production"), ("library_canonical_csv", "library")):
         hashes = {name: canonical_hash(table) for name, table in actual[field].items()}
         assert hashes == canonical_expected, (book, f"canonical {label} CSV drift")

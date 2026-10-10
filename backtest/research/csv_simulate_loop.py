@@ -470,6 +470,9 @@ def run_pool_buys_day(
         st.stats["skip_sold_today"] += sum(code in sold_today for code in raw)
         raw = [code for code in raw if code not in sold_today]
     planned = apply_capital_ration(raw, ration=ration, ration_seed=ration_seed, ds=ds)
+    from backtest.research.research_overlay import constrain_planned
+
+    planned = constrain_planned(st, planned)
     if not planned:
         return
     if sizing == "per_name":

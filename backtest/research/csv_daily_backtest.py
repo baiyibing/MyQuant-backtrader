@@ -281,6 +281,7 @@ def simulate(
     rule_profile: str | RuleProfile = "industry",
     sim_profile: SimPhaseClock | None = None,
     st_gate: bool = False,
+    research_overlay=None,
 ) -> SimState:
     """核心日循环。bars/pool_days 可由测试注入；run() 负责从湖与 CSV 加载。
 
@@ -370,6 +371,10 @@ def simulate(
         daily_quota=daily_quota,
         st_gate=st_gate,
     )
+    if research_overlay is not None:
+        from backtest.research.research_overlay import bind_research_overlay
+
+        bind_research_overlay(st, research_overlay)
     if (
         profile.exchange_quantity_rules
         or profile.supplementary_min_lot
@@ -901,8 +906,20 @@ def run(
     min_lot_top_up: bool | None = None,
     rule_profile: str | RuleProfile = "industry",
     profile_sim: bool | None = None,
+    slippage: str | None = None,
+    slippage_bp: float | None = None,
+    max_names: int | None = None,
+    industry_cap: int | None = None,
 ) -> SimState:
     profile = resolve_rule_profile(rule_profile)
+    from backtest.research.research_overlay import build_research_overlay
+
+    research_overlay = build_research_overlay(
+        slippage=slippage,
+        slippage_bp=slippage_bp,
+        max_names=max_names,
+        industry_cap=industry_cap,
+    )
     sim_clock = SimPhaseClock() if profile_sim_enabled(profile_sim) else None
     resolve_account_fee_schedule(
         profile.account_fee_schedule,
@@ -1088,6 +1105,7 @@ def run(
             strategy, start, end, None,
             codes=all_codes, bars=bars, workers=workers,
         ),
+        research_overlay=research_overlay,
     )
     if skipped.get("exdiv_skipped_no_factor"):
         st.stats["exdiv_skipped_no_factor"] = int(skipped["exdiv_skipped_no_factor"])
@@ -1202,6 +1220,9 @@ def main(argv: Optional[list] = None) -> int:
         "--fix-s11-exit-domain", action="store_true",
         help="version11 EOD exits use independent lake front; raw lake fills/marks (default OFF)",
     )
+    from backtest.research.research_overlay import add_research_overlay_args
+
+    add_research_overlay_args(ap)
     args = ap.parse_args(argv if argv is not None else None)
     try:
         validate_hold_days(args.strategy, args.hold_days, cli_option=True)
@@ -1238,6 +1259,10 @@ def main(argv: Optional[list] = None) -> int:
         min_cost=QLIB_MIN_COST if args.qlib_cost else None,
         strict_pool=args.strict_pool,
         fix_s11_exit_domain=args.fix_s11_exit_domain,
+        slippage=args.slippage,
+        slippage_bp=args.slippage_bp,
+        max_names=args.max_names,
+        industry_cap=args.industry_cap,
         **csv_run_kwargs_from_args(args),
     )
     engine = f"csv_daily_{book}"

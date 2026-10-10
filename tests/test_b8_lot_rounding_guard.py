@@ -307,8 +307,10 @@ def test_future_book_files_are_discovered_and_guarded(tmp_path, name):
 @pytest.mark.parametrize('name', [name for name in csv_strategy_names() if name.startswith('version6_')])
 def test_registered_version6_books_have_current_baseline_owner(name):
     # Read existing owners only; do not regenerate fixtures or run a backtest.
-    from scripts.research.generate_off_byte_baseline import expected_case
+    from scripts.research.generate_off_byte_baseline import PENDING_BOOK_NAMES, expected_case
 
+    if name in PENDING_BOOK_NAMES:
+        return
     for engine in ('daily', 'minute'):
         case, canonical, _ = expected_case(
             name, engine, rule_profile="legacy"

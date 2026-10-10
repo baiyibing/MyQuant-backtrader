@@ -353,8 +353,12 @@ def _bundle_byte_hashes(run: Path, out: Path) -> dict[str, str]:
     for path in sorted(out.iterdir()):
         blob = path.read_bytes()
         # Temporary directory names are not part of the output contract.
-        blob = blob.replace(str(out).encode(), b"<OUT_DIR>")
-        blob = blob.replace(str(run).encode(), b"<RUN_DIR>")
+        # JSON escapes backslashes, so replace that form before the raw path.
+        for folder, token in ((out, b"<OUT_DIR>"), (run, b"<RUN_DIR>")):
+            raw = str(folder).encode()
+            blob = blob.replace(raw.replace(b"\\", b"\\\\"), token)
+            blob = blob.replace(raw, token)
+        blob = blob.replace(b"\r\n", b"\n")
         hashes[path.name] = hashlib.sha256(blob).hexdigest()
     return hashes
 

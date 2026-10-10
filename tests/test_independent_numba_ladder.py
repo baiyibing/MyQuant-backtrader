@@ -13,7 +13,9 @@ from backtest.research.csv_ledger import (
 )
 from backtest.research.csv_minute_backtest import (
     _NUMBA_SCAN_AVAILABLE,
+    _drive_independent_window,
     _independent_numba_prefix,
+    _previous_rows,
     independent_ladder_first_bar,
 )
 from backtest.research.minute_cash_order import (
@@ -216,10 +218,11 @@ def _drive_numba_prefix(**kwargs):
     hooks = kwargs.pop("side_hooks", SIDE)
     st, pos, cursor, limits = _session(**kwargs)
     record_strategy6_53_params(st, stop_pct=float(kwargs.get("stop_pct", 0.05)))
-    python_from = _independent_numba_prefix(
-        st, pos, cursor, day_i=1, side_hooks=hooks, hm_lo=0, hm_hi=24 * 60,
+    _drive_independent_window(
+        st, CODE, pos, cursor, limits,
+        day=DAY, day_i=1, side_hooks=hooks, hm_lo=0, hm_hi=24 * 60,
     )
-    return _run_bars(st, pos, cursor, limits, hooks, python_from=python_from)
+    return st, pos
 
 
 def _same_trades(left, right):
@@ -538,3 +541,84 @@ def test_numba_prefix_blocked_then_fillable_scale_matches_python():
     sold = [t for t in nb[0].trades if str(t["reason"]).startswith("scale_out:")]
     assert sold
     assert not any(str(t["reason"]).startswith("trail:") for t in nb[0].trades)
+
+
+def _two_scale_then_trail():
+    n = 38
+    opens = [10.0] * n
+    highs = [10.05] * n
+    lows = [9.95] * n
+    closes = [10.0] * n
+    for i in range(6, 21):
+        opens[i] = highs[i] = closes[i] = 10.6
+        lows[i] = 10.5
+    for i in range(21, 37):
+        opens[i] = highs[i] = closes[i] = 11.2
+        lows[i] = 11.0
+    opens[37], highs[37], lows[37], closes[37] = 9.7, 11.2, 9.55, 9.6
+    return dict(
+        n=n, n_days=2, shares=2000, cost=10.0, peak=10.0, peak_hm=570,
+        opens=opens, highs=highs, lows=lows, closes=closes,
+    )
+
+
+def test_resume_matches_python_across_quiet_scale_gaps():
+    kwargs = _two_scale_then_trail()
+    nb, py = _drive_numba_prefix(**kwargs), _drive_python(**kwargs)
+    _same_trades(nb, py)
+    reasons = [str(t["reason"]) for t in nb[0].trades]
+    assert reasons[0].startswith("scale_out")
+    assert any(r.startswith("trail:") for r in reasons)
+    assert nb[1].group.scale_steps == 2
+    st, pos, cursor, limits = _session(**kwargs)
+    record_strategy6_53_params(st, stop_pct=0.05)
+    _prefix, resumed, evaluated, quiet_slice = _drive_independent_window(
+        st, CODE, pos, cursor, limits,
+        day=DAY, day_i=1, side_hooks=SIDE, hm_lo=0, hm_hi=24 * 60,
+    )
+    assert quiet_slice is False
+    assert resumed > 20
+    assert evaluated == 3
+
+
+def test_resume_off_keeps_python_tail(monkeypatch):
+    monkeypatch.setenv("OSKH_INDEPENDENT_RESUME", "0")
+    kwargs = _two_scale_then_trail()
+    nb, py = _drive_numba_prefix(**kwargs), _drive_python(**kwargs)
+    _same_trades(nb, py)
+    st, pos, cursor, limits = _session(**kwargs)
+    record_strategy6_53_params(st, stop_pct=0.05)
+    _prefix, resumed, evaluated, _quiet = _drive_independent_window(
+        st, CODE, pos, cursor, limits,
+        day=DAY, day_i=1, side_hooks=SIDE, hm_lo=0, hm_hi=24 * 60,
+    )
+    assert resumed == 0
+    assert evaluated > 20
+
+
+def test_resume_freezes_peak_after_deferred_exit():
+    kwargs = dict(
+        n=6, n_days=2, shares=1000, limit_down=9.4, cost=10.0, peak=10.0, peak_hm=570,
+        opens=[9.6, 10.5, 11.0, 11.2, 11.4, 11.5],
+        highs=[9.7, 10.8, 12.0, 12.2, 12.4, 12.5],
+        lows=[9.3, 10.4, 10.8, 11.0, 11.2, 11.3],
+        closes=[9.4, 10.6, 11.5, 11.6, 11.8, 12.0],
+        attach_low=False,
+    )
+    nb, py = _drive_numba_prefix(**kwargs), _drive_python(**kwargs)
+    _same_trades(nb, py)
+    assert int(nb[0].stats.get("defer_sell_limit_down", 0)) >= 1
+    assert nb[1].peak == py[1].peak == 10.0
+    assert nb[1].shares == 1000
+
+
+def test_previous_rows_searchsorted_matches_boolean_mask():
+    index = pd.to_datetime(["2025-11-03", "2025-11-04", "2025-11-04", "2025-11-05"])
+    frame = pd.DataFrame({"close": [1.0, 2.0, 3.0, 4.0]}, index=index)
+    day = pd.Timestamp("2025-11-05")
+    got = _previous_rows(frame, day)
+    assert list(got["close"]) == [1.0, 2.0, 3.0]
+    scrambled = frame.iloc[[2, 0, 3, 1]]
+    assert list(_previous_rows(scrambled, day)["close"]) == list(
+        scrambled.loc[scrambled.index < day, "close"]
+    )

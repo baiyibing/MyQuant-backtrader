@@ -18,7 +18,11 @@
 | 文件 | 用途 |
 |---|---|
 | `字段说明.txt` | **每次导出必写**。文件与字段说明。开头是本次 `run_dir` 和窗口；正文来自 `docs/backtest/csv-analysis-fields.txt` |
-| `human_analysis.txt` | **每次导出必写**。总收益率、最大回撤（日期、峰值、谷值）、已平仓胜率、含期末浮盈的胜率、按卖因拆开 |
+| `human_analysis.txt` | **每次导出必写**。总收益率、最大回撤（日期、峰值、谷值）、已平仓胜率、含期末浮盈的胜率、按卖因拆开，并各引一行 `account_curve.json` 与 `trade_payoff.json` |
+| `account_curve.json` | **每次导出必写**。相对净值首行、复利年化、回撤长度、可选超额、月度、换手、费用。不要手算 |
+| `trade_payoff.json` | **每次导出必写**。已平仓盈亏比和获利因子，按卖因拆开。不要手算 |
+| `window_split.json` | **每次导出必写**。后半段净值的收益和回撤。不要写进结论，也不要据此改参数 |
+| `walkforward.json` | **每次导出必写**。四段里后三段的收益。不要写进结论，也不要据此改参数 |
 | `win_by_reason.csv` | 已平仓按 `sell_reason` 的笔数、胜率、盈亏 |
 | `summary.json` | 天数 / 买卖笔数 / 已实现+期末浮盈 / 与净值变动对账（`pnl_nav_diff`），并含上面的回撤和胜率字段 |
 | `nav_daily.csv` | 组合日净值、回撤（来自 run 的 `daily_equity.csv`） |
@@ -48,7 +52,7 @@
 
 ## 盘后清单（按这个顺序写，不要跳到「策略该怎么改」）
 
-1. **净值与胜率**：直接引用 `human_analysis.txt`。最大回撤 = 净值相对此前峰值的最小值；已平仓胜率 = `realized_pnl > 0` 的已平笔 / 已平笔。`pnl_total` 与 `nav_delta` 的 `pnl_nav_diff` 只作对账；差大先查佣金是否进了 round_trips、未平仓是否缺 `EOD_MARK`。
+1. **净值与胜率**：直接引用 `human_analysis.txt`。最大回撤 = 净值相对此前峰值的最小值；已平仓胜率 = `realized_pnl > 0` 的已平笔 / 已平笔。相对净值首行、复利年化、盈亏比、获利因子只引用该文件指向 `account_curve.json` 和 `trade_payoff.json` 的两行，不要手算。`pnl_total` 与 `nav_delta` 的 `pnl_nav_diff` 只作对账；差大先查佣金是否进了 round_trips、未平仓是否缺 `EOD_MARK`。
 2. **荐股 vs 实持**（有 `daily_picks` 时）：按日数 `missed` / `held_not_topk` / `new_buy`。missed 多 = 执行层或资格闸吃掉信号；held_not_topk 多 = dropout 惯性。
 3. **个股**：对 `pnl_by_stock` 盈亏两端各翻 5 只，用 `round_trips` 看开平日、持有交易日、卖因（`stop_loss:*` / `topk_drop:bottom` / 书侧 trail 等）、买点 cond。
 4. **结构**：持仓天数分布、单日是否顶满 topk、同一只反复进出、cond1 vs cond2 笔数。

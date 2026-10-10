@@ -105,7 +105,7 @@ def test_cap_off_byte_snapshot_with_p2_b_labels_and_ignores_volume(engine):
     # (buy/sell_cost_rate, min_cost); capital pairing adds stats["daily_quota"].
     # Removing daily_quota reproduces the 2904e749/4b6ccf7f pins; removing the
     # fee stats too reproduces the prior 9220b164 snapshot; fill economics unchanged.
-    expected = {"daily": "6b8975a899049fa694aedb60d5a68cf50dbd79db18f9ed131267d448f2e453d2", "book": "e33b5ed5120d82e9340d0f380796adbb8248d71eff22c3cd974ef2cd93305c0c", "v7": "2d3c71db7e90c4286271d4a5470235511314a05adb13fc6c54ca323e7f8044ee"}
+    expected = {"daily": "815339df3536055edb359eb57c9c3824cbf7fff4ca2f649218ef2f5d8d802b2f", "book": "5d9f4540976004981c7f76c0e8f5f981e4cee25e0de0e2e636dc3bb2f93b3dfe", "v7": "2d3c71db7e90c4286271d4a5470235511314a05adb13fc6c54ca323e7f8044ee"}
 
     def forbidden_lookup(*_):
         pytest.fail("cap off must not consult the volume provider")

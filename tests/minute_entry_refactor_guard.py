@@ -4,11 +4,11 @@ import ast
 import hashlib
 from pathlib import Path
 
-# HELP_LOCK + main() bytes at knife base 501de569; main refreshed for version9_3 --hold-days.
+# HELP_LOCK + main() bytes at knife base 501de569; main refreshed for research overlay flags.
 # Frozen hashes avoid `git show` so shallow Actions checkouts can still enforce.
 _EXPECTED_SHA256 = {
     "HELP_LOCK": "abdc73bf56b1e3318d25191fcc8bee78ab51d1b7877c603e9a0a70b1df305473",
-    "main": "ea732281fdac366f637f2c65a9491ff7180dfa56c69f8a979d0fe2ad95031093",
+    "main": "dd2a3cc38c651b7c0febb8da80bc46f1aec8c9ef4f464d3e234103084759be93",
 }
 
 

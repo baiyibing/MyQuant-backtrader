@@ -842,7 +842,8 @@ def test_run_metadata_assembly_merges_topk_tail_capacity_and_s11(existing, enabl
                       and any(ast.unparse(target) == "st.run_metadata" for target in child.targets)
                       for child in node.body)]
     # The topk/tail/capacity blocks precede the strategy-11 provenance block.
-    assert len(blocks) == 4
+    # The last block is the minute layout switch and is not part of this assembly.
+    assert len(blocks) == 5
     st = SimpleNamespace()
     if existing is not None:
         st.run_metadata = existing.copy()

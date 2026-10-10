@@ -31,7 +31,7 @@ def test_cache_miss_hit_subset_and_partial_preserve(tmp_path, monkeypatch):
     assert path.is_file()
     cached = b.load_monitor_bars({"600998.SH"}, cache_dir=tmp_path, status=status,
                                  lake_root=lake_root)
-    assert status["cache"] == "hit" and len(calls) == 1
+    assert status["cache"] == "mem" and len(calls) == 1
     assert cached["600998.SH"]["hm"].tolist() == [600]
     assert b.minute_coverage(["600998.SH"], cached)["covered_codes"] == 1
     b.load_monitor_bars({"600996.SH"}, cache_dir=tmp_path, lake_root=lake_root)

@@ -41,6 +41,10 @@ from backtest.research.strategy9_rules import (  # noqa: E402
 
 from backtest.research.book_capabilities import allows_price_add  # noqa: E402
 from backtest.research.bar_store import build_day_spans  # noqa: E402
+from backtest.research.minute_grid import (  # noqa: E402
+    apply_minute_layout,
+    resolve_minute_layout,
+)
 
 from backtest.research.csv_ledger import (  # noqa: E402
     CHASE_HM,
@@ -317,12 +321,14 @@ try:
             if not sell_allowed(can_sell, n_days):
                 continue
             hi = h[i]
+            px_open = o[i]
+            px_close = c[i]
+            if not (hi == hi) or not (px_open == px_open) or not (px_close == px_close):
+                continue
             cur_hm = hm[i]
             if hi > new_peak:
                 new_peak = hi
                 new_peak_hm = cur_hm
-            px_open = o[i]
-            px_close = c[i]
             if limit_down_blocks(px_open, limit_down):
                 continue
             if stop_enabled and gap_stop(px_open, trigger):
@@ -372,8 +378,9 @@ try:
         hm_lo,
         hm_hi,
         advance_done,
+        start,
     ):
-        """First fillable bar. Limit-down-open sell intents are counted, not returned."""
+        """First fillable bar at or after ``start``. Limit-down-open sells are counted."""
         new_peak = peak
         new_peak_hm = peak_hm
         allowed = can_sell and n_days >= 1
@@ -382,7 +389,8 @@ try:
         defer_count = 0
         dd_start = peak_dd_start
         advance_latched = advance_done
-        for i in range(n):
+        begin = start if start > 0 else 0
+        for i in range(begin, n):
             cur_hm = hm[i]
             if cur_hm < hm_lo or cur_hm > hm_hi:
                 continue
@@ -391,6 +399,8 @@ try:
             px_open = o[i]
             px_close = c[i]
             hi = h[i]
+            if not (px_open == px_open) or not (px_close == px_close) or not (hi == hi):
+                continue
             if allowed and hi > new_peak:
                 new_peak = hi
                 new_peak_hm = cur_hm
@@ -511,6 +521,8 @@ def independent_ladder_first_bar(
     hm_lo: int,
     hm_hi: int,
     advance_done: bool = False,
+    bar_start: int = 0,
+    bars=None,
 ):
     """Return ``(idx, peak, peak_hm, defer, dd_start, advance_latched)``. ``idx<0`` means no Python action."""
     if _scan_independent_ladder_first is None:
@@ -518,11 +530,18 @@ def independent_ladder_first_bar(
     stop_pct = cursor.stop_pct
     stop_enabled = isinstance(stop_pct, float) and 0 < float(stop_pct) < 1
     costs = np.asarray(step_costs, dtype=np.float64)
+    if bars is None:
+        bars = (
+            np.asarray(cursor.o, dtype=np.float64),
+            np.asarray(cursor.h, dtype=np.float64),
+            np.asarray(cursor.c, dtype=np.float64),
+            np.asarray(cursor.hm, dtype=np.int64),
+        )
     idx, peak, peak_hm, defer, dd_start, advance_latched = _scan_independent_ladder_first(
-        np.asarray(cursor.o, dtype=np.float64),
-        np.asarray(cursor.h, dtype=np.float64),
-        np.asarray(cursor.c, dtype=np.float64),
-        np.asarray(cursor.hm, dtype=np.int64),
+        bars[0],
+        bars[1],
+        bars[2],
+        bars[3],
         float(cursor.cost),
         float(cursor.peak),
         int(cursor.n_days),
@@ -548,6 +567,7 @@ def independent_ladder_first_bar(
         int(hm_lo),
         int(hm_hi),
         bool(advance_done),
+        int(bar_start),
     )
     return int(idx), float(peak), int(peak_hm), int(defer), int(dd_start), bool(advance_latched)
 
@@ -561,23 +581,20 @@ def _independent_numba_prefix(
     side_hooks,
     hm_lo: int,
     hm_hi: int,
+    bar_start: int = 0,
+    bars=None,
+    ladder=None,
 ) -> int:
-    """Write prefix peak and return first Python bar, or -1 if none in this slice."""
-    flag = (os.environ.get("OSKH_INDEPENDENT_NUMBA") or "1").strip().lower()
-    if flag in {"0", "false", "off", "no"}:
+    """Write prefix peak and return first Python bar, or -1 if none in this slice.
+
+    ``-2`` means the scan gave up (too many step lots): Python from ``bar_start``.
+    ``bars`` and ``ladder`` are the window's static inputs. Lot costs, scale
+    anchor and peak still refresh on every call.
+    """
+    if _independent_numba_blocked(st, pos, cursor):
         return 0
-    ladder = _ladder_numba_params(st)
-    if (
-        ladder is None
-        or not _NUMBA_SCAN_AVAILABLE
-        or not _independent_skip_supported(cursor)
-        or cursor.force_sell_hm is not None
-        or cursor.close_clear is not None
-        or (cursor.fill_state and "pending" in cursor.fill_state)
-        or pos.pending_exit
-        or _side_pending_host(st, pos)
-    ):
-        return 0
+    if ladder is None:
+        ladder = _ladder_numba_params(st)
     width, give_base, give_step, tp_min = ladder
     step_pct = float((side_hooks or {}).get("step_stop_pct") or 0.0)
     cont_pct = float((side_hooks or {}).get("cont_step_stop_pct") or 0.0)
@@ -595,7 +612,7 @@ def _independent_numba_prefix(
             ):
                 step_costs.append(float(lot.cost))
         if len(step_costs) > 32:
-            return 0
+            return -2 if bar_start else 0
     scale_step = float((side_hooks or {}).get("scale_out_step") or 0.0)
     scale_anchor = 0.0
     scale_steps = 0
@@ -636,6 +653,8 @@ def _independent_numba_prefix(
         hm_lo=hm_lo,
         hm_hi=hm_hi,
         advance_done=bool(cursor.first_exit_attempted),
+        bar_start=bar_start,
+        bars=bars,
     )
     pos.peak = peak
     pos.peak_hm = peak_hm
@@ -652,6 +671,230 @@ def _independent_numba_prefix(
 
 def _side_pending_host(st, pos) -> bool:
     return bool(getattr(st, "held_fill_states", {}).get(held_fill_key(pos), {}).get("side_pending"))
+
+
+def _independent_resume_enabled() -> bool:
+    flag = (os.environ.get("OSKH_INDEPENDENT_RESUME") or "1").strip().lower()
+    return flag not in {"0", "false", "off", "no"}
+
+
+def _independent_numba_blocked(st, pos, cursor) -> bool:
+    """True when the whole remaining window must stay on the Python bar loop."""
+    flag = (os.environ.get("OSKH_INDEPENDENT_NUMBA") or "1").strip().lower()
+    if flag in {"0", "false", "off", "no"}:
+        return True
+    if (
+        _ladder_numba_params(st) is None
+        or not _NUMBA_SCAN_AVAILABLE
+        or not _independent_skip_supported(cursor)
+        or cursor.force_sell_hm is not None
+        or cursor.close_clear is not None
+        or (cursor.fill_state and "pending" in cursor.fill_state)
+        or pos.pending_exit
+        or _side_pending_host(st, pos)
+    ):
+        return True
+    return False
+
+
+def _drive_independent_window(
+    st,
+    code,
+    pos,
+    cursor,
+    limits,
+    *,
+    day,
+    day_i,
+    side_hooks,
+    hm_lo,
+    hm_hi,
+    audit_sink=None,
+    dump_label=None,
+    dump_ds=None,
+):
+    """Scan one held window. Return ``(prefix_bars, resume_bars, eval_bars, quiet_slice)``.
+
+    Default path re-enters Numba after each Python bar so quiet gaps are not
+    evaluated in Python. ``OSKH_INDEPENDENT_RESUME=0`` keeps one prefix plus a
+    Python tail. After a cursor exit attempt, peak stays frozen and the tail
+    stays in Python.
+    """
+    hm = cursor.hm
+    n = len(hm)
+    hm_arr = np.asarray(hm, dtype=np.int64)
+    ordered = hm_arr.size < 2 or bool(np.all(hm_arr[1:] >= hm_arr[:-1]))
+    if ordered:
+        win_lo = int(np.searchsorted(hm_arr, int(hm_lo), side="left"))
+        win_hi = int(np.searchsorted(hm_arr, int(hm_hi), side="right"))
+    else:
+        win_lo = win_hi = 0
+    prefix_bars = 0
+    resume_bars = 0
+    evaluated = 0
+    quiet_slice = False
+    peak0 = float(pos.peak)
+    peak_hm0 = int(pos.peak_hm)
+    dumped = False
+    bars = (
+        np.asarray(cursor.o, dtype=np.float64),
+        np.asarray(cursor.h, dtype=np.float64),
+        np.asarray(cursor.c, dtype=np.float64),
+        hm_arr,
+    )
+    ladder = _ladder_numba_params(st)
+
+    def in_window(idx):
+        at = int(hm[idx])
+        return hm_lo <= at <= hm_hi
+
+    def first_from(idx):
+        if ordered:
+            if idx < win_lo:
+                idx = win_lo
+            return idx if idx < win_hi else n
+        while idx < n and int(hm[idx]) < hm_lo:
+            idx += 1
+        if idx >= n or int(hm[idx]) > hm_hi:
+            return n
+        return idx
+
+    def count_quiet(lo_idx, hi_idx):
+        if ordered:
+            stop = win_hi if hi_idx is None else hi_idx
+            left = lo_idx if lo_idx > win_lo else win_lo
+            right = stop if stop < win_hi else win_hi
+            return right - left if right > left else 0
+        total = 0
+        stop = n if hi_idx is None else hi_idx
+        for bar_idx in range(lo_idx, stop):
+            if int(hm[bar_idx]) > hm_hi:
+                break
+            if in_window(bar_idx):
+                total += 1
+        return total
+
+    def dump(python_from):
+        nonlocal dumped
+        if dumped or not dump_label:
+            return
+        dumped = True
+        _maybe_dump_independent_prefix(
+            code=code, ds=dump_ds, label=dump_label, pos=pos, cursor=cursor,
+            python_from=python_from, hm_lo=hm_lo, hm_hi=hm_hi,
+            peak0=peak0, peak_hm0=peak_hm0, n_days=cursor.n_days,
+            can_sell=cursor.can_sell, take_profit=cursor.take_profit,
+        )
+
+    def exec_bar(bar_idx):
+        at_hm = int(hm[bar_idx])
+        o_px = float(cursor.o[bar_idx])
+        c_px = float(cursor.c[bar_idx])
+        hi_px = float(cursor.h[bar_idx])
+        if not (np.isfinite(o_px) and np.isfinite(c_px) and np.isfinite(hi_px)):
+            return
+        for phase in ("open", "close"):
+            advance_independent_exit(
+                st, code, pos, cursor, bar_idx, phase, limits,
+                day=day, day_i=day_i, audit_sink=audit_sink,
+            )
+            if phase == "open":
+                fill_side_pending(st, code, pos, o_px, day, day_i, limits, hm=at_hm)
+            if phase != "close" or not side_hooks:
+                continue
+            fill_config = side_hooks.get("fill_config")
+            low_arr = side_hooks.get("low_arr")
+            if side_hooks.get("step_stop_pct") or side_hooks.get("cont_step_stop_pct"):
+                step_stop_exits(
+                    st, code, pos, c_px, day, day_i, limits,
+                    step_stop_pct=side_hooks.get("step_stop_pct") or 0.0,
+                    cont_step_stop_pct=side_hooks.get("cont_step_stop_pct"),
+                    fill_config=fill_config, open_px=o_px,
+                    low=(float(low_arr[bar_idx])
+                         if low_arr is not None and fill_config and fill_config.trigger_basis == "bar_low" else None),
+                    hm=at_hm,
+                )
+            if side_hooks.get("scale_out_step"):
+                scale_out_exits(
+                    st, code, pos, c_px, day, day_i, limits,
+                    scale_step=side_hooks["scale_out_step"],
+                    scale_frac=side_hooks.get("scale_out_frac", 0.05),
+                    scale_anchor=side_hooks.get("scale_out_anchor", "first_lot"),
+                    fill_config=fill_config, open_px=o_px, hm=at_hm,
+                )
+            if side_hooks.get("peak_dd_exit"):
+                peak_dd_clear_exits(
+                    st, code, pos, c_px, day, day_i, limits,
+                    peak_dd_exit=side_hooks["peak_dd_exit"],
+                    fill_config=fill_config, open_px=o_px,
+                    peak_dd_sessions=side_hooks.get("peak_dd_sessions", 15),
+                    peak_dd_min_rise=side_hooks.get("peak_dd_min_rise") or 0.0,
+                    hm=at_hm,
+                )
+
+    def python_tail(start_idx):
+        nonlocal evaluated
+        for bar_idx in range(start_idx, n):
+            if not position_is_open(st, pos):
+                break
+            if int(hm[bar_idx]) > hm_hi:
+                break
+            if not in_window(bar_idx):
+                continue
+            exec_bar(bar_idx)
+            evaluated += 1
+
+    if not _independent_resume_enabled():
+        python_from = _independent_numba_prefix(
+            st, pos, cursor, day_i=day_i, side_hooks=side_hooks,
+            hm_lo=hm_lo, hm_hi=hm_hi, bars=bars, ladder=ladder,
+        )
+        dump(python_from)
+        if python_from < 0:
+            return 0, 0, 0, True
+        prefix_bars = count_quiet(0, python_from)
+        python_tail(python_from)
+        return prefix_bars, 0, evaluated, False
+
+    start_idx = first_from(0)
+    seen_python = False
+    while start_idx < n and position_is_open(st, pos):
+        if (
+            _independent_numba_blocked(st, pos, cursor)
+            or getattr(cursor, "first_exit_attempted", False)
+        ):
+            dump(0 if not seen_python else start_idx)
+            python_tail(start_idx)
+            break
+        cursor.cost = pos.cost
+        python_from = _independent_numba_prefix(
+            st, pos, cursor, day_i=day_i, side_hooks=side_hooks,
+            hm_lo=hm_lo, hm_hi=hm_hi, bar_start=start_idx,
+            bars=bars, ladder=ladder,
+        )
+        dump(python_from)
+        if python_from == -2:
+            python_tail(start_idx)
+            break
+        if python_from < 0:
+            if not seen_python:
+                quiet_slice = True
+            else:
+                resume_bars += count_quiet(start_idx, None)
+            break
+        if python_from < start_idx:
+            python_tail(start_idx)
+            break
+        gap = count_quiet(start_idx, python_from)
+        if seen_python:
+            resume_bars += gap
+        else:
+            prefix_bars += gap
+        exec_bar(python_from)
+        evaluated += 1
+        seen_python = True
+        start_idx = first_from(python_from + 1)
+    return prefix_bars, resume_bars, evaluated, quiet_slice
 
 
 def _maybe_dump_independent_prefix(
@@ -958,18 +1201,72 @@ def _slice_day(
 
 
 def _previous_rows(df: pd.DataFrame, day) -> pd.DataFrame:
-    """Rows strictly before ``day``; kept named so orchestration can be profiled."""
+    """Rows strictly before ``day``. Sorted indexes use searchsorted."""
+    index = df.index
+    if len(index) == 0:
+        return df.iloc[0:0]
+    try:
+        if index.is_monotonic_increasing:
+            end = int(index.searchsorted(day, side="left"))
+            return df.iloc[:end]
+    except (TypeError, ValueError):
+        pass
     return df.loc[df.index < day]
 
 
+def _first_finite(values: np.ndarray) -> Optional[float]:
+    if values.size == 0:
+        return None
+    first = float(values[0])
+    if np.isfinite(first):
+        return first
+    hit = np.flatnonzero(np.isfinite(values))
+    if hit.size == 0:
+        return None
+    return float(values[int(hit[0])])
+
+
+def _last_finite(values: np.ndarray) -> Optional[float]:
+    if values.size == 0:
+        return None
+    last = float(values[-1])
+    if np.isfinite(last):
+        return last
+    hit = np.flatnonzero(np.isfinite(values))
+    if hit.size == 0:
+        return None
+    return float(values[int(hit[-1])])
+
+
+def _finite_hm_bucket(frame, target: int, earliest: int) -> Optional[int]:
+    """Exact finite close at ``target``, else the last finite close at or before it."""
+    if frame is None or getattr(frame, "empty", True):
+        return None
+    hm = frame["hm"].to_numpy(np.int64, copy=False)
+    close = frame["close"].to_numpy(np.float64, copy=False)
+    finite = np.isfinite(close)
+    hit = np.flatnonzero((hm == int(target)) & finite)
+    if hit.size:
+        return int(hm[int(hit[0])])
+    eligible = np.flatnonzero((hm >= int(earliest)) & (hm <= int(target)) & finite)
+    if eligible.size == 0:
+        return None
+    return int(hm[int(eligible[-1])])
+
+
 def _buy_px_from_arrays(hm: np.ndarray, close: np.ndarray) -> Optional[float]:
-    """14:55 close, else last close in 14:30–14:55. Arrays stay in bar order."""
+    """14:55 close, else last close in 14:30–14:55. Arrays stay in bar order.
+
+    A non-finite close is an empty slot, so the search falls through as if
+    that minute were absent.
+    """
     if hm.size == 0:
         return None
-    exact = np.flatnonzero(hm == BUY_HM)
+    finite = np.isfinite(close)
+    exact = np.flatnonzero((hm == BUY_HM) & finite)
     if exact.size:
         return float(close[int(exact[0])])
-    late = np.flatnonzero((hm >= 14 * 60 + 30) & (hm <= BUY_HM))
+    late = np.flatnonzero((hm >= 14 * 60 + 30) & (hm <= BUY_HM) & finite)
     if late.size:
         return float(close[int(late[-1])])
     return None
@@ -985,23 +1282,54 @@ def _buy_px(day_df: pd.DataFrame) -> Optional[float]:
 
 
 def _chase_quotes(day_df: pd.DataFrame) -> Optional[tuple[float, float]]:
-    """(当日开盘, 09:45 市价)。缺 09:45 则用 ≤09:45 最后一根 close。"""
-    if day_df is None or day_df.empty:
+    """(当日开盘, 09:45 市价)。缺 09:45 则用 ≤09:45 最后一根 close。
+
+    Empty slots are not bars: the open is the first finite open, and a NaN
+    09:45 close falls through to the previous finite close.
+    """
+    if day_df is None or getattr(day_df, "empty", True):
         return None
-    open_px = float(day_df.iloc[0]["open"])
-    hit = day_df.loc[day_df["hm"] == CHASE_HM]
-    if not hit.empty:
-        return open_px, float(hit["close"].iloc[0])
-    early = day_df.loc[(day_df["hm"] >= AM_OPEN) & (day_df["hm"] <= CHASE_HM)]
-    if early.empty:
+    hm = day_df["hm"].to_numpy(np.int64, copy=False)
+    op = day_df["open"].to_numpy(np.float64, copy=False)
+    cl = day_df["close"].to_numpy(np.float64, copy=False)
+    if hm.size == 0:
         return None
-    return open_px, float(early["close"].iloc[-1])
+    open_hit = np.flatnonzero(np.isfinite(op))
+    if open_hit.size == 0:
+        return None
+    open_px = float(op[int(open_hit[0])])
+    exact = np.flatnonzero((hm == CHASE_HM) & np.isfinite(cl))
+    if exact.size:
+        return open_px, float(cl[int(exact[0])])
+    early = np.flatnonzero((hm >= AM_OPEN) & (hm <= CHASE_HM) & np.isfinite(cl))
+    if early.size == 0:
+        return None
+    return open_px, float(cl[int(early[-1])])
 
 
 def _open_quote_for(day_df: pd.DataFrame):
-    """Exact 09:30 first open; a missing opening bar never borrows a later row."""
-    hit = day_df.loc[day_df["hm"] == AM_OPEN]
-    return None if hit.empty else hit.iloc[0]
+    """Exact 09:30 first open; a missing or empty opening bar never borrows a later row."""
+    if day_df is None or getattr(day_df, "empty", True):
+        return None
+    hm = day_df["hm"].to_numpy(np.int64, copy=False)
+    hit = np.flatnonzero(hm == AM_OPEN)
+    if hit.size == 0:
+        return None
+    idx = int(hit[0])
+    open_px = float(day_df["open"].to_numpy(np.float64, copy=False)[idx])
+    if not np.isfinite(open_px):
+        return None
+    data = {}
+    for name in ("open", "high", "low", "close"):
+        if name in day_df.columns:
+            data[name] = float(day_df[name].to_numpy(np.float64, copy=False)[idx])
+    data["hm"] = int(hm[idx])
+    for name in ("volume", "amount"):
+        if name in day_df.columns:
+            data[name] = float(day_df[name].to_numpy(np.float64, copy=False)[idx])
+    if "ymd" in day_df.columns:
+        data["ymd"] = day_df["ymd"].to_numpy()[idx]
+    return pd.Series(data)
 
 
 def simulate(
@@ -1066,6 +1394,7 @@ def simulate(
     sim_profile: SimPhaseClock | None = None,
     day_spans: dict | None = None,
     st_gate: bool = False,
+    research_overlay=None,
 ) -> SimState:
     """Opt-in cap uses caller-attested completed minutes; daily volume is unused.
 
@@ -1247,6 +1576,10 @@ def simulate(
             st_gate=st_gate,
             **({"context": policy_context} if policy.initialize is not None else {}),
         )
+        if research_overlay is not None:
+            from backtest.research.research_overlay import bind_research_overlay
+
+            bind_research_overlay(st, research_overlay)
         if (
             profile.exchange_quantity_rules
             or profile.supplementary_min_lot
@@ -1304,7 +1637,10 @@ def simulate(
         hold_modes = {}
         clock.begin("day_spans")
         if day_spans is None:
-            day_spans = {code: build_day_spans(df) for code, df in minute_bars.items()}
+            day_spans = {}
+            for code, df in minute_bars.items():
+                owned = getattr(df, "spans", None)
+                day_spans[code] = owned if owned else build_day_spans(df)
         clock.end("day_spans")
 
     clock.begin("day_loop")
@@ -1479,7 +1815,10 @@ def simulate(
                     or (fill_config is not None and fill_config.trigger_basis == "bar_low")
                 )
                 low_arr = day_m["low"].to_numpy(np.float64) if need_low else None
-                prev_closes = prev_rows["close"].astype(float).tolist()
+                prev_closes = (
+                    prev_rows["close"].astype(float).tolist()
+                    if sell_gate is not None else []
+                )
                 if s8_confirm:
                     prefix_high = max((float(hi) for hi in h[hm <= BUY_HM] if hi > 0), default=0.0)
                     for pos in st.positions.get(code, []):
@@ -1488,10 +1827,12 @@ def simulate(
                         )
                 if absolute_exit:
                     line = absolute_exit(code, day)
-                    if line is not None and float(day_m["low"].min()) <= line:
-                        for lot in st.positions.get(code, []):
-                            if lot.entry_idx >= i:
-                                lot.pending_exit = "stop_loss:touch|t1_deferred"
+                    if line is not None:
+                        low_min = float(day_m["low"].min())
+                        if np.isfinite(low_min) and low_min <= line:
+                            for lot in st.positions.get(code, []):
+                                if lot.entry_idx >= i:
+                                    lot.pending_exit = "stop_loss:touch|t1_deferred"
                 for pos in exit_positions(st, code, i, day=day):
                     if getattr(pos, "ride_with", None) is not None:
                         continue
@@ -1530,79 +1871,19 @@ def simulate(
                             "fill_config": side_fill_config,
                             "low_arr": low_arr,
                         }
-                        quiet = 0
-                        evaluated = 0
-                        peak0, peak_hm0 = float(pos.peak), int(pos.peak_hm)
                         hm_hi = BUY_HM if split_group_scan else 24 * 60
-                        want_step = hooks.get("step_stop_pct")
-                        want_scale = hooks.get("scale_out_step")
-                        want_dd = hooks.get("peak_dd_exit")
-                        scale_frac = hooks.get("scale_out_frac", 0.05)
-                        scale_anchor_name = hooks.get("scale_out_anchor", "first_lot")
-                        dd_sessions = hooks.get("peak_dd_sessions", 15)
-                        python_from = _independent_numba_prefix(
-                            st, pos, cursor, day_i=i, side_hooks=side_hooks,
-                            hm_lo=0, hm_hi=hm_hi,
+                        quiet, resumed, evaluated, quiet_slice = _drive_independent_window(
+                            st, code, pos, cursor, limits,
+                            day=day, day_i=i, side_hooks=side_hooks,
+                            hm_lo=0, hm_hi=hm_hi, audit_sink=audit_sink,
+                            dump_label="morning", dump_ds=ds,
                         )
-                        _maybe_dump_independent_prefix(
-                            code=code, ds=ds, label="morning", pos=pos, cursor=cursor,
-                            python_from=python_from, hm_lo=0, hm_hi=hm_hi,
-                            peak0=peak0, peak_hm0=peak_hm0, n_days=n_days,
-                            can_sell=cursor.can_sell, take_profit=take_profit,
-                        )
-                        for bar_idx, at_hm in enumerate(hm):
-                            if python_from < 0 or not position_is_open(st, pos):
-                                break
-                            if split_group_scan and int(at_hm) > BUY_HM:
-                                continue
-                            if bar_idx < python_from:
-                                quiet += 1
-                                continue
-                            evaluated += 1
-                            for phase in ("open", "close"):
-                                advance_independent_exit(
-                                    st, code, pos, cursor, bar_idx, phase, limits,
-                                    day=day, day_i=i, audit_sink=audit_sink,
-                                )
-                                if phase == "open":
-                                    fill_side_pending(st, code, pos, float(o[bar_idx]), day, i,
-                                                      limits, hm=int(at_hm))
-                                if phase == "close" and (
-                                    want_step or hooks.get("cont_step_stop_pct")
-                                ):
-                                    step_stop_exits(
-                                        st, code, pos, float(c[bar_idx]), day, i,
-                                        limits,
-                                        step_stop_pct=want_step or 0.0,
-                                        cont_step_stop_pct=hooks.get("cont_step_stop_pct"),
-                                        fill_config=side_fill_config, open_px=float(o[bar_idx]),
-                                        low=(float(low_arr[bar_idx])
-                                             if low_arr is not None and side_fill_config and side_fill_config.trigger_basis == "bar_low" else None),
-                                        hm=int(at_hm),
-                                    )
-                                if phase == "close" and want_scale:
-                                    scale_out_exits(
-                                        st, code, pos, float(c[bar_idx]), day, i,
-                                        limits, scale_step=want_scale,
-                                        scale_frac=scale_frac,
-                                        scale_anchor=scale_anchor_name,
-                                        fill_config=side_fill_config, open_px=float(o[bar_idx]),
-                                        hm=int(at_hm),
-                                    )
-                                if phase == "close" and want_dd:
-                                    peak_dd_clear_exits(
-                                        st, code, pos, float(c[bar_idx]), day, i,
-                                        limits,
-                                        peak_dd_exit=want_dd,
-                                        fill_config=side_fill_config, open_px=float(o[bar_idx]),
-                                        peak_dd_sessions=dd_sessions,
-                                        peak_dd_min_rise=hooks.get("peak_dd_min_rise") or 0.0,
-                                        hm=int(at_hm),
-                                    )
-                        if python_from < 0:
+                        if quiet_slice:
                             clock.count("held_numba_slices")
                         if quiet:
                             clock.count("held_numba_prefix_bars", quiet)
+                        if resumed:
+                            clock.count("held_numba_resume_bars", resumed)
                         if evaluated:
                             clock.count("held_eval_bars", evaluated)
                         if split_group_scan:
@@ -1654,15 +1935,20 @@ def simulate(
                         reserve_state=reserve_state,
                         close_clear=close_clear,
                     )
-                    if absolute_exit and idx < 0 and float(day_m["low"].min()) <= absolute_exit(code, day):
-                        pos.pending_exit = "stop_loss:touch"
+                    if absolute_exit and idx < 0:
+                        line = absolute_exit(code, day)
+                        low_min = float(day_m["low"].min()) if line is not None else float("nan")
+                        if line is not None and np.isfinite(low_min) and low_min <= line:
+                            pos.pending_exit = "stop_loss:touch"
+                    first_open = _first_finite(o) if pending_at_open else None
                     if (
                         idx < 0
                         and pending_at_open
                         and "pending" in fill_state
                         and callable(hooks.get("minute_next_open_exit"))
                         and limit_down > 0
-                        and hit_limit_down(float(o[0]), limit_down)
+                        and first_open is not None
+                        and hit_limit_down(first_open, limit_down)
                     ):
                         st.stats["defer_sell_limit_down"] += 1
                     minute_next_open_exit = hooks.get("minute_next_open_exit")
@@ -1672,8 +1958,10 @@ def simulate(
                         and "pending" not in fill_state
                         and callable(minute_next_open_exit)
                     ):
-                        exit_reason = minute_next_open_exit(
-                            float(c[-1]), pos.cost, new_peak, n_days
+                        last_close = _last_finite(c)
+                        exit_reason = (
+                            minute_next_open_exit(last_close, pos.cost, new_peak, n_days)
+                            if last_close is not None else None
                         )
                         if exit_reason:
                             fill_state["pending"] = exit_reason
@@ -1682,6 +1970,8 @@ def simulate(
                     pos.reserved = bool(reserve_state["reserved"])
                     if idx >= 0:
                         fill_open = float(o[idx])
+                        if not np.isfinite(fill_open) or not np.isfinite(float(px)):
+                            continue
                         if limit_down > 0 and (
                             defer_sell_open_or_fill(fill_open, float(px), limits)
                         ):
@@ -1718,13 +2008,7 @@ def simulate(
                 if code not in minute_bars:
                     return None
                 frame = _slice_day(minute_bars[code], day_spans.get(code, {}), ds)
-                if frame is None:
-                    return None
-                hit = frame.loc[frame["hm"] == target]
-                if not hit.empty:
-                    return int(hit["hm"].iloc[0])
-                eligible = frame.loc[(frame["hm"] >= earliest) & (frame["hm"] <= target)]
-                return None if eligible.empty else int(eligible["hm"].iloc[-1])
+                return _finite_hm_bucket(frame, target, earliest)
 
             def chase_volume(code):
                 return _volume_bucket_for(code, CHASE_HM, AM_OPEN)
@@ -1789,11 +2073,13 @@ def simulate(
                         if not hit.size:
                             return None
                         idx = int(hit[0])
+                        px = float(mdf["open"].to_numpy(np.float64, copy=False)[lo:hi][idx])
                         volume = float(mdf["volume"].to_numpy(np.float64, copy=False)[lo:hi][idx])
+                        if not np.isfinite(px) or px <= 0:
+                            return None
                         if not np.isfinite(volume) or volume <= 0:
                             st.stats["skip_buy_volume"] += 1
                             return None
-                        px = float(mdf["open"].to_numpy(np.float64, copy=False)[lo:hi][idx])
                     else:
                         px = _buy_px_from_arrays(
                             hm, mdf["close"].to_numpy(np.float64, copy=False)[lo:hi]
@@ -1813,7 +2099,7 @@ def simulate(
                         px = float(opening["open"])
                     else:
                         px = _buy_px(day_m)
-                if px is None or px <= 0 or (minute_open and not np.isfinite(px)):
+                if px is None or not np.isfinite(px) or px <= 0:
                     return None
                 return px, closes
 
@@ -1903,40 +2189,18 @@ def simulate(
             clock.end("pool_buy")
             clock.begin("post_group")
             for code, pos, cursor, limits in post_group_scans:
-                quiet = 0
-                evaluated = 0
-                peak0, peak_hm0 = float(pos.peak), int(pos.peak_hm)
-                python_from = _independent_numba_prefix(
-                    st, pos, cursor, day_i=i, side_hooks=None,
-                    hm_lo=BUY_HM + 1, hm_hi=24 * 60,
+                quiet, resumed, evaluated, quiet_slice = _drive_independent_window(
+                    st, code, pos, cursor, limits,
+                    day=day, day_i=i, side_hooks=None,
+                    hm_lo=BUY_HM + 1, hm_hi=24 * 60, audit_sink=audit_sink,
+                    dump_label="post_group", dump_ds=ds,
                 )
-                _maybe_dump_independent_prefix(
-                    code=code, ds=ds, label="post_group", pos=pos, cursor=cursor,
-                    python_from=python_from, hm_lo=BUY_HM + 1, hm_hi=24 * 60,
-                    peak0=peak0, peak_hm0=peak_hm0, n_days=i - pos.entry_idx,
-                    can_sell=cursor.can_sell, take_profit=take_profit,
-                )
-                for bar_idx, at_hm in enumerate(cursor.hm):
-                    if python_from < 0 or not position_is_open(st, pos):
-                        break
-                    if int(at_hm) <= BUY_HM:
-                        continue
-                    if bar_idx < python_from:
-                        quiet += 1
-                        continue
-                    evaluated += 1
-                    for phase in ("open", "close"):
-                        advance_independent_exit(
-                            st, code, pos, cursor, bar_idx, phase, limits,
-                            day=day, day_i=i, audit_sink=audit_sink,
-                        )
-                        if phase == "open":
-                            fill_side_pending(st, code, pos, float(cursor.o[bar_idx]), day, i,
-                                              limits, hm=int(at_hm))
-                if python_from < 0:
+                if quiet_slice:
                     clock.count("held_numba_slices")
                 if quiet:
                     clock.count("held_numba_prefix_bars", quiet)
+                if resumed:
+                    clock.count("held_numba_resume_bars", resumed)
                 if evaluated:
                     clock.count("held_eval_bars", evaluated)
             clock.end("post_group")
@@ -2090,8 +2354,22 @@ def run(
     min_lot_top_up: bool | None = None,
     rule_profile: str | RuleProfile = "industry",
     profile_sim: bool | None = None,
+    minute_length: str | None = None,
+    minute_store: str | None = None,
+    slippage: str | None = None,
+    slippage_bp: float | None = None,
+    max_names: int | None = None,
+    industry_cap: int | None = None,
 ) -> SimState:
     profile = resolve_rule_profile(rule_profile)
+    from backtest.research.research_overlay import build_research_overlay
+
+    research_overlay = build_research_overlay(
+        slippage=slippage,
+        slippage_bp=slippage_bp,
+        max_names=max_names,
+        industry_cap=industry_cap,
+    )
     sim_clock = SimPhaseClock() if profile_sim_enabled(profile_sim) else None
     book = normalize_csv_strategy(strategy)
     fix_minute_cash_order = bool(
@@ -2344,6 +2622,13 @@ def run(
     t_index_gate = time.perf_counter() - t_index_gate
     if sim_clock is not None:
         sim_clock.end("index_gate")
+    minute_length, minute_store = resolve_minute_layout(minute_length, minute_store)
+    laid_spans = cache_status.get("day_spans")
+    if minute_length != "variable" or minute_store != "frame":
+        minute = apply_minute_layout(minute, minute_length, minute_store)
+        # Variable-length span sidecars index the lake rows, not a 242-slot day.
+        laid_spans = None
+        print(f"minute layout {minute_length}/{minute_store}", flush=True)
     t_sim = time.perf_counter()
     st = simulate(
         minute,
@@ -2398,12 +2683,13 @@ def run(
         **({"min_lot_top_up": min_lot_top_up} if min_lot_top_up is not None else {}),
         rule_profile=profile,
         sim_profile=sim_clock,
-        day_spans=cache_status.get("day_spans"),
+        day_spans=laid_spans,
         st_gate=True,
         exdiv_economics=bind_book_cash_div_economics(
             strategy, start, end, None,
             codes=all_codes, bars=daily, workers=workers,
         ),
+        research_overlay=research_overlay,
     )
     if skipped.get("exdiv_skipped_no_factor"):
         st.stats["exdiv_skipped_no_factor"] = int(skipped["exdiv_skipped_no_factor"])
@@ -2487,6 +2773,11 @@ def run(
         st.stats.pop("rule_profile_revision", None)
         st.stats["rule_profile"] = profile.name
         st.stats["rule_profile_revision"] = profile.revision
+    if minute_length != "variable" or minute_store != "frame":
+        st.run_metadata = {
+            **getattr(st, "run_metadata", {}),
+            "minute_layout": {"length": minute_length, "store": minute_store},
+        }
     return st
 
 
@@ -2523,6 +2814,18 @@ def main(argv: Optional[list] = None) -> int:
         "--rebuild-cache", action="store_true", help="reload lake and rewrite cache"
     )
     ap.add_argument("--minute-source", choices=("lake", "qlib_1min"), default="lake")
+    ap.add_argument(
+        "--minute-length",
+        choices=("variable", "fixed"),
+        default=None,
+        help="variable (default): one row per lake minute. fixed: 242 session slots per day; missing minutes stay empty",
+    )
+    ap.add_argument(
+        "--minute-store",
+        choices=("frame", "array"),
+        default=None,
+        help="frame (default): pandas DataFrame. array: column arrays. Independent of --minute-length",
+    )
     ap.add_argument("--daily-source", choices=("lake", "qlib_day"), default="lake")
     ap.add_argument("--topk-limit-rule", choices=("qlib", "real"), default="qlib",
                     help="TopK limit band: qlib 0.095 (default) or real board/ST/date tiers")
@@ -2590,6 +2893,9 @@ def main(argv: Optional[list] = None) -> int:
         help="lake minute volume unit (default shares); lots multiplies volume by 100",
     )
     ap.add_argument("--execution-audit-file", help="optional execution JSON sidecar; leaves CSVs unchanged")
+    from backtest.research.research_overlay import add_research_overlay_args
+
+    add_research_overlay_args(ap)
     args = ap.parse_args(argv if argv is not None else None)
     # P2-B: CLI-parse shell precheck (unit/domain). None → no-op. ≠δ5≠R4.
     # Keep ValueError (not ap.error) so invalid-rate contract matches pre-P2 tests/API.
@@ -2648,6 +2954,12 @@ def main(argv: Optional[list] = None) -> int:
         minute_stop_trigger=args.minute_stop_trigger,
         topk_exec=args.topk_exec, limit_walkdown=args.limit_walkdown,
         topk_limit_rule=args.topk_limit_rule,
+        minute_length=args.minute_length,
+        minute_store=args.minute_store,
+        slippage=args.slippage,
+        slippage_bp=args.slippage_bp,
+        max_names=args.max_names,
+        industry_cap=args.industry_cap,
         **csv_run_kwargs_from_args(args),
     )
     book = engine_book(args.strategy, hold_days=args.hold_days)
@@ -2671,6 +2983,17 @@ def main(argv: Optional[list] = None) -> int:
     manifest_args = vars(args).copy()
     if args.participation_rate is None:
         manifest_args.pop("participation_rate", None)
+    if args.minute_length in (None, "variable"):
+        manifest_args.pop("minute_length", None)
+    if args.minute_store in (None, "frame"):
+        manifest_args.pop("minute_store", None)
+    if args.slippage in (None, "none"):
+        manifest_args.pop("slippage", None)
+        manifest_args.pop("slippage_bp", None)
+    if args.max_names is None:
+        manifest_args.pop("max_names", None)
+    if args.industry_cap is None:
+        manifest_args.pop("industry_cap", None)
     if not args.limit_walkdown:
         manifest_args.pop("limit_walkdown", None)
     if args.topk_exec == "close" and not args.limit_walkdown and args.topk_limit_rule == "qlib":

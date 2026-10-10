@@ -1057,6 +1057,9 @@ def execute_buy(
     order_id=None,
 ) -> bool:
     """常规/追买共用；open 调用方显式传 at，默认仍为 bucket 收盘。"""
+    model = getattr(st, "slippage_model", None)
+    if model is not None:
+        px = model.buy_price(px)
     if px <= 0:
         return False
     from backtest.research.st_status import st_blocks_buy
@@ -1517,6 +1520,11 @@ def _sell(
             price_rule=price_rule,
             wanted_shares=wanted_shares,
         )
+    model = getattr(st, "slippage_model", None)
+    if model is not None:
+        px = model.sell_price(px)
+        if px <= 0:
+            return 0
     shares = pos.shares
     if wanted_shares is not None:
         if isinstance(wanted_shares, bool) or not isinstance(wanted_shares, Integral):

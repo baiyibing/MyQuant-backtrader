@@ -32,6 +32,8 @@ import json
 import math
 from pathlib import Path
 
+import numpy as np
+
 from backtest.research.ashare_bars import AM_OPEN, PM_CLOSE, _in_session
 from backtest.research.ashare_session import hit_limit_down, hit_limit_up
 from backtest.research.csv_common import book_limit_prices
@@ -44,6 +46,17 @@ from backtest.research.minute_audit import audit_scope
 
 CLOSE_BUY_HM = 14 * 60 + 55
 CLOSE_FALLBACK_START = 14 * 60 + 30
+
+
+def _finite_close_rows(frame):
+    """Drop empty slots. An all-finite frame is returned as itself."""
+    if frame is None or len(frame) == 0:
+        return frame
+    close = frame["close"].to_numpy(np.float64, copy=False)
+    keep = np.isfinite(close)
+    if bool(np.all(keep)):
+        return frame
+    return frame.iloc[np.flatnonzero(keep)]
 
 
 VWAP_SLICE_CLOCKS = (9 * 60 + 35, 10 * 60 + 30, 11 * 60 + 30,
@@ -152,6 +165,8 @@ class TopkMinuteBuys:
                 self.missing.add(code)
                 continue
             closes, frame = got
+            if not hasattr(frame, "itertuples"):
+                frame = frame.to_frame()
             # Same inclusive session contract as ashare_bars.annotate_session.
             frame = frame.loc[_in_session(frame["hm"])].sort_values("hm", kind="stable")
             if mode == "vwap":
@@ -166,8 +181,10 @@ class TopkMinuteBuys:
                 px = close_quote_for(frame)
                 quotes = []
                 if px is not None and math.isfinite(px) and px > 0:
-                    hit = frame.loc[frame["hm"] == CLOSE_BUY_HM]
-                    late = frame.loc[frame["hm"].between(CLOSE_FALLBACK_START, CLOSE_BUY_HM)]
+                    hit = _finite_close_rows(frame.loc[frame["hm"] == CLOSE_BUY_HM])
+                    late = _finite_close_rows(
+                        frame.loc[frame["hm"].between(CLOSE_FALLBACK_START, CLOSE_BUY_HM)]
+                    )
                     self.quote_bars[code] = int((hit.iloc[0] if not hit.empty else late.iloc[-1])["hm"])
                     quotes = [(CLOSE_BUY_HM, px)]
             if not quotes:

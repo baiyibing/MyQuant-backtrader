@@ -145,13 +145,13 @@ Numba `nopython` 核调不了任意 Python 回调（闭包、`Optional[str]`、l
 | 成交 | 9662 | 9621 | 买入 4479→4459，加仓 1280→1268 |
 | defer_sell_limit_down | 1433 | 4147 | 开盘跌停漏计已收口；关核旧数 4382 |
 
-下一刀如果还要动引擎：只剩持仓扫描的 Python 评估段（`held_eval_bars=542018`）。名单买入的现金循环还在 Python，但 9.7s 不值得再把 `execute_buy` 编进 Numba。时序买入的 DataFrame `pool_quote` 仍未动——默认 6.53 不走那条路。
+当时下一刀是持仓扫描的 Python 评估段（`held_eval_bars=542018`）。名单买入的现金循环还在 Python，但 9.7s 不值得再把 `execute_buy` 编进 Numba。时序买入的 DataFrame `pool_quote` 仍未动——默认 6.53 不走那条路。
 
 6.53 仍 PENDING。这次净值更不是锁定比分（ST 闸改了成交）。
 
 ---
 
-### 2.8 开盘跌停侧钩顺延（本刀）
+### 2.8 开盘跌停侧钩顺延
 
 `held_eval_bars=542018` 的根因：核一旦在开盘跌停 bar 上看到收盘谓词，就把该 bar 交给 Python，Python 再把当天剩下的 bar 全部评完。本刀让核自己跨过「只会顺延、不成交」的开盘跌停 bar，只把第一根能成交的 bar 交出去。
 
@@ -182,11 +182,33 @@ Numba `nopython` 核调不了任意 Python 回调（闭包、`Optional[str]`、l
 
 6.53 仍 PENDING。本刀不录 golden。
 
+### 2.9 动作之后重新进核
+
+前缀只交给 Python 第一根动作 bar，之后整天留在 Python。6.53 的减仓档之间有大段安静 bar。本刀在每根 Python bar 结算后，用更新过的峰值 / `scale_steps` / 加仓止损成本再进同一核，只把下一根动作 bar 交回 Python。
+
+不改卖点，不把账本编进 Numba。三种情况整段回到 Python：核被关掉、有 pending / `side_pending`、游标已经尝试过离场（`first_exit_attempted` 之后峰值冻结，再进核会把后面的高点写进峰值）。`OSKH_INDEPENDENT_RESUME=0` 恢复「一次前缀 + Python 尾巴」。
+
+同一配方、`PYTHONHASHSEED=0`、产品 `run()`。基线是本机冷缓存那次（`industry_baseline_h0`，算法与 2.7 相同：`held_eval_bars=542018`）。复跑 `industry_resume_h0`，分钟/日线缓存命中。
+
+| 项 | baseline | resume |
+|---|---:|---:|
+| 模拟 | 46.1s | 16.6s |
+| held_scan | 30.4s (62%) | 8.8s (49%) |
+| post_group | 0.4s | 0.9s |
+| pool_buy | 6.7s | 3.4s |
+| held_eval_bars | 542018 | 16270 |
+| held_numba_resume_bars | 0 | 525763 |
+| 净值 / 成交 | 44,341,528.00 / 9621 | 相同 |
+
+`trades.csv`、`daily_equity.csv`、`pending_sells.csv` 与基线逐字节相同。净值仍是 +64.23%，不是锁定比分。`post_group` 略慢：下午动作更密，重新进核的调用开销盖过少掉的 Python bar。`pool_buy` 这次更快来自缓存热度，不是本刀。
+
+对照：`tests/test_independent_numba_ladder.py`（两档减仓之间的安静段、关恢复、跌停顺延后峰值冻结）。
+
 ---
 
 ## 4. 遗留问题
 
-1. **模拟大头还是 held_scan。** 全窗开核 38.7s / 61%。第一根真正能成交的 bar 之后，当天剩下的 Python 评估还在（减仓后继续找下一档）。不要对回调 `objmode`，不要把账本编进 Numba。
+1. **模拟大头仍是 held_scan，但只剩真动作。** 全窗 8.8s / 49%，`held_eval_bars=16270`。这些 bar 要走账本和侧钩。不要对回调 `objmode`，不要把账本编进 Numba。
 2. **真回调仍走 Python。** `sell_gate`、`exit_plan`、`force_sell_hm`、`close_clear`、pending、自定义 `fill_config`、`session_volume` 失败则 `python_from=0`。
 3. **6.53 仍在 `PENDING_BOOK_NAMES`。** 行业默认 off-byte 未授权。经济除权默认仍关。本刀不录 golden。ST 闸会改历史成交，预期如此。
 4. **HELP_LOCK / CLI 未动。** 分钟 `main()` 字节冻结。埋点仍走 `run()` + 默认 `OSKH_PROFILE_SIM`。

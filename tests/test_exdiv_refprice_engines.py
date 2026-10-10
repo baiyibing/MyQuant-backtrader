@@ -861,10 +861,10 @@ def test_d6_book_off_byte_snapshot_with_p2_b_labels(engine, factor):
     # Removing daily_quota restores the 42554d79/4b27fbaa/1c60523a pins; routing
     # unchanged. The flat-bar factor fixture keeps identical daily/minute snapshots.
     expected = {
-        (daily, False): "450705c0837614cba645109268da536f011d6baf7c36b570e8563c96e8cf3696",
-        (daily, True): "84094f2b3e6352eb3937922524da486672a6ecdabf16971a1222ec9b78159619",
-        (minute, False): "2639102c6d2de92d6c2e7a38952d5ba90a421865d23785a9c512fc4ebbc75c3a",
-        (minute, True): "84094f2b3e6352eb3937922524da486672a6ecdabf16971a1222ec9b78159619",
+        (daily, False): "8a7a038a1f16dda2fb6cc906f737dee4ca49dd09c06be22f8bc8c13ec99890f7",
+        (daily, True): "4dcd103dc053a796ae7405a3b4e5fe93d398ef1306cc2ba6a3fd0f8e906776a0",
+        (minute, False): "c9de77acfe319cbca7d5fce6bc221bdbd1786a974c38149b45e1b2fbd61ee768",
+        (minute, True): "4dcd103dc053a796ae7405a3b4e5fe93d398ef1306cc2ba6a3fd0f8e906776a0",
     }
     for kwargs in ({}, {"exdiv_economics": None}, {"exdiv_economics": {}}):
         state = _d2_book_run(engine, [10, 10, 5], exdiv=factor,
