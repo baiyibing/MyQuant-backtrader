@@ -56,6 +56,7 @@ FROZEN_PRICE_ADD_BOOKS = frozenset({
     "version6_51",
     "version6_52",
     "version6_53",
+    "version6_54",
     "version6_5",
     "version6_6",
     "version6_7",
@@ -89,8 +90,8 @@ def test_membership_and_registration():
     assert isinstance(price, frozenset)
     assert isinstance(independent, frozenset)
     assert price == FROZEN_PRICE_ADD_BOOKS
-    assert len(price) == 57
-    assert len(independent) == 59
+    assert len(price) == 58
+    assert len(independent) == 60
     assert price < independent
     assert independent - price == {"version8_2", "version8_6"}
     assert price <= BOOKS.keys()
@@ -113,7 +114,7 @@ def test_no_prefix_inheritance_in_production_helpers():
 
 def test_current_prefix_family_classified():
     registered = BOOKS.keys() | MINUTE_ONLY_BOOKS.keys()
-    assert sum(caps.in_prefix_family(name) for name in registered) == 60
+    assert sum(caps.in_prefix_family(name) for name in registered) == 61
     assert caps.PREFIX_FAMILY_OPT_OUT["version8_1"]
     assert caps.unclassified_prefix_family_books(registered) == []
     caps.assert_prefix_family_classified(registered)
@@ -128,7 +129,7 @@ def test_frozen_admission_family(name, expected):
     assert caps.in_prefix_family(name) is expected
 
 
-@pytest.mark.parametrize("name", ["version6_54", "version8_7"])
+@pytest.mark.parametrize("name", ["version6_55", "version8_7"])
 def test_unclassified_registered_book_fails_then_explicit_opt_out_passes(monkeypatch, name):
     monkeypatch.setitem(BOOKS, name, object())
     registered = BOOKS.keys() | MINUTE_ONLY_BOOKS.keys()

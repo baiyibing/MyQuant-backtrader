@@ -724,28 +724,31 @@ def rescale_position(pos: Position, k: float) -> None:
     pos.peak = float(pos.peak) * factor
 
 
-def apply_exdiv_economics(st: SimState, code: str, ds: str) -> None:
+def apply_exdiv_economics(st: SimState, code: str, ds: str) -> float:
     """Ex-date snapshot before scan/buys; keep refs and lot identity unchanged.
 
     Bonus shares join their source lot, with a separate list-date T+1 lock.
     They are marked from ex-date, including shares awaiting a later listing.
+    Returns cash posted on this call (same-day pay or 0).
     """
     account = st.exdiv_economics
     if account is None:
-        return
+        return 0.0
     lots = st.positions.get(code, [])
     callback = ({"on_event": lambda event: st.book_on_exdiv(st, code, event)}
                 if callable(st.book_on_exdiv) else {})
     entitlement = account.entitle(code, ds, [p.shares for p in lots], **callback)
     if entitlement is None:
-        return
+        return 0.0
     for pos, added in zip(lots, entitlement.bonus_shares):
         if added:
             pos.shares += added
             date = entitlement.list_date
             locks = account.locks_for(pos)
             locks[date] = locks.get(date, 0) + added
-    st.cash += account.settle(ds)  # pay_date == ex_date is allowed
+    posted = account.settle(ds)  # pay_date == ex_date is allowed
+    st.cash += posted
+    return float(posted)
 
 
 def _locked_bonus(account: ExDivEconomics, pos: Position, ds: str) -> int:

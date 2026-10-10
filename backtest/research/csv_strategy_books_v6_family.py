@@ -58,6 +58,7 @@ from backtest.research import (
     strategy6_51_rules,
     strategy6_52_rules,
     strategy6_53_rules,
+    strategy6_54_rules,
 )
 
 
@@ -2141,3 +2142,73 @@ def _run_kwargs_version6_53(args) -> dict:
     if stop is not None and not 0 < float(stop) < 1:
         raise SystemExit(f"--stop-pct must be in (0, 1), got {stop}")
     return {"strategy": "version6_53", "stop_pct": stop}
+
+
+def _apply_version6_54(
+    *,
+    stop_pct=None,
+    take_profit=None,
+    record_params=None,
+    index_block_new=None,
+    **_,
+) -> dict:
+    resolved = strategy6_54_rules.STOP_PCT if stop_pct is None else float(stop_pct)
+
+    def _tp(px, cost, peak, n_days=1):
+        return strategy6_54_rules.take_profit_reason(px, cost, peak, n_days)
+
+    def _rec(st):
+        strategy6_54_rules.record_strategy6_54_params(st, stop_pct=resolved)
+        st.stats["index_gate_on"] = bool(strategy6_54_rules.INDEX_GATE_ON)
+        st.stats["parking_symbol"] = strategy6_54_rules.PARKING_SYMBOL
+        st.stats["parking_frac"] = strategy6_54_rules.PARKING_FRAC
+        st.stats["parking_execute"] = bool(strategy6_54_rules.PARKING_EXECUTE)
+        st.stats["parking_open_cover"] = bool(strategy6_54_rules.PARKING_OPEN_COVER)
+        st.stats["cont_stop_rebuy"] = bool(strategy6_54_rules.CONT_STOP_REBUY)
+        st.stats["profit_skim"] = bool(strategy6_54_rules.PROFIT_SKIM)
+        st.stats["index_cut"] = bool(strategy6_54_rules.INDEX_CUT)
+        st.stats["div_to_parking"] = bool(strategy6_54_rules.DIV_TO_PARKING)
+
+    base = _apply_version6_53(
+        stop_pct=resolved,
+        take_profit=take_profit if take_profit is not None else _tp,
+        record_params=record_params if record_params is not None else _rec,
+        index_block_new=index_block_new,
+    )
+    base["name"] = "version6_54"
+    base["scale_out_anchor"] = strategy6_54_rules.SCALE_OUT_ANCHOR
+    base["parking_symbol"] = strategy6_54_rules.PARKING_SYMBOL
+    base["parking_frac"] = float(strategy6_54_rules.PARKING_FRAC)
+    base["parking_buffer"] = float(strategy6_54_rules.PARKING_BUFFER)
+    base["parking_execute"] = bool(strategy6_54_rules.PARKING_EXECUTE)
+    base["parking_open_cover"] = bool(strategy6_54_rules.PARKING_OPEN_COVER)
+    base["cont_stop_rebuy"] = bool(strategy6_54_rules.CONT_STOP_REBUY)
+    base["cont_from_rise"] = float(strategy6_54_rules.CONT_FROM_RISE)
+    base["cont_stop_rebuy_lift"] = float(strategy6_54_rules.CONT_STOP_REBUY_LIFT)
+    base["cont_stop_rebuy_frac"] = float(strategy6_54_rules.CONT_STOP_REBUY_FRAC)
+    base["cont_stop_rebuy_open_frac"] = float(
+        strategy6_54_rules.CONT_STOP_REBUY_OPEN_FRAC
+    )
+    base["cont_stop_rebuy_with_schedule"] = bool(
+        strategy6_54_rules.CONT_STOP_REBUY_WITH_SCHEDULE
+    )
+    base["min_lot_top_up"] = bool(strategy6_54_rules.MIN_LOT_TOP_UP)
+    base["profit_skim"] = bool(strategy6_54_rules.PROFIT_SKIM)
+    base["profit_skim_step"] = float(strategy6_54_rules.PROFIT_SKIM_STEP)
+    base["profit_skim_frac"] = float(strategy6_54_rules.PROFIT_SKIM_FRAC)
+    base["profit_skim_pro_rata"] = bool(strategy6_54_rules.PROFIT_SKIM_PRO_RATA)
+    base["profit_skim_keep_idle"] = bool(strategy6_54_rules.PROFIT_SKIM_KEEP_IDLE)
+    base["profit_skim_to_parking"] = bool(strategy6_54_rules.PROFIT_SKIM_TO_PARKING)
+    base["index_cut"] = bool(strategy6_54_rules.INDEX_CUT)
+    base["index_cut_frac"] = float(strategy6_54_rules.INDEX_CUT_FRAC)
+    base["index_cut_min_keep"] = int(strategy6_54_rules.INDEX_CUT_MIN_KEEP)
+    base["index_blocks_s8_add"] = bool(strategy6_54_rules.INDEX_BLOCKS_S8_ADD)
+    base["div_to_parking"] = bool(strategy6_54_rules.DIV_TO_PARKING)
+    return base
+
+
+def _run_kwargs_version6_54(args) -> dict:
+    stop = getattr(args, "stop_pct", None)
+    if stop is not None and not 0 < float(stop) < 1:
+        raise SystemExit(f"--stop-pct must be in (0, 1), got {stop}")
+    return {"strategy": "version6_54", "stop_pct": stop}

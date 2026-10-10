@@ -27,6 +27,7 @@ from backtest.research.csv_common import (
     day_bar_and_prev_closes,
 )
 from backtest.research.csv_ledger import (
+    apply_exdiv_economics,
     check_buy_cash,
     SimState,
     chase_decision,
@@ -272,6 +273,11 @@ def init_sim_state(
         st.stats.setdefault("profit_skim_cash_hold", 0.0)
         st.stats.setdefault("profit_skim_lock_drawn", 0.0)
         st.stats.setdefault("profit_skim_lock_restored", 0.0)
+    if hooks.get("div_to_parking"):
+        st.stats.setdefault("div_to_parking", True)
+        st.stats.setdefault("div_to_parking_pending", 0.0)
+        st.stats.setdefault("div_to_parking_spent", 0.0)
+        st.stats.setdefault("div_to_parking_events", 0)
     configure_s8(st, hooks)
     if st_gate:
         from backtest.research.st_status import bind_st_gate
@@ -1136,11 +1142,29 @@ def extra_load_codes_for_strategy(strategy: str) -> set[str]:
     from backtest.research.csv_strategy_books import normalize_csv_strategy
 
     name = normalize_csv_strategy(strategy)
-    if name in {"version6_47", "version6_50", "version6_51", "version6_52", "version6_53"}:
+    if name in {
+        "version6_47",
+        "version6_50",
+        "version6_51",
+        "version6_52",
+        "version6_53",
+        "version6_54",
+    }:
         from backtest.research.strategy6_47_rules import PARKING_SYMBOL
 
         return {PARKING_SYMBOL}
     return set()
+
+
+def accrue_overnight_cash_div(st: SimState, ds: str) -> float:
+    """Credit due cash dividends on overnight lots. Returns cash posted today."""
+    if st.exdiv_economics is None:
+        return 0.0
+    posted = float(st.exdiv_economics.settle(ds))
+    st.cash += posted
+    for code in held_codes(st):
+        posted += float(apply_exdiv_economics(st, code, ds) or 0.0)
+    return posted
 
 
 def bind_parking_session(
@@ -1911,6 +1935,52 @@ def _idle_fill_principal(
             )
             filled += spent
     return filled
+
+
+def run_div_to_parking_day(
+    st: SimState,
+    hooks: dict,
+    *,
+    day_i: int,
+    day,
+    ds: str,
+    names: dict,
+    daily_bars: dict,
+    exdiv=None,
+    qlib_limit_pct=None,
+    forbid_all_trade_at_limit: bool = False,
+) -> float:
+    """Spend earmarked cash-dividend cash on 600036. Does not keep the parking buffer."""
+    if not hooks.get("div_to_parking"):
+        return 0.0
+    pending = float(st.stats.get("div_to_parking_pending", 0.0))
+    if pending <= 1e-6:
+        return 0.0
+    spent = _buy_skim_principal(
+        st,
+        hooks,
+        budget=pending,
+        day_i=day_i,
+        day=day,
+        ds=ds,
+        names=names,
+        daily_bars=daily_bars,
+        exdiv=exdiv,
+        qlib_limit_pct=qlib_limit_pct,
+        forbid_all_trade_at_limit=forbid_all_trade_at_limit,
+        reason="parking:cash_div",
+        count_skim=False,
+    )
+    leftover = max(0.0, pending - spent)
+    st.stats["div_to_parking_pending"] = leftover
+    if spent > 1e-6:
+        st.stats["div_to_parking_spent"] = (
+            float(st.stats.get("div_to_parking_spent", 0.0)) + spent
+        )
+        st.stats["div_to_parking_events"] = (
+            int(st.stats.get("div_to_parking_events", 0)) + 1
+        )
+    return spent
 
 
 def _profit_skim_owed(equity: float, *, base: float, step: float, frac: float, withdrawn: float) -> float:

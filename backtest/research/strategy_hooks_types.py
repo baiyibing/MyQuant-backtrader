@@ -55,6 +55,7 @@ class StrategyHooks(TypedDict, total=False):
     index_cut_frac: float | None
     index_cut_min_keep: int | None
     index_blocks_s8_add: bool
+    div_to_parking: bool
 
 
 # Book apply functions have different named parameters.

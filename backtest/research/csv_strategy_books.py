@@ -71,6 +71,7 @@ from backtest.research import (
     strategy6_51_rules,
     strategy6_52_rules,
     strategy6_53_rules,
+    strategy6_54_rules,
     strategy8_rules,
     strategy8_1_rules,
     strategy8_2_rules,
@@ -196,6 +197,8 @@ from backtest.research.csv_strategy_books_v6_family import (
     _run_kwargs_version6_52,
     _apply_version6_53,
     _run_kwargs_version6_53,
+    _apply_version6_54,
+    _run_kwargs_version6_54,
 )
 
 HELP_LOCK_V1 = strategy1_rules.HELP_LOCK
@@ -257,6 +260,7 @@ HELP_LOCK_V6_50 = strategy6_50_rules.HELP_LOCK
 HELP_LOCK_V6_51 = strategy6_51_rules.HELP_LOCK
 HELP_LOCK_V6_52 = strategy6_52_rules.HELP_LOCK
 HELP_LOCK_V6_53 = strategy6_53_rules.HELP_LOCK
+HELP_LOCK_V6_54 = strategy6_54_rules.HELP_LOCK
 HELP_LOCK_V8 = strategy8_rules.HELP_LOCK
 HELP_LOCK_V8_1 = strategy8_1_rules.HELP_LOCK
 HELP_LOCK_V8_2 = strategy8_2_rules.HELP_LOCK
@@ -462,6 +466,7 @@ def apply_csv_strategy(strategy: str, **kwargs) -> dict:
     hooks.setdefault("index_cut_frac", None)
     hooks.setdefault("index_cut_min_keep", None)
     hooks.setdefault("index_blocks_s8_add", False)
+    hooks.setdefault("div_to_parking", False)
     hooks.setdefault("add_step2", None)  # second (base) ladder step; None = single ladder
     hooks.setdefault("step_frac2", None)
     hooks.setdefault("tranche_max", None)
@@ -2595,6 +2600,21 @@ register(
         help_lock=strategy6_53_rules.HELP_LOCK,
         apply=_apply_version6_53,
         run_kwargs=_run_kwargs_version6_53,
+    )
+)
+
+register(
+    CsvStrategyBook(
+        name="version6_54",
+        sizing="per_name",
+        name_budget=1_000_000.0,
+        tag=strategy6_54_rules.BOOK_TAG,
+        aliases=("6.54", "6_54", "v6.54", "v6_54", "version6_54"),
+        allow_add=strategy6_54_rules.ALLOW_ADD,
+        peak_gap_min=strategy6_54_rules.PEAK_GAP_MIN,
+        help_lock=strategy6_54_rules.HELP_LOCK,
+        apply=_apply_version6_54,
+        run_kwargs=_run_kwargs_version6_54,
     )
 )
 

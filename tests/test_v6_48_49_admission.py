@@ -12,13 +12,13 @@ from backtest.research.csv_strategy_books import BOOKS, apply_csv_strategy
 GATE_BOOKS = (
     "version6_45", "version6_46", "version6_47", "version6_48",
     "version6_49", "version6_50", "version6_51", "version6_52",
-    "version6_53",
+    "version6_53", "version6_54",
 )
 NO_GATE_BOOKS = ("version6_4", "version6_40", "version6_41", "version6_42",
                  "version6_43", "version6_44")
 
 
-@pytest.mark.parametrize("name", ["version6_48", "version6_49", "version6_50", "version6_51", "version6_52", "version6_53"])
+@pytest.mark.parametrize("name", ["version6_48", "version6_49", "version6_50", "version6_51", "version6_52", "version6_53", "version6_54"])
 def test_new_books_are_explicitly_classified(name):
     assert name in BOOKS
     assert name in caps.PRICE_ADD_ELIGIBLE_BOOKS
@@ -64,7 +64,7 @@ def test_cont_stop_rebuy_is_scoped_to_version6_50():
     hooks = {name: apply_csv_strategy(name)
              for name in BOOKS if not name.startswith("topk_")}
     rebuy = {name for name, h in hooks.items() if h.get("cont_stop_rebuy")}
-    assert rebuy == {"version6_50", "version6_51", "version6_52", "version6_53"}
+    assert rebuy == {"version6_50", "version6_51", "version6_52", "version6_53", "version6_54"}
     state = type("S", (), {"book_state": {}})()
     csv_ledger._configure_s8(state, apply_csv_strategy("version6_50"))
     assert csv_ledger.s8_policy(state)["cont_stop_rebuy"] is True
@@ -80,7 +80,7 @@ def test_profit_skim_is_scoped_to_version6_52():
     hooks = {name: apply_csv_strategy(name)
              for name in BOOKS if not name.startswith("topk_")}
     skim = {name for name, h in hooks.items() if h.get("profit_skim")}
-    assert skim == {"version6_52", "version6_53"}
+    assert skim == {"version6_52", "version6_53", "version6_54"}
     assert hooks["version6_52"]["profit_skim_frac"] == pytest.approx(0.20)
     assert hooks["version6_52"]["profit_skim_pro_rata"] is True
     assert hooks["version6_52"]["profit_skim_keep_idle"] is True
@@ -92,7 +92,7 @@ def test_index_cut_is_scoped_to_version6_53():
     hooks = {name: apply_csv_strategy(name)
              for name in BOOKS if not name.startswith("topk_")}
     cut = {name for name, h in hooks.items() if h.get("index_cut")}
-    assert cut == {"version6_53"}
+    assert cut == {"version6_53", "version6_54"}
     assert hooks["version6_53"]["index_cut_frac"] == pytest.approx(0.50)
     assert hooks["version6_53"]["index_cut_min_keep"] == 100
     assert hooks["version6_53"]["index_blocks_s8_add"] is True
@@ -101,9 +101,20 @@ def test_index_cut_is_scoped_to_version6_53():
     state = type("S", (), {"book_state": {}})()
     csv_ledger._configure_s8(state, apply_csv_strategy("version6_53"))
     assert csv_ledger.s8_policy(state)["index_blocks_s8_add"] is True
+    successor = type("S", (), {"book_state": {}})()
+    csv_ledger._configure_s8(successor, apply_csv_strategy("version6_54"))
+    assert csv_ledger.s8_policy(successor)["index_blocks_s8_add"] is True
     sibling = type("S", (), {"book_state": {}})()
     csv_ledger._configure_s8(sibling, apply_csv_strategy("version6_52"))
     assert csv_ledger.s8_policy(sibling)["index_blocks_s8_add"] is False
+
+
+def test_div_to_parking_is_scoped_to_version6_54():
+    hooks = {name: apply_csv_strategy(name)
+             for name in BOOKS if not name.startswith("topk_")}
+    parked = {name for name, h in hooks.items() if h.get("div_to_parking")}
+    assert parked == {"version6_54"}
+    assert hooks["version6_53"].get("div_to_parking") is not True
 
 
 def test_peak_trigger_reaches_the_s8_policy():
