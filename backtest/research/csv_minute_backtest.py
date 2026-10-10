@@ -368,13 +368,17 @@ try:
         step_stop_pct,
         hm_lo,
         hm_hi,
+        advance_done,
     ):
-        """First bar that Python must see. Peak returned is the prefix before that bar."""
+        """First fillable bar. Limit-down-open sell intents are counted, not returned."""
         new_peak = peak
         new_peak_hm = peak_hm
         allowed = can_sell and n_days >= 1
         n = len(c)
         n_step = len(step_costs)
+        defer_count = 0
+        dd_start = peak_dd_start
+        advance_latched = advance_done
         for i in range(n):
             cur_hm = hm[i]
             if cur_hm < hm_lo or cur_hm > hm_hi:
@@ -390,14 +394,20 @@ try:
             if not allowed:
                 continue
             blocked_open = limit_down > 0.0 and limit_down_blocks(px_open, limit_down)
-            if not blocked_open and stop_enabled and gap_stop(px_open, stop_trigger(cost, stop_pct)):
-                return i, peak_before, peak_hm_before
-            if stop_enabled and stop_touch(px_close / cost - 1.0, stop_pct):
-                return i, peak_before, peak_hm_before
+            if (
+                (not blocked_open)
+                and (not advance_latched)
+                and stop_enabled
+                and gap_stop(px_open, stop_trigger(cost, stop_pct))
+            ):
+                return i, peak_before, peak_hm_before, defer_count, dd_start, advance_latched
+            stop_hit = stop_enabled and stop_touch(px_close / cost - 1.0, stop_pct)
+            trail_hit = False
             gap = cur_hm - new_peak_hm
             peak_blocked = new_peak_hm >= 0 and peak_gap_blocks(gap, peak_gap_min)
             if (
-                (not peak_blocked)
+                (not stop_hit)
+                and (not peak_blocked)
                 and n_days >= tp_min_days
                 and cost > 0.0
                 and px_close > 0.0
@@ -406,26 +416,41 @@ try:
                 band = int((new_peak / cost - 1.0 + 1e-12) / band_width)
                 line = new_peak - cost * (give_base + give_step * band)
                 if px_close <= line:
-                    return i, peak_before, peak_hm_before
+                    trail_hit = True
+            scale_hit = False
             if scale_step > 0.0 and scale_anchor > 0.0 and px_close >= scale_anchor:
                 allowed_steps = int((px_close / scale_anchor - 1.0 + 1e-12) / scale_step)
                 if allowed_steps > scale_steps:
-                    return i, peak_before, peak_hm_before
+                    scale_hit = True
+            dd_sell = False
             if peak_dd > 0.0 and new_peak > 0.0:
                 dd = (new_peak - px_close) / new_peak
-                if dd <= 0.0 and peak_dd_start >= 0:
-                    return i, peak_before, peak_hm_before
-                if dd >= peak_dd:
-                    if peak_dd_start < 0:
-                        return i, peak_before, peak_hm_before
-                    if day_i - peak_dd_start >= peak_dd_sessions:
-                        return i, peak_before, peak_hm_before
+                if dd <= 0.0:
+                    dd_start = -1
+                elif dd >= peak_dd:
+                    if dd_start < 0:
+                        dd_start = day_i
+                    elif day_i - dd_start >= peak_dd_sessions:
+                        dd_sell = True
+            step_hits = 0
             if step_stop_pct > 0.0 and n_step > 0:
                 line_mult = 1.0 - step_stop_pct
                 for j in range(n_step):
                     if px_close <= step_costs[j] * line_mult:
-                        return i, peak_before, peak_hm_before
-        return -1, new_peak, new_peak_hm
+                        step_hits += 1
+            if blocked_open:
+                added = step_hits
+                if scale_hit:
+                    added += 1
+                if dd_sell:
+                    added += 1
+                defer_count += added
+                continue
+            if (not advance_latched) and (stop_hit or trail_hit):
+                return i, peak_before, peak_hm_before, defer_count, dd_start, advance_latched
+            if scale_hit or dd_sell or step_hits > 0:
+                return i, peak_before, peak_hm_before, defer_count, dd_start, advance_latched
+        return -1, new_peak, new_peak_hm, defer_count, dd_start, advance_latched
 
     _NUMBA_SCAN_AVAILABLE = True
 except Exception:  # pragma: no cover - optional dep
@@ -482,14 +507,15 @@ def independent_ladder_first_bar(
     step_stop_pct: float,
     hm_lo: int,
     hm_hi: int,
+    advance_done: bool = False,
 ):
-    """Return ``(idx, peak, peak_hm)``. ``idx<0`` means the slice has no Python action."""
+    """Return ``(idx, peak, peak_hm, defer, dd_start, advance_latched)``. ``idx<0`` means no Python action."""
     if _scan_independent_ladder_first is None:
-        return 0, float(cursor.peak), int(cursor.peak_hm)
+        return 0, float(cursor.peak), int(cursor.peak_hm), 0, int(peak_dd_start), bool(advance_done)
     stop_pct = cursor.stop_pct
     stop_enabled = isinstance(stop_pct, float) and 0 < float(stop_pct) < 1
     costs = np.asarray(step_costs, dtype=np.float64)
-    idx, peak, peak_hm = _scan_independent_ladder_first(
+    idx, peak, peak_hm, defer, dd_start, advance_latched = _scan_independent_ladder_first(
         np.asarray(cursor.o, dtype=np.float64),
         np.asarray(cursor.h, dtype=np.float64),
         np.asarray(cursor.c, dtype=np.float64),
@@ -518,8 +544,9 @@ def independent_ladder_first_bar(
         float(step_stop_pct),
         int(hm_lo),
         int(hm_hi),
+        bool(advance_done),
     )
-    return int(idx), float(peak), int(peak_hm)
+    return int(idx), float(peak), int(peak_hm), int(defer), int(dd_start), bool(advance_latched)
 
 
 def _independent_numba_prefix(
@@ -578,7 +605,7 @@ def _independent_numba_prefix(
         scale_steps = int(pos.group.scale_steps)
     peak_dd = float((side_hooks or {}).get("peak_dd_exit") or 0.0)
     start = pos.group.peak_dd_start
-    idx, peak, peak_hm = independent_ladder_first_bar(
+    idx, peak, peak_hm, defer, dd_start, advance_latched = independent_ladder_first_bar(
         cursor,
         day_i=day_i,
         tp_min_days=tp_min,
@@ -595,11 +622,18 @@ def _independent_numba_prefix(
         step_stop_pct=step_pct,
         hm_lo=hm_lo,
         hm_hi=hm_hi,
+        advance_done=bool(cursor.first_exit_attempted),
     )
     pos.peak = peak
     pos.peak_hm = peak_hm
     cursor.peak = peak
     cursor.peak_hm = peak_hm
+    if defer:
+        st.stats["defer_sell_limit_down"] = int(st.stats.get("defer_sell_limit_down", 0)) + int(defer)
+    if peak_dd > 0.0:
+        pos.group.peak_dd_start = None if dd_start < 0 else int(dd_start)
+    if advance_latched:
+        cursor.first_exit_attempted = True
     return idx
 
 
@@ -1466,6 +1500,12 @@ def simulate(
                         evaluated = 0
                         peak0, peak_hm0 = float(pos.peak), int(pos.peak_hm)
                         hm_hi = BUY_HM if split_group_scan else 24 * 60
+                        want_step = hooks.get("step_stop_pct")
+                        want_scale = hooks.get("scale_out_step")
+                        want_dd = hooks.get("peak_dd_exit")
+                        scale_frac = hooks.get("scale_out_frac", 0.05)
+                        scale_anchor_name = hooks.get("scale_out_anchor", "first_lot")
+                        dd_sessions = hooks.get("peak_dd_sessions", 15)
                         python_from = _independent_numba_prefix(
                             st, pos, cursor, day_i=i, side_hooks=side_hooks,
                             hm_lo=0, hm_hi=hm_hi,
@@ -1493,31 +1533,31 @@ def simulate(
                                 if phase == "open":
                                     fill_side_pending(st, code, pos, float(o[bar_idx]), day, i,
                                                       limits, hm=int(at_hm))
-                                if phase == "close" and hooks.get("step_stop_pct"):
+                                if phase == "close" and want_step:
                                     step_stop_exits(
                                         st, code, pos, float(c[bar_idx]), day, i,
-                                        limits, step_stop_pct=hooks["step_stop_pct"],
+                                        limits, step_stop_pct=want_step,
                                         fill_config=side_fill_config, open_px=float(o[bar_idx]),
                                         low=(float(low_arr[bar_idx])
                                              if low_arr is not None and side_fill_config and side_fill_config.trigger_basis == "bar_low" else None),
                                         hm=int(at_hm),
                                     )
-                                if phase == "close" and hooks.get("scale_out_step"):
+                                if phase == "close" and want_scale:
                                     scale_out_exits(
                                         st, code, pos, float(c[bar_idx]), day, i,
-                                        limits, scale_step=hooks["scale_out_step"],
-                                        scale_frac=hooks.get("scale_out_frac", 0.05),
-                                        scale_anchor=hooks.get("scale_out_anchor", "first_lot"),
+                                        limits, scale_step=want_scale,
+                                        scale_frac=scale_frac,
+                                        scale_anchor=scale_anchor_name,
                                         fill_config=side_fill_config, open_px=float(o[bar_idx]),
                                         hm=int(at_hm),
                                     )
-                                if phase == "close" and hooks.get("peak_dd_exit"):
+                                if phase == "close" and want_dd:
                                     peak_dd_clear_exits(
                                         st, code, pos, float(c[bar_idx]), day, i,
                                         limits,
-                                        peak_dd_exit=hooks["peak_dd_exit"],
+                                        peak_dd_exit=want_dd,
                                         fill_config=side_fill_config, open_px=float(o[bar_idx]),
-                                        peak_dd_sessions=hooks.get("peak_dd_sessions", 15),
+                                        peak_dd_sessions=dd_sessions,
                                         hm=int(at_hm),
                                     )
                         if python_from < 0:
