@@ -14,6 +14,18 @@ CLOSE_CLEAR_HM = 15 * 60
 def sell_allowed(can_sell, n_days):
     return can_sell and n_days >= 1
 
+
+def _prices_finite(px_open, hi, px_close) -> bool:
+    return math.isfinite(px_open) and math.isfinite(hi) and math.isfinite(px_close)
+
+
+def _last_finite_bar(o, h, c) -> int:
+    """Last row whose open, high and close are all finite. ``-1`` when none are."""
+    for i in range(len(c) - 1, -1, -1):
+        if _prices_finite(o[i], h[i], c[i]):
+            return i
+    return -1
+
 def stop_touch(ret, stop_pct):
     return ret <= -stop_pct
 
@@ -88,6 +100,7 @@ class HeldMinuteCursor:
     saw_close_hm: bool = field(default=False, init=False)
     first_exit_attempted: bool = field(default=False, init=False)
     is_true_day_last: bool = field(default=False, init=False)
+    _last_finite_idx: int | None = field(default=None, init=False)
     _open_state: dict[int, tuple[bool, float, int]] = field(default_factory=dict, init=False)
 
     def __post_init__(self):
@@ -141,7 +154,13 @@ class HeldMinuteCursor:
         """Observe one phase and return ``(idx, price, reason)`` or None."""
         if phase not in ("open", "close"):
             raise ValueError(f"unsupported minute phase: {phase}")
-        self.is_true_day_last = idx == len(self.c) - 1
+        if self._last_finite_idx is None:
+            self._last_finite_idx = _last_finite_bar(self.o, self.h, self.c)
+        # A trailing empty slot is not the session's last bar. Finite days keep
+        # the last index, so the variable-length scan is unchanged.
+        self.is_true_day_last = idx == self._last_finite_idx
+        if not _prices_finite(self.o[idx], self.h[idx], self.c[idx]):
+            return None
         if self.first_exit_attempted:
             return None
         if callable(self.phase_exit):

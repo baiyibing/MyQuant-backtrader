@@ -41,6 +41,10 @@ from backtest.research.strategy9_rules import (  # noqa: E402
 
 from backtest.research.book_capabilities import allows_price_add  # noqa: E402
 from backtest.research.bar_store import build_day_spans  # noqa: E402
+from backtest.research.minute_grid import (  # noqa: E402
+    apply_minute_layout,
+    resolve_minute_layout,
+)
 
 from backtest.research.csv_ledger import (  # noqa: E402
     CHASE_HM,
@@ -314,12 +318,14 @@ try:
             if not sell_allowed(can_sell, n_days):
                 continue
             hi = h[i]
+            px_open = o[i]
+            px_close = c[i]
+            if not (hi == hi) or not (px_open == px_open) or not (px_close == px_close):
+                continue
             cur_hm = hm[i]
             if hi > new_peak:
                 new_peak = hi
                 new_peak_hm = cur_hm
-            px_open = o[i]
-            px_close = c[i]
             if limit_down_blocks(px_open, limit_down):
                 continue
             if stop_enabled and gap_stop(px_open, trigger):
@@ -389,6 +395,8 @@ try:
             px_open = o[i]
             px_close = c[i]
             hi = h[i]
+            if not (px_open == px_open) or not (px_close == px_close) or not (hi == hi):
+                continue
             if allowed and hi > new_peak:
                 new_peak = hi
                 new_peak_hm = cur_hm
@@ -738,6 +746,9 @@ def _drive_independent_window(
         at_hm = int(hm[bar_idx])
         o_px = float(cursor.o[bar_idx])
         c_px = float(cursor.c[bar_idx])
+        hi_px = float(cursor.h[bar_idx])
+        if not (np.isfinite(o_px) and np.isfinite(c_px) and np.isfinite(hi_px)):
+            return
         for phase in ("open", "close"):
             advance_independent_exit(
                 st, code, pos, cursor, bar_idx, phase, limits,
@@ -1157,14 +1168,59 @@ def _previous_rows(df: pd.DataFrame, day) -> pd.DataFrame:
     return df.loc[df.index < day]
 
 
+def _first_finite(values: np.ndarray) -> Optional[float]:
+    if values.size == 0:
+        return None
+    first = float(values[0])
+    if np.isfinite(first):
+        return first
+    hit = np.flatnonzero(np.isfinite(values))
+    if hit.size == 0:
+        return None
+    return float(values[int(hit[0])])
+
+
+def _last_finite(values: np.ndarray) -> Optional[float]:
+    if values.size == 0:
+        return None
+    last = float(values[-1])
+    if np.isfinite(last):
+        return last
+    hit = np.flatnonzero(np.isfinite(values))
+    if hit.size == 0:
+        return None
+    return float(values[int(hit[-1])])
+
+
+def _finite_hm_bucket(frame, target: int, earliest: int) -> Optional[int]:
+    """Exact finite close at ``target``, else the last finite close at or before it."""
+    if frame is None or getattr(frame, "empty", True):
+        return None
+    hm = frame["hm"].to_numpy(np.int64, copy=False)
+    close = frame["close"].to_numpy(np.float64, copy=False)
+    finite = np.isfinite(close)
+    hit = np.flatnonzero((hm == int(target)) & finite)
+    if hit.size:
+        return int(hm[int(hit[0])])
+    eligible = np.flatnonzero((hm >= int(earliest)) & (hm <= int(target)) & finite)
+    if eligible.size == 0:
+        return None
+    return int(hm[int(eligible[-1])])
+
+
 def _buy_px_from_arrays(hm: np.ndarray, close: np.ndarray) -> Optional[float]:
-    """14:55 close, else last close in 14:30–14:55. Arrays stay in bar order."""
+    """14:55 close, else last close in 14:30–14:55. Arrays stay in bar order.
+
+    A non-finite close is an empty slot, so the search falls through as if
+    that minute were absent.
+    """
     if hm.size == 0:
         return None
-    exact = np.flatnonzero(hm == BUY_HM)
+    finite = np.isfinite(close)
+    exact = np.flatnonzero((hm == BUY_HM) & finite)
     if exact.size:
         return float(close[int(exact[0])])
-    late = np.flatnonzero((hm >= 14 * 60 + 30) & (hm <= BUY_HM))
+    late = np.flatnonzero((hm >= 14 * 60 + 30) & (hm <= BUY_HM) & finite)
     if late.size:
         return float(close[int(late[-1])])
     return None
@@ -1180,23 +1236,54 @@ def _buy_px(day_df: pd.DataFrame) -> Optional[float]:
 
 
 def _chase_quotes(day_df: pd.DataFrame) -> Optional[tuple[float, float]]:
-    """(当日开盘, 09:45 市价)。缺 09:45 则用 ≤09:45 最后一根 close。"""
-    if day_df is None or day_df.empty:
+    """(当日开盘, 09:45 市价)。缺 09:45 则用 ≤09:45 最后一根 close。
+
+    Empty slots are not bars: the open is the first finite open, and a NaN
+    09:45 close falls through to the previous finite close.
+    """
+    if day_df is None or getattr(day_df, "empty", True):
         return None
-    open_px = float(day_df.iloc[0]["open"])
-    hit = day_df.loc[day_df["hm"] == CHASE_HM]
-    if not hit.empty:
-        return open_px, float(hit["close"].iloc[0])
-    early = day_df.loc[(day_df["hm"] >= AM_OPEN) & (day_df["hm"] <= CHASE_HM)]
-    if early.empty:
+    hm = day_df["hm"].to_numpy(np.int64, copy=False)
+    op = day_df["open"].to_numpy(np.float64, copy=False)
+    cl = day_df["close"].to_numpy(np.float64, copy=False)
+    if hm.size == 0:
         return None
-    return open_px, float(early["close"].iloc[-1])
+    open_hit = np.flatnonzero(np.isfinite(op))
+    if open_hit.size == 0:
+        return None
+    open_px = float(op[int(open_hit[0])])
+    exact = np.flatnonzero((hm == CHASE_HM) & np.isfinite(cl))
+    if exact.size:
+        return open_px, float(cl[int(exact[0])])
+    early = np.flatnonzero((hm >= AM_OPEN) & (hm <= CHASE_HM) & np.isfinite(cl))
+    if early.size == 0:
+        return None
+    return open_px, float(cl[int(early[-1])])
 
 
 def _open_quote_for(day_df: pd.DataFrame):
-    """Exact 09:30 first open; a missing opening bar never borrows a later row."""
-    hit = day_df.loc[day_df["hm"] == AM_OPEN]
-    return None if hit.empty else hit.iloc[0]
+    """Exact 09:30 first open; a missing or empty opening bar never borrows a later row."""
+    if day_df is None or getattr(day_df, "empty", True):
+        return None
+    hm = day_df["hm"].to_numpy(np.int64, copy=False)
+    hit = np.flatnonzero(hm == AM_OPEN)
+    if hit.size == 0:
+        return None
+    idx = int(hit[0])
+    open_px = float(day_df["open"].to_numpy(np.float64, copy=False)[idx])
+    if not np.isfinite(open_px):
+        return None
+    data = {}
+    for name in ("open", "high", "low", "close"):
+        if name in day_df.columns:
+            data[name] = float(day_df[name].to_numpy(np.float64, copy=False)[idx])
+    data["hm"] = int(hm[idx])
+    for name in ("volume", "amount"):
+        if name in day_df.columns:
+            data[name] = float(day_df[name].to_numpy(np.float64, copy=False)[idx])
+    if "ymd" in day_df.columns:
+        data["ymd"] = day_df["ymd"].to_numpy()[idx]
+    return pd.Series(data)
 
 
 def simulate(
@@ -1499,7 +1586,10 @@ def simulate(
         hold_modes = {}
         clock.begin("day_spans")
         if day_spans is None:
-            day_spans = {code: build_day_spans(df) for code, df in minute_bars.items()}
+            day_spans = {}
+            for code, df in minute_bars.items():
+                owned = getattr(df, "spans", None)
+                day_spans[code] = owned if owned else build_day_spans(df)
         clock.end("day_spans")
 
     clock.begin("day_loop")
@@ -1667,10 +1757,12 @@ def simulate(
                         )
                 if absolute_exit:
                     line = absolute_exit(code, day)
-                    if line is not None and float(day_m["low"].min()) <= line:
-                        for lot in st.positions.get(code, []):
-                            if lot.entry_idx >= i:
-                                lot.pending_exit = "stop_loss:touch|t1_deferred"
+                    if line is not None:
+                        low_min = float(day_m["low"].min())
+                        if np.isfinite(low_min) and low_min <= line:
+                            for lot in st.positions.get(code, []):
+                                if lot.entry_idx >= i:
+                                    lot.pending_exit = "stop_loss:touch|t1_deferred"
                 for pos in exit_positions(st, code, i, day=day):
                     if getattr(pos, "ride_with", None) is not None:
                         continue
@@ -1771,15 +1863,20 @@ def simulate(
                         reserve_state=reserve_state,
                         close_clear=close_clear,
                     )
-                    if absolute_exit and idx < 0 and float(day_m["low"].min()) <= absolute_exit(code, day):
-                        pos.pending_exit = "stop_loss:touch"
+                    if absolute_exit and idx < 0:
+                        line = absolute_exit(code, day)
+                        low_min = float(day_m["low"].min()) if line is not None else float("nan")
+                        if line is not None and np.isfinite(low_min) and low_min <= line:
+                            pos.pending_exit = "stop_loss:touch"
+                    first_open = _first_finite(o) if pending_at_open else None
                     if (
                         idx < 0
                         and pending_at_open
                         and "pending" in fill_state
                         and callable(hooks.get("minute_next_open_exit"))
                         and limit_down > 0
-                        and hit_limit_down(float(o[0]), limit_down)
+                        and first_open is not None
+                        and hit_limit_down(first_open, limit_down)
                     ):
                         st.stats["defer_sell_limit_down"] += 1
                     minute_next_open_exit = hooks.get("minute_next_open_exit")
@@ -1789,8 +1886,10 @@ def simulate(
                         and "pending" not in fill_state
                         and callable(minute_next_open_exit)
                     ):
-                        exit_reason = minute_next_open_exit(
-                            float(c[-1]), pos.cost, new_peak, n_days
+                        last_close = _last_finite(c)
+                        exit_reason = (
+                            minute_next_open_exit(last_close, pos.cost, new_peak, n_days)
+                            if last_close is not None else None
                         )
                         if exit_reason:
                             fill_state["pending"] = exit_reason
@@ -1799,6 +1898,8 @@ def simulate(
                     pos.reserved = bool(reserve_state["reserved"])
                     if idx >= 0:
                         fill_open = float(o[idx])
+                        if not np.isfinite(fill_open) or not np.isfinite(float(px)):
+                            continue
                         if limit_down > 0 and (
                             defer_sell_open_or_fill(fill_open, float(px), limits)
                         ):
@@ -1835,13 +1936,7 @@ def simulate(
                 if code not in minute_bars:
                     return None
                 frame = _slice_day(minute_bars[code], day_spans.get(code, {}), ds)
-                if frame is None:
-                    return None
-                hit = frame.loc[frame["hm"] == target]
-                if not hit.empty:
-                    return int(hit["hm"].iloc[0])
-                eligible = frame.loc[(frame["hm"] >= earliest) & (frame["hm"] <= target)]
-                return None if eligible.empty else int(eligible["hm"].iloc[-1])
+                return _finite_hm_bucket(frame, target, earliest)
 
             def chase_volume(code):
                 return _volume_bucket_for(code, CHASE_HM, AM_OPEN)
@@ -1906,11 +2001,13 @@ def simulate(
                         if not hit.size:
                             return None
                         idx = int(hit[0])
+                        px = float(mdf["open"].to_numpy(np.float64, copy=False)[lo:hi][idx])
                         volume = float(mdf["volume"].to_numpy(np.float64, copy=False)[lo:hi][idx])
+                        if not np.isfinite(px) or px <= 0:
+                            return None
                         if not np.isfinite(volume) or volume <= 0:
                             st.stats["skip_buy_volume"] += 1
                             return None
-                        px = float(mdf["open"].to_numpy(np.float64, copy=False)[lo:hi][idx])
                     else:
                         px = _buy_px_from_arrays(
                             hm, mdf["close"].to_numpy(np.float64, copy=False)[lo:hi]
@@ -1930,7 +2027,7 @@ def simulate(
                         px = float(opening["open"])
                     else:
                         px = _buy_px(day_m)
-                if px is None or px <= 0 or (minute_open and not np.isfinite(px)):
+                if px is None or not np.isfinite(px) or px <= 0:
                     return None
                 return px, closes
 
@@ -2185,6 +2282,8 @@ def run(
     min_lot_top_up: bool | None = None,
     rule_profile: str | RuleProfile = "industry",
     profile_sim: bool | None = None,
+    minute_length: str | None = None,
+    minute_store: str | None = None,
 ) -> SimState:
     profile = resolve_rule_profile(rule_profile)
     sim_clock = SimPhaseClock() if profile_sim_enabled(profile_sim) else None
@@ -2439,6 +2538,13 @@ def run(
     t_index_gate = time.perf_counter() - t_index_gate
     if sim_clock is not None:
         sim_clock.end("index_gate")
+    minute_length, minute_store = resolve_minute_layout(minute_length, minute_store)
+    laid_spans = cache_status.get("day_spans")
+    if minute_length != "variable" or minute_store != "frame":
+        minute = apply_minute_layout(minute, minute_length, minute_store)
+        # Variable-length span sidecars index the lake rows, not a 242-slot day.
+        laid_spans = None
+        print(f"minute layout {minute_length}/{minute_store}", flush=True)
     t_sim = time.perf_counter()
     st = simulate(
         minute,
@@ -2493,7 +2599,7 @@ def run(
         **({"min_lot_top_up": min_lot_top_up} if min_lot_top_up is not None else {}),
         rule_profile=profile,
         sim_profile=sim_clock,
-        day_spans=cache_status.get("day_spans"),
+        day_spans=laid_spans,
         st_gate=True,
     )
     if skipped.get("exdiv_skipped_no_factor"):
@@ -2578,6 +2684,11 @@ def run(
         st.stats.pop("rule_profile_revision", None)
         st.stats["rule_profile"] = profile.name
         st.stats["rule_profile_revision"] = profile.revision
+    if minute_length != "variable" or minute_store != "frame":
+        st.run_metadata = {
+            **getattr(st, "run_metadata", {}),
+            "minute_layout": {"length": minute_length, "store": minute_store},
+        }
     return st
 
 
@@ -2614,6 +2725,18 @@ def main(argv: Optional[list] = None) -> int:
         "--rebuild-cache", action="store_true", help="reload lake and rewrite cache"
     )
     ap.add_argument("--minute-source", choices=("lake", "qlib_1min"), default="lake")
+    ap.add_argument(
+        "--minute-length",
+        choices=("variable", "fixed"),
+        default=None,
+        help="variable (default): one row per lake minute. fixed: 242 session slots per day; missing minutes stay empty",
+    )
+    ap.add_argument(
+        "--minute-store",
+        choices=("frame", "array"),
+        default=None,
+        help="frame (default): pandas DataFrame. array: column arrays. Independent of --minute-length",
+    )
     ap.add_argument("--daily-source", choices=("lake", "qlib_day"), default="lake")
     ap.add_argument("--topk-limit-rule", choices=("qlib", "real"), default="qlib",
                     help="TopK limit band: qlib 0.095 (default) or real board/ST/date tiers")
@@ -2739,6 +2862,8 @@ def main(argv: Optional[list] = None) -> int:
         minute_stop_trigger=args.minute_stop_trigger,
         topk_exec=args.topk_exec, limit_walkdown=args.limit_walkdown,
         topk_limit_rule=args.topk_limit_rule,
+        minute_length=args.minute_length,
+        minute_store=args.minute_store,
         **csv_run_kwargs_from_args(args),
     )
     book = engine_book(args.strategy, hold_days=args.hold_days)
@@ -2762,6 +2887,10 @@ def main(argv: Optional[list] = None) -> int:
     manifest_args = vars(args).copy()
     if args.participation_rate is None:
         manifest_args.pop("participation_rate", None)
+    if args.minute_length in (None, "variable"):
+        manifest_args.pop("minute_length", None)
+    if args.minute_store in (None, "frame"):
+        manifest_args.pop("minute_store", None)
     if not args.limit_walkdown:
         manifest_args.pop("limit_walkdown", None)
     if args.topk_exec == "close" and not args.limit_walkdown and args.topk_limit_rule == "qlib":

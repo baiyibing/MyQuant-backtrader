@@ -459,9 +459,22 @@ def run_chronological_day(
     if held_fill_states is None:
         held_fill_states = {}
 
+    def _rows_with_prices(frame, mask):
+        rows = frame.loc[mask]
+        if len(rows) == 0:
+            return rows
+        close = rows["close"].to_numpy(np.float64, copy=False)
+        open_ = rows["open"].to_numpy(np.float64, copy=False)
+        keep = np.isfinite(close) & np.isfinite(open_)
+        if bool(np.all(keep)):
+            return rows
+        return rows.iloc[np.flatnonzero(keep)]
+
     def frame_for(code):
         if code not in frames:
             frame = slice_day(code, ds) if code in minute_bars else None
+            if frame is not None and not hasattr(frame, "sort_values"):
+                frame = frame.to_frame()
             if frame is not None:
                 valid = frame["hm"].between(AM_OPEN, AM_CLOSE) | frame["hm"].between(
                     PM_OPEN, PM_CLOSE
@@ -560,10 +573,10 @@ def run_chronological_day(
         frame = frame_for(code)
         if frame is None:
             return None
-        hit = frame.loc[frame["hm"] == target]
+        hit = _rows_with_prices(frame, frame["hm"] == target)
         if not hit.empty:
             return int(hit["hm"].iloc[0])
-        eligible = frame.loc[frame["hm"].between(earliest, target)]
+        eligible = _rows_with_prices(frame, frame["hm"].between(earliest, target))
         return None if eligible.empty else int(eligible["hm"].iloc[-1])
 
     def chase_bucket(code):
@@ -608,7 +621,7 @@ def run_chronological_day(
             px = float(opening["open"])
         else:
             px = _buy_px(frame)
-        if px is None or px <= 0 or (minute_open and not np.isfinite(px)):
+        if px is None or not np.isfinite(px) or px <= 0:
             return None
         return px, closes
 
@@ -673,7 +686,7 @@ def run_chronological_day(
                 st.stats["skip_no_bar"] += 1
                 continue
             closes, frame = got
-            opening = frame.loc[frame["hm"] == TAIL_START]
+            opening = _rows_with_prices(frame, frame["hm"] == TAIL_START)
             if len(opening) != 1 or bool(opening.iloc[0].get("_tail_duplicate", False)):
                 st.stats["skip_no_bar"] += 1
                 continue
@@ -730,7 +743,7 @@ def run_chronological_day(
             tail_attempted.add((code, at_hm))
             parent, merge_lot, limits, order_debit = order
             frame = frame_for(code)
-            rows = frame.loc[frame["hm"] == at_hm]
+            rows = _rows_with_prices(frame, frame["hm"] == at_hm)
             if len(rows) != 1 or bool(rows.iloc[0].get("_tail_duplicate", False)):
                 reject_tail("quote")
                 continue
