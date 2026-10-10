@@ -15,6 +15,7 @@ from backtest.research.csv_minute_backtest import (
     _NUMBA_SCAN_AVAILABLE,
     _drive_independent_window,
     _independent_numba_prefix,
+    _previous_rows,
     independent_ladder_first_bar,
 )
 from backtest.research.minute_cash_order import (
@@ -528,3 +529,15 @@ def test_resume_freezes_peak_after_deferred_exit():
     assert int(nb[0].stats.get("defer_sell_limit_down", 0)) >= 1
     assert nb[1].peak == py[1].peak == 10.0
     assert nb[1].shares == 1000
+
+
+def test_previous_rows_searchsorted_matches_boolean_mask():
+    index = pd.to_datetime(["2025-11-03", "2025-11-04", "2025-11-04", "2025-11-05"])
+    frame = pd.DataFrame({"close": [1.0, 2.0, 3.0, 4.0]}, index=index)
+    day = pd.Timestamp("2025-11-05")
+    got = _previous_rows(frame, day)
+    assert list(got["close"]) == [1.0, 2.0, 3.0]
+    scrambled = frame.iloc[[2, 0, 3, 1]]
+    assert list(_previous_rows(scrambled, day)["close"]) == list(
+        scrambled.loc[scrambled.index < day, "close"]
+    )

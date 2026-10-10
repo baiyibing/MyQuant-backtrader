@@ -88,7 +88,7 @@
 
 ## 5. 下一刀怎么选
 
-**若目标是模拟时间：** 减轻 `_scan_independent_ladder_first` 的每次调用。`independent_ladder_first_bar` 每次对 `cursor.o/h/c/hm` 做 `np.asarray`，`_independent_numba_prefix` 每次重扫加仓 lot 成本。`bar_start` 已经能从中间接着扫。包装变轻之后，用 `OSKH_INDEPENDENT_RESUME=0` 对同一进程或同一文件缓存再跑一窗，成交文件必须与 `industry_resume_h0` 逐字节相同。
+**模拟时间的第一刀已按脑暴 P0 落地（仍在本分支）：** 每个持仓窗口只绑定一次 OHLC/`hm` 数组和梯子常数；lot 成本、均价锚和峰值仍每次刷新。有序 `hm` 的安静段用 `searchsorted` 做下标差，不再为计数逐根走 Python。日线「严格早于当日」在单调索引上走 `searchsorted`。没有 `sell_gate` 的书不再把全部昨收收成 list。成交路径没改。
 
 **若目标是新进程墙钟：** 装载。可以从 Arrow 列直接取出 `open/high/low/close/hm` 的 numpy，跳过 `to_pandas()`。这只削 14.9s 的一部分。parquet 仍是跨进程真源。同一进程第二次 `run()` 已经走 `bar_store`，不要为这一刀再做 mmap。
 

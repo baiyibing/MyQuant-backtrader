@@ -488,6 +488,7 @@ def independent_ladder_first_bar(
     hm_lo: int,
     hm_hi: int,
     bar_start: int = 0,
+    bars=None,
 ):
     """Return ``(idx, peak, peak_hm)``. ``idx<0`` means the slice has no Python action."""
     if _scan_independent_ladder_first is None:
@@ -495,11 +496,18 @@ def independent_ladder_first_bar(
     stop_pct = cursor.stop_pct
     stop_enabled = isinstance(stop_pct, float) and 0 < float(stop_pct) < 1
     costs = np.asarray(step_costs, dtype=np.float64)
+    if bars is None:
+        bars = (
+            np.asarray(cursor.o, dtype=np.float64),
+            np.asarray(cursor.h, dtype=np.float64),
+            np.asarray(cursor.c, dtype=np.float64),
+            np.asarray(cursor.hm, dtype=np.int64),
+        )
     idx, peak, peak_hm = _scan_independent_ladder_first(
-        np.asarray(cursor.o, dtype=np.float64),
-        np.asarray(cursor.h, dtype=np.float64),
-        np.asarray(cursor.c, dtype=np.float64),
-        np.asarray(cursor.hm, dtype=np.int64),
+        bars[0],
+        bars[1],
+        bars[2],
+        bars[3],
         float(cursor.cost),
         float(cursor.peak),
         int(cursor.n_days),
@@ -539,14 +547,19 @@ def _independent_numba_prefix(
     hm_lo: int,
     hm_hi: int,
     bar_start: int = 0,
+    bars=None,
+    ladder=None,
 ) -> int:
     """Write prefix peak and return first Python bar, or -1 if none in this slice.
 
     ``-2`` means the scan gave up (too many step lots): Python from ``bar_start``.
+    ``bars`` and ``ladder`` are the window's static inputs. Lot costs, scale
+    anchor and peak still refresh on every call.
     """
     if _independent_numba_blocked(st, pos, cursor):
         return 0
-    ladder = _ladder_numba_params(st)
+    if ladder is None:
+        ladder = _ladder_numba_params(st)
     width, give_base, give_step, tp_min = ladder
     step_pct = float((side_hooks or {}).get("step_stop_pct") or 0.0)
     step_costs = []
@@ -595,6 +608,7 @@ def _independent_numba_prefix(
         hm_lo=hm_lo,
         hm_hi=hm_hi,
         bar_start=bar_start,
+        bars=bars,
     )
     pos.peak = peak
     pos.peak_hm = peak_hm
@@ -656,6 +670,13 @@ def _drive_independent_window(
     """
     hm = cursor.hm
     n = len(hm)
+    hm_arr = np.asarray(hm, dtype=np.int64)
+    ordered = hm_arr.size < 2 or bool(np.all(hm_arr[1:] >= hm_arr[:-1]))
+    if ordered:
+        win_lo = int(np.searchsorted(hm_arr, int(hm_lo), side="left"))
+        win_hi = int(np.searchsorted(hm_arr, int(hm_hi), side="right"))
+    else:
+        win_lo = win_hi = 0
     prefix_bars = 0
     resume_bars = 0
     evaluated = 0
@@ -663,12 +684,23 @@ def _drive_independent_window(
     peak0 = float(pos.peak)
     peak_hm0 = int(pos.peak_hm)
     dumped = False
+    bars = (
+        np.asarray(cursor.o, dtype=np.float64),
+        np.asarray(cursor.h, dtype=np.float64),
+        np.asarray(cursor.c, dtype=np.float64),
+        hm_arr,
+    )
+    ladder = _ladder_numba_params(st)
 
     def in_window(idx):
         at = int(hm[idx])
         return hm_lo <= at <= hm_hi
 
     def first_from(idx):
+        if ordered:
+            if idx < win_lo:
+                idx = win_lo
+            return idx if idx < win_hi else n
         while idx < n and int(hm[idx]) < hm_lo:
             idx += 1
         if idx >= n or int(hm[idx]) > hm_hi:
@@ -676,6 +708,11 @@ def _drive_independent_window(
         return idx
 
     def count_quiet(lo_idx, hi_idx):
+        if ordered:
+            stop = win_hi if hi_idx is None else hi_idx
+            left = lo_idx if lo_idx > win_lo else win_lo
+            right = stop if stop < win_hi else win_hi
+            return right - left if right > left else 0
         total = 0
         stop = n if hi_idx is None else hi_idx
         for bar_idx in range(lo_idx, stop):
@@ -753,7 +790,7 @@ def _drive_independent_window(
     if not _independent_resume_enabled():
         python_from = _independent_numba_prefix(
             st, pos, cursor, day_i=day_i, side_hooks=side_hooks,
-            hm_lo=hm_lo, hm_hi=hm_hi,
+            hm_lo=hm_lo, hm_hi=hm_hi, bars=bars, ladder=ladder,
         )
         dump(python_from)
         if python_from < 0:
@@ -776,6 +813,7 @@ def _drive_independent_window(
         python_from = _independent_numba_prefix(
             st, pos, cursor, day_i=day_i, side_hooks=side_hooks,
             hm_lo=hm_lo, hm_hi=hm_hi, bar_start=start_idx,
+            bars=bars, ladder=ladder,
         )
         dump(python_from)
         if python_from == -2:
@@ -1106,7 +1144,16 @@ def _slice_day(
 
 
 def _previous_rows(df: pd.DataFrame, day) -> pd.DataFrame:
-    """Rows strictly before ``day``; kept named so orchestration can be profiled."""
+    """Rows strictly before ``day``. Sorted indexes use searchsorted."""
+    index = df.index
+    if len(index) == 0:
+        return df.iloc[0:0]
+    try:
+        if index.is_monotonic_increasing:
+            end = int(index.searchsorted(day, side="left"))
+            return df.iloc[:end]
+    except (TypeError, ValueError):
+        pass
     return df.loc[df.index < day]
 
 
@@ -1608,7 +1655,10 @@ def simulate(
                     or (fill_config is not None and fill_config.trigger_basis == "bar_low")
                 )
                 low_arr = day_m["low"].to_numpy(np.float64) if need_low else None
-                prev_closes = prev_rows["close"].astype(float).tolist()
+                prev_closes = (
+                    prev_rows["close"].astype(float).tolist()
+                    if sell_gate is not None else []
+                )
                 if s8_confirm:
                     prefix_high = max((float(hi) for hi in h[hm <= BUY_HM] if hi > 0), default=0.0)
                     for pos in st.positions.get(code, []):
