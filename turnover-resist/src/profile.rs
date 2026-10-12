@@ -273,8 +273,7 @@ pub fn write_profile_json(path: &Path, report: &ProfileReport) -> std::io::Resul
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
-    let text = serde_json::to_string_pretty(report)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+    let text = serde_json::to_string_pretty(report).map_err(std::io::Error::other)?;
     let mut file = fs::File::create(path)?;
     file.write_all(text.as_bytes())?;
     file.write_all(b"\n")?;
