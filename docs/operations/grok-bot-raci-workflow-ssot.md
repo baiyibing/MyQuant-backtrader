@@ -154,6 +154,8 @@ MyQuant  →  MyQuant-backtrader  →  OSkhQuant1.3
 - 4090 **已装 Codex**（`codex-cli 0.160.0`，provider DeepSeek），但 4090 **默认实现刀仍是 Cursor agent + Grok 4.7**；**勿**把 Bot VM 的 Codex `gpt-6.*` 流水线默认搬到 4090（该机无这些模型 id）。清单见 §6.1。
 - **Headless 不限 4090**：§3 规定 bot 在**所有**已注册物理机上调度 agent CLI 时都优先 headless；4090 上 Cursor / Grok 4.7 已是 headless 一例，其余注册机（笔记本、zcode 主机等）同口径。
 
+**4090 本地执行通道选型**（Gitea Actions `win-ci-gates` / `tea` / runner 本机+agent CLI headless / Cursor Auto 仅 GUI）见 [`newtest-4090-execution-channels-ssot.md`](newtest-4090-execution-channels-ssot.md)。本文 §6/§6.1 仍只管角色与 agent CLI 模型钉；可复现脚本默认 Actions，agent 改码/排障默认 headless agent CLI，**勿**把 Cursor Auto 当默认通道。
+
 **常驻说明（2026-10-03 机器核验；headless，未消耗 generation）**：
 
 - `newtest_4090` PATH（2026-10-03 快照，**已过期**）：`kimi 2.1.1`、`codex-cli 0.156.1`、`cursor 3.22.12`、`cursor agent 2026.09.18-9a7762b`；当时 `claude` / `grok` 不在 PATH。**现以 §6.1（2026-10-05 实测）为准**。
@@ -251,3 +253,4 @@ MyQuant  →  MyQuant-backtrader  →  OSkhQuant1.3
 | 2026-10-05 | Human：PATH zcode 为社区非官方 `zcode-app-cli` → **暂时不用 zcode CLI 模式**；4090bot **不派** `zcode -p` / headless，直至官方 CLI；桌面安装可留作库存；§6.1 表行 / 调用约定 / §9 同步 |
 | 2026-10-06 | 新增 §3.1：Bot VM 上 Codex / Cursor / Grok / Kimi CLI 额度权威查询（路径与 endpoint；禁止写 token / api_key 值 / 手机号）；§9 清单加「查额度走 §3.1」 |
 | 2026-10-12 | Human：§1 默认分工（没特别点名时）— tj→newtest+9 前端；qlib→MyQuant；bt→MyQuant-backtrader；qmt→OSkhQuant1.3；4090bot→只跟 4090 机沟通；§0/§2 同步列入 tj |
+| 2026-10-12 | §6 新增 4090 执行通道 SSOT 薄指针：可复现脚本默认 Actions，forge 元数据用 tea，agent 工作默认 headless agent CLI，Cursor Auto 仅 GUI 最后手段；角色与模型钉仍归 §6/§6.1 |
