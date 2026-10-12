@@ -1,3 +1,5 @@
+> **Historical episode (S6/S7, 2026-10-12).** Do **not** treat this file as the living roster, Owner table, or model-pin SSOT. Living roles / 4090 CLI roster → `baiyibing/grok-bot-ops` [`docs/raci/grok-bot-raci-workflow-ssot.md`](https://github.com/baiyibing/grok-bot-ops/blob/master/docs/raci/grok-bot-raci-workflow-ssot.md) §1 / §6.1. Body below is preserved as of the episode date.
+
 # 交接：联合收益 Mode B 性能刀（2026-09-24）——**弧已收官**
 
 > **状态（终版）**：性能弧**收官**。#181–#192 全合入，master tip **`95431fc`**；收尾 tip 重剖 **PASS**（wall **237.6s**，vs 弧起点 ~789s **−69.9%**，vs #187 384.5s −38.2%），fills/NAV/orders 全链 byte-identical（合约 SHA 不变）。tip 全量 pytest **2085 绿**。核改账：#189/#192 = kimi GO + codex GO 双核（B 路线代核，Grok 停摆期豁免，额度恢复后可选补核）。**剩余热点全部 <32s，不再开新刀**；回研究主线。  
