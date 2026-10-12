@@ -1,42 +1,41 @@
-# newtest_4090 执行通道 SSOT（Actions / tea / runner+agent CLI / Cursor Auto）
+# newtest_4090 执行通道 SSOT（Actions / tea / agent CLI / GUI）
 
-- 适用范围：Grok Bot 协作下，在 **newtest_4090** 上选**执行通道**（谁跑脚本、谁管 forge、谁点 GUI）。
-- 角色 / 模型钉 / headless 仍以 [`grok-bot-raci-workflow-ssot.md`](grok-bot-raci-workflow-ssot.md) §3/§6/§6.1 为准；**本文只定通道选型**。
-- **agent CLI headless**（cursor-agent / kimi / codex 等，见 RACI §6.1）是 4090 上默认的 *agent 执行面*；Cursor Auto 不是与 Actions 并列的默认通道。
+- 适用范围：Grok Bot 协作下，在 **newtest_4090** 上选择执行通道。
+- 角色 / 模型钉 / headless 以 [`grok-bot-raci-workflow-ssot.md`](grok-bot-raci-workflow-ssot.md) §3/§6/§6.1 为准；**本文只定通道选型**。
+- **Cursor Auto = Cursor agent CLI headless + Auto 模型**，属于第 3 通道；桌面 / 浏览器 GUI 自动化另列为第 4 通道。
 - 生效：2026-10-12
 
 ## 1. 四通道对照
 
-| 通道 | 是什么 | 适合 | 不适合 | 备注 |
-|---|---|---|---|---|
-| **A. Gitea Actions**（`win-ci-gates`，跑在 4090 本机） | 可复现脚本的**首选** | Playwright、mock SSO（`zhentinginfo/newtest` 的 `tools/mock-sso`）、单测 / build gate；固定 outdir `D:\exports\…`；合入后 pull+rerun | 真人可见 GUI 登录墙 | 不依赖 Cursor 桌面连接、不吃 Cursor 配额；runner 在同机时更快更稳；已核验证据见下方 |
-| **B. `tea`**（Gitea CLI） | forge 元数据首选 | 开 / 列 / 合 PR、触发 / 盯 workflow、label、issue / PR 元数据 | 执行 Playwright 本身 | forge：http://netgear.seetell.net:13001/ 或 http://120.236.35.58:13001/；DNS 失败优先 `120.236.35.58` |
-| **C. Gitea runner 本机 / 本地 checkout + headless** | 一次性排障执行面 | Actions YAML 缺失，或已 checkout 树上的 one-off debug；优先 **headless 脚本**或 **agent CLI headless** | 默认挂 TUI；手工拷贝散文件 | agent CLI 按 RACI §6.1；工具下发对仓库 **git pull** |
-| **D. Cursor Auto / 桌面 GUI 自动化** | **仅最后手段** | 必须真人可见 GUI：点登录、验证码、2FA、看实页状态 | mock SSO 链默认执行；与 Actions 并列的默认 agent 通道 | ListMachines `disconnected` ≠ 主机离线；改走 Actions / SSH / 本机 session / agent CLI headless |
+| 通道 | 定位 | 适合 | 边界 |
+|---|---|---|---|
+| **1. Gitea Actions `win-ci-gates`**（4090 本机 runner） | 可复现脚本首选 | Playwright、mock SSO、单测 / build gate、合入后 pull+rerun | 固定脚本与 outdir；真人可见点击登录走第 4 通道 |
+| **2. `tea`**（Gitea CLI） | forge PR / Actions 元数据 | 开 / 列 / 合 PR、触发 / 盯 workflow、label、issue / PR 元数据 | 不执行 Playwright；forge：http://netgear.seetell.net:13001/ 或 http://120.236.35.58:13001/；DNS 失败优先后者 |
+| **3. 4090 上 headless agent CLI** | 本机实现 / review / one-off 默认 | **Cursor Auto**（cursor-agent headless + Auto）；kimi / codex 等按 RACI §6.1；本机 checkout 排障 | 非 Auto 默认模型钉仍为 `grok-4.7-high`；不套用 Bot VM `gpt-6.*`；默认无 TUI |
+| **4. 桌面 / 浏览器 GUI 自动化** | 独立的最后手段 | 验证码 / 2FA / 必须真人可见的点击登录 | 不称为 Cursor Auto；不作为脚本或 agent 工作的默认通道 |
 
-**A 已核验记录**：2026-10-11 ~20:34 CST mock SSO **7/7 PASS**；Actions http://120.236.35.58:13001/zhentinginfo/newtest/actions/runs/1102 ；outdir `D:\exports\vue3_sso_joint_20261011\mock\`（含 `MOCK_RUN.md`）。当时 checkout PR #62 分支 `feat/tools-mock-sso` @ `50269b74` → `D:\PycharmProjects\newtest-mock-sso\tools\mock-sso`；合入后路径为 pull master `e455dd3` 再跑。
+**Actions 已核验记录**：2026-10-11 ~20:34 CST mock SSO **7/7 PASS**；Actions http://120.236.35.58:13001/zhentinginfo/newtest/actions/runs/1102 ；outdir `D:\exports\vue3_sso_joint_20261011\mock\`（含 `MOCK_RUN.md`）。当时 checkout PR #62 分支 `feat/tools-mock-sso` @ `50269b74` → `D:\PycharmProjects\newtest-mock-sso\tools\mock-sso`；合入后路径为 pull master `e455dd3` 再跑。
 
-**C 调用入口**：RACI §6.1 默认 `agent -p --force --trust --model grok-4.7-high`；亦可 kimi / codex DeepSeek；勿套用 Bot VM `gpt-6.*`。模型钉及后续实测更新仍由 RACI §6.1 管理。
+**agent CLI 调用入口**：Cursor Auto 示例 `agent -p --force --trust --model auto "..."`；不使用 Auto 时，RACI §6.1 默认 `agent -p --force --trust --model grok-4.7-high "..."`。kimi / codex DeepSeek 等可用范围、模型钉与后续实测更新仍由 RACI §6.1 管理。
 
 ## 2. 决策表
 
 | 任务类型 | 首选通道 | 回退 | 禁止 |
 |---|---|---|---|
-| 可复现脚本（Playwright / mock SSO / 单测 / build gate） | **Actions `win-ci-gates`** | runner 本机 headless 脚本 | 禁止默认 Cursor Auto / 禁止对 169.169 硬联调 |
-| 合入后 pull master 再跑 | **Actions** | runner checkout + git pull + 同脚本 | 禁止 Cursor Auto |
-| 开 / 列 / 合 PR、触发 / 盯 workflow、打 label | **`tea`** | forge Web UI（人） | 禁止用 Playwright 冒充 forge 操作 |
-| Actions YAML 缺失或本机 checkout 一次性排障 | **runner checkout + headless 脚本 / agent CLI headless** | 补 YAML 后改回 Actions | 禁止默认挂 TUI / Cursor Auto |
-| 需 agent 改码 / 排障（非 GUI 墙） | **agent CLI headless**（RACI §6.1） | 同机 headless 脚本 | 禁止默认 Cursor Auto / TUI |
-| 需真人可见 GUI（点登录 / 验证码 / 2FA / 看实页） | **Cursor Auto（最后手段）** | 人在机前 | 禁止用 headless 硬扛登录墙 |
-| 对 169.169.* 真实 SSO 联调 | **禁止**（TCP 不通） | 改用 `tools/mock-sso/` | — |
+| 可复现脚本（Playwright / mock SSO / 单测 / build gate） | **1. Actions `win-ci-gates`** | 3. headless agent CLI 在本机 checkout 调用同脚本 | 默认走 GUI；对 169.169 硬联调 |
+| 合入后 pull master 再跑 | **1. Actions `win-ci-gates`** | 3. headless agent CLI 执行 git pull + 同脚本 | 手工拷贝散文件 |
+| forge PR / Actions 元数据（开 / 列 / 合 PR、触发 / 盯 workflow、label） | **2. `tea`** | forge Web UI（人工） | 用 `tea` 执行 Playwright |
+| 本机实现 / review / one-off；Actions YAML 缺失时排障 | **3. headless agent CLI**（含 Cursor Auto；按 RACI §6.1） | 可复现脚本补 YAML 后走 1. Actions | 默认挂 TUI / GUI |
+| 验证码 / 2FA / 真人可见点击登录 | **4. 桌面 / 浏览器 GUI 自动化（最后手段）** | 人在机前 | 称为 Cursor Auto；用 headless 硬扛登录墙 |
+| 对 169.169.* 真实 SSO 联调 | **禁止**（TCP 不通） | 改用 `tools/mock-sso/`，走 1. Actions | 硬联调 |
 
 ## 3. 硬约束
 
-- 169.169.* 直播 SSO 不可达；用 newtest `tools/mock-sso/`。
-- Headless 默认；无 TUI；与 RACI §3/§6 对齐，**通道选型以本文为准**。
-- agent CLI 模型钉见 RACI §6.1；本文不重复钉模型。
+- 169.169.* 真实 SSO 不可达；用 newtest `tools/mock-sso/`。
+- 本机 agent 工作默认 headless、无 TUI；Cursor Auto 属于此通道。GUI 仅用于验证码 / 2FA / 真人可见点击登录。
+- agent CLI 模型钉与可用清单见 RACI §6.1；不使用 Auto 时默认 `grok-4.7-high`。
 - 工具下发 git pull；禁止手工拷贝。
-- Cursor 额度 / 桌面断连不挡 Actions；ListMachines `disconnected` ≠ 4090 关机。
+- Cursor 额度 / 桌面断连不挡 Actions；ListMachines `disconnected` ≠ 4090 关机，可走 Actions / SSH / 本机 session / headless agent CLI。
 - DNS：Gitea 优先 `120.236.35.58:13001`。
 
 ## 4. 证据 / outdir（薄）
@@ -57,4 +56,5 @@
 
 | 日期 | 变更 |
 |---|---|
-| 2026-10-12 | 初版：四通道 + 决策表；Actions 为可复现脚本首选；agent CLI headless 为默认 agent 面；Cursor Auto 仅 GUI 最后手段；沉淀 mock SSO Actions #1102 |
+| 2026-10-12 | 初版：四通道 + 决策表；Actions 为可复现脚本首选；agent CLI headless 为默认 agent 面；沉淀 mock SSO Actions #1102 |
+| 2026-10-12 | 纠正 Cursor Auto=agent CLI Auto 模型，GUI 另立；明确本机实现 / review / one-off 默认 headless agent CLI，GUI 仅验证码 / 2FA / 真人可见点击登录最后手段 |
