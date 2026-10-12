@@ -2,6 +2,7 @@
 
 > **落盘**：2026-09-13。
 > **状态**：已编码（夹具已合 [#32](https://github.com/baiyibing/MyQuant-backtrader/pull/32)）。宿主短窗烟测 2026-09-13，见 [s9-s10-host-smoke-2026-09-13.md](../../s9-s10-host-smoke-2026-09-13.md)。
+> **续写（2026-10-12）**：宇宙 lake∩TR / 全湖 fail_closed / 导出埋点 → [note-strategy10-source-b-universe-2026-10-12.md](../../note-strategy10-source-b-universe-2026-10-12.md)。
 > **风险档**：L1。不改账本公式、不第四台引擎、不写 `stock_pool/`、不 `import qlib`。
 > **上游**：源 B 计划口径；本片把编号落成 **version10**。
 

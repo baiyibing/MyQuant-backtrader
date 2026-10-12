@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pandas as pd
 import pytest
 
@@ -131,6 +133,22 @@ def test_scan_skips_empty_day():
     assert list(days) == ["20260303"]
 
 
+def test_scan_skips_empty_section_even_with_universe():
+    """CN holidays inside bdate_range must not fail-closed the whole export."""
+
+    def load(ymd: str) -> pd.DataFrame:
+        if ymd == "20260303":
+            return pd.DataFrame([_row("600000.SH")])
+        return pd.DataFrame()
+
+    days = scan_tr_days(
+        ["20260303", "20260304"],
+        load_cross_section=load,
+        universe_for=lambda _ymd: ["600000.SH"],
+    )
+    assert list(days) == ["20260303"]
+
+
 def test_write_refuses_stock_pool(tmp_path):
     stock = tmp_path / "stock_pool"
     stock.mkdir()
@@ -179,6 +197,13 @@ def test_export_cli_inject_writes_files(tmp_path):
         "600000"
     ]
     assert validate_pool_dir(dest) == []
+    profile = dest / "profile_export.json"
+    assert profile.is_file()
+    payload = json.loads(profile.read_text(encoding="utf-8"))
+    assert payload["job"] == "export_ta_pool"
+    assert payload["pool_days"] == 1
+    assert payload["universe_mode"] == "file"
+    assert "phases_s" in payload
 
 
 def test_version10_reuses_version6_sells_and_refuses_stock_pool(tmp_path):

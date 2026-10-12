@@ -166,12 +166,23 @@ def apply_turnover_resistance_filter(
         )
         return list(candidates)
 
-    by_code: dict[str, pd.Series] = {}
-    for _, row in cross_section.iterrows():
-        code = str(row.get("stock_code", "") or "").strip()
-        if code:
-            by_code[code] = row
+    frame = pd.DataFrame(cross_section).copy()
+    if "stock_code" not in frame.columns:
+        raise ValueError("cross_section missing stock_code")
+    frame["stock_code"] = frame["stock_code"].map(lambda c: str(c or "").strip())
+    frame = frame[frame["stock_code"].astype(bool)]
+    # Last row wins on duplicate codes (matches prior iterrows overwrite).
+    dedup = frame.drop_duplicates("stock_code", keep="last")
 
+    if rule in {_RULE_RESIST_TR_BB_1000, _RULE_RESIST_TR_BB_80}:
+        return _filter_resist_tr_bb_ordered(
+            candidates,
+            frame=dedup,
+            fail_closed=fc,
+            rule=rule,
+        )
+
+    by_code = {str(code): row for code, row in dedup.set_index("stock_code").iterrows()}
     kept: list[str] = []
     for code in candidates:
         norm = str(code or "").strip()
@@ -194,4 +205,68 @@ def apply_turnover_resistance_filter(
         if handler(row):
             kept.append(norm)
 
+    return kept
+
+
+def _filter_resist_tr_bb_ordered(
+    candidates: Sequence[str],
+    *,
+    frame: pd.DataFrame,
+    fail_closed: bool,
+    rule: str,
+    tr_abs_min: float = 20.0,
+    bb_min: float = 0.5,
+    tr_bb_min: float = 0.5,
+) -> list[str]:
+    """Preserve candidate order; vectorize the resist_tr_bb predicate."""
+
+    norms = [str(code or "").strip() for code in candidates]
+    norms = [code for code in norms if code]
+    if not norms:
+        return []
+
+    present = set(frame["stock_code"].astype(str))
+    missing = [code for code in norms if code not in present]
+    if missing:
+        if fail_closed:
+            raise ConfigurationError(
+                f"TR filter fail-closed: missing cross_section row for {missing[0]!r}",
+                error_code=_ERROR_CODE_CFG_VALIDATION_FAILED,
+                config_key="stock_code",
+            )
+        for code in missing:
+            _logger.warning(
+                "TR filter: candidate missing from cross_section; skipping TR gate for symbol",
+                context={"stock_code": code, "rule": rule},
+            )
+
+    work = frame.set_index("stock_code", drop=False)
+    work = work.reindex([code for code in norms if code in present])
+    if work.empty:
+        if not fail_closed:
+            return list(norms)
+        return []
+
+    bands_ok = work["bands_computed_at"].notna() & work["tr_bb_middle"].notna()
+    tr = pd.to_numeric(work["turnover_resistance"], errors="coerce").abs()
+    bb_pos = pd.to_numeric(work["bb_position"], errors="coerce")
+    tr_bb_pos = pd.to_numeric(work["tr_bb_position"], errors="coerce")
+    pass_mask = (
+        bands_ok
+        & tr.notna()
+        & (tr > float(tr_abs_min))
+        & bb_pos.notna()
+        & (bb_pos >= float(bb_min))
+        & tr_bb_pos.notna()
+        & (tr_bb_pos > float(tr_bb_min))
+    )
+    passed = set(work.index[pass_mask].astype(str))
+
+    kept: list[str] = []
+    for code in norms:
+        if code in passed:
+            kept.append(code)
+        elif code not in present and not fail_closed:
+            # fail-open: missing row kept (same as legacy path)
+            kept.append(code)
     return kept

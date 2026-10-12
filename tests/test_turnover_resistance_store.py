@@ -104,6 +104,18 @@ class TestTurnoverResistanceStore:
         assert len(df) == 3
         assert list(df["trade_date"]) == ["20260103", "20260104", "20260105"]
 
+    def test_cross_section_reuses_session_cache(self, store: TurnoverResistanceStore):
+        store.upsert_daily("20260101", [_mock_ffi_row(trade_date="20260101")], window=1000)
+        store.upsert_daily("20260102", [_mock_ffi_row(trade_date="20260102")], window=1000)
+        store.invalidate_cache()
+        store.read_disk_loads = 0
+        store.read_cache_hits = 0
+        a = store.load_cross_section("20260101", require_bands=False)
+        b = store.load_cross_section("20260102", require_bands=False)
+        assert len(a) == 1 and len(b) == 1
+        assert store.read_disk_loads == 1
+        assert store.read_cache_hits >= 1
+
     def test_window_conflict_raises(self, store: TurnoverResistanceStore):
         store.upsert_daily("20260101", [_mock_ffi_row()], window=1000)
         with pytest.raises(ValueError, match="window"):

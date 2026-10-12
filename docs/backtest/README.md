@@ -51,10 +51,15 @@ D:\anaconda3\envs\vanna312\python.exe scripts/data/export_strategy9_pool.py --st
 D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_daily_backtest.py ^
   --strategy version9 --pool-dir exports/s9_bvot_20260303_20260908 --start 20260303 --end 20260908
 
-# 策略 10 / 源 B（export_ta_pool.py；湖当日有 K；禁止 stock_pool/；不做 TopK）
-D:\anaconda3\envs\vanna312\python.exe scripts/data/export_ta_pool.py --start 20260303 --end 20260908
+# 策略 10 / 源 B（export_ta_pool.py；禁止 stock_pool/；不做 TopK）
+# 宿主：lake∩TR 快路径；说明 docs/backtest/note-strategy10-source-b-universe-2026-10-12.md
+D:\anaconda3\envs\vanna312\python.exe scripts/data/export_ta_pool.py ^
+  --start 20260303 --end 20260908 ^
+  --store-parquet E:/stock_data/turnover_resistance_daily.parquet ^
+  --universe-mode lake_tr
 D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_daily_backtest.py ^
-  --strategy version10 --pool-dir exports/src_b_tr_bb1000_20260303_20260908 --start 20260303 --end 20260908
+  --strategy version10 --stop-pct 0.06 ^
+  --pool-dir exports/src_b_tr_bb1000_20260303_20260908 --start 20260303 --end 20260908
 
 # 策略 7 金榕元仓位机（独立，不进 1–6/8/9/10 策略书）。只吃海龟池。
 D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_minute_backtest_v7.py ^
