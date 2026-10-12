@@ -1,6 +1,6 @@
 # Grok Bot 专用：多 Bot RACI 与工作流 SSOT
 
-> **适用范围：仅 Grok Bot 协作链路**（bt / qlib / qmt / 4090bot 等）。  
+> **适用范围：仅 Grok Bot 协作链路**（bt / qlib / qmt / tj / 4090bot 等）。  
 > 人类本地 IDE、纯 Cursor 桌面会话、非 Grok Bot 调度的 Cloud Agent / 其他助手默认流程、仓库 CI runner 与普通运维 runbook **不适用本文**，不要拿本文去约束那些场景。  
 > 生效：2026-09-22（用户当面逐条裁定）  
 >
@@ -15,18 +15,29 @@
 
 | 场景 | 是否适用本文 |
 |---|---|
-| 用户与 **Grok Bot**（含 bt / qlib / qmt / 4090bot）协作改仓、盯 PR、合入 | **适用** |
+| 用户与 **Grok Bot**（含 bt / qlib / qmt / tj / 4090bot）协作改仓、盯 PR、合入 | **适用** |
 | 用户自己在 Cursor / VS Code / 终端里手写、手推 | **不适用** |
 | 未经过 Grok Bot 调度的 Cloud Agent / 其他助手默认流程 | **不适用** |
 | 仓库 CI runner、生产运维 runbook 本身 | **不适用**（仍看各运维文档） |
 
 ## 1. 仓 Owner（主管 bot）
 
-| 仓 | Owner bot |
+| 仓 / 范围 | Owner bot |
 |---|---|
 | `baiyibing/OSkhQuant1.3` | **qmt** |
 | `baiyibing/MyQuant` | **qlib** |
 | `baiyibing/MyQuant-backtrader` | **bt**（本文所在仓） |
+| `newtest` + 9 个 Gitea zhentinginfo 前端仓（`lh_sso` / `chart_lh` / `chart_cn` / `stats-largescreen` / `smartcity` / `vue-data-visualization` / `appadmin` / `ydc_mobile` / `yearbook`） | **tj** |
+
+**没特别点名时的默认分工**（Human 2026-10-12）：未点名 / 未另行指派时，各 bot **只**管上表自己的范围——
+
+- **tj** → `newtest` + 上述 9 前端
+- **qlib** → `MyQuant`（myquant）
+- **bt** → `MyQuant-backtrader`
+- **qmt** → `OSkhQuant1.3`
+- **4090bot** → **只**负责与 4090 物理机沟通（不当仓业务 Owner）
+
+点名 / 另行指派后，以当次指派为准。
 
 - **没有**独立 Doer bot。实现由该仓 Owner **亲自**在 Bot VM 上调度 Codex。
 - Owner 职责：拆任务、写/收 handoff、调度 Codex 开 PR、调度 Grok 核、回写 plan、**人裁后合入**（Codex 只开 PR，不合）。
@@ -36,9 +47,9 @@
 
 | 角色 | 做 | 别做 |
 |---|---|---|
-| **仓 Owner bot**（bt / qlib / qmt） | 协调、调度、host：拆任务、盯 PR/CI、合入、把活派给 VM CLI / 4090 | 用 Bot **自身额度**硬干大段实现；默认上 Cursor **云端 agent** |
+| **仓 Owner bot**（bt / qlib / qmt / tj） | 协调、调度、host：拆任务、盯 PR/CI、合入、把活派给 VM CLI / 4090 | 用 Bot **自身额度**硬干大段实现；默认上 Cursor **云端 agent**；**未点名时不越上表范围** |
 | **Bot VM agent CLI** | 写代码、改文档、核验、开 PR（**优先 headless**，见 §3；物理机 agent CLI 同） | 绕过显式模型钉；平行开第二把同一刀；默认挂交互式 TUI |
-| **4090bot** | 唯一「bot 当 runner」：4090 湖 / Windows / agent CLI（**优先 headless**，见 §3/§6；Cursor→Grok 4.7 为常见例） | 冒充仓业务 Owner；在对话里假装已读 4090 盘却不调度 |
+| **4090bot** | 唯一「bot 当 runner」：**只**负责与 4090 物理机沟通（湖 / Windows / agent CLI；**优先 headless**，见 §3/§6；Cursor→Grok 4.7 为常见例） | 冒充仓业务 Owner；管非 4090 仓务；在对话里假装已读 4090 盘却不调度 |
 | **物理机发起 agent** | 见 §5（任意注册物理机 + 任意 agent）；bot 在其上调度 agent CLI 时亦 **优先 headless**（见 §3） | 越过 Owner 直接改对方仓业务 |
 
 ## 3. 优先执行面与默认流水线（Bot VM CLI）
@@ -239,3 +250,4 @@ MyQuant  →  MyQuant-backtrader  →  OSkhQuant1.3
 | 2026-10-05 | §6.1 新增 zcode 行（实测）：桌面 `D:\ZCode\ZCode.exe`（3.14.4）；PATH CLI `npm i -g zcode-app-cli@latest` → `zcode.cmd`，`--version` zcode-app-cli 3.14.4-32 / runtime 0.16.9（社区非官方 wrapper；官方独立 `-p` 仍为 zai-org/feedback#29 P1）；模型 `builtin:bigmodel` GLM-5.3 / -Flash / -FlashX（zai providers 禁用）；headless `zcode -p … --mode yolo` 冒烟回 `ZCODE_OK`（exit 0，`ZCode Built-in missing` 警告），`doctor --json` configuration.ok true；调用约定补 zcode 文档指针；以实测为准、4090≠VM catalog；未写任何 token |
 | 2026-10-05 | Human：PATH zcode 为社区非官方 `zcode-app-cli` → **暂时不用 zcode CLI 模式**；4090bot **不派** `zcode -p` / headless，直至官方 CLI；桌面安装可留作库存；§6.1 表行 / 调用约定 / §9 同步 |
 | 2026-10-06 | 新增 §3.1：Bot VM 上 Codex / Cursor / Grok / Kimi CLI 额度权威查询（路径与 endpoint；禁止写 token / api_key 值 / 手机号）；§9 清单加「查额度走 §3.1」 |
+| 2026-10-12 | Human：§1 默认分工（没特别点名时）— tj→newtest+9 前端；qlib→MyQuant；bt→MyQuant-backtrader；qmt→OSkhQuant1.3；4090bot→只跟 4090 机沟通；§0/§2 同步列入 tj |
