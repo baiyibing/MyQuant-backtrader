@@ -226,8 +226,9 @@ def codex_cmd(prompt: str) -> list[str]:
     v0.144.5 实测（2026-07-19，`exec --help` / 三形态实跑；调用细节 SSOT 见
     ``docs/prompts/Codex-CLI-Headless模式完整指南.md`` 附录）；v0.147.0（2026-08-11 核对
     GitHub openai/codex @ rust-v0.147.0 源码 + release notes，无命令形态变化）。
-    - 模型/供应商走 ``~/.codex/config.toml``：``model=deepseek-v4-flash`` 经本地 cc-switch 代理（2026-08-17 核：config.toml 现值）
-      ``127.0.0.1:15721``（``model_provider="custom"``），无 ``-m``。
+    - **两套模型目录，都显式 ``-m``**（禁止再靠「不传 ``-m``、吃 config.toml 的 DeepSeek」当 Bot VM 默认）：
+      - **Bot VM**（非 Windows）：``-m gpt-6.1-sol``（一般，本命令默认）/ ``-m gpt-6-astra``（上强度）。
+      - **4090**（Windows）：``-m deepseek-flash``（本命令默认）/ ``-m deepseek-v4-pro``（上强度）。禁止 ``gpt-6.*``。
     - **审批/沙盒由 config 管**（``--ask-for-approval``/``-a`` 是**交互式** ``codex`` 的 flag，
       ``codex exec`` 从未提供过——早前「已移除」表述不准确）：本仓 full-auto 配置
       ``approval_policy="never"`` + ``sandbox_mode="workspace-write"``
@@ -246,10 +247,16 @@ def codex_cmd(prompt: str) -> list[str]:
     - stdin 亦可喂 prompt（无位置参数时读 stdin；有位置参数时管道内容追加为 ``<stdin>`` 块），
       编排器沿用 cmd_arg（2026-07-08 probe：28s cmd_arg 略快于 stdin 37s）。
     - stdout=最终消息、stderr=进度；``--json`` 为 JSONL 事件流（thread.started/item.completed 等）。"""
+    # Bot VM: -m gpt-6.1-sol（alt gpt-6-astra）。4090: -m deepseek-flash（alt deepseek-v4-pro）。
+    # 不传 -m 会吃到 config.toml；Bot VM 不得再把 DeepSeek 当默认。
+    if sys.platform != "win32":
+        model = "gpt-6.1-sol"
+    else:
+        model = "deepseek-flash"
     if _CODEX_NODE_ENTRY is not None:
         node, entry = _CODEX_NODE_ENTRY
-        return [node, entry, "exec", "--ephemeral", prompt]
-    return ["codex", "exec", "--ephemeral", prompt]
+        return [node, entry, "exec", "--ephemeral", "-m", model, prompt]
+    return ["codex", "exec", "--ephemeral", "-m", model, prompt]
 
 
 def _replace_cursor_mode(cmd: list[str], mode: str) -> list[str]:
@@ -376,7 +383,7 @@ def _find_node_entry(cmd: str, entry_rel: tuple[str, ...]) -> tuple[str, str] | 
 
 
 def _resolve_qoder_node_bundle() -> tuple[str, str] | None:
-    """直连 node + qodercli bundle（cursor 同款绕 shim 思路；详见 qoder_cmd docstring 双二进制陷阱）。"""
+    """Archived lookup only. ``qoder_cmd`` does not call this (RACI §6.1/§9 hard refuse)."""
     return _find_node_entry("qodercli", ("node_modules", "@qoder-ai", "qodercli", "bundle", "qodercli.js"))
 
 
@@ -389,37 +396,17 @@ _QODER_NODE_BUNDLE = _resolve_qoder_node_bundle()
 _CODEX_NODE_ENTRY = _resolve_codex_node_entry()
 
 
-def qoder_cmd(prompt: str) -> list[str]:
-    """qodercli headless（-p 非交互）+ -m Qwen3.8-Max（2026-08-07 账户可用模型 pin）。
+def qoder_cmd(_prompt: str) -> list[str]:
+    """Hard-refuse Qoder dispatch (RACI §6.1/§9).
 
-    v1.0.48 实测（2026-07-18，`--help` / `--list-models` / 实跑 18.9s 出文）：
-    - `--list-models` 13 档：Auto/Ultimate/Performance/Efficient/Lite + Qwen3.7-Max/Plus +
-      Kimi-K3/K2.7-Code + GLM-5.2 + DeepSeek-V4-Pro/Flash + MiniMax-M3。曾 pin Qwen3.7-Plus
-      （避 Auto 504）；2026-08-07 起 pin Qwen3.8-Max（`--list-models` 仅 Lite / Qwen3.8-Max）。
-    - `--permission-mode bypass_permissions`：choices = default/accept_edits/bypass_permissions/
-      dont_ask/auto（评审需跑 git/读文件，bypass 免确认）。
-    - `--no-session-persistence`：一次性评审/核查不留会话存档（仅 -p 模式有效；实测 rc=0 26.9s）。
-    - ⚠️ 指南（``Qoder-CLI-Print模式完整指南.md``）过时项：``--yolo``/``-q``/
-      ``--max-turns`` 实测不存在——该结论为 v1.0.48（2026-07-18）时代；现行官方文档
-      （docs.qoder.com/cli/permissions、/cli/model）已列 ``--yolo``/``--max-turns``，但
-      1.1.19 实测 ``--yolo`` 仍报 unknown option（疑 CN/国际版差异）——故本地继续用
-      「文档有效 + 实测有效」交集 ``--permission-mode bypass_permissions``，勿换 ``--yolo``；
-      免权限跳检实测为 ``--dangerously-skip-permissions``（本命令用 permission-mode 即可）；
-      工作区参数为 ``-w, --cwd``（run_agent 已设 cwd，免加）。
-    - 官方文档：docs.qoder.com/cli/using-cli（print 模式/Flags）、/cli/permissions、/cli/model。
-      1.1.18 起新增启动命令 ``qoder``（国际版）/``qodercn``（CN 版），``qodercli`` 保持兼容——
-      非 breaking，本地仍走 ``qodercli``（node 直连 bundle）。
-    - **双二进制陷阱（2026-07-19 实测）**：bash 命中 npm shim（v1.0.48），python CreateProcess
-      命中 `.qoder/bin/qodercli.exe`（旧 1.0.10，无新 flag）→ 本命令直连
-      ``node <bundle>``（``_resolve_qoder_node_bundle``，cursor 同款绕 shim），
-      找不到 bundle 时回退裸 ``qodercli``。
-    - stdin：长 prompt 超时而 cmd_arg 稳（2026-07-08 probe），故 prompt 走位置参数。"""
-    if _QODER_NODE_BUNDLE is not None:
-        node, bundle = _QODER_NODE_BUNDLE
-        return [node, bundle, "-p", "--no-session-persistence",
-                "--permission-mode", "bypass_permissions", "-m", "Qwen3.8-Max", prompt]
-    return ["qodercli", "-p", "--no-session-persistence",
-            "--permission-mode", "bypass_permissions", "-m", "Qwen3.8-Max", prompt]
+    Long-term disabled: no qodercli argv and no dependency upgrade.
+    ``OSKH_ENABLE_QODER`` is refused until RACI revises.
+    Archived guide (not a living path): ``docs/prompts/Qoder-CLI-Print模式完整指南.md``.
+    """
+    raise SystemExit(
+        "qoder 长期禁用（RACI §6.1/§9）：不派发、不升级依赖。"
+        "OSKH_ENABLE_QODER 被拒绝，须待 RACI 修订。"
+    )
 
 
 def cursor_cmd(prompt: str) -> list[str]:
@@ -478,7 +465,7 @@ def grok_cmd(prompt: str) -> list[str]:
     return ["grok", "-p", prompt, "--permission-mode", "bypassPermissions", "--always-approve"]
 
 
-# 标准 agent（period_verify 本地追加 "claw"）。qoder 保留以便 OSKH_ENABLE_QODER 一键恢复。
+# 标准 agent（period_verify 本地追加 "claw"）。qoder → qoder_cmd 硬拒绝（RACI §6.1/§9）。
 BASE_AGENTS: Dict[str, Callable[[str], list[str]]] = {
     "codex": codex_cmd,
     "kimi": kimi_cmd,
@@ -607,7 +594,7 @@ def canonical_host_slot(names: list[str], host: str) -> str:
 
 
 def classic_agents_csv() -> str:
-    """Platform classic roster (qoder never in default lists).
+    """Platform classic roster. Qoder is long-term disabled (RACI §6.1/§9).
 
     Linux: grok CLI + kimi + codex + cursor.
     Windows: claude + kimi + codex + cursor.
@@ -627,25 +614,23 @@ def default_host() -> str:
 
 
 def _env_enables_qoder() -> bool:
-    return os.environ.get("OSKH_ENABLE_QODER", "").strip().lower() in ("1", "true", "yes")
+    """Closed hatch. ``OSKH_ENABLE_QODER`` does not re-enable qoder (RACI §6.1/§9)."""
+    return False
 
 
-# Default True unless process env already enables qoder. assert_qoder_allowed re-reads env.
-QODER_PAUSED = not _env_enables_qoder()
+# Long-term disabled. The env var is ignored until RACI revises.
+QODER_PAUSED = True
 
 
 def assert_qoder_allowed(names: list[str]) -> None:
-    """Fail-fast if any agent is qoder while paused (额度暂停).
+    """Hard-refuse any qoder seat. ``OSKH_ENABLE_QODER`` is not a hatch.
 
-    Re-enable: explicit notice or ``OSKH_ENABLE_QODER=1`` / true / yes.
+    RACI §6.1/§9: no dispatch and no dependency upgrade until RACI revises.
     """
-    if not any(agent_base(n) == "qoder" for n in names):
-        return
-    if _env_enables_qoder():
-        return
-    if QODER_PAUSED:
+    if any(agent_base(n) == "qoder" for n in names):
         raise SystemExit(
-            "qoder 额度暂停，等明确启用；临时可 OSKH_ENABLE_QODER=1。"
+            "qoder 长期禁用（RACI §6.1/§9）：不派发、不升级依赖。"
+            "OSKH_ENABLE_QODER 被拒绝，须待 RACI 修订。"
         )
 
 
@@ -663,7 +648,7 @@ class _ClassicPreset(dict):
         return super().get(key, default)
 
 
-# 2026-08-24：classic 按平台四家；qoder 默认暂停，不进 classic/mixed。
+# classic/mixed 不含 qoder。qoder 长期禁用（RACI §6.1/§9），OSKH_ENABLE_QODER 被拒绝。
 PRESETS: Dict[str, dict] = {
     "classic": _ClassicPreset({
         "agents": classic_agents_csv,
@@ -672,7 +657,8 @@ PRESETS: Dict[str, dict] = {
             "Windows=codex+kimi+cursor+claude。"
             "默认 host：Linux=claude（空槽，四家全跑）；Windows=cursor-desktop（四家全跑）。"
             "kimi 席位默认 Cursor Kimi（kimi-k3-high；独立 kimi-code 周额度用尽）。"
-            "OSKH_KIMI_VIA_CURSOR=0 才回独立 CLI。qoder 额度暂停，不进默认阵容。"
+            "OSKH_KIMI_VIA_CURSOR=0 才回独立 CLI。"
+            "qoder 长期禁用（RACI §6.1/§9），不进默认阵容；OSKH_ENABLE_QODER 被拒绝，须待 RACI 修订。"
             "cursor 显式 --model auto（2026-08-26 人裁；换钉用 cursor:<model> 语法）。"
         ),
     }),
