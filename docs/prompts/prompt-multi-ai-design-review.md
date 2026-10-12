@@ -1,33 +1,10 @@
-# 提示词：对某方案做多 agent 多轮评审
+# 多 AI 设计评审 prompt 指针（MyQuant-backtrader）
 
-对任意 agent 说：
+本仓**不再维护**本文正文。唯一权威正文在：
 
-**按 `docs/prompts/prompt-multi-ai-design-review.md`，对 `<方案>` 做多 agent 多轮评审**
+`baiyibing/grok-bot-ops` `master` → [`docs/multi-ai/prompt-multi-ai-design-review.md`](https://github.com/baiyibing/grok-bot-ops/blob/master/docs/multi-ai/prompt-multi-ai-design-review.md)
 
-`<方案>` = `docs/` 里已落盘的 plan 路径。
-
-编排器：`scripts/run/run_multi_ai_review.py`  
-Runbook：`docs/engineering/multi-ai-review-workflow.md`  
-对抗三路（Codex）：`scripts/run/run_codex_adversarial_lanes.py`
-
-## 步骤
-
-1. 若只有口头方案，先起草 `docs/backtest/plan-<topic>-<date>.md`。
-2. 复杂取舍先跑 `docs/prompts/prompt-adversarial-subagent-review.md` 三路对抗，回填 plan。
-   - **必须**宿主机并行独立进程（推荐 `run_codex_adversarial_lanes.py`）。
-   - **禁止**在单个 Codex 会话内 spawn/套娃 `codex exec`（见对抗提示词「编排硬规则」）。
-3. fan-out：
-
-```powershell
-D:\anaconda3\envs\vanna312\python.exe scripts/run/run_multi_ai_review.py `
-    --plan <plan路径> --host cursor-desktop
-```
-
-4. host 综合为 `merge-consensus.md`。有 🔴 则修订 plan 再跑。
-5. 收敛后说「按 plan 实施」。
-
-## 本仓约束
-
-- 只评本仓向量化 / path-SSOT / 筹码包装，不把实盘栈当前提。Cerebro 仅考古。引擎分工见 `docs/backtest/engine-positioning-ssot.md`。
-- 评审员禁改文件。
-- 输出：🔴 / 🟡 / 🟢 / ✅，每条带 `file:line`。
+- Owner：本仓为 **bt**（见 ops RACI §1）
+- **禁止**在本仓镜像正文或 `-m` pins
+- 历史正文曾在本路径；2026-10-12 迁入 `grok-bot-ops` 后本文件塌缩为薄指针
+- 编排器若仍读本路径，视为指向 ops 的重定向指针
