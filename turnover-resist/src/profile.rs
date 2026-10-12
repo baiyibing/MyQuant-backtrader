@@ -125,7 +125,9 @@ impl PhaseClock {
             })
             .collect();
         ProfileReport {
-            started_at: self.started_at.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+            started_at: self
+                .started_at
+                .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
             finished_at: finished.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
             wall_s: round3(wall_s),
             phases_s,

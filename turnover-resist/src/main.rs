@@ -49,7 +49,9 @@ fn main() -> Result<()> {
     outcome
         .profile
         .stamp_output(&output_path, Some(cli.data_dir.as_path()));
-    outcome.profile.set_wall_s(host_start.elapsed().as_secs_f64());
+    outcome
+        .profile
+        .set_wall_s(host_start.elapsed().as_secs_f64());
 
     // ---- 4. 打印结果摘要 + Top 20 ----
     eprintln!(

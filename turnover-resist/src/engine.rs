@@ -282,9 +282,7 @@ pub fn run_detailed(cli: &Cli) -> Result<RunOutcome> {
             anyhow::bail!("free_float_shares.parquet not found under policy=fail");
         }
         if ff_map.is_none() {
-            anyhow::bail!(
-                "free_float_shares.parquet exists but no valid rows under policy=fail"
-            );
+            anyhow::bail!("free_float_shares.parquet exists but no valid rows under policy=fail");
         }
         let available = ff_map.as_ref().map_or(0, HashMap::len);
         anyhow::ensure!(
@@ -352,7 +350,10 @@ pub fn run_detailed(cli: &Cli) -> Result<RunOutcome> {
     clock.set_count("parquet_loaded", stats.loaded as u64);
     clock.set_count("parquet_missing_path", stats.missing_path as u64);
     clock.set_count("parquet_scan_failed", stats.scan_failed as u64);
-    clock.set_count("parquet_empty_after_filter", stats.empty_after_filter as u64);
+    clock.set_count(
+        "parquet_empty_after_filter",
+        stats.empty_after_filter as u64,
+    );
     clock.set_count("parquet_decode_failed", stats.decode_failed as u64);
     eprintln!(
         "  [Timing] batch loaded {} stocks (see profile load_bars)",
@@ -377,37 +378,36 @@ pub fn run_detailed(cli: &Cli) -> Result<RunOutcome> {
 
     let processed = AtomicUsize::new(0);
     let total = codes.len();
-    let outcomes: Vec<std::result::Result<OutputRow, SkipReason>> =
-        clock.time("compute", || {
-            codes
-                .par_iter()
-                .map(|code| {
-                    let n = processed.fetch_add(1, Ordering::Relaxed) + 1;
-                    if n.is_multiple_of(500) {
-                        eprintln!("  {}/{} processed", n, total);
-                    }
-                    let info = match fs_map.get(code) {
-                        Some(v) => v,
-                        None => return Err(SkipReason::MissingFloatShares),
-                    };
-                    let ff_info = ff_map.as_ref().and_then(|m| m.get(code));
-                    let ff_info_prev = ff_map_prev.as_ref().and_then(|m| m.get(code));
-                    let bars = match bars_map.get(code) {
-                        Some(v) => v,
-                        None => return Err(SkipReason::MissingBars),
-                    };
-                    process_one_stock(
-                        code,
-                        &ctx,
-                        info,
-                        ff_info,
-                        ff_info_prev,
-                        cli.free_float_policy,
-                        bars,
-                    )
-                })
-                .collect()
-        });
+    let outcomes: Vec<std::result::Result<OutputRow, SkipReason>> = clock.time("compute", || {
+        codes
+            .par_iter()
+            .map(|code| {
+                let n = processed.fetch_add(1, Ordering::Relaxed) + 1;
+                if n.is_multiple_of(500) {
+                    eprintln!("  {}/{} processed", n, total);
+                }
+                let info = match fs_map.get(code) {
+                    Some(v) => v,
+                    None => return Err(SkipReason::MissingFloatShares),
+                };
+                let ff_info = ff_map.as_ref().and_then(|m| m.get(code));
+                let ff_info_prev = ff_map_prev.as_ref().and_then(|m| m.get(code));
+                let bars = match bars_map.get(code) {
+                    Some(v) => v,
+                    None => return Err(SkipReason::MissingBars),
+                };
+                process_one_stock(
+                    code,
+                    &ctx,
+                    info,
+                    ff_info,
+                    ff_info_prev,
+                    cli.free_float_policy,
+                    bars,
+                )
+            })
+            .collect()
+    });
 
     let (mut results, skip_counts) = clock.time("collect", || {
         let mut results: Vec<OutputRow> = Vec::with_capacity(outcomes.len());
