@@ -2,7 +2,9 @@
 
 Standalone research-face fork (see [README.md](README.md)). Since migration S2 (2026-09-09) this repo owns the research face; OSkhQuant1.3 stays the trading stack and keeps only the `oskh_factors` chip/bridge micropackage.
 
-**成交引擎定位**：本仓 = 向量化。1.3 = LEBS + MockQMT 真栈。Qlib PortAnaRecord 停用；Cerebro / Rolling 已退场（2026-09-16）。见 [`docs/backtest/engine-positioning-ssot.md`](docs/backtest/engine-positioning-ssot.md)。成交核（档位 / 全卖因跌停 / Decimal 涨跌停价）见 [`docs/backtest/engine-ashare-correctness.md`](docs/backtest/engine-ashare-correctness.md)。分钟成交假设、默认锁与混比边界见 [`docs/backtest/minute-fill-policy-ssot.md`](docs/backtest/minute-fill-policy-ssot.md)。研究问题地图（三份名单 × 收益最大化）见 [`docs/backtest/research-backtest-entry.md`](docs/backtest/research-backtest-entry.md)。入口命令见 [`docs/backtest/README.md`](docs/backtest/README.md)。
+**成交引擎定位**：本仓 = 向量化。1.3 = LEBS + MockQMT 真栈。Qlib PortAnaRecord 停用；Cerebro / Rolling 已退场（2026-09-16）。见 [`docs/backtest/engine-positioning-ssot.md`](docs/backtest/engine-positioning-ssot.md)。
+**Grok Bot RACI / CLI / 模型钉**：唯一正文在 [`baiyibing/grok-bot-ops`](https://github.com/baiyibing/grok-bot-ops/blob/master/docs/raci/grok-bot-raci-workflow-ssot.md) `docs/raci/grok-bot-raci-workflow-ssot.md`（本仓 `docs/operations/grok-bot-raci-workflow-ssot.md` 为薄指针）。 Owner：**bt**（ops §1）。
+成交核（档位 / 全卖因跌停 / Decimal 涨跌停价）见 [`docs/backtest/engine-ashare-correctness.md`](docs/backtest/engine-ashare-correctness.md)。分钟成交假设、默认锁与混比边界见 [`docs/backtest/minute-fill-policy-ssot.md`](docs/backtest/minute-fill-policy-ssot.md)。研究问题地图（三份名单 × 收益最大化）见 [`docs/backtest/research-backtest-entry.md`](docs/backtest/research-backtest-entry.md)。入口命令见 [`docs/backtest/README.md`](docs/backtest/README.md)。
 
 交易规则站位原则（行业惯例 · 回测≠交易系统）：[`docs/backtest/ssot/backtest-rule-principles-ssot.md`](docs/backtest/ssot/backtest-rule-principles-ssot.md)。
 

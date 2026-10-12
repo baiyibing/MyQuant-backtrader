@@ -1,7 +1,7 @@
 # 研究工程沟通与复现词典
 
 > **用途**：本文是人机沟通与研究复现词典，面向 Bai Yibing 与 bt / qlib / qmt / 4090bot，统一术语与复现证据。
-> **边界**：本文**不替代** [grok-bot-raci-workflow-ssot.md](grok-bot-raci-workflow-ssot.md)，不复制 RACI 正文；不改 fill / 策略业务口径。
+> **边界**：本文**不替代** [grok-bot-raci-workflow-ssot.md](grok-bot-raci-workflow-ssot.md)（薄指针 → `baiyibing/grok-bot-ops`），不复制 RACI 正文；不改 fill / 策略业务口径。
 > **来源与日期**：合并 2026-09-23 handoff 的沟通词典与复现草稿；当前主线快照见 §6。
 
 沟通时尽量沿用下表中的词；正式跑数按 §7–§12 留齐复现证据。
@@ -76,7 +76,7 @@ hash/seal              ← 防偷改
 
 ## 4. 机器人流程：我们交流时会用的词
 
-权威流程正文见 [Grok Bot RACI 与工作流 SSOT](grok-bot-raci-workflow-ssot.md)（BT 仓）。这里只留**聊天用短词**，适用范围、角色权限与流程细节均以该 SSOT 为准。
+权威流程正文见 [Grok Bot RACI 与工作流 SSOT](grok-bot-raci-workflow-ssot.md)（现迁至 `baiyibing/grok-bot-ops`；本仓该路径为薄指针）。这里只留**聊天用短词**，适用范围、角色权限与流程细节均以该 SSOT 为准。
 
 | 词 | 谁 | 你听到时表示 |
 |---|---|---|
