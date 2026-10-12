@@ -52,6 +52,31 @@ pub struct Cli {
     /// 数据根目录（含 `float_shares.parquet` 与 `stock/period=1d/` 日线树；旧布局 `period=1d/` 自动回落），默认 `stock_data`
     #[arg(long, default_value = "stock_data")]
     pub data_dir: PathBuf,
+
+    /// 写性能埋点 JSON（默认开；`OSKH_PROFILE_SIM=0` 关）。显式 `--profile` / `--no-profile` 覆盖环境变量。
+    #[arg(long, action = clap::ArgAction::SetTrue, overrides_with = "no_profile")]
+    pub profile: bool,
+
+    /// 关闭性能埋点输出（仍会做轻量计时对象；不写 JSON、少打分相）。
+    #[arg(long, action = clap::ArgAction::SetTrue, overrides_with = "profile")]
+    pub no_profile: bool,
+
+    /// 性能埋点 JSON 路径；默认写在 CSV 旁 `*.profile.json`。
+    #[arg(long)]
+    pub profile_json: Option<PathBuf>,
+}
+
+impl Cli {
+    /// Resolve whether to emit profile JSON / stderr summary.
+    pub fn profile_enabled(&self) -> bool {
+        if self.no_profile {
+            return false;
+        }
+        if self.profile {
+            return true;
+        }
+        crate::profile::profile_enabled(None)
+    }
 }
 
 /// 解析 YYYYMMDD → `NaiveDate`，格式不对时给出可读的错误提示。

@@ -2,6 +2,20 @@
 
 > 合并自 5 个源文件，涵盖运行时优化、编译优化、已完成项和已评审关闭项。
 
+## 0. 性能埋点（2026-10-12）
+
+CLI / `engine::run_detailed` 输出与 Python `profile_sim.json` 同形的分相 JSON：
+
+| 项 | 口径 |
+|----|------|
+| 模块 | `turnover-resist/src/profile.rs` |
+| 默认 | 开；`OSKH_PROFILE_SIM=0` 或 `--no-profile` 关 |
+| CLI | `--profile-json PATH`（默认写在 CSV 旁 `*.profile.json`） |
+| 分相 | `load_float` / `load_free_float` / `load_bars` / `compute` / `collect` / `sort` / `write_csv` 等 |
+| PyO3 | 默认仍返回行数组；`include_profile=True` 返回 `{"rows","profile"}`；`profile_json=` 旁路写文件 |
+
+不影响数值结果。
+
 ---
 
 ## 1. 运行时优化

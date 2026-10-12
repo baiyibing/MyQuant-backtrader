@@ -218,8 +218,23 @@ pub fn print_parquet_load_stats(stats: &ParquetLoadStats) {
     );
 }
 
+/// Compute outcome with structured performance profile.
+pub struct RunOutcome {
+    pub rows: Vec<OutputRow>,
+    pub profile: crate::profile::ProfileReport,
+    pub skip_counts: HashMap<SkipReason, usize>,
+}
+
 /// 核心计算入口：加载数据 → 并行计算 → 排序 → 返回结果。
 pub fn run(cli: &Cli) -> Result<Vec<OutputRow>> {
+    Ok(run_detailed(cli)?.rows)
+}
+
+/// Same as [`run`] but returns phase timings / counts for host profiling.
+pub fn run_detailed(cli: &Cli) -> Result<RunOutcome> {
+    let mut clock = crate::profile::PhaseClock::new();
+    clock.begin("total");
+
     let target_date_ms = date_to_ms(cli.date);
     let date_str = cli.date.format("%Y%m%d").to_string();
     let data_dir = cli.data_dir.to_str().unwrap_or("stock_data").to_string();
@@ -229,38 +244,48 @@ pub fn run(cli: &Cli) -> Result<Vec<OutputRow>> {
     if !fs_path.exists() {
         anyhow::bail!("float_shares.parquet not found at {}", fs_path.display());
     }
-    let fs_map = load_float_shares(&fs_path)?;
+    let fs_map = clock.time_result("load_float", || load_float_shares(&fs_path))?;
     let codes: Vec<String> = fs_map.keys().cloned().collect();
+    clock.set_count("universe_codes", codes.len() as u64);
 
     // ---- 2. 加载自由流通股本历史 ----
     let ff_path = std::path::Path::new(&data_dir).join("free_float_shares.parquet");
-    let ff_map: Option<HashMap<String, FreeFloatSharesInfo>> = if ff_path.exists() {
-        match load_free_float_shares(&ff_path, target_date_ms) {
-            Ok(m) if !m.is_empty() => Some(m),
-            Ok(_) | Err(_) => {
-                if cli.free_float_policy == FreeFloatPolicy::Fail {
-                    anyhow::bail!(
-                        "free_float_shares.parquet exists but no valid rows under policy=fail"
+    let ff_map: Option<HashMap<String, FreeFloatSharesInfo>> =
+        clock.time("load_free_float", || {
+            if ff_path.exists() {
+                match load_free_float_shares(&ff_path, target_date_ms) {
+                    Ok(m) if !m.is_empty() => Some(m),
+                    Ok(_) | Err(_) => {
+                        if cli.free_float_policy == FreeFloatPolicy::Fail {
+                            None
+                        } else {
+                            eprintln!(
+                                "  [WARN] free_float_shares.parquet load failed/empty, free-float columns fallback by policy={:?}",
+                                cli.free_float_policy
+                            );
+                            None
+                        }
+                    }
+                }
+            } else {
+                if cli.free_float_policy != FreeFloatPolicy::Fail {
+                    eprintln!(
+                        "  [WARN] free_float_shares.parquet not found, fallback by policy={:?}",
+                        cli.free_float_policy
                     );
                 }
-                eprintln!(
-                    "  [WARN] free_float_shares.parquet load failed/empty, free-float columns fallback by policy={:?}",
-                    cli.free_float_policy
-                );
                 None
             }
-        }
-    } else {
-        if cli.free_float_policy == FreeFloatPolicy::Fail {
+        });
+    if cli.free_float_policy == FreeFloatPolicy::Fail {
+        if !ff_path.exists() {
             anyhow::bail!("free_float_shares.parquet not found under policy=fail");
         }
-        eprintln!(
-            "  [WARN] free_float_shares.parquet not found, fallback by policy={:?}",
-            cli.free_float_policy
-        );
-        None
-    };
-    if cli.free_float_policy == FreeFloatPolicy::Fail {
+        if ff_map.is_none() {
+            anyhow::bail!(
+                "free_float_shares.parquet exists but no valid rows under policy=fail"
+            );
+        }
         let available = ff_map.as_ref().map_or(0, HashMap::len);
         anyhow::ensure!(
             available >= codes.len(),
@@ -269,14 +294,21 @@ pub fn run(cli: &Cli) -> Result<Vec<OutputRow>> {
             codes.len()
         );
     }
+    clock.set_count(
+        "free_float_codes",
+        ff_map.as_ref().map_or(0, |m| m.len() as u64),
+    );
 
     // ---- 3. 加载 T-1 日自由流通股本 ----
     let target_prev_ms = target_date_ms - 86_400_000;
-    let ff_map_prev: Option<HashMap<String, FreeFloatSharesInfo>> = if ff_path.exists() {
-        load_free_float_shares(&ff_path, target_prev_ms).ok()
-    } else {
-        None
-    };
+    let ff_map_prev: Option<HashMap<String, FreeFloatSharesInfo>> =
+        clock.time("load_free_float_prev", || {
+            if ff_path.exists() {
+                load_free_float_shares(&ff_path, target_prev_ms).ok()
+            } else {
+                None
+            }
+        });
 
     eprintln!(
         "date={} window={} step={} max_grid_points={} stocks={} sort_by={:?} free_float_policy={:?} target_date_policy={:?} bb_ddof={}",
@@ -299,84 +331,106 @@ pub fn run(cli: &Cli) -> Result<Vec<OutputRow>> {
         bb_period: 20,
         bb_std: 2.0,
         bb_ddof: cli.bb_ddof,
-        data_dir,
-        date_str,
+        data_dir: data_dir.clone(),
+        date_str: date_str.clone(),
         allow_previous_target_date: cli.target_date_policy == TargetDatePolicy::AllowPrevious,
         max_grid_points: cli.max_grid_points,
     };
 
     // ---- 5. 批量加载日线数据 ----
-    let t_load_bars = std::time::Instant::now();
     let start_ms = date_to_ms(cli.date - chrono::Duration::days(3000));
     let code_dirs: Vec<String> = codes
         .iter()
         .map(|c| format!("symbol={}", stock_code_to_dir(c)))
         .collect();
-    let parquet_result =
-        load_all_stocks_parquet(&ctx.data_dir, &code_dirs, start_ms, ctx.target_date_ms)?;
+    let parquet_result = clock.time_result("load_bars", || {
+        load_all_stocks_parquet(&ctx.data_dir, &code_dirs, start_ms, ctx.target_date_ms)
+    })?;
     let bars_map = parquet_result.bars_by_code;
+    let stats = &parquet_result.stats;
+    clock.set_count("parquet_requested", stats.requested as u64);
+    clock.set_count("parquet_loaded", stats.loaded as u64);
+    clock.set_count("parquet_missing_path", stats.missing_path as u64);
+    clock.set_count("parquet_scan_failed", stats.scan_failed as u64);
+    clock.set_count("parquet_empty_after_filter", stats.empty_after_filter as u64);
+    clock.set_count("parquet_decode_failed", stats.decode_failed as u64);
     eprintln!(
-        "  [Timing] batch loaded {} stocks in {:.1}s",
+        "  [Timing] batch loaded {} stocks (see profile load_bars)",
         bars_map.len(),
-        t_load_bars.elapsed().as_secs_f64()
     );
-    print_parquet_load_stats(&parquet_result.stats);
+    print_parquet_load_stats(stats);
 
     // ---- 6. 并行计算（rayon） ----
-    let stack_size = std::env::var("RUST_MIN_STACK")
-        .ok()
-        .and_then(|v| v.parse::<usize>().ok())
-        .filter(|&v| v > 0)
-        .unwrap_or(8 * 1024 * 1024);
-    if let Err(err) = rayon::ThreadPoolBuilder::new()
-        .stack_size(stack_size)
-        .build_global()
-    {
-        eprintln!("  [WARN] rayon global thread pool init skipped: {}", err);
-    }
+    clock.time("rayon_init", || {
+        let stack_size = std::env::var("RUST_MIN_STACK")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .filter(|&v| v > 0)
+            .unwrap_or(8 * 1024 * 1024);
+        if let Err(err) = rayon::ThreadPoolBuilder::new()
+            .stack_size(stack_size)
+            .build_global()
+        {
+            eprintln!("  [WARN] rayon global thread pool init skipped: {}", err);
+        }
+    });
 
     let processed = AtomicUsize::new(0);
     let total = codes.len();
-    let outcomes: Vec<std::result::Result<OutputRow, SkipReason>> = codes
-        .par_iter()
-        .map(|code| {
-            let n = processed.fetch_add(1, Ordering::Relaxed) + 1;
-            if n.is_multiple_of(500) {
-                eprintln!("  {}/{} processed", n, total);
-            }
-            let info = match fs_map.get(code) {
-                Some(v) => v,
-                None => return Err(SkipReason::MissingFloatShares),
-            };
-            let ff_info = ff_map.as_ref().and_then(|m| m.get(code));
-            let ff_info_prev = ff_map_prev.as_ref().and_then(|m| m.get(code));
-            let bars = match bars_map.get(code) {
-                Some(v) => v,
-                None => return Err(SkipReason::MissingBars),
-            };
-            process_one_stock(
-                code,
-                &ctx,
-                info,
-                ff_info,
-                ff_info_prev,
-                cli.free_float_policy,
-                bars,
-            )
-        })
-        .collect();
+    let outcomes: Vec<std::result::Result<OutputRow, SkipReason>> =
+        clock.time("compute", || {
+            codes
+                .par_iter()
+                .map(|code| {
+                    let n = processed.fetch_add(1, Ordering::Relaxed) + 1;
+                    if n.is_multiple_of(500) {
+                        eprintln!("  {}/{} processed", n, total);
+                    }
+                    let info = match fs_map.get(code) {
+                        Some(v) => v,
+                        None => return Err(SkipReason::MissingFloatShares),
+                    };
+                    let ff_info = ff_map.as_ref().and_then(|m| m.get(code));
+                    let ff_info_prev = ff_map_prev.as_ref().and_then(|m| m.get(code));
+                    let bars = match bars_map.get(code) {
+                        Some(v) => v,
+                        None => return Err(SkipReason::MissingBars),
+                    };
+                    process_one_stock(
+                        code,
+                        &ctx,
+                        info,
+                        ff_info,
+                        ff_info_prev,
+                        cli.free_float_policy,
+                        bars,
+                    )
+                })
+                .collect()
+        });
 
-    let mut results: Vec<OutputRow> = Vec::with_capacity(outcomes.len());
-    let mut skip_counts: HashMap<SkipReason, usize> = HashMap::new();
-    for outcome in outcomes {
-        match outcome {
-            Ok(row) => results.push(row),
-            Err(reason) => {
-                *skip_counts.entry(reason).or_insert(0) += 1;
+    let (mut results, skip_counts) = clock.time("collect", || {
+        let mut results: Vec<OutputRow> = Vec::with_capacity(outcomes.len());
+        let mut skip_counts: HashMap<SkipReason, usize> = HashMap::new();
+        for outcome in outcomes {
+            match outcome {
+                Ok(row) => results.push(row),
+                Err(reason) => {
+                    *skip_counts.entry(reason).or_insert(0) += 1;
+                }
             }
         }
-    }
+        (results, skip_counts)
+    });
     let skipped = total.saturating_sub(results.len());
+    clock.set_count("rows_valid", results.len() as u64);
+    clock.set_count("rows_skipped", skipped as u64);
+    for (reason, count) in &skip_counts {
+        clock.set_count(
+            &format!("skip_{}", skip_reason_label(*reason)),
+            *count as u64,
+        );
+    }
 
     eprintln!("\nTotal: valid={}, skipped={}", results.len(), skipped);
     if skipped > 0 {
@@ -388,7 +442,7 @@ pub fn run(cli: &Cli) -> Result<Vec<OutputRow>> {
     }
 
     // ---- 7. 排序 ----
-    match cli.sort_by {
+    clock.time("sort", || match cli.sort_by {
         SortBy::Circulating => results.sort_by(|a, b| {
             b.turnover_resistance
                 .abs()
@@ -401,7 +455,20 @@ pub fn run(cli: &Cli) -> Result<Vec<OutputRow>> {
                 .partial_cmp(&a.turnover_resistance_free.abs())
                 .unwrap_or(std::cmp::Ordering::Equal)
         }),
-    }
+    });
 
-    Ok(results)
+    clock.end("total");
+    let profile = clock.report(
+        "turnover-resist",
+        &date_str,
+        cli.window,
+        None,
+        Some(cli.data_dir.as_path()),
+    );
+
+    Ok(RunOutcome {
+        rows: results,
+        profile,
+        skip_counts,
+    })
 }

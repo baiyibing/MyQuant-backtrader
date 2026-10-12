@@ -2,14 +2,16 @@
 
 use std::io::Write;
 use std::path::PathBuf;
+use std::time::Instant;
 
 use anyhow::Result;
 use clap::Parser;
 
 use turnover_resist::cli::Cli;
+use turnover_resist::profile::{default_profile_path, print_profile, write_profile_json};
 
 fn main() -> Result<()> {
-    let t_total = std::time::Instant::now();
+    let host_start = Instant::now();
 
     // ---- 1. 解析命令行参数 ----
     let cli = Cli::parse();
@@ -26,38 +28,41 @@ fn main() -> Result<()> {
     });
 
     // ---- 2. 核心计算（engine 模块） ----
-    let results = turnover_resist::engine::run(&cli)?;
+    let mut outcome = turnover_resist::engine::run_detailed(&cli)?;
 
     // ---- 3. 输出 CSV（UTF-8 BOM） ----
+    let t_write = Instant::now();
     if let Some(parent) = output_path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-
     let file = std::fs::File::create(&output_path)?;
     let mut writer = std::io::BufWriter::new(file);
-
-    // UTF-8 BOM
     writer.write_all(&[0xEF, 0xBB, 0xBF])?;
-
     let mut csv_writer = csv::Writer::from_writer(writer);
-    for row in &results {
+    for row in &outcome.rows {
         csv_writer.serialize(row)?;
     }
     csv_writer.flush()?;
+    outcome
+        .profile
+        .insert_phase("write_csv", t_write.elapsed().as_secs_f64());
+    outcome
+        .profile
+        .stamp_output(&output_path, Some(cli.data_dir.as_path()));
+    outcome.profile.set_wall_s(host_start.elapsed().as_secs_f64());
 
     // ---- 4. 打印结果摘要 + Top 20 ----
-    let t_total_elapsed = t_total.elapsed();
     eprintln!(
         "\n[Timing] total={:.1}s  rows={}",
-        t_total_elapsed.as_secs_f64(),
-        results.len()
+        outcome.profile.wall_s,
+        outcome.rows.len()
     );
     let top_key = match cli.sort_by {
         turnover_resist::cli::SortBy::Circulating => "|turnover_resistance|",
         turnover_resist::cli::SortBy::Free => "|turnover_resistance_free|",
     };
     eprintln!("\nTop 20 by {}:", top_key);
-    for (i, row) in results.iter().take(20).enumerate() {
+    for (i, row) in outcome.rows.iter().take(20).enumerate() {
         eprintln!(
             "  {:2}. {:>9} {:>8} resist={:>10.4} cyqk_T={:>8.4} cyqk_T_1={:>8.4} turnover={:>10.6}",
             i + 1,
@@ -67,6 +72,21 @@ fn main() -> Result<()> {
             row.cyqk_t,
             row.cyqk_t_1,
             row.turnover,
+        );
+    }
+
+    if cli.profile_enabled() {
+        print_profile(&outcome.profile);
+        let profile_path = cli
+            .profile_json
+            .clone()
+            .unwrap_or_else(|| default_profile_path(&output_path));
+        let written = write_profile_json(&profile_path, &outcome.profile)?;
+        eprintln!(
+            "profile_rust: wall={:.1}s rows={} -> {}",
+            outcome.profile.wall_s,
+            outcome.rows.len(),
+            written.display()
         );
     }
 
