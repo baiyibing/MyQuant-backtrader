@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Living SSOT: OSkhQuant1.3/scripts/run/multi_ai_common.py (mirrored in grok-bot-ops/scripts/run/).
-BT sync-copy for same-dir imports; do not fork catalogs/PRESETS. S4 consolidated 2026-10-12.
+BT sync-copy for same-dir imports; do not fork catalogs/PRESETS. Refreshed from OSkh #1164 / `07d516a` (2026-10-12): grok_cmd = dontAsk + -m grok-4.7.
 
 多 agent 评审/核查工具的共享 agent 基础设施（命令构造 + cursor 解析 + PRESETS + run_agent）。
 
@@ -462,16 +462,21 @@ def claude_cmd(prompt: str) -> list[str]:
 
 
 def grok_cmd(prompt: str) -> list[str]:
-    """grok CLI headless（Linux VM）。``-p/--single <PROMPT>`` 后紧跟正文；再挂权限 flag。
+    """grok CLI headless（Linux VM）。RACI §3：``dontAsk`` + ``-m grok-4.7``。
 
     2026-09-05：新版 grok 把 ``-p`` 从布尔改为 ``--single <PROMPT>``。旧序
     ``grok -p --permission-mode ... <prompt>`` 会让 ``-p`` 吃掉下一个 flag，
     报 ``a value is required for '--single <PROMPT>'``（走读评审 grok rc=2）。
-    正解：``grok -p "<prompt>" --permission-mode bypassPermissions --always-approve``。
+    正解（与 AGENTS.md / CLAUDE.md 一致）：
+    ``grok -p "<prompt>" -m grok-4.7 --always-approve --permission-mode dontAsk``。
 
     acceptEdits 会取消 ``run_terminal_command``，headless 评审/核查不可用。
+    ``bypassPermissions`` 已弃用；Bot VM 统一 ``dontAsk``（RACI C3）。
     """
-    return ["grok", "-p", prompt, "--permission-mode", "bypassPermissions", "--always-approve"]
+    return [
+        "grok", "-p", prompt, "-m", "grok-4.7",
+        "--always-approve", "--permission-mode", "dontAsk",
+    ]
 
 
 # 标准 agent（period_verify 本地追加 "claw"）。qoder → qoder_cmd 硬拒绝（RACI §6.1/§9）。
