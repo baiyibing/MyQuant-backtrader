@@ -1,5 +1,5 @@
 {
-  "source": "csv_analysis_export.py after walkforward and concentration; paths and CRLF normalized before hash",
+  "source": "csv_analysis_export.py after walkforward and concentration; paths and CRLF normalized before hash; corrected erroneous summary.json pin using current write_bundle output",
   "sha256": {
     "account_curve.json": "ce7f5022f686ee43158a72f3ec150f891e1a7163979d202bb381ad8d70a912d6",
     "human_analysis.txt": "5b35540f0ac5f015bd65206de31ae40163490e568a2c3f9287f3082dbae3c664",
@@ -8,7 +8,7 @@
     "pnl_by_stock.csv": "abaa558118a96aae964564aea643708406668bb29d960f19526106d471d8448f",
     "positions_daily.csv": "981696ebaf18f6bc217d42c469f8a54b5deaa681536d30bf7bf24ecbcc92aeca",
     "round_trips.csv": "d5f95079fdcbe2f23ad99fb389d52b94d4315ff23446e00eb770e3bc13450ed5",
-    "summary.json": "d47eb184da99d18c73e7bc71cb58249e3fc55d942976843331105118a5ebf723",
+    "summary.json": "a281baf1c859f51d83e6bff74d69bc5a0bf06fac5a35d8838c0e1655854ad8c0",
     "trade_payoff.json": "ffdfec47c12afb6b8fb5d1e43991661d96a6dbdb710cab5c3edace2f479ea075",
     "trades_daily.csv": "da416e5beb8ee7e997d68804dcb9efd4186c437c8f524cc25611a0aeff896137",
     "walkforward.json": "abdd05780091318cf4133fcac3f9766a47ad54ae4a20546cd0cab639db12b40a",

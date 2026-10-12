@@ -53,7 +53,12 @@ def test_run_omitted_equals_none_and_never_requests_or_reads_volume(loaded, monk
     monkeypatch.setattr(minute, "completed_minute_volumes", lambda *_: pytest.fail("cap off consulted volume"))
     omitted = minute.run(DAY, DAY, **options)
     explicit = minute.run(DAY, DAY, participation_rate=None, **options)
-    assert vars(omitted) == vars(explicit)
+    omitted_fields = vars(omitted).copy()
+    explicit_fields = vars(explicit).copy()
+    # Host profiling includes wall-clock timing, outside trading semantics.
+    omitted_fields.pop("sim_profile", None)
+    explicit_fields.pop("sim_profile", None)
+    assert omitted_fields == explicit_fields
     assert omitted.volume_cap is None
     assert buys(omitted) == [500]
     assert all("include_volume" not in call for call in loads)
