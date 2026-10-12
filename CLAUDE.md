@@ -16,3 +16,7 @@ D:\anaconda3\envs\vanna312\python.exe -m pytest -q
 ## Docs
 
 Backtest / chip / data docs live under `docs/backtest/`. Research map (pools × strategies × Mode A/B / TopK): [docs/backtest/research-backtest-entry.md](docs/backtest/research-backtest-entry.md).
+
+## Grok Bot ops
+
+RACI / channels SSOT: [`baiyibing/grok-bot-ops`](https://github.com/baiyibing/grok-bot-ops) `master` (local paths under `docs/operations/` are thin pointers). Owner: **bt** (ops §1).
