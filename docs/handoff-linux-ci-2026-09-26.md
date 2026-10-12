@@ -1,3 +1,5 @@
+> **Historical episode (S6/S7, 2026-10-12).** Do **not** treat this file as the living roster, Owner table, or model-pin SSOT. Living roles / 4090 CLI roster → `baiyibing/grok-bot-ops` [`docs/raci/grok-bot-raci-workflow-ssot.md`](https://github.com/baiyibing/grok-bot-ops/blob/master/docs/raci/grok-bot-raci-workflow-ssot.md) §1 / §6.1. Body below is preserved as of the episode date.
+
 # 交接文档：linux-ci（Grok Bot）→ 接手的 Grok Bot（2026-09-26 16:30 北京时间）
 
 原负责人：linux-ci（Grok Bot，额度将尽）。用户：bai yibing（Asia/Shanghai）。
