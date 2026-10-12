@@ -7,7 +7,7 @@ Linux=claude（空槽，classic 四家全跑）；Windows=cursor-desktop（class
 
 两种预设模式（--preset）：
   classic      按平台四家（默认；Linux=codex+kimi+cursor+grok；Win=codex+kimi+cursor+claude；
-               kimi 席位默认 Cursor Kimi）。qoder 额度暂停，不进默认阵容。
+               kimi 席位=classic_kimi_seat() host profile；win32 默认 Cursor Kimi）。qoder 长期禁用，不进默认阵容。
                host 从成员选一 / cursor-desktop→全员跑
   mixed        混合组：成员全是 cursor 自带模型（不拉独立 CLI）。host 不预设，
                谁发起谁综合（独立 agent / 某个 cursor:<model> / cursor-desktop）。

@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
-"""多 agent 评审/核查工具的共享 agent 基础设施（命令构造 + cursor 解析 + PRESETS + run_agent）。
+"""Living SSOT: OSkhQuant1.3/scripts/run/multi_ai_common.py (mirrored in grok-bot-ops/scripts/run/).
+BT sync-copy for same-dir imports; do not fork catalogs/PRESETS. S4 consolidated 2026-10-12.
+
+多 agent 评审/核查工具的共享 agent 基础设施（命令构造 + cursor 解析 + PRESETS + run_agent）。
 
 抽取自 run_multi_ai_review.py + run_multi_ai_period_verify.py（此前两处近乎逐字复制）。
 **agent 模型配置集中在此**——改一家模型只改本文件一处（历史教训：cursor v2026.07.13
@@ -22,11 +25,6 @@ importlib 复用 period_verify，传递复用本模块（含 run_agent）。
   HOME/USERPROFILE，避免鉴权失效）。官方：cursor.com/docs/cli/reference/configuration。
 
 关联：docs/engineering/multi-ai-review-workflow.md（runbook）
-
-Codex 对抗三路请用 ``scripts/run/run_codex_adversarial_lanes.py``（宿主机并行独立
-``codex exec``）。**禁止**在单个 Codex 会话内再套 ``codex exec`` / collab spawn：
-外层 bwrap 只读挂载 + 常断网，内层会 ``Read-only file system (os error 30)`` 或挂起
-（2026-09-19 本机复现；见 ``docs/prompts/prompt-adversarial-subagent-review.md``）。
 """
 
 from __future__ import annotations
@@ -259,6 +257,7 @@ def codex_cmd(prompt: str) -> list[str]:
     return ["codex", "exec", "--ephemeral", "-m", model, prompt]
 
 
+
 def _replace_cursor_mode(cmd: list[str], mode: str) -> list[str]:
     """把 cursor-agent 命令行的 ``--mode`` 换成 ``mode``（无则追加）。"""
     out = list(cmd)
@@ -272,23 +271,31 @@ def _replace_cursor_mode(cmd: list[str], mode: str) -> list[str]:
 
 
 def cursor_headless_mode() -> str:
-    """只读 headless 模式：默认 **ask**（正文进 stdout）。
+    """只读 headless 模式：Windows 用 plan（r1 实测 stdout 有正文）；Linux 用 ask。
 
-    2026-08-16 Linux：``--mode plan`` 长评审走 CreatePlan，``-p text`` 终稿不落
-    stdout（rc=0 空产）。2026-09-07 本仓 r2：Windows ``cursor:auto`` + plan 同样
-    rc=0 空壳，同命令重试两次仍空；``ask`` 是只读问答，终稿进 stdout。
+    2026-08-16 Linux 实测：``--mode plan`` 短 prompt 能出字，但长评审走 CreatePlan，
+    ``-p --output-format text`` 终稿不落 stdout（rc=0 空产）。``--mode ask`` 是只读
+    问答，正文进 stdout。Windows 保持 plan，不改已验证路径。
 
-    ``OSKH_CURSOR_HEADLESS_MODE=plan|ask`` 可覆盖。空产重试会把 plan 升成 ask。
+    2026-09-06 Windows 补判：plan 在**跨盘探查/头脑风暴类任务**（读 workspace 外
+    F: 盘 + 长产出）同样 rc=0 空 stdout——composer-2.5-fast / auto / kimi-k3-high
+    三模型实证，与模型家族无关；直连加 ``--mode ask`` 同任务 11KB 满产。此类任务
+    绕编排器直连 ask 根治；文档评审类任务 plan 维持。行为开关改造（env 覆盖/空产
+    升档重试）见 ``plan-cursor-headless-ask-fallback-2026-09-06.md``（GO 前禁编码）。
+
+    Slice A（2026-09-06 GO 落地）：env ``OSKH_CURSOR_HEADLESS_MODE``（``plan``|``ask``，
+    大小写归一、空白裁剪）覆盖平台默认；非法值 ValueError fail-fast（工具级显式报错
+    优于静默回落）。默认不设 = 平台默认不动。
     """
     env = os.environ.get("OSKH_CURSOR_HEADLESS_MODE", "").strip().lower()
     if env:
         if env not in ("plan", "ask"):
             raise ValueError(
                 f"OSKH_CURSOR_HEADLESS_MODE 非法值 {env!r}（仅 plan|ask；"
-                "不设则默认 ask）"
+                "不设则用平台默认 win32=plan / 其他=ask）"
             )
         return env
-    return "ask"
+    return "plan" if sys.platform == "win32" else "ask"
 
 
 def kimi_model_alias() -> str:
@@ -411,13 +418,15 @@ def qoder_cmd(_prompt: str) -> list[str]:
 
 def cursor_cmd(prompt: str) -> list[str]:
     """cursor-agent 非交互 headless（默认 auto）。可用模型**完整清单见本文件
-    CURSOR_MODEL_CATALOG**（2026-08-14 实测 23 档快照；自更新会漂移，实时以
+    CURSOR_MODEL_CATALOG**（2026-09-24 实测 31 档快照；自更新会漂移，实时以
     cursor_list_models()/--list-models 为准）。auto=Cursor Auto agent router（动态路由非固定）。
     历史：07.08→07.13 grok-4.5-xhigh 等旧 ID 已废（xhigh 档取消）；08.13 4.6 系列恢复 xhigh。
     裸 CLI ``agent --model`` 必须用完整 ID（``cursor-grok-4.6-xhigh-fast``）；短名
     ``grok-4.6-xhigh-fast`` 会被拒。编排器 ``cursor:grok-…`` 由 normalize_cursor_model 补前缀。
     prompt 由 run_agent 走 stdin 管道（避 Windows CLI 长度/编码限制；直连 Node 绕 .ps1）。
-    --mode 由 cursor_headless_mode() 选：默认 ask（plan 长评审易 rc=0 空壳）。
+    --mode 由 cursor_headless_mode() 选：Windows plan（r1 实测 stdout 有正文；
+    但跨盘探查类任务空 stdout，2026-09-06——须直连 ask，见该函数 docstring），
+    Linux ask（2026-08-16：长评审 plan 走 CreatePlan，-p text 空 stdout）。
     裸 -p 按官方语义可访问全部工具含写/shell，所以必须钉只读 mode；
     --trust = headless 免工作区信任提示；
     -f/--force = headless 下自动放行工具审批（2026-08-13 实测：无 -f 时 plan 模式读文件/搜索/终端被审批墙拦死，
@@ -498,44 +507,55 @@ def resolve_agent_cmd(agent_name: str, prompt: str, agents_map: Dict[str, Callab
 
 # ── 预设（classic/mixed，review 与 verify 共用）────────────────────────
 # ── CURSOR_MODEL_CATALOG（cursor 可用模型唯一手写清单 SSOT；其他位置一律指向此处，原则⑩）──
-# 快照：2026-08-14 `agent --list-models` 实测，共 23 档。
+# 快照：2026-09-24 `agent --list-models` 实测，共 31 档。
 # 自更新会漂移——实时以 cursor_list_models() / --list-models 为准（编排器 fan-out 前自动预检）。
 # 裸 CLI `agent --model` 必须用完整 ID：`grok-4.6-xhigh-fast` 会被拒，正确为
 # `cursor-grok-4.6-xhigh-fast`。编排器 `cursor:grok-…` 短名由 normalize_cursor_model 补前缀。
 # classic 的 cursor 席位 2026-08-26 人裁改 **auto**（--model auto；grok-4.6 家族长评审空产三连实证、
 # composer-2.5 换家族一次出活佐证问题在家族级。显式换钉用 cursor:<model> 语法；08-13 曾钉 grok-4.6-xhigh-fast）。
+# kimi CLI 额度挂时的 Cursor 替代席优先用 kimi-k3-high，不默认使用 kimi-k3-max。
 CURSOR_MODEL_CATALOG: frozenset[str] = frozenset({
     "auto",
+    "cursor-grok-4.6-high",
+    "cursor-grok-4.6-high-fast",
     "cursor-grok-4.6-low",
     "cursor-grok-4.6-low-fast",
     "cursor-grok-4.6-medium",
     "cursor-grok-4.6-medium-fast",
-    "cursor-grok-4.6-high",
-    "cursor-grok-4.6-high-fast",
     "cursor-grok-4.6-xhigh",
     "cursor-grok-4.6-xhigh-fast",
+    "cursor-grok-4.5-high",
+    "cursor-grok-4.5-high-fast",
     "cursor-grok-4.5-low",
     "cursor-grok-4.5-low-fast",
     "cursor-grok-4.5-medium",
     "cursor-grok-4.5-medium-fast",
-    "cursor-grok-4.5-high",
-    "cursor-grok-4.5-high-fast",
     "composer-2.5",
     "composer-2.5-fast",
     "kimi-k2.7-code",
-    "kimi-k3-low",
     "kimi-k3-high",
+    "kimi-k3-low",
     "kimi-k3-max",
     "glm-5.2-high",
     "glm-5.2-max",
+    "grok-4.7-high",
+    "grok-4.7-high-fast",
+    "grok-4.7-low",
+    "grok-4.7-low-fast",
+    "grok-4.7-medium",
+    "grok-4.7-medium-fast",
+    "grok-4.7-xhigh",
+    "grok-4.7-xhigh-fast",
 })
 
 
 def normalize_cursor_model(variant: str) -> str:
-    """把短名补成 CLI 完整 ID。``grok-4.6-xhigh-fast`` → ``cursor-grok-4.6-xhigh-fast``。
+    """把短名补成 CLI 完整 ID（仅 ``cursor-grok-4.6*`` 家族需要前缀）。
 
-    仅当 ``cursor-{variant}`` 在 CURSOR_MODEL_CATALOG 时改写；auto / composer / kimi / glm
-    等本就无前缀的 ID 原样返回。未知 ID 不改写（交给 --list-models 预检报缺失）。
+    ``grok-4.6-xhigh-fast`` → ``cursor-grok-4.6-xhigh-fast``（catalog 有前缀形）。
+    裸 ``grok-4.7-*`` 已在 CURSOR_MODEL_CATALOG，**禁止**再加 ``cursor-`` 前缀（S3 / RACI §6.1）。
+    仅当 ``cursor-{variant}`` 在 catalog 时改写；auto / composer / kimi / glm 等无前缀 ID 原样返回。
+    未知 ID 不改写（交给 --list-models 预检报缺失）。
     """
     if variant in CURSOR_MODEL_CATALOG:
         return variant
@@ -593,11 +613,34 @@ def canonical_host_slot(names: list[str], host: str) -> str:
     return host
 
 
+def classic_kimi_seat() -> str:
+    """classic 的 kimi 席位（S4 host profile；勿与 catalog 盲合并）。
+
+    - ``OSKH_KIMI_VIA_CURSOR`` 显式 ``1/true/yes`` → ``cursor:{model}``
+    - 显式 ``0/false/no`` → 独立 ``kimi`` CLI
+    - **未设置**：win32 默认 via=1（独立 kimi-code 周额度常尽）；非 win32 默认 via=0
+      （Bot VM / Linux classic 保持 ``codex,kimi,cursor:auto,grok``）
+    - ``OSKH_KIMI_CURSOR_MODEL`` 换钉（默认 ``kimi-k3-high``）
+    """
+    raw = os.environ.get("OSKH_KIMI_VIA_CURSOR", "").strip().lower()
+    if raw in ("1", "true", "yes"):
+        via = True
+    elif raw in ("0", "false", "no"):
+        via = False
+    else:
+        via = sys.platform == "win32"
+    if not via:
+        return "kimi"
+    model = os.environ.get("OSKH_KIMI_CURSOR_MODEL", "kimi-k3-high").strip() or "kimi-k3-high"
+    return f"cursor:{normalize_cursor_model(model)}"
+
+
 def classic_agents_csv() -> str:
     """Platform classic roster. Qoder is long-term disabled (RACI §6.1/§9).
 
-    Linux: grok CLI + kimi + codex + cursor.
-    Windows: claude + kimi + codex + cursor.
+    Linux: grok CLI + kimi seat + codex + cursor.
+    Windows: claude + kimi seat + codex + cursor.
+    kimi seat = ``classic_kimi_seat()``（host profile）。
     """
     cursor = "cursor:auto"
     kimi = classic_kimi_seat()
@@ -653,11 +696,11 @@ PRESETS: Dict[str, dict] = {
     "classic": _ClassicPreset({
         "agents": classic_agents_csv,
         "description": (
-            "经典组（按平台）：Linux=codex+kimi+cursor+grok；"
-            "Windows=codex+kimi+cursor+claude。"
+            "经典组（按平台）：Linux=codex+kimi席+cursor+grok；"
+            "Windows=codex+kimi席+cursor+claude。"
+            "kimi 席位=classic_kimi_seat() host profile：未设 OSKH_KIMI_VIA_CURSOR 时 "
+            "win32→cursor:kimi-k3-high，非 win32→独立 kimi；显式 1/0 覆盖。"
             "默认 host：Linux=claude（空槽，四家全跑）；Windows=cursor-desktop（四家全跑）。"
-            "kimi 席位默认 Cursor Kimi（kimi-k3-high；独立 kimi-code 周额度用尽）。"
-            "OSKH_KIMI_VIA_CURSOR=0 才回独立 CLI。"
             "qoder 长期禁用（RACI §6.1/§9），不进默认阵容；OSKH_ENABLE_QODER 被拒绝，须待 RACI 修订。"
             "cursor 显式 --model auto（2026-08-26 人裁；换钉用 cursor:<model> 语法）。"
         ),
@@ -697,7 +740,7 @@ STDIN_AGENTS = {"cursor"}
 # kimi=1500（2026-08-13 r31 轮 900s 超时 rc=124——思考流完整但死在整理阶段，产出 82KB 未整理；
 # 评审发现不亚于其他家，问题纯在预算；调大让其出正式报告）
 DEFAULT_TIMEOUTS_BASE: Dict[str, int] = {
-    "codex": 1500, "kimi": 1500, "qoder": 900, "cursor": 900, "claude": 900, "grok": 900,
+    "codex": 900, "kimi": 1500, "qoder": 900, "cursor": 900, "claude": 900, "grok": 900,
 }
 
 
@@ -718,20 +761,6 @@ def review_seat(agent: str) -> str:
 
 def agent_timeout_key(agent: str) -> str:
     return review_seat(agent)
-
-
-def classic_kimi_seat() -> str:
-    """classic 的 kimi 席位。独立 kimi-code 周额度用尽时走 Cursor Kimi。
-
-    - 默认 ``cursor:kimi-k3-high``（``OSKH_KIMI_VIA_CURSOR`` 缺省为开）
-    - ``OSKH_KIMI_VIA_CURSOR=0`` 强制独立 ``kimi`` CLI
-    - ``OSKH_KIMI_CURSOR_MODEL`` 换钉（默认 kimi-k3-high）
-    """
-    via = os.environ.get("OSKH_KIMI_VIA_CURSOR", "1").strip().lower()
-    if via in ("0", "false", "no"):
-        return "kimi"
-    model = os.environ.get("OSKH_KIMI_CURSOR_MODEL", "kimi-k3-high").strip() or "kimi-k3-high"
-    return f"cursor:{normalize_cursor_model(model)}"
 
 
 def fs_safe(name: str) -> str:
