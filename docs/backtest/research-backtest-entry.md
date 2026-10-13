@@ -47,7 +47,7 @@
 | 信号 | 导出 | 书 / 入口 | 备注 |
 |------|------|-----------|------|
 | 底量超顶量 | `scripts/data/export_strategy9_pool.py` | `--strategy version9` | 必须 `--pool-dir`；指向 `stock_pool/` 立即退出 |
-| 换手阻力 / 源 B | `scripts/data/export_ta_pool.py` | `--strategy version10`（卖点冻结策略 6 旧公式） | 湖当日有 K；不做 TopK；拒绝 `stock_pool/` |
+| 换手阻力 / 源 B | `scripts/data/export_ta_pool.py` | `--strategy version10`（卖点冻结策略 6 旧公式） | 宿主宜 `--universe-mode lake_tr`（lake∩TR）；全湖+fail_closed 常因缺行失败；不做 TopK；拒绝 `stock_pool/`；说明 [note-strategy10-source-b-universe-2026-10-12.md](note-strategy10-source-b-universe-2026-10-12.md) |
 | ma_chip | `scripts/data/export_strategy11_pool.py` → `<out>/pool/` | `--strategy version11` | 拒绝 `stock_pool/`；框架验证非已验证多头 |
 | app ∩ qlib TopK | `scripts/data/export_topk_app_dropout_pool.py`（可选） | `csv_minute_backtest_topk_app_dropout.py` | **不是** `topk_dropout`；仓位机借策略 7 函数，不改 v7；禁止 register 进 1–10 BOOKS |
 
@@ -92,7 +92,7 @@
 | version7 | **海龟池，必填 `--pool-dir`** | 人工仓位机 | 独立入口 `csv_minute_backtest_v7.py`，不进 1–10 BOOKS |
 | version8 / 8.1 / 8.2 / 8.3 | `stock_pool/` | **人工优化主线** | per_name 100 万；8.x 为冻结里程碑，不要当现行宿主书 |
 | version9 | 导出器，拒绝 `stock_pool/` | 人工书 + 独立买点 | 底量超顶量；止损 8%、满 20 日强平 |
-| version10 | 导出器，拒绝 `stock_pool/` | 人工书 + 独立买点 | TR 源 B；卖点冻结 v6 旧公式 |
+| version10 | 导出器，拒绝 `stock_pool/` | 人工书 + 独立买点 | TR 源 B；卖点冻结 v6 旧公式；宇宙/导出见 [note-strategy10-source-b-universe-2026-10-12.md](note-strategy10-source-b-universe-2026-10-12.md) |
 | version11 | 导出器，拒绝 `stock_pool/` | 人工书 + 独立买点 | ma_chip CSV 移植 |
 | version12 | `stock_pool/` | 人工书（金榕元第 4 版） | v8 买侧骨架 + MA5/MA10 减仓买回 |
 | **topk_dropout** | pred 分 + `--pool-dir` 日历 | 分数轮换 | qlib TopkDropout 底座；联合研究页 [topk-joint-research-tracker-2026-09-22.md](topk-joint-research-tracker-2026-09-22.md) |

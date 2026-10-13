@@ -38,8 +38,10 @@ def take_profit_reason(
 
 HELP_LOCK = """
 策略 10 卖点（--strategy version10）：
-  买点 = resist_tr_bb_1000 名单（export_strategy10_pool.py），不是 stock_pool/。
+  买点 = resist_tr_bb_1000 名单（export_strategy10_pool.py / export_ta_pool.py），不是 stock_pool/。
   必须显式 --pool-dir；指向本仓 stock_pool/ 立即退出。
+  宿主导出宜 --universe-mode lake_tr（湖分区∩TR 截面）；全湖+fail_closed 常因缺行失败。
+  宇宙/少票原因/导出埋点：docs/backtest/note-strategy10-source-b-universe-2026-10-12.md
   卖点冻结策略 6 旧公式：止损 6%、+1% 锚后按 T+1..T+5+ 回撤。
   已持仓票跳过；peak_gap_min=15。
   落盘：backtest_output/csv_{daily|minute}_v10_{start}_{end}/

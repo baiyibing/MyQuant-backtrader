@@ -33,6 +33,15 @@ PHASE_LABELS = {
     "run_daily_day": "日线自定义日",
     "post_add": "加仓后再评",
     "day_loop": "日循环合计",
+    # export_ta_pool / source_b
+    "load_source": "装载源",
+    "universe_setup": "宇宙文件",
+    "list_lake_symbols": "列湖代码",
+    "load_section": "读截面",
+    "universe": "日宇宙",
+    "filter": "TR过滤",
+    "write_pool": "写名单",
+    "validate": "校验池",
 }
 
 # Parent timers wrap children. Do not fold them into phase_share.

@@ -7,14 +7,15 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Callable, Iterable, Mapping, Sequence
+from typing import Any, Callable, Iterable, Mapping, Sequence
 
 import pandas as pd
 
 from backtest.research.csv_pool import is_repo_stock_pool
+from backtest.research.csv_sim_profile import NULL_CLOCK
 from oskh_core.a_share_symbol_normalize import canonical_from_bare_code
 from oskh_data.symbol_format import to_canonical_symbol
-from strategies.tr_filter import ConfigurationError, apply_turnover_resistance_filter
+from strategies.tr_filter import apply_turnover_resistance_filter
 
 RULE = "resist_tr_bb_1000"
 WINDOW = 1000
@@ -97,35 +98,43 @@ def scan_tr_days(
     load_cross_section: Callable[[str], pd.DataFrame],
     universe_for: Callable[[str], Sequence[str]],
     fail_closed: bool = True,
+    clock: Any = None,
 ) -> dict[str, list[str]]:
-    """``{YYYYMMDD: [canonical codes]}``; empty days omitted.
+    """``{YYYYMMDD: [canonical codes]}``; empty / non-trading days omitted.
 
     ``universe_for(T)`` is required (B-R4). Do not default to store members.
+
+    Empty cross-sections (weekends / CN holidays inside ``bdate_range``) are
+    skipped. ``fail_closed`` still applies to missing rows on a non-empty day.
     """
     if universe_for is None:
         raise TypeError("universe_for is required (B-R4 lake or --universe-file)")
+    phase = NULL_CLOCK if clock is None else clock
     out: dict[str, list[str]] = {}
     for raw in dates:
         ymd = str(raw).replace("-", "")
-        section = load_cross_section(ymd)
+        with phase.phase("load_section"):
+            section = load_cross_section(ymd)
         if section is None:
             section = pd.DataFrame()
         else:
             section = pd.DataFrame(section)
         assert_section_asof(section, ymd)
-        universe = unique_preserve(universe_for(ymd))
-        if not universe:
-            continue
         if section.empty:
-            if fail_closed:
-                raise ConfigurationError(
-                    f"TR filter fail-closed: empty cross_section for {ymd}",
-                    config_key="cross_section",
-                )
+            # Calendar gap: omit day (matches "empty days omitted").
+            phase.count("skip_empty_section")
             continue
-        kept = unique_preserve(filter_day(universe, section, fail_closed=fail_closed))
+        with phase.phase("universe"):
+            universe = unique_preserve(universe_for(ymd))
+        if not universe:
+            phase.count("skip_empty_universe")
+            continue
+        with phase.phase("filter"):
+            kept = unique_preserve(filter_day(universe, section, fail_closed=fail_closed))
+        phase.count("scan_days")
         if kept:
             out[ymd] = kept
+            phase.count("pool_names", len(kept))
     return out
 
 

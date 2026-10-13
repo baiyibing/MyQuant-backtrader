@@ -263,6 +263,22 @@ class TurnoverResistanceStore:
     def __init__(self, path: Optional[Union[str, Path]] = None) -> None:
         self.path = resolve_parquet_path(path)
         self._lock_path = self.path.with_suffix(self.path.suffix + ".lock")
+        # Session cache: load_cross_section used to re-read the full parquet every day.
+        # Invalidate when mtime changes (external writers) or after our own writes.
+        self._frame_cache: Optional[pd.DataFrame] = None
+        self._cache_mtime_ns: Optional[int] = None
+        self.read_disk_loads: int = 0
+        self.read_cache_hits: int = 0
+
+    def invalidate_cache(self) -> None:
+        self._frame_cache = None
+        self._cache_mtime_ns = None
+
+    def cache_stats(self) -> dict[str, int]:
+        return {
+            "read_disk_loads": int(self.read_disk_loads),
+            "read_cache_hits": int(self.read_cache_hits),
+        }
 
     @contextmanager
     def _locked(self) -> Iterator[None]:
@@ -273,9 +289,17 @@ class TurnoverResistanceStore:
 
     def _read(self) -> pd.DataFrame:
         if not self.path.is_file():
+            self.invalidate_cache()
             return _empty_frame()
-        df = pd.read_parquet(self.path)
-        return _ensure_schema(df)
+        mtime_ns = self.path.stat().st_mtime_ns
+        if self._frame_cache is not None and self._cache_mtime_ns == mtime_ns:
+            self.read_cache_hits += 1
+            return self._frame_cache
+        df = _ensure_schema(pd.read_parquet(self.path))
+        self._frame_cache = df
+        self._cache_mtime_ns = mtime_ns
+        self.read_disk_loads += 1
+        return df
 
     def _write_atomic(self, df: pd.DataFrame) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -284,6 +308,11 @@ class TurnoverResistanceStore:
         frame = frame.sort_values(list(UNIQUE_KEYS)).reset_index(drop=True)
         frame.to_parquet(staging, index=False)
         staging.replace(self.path)
+        self._frame_cache = frame
+        try:
+            self._cache_mtime_ns = self.path.stat().st_mtime_ns
+        except OSError:
+            self.invalidate_cache()
 
     def upsert_daily(
         self,
