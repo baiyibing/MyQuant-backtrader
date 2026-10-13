@@ -85,17 +85,32 @@ def test_b_filter_preserves_universe_order():
     assert days["20260303"] == ["600002.SH", "600000.SH"]
 
 
-def test_b_fail_closed_empty_and_missing():
+def test_b_empty_section_skipped_missing_row_fail_closed():
+    """Empty calendar-gap sections are omitted; missing rows on a real day still fail-closed."""
     from strategies.tr_filter import ConfigurationError
 
-    def load(_ymd: str) -> pd.DataFrame:
+    def load_empty(_ymd: str) -> pd.DataFrame:
         return pd.DataFrame()
 
-    with pytest.raises((ConfigurationError, ValueError)):
+    assert (
         scan_tr_days(
             ["20260303"],
-            load_cross_section=load,
+            load_cross_section=load_empty,
             universe_for=lambda _ymd: ["600000.SH"],
+        )
+        == {}
+    )
+
+    section = pd.DataFrame([_row("600000.SH")])
+
+    def load_partial(_ymd: str) -> pd.DataFrame:
+        return section
+
+    with pytest.raises(ConfigurationError, match="missing"):
+        scan_tr_days(
+            ["20260303"],
+            load_cross_section=load_partial,
+            universe_for=lambda _ymd: ["600000.SH", "600001.SH"],
         )
 
 
