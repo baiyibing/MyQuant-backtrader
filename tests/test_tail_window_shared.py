@@ -318,6 +318,16 @@ def test_run_tail_loader_requests_volume_amount_and_outer_only_metadata(syntheti
     assert not any(key.startswith("tail_") for key in state.stats)
 
 
+
+def _stdout_without_profile_noise(text: str) -> str:
+    """Drop host sim-profile timing lines; phase % can round differently across runs."""
+    skip_prefixes = ("  开始:", "  结束:", "  墙钟:", "  模拟分相:", "  埋点计数:")
+    return "".join(
+        line for line in text.splitlines(keepends=True)
+        if not line.startswith(skip_prefixes)
+    )
+
+
 def test_cli_default_volume_unit_matches_shares_results_and_manifest(
     monkeypatch, tmp_path, synthetic_run, capsys,
 ):
@@ -335,8 +345,15 @@ def test_cli_default_volume_unit_matches_shares_results_and_manifest(
     assert minute.main(argv) == 0
     default_output = capsys.readouterr().out
     assert minute.main([*argv, "--tail-volume-unit", "shares"]) == 0
-    assert capsys.readouterr().out == default_output
-    assert captured[0] == captured[1]
+    # Host sim profile phase shares round to integer % and can differ 0% vs 1% across runs.
+    assert _stdout_without_profile_noise(capsys.readouterr().out) == _stdout_without_profile_noise(default_output)
+    left, right = captured[0], captured[1]
+    left_state, right_state = dict(left[0]), dict(right[0])
+    left_state.pop("sim_profile", None)
+    right_state.pop("sim_profile", None)
+    assert (left_state, left[1], _stdout_without_profile_noise(left[2]), left[3]) == (
+        right_state, right[1], _stdout_without_profile_noise(right[2]), right[3]
+    )
     state, metadata, _, written = captured[0]
     assert sum(row["side"] == "BUY" for row in state["trades"]) == 28
     assert metadata["tail_window_buy"]["tail_volume_unit"] == "shares"

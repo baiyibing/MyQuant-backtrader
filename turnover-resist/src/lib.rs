@@ -4,6 +4,7 @@ pub mod bollinger;
 pub mod cli;
 pub mod data;
 pub mod engine;
+pub mod profile;
 pub mod types;
 
 // ---- PyO3 绑定（选型 benchmark 用最小原型） ----
@@ -13,8 +14,21 @@ use pyo3::prelude::*;
 ///
 /// 返回 JSON 数组，每个元素是一个 OutputRow 的对象表示。
 /// 字段名与 CSV 输出一致（含 serde(rename) 映射）。
-#[allow(clippy::too_many_arguments)] // 9 个 Python 入参，pyo3 绑定天然多参；重构 struct 会动 Python 侧签名
+#[allow(clippy::too_many_arguments)] // Python 入参偏多；pyo3 绑定天然多参
 #[pyfunction]
+#[pyo3(signature = (
+    date,
+    window,
+    step,
+    data_dir,
+    sort_by,
+    free_float_policy,
+    target_date_policy,
+    bb_ddof,
+    max_grid_points,
+    include_profile=false,
+    profile_json=None,
+))]
 fn compute_turnover_resist(
     date: &str,
     window: usize,
@@ -25,6 +39,8 @@ fn compute_turnover_resist(
     target_date_policy: &str,
     bb_ddof: usize,
     max_grid_points: usize,
+    include_profile: bool,
+    profile_json: Option<&str>,
 ) -> PyResult<String> {
     let date = chrono::NaiveDate::parse_from_str(date, "%Y%m%d").map_err(|e| {
         pyo3::exceptions::PyValueError::new_err(format!("invalid date '{}': {}", date, e))
@@ -75,12 +91,31 @@ fn compute_turnover_resist(
         free_float_policy,
         output: None,
         data_dir: std::path::PathBuf::from(data_dir),
+        profile: false,
+        no_profile: true,
+        profile_json: profile_json.map(std::path::PathBuf::from),
     };
 
-    let results = engine::run(&cli)
+    let outcome = engine::run_detailed(&cli)
         .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(format!("compute failed: {}", e)))?;
 
-    let json = serde_json::to_string(&results).map_err(|e| {
+    // Side-channel JSON file never changes the historical array return shape.
+    if let Some(path) = profile_json {
+        let _ = profile::write_profile_json(std::path::Path::new(path), &outcome.profile);
+    }
+
+    if include_profile {
+        profile::print_profile(&outcome.profile);
+        let wrapped = serde_json::json!({
+            "rows": outcome.rows,
+            "profile": outcome.profile,
+        });
+        return serde_json::to_string(&wrapped).map_err(|e| {
+            pyo3::exceptions::PyRuntimeError::new_err(format!("serialize failed: {}", e))
+        });
+    }
+
+    let json = serde_json::to_string(&outcome.rows).map_err(|e| {
         pyo3::exceptions::PyRuntimeError::new_err(format!("serialize failed: {}", e))
     })?;
 

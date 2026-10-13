@@ -1674,7 +1674,7 @@ def expected_case(
 
 
 def _expect_skip_st(expected: dict) -> dict:
-    """Host stats now always include skip_st. Frozen overlays stay untouched."""
+    """Normalize both sides for frozen-as-actual overlay tests without mutating goldens."""
     structured = expected.get("structured")
     if not isinstance(structured, dict):
         return expected
@@ -1689,6 +1689,7 @@ def _expect_skip_st(expected: dict) -> dict:
 
 def assert_case_canonical(book: str, actual: dict, expected: dict, canonical_expected: dict):
     """Mandatory on every pandas version, before any byte-check skip."""
+    actual = _expect_skip_st(actual)
     expected = _expect_skip_st(expected)
     for field, label in (("canonical_csv", "production"), ("library_canonical_csv", "library")):
         hashes = {name: canonical_hash(table) for name, table in actual[field].items()}
