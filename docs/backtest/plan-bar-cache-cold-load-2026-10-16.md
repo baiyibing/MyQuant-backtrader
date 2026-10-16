@@ -1,22 +1,24 @@
-# 计划：分钟 bar_cache 冷装载（2026-10-16 · r2）
+# 计划：分钟 bar_cache 冷装载（2026-10-16 · r2 · cut A）
 
-> **日期**：2026-10-16。**r2**（同日修订）：吸收 Grok 设计评审 **REQUEST_CHANGES**。r1 是已合并的 [#479](https://github.com/baiyibing/MyQuant-backtrader/pull/479)（master `ac5ff773`，正文 69 行）。
-> **状态**：**待裁** / **非 impl GO**。P1–P8 全部未裁。合入本 docs PR 不是实施 GO。未裁的卡不准编码。
-> **评审**：Grok 设计评审 **REQUEST_CHANGES**（2026-10-16）。见 [PR #479 评论](https://github.com/baiyibing/MyQuant-backtrader/pull/479#issuecomment-6213298677) 与 [grok.md](../architecture/reviews/2026-10-16/pr-479-bar-cache-cold-load/grok.md)（`docs/architecture/reviews/2026-10-16/pr-479-bar-cache-cold-load/grok.md`）。
+> **日期**：2026-10-16。**r2**（同日修订）：吸收 Grok 设计评审 **REQUEST_CHANGES**。r1 是已合并的 [#479](https://github.com/baiyibing/MyQuant-backtrader/pull/479)（master `ac5ff773`，正文 69 行）。**同日 cut A**：Human 书面绑定保守整文件失效（吸收 Codex HOLD + Grok AGREE-HOLD）。
+> **状态**：**P1 / P3 身份合同已裁（Human cut A · 2026-10-16）**。其余 P2 / P4–P8 仍可用表内建议默认作 encode 门（须经 Codex 重评 GO）；合入本 docs PR **仍不是**自动 impl GO。身份阻断已解除，可开 encode 门评审。
+> **评审**：Grok #479 **REQUEST_CHANGES**；Codex #481 **HOLD**（[codex.md](../architecture/reviews/2026-10-16/pr-481-bar-cache-cold-load-r2/codex.md)）；Grok #481 **AGREE-HOLD** 并推荐 cut A（[grok.md](../architecture/reviews/2026-10-16/pr-481-bar-cache-cold-load-r2/grok.md)）。#479 原文见 [PR #479 评论](https://github.com/baiyibing/MyQuant-backtrader/pull/479#issuecomment-6213298677) 与 [pr-479 grok.md](../architecture/reviews/2026-10-16/pr-479-bar-cache-cold-load/grok.md)。
 > **上游**：[note-v653-host-perf-summary-2026-10-10.md](note-v653-host-perf-summary-2026-10-10.md) §5「另一刀」；[topk-joint-research-tracker-2026-09-22.md](topk-joint-research-tracker-2026-09-22.md) §6.11 首批分钟数据；[#476](https://github.com/baiyibing/MyQuant-backtrader/pull/476)（`47735bba`，per-pid tmp）；[#479](https://github.com/baiyibing/MyQuant-backtrader/pull/479)。身份守卫：[g2-minute-cache-identity-2026-09-28.md](g2-minute-cache-identity-2026-09-28.md)。
-> **范围**：分钟 `bar_cache` 装载侧方案文档。**不动成交核、不动书、不动净值、不开 `ashare_bars` 实现。**
-> **禁止**：不要按未改前的 69 行正文开 `ashare_bars` 实现 PR，也不要授权把探针、分片、代码集、Arrow 做进同一个 PR。
-> **对码**：master `ac5ff773`。下文行号是该 tip 的锚；行号漂移以符号名为准。
+> **范围**：分钟 `bar_cache` 装载侧方案文档。**不动成交核、不动书、不动净值**；encode 须另开实现 PR，且默认关。
+> **禁止**：不要按未改前的 69 行正文开 `ashare_bars` 实现 PR，也不要授权把探针、分片、代码集、Arrow 做进同一个 PR。刀序仍是 S1.1 → S1（缺省关）→ S2 → S3（单独 PR）。
+> **对码**：master `ac5ff773`（#480 已合入后 tip 以 `origin/master` 为准）。下文行号是该 tip 的锚；行号漂移以符号名为准。
 
 ---
 
 ## 0. r2 怎么用
 
-r1 把几件还没裁的语义写成了已定方案，并有三处和现码相反：整文件 stamp 做不到「追加一日只建新月」；月 shard 的裁剪 / `mem_key` / spans 没有合同；`codes_hint` 忽略了调用方已经传入的代码集。本修订把这些收成硬约束，并把选择收成八张未裁卡。
+r1 把几件还没裁的语义写成了已定方案，并有三处和现码相反：整文件 stamp 做不到「追加一日只建新月」；月 shard 的裁剪 / `mem_key` / spans 没有合同；`codes_hint` 忽略了调用方已经传入的代码集。本修订把这些收成硬约束，并把选择收成八张卡。
 
-方向（可复用分片、调用方缩小分钟装载集合、Arrow 直读单独一刀、不做 mmap）和现网瓶颈对齐。方向不是合同。失效单位、读契约、认证字段、代码集公式、开关缺省、预算归属、残留文件、状态字，全部等 Human 书面选择。
+方向（可复用分片、调用方缩小分钟装载集合、Arrow 直读单独一刀、不做 mmap）和现网瓶颈对齐。方向不是合同。
 
-人裁顺序写在 §4.1。P1 与 P2 未裁之前，S1.1 探针的通过条件写不出来。
+**2026-10-16 Human cut A**（书面）：P1 / P3 身份合同按 §4.2 绑定——保守**整文件**失效；不承诺「+1 天只建新月」；不冻住旧月 stamp。Grok 推荐 A 优于 B（B = 月 digest + manifest，日后再开）。其余 P2 / P4–P8 仍见表内建议默认；encode 门仍须 Codex 重评。
+
+人裁顺序写在 §4.1。P1 已裁后，S1.1 的失效预期可按 §4.2 矩阵写出；P2 建议默认（F2）仍须在 encode 门一并确认。
 
 ---
 
@@ -24,7 +26,7 @@ r1 把几件还没裁的语义写成了已定方案，并有三处和现码相�
 
 | # | 方向 | 未裁之前怎么读 |
 |---|---|---|
-| D1 | 单体整窗缓存改成可复用的分片。月份是候选粒度 | 失效单位是 P1。整文件 mtime/size 与「只建新月」不能同时当成已定方案 |
+| D1 | 单体整窗缓存改成可复用的分片。月份是候选粒度 | **P1 = cut A（已裁）**：整文件 stamp 参与身份；**不**承诺「只建新月」。跨窗复用靠月对齐 bounds，不靠追加增量 |
 | D2 | 调用方缩小分钟装载集合 | 公式是 P4。未裁前保持现网并集，不新增调用方不传的 `codes_hint` |
 | D3 | Arrow 直读单独一刀 | 帧形状是 P8。削的是命中后的解码。不做 mmap |
 | D4 | `daily_equity.csv` 与 `trades.csv` 逐字节相同是硬门 | 必要，不够单独放行。比较基准与配方在 §7 |
@@ -72,7 +74,7 @@ symbol={partition}/data.parquet    # read_lake_minute_ohlc
 
 换窗口会换路径里的 start/end 和整份身份的 12 位摘要，同票跨窗不能复用单体文件。这句和现码一致。
 
-目标仍是：同湖同窗的冷装载从 20 分钟级降到分钟级；日常追加窗少做无用重建；暖读变短。这三句在 P1 / P6 未裁前**不是**验收数字，也**不**承诺「末日 +1 天只建新月」。`daily_equity.csv` 与 `trades.csv` 逐字节不变仍然是每一刀的硬门（§7）。
+目标仍是：同湖同窗的冷装载从 20 分钟级降到分钟级；湖 stamp 稳定时不同请求窗可共享月 shard；暖读变短。冷/暖墙钟在 P6 未裁前**不是**验收数字。cut A 下**明确不承诺**「末日 +1 天只建新月」——源文件一变，该票覆盖窗内全部月份重建。`daily_equity.csv` 与 `trades.csv` 逐字节不变仍然是每一刀的硬门（§7）。
 
 ---
 
@@ -82,17 +84,17 @@ symbol={partition}/data.parquet    # read_lake_minute_ohlc
 
 ### F1 失效单位与增量句
 
-湖布局是一票一个 `symbol=*/data.parquet`，不是按月分区。整文件的 mtime/size 一变，该票每一个月的 shard 一起变。每日增量写进这一个文件时，已经建好的历史月 shard 全部 miss。
+湖布局是一票一个 `symbol=*/data.parquet`，不是按月分区。**Human cut A（已裁，§4.2）**绑定保守整文件失效：该票源文件 stamp（`st_mtime_ns`，及等价整文件身份如 `st_size`）参与每个月 shard 的源身份；源文件任意追加 / 修正导致 stamp 变化时，该票覆盖窗内**全部**月份 shard 一起 miss——**不**承诺「+1 天只建新月」，也**不**声称未改字节的历史月在整文件 stamp 变化后仍可复用。
 
-因此：
+因此（cut A 下已是合同，不再是「未裁前禁止」）：
 
-- **禁止**在 P1 未裁前承诺「追加一日只建新月」。
-- **禁止**「冻住旧月 stamp」。旧月必须跟随它自己的失效身份。为了让验收第 ③ 条通过而把旧月 stamp 冻住，会使该月修数静默陈旧。
-- 「只有被写过的票失效」和「被写过的票只失效新月」不能同时写成已定事实。整文件 stamp 下，被写过的票失效它的每一个月。
-- 计划对 stamp 的说法必须一处说完：窗口身份与该票源身份是两个量。文件名里拆 `winhash` / `symhash` 时，正文不得再把 stamp 写进窗口哈希。
-- stamp 精度未裁前，不得只用秒级 mtime。现码浅快照用 `st_mtime_ns`。秒级 mtime 会把同一秒内的两次修数收成同一 shard。精度选择在 P1。
+- **禁止**承诺「追加一日只建新月」。
+- **禁止**「冻住旧月 stamp」。旧月跟随整文件源身份；为通过验收而冻住旧月会使该月修数静默陈旧。
+- 「只有被写过的票失效」在 lake-wide 默认 `source_snapshot` 下**不**成立为全局保证（sibling 变更可全局 miss，见 §4.2）；在仅票级 stamp 视角下，被写过的票失效它的**每一个**覆盖月，不是「只失效新月」。
+- 窗口身份与该票源身份是两个量。文件名里拆 `winhash` / `symhash` 时，正文不得再把 stamp 写进窗口哈希。
+- stamp 精度：**`st_mtime_ns`（纳秒）**，不得只用秒级 mtime。秒级会把同一秒内两次修数收成同一 shard。
 
-做不到「该月字节或该月分区」这一级的失效身份之前，S1 验收不得写「只建增量」。探针必须分别报告：月末 +1 日（仍在当月）改写了几个 shard，跨月 +1 日改写了几个 shard。
+S1 验收**不得**写「只建增量」。探针必须分别报告：月末 +1 日（仍在当月）改写了几个 shard，跨月 +1 日改写了几个 shard。cut A 下两者对该票均为「覆盖窗内全部月份」。月字节 / 分区 digest（cut B）若日后需要，另开计划修订；本 cut **不**引入 digest manifest。
 
 ### F2 月 shard 的读契约
 
@@ -133,17 +135,20 @@ searchsorted(request_start 日 00:00, side="left")
 
 ### F3 G2 认证字段
 
-下列去留是未裁卡（P3，精度交叉见 P1），不是 r2 已经删掉或已经保留的决定：
+**P3 已裁（Human cut A · §4.2）**：G2 七字段**全留**于 shard sidecar 并参与 typed equality / 文件名摘要输入：`identity_version`、`start`、`end`、`dividend_type`、`schema`、`resolver_identity`、`source_snapshot`。票级源 stamp（`st_mtime_ns` / 整文件身份）归 P1，叠进源身份（可进 sidecar 扩展字段或与摘要输入绑定，但不得用秒级 mtime 顶替）。
 
-`identity_version`、缓存 `schema` 哈希、`dividend_type`、`resolver_identity`、显式 `source_snapshot` token、`st_mtime_ns`，以及现字典里的 `start` / `end`。
+角色写死（不得静默改语义）：
 
-在 Human 书面选择之前，实现不得发明一套更短的身份并开始写 shard。约束先写死：
+- sidecar 的 `start` / `end` = **月对齐分片窗**（该月闭区间 `YYYYMMDD` 对），**不是**本次请求窗。请求窗只进 F2 裁剪与 `mem_key.extra`。
+- 默认 `source_snapshot` = 今日 lake-wide shallow。sibling / 父目录 mtime 变化可导致**全局** miss——cut A 下这是**有意保守**（与今日单体同类），不是 bug，禁止靠「悄悄丢掉该字段」来「修」。
+- 显式 `source_snapshot` token **保留**，作为 metadata-preserving 替换（`cp -p` / `rsync -t` / utime）的逃逸口。
+
+其余硬约束不变：
 
 - 「湖目录改名 / 搬仓会整体 miss」只有在根 token（现码是 `resolver_identity`）还在身份里时才成立。只剩文件 mtime/size 时，新根上时间戳相同的树会命中旧 shard 里的价格。备份恢复保留了时间戳但价格已改，就是错价。
 - 短文件名摘要不是认证。sidecar 全字段类型和值一致才算命中。认证失败禁止把未认证文件里的其他代码并进来（`tests/test_minute_cache_identity.py` 对七个字段的 missing / mismatch 有钉）。
 - 旧单体路径不迁移、不自动复用。G2 对无摘要旧路径的句子是：旧 `minute_none_{start}_{end}.parquet` 不迁移、不删除、永不自动复用。分片开关打开后，现行 `minute_none_{start}_{end}_{digest}.parquet` 同样不读、不写、不迁进 shard。
 - `dividend_type=front` 今天整段绕过共享缓存，`status["cache"] = "front_uncached"`。volume / amount 在 `load_minute_ohlc` 入口返回，`off:volume_required`。这两条旁路继续绕过。shard 前缀写成 `minute_none_` **不能**代替身份里的价格域字段。
-- 显式 `source_snapshot` token 的去留未裁。现码用它补「深层修数不动父目录元数据」的洞。票级 mtime/size 对普通覆写更严，盖不住 size 与 mtime 都保持的替换（`cp -p` / `rsync -t` / utime 回拨）。
 
 ### F4 分钟代码集
 
@@ -207,28 +212,53 @@ mem / hit / partial / miss / miss:identity / rebuild / off / off:volume_required
 
 ---
 
-## 4. 人裁点（P1–P8 · 全部未裁）
+## 4. 人裁点（P1–P8）
 
-未裁 = 禁止编码。建议默认写在表里，供 Human 推翻。建议不是批准。头部状态保持 **待裁**，直到有书面选择把对应行改成已裁。合入本 docs PR 不把任何一行改成已裁。
+**P1 / P3 = Human cut A（2026-10-16）已裁。** 其余行：建议默认仍供 encode 门（Codex 重评）绑定；建议不是自动批准。合入本 docs PR 不把未裁行改成已裁。
 
-| 卡 | 要裁的内容 | 建议默认（仍要人写「批准」） | 状态 |
+| 卡 | 要裁的内容 | 绑定内容 / 建议默认 | 状态 |
 |---|---|---|---|
-| **P1** 失效单位 | 整文件 stamp，或该月字节 / 分区 stamp。`st_mtime_ns` 还是秒级 mtime。同一秒修数算不算 miss | 该月字节身份 + `st_mtime_ns`。做不到月级字节身份之前，不承诺「+1 天只建新月」。冻住旧月不在选项里 | **未裁** |
-| **P2** 读契约 | 裁剪谓词、月份不重叠、一趟扫描写多月还是每月一趟、`mem_key` extra、spans 只描述返回帧、旧单体路径不读 | 采用 §3 F2 的 `ymd` 闭区间。`mem_key` 含请求 start/end。spans 对裁剪帧重建。建议一趟扫描写出该票覆盖月份；每月一趟未否决，探针必须报出倍数 | **未裁** |
-| **P3** G2 字段 | 七个认证字段哪些留在 shard sidecar 且参与文件名。显式 `source_snapshot` 是否保留。认证失败是否仍禁止合并其他代码 | 七字段都留（`identity_version`、`start`、`end`、`dividend_type`、`schema`、`resolver_identity`、`source_snapshot`）。短文件名摘要仍不是认证，sidecar 全字段相等才命中。认证失败禁止合并其他码。`st_mtime_ns` 的精度归 P1 | **未裁** |
-| **P4** 分钟代码集 | 扫描前公式；日线是否仍用宽集合；分数宇宙进不进分钟；停车码谁负责 | 分钟 = `union(pool_days) ∪ extra_load_codes_for_strategy(strategy)`。分数宇宙留在日线，除非点名某条分钟读分数码的路径。停车码经 `extra_load_codes_for_strategy`，不另做 hint。缺 bar 不在 loader raise。不新增调用方不传的 `codes_hint` | **未裁** |
-| **P5** 开关 | 未设置、空串、`0`、`false`、`off`、`no`、其他。其他值是退出还是当成关 | 缺省关。未设置与 `0` 走今天的单体函数，含 partial 整文件重写，`status["cache"]` 逐值不变。只有 `1` 打开。空串、`false`、`off`、`no` 与其他值 fail-closed 退出，不静默当开、也不静默当关 | **未裁** |
-| **P6** 预算归属 | ≤5min 属于哪一刀。暖读的定义。+1 日指标 | 5min 不挂在单独的 S1 上。暖读 = 第二次且 `hit` 或 `mem` 且零湖读。S1 的冷预算是「不慢于单体冷路径」，直到 P4 合入。+1 日分两行计数：当月内一日、跨月一日，各打印 rebuilt shard 数 | **未裁** |
-| **P7** 残留文件 | 旧 stamp shard 的保留代数；tmp 清理；批成员的稳定分桶；writer 何时可以 replace | 引擎不自动扫盘删除。脚本只删「stamp 与当前源不一致」且 mtime 老于 N 日的 shard。不删 `*.tmp`，除非对应 pid 已不存在。批按代码排序后的固定区间分桶，批哈希覆盖批内全部成员的 stamp，不是本次请求的子集。writer 写完整个 shard 身份才 `replace`，失败不替换 | **未裁** |
-| **P8** S3 与状态字 | 返回帧列与 dtype。`cache` 是替换还是附加。S3 是否允许改 `mem` 里的对象类型 | 书帧形状不变：DatetimeIndex(ns)、无时区、`open/high/low/close` float64、`hm` int64、`ymd` 与现网同值。`cache` 枚举冻结。附加 `shard_hit` / `shard_miss` / `shard_rebuild` 计数。S3 单独 GO。不做 mmap | **未裁** |
+| **P1** 失效单位 | 整文件 stamp，或该月字节 / 分区 stamp。`st_mtime_ns` 还是秒级 mtime | **已裁 = cut A**：该票整文件源身份（`st_mtime_ns`，及等价如 `st_size`）参与每个月 shard；源 stamp 变 → 该票覆盖窗**全部**月 miss。**不**承诺「+1 天只建新月」。**禁止**冻住旧月 stamp。不做月 digest / manifest（那是日后 cut B） | **已裁 · cut A** |
+| **P2** 读契约 | 裁剪谓词、月份不重叠、一趟扫描写多月还是每月一趟、`mem_key` extra、spans 只描述返回帧、旧单体路径不读 | 采用 §3 F2 的 `ymd` 闭区间。`mem_key` 含请求 start/end。spans 对裁剪帧重建。建议一趟扫描写出该票覆盖月份；每月一趟未否决，探针必须报出倍数 | **未裁**（建议默认） |
+| **P3** G2 字段 | 七个认证字段哪些留在 shard sidecar 且参与文件名。显式 `source_snapshot` 是否保留。认证失败是否仍禁止合并其他代码 | **已裁 = cut A**：七字段全留。sidecar `start`/`end` = **月对齐分片窗**（非请求窗）。默认 `source_snapshot` = lake-wide shallow（广域 miss = 有意保守）。显式 token 保留。短文件名非认证；全字段 typed equality；认证失败禁止合并其他码。票级 `st_mtime_ns` 精度归 P1 | **已裁 · cut A** |
+| **P4** 分钟代码集 | 扫描前公式；日线是否仍用宽集合；分数宇宙进不进分钟；停车码谁负责 | 分钟 = `union(pool_days) ∪ extra_load_codes_for_strategy(strategy)`。分数宇宙留在日线，除非点名某条分钟读分数码的路径。停车码经 `extra_load_codes_for_strategy`，不另做 hint。缺 bar 不在 loader raise。不新增调用方不传的 `codes_hint` | **未裁**（建议默认） |
+| **P5** 开关 | 未设置、空串、`0`、`false`、`off`、`no`、其他。其他值是退出还是当成关 | 缺省关。未设置与 `0` 走今天的单体函数，含 partial 整文件重写，`status["cache"]` 逐值不变。只有 `1` 打开。空串、`false`、`off`、`no` 与其他值 fail-closed 退出，不静默当开、也不静默当关 | **未裁**（建议默认） |
+| **P6** 预算归属 | ≤5min 属于哪一刀。暖读的定义。+1 日指标 | 5min 不挂在单独的 S1 上。暖读 = 第二次且 `hit` 或 `mem` 且零湖读。S1 的冷预算是「不慢于单体冷路径」，直到 P4 合入。+1 日分两行计数：当月内一日、跨月一日，各打印 rebuilt shard 数（cut A 下对该票均为全覆盖月） | **未裁**（建议默认） |
+| **P7** 残留文件 | 旧 stamp shard 的保留代数；tmp 清理；批成员的稳定分桶；writer 何时可以 replace | 引擎不自动扫盘删除。脚本只删「stamp 与当前源不一致」且 mtime 老于 N 日的 shard。不删 `*.tmp`，除非对应 pid 已不存在。批按代码排序后的固定区间分桶，批哈希覆盖批内全部成员的 stamp，不是本次请求的子集。writer 写完整个 shard 身份才 `replace`，失败不替换 | **未裁**（建议默认） |
+| **P8** S3 与状态字 | 返回帧列与 dtype。`cache` 是替换还是附加。S3 是否允许改 `mem` 里的对象类型 | 书帧形状不变：DatetimeIndex(ns)、无时区、`open/high/low/close` float64、`hm` int64、`ymd` 与现网同值。`cache` 枚举冻结。附加 `shard_hit` / `shard_miss` / `shard_rebuild` 计数。S3 单独 GO。不做 mmap | **未裁**（建议默认） |
 
 ### 4.1 人裁顺序
 
-**P5 → P3 → P1 → P2 → P7 → P4 → P6 → P8。**
+**P5 → P3 → P1 → P2 → P7 → P4 → P6 → P8。**（逻辑顺序；P1/P3 已由 cut A 满足。）
 
-P5 先定缺省关，避免后续卡在「一合并就替换全部分钟缓存」上讨论。P3 先定认证字段，P1 / P2 的身份和读契约才有根 token 与 sidecar 比较可写。P7 的残留规则跟着 P1 的 stamp 走。P4 的集合公式独立于分片布局，但 S2 对账要等它写完。P6 的数字归属等探针条件（P1 / P2）和集合（P4）有着落再定。P8 留给 S3，不挡前面的刀。
+P5 建议缺省关，避免「一合并就替换全部分钟缓存」。P3 / P1 已按 cut A 写死（§4.2）。P7 的残留规则跟着 P1 的整文件 stamp 走。P4 的集合公式独立于分片布局，但 S2 对账要等它写完。P6 的数字归属等探针条件（P2）和集合（P4）有着落再定。P8 留给 S3，不挡前面的刀。
 
-P1 与 P2 未裁之前，S1.1 探针的通过条件写不出来，探针 PR 不准开。
+**P1 已裁**：S1.1 失效预期按 §4.2 矩阵可写。P2 仍建议采用 F2；encode / 探针 PR 须在 Codex 重评 GO 后开。刀序不变：**S1.1 → S1（`OSKH_MINUTE_CACHE_SHARD` 缺省关）→ S2 → S3（单独 PR）**。
+
+### 4.2 Human cut A（2026-10-16）— 身份合同 + 失效矩阵
+
+来源：Human「按 A 改计划」；吸收 Codex [#481 HOLD](../architecture/reviews/2026-10-16/pr-481-bar-cache-cold-load-r2/codex.md) 与 Grok [#481 AGREE-HOLD](../architecture/reviews/2026-10-16/pr-481-bar-cache-cold-load-r2/grok.md)（**推荐 A 优于 B**）。B（月 digest + 认证 manifest + 重定义 snapshot 作用域）若日后需要增量追加，另开计划修订；**本 cut 不实现 B**。
+
+#### 身份绑定
+
+1. **失效单位（P1）** = 该票湖文件的整文件身份（至少 `st_mtime_ns`；实现可并列 `st_size`）。该 stamp 参与**每一个**月 shard 的源身份。源文件任意使 stamp 变化的追加 / 修正 → 该票在覆盖窗内的**全部**月 shard miss。
+2. **明确不承诺**「末日 +1 天只建新月」；**禁止**冻住旧月 stamp；**禁止**声称「未改字节的历史月在整文件 stamp 变化后仍可复用」。
+3. **G2 七字段（P3）全留**，含默认 `source_snapshot`。sidecar 的 `start`/`end` = **月对齐分片窗**；请求窗只进 F2 裁剪与 `mem_key.extra`。
+4. 默认 lake-wide shallow `source_snapshot` 导致的广域 miss = **有意保守**，与今日单体同类；不得靠丢掉字段「修复」。显式 token 保留。
+5. 跨窗复用：仅当源 stamp（及七字段相等）稳定时，不同请求窗可共享同一月对齐 shard。追加增量主义**不是**本 cut 的目标。
+
+#### 失效矩阵（cut A 期望）
+
+| 场景 | 该票月 shard | 其他票月 shard | 说明 |
+|---|---|---|---|
+| **同月追加**（末日 +1 日仍在当月，整文件 stamp 变） | 覆盖窗内**全部**月 miss / rebuild | 若仅票级 stamp：可仍 hit；若默认 lake-wide snapshot 因父目录 mtime 变：可能**全局** miss | 不存在「只建当月」 |
+| **跨月追加**（+1 日落在新月，整文件 stamp 变） | 覆盖窗内**全部**月 miss / rebuild（含历史月与新月） | 同上（snapshot 广域规则） | 不存在「只建新月」 |
+| **旧月修正**（改写历史月字节，整文件 stamp 变） | 覆盖窗内**全部**月 miss / rebuild | 同上 | 禁止冻住旧月 |
+| **无关票替换**（另一 `symbol=*/data.parquet` 被替换） | 该票：若自身 stamp 未变且 snapshot 未变 → hit | 被替换票：其全部月 miss；若 shallow 父目录 mtime 变 → **全局**可能 miss | 广域 miss = 有意保守 |
+| **显式 `source_snapshot` token 变更** | 凡 sidecar 带旧 token 的 shard **全部** miss | 全部 miss（token 在身份里） | 逃逸口；用于 metadata-preserving 替换后的强制失效 |
+| **仅元数据替换**（`cp -p` / `rsync -t` / utime，size+mtime 不变） | 票级 stamp **可能不** miss | 默认 shallow **可能不** miss | **必须**换显式 token（或接受陈旧风险）；cut A 不静默宣称能检测此类替换 |
+
+S1.1 探针须按上表打印 rebuilt-shard 计数（当月 +1 与跨月 +1 分行），不得把「只建新月」写成通过句。
 
 ---
 
@@ -287,8 +317,8 @@ P1 与 P2 未裁之前，S1.1 探针的通过条件写不出来，探针 PR 不�
 
 | 顺序 | 刀 | 依赖的书面裁 | 这一刀交付 | 通过 / 失败 |
 |---|---|---|---|---|
-| 1 | **探针 S1.1** | P1、P2 须先有书面选择，否则通过条件写不出。P6 未裁时可以量数，不能把 ≤5min 写成通过线 | 脚本 + 数据段回填本文。不改默认装载 | 失败条件：一趟扫描 vs 每月一趟的倍数；月末 +1 日与跨月 +1 日各自改写的 shard 数；打开开销 / 单票扫湖倍数，以及外推到请求票数的 fd。粒度（单票或稳定批）由这组数裁，不由「小文件打开主导」一句口头裁 |
-| 2 | **分片 S1** | P1、P2、P3、P5、P7 须先有书面选择。冷预算用 P6 的「不慢于单体」，直到 P4 合入 | `ashare_bars` 的 shard 读写。**缺省关**（P5）。不改日线写入 | 同提交上 `OSKH_MINUTE_CACHE_SHARD=0` 对照，`daily_equity.csv` / `trades.csv` 逐字节等。`=0` 的 `status["cache"]` 与现码逐值相同，且不产生 shard。不慢于单体冷路径，直到 P4 合入。不等则该刀回滚 |
+| 1 | **探针 S1.1** | **P1 已裁（cut A）**；P2 须在 encode 门确认建议默认。P6 未裁时可以量数，不能把 ≤5min 写成通过线 | 脚本 + 数据段回填本文。不改默认装载 | 失败条件：一趟扫描 vs 每月一趟的倍数；月末 +1 日与跨月 +1 日各自改写的 shard 数（cut A：对该票均为覆盖窗全月，见 §4.2）；打开开销 / 单票扫湖倍数，以及外推到请求票数的 fd。粒度（单票或稳定批）由这组数裁，不由「小文件打开主导」一句口头裁 |
+| 2 | **分片 S1** | **P1/P3 已裁（cut A）**；P2、P5、P7 须在 encode 门确认建议默认。冷预算用 P6 的「不慢于单体」，直到 P4 合入 | `ashare_bars` 的 shard 读写。**缺省关**（P5）。不改日线写入 | 同提交上 `OSKH_MINUTE_CACHE_SHARD=0` 对照，`daily_equity.csv` / `trades.csv` 逐字节等。`=0` 的 `status["cache"]` 与现码逐值相同，且不产生 shard。不慢于单体冷路径，直到 P4 合入。不等则该刀回滚 |
 | 3 | **代码集 S2** | P4 须先有书面选择 | 改调用方的分钟集合。日线该留宽的地方留宽。自己对账 | 同提交逐字节等。对账在本刀 PR，不推到 S3。漏码、停车码缺失都算本刀失败 |
 | 4 | **Arrow S3** | P8 单独 GO | 命中后的解码。帧形状不变。不做 mmap | 合成测试先比帧：索引单位 ns、无时区、OHLC float64、`hm` int64、`ymd` 与现网同值。两支配方是这组单测绿了之后的集成门。削的是解码，不声称削掉 partial 里的湖时间 |
 
@@ -368,7 +398,7 @@ csv_minute_backtest.py --strategy version6_53 --start 20251023 --end 20260909 ^
 | 暖路径 40.5s 是热读 | partial：缺码扫湖 + 整文件重写。不是纯 `hit` / `mem` |
 | note §5「两刀不混」= S1/S2/S3 | note §5 的两刀是已经落地的**模拟侧** `searchsorted`，和**装载侧** Arrow 解码。本计划的日期裁剪是第三处，用 §3 F2 的闭区间谓词命名，不叫「模拟器里那把 searchsorted」 |
 | 日线同构、二期跟进 | 指针在 `csv_daily_loader.py`。二期未开。分钟 PR 不改日线写入 |
-| 验收第 ③「只建增量（日志可证）」 | 要计数：当月 +1 与跨月 +1 各自的 rebuilt shard 数。不是路径倾倒。在 P1 选定失效单位之前，这句不能写成「只建新月」 |
+| 验收第 ③「只建增量（日志可证）」 | 要计数：当月 +1 与跨月 +1 各自的 rebuilt shard 数。不是路径倾倒。**cut A 下禁止写成「只建新月」**；期望见 §4.2 矩阵 |
 | `codes_hint` = 池 ∪ 已持，扫描前传入，漏并靠 S3 | 作废。见 F4 / P4 |
 | `cache` 改为 `miss/shard-miss/shard-partial/hit` | 作废。枚举冻结，计数走附加字段 |
 | 身份 = `{start, end, schema, 全湖浅快照哈希}` | 七字段见 §2。schema 是缓存 schema 哈希。快照是根 + 一层子目录的纳秒 stamp |
@@ -390,5 +420,6 @@ csv_minute_backtest.py --strategy version6_53 --start 20251023 --end 20260909 ^
 |---|---|---|
 | r1 | 2026-10-16 | docs-only 首版，随 #479 合入。状态待裁。正文 69 行，若干未裁语义写成了已定方案 |
 | r2 | 2026-10-16 | 吸收 Grok **REQUEST_CHANGES**。F1–F6 收成硬约束。P1–P8 保持未裁。回滚三句与刀序改到「P* 裁完才允许对应实现」。**仍是待裁 / 非 impl GO。** 不要按 r1 开 `ashare_bars` 实现 PR |
+| r2 · cut A | 2026-10-16 | Human 绑定 **(A) 保守整文件失效**。P1/P3 **已裁**；§4.2 身份合同 + 失效矩阵。吸收 Codex HOLD + Grok AGREE-HOLD（荐 A 不荐 B）。刀序不变。身份阻断解除；encode 仍须 Codex 重评 GO，且缺省关、不 merge |
 
-下一份需要评审的是这份补了 P 卡的计划 diff。r1 的 69 行不再当作 Codex 的已裁合同。
+下一份需要评审的是 **cut A 之后**的计划 tip（本文件）。r1 的 69 行与 r2 未裁身份一句话不再当作 encode 合同。
