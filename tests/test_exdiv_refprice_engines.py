@@ -700,6 +700,8 @@ def test_d2_v7_main_keeps_real_context_chain_with_nonempty_pool(
     monkeypatch.setattr(v7, "write_run_artifacts", writer)
     config_writer = Mock()
     monkeypatch.setattr(v7, "write_run_config", config_writer)
+    profiler = Mock()
+    monkeypatch.setattr(v7, "write_profile_sim", profiler)
     assert v7.main(["--start", "20251103", "--end", "20251105", "--pool-dir", str(tmp_path),
                     "--output-dir", str(tmp_path / "out"), "--daily-source", daily_source,
                     "--minute-source", minute_source, "--rule-profile", "legacy"]) == 0
