@@ -705,6 +705,13 @@ def add_topk_dropout_args(ap: argparse.ArgumentParser) -> None:
             "names. Default off."
         ),
     )
+    ap.add_argument("--bigvalue-regime-file", type=Path, default=None)
+    ap.add_argument("--bigvalue-block-new", action="store_true",
+                    help="topk_dropout: yesterday's confirmed bigvalue death state blocks new opens; default off")
+    ap.add_argument("--bigvalue-ma-fast", type=int, default=None, help="default 5 when enabled")
+    ap.add_argument("--bigvalue-ma-slow", type=int, default=None, help="default 10 when enabled")
+    ap.add_argument("--bigvalue-confirm-days", type=int, default=None, help="default 2 when enabled")
+    ap.add_argument("--bigvalue-signal", choices=("state",), default=None)
     ap.add_argument(
         "--keep-buy-vacancy",
         action="store_true",
@@ -1941,6 +1948,23 @@ def _apply_topk_score_exit(
 def _run_kwargs_topk_dropout(args) -> dict:
     from backtest.research.topk_dropout_scores import load_scores_from_args
 
+    bigvalue = bool(getattr(args, "bigvalue_block_new", False))
+    bigvalue_options = {
+        key: getattr(args, "bigvalue_" + key, None)
+        for key in ("regime_file", "ma_fast", "ma_slow", "confirm_days", "signal")
+    }
+    if any(value is not None for value in bigvalue_options.values()) and not bigvalue:
+        raise SystemExit("bigvalue flags require --bigvalue-block-new")
+    if bigvalue and getattr(args, "index_ma5_gate", False):
+        raise SystemExit("bigvalue refuses --index-ma5-gate pending P1")
+    if bigvalue and bigvalue_options["regime_file"] is None:
+        raise SystemExit("--bigvalue-block-new requires --bigvalue-regime-file")
+    fast = bigvalue_options["ma_fast"] if bigvalue_options["ma_fast"] is not None else 5
+    slow = bigvalue_options["ma_slow"] if bigvalue_options["ma_slow"] is not None else 10
+    confirm = bigvalue_options["confirm_days"] if bigvalue_options["confirm_days"] is not None else 2
+    if bigvalue and (not 0 < fast < slow or confirm < 1):
+        raise SystemExit("bigvalue requires 0 < fast < slow and confirm-days >= 1")
+
     buy_rule = str(getattr(args, "buy_state_rule", "oral") or "oral")
     if (
         buy_rule
@@ -1979,6 +2003,10 @@ def _run_kwargs_topk_dropout(args) -> dict:
         "stop_pct": resolved_stop,
         "stop_fill": resolve_stop_fill(getattr(args, "stop_fill", None)),
     }
+    if bigvalue:
+        from backtest.research.bigvalue_regime import load_regime
+
+        out["bigvalue_regime"] = (load_regime(bigvalue_options["regime_file"], fast, slow), confirm)
     st_daily = getattr(args, "st_daily_file", None)
     age_map = getattr(args, "age_map_file", None)
     age_days = int(getattr(args, "age_days", 60))
@@ -2013,6 +2041,9 @@ def _run_kwargs_topk_dropout(args) -> dict:
 
 
 def _run_kwargs_topk_score_exit(args) -> dict:
+    if any(getattr(args, "bigvalue_" + key, None) is not None
+           for key in ("regime_file", "ma_fast", "ma_slow", "confirm_days", "signal")) or getattr(args, "bigvalue_block_new", False):
+        raise SystemExit("topk_score_exit refuses any bigvalue flag; use topk_dropout")
     if getattr(args, "buy_state_file", None) is not None:
         raise SystemExit("topk_score_exit refuses --buy-state-file; use topk_dropout")
     out = _run_kwargs_topk_dropout(args)

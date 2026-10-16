@@ -892,6 +892,7 @@ def run(
     return_threshold_filter: bool = False,
     week_ma_gate: bool = False,
     ma5_gate: bool = False,
+    bigvalue_regime: tuple | None = None,
     keep_buy_vacancy: bool = False,
     dividend_type: str = "none",
     daily_root: Optional[Path] = None,
@@ -1033,6 +1034,10 @@ def run(
         f"loaded {len(bars)}/{len(all_codes)} daily series, {len(pool_days)} pool days",
         flush=True,
     )
+    if bigvalue_regime is not None:
+        from backtest.research.bigvalue_regime import with_bigvalue_gate
+
+        eligible_buy = with_bigvalue_gate(eligible_buy, bars, *bigvalue_regime)
     if week_ma_gate:
         from backtest.research.topk_dropout_eligibility import with_week_ma_gate
 

@@ -56,6 +56,11 @@ HELP_LOCK = """
   --index-ma5-gate 新开闸（默认关）：全市场只看上证指数 000001.SH，不分板块。
   信号日=买入日前一根上证交易日。该日收盘 < 含当日的 5 日均线 → 下一交易日所有新开不买。
   收盘=均线不挡。指数缺前史或无正收盘 → 不买。不因此强卖已持仓。
+  --bigvalue-block-new 默认关；--bigvalue-regime-file 显式 parquet，不是 buy-state。
+  加载再剔除表尾连续 bigvalue=0；只读 ma*，不重算。state 默认 5×10、confirm-days=2。
+  信号日=本书前一交易日；确认死叉态 → 次日全部新开不买，不强卖旧仓。
+  缺日/暖机/未满确认不买；等号非死非金，打断确认。与 --index-ma5-gate 同开拒绝。
+  topk_score_exit 拒绝任意 bigvalue 旗；无强平/金叉倍数实现；risk_degree 仍为 0.95。
   --dividend-type none|front|back 日线复权（默认 none）；front/back 不再做 E-R6 除权缩放。
   --qlib-data-root 读 qlib features/*.day.bin（$close 后复权）。成交热路径不挂 qlib 运行时；
   Mean($close, n) 用已加载收盘滚动均值，不是「算法不许像 qlib」。

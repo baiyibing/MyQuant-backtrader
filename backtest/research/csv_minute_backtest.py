@@ -2331,6 +2331,7 @@ def run(
     stop_fill: Optional[str] = None,
     week_ma_gate: bool = False,
     ma5_gate: bool = False,
+    bigvalue_regime: tuple | None = None,
     keep_buy_vacancy: bool = False,
     buy_cost_rate: Optional[float] = None,
     sell_cost_rate: Optional[float] = None,
@@ -2593,6 +2594,10 @@ def run(
             "participation_rate": participation_rate,
             "volume_for_bucket": samples,
         }
+    if bigvalue_regime is not None:
+        from backtest.research.bigvalue_regime import with_bigvalue_gate
+
+        eligible_buy = with_bigvalue_gate(eligible_buy, daily, *bigvalue_regime)
     if week_ma_gate:
         from backtest.research.topk_dropout_eligibility import with_week_ma_gate
 
