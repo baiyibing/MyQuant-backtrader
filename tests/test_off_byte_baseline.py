@@ -160,6 +160,8 @@ def test_off_byte_baseline_covers_current_registry_and_standalone_v7():
         "version6_54",
         "version6_55",
         "version6_56",
+        "version10_1",
+        "version10_2",
     }
     assert set(BOOKS) == set(BOOK_NAMES) | set(PENDING_BOOK_NAMES)
     assert len(BOOK_NAMES) + len(PENDING_BOOK_NAMES) == len(BOOKS)

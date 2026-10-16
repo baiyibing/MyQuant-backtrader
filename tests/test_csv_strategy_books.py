@@ -92,6 +92,8 @@ def test_registered_books_are_explicit():
         "version9_2",
         "version9_3",
         "version10",
+        "version10_1",
+        "version10_2",
         "version11",
         "version12",
         "topk_dropout",
@@ -111,10 +113,16 @@ def test_registered_books_are_explicit():
     assert get_book("version8").peak_gap_min == 15
     assert get_book("version9").allow_add is False
     assert get_book("version10").allow_add is False
+    assert get_book("version10_1").allow_add is False
+    assert get_book("version10_1").peak_gap_min == 0
+    assert get_book("version10_2").allow_add is True
+    assert get_book("version10_2").sizing == "per_name"
     assert engine_book("v6") == "v6"
     assert engine_book("v8") == "v8"
     assert engine_book("v9") == "v9"
     assert engine_book("v10") == "v10"
+    assert engine_book("v10_1") == "v10_1"
+    assert engine_book("v10_2") == "v10_2"
 
 
 @pytest.mark.parametrize("strategy", ["version1", "version2"])
@@ -534,6 +542,8 @@ def test_books_are_separate_modules():
     assert "策略 8" in BOOKS["version8"].help_lock
     assert "策略 9" in BOOKS["version9"].help_lock
     assert "策略 10" in BOOKS["version10"].help_lock
+    assert "策略 10.1" in BOOKS["version10_1"].help_lock
+    assert "策略 10.2" in BOOKS["version10_2"].help_lock
 
 
 @pytest.mark.parametrize("strategy", [

@@ -44,26 +44,48 @@ def take_profit_reason(
     cost: float,
     peak: float,
     n_days: int = 1,
-    *, max_hold: bool = False,
+    *,
+    max_hold: bool = False,
+    max_hold_days: Optional[int] = None,
+    profit_take: bool = True,
 ) -> Optional[str]:
     """T+1 后价格达到成本的 10% 优先止盈，启用 max_hold 时否则满持有期强平。"""
     del peak
     if n_days < 1:
         return None
-    if cost > 0 and float(px) >= float(cost) * (1.0 + TAKE_PROFIT_PCT):
+    if (
+        profit_take
+        and cost > 0
+        and float(px) >= float(cost) * (1.0 + TAKE_PROFIT_PCT)
+    ):
         return "profit_take:target"
-    if max_hold and int(n_days) >= MAX_HOLD:
+    limit = (
+        int(max_hold_days)
+        if max_hold_days is not None
+        else (MAX_HOLD if max_hold else None)
+    )
+    if limit is not None and int(n_days) >= int(limit):
         return "force_sell:max_hold"
     return None
 
 
-def record_strategy9_params(st, *, max_hold: bool = False, range_stop: bool = True) -> None:
+def record_strategy9_params(
+    st,
+    *,
+    max_hold: bool = False,
+    max_hold_days: Optional[int] = None,
+    range_stop: bool = True,
+    profit_take: bool = True,
+) -> None:
     st.stats["sell_book"] = BOOK_TAG
     st.stats["stop_pct"] = None
     st.stats["stop_mode"] = "range_amp_20_trailing" if range_stop else "off"
     st.stats["range_bars"] = RANGE_BARS if range_stop else None
-    st.stats["profit_target"] = TAKE_PROFIT_PCT
-    st.stats["max_hold"] = MAX_HOLD if max_hold else None
+    st.stats["profit_target"] = TAKE_PROFIT_PCT if profit_take else None
+    if max_hold_days is not None:
+        st.stats["max_hold"] = int(max_hold_days)
+    else:
+        st.stats["max_hold"] = MAX_HOLD if max_hold else None
 
 
 def stop_range_status(frame, day):
@@ -108,8 +130,10 @@ SELL_MODES = ("mean_tr3_tp10", "range_amp_tp_amp", "mean_tr2_or_prior10_low")
 def validate_sell_mode(strategy, mode, max_hold=False):
     if mode is None:
         return
-    if strategy != "version9" or mode not in SELL_MODES:
-        raise ValueError("version9_sell requires version9 and one of " + repr(SELL_MODES))
+    if strategy not in {"version9", "version10_1"} or mode not in SELL_MODES:
+        raise ValueError(
+            "version9_sell requires version9/version10_1 and one of " + repr(SELL_MODES)
+        )
     if mode == "mean_tr2_or_prior10_low" and max_hold:
         raise ValueError("mean_tr2_or_prior10_low rejects max_hold")
 
