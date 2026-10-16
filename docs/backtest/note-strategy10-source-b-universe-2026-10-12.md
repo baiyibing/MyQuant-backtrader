@@ -7,7 +7,7 @@
 
 | 项 | 口径 |
 |----|------|
-| 书 | `--strategy version10`（别名 `10` / `v10`）；**仅一本**，无 `version10_x` |
+| 书 | `--strategy version10`（别名 `10` / `v10`）；导出侧仅此一本。2026-10-16 起（#473）回测注册 `version10_1`（卖点冻结 v9）/ `version10_2`（卖/仓位冻结 6.55 栈），买点复用同一池，**不改导出** |
 | 买点 | 名单源 B：`resist_tr_bb_1000`（`window=1000`） |
 | 导出 | `scripts/data/export_ta_pool.py`（别名 `export_strategy10_pool.py`） |
 | 卖点 | 冻结策略 6 **旧公式**（止损 6%、+1% 锚后 T+1… 回撤）；`sell_logic=version6_legacy`，不跟现行 version6（止损 2% 等）漂移 |
