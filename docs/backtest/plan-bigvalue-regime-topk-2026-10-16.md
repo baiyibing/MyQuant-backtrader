@@ -1,6 +1,6 @@
 # Plan: 联合 TopK 全市场大单净量 regime（2026-10-16）
 
-> **状态**：**v0.1 草案**。待 Claude review。**不是 impl GO**。本 PR 只加文档。
+> **现行状态（Human 2026-10-16）**：**GO — full switches + shared infrastructure**，实施在同分支 [PR #480](https://github.com/baiyibing/MyQuant-backtrader/pull/480)。Human：「把人裁都实施了，只是开关而已」。P1–P15 已按下表切点实施，全部行为默认 OFF；topk_dropout 为首个消费书。本文其余「未裁 / docs-only / 不是 impl GO / 第一轮仅挡新开」为原始提案历史，由本段及 §14 覆盖；#478 保留 docs-only。
 > **日期**：2026-10-16
 > **基线**：`master` `217682671a368455e2592dc2e2788547bede2fa2`
 > **风险档**：本 PR 无行为风险。将来若单独 GO 实施，挡新开是低风险闸（默认关）；强平会改持仓，默认关，且比挡新开狠得多。
@@ -547,3 +547,27 @@ ERROR: hardcoded machine paths in executable code:
 | 版本 | 日期 | 内容 |
 |---|---|---|
 | v0.1 | 2026-10-16 | 首稿。docs-only。P1–P15 全部未裁。Q12 打开。Q8 保持打开。无 impl GO。 |
+
+
+## 14. Human 2026-10-16 full-switch cut（现行 SSOT）
+
+Human: 「把人裁都实施了，只是开关而已」。共享基础设施放在 `backtest/research/bigvalue_regime.py`；引擎以 kwargs opt in，topk_dropout 首消费，其它 CLI 书当前拒绝这些旗。不新建策略、不改排名、不改默认。Codex review **GO**：见 [review](reviews/2026-10-16/plan-bigvalue-regime-topk/codex.md)。同分支扩展 #480，不开第二 PR。
+
+| P | 已裁实施 |
+|---|---|
+| P1 | 任意行为旗 + index-ma5-gate 拒绝（互斥） |
+| P2 | flatten 本 PR 交付，默认 OFF |
+| P3 | golden-mult M 默认 None；确认金叉 eff=min(1.0,0.95*M)，M 必须有限且正 |
+| P4–P6 | enabled 时 confirm=2、连续 state、MA=5×10；CLI 可配窗口/确认天数，signal 只支持 state |
+| P7 | 缺精确信号日：继续运行、挡新开、不强平/加倍；任意行为旗缺文件/列/重复日期硬失败 |
+| P8–P9 | 等号非死非金、打断 streak；有效等号日可开。暖机/未满确认挡新开、不强平/加倍 |
+| P10 | 信号次日开盘：日线 open、分钟精确 09:30 open，无该分钟不借后续报价 |
+| P11 | 跌停沿用引擎拒绝/延期；强平不套 Q7；未成交次日开盘重试 |
+| P12 | 已有 pending 优先；止损 → regime flatten → dropout，同仓一卖，reason=regime_flat:bigvalue_death |
+| P13 | topk_score_exit + 任意显式 bigvalue 旗拒绝 |
+| P14 | 只读 parquet ma{fast}/ma{slow}，不做第二套 rolling |
+| P15 | 日线/分钟同一日频日历及领先 gate；分钟强平按 P10 |
+
+旗：`--bigvalue-regime-file`、`--bigvalue-block-new`、`--bigvalue-flatten`、`--bigvalue-golden-mult`、`--bigvalue-ma-fast/slow`、`--bigvalue-confirm-days`、`--bigvalue-signal state`。任意行为须显式文件，参数本身不启用行为。任意行为开启时，共享 gate 对缺失/暖机/未确认保持 fail-closed，即使只开 flatten 或 golden；确认死叉仅在 block-new 开启时挡新开。
+
+R1–R13 保留：lead-lag、尾零再剔、单书开关、默认关、无盘符、Q8 仍开。#475 已合并且显式 CSV 路径。无湖回测、无超额结论、Grok 未运行、未合并。

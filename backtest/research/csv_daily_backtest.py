@@ -284,6 +284,10 @@ def simulate(
     sim_profile: SimPhaseClock | None = None,
     st_gate: bool = False,
     research_overlay=None,
+    bigvalue_regime: tuple | None = None,
+    bigvalue_block_new: bool = False,
+    bigvalue_flatten: bool = False,
+    bigvalue_golden_mult: float | None = None,
 ) -> SimState:
     """核心日循环。bars/pool_days 可由测试注入；run() 负责从湖与 CSV 加载。
 
@@ -318,6 +322,16 @@ def simulate(
             bars, signal_bars_front, start=start, end=end,
             required_codes={c for codes in pool_days.values() for c in codes},
         )
+    if bigvalue_regime is None and (bigvalue_block_new or bigvalue_flatten or bigvalue_golden_mult is not None):
+        raise ValueError("bigvalue behavior requires bigvalue_regime")
+    regime_days = {}
+    if bigvalue_regime is not None:
+        from backtest.research.bigvalue_regime import with_bigvalue_gate
+
+        eligible_buy = with_bigvalue_gate(eligible_buy, bars, *bigvalue_regime, block_new=bigvalue_block_new)
+        regime_days = eligible_buy.bigvalue_diagnostics["reasons_by_day"]
+    from backtest.research.bigvalue_regime import flatten_reason, golden_cash_fraction
+
     hooks = prepare_strategy_hooks(
         strategy,
         stop_pct=stop_pct,
@@ -602,6 +616,16 @@ def simulate(
                                           price_rule="daily_stop_touch_at_trigger")
                                 continue
 
+                        regime_reason = flatten_reason(regime_days, day, bigvalue_flatten)
+                        if regime_reason:
+                            if defer_sell_at_limit(float(row["open"]), limits):
+                                st.stats["defer_sell_limit_down"] += 1
+                                pos.pending_exit = regime_reason
+                            else:
+                                _sell(st, code, pos, float(row["open"]), day, regime_reason,
+                                      price_rule="daily_regime_next_open")
+                            continue
+
                         pos.peak = max(pos.peak, float(row["high"]))
                         if defer_limit_up and hit_limit_up(close, limit_up):
                             continue
@@ -729,7 +753,7 @@ def simulate(
                 ration_seed=hooks.get("ration_seed", 0),
                 exdiv=exdiv,
                 planned_for_day=hooks.get("planned_for_day"),
-                cash_deploy_frac=hooks.get("cash_deploy_frac"),
+                cash_deploy_frac=golden_cash_fraction(regime_days, day, bigvalue_golden_mult, hooks.get("cash_deploy_frac")),
                 qlib_limit_pct=qlib_limit_pct,
                 limit_up_chase=limit_up_chase,
                 forbid_all_trade_at_limit=forbid_all_trade_at_limit,
@@ -893,6 +917,9 @@ def run(
     week_ma_gate: bool = False,
     ma5_gate: bool = False,
     bigvalue_regime: tuple | None = None,
+    bigvalue_block_new: bool = False,
+    bigvalue_flatten: bool = False,
+    bigvalue_golden_mult: float | None = None,
     keep_buy_vacancy: bool = False,
     dividend_type: str = "none",
     daily_root: Optional[Path] = None,
@@ -1034,10 +1061,6 @@ def run(
         f"loaded {len(bars)}/{len(all_codes)} daily series, {len(pool_days)} pool days",
         flush=True,
     )
-    if bigvalue_regime is not None:
-        from backtest.research.bigvalue_regime import with_bigvalue_gate
-
-        eligible_buy = with_bigvalue_gate(eligible_buy, bars, *bigvalue_regime)
     if week_ma_gate:
         from backtest.research.topk_dropout_eligibility import with_week_ma_gate
 
@@ -1104,6 +1127,8 @@ def run(
         topk=topk,
         n_drop=n_drop,
         eligible_buy=eligible_buy,
+        bigvalue_regime=bigvalue_regime, bigvalue_block_new=bigvalue_block_new,
+        bigvalue_flatten=bigvalue_flatten, bigvalue_golden_mult=bigvalue_golden_mult,
         keep_buy_vacancy=keep_buy_vacancy,
         buy_cost_rate=buy_cost_rate,
         sell_cost_rate=sell_cost_rate,

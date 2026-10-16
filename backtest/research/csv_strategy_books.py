@@ -708,6 +708,8 @@ def add_topk_dropout_args(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--bigvalue-regime-file", type=Path, default=None)
     ap.add_argument("--bigvalue-block-new", action="store_true",
                     help="topk_dropout: yesterday's confirmed bigvalue death state blocks new opens; default off")
+    ap.add_argument("--bigvalue-flatten", action="store_true", help="confirmed death: next session open; default off")
+    ap.add_argument("--bigvalue-golden-mult", type=float, default=None, help="confirmed golden cash fraction min(1, 0.95*M); default off")
     ap.add_argument("--bigvalue-ma-fast", type=int, default=None, help="default 5 when enabled")
     ap.add_argument("--bigvalue-ma-slow", type=int, default=None, help="default 10 when enabled")
     ap.add_argument("--bigvalue-confirm-days", type=int, default=None, help="default 2 when enabled")
@@ -941,6 +943,10 @@ def csv_run_kwargs_from_args(args) -> dict:
         raise SystemExit(f"--stop-fill must be touch or close, got {fill_s}")
     if fill_s == STOP_FILL_CLOSE and name not in STOP_FILL_CLOSE_BOOKS:
         raise SystemExit("--stop-fill close is only for topk_dropout / topk_score_exit")
+    if name not in {"topk_dropout", "topk_score_exit"} and any(
+        value not in (None, False) for key, value in vars(args).items() if key.startswith("bigvalue_")
+    ):
+        raise SystemExit("bigvalue flags currently supported only by topk_dropout")
     kwargs = get_book(name).run_kwargs(args)
     kwargs["ration"] = getattr(args, "ration", "file_order")
     kwargs["ration_seed"] = int(getattr(args, "ration_seed", 0))
@@ -1948,22 +1954,30 @@ def _apply_topk_score_exit(
 def _run_kwargs_topk_dropout(args) -> dict:
     from backtest.research.topk_dropout_scores import load_scores_from_args
 
-    bigvalue = bool(getattr(args, "bigvalue_block_new", False))
+    bigvalue = (bool(getattr(args, "bigvalue_block_new", False))
+                or bool(getattr(args, "bigvalue_flatten", False))
+                or getattr(args, "bigvalue_golden_mult", None) is not None)
     bigvalue_options = {
         key: getattr(args, "bigvalue_" + key, None)
         for key in ("regime_file", "ma_fast", "ma_slow", "confirm_days", "signal")
     }
     if any(value is not None for value in bigvalue_options.values()) and not bigvalue:
-        raise SystemExit("bigvalue flags require --bigvalue-block-new")
+        raise SystemExit("bigvalue flags require --bigvalue-block-new or --bigvalue-flatten or --bigvalue-golden-mult")
     if bigvalue and getattr(args, "index_ma5_gate", False):
-        raise SystemExit("bigvalue refuses --index-ma5-gate pending P1")
+        raise SystemExit("bigvalue refuses --index-ma5-gate (P1)")
     if bigvalue and bigvalue_options["regime_file"] is None:
-        raise SystemExit("--bigvalue-block-new requires --bigvalue-regime-file")
+        raise SystemExit("bigvalue behavior requires --bigvalue-regime-file")
     fast = bigvalue_options["ma_fast"] if bigvalue_options["ma_fast"] is not None else 5
     slow = bigvalue_options["ma_slow"] if bigvalue_options["ma_slow"] is not None else 10
     confirm = bigvalue_options["confirm_days"] if bigvalue_options["confirm_days"] is not None else 2
     if bigvalue and (not 0 < fast < slow or confirm < 1):
         raise SystemExit("bigvalue requires 0 < fast < slow and confirm-days >= 1")
+
+    multiplier = getattr(args, "bigvalue_golden_mult", None)
+    if multiplier is not None:
+        import math
+        if not math.isfinite(multiplier) or multiplier <= 0:
+            raise SystemExit("bigvalue golden-mult must be finite and positive")
 
     buy_rule = str(getattr(args, "buy_state_rule", "oral") or "oral")
     if (
@@ -2007,6 +2021,9 @@ def _run_kwargs_topk_dropout(args) -> dict:
         from backtest.research.bigvalue_regime import load_regime
 
         out["bigvalue_regime"] = (load_regime(bigvalue_options["regime_file"], fast, slow), confirm)
+        out["bigvalue_block_new"] = bool(getattr(args, "bigvalue_block_new", False))
+        out["bigvalue_flatten"] = bool(getattr(args, "bigvalue_flatten", False))
+        out["bigvalue_golden_mult"] = multiplier
     st_daily = getattr(args, "st_daily_file", None)
     age_map = getattr(args, "age_map_file", None)
     age_days = int(getattr(args, "age_days", 60))
@@ -2042,7 +2059,7 @@ def _run_kwargs_topk_dropout(args) -> dict:
 
 def _run_kwargs_topk_score_exit(args) -> dict:
     if any(getattr(args, "bigvalue_" + key, None) is not None
-           for key in ("regime_file", "ma_fast", "ma_slow", "confirm_days", "signal")) or getattr(args, "bigvalue_block_new", False):
+           for key in ("regime_file", "ma_fast", "ma_slow", "confirm_days", "signal", "golden_mult")) or getattr(args, "bigvalue_block_new", False) or getattr(args, "bigvalue_flatten", False):
         raise SystemExit("topk_score_exit refuses any bigvalue flag; use topk_dropout")
     if getattr(args, "buy_state_file", None) is not None:
         raise SystemExit("topk_score_exit refuses --buy-state-file; use topk_dropout")

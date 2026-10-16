@@ -1,4 +1,4 @@
-"""Opt-in market-wide block-new gate; precomputed MA, exact prior session only."""
+"""Shared opt-in market regime: precomputed MA, exact prior session only."""
 from __future__ import annotations
 
 import math
@@ -37,12 +37,8 @@ def load_regime(path: str | Path, fast: int = 5, slow: int = 10) -> dict[str, in
     return states
 
 
-def with_bigvalue_gate(eligible_buy, bars, states, confirm_days=2):
-    """Bind to the book's union daily-bar calendar, including loaded prehistory.
-
-    Diagnostics count distinct queried buy days, independent of candidate count.
-    Equality is neutral; missing/warmup/under-confirmation are fail-closed.
-    """
+def confirmed_days(bars, states, confirm_days=2):
+    """Execution-day labels from exact prior sessions, never stale asof rows."""
     if confirm_days < 1:
         raise ValueError("bigvalue confirm-days must be positive")
     calendar = sorted({pd.Timestamp(day).strftime("%Y%m%d")
@@ -64,6 +60,26 @@ def with_bigvalue_gate(eligible_buy, bars, states, confirm_days=2):
             reasons[day] = "under_confirm"
         else:
             reasons[day] = "death" if state == -1 else "allowed_golden"
+    return reasons
+
+
+def flatten_reason(reasons, day, enabled=False):
+    return "regime_flat:bigvalue_death" if enabled and reasons.get(
+        pd.Timestamp(str(day)).strftime("%Y%m%d")) == "death" else None
+
+
+def golden_cash_fraction(reasons, day, multiplier=None, base=0.95):
+    if multiplier is None:
+        return base
+    if not math.isfinite(multiplier) or multiplier <= 0:
+        raise ValueError("bigvalue golden-mult must be finite and positive")
+    return min(1.0, 0.95 * multiplier) if reasons.get(
+        pd.Timestamp(str(day)).strftime("%Y%m%d")) == "allowed_golden" else base
+
+
+def with_bigvalue_gate(eligible_buy, bars, states, confirm_days=2, *, block_new=True):
+    """Preserve book list/seat hooks; unknown days always fail closed."""
+    reasons = confirmed_days(bars, states, confirm_days)
     queried = set()
     diagnostics = {"skip_bigvalue_block": 0, "reasons_by_day": reasons}
 
@@ -73,7 +89,8 @@ def with_bigvalue_gate(eligible_buy, bars, states, confirm_days=2):
 
     def seat_ok(code, day):
         ds = pd.Timestamp(str(day)).strftime("%Y%m%d")
-        allowed = reasons.get(ds, "missing_or_warmup").startswith("allowed_")
+        reason = reasons.get(ds, "missing_or_warmup")
+        allowed = reason.startswith("allowed_") or (not block_new and reason == "death")
         if not allowed:
             if ds not in queried:
                 diagnostics["skip_bigvalue_block"] += 1
