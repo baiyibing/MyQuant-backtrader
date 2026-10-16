@@ -70,4 +70,4 @@ def book_fill_defaults(hooks, minute_stop_trigger="close"):
 
 def is_open_fill(reason):
     """Preserve legacy gap metadata; queued executions are opening quotes too."""
-    return reason == "stop_loss:gap_open" or reason.endswith(":next_open")
+    return reason in {"stop_loss:gap_open", "regime_flat:bigvalue_death"} or reason.endswith(":next_open")
