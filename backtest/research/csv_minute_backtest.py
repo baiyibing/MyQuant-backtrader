@@ -1374,7 +1374,9 @@ def simulate(
     fix_s11_exit_domain: bool = False,
     version9_sell=None,
     max_hold: bool = False,
+    max_hold_days=None,
     range_stop: bool = True,
+    profit_take: bool = True,
     hold_days: int = 20,
     fix_s81_band_precision: bool = False,
     signal_bars_front: dict[str, pd.DataFrame] | None = None,
@@ -1514,7 +1516,9 @@ def simulate(
             apply_fn=apply_csv_strategy,
             **({"version9_sell": version9_sell} if version9_sell is not None else {}),
             **({"max_hold": True} if max_hold else {}),
+            **({"max_hold_days": max_hold_days} if max_hold_days is not None else {}),
             **({"range_stop": False} if not range_stop else {}),
+            **({"profit_take": False} if not profit_take else {}),
             hold_days=hold_days,
             **({"fix_s81_band_precision": True} if fix_s81_band_precision else {}),
             scores_by_day=scores_by_day,
@@ -2337,7 +2341,9 @@ def run(
     fix_s11_exit_domain: bool = False,
     version9_sell=None,
     max_hold: bool = False,
+    max_hold_days=None,
     range_stop: bool = True,
+    profit_take: bool = True,
     hold_days: int = 20,
     fix_s81_band_precision: bool = False,
     minute_stop_trigger: str = "close",
@@ -2477,7 +2483,7 @@ def run(
         if book in ("version4", "version12")
         else (20 if return_threshold_filter else WARMUP_DAYS)
     )
-    if normalize_csv_strategy(strategy) in {"version9", "version9_1"}:
+    if normalize_csv_strategy(strategy) in {"version9", "version9_1", "version10_1"}:
         warm_days = max(warm_days, RANGE_LOOKBACK_CALENDAR_DAYS)
     if week_ma_gate:
         from backtest.research.topk_dropout_eligibility import WEEK_MA_WARMUP_DAYS
@@ -2647,7 +2653,9 @@ def run(
         **volume_options,
         **({"version9_sell": version9_sell} if version9_sell is not None else {}),
         **({"max_hold": True} if max_hold else {}),
+        **({"max_hold_days": max_hold_days} if max_hold_days is not None else {}),
         **({"range_stop": False} if not range_stop else {}),
+        **({"profit_take": False} if not profit_take else {}),
         hold_days=hold_days,
         **({"fix_s81_band_precision": True} if fix_s81_band_precision else {}),
         take_profit=take_profit,

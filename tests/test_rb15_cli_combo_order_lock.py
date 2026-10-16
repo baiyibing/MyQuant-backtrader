@@ -4,8 +4,8 @@ from backtest.research import csv_minute_backtest as minute
 from backtest.research import csv_strategy_books as books
 
 CASES = [
-    ({'max_hold': True}, ValueError, 'max_hold is supported only by version9'),
-    ({'version9_sell': 'bad'}, ValueError, "version9_sell requires version9 and one of ('mean_tr3_tp10', 'range_amp_tp_amp', 'mean_tr2_or_prior10_low')"),
+    ({'max_hold': True}, ValueError, 'max_hold is supported only by version9/version10_1'),
+    ({'version9_sell': 'bad'}, ValueError, "version9_sell requires version9/version10_1 and one of ('mean_tr3_tp10', 'range_amp_tp_amp', 'mean_tr2_or_prior10_low')"),
     ({'strategy': 'version9', 'version9_sell': 'mean_tr2_or_prior10_low', 'max_hold': True}, ValueError, 'mean_tr2_or_prior10_low rejects max_hold'),
     ({'participation_rate': 0.1, 'minute_source': 'qlib_1min'}, ValueError, 'participation_rate requires raw lake minute volume in shares'),
     ({'participation_rate': 0.1, 'tail_window_buy': True, 'tail_volume_unit': 'lots'}, ValueError, 'participation_rate requires shares, not tail volume lots'),

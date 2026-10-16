@@ -86,6 +86,8 @@ from backtest.research import (
     strategy9_2_rules,
     strategy9_3_rules,
     strategy10_rules,
+    strategy10_1_rules,
+    strategy10_2_rules,
     strategy11_rules,
     strategy12_rules,
     strategy_topk_dropout_rules,
@@ -278,12 +280,16 @@ HELP_LOCK_V8_5 = strategy8_5_rules.HELP_LOCK
 HELP_LOCK_V8_6 = strategy8_6_rules.HELP_LOCK
 HELP_LOCK_V9 = strategy9_rules.HELP_LOCK
 HELP_LOCK_V10 = strategy10_rules.HELP_LOCK
+HELP_LOCK_V10_1 = strategy10_1_rules.HELP_LOCK
+HELP_LOCK_V10_2 = strategy10_2_rules.HELP_LOCK
 HELP_LOCK_TOPK = strategy_topk_dropout_rules.HELP_LOCK
 HELP_LOCK_SCORE_EXIT = strategy_topk_score_exit_rules.HELP_LOCK
 
 FORBIDDEN_DEFAULT_STOCK_POOL = frozenset({
-    "version9", "version9_1", "version9_2", "version9_3", "version10", "version11",
+    "version9", "version9_1", "version9_2", "version9_3",
+    "version10", "version10_1", "version10_2", "version11",
 })
+RANGE_STOP_BOOKS = frozenset({"version9", "version10_1"})
 STOP_FILL_TOUCH = "touch"
 STOP_FILL_CLOSE = "close"
 STOP_FILL_ALLOWED = (STOP_FILL_TOUCH, STOP_FILL_CLOSE)
@@ -750,9 +756,20 @@ def add_csv_backtest_common_args(
     """
     ap.add_argument("--version9-sell", choices=strategy9_rules.SELL_MODES, default=None)
     ap.add_argument("--max-hold", action="store_true",
-                    help="version9: enable 20-trading-day force-flat (force_sell:max_hold); default off")
+                    help="version9/version10_1: enable 20-trading-day force-flat (force_sell:max_hold); default off")
+    ap.add_argument(
+        "--max-hold-days",
+        type=int,
+        default=None,
+        help="version9/version10_1: force-flat after N trading days (overrides --max-hold length)",
+    )
     ap.add_argument("--no-range-stop", action="store_true",
-                    help="version9: turn off the rolling 20-bar range stop; default on")
+                    help="version9/version10_1: turn off the rolling 20-bar range stop; default on")
+    ap.add_argument(
+        "--no-profit-take",
+        action="store_true",
+        help="version9/version10_1: disable the +10%% profit_take:target exit",
+    )
     ap.add_argument(
         "--hold-days",
         type=int,
@@ -852,11 +869,12 @@ def resolve_research_pool_dir(
     if name in FORBIDDEN_DEFAULT_STOCK_POOL and is_repo_stock_pool(
         chosen, repo=Path(repo)
     ):
-        exporter = (
-            "export_strategy11_pool.py"
-            if name == "version11"
-            else "export_strategy9_pool.py"
-        )
+        if name == "version11":
+            exporter = "export_strategy11_pool.py"
+        elif name in {"version10", "version10_1", "version10_2"}:
+            exporter = "export_ta_pool.py"
+        else:
+            exporter = "export_strategy9_pool.py"
         raise SystemExit(
             f"{name} requires --pool-dir from {exporter}; "
             f"refusing stock_pool/: {chosen}"
@@ -892,12 +910,22 @@ def csv_run_kwargs_from_args(args) -> dict:
             raise SystemExit(f"--name-budget applies only to per_name books; {name} is {BOOKS[name].sizing}")
     if getattr(args, "fix_s81_band_precision", False) and name != "version8_1":
         raise SystemExit("--fix-s81-band-precision is supported only by version8_1")
-    if getattr(args, "max_hold", False) and name != "version9":
-        raise SystemExit("--max-hold is supported only by version9")
-    if getattr(args, "no_range_stop", False) and name != "version9":
-        raise SystemExit("--no-range-stop is supported only by version9")
+    if getattr(args, "max_hold", False) and name not in RANGE_STOP_BOOKS:
+        raise SystemExit("--max-hold is supported only by version9/version10_1")
+    max_hold_days = getattr(args, "max_hold_days", None)
+    if max_hold_days is not None:
+        if name not in RANGE_STOP_BOOKS:
+            raise SystemExit("--max-hold-days is supported only by version9/version10_1")
+        if int(max_hold_days) < 1:
+            raise SystemExit(f"--max-hold-days must be >= 1, got {max_hold_days}")
+    if getattr(args, "no_range_stop", False) and name not in RANGE_STOP_BOOKS:
+        raise SystemExit("--no-range-stop is supported only by version9/version10_1")
+    if getattr(args, "no_profit_take", False) and name not in RANGE_STOP_BOOKS:
+        raise SystemExit("--no-profit-take is supported only by version9/version10_1")
     if getattr(args, "no_range_stop", False) and getattr(args, "version9_sell", None) is not None:
         raise SystemExit("--no-range-stop cannot be combined with --version9-sell")
+    if getattr(args, "no_profit_take", False) and getattr(args, "version9_sell", None) is not None:
+        raise SystemExit("--no-profit-take cannot be combined with --version9-sell")
     fill_s = getattr(args, "stop_fill", None)
     fill_s = None if fill_s is None else str(fill_s).strip().lower()
     if fill_s == "":
@@ -1432,18 +1460,43 @@ def _run_kwargs_version9_3(args):
     }
 
 
+def _resolve_max_hold_days(*, max_hold: bool, max_hold_days: Optional[int]) -> Optional[int]:
+    if max_hold_days is not None:
+        days = int(max_hold_days)
+        if days < 1:
+            raise SystemExit(f"--max-hold-days must be >= 1, got {max_hold_days}")
+        return days
+    if max_hold:
+        return int(strategy9_rules.MAX_HOLD)
+    return None
+
+
 def _apply_version9(
-    *, version9_sell=None, max_hold: bool = False, range_stop: bool = True, stop_pct: Optional[float] = None, take_profit=None, record_params=None, **_
+    *,
+    version9_sell=None,
+    max_hold: bool = False,
+    max_hold_days: Optional[int] = None,
+    range_stop: bool = True,
+    profit_take: bool = True,
+    stop_pct: Optional[float] = None,
+    take_profit=None,
+    record_params=None,
+    **_,
 ) -> dict:
     if stop_pct is not None:
         raise SystemExit("version9 does not accept --stop-pct")
     if version9_sell is not None and not range_stop:
         raise SystemExit("--no-range-stop cannot be combined with --version9-sell")
+    if version9_sell is not None and not profit_take:
+        raise SystemExit("--no-profit-take cannot be combined with --version9-sell")
 
-    strategy9_rules.validate_sell_mode("version9", version9_sell, max_hold)
+    hold_days = _resolve_max_hold_days(max_hold=max_hold, max_hold_days=max_hold_days)
+    strategy9_rules.validate_sell_mode("version9", version9_sell, hold_days is not None)
     if version9_sell is not None:
         def record(st):
-            strategy9_rules.record_strategy9_params(st, max_hold=max_hold)
+            strategy9_rules.record_strategy9_params(
+                st, max_hold=hold_days is not None, max_hold_days=hold_days
+            )
             st.stats.update(sell_mode=version9_sell,
                             stop_mode=("range_amp_20_trailing" if version9_sell == "range_amp_tp_amp" else
                                        "mean_tr_20_yuan_" + ("3" if version9_sell == "mean_tr3_tp10" else "2")),
@@ -1453,10 +1506,24 @@ def _apply_version9(
                     take_profit=lambda *args: None, record_params=record)
 
     def _tp(px, cost, peak, n_days):
-        return strategy9_rules.take_profit_reason(px, cost, peak, n_days, max_hold=max_hold)
+        return strategy9_rules.take_profit_reason(
+            px,
+            cost,
+            peak,
+            n_days,
+            max_hold=hold_days is not None,
+            max_hold_days=hold_days,
+            profit_take=profit_take,
+        )
 
     def _rec(st):
-        strategy9_rules.record_strategy9_params(st, max_hold=max_hold, range_stop=range_stop)
+        strategy9_rules.record_strategy9_params(
+            st,
+            max_hold=hold_days is not None,
+            max_hold_days=hold_days,
+            range_stop=range_stop,
+            profit_take=profit_take,
+        )
 
     hooks = {
         "stop_pct": None,
@@ -1471,10 +1538,16 @@ def _apply_version9(
 def _run_kwargs_version9(args) -> dict:
     if getattr(args, "stop_pct", None) is not None:
         raise SystemExit("version9 does not accept --stop-pct")
+    hold_days = _resolve_max_hold_days(
+        max_hold=bool(getattr(args, "max_hold", False)),
+        max_hold_days=getattr(args, "max_hold_days", None),
+    )
     return {
         "strategy": "version9",
-        "max_hold": bool(getattr(args, "max_hold", False)),
+        "max_hold": hold_days is not None,
+        "max_hold_days": hold_days,
         "range_stop": not bool(getattr(args, "no_range_stop", False)),
+        "profit_take": not bool(getattr(args, "no_profit_take", False)),
         "version9_sell": getattr(args, "version9_sell", None),
     }
 
@@ -1517,6 +1590,165 @@ def _apply_version10(
 
 def _run_kwargs_version10(args) -> dict:
     return {"strategy": "version10", **strategy6_kwargs_from_args(args)}
+
+
+def _apply_version10_1(
+    *,
+    version9_sell=None,
+    max_hold: bool = False,
+    max_hold_days: Optional[int] = None,
+    range_stop: bool = True,
+    profit_take: bool = True,
+    stop_pct: Optional[float] = None,
+    take_profit=None,
+    record_params=None,
+    **_,
+) -> dict:
+    if stop_pct is not None:
+        raise SystemExit("version10_1 does not accept --stop-pct")
+    if version9_sell is not None and not range_stop:
+        raise SystemExit("--no-range-stop cannot be combined with --version9-sell")
+    if version9_sell is not None and not profit_take:
+        raise SystemExit("--no-profit-take cannot be combined with --version9-sell")
+
+    hold_days = _resolve_max_hold_days(max_hold=max_hold, max_hold_days=max_hold_days)
+    strategy10_1_rules.validate_sell_mode(
+        "version10_1", version9_sell, hold_days is not None
+    )
+    if version9_sell is not None:
+        def record(st):
+            strategy10_1_rules.record_strategy10_1_params(
+                st, max_hold=hold_days is not None, max_hold_days=hold_days
+            )
+            st.stats.update(
+                sell_mode=version9_sell,
+                stop_mode=(
+                    "range_amp_20_trailing"
+                    if version9_sell == "range_amp_tp_amp"
+                    else "mean_tr_20_yuan_"
+                    + ("3" if version9_sell == "mean_tr3_tp10" else "2")
+                ),
+                profit_target=(
+                    0.10
+                    if version9_sell == "mean_tr3_tp10"
+                    else (
+                        "range_amp_20_trailing"
+                        if version9_sell == "range_amp_tp_amp"
+                        else None
+                    )
+                ),
+            )
+
+        return dict(
+            stop_pct=None,
+            version9_exit=lambda frame, day: strategy10_1_rules.version9_exit(
+                frame, day, version9_sell
+            ),
+            take_profit=lambda *args: None,
+            record_params=record,
+        )
+
+    def _tp(px, cost, peak, n_days):
+        return strategy10_1_rules.take_profit_reason(
+            px,
+            cost,
+            peak,
+            n_days,
+            max_hold=hold_days is not None,
+            max_hold_days=hold_days,
+            profit_take=profit_take,
+        )
+
+    def _rec(st):
+        strategy10_1_rules.record_strategy10_1_params(
+            st,
+            max_hold=hold_days is not None,
+            max_hold_days=hold_days,
+            range_stop=range_stop,
+            profit_take=profit_take,
+        )
+
+    hooks = {
+        "stop_pct": None,
+        "take_profit": _tp if take_profit is None else take_profit,
+        "record_params": _rec if record_params is None else record_params,
+    }
+    if range_stop:
+        hooks["stop_range"] = strategy10_1_rules.stop_range_amplitude
+    return hooks
+
+
+def _run_kwargs_version10_1(args) -> dict:
+    if getattr(args, "stop_pct", None) is not None:
+        raise SystemExit("version10_1 does not accept --stop-pct")
+    hold_days = _resolve_max_hold_days(
+        max_hold=bool(getattr(args, "max_hold", False)),
+        max_hold_days=getattr(args, "max_hold_days", None),
+    )
+    return {
+        "strategy": "version10_1",
+        "max_hold": hold_days is not None,
+        "max_hold_days": hold_days,
+        "range_stop": not bool(getattr(args, "no_range_stop", False)),
+        "profit_take": not bool(getattr(args, "no_profit_take", False)),
+        "version9_sell": getattr(args, "version9_sell", None),
+    }
+
+
+def _apply_version10_2(
+    *,
+    stop_pct=None,
+    take_profit=None,
+    record_params=None,
+    index_block_new=None,
+    **_,
+) -> dict:
+    resolved = (
+        strategy10_2_rules.STOP_PCT if stop_pct is None else float(stop_pct)
+    )
+
+    def _tp(px, cost, peak, n_days=1):
+        return strategy10_2_rules.take_profit_reason(px, cost, peak, n_days)
+
+    def _rec(st):
+        strategy10_2_rules.record_strategy10_2_params(st, stop_pct=resolved)
+        st.stats["index_gate_on"] = bool(strategy6_55_rules.INDEX_GATE_ON)
+        st.stats["parking_symbol"] = strategy6_55_rules.PARKING_SYMBOL
+        st.stats["parking_frac"] = strategy6_55_rules.PARKING_FRAC
+        st.stats["parking_execute"] = bool(strategy6_55_rules.PARKING_EXECUTE)
+        st.stats["parking_open_cover"] = bool(strategy6_55_rules.PARKING_OPEN_COVER)
+        st.stats["cont_stop_rebuy"] = bool(strategy6_55_rules.CONT_STOP_REBUY)
+        st.stats["profit_skim"] = bool(strategy6_55_rules.PROFIT_SKIM)
+        st.stats["index_cut"] = bool(strategy6_55_rules.INDEX_CUT)
+        st.stats["div_to_parking"] = bool(strategy6_55_rules.DIV_TO_PARKING)
+        st.stats["ladder_give_step"] = float(strategy6_55_rules.GIVE_STEP)
+        st.stats["scale_out_step"] = float(strategy6_55_rules.SCALE_OUT_STEP)
+        st.stats["scale_out_frac"] = float(strategy6_55_rules.SCALE_OUT_FRAC)
+        st.stats["profit_skim_step"] = float(strategy6_55_rules.PROFIT_SKIM_STEP)
+        st.stats["profit_skim_frac"] = float(strategy6_55_rules.PROFIT_SKIM_FRAC)
+        st.stats["peak_dd_exit"] = float(strategy6_55_rules.PEAK_DD_EXIT)
+
+    base = _apply_version6_55(
+        stop_pct=resolved,
+        take_profit=take_profit if take_profit is not None else _tp,
+        record_params=record_params if record_params is not None else _rec,
+        index_block_new=index_block_new,
+    )
+    base["name"] = "version10_2"
+    base["div_to_parking"] = bool(strategy6_55_rules.DIV_TO_PARKING)
+    base["scale_out_step"] = float(strategy6_55_rules.SCALE_OUT_STEP)
+    base["scale_out_frac"] = float(strategy6_55_rules.SCALE_OUT_FRAC)
+    base["profit_skim_step"] = float(strategy6_55_rules.PROFIT_SKIM_STEP)
+    base["profit_skim_frac"] = float(strategy6_55_rules.PROFIT_SKIM_FRAC)
+    base["peak_dd_exit"] = float(strategy6_55_rules.PEAK_DD_EXIT)
+    return base
+
+
+def _run_kwargs_version10_2(args) -> dict:
+    stop = getattr(args, "stop_pct", None)
+    if stop is not None and not 0 < float(stop) < 1:
+        raise SystemExit(f"--stop-pct must be in (0, 1), got {stop}")
+    return {"strategy": "version10_2", "stop_pct": stop}
 
 
 def _apply_version11(*, take_profit=None, record_params=None, **_) -> dict:
@@ -2794,6 +3026,32 @@ register(
         help_lock=strategy10_rules.HELP_LOCK,
         apply=_apply_version10,
         run_kwargs=_run_kwargs_version10,
+    )
+)
+register(
+    CsvStrategyBook(
+        name="version10_1",
+        tag=strategy10_1_rules.BOOK_TAG,
+        aliases=("10.1", "10_1", "v10.1", "v10_1", "version10_1"),
+        allow_add=strategy10_1_rules.ALLOW_ADD,
+        peak_gap_min=strategy10_1_rules.PEAK_GAP_MIN,
+        help_lock=strategy10_1_rules.HELP_LOCK,
+        apply=_apply_version10_1,
+        run_kwargs=_run_kwargs_version10_1,
+    )
+)
+register(
+    CsvStrategyBook(
+        name="version10_2",
+        tag=strategy10_2_rules.BOOK_TAG,
+        aliases=("10.2", "10_2", "v10.2", "v10_2", "version10_2"),
+        allow_add=strategy10_2_rules.ALLOW_ADD,
+        peak_gap_min=strategy10_2_rules.PEAK_GAP_MIN,
+        help_lock=strategy10_2_rules.HELP_LOCK,
+        apply=_apply_version10_2,
+        run_kwargs=_run_kwargs_version10_2,
+        sizing="per_name",
+        name_budget=float(strategy10_2_rules.NAME_BUDGET),
     )
 )
 

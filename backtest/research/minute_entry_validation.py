@@ -10,8 +10,8 @@ def validate_minute_entry(strategy, *, stage, version9_sell=None, max_hold=False
     if stage == "sell":
         from backtest.research.strategy9_rules import validate_sell_mode
         validate_sell_mode(book, version9_sell, max_hold)
-        if max_hold and book != "version9":
-            raise ValueError("max_hold is supported only by version9")
+        if max_hold and book not in {"version9", "version10_1"}:
+            raise ValueError("max_hold is supported only by version9/version10_1")
         validate_hold_days(book, hold_days)
     elif stage == "tail":
         if tail_window_buy and book not in {

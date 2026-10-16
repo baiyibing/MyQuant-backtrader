@@ -107,6 +107,9 @@ def load_book_index_gate(book, start, end):
     elif (_suffix := _version6_suffix(book)) is not None and _suffix >= 45:
         # 6.45 起的书继承 6.45 的闸门 loader；6.4 / 6.40-6.44 没有指数闸。
         module = import_module("backtest.research.strategy6_45_rules")
+    elif book == "version10_2":
+        # TR 名单 + 6.55 栈：闸门口径同 6.45+。
+        module = import_module("backtest.research.strategy6_45_rules")
     else:
         return None
     # 8.3 冻结包闸门无条件开，仍沿用 8 的 loader。

@@ -237,3 +237,55 @@ def test_daily_cli_version10_refuses_stock_pool(monkeypatch):
         sim.main(
             ["--strategy", "version10", "--start", "20260303", "--end", "20260323"]
         )
+
+
+def test_version10_2_reuses_version6_55_stack_and_refuses_stock_pool(tmp_path):
+    from backtest.research.cash_div_events import CASH_DIV_BOOKS
+    from backtest.research.csv_simulate_loop import extra_load_codes_for_strategy
+    from backtest.research.strategy6_47_rules import PARKING_SYMBOL
+    from backtest.research.strategy_book_helpers import load_book_index_gate
+
+    hooks55 = apply_csv_strategy("version6_55")
+    hooks102 = apply_csv_strategy("version10_2")
+    assert hooks102["name"] == "version10_2"
+    assert hooks102["book"] == "v10_2"
+    assert hooks102["sizing"] == "per_name"
+    assert hooks102["allow_add"] is True
+    assert hooks102["stop_pct"] == pytest.approx(hooks55["stop_pct"])
+    assert hooks102["take_profit"](10.0, 10.0, 11.0, 1) == hooks55["take_profit"](
+        10.0, 10.0, 11.0, 1
+    )
+    assert hooks102["div_to_parking"] is True
+    assert hooks102["peak_dd_exit"] == pytest.approx(hooks55["peak_dd_exit"])
+    assert hooks102.get("parking_symbol") == hooks55.get("parking_symbol")
+    assert extra_load_codes_for_strategy("version10_2") == {PARKING_SYMBOL}
+    assert "version10_2" in CASH_DIV_BOOKS
+    assert load_book_index_gate("version10_2", "20260105", "20260110") is not None
+    repo = tmp_path / "repo"
+    (repo / "stock_pool").mkdir(parents=True)
+    with pytest.raises(SystemExit, match="stock_pool"):
+        resolve_research_pool_dir("version10_2", None, repo=repo)
+    dest = repo / "exports" / "s10"
+    dest.mkdir(parents=True)
+    assert resolve_research_pool_dir("version10_2", dest, repo=repo) == dest
+
+
+def test_version10_1_reuses_version9_sells_and_refuses_stock_pool(tmp_path):
+    hooks9 = apply_csv_strategy("version9")
+    hooks101 = apply_csv_strategy("version10_1")
+    assert hooks101["name"] == "version10_1"
+    assert hooks101["book"] == "v10_1"
+    assert hooks101["stop_pct"] is None
+    assert hooks101["allow_add"] is False
+    assert hooks101["peak_gap_min"] == 0
+    assert "stop_range" in hooks101
+    assert hooks101["take_profit"](11.0, 10.0, 11.0, 1) == "profit_take:target"
+    assert hooks101["take_profit"](10.5, 10.0, 11.0, 1) is None
+    assert hooks9["take_profit"](11.0, 10.0, 11.0, 1) == "profit_take:target"
+    repo = tmp_path / "repo"
+    (repo / "stock_pool").mkdir(parents=True)
+    with pytest.raises(SystemExit, match="stock_pool"):
+        resolve_research_pool_dir("version10_1", None, repo=repo)
+    dest = repo / "exports" / "s10"
+    dest.mkdir(parents=True)
+    assert resolve_research_pool_dir("version10_1", dest, repo=repo) == dest
