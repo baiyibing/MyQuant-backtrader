@@ -21,8 +21,6 @@ from typing import Sequence
 
 import pandas as pd
 
-DEFAULT_CSV = Path("E:/stock_data/bigdata.csv")
-
 
 def load_bigvalue(csv_path: Path, value_col: str) -> pd.DataFrame:
     df = pd.read_csv(csv_path)
@@ -84,7 +82,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
         sys.stdout.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--csv", type=Path, default=DEFAULT_CSV, help="源 CSV(date, bigvalue)")
+    ap.add_argument("--csv", type=Path, required=True,
+                    help="源 CSV(date, bigvalue),如数据湖导出的 bigdata.csv")
     ap.add_argument("--out", type=Path, default=None,
                     help="输出 parquet;默认取 --csv 同名 .parquet")
     ap.add_argument("--value-col", default="bigvalue", help="数值列名(默认 bigvalue)")
