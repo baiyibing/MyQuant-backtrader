@@ -62,7 +62,10 @@ HELP_LOCK = """
   缺日/暖机/未满确认不买；等号非死非金，打断确认。与 --index-ma5-gate 同开拒绝。
   --bigvalue-flatten 默认关：确认死叉次日开盘（日线 open / 分钟 09:30 open）强平。
   止损先于强平再 dropout，同仓一卖；跌停走引擎延期，不套 Q7。
-  --bigvalue-golden-mult M 默认 None：确认金叉 eff=min(1.0, 0.95*M)，其它日仍 0.95。
+  --bigvalue-golden-mult M 默认 None：确认金叉 eff=min(1.0, base*M)，其它日 base（默认 0.95）。
+  --bigvalue-base-frac 默认 None：非金叉日买入投放 base（默认书 0.95）。
+    注意：block-new 开着时买入只发生在金叉确认日，base 对买入无感；
+    只有 flatten 不配 block 的组合里 base 才实际缩放买入。
   任意行为旗须显式文件；缺信号日挡新开且不强平/加倍；topk_score_exit 拒绝任意 bigvalue 旗。
   共享 bigvalue_regime 基建，topk_dropout 为首个消费书；其它书当前拒绝旗。
   --dividend-type none|front|back 日线复权（默认 none）；front/back 不再做 E-R6 除权缩放。

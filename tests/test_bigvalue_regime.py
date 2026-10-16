@@ -107,6 +107,7 @@ def test_kwargs_off_and_on(tmp_path, monkeypatch):
     assert on.pop('bigvalue_block_new') is True
     assert on.pop('bigvalue_flatten') is False
     assert on.pop('bigvalue_golden_mult') is None
+    assert on.pop('bigvalue_base_frac') is None
     assert on == old
 
 
@@ -133,7 +134,11 @@ def test_all_behavior_flags_require_file_and_refuse_index(flag):
 
 
 def test_shared_cash_flatten_and_missing_without_block_flag():
-    from backtest.research.bigvalue_regime import confirmed_days, flatten_reason, golden_cash_fraction
+    from backtest.research.bigvalue_regime import (
+        confirmed_days,
+        flatten_reason,
+        golden_cash_fraction,
+    )
     states = dict(zip(['20261009','20261012','20261013','20261014'], [-1,-1,1,1]))
     days = confirmed_days(bars(), states)
     assert flatten_reason(days, '20261013') is None  # default off
@@ -147,6 +152,39 @@ def test_shared_cash_flatten_and_missing_without_block_flag():
     gate = with_bigvalue_gate(None, bars(), states, block_new=False)
     assert gate('A', '20261013')  # confirmed death, flatten-only can open
     assert not gate('A', '20261016')  # any behavior: missing is fail closed
+
+
+def test_base_frac_pairs_with_golden_mult():
+    from backtest.research.bigvalue_regime import confirmed_days, golden_cash_fraction
+    states = dict(zip(['20261009','20261012','20261013','20261014'], [-1,-1,1,1]))
+    days = confirmed_days(bars(), states)
+    # Non-golden days sit at the lowered base; golden day = min(1, base*M).
+    assert golden_cash_fraction(days, '20261013', 2, 0.5) == 0.5
+    assert golden_cash_fraction(days, '20261016', 2, 0.5) == 0.5
+    assert golden_cash_fraction(days, '20261015', 2, 0.5) == 1.0
+    assert golden_cash_fraction(days, '20261015', 1.2, 0.5) == 0.6
+    # Default base keeps the merged contract byte-identical.
+    assert golden_cash_fraction(days, '20261015', 0.5) == 0.475
+
+
+def test_base_frac_cli_contract(tmp_path, monkeypatch):
+    from backtest.research import topk_dropout_scores
+    monkeypatch.setattr(topk_dropout_scores,'load_scores_from_args',lambda **kw: {'20261015': {'A':1.}})
+    path = fixture_file(tmp_path)
+    on = _run_kwargs_topk_dropout(parse([
+        '--bigvalue-block-new', '--bigvalue-regime-file', str(path),
+        '--bigvalue-base-frac', '0.5',
+        '--bigvalue-golden-mult', '2']))
+    assert on.pop('bigvalue_base_frac') == 0.5
+    assert on.pop('bigvalue_golden_mult') == 2.0
+    # Alone it is not a behavior flag; out of range it refuses.
+    with pytest.raises(SystemExit, match='require --bigvalue-block-new'):
+        _run_kwargs_topk_dropout(parse(
+            ['--bigvalue-base-frac', '0.5']))
+    with pytest.raises(SystemExit, match='base-frac'):
+        _run_kwargs_topk_dropout(parse([
+            '--bigvalue-block-new', '--bigvalue-regime-file', str(path),
+            '--bigvalue-base-frac', '1.5']))
 
 
 @pytest.mark.parametrize('engine', ['daily', 'minute', 'minute_open'])

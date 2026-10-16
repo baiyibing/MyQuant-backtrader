@@ -288,6 +288,7 @@ def simulate(
     bigvalue_block_new: bool = False,
     bigvalue_flatten: bool = False,
     bigvalue_golden_mult: float | None = None,
+    bigvalue_base_frac: float | None = None,
 ) -> SimState:
     """核心日循环。bars/pool_days 可由测试注入；run() 负责从湖与 CSV 加载。
 
@@ -753,7 +754,10 @@ def simulate(
                 ration_seed=hooks.get("ration_seed", 0),
                 exdiv=exdiv,
                 planned_for_day=hooks.get("planned_for_day"),
-                cash_deploy_frac=golden_cash_fraction(regime_days, day, bigvalue_golden_mult, hooks.get("cash_deploy_frac")),
+                cash_deploy_frac=golden_cash_fraction(
+                    regime_days, day, bigvalue_golden_mult,
+                    bigvalue_base_frac if bigvalue_base_frac is not None
+                    else hooks.get("cash_deploy_frac")),
                 qlib_limit_pct=qlib_limit_pct,
                 limit_up_chase=limit_up_chase,
                 forbid_all_trade_at_limit=forbid_all_trade_at_limit,
@@ -920,6 +924,7 @@ def run(
     bigvalue_block_new: bool = False,
     bigvalue_flatten: bool = False,
     bigvalue_golden_mult: float | None = None,
+    bigvalue_base_frac: float | None = None,
     keep_buy_vacancy: bool = False,
     dividend_type: str = "none",
     daily_root: Optional[Path] = None,
@@ -1129,6 +1134,7 @@ def run(
         eligible_buy=eligible_buy,
         bigvalue_regime=bigvalue_regime, bigvalue_block_new=bigvalue_block_new,
         bigvalue_flatten=bigvalue_flatten, bigvalue_golden_mult=bigvalue_golden_mult,
+        bigvalue_base_frac=bigvalue_base_frac,
         keep_buy_vacancy=keep_buy_vacancy,
         buy_cost_rate=buy_cost_rate,
         sell_cost_rate=sell_cost_rate,
