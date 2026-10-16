@@ -3,7 +3,7 @@
 Implements the first knife of [r2 + cut A](plan-bar-cache-cold-load-2026-10-16.md),
 after [Codex GO-WITH-NITS](../architecture/reviews/2026-10-16/pr-481-bar-cache-cold-load-r2/codex-r2.md)
 on [#481](https://github.com/baiyibing/MyQuant-backtrader/pull/481).
-Human「通过就实施」2026-10-16 authorizes this encode. Grok review pending; do not merge.
+Human「通过就实施」2026-10-16 authorizes this encode. Grok [GO-WITH-NITS](../architecture/reviews/2026-10-16/pr-482-s11-probe/grok.md); nits addressed on this branch before merge.
 
 This PR delivers **S1.1 scaffolding only**. It does not change `ashare_bars`,
 callers, cache files, memory namespaces, cache status or any strategy. The
@@ -51,10 +51,19 @@ exercise actual scan equivalence, month coverage, absence errors and source
 mutation rejection; they do not establish host performance or alpha.
 
 `cut_a_modeled_counts` reports expected whole-file invalidation separately
-for same-month and cross-month +1. It is **not** a measurement of rebuilt
-files (`actual_rebuilt_shards` is null). Same-month means all existing covered
-months; cross-month includes all historical covered months plus the new one.
-No digest manifests, frozen stamps or incremental-only promise.
+for same-month and cross-month +1 under `scenarios.*`. Keys are
+`scenario_base_end` / `scenario_extended_end` plus
+`modeled_not_measured_request_ends: true` — these are **modeled demo ends**,
+not live loader request ends; do not paste them into CLI `--end`. It is
+**not** a measurement of rebuilt files (`actual_rebuilt_shards` is null).
+Same-month means all existing covered months; cross-month includes all
+historical covered months plus the new one. No digest manifests, frozen
+stamps or incremental-only promise.
+
+`fd_extrapolation.projected_shard_files` is `request_codes × month_windows`
+(full-request shard-file projection). Do not read it as a single-symbol
+count. Host probe JSON embeds absolute `resolver_identity`; keep evidence
+output outside the repo (see `.gitignore`).
 
 Before S1: collect representative host scan/open data and monolith versus
 candidate shard write/read costs, choose grain from those measurements,

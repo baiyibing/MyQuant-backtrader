@@ -103,3 +103,19 @@ Does **not** authorize S1 shard encode, switch install, S2, or S3.
 Do not merge from this review alone; Human still owns the merge button.
 Nits may land as drive-by on a later docs/probe polish PR — not required
 to unblock Human merge of #482 if scope stays scaffolding-only.
+
+## 6. Nits addressed (post-review polish)
+
+Human asked to land nits before merge (2026-10-16). Applied on this branch:
+
+1. Renamed `fd_extrapolation.single_symbol_month_total_files` →
+   `projected_shard_files` (value remains `request_codes * months`).
+2. `cut_a_modeled_counts` now nests scenarios under `scenarios` with
+   `scenario_base_end` / `scenario_extended_end` and top-level
+   `modeled_not_measured_request_ends: true`.
+3. No probe evidence JSON was committed; `.gitignore` now keeps host
+   `minute-cold-load-probe*.json` / evidence dir out of git.
+4. Skipped optional `scripts/` package inits (namespace import already green).
+
+Verdict for scaffolding merge remains **GO-WITH-NITS** (nits cleared).
+Still does not authorize S1 encode.

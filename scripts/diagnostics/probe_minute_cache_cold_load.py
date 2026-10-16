@@ -41,17 +41,27 @@ def month_windows(start: str, end: str) -> list[tuple[str, str]]:
 
 
 def cut_a_counts(start: str, end: str) -> dict:
-    """Expected counts for a changed symbol stamp; NOT measured rebuilt files."""
+    """Expected counts for a changed symbol stamp; NOT measured rebuilt files.
+
+    Scenario ends are modeled for cut A demos only — never paste as CLI --end.
+    When the loader request already ends on month-end, same_month_plus_one uses
+    an in-month day (last-1) so +1 stays inside that month.
+    """
     day = datetime.strptime(end, "%Y%m%d").date()
-    # Use a month with an in-month +1 even if the request ends on month end.
     within = day.replace(day=min(day.day, calendar.monthrange(day.year, day.month)[1] - 1))
     boundary = day.replace(day=calendar.monthrange(day.year, day.month)[1])
+    scenarios = {}
+    for label, base in (("same_month_plus_one", within), ("cross_month_plus_one", boundary)):
+        extended = base + timedelta(days=1)
+        scenarios[label] = {
+            "scenario_base_end": base.strftime("%Y%m%d"),
+            "scenario_extended_end": extended.strftime("%Y%m%d"),
+            "expected_rebuilt_shards_per_changed_symbol": len(
+                month_windows(start, extended.strftime("%Y%m%d"))),
+        }
     return {
-        label: {"base_end": base.strftime("%Y%m%d"),
-                "extended_end": (base + timedelta(days=1)).strftime("%Y%m%d"),
-                "expected_rebuilt_shards_per_changed_symbol": len(
-                    month_windows(start, (base + timedelta(days=1)).strftime("%Y%m%d")))}
-        for label, base in (("same_month_plus_one", within), ("cross_month_plus_one", boundary))
+        "modeled_not_measured_request_ends": True,
+        "scenarios": scenarios,
     }
 
 
@@ -117,7 +127,8 @@ def probe(codes, start, end, *, request_codes: int, workers: int = 16,
             "observations": observations, "cut_a_modeled_counts": cut_a_counts(start, end),
             "actual_rebuilt_shards": None,
             "fd_extrapolation": {"request_codes": request_codes, "workers": workers,
-                                 "single_symbol_month_total_files": request_codes * len(windows),
+                                 # Full-request shard-file projection (codes × months), not one symbol.
+                                 "projected_shard_files": request_codes * len(windows),
                                  "serial_probe_peak_parquet_handles": 1,
                                  "one_handle_per_worker_projection": min(workers, request_codes),
                                  "all_shards_open_projection": request_codes * len(windows)},

@@ -26,9 +26,14 @@ def test_month_bounds_leap_year_and_inverted_request():
 
 def test_cut_a_counts_include_all_history_not_only_new_month():
     counts = probe.cut_a_counts("20251227", "20260914")
-    assert counts["same_month_plus_one"]["expected_rebuilt_shards_per_changed_symbol"] == 10
-    assert counts["cross_month_plus_one"]["expected_rebuilt_shards_per_changed_symbol"] == 11
-    assert counts["cross_month_plus_one"]["extended_end"] == "20261001"
+    assert counts["modeled_not_measured_request_ends"] is True
+    scenarios = counts["scenarios"]
+    assert scenarios["same_month_plus_one"]["expected_rebuilt_shards_per_changed_symbol"] == 10
+    assert scenarios["cross_month_plus_one"]["expected_rebuilt_shards_per_changed_symbol"] == 11
+    assert scenarios["cross_month_plus_one"]["scenario_extended_end"] == "20261001"
+    # Scenario ends are modeled demos — not live loader request ends to paste as --end.
+    assert "base_end" not in scenarios["same_month_plus_one"]
+    assert "extended_end" not in scenarios["cross_month_plus_one"]
 
 
 def test_real_source_scan_equivalence_and_no_writes(lake):
@@ -38,7 +43,7 @@ def test_real_source_scan_equivalence_and_no_writes(lake):
                          request_codes=5575, open_repeats=2)
     assert report["observations"][0]["rows"] == 3  # full months, including Feb 28
     assert report["actual_rebuilt_shards"] is None
-    assert report["fd_extrapolation"]["single_symbol_month_total_files"] == 11150
+    assert report["fd_extrapolation"]["projected_shard_files"] == 11150
     assert report["fd_extrapolation"]["one_handle_per_worker_projection"] == 16
     assert list(root.rglob("*.*")) == [path]
     assert path.read_bytes() == before
