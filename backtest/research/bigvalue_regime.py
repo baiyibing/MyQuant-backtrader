@@ -73,7 +73,7 @@ def golden_cash_fraction(reasons, day, multiplier=None, base=0.95):
         return base
     if not math.isfinite(multiplier) or multiplier <= 0:
         raise ValueError("bigvalue golden-mult must be finite and positive")
-    return min(1.0, 0.95 * multiplier) if reasons.get(
+    return min(1.0, base * multiplier) if reasons.get(
         pd.Timestamp(str(day)).strftime("%Y%m%d")) == "allowed_golden" else base
 
 

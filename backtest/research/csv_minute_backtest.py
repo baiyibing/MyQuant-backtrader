@@ -1406,6 +1406,7 @@ def simulate(
     bigvalue_block_new: bool = False,
     bigvalue_flatten: bool = False,
     bigvalue_golden_mult: float | None = None,
+    bigvalue_base_frac: float | None = None,
 ) -> SimState:
     """Opt-in cap uses caller-attested completed minutes; daily volume is unused.
 
@@ -1765,7 +1766,8 @@ def simulate(
         if bigvalue_regime is not None:
             hooks["regime_flat"] = flatten_reason(regime_days, day, bigvalue_flatten)
             hooks["cash_deploy_frac"] = golden_cash_fraction(
-                regime_days, day, bigvalue_golden_mult, 0.95)
+                regime_days, day, bigvalue_golden_mult,
+                bigvalue_base_frac if bigvalue_base_frac is not None else 0.95)
         if policy.chronological(hooks, fix_cash_order=fix_minute_cash_order,
                                 topk_exec=topk_exec, limit_walkdown=limit_walkdown):
             clock.begin("chronological_day")
@@ -2177,7 +2179,10 @@ def simulate(
                     ration_seed=hooks.get("ration_seed", 0),
                     exdiv=exdiv, exdiv_ref_fen=exdiv_ref_fen,
                     planned_for_day=hooks.get("planned_for_day"),
-                    cash_deploy_frac=golden_cash_fraction(regime_days, day, bigvalue_golden_mult, hooks.get("cash_deploy_frac")),
+                    cash_deploy_frac=golden_cash_fraction(
+                        regime_days, day, bigvalue_golden_mult,
+                        bigvalue_base_frac if bigvalue_base_frac is not None
+                        else hooks.get("cash_deploy_frac")),
                     qlib_limit_pct=qlib_limit_pct,
                     limit_up_chase=limit_up_chase,
                     forbid_all_trade_at_limit=forbid_all_trade_at_limit,
@@ -2364,6 +2369,7 @@ def run(
     bigvalue_block_new: bool = False,
     bigvalue_flatten: bool = False,
     bigvalue_golden_mult: float | None = None,
+    bigvalue_base_frac: float | None = None,
     keep_buy_vacancy: bool = False,
     buy_cost_rate: Optional[float] = None,
     sell_cost_rate: Optional[float] = None,
@@ -2707,6 +2713,7 @@ def run(
         eligible_buy=eligible_buy,
         bigvalue_regime=bigvalue_regime, bigvalue_block_new=bigvalue_block_new,
         bigvalue_flatten=bigvalue_flatten, bigvalue_golden_mult=bigvalue_golden_mult,
+        bigvalue_base_frac=bigvalue_base_frac,
         keep_buy_vacancy=keep_buy_vacancy,
         index_block_new=index_block_new,
         stop_fill=stop_fill,

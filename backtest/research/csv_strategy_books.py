@@ -710,6 +710,11 @@ def add_topk_dropout_args(ap: argparse.ArgumentParser) -> None:
                     help="topk_dropout: yesterday's confirmed bigvalue death state blocks new opens; default off")
     ap.add_argument("--bigvalue-flatten", action="store_true", help="confirmed death: next session open; default off")
     ap.add_argument("--bigvalue-golden-mult", type=float, default=None, help="confirmed golden cash fraction min(1, 0.95*M); default off")
+    ap.add_argument("--bigvalue-base-frac", type=float, default=None,
+                    help="topk_dropout: non-golden-day buy cash fraction (default book 0.95). "
+                         "No effect on buy days while --bigvalue-block-new restricts buying to "
+                         "confirmed-golden days (there min(1, base*M) applies); meaningful with "
+                         "--bigvalue-flatten without block-new")
     ap.add_argument("--bigvalue-ma-fast", type=int, default=None, help="default 5 when enabled")
     ap.add_argument("--bigvalue-ma-slow", type=int, default=None, help="default 10 when enabled")
     ap.add_argument("--bigvalue-confirm-days", type=int, default=None, help="default 2 when enabled")
@@ -1959,7 +1964,7 @@ def _run_kwargs_topk_dropout(args) -> dict:
                 or getattr(args, "bigvalue_golden_mult", None) is not None)
     bigvalue_options = {
         key: getattr(args, "bigvalue_" + key, None)
-        for key in ("regime_file", "ma_fast", "ma_slow", "confirm_days", "signal")
+        for key in ("regime_file", "ma_fast", "ma_slow", "confirm_days", "signal", "base_frac")
     }
     if any(value is not None for value in bigvalue_options.values()) and not bigvalue:
         raise SystemExit("bigvalue flags require --bigvalue-block-new or --bigvalue-flatten or --bigvalue-golden-mult")
@@ -1978,6 +1983,11 @@ def _run_kwargs_topk_dropout(args) -> dict:
         import math
         if not math.isfinite(multiplier) or multiplier <= 0:
             raise SystemExit("bigvalue golden-mult must be finite and positive")
+    base_frac = getattr(args, "bigvalue_base_frac", None)
+    if base_frac is not None:
+        import math
+        if not math.isfinite(base_frac) or not 0 < base_frac <= 1:
+            raise SystemExit("bigvalue base-frac must be in (0, 1]")
 
     buy_rule = str(getattr(args, "buy_state_rule", "oral") or "oral")
     if (
@@ -2024,6 +2034,7 @@ def _run_kwargs_topk_dropout(args) -> dict:
         out["bigvalue_block_new"] = bool(getattr(args, "bigvalue_block_new", False))
         out["bigvalue_flatten"] = bool(getattr(args, "bigvalue_flatten", False))
         out["bigvalue_golden_mult"] = multiplier
+        out["bigvalue_base_frac"] = base_frac
     st_daily = getattr(args, "st_daily_file", None)
     age_map = getattr(args, "age_map_file", None)
     age_days = int(getattr(args, "age_days", 60))
