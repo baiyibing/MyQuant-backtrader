@@ -169,15 +169,16 @@ class HeldMinuteCursor:
             return self.phase_exit(self, idx, phase)
         if not sell_allowed(self.can_sell, self.n_days):
             return None
-        if self.session_exit_reason == "regime_flat:bigvalue_death":
-            # A rejected opening order retries at the next session open only.
-            if int(self.hm[idx]) == 570 and phase == "open":
-                return self._exit(idx, float(self.o[idx]), self.session_exit_reason)
-            return None
-        if self.session_volume is not None:
+        regime_session_exit = self.session_exit_reason == "regime_flat:bigvalue_death"
+        if self.session_volume is not None or regime_session_exit:
             # An EOD decision is eligible only at the next session's opening
             # bucket. Rejection carries the position's decision to another day.
             if int(self.hm[idx]) != 9 * 60 + 30 or not self.session_exit_reason:
+                return None
+            if regime_session_exit:
+                # A rejected flatten retries only at the next session open.
+                if phase == "open":
+                    return self._exit(idx, float(self.o[idx]), self.session_exit_reason)
                 return None
             opening = self.fill_config.fill_timing == "next_bar_open"
             if phase != ("open" if opening else "close"):
@@ -267,9 +268,9 @@ class HeldMinuteCursor:
                 return self._price_exit(idx, fill_px, "stop_loss:touch", trigger, intrabar=self.fill_config.trigger_basis == "bar_low")
         if self.regime_flat:
             # Stop checks above retain priority; flatten never borrows Q7.
-            if cur_hm == 9 * 60 + 30:
-                return idx, float(self.o[idx]), self.regime_flat
-            return None
+            if int(self.hm[idx]) != 9 * 60 + 30:
+                return None
+            return idx, float(self.o[idx]), self.regime_flat
         if self.defer_limit_up and self.limit_up > 0 and hit_limit_up(px_close, self.limit_up):
             self.lu_today = True
         if self.defer_limit_up and self.lu_today:
