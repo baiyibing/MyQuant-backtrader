@@ -367,6 +367,28 @@ BT-B：`eligible_buy` 只过滤**新开**；不够 `len(buy)` 则沿未持仓分
 
 每个产物目录典型三件套：`summary.txt`、`daily_equity.csv`、`trades.csv`。要复现：对着 `summary.txt` 头几行的窗/费率，用 §6.7 命令另开 `--out-dir`，不要覆盖。
 
+### 6.11 三版本对比跑（2026-10-16，首次落到分钟入口）
+
+pred `8a061ea4`（`replay_20260917_current_ruler`），窗 `20260106–20260914`，湖价源，书默认 50/5 + `--stop-pct 0.10`，无 ST/年龄/15%/buy-state 闸。两本书 2100 万；app_dropout 自家 CLI 默认 5 亿。产物：`backtest_output/csv_{daily,minute}_topk_{dropout,score_exit}_20260106_20260914/`、`csv_minute_topk_app_dropout_20260106_20260914/`（app 池 = OSkhQuant1.3 `stock_pool/`）。
+
+| 书 | 日线 | 分钟 |
+|---|---|---|
+| topk_dropout（主书） | **+8.14%** / DD −32.64% / 买 1180 | **−3.69%** / DD −31.27% / 买 1266 |
+| topk_score_exit（T6-SX0） | −9.80% / DD −36.41% / 买 1642 | −6.24% / DD −31.93% / 买 1674 |
+| topk_app_dropout | 无日线入口 | −0.01% / DD −0.03% / 买 9（交集太窄，空转） |
+
+结论：
+
+- **SX0 额外卖两引擎一致为负贡献**（日线 −17.9pp、分钟 −2.6pp），换手 +40%、日线 DD 加深。维持实验书，不升默认，不并入主书。
+- 主书日 vs 分钟差 **11.8pp**：仍是 §6.5 as-built 分叉（日线收盘成交 + low 触价 vs 14:55 + 逐根 close），归 Q8 一侧，不据此改默认成交。
+- `topk_app_dropout` 在该窗 app∩TopK50 交集几乎为空（9 笔）；要出样本需放宽交集（topk 加大 / 换 asof），先别当结论书。
+- §6.10 的「联合 50/5 从未落分钟入口」空白已补：本批即首批 `csv_minute_topk_dropout_*`。
+
+程序修复（由本批踩坑驱动）：
+
+- **分钟/日线回测并行会撞 `bar_cache` 共享 tmp**（两进程同名 `.parquet.tmp`，Windows `WinError 32`，先撞的进程直接崩）。`write_minute_cache` / `write_daily_cache` 改 per-pid tmp + 原子 `replace`，`.json` sidecar 同样原子化（`ashare_bars.py` / `csv_daily_loader.py`）；修复后两个同窗并行跑均通过。修复前若必须并行，先各自预热缓存再并行。
+- 管道 `... | tail` 会吞退出码：判断跑没跑完要看输出目录三件套，不要信 rc=0。
+
 ---
 
 ## 7. 会话共识（2026-09-22）
@@ -547,3 +569,4 @@ csv_daily_backtest.py --strategy topk_dropout --pred-csv <MyQuant pred>
 | 2026-09-22 | 写清禁 `import qlib`：**目的**是成交核不绑 qlib 运行时；**手段**是热路径不 import。对齐 `Mean($close)` 不是破例。 |
 | 2026-09-22 | **Q3/Q4 人裁并落地**：MyQuant 旁路 `$close`/`Mean(20/60)`/`$winratio`；BT `--buy-state-file` 查表。score_exit 拒绝此旗。MQ `--buy-state-filter` 默认不翻。 |
 | 2026-09-26 | **Q5/Q9/Q10 人裁**：日线对照钉 qlib `$close` 日线后复权 bin（`--qlib-data-root` + 常配 `--qlib-cost`），湖日线另账；分钟仅 `none`，禁与日线 bin/湖 `front` 混比，信号→`none` 换算归 #214/X-01 HOLD，非本页 impl GO。pred 钉 `8a061ea4` + OOS `20260106–20260914`，`c5f4bccd` 仅烟测、不作归因窗，不覆盖 `pred.pkl`；全臂显式 `--cash-total 100000000`。Q8 仍开，勿静默叠 5 日 15% 挡；生产默认与上述不变边界均不翻。 |
+| 2026-10-16 | §6.11：三版本对比跑（首次分钟入口）。SX0 两引擎一致负贡献，维持实验书；主书日/分差 11.8pp 归 Q8；bar_cache 共享 tmp 并行撞锁已修（per-pid tmp + 原子 replace）。 |

@@ -15,6 +15,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
+import uuid
 
 import numpy as np
 import pandas as pd
@@ -212,9 +213,10 @@ def write_daily_cache(
     path = daily_cache_path(start, end, cache_dir, identity=identity)
     path.parent.mkdir(parents=True, exist_ok=True)
     schema = _daily_cache_schema()
-    tmp = path.with_suffix(".parquet.tmp")
-    if tmp.exists():
-        tmp.unlink()
+    # Per-process tmp: parallel runs sharing one cache identity must never
+    # unlink each other's in-flight tmp (Windows WinError 32). Identical
+    # content, last atomic replace wins.
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.{uuid.uuid4().hex[:8]}.tmp")
     writer = None
     n_rows = 0
     try:
@@ -246,7 +248,8 @@ def write_daily_cache(
             writer.close()
             if tmp.exists():
                 tmp.unlink()
-    path.with_suffix(".json").write_text(
+    meta = path.with_name(f"{path.name}.json.{os.getpid()}.{uuid.uuid4().hex[:8]}.tmp")
+    meta.write_text(
         json.dumps(
             {
                 **identity,
@@ -261,6 +264,7 @@ def write_daily_cache(
         encoding="utf-8",
         newline="\n",
     )
+    meta.replace(path.with_suffix(".json"))
     print(f"wrote daily cache {path} symbols={len(bars)} rows={n_rows}", flush=True)
     return path
 

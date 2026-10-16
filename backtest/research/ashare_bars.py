@@ -17,8 +17,10 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 import hashlib
 import json
+import os
 from pathlib import Path
 from typing import Iterable, Mapping, Optional
+import uuid
 
 from backtest.research.bar_store import (
     mem_drop,
@@ -551,9 +553,10 @@ def write_minute_cache(bars: dict, start: str, end: str, cache_dir: Optional[Pat
                                          source_snapshot=source_snapshot)
     path = minute_cache_path(start, end, cache_dir, identity=identity)
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".parquet.tmp")
-    if tmp.exists():
-        tmp.unlink()
+    # Per-process tmp: parallel hosts sharing one cache identity must never
+    # unlink each other's in-flight tmp (Windows WinError 32). Identical
+    # content, last atomic replace wins.
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.{uuid.uuid4().hex[:8]}.tmp")
     writer = None
     n_rows = 0
     n_sym = 0
@@ -591,7 +594,8 @@ def write_minute_cache(bars: dict, start: str, end: str, cache_dir: Optional[Pat
             writer.close()
             if tmp.exists():
                 tmp.unlink()
-    path.with_suffix(".json").write_text(
+    meta = path.with_name(f"{path.name}.json.{os.getpid()}.{uuid.uuid4().hex[:8]}.tmp")
+    meta.write_text(
         json.dumps(
             {
                 **identity,
@@ -606,6 +610,7 @@ def write_minute_cache(bars: dict, start: str, end: str, cache_dir: Optional[Pat
         encoding="utf-8",
         newline="\n",
     )
+    meta.replace(path.with_suffix(".json"))
     print(f"wrote minute cache {path} symbols={len(bars)} rows={n_rows}", flush=True)
     write_span_sidecar(path, identity, bars)
     return path
