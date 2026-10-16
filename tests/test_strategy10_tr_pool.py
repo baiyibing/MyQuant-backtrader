@@ -239,11 +239,12 @@ def test_daily_cli_version10_refuses_stock_pool(monkeypatch):
         )
 
 
-def test_version10_2_reuses_version6_55_stack_and_refuses_stock_pool(tmp_path):
+def test_version10_2_reuses_version6_55_stack_and_refuses_stock_pool(tmp_path, monkeypatch):
     from backtest.research.cash_div_events import CASH_DIV_BOOKS
     from backtest.research.csv_simulate_loop import extra_load_codes_for_strategy
     from backtest.research.strategy6_47_rules import PARKING_SYMBOL
     from backtest.research.strategy_book_helpers import load_book_index_gate
+    from backtest.research import strategy6_45_rules
 
     hooks55 = apply_csv_strategy("version6_55")
     hooks102 = apply_csv_strategy("version10_2")
@@ -260,7 +261,12 @@ def test_version10_2_reuses_version6_55_stack_and_refuses_stock_pool(tmp_path):
     assert hooks102.get("parking_symbol") == hooks55.get("parking_symbol")
     assert extra_load_codes_for_strategy("version10_2") == {PARKING_SYMBOL}
     assert "version10_2" in CASH_DIV_BOOKS
-    assert load_book_index_gate("version10_2", "20260105", "20260110") is not None
+    # Gate wiring via the 6.45+ loader, sentinel instead of the lake (CI is data-free).
+    sentinel = {"20260105": True}
+    monkeypatch.setattr(strategy6_45_rules, "INDEX_GATE_ON", True)
+    monkeypatch.setattr(strategy6_45_rules, "load_sse_ma10_block_new",
+                        lambda start, end: sentinel)
+    assert load_book_index_gate("version10_2", "20260105", "20260110") is sentinel
     repo = tmp_path / "repo"
     (repo / "stock_pool").mkdir(parents=True)
     with pytest.raises(SystemExit, match="stock_pool"):
