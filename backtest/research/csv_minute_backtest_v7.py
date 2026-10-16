@@ -15,7 +15,7 @@ import json
 import os
 import sys
 import time
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
@@ -26,6 +26,11 @@ from backtest.research.ashare_bars import bars_from_pool
 from backtest.research.ashare_fees import DEFAULT_SCHEDULE, FeeSchedule
 from backtest.research.ashare_volume_cap import VolumeLookup
 from backtest.research.csv_minute_volume import completed_minute_volumes
+from backtest.research.csv_sim_profile import (
+    entry_profile_report,
+    profile_sim_enabled,
+    write_profile_sim,
+)
 from backtest.research.participation_rate_precheck import (
     precheck_cli_participation_rate,
     precheck_completed_bucket_samples,
@@ -340,6 +345,8 @@ def write_run_config(output: Path, config: dict) -> None:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    run_t0 = time.perf_counter()
+    started_at = datetime.now().isoformat(timespec="seconds")
     args = build_parser().parse_args(argv)
     profile = resolve_rule_profile(args.rule_profile)
     fix_minute_cash_order = bool(
@@ -369,7 +376,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     if end < start:
         raise SystemExit("--end must be on or after --start")
     pool_dir = Path(pool_value)
+    pool_t0 = time.perf_counter()
     pools = load_pool_days(pool_dir, start, end)
+    pool_s = time.perf_counter() - pool_t0
     minute_source = "qlib_1min" if args.qlib_1min_root else args.minute_source
     load_t0 = time.perf_counter()
     minute, daily = _load_cli_bars(
@@ -450,6 +459,13 @@ def main(argv: Sequence[str] | None = None) -> int:
                     enabled=fix_minute_cash_order)
     print(summarize_v7(state), end="")
     print(f"timing load={load_s:.2f}s simulate={sim_s:.2f}s total={load_s + sim_s:.2f}s", flush=True)
+    if profile_sim_enabled():
+        write_profile_sim(output, entry_profile_report(
+            engine="csv_minute_v7", strategy="version7",
+            started_at=started_at, wall_s=time.perf_counter() - run_t0,
+            phases_s={"pool_load": pool_s, "load_bars": load_s, "simulate": sim_s},
+            counts={"pool_days": len(pools), "trades": len(state.trades)},
+        ))
     return 0
 
 

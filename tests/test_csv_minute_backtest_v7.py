@@ -258,6 +258,7 @@ def test_cli_empty_pool_is_legal_and_missing_pool_is_system_exit(tmp_path, monke
         "daily_equity.csv",
         "trades.csv",
         "run-config.json",
+        "profile_sim.json",
     }
 
     monkeypatch.delenv("OSKH_TURTLE_POOL_DIR", raising=False)

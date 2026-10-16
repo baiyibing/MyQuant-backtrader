@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Sequence
@@ -28,6 +29,11 @@ from backtest.research.csv_minute_backtest_v7 import (
 )
 from backtest.research.strategy7_engine import simulate_native
 from backtest.research.csv_minute_volume import completed_minute_volumes
+from backtest.research.csv_sim_profile import (
+    entry_profile_report,
+    profile_sim_enabled,
+    write_profile_sim,
+)
 from backtest.research.participation_rate_precheck import (
     precheck_cli_participation_rate,
     precheck_completed_bucket_samples,
@@ -121,6 +127,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    run_t0 = time.perf_counter()
+    started_at = datetime.now().isoformat(timespec="seconds")
     args = build_parser().parse_args(argv)
     # P2-B shell precheck (CLI). APP defaults to lake; None → no-op. ≠δ5≠R4.
     precheck_cli_participation_rate(
@@ -134,7 +142,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     start_ymd, end_ymd = start.strftime("%Y%m%d"), end.strftime("%Y%m%d")
 
     if args.pool_dir is not None:
+        pool_t0 = time.perf_counter()
         pools = load_pool_days(Path(args.pool_dir), start, end)
+        pool_s = time.perf_counter() - pool_t0
     else:
         if args.app_pool_dir is None or args.pred is None:
             raise SystemExit("need --pool-dir, or both --app-pool-dir and --pred")
@@ -147,6 +157,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         dump = args.dump_pool_dir
         if dump is None:
             dump = REPO_ROOT / "exports" / f"{BOOK_TAG}_{start_ymd}_{end_ymd}"
+        pool_t0 = time.perf_counter()
         pools = build_intersect_pool_days(
             app_dir,
             pred_path,
@@ -156,11 +167,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             asof=args.asof,
             dump_dir=dump,
         )
+        pool_s = time.perf_counter() - pool_t0
 
+    bars_t0 = time.perf_counter()
     minute, daily = _load_cli_bars(
         pools, start, end,
         **({"include_volume": True} if args.participation_rate is not None else {}),
     )
+    bars_s = time.perf_counter() - bars_t0
     if pools:
         index_closes = load_index_daily(start, end)
     else:
@@ -178,6 +192,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "participation_rate": args.participation_rate,
             "volume_for_bucket": samples,
         }
+    sim_t0 = time.perf_counter()
     state = simulate_native(
         minute,
         daily,
@@ -190,6 +205,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         names=names,
         **volume_options,
     )
+    sim_s = time.perf_counter() - sim_t0
     output = Path(
         args.output_dir
         or f"backtest_output/csv_minute_{BOOK_TAG}_{args.start}_{args.end}"
@@ -201,6 +217,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     print(header, end="")
     print(summarize_v7(state), end="")
+    if profile_sim_enabled():
+        write_profile_sim(output, entry_profile_report(
+            engine=BOOK_TAG, strategy=BOOK_TAG,
+            started_at=started_at, wall_s=time.perf_counter() - run_t0,
+            phases_s={"pool_intersect": pool_s, "load_bars": bars_s, "simulate": sim_s},
+            counts={"pool_days": len(pools), "trades": len(state.trades)},
+        ))
     return 0
 
 
