@@ -129,6 +129,38 @@ def resolve_sim_clock(enabled: bool) -> SimPhaseClock | _NullPhaseClock:
     return SimPhaseClock() if enabled else NULL_CLOCK
 
 
+def entry_profile_report(
+    *,
+    engine: str,
+    strategy: str,
+    started_at: str,
+    wall_s: float,
+    phases_s: dict[str, float],
+    counts: dict[str, Any],
+) -> dict[str, Any]:
+    """Coarse run report for standalone CLIs (v7 / topk_app_dropout).
+
+    Same artifact (``profile_sim.json`` via ``write_profile_sim``) and the same
+    default-on gate (``profile_sim_enabled``) as the shared engines, minus
+    SimPhaseClock detail: whole-phase timings with shares plus counts.
+    """
+    total = float(wall_s or 0.0)
+    share = {
+        name: (float(v) / total if total > 0 else 0.0)
+        for name, v in phases_s.items()
+    }
+    return {
+        "started_at": started_at,
+        "finished_at": datetime.now().isoformat(timespec="seconds"),
+        "wall_s": total,
+        "engine": engine,
+        "strategy": strategy,
+        "phases_s": {name: float(v) for name, v in phases_s.items()},
+        "phase_share": share,
+        "counts": counts,
+    }
+
+
 def format_profile_lines(report: dict[str, Any]) -> list[str]:
     lines = [
         f"  开始: {report.get('started_at', '')}",
