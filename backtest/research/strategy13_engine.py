@@ -33,11 +33,25 @@ def on_buy(st, code, reason, shares):
         mem.last_add = trade["price"]
 
 
-def plan_exit(st, code, px, day, closes, *, day_i, ds, params, daily_close=False):
+def entry_atr_pct(bars, day, n=rules.ATR_WINDOW):
+    """ATR14%% as of ``day`` from an OHLC daily frame; None during warm-up."""
+    f = bars.loc[:day]
+    if len(f) < n + 1:
+        return None
+    h, l, c = (f[k].to_numpy(dtype=float)[-(n + 1):] for k in ("high", "low", "close"))
+    tr = np.maximum(h[1:] - l[1:], np.maximum(np.abs(h[1:] - c[:-1]), np.abs(l[1:] - c[:-1])))
+    close_now = float(f["close"].iloc[-1])
+    return float(tr.mean()) / close_now if close_now > 0 else None
+
+
+def plan_exit(st, code, px, day, closes, *, day_i, ds, params, daily_close=False, atr_pct=None):
     lots = strategy_lots(st, code)
     if not lots:
         return None
     mem = memory(st, code)
+    if atr_pct and not mem.entry_atr:
+        mem.entry_atr = float(atr_pct)  # locked at first sight (entry context)
+    atr = mem.entry_atr or None
     held = sum(p.shares for p in lots)
     mem.peak = max(mem.peak, px)
     if daily_close and mem.last_ma_day != ds:
@@ -46,15 +60,29 @@ def plan_exit(st, code, px, day, closes, *, day_i, ds, params, daily_close=False
         mem.last_ma_day = ds
     age = day_i - mem.entry_idx
     reason = None
-    if px <= mem.peak * (1 - params.clear_drawdown) + 1e-10:
+    add_sel = None
+    # Inverse scaling (r11b): high-ATR names cut sooner, quiet names tolerate
+    # more — both stop-afters deepen with ATR in the host pool diagnostics.
+    trail_dd = rules.atr_threshold(params.clear_drawdown, atr, params.atr_anchor, rules.ATR_CLAMP_TRAIL, inverse=True)
+    hard_pct = rules.atr_threshold(params.stop_pct, atr, params.atr_anchor, rules.ATR_CLAMP_HARD, inverse=True)
+    add_pct = rules.atr_threshold(params.add_stop_pct, atr, params.atr_anchor, rules.ATR_CLAMP_ADD, inverse=True)
+    if px <= mem.peak * (1 - trail_dd) + 1e-10:
         reason = "trail:beidou_clear"
-    elif daily_close and px < mem.entry * (1 - params.stop_pct):
+    elif daily_close and px < mem.entry * (1 - hard_pct):
         reason = "stop_loss:beidou_hard"
-    elif daily_close and mem.below_days >= params.ma_sessions:
-        reason = "stop_loss:beidou_ma20"
-    elif daily_close and 0 < age <= params.early_sessions and px <= mem.entry * (1 - params.early_loss) + 1e-10:
-        reason = "stop_loss:beidou_early"
+    elif daily_close:
+        # Per-lot hard stop for add lots only; base lot keeps stop_pct above.
+        sel = [p for p in lots if p.lot_id and px < p.cost * (1 - add_pct)]
+        if sel:
+            reason = "stop_loss:beidou_add_hard"
+            add_sel = {p.lot_id for p in sel}
+        elif mem.below_days >= params.ma_sessions:
+            reason = "stop_loss:beidou_ma20"
+        elif 0 < age <= params.early_sessions and px <= mem.entry * (1 - params.early_loss) + 1e-10:
+            reason = "stop_loss:beidou_early"
     if reason:
+        if add_sel is not None:
+            return reason, sum(p.shares for p in sel), add_sel
         return reason, held
     if mem.tier < len(params.tp_levels) and px + 1e-10 >= mem.entry * (1 + params.tp_levels[mem.tier]):
         wanted = rules.tp_shares(held, mem.base_shares, params.tp_fractions[mem.tier], params.base_floor)
@@ -68,7 +96,8 @@ def fill_pending(st, code, row, day, *, day_i, ds, limits, bucket=None, at=None)
     pending = st.book_state.setdefault("beidou_pending", {})
     if code not in pending or limits is None:
         return
-    reason, wanted = pending[code]
+    reason, wanted = pending[code][:2]
+    sel = pending[code][2] if len(pending[code]) > 2 else None
     px = float(row.open)
     if defer_sell_open_or_fill(px, px, limits):
         st.stats["defer_sell_limit_down"] += 1
@@ -79,6 +108,8 @@ def fill_pending(st, code, row, day, *, day_i, ds, limits, bucket=None, at=None)
     mem = memory(st, code)
     for lot in list(strategy_lots(st, code)):
         if lot.entry_idx >= day_i or filled >= wanted:
+            continue
+        if sel is not None and lot.lot_id not in sel:
             continue
         before = lot.shares
         cost = lot.cost
@@ -128,10 +159,12 @@ def buy(st, code, px, closes, *, hooks, day_i, day, ds, names, exdiv, bucket=Non
     if gate is not None:
         fraction = gate.get(day.date() if hasattr(day, "date") else day)
         if fraction is None:
-            raise ValueError(f"missing HS300 gate for {ds}")
+            raise ValueError(f"missing {rules.INDEX_SYMBOL} gate for {ds}")
         prices = st.book_state.setdefault("beidou_marks", {})
         prices[code] = px
-        exposure = sum(sum(p.shares for p in group) * prices.get(c, group[0].cost)
+        # Gate covers the strategy sleeve only; parking (600036) lots are idle
+        # cash management and never subject to the index cap.
+        exposure = sum(sum(p.shares for p in group if not is_parking_lot(st, p)) * prices.get(c, group[0].cost)
                        for c, group in st.positions.items() if group)
         equity = st.cash + exposure
         allowed &= exposure + shares * fill_px <= equity * fraction + 1e-9
@@ -195,7 +228,8 @@ def run_daily_day(st, pending_chase, *, hooks, bars, pool_days, day_i, day, ds, 
             mem.peak = max(mem.peak, float(row.high))
         pending = st.book_state.setdefault("beidou_pending", {})
         plan = plan_exit(st, code, float(row.close), day, closes, day_i=day_i, ds=ds,
-                         params=hooks["beidou_params"], daily_close=True)
+                         params=hooks["beidou_params"], daily_close=True,
+                         atr_pct=entry_atr_pct(bars[code], day))
         if plan and (code not in pending or not plan[0].startswith("profit_take")):
             pending[code] = plan
 
@@ -208,6 +242,7 @@ class MinuteSession:
         codes = list(dict.fromkeys([*st.positions, *pool_days.get(ds, [])]))
         prepare(st, codes, ds, exdiv)
         self.frames, self.closes, self.limits = {}, {}, {}
+        self.atrs = {c: entry_atr_pct(daily_bars[c], day) for c in codes if c in daily_bars}
         for c in codes:
             if c not in daily_bars or c not in minute_bars:
                 continue
@@ -247,7 +282,7 @@ class MinuteSession:
                     mem.peak = max(mem.peak, float(row.high))
                 plan = plan_exit(st, code, float(row.close), self.ctx["day"], self.closes[code],
                                  day_i=self.ctx["day_i"], ds=self.ctx["ds"], params=hooks["beidou_params"],
-                                 daily_close=hm == max(self.frames[code]))
+                                 daily_close=hm == max(self.frames[code]), atr_pct=self.atrs.get(code))
                 if plan:
                     pending[code] = plan
                     return cursor._price_exit(idx, row.close, plan[0])

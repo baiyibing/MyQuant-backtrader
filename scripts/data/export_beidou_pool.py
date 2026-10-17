@@ -84,7 +84,7 @@ def signal_mask(frame, code, *, breakout_days=BREAKOUT_DAYS,
             & (ma[5] > ma[10]) & (ma[10] > ma[20])
             & (ma[5] > ma[5].shift()) & (ma[10] > ma[10].shift())
             & (ma[20] > ma[20].shift())
-            & (frame.float_shares > 0) & (v / frame.float_shares > TURNOVER)
+            & (frame.float_shares > 0) & (v * 100 / frame.float_shares > TURNOVER)
             & ((c / c.shift() - 1) < band - 0.005)
             & (c * frame.float_shares).between(FLOAT_MV_MIN, FLOAT_MV_MAX)
             & (frame.amount.rolling(20).mean() >= AMOUNT_MIN)
@@ -142,6 +142,7 @@ def main(argv=None):
         raise FileNotFoundError(root)
     history = pd.read_parquet(resolve_parquet_container() / "float_shares_history.parquet")
     history["stock_code"] = history.stock_code.map(to_canonical_symbol)
+    float_codes = set(history.stock_code.unique())
     from backtest.research.st_status import membership_from_frame
     # Non-ST is a required prefilter, so a missing vendor table is an error.
     st = membership_from_frame(pd.read_parquet(resolve_parquet_container() / "vendor_wind_st_status/st_daily.parquet"))
@@ -158,6 +159,10 @@ def main(argv=None):
         f = f.loc[f.index <= pd.Timestamp(args.end)].sort_index()
         if f.index.has_duplicates:
             raise ValueError(f"duplicate daily bars: {code}")
+        if code not in float_codes:
+            # Non-equity partitions (SSE/SZSE indexes) ride in the stock tree;
+            # equities present in the share table but asof-empty still fail.
+            continue
         f = attach_float_history(f, history, code)
         if not f.empty and not f.float_shares.notna().any():
             raise ValueError(f"missing historical float shares for {code}")
