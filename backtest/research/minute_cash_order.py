@@ -589,6 +589,7 @@ def run_chronological_day(
                 peak_hm=int(pos.peak_hm),
                 peak_gap_min=int(hooks["peak_gap_min"]),
                 take_profit=hooks["take_profit"],
+                regime_flat=hooks.get("regime_flat"),
                 sell_gate=hooks.get("sell_gate"),
                 gate_code=code,
                 gate_day=day,
@@ -600,6 +601,8 @@ def run_chronological_day(
                 reserved=bool(pos.reserved),
                 close_clear=hooks.get("close_clear"),
             )
+            if hooks.get("regime_flat") and sellable:
+                pos.pending_exit = hooks["regime_flat"]
             for idx, at_hm in enumerate(hm):
                 events.setdefault(int(at_hm), []).append((code, pos, cursor, idx, limits))
 
@@ -932,6 +935,8 @@ def run_chronological_day(
                     session.before_close(at_hm)
                 for code in list(st.positions):
                     session.advance_held(code, at_hm, phase)
+                if phase == "open" and callable(getattr(session, "after_open", None)):
+                    session.after_open(at_hm)
                 if phase == "close":
                     session.after_close(at_hm)
                 continue
@@ -967,6 +972,8 @@ def run_chronological_day(
                     "stop_loss:gap_open": "minute_gap_open",
                     "stop_loss:touch": "minute_stop_price" if cursor.minute_stop_trigger == "hl" else "minute_trigger_bar_close",
                 }.get(reason, "")
+                if reason == "regime_flat:bigvalue_death":
+                    price_rule = "minute_regime_next_open"
                 if minute_open:
                     price_rule = "minute_trigger_bar_close"
                 if reason.endswith(":next_open") or (minute_open and fill_config.fill_timing == "next_bar_open"):

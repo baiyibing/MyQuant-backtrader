@@ -1,0 +1,15 @@
+# Codex review — 2026-10-16
+
+Verdict: **GO** — full-switch + shared-infrastructure scope for existing PR #480.
+
+Authority: Human 2026-10-16「把人裁都实施了，只是开关而已」. This supersedes the earlier first-slice GO-WITH-NITS and historical no-implementation statements. All P1–P15 cuts are implemented as default-OFF CLI behaviors; flatten and golden-mult are in scope. Keep branch `feat/bigvalue-regime-topk-block-new-20261016`, expand #480 only, no merge. Q8 remains open; no real-lake or alpha claim.
+
+Shared architecture: `bigvalue_regime.py` owns strict parquet loading, trailing-zero re-drop, exact prior-session state/confirmation, list/seat eligibility wrapper, flatten reason, and golden cash fraction. Daily/minute engines consume via explicit kwargs; topk_dropout is first CLI consumer. Other CLI books refuse flags, score_exit refuses every explicit bigvalue option. No new book or ranking changes. #475 merged (`c2a7b20`); explicit CSV path meets path SSOT.
+
+Binding cuts: P1 index coexistence refuses; P2 flatten included; P3 confirmed golden eff=min(1.0,0.95*M), finite positive M; P4 confirm=2; P5 state only; P6 MA5/10. P7 exact missing day blocks new opens and continues without flat/mult, while missing file/columns/duplicate dates hard fail. P8 equality neutral and breaks streak; valid equal observation allows opens as pinned in the prior review. P9 warmup/insufficient confirmation blocks opens, no flatten/mult. P10 daily next open / minute exact 09:30 open. P11 existing engine limit-down rejection/defer, no Q7. P12 pending then stops then regime flatten then dropout, single sell. P13 score_exit refuses; P14 precomputed MA only; P15 shared day-frequency gate in both engines. Any active behavior receives the fail-closed eligibility gate, including flatten-only and golden-only. No stale state fallback or invented rows.
+
+Execution review: flatten is opt-in in daily held-sell path and shared minute held cursor, after stop evaluation and before dropout. Both legacy minute scans and chronological topk execution receive the regime decision. Rejected flatten orders persist to next session open; T+1 and limit-down checks remain in the engine. Golden changes only cash deployment; defaults preserve the original 0.95 book fraction. Existing frozen output fixtures change HELP_LOCK prose only, with trades/equity/stats unchanged.
+
+Validation: see final validation record below. Grok not run; no merge or second PR.
+
+Final validation: **670 passed** across `test_bigvalue_regime.py` (38 data-free cases), `test_topk_dropout_*.py`, `test_topk_minute_exec.py`, `test_csv_strategy_books.py`, minute fill/chronology/audit/red/side-sell suites and ashare predicate/import-fence suites. Tests cover actual daily/minute legacy/chronological fills, flatten default-OFF/T+1/stop priority, exact 09:30 price, limit-down and missing-open retries, and actual golden sizing/clamp. Machine-path and book admission gates pass. Ruff comparison against ef3fa96: no added diagnostics (18 pre-existing across touched legacy files); shared module and tests clean. UTF-8 without BOM, NUL=0 and diff whitespace checks pass. No lake run or Grok run.

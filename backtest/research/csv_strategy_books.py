@@ -90,6 +90,7 @@ from backtest.research import (
     strategy10_2_rules,
     strategy11_rules,
     strategy12_rules,
+    strategy13_rules,
     strategy_topk_dropout_rules,
     strategy_topk_score_exit_rules,
 )
@@ -287,7 +288,7 @@ HELP_LOCK_SCORE_EXIT = strategy_topk_score_exit_rules.HELP_LOCK
 
 FORBIDDEN_DEFAULT_STOCK_POOL = frozenset({
     "version9", "version9_1", "version9_2", "version9_3",
-    "version10", "version10_1", "version10_2", "version11",
+    "version10", "version10_1", "version10_2", "version11", "version13",
 })
 RANGE_STOP_BOOKS = frozenset({"version9", "version10_1"})
 STOP_FILL_TOUCH = "touch"
@@ -705,6 +706,20 @@ def add_topk_dropout_args(ap: argparse.ArgumentParser) -> None:
             "names. Default off."
         ),
     )
+    ap.add_argument("--bigvalue-regime-file", type=Path, default=None)
+    ap.add_argument("--bigvalue-block-new", action="store_true",
+                    help="topk_dropout: yesterday's confirmed bigvalue death state blocks new opens; default off")
+    ap.add_argument("--bigvalue-flatten", action="store_true", help="confirmed death: next session open; default off")
+    ap.add_argument("--bigvalue-golden-mult", type=float, default=None, help="confirmed golden cash fraction min(1, 0.95*M); default off")
+    ap.add_argument("--bigvalue-base-frac", type=float, default=None,
+                    help="topk_dropout: non-golden-day buy cash fraction (default book 0.95). "
+                         "No effect on buy days while --bigvalue-block-new restricts buying to "
+                         "confirmed-golden days (there min(1, base*M) applies); meaningful with "
+                         "--bigvalue-flatten without block-new")
+    ap.add_argument("--bigvalue-ma-fast", type=int, default=None, help="default 5 when enabled")
+    ap.add_argument("--bigvalue-ma-slow", type=int, default=None, help="default 10 when enabled")
+    ap.add_argument("--bigvalue-confirm-days", type=int, default=None, help="default 2 when enabled")
+    ap.add_argument("--bigvalue-signal", choices=("state",), default=None)
     ap.add_argument(
         "--keep-buy-vacancy",
         action="store_true",
@@ -822,6 +837,8 @@ def add_csv_backtest_common_args(
     )
     ap.add_argument("--workers", type=int, default=workers_default)
     ap.add_argument("--pool-dir", type=Path, default=Path(repo) / "stock_pool")
+    ap.add_argument("--beidou-params", default=None,
+                    help="version13 rule overrides as JSON; see strategy13_rules.Params")
     add_csv_strategy_arg(ap)
     add_strategy6_ratio_args(ap)
     add_topk_dropout_args(ap)
@@ -869,7 +886,9 @@ def resolve_research_pool_dir(
     if name in FORBIDDEN_DEFAULT_STOCK_POOL and is_repo_stock_pool(
         chosen, repo=Path(repo)
     ):
-        if name == "version11":
+        if name == "version13":
+            exporter = "export_beidou_pool.py"
+        elif name == "version11":
             exporter = "export_strategy11_pool.py"
         elif name in {"version10", "version10_1", "version10_2"}:
             exporter = "export_ta_pool.py"
@@ -893,6 +912,8 @@ def resolve_stop_fill(raw) -> str:
 
 def csv_run_kwargs_from_args(args) -> dict:
     name = normalize_csv_strategy(getattr(args, "strategy", "") or "")
+    if getattr(args, "beidou_params", None) is not None and name != "version13":
+        raise SystemExit("--beidou-params requires version13")
     hold_days = getattr(args, "hold_days", 20)
     try:
         validate_hold_days(name, hold_days, cli_option=True)
@@ -934,6 +955,10 @@ def csv_run_kwargs_from_args(args) -> dict:
         raise SystemExit(f"--stop-fill must be touch or close, got {fill_s}")
     if fill_s == STOP_FILL_CLOSE and name not in STOP_FILL_CLOSE_BOOKS:
         raise SystemExit("--stop-fill close is only for topk_dropout / topk_score_exit")
+    if name not in {"topk_dropout", "topk_score_exit"} and any(
+        value not in (None, False) for key, value in vars(args).items() if key.startswith("bigvalue_")
+    ):
+        raise SystemExit("bigvalue flags currently supported only by topk_dropout")
     kwargs = get_book(name).run_kwargs(args)
     kwargs["ration"] = getattr(args, "ration", "file_order")
     kwargs["ration_seed"] = int(getattr(args, "ration_seed", 0))
@@ -946,6 +971,8 @@ def csv_run_kwargs_from_args(args) -> dict:
             if budget_override is not None
             else float(get_book(name).name_budget)
         )
+    if name == "version13":
+        kwargs["name_budget"] = min(kwargs["name_budget"], float(args.cash_total) * strategy13_rules.NAME_CAP)
     if getattr(args, "min_lot_top_up", None) is not None:
         kwargs["min_lot_top_up"] = bool(args.min_lot_top_up)
     return kwargs
@@ -1941,6 +1968,36 @@ def _apply_topk_score_exit(
 def _run_kwargs_topk_dropout(args) -> dict:
     from backtest.research.topk_dropout_scores import load_scores_from_args
 
+    bigvalue = (bool(getattr(args, "bigvalue_block_new", False))
+                or bool(getattr(args, "bigvalue_flatten", False))
+                or getattr(args, "bigvalue_golden_mult", None) is not None)
+    bigvalue_options = {
+        key: getattr(args, "bigvalue_" + key, None)
+        for key in ("regime_file", "ma_fast", "ma_slow", "confirm_days", "signal", "base_frac")
+    }
+    if any(value is not None for value in bigvalue_options.values()) and not bigvalue:
+        raise SystemExit("bigvalue flags require --bigvalue-block-new or --bigvalue-flatten or --bigvalue-golden-mult")
+    if bigvalue and getattr(args, "index_ma5_gate", False):
+        raise SystemExit("bigvalue refuses --index-ma5-gate (P1)")
+    if bigvalue and bigvalue_options["regime_file"] is None:
+        raise SystemExit("bigvalue behavior requires --bigvalue-regime-file")
+    fast = bigvalue_options["ma_fast"] if bigvalue_options["ma_fast"] is not None else 5
+    slow = bigvalue_options["ma_slow"] if bigvalue_options["ma_slow"] is not None else 10
+    confirm = bigvalue_options["confirm_days"] if bigvalue_options["confirm_days"] is not None else 2
+    if bigvalue and (not 0 < fast < slow or confirm < 1):
+        raise SystemExit("bigvalue requires 0 < fast < slow and confirm-days >= 1")
+
+    multiplier = getattr(args, "bigvalue_golden_mult", None)
+    if multiplier is not None:
+        import math
+        if not math.isfinite(multiplier) or multiplier <= 0:
+            raise SystemExit("bigvalue golden-mult must be finite and positive")
+    base_frac = getattr(args, "bigvalue_base_frac", None)
+    if base_frac is not None:
+        import math
+        if not math.isfinite(base_frac) or not 0 < base_frac <= 1:
+            raise SystemExit("bigvalue base-frac must be in (0, 1]")
+
     buy_rule = str(getattr(args, "buy_state_rule", "oral") or "oral")
     if (
         buy_rule
@@ -1979,6 +2036,14 @@ def _run_kwargs_topk_dropout(args) -> dict:
         "stop_pct": resolved_stop,
         "stop_fill": resolve_stop_fill(getattr(args, "stop_fill", None)),
     }
+    if bigvalue:
+        from backtest.research.bigvalue_regime import load_regime
+
+        out["bigvalue_regime"] = (load_regime(bigvalue_options["regime_file"], fast, slow), confirm)
+        out["bigvalue_block_new"] = bool(getattr(args, "bigvalue_block_new", False))
+        out["bigvalue_flatten"] = bool(getattr(args, "bigvalue_flatten", False))
+        out["bigvalue_golden_mult"] = multiplier
+        out["bigvalue_base_frac"] = base_frac
     st_daily = getattr(args, "st_daily_file", None)
     age_map = getattr(args, "age_map_file", None)
     age_days = int(getattr(args, "age_days", 60))
@@ -2013,6 +2078,9 @@ def _run_kwargs_topk_dropout(args) -> dict:
 
 
 def _run_kwargs_topk_score_exit(args) -> dict:
+    if any(getattr(args, "bigvalue_" + key, None) is not None
+           for key in ("regime_file", "ma_fast", "ma_slow", "confirm_days", "signal", "golden_mult")) or getattr(args, "bigvalue_block_new", False) or getattr(args, "bigvalue_flatten", False):
+        raise SystemExit("topk_score_exit refuses any bigvalue flag; use topk_dropout")
     if getattr(args, "buy_state_file", None) is not None:
         raise SystemExit("topk_score_exit refuses --buy-state-file; use topk_dropout")
     out = _run_kwargs_topk_dropout(args)
@@ -3136,4 +3204,62 @@ register_minute_book(CsvStrategyBook(
     name="version7", tag="v7", aliases=("7", "v7", "version7"),
     allow_add=True, peak_gap_min=0, help_lock="", apply=_apply_version7,
     run_kwargs=lambda args: {"strategy": "version7"}, sizing="per_name",
+))
+
+
+def _apply_version13(*, stop_pct=None, beidou_params=None, index_block_new=None, **_):
+    from backtest.research import strategy13_engine as engine
+    from functools import partial
+    overrides = dict(beidou_params or {})
+    if stop_pct is not None:
+        overrides["stop_pct"] = float(stop_pct)
+    params = strategy13_rules.Params(**overrides)
+
+    def init_book(st, hooks):
+        # Fail-closed: NAME_BUDGET_DEFER / any oversized override collapses to cash×20%.
+        hooks["name_budget"] = min(hooks["name_budget"], st.cash * strategy13_rules.NAME_CAP)
+
+    def record(st):
+        from dataclasses import asdict
+        st.stats.update(sell_book="v13", beidou_capital=float(st.cash),
+                        beidou_realized=0.0, beidou_params=asdict(params),
+                        parking_symbol=strategy13_rules.PARKING_SYMBOL,
+                        parking_frac=0.0, parking_buffer=0.0, parking_execute=True,
+                        profit_skim=True, profit_skim_ratio=1.0)
+
+    def skim_equity(st, base):
+        target = strategy13_rules.skim_target(st.stats.get("beidou_realized", 0.0), base, params.skim_step)
+        target = max(target, st.stats.get("beidou_skim_entitled", 0.0))
+        st.stats["beidou_skim_entitled"] = target
+        return base + target
+
+    return dict(stop_pct=None, take_profit=strategy13_rules.take_profit_reason,
+                record_params=record, init_book=init_book, on_buy=engine.on_buy,
+                run_daily_day=engine.run_daily_day, minute_session=engine.MinuteSession,
+                beidou_params=params, beidou_index_gate=index_block_new,
+                exit_plan=partial(engine.plan_exit, params=params),
+                profit_skim=True, profit_skim_step=params.skim_step,
+                profit_skim_frac=params.skim_step, profit_skim_equity=skim_equity,
+                profit_skim_to_parking=True, profit_skim_keep_idle=True,
+                parking_symbol=strategy13_rules.PARKING_SYMBOL, parking_execute=True,
+                parking_frac=0.0, parking_buffer=0.0, div_to_parking=True)
+
+
+def _run_kwargs_version13(args):
+    import json
+    raw = getattr(args, "beidou_params", None)
+    try:
+        overrides = json.loads(raw) if raw is not None else {}
+        strategy13_rules.Params(**overrides)
+    except (TypeError, ValueError) as exc:
+        raise SystemExit(f"invalid --beidou-params: {exc}") from exc
+    return dict(strategy="version13", stop_pct=getattr(args, "stop_pct", None),
+                beidou_params=overrides)
+
+
+register(CsvStrategyBook(
+    name="version13", tag="v13", aliases=("13", "v13", "version13"),
+    allow_add=True, peak_gap_min=0, help_lock=strategy13_rules.HELP_LOCK,
+    apply=_apply_version13, run_kwargs=_run_kwargs_version13,
+    sizing="per_name", name_budget=strategy13_rules.NAME_BUDGET_DEFER,
 ))

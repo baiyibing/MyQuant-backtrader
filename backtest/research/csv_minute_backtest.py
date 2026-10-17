@@ -985,6 +985,7 @@ def scan_held_day_python(
     can_sell: bool,
     stop_pct: Optional[float],
     fill_state: dict | None = None,
+    regime_flat=None,
     session_exit_reason=None, session_volume=None, session_stats=None,
     pending_log=None,
     version9_plan=None,
@@ -1026,6 +1027,7 @@ def scan_held_day_python(
         reserve_state=reserve_state, exit_plan=exit_plan, exit_state=exit_state,
         close_clear=close_clear, l=l, minute_stop_trigger=minute_stop_trigger,
         fill_config=fill_config, fill_state=fill_state, pending_log=pending_log,
+        regime_flat=regime_flat,
         session_exit_reason=session_exit_reason, session_volume=session_volume, session_stats=session_stats,
         take_profit_pct=take_profit_pct, version9_plan=version9_plan,
         version9_max_hold=version9_max_hold,
@@ -1055,6 +1057,7 @@ def scan_held_day(
     can_sell: bool,
     stop_pct: Optional[float],
     fill_state: dict | None = None,
+    regime_flat=None,
     session_exit_reason=None, session_volume=None, session_stats=None,
     pending_log=None,
     version9_plan=None,
@@ -1096,6 +1099,7 @@ def scan_held_day(
         and stop_range_ratio is None
         and _want_numba_scan(use_numba)
         and _NUMBA_SCAN_AVAILABLE
+        and regime_flat is None
         and sell_gate is None
         and take_profit is None
         and close_clear is None
@@ -1151,6 +1155,7 @@ def scan_held_day(
         c,
         l=l, minute_stop_trigger=minute_stop_trigger, take_profit_pct=take_profit_pct,
         fill_config=fill_config, fill_state=fill_state, pending_log=pending_log,
+        regime_flat=regime_flat,
         session_exit_reason=session_exit_reason, session_volume=session_volume, session_stats=session_stats,
         cost=cost,
         peak=peak,
@@ -1342,6 +1347,7 @@ def simulate(
     total_cash: float = DEFAULT_TOTAL_CASH,
     daily_quota: float = DEFAULT_DAILY_QUOTA,
     name_budget: Optional[float] = None,
+    beidou_params: Optional[dict] = None,
     ration: str = "file_order",
     ration_seed: int = 0,
     stop_pct: Optional[float] = None,
@@ -1397,6 +1403,11 @@ def simulate(
     day_spans: dict | None = None,
     st_gate: bool = False,
     research_overlay=None,
+    bigvalue_regime: tuple | None = None,
+    bigvalue_block_new: bool = False,
+    bigvalue_flatten: bool = False,
+    bigvalue_golden_mult: float | None = None,
+    bigvalue_base_frac: float | None = None,
 ) -> SimState:
     """Opt-in cap uses caller-attested completed minutes; daily volume is unused.
 
@@ -1410,6 +1421,16 @@ def simulate(
         profile.account_fee_schedule,
         explicit_rates=(buy_cost_rate, sell_cost_rate, min_cost),
     )
+    if bigvalue_regime is None and (bigvalue_block_new or bigvalue_flatten or bigvalue_golden_mult is not None):
+        raise ValueError("bigvalue behavior requires bigvalue_regime")
+    regime_days = {}
+    if bigvalue_regime is not None:
+        from backtest.research.bigvalue_regime import with_bigvalue_gate
+
+        eligible_buy = with_bigvalue_gate(eligible_buy, daily_bars, *bigvalue_regime, block_new=bigvalue_block_new)
+        regime_days = eligible_buy.bigvalue_diagnostics["reasons_by_day"]
+    from backtest.research.bigvalue_regime import flatten_reason, golden_cash_fraction
+
     book = get_minute_book(strategy)
     validate_hold_days(book.name, hold_days)
     native_v7 = book.name == "version7"
@@ -1508,6 +1529,7 @@ def simulate(
             take_profit=take_profit,
             record_params=record_params,
             name_budget=name_budget,
+            **({"beidou_params": beidou_params} if beidou_params is not None else {}),
             ration=ration,
             ration_seed=ration_seed,
             profit_base=profit_base,
@@ -1743,6 +1765,11 @@ def simulate(
         if policy.day_start is not None:
             policy.day_start(st, day=day, ds=ds, day_i=i, context=policy_context)
 
+        if bigvalue_regime is not None:
+            hooks["regime_flat"] = flatten_reason(regime_days, day, bigvalue_flatten)
+            hooks["cash_deploy_frac"] = golden_cash_fraction(
+                regime_days, day, bigvalue_golden_mult,
+                bigvalue_base_frac if bigvalue_base_frac is not None else 0.95)
         if policy.chronological(hooks, fix_cash_order=fix_minute_cash_order,
                                 topk_exec=topk_exec, limit_walkdown=limit_walkdown):
             clock.begin("chronological_day")
@@ -1905,6 +1932,7 @@ def simulate(
                         c,
                         l=low_arr,
                         session_exit_reason=pos.pending_exit,
+                        regime_flat=flatten_reason(regime_days, day, bigvalue_flatten),
                         session_volume=day_m["volume"].to_numpy(np.float64) if minute_open else None,
                         session_stats=st.stats,
                         minute_stop_trigger="hl" if absolute_exit else minute_stop_trigger,
@@ -1972,6 +2000,9 @@ def simulate(
                     pos.peak = new_peak
                     pos.peak_hm = new_peak_hm
                     pos.reserved = bool(reserve_state["reserved"])
+                    regime_reason = flatten_reason(regime_days, day, bigvalue_flatten)
+                    if regime_reason and t1_sellable(calendar[pos.entry_idx].date(), day.date()):
+                        pos.pending_exit = regime_reason
                     if idx >= 0:
                         fill_open = float(o[idx])
                         if not np.isfinite(fill_open) or not np.isfinite(float(px)):
@@ -1992,6 +2023,8 @@ def simulate(
                             "stop_loss:gap_open": "minute_gap_open",
                             "stop_loss:touch": "minute_stop_price" if minute_stop_trigger == "hl" else "minute_trigger_bar_close",
                         }.get(reason, "")
+                        if reason == "regime_flat:bigvalue_death":
+                            price_rule = "minute_regime_next_open"
                         if minute_open:
                             price_rule = "minute_trigger_bar_close"
                         if reason.endswith(":next_open") or (minute_open and fill_config.fill_timing == "next_bar_open"):
@@ -2148,7 +2181,10 @@ def simulate(
                     ration_seed=hooks.get("ration_seed", 0),
                     exdiv=exdiv, exdiv_ref_fen=exdiv_ref_fen,
                     planned_for_day=hooks.get("planned_for_day"),
-                    cash_deploy_frac=hooks.get("cash_deploy_frac"),
+                    cash_deploy_frac=golden_cash_fraction(
+                        regime_days, day, bigvalue_golden_mult,
+                        bigvalue_base_frac if bigvalue_base_frac is not None
+                        else hooks.get("cash_deploy_frac")),
                     qlib_limit_pct=qlib_limit_pct,
                     limit_up_chase=limit_up_chase,
                     forbid_all_trade_at_limit=forbid_all_trade_at_limit,
@@ -2303,6 +2339,7 @@ def run(
     total_cash: float = DEFAULT_TOTAL_CASH,
     daily_quota: float = DEFAULT_DAILY_QUOTA,
     name_budget: Optional[float] = None,
+    beidou_params: Optional[dict] = None,
     ration: str = "file_order",
     ration_seed: int = 0,
     stop_pct: Optional[float] = None,
@@ -2331,6 +2368,11 @@ def run(
     stop_fill: Optional[str] = None,
     week_ma_gate: bool = False,
     ma5_gate: bool = False,
+    bigvalue_regime: tuple | None = None,
+    bigvalue_block_new: bool = False,
+    bigvalue_flatten: bool = False,
+    bigvalue_golden_mult: float | None = None,
+    bigvalue_base_frac: float | None = None,
     keep_buy_vacancy: bool = False,
     buy_cost_rate: Optional[float] = None,
     sell_cost_rate: Optional[float] = None,
@@ -2661,6 +2703,7 @@ def run(
         take_profit=take_profit,
         record_params=record_params,
         name_budget=name_budget,
+            **({"beidou_params": beidou_params} if beidou_params is not None else {}),
         ration=ration,
         ration_seed=ration_seed,
         pool_names_by_day=pool_names_by_day,
@@ -2672,6 +2715,9 @@ def run(
         topk=topk,
         n_drop=n_drop,
         eligible_buy=eligible_buy,
+        bigvalue_regime=bigvalue_regime, bigvalue_block_new=bigvalue_block_new,
+        bigvalue_flatten=bigvalue_flatten, bigvalue_golden_mult=bigvalue_golden_mult,
+        bigvalue_base_frac=bigvalue_base_frac,
         keep_buy_vacancy=keep_buy_vacancy,
         index_block_new=index_block_new,
         stop_fill=stop_fill,

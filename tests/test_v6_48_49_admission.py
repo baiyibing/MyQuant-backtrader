@@ -83,7 +83,9 @@ def test_profit_skim_is_scoped_to_version6_52():
     hooks = {name: apply_csv_strategy(name)
              for name in BOOKS if not name.startswith("topk_")}
     skim = {name for name, h in hooks.items() if h.get("profit_skim")}
+    assert callable(hooks["version13"]["profit_skim_equity"])
     assert skim == {
+        "version13",
         "version6_52", "version6_53", "version6_54",
         "version6_55", "version6_56", "version10_2",
     }
@@ -119,7 +121,7 @@ def test_div_to_parking_is_scoped_to_version6_54():
     hooks = {name: apply_csv_strategy(name)
              for name in BOOKS if not name.startswith("topk_")}
     parked = {name for name, h in hooks.items() if h.get("div_to_parking")}
-    assert parked == {"version6_54", "version6_55", "version6_56", "version10_2"}
+    assert parked == {"version13", "version6_54", "version6_55", "version6_56", "version10_2"}
     assert hooks["version6_53"].get("div_to_parking") is not True
     assert hooks["version6_55"]["div_to_parking"] is True
     assert hooks["version6_56"]["div_to_parking"] is True
