@@ -252,6 +252,8 @@ def init_sim_state(
 ) -> tuple[SimState, dict[str, tuple[float, int]], Callable[[str], dict[str, str]]]:
     """SimState + pending_chase + names_asof after strategy hooks are applied."""
     st = SimState(cash=float(total_cash))
+    if callable(hooks.get("init_book")):
+        hooks["init_book"](st, hooks)
     st.book_on_buy = hooks.get("on_buy")
     st.book_on_exdiv = hooks.get("on_exdiv")
     hooks["record_params"](st)
@@ -1305,6 +1307,7 @@ def extra_load_codes_for_strategy(strategy: str) -> set[str]:
         "version6_55",
         "version6_56",
         "version10_2",
+        "version13",
     }:
         from backtest.research.strategy6_47_rules import PARKING_SYMBOL
 
@@ -2218,7 +2221,8 @@ def run_profit_skim_day(
         return
     extracted = _profit_skim_extracted(st)
     to_parking = bool(hooks.get("profit_skim_to_parking"))
-    equity = working_equity(st, day, daily_bars)
+    skim_equity = hooks.get("profit_skim_equity")
+    equity = skim_equity(st, base) if callable(skim_equity) else working_equity(st, day, daily_bars)
     owed = _profit_skim_owed(equity, base=base, step=step, frac=frac, withdrawn=extracted)
     if to_parking:
         if owed > 1e-6:

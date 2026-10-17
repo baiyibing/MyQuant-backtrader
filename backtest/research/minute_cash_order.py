@@ -935,6 +935,8 @@ def run_chronological_day(
                     session.before_close(at_hm)
                 for code in list(st.positions):
                     session.advance_held(code, at_hm, phase)
+                if phase == "open" and callable(getattr(session, "after_open", None)):
+                    session.after_open(at_hm)
                 if phase == "close":
                     session.after_close(at_hm)
                 continue

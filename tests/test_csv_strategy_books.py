@@ -99,6 +99,7 @@ def test_registered_books_are_explicit():
         "topk_dropout",
         "topk_score_exit",
         "version9_1",
+        "version13",
     )
     assert get_book("version1").allow_add is False
     assert get_book("version1").peak_gap_min == 0
@@ -794,7 +795,7 @@ def test_per_name_default_budget_is_float(budget_parser, strategy):
     args = budget_parser.parse_args(["--strategy", strategy])
     budget = csv_run_kwargs_from_args(args)["name_budget"]
     assert type(budget) is float
-    assert budget == 1_000_000.0
+    assert budget == (4_200_000.0 if strategy == "version13" else 1_000_000.0)
 
 
 @pytest.mark.parametrize("budget", ["0", "-1"])
