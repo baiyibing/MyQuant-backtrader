@@ -134,3 +134,9 @@ scripts/baselines/*_last_run.log
 /_agent_runs/
 /_tmp_*
 *.py.bak_*
+
+# S1.1 cold-load probe host evidence (absolute resolver_identity; never commit)
+/docs/backtest/minute-cold-load-probe*.json
+/evidence/minute-cold-load-probe/
+**/minute-cold-load-probe.json
+

@@ -423,3 +423,13 @@ csv_minute_backtest.py --strategy version6_53 --start 20251023 --end 20260909 ^
 | r2 · cut A | 2026-10-16 | Human 绑定 **(A) 保守整文件失效**。P1/P3 **已裁**；§4.2 身份合同 + 失效矩阵。吸收 Codex HOLD + Grok AGREE-HOLD（荐 A 不荐 B）。刀序不变。身份阻断解除；encode 仍须 Codex 重评 GO，且缺省关、不 merge |
 
 下一份需要评审的是 **cut A 之后**的计划 tip（本文件）。r1 的 69 行与 r2 未裁身份一句话不再当作 encode 合同。
+
+## 11. S1.1 encode status (2026-10-16)
+
+Codex [cut A re-review GO-WITH-NITS](../architecture/reviews/2026-10-16/pr-481-bar-cache-cold-load-r2/codex-r2.md)
+binds P2/P4–P8 suggested defaults through Human「通过就实施」2026-10-16.
+First delivery is [S1.1 probe scaffolding](note-minute-cache-cold-load-s11-2026-10-16.md)
+only; no runtime shard path. Real-host measurements, actual rebuilt-file
+counts and grain decision remain PENDING because no lake root is configured
+in the encode environment. No performance or CSV acceptance claim follows.
+S1 default-OFF shards, S2 and separate S3 remain subsequent knives.

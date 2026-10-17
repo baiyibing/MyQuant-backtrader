@@ -1,7 +1,7 @@
 # 联合仓库 TopK 回测 · 问题记录
 
 - 日期：2026-09-22
-- 状态：**讨论中**。Q1–Q4 / Q6 / Q7 已裁；**Q5/Q9/Q10 已裁（2026-09-26）**：日线对照钉 qlib `$close` 日线后复权 bin + pred `8a061ea4` OOS `20260106–20260914` + cash 1e8；分钟价域归 #214/X-01 HOLD，非本页 impl GO。Q8 仍开。`--stop-fill close` 与 `--buy-state-file` 已落地，默认关；`--stop-fill` 默认 `touch`。不要把本页当「改默认成交」任务书。
+- 状态：**讨论中**。Q1–Q4 / Q6 / Q7 已裁；**Q5/Q9/Q10 已裁（2026-09-26）**：日线对照钉 qlib `$close` 日线后复权 bin + pred `8a061ea4` OOS `20260106–20260914` + cash 1e8；分钟价域归 #214/X-01 HOLD，非本页 impl GO。Q8 仍开。**Q12 full-switch impl GO（Human 2026-10-16）**：共享 bigvalue regime 开关已交付，全部行为默认关；见页尾现行 addendum。`--stop-fill close` 与 `--buy-state-file` 已落地，默认关；`--stop-fill` 默认 `touch`。不要把本页当「改默认成交」任务书。
 - 范围：MyQuant 出分 / 买闸；本仓 `topk_dropout` 向量化成交。不复活 PortAna 当产品；不改线上 10/3。
 - GitHub 问题：[#164](https://github.com/baiyibing/MyQuant-backtrader/issues/164)（本仓此前无专题 issue）。
 
@@ -24,6 +24,7 @@
 | 本仓 CLI | §9 |
 | MyQuant 出分 / 买闸开关 | §9.1 |
 | 还没做 / 待裁 | §7、§8 |
+| 大单净量 regime（full-switch GO） | [plan-bigvalue-regime-topk-2026-10-16.md](plan-bigvalue-regime-topk-2026-10-16.md)；Q12 实施见页尾 Human addendum |
 | 本页怎么用 | §11 |
 
 ---
@@ -435,8 +436,11 @@ pred `8a061ea4`（`replay_20260917_current_ruler`），窗 `20260106–20260914`
 | Q9 | 窗与 pred | **已裁（2026-09-26）**：钉年化主 pred **`8a061ea4`** + 2026 OOS 窗 **`20260106–20260914`**。`c5f4bccd` 仅烟测，不作对照归因窗。不覆盖 `pred.pkl`。 |
 | Q10 | `--cash-total` | **已裁（2026-09-26）**：对照实验一律显式 **`--cash-total 100000000`**，全臂同本金。CLI 默认 2100 万不翻。 |
 | Q11 | 闸做在哪边 | **随 Q3**：分数导出仍不过闸；买点用独立 sidecar，BT 只查表。不要 MQ `--buy-state-filter` 滤完分数再让 BT 滤同一层 |
+| Q12 | 全市场大单净量（bigvalue）regime 切点 | **Human 2026-10-16: P* drafted as switches shipped (shared infra; topk first consumer)**；见页尾现行 addendum。以下为历史待裁清单：与 `--index-ma5-gate` 共存（AND / 独立 / 互斥）、死叉态强平开或关（默认关）、金叉态资金倍数相对 `risk_degree=0.95`、`confirm-days`、连续状态 vs `cross_*` 边沿。计划：[plan-bigvalue-regime-topk-2026-10-16.md](plan-bigvalue-regime-topk-2026-10-16.md)。**不关闭 Q8** |
 
 编码门槛：Q1–Q4/Q6/Q7 已裁（`--stop-fill close` 仅日线；买点旁路 + `$winratio`；止损先；收盘跌停仍成交）。对照实验 Q5/Q9/Q10 **已裁（2026-09-26）**，按上表钉日线价域、pred/OOS 窗与全臂本金。**Q8 仍开**，勿静默叠年化 A 格的 5 日涨幅&gt;15% 挡。本次仅记人裁，不改生产默认，不授权 #214 实施；分钟信号→`none` 换算 / X-01 仍归 #214 HOLD 专题。
+
+2026-10-16：追加 **Q12 仍开 / 待裁**（全市场大单净量 regime，见计划）。该计划 **不是 impl GO**，不改生产默认，不授权改 `strategy_topk_dropout_rules.py`。**Q8 仍开**，状态不变。
 
 不变边界：不传 `--qlib-data-root` 仍走湖；CLI 本金默认仍为 2100 万；`--stop-fill touch` 默认、线上 10/3 不翻；PortAna 不复活产品地位；seal bars = `qlib_bin`；validate 默认 `v1`。
 
@@ -469,6 +473,7 @@ pred `8a061ea4`（`replay_20260917_current_ruler`），窗 `20260106–20260914`
 | **`--buy-state-file`** | 不传=不滤 | ✓ | ✓ | 见 Q3/Q4；新开；(close&lt;MA20 且 close&lt;MA60 且 `$winratio`&lt;0.10) 或 close&gt;MA20。`topk_score_exit` 拒绝 |
 | **`--buy-state-rule`** | `oral` | ✓ | ✓ | `above-ma20` 关掉盈筹抄底，只留 close&gt;MA20。`above-ma20-week20` 再要求 close&gt;qlib 20 周均线（每周第一个交易日收盘的 20 期均值；用日线收盘算，分钟成交也可挂这道闸）。`above-ma5-ma20-week20` 再要求 close&gt;个股 5 日均线（含当日的 5 根收盘均值）。须配 `--buy-state-file` |
 | **`--index-ma5-gate`** | 关 | ✓ | ✓ | 新开。全市场只看上证 000001.SH。信号日收盘 &lt; MA5 → 次日所有新开不买 |
+| **`--bigvalue-*`（已落地）** | 全关 / None | 支持 | 支持 | Human 2026-10-16 full-switch GO；共享基建，topk 首消费。挡新开 / 次日开盘强平 / 金叉现金倍数；见页尾现行 addendum 与计划 §14。不是 `--buy-state-file` |
 | **`--keep-buy-vacancy`** | 关 | ✓ | ✓ | 原买名单没过闸则空着，不按分数往下补。资金仍按原名单只数分，空位留现金 |
 
 ### 9.1 MyQuant 侧（出分 / 闸，不是本仓 CLI）
@@ -539,6 +544,7 @@ csv_daily_backtest.py --strategy topk_dropout --pred-csv <MyQuant pred>
 | 本页 + [#164](https://github.com/baiyibing/MyQuant-backtrader/issues/164) | 持续改进账；GitHub 问题是入口，**正文以本文件为准** |
 | [plan-topk-dropout-overlay-2026-09-16.md](plan-topk-dropout-overlay-2026-09-16.md) | 已 GO 的默认书，**冻结**；不要为新实验改它的默认触价 |
 | HELP_LOCK `strategy_topk_dropout_rules.py` | CLI `--help` 契约；加开关必须改这里 + 本页 + 单测 |
+| [plan-bigvalue-regime-topk-2026-10-16.md](plan-bigvalue-regime-topk-2026-10-16.md) | 大单净量 regime 计划 + **full-switch 已实施**（[#480](https://github.com/baiyibing/MyQuant-backtrader/pull/480)；开关默认关；共享 `bigvalue_regime`，topk 第一消费方）。见 §14 / 页尾 addendum + [Grok GO-WITH-NITS](reviews/2026-10-16/plan-bigvalue-regime-topk/grok.md)。**Q8 仍开** |
 | 年化账 / 填坑文（MyQuant `docs/reviews/`） | 数字与坑的明细；本页只摘要 |
 
 加开关：一书加旗，不复制 `strategy_topk_dropout_rules.py`。改默认成交须先人裁。未 GO 不改止损核。
@@ -549,6 +555,8 @@ csv_daily_backtest.py --strategy topk_dropout --pred-csv <MyQuant pred>
 
 | 日期 | 什么 |
 |---|---|
+| 2026-10-16 | Grok nit：§11 文档地图 bigvalue 行改为 full-switch 已实施（#480 / 共享 infra / 默认关）；页尾 addendum 记 Grok GO-WITH-NITS + CI 绿。历史「非 impl GO」修订行保留。 |
+| 2026-10-16 | 登记计划 [plan-bigvalue-regime-topk-2026-10-16.md](plan-bigvalue-regime-topk-2026-10-16.md)（draft PR，docs-only，**非 impl GO**）：联合 `topk_dropout` 用全市场大单净量均线状态做领先 regime，次日才生效。新增 **Q12 仍开 / 待裁**（与 `--index-ma5-gate` 共存、强平、资金倍数 vs `risk_degree`、`confirm-days`、状态 vs 边沿）。§9 只追加 **拟** 旗，未进 HELP_LOCK。依赖未合并的 [#475](https://github.com/baiyibing/MyQuant-backtrader/pull/475)；该 PR 因 `E:/stock_data/bigdata.csv` 被 path gate 拦住，实施前须先去掉盘符默认。**Q8 仍开**，勿静默叠 ST/年龄/5 日涨幅&gt;15% 挡。 |
 | 2026-09-27 | 归档 [4090 Human-GO TopK real↔qlib 六格（20260927d）](topk-exec-6cell-real-2026-09-27.md)：tip `5a3e6e2`（P4 #225），对照 qlib c；real open/intradate 四格回报指标相同（-0.44%，walkdown 未触发），close_wd 对 c 的 ΔNAV −0.77M；minute-none / nostop / Q9 湖末警告保留，非完整 hash / 2025 锚矩阵或默认切换 GO。 |
 | 2026-09-27 | 归档 [4090 Human-GO TopK 执行三格（20260927a/b）](topk-exec-3cell-2026-09-27.md)：Q9 原结束日及湖末截尾，minute-none / nostop / walkdown-off；默认 close 不变，不新增 P2/P3/#214/Q8 GO。 |
 | 2026-09-27 | 归档 [4090 Human-GO TopK 执行六格（20260927c）](topk-exec-6cell-2026-09-27.md)：tip `9e58bde`（P3 #222），2026 窗含 walkdown-on，minute-none / nostop / Q9 原结束日及湖末警告；open_wd 与 intradate_wd 仅 equity MD5 相同，非全产物相同；非 2025 锚完整矩阵或默认切换 GO。 |
@@ -570,3 +578,11 @@ csv_daily_backtest.py --strategy topk_dropout --pred-csv <MyQuant pred>
 | 2026-09-22 | **Q3/Q4 人裁并落地**：MyQuant 旁路 `$close`/`Mean(20/60)`/`$winratio`；BT `--buy-state-file` 查表。score_exit 拒绝此旗。MQ `--buy-state-filter` 默认不翻。 |
 | 2026-09-26 | **Q5/Q9/Q10 人裁**：日线对照钉 qlib `$close` 日线后复权 bin（`--qlib-data-root` + 常配 `--qlib-cost`），湖日线另账；分钟仅 `none`，禁与日线 bin/湖 `front` 混比，信号→`none` 换算归 #214/X-01 HOLD，非本页 impl GO。pred 钉 `8a061ea4` + OOS `20260106–20260914`，`c5f4bccd` 仅烟测、不作归因窗，不覆盖 `pred.pkl`；全臂显式 `--cash-total 100000000`。Q8 仍开，勿静默叠 5 日 15% 挡；生产默认与上述不变边界均不翻。 |
 | 2026-10-16 | §6.11：三版本对比跑（首次分钟入口）。SX0 两引擎一致负贡献，维持实验书；主书日/分差 11.8pp 归 Q8；bar_cache 共享 tmp 并行撞锁已修（per-pid tmp + 原子 replace）。 |
+
+2026-10-16 implementation addendum: Human authorized Codex review→impl; [Codex review](reviews/2026-10-16/plan-bigvalue-regime-topk/codex.md) verdict **GO-WITH-NITS**, superseding the historical no-GO statements above for **block-new only**. #475 is merged (`c2a7b20`), explicit CSV path, no drive default. Daily/minute `topk_dropout` now accept `--bigvalue-block-new` (default OFF), explicit `--bigvalue-regime-file`, `--bigvalue-ma-fast/slow` (effective 5/10), `--bigvalue-confirm-days` (effective 2), `--bigvalue-signal state` only. Exact prior book session, trailing-zero re-drop, precomputed MA only; missing/warmup/under-confirm blocks that day, equality neutral and breaks confirmation. Index gate coexistence and score_exit bigvalue flags refuse. Diagnostics on eligibility: `bigvalue_diagnostics` includes per-day reasons and `skip_bigvalue_block` distinct queried blocked days. Flatten/golden/edge omitted and deferred; Q12 remaining decisions and Q8 remain open. Existing cash, stop and sell defaults unchanged. No real-lake experiment or return claim.
+
+
+2026-10-16 full-switch superseding addendum — **Q12 implementation cuts GO**: **Human 2026-10-16: P* drafted as switches shipped (shared infra; topk first consumer)**. Human「把人裁都实施了，只是开关而已」。[PR #480](https://github.com/baiyibing/MyQuant-backtrader/pull/480) expands the existing branch; [plan §14](plan-bigvalue-regime-topk-2026-10-16.md#14-human-2026-10-16-full-switch-cut现行-ssot) and [Codex GO](reviews/2026-10-16/plan-bigvalue-regime-topk/codex.md) supersede the historical block-new-only/deferred statements above. `--bigvalue-block-new` / `--bigvalue-flatten` default OFF; `--bigvalue-golden-mult` default None; explicit parquet file required by any behavior. Shared load/state/confirm/gate/flatten/cash helpers; engines opt in by kwargs. MA5/10, confirm=2, continuous state; exact prior session and no stale fallback. Missing/warmup/under-confirm blocks opens even in flatten-only/golden-only runs; equality neutral and breaks streak. Stop then flatten then dropout, single sell; flatten daily next open / minute exact 09:30 open, limit-down retry next session without Q7. Golden eff=min(1.0,0.95*M); no leverage. Index gate coexistence refuses (P1); score_exit refuses any bigvalue flag (P13); other CLI books refuse. HELP_LOCK updated with all flags. Q8 remains open; no ST/age/15% filter implicitly enabled. No real-lake/alpha claim. [Grok review](reviews/2026-10-16/plan-bigvalue-regime-topk/grok.md) **GO-WITH-NITS** (2026-10-16); CI green on as-built open-bucket rewrite; merge pending Human ack of LOW tracker nit (this row).
+
+2026-10-16 host A/B addendum (bigvalue regime, pred 8a061ea4, 20260106–20260914, 2100万, lake): arms off / block-only / flatten-only / block+flatten on both engines. block-only hurts both (daily +8.14→−13.81, minute −3.69→−13.72); flatten-only churns (daily 2130 buys, death-day rebuys — no cooldown on regime_flat sells); **block+flatten on minute wins both dimensions (−0.19%, DD −24.28 vs off −3.69/−31.27)**, daily still loses to off (−7.04) — evaluate the gate on the minute engine. golden-mult 2 alone: daily −7.63 (slightly worse). Semantics finding: under block-new, buying only happens on confirmed-golden days, so a non-golden-day base deployment fraction cannot scale buys (0.95×M and 0.5×M identical to the cent on 937 aligned buys). `--bigvalue-base-frac` (opt-in, default None; golden branch unified to min(1, base*M), byte-identical default) shipped for flatten-without-block configs with that caveat in HELP_LOCK. Open adjudication: 「平时半仓弹药」需要管持仓不是买入投放 —— fractional flatten (death → trim to X% instead of full clear) is the candidate mechanism.
+| 2026-10-16 | bigvalue 宿主 A/B:分钟上 block+flatten 两维全赢(−0.19%/−24.28),block-only 与 flatten-only 各自有害;发现 block-new 下买入仅发生在金叉确认日 → 非金叉 base 投放系数对买入无感,`--bigvalue-base-frac` 以 flatten-无-block 场景入库(默认不变);分数 flatten(死叉减仓到 X%)待裁。 |

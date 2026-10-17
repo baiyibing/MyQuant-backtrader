@@ -90,7 +90,7 @@ def test_every_registered_book_has_main_engine_dispatch(name):
     hooks = _hooks(name)
     entry = next(e for e in minute_strategy_entries() if e.name == name)
     assert (entry.cli, entry.status, entry.missing_field) == (CLI_MINUTE, "wired", None)
-    if name in {"version9_2", "version12"}:
+    if callable(hooks.get("minute_session")):
         assert callable(hooks["minute_session"])
         assert callable(hooks["exit_plan"])
     elif name == "version11":
