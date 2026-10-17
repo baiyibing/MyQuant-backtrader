@@ -720,6 +720,9 @@ def load_s12_price_context(codes, start, end, *, load_start, transform_file=None
         # conversion is undefined anyway.
         common_start = max(front.index[0], raw.index[0])
         common_end = min(front.index[-1], raw.index[-1])
+        if common_start > common_end:
+            _fail("front/raw parquet have no overlapping dates", code=code,
+                  domain="front/raw", path=paths["raw"][code])
         front_ci = front.index[(front.index >= common_start) & (front.index <= common_end)]
         raw_ci = raw.index[(raw.index >= common_start) & (raw.index <= common_end)]
         if not front_ci.equals(raw_ci):
