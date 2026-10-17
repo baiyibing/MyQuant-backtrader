@@ -252,6 +252,8 @@ def init_sim_state(
 ) -> tuple[SimState, dict[str, tuple[float, int]], Callable[[str], dict[str, str]]]:
     """SimState + pending_chase + names_asof after strategy hooks are applied."""
     st = SimState(cash=float(total_cash))
+    if callable(hooks.get("init_book")):
+        hooks["init_book"](st, hooks)
     st.book_on_buy = hooks.get("on_buy")
     st.book_on_exdiv = hooks.get("on_exdiv")
     hooks["record_params"](st)

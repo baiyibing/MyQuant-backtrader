@@ -77,16 +77,18 @@ def signal_mask(frame, code, *, breakout_days=BREAKOUT_DAYS,
     if chip:
         for day in mask.index[mask]:
             mask.loc[day] = chip_single_peak(frame.loc[:day], code)
-    return mask.fillna(False)
+    numeric = frame[["open", "high", "close", "volume", "amount", "float_shares"]]
+    return (mask & np.isfinite(numeric).all(axis=1)).fillna(False)
 
 
 def attach_float_history(frame, history, code):
     """Backward asof only; no snapshot backfill or future shares."""
     h = history.loc[history.stock_code == code, ["date", "FloatVolume"]].copy()
-    h["date"] = pd.to_datetime(h.date).dt.normalize()
+    h["date"] = pd.to_datetime(h.date).dt.normalize().astype("datetime64[ns]")
     if h.date.duplicated().any():
         raise ValueError(f"duplicate float-share dates for {code}")
     left = frame.rename_axis("date").reset_index()
+    left["date"] = pd.to_datetime(left.date).astype("datetime64[ns]")
     return pd.merge_asof(left, h.sort_values("date"), on="date", direction="backward").set_index("date").rename(columns={"FloatVolume": "float_shares"})
 
 
@@ -135,6 +137,8 @@ def main(argv=None):
         if f.index.has_duplicates:
             raise ValueError(f"duplicate daily bars: {code}")
         f = attach_float_history(f, history, code)
+        if not f.empty and not f.float_shares.notna().any():
+            raise ValueError(f"missing historical float shares for {code}")
         f["is_st"] = [code in st.get(d.strftime("%Y%m%d"), ()) for d in f.index]
         frames[code] = f
     if not frames:

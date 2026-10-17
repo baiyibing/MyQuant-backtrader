@@ -971,6 +971,8 @@ def csv_run_kwargs_from_args(args) -> dict:
             if budget_override is not None
             else float(get_book(name).name_budget)
         )
+    if name == "version13":
+        kwargs["name_budget"] = min(kwargs["name_budget"], float(args.cash_total) * strategy13_rules.NAME_CAP)
     if getattr(args, "min_lot_top_up", None) is not None:
         kwargs["min_lot_top_up"] = bool(args.min_lot_top_up)
     return kwargs
@@ -3207,10 +3209,14 @@ register_minute_book(CsvStrategyBook(
 
 def _apply_version13(*, stop_pct=None, beidou_params=None, index_block_new=None, **_):
     from backtest.research import strategy13_engine as engine
+    from functools import partial
     overrides = dict(beidou_params or {})
     if stop_pct is not None:
         overrides["stop_pct"] = float(stop_pct)
     params = strategy13_rules.Params(**overrides)
+
+    def init_book(st, hooks):
+        hooks["name_budget"] = min(hooks["name_budget"], st.cash * strategy13_rules.NAME_CAP)
 
     def record(st):
         from dataclasses import asdict
@@ -3227,9 +3233,10 @@ def _apply_version13(*, stop_pct=None, beidou_params=None, index_block_new=None,
         return base + target
 
     return dict(stop_pct=None, take_profit=strategy13_rules.take_profit_reason,
-                record_params=record, on_buy=engine.on_buy,
+                record_params=record, init_book=init_book, on_buy=engine.on_buy,
                 run_daily_day=engine.run_daily_day, minute_session=engine.MinuteSession,
                 beidou_params=params, beidou_index_gate=index_block_new,
+                exit_plan=partial(engine.plan_exit, params=params),
                 profit_skim=True, profit_skim_step=params.skim_step,
                 profit_skim_frac=params.skim_step, profit_skim_equity=skim_equity,
                 profit_skim_to_parking=True, profit_skim_keep_idle=True,

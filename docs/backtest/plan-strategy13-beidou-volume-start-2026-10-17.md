@@ -69,3 +69,54 @@ produces no pool entry. Optional chip uses the existing chip distribution's
 Data-free S1 verification: `tests/test_strategy13_exporter.py` (9 passed).
 Host lake smoke and manual chapter-10 comparison remain unrun; the manual's
 future-selected performance is not an acceptance target. Claude review pending; do not merge.
+
+S2/S3: registered `version13` / `v13`, per-name budget bound at simulation
+initialization to `min(--name-budget, --cash-total × 0.20)` (omission means
+cash×20%). Base is the manual's fixed ¥10,000, minimum 100 shares; rejected
+orders never shrink for cash. Adds anchor to the actual successful fill price,
+with 42/35 base-share multipliers and maximum ten. Shared fee/quantity helpers,
+ledger, T+1, limit checks, minute cursor and parking/dividend paths remain the
+fill authority. Daily close exits queue for the next available open; minute
+price exits use the shared FillConfig. Close-only stops count once per session.
+The book records net realized trading PnL after allocated buy fees and actual
+sell cash debits. Cumulative skim entitlements are monotone, with whole-lot
+unpaid residuals retried; parking mark-to-market never triggers the skim.
+`profit_skim_frac=0.20` is the existing stack's **fraction of initial capital
+per rung**, equal to **100% of the 20% realized-profit increment**; the book
+also records `profit_skim_ratio=1.0`. No idle parking sleeve is opened.
+
+HS300 gate is dispatched through `load_book_index_gate` and reads only the
+configured index tree. It requires 120 preload sessions and uses completed
+T−1 closes/MA60/MA120 for T's 50%/30% cap. It checks post-order exposure,
+including parking, and never schedules a forced sale. Direct data-free
+`simulate()` callers can inject the gate; product `run()` loads it fail-closed.
+
+CLI examples (configured lake required):
+
+```bash
+scripts/data/export_beidou_pool.py --start 20260105 --end 20260930 --pool-dir exports/beidou_2026
+backtest/research/csv_daily_backtest.py --strategy version13 --start 20260105 --end 20260930 --pool-dir exports/beidou_2026 --cash-total 21000000
+backtest/research/csv_minute_backtest.py --strategy version13 --start 20260105 --end 20260930 --pool-dir exports/beidou_2026 --cash-total 21000000
+```
+
+Use the configured Python interpreter before each script. `--beidou-params`
+is a JSON object over `strategy13_rules.Params`, for example
+`'{"base_budget": 20000, "max_adds": 5}'`. Unknown/non-finite parameters and
+more than ten adds fail; the 20% hard cap cannot be raised by overrides.
+The exporter separately exposes `--volume-ratio`, `--breakout-days`, and
+`--chip-single-peak` (OFF). No B-class stub is exposed.
+
+S4: `version13` is pending (no golden regenerated); existing HELP_LOCKs and
+baseline bytes are unchanged. Synthetic exporter-lake, daily/minute legacy
+and industry, tier/floor/T+1, cash-cap, dual-index and dividend-reinvestment
+tests are data-free. Host-market smoke/comparison is unavailable in this
+worktree: both `OSKH_SOURCE_PARQUET_ROOT` and `OSKH_AUTHORITY_HINT_ROOT` are
+unset. No drive probing or substitute market data was used. Claude review
+pending; do not merge.
+
+Local verification: strategy13-specific tests **37 passed**; admission/shared
+contracts **1,241 passed**; full CI marker on pandas 3.0.6 **9,391 passed,
+67 skipped, 24 deselected** (before final added smoke regressions). All path,
+book/baseline/capability/minute-classification gates and contract ruff pass.
+600036 may also have an A-signal position: exits allocate only its strategy
+lots, preserving separately tagged locked parking principal.

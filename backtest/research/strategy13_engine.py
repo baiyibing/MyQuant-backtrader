@@ -1,12 +1,17 @@
 """Beidou orchestration through shared ledger and HeldMinuteCursor; no fill kernel."""
 import numpy as np
 from types import SimpleNamespace
+from backtest.research.lot_rounding import budget_board_lots
 
 from backtest.research import strategy13_rules as rules
 from backtest.research import strategy12_engine as shared
 from backtest.research.ashare_session import hit_limit_up, defer_sell_open_or_fill
 from backtest.research.csv_common import day_bar_and_prev_closes
-from backtest.research.csv_ledger import execute_buy, _sell, fee_order_id, release_fee_order, preview_buy_cash_needed
+from backtest.research.csv_ledger import execute_buy, _sell, fee_order_id, release_fee_order, preview_buy_cash_needed, is_parking_lot
+
+
+def strategy_lots(st, code):
+    return [p for p in st.positions.get(code, []) if not is_parking_lot(st, p)]
 
 
 def memory(st, code):
@@ -14,7 +19,7 @@ def memory(st, code):
 
 
 def on_buy(st, code, reason, shares):
-    if code == rules.PARKING_SYMBOL:
+    if reason.startswith("parking:"):
         return
     trade = st.trades[-1]
     if reason == "pool":
@@ -22,15 +27,15 @@ def on_buy(st, code, reason, shares):
             entry=trade["price"], base_shares=shares, peak=trade["price"],
             entry_idx=st.positions[code][-1].entry_idx)
     mem = memory(st, code)
-    mem.buy_fees[st.positions[code][-1].lot_id] = float(trade["commission"])
+    mem.buy_fees[st.positions[code][-1].lot_id] = sum(float(trade.get(k, 0.0)) for k in ("commission", "stamp_duty", "transfer_fee"))
     if reason == "add:beidou":
         mem.adds += 1
         mem.last_add = trade["price"]
 
 
 def plan_exit(st, code, px, day, closes, *, day_i, ds, params, daily_close=False):
-    lots = st.positions.get(code, [])
-    if not lots or code == rules.PARKING_SYMBOL:
+    lots = strategy_lots(st, code)
+    if not lots:
         return None
     mem = memory(st, code)
     held = sum(p.shares for p in lots)
@@ -72,20 +77,20 @@ def fill_pending(st, code, row, day, *, day_i, ds, limits, bucket=None, at=None)
     order_id = fee_order_id(st, key)
     filled = 0
     mem = memory(st, code)
-    for lot in list(st.positions.get(code, [])):
+    for lot in list(strategy_lots(st, code)):
         if lot.entry_idx >= day_i or filled >= wanted:
             continue
         before = lot.shares
         cost = lot.cost
-        trade_i = len(st.trades)
+        cash_before = st.cash
         got = _sell(st, code, lot, px, day, reason, wanted_shares=min(before, wanted-filled),
                     day_i=day_i, bucket_id=bucket, order_id=order_id,
                     **({"at": at, "hm": bucket, "price_rule": "minute_pending_next_open"} if at is not None else {}))
         if got:
             fee = mem.buy_fees.get(lot.lot_id, 0.0) * got / before
             mem.buy_fees[lot.lot_id] = mem.buy_fees.get(lot.lot_id, 0.0) - fee
-            sells = st.trades[trade_i:]
-            pnl = sum(t["notional"] - t["commission"] for t in sells if t["side"] == "SELL") - got * cost - fee
+            # Cash delta includes shared per-order fee reallocations, stamp and transfer.
+            pnl = st.cash - cash_before - got * cost - fee
             st.stats["beidou_realized"] = st.stats.get("beidou_realized", 0.0) + pnl
         filled += got
     if filled >= wanted or not st.positions.get(code):
@@ -98,23 +103,27 @@ def fill_pending(st, code, row, day, *, day_i, ds, limits, bucket=None, at=None)
 
 
 def buy(st, code, px, closes, *, hooks, day_i, day, ds, names, exdiv, bucket=None, adding=False):
-    if code == rules.PARKING_SYMBOL or code in st.book_state.setdefault("beidou_pending", {}):
+    if code in st.book_state.setdefault("beidou_pending", {}):
         return False
-    lots = st.positions.get(code, [])
+    lots = strategy_lots(st, code)
     if bool(lots) != adding:
         return False
     limits = shared._limits(st, code, closes, ds, names, exdiv)
     if limits is None or hit_limit_up(px, limits[0]):
         return False
     params = hooks["beidou_params"]
+    model = getattr(st, "slippage_model", None)
+    fill_px = model.buy_price(px) if model is not None else px
+    if not np.isfinite(fill_px) or fill_px <= 0:
+        return False
     shares = (rules.add_order(memory(st, code), px, params) if adding
-              else max(100, int(params.base_budget / px) // 100 * 100))
+              else max(100, budget_board_lots(params.base_budget, fill_px)))
     if not shares:
         return False
     capital = st.stats["beidou_capital"]
     cap = min(capital * rules.NAME_CAP, hooks["name_budget"])
-    held_value = sum(p.shares for p in lots) * px
-    allowed = shares * px + held_value <= cap + 1e-9
+    held_value = sum(p.shares for p in lots) * fill_px
+    allowed = shares * fill_px + held_value <= cap + 1e-9
     gate = hooks.get("beidou_index_gate")
     if gate is not None:
         fraction = gate.get(day.date() if hasattr(day, "date") else day)
@@ -125,8 +134,8 @@ def buy(st, code, px, closes, *, hooks, day_i, day, ds, names, exdiv, bucket=Non
         exposure = sum(sum(p.shares for p in group) * prices.get(c, group[0].cost)
                        for c, group in st.positions.items() if group)
         equity = st.cash + exposure
-        allowed &= exposure + shares * px <= equity * fraction + 1e-9
-    needed = preview_buy_cash_needed(st, code, px, shares, day)
+        allowed &= exposure + shares * fill_px <= equity * fraction + 1e-9
+    needed = preview_buy_cash_needed(st, code, fill_px, shares, day)
     if not allowed or needed > st.cash + 1e-9:
         st.stats["skip_cash"] += 1
         return False
@@ -143,7 +152,7 @@ def prepare(st, codes, ds, exdiv):
     from backtest.research.exdiv_map import k_for
     for code in codes:
         factor = k_for(exdiv, code, ds)
-        if factor is not None and st.positions.get(code) and code != rules.PARKING_SYMBOL:
+        if factor is not None and st.positions.get(code) and strategy_lots(st, code):
             mem = memory(st, code)
             mem.entry *= factor
             mem.peak *= factor
@@ -170,12 +179,12 @@ def run_daily_day(st, pending_chase, *, hooks, bars, pool_days, day_i, day, ds, 
         if got is None:
             continue
         row, closes = got
-        if not st.positions.get(code) and code not in pool_days.get(ds, []):
+        if not strategy_lots(st, code) and code not in pool_days.get(ds, []):
             continue
         buy(st, code, float(row.open), closes, hooks=hooks, day_i=day_i, day=day,
-            ds=ds, names=names, exdiv=exdiv, adding=bool(st.positions.get(code)))
+            ds=ds, names=names, exdiv=exdiv, adding=bool(strategy_lots(st, code)))
     for code in list(st.positions):
-        if code == rules.PARKING_SYMBOL or code not in bars:
+        if not strategy_lots(st, code) or code not in bars:
             continue
         got = day_bar_and_prev_closes(bars[code], day)
         if got is None:
@@ -220,7 +229,7 @@ class MinuteSession:
         from backtest.research.minute_held_scan_core import HeldMinuteCursor
         st, hooks = self.ctx["st"], self.ctx["hooks"]
         row = self.frames.get(code, {}).get(hm)
-        if row is None or code == rules.PARKING_SYMBOL or not st.positions.get(code):
+        if row is None or not strategy_lots(st, code):
             return
         state = self.states.setdefault(("beidou", code), {})
         pending = st.book_state.setdefault("beidou_pending", {})
@@ -230,7 +239,7 @@ class MinuteSession:
                 if at_phase == "open":
                     if code in pending:
                         state.pop("pending", None)
-                        return cursor._exit(idx, row.open, pending[code][0])
+                        return cursor._exit(idx, row.open, pending[code][0] + ":next_open")
                     return None
                 if code in pending:
                     return None
@@ -258,6 +267,17 @@ class MinuteSession:
                          day_i=self.ctx["day_i"], ds=self.ctx["ds"], limits=self.limits[code],
                          bucket=hm, at=hm-1 if event[2].endswith(":next_open") else None)
 
+    def after_open(self, hm):
+        st = self.ctx["st"]
+        for code, rows in self.frames.items():
+            if hm in rows:
+                st.book_state.setdefault("beidou_marks", {})[code] = float(rows[hm].open)
+        for code in self.frames:
+            rows = self.frames[code]
+            if code in self.pool and hm == min(rows) and not strategy_lots(st, code):
+                buy(**self.ctx, code=code, px=float(rows[hm].open), closes=self.closes[code],
+                    bucket=hm, adding=False)
+
     def after_close(self, hm):
         st = self.ctx["st"]
         for code, rows in self.frames.items():
@@ -267,9 +287,7 @@ class MinuteSession:
             row = rows.get(hm)
             if row is None:
                 continue
-            adding = bool(st.positions.get(code))
-            if not adding and (code not in self.pool or hm != min(rows)):
-                continue
-            # Pool signals were frozen at D close; T first open is causal.
-            px = float(row.close) if adding else float(row.open)
-            buy(**self.ctx, code=code, px=px, closes=self.closes[code], bucket=hm, adding=adding)
+            adding = bool(strategy_lots(st, code))
+            if adding:
+                buy(**self.ctx, code=code, px=float(row.close), closes=self.closes[code],
+                    bucket=hm, adding=True)

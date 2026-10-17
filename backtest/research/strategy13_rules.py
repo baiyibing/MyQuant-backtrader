@@ -1,6 +1,7 @@
 """Beidou A-only book. Human 2026-10-17 cuts; manual performance is not validated."""
 from dataclasses import asdict, dataclass, field
 import math
+from backtest.research.lot_rounding import floor_board_lots, scale_out_board_lots
 
 BOOK_TAG = "v13"
 BASE_BUDGET = 10_000.0
@@ -81,8 +82,8 @@ class Memory:
 
 def tp_shares(held, base, fraction, floor=BASE_FLOOR):
     keep = math.ceil(base * floor)
-    return max(0, min(int(held * fraction) // 100 * 100,
-                      (held - keep) // 100 * 100))
+    return max(0, min(scale_out_board_lots(held, fraction),
+                      floor_board_lots(held - keep)))
 
 
 def add_order(mem, px, params):

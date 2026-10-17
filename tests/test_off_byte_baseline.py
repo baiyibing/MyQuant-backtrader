@@ -154,6 +154,7 @@ def test_off_byte_baseline_covers_current_registry_and_standalone_v7():
     assert set(expected["books"]) == set(HISTORICAL_BOOK_NAMES)
     assert set(expected["cases"]) == {f"{book}/{engine}" for book, engine in HISTORICAL_CASES}
     assert set(PENDING_BOOK_NAMES) == {
+        "version13",
         "version6_51",
         "version6_52",
         "version6_53",

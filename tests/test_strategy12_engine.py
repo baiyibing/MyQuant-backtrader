@@ -429,7 +429,7 @@ def test_new_cli_aliases_do_not_expand_existing_book_cli_contract():
     add_csv_strategy_arg(parser)
     assert parser.parse_args(["--strategy", "v8"]).strategy == "version8"
     with pytest.raises(SystemExit):
-        parser.parse_args(["--strategy", "13"])
+        parser.parse_args(["--strategy", "14"])
 
 
 def test_daily_run_rejects_wrong_price_domain_before_data_reads():

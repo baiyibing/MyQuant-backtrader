@@ -151,3 +151,101 @@ def test_realized_skim_cumulative_full_increment_and_no_unrealized_trigger():
 def test_bad_overrides(params):
     with pytest.raises(ValueError):
         rules.Params(**params)
+
+
+@pytest.mark.parametrize("profile", ["legacy", "industry"])
+@pytest.mark.parametrize("minute", [False, True])
+def test_daily_minute_end_to_end(profile, minute):
+    from backtest.research.csv_daily_backtest import simulate as daily
+    from backtest.research.csv_minute_backtest import simulate as intraday
+    dates = pd.bdate_range("20250101", periods=127)
+    prices = [10.]*121 + [10.5, 11., 12., 12., 11.5, 11.5]
+    frame = pd.DataFrame({"open": prices, "high": prices, "low": prices, "close": prices}, index=dates)
+    start, end = dates[120].strftime("%Y%m%d"), dates[-1].strftime("%Y%m%d")
+    pool = {start: [CODE]}
+    kwargs = dict(strategy="version13", rule_profile=profile, total_cash=21e6,
+                  index_block_new={d.date(): 1. for d in dates})
+    if minute:
+        rows = [dict(time=d+pd.Timedelta(minutes=hm), ymd=d.strftime("%Y%m%d"), hm=hm,
+                     open=p, high=p, low=p, close=p) for d, p in zip(dates, prices) for hm in (570, 895, 900)]
+        minutes = pd.DataFrame(rows).set_index("time")
+        st = intraday({CODE: minutes}, {CODE: frame}, pool, start, end, **kwargs)
+    else:
+        st = daily({CODE: frame}, pool, start, end, **kwargs)
+    buys = [t for t in st.trades if t["side"] == "BUY"]
+    sells = [t for t in st.trades if t["side"] == "SELL"]
+    assert len(buys) == 1 and buys[0]["shares"] == 1000
+    assert sells and sells[0]["reason"] == "profit_take:beidou:0"
+    assert sum(p.shares for p in st.positions[CODE]) >= 100
+    assert st.stats["beidou_realized"] > 0
+
+
+def test_parking_dividends_reinvest_without_beidou_adds():
+    from backtest.research.ashare_exdiv_economics import ExDivEconomics, ExDivEvent
+    from backtest.research.csv_simulate_loop import accrue_overnight_cash_div, bind_parking_session, run_div_to_parking_day
+    st, h = state(1e6)
+    assert execute_buy(st, rules.PARKING_SYMBOL, 10., 100000., 0, DAY, reason="parking:profit_skim")
+    held = sum(p.shares for p in st.positions[rules.PARKING_SYMBOL])
+    st.exdiv_economics = ExDivEconomics({(rules.PARKING_SYMBOL, "20260106"):
+                                      ExDivEvent("test-div", 0, 1., "20260106", "20260106")}, st.stats)
+    posted = accrue_overnight_cash_div(st, "20260106")
+    assert posted == held
+    st.stats["div_to_parking_pending"] = posted
+    dates = pd.bdate_range("20251201", "20260106")
+    bars = {rules.PARKING_SYMBOL: pd.DataFrame({"open": 10., "high": 10., "low": 10., "close": 10.}, index=dates)}
+    args = dict(day_i=1, day=pd.Timestamp("20260106"), ds="20260106", names={}, daily_bars=bars)
+    bind_parking_session(st, h, **args)
+    assert run_div_to_parking_day(st, h, **args) > 0
+    assert sum(p.shares for p in st.positions[rules.PARKING_SYMBOL]) > held
+    assert st.trades[-1]["reason"] == "parking:cash_div"
+    assert not st.book_state.get("beidou")
+
+
+def test_fee_shortfall_is_whole_order_skip_under_industry():
+    from backtest.research.csv_daily_backtest import simulate
+    dates = pd.bdate_range("20250101", periods=3)
+    f = pd.DataFrame({"open": 10., "high": 10., "low": 10., "close": 10.}, index=dates)
+    start, end = dates[1].strftime("%Y%m%d"), dates[-1].strftime("%Y%m%d")
+    # Eleven 2k declarations: fees exhaust cash before the tenth; never shrink.
+    codes = [f"{600000+i}.SH" for i in range(11)]
+    st = simulate({code: f for code in codes}, {start: codes}, start, end,
+                  strategy="version13", total_cash=20005., beidou_params={"base_budget": 2000.})
+    buys = [t for t in st.trades if t["side"] == "BUY"]
+    assert len(buys) == 9
+    assert all(t["shares"] == 200 for t in buys)
+    assert st.stats["skip_cash"] == 2
+
+
+def test_help_lock_digest_and_override_plumbing():
+    import argparse
+    import hashlib
+    from backtest.research.csv_strategy_books import add_csv_backtest_common_args, csv_run_kwargs_from_args
+    parser = argparse.ArgumentParser()
+    add_csv_backtest_common_args(parser, repo=".", end_default="20261017", cash_total_default=21000000, daily_quota_default=1000000)
+    args = parser.parse_args(["--strategy", "v13", "--beidou-params", '{"base_budget": 20000, "max_adds": 5}'])
+    kwargs = csv_run_kwargs_from_args(args)
+    assert kwargs["name_budget"] == 4200000
+    assert kwargs["beidou_params"] == {"base_budget": 20000, "max_adds": 5}
+    # Freeze this book's user-visible contract without editing earlier HELP_LOCKs.
+    assert hashlib.sha256(rules.HELP_LOCK.encode()).hexdigest() == "1d7ef0ab0085b9e9dbc8d9dffd43750699ec97c7c37cf53fab36e2c69eec29d5"
+
+
+def test_cmb_a_signal_and_parking_principal_remain_separate():
+    from backtest.research.csv_ledger import is_parking_lot
+    st, h = state(1e6)
+    dates = pd.bdate_range("20251201", "20260105")
+    bars = {rules.PARKING_SYMBOL: pd.DataFrame({"open": 10., "high": 10., "low": 10., "close": 10.}, index=dates)}
+    st.stats["beidou_realized"] = 200000
+    run_profit_skim_day(st, h, day_i=0, day=DAY, ds="20260105", names={}, daily_bars=bars)
+    principal = sum(p.shares for p in st.positions[rules.PARKING_SYMBOL] if is_parking_lot(st, p))
+    assert principal > 0
+    assert engine.buy(st, rules.PARKING_SYMBOL, 10., [10.]*120, hooks=h, day_i=1,
+                      day=DAY, ds="20260105", names={}, exdiv=None)
+    plan = engine.plan_exit(st, rules.PARKING_SYMBOL, 8., DAY, [10.]*120,
+                            day_i=2, ds="20260106", params=h["beidou_params"], daily_close=True)
+    assert plan[1] == 1000
+    st.book_state["beidou_pending"] = {rules.PARKING_SYMBOL: plan}
+    engine.fill_pending(st, rules.PARKING_SYMBOL, SimpleNamespace(open=8.), DAY,
+                        day_i=2, ds="20260106", limits=(20., 1.))
+    assert sum(p.shares for p in st.positions[rules.PARKING_SYMBOL]) == principal
+    assert not engine.strategy_lots(st, rules.PARKING_SYMBOL)

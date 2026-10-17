@@ -46,3 +46,14 @@ def test_gate_requires_warmup_and_partition(tmp_path):
         rules.build_index_caps({DAY.date(): 10})
     with pytest.raises(FileNotFoundError, match="HS300"):
         rules.load_sse_ma10_block_new("20260101", "20260201", root=tmp_path)
+
+
+def test_gate_blocks_a_new_name_after_portfolio_cap():
+    st, h = state(100000, index_block_new={DAY.date(): .3})
+    for code in ("600000.SH", "600001.SH"):
+        assert engine.buy(st, code, 10, [10]*120, hooks=h, day_i=0, day=DAY,
+                          ds="20260105", names={}, exdiv=None)
+    assert not engine.buy(st, "600002.SH", 10, [10]*120, hooks=h, day_i=0, day=DAY,
+                          ds="20260105", names={}, exdiv=None)
+    assert len(st.positions) == 2
+    assert not [t for t in st.trades if t["side"] == "SELL"]

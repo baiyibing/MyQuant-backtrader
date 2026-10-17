@@ -60,3 +60,29 @@ def test_explicit_destination_and_stock_pool_refusal():
         main(["--start", "20260101", "--end", "20260201"])
     with pytest.raises(SystemExit, match="refusing stock_pool"):
         main(["--start", "20260101", "--end", "20260201", "--pool-dir", "stock_pool"])
+
+
+def test_exporter_synthetic_lake_smoke(tmp_path, monkeypatch):
+    from oskh_data.symbol_format import to_partition_key
+    import scripts.data.export_beidou_pool as exporter
+    f = frame().drop(columns=["float_shares", "is_st"])
+    f["time"] = f.index.as_unit("ms").asi8
+    lake = tmp_path / "lake"
+    root = lake / "daily" / "dividend_type=none"
+    partition = root / f"symbol={to_partition_key('600000.SH')}"
+    partition.mkdir(parents=True)
+    f.to_parquet(partition / "data.parquet", index=False)
+    pd.DataFrame({"stock_code": ["600000.SH"], "date": [f.index[0]],
+                  "FloatVolume": [4e8]}).to_parquet(lake / "float_shares_history.parquet")
+    vendor = lake / "vendor_wind_st_status"
+    vendor.mkdir()
+    pd.DataFrame({"trade_date": [f.index[0]], "code": ["600000"], "is_st": [False]}).to_parquet(vendor / "st_daily.parquet")
+    monkeypatch.setattr(exporter, "resolve_period_root", lambda _: lake / "daily")
+    monkeypatch.setattr(exporter, "resolve_parquet_container", lambda: lake)
+    out = tmp_path / "exports"
+    t = f.index[-1].strftime("%Y%m%d")
+    assert exporter.main(["--start", t, "--end", t, "--pool-dir", str(out)]) == 0
+    assert (out / f"{t}.csv").read_bytes() == b"600000\n"
+    (lake / "float_shares_history.parquet").unlink()
+    with pytest.raises(FileNotFoundError):
+        exporter.main(["--start", t, "--end", t, "--pool-dir", str(out)])
