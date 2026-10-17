@@ -13,6 +13,7 @@ DAY = pd.Timestamp("20260105")
 
 
 def state(capital=21e6, **kwargs):
+    kwargs.setdefault("beidou_params", {"base_budget": 10_000})  # keep legacy 10k base semantics
     hooks = apply_csv_strategy("v13", **kwargs)
     st = init_sim_state(hooks, total_cash=capital, bars_loaded=1, pool_days={})[0]
     return st, hooks
@@ -65,16 +66,45 @@ def test_add_multipliers_cap_and_failed_fill_does_not_advance():
     st2, h2 = state()
     open_base(st2, h2)
     kwargs["hooks"] = h2
-    assert engine.buy(st2, CODE, 16, [15]*120, **kwargs)
+    assert not engine.buy(st2, CODE, 15.99, [15]*120, **kwargs)  # below x1.6 line
+    assert engine.buy(st2, CODE, 16, [15]*120, **kwargs)         # single rung: x42
     mem = engine.memory(st2, CODE)
     assert mem.adds == 1
     assert st2.trades[-1]["shares"] == 42000
-    assert not engine.buy(st2, CODE, 17.59, [17]*120, **kwargs)
-    assert engine.buy(st2, CODE, 17.6, [17]*120, **kwargs)
-    assert st2.trades[-1]["shares"] == 35000
+    assert not engine.buy(st2, CODE, 19.19, [19]*120, **kwargs)  # below last_add x1.2
+    assert engine.buy(st2, CODE, 19.2, [19]*120, **kwargs)
+    assert st2.trades[-1]["shares"] == 42000
     mem.adds = 10
     assert not engine.buy(st2, CODE, 100, [99]*120, **kwargs)
     assert mem.adds == 10
+
+
+def test_atr_scaled_stops_lock_at_entry():
+    st, h = state()
+    open_base(st, h)
+    mem = engine.memory(st, CODE)
+    # Anchor ATR reproduces the fixed thresholds; tails clamp inside bounds.
+    assert rules.atr_threshold(.25, .038, h["beidou_params"].atr_anchor, rules.ATR_CLAMP_TRAIL, inverse=True) == .25
+    assert rules.atr_threshold(.25, .08, .038, rules.ATR_CLAMP_TRAIL, inverse=True) == .18
+    assert rules.atr_threshold(.10, .01, .038, rules.ATR_CLAMP_ADD, inverse=True) == .16
+    assert rules.atr_threshold(.15, None, .038, rules.ATR_CLAMP_HARD, inverse=True) == .15
+    # Inverse scaling: high ATR tightens the trail to 18%, so -24% clears now
+    # while the fixed threshold would still hold.
+    plan = engine.plan_exit(st, CODE, 7.6, DAY, [10]*120, day_i=40, ds="20260106",
+                            params=h["beidou_params"], daily_close=True, atr_pct=.08)
+    assert plan is not None and plan[0] == "trail:beidou_clear"
+    assert mem.entry_atr == .08
+
+
+def test_index_gate_ignores_parking_sleeve():
+    from backtest.research.csv_ledger import execute_parking_buy, is_parking_lot
+    st, h = state(capital=10_000_000)
+    h["beidou_index_gate"] = {DAY.date(): 0.3}
+    execute_parking_buy(st, rules.PARKING_SYMBOL, 10., 5_000_000, 0, DAY)
+    assert is_parking_lot(st, st.positions[rules.PARKING_SYMBOL][0])
+    # 50% of equity sits in parking; a 30% cap must not block a fresh base lot.
+    assert engine.buy(st, CODE, 10, [10]*120, hooks=h, day_i=1, day=DAY,
+                      ds="20260105", names={}, exdiv=None)
 
 
 def test_short_cash_and_name_override_cannot_relax_cap():
@@ -110,6 +140,23 @@ def test_close_stops(prices, age, reason):
     assert plan[0] == f"stop_loss:beidou_{reason}"
 
 
+def test_add_lot_hard_stop_exits_only_that_lot():
+    st, h = state()
+    open_base(st, h)
+    kwargs = dict(hooks=h, day_i=1, day=DAY, ds="20260106", names={}, exdiv=None, adding=True)
+    assert engine.buy(st, CODE, 16, [15]*120, **kwargs)
+    add_lot = next(p for p in st.positions[CODE] if p.lot_id)
+    px = 16 * (1 - h["beidou_params"].add_stop_pct) - 0.01  # below add anchor only
+    plan = engine.plan_exit(st, CODE, px, DAY, [15]*120, day_i=2, ds="20260107",
+                            params=h["beidou_params"], daily_close=True)
+    assert plan == ("stop_loss:beidou_add_hard", add_lot.shares, {add_lot.lot_id})
+    st.book_state.setdefault("beidou_pending", {})[CODE] = plan
+    engine.fill_pending(st, CODE, SimpleNamespace(open=px), DAY,
+                        day_i=2, ds="20260107", limits=(100, 1))
+    lots_after = {p.lot_id for p in st.positions[CODE]}
+    assert add_lot.lot_id not in lots_after and 0 in lots_after
+
+
 def test_ma20_counts_sessions_not_bars_and_reclaim_resets():
     st, h = state()
     open_base(st, h)
@@ -125,6 +172,7 @@ def test_ma20_counts_sessions_not_bars_and_reclaim_resets():
 
 def test_realized_skim_cumulative_full_increment_and_no_unrealized_trigger():
     st, h = state(1e6)
+    h["parking_buffer"] = 0.0  # isolate skim math from the idle sleeve buffer
     # Isolated synthetic books may supply explicit economics; no lake access.
     dates = pd.bdate_range("20251201", "20260105")
     bars = {rules.PARKING_SYMBOL: pd.DataFrame({"open": 10., "high": 10., "low": 10., "close": 10.}, index=dates)}
@@ -164,6 +212,7 @@ def test_daily_minute_end_to_end(profile, minute):
     start, end = dates[120].strftime("%Y%m%d"), dates[-1].strftime("%Y%m%d")
     pool = {start: [CODE]}
     kwargs = dict(strategy="version13", rule_profile=profile, total_cash=21e6,
+                  beidou_params={"base_budget": 10_000},
                   index_block_new={d.date(): 1. for d in dates})
     if minute:
         rows = [dict(time=d+pd.Timedelta(minutes=hm), ymd=d.strftime("%Y%m%d"), hm=hm,
@@ -227,12 +276,13 @@ def test_help_lock_digest_and_override_plumbing():
     assert kwargs["name_budget"] == 4200000
     assert kwargs["beidou_params"] == {"base_budget": 20000, "max_adds": 5}
     # Freeze this book's user-visible contract without editing earlier HELP_LOCKs.
-    assert hashlib.sha256(rules.HELP_LOCK.encode()).hexdigest() == "1ebe0f0bcc68d799d18b086001423022414e0481f11c8b3ff77010896dd36a74"
+    assert hashlib.sha256(rules.HELP_LOCK.encode()).hexdigest() == "d6a085b9fb88a3a0ded84abb25a612545b65d54cda0771572678e564cd308878"
 
 
 def test_cmb_a_signal_and_parking_principal_remain_separate():
     from backtest.research.csv_ledger import is_parking_lot
     st, h = state(1e6)
+    h["parking_buffer"] = 0.0  # isolate principal locking from the idle sleeve buffer
     dates = pd.bdate_range("20251201", "20260105")
     bars = {rules.PARKING_SYMBOL: pd.DataFrame({"open": 10., "high": 10., "low": 10., "close": 10.}, index=dates)}
     st.stats["beidou_realized"] = 200000

@@ -3224,7 +3224,8 @@ def _apply_version13(*, stop_pct=None, beidou_params=None, index_block_new=None,
         st.stats.update(sell_book="v13", beidou_capital=float(st.cash),
                         beidou_realized=0.0, beidou_params=asdict(params),
                         parking_symbol=strategy13_rules.PARKING_SYMBOL,
-                        parking_frac=0.0, parking_buffer=0.0, parking_execute=True,
+                        parking_frac=strategy13_rules.PARKING_FRAC,
+                        parking_buffer=strategy13_rules.PARKING_BUFFER, parking_execute=True,
                         profit_skim=True, profit_skim_ratio=1.0)
 
     def skim_equity(st, base):
@@ -3242,7 +3243,8 @@ def _apply_version13(*, stop_pct=None, beidou_params=None, index_block_new=None,
                 profit_skim_frac=params.skim_step, profit_skim_equity=skim_equity,
                 profit_skim_to_parking=True, profit_skim_keep_idle=True,
                 parking_symbol=strategy13_rules.PARKING_SYMBOL, parking_execute=True,
-                parking_frac=0.0, parking_buffer=0.0, div_to_parking=True)
+                parking_frac=strategy13_rules.PARKING_FRAC,
+                parking_buffer=strategy13_rules.PARKING_BUFFER, div_to_parking=True)
 
 
 def _run_kwargs_version13(args):
