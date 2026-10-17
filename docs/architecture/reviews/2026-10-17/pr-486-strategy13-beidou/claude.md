@@ -52,3 +52,13 @@ Shared diffs are narrow and gated: `init_book` + `profit_skim_equity` hook point
 ## 5. Verdict rationale
 
 Human cuts and S1–S4 plan contracts are encoded; admission/pending/HELP_LOCK are correct; critical paths have data-free coverage; residuals are timing/ops honesty rather than fail-open or cut violations. **GO-WITH-NITS** — safe to merge after Human acknowledges nits (or a tiny follow-up doc note on daily≠minute add cadence). This review does **not** merge.
+
+## 6. Nits addressed (follow-up on tip after `5f67b06`)
+
+Human chose fix-nits-then-merge. Encoding follow-up (this commit):
+
+1. **Daily/minute add cadence** — minute pyramid adds moved to once-at-first-open (aligned with daily). `after_close` marks only. HELP_LOCK documents add cadence + FillConfig TP/stop asymmetry (path identity still not claimed). Data-free regression `test_minute_adds_once_at_first_open_not_every_close`.
+2. **Chip concentration** — extracted `chip_concentration` as Tongdaxin-style `(p95−p05)/(p95+p05)`; NaN/non-positive fail closed; docstring cites manual §3.4. Unit test covers thresholds. Still default-off.
+3. **`name_budget=1e99`** — replaced with `strategy13_rules.NAME_BUDGET_DEFER = inf`; CLI + `init_book` still clamp to cash×20%. Comment warns against raising the sentinel to relax the hard cap.
+4. **Exporter universe cost** — `--symbols` optional filter; help text notes full-universe default; stdout reports scanned symbol count. No lake redesign.
+5. **Host lake / ch.10 smoke** — left honest / unrun (no invented results).

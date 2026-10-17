@@ -6,6 +6,9 @@ from backtest.research.lot_rounding import floor_board_lots, scale_out_board_lot
 BOOK_TAG = "v13"
 BASE_BUDGET = 10_000.0
 NAME_CAP = 0.20
+# Register sentinel only: real per-name cap is always cash×NAME_CAP via
+# CLI clamp + init_book. Never raise this to "relax" the 20% hard cap.
+NAME_BUDGET_DEFER = float("inf")
 TP_LEVELS = (0.20, 0.40, 0.60, 0.80, 1.00, 1.50, 2.00)
 TP_FRACTIONS = (0.15, 0.20, 0.20, 0.25, 0.25, 0.30, 0.30)
 BASE_FLOOR = 0.10
@@ -106,6 +109,8 @@ HELP_LOCK = """
   A 类名单须 --pool-dir（export_beidou_pool.py；拒绝 stock_pool/）。D 收盘信号→T 开盘。
   per_name：底仓 1 万元（最低 100 股），单只硬帽 cash-total×20%；超帽/现金不足整笔 skip_cash。
   首加买价×1.6，底仓×42；以后实际加仓价每 +10% 加底仓×35，最多 10 次。
+  加仓节奏：日线与分钟均每个交易日开盘评估一次（分钟不对盘中每个收盘重复加仓）。
+  止盈/止损成交：日线收盘排队次日开盘；分钟走共享 FillConfig（可同 bar / 次开），路径不等同。
   浮盈 20/40/60/80/100/150/200% 各一次卖当前 15/20/20/25/25/30/30%，留底仓≥10%。
   高点回撤≥25% 全清；收盘<买价×0.85、破 MA20 三日不收回、持有≤30日浮亏≥5% 止损。
   累计已实现策略净收益每 +总投入20%，全部该增量锁入 600036；现金分红再买 600036。

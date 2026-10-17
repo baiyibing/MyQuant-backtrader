@@ -227,7 +227,7 @@ def test_help_lock_digest_and_override_plumbing():
     assert kwargs["name_budget"] == 4200000
     assert kwargs["beidou_params"] == {"base_budget": 20000, "max_adds": 5}
     # Freeze this book's user-visible contract without editing earlier HELP_LOCKs.
-    assert hashlib.sha256(rules.HELP_LOCK.encode()).hexdigest() == "1d7ef0ab0085b9e9dbc8d9dffd43750699ec97c7c37cf53fab36e2c69eec29d5"
+    assert hashlib.sha256(rules.HELP_LOCK.encode()).hexdigest() == "1ebe0f0bcc68d799d18b086001423022414e0481f11c8b3ff77010896dd36a74"
 
 
 def test_cmb_a_signal_and_parking_principal_remain_separate():
@@ -249,3 +249,42 @@ def test_cmb_a_signal_and_parking_principal_remain_separate():
                         day_i=2, ds="20260106", limits=(20., 1.))
     assert sum(p.shares for p in st.positions[rules.PARKING_SYMBOL]) == principal
     assert not engine.strategy_lots(st, rules.PARKING_SYMBOL)
+
+
+def test_name_budget_defer_clamps_to_cash_cap_not_sentinel():
+    """Register uses NAME_BUDGET_DEFER; hard cap is always cash×20%."""
+    assert rules.NAME_BUDGET_DEFER == float("inf")
+    st, h = state(capital=1_000_000)
+    assert h["name_budget"] == 200_000
+    # Explicit override still cannot exceed cash×20%.
+    st2, h2 = state(capital=1_000_000, name_budget=9e18)
+    assert h2["name_budget"] == 200_000
+
+
+def test_minute_adds_once_at_first_open_not_every_close():
+    """Contract: minute pyramid matches daily (once per session at open)."""
+    from backtest.research.strategy13_engine import MinuteSession
+    st, h = state()
+    assert open_base(st, h)
+    # First add at 16 (=entry×1.6). Prev close 15.5 keeps 16 under the 10% limit-up.
+    idx = pd.DatetimeIndex([DAY + pd.Timedelta(hours=9, minutes=31),
+                            DAY + pd.Timedelta(hours=14, minutes=55)])
+    minute = pd.DataFrame({"open": [16.0, 17.6], "high": [16.1, 17.7],
+                           "low": [15.9, 17.5], "close": [16.0, 17.6],
+                           "hm": [931, 1455]}, index=idx)
+    daily = pd.DataFrame({"open": 15.5, "high": 15.5, "low": 15.5, "close": 15.5},
+                         index=pd.DatetimeIndex([DAY - pd.Timedelta(days=1), DAY]))
+    session = MinuteSession(
+        st, {}, hooks=h, minute_bars={CODE: minute}, daily_bars={CODE: daily},
+        pool_days={}, day_i=1, day=DAY, ds="20260105", names={}, daily_quota=None,
+        exdiv=None, slice_day=lambda c, ds: minute)
+    # Mid-session close must not add even if price is above threshold.
+    session.after_close(1455)
+    assert engine.memory(st, CODE).adds == 0
+    # First open of the session may add once.
+    session.after_open(931)
+    assert engine.memory(st, CODE).adds == 1
+    # Later open of another bar must not re-add in the same session constructor;
+    # only the first open of frames is eligible.
+    session.after_open(1455)
+    assert engine.memory(st, CODE).adds == 1

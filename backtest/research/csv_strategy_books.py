@@ -3216,6 +3216,7 @@ def _apply_version13(*, stop_pct=None, beidou_params=None, index_block_new=None,
     params = strategy13_rules.Params(**overrides)
 
     def init_book(st, hooks):
+        # Fail-closed: NAME_BUDGET_DEFER / any oversized override collapses to cash×20%.
         hooks["name_budget"] = min(hooks["name_budget"], st.cash * strategy13_rules.NAME_CAP)
 
     def record(st):
@@ -3260,5 +3261,5 @@ register(CsvStrategyBook(
     name="version13", tag="v13", aliases=("13", "v13", "version13"),
     allow_add=True, peak_gap_min=0, help_lock=strategy13_rules.HELP_LOCK,
     apply=_apply_version13, run_kwargs=_run_kwargs_version13,
-    sizing="per_name", name_budget=1e99,
+    sizing="per_name", name_budget=strategy13_rules.NAME_BUDGET_DEFER,
 ))

@@ -33,16 +33,32 @@ MIN_LISTED_BARS = 60
 CHIP_CONCENTRATION = 0.20
 
 
+def chip_concentration(low, high):
+    """Tongdaxin-style 90% cost-band concentration: (p95-p05)/(p95+p05).
+
+    Manual §3.4 「90%筹码集中度约在20%以内」uses this relative bandwidth of
+    the central 90% chip costs (5th–95th winner percentiles). Non-finite or
+    non-positive band sums fail closed as +inf.
+    """
+    if not (np.isfinite(low) and np.isfinite(high)) or high + low <= 0:
+        return np.inf
+    return (high - low) / (high + low)
+
+
 def chip_single_peak(frame, code):
-    """90% cost band concentration and price above the distribution's mode."""
+    """Optional A-filter: 90% concentration ≤20% and price above chip mode."""
     from oskh_factors.chip.core import adapt_columns, daily_chip_distribution
     from qlib_cost.cyq import ChipFactor
     dist = daily_chip_distribution(adapt_columns(frame, stock_code=code,
                                                  as_of_date=frame.index[-1]))
+    if dist is None or len(dist) == 0 or not np.isfinite(dist).any():
+        return False
     cf = ChipFactor(float(frame.close.iloc[-1]), dist)
     low, high = cf.get_cost(0.05), cf.get_cost(0.95)
-    concentration = (high - low) / (high + low) if high + low > 0 else np.inf
-    return concentration <= CHIP_CONCENTRATION and frame.close.iloc[-1] > float(dist.idxmax())
+    if chip_concentration(low, high) > CHIP_CONCENTRATION:
+        return False
+    mode = float(dist.idxmax())
+    return np.isfinite(mode) and frame.close.iloc[-1] > mode
 
 
 def signal_mask(frame, code, *, breakout_days=BREAKOUT_DAYS,
@@ -112,7 +128,10 @@ def main(argv=None):
     ap.add_argument("--pool-dir", type=Path, required=True, help="explicit exports/ destination; refuses stock_pool/")
     ap.add_argument("--breakout-days", type=int, default=BREAKOUT_DAYS)
     ap.add_argument("--volume-ratio", type=float, default=VOLUME_RATIO)
-    ap.add_argument("--chip-single-peak", action="store_true", default=False)
+    ap.add_argument("--chip-single-peak", action="store_true", default=False,
+                    help="optional A-filter; default OFF (manual §3.4)")
+    ap.add_argument("--symbols", default="",
+                    help="optional comma-separated codes to scan (default: full 1d universe under period root; host cost grows with symbol count)")
     args = ap.parse_args(argv)
     if is_repo_stock_pool(args.pool_dir):
         raise SystemExit("refusing stock_pool/")
@@ -126,9 +145,12 @@ def main(argv=None):
     from backtest.research.st_status import membership_from_frame
     # Non-ST is a required prefilter, so a missing vendor table is an error.
     st = membership_from_frame(pd.read_parquet(resolve_parquet_container() / "vendor_wind_st_status/st_daily.parquet"))
+    wanted = {to_canonical_symbol(s.strip()) for s in args.symbols.split(",") if s.strip()}
     frames = {}
     for path in sorted(root.glob("symbol=*/data.parquet")):
         code = to_canonical_symbol(path.parent.name.removeprefix("symbol="))
+        if wanted and code not in wanted:
+            continue
         if limit_pct(code) is None:
             continue
         f = pd.read_parquet(path)
@@ -147,7 +169,8 @@ def main(argv=None):
                        breakout_days=args.breakout_days, volume_ratio=args.volume_ratio,
                        chip=args.chip_single_peak)
     written = write_strategy9_pool(days, args.pool_dir)
-    print(f"beidou: {len(written)} day files, {sum(map(len, days.values()))} signals")
+    print(f"beidou: scanned {len(frames)} symbols, {len(written)} day files, "
+          f"{sum(map(len, days.values()))} signals")
     return 0
 
 

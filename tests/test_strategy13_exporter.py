@@ -86,3 +86,17 @@ def test_exporter_synthetic_lake_smoke(tmp_path, monkeypatch):
     (lake / "float_shares_history.parquet").unlink()
     with pytest.raises(FileNotFoundError):
         exporter.main(["--start", t, "--end", t, "--pool-dir", str(out)])
+
+
+def test_chip_concentration_formula_fail_closed():
+    from scripts.data.export_beidou_pool import CHIP_CONCENTRATION, chip_concentration
+    # 9–11 band → 2/20 = 0.10 ≤ 0.20
+    assert chip_concentration(9.0, 11.0) == pytest.approx(0.10)
+    assert chip_concentration(9.0, 11.0) <= CHIP_CONCENTRATION
+    # 8–12 band → 4/20 = 0.20
+    assert chip_concentration(8.0, 12.0) == pytest.approx(0.20)
+    # Wider than 20%
+    assert chip_concentration(7.0, 13.0) > CHIP_CONCENTRATION
+    # Non-finite / non-positive sum fail closed
+    assert chip_concentration(float("nan"), 10.0) == float("inf")
+    assert chip_concentration(-1.0, 0.5) == float("inf")

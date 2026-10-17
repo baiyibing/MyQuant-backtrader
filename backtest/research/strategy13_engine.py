@@ -268,26 +268,31 @@ class MinuteSession:
                          bucket=hm, at=hm-1 if event[2].endswith(":next_open") else None)
 
     def after_open(self, hm):
+        """Pool opens and pyramid adds once at the session's first open (daily-aligned).
+
+        Intra-session multi-add on every close is intentionally not used: daily
+        evaluates adds once at open, and minute matches that cadence. TP/stop
+        fills still follow shared FillConfig (may differ from daily next-open).
+        """
         st = self.ctx["st"]
         for code, rows in self.frames.items():
             if hm in rows:
                 st.book_state.setdefault("beidou_marks", {})[code] = float(rows[hm].open)
         for code in self.frames:
             rows = self.frames[code]
-            if code in self.pool and hm == min(rows) and not strategy_lots(st, code):
+            if hm != min(rows):
+                continue
+            held = bool(strategy_lots(st, code))
+            if held:
+                buy(**self.ctx, code=code, px=float(rows[hm].open), closes=self.closes[code],
+                    bucket=hm, adding=True)
+            elif code in self.pool:
                 buy(**self.ctx, code=code, px=float(rows[hm].open), closes=self.closes[code],
                     bucket=hm, adding=False)
 
     def after_close(self, hm):
+        """Mark closes only; pyramid adds run at open (see after_open)."""
         st = self.ctx["st"]
         for code, rows in self.frames.items():
             if hm in rows:
                 st.book_state.setdefault("beidou_marks", {})[code] = float(rows[hm].close)
-        for code, rows in self.frames.items():
-            row = rows.get(hm)
-            if row is None:
-                continue
-            adding = bool(strategy_lots(st, code))
-            if adding:
-                buy(**self.ctx, code=code, px=float(row.close), closes=self.closes[code],
-                    bucket=hm, adding=True)
