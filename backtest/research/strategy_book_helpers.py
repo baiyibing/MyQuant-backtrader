@@ -102,7 +102,7 @@ def load_book_index_gate(book, start, end):
 
     if book in ("version8", "version8_3"):
         module = import_module("backtest.research.strategy8_rules")
-    elif book in ("version12", "version8_4", "version8_5", "version8_6"):
+    elif book in ("version13", "version12", "version8_4", "version8_5", "version8_6"):
         module = import_module("backtest.research.strategy" + book[7:] + "_rules")
     elif (_suffix := _version6_suffix(book)) is not None and _suffix >= 45:
         # 6.45 起的书继承 6.45 的闸门 loader；6.4 / 6.40-6.44 没有指数闸。

@@ -112,3 +112,53 @@ HELP_LOCK = """
   --beidou-params JSON 显式覆盖规则参数（硬帽20%、最多10次不可放宽）。
   无2%风险公式、主题/监管/B类；筹码单峰仅导出器可选且默认关。手册收益未验证。
 """
+
+
+def build_index_caps(closes):
+    """T exposure limit from completed T-1 close/MA, never today's close."""
+    import pandas as pd
+    values = pd.Series(closes, dtype=float).sort_index()
+    if values.index.has_duplicates or not all(math.isfinite(v) and v > 0 for v in values):
+        raise ValueError("HS300 closes must be unique, positive and finite")
+    if len(values) <= max(INDEX_MAS):
+        raise ValueError("HS300 requires 120 preload sessions and a run session")
+    ma60 = values.rolling(INDEX_MAS[0]).mean().shift()
+    ma120 = values.rolling(INDEX_MAS[1]).mean().shift()
+    prev = values.shift()
+    out = {}
+    for day in values.index[max(INDEX_MAS):]:
+        cap = 1.0
+        if prev.loc[day] < ma60.loc[day]:
+            cap = INDEX_CAPS[0]
+        if prev.loc[day] < ma120.loc[day]:
+            cap = min(cap, INDEX_CAPS[1])
+        out[day.date() if hasattr(day, "date") else day] = cap
+    return out
+
+
+def load_sse_ma10_block_new(start, end, *, root=None):
+    """Compatibility entry for load_book_index_gate; returns exposure fractions."""
+    from pathlib import Path
+    import pandas as pd
+    from common.infra.data_root import resolve_index_daily_root
+    from oskh_data.symbol_format import to_partition_key
+    from backtest.research.csv_minute_backtest_v7 import _as_date
+
+    directory = (Path(root) if root is not None else resolve_index_daily_root()) / "dividend_type=none" / f"symbol={to_partition_key(INDEX_SYMBOL)}"
+    files = sorted(directory.glob("*.parquet"))
+    if not files:
+        raise FileNotFoundError(f"missing HS300 daily partition: {directory}")
+    frame = pd.concat([pd.read_parquet(p) for p in files], ignore_index=True)
+    column = next((c for c in ("date", "datetime", "timestamp", "time") if c in frame), None)
+    if column is None or "close" not in frame:
+        raise ValueError("HS300 requires date/time and close")
+    days = frame[column].map(_as_date)
+    if days.duplicated().any():
+        raise ValueError("duplicate HS300 sessions")
+    lo, hi = pd.Timestamp(start).date(), pd.Timestamp(end).date()
+    closes = {d: float(c) for d, c in zip(days, frame.close) if d <= hi}
+    caps = build_index_caps(closes)
+    window = [d for d in closes if lo <= d <= hi]
+    if not window or any(d not in caps for d in window):
+        raise ValueError("HS300 lacks 120 preload sessions or requested window")
+    return {d: caps[d] for d in window}
