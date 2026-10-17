@@ -51,3 +51,21 @@ HS300(000300.SH)收盘 < MA60 → 总仓位 ≤50%;< MA120 → ≤30%。复用 `
 
 - 手册绩效不可当验收标准(源文档头注钉死);本策略第一版**不做**:2% 公式、单行业 30% 帽、组合熔断/月度止损、备兑期权、B 类、主题共振
 - 参数全部进 `strategy13_rules` 常量 + CLI 显式覆盖;HELP_LOCK 冻结口径
+
+## 6. Implementation evidence (2026-10-17)
+
+Human 2026-10-17 authorize encode: base+pyramid, cash×20% name cap,
+42/35 multipliers with ten-add maximum; no 2% risk formula; A-only,
+chip default off; no theme/regulatory/B-class approximation.
+
+S1: `scripts/data/export_beidou_pool.py --start YYYYMMDD --end YYYYMMDD
+--pool-dir exports/beidou_run` consumes raw daily bars, amount, backward-asof
+`float_shares_history.parquet` and the vendor ST membership table. Missing
+required inputs fail. A signal observed at D close is written for the next
+observed session T (never D open/14:55). The final observed bar without T
+produces no pool entry. Optional chip uses the existing chip distribution's
+90% cost band and price above its mode. No market data is written.
+
+Data-free S1 verification: `tests/test_strategy13_exporter.py` (9 passed).
+Host lake smoke and manual chapter-10 comparison remain unrun; the manual's
+future-selected performance is not an acceptance target. Claude review pending; do not merge.
