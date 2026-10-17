@@ -136,6 +136,7 @@ V650_BOOK_NAMES = ("version6_50",)
 V650_CASES = tuple((book, engine) for book in V650_BOOK_NAMES for engine in ("daily", "minute"))
 # Registered in BOOKS but not yet in an authorized off-byte overlay.
 PENDING_BOOK_NAMES = (
+    "version13",
     "version6_51",
     "version6_52",
     "version6_53",
