@@ -129,6 +129,7 @@ from backtest.research.strategy6_rules import (  # noqa: E402
     trail_hits,
 )
 from backtest.research.csv_artifacts import (  # noqa: E402
+    data_provenance,
     maybe_compare_daily,
     summarize,
     write_run_artifacts,
@@ -2919,7 +2920,11 @@ def main(argv: Optional[list] = None) -> int:
     )
     ap.add_argument(
         "--emit-run-manifest", action="store_true",
-        help="write myquant.bt-run/1 provenance (default off)",
+        help="write myquant.bt-run/1 provenance (legacy no-op: manifest is now default-on)",
+    )
+    ap.add_argument(
+        "--no-run-manifest", action="store_true",
+        help="skip run-manifest.json (default now: always emitted with data provenance)",
     )
     ap.add_argument(
         "--require-signal-bundle", action="store_true",
@@ -3033,7 +3038,7 @@ def main(argv: Optional[list] = None) -> int:
         raise SystemExit(
             f"refuse overwrite existing {out_dir}; pick a new stamp directory"
         )
-    emit_manifest = args.emit_run_manifest or args.tail_window_buy or args.participation_rate is not None
+    emit_manifest = not args.no_run_manifest
     manifest_args = vars(args).copy()
     if args.participation_rate is None:
         manifest_args.pop("participation_rate", None)
@@ -3067,6 +3072,8 @@ def main(argv: Optional[list] = None) -> int:
         manifest_config=(
             {**manifest_args, "pool_dir": pool_dir, "out_dir": out_dir,
              "minute_source": minute_source, "daily_source": daily_source,
+             "data_provenance": data_provenance(
+                 {**manifest_args, "pool_dir": pool_dir}),
              **getattr(st, "run_metadata", {})}
             if emit_manifest else None
         ),

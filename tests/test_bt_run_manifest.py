@@ -142,9 +142,9 @@ def test_artifact_manifest_opt_in_preserves_existing_artifact_bytes(tmp_path, st
 
 
 @pytest.mark.parametrize("engine", ["daily", "minute"])
-@pytest.mark.parametrize("emit", [False, True])
-def test_cli_manifest_is_opt_in_and_labels_existing_qlib_cost(
-    tmp_path, state, monkeypatch, engine, emit
+@pytest.mark.parametrize("mode", ["default", "opt-out", "legacy-flag"])
+def test_cli_manifest_default_on_with_data_provenance(
+    tmp_path, state, monkeypatch, engine, mode
 ):
     module = importlib.import_module(f"backtest.research.csv_{engine}_backtest")
     calls = []
@@ -164,7 +164,9 @@ def test_cli_manifest_is_opt_in_and_labels_existing_qlib_cost(
         "--strategy", "version6", "--start", "20260925", "--end", "20260925",
         "--pool-dir", str(pool), "--out-dir", str(out), "--qlib-cost",
     ]
-    if emit:
+    if mode == "opt-out":
+        argv.append("--no-run-manifest")
+    if mode == "legacy-flag":
         argv.append("--emit-run-manifest")
     assert module.main(argv) == 0
     assert len(calls) == 1
@@ -172,10 +174,16 @@ def test_cli_manifest_is_opt_in_and_labels_existing_qlib_cost(
     assert calls[0]["sell_cost_rate"] == ashare_fees.QLIB_CLOSE_COST
     assert calls[0]["min_cost"] == ashare_fees.QLIB_MIN_COST
     path = out / "run-manifest.json"
-    assert path.exists() is emit
-    if emit:
+    assert path.exists() is (mode != "opt-out")
+    if mode != "opt-out":
         manifest = json.loads(path.read_bytes())
         assert manifest["strategy"] == "version6"
         assert manifest["dividend_type"] == "none"
         assert manifest["fee_schedule"] == "QLIB_PORTANA"
         assert manifest["liquidity_cap"] == "off"
+        prov_path = out / "data-provenance.json"
+        prov = json.loads(prov_path.read_bytes())
+        assert prov["pool_dir"]["files"] == 0  # empty tmp pool, fingerprinted
+        assert any(
+            row["path"].endswith("data-provenance.json") for row in manifest["artifacts"]
+        )

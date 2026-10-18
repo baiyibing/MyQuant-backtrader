@@ -435,13 +435,14 @@ def test_main_tail_automatically_emits_existing_manifest_and_off_keeps_old_confi
     assert minute.main(argv) == 0
     assert run_options[0]["tail_volume_unit"] == "shares"
     written = captured[0]
-    assert written["emit_run_manifest"] == (tail_enabled or explicit_manifest)
+    # 2026-10-18: manifest is default-on (data provenance hardening); the
+    # explicit flag no longer changes emission, only --no-run-manifest does.
+    assert written["emit_run_manifest"] is True
     config = written["manifest_config"]
+    assert config is not None and "data_provenance" in config
     if tail_enabled:
         assert config["tail_window_buy"] == tail_policy("shares")
         assert config["tail_volume_unit"] == "shares"
-    elif explicit_manifest:
-        assert "tail_window_buy" not in config and "tail_volume_unit" not in config
     else:
-        assert config is None
+        assert "tail_window_buy" not in config and "tail_volume_unit" not in config
     assert not any(key.startswith("tail_") for key in state.stats)

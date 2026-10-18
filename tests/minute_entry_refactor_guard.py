@@ -8,7 +8,8 @@ from pathlib import Path
 # Frozen hashes avoid `git show` so shallow Actions checkouts can still enforce.
 _EXPECTED_SHA256 = {
     "HELP_LOCK": "abdc73bf56b1e3318d25191fcc8bee78ab51d1b7877c603e9a0a70b1df305473",
-    "main": "dd2a3cc38c651b7c0febb8da80bc46f1aec8c9ef4f464d3e234103084759be93",
+    # 2026-10-18: main() pin refreshed for default-on run-manifest + data provenance
+    "main": "825183ef1ad22dfc66c9ce31dc29a36e8d157abf31029656d503053274ec937b",
 }
 
 
