@@ -154,6 +154,7 @@ from backtest.research.market_layer import (  # noqa: E402
     utc_ms_range as utc_ms_range,
 )
 from backtest.research.csv_artifacts import (  # noqa: E402
+    data_provenance,
     summarize,
     write_run_artifacts,
 )
@@ -1254,7 +1255,11 @@ def main(argv: Optional[list] = None) -> int:
     )
     ap.add_argument(
         "--emit-run-manifest", action="store_true",
-        help="write myquant.bt-run/1 provenance (default off)",
+        help="write myquant.bt-run/1 provenance (legacy no-op: manifest is now default-on)",
+    )
+    ap.add_argument(
+        "--no-run-manifest", action="store_true",
+        help="skip run-manifest.json (default now: always emitted with data provenance)",
     )
     ap.add_argument(
         "--require-signal-bundle", action="store_true",
@@ -1321,12 +1326,13 @@ def main(argv: Optional[list] = None) -> int:
         st,
         text,
         help_lock_for(args.strategy),
-        emit_run_manifest=args.emit_run_manifest,
+        emit_run_manifest=not args.no_run_manifest,
         signal_bundle_sha256=st.stats.get("signal_bundle_sha256"),
         manifest_config=(
             {**vars(args), "pool_dir": pool_dir, "out_dir": out_dir,
+             "data_provenance": data_provenance({**vars(args), "pool_dir": pool_dir}),
              **getattr(st, "run_metadata", {})}
-            if args.emit_run_manifest else None
+            if not args.no_run_manifest else None
         ),
     )
     return 0

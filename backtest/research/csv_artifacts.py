@@ -6,14 +6,77 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Mapping, Optional
 
 import pandas as pd
 
 from backtest.research.csv_ledger import SimState, chase_explained
 from backtest.research.csv_sim_profile import format_profile_lines, write_profile_sim
+
+_PROV_FILE_KEYS = (
+    "pred_csv", "buy_state_file", "bigvalue_regime_file", "st_daily_file", "age_map_file",
+)
+_PROV_DIR_KEYS = ("scores_dir", "pool_dir", "app_pool_dir")
+_PROV_QLIB_KEYS = ("qlib_data_root", "qlib_1min_root", "qlib_day_root")
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def data_provenance(config: Mapping) -> dict:
+    """Fingerprint the data inputs named in ``config`` so runs stay re-traceable.
+
+    Files: sha256 + size. Score/pool dirs: file count + aggregate sha over the
+    sorted (name, file-sha) pairs. qlib bin roots: calendars/day.txt tail and
+    dump mtime — the as-of that adjusted-price results are pinned to. Lake env
+    roots recorded verbatim. Unknown/missing/None entries are skipped.
+    """
+    prov: dict = {}
+    for key in _PROV_FILE_KEYS:
+        raw = config.get(key)
+        if raw is None or raw == "":
+            continue
+        path = Path(str(raw))
+        if path.is_file():
+            prov[key] = {"path": str(path), "sha256": _sha256_file(path),
+                         "bytes": path.stat().st_size}
+    for key in _PROV_DIR_KEYS:
+        raw = config.get(key)
+        if raw is None or raw == "":
+            continue
+        path = Path(str(raw))
+        if not path.is_dir():
+            continue
+        entries = []
+        for f in sorted(p for p in path.glob("*.csv") if p.is_file()):
+            entries.append(f"{f.name}:{_sha256_file(f)}")
+        agg = hashlib.sha256("\n".join(entries).encode("utf-8")).hexdigest()
+        prov[key] = {"path": str(path), "files": len(entries), "sha256": agg}
+    for key in _PROV_QLIB_KEYS:
+        raw = config.get(key)
+        if raw is None or raw == "":
+            continue
+        root = Path(str(raw))
+        cal = root / "calendars" / "day.txt"
+        info = {"path": str(root)}
+        if cal.is_file():
+            lines = cal.read_text(encoding="utf-8").splitlines()
+            info["calendar_last"] = lines[-1].strip() if lines else None
+            info["dumped_at"] = __import__("datetime").datetime.fromtimestamp(
+                cal.stat().st_mtime).isoformat(timespec="seconds")
+        prov[key] = info
+    lake = os.environ.get("OSKH_SOURCE_PARQUET_ROOT")
+    if lake:
+        prov["lake_root_env"] = lake
+    return prov
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
@@ -433,6 +496,10 @@ def write_run_artifacts(
         manifest_config.pop("rule_profile", None)
         manifest_config.pop("rule_profile_revision", None)
         metadata_paths = []
+        if prov := manifest_config.get("data_provenance"):
+            prov_path = out_dir / "data-provenance.json"
+            prov_path.write_bytes(canonical_json_bytes(prov))
+            metadata_paths.append(prov_path)
         if metadata := getattr(st, "run_metadata", None):
             metadata_path = out_dir / "run-metadata.json"
             metadata_path.write_bytes(canonical_json_bytes(metadata))
