@@ -84,6 +84,11 @@ csv_minute_topk_dropout 20260901..20260902
   止损先于强平再 dropout，同仓一卖；跌停走引擎延期，不套 Q7。
   --bigvalue-golden-mult M 默认 None：确认金叉 eff=min(1.0, base*M)，其它日 base（默认 0.95）。
   --bigvalue-base-frac 默认 None：非金叉日买入投放 base（默认书 0.95）。
+  --index-regime-* 家族（2026-10-18 统一）：与 bigvalue 同一 market_regime 核心，序列=指数。
+    文件列 date/close/ma{fast}/ma{slow}（bigdata_ma_cross.py --value-col close 生成）；
+    fast 默认 1=收盘本身 vs 慢线（默认 5）。九旗逐条镜像 bigvalue；一跑一 regime
+    （bigvalue×index、index×--index-ma5-gate 互斥）。books 层翻译进引擎同一 regime 槽，
+    卖出 reason 仍 regime_flat:bigvalue_death（死亡清仓语义与序列无关）。
     注意：block-new 开着时买入只发生在金叉确认日，base 对买入无感；
     只有 flatten 不配 block 的组合里 base 才实际缩放买入。
   任意行为旗须显式文件；缺信号日挡新开且不强平/加倍；topk_score_exit 拒绝任意 bigvalue 旗。

@@ -49,3 +49,73 @@ def test_regime_cash_fraction_alias_semantics():
     assert market_regime.regime_cash_fraction(days, "20260115", 2, 0.5) == 1.0
     assert market_regime.regime_cash_fraction(days, "20260115", 1.2, 0.5) == 0.6
     assert market_regime.regime_cash_fraction(days, "20260114", 2, 0.5) == 0.5
+
+
+def _index_fixture(tmp_path):
+    days = pd.bdate_range("20260101", periods=8)
+    frame = pd.DataFrame({
+        "date": [d.strftime("%Y%m%d") for d in days],
+        "close": [10.0] * 4 + [9.0] * 4,
+        "ma5": [10.0] * 4 + [9.6] * 4,
+    })
+    path = tmp_path / "sse_regime.parquet"
+    frame.to_parquet(path, index=False)
+    return path
+
+
+def _parse_topk(argv):
+    import argparse
+    from backtest.research.csv_strategy_books import add_topk_dropout_args
+    ap = argparse.ArgumentParser()
+    add_topk_dropout_args(ap)
+    return ap.parse_args(argv)
+
+
+def _run_kwargs_topk(args):
+    from backtest.research import topk_dropout_scores, csv_strategy_books as books
+    orig = topk_dropout_scores.load_scores_from_args
+    topk_dropout_scores.load_scores_from_args = lambda **kw: {"20260115": {"A": 1.0}}
+    try:
+        return books._run_kwargs_topk_dropout(args)
+    finally:
+        topk_dropout_scores.load_scores_from_args = orig
+
+
+def test_index_family_cli_contract(tmp_path, monkeypatch):
+    path = _index_fixture(tmp_path)
+    kw = _run_kwargs_topk(_parse_topk([
+        "--index-block-new", "--index-flatten", "--index-regime-file", str(path),
+        "--index-confirm-days", "1",
+    ]))
+    states, confirm = kw["bigvalue_regime"]
+    last_day = max(states)
+    assert confirm == 1 and states[last_day] == -1
+    assert kw["bigvalue_block_new"] is True and kw["bigvalue_flatten"] is True
+
+    def run_kwargs(argv):
+        return _run_kwargs_topk(_parse_topk(argv))
+
+    with pytest.raises(SystemExit, match="require --index-block-new"):
+        run_kwargs(["--index-regime-file", str(path)])
+    with pytest.raises(SystemExit, match="requires --index-regime-file"):
+        run_kwargs(["--index-block-new"])
+    with pytest.raises(SystemExit, match="one regime per run"):
+        run_kwargs(["--index-block-new", "--index-regime-file", str(path),
+                    "--index-ma5-gate"])
+    with pytest.raises(SystemExit, match="one regime per run"):
+        run_kwargs(["--index-block-new", "--index-regime-file", str(path),
+                    "--bigvalue-block-new", "--bigvalue-regime-file", str(path)])
+    with pytest.raises(SystemExit, match="base-frac"):
+        run_kwargs(["--index-block-new", "--index-regime-file", str(path),
+                    "--index-base-frac", "1.5"])
+
+
+def test_index_family_guarded_to_topk(tmp_path):
+    import subprocess
+    import sys as _sys
+    argv = [_sys.executable, "-m", "backtest.research.csv_daily_backtest",
+            "--strategy", "version6", "--index-block-new",
+            "--index-regime-file", str(_index_fixture(tmp_path))]
+    proc = subprocess.run(argv, capture_output=True, text=True, cwd=".")
+    assert proc.returncode != 0
+    assert "only by topk_dropout" in (proc.stderr + proc.stdout)

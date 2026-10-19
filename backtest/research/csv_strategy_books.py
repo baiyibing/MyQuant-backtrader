@@ -720,6 +720,21 @@ def add_topk_dropout_args(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--bigvalue-ma-slow", type=int, default=None, help="default 10 when enabled")
     ap.add_argument("--bigvalue-confirm-days", type=int, default=None, help="default 2 when enabled")
     ap.add_argument("--bigvalue-signal", choices=("state",), default=None)
+    ap.add_argument("--index-regime-file", type=Path, default=None,
+                    help="index regime parquet: date/close/ma{fast}/ma{slow} (bigdata_ma_cross.py --value-col close)")
+    ap.add_argument("--index-block-new", action="store_true",
+                    help="topk_dropout: confirmed index death (fast below slow) blocks new opens; default off")
+    ap.add_argument("--index-flatten", action="store_true",
+                    help="confirmed index death: next session open clear; default off")
+    ap.add_argument("--index-golden-mult", type=float, default=None,
+                    help="confirmed index golden cash fraction min(1, base*M); default off")
+    ap.add_argument("--index-base-frac", type=float, default=None,
+                    help="non-golden-day cash fraction base (default book 0.95); pairs with --index-golden-mult")
+    ap.add_argument("--index-ma-fast", type=int, default=None,
+                    help="default 1 when enabled (the close itself)")
+    ap.add_argument("--index-ma-slow", type=int, default=None, help="default 5 when enabled")
+    ap.add_argument("--index-confirm-days", type=int, default=None, help="default 2 when enabled")
+    ap.add_argument("--index-signal", choices=("state",), default=None)
     ap.add_argument(
         "--keep-buy-vacancy",
         action="store_true",
@@ -956,7 +971,10 @@ def csv_run_kwargs_from_args(args) -> dict:
     if fill_s == STOP_FILL_CLOSE and name not in STOP_FILL_CLOSE_BOOKS:
         raise SystemExit("--stop-fill close is only for topk_dropout / topk_score_exit")
     if name not in {"topk_dropout", "topk_score_exit"} and any(
-        value not in (None, False) for key, value in vars(args).items() if key.startswith("bigvalue_")
+        value not in (None, False)
+        for key, value in vars(args).items()
+        if key.startswith("bigvalue_")
+        or (key.startswith("index_") and key != "index_ma5_gate")
     ):
         raise SystemExit("bigvalue flags currently supported only by topk_dropout")
     kwargs = get_book(name).run_kwargs(args)
@@ -2037,6 +2055,12 @@ def _run_kwargs_topk_dropout(args) -> dict:
         "stop_fill": resolve_stop_fill(getattr(args, "stop_fill", None)),
     }
     if bigvalue:
+        _index_active = (bool(getattr(args, "index_block_new", False))
+                         or bool(getattr(args, "index_flatten", False))
+                         or getattr(args, "index_golden_mult", None) is not None
+                         or getattr(args, "index_regime_file", None) is not None)
+        if _index_active:
+            raise SystemExit("one regime per run: bigvalue refuses --index-regime-* flags")
         from backtest.research.bigvalue_regime import load_regime
 
         out["bigvalue_regime"] = (load_regime(bigvalue_options["regime_file"], fast, slow), confirm)
@@ -2044,6 +2068,47 @@ def _run_kwargs_topk_dropout(args) -> dict:
         out["bigvalue_flatten"] = bool(getattr(args, "bigvalue_flatten", False))
         out["bigvalue_golden_mult"] = multiplier
         out["bigvalue_base_frac"] = base_frac
+    index_regime = (bool(getattr(args, "index_block_new", False))
+                    or bool(getattr(args, "index_flatten", False))
+                    or getattr(args, "index_golden_mult", None) is not None)
+    index_options = {
+        key: getattr(args, "index_" + key, None)
+        for key in ("regime_file", "ma_fast", "ma_slow", "confirm_days", "signal", "base_frac")
+    }
+    if any(value is not None for value in index_options.values()) and not index_regime:
+        raise SystemExit(
+            "index flags require --index-block-new or --index-flatten or --index-golden-mult")
+    if index_regime:
+        if index_options["regime_file"] is None:
+            raise SystemExit("index regime behavior requires --index-regime-file")
+        if getattr(args, "index_ma5_gate", False):
+            raise SystemExit("one regime per run: --index-regime-* refuses --index-ma5-gate")
+        ifast = index_options["ma_fast"] if index_options["ma_fast"] is not None else 1
+        islow = index_options["ma_slow"] if index_options["ma_slow"] is not None else 5
+        iconfirm = (index_options["confirm_days"]
+                    if index_options["confirm_days"] is not None else 2)
+        if not 0 < ifast < islow or iconfirm < 1:
+            raise SystemExit("index regime requires 0 < fast < slow and confirm-days >= 1")
+        imult = getattr(args, "index_golden_mult", None)
+        if imult is not None:
+            import math
+            if not math.isfinite(imult) or imult <= 0:
+                raise SystemExit("index golden-mult must be finite and positive")
+        ibase = getattr(args, "index_base_frac", None)
+        if ibase is not None:
+            import math
+            if not math.isfinite(ibase) or not 0 < ibase <= 1:
+                raise SystemExit("index base-frac must be in (0, 1]")
+        from backtest.research.market_regime import load_regime as _load_index_regime
+        out["bigvalue_regime"] = (
+            _load_index_regime(index_options["regime_file"], ifast, islow,
+                               value_col="close"),
+            iconfirm,
+        )
+        out["bigvalue_block_new"] = bool(getattr(args, "index_block_new", False))
+        out["bigvalue_flatten"] = bool(getattr(args, "index_flatten", False))
+        out["bigvalue_golden_mult"] = imult
+        out["bigvalue_base_frac"] = ibase
     st_daily = getattr(args, "st_daily_file", None)
     age_map = getattr(args, "age_map_file", None)
     age_days = int(getattr(args, "age_days", 60))

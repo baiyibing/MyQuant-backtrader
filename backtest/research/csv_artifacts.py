@@ -17,7 +17,8 @@ from backtest.research.csv_ledger import SimState, chase_explained
 from backtest.research.csv_sim_profile import format_profile_lines, write_profile_sim
 
 _PROV_FILE_KEYS = (
-    "pred_csv", "buy_state_file", "bigvalue_regime_file", "st_daily_file", "age_map_file",
+    "pred_csv", "buy_state_file", "bigvalue_regime_file", "index_regime_file",
+    "st_daily_file", "age_map_file",
 )
 _PROV_DIR_KEYS = ("scores_dir", "pool_dir", "app_pool_dir")
 _PROV_QLIB_KEYS = ("qlib_data_root", "qlib_1min_root", "qlib_day_root")
