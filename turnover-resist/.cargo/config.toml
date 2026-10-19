@@ -3,9 +3,9 @@
 # =============================================================================
 #
 # Global env vars (set at user level, apply to ALL Rust projects):
-#   CARGO_TARGET_DIR = E:\rust-targets       → build artifacts off C: drive
+#   CARGO_TARGET_DIR = F:\rust-targets       → build artifacts off C: drive
 #   RUSTC_WRAPPER    = sccache               → shared compilation cache
-#   SCCACHE_DIR      = E:\rust-sccache-cache  → sccache cache off C: drive
+#   SCCACHE_DIR      = F:\rust-sccache-cache  → sccache cache off C: drive
 #
 # Periodic cleanup:
 #   cargo clean           → wipe current project's target dir

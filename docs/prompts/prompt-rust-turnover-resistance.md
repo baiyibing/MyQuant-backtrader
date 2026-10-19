@@ -49,7 +49,7 @@ turnover-resist/
 
 2. **Rust 二进制已存在**  
    确认以下路径之一存在：
-   - `/e/rust-targets/release/turnover-resist.exe`
+   - `/f/rust-targets/release/turnover-resist.exe`
    - `./turnover-resist/target/release/turnover-resist.exe`
    - `./turnover-resist/target/release-fast/turnover-resist.exe`
    
@@ -79,19 +79,19 @@ cd E:/PycharmProjects/OSkhQuant1.3
 # export RUST_MIN_STACK=8388608
 ```
 
-> **⚠️ 二进制路径注意**：`turnover-resist/.cargo/config.toml` 及全局环境变量可能将 `CARGO_TARGET_DIR` 指向非本地目录（如 `E:\rust-targets`）。编译后请先确认二进制实际位置：
+> **⚠️ 二进制路径注意**：`turnover-resist/.cargo/config.toml` 及全局环境变量可能将 `CARGO_TARGET_DIR` 指向非本地目录（如 `F:\rust-targets`）。编译后请先确认二进制实际位置：
 > ```bash
 > # 本地默认路径
 > ls ./turnover-resist/target/release/turnover-resist.exe
-> # 或全局重定向路径（以 E:\rust-targets 为例）
-> ls /e/rust-targets/release/turnover-resist.exe
-> ls /e/rust-targets/release-fast/turnover-resist.exe
+> # 或全局重定向路径（以 F:\rust-targets 为例）
+> ls /f/rust-targets/release/turnover-resist.exe
+> ls /f/rust-targets/release-fast/turnover-resist.exe
 > ```
 
 ```bash
 # 全市场计算（默认 window=1000 个交易日，≈4 年）
 # 注意：根据实际编译输出路径替换以下二进制路径
-/e/rust-targets/release/turnover-resist.exe \
+/f/rust-targets/release/turnover-resist.exe \
   --date 20260604 \
   --sort-by free \
   --window 1000 \
@@ -164,7 +164,7 @@ PYTHONUNBUFFERED=1 D:/anaconda3/envs/vanna311/python.exe scripts/data/full_marke
   --output backtest_output/canonical_resist_batch_20260616.csv
 
 # 2. 跑 Rust
-/e/rust-targets/release/turnover-resist.exe \
+/f/rust-targets/release/turnover-resist.exe \
   --date 20260616 --sort-by free --window 1000 --step 0.01 \
   --output backtest_output/canonical_resist_rust_20260616.csv
 
@@ -332,7 +332,7 @@ polars 版本升级注意事项：
 cd E:/PycharmProjects/OSkhQuant1.3
 
 # 基准测试（window=1000 全市场）
-time /e/rust-targets/release/turnover-resist.exe --date 20260604 --window 1000 --sort-by free
+time /f/rust-targets/release/turnover-resist.exe --date 20260604 --window 1000 --sort-by free
 
 # 当前基线：~78 秒（8 核，window=1000，5516 只有效结果，2026-06-04）
 # 目标：< 60 秒（结合 T/T-1 窗口复用）

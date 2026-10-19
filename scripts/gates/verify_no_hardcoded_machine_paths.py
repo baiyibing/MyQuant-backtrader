@@ -10,7 +10,7 @@ Scans production packages, ``scripts/**/*.py``, and ``tests/**/*.py`` for:
 - ``C:\\Users\\Thinkpad`` / ``C:/Users/Thinkpad``
 - ``D:\\anaconda3`` / ``D:/anaconda3`` (except allowlisted files)
 - ``E:/stock_data`` / ``F:/stock_data`` (data containers; use resolvers)
-- ``E:/data/parquet`` / ``E:/rust-targets``
+- ``E:/data/parquet`` / ``[EF]:/rust-targets``
 
 Docstrings and ``#`` comments are ignored. Production packages must stay at 0 hits.
 
@@ -37,7 +37,7 @@ _PATTERNS = (
     re.compile(r"D:[/\\]+anaconda3", re.I),
     re.compile(r"[EF]:[/\\]+stock_data", re.I),
     re.compile(r"E:[/\\]+data[/\\]+parquet", re.I),
-    re.compile(r"E:[/\\]+rust-targets", re.I),
+    re.compile(r"[EF]:[/\\]+rust-targets", re.I),
 )
 
 # Slim research-face packages (no live_trading / oskh_db / executor_stream).

@@ -21,7 +21,7 @@
 
 ## 2. Benchmark 结果
 
-环境：`D:\anaconda3\envs\vanna311\python.exe`，Windows 11，`E:\rust-targets\release\turnover-resist.exe`。
+环境：`D:\anaconda3\envs\vanna311\python.exe`，Windows 11，`F:\rust-targets\release\turnover-resist.exe`。
 
 ### 2.1 子进程启动开销
 
@@ -76,7 +76,7 @@ import pandas as pd
 
 # 第 1 步：发快递（启动子进程，等它跑完）
 cp = subprocess.run([
-    r"E:\rust-targets\release\turnover-resist.exe",
+    r"F:\rust-targets\release\turnover-resist.exe",
     "--date", "20260525",
     "--sort-by", "free",
     "--output", "backtest_output/result.csv"
@@ -182,7 +182,7 @@ data = turnover_resist.compute_turnover_resist(date="20269999")
 
 4. **构建链已有解**
    - `release-fast` profile（无 LTO）编译时间从 ~20 min 降至 ~2 min，日常开发可接受。
-   - CI 可缓存 `E:\rust-targets`（sccache + cargo artifact lock），全量重编只在依赖升级时触发。
+   - CI 可缓存 `F:\rust-targets`（sccache + cargo artifact lock），全量重编只在依赖升级时触发。
 
 **CLI 的保留场景**
 - 独立调试/排错：直接在命令行 `turnover-resist.exe --date ...` 跑，不依赖 Python 环境。
