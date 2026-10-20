@@ -8,6 +8,6 @@
 
 `baiyibing/grok-bot-ops` `master` → [`docs/channels/newtest-4090-execution-channels-ssot.md`](https://github.com/baiyibing/grok-bot-ops/blob/master/docs/channels/newtest-4090-execution-channels-ssot.md)
 
-- Owner：本仓为 **bt**（见 ops RACI §1）
+- Owner：本仓为 **qt**（原 **bt**；见 ops RACI §1；旧 qmt/qlib/bt 已 RETIRED→qt，见 [grok-bot-ops#48](https://github.com/baiyibing/grok-bot-ops/pull/48)）
 - **禁止**在本仓镜像 Owners 表、pipeline 步骤或 `-m` pins
 - 历史正文曾合于本路径（PR #163 / #466）；2026-10-12 迁入 `grok-bot-ops` 后本文件塌缩为薄指针
