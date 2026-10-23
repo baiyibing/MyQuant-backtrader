@@ -42,6 +42,8 @@ def test_hooks_carry_v14_spec():
     assert hooks["open_frac"] == pytest.approx(1.0)
     sched = hooks["add_schedule"]
     assert sched[:3] == [(0.15, 42.0), (0.35, 42.0), (0.55, 42.0)]
+    assert [s for s in sched if s[0] < 1.0][-1] == (0.95, 42.0)
+    assert [s for s in sched if s[0] >= 1.0][0] == (1.15, 126.0)
     assert len(sched) == 66 and sched[-1][0] == 13.15
     assert hooks["add_step"] == pytest.approx(99.0)  # 通用步进梯禁用
     assert hooks["give_base"] == pytest.approx(99.0)  # 梯子禁用
