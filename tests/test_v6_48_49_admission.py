@@ -14,12 +14,13 @@ GATE_BOOKS = (
     "version6_49", "version6_50", "version6_51", "version6_52",
     "version6_53", "version6_54", "version6_55", "version6_56",
     "version6_63",
+    "version6_65",
 )
 NO_GATE_BOOKS = ("version6_4", "version6_40", "version6_41", "version6_42",
                  "version6_43", "version6_44")
 
 
-@pytest.mark.parametrize("name", ["version6_48", "version6_49", "version6_50", "version6_51", "version6_52", "version6_53", "version6_54", "version6_55", "version6_56", "version6_63"])
+@pytest.mark.parametrize("name", ["version6_48", "version6_49", "version6_50", "version6_51", "version6_52", "version6_53", "version6_54", "version6_55", "version6_56", "version6_63", "version6_65"])
 def test_new_books_are_explicitly_classified(name):
     assert name in BOOKS
     assert name in caps.PRICE_ADD_ELIGIBLE_BOOKS
@@ -68,6 +69,7 @@ def test_cont_stop_rebuy_is_scoped_to_version6_50():
     assert rebuy == {
         "version6_50", "version6_51", "version6_52", "version6_53",
         "version6_54", "version6_55", "version6_56", "version6_63",
+        "version6_65",
         "version10_2",
     }
     state = type("S", (), {"book_state": {}})()
@@ -89,7 +91,7 @@ def test_profit_skim_is_scoped_to_version6_52():
     assert skim == {
         "version13",
         "version6_52", "version6_53", "version6_54",
-        "version6_55", "version6_56", "version6_63", "version10_2",
+        "version6_55", "version6_56", "version6_63", "version6_65", "version10_2",
     }
     assert hooks["version6_52"]["profit_skim_frac"] == pytest.approx(0.20)
     assert hooks["version6_52"]["profit_skim_pro_rata"] is True
@@ -102,7 +104,7 @@ def test_index_cut_is_scoped_to_version6_53():
     hooks = {name: apply_csv_strategy(name)
              for name in BOOKS if not name.startswith("topk_")}
     cut = {name for name, h in hooks.items() if h.get("index_cut")}
-    assert cut == {"version6_53", "version6_54", "version6_55", "version6_56", "version6_63", "version10_2"}
+    assert cut == {"version6_53", "version6_54", "version6_55", "version6_56", "version6_63", "version6_65", "version10_2"}
     assert hooks["version6_53"]["index_cut_frac"] == pytest.approx(0.50)
     assert hooks["version6_53"]["index_cut_min_keep"] == 100
     assert hooks["version6_53"]["index_blocks_s8_add"] is True
@@ -123,7 +125,7 @@ def test_div_to_parking_is_scoped_to_version6_54():
     hooks = {name: apply_csv_strategy(name)
              for name in BOOKS if not name.startswith("topk_")}
     parked = {name for name, h in hooks.items() if h.get("div_to_parking")}
-    assert parked == {"version13", "version6_54", "version6_55", "version6_56", "version6_63", "version10_2"}
+    assert parked == {"version13", "version6_54", "version6_55", "version6_56", "version6_63", "version6_65", "version10_2"}
     assert hooks["version6_53"].get("div_to_parking") is not True
     assert hooks["version6_55"]["div_to_parking"] is True
     assert hooks["version6_56"]["div_to_parking"] is True
