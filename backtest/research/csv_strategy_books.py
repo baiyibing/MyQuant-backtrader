@@ -3103,7 +3103,7 @@ register(
         sizing="per_name",
         name_budget=1_000_000.0,
         tag=strategy14_rules.BOOK_TAG,
-        aliases=("14", "v14", "v_14", "version14"),
+        aliases=("v14", "v_14", "version14"),  # 裸数字 "14" 受 CLI 契约冻结禁止
         allow_add=strategy14_rules.ALLOW_ADD,
         peak_gap_min=strategy14_rules.PEAK_GAP_MIN,
         help_lock=strategy14_rules.HELP_LOCK,
