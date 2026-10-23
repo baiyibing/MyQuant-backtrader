@@ -74,6 +74,7 @@ from backtest.research import (
     strategy6_54_rules,
     strategy6_55_rules,
     strategy6_56_rules,
+    strategy6_63_rules,
     strategy8_rules,
     strategy8_1_rules,
     strategy8_2_rules,
@@ -208,6 +209,8 @@ from backtest.research.csv_strategy_books_v6_family import (
     _run_kwargs_version6_55,
     _apply_version6_56,
     _run_kwargs_version6_56,
+    _apply_version6_63,
+    _run_kwargs_version6_63,
 )
 
 HELP_LOCK_V1 = strategy1_rules.HELP_LOCK
@@ -272,6 +275,7 @@ HELP_LOCK_V6_53 = strategy6_53_rules.HELP_LOCK
 HELP_LOCK_V6_54 = strategy6_54_rules.HELP_LOCK
 HELP_LOCK_V6_55 = strategy6_55_rules.HELP_LOCK
 HELP_LOCK_V6_56 = strategy6_56_rules.HELP_LOCK
+HELP_LOCK_V6_63 = strategy6_63_rules.HELP_LOCK
 HELP_LOCK_V8 = strategy8_rules.HELP_LOCK
 HELP_LOCK_V8_1 = strategy8_1_rules.HELP_LOCK
 HELP_LOCK_V8_2 = strategy8_2_rules.HELP_LOCK
@@ -484,6 +488,8 @@ def apply_csv_strategy(strategy: str, **kwargs) -> dict:
     hooks.setdefault("index_cut", False)
     hooks.setdefault("index_cut_frac", None)
     hooks.setdefault("index_cut_min_keep", None)
+    hooks.setdefault("index_cut2_blocked_day", None)
+    hooks.setdefault("index_cut2_frac", None)
     hooks.setdefault("index_blocks_s8_add", False)
     hooks.setdefault("post_exit_cont", False)
     hooks.setdefault("post_exit_cont_bypass_index", False)
@@ -3024,6 +3030,21 @@ register(
         help_lock=strategy6_56_rules.HELP_LOCK,
         apply=_apply_version6_56,
         run_kwargs=_run_kwargs_version6_56,
+    )
+)
+
+register(
+    CsvStrategyBook(
+        name="version6_63",
+        sizing="per_name",
+        name_budget=1_000_000.0,
+        tag=strategy6_63_rules.BOOK_TAG,
+        aliases=("6.63", "6_63", "v6.63", "v6_63", "version6_63"),
+        allow_add=strategy6_63_rules.ALLOW_ADD,
+        peak_gap_min=strategy6_63_rules.PEAK_GAP_MIN,
+        help_lock=strategy6_63_rules.HELP_LOCK,
+        apply=_apply_version6_63,
+        run_kwargs=_run_kwargs_version6_63,
     )
 )
 

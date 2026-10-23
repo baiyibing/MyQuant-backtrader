@@ -61,6 +61,7 @@ from backtest.research import (
     strategy6_54_rules,
     strategy6_55_rules,
     strategy6_56_rules,
+    strategy6_63_rules,
 )
 
 
@@ -2387,3 +2388,57 @@ def _run_kwargs_version6_56(args) -> dict:
     if stop is not None and not 0 < float(stop) < 1:
         raise SystemExit(f"--stop-pct must be in (0, 1), got {stop}")
     return {"strategy": "version6_56", "stop_pct": stop}
+
+
+def _apply_version6_63(
+    *,
+    stop_pct=None,
+    take_profit=None,
+    record_params=None,
+    index_block_new=None,
+    **_,
+) -> dict:
+    resolved = strategy6_63_rules.STOP_PCT if stop_pct is None else float(stop_pct)
+
+    def _tp(px, cost, peak, n_days=1):
+        return strategy6_63_rules.take_profit_reason(px, cost, peak, n_days)
+
+    def _rec(st):
+        strategy6_63_rules.record_strategy6_63_params(st, stop_pct=resolved)
+        st.stats["index_gate_on"] = bool(strategy6_63_rules.INDEX_GATE_ON)
+        st.stats["parking_symbol"] = strategy6_63_rules.PARKING_SYMBOL
+        st.stats["parking_frac"] = strategy6_63_rules.PARKING_FRAC
+        st.stats["parking_execute"] = bool(strategy6_63_rules.PARKING_EXECUTE)
+        st.stats["parking_open_cover"] = bool(strategy6_63_rules.PARKING_OPEN_COVER)
+        st.stats["cont_stop_rebuy"] = bool(strategy6_63_rules.CONT_STOP_REBUY)
+        st.stats["profit_skim"] = bool(strategy6_63_rules.PROFIT_SKIM)
+        st.stats["index_cut"] = bool(strategy6_63_rules.INDEX_CUT)
+        st.stats["div_to_parking"] = bool(strategy6_63_rules.DIV_TO_PARKING)
+        st.stats["ladder_give_step"] = float(strategy6_63_rules.GIVE_STEP)
+        st.stats["scale_out_step"] = float(strategy6_63_rules.SCALE_OUT_STEP)
+        st.stats["scale_out_frac"] = float(strategy6_63_rules.SCALE_OUT_FRAC)
+        st.stats["profit_skim_step"] = float(strategy6_63_rules.PROFIT_SKIM_STEP)
+        st.stats["profit_skim_frac"] = float(strategy6_63_rules.PROFIT_SKIM_FRAC)
+        st.stats["peak_dd_exit"] = float(strategy6_63_rules.PEAK_DD_EXIT)
+        st.stats["index_below_sessions_2"] = int(strategy6_63_rules.INDEX_BELOW_SESSIONS_2)
+        st.stats["index_cut2_frac"] = float(strategy6_63_rules.INDEX_CUT2_FRAC)
+
+    base = _apply_version6_55(
+        stop_pct=resolved,
+        take_profit=take_profit if take_profit is not None else _tp,
+        record_params=record_params if record_params is not None else _rec,
+        index_block_new=index_block_new,
+    )
+    base["name"] = "version6_63"
+    base["index_cut2_blocked_day"] = int(strategy6_63_rules.INDEX_CUT2_BLOCKED_DAY)
+    base["index_cut2_frac"] = float(strategy6_63_rules.INDEX_CUT2_FRAC)
+    base["add_schedule"] = list(strategy6_63_rules.ADD_SCHEDULE)
+    base["cont_from_rise"] = float(strategy6_63_rules.CONT_FROM_RISE)
+    return base
+
+
+def _run_kwargs_version6_63(args) -> dict:
+    stop = getattr(args, "stop_pct", None)
+    if stop is not None and not 0 < float(stop) < 1:
+        raise SystemExit(f"--stop-pct must be in (0, 1), got {stop}")
+    return {"strategy": "version6_63", "stop_pct": stop}

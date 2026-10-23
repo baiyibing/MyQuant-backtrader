@@ -32,6 +32,7 @@ FROZEN_NAMES = (
     "version6_46", "version6_47", "version6_48", "version6_49",
     "version6_50", "version6_51", "version6_52", "version6_53",
     "version6_54", "version6_55", "version6_56",
+    "version6_63",
     "version8", "version8_1", "version8_2",
     "version8_3", "version8_4", "version8_5", "version8_6", "version9",
     "version9_2", "version9_3", "version10", "version10_1", "version10_2",
@@ -58,7 +59,7 @@ def test_registry_names_and_aliases():
     "name",
     ("version6_1", "version6_11", "version6_45", "version6_46", "version6_47",
      "version6_48", "version6_49", "version6_50", "version6_51",
-     "version6_52", "version6_53", "version6_54", "version6_55", "version6_56", "version8", "version1"),
+     "version6_52", "version6_53", "version6_54", "version6_55", "version6_56", "version6_63", "version8", "version1"),
 )
 def test_default_apply_keys(name):
     hooks = apply_csv_strategy(name)
