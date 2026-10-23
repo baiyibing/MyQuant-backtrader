@@ -1306,6 +1306,7 @@ def extra_load_codes_for_strategy(strategy: str) -> set[str]:
         "version6_54",
         "version6_55",
         "version6_56",
+        "version6_63",
         "version10_2",
         "version13",
     }:
@@ -1442,7 +1443,10 @@ def run_parking_open_cover_day(
 
 
 def _index_cut_state(st: SimState) -> dict:
-    return st.book_state.setdefault("index_cut", {"latched": False, "memory": {}})
+    return st.book_state.setdefault(
+        "index_cut",
+        {"latched": False, "memory": {}, "blocked_run": 0, "cut2_done": False},
+    )
 
 
 def _index_group_lots(st: SimState, code: str, position_id: str) -> list:
@@ -1490,10 +1494,15 @@ def _execute_index_cuts(
     exdiv=None,
     qlib_limit_pct=None,
     forbid_all_trade_at_limit: bool = False,
+    frac_override=None,
+    stat_tag: str = "",
 ) -> None:
     from backtest.research.strategy6_53_rules import index_cut_shares
 
-    frac = float(hooks.get("index_cut_frac") or 0.50)
+    if frac_override is not None:
+        frac = float(frac_override)
+    else:
+        frac = float(hooks.get("index_cut_frac") or 0.50)
     min_keep = int(hooks.get("index_cut_min_keep") or 100)
     memory = _index_cut_state(st)["memory"]
     for code in held_codes(st):
@@ -1535,8 +1544,12 @@ def _execute_index_cuts(
                     remain -= int(filled)
             if sold:
                 memory[position_id] = int(memory.get(position_id, 0)) + sold
-                st.stats["index_cut_shares"] = int(st.stats.get("index_cut_shares", 0)) + sold
-                st.stats["index_cut_events"] = int(st.stats.get("index_cut_events", 0)) + 1
+                st.stats[f"index_cut{stat_tag}_shares"] = int(
+                    st.stats.get(f"index_cut{stat_tag}_shares", 0)
+                ) + sold
+                st.stats[f"index_cut{stat_tag}_events"] = int(
+                    st.stats.get(f"index_cut{stat_tag}_events", 0)
+                ) + 1
 
 
 def _execute_index_rebuys(
@@ -1615,8 +1628,11 @@ def run_index_gate_cut_day(
 ) -> None:
     """Open of a blocked SSE-MA10 episode: halt new chips and halve strategy book.
 
-    Same episode is cut once. When the gate lifts, buy back remembered shares
-    at the open before pool/adds. Parking lots are not touched.
+    Stage 1 fires on the first blocked day; stage 2 (``index_cut2_blocked_day``,
+    e.g. 4 consecutive closes below MA10 for INDEX_BELOW_SESSIONS=2) halves the
+    remainder once more. Each stage cuts at most once per episode. When the gate
+    lifts, buy back remembered shares (all stages) at the open before pool/adds.
+    Parking lots are not touched.
     """
     if not hooks.get("index_cut"):
         return
@@ -1624,6 +1640,8 @@ def run_index_gate_cut_day(
     blocked = callable(allow) and not allow(day)
     state = _index_cut_state(st)
     if blocked:
+        state["blocked_run"] = int(state.get("blocked_run", 0)) + 1
+        cut2_day = hooks.get("index_cut2_blocked_day")
         if not state["latched"]:
             _execute_index_cuts(
                 st,
@@ -1638,6 +1656,26 @@ def run_index_gate_cut_day(
                 forbid_all_trade_at_limit=forbid_all_trade_at_limit,
             )
             state["latched"] = True
+        elif (
+            cut2_day is not None
+            and not state.get("cut2_done", False)
+            and state["blocked_run"] >= int(cut2_day)
+        ):
+            _execute_index_cuts(
+                st,
+                hooks,
+                day_i=day_i,
+                day=day,
+                ds=ds,
+                names=names,
+                daily_bars=daily_bars,
+                exdiv=exdiv,
+                qlib_limit_pct=qlib_limit_pct,
+                forbid_all_trade_at_limit=forbid_all_trade_at_limit,
+                frac_override=hooks.get("index_cut2_frac"),
+                stat_tag="2",
+            )
+            state["cut2_done"] = True
         return
     if state["memory"]:
         _execute_index_rebuys(
@@ -1653,6 +1691,8 @@ def run_index_gate_cut_day(
             forbid_all_trade_at_limit=forbid_all_trade_at_limit,
         )
     state["latched"] = False
+    state["blocked_run"] = 0
+    state["cut2_done"] = False
 
 
 def working_equity(st: SimState, day, mark_bars: dict) -> float:
