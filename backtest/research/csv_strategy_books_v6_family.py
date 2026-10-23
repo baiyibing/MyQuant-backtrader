@@ -2581,6 +2581,7 @@ def _apply_version14(
     base["peak_dd_exit2"] = float(strategy14_rules.PEAK_DD_EXIT2)
     base["max_hold_sessions"] = int(strategy14_rules.MAX_HOLD_SESSIONS)
     base["max_live_add_lots"] = int(strategy14_rules.MAX_LIVE_ADD_LOTS)
+    base["add_priority_rise"] = bool(strategy14_rules.ADD_PRIORITY_RISE)
     base["cont_stop_rebuy"] = False
     base["parking_frac"] = float(strategy14_rules.PARKING_FRAC)
     base["parking_buffer"] = float(strategy14_rules.PARKING_BUFFER)

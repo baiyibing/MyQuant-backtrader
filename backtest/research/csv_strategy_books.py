@@ -509,6 +509,7 @@ def apply_csv_strategy(strategy: str, **kwargs) -> dict:
     hooks.setdefault("max_hold_sessions", None)
     hooks.setdefault("peak_dd_exit2", None)
     hooks.setdefault("max_live_add_lots", None)
+    hooks.setdefault("add_priority_rise", False)
     hooks.setdefault("index_blocks_s8_add", False)
     hooks.setdefault("post_exit_cont", False)
     hooks.setdefault("post_exit_cont_bypass_index", False)

@@ -45,8 +45,8 @@ def test_hooks_carry_v14_spec():
     assert len(sched) == 66 and sched[-1][0] == 13.15
     assert hooks["add_step"] == pytest.approx(99.0)  # 通用步进梯禁用
     assert hooks["give_base"] == pytest.approx(99.0)  # 梯子禁用
-    assert hooks["scale_out_step"] == pytest.approx(0.10)
-    assert hooks["scale_out_frac"] == pytest.approx(0.10)
+    assert hooks["scale_out_step"] == pytest.approx(0.0)  # 阶梯止盈关闭
+    assert hooks["scale_out_frac"] == pytest.approx(0.0)
     assert hooks["scale_out_anchor"] == "weighted"
     assert hooks["peak_dd_exit"] == pytest.approx(0.25)
     assert hooks["peak_dd_exit2"] == pytest.approx(0.15)
@@ -54,6 +54,7 @@ def test_hooks_carry_v14_spec():
     assert hooks["peak_dd_min_rise"] == pytest.approx(1.0)
     assert hooks["max_hold_sessions"] == 180
     assert hooks["max_live_add_lots"] == 10
+    assert hooks["add_priority_rise"] is True
     assert hooks["cont_stop_rebuy"] is False
     assert hooks["div_to_parking"] is True
     assert hooks["parking_frac"] == pytest.approx(0.95)
@@ -87,6 +88,7 @@ def test_records_override_stats():
     assert st.stats["ladder_give_base"] == pytest.approx(99.0)
     assert st.stats["max_hold_sessions"] == 180
     assert st.stats["max_live_add_lots"] == 10
+    assert st.stats["add_priority_rise"] is True
     assert st.stats["parking_buffer"] == pytest.approx(2_000_000.0)
     assert st.stats["div_to_parking"] is True
     assert st.stats["peak_dd_min_rise"] == pytest.approx(1.0)
