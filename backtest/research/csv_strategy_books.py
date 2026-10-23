@@ -75,6 +75,7 @@ from backtest.research import (
     strategy6_55_rules,
     strategy6_56_rules,
     strategy6_63_rules,
+    strategy6_64_rules,
     strategy6_65_rules,
     strategy8_rules,
     strategy8_1_rules,
@@ -212,6 +213,8 @@ from backtest.research.csv_strategy_books_v6_family import (
     _run_kwargs_version6_56,
     _apply_version6_63,
     _run_kwargs_version6_63,
+    _apply_version6_64,
+    _run_kwargs_version6_64,
     _apply_version6_65,
     _run_kwargs_version6_65,
 )
@@ -279,6 +282,7 @@ HELP_LOCK_V6_54 = strategy6_54_rules.HELP_LOCK
 HELP_LOCK_V6_55 = strategy6_55_rules.HELP_LOCK
 HELP_LOCK_V6_56 = strategy6_56_rules.HELP_LOCK
 HELP_LOCK_V6_63 = strategy6_63_rules.HELP_LOCK
+HELP_LOCK_V6_64 = strategy6_64_rules.HELP_LOCK
 HELP_LOCK_V6_65 = strategy6_65_rules.HELP_LOCK
 HELP_LOCK_V8 = strategy8_rules.HELP_LOCK
 HELP_LOCK_V8_1 = strategy8_1_rules.HELP_LOCK
@@ -494,6 +498,10 @@ def apply_csv_strategy(strategy: str, **kwargs) -> dict:
     hooks.setdefault("index_cut_min_keep", None)
     hooks.setdefault("index_cut2_blocked_day", None)
     hooks.setdefault("index_cut2_frac", None)
+    hooks.setdefault("atr_stop_anchor", None)
+    hooks.setdefault("atr_stop_window", 14)
+    hooks.setdefault("atr_clamp_hard", None)
+    hooks.setdefault("atr_clamp_step", None)
     hooks.setdefault("index_blocks_s8_add", False)
     hooks.setdefault("post_exit_cont", False)
     hooks.setdefault("post_exit_cont_bypass_index", False)
@@ -3049,6 +3057,21 @@ register(
         help_lock=strategy6_63_rules.HELP_LOCK,
         apply=_apply_version6_63,
         run_kwargs=_run_kwargs_version6_63,
+    )
+)
+
+register(
+    CsvStrategyBook(
+        name="version6_64",
+        sizing="per_name",
+        name_budget=1_000_000.0,
+        tag=strategy6_64_rules.BOOK_TAG,
+        aliases=("6.64", "6_64", "v6.64", "v6_64", "version6_64"),
+        allow_add=strategy6_64_rules.ALLOW_ADD,
+        peak_gap_min=strategy6_64_rules.PEAK_GAP_MIN,
+        help_lock=strategy6_64_rules.HELP_LOCK,
+        apply=_apply_version6_64,
+        run_kwargs=_run_kwargs_version6_64,
     )
 )
 
