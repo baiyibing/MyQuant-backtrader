@@ -147,6 +147,7 @@ PENDING_BOOK_NAMES = (
     "version6_64",
     "version14",
     "version6_65",
+    "version6_67",
     "version10_1",
     "version10_2",
 )

@@ -165,6 +165,7 @@ def test_off_byte_baseline_covers_current_registry_and_standalone_v7():
         "version6_64",
         "version14",
         "version6_65",
+        "version6_67",
         "version10_1",
         "version10_2",
     }

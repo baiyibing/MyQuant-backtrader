@@ -1340,6 +1340,7 @@ def extra_load_codes_for_strategy(strategy: str) -> set[str]:
         "version6_64",
         "version14",
         "version6_65",
+        "version6_67",
         "version10_2",
         "version13",
     }:
