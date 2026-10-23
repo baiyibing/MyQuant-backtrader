@@ -900,7 +900,23 @@ def _run_s8_price_adds_day(
         qlib_limit_pct=qlib_limit_pct,
         reference_price_for=reference_price_for,
     )
-    for code in s8_price_add_codes(st, include_closed=include_closed):
+    _add_codes = s8_price_add_codes(st, include_closed=include_closed)
+    if policy.get("add_priority_rise") and len(_add_codes) > 1:
+        # 人裁（找回利通引擎）：现金紧张时按当前涨幅深→浅分配加仓，赢家档先拿现金。
+        def _deep_rise(code):
+            best = 0.0
+            for _pid, _grp in (
+                list(s8_open_groups(st, code))
+                + (list(s8_closed_groups(st, code)) if include_closed else [])
+            ):
+                _cost = float(getattr(_grp, "anchor_cost", None) or _grp.first_lot.cost)
+                _row = quotes.get(code)
+                if _row is not None and _cost > 0:
+                    best = max(best, float(_row.px) / _cost - 1.0)
+            return best
+
+        _add_codes = sorted(_add_codes, key=_deep_rise, reverse=True)
+    for code in _add_codes:
         row = quotes.get(code)
         if row is None or float(row.px) <= 0:
             continue

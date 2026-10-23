@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """策略 14 — 大资金宽基书（人裁 2026-10-23）。
 
-总资金 5000 万、单票底仓 1 万（人裁八次 2026-10-23 定稿）；底仓 −10% 止损、加仓档 −10% 止损；
-底仓价 ×1.15 起每 +20% 加仓 42 万固定档（=基数×42，66 档；保底 100 股——预算不足一手现金池补足），同组在场加仓档 ≤10（人裁七次）；持有时长 ≤180 交易日；涨幅 <100% 峰值回撤 ≥25% 清、涨幅 ≥100% 峰值回撤 ≥15% 清（跨 1 日，两档）；每 +10% 减仓持有筹码 10%（加权均价锚）；
+总资金 1 亿、单票底仓 1 万（人裁十次 2026-10-24；优化定稿 = 十次 + 涨幅优先加仓）；底仓 −10% 止损、加仓档 −10% 止损；
+底仓价 ×1.15 起每 +20% 加仓 42 万固定档（=基数×42，66 档；保底 100 股——预算不足一手现金池补足），同组在场加仓档 ≤10（人裁七次）；持有时长 ≤180 交易日；涨幅 <100% 峰值回撤 ≥25% 清、涨幅 ≥100% 峰值回撤 ≥15% 清（跨 1 日，两档）；阶梯减仓止盈已关（人裁十次）；加仓现金按涨幅深→浅分配（add_priority_rise，找回利通引擎：+18.74%→+30.13%）；
 上证闸（单段：连续两日收 MA10 下方停新开+减半、收复买回）；
 闲置资金（现金+停泊市值−200 万）×95% 买 600036；现金不足 200 万开盘卖 600036 补足；
 总收益每 +总资金 10% 抽出该增量锁定买 600036；现金分红计入收益（入账后买 600036）。无梯子 trail、无延续档买回、
@@ -47,8 +47,8 @@ STEP_STOP_PCT = 0.10
 ADD_SCHEDULE = [(round(0.15 + 0.20 * i, 2), 42.0) for i in range(66)]
 ADD_STEP = 99.0  # 禁用通用 +20% 步进梯（due1），加仓只走 schedule（+35% 起）
 GIVE_BASE = 99.0  # 禁用梯子 trail（spec 无梯子；exit_line 永不可达）
-SCALE_OUT_STEP = 0.10
-SCALE_OUT_FRAC = 0.10
+SCALE_OUT_STEP = 0.0  # 人裁十次：关闭阶梯减仓止盈
+SCALE_OUT_FRAC = 0.0
 SCALE_OUT_ANCHOR = "weighted"
 PEAK_DD_EXIT = 0.25  # 涨幅 <100% 档（人裁五次；优化选 2 的 20% 实测 −1.84pp 弃用）
 PEAK_DD_SESSIONS = 1
@@ -56,6 +56,7 @@ PEAK_DD_EXIT2 = 0.15  # 涨幅 ≥100% 档（人裁五次）
 PEAK_DD_MIN_RISE = 1.0
 MAX_HOLD_SESSIONS = 180
 MAX_LIVE_ADD_LOTS = 10  # 同组在场加仓档上限（人裁七次）
+ADD_PRIORITY_RISE = True  # 找回利通引擎（优化）：加仓现金按涨幅深→浅分配
 CONT_STOP_REBUY = False
 PARKING_FRAC = 0.95  # spec 全量；FRAC=1.0 单变量实证：5亿/100万档下档位 56% 缩至 1/10（unpark 供款不足），留 5% 工作现金
 PARKING_BUFFER = 2_000_000.0
@@ -86,6 +87,7 @@ def record_strategy14_params(st, *, stop_pct: float) -> None:
     st.stats["peak_dd_sessions"] = int(PEAK_DD_SESSIONS)
     st.stats["max_hold_sessions"] = int(MAX_HOLD_SESSIONS)
     st.stats["max_live_add_lots"] = int(MAX_LIVE_ADD_LOTS)
+    st.stats["add_priority_rise"] = bool(ADD_PRIORITY_RISE)
     st.stats["cont_stop_rebuy"] = bool(CONT_STOP_REBUY)
     st.stats["parking_frac"] = float(PARKING_FRAC)
     st.stats["parking_buffer"] = float(PARKING_BUFFER)
@@ -118,6 +120,7 @@ HELP_LOCK = """
   抽离：总收益每 +总资金 10%，该增量全额锁定买 600036。
   分红：现金分红计入收益，入账当日买 600036（DIV_TO_PARKING）。
   无梯子 trail（GIVE_BASE=99 禁用）、无延续档止损买回。
-  官方章：backtest_output/csv_minute_v14_20251023_20260909_industry
+  加仓现金分配：涨幅优先（add_priority_rise）——现金紧张时赢家档先拿现金。
+  官方章：backtest_output/csv_minute_v14_20251023_20260909_industry（+30.13% / −10.71%）
   落盘：backtest_output/csv_minute_v14_{start}_{end}/
 """
