@@ -2432,6 +2432,8 @@ def _apply_version6_63(
     base["name"] = "version6_63"
     base["index_cut2_blocked_day"] = int(strategy6_63_rules.INDEX_CUT2_BLOCKED_DAY)
     base["index_cut2_frac"] = float(strategy6_63_rules.INDEX_CUT2_FRAC)
+    base["add_schedule"] = list(strategy6_63_rules.ADD_SCHEDULE)
+    base["cont_from_rise"] = float(strategy6_63_rules.CONT_FROM_RISE)
     return base
 
 
