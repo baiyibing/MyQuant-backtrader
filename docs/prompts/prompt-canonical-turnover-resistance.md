@@ -31,7 +31,7 @@ PYTHONUNBUFFERED=1 D:/anaconda3/envs/vanna311/python.exe scripts/data/full_marke
 
 ```bash
 cd "E:/PycharmProjects/OSkhQuant1.3"
-/e/rust-targets/release/turnover-resist.exe \
+/f/rust-targets/release/turnover-resist.exe \
   --date 20260525 \
   --sort-by free \
   --free-float-policy warn-zero \
@@ -192,7 +192,7 @@ D:/anaconda3/envs/vanna311/python.exe -c "from qlib_cost import cyq; from backte
 
 3. **全量 Rust 计算**（1-2 分钟）
    ```bash
-   /e/rust-targets/release/turnover-resist.exe \
+   /f/rust-targets/release/turnover-resist.exe \
      --date 20260616 --sort-by free --window 1000 --step 0.01 \
      --output backtest_output/canonical_resist_rust_20260616.csv
    ```
