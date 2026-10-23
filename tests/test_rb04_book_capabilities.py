@@ -61,6 +61,7 @@ FROZEN_PRICE_ADD_BOOKS = frozenset({
     "version6_56",
     "version6_63",
     "version6_64",
+    "version14",
     "version6_65",
     "version6_5",
     "version6_6",
@@ -79,7 +80,7 @@ FROZEN_PRICE_ADD_BOOKS = frozenset({
 def test_tip_capability_equivalence(name, sizing):
     # Freeze the old independent predicate once for registered-book equivalence.
     old = bool(sizing == "per_name" and name and (
-        name.startswith("version6_") or name == "version8"
+        name.startswith("version6_") or name == "version8" or name == "version14"
         or (name.startswith("version8_") and name != "version8_1")
     ))
     assert caps.uses_s8_independent(name, sizing) is old
@@ -95,8 +96,8 @@ def test_membership_and_registration():
     assert isinstance(price, frozenset)
     assert isinstance(independent, frozenset)
     assert price == FROZEN_PRICE_ADD_BOOKS
-    assert len(price) == 63
-    assert len(independent) == 65
+    assert len(price) == 64
+    assert len(independent) == 66
     assert price < independent
     assert independent - price == {"version8_2", "version8_6"}
     assert price <= BOOKS.keys()

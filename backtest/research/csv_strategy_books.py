@@ -77,6 +77,7 @@ from backtest.research import (
     strategy6_63_rules,
     strategy6_64_rules,
     strategy6_65_rules,
+    strategy14_rules,
     strategy8_rules,
     strategy8_1_rules,
     strategy8_2_rules,
@@ -217,6 +218,8 @@ from backtest.research.csv_strategy_books_v6_family import (
     _run_kwargs_version6_64,
     _apply_version6_65,
     _run_kwargs_version6_65,
+    _apply_version14,
+    _run_kwargs_version14,
 )
 
 HELP_LOCK_V1 = strategy1_rules.HELP_LOCK
@@ -284,6 +287,7 @@ HELP_LOCK_V6_56 = strategy6_56_rules.HELP_LOCK
 HELP_LOCK_V6_63 = strategy6_63_rules.HELP_LOCK
 HELP_LOCK_V6_64 = strategy6_64_rules.HELP_LOCK
 HELP_LOCK_V6_65 = strategy6_65_rules.HELP_LOCK
+HELP_LOCK_V14 = strategy14_rules.HELP_LOCK
 HELP_LOCK_V8 = strategy8_rules.HELP_LOCK
 HELP_LOCK_V8_1 = strategy8_1_rules.HELP_LOCK
 HELP_LOCK_V8_2 = strategy8_2_rules.HELP_LOCK
@@ -502,6 +506,9 @@ def apply_csv_strategy(strategy: str, **kwargs) -> dict:
     hooks.setdefault("atr_stop_window", 14)
     hooks.setdefault("atr_clamp_hard", None)
     hooks.setdefault("atr_clamp_step", None)
+    hooks.setdefault("max_hold_sessions", None)
+    hooks.setdefault("peak_dd_exit2", None)
+    hooks.setdefault("max_live_add_lots", None)
     hooks.setdefault("index_blocks_s8_add", False)
     hooks.setdefault("post_exit_cont", False)
     hooks.setdefault("post_exit_cont_bypass_index", False)
@@ -3087,6 +3094,21 @@ register(
         help_lock=strategy6_65_rules.HELP_LOCK,
         apply=_apply_version6_65,
         run_kwargs=_run_kwargs_version6_65,
+    )
+)
+
+register(
+    CsvStrategyBook(
+        name="version14",
+        sizing="per_name",
+        name_budget=1_000_000.0,
+        tag=strategy14_rules.BOOK_TAG,
+        aliases=("v14", "v_14", "version14"),  # 裸数字 "14" 受 CLI 契约冻结禁止
+        allow_add=strategy14_rules.ALLOW_ADD,
+        peak_gap_min=strategy14_rules.PEAK_GAP_MIN,
+        help_lock=strategy14_rules.HELP_LOCK,
+        apply=_apply_version14,
+        run_kwargs=_run_kwargs_version14,
     )
 )
 

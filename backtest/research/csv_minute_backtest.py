@@ -373,6 +373,8 @@ try:
         peak_dd,
         peak_dd_start,
         peak_dd_sessions,
+        peak_dd_hi,
+        peak_dd_rise_mult,
         day_i,
         step_costs,
         step_stop_pct,
@@ -438,10 +440,13 @@ try:
                     scale_hit = True
             dd_sell = False
             if peak_dd > 0.0 and new_peak > 0.0:
+                dd_line = peak_dd
+                if peak_dd_hi > 0.0 and cost > 0.0 and new_peak >= cost * peak_dd_rise_mult:
+                    dd_line = peak_dd_hi  # 涨幅达标后启用更紧的第二档峰撤
                 dd = (new_peak - px_close) / new_peak
                 if dd <= 0.0:
                     dd_start = -1
-                elif dd >= peak_dd:
+                elif dd >= dd_line:
                     if dd_start < 0:
                         dd_start = day_i
                     elif day_i - dd_start >= peak_dd_sessions:
@@ -553,6 +558,8 @@ def independent_ladder_first_bar(
     peak_dd: float,
     peak_dd_start: int,
     peak_dd_sessions: int,
+    peak_dd_hi: float = 0.0,
+    peak_dd_rise_mult: float = 0.0,
     step_costs,
     step_stop_pct: float,
     hm_lo: int,
@@ -598,6 +605,8 @@ def independent_ladder_first_bar(
         float(peak_dd),
         int(peak_dd_start),
         int(peak_dd_sessions),
+        float(peak_dd_hi),
+        float(peak_dd_rise_mult),
         int(day_i),
         costs,
         float(step_stop_pct),
@@ -666,8 +675,10 @@ def _independent_numba_prefix(
             scale_anchor = float(getattr(pos.group, "anchor_cost", None) or pos.group.first_lot.cost)
         scale_steps = int(pos.group.scale_steps)
     peak_dd = float((side_hooks or {}).get("peak_dd_exit") or 0.0)
+    peak_dd_hi = float((side_hooks or {}).get("peak_dd_exit2") or 0.0)
     min_rise = float((side_hooks or {}).get("peak_dd_min_rise") or 0.0)
-    if min_rise > 0.0 and peak_dd > 0.0:
+    if min_rise > 0.0 and peak_dd > 0.0 and peak_dd_hi <= 0.0:
+        # 单档 + min_rise 门（6.56 语义）：涨幅不足时整腿休眠。两档书下方档仍活。
         cost0 = float(getattr(pos.group.first_lot, "cost", 0) or cursor.cost or 0)
         if cost0 > 0.0 and float(pos.peak) <= cost0 * (1.0 + min_rise):
             return 0
@@ -685,6 +696,8 @@ def _independent_numba_prefix(
         peak_dd=peak_dd,
         peak_dd_start=-1 if start is None else int(start),
         peak_dd_sessions=int((side_hooks or {}).get("peak_dd_sessions", 15)),
+        peak_dd_hi=peak_dd_hi,
+        peak_dd_rise_mult=(1.0 + min_rise) if min_rise > 0.0 else 0.0,
         step_costs=step_costs,
         step_stop_pct=wake_pct,
         hm_lo=hm_lo,
@@ -1905,6 +1918,13 @@ def simulate(
                     if getattr(pos, "ride_with", None) is not None:
                         continue
                     n_days = i - pos.entry_idx
+                    if (
+                        pos.pending_exit == ""
+                        and hooks.get("max_hold_sessions")
+                        and n_days >= int(hooks["max_hold_sessions"])
+                    ):
+                        pos.pending_exit = "max_hold:sessions"
+                        st.stats["max_hold_exits"] = int(st.stats.get("max_hold_exits", 0)) + 1
                     stop_pct_pos = stop_pct
                     step_pct_pos = hooks.get("step_stop_pct")
                     if hooks.get("atr_stop_anchor") is not None:
@@ -1941,6 +1961,7 @@ def simulate(
                             "scale_out_frac": hooks.get("scale_out_frac", 0.05),
                             "scale_out_anchor": hooks.get("scale_out_anchor", "first_lot"),
                             "peak_dd_exit": hooks.get("peak_dd_exit"),
+                            "peak_dd_exit2": hooks.get("peak_dd_exit2"),
                             "peak_dd_sessions": hooks.get("peak_dd_sessions", 15),
                             "peak_dd_min_rise": hooks.get("peak_dd_min_rise") or 0.0,
                             "fill_config": side_fill_config,
