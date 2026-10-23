@@ -366,6 +366,7 @@ def _configure_s8(st, hooks: dict) -> None:
         "post_exit_cont_rise": hooks.get("post_exit_cont_rise"),
         "post_exit_cont_bypass_index": bool(hooks.get("post_exit_cont_bypass_index")),
         "cont_live_max": hooks.get("cont_live_max"),
+        "max_live_add_lots": hooks.get("max_live_add_lots"),
         "groups": {},
     }
 

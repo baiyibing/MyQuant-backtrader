@@ -64,6 +64,7 @@ from backtest.research import (
     strategy6_63_rules,
     strategy6_64_rules,
     strategy6_65_rules,
+    strategy14_rules,
 )
 
 
@@ -2539,6 +2540,63 @@ def _apply_version6_64(
     base["atr_clamp_hard"] = tuple(strategy6_64_rules.ATR_CLAMP_HARD)
     base["atr_clamp_step"] = tuple(strategy6_64_rules.ATR_CLAMP_STEP)
     return base
+
+
+def _apply_version14(
+    *,
+    stop_pct=None,
+    take_profit=None,
+    record_params=None,
+    index_block_new=None,
+    **_,
+) -> dict:
+    resolved = strategy14_rules.STOP_PCT if stop_pct is None else float(stop_pct)
+
+    def _tp(px, cost, peak, n_days=1):
+        return None  # 策略14 无梯子 trail（减仓/止损/峰值/时长为全部出场腿）
+
+    def _rec(st):
+        strategy14_rules.record_strategy14_params(st, stop_pct=resolved)
+
+    base = _apply_version6_55(
+        stop_pct=resolved,
+        take_profit=take_profit if take_profit is not None else _tp,
+        record_params=record_params if record_params is not None else _rec,
+        index_block_new=index_block_new,
+    )
+    base["name"] = "version14"
+    base["name_lot_budget"] = strategy14_rules.lot_budget
+    base["stop_pct"] = resolved
+    base["step_stop_pct"] = float(strategy14_rules.STEP_STOP_PCT)
+    base["add_schedule"] = list(strategy14_rules.ADD_SCHEDULE)
+    base["add_step"] = float(strategy14_rules.ADD_STEP)
+    base["open_frac"] = float(strategy14_rules.OPEN_FRAC)
+    base["give_base"] = float(strategy14_rules.GIVE_BASE)
+    base["scale_out_step"] = float(strategy14_rules.SCALE_OUT_STEP)
+    base["scale_out_frac"] = float(strategy14_rules.SCALE_OUT_FRAC)
+    base["scale_out_anchor"] = strategy14_rules.SCALE_OUT_ANCHOR
+    base["peak_dd_exit"] = float(strategy14_rules.PEAK_DD_EXIT)
+    base["peak_dd_sessions"] = int(strategy14_rules.PEAK_DD_SESSIONS)
+    base["peak_dd_min_rise"] = float(strategy14_rules.PEAK_DD_MIN_RISE)
+    base["peak_dd_exit2"] = float(strategy14_rules.PEAK_DD_EXIT2)
+    base["max_hold_sessions"] = int(strategy14_rules.MAX_HOLD_SESSIONS)
+    base["max_live_add_lots"] = int(strategy14_rules.MAX_LIVE_ADD_LOTS)
+    base["cont_stop_rebuy"] = False
+    base["parking_frac"] = float(strategy14_rules.PARKING_FRAC)
+    base["parking_buffer"] = float(strategy14_rules.PARKING_BUFFER)
+    base["profit_skim"] = True
+    base["profit_skim_step"] = float(strategy14_rules.PROFIT_SKIM_STEP)
+    base["profit_skim_frac"] = float(strategy14_rules.PROFIT_SKIM_FRAC)
+    base["profit_skim_to_parking"] = True
+    base["div_to_parking"] = True
+    return base
+
+
+def _run_kwargs_version14(args) -> dict:
+    stop = getattr(args, "stop_pct", None)
+    if stop is not None and not 0 < float(stop) < 1:
+        raise SystemExit(f"--stop-pct must be in (0, 1), got {stop}")
+    return {"strategy": "version14", "stop_pct": stop}
 
 
 def _run_kwargs_version6_64(args) -> dict:

@@ -1005,6 +1005,20 @@ def _run_s8_price_adds_day(
                 use2 = (
                     not due1 and not _sched_due and not _rebuy_due
                 )  # schedule/rebuy 走 executed_steps，不走 steps2
+                if policy.get("max_live_add_lots") and not _rebuy_due:
+                    live_adds = sum(
+                        1
+                        for p in st.positions.get(code, [])
+                        if getattr(p, "position_id", None) == position_id
+                        and getattr(p, "is_step", False)
+                        and int(p.shares) > 0
+                    )
+                    if live_adds >= int(policy["max_live_add_lots"]):
+                        # 人裁七次：同组在场加仓档数达上限，暂停新加仓（回补不受限）
+                        st.stats["skip_max_live_adds"] = (
+                            int(st.stats.get("skip_max_live_adds", 0)) + 1
+                        )
+                        continue
             if row.did_map:
                 st.stats["exdiv_prev_close_mapped"] = (
                     int(st.stats.get("exdiv_prev_close_mapped", 0)) + 1
@@ -1308,6 +1322,7 @@ def extra_load_codes_for_strategy(strategy: str) -> set[str]:
         "version6_56",
         "version6_63",
         "version6_64",
+        "version14",
         "version6_65",
         "version10_2",
         "version13",
