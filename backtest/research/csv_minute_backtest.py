@@ -503,6 +503,42 @@ def _ladder_numba_params(st):
     return width, give_base, give_step, tp_min
 
 
+def _atr_group_stops(st, hooks, frame, pos, base_stop, base_step, entry_day):
+    """Per-group ATR-inverse scaled (base stop, step stop); fixed fallback.
+
+    Locks ATR14% at the base lot's entry day (first sight), mirroring the
+    strategy13 semantics: threshold = base * anchor/atr, clamped per leg —
+    volatile names stop sooner, quiet names tolerate more; the anchor name
+    behaves exactly like the fixed book. ``None`` ATR falls back to fixed.
+    """
+    cache = st.book_state.setdefault("atr_group_stops", {})
+    got = cache.get(pos.position_id)
+    if got is not None:
+        return got
+    anchor = float(hooks["atr_stop_anchor"])
+    window = int(hooks.get("atr_stop_window") or 14)
+    clamp_hard = tuple(hooks.get("atr_clamp_hard") or (0.0, 1.0))
+    clamp_step = tuple(hooks.get("atr_clamp_step") or (0.0, 1.0))
+    atr = None
+    if frame is not None:
+        from backtest.research.strategy13_engine import entry_atr_pct
+
+        atr = entry_atr_pct(frame, pd.Timestamp(entry_day), n=window)
+    if not atr or atr <= 0:
+        st.stats["atr_stop_fixed_fallback"] = int(st.stats.get("atr_stop_fixed_fallback", 0)) + 1
+        out = (float(base_stop), float(base_step or 0.0), None)
+    else:
+        ratio = anchor / float(atr)
+
+        def _scale(base, clamp):
+            return 0.0 if not base else min(clamp[1], max(clamp[0], float(base) * ratio))
+
+        out = (_scale(base_stop, clamp_hard), _scale(base_step, clamp_step), float(atr))
+    st.stats["atr_stop_groups"] = int(st.stats.get("atr_stop_groups", 0)) + 1
+    cache[pos.position_id] = out
+    return out
+
+
 def independent_ladder_first_bar(
     cursor,
     *,
@@ -1869,6 +1905,13 @@ def simulate(
                     if getattr(pos, "ride_with", None) is not None:
                         continue
                     n_days = i - pos.entry_idx
+                    stop_pct_pos = stop_pct
+                    step_pct_pos = hooks.get("step_stop_pct")
+                    if hooks.get("atr_stop_anchor") is not None:
+                        stop_pct_pos, step_pct_pos, _atr_used = _atr_group_stops(
+                            st, hooks, ddf, pos, stop_pct, step_pct_pos,
+                            entry_day=calendar[pos.entry_idx].date(),
+                        )
                     if isinstance(pos, IndependentExitPosition):
                         cursor = HeldMinuteCursor(
                             o, h, c, cost=pos.cost, peak=pos.peak,
@@ -1879,7 +1922,7 @@ def simulate(
                             take_profit_pct=st.stats.get("profit_target"),
                             n_days=n_days,
                             can_sell=t1_sellable(calendar[pos.entry_idx].date(), day.date()),
-                            stop_pct=stop_pct,
+                            stop_pct=stop_pct_pos,
                             profit_base=profit_base if profit_base is not None else 0.0,
                             trail_ratio=0.0, pos_trail=pos_trail,
                             limit_down=limit_down, hm=hm, peak_hm=int(pos.peak_hm),
@@ -1892,7 +1935,7 @@ def simulate(
                             reserved=bool(pos.reserved), close_clear=close_clear,
                         )
                         side_hooks = {
-                            "step_stop_pct": hooks.get("step_stop_pct"),
+                            "step_stop_pct": step_pct_pos,
                             "cont_step_stop_pct": hooks.get("cont_step_stop_pct"),
                             "scale_out_step": hooks.get("scale_out_step"),
                             "scale_out_frac": hooks.get("scale_out_frac", 0.05),
@@ -1944,7 +1987,7 @@ def simulate(
                         peak=pos.peak,
                         n_days=n_days,
                         can_sell=t1_sellable(calendar[pos.entry_idx].date(), day.date()),
-                        stop_pct=stop_pct,
+                        stop_pct=stop_pct_pos,
                         version9_plan=v9_plan, version9_max_hold=max_hold,
                         stop_range_ratio=((1 - absolute_exit(code, day) / pos.cost) if absolute_exit else evaluate_stop_range(hooks, ddf, day, st.stats)
                                           if (absolute_exit or "stop_range" in hooks) and n_days >= 1 else None),

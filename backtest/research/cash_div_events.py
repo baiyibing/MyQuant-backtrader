@@ -21,7 +21,7 @@ PARK = "600036.SH"
 CASH_DR_MAX = 1.12
 CASH_PS_MIN = 0.30
 CASH_DIV_BOOKS = frozenset(
-    {"version6_54", "version6_55", "version6_56", "version6_63", "version6_65", "version10_2", "version13"}
+    {"version6_54", "version6_55", "version6_56", "version6_63", "version6_64", "version6_65", "version10_2", "version13"}
 )
 # 巨潮 2026-01-10 / 1224927640 ；巨潮 2026-07-04 / 公告 2026-029
 CMB_CASH_PS: dict[tuple[str, str], float] = {
