@@ -63,6 +63,7 @@ FROZEN_PRICE_ADD_BOOKS = frozenset({
     "version6_64",
     "version14",
     "version6_65",
+    "version6_67",
     "version6_5",
     "version6_6",
     "version6_7",
@@ -96,8 +97,8 @@ def test_membership_and_registration():
     assert isinstance(price, frozenset)
     assert isinstance(independent, frozenset)
     assert price == FROZEN_PRICE_ADD_BOOKS
-    assert len(price) == 64
-    assert len(independent) == 66
+    assert len(price) == 65
+    assert len(independent) == 67
     assert price < independent
     assert independent - price == {"version8_2", "version8_6"}
     assert price <= BOOKS.keys()
@@ -120,7 +121,7 @@ def test_no_prefix_inheritance_in_production_helpers():
 
 def test_current_prefix_family_classified():
     registered = BOOKS.keys() | MINUTE_ONLY_BOOKS.keys()
-    assert sum(caps.in_prefix_family(name) for name in registered) == 66
+    assert sum(caps.in_prefix_family(name) for name in registered) == 67
     assert caps.PREFIX_FAMILY_OPT_OUT["version8_1"]
     assert caps.unclassified_prefix_family_books(registered) == []
     caps.assert_prefix_family_classified(registered)
