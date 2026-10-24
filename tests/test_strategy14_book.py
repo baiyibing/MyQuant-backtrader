@@ -12,7 +12,7 @@ from backtest.research.csv_simulate_loop import init_sim_state, run_step_adds_da
 from backtest.research.csv_strategy_books import apply_csv_strategy
 
 CODE = "600000.SH"
-BUDGET = 10_000.0
+BUDGET = 1_000.0
 
 
 def _state(book="version14", cash=3_000_000.0):
@@ -60,7 +60,7 @@ def test_hooks_carry_v14_spec():
     assert hooks["cont_stop_rebuy"] is False
     assert hooks["div_to_parking"] is True
     assert hooks["parking_frac"] == pytest.approx(0.95)
-    assert hooks["parking_buffer"] == pytest.approx(2_000_000.0)
+    assert hooks["parking_buffer"] == pytest.approx(200_000.0)
     assert hooks["profit_skim_step"] == pytest.approx(0.10)
     assert hooks["profit_skim_frac"] == pytest.approx(1.0)
     assert hooks["profit_skim_to_parking"] is True
@@ -74,7 +74,7 @@ def test_hooks_carry_v14_spec():
 def test_first_lot_is_full_budget_and_add_at_15pct():
     st, hooks = _state()
     group = next(iter(s8_policy(st)["groups"].values()))
-    assert st.trades[0]["notional"] == pytest.approx(BUDGET)  # 底仓=全额预算
+    assert st.trades[0]["notional"] == pytest.approx(BUDGET)  # 底仓=全额预算（1000 元=100 股）
     _add(st, hooks, 1, "2025-11-04", "20251104", 11.4)  # +14% 未到 15%
     assert [t for t in st.trades if t["reason"] == "add:tranche"] == []
     _add(st, hooks, 2, "2025-11-05", "20251105", 11.5)  # +15%
@@ -91,7 +91,7 @@ def test_records_override_stats():
     assert st.stats["max_hold_sessions"] == 180
     assert st.stats["max_live_add_lots"] == 10
     assert st.stats["add_priority_rise"] is True
-    assert st.stats["parking_buffer"] == pytest.approx(2_000_000.0)
+    assert st.stats["parking_buffer"] == pytest.approx(200_000.0)
     assert st.stats["div_to_parking"] is True
     assert st.stats["peak_dd_min_rise"] == pytest.approx(1.0)
     assert st.stats["peak_dd_exit2"] == pytest.approx(0.15)
