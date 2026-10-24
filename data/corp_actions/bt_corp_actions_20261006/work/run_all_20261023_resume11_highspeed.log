@@ -1,0 +1,20 @@
+==== launch 2026-10-23 08:57:54 model=kimi-code/kimi-for-coding-highspeed ====
+[2026-10-23 08:57:54] driver start pid=41912 (2026-10-08 patch: quota/infra not attempts; stop on quota)
+== listing round 0: 0 pending of 59
+== listing_info round 0: 0 pending of 4
+== events round 0: 37 pending of 463
+[09:00:28] events_r0_0002_1792717074: 12 calls in 153s; ok=12
+[09:00:32] events_r0_0001_1792717074: 12 calls in 158s; ok=12
+[09:00:56] events_r0_0000_1792717074: 12 calls in 182s; ok=12
+[09:00:56] events_r0_0003_1792717228: 1 calls in 28s; ok=1
+== events round 1: 0 pending of 463
+== events2 round 0: 25 pending of 25
+[09:01:51] events2_r0_0002_1792717257: 1 calls in 55s; ok=0
+[09:05:55] events2_r0_0000_1792717257: 12 calls in 298s; ok=0
+[09:05:56] events2_r0_0001_1792717257: 12 calls in 299s; ok=0
+== events2 round 1: 2 pending of 25
+[09:06:47] events2_r1_0000_1792717556: 2 calls in 51s; ok=0
+== events2 round 2: 1 pending of 25
+[09:07:16] events2_r2_0000_1792717607: 1 calls in 29s; ok=0
+== events1 round 0: 0 pending of 0
+ALL PHASES DONE

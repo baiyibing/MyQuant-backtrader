@@ -1,0 +1,12 @@
+==== launch 2026-10-16 08:27:07 model=kimi-code/kimi-for-coding-highspeed ====
+[2026-10-16 08:27:07] driver start pid=15696 (2026-10-08 patch: quota/infra not attempts; stop on quota)
+== listing round 0: 0 pending of 59
+== listing_info round 0: 0 pending of 4
+== events round 0: 76 pending of 463
+[08:29:40] events_r0_0000_1792110427: 12 calls in 153s; ok=12
+[08:30:02] events_r0_0002_1792110427: 12 calls in 175s; ok=12
+[08:30:02] events_r0_0001_1792110427: 12 calls in 175s; ok=12
+[08:30:13] events_r0_0005_1792110602: 12 calls in 11s; ok=0
+[08:30:16] events_r0_0004_1792110602: 12 calls in 14s; ok=0
+[08:30:23] events_r0_0003_1792110580: 12 calls in 42s; ok=3
+[08:30:23] QUOTA HIT in events: stopping (see D:\exports\bt_corp_actions_20261006\work\QUOTA_STOP.txt)

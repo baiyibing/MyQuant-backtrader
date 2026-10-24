@@ -1,0 +1,13 @@
+ï»¿==== launch 2026-10-15 15:13:21 model=kimi-code/k3 ====
+[2026-10-15 15:13:21] driver start pid=31460 (2026-10-08 patch: quota/infra not attempts; stop on quota)
+== listing round 0: 0 pending of 59
+== listing_info round 0: 0 pending of 4
+== events round 0: 277 pending of 463
+[15:18:05] events_r0_0000_1792048401: 12 calls in 284s; ok=12
+[15:18:09] events_r0_0002_1792048401: 12 calls in 287s; ok=12
+[15:18:28] events_r0_0001_1792048401: 12 calls in 307s; ok=12
+[15:20:12] events_r0_0005_1792048708: 12 calls in 104s; ok=5
+[15:20:15] events_r0_0003_1792048685: 12 calls in 129s; ok=6
+[15:20:16] events_r0_0004_1792048689: 12 calls in 128s; ok=5
+[15:20:17] QUOTA HIT in events: stopping (see D:\exports\bt_corp_actions_20261006\work\QUOTA_STOP.txt)
+{"generated": "2026-10-15 15:20:17 CST", "universe": 2774, "event_rows": 11403, "codes_with_events": 1390, "codes_covered_events": 1395, "codes_no_events_in_window": 5, "listing_rows": 2762, "listing_with_ipo": 2762, "delisted": 7, "failure_rows": 144, "failure_codes": 132, "pending_events": 1259, "pending_listing": 0, "raw_event_rows": 11567, "dropped_outside_window": 69, "dropped_no_exdate": 95, "ex_date_min": "2015-01-26", "ex_date_max": "2026-09-30", "ratio_max": 3.0, "progress": {"ÊµÊ©Íê±Ï": 11403}, "err_patterns": {"the current N-hour window ends. To continue now, purchase extra usage or upgrade your plan": 120, "no RESULT_JSON entry": 12, "<system>ERROR: Tool execution failed.</system> Request timed out after N seconds.": 9, "Request timed out after N seconds.": 3}, "rows_with_record_date": 11403, "rows_with_pay_date": 11172, "rows_with_bonus_list": 1781, "rows_with_bonus_or_transfer": 1782}

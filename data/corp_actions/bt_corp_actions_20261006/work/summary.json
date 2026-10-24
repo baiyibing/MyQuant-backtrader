@@ -1,34 +1,33 @@
 {
- "generated": "2026-10-09 11:31:40 CST",
+ "generated": "2026-10-23 09:07:18 CST",
  "universe": 2774,
- "event_rows": 9096,
- "codes_with_events": 1078,
- "codes_covered_events": 1083,
- "codes_no_events_in_window": 5,
+ "event_rows": 21779,
+ "codes_with_events": 2693,
+ "codes_covered_events": 2774,
+ "codes_no_events_in_window": 81,
  "listing_rows": 2762,
  "listing_with_ipo": 2762,
  "delisted": 7,
- "failure_rows": 186,
- "failure_codes": 174,
- "pending_events": 1529,
+ "failure_rows": 24,
+ "failure_codes": 12,
+ "pending_events": 0,
  "pending_listing": 0,
- "raw_event_rows": 9250,
- "dropped_outside_window": 61,
- "dropped_no_exdate": 93,
- "ex_date_min": "2015-01-26",
+ "raw_event_rows": 22105,
+ "dropped_outside_window": 171,
+ "dropped_no_exdate": 155,
+ "ex_date_min": "2015-01-09",
  "ex_date_max": "2026-09-30",
  "ratio_max": 3.0,
  "progress": {
-  "实施完毕": 9096
+  "实施完毕": 21779
  },
  "err_patterns": {
-  " the current N-day window ends. To continue now, purchase extra usage or upgrade your plan": 162,
   "no RESULT_JSON entry": 12,
   "<system>ERROR: Tool execution failed.</system> Request timed out after N seconds.": 9,
   "Request timed out after N seconds.": 3
  },
- "rows_with_record_date": 9096,
- "rows_with_pay_date": 8918,
- "rows_with_bonus_list": 1228,
- "rows_with_bonus_or_transfer": 1229
+ "rows_with_record_date": 21779,
+ "rows_with_pay_date": 21434,
+ "rows_with_bonus_list": 2999,
+ "rows_with_bonus_or_transfer": 3000
 }
