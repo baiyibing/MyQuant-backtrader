@@ -144,6 +144,12 @@ def test_end_defaults_cst_today_and_listing_universe_fallback(inputs):
     assert run.config["codes"] == ["600036.SH"]
 
 
+def test_unconfigured_lake_reports_cli_error_without_guessing(inputs, capsys):
+    assert driver.main(["init", "--out-dir", str(inputs[2])]) == 2
+    assert "lake root is not configured" in capsys.readouterr().err
+    assert not inputs[2].exists()
+
+
 @pytest.mark.parametrize("where", ["lake", "lake_child", "prior", "parent", "container"])
 def test_output_guard_protects_inputs_and_configured_lake(inputs, monkeypatch, where):
     lake, universe, _ = inputs

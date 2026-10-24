@@ -28,7 +28,11 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from common.infra.data_root import resolve_parquet_container, resolve_source_parquet  # noqa: E402
+from common.infra.data_root import (  # noqa: E402
+    UnconfiguredDataRootError,
+    resolve_parquet_container,
+    resolve_source_parquet,
+)
 
 MODELS = ("kimi-code/kimi-for-coding-highspeed", "kimi-code/kimi-for-coding")
 BASE_FILES = ("manifest.json", "events.parquet", "listing.parquet", "failures.parquet")
@@ -634,7 +638,7 @@ def main(argv=None):
             plan = prepare_merge(run)
             print(json.dumps(plan, ensure_ascii=False, indent=2))
             return 0
-    except (ValueError, OSError, KeyError, csv.Error, pa.ArrowException) as exc:
+    except (ValueError, OSError, KeyError, csv.Error, pa.ArrowException, UnconfiguredDataRootError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
 
