@@ -254,6 +254,14 @@ def test_no_false_quota_on_instructions_or_normal_thinking():
     )
     assert not driver.quota_hit("stop on 额度耗尽(quota exhausted)")
     assert not driver.quota_hit("stop if 配额耗尽 (quota exceeded)")
+    # Negated quotation of the stop-policy phrase (follow-up #510)
+    assert not driver.quota_hit(
+        'This is not "quota exhausted or auth/rate-limit", so we don\'t stop'
+    )
+    assert not driver.quota_hit(
+        '…not "quota exhausted or auth/rate-limit", so we don\'t stop…'
+    )
+    assert not driver.quota_hit("this is not 'quota exhausted', so do not stop")
 
 
 @pytest.mark.parametrize("text", [
