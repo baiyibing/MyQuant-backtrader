@@ -238,6 +238,9 @@ def test_quota_sticky_partial_file_not_accepted_and_explicit_resume(inputs):
 
 
 def test_no_false_quota_on_instructions_or_normal_thinking():
+    assert not driver.quota_hit("Stop remaining calls if quota exhausted or auth/rate limit error.")
+    assert not driver.quota_hit("Only stop all remaining data source tool calls on quota reached.")
+    assert not driver.quota_hit("Stop\tremaining calls\tif\tquota exceeded.")
     assert not driver.quota_hit("Stop if quota exhausted or auth/rate limit errors")
     assert not driver.quota_hit("only stop on quota exhausted, auth, or rate limit errors")
     assert not driver.quota_hit("I will stop on quota errors and then report results.")
@@ -256,6 +259,10 @@ def test_no_false_quota_on_instructions_or_normal_thinking():
     "429: rate-limit error",
     "Stop if quota exhausted or auth/rate limit errors\nquota has been exhausted",
     "only stop on quota exhausted, auth, or rate limit errors\nHTTP 429",
+    "Stop remaining calls if quota exhausted or auth/rate limit error.\nquota has been exhausted",
+    "Stop remaining calls if quota exhausted.\n429: usage denied",
+    "Stop remaining calls if\nquota exhausted",
+    "Stop one two three four five six seven if quota exhausted",
 ])
 def test_provider_quota_signals(text):
     assert driver.quota_hit(text)
