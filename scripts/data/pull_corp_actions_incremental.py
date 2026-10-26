@@ -251,8 +251,11 @@ def quota_hit(text):
     lower = text.lower()
     return any(s in lower for s in ("usage limit", "auth_error", "quota_exceeded", "rate limit exceeded", "too many requests")) or bool(
         re.search(r"\bhttp(?:/[\d.]+)?\s+(403|429)\b|"
-                  r"\b(403|429)\b.{0,60}(quota|usage|auth|rate.limit)|"
-                  r"quota.{0,40}(exceeded|exhausted|reached)", lower)
+                  r"\b(403|429)\b.{0,60}(quota|usage|auth|rate.limit)", lower)
+    ) or any(
+        # Kimi may echo stop policies; those are not provider error reports.
+        not re.search(r"\bstop\s+(?:if|on)\s*$", lower[:match.start()])
+        for match in re.finditer(r"\bquota.{0,40}(exceeded|exhausted|reached)", lower)
     )
 
 

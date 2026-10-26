@@ -238,10 +238,27 @@ def test_quota_sticky_partial_file_not_accepted_and_explicit_resume(inputs):
 
 
 def test_no_false_quota_on_instructions_or_normal_thinking():
+    assert not driver.quota_hit("Stop if quota exhausted or auth/rate limit errors")
+    assert not driver.quota_hit("only stop on quota exhausted, auth, or rate limit errors")
     assert not driver.quota_hit("I will stop on quota errors and then report results.")
     assert not driver.quota_hit('RESULT_JSON: [{"rows":403},{"rows":429}]')
-    assert driver.quota_hit("quota has been exhausted")
-    assert driver.quota_hit("HTTP 429")
+    assert not driver.quota_hit('RESULT_JSON: [{"error":"API_CALL_ERROR: 没找到数据"}]')
+    assert not driver.quota_hit("I will stop on quota exhausted and then report results.")
+    assert not driver.quota_hit("Stop  if\tquota exhausted or auth/rate limit errors")
+
+
+@pytest.mark.parametrize("text", [
+    "quota has been exhausted", "quota exceeded", "quota reached",
+    "HTTP 429", "HTTP 403", "HTTP/1.1 429",
+    "too many requests", "usage limit", "quota_exceeded",
+    "rate limit exceeded", "auth_error",
+    "403: quota denied", "429: usage denied", "403: auth failed",
+    "429: rate-limit error",
+    "Stop if quota exhausted or auth/rate limit errors\nquota has been exhausted",
+    "only stop on quota exhausted, auth, or rate limit errors\nHTTP 429",
+])
+def test_provider_quota_signals(text):
+    assert driver.quota_hit(text)
 
 
 @pytest.mark.parametrize("kind", ["infra", "timeout", "missing_binary"])
