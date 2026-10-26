@@ -248,6 +248,12 @@ def test_no_false_quota_on_instructions_or_normal_thinking():
     assert not driver.quota_hit('RESULT_JSON: [{"error":"API_CALL_ERROR: 没找到数据"}]')
     assert not driver.quota_hit("I will stop on quota exhausted and then report results.")
     assert not driver.quota_hit("Stop  if\tquota exhausted or auth/rate limit errors")
+    # CJK instructional gloss between on/if and the English quota phrase (#509 follow-up)
+    assert not driver.quota_hit(
+        "The user said to stop on 额度耗尽 (quota exhausted), 鉴权 (auth), or 限流 (rate limit) errors."
+    )
+    assert not driver.quota_hit("stop on 额度耗尽(quota exhausted)")
+    assert not driver.quota_hit("stop if 配额耗尽 (quota exceeded)")
 
 
 @pytest.mark.parametrize("text", [
