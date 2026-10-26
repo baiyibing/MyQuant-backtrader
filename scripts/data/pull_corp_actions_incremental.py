@@ -253,8 +253,8 @@ def quota_hit(text):
         re.search(r"\bhttp(?:/[\d.]+)?\s+(403|429)\b|"
                   r"\b(403|429)\b.{0,60}(quota|usage|auth|rate.limit)", lower)
     ) or any(
-        # Kimi may echo stop policies; those are not provider error reports.
-        not re.search(r"\bstop\s+(?:if|on)\s*$", lower[:match.start()])
+        # Kimi may echo stop policies; allow a bounded, same-line word gap.
+        not re.search(r"\bstop\b(?:[ \t]+\w+){0,6}[ \t]+(?:if|on)[ \t]*\Z", lower[:match.start()])
         for match in re.finditer(r"\bquota.{0,40}(exceeded|exhausted|reached)", lower)
     )
 
