@@ -226,12 +226,17 @@ def ensure_extracted(day: str, prefetch: Prefetch | None, extract_cache: dict) -
     return run_extract(day)
 
 
-def finalize_ok(day: str, ex_s: float, etl_s: float, mg: float, og: float, parsed: dict, notes_extra: str) -> None:
+def finalize_ok(
+    day: str, ex_s: float, etl_s: float, mg: float, og: float,
+    parsed: dict, notes_extra: str, prefetch_wait_s: float = 0.0,
+) -> None:
+    delete_started = time.perf_counter()
     try:
         delete_csv(day)
         del_note = "csv_deleted"
     except Exception as exc:
         del_note = "csv_delete_fail:%s" % exc
+    csv_delete_s = time.perf_counter() - delete_started
     notes = "%s %s" % (del_note, notes_extra)
     if parsed.get("rows_main"):
         notes += " rows_main=%s" % parsed.get("rows_main")
@@ -242,10 +247,13 @@ def finalize_ok(day: str, ex_s: float, etl_s: float, mg: float, og: float, parse
         "status": "ok",
         "extract_s": round(ex_s, 1),
         "etl_s": round(etl_s, 1),
+        "prefetch_wait_s": round(prefetch_wait_s, 1),
+        "csv_delete_s": round(csv_delete_s, 3),
         "main_gib": round(mg, 3),
         "order_gib": round(og, 3),
         "notes": notes,
         "parsed": {k: parsed.get(k) for k in ("rows_main", "rows_order", "csv_files", "elapsed_s") if k in parsed},
+        "profile": parsed.get("profile"),
     }
     log_rec(rec)
     append_progress_md(
@@ -272,6 +280,7 @@ def process_pipeline(todo: list[str]) -> dict:
                 prefetch.wait()
             rec = {
                 "ts": now(), "date": day, "status": "ok", "extract_s": 0, "etl_s": 0,
+                "prefetch_wait_s": 0.0, "csv_delete_s": 0.0,
                 "main_gib": round(mg, 3), "order_gib": round(og, 3), "notes": "already_in_lake",
             }
             log_rec(rec)
@@ -362,11 +371,14 @@ def process_pipeline(todo: list[str]) -> dict:
             continue
 
         note_pipe = "pipeline+extract_prefetch" if prefetch_started else "pipeline"
+        prefetch_wait_s = 0.0
         if prefetch_started and prefetch.thread is not None:
+            wait_started = time.perf_counter()
             d2, rc2, ex2, tail2 = prefetch.wait()
+            prefetch_wait_s = time.perf_counter() - wait_started
             extract_cache[d2] = (rc2, ex2, tail2)
 
-        finalize_ok(day, ex_s, etl_s, mg, og, parsed, note_pipe)
+        finalize_ok(day, ex_s, etl_s, mg, og, parsed, note_pipe, prefetch_wait_s=prefetch_wait_s)
         counts["ok"] += 1
         consecutive_fail = 0
 

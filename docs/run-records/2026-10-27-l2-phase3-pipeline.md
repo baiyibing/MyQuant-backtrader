@@ -75,3 +75,14 @@ Stop policy: **Human GO only**. Auto-stop after 3 consecutive extract/etl failur
 
 - Do not mutate live PID / lake while researching.
 - Prefer this branch/PR over ad-hoc `/workspace/l2-phase3-research/` copies.
+
+## Knife #3 observability (local patch; not deployed)
+
+Successful ETL JSONL records retain the existing fields and four-field `parsed` subset,
+and add top-level `profile`: the full ETL profile, including per-chunk details
+(null when absent). `prefetch_wait_s` measures only the post-ETL join for the next
+day (seconds, 1 decimal; 0.0 without a join). `csv_delete_s` measures the CSV delete
+attempt, including failures (seconds, 3 decimals); existing delete notes remain.
+`already_in_lake` records use 0.0 for both timings because neither operation runs.
+The Markdown table and tail-only watch helper remain unchanged. No runtime knobs
+or ETL behavior changed; no 4090/live PID/lake access or deployment performed.
