@@ -1,5 +1,9 @@
 # L2 Phase3 pipeline (rar → csv → parquet) — run record
 
+Historical live design. The proposed four-stage SSD pipeline and its validation
+are documented in [the speed knife record](2026-10-27-l2-phase3-ssd-pipeline.md);
+it has not been deployed or hotcut.
+
 - Date: 2026-10-27 Asia/Shanghai
 - Machine: newtest_4090
 - **SSOT home: this repo (`MyQuant-backtrader`)** — extract + ETL + orchestrator together
