@@ -1,13 +1,8 @@
-"""Phase 3 pipeline: extract day N+1 while ETL day N (one extract + one ETL).
-
-Continues other years after Phase2 (2026) DONE.
-Homed in MyQuant-backtrader (extract + ETL + orchestrator).
-Resume-safe via same progress jsonl/md. Asia/Shanghai stamps.
-SRC is J:\\stock_data root (year/month + stock_rar_data layouts).
-"""
+"""Bounded per-day archive → CSV → SSD parquet → lake pipeline."""
 from __future__ import annotations
 
 import json
+import queue
 import os
 import shutil
 import subprocess
@@ -26,7 +21,6 @@ from scripts._script_bootstrap import ensure_repo_on_syspath, resolve_oskh_pytho
 ensure_repo_on_syspath(__file__)
 EXTRACT = _REPO / "scripts" / "misc" / "extract_stock_rar_data.py"
 ETL = _REPO / "scripts" / "run" / "run_l2_etl_day.py"
-PY = str(resolve_oskh_python())
 
 # Host ops defaults for newtest_4090 (override via env). Not scanned by anaconda/E: path gate.
 def _env_path(key: str, default: str) -> Path:
@@ -34,8 +28,10 @@ def _env_path(key: str, default: str) -> Path:
     return Path(raw) if raw else Path(default)
 
 SRC = _env_path("OSKH_STOCK_RAR_SRC", r"J:\stock_data")
-CSV_ROOT = _env_path("OSKH_STOCK_CSV_DST", r"J:\l2_work\stock_csv_data")
+CSV_ROOT = _env_path("OSKH_STOCK_CSV_DST", r"E:\l2_csv_scratch")
 LAKE = _env_path("OSKH_L2_PARQUET_ROOT", r"J:\l2_lake\l2_parquet")
+STAGING = _env_path("OSKH_L2_PARQUET_STAGING_ROOT", str(CSV_ROOT.parent / "l2_parquet_staging"))
+ARCHIVES = CSV_ROOT.parent / "l2_archive_scratch"
 _AGENT_TOOLS = _env_path("OSKH_L2_AGENT_TOOLS", r"C:\Users\wangc\agent-tools")
 SKIP_FILE = _AGENT_TOOLS / "l2_skip_dates.txt"
 DATES_FILE = _AGENT_TOOLS / "l2_phase3_dates.txt"
@@ -54,30 +50,35 @@ def load_dates() -> list[str]:
     return [ln.strip() for ln in DATES_FILE.read_text(encoding="utf-8").splitlines() if ln.strip()]
 
 
+def manifest_records(root: Path) -> list[dict]:
+    path = root / "_manifest.jsonl"
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()
+            if line.strip()] if path.exists() else []
+
+
 def done_dates() -> set[str]:
     done = set()
-    if LOG_JSONL.is_file():
-        for ln in LOG_JSONL.read_text(encoding="utf-8").splitlines():
-            if not ln.strip():
-                continue
-            try:
-                rec = json.loads(ln)
-            except json.JSONDecodeError:
-                continue
-            if rec.get("status") == "ok":
-                done.add(rec["date"])
+    committed = {r["date"] for r in manifest_records(LAKE)}
     if LAKE.is_dir():
         for d in LAKE.iterdir():
             if d.is_dir() and d.name.startswith("date="):
                 day = d.name.split("=", 1)[1]
                 main = d / "main.parquet"
                 order = d / "order.parquet"
-                if main.is_file() and order.is_file() and main.stat().st_size > 0 and order.stat().st_size > 0:
+                if day in committed and main.is_file() and order.is_file() and main.stat().st_size > 0 and order.stat().st_size > 0:
                     done.add(day)
     return done
 
 
+_LOG_LOCK = threading.RLock()
+
+
 def append_progress_md(line: str) -> None:
+    with _LOG_LOCK:
+        _append_progress_md(line)
+
+
+def _append_progress_md(line: str) -> None:
     if not PROGRESS.exists():
         PROGRESS.write_text(
             "# L2 batch progress (Asia/Shanghai)\n\n"
@@ -90,8 +91,9 @@ def append_progress_md(line: str) -> None:
 
 
 def log_rec(rec: dict) -> None:
-    with LOG_JSONL.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    with _LOG_LOCK:
+        with LOG_JSONL.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
 
 
 def verify_lake(day: str) -> tuple[bool, float, float]:
@@ -110,9 +112,10 @@ def verify_lake(day: str) -> tuple[bool, float, float]:
 def run_extract(day: str) -> tuple[int, float, str]:
     t0 = time.perf_counter()
     cmd = [
-        PY, str(EXTRACT),
-        "--src", str(SRC),
+        str(resolve_oskh_python()), str(EXTRACT),
+        "--src", str(ARCHIVES),
         "--dst", str(CSV_ROOT),
+        "--force",
         "--seven-zip", str(SEVEN),
         "--dates", day,
         "--skip-dates-file", str(SKIP_FILE),
@@ -126,11 +129,11 @@ def run_extract(day: str) -> tuple[int, float, str]:
 def run_etl(day: str) -> tuple[int, float, str, dict]:
     t0 = time.perf_counter()
     env = os.environ.copy()
-    env["OSKH_L2_PARQUET_ROOT"] = str(LAKE)
+    env["OSKH_L2_PARQUET_ROOT"] = str(STAGING)
     cmd = [
-        PY, str(ETL),
+        str(resolve_oskh_python()), str(ETL),
         "--source", str(CSV_ROOT / day),
-        "--out-root", str(LAKE),
+        "--out-root", str(STAGING),
         "--gap-free-sample", "50",
     ]
     proc = subprocess.run(
@@ -164,71 +167,69 @@ def delete_csv(day: str) -> None:
 
 def csv_ready(day: str) -> bool:
     d = CSV_ROOT / day
-    return d.is_dir() and any(d.glob("*.csv"))
+    return (d / "_extract_ready").is_file() and any(d.glob("*.csv"))
 
 
-class Prefetch:
-    """Background extract for one day; only one at a time."""
-
-    def __init__(self) -> None:
-        self._lock = threading.Lock()
-        self.day: str | None = None
-        self.thread: threading.Thread | None = None
-        self.result: tuple[int, float, str] | None = None
-        self.error: str | None = None
-
-    def start(self, day: str) -> None:
-        with self._lock:
-            if self.thread is not None and self.thread.is_alive():
-                raise RuntimeError("prefetch already running for %s" % self.day)
-            self.day = day
-            self.result = None
-            self.error = None
-            self.thread = threading.Thread(target=self._run, args=(day,), name="extract-%s" % day, daemon=True)
-            self.thread.start()
-            print("[%s] PREFETCH extract start %s" % (now(), day), flush=True)
-
-    def _run(self, day: str) -> None:
-        try:
-            self.result = run_extract(day)
-        except Exception as exc:
-            self.error = str(exc)
-            self.result = (1, 0.0, "prefetch_exc:%s" % exc)
-
-    def wait(self) -> tuple[str, int, float, str]:
-        with self._lock:
-            day = self.day
-            th = self.thread
-        if day is None or th is None:
-            raise RuntimeError("no prefetch")
-        th.join()
-        rc, elapsed, tail = self.result if self.result is not None else (1, 0.0, self.error or "no result")
-        print("[%s] PREFETCH extract done %s rc=%s %.1fs" % (now(), day, rc, elapsed), flush=True)
-        with self._lock:
-            self.thread = None
-            self.day = None
-        return day, rc, elapsed, tail
-
-    def busy(self) -> bool:
-        with self._lock:
-            return self.thread is not None and self.thread.is_alive()
+def stage_ready(day: str) -> bool:
+    folder = STAGING / f"date={day}"
+    return (folder / "_ready.json").is_file() and all(
+        (folder / name).is_file() and (folder / name).stat().st_size > 0
+        for name in ("main.parquet", "order.parquet")
+    )
 
 
-def ensure_extracted(day: str, prefetch: Prefetch | None, extract_cache: dict) -> tuple[int, float, str]:
-    """Return (rc, extract_s, tail). Use prefetch/cache if available."""
-    if day in extract_cache:
-        return extract_cache.pop(day)
-    if prefetch is not None and prefetch.day == day:
-        d, rc, ex_s, tail = prefetch.wait()
-        return rc, ex_s, tail
-    if csv_ready(day):
-        return 0, 0.0, "csv_already_present"
-    return run_extract(day)
+def publish_day(day: str) -> tuple[float, float, float]:
+    """Copy privately, verify sizes, rename pair, then commit lake manifest.
+
+    Only this pipeline's single publisher writes the lake manifest. An interrupted
+    copy is retried from SSD; no partially copied pair appears under date=.
+    """
+    started = time.perf_counter()
+    source = STAGING / f"date={day}"
+    pending = LAKE / f".publishing-{day}"
+    final = LAKE / f"date={day}"
+    if not stage_ready(day):
+        raise RuntimeError(f"staging not committed: {day}")
+    ready = json.loads((source / "_ready.json").read_text(encoding="utf-8"))
+    record = ready["manifest"]
+    if final.exists() and verify_lake(day)[0]:
+        marker = final / "_pipeline_ready.json"
+        if not marker.is_file() or json.loads(marker.read_text(encoding="utf-8")) != record:
+            raise RuntimeError(f"existing lake day not owned by this publish: {final}")
+        if any((source / name).stat().st_size != (final / name).stat().st_size
+               for name in ("main.parquet", "order.parquet")):
+            raise RuntimeError(f"existing lake day size mismatch: {day}")
+    if not verify_lake(day)[0]:
+        if final.exists():
+            raise RuntimeError(f"incomplete existing lake day; inspect before retry: {final}")
+        if pending.exists():
+            shutil.rmtree(pending)
+        pending.mkdir(parents=True)
+        for name in ("main.parquet", "order.parquet"):
+            shutil.copy2(source / name, pending / name)
+            if (source / name).stat().st_size != (pending / name).stat().st_size:
+                raise RuntimeError(f"publish size mismatch: {day}/{name}")
+        (pending / "_pipeline_ready.json").write_text(json.dumps(record), encoding="utf-8")
+    # Commit the complete pair first; manifest visibility is the final commit.
+    # If interrupted between these operations, SSD readiness survives the retry.
+    if not final.exists():
+        pending.rename(final)
+    manifest = LAKE / "_manifest.jsonl"
+    existing = manifest_records(LAKE)
+    tmp = LAKE / "._manifest.publish.tmp"
+    tmp.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n"
+                   for r in existing if r.get("date") != day)
+                   + json.dumps(record, ensure_ascii=False) + "\n", encoding="utf-8")
+    os.replace(tmp, manifest)
+    ok, mg, og = verify_lake(day)
+    if not ok:
+        raise RuntimeError(f"publish verification failed: {day}")
+    return time.perf_counter() - started, mg, og
 
 
 def finalize_ok(
     day: str, ex_s: float, etl_s: float, mg: float, og: float,
-    parsed: dict, notes_extra: str, prefetch_wait_s: float = 0.0,
+    parsed: dict, notes_extra: str, prefetch_wait_s: float = 0.0, publish_s: float = 0.0, archive_s: float = 0.0,
 ) -> None:
     delete_started = time.perf_counter()
     try:
@@ -247,6 +248,8 @@ def finalize_ok(
         "status": "ok",
         "extract_s": round(ex_s, 1),
         "etl_s": round(etl_s, 1),
+        "publish_s": round(publish_s, 3),
+        "archive_s": round(archive_s, 3),
         "prefetch_wait_s": round(prefetch_wait_s, 1),
         "csv_delete_s": round(csv_delete_s, 3),
         "main_gib": round(mg, 3),
@@ -264,136 +267,143 @@ def finalize_ok(
 
 
 def process_pipeline(todo: list[str]) -> dict:
-    counts = {"ok": 0, "skip_lake": 0, "extract_fail": 0, "extract_empty": 0, "etl_fail": 0}
+    """One worker per stage; bounded queues provide SSD backpressure, not barriers."""
+    from scripts.misc.extract_stock_rar_data import discover_archives
+
+    roots = [path.resolve() for path in (CSV_ROOT, STAGING, ARCHIVES, LAKE)]
+    if any(a == b or a in b.parents or b in a.parents
+           for i, a in enumerate(roots) for b in roots[i + 1:]):
+        raise ValueError("CSV, parquet staging, archive scratch and lake must be separate trees")
+    for root in (CSV_ROOT, STAGING, ARCHIVES, LAKE):
+        root.mkdir(parents=True, exist_ok=True)
+    archives = {p.stem: p for p in discover_archives(SRC)}
+    counts = dict.fromkeys(("ok", "skip_lake", "archive_fail", "extract_fail",
+                            "extract_empty", "etl_fail", "publish_fail"), 0)
+    stop = threading.Event()
+    lock = threading.Lock()
     consecutive_fail = 0
-    prefetch = Prefetch()
-    extract_cache: dict[str, tuple[int, float, str]] = {}
+    # One queued day per boundary, plus at most one active day per worker.
+    links = [queue.Queue(maxsize=1) for _ in range(4)]
+    sentinel = object()
 
-    for i, day in enumerate(todo):
-        print("[%s] (%d/%d) pipeline %s" % (now(), i + 1, len(todo), day), flush=True)
+    def archive(job):
+        day = job["date"]
+        if stage_ready(day) or csv_ready(day):
+            return
+        source = archives[day]
+        target = ARCHIVES / source.name
+        started = time.perf_counter()
+        temporary = target.with_suffix(target.suffix + ".copying")
+        shutil.copy2(source, temporary)
+        if temporary.stat().st_size != source.stat().st_size:
+            raise RuntimeError("archive copy size mismatch")
+        os.replace(temporary, target)
+        job["archive_s"] = time.perf_counter() - started
+        job["archive"] = target
 
-        ok, mg, og = verify_lake(day)
-        if ok:
-            if day in extract_cache:
-                extract_cache.pop(day)
-            if prefetch.day == day:
-                prefetch.wait()
-            rec = {
-                "ts": now(), "date": day, "status": "ok", "extract_s": 0, "etl_s": 0,
-                "prefetch_wait_s": 0.0, "csv_delete_s": 0.0,
-                "main_gib": round(mg, 3), "order_gib": round(og, 3), "notes": "already_in_lake",
-            }
-            log_rec(rec)
-            append_progress_md(
-                "| %s | %s | skip_lake | 0 | 0 | %.3f | %.3f | already_in_lake |" % (now(), day, mg, og)
-            )
-            counts["skip_lake"] += 1
-            consecutive_fail = 0
-            nxt = todo[i + 1] if i + 1 < len(todo) else None
-            if nxt and nxt not in extract_cache and not verify_lake(nxt)[0] and not csv_ready(nxt) and not prefetch.busy():
-                prefetch.start(nxt)
-            continue
+    def extract(job):
+        day = job["date"]
+        if stage_ready(day) or csv_ready(day):
+            return
+        # --force overlays files; remove any interrupted extraction first.
+        delete_csv(day)
+        rc, elapsed, tail = run_extract(day)
+        job["extract_s"] = elapsed
+        if rc:
+            raise RuntimeError(tail)
+        if not (CSV_ROOT / day).is_dir() or not any((CSV_ROOT / day).glob("*.csv")):
+            raise RuntimeError("no csv after extraction")
+        (CSV_ROOT / day / "_extract_ready").touch()
+        if "archive" in job:
+            job["archive"].unlink()
 
-        rc, ex_s, ex_tail = ensure_extracted(day, prefetch, extract_cache)
-        if rc != 0:
-            rec = {
-                "ts": now(), "date": day, "status": "extract_fail",
-                "extract_s": round(ex_s, 1), "etl_s": 0, "notes": ex_tail,
-            }
-            log_rec(rec)
-            append_progress_md(
-                "| %s | %s | extract_fail | %.1f | 0 |  |  | %s |"
-                % (now(), day, ex_s, ex_tail[:120].replace("|", "/"))
-            )
-            counts["extract_fail"] += 1
-            consecutive_fail += 1
-            if consecutive_fail >= 3:
-                append_progress_md(
-                    "| %s | — | batch_stop |  |  |  |  | STOP after 3 consecutive failures counts=%s |"
-                    % (now(), counts)
-                )
-                return counts
-            continue
+    def etl(job):
+        day = job["date"]
+        if stage_ready(day):
+            job.update(json.loads((STAGING / f"date={day}" / "_ready.json").read_text(encoding="utf-8")))
+            return
+        rc, elapsed, tail, parsed = run_etl(day)
+        job.update(etl_s=elapsed, parsed=parsed)
+        folder = STAGING / f"date={day}"
+        if rc or not all((folder / n).is_file() and (folder / n).stat().st_size > 0
+                         for n in ("main.parquet", "order.parquet")):
+            raise RuntimeError(tail)
+        # Persist timings/profile only after successful subprocess completion.
+        job["manifest"] = next(r for r in manifest_records(STAGING) if r["date"] == day)
+        tmp = folder / "_ready.tmp"
+        tmp.write_text(json.dumps({k: v for k, v in job.items() if k != "archive"}), encoding="utf-8")
+        os.replace(tmp, folder / "_ready.json")
 
-        if not csv_ready(day):
-            rec = {
-                "ts": now(), "date": day, "status": "extract_empty",
-                "extract_s": round(ex_s, 1), "notes": "no csv",
-            }
-            log_rec(rec)
-            append_progress_md(
-                "| %s | %s | extract_empty | %.1f | 0 |  |  | no csv |" % (now(), day, ex_s)
-            )
-            counts["extract_empty"] += 1
-            consecutive_fail += 1
-            if consecutive_fail >= 3:
-                append_progress_md(
-                    "| %s | — | batch_stop |  |  |  |  | STOP after 3 consecutive failures counts=%s |"
-                    % (now(), counts)
-                )
-                return counts
-            continue
-
-        nxt = todo[i + 1] if i + 1 < len(todo) else None
-        prefetch_started = False
-        if nxt and not verify_lake(nxt)[0] and not csv_ready(nxt) and not prefetch.busy():
-            prefetch.start(nxt)
-            prefetch_started = True
-            print("[%s] OVERLAP extract_prefetch %s || ETL %s" % (now(), nxt, day), flush=True)
-
-        rc, etl_s, etl_tail, parsed = run_etl(day)
-        ok, mg, og = verify_lake(day)
-        if rc != 0 or not ok:
-            if prefetch_started and prefetch.thread is not None:
-                d2, rc2, ex2, tail2 = prefetch.wait()
-                extract_cache[d2] = (rc2, ex2, tail2)
-            rec = {
-                "ts": now(), "date": day, "status": "etl_fail",
-                "extract_s": round(ex_s, 1), "etl_s": round(etl_s, 1),
-                "notes": etl_tail[:500], "etl_rc": rc,
-            }
-            log_rec(rec)
-            append_progress_md(
-                "| %s | %s | etl_fail | %.1f | %.1f |  |  | rc=%s |"
-                % (now(), day, ex_s, etl_s, rc)
-            )
-            counts["etl_fail"] += 1
-            consecutive_fail += 1
-            if consecutive_fail >= 3:
-                if prefetch.busy():
-                    d2, rc2, ex2, tail2 = prefetch.wait()
-                    extract_cache[d2] = (rc2, ex2, tail2)
-                append_progress_md(
-                    "| %s | — | batch_stop |  |  |  |  | STOP after 3 consecutive failures counts=%s |"
-                    % (now(), counts)
-                )
-                return counts
-            continue
-
-        note_pipe = "pipeline+extract_prefetch" if prefetch_started else "pipeline"
-        prefetch_wait_s = 0.0
-        if prefetch_started and prefetch.thread is not None:
-            wait_started = time.perf_counter()
-            d2, rc2, ex2, tail2 = prefetch.wait()
-            prefetch_wait_s = time.perf_counter() - wait_started
-            extract_cache[d2] = (rc2, ex2, tail2)
-
-        finalize_ok(day, ex_s, etl_s, mg, og, parsed, note_pipe, prefetch_wait_s=prefetch_wait_s)
-        counts["ok"] += 1
-        consecutive_fail = 0
-
-    if prefetch.busy() or prefetch.day is not None:
+    def publish(job):
+        day = job["date"]
+        elapsed, mg, og = publish_day(day)
+        finalize_ok(day, job.get("extract_s", 0), job.get("etl_s", 0), mg, og,
+                    job.get("parsed", {}), "ssd_pipeline", publish_s=elapsed,
+                    archive_s=job.get("archive_s", 0))
         try:
-            if prefetch.thread is not None:
-                d2, rc2, ex2, tail2 = prefetch.wait()
-                extract_cache[d2] = (rc2, ex2, tail2)
-        except Exception:
-            pass
+            shutil.rmtree(STAGING / f"date={day}")
+        except OSError as exc:
+            print(f"staging cleanup deferred {day}: {exc}", flush=True)
 
+    def worker(index, action, failure):
+        nonlocal consecutive_fail
+        upstream = links[index]
+        downstream = links[index + 1] if index < 3 else None
+        while True:
+            job = upstream.get()
+            if job is sentinel:
+                if downstream is not None:
+                    downstream.put(sentinel)
+                return
+            if stop.is_set():
+                continue
+            try:
+                print(f"[{now()}] {action.__name__} start {job['date']}", flush=True)
+                action(job)
+            except Exception as exc:
+                with lock:
+                    counts[failure] += 1
+                    consecutive_fail += 1
+                    print(f"[{now()}] {failure} {job['date']}: {exc}", flush=True)
+                    try:
+                        log_rec({"ts": now(), "date": job["date"], "status": failure, "notes": str(exc)})
+                        append_progress_md(f"| {now()} | {job['date']} | {failure} | | | | | {str(exc)[:300].replace('|', '/')} |")
+                        if consecutive_fail >= 3:
+                            stop.set()
+                            append_progress_md(f"| {now()} | — | batch_stop | | | | | 3 consecutive failures |")
+                    except OSError as logging_error:
+                        stop.set()
+                        print(f"progress write failed: {logging_error}", flush=True)
+                continue
+            if downstream is not None:
+                downstream.put(job)
+            else:
+                with lock:
+                    counts["ok"] += 1
+                    consecutive_fail = 0
+
+    workers = [threading.Thread(target=worker, args=(i, action, failure))
+               for i, (action, failure) in enumerate(zip(
+                   (archive, extract, etl, publish),
+                   ("archive_fail", "extract_fail", "etl_fail", "publish_fail")))]
+    for thread in workers:
+        thread.start()
+    completed = done_dates()
+    for day in dict.fromkeys(todo):
+        if stop.is_set():
+            break
+        if day in completed:
+            counts["skip_lake"] += 1
+            continue
+        links[0].put({"date": day})
+    links[0].put(sentinel)
+    for thread in workers:
+        thread.join()
     return counts
 
 
-def main() -> int:
+def _main() -> int:
+    _AGENT_TOOLS.mkdir(parents=True, exist_ok=True)
     LAKE.mkdir(parents=True, exist_ok=True)
     CSV_ROOT.mkdir(parents=True, exist_ok=True)
     try:
@@ -402,6 +412,9 @@ def main() -> int:
         pass
 
     dates = load_dates()
+    for day in dates:
+        if datetime.strptime(day, "%Y-%m-%d").strftime("%Y-%m-%d") != day:
+            raise ValueError(f"invalid date: {day!r}")
     already = done_dates()
     skip_dates_from_file = set()
     if SKIP_FILE.is_file():
@@ -437,8 +450,27 @@ def main() -> int:
     print("[%s] Phase3 PIPELINE done counts=%s" % (now(), counts), flush=True)
     summary = {"ts": now(), "mode": "pipeline", "phase": 3, "counts": counts, "todo": len(todo)}
     SUMMARY.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
-    fails = counts.get("extract_fail", 0) + counts.get("etl_fail", 0) + counts.get("extract_empty", 0)
+    fails = sum(value for key, value in counts.items() if key.endswith("fail") or key == "extract_empty")
     return 0 if fails == 0 else 1
+
+
+def main() -> int:
+    # OS releases the advisory lock on process exit, including crashes. Keep the
+    # file itself: unlinking a locked inode would let a second process bypass it.
+    STAGING.mkdir(parents=True, exist_ok=True)
+    with (STAGING / ".pipeline.lock").open("a+b") as handle:
+        handle.seek(0, os.SEEK_END)
+        if handle.tell() == 0:
+            handle.write(b"0")
+            handle.flush()
+        handle.seek(0)
+        if os.name == "nt":
+            import msvcrt
+            msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return _main()
 
 
 if __name__ == "__main__":
