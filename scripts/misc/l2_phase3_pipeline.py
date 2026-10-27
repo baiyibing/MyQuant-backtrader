@@ -217,7 +217,7 @@ def publish_day(day: str) -> tuple[float, float, float]:
         if final.exists():
             raise RuntimeError(f"incomplete existing lake day; inspect before retry: {final}")
         if pending.exists():
-            shutil.rmtree(pending)
+            shutil.rmtree(pending, onerror=_retry_readonly)
         pending.mkdir(parents=True)
         for name in ("main.parquet", "order.parquet"):
             shutil.copy2(source / name, pending / name)
@@ -363,7 +363,7 @@ def process_pipeline(todo: list[str]) -> dict:
                     job.get("parsed", {}), "ssd_pipeline", publish_s=elapsed,
                     archive_s=job.get("archive_s", 0))
         try:
-            shutil.rmtree(STAGING / f"date={day}")
+            shutil.rmtree(STAGING / f"date={day}", onerror=_retry_readonly)
         except OSError as exc:
             print(f"staging cleanup deferred {day}: {exc}", flush=True)
 

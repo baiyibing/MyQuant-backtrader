@@ -144,10 +144,6 @@ class PipelineTest(unittest.TestCase):
         self.assertEqual(counts['ok'], 1)
 
 
-if __name__ == '__main__':
-    unittest.main()
-
-
 def test_readonly_archive_retry_and_cleanup(tmp_path, monkeypatch, capsys):
     import stat
 
@@ -224,20 +220,39 @@ def test_delete_csv_retries_readonly_file(tmp_path, monkeypatch):
     csv = folder / 'tick.csv'
     csv.write_text('tick', encoding='utf-8')
     csv.chmod(stat.S_IREAD)
-    rmtree = pipeline.shutil.rmtree
-    retried = []
+    unlink = pipeline.os.unlink
+    attempts = []
 
-    def windows_rmtree(path, *, ignore_errors, onerror):
-        def remove_readonly(path):
-            assert Path(path).stat().st_mode & stat.S_IWRITE
-            retried.append(path)
-            Path(path).unlink()
+    def windows_unlink(path, *args, **kwargs):
+        # Real rmtree may pass a basename with dir_fd or the full path.
+        if Path(path).name == csv.name:
+            writable = bool(csv.stat().st_mode & stat.S_IWRITE)
+            attempts.append(writable)
+            if len(attempts) == 1:
+                assert not writable
+                raise PermissionError('read-only CSV')
+            assert writable  # The onerror helper must chmod before retrying.
+        return unlink(path, *args, **kwargs)
 
-        error = PermissionError('read-only CSV')
-        onerror(remove_readonly, str(csv), (PermissionError, error, None))
-        rmtree(path, ignore_errors=ignore_errors)
-
-    monkeypatch.setattr(pipeline.shutil, 'rmtree', windows_rmtree)
+    monkeypatch.setattr(pipeline.os, 'unlink', windows_unlink)
     pipeline.delete_csv(day)
-    assert retried == [str(csv)]
+    assert attempts == [False, True]
     assert not folder.exists()
+
+
+def test_retry_readonly_reraises_non_permission_error(tmp_path):
+    import pytest
+
+    error = OSError('other')
+
+    def unexpected_retry(path):
+        raise AssertionError('non-permission errors must not be retried')
+
+    with pytest.raises(OSError, match='other') as raised:
+        pipeline._retry_readonly(unexpected_retry, str(tmp_path / 'missing.csv'),
+                                 (OSError, error, None))
+    assert raised.value is error
+
+
+if __name__ == '__main__':
+    unittest.main()
