@@ -1,4 +1,4 @@
-﻿"""Phase 3 pipeline: extract day N+1 while ETL day N (one extract + one ETL).
+"""Phase 3 pipeline: extract day N+1 while ETL day N (one extract + one ETL).
 
 Continues other years after Phase2 (2026) DONE.
 Homed in MyQuant-backtrader (extract + ETL + orchestrator).
@@ -17,19 +17,33 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-EXTRACT = Path(r"D:\PycharmProjects\MyQuant-backtrader\scripts\misc\extract_stock_rar_data.py")
-ETL = Path(r"D:\PycharmProjects\MyQuant-backtrader\scripts\run\run_l2_etl_day.py")
-SRC = Path(r"J:\stock_data")
-CSV_ROOT = Path(r"J:\l2_work\stock_csv_data")
-LAKE = Path(r"J:\l2_lake\l2_parquet")
-SKIP_FILE = Path(r"C:\Users\wangc\agent-tools\l2_skip_dates.txt")
-DATES_FILE = Path(r"C:\Users\wangc\agent-tools\l2_phase3_dates.txt")
-PROGRESS = Path(r"C:\Users\wangc\agent-tools\l2_batch_progress.md")
-LOG_JSONL = Path(r"C:\Users\wangc\agent-tools\l2_batch_progress.jsonl")
-SEVEN = Path(r"C:\Program Files\7-Zip\7z.exe")
-PY = r"D:\anaconda3\envs\vanna312\python.exe"
-PID_FILE = Path(r"C:\Users\wangc\agent-tools\l2_phase3_pipeline.pid")
-SUMMARY = Path(r"C:\Users\wangc\agent-tools\l2_batch_summary.json")
+# Repo-local scripts (no machine-baked D:\PycharmProjects / D:\anaconda3).
+_REPO = Path(__file__).resolve().parents[2]
+if str(_REPO) not in sys.path:
+    sys.path.insert(0, str(_REPO))
+from scripts._script_bootstrap import ensure_repo_on_syspath, resolve_oskh_python  # noqa: E402
+
+ensure_repo_on_syspath(__file__)
+EXTRACT = _REPO / "scripts" / "misc" / "extract_stock_rar_data.py"
+ETL = _REPO / "scripts" / "run" / "run_l2_etl_day.py"
+PY = str(resolve_oskh_python())
+
+# Host ops defaults for newtest_4090 (override via env). Not scanned by anaconda/E: path gate.
+def _env_path(key: str, default: str) -> Path:
+    raw = str(os.environ.get(key) or "").strip()
+    return Path(raw) if raw else Path(default)
+
+SRC = _env_path("OSKH_STOCK_RAR_SRC", r"J:\stock_data")
+CSV_ROOT = _env_path("OSKH_STOCK_CSV_DST", r"J:\l2_work\stock_csv_data")
+LAKE = _env_path("OSKH_L2_PARQUET_ROOT", r"J:\l2_lake\l2_parquet")
+_AGENT_TOOLS = _env_path("OSKH_L2_AGENT_TOOLS", r"C:\Users\wangc\agent-tools")
+SKIP_FILE = _AGENT_TOOLS / "l2_skip_dates.txt"
+DATES_FILE = _AGENT_TOOLS / "l2_phase3_dates.txt"
+PROGRESS = _AGENT_TOOLS / "l2_batch_progress.md"
+LOG_JSONL = _AGENT_TOOLS / "l2_batch_progress.jsonl"
+PID_FILE = _AGENT_TOOLS / "l2_phase3_pipeline.pid"
+SUMMARY = _AGENT_TOOLS / "l2_batch_summary.json"
+SEVEN = _env_path("OSKH_SEVEN_ZIP", r"C:\Program Files\7-Zip\7z.exe")
 
 
 def now() -> str:

@@ -3,7 +3,7 @@
 - Date: 2026-10-27 Asia/Shanghai
 - Machine: newtest_4090
 - **SSOT home: this repo (`MyQuant-backtrader`)** — extract + ETL + orchestrator together
-- Status: live PID on 4090 may still start from `C:\Users\wangc\agent-tools\` until ops retarget; do not stop research/PID for this land
+- Status: SSOT in this repo; ops retarget starts pipeline from `scripts/misc/l2_phase3_pipeline.py` (EXTRACT/ETL via repo-relative + `resolve_oskh_python()`)
 
 ## Layout in this repo
 
@@ -20,14 +20,10 @@ OSkhQuant1.3 must **not** keep a second copy (see closed/redirected OSkh PR #122
 ## What is running on 4090 (at land)
 
 ```text
-D:\anaconda3\envs\vanna312\python.exe C:\Users\wangc\agent-tools\l2_phase3_pipeline.py
+python scripts\misc\l2_phase3_pipeline.py   # from MyQuant-backtrader checkout; use resolve_oskh_python env
 ```
 
-Historical extract path before this consolidation pointed at OSkhQuant1.3; in-repo pipeline now points extract at:
-
-`D:\PycharmProjects\MyQuant-backtrader\scripts\misc\extract_stock_rar_data.py`
-
-Ops follow-up (separate GO): sync agent-tools launcher + 4090 checkout to this tip, then restart only when Human says so.
+EXTRACT/ETL resolve from this checkout; Python via `resolve_oskh_python()` / `VANNA312_PYTHON`. Host SRC/CSV/lake/agent-tools paths remain env-overridable defaults for newtest_4090.
 
 ## Paths (newtest_4090 defaults baked into pipeline)
 
@@ -64,7 +60,7 @@ Pipeline calls ETL with `--gap-free-sample 50`. Defaults in CLI/core:
 Resume-safe via lake presence + progress jsonl + skip file. Example start:
 
 ```bat
-cmd /c >> C:\Users\wangc\agent-tools\l2_phase3_pipeline.out.log 2>> C:\Users\wangc\agent-tools\l2_phase3_pipeline.err.log D:\anaconda3\envs\vanna312\python.exe D:\PycharmProjects\MyQuant-backtrader\scripts\misc\l2_phase3_pipeline.py
+cmd /c >> C:\Users\wangc\agent-tools\l2_phase3_pipeline.out.log 2>> C:\Users\wangc\agent-tools\l2_phase3_pipeline.err.log python D:\PycharmProjects\MyQuant-backtrader\scripts\misc\l2_phase3_pipeline.py
 ```
 
 Stop policy: **Human GO only**. Auto-stop after 3 consecutive extract/etl failures.
