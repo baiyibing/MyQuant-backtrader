@@ -86,7 +86,7 @@ traffic; compare `archive_s` and `publish_s` as well as ETL profile on 4090.
 Data-free checks (explicit Linux interpreter for this sandbox):
 
 ```sh
-OSKH_MERGE_PYTHON=/usr/bin/python3 /usr/bin/python3 -m unittest discover -s tests -p test_l2_phase3_pipeline.py -v
+python3 -m pytest tests/test_l2_phase3_pipeline.py -q
 ```
 
 Tests cover overlapping extract/ETL/publish, ETL output routing and profile,
@@ -101,7 +101,11 @@ Progress Markdown and OK stdout expose archive/extract/ETL/publish/CSV-delete
 seconds, with the same precision as JSONL (extract/ETL: 1 decimal; others: 3).
 Before using this schema, ops must rotate an existing progress Markdown file:
 old eight-column headers/rows are historical and must not receive new eleven-column
-rows. JSONL needs no rotation. No live progress file was changed here.
+rows. If an existing header lacks `archive_s`, the writer warns clearly on stderr
+before each append, then continues writing new eleven-column rows; it does not
+rotate or rewrite historical content. OK stdout uses `archive_s=`, `extract_s=`,
+`etl_s=`, `publish_s=`, and `csv_delete_s=` (seconds, no trailing unit suffix).
+JSONL needs no rotation. No live progress file was changed here.
 Failure JSONL and Markdown retain only timing keys already present on the job;
 missing stages stay absent/blank, including archive/publish calls that raise before
 returning a timing. No new elapsed-time measurement or synthetic failure zeros.

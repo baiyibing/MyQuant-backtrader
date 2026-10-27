@@ -143,6 +143,35 @@ class PipelineTest(unittest.TestCase):
             counts = pipeline.process_pipeline([day])
         self.assertEqual(counts['ok'], 1)
 
+    def test_publish_raise_omits_timing(self):
+        day = '2025-01-02'
+        self.ready(day)
+        with patch.object(pipeline, 'publish_day', side_effect=RuntimeError('publish interrupted')):
+            counts = pipeline.process_pipeline([day])
+        self.assertEqual(counts['publish_fail'], 1)
+        self.assertEqual(counts['ok'], 0)
+        rec = json.loads(pipeline.LOG_JSONL.read_text())
+        self.assertEqual(rec['status'], 'publish_fail')
+        self.assertNotIn('publish_s', rec)
+        self.assertNotIn('csv_delete_s', rec)
+        cells = [cell.strip() for cell in pipeline.PROGRESS.read_text().splitlines()[-1].split('|')[1:-1]]
+        self.assertEqual(cells[6:8], ['', ''])
+
+    def test_finalize_raise_retains_publish_timing(self):
+        day = '2025-01-02'
+        self.ready(day)
+        with patch.object(pipeline, 'publish_day', return_value=(6.7896, 3, 4)), \
+             patch.object(pipeline, 'finalize_ok', side_effect=RuntimeError('finalize interrupted')):
+            counts = pipeline.process_pipeline([day])
+        self.assertEqual(counts['publish_fail'], 1)
+        self.assertEqual(counts['ok'], 0)
+        rec = json.loads(pipeline.LOG_JSONL.read_text())
+        self.assertEqual(rec['status'], 'publish_fail')
+        self.assertEqual(rec['publish_s'], 6.79)
+        self.assertNotIn('csv_delete_s', rec)
+        cells = [cell.strip() for cell in pipeline.PROGRESS.read_text().splitlines()[-1].split('|')[1:-1]]
+        self.assertEqual(cells[6:8], ['6.790', ''])
+
 
 def test_readonly_archive_retry_and_cleanup(tmp_path, monkeypatch, capsys):
     import stat
@@ -273,6 +302,8 @@ def test_finalize_observability(tmp_path, monkeypatch, capsys):
     assert len(lines[2].split('|')) == len(lines[-1].split('|'))
     out = capsys.readouterr().out
     assert 'OK' in out and 'archive_s=5.124' in out and 'publish_s=6.790' in out
+    assert 'extract_s=1.3' in out and 'etl_s=2.3' in out
+    assert f"csv_delete_s={rec['csv_delete_s']:.3f}" in out
 
 
 def test_failure_retains_partial_timings(tmp_path, monkeypatch):
@@ -299,6 +330,29 @@ def test_failure_retains_partial_timings(tmp_path, monkeypatch):
     assert cells[5:8] == ['', '', '']
     assert len(lines[2].split('|')) == len(lines[-1].split('|'))
     assert not pipeline.done_dates()
+
+
+def test_progress_warns_for_legacy_header(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(pipeline, 'PROGRESS', tmp_path / 'progress.md')
+    legacy = ("# Legacy progress\n\n"
+              "| time | date | status | extract_s | etl_s | main_gib | order_gib | notes |\n")
+    pipeline.PROGRESS.write_text(legacy, encoding='utf-8')
+    row = pipeline.progress_row({'ts': 'now', 'status': 'batch_start'})
+    pipeline.append_progress_md(row)
+    err = capsys.readouterr().err
+    assert 'WARNING' in err and str(pipeline.PROGRESS) in err
+    assert 'header lacks archive_s' in err and 'rotate' in err
+    assert 'Continuing with new 11-column rows' in err
+    assert pipeline.PROGRESS.read_text() == legacy + row + '\n'
+
+
+def test_progress_current_header_does_not_warn(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(pipeline, 'PROGRESS', tmp_path / 'progress.md')
+    row = pipeline.progress_row({'ts': 'now', 'status': 'batch_start'})
+    pipeline.append_progress_md(row)
+    pipeline.append_progress_md(row)
+    assert capsys.readouterr().err == ''
+    assert pipeline.PROGRESS.read_text().splitlines()[-2:] == [row, row]
 
 
 if __name__ == '__main__':

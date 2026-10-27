@@ -87,6 +87,13 @@ def _append_progress_md(line: str) -> None:
             "|---|---|---|---:|---:|---:|---:|---:|---:|---:|---|\n",
             encoding="utf-8",
         )
+    else:
+        with PROGRESS.open(encoding="utf-8") as f:
+            header = next((line for line in f if line.lstrip().startswith("|")), "")
+        if "archive_s" not in [cell.strip() for cell in header.split("|")]:
+            print(f"WARNING: {PROGRESS}: progress Markdown header lacks archive_s; "
+                  "rotate the legacy file before reuse. Continuing with new 11-column rows; "
+                  "these will not align with the existing header.", file=sys.stderr, flush=True)
     with PROGRESS.open("a", encoding="utf-8") as f:
         f.write(line + "\n")
 
@@ -288,7 +295,7 @@ def finalize_ok(
     }
     log_rec(rec)
     append_progress_md(progress_row(rec))
-    print("[%s] OK %s main=%.3fGiB order=%.3fGiB archive_s=%.3f ex=%.1fs etl=%.1fs publish_s=%.3f csv_delete_s=%.3f"
+    print("[%s] OK %s main=%.3fGiB order=%.3fGiB archive_s=%.3f extract_s=%.1f etl_s=%.1f publish_s=%.3f csv_delete_s=%.3f"
           % (now(), day, mg, og, archive_s, ex_s, etl_s, publish_s, csv_delete_s), flush=True)
 
 
