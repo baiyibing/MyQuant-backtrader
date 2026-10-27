@@ -254,5 +254,52 @@ def test_retry_readonly_reraises_non_permission_error(tmp_path):
     assert raised.value is error
 
 
+def test_finalize_observability(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(pipeline, 'PROGRESS', tmp_path / 'progress.md')
+    monkeypatch.setattr(pipeline, 'LOG_JSONL', tmp_path / 'progress.jsonl')
+    monkeypatch.setattr(pipeline, 'delete_csv', lambda day: None)
+    pipeline.finalize_ok('2025-01-02', 1.26, 2.34, 3, 4,
+                         {'profile': {'chunk_s': 2}}, 'test',
+                         archive_s=5.1236, publish_s=6.7896)
+    rec = json.loads(pipeline.LOG_JSONL.read_text())
+    assert 'prefetch_wait_s' not in rec
+    assert rec['profile'] == {'chunk_s': 2}
+    assert rec['archive_s'] == 5.124
+    assert rec['publish_s'] == 6.79
+    lines = pipeline.PROGRESS.read_text().splitlines()
+    assert 'archive_s' in lines[2] and 'publish_s' in lines[2]
+    assert 'csv_delete_s' in lines[2]
+    assert '5.124' in lines[-1] and '6.790' in lines[-1]
+    assert len(lines[2].split('|')) == len(lines[-1].split('|'))
+    out = capsys.readouterr().out
+    assert 'OK' in out and 'archive_s=5.124' in out and 'publish_s=6.790' in out
+
+
+def test_failure_retains_partial_timings(tmp_path, monkeypatch):
+    for key in ('SRC', 'CSV_ROOT', 'STAGING', 'ARCHIVES', 'LAKE'):
+        root = tmp_path / key
+        root.mkdir()
+        monkeypatch.setattr(pipeline, key, root)
+    for key in ('LOG_JSONL', 'PROGRESS'):
+        monkeypatch.setattr(pipeline, key, tmp_path / key)
+    day = '2025-01-02'
+    (pipeline.SRC / f'{day}.rar').write_bytes(b'archive')
+    monkeypatch.setattr(pipeline, 'run_extract', lambda day: (1, 1.26, 'extract failed'))
+    counts = pipeline.process_pipeline([day])
+    assert counts['extract_fail'] == 1
+    rec = json.loads(pipeline.LOG_JSONL.read_text())
+    assert rec['status'] == 'extract_fail'
+    assert rec['archive_s'] >= 0
+    assert rec['extract_s'] == 1.3
+    assert not {'etl_s', 'publish_s', 'csv_delete_s'} & rec.keys()
+    lines = pipeline.PROGRESS.read_text().splitlines()
+    cells = [cell.strip() for cell in lines[-1].split('|')[1:-1]]
+    assert cells[3] == f"{rec['archive_s']:.3f}"
+    assert cells[4] == '1.3'
+    assert cells[5:8] == ['', '', '']
+    assert len(lines[2].split('|')) == len(lines[-1].split('|'))
+    assert not pipeline.done_dates()
+
+
 if __name__ == '__main__':
     unittest.main()
