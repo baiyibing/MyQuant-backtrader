@@ -346,6 +346,18 @@ def test_progress_warns_for_legacy_header(tmp_path, monkeypatch, capsys):
     assert pipeline.PROGRESS.read_text() == legacy + row + '\n'
 
 
+def test_progress_invalid_utf8_warns_and_appends(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(pipeline, 'PROGRESS', tmp_path / 'progress.md')
+    legacy = b'# Legacy progress\xff\n\n| time | date | status | notes |\n'
+    pipeline.PROGRESS.write_bytes(legacy)
+    row = pipeline.progress_row({'ts': 'now', 'status': 'batch_start'})
+    pipeline.append_progress_md(row)
+    err = capsys.readouterr().err
+    assert 'WARNING' in err and str(pipeline.PROGRESS) in err
+    assert 'header lacks archive_s' in err
+    assert pipeline.PROGRESS.read_bytes() == legacy + (row + '\n').encode('utf-8')
+
+
 def test_progress_current_header_does_not_warn(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(pipeline, 'PROGRESS', tmp_path / 'progress.md')
     row = pipeline.progress_row({'ts': 'now', 'status': 'batch_start'})

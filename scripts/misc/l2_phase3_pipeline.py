@@ -88,7 +88,7 @@ def _append_progress_md(line: str) -> None:
             encoding="utf-8",
         )
     else:
-        with PROGRESS.open(encoding="utf-8") as f:
+        with PROGRESS.open(encoding="utf-8", errors="replace") as f:
             header = next((line for line in f if line.lstrip().startswith("|")), "")
         if "archive_s" not in [cell.strip() for cell in header.split("|")]:
             print(f"WARNING: {PROGRESS}: progress Markdown header lacks archive_s; "
