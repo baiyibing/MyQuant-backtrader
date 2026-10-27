@@ -5,6 +5,7 @@ import json
 import queue
 import os
 import shutil
+import stat
 import subprocess
 import sys
 import threading
@@ -159,10 +160,23 @@ def run_etl(day: str) -> tuple[int, float, str, dict]:
     return proc.returncode, elapsed, tail, parsed
 
 
+def make_writable(path: Path) -> None:
+    """Clear Windows read-only while preserving the other permission bits."""
+    path.chmod(path.stat().st_mode | stat.S_IWRITE)
+
+
+def _retry_readonly(func, path, exc_info) -> None:
+    # onerror also supports Python versions before rmtree's onexc was added.
+    if not isinstance(exc_info[1], PermissionError):
+        raise exc_info[1]
+    make_writable(Path(path))
+    func(path)
+
+
 def delete_csv(day: str) -> None:
     d = CSV_ROOT / day
     if d.is_dir():
-        shutil.rmtree(d, ignore_errors=False)
+        shutil.rmtree(d, ignore_errors=False, onerror=_retry_readonly)
 
 
 def csv_ready(day: str) -> bool:
@@ -294,9 +308,13 @@ def process_pipeline(todo: list[str]) -> dict:
         target = ARCHIVES / source.name
         started = time.perf_counter()
         temporary = target.with_suffix(target.suffix + ".copying")
+        if temporary.exists():
+            make_writable(temporary)
         shutil.copy2(source, temporary)
         if temporary.stat().st_size != source.stat().st_size:
             raise RuntimeError("archive copy size mismatch")
+        if target.exists():
+            make_writable(target)
         os.replace(temporary, target)
         job["archive_s"] = time.perf_counter() - started
         job["archive"] = target
@@ -315,7 +333,11 @@ def process_pipeline(todo: list[str]) -> dict:
             raise RuntimeError("no csv after extraction")
         (CSV_ROOT / day / "_extract_ready").touch()
         if "archive" in job:
-            job["archive"].unlink()
+            try:
+                make_writable(job["archive"])
+                job["archive"].unlink()
+            except OSError as exc:
+                print(f"archive cleanup deferred {day}: {exc}", flush=True)
 
     def etl(job):
         day = job["date"]

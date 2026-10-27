@@ -146,3 +146,98 @@ class PipelineTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def test_readonly_archive_retry_and_cleanup(tmp_path, monkeypatch, capsys):
+    import stat
+
+    for key in ('SRC', 'CSV_ROOT', 'STAGING', 'ARCHIVES', 'LAKE'):
+        root = tmp_path / key
+        root.mkdir()
+        monkeypatch.setattr(pipeline, key, root)
+    for key in ('LOG_JSONL', 'PROGRESS'):
+        monkeypatch.setattr(pipeline, key, tmp_path / key)
+
+    replace = pipeline.os.replace
+    unlink = Path.unlink
+    source_days = ['2025-01-02', '2025-01-03']
+    for day in source_days:
+        source = pipeline.SRC / f'{day}.rar'
+        source.write_bytes(b'archive')
+        source.chmod(stat.S_IREAD)
+        for suffix in ('.rar', '.rar.copying'):
+            leftover = pipeline.ARCHIVES / f'{day}{suffix}'
+            leftover.write_bytes(b'interrupted')
+            leftover.chmod(stat.S_IREAD)
+
+    def windows_replace(source, target):
+        target = Path(target)
+        if target.exists() and not target.stat().st_mode & stat.S_IWRITE:
+            raise PermissionError('read-only destination')
+        return replace(source, target)
+
+    def windows_unlink(path, *args, **kwargs):
+        if path.suffix == '.rar':
+            assert path.stat().st_mode & stat.S_IWRITE
+            if path.stem == source_days[1]:
+                raise PermissionError('scratch file held open')
+        return unlink(path, *args, **kwargs)
+
+    def extract(day):
+        archive = pipeline.ARCHIVES / f'{day}.rar'
+        assert not archive.stat().st_mode & stat.S_IWRITE  # copy2 preserved mode
+        folder = pipeline.CSV_ROOT / day
+        folder.mkdir()
+        (folder / 'tick.csv').write_text('tick', encoding='utf-8')
+        return 0, 0.1, ''
+
+    def etl(day):
+        assert pipeline.csv_ready(day)
+        folder = pipeline.STAGING / f'date={day}'
+        folder.mkdir()
+        for name in ('main.parquet', 'order.parquet'):
+            (folder / name).write_bytes(b'fake-parquet')
+        with (pipeline.STAGING / '_manifest.jsonl').open('a') as handle:
+            handle.write(json.dumps({'date': day}) + '\n')
+        return 0, 0.2, '', {}
+
+    monkeypatch.setattr(pipeline.os, 'replace', windows_replace)
+    monkeypatch.setattr(Path, 'unlink', windows_unlink)
+    monkeypatch.setattr(pipeline, 'run_extract', extract)
+    monkeypatch.setattr(pipeline, 'run_etl', etl)
+    counts = pipeline.process_pipeline(source_days)
+    assert counts['ok'] == 2
+    assert counts['archive_fail'] == counts['extract_fail'] == 0
+    assert pipeline.done_dates() == set(source_days)
+    assert not (pipeline.ARCHIVES / f'{source_days[0]}.rar').exists()
+    assert (pipeline.ARCHIVES / f'{source_days[1]}.rar').exists()
+    assert 'archive cleanup deferred' in capsys.readouterr().out
+
+
+def test_delete_csv_retries_readonly_file(tmp_path, monkeypatch):
+    import stat
+
+    monkeypatch.setattr(pipeline, 'CSV_ROOT', tmp_path)
+    day = '2025-01-02'
+    folder = tmp_path / day
+    folder.mkdir()
+    csv = folder / 'tick.csv'
+    csv.write_text('tick', encoding='utf-8')
+    csv.chmod(stat.S_IREAD)
+    rmtree = pipeline.shutil.rmtree
+    retried = []
+
+    def windows_rmtree(path, *, ignore_errors, onerror):
+        def remove_readonly(path):
+            assert Path(path).stat().st_mode & stat.S_IWRITE
+            retried.append(path)
+            Path(path).unlink()
+
+        error = PermissionError('read-only CSV')
+        onerror(remove_readonly, str(csv), (PermissionError, error, None))
+        rmtree(path, ignore_errors=ignore_errors)
+
+    monkeypatch.setattr(pipeline.shutil, 'rmtree', windows_rmtree)
+    pipeline.delete_csv(day)
+    assert retried == [str(csv)]
+    assert not folder.exists()
