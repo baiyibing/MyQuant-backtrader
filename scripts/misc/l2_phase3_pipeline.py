@@ -83,12 +83,34 @@ def _append_progress_md(line: str) -> None:
     if not PROGRESS.exists():
         PROGRESS.write_text(
             "# L2 batch progress (Asia/Shanghai)\n\n"
-            "| time | date | status | extract_s | etl_s | main_gib | order_gib | notes |\n"
-            "|---|---|---|---:|---:|---:|---:|---|\n",
+            "| time | date | status | archive_s | extract_s | etl_s | publish_s | csv_delete_s | main_gib | order_gib | notes |\n"
+            "|---|---|---|---:|---:|---:|---:|---:|---:|---:|---|\n",
             encoding="utf-8",
         )
+    else:
+        with PROGRESS.open(encoding="utf-8", errors="replace") as f:
+            header = next((line for line in f if line.lstrip().startswith("|")), "")
+        if "archive_s" not in [cell.strip() for cell in header.split("|")]:
+            print(f"WARNING: {PROGRESS}: progress Markdown header lacks archive_s; "
+                  "rotate the legacy file before reuse. Continuing with new 11-column rows; "
+                  "these will not align with the existing header.", file=sys.stderr, flush=True)
     with PROGRESS.open("a", encoding="utf-8") as f:
         f.write(line + "\n")
+
+
+_TIMING_DIGITS = {"archive_s": 3, "extract_s": 1, "etl_s": 1,
+                  "publish_s": 3, "csv_delete_s": 3}
+
+
+def progress_row(rec: dict) -> str:
+    """Render missing stage timings as blank cells, never synthetic zeros."""
+    cells = [rec["ts"], rec.get("date") or "—", rec["status"]]
+    cells += [f"{rec[key]:.{digits}f}" if key in rec else ""
+              for key, digits in _TIMING_DIGITS.items()]
+    cells += [f"{rec[key]:.3f}" if key in rec else ""
+              for key in ("main_gib", "order_gib")]
+    cells.append(str(rec.get("notes", "")).replace("|", "/").replace("\n", " "))
+    return "| " + " | ".join(cells) + " |"
 
 
 def log_rec(rec: dict) -> None:
@@ -243,7 +265,7 @@ def publish_day(day: str) -> tuple[float, float, float]:
 
 def finalize_ok(
     day: str, ex_s: float, etl_s: float, mg: float, og: float,
-    parsed: dict, notes_extra: str, prefetch_wait_s: float = 0.0, publish_s: float = 0.0, archive_s: float = 0.0,
+    parsed: dict, notes_extra: str, publish_s: float = 0.0, archive_s: float = 0.0,
 ) -> None:
     delete_started = time.perf_counter()
     try:
@@ -264,7 +286,6 @@ def finalize_ok(
         "etl_s": round(etl_s, 1),
         "publish_s": round(publish_s, 3),
         "archive_s": round(archive_s, 3),
-        "prefetch_wait_s": round(prefetch_wait_s, 1),
         "csv_delete_s": round(csv_delete_s, 3),
         "main_gib": round(mg, 3),
         "order_gib": round(og, 3),
@@ -273,11 +294,9 @@ def finalize_ok(
         "profile": parsed.get("profile"),
     }
     log_rec(rec)
-    append_progress_md(
-        "| %s | %s | ok | %.1f | %.1f | %.3f | %.3f | %s |"
-        % (now(), day, ex_s, etl_s, mg, og, notes.replace("|", "/"))
-    )
-    print("[%s] OK %s main=%.3fGiB order=%.3fGiB ex=%.1fs etl=%.1fs" % (now(), day, mg, og, ex_s, etl_s), flush=True)
+    append_progress_md(progress_row(rec))
+    print("[%s] OK %s main=%.3fGiB order=%.3fGiB archive_s=%.3f extract_s=%.1f etl_s=%.1f publish_s=%.3f csv_delete_s=%.3f"
+          % (now(), day, mg, og, archive_s, ex_s, etl_s, publish_s, csv_delete_s), flush=True)
 
 
 def process_pipeline(todo: list[str]) -> dict:
@@ -359,6 +378,7 @@ def process_pipeline(todo: list[str]) -> dict:
     def publish(job):
         day = job["date"]
         elapsed, mg, og = publish_day(day)
+        job["publish_s"] = elapsed
         finalize_ok(day, job.get("extract_s", 0), job.get("etl_s", 0), mg, og,
                     job.get("parsed", {}), "ssd_pipeline", publish_s=elapsed,
                     archive_s=job.get("archive_s", 0))
@@ -388,11 +408,15 @@ def process_pipeline(todo: list[str]) -> dict:
                     consecutive_fail += 1
                     print(f"[{now()}] {failure} {job['date']}: {exc}", flush=True)
                     try:
-                        log_rec({"ts": now(), "date": job["date"], "status": failure, "notes": str(exc)})
-                        append_progress_md(f"| {now()} | {job['date']} | {failure} | | | | | {str(exc)[:300].replace('|', '/')} |")
+                        rec = {"ts": now(), "date": job["date"], "status": failure,
+                               "notes": str(exc)}
+                        rec.update({key: round(job[key], digits)
+                                    for key, digits in _TIMING_DIGITS.items() if key in job})
+                        log_rec(rec)
+                        append_progress_md(progress_row({**rec, "notes": str(exc)[:300]}))
                         if consecutive_fail >= 3:
                             stop.set()
-                            append_progress_md(f"| {now()} | — | batch_stop | | | | | 3 consecutive failures |")
+                            append_progress_md(progress_row({"ts": now(), "status": "batch_stop", "notes": "3 consecutive failures"}))
                     except OSError as logging_error:
                         stop.set()
                         print(f"progress write failed: {logging_error}", flush=True)
@@ -451,10 +475,11 @@ def _main() -> int:
         % (now(), len(dates), len(already), len(todo), os.getpid(), SRC),
         flush=True,
     )
-    append_progress_md(
-        "| %s | — | batch_start |  |  |  |  | Phase3 pipeline total=%d already=%d todo=%d pid=%s order=2025..2020 SRC=J:\\\\stock_data |"
-        % (now(), len(dates), len(already), len(todo), os.getpid())
-    )
+    append_progress_md(progress_row({
+        "ts": now(), "status": "batch_start",
+        "notes": "Phase3 pipeline total=%d already=%d todo=%d pid=%s order=2025..2020 SRC=J:\\\\stock_data"
+                 % (len(dates), len(already), len(todo), os.getpid()),
+    }))
     log_rec({
         "ts": now(),
         "date": None,
@@ -468,7 +493,7 @@ def _main() -> int:
     })
 
     counts = process_pipeline(todo)
-    append_progress_md("| %s | — | batch_done |  |  |  |  | Phase3 pipeline counts=%s |" % (now(), counts))
+    append_progress_md(progress_row({"ts": now(), "status": "batch_done", "notes": "Phase3 pipeline counts=%s" % counts}))
     print("[%s] Phase3 PIPELINE done counts=%s" % (now(), counts), flush=True)
     summary = {"ts": now(), "mode": "pipeline", "phase": 3, "counts": counts, "todo": len(todo)}
     SUMMARY.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")

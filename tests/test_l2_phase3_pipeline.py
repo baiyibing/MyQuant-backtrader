@@ -143,6 +143,35 @@ class PipelineTest(unittest.TestCase):
             counts = pipeline.process_pipeline([day])
         self.assertEqual(counts['ok'], 1)
 
+    def test_publish_raise_omits_timing(self):
+        day = '2025-01-02'
+        self.ready(day)
+        with patch.object(pipeline, 'publish_day', side_effect=RuntimeError('publish interrupted')):
+            counts = pipeline.process_pipeline([day])
+        self.assertEqual(counts['publish_fail'], 1)
+        self.assertEqual(counts['ok'], 0)
+        rec = json.loads(pipeline.LOG_JSONL.read_text())
+        self.assertEqual(rec['status'], 'publish_fail')
+        self.assertNotIn('publish_s', rec)
+        self.assertNotIn('csv_delete_s', rec)
+        cells = [cell.strip() for cell in pipeline.PROGRESS.read_text().splitlines()[-1].split('|')[1:-1]]
+        self.assertEqual(cells[6:8], ['', ''])
+
+    def test_finalize_raise_retains_publish_timing(self):
+        day = '2025-01-02'
+        self.ready(day)
+        with patch.object(pipeline, 'publish_day', return_value=(6.7896, 3, 4)), \
+             patch.object(pipeline, 'finalize_ok', side_effect=RuntimeError('finalize interrupted')):
+            counts = pipeline.process_pipeline([day])
+        self.assertEqual(counts['publish_fail'], 1)
+        self.assertEqual(counts['ok'], 0)
+        rec = json.loads(pipeline.LOG_JSONL.read_text())
+        self.assertEqual(rec['status'], 'publish_fail')
+        self.assertEqual(rec['publish_s'], 6.79)
+        self.assertNotIn('csv_delete_s', rec)
+        cells = [cell.strip() for cell in pipeline.PROGRESS.read_text().splitlines()[-1].split('|')[1:-1]]
+        self.assertEqual(cells[6:8], ['6.790', ''])
+
 
 def test_readonly_archive_retry_and_cleanup(tmp_path, monkeypatch, capsys):
     import stat
@@ -252,6 +281,90 @@ def test_retry_readonly_reraises_non_permission_error(tmp_path):
         pipeline._retry_readonly(unexpected_retry, str(tmp_path / 'missing.csv'),
                                  (OSError, error, None))
     assert raised.value is error
+
+
+def test_finalize_observability(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(pipeline, 'PROGRESS', tmp_path / 'progress.md')
+    monkeypatch.setattr(pipeline, 'LOG_JSONL', tmp_path / 'progress.jsonl')
+    monkeypatch.setattr(pipeline, 'delete_csv', lambda day: None)
+    pipeline.finalize_ok('2025-01-02', 1.26, 2.34, 3, 4,
+                         {'profile': {'chunk_s': 2}}, 'test',
+                         archive_s=5.1236, publish_s=6.7896)
+    rec = json.loads(pipeline.LOG_JSONL.read_text())
+    assert 'prefetch_wait_s' not in rec
+    assert rec['profile'] == {'chunk_s': 2}
+    assert rec['archive_s'] == 5.124
+    assert rec['publish_s'] == 6.79
+    lines = pipeline.PROGRESS.read_text().splitlines()
+    assert 'archive_s' in lines[2] and 'publish_s' in lines[2]
+    assert 'csv_delete_s' in lines[2]
+    assert '5.124' in lines[-1] and '6.790' in lines[-1]
+    assert len(lines[2].split('|')) == len(lines[-1].split('|'))
+    out = capsys.readouterr().out
+    assert 'OK' in out and 'archive_s=5.124' in out and 'publish_s=6.790' in out
+    assert 'extract_s=1.3' in out and 'etl_s=2.3' in out
+    assert f"csv_delete_s={rec['csv_delete_s']:.3f}" in out
+
+
+def test_failure_retains_partial_timings(tmp_path, monkeypatch):
+    for key in ('SRC', 'CSV_ROOT', 'STAGING', 'ARCHIVES', 'LAKE'):
+        root = tmp_path / key
+        root.mkdir()
+        monkeypatch.setattr(pipeline, key, root)
+    for key in ('LOG_JSONL', 'PROGRESS'):
+        monkeypatch.setattr(pipeline, key, tmp_path / key)
+    day = '2025-01-02'
+    (pipeline.SRC / f'{day}.rar').write_bytes(b'archive')
+    monkeypatch.setattr(pipeline, 'run_extract', lambda day: (1, 1.26, 'extract failed'))
+    counts = pipeline.process_pipeline([day])
+    assert counts['extract_fail'] == 1
+    rec = json.loads(pipeline.LOG_JSONL.read_text())
+    assert rec['status'] == 'extract_fail'
+    assert rec['archive_s'] >= 0
+    assert rec['extract_s'] == 1.3
+    assert not {'etl_s', 'publish_s', 'csv_delete_s'} & rec.keys()
+    lines = pipeline.PROGRESS.read_text().splitlines()
+    cells = [cell.strip() for cell in lines[-1].split('|')[1:-1]]
+    assert cells[3] == f"{rec['archive_s']:.3f}"
+    assert cells[4] == '1.3'
+    assert cells[5:8] == ['', '', '']
+    assert len(lines[2].split('|')) == len(lines[-1].split('|'))
+    assert not pipeline.done_dates()
+
+
+def test_progress_warns_for_legacy_header(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(pipeline, 'PROGRESS', tmp_path / 'progress.md')
+    legacy = ("# Legacy progress\n\n"
+              "| time | date | status | extract_s | etl_s | main_gib | order_gib | notes |\n")
+    pipeline.PROGRESS.write_text(legacy, encoding='utf-8')
+    row = pipeline.progress_row({'ts': 'now', 'status': 'batch_start'})
+    pipeline.append_progress_md(row)
+    err = capsys.readouterr().err
+    assert 'WARNING' in err and str(pipeline.PROGRESS) in err
+    assert 'header lacks archive_s' in err and 'rotate' in err
+    assert 'Continuing with new 11-column rows' in err
+    assert pipeline.PROGRESS.read_text() == legacy + row + '\n'
+
+
+def test_progress_invalid_utf8_warns_and_appends(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(pipeline, 'PROGRESS', tmp_path / 'progress.md')
+    legacy = b'# Legacy progress\xff\n\n| time | date | status | notes |\n'
+    pipeline.PROGRESS.write_bytes(legacy)
+    row = pipeline.progress_row({'ts': 'now', 'status': 'batch_start'})
+    pipeline.append_progress_md(row)
+    err = capsys.readouterr().err
+    assert 'WARNING' in err and str(pipeline.PROGRESS) in err
+    assert 'header lacks archive_s' in err
+    assert pipeline.PROGRESS.read_bytes() == legacy + (row + '\n').encode('utf-8')
+
+
+def test_progress_current_header_does_not_warn(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(pipeline, 'PROGRESS', tmp_path / 'progress.md')
+    row = pipeline.progress_row({'ts': 'now', 'status': 'batch_start'})
+    pipeline.append_progress_md(row)
+    pipeline.append_progress_md(row)
+    assert capsys.readouterr().err == ''
+    assert pipeline.PROGRESS.read_text().splitlines()[-2:] == [row, row]
 
 
 if __name__ == '__main__':

@@ -84,9 +84,13 @@ Stop policy: **Human GO only**. Auto-stop after 3 consecutive extract/etl failur
 
 Successful ETL JSONL records retain the existing fields and four-field `parsed` subset,
 and add top-level `profile`: the full ETL profile, including per-chunk details
-(null when absent). `prefetch_wait_s` measures only the post-ETL join for the next
+(null when absent). Historically, `prefetch_wait_s` measured only the post-ETL join for the next
 day (seconds, 1 decimal; 0.0 without a join). `csv_delete_s` measures the CSV delete
 attempt, including failures (seconds, 3 decimals); existing delete notes remain.
-`already_in_lake` records use 0.0 for both timings because neither operation runs.
-The Markdown table and tail-only watch helper remain unchanged. No runtime knobs
+Legacy `already_in_lake` records used 0.0 for `prefetch_wait_s` and
+`csv_delete_s` because neither operation ran.
+The above describes the legacy pipeline. In the SSD pipeline the join is gone;
+`prefetch_wait_s` is unused and removed by the t1083u observability follow-up.
+See the SSD run-record for the expanded Markdown timing schema and rotation requirement.
+The tail-only watch helper remains unchanged. No runtime knobs
 or ETL behavior changed; no 4090/live PID/lake access or deployment performed.

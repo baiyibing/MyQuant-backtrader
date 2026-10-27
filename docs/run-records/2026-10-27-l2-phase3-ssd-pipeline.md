@@ -66,8 +66,8 @@ not coordinate with the older live implementation or unrelated lake writers.
   queues and exit; failed artifacts remain for retry. Progress writes serialize
   across workers. A failed day is not sent downstream.
 - `archive_s`, `extract_s`, `etl_s`, `publish_s`, `csv_delete_s` and ETL `profile`
-  are retained in success JSONL. `prefetch_wait_s` is 0 because the old join no
-  longer exists. Stage starts are logged to stdout. CSV deletion runs in publish.
+  are retained in success JSONL. `prefetch_wait_s` was unused (always 0) and is removed by the
+  observability follow-up because the old join no longer exists. Stage starts are logged to stdout. CSV deletion runs in publish.
 - Abrupt exit after a successful manifest commit can leave scratch artifacts;
   the already committed day is skipped on restart. These may be removed during
   a later maintenance window after checking the lake manifest and pair.
@@ -86,7 +86,7 @@ traffic; compare `archive_s` and `publish_s` as well as ETL profile on 4090.
 Data-free checks (explicit Linux interpreter for this sandbox):
 
 ```sh
-OSKH_MERGE_PYTHON=/usr/bin/python3 /usr/bin/python3 -m unittest discover -s tests -p test_l2_phase3_pipeline.py -v
+python3 -m pytest tests/test_l2_phase3_pipeline.py -q
 ```
 
 Tests cover overlapping extract/ETL/publish, ETL output routing and profile,
@@ -94,3 +94,21 @@ copy interruption, manifest interruption after rename, repeat publish,
 incomplete lake preservation and staged-day resume without CSV/archive.
 No Windows/7-Zip/real DuckDB lake benchmark was run here. Claude review follows
 this PR separately.
+
+## Human t1083u observability follow-up (not deployed)
+
+Progress Markdown and OK stdout expose archive/extract/ETL/publish/CSV-delete
+seconds, with the same precision as JSONL (extract/ETL: 1 decimal; others: 3).
+Before using this schema, ops must rotate an existing progress Markdown file:
+old eight-column headers/rows are historical and must not receive new eleven-column
+rows. If an existing header lacks `archive_s`, the writer warns clearly on stderr
+before each append, then continues writing new eleven-column rows; it does not
+rotate or rewrite historical content. OK stdout uses `archive_s=`, `extract_s=`,
+`etl_s=`, `publish_s=`, and `csv_delete_s=` (seconds, no trailing unit suffix).
+JSONL needs no rotation. No live progress file was changed here.
+Failure JSONL and Markdown retain only timing keys already present on the job;
+missing stages stay absent/blank, including archive/publish calls that raise before
+returning a timing. No new elapsed-time measurement or synthetic failure zeros.
+Success retains ETL profile and the five stage timings; prefetch_wait_s is removed.
+No queue, locking, publish, RO retry, or environment-default semantics changed.
+No hotcut, production/PID/lake access, or deployment performed.
