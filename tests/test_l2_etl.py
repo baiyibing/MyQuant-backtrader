@@ -162,6 +162,38 @@ class TestEtlOneDay:
         assert result.rows_main == int(with_data)
         assert result.rows_order == int(with_data)
 
+    @pytest.mark.parametrize("sample", [0, 2])
+    @pytest.mark.parametrize("ids", [(1, 2, 10), (2, 3, 11), (1, 2, 11)])
+    def test_gap_free_mixed_encodings(
+        self, tmp_path: Path, sample: int, ids: tuple[int, int, int],
+    ) -> None:
+        day = tmp_path / "2026-01-16"
+        day.mkdir()
+        # GBK is the heaviest file, so the stratified sample must include it.
+        for code, encoding in [("000001", "gbk"), ("000002", "utf-8"),
+                               ("000003", "utf-8-sig")]:
+            tran_ids = list(range(1, 11)) if encoding == "gbk" else [1]
+            if encoding == "gbk":
+                tran_ids[0], tran_ids[1], tran_ids[-1] = ids
+            header = CSV_HEADER.replace("TranID", "成交编号")
+            lines = [header] + [
+                ",".join(str(v) for v in _row(i, "09:30:00", 10.0, 100, "B"))
+                for i in tran_ids
+            ]
+            (day / f"{code}.csv").write_bytes(("\n".join(lines) + "\n").encode(encoding))
+        result = etl_one_day(
+            day, out_root=tmp_path / "out", validate_gap_free=True,
+            gap_free_sample=sample,
+        )
+        assert result.rows_main == 12
+        assert result.rows_order == 12
+        assert result.skipped is False
+        assert result.gap_free_ok is (ids == (1, 2, 10))
+        assert result.gap_free_failures == (
+            [] if ids == (1, 2, 10) else
+            [f"000001.csv: n=10 min={min(ids)} max={max(ids)}"]
+        )
+
     @pytest.mark.parametrize("payload", [b"", b"\xff"])
     def test_csv_sniff_empty_or_undecodable(self, tmp_path: Path, payload: bytes) -> None:
         path = tmp_path / "000001.csv"
