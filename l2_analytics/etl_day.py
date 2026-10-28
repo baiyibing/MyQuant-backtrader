@@ -63,6 +63,7 @@ class DayEtlResult:
     source_csv_bytes: int
     compress_ratio: float
     elapsed_s: float
+    engine: str = "duckdb"
     chunks: int = 0
     skipped: bool = False
     gap_free_ok: bool = True
@@ -180,9 +181,11 @@ def _append_manifest(
     main_parts: list[str],
     order_parts: list[str],
     stat_by_path: dict[str, os.stat_result] | None = None,
+    engine: str = "unknown",
 ) -> None:
     cache = stat_by_path or {}
     rec = {
+        "engine": engine,
         "date": date,
         "rows_main": rows_main,
         "rows_order": rows_order,
@@ -553,11 +556,21 @@ def etl_one_day(
     validate_gap_free: bool = True,
     gap_free_sample: int = 0,
     max_files: int = 0,
+    engine: str | None = None,
 ) -> DayEtlResult:
     """Convert one ``YYYY-MM-DD`` L2 CSV directory to main+order Parquet.
 
     ``max_files``: if > 0, only process the first N CSVs (smoke). 0 = all.
     """
+    engine = engine if engine is not None else os.environ.get("OSKH_L2_ETL_ENGINE", "duckdb")
+    if engine not in ("duckdb", "polars"):
+        raise ValueError(f"invalid OSKH_L2_ETL_ENGINE: {engine!r}; expected duckdb|polars")
+    write_chunk = _write_chunk
+    merge_chunks = _merge_chunks
+    if engine == "polars":
+        # Import before any output directories or manifests are touched.
+        from l2_analytics.etl_polars import configure_threads, write_chunk, merge_chunks
+        configure_threads(threads)
     t0 = time.perf_counter()
     source = Path(source_dir).resolve()
     if not source.is_dir():
@@ -579,13 +592,15 @@ def etl_one_day(
     manifest_path = data_root / "_manifest.jsonl"
     work_dir = data_root / f"_work_{date}"
     tmp_dir = Path(temp_directory) if temp_directory else (data_root / "_duckdb_tmp")
-    tmp_dir.mkdir(parents=True, exist_ok=True)
+    if engine == "duckdb":
+        tmp_dir.mkdir(parents=True, exist_ok=True)
     peak_rss: list[int | None] = [None]
     peak_rss_chunk: list[int | None] = [None]
     peak_rss_compact: list[int | None] = [None]
     peak_temp: list[int | None] = [None]
     note_peak(peak_rss)
-    note_temp_peak(peak_temp, tmp_dir)
+    if engine == "duckdb":
+        note_temp_peak(peak_temp, tmp_dir)
 
     t_scan = time.perf_counter()
     csv_files, stat_by_path = _scan_csv_files(source)
@@ -622,6 +637,7 @@ def etl_one_day(
                 main_bytes = sum((data_root / n).stat().st_size for n in skip_main_parts)
                 order_bytes = sum((data_root / n).stat().st_size for n in skip_order_parts)
                 return DayEtlResult(
+                    engine=rec.get("engine", "unknown"),
                     date=date,
                     source_dir=str(source),
                     csv_files=len(csv_files),
@@ -642,6 +658,7 @@ def etl_one_day(
             # Empty-day idempotent skip: manifest match with 0 rows + no parts.
             if not all_parts and int(rec.get("rows_main", 0)) == 0:
                 return DayEtlResult(
+                    engine=rec.get("engine", "unknown"),
                     date=date,
                     source_dir=str(source),
                     csv_files=len(csv_files),
@@ -683,8 +700,10 @@ def etl_one_day(
                 main_parts=[],
                 order_parts=[],
                 stat_by_path=stat_by_path,
+                engine=engine,
             )
         return DayEtlResult(
+            engine=engine,
             date=date,
             source_dir=str(source),
             csv_files=len(csv_files),
@@ -728,16 +747,17 @@ def etl_one_day(
     rows_order = 0
     chunk_profiles: list[dict[str, float]] = []
 
-    con = duckdb.connect(database=":memory:")
+    con = duckdb.connect(database=":memory:") if engine == "duckdb" else None
     try:
-        _configure(con, memory_limit=memory_limit, threads=n_threads, temp_dir=tmp_dir)
+        if con is not None:
+            _configure(con, memory_limit=memory_limit, threads=n_threads, temp_dir=tmp_dir)
         setup_s = time.perf_counter() - t_setup
         for idx, group in enumerate(chunks):
             if not group:
                 continue
             main_c = work_dir / f"main_{idx:04d}.parquet"
             order_c = work_dir / f"order_{idx:04d}.parquet"
-            n_m, n_o, cprof = _write_chunk(
+            n_m, n_o, cprof = write_chunk(
                 con, date=date, files=group, main_out=main_c, order_out=order_c, size_by_path=size_by_path
             )
             rows_main += n_m
@@ -747,7 +767,8 @@ def etl_one_day(
             chunk_profiles.append(cprof)
             note_peak(peak_rss)
             note_peak(peak_rss_chunk)
-            note_temp_peak(peak_temp, tmp_dir)
+            if engine == "duckdb":
+                note_temp_peak(peak_temp, tmp_dir)
             print(
                 f"[l2_etl] chunk {idx + 1}/{len(chunks)} files={len(group)} "
                 f"rows={n_m} main={cprof['main_copy_s']:.1f}s order={cprof['order_copy_s']:.1f}s "
@@ -755,32 +776,38 @@ def etl_one_day(
                 flush=True,
             )
     finally:
-        con.close()
+        if con is not None:
+            con.close()
     note_peak(peak_rss_chunk)
-    note_temp_peak(peak_temp, tmp_dir)
+    if engine == "duckdb":
+        note_temp_peak(peak_temp, tmp_dir)
 
     # v5.9 publish: compact range-sorted work chunks → date=D/{main,order}.parquet
     # (pyarrow concat; replace-first). Then drop legacy flat parts for this date.
     t_publish = time.perf_counter()
     main_out.parent.mkdir(parents=True, exist_ok=True)
     note_peak(peak_rss_compact)  # baseline before compact
-    merge_con = duckdb.connect(database=":memory:")
+    merge_con = duckdb.connect(database=":memory:") if engine == "duckdb" else None
     try:
-        _configure(merge_con, memory_limit=memory_limit, threads=n_threads, temp_dir=tmp_dir)
-        n_pub_m, merge_main_s = _merge_chunks(
+        if merge_con is not None:
+            _configure(merge_con, memory_limit=memory_limit, threads=n_threads, temp_dir=tmp_dir)
+        n_pub_m, merge_main_s = merge_chunks(
             merge_con, chunk_paths=main_chunks, final_path=main_out
         )
         note_peak(peak_rss)
         note_peak(peak_rss_compact)
-        note_temp_peak(peak_temp, tmp_dir)
-        n_pub_o, merge_order_s = _merge_chunks(
+        if engine == "duckdb":
+            note_temp_peak(peak_temp, tmp_dir)
+        n_pub_o, merge_order_s = merge_chunks(
             merge_con, chunk_paths=order_chunks, final_path=order_out
         )
         note_peak(peak_rss)
         note_peak(peak_rss_compact)
-        note_temp_peak(peak_temp, tmp_dir)
+        if engine == "duckdb":
+            note_temp_peak(peak_temp, tmp_dir)
     finally:
-        merge_con.close()
+        if merge_con is not None:
+            merge_con.close()
     if n_pub_m != rows_main or n_pub_o != rows_order:
         raise RuntimeError(
             f"[l2_etl] compact row mismatch: main {n_pub_m}/{rows_main} "
@@ -811,6 +838,7 @@ def etl_one_day(
             main_parts=main_parts,
             order_parts=order_parts,
             stat_by_path=stat_by_path,
+            engine=engine,
         )
     manifest_s = time.perf_counter() - t_manifest
 
@@ -822,12 +850,14 @@ def etl_one_day(
         scan_s + gap_free_s + setup_s + chunk_total_sum_s + publish_s + manifest_s
     )
     note_peak(peak_rss)
-    note_temp_peak(peak_temp, tmp_dir)
+    if engine == "duckdb":
+        note_temp_peak(peak_temp, tmp_dir)
     peak_rss_bytes = peak_rss[0]
     peak_rss_chunk_b = peak_rss_chunk[0]
     peak_rss_compact_b = peak_rss_compact[0]
     peak_temp_b = peak_temp[0]
     profile: dict[str, Any] = {
+        "engine": engine,
         "scan_s": round(scan_s, 3),
         "gap_free_s": round(gap_free_s, 3),
         "setup_s": round(setup_s, 3),
@@ -846,7 +876,7 @@ def etl_one_day(
         "peak_rss_compact_bytes": peak_rss_compact_b,
         "peak_rss_compact_gb": bytes_to_gb(peak_rss_compact_b),
         # DuckDB SET temp_directory peak on-disk footprint (spill files).
-        "temp_directory": tmp_dir.as_posix(),
+        "temp_directory": tmp_dir.as_posix() if engine == "duckdb" else None,
         "peak_temp_bytes": peak_temp_b,
         "peak_temp_gb": bytes_to_gb(peak_temp_b),
         "rss_end_bytes": process_rss_bytes(),
@@ -856,6 +886,7 @@ def etl_one_day(
         ],
     }
     return DayEtlResult(
+        engine=engine,
         date=date,
         source_dir=str(source),
         csv_files=len(csv_files),

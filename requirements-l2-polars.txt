@@ -1,0 +1,2 @@
+# Optional offline L2 ETL backend; core requirements remain required.
+polars>=2.1,<3

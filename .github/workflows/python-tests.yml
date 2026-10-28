@@ -48,7 +48,7 @@ jobs:
       # skipif(not _NUMBA_SCAN_AVAILABLE). Simulate/scan_held_day default remains
       # the Python reference; numba is opt-in only.
       - name: Install dependencies
-        run: python -m pip install -r requirements.txt
+        run: python -m pip install -r requirements.txt -r requirements-l2-polars.txt
 
       # L1: registry/baseline/capability admission + minute classification (post-pip).
       # Registry/baseline imports require the installed research dependencies.

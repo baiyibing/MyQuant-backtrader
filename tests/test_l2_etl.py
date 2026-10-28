@@ -10,6 +10,14 @@ import pytest
 
 from l2_analytics.etl_day import _is_header_only_csv, etl_one_day
 
+@pytest.fixture(autouse=True, params=["duckdb", "polars"])
+def etl_engine(request, monkeypatch):
+    if request.param == "polars":
+        pytest.importorskip("polars")
+    monkeypatch.setenv("OSKH_L2_ETL_ENGINE", request.param)
+    return request.param
+
+
 CSV_HEADER = (
     "TranID,Time,Price,Volume,SaleOrderVolume,BuyOrderVolume,"
     "Type,SaleOrderID,SaleOrderPrice,BuyOrderID,BuyOrderPrice"
@@ -84,7 +92,7 @@ class TestEtlOneDay:
         assert r.profile.get("peak_rss_chunk_bytes") is not None
         assert r.profile.get("peak_rss_compact_bytes") is not None
         assert "peak_temp_bytes" in r.profile
-        assert r.profile.get("temp_directory")
+        assert bool(r.profile.get("temp_directory")) == (r.engine == "duckdb")
 
     def test_instrument_type_injection(self, synthetic_day: Path, tmp_path: Path) -> None:
         out = tmp_path / "out"
@@ -425,3 +433,80 @@ class TestGapFreeStratified:
         )
         heaviest = max(files, key=lambda p: sizes[str(p)])
         assert heaviest in picked
+
+
+def test_engine_selection_fail_closed(tmp_path, monkeypatch):
+    monkeypatch.setenv("OSKH_L2_ETL_ENGINE", "typo")
+    out = tmp_path / "must-not-exist"
+    with pytest.raises(ValueError, match="duckdb\\|polars"):
+        etl_one_day(tmp_path / "missing", out_root=out)
+    assert not out.exists()
+
+
+def test_default_engine(synthetic_day, tmp_path, monkeypatch):
+    monkeypatch.delenv("OSKH_L2_ETL_ENGINE")
+    result = etl_one_day(synthetic_day, out_root=tmp_path / "out")
+    assert result.engine == result.profile["engine"] == "duckdb"
+
+
+def test_engine_parity(synthetic_day, tmp_path):
+    pytest.importorskip("polars")
+    results = [etl_one_day(synthetic_day, out_root=tmp_path / engine,
+                          engine=engine, chunk_files=1) for engine in ("duckdb", "polars")]
+    import pyarrow.parquet as pq
+    for attr in ("main_parquet", "order_parquet"):
+        tables = [pq.ParquetFile(getattr(r, attr)).read() for r in results]
+        schemas = [_query_parquet(getattr(r, attr),
+                   "DESCRIBE SELECT * FROM read_parquet('__PQ__')") for r in results]
+        assert [(r[0], r[1]) for r in schemas[0]] == [(r[0], r[1]) for r in schemas[1]]
+        assert tables[0].to_pylist() == tables[1].to_pylist()
+    for result in results:
+        assert result.profile["chunk_total_sum_s"] >= 0
+        assert result.profile["merge_main_s"] >= 0
+        assert result.profile["merge_order_s"] >= 0
+        assert etl_one_day(synthetic_day, out_root=Path(result.main_parquet).parent.parent,
+                           engine=result.engine).skipped
+
+def test_cross_engine_skip_attribution(synthetic_day, tmp_path, etl_engine):
+    other = "polars" if etl_engine == "duckdb" else "duckdb"
+    pytest.importorskip("polars")
+    result = etl_one_day(synthetic_day, out_root=tmp_path, engine=etl_engine)
+    skipped = etl_one_day(synthetic_day, out_root=tmp_path, engine=other)
+    assert skipped.skipped and skipped.engine == result.engine
+    manifest = tmp_path / "_manifest.jsonl"
+    record = json.loads(manifest.read_text())
+    record.pop("engine")
+    manifest.write_text(json.dumps(record) + "\n")
+    assert etl_one_day(synthetic_day, out_root=tmp_path, engine=other).engine == "unknown"
+
+
+def test_polars_no_unused_duckdb(synthetic_day, tmp_path, monkeypatch):
+    pytest.importorskip("polars")
+    def unexpected(*args, **kwargs):
+        raise AssertionError("unused DuckDB connection")
+    monkeypatch.setattr(duckdb, "connect", unexpected)
+    result = etl_one_day(synthetic_day, out_root=tmp_path, engine="polars",
+                         validate_gap_free=False)
+    assert result.profile["temp_directory"] is None
+    assert result.profile["peak_temp_bytes"] is None
+    assert result.profile["peak_temp_gb"] is None
+    assert not (tmp_path / "_duckdb_tmp").exists()
+
+
+def test_polars_single_chunk_copy(tmp_path):
+    pl = pytest.importorskip("polars")
+    from l2_analytics.etl_polars import merge_chunks
+    chunk, final = tmp_path / "chunk.parquet", tmp_path / "final.parquet"
+    pl.DataFrame({"x": [1, 2]}).write_parquet(chunk)
+    rows, _ = merge_chunks(None, chunk_paths=[chunk], final_path=final)
+    assert rows == 2
+    assert final.read_bytes() == chunk.read_bytes()
+    assert not final.with_name(final.name + ".merge.tmp").exists()
+
+
+def test_compare_json_scrape():
+    from scripts.misc.compare_l2_etl_engines import last_result, timing
+    assert last_result('log {noise}\n{"profile": {"scan_s": 1}}\n') == {"profile": {"scan_s": 1}}
+    assert timing({}, "merge_main_s") == "N/A"
+    with pytest.raises(ValueError, match="no final JSON"):
+        last_result("progress only")
