@@ -296,6 +296,38 @@ def _select_gap_free_targets(
     return out
 
 
+def _csv_source_sql(files: list[Path]) -> str:
+    """Fixed positional schema; discard vendor watermark fields without losing rows."""
+    groups: dict[str, list[Path]] = {}
+    for path in files:
+        # DuckDB's latin-1 decoder rejects some UTF-8 input. Keep UTF-8 files
+        # on their original path, including mixed-encoding chunks.
+        with path.open("rb") as fh:
+            header = fh.readline()
+        try:
+            header.decode("utf-8-sig")
+            encoding = "utf-8"
+        except UnicodeDecodeError:
+            encoding = "latin-1"
+        groups.setdefault(encoding, []).append(path)
+    columns = ", ".join(
+        f"'{name}': 'VARCHAR'" for name in (
+            "TranID", "Time", "Price", "Volume", "SaleOrderVolume",
+            "BuyOrderVolume", "Type", "SaleOrderID", "SaleOrderPrice",
+            "BuyOrderID", "BuyOrderPrice",
+        )
+    )
+    sources = []
+    for encoding, paths in groups.items():
+        file_list = "[" + ", ".join("'" + p.as_posix().replace("'", "''") + "'" for p in paths) + "]"
+        sources.append(
+            f"SELECT * FROM read_csv({file_list}, header=true, filename=true, "
+            f"auto_detect=false, parallel=true, encoding='{encoding}', "
+            f"strict_mode=false, columns={{{columns}}})"
+        )
+    return "(" + " UNION ALL ".join(sources) + ")"
+
+
 def _check_gap_free(
     files: list[Path],
     *,
@@ -308,7 +340,6 @@ def _check_gap_free(
     # opt #8: one grouped query over the sampled file list (filename=true) instead of
     # N per-file queries. parse_filename(filename, true) yields the bare code (== stem).
     name_by_bare = {p.stem.strip(): p.name for p in targets}
-    file_list_sql = "[" + ", ".join(f"'{p.as_posix()}'" for p in targets) + "]"
     failures: list[str] = []
     con = duckdb.connect(database=":memory:")
     try:
@@ -321,22 +352,7 @@ def _check_gap_free(
               max(TranID::BIGINT) AS mx
             -- Match _write_chunk's positional schema: skip header sniffing, which
             -- rejects GBK exchange headers. Cast before min/max for numeric order.
-            FROM read_csv(
-              {file_list_sql}, header=true, auto_detect=false, filename=true,
-              columns={{
-                'TranID': 'VARCHAR',
-                'Time': 'VARCHAR',
-                'Price': 'VARCHAR',
-                'Volume': 'VARCHAR',
-                'SaleOrderVolume': 'VARCHAR',
-                'BuyOrderVolume': 'VARCHAR',
-                'Type': 'VARCHAR',
-                'SaleOrderID': 'VARCHAR',
-                'SaleOrderPrice': 'VARCHAR',
-                'BuyOrderID': 'VARCHAR',
-                'BuyOrderPrice': 'VARCHAR'
-              }}
-            )
+            FROM {_csv_source_sql(targets)}
             GROUP BY 1
             """
         ).fetchall()
@@ -390,8 +406,6 @@ def _write_chunk(
     con.executemany("INSERT INTO symbol_map VALUES (?, ?, ?)", sym_rows)
     prof["sym_map_s"] = time.perf_counter() - t_sym
 
-    # Explicit file list avoids glob + keeps chunk bounded.
-    file_list_sql = "[" + ", ".join(f"'{p.as_posix()}'" for p in files) + "]"
     session_sql = _session_sql("Time")
 
     t_enrich = time.perf_counter()
@@ -427,26 +441,7 @@ def _write_chunk(
         -- opt #1: explicit VARCHAR columns + auto_detect=false 跳过 DuckDB 全文件
         -- 嗅探（sample_size=-1 曾在 CREATE 阶段整包扫一遍）；类型由上方 CAST/TRY_CAST
         -- 决定，语义不变。交易所 L2 dump schema 统一，故去 union_by_name。
-        FROM read_csv(
-          {file_list_sql},
-          header=true,
-          filename=true,
-          auto_detect=false,
-          parallel=true,
-          columns={{
-            'TranID': 'VARCHAR',
-            'Time': 'VARCHAR',
-            'Price': 'VARCHAR',
-            'Volume': 'VARCHAR',
-            'SaleOrderVolume': 'VARCHAR',
-            'BuyOrderVolume': 'VARCHAR',
-            'Type': 'VARCHAR',
-            'SaleOrderID': 'VARCHAR',
-            'SaleOrderPrice': 'VARCHAR',
-            'BuyOrderID': 'VARCHAR',
-            'BuyOrderPrice': 'VARCHAR'
-          }}
-        ) r
+        FROM {_csv_source_sql(files)} r
         INNER JOIN symbol_map m
           ON parse_filename(r.filename, true) = m.bare_code
         WHERE r.Type IN ('B', 'S')
