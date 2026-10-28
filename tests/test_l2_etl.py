@@ -8,7 +8,7 @@ from pathlib import Path
 import duckdb
 import pytest
 
-from l2_analytics.etl_day import etl_one_day
+from l2_analytics.etl_day import _is_header_only_csv, etl_one_day
 
 CSV_HEADER = (
     "TranID,Time,Price,Volume,SaleOrderVolume,BuyOrderVolume,"
@@ -141,6 +141,35 @@ class TestEtlOneDay:
         r = etl_one_day(day, out_root=tmp_path / "out", validate_gap_free=False)
         assert r.empty_files == 1
         assert r.rows_main == 1
+
+    @pytest.mark.parametrize("encoding", ["gbk", "gb18030", "utf-8", "utf-8-sig"])
+    @pytest.mark.parametrize("with_data", [False, True])
+    def test_csv_sniff_encoding(
+        self, tmp_path: Path, encoding: str, with_data: bool,
+    ) -> None:
+        day = tmp_path / "2026-01-16"
+        day.mkdir()
+        # Non-ASCII is essential: an ASCII-only GBK fixture also decodes as UTF-8.
+        # The loader uses explicit positional columns, so header labels are skipped.
+        text = CSV_HEADER.replace("TranID", "成交编号") + "\n"
+        if with_data:
+            text += ",".join(str(v) for v in _row(1, "09:30:00", 10.0, 100, "B")) + "\n"
+        path = day / "000001.csv"
+        path.write_bytes(text.encode(encoding))
+        assert _is_header_only_csv(path) is (not with_data)
+        result = etl_one_day(day, out_root=tmp_path / "out", validate_gap_free=False)
+        assert result.empty_files == int(not with_data)
+        assert result.rows_main == int(with_data)
+        assert result.rows_order == int(with_data)
+
+    @pytest.mark.parametrize("payload", [b"", b"\xff"])
+    def test_csv_sniff_empty_or_undecodable(self, tmp_path: Path, payload: bytes) -> None:
+        path = tmp_path / "000001.csv"
+        path.write_bytes(payload)
+        assert _is_header_only_csv(path) is True
+
+    def test_csv_sniff_missing_file(self, tmp_path: Path) -> None:
+        assert _is_header_only_csv(tmp_path / "missing.csv") is True
 
     def test_empty_day_all_header_only(self, tmp_path: Path) -> None:
         """All CSVs header-only -> 0 rows, no raise, empty manifest parts."""
