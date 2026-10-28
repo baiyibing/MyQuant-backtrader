@@ -317,9 +317,26 @@ def _check_gap_free(
             SELECT
               parse_filename(filename, true) AS bare,
               count(*)::BIGINT AS n,
-              min(TranID)::BIGINT AS mn,
-              max(TranID)::BIGINT AS mx
-            FROM read_csv({file_list_sql}, header=true, auto_detect=true, filename=true)
+              min(TranID::BIGINT) AS mn,
+              max(TranID::BIGINT) AS mx
+            -- Match _write_chunk's positional schema: skip header sniffing, which
+            -- rejects GBK exchange headers. Cast before min/max for numeric order.
+            FROM read_csv(
+              {file_list_sql}, header=true, auto_detect=false, filename=true,
+              columns={{
+                'TranID': 'VARCHAR',
+                'Time': 'VARCHAR',
+                'Price': 'VARCHAR',
+                'Volume': 'VARCHAR',
+                'SaleOrderVolume': 'VARCHAR',
+                'BuyOrderVolume': 'VARCHAR',
+                'Type': 'VARCHAR',
+                'SaleOrderID': 'VARCHAR',
+                'SaleOrderPrice': 'VARCHAR',
+                'BuyOrderID': 'VARCHAR',
+                'BuyOrderPrice': 'VARCHAR'
+              }}
+            )
             GROUP BY 1
             """
         ).fetchall()
