@@ -96,7 +96,11 @@ Quota/usage-limit/403/429 stops the runner, writes `work/QUOTA_STOP.json`, retur
 exit **3**, and launches no later session. A plain `pull` stays stopped while that
 marker exists. `--resume-quota` archives it and retries; quota/startup credential
 failures do not consume vendor attempts. Startup errors and timeouts return **2**
-without sleeping/spinning. Failed/interrupted vendor attempts are bounded; raising
+without sleeping/spinning. Calls the model skipped under the prompt stop policy
+(e.g. after a mid-session vendor 401; `skipped:`/empty-error entries) made no
+vendor request: they are journaled as `skipped`, do not consume attempts, and a
+session in which every call was skipped returns **2** instead of spinning.
+Failed/interrupted vendor attempts are bounded; raising
 `--max-attempts` explicitly permits additional attempts. Exit **0** means command
 success, **2** means invalid input, unresolved work or other failure. `pending`
 returns 0 for a readable status even when work is unresolved; inspect its counts.

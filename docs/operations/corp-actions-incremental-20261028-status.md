@@ -63,9 +63,32 @@
 
 1. ~~更新 kimi CLI~~（已做，无效，2.3.3 上 401 依旧）。
 2. **联系 Kimi 支持**：确认 wind 数据源当前是否需要额外绑定 Wind 账号或 apiKey（最可能有效的动作）。
-3. **换电脑试**（owner 决定，见下节）。
+3. ~~换电脑试~~（已做，**证伪**：Thinkpad 换机实验 401 原样复现，见下节；换机/换凭证/换网络均无效）。
 4. **若恢复**：续跑当前 run（`D:\exports\bt_corp_actions_incr_20261028`；pull 前确认无 `work/runner.lock` 残留），完成后 `assemble` → `prepare-merge`。
-5. **若无法恢复**：评估换数据源（如 tushare/akshare/同花顺 iFind）或延后增量窗口。
+5. **近期按"数据源不可用"处置**：401 为服务端问题且已跨机复现，短期内不要指望 wind 通道；评估替代数据源（tushare / akshare / 同花顺 iFind）或延后增量窗口，优先级上调。
+
+## Thinkpad 换机实验（2026-10-28 晚，结论：401 在服务端，换机无效）
+
+环境：Thinkpad（独立 Windows 账户 / 独立凭证文件 / 独立网络），kimi CLI 2.3.3 + kimi-datasource 3.4.0（与 4090 同版本）。本机无 `D:\exports` / `E:\stock_data`，按"全新 init"备选路径搭建：
+
+- **基础湖重建**：由仓内 handoff `data/corp_actions/bt_corp_actions_20261006/`（#501 快照）重建 `manifest.json` + 3 parquet（21779 events / 2762 listing / 24 failures），过驱动 `validate_base`。脚本 `E:\exports\corp_actions_rebuild\build_lake.py`，湖 `E:\exports\corp_actions_lake`。
+- **init**：窗口 **2026-10-07 → 2026-10-28**（与 4090 冻结 k3 run 完全同窗），`kimi-code/k3`，2774 码 → 463 任务；run 目录 `E:\exports\bt_corp_actions_incr_20261028`（本机，与 4090 冻结 run 互不冲突）。
+
+结果：
+
+- 单码探针（~17:53）正常返回"没找到数据"（鉴权通过）；正式 pull **2 个会话内即复现 401**，原文与 4090 逐字一致（`{"code": 401, "message": "原因：未识别到有效的身份凭证…"}`）；同一会话内前一批次正常、后一批次 401，分钟级抖动在第二台机器上成立。
+- **结论：401 位于 kimi-datasource 上游 wind 后端，与机器/凭证/网络无关**。换机续跑不能解决问题。
+- 附带发现（已在本分支修复）：会话内 401 触发 prompt 停止策略后，被跳过的任务（`skipped:`/空 error 条目）此前按普通 error 烧 attempt —— 2 个会话烧满 ev_0001~ev_0005 共 5 个任务，其中多数**一次真实供应商调用都没发出**。修复：`skipped` 记账不计 vendor attempt；整会话全 skipped 时退出码 2 防空转。
+- 无数据分类在本机正常：`API_CALL_ERROR - Wind inner payload is not valid JSON ... '没找到数据'` 两个标记齐全，ev_0000 批次被正确拆分（463→469 任务）。
+
+本机 run 当前状态：469 任务，0 accepted，463 retryable，5 exhausted（修复前烧满的 ev_0001~ev_0005），无锁、无 QUOTA_STOP。wind 恢复后续跑：
+
+```powershell
+D:\anaconda3\envs\vanna312\python.exe scripts\data\pull_corp_actions_incremental.py pending --out-dir E:\exports\bt_corp_actions_incr_20261028
+D:\anaconda3\envs\vanna312\python.exe scripts\data\pull_corp_actions_incremental.py pull --out-dir E:\exports\bt_corp_actions_incr_20261028 --max-attempts 6
+```
+
+（`--max-attempts 6` 用于复活修复前烧满的 5 个任务；k3 需在本分支/合并后跑。）
 
 ## 换电脑续跑说明
 
@@ -88,5 +111,6 @@ D:\anaconda3\envs\vanna312\python.exe scripts\data\pull_corp_actions_incremental
 ## 产物位置
 
 - 当前 run：`D:\exports\bt_corp_actions_incr_20261028`（k3，窗口 10-07→10-28）
+- Thinkpad 实验 run：`E:\exports\bt_corp_actions_incr_20261028`（k3，同窗，全新 init，见上节；湖 `E:\exports\corp_actions_lake` 为 handoff 重建版，sha256 与 4090 湖不同）
 - 10-24 highspeed run：`D:\exports\bt_corp_actions_incr_20261024`（已从 `_broken_highspeed` 改回冻结路径；窗口 10-07→10-24，可续跑，状态干净无锁）
 - 旧 kimi-for-coding 失败证据：`D:\exports\bt_corp_actions_incr_20261024_kimi_for_coding_401`
