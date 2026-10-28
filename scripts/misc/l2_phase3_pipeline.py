@@ -190,6 +190,11 @@ def stage_folder(day: str) -> Path:
 
 
 def run_etl(day: str, *, engine: str | None = None) -> tuple[int, float, str, dict]:
+    """Return (rc, elapsed, failure_note, parsed CLI result).
+
+    The failure note uses validation diagnostics when parseable, otherwise
+    bounded stdout/stderr excerpts.
+    """
     t0 = time.perf_counter()
     env = os.environ.copy()
     selected = engine if engine is not None else env.get("OSKH_L2_ETL_ENGINE", "duckdb")
@@ -226,15 +231,19 @@ def run_etl(day: str, *, engine: str | None = None) -> tuple[int, float, str, di
         parsed = {}
     if proc.returncode or parsed.get("gap_free_ok") is False:
         # Retain the full CLI evidence before handing failure to the worker.
-        root = etl_root(day)
-        root.mkdir(parents=True, exist_ok=True)
-        evidence = {"day": day, "engine": selected, "returncode": proc.returncode,
-                    "result": parsed, "stderr_excerpt": err[-1000:]}
-        if not parsed:
-            evidence["stdout"] = proc.stdout or ""
-        temporary = root / "_etl_fail.tmp"
-        temporary.write_text(json.dumps(evidence, ensure_ascii=False, indent=2), encoding="utf-8")
-        os.replace(temporary, root / "_etl_fail.json")
+        try:
+            root = etl_root(day)
+            root.mkdir(parents=True, exist_ok=True)
+            evidence = {"day": day, "engine": selected, "returncode": proc.returncode,
+                        "result": parsed, "stderr_excerpt": err[-1000:]}
+            if not parsed:
+                evidence["stdout"] = proc.stdout or ""
+            temporary = root / "_etl_fail.tmp"
+            temporary.write_text(json.dumps(evidence, ensure_ascii=False, indent=2), encoding="utf-8")
+            os.replace(temporary, root / "_etl_fail.json")
+        except OSError as exc:
+            print(f"WARNING: ETL failure evidence write failed {day}: {exc}",
+                  file=sys.stderr, flush=True)
     return proc.returncode, elapsed, etl_failure_note(proc.returncode, parsed, out, err), parsed
 
 
@@ -242,7 +251,7 @@ def etl_failure_note(rc: int, parsed: dict, stdout: str = "", stderr: str = "") 
     """Keep validation diagnostics intact; bound output excerpts for crashes."""
     if "gap_free_ok" in parsed:
         fields = {key: parsed[key] for key in
-                  ("gap_free_ok", "gap_free_failures", "gap_free_checked") if key in parsed}
+                  ("gap_free_ok", "gap_free_failures") if key in parsed}
         return f"ETL rc={rc}: " + json.dumps(fields, ensure_ascii=False)
     # Bound after newline expansion as well as before it.
     out = stdout[-500:].replace("\n", " | ")[-500:]
@@ -437,15 +446,15 @@ def process_pipeline(todo: list[str]) -> dict:
         if stage_ready(day):
             job.update(json.loads((stage_folder(day) / "_ready.json").read_text(encoding="utf-8")))
             return
-        rc, elapsed, tail, parsed = run_etl(day, engine=engine)
+        rc, elapsed, failure_note, parsed = run_etl(day, engine=engine)
         parsed.setdefault("engine", engine)
         job.update(etl_s=elapsed, parsed=parsed)
         folder = stage_folder(day)
         if rc or parsed.get("gap_free_ok") is False:
-            raise RuntimeError(etl_failure_note(rc, parsed) if "gap_free_ok" in parsed else tail)
+            raise RuntimeError(etl_failure_note(rc, parsed) if "gap_free_ok" in parsed else failure_note)
         if not all((folder / n).is_file() and (folder / n).stat().st_size > 0
                          for n in ("main.parquet", "order.parquet")):
-            raise RuntimeError(tail)
+            raise RuntimeError(failure_note)
         # Persist timings/profile only after successful subprocess completion.
         job["manifest"] = next(r for r in manifest_records(etl_root(day)) if r["date"] == day)
         tmp = folder / "_ready.tmp"

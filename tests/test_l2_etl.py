@@ -300,6 +300,21 @@ class TestEtlOneDay:
         assert r.gap_free_ok is False
         assert len(r.gap_free_failures) > 0
 
+    def test_gap_free_retains_more_than_twenty_failures(self, tmp_path: Path) -> None:
+        day = tmp_path / "2026-01-17"
+        day.mkdir()
+        codes = [f"{i:06d}" for i in range(1, 26)]
+        for code in codes:
+            _write_csv(day, code, [_row(2, "09:30:00", 10.0, 100, "B")])
+        result = etl_one_day(
+            day, out_root=tmp_path / "out", validate_gap_free=True, gap_free_sample=50,
+        )
+        assert result.gap_free_ok is False
+        assert len(result.gap_free_failures) == len(codes)
+        assert set(result.gap_free_failures) == {
+            f"{code}.csv: n=1 min=2 max=2" for code in codes
+        }
+
     def test_invalid_dir_name_raises(self, tmp_path: Path) -> None:
         bad = tmp_path / "not-a-date"
         bad.mkdir()
