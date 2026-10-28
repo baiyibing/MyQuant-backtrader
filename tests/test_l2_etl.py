@@ -197,7 +197,7 @@ class TestEtlOneDay:
         assert result.rows_main == result.rows_order == 4
         assert result.gap_free_ok is (ids == (1, 2, 3))
         assert result.gap_free_failures == (
-            [] if ids == (1, 2, 3) else ["000001.csv: n=3 min=1 max=4"]
+            [] if ids == (1, 2, 3) else ["000001.csv: rows=3 uniq=3 min=1 max=4"]
         )
         assert _query_parquet(
             result.main_parquet,
@@ -239,8 +239,43 @@ class TestEtlOneDay:
         assert result.gap_free_ok is (ids == (1, 2, 10))
         assert result.gap_free_failures == (
             [] if ids == (1, 2, 10) else
-            [f"000001.csv: n=10 min={min(ids)} max={max(ids)}"]
+            [f"000001.csv: rows=10 uniq={10 if ids == (1, 2, 11) else 9} "
+             f"min={min(ids)} max={max(ids)}"]
         )
+
+    def test_gap_free_duplicate_tran_ids_tolerated(self, tmp_path: Path) -> None:
+        # Vendor exports reuse the last continuous-session TranID for STAR
+        # (688xxx) after-hours fixed-price prints (distinct rows under one id)
+        # and occasionally double-write a close print (identical row). Both
+        # keep distinct ids contiguous 1..max, so gap-free must pass; a
+        # genuinely missing print must still fail.
+        day = tmp_path / "2021-05-19"
+        day.mkdir()
+        close = _row(2, "15:00:01", 10.12, 200, "B")
+        _write_csv(day, "600421", [
+            _row(1, "09:25:00", 10.21, 200, "S"),
+            close, close,  # exact double-write of the close print
+        ])
+        _write_csv(day, "688660", [
+            _row(1, "09:30:00", 11.75, 300, "B"),
+            _row(2, "14:57:00", 11.75, 415, "S"),
+            _row(3, "15:00:00", 11.75, 400, "S"),
+            _row(3, "15:15:17", 11.75, 200, "S"),
+            _row(3, "15:29:59", 11.75, 194, "B"),  # after-hours prints share the last id
+        ])
+        result = etl_one_day(day, out_root=tmp_path / "out", validate_gap_free=True)
+        assert result.gap_free_ok is True
+        assert result.gap_free_failures == []
+
+        gapped = tmp_path / "2021-05-20"
+        gapped.mkdir()
+        _write_csv(gapped, "000001", [
+            _row(1, "09:30:00", 10.0, 100, "B"),
+            _row(3, "09:30:05", 10.0, 100, "S"),  # TranID 2 missing
+        ])
+        result = etl_one_day(gapped, out_root=tmp_path / "out2", validate_gap_free=True)
+        assert result.gap_free_ok is False
+        assert result.gap_free_failures == ["000001.csv: rows=2 uniq=2 min=1 max=3"]
 
     @pytest.mark.parametrize("payload", [b"", b"\xff"])
     def test_csv_sniff_empty_or_undecodable(self, tmp_path: Path, payload: bytes) -> None:
@@ -312,7 +347,7 @@ class TestEtlOneDay:
         assert result.gap_free_ok is False
         assert len(result.gap_free_failures) == len(codes)
         assert set(result.gap_free_failures) == {
-            f"{code}.csv: n=1 min=2 max=2" for code in codes
+            f"{code}.csv: rows=1 uniq=1 min=2 max=2" for code in codes
         }
 
     def test_invalid_dir_name_raises(self, tmp_path: Path) -> None:
