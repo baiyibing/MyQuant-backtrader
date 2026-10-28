@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import sys
 import time
 from datetime import date as Date
@@ -108,6 +109,11 @@ def merge_chunks(con, *, chunk_paths: list[Path], final_path: Path):
     tmp = final_path.with_name(final_path.name + ".merge.tmp")
     # Explicit concat preserves caller chunk order; streaming sink avoids a full-day collect.
     import pyarrow.parquet as pq
+    if len(chunk_paths) == 1:
+        shutil.copy2(chunk_paths[0], tmp)
+        n = pq.ParquetFile(tmp).metadata.num_rows
+        os.replace(tmp, final_path)
+        return n, time.perf_counter() - t
     schema = pq.ParquetFile(chunk_paths[0]).schema_arrow
     pl.concat([pl.scan_parquet(p, hive_partitioning=False) for p in chunk_paths]).sink_parquet(
         tmp, compression="zstd", row_group_size=_ROW_GROUP_SIZE, maintain_order=True, arrow_schema=schema,

@@ -29,7 +29,7 @@ from l2_analytics.etl_day import etl_one_day, result_to_json  # noqa: E402
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description="L2 tick one-day ETL (DuckDB)")
+    p = argparse.ArgumentParser(description="L2 tick one-day ETL (DuckDB / opt-in Polars via OSKH_L2_ETL_ENGINE)")
     p.add_argument(
         "--source",
         required=True,

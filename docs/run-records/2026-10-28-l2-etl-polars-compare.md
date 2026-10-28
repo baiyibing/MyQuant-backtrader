@@ -65,3 +65,19 @@ Resumed ready days retain the engine recorded by their original execution.
 Resource risk: two DuckDB ETLs (about 18 GB memory limit each) run alongside
 two Polars ETLs, whose memory is not capped by the DuckDB limit. Human accepts
 this play configuration under available CPU/RAM headroom; it is not a live hotcut.
+
+## Human t1130–t1132u review nits
+
+New manifests record the writing engine; idempotent skips report that engine,
+or `unknown` for older manifests without attribution, never the requested engine.
+Ready-day pipeline resume continues to retain its original ready record.
+Polars opens DuckDB only for shared gap-free validation; its `temp_directory`
+and `peak_temp_*` profile fields are null (N/A), while RSS sampling remains.
+Single-chunk Polars compaction copies the file without re-encoding.
+The compare helper reads the final JSON object and prints N/A for missing timings.
+
+Theoretical numeric parsing edges (`4e7`, `1e309`, whitespace-padded values)
+remain outside fixtures and may differ across engines; default DuckDB is unaffected.
+
+Next Human review is Kimi, triggered by hostbot after push; do not request
+another Claude/Grok pass. No merge, hotcut, live Phase3 or lake changes.

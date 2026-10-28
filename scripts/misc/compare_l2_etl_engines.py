@@ -10,6 +10,26 @@ import sys
 import time
 
 
+def last_result(stdout: str) -> dict:
+    """Read the last standalone JSON object, ignoring progress/log braces."""
+    decoder = json.JSONDecoder()
+    for pos in range(len(stdout) - 1, -1, -1):
+        if stdout[pos] != "{":
+            continue
+        try:
+            value, end = decoder.raw_decode(stdout[pos:])
+        except ValueError:
+            continue
+        if isinstance(value, dict) and not stdout[pos + end:].strip():
+            return value
+    raise ValueError("ETL stdout contains no final JSON object")
+
+
+def timing(profile: dict, key: str) -> str:
+    value = profile.get(key)
+    return f"{value:.3f}s" if isinstance(value, (int, float)) else "N/A"
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source', required=True)
@@ -37,11 +57,11 @@ def main():
         )
         wall = time.perf_counter() - t
         (out / f'{engine}.log').write_text(completed.stdout, encoding='utf-8')
-        result = json.loads(completed.stdout[completed.stdout.index('{'):])
+        result = last_result(completed.stdout)
         (out / f'{engine}.json').write_text(json.dumps(result, indent=2), encoding='utf-8')
-        prof = result['profile']
-        print(f"{engine}: wall={wall:.3f}s chunk={prof['chunk_total_sum_s']:.3f}s "
-              f"merge_main={prof['merge_main_s']:.3f}s merge_order={prof['merge_order_s']:.3f}s "
+        prof = result.get('profile') or {}
+        print(f"{engine}: wall={wall:.3f}s chunk={timing(prof, 'chunk_total_sum_s')} "
+              f"merge_main={timing(prof, 'merge_main_s')} merge_order={timing(prof, 'merge_order_s')} "
               f"rows={result['rows_main']}/{result['rows_order']}", flush=True)
     return 0
 
