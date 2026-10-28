@@ -49,11 +49,11 @@ The compare uses fresh processes and the same requested threads for each engine.
 RSS metrics remain sampled phase observations, not a continuous high-water mark.
 No live lake was used in local validation.
 
-## Human t1120u mixed fleet amendment
+## Human t1120u + t1121u mixed fleet amendment
 
-For play runs after Human GO, set `OSKH_L2_ETL_WORKERS=3` and
-`OSKH_L2_ETL_POLARS_WORKERS=1` with engine unset/default DuckDB. The first
-worker slot uses Polars and the next two DuckDB; scheduling determines which
+Human-preferred play configuration: `OSKH_L2_ETL_WORKERS=4 OSKH_L2_ETL_POLARS_WORKERS=2`
+with engine unset/default DuckDB. The first two
+worker slots use Polars and the next two DuckDB; scheduling determines which
 slot takes each day. Every child receives an explicit engine environment.
 `OSKH_L2_ETL_POLARS_WORKERS` defaults to 0 and must be an integer between 0
 and total workers, validated before pipeline work. `OSKH_L2_ETL_ENGINE=polars`
@@ -61,3 +61,7 @@ selects Polars for all slots (the worker-count knob must still be valid).
 Queue capacities remain 1/1/N/1; live total-worker default remains 2.
 Completed-day progress JSON includes the selected engine and existing profile.
 Resumed ready days retain the engine recorded by their original execution.
+
+Resource risk: two DuckDB ETLs (about 18 GB memory limit each) run alongside
+two Polars ETLs, whose memory is not capped by the DuckDB limit. Human accepts
+this play configuration under available CPU/RAM headroom; it is not a live hotcut.

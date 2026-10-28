@@ -459,20 +459,20 @@ class DualETLTest(unittest.TestCase):
 
 
 def test_mixed_engine_slots_and_subprocess_env(monkeypatch):
-    monkeypatch.setenv("OSKH_L2_ETL_WORKERS", "3")
-    monkeypatch.setenv("OSKH_L2_ETL_POLARS_WORKERS", "1")
+    monkeypatch.setenv("OSKH_L2_ETL_WORKERS", "4")
+    monkeypatch.setenv("OSKH_L2_ETL_POLARS_WORKERS", "2")
     monkeypatch.setenv("OSKH_L2_ETL_ENGINE", "duckdb")
-    assert pipeline.etl_engine_slots() == ["polars", "duckdb", "duckdb"]
+    assert pipeline.etl_engine_slots() == ["polars", "polars", "duckdb", "duckdb"]
     result = type("Result", (), {"returncode": 0, "stdout": "{}", "stderr": ""})()
     with patch.object(pipeline, "resolve_oskh_python", return_value=Path("/test/python")), \
          patch.object(pipeline.subprocess, "run", return_value=result) as run:
         for slot, engine in enumerate(pipeline.etl_engine_slots()):
             pipeline.run_etl(f"2025-01-0{slot + 1}", engine=engine)
     assert [c.kwargs["env"]["OSKH_L2_ETL_ENGINE"] for c in run.call_args_list] == [
-        "polars", "duckdb", "duckdb"]
+        "polars", "polars", "duckdb", "duckdb"]
     monkeypatch.setenv("OSKH_L2_ETL_ENGINE", "polars")
-    assert pipeline.etl_engine_slots() == ["polars"] * 3
-    for invalid in ("-1", "4", "oops", "1.5"):
+    assert pipeline.etl_engine_slots() == ["polars"] * 4
+    for invalid in ("-1", "5", "oops", "1.5"):
         monkeypatch.setenv("OSKH_L2_ETL_POLARS_WORKERS", invalid)
         with pytest.raises(ValueError, match="OSKH_L2_ETL_POLARS_WORKERS"):
             pipeline.process_pipeline([])
