@@ -34,7 +34,7 @@ from common.infra.data_root import (  # noqa: E402
     resolve_source_parquet,
 )
 
-MODELS = ("kimi-code/kimi-for-coding-highspeed", "kimi-code/kimi-for-coding")
+MODELS = ("kimi-code/kimi-for-coding-highspeed", "kimi-code/kimi-for-coding", "kimi-code/k3")
 BASE_FILES = ("manifest.json", "events.parquet", "listing.parquet", "failures.parquet")
 EVENT_COLS = (
     "code", "event_id", "ex_date", "record_date", "pay_date",
