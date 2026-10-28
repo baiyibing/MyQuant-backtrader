@@ -455,6 +455,7 @@ class DualETLTest(unittest.TestCase):
         self.assertEqual(counts['publish_fail'], 3)
         self.assertEqual(counts['ok'], 0)
         self.assertIn('batch_stop', pipeline.PROGRESS.read_text())
+        self.assertIn('3 consecutive failures since last completed publish', pipeline.PROGRESS.read_text())
         self.assertTrue(all(pipeline.stage_ready(day) for day in days))
 
 
@@ -476,3 +477,89 @@ def test_mixed_engine_slots_and_subprocess_env(monkeypatch):
         monkeypatch.setenv("OSKH_L2_ETL_POLARS_WORKERS", invalid)
         with pytest.raises(ValueError, match="OSKH_L2_ETL_POLARS_WORKERS"):
             pipeline.process_pipeline([])
+
+
+@pytest.fixture
+def isolated_pipeline(tmp_path, monkeypatch):
+    for key in ('SRC', 'CSV_ROOT', 'STAGING', 'ARCHIVES', 'LAKE'):
+        root = tmp_path / key
+        root.mkdir()
+        monkeypatch.setattr(pipeline, key, root)
+    for key in ('LOG_JSONL', 'PROGRESS'):
+        monkeypatch.setattr(pipeline, key, tmp_path / key)
+    monkeypatch.setenv('OSKH_L2_ETL_WORKERS', '1')
+    monkeypatch.setenv('OSKH_L2_ETL_POLARS_WORKERS', '0')
+    monkeypatch.setattr(pipeline, 'resolve_oskh_python', lambda: Path('/test/python'))
+
+
+@pytest.mark.parametrize('engine', ['duckdb', 'polars'])
+@pytest.mark.parametrize('rc', [2, 0])
+def test_gap_free_failure_retains_evidence_and_blocks_publish(isolated_pipeline, monkeypatch, engine, rc):
+    day = '2021-01-06'
+    monkeypatch.setenv('OSKH_L2_ETL_ENGINE', engine)
+    csv = pipeline.CSV_ROOT / day
+    csv.mkdir()
+    (csv / 'tick.csv').write_text('retained', encoding='utf-8')
+    (csv / '_extract_ready').touch()
+    folder = pipeline.stage_folder(day)
+    folder.mkdir(parents=True)
+    for name in ('main.parquet', 'order.parquet'):
+        (folder / name).write_bytes(b'nonempty staging')
+    failures = ['000001.csv: n=123 min=2 max=124', '600036.csv: n=50 min=1 max=70']
+    result = {'gap_free_ok': False, 'gap_free_failures': failures, 'gap_free_checked': 50,
+              'profile': {'chunks': ['profile-tail-scrap' * 100]}}
+    output = json.dumps(result, indent=2)
+    response = type('Result', (), {'returncode': rc, 'stdout': output, 'stderr': 'warning'})()
+    with patch.object(pipeline.subprocess, 'run', return_value=response) as run, \
+         patch.object(pipeline, 'publish_day', side_effect=AssertionError('must not publish')):
+        counts = pipeline.process_pipeline([day])
+    assert counts['etl_fail'] == 1 and counts['ok'] == 0
+    assert not (folder / '_ready.json').exists()
+    assert not pipeline.done_dates()
+    assert (csv / 'tick.csv').exists()
+    record = json.loads(pipeline.LOG_JSONL.read_text(encoding='utf-8'))
+    assert '"gap_free_ok": false' in record['notes']
+    assert all(failure in record['notes'] for failure in failures)
+    assert 'profile-tail-scrap' not in record['notes']
+    evidence = json.loads((pipeline.etl_root(day) / '_etl_fail.json').read_text(encoding='utf-8'))
+    assert evidence == {'day': day, 'engine': engine, 'returncode': rc,
+                        'result': result, 'stderr_excerpt': 'warning'}
+    command = run.call_args.args[0]
+    assert command[command.index('--gap-free-sample') + 1] == '50'
+
+
+@pytest.mark.parametrize('output', ['crash\n' * 2000, '{invalid json', '[1, 2]'])
+def test_etl_crash_fallback_is_bounded_and_raw_output_persisted(isolated_pipeline, output):
+    stderr = 'traceback\n' * 2000
+    response = type('Result', (), {'returncode': 1, 'stdout': output, 'stderr': stderr})()
+    with patch.object(pipeline.subprocess, 'run', return_value=response):
+        rc, _, note, parsed = pipeline.run_etl('2021-01-07', engine='duckdb')
+    assert rc == 1 and parsed == {}
+    assert len(note) <= 850
+    assert 'ETL rc=1: stdout=' in note and '; stderr=' in note
+    evidence = json.loads((pipeline.etl_root('2021-01-07') / '_etl_fail.json').read_text(encoding='utf-8'))
+    assert evidence['stdout'] == output
+    assert evidence['returncode'] == 1 and evidence['engine'] == 'duckdb'
+    assert evidence['stderr_excerpt'] == stderr.strip()[-1000:]
+
+
+def test_mocked_nonzero_etl_uses_validation_note(isolated_pipeline, monkeypatch):
+    day = '2021-01-12'
+    csv = pipeline.CSV_ROOT / day
+    csv.mkdir()
+    (csv / 'tick.csv').touch()
+    (csv / '_extract_ready').touch()
+    folder = pipeline.stage_folder(day)
+    folder.mkdir(parents=True)
+    for name in ('main.parquet', 'order.parquet'):
+        (folder / name).write_bytes(b'parquet')
+    result = {'gap_free_ok': False, 'gap_free_failures': ['sample.csv: n=9 min=2 max=10']}
+    monkeypatch.setattr(pipeline, 'run_etl', lambda day, *, engine: (2, 1.2, 'profile scrap', result))
+    with patch.object(pipeline, 'publish_day') as publish:
+        counts = pipeline.process_pipeline([day])
+    assert counts['etl_fail'] == 1
+    publish.assert_not_called()
+    assert not (folder / '_ready.json').exists()
+    note = json.loads(pipeline.LOG_JSONL.read_text(encoding='utf-8'))['notes']
+    assert 'sample.csv: n=9 min=2 max=10' in note
+    assert 'profile scrap' not in note

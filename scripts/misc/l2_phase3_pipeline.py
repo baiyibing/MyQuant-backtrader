@@ -219,11 +219,35 @@ def run_etl(day: str, *, engine: str | None = None) -> tuple[int, float, str, di
     try:
         start = out.find("{")
         if start >= 0:
-            parsed = json.loads(out[start:])
-    except Exception:
+            result = json.loads(out[start:])
+            if isinstance(result, dict):
+                parsed = result
+    except (ValueError, TypeError):
         parsed = {}
-    tail = (out[-500:] + ("\n" + err[-300:] if err else "")).replace("\n", " | ")
-    return proc.returncode, elapsed, tail, parsed
+    if proc.returncode or parsed.get("gap_free_ok") is False:
+        # Retain the full CLI evidence before handing failure to the worker.
+        root = etl_root(day)
+        root.mkdir(parents=True, exist_ok=True)
+        evidence = {"day": day, "engine": selected, "returncode": proc.returncode,
+                    "result": parsed, "stderr_excerpt": err[-1000:]}
+        if not parsed:
+            evidence["stdout"] = proc.stdout or ""
+        temporary = root / "_etl_fail.tmp"
+        temporary.write_text(json.dumps(evidence, ensure_ascii=False, indent=2), encoding="utf-8")
+        os.replace(temporary, root / "_etl_fail.json")
+    return proc.returncode, elapsed, etl_failure_note(proc.returncode, parsed, out, err), parsed
+
+
+def etl_failure_note(rc: int, parsed: dict, stdout: str = "", stderr: str = "") -> str:
+    """Keep validation diagnostics intact; bound output excerpts for crashes."""
+    if "gap_free_ok" in parsed:
+        fields = {key: parsed[key] for key in
+                  ("gap_free_ok", "gap_free_failures", "gap_free_checked") if key in parsed}
+        return f"ETL rc={rc}: " + json.dumps(fields, ensure_ascii=False)
+    # Bound after newline expansion as well as before it.
+    out = stdout[-500:].replace("\n", " | ")[-500:]
+    err = stderr[-300:].replace("\n", " | ")[-300:]
+    return f"ETL rc={rc}: stdout={out}; stderr={err}"
 
 
 def make_writable(path: Path) -> None:
@@ -360,6 +384,7 @@ def process_pipeline(todo: list[str]) -> dict:
                             "extract_empty", "etl_fail", "publish_fail"), 0)
     stop = threading.Event()
     lock = threading.Lock()
+    # Stage failure events since the last completed publish, not calendar days.
     consecutive_fail = 0
     # Only the extract → ETL boundary grows; all SSD buffering stays bounded.
     stage_counts = (1, 1, n_etl, 1)
@@ -416,7 +441,9 @@ def process_pipeline(todo: list[str]) -> dict:
         parsed.setdefault("engine", engine)
         job.update(etl_s=elapsed, parsed=parsed)
         folder = stage_folder(day)
-        if rc or not all((folder / n).is_file() and (folder / n).stat().st_size > 0
+        if rc or parsed.get("gap_free_ok") is False:
+            raise RuntimeError(etl_failure_note(rc, parsed) if "gap_free_ok" in parsed else tail)
+        if not all((folder / n).is_file() and (folder / n).stat().st_size > 0
                          for n in ("main.parquet", "order.parquet")):
             raise RuntimeError(tail)
         # Persist timings/profile only after successful subprocess completion.
@@ -474,7 +501,7 @@ def process_pipeline(todo: list[str]) -> dict:
                         append_progress_md(progress_row({**rec, "notes": str(exc)[:300]}))
                         if consecutive_fail >= 3:
                             stop.set()
-                            append_progress_md(progress_row({"ts": now(), "status": "batch_stop", "notes": "3 consecutive failures"}))
+                            append_progress_md(progress_row({"ts": now(), "status": "batch_stop", "notes": "3 consecutive failures since last completed publish"}))
                     except OSError as logging_error:
                         stop.set()
                         print(f"progress write failed: {logging_error}", flush=True)
