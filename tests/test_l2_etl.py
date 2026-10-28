@@ -163,6 +163,46 @@ class TestEtlOneDay:
         assert result.rows_order == int(with_data)
 
     @pytest.mark.parametrize("sample", [0, 2])
+    @pytest.mark.parametrize("ids", [(1, 2, 3), (1, 2, 4)])
+    def test_gbk_watermark_extra_column(
+        self, tmp_path: Path, sample: int, ids: tuple[int, int, int],
+    ) -> None:
+        day = tmp_path / "2022-02-24"
+        day.mkdir()
+        watermark = "原创:cfht.taobao.com(QQ:515005403)"
+        lines = [CSV_HEADER + "," + watermark]
+        for index, tran_id in enumerate(ids):
+            row = _row(tran_id, "09:30:00", 10.5, 100, "S" if index == 1 else "B")
+            # Most rows have 11 fields; occasional rows repeat the header watermark.
+            lines.append(",".join(str(v) for v in row) + ("," + watermark if index == 1 else ""))
+        (day / "000001.csv").write_bytes(("\n".join(lines) + "\n").encode("gbk"))
+        companion = _write_csv(day, "000002", [_row(1, "09:30:00", 12.0, 200, "B")])
+        companion.write_text(
+            companion.read_text(encoding="utf-8").replace("TranID", "成交编号"),
+            encoding="utf-8",
+        )
+
+        result = etl_one_day(
+            day, out_root=tmp_path / "out", validate_gap_free=True,
+            gap_free_sample=sample,
+        )
+        assert result.rows_main == result.rows_order == 4
+        assert result.gap_free_ok is (ids == (1, 2, 3))
+        assert result.gap_free_failures == (
+            [] if ids == (1, 2, 3) else ["000001.csv: n=3 min=1 max=4"]
+        )
+        assert _query_parquet(
+            result.main_parquet,
+            "SELECT TranID, Type, Price::DOUBLE, Volume FROM read_parquet('__PQ__') "
+            "WHERE stock_code = '000001.SZ' ORDER BY TranID",
+        ) == [(ids[0], "B", 10.5, 100), (ids[1], "S", 10.5, 100), (ids[2], "B", 10.5, 100)]
+        assert _query_parquet(
+            result.order_parquet,
+            "SELECT TranID, SaleOrderID, BuyOrderID, BuyOrderPrice::DOUBLE "
+            "FROM read_parquet('__PQ__') WHERE stock_code = '000001.SZ' ORDER BY TranID",
+        ) == [(tran_id, 1, 2, 10.5) for tran_id in ids]
+
+    @pytest.mark.parametrize("sample", [0, 2])
     @pytest.mark.parametrize("ids", [(1, 2, 10), (2, 3, 11), (1, 2, 11)])
     def test_gap_free_mixed_encodings(
         self, tmp_path: Path, sample: int, ids: tuple[int, int, int],
