@@ -124,8 +124,11 @@ def test_window_model_universe_frozen_and_no_init_overwrite(inputs):
     with pytest.raises(ValueError, match="new/empty"):
         init_run(inputs)
     assert driver.main(["pull", "--out-dir", str(run.out), "--end", "2026-10-24"]) == 2
+    # k3 is whitelisted by owner override (2026-10-28); other models stay rejected.
+    args = driver.parser().parse_args(["init", "--out-dir", "unused", "--model", "kimi-code/k3"])
+    assert args.model == "kimi-code/k3"
     with pytest.raises(SystemExit):
-        driver.parser().parse_args(["init", "--out-dir", "unused", "--model", "kimi-code/k3"])
+        driver.parser().parse_args(["init", "--out-dir", "unused", "--model", "kimi-code/k2"])
 
 
 @pytest.mark.parametrize("start,end", [("2014-01-01", "2026-10-24"),
@@ -235,6 +238,35 @@ def test_quota_sticky_partial_file_not_accepted_and_explicit_resume(inputs):
     assert driver.pull(run, pull_args(run, "--resume-quota"), FakeKimi(no_data)) == 0
     assert not run.path("work/QUOTA_STOP.json").exists()
     assert list((run.out / "work").glob("QUOTA_STOP.*.json"))
+
+
+def test_stop_policy_skips_never_consume_vendor_attempts(inputs):
+    # Observed 2026-10-28: a mid-session vendor 401 makes the model skip the
+    # remaining calls ("skipped:"/empty error); those tasks made no vendor
+    # request and must stay fully retryable.
+    run = init_run(inputs)
+    skipped = FakeKimi(lambda _: "skipped: 因前一任务鉴权(401)错误按指令中止，未发起请求")
+    assert driver.pull(run, pull_args(run), skipped) == 2  # all-skipped session stops, no spin
+    assert len(skipped.calls) == 1
+    task = run.state()["tasks"][0]
+    assert driver.attempts_used(task) == 0
+    assert driver.summary(run.state())["exhausted_tasks"] == 0
+    assert driver.pull(run, pull_args(run), FakeKimi(no_data)) == 0
+    assert driver.summary(run.state())["codes_vendor_no_data"] == 3
+
+
+def test_skipped_attempt_does_not_count_but_real_errors_still_exhaust(inputs):
+    run = init_run(inputs)
+    seen = []
+    def handler(codes):
+        seen.append(codes)
+        return "skipped: aborted" if len(seen) == 1 else "boom"
+    fake = FakeKimi(handler)
+    assert driver.pull(run, pull_args(run), fake) == 2  # skipped-only session, no spin
+    assert driver.pull(run, pull_args(run, "--max-attempts", "2"), fake) == 2
+    task = run.state()["tasks"][0]
+    assert [a["status"] for a in task["attempts"]] == ["skipped", "error", "error"]
+    assert driver.attempts_used(task) == 2
 
 
 def test_no_false_quota_on_instructions_or_normal_thinking():

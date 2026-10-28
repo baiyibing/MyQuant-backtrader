@@ -34,7 +34,7 @@ from common.infra.data_root import (  # noqa: E402
     resolve_source_parquet,
 )
 
-MODELS = ("kimi-code/kimi-for-coding-highspeed", "kimi-code/kimi-for-coding")
+MODELS = ("kimi-code/kimi-for-coding-highspeed", "kimi-code/kimi-for-coding", "kimi-code/k3")
 BASE_FILES = ("manifest.json", "events.parquet", "listing.parquet", "failures.parquet")
 EVENT_COLS = (
     "code", "event_id", "ex_date", "record_date", "pay_date",
@@ -307,6 +307,16 @@ def split_task(task, state, codes):
                                "status": "pending", "attempts": []})
 
 
+def skipped_entry(entry):
+    # Stop-policy skip (e.g. after an auth error): the model never made the
+    # vendor call, so the entry carries no vendor detail and must not count
+    # as a bounded vendor attempt.
+    if not isinstance(entry, dict) or entry.get("status") != "error":
+        return False
+    error = str(entry.get("error", "")).strip()
+    return not error or error.lower().startswith("skipped")
+
+
 def accept_result(run, task, entry, state):
     if not entry or entry.get("status") not in ("ok", "error"):
         raise ValueError("missing/invalid task result")
@@ -344,7 +354,7 @@ def accept_result(run, task, entry, state):
 
 
 def attempts_used(task):
-    return sum(a["status"] not in ("quota", "infra") for a in task["attempts"])
+    return sum(a["status"] not in ("quota", "infra", "skipped") for a in task["attempts"])
 
 
 def summary(state, max_attempts=3):
@@ -414,6 +424,9 @@ def pull(run, args, runner=None):
             if quota or infra:
                 attempt["status"] = "quota" if quota else "infra"
                 continue
+            if not returncode and skipped_entry(results.get(task["id"])):
+                attempt["status"] = "skipped"
+                continue
             try:
                 if returncode:
                     raise ValueError(f"Kimi exited {returncode}; see session logs")
@@ -427,6 +440,10 @@ def pull(run, args, runner=None):
             return 3
         if infra or returncode == -1:
             return 2  # No spin on startup failure/timeout; explicit next pull resumes.
+        if not returncode and all(skipped_entry(results.get(t["id"])) for t in todo):
+            # Every call was skipped under the stop policy (e.g. vendor auth
+            # flapping); nothing was attempted, so stop instead of spinning.
+            return 2
 
 
 def normalize_event(raw, config):
