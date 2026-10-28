@@ -505,7 +505,7 @@ def test_gap_free_failure_retains_evidence_and_blocks_publish(isolated_pipeline,
     folder.mkdir(parents=True)
     for name in ('main.parquet', 'order.parquet'):
         (folder / name).write_bytes(b'nonempty staging')
-    failures = ['000001.csv: n=123 min=2 max=124', '600036.csv: n=50 min=1 max=70']
+    failures = ['000001.csv: rows=123 uniq=123 min=2 max=124', '600036.csv: rows=50 uniq=49 min=1 max=70']
     result = {'gap_free_ok': False, 'gap_free_failures': failures,
               'profile': {'chunks': ['profile-tail-scrap' * 100]}}
     output = json.dumps(result, indent=2)
@@ -532,7 +532,7 @@ def test_gap_free_failure_retains_evidence_and_blocks_publish(isolated_pipeline,
 @pytest.mark.parametrize('rc', [2, 0])
 def test_evidence_oserror_preserves_cli_result(isolated_pipeline, capsys, operation, rc):
     day = '2021-01-07'
-    result = {'gap_free_ok': False, 'gap_free_failures': ['sample.csv: n=9 min=2 max=10']}
+    result = {'gap_free_ok': False, 'gap_free_failures': ['sample.csv: rows=9 uniq=9 min=2 max=10']}
     response = type('Result', (), {'returncode': rc, 'stdout': json.dumps(result), 'stderr': ''})()
     target = pipeline.os if operation == 'replace' else Path
     with patch.object(pipeline.subprocess, 'run', return_value=response), \
@@ -555,7 +555,7 @@ def test_evidence_oserror_keeps_worker_validation_note(isolated_pipeline):
     folder.mkdir(parents=True)
     for name in ('main.parquet', 'order.parquet'):
         (folder / name).write_bytes(b'nonempty staging')
-    result = {'gap_free_ok': False, 'gap_free_failures': ['sample.csv: n=9 min=2 max=10']}
+    result = {'gap_free_ok': False, 'gap_free_failures': ['sample.csv: rows=9 uniq=9 min=2 max=10']}
     response = type('Result', (), {'returncode': 2, 'stdout': json.dumps(result), 'stderr': ''})()
     with patch.object(pipeline.subprocess, 'run', return_value=response), \
          patch.object(pipeline.os, 'replace', side_effect=OSError('evidence unavailable')), \
@@ -596,7 +596,7 @@ def test_mocked_nonzero_etl_uses_validation_note(isolated_pipeline, monkeypatch)
     folder.mkdir(parents=True)
     for name in ('main.parquet', 'order.parquet'):
         (folder / name).write_bytes(b'parquet')
-    result = {'gap_free_ok': False, 'gap_free_failures': ['sample.csv: n=9 min=2 max=10']}
+    result = {'gap_free_ok': False, 'gap_free_failures': ['sample.csv: rows=9 uniq=9 min=2 max=10']}
     monkeypatch.setattr(pipeline, 'run_etl', lambda day, *, engine: (2, 1.2, 'profile scrap', result))
     with patch.object(pipeline, 'publish_day') as publish:
         counts = pipeline.process_pipeline([day])
@@ -604,5 +604,5 @@ def test_mocked_nonzero_etl_uses_validation_note(isolated_pipeline, monkeypatch)
     publish.assert_not_called()
     assert not (folder / '_ready.json').exists()
     note = json.loads(pipeline.LOG_JSONL.read_text(encoding='utf-8'))['notes']
-    assert 'sample.csv: n=9 min=2 max=10' in note
+    assert 'sample.csv: rows=9 uniq=9 min=2 max=10' in note
     assert 'profile scrap' not in note
