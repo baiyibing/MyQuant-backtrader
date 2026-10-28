@@ -12,6 +12,8 @@ There is **no apply/merge/publish command**, no scheduler, and no trading hook.
 
 ## Baseline and boundaries
 
+CNINFO backup planning lives in the [2026-10-29 C0 plan](corp-actions-cninfo-backup-incremental-plan-20261029.md): independent sandbox outdir, no Wind lake overwrite, C1+ needs separate Human GO. The primary path remains Wind/Kimi when available; this docs-only knife makes no driver/vendor switch and does not fix the upstream 401. See that plan and the [10-28 status](corp-actions-incremental-20261028-status.md) for Wind resume on a tip including #523 (k3 + skipped accounting).
+
 The blocker inventory supplied for this task reports the untouched lake as
 `E:\stock_data\corp_actions`, revision `r20261023_01`, snapshot
 `bt_corp_actions_20261006`, 21,779 events, `coverage_window.ask_end=2026-10-06`.
