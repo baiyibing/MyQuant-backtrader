@@ -277,6 +277,17 @@ class TestEtlOneDay:
         assert result.gap_free_ok is False
         assert result.gap_free_failures == ["000001.csv: rows=2 uniq=2 min=1 max=3"]
 
+        nulled = tmp_path / "2021-05-21"
+        nulled.mkdir()
+        _write_csv(nulled, "000001", [
+            _row(1, "09:30:00", 10.0, 100, "B"),
+            _row("", "09:30:05", 10.0, 100, "S"),  # empty TranID parses as NULL
+            _row(2, "09:30:10", 10.0, 100, "B"),
+        ])
+        result = etl_one_day(nulled, out_root=tmp_path / "out3", validate_gap_free=True)
+        assert result.gap_free_ok is False
+        assert result.gap_free_failures == ["000001.csv: rows=3 uniq=2 min=1 max=2"]
+
     @pytest.mark.parametrize("payload", [b"", b"\xff"])
     def test_csv_sniff_empty_or_undecodable(self, tmp_path: Path, payload: bytes) -> None:
         path = tmp_path / "000001.csv"

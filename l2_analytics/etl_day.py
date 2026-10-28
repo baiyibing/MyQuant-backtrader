@@ -351,17 +351,18 @@ def _check_gap_free(
             SELECT
               parse_filename(filename, true) AS bare,
               count(*)::BIGINT AS n,
+              count(TranID::BIGINT)::BIGINT AS nc,
               count(DISTINCT TranID::BIGINT)::BIGINT AS nd,
               min(TranID::BIGINT) AS mn,
               max(TranID::BIGINT) AS mx
             -- Match _write_chunk's positional schema: skip header sniffing, which
-            -- rejects GBK exchange headers. Cast before distinct/min/max for
+            -- rejects GBK exchange headers. Cast before counts/min/max for
             -- numeric order and numeric equality ('01' == '1').
             FROM {_csv_source_sql(targets)}
             GROUP BY 1
             """
         ).fetchall()
-        for bare, n, nd, mn, mx in rows:
+        for bare, n, nc, nd, mn, mx in rows:
             if n == 0:
                 continue
             # Contiguity is over DISTINCT ids: vendor exports reuse the last
@@ -369,8 +370,10 @@ def _check_gap_free(
             # fixed-price print (15:05-15:30, distinct rows under one id) and
             # occasionally double-write a close print (identical row), so
             # healthy days have rows >= distinct ids. A genuinely missing
-            # print still yields distinct ids < max.
-            if mn != 1 or mx != nd:
+            # print still yields distinct ids < max. The nc != n cross-check
+            # keeps NULL/short-field TranID rows failing (they inflate rows
+            # but are skipped by the casted aggregates).
+            if mn != 1 or mx != nd or nc != n:
                 name = name_by_bare.get(bare, f"{bare}.csv")
                 failures.append(f"{name}: rows={n} uniq={nd} min={mn} max={mx}")
     finally:
