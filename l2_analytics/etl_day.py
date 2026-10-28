@@ -337,6 +337,12 @@ def _check_gap_free(
     sample: int,
     size_by_path: dict[str, int] | None = None,
 ) -> list[str]:
+    """Assert per-symbol TranID coverage: non-null everywhere and distinct ids
+    exactly 1..max. Duplicate-id rows are tolerated (vendor reuses the last
+    continuous-session id for STAR after-hours prints; close prints are
+    occasionally double-written). Contract limits: duplicate row *content* is
+    not validated, and ids missing beyond max are undetectable (the max-as-
+    upper-bound model shares this limit with the previous predicate)."""
     targets = _select_gap_free_targets(files, sample=sample, size_by_path=size_by_path)
     if not targets:
         return []
