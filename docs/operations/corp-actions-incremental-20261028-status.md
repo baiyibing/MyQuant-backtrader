@@ -31,6 +31,11 @@
 | 2026-10-28 15:20 | `kimi-for-coding-highspeed` | 首次真 401：`ev_0163`、`ev_0166` 返回"未识别到有效的身份凭证" |
 | 2026-10-28 15:26–15:27 | `kimi-for-coding` | batch 全部 401，无进展 |
 | 2026-10-28 15:50–15:53 | `kimi-code/k3` | 部分 batch 返回"没找到数据"并被拆分，但 singleton 仍频繁 401；0 accepted codes |
+| 2026-10-28 ~17:20 | （探针） | wind 短暂恢复：`wind_get_stock_events` 单码探针正常返回"没找到数据" |
+| 2026-10-28 17:25–17:45 | `kimi-for-coding-highspeed` | 恢复 10-24 run 续跑（目录已从 `_broken_highspeed` 改回冻结路径），约 6 会话正常处理（batch 无数据→按设计拆 singleton）；会话内 401 与正常响应混杂 |
+| 2026-10-28 ~17:55 起 | （探针） | 401 重现且转为持续；同一探针 40 分钟前成功、此刻失败。手动停掉 pull 保任务重试次数（401 在驱动里按普通 error 计，3 次即 exhausted） |
+
+**间歇性是本轮新证据**：401 不是恒定的，wind 后端鉴权在分钟级尺度上抖动（正常↔401 交替）。
 
 ## 当前卡点
 
@@ -45,9 +50,10 @@
 ### 排除项
 
 - **模型选型**：highspeed / K2.8 / K3 均出现 401。
-- **CLI 版本**：当前 kimi 2.3.3。
-- **本地 OAuth**：`C:\Users\wangc\.kimi-code\credentials\kimi-code.json` 存在且未过期。
+- **CLI 版本**：kimi 2.3.3；10-28 已执行过 CLI 更新，401 依旧。
+- **本机凭证**：`C:\Users\wangc\.kimi-code\credentials\kimi-code.json` 存在且未过期。
 - **额度/周限额**：401 是鉴权错误，不是 403/429 额度耗尽。
+- **插件本地配置**：kimi-datasource 3.4.0 本机不存任何数据源凭证，401 由其上游服务→Wind 段返回。
 
 ### 结论
 
@@ -55,13 +61,32 @@
 
 ## 待办 / 下一步
 
-1. **更新 kimi CLI**：`kimi update` / `kimi upgrade`，观察 OAuth 到 datasource 的链路是否修复。
-2. **联系 Kimi 支持**：确认 wind 数据源当前是否需要额外绑定 Wind 账号或 apiKey。
-3. **若恢复**：用 `--resume-quota` 续跑当前 run（`D:\exports\bt_corp_actions_incr_20261028`），完成后 `assemble` → `prepare-merge`。
-4. **若无法恢复**：评估换数据源（如 tushare/akshare/同花顺 iFind）或延后增量窗口。
+1. ~~更新 kimi CLI~~（已做，无效，2.3.3 上 401 依旧）。
+2. **联系 Kimi 支持**：确认 wind 数据源当前是否需要额外绑定 Wind 账号或 apiKey（最可能有效的动作）。
+3. **换电脑试**（owner 决定，见下节）。
+4. **若恢复**：续跑当前 run（`D:\exports\bt_corp_actions_incr_20261028`；pull 前确认无 `work/runner.lock` 残留），完成后 `assemble` → `prepare-merge`。
+5. **若无法恢复**：评估换数据源（如 tushare/akshare/同花顺 iFind）或延后增量窗口。
+
+## 换电脑续跑说明
+
+run 的 `run.json` 冻结了**绝对路径**与 base 哈希，换机必须原样复刻，否则 `Run()` 校验直接拒绝：
+
+- `D:\exports\bt_corp_actions_incr_20261028\` —— 整目录拷贝（含 `work/tasks.json` 任务日志、`raw_events/`、`run.json`）
+- `E:\stock_data\corp_actions\` —— 基础湖 4 文件（`manifest.json` / `events.parquet` / `listing.parquet` / `failures.parquet`），字节级一致（init 时有 sha256 钉住）
+- `D:\exports\bt_corp_actions_20261006\universe.txt` —— 2774 码冻结 universe（同样有 sha256）
+- Python 环境：`vanna312`（pyarrow 必需）；kimi CLI + kimi-datasource 插件可用
+
+续跑命令（新机上路径一致时）：
+
+```powershell
+D:\anaconda3\envs\vanna312\python.exe scripts\data\pull_corp_actions_incremental.py pending --out-dir D:\exports\bt_corp_actions_incr_20261028
+D:\anaconda3\envs\vanna312\python.exe scripts\data\pull_corp_actions_incremental.py pull --out-dir D:\exports\bt_corp_actions_incr_20261028
+```
+
+注意：`kimi-code/k3` 模型仅在本分支放开了 `MODELS` 白名单；在 master 上跑 k3 run 会被拒。备选：也可以在新机全新 `init`（窗口起点固定 2026-10-07，end=init 当天），代价是重跑批次拆分阶段；已冻结的旧 run 互不冲突。
 
 ## 产物位置
 
-- 当前 run：`D:\exports\bt_corp_actions_incr_20261028`
-- 旧 highspeed 失败证据：`D:\exports\bt_corp_actions_incr_20261024_broken_highspeed`
+- 当前 run：`D:\exports\bt_corp_actions_incr_20261028`（k3，窗口 10-07→10-28）
+- 10-24 highspeed run：`D:\exports\bt_corp_actions_incr_20261024`（已从 `_broken_highspeed` 改回冻结路径；窗口 10-07→10-24，可续跑，状态干净无锁）
 - 旧 kimi-for-coding 失败证据：`D:\exports\bt_corp_actions_incr_20261024_kimi_for_coding_401`
