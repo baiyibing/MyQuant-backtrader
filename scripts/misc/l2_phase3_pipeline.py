@@ -149,14 +149,38 @@ def run_extract(day: str) -> tuple[int, float, str]:
     return proc.returncode, elapsed, " | ".join(tail)
 
 
+def etl_workers() -> int:
+    raw = os.environ.get("OSKH_L2_ETL_WORKERS", "2")
+    try:
+        value = int(raw)
+    except ValueError:
+        raise ValueError("OSKH_L2_ETL_WORKERS must be a positive integer") from None
+    if value < 1:
+        raise ValueError("OSKH_L2_ETL_WORKERS must be a positive integer")
+    return value
+
+
+def etl_root(day: str) -> Path:
+    # Each subprocess owns its manifest, manifest temp file and DuckDB spill tree.
+    return STAGING / "_etl" / day
+
+
+def stage_folder(day: str) -> Path:
+    legacy = STAGING / f"date={day}"
+    # A committed pre-dual-ETL stage remains resumable without rerunning ETL.
+    if (legacy / "_ready.json").is_file():
+        return legacy
+    return etl_root(day) / f"date={day}"
+
+
 def run_etl(day: str) -> tuple[int, float, str, dict]:
     t0 = time.perf_counter()
     env = os.environ.copy()
-    env["OSKH_L2_PARQUET_ROOT"] = str(STAGING)
+    env["OSKH_L2_PARQUET_ROOT"] = str(etl_root(day))
     cmd = [
         str(resolve_oskh_python()), str(ETL),
         "--source", str(CSV_ROOT / day),
-        "--out-root", str(STAGING),
+        "--out-root", str(etl_root(day)),
         "--gap-free-sample", "50",
     ]
     proc = subprocess.run(
@@ -207,7 +231,7 @@ def csv_ready(day: str) -> bool:
 
 
 def stage_ready(day: str) -> bool:
-    folder = STAGING / f"date={day}"
+    folder = stage_folder(day)
     return (folder / "_ready.json").is_file() and all(
         (folder / name).is_file() and (folder / name).stat().st_size > 0
         for name in ("main.parquet", "order.parquet")
@@ -221,7 +245,7 @@ def publish_day(day: str) -> tuple[float, float, float]:
     copy is retried from SSD; no partially copied pair appears under date=.
     """
     started = time.perf_counter()
-    source = STAGING / f"date={day}"
+    source = stage_folder(day)
     pending = LAKE / f".publishing-{day}"
     final = LAKE / f"date={day}"
     if not stage_ready(day):
@@ -300,7 +324,8 @@ def finalize_ok(
 
 
 def process_pipeline(todo: list[str]) -> dict:
-    """One worker per stage; bounded queues provide SSD backpressure, not barriers."""
+    """Single archive/extract/publish workers surround a bounded ETL worker pool."""
+    n_etl = etl_workers()
     from scripts.misc.extract_stock_rar_data import discover_archives
 
     roots = [path.resolve() for path in (CSV_ROOT, STAGING, ARCHIVES, LAKE)]
@@ -315,8 +340,11 @@ def process_pipeline(todo: list[str]) -> dict:
     stop = threading.Event()
     lock = threading.Lock()
     consecutive_fail = 0
-    # One queued day per boundary, plus at most one active day per worker.
-    links = [queue.Queue(maxsize=1) for _ in range(4)]
+    # Only the extract → ETL boundary grows; all SSD buffering stays bounded.
+    stage_counts = (1, 1, n_etl, 1)
+    links = [queue.Queue(maxsize=size) for size in (1, 1, n_etl, 1)]
+    remaining = list(stage_counts)
+    print(f"[{now()}] ETL workers={n_etl}; queue capacities=1,1,{n_etl},1", flush=True)
     sentinel = object()
 
     def archive(job):
@@ -361,16 +389,16 @@ def process_pipeline(todo: list[str]) -> dict:
     def etl(job):
         day = job["date"]
         if stage_ready(day):
-            job.update(json.loads((STAGING / f"date={day}" / "_ready.json").read_text(encoding="utf-8")))
+            job.update(json.loads((stage_folder(day) / "_ready.json").read_text(encoding="utf-8")))
             return
         rc, elapsed, tail, parsed = run_etl(day)
         job.update(etl_s=elapsed, parsed=parsed)
-        folder = STAGING / f"date={day}"
+        folder = stage_folder(day)
         if rc or not all((folder / n).is_file() and (folder / n).stat().st_size > 0
                          for n in ("main.parquet", "order.parquet")):
             raise RuntimeError(tail)
         # Persist timings/profile only after successful subprocess completion.
-        job["manifest"] = next(r for r in manifest_records(STAGING) if r["date"] == day)
+        job["manifest"] = next(r for r in manifest_records(etl_root(day)) if r["date"] == day)
         tmp = folder / "_ready.tmp"
         tmp.write_text(json.dumps({k: v for k, v in job.items() if k != "archive"}), encoding="utf-8")
         os.replace(tmp, folder / "_ready.json")
@@ -383,7 +411,9 @@ def process_pipeline(todo: list[str]) -> dict:
                     job.get("parsed", {}), "ssd_pipeline", publish_s=elapsed,
                     archive_s=job.get("archive_s", 0))
         try:
-            shutil.rmtree(STAGING / f"date={day}", onerror=_retry_readonly)
+            shutil.rmtree(stage_folder(day), onerror=_retry_readonly)
+            if etl_root(day).exists():
+                shutil.rmtree(etl_root(day), onerror=_retry_readonly)
         except OSError as exc:
             print(f"staging cleanup deferred {day}: {exc}", flush=True)
 
@@ -394,8 +424,14 @@ def process_pipeline(todo: list[str]) -> dict:
         while True:
             job = upstream.get()
             if job is sentinel:
-                if downstream is not None:
-                    downstream.put(sentinel)
+                # Only the last worker forwards end-of-stream, after every
+                # worker has forwarded its final job (including blocked puts).
+                with lock:
+                    remaining[index] -= 1
+                    last = remaining[index] == 0
+                if last and downstream is not None:
+                    for _ in range(stage_counts[index + 1]):
+                        downstream.put(sentinel)
                 return
             if stop.is_set():
                 continue
@@ -431,7 +467,8 @@ def process_pipeline(todo: list[str]) -> dict:
     workers = [threading.Thread(target=worker, args=(i, action, failure))
                for i, (action, failure) in enumerate(zip(
                    (archive, extract, etl, publish),
-                   ("archive_fail", "extract_fail", "etl_fail", "publish_fail")))]
+                   ("archive_fail", "extract_fail", "etl_fail", "publish_fail")))
+               for _ in range(stage_counts[i])]
     for thread in workers:
         thread.start()
     completed = done_dates()

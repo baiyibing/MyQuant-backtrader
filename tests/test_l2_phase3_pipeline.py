@@ -27,7 +27,7 @@ class PipelineTest(unittest.TestCase):
 
     def ready(self, day):
         folder = pipeline.STAGING / f'date={day}'
-        folder.mkdir(exist_ok=True)
+        folder.mkdir(parents=True, exist_ok=True)
         for name in ('main.parquet', 'order.parquet'):
             (folder / name).write_bytes(b'fake-parquet')
         record = {'date': day, 'main_parts': [f'date={day}/main.parquet'],
@@ -98,11 +98,15 @@ class PipelineTest(unittest.TestCase):
             if day == days[2]:
                 third_etl.set()
             self.ready(day)
-            record = json.loads((pipeline.STAGING / f'date={day}' / '_ready.json').read_text())['manifest']
-            with (pipeline.STAGING / '_manifest.jsonl').open('a') as handle:
+            legacy = pipeline.STAGING / f'date={day}'
+            target = pipeline.etl_root(day) / f'date={day}'
+            target.parent.mkdir(parents=True)
+            legacy.rename(target)
+            record = json.loads((pipeline.stage_folder(day) / '_ready.json').read_text())['manifest']
+            with (pipeline.etl_root(day) / '_manifest.jsonl').open('a') as handle:
                 handle.write(json.dumps(record) + '\n')
             # The real ETL does not create the orchestrator readiness marker.
-            (pipeline.STAGING / f'date={day}' / '_ready.json').unlink()
+            (pipeline.stage_folder(day) / '_ready.json').unlink()
             return 0, 0.2, '', {'profile': {'test': True}}
 
         publish = pipeline.publish_day
@@ -113,7 +117,8 @@ class PipelineTest(unittest.TestCase):
             published.append(day)
             return publish(day)
 
-        with patch.object(pipeline, 'run_extract', side_effect=extract), \
+        with patch.dict(pipeline.os.environ, {'OSKH_L2_ETL_WORKERS': '1'}), \
+             patch.object(pipeline, 'run_extract', side_effect=extract), \
              patch.object(pipeline, 'run_etl', side_effect=etl), \
              patch.object(pipeline, 'publish_day', side_effect=delayed_publish):
             counts = pipeline.process_pipeline(days)
@@ -130,8 +135,8 @@ class PipelineTest(unittest.TestCase):
             rc, _, _, parsed = pipeline.run_etl('2025-01-02')
         args, kwargs = run.call_args
         command = args[0]
-        self.assertEqual(command[command.index('--out-root') + 1], str(pipeline.STAGING))
-        self.assertEqual(kwargs['env']['OSKH_L2_PARQUET_ROOT'], str(pipeline.STAGING))
+        self.assertEqual(command[command.index('--out-root') + 1], str(pipeline.etl_root('2025-01-02')))
+        self.assertEqual(kwargs['env']['OSKH_L2_PARQUET_ROOT'], str(pipeline.etl_root('2025-01-02')))
         self.assertEqual(rc, 0)
         self.assertEqual(parsed['profile'], {'chunk_s': 2})
 
@@ -218,11 +223,11 @@ def test_readonly_archive_retry_and_cleanup(tmp_path, monkeypatch, capsys):
 
     def etl(day):
         assert pipeline.csv_ready(day)
-        folder = pipeline.STAGING / f'date={day}'
-        folder.mkdir()
+        folder = pipeline.etl_root(day) / f'date={day}'
+        folder.mkdir(parents=True)
         for name in ('main.parquet', 'order.parquet'):
             (folder / name).write_bytes(b'fake-parquet')
-        with (pipeline.STAGING / '_manifest.jsonl').open('a') as handle:
+        with (pipeline.etl_root(day) / '_manifest.jsonl').open('a') as handle:
             handle.write(json.dumps({'date': day}) + '\n')
         return 0, 0.2, '', {}
 
@@ -369,3 +374,84 @@ def test_progress_current_header_does_not_warn(tmp_path, monkeypatch, capsys):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def test_etl_worker_setting(monkeypatch):
+    import pytest
+
+    monkeypatch.delenv('OSKH_L2_ETL_WORKERS', raising=False)
+    assert pipeline.etl_workers() == 2
+    for raw in ('1', '3'):
+        monkeypatch.setenv('OSKH_L2_ETL_WORKERS', raw)
+        assert pipeline.etl_workers() == int(raw)
+    for raw in ('0', '-1', 'bad', ''):
+        monkeypatch.setenv('OSKH_L2_ETL_WORKERS', raw)
+        with pytest.raises(ValueError, match='positive integer'):
+            pipeline.process_pipeline([])
+
+
+class DualETLTest(unittest.TestCase):
+    setUp = PipelineTest.setUp
+    ready = PipelineTest.ready
+
+    def test_parallel_etl_drains_before_publish_exit(self):
+        days = ['2025-01-02', '2025-01-03']
+        both_running = threading.Barrier(2)
+        second_published = threading.Event()
+        published = []
+        real_publish = pipeline.publish_day
+
+        def etl(day):
+            both_running.wait(timeout=5)
+            if day == days[0]:
+                self.assertTrue(second_published.wait(5))
+            folder = pipeline.etl_root(day) / f'date={day}'
+            folder.mkdir(parents=True)
+            for name in ('main.parquet', 'order.parquet'):
+                (folder / name).write_bytes(b'parquet')
+            (pipeline.etl_root(day) / '_manifest.jsonl').write_text(
+                json.dumps({'date': day}) + '\n')
+            return 0, 0.2, '', {'profile': {'day': day}}
+
+        def publish(day):
+            result = real_publish(day)
+            published.append(day)
+            if day == days[1]:
+                second_published.set()
+            return result
+
+        for day in days:
+            folder = pipeline.CSV_ROOT / day
+            folder.mkdir()
+            (folder / 'tick.csv').write_text('tick')
+            (folder / '_extract_ready').touch()
+        capacities = []
+        queue_type = pipeline.queue.Queue
+
+        def make_queue(maxsize):
+            capacities.append(maxsize)
+            return queue_type(maxsize=maxsize)
+
+        with patch.dict(pipeline.os.environ, {'OSKH_L2_ETL_WORKERS': '2'}), \
+             patch.object(pipeline.queue, 'Queue', side_effect=make_queue), \
+             patch.object(pipeline, 'run_etl', side_effect=etl), \
+             patch.object(pipeline, 'publish_day', side_effect=publish):
+            counts = pipeline.process_pipeline(days + days)
+        self.assertEqual(capacities, [1, 1, 2, 1])
+        self.assertEqual(counts['ok'], 2)
+        self.assertEqual(published, list(reversed(days)))
+        self.assertEqual(pipeline.done_dates(), set(days))
+        records = [json.loads(line) for line in pipeline.LOG_JSONL.read_text().splitlines()]
+        self.assertEqual({r['profile']['day'] for r in records}, set(days))
+
+    def test_three_failures_stop_and_workers_drain(self):
+        days = [f'2025-01-{n:02d}' for n in range(1, 15)]
+        for day in days:
+            self.ready(day)
+        with patch.dict(pipeline.os.environ, {'OSKH_L2_ETL_WORKERS': '2'}), \
+             patch.object(pipeline, 'publish_day', side_effect=OSError('disk failure')):
+            counts = pipeline.process_pipeline(days)
+        self.assertEqual(counts['publish_fail'], 3)
+        self.assertEqual(counts['ok'], 0)
+        self.assertIn('batch_stop', pipeline.PROGRESS.read_text())
+        self.assertTrue(all(pipeline.stage_ready(day) for day in days))
