@@ -63,6 +63,7 @@ class DayEtlResult:
     source_csv_bytes: int
     compress_ratio: float
     elapsed_s: float
+    engine: str = "duckdb"
     chunks: int = 0
     skipped: bool = False
     gap_free_ok: bool = True
@@ -553,11 +554,21 @@ def etl_one_day(
     validate_gap_free: bool = True,
     gap_free_sample: int = 0,
     max_files: int = 0,
+    engine: str | None = None,
 ) -> DayEtlResult:
     """Convert one ``YYYY-MM-DD`` L2 CSV directory to main+order Parquet.
 
     ``max_files``: if > 0, only process the first N CSVs (smoke). 0 = all.
     """
+    engine = engine if engine is not None else os.environ.get("OSKH_L2_ETL_ENGINE", "duckdb")
+    if engine not in ("duckdb", "polars"):
+        raise ValueError(f"invalid OSKH_L2_ETL_ENGINE: {engine!r}; expected duckdb|polars")
+    write_chunk = _write_chunk
+    merge_chunks = _merge_chunks
+    if engine == "polars":
+        # Import before any output directories or manifests are touched.
+        from l2_analytics.etl_polars import configure_threads, write_chunk, merge_chunks
+        configure_threads(threads)
     t0 = time.perf_counter()
     source = Path(source_dir).resolve()
     if not source.is_dir():
@@ -622,6 +633,7 @@ def etl_one_day(
                 main_bytes = sum((data_root / n).stat().st_size for n in skip_main_parts)
                 order_bytes = sum((data_root / n).stat().st_size for n in skip_order_parts)
                 return DayEtlResult(
+                    engine=engine,
                     date=date,
                     source_dir=str(source),
                     csv_files=len(csv_files),
@@ -642,6 +654,7 @@ def etl_one_day(
             # Empty-day idempotent skip: manifest match with 0 rows + no parts.
             if not all_parts and int(rec.get("rows_main", 0)) == 0:
                 return DayEtlResult(
+                    engine=engine,
                     date=date,
                     source_dir=str(source),
                     csv_files=len(csv_files),
@@ -685,6 +698,7 @@ def etl_one_day(
                 stat_by_path=stat_by_path,
             )
         return DayEtlResult(
+            engine=engine,
             date=date,
             source_dir=str(source),
             csv_files=len(csv_files),
@@ -737,7 +751,7 @@ def etl_one_day(
                 continue
             main_c = work_dir / f"main_{idx:04d}.parquet"
             order_c = work_dir / f"order_{idx:04d}.parquet"
-            n_m, n_o, cprof = _write_chunk(
+            n_m, n_o, cprof = write_chunk(
                 con, date=date, files=group, main_out=main_c, order_out=order_c, size_by_path=size_by_path
             )
             rows_main += n_m
@@ -767,13 +781,13 @@ def etl_one_day(
     merge_con = duckdb.connect(database=":memory:")
     try:
         _configure(merge_con, memory_limit=memory_limit, threads=n_threads, temp_dir=tmp_dir)
-        n_pub_m, merge_main_s = _merge_chunks(
+        n_pub_m, merge_main_s = merge_chunks(
             merge_con, chunk_paths=main_chunks, final_path=main_out
         )
         note_peak(peak_rss)
         note_peak(peak_rss_compact)
         note_temp_peak(peak_temp, tmp_dir)
-        n_pub_o, merge_order_s = _merge_chunks(
+        n_pub_o, merge_order_s = merge_chunks(
             merge_con, chunk_paths=order_chunks, final_path=order_out
         )
         note_peak(peak_rss)
@@ -828,6 +842,7 @@ def etl_one_day(
     peak_rss_compact_b = peak_rss_compact[0]
     peak_temp_b = peak_temp[0]
     profile: dict[str, Any] = {
+        "engine": engine,
         "scan_s": round(scan_s, 3),
         "gap_free_s": round(gap_free_s, 3),
         "setup_s": round(setup_s, 3),
@@ -856,6 +871,7 @@ def etl_one_day(
         ],
     }
     return DayEtlResult(
+        engine=engine,
         date=date,
         source_dir=str(source),
         csv_files=len(csv_files),

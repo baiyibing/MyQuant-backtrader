@@ -3,6 +3,7 @@ import json
 import tempfile
 import threading
 import unittest
+import pytest
 from pathlib import Path
 from unittest.mock import patch
 
@@ -92,7 +93,7 @@ class PipelineTest(unittest.TestCase):
                 second_extracted.set()
             return 0, 0.1, ''
 
-        def etl(day):
+        def etl(day, *, engine=None):
             if day == days[0]:
                 self.assertTrue(second_extracted.wait(5), 'extract must overlap ETL')
             if day == days[2]:
@@ -221,7 +222,7 @@ def test_readonly_archive_retry_and_cleanup(tmp_path, monkeypatch, capsys):
         (folder / 'tick.csv').write_text('tick', encoding='utf-8')
         return 0, 0.1, ''
 
-    def etl(day):
+    def etl(day, *, engine=None):
         assert pipeline.csv_ready(day)
         folder = pipeline.etl_root(day) / f'date={day}'
         folder.mkdir(parents=True)
@@ -401,7 +402,7 @@ class DualETLTest(unittest.TestCase):
         published = []
         real_publish = pipeline.publish_day
 
-        def etl(day):
+        def etl(day, *, engine=None):
             both_running.wait(timeout=5)
             if day == days[0]:
                 self.assertTrue(second_published.wait(5))
@@ -455,3 +456,23 @@ class DualETLTest(unittest.TestCase):
         self.assertEqual(counts['ok'], 0)
         self.assertIn('batch_stop', pipeline.PROGRESS.read_text())
         self.assertTrue(all(pipeline.stage_ready(day) for day in days))
+
+
+def test_mixed_engine_slots_and_subprocess_env(monkeypatch):
+    monkeypatch.setenv("OSKH_L2_ETL_WORKERS", "3")
+    monkeypatch.setenv("OSKH_L2_ETL_POLARS_WORKERS", "1")
+    monkeypatch.setenv("OSKH_L2_ETL_ENGINE", "duckdb")
+    assert pipeline.etl_engine_slots() == ["polars", "duckdb", "duckdb"]
+    result = type("Result", (), {"returncode": 0, "stdout": "{}", "stderr": ""})()
+    with patch.object(pipeline, "resolve_oskh_python", return_value=Path("/test/python")), \
+         patch.object(pipeline.subprocess, "run", return_value=result) as run:
+        for slot, engine in enumerate(pipeline.etl_engine_slots()):
+            pipeline.run_etl(f"2025-01-0{slot + 1}", engine=engine)
+    assert [c.kwargs["env"]["OSKH_L2_ETL_ENGINE"] for c in run.call_args_list] == [
+        "polars", "duckdb", "duckdb"]
+    monkeypatch.setenv("OSKH_L2_ETL_ENGINE", "polars")
+    assert pipeline.etl_engine_slots() == ["polars"] * 3
+    for invalid in ("-1", "4", "oops", "1.5"):
+        monkeypatch.setenv("OSKH_L2_ETL_POLARS_WORKERS", invalid)
+        with pytest.raises(ValueError, match="OSKH_L2_ETL_POLARS_WORKERS"):
+            pipeline.process_pipeline([])

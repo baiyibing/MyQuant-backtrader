@@ -10,6 +10,14 @@ import pytest
 
 from l2_analytics.etl_day import _is_header_only_csv, etl_one_day
 
+@pytest.fixture(autouse=True, params=["duckdb", "polars"])
+def etl_engine(request, monkeypatch):
+    if request.param == "polars":
+        pytest.importorskip("polars")
+    monkeypatch.setenv("OSKH_L2_ETL_ENGINE", request.param)
+    return request.param
+
+
 CSV_HEADER = (
     "TranID,Time,Price,Volume,SaleOrderVolume,BuyOrderVolume,"
     "Type,SaleOrderID,SaleOrderPrice,BuyOrderID,BuyOrderPrice"
@@ -425,3 +433,36 @@ class TestGapFreeStratified:
         )
         heaviest = max(files, key=lambda p: sizes[str(p)])
         assert heaviest in picked
+
+
+def test_engine_selection_fail_closed(tmp_path, monkeypatch):
+    monkeypatch.setenv("OSKH_L2_ETL_ENGINE", "typo")
+    out = tmp_path / "must-not-exist"
+    with pytest.raises(ValueError, match="duckdb\\|polars"):
+        etl_one_day(tmp_path / "missing", out_root=out)
+    assert not out.exists()
+
+
+def test_default_engine(synthetic_day, tmp_path, monkeypatch):
+    monkeypatch.delenv("OSKH_L2_ETL_ENGINE")
+    result = etl_one_day(synthetic_day, out_root=tmp_path / "out")
+    assert result.engine == result.profile["engine"] == "duckdb"
+
+
+def test_engine_parity(synthetic_day, tmp_path):
+    pytest.importorskip("polars")
+    results = [etl_one_day(synthetic_day, out_root=tmp_path / engine,
+                          engine=engine, chunk_files=1) for engine in ("duckdb", "polars")]
+    import pyarrow.parquet as pq
+    for attr in ("main_parquet", "order_parquet"):
+        tables = [pq.ParquetFile(getattr(r, attr)).read() for r in results]
+        schemas = [_query_parquet(getattr(r, attr),
+                   "DESCRIBE SELECT * FROM read_parquet('__PQ__')") for r in results]
+        assert [(r[0], r[1]) for r in schemas[0]] == [(r[0], r[1]) for r in schemas[1]]
+        assert tables[0].to_pylist() == tables[1].to_pylist()
+    for result in results:
+        assert result.profile["chunk_total_sum_s"] >= 0
+        assert result.profile["merge_main_s"] >= 0
+        assert result.profile["merge_order_s"] >= 0
+        assert etl_one_day(synthetic_day, out_root=Path(result.main_parquet).parent.parent,
+                           engine=result.engine).skipped

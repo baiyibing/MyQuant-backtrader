@@ -160,6 +160,22 @@ def etl_workers() -> int:
     return value
 
 
+def etl_engine_slots() -> list[str]:
+    count = etl_workers()
+    engine = os.environ.get("OSKH_L2_ETL_ENGINE", "duckdb")
+    if engine not in ("duckdb", "polars"):
+        raise ValueError("OSKH_L2_ETL_ENGINE must be duckdb|polars")
+    try:
+        polars_count = int(os.environ.get("OSKH_L2_ETL_POLARS_WORKERS", "0"))
+    except ValueError:
+        raise ValueError("OSKH_L2_ETL_POLARS_WORKERS must be an integer in [0, WORKERS]") from None
+    if not 0 <= polars_count <= count:
+        raise ValueError("OSKH_L2_ETL_POLARS_WORKERS must be in [0, WORKERS]")
+    if engine == "polars":
+        return ["polars"] * count
+    return ["polars"] * polars_count + ["duckdb"] * (count - polars_count)
+
+
 def etl_root(day: str) -> Path:
     # Each subprocess owns its manifest, manifest temp file and DuckDB spill tree.
     return STAGING / "_etl" / day
@@ -173,9 +189,13 @@ def stage_folder(day: str) -> Path:
     return etl_root(day) / f"date={day}"
 
 
-def run_etl(day: str) -> tuple[int, float, str, dict]:
+def run_etl(day: str, *, engine: str | None = None) -> tuple[int, float, str, dict]:
     t0 = time.perf_counter()
     env = os.environ.copy()
+    selected = engine if engine is not None else env.get("OSKH_L2_ETL_ENGINE", "duckdb")
+    if selected not in ("duckdb", "polars"):
+        raise ValueError("OSKH_L2_ETL_ENGINE must be duckdb|polars")
+    env["OSKH_L2_ETL_ENGINE"] = selected
     env["OSKH_L2_PARQUET_ROOT"] = str(etl_root(day))
     cmd = [
         str(resolve_oskh_python()), str(ETL),
@@ -314,7 +334,7 @@ def finalize_ok(
         "main_gib": round(mg, 3),
         "order_gib": round(og, 3),
         "notes": notes,
-        "parsed": {k: parsed.get(k) for k in ("rows_main", "rows_order", "csv_files", "elapsed_s") if k in parsed},
+        "parsed": {k: parsed.get(k) for k in ("rows_main", "rows_order", "csv_files", "elapsed_s", "engine") if k in parsed},
         "profile": parsed.get("profile"),
     }
     log_rec(rec)
@@ -325,7 +345,8 @@ def finalize_ok(
 
 def process_pipeline(todo: list[str]) -> dict:
     """Single archive/extract/publish workers surround a bounded ETL worker pool."""
-    n_etl = etl_workers()
+    engines = etl_engine_slots()
+    n_etl = len(engines)
     from scripts.misc.extract_stock_rar_data import discover_archives
 
     roots = [path.resolve() for path in (CSV_ROOT, STAGING, ARCHIVES, LAKE)]
@@ -386,12 +407,13 @@ def process_pipeline(todo: list[str]) -> dict:
             except OSError as exc:
                 print(f"archive cleanup deferred {day}: {exc}", flush=True)
 
-    def etl(job):
+    def etl(job, *, engine):
         day = job["date"]
         if stage_ready(day):
             job.update(json.loads((stage_folder(day) / "_ready.json").read_text(encoding="utf-8")))
             return
-        rc, elapsed, tail, parsed = run_etl(day)
+        rc, elapsed, tail, parsed = run_etl(day, engine=engine)
+        parsed.setdefault("engine", engine)
         job.update(etl_s=elapsed, parsed=parsed)
         folder = stage_folder(day)
         if rc or not all((folder / n).is_file() and (folder / n).stat().st_size > 0
@@ -417,7 +439,7 @@ def process_pipeline(todo: list[str]) -> dict:
         except OSError as exc:
             print(f"staging cleanup deferred {day}: {exc}", flush=True)
 
-    def worker(index, action, failure):
+    def worker(index, action, failure, engine=None):
         nonlocal consecutive_fail
         upstream = links[index]
         downstream = links[index + 1] if index < 3 else None
@@ -437,7 +459,7 @@ def process_pipeline(todo: list[str]) -> dict:
                 continue
             try:
                 print(f"[{now()}] {action.__name__} start {job['date']}", flush=True)
-                action(job)
+                action(job, engine=engine) if index == 2 else action(job)
             except Exception as exc:
                 with lock:
                     counts[failure] += 1
@@ -464,11 +486,12 @@ def process_pipeline(todo: list[str]) -> dict:
                     counts["ok"] += 1
                     consecutive_fail = 0
 
-    workers = [threading.Thread(target=worker, args=(i, action, failure))
+    workers = [threading.Thread(target=worker, args=(
+                   i, action, failure, engines[slot] if i == 2 else None))
                for i, (action, failure) in enumerate(zip(
                    (archive, extract, etl, publish),
                    ("archive_fail", "extract_fail", "etl_fail", "publish_fail")))
-               for _ in range(stage_counts[i])]
+               for slot in range(stage_counts[i])]
     for thread in workers:
         thread.start()
     completed = done_dates()
@@ -486,6 +509,7 @@ def process_pipeline(todo: list[str]) -> dict:
 
 
 def _main() -> int:
+    etl_engine_slots()
     _AGENT_TOOLS.mkdir(parents=True, exist_ok=True)
     LAKE.mkdir(parents=True, exist_ok=True)
     CSV_ROOT.mkdir(parents=True, exist_ok=True)
@@ -539,6 +563,7 @@ def _main() -> int:
 
 
 def main() -> int:
+    etl_engine_slots()  # Validate before locks, directories or pipeline work.
     # OS releases the advisory lock on process exit, including crashes. Keep the
     # file itself: unlinking a locked inode would let a second process bypass it.
     STAGING.mkdir(parents=True, exist_ok=True)
