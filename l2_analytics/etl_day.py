@@ -96,14 +96,20 @@ def _list_csv_files(source_dir: Path) -> list[Path]:
 
 
 def _is_header_only_csv(path: Path) -> bool:
-    try:
-        with path.open("r", encoding="utf-8", newline="") as fh:
-            reader = csv.reader(fh)
-            if next(reader, None) is None:
-                return True
-            return next(reader, None) is None
-    except OSError:
-        return True
+    # utf-8-sig also accepts plain UTF-8; GB18030 covers GBK exchange dumps.
+    # Only inspect two CSV records, retrying from the start on decode failure.
+    for encoding in ("utf-8-sig", "gb18030"):
+        try:
+            with path.open("r", encoding=encoding, newline="") as fh:
+                reader = csv.reader(fh)
+                if next(reader, None) is None:
+                    return True
+                return next(reader, None) is None
+        except UnicodeDecodeError:
+            continue
+        except OSError:
+            return True
+    return True
 
 
 def _session_sql(time_col: str = "Time") -> str:
