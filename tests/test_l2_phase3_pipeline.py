@@ -506,7 +506,7 @@ def test_gap_free_failure_retains_evidence_and_blocks_publish(isolated_pipeline,
     for name in ('main.parquet', 'order.parquet'):
         (folder / name).write_bytes(b'nonempty staging')
     failures = ['000001.csv: n=123 min=2 max=124', '600036.csv: n=50 min=1 max=70']
-    result = {'gap_free_ok': False, 'gap_free_failures': failures, 'gap_free_checked': 50,
+    result = {'gap_free_ok': False, 'gap_free_failures': failures,
               'profile': {'chunks': ['profile-tail-scrap' * 100]}}
     output = json.dumps(result, indent=2)
     response = type('Result', (), {'returncode': rc, 'stdout': output, 'stderr': 'warning'})()
@@ -526,6 +526,49 @@ def test_gap_free_failure_retains_evidence_and_blocks_publish(isolated_pipeline,
                         'result': result, 'stderr_excerpt': 'warning'}
     command = run.call_args.args[0]
     assert command[command.index('--gap-free-sample') + 1] == '50'
+
+
+@pytest.mark.parametrize('operation', ['mkdir', 'write_text', 'replace'])
+@pytest.mark.parametrize('rc', [2, 0])
+def test_evidence_oserror_preserves_cli_result(isolated_pipeline, capsys, operation, rc):
+    day = '2021-01-07'
+    result = {'gap_free_ok': False, 'gap_free_failures': ['sample.csv: n=9 min=2 max=10']}
+    response = type('Result', (), {'returncode': rc, 'stdout': json.dumps(result), 'stderr': ''})()
+    target = pipeline.os if operation == 'replace' else Path
+    with patch.object(pipeline.subprocess, 'run', return_value=response), \
+         patch.object(target, operation, side_effect=OSError('evidence unavailable')):
+        actual_rc, elapsed, note, parsed = pipeline.run_etl(day, engine='duckdb')
+    assert actual_rc == rc and elapsed >= 0
+    assert parsed == result
+    assert note == f'ETL rc={rc}: ' + json.dumps(result)
+    assert not (pipeline.etl_root(day) / '_etl_fail.json').exists()
+    assert f'WARNING: ETL failure evidence write failed {day}: evidence unavailable' in capsys.readouterr().err
+
+
+def test_evidence_oserror_keeps_worker_validation_note(isolated_pipeline):
+    day = '2021-01-08'
+    csv = pipeline.CSV_ROOT / day
+    csv.mkdir()
+    (csv / 'tick.csv').write_text('retained', encoding='utf-8')
+    (csv / '_extract_ready').touch()
+    folder = pipeline.stage_folder(day)
+    folder.mkdir(parents=True)
+    for name in ('main.parquet', 'order.parquet'):
+        (folder / name).write_bytes(b'nonempty staging')
+    result = {'gap_free_ok': False, 'gap_free_failures': ['sample.csv: n=9 min=2 max=10']}
+    response = type('Result', (), {'returncode': 2, 'stdout': json.dumps(result), 'stderr': ''})()
+    with patch.object(pipeline.subprocess, 'run', return_value=response), \
+         patch.object(pipeline.os, 'replace', side_effect=OSError('evidence unavailable')), \
+         patch.object(pipeline, 'publish_day') as publish:
+        counts = pipeline.process_pipeline([day])
+    assert counts['etl_fail'] == 1 and counts['ok'] == 0
+    publish.assert_not_called()
+    assert not (folder / '_ready.json').exists()
+    assert not pipeline.done_dates()
+    assert (csv / 'tick.csv').exists()
+    record = json.loads(pipeline.LOG_JSONL.read_text(encoding='utf-8'))
+    assert record['status'] == 'etl_fail' and 'etl_s' in record
+    assert record['notes'] == 'ETL rc=2: ' + json.dumps(result)
 
 
 @pytest.mark.parametrize('output', ['crash\n' * 2000, '{invalid json', '[1, 2]'])

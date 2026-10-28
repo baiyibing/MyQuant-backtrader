@@ -902,7 +902,8 @@ def etl_one_day(
         elapsed_s=elapsed_total,
         chunks=len(chunks),
         gap_free_ok=len(gap_failures) == 0,
-        gap_free_failures=gap_failures[:20],
+        # Sampling already limits checked files; preserve every failure.
+        gap_free_failures=list(gap_failures),
         instrument_counts=instrument_counts,
         notes=f"memory_limit={memory_limit}; threads={n_threads}; chunk_files={chunk_files}; layout=hive",
         profile=profile,
