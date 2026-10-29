@@ -1,6 +1,6 @@
 # corp-actions 双通道取数方案（wind 保留 + hithink 新增）— 2026-10-29
 
-状态：**提案待评审**（2026-10-29 评审修订 v3：codex 评审三条 P1 修订，变更记录见 §9）。评审通过前不动实现代码。本 PR 只含方案文档 + 一份非本方案范围的 [hithink 湖补强 backlog](hithink-lake-supplement-backlog-2026-10-29.md)。
+状态：**提案待评审**（2026-10-29 评审修订 v4：复审三条收口，变更记录见 §9）。评审通过前不动实现代码。本 PR 只含方案文档 + 一份非本方案范围的 [hithink 湖补强 backlog](hithink-lake-supplement-backlog-2026-10-29.md)。
 
 ## 1. 背景
 
@@ -80,14 +80,14 @@
 - **显式加固（两通道通用）**：prepare_merge 在既有 event_id 碰撞检查之外，新增断言"delta 的 (code, ex_date) 与 base 无重叠"，把窗口序贯从构造性成立变为显式校验。
 - 覆盖断言（prepare-merge 同款语义）：`universe_hits ∪ codes_no_events ∪ explained_vendor_unknown` 必须 == universe。`codes_vendor_unknown`（dump 查无的 universe 码）**逐码按 base 冻结事实分类，不用静态码表白名单**（事实源：listing.parquet 的 `delist_date` 与 base events.parquet，均被 base_sha256 钉死）：
 
-  | 类 | 判定（均要求事实由 base 解释） | 处置 | 实测（2026-10-29 dump） |
+  | 类 | 判定（均要求事实由 base 解释） | 处置 | 实测（2026-10-29 dump + base listing） |
   |---|---|---|---|
-  | A `delisted_explained` | base 有该码事件 且 `delist_date` 非空 且 ≤ run end | 放行（历史事件由 wind base 承载；退市后无新事件） | 4 码：002231.SZ / 002898.SZ / 300379.SZ / 600200.SH |
-  | B `delisted_no_history` | base 无该码事件 且 `delist_date` 非空 且 ≤ run end | 放行（退市且双侧一致无事件） | 3 码：000004.SZ / 000638.SZ / 920305.BJ |
+  | A `delisted_explained` | base 有该码事件 且 `delist_date` 非空 且 **`delist_date < run.start`** | 放行（历史事件由 wind base 承载；**整窗在退市之后**，退市后无新事件） | 4 码：002231.SZ / 002898.SZ / 300379.SZ / 600200.SH（delist 2026-01-22 ~ 2026-07-17，均 < start 2026-10-07） |
+  | B `delisted_no_history` | base 无该码事件 且 `delist_date` 非空 且 **`delist_date < run.start`** | 放行（整窗在退市之后且双侧一致无事件） | 3 码：000004.SZ / 000638.SZ / 920305.BJ（delist 2026-06-03 ~ 2026-07-30，均 < start） |
   | C `trading_eventless` | base 无该码事件 且 `delist_date` 为空 | 仅在 **hithink 目录正向确认**后放行：pull 时逐码探 `GET /api/meta/tickers/search`（或逐码 adjustment-factors 端点），"目录认识该码 + 生涯零事件" = 在交易但无事件（dump 含已宣告未来事件，查无即真无）；探针证据（request_id、返回条目）写进 hithink_state。目录同样查无 → 归 D | 8 码：001239.SZ / 001330.SZ / 301292.SZ / 301565.SZ / 601399.SH / 688062.SH / 688221.SH / 688382.SH |
-  | D `unexplained` | base 有该码事件 且（`delist_date` 为空 或 > run end），或 C 类探针失败 | **fail-closed 阻断**；唯一放行路径是 §4.4 `manual_overrides` | 3 码：000016.SZ / 002731.SZ / 601198.SH（listing 无退市日期，§7 注 2） |
+  | D `unexplained` | **不满足 A/B/C 的一切情形**：`delist_date ≥ run.start`（`== start`、窗口内、`== end`、`> end` 均算——退市发生在窗口内/之后时，start..delist 之间仍可能有除权，dump 查无不构成解释；无论 base 有无事件）；listing 缺该码行；C 类探针失败 | **fail-closed 阻断**；唯一放行路径是 §4.4 `manual_overrides` | 3 码：000016.SZ / 002731.SZ / 601198.SH（listing 无退市日期，§7 注 2）；实测 universe 无任何码 `delist_date ≥ start`；base listing 另缺 12 个 universe 码（见下注） |
 
-  所有判定只取与当前 run universe 的交集；分类明细（每码落哪类、依据的 delist_date/事件计数）写进 summary.json。
+  边界语义：`delist_date == run.start` 落 D（退市当日=窗口首日，此前仍有交易日可能除权）。实测补充（2026-10-29）：base listing 缺 12 个 universe 码（000777.SZ / 000778.SZ / 000779.SZ / 002374.SZ / 002375.SZ / 002376.SZ / 300948.SZ / 300950.SZ / 300952.SZ / 301119.SZ / 301122.SZ / 301123.SZ）——全部在 dump 有事件、不进 vendor_unknown 分类，但印证 base listing 覆盖本身有缺口；"listing 缺行 → D"为防御性规则。所有判定只取与当前 run universe 的交集；分类明细（每码落哪类、依据的 delist_date/事件计数）写进 summary.json。
 - `summary.json` 增 `"channel": "hithink"`、`dump_sha256`、`hithink_allotment_rows`、`vendor_unknown_classification`、`manual_overrides_applied`；`coverage_is_vendor_query_only` 保留为 True（dump 同样是 vendor 口径快照）。
 
 ### 4.4 排除清单（人工例外 + 冻结事实键）
@@ -110,7 +110,12 @@
 }
 ```
 
-- **`manual_overrides`**：D 类码的唯一人工放行路径。生效条件：四元组（reason/evidence/approved_by/approved_at）齐全 **且 `review_after` ≥ run end**；过期即失效、恢复阻断。每次使用逐条写入 summary.json 的 `manual_overrides_applied` 与 manifest-patch-plan 的 review_requirements。首跑时 000016.SZ / 002731.SZ / 601198.SH 如无 override 则 run 阻断——这是设计行为（base 事实无法解释 dump 查无，先查清楚再放行，或修订 listing 后重跑）。
+- **`manual_overrides`**：D 类码的唯一人工放行路径。生效条件（逐条校验，任一不满足即拒绝并阻断）：
+  - 四元组（reason/evidence/approved_by/approved_at）齐全；`approved_at`/`review_after` 均为 `YYYY-MM-DD`，`approved_at ≤ review_after`，且 `approved_at` 不得晚于 assemble 当日（CST，禁未来时间戳）。
+  - **`review_after` 是真正的日历过期**：assemble 时按**当日日期**（CST）判定——`today ≤ review_after` 有效，`today > review_after` 失效恢复阻断。**不与 run end 比较**：run end 在 init 后冻结，作基准会让同一 run 数周后再 assemble 仍"永不过期"（v3 缺陷，复审 P2）。
+  - `classification` 必须为四类枚举之一（未知值拒绝）；且该码在当前 run 的实际分类**必须为 D**——对 A/B/C 类码的 override 视为过期/漂移条目，拒绝并告警（防止名单漂移后 override 退化为隐式白名单）。
+  - 显式不设 `approved_at` 与 `fetched_at` 的大小约束：override 的标准工作流就是"首跑 D 阻断 → 人查事实 → 落 override → 同 dump 复跑"，`approved_at > fetched_at` 是常态（复审该项建议未采纳，理由如上）。
+  - 每次使用逐条写入 summary.json 的 `manual_overrides_applied`（含 evaluated_at）与 manifest-patch-plan 的 review_requirements。首跑时 000016.SZ / 002731.SZ / 601198.SH 如无 override 则 run 阻断——这是设计行为（base 事实无法解释 dump 查无，先查清楚再放行，或修订 listing 后重跑）。
 - **`known_discrepancies`**：完整事实键 `(code, ex_date, field, wind_value, hithink_value)`，不是码级名单——已解释差异精确到键，同码未来出现**新**差异键仍会触发 gate 报警。
 - 两份名单均只取与当前 universe 的交集；universe 外的条目忽略并告警。
 
@@ -129,7 +134,7 @@
 
 hithink 通道候选的 `review_requirements` 追加：
 
-- "hithink 行 record_date/pay_date/bonus_list_date 为 NULL、transfer_ratio 并入 bonus_ratio；economics 消费受 §4.8 闸门 fail-closed 约束，回填前这些事件的现金/送转过不了闸门。"
+- "hithink 行 record_date/pay_date/bonus_list_date 为 NULL、transfer_ratio 并入 bonus_ratio；economics 消费受 §4.8 闸门约束——回填前这些事件逐事件显式缺席（blocked 明细进统计），进不了 economics。"
 - "hithink 不覆盖 dump 查无的标的：按 §4.3 四类逐码判定（A/B 由 base 事实解释、C 经目录探针确认、D 阻断或 override）；本次 run 的 manual_overrides_applied 见 summary。"
 - "重整/债务重组转增不在 hithink 口径；**窗口内新发生的重整转增对本通道不可见**（表现为该码窗口无事件，覆盖断言无法发现），发布 GO 前必须完成 §5.3 同窗 wind diff 或显式记录放弃。"
 
@@ -147,9 +152,10 @@ hithink 通道候选的 `review_requirements` 追加：
 
 **决策（显式终态，不是待办）**：
 
-1. hithink 行进入共享 events.parquet；但任何 corp_actions → ExDivEvent 的 loader 必须先过消费闸门。PR-A 新增 `backtest/research/corp_actions_econ_gate.py::gate_rows_for_economics(rows)`：`source` 以 `hithink:` 开头且 `pay_date` 为 NULL，或（`bonus_ratio`/`transfer_ratio` 非零且 `bonus_list_date` 为 NULL）→ **raise**（fail-closed；不走 invalid_event 静默计数，不使用 :123 的 ex_date 回退）。wind 行维持现有校验。闸门带 data-free 测试。
-2. **NULL 不是可接受的最终状态**：发布 GO 检查项维持 §5.3——同窗 wind diff + 日期回填完成，或显式人裁放弃并记录理由。即使放弃回填，闸门保证 NULL 行进不了 economics：这些事件的现金/送转在回测中**显式缺席**（可监测、可追踪），而不是静默错算（现金不到账、红股提前可交易）。
-3. **回填路径**：wind 恢复后由 owner 侧以新 revision 修订（del+add）回填 record/pay/bonus_list 日期；prepare-merge 维持纯追加（`updated_event_rows: 0`），修订流程待 wind 实际恢复后另行小方案、人裁，本方案不实现。
+1. **闸门语义 = 逐事件显式缺席（不是整批阻断）**：hithink 行进入共享 events.parquet；任何 corp_actions → ExDivEvent 的 loader 必须先过消费闸门。PR-A 新增 `backtest/research/corp_actions_econ_gate.py::gate_rows_for_economics(rows)` → 返回 `(accepted_rows, blocked_rows, reasons)`：`source` 以 `hithink:` 开头且 `pay_date` 为 NULL，或（`bonus_ratio`/`transfer_ratio` 非零且 `bonus_list_date` 为 NULL）→ 进 `blocked_rows`（**不 raise、不走 invalid_event 静默计数、不使用 :123 的 ex_date 回退**）；调用方只消费 `accepted_rows`，`blocked_rows` 明细（code/ex_date/缺失字段）写入运行统计。**批次级 raise 只用于身份/结构异常**：`source` 前缀既非 `wind:` 也非 `hithink:` → raise（不得当作 wind 或忽略）；wind 行维持现有校验。选择逐事件缺席而非整批阻断的理由：整批 raise 会让首个 hithink 窗口发布后 economics 整体不可用，与"其余事件照常消费"的研究需求冲突；且 NULL 的经济影响（现金不成应收、红股不可交易）本就是按事件粒度陈述的。闸门带 data-free 测试。
+2. **闸门不是"约定"而是结构保证（防死代码）**：(a) PR-A 把读取与闸门合成**唯一认可入口** `corp_actions_econ_gate.py::load_corp_actions_for_economics()`（读 parquet + 过闸门一体）；(b) **静态 fence 测试进 CI（data-free）**：扫描 `backtest/`、`trade_decision/`、`scripts/`，除该模块外任何文件出现对 corp_actions 湖的直接读取（`resolve_source_parquet("corp_actions"`、corp_actions `events.parquet` 路径引用、对其 `pq.read_table`）即失败——把问题从"希望未来 loader 调闸门"反转为"任何 loader 不得绕过闸门"；(c) 现状 economics 不读 corp_actions 湖（见上），fence 从第一天就拦住未来第一条直读路径。
+3. **NULL 不是可接受的最终状态**：发布 GO 检查项维持 §5.3——同窗 wind diff + 日期回填完成，或显式人裁放弃并记录理由。即使放弃回填，闸门保证 NULL 行进不了 economics：这些事件的现金/送转在回测中**显式缺席**（blocked 明细可监测、可追踪），而不是静默错算（现金不到账、红股提前可交易）。
+4. **回填路径**：wind 恢复后由 owner 侧以新 revision 修订（del+add）回填 record/pay/bonus_list 日期；prepare-merge 维持纯追加（`updated_event_rows: 0`），修订流程待 wind 实际恢复后另行小方案、人裁，本方案不实现。
 
 ## 5. 实施步骤（评审通过后）
 
@@ -157,7 +163,8 @@ hithink 通道候选的 `review_requirements` 追加：
    - `pull_corp_actions_incremental.py`：`--channel` / hithink pull（含 §4.2 全经济键去重、C 类目录探针）/ assemble 分支 / §4.3 四类覆盖断言（事实源 = 钉死的 listing + base events）/ `manual_overrides` 过期校验 / delta↔base (code, ex_date) 重叠断言 / validate_base 分通道期望（§4.7）。
    - `config/corp_actions_hithink_exclusions.json`：manual_overrides 骨架（空列表起步）+ `known_discrepancies` 全量 46 条冻结键（从 2026-10-29 探针产物生成）。
    - `backtest/research/corp_actions_econ_gate.py`（§4.8）+ data-free 测试。
-   - `tests/test_corp_actions_hithink_channel.py`（合成 dump 夹具，data-free）：字段映射、窗口过滤、全经济键去重（相同行折叠/冲突保留多行）、event_id 稳定、旧 wind run.json 无 channel 字段可加载、含 hithink 行（record_date=None）的 base 可通过 validate_base/prepare-merge、**四类覆盖断言逐类（A/B 放行、C 探针证据、D 阻断、override 生效与过期失效）**、delta↔base 重叠断言。
+   - `tests/test_corp_actions_hithink_channel.py`（合成 dump 夹具，data-free）：字段映射、窗口过滤、全经济键去重（相同行折叠/冲突保留多行）、event_id 稳定、旧 wind run.json 无 channel 字段可加载、含 hithink 行（record_date=None）的 base 可通过 validate_base/prepare-merge、**四类覆盖断言逐类与边界（A/B 放行且要求 `delist_date < start`；`delist_date == start` / 窗口内 / `== end` / `> end`、listing 缺行均落 D；C 探针证据；D 阻断）**、**override 校验（日期格式、`approved_at ≤ review_after` 且非未来时间戳、`review_after` 日历过期即失效、未知 classification 拒绝、非 D 类码的 override 拒绝）**、delta↔base 重叠断言。
+   - `backtest/research/corp_actions_econ_gate.py` 测试（data-free）：逐事件 accepted/blocked 拆分与 reasons、blocked 明细进统计、未知 `source` 前缀批次级 raise、wind 行维持校验；**静态 fence 测试**（§4.8：economics 路径直读 corp_actions 湖 → fence 失败）。
    - `scripts/gates/verify_corp_actions_hithink_parity.py`（§4.5 集合恒等口径）。
    - runbook `corp-actions-incremental-driver.md` 增补 hithink 章节（Key env、四类判定、override 流程、闸门语义）。
 2. **首跑（人裁 GO 后）**：`init --channel hithink` 新 run-dir `D:\exports\bt_corp_actions_incr_20261028_hithink`（窗口 10-07→10-28，与 wind 冻结 run 同窗便于对照）→ `pull` → `assemble` → `prepare-merge`（不 apply）→ 人工审 `manifest-patch-plan.json`。预期首跑在 D 类 3 码（000016.SZ / 002731.SZ / 601198.SH）阻断，需先查清事实并落 override 或修订 listing——这是设计行为。
@@ -171,8 +178,10 @@ hithink 通道候选的 `review_requirements` 追加：
 | API Key 授权范围变化 / 服务限流 | pull 原子失败即整体失败，无部分状态；Key 走 env，轮换不落盘 |
 | dump 是全量快照、历史可被上游修订 | 每次 dump 原始 parquet + sha256 留档进证据链；跨日 diff 由 parity gate 集合恒等盯 |
 | 口径差异（送转合并、缺 record_date）污染下游 | source 列区分通道；review_requirements 显式声明；null_counts 进 summary |
-| 静态白名单把真实缺口误判为"已退市"（v2 缺陷：7 码中 3 码 listing 无退市日期、11 码中 3 码实已退市） | §4.3 运行时按 base 冻结事实四类判定，D 类阻断；manual_overrides 带证据 + review_after 过期机制 |
-| hithink 行 NULL 日期进 economics 静默错算（现金不到账 / 红股提前可交易） | §4.8 消费闸门 fail-closed；发布 GO 检查项；回填路径显式化 |
+| 静态白名单把真实缺口误判为"已退市"（v2 缺陷：7 码中 3 码 listing 无退市日期、11 码中 3 码实已退市） | §4.3 运行时按 base 冻结事实四类判定，D 类阻断；manual_overrides 带证据 + review_after 日历过期（assemble 当日判定，非 run end） |
+| 退市发生在增量窗口内 / listing 缺行，被 A/B 类误放行 | §4.3 A/B 要求 `delist_date < run.start`；`delist_date ≥ start`（含 == start / == end / > end）与 listing 缺行一律 D，override 唯一放行路径 |
+| hithink 行 NULL 日期进 economics 静默错算（现金不到账 / 红股提前可交易） | §4.8 消费闸门逐事件阻断（blocked 显式缺席、明细进统计），未知 source 前缀批次级 raise；发布 GO 检查项；回填路径显式化 |
+| 闸门沦为死代码（未来 loader 不经闸门直读 corp_actions 湖） | §4.8 读取+闸门合一的唯一入口 `load_corp_actions_for_economics()` + 静态 fence 测试进 CI，绕过即失败 |
 | 容差名单按码剔除掩盖同码新漂移（v2 缺陷） | §4.5 差异集合恒等断言，容差精确到 (code, ex_date, field, 双值) 事实键 |
 | 跨通道重复合并 | base_sha256 钉死 + 窗口序贯（base ex_date ≤ ask_end < 增量窗口）；prepare-merge 既有 event_id 碰撞检查 + 新增 (code, ex_date) 重叠断言，双 fail-closed（event_id 跨通道不同形，不作为防重依据，见 §4.3） |
 | hithink 行发布进湖后，validate_base 旧 record_date 非空要求阻断后续一切增量 run | 分通道期望（§4.7）；"含 hithink 行的 base"进 data-free 测试 |
@@ -197,6 +206,14 @@ hithink 通道候选的 `review_requirements` 追加：
 4. Key 管理与轮换流程是否合规。
 
 ## 9. 评审修订记录
+
+### 2026-10-29 v4（复审收口，结论 Request changes（小幅）→ 三条全部落实）
+
+复审核验：差异键复算属实（46 唯一事实键 = cash 10 + bonus 36，与本仓探针复算一致）；UTF-8 / 无 NUL / 相对链接 / `git diff --check` 通过。修订：
+
+1. **四类判定覆盖"窗口内退市"**（§4.3）：A/B 放行条件从 `delist_date ≤ run end` 收紧为 `delist_date < run.start`（原条件只能证明退市后无事件，证明不了 start..delist 间无事件）；`delist_date ≥ start`（== start、窗口内、== end、> end，无论 base 有无事件）与 listing 缺行一律 D。实测核验：A 类 4 码 delist 2026-01-22~07-17、B 类 3 码 delist 2026-06-03~07-30，均 < start 2026-10-07，四类计数不变；universe 无任何码 `delist_date ≥ start`；另发现 base listing 缺 12 个 universe 码（均在 dump 有事件、不进分类），已记入 §4.3 注——印证"listing 缺行 → D"的必要性。
+2. **§4.8 闸门从"约定"变结构保证**（§4.8）：语义定为**逐事件显式缺席**——`gate_rows_for_economics()` 返回 `(accepted_rows, blocked_rows, reasons)`，blocked 明细进统计、调用方只消费 accepted；批次级 raise 仅限身份异常（未知 `source` 前缀）。防死代码三件套：读取+闸门合一唯一入口 `load_corp_actions_for_economics()`、静态 fence 测试进 CI（economics 路径直读 corp_actions 湖即失败）、未知前缀 fail-closed。未采纳复审"approved_at ≤ fetched_at"硬约束，理由已写入 §4.4（override 工作流本就是 D 阻断后补落、同 dump 复跑，approved_at 晚于 fetched_at 是常态）。
+3. **review_after 改真日历过期**（§4.4）：assemble 按当日（CST）判定 `today ≤ review_after`，不再与冻结的 run end 比较（原规则下同一 run 数周后 assemble 仍永不过期）；补充校验与测试：日期格式、`approved_at ≤ review_after` 且非未来时间戳、未知 classification 拒绝、非 D 类码 override 拒绝。
 
 ### 2026-10-29 v3（codex 评审，结论 Request changes → 三条 P1 全部落实）
 
