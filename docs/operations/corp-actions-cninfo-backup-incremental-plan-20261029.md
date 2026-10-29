@@ -91,7 +91,7 @@ Git author、AI 角色、测试通过或回归匹配均不是 Owner 手签；本
 | 刀 | 范围 / 进入条件 |
 | --- | --- |
 | **C0 ✅** | 本 PR：计划 + 两处文档指针，docs-only；不启动后续刀 |
-| **C1 — sandbox encode** | **须单独 Human GO**；复用 MVP / extractor，仅独立 sandbox + manifest，导出 `cninfo_bt_sandbox.csv`；零生产湖路径。先确认 §3–4 提案；如需新增抓取能力，范围与覆盖验收另行明确，不能把 replay 当 crawler |
+| **C1 ✅** | Human **t212u** GO → OSkh [#1238](https://github.com/baiyibing/OSkhQuant1.3/pull/1238) squash → `0b2268706`（path guard + `run_manifest.json` `lake_write_authorized=false` / `crawl_complete=false` + `cninfo_bt_sandbox.csv`；fixture CI；OWNER 仍 UNSIGNED）。C2/C3/合湖仍须另 GO |
 | **C2 — Owner hand-sign / parity** | Owner 独立手签 mvp / parity，固定哈希与逐事件处置；在 **#501 基线窗内**做小样本 Wind diff，形成日期 / 金额 / 单位 / 拒绝证据与 BT 消费者验收。expand-prod 签收与代表性分母仍须按其 checklist 补齐，不能由小样本自动关闭 |
 | **C3 — parallel backup schedule** | 仅 Human 明确 **“backup may run in parallel / backup 可并行” GO** 后，才可另案开独立备份调度；仍无主源切换或湖发布权限。任何 primary swap 须更晚的 **“main-source switch / 主源切换” GO** 及适用签收，不能由 C3 推定 |
 
