@@ -82,7 +82,7 @@
 
   | 类 | 判定（均要求事实由 base 解释） | 处置 | 实测（2026-10-29 dump + base listing） |
   |---|---|---|---|
-  | A `delisted_explained` | base 有该码事件 且 `delist_date` 非空 且 **`delist_date < run.start`** | 放行（历史事件由 wind base 承载；**整窗在退市之后**，退市后无新事件） | 4 码：002231.SZ / 002898.SZ / 300379.SZ / 600200.SH（delist 2026-01-22 ~ 2026-07-17，均 < start 2026-10-07） |
+  | A `delisted_explained` | base 有该码事件 且 `delist_date` 非空 且 **`delist_date < run.start`** | 放行（历史事件由 wind base 承载；**整窗在退市之后**，退市后无新事件） | 4 码：002231.SZ / 002898.SZ / 300379.SZ / 600200.SH（delist 2025-12-31 ~ 2026-07-17，均 < start 2026-10-07） |
   | B `delisted_no_history` | base 无该码事件 且 `delist_date` 非空 且 **`delist_date < run.start`** | 放行（整窗在退市之后且双侧一致无事件） | 3 码：000004.SZ / 000638.SZ / 920305.BJ（delist 2026-06-03 ~ 2026-07-30，均 < start） |
   | C `trading_eventless` | base 无该码事件 且 `delist_date` 为空 | 仅在 **hithink 目录正向确认**后放行：pull 时逐码探 `GET /api/meta/tickers/search`（或逐码 adjustment-factors 端点），"目录认识该码 + 生涯零事件" = 在交易但无事件（dump 含已宣告未来事件，查无即真无）；探针证据（request_id、返回条目）写进 hithink_state。目录同样查无 → 归 D | 8 码：001239.SZ / 001330.SZ / 301292.SZ / 301565.SZ / 601399.SH / 688062.SH / 688221.SH / 688382.SH |
   | D `unexplained` | **不满足 A/B/C 的一切情形**：`delist_date ≥ run.start`（`== start`、窗口内、`== end`、`> end` 均算——退市发生在窗口内/之后时，start..delist 之间仍可能有除权，dump 查无不构成解释；无论 base 有无事件）；listing 缺该码行；C 类探针失败 | **fail-closed 阻断**；唯一放行路径是 §4.4 `manual_overrides` | 3 码：000016.SZ / 002731.SZ / 601198.SH（listing 无退市日期，§7 注 2）；实测 universe 无任何码 `delist_date ≥ start`；base listing 另缺 12 个 universe 码（见下注） |
@@ -211,7 +211,7 @@ hithink 通道候选的 `review_requirements` 追加：
 
 复审核验：差异键复算属实（46 唯一事实键 = cash 10 + bonus 36，与本仓探针复算一致）；UTF-8 / 无 NUL / 相对链接 / `git diff --check` 通过。修订：
 
-1. **四类判定覆盖"窗口内退市"**（§4.3）：A/B 放行条件从 `delist_date ≤ run end` 收紧为 `delist_date < run.start`（原条件只能证明退市后无事件，证明不了 start..delist 间无事件）；`delist_date ≥ start`（== start、窗口内、== end、> end，无论 base 有无事件）与 listing 缺行一律 D。实测核验：A 类 4 码 delist 2026-01-22~07-17、B 类 3 码 delist 2026-06-03~07-30，均 < start 2026-10-07，四类计数不变；universe 无任何码 `delist_date ≥ start`；另发现 base listing 缺 12 个 universe 码（均在 dump 有事件、不进分类），已记入 §4.3 注——印证"listing 缺行 → D"的必要性。
+1. **四类判定覆盖"窗口内退市"**（§4.3）：A/B 放行条件从 `delist_date ≤ run end` 收紧为 `delist_date < run.start`（原条件只能证明退市后无事件，证明不了 start..delist 间无事件）；`delist_date ≥ start`（== start、窗口内、== end、> end，无论 base 有无事件）与 listing 缺行一律 D。实测核验：A 类 4 码 delist 2025-12-31~2026-07-17、B 类 3 码 delist 2026-06-03~07-30，均 < start 2026-10-07，四类计数不变；universe 无任何码 `delist_date ≥ start`；另发现 base listing 缺 12 个 universe 码（均在 dump 有事件、不进分类），已记入 §4.3 注——印证"listing 缺行 → D"的必要性。
 2. **§4.8 闸门从"约定"变结构保证**（§4.8）：语义定为**逐事件显式缺席**——`gate_rows_for_economics()` 返回 `(accepted_rows, blocked_rows, reasons)`，blocked 明细进统计、调用方只消费 accepted；批次级 raise 仅限身份异常（未知 `source` 前缀）。防死代码三件套：读取+闸门合一唯一入口 `load_corp_actions_for_economics()`、静态 fence 测试进 CI（economics 路径直读 corp_actions 湖即失败）、未知前缀 fail-closed。未采纳复审"approved_at ≤ fetched_at"硬约束，理由已写入 §4.4（override 工作流本就是 D 阻断后补落、同 dump 复跑，approved_at 晚于 fetched_at 是常态）。
 3. **review_after 改真日历过期**（§4.4）：assemble 按当日（CST）判定 `today ≤ review_after`，不再与冻结的 run end 比较（原规则下同一 run 数周后 assemble 仍永不过期）；补充校验与测试：日期格式、`approved_at ≤ review_after` 且非未来时间戳、未知 classification 拒绝、非 D 类码 override 拒绝。
 
