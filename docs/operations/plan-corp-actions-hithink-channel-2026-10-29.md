@@ -1,6 +1,6 @@
 # corp-actions 双通道取数方案（wind 保留 + hithink 新增）— 2026-10-29
 
-状态：**提案待评审**。评审通过前不动实现代码。本 PR 只含本文档。
+状态：**提案待评审**（2026-10-29 评审修订 v2，变更记录见 §9）。评审通过前不动实现代码。本 PR 只含方案文档 + 一份非本方案范围的 [hithink 湖补强 backlog](hithink-lake-supplement-backlog-2026-10-29.md)。
 
 ## 1. 背景
 
@@ -70,12 +70,14 @@
 | `transfer_ratio` | — | 恒 None（口径差异写入 review_requirements） |
 | `record_date` / `pay_date` / `bonus_list_date` | — | 恒 None（hithink 不提供） |
 | `source` | 字面量 | `hithink:market-dumps/adjustment-factors` |
-| `event_id` | 同 wind 规则 | `natural_key` + `_incr_` + sha20，跨通道同事件同 id |
+| `event_id` | 同 wind 规则 | `natural_key` + `_incr_` + sha20。**跨通道同事件不保证同 id**（见下），防重不依赖 id 相同 |
 
 - 窗口过滤：`start ≤ ex_date ≤ end`；窗口外事件（含已宣告未除权的未来事件）不计入、不写 rejected（dump 是全量快照，下次 run 自然再捡到）。
 - 配股行（`allotment_ratio > 0`）：不映射进 events，落 `assembled/hithink_allotments.csv` sidecar + 计数进 summary。
-- 同日多行（分红/送股分行）：沿用现有 `natural_key` 合并语义；同键字段冲突照抛。
-- 覆盖断言（prepare-merge 同款语义）：`universe_hits ∪ codes_no_events ∪ exclusion.delisted_codes` 必须 == universe；`codes_vendor_unknown` 中有不在排除清单的码 → **fail-closed 报错**。
+- 同日多行（分红/送股分行）：沿用现有 `natural_key` 合并语义；同键字段冲突照抛。同日多行不是新形态——wind base 本就有 42 例（event_id 带 `_1/_2` 后缀），hithink dump 实测 3 码 6 行同类，下游本就按 (code, ex_date) 日口径聚合。
+- 跨通道防重复合并的真实机制是 **base 钉死 + 窗口序贯**，不是 event_id 相同：`verify_base` 的 base_sha256 使湖一更新旧 run 即失效；`validate_base` 强制 base 事件 `ex_date ≤ base_ask_end`，init 强制增量窗口从 `ask_end+1` 起 → base 与 delta 的 (code, ex_date) 不可能重叠。wind 送转分列 vs hithink 合并口径下，同事件 `natural_key`（含全部数值列）几乎必然不同 → event_id 必然不同，"同 id 防重"只在数值完全一致的窄情形成立，**不作为安全依据**。
+- **显式加固（两通道通用）**：prepare_merge 在既有 event_id 碰撞检查之外，新增断言"delta 的 (code, ex_date) 与 base 无重叠"，把窗口序贯从构造性成立变为显式校验。
+- 覆盖断言（prepare-merge 同款语义）：`universe_hits ∪ codes_no_events ∪ delisted_codes ∪ no_event_history_codes` 必须 == universe；`codes_vendor_unknown`（dump 查无的 universe 码）逐码判定——在 `delisted_codes` → 通过（事件由 wind base 存量承载）；在 `no_event_history_codes`（dump 查无 **且** wind base 无该码事件）→ 通过（次新/从不分红，双侧一致无事件）；其余 → **fail-closed 报错**。实测首跑 vendor_unknown 共 18 码 = 7 退市 + 11 无事件史（清单见 §4.4）。
 - `summary.json` 增 `"channel": "hithink"`、`dump_sha256`、`hithink_allotment_rows`；`coverage_is_vendor_query_only` 保留为 True（dump 同样是 vendor 口径快照）。
 
 ### 4.4 排除清单（缺口冻结，人工维护）
@@ -85,13 +87,15 @@
 ```json
 {
   "delisted_codes": ["000016.SZ", "002231.SZ", "002731.SZ", "002898.SZ", "300379.SZ", "600200.SH", "601198.SH"],
-  "known_restructuring_transfer_gap": ["601777.SH", "002251.SZ", "002321.SZ", "..."],
-  "known_cash_discrepancy": ["600989.SH", "600025.SH", "600900.SH", "301057.SZ"],
-  "notes": "hithink 代码表只收在交易标的；重整/债务重组转增不在其分红送转口径；现金不符见 §7 对拍"
+  "no_event_history_codes": ["000004.SZ", "000638.SZ", "001239.SZ", "001330.SZ", "301292.SZ", "301565.SZ", "601399.SH", "688062.SH", "688221.SH", "688382.SH", "920305.BJ"],
+  "known_restructuring_transfer_gap": ["000697.SZ", "000908.SZ", "002015.SZ", "002076.SZ", "002157.SZ", "002200.SZ", "002217.SZ", "002251.SZ", "002309.SZ", "002310.SZ", "002321.SZ", "002323.SZ", "002356.SZ", "002366.SZ", "002713.SZ", "002721.SZ", "002766.SZ", "300071.SZ", "300091.SZ", "300209.SZ", "300256.SZ", "300506.SZ", "300767.SZ", "600157.SH", "600179.SH", "600221.SH", "600423.SH", "600515.SH", "600589.SH", "600601.SH", "600654.SH", "600666.SH", "600815.SH", "601777.SH", "603363.SH", "603559.SH"],
+  "known_cash_discrepancy": ["301057.SZ", "600025.SH", "600900.SH", "600989.SH"],
+  "notes": "hithink 代码表只收在交易标的；重整/债务重组转增不在其分红送转口径；现金不符见 §7 对拍。名单与 §7 实测闭环：cash 不符 10 键=4 码、bonus 不符 36 键=36 码、vendor_unknown 18 码=delisted 7 + no_event_history 11"
 }
 ```
 
-- `delisted_codes`：hithink 通道允许 `codes_vendor_unknown` 的唯一白名单；这些码的事件**继续由 wind base 存量承载**，wind 恢复后可对这 7 码走 wind 通道单独增量。
+- `delisted_codes`：dump 查无、wind base 有存量事件的码（实测 7 码，退市/被吸收合并）；事件继续由 wind base 承载，wind 恢复后可对这 7 码走 wind 通道单独增量。
+- `no_event_history_codes`：dump 查无、wind base 也无事件的码（实测 11 码，次新/从不分红）。判据是"双侧一致无事件"，因此**真实缺口不会被名单吞掉**：wind base 有事件而 dump 查无、且不在 `delisted_codes` → 仍 fail-closed。
 - 后两组只用于对拍 gate 的容差名单与人工核对追踪，不影响 assemble。
 
 ### 4.5 对拍 gate（手动，不进 CI）
@@ -99,7 +103,9 @@
 `scripts/gates/verify_corp_actions_hithink_parity.py`（需网络 + Key，手动跑，非 CI data-free gate）：
 
 - 输入：hithink dump + base `events.parquet` + 排除清单。
+- **聚合口径（与 §7 对拍一致，转正自 `_tmp_hithink_probe/compare2.py`）**：按 `(code, ex_date)` groupby-**sum** 后比较；wind 侧 `bonus = bonus_ratio + transfer_ratio`（送转合并）。这是日口径比较，不是 assemble 的 per-event natural_key 口径——后者跨通道本就不同形（§4.3）。
 - 断言（阈值随首跑实测值冻结）：共同 (code, ex_date) 键 cash 一致率 ≥ 99.9%、bonus 一致率 ≥ 99.8%；`仅 wind 有` 的键 ⊆ `delisted_codes` × 任意日期。
+- 一致率同时报告**原始**与**剔除容差名单码后**两组：阈值断言只作用于剔除后比率（只拦新差异），原始比率供漂移观察。实测余量参考：cash 99.95% vs 99.9%、bonus 99.83% vs 99.8%（剔除容差后应近 100%）。
 - 输出 markdown 报告；阈值破坏即非零退出，触发人工逐案核对（清单该扩容还是数据该质疑，由人裁）。
 
 ### 4.6 manifest-patch-plan 增补
@@ -107,14 +113,18 @@
 hithink 通道候选的 `review_requirements` 追加：
 
 - "hithink 行 record_date/pay_date/bonus_list_date 为 NULL、transfer_ratio 并入 bonus_ratio；下游消费前确认容忍。"
-- "hithink 不覆盖已退市标的；delisted_codes 内事件仍来自 wind base 存量。"
-- "重整/债务重组转增不在 hithink 口径；见 exclusions 清单。"
+- "hithink 不覆盖 dump 查无的标的：delisted_codes（退市，事件由 wind base 存量承载）与 no_event_history_codes（双侧一致无事件）见 exclusions 清单。"
+- "重整/债务重组转增不在 hithink 口径；**窗口内新发生的重整转增对本通道不可见**（表现为该码窗口无事件，覆盖断言无法发现），发布 GO 前必须完成 §5.3 同窗 wind diff 或显式记录放弃。"
+
+### 4.7 发布后 base 的前向兼容（validate_base 分通道期望）
+
+现状 `validate_base` 要求 base 每行 `record_date` 非空（:554）。hithink 行 `record_date=None`——**一旦 hithink 候选发布进湖，任何后续增量 run（含 wind 恢复后的）都会在该检查报 "base has null required fields" 被阻断**。PR-A 必须同步把该校验改为按 `source` 前缀分通道设期望：`wind:` 行维持 record_date 非空与日期一致性检查；`hithink:` 行豁免 record_date/pay_date/bonus_list_date 非空要求（ex_date 非空、event_id 唯一、decimal 合法仍适用）。测试用例见 §5.1。
 
 ## 5. 实施步骤（评审通过后）
 
-1. **PR-A（实现）**：`pull_corp_actions_incremental.py` 加 `--channel` / hithink pull / assemble 分支 / 覆盖断言；`config/corp_actions_hithink_exclusions.json`；`tests/test_corp_actions_hithink_channel.py`（合成 dump 夹具，data-free：字段映射、窗口过滤、同日多行合并、event_id 稳定、未知码 fail-closed、旧 wind run.json 无 channel 字段可加载）；`scripts/gates/verify_corp_actions_hithink_parity.py`；runbook `corp-actions-incremental-driver.md` 增补 hithink 章节。
+1. **PR-A（实现）**：`pull_corp_actions_incremental.py` 加 `--channel` / hithink pull / assemble 分支 / 覆盖断言三桶 / delta↔base (code, ex_date) 重叠断言 / validate_base 分通道期望（§4.7）；`config/corp_actions_hithink_exclusions.json`（§4.4 完整名单）；`tests/test_corp_actions_hithink_channel.py`（合成 dump 夹具，data-free：字段映射、窗口过滤、同日多行合并、event_id 稳定、未知码 fail-closed、旧 wind run.json 无 channel 字段可加载、**含 hithink 行（record_date=None）的 base 可通过 validate_base/prepare-merge、no_event_history 桶放行而真缺口（wind 有事件 dump 查无非退市）仍报错、delta 与 base 的 (code, ex_date) 重叠断言**）；`scripts/gates/verify_corp_actions_hithink_parity.py`（§4.5 聚合口径）；runbook `corp-actions-incremental-driver.md` 增补 hithink 章节。
 2. **首跑（人裁 GO 后）**：`init --channel hithink` 新 run-dir `D:\exports\bt_corp_actions_incr_20261028_hithink`（窗口 10-07→10-28，与 wind 冻结 run 同窗便于对照）→ `pull` → `assemble` → `prepare-merge`（不 apply）→ 人工审 `manifest-patch-plan.json`。
-3. **交叉验证**：parity gate 重跑；wind 恢复后同窗 wind run 续跑，两候选 diff（expect：hithink ⊇ wind，差异 ⊆ 排除清单解释范围）。
+3. **交叉验证**：parity gate 重跑；wind 恢复后同窗 wind run 续跑，两候选 diff（expect：hithink ⊇ wind，差异 ⊆ 排除清单解释范围）。同窗 wind 结果同时承担两职：(a) 补齐 hithink 行缺失的 pay/record/bonus_list 日期事实；(b) 探测窗口内重整转增盲区（§4.6）。**日期回填机制本方案不实现**：首发接受空值（prepare-merge 为纯追加模型，`updated_event_rows: 0`）；回填路径（owner 侧修订 revision，或扩展 patch-plan 支持更新）待 wind 实际恢复后另行小方案、人裁。发布 GO 检查项：同窗 diff 已完成，或显式记录放弃及理由。
 4. **发布**：沿用既有"单独 Human GO + owner 侧 publisher"流程，本驱动永不 apply。
 
 ## 6. 风险与缓解
@@ -124,7 +134,8 @@ hithink 通道候选的 `review_requirements` 追加：
 | API Key 授权范围变化 / 服务限流 | pull 原子失败即整体失败，无部分状态；Key 走 env，轮换不落盘 |
 | dump 是全量快照、历史可被上游修订 | 每次 dump 原始 parquet + sha256 留档进证据链；跨日 diff 由 parity gate 盯 |
 | 口径差异（送转合并、缺 record_date）污染下游 | source 列区分通道；review_requirements 显式声明；null_counts 进 summary |
-| 跨通道重复合并 | event_id 同规则 + prepare-merge 既有碰撞检查 fail-closed |
+| 跨通道重复合并 | base_sha256 钉死 + 窗口序贯（base ex_date ≤ ask_end < 增量窗口）；prepare-merge 既有 event_id 碰撞检查 + 新增 (code, ex_date) 重叠断言，双 fail-closed（event_id 跨通道不同形，不作为防重依据，见 §4.3） |
+| hithink 行发布进湖后，validate_base 旧 record_date 非空要求阻断后续一切增量 run | 分通道期望（§4.7）；"含 hithink 行的 base"进 data-free 测试 |
 | hithink 端点契约变更 | 必需列校验 fail-closed；契约以 `fuyao.aicubes.cn/llms-full.txt` 为准，runbook 注明 |
 
 ## 7. 对拍证据（2026-10-29 探针，真实 Key）
@@ -143,3 +154,16 @@ hithink 通道候选的 `review_requirements` 追加：
 2. 排除清单 fail-closed 边界是否够严（`codes_vendor_unknown` 只允许白名单）。
 3. 送转合并口径 / record_date 置空对下游消费方（复权计算、回测 economics 路径）的影响是否可接受。
 4. Key 管理与轮换流程是否合规。
+
+## 9. 评审修订记录（2026-10-29 v2）
+
+评审核验基础：§3 代码锚点逐一对过全部准确；`_tmp_hithink_probe/` 产物与 §7 数字逐项吻合；Key 卫生通过（探针目录与 git 全历史无 Key 值，轮换入口见 §4.2）。按评审意见修订如下（实现代码仍不动）：
+
+1. **覆盖断言改三桶**（§4.3/§4.4）：原两桶设计按 §7 自身数字（vendor_unknown 18 码 vs 白名单 7 码）首跑即 fail-closed；新增 `no_event_history_codes` 桶（dump 查无且 wind base 无事件，实测 11 码），真实缺口仍报错。
+2. **跨通道防重论证重写**（§4.3/§6）：原"event_id 同规则 → 同事件同 id → 天然防重"不成立（natural_key 含数值列，送转分列 vs 合并必然不同 id；对拍探针为 (code, ex_date) groupby-sum 口径，从未验证 id 级一致）；改为 base 钉死 + 窗口序贯，并新增 (code, ex_date) 重叠断言。
+3. **validate_base 前向兼容**（新增 §4.7）：hithink 行发布进湖后，原 record_date 非空检查会阻断一切后续增量 run；PR-A 按 `source` 前缀分通道设期望。
+4. 对拍 gate 聚合口径显式化（§4.5，groupby-sum + wind 送转合并）+ 原始/剔除容差双组一致率。
+5. pay/record 日期回填路径与窗口内重整盲区显式化为发布 GO 检查项（§4.6/§5.3）。
+6. 排除清单占位符补全并与 §7 数字闭环（§4.4：cash 10 键=4 码、bonus 36 键=36 码、vendor_unknown 18=7+11）。
+
+非本方案范围：hithink 其余数据集对湖的补强 backlog（交易日历 / 指数成分权重 / 复权审计 / 收盘校验 / 基础资料等）见 [hithink-lake-supplement-backlog-2026-10-29.md](hithink-lake-supplement-backlog-2026-10-29.md)。
