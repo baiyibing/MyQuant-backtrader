@@ -3932,5 +3932,24 @@
       "signoff_urls": [],
       "summary": "#1258 最终 head 的必需检查通过且已合入，关闭 v653 Phase4c/d/e 测试漂移条目；P01 的 MyQuant CI、BT 验收器与 Windows 测试复核仍待做。"
     }
+  ],
+  "implementation_refs": [
+    {
+      "package_id": "P01",
+      "audit_ids": [
+        "QL01"
+      ],
+      "pr_url": "https://github.com/baiyibing/MyQuant/pull/110",
+      "domain_record_url": "https://github.com/baiyibing/MyQuant/blob/7716ab6588a3a3faa8a799f5c0ee54154343733a/docs/operations/batch0-offline-staging-ci-2026-10-30.md"
+    },
+    {
+      "package_id": "P01",
+      "audit_ids": [
+        "BT-18",
+        "BT-17"
+      ],
+      "pr_url": "https://github.com/baiyibing/MyQuant-backtrader/pull/540",
+      "domain_record": "docs/operations/batch0-run-protocol-admission-2026-10-30.md"
+    }
   ]
 }

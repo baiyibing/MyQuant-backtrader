@@ -29,3 +29,11 @@ Windows vanna312，`PYTHONUTF8=1`、`PYTHONIOENCODING=utf-8`：
 Windows 默认 GBK 模式下，原有无编码 `read_text()` 测试会解码 UTF-8 产物失败；验证明确采用 UTF-8 模式，未把该环境差异当成引擎或数据故障。真实湖尚未运行，不由这些离线结果关闭 P14。
 
 合入并完成当前 head 的 CI 后，统一索引追加 BT-18/BT-17 的条目级关闭回执；MyQuant QL01 由其独立 PR 验收。
+
+## 批次 0D / 0F / 0.5 准备
+
+[首日输入回执](evidence/three-repo-closeout-2026-10-30/batch0-readiness.json)记录本机已配置湖根和 resolver 读回、marker SHA 及目录存在。目标 paper 宿主尚待用户指定，I01～I07 均没有现场签收。源码字段已核与目标数据有效分开记录。
+
+[Owner 队列](evidence/three-repo-closeout-2026-10-30/batch0-owner-queue.json)已核三仓默认分支和 CI 检查名：1.3 main、MyQuant/BT master 均未保护；1.3 rulesets 查询为套餐限制 403，其他两仓为空。列出供 Owner 选择的实际 job context，以及设置后读回和失败/缺 check 验证所需材料。本轮未变更 GitHub 设置，OP17/BT-11 保持待人工。
+
+机器索引的 `implementation_refs` 已指向 [MyQuant #110](https://github.com/baiyibing/MyQuant/pull/110) 和 [BT #540](https://github.com/baiyibing/MyQuant-backtrader/pull/540)。这里仅保存实施入口，最新状态由 PR 读取；完成条件满足后再追加 `closeout_receipts`。
