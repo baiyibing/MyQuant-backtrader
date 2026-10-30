@@ -89,7 +89,7 @@ by the agreed whole-dump nonnegative rule due to two historical negative bonus
 ratios. It has no commit marker. An independent exact-decimal replay of the pinned
 2026-10-29 inputs also finds a 47th threshold difference (`300708.SZ`, 2020-06-02,
 cash 0.0199 vs 0.02). It was omitted by the earlier float boundary comparison and
-is deliberately **not** added to the 46-key approval baseline. These are data
+is deliberately **not** added to the 46-key frozen diagnostic baseline. These are data
 review items; successful synthetic tests do not authorize real-data publication.
 
 ## Baseline and boundaries
