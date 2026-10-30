@@ -36,6 +36,8 @@ Kimi 独立预审（256s，结论可实施）采纳：每次 HTTP 显式 timeout
 
 实现完成，待草稿 PR 评审。Claude 原生 executable 重跑结论“未发现阻断级合同漏洞，可实施”；Kimi 及两路独立 Codex 复核提出的问题均已修复并加回归：Key/header 异常脱敏、短 request_id 留证及缺 ID 禁 C、公告链禁止多根/分叉、base 日期一致性、别名/动态路径绕闸读取、审批内容/哈希一次读取及末尾复核、候选准备前拒绝覆盖旧 summary。
 
+评审入口：[1.3 producer PR1256](https://github.com/baiyibing/OSkhQuant1.3/pull/1256)、[BT importer PR538](https://github.com/baiyibing/MyQuant-backtrader/pull/538)。[原始意见与收敛记录](https://github.com/baiyibing/MyQuant-backtrader/blob/codex/hithink-artifact-import-20261030/docs/operations/evidence/hithink-artifact-2026-10-30/README.md)统一保存在 BT。
+
 - 1.3：29 项离线测试通过；定向 pyright 0 errors/0 warnings；ruff 通过。验证命令使用 vanna312 显式解释器，`pytest --noconftest -o addopts= tests/test_hithink_corp_actions_export.py`（该隔离测试不需要交易栈 conftest）。
 - BT：108 项定向测试通过；原 Wind 符号链接测试在本机缺 Windows 创建 symlink 权限，单独排除，CI 仍保留原测试。`pytest --noconftest --basetemp <short-temp> tests/test_hithink_incremental.py tests/test_corp_actions_economics_gate.py tests/test_corp_actions_incremental_driver.py -k 'not output_symlink_escape'`。本仓 conftest 强制长的 repo-local 临时路径，独立工作区下会超过 Windows 路径限制，故这批不加载它。
 - BT 定向 pyright 使用与原配置同为 basic 的临时配置，只补仓库根的 import path（原配置将 scripts/tests 各自作为 root，直接命令产生 missing-import warnings）；8 个修改/新增 Python 文件最终 0 errors/0 warnings。ruff 通过。
