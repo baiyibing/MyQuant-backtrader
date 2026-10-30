@@ -31,3 +31,19 @@
 Kimi 独立预审（256s，结论可实施）采纳：每次 HTTP 显式 timeout=25s，主下载最多 3 次、每次失败重取签名地址，退避 1/2 秒；每个探针最多 2 次，限流/鉴权错误立即停止该类请求且后续探针留 skipped 证据。限额不称作严格墙钟 SLA（urllib timeout 是 socket 阻塞预算），流式下载另检查 monotonic 总时长 120s 及最大文件 64 MiB。探针失败明确落 D 阻断。重复导入请求一致指原始宇宙文件 SHA、规范代码集与 start/end 全相等。日期测试含 1991 年上海夏令时和 BJ 代码。设计原则条号来源为 1.3 `docs/architecture/design-principles.md`。
 
 评审工具记录：默认 Cursor 模型预检失败，未旁路预检；改跑独立 Kimi CLI 与 Claude CLI。编排器的 Claude CMD 多行参数被截断，该次退出码 0 不计有效意见，使用原生 executable 单行提示重跑。主笔侧独立 Codex 只读预审的三项缺口已在上一段关闭；不将工具退出码代替实质评审。
+
+## 实施与复核结果
+
+实现完成，待草稿 PR 评审。Claude 原生 executable 重跑结论“未发现阻断级合同漏洞，可实施”；Kimi 及两路独立 Codex 复核提出的问题均已修复并加回归：Key/header 异常脱敏、短 request_id 留证及缺 ID 禁 C、公告链禁止多根/分叉、base 日期一致性、别名/动态路径绕闸读取、审批内容/哈希一次读取及末尾复核、候选准备前拒绝覆盖旧 summary。
+
+- 1.3：29 项离线测试通过；定向 pyright 0 errors/0 warnings；ruff 通过。验证命令使用 vanna312 显式解释器，`pytest --noconftest -o addopts= tests/test_hithink_corp_actions_export.py`（该隔离测试不需要交易栈 conftest）。
+- BT：108 项定向测试通过；原 Wind 符号链接测试在本机缺 Windows 创建 symlink 权限，单独排除，CI 仍保留原测试。`pytest --noconftest --basetemp <short-temp> tests/test_hithink_incremental.py tests/test_corp_actions_economics_gate.py tests/test_corp_actions_incremental_driver.py -k 'not output_symlink_escape'`。本仓 conftest 强制长的 repo-local 临时路径，独立工作区下会超过 Windows 路径限制，故这批不加载它。
+- BT 定向 pyright 使用与原配置同为 basic 的临时配置，只补仓库根的 import path（原配置将 scripts/tests 各自作为 root，直接命令产生 missing-import warnings）；8 个修改/新增 Python 文件最终 0 errors/0 warnings。ruff 通过。
+- 路径/模块契约 4 门、book admission、baseline admission、新 economics fence 共 7 门退出码均为 0；fence 已接入 CI 的 data-free 阶段。
+- 真正的跨仓合成串联：1.3 export → BT import → assemble → prepare-merge，新增 1 条 fixture 事件，候选 economics_ready=false，基线未改写。测试在独立目录，不伪装成市场湖。
+
+真实 API 请求已完成下载并进入生产校验：57,709 行，SHA256 `668ad6cacd8972f6991995c7625d545393e01d3de76cc5d8c2c6a90254991ad3`。出口码 2，未生成 COMMITTED；负值为 000887.SZ / 2007-03-30 / bonus -0.67335 与 600381.SH / 2014-06-27 / bonus -0.87581。保持 v6 的整包非负规则；窗外隔离的可选变更尚未收到答复，不预先实现。
+
+冻结旧输入的 Decimal 复算为 47 个阈值差异，原 46 键（cash 10 + bonus 36）仍原样保留。新增 `300708.SZ / 2020-06-02 / cash / 0.0199 / 0.02` 恰等于 1e-4，旧浮点比较漏计。新闸门明确失败，不扩大容差或自行增加批准项。四源旧研究不因此视作经济账验收。
+
+技术债/剩余审阅：真实包异常处理和新增差异事实需独立裁定；当前采集失败不能交给 BT 正式导入。没有湖写入、发布器、C3、OWNER_SIGNOFF、CNINFO parser/policy 修改或消费切源。三问结论：职责边界只穿过冻结文件；失败不产生成功标记；时间/宇宙/哈希及审批有效期可重放并留证。

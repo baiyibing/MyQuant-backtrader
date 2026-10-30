@@ -10,6 +10,88 @@ Entry: [`scripts/data/pull_corp_actions_incremental.py`](../../scripts/data/pull
 One workflow: `init` → `pending` / `pull` → `assemble` → `prepare-merge`.
 There is **no apply/merge/publish command**, no scheduler, and no trading hook.
 
+## Hithink frozen artifact intake (2026-10-30 implementation)
+
+The 2026-10-30 Human GO adds an explicit `--channel hithink`. Wind is still the
+default; old run.json files without `channel` retain Wind semantics. Hithink has
+no model, Kimi process, network access or key requirement in this repository.
+The producer lives in OSkhQuant1.3 at `scripts/data/export_hithink_corp_actions.py`.
+The [implementation/review record](hithink-artifact-implementation-2026-10-30.md)
+records the v6 contract, review corrections, tests and current real-data blockers.
+
+In 1.3, use the canonical Python executable explicitly through a configured
+`OSKH_MERGE_PYTHON`. Load `HITHINK_FINANCE_API_KEY` into that process environment
+from the operator's secret store; do not put the key in command arguments or logs.
+Key rotation is at <https://fuyao.aicubes.cn/admin>.
+
+```powershell
+& $env:OSKH_MERGE_PYTHON scripts/data/export_hithink_corp_actions.py --universe <original-universe-file> --start 2026-10-07 --end 2026-10-28 --out-dir <new-snapshot-directory>
+```
+
+The artifact contains `hithink_dump.parquet`, `probes.json`, `manifest.json` and
+`COMMITTED.json`. The marker binds the manifest, which binds file hashes, the
+original universe bytes, normalized codes, window and original fetched_at.
+An incomplete output directory must be inspected and replaced by a new output
+directory; it is never resumed as a successful snapshot. Probe failures are
+recorded but do not prove no events. C classification requires successful exact
+identity and explicitly empty event probes, with response hashes and request IDs.
+`3002` remains D/unexplained.
+
+In this repository, use the **same original universe file**, not an independently
+regenerated text file whose bytes may differ. The base must be an existing,
+reviewed corp-actions snapshot with all four required files; a CSV archive alone
+is not a lake revision. Output directories must be separate from the configured
+lake and inputs.
+
+```powershell
+& $env:OSKH_MERGE_PYTHON scripts/data/pull_corp_actions_incremental.py init --channel hithink --universe <original-universe-file> --lake-dir <reviewed-base-directory> --end 2026-10-28 --out-dir <new-run-directory>
+& $env:OSKH_MERGE_PYTHON scripts/data/pull_corp_actions_incremental.py pull --out-dir <run-directory> --artifact-dir <snapshot-directory>
+& $env:OSKH_MERGE_PYTHON scripts/data/pull_corp_actions_incremental.py assemble --out-dir <run-directory>
+& $env:OSKH_MERGE_PYTHON scripts/gates/verify_corp_actions_hithink_parity.py --run-dir <run-directory>
+& $env:OSKH_MERGE_PYTHON scripts/data/pull_corp_actions_incremental.py prepare-merge --out-dir <run-directory>
+```
+
+Imported files occupy `raw_events/`; original fetch time and import time are
+separate in `work/hithink_state.json`. The local commit marker binds that state
+and all imported files. `pull --refresh` imports a complete new bundle and keeps
+the superseded files for inspection; it is forbidden once `assembled/` exists.
+After `merge-prep/` exists, both assemble and prepare-merge reject overwrites.
+
+The default exclusions file has **no manual approvals**. An explicitly reviewed
+D exception must record code, classification, reason, evidence, approved_by,
+approved_at, review_after, scope_start and scope_end in the run's copied
+`hithink_exclusions.json`. The latter dates delimit event applicability; the
+former use the actual CST evaluation date. Approvals may follow fetched_at.
+Changes to a non-D classification or missing/expired evidence are rejected.
+Historical parity uses the base ask_start/ask_end and the same coverage evaluator.
+The original 46 frozen difference keys are retained; new or missing keys fail.
+
+`assembled/hithink_allotments.json` preserves rights issues. Pure rights are
+excluded from candidate events; mixed rights/dividends block candidate preparation.
+Different raw records with the same projected natural key require identity review.
+Dates stay NULL; amounts use exact decimal conversion without ROUND4 or field
+stitching. Candidate plans explicitly state `economics_ready=false`.
+
+The future economics entry is `load_corp_actions_for_economics()` in
+`backtest/research/corp_actions_econ_gate.py`. It checks manifest revision and
+events SHA, optional evidence revision/file/field hashes, then returns accepted,
+blocked and per-event reasons. Evidence records reviewer/date, economic basis,
+shareholder class, policy, event identity and a continuous announcement revision
+chain with document hashes. Missing pay/list dates block all sources; Hithink
+requires reviewed basis even with complete dates. Multiple same-day rows stay
+blocked until a separately reviewed revision resolves their applicable identity.
+No existing economics consumer is connected by this change. The CI fence guards
+seven registered consumer files and the two existing non-corp-actions reads;
+new consumers/readers require an explicit inventory review.
+
+**Current real-data status:** the 2026-10-30 live download (57,709 rows) is rejected
+by the agreed whole-dump nonnegative rule due to two historical negative bonus
+ratios. It has no commit marker. An independent exact-decimal replay of the pinned
+2026-10-29 inputs also finds a 47th threshold difference (`300708.SZ`, 2020-06-02,
+cash 0.0199 vs 0.02). It was omitted by the earlier float boundary comparison and
+is deliberately **not** added to the 46-key approval baseline. These are data
+review items; successful synthetic tests do not authorize real-data publication.
+
 ## Baseline and boundaries
 
 CNINFO backup planning lives in the [2026-10-29 C0 plan](corp-actions-cninfo-backup-incremental-plan-20261029.md): independent sandbox outdir, no Wind lake overwrite, C1+ needs separate Human GO. The primary path remains Wind/Kimi when available; this docs-only knife makes no driver/vendor switch and does not fix the upstream 401. See that plan and the [10-28 status](corp-actions-incremental-20261028-status.md) for Wind resume on a tip including #523 (k3 + skipped accounting).
