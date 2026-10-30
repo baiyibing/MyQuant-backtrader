@@ -1,0 +1,95 @@
+{
+  "captured_at": "2026-10-30T09:54:00.475900+00:00",
+  "results": {
+    "OSkhQuant1.3_1256": {
+      "captured_at": "2026-10-30T09:54:02.312971+00:00",
+      "headRefOid": "1f0988947df1cd877408b1df8d041e2fcb18710a",
+      "isDraft": true,
+      "mergedAt": null,
+      "number": 1256,
+      "state": "OPEN",
+      "title": "feat(data): export frozen Hithink corporate-action artifacts",
+      "updatedAt": "2026-10-30T08:00:10Z",
+      "url": "https://github.com/baiyibing/OSkhQuant1.3/pull/1256",
+      "check_counts": {
+        "SUCCESS": 18,
+        "SKIPPED": 1
+      }
+    },
+    "oskh_head": {
+      "captured_at": "2026-10-30T09:54:02.513167+00:00",
+      "committed_at": "2026-10-30T09:50:35Z",
+      "sha": "1ed67467890edb6c931bf8816c121fa7483cc276",
+      "url": "https://github.com/baiyibing/OSkhQuant1.3/commit/1ed67467890edb6c931bf8816c121fa7483cc276"
+    },
+    "bt_head": {
+      "captured_at": "2026-10-30T09:54:02.671379+00:00",
+      "committed_at": "2026-10-30T02:10:44Z",
+      "sha": "418496378ebefc4e707879f9859774b0b8f67284",
+      "url": "https://github.com/baiyibing/MyQuant-backtrader/commit/418496378ebefc4e707879f9859774b0b8f67284"
+    },
+    "qlib_head": {
+      "captured_at": "2026-10-30T09:54:02.931308+00:00",
+      "committed_at": "2026-10-26T07:09:13Z",
+      "sha": "7c428d9bcb66c0dde37ec203a2b5fcc28ac9f1e8",
+      "url": "https://github.com/baiyibing/MyQuant/commit/7c428d9bcb66c0dde37ec203a2b5fcc28ac9f1e8"
+    },
+    "MyQuant-backtrader_538": {
+      "captured_at": "2026-10-30T09:54:04.520153+00:00",
+      "headRefOid": "42662418231ea87af4c72e83f8ee69d6396db715",
+      "isDraft": true,
+      "mergedAt": null,
+      "number": 538,
+      "state": "OPEN",
+      "title": "feat(data): import Hithink artifacts and gate corporate-action economics",
+      "updatedAt": "2026-10-30T07:57:53Z",
+      "url": "https://github.com/baiyibing/MyQuant-backtrader/pull/538",
+      "check_counts": {
+        "SUCCESS": 1
+      }
+    },
+    "OSkhQuant1.3_1258": {
+      "captured_at": "2026-10-30T09:54:04.616413+00:00",
+      "headRefOid": "ceff70d3e2216539c8a62ba70809a542d66b3a59",
+      "isDraft": false,
+      "mergedAt": "2026-10-30T09:50:36Z",
+      "number": 1258,
+      "state": "MERGED",
+      "title": "test(v653): fix phase4c/d/e tests drifted onto the 4b runner; add to contract bundle",
+      "updatedAt": "2026-10-30T09:50:36Z",
+      "url": "https://github.com/baiyibing/OSkhQuant1.3/pull/1258",
+      "check_counts": {
+        "SUCCESS": 18,
+        "SKIPPED": 1
+      }
+    },
+    "MyQuant-backtrader_532": {
+      "captured_at": "2026-10-30T09:54:04.616413+00:00",
+      "headRefOid": "2955fd5fafa8ad4f001d05bb1e11095a457bbab1",
+      "isDraft": false,
+      "mergedAt": null,
+      "number": 532,
+      "state": "OPEN",
+      "title": "chore(data): rename corp-actions backup dir, drop cutoff-date suffix",
+      "updatedAt": "2026-10-29T04:15:41Z",
+      "url": "https://github.com/baiyibing/MyQuant-backtrader/pull/532",
+      "check_counts": {
+        "SUCCESS": 1
+      }
+    },
+    "MyQuant-backtrader_531": {
+      "captured_at": "2026-10-30T09:54:05.033704+00:00",
+      "headRefOid": "179d0f6293514d9c4fec3477fca3ae64d475f68a",
+      "isDraft": false,
+      "mergedAt": null,
+      "number": 531,
+      "state": "OPEN",
+      "title": "docs(ops): hithink × CNINFO 协作、四源核对与独立扩样（待评审）",
+      "updatedAt": "2026-10-30T04:24:34Z",
+      "url": "https://github.com/baiyibing/MyQuant-backtrader/pull/531",
+      "check_counts": {
+        "SUCCESS": 1
+      }
+    }
+  }
+}
