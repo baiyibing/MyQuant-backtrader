@@ -7,6 +7,7 @@ import hashlib
 import importlib.util
 import json
 from pathlib import Path
+import re
 import sys
 
 import pandas as pd
@@ -40,6 +41,11 @@ def total(rows, fields, *, blank_zero=False):
 
 def comparison(left, right):
     return "UNKNOWN" if left is None or right is None else "EXACT" if left == right else "DIFFERENT"
+
+
+def single_date(rows, field):
+    values = {row[field] for row in rows}
+    return next(iter(values)) if len(values) == 1 and "" not in values else None
 
 
 def csv_out(name, rows):
@@ -106,16 +112,25 @@ def observe(module, text, row):
 
 study = json.loads((RAW / "report.json").read_text(encoding="utf-8"))
 assert json.loads((RAW / "status.json").read_text(encoding="utf-8"))["phase"] == "complete"
+for key, path in (("sample_sha256", HERE / "results/holdout_240.csv"),
+                  ("extractor_sha256", HERE / "inputs/extractor_v10.py"),
+                  ("adapter_sha256", HERE / "inputs/adapter_v10.py"),
+                  ("orgmap_sha256", HERE / "orgmap.json")):
+    assert hashlib.sha256(path.read_bytes()).hexdigest() == study["config"][key], key
+for item in json.loads((HERE / "inputs/manifest.json").read_text(encoding="utf-8")):
+    assert hashlib.sha256((HERE / "inputs" / item["file"]).read_bytes()).hexdigest() == item["sha256"], item["file"]
 events = read_csv(RAW / "events.csv")
 sample = read_csv(HERE / "results/holdout_240.csv")
 scope = {row["code"] for row in sample}
-wind_scope = set((REPO / "_agent_runs/pr531_lake_audit_20261029/wind_base_universe.txt").read_text().split())
+wind_scope = set((HERE / "inputs/wind_universe.txt").read_text(encoding="utf-8").split())
 wind = defaultdict(list)
 for row in read_csv(HERE / "inputs/wind.csv"):
     if row["code"] in scope:
         wind[(row["code"], row["ex_date"])].append(row)
 hithink = defaultdict(list)
-hframe = pq.ParquetFile(REPO / "_agent_runs/pr531_lake_audit_20261029/hithink_dump.parquet").read().to_pandas().drop_duplicates()
+hpath = REPO / "_agent_runs/pr531_lake_audit_20261029/hithink_dump.parquet"
+assert hashlib.sha256(hpath.read_bytes()).hexdigest() == "db19162144ca902160931a9eb9472a56e81580dc6d0f4ff4131b9647971c5a27"
+hframe = pq.ParquetFile(hpath).read().to_pandas().drop_duplicates()
 hframe["ex_date"] = pd.to_datetime(hframe.ex_date_ms, unit="ms", utc=True).dt.tz_convert("Asia/Shanghai").dt.strftime("%Y-%m-%d")
 for row in hframe[hframe.thscode.isin(scope)].to_dict("records"):
     hithink[(row["thscode"], row["ex_date"])].append(row)
@@ -132,11 +147,21 @@ result, provenance, counts, tier_counts = [], [], Counter(), defaultdict(Counter
 module = load_module()
 sources = {row["announcement_id"]: row for row in json.loads((RAW / "sources.json").read_text(encoding="utf-8"))}
 coverage = {row["code"]: row for row in read_csv(RAW / "query_coverage.csv")}
+query_audit = json.loads((HERE / "results/query_audit/report.json").read_text(encoding="utf-8"))
+identity_warnings = set(query_audit["requested_codes_with_mismatches"])
+excluded = {}
+for item in json.loads((RAW / "title_excluded.json").read_text(encoding="utf-8")):
+    excluded[(item["code"], item["announcement_id"])] = item
+csv_out("title_exclusions.csv", [dict(code=item["code"], stratum=item["stratum"],
+    announcement_id=item["announcement_id"], title=item["title"], announcement_time=item["announcement_time"],
+    url="https://static.cninfo.com.cn/" + item["adjunct"].lstrip("/"),
+    disposition="EXCLUDED_BY_FROZEN_TITLE_RULES_NOT_PARSED") for item in excluded.values()])
 for event in events:
     code, day = event["code"], event["ex_date"]
     window = ("NO_EX_DATE" if not day else "HISTORICAL" if "2024-01-01" <= day <= "2026-10-06" else
               "INCREMENTAL" if "2026-10-07" <= day <= "2026-10-28" else "OUTSIDE_EVENT_WINDOW")
     text = (RAW / "txt" / f'{event["announcement_id"]}.txt').read_text(encoding="utf-8")
+    assert hashlib.sha256((RAW / "pdf" / f'{event["announcement_id"]}.pdf').read_bytes()).hexdigest() == sources[event["announcement_id"]]["pdf_sha256"]
     assert hashlib.sha256(text.encode("utf-8")).hexdigest() == sources[event["announcement_id"]]["text_sha256"]
     assert module.event_identity(code, event["announcement_id"], sources[event["announcement_id"]]["text_sha256"]) == event["event_id"]
     trace = observe(module, text, event)
@@ -147,8 +172,13 @@ for event in events:
     raw_bonus = sum(legs, Decimal(0)) if all(value is not None for value in legs) else None
     adapted = event["adapter_accepted"] == "True"
     adapted_bonus = sum((value or Decimal(0) for value in legs), Decimal(0)) if adapted else None
+    listing_dates = {event[field] for amount, field in zip(legs, ("bonus_list_date", "transfer_list_date"))
+                     if amount is not None and amount > 0}
+    listing_day = next(iter(listing_dates)) if len(listing_dates) == 1 and "" not in listing_dates else None
     hi_cash, hi_bonus = total(hi, ("dividend_per_share",)), total(hi, ("per_share_bonus",))
     wind_cash = total(wr, ("cash_div_per_share",))
+    wind_bonus_raw = total(wr, ("bonus_ratio", "transfer_ratio"))
+    wind_bonus_null_zero = total(wr, ("bonus_ratio", "transfer_ratio"), blank_zero=True)
     wind_state = ("NO_EVENT_DATE" if not day else "OUTSIDE_SNAPSHOT_WINDOW" if day > "2026-10-06" else "OUTSIDE_FROZEN_UNIVERSE"
                   if code not in wind_scope else "PRESENT" if wr else "DATE_ABSENT")
     qmt_state = "NO_EVENT_DATE" if not day else "OUTSIDE_SNAPSHOT_WINDOW" if day > qend else "PRESENT" if key in qkeys else "DATE_ABSENT"
@@ -156,13 +186,25 @@ for event in events:
                announcement_id=event["announcement_id"], event_id=event["event_id"],
                announcement_url=sources[event["announcement_id"]]["url"],
                cninfo_status=event["status"], adapter_accepted=adapted, adapter_reason=event["adapter_reason"],
+               query_identity_warning=code.split(".")[0] in identity_warnings,
                cninfo_reasons=event["reasons"], cninfo_same_day_documents=same_day.get(key, 0),
                cash=event["cash_div_per_share"], bonus_raw=event["bonus_ratio"], transfer_raw=event["transfer_ratio"],
                record_date=event["record_date"], pay_date=event["pay_date"], bonus_list_date=event["bonus_list_date"],
                transfer_list_date=event["transfer_list_date"], listing_policy_fields="|".join(trace["listing_policy_fields"]),
                adapter_zero_policy_fields="|".join(trace["adapter_zero_policy_fields"]),
                qmt_state=qmt_state, qmt_amounts="NOT_PERSISTED_IN_INDEX", wind_state=wind_state,
-               wind_cash=wind_cash, hithink_rows=len(hi), hithink_cash=hi_cash, hithink_bonus_total=hi_bonus,
+               wind_cash=wind_cash, wind_rows=len(wr), wind_event_ids="|".join(item["event_id"] for item in wr),
+               wind_cash_components="|".join(item["cash_div_per_share"] for item in wr),
+               hithink_rows=len(hi), hithink_cash=hi_cash, hithink_bonus_total=hi_bonus,
+               wind_bonus_raw=wind_bonus_raw, wind_bonus_null_zero_diagnostic=wind_bonus_null_zero,
+               wind_record_date=single_date(wr, "record_date"), wind_pay_date=single_date(wr, "pay_date"),
+               wind_bonus_list_date=single_date(wr, "bonus_list_date"),
+               wind_vs_cninfo_cash=comparison(wind_cash, cash),
+               wind_vs_cninfo_record_date=comparison(single_date(wr, "record_date"), event["record_date"] or None),
+               wind_vs_cninfo_pay_date=comparison(single_date(wr, "pay_date"), event["pay_date"] or None),
+               wind_vs_cninfo_bonus_adapted=comparison(wind_bonus_null_zero, adapted_bonus) if adapted else "NOT_ACCEPTED",
+               wind_vs_cninfo_share_listing_date=("NOT_ACCEPTED" if not adapted else "NOT_APPLICABLE"
+                   if adapted_bonus == 0 else comparison(single_date(wr, "bonus_list_date"), listing_day)),
                hi_vs_cninfo_cash=comparison(hi_cash, cash), hi_vs_cninfo_bonus_raw=comparison(hi_bonus, raw_bonus),
                hi_vs_cninfo_bonus_adapted=comparison(hi_bonus, adapted_bonus) if adapted else "NOT_ACCEPTED",
                hi_cash_round4_equal_diagnostic=bool(hi_cash is not None and cash is not None and hi_cash != cash and
@@ -170,6 +212,8 @@ for event in events:
     result.append(row)
     counts["window:" + window] += 1
     counts["adapter_accepted:" + str(adapted)] += 1
+    counts[window + ":adapter_accepted:" + str(adapted)] += 1
+    counts[window + ":status:" + event["status"]] += 1
     counts["listing_policy_events"] += bool(trace["listing_policy_fields"])
     counts["adapter_zero_policy_events"] += bool(trace["adapter_zero_policy_fields"])
     tier_counts[event["stratum"]]["events"] += 1
@@ -177,12 +221,35 @@ for event in events:
     if window in ("HISTORICAL", "INCREMENTAL"):
         for name in ("qmt_state", "wind_state", "hi_vs_cninfo_cash", "hi_vs_cninfo_bonus_raw", "hi_vs_cninfo_bonus_adapted"):
             counts[window + ":" + name + ":" + str(row[name])] += 1
+        if wind_state == "PRESENT":
+            for name in ("wind_vs_cninfo_cash", "wind_vs_cninfo_record_date", "wind_vs_cninfo_pay_date",
+                         "wind_vs_cninfo_bonus_adapted", "wind_vs_cninfo_share_listing_date"):
+                counts[window + ":wind_present:" + name + ":" + str(row[name])] += 1
 csv_out("four_source_events.csv", result)
 csv_out("differences.csv", [row for row in result if row["window"] in ("HISTORICAL", "INCREMENTAL") and
-    (row["hi_vs_cninfo_cash"] == "DIFFERENT" or row["hi_vs_cninfo_bonus_adapted"] == "DIFFERENT")])
+    any(row[key] == "DIFFERENT" for key in ("hi_vs_cninfo_cash", "hi_vs_cninfo_bonus_adapted",
+        "wind_vs_cninfo_cash", "wind_vs_cninfo_record_date", "wind_vs_cninfo_pay_date",
+        "wind_vs_cninfo_bonus_adapted", "wind_vs_cninfo_share_listing_date"))])
 csv_out("review_list.csv", read_csv(RAW / "review_list.csv"))
 csv_out("query_coverage.csv", read_csv(RAW / "query_coverage.csv"))
 csv_out("policy_derived_events.csv", [row for row in result if row["listing_policy_fields"] or row["adapter_zero_policy_fields"]])
+research_review = []
+for row in result:
+    reasons = []
+    if not row["adapter_accepted"]:
+        reasons.append("ADAPTER_REJECTED")
+    if row["window"] in ("HISTORICAL", "INCREMENTAL"):
+        if any(row[key] == "DIFFERENT" for key in ("hi_vs_cninfo_cash", "hi_vs_cninfo_bonus_adapted",
+                "wind_vs_cninfo_cash", "wind_vs_cninfo_bonus_adapted")):
+            reasons.append("CROSS_SOURCE_AMOUNT_DIFFERENCE")
+        if any(row[key] == "DIFFERENT" for key in ("wind_vs_cninfo_record_date", "wind_vs_cninfo_pay_date",
+                "wind_vs_cninfo_share_listing_date")):
+            reasons.append("CROSS_SOURCE_DATE_DIFFERENCE")
+        if row["cninfo_same_day_documents"] > 1:
+            reasons.append("SAME_DAY_MULTIPLE_DOCUMENTS")
+    if reasons:
+        research_review.append(dict(**row, research_review_reasons="|".join(reasons)))
+csv_out("research_review_queue.csv", research_review)
 save("provenance.json", provenance)
 save("sources.json", list(sources.values()))
 
@@ -203,20 +270,62 @@ for code, day in sorted(key for key in reference_keys if "2024-01-01" <= key[1] 
     wstate = ("OUTSIDE_SNAPSHOT_WINDOW" if day > "2026-10-06" else "OUTSIDE_FROZEN_UNIVERSE"
               if code not in wind_scope else "PRESENT" if key in wind else "DATE_ABSENT")
     qstate = "OUTSIDE_SNAPSHOT_WINDOW" if day > qend else "PRESENT" if key in qkeys else "DATE_ABSENT"
+    hi_rows = hithink.get(key, [])
+    hi_cash = total(hi_rows, ("dividend_per_share",))
+    hi_bonus = total(hi_rows, ("per_share_bonus",))
+    hi_allot = total(hi_rows, ("allotment_ratio",))
+    hi_shape = ("DATE_ABSENT" if not hi_rows else "UNKNOWN_AMOUNTS" if any(value is None for value in (hi_cash, hi_bonus, hi_allot))
+                else "MIXED_ALLOTMENT" if hi_allot > 0 and (hi_cash > 0 or hi_bonus > 0)
+                else "ALLOTMENT_ONLY" if hi_allot > 0 else "CASH_OR_BONUS" if hi_cash > 0 or hi_bonus > 0 else "ZERO_AMOUNTS")
     item = dict(code=code, ex_date=day, window=window, query_complete=query_ok,
+                query_identity_warning=code.split(".")[0] in identity_warnings,
                 cninfo_state=cstate, cninfo_documents=len(matches),
                 cninfo_accepted_documents=sum(row["adapter_accepted"] for row in matches),
-                cninfo_same_day_ambiguous=len(matches) > 1, hithink_rows=len(hithink.get(key, [])),
+                cninfo_same_day_ambiguous=len(matches) > 1, hithink_rows=len(hi_rows),
+                hithink_cash=hi_cash, hithink_bonus_total=hi_bonus, hithink_allotment_ratio=hi_allot, hithink_shape=hi_shape,
                 qmt_state=qstate, wind_state=wstate)
     presence.append(item)
     presence_counts[window + ":cninfo:" + cstate] += 1
     presence_counts[window + ":reference_keys"] += 1
+    if not matches:
+        presence_counts[window + ":missing_cninfo:hithink_shape:" + hi_shape] += 1
 csv_out("reference_presence.csv", presence)
 csv_out("reference_keys_without_cninfo.csv", [row for row in presence if not row["cninfo_documents"]])
+by_code = []
+selected = json.loads((RAW / "announcements.json").read_text(encoding="utf-8"))
+for stock in sample:
+    code = stock["code"]
+    documents = [row for row in result if row["code"] == code]
+    code_sources = [row for row in sources.values() if row["code"] == code]
+    by_code.append(dict(code=code, stratum=stock["stratum"], query_complete=coverage[code]["query_complete"],
+        query_identity_warning=code.split(".")[0] in identity_warnings,
+        selected_announcements=sum(row["code"] == code for row in selected),
+        successful_sources=sum("error_type" not in row for row in code_sources),
+        parsed_documents=len(documents), accepted_documents=sum(row["adapter_accepted"] for row in documents),
+        historical_documents=sum(row["window"] == "HISTORICAL" for row in documents),
+        incremental_documents=sum(row["window"] == "INCREMENTAL" for row in documents)))
+csv_out("code_coverage.csv", by_code)
 save("report.json", dict(study=study, metrics=dict(counts), strata={key: dict(value) for key, value in tier_counts.items()},
+    query_audit=query_audit,
+    distinct_title_excluded_documents=len(excluded),
+    title_exclusion_status_term_counts={term: sum(bool(re.search(term, item["title"])) for item in excluded.values())
+        for term in ("更正", "修订", "取消", "终止", "延期", "调整")},
     qmt_sha256=qhash, qmt_ex_date_max=qcutoff, same_day_multi_document_keys=sum(value > 1 for value in same_day.values()),
+    wind_scope_sha256=hashlib.sha256((HERE / "inputs/wind_universe.txt").read_bytes()).hexdigest(),
     reference_presence_counts=dict(presence_counts),
+    research_review_documents=len(research_review),
+    research_review_adapter_accepted_documents=sum(row["adapter_accepted"] for row in research_review),
+    codes_with_selected_announcements=sum(row["selected_announcements"] > 0 for row in by_code),
+    codes_without_selected_announcements=[row["code"] for row in by_code if not row["selected_announcements"]],
+    unique_accepted_date_keys=len({(row["code"], row["ex_date"]) for row in result
+        if row["adapter_accepted"] and row["window"] in ("HISTORICAL", "INCREMENTAL")}),
+    review_reason_counts=dict(Counter(reason for event in events if event["adapter_accepted"] != "True"
+        for reason in event["adapter_reason"].split(";") if reason)),
+    extractor_review_reason_counts=dict(Counter(reason for event in events if event["adapter_accepted"] != "True"
+        for reason in event["reasons"].split("|") if reason)),
     provenance_replays=len(provenance), extractor_policy_changed=False, hithink_round4_policy_applied=False,
     actual_coverage_claim="fixed-query-scope sample only; historical and incremental windows reported separately",
+    economics_ready_assessed=False, accepted_is_adapter_status_only=True,
+    reference_amounts_are_daily_sum_diagnostics=True, reference_day_sum_is_entitlement=False,
     owner_signature=None, lake_write_authorized=False, source_switch_authorized=False))
 print((OUT / "report.json").read_text(encoding="utf-8"), flush=True)

@@ -1,0 +1,218 @@
+{
+  "study": {
+    "config": {
+      "sample_sha256": "33b5098390bedfed0dcc7d7bcd62d57026a199b934bedde95d99b1bf98af5082",
+      "extractor_sha256": "9effaebd966749afa07bf77b4a198a8567d0a582e632a73916d52d4bce3382fb",
+      "adapter_sha256": "c18511341bbcbd4c92dcc61a50e7b6cc54484ca9f54d3010d3482950c25dd613",
+      "orgmap_sha256": "c1c30bf7befcc25f77bf5cd7565309b2fed26aeb073ce669570394a8f0e9fd15",
+      "keywords": [
+        "权益分派",
+        "分红派息",
+        "利润分配",
+        "派息"
+      ],
+      "announcement_query_window": "2023-12-01~2026-10-28",
+      "max_pages_per_query": 10,
+      "min_delay_seconds": 1.5,
+      "historical_window": [
+        "2024-01-01",
+        "2026-10-06"
+      ],
+      "incremental_window": [
+        "2026-10-07",
+        "2026-10-28"
+      ],
+      "lake_write_authorized": false,
+      "owner_signature": null,
+      "source_switch_authorized": false
+    },
+    "generated_at": "2026-10-30T04:15:26.382576+00:00",
+    "codes": 240,
+    "query_complete_codes": 239,
+    "announcements": 748,
+    "pdf_success": 748,
+    "events": 748,
+    "status_counts": {
+      "needs_review": 189,
+      "candidate": 559
+    },
+    "adapter_accepted": 559,
+    "review": 189,
+    "source_errors": 0,
+    "coverage_claim": "fixed-query-scope study only; no full-market recall claim",
+    "owner_signature": null,
+    "lake_write_authorized": false,
+    "source_switch_authorized": false
+  },
+  "metrics": {
+    "window:HISTORICAL": 712,
+    "adapter_accepted:False": 189,
+    "HISTORICAL:adapter_accepted:False": 164,
+    "HISTORICAL:status:needs_review": 164,
+    "listing_policy_events": 18,
+    "adapter_zero_policy_events": 274,
+    "HISTORICAL:qmt_state:PRESENT": 712,
+    "HISTORICAL:wind_state:OUTSIDE_FROZEN_UNIVERSE": 380,
+    "HISTORICAL:hi_vs_cninfo_cash:EXACT": 664,
+    "HISTORICAL:hi_vs_cninfo_bonus_raw:UNKNOWN": 366,
+    "HISTORICAL:hi_vs_cninfo_bonus_adapted:NOT_ACCEPTED": 164,
+    "adapter_accepted:True": 559,
+    "HISTORICAL:adapter_accepted:True": 548,
+    "HISTORICAL:status:candidate": 548,
+    "HISTORICAL:hi_vs_cninfo_bonus_adapted:EXACT": 548,
+    "HISTORICAL:wind_state:PRESENT": 331,
+    "HISTORICAL:hi_vs_cninfo_bonus_raw:EXACT": 346,
+    "HISTORICAL:wind_present:wind_vs_cninfo_cash:EXACT": 308,
+    "HISTORICAL:wind_present:wind_vs_cninfo_record_date:EXACT": 328,
+    "HISTORICAL:wind_present:wind_vs_cninfo_pay_date:EXACT": 326,
+    "HISTORICAL:wind_present:wind_vs_cninfo_bonus_adapted:EXACT": 264,
+    "HISTORICAL:wind_present:wind_vs_cninfo_share_listing_date:NOT_APPLICABLE": 258,
+    "HISTORICAL:wind_present:wind_vs_cninfo_bonus_adapted:NOT_ACCEPTED": 67,
+    "HISTORICAL:wind_present:wind_vs_cninfo_share_listing_date:NOT_ACCEPTED": 67,
+    "HISTORICAL:wind_present:wind_vs_cninfo_share_listing_date:EXACT": 6,
+    "HISTORICAL:wind_present:wind_vs_cninfo_pay_date:UNKNOWN": 4,
+    "HISTORICAL:wind_present:wind_vs_cninfo_record_date:UNKNOWN": 3,
+    "window:INCREMENTAL": 13,
+    "INCREMENTAL:adapter_accepted:True": 11,
+    "INCREMENTAL:status:candidate": 11,
+    "INCREMENTAL:qmt_state:PRESENT": 5,
+    "INCREMENTAL:wind_state:OUTSIDE_SNAPSHOT_WINDOW": 13,
+    "INCREMENTAL:hi_vs_cninfo_cash:EXACT": 13,
+    "INCREMENTAL:hi_vs_cninfo_bonus_raw:EXACT": 9,
+    "INCREMENTAL:hi_vs_cninfo_bonus_adapted:EXACT": 11,
+    "INCREMENTAL:qmt_state:OUTSIDE_SNAPSHOT_WINDOW": 8,
+    "HISTORICAL:hi_vs_cninfo_cash:UNKNOWN": 42,
+    "HISTORICAL:wind_present:wind_vs_cninfo_cash:UNKNOWN": 11,
+    "window:NO_EX_DATE": 21,
+    "NO_EX_DATE:adapter_accepted:False": 21,
+    "NO_EX_DATE:status:needs_review": 21,
+    "window:OUTSIDE_EVENT_WINDOW": 2,
+    "OUTSIDE_EVENT_WINDOW:adapter_accepted:False": 2,
+    "OUTSIDE_EVENT_WINDOW:status:needs_review": 2,
+    "HISTORICAL:wind_present:wind_vs_cninfo_pay_date:DIFFERENT": 1,
+    "HISTORICAL:wind_present:wind_vs_cninfo_cash:DIFFERENT": 12,
+    "INCREMENTAL:hi_vs_cninfo_bonus_raw:UNKNOWN": 4,
+    "HISTORICAL:hi_vs_cninfo_cash:DIFFERENT": 6,
+    "INCREMENTAL:adapter_accepted:False": 2,
+    "INCREMENTAL:status:needs_review": 2,
+    "INCREMENTAL:hi_vs_cninfo_bonus_adapted:NOT_ACCEPTED": 2,
+    "HISTORICAL:wind_state:DATE_ABSENT": 1
+  },
+  "strata": {
+    "SZ_MAIN": {
+      "events": 190,
+      "accepted": 130
+    },
+    "CHINEXT": {
+      "events": 197,
+      "accepted": 140
+    },
+    "SH_MAIN": {
+      "events": 211,
+      "accepted": 180
+    },
+    "STAR": {
+      "events": 132,
+      "accepted": 109
+    },
+    "BJ": {
+      "events": 18,
+      "accepted": 0
+    }
+  },
+  "query_audit": {
+    "query_pages": 959,
+    "schema_issue_pages": 0,
+    "schema_issues": [],
+    "other_code_item_occurrences": 61,
+    "distinct_other_code_documents": 61,
+    "requested_codes_with_mismatches": [
+      "920077",
+      "920242",
+      "920339",
+      "920344",
+      "920454",
+      "920491",
+      "920547",
+      "920556",
+      "920735",
+      "920786",
+      "920819",
+      "920974",
+      "920981"
+    ],
+    "distinct_mismatches_same_org": 61,
+    "alias_policy_applied": false,
+    "collector_changed": false,
+    "caveat": "Same orgId is an identity diagnostic, not an approved cross-code security mapping."
+  },
+  "distinct_title_excluded_documents": 1334,
+  "title_exclusion_status_term_counts": {
+    "更正": 6,
+    "修订": 6,
+    "取消": 0,
+    "终止": 0,
+    "延期": 0,
+    "调整": 163
+  },
+  "qmt_sha256": "f19177339468ac43372d4298e9d08db9742d5c9e4aacde7afec042e5e522c601",
+  "qmt_ex_date_max": "20261015",
+  "same_day_multi_document_keys": 2,
+  "wind_scope_sha256": "fcea657d0e4b7ef52413f1469e0f736130a618277f2b3d619c39ae4c62b9d582",
+  "reference_presence_counts": {
+    "HISTORICAL:cninfo:FOUND": 710,
+    "HISTORICAL:reference_keys": 737,
+    "HISTORICAL:cninfo:NO_MATCHING_EXTRACTED_KEY": 27,
+    "HISTORICAL:missing_cninfo:hithink_shape:CASH_OR_BONUS": 25,
+    "INCREMENTAL:cninfo:FOUND": 13,
+    "INCREMENTAL:reference_keys": 13,
+    "HISTORICAL:missing_cninfo:hithink_shape:ZERO_AMOUNTS": 1,
+    "HISTORICAL:missing_cninfo:hithink_shape:ALLOTMENT_ONLY": 1
+  },
+  "research_review_documents": 200,
+  "research_review_adapter_accepted_documents": 11,
+  "codes_with_selected_announcements": 233,
+  "codes_without_selected_announcements": [
+    "000697.SZ",
+    "002309.SZ",
+    "301116.SZ",
+    "920344.BJ",
+    "920819.BJ",
+    "920974.BJ",
+    "920981.BJ"
+  ],
+  "unique_accepted_date_keys": 559,
+  "review_reason_counts": {
+    "review/rejected event cannot enter BT": 189
+  },
+  "extractor_review_reason_counts": {
+    "pay_date_before_ex_date": 2,
+    "ambiguous_pay_date": 1,
+    "missing_pay_date": 33,
+    "revision_requires_review": 16,
+    "unresolved_bonus_ratio": 33,
+    "ambiguous_record_date": 3,
+    "differentiated_dividend": 67,
+    "missing_record_date": 42,
+    "unsupported_currency": 8,
+    "rights_out_of_scope": 69,
+    "ambiguous_cash_div_per_share": 11,
+    "unresolved_cash_basis": 39,
+    "missing_distribution_or_gross_units": 35,
+    "missing_ex_date": 21,
+    "not_implementation": 5,
+    "ambiguous_transfer_ratio": 4,
+    "unresolved_transfer_ratio": 4
+  },
+  "provenance_replays": 748,
+  "extractor_policy_changed": false,
+  "hithink_round4_policy_applied": false,
+  "actual_coverage_claim": "fixed-query-scope sample only; historical and incremental windows reported separately",
+  "economics_ready_assessed": false,
+  "accepted_is_adapter_status_only": true,
+  "reference_amounts_are_daily_sum_diagnostics": true,
+  "reference_day_sum_is_entitlement": false,
+  "owner_signature": null,
+  "lake_write_authorized": false,
+  "source_switch_authorized": false
+}

@@ -8,6 +8,14 @@
     "sha256": "6afe807a996fea68f2f34fa43344f44ca8f4254fb8580c9213bef6d443c3ba4d"
   },
   {
+    "file": "wind_universe.txt",
+    "repository": "MyQuant-backtrader",
+    "ref": "584538beff822c12b46079fc237a1771453ff25a",
+    "path": "data/corp_actions/bt_corp_actions_20261006/universe.txt",
+    "bytes": 27740,
+    "sha256": "fcea657d0e4b7ef52413f1469e0f736130a618277f2b3d619c39ae4c62b9d582"
+  },
+  {
     "file": "cninfo_events.csv",
     "repository": "OSkhQuant1.3",
     "ref": "ce30b8bf456fdaf7639b61650e339671482eaf09",

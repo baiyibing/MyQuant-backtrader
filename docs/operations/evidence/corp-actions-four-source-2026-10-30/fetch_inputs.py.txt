@@ -14,6 +14,7 @@ CODE_REF = "f00c75708f92d93db3ce7583e59b6cadc615c84b"
 PACK = "docs/architecture/reviews/2026-10-29/corp-actions-c2-wide-cninfo-parity-v10/"
 FILES = [
     ("wind.csv", "MyQuant-backtrader", BT_REF, "data/corp_actions/bt_corp_actions_20261006/corp_actions.csv"),
+    ("wind_universe.txt", "MyQuant-backtrader", BT_REF, "data/corp_actions/bt_corp_actions_20261006/universe.txt"),
     ("cninfo_events.csv", "OSkhQuant1.3", OSKH_REF, PACK + "events.csv"),
     ("review_list.csv", "OSkhQuant1.3", OSKH_REF, PACK + "review_list.csv"),
     ("adapter_rejects.csv", "OSkhQuant1.3", OSKH_REF, PACK + "adapter_rejects.csv"),

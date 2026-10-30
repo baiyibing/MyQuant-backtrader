@@ -24,7 +24,7 @@
 
 ## 工程约定（复用 corp-actions 双通道已验证骨架）
 
-- env Key（`HITHINK_FINANCE_API_KEY`）、原子写（tmp+rename）、dump sha256 + `fetched_at` 进 state 证据链、排除/容差清单 fail-closed、单独 Human GO。
-- 不因候选清单提前抽象 A–E 通用采集平台。既有 BT 离线候选授权保留，新增通用采集/生产发布归 1.3；确认真实第二个数据集契约后再决定是否提取最小公用函数。
+- 1.3 producer 使用 env Key（`HITHINK_FINANCE_API_KEY`）、原子写（tmp+rename）、dump sha256 + 原始 `fetched_at` 证据链；BT 只验证冻结产物，不要求 Key。排除/容差清单 fail-closed，发布仍单独 Human GO。
+- 不因候选清单提前抽象 A–E 通用采集平台。既有 BT 离线候选授权保留，新增供应商取数/生产发布归 1.3，BT 消费显式冻结产物；确认真实第二个数据集契约后再决定是否提取最小公用函数。
 - 上游契约以 `fuyao.aicubes.cn/llms-full.txt` 为准并记版本/日期进 state，防上游静默改列（同 corp-actions 方案 §6 风险条目）。
 - 湖根只经 resolver，`.authority` 与输入哈希留证：本机 E、75 物理机 F，4090 以自身配置为准；不把物理盘符当作跨宿主契约。

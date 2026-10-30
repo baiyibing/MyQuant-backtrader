@@ -1,0 +1,202 @@
+[
+  {
+    "file": "analysis_versions.json",
+    "bytes": 910,
+    "sha256": "430e91c8252764bbb7545f7139558b832e9e2e7d8b10d740d2359c42cb7b2aed"
+  },
+  {
+    "file": "confirmed_case_notes.json",
+    "bytes": 10114,
+    "sha256": "32f0e9076041b3625806512acc0574aba86516a1202114e0f677a0d74e5391b2"
+  },
+  {
+    "file": "confirmed_case_notes.py.txt",
+    "bytes": 8018,
+    "sha256": "d1e6a64934647cbe1874b0066e3222795e9429ac468cb8b8dbb11b75d77fb374"
+  },
+  {
+    "file": "execution_versions.json",
+    "bytes": 501,
+    "sha256": "8c3cec660aed98545d33d509fcd6fd7f1ecbb290417f4bc33608fb9185c17ba2"
+  },
+  {
+    "file": "fetch_inputs.py.txt",
+    "bytes": 3187,
+    "sha256": "d9c80494d873e851ef6ac9ee6cdd6be1276f8d494a5316b6d8683a2670a117bc"
+  },
+  {
+    "file": "four_source_audit.py.txt",
+    "bytes": 11067,
+    "sha256": "9678360c7c88c5f8d5f8b04ec0ceb9ad24f82cc7a8e8aee7d39eb25a14448f80"
+  },
+  {
+    "file": "four_source_differences.csv",
+    "bytes": 2533,
+    "sha256": "40e513ea9cadd7a5b7b3b0c29f987cc2e76661be6b06c5bbc42eca2e780ae2c0"
+  },
+  {
+    "file": "four_source_events.csv",
+    "bytes": 58267,
+    "sha256": "a22f290059969665f01c987680678979e6821d3636fe72d5b27e1999714dc0a9"
+  },
+  {
+    "file": "heldout_crawl.py.txt",
+    "bytes": 12481,
+    "sha256": "8b81aa9a2ade348fd182c31e7b4d07f0875700084c5900f5476704d1eb87dad5"
+  },
+  {
+    "file": "hithink_no_event_probe.json",
+    "bytes": 9245,
+    "sha256": "622b47495c612a7aa606204a6f8c92b661ae39f5fb5f4df8079846b56f854384"
+  },
+  {
+    "file": "holdout/code_coverage.csv",
+    "bytes": 9780,
+    "sha256": "7bb6194db17b0637a340617afbd42d4f68ebb687cc1d4ac7ff845c4b597c0c10"
+  },
+  {
+    "file": "holdout/differences.csv",
+    "bytes": 8432,
+    "sha256": "65617e329920d9dabe0e106f4802b6efa05a06481950907fd64e12f03cbfea3d"
+  },
+  {
+    "file": "holdout/four_source_events.csv",
+    "bytes": 329542,
+    "sha256": "90b077503813fad89377b637250fdb6812047ff1f930a65652cc9c055b13fde4"
+  },
+  {
+    "file": "holdout/policy_derived_events.csv",
+    "bytes": 127297,
+    "sha256": "88c3e0657648ddc66a90fa54c6c999c62b7b1a996be0981c2f68244f2100a913"
+  },
+  {
+    "file": "holdout/provenance.json",
+    "bytes": 1086480,
+    "sha256": "f49aa431e6c82e98af6a9eb52f32c5dd34660de9820e0956e734f7d7153805f9"
+  },
+  {
+    "file": "holdout/query_coverage.csv",
+    "bytes": 6178,
+    "sha256": "96b86c955c56747ee4689bac03ee3517014b93bf98452b7814d19474b2273053"
+  },
+  {
+    "file": "holdout/reference_keys_without_cninfo.csv",
+    "bytes": 3965,
+    "sha256": "768f62973ea9cba85a356f331d4c6614bd61f6e4d32e79b179755601a84da0d8"
+  },
+  {
+    "file": "holdout/reference_presence.csv",
+    "bytes": 85643,
+    "sha256": "ff1681a87da19ab9d69d1656d03b8e141e955dc4712623a43d2a8015c0f38611"
+  },
+  {
+    "file": "holdout/report.json",
+    "bytes": 7765,
+    "sha256": "52cde8112817314367f3ce99227c0bb686997a9b0194793c564e36ef5e32da5d"
+  },
+  {
+    "file": "holdout/research_review_queue.csv",
+    "bytes": 103440,
+    "sha256": "90ada6deb6e26daa557be062c0baba21e3347038fa7647ebb6e110a77fc7d3b4"
+  },
+  {
+    "file": "holdout/review_list.csv",
+    "bytes": 57226,
+    "sha256": "6d6fac3b394d73f8f66d83ad1fd77681595e0c1732586c342827342df6cde69e"
+  },
+  {
+    "file": "holdout/run.json",
+    "bytes": 817,
+    "sha256": "b1cd31b98f7f9b3da01af3164060c78458b6cfa23f68c40c86d713cb1a8ed06d"
+  },
+  {
+    "file": "holdout/sources.json",
+    "bytes": 439069,
+    "sha256": "fe0e931a45d536bdf92d200319531d8f5975ec959da5c3b3dc8fd78018e89759"
+  },
+  {
+    "file": "holdout/title_exclusions.csv",
+    "bytes": 292363,
+    "sha256": "95d1d12408c4019ec10a4b9edd985c77173d3fb86eb12e8bf6da25dc10681384"
+  },
+  {
+    "file": "holdout_240.csv",
+    "bytes": 4113,
+    "sha256": "33b5098390bedfed0dcc7d7bcd62d57026a199b934bedde95d99b1bf98af5082"
+  },
+  {
+    "file": "holdout_manifest.json",
+    "bytes": 1571,
+    "sha256": "7acc01d456dc8274a257542d70542fe2debebf71fb0764d5ccc769a3ace3d199"
+  },
+  {
+    "file": "inputs_manifest.json",
+    "bytes": 5895,
+    "sha256": "5fc30af3dbf24fc5bb1f0c615be2db017da4ede95cd02feed3f6c973293a726c"
+  },
+  {
+    "file": "lake_authority_observation.json",
+    "bytes": 2939,
+    "sha256": "4fe252d507687b1eb521b50cfb80e7f83765e682d62d88d32953b634b9085a2e"
+  },
+  {
+    "file": "policy_derived_events.csv",
+    "bytes": 29117,
+    "sha256": "6f9f8dbee26c25a332fe393fa7f6eb8cbbcef841d2a01c60bf14cb0eb4599377"
+  },
+  {
+    "file": "query_audit/issuer_code_mismatches.csv",
+    "bytes": 11337,
+    "sha256": "2d84e3fcd5701dda038abe378779b67cdbd9a8c67e535c6c20a64881cf64ffe9"
+  },
+  {
+    "file": "query_audit/issuer_summary.csv",
+    "bytes": 4351,
+    "sha256": "5d6c60178b5384ead7b9f01c9c75ba160822a4ef511cece2c1cf95d19f6e052d"
+  },
+  {
+    "file": "query_audit/query_pages.csv",
+    "bytes": 104771,
+    "sha256": "7a82b17c52f96837a90bee64529a324373fae90ffec0f2bd40d84c293dbf1800"
+  },
+  {
+    "file": "query_audit/report.json",
+    "bytes": 601,
+    "sha256": "b153cd702b59e6d9d239f25b94e234960c6c2b7b3651117f286275c6dab11d6c"
+  },
+  {
+    "file": "query_audit.py.txt",
+    "bytes": 4581,
+    "sha256": "a4222b3f0564d095830d4c0e00ada70ad876693b6d7232b8827641f56778979b"
+  },
+  {
+    "file": "README.md",
+    "bytes": 5188,
+    "sha256": "b740e0ee31c720217fe310de5fbeb8f54a0b3046c6d4dceef380c562ddad7f6f"
+  },
+  {
+    "file": "report.json",
+    "bytes": 2374,
+    "sha256": "7f41cd31e29a703bd0da0541a052e1563facfe12530ab04aed559ac611bfe14e"
+  },
+  {
+    "file": "semantic_findings.json",
+    "bytes": 1771,
+    "sha256": "499220d6d069c62d9452a55190ee71aabad941d5b833e142f2488af6ca9f7542"
+  },
+  {
+    "file": "semantic_policy_trace.json",
+    "bytes": 2977,
+    "sha256": "f1dc80f52476e5bac5f18c6c5f4ed4fc2176f9f80b07db0bd4fbdf1b7444b302"
+  },
+  {
+    "file": "summarize_holdout.py.txt",
+    "bytes": 20790,
+    "sha256": "4432eecc507e1a888e27f184d6fb0833ee6fb569be97dc8ce1a873769424bf80"
+  },
+  {
+    "file": "wind_frozen_universe.txt",
+    "bytes": 27740,
+    "sha256": "fcea657d0e4b7ef52413f1469e0f736130a618277f2b3d619c39ae4c62b9d582"
+  }
+]

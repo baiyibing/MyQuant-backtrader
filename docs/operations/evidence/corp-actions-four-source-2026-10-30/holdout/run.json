@@ -1,0 +1,26 @@
+{
+  "sample_sha256": "33b5098390bedfed0dcc7d7bcd62d57026a199b934bedde95d99b1bf98af5082",
+  "extractor_sha256": "9effaebd966749afa07bf77b4a198a8567d0a582e632a73916d52d4bce3382fb",
+  "adapter_sha256": "c18511341bbcbd4c92dcc61a50e7b6cc54484ca9f54d3010d3482950c25dd613",
+  "orgmap_sha256": "c1c30bf7befcc25f77bf5cd7565309b2fed26aeb073ce669570394a8f0e9fd15",
+  "keywords": [
+    "权益分派",
+    "分红派息",
+    "利润分配",
+    "派息"
+  ],
+  "announcement_query_window": "2023-12-01~2026-10-28",
+  "max_pages_per_query": 10,
+  "min_delay_seconds": 1.5,
+  "historical_window": [
+    "2024-01-01",
+    "2026-10-06"
+  ],
+  "incremental_window": [
+    "2026-10-07",
+    "2026-10-28"
+  ],
+  "lake_write_authorized": false,
+  "owner_signature": null,
+  "source_switch_authorized": false
+}
