@@ -1,6 +1,6 @@
 # 三个量化仓库未收尾事项与统一实施计划
 
-> 状态：盘点与排期提案；按用户要求「把最近三个量化仓库未收尾的事情找出来，统一规划」。
+> 状态：用户已评审认可，纳入本轮修订后合入 [#539](https://github.com/baiyibing/MyQuant-backtrader/pull/539)；实施按下列批次及原域授权推进。
 > 2026-10-30。已确认方向：**只拆包，不拆业务仓库**。此前已明确的逐片 GO 继续有效。
 > 本次交付是计划与证据索引；新增的资金执行、默认源切换、生产部署分别沿用原域授权及验收要求。
 
@@ -41,7 +41,7 @@
 3. **每台机器明确根路径。** 本机、4090 无 F 盘，75 物理机有 F；这是用户确认的部署事实，不是代码默认。行情根、workspace、Rust 构建缓存分开登记。只经配置与 `.authority` 解析，缺配置/缺文件失败，不探盘、自动搬盘或回落到另一湖。
 4. **事实、推导和经济口径分开。** 公告明确日期保存字段级来源与可用时间；「缺红股上市日时用除权日」可作为可调整的兼容推导，明确标记，不能冒充公告事实。现金事件不因不适用的红股日期缺失而误阻塞。数据调度、字段补证、经济审批、合湖发布、主源切换分别留证。
 5. **运行证据按能力复用。** 同一宿主记录可供 SHM、SDD、6.53 引用，但每个合同分别给 PASS/FAIL/NOT_TRIGGERED。至少记录 host、源码 SHA、脱敏配置摘要、vendor、输入/名单 hash、run-id、UTC/交易日、直接事件、输出 hash、水位和停止结果。无触发就写未触发，不根据侧面结果补签。
-6. **只维护一份活状态。** 本文是统一排期快照；完成每片后，回写原域 SSOT/风险登记/运行记录，再在此链接回执。已替代的旧计划标 superseded/retired 并指向新入口，不重新制造第二本运行台账。
+6. **只维护一份活状态。** 本文与 `inventory.json.items` 保留审计时点的状态；完成每片后，先回写原域 SSOT/风险登记/运行记录，再向 `inventory.json.closeout_receipts` 追加带作用范围的回执索引。后续进度由原域状态及回执推导，无需重复改写所有历史段落。部分条目完成不能关闭整包。已替代的旧计划标 superseded/retired 并指向新入口；具体回执字段见 §7。
 
 涉及 1.3 的实施继续遵守其[设计原则 ①–㉑](https://github.com/baiyibing/OSkhQuant1.3/blob/7e52e6e0cd6a289ad04bccaefb5edced40850841/docs/architecture/design-principles.md)：重点核①职责隔离、②既有跨进程通道、③策略账本隔离、④水位幂等、⑤失败关闭、⑥冻结规则同源、⑨追踪身份、⑩状态单源、⑲部署 vendor 单选、㉑决策价格源边界。独立数据服务不因此增加第四条交易总线，下载湖不进入实时下单决策价格回退。
 
@@ -52,10 +52,10 @@
 | 包 | 归口与状态 | 交付及完成条件 | 依赖/顺序 |
 |---|---|---|---|
 | [P01](three-repo-closeout-inventory-2026-10-30.md#p01) 测试与验收器 | 三仓；先收尾 | 1.3 #1258 已合，保留回执；MyQuant 5 个既有 ETF/分钟 staging 测试进 CI；BT 真湖验收器显式记录 `rule-profile`/revision/实际费用合同并校准低现金判据；复核 Windows CRLF 测试线索 | 可先做；不重复开 #1258 的实现 |
-| [P02](three-repo-closeout-inventory-2026-10-30.md#p02) CI 与合并检查 | 三仓；待运行/管理配置 | 1.3 两次真实 nightly 的历史、chunk/重试日志及分类；按仓形成 required-checks 可执行方案和验证回执 | #1258 相关修复后观察；当前主分支 CI 可绿，不能称全面红；1.3 rulesets 403 是套餐能力限制，不能写成空规则集 |
+| [P02](three-repo-closeout-inventory-2026-10-30.md#p02) CI 与合并检查 | 三仓；运行观察 + Owner 人工操作 | nightly 历史与日志由实施侧收尾；OP17/BT-11 单独进入 §5 的 Owner 清单，准备实际检查名、规则及验证材料 | #1258 后观察；分支设置等待 Owner/admin 操作，不以代码 PR 代签；1.3 rulesets 403 是套餐能力限制，不能写成空规则集 |
 | [P03](three-repo-closeout-inventory-2026-10-30.md#p03) 路径与数据质量 | 1.3 生产、两仓消费；先核实 | 三机 authority/根路径记录；OHLC、volume、suspendFlag、单位/水位质量；TR/BJ/缺 bands 宇宙清单 | 是宿主数据验收共同输入；10/24 分钟 volume 全 0 的记录须重查，通道成功不代签 |
 | [P04](three-repo-closeout-inventory-2026-10-30.md#p04) SHM | 1.3；待实机验收 | 当前 1m+1d 矩阵和桥/shim 运维证据；旧 v3.1 方案与已合实现的状态映射 | P03 中本部署根路径/实际消费字段 + 对应 QMT/桥版本；显式取消已过场景引用旧证据，按必要性抽验 |
-| [P05](three-repo-closeout-inventory-2026-10-30.md#p05) SDD + 6.53 首日 | 1.3；待实机验收 | 真实 Redis 日槽场景与受限 paper 首日逐项 runbook，分别给结论、共用产物 | P01 相关测试、有效源 B、批准名单/目标配置；使用 SHM 下载的部署先完成 P04 对应能力 |
+| [P05](three-repo-closeout-inventory-2026-10-30.md#p05) SDD + 6.53 首日 | 1.3；待实机验收 | 真实 Redis 日槽场景与受限 paper 首日逐项 runbook，分别给结论、共用产物 | P01 中 v653 测试已合；提前完成批次 0.5 的输入核对。P01 中 MyQuant/BT 未结项不自动成为本首日的前置；使用 SHM 下载的部署验 P04 对应能力 |
 | [P06](three-repo-closeout-inventory-2026-10-30.md#p06) 6.53 模式 E | 1.3 + BT 冻结合同；后继 L3 | 红队、equity/抽离本金事实、停泊/利润抽离执行语义及资金守恒；未完成保持 execute=false | P05 基础路径证据；独立执行范围，不阻塞受限首日 |
 | [P07](three-repo-closeout-inventory-2026-10-30.md#p07) 独立数据服务 | 1.3 主、MyQuant 派生；待实现/验收 | 同仓包边界、独立入口与监督；停止交易后的采集/通知运行；盘后/非交易日补数、恢复和失败回执；RAGFlow 集成边界 | 可先审现有依赖；完整 Phase0 G0 仍 NO_GO，离线/独立 CLI 已有授权不被扩成新总前置 |
 | [P08](three-repo-closeout-inventory-2026-10-30.md#p08) 公司行动日期 | 1.3 生产、BT 消费；既有 GO 后续 | 收口 #1256/#538 与 #531/#532 重叠范围；162 个现金事件+D11 的明确日期补证、字段来源和 as-of 合同 | 保持生产/消费分工；不等待 P07 全部服务切换 |
@@ -81,7 +81,9 @@
 flowchart TD
     A[批次 0 测试 验收器 状态与路径核实] --> B[批次 1 SHM 当前范围与字段质量]
     A --> C[批次 1 数据包边界与日期证据]
+    A --> M[批次 0.5 首日输入清单与目标宿主回执]
     B --> D[批次 2 SDD 场景与 6.53 受限 paper 首日]
+    M --> D
     D --> E[后继 模式 E 独立评审与验收]
     A --> F[研究输入及验收配方冻结]
     F --> G[ETF E3 后 E4 / 基线 / 引擎真湖 / L2覆盖]
@@ -103,8 +105,40 @@ flowchart TD
 | 0C：BT 验收器 | `verify_run_protocol_lake_parity.py` 为 native/facade 选择同一显式 profile；把当前 industry 的 shrink/skip 与 legacy 的抛错分别验；修掉 manifest 的旧固定费用标签 | 小样本验证成功/拒绝路径，manifest 记录 profile/revision/实际费用合同；低现金格须有 shrink 或 skip_cash 直接证据，无触发仍 NOT_COVERED；之后才能凭真湖矩阵判引擎结果 |
 | 0D：宿主与台账清单 | 读取已声明配置/marker，列本机、4090、75 根路径与读写角色；核旧 issue/运行条目是否已被替代 | 每条为已证/待宿主回执/已替代，链接证据；不能以旧盘符文档触发自动搬盘 |
 | 0E：当前数据 PR 收口 | 对齐 1.3 #1256、BT #538 两端 artifact 合同；将 #531/#532 尚有价值的计划/兼容项归位 | 无两套 producer/consumer；日期后续沿已有计划，备份目录改名先核所有读者兼容 |
+| 0F：Owner 操作清单 | 先准备 OP17/BT-11 的实际 job 名、required checks、review/bypass 选项和回退材料，进入下表人工队列 | Owner/admin 完成设置后才核验；未操作保持待人工，不因 CI 绿或计划合入标完成 |
+| 0G：关闭回执 | 在 `inventory.json.closeout_receipts` 按 §7 追加原域证据链接；本轮先登记已合 #1258 的条目级回执 | 映射与范围检查通过；P01 其他三项仍未关闭，不能把 #1258 当整包完成 |
 
 0B、0C、0D 的离线部分可并行；0A 已由原 PR 完成，无需另开修复。当前计划先交付这些可审片的范围，实际实施时以任务所需的最新主分支建立隔离分支，不能覆盖根目录已有未提交修改。
+
+**Owner 人工操作队列（尽早准备，未代为操作或派单）：**
+
+| ID | 对象 / 原事项 | 实施侧先准备 | Owner/admin 操作与签收 | 当前状态 |
+|---|---|---|---|---|
+| H01 | 1.3 `main` / OP17 | 实际检查名、所需规则、套餐支持范围；已有 rulesets 403 回执 | 选择可用保护方案并设置；不可用则明确现行合并检查和替代方案，不能登记成已启用保护 | 待 Owner |
+| H02 | MyQuant `master` / OP17 | required checks、review、bypass 的具体配置与验证步骤 | 确认并设置，以 API 读回和失败/缺 check 不可合的回执签收 | 待 Owner |
+| H03 | BT `master` / BT-11、OP17 | 依 RB-01 准备真实 job 名和规则 | 确认并设置，以 API 读回和最小验证签收 | 待 Owner |
+
+这是操作归口，不表示必须手点网页：Owner 可明确委托执行工具，但本轮未变更 GitHub 设置。治理排队不阻塞不相关的离线研究片。
+
+**需裁定的实施片也单独排队。** P13 的 14 本书按已冻结标准逐本提交正式/实验/退役证据与推荐；TopK Q8、P18 的 603556 lot、P17 的 G5 优先级各提交具体选项、差异和适用范围。尚无裁定的片保持待裁，不把并行准备当成同时交付；不要求其他独立片一起等待。
+
+### 批次 0.5：提前核对首日输入，与批次 1 并行
+
+在批次 0 就准备以下表，批次 1 期间补齐对应目标机回执；批次 2 前逐项检查。清单/代码/字段合同可离线核对，Redis 可达性、真实路径、名单批准和源 B 数据有效性不能靠离线文档代签。状态只用 **待准备 / 待宿主回执 / 已核（附证据）/ 阻塞**；本轮不填写敏感配置值，不虚构已经检查目标机。
+
+| ID | 输入 | 可提前准备的内容 | 进入首日前所需证据 | 本轮状态 |
+|---|---|---|---|---|
+| I01 | host / runtime / 部署 vendor | 目标机、源码版本、runtime 路径及单 vendor 映射 | 实际生效配置摘要、无 REPLACE 占位、无旧 turtle 环境覆盖 | 待宿主回执 |
+| I02 | 账户 / userdata / DB | 策略身份、各库归属、独立库路径及 schema 清单 | 脱敏身份匹配、真实路径存在、只读 schema 检查；无跨策略串库 | 待宿主回执 |
+| I03 | Redis / SDD | 命名空间、实例/租约、日槽路径、旧 profile 残留核对步骤 | 目标 Redis 可达与身份匹配；新日槽合法、旧状态处置有记录 | 待宿主回执 |
+| I04 | 批准名单 | 文件名/hash、signal/valid session、生成时间、批准引用字段 | 实际名单与批准 JSON 匹配且适用于目标交易日；不能推断最新文件 | 待宿主回执 |
+| I05 | 指数源 B 及两腿证据 | 下述 T−11..T−1 指数日线字段、树/复权域、交易日历合同 | mini/daqmt 分别留能力/来源回执；单部署仅使用所选 vendor；实际输入 hash、日期、水位、OHLCV 有效 | 静态字段已核；宿主未验 |
+| I06 | SHM 适用范围 / volume | 明确本部署哪项采集使用 SHM、消费者读日线还是分钟线 | 仅依赖 P04 对应能力；需要的 volume 不得豁免或填 0，其他消费者的未验字段不被代签 | 静态字段已核；部署未验 |
+| I07 | 合法新交易日 / 宿主窗口 | T 日、T−1 准备窗口、旧 profile 换日安排 | 交易日历与日槽相符；同日已运行 turtle 不切到 v653 | 待宿主回执 |
+
+**volume 的静态结论已明确。** 当前 `load_index_gate` 通过指数专用 reader 读取 `period=1d, adjust_type=none`，范围恰为 T−11..T−1；每根 `open/high/low/close/volume` 必须有限且大于 0，并拒绝已标 synthetic 的记录。指数日线 volume=0 会得到 UNKNOWN，不能签成有效源 B；已有测试固定该失败语义。[读取与字段判据](https://github.com/baiyibing/OSkhQuant1.3/blob/7e52e6e0cd6a289ad04bccaefb5edced40850841/live_trading/runtime/v653/inputs.py#L36) · [零 volume 测试](https://github.com/baiyibing/OSkhQuant1.3/blob/7e52e6e0cd6a289ad04bccaefb5edced40850841/tests/test_v653_paper_wiring.py#L313)
+
+当前 6.53 接线中未见分钟 bar volume 的历史读取依赖；分钟 cycle 是调度频率，决策价仍走 tick/instrument_detail。10/24 SHM **分钟**全零记录不能直接推导本部署的**指数日线**也失败；I05 必须验真实日线，I06 必须核实际依赖。其他分钟消费者的质量问题继续留在 P03/P04，不能因此关闭。[接线调用](https://github.com/baiyibing/OSkhQuant1.3/blob/7e52e6e0cd6a289ad04bccaefb5edced40850841/live_trading/runtime/v653/loop_hooks.py#L131)
 
 ### 批次 1：数据端口可独立运行、当前行情能力可验
 
@@ -118,7 +152,7 @@ flowchart TD
 
 ### 批次 2：同一宿主集中完成 SDD 与受限 paper 首日
 
-以[现有首日 runbook](https://github.com/baiyibing/OSkhQuant1.3/blob/7e52e6e0cd6a289ad04bccaefb5edced40850841/docs/operations/v653-paper-first-day-runbook.md)为入口，准备目标 host、runtime、账户/userdata、Redis、独立 DB/schema、批准名单和合法新交易日日槽。按现有顺序执行 precheck/preflight/dry-run 和首日路径。
+以[现有首日 runbook](https://github.com/baiyibing/OSkhQuant1.3/blob/7e52e6e0cd6a289ad04bccaefb5edced40850841/docs/operations/v653-paper-first-day-runbook.md)为入口，先复核批次 0.5 的 I01～I07 回执及当日时效，再按现有顺序执行 precheck/preflight/dry-run 和首日路径。合法新交易日或宿主窗口未就绪时，本批等待；不影响无此依赖的离线片。
 
 SDD 的错误配置/双开/失租场景先在明确的验收实例和隔离命名空间演练，记录拒绝埋点；不对正在承载任务的运行实例无计划注入故障。首日真实过程复用配置身份与证据目录，分别签收 SDD、cycle、首笔订单到本地状态、EOD、停止。新交易日人工换槽路径保持可用；无首笔订单的安静 paper 日可签 cycle/EOD/stop 子项，intent→execution_log→action-state 仍未签，真实触发后才可关闭整个首日包。P18 的 R1 三个实际 paper 日有自己的修复版本和直接事件口径，不能用这一个首日自动冲销。
 
@@ -149,6 +183,10 @@ P18/P19 的备份恢复准备、Redis 持久配置核查和已有风险证据整
 
 实施片只需提交一组可审材料：**问题/范围、原域合同链接、当前 base/head、输入与复现实验、具体改动、对应测试/直接运行证据、剩余限制、原台账状态回写**。跨仓 artifact 按 producer/consumer 的 schema、版本、hash、as-of 和缺失失败语义配对验收；同一变更不要另起平行实现 PR。
 
+每次关闭条目或整包，在同一关闭 PR（跨仓时为紧随的索引 PR）向 `inventory.json.closeout_receipts` 追加一项，至少包含 `receipt_id`、`package_id`、`scope`（`audit_items` 或 `package`）、`audit_ids`、`disposition`（`completed/superseded/retired`）、`closed_at_utc`、`recorded_at_utc`、`ssot_urls`、`evidence_urls` 和 `summary`。链接指向已经更新的原域记录、合入 PR 或不可变运行证据，不能只指向本计划自身；原域需要人签的还须附 `signoff_urls`，AI 不代签。
+
+读取方按 ID 和证据计算关闭范围：条目必须属于该主包；`scope=package` 只能在所有条目与原域验收条件均已满足时使用。本轮以已合 #1258 登记首条 `scope=audit_items` 回执，仅覆盖 `V653_TEST_DRIFT`，P01 的 QL01/BT-18/BT-17 继续待做。机器回执是原域证据的索引，不是新授权或第二份手写状态表；冻结 `items[].status` 不因追加而覆盖。
+
 运行片关闭必须回答：什么代码与配置在什么宿主、对什么输入、执行了哪条直接路径、结果与失败如何判断、能否重跑/恢复。若本轮证明「已做但漏回写」「被替代」「无需继续」，明确记理由及证据即可关闭；不能为了制造完成数去运行已退役系统。
 
 本文合入只发布统一计划。开工顺序采用批次 0→对应依赖就绪的后续片，原有逐片授权持续有效；新增 L2/L3 合同或生产执行沿原域治理办理，不由本页替代。
@@ -156,3 +194,5 @@ P18/P19 的备份恢复准备、Redis 持久配置核查和已有风险证据整
 ## 8. 本次计划验证
 
 已完成三仓独立审查及外部 Kimi/Claude CLI 只读复核，按代码证据修订依赖、费用身份、未触发首单与通知域验收。审查范围、版本和逐条处理见[复核记录](evidence/three-repo-closeout-2026-10-30/review-and-validation.md)。这些是计划质量检查，不替代待完成的目标宿主验收。
+
+用户复评后的本轮修订：增加 0.5 输入清单、Owner 操作队列、人裁片排队及条目级机器回执，并静态核实 6.53 日线 volume 判据。修订处置见[复评回写](evidence/three-repo-closeout-2026-10-30/user-review-followup.md)。

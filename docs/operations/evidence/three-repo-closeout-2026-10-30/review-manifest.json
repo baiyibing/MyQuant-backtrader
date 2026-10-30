@@ -565,5 +565,73 @@
         "recommended_disposition": "主计划架构可通过；将BTPR-01/02写入0C的具体验收即可，BTPR-03/04为发布前文档修整。"
       }
     }
+  ],
+  "followup_reviews": [
+    {
+      "reviewer": "oskh_core_closeout_audit",
+      "raw_sha256": "9fcf63bfbffe3c8f6c22f101bdb4cd0606efd13c4be9d0f7eb40b18866d65edc",
+      "summary": {
+        "reviewer": "oskh_core_closeout_audit",
+        "reviewed_at_utc": "2026-10-30T11:18:08.636477+00:00",
+        "review_scope": "Only current git diff plus new user-review-followup.md; targeted static source checks for the added v653 statements. No full-plan re-audit.",
+        "verdict": "APPROVE",
+        "blocking_findings": [],
+        "nonblocking_findings": [],
+        "checks": [
+          {
+            "id": "SOURCE_B_OHLCV",
+            "result": "PASS",
+            "detail": "Frozen inputs.py:36-65 reads index-specific 1d/none T-11..T-1; all OHLCV values finite and >0, synthetic records rejected. Existing test at lines313-315 asserts zero completed-day volume gives UNKNOWN. The delta accurately states these static facts and does not claim host data passed."
+          },
+          {
+            "id": "MINUTE_VOLUME_SCOPE",
+            "result": "PASS",
+            "detail": "Targeted source search over live_trading/runtime/v653 and trade_decision/v653 finds history reading in inputs.py only, at period=1d. loop_hooks minute cadence does not itself read minute bars; cumulative_filled_volume is order/fill state. Wording remains limited to current wiring and keeps other minute consumers quality acceptance open."
+          },
+          {
+            "id": "P01_SCOPE",
+            "result": "PASS",
+            "detail": "JSON receipt scope=audit_items closes V653_TEST_DRIFT only. Membership/unique-ID/UTC validation passes; QL01, BT-18 and BT-17 remain open. No package-scope receipt or unrelated P01 prerequisites were introduced."
+          },
+          {
+            "id": "HOST_EVIDENCE",
+            "result": "PASS",
+            "detail": "I01-I04/I07 remain pending host receipts; I05/I06 distinguish static field checks from unverified host/deployment inputs. Batch0.5 and batch2 explicitly require real paths, Redis identity/reachability, approval and source-B validity; no offline-to-host signoff substitution."
+          },
+          {
+            "id": "OWNER_AND_HUMAN_SIGNOFF",
+            "result": "PASS",
+            "detail": "H01-H03 remain pending Owner/admin with no settings change claimed. Human decision work is queued without implied approval. Receipt schema requires signoff_urls where the original domain requires a human signoff; empty signoff_urls for the merged code-test item does not sign any paper, economics or production capability."
+          },
+          {
+            "id": "DEPENDENCY_BOUNDARIES",
+            "result": "PASS",
+            "detail": "P05 uses only relevant v653 test closure and applicable SHM capability. Independent research work does not wait for all P01 or Owner governance items; original scope/authorizations remain in force."
+          }
+        ],
+        "reviewed_files": [
+          {
+            "path": "docs/operations/three-repo-closeout-plan-2026-10-30.md",
+            "sha256": "400589afc22a3c2b4870a0d48e19173a3cc0457250fe50d8995c759bb1b32948"
+          },
+          {
+            "path": "docs/operations/three-repo-closeout-inventory-2026-10-30.md",
+            "sha256": "19a1c408f69179585c05f225a3b52bd09c1769ab0b4d96226e1e3a4ab8160caa"
+          },
+          {
+            "path": "docs/operations/evidence/three-repo-closeout-2026-10-30/inventory.json",
+            "sha256": "726061592b09e541d606d2875e97935386598b9dff6c01f5bee01e35830889d9"
+          },
+          {
+            "path": "docs/operations/evidence/three-repo-closeout-2026-10-30/user-review-followup.md",
+            "sha256": "2e495db00b89c98320e46e9452106249fc4353b816f618826d571beb8b4ec6ba"
+          }
+        ],
+        "git_diff_sha256": "d389942e0216a279599537483333f81989b00a149be763af66f15d657887fa0e",
+        "static_source_sha": "7e52e6e0cd6a289ad04bccaefb5edced40850841",
+        "source_method": "Read fixed-SHA Git objects from frozen oskh/cache.git; initial docs-only snapshot did not contain runtime files. Used git grep for narrowly scoped dependency verification.",
+        "validation_limits": "No new runtime tests, services, Redis/QMT connection, real-host experiment, credentials, settings changes or notifications. This is documentation/diff review, not host acceptance."
+      }
+    }
   ]
 }

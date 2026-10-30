@@ -25,3 +25,7 @@
 - 对本次新增文件检查 UTF-8 无 BOM、NUL=0、相对链接、显式锚点及 `git diff --check`。最终结果见 [validation.json](validation.json)。仅文档/JSON 变更，无需重跑交易测试或真实数据任务。
 
 审查指出的非阻塞问题已经逐项回填。签收边界维持主计划定义：本机/4090/75 的新运行回执、实际通知、训练、paper 与行情湖变更均未在此次规划中执行。
+
+## 用户复评增量
+
+用户认可合入后的五项建议已回填，见[复评回写](user-review-followup.md)。独立增量审查为 APPROVE、无阻塞，范围/源码/内容 hash 见 `review-manifest.json.followup_reviews`。最新验证增加关闭回执检查：仅关闭 P01 内的 V653_TEST_DRIFT，其他三个条目仍开放；不代签宿主数据或 Owner 操作。

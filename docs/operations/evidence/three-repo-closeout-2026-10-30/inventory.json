@@ -3909,5 +3909,28 @@
     "Two supplemental sources are authorized unmerged plan/draft branches: OSkh 6825f22169 and BT 42662418231ea87af4c72e83f8ee69d6396db715; neither is proof of merged implementation.",
     "Source groups overlap in subject; primary mapping avoids double scheduling.",
     "Earlier explicit offline GO remains; this planning task does not approve every deferred feature or production cutover."
+  ],
+  "closeout_receipts_schema_version": 1,
+  "closeout_receipts": [
+    {
+      "receipt_id": "oskh-pr1258-v653-test-drift",
+      "package_id": "P01",
+      "scope": "audit_items",
+      "audit_ids": [
+        "V653_TEST_DRIFT"
+      ],
+      "disposition": "completed",
+      "closed_at_utc": "2026-10-30T09:50:36Z",
+      "recorded_at_utc": "2026-10-30T11:16:24.021657+00:00",
+      "ssot_urls": [
+        "https://github.com/baiyibing/OSkhQuant1.3/pull/1258"
+      ],
+      "evidence_urls": [
+        "https://github.com/baiyibing/OSkhQuant1.3/commit/1ed67467890edb6c931bf8816c121fa7483cc276",
+        "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/41033724228"
+      ],
+      "signoff_urls": [],
+      "summary": "#1258 最终 head 的必需检查通过且已合入，关闭 v653 Phase4c/d/e 测试漂移条目；P01 的 MyQuant CI、BT 验收器与 Windows 测试复核仍待做。"
+    }
   ]
 }
