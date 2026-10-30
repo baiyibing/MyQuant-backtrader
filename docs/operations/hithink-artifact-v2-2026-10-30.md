@@ -22,4 +22,6 @@
 
 覆盖仍为 A4/B3/C0/D11，31 个仅 Wind 历史键未解释，故 parity 总状态和 prepare-merge 继续阻断。完整 [真实运行摘要](evidence/hithink-artifact-2026-10-30/v2-real-run.json) 与 [11 码事实复核表](evidence/hithink-artifact-2026-10-30/v2-coverage-review.json) 已留证。基线是从冻结 CSV 在独立目录重建的离线参考，不是发布的湖修订；没有生成可发布候选、签人工例外或写湖。
 
+后续 [D11 公告取证](hithink-coverage-followup-2026-10-30.md) 已确认三种身份事件：窗口内主动摘牌、退市整理期和换股吸收合并。另八码找到报告期不分配文件，但不足以证明整个窗口无事件。31 个 Wind-only 历史键全部关联前三码；原覆盖阻断和冻结输入保持。
+
 为让整体 CI 能继续，1.3 同步主线 7943d10 后修复了已确认的基线问题：`l2_phase3_pipeline.py` 去 BOM、使用明确上海时区；`extract_stock_rar_data.py` 明确返回 bool；两份 v653 CLI 去重复的同名 parser 声明。保留原 parser 逻辑和退出码，help=0/非法参数=1 冒烟通过，四文件定向 pyright 0 errors/0 warnings。原 CRLF 字节保留并注明 whitespace 规则，未重构其业务代码。CI 最新结果以两个 PR 为准。
