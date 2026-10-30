@@ -25,3 +25,9 @@
 设计原则：①②③⑥⑨为离线任务不适用；④通过冻结哈希及提交标记保证重放；⑤所有未知/中断失败关闭；⑦固定跨仓协议；⑧显式 channel 与静态 fence；⑩方案及证据用不可变链接。⑪—㉑未触及交易/通信/实时价格边界，无原则例外。策略买卖通道与时点 N/A。
 
 授权不包含合并/OWNER_SIGNOFF/C3/湖写入/来源切换。独立评审和定向门禁结果在编码后补入本页；上线价值与资金口径仍由人裁。宿主锁：本工作区只处理 PR531 v6 这一个离线产物通道，不并行编码其他方案。
+
+只读预审补充（编码前采纳）：parity 使用 `--run-dir` 与同一覆盖分类函数，历史范围取 base manifest 的 ask_start/ask_end。D 类 override 另需 `scope_start/scope_end` 约束实际缺席事件日期，审批期限不代替事实范围。唯一 economics loader 从 manifest 验证 revision、events SHA 和逐事件字段 SHA；直接 gate 调用未携带已验证上下文时不能凭 sidecar 自述 revision 放行 Hithink。缺 pay_date、正送转缺上市日检查适用于所有来源。fence 只保证登记入口，无任意未来代码安全证明。
+
+Kimi 独立预审（256s，结论可实施）采纳：每次 HTTP 显式 timeout=25s，主下载最多 3 次、每次失败重取签名地址，退避 1/2 秒；每个探针最多 2 次，限流/鉴权错误立即停止该类请求且后续探针留 skipped 证据。限额不称作严格墙钟 SLA（urllib timeout 是 socket 阻塞预算），流式下载另检查 monotonic 总时长 120s 及最大文件 64 MiB。探针失败明确落 D 阻断。重复导入请求一致指原始宇宙文件 SHA、规范代码集与 start/end 全相等。日期测试含 1991 年上海夏令时和 BJ 代码。设计原则条号来源为 1.3 `docs/architecture/design-principles.md`。
+
+评审工具记录：默认 Cursor 模型预检失败，未旁路预检；改跑独立 Kimi CLI 与 Claude CLI。编排器的 Claude CMD 多行参数被截断，该次退出码 0 不计有效意见，使用原生 executable 单行提示重跑。主笔侧独立 Codex 只读预审的三项缺口已在上一段关闭；不将工具退出码代替实质评审。
