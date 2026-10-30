@@ -157,6 +157,13 @@
       "hithink_value": "0.3259"
     },
     {
+      "code": "300708.SZ",
+      "ex_date": "2020-06-02",
+      "field": "cash",
+      "wind_value": "0.0199",
+      "hithink_value": "0.02"
+    },
+    {
       "code": "300767.SZ",
       "ex_date": "2022-05-26",
       "field": "bonus",
@@ -331,5 +338,5 @@
     "ask_start": "2015-01-01",
     "ask_end": "2026-10-06"
   },
-  "notes": "Original v6 frozen set retained: 46 keys, cash10+bonus36. Exact Decimal threshold also detects 300708.SZ/2020-06-02 cash .0199 vs .02; this remains a NEW discrepancy and must fail until separately reviewed. These are diagnostic facts, not economic approvals."
+  "notes": "47 frozen exact daily-sum diagnostic facts (cash11+bonus36). 2026-10-30 continuation GO: verified original .0199/.02 boundary key; no economic approval and no tolerance change."
 }

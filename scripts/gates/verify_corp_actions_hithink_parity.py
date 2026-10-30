@@ -72,9 +72,10 @@ def verify(run):
     if run.channel != "hithink":
         raise ValueError("parity requires a hithink run")
     run.verify_base()
-    _, rows, probes = hithink_incremental.imported(run)
+    state, rows, probes = hithink_incremental.imported(run)
     exclusions, exclusions_sha256 = hithink_incremental.read_exclusions(run)
-    facts = hithink_incremental.coverage(run, rows, probes, exclusions=(exclusions, exclusions_sha256))
+    facts = hithink_incremental.coverage(run, rows, probes, exclusions=(exclusions, exclusions_sha256),
+                                       quarantine=state.get("quarantine_records", []))
     base = Path(run.config["lake_dir"])
     manifest = artifact.read_json(base / "manifest.json")
     window = manifest["coverage_window"]
@@ -83,6 +84,9 @@ def verify(run):
                      end=artifact.day(window["ask_end"]), codes=set(run.config["codes"]),
                      classification=facts["vendor_unknown_classification"], overrides=facts["manual_overrides_applied"])
     result["unresolved_coverage_codes"] = facts["unresolved_codes"]
+    result["quarantine_in_comparison"] = [r for r in state.get("quarantine_records", [])
+        if r["code"] in run.config["codes"] and artifact.day(window["ask_start"]) <= artifact.day(r["ex_date"]) <= artifact.day(window["ask_end"])]
+    result["passed"] &= not result["quarantine_in_comparison"]
     result["passed"] &= not facts["unresolved_codes"]
     result["input_hashes"] = {"base": run.config["base_sha256"],
                               "import": artifact.digest(run.path("work/hithink_committed.json")),

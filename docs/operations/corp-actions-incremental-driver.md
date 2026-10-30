@@ -64,7 +64,9 @@ approved_at, review_after, scope_start and scope_end in the run's copied
 former use the actual CST evaluation date. Approvals may follow fetched_at.
 Changes to a non-D classification or missing/expired evidence are rejected.
 Historical parity uses the base ask_start/ask_end and the same coverage evaluator.
-The original 46 frozen difference keys are retained; new or missing keys fail.
+The reviewed diagnostic baseline now has 47 exact keys (the original 46 plus
+the source-verified Decimal boundary key); new or missing keys fail. Existing
+runs keep their copied config. Use a new run for the updated baseline.
 
 `assembled/hithink_allotments.json` preserves rights issues. Pure rights are
 excluded from candidate events; mixed rights/dividends block candidate preparation.
@@ -84,13 +86,24 @@ No existing economics consumer is connected by this change. The CI fence guards
 seven registered consumer files and the two existing non-corp-actions reads;
 new consumers/readers require an explicit inventory review.
 
-**Current real-data status:** the 2026-10-30 live download (57,709 rows) is rejected
-by the agreed whole-dump nonnegative rule due to two historical negative bonus
-ratios. It has no commit marker. An independent exact-decimal replay of the pinned
-2026-10-29 inputs also finds a 47th threshold difference (`300708.SZ`, 2020-06-02,
-cash 0.0199 vs 0.02). It was omitted by the earlier float boundary comparison and
-is deliberately **not** added to the 46-key frozen diagnostic baseline. These are data
-review items; successful synthetic tests do not authorize real-data publication.
+**Current real-data status:** following the 2026-10-30 continuation GO, the
+producer supports explicit `--quarantine-outside-window`. This creates v2 with a
+hash-bound `quarantine.json`; without this flag v1 still rejects every negative
+amount. Only negative amounts outside the closed requested window can be
+isolated. Invalid identities, timestamps, currency, nonfinite amounts and precision
+loss still fail the whole run. The raw parquet remains unchanged. BT independently
+reconstructs the sidecar and reports both usable and isolated rows. Codes found
+only in isolated history still count as vendor-present. Historical parity fails
+if isolated rows intersect its comparison universe/window.
+
+The real v2 download and BT import succeeded: 57,709 raw rows, 2 isolated historical
+negative bonus rows, 162 assembled incremental events. Source review confirmed
+the 47th exact diagnostic key (`300708.SZ`, 2020-06-02, cash 0.0199 vs 0.02),
+so the diagnostic set now has 47 keys; the threshold remains 1e-4. All 47 keys
+reproduced. Coverage still has 11 unexplained codes, and prepare-merge remains
+blocked. See the [continuation record](hithink-artifact-v2-2026-10-30.md), including
+the per-code review table. No economic approval or lake publication follows
+from these acquisition and diagnostic results.
 
 ## Baseline and boundaries
 

@@ -1,5 +1,7 @@
 # Hithink 冻结产物实施合同（PR531 v6）
 
+当前续片：[v2 窗外隔离与真实链路结果](https://github.com/baiyibing/MyQuant-backtrader/blob/codex/hithink-artifact-import-20261030/docs/operations/hithink-artifact-v2-2026-10-30.md)。下文保留首次 v1 实施时的事实与停点；2026-10-30 用户“继续GO”后，显式 v2 导出/导入成功、诊断集经复核为 47 键，剩 D11 覆盖阻断。
+
 状态：2026-10-30 用户“可以开始实施了吗”授权实施；主笔 Codex，本机独立工作区。方案基线 [PR531 @179d0f6](https://github.com/baiyibing/MyQuant-backtrader/blob/179d0f6293514d9c4fec3477fca3ae64d475f68a/docs/operations/plan-corp-actions-hithink-channel-2026-10-29.md)。先完成 1.3 producer，再完成 BT 离线导入；两仓分别提交评审。风险 L2，显式命令触发，默认仍 Wind。无调度、湖发布、经济消费接线或生产开闸。
 
 ## 产物协议 v1

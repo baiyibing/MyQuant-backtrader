@@ -65,13 +65,31 @@ def row(ticker="600036.SH", stamp="2026-10-12", **changes):
     }
 
 
-def bundle(run, path, rows=None, business_code=3002):
+def bundle(run, path, rows=None, business_code=3002, *, quarantine=False):
     rows = rows if rows is not None else [row(), row("000001.SZ"), row("000004.SZ", "2026-09-01")]
     path.mkdir()
     pq.write_table(pa.Table.from_pylist(rows), path / "hithink_dump.parquet")
-    parsed, stats = art.parse_dump(path / "hithink_dump.parquet")
+    parsed, stats = art.parse_dump(
+        path / "hithink_dump.parquet",
+        quarantine_window=(run.config["start"], run.config["end"]) if quarantine else None,
+    )
+    version = 2 if quarantine else 1
+    request = art.request_identity(run.config)
+    files = (*art.FILES[:2], "quarantine.json") if quarantine else art.FILES[:2]
+    if quarantine:
+        request["quarantine_policy"] = art.QUARANTINE_POLICY
+        (path / "quarantine.json").write_bytes(
+            driver.json_bytes(
+                {
+                    "format_version": 1,
+                    "policy": art.QUARANTINE_POLICY,
+                    "window": {k: run.config[k] for k in ("start", "end")},
+                    "rows": stats["quarantine_records"],
+                }
+            )
+        )
     probes = []
-    for ticker in sorted(set(run.config["codes"]) - {r["thscode"] for r in parsed}):
+    for ticker in sorted(set(run.config["codes"]) - art.present_codes(parsed, stats)):
         probes.append(
             {
                 "code": ticker,
@@ -102,13 +120,13 @@ def bundle(run, path, rows=None, business_code=3002):
         )
     (path / "probes.json").write_bytes(driver.json_bytes({"format_version": 1, "probes": probes}))
     manifest = {
-        "format_version": 1,
+        "format_version": version,
         "producer": "OSkhQuant1.3",
         "source": art.SOURCE,
         "endpoint": art.DUMP_ENDPOINT,
-        "request": art.request_identity(run.config),
+        "request": request,
         "fetched_at": "2026-10-24T08:00:00+00:00",
-        "files": {k: art.digest(path / k) for k in art.FILES[:2]},
+        "files": {k: art.digest(path / k) for k in files},
         "dump": stats,
         "coverage_passed": False,
         "lake_write_authorized": False,
@@ -116,7 +134,7 @@ def bundle(run, path, rows=None, business_code=3002):
     (path / "manifest.json").write_bytes(driver.json_bytes(manifest))
     (path / "COMMITTED.json").write_bytes(
         driver.json_bytes(
-            {"format_version": 1, "manifest_sha256": art.digest(path / "manifest.json")}
+            {"format_version": version, "manifest_sha256": art.digest(path / "manifest.json")}
         )
     )
     return path
@@ -124,11 +142,14 @@ def bundle(run, path, rows=None, business_code=3002):
 
 def reseal(path):
     manifest = art.read_json(path / "manifest.json")
-    manifest["files"] = {k: art.digest(path / k) for k in art.FILES[:2]}
+    manifest["files"] = {k: art.digest(path / k) for k in manifest["files"]}
     (path / "manifest.json").write_bytes(driver.json_bytes(manifest))
     (path / "COMMITTED.json").write_bytes(
         driver.json_bytes(
-            {"format_version": 1, "manifest_sha256": art.digest(path / "manifest.json")}
+            {
+                "format_version": manifest["format_version"],
+                "manifest_sha256": art.digest(path / "manifest.json"),
+            }
         )
     )
 
@@ -412,3 +433,139 @@ def test_source_independent_code_date_collision(inputs, tmp_path, monkeypatch):
     monkeypatch.setattr(driver, "validate_base", collide)
     with pytest.raises(ValueError, match="code/ex_date overlaps"):
         driver.prepare_merge(run)
+
+
+def test_v2_import_keeps_quarantine_only_identity_present(inputs, tmp_path):
+    run = init(inputs)
+    bad = row("600036.SH", "2007-03-30", per_share_bonus=-0.5)
+    artifact = bundle(
+        run, tmp_path / "bundle", [bad, bad, row("000001.SZ"), row("000004.SZ")], quarantine=True
+    )
+    hi.import_artifact(run, artifact)
+    state, _, _ = hi.imported(run)
+    assert state["codes_vendor_unknown"] == [] and state["codes_no_events"] == ["600036.SH"]
+    assert state["deduped_rows"] == state["accepted_rows"] + state["quarantined_rows"] == 3
+    table, report = driver.assemble(run)
+    assert (
+        table.num_rows == 2
+        and report["quarantined_codes"] == ["600036.SH"]
+        and report["quarantined_rows"] == 1
+    )
+    assert not report["unresolved_codes"]
+
+
+@pytest.mark.parametrize("operation", ["delete", "tamper", "reseal", "window"])
+def test_v2_quarantine_evidence_is_recomputed(inputs, tmp_path, operation):
+    run = init(inputs)
+    artifact = bundle(
+        run,
+        tmp_path / "bundle",
+        [row("600036.SH", "2007-03-30", per_share_bonus=-0.5)],
+        quarantine=True,
+    )
+    if operation == "delete":
+        (artifact / "quarantine.json").unlink()
+    else:
+        value = art.read_json(artifact / "quarantine.json")
+        if operation == "window":
+            value["window"]["start"] = "2026-10-08"
+        else:
+            value["rows"][0]["row_index"] = 999
+        (artifact / "quarantine.json").write_bytes(driver.json_bytes(value))
+        if operation in ("reseal", "window"):
+            reseal(artifact)
+    with pytest.raises((ValueError, OSError)):
+        hi.import_artifact(run, artifact)
+    assert not run.path("work/hithink_committed.json").exists()
+
+
+@pytest.mark.parametrize("version", [True, 3])
+def test_invalid_artifact_version_cannot_be_accepted(inputs, tmp_path, version):
+    run = init(inputs)
+    artifact = bundle(run, tmp_path / "bundle")
+    manifest = art.read_json(artifact / "manifest.json")
+    manifest["format_version"] = version
+    (artifact / "manifest.json").write_bytes(driver.json_bytes(manifest))
+    reseal(artifact)
+    with pytest.raises(ValueError, match="version"):
+        hi.import_artifact(run, artifact)
+
+
+def test_v1_cannot_ignore_an_unbound_quarantine_sidecar(inputs, tmp_path):
+    run = init(inputs)
+    artifact = bundle(run, tmp_path / "bundle")
+    (artifact / "quarantine.json").write_bytes(b"{}")
+    with pytest.raises(ValueError, match="v1"):
+        hi.import_artifact(run, artifact)
+
+
+def test_parity_rejects_quarantine_inside_historical_comparison(inputs, tmp_path):
+    from scripts.gates.verify_corp_actions_hithink_parity import verify
+
+    run = init(inputs)
+    artifact = bundle(
+        run,
+        tmp_path / "bundle",
+        [row("600036.SH", "2026-09-30", per_share_bonus=-0.5), row("000001.SZ"), row("000004.SZ")],
+        quarantine=True,
+    )
+    hi.import_artifact(run, artifact)
+    result = verify(run)
+    assert not result["passed"] and len(result["quarantine_in_comparison"]) == 1
+
+
+@pytest.mark.parametrize("target", ["sidecar_version", "sidecar_index", "manifest_count"])
+def test_v2_boolean_metadata_does_not_equal_recomputed_integers(inputs, tmp_path, target):
+    run = init(inputs)
+    artifact = bundle(
+        run,
+        tmp_path / "bundle",
+        [row("600036.SH", "2007-03-30", per_share_bonus=-0.5), row("000001.SZ")],
+        quarantine=True,
+    )
+    if target == "manifest_count":
+        manifest = art.read_json(artifact / "manifest.json")
+        manifest["dump"]["accepted_rows"] = True
+        (artifact / "manifest.json").write_bytes(driver.json_bytes(manifest))
+    else:
+        q = art.read_json(artifact / "quarantine.json")
+        if target == "sidecar_version":
+            q["format_version"] = True
+        else:
+            q["rows"][0]["row_index"] = False
+        (artifact / "quarantine.json").write_bytes(driver.json_bytes(q))
+    reseal(artifact)
+    with pytest.raises(ValueError):
+        hi.import_artifact(run, artifact)
+
+
+def test_resealed_import_state_cannot_drop_verified_quarantine(inputs, tmp_path):
+    run = init(inputs)
+    artifact = bundle(
+        run,
+        tmp_path / "bundle",
+        [row("600036.SH", "2007-03-30", per_share_bonus=-0.5), row("000001.SZ"), row("000004.SZ")],
+        quarantine=True,
+    )
+    hi.import_artifact(run, artifact)
+    state = art.read_json(run.path("work/hithink_state.json"))
+    state["quarantine_records"] = []
+    run.write("work/hithink_state.json", driver.json_bytes(state))
+    marker = art.read_json(run.path("work/hithink_committed.json"))
+    marker["state_sha256"] = art.digest(run.path("work/hithink_state.json"))
+    run.write("work/hithink_committed.json", driver.json_bytes(marker))
+    with pytest.raises(ValueError, match="verified artifact facts"):
+        hi.imported(run)
+
+
+def test_v1_state_cannot_inject_unverified_quarantine(inputs, tmp_path):
+    run = init(inputs)
+    hi.import_artifact(run, bundle(run, tmp_path / "bundle"))
+    state = art.read_json(run.path("work/hithink_state.json"))
+    state["quarantine_records"] = [{"code": "000001.SZ"}]
+    run.write("work/hithink_state.json", driver.json_bytes(state))
+    marker = art.read_json(run.path("work/hithink_committed.json"))
+    marker["state_sha256"] = art.digest(run.path("work/hithink_state.json"))
+    run.write("work/hithink_committed.json", driver.json_bytes(marker))
+    with pytest.raises(ValueError, match="verified artifact facts"):
+        hi.imported(run)

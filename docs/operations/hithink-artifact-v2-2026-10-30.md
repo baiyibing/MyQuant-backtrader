@@ -10,4 +10,16 @@
 
 直接验收：窗口前/内/后及两端点、非法字段不可隔离、sidecar 删除/篡改/错误窗口、v1 兼容、重复原始行、历史 parity 隔离交集、跨仓真实导出/导入/assemble 留证；不伪造 D 类审批，不发布候选到湖。
 
+独立预审已采纳：覆盖 presence 按原始 dump 全部代码（含隔离行）计算；仅有窗外隔离行的代码不误报为供应商缺码，当前窗口计无事件并单列隔离身份。`accepted_rows + quarantined_rows == deduped_rows`，重复隔离位置仍由 duplicates 留证。版本须为严格整数，manifest/marker/文件集合匹配，v1 带 quarantine sidecar 拒绝降级。
+
 原则④⑤⑦⑧⑩：冻结文件版本、明确失败、显式开关、单一统计与证据；交易进程/资金/策略通道时点均 N/A。代码后独立只读复核，问题闭环后更新原草稿 PR。
+
+## 完成结果
+
+1.3 44 项、BT 122 项定向测试通过（另有 1 项本机 Windows symlink 权限测试排除，CI 保留）；双方定向 pyright 0 errors/0 warnings，ruff 通过。独立只读复核补齐了 bool/整数严格比较、重封 state 不得丢隔离记录及 v1 不得注入隔离记录三项边界，最终结论无剩余实现阻断。
+
+真实 v2 导出已成功提交，BT 导入成功并组装 162 条窗口内事件：57,709 原始行、57,708 唯一行 = 57,706 可用行 + 2 隔离行。原始包未删改。冻结事实集经 [精确边界复核](evidence/hithink-artifact-2026-10-30/decimal-boundary-review.json) 为 47 键；实际复算无新增/消失键，21,709 个历史键对拍，历史比较窗口与隔离行无交集。
+
+覆盖仍为 A4/B3/C0/D11，31 个仅 Wind 历史键未解释，故 parity 总状态和 prepare-merge 继续阻断。完整 [真实运行摘要](evidence/hithink-artifact-2026-10-30/v2-real-run.json) 与 [11 码事实复核表](evidence/hithink-artifact-2026-10-30/v2-coverage-review.json) 已留证。基线是从冻结 CSV 在独立目录重建的离线参考，不是发布的湖修订；没有生成可发布候选、签人工例外或写湖。
+
+为让整体 CI 能继续，1.3 同步主线 7943d10 后修复了已确认的基线问题：`l2_phase3_pipeline.py` 去 BOM、使用明确上海时区；`extract_stock_rar_data.py` 明确返回 bool；两份 v653 CLI 去重复的同名 parser 声明。保留原 parser 逻辑和退出码，help=0/非法参数=1 冒烟通过，四文件定向 pyright 0 errors/0 warnings。原 CRLF 字节保留并注明 whitespace 规则，未重构其业务代码。CI 最新结果以两个 PR 为准。

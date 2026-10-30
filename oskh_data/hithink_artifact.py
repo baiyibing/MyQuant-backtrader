@@ -17,6 +17,7 @@ DUMP_ENDPOINT = "/api/dump/market-dumps/adjustment-factors/download-url"
 IDENTITY_ENDPOINT = "/api/meta/tickers/search"
 EVENT_ENDPOINT = "/api/a-share/corporate-actions/adjustment-factors"
 FILES = ("hithink_dump.parquet", "probes.json", "manifest.json", "COMMITTED.json")
+QUARANTINE_POLICY = "negative_amounts_outside_window_v1"
 NUMBERS = ("dividend_per_share", "per_share_bonus", "allotment_ratio", "allotment_price")
 SHANGHAI = ZoneInfo("Asia/Shanghai")
 ERRORS = {"redirect_blocked", "invalid_https_url", "credential_origin_blocked", "http_error",
@@ -32,6 +33,10 @@ def read_json(path):
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
+def canonical_json(value):
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
+
+
 def code(value):
     if not isinstance(value, str) or not re.fullmatch(r"[0-9]{6}\.(SH|SZ|BJ)", value):
         raise ValueError("invalid A-share code")
@@ -44,24 +49,27 @@ def day(value):
     return date.fromisoformat(value)
 
 
-def number(value):
+def number(value, *, allow_negative=False):
     if isinstance(value, bool) or not isinstance(value, (int, float, Decimal)):
         raise ValueError("adjustment amount must be numeric")
     value = Decimal(str(value))
-    if not value.is_finite() or value < 0:
+    if not value.is_finite() or (value < 0 and not allow_negative):
         raise ValueError("adjustment amount must be finite and nonnegative")
     pa.scalar(value, type=pa.decimal128(24, 12))
     return value
 
 
-def parse_dump(path):
+def parse_dump(path, *, quarantine_window=None):
     table = pq.ParquetFile(path).read()
     required = {"thscode", "ex_date_ms", "currency", *NUMBERS}
     if len(set(table.column_names)) != len(table.column_names) or not required <= set(table.column_names):
         raise ValueError("missing/duplicate adjustment columns")
     if not table.num_rows:
         raise ValueError("empty full-market dump")
-    result, seen, duplicates = [], {}, []
+    window = tuple(day(v) for v in quarantine_window) if quarantine_window is not None else None
+    if window is not None and window[1] < window[0]:
+        raise ValueError("invalid quarantine window")
+    result, seen, duplicates, quarantine = [], {}, [], []
     for index, raw in enumerate(table.to_pylist()):
         code(raw["thscode"])
         if raw["currency"] != "CNY":
@@ -73,14 +81,29 @@ def parse_dump(path):
         stamp = datetime.fromtimestamp(raw["ex_date_ms"] / 1000, SHANGHAI)
         if (stamp.hour, stamp.minute, stamp.second, stamp.microsecond) != (0, 0, 0, 0):
             raise ValueError("ex_date_ms must denote Shanghai midnight")
-        amounts = {k: number(raw[k]) for k in NUMBERS}
+        amounts = {k: number(raw[k], allow_negative=window is not None) for k in NUMBERS}
         identity = json.dumps(raw, sort_keys=True, allow_nan=False, default=str)
         if identity in seen:
             duplicates.append({"kept_index": seen[identity], "duplicate_index": index})
             continue
         seen[identity] = index
+        negative = [k for k in NUMBERS if amounts[k] < 0]
+        if negative:
+            if window is None or window[0] <= stamp.date() <= window[1]:
+                raise ValueError("negative adjustment amount in incremental window")
+            quarantine.append({"row_index": index, "row_sha256": hashlib.sha256(identity.encode()).hexdigest(),
+                               "code": raw["thscode"], "ex_date": str(stamp.date()), "negative_fields": negative,
+                               "reason": "negative_amount_outside_incremental_window"})
+            continue
         result.append({**raw, **amounts, "ex_date": stamp.date()})
-    return result, {"dump_rows": table.num_rows, "deduped_rows": len(result), "duplicates": duplicates}
+    stats = {"dump_rows": table.num_rows, "deduped_rows": len(seen), "duplicates": duplicates}
+    if window is not None:
+        stats.update(accepted_rows=len(result), quarantined_rows=len(quarantine), quarantine_records=quarantine)
+    return result, stats
+
+
+def present_codes(rows, stats):
+    return {r["thscode"] for r in rows} | {r["code"] for r in stats.get("quarantine_records", [])}
 
 
 def request_identity(config):
@@ -154,12 +177,25 @@ def proves_empty(probe, ticker):
 
 def read_artifact(directory, config):
     directory = Path(directory)
-    before = {name: digest(directory / name) for name in FILES}
-    marker, manifest = read_json(directory / "COMMITTED.json"), read_json(directory / "manifest.json")
+    manifest_hash = digest(directory / "manifest.json")
+    manifest = read_json(directory / "manifest.json")
+    version = manifest.get("format_version")
+    if type(version) is not int or version not in (1, 2):
+        raise ValueError("unsupported artifact version")
+    if version == 1 and (directory / "quarantine.json").exists():
+        raise ValueError("v1 must not contain a quarantine sidecar")
+    payload = (*FILES[:2], "quarantine.json") if version == 2 else FILES[:2]
+    names = (*payload, *FILES[2:])
+    before = {name: digest(directory / name) for name in names}
+    if before["manifest.json"] != manifest_hash:
+        raise ValueError("manifest changed while reading")
+    marker = read_json(directory / "COMMITTED.json")
     request = request_identity(config)
-    if marker != {"format_version": 1, "manifest_sha256": before["manifest.json"]}:
+    if version == 2:
+        request["quarantine_policy"] = QUARANTINE_POLICY
+    if type(marker.get("format_version")) is not int or marker != {"format_version": version, "manifest_sha256": before["manifest.json"]}:
         raise ValueError("invalid artifact commit marker")
-    if (manifest.get("format_version") != 1 or manifest.get("producer") != "OSkhQuant1.3"
+    if (manifest.get("producer") != "OSkhQuant1.3"
             or manifest.get("source") != SOURCE or manifest.get("endpoint") != DUMP_ENDPOINT
             or manifest.get("request") != request or manifest.get("coverage_passed") is not False
             or manifest.get("lake_write_authorized") is not False):
@@ -167,13 +203,18 @@ def read_artifact(directory, config):
     stamp = datetime.fromisoformat(manifest["fetched_at"])
     if stamp.utcoffset() is None:
         raise ValueError("fetched_at requires a timezone")
-    if manifest.get("files") != {k: before[k] for k in FILES[:2]}:
+    if manifest.get("files") != {k: before[k] for k in payload}:
         raise ValueError("artifact content hash mismatch")
-    rows, stats = parse_dump(directory / FILES[0])
-    if stats != manifest["dump"]:
+    rows, stats = parse_dump(directory / FILES[0], quarantine_window=(request["start"], request["end"]) if version == 2 else None)
+    if canonical_json(stats) != canonical_json(manifest["dump"]):
         raise ValueError("artifact dump statistics mismatch")
-    absent = set(request["codes"]) - {r["thscode"] for r in rows}
+    if version == 2:
+        expected = {"format_version": 1, "policy": QUARANTINE_POLICY,
+                    "window": {k: request[k] for k in ("start", "end")}, "rows": stats["quarantine_records"]}
+        if canonical_json(read_json(directory / "quarantine.json")) != canonical_json(expected):
+            raise ValueError("quarantine evidence mismatch")
+    absent = set(request["codes"]) - present_codes(rows, stats)
     probes = validate_probes(read_json(directory / "probes.json"), absent, request)
-    if before != {name: digest(directory / name) for name in FILES}:
+    if before != {name: digest(directory / name) for name in names}:
         raise ValueError("artifact changed while reading")
     return manifest, rows, probes, before

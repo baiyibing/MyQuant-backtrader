@@ -2,6 +2,8 @@
 
 这些是取证和评审记录，不是经济口径或湖发布签字。
 
+续片当前证据：[v2 真实运行](v2-real-run.json)、[D11 事实复核](v2-coverage-review.json)、[第 47 键原始记录核对](decimal-boundary-review.json)。以下首次 v1 记录保留为历史；v2 的两条隔离边界与诊断扩充不改变经济审批状态。
+
 - [Kimi 原始设计评审](design-kimi.md)：CLI `kimi-code/k3`，256 秒。包含编排器原提示和实质意见；timeout/重试、短签名重取等已采纳。
 - [Claude CLI 重跑原始结果](design-claude-cli.txt)：原生 executable；沿用本机配置的模型 `glm-5.3[1m]`，未改模型 pin。最初 CMD 包装器截断多行提示，该次退出 0 未当作有效意见；重跑明确读取合同和 v6 原方案，结论可实施。
 - [真实导出证据](real-export.json)：2026-10-30 实际 API 下载的行数、哈希、两条负值和拒绝结果。没有凭据、签名 URL 或原始数据文件。

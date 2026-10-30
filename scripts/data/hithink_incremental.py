@@ -26,6 +26,21 @@ def imported(run):
         raise ValueError("import commit/state mismatch")
     if state["fetched_at"] != manifest["fetched_at"]:
         raise ValueError("import changed original fetched_at")
+    universe = set(run.config["codes"])
+    present = artifact.present_codes(rows, manifest["dump"]) & universe
+    hits = {r["thscode"] for r in rows if artifact.day(run.config["start"]) <= r["ex_date"] <= artifact.day(run.config["end"])} & universe
+    expected = {**manifest["dump"], "dump_sha256": hashes["hithink_dump.parquet"],
+                "universe_hits": sorted(hits), "codes_no_events": sorted(present - hits),
+                "codes_vendor_unknown": sorted(universe - present), "vendor_unknown_probes": probes}
+    if any(artifact.canonical_json(state.get(k)) != artifact.canonical_json(v) for k, v in expected.items()):
+        raise ValueError("import state differs from verified artifact facts")
+    for key, default in (("quarantine_records", []), ("quarantined_rows", 0)):
+        if artifact.canonical_json(state.get(key, default)) != artifact.canonical_json(manifest["dump"].get(key, default)):
+            raise ValueError("import state quarantine differs from verified artifact facts")
+    if (type(state.get("artifact_version", 1)) is not int
+            or state.get("artifact_version", 1) != manifest["format_version"]
+            or state.get("quarantine_policy") != manifest["request"].get("quarantine_policy")):
+        raise ValueError("import state artifact version/policy mismatch")
     return state, rows, probes
 
 
@@ -49,17 +64,18 @@ def import_artifact(run, directory, *, refresh=False):
             raise ValueError("incomplete/different import; use --refresh before assemble or create a new run") from None
     staging = run.path("work/import-" + uuid.uuid4().hex)
     staging.mkdir()
-    for name in artifact.FILES:
+    for name in hashes:
         shutil.copyfile(Path(directory) / name, staging / name)
     _, _, _, copied = artifact.read_artifact(staging, run.config)
-    if hashes != copied or hashes != {k: artifact.digest(Path(directory) / k) for k in artifact.FILES}:
+    if hashes != copied or hashes != {k: artifact.digest(Path(directory) / k) for k in hashes}:
         raise ValueError("artifact changed during copy")
     universe = set(run.config["codes"])
-    present = {r["thscode"] for r in rows} & universe
+    present = artifact.present_codes(rows, manifest["dump"]) & universe
     hits = {r["thscode"] for r in rows if artifact.day(run.config["start"]) <= r["ex_date"] <= artifact.day(run.config["end"])} & universe
     state = {"format_version": 1, "artifact_sha256": hashes, "dump_sha256": hashes["hithink_dump.parquet"],
              "fetched_at": manifest["fetched_at"], "imported_at": datetime.now(timezone.utc).isoformat(),
              **manifest["dump"], "universe_hits": sorted(hits), "codes_no_events": sorted(present - hits),
+             "artifact_version": manifest["format_version"], "quarantine_policy": manifest["request"].get("quarantine_policy"),
              "codes_vendor_unknown": sorted(universe - present), "vendor_unknown_probes": probes}
     run.verify_base()
     if marker.exists():
@@ -79,7 +95,7 @@ def read_exclusions(run):
     return json.loads(raw), hashlib.sha256(raw).hexdigest()
 
 
-def coverage(run, rows, probes, *, today=None, exclusions=None):
+def coverage(run, rows, probes, *, today=None, exclusions=None, quarantine=()):
     today = today or datetime.now(artifact.SHANGHAI).date()
     universe, start, end = set(run.config["codes"]), artifact.day(run.config["start"]), artifact.day(run.config["end"])
     base = Path(run.config["lake_dir"])
@@ -90,7 +106,7 @@ def coverage(run, rows, probes, *, today=None, exclusions=None):
             raise ValueError("duplicate listing identity")
         listing[ticker] = row
     history = set(pq.ParquetFile(base / "events.parquet").read(columns=["code"])["code"].to_pylist())
-    present = {r["thscode"] for r in rows}
+    present = {r["thscode"] for r in rows} | {r["code"] for r in quarantine}
     unknown = universe - present
     classified = {}
     for ticker in sorted(unknown):
@@ -140,7 +156,7 @@ def assemble(run):
     from scripts.data import pull_corp_actions_incremental as driver
     run.verify_base()
     state, raw, probes = imported(run)
-    facts = coverage(run, raw, probes)
+    facts = coverage(run, raw, probes, quarantine=state.get("quarantine_records", []))
     universe = set(run.config["codes"])
     start, end = artifact.day(run.config["start"]), artifact.day(run.config["end"])
     rows, rights, mixed = [], [], []
@@ -177,6 +193,9 @@ def assemble(run):
     from collections import Counter
     dates = Counter((r["code"], r["ex_date"]) for r in rows)
     report = {"channel": "hithink", **facts, "event_rows": len(rows), "rejected_rows": len(mixed),
+              "quarantined_rows": state.get("quarantined_rows", 0),
+              "quarantined_codes": sorted({r["code"] for r in state.get("quarantine_records", [])}),
+              "quarantine_policy": state.get("quarantine_policy"),
               "mixed_economics_requires_review": len(mixed), "hithink_allotment_rows": len(rights),
               "universe_hits": state["universe_hits"], "codes_no_events": state["codes_no_events"],
               "codes_vendor_unknown": state["codes_vendor_unknown"],
