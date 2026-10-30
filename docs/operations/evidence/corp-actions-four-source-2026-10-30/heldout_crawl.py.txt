@@ -1,0 +1,259 @@
+"""One-off frozen-v10 holdout study. No scheduler, lake, or product changes."""
+
+from collections import Counter
+from datetime import datetime, timezone
+import csv
+import hashlib
+import importlib.util
+import json
+from pathlib import Path
+import re
+import sys
+import time
+
+import pymupdf
+import requests
+
+HERE = Path(__file__).resolve().parent
+OUT = HERE / "bt_corp_actions_cninfo_backup_20261030"
+OUT.mkdir(exist_ok=True)
+INPUTS = HERE / "inputs"
+SAMPLE = HERE / "results/holdout_240.csv"
+KEYWORDS = ("权益分派", "分红派息", "利润分配", "派息")
+TOPIC = re.compile(r"权益分派|分红派息|利润分配|派息|分红|红利")
+TITLE_OK = re.compile(r"实施|(?:权益分派|分红派息|派息)公告$")
+EXCLUDE = re.compile(r"H股|英文|English|调整|回购|转股价|行权价|激励|可转|债券|提示性|摘要")
+SE_DATE = "2023-12-01~2026-10-28"
+HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/136.0.0.0 Safari/537.36",
+           "Origin": "https://www.cninfo.com.cn", "Referer": "https://www.cninfo.com.cn/new/commonUrl/pageOfSearch",
+           "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8", "Accept": "application/json, text/plain, */*"}
+
+
+def now():
+    return datetime.now(timezone.utc).isoformat()
+
+
+def sha(path):
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def write_json(path, value):
+    temp = path.with_suffix(path.suffix + ".tmp")
+    temp.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    temp.replace(path)
+
+
+def module(name, path):
+    spec = importlib.util.spec_from_file_location(name, path)
+    obj = importlib.util.module_from_spec(spec)
+    sys.modules[name] = obj
+    spec.loader.exec_module(obj)
+    return obj
+
+
+extractor = module("frozen_corp_actions_v10", INPUTS / "extractor_v10.py")
+adapter = module("frozen_corp_actions_adapter_v10", INPUTS / "adapter_v10.py")
+assert extractor.EXTRACT_VERSION == "corp-actions:regex:mvp-v10"
+config = {"sample_sha256": sha(SAMPLE), "extractor_sha256": sha(INPUTS / "extractor_v10.py"),
+          "adapter_sha256": sha(INPUTS / "adapter_v10.py"), "orgmap_sha256": sha(HERE / "orgmap.json"),
+          "keywords": KEYWORDS, "announcement_query_window": SE_DATE, "max_pages_per_query": 10,
+          "min_delay_seconds": 1.5, "historical_window": ["2024-01-01", "2026-10-06"],
+          "incremental_window": ["2026-10-07", "2026-10-28"], "lake_write_authorized": False,
+          "owner_signature": None, "source_switch_authorized": False}
+config = json.loads(json.dumps(config))
+if (OUT / "run.json").exists():
+    assert json.loads((OUT / "run.json").read_text(encoding="utf-8")) == config
+else:
+    write_json(OUT / "run.json", config)
+for child in ("raw_query", "pdf", "txt", "events"):
+    (OUT / child).mkdir(exist_ok=True)
+cache_path = OUT / "cache_index.json"
+cache = json.loads(cache_path.read_text(encoding="utf-8")) if cache_path.exists() else {}
+session = requests.Session()
+state = {"phase": "queries", "codes_total": 240, "codes_completed": 0, "queries_network": 0,
+         "pdfs_completed": 0, "query_failures": [], "updated_at": now()}
+
+
+def progress(**items):
+    state.update(items)
+    state["updated_at"] = now()
+    write_json(OUT / "status.json", state)
+
+
+def note(value):
+    print(json.dumps(value, ensure_ascii=False), flush=True)
+
+
+class VendorBlocked(RuntimeError):
+    pass
+
+
+def request(method, url, **kwargs):
+    last = None
+    for attempt in range(2):
+        try:
+            if attempt:
+                time.sleep(5)
+            response = session.request(method, url, headers=HEADERS, timeout=25, **kwargs)
+            time.sleep(1.5)
+            if response.status_code in (401, 403, 429):
+                raise VendorBlocked(f"HTTP {response.status_code}")
+            response.raise_for_status()
+            return response
+        except VendorBlocked:
+            raise
+        except (requests.RequestException, ValueError) as exc:
+            last = type(exc).__name__
+    raise RuntimeError(last)
+
+
+def cached(path):
+    relative = str(path.relative_to(OUT))
+    return path.is_file() and relative in cache and sha(path) == cache[relative]
+
+
+def remember(path):
+    cache[str(path.relative_to(OUT))] = sha(path)
+    write_json(cache_path, cache)
+
+
+def csv_rows(name, records):
+    if not records:
+        return
+    with (OUT / name).open("w", encoding="utf-8", newline="") as stream:
+        writer = csv.DictWriter(stream, fieldnames=list(records[0]), lineterminator="\n")
+        writer.writeheader()
+        writer.writerows(records)
+
+
+def main():
+    with SAMPLE.open(encoding="utf-8", newline="") as stream:
+        sample = list(csv.DictReader(stream))
+    org = {r["code"]: r["orgId"] for r in json.loads((HERE / "orgmap.json").read_text(encoding="utf-8"))["stockList"]}
+    announcements, excluded, coverage = {}, [], []
+    for index, stock in enumerate(sample, 1):
+        code, tier = stock["code"], stock["stratum"]
+        sec = code.split(".")[0]
+        complete, raw_hits, reasons = True, 0, []
+        if sec not in org:
+            complete, reasons = False, ["issuer_org_id_unavailable"]
+        else:
+            for ki, keyword in enumerate(KEYWORDS):
+                for page in range(1, 11):
+                    path = OUT / "raw_query" / f"{sec}_{ki}_{page:02d}.json"
+                    try:
+                        if cached(path):
+                            data = json.loads(path.read_text(encoding="utf-8"))
+                        else:
+                            response = request("POST", "https://www.cninfo.com.cn/new/hisAnnouncement/query", data={
+                                "pageNum": str(page), "pageSize": "30", "column": "szse", "tabName": "fulltext",
+                                "plate": "sz,sh,bj", "stock": f"{sec},{org[sec]}", "searchkey": keyword,
+                                "secid": "", "category": "", "trade": "", "seDate": SE_DATE,
+                                "sortName": "", "sortType": "", "isHLtitle": "true"})
+                            data = response.json()
+                            if not isinstance(data, dict) or "announcements" not in data or "totalAnnouncement" not in data:
+                                raise ValueError("Unexpected announcement response schema")
+                            write_json(path, data)
+                            remember(path)
+                            state["queries_network"] += 1
+                        items = data.get("announcements") or []
+                        if not isinstance(items, list) or (not items and data.get("hasMore")):
+                            raise ValueError("Inconsistent announcement pagination")
+                        for item in items:
+                            if item.get("secCode") != sec:
+                                continue
+                            raw_hits += 1
+                            title = re.sub(r"</?em>", "", item["announcementTitle"])
+                            aid = str(item["announcementId"])
+                            record = dict(code=code, stratum=tier, announcement_id=aid, title=title,
+                                          adjunct=item["adjunctUrl"], announcement_time=item["announcementTime"])
+                            if TITLE_OK.search(title) and TOPIC.search(title) and not EXCLUDE.search(title):
+                                previous = announcements.get(aid)
+                                if previous and previous["code"] != code:
+                                    raise ValueError("Announcement issuer collision")
+                                announcements[aid] = record
+                            else:
+                                excluded.append(record)
+                        if not data.get("hasMore"):
+                            break
+                        if page == 10:
+                            complete = False
+                            reasons.append(f"keyword_{ki}_page_cap")
+                    except VendorBlocked:
+                        raise
+                    except (requests.RequestException, RuntimeError, ValueError) as exc:
+                        complete = False
+                        reasons.append(f"keyword_{ki}_{type(exc).__name__}")
+                        break
+        coverage.append(dict(code=code, stratum=tier, query_complete=complete, raw_hits=raw_hits,
+                             reasons="|".join(reasons)))
+        progress(codes_completed=index, announcements=len(announcements))
+        note({"phase": "queries", "done": index, "total": len(sample), "code": code, "complete": complete,
+              "announcements": len(announcements)})
+        write_json(OUT / "announcements.json", list(announcements.values()))
+        csv_rows("query_coverage.csv", coverage)
+    write_json(OUT / "title_excluded.json", excluded)
+    if len(announcements) > 2000:
+        raise ValueError("PDF count exceeds frozen one-off study bound")
+    progress(phase="pdfs", pdfs_total=len(announcements))
+    events, sources, review = [], [], []
+    for index, item in enumerate(sorted(announcements.values(), key=lambda r: (r["code"], r["announcement_id"])), 1):
+        aid = item["announcement_id"]
+        pdf = OUT / "pdf" / f"{aid}.pdf"
+        url = "https://static.cninfo.com.cn/" + item["adjunct"].lstrip("/")
+        source = {**item, "url": url, "fetch_at": now()}
+        try:
+            if not cached(pdf):
+                response = request("GET", url)
+                if len(response.content) > 8_000_000 or not response.content.startswith(b"%PDF"):
+                    raise ValueError("PDF response invalid or exceeds size bound")
+                pdf.write_bytes(response.content)
+                remember(pdf)
+            with pymupdf.open(pdf) as document:
+                text = "\n\n".join(page.get_text() for page in document)
+                source["pages"] = len(document)
+            source.update(pdf_sha256=sha(pdf), text_sha256=hashlib.sha256(text.encode("utf-8")).hexdigest())
+            (OUT / "txt" / f"{aid}.txt").write_text(text, encoding="utf-8")
+            result = extractor.extract_corp_actions(text, title=item["title"])
+            event = {"code": item["code"], "stratum": item["stratum"], "announcement_id": aid,
+                     "title": item["title"], "event_id": extractor.event_identity(item["code"], aid, source["text_sha256"]),
+                     **result.fields, "status": result.status, "reasons": "|".join(result.reasons)}
+            try:
+                adapter.to_bt(event)
+                event["adapter_accepted"] = True
+                event["adapter_reason"] = ""
+            except ValueError as exc:
+                event["adapter_accepted"] = False
+                event["adapter_reason"] = str(exc)
+                review.append(event)
+            events.append(event)
+            write_json(OUT / "events" / f"{aid}.json", {"source": source, "event": event})
+        except VendorBlocked:
+            raise
+        except Exception as exc:
+            source["error_type"] = type(exc).__name__
+        sources.append(source)
+        progress(pdfs_completed=index, events=len(events), accepted=sum(e["adapter_accepted"] for e in events))
+        if index % 10 == 0:
+            note({"phase": "pdfs", "done": index, "total": len(announcements), "events": len(events)})
+        write_json(OUT / "sources.json", sources)
+        csv_rows("events.csv", events)
+        csv_rows("review_list.csv", review)
+    report = dict(config=config, generated_at=now(), codes=len(sample), query_complete_codes=sum(r["query_complete"] for r in coverage),
+                  announcements=len(announcements), pdf_success=sum("pdf_sha256" in r and "error_type" not in r for r in sources),
+                  events=len(events), status_counts=dict(Counter(e["status"] for e in events)),
+                  adapter_accepted=sum(e["adapter_accepted"] for e in events), review=len(review),
+                  source_errors=sum("error_type" in r for r in sources),
+                  coverage_claim="fixed-query-scope study only; no full-market recall claim",
+                  owner_signature=None, lake_write_authorized=False, source_switch_authorized=False)
+    write_json(OUT / "report.json", report)
+    progress(phase="complete")
+    note(report)
+
+
+try:
+    main()
+except Exception as exc:
+    progress(phase="blocked", error_type=type(exc).__name__)
+    note({"phase": "blocked", "error_type": type(exc).__name__})
+    raise

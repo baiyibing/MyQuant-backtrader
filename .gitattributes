@@ -9,5 +9,8 @@ tests/fixtures/*.json text eol=lf
 # Store and check out as-is: no eol conversion anywhere.
 docs/backtest/b-l2-01-evidence-2026-09-30/** -text
 
+# Four-source research artifacts carry exact input/sample fingerprints.
+docs/operations/evidence/corp-actions-four-source-2026-10-30/** -text
+
 .githooks/* text eol=lf
 scripts/install-git-hooks.sh text eol=lf

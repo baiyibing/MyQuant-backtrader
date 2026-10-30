@@ -1,0 +1,32 @@
+[
+  {
+    "code": "301266.SZ",
+    "ex_date": "2025-05-30",
+    "announcement_id": "1223633595",
+    "announcement_url": "https://static.cninfo.com.cn/finalpage/2025-05-22/1223633595.PDF",
+    "pdf_sha256": "b32bd6c10b5f7c85d0de1f394ed5115d53fca11f0bca0ee2b31ab920c6920931",
+    "text_sha256": "2ffe0c0a491a26236c818f914a385c5d60c2c765cd343fd5c3d8e0835093e174",
+    "text_matches_c2_source_hash": true,
+    "cninfo_economic_cash": "0.1",
+    "hithink_price_reference_cash": "0.0999998",
+    "cninfo_economic_bonus_total": "0",
+    "hithink_price_reference_bonus_total": "0",
+    "classification": "DIFFERENT_DENOMINATOR_PRICE_REFERENCE_VS_ECONOMIC_ENTITLEMENT",
+    "evidence": "Announcement explicitly labels the hithink numbers as amounts spread over total share capital for ex-price calculation; amounts are not interchangeable for entitlement accounting."
+  },
+  {
+    "code": "301266.SZ",
+    "ex_date": "2026-05-22",
+    "announcement_id": "1225306973",
+    "announcement_url": "https://static.cninfo.com.cn/finalpage/2026-05-15/1225306973.PDF",
+    "pdf_sha256": "1d60be4e7019d0c105801f5658f428e3f5151bdfe1f733b318db7a48ca203843",
+    "text_sha256": "192dc5952014e715e942c4f376b018ed7909a36a16335867d234e7d15f3d1aba",
+    "text_matches_c2_source_hash": true,
+    "cninfo_economic_cash": "0.2",
+    "hithink_price_reference_cash": "0.1999990",
+    "cninfo_economic_bonus_total": "0.3",
+    "hithink_price_reference_bonus_total": "0.2999985",
+    "classification": "DIFFERENT_DENOMINATOR_PRICE_REFERENCE_VS_ECONOMIC_ENTITLEMENT",
+    "evidence": "Announcement explicitly labels the hithink numbers as amounts spread over total share capital for ex-price calculation; amounts are not interchangeable for entitlement accounting."
+  }
+]

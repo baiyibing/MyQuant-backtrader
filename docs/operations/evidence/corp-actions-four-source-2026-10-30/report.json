@@ -1,0 +1,73 @@
+{
+  "scope": {
+    "codes": 38,
+    "start": "2024-01-01",
+    "end": "2026-10-06",
+    "cninfo_events_total": 152,
+    "cninfo_selected": 147,
+    "accepted_total": 118,
+    "review_total": 34
+  },
+  "metrics": {
+    "listing_policy_events": 10,
+    "blank_to_zero_events": 62,
+    "hi_vs_wind_cash:EXACT": 139,
+    "hi_vs_wind_bonus:EXACT": 146,
+    "hi_vs_cninfo_cash:EXACT": 142,
+    "hi_vs_cninfo_bonus_raw:EXACT": 73,
+    "hi_vs_cninfo_bonus_adapted:EXACT": 114,
+    "qmt_date_present": 147,
+    "hithink_date_present": 147,
+    "wind_date_present": 147,
+    "adapter_accepted": 115,
+    "hi_vs_cninfo_bonus_adapted:NOT_ACCEPTED": 32,
+    "hi_vs_cninfo_bonus_raw:UNKNOWN": 73,
+    "hi_vs_wind_cash:DIFFERENT": 5,
+    "hi_vs_cninfo_cash:DIFFERENT": 2,
+    "hi_vs_wind_bonus:DIFFERENT": 1,
+    "hi_vs_cninfo_bonus_raw:DIFFERENT": 1,
+    "hi_vs_cninfo_bonus_adapted:DIFFERENT": 1,
+    "hi_vs_wind_cash:UNKNOWN": 3,
+    "hi_vs_cninfo_cash:UNKNOWN": 3
+  },
+  "policy_field_counts": {
+    "listing_ex_date_fields": 10,
+    "blank_to_zero_fields": 116
+  },
+  "distinct_difference_events": 5,
+  "cninfo_wind_run_a": {
+    "MATCH": 115,
+    "FIELD_DIFF": 0,
+    "CNINFO_ONLY": 0,
+    "WIND_ONLY": 32,
+    "WIND_UNAVAILABLE": 0,
+    "AMBIGUOUS": 0
+  },
+  "cninfo_wind_run_b": {
+    "MATCH": 147,
+    "FIELD_DIFF": 0,
+    "CNINFO_ONLY": 0,
+    "WIND_ONLY": 0,
+    "WIND_UNAVAILABLE": 0,
+    "AMBIGUOUS": 0
+  },
+  "safety": {
+    "owner_signature": null,
+    "lake_write_authorized": false,
+    "source_switch_authorized": false,
+    "automatic_acceptance": false,
+    "hithink_round4_policy_applied": false,
+    "qmt_amounts_compared": false,
+    "coverage_claim": "fixed-sample diagnostics only"
+  },
+  "source_snapshots": {
+    "cninfo_v10": "f00c75708f92d93db3ce7583e59b6cadc615c84b",
+    "cninfo_evidence": "ce30b8bf456fdaf7639b61650e339671482eaf09",
+    "wind_sha256": "6afe807a996fea68f2f34fa43344f44ca8f4254fb8580c9213bef6d443c3ba4d",
+    "hithink_sha256": "db19162144ca902160931a9eb9472a56e81580dc6d0f4ff4131b9647971c5a27",
+    "qmt_ex_date_index_sha256": "f19177339468ac43372d4298e9d08db9742d5c9e4aacde7afec042e5e522c601",
+    "qmt_root": "E:\\stock_data",
+    "qmt_ex_date_max": "20261015",
+    "listing_policy_evidence": "v8 pre-fallback extracted field vs v10; raw PDF text not replayed"
+  }
+}

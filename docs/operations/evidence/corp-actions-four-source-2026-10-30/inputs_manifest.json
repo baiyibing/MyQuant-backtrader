@@ -1,0 +1,130 @@
+[
+  {
+    "file": "wind.csv",
+    "repository": "MyQuant-backtrader",
+    "ref": "584538beff822c12b46079fc237a1771453ff25a",
+    "path": "data/corp_actions/bt_corp_actions_20261006/corp_actions.csv",
+    "bytes": 2189756,
+    "sha256": "6afe807a996fea68f2f34fa43344f44ca8f4254fb8580c9213bef6d443c3ba4d"
+  },
+  {
+    "file": "cninfo_events.csv",
+    "repository": "OSkhQuant1.3",
+    "ref": "ce30b8bf456fdaf7639b61650e339671482eaf09",
+    "path": "docs/architecture/reviews/2026-10-29/corp-actions-c2-wide-cninfo-parity-v10/events.csv",
+    "bytes": 33518,
+    "sha256": "0d7953ab14fc115a8d4376c3f7347b8de7a378e7bb312c3479f8927859bc7029"
+  },
+  {
+    "file": "review_list.csv",
+    "repository": "OSkhQuant1.3",
+    "ref": "ce30b8bf456fdaf7639b61650e339671482eaf09",
+    "path": "docs/architecture/reviews/2026-10-29/corp-actions-c2-wide-cninfo-parity-v10/review_list.csv",
+    "bytes": 9696,
+    "sha256": "509c7fe61cca342ac777dff01dbd5b01e885736f894511ac0b14b5b5b3e04495"
+  },
+  {
+    "file": "adapter_rejects.csv",
+    "repository": "OSkhQuant1.3",
+    "ref": "ce30b8bf456fdaf7639b61650e339671482eaf09",
+    "path": "docs/architecture/reviews/2026-10-29/corp-actions-c2-wide-cninfo-parity-v10/adapter_rejects.csv",
+    "bytes": 6969,
+    "sha256": "65583363eb1b7e34af8feee2316ff994064778904074a78214608b8dabbcae30"
+  },
+  {
+    "file": "sample_universe.txt",
+    "repository": "OSkhQuant1.3",
+    "ref": "ce30b8bf456fdaf7639b61650e339671482eaf09",
+    "path": "docs/architecture/reviews/2026-10-29/corp-actions-c2-wide-cninfo-parity-v10/inputs/sample_universe.txt",
+    "bytes": 380,
+    "sha256": "6db78525de45d90cf96de7927cb59b3b942b1c4dfec1dbaf2e7df8bc73ddad6c"
+  },
+  {
+    "file": "cninfo_run_manifest.json",
+    "repository": "OSkhQuant1.3",
+    "ref": "ce30b8bf456fdaf7639b61650e339671482eaf09",
+    "path": "docs/architecture/reviews/2026-10-29/corp-actions-c2-wide-cninfo-parity-v10/run_manifest.json",
+    "bytes": 4596,
+    "sha256": "5b031459b2e18783bc9886488a6954e5348be921bb78de463172d0d7a9a394c0"
+  },
+  {
+    "file": "cninfo_sources.json",
+    "repository": "OSkhQuant1.3",
+    "ref": "ce30b8bf456fdaf7639b61650e339671482eaf09",
+    "path": "docs/architecture/reviews/2026-10-29/corp-actions-c2-wide-cninfo-parity-v10/sources.json",
+    "bytes": 86970,
+    "sha256": "65ef12f0444a41c6ca4141f21dd2baeba3fac459c6f9e371d506d534d3c6854d"
+  },
+  {
+    "file": "cninfo_accepted.csv",
+    "repository": "OSkhQuant1.3",
+    "ref": "ce30b8bf456fdaf7639b61650e339671482eaf09",
+    "path": "docs/architecture/reviews/2026-10-29/corp-actions-c2-wide-cninfo-parity-v10/run_a_adapter_accepted/cninfo_adapter_accepted.csv",
+    "bytes": 18867,
+    "sha256": "8b5adc2b0016d6f0e4597dbda1b9b0d1f884524146b3c09ac2ec44f6c138ba72"
+  },
+  {
+    "file": "run_a_report.json",
+    "repository": "OSkhQuant1.3",
+    "ref": "ce30b8bf456fdaf7639b61650e339671482eaf09",
+    "path": "docs/architecture/reviews/2026-10-29/corp-actions-c2-wide-cninfo-parity-v10/run_a_adapter_accepted/parity_report.json",
+    "bytes": 3207,
+    "sha256": "feaa3f41eded9ce982d3cba6239bddaeecf32a6f8d3ec6183e9f7dc97d21e3e6"
+  },
+  {
+    "file": "cninfo_pre_adapter.csv",
+    "repository": "OSkhQuant1.3",
+    "ref": "ce30b8bf456fdaf7639b61650e339671482eaf09",
+    "path": "docs/architecture/reviews/2026-10-29/corp-actions-c2-wide-cninfo-parity-v10/run_b_pre_adapter_review_only/cninfo_pre_adapter_review_only.csv",
+    "bytes": 29285,
+    "sha256": "6dbe919c95b1b5f42b66d16888564b1d397a3d39e1283297fcc0b999aaabf95c"
+  },
+  {
+    "file": "run_b_report.json",
+    "repository": "OSkhQuant1.3",
+    "ref": "ce30b8bf456fdaf7639b61650e339671482eaf09",
+    "path": "docs/architecture/reviews/2026-10-29/corp-actions-c2-wide-cninfo-parity-v10/run_b_pre_adapter_review_only/parity_report.json",
+    "bytes": 3206,
+    "sha256": "9dcc40364904fb90b81b6649ce430cb14ab4f1c999300f42f29535bf133d9723"
+  },
+  {
+    "file": "v10_readme.md",
+    "repository": "OSkhQuant1.3",
+    "ref": "ce30b8bf456fdaf7639b61650e339671482eaf09",
+    "path": "docs/architecture/reviews/2026-10-29/corp-actions-c2-wide-cninfo-parity-v10/README.md",
+    "bytes": 8846,
+    "sha256": "76319282982248037b64dac69b918e25b480b0d52107fe79cece59a5f2742135"
+  },
+  {
+    "file": "extractor_v10.py",
+    "repository": "OSkhQuant1.3",
+    "ref": "f00c75708f92d93db3ce7583e59b6cadc615c84b",
+    "path": "oskh_disclosure/extractor_corp_actions.py",
+    "bytes": 20224,
+    "sha256": "9effaebd966749afa07bf77b4a198a8567d0a582e632a73916d52d4bce3382fb"
+  },
+  {
+    "file": "adapter_v10.py",
+    "repository": "OSkhQuant1.3",
+    "ref": "f00c75708f92d93db3ce7583e59b6cadc615c84b",
+    "path": "oskh_disclosure/corp_actions_adapter.py",
+    "bytes": 3521,
+    "sha256": "c18511341bbcbd4c92dcc61a50e7b6cc54484ca9f54d3010d3482950c25dd613"
+  },
+  {
+    "file": "crawl_driver_v7.py.txt",
+    "repository": "OSkhQuant1.3",
+    "ref": "ce30b8bf456fdaf7639b61650e339671482eaf09",
+    "path": "docs/architecture/reviews/2026-10-29/corp-actions-c2-wide-cninfo-parity-v10/crawl_driver_v7.py.txt",
+    "bytes": 10405,
+    "sha256": "965ee86d30788b56bb11b8d1abaa8163bf45f95f238f58497425b80ae7fc66cd"
+  },
+  {
+    "file": "cninfo_events_v8.csv",
+    "repository": "OSkhQuant1.3",
+    "ref": "8b2fc7c2be43bab01359eb2287d2f1415d022079",
+    "path": "docs/architecture/reviews/2026-10-29/corp-actions-c2-wide-cninfo-parity-v8/events.csv",
+    "bytes": 33949,
+    "sha256": "2602fd6e2f816c45a256cb679303ad17d101424cb489151594be3336c7dc722e"
+  }
+]

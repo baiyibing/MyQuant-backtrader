@@ -1,0 +1,53 @@
+"""Fetch hash-bound repository evidence for an offline four-source audit."""
+
+from concurrent.futures import ThreadPoolExecutor
+import hashlib
+import json
+from pathlib import Path
+import subprocess
+
+OUT = Path(__file__).resolve().parent / "inputs"
+OUT.mkdir(parents=True, exist_ok=True)
+BT_REF = "584538beff822c12b46079fc237a1771453ff25a"
+OSKH_REF = "ce30b8bf456fdaf7639b61650e339671482eaf09"
+CODE_REF = "f00c75708f92d93db3ce7583e59b6cadc615c84b"
+PACK = "docs/architecture/reviews/2026-10-29/corp-actions-c2-wide-cninfo-parity-v10/"
+FILES = [
+    ("wind.csv", "MyQuant-backtrader", BT_REF, "data/corp_actions/bt_corp_actions_20261006/corp_actions.csv"),
+    ("cninfo_events.csv", "OSkhQuant1.3", OSKH_REF, PACK + "events.csv"),
+    ("review_list.csv", "OSkhQuant1.3", OSKH_REF, PACK + "review_list.csv"),
+    ("adapter_rejects.csv", "OSkhQuant1.3", OSKH_REF, PACK + "adapter_rejects.csv"),
+    ("sample_universe.txt", "OSkhQuant1.3", OSKH_REF, PACK + "inputs/sample_universe.txt"),
+    ("cninfo_run_manifest.json", "OSkhQuant1.3", OSKH_REF, PACK + "run_manifest.json"),
+    ("cninfo_sources.json", "OSkhQuant1.3", OSKH_REF, PACK + "sources.json"),
+    ("cninfo_accepted.csv", "OSkhQuant1.3", OSKH_REF, PACK + "run_a_adapter_accepted/cninfo_adapter_accepted.csv"),
+    ("run_a_report.json", "OSkhQuant1.3", OSKH_REF, PACK + "run_a_adapter_accepted/parity_report.json"),
+    ("cninfo_pre_adapter.csv", "OSkhQuant1.3", OSKH_REF, PACK + "run_b_pre_adapter_review_only/cninfo_pre_adapter_review_only.csv"),
+    ("run_b_report.json", "OSkhQuant1.3", OSKH_REF, PACK + "run_b_pre_adapter_review_only/parity_report.json"),
+    ("v10_readme.md", "OSkhQuant1.3", OSKH_REF, PACK + "README.md"),
+    ("extractor_v10.py", "OSkhQuant1.3", CODE_REF, "oskh_disclosure/extractor_corp_actions.py"),
+    ("adapter_v10.py", "OSkhQuant1.3", CODE_REF, "oskh_disclosure/corp_actions_adapter.py"),
+    ("crawl_driver_v7.py.txt", "OSkhQuant1.3", OSKH_REF, PACK + "crawl_driver_v7.py.txt"),
+    ("cninfo_events_v8.csv", "OSkhQuant1.3", "8b2fc7c2be43bab01359eb2287d2f1415d022079",
+     "docs/architecture/reviews/2026-10-29/corp-actions-c2-wide-cninfo-parity-v8/events.csv"),
+]
+
+
+def fetch(item):
+    name, repo, ref, remote_path = item
+    path = OUT / name
+    if not path.is_file():
+        command = (["git", "show", f"{ref}:{remote_path}"] if repo == "MyQuant-backtrader" else
+                   ["gh", "api", f"repos/baiyibing/{repo}/contents/{remote_path}?ref={ref}",
+                    "-H", "Accept: application/vnd.github.raw+json"])
+        result = subprocess.run(command, capture_output=True, timeout=90, check=True)
+        path.write_bytes(result.stdout)
+    data = path.read_bytes()
+    return {"file": name, "repository": repo, "ref": ref, "path": remote_path,
+            "bytes": len(data), "sha256": hashlib.sha256(data).hexdigest()}
+
+
+with ThreadPoolExecutor(max_workers=3) as executor:
+    manifest = list(executor.map(fetch, FILES))
+(OUT / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+print(json.dumps(manifest, indent=2), flush=True)

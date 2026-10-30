@@ -1,19 +1,20 @@
-# corp-actions 双通道取数方案（wind 保留 + hithink 新增）— 2026-10-29
+# corp-actions hithink 候选与 CNINFO 协作方案 — 2026-10-30
 
-状态：**提案待评审**（2026-10-29 评审修订 v4：复审三条收口，变更记录见 §9）。评审通过前不动实现代码。本 PR 只含方案文档 + 一份非本方案范围的 [hithink 湖补强 backlog](hithink-lake-supplement-backlog-2026-10-29.md)。
+状态：**提案待评审**（2026-10-30 评审修订 v5：冻结四源核对与 CNINFO v10 协作合同，变更记录见 §9）。本 PR 保存方案、一次性研究证据和研究脚本原文，不实现生产取数分支、调度、消费切源或发布器。关联：[四源研究与独立扩样](note-corp-actions-four-source-study-2026-10-30.md)、非本方案范围的 [hithink 湖补强 backlog](hithink-lake-supplement-backlog-2026-10-29.md)。
 
 ## 1. 背景
 
 - corp-actions 增量（窗口 2026-10-07 → 2026-10-28，2774 码）被 kimi-datasource wind 后端间歇性 401 阻断，详见 [#523](https://github.com/baiyibing/MyQuant-backtrader/pull/523) 与 [状态文档](corp-actions-incremental-20261028-status.md)。换机实验已证伪本机因素，401 在服务端。
-- 2026-10-29 对同花顺官方数据服务 **hithink-finance**（[HiThink-Tech/Financial-API](https://github.com/HiThink-Tech/Financial-API)，`fuyao.aicubes.cn`）做了真实 API Key 探针 + 与 wind 冻结 base（`bt_corp_actions_20261006`，21779 事件 / 2693 码）全量对拍，结论：**可作为 wind 的并行取数通道**（对拍证据见 §7）。
+- 2026-10-29 对 **hithink-finance**（[公开接口契约](https://fuyao.aicubes.cn/llms-full.txt)）做了真实 API Key 探针 + 与 wind 冻结 base（`bt_corp_actions_20261006`，21779 事件 / 2693 码）全量对拍，可提供并行的批量事件候选（证据见 §7）；其调整价格数值不自动等于经济权利金额。
+- Wind 在线链路按不可用处置；既有 Wind 快照保留为离线基准，后续验证和经济日期补齐不以在线恢复为前提。CNINFO 已有独立的 v10 抽取与签收阶梯（OSkh [#1250](https://github.com/baiyibing/OSkhQuant1.3/pull/1250)、[#1251](https://github.com/baiyibing/OSkhQuant1.3/pull/1251)）；本方案与其按 §4.9 协作，不把 147 条 pre-adapter MATCH 当作 147 条可消费事件。
 
 ## 2. 目标 / 非目标
 
 ### 目标
 
 1. `pull_corp_actions_incremental.py` 取数层引入**通道（channel）抽象**：`wind`（现有 LLM 会话驱动，原样保留）与 `hithink`（直连 REST 全量 dump，无 LLM）。
-2. hithink 通道一次 dump 覆盖全 universe，替代逐码 LLM 会话的 463 任务模型；天然免疫 wind 401 与 LLM 会话抖动。
-3. 已冻结的 wind run（`bt_corp_actions_incr_20261024` / `_20261028`）续跑能力**不受影响**，wind 恢复后可直接续跑并对 hithink 结果交叉验证。
+2. hithink 通道一次 dump 提供当前 universe 的批量事件候选；缺码、经济口径与可消费状态分别验证，不把有 dump 等同于覆盖完整。
+3. 已冻结的 wind run（`bt_corp_actions_incr_20261024` / `_20261028`）保留原兼容性；如恢复，另验证其在线健康再续跑。离线 Wind 快照继续用于回归，不作为取得新日期的在线依赖。
 4. hithink 已知缺口（退市码、重整转增）以**运行时事实分类 + 冻结事实键**形式钉死，fail-closed，不静默吞掉。
 
 ### 非目标
@@ -22,7 +23,8 @@
 - 不动湖 schema（`EVENT_SCHEMA` 10 列不变）、不动 `prepare-merge` 的"只出候选、永不 apply"语义。
 - 不回填历史：hithink dump 含 1991 年以来深历史，本方案只取 run 窗口内事件；历史回填如需另行 GO。
 - 不配股入湖：hithink dump 含配股（allotment），wind base 无对应列，本方案落 sidecar 不消费。
-- 不实现日期回填机制（§4.8 定义路径与闸门，回填本身待 wind 恢复后另行小方案）。
+- 本 PR 不实现日期回填机制。CNINFO 完整公告事件或显式修订链提供经济事实候选，后续修订/发布另案；禁止只按代码和除权日拼接不同来源的字段（§4.9）。
+- 不改 QMT 行情/复权权威，不把 hithink 接入 `OSKH_DAILY_DOWNLOAD_BACKEND`。既有 BT 离线候选驱动保留；新增通用采集与生产发布由 1.3 负责，本仓只保留研究核对和已授权的离线候选路径。
 
 ## 3. 现状架构锚点
 
@@ -48,9 +50,9 @@
 
 1. `GET /api/dump/market-dumps/adjustment-factors/download-url`（Header `X-api-key`）→ 取 S3 预签名 URL（约 5 分钟有效，拿到立刻下载）。
 2. 下载全市场复权事件 Parquet（约 5.2 万行 / 5435 码 / <1 MB）→ `raw_events/hithink_dump.parquet`（原子写，沿用 `Run.write` 的 tmp+rename）。
-3. 校验：pyarrow 可读、必需列齐全（`thscode, ex_date_ms, dividend_per_share, per_share_bonus, allotment_ratio, allotment_price`）。**按完整经济键（全部原始列）去重**：完全相同的重复行折叠为一行（实测 000601.SZ 1997-11-03 两条逐字节相同，属上游重复而非并行事件）；同 `(thscode, ex_date_ms)` 但经济内容不同的行保留为多行（实测 000812.SZ、603883.SH，为同日分红/送股分行）。去重计数与折叠明细记入状态，不设"人工阈值"。
+3. 校验：pyarrow 可读、必需列齐全（`thscode, ex_date_ms, dividend_per_share, per_share_bonus, allotment_ratio, allotment_price, currency`），代码、日期、非负有限数值及 `currency=CNY` 合法。实测数值列为 Arrow `double`：先 `Decimal(str(value))` 再走精度/scale 校验，不用 `Decimal(float)` 注入二进制尾差，也不静默截位。**按完整经济键（全部原始列）去重**：完全相同的重复行折叠为一行（实测 000601.SZ 1997-11-03 两条逐字节相同，属上游重复而非并行事件）；同 `(thscode, ex_date_ms)` 但经济内容不同的行保留为多行（实测 000812.SZ、603883.SH，为同日分红/送股分行）。去重计数与折叠明细记入状态，不设"人工阈值"。
 4. 状态写 `work/hithink_state.json`：`dump_sha256`、`fetched_at`、`dump_rows`、`deduped_rows`、`universe_hits`（universe ∩ dump 且窗口内）、`codes_no_events`（dump 有该码但窗口内无事件）、`codes_vendor_unknown`（universe 中 dump 完全不存在的码）、`vendor_unknown_probes`（C 类目录探针证据，见 §4.3）。
-5. 幂等/续跑：已存在 dump 且无 `--refresh` 时 `pull` 直接报告现状退出 0；`--refresh` 仅在 `assemble` 未消费过旧 dump 前允许（已 assemble 的 dump sha256 被证据链钉住，换 dump 即校验失败，fail-closed）。
+5. 幂等/续跑：只在**完整提交标识、state、dump 均存在且哈希、schema、覆盖探针证据相符**时报告成功退出 0。最后写入的提交标识绑定全部产物哈希；只有 dump 或中断残留不得视为成功，非零退出并给出显式恢复指引。`--refresh` 仅在 `assemble` 未消费过旧 dump 前允许；重取、验证、state/提交标识写入须完整完成，不能复用旧探针或部分状态（已 assemble 的 dump sha256 被证据链钉住，换 dump 即失败）。
 - HTTP 走 stdlib `urllib`，不引新依赖。失败（HTTP 非 200 / `code != 0` / 下载或 parquet 校验失败）= 整体失败，退出码 2，无部分状态。
 
 **API Key**：仅从环境变量 `HITHINK_FINANCE_API_KEY` 读取；缺失即报错。禁止写入 run.json / tasks / 日志 / 文档 / git。runbook 中注明 Key 轮换入口在 `fuyao.aicubes.cn/admin`。
@@ -73,8 +75,10 @@
 | `source` | 字面量 | `hithink:market-dumps/adjustment-factors` |
 | `event_id` | 同 wind 规则 | `natural_key` + `_incr_` + sha20。**跨通道同事件不保证同 id**（见下），防重不依赖 id 相同 |
 
+字段名映射不是经济口径认证。四源核对已确认 `301266.SZ` 的 2025-05-30 / 2026-05-22：hithink 现金 `0.0999998 / 0.1999990`、2026 送转合计 `0.2999985` 对应公告**按总股本摊薄计算除权参考价**的数值；CNINFO 经济候选分别为 `0.1 / 0.2 / 0.3`。这属于分母/用途差异，不应因为小于 `1e-4` 就当成同一经济字段。当前十列仅保存来源原值和 source，缺日期仍受闸门阻断；以后即使日期完整，也须有经济口径验收，不能仅因字段齐全就进入 entitlement 计算。详见[研究证据](note-corp-actions-four-source-study-2026-10-30.md)。
+
 - 窗口过滤：`start ≤ ex_date ≤ end`；窗口外事件（含已宣告未除权的未来事件）不计入、不写 rejected（dump 是全量快照，下次 run 自然再捡到）。
-- 配股行（`allotment_ratio > 0`）：不映射进 events，落 `assembled/hithink_allotments.csv` sidecar + 计数进 summary。
+- 纯配股行（`allotment_ratio > 0` 且现金/送转均为 0）：不映射进 events，落 `assembled/hithink_allotments.csv` sidecar + 计数进 summary。配股与现金/送转共存的复合行落同一 sidecar 并标记 `mixed_economics_requires_review`，窗口内出现即阻断自动候选，不能丢弃整行后仍宣称经济覆盖完整。实测全历史有 83 条此形态，均为 1992–2000 年，不涉及本次增量窗；不因此授权历史回填。
 - 同日多行（分红/送股分行）：沿用现有 `natural_key` 合并语义；同键字段冲突照抛。同日多行不是新形态——wind base 本就有 42 例（event_id 带 `_1/_2` 后缀），hithink dump 实测 2 码 4 行同类（另有 000601.SZ 2 行完全重复，已在 §4.2 折叠），下游本就按 (code, ex_date) 日口径聚合。
 - 跨通道防重复合并的真实机制是 **base 钉死 + 窗口序贯**，不是 event_id 相同：`verify_base` 的 base_sha256 使湖一更新旧 run 即失效；`validate_base` 强制 base 事件 `ex_date ≤ base_ask_end`，init 强制增量窗口从 `ask_end+1` 起 → base 与 delta 的 (code, ex_date) 不可能重叠。wind 送转分列 vs hithink 合并口径下，同事件 `natural_key`（含全部数值列）几乎必然不同 → event_id 必然不同，"同 id 防重"只在数值完全一致的窄情形成立，**不作为安全依据**。
 - **显式加固（两通道通用）**：prepare_merge 在既有 event_id 碰撞检查之外，新增断言"delta 的 (code, ex_date) 与 base 无重叠"，把窗口序贯从构造性成立变为显式校验。
@@ -84,8 +88,8 @@
   |---|---|---|---|
   | A `delisted_explained` | base 有该码事件 且 `delist_date` 非空 且 **`delist_date < run.start`** | 放行（历史事件由 wind base 承载；**整窗在退市之后**，退市后无新事件） | 4 码：002231.SZ / 002898.SZ / 300379.SZ / 600200.SH（delist 2025-12-31 ~ 2026-07-17，均 < start 2026-10-07） |
   | B `delisted_no_history` | base 无该码事件 且 `delist_date` 非空 且 **`delist_date < run.start`** | 放行（整窗在退市之后且双侧一致无事件） | 3 码：000004.SZ / 000638.SZ / 920305.BJ（delist 2026-06-03 ~ 2026-07-30，均 < start） |
-  | C `trading_eventless` | base 无该码事件 且 `delist_date` 为空 | 仅在 **hithink 目录正向确认**后放行：pull 时逐码探 `GET /api/meta/tickers/search`（或逐码 adjustment-factors 端点），"目录认识该码 + 生涯零事件" = 在交易但无事件（dump 含已宣告未来事件，查无即真无）；探针证据（request_id、返回条目）写进 hithink_state。目录同样查无 → 归 D | 8 码：001239.SZ / 001330.SZ / 301292.SZ / 301565.SZ / 601399.SH / 688062.SH / 688221.SH / 688382.SH |
-  | D `unexplained` | **不满足 A/B/C 的一切情形**：`delist_date ≥ run.start`（`== start`、窗口内、`== end`、`> end` 均算——退市发生在窗口内/之后时，start..delist 之间仍可能有除权，dump 查无不构成解释；无论 base 有无事件）；listing 缺该码行；C 类探针失败 | **fail-closed 阻断**；唯一放行路径是 §4.4 `manual_overrides` | 3 码：000016.SZ / 002731.SZ / 601198.SH（listing 无退市日期，§7 注 2）；实测 universe 无任何码 `delist_date ≥ start`；base listing 另缺 12 个 universe 码（见下注） |
+  | C `trading_eventless` | base 无该码事件、listing 有该码且 `delist_date` 为空，并有明确的本查询范围无事件证据 | 目录精确命中只确认标的身份；还须事件端点成功返回有效空列表或经独立核实的等价覆盖证据。`3002` 的官方含义是“数据未就绪”，即使消息为 `No adjustment events` 也不能自动视作无事件；HTTP/业务错误、探针失败均归 D。证据须绑定请求参数、窗口、request_id、响应哈希，不声称“生涯零事件” | 旧 v4 的 8 码均返回 `3002`；本次没有可自动放行的 C 类证据，8 码转 D |
+  | D `unexplained` | **不满足 A/B/C 的一切情形**：`delist_date ≥ run.start`（含相等、窗口内、end、未来）；listing 缺行；C 类未就绪/失败或证据不足；base 有事件但无退市解释 | **fail-closed 阻断**；唯一放行路径是 §4.4 `manual_overrides` | 本次已知为原 3 码 000016.SZ / 002731.SZ / 601198.SH 加旧 C 类 8 码，共 11 码；分类仍由实际输入和证据运行时计算 |
 
   边界语义：`delist_date == run.start` 落 D（退市当日=窗口首日，此前仍有交易日可能除权）。实测补充（2026-10-29）：base listing 缺 12 个 universe 码（000777.SZ / 000778.SZ / 000779.SZ / 002374.SZ / 002375.SZ / 002376.SZ / 300948.SZ / 300950.SZ / 300952.SZ / 301119.SZ / 301122.SZ / 301123.SZ）——全部在 dump 有事件、不进 vendor_unknown 分类，但印证 base listing 覆盖本身有缺口；"listing 缺行 → D"为防御性规则。所有判定只取与当前 run universe 的交集；分类明细（每码落哪类、依据的 delist_date/事件计数）写进 summary.json。
 - `summary.json` 增 `"channel": "hithink"`、`dump_sha256`、`hithink_allotment_rows`、`vendor_unknown_classification`、`manual_overrides_applied`；`coverage_is_vendor_query_only` 保留为 True（dump 同样是 vendor 口径快照）。
@@ -126,7 +130,8 @@
 - 输入：hithink dump + base `events.parquet` + 排除清单。
 - **聚合口径（与 §7 对拍一致，转正自 `_tmp_hithink_probe/compare2.py`）**：按 `(code, ex_date)` groupby-**sum** 后比较；wind 侧 `bonus = bonus_ratio + transfer_ratio`（送转合并）。这是日口径比较，不是 assemble 的 per-event natural_key 口径——后者跨通道本就不同形（§4.3）。
 - **断言改为集合恒等**：实测差异集（全部 |Δ|≥1e-4 的 `(code, ex_date, field, wind_value, hithink_value)` 键）必须**等于** `known_discrepancies` 冻结集——实测多出冻结外任一键（新漂移）或冻结键未复现（上游已修订/口径变化）均非零退出。不按码剔除、不设比率阈值（消除"整码进容差名单后新差异被掩盖"的 fail-open）。
-- `仅 wind 有` 的键必须 ⊆ A/B 类（delisted）码 × 任意日期。
+- `仅 wind 有` 的键须按最终有效分类及证据解释：A/B 事实或经审批、尚有效且有适用日期范围的 D 类例外。不得用未应用 override 前的 D 分类一边允许 assemble、一边令 parity 永久失败；也不得仅因码在 override 中就把数值差异放行。报告逐键保留缺席及解释依据。
+- 四源研究另保留**全部精确数值差异**，包括小于 `1e-4` 的差异。上述历史 Wind 冻结集 gate 不等于经济金额验收；Wind 的 ROUND4/NULL-as-zero 比较政策不自动扩展至 hithink，也不把虚拟分派与实际派发当作同一字段。
 - 一致率（原始 99.95% / 99.83%）仅作观察指标随报告输出，不承担断言。
 - 输出 markdown 报告；触发人工逐案核对（冻结集该扩、该改，还是数据该质疑，由人裁）。
 
@@ -136,7 +141,7 @@ hithink 通道候选的 `review_requirements` 追加：
 
 - "hithink 行 record_date/pay_date/bonus_list_date 为 NULL、transfer_ratio 并入 bonus_ratio；economics 消费受 §4.8 闸门约束——回填前这些事件逐事件显式缺席（blocked 明细进统计），进不了 economics。"
 - "hithink 不覆盖 dump 查无的标的：按 §4.3 四类逐码判定（A/B 由 base 事实解释、C 经目录探针确认、D 阻断或 override）；本次 run 的 manual_overrides_applied 见 summary。"
-- "重整/债务重组转增不在 hithink 口径；**窗口内新发生的重整转增对本通道不可见**（表现为该码窗口无事件，覆盖断言无法发现），发布 GO 前必须完成 §5.3 同窗 wind diff 或显式记录放弃。"
+- "重整/债务重组转增不在 hithink 口径；窗口内新事件可能表现为该码无事件而逃过覆盖断言。须由独立公告查询、QMT 检测及逐项复核补充证据；不以 Wind 在线恢复为完成条件。"
 
 ### 4.7 发布后 base 的前向兼容（validate_base 分通道期望）
 
@@ -152,10 +157,32 @@ hithink 通道候选的 `review_requirements` 追加：
 
 **决策（显式终态，不是待办）**：
 
-1. **闸门语义 = 逐事件显式缺席（不是整批阻断）**：hithink 行进入共享 events.parquet；任何 corp_actions → ExDivEvent 的 loader 必须先过消费闸门。PR-A 新增 `backtest/research/corp_actions_econ_gate.py::gate_rows_for_economics(rows)` → 返回 `(accepted_rows, blocked_rows, reasons)`：`source` 以 `hithink:` 开头且 `pay_date` 为 NULL，或（`bonus_ratio`/`transfer_ratio` 非零且 `bonus_list_date` 为 NULL）→ 进 `blocked_rows`（**不 raise、不走 invalid_event 静默计数、不使用 :123 的 ex_date 回退**）；调用方只消费 `accepted_rows`，`blocked_rows` 明细（code/ex_date/缺失字段）写入运行统计。**批次级 raise 只用于身份/结构异常**：`source` 前缀既非 `wind:` 也非 `hithink:` → raise（不得当作 wind 或忽略）；wind 行维持现有校验。选择逐事件缺席而非整批阻断的理由：整批 raise 会让首个 hithink 窗口发布后 economics 整体不可用，与"其余事件照常消费"的研究需求冲突；且 NULL 的经济影响（现金不成应收、红股不可交易）本就是按事件粒度陈述的。闸门带 data-free 测试。
-2. **闸门不是"约定"而是结构保证（防死代码）**：(a) PR-A 把读取与闸门合成**唯一认可入口** `corp_actions_econ_gate.py::load_corp_actions_for_economics()`（读 parquet + 过闸门一体）；(b) **静态 fence 测试进 CI（data-free）**：扫描 `backtest/`、`trade_decision/`、`scripts/`，除该模块外任何文件出现对 corp_actions 湖的直接读取（`resolve_source_parquet("corp_actions"`、corp_actions `events.parquet` 路径引用、对其 `pq.read_table`）即失败——把问题从"希望未来 loader 调闸门"反转为"任何 loader 不得绕过闸门"；(c) 现状 economics 不读 corp_actions 湖（见上），fence 从第一天就拦住未来第一条直读路径。
-3. **NULL 不是可接受的最终状态**：发布 GO 检查项维持 §5.3——同窗 wind diff + 日期回填完成，或显式人裁放弃并记录理由。即使放弃回填，闸门保证 NULL 行进不了 economics：这些事件的现金/送转在回测中**显式缺席**（blocked 明细可监测、可追踪），而不是静默错算（现金不到账、红股提前可交易）。
-4. **回填路径**：wind 恢复后由 owner 侧以新 revision 修订（del+add）回填 record/pay/bonus_list 日期；prepare-merge 维持纯追加（`updated_event_rows: 0`），修订流程待 wind 实际恢复后另行小方案、人裁，本方案不实现。
+1. **闸门语义 = 逐事件显式缺席**：任何 corp_actions → ExDivEvent loader 必须先过 `gate_rows_for_economics(rows, *, evidence=None)`，返回 `(accepted_rows, blocked_rows, reasons)`。hithink 行 pay_date 为 NULL，或送转非零但上市日为 NULL，或缺少与本 revision/事件/字段数值哈希绑定的已审阅经济口径证据，均进 blocked；即使日期齐全，原始调整价格数值也不能直接进账。经济口径证据须指向已核验完整公告事件/修订链及适用政策，不能仅凭一个自填布尔值。调用方只消费 accepted，blocked 逐事件记录缺失字段/口径原因，不走 invalid_event 静默计数、不使用 ex_date 默认回退。身份/结构异常仍批次级 raise；当前 source 前缀仍仅接受 wind/hithink，不在本刀注册 CNINFO 消费。wind 行维持现有校验，闸门带 data-free 测试。
+2. **闸门不是约定而是结构保证**：(a) 唯一认可入口 `load_corp_actions_for_economics()` 合并读取行、验证 revision/经济证据 sidecar、过闸门，缺证据按上款阻断；(b) data-free fence 检查 economics 消费路径直接读湖的绕过行为，扫描范围和显式豁免由测试固定。合法维护/研究读取必须豁免，至少包括现有 `pull_corp_actions_incremental.py`、离线 parity/四源研究驱动及闸门模块；豁免仅允许读数/准备候选，不授予 economics 消费资格。既测非法消费绕过失败，也测维护驱动不会误报；(c) 现状 economics 不读该湖，不为本 PR 接入消费者。
+3. **可取候选不等于经济账完整**：分别报告 acquisition、evidence、economics-ready 状态；blocked 数量、代码/日期/原因及使用了哪些适配政策进入研究运行结果。含 blocked 事件的结果须明确 economics 不完整，不能因日志里有计数就宣称完整 NAV。发布前按 §4.9/§5 完成公告经济事实/修订候选审阅，或由 Human 显式接受对应缺席范围及其影响。
+4. **修订路径**：由 owner 侧依据 CNINFO 完整公告事件或显式修订链提出新 revision（del+add）候选，保留原始事实与政策适配的区别；Wind 快照作为可用历史对照。prepare-merge 仍纯追加（`updated_event_rows: 0`），修订/回填发布另案，不等待 Wind 在线恢复，也不在此处实现。
+
+### 4.9 QMT / hithink / CNINFO / Wind 协作合同
+
+| 来源 | 本次职责与字段边界 |
+|---|---|
+| QMT | 行情与价格复权权威不变；`cumulative_adj_factor=front/none`。`get_divid_factors` 七字段已有下载面，但现有 `ex_date_index` 只保留日期/`dr`；本次只验日期，不反推金额、不写回因子。七字段留存如需实施，另在 1.3 小方案中完成。 |
+| hithink | 批量事件发现与现金/送转核对；保留原始数值及 source。送转合并量不是送转分列事实；缺经济日期仍受 §4.8 阻断。 |
+| CNINFO | 复用 1.3 `mvp-v10`、adapter 和修订链，提供可追溯公告经济事实。实际派发/调整后金额、原文日期与经 Human 批准的适配政策分别留证。 |
+| Wind | #501 冻结快照为历史回归基准；在线状态为 unavailable，现有 run 保留兼容性，恢复后另取健康证据。 |
+
+- 经济候选以同一公告事件或可追溯修订链为整体；`(code, ex_date)` 只用于候选关联，不是跨源字段拼接或修订身份。多公告、同日多事件、金额/日期冲突都进入复核。不得只把 CNINFO 日期填入 hithink 的调整价格现金上就宣布可消费。
+- 现行 Human 政策继续遵守：空送转腿的条件适配为 0、Wind 比较的 ROUND4、缺失送转上市日按 ex_date、实施双口径优先调整后/实际派发。证据 sidecar 分别保存原始/抽取值、适配值、依据及版本；默认上市日不得标为“公告明示”。本方案不回退已批准政策，也不将其扩展到 hithink。
+- hithink 名单可用于优先核对，但不是 CNINFO 唯一采集分母。独立公告查询还须揭示缺失、修订、取消、重整与范围外事件；无返回、业务未就绪和查询失败不得混同。
+- 新候选只落独立研究目录。CNINFO C3、Owner 签收、合湖与主源切换仍是独立动作，本次研究与此方案均不代签、不启用。
+
+### 4.10 湖根、快照与共同窗口
+
+湖根以 `common.infra.data_root` 的实际解析结果为准；`.authority` 是配置位置标识，不证明各宿主数据同步。2026-10-30 本机为 `OSKH_SOURCE_PARQUET_ROOT=E:\stock_data` 且 marker 有效；F 是 75 物理机的路径，4090 不预设 F。原 PR 没有写死 F，不需要增加盘符探测。
+
+记录宿主/运行标识、解析后根、marker 指纹、每源文件 SHA256、数据截止日、冻结宇宙及窗口。当前本机 QMT 索引/因子到 2026-10-15，不能把之后的 hithink 事件判成 QMT 漏数；当前湖未部署 `corp_actions/`，首用基线须显式重建/交接并验证 revision 和全部哈希。全历史对拍和 2024–2026 固定样本对拍分开报告，不能混用分母。
+
+`fetched_at` 只表示取得文件的时刻；本次 dump 最大 ex_date 为未来的 2026-11-05，既不等于供应商已完成的覆盖水位，也不能证明所有已实施事件齐备。缺少供应商覆盖水位时明确记为未知，以独立公告/QMT 范围核对和 Human 窗口审阅决定是否可推进 ask_end，不能由最大 ex_date 推断。
 
 ## 5. 实施步骤（评审通过后）
 
@@ -163,12 +190,12 @@ hithink 通道候选的 `review_requirements` 追加：
    - `pull_corp_actions_incremental.py`：`--channel` / hithink pull（含 §4.2 全经济键去重、C 类目录探针）/ assemble 分支 / §4.3 四类覆盖断言（事实源 = 钉死的 listing + base events）/ `manual_overrides` 过期校验 / delta↔base (code, ex_date) 重叠断言 / validate_base 分通道期望（§4.7）。
    - `config/corp_actions_hithink_exclusions.json`：manual_overrides 骨架（空列表起步）+ `known_discrepancies` 全量 46 条冻结键（从 2026-10-29 探针产物生成）。
    - `backtest/research/corp_actions_econ_gate.py`（§4.8）+ data-free 测试。
-   - `tests/test_corp_actions_hithink_channel.py`（合成 dump 夹具，data-free）：字段映射、窗口过滤、全经济键去重（相同行折叠/冲突保留多行）、event_id 稳定、旧 wind run.json 无 channel 字段可加载、含 hithink 行（record_date=None）的 base 可通过 validate_base/prepare-merge、**四类覆盖断言逐类与边界（A/B 放行且要求 `delist_date < start`；`delist_date == start` / 窗口内 / `== end` / `> end`、listing 缺行均落 D；C 探针证据；D 阻断）**、**override 校验（日期格式、`approved_at ≤ review_after` 且非未来时间戳、`review_after` 日历过期即失效、未知 classification 拒绝、非 D 类码的 override 拒绝）**、delta↔base 重叠断言。
-   - `backtest/research/corp_actions_econ_gate.py` 测试（data-free）：逐事件 accepted/blocked 拆分与 reasons、blocked 明细进统计、未知 `source` 前缀批次级 raise、wind 行维持校验；**静态 fence 测试**（§4.8：economics 路径直读 corp_actions 湖 → fence 失败）。
+   - `tests/test_corp_actions_hithink_channel.py`（合成 dump 夹具，data-free）：字段/单位/CNY/精度校验、窗口过滤、全经济键去重、event_id 稳定、旧 wind run 可加载、含 hithink 行的 base 前向兼容；覆盖 A/B/C/D 边界与 `3002` 不作空事件、override 日期/枚举/实际分类校验、delta↔base 重叠；补 dump 已落但 state/提交标识缺失、哈希漂移、refresh 中断、double→Decimal、复合配股事件阻断用例。
+   - `backtest/research/corp_actions_econ_gate.py` 测试（data-free）：逐事件 accepted/blocked、blocked 明细、未知 source、wind 校验；日期齐全但经济口径未核验的 hithink 行仍阻断、证据 revision/数值哈希漂移拒绝；**静态 fence** 同时覆盖 economics 绕过失败与合法维护读取不误报。
    - `scripts/gates/verify_corp_actions_hithink_parity.py`（§4.5 集合恒等口径）。
    - runbook `corp-actions-incremental-driver.md` 增补 hithink 章节（Key env、四类判定、override 流程、闸门语义）。
-2. **首跑（人裁 GO 后）**：`init --channel hithink` 新 run-dir `D:\exports\bt_corp_actions_incr_20261028_hithink`（窗口 10-07→10-28，与 wind 冻结 run 同窗便于对照）→ `pull` → `assemble` → `prepare-merge`（不 apply）→ 人工审 `manifest-patch-plan.json`。预期首跑在 D 类 3 码（000016.SZ / 002731.SZ / 601198.SH）阻断，需先查清事实并落 override 或修订 listing——这是设计行为。
-3. **交叉验证**：parity gate 重跑（集合恒等）；wind 恢复后同窗 wind run 续跑，两候选 diff——**diff 结果必须逐键落零或 ∈ `known_discrepancies` 冻结集**（§4.5）；hithink-only 键 ⊆ 深历史/窗口外可解释范围，wind-only 键 ⊆ A/B 类码。同窗 wind 结果同时承担两职：(a) 提供 hithink 行缺失的 pay/record/bonus_list 日期事实（回填数据源，机制见 §4.8）；(b) 探测窗口内重整转增盲区（§4.6）。发布 GO 检查项：同窗 diff 已完成，或显式记录放弃及理由。
+2. **首跑（实现及人裁 GO 后）**：`init --channel hithink` 使用独立 run-dir 和冻结 10-07→10-28 窗口 → `pull` → `assemble` → `prepare-merge`（不 apply）→ 人工审 `manifest-patch-plan.json`。按已保存探针证据，原 D 类 3 码和旧 C 类 8 码共 11 码没有自动放行依据；须独立查清并落有效 override 或修订基线，不能把 `3002` 改成空事件。
+3. **交叉验证与补齐候选**：先复用四源 38 码研究，再用冻结 v10/政策的独立扩样检验（见[研究合同](note-corp-actions-four-source-study-2026-10-30.md)）；历史 Wind gate 保留，新增量由 hithink、QMT 共同覆盖范围与独立 CNINFO 公告查询核对。缺日期通过 §4.9 完整公告事件/修订候选处理，冲突逐项复核；不以 Wind 在线恢复作为完成或发布前提。缺席范围、政策值和经济账完整性均须显式审阅。
 4. **发布**：沿用既有"单独 Human GO + owner 侧 publisher"流程，本驱动永不 apply。
 
 ## 6. 风险与缓解
@@ -206,6 +233,16 @@ hithink 通道候选的 `review_requirements` 追加：
 4. Key 管理与轮换流程是否合规。
 
 ## 9. 评审修订记录
+
+### 2026-10-30 v5（四源研究与 CNINFO v10 协作）
+
+冻结 38 码原样本、v10 及已批准政策，补入 hithink dump / 本机 QMT 索引核对；新样本用独立 QMT 抽样框与固定 seed，不用 hithink 有事件名单筛选。证据和统计口径见[研究合同](note-corp-actions-four-source-study-2026-10-30.md)。
+
+1. Wind 在线不可用不再阻塞方案；CNINFO 完整经济事件/修订链与 hithink 批量发现协作，禁止按日键拼字段。
+2. 147 个 pre-adapter MATCH、115 个窗口内 adapter-accepted MATCH 与 34 条复核分别报告；政策值与原文抽取值留证，不宣称全市场召回。
+3. C 类不再由目录命中或 `3002` 自动放行；补齐成功提交标识/state/dump 的续跑合同、维护读取 fence 豁免与测试、double→Decimal 转换及复合配股阻断语义。
+4. 以 resolver / marker / 哈希 / 数据截止日冻结宿主输入；QMT 行情与复权权威不变，backlog 接口须先证明能力。
+5. 本次不实现生产采集、调度、消费者接线或发布；已批准适配政策及既有 Owner/C3/合湖边界保留。
 
 ### 2026-10-29 v4（复审收口，结论 Request changes（小幅）→ 三条全部落实）
 

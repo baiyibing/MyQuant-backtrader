@@ -2,17 +2,17 @@
 
 状态：**候选清单，未排期**。非 [corp-actions 双通道方案](plan-corp-actions-hithink-channel-2026-10-29.md) 范围；每项落地各自小方案 + 单独 Human GO。
 
-来源：PR #531 评审补充——湖数据集清单（`common/infra/data_root.py`）× hithink 官方目录（`fuyao.aicubes.cn/llms-full.txt`）× [`docs/research/a-stock-data-reviews/SYNTHESIS.md`](../research/a-stock-data-reviews/SYNTHESIS.md) 已列补缺候选的交集。
+来源：PR #531 评审补充，2026-10-30 按本机湖与接口探针修订。既有候选来自湖清单与 SYNTHESIS；**候选名称不等于已证实的 API 能力**。公开 `llms-full.txt` 未列出下表所称 `holiday-calendar/index-cons/stock-basic-info/stock-close-values` dump；按 `GET /api/dump/market-dumps/<name>/download-url` 模式实测均为 404，只说明这些测试路径不可用，不能据此断言服务无对应数据。落地前须补真实端点、schema、授权范围和快照证据，不能承诺“一次 dump 即可”。
 
 ## 候选项
 
 | # | 湖内现状 / 缺口 | hithink 来源 | 价值与定位 | 优先级 |
 |---|---|---|---|---|
-| A | 交易日历无湖侧 SSOT，回测日历靠 pandas-market-calendars 推算（SYNTHESIS 下一步已排"2027 日历 diff"探针） | `holiday-calendar` dump（2000–2030） | 官方休市日历落湖侧 calendar 旁表，替代第三方推算；1 次调用 | 高（最小起点） |
-| B | `index/period=1d` 只有价格、无成分/权重 | `index-cons` dump（沪深300/中证500/1000 + 28 扩展指数，含权重）+ mcp `index-weight` | SYNTHESIS 补缺候选"中证/国证当前成分权重"；池构建与指数对冲回测。**当前快照**，须带 `fetched_at` 钉住，PIT 变迁仍缺 | 高 |
-| C | `adj_factor.parquet` / `ex_date_index`（QMT 价格侧权威）无第二独立审计源 | **corp-actions 双通道方案已拉的同一份 adjustment-factors dump，零新增取数成本** | `(thscode, ex_date)` 集合对 `ex_date_index` 做 diff，抓 QMT 日更漏日/错漏除权。SYNTHESIS 点 6：腾讯 qfq ≠ 新浪 ≠ QMT 因子互不一致，多源审计是既有需求 | 高（搭车） |
-| D | `stock`/`index`/`etf` `period=1d` 收盘列质量无独立源 | `stock-close-values` / `index-close-values` / `etf-close-values` dumps（1990→ 全市场收盘序列，中量级） | 周期性全量收盘 diff，抓漏日/坏点。**审计源，非替换源**（仅收盘序列，无完整 OHLCV/量） | 中 |
-| E | `float_shares` / `free_float_shares` 陈旧度未知 | `stock-basic-info` dump（总股本/流通股本/上市日期/状态，全市场） | float 审计旁表；快照性质同 B，带 `fetched_at` | 中 |
+| A | 本机无独立湖日历旁表，但 1.3 已有 `TradeCalendarPort`、PMC/QMT/本地日历解析链 | `holiday-calendar` 为待证实的 dump 候选；公开交易日历接口按其实际范围核实 | 先做离线 diff，再考虑旁表；不在 #531 替换现有日历端口或生产来源，不预设 2000–2030 范围 | 待端点验证 |
+| B | `index/period=1d` 有价格，当前成分/权重与 PIT 历史须分别核实 | `index-cons` dump 名称待证实；已公开成分接口可另做能力探针 | 当前快照带 `fetched_at` 与适用日，不充当 PIT 变迁；先证明权重/范围字段 | 待端点验证 |
+| C | QMT `adj_factor` / `ex_date_index` 已有权威链，需要独立审计 | 已取得并冻结 SHA256 的 `adjustment-factors` dump；与 CNINFO v10 / Wind 离线快照协作 | [四源研究](note-corp-actions-four-source-study-2026-10-30.md)先验日期与经济口径；共同窗口和宇宙一致。QMT 七字段留存另在 1.3 规划，不用 `dr` 或 hithink 数值重写 front/因子 | 优先，已有证据 |
+| D | QMT 股票/指数/ETF 各自分树、raw/front 含义固定 | `stock-close-values` 等 dump 名称、范围待证实 | 单独按资产、复权方式、交易日、停牌/填充语义对拍；仅审计，不混写 QMT 行情 | 待端点验证 |
+| E | 本机 `float_shares` 快照 2026-09-26；`free_float_shares` 最大记录日 2026-05-30，后者不等于采集时间 | `stock-basic-info` dump 名称待证实；需确认单位、流通/自由流通定义和时间字段 | 当前基本资料不能替代历史自由流通股本；先补新鲜度与历史可知性元数据，再做同口径快照核对 | 中，先核查现有 QMT |
 | F | —（新研究数据集） | `fund-flow-stocks` dump（个股资金流近 100 日全市场） | 窗口浅，研究旁表候选 | 低 |
 | G | —（财报族因子） | mcp `stat-finance` 系（归母净利/营收/ROE/毛利率…，逐码查询） | **不做**：逐码调用 + 官方自警 429 / 按指数成分展开的调用放大——正是 corp-actions 双通道要摆脱的 463 任务模式的翻版 | 不做 |
 
@@ -25,5 +25,6 @@
 ## 工程约定（复用 corp-actions 双通道已验证骨架）
 
 - env Key（`HITHINK_FINANCE_API_KEY`）、原子写（tmp+rename）、dump sha256 + `fetched_at` 进 state 证据链、排除/容差清单 fail-closed、单独 Human GO。
-- corp-actions PR-A 实现时把"dump 下载 → 必需列校验 → sha256/state 留证"抽成函数级公用件（不引新依赖）；A–E 每数据集一个薄 driver，不做巨脚本。
+- 不因候选清单提前抽象 A–E 通用采集平台。既有 BT 离线候选授权保留，新增通用采集/生产发布归 1.3；确认真实第二个数据集契约后再决定是否提取最小公用函数。
 - 上游契约以 `fuyao.aicubes.cn/llms-full.txt` 为准并记版本/日期进 state，防上游静默改列（同 corp-actions 方案 §6 风险条目）。
+- 湖根只经 resolver，`.authority` 与输入哈希留证：本机 E、75 物理机 F，4090 以自身配置为准；不把物理盘符当作跨宿主契约。
