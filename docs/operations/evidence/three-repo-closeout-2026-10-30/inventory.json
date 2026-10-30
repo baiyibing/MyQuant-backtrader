@@ -3950,6 +3950,16 @@
       ],
       "pr_url": "https://github.com/baiyibing/MyQuant-backtrader/pull/540",
       "domain_record": "docs/operations/batch0-run-protocol-admission-2026-10-30.md"
+    },
+    {
+      "package_id": "P05",
+      "audit_ids": [
+        "SDD_RUNTIME",
+        "V653_PAPER_FIRST_DAY"
+      ],
+      "pr_url": "https://github.com/baiyibing/OSkhQuant1.3/pull/1259",
+      "scope": "Windows slot-writer compatibility and selected local host preparation; no first-day closure",
+      "domain_record": "docs/run-records/2026-10-30-v653-local-readiness.md"
     }
   ]
 }

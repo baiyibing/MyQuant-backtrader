@@ -32,8 +32,10 @@ Windows 默认 GBK 模式下，原有无编码 `read_text()` 测试会解码 UTF
 
 ## 批次 0D / 0F / 0.5 准备
 
-[首日输入回执](evidence/three-repo-closeout-2026-10-30/batch0-readiness.json)记录本机已配置湖根和 resolver 读回、marker SHA 及目录存在。目标 paper 宿主尚待用户指定，I01～I07 均没有现场签收。源码字段已核与目标数据有效分开记录。
+[首日输入回执](evidence/three-repo-closeout-2026-10-30/batch0-readiness.json)记录本机已配置湖根和 resolver 读回、marker SHA 及目录存在。用户已指定本机 `DESKTOP-M5HCFD6`；[1.3 #1259](https://github.com/baiyibing/OSkhQuant1.3/pull/1259)保存独立部署候选的私有配置/空库准备、Redis 隔离租约实测、Windows 运维入口修复与正式预检拒绝结果。真实账户信息不在本仓复制。
+
+I01 配置与 I02 schema 已核；I03 Redis 原语通过但正式槽和旧栈残留交接未签；I04 无新首日批准名单，I05 指数日线止于 2026-10-15，I07 首日日期/窗口待定，继续阻塞真实启动。I06 的日线 volume 合同已核，但不据此代签 SHM 生产者或其他分钟消费者。precheck 为 14 PASS / 3 FAIL / 1 WARN，dry-run 拒启；这次准备不关闭 P05 或完整 SDD，不新增模式 E 为受限 paper 首日的硬前置。
 
 [Owner 队列](evidence/three-repo-closeout-2026-10-30/batch0-owner-queue.json)已核三仓默认分支和 CI 检查名：1.3 main、MyQuant/BT master 均未保护；1.3 rulesets 查询为套餐限制 403，其他两仓为空。列出供 Owner 选择的实际 job context，以及设置后读回和失败/缺 check 验证所需材料。本轮未变更 GitHub 设置，OP17/BT-11 保持待人工。
 
-机器索引的 `implementation_refs` 已指向 [MyQuant #110](https://github.com/baiyibing/MyQuant/pull/110) 和 [BT #540](https://github.com/baiyibing/MyQuant-backtrader/pull/540)。这里仅保存实施入口，最新状态由 PR 读取；完成条件满足后再追加 `closeout_receipts`。
+机器索引的 `implementation_refs` 已指向 [MyQuant #110](https://github.com/baiyibing/MyQuant/pull/110)、[BT #540](https://github.com/baiyibing/MyQuant-backtrader/pull/540) 和 [1.3 #1259](https://github.com/baiyibing/OSkhQuant1.3/pull/1259)。这里仅保存实施入口，最新状态由 PR 和原域回执读取；冻结审计条目及现有 `closeout_receipts` 保持原样，完成条件满足后再追加关闭回执。
