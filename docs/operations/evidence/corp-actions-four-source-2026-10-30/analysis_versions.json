@@ -1,0 +1,16 @@
+{
+  "generated_at": "2026-10-30T04:21:22.480857+00:00",
+  "python": "3.12.13 | packaged by Anaconda, Inc. | (main, Jul  9 2026, 14:26:47) [MSC v.1942 64 bit (AMD64)]",
+  "pandas": "2.3.3",
+  "pyarrow": "25.0.0",
+  "scripts": {
+    "confirmed_case_notes.py.txt": "d1e6a64934647cbe1874b0066e3222795e9429ac468cb8b8dbb11b75d77fb374",
+    "fetch_inputs.py.txt": "d9c80494d873e851ef6ac9ee6cdd6be1276f8d494a5316b6d8683a2670a117bc",
+    "four_source_audit.py.txt": "9678360c7c88c5f8d5f8b04ec0ceb9ad24f82cc7a8e8aee7d39eb25a14448f80",
+    "heldout_crawl.py.txt": "8b81aa9a2ade348fd182c31e7b4d07f0875700084c5900f5476704d1eb87dad5",
+    "query_audit.py.txt": "a4222b3f0564d095830d4c0e00ada70ad876693b6d7232b8827641f56778979b",
+    "summarize_holdout.py.txt": "4432eecc507e1a888e27f184d6fb0833ee6fb569be97dc8ce1a873769424bf80"
+  },
+  "extractor_policy_changed": false,
+  "economics_ready_assessed": false
+}

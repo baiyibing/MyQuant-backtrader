@@ -1,0 +1,106 @@
+"""Pin bounded human-readable study observations, without changing extraction."""
+
+import csv
+import hashlib
+import json
+from pathlib import Path
+
+import pandas as pd
+import pyarrow.parquet as pq
+
+HERE = Path(__file__).resolve().parent
+RAW = HERE / "bt_corp_actions_cninfo_backup_20261030"
+
+def source(aid):
+    entry = json.loads((RAW / "events" / f"{aid}.json").read_text(encoding="utf-8"))
+    text = (RAW / "txt" / f"{aid}.txt").read_text(encoding="utf-8")
+    assert hashlib.sha256(text.encode("utf-8")).hexdigest() == entry["source"]["text_sha256"]
+    assert hashlib.sha256((RAW / "pdf" / f"{aid}.pdf").read_bytes()).hexdigest() == entry["source"]["pdf_sha256"]
+    return entry, text
+
+cross_page, text = source("1225385031")
+assert cross_page["event"]["code"] == "000551.SZ"
+assert cross_page["event"]["pay_date"] is None
+assert "missing_pay_date" in cross_page["event"]["reasons"]
+assert "现金红利将于2026 年7" in text
+assert "月3 日通过股东托管证券公司" in text
+original, original_text = source("1220064023")
+correction, correction_text = source("1220070414")
+assert original["event"]["pay_date"] == "2024-05-21"
+assert original["event"]["ex_date"] == "2024-05-22"
+assert "更正前" in correction_text and "更正后" in correction_text
+assert "于2024 年5 月21 日通过" in correction_text
+assert "于2024 年5 月22 日通过" in correction_text
+adjusted_2024, adjusted_2024_text = source("1220534844")
+adjusted_2025, adjusted_2025_text = source("1224145554")
+assert adjusted_2024["event"]["cash_div_per_share"] == "0.1"
+assert adjusted_2025["event"]["cash_div_per_share"] == "0.05"
+assert adjusted_2024["event"]["adapter_accepted"] and adjusted_2025["event"]["adapter_accepted"]
+assert "0.999985元" in "".join(adjusted_2024_text.split())
+assert "0.499999元" in "".join(adjusted_2025_text.split())
+hpath = HERE.parents[1] / "_agent_runs/pr531_lake_audit_20261029/hithink_dump.parquet"
+hhash = hashlib.sha256(hpath.read_bytes()).hexdigest()
+assert hhash == "db19162144ca902160931a9eb9472a56e81580dc6d0f4ff4131b9647971c5a27"
+hframe = pq.ParquetFile(hpath).read().to_pandas().drop_duplicates()
+hframe["day"] = pd.to_datetime(hframe.ex_date_ms, unit="ms", utc=True).dt.tz_convert("Asia/Shanghai").dt.strftime("%Y-%m-%d")
+for day, expected in (("2024-07-11", "0.0999985"), ("2025-07-18", "0.0499999")):
+    selected = hframe[(hframe.thscode == "300243.SZ") & (hframe.day == day)]
+    assert len(selected) == 1 and str(selected.iloc[0].dividend_per_share) == expected
+differentiated, differentiated_text = source("1225136155")
+assert differentiated["event"]["cash_div_per_share"] == "0.4921"
+assert all(value in differentiated_text for value in ("0.4921", "0.3906", "0.42"))
+wind_path = HERE / "inputs/wind.csv"
+wind_hash = hashlib.sha256(wind_path.read_bytes()).hexdigest()
+assert wind_hash == "6afe807a996fea68f2f34fa43344f44ca8f4254fb8580c9213bef6d443c3ba4d"
+with wind_path.open(encoding="utf-8", newline="") as stream:
+    wind_classes = [row for row in csv.DictReader(stream) if row["code"] == "600989.SH" and row["ex_date"] == "2026-04-28"]
+assert sorted(row["cash_div_per_share"] for row in wind_classes) == ["0.3906", "0.4921"]
+bj, bj_text = source("1225331866")
+assert bj["event"]["record_date"] is None and not bj["event"]["adapter_accepted"]
+assert "权益登记日为：2026 年6 月1 日" in bj_text
+notes = {
+    "method": "Bounded source-text inspection, not an independently labeled full-sample accuracy test or Owner signoff",
+    "extractor_policy_changed": False,
+    "hithink_snapshot_sha256": hhash,
+    "wind_snapshot_sha256": wind_hash,
+    "cases": [
+        {"code": "000551.SZ", "announcement_id": "1225385031", "source": cross_page["source"],
+         "observation": "PDF page 2 ends the pay-date sentence at year 2026/month 7; page 3 continues with day 3 after a repeated page header.",
+         "source_pay_date": "2026-07-03", "frozen_v10_pay_date": None,
+         "disposition": "REVIEW_MISSING_PAY_DATE", "classification": "verified_cross_page_parse_miss",
+         "follow_up": "Handle page headers and date continuations in a later revision; keep this run frozen and use a new holdout for rescoring."},
+        {"code": "000088.SZ", "announcement_ids": ["1220064023", "1220070414"],
+         "sources": [original["source"], correction["source"]],
+         "observation": "The original implementation notice states May 21 for payment; the explicit correction changes it to May 22 and keeps other terms unchanged.",
+         "original_pay_date": "2024-05-21", "corrected_pay_date": "2024-05-22", "ex_date": "2024-05-22",
+         "disposition": "BOTH_REVIEW_NO_AUTOMATIC_MERGE", "classification": "verified_source_revision_chain",
+         "follow_up": "Resolve an explicit supersedes chain with source identities; a same-day sum or field stitching cannot resolve the revision."},
+        {"code": "300243.SZ", "announcement_ids": ["1220534844", "1224145554"],
+         "sources": [adjusted_2024["source"], adjusted_2025["source"]],
+         "observation": "Both implementation notices change the per-share payment after share-capital changes while keeping the total payout unchanged. Hithink equals the adjusted gross per-share payment, rather than a different price-only denominator.",
+         "adjusted_gross_cash_per_share": ["0.0999985", "0.0499999"],
+         "hithink_cash_per_share": ["0.0999985", "0.0499999"],
+         "frozen_v10_cash_per_share": ["0.1", "0.05"],
+         "observed_candidates": [{"original": "0.100", "adjusted": "0.0999985", "chosen": "0.1000"},
+                                  {"original": "0.050", "adjusted": "0.0499999", "chosen": "0.0500"}],
+         "disposition": "BOTH_ACCEPTED_BY_FROZEN_V10_NO_POLICY_CHANGE",
+         "classification": "verified_precision_loss_under_approved_round4_policy",
+         "follow_up": "Keep the current approved comparison policy for this run; propose separate preservation of exact adjusted/actual source values and comparison tolerance in a later reviewed revision. CNINFO extraction is not independent ground truth."},
+        {"code": "600989.SH", "announcement_id": "1225136155", "source": differentiated["source"],
+         "observation": "The notice explicitly distinguishes minority holders at 0.4921/share from major holders at 0.3906/share. Its 0.42/share is the virtual payout for the ex-price formula. Frozen Wind has separate 0.4921 and 0.3906 rows; the audit's day sum 0.8827 is not any holder's per-share entitlement.",
+         "minority_cash_per_share": "0.4921", "majority_cash_per_share": "0.3906",
+         "price_reference_virtual_cash": "0.42", "wind_daily_sum_diagnostic": "0.8827",
+         "wind_class_rows": wind_classes, "frozen_v10_cash": "0.4921",
+         "classification": "verified_holder_classes_make_day_sum_non_entitlement",
+         "follow_up": "Preserve source row identities and verified holder applicability in evidence. The historical daily-sum parity gate remains a diagnostic and cannot authorize economics."},
+        {"code": "920018.BJ", "announcement_id": "1225331866", "source": bj["source"],
+         "observation": "The notice uses the label 权益登记日 with an explicit June 1 date, and states a cash scheme without an explicit gross marker in that clause. Frozen v10 leaves record_date and cash unknown and rejects the document.",
+         "source_record_date": "2026-06-01", "source_ex_date": "2026-06-02",
+         "source_pay_date": "2026-06-02", "frozen_v10_record_date": None,
+         "classification": "verified_bj_template_and_gross_basis_coverage_gap",
+         "follow_up": "Review BJ labels, gross-payment evidence and share-leg component scopes in a later revision; do not invent missing fields or silently broaden approved policies."}
+    ],
+    "owner_signature": None, "lake_write_authorized": False
+}
+(HERE / "results/confirmed_case_notes.json").write_text(json.dumps(notes, ensure_ascii=False, indent=2)+"\n", encoding="utf-8")
+print(json.dumps({"verified_cases": len(notes["cases"]), "source_documents": 7}))

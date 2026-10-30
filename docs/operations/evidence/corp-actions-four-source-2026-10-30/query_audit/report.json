@@ -1,0 +1,26 @@
+{
+  "query_pages": 959,
+  "schema_issue_pages": 0,
+  "schema_issues": [],
+  "other_code_item_occurrences": 61,
+  "distinct_other_code_documents": 61,
+  "requested_codes_with_mismatches": [
+    "920077",
+    "920242",
+    "920339",
+    "920344",
+    "920454",
+    "920491",
+    "920547",
+    "920556",
+    "920735",
+    "920786",
+    "920819",
+    "920974",
+    "920981"
+  ],
+  "distinct_mismatches_same_org": 61,
+  "alias_policy_applied": false,
+  "collector_changed": false,
+  "caveat": "Same orgId is an identity diagnostic, not an approved cross-code security mapping."
+}
