@@ -1,0 +1,115 @@
+{
+  "schema_version": 1,
+  "recorded_at_utc": "2026-10-30T11:38:47.460683+00:00",
+  "plan": "https://github.com/baiyibing/MyQuant-backtrader/pull/539",
+  "scope": "Batch0/0.5 offline preparation and configured local root readback only",
+  "target_paper_host": null,
+  "target_host_status": "AWAITING_USER_SELECTION",
+  "local_observation": {
+    "host": "DESKTOP-M5HCFD6",
+    "source_root": "E:\\stock_data",
+    "root_exists": true,
+    "marker_exists": true,
+    "marker_sha256": "7b2ab4ce1d4c1e98dba7320915d09a56eef613d423504bc6af6c88e5d4036e16",
+    "marker_format": "non-JSON; contents not printed",
+    "stock_1d_exists": true,
+    "index_1d_exists": true,
+    "etf_1d_exists": true,
+    "stock_1m_exists": true,
+    "observed_at_utc": "2026-10-30T11:38:46.685518+00:00",
+    "resolved_roots": {
+      "container": {
+        "path": "E:\\stock_data",
+        "exists": true
+      },
+      "stock_1d": {
+        "path": "E:\\stock_data\\stock\\period=1d",
+        "exists": true
+      },
+      "stock_1m": {
+        "path": "E:\\stock_data\\stock\\period=1m",
+        "exists": true
+      },
+      "index_1d": {
+        "path": "E:\\stock_data\\index\\period=1d",
+        "exists": true
+      },
+      "etf_1d": {
+        "path": "E:\\stock_data\\etf\\period=1d",
+        "exists": true
+      }
+    }
+  },
+  "readiness": [
+    {
+      "id": "I01",
+      "input": "host/runtime/vendor",
+      "status": "TARGET_HOST_PENDING",
+      "host_evidence_urls": []
+    },
+    {
+      "id": "I02",
+      "input": "account/userdata/independent DB/schema",
+      "status": "TARGET_HOST_PENDING",
+      "host_evidence_urls": []
+    },
+    {
+      "id": "I03",
+      "input": "Redis/SDD namespace and slot",
+      "status": "TARGET_HOST_PENDING",
+      "host_evidence_urls": []
+    },
+    {
+      "id": "I04",
+      "input": "approved pool/file hash/session",
+      "status": "TARGET_HOST_PENDING",
+      "host_evidence_urls": []
+    },
+    {
+      "id": "I05",
+      "input": "source B index daily OHLCV and vendor evidence",
+      "status": "STATIC_CONTRACT_VERIFIED_HOST_PENDING",
+      "host_evidence_urls": []
+    },
+    {
+      "id": "I06",
+      "input": "applicable SHM capability and consumer fields",
+      "status": "STATIC_CONTRACT_VERIFIED_HOST_PENDING",
+      "host_evidence_urls": []
+    },
+    {
+      "id": "I07",
+      "input": "legal new trading day/window",
+      "status": "TARGET_HOST_PENDING",
+      "host_evidence_urls": []
+    }
+  ],
+  "static_contract": {
+    "source_sha": "7e52e6e0cd6a289ad04bccaefb5edced40850841",
+    "source_b": {
+      "asset": "index",
+      "period": "1d",
+      "adjust_type": "none",
+      "sessions": "T-11..T-1",
+      "required_positive_finite_fields": [
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume"
+      ],
+      "zero_volume_gate": "UNKNOWN"
+    },
+    "minute_bar_volume_dependency": "Not found in current v653 wiring; target deployment producer dependencies still require verification",
+    "sources": [
+      "https://github.com/baiyibing/OSkhQuant1.3/blob/7e52e6e0cd6a289ad04bccaefb5edced40850841/live_trading/runtime/v653/inputs.py#L36",
+      "https://github.com/baiyibing/OSkhQuant1.3/blob/7e52e6e0cd6a289ad04bccaefb5edced40850841/tests/test_v653_paper_wiring.py#L313"
+    ]
+  },
+  "limits": [
+    "Local configured roots/marker presence and SHA only; no other machine was probed.",
+    "No real runtime/account/Redis/approved-pool/date signoff; target host remains pending.",
+    "No QMT/paper/service startup, lake writes, production notifications, or training.",
+    "I05/I06 static verification does not mean target data is valid."
+  ]
+}

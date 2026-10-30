@@ -1,5 +1,6 @@
 """Data-free orchestration and interrupted publish checks (stdlib unittest)."""
 import json
+import os
 import tempfile
 import threading
 import unittest
@@ -361,7 +362,7 @@ def test_progress_invalid_utf8_warns_and_appends(tmp_path, monkeypatch, capsys):
     err = capsys.readouterr().err
     assert 'WARNING' in err and str(pipeline.PROGRESS) in err
     assert 'header lacks archive_s' in err
-    assert pipeline.PROGRESS.read_bytes() == legacy + (row + '\n').encode('utf-8')
+    assert pipeline.PROGRESS.read_bytes() == legacy + (row + os.linesep).encode('utf-8')
 
 
 def test_progress_current_header_does_not_warn(tmp_path, monkeypatch, capsys):

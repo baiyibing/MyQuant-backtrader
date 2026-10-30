@@ -595,12 +595,69 @@ def test_normal_and_low_cash_cannot_pass_without_trigger(pair):
 def test_low_cash_refusal_requires_real_exception_signature(pair):
     passing = {"status": "PASS"}
     genuine = [replace(o, exit_code=1, stderr=b"backtest.research.csv_ledger.InsufficientCashError: InsufficientCashError: date=20251103 code=600000.SH needed=100 available=1\n") for o in pair]
-    assert harness.cell_verdict("csv_minute", "low_cash", genuine, passing)[0] == "PASS"
+    assert harness.cell_verdict("csv_minute", "low_cash", genuine, passing, "legacy")[0] == "PASS"
+    assert harness.cell_verdict("csv_minute", "low_cash", genuine, passing, "industry")[0] == "FAIL"
     broken = [replace(o, exit_code=1, stderr=b"ModuleNotFoundError: pandas\n") for o in pair]
-    assert harness.cell_verdict("csv_minute", "low_cash", broken, passing)[0] == "FAIL"
+    assert harness.cell_verdict("csv_minute", "low_cash", broken, passing, "legacy")[0] == "FAIL"
     for o in pair:
         (o.root / "trades.csv").write_text("side,reason\nskip,skip_cash\n")
     assert harness.cell_verdict("v7", "low_cash", pair, passing)[0] == "PASS"
+
+
+@pytest.mark.parametrize("profile", ["industry", "legacy"])
+@pytest.mark.parametrize("family", ["csv_minute", "v7"])
+@pytest.mark.parametrize("cell", ["normal", "low_cash", "invalid_config", "bad_output"])
+def test_native_recipe_pins_profile_for_both_sides(profile, family, cell, tmp_path):
+    argv = harness.native_argv(family, cell, tmp_path, "20251103", "20251104", profile)
+    assert argv[argv.index("--rule-profile") + 1] == profile
+
+
+@pytest.mark.parametrize("profile,rate,floor,dated", [
+    ("industry", 0.0003, 5.0, True), ("legacy", 0.001, 0.0, False),
+])
+def test_recipe_records_resolved_rules_and_fee_components(profile, rate, floor, dated):
+    contract = harness.economic_contract(profile)
+    assert contract["rule_profile"] == profile
+    assert contract["rule_profile_revision"] == contract["profile_settings"]["revision"]
+    assert contract["fee_schedule"] == {
+        "buy_rate": rate, "sell_rate": rate, "min_cost": floor,
+        "per_order": dated, "dated_sell_stamp_duty": dated,
+        "dated_bilateral_transfer_fee": dated,
+    }
+
+
+def test_industry_low_cash_requires_native_cash_rejection_in_both_audits(pair):
+    import pandas as pd
+    from backtest.research.ashare_fees import INDUSTRY_ACCOUNT_FEES
+    from backtest.research.csv_ledger import SimState, bind_account_fee_schedule, configure_s8, execute_buy
+    from backtest.research.csv_strategy_books import apply_csv_strategy
+    from backtest.research.minute_audit import audit_scope, write_audit
+    from backtest.research.rule_profile import INDUSTRY
+
+    state = SimState(cash=1.0)
+    state.rule_profile = INDUSTRY
+    bind_account_fee_schedule(state, INDUSTRY_ACCOUNT_FEES)
+    configure_s8(state, apply_csv_strategy("version8", name_budget=1_000_000.0))
+    events = []
+    with audit_scope(events, decision_hm=895, phase="close"):
+        assert not execute_buy(state, "600000.SH", 10.0, 1_000_000.0, 0, pd.Timestamp("2025-11-03"))
+    assert state.trades == []
+    assert events[0]["side"] == "SKIP" and events[0]["reason"] == "skip_cash"
+    for observation in pair:
+        (observation.root / "trades.csv").write_text("side,shares,reason\n", encoding="utf-8")
+        write_audit(observation.root / "execution-audit.json", events, engine="csv_minute", enabled=False)
+    assert harness.cell_verdict("csv_minute", "low_cash", pair, {"status": "PASS"})[0] == "PASS"
+    write_audit(pair[1].root / "execution-audit.json", [], engine="csv_minute", enabled=False)
+    assert harness.cell_verdict("csv_minute", "low_cash", pair, {"status": "PASS"})[0] == "NOT_COVERED"
+
+
+@pytest.mark.parametrize("event", [
+    {"side": "SKIP", "reason": "skip_st"}, {"side": "BUY", "reason": "skip_cash"},
+])
+def test_other_events_do_not_cover_cash_rejection(pair, event):
+    for observation in pair:
+        (observation.root / "execution-audit.json").write_text(json.dumps({"events": [event]}), encoding="utf-8")
+    assert harness.cell_verdict("csv_minute", "low_cash", pair, {"status": "PASS"})[0] == "NOT_COVERED"
 
 
 @pytest.mark.parametrize("statuses,expected", [
@@ -634,6 +691,10 @@ def test_preregistration_precedes_refusals_and_no_lake_never_launches_live(exter
     def launch(side, family, argv, cwd, *args):
         recipe = json.loads((output / "recipe.json").read_text())
         assert recipe["experiment"] == "B-native-CV-01"
+        assert recipe["economic_flags"]["rule_profile"] == "industry"
+        assert recipe["economic_flags"]["fee_schedule"]["min_cost"] == 5.0
+        assert all(row["rule_profile"] == "industry" for row in recipe["cells"])
+        assert argv[argv.index("--rule-profile") + 1] == "industry"
         assert "B_NATIVE_INVALID" in argv  # No live launch, even with a valid pool.
         calls.append((family, side))
         return harness.Observation(cwd / "artifacts", 2, b"", b"invalid choice: 'B_NATIVE_INVALID'")
