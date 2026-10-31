@@ -1,0 +1,95 @@
+{
+  "schema_version": 1,
+  "observed_at_utc": "2026-10-30T11:42:02.085442+00:00",
+  "settings_changed": false,
+  "actions": [
+    {
+      "id": "H01",
+      "repo": "baiyibing/OSkhQuant1.3",
+      "branch": "main",
+      "audit_ids": [
+        "OP17"
+      ],
+      "state": "PENDING_OWNER_DECISION",
+      "observed_protected": false,
+      "observed_head": "1ed67467890edb6c931bf8816c121fa7483cc276",
+      "rulesets_result": {
+        "http_status": 403,
+        "reason": "GitHub feature/plan restriction; not evidence of an empty ruleset list"
+      },
+      "candidate_required_contexts": [
+        "Python syntax (AST)",
+        "Import smoke (no xtquant)",
+        "turnover_resist Python tests",
+        "Common package contract gates (linux)",
+        "QMT connect guard (bootstrap-only)",
+        "Pyright (Linux, core packages)",
+        "Gitleaks",
+        "Settlement SELECT baseline",
+        "Docs & PR hygiene"
+      ],
+      "candidate_basis": "Names from the completed #1258 Linux CI Fast Lane; Owner must choose treatment of Windows/ReleaseInfra checks as well.",
+      "sources": [
+        "https://github.com/baiyibing/OSkhQuant1.3/pull/1258"
+      ]
+    },
+    {
+      "id": "H02",
+      "repo": "baiyibing/MyQuant",
+      "branch": "master",
+      "audit_ids": [
+        "OP17"
+      ],
+      "state": "PENDING_OWNER_DECISION",
+      "observed_protected": false,
+      "observed_head": "7c428d9bcb66c0dde37ec203a2b5fcc28ac9f1e8",
+      "rulesets_result": {
+        "http_status": 200,
+        "rulesets": []
+      },
+      "candidate_required_contexts": [
+        "joint-return",
+        "pytest",
+        "data-staging"
+      ],
+      "candidate_basis": "Existing two contexts plus new #110 data-staging, all verified SUCCESS at head 7716ab6588a3a3faa8a799f5c0ee54154343733a; add new context only when workflow is merged and visible.",
+      "sources": [
+        "https://github.com/baiyibing/MyQuant/pull/110",
+        "https://github.com/baiyibing/MyQuant/actions/runs/41049169400"
+      ]
+    },
+    {
+      "id": "H03",
+      "repo": "baiyibing/MyQuant-backtrader",
+      "branch": "master",
+      "audit_ids": [
+        "OP17",
+        "BT-11"
+      ],
+      "state": "PENDING_OWNER_DECISION",
+      "observed_protected": false,
+      "observed_head": "6b124799fcec2a7e4bf6d3ec4eb31bcbbdd15082",
+      "rulesets_result": {
+        "http_status": 200,
+        "rulesets": []
+      },
+      "candidate_required_contexts": [
+        "pytest-and-gates"
+      ],
+      "candidate_basis": "Existing RB-01 configuration instructions; Owner decides review/bypass/up-to-date policy.",
+      "sources": [
+        "https://github.com/baiyibing/MyQuant-backtrader/blob/6b124799fcec2a7e4bf6d3ec4eb31bcbbdd15082/docs/backtest/rb01-github-branch-protection-steps-2026-10-06.md"
+      ]
+    }
+  ],
+  "completion_evidence": [
+    "Owner-approved rule/check/review/bypass configuration, or documented feature-limited alternative",
+    "Readback of effective protection/rules",
+    "Minimal proof failed or missing required checks cannot merge and valid PR can merge"
+  ],
+  "notes": [
+    "Candidate list is prepared for Owner; no GitHub settings were changed.",
+    "No failed PR or notification was created to test protection.",
+    "CI success alone does not close OP17/BT-11."
+  ]
+}

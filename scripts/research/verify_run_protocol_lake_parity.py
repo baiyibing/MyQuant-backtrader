@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import argparse
 import csv
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 import hashlib
 import io
@@ -23,6 +23,8 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 EXPERIMENT = "B-native-CV-01"
+DEFAULT_RULE_PROFILE = "industry"
+RULE_PROFILES = (DEFAULT_RULE_PROFILE, "legacy")
 NORMAL_CASH = 1_000_000_000  # Frozen ample-capital recipe; native defaults stay unchanged.
 ENTRIES = {
     "csv_minute": "backtest/research/csv_minute_backtest.py",
@@ -379,10 +381,38 @@ def input_identity(pool_path: Path, start: str, end: str) -> dict:
             "runtime_config_and_authority": config_identity, "csv_daily_comparison_candidates": baseline}
 
 
-def native_argv(family: str, cell: str, pool: Path, start: str, end: str) -> list[str]:
+def economic_contract(rule_profile: str) -> dict:
+    """Resolve the same profile and unoverridden fee schedule as both native CLIs."""
+    from backtest.research.ashare_fees import resolve_account_fee_schedule
+    from backtest.research.rule_profile import resolve_rule_profile
+
+    profile = resolve_rule_profile(rule_profile)
+    fee = resolve_account_fee_schedule(profile.account_fee_schedule)
+    return {"rule_profile": profile.name, "rule_profile_revision": profile.revision,
+            "profile_settings": asdict(profile), "fee_schedule": asdict(fee)}
+
+
+def uses_legacy_cash_exception(family: str, rule_profile: str) -> bool:
+    return family == "csv_minute" and rule_profile == "legacy"
+
+
+def low_cash_trigger_description() -> str:
+    exceptions = "; ".join(
+        f"{family} {profile}: InsufficientCashError"
+        for family in ENTRIES for profile in RULE_PROFILES
+        if uses_legacy_cash_exception(family, profile)
+    )
+    return (f"{exceptions}; otherwise: actual skip_cash rejection "
+            "(cash=1 tests zero affordable quantity, not partial shrink)")
+
+
+def native_argv(family: str, cell: str, pool: Path, start: str, end: str,
+                rule_profile: str = DEFAULT_RULE_PROFILE) -> list[str]:
+    profile_args = ["--rule-profile", rule_profile]
     if cell == "invalid_config":
-        return ["--start", start, "--end", end, "--minute-source", "B_NATIVE_INVALID"]
+        return [*profile_args, "--start", start, "--end", end, "--minute-source", "B_NATIVE_INVALID"]
     args = ["--start", start, "--end", end, "--pool-dir", str(pool),
+            *profile_args,
             "--minute-source", "lake", "--daily-source", "lake",
             "--cash-total", "1" if cell == "low_cash" else str(NORMAL_CASH),
             "--execution-audit-file", "artifacts/execution-audit.json"]
@@ -431,7 +461,8 @@ def launch(side: str, family: str, argv: list[str], cwd: Path, interpreter: Path
     return Observation(cwd / "artifacts", status, process.stdout, process.stderr)
 
 
-def cell_verdict(family: str, cell: str, observations: list[Observation], comparison: dict) -> tuple[str, str]:
+def cell_verdict(family: str, cell: str, observations: list[Observation], comparison: dict,
+                 rule_profile: str = DEFAULT_RULE_PROFILE) -> tuple[str, str]:
     if comparison["status"] == "FAIL":
         return "FAIL", "native / L1 mismatch; see comparison field paths"
     for observed in observations:
@@ -442,7 +473,7 @@ def cell_verdict(family: str, cell: str, observations: list[Observation], compar
             marker = b"NotADirectoryError" if family == "csv_minute" else b"FileExistsError"
             if observed.exit_code == 0 or marker not in observed.stderr or b"artifacts" not in observed.stderr:
                 return "FAIL", "expected native output-file refusal was not observed"
-        elif cell == "low_cash" and family == "csv_minute":
+        elif cell == "low_cash" and uses_legacy_cash_exception(family, rule_profile):
             if observed.exit_code != 0:
                 if not re.search(rb"(?:^|\n)(?:[\w.]+\.)?InsufficientCashError:.*date=.*code=", observed.stderr):
                     return "FAIL", "nonzero exit was not the native InsufficientCashError path"
@@ -451,12 +482,27 @@ def cell_verdict(family: str, cell: str, observations: list[Observation], compar
         elif observed.exit_code != 0:
             return "FAIL", "unexpected native nonzero exit"
         else:
-            with (observed.root / "trades.csv").open(encoding="utf-8-sig", newline="") as handle:
-                trades = list(csv.DictReader(handle))
             if cell == "low_cash":
-                if not any(row.get("reason") == "skip_cash" and row.get("side") == "skip" for row in trades):
-                    return "NOT_COVERED", "未覆盖: real v7 skip_cash did not trigger"
+                artifact = "execution-audit.json" if family == "csv_minute" else "trades.csv"
+                try:
+                    if family == "csv_minute":
+                        # Native CSV books keep refusals outside their trades table.
+                        rows = json.loads((observed.root / artifact).read_bytes())["events"]
+                    else:
+                        with (observed.root / artifact).open(encoding="utf-8-sig", newline="") as handle:
+                            rows = list(csv.DictReader(handle))
+                    if not isinstance(rows, list) or any(
+                        not isinstance(row, dict)
+                        or not isinstance(row.get("side", ""), str) for row in rows
+                    ):
+                        raise ValueError("expected event rows with string sides")
+                except (OSError, ValueError, KeyError, TypeError, csv.Error):
+                    return "NOT_COVERED", f"未覆盖: missing/unusable {artifact}; skip_cash trigger not observed"
+                if not any(row.get("reason") == "skip_cash" and row.get("side", "").lower() == "skip" for row in rows):
+                    return "NOT_COVERED", f"未覆盖: real {family} {rule_profile} skip_cash did not trigger"
             else:
+                with (observed.root / "trades.csv").open(encoding="utf-8-sig", newline="") as handle:
+                    trades = list(csv.DictReader(handle))
                 sides = {row.get("side", "").lower() for row in trades if float(row.get("shares", 0)) > 0}
                 with (observed.root / "daily_equity.csv").open(encoding="utf-8-sig", newline="") as handle:
                     equity = list(csv.DictReader(handle))
@@ -479,6 +525,8 @@ def main(argv=None) -> int:
     parser.add_argument("--output-root", type=Path, help="new directory under a handoff or temp; must not exist")
     parser.add_argument("--start", default="20251023", help="native documented start, validated against existing pool files")
     parser.add_argument("--end", default="20251104", help="native CLI documented short-window end")
+    parser.add_argument("--rule-profile", choices=RULE_PROFILES, default=DEFAULT_RULE_PROFILE,
+                        help="explicit native rules for both sides (default: industry; legacy retains refusal recipe)")
     parser.add_argument("--csv-pool-dir", type=Path, default=ROOT / "stock_pool")
     parser.add_argument("--v7-pool-dir", type=Path, default=ROOT / "stock_pool",
                         help="existing named lists; passed explicitly to v7, never its environment fallback")
@@ -492,6 +540,7 @@ def main(argv=None) -> int:
     sys.path.insert(0, str(ROOT))
     from scripts._script_bootstrap import resolve_oskh_python
 
+    contract = economic_contract(args.rule_profile)
     interpreter = resolve_oskh_python().absolute()  # Preserve venv symlink identity.
     if interpreter != Path(sys.executable).absolute():
         parser.error("launch this harness with the same interpreter selected by resolve_oskh_python")
@@ -523,7 +572,9 @@ def main(argv=None) -> int:
     if env.get("OSKH_DATA_ROOT"):
         env["OSKH_DATA_ROOT"] = str(Path(env["OSKH_DATA_ROOT"]).resolve())
     cells = [{"family": family, "cell": cell,
-              "argv": native_argv(family, cell, pools[family], args.start, args.end),
+              "rule_profile": contract["rule_profile"],
+              "rule_profile_revision": contract["rule_profile_revision"],
+              "argv": native_argv(family, cell, pools[family], args.start, args.end, args.rule_profile),
               "cwd": {side: str(out / f"{family}-{cell}" / side) for side in ("direct", "l1")}}
              for family in ENTRIES for cell in ("normal", "low_cash", "invalid_config", "bad_output")]
     git = lambda *tokens: subprocess.check_output(["git", *tokens], cwd=ROOT, text=True).strip()
@@ -549,7 +600,8 @@ def main(argv=None) -> int:
                          "index": "native requested window plus 11 preceding sessions; files hashed in full"},
         "inputs": identities, "cells": cells, "output_root": str(out),
         "economic_flags": {"normal_cash": NORMAL_CASH, "low_cash": 1, "name_budget": 1000000,
-                           "fee": "BILATERAL_10BP: buy=sell=0.001, floor=0",
+                           **contract,
+                           "low_cash_trigger": low_cash_trigger_description(),
                            "price_domain": "lake minute/daily none; native exdiv context",
                            "strategy": {"csv_minute": "version8", "v7": "native strategy7"},
                            "other_flags": "native pinned code defaults; no X-02/X-04 or production changes"},
@@ -602,7 +654,7 @@ def main(argv=None) -> int:
                                        duration_stdout=True, verify_manifest="run-manifest.json" in require)
                 comparison = compare_observations(*observations, policy)
                 write_json(directory / "comparison.json", comparison)
-                status, reason = cell_verdict(family, name, observations, comparison)
+                status, reason = cell_verdict(family, name, observations, comparison, args.rule_profile)
                 result.update(status=status, reason=reason, native_exit_codes=[o.exit_code for o in observations],
                               comparison=str(directory / "comparison.json"), byte_identical=comparison["byte_identical"])
             except Exception as exc:
