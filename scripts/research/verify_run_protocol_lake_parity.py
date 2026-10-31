@@ -23,6 +23,8 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 EXPERIMENT = "B-native-CV-01"
+DEFAULT_RULE_PROFILE = "industry"
+RULE_PROFILES = (DEFAULT_RULE_PROFILE, "legacy")
 NORMAL_CASH = 1_000_000_000  # Frozen ample-capital recipe; native defaults stay unchanged.
 ENTRIES = {
     "csv_minute": "backtest/research/csv_minute_backtest.py",
@@ -390,8 +392,22 @@ def economic_contract(rule_profile: str) -> dict:
             "profile_settings": asdict(profile), "fee_schedule": asdict(fee)}
 
 
+def uses_legacy_cash_exception(family: str, rule_profile: str) -> bool:
+    return family == "csv_minute" and rule_profile == "legacy"
+
+
+def low_cash_trigger_description() -> str:
+    exceptions = "; ".join(
+        f"{family} {profile}: InsufficientCashError"
+        for family in ENTRIES for profile in RULE_PROFILES
+        if uses_legacy_cash_exception(family, profile)
+    )
+    return (f"{exceptions}; otherwise: actual skip_cash rejection "
+            "(cash=1 tests zero affordable quantity, not partial shrink)")
+
+
 def native_argv(family: str, cell: str, pool: Path, start: str, end: str,
-                rule_profile: str = "industry") -> list[str]:
+                rule_profile: str = DEFAULT_RULE_PROFILE) -> list[str]:
     profile_args = ["--rule-profile", rule_profile]
     if cell == "invalid_config":
         return [*profile_args, "--start", start, "--end", end, "--minute-source", "B_NATIVE_INVALID"]
@@ -446,7 +462,7 @@ def launch(side: str, family: str, argv: list[str], cwd: Path, interpreter: Path
 
 
 def cell_verdict(family: str, cell: str, observations: list[Observation], comparison: dict,
-                 rule_profile: str = "industry") -> tuple[str, str]:
+                 rule_profile: str = DEFAULT_RULE_PROFILE) -> tuple[str, str]:
     if comparison["status"] == "FAIL":
         return "FAIL", "native / L1 mismatch; see comparison field paths"
     for observed in observations:
@@ -457,7 +473,7 @@ def cell_verdict(family: str, cell: str, observations: list[Observation], compar
             marker = b"NotADirectoryError" if family == "csv_minute" else b"FileExistsError"
             if observed.exit_code == 0 or marker not in observed.stderr or b"artifacts" not in observed.stderr:
                 return "FAIL", "expected native output-file refusal was not observed"
-        elif cell == "low_cash" and family == "csv_minute" and rule_profile == "legacy":
+        elif cell == "low_cash" and uses_legacy_cash_exception(family, rule_profile):
             if observed.exit_code != 0:
                 if not re.search(rb"(?:^|\n)(?:[\w.]+\.)?InsufficientCashError:.*date=.*code=", observed.stderr):
                     return "FAIL", "nonzero exit was not the native InsufficientCashError path"
@@ -467,12 +483,21 @@ def cell_verdict(family: str, cell: str, observations: list[Observation], compar
             return "FAIL", "unexpected native nonzero exit"
         else:
             if cell == "low_cash":
-                if family == "csv_minute":
-                    # Native CSV books keep refusals outside their trades table.
-                    rows = json.loads((observed.root / "execution-audit.json").read_bytes())["events"]
-                else:
-                    with (observed.root / "trades.csv").open(encoding="utf-8-sig", newline="") as handle:
-                        rows = list(csv.DictReader(handle))
+                artifact = "execution-audit.json" if family == "csv_minute" else "trades.csv"
+                try:
+                    if family == "csv_minute":
+                        # Native CSV books keep refusals outside their trades table.
+                        rows = json.loads((observed.root / artifact).read_bytes())["events"]
+                    else:
+                        with (observed.root / artifact).open(encoding="utf-8-sig", newline="") as handle:
+                            rows = list(csv.DictReader(handle))
+                    if not isinstance(rows, list) or any(
+                        not isinstance(row, dict)
+                        or not isinstance(row.get("side", ""), str) for row in rows
+                    ):
+                        raise ValueError("expected event rows with string sides")
+                except (OSError, ValueError, KeyError, TypeError, csv.Error):
+                    return "NOT_COVERED", f"未覆盖: missing/unusable {artifact}; skip_cash trigger not observed"
                 if not any(row.get("reason") == "skip_cash" and row.get("side", "").lower() == "skip" for row in rows):
                     return "NOT_COVERED", f"未覆盖: real {family} {rule_profile} skip_cash did not trigger"
             else:
@@ -500,7 +525,7 @@ def main(argv=None) -> int:
     parser.add_argument("--output-root", type=Path, help="new directory under a handoff or temp; must not exist")
     parser.add_argument("--start", default="20251023", help="native documented start, validated against existing pool files")
     parser.add_argument("--end", default="20251104", help="native CLI documented short-window end")
-    parser.add_argument("--rule-profile", choices=("industry", "legacy"), default="industry",
+    parser.add_argument("--rule-profile", choices=RULE_PROFILES, default=DEFAULT_RULE_PROFILE,
                         help="explicit native rules for both sides (default: industry; legacy retains refusal recipe)")
     parser.add_argument("--csv-pool-dir", type=Path, default=ROOT / "stock_pool")
     parser.add_argument("--v7-pool-dir", type=Path, default=ROOT / "stock_pool",
@@ -576,7 +601,7 @@ def main(argv=None) -> int:
         "inputs": identities, "cells": cells, "output_root": str(out),
         "economic_flags": {"normal_cash": NORMAL_CASH, "low_cash": 1, "name_budget": 1000000,
                            **contract,
-                           "low_cash_trigger": "csv_minute legacy: InsufficientCashError; otherwise: actual skip_cash rejection (cash=1 tests zero affordable quantity, not partial shrink)",
+                           "low_cash_trigger": low_cash_trigger_description(),
                            "price_domain": "lake minute/daily none; native exdiv context",
                            "strategy": {"csv_minute": "version8", "v7": "native strategy7"},
                            "other_flags": "native pinned code defaults; no X-02/X-04 or production changes"},

@@ -592,6 +592,26 @@ def test_normal_and_low_cash_cannot_pass_without_trigger(pair):
     assert harness.cell_verdict("v7", "normal", pair, passing)[0] == "NOT_COVERED"
 
 
+@pytest.mark.parametrize("payload", [None, b"invalid json", b"{}", b'{"events": null}',
+                                      b'{"events": [null]}', b'{"events": [{"side": null}]}'])
+def test_low_cash_missing_or_unusable_execution_audit_is_not_covered(pair, payload):
+    path = pair[0].root / "execution-audit.json"
+    if payload is None:
+        path.unlink()
+    else:
+        path.write_bytes(payload)
+    status, reason = harness.cell_verdict("csv_minute", "low_cash", pair, {"status": "PASS"})
+    assert status == "NOT_COVERED"
+    assert "missing/unusable execution-audit.json" in reason
+
+
+def test_v7_low_cash_missing_trades_is_not_covered(pair):
+    (pair[0].root / "trades.csv").unlink()
+    status, reason = harness.cell_verdict("v7", "low_cash", pair, {"status": "PASS"})
+    assert status == "NOT_COVERED"
+    assert "missing/unusable trades.csv" in reason
+
+
 def test_low_cash_refusal_requires_real_exception_signature(pair):
     passing = {"status": "PASS"}
     genuine = [replace(o, exit_code=1, stderr=b"backtest.research.csv_ledger.InsufficientCashError: InsufficientCashError: date=20251103 code=600000.SH needed=100 available=1\n") for o in pair]
