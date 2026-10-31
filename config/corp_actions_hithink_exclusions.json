@@ -1,0 +1,342 @@
+{
+  "format_version": 1,
+  "manual_overrides": [],
+  "known_discrepancies": [
+    {
+      "code": "000697.SZ",
+      "ex_date": "2025-11-28",
+      "field": "bonus",
+      "wind_value": "0.599",
+      "hithink_value": "0.0584"
+    },
+    {
+      "code": "000908.SZ",
+      "ex_date": "2026-03-11",
+      "field": "bonus",
+      "wind_value": "1",
+      "hithink_value": "0.461"
+    },
+    {
+      "code": "002015.SZ",
+      "ex_date": "2015-06-26",
+      "field": "bonus",
+      "wind_value": "0.67",
+      "hithink_value": "0.169"
+    },
+    {
+      "code": "002076.SZ",
+      "ex_date": "2022-12-21",
+      "field": "bonus",
+      "wind_value": "0.4588",
+      "hithink_value": "0.1659"
+    },
+    {
+      "code": "002157.SZ",
+      "ex_date": "2023-12-08",
+      "field": "bonus",
+      "wind_value": "1.623",
+      "hithink_value": "0"
+    },
+    {
+      "code": "002200.SZ",
+      "ex_date": "2025-12-12",
+      "field": "bonus",
+      "wind_value": "1.45",
+      "hithink_value": "0.1268"
+    },
+    {
+      "code": "002217.SZ",
+      "ex_date": "2024-12-31",
+      "field": "bonus",
+      "wind_value": "1.4",
+      "hithink_value": "0"
+    },
+    {
+      "code": "002251.SZ",
+      "ex_date": "2024-08-02",
+      "field": "bonus",
+      "wind_value": "2.2",
+      "hithink_value": "0"
+    },
+    {
+      "code": "002309.SZ",
+      "ex_date": "2024-12-24",
+      "field": "bonus",
+      "wind_value": "2.45",
+      "hithink_value": "0"
+    },
+    {
+      "code": "002310.SZ",
+      "ex_date": "2024-12-30",
+      "field": "bonus",
+      "wind_value": "1.234",
+      "hithink_value": "0"
+    },
+    {
+      "code": "002321.SZ",
+      "ex_date": "2022-01-04",
+      "field": "bonus",
+      "wind_value": "2.992",
+      "hithink_value": "0.037"
+    },
+    {
+      "code": "002323.SZ",
+      "ex_date": "2022-01-06",
+      "field": "bonus",
+      "wind_value": "3.4079",
+      "hithink_value": "0.8054"
+    },
+    {
+      "code": "002356.SZ",
+      "ex_date": "2022-01-04",
+      "field": "bonus",
+      "wind_value": "1.484",
+      "hithink_value": "0"
+    },
+    {
+      "code": "002366.SZ",
+      "ex_date": "2022-12-22",
+      "field": "bonus",
+      "wind_value": "1.4",
+      "hithink_value": "0"
+    },
+    {
+      "code": "002713.SZ",
+      "ex_date": "2025-12-30",
+      "field": "bonus",
+      "wind_value": "1.2678",
+      "hithink_value": "0.3514"
+    },
+    {
+      "code": "002721.SZ",
+      "ex_date": "2023-11-17",
+      "field": "bonus",
+      "wind_value": "1.8",
+      "hithink_value": "0"
+    },
+    {
+      "code": "002766.SZ",
+      "ex_date": "2022-01-04",
+      "field": "bonus",
+      "wind_value": "1",
+      "hithink_value": "0"
+    },
+    {
+      "code": "300071.SZ",
+      "ex_date": "2021-12-30",
+      "field": "bonus",
+      "wind_value": "0.38",
+      "hithink_value": "0"
+    },
+    {
+      "code": "300091.SZ",
+      "ex_date": "2026-02-12",
+      "field": "bonus",
+      "wind_value": "0.908",
+      "hithink_value": "0.1326"
+    },
+    {
+      "code": "300209.SZ",
+      "ex_date": "2024-12-20",
+      "field": "bonus",
+      "wind_value": "1.2",
+      "hithink_value": "0.3132"
+    },
+    {
+      "code": "300256.SZ",
+      "ex_date": "2022-08-31",
+      "field": "bonus",
+      "wind_value": "1.368",
+      "hithink_value": "0"
+    },
+    {
+      "code": "300506.SZ",
+      "ex_date": "2025-12-22",
+      "field": "bonus",
+      "wind_value": "1.05",
+      "hithink_value": "0.3259"
+    },
+    {
+      "code": "300708.SZ",
+      "ex_date": "2020-06-02",
+      "field": "cash",
+      "wind_value": "0.0199",
+      "hithink_value": "0.02"
+    },
+    {
+      "code": "300767.SZ",
+      "ex_date": "2022-05-26",
+      "field": "bonus",
+      "wind_value": "0.1999",
+      "hithink_value": "0.2"
+    },
+    {
+      "code": "301057.SZ",
+      "ex_date": "2024-06-25",
+      "field": "cash",
+      "wind_value": "0.3",
+      "hithink_value": "0.3005408"
+    },
+    {
+      "code": "600025.SH",
+      "ex_date": "2019-07-05",
+      "field": "cash",
+      "wind_value": "0.3251",
+      "hithink_value": "0.15022"
+    },
+    {
+      "code": "600025.SH",
+      "ex_date": "2020-06-19",
+      "field": "cash",
+      "wind_value": "0.3291",
+      "hithink_value": "0.15222"
+    },
+    {
+      "code": "600157.SH",
+      "ex_date": "2020-12-29",
+      "field": "bonus",
+      "wind_value": "0.788",
+      "hithink_value": "0"
+    },
+    {
+      "code": "600179.SH",
+      "ex_date": "2020-12-07",
+      "field": "bonus",
+      "wind_value": "1.935",
+      "hithink_value": "0.0648"
+    },
+    {
+      "code": "600221.SH",
+      "ex_date": "2021-12-06",
+      "field": "bonus",
+      "wind_value": "1",
+      "hithink_value": "0"
+    },
+    {
+      "code": "600423.SH",
+      "ex_date": "2018-12-18",
+      "field": "bonus",
+      "wind_value": "1",
+      "hithink_value": "0.0854"
+    },
+    {
+      "code": "600515.SH",
+      "ex_date": "2021-12-22",
+      "field": "bonus",
+      "wind_value": "1.9239",
+      "hithink_value": "0.477"
+    },
+    {
+      "code": "600589.SH",
+      "ex_date": "2023-12-29",
+      "field": "bonus",
+      "wind_value": "1.1",
+      "hithink_value": "0.2632"
+    },
+    {
+      "code": "600601.SH",
+      "ex_date": "2022-12-23",
+      "field": "bonus",
+      "wind_value": "0.9",
+      "hithink_value": "0.1124"
+    },
+    {
+      "code": "600654.SH",
+      "ex_date": "2022-12-23",
+      "field": "bonus",
+      "wind_value": "1.1901",
+      "hithink_value": "0.0035"
+    },
+    {
+      "code": "600666.SH",
+      "ex_date": "2023-02-20",
+      "field": "bonus",
+      "wind_value": "1.5",
+      "hithink_value": "0.5866"
+    },
+    {
+      "code": "600815.SH",
+      "ex_date": "2019-12-23",
+      "field": "bonus",
+      "wind_value": "0.85",
+      "hithink_value": "0.0352"
+    },
+    {
+      "code": "600900.SH",
+      "ex_date": "2017-07-14",
+      "field": "cash",
+      "wind_value": "0.725",
+      "hithink_value": "0.71307"
+    },
+    {
+      "code": "600989.SH",
+      "ex_date": "2021-05-20",
+      "field": "cash",
+      "wind_value": "0.5856",
+      "hithink_value": "0.28"
+    },
+    {
+      "code": "600989.SH",
+      "ex_date": "2022-05-12",
+      "field": "cash",
+      "wind_value": "0.5858",
+      "hithink_value": "0.28"
+    },
+    {
+      "code": "600989.SH",
+      "ex_date": "2022-12-27",
+      "field": "cash",
+      "wind_value": "0.3057",
+      "hithink_value": "0.14"
+    },
+    {
+      "code": "600989.SH",
+      "ex_date": "2024-07-24",
+      "field": "cash",
+      "wind_value": "0.5808",
+      "hithink_value": "0.28"
+    },
+    {
+      "code": "600989.SH",
+      "ex_date": "2025-05-13",
+      "field": "cash",
+      "wind_value": "0.8489",
+      "hithink_value": "0.4099932"
+    },
+    {
+      "code": "600989.SH",
+      "ex_date": "2026-04-28",
+      "field": "cash",
+      "wind_value": "0.8827",
+      "hithink_value": "0.42"
+    },
+    {
+      "code": "601777.SH",
+      "ex_date": "2020-12-23",
+      "field": "bonus",
+      "wind_value": "2.4997",
+      "hithink_value": "0"
+    },
+    {
+      "code": "603363.SH",
+      "ex_date": "2024-12-26",
+      "field": "bonus",
+      "wind_value": "2",
+      "hithink_value": "0"
+    },
+    {
+      "code": "603559.SH",
+      "ex_date": "2024-12-26",
+      "field": "bonus",
+      "wind_value": "1.8",
+      "hithink_value": "0.4479"
+    }
+  ],
+  "baseline": {
+    "wind_sha256": "6afe807a996fea68f2f34fa43344f44ca8f4254fb8580c9213bef6d443c3ba4d",
+    "hithink_sha256": "db19162144ca902160931a9eb9472a56e81580dc6d0f4ff4131b9647971c5a27",
+    "ask_start": "2015-01-01",
+    "ask_end": "2026-10-06"
+  },
+  "notes": "47 frozen exact daily-sum diagnostic facts (cash11+bonus36). 2026-10-30 continuation GO: verified original .0199/.02 boundary key; no economic approval and no tolerance change."
+}
