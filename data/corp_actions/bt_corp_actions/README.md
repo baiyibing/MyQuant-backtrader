@@ -1,4 +1,4 @@
-# bt_corp_actions_20261006 — Wind corporate actions + listing dates (read-only pull)
+# bt_corp_actions — Wind corporate actions + listing dates (read-only pull)
 
 Generated 2026-10-23 09:07:18 CST on newtest_4090. Source: Kimi Code CLI 2.1.1 headless (`kimi -p`) + kimi-datasource 3.4.0 plugin, data source `wind`. Read-only vendor fetch; no lake/qlib writes, no code/repo changes. No credentials stored here.
 

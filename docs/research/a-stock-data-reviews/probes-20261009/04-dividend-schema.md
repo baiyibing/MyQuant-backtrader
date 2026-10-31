@@ -2,7 +2,7 @@
 
 结论：`dividend_history` 不能直接替换 Wind corp-actions 或构造 BT ExDivEvent。除了缺日期/身份/来源，**现金单位大10倍、转增字段读取错误**已用真实 HTTP 响应及原函数回放复现。
 
-来源：a-stock-data `SKILL.md:3113`、旧 helper `:785`；BT `backtest/research/ashare_exdiv_economics.py:19`；本地 `data/corp_actions/bt_corp_actions_20261006/{README.md,corp_actions.csv}`。本轮只读现成 Wind/Kimi 数据文件，没有调用 Kimi；README 的历史产地写 4090 不表示此次访问该机器。
+来源：a-stock-data `SKILL.md:3113`、旧 helper `:785`；BT `backtest/research/ashare_exdiv_economics.py:19`；本地 `data/corp_actions/bt_corp_actions/{README.md,corp_actions.csv}`。本轮只读现成 Wind/Kimi 数据文件，没有调用 Kimi；README 的历史产地写 4090 不表示此次访问该机器。
 
 ## 实证
 

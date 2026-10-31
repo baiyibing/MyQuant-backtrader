@@ -1,0 +1,637 @@
+{
+  "reviewed_plan_sha256": "b1b5eb64d3ca17b8d225b2a2f7eee67dce6d6c65614f8913d879dca3a5de9e41",
+  "reviewed_inventory_md_sha256": "8dcb499197671c3b00894dc6a3b4c01f1fe81b22376eb435aa72651fe9d1d02f",
+  "reviewed_inventory_json_sha256": "c608e2b15cae3a20e73b57b7030bd86541604a207824185a3da5220b9e9b060c",
+  "reviewers": [
+    {
+      "reviewer": "kimi CLI",
+      "exit_code": 0,
+      "model_identity": "kimi-code/k3",
+      "raw_sha256": "7d532a9b8da26687515e2e9217603fd03544de31e3378d9968f684815a05c86f",
+      "published_body_sha256": "dec8c9d4ab60f493d65d1e0d935fc1b6ff61c26741098f3d8ea4df7ad66d13ce"
+    },
+    {
+      "reviewer": "claude CLI",
+      "exit_code": 0,
+      "model_identity": "existing local routing; backend model identity not independently verified in this run",
+      "raw_sha256": "73e65c6541907c782c170bd173d86204b739f0b8d326a167b292e5c7163346b1",
+      "published_body_sha256": "8cf6ebb2729b572ca18a66267e21482082c9bab760b6a938e1d735491914fdde"
+    },
+    {
+      "reviewer": "core_plan_review",
+      "raw_sha256": "d55f2d58076f7ab183f360ec60c86f99bf53159d18f3c5813b7fdd4ec2bab014",
+      "summary": {
+        "reviewer": "oskh_core_closeout_audit",
+        "review_date": "2026-10-30",
+        "scope": [
+          "OSkhQuant1.3 SHM",
+          "SDD single-active-day-slot",
+          "v653 migration and restricted paper",
+          "dependencies affecting those work packages"
+        ],
+        "verdict": "APPROVE_WITH_NONBLOCKING_CLARIFICATIONS",
+        "blocking_findings": [],
+        "reviewed_files": [
+          {
+            "path": "D:\\PycharmProjects\\MyQuant-backtrader\\_agent_runs\\three_repo_closeout_20261030\\plan-worktree\\docs\\operations\\three-repo-closeout-plan-2026-10-30.md",
+            "sha256": "b1b5eb64d3ca17b8d225b2a2f7eee67dce6d6c65614f8913d879dca3a5de9e41"
+          },
+          {
+            "path": "D:\\PycharmProjects\\MyQuant-backtrader\\_agent_runs\\three_repo_closeout_20261030\\plan-worktree\\docs\\operations\\three-repo-closeout-inventory-2026-10-30.md",
+            "sha256": "8dcb499197671c3b00894dc6a3b4c01f1fe81b22376eb435aa72651fe9d1d02f"
+          }
+        ],
+        "freshness_note": "Parent independently refreshed PR #1258: merged 2026-10-30 09:50:36 UTC, head ceff70d3e2216539c8a62ba70809a542d66b3a59; main advanced to 1ed67467890edb6c931bf8816c121fa7483cc276 with only its 7 files. Parent will update the plan; obsolete open status in the reviewed draft is not a separate finding.",
+        "confirmed": [
+          {
+            "topic": "SHM implemented versus original design",
+            "result": "Correctly distinguishes merged v1_36 implementation/partial M5 evidence from original v3.1 NO_GO manuscript; does not falsely resurrect old pseudocode defects.",
+            "locations": [
+              "inventory:146-168"
+            ]
+          },
+          {
+            "topic": "SHM scope",
+            "result": "Correctly retains 1m+1d current must-pass scope; explicit cancellation is already PASS; 180-second automatic lease cancellation and optional 5m+ periods remain deferred. Data quality is assessed separately from channel success.",
+            "locations": [
+              "plan:29",
+              "plan:108",
+              "inventory:130-156"
+            ]
+          },
+          {
+            "topic": "SDD current requirement",
+            "result": "Identifies actual Redis/process admission, single-active slot, three-failure latch and continued settlement/cancel, and manual next-day handover as operational work; fake-Redis/offline tests are not relabeled real acceptance.",
+            "locations": [
+              "plan:30",
+              "plan:118-120",
+              "inventory:174-184"
+            ]
+          },
+          {
+            "topic": "SDD deferred automation",
+            "result": "Automatic clean-stop/drain/seal and in-loop day change remain deferred and do not become restricted-paper prerequisites; retired document/host-lock ceremonies are not reinstated.",
+            "locations": [
+              "plan:30",
+              "plan:72",
+              "inventory:786-796"
+            ]
+          },
+          {
+            "topic": "v653 stage",
+            "result": "P4-01 through P4-08 and W1 through W6 are recorded as implemented; tests/offline execution do not count as a real paper day. Restricted paper, full Mode E, LIVE and D3 remain distinct.",
+            "locations": [
+              "plan:31-33",
+              "plan:56-57",
+              "inventory:186-212"
+            ]
+          },
+          {
+            "topic": "contracts and later work",
+            "result": "Uses frozen v653 cross-repo contract rather than automatically adopting current BT defaults. Mode E remains an independent L3 follow-up. Existing three-day R1 live condition and retired CSV live pipeline are not silently substituted or restarted.",
+            "locations": [
+              "plan:33",
+              "plan:69",
+              "plan:120",
+              "plan:132",
+              "plan:140",
+              "inventory:760-770"
+            ]
+          },
+          {
+            "topic": "operational evidence",
+            "result": "Same-host evidence may be reused by capability with separate PASS/FAIL/NOT_TRIGGERED conclusions; independent failure exercises precede shared first-day evidence. Same-day hot profile switch is not authorized.",
+            "locations": [
+              "plan:41",
+              "plan:118-120"
+            ]
+          }
+        ],
+        "nonblocking_comments": [
+          {
+            "id": "CORE-PLAN-C1",
+            "severity": "clarification",
+            "required_before_plan_merge": false,
+            "location": {
+              "file": "D:\\PycharmProjects\\MyQuant-backtrader\\_agent_runs\\three_repo_closeout_20261030\\plan-worktree\\docs\\operations\\three-repo-closeout-plan-2026-10-30.md",
+              "line": 55
+            },
+            "observation": "The P04 dependency cell says P03 + corresponding QMT/bridge version, while P03 also bundles three-machine authority, TR/BJ/bands coverage and consumer-specific volume fields. Later text correctly makes SHM-to-paper conditional, so this is not a blocking contradiction, but the broad package edge can be read as requiring unrelated host/research work before any SHM or paper acceptance.",
+            "suggested_wording": "P03 中本部署的 authority/根路径与本能力实际消费字段 + 对应 QMT/桥版本；其他宿主、TR/BJ/研究专属覆盖并行，不阻塞本能力验收。",
+            "support": [
+              "plan:54-56",
+              "plan:92",
+              "inventory:116-138"
+            ]
+          },
+          {
+            "id": "CORE-PLAN-C2",
+            "severity": "clarification",
+            "required_before_plan_merge": false,
+            "location": {
+              "file": "D:\\PycharmProjects\\MyQuant-backtrader\\_agent_runs\\three_repo_closeout_20261030\\plan-worktree\\docs\\operations\\three-repo-closeout-inventory-2026-10-30.md",
+              "line": 192
+            },
+            "observation": "The draft correctly permits NOT_TRIGGERED and requires the original first-day checklist. Preserve the distinction during execution: a quiet no-buy paper day can establish startup/cycle/EOD/stop, but it cannot complete the separately required first-open intent -> execution_log -> action-state path.",
+            "suggested_wording": "未触发首笔开仓时，可签已覆盖子项；订单全链路仍未完成，后续真实触发补证后方可关闭整个首日验收包。",
+            "support": [
+              "plan:41",
+              "inventory:190-192",
+              "https://github.com/baiyibing/OSkhQuant1.3/blob/7e52e6e0cd6a289ad04bccaefb5edced40850841/docs/operations/v653-paper-first-day-runbook.md#L108"
+            ]
+          }
+        ],
+        "actions_performed": "Read-only targeted document review and comparison with frozen source contracts/run records. Wrote only this audit artifact; no source/snapshot edits, services, QMT access, keys, notifications or PR actions.",
+        "limitations": "Review concerns plan accuracy and dependency logic in the delegated core scope; it is not real-host acceptance or independent validation of all 21 work packages."
+      }
+    },
+    {
+      "reviewer": "qlib_plan_review",
+      "raw_sha256": "ccb6d5e71a299b15f9bd6b25bddd2dd23b84f432352e26e983adf88bd5480828",
+      "summary": {
+        "schema_version": 1,
+        "reviewer": "qlib_closeout_audit",
+        "reviewed_at_utc": "2026-10-30T09:55:50.090448+00:00",
+        "scope": "MyQuant 全部近期审计事项、已完成/负结果排除项，以及跨仓数据和研究依赖；只读计划复核，未运行训练、采集或湖操作。",
+        "verdict": "NEEDS_SMALL_DOC_CLARIFICATION",
+        "summary": "17/17 QL 条目及 10/10 已完成/替代组完整纳入，未发现事实性漏项或需新增的实施前置。主计划依赖图及 BT-09 概括容易把局部数据依赖扩大成全部联合研究的总前置，须限定到对应研究臂；另有一处 scores-only 摘要用词。",
+        "reviewed_files": [
+          {
+            "path": "D:\\PycharmProjects\\MyQuant-backtrader\\_agent_runs\\three_repo_closeout_20261030\\plan-worktree\\docs\\operations\\three-repo-closeout-plan-2026-10-30.md",
+            "sha256": "b1b5eb64d3ca17b8d225b2a2f7eee67dce6d6c65614f8913d879dca3a5de9e41"
+          },
+          {
+            "path": "D:\\PycharmProjects\\MyQuant-backtrader\\_agent_runs\\three_repo_closeout_20261030\\plan-worktree\\docs\\operations\\three-repo-closeout-inventory-2026-10-30.md",
+            "sha256": "8dcb499197671c3b00894dc6a3b4c01f1fe81b22376eb435aa72651fe9d1d02f"
+          },
+          {
+            "path": "D:\\PycharmProjects\\MyQuant-backtrader\\_agent_runs\\three_repo_closeout_20261030\\plan-worktree\\docs\\operations\\evidence\\three-repo-closeout-2026-10-30\\inventory.json",
+            "sha256": "c608e2b15cae3a20e73b57b7030bd86541604a207824185a3da5220b9e9b060c"
+          },
+          {
+            "path": "D:\\PycharmProjects\\MyQuant-backtrader\\_agent_runs\\three_repo_closeout_20261030\\qlib_findings.json",
+            "sha256": "a3f39a99792cd072215ed4ab80c831f56e764b40d951eed8f269b365d45c5e0d"
+          }
+        ],
+        "checks": {
+          "ql_items_expected": 17,
+          "ql_items_present": 17,
+          "missing_ids": [],
+          "unexpected_ids": [],
+          "ql_detail_identical": true,
+          "closed_groups_expected": 10,
+          "closed_groups_present": 10,
+          "closed_groups_identical": true,
+          "ql_package_mapping": {
+            "QL01": [
+              "P01"
+            ],
+            "QL02": [
+              "P11"
+            ],
+            "QL03": [
+              "P11"
+            ],
+            "QL04": [
+              "P17"
+            ],
+            "QL05": [
+              "P17"
+            ],
+            "QL06": [
+              "P17"
+            ],
+            "QL07": [
+              "P17"
+            ],
+            "QL08": [
+              "P17"
+            ],
+            "QL09": [
+              "P10"
+            ],
+            "QL10": [
+              "P12"
+            ],
+            "QL11": [
+              "P12"
+            ],
+            "QL12": [
+              "P12"
+            ],
+            "QL13": [
+              "P12"
+            ],
+            "QL14": [
+              "P21"
+            ],
+            "QL15": [
+              "P21"
+            ],
+            "QL16": [
+              "P20"
+            ],
+            "QL17": [
+              "P20"
+            ]
+          },
+          "one_package_per_ql_item": true
+        },
+        "findings": [
+          {
+            "id": "QPR01",
+            "priority": "P2",
+            "type": "dependency_scope",
+            "title": "依赖图与 BT-09 摘要应限制到入选研究臂，避免覆盖/PIT/证券转换变成总前置",
+            "locations": [
+              {
+                "path": "D:\\PycharmProjects\\MyQuant-backtrader\\_agent_runs\\three_repo_closeout_20261030\\plan-worktree\\docs\\operations\\three-repo-closeout-plan-2026-10-30.md",
+                "line": 87
+              },
+              {
+                "path": "D:\\PycharmProjects\\MyQuant-backtrader\\_agent_runs\\three_repo_closeout_20261030\\plan-worktree\\docs\\operations\\three-repo-closeout-plan-2026-10-30.md",
+                "line": 88
+              },
+              {
+                "path": "D:\\PycharmProjects\\MyQuant-backtrader\\_agent_runs\\three_repo_closeout_20261030\\plan-worktree\\docs\\operations\\three-repo-closeout-inventory-2026-10-30.md",
+                "line": 652
+              }
+            ],
+            "observed": "Mermaid C→I→J 将覆盖扩大、PIT 事实与证券转换合同整体连到所有 TopK/联合收益下一臂；BT-09 的依赖又概括为 MyQuant R2–R6 producer/planner。正文第 68/130 行及 QL07/QL08 细项已较准确，但图和概括与之不一致。",
+            "impact": "按图排期会无谓阻塞已具备 R1 基础的 P-TURN、BT R4 成交敏感性与 R5 最小报告，并可能把独立 TopK 研究线也并入公司行动全量补证前置。",
+            "evidence": [
+              "https://github.com/baiyibing/MyQuant/blob/7c428d9bcb66c0dde37ec203a2b5fcc28ac9f1e8/docs/reviews/2026-09-19-joint-return-implementation-plan.md#L155",
+              "https://github.com/baiyibing/MyQuant/blob/7c428d9bcb66c0dde37ec203a2b5fcc28ac9f1e8/docs/reviews/2026-09-19-joint-return-implementation-plan.md#L166",
+              "https://github.com/baiyibing/MyQuant/blob/7c428d9bcb66c0dde37ec203a2b5fcc28ac9f1e8/docs/reviews/2026-09-19-joint-return-implementation-plan.md#L177",
+              "https://github.com/baiyibing/MyQuant/blob/7c428d9bcb66c0dde37ec203a2b5fcc28ac9f1e8/docs/reviews/2026-09-19-joint-return-implementation-plan.md#L188",
+              "https://github.com/baiyibing/MyQuant/blob/7c428d9bcb66c0dde37ec203a2b5fcc28ac9f1e8/docs/reviews/2026-09-19-joint-return-implementation-plan.md#L199"
+            ],
+            "recommended_change": "把下一研究臂选择连到已有 R1/冻结输入；PIT 只连 R3，证券转换/公司行动事实只连涉及该事件的实验，P-CHASE-TURN 另依赖 full 源。BT-09 改为依当次入选臂需要的 MQ producer/planner、intent/经济与排序合同；R4/R5 不等待 R2/R3 全部完成，R6 只等入选臂。",
+            "acceptance": "图、正文及索引对依赖口径一致；可以直接看出 R4/R5 的最小路径与 R3 的 PIT 阻断分离。"
+          },
+          {
+            "id": "QPR02",
+            "priority": "P3",
+            "type": "summary_wording",
+            "title": "scores-only 遗留是首次生成空 bundle，不是空目录",
+            "locations": [
+              {
+                "path": "D:\\PycharmProjects\\MyQuant-backtrader\\_agent_runs\\three_repo_closeout_20261030\\plan-worktree\\docs\\operations\\three-repo-closeout-plan-2026-10-30.md",
+                "line": 63
+              }
+            ],
+            "observed": "P12 摘要写“scores-only 空目录”；实际 QL13 是已存在池目录、没有旧 bundle 时 scores-only 仍新写空 bundle。附录第 432/434 行已正确。",
+            "impact": "实施摘要可能把复现条件误缩为没有池文件的空目录，漏掉旧池已有数据却得到误导空合同的情形。",
+            "evidence": [
+              "https://github.com/baiyibing/MyQuant/pull/100#issuecomment-5826204003",
+              "https://github.com/baiyibing/MyQuant/blob/7c428d9bcb66c0dde37ec203a2b5fcc28ac9f1e8/my_scripts/export_daily_pool.py#L346",
+              "https://github.com/baiyibing/MyQuant/blob/7c428d9bcb66c0dde37ec203a2b5fcc28ac9f1e8/my_scripts/export_daily_pool.py#L357"
+            ],
+            "recommended_change": "将摘要改为“scores-only 首次空 bundle 与 available-at 校验”，细项保持现有 QL13。",
+            "acceptance": "摘要与 QL13 的复现条件一致；无须新增实现范围。"
+          }
+        ],
+        "confirmed_correct": [
+          "ETF E3/E4 保持真实 provider/readback 与训练有效 IC 两段验收，离线 smoke 未冒充宿主通过；P10 按 ETF 所需输入取子集。",
+          "五个已存在测试的 CI 漏接独立列入批次 0，未重复重做 joint-return CI。",
+          "4090 5474 码 A/B、MQ-1..4、P-BASE B–G/Mode B、M1/M4 与 M2/M3/M5/T5 合法负终态均未被复活。",
+          "R3 组合约束与已完成 M3-D 排序侧负实验区分；TopK #164 与 MQ 联合收益链区分。",
+          "分钟 provider 增量、派生定时刷新、manifest 失败语义和 scores-only 遗留均有独立验收；分钟训练仅按业务需要，不成为 BT 分钟成交前置。",
+          "1.3 负责外部采集/源修订，MyQuant 负责派生和信号，BT 只消费；同仓拆包和运行生命周期独立符合用户方向。",
+          "旧 L2 A/B 已完成，C/D/E 先裁保留或归档；没有用 v653 paper 替代旧 csv_v5 D，也未要求复活旧 live。",
+          "旧 CYQ P6 标历史待核，性能 P2 和清理项目继续后置，未把待核或条件候选当确定故障。"
+        ],
+        "limits": [
+          "基于本轮冻结仓库与先前 gh 核验，未再次访问或运行宿主数据。",
+          "本报告只修改审计输出文件；未修改计划、索引、源码、湖或训练产物。"
+        ]
+      }
+    },
+    {
+      "reviewer": "bt_plan_review",
+      "raw_sha256": "4483bfc7752662f2170d7b95ac7d2c8f519de8595bb0b7207545989096fb6d78",
+      "summary": {
+        "reviewer": "bt_closeout_audit",
+        "review_type": "read-only unified-plan review, BT scope",
+        "verdict": "GO_WITH_NITS",
+        "blocking_architecture_findings": 0,
+        "reviewed_inputs": {
+          "plan": {
+            "path": "plan-worktree/docs/operations/three-repo-closeout-plan-2026-10-30.md",
+            "sha256": "b1b5eb64d3ca17b8d225b2a2f7eee67dce6d6c65614f8913d879dca3a5de9e41"
+          },
+          "appendix": {
+            "path": "plan-worktree/docs/operations/three-repo-closeout-inventory-2026-10-30.md",
+            "sha256": "8dcb499197671c3b00894dc6a3b4c01f1fe81b22376eb435aa72651fe9d1d02f"
+          },
+          "inventory": "plan-worktree/docs/operations/evidence/three-repo-closeout-2026-10-30/inventory.json",
+          "frozen_bt_head": "418496378ebefc4e707879f9859774b0b8f67284"
+        },
+        "coverage": {
+          "bt_items_expected": 18,
+          "bt_items_present": 18,
+          "missing": [],
+          "duplicate_package_assignments": [],
+          "mapping": {
+            "BT-01": "P08",
+            "BT-02": "P16",
+            "BT-03": "P16",
+            "BT-04": "P13",
+            "BT-05": "P15",
+            "BT-06": "P13",
+            "BT-07": "P14",
+            "BT-08": "P17",
+            "BT-09": "P17",
+            "BT-10": "P03",
+            "BT-11": "P02",
+            "BT-12": "P10",
+            "BT-13": "P13",
+            "BT-14": "P21",
+            "BT-15": "P21",
+            "BT-16": "P15",
+            "BT-17": "P01",
+            "BT-18": "P01"
+          }
+        },
+        "accepted_design": [
+          {
+            "topic": "BT-18 修验收器→BT-07 真湖验收分开",
+            "result": "合理。0C可用data-free最小验证，不依赖真实湖或先改引擎；P14再给具名宿主矩阵，不重复估工。",
+            "plan_lines": [
+              100,
+              65,
+              124
+            ],
+            "appendix_lines": [
+              34,
+              488
+            ]
+          },
+          {
+            "topic": "14本策略baseline接线与现有ABI/能力门",
+            "result": "P13逐本选正式/实验/退役，未列为受限6.53 paper新门槛；TopK已入BOOK_NAMES正确排除。",
+            "plan_lines": [
+              33,
+              64,
+              138
+            ],
+            "appendix_lines": [
+              442
+            ]
+          },
+          {
+            "topic": "冷加载和热点",
+            "result": "S1.1先真实测量，S1/S2/S3按瓶颈选择；未复活已完成Numba/variable-frame方案，未预订倍数。",
+            "plan_lines": [
+              66,
+              126
+            ],
+            "appendix_lines": [
+              506,
+              520
+            ]
+          },
+          {
+            "topic": "已退役方案",
+            "result": "#391 probe、Cerebro/Rolling、旧CSV live明确不复活；#402已完成。独立minute_orders仍存在，归P21后置正确。",
+            "plan_lines": [
+              140
+            ],
+            "appendix_lines": [
+              844
+            ]
+          },
+          {
+            "topic": "认证级证据不扩为普通研究总闸",
+            "result": "B-L2/δ5归P21；P10按所选输入分拆，research不等live条件，符合当前授权与边界。",
+            "plan_lines": [
+              72,
+              124
+            ],
+            "appendix_lines": [
+              830
+            ]
+          },
+          {
+            "topic": "历史核销/负结果",
+            "result": "L2约370日、ETF空壳、旧红CI均保留历史口径；基线可退役、静态档案不可得可明确替代、负结果可结束，不强迫重跑。",
+            "plan_lines": [
+              124,
+              126,
+              141,
+              149
+            ]
+          },
+          {
+            "topic": "数据生产者边界",
+            "result": "仅拆包不拆仓，BT历史pull窄例外有说明；producer归1.3，BT保消费/兼容。公司行动补证不等整个P07切换，合理。",
+            "plan_lines": [
+              37,
+              59,
+              114
+            ],
+            "appendix_lines": [
+              270
+            ]
+          }
+        ],
+        "findings": [
+          {
+            "id": "BTPR-01",
+            "priority": "P2",
+            "kind": "BT-18 验收范围补充",
+            "location": {
+              "plan_line": 100,
+              "appendix_line": 40
+            },
+            "title": "同一验收器还有费用身份硬编码漂移，应与 profile 一起修",
+            "evidence": [
+              {
+                "file": "scripts/research/verify_run_protocol_lake_parity.py",
+                "line": 551,
+                "url": "https://github.com/baiyibing/MyQuant-backtrader/blob/418496378ebefc4e707879f9859774b0b8f67284/scripts/research/verify_run_protocol_lake_parity.py#L551",
+                "fact": "economic_flags.fee 固定写 BILATERAL_10BP: buy=sell=0.001, floor=0；other_flags 仍写 native pinned code defaults。"
+              },
+              {
+                "file": "backtest/research/ashare_fees.py",
+                "line": 86,
+                "url": "https://github.com/baiyibing/MyQuant-backtrader/blob/418496378ebefc4e707879f9859774b0b8f67284/backtest/research/ashare_fees.py#L86",
+                "fact": "INDUSTRY_ACCOUNT_FEES 以及 resolve_fee_schedule 在 industry 下使用实际按单佣金/日期税费合同。"
+              },
+              {
+                "file": "backtest/research/csv_minute_backtest.py",
+                "line": 1451,
+                "url": "https://github.com/baiyibing/MyQuant-backtrader/blob/418496378ebefc4e707879f9859774b0b8f67284/backtest/research/csv_minute_backtest.py#L1451",
+                "fact": "默认 rule_profile=industry。"
+              }
+            ],
+            "impact": "只加profile并修低现金预期仍可能输出错误fee身份，削弱真湖回执的可复现性；不是成交引擎缺陷。",
+            "recommendation": "在0C/BT-18明确一并消除fee硬编码：manifest记录实际解析后的profile/revision及费用合同（必要时日期规则标识），legacy与industry各自匹配。",
+            "acceptance": "命令中的profile、native/facade实际profile、报告费用身份三者一致；无需新增工作包或扩大湖回测。"
+          },
+          {
+            "id": "BTPR-02",
+            "priority": "P2",
+            "kind": "BT-18 完成条件防假绿",
+            "location": {
+              "plan_line": 100,
+              "appendix_line": 40
+            },
+            "title": "industry 成功退出仍须证明低现金分支实际触发",
+            "evidence": [
+              {
+                "file": "scripts/research/verify_run_protocol_lake_parity.py",
+                "line": 445,
+                "url": "https://github.com/baiyibing/MyQuant-backtrader/blob/418496378ebefc4e707879f9859774b0b8f67284/scripts/research/verify_run_protocol_lake_parity.py#L445",
+                "fact": "旧csv格要求真实InsufficientCashError；成功退出为NOT_COVERED。"
+              },
+              {
+                "file": "scripts/research/verify_run_protocol_lake_parity.py",
+                "line": 456,
+                "url": "https://github.com/baiyibing/MyQuant-backtrader/blob/418496378ebefc4e707879f9859774b0b8f67284/scripts/research/verify_run_protocol_lake_parity.py#L456",
+                "fact": "v7低现金格已有实际skip_cash检测；正常格还要求BUY/SELL与权益/审计非空。"
+              },
+              {
+                "file": "scripts/research/verify_run_protocol_lake_parity.py",
+                "line": 387,
+                "url": "https://github.com/baiyibing/MyQuant-backtrader/blob/418496378ebefc4e707879f9859774b0b8f67284/scripts/research/verify_run_protocol_lake_parity.py#L387",
+                "fact": "现有low_cash配方现金=1，只能代表skip端，不能代签部分缩量。"
+              }
+            ],
+            "impact": "将industry的exit0直接接纳为PASS会让无买入尝试或空输出的同结果配对假通过。当前计划方向正确，但完成条件应写出触发证据。",
+            "recommendation": "明确实际shrink或skip_cash事件/数量证据；无触发继续NOT_COVERED。缩量路径用离线小夹具或独立具名现金格验证，不要求扩大真实窗口。",
+            "acceptance": "native/facade一致与命名场景触发两道门都通过；保留坏参数/坏输出路径拒绝与正常非空门。"
+          },
+          {
+            "id": "BTPR-03",
+            "priority": "P3",
+            "kind": "依赖图表达",
+            "location": {
+              "plan_line": 88
+            },
+            "title": "图中的覆盖/PIT/证券转换→下一TopK臂应标为所选臂的条件依赖",
+            "evidence": [
+              {
+                "file": "three-repo-closeout-plan-2026-10-30.md",
+                "line": 88,
+                "fact": "I[覆盖扩大 PIT事实与证券转换合同] --> J[选择 TopK 联合收益下一研究臂] 把多轴捆为一条实线。"
+              },
+              {
+                "file": "three-repo-closeout-plan-2026-10-30.md",
+                "line": 130,
+                "fact": "正文仅组合约束依赖对应PIT事实，并允许选择下一臂。"
+              }
+            ],
+            "impact": "图单看可能误以为要完成东兴证券转换等全部P09/P10才能开任一TopK研究，与正文有细微不一致。",
+            "recommendation": "改成“所选臂所需PIT/来源”条件箭头，或图下注明箭头按能力生效。",
+            "blocking": false
+          },
+          {
+            "id": "BTPR-04",
+            "priority": "P3",
+            "kind": "持久文档依赖",
+            "location": {
+              "appendix_lines": [
+                124,
+                274,
+                276,
+                654
+              ]
+            },
+            "title": "发布版应把临时代理身份改为可追溯的会话/仓库证据",
+            "evidence": [
+              {
+                "file": "three-repo-closeout-inventory-2026-10-30.md",
+                "line": 274,
+                "fact": "依赖仍写“根代理掌握本会话最新GO与新公告”。"
+              },
+              {
+                "file": "three-repo-closeout-inventory-2026-10-30.md",
+                "line": 124,
+                "fact": "依赖写“父代理本机.authority核验”。"
+              },
+              {
+                "file": "three-repo-closeout-inventory-2026-10-30.md",
+                "line": 654,
+                "fact": "范围说明写“已与qlib_closeout_audit互证”。"
+              }
+            ],
+            "impact": "会话代理不具备长期可查询身份，读者不能仅从计划复原当前授权或新公告；事实方向并无错误。",
+            "recommendation": "替换为明确的PR/计划commit/公告URL、核验记录或“本轮跨仓证据核对”；对应inventory.json同步。",
+            "blocking": false
+          }
+        ],
+        "authorization_boundary": "本次只读计划/冻结源码，未改主文档、未跑湖、未运行回测/测试、未评论PR。只写本审计JSON。",
+        "recommended_disposition": "主计划架构可通过；将BTPR-01/02写入0C的具体验收即可，BTPR-03/04为发布前文档修整。"
+      }
+    }
+  ],
+  "followup_reviews": [
+    {
+      "reviewer": "oskh_core_closeout_audit",
+      "raw_sha256": "9fcf63bfbffe3c8f6c22f101bdb4cd0606efd13c4be9d0f7eb40b18866d65edc",
+      "summary": {
+        "reviewer": "oskh_core_closeout_audit",
+        "reviewed_at_utc": "2026-10-30T11:18:08.636477+00:00",
+        "review_scope": "Only current git diff plus new user-review-followup.md; targeted static source checks for the added v653 statements. No full-plan re-audit.",
+        "verdict": "APPROVE",
+        "blocking_findings": [],
+        "nonblocking_findings": [],
+        "checks": [
+          {
+            "id": "SOURCE_B_OHLCV",
+            "result": "PASS",
+            "detail": "Frozen inputs.py:36-65 reads index-specific 1d/none T-11..T-1; all OHLCV values finite and >0, synthetic records rejected. Existing test at lines313-315 asserts zero completed-day volume gives UNKNOWN. The delta accurately states these static facts and does not claim host data passed."
+          },
+          {
+            "id": "MINUTE_VOLUME_SCOPE",
+            "result": "PASS",
+            "detail": "Targeted source search over live_trading/runtime/v653 and trade_decision/v653 finds history reading in inputs.py only, at period=1d. loop_hooks minute cadence does not itself read minute bars; cumulative_filled_volume is order/fill state. Wording remains limited to current wiring and keeps other minute consumers quality acceptance open."
+          },
+          {
+            "id": "P01_SCOPE",
+            "result": "PASS",
+            "detail": "JSON receipt scope=audit_items closes V653_TEST_DRIFT only. Membership/unique-ID/UTC validation passes; QL01, BT-18 and BT-17 remain open. No package-scope receipt or unrelated P01 prerequisites were introduced."
+          },
+          {
+            "id": "HOST_EVIDENCE",
+            "result": "PASS",
+            "detail": "I01-I04/I07 remain pending host receipts; I05/I06 distinguish static field checks from unverified host/deployment inputs. Batch0.5 and batch2 explicitly require real paths, Redis identity/reachability, approval and source-B validity; no offline-to-host signoff substitution."
+          },
+          {
+            "id": "OWNER_AND_HUMAN_SIGNOFF",
+            "result": "PASS",
+            "detail": "H01-H03 remain pending Owner/admin with no settings change claimed. Human decision work is queued without implied approval. Receipt schema requires signoff_urls where the original domain requires a human signoff; empty signoff_urls for the merged code-test item does not sign any paper, economics or production capability."
+          },
+          {
+            "id": "DEPENDENCY_BOUNDARIES",
+            "result": "PASS",
+            "detail": "P05 uses only relevant v653 test closure and applicable SHM capability. Independent research work does not wait for all P01 or Owner governance items; original scope/authorizations remain in force."
+          }
+        ],
+        "reviewed_files": [
+          {
+            "path": "docs/operations/three-repo-closeout-plan-2026-10-30.md",
+            "sha256": "400589afc22a3c2b4870a0d48e19173a3cc0457250fe50d8995c759bb1b32948"
+          },
+          {
+            "path": "docs/operations/three-repo-closeout-inventory-2026-10-30.md",
+            "sha256": "19a1c408f69179585c05f225a3b52bd09c1769ab0b4d96226e1e3a4ab8160caa"
+          },
+          {
+            "path": "docs/operations/evidence/three-repo-closeout-2026-10-30/inventory.json",
+            "sha256": "726061592b09e541d606d2875e97935386598b9dff6c01f5bee01e35830889d9"
+          },
+          {
+            "path": "docs/operations/evidence/three-repo-closeout-2026-10-30/user-review-followup.md",
+            "sha256": "2e495db00b89c98320e46e9452106249fc4353b816f618826d571beb8b4ec6ba"
+          }
+        ],
+        "git_diff_sha256": "d389942e0216a279599537483333f81989b00a149be763af66f15d657887fa0e",
+        "static_source_sha": "7e52e6e0cd6a289ad04bccaefb5edced40850841",
+        "source_method": "Read fixed-SHA Git objects from frozen oskh/cache.git; initial docs-only snapshot did not contain runtime files. Used git grep for narrowly scoped dependency verification.",
+        "validation_limits": "No new runtime tests, services, Redis/QMT connection, real-host experiment, credentials, settings changes or notifications. This is documentation/diff review, not host acceptance."
+      }
+    }
+  ]
+}
