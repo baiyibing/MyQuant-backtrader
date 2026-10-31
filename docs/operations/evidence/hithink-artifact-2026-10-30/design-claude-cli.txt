@@ -1,0 +1,21 @@
+已读取实施合同与本机 v6 原方案（`plan-corp-actions-hithink-channel-2026-10-29.md`，lake_audit 工作树副本），逐项对照四类风险模式核查。
+
+## 结论：未发现阻断级合同漏洞，可实施
+
+（基线 = v6 plan @179d0f6 + 本合同 + 行 29 只读预审补充；合同未重申处以 plan 为准。）
+
+**四类风险核查闭环情况：**
+
+1. **错误候选**：全列相等才折叠、混合配股阻断自动准备、event_id 跨通道不同形已明示、防重靠 base 钉死+窗口序贯而非同 id——闭环。
+2. **覆盖误判**：A/B 要求 `delist_date < run.start`、`==start` 落 D；C 类仅认 HTTP200+code0+身份准确+显式空数组，3002 永不放行；探针失败=unknown→D——闭环。
+3. **哈希幂等**：marker→manifest→dump/probes/宇宙/窗口/fetched_at 哈希链；成功报告要求 marker+state+dump 三方哈希相符，refresh 中断或换 dump 不可能假绿（已 assemble 的 dump sha 被证据链钉住）——闭环。
+4. **经济闸门**：无 evidence 即阻断 hithink（含日期齐全情形）；sidecar 自述 revision 不放行；同日多行消歧适用全源；当前无消费者接线——闭环。
+
+**实施时须钉死的四个薄弱缝（非阻断，均为合同摘要相对 plan 的缺失/过简）：**
+
+1. 合同验收清单（:23）"跨源代码日期碰撞"一句过简——须落实为 plan §4.3 的 **delta↔base (code, ex_date) 重叠断言**测试 + 窗口双闭语义（`start ≤ ex_date ≤ end`）producer/BT/manifest 三处一致。这是跨通道防重的最后闸，缺了会漏重复合并。
+2. `ex_date_ms`→date 换算以 Asia/Shanghai 为零点口径须有显式单测（:16 只写"日期按 Asia/Shanghai"）；系统性换算漂移虽可由 parity 46 键集合恒等（:18）兜出，但不应依赖事后兜底。
+3. 合同验收清单缺 plan §4.7"**含 hithink 行的 base 前向兼容**"（validate_base 分通道 record_date 期望）与 event_id 稳定性两项；plan §5.1 测试清单为权威全集，勿以合同摘要清单裁剪。
+4. 配股-only 码计入覆盖（universe_hits/codes_no_events）但不产生任何事件——属已声明范围排除，但覆盖断言因此可能被误读为"经济完整"；plan §4.6 review_requirements（NULL 日期、重整转增盲区）必须实际落进 manifest-patch-plan，且 dump 在窗有行≠已消费事件须进 summary 口径。
+
+另确认：fence"只保证登记入口"（:29）为已知残余，属已声明接受，不构成绕过漏洞。

@@ -42,6 +42,7 @@ jobs:
           python scripts/gates/verify_data_path_ssot.py
           python scripts/gates/verify_no_hardcoded_machine_paths.py
           python scripts/gates/verify_tr_bridge_import_ssot.py
+          python scripts/gates/verify_corp_actions_economics_fence.py
 
       # requirements.txt includes numba>=0.60 so scan_held_day numba/Python
       # parity (tests/test_scan_held_day_numba_parity.py) runs in CI instead of
