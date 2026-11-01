@@ -1,0 +1,154 @@
+{
+  "schema_version": 1,
+  "recorded_at_utc": "2026-11-01T11:10:25.751427+00:00",
+  "package_id": "P15",
+  "package_closed": false,
+  "stage": "S1.1 local scan/open samples",
+  "host": "DESKTOP-M5HCFD6",
+  "observed_source_head": "2b8a3208fca677b404513efd4d6f774180e44a7b",
+  "source_merged_head": "3197ffa6310e3704f0fc4d24d18e295bb27f2c1b",
+  "source_and_merged_tree_equal": true,
+  "probe_blob": "692badb3b2565da82d783e2f27bf9c59d89d4b85",
+  "loader_blob": "84414cb2e1deb347d50b0ba750066167a8e05005",
+  "source_snapshot": "shallow-v1:d9757139c6024c7c449532c079b204cfd70465dbaa28ea2cf5e9dab75dd72c59",
+  "source_schema": "a2dabd479e94988d5a36f9abefe44098d68c5d754090a5a5e68462ede6da060f",
+  "loader_request": [
+    "20251227",
+    "20260914"
+  ],
+  "month_windows": [
+    [
+      "20251201",
+      "20251231"
+    ],
+    [
+      "20260101",
+      "20260131"
+    ],
+    [
+      "20260201",
+      "20260228"
+    ],
+    [
+      "20260301",
+      "20260331"
+    ],
+    [
+      "20260401",
+      "20260430"
+    ],
+    [
+      "20260501",
+      "20260531"
+    ],
+    [
+      "20260601",
+      "20260630"
+    ],
+    [
+      "20260701",
+      "20260731"
+    ],
+    [
+      "20260801",
+      "20260831"
+    ],
+    [
+      "20260901",
+      "20260930"
+    ]
+  ],
+  "sample_symbols": [
+    "600000.SH",
+    "600036.SH"
+  ],
+  "request_basis": "Unchanged documented historical TopK probe example: 5575 request codes / 16 workers. This is a file-count projection, not a measurement of the current full universe.",
+  "fd_extrapolation": {
+    "request_codes": 5575,
+    "workers": 16,
+    "projected_shard_files": 55750,
+    "serial_probe_peak_parquet_handles": 1,
+    "one_handle_per_worker_projection": 16,
+    "all_shards_open_projection": 55750
+  },
+  "timing_caveat": "ordered reads; OS page cache not evicted; not cold-cache evidence",
+  "rounds": [
+    {
+      "raw_receipt": "p15-ordered-minute-probe.json",
+      "raw_sha256": "9a495879fd540e46f774e0b28a6305d78d3e459b82eaf4fce2a554a21d2b9a90",
+      "raw_receipt_mtime_utc": "2026-11-01T11:01:59.953791+00:00",
+      "observations": [
+        {
+          "code": "600000.SH",
+          "source_stamp": [
+            3242793,
+            1792062376795608100
+          ],
+          "rows": 49164,
+          "open_s": 0.0003647150006145239,
+          "one_scan_s": 0.41117239999584854,
+          "per_month_scans_s": 0.40981749998172745,
+          "per_month_over_one_scan": 0.9967047885166058,
+          "open_over_one_scan": 0.0008870123593368774
+        },
+        {
+          "code": "600036.SH",
+          "source_stamp": [
+            3470121,
+            1792062378077907900
+          ],
+          "rows": 49164,
+          "open_s": 0.001257074999739416,
+          "one_scan_s": 0.37173519999487326,
+          "per_month_scans_s": 0.4060424000490457,
+          "per_month_over_one_scan": 1.0922893502004802,
+          "open_over_one_scan": 0.003381641016930204
+        }
+      ]
+    },
+    {
+      "raw_receipt": "p15-ordered-minute-probe-repeat.json",
+      "raw_sha256": "679a6e23ff8f86f19ed6a34ae934184cd53fc6ee5c1784ed88047be9c94b3068",
+      "raw_receipt_mtime_utc": "2026-11-01T11:04:35.360235+00:00",
+      "observations": [
+        {
+          "code": "600000.SH",
+          "source_stamp": [
+            3242793,
+            1792062376795608100
+          ],
+          "rows": 49164,
+          "open_s": 0.0004272650025086477,
+          "one_scan_s": 0.39562409999780357,
+          "per_month_scans_s": 0.4101844999822788,
+          "per_month_over_one_scan": 1.0368036223894248,
+          "open_over_one_scan": 0.0010799771867058144
+        },
+        {
+          "code": "600036.SH",
+          "source_stamp": [
+            3470121,
+            1792062378077907900
+          ],
+          "rows": 49164,
+          "open_s": 0.00033512999943923204,
+          "one_scan_s": 0.33389220002572984,
+          "per_month_scans_s": 0.41492510004900396,
+          "per_month_over_one_scan": 1.2426918029742224,
+          "open_over_one_scan": 0.0010037071827775756
+        }
+      ]
+    }
+  ],
+  "frame_equality_passed_each_round": true,
+  "market_or_runtime_cache_writes": false,
+  "actual_rebuilt_shards": null,
+  "scope": "Two symbols, two ordered rounds. No cold-cache throughput, all-universe cost, real shard rebuild or grain-selection signoff.",
+  "interpretation": "Open/close time is under 0.4% of one scan in these samples. It does not establish that opening files dominates and does not justify a shard grain decision.",
+  "remaining": [
+    "Controlled cold/warm measurements and representative full request",
+    "Monolith versus candidate write/read costs and actual append/repair rebuild counts",
+    "Separate default-OFF S1 implementation/admission, codeset S2 and independently authorized Arrow S3"
+  ],
+  "raw_receipts_location": "_agent_runs/three_repo_batch3_20261101/ (ignored host-local evidence; not copied into the repository)"
+}

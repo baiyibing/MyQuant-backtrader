@@ -4026,6 +4026,15 @@
       "scope": "B-native-CV-01 industry/native-L1 matrix: eight real-lake cells PASS at frozen historical window. Engine Slice D and P14 package remain open.",
       "domain_record": "docs/backtest/note-l1-lake-e2e-b-native-cv01-2026-09-29.md",
       "evidence_record": "docs/operations/evidence/p14-native-lake-2026-11-01/acceptance.json"
+    },
+    {
+      "package_id": "P15",
+      "audit_ids": [
+        "BT-05"
+      ],
+      "scope": "Two real-host S1.1 scan/open samples with frame equality and stable source identity; OS cache uncontrolled, grain and full P15 remain open.",
+      "domain_record": "docs/backtest/note-minute-cache-cold-load-s11-2026-10-16.md",
+      "evidence_record": "docs/operations/evidence/p15-host-samples-2026-11-01/readout.json"
     }
   ]
 }

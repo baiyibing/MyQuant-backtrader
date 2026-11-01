@@ -433,3 +433,13 @@ only; no runtime shard path. Real-host measurements, actual rebuilt-file
 counts and grain decision remain PENDING because no lake root is configured
 in the encode environment. No performance or CSV acceptance claim follows.
 S1 default-OFF shards, S2 and separate S3 remain subsequent knives.
+
+### 2026-11-01 measurement update
+
+Two ordered real-host rounds of the unchanged documented two-symbol example
+are now recorded in the [S1.1 host supplement](note-minute-cache-cold-load-s11-2026-10-16.md#2026-11-01-本机实测补充p15-未关闭).
+Frames match exactly and source identities stay stable. Open overhead is
+below 0.4% of one scan in these samples; the result does not establish an
+open-dominated workload. OS cache state was not controlled, the full request
+was not scanned, and no runtime shards or actual rebuilds were measured.
+P15, grain selection and the subsequent S1/S2/S3 knives remain open.
