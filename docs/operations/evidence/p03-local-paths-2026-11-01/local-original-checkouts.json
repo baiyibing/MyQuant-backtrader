@@ -1,0 +1,173 @@
+{
+  "recorded_at_utc": "2026-11-01T11:20:01.769176+00:00",
+  "scope": "Local original working-checkout root contracts; not deployed process/other-host attestation",
+  "host": "DESKTOP-M5HCFD6",
+  "process_paths": {
+    "OSKH_SOURCE_PARQUET_ROOT": "E:\\stock_data",
+    "OSKH_AUTHORITY_HINT_ROOT": null,
+    "OSKH_DATA_ROOT": null,
+    "OSKH_PERIOD_1D_ROOT": null,
+    "OSKH_PERIOD_1M_ROOT": null,
+    "OSKH_INDEX_DAILY_ROOT": null,
+    "OSKH_ETF_DAILY_ROOT": null,
+    "OSKH_L2_PARQUET_ROOT": null,
+    "TURNOVER_RESIST_DATA_DIR": null,
+    "CARGO_TARGET_DIR": null
+  },
+  "registered_paths": {
+    "user": {
+      "OSKH_SOURCE_PARQUET_ROOT": "E:\\stock_data",
+      "OSKH_AUTHORITY_HINT_ROOT": null,
+      "OSKH_DATA_ROOT": null,
+      "OSKH_PERIOD_1D_ROOT": null,
+      "OSKH_PERIOD_1M_ROOT": null,
+      "OSKH_INDEX_DAILY_ROOT": null,
+      "OSKH_ETF_DAILY_ROOT": null,
+      "OSKH_L2_PARQUET_ROOT": null,
+      "TURNOVER_RESIST_DATA_DIR": null,
+      "CARGO_TARGET_DIR": null
+    },
+    "machine": {
+      "OSKH_SOURCE_PARQUET_ROOT": null,
+      "OSKH_AUTHORITY_HINT_ROOT": null,
+      "OSKH_DATA_ROOT": null,
+      "OSKH_PERIOD_1D_ROOT": null,
+      "OSKH_PERIOD_1M_ROOT": null,
+      "OSKH_INDEX_DAILY_ROOT": null,
+      "OSKH_ETF_DAILY_ROOT": null,
+      "OSKH_L2_PARQUET_ROOT": null,
+      "TURNOVER_RESIST_DATA_DIR": null,
+      "CARGO_TARGET_DIR": null
+    }
+  },
+  "repos": [
+    {
+      "repo": "D:\\PycharmProjects\\OSkhQuant1.3",
+      "head": "622c5d217770233c5c45e124c7cb5737ed30fe25",
+      "branch": "feat/lake-stat-1d1m-readonly",
+      "module": "D:\\PycharmProjects\\OSkhQuant1.3\\common\\infra\\data_root.py",
+      "roots": {
+        "container": {
+          "path": "E:\\stock_data",
+          "exists": true
+        },
+        "stock_1d": {
+          "path": "E:\\stock_data\\stock\\period=1d",
+          "exists": true
+        },
+        "stock_1m": {
+          "path": "E:\\stock_data\\stock\\period=1m",
+          "exists": true
+        },
+        "index_1d": {
+          "path": "E:\\stock_data\\index\\period=1d",
+          "exists": true
+        },
+        "etf_1d": {
+          "path": "E:\\stock_data\\etf\\period=1d",
+          "exists": true
+        },
+        "workspace_container": {
+          "path": "D:\\PycharmProjects\\OSkhQuant1.3\\stock_data",
+          "exists": true
+        }
+      },
+      "authority_marker": {
+        "exists": true,
+        "path": "E:\\stock_data\\.authority",
+        "sha256": "7b2ab4ce1d4c1e98dba7320915d09a56eef613d423504bc6af6c88e5d4036e16"
+      },
+      "marker_hint_without_source": {
+        "resolves": false,
+        "error_type": "UnsetDataRootError"
+      }
+    },
+    {
+      "repo": "D:\\PycharmProjects\\MyQuant",
+      "head": "84f273b1c8280be155040dba1145281ccd7a14d6",
+      "branch": "feat/etf-qlib-daily",
+      "module": "D:\\PycharmProjects\\MyQuant\\my_scripts\\data_root.py",
+      "roots": {
+        "container": {
+          "path": "E:\\stock_data",
+          "exists": true
+        },
+        "stock_1d": {
+          "path": "E:\\stock_data\\stock\\period=1d",
+          "exists": true
+        },
+        "stock_1m": {
+          "path": "E:\\stock_data\\stock\\period=1m",
+          "exists": true
+        },
+        "index_1d": {
+          "path": "E:\\stock_data\\index\\period=1d",
+          "exists": true
+        },
+        "etf_1d": {
+          "path": "E:\\stock_data\\etf\\period=1d",
+          "exists": true
+        },
+        "workspace_container": {
+          "status": "NOT_APPLICABLE",
+          "reason": "This consumer does not own the 1.3 DuckDB workspace"
+        }
+      },
+      "authority_marker": {
+        "exists": true,
+        "path": "E:\\stock_data\\.authority",
+        "sha256": "7b2ab4ce1d4c1e98dba7320915d09a56eef613d423504bc6af6c88e5d4036e16"
+      },
+      "marker_hint_without_source": {
+        "resolves": false,
+        "error_type": "DataRootError"
+      }
+    },
+    {
+      "repo": "D:\\PycharmProjects\\MyQuant-backtrader",
+      "head": "df2d951f07471477280c24aed809c46d1bc7025a",
+      "branch": "master",
+      "module": "D:\\PycharmProjects\\MyQuant-backtrader\\common\\infra\\data_root.py",
+      "roots": {
+        "container": {
+          "path": "E:\\stock_data",
+          "exists": true
+        },
+        "stock_1d": {
+          "path": "E:\\stock_data\\stock\\period=1d",
+          "exists": true
+        },
+        "stock_1m": {
+          "path": "E:\\stock_data\\stock\\period=1m",
+          "exists": true
+        },
+        "index_1d": {
+          "path": "E:\\stock_data\\index\\period=1d",
+          "exists": true
+        },
+        "etf_1d": {
+          "path": "E:\\stock_data\\etf\\period=1d",
+          "exists": true
+        },
+        "workspace_container": {
+          "path": "D:\\PycharmProjects\\MyQuant-backtrader\\stock_data",
+          "exists": false
+        }
+      },
+      "authority_marker": {
+        "exists": true,
+        "path": "E:\\stock_data\\.authority",
+        "sha256": "7b2ab4ce1d4c1e98dba7320915d09a56eef613d423504bc6af6c88e5d4036e16"
+      },
+      "marker_hint_without_source": {
+        "resolves": true,
+        "path": "E:\\stock_data"
+      }
+    }
+  ],
+  "market_write_performed": false,
+  "remote_hosts": {
+    "4090": "NOT_INSPECTED",
+    "75": "NOT_INSPECTED; F location is user-reported, not freshly verified"
+  }
+}
