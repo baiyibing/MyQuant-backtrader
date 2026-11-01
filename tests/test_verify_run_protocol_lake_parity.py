@@ -4,6 +4,7 @@ from dataclasses import replace
 import hashlib
 import json
 from pathlib import Path
+import os
 import tempfile
 
 import pytest
@@ -728,3 +729,88 @@ def test_preregistration_precedes_refusals_and_no_lake_never_launches_live(exter
     assert exact in capsys.readouterr().out
     with pytest.raises(FileExistsError):
         harness.main(["--output-root", str(output)])
+
+
+@pytest.mark.parametrize("name", ["stdout", "summary.txt"])
+def test_current_six_phase_duration_grammar_preserves_economics_and_cache_state(pair, name):
+    line = ("  耗时: 池 0.0s | 日线 2.4s | 分钟 10.7s | 除权 0.6s | 指数闸 0.0s | 模拟 3.4s"
+            " | 缓存 off | 日线缓存 hit\n")
+    left = with_observed_bytes(pair[0], name, ("NAV=10008\n" + line).encode())
+    right_data = ("NAV=10008\n" + line.replace("2.4s", "0.4s").replace("0.6s", "0.5s")).encode()
+    right = with_observed_bytes(pair[1], name, right_data)
+    policy = harness.ComparePolicy(duration_files=("summary.txt",), duration_stdout=True)
+    assert harness.compare_observations(left, right, policy)["status"] == "PASS"
+    for before, after in ((b"hit", b"miss"), (b"NAV=10008", b"NAV=10009"),
+                          ("除权".encode(), "成交".encode())):
+        changed = with_observed_bytes(right, name, right_data.replace(before, after))
+        assert harness.compare_observations(left, changed, policy)["status"] == "FAIL"
+
+
+@pytest.mark.parametrize("mode", ["ok", "warmup_failure", "cache_before", "cache_after"])
+def test_matrix_pins_existing_profile_switch_and_warms_then_freezes_daily_cache(external_tmp, monkeypatch, mode):
+    import scripts._script_bootstrap as bootstrap
+    import sys
+
+    output = external_tmp / "receipt"
+    monkeypatch.setenv("OSKH_PROFILE_SIM", "1")
+    monkeypatch.setattr(bootstrap, "resolve_oskh_python", lambda: Path(sys.executable))
+    monkeypatch.setattr(harness, "resolve_roots", lambda: {})
+    monkeypatch.setattr(harness, "input_identity", lambda *args: {"sources": {"errors": []}})
+    calls = []
+    snapshots = 0
+
+    def snapshot():
+        nonlocal snapshots
+        snapshots += 1
+        changed = ((mode == "cache_before" and snapshots > 1)
+                   or (mode == "cache_after" and snapshots > 2))
+        return {"root": "isolated-derived-cache", "files": [int(changed)]}
+
+    def launch(side, family, argv, cwd, interpreter, env, bad_output):
+        assert env["OSKH_PROFILE_SIM"] == "0" and os.environ["OSKH_PROFILE_SIM"] == "1"
+        recipe = json.loads((output / "recipe.json").read_text(encoding="utf-8"))
+        assert recipe["environment_public"]["OSKH_PROFILE_SIM"] == "0"
+        assert len(recipe["cache_warmup_plan"]) == 2
+        warming = cwd.parent.name.endswith("-cache-warmup")
+        if warming:
+            assert side == "direct" and not bad_output
+            assert argv == harness.native_argv(family, "normal", harness.ROOT / "stock_pool",
+                                               "20251023", "20251104", "industry")
+        else:
+            assert sum(row[0] for row in calls) == 2
+        calls.append((warming, side, family))
+        return harness.Observation(cwd / "artifacts", 1 if warming and mode == "warmup_failure" else 0,
+                                   b"", b"")
+
+    monkeypatch.setattr(harness, "daily_cache_snapshot", snapshot)
+    monkeypatch.setattr(harness, "launch", launch)  # External child-process boundary only.
+    monkeypatch.setattr(harness, "compare_observations", lambda *a, **k: {"status": "PASS", "byte_identical": True})
+    monkeypatch.setattr(harness, "cell_verdict", lambda *a, **k: ("PASS", "flow-only fixture"))
+    assert harness.main(["--output-root", str(output)]) == (0 if mode == "ok" else 1)
+    result = json.loads((output / "result.json").read_text(encoding="utf-8"))
+    assert len(result["cells"]) == 8
+    if mode == "ok":
+        assert len(calls) == 18 and all(c["status"] == "PASS" for c in result["cells"])
+    else:
+        assert sum(c["status"] == "FAIL" for c in result["cells"]) == 6
+        assert all(c["status"] == "PASS" for c in result["cells"] if c["cell"] == "invalid_config")
+        if mode.startswith("cache_"):
+            assert all("daily cache identity drift" in c["reason"] for c in result["cells"]
+                       if c["status"] == "FAIL")
+
+
+def test_daily_cache_snapshot_pins_real_derived_bytes_without_source_access(tmp_path, monkeypatch):
+    from backtest.research import ashare_bars
+
+    monkeypatch.setattr(ashare_bars, "CACHE_ROOT", tmp_path)
+    parquet = tmp_path / "daily_fixture.parquet"
+    sidecar = tmp_path / "daily_fixture.json"
+    parquet.write_bytes(b"frozen-parquet-fixture")
+    sidecar.write_bytes(b'{"identity":"frozen"}')
+    (tmp_path / "minute_unrelated.parquet").write_bytes(b"not a daily cache")
+    before = harness.daily_cache_snapshot()
+    assert len(before["files"]) == 2
+    assert before == harness.daily_cache_snapshot()
+    parquet.write_bytes(b"changed-parquet-fixture")
+    assert before != harness.daily_cache_snapshot()
+    assert sidecar.read_bytes() == b'{"identity":"frozen"}'

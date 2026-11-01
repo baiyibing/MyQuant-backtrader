@@ -1,0 +1,155 @@
+[
+  {
+    "case": "csv_minute-bad_output",
+    "nonallowed_by_artifact": {
+      "stdout": 6
+    },
+    "first_paths": [
+      "stdout/line/24",
+      "stdout/line/25",
+      "stdout/line/26",
+      "stdout/line/27",
+      "stdout/line/28"
+    ],
+    "economic_files": {}
+  },
+  {
+    "case": "csv_minute-invalid_config",
+    "nonallowed_by_artifact": {},
+    "first_paths": [],
+    "economic_files": {}
+  },
+  {
+    "case": "csv_minute-low_cash",
+    "nonallowed_by_artifact": {
+      "profile_sim.json": 26,
+      "summary.txt": 6,
+      "stdout": 6
+    },
+    "first_paths": [
+      "profile_sim.json/finished_at",
+      "profile_sim.json/leftover_init_s",
+      "profile_sim.json/load_s/t_daily_s",
+      "profile_sim.json/load_s/t_exdiv_s",
+      "profile_sim.json/load_s/t_minute_s"
+    ],
+    "economic_files": {
+      "trades.csv": {
+        "byte_equal": true,
+        "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+      },
+      "daily_equity.csv": {
+        "byte_equal": true,
+        "sha256": "42570b8c3be88f70e11a6c376b195d839ce807b4169541a957e03aa073ccd93c"
+      },
+      "execution-audit.json": {
+        "byte_equal": true,
+        "sha256": "0bff2375878752abe4b7cfd07c02b0877caab9f0f59b0fed9af1940e56051ef7"
+      },
+      "data-provenance.json": {
+        "byte_equal": true,
+        "sha256": "90dacef7bd4fd780669dd028b4e1a3e8f4bd1ac3aaf64b78e28e6b00aa3d0302"
+      }
+    }
+  },
+  {
+    "case": "csv_minute-normal",
+    "nonallowed_by_artifact": {
+      "profile_sim.json": 30,
+      "summary.txt": 6,
+      "stdout": 31
+    },
+    "first_paths": [
+      "profile_sim.json/finished_at",
+      "profile_sim.json/leftover_init_s",
+      "profile_sim.json/load_s/t_daily_s",
+      "profile_sim.json/load_s/t_exdiv_s",
+      "profile_sim.json/load_s/t_index_gate_s"
+    ],
+    "economic_files": {
+      "trades.csv": {
+        "byte_equal": true,
+        "sha256": "3ed13ce3c43c64bf8522764ae7db83c9ef8d5d5d43f26aecd709acc2ca9d0d81"
+      },
+      "daily_equity.csv": {
+        "byte_equal": true,
+        "sha256": "e7962e5f4ac38998b212b1d6be3b7e3a7f66678637238be02431bf1c93c6d2f5"
+      },
+      "execution-audit.json": {
+        "byte_equal": true,
+        "sha256": "0591e2881c5d7f8e9b1a3cd2c66c1a91b33ba663cd3cd4b181f4bf2bdef756a1"
+      },
+      "data-provenance.json": {
+        "byte_equal": true,
+        "sha256": "90dacef7bd4fd780669dd028b4e1a3e8f4bd1ac3aaf64b78e28e6b00aa3d0302"
+      }
+    }
+  },
+  {
+    "case": "v7-bad_output",
+    "nonallowed_by_artifact": {},
+    "first_paths": [],
+    "economic_files": {}
+  },
+  {
+    "case": "v7-invalid_config",
+    "nonallowed_by_artifact": {},
+    "first_paths": [],
+    "economic_files": {}
+  },
+  {
+    "case": "v7-low_cash",
+    "nonallowed_by_artifact": {
+      "profile_sim.json": 10
+    },
+    "first_paths": [
+      "profile_sim.json/finished_at",
+      "profile_sim.json/phase_share/load_bars",
+      "profile_sim.json/phase_share/pool_load",
+      "profile_sim.json/phase_share/simulate",
+      "profile_sim.json/phases_s/load_bars"
+    ],
+    "economic_files": {
+      "trades.csv": {
+        "byte_equal": true,
+        "sha256": "c6f3a4a26a6a2e656b9ad03dbdbc1a224eb1801a27e2ee45166aefd99a030657"
+      },
+      "daily_equity.csv": {
+        "byte_equal": true,
+        "sha256": "232ab0ea08dca01e74f3660e5ab5a408c4cf4daf8867777e89f154ddbf8c8a62"
+      },
+      "execution-audit.json": {
+        "byte_equal": true,
+        "sha256": "1d4b24c66db5f1d5206e26309b8b9095c60d0d1d41d5c2fbb1b6ebe84f1e9b2a"
+      }
+    }
+  },
+  {
+    "case": "v7-normal",
+    "nonallowed_by_artifact": {
+      "profile_sim.json": 10,
+      "stdout": 15
+    },
+    "first_paths": [
+      "profile_sim.json/finished_at",
+      "profile_sim.json/phase_share/load_bars",
+      "profile_sim.json/phase_share/pool_load",
+      "profile_sim.json/phase_share/simulate",
+      "profile_sim.json/phases_s/load_bars"
+    ],
+    "economic_files": {
+      "trades.csv": {
+        "byte_equal": true,
+        "sha256": "261205d7f6a5e893535712fa1f210995c8d88d3ac7d231ae2939b1c12649e01e"
+      },
+      "daily_equity.csv": {
+        "byte_equal": true,
+        "sha256": "0f56b93e188d51c5ed2cce914ec24df77f5857c293c35c7f6790392dd6e8db55"
+      },
+      "execution-audit.json": {
+        "byte_equal": true,
+        "sha256": "0252bbf8d2bfe07bde9a40d06e9b74711d60a88c0c590bc839aee7fe5a26aef9"
+      }
+    }
+  }
+]

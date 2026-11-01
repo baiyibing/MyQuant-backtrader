@@ -40,6 +40,7 @@ TEXT_SUFFIXES = (".csv", ".json", ".txt")
 # Only numeric duration captures may differ after text normalization to LF.
 # Keep #261's capture grammar; every surrounding character must still match.
 DURATION_LINES = (
+    r"  耗时: 池 (?P<pool>\d+\.\d+)s \| 日线 (?P<daily>\d+\.\d+)s \| 分钟 (?P<minute>\d+\.\d+)s \| 除权 (?P<exdiv>\d+\.\d+)s \| 指数闸 (?P<index>\d+\.\d+)s \| 模拟 (?P<sim>\d+\.\d+)s(?: \| 缓存 [^\r\n]+)?(?:\r?\n)?",
     r"  耗时: 池 (?P<pool>\d+\.\d+)s \| 日线 (?P<daily>\d+\.\d+)s \| 分钟 (?P<minute>\d+\.\d+)s \| 模拟 (?P<sim>\d+\.\d+)s(?: \| 缓存 [^\r\n]+)?(?:\r?\n)?",
     r"loaded minute=lake daily=lake: minute_names=\d+ daily_names=\d+ exdiv_names=\d+ st_names=\d+ in (?P<load>\d+\.\d+)s(?:\r?\n)?",
     r"timing load=(?P<load>\d+\.\d+)s simulate=(?P<sim>\d+\.\d+)s total=(?P<total>\d+\.\d+)s(?:\r?\n)?",
@@ -381,6 +382,18 @@ def input_identity(pool_path: Path, start: str, end: str) -> dict:
             "runtime_config_and_authority": config_identity, "csv_daily_comparison_candidates": baseline}
 
 
+def daily_cache_snapshot() -> dict:
+    """Pin derived daily caches after native warmup; never mutate or mask them."""
+    from backtest.research.ashare_bars import CACHE_ROOT
+
+    root = CACHE_ROOT.resolve()
+    files = [{"path": str(path), "sha256": file_digest(path),
+              "size": path.stat().st_size, "mtime_ns": path.stat().st_mtime_ns}
+             for path in sorted(root.glob("daily_*"))
+             if path.is_file() and path.suffix in (".parquet", ".json")]
+    return {"root": str(root), "files": files}
+
+
 def economic_contract(rule_profile: str) -> dict:
     """Resolve the same profile and unoverridden fee schedule as both native CLIs."""
     from backtest.research.ashare_fees import resolve_account_fee_schedule
@@ -555,7 +568,8 @@ def main(argv=None) -> int:
     out.mkdir(parents=True, exist_ok=False)
     env = {**os.environ, "OSKH_MERGE_PYTHON": str(interpreter), "OSKH_TURTLE_POOL_DIR": "",
            "PYTHONPATH": str(ROOT), "PYTHONHASHSEED": "0", "PYTHONDONTWRITEBYTECODE": "1",
-           "NUMBA_CACHE_DIR": str(out / "numba-cache"), "TZ": "Asia/Shanghai"}
+           "NUMBA_CACHE_DIR": str(out / "numba-cache"), "TZ": "Asia/Shanghai",
+           "OSKH_PROFILE_SIM": "0"}
     pools = {"csv_minute": args.csv_pool_dir.resolve(), "v7": args.v7_pool_dir.resolve()}
     identities = {family: input_identity(pool, args.start, args.end) for family, pool in pools.items()}
     # Relative source settings must not change meaning in the isolated child cwd.
@@ -577,6 +591,10 @@ def main(argv=None) -> int:
               "argv": native_argv(family, cell, pools[family], args.start, args.end, args.rule_profile),
               "cwd": {side: str(out / f"{family}-{cell}" / side) for side in ("direct", "l1")}}
              for family in ENTRIES for cell in ("normal", "low_cash", "invalid_config", "bad_output")]
+    warmup_plan = [{"family": family,
+                    "argv": native_argv(family, "normal", pools[family], args.start, args.end, args.rule_profile),
+                    "cwd": str(out / f"{family}-cache-warmup" / "direct")}
+                   for family in ENTRIES]
     git = lambda *tokens: subprocess.check_output(["git", *tokens], cwd=ROOT, text=True).strip()
     # Selected-interpreter environment identity: versions, no secret environment values.
     runtime = subprocess.check_output([str(interpreter), "-c",
@@ -593,7 +611,7 @@ def main(argv=None) -> int:
             "OSKH_DATA_ROOT", "OSKH_SOURCE_PARQUET_ROOT", "OSKH_AUTHORITY_HINT_ROOT",
             "OSKH_PERIOD_1M_ROOT", "OSKH_PERIOD_1D_ROOT", "OSKH_INDEX_DAILY_ROOT",
             "OSKH_MERGE_PYTHON", "OSKH_TURTLE_POOL_DIR", "PYTHONPATH", "PYTHONHASHSEED",
-            "PYTHONDONTWRITEBYTECODE", "NUMBA_CACHE_DIR", "TZ", "MINIQMT_CONFIG_PATH")},
+            "PYTHONDONTWRITEBYTECODE", "NUMBA_CACHE_DIR", "TZ", "MINIQMT_CONFIG_PATH", "OSKH_PROFILE_SIM")},
         "window": {"start": args.start, "end": args.end, "origin": "native CLI documented defaults / explicit harness arguments"},
         "load_windows": {"csv_minute": "minute/daily: start minus native WARMUP_DAYS=10 calendar days through end",
                          "v7": "minute: start..end; daily: start minus native DAILY_PRELOAD_DAYS=40 through end",
@@ -605,7 +623,10 @@ def main(argv=None) -> int:
                            "price_domain": "lake minute/daily none; native exdiv context",
                            "strategy": {"csv_minute": "version8", "v7": "native strategy7"},
                            "other_flags": "native pinned code defaults; no X-02/X-04 or production changes"},
-        "cache": "CSV --no-cache; v7 native bars_from_pool use_cache=False; fresh processes; shared isolated numba code cache only",
+        "cache": "minute: CSV --no-cache / v7 use_cache=False; daily: native normal warmup for each family, then pin hashes before paired cells; fresh processes and isolated numba code cache",
+        "cache_warmup_plan": warmup_plan,
+        "daily_cache_snapshot": "daily-cache-snapshot.json (recorded after warmup, before paired cells)",
+        "profiling": "existing OSKH_PROFILE_SIM=0 disables optional wall-clock sidecars; native defaults and comparison JSON policy unchanged",
         "compare_policy": {"duration_lines": DURATION_LINES, "duration_files": ["summary.txt"],
                            "text": {"suffixes": TEXT_SUFFIXES, "also": ["stdout", "stderr", "declared duration_files"],
                                     "classification": "strict UTF-8; no C0/C1 controls except tab/CR/LF",
@@ -628,6 +649,31 @@ def main(argv=None) -> int:
                 or file_digest(Path(__file__)) != receipt["harness_sha256"]):
             raise RuntimeError("code identity drift after preregistration")
 
+    warmups = {}
+    for warmup in warmup_plan:
+        family = warmup["family"]
+        if identities[family]["sources"]["errors"]:
+            warmups[family] = {"status": "NOT_RUN", "reason": "input source blocked"}
+            continue
+        directory = Path(warmup["cwd"]).parent
+        directory.mkdir()
+        try:
+            check_code_identity()
+            if input_identity(pools[family], args.start, args.end) != identities[family]:
+                raise RuntimeError("input identity drift before cache warmup")
+            observed = launch("direct", family, warmup["argv"], Path(warmup["cwd"]), interpreter, env, False)
+            check_code_identity()
+            if input_identity(pools[family], args.start, args.end) != identities[family]:
+                raise RuntimeError("input identity drift after cache warmup")
+            if observed.exit_code != 0:
+                raise RuntimeError(f"native cache warmup failed ({observed.exit_code})")
+            warmups[family] = {"status": "PASS", "native_exit_code": observed.exit_code}
+        except Exception as exc:
+            warmups[family] = {"status": "FAIL", "reason": f"{type(exc).__name__}: {exc}"}
+    write_json(out / "cache-warmup.json", warmups)
+    cache_pin = daily_cache_snapshot() if any(row["status"] == "PASS" for row in warmups.values()) else None
+    write_json(out / "daily-cache-snapshot.json", cache_pin or {"status": "NOT_RUN"})
+
     results = []
     for cell in cells:
         family, name = cell["family"], cell["cell"]
@@ -635,6 +681,8 @@ def main(argv=None) -> int:
         errors = list(dict.fromkeys(identities[family]["sources"]["errors"]))
         if name != "invalid_config" and errors:
             result.update(status="NOT_RUN", reason="BLOCKED: " + " | ".join(errors))
+        elif name != "invalid_config" and warmups[family]["status"] != "PASS":
+            result.update(status="FAIL", reason="native daily-cache preparation failed: " + warmups[family]["reason"])
         else:
             directory = out / f"{family}-{name}"
             directory.mkdir()
@@ -644,11 +692,15 @@ def main(argv=None) -> int:
                     check_code_identity()
                     if name != "invalid_config" and input_identity(pools[family], args.start, args.end) != identities[family]:
                         raise RuntimeError("input identity drift before " + side)
+                    if name != "invalid_config" and daily_cache_snapshot() != cache_pin:
+                        raise RuntimeError("daily cache identity drift before " + side)
                     observations.append(launch(side, family, cell["argv"], Path(cell["cwd"][side]),
                                                interpreter, env, name == "bad_output"))
                     check_code_identity()
                     if name != "invalid_config" and input_identity(pools[family], args.start, args.end) != identities[family]:
                         raise RuntimeError("input identity drift after " + side)
+                    if name != "invalid_config" and daily_cache_snapshot() != cache_pin:
+                        raise RuntimeError("daily cache identity drift after " + side)
                 require = REQUIRED[family] if name in ("normal", "low_cash") and all(o.exit_code == 0 for o in observations) else ()
                 policy = ComparePolicy(required_files=require, duration_files=("summary.txt",),
                                        duration_stdout=True, verify_manifest="run-manifest.json" in require)
