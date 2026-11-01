@@ -1,5 +1,7 @@
 # 批次 0：真湖验收器规则身份与 Windows 测试收尾
 
+> 2026-11-01 本机路径/源 B 追加核验见文末；P03/P05 未整包关闭。
+
 对应统一计划 P01 / BT-18、BT-17，批次 0C。改动对象是验收器及离线测试；后续 P14 的目标宿主真湖矩阵尚待执行。
 
 ## 规则、费用与低现金判据
@@ -47,3 +49,30 @@ I01 配置与 I02 schema 已核；I03 Redis 原语通过但正式槽和旧栈残
 [MyQuant #110](https://github.com/baiyibing/MyQuant/pull/110) 最终 head `7716ab6588a3a3faa8a799f5c0ee54154343733a` 三项 CI（含五文件 data-staging）通过，10/31 14:09:08 UTC 合入 `11720e5b394b440101b31f32038c85ab536f572e`，QL01 完成。与 #1258 的既有 V653_TEST_DRIFT 回执一起，P01 四项全部满足，机器索引追加一次 package 关闭回执，原冻结 64 条记录与旧回执不改。
 
 [1.3 #1259](https://github.com/baiyibing/OSkhQuant1.3/pull/1259) 也已合入，但只证明 Windows 工具与候选准备；P05 仍开放。[后续程序 #1260](https://github.com/baiyibing/OSkhQuant1.3/pull/1260) 在原只读预检中补入真实名单/hash/session、实际环境湖根和源 B 完整性，并修复两处旧 CLI 守卫；本机新程序的历史日期诊断为 15 PASS / 5 FAIL / 2 WARN。现场未签项仍在 1.3 [原域回执](https://github.com/baiyibing/OSkhQuant1.3/blob/6be2d6358b7528fbeae160327fbf70e3aa8c9c5d/docs/run-records/2026-11-01-v653-input-precheck.md)维护，本仓只保存实施入口与固定证据链接，不复制另一套运行状态。
+
+## 2026-11-01 P03 本机原工作区路径核验
+
+对 `DESKTOP-M5HCFD6` 三个原工作区分别用独立冷进程读取各自 resolver，
+没有切换用户分支或导入交易/QMT/Redis 栈。[固定回执](evidence/p03-local-paths-2026-11-01/local-original-checkouts.json)
+保留实际分支 SHA、模块路径、Process/User/Machine 注册值和 marker hash；
+这是原工作区的读回，不代签实际部署进程或远端主机。
+
+| 原工作区 | 配置 Parquet 容器 | 工作区容器读回 | 仅 marker hint、没有 SOURCE |
+|---|---|---|---|
+| 1.3 | `E:\stock_data`，存在 | 本仓 `stock_data/`，存在 | 拒绝；marker 只作诊断 |
+| MyQuant | `E:\stock_data`，存在 | 不拥有 1.3 DuckDB 工作区 | 拒绝；必须配置 SOURCE |
+| BT | `E:\stock_data`，存在 | 本仓 `stock_data/`，未存在 | 显式 hint 可解析已有 marker |
+
+三仓实际股票 1d/1m、指数和 ETF 日线根都指向该容器下对应树，目录存在。
+`.authority` hash 一致，未写入或更改。Process 与 User 的 SOURCE 均为上述 E 根；
+Machine 未注册 SOURCE，不能把 User 配置当作 SYSTEM 服务已经继承的证据。
+沿用显式 SOURCE 即可满足三仓共同合同，本片不统一或改变 resolver 行为。
+
+4090/75 尚未重新实机核验，75 的 F 盘位置仍按用户提供信息登记；未扫描盘符。
+构建产物路径与实际服务环境仍待核，不能由 CARGO_TARGET_DIR 未设置推导构建目录。
+此快照也不证明市场数据最新或字段全覆盖，P03 保持开放。
+
+同次[源 B 只读探针](evidence/p03-local-paths-2026-11-01/source-b-gap.json)以本地日历
+`20261102` 作诊断目标：上证指数实际日线止于 `20261015`，所需的 `20261016..20261030`
+十一会话全部缺失；调用原预检验证器仍 FAIL，文件 hash 前后不变。
+该目标不是首日批准日期；未补数、未启动交易。P05 活状态及后续现场回执仍归 1.3。

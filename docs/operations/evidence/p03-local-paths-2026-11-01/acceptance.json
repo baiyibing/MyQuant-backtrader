@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "packages": [
+    "P03",
+    "P05"
+  ],
+  "package_closed": false,
+  "scope": "Read-only local original working-checkout roots, registry paths and diagnostic source-B gap; not deployment or remote-host signoff",
+  "host": "DESKTOP-M5HCFD6",
+  "observed_at_utc": "2026-11-01T11:20:01.769176+00:00",
+  "market_write_performed": false,
+  "source_helper_sha256": "bd5ad10e3884f7d8889bc440dd4a2c8bd1b3c02227008072c56eaf08d17eb488",
+  "source_b_helper_sha256": "4f0fac06fefd590285f3e8b094bcc691fac7dff48c781547d21ca2598a5cde69",
+  "source_root_registration": "Process and User SOURCE agree; Machine SOURCE absent. A SYSTEM service must have its own explicit environment; User state is not service inheritance proof.",
+  "authority_contract": "The marker exists and has the same hash in all three original checkouts. 1.3 and MyQuant require SOURCE; BT also supports an explicit marker hint. No resolver behavior was changed.",
+  "diagnostic_target_session": "20261102",
+  "diagnostic_target_is_approved_first_day": false,
+  "source_b_missing_completed_sessions": 11,
+  "remaining": [
+    "4090 and 75 fresh host receipts",
+    "Actual service/deployment root inheritance and build-artifact paths",
+    "Current full-universe field/coverage acceptance",
+    "Source-B download/read and valid current OHLCV through 1.3",
+    "Approved pool, actual day slot, Turtle handoff and paper-day signoff"
+  ]
+}
