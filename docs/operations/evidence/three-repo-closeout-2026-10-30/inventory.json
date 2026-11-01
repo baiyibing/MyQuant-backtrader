@@ -3931,6 +3931,36 @@
       ],
       "signoff_urls": [],
       "summary": "#1258 最终 head 的必需检查通过且已合入，关闭 v653 Phase4c/d/e 测试漂移条目；P01 的 MyQuant CI、BT 验收器与 Windows 测试复核仍待做。"
+    },
+    {
+      "receipt_id": "p01-batch0-tests-harness-merged-20261031",
+      "package_id": "P01",
+      "scope": "package",
+      "audit_ids": [
+        "V653_TEST_DRIFT",
+        "QL01",
+        "BT-18",
+        "BT-17"
+      ],
+      "disposition": "completed",
+      "closed_at_utc": "2026-10-31T15:48:06Z",
+      "recorded_at_utc": "2026-11-01T07:06:31.492209+00:00",
+      "ssot_urls": [
+        "https://github.com/baiyibing/OSkhQuant1.3/pull/1258",
+        "https://github.com/baiyibing/MyQuant/pull/110",
+        "https://github.com/baiyibing/MyQuant-backtrader/pull/540"
+      ],
+      "evidence_urls": [
+        "https://github.com/baiyibing/OSkhQuant1.3/commit/1ed67467890edb6c931bf8816c121fa7483cc276",
+        "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/41033724228",
+        "https://github.com/baiyibing/MyQuant/commit/7716ab6588a3a3faa8a799f5c0ee54154343733a",
+        "https://github.com/baiyibing/MyQuant-backtrader/commit/b50101c95a66ad3732436426132d7114d7c7740f",
+        "https://github.com/baiyibing/MyQuant/actions/runs/41049169400",
+        "https://github.com/baiyibing/MyQuant-backtrader/actions/runs/41216264475",
+        "https://github.com/baiyibing/MyQuant-backtrader/blob/f9e51d57bd3149d40fee3c28a450caf3da06e49d/docs/operations/batch0-run-protocol-admission-2026-10-30.md"
+      ],
+      "signoff_urls": [],
+      "summary": "P01四个代码/测试条目完成：#1258既有回执保留，MyQuant#110与BT#540均已合入且最终head CI通过。Windows验证过的L2测试文件与最终合入树blob相同，Linux最终CI通过。只关闭验收基础，不代签P14真湖、P05首日或任何现场/经济/Owner条件。"
     }
   ],
   "implementation_refs": [
@@ -3961,6 +3991,15 @@
       "scope": "Windows slot-writer compatibility and selected local host preparation; no first-day closure",
       "domain_record": "docs/run-records/2026-10-30-v653-local-readiness.md",
       "domain_record_url": "https://github.com/baiyibing/OSkhQuant1.3/blob/78b1ca84e45f708773db8d37608e7b4439e92cd7/docs/run-records/2026-10-30-v653-local-readiness.md"
+    },
+    {
+      "package_id": "P05",
+      "audit_ids": [
+        "V653_PAPER_FIRST_DAY"
+      ],
+      "pr_url": "https://github.com/baiyibing/OSkhQuant1.3/pull/1260",
+      "scope": "Read-only artifact/source-B precheck and existing paper CLI repair; no first-day closure",
+      "domain_record_url": "https://github.com/baiyibing/OSkhQuant1.3/blob/6be2d6358b7528fbeae160327fbf70e3aa8c9c5d/docs/run-records/2026-11-01-v653-input-precheck.md"
     }
   ]
 }
