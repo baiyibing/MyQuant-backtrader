@@ -3984,6 +3984,28 @@
       ],
       "signoff_urls": [],
       "summary": "仅关闭QL13两项scores-only遗留：无新信号时不生成空bundle，非法时间在所有保留/空信号分支写盘前拒绝；既有bundle和默认CSV合同保留。449通过/1跳过/18子测试，最终head三个CI全绿、合入树相同。P12刷新现场、分钟增量和QL12必需manifest失败语义仍开放。"
+    },
+    {
+      "receipt_id": "ql12-required-manifests-pr112-merged-20261101",
+      "package_id": "P12",
+      "scope": "audit_items",
+      "audit_ids": [
+        "QL12"
+      ],
+      "disposition": "completed",
+      "closed_at_utc": "2026-11-01T13:30:43Z",
+      "recorded_at_utc": "2026-11-01T13:37:35.132949+00:00",
+      "ssot_urls": [
+        "https://github.com/baiyibing/MyQuant/pull/112"
+      ],
+      "evidence_urls": [
+        "https://github.com/baiyibing/MyQuant/blob/a9106ff08a8fdb7decfde908028f45e6f4931825/docs/operations/evidence/ql12-required-manifests-2026-11-01/acceptance.json",
+        "https://github.com/baiyibing/MyQuant/blob/1f984f2b7c0e8ffe7d6a19cf087fd7b694ac8d14/my_scripts/sweep_models.py",
+        "https://github.com/baiyibing/MyQuant/commit/1f984f2b7c0e8ffe7d6a19cf087fd7b694ac8d14",
+        "https://github.com/baiyibing/MyQuant/actions/runs/41311430469"
+      ],
+      "signoff_urls": [],
+      "summary": "只关闭QL12必需清单失败语义：训练/日池导出主清单及请求副本失败均非零；真实Qlib上下文将失败记录为FAILED且不输出完成。最终回归对旧CLI为6失败，修后455通过/1跳过/18子测试；最终head三CI全绿、合入树相同。现有sweep调用方验证子任务1后0仍返回1并记录两腿退出码。P12独立刷新/分钟现场验收仍开放。"
     }
   ],
   "implementation_refs": [
@@ -4109,6 +4131,35 @@
       "pr_url": "https://github.com/baiyibing/OSkhQuant1.3/pull/1266",
       "scope": "History cache roundtrip verified by real runs 41297584475 -> 41301463235: restored prior key, loaded 132 history entries, no seed additions; both frozen reports show 127 persisting/zero new. Runs predate #1264/#1265. This history subtask is verified; OP16 failure repair and P02 remain open. Receipt was published in PR1266; its test-cleanup implementation requires separate CI/merge evidence.",
       "domain_record_url": "https://github.com/baiyibing/OSkhQuant1.3/blob/53d2a70303f7e5cb72d874d71cac78b225b96246/docs/run-records/evidence/p02-history-roundtrip-2026-11-01/acceptance.json"
+    },
+    {
+      "package_id": "P12",
+      "audit_ids": [
+        "QL12"
+      ],
+      "pr_url": "https://github.com/baiyibing/MyQuant/pull/112",
+      "scope": "QL12 merged and audit-item receipt appended; remaining P12 refresh/minute host acceptance remains open.",
+      "domain_record_url": "https://github.com/baiyibing/MyQuant/blob/a9106ff08a8fdb7decfde908028f45e6f4931825/docs/operations/evidence/ql12-required-manifests-2026-11-01/acceptance.json",
+      "evidence_record": "docs/operations/evidence/ql12-required-manifest-closeout-2026-11-01/acceptance.json"
+    },
+    {
+      "package_id": "P02",
+      "audit_ids": [
+        "OP16"
+      ],
+      "pr_url": "https://github.com/baiyibing/OSkhQuant1.3/pull/1266",
+      "scope": "R1 test-owned config cleanup merged at cda0253e7f7b1fef5ad1d088babb893a44c6d6ab after19SUCCESS/one informational SKIP; checked/merged trees equal. The earlier history-roundtrip milestone and strict v653 assertions remain intact; no P02 closure.",
+      "domain_record_url": "https://github.com/baiyibing/OSkhQuant1.3/blob/53d2a70303f7e5cb72d874d71cac78b225b96246/docs/run-records/evidence/p02-runtime-config-cleanup-2026-11-01/acceptance.json"
+    },
+    {
+      "package_id": "P02",
+      "audit_ids": [
+        "OP16"
+      ],
+      "pr_url": "https://github.com/baiyibing/OSkhQuant1.3/pull/1267",
+      "scope": "R2/R3/R4 offline workspace, stale-contract and checkout fixes merged after18SUCCESS/one informational SKIP; checked/merged trees equal.338PASS/one local symlink capability skip,188 bundle files. Frozen report mapping only; fresh nightly and nine real-data requirements remain separate, Owner governance/P02 remain open.",
+      "domain_record_url": "https://github.com/baiyibing/OSkhQuant1.3/blob/ba571feb4b4acbd0a37c42264b9d53ae8f522783/docs/run-records/evidence/p02-offline-residuals-2026-11-01/acceptance.json",
+      "verification_run_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/41312101566"
     }
   ]
 }

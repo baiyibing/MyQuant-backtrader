@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "recorded_at_utc": "2026-11-01T13:37:35.132949+00:00",
+  "package_id": "P12",
+  "audit_ids": [
+    "QL12"
+  ],
+  "scope": "verified merged implementation and existing downstream rejection",
+  "package_closed": false,
+  "merge_receipt": {
+    "recorded_at_utc": "2026-11-01T13:30:49.241436+00:00",
+    "repo": "baiyibing/MyQuant",
+    "pr": "112",
+    "expected_head": "a9106ff08a8fdb7decfde908028f45e6f4931825",
+    "status": "MERGED",
+    "package_closed": false,
+    "result": {
+      "headRefOid": "a9106ff08a8fdb7decfde908028f45e6f4931825",
+      "mergeCommit": {
+        "oid": "1f984f2b7c0e8ffe7d6a19cf087fd7b694ac8d14"
+      },
+      "mergedAt": "2026-11-01T13:30:43Z",
+      "state": "MERGED",
+      "url": "https://github.com/baiyibing/MyQuant/pull/112"
+    },
+    "checked_and_merged_tree_equal": true,
+    "checks": [
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-01T13:28:50Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/baiyibing/MyQuant/actions/runs/41311430469/job/124862465236",
+        "name": "data-staging",
+        "startedAt": "2026-11-01T13:28:36Z",
+        "status": "COMPLETED",
+        "workflowName": "ci"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-01T13:29:05Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/baiyibing/MyQuant/actions/runs/41311430469/job/124862465466",
+        "name": "joint-return",
+        "startedAt": "2026-11-01T13:28:37Z",
+        "status": "COMPLETED",
+        "workflowName": "ci"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-01T13:30:19Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/baiyibing/MyQuant/actions/runs/41311430469/job/124862465588",
+        "name": "pytest",
+        "startedAt": "2026-11-01T13:28:37Z",
+        "status": "COMPLETED",
+        "workflowName": "ci"
+      }
+    ]
+  },
+  "downstream_probe": {
+    "repo_commit": "1f984f2b7c0e8ffe7d6a19cf087fd7b694ac8d14",
+    "caller": "my_scripts/sweep_models.py",
+    "source_sha256": "0beb5b0fe86c36e5f4f2c0fadf60a3eda0b729a793a3d3658154ff4b7586c9fa",
+    "source_byte_kind": "Observed worktree bytes; Git blob identity is authoritative across checkout line endings.",
+    "source_git_blob_sha256": "92cfcd86765e65f91ee6a63bcef76175408b674b8bdd001715c06b4da692a0db",
+    "source_git_blob": "2fec5ace87f6f586c637e3a1ed6fe6f24f1d828e",
+    "observations": [
+      {
+        "child_exit_codes": [
+          1,
+          0
+        ],
+        "caller_exit_code": 1,
+        "both_child_statuses_recorded": true,
+        "actual_training_executed": false
+      },
+      {
+        "child_exit_codes": [
+          0,
+          0
+        ],
+        "caller_exit_code": 0,
+        "both_child_statuses_recorded": true,
+        "actual_training_executed": false
+      }
+    ],
+    "note": "Real orchestration main, fake child process boundary; no model training or service access."
+  },
+  "limits": [
+    "The caller test uses fake subprocess outcomes; no training or external experiment service.",
+    "QL12/QL13 code items are closed individually. P12 refresh and minute host acceptance remain open."
+  ]
+}
