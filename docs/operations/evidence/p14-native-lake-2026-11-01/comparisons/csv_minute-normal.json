@@ -1,0 +1,112 @@
+{
+  "status": "PASS",
+  "differences": [
+    {
+      "path": "run-manifest.json/artifacts/2/md5",
+      "left": "508ace9ff37a51d73f27186e9ccff5ae",
+      "right": "d4821608b4eefe60d6d9dc4dee119012",
+      "allowed": true,
+      "reason": "predeclared non-economic field"
+    },
+    {
+      "path": "run-manifest.json/artifacts/2/sha256",
+      "left": "2dbe1949e3c24571655b84da682e7c009ca18bac19479eab8785ecc64ce95ce5",
+      "right": "cbdf28787d08d566c225d901a95fcd9913ab415f865bf403578e15bbc51448cf",
+      "allowed": true,
+      "reason": "predeclared non-economic field"
+    },
+    {
+      "path": "run-manifest.json/bytes",
+      "left": "5aba14d33e2cf823d31288e73e277f35753a202d317c62a4448bb39bf770acfe",
+      "right": "96304f1f8dfb972af0edca19ac563f58c4a9e84b2003bbc0f548c5d226e2abcb",
+      "allowed": true,
+      "reason": "raw bytes differ"
+    },
+    {
+      "path": "summary.txt/line/15",
+      "left": "  耗时: 池 0.0s | 日线 0.4s | 分钟 13.2s | 除权 0.7s | 指数闸 0.0s | 模拟 4.5s | 缓存 off | 日线缓存 hit\n",
+      "right": "  耗时: 池 0.0s | 日线 0.4s | 分钟 12.2s | 除权 0.6s | 指数闸 0.0s | 模拟 3.8s | 缓存 off | 日线缓存 hit\n",
+      "allowed": true,
+      "reason": "duration numeric captures only"
+    },
+    {
+      "path": "summary.txt/bytes",
+      "left": "2dbe1949e3c24571655b84da682e7c009ca18bac19479eab8785ecc64ce95ce5",
+      "right": "cbdf28787d08d566c225d901a95fcd9913ab415f865bf403578e15bbc51448cf",
+      "allowed": true,
+      "reason": "raw bytes differ"
+    },
+    {
+      "path": "stdout/line/24",
+      "left": "  耗时: 池 0.0s | 日线 0.4s | 分钟 13.2s | 除权 0.7s | 指数闸 0.0s | 模拟 4.5s | 缓存 off | 日线缓存 hit\n",
+      "right": "  耗时: 池 0.0s | 日线 0.4s | 分钟 12.2s | 除权 0.6s | 指数闸 0.0s | 模拟 3.8s | 缓存 off | 日线缓存 hit\n",
+      "allowed": true,
+      "reason": "duration numeric captures only"
+    },
+    {
+      "path": "stdout/bytes",
+      "left": "51072529e32afeccf895c8b503d13bbacfd98219e5eca1b378459049d47f3231",
+      "right": "05dc3f4bfee76d85065710c852bb066b2cea1d9fa95305623f85a6fd4a8d0134",
+      "allowed": true,
+      "reason": "raw bytes differ"
+    }
+  ],
+  "raw": {
+    "daily_equity.csv": {
+      "left_sha256": "e7962e5f4ac38998b212b1d6be3b7e3a7f66678637238be02431bf1c93c6d2f5",
+      "right_sha256": "e7962e5f4ac38998b212b1d6be3b7e3a7f66678637238be02431bf1c93c6d2f5",
+      "byte_equal": true
+    },
+    "data-provenance.json": {
+      "left_sha256": "90dacef7bd4fd780669dd028b4e1a3e8f4bd1ac3aaf64b78e28e6b00aa3d0302",
+      "right_sha256": "90dacef7bd4fd780669dd028b4e1a3e8f4bd1ac3aaf64b78e28e6b00aa3d0302",
+      "byte_equal": true
+    },
+    "execution-audit.json": {
+      "left_sha256": "0591e2881c5d7f8e9b1a3cd2c66c1a91b33ba663cd3cd4b181f4bf2bdef756a1",
+      "right_sha256": "0591e2881c5d7f8e9b1a3cd2c66c1a91b33ba663cd3cd4b181f4bf2bdef756a1",
+      "byte_equal": true
+    },
+    "run-manifest.json": {
+      "left_sha256": "5aba14d33e2cf823d31288e73e277f35753a202d317c62a4448bb39bf770acfe",
+      "right_sha256": "96304f1f8dfb972af0edca19ac563f58c4a9e84b2003bbc0f548c5d226e2abcb",
+      "byte_equal": false
+    },
+    "summary.txt": {
+      "left_sha256": "2dbe1949e3c24571655b84da682e7c009ca18bac19479eab8785ecc64ce95ce5",
+      "right_sha256": "cbdf28787d08d566c225d901a95fcd9913ab415f865bf403578e15bbc51448cf",
+      "byte_equal": false
+    },
+    "trades.csv": {
+      "left_sha256": "3ed13ce3c43c64bf8522764ae7db83c9ef8d5d5d43f26aecd709acc2ca9d0d81",
+      "right_sha256": "3ed13ce3c43c64bf8522764ae7db83c9ef8d5d5d43f26aecd709acc2ca9d0d81",
+      "byte_equal": true
+    },
+    "stdout": {
+      "left_sha256": "51072529e32afeccf895c8b503d13bbacfd98219e5eca1b378459049d47f3231",
+      "right_sha256": "05dc3f4bfee76d85065710c852bb066b2cea1d9fa95305623f85a6fd4a8d0134",
+      "byte_equal": false
+    },
+    "stderr": {
+      "left_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "right_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "byte_equal": true
+    }
+  },
+  "byte_identical": false,
+  "policy": {
+    "required_files": [
+      "trades.csv",
+      "daily_equity.csv",
+      "summary.txt",
+      "run-manifest.json",
+      "execution-audit.json"
+    ],
+    "allowed_json_fields": [],
+    "duration_files": [
+      "summary.txt"
+    ],
+    "duration_stdout": true,
+    "verify_manifest": true
+  }
+}

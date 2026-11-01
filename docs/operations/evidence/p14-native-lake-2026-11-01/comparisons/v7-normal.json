@@ -1,0 +1,79 @@
+{
+  "status": "PASS",
+  "differences": [
+    {
+      "path": "stdout/line/7",
+      "left": "loaded minute=lake daily=lake: minute_names=303 daily_names=303 exdiv_names=6 st_names=303 in 8.38s\n",
+      "right": "loaded minute=lake daily=lake: minute_names=303 daily_names=303 exdiv_names=6 st_names=303 in 8.29s\n",
+      "allowed": true,
+      "reason": "duration numeric captures only"
+    },
+    {
+      "path": "stdout/line/16",
+      "left": "timing load=8.38s simulate=6.80s total=15.18s\n",
+      "right": "timing load=8.29s simulate=7.16s total=15.45s\n",
+      "allowed": true,
+      "reason": "duration numeric captures only"
+    },
+    {
+      "path": "stdout/bytes",
+      "left": "9f0ad3f188f612dbb2341d502cfbac48f1495e528ed9563be3bf8da0a7859805",
+      "right": "06b015abc6ae769fffb6cdb77fd8fd76db5823c6d15bf458d0f63356ec612dc8",
+      "allowed": true,
+      "reason": "raw bytes differ"
+    }
+  ],
+  "raw": {
+    "daily_equity.csv": {
+      "left_sha256": "0f56b93e188d51c5ed2cce914ec24df77f5857c293c35c7f6790392dd6e8db55",
+      "right_sha256": "0f56b93e188d51c5ed2cce914ec24df77f5857c293c35c7f6790392dd6e8db55",
+      "byte_equal": true
+    },
+    "execution-audit.json": {
+      "left_sha256": "0252bbf8d2bfe07bde9a40d06e9b74711d60a88c0c590bc839aee7fe5a26aef9",
+      "right_sha256": "0252bbf8d2bfe07bde9a40d06e9b74711d60a88c0c590bc839aee7fe5a26aef9",
+      "byte_equal": true
+    },
+    "run-config.json": {
+      "left_sha256": "33f9ef3bf5fbe5394fde980dccc98ba47190837015fbe57cff24acbfe3f1f11a",
+      "right_sha256": "33f9ef3bf5fbe5394fde980dccc98ba47190837015fbe57cff24acbfe3f1f11a",
+      "byte_equal": true
+    },
+    "summary.txt": {
+      "left_sha256": "0e23216d4d9244a0d41e5a60226f645ba164d1886ecaa1f795f8f65cc7296883",
+      "right_sha256": "0e23216d4d9244a0d41e5a60226f645ba164d1886ecaa1f795f8f65cc7296883",
+      "byte_equal": true
+    },
+    "trades.csv": {
+      "left_sha256": "261205d7f6a5e893535712fa1f210995c8d88d3ac7d231ae2939b1c12649e01e",
+      "right_sha256": "261205d7f6a5e893535712fa1f210995c8d88d3ac7d231ae2939b1c12649e01e",
+      "byte_equal": true
+    },
+    "stdout": {
+      "left_sha256": "9f0ad3f188f612dbb2341d502cfbac48f1495e528ed9563be3bf8da0a7859805",
+      "right_sha256": "06b015abc6ae769fffb6cdb77fd8fd76db5823c6d15bf458d0f63356ec612dc8",
+      "byte_equal": false
+    },
+    "stderr": {
+      "left_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "right_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "byte_equal": true
+    }
+  },
+  "byte_identical": false,
+  "policy": {
+    "required_files": [
+      "trades.csv",
+      "daily_equity.csv",
+      "summary.txt",
+      "run-config.json",
+      "execution-audit.json"
+    ],
+    "allowed_json_fields": [],
+    "duration_files": [
+      "summary.txt"
+    ],
+    "duration_stdout": true,
+    "verify_manifest": false
+  }
+}

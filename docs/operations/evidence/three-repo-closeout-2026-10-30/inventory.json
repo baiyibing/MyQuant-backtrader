@@ -4000,6 +4000,32 @@
       "pr_url": "https://github.com/baiyibing/OSkhQuant1.3/pull/1260",
       "scope": "Read-only artifact/source-B precheck and existing paper CLI repair; no first-day closure",
       "domain_record_url": "https://github.com/baiyibing/OSkhQuant1.3/blob/6be2d6358b7528fbeae160327fbf70e3aa8c9c5d/docs/run-records/2026-11-01-v653-input-precheck.md"
+    },
+    {
+      "package_id": "P02",
+      "audit_ids": [
+        "OP16"
+      ],
+      "pr_url": "https://github.com/baiyibing/OSkhQuant1.3/pull/1262",
+      "scope": "Nightly history repair merged; real post-merge sweep 41297584475 launched. Cache save/next-run restore and remaining failure triage still required; package remains open.",
+      "domain_record_url": "https://github.com/baiyibing/OSkhQuant1.3/blob/9bb8e6db2e80346fbc1d3d9f7f6447c4a3d70036/docs/run-records/evidence/nightly-history-2026-11-01/local-acceptance.json"
+    },
+    {
+      "package_id": "P03",
+      "audit_ids": [],
+      "pr_url": "https://github.com/baiyibing/OSkhQuant1.3/pull/1263",
+      "scope": "Local read-only stock lake inventory and physical-date diagnostic repair; eight date samples/two symbols only. P03, SHM quality and other hosts remain open.",
+      "domain_record_url": "https://github.com/baiyibing/OSkhQuant1.3/blob/a21cf01742c95c2805eb6e8727540237fe8ac467/docs/run-records/evidence/p03-lake-physical-dates-2026-11-01/acceptance.json"
+    },
+    {
+      "package_id": "P14",
+      "audit_ids": [
+        "BT-07"
+      ],
+      "implementation_commit_url": "https://github.com/baiyibing/MyQuant-backtrader/commit/0c9886fa59bf4a6ef72333a1ba02413655a60f97",
+      "scope": "B-native-CV-01 industry/native-L1 matrix: eight real-lake cells PASS at frozen historical window. Engine Slice D and P14 package remain open.",
+      "domain_record": "docs/backtest/note-l1-lake-e2e-b-native-cv01-2026-09-29.md",
+      "evidence_record": "docs/operations/evidence/p14-native-lake-2026-11-01/acceptance.json"
     }
   ]
 }

@@ -1,0 +1,29 @@
+{
+  "root": "D:\\PycharmProjects\\MyQuant-backtrader\\_agent_runs\\three_repo_batch1_20261101\\bt\\backtest_output\\bar_cache",
+  "files": [
+    {
+      "path": "D:\\PycharmProjects\\MyQuant-backtrader\\_agent_runs\\three_repo_batch1_20261101\\bt\\backtest_output\\bar_cache\\daily_none_20250913_20251104_7da7f5ee740c.json",
+      "sha256": "5155e4b43592b2915b20c88a8206a61d5a9a6b83a26f7ad1f4efe1623b3cacf7",
+      "size": 449,
+      "mtime_ns": 1793527441806731300
+    },
+    {
+      "path": "D:\\PycharmProjects\\MyQuant-backtrader\\_agent_runs\\three_repo_batch1_20261101\\bt\\backtest_output\\bar_cache\\daily_none_20250913_20251104_7da7f5ee740c.parquet",
+      "sha256": "e461a30e4acb7dec2ad5d4737a3f7029b8e22503e64281e957ce63f717513e52",
+      "size": 687642,
+      "mtime_ns": 1793527441790901800
+    },
+    {
+      "path": "D:\\PycharmProjects\\MyQuant-backtrader\\_agent_runs\\three_repo_batch1_20261101\\bt\\backtest_output\\bar_cache\\daily_none_20251013_20251104_3173a09a1a23.json",
+      "sha256": "61f181c0ca518010894085808f6c8b2e3fdc5f1b24aea758686b1a217be32b19",
+      "size": 449,
+      "mtime_ns": 1793527287993975300
+    },
+    {
+      "path": "D:\\PycharmProjects\\MyQuant-backtrader\\_agent_runs\\three_repo_batch1_20261101\\bt\\backtest_output\\bar_cache\\daily_none_20251013_20251104_3173a09a1a23.parquet",
+      "sha256": "49ef5ddb3a5c1f39179410322023965b7b42365f12368f340f05e29cc44fb751",
+      "size": 580538,
+      "mtime_ns": 1793527287993975300
+    }
+  ]
+}
