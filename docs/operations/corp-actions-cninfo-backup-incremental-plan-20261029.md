@@ -15,6 +15,8 @@ Human t205u 要求在 Wind/Kimi 401 期间规划 CNINFO 备份路径；本次授
 - **gmail / M5 不写湖**；本次不授予这些执行面生产路径访问或湖发布能力。禁用 Cursor Cloud Agents，不做任何 lake writes。
 - 1.3 旧可行性文档中的“CNINFO 主 / Wind 辅”仅为历史讨论目标，不是本刀授权；本计划遵守以上 Wind primary / CNINFO backup 边界。
 
+> 2026-11-01 19:41 CST Human: M5 上解锁 E:\stock_data\corp_actions（Wind 湖由 Human 从 4090 拷入）；其余锁不变
+
 ## 3. Independent outdir contract（提案，未创建目录）
 
 | 执行端 | CNINFO 独立输出根提案 |
@@ -28,6 +30,8 @@ Human t205u 要求在 Wind/Kimi 401 期间规划 CNINFO 备份路径；本次授
 - `D:\exports\bt_corp_actions_20261006`（Wind full-pull）。
 - `D:\exports\bt_corp_actions_incr_20261028`、`D:\exports\bt_corp_actions_incr_20261024` 及其他 `D:\exports\bt_corp_actions_incr_*`。
 - Thinkpad 的 Wind run `E:\exports\bt_corp_actions_incr_20261028` 与重建湖 `E:\exports\corp_actions_lake`。
+
+> 2026-11-01 19:41 CST Human: M5 上解锁 E:\stock_data\corp_actions（Wind 湖由 Human 从 4090 拷入）；其余锁不变
 
 未来 C1 sandbox manifest 至少记录以下信息；这是待实现的证据合同，不能宣称现有 MVP 已全部满足：
 
@@ -120,3 +124,5 @@ Git author、AI 角色、测试通过或回归匹配均不是 Owner 手签；本
 - 不拉数、不写湖、不发布，不覆盖或合并 Wind full lake / full-pull / incremental outdirs；gmail / M5 无写湖授权。
 - 不伪签 OWNER_SIGNOFF，不将 UNSIGNED 改为已签，不宣称消费者已接受或 Wind 已被替代。
 - 不建立 scheduler job，不启用现有 job，不启动 Cursor Cloud Agents；C1+ 另取 Human GO。
+
+> 2026-11-01 19:41 CST Human: M5 上解锁 E:\stock_data\corp_actions（Wind 湖由 Human 从 4090 拷入）；其余锁不变
