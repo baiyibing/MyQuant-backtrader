@@ -3,7 +3,7 @@
 本附录按主实施包归并 64 条审计记录。每条只归入一个主包，跨包关系写入依赖；记录包含待核销和后置事项，并非 64 个均应立即执行的项目。
 主分支来源锁定于主计划所列提交；交付前 #1258 合入增量见主计划及 github-refresh.json。补充两份未合分支证据：1.3 日期后续计划钉于 6825f22169，BT artifact 草稿钉于 42662418231ea87af4c72e83f8ee69d6396db715；它们不代表主分支已实现。运行现状以目标宿主的新回执为准。主计划与本附录是本次排期快照，原域 SSOT 继续维护权威状态。
 
-机器可读版本：[inventory.json](evidence/three-repo-closeout-2026-10-30/inventory.json)。 冻结条目保持审计时点；后续关闭见其中 `closeout_receipts`，先更新原域 SSOT 再追加证据索引。已登记 #1258 的条目级回执，P01 其余三项仍待做。首日输入和 Owner 操作队列见主计划批次 0/0.5；本附录不另复制一套活状态。
+机器可读版本：[inventory.json](evidence/three-repo-closeout-2026-10-30/inventory.json)。冻结条目保持审计时点；关闭范围由 `closeout_receipts` 及原域证据读取。2026-11-01 已保留 #1258 的原条目回执，并在 MyQuant #110、BT #540 最终 head CI 通过且合入后追加 P01 整包关闭回执；[核对证据](evidence/three-repo-closeout-2026-10-30/batch0-merged-ci-2026-11-01.json)。下文的历史条目不覆盖为新状态。首日输入和 Owner 操作队列仍见主计划批次 0/0.5；本附录不另复制一套活状态。
 
 <a id="p01"></a>
 

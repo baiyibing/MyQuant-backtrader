@@ -39,3 +39,11 @@ I01 配置与 I02 schema 已核；I03 Redis 原语通过但正式槽和旧栈残
 [Owner 队列](evidence/three-repo-closeout-2026-10-30/batch0-owner-queue.json)已核三仓默认分支和 CI 检查名：1.3 main、MyQuant/BT master 均未保护；1.3 rulesets 查询为套餐限制 403，其他两仓为空。列出供 Owner 选择的实际 job context，以及设置后读回和失败/缺 check 验证所需材料。本轮未变更 GitHub 设置，OP17/BT-11 保持待人工。
 
 机器索引的 `implementation_refs` 已指向 [MyQuant #110](https://github.com/baiyibing/MyQuant/pull/110)、[BT #540](https://github.com/baiyibing/MyQuant-backtrader/pull/540) 和 [1.3 #1259](https://github.com/baiyibing/OSkhQuant1.3/pull/1259)。这里仅保存实施入口，最新状态由 PR 和原域回执读取；冻结审计条目及现有 `closeout_receipts` 保持原样，完成条件满足后再追加关闭回执。
+
+## 2026-11-01 合入回执
+
+上述本机测试与准备数字属于 10/30 的切片。最终 [BT #540](https://github.com/baiyibing/MyQuant-backtrader/pull/540) head 为 `b50101c95a66ad3732436426132d7114d7c7740f`，最终 [CI](https://github.com/baiyibing/MyQuant-backtrader/actions/runs/41216264475) 通过，于 10/31 15:48:06 UTC 合入 `f9e51d57bd3149d40fee3c28a450caf3da06e49d`。Windows 已验证的 L2 测试文件与最终合入树 blob 相同；结合最终 Linux CI，BT-17 / BT-18 代码与测试条件满足。
+
+[MyQuant #110](https://github.com/baiyibing/MyQuant/pull/110) 最终 head `7716ab6588a3a3faa8a799f5c0ee54154343733a` 三项 CI（含五文件 data-staging）通过，10/31 14:09:08 UTC 合入 `11720e5b394b440101b31f32038c85ab536f572e`，QL01 完成。与 #1258 的既有 V653_TEST_DRIFT 回执一起，P01 四项全部满足，机器索引追加一次 package 关闭回执，原冻结 64 条记录与旧回执不改。
+
+[1.3 #1259](https://github.com/baiyibing/OSkhQuant1.3/pull/1259) 也已合入，但只证明 Windows 工具与候选准备；P05 仍开放。[后续程序 #1260](https://github.com/baiyibing/OSkhQuant1.3/pull/1260) 在原只读预检中补入真实名单/hash/session、实际环境湖根和源 B 完整性，并修复两处旧 CLI 守卫；本机新程序的历史日期诊断为 15 PASS / 5 FAIL / 2 WARN。现场未签项仍在 1.3 [原域回执](https://github.com/baiyibing/OSkhQuant1.3/blob/6be2d6358b7528fbeae160327fbf70e3aa8c9c5d/docs/run-records/2026-11-01-v653-input-precheck.md)维护，本仓只保存实施入口与固定证据链接，不复制另一套运行状态。
