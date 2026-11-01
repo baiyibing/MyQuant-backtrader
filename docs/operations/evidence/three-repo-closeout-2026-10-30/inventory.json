@@ -3961,6 +3961,29 @@
       ],
       "signoff_urls": [],
       "summary": "P01四个代码/测试条目完成：#1258既有回执保留，MyQuant#110与BT#540均已合入且最终head CI通过。Windows验证过的L2测试文件与最终合入树blob相同，Linux最终CI通过。只关闭验收基础，不代签P14真湖、P05首日或任何现场/经济/Owner条件。"
+    },
+    {
+      "receipt_id": "ql13-scores-only-pr111-merged-20261101",
+      "package_id": "P12",
+      "scope": "audit_items",
+      "audit_ids": [
+        "QL13"
+      ],
+      "disposition": "completed",
+      "closed_at_utc": "2026-11-01T12:16:42Z",
+      "recorded_at_utc": "2026-11-01T12:30:59.392436+00:00",
+      "ssot_urls": [
+        "https://github.com/baiyibing/MyQuant/pull/111"
+      ],
+      "evidence_urls": [
+        "https://github.com/baiyibing/MyQuant/commit/e5aac8b2de880f0138f99b35c31b3c0e71442e7b",
+        "https://github.com/baiyibing/MyQuant/commit/21519eb4ce263019896b642dd62858fbecd625e8",
+        "https://github.com/baiyibing/MyQuant/actions/runs/41305355723",
+        "https://github.com/baiyibing/MyQuant/blob/e5aac8b2de880f0138f99b35c31b3c0e71442e7b/docs/operations/evidence/ql13-scores-only-2026-11-01/acceptance.json",
+        "https://github.com/baiyibing/MyQuant/blob/e5aac8b2de880f0138f99b35c31b3c0e71442e7b/docs/run-manifest-spec.md"
+      ],
+      "signoff_urls": [],
+      "summary": "仅关闭QL13两项scores-only遗留：无新信号时不生成空bundle，非法时间在所有保留/空信号分支写盘前拒绝；既有bundle和默认CSV合同保留。449通过/1跳过/18子测试，最终head三个CI全绿、合入树相同。P12刷新现场、分钟增量和QL12必需manifest失败语义仍开放。"
     }
   ],
   "implementation_refs": [
@@ -4059,6 +4082,33 @@
       "pr_url": "https://github.com/baiyibing/OSkhQuant1.3/pull/1264",
       "scope": "Windows test-fixture/CI admission repair, independently reviewed; no production ACL/notification change or full P02 closure.",
       "domain_record_url": "https://github.com/baiyibing/OSkhQuant1.3/blob/a83744cb7b9ae00053c79cc3875c4799738441fe/docs/run-records/evidence/p02-windows-tests-2026-11-01/acceptance.json"
+    },
+    {
+      "package_id": "P12",
+      "audit_ids": [
+        "QL13"
+      ],
+      "pr_url": "https://github.com/baiyibing/MyQuant/pull/111",
+      "scope": "QL13 audit-item receipt appended; P12 remains open.",
+      "domain_record_url": "https://github.com/baiyibing/MyQuant/blob/e5aac8b2de880f0138f99b35c31b3c0e71442e7b/docs/operations/evidence/ql13-scores-only-2026-11-01/acceptance.json"
+    },
+    {
+      "package_id": "P02",
+      "audit_ids": [
+        "OP16"
+      ],
+      "pr_url": "https://github.com/baiyibing/OSkhQuant1.3/pull/1265",
+      "scope": "Reviewed C01 offline test-fixture repair merged at 9af20f3c879ece35279164bf88582de724c3b6d9 after 18 successes/one informational skip; no production ACL, network or authorization relaxation. No latest-head full sweep or P02 closure.",
+      "domain_record_url": "https://github.com/baiyibing/OSkhQuant1.3/blob/e482d932b2992856e4f3a017eb26074f9d1fd272/docs/run-records/evidence/p02-c01-windows-2026-11-01/acceptance.json"
+    },
+    {
+      "package_id": "P02",
+      "audit_ids": [
+        "OP16"
+      ],
+      "pr_url": "https://github.com/baiyibing/OSkhQuant1.3/pull/1266",
+      "scope": "History cache roundtrip verified by real runs 41297584475 -> 41301463235: restored prior key, loaded 132 history entries, no seed additions; both frozen reports show 127 persisting/zero new. Runs predate #1264/#1265. This history subtask is verified; OP16 failure repair and P02 remain open. Receipt was published in PR1266; its test-cleanup implementation requires separate CI/merge evidence.",
+      "domain_record_url": "https://github.com/baiyibing/OSkhQuant1.3/blob/53d2a70303f7e5cb72d874d71cac78b225b96246/docs/run-records/evidence/p02-history-roundtrip-2026-11-01/acceptance.json"
     }
   ]
 }
