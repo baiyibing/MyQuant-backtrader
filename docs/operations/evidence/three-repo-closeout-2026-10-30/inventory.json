@@ -4168,7 +4168,7 @@
       ],
       "pr_url": "https://github.com/baiyibing/OSkhQuant1.3/pull/1269",
       "scope": "Notification runtime-cache producer and clean-stop offline fixtures: PR state OPEN; fixed-SHA independent APPROVE, 77PASS/4actual Windows capability SKIP, common190. History134 correctly classifies latest frozen pre-fix nightly as 1old/0new. No P02 closure; actual new full nightly and real-data acceptance remain separate.",
-      "domain_record_url": "https://github.com/baiyibing/OSkhQuant1.3/blob/a1504440a09d2d44e31b9e0f73a7e32e1a14eab9/docs/run-records/evidence/p02-nightly-residuals-2026-11-02/acceptance.json",
+      "domain_record_url": "https://github.com/baiyibing/OSkhQuant1.3/blob/a24f2f4a38f7924d8d091fd8b21db96cd49ade26/docs/run-records/evidence/p02-nightly-residuals-2026-11-02/acceptance.json",
       "evidence_record": "docs/operations/evidence/p02-residual-readout-2026-11-02/status.json"
     },
     {

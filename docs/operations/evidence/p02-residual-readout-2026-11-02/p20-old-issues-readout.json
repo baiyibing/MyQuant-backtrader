@@ -5131,10 +5131,10 @@
       "exit_code": 0,
       "passed": 56,
       "skipped": 0,
-      "log_sha256": "3be75be7af48f7bae0175b63bae08ed9aea5da26dbca49344d34b5b2e3d9d1a4",
+      "log_sha256": "e6e69cb76ef6f061bd0d0e12a49015c00f1abd274c0ef9146469362ec2940e5e",
       "log": "p20-issue37-existing-contracts.log",
       "source_log_sha256": "7ca96340765d362df3baebf1d62ccfea8fe59ed0060e9e118d13fb6b254a7edf",
-      "log_normalization": "Only trailing blank lines removed for git diff --check; original log digest retained."
+      "log_normalization": "CRLF normalized to LF and trailing blank lines removed for git diff --check; original observed log digest retained separately. Published digest matches Git blob bytes."
     },
     "limits": "Fake provider boundaries with public CI YAML and real-QMT-connect forbidden, isolated empty workspace. No online vendor build, real account, QMT session or production capital-path signoff; do not close the issue from unit tests."
   },
