@@ -1,0 +1,8 @@
+........................................................                 [100%]
+============================== warnings summary ===============================
+..\..\..\..\..\anaconda3\envs\vanna312\Lib\site-packages\xtquant\xtbson\bson37\datetime_ms.py:29
+  D:\anaconda3\envs\vanna312\Lib\site-packages\xtquant\xtbson\bson37\datetime_ms.py:29: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
+    EPOCH_NAIVE = datetime.datetime.utcfromtimestamp(0)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+56 passed, 1 warning in 6.21s

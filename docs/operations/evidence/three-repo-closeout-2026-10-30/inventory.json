@@ -4160,6 +4160,41 @@
       "scope": "R2/R3/R4 offline workspace, stale-contract and checkout fixes merged after18SUCCESS/one informational SKIP; checked/merged trees equal.338PASS/one local symlink capability skip,188 bundle files. Frozen report mapping only; fresh nightly and nine real-data requirements remain separate, Owner governance/P02 remain open.",
       "domain_record_url": "https://github.com/baiyibing/OSkhQuant1.3/blob/ba571feb4b4acbd0a37c42264b9d53ae8f522783/docs/run-records/evidence/p02-offline-residuals-2026-11-01/acceptance.json",
       "verification_run_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/41312101566"
+    },
+    {
+      "package_id": "P02",
+      "audit_ids": [
+        "OP16"
+      ],
+      "pr_url": "https://github.com/baiyibing/OSkhQuant1.3/pull/1269",
+      "scope": "Notification runtime-cache producer and clean-stop offline fixtures: PR state OPEN; fixed-SHA independent APPROVE, 77PASS/4actual Windows capability SKIP, common190. History134 correctly classifies latest frozen pre-fix nightly as 1old/0new. No P02 closure; actual new full nightly and real-data acceptance remain separate.",
+      "domain_record_url": "https://github.com/baiyibing/OSkhQuant1.3/blob/a1504440a09d2d44e31b9e0f73a7e32e1a14eab9/docs/run-records/evidence/p02-nightly-residuals-2026-11-02/acceptance.json",
+      "evidence_record": "docs/operations/evidence/p02-residual-readout-2026-11-02/status.json"
+    },
+    {
+      "package_id": "P05",
+      "audit_ids": [
+        "V653_PAPER_FIRST_DAY"
+      ],
+      "scope": "20261102 local readonly diagnosis:16PASS/5FAIL/1WARN, exit1; source-B completed sessions, formal day slot, Turtle claim/handoff and approved pool still block. No trading started, no approved date or first-day acceptance.",
+      "evidence_record": "docs/operations/evidence/p02-residual-readout-2026-11-02/p05-input-precheck.json"
+    },
+    {
+      "package_id": "P02",
+      "audit_ids": [
+        "OP17",
+        "BT-11"
+      ],
+      "scope": "Fresh read-only GitHub branch protection snapshot; Owner settings/action and post-setting validation remain open.",
+      "evidence_record": "docs/operations/evidence/p02-residual-readout-2026-11-02/governance.json"
+    },
+    {
+      "package_id": "P20",
+      "audit_ids": [
+        "OP18"
+      ],
+      "scope": "Read-only old-issue audit: #37 legacy compat mechanism is replaced and56existing offline tests pass; appropriate online host/vendor signoff remains. #34 current stock-tree file counts none5610/front5605/back877, front missing5(includes3indexes also present in index tree), back missing4733; no row/date/factor acceptance, no issue closure or price copying.",
+      "evidence_record": "docs/operations/evidence/p02-residual-readout-2026-11-02/p20-old-issues-readout.json"
     }
   ]
 }

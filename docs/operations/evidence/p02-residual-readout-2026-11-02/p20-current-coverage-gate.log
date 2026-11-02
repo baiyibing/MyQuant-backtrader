@@ -1,0 +1,3 @@
+WARN: front missing 5 none symbols: ['000001.SH', '301718.SZ', '399001.SZ', '399006.SZ', '821025.BJ']
+WARN: back missing 4733 none symbols: ['000001.SH', '000004.SZ', '000300.SH', '000638.SZ', '001220.SZ', '001221.SZ', '001232.SZ', '001233.SZ', '001237.SZ', '001246.SZ']
+OK: verify_p2_4_symbol_coverage (none=5610 front=5605 back=877; warnings=2)
