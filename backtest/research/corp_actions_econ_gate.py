@@ -2,7 +2,14 @@
 
 No current backtest consumer is connected here. Acquisition success is not an
 entitlement assertion. Blocked rows and reasons must accompany research results.
+
+OP06 defensive gate: stock-conversion / stock-merger arrangements (share-identity
+swaps) can never be expressed through the cash/bonus ten-column schema. Rows whose
+code is a pinned conversion source, or that smuggle a pinned conversion ratio into
+bonus_ratio/transfer_ratio alongside conversion markers, are hard-blocked with the
+stable reason key `unsupported_stock_conversion_in_cash_bonus_schema`.
 """
+
 from __future__ import annotations
 
 from collections import Counter
@@ -35,6 +42,73 @@ class _VerifiedEvidence:
     revision: str
     events_sha256: str
     entries: dict
+
+
+UNSUPPORTED_STOCK_CONVERSION_REASON = "unsupported_stock_conversion_in_cash_bonus_schema"
+
+
+@dataclass(frozen=True)
+class PinnedStockConversion:
+    """A frozen share-identity swap that must never enter via cash/bonus columns."""
+
+    source_code: str
+    target_code: str
+    target_shares_per_source_share: Decimal
+    conversion_record_date: date
+    delist_date: date
+
+
+# OP06 frozen identity facts, pinned from
+# docs/operations/evidence/hithink-artifact-2026-10-30/coverage-identity-facts.json
+# (东兴证券 601198.SH absorbed by 中金公司 601995.SH). Deliberately not loaded from
+# the evidence JSON at runtime; tests assert the pin matches those values.
+PINNED_STOCK_CONVERSIONS = (
+    PinnedStockConversion(
+        source_code="601198.SH",
+        target_code="601995.SH",
+        target_shares_per_source_share=Decimal("0.4376"),
+        conversion_record_date=date(2026, 10, 16),
+        delist_date=date(2026, 10, 19),
+    ),
+)
+_PINNED_CONVERSION_SOURCES = frozenset(p.source_code for p in PINNED_STOCK_CONVERSIONS)
+_PINNED_CONVERSION_RATIOS = frozenset(
+    p.target_shares_per_source_share for p in PINNED_STOCK_CONVERSIONS
+)
+_PINNED_CONVERSION_MARKER_TOKENS = frozenset(
+    token
+    for pinned in PINNED_STOCK_CONVERSIONS
+    for token in (
+        pinned.source_code,
+        pinned.target_code,
+        pinned.source_code.split(".")[0],
+        pinned.target_code.split(".")[0],
+        "换股",
+        "conversion",
+        "stock_merger",
+        "stock-merger",
+        "stock merger",
+    )
+)
+
+
+def _stock_conversion_reasons(row):
+    # Primary: a pinned conversion source code always blocks, even with amounts
+    # shaped like an ordinary cash/bonus event — the identity swap and delist
+    # conversion cannot be expressed in this schema.
+    if row["code"] in _PINNED_CONVERSION_SOURCES:
+        return [UNSUPPORTED_STOCK_CONVERSION_REASON]
+    # Secondary (defense-in-depth): a pinned conversion ratio stuffed into
+    # bonus/transfer columns blocks only when conversion markers name the
+    # arrangement, so an unrelated code with a coincidentally equal bonus ratio
+    # stays eligible.
+    ratios = (row["bonus_ratio"], row["transfer_ratio"])
+    if not any(ratio in _PINNED_CONVERSION_RATIOS for ratio in ratios):
+        return []
+    markers = " ".join((row["event_id"], row["source"])).lower()
+    if any(token in markers for token in _PINNED_CONVERSION_MARKER_TOKENS):
+        return [UNSUPPORTED_STOCK_CONVERSION_REASON]
+    return []
 
 
 def _validate_rows(rows):
@@ -103,7 +177,7 @@ def gate_rows_for_economics(rows, *, evidence=None):
     accepted, blocked, reasons = [], [], []
     verified = isinstance(evidence, _VerifiedEvidence)
     for row in rows:
-        why = []
+        why = _stock_conversion_reasons(row)
         for key in ("record_date", "pay_date", "cash_div_per_share"):
             if row[key] is None:
                 why.append("missing_" + key)
