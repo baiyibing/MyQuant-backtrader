@@ -1,5 +1,7 @@
 # 三个量化仓库未收尾事项与统一实施计划
 
+> 2026-11-03 实现增量：MyQuant #118 分钟写边界、#119 旧文档状态指针均经固定 head Grok 复核及各 3 CI 通过后合入；[QL11/QL17 进展回执](evidence/p12-p20-merged-progress-2026-11-03/README.md)。只追加 2 条 implementation_ref，QL11/P12/QL17/P20 仍开放，冻结台账及旧回执保持。
+
 > 2026-11-03 实现增量：MyQuant #117 日频刷新路径隔离已合入（固定 head Grok 复核、3 CI 通过）；[P12/QL10 实现回执](evidence/p12-ql10-path-isolation-2026-11-03/README.md)。只追加 implementation_ref，QL10 现场与 P12 整包仍开放；冻结 64 条记录及旧关闭回执保持。
 
 > 2026-11-03 实证增量：FullSweep934文件通过，149条历史/全部首见日期保留、0新增/持续失败；源PR#1275因Linuxrunner失联仍待合入。[报告与阻塞证据](evidence/p02-full-sweep-readout-2026-11-03/README.md)。本片仅追加implementation_ref，OP16/P02仍开放，不改写冻结64条记录。

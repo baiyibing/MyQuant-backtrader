@@ -1,0 +1,56 @@
+{
+  "reviewed_head": "e310c581771127dee406917de4f0c254df769cf8",
+  "verdict": "APPROVE",
+  "cli": "Grok CLI",
+  "requested_model": "grok-4.7",
+  "actual_models": [
+    "grok-4.7-build"
+  ],
+  "reasoning_effort": "low",
+  "session_id": "01a1a191-5a01-7600-9b8c-3b96f1f4e55c",
+  "raw_review_sha256": "ee90e649429d2707e84c059710e108d2cc8f3cd26a81a7f42a777b26e19468f9",
+  "bundle_sha256": "77eed7fadc97937514ec7e508b20b4974ab44d320ac62976c60bc14039a0a4c7",
+  "original_coding_bundle_sha256": "5c648d1765c15d7868068e3e72cbd47a60b947b8f62e47cf16acecc797f9c60a",
+  "full_local_ci_log_sha256": "50dd0f3227e0d3539e7e152567be3e3c6a7235d5926fd77c7dad9be00ff58116",
+  "remote_pytest_log_sha256": "736fd2b0d654d300f9d59a1fd09957e97630d9f99a1b9d409a69aa1f4102d1fc",
+  "remote_pytest_job": 125940429697,
+  "remote_pytest_summary": "2026-11-03T13:17:50.3668997Z 588 passed, 7 skipped, 47 warnings, 18 subtests passed in 11.39s",
+  "local_full_suite": "588 passed / 7 skipped / 18 subtests / 1 existing SyntaxWarning",
+  "canonical_checks": [
+    {
+      "name": "data-staging",
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "e310c581771127dee406917de4f0c254df769cf8",
+      "details_url": "https://github.com/baiyibing/MyQuant/actions/runs/41642839816/job/125940430180"
+    },
+    {
+      "name": "joint-return",
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "e310c581771127dee406917de4f0c254df769cf8",
+      "details_url": "https://github.com/baiyibing/MyQuant/actions/runs/41642839816/job/125940430132"
+    },
+    {
+      "name": "pytest",
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "e310c581771127dee406917de4f0c254df769cf8",
+      "details_url": "https://github.com/baiyibing/MyQuant/actions/runs/41642839816/job/125940429697"
+    }
+  ],
+  "review_scope": "Fixed supplied implementation snapshot; reviewer did not run host tests or approve actual provider/lake writes",
+  "result": "APPROVE.\n\nThe fixed head `e310c581771127dee406917de4f0c254df769cf8` against merged base `d64b415b4443f6f3779cbf05124ba15807003e85` closes both reproduced write holes. `refuse_if_daily` nonstrict-resolves, applies `os.path.normcase`, and rejects equality plus both component ancestries via `is_relative_to`. `OSError`, `RuntimeError`, and `ValueError` exit before any writer. Same-prefix siblings such as `my_data` and `my_data_1min` stay distinct because the check is by path component, not string prefix.\n\n`main` checks the minute provider, expanded staging, derived `*_full_new` staging, and an optional receipt before workers, staging, append, or `dump_all`. `skip-stage` and `rebuild` still pass through that gate. `emit_receipt` runs the same guard again immediately before `write_receipt`, after the existing calendar fingerprint. The receipt schema, bin append path, and worker defaults are unchanged. PR117 is not reimplemented.\n\nThe new tests cover both real writer failures, both ancestry directions, normalized `..`, derived full staging, Windows case aliases, explicit directory-link skips, and a disjoint append/receipt that leaves daily and lake bytes unchanged. The supplied unchanged-head local run is 588 passed, 7 skipped, 1 warning, 18 subtests passed. Those skips stay explicit; Linux CI still has to exercise the link aliases. The evidence pack correctly stays the frozen pre-closeout record: no deployment, and QL11/P12 remain open. No implementation blocker.",
+  "quoted_result_observation_stage": "Preserved verbatim source-review snapshot. Any pending/capability-skip sentence concerns its supplied pre-closeout/local input; current canonical facts are separately attached by this later receipt.",
+  "skip_compositions": {
+    "local_windows": {
+      "directory_symlink_capability": 6,
+      "absent_my_data_universe": 1
+    },
+    "canonical_linux": {
+      "windows_case_alias_platform": 6,
+      "absent_my_data_universe": 1,
+      "directory_symlink_capability": 0
+    }
+  }
+}

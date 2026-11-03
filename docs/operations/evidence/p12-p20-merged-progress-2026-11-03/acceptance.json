@@ -1,0 +1,46 @@
+{
+  "recorded_at_utc": "2026-11-03T13:59:04.338727+00:00",
+  "scope": "merged_implementation_refs_only",
+  "new_refs": [
+    {
+      "package_id": "P12",
+      "audit_ids": [
+        "QL11"
+      ],
+      "source_pr": 118
+    },
+    {
+      "package_id": "P20",
+      "audit_ids": [
+        "QL17"
+      ],
+      "source_pr": 119
+    }
+  ],
+  "source_prs_merged": true,
+  "source_trees_equal": true,
+  "all_source_canonical_checks_success": 6,
+  "all_source_fixed_head_reviews": "Grok CLI/grok-4.7 APPROVE",
+  "audit_items_closed": [],
+  "packages_closed": [],
+  "QL11": {
+    "implementation_merged": true,
+    "local_full_ci": "588PASS/7SKIP/18subtests/1existingSyntaxWarning",
+    "canonical_linux_pytest": "588PASS/7SKIP/18subtests/47warnings",
+    "local_skip_identity": "6directory-link capability skips+1absent-universe",
+    "linux_skip_identity": "6Windows-only cases+1absent-universe; sixactualdirectory-link cases pass via595marker/collectionalignment",
+    "earlier_source_snapshot": "Committed79relatedPASS/3local-linkcapabilitySKIP/remotepending acceptance remains unchanged.",
+    "remaining": "Actual minute refresh/default-provider deployment and full QL11/P12 host acceptance remain open."
+  },
+  "QL17": {
+    "implementation_merged": true,
+    "scope": "Three status banners plus immutable evidence; original page bodies, research stamp, ETF page and production defaults unchanged.",
+    "P6": "Only tracked historical summary found; no full host/untracked scan or claim that original packages were lost, fixed or obsolete.",
+    "remaining": "Other QL17/P20 old accounts and host/review/performance boundaries remain open."
+  },
+  "limits": [
+    "No audit or package closeouts; no duplication of QL12/13 or prior refs/receipts.",
+    "No actual provider refresh/promotion, lake writes, QMT, productionRedis, trading or runtime cutover.",
+    "Quoted source-review text and committed pending snapshots are earlier observations, not later canonical states."
+  ]
+}

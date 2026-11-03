@@ -1,0 +1,70 @@
+{
+  "head": "e310c581771127dee406917de4f0c254df769cf8",
+  "job": 125940429697,
+  "method": "Align all595remote pytest progress markers with collection at identical head; static order and normalized nodeid count checked.7skips map to6Windows-only cases+1missinguniverse; all6directory-link cases map toPASS.",
+  "progress_markers": ".........................................................................................................................................................................s...........................................................................................................................sss....................................................................................................................................................sss....................................................................................................................................................",
+  "collected_nodeids_sha256": "26a8fccae88158c91392de679d4e9b96b8f56d4b456b96b9b5006df1c5dc0a35",
+  "skip_nodes": [
+    {
+      "index0": 169,
+      "nodeid": "my_tests/test_m3d_industry_source_ready.py::test_shsz_coverage_if_universe_present"
+    },
+    {
+      "index0": 293,
+      "nodeid": "my_tests/test_refresh_1min_daily_boundary.py::test_windows_case_aliases[qlib]"
+    },
+    {
+      "index0": 294,
+      "nodeid": "my_tests/test_refresh_1min_daily_boundary.py::test_windows_case_aliases[staging]"
+    },
+    {
+      "index0": 295,
+      "nodeid": "my_tests/test_refresh_1min_daily_boundary.py::test_windows_case_aliases[receipt]"
+    },
+    {
+      "index0": 444,
+      "nodeid": "my_tests/test_refresh_path_isolation.py::test_windows_case_aliases_are_rejected_at_every_sink[validate]"
+    },
+    {
+      "index0": 445,
+      "nodeid": "my_tests/test_refresh_path_isolation.py::test_windows_case_aliases_are_rejected_at_every_sink[wipe]"
+    },
+    {
+      "index0": 446,
+      "nodeid": "my_tests/test_refresh_path_isolation.py::test_windows_case_aliases_are_rejected_at_every_sink[swap]"
+    }
+  ],
+  "symlink_nodes": [
+    {
+      "index0": 296,
+      "nodeid": "my_tests/test_refresh_1min_daily_boundary.py::test_symlink_aliases[qlib]",
+      "marker": "."
+    },
+    {
+      "index0": 297,
+      "nodeid": "my_tests/test_refresh_1min_daily_boundary.py::test_symlink_aliases[staging]",
+      "marker": "."
+    },
+    {
+      "index0": 298,
+      "nodeid": "my_tests/test_refresh_1min_daily_boundary.py::test_symlink_aliases[receipt]",
+      "marker": "."
+    },
+    {
+      "index0": 439,
+      "nodeid": "my_tests/test_refresh_path_isolation.py::test_resolved_directory_aliases_are_rejected_at_every_sink[validate]",
+      "marker": "."
+    },
+    {
+      "index0": 440,
+      "nodeid": "my_tests/test_refresh_path_isolation.py::test_resolved_directory_aliases_are_rejected_at_every_sink[wipe]",
+      "marker": "."
+    },
+    {
+      "index0": 441,
+      "nodeid": "my_tests/test_refresh_path_isolation.py::test_resolved_directory_aliases_are_rejected_at_every_sink[swap]",
+      "marker": "."
+    }
+  ],
+  "result": "PASS"
+}
