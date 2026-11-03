@@ -4278,6 +4278,22 @@
       "merged_commit": "f343b08b971023de937a38044a4a6cf642ddd3b1",
       "domain_record_url": "https://github.com/baiyibing/MyQuant/blob/f343b08b971023de937a38044a4a6cf642ddd3b1/docs/operations/evidence/ql11-default-noop-2026-11-03/acceptance.json",
       "scope": "默认自动空增量误报修复已合：原CLI不传start/end得到有依据的noop，5个坏输入宿主格拒绝，53个provider文件不变；日频/分钟默认provider锚点缺失已如实记录。 P12与QL11的完整部署/真实既有日频保护验收仍开放，不追加completed回执。"
+    },
+    {
+      "package_id": "P14",
+      "audit_ids": [
+        "BT-07"
+      ],
+      "evidence_record": "docs/operations/evidence/p14-current-input-bridge-2026-11-03/acceptance.json",
+      "scope": "New industry8PASS bridged to existing legacy8PASS by ALL market input fields after root aliases and docs-only runtime-code delta. Different private workspaces; oldSliceD/P14 remain open."
+    },
+    {
+      "package_id": "P20",
+      "audit_ids": [
+        "OP18"
+      ],
+      "evidence_record": "docs/operations/evidence/p14-current-input-bridge-2026-11-03/acceptance.json",
+      "scope": "Legacy14code current-tree readout:10stocks none/front nonempty,10back missing; standard gateway45offline PASS for#37. Issues/OP18/P20 remain open pending applicable data/host evidence."
     }
   ]
 }

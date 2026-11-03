@@ -1,0 +1,25 @@
+{
+  "audit_runner_sha256": "352a0082056f1ca95088fa21df3895a1188a4805194f7d9bdeda6594775a0b22",
+  "legacy_code_sha": "6f3a3305b2dacba6bb4fe49549a05284227ac43f",
+  "industry_code_sha": "b87ddce80bbf20cb44dd5e962f1fa93459276ad6",
+  "code_delta_only_under_docs": true,
+  "input_fields_equal": {
+    "csv_minute": {
+      "roots": true,
+      "pool": true,
+      "sources": true,
+      "runtime_config_and_authority": true,
+      "csv_daily_comparison_candidates": true
+    },
+    "v7": {
+      "roots": true,
+      "pool": true,
+      "sources": true,
+      "runtime_config_and_authority": true,
+      "csv_daily_comparison_candidates": true
+    }
+  },
+  "whole_inputs_equal_after_only_root_alias_normalization": true,
+  "normalization": "Windows slash normalization and only resolved repository/source prefix aliases; no field/hash/value exclusions",
+  "claim": "Market input/code bridge only; final industry matrix verdict required before acceptance"
+}

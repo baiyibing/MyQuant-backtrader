@@ -1,0 +1,26 @@
+{
+  "byte_domain": "Git-published UTF-8 LF bytes; excludes this manifest",
+  "files": {
+    "docs/operations/evidence/p14-current-input-bridge-2026-11-03/acceptance.json": "fee1feef68e6fd79e0a57ff0cbb7f2f63c78cd5ca5b83da1a7fe922e48e1b777",
+    "docs/operations/evidence/p14-current-input-bridge-2026-11-03/raw-record-hashes.json": "3de6f489d2db465837089190c37844421d5fcdd22a95060d398dc95ed7629277",
+    "docs/operations/evidence/p14-current-input-bridge-2026-11-03/README.md": "b2d53c8ab70426a36aafe9ff01d6688d2f2eeaaa58d89dbdcbb4072b6fa02f4a",
+    "docs/operations/evidence/p14-current-input-bridge-2026-11-03/validation.json": "afc04665f708c6e412a83fae1ebb89756dcb07e5d99391ab83e351d1dadca73c",
+    "docs/operations/evidence/p14-current-input-bridge-2026-11-03/audit-sources/audit_issue34.py": "19b7327efde934ec27f4fde1b73036cef73b318509cdfa89c1a6eae8a7589f8d",
+    "docs/operations/evidence/p14-current-input-bridge-2026-11-03/audit-sources/compare_legacy_inputs.py": "352a0082056f1ca95088fa21df3895a1188a4805194f7d9bdeda6594775a0b22",
+    "docs/operations/evidence/p14-current-input-bridge-2026-11-03/p14/cache-warmup.json": "c5ef52d4c4de4a39eaba5b6211f39f0c559d06e496119a5c610bcea2444dd3c9",
+    "docs/operations/evidence/p14-current-input-bridge-2026-11-03/p14/economic-hashes.json": "740c3bffd9d7e42961a7130e7310a259d08e4d5e43df9c1587e5f24df13792ed",
+    "docs/operations/evidence/p14-current-input-bridge-2026-11-03/p14/input-bridge.json": "58d5f5534183019b0a6a0291e726dd480ff9639ad2cbbb6cd76e8b85822c4c16",
+    "docs/operations/evidence/p14-current-input-bridge-2026-11-03/p14/recipe.json": "a4673949fb9afcb37603a0c354175d11e7981965281ab83637a22810b9608f0a",
+    "docs/operations/evidence/p14-current-input-bridge-2026-11-03/p14/result.json": "ac1fe2000ac02299a981ce97d7d5c5d3d7fef2e53facdf45adc7d419e163b8c9",
+    "docs/operations/evidence/p14-current-input-bridge-2026-11-03/p20/github-issues.json": "c64aa06db79d00e0fd0b43176ae7f154acf76fd6b693a2d241e53e7c175de20c",
+    "docs/operations/evidence/p14-current-input-bridge-2026-11-03/p20/issue34-current.json": "1c20059e2562c2abbcfdce48b9bb7da6314f4fc3690a90b419477350b23897e9",
+    "docs/operations/evidence/p14-current-input-bridge-2026-11-03/p14/comparisons/csv_minute-bad_output.json": "457b7e851c2a3d01bbf1ca9b9d18dd1cacc4e8fe3041f0d9e1b78a2c87de78b5",
+    "docs/operations/evidence/p14-current-input-bridge-2026-11-03/p14/comparisons/csv_minute-invalid_config.json": "5fc672b4b04ae75a5b556132c9e5dde1b417f6402c79761c004f289dd80dd5fa",
+    "docs/operations/evidence/p14-current-input-bridge-2026-11-03/p14/comparisons/csv_minute-low_cash.json": "62913ea2d60cc2f984757561d7b3b31995474aadb642dfa61071ab1ec2dea1d4",
+    "docs/operations/evidence/p14-current-input-bridge-2026-11-03/p14/comparisons/csv_minute-normal.json": "641efdd560dd54b9f868b902411d0f1ddd07e81ee8e190164807bf44e3f37eca",
+    "docs/operations/evidence/p14-current-input-bridge-2026-11-03/p14/comparisons/v7-bad_output.json": "78d4d83c2cf014034e214b156f8a66be2c999bf3a8d30650fea89d939c68230d",
+    "docs/operations/evidence/p14-current-input-bridge-2026-11-03/p14/comparisons/v7-invalid_config.json": "fbd793973c20afbe02b460fb7106c25d6bd65b6cd3bf307fb58b866426d402c0",
+    "docs/operations/evidence/p14-current-input-bridge-2026-11-03/p14/comparisons/v7-low_cash.json": "b7bd57c6f5194de8af5b767373d066684fc183fb122019fb81dd1311187dcfde",
+    "docs/operations/evidence/p14-current-input-bridge-2026-11-03/p14/comparisons/v7-normal.json": "8063671c6da59b91172d1a6ebf981d315892eee08cdcb1094c4a8cf5a12e2a1e"
+  }
+}

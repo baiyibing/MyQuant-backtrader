@@ -1,0 +1,41 @@
+{
+  "status": "PASS",
+  "differences": [
+    {
+      "path": "stdout/line/7",
+      "left": "loaded minute=lake daily=lake: minute_names=303 daily_names=303 exdiv_names=6 st_names=303 in 9.69s\n",
+      "right": "loaded minute=lake daily=lake: minute_names=303 daily_names=303 exdiv_names=6 st_names=303 in 9.65s\n",
+      "allowed": true,
+      "reason": "duration numeric captures only"
+    },
+    {
+      "path": "stdout/bytes",
+      "left": "264136a5ed619881dcb4942a9fae04ef07e95d5ec0fa8af9dd1089164c3e5626",
+      "right": "e21f633cdfdfb726d23fb8bbc18a46b2afe201d2c5f911d580c44a628b87cb0d",
+      "allowed": true,
+      "reason": "raw bytes differ"
+    }
+  ],
+  "raw": {
+    "stdout": {
+      "left_sha256": "264136a5ed619881dcb4942a9fae04ef07e95d5ec0fa8af9dd1089164c3e5626",
+      "right_sha256": "e21f633cdfdfb726d23fb8bbc18a46b2afe201d2c5f911d580c44a628b87cb0d",
+      "byte_equal": false
+    },
+    "stderr": {
+      "left_sha256": "4f27a6aa3c6d88b1f1485ba64d9be10d6108670ac30096aecb2f347a9a70fd9e",
+      "right_sha256": "4f27a6aa3c6d88b1f1485ba64d9be10d6108670ac30096aecb2f347a9a70fd9e",
+      "byte_equal": true
+    }
+  },
+  "byte_identical": false,
+  "policy": {
+    "required_files": [],
+    "allowed_json_fields": [],
+    "duration_files": [
+      "summary.txt"
+    ],
+    "duration_stdout": true,
+    "verify_manifest": false
+  }
+}

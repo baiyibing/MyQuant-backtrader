@@ -1,0 +1,35 @@
+{
+  "recorded_at_utc": "2026-11-03T10:11:54.954322+00:00",
+  "p14": {
+    "package_closed": false,
+    "audit_item_closed": false,
+    "new_industry_cells_passed": 8,
+    "existing_legacy_cells_passed": 8,
+    "legacy_record": "docs/operations/evidence/consumer-host-2026-11-03/p14/acceptance.json",
+    "whole_market_input_fields_equal": true,
+    "runtime_code_delta_only_docs": true,
+    "different_worktree_and_private_workspace_identities": true,
+    "cross_profile_economic_equality": "NOT_ASSERTED; compare only native versus L1 within each profile",
+    "normal_trades_rows": {
+      "csv_minute": 584,
+      "v7": 613
+    },
+    "remaining": "Old #108 Slice D pre-migration matching host baseline/price-reason comparison remains open."
+  },
+  "p20": {
+    "package_closed": false,
+    "audit_item_closed": false,
+    "issue34": "10 legacy stocks none/front nonempty;10back missing; index/ETF checked in own trees. Keep data debt open.",
+    "issue37": {
+      "fixed_code_commit": "a039609b93b592e1c6097a77e8ed22dfb033b503",
+      "current_source": "773c6260a8fb7916a353a0c7ad3111b7852cbef5",
+      "offline_existing_tests_passed": 45,
+      "status": "Keep open: no applicable online host/vendor signoff."
+    }
+  },
+  "limits": [
+    "Frozen current-source evidence only; no economic truth, strategy admission, all-market quality or physical host signoff.",
+    "P02 history/remaining SHM test repair tracked separately in1.3#1275 and FullSweep41615284944; no OP16/P02 closure here.",
+    "No market-lake writes, QMT login, production Redis changes, runtime cutover, paper/live start or default provider promotion."
+  ]
+}

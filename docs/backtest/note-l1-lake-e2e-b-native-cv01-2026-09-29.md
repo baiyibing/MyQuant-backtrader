@@ -1,5 +1,7 @@
 # B-native-CV-01：CSV/v7 原生 CLI ↔ L1 真湖验收 harness
 
+> 2026-11-03：新industry八格PASS，与当前legacy八格完整市场输入/运行时代码桥接成立；[16格增量回执](../operations/evidence/p14-current-input-bridge-2026-11-03/README.md)。不同workspace身份保留，旧Slice D与P14整包仍开放。
+
 > 2026-11-01：本机 industry 配方八格真湖 PASS，见文末追加回执。P14 整包仍开放。
 
 2026-09-29 · Human「B GO」· 基线 `b3a76a9` · Track B 首刀。
