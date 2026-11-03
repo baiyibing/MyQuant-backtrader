@@ -39,5 +39,17 @@
     "P12 minute/default-provider/refresh host conditions remain open; no package closeout.",
     "Do not duplicate already-closedQL12/QL13 or previousimplementationrefs/receipts.",
     "No actual provider refresh/promotion, QMT, productionRedis, external download or market-lake writes."
-  ]
+  ],
+  "skip_compositions": {
+    "local_windows": {
+      "directory_symlink_capability": 3,
+      "absent_my_data_universe": 1
+    },
+    "canonical_linux": {
+      "windows_case_alias_platform": 3,
+      "absent_my_data_universe": 1,
+      "directory_symlink_capability": 0
+    }
+  },
+  "source_review_quote_scope": "The preserved quoted review discusses historical local Windows capability skips; later Linux results and skip identities are reported separately."
 }

@@ -32,5 +32,6 @@
       "exit_code": 0,
       "log_sha256": "a3033bb915b0ed362b3db6317bd5e3cd643c287efe02c018768b75aa63cdc998"
     }
-  }
+  },
+  "documentation_review_followup": "Clarified historical source quote versus local Windows/canonical Linux skip compositions; source quote, runtime code, frozen inventory, refs and prior gate results unchanged."
 }
