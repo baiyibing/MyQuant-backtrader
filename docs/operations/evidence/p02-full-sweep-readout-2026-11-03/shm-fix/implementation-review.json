@@ -1,0 +1,15 @@
+{
+  "reviewed_head": "4d421edd60c502a4a8607a0677de4a163deeeb96",
+  "verdict": "APPROVE",
+  "cli": "Grok CLI",
+  "requested_model": "grok-4.7",
+  "actual_models": [
+    "grok-4.7-build"
+  ],
+  "reasoning_effort": "low",
+  "session_id": "01a1a0e1-98f6-7971-b2b3-af5c9076a303",
+  "raw_review_sha256": "3b368bac84e953c3f9ffea70b74037aac7ca25309ab6e4751dfcfc610986bfe1",
+  "bundle_sha256": "56175badd747f563534f1005f0429a18e33978a6ea5b21a4090162a9537fcd5f",
+  "review_scope": "Supplied fixed snapshot only; no test execution/host signoff by reviewer",
+  "result": "**APPROVE**\n\nThe L1 fake matches the already-merged bridge call. `relay_ring` passes `**_infra_xadd_kwargs(stream)`, which is either `{}` or `{\"maxlen\": _INFRA_MAXLEN, \"approximate\": True}`. The test `Redis.xadd` now takes those two keyword-only arguments, defaults them to `None`, and still rejects any other keyword. The success path still stores `(\"xadd\", stream, fields)` before the option row, and `fail == \"xadd\"` still raises `ConnectionError` before either append, so the existing call tuples and failure injections stay the same.\n\n`test_item_order_and_ttl` patches `_INFRA_MAXLEN` to `7` before `relay_ring`. `_infra_xadd_kwargs` reads that global at call time, and `download_stream` sends these five item kinds to `DL_STREAM`, which is in `_INFRA_STREAMS`. The new assertion `[(bridge.DL_STREAM, 7, True)]` checks the value actually handed to the transport. The literal `7` is independent of `DAQMT_BRIDGE_INFRA_MAXLEN`. The original payload, setex, and commit checks remain in place. No other test function in the file is edited. Shim-local `Transport.xadd` methods are separate and were not part of the `maxlen` `TypeError` set.\n\n`tests/test_daqmt_shm_l2.py` is inserted once in `_COMMON_CONTRACT_TEST_PATHS`. The PR workflows use `paths-ignore` for docs, markdown, and vendor paths, so this test file and `scripts/run_common_package_contract_gates.py` already trigger the Linux and Windows contract jobs. The evidence note under `docs/` does not change that. The diff does not touch production shim, bridge, retention, or Redis behavior.\n\nFull Sweep, OP16/P02, and M5 acceptance stay open, as the evidence limits already say. That does not block this fake-protocol and gate-selection change."
+}

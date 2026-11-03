@@ -1,0 +1,21 @@
+{
+  "recorded_at_utc": "2026-11-03 10:33:49 UTC",
+  "repositories": [
+    {
+      "repo": "baiyibing/OSkhQuant1.3",
+      "name": "main",
+      "protected": false
+    },
+    {
+      "repo": "baiyibing/MyQuant",
+      "name": "master",
+      "protected": false
+    },
+    {
+      "repo": "baiyibing/MyQuant-backtrader",
+      "name": "master",
+      "protected": false
+    }
+  ],
+  "scope": "Read-only current branch protected flag only; no rule/admin change and no broader ruleset inference. Owner governance remains open."
+}

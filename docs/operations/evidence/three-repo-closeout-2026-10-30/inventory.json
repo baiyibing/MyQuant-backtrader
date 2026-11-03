@@ -4294,6 +4294,16 @@
       ],
       "evidence_record": "docs/operations/evidence/p14-current-input-bridge-2026-11-03/acceptance.json",
       "scope": "Legacy14code current-tree readout:10stocks none/front nonempty,10back missing; standard gateway45offline PASS for#37. Issues/OP18/P20 remain open pending applicable data/host evidence."
+    },
+    {
+      "package_id": "P02",
+      "audit_ids": [
+        "OP16"
+      ],
+      "pr_url": "https://github.com/baiyibing/OSkhQuant1.3/pull/1275",
+      "evidence_record": "docs/operations/evidence/p02-full-sweep-readout-2026-11-03/acceptance.json",
+      "verification_run_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/41615284944",
+      "scope": "Exactfeaturehead FullSweep934files/13chunks:11788PASS/101SKIP/35deselect,0new/0old,149history/allfirstseen preserved. SourcePR1275GrokAPPROVE but Linuxrunnerlostcommunication blocks merge. OP16/P02stayOPEN; no closeout receipt."
     }
   ]
 }
