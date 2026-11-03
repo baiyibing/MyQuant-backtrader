@@ -103,3 +103,7 @@ infra, P2 DB/sqlite, CI allowlist changes, cleanup script or lake changes.
 OS 页缓存没有清除，两个扫描路径的顺序固定，因此这不是冷缓存吞吐验收。
 分片粒度仍待代表性请求、受控冷/暖读写成本及实际 append/repair 重建计数；
 S1 默认关闭实现、S2、S3 均未由本片推进，P15 保持开放。
+
+## 2026-11-03 单体缓存命中路径补测
+
+在原两股探针之后补六股、250,158 行样本：独立进程私有缓存 miss 2.520s，独立进程 hit 0.234s，同进程 mem 0.117s；三者帧摘要一致。见[运行回执](../operations/evidence/consumer-host-2026-11-03/p15/acceptance.json)与[环境配方](../operations/evidence/consumer-host-2026-11-03/p15/recipe.json)。OS page cache 未清空，这些有序测量不是冷 IO 或全市场预算。没有 shard 实现/真实重建计数，不据此裁定粒度或关闭 P15。

@@ -1,0 +1,10 @@
+{
+  "csv_minute": {
+    "status": "PASS",
+    "native_exit_code": 0
+  },
+  "v7": {
+    "status": "PASS",
+    "native_exit_code": 0
+  }
+}

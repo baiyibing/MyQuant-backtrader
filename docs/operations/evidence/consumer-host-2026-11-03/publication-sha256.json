@@ -1,0 +1,33 @@
+{
+  "byte_basis": "Git blob bytes, UTF-8 LF; original raw run JSON hashes are separate",
+  "sha256": {
+    "audit-sources/audit_p03_consumer.py": "a0e03f392aa4ed492af3ceadc2e9823adc94cab497bac0f94f4330974669d181",
+    "audit-sources/profile_p15_host.py": "f20f8ef786e74db36541cfd69f060d1c1c0adbbf9bd33b365da45de2428e118e",
+    "evidence-review.json": "6597159bc0d781ff646040217bce4084a75073beaeeefefcc07ecaf2381cde1e",
+    "p03/readout.json": "cd510f334a9400eefff1373e6e9983516a32d24291608827a0e6a2c89921bc18",
+    "p03/recipe.json": "1f8da08293584781394aa78f2eb895840a476b8e7dfbeeb67ce194ca72c786c8",
+    "p11-pr114.json": "772a15f73d81a45c21a5cc76ecf83fd81d22b590e51d9ed582906e606ec9a772",
+    "p14/acceptance.json": "da3b28363377d65dd44a282df6f98719a088eb9af8d8e7a7dc65cd9233b5aa63",
+    "p14/cache-warmup.json": "c5ef52d4c4de4a39eaba5b6211f39f0c559d06e496119a5c610bcea2444dd3c9",
+    "p14/comparisons/csv_minute-bad_output.json": "4efd32ad4117fe74bc9bb7c97362a3854dc1d6a88ba4614d67237728b8096d03",
+    "p14/comparisons/csv_minute-invalid_config.json": "5fc672b4b04ae75a5b556132c9e5dde1b417f6402c79761c004f289dd80dd5fa",
+    "p14/comparisons/csv_minute-low_cash.json": "36e7094976870f44345f73784cf391f31789357e91d83661f16ea2cf9bdf3a6e",
+    "p14/comparisons/csv_minute-normal.json": "ac59fe5c58b7c805093f10776a24b30bd9e8e362463456eb3eb8d469c4c09576",
+    "p14/comparisons/v7-bad_output.json": "5b0682a4b4eed9e9c675ec793f6026054437b17ad3f84441074fce670e658459",
+    "p14/comparisons/v7-invalid_config.json": "fbd793973c20afbe02b460fb7106c25d6bd65b6cd3bf307fb58b866426d402c0",
+    "p14/comparisons/v7-low_cash.json": "3b9909279dc0fa0ced19539a6ffa64bbf60cbd585abbcf13a21d23c15159420f",
+    "p14/comparisons/v7-normal.json": "133252b970304acd34616b651a1f37cac6ace09157bed1c3fd40348ca633b283",
+    "p14/recipe.json": "7306dca71e1a6499d87eb532ad0d19e78c8ed5d047812b29fd2eb6b5b5192019",
+    "p14/result.json": "95dee932ee1a7d9b5440589660da55ae5b389e659d0d4edf4b7092f0ea71eaeb",
+    "p15/acceptance.json": "d1975f0511ffc106520481d47e80807f0bd17222324eddf136240e4cbd9af718",
+    "p15/fresh-hit.json": "caff7f76c50f82d2b48d8de1f7ae7f0db1c3a16917478e397ce334422ef74380",
+    "p15/fresh-miss.json": "9fa631a20f91954c8c4d0cf47091a97cb802c046f07bb507942f953b7c5589da",
+    "p15/plan-review-r1.json": "f7a68cc2f78de355230935f0c7817886e7f82a778ed8abf54e4924d856616b41",
+    "p15/plan-review-r2.json": "195baae189cd139f51ca3ad87b9c1f9d9686b9e9350a40e66f40a1d65b97d1e3",
+    "p15/recipe.json": "4dc813ecdac43bc1b1c748c33c798a8fd22d94cc92313ac2ecb63ed5359c7d35",
+    "p15/scan-probe.json": "0ff410797a1d8a0d3cd39f5ad70b4a2dc4125f5b949fd7660275ba06c7a2c584",
+    "raw-record-hashes.json": "f124b42ce5c57d304e07fdce6d3a0611308cbac0df3aa26422b07ddbdf22d1df",
+    "README.md": "16bad940af943b525fcc3c2604e1fd57d2a36b027fef9214efed5004b3337857",
+    "validation.json": "709c0f13497d8f31e48abb595d9eab0dadf47ec23e213243d23174d2a290058b"
+  }
+}

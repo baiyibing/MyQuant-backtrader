@@ -1,0 +1,25 @@
+{
+  "phase": "fresh-hit",
+  "observations": [
+    {
+      "repeat": 0,
+      "elapsed_seconds": 0.23395519994664937,
+      "cache_status": "hit",
+      "codes": 6,
+      "rows": 250158,
+      "frame_digest": "55bc4e9099b3faa46027161e99e53cad5cc70de3fad8fb1f98e26b697227b415",
+      "rss_after_bytes": 146128896
+    },
+    {
+      "repeat": 1,
+      "elapsed_seconds": 0.11701760010328144,
+      "cache_status": "mem",
+      "codes": 6,
+      "rows": 250158,
+      "frame_digest": "55bc4e9099b3faa46027161e99e53cad5cc70de3fad8fb1f98e26b697227b415",
+      "rss_after_bytes": 146726912
+    }
+  ],
+  "sampled_process_tree_peak_rss_bytes": 147202048,
+  "windows_lifetime_peak_wset_bytes": 147935232
+}
