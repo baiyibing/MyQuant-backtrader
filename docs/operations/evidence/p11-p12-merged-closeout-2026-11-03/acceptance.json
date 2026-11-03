@@ -1,0 +1,46 @@
+{
+  "recorded_at_utc": "2026-11-03T08:13:44.858272+00:00",
+  "scope": "Merged receipt/index upkeep only",
+  "p11_package_closed": true,
+  "p12_package_closed": false,
+  "ql11_full_scope_closed": false,
+  "receipt": {
+    "receipt_id": "p11-etf-e3-e4-pr114-merged-20261103",
+    "package_id": "P11",
+    "scope": "package",
+    "audit_ids": [
+      "QL02",
+      "QL03"
+    ],
+    "disposition": "completed",
+    "closed_at_utc": "2026-11-03T05:27:54Z",
+    "recorded_at_utc": "2026-11-03T08:13:44.858272+00:00",
+    "ssot_urls": [
+      "https://github.com/baiyibing/MyQuant/pull/114",
+      "https://github.com/baiyibing/MyQuant/blob/8f65e08685d47f3ed736409336726654a21723ae/docs/operations/evidence/p11-etf-host-acceptance-2026-11-03/acceptance.json",
+      "https://github.com/baiyibing/MyQuant/blob/8f65e08685d47f3ed736409336726654a21723ae/docs/operations/evidence/p11-etf-host-acceptance-2026-11-03/e3-revalidation.json",
+      "https://github.com/baiyibing/MyQuant/blob/8f65e08685d47f3ed736409336726654a21723ae/docs/operations/evidence/p11-etf-host-acceptance-2026-11-03/evidence-review.json"
+    ],
+    "evidence_urls": [
+      "https://github.com/baiyibing/MyQuant/commit/8f65e08685d47f3ed736409336726654a21723ae",
+      "https://github.com/baiyibing/MyQuant/actions/runs/41580138648",
+      "https://github.com/baiyibing/MyQuant/blob/8f65e08685d47f3ed736409336726654a21723ae/docs/operations/evidence/p11-etf-host-acceptance-2026-11-03/acceptance.json",
+      "https://github.com/baiyibing/MyQuant/blob/8f65e08685d47f3ed736409336726654a21723ae/docs/operations/evidence/p11-etf-host-acceptance-2026-11-03/e3-revalidation.json",
+      "https://github.com/baiyibing/MyQuant/blob/8f65e08685d47f3ed736409336726654a21723ae/docs/operations/evidence/p11-etf-host-acceptance-2026-11-03/evidence-review.json"
+    ],
+    "signoff_urls": [],
+    "evidence_record": "docs/operations/evidence/p11-p12-merged-closeout-2026-11-03/acceptance.json",
+    "summary": "仅关闭冻结P11/QL02+QL03：原窗口ETF隔离provider E3与Alpha158+LGB E4均已在原域接受，修正拟合边界泄漏后104772有效测试样本、IC有限；MyQuant114三CI成功且已合，checked/merged树相同。本轮再核11406个provider文件与4ETF×7字段，当前股票日/分钟provider根目录前后均不存在。保留front与幸存者偏差、历史快照和隔离烟测限制；不代签当前湖刷新、默认provider部署、现有线上全树保护、盈利或P12。"
+  },
+  "closed_packages_from_current_ledger": [
+    "P01",
+    "P11"
+  ],
+  "packages_without_package_closeout": 19,
+  "limits": [
+    "Ledger counts are not a fresh audit of every remaining package.",
+    "P11 is the original frozen historical isolated E3/E4 smoke; not live/default-provider qualification.",
+    "P12 default daily/minute providers were absent in the selected host anchors; no existing live-provider invariance signed.",
+    "No market/trading/SHM/SDD/production source/Owner governance changes."
+  ]
+}

@@ -1,0 +1,196 @@
+{
+  "recorded_at_utc": "2026-11-03T08:04:40.122260+00:00",
+  "status": "PASS_FROZEN_PROVIDER_REVALIDATION",
+  "runner_sha256": "10f2c21c714664b8437781bc818efe4a74d6b4a52f7ce617a3bf80d53c64b76d",
+  "provider_files_verified_unchanged": 11406,
+  "calendar_rows": 1640,
+  "protected_provider_roots_before": {
+    "$USER_HOME\\.qlib\\qlib_data\\my_data": {
+      "exists": false
+    },
+    "$USER_HOME\\.qlib\\qlib_data\\my_data_1min": {
+      "exists": false
+    }
+  },
+  "protected_provider_roots_after": {
+    "$USER_HOME\\.qlib\\qlib_data\\my_data": {
+      "exists": false
+    },
+    "$USER_HOME\\.qlib\\qlib_data\\my_data_1min": {
+      "exists": false
+    }
+  },
+  "four_etf_seven_field_checks": [
+    {
+      "code": "SH510050",
+      "staging_sha256": "c30e09f2539a3ac98e6a5b0224a55ed4654eeb39ab6a0a5558689d58c4e484d0",
+      "fields": {
+        "open": {
+          "finite_rows": 1640,
+          "max_absolute_error": 1.1825561552214481e-07,
+          "bin_sha256": "98c8aed71536e48f3198dc909a4f8a6dda336e70dfe1892a16c6fce798e2763b"
+        },
+        "high": {
+          "finite_rows": 1640,
+          "max_absolute_error": 1.1825561552214481e-07,
+          "bin_sha256": "99dc43e26612f2b11d3a4ccb7c7a1c9c27a6f0f1e169cc93fb56e871e80c73bc"
+        },
+        "low": {
+          "finite_rows": 1640,
+          "max_absolute_error": 1.1825561552214481e-07,
+          "bin_sha256": "4b3ab83d288708e5f125663aa229cd2ba9fa68bc6c86a6bae683a58dc023e571"
+        },
+        "close": {
+          "finite_rows": 1640,
+          "max_absolute_error": 1.1825561552214481e-07,
+          "bin_sha256": "3cf8f9ed123b9db437c500003defd955c2417abc6be7a9b1187ba189368f3490"
+        },
+        "volume": {
+          "finite_rows": 1640,
+          "max_absolute_error": 2.0,
+          "bin_sha256": "311c8339d20975e1d42001bb6189e92b7a8a753389ebe1adf5551a63171f4ca6"
+        },
+        "amount": {
+          "finite_rows": 1640,
+          "max_absolute_error": 908.0,
+          "bin_sha256": "6df90b863e3f4d9020fe4cfde50748f11ee8721fbdc076043d2cd59f1e69591a"
+        },
+        "vwap": {
+          "finite_rows": 1640,
+          "max_absolute_error": 1.1916473274808936e-07,
+          "bin_sha256": "54c259d2a3a427c36e41d2a0df9c9d33cecbc0bf4840b696b044667112348381"
+        }
+      }
+    },
+    {
+      "code": "SH510300",
+      "staging_sha256": "47cd264042a227f8748f66d12da05073a21f319b9d352dc69fa1f066fbf84f1a",
+      "fields": {
+        "open": {
+          "finite_rows": 1640,
+          "max_absolute_error": 2.3651123104428962e-07,
+          "bin_sha256": "9fe0c6062fde7df84b60afc599ffdf371597ab183005ba1849cffb8e809deed8"
+        },
+        "high": {
+          "finite_rows": 1640,
+          "max_absolute_error": 2.3651123104428962e-07,
+          "bin_sha256": "fd3a113c2770b9940eb1dbe66342d3dd1ed1d01fa775f98777500c71cfeb53dc"
+        },
+        "low": {
+          "finite_rows": 1640,
+          "max_absolute_error": 2.3651123104428962e-07,
+          "bin_sha256": "1c99a6b88afbfedb71f4250959fb0674107c8f1da2d277e60c6e71f9ccb3d511"
+        },
+        "close": {
+          "finite_rows": 1640,
+          "max_absolute_error": 2.3651123104428962e-07,
+          "bin_sha256": "ef344e8562403bf11d35daecfa75ca0df99223bf72ff09ba9ca722c238a1204b"
+        },
+        "volume": {
+          "finite_rows": 1640,
+          "max_absolute_error": 3.0,
+          "bin_sha256": "84706c28d80bdab4cafc22db53d684acbd662e0b56f92bc41422d4cfe93a7b68"
+        },
+        "amount": {
+          "finite_rows": 1640,
+          "max_absolute_error": 1977.0,
+          "bin_sha256": "5855609d4fe704646409bd42599e246f97caa0a80c9a6a1f920c450c65504fa2"
+        },
+        "vwap": {
+          "finite_rows": 1640,
+          "max_absolute_error": 2.3794902137552754e-07,
+          "bin_sha256": "11decb638d8805634fe7cc69755673b9562158ee0735a864547c2648fab87ba0"
+        }
+      }
+    },
+    {
+      "code": "SZ159915",
+      "staging_sha256": "743055c127ad888e2a44bad11b20797c5604cd31e23189cb49685ba53efd328e",
+      "fields": {
+        "open": {
+          "finite_rows": 1639,
+          "max_absolute_error": 2.2125244125703603e-07,
+          "bin_sha256": "9e3bc88c7a871f8061b53d98a0b7c93e66ae510bad81770935dc2543e7e50595"
+        },
+        "high": {
+          "finite_rows": 1639,
+          "max_absolute_error": 2.365112301561112e-07,
+          "bin_sha256": "eab19312b876136bc204ac1e2426bc831b0103fe35a9ed3163fb47fe563eb2c6"
+        },
+        "low": {
+          "finite_rows": 1639,
+          "max_absolute_error": 2.2888183615066282e-07,
+          "bin_sha256": "d7f9341cc90fff286176996d0a7a9cb9bb9e94b0d0c091ce81e8c6d428dee1ee"
+        },
+        "close": {
+          "finite_rows": 1639,
+          "max_absolute_error": 2.32696533153387e-07,
+          "bin_sha256": "c8762dd672adf78dd3ee633ed8f2d45f147ee4e66b855975d6525dc76b3b2b1a"
+        },
+        "volume": {
+          "finite_rows": 1639,
+          "max_absolute_error": 4.0,
+          "bin_sha256": "3a8c7c6bc65385e6c61dfb76e5a2df31aad5820998d8be602e4a13e7843e0b04"
+        },
+        "amount": {
+          "finite_rows": 1639,
+          "max_absolute_error": 1552.0,
+          "bin_sha256": "56ae3b1d87bbba2f01b474f5792e44d9e4cb3b08033639065e8b3c8413dadbf0"
+        },
+        "vwap": {
+          "finite_rows": 1639,
+          "max_absolute_error": 2.3772012891498662e-07,
+          "bin_sha256": "dbd5fff8b76de920c4d904e1b5f1edb198eb6f8f537d57f4addb3565055c70a7"
+        }
+      }
+    },
+    {
+      "code": "SH510500",
+      "staging_sha256": "62ba93050aaa3a83ce7bc79ddf0d799995beedba51d6e4d1a9bfffb33b97ec56",
+      "fields": {
+        "open": {
+          "finite_rows": 1640,
+          "max_absolute_error": 4.7302246208857923e-07,
+          "bin_sha256": "06868f8437fa86d521112ef958e7f36090b62a0e8d0faa80faa041756e331332"
+        },
+        "high": {
+          "finite_rows": 1640,
+          "max_absolute_error": 4.7302246208857923e-07,
+          "bin_sha256": "89040ab19b996c272011358674bc6dc9f39243993f238540f377dbce6989d923"
+        },
+        "low": {
+          "finite_rows": 1640,
+          "max_absolute_error": 4.577636705249688e-07,
+          "bin_sha256": "dab30488b8b75126cb5947a4d6dfd3f979b905a9571a08d44c0d67e794e7a4a2"
+        },
+        "close": {
+          "finite_rows": 1640,
+          "max_absolute_error": 4.6539306808313086e-07,
+          "bin_sha256": "b631e57dd2fdc7f8ae09b72cfc388397e00ef34876b9f21dae31e6bd58035067"
+        },
+        "volume": {
+          "finite_rows": 1640,
+          "max_absolute_error": 2.0,
+          "bin_sha256": "2c34ebc62876b5fd301591657e6cf4d13eacfb7c495775d444cb04943aa78d51"
+        },
+        "amount": {
+          "finite_rows": 1640,
+          "max_absolute_error": 978.0,
+          "bin_sha256": "b83c56b667d5b77ce59a12efde5df45f4a754f3e979a5ebc8febe611436d34d6"
+        },
+        "vwap": {
+          "finite_rows": 1640,
+          "max_absolute_error": 4.6512509221940945e-07,
+          "bin_sha256": "33d0e79d50cffb800225373ecfdaf64d5b2fc6b9c14bc5069a63aa0d44eccd09"
+        }
+      }
+    }
+  ],
+  "provider_writes": false,
+  "market_writes": false,
+  "limits": [
+    "Frozen2020-01-02..2026-10-13 provider/staging only; not the latest front lake.",
+    "Current protected root directories absent before/after. This is not a retroactive full-tree attestation of older runs.",
+    "E4 fit/prediction is not rerun; its merged independently verified artifacts are referenced separately."
+  ]
+}
