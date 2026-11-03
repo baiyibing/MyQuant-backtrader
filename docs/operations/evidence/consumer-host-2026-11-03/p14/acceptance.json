@@ -1,0 +1,98 @@
+{
+  "package_id": "P14",
+  "audit_id": "BT-07",
+  "status": "PASS_LEGACY_NATIVE_L1_8_CELLS",
+  "package_closed": false,
+  "source_commit": "6f3a3305b2dacba6bb4fe49549a05284227ac43f",
+  "window": {
+    "start": "20251023",
+    "end": "20251104",
+    "origin": "native CLI documented defaults / explicit harness arguments"
+  },
+  "symbols": 303,
+  "rule_profile": "legacy",
+  "economic_artifacts": {
+    "csv_minute": {
+      "files": {
+        "trades.csv": {
+          "native_sha256": "12c6cf14e384aeb64a9843312afae0704ffdbd2526fd85b4415dd800b957bf82",
+          "l1_sha256": "12c6cf14e384aeb64a9843312afae0704ffdbd2526fd85b4415dd800b957bf82",
+          "byte_equal": true
+        },
+        "daily_equity.csv": {
+          "native_sha256": "b5207d425946e9240437ad74a8ea19f13530edb4df97bde96eaf8e512fdf4d34",
+          "l1_sha256": "b5207d425946e9240437ad74a8ea19f13530edb4df97bde96eaf8e512fdf4d34",
+          "byte_equal": true
+        },
+        "execution-audit.json": {
+          "native_sha256": "d62f75e2929bab2aba9ca5f2f453aa9a260fe6f18a40afd9129f33cf1bdd86ee",
+          "l1_sha256": "d62f75e2929bab2aba9ca5f2f453aa9a260fe6f18a40afd9129f33cf1bdd86ee",
+          "byte_equal": true
+        }
+      },
+      "trade_rows": 584,
+      "sides": {
+        "BUY": 292,
+        "SELL": 207,
+        "EOD_MARK": 85
+      },
+      "raw_reason_counts": {
+        "pool": 277,
+        "trail:max101_80": 192,
+        "stop_loss:touch": 6,
+        "open_board": 2,
+        "chase:T+1": 15,
+        "stop_loss:gap_open": 1,
+        "force_sell:stale": 6,
+        "NaN": 85
+      },
+      "note": "Current native/L1 outputs only; these reason counts are NOT old Slice D pre/post parity."
+    },
+    "v7": {
+      "files": {
+        "trades.csv": {
+          "native_sha256": "8697775541361b1d7bb72e7aaa37e38861ff5dcf349c8e06e279930f73e93c7c",
+          "l1_sha256": "8697775541361b1d7bb72e7aaa37e38861ff5dcf349c8e06e279930f73e93c7c",
+          "byte_equal": true
+        },
+        "daily_equity.csv": {
+          "native_sha256": "14d3e85830bf5f32f084ee3053eb5dc35fde98c2d93259cd71ef9bb0f698aada",
+          "l1_sha256": "14d3e85830bf5f32f084ee3053eb5dc35fde98c2d93259cd71ef9bb0f698aada",
+          "byte_equal": true
+        },
+        "execution-audit.json": {
+          "native_sha256": "e125a3d478f662101327b3ddc8802a16041562dc33a17663249f5f5b09705c1f",
+          "l1_sha256": "e125a3d478f662101327b3ddc8802a16041562dc33a17663249f5f5b09705c1f",
+          "byte_equal": true
+        }
+      },
+      "trade_rows": 613,
+      "sides": {
+        "SKIP": 216,
+        "BUY": 374,
+        "SELL": 23
+      },
+      "raw_reason_counts": {
+        "skip_limit_up": 216,
+        "buy:trial": 257,
+        "buy:add_a104": 70,
+        "buy:add_a108": 26,
+        "buy:add_a112": 14,
+        "stop:trial_a090": 9,
+        "buy:add_a116": 7,
+        "stop:eight_avg0975": 3,
+        "stop:six_avg0965": 2,
+        "stop:four_avg095": 8,
+        "stop:full_avg098": 1
+      },
+      "note": "Current native/L1 outputs only; these reason counts are NOT old Slice D pre/post parity."
+    }
+  },
+  "previous_industry_receipt": "docs/operations/evidence/p14-native-lake-2026-11-01/acceptance.json",
+  "limits": [
+    "Legacy profile on current frozen lake inputs. Previous industry receipt has its OWN older input identity.",
+    "No combined same-source industry/legacy matrix claim.",
+    "Old #108 Slice D pre-migration matching host baseline/price-reason comparison is not supplied; keep open.",
+    "No strategy admission, economic-truth, cross-family NAV or SSOT R/S signoff."
+  ]
+}

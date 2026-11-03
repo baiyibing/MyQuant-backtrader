@@ -4195,6 +4195,41 @@
       ],
       "scope": "Read-only old-issue audit: #37 legacy compat mechanism is replaced and56existing offline tests pass; appropriate online host/vendor signoff remains. #34 current stock-tree file counts none5610/front5605/back877, front missing5(includes3indexes also present in index tree), back missing4733; no row/date/factor acceptance, no issue closure or price copying.",
       "evidence_record": "docs/operations/evidence/p02-residual-readout-2026-11-02/p20-old-issues-readout.json"
+    },
+    {
+      "package_id": "P11",
+      "audit_ids": [
+        "QL02",
+        "QL03"
+      ],
+      "scope": "ETF E3/E4 local isolated smoke accepted and label-boundary fit purge implemented; MyQuant #114 submitted, 3 CI SUCCESS. PR still OPEN; no merged package-closeout receipt.",
+      "evidence_record": "docs/operations/evidence/consumer-host-2026-11-03/p11-pr114.json"
+    },
+    {
+      "package_id": "P14",
+      "audit_ids": [
+        "BT-07"
+      ],
+      "scope": "Legacy native/L1 8 named cells PASS on frozen current inputs. Prior industry 8 cells remain separate older identity; old Slice D stays open.",
+      "evidence_record": "docs/operations/evidence/consumer-host-2026-11-03/p14/acceptance.json"
+    },
+    {
+      "package_id": "P15",
+      "audit_ids": [
+        "BT-05",
+        "BT-16"
+      ],
+      "scope": "Six-symbol 250158-row private-cache miss/hit/mem equality and memory measurement; ordered page-cache-warm observations only, no sharding admission/package closure.",
+      "evidence_record": "docs/operations/evidence/consumer-host-2026-11-03/p15/acceptance.json"
+    },
+    {
+      "package_id": "P03",
+      "audit_ids": [
+        "OP09",
+        "BT-10"
+      ],
+      "scope": "M5 configured authority/workspace disjoint; 11 named last-row-group sample checks, zero-price001381 and stale512390 retained. Not full coverage/SHM/4090/75 signoff.",
+      "evidence_record": "docs/operations/evidence/consumer-host-2026-11-03/p03/readout.json"
     }
   ]
 }

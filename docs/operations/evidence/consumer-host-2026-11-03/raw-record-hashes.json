@@ -1,0 +1,23 @@
+{
+  "note": "Original unsanitized task-local JSON bytes; published paths substituted and JSON canonicalized separately.",
+  "sha256": {
+    "p14/recipe.json": "76c299a49b10a7bb55f74ce8444f5e8b6b72c9762ce455523c32edb89f97436d",
+    "p14/result.json": "4f9846e0f5c551029fe9ce7f21ef864e4125d5a61c0ecba184cb48c6d874d984",
+    "p14/cache-warmup.json": "c5ef52d4c4de4a39eaba5b6211f39f0c559d06e496119a5c610bcea2444dd3c9",
+    "p14/comparisons/csv_minute-normal.json": "ac59fe5c58b7c805093f10776a24b30bd9e8e362463456eb3eb8d469c4c09576",
+    "p14/comparisons/csv_minute-low_cash.json": "36e7094976870f44345f73784cf391f31789357e91d83661f16ea2cf9bdf3a6e",
+    "p14/comparisons/csv_minute-invalid_config.json": "5fc672b4b04ae75a5b556132c9e5dde1b417f6402c79761c004f289dd80dd5fa",
+    "p14/comparisons/csv_minute-bad_output.json": "4efd32ad4117fe74bc9bb7c97362a3854dc1d6a88ba4614d67237728b8096d03",
+    "p14/comparisons/v7-normal.json": "133252b970304acd34616b651a1f37cac6ace09157bed1c3fd40348ca633b283",
+    "p14/comparisons/v7-low_cash.json": "3b9909279dc0fa0ced19539a6ffa64bbf60cbd585abbcf13a21d23c15159420f",
+    "p14/comparisons/v7-invalid_config.json": "fbd793973c20afbe02b460fb7106c25d6bd65b6cd3bf307fb58b866426d402c0",
+    "p14/comparisons/v7-bad_output.json": "5b0682a4b4eed9e9c675ec793f6026054437b17ad3f84441074fce670e658459",
+    "p15/recipe.json": "1e97ae69645aa27b5c007430595d9f8ad0cfee07e66e55d9680b610edd4eb7f5",
+    "p15/acceptance.json": "d1975f0511ffc106520481d47e80807f0bd17222324eddf136240e4cbd9af718",
+    "p15/fresh-miss.json": "9fa631a20f91954c8c4d0cf47091a97cb802c046f07bb507942f953b7c5589da",
+    "p15/fresh-hit.json": "caff7f76c50f82d2b48d8de1f7ae7f0db1c3a16917478e397ce334422ef74380",
+    "p15/scan-probe.json": "915371a2fed3b7e45f10afcd9fb109b89d2c58be4e3f7cdd8c807ab40a2766f2",
+    "p03/recipe.json": "f897c723e4d8cc73f05c74448bdd4a1b6936cdbfd1b668efc09da7941ac90639",
+    "p03/readout.json": "cd510f334a9400eefff1373e6e9983516a32d24291608827a0e6a2c89921bc18"
+  }
+}

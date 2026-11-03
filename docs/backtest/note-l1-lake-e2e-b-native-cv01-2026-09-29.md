@@ -136,3 +136,7 @@ normal、low_cash、invalid_config、bad_output 全部 PASS；两家正常格均
 
 这只签收本窗口的 native/L1 委托保真。成交核 Slice D 逐书/原因桶矩阵、其他策略、
 最新湖水位、其他宿主及经济口径均未由本回执签收，P14 保持开放。
+
+## 2026-11-03 legacy 配方补验
+
+本机冻结 `6f3a3305` 的 legacy 八格全部 PASS，见[具名回执](../operations/evidence/consumer-host-2026-11-03/p14/acceptance.json)。正常格实际 BUY/SELL；trades、equity、audit 在 native/L1 间逐字节一致。与上轮 industry 各持独立输入身份，不合成同源十六格声明。旧 Slice D 改造前 matching baseline/reason/价格对照仍开放；P14 不整包关闭。

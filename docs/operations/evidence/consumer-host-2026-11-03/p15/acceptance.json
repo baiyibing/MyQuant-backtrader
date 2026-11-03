@@ -1,0 +1,43 @@
+{
+  "package": "P15",
+  "status": "PASS_MEASUREMENT_ONLY",
+  "package_closed": false,
+  "measured_input_files_unchanged": true,
+  "measured_partition_listings_unchanged": true,
+  "miss_hit_mem_frames_equal": true,
+  "observations": [
+    {
+      "repeat": 0,
+      "elapsed_seconds": 2.520031600026414,
+      "cache_status": "miss",
+      "codes": 6,
+      "rows": 250158,
+      "frame_digest": "55bc4e9099b3faa46027161e99e53cad5cc70de3fad8fb1f98e26b697227b415",
+      "rss_after_bytes": 186187776
+    },
+    {
+      "repeat": 0,
+      "elapsed_seconds": 0.23395519994664937,
+      "cache_status": "hit",
+      "codes": 6,
+      "rows": 250158,
+      "frame_digest": "55bc4e9099b3faa46027161e99e53cad5cc70de3fad8fb1f98e26b697227b415",
+      "rss_after_bytes": 146128896
+    },
+    {
+      "repeat": 1,
+      "elapsed_seconds": 0.11701760010328144,
+      "cache_status": "mem",
+      "codes": 6,
+      "rows": 250158,
+      "frame_digest": "55bc4e9099b3faa46027161e99e53cad5cc70de3fad8fb1f98e26b697227b415",
+      "rss_after_bytes": 146726912
+    }
+  ],
+  "limits": [
+    "Six explicit symbols, existing runtime monolith; not full-market measurement or shard admission",
+    "Fresh private application cache, fresh Python process per phase. OS page cache NOT evicted; ordered observations only.",
+    "No timing budget signed; no production loader/cache change.",
+    "Actual shard rebuild counts remain unmeasured; S1/S2/S3 remain separate decisions."
+  ]
+}

@@ -1,0 +1,114 @@
+{
+  "registered_utc": "2026-11-03T05:02:08.392452+00:00",
+  "source_commit": "6f3a3305b2dacba6bb4fe49549a05284227ac43f",
+  "code_identity": {
+    "commit": "6f3a3305b2dacba6bb4fe49549a05284227ac43f",
+    "worktree_status": ""
+  },
+  "runtime": {
+    "python": "3.12.13 | packaged by Anaconda, Inc. | (main, Jul  9 2026, 14:26:47) [MSC v.1942 64 bit (AMD64)]",
+    "executable": "$PYTHON_ENV\\python.exe",
+    "packages": {
+      "pandas": "2.3.3",
+      "pyarrow": "25.0.0",
+      "psutil": "7.2.2",
+      "numpy": "2.3.5"
+    },
+    "module_origins": {
+      "oskh_data": {
+        "path": "$REPO\\oskh_data\\__init__.py",
+        "sha256": "a298d09e03021310bc8efdbf0298fd515331d35238a7439abdb03c6bc88effd2"
+      },
+      "ashare_bars": {
+        "path": "$REPO\\backtest\\research\\ashare_bars.py",
+        "sha256": "2b44391d66a9f70dbf695e7e386fc08b70673d77b37b77a372b0bf57c4fa9f9c"
+      }
+    }
+  },
+  "runner_sha256": "f20f8ef786e74db36541cfd69f060d1c1c0adbbf9bd33b365da45de2428e118e",
+  "codes": [
+    "600000.SH",
+    "600036.SH",
+    "000001.SZ",
+    "300750.SZ",
+    "688981.SH",
+    "920002.BJ"
+  ],
+  "window": [
+    "20251227",
+    "20260914"
+  ],
+  "sources": {
+    "$LAKE\\stock\\period=1m\\dividend_type=none\\symbol=600000_SH\\data.parquet": {
+      "size": 3311060,
+      "sha256": "f57680ed29b065eea4a2cc5feebbc76739250bf29cafe5f1d52dc7786de07432"
+    },
+    "$LAKE\\stock\\period=1m\\dividend_type=none\\symbol=600036_SH\\data.parquet": {
+      "size": 3544209,
+      "sha256": "730f4f4e7725a734245b831d27de5e1efda1046ad700f72f3e56e3ebce561868"
+    },
+    "$LAKE\\stock\\period=1m\\dividend_type=none\\symbol=000001_SZ\\data.parquet": {
+      "size": 3266071,
+      "sha256": "4026066ed285d0de7d38da5c77f6f778490579d7ba9ef5ccc1354a4d8f07b7be"
+    },
+    "$LAKE\\stock\\period=1m\\dividend_type=none\\symbol=300750_SZ\\data.parquet": {
+      "size": 4124341,
+      "sha256": "720dd884058314abac8fd7f3f1c5ee3e9fde53b68ab3ad632955d0790d5d6da5"
+    },
+    "$LAKE\\stock\\period=1m\\dividend_type=none\\symbol=688981_SH\\data.parquet": {
+      "size": 3817447,
+      "sha256": "b7ef5ff44721a4b0fc2c41b9a84915d5296deae06b1e9faef0db7b2107268bb6"
+    },
+    "$LAKE\\stock\\period=1m\\dividend_type=none\\symbol=920002_BJ\\data.parquet": {
+      "size": 3006911,
+      "sha256": "50ae4fc1236e7a9e91a59174fff8cf9eb52360815c0a66f57017ce59b46fed15"
+    }
+  },
+  "partition_stamps": {
+    "$LAKE\\stock\\period=1m\\dividend_type=none\\symbol=600000_SH": [
+      [
+        "data.parquet",
+        3311060,
+        1793613761800277600
+      ]
+    ],
+    "$LAKE\\stock\\period=1m\\dividend_type=none\\symbol=600036_SH": [
+      [
+        "data.parquet",
+        3544209,
+        1793613763112643200
+      ]
+    ],
+    "$LAKE\\stock\\period=1m\\dividend_type=none\\symbol=000001_SZ": [
+      [
+        "data.parquet",
+        3266071,
+        1793613178155299500
+      ]
+    ],
+    "$LAKE\\stock\\period=1m\\dividend_type=none\\symbol=300750_SZ": [
+      [
+        "data.parquet",
+        4124341,
+        1793613601017408000
+      ]
+    ],
+    "$LAKE\\stock\\period=1m\\dividend_type=none\\symbol=688981_SH": [
+      [
+        "data.parquet",
+        3817447,
+        1793615561614000100
+      ]
+    ],
+    "$LAKE\\stock\\period=1m\\dividend_type=none\\symbol=920002_BJ": [
+      [
+        "data.parquet",
+        3006911,
+        1793615561673212300
+      ]
+    ]
+  },
+  "workers": 8,
+  "scope": "Six explicit symbols, existing runtime monolith; not full-market measurement or shard admission",
+  "cache_control": "Fresh private application cache, fresh Python process per phase. OS page cache NOT evicted; ordered observations only."
+}

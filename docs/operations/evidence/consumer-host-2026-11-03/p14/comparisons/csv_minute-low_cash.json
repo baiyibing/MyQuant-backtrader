@@ -1,0 +1,26 @@
+{
+  "status": "PASS",
+  "differences": [],
+  "raw": {
+    "stdout": {
+      "left_sha256": "83e4aa4eb4e0c0d28adc6aa8a932b8978f44b0a77747ed0d0a7197ab5ba77000",
+      "right_sha256": "83e4aa4eb4e0c0d28adc6aa8a932b8978f44b0a77747ed0d0a7197ab5ba77000",
+      "byte_equal": true
+    },
+    "stderr": {
+      "left_sha256": "0fc211c5adb286f36d9650dab755a67565fdc4a992086e5dcac5a28158cff936",
+      "right_sha256": "0fc211c5adb286f36d9650dab755a67565fdc4a992086e5dcac5a28158cff936",
+      "byte_equal": true
+    }
+  },
+  "byte_identical": true,
+  "policy": {
+    "required_files": [],
+    "allowed_json_fields": [],
+    "duration_files": [
+      "summary.txt"
+    ],
+    "duration_stdout": true,
+    "verify_manifest": false
+  }
+}
