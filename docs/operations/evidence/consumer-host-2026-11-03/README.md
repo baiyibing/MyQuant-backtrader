@@ -36,3 +36,5 @@ APPROVE，再执行；CLI 是 Claude Code 2.1.317，实际模型 GLM-5.3，非 A
 
 统一盘点的 64 条冻结记录和既有关闭回执保持不变；只追加 implementation_refs。
 P03/P14/P15 均保持整包开放，P11 的合入状态以其 PR 为准。
+
+最终固定提交证据复核 ce45c052：**APPROVE**，见[原文及口径澄清](evidence-review.json)。CLI 禁用工具，依据固定源码/证据 bundle；不冒称复核运行了宿主场景。之后仅追加这条复核回执及发布摘要。
