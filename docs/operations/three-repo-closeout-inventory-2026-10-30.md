@@ -1,5 +1,7 @@
 # 三仓收尾事项明细
 
+> 2026-11-03 实现增量：MyQuant #117 日频刷新路径隔离已合入（固定 head Grok 复核、3 CI 通过）；[P12/QL10 实现回执](evidence/p12-ql10-path-isolation-2026-11-03/README.md)。只追加 implementation_ref，QL10 现场与 P12 整包仍开放；冻结 64 条记录及旧关闭回执保持。
+
 > 2026-11-03 实证增量：FullSweep934文件通过，149条历史/全部首见日期保留、0新增/持续失败；源PR#1275因Linuxrunner失联仍待合入。[报告与阻塞证据](evidence/p02-full-sweep-readout-2026-11-03/README.md)。本片仅追加implementation_ref，OP16/P02仍开放，不改写冻结64条记录。
 
 > 2026-11-03 回执增量：P14同市场输入/运行时代码16格通过，旧Slice D仍开放；P20两个issue保留。[证据与边界](evidence/p14-current-input-bridge-2026-11-03/README.md)。本片不关闭OP16/P02，也不改写冻结64条记录。

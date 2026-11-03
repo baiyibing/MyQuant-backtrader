@@ -1,0 +1,43 @@
+{
+  "recorded_at_utc": "2026-11-03T13:17:16.926407+00:00",
+  "package_id": "P12",
+  "audit_ids": [
+    "QL10"
+  ],
+  "scope": "implementation_progress",
+  "implementation_merged": true,
+  "audit_item_closed": false,
+  "package_closed": false,
+  "source_pr": "https://github.com/baiyibing/MyQuant/pull/117",
+  "source_head": "1f7688a5508f74fa506226f5367da9e1cf507a95",
+  "source_merge_commit": "d64b415b4443f6f3779cbf05124ba15807003e85",
+  "checked_and_merged_tree_equal": true,
+  "fix": "Daily-refresh staging/new root aliases and bidirectional overlaps with live/archive/CSV/index/explicitSOURCE are rejected before destructive cleanup/swap; disjoint sibling roots stay valid.",
+  "local_full_ci": {
+    "passed": 557,
+    "skipped": 4,
+    "subtests_passed": 18,
+    "warnings": 1,
+    "warning_scope": "existing custom_utils SyntaxWarning"
+  },
+  "canonical_linux_pytest": {
+    "passed": 557,
+    "skipped": 4,
+    "subtests_passed": 18,
+    "warnings": 45
+  },
+  "canonical_checks_success": 3,
+  "independent_fixed_head_review": "Grok CLI/grok-4.7 APPROVE",
+  "local_and_remote_raw_log_sha256": {
+    "local": "8e3679fd2394f8b27eb32e1b14ff37603333b3beb260d641fd3d82c919809775",
+    "remote": "45b4895fef29aff7ef57843f24a071c0b94fed988fb45419dce13f3d2507cc85"
+  },
+  "linux_symlink_coverage": "Matched561remoteprogressmarkers to exacthead collection; validate/wipe/swap symlink cases map toPASS,4skips map to3Windows-only cases+1absent-universe test.",
+  "unchanged_committed_snapshot": "Source acceptance.json remains the truthful147relatedPASS/remotepending snapshot; full557 result is this later follow-up.",
+  "limits": [
+    "QL10 actual daily-refresh host/deployment acceptance remains open; no audit-item closeout.",
+    "P12 minute/default-provider/refresh host conditions remain open; no package closeout.",
+    "Do not duplicate already-closedQL12/QL13 or previousimplementationrefs/receipts.",
+    "No actual provider refresh/promotion, QMT, productionRedis, external download or market-lake writes."
+  ]
+}

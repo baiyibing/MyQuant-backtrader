@@ -4304,6 +4304,18 @@
       "evidence_record": "docs/operations/evidence/p02-full-sweep-readout-2026-11-03/acceptance.json",
       "verification_run_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/41615284944",
       "scope": "Exactfeaturehead FullSweep934files/13chunks:11788PASS/101SKIP/35deselect,0new/0old,149history/allfirstseen preserved. SourcePR1275GrokAPPROVE but Linuxrunnerlostcommunication blocks merge. OP16/P02stayOPEN; no closeout receipt."
+    },
+    {
+      "package_id": "P12",
+      "audit_ids": [
+        "QL10"
+      ],
+      "pr_url": "https://github.com/baiyibing/MyQuant/pull/117",
+      "merged_commit": "d64b415b4443f6f3779cbf05124ba15807003e85",
+      "domain_record_url": "https://github.com/baiyibing/MyQuant/blob/1f7688a5508f74fa506226f5367da9e1cf507a95/docs/operations/evidence/ql10-refresh-path-isolation-2026-11-03/acceptance.json",
+      "evidence_record": "docs/operations/evidence/p12-ql10-path-isolation-2026-11-03/acceptance.json",
+      "verification_run_url": "https://github.com/baiyibing/MyQuant/actions/runs/41640632580",
+      "scope": "QL10日频刷新路径隔离实现已合：固定headGrokAPPROVE+3CI绿，受测/合入树相同；完整套件本机及Linux均557PASS/4SKIP/18subtests，Linux三种symlink sink已核通过。只记实现进展，QL10现场与P12整包仍开放。"
     }
   ]
 }
