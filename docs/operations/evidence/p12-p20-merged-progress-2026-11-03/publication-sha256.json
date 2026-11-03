@@ -7,8 +7,11 @@
     "docs/operations/evidence/p12-p20-merged-progress-2026-11-03/pr118-source-references.json": "7ac716db56905b1f600b36e14ad4df12d47480f776a9a20b75a5158bb4efc6d0",
     "docs/operations/evidence/p12-p20-merged-progress-2026-11-03/pr119-implementation-review.json": "73957b7b0912fa721868ddf86f1d979d2e19c4f7c0edc67555f78a4a12426215",
     "docs/operations/evidence/p12-p20-merged-progress-2026-11-03/pr119-source-references.json": "2ce35fdfead45bc0d2d9f6251f67acfd869ac9a4445b1d958611e1b045a56469",
+    "docs/operations/evidence/p12-p20-merged-progress-2026-11-03/ql11-collected-nodeids.json": "4c36a111b0d7befa5fa16cc17aa28d277a5768b8c49349778d8a85ea43074497",
     "docs/operations/evidence/p12-p20-merged-progress-2026-11-03/ql11-linux-link-coverage.json": "49e2074b79e640adbab6d2cb4991c8a86f36215c26c8c7ce53fc6292a71ef365",
-    "docs/operations/evidence/p12-p20-merged-progress-2026-11-03/README.md": "c0050773373aa0f1fbe01a190d4964e0dbee4c3fdd4e8001d095cd285e523ffe",
-    "docs/operations/evidence/p12-p20-merged-progress-2026-11-03/validation.json": "c3b7cf1bc9aaf6aa805d5c9c1794f4065ade03ced0b2cfb3d654beeb276c6210"
+    "docs/operations/evidence/p12-p20-merged-progress-2026-11-03/ql11-progress-check.json": "596280154b917095adfb8e9bcf958a3eb158f642421e018515b358c0c2eca067",
+    "docs/operations/evidence/p12-p20-merged-progress-2026-11-03/README.md": "ea3ebe998c1ea4a4999f639a12b762a4b96ea01718590fe8ac68ef5b4be77326",
+    "docs/operations/evidence/p12-p20-merged-progress-2026-11-03/validation.json": "d09df300a3055f2283b4e1bc34c4e88ade5c1809f440eab946e628a4addd0452",
+    "docs/operations/evidence/p12-p20-merged-progress-2026-11-03/audit-sources/verify_progress_map.py": "ee810030fe07f30f52d0e69515ac8cd78f7bbfe0c4cfc9708ada757ee491e224"
   }
 }
