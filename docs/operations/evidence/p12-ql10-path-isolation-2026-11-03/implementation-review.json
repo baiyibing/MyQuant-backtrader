@@ -1,0 +1,56 @@
+{
+  "reviewed_head": "1f7688a5508f74fa506226f5367da9e1cf507a95",
+  "verdict": "APPROVE",
+  "cli": "Grok CLI",
+  "requested_model": "grok-4.7",
+  "actual_models": [
+    "grok-4.7-build"
+  ],
+  "reasoning_effort": "low",
+  "session_id": "01a1a182-7aca-7c51-b7ee-fd6861806bf4",
+  "raw_review_sha256": "6a58f9b504120d39573b8df6a4701fb95f26859235bfef658613fa9c071d9d14",
+  "bundle_sha256": "eeef0f38eaeb3cca73ca7dd4ca72fd43a30347771f9765c810ea4a7b95878b42",
+  "original_coding_bundle_sha256": "48233d61302ca43cc1fce477bea7e809957f7826c3f78d26f734f79bf4ffde19",
+  "full_local_ci_log_sha256": "8e3679fd2394f8b27eb32e1b14ff37603333b3beb260d641fd3d82c919809775",
+  "remote_pytest_log_sha256": "45b4895fef29aff7ef57843f24a071c0b94fed988fb45419dce13f3d2507cc85",
+  "local_full_suite": "557 passed / 4 skipped / 18 subtests / 1 existing SyntaxWarning",
+  "remote_full_suite": "557 passed / 4 skipped / 18 subtests / 45 warnings",
+  "canonical_checks": [
+    {
+      "name": "data-staging",
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "1f7688a5508f74fa506226f5367da9e1cf507a95",
+      "details_url": "https://github.com/baiyibing/MyQuant/actions/runs/41640632580/job/125932941052"
+    },
+    {
+      "name": "pytest",
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "1f7688a5508f74fa506226f5367da9e1cf507a95",
+      "details_url": "https://github.com/baiyibing/MyQuant/actions/runs/41640632580/job/125932940900"
+    },
+    {
+      "name": "joint-return",
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "1f7688a5508f74fa506226f5367da9e1cf507a95",
+      "details_url": "https://github.com/baiyibing/MyQuant/actions/runs/41640632580/job/125932940168"
+    }
+  ],
+  "review_scope": "Fixed supplied implementation snapshot; reviewer did not run host tests or approve actual provider/lake writes",
+  "result": "APPROVE. The fixed head `1f7688a5508f74fa506226f5367da9e1cf507a95` implements the QL10 path-isolation guard as specified. No implementation blocker.\n\nDestructive order holds. `main` calls `require_valid` before `build_plan`, dry-run output, preflight, and child steps. `ensure_dump_target_clean` returns on `skip_dump` with no delete. Otherwise it runs the full role map before dirty detection and wipe advice, and again immediately before `remover`. With `wipe_new_qlib_dir` false, a protected alias raises `path isolation` and the wipe-flag sentence is never reached. `atomic_swap` keeps its signature and runs `_path_isolation_errors` on the new and live roots it receives before `is_dir`, backup creation, or any rename.\n\nAlias handling matches the plan. Identities go through `expanduser`, `resolve(strict=False)`, and `os.path.normcase`. Missing final components stay legal. Resolution `OSError`, `RuntimeError`, and `ValueError` fail closed. Equality and ancestry use `is_relative_to` in both directions, so same, child, and parent aliases are overlaps. Shared-prefix siblings (`my_data`, `my_data_new_DATE`, `my_data_staging_DATE`, backup names) stay legal, and the sibling test performs a real wipe and swap only on those disjoint roots.\n\n`OSKH_SOURCE_PARQUET_ROOT` is copied once into the trailing optional `RefreshConfig.source_parquet_root`. Validation and the remover read that field. A later environment change does not affect an already built config. Direct constructors can pass the pin. Staging and new are checked against live, archive, CSV, index, and the whole SOURCE pin, and against each other. Workers, archive overlay, gates, and rollback stay as they were.\n\nThe supplied local result at this same head is 557 passed, 4 skipped, 1 warning, 18 subtests passed. Directory-symlink cases remain capability skips until Linux canonical CI. This review does not close QL10 or P12 deployment and does not authorize live provider or lake writes.",
+  "result_observation_stage": "Verbatim historical source implementation review of the supplied local Windows snapshot, before the later downloaded canonical Linux result was attached. Result text is preserved, not rewritten.",
+  "result_capability_skip_sentence_scope": "The sentence about directory-symlink capability skips describes local Windows verification only. Current canonical Linux skip identity is separately proved by linux-link-coverage.json.",
+  "skip_compositions": {
+    "local_windows": {
+      "directory_symlink_capability": 3,
+      "absent_my_data_universe": 1
+    },
+    "canonical_linux": {
+      "windows_case_alias_platform": 3,
+      "absent_my_data_universe": 1,
+      "directory_symlink_capability": 0
+    }
+  }
+}

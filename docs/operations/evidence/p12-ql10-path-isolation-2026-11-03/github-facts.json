@@ -1,0 +1,37 @@
+{
+  "observed_at_utc": "2026-11-03T13:17:16.926407+00:00",
+  "source_pr": "https://github.com/baiyibing/MyQuant/pull/117",
+  "source_head": "1f7688a5508f74fa506226f5367da9e1cf507a95",
+  "source_base": "f343b08b971023de937a38044a4a6cf642ddd3b1",
+  "source_merged_at_utc": "2026-11-03T13:09:53Z",
+  "source_merge_commit": "d64b415b4443f6f3779cbf05124ba15807003e85",
+  "source_state": "MERGED",
+  "head_tree": "9c88cf1b8744fe2e2efecd439880f306c9654094",
+  "merged_tree": "9c88cf1b8744fe2e2efecd439880f306c9654094",
+  "trees_equal": true,
+  "canonical_ci": [
+    {
+      "name": "data-staging",
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "1f7688a5508f74fa506226f5367da9e1cf507a95",
+      "details_url": "https://github.com/baiyibing/MyQuant/actions/runs/41640632580/job/125932941052"
+    },
+    {
+      "name": "pytest",
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "1f7688a5508f74fa506226f5367da9e1cf507a95",
+      "details_url": "https://github.com/baiyibing/MyQuant/actions/runs/41640632580/job/125932940900"
+    },
+    {
+      "name": "joint-return",
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "1f7688a5508f74fa506226f5367da9e1cf507a95",
+      "details_url": "https://github.com/baiyibing/MyQuant/actions/runs/41640632580/job/125932940168"
+    }
+  ],
+  "merge_transport": "gh pr merge GraphQL returned503 before merge. REST confirmed stillOPEN/samehead/3green; gh api PUT with exactsha completed merge. No admin/force.",
+  "scope": "Implementation only; no provider refresh, promotion, external downloads or lake writes."
+}
