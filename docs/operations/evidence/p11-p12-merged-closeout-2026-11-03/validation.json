@@ -1,0 +1,29 @@
+{
+  "frozen_records": 64,
+  "frozen_work_packages": 21,
+  "all_frozen_fields_unchanged": true,
+  "previous_receipts_unchanged": true,
+  "previous_implementation_refs_unchanged": true,
+  "appended_package_receipts": 1,
+  "appended_implementation_refs": 2,
+  "all_referenced_prs_merged": true,
+  "checked_and_merged_trees_equal": [
+    114,
+    115,
+    116
+  ],
+  "ci_counts": {
+    "114": {
+      "SUCCESS": 3
+    },
+    "115": {
+      "SUCCESS": 3
+    },
+    "116": {
+      "SUCCESS": 3
+    }
+  },
+  "source_domain_p11_closed": true,
+  "current_readonly_revalidation": "PASS",
+  "local_testing": "Evidence-only edits; no new implementation-mirroring tests. Validate schema/links/UTF8 and existing path gates."
+}

@@ -1,0 +1,1270 @@
+{
+  "recorded_at_utc": "2026-11-03T08:04:36.220261+00:00",
+  "prs": [
+    {
+      "headRefOid": "9f894adff64bcb35212f7a5759cf42ddc7150b2d",
+      "mergeCommit": {
+        "oid": "8f65e08685d47f3ed736409336726654a21723ae"
+      },
+      "mergedAt": "2026-11-03T05:27:54Z",
+      "number": 114,
+      "state": "MERGED",
+      "statusCheckRollup": [
+        {
+          "__typename": "CheckRun",
+          "completedAt": "2026-11-03T04:47:43Z",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/baiyibing/MyQuant/actions/runs/41580138648/job/125732784638",
+          "name": "data-staging",
+          "startedAt": "2026-11-03T04:47:25Z",
+          "status": "COMPLETED",
+          "workflowName": "ci"
+        },
+        {
+          "__typename": "CheckRun",
+          "completedAt": "2026-11-03T04:47:58Z",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/baiyibing/MyQuant/actions/runs/41580138648/job/125732784547",
+          "name": "joint-return",
+          "startedAt": "2026-11-03T04:47:25Z",
+          "status": "COMPLETED",
+          "workflowName": "ci"
+        },
+        {
+          "__typename": "CheckRun",
+          "completedAt": "2026-11-03T04:49:44Z",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/baiyibing/MyQuant/actions/runs/41580138648/job/125732784410",
+          "name": "pytest",
+          "startedAt": "2026-11-03T04:47:25Z",
+          "status": "COMPLETED",
+          "workflowName": "ci"
+        }
+      ],
+      "url": "https://github.com/baiyibing/MyQuant/pull/114",
+      "checked_head_tree": "781b008627446794e68f12c7319bd3ad85c99608",
+      "merged_tree": "781b008627446794e68f12c7319bd3ad85c99608"
+    },
+    {
+      "headRefOid": "76e1d0e23ee9ac706c7e1fd77f6f02f852a816f7",
+      "mergeCommit": {
+        "oid": "bce9613b19ecbd806b96f52e0be5efe09464d11c"
+      },
+      "mergedAt": "2026-11-03T05:51:06Z",
+      "number": 115,
+      "state": "MERGED",
+      "statusCheckRollup": [
+        {
+          "__typename": "CheckRun",
+          "completedAt": "2026-11-03T05:48:38Z",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/baiyibing/MyQuant/actions/runs/41586027508/job/125751592025",
+          "name": "data-staging",
+          "startedAt": "2026-11-03T05:48:17Z",
+          "status": "COMPLETED",
+          "workflowName": "ci"
+        },
+        {
+          "__typename": "CheckRun",
+          "completedAt": "2026-11-03T05:48:58Z",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/baiyibing/MyQuant/actions/runs/41586027508/job/125751592024",
+          "name": "joint-return",
+          "startedAt": "2026-11-03T05:48:17Z",
+          "status": "COMPLETED",
+          "workflowName": "ci"
+        },
+        {
+          "__typename": "CheckRun",
+          "completedAt": "2026-11-03T05:50:06Z",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/baiyibing/MyQuant/actions/runs/41586027508/job/125751591846",
+          "name": "pytest",
+          "startedAt": "2026-11-03T05:48:17Z",
+          "status": "COMPLETED",
+          "workflowName": "ci"
+        }
+      ],
+      "url": "https://github.com/baiyibing/MyQuant/pull/115",
+      "checked_head_tree": "b1e5cc7302011835c4f0a64dfdc3ceb185bff154",
+      "merged_tree": "b1e5cc7302011835c4f0a64dfdc3ceb185bff154"
+    },
+    {
+      "headRefOid": "31f418f1b2760bbffd9b9f375070d91ca9405fdb",
+      "mergeCommit": {
+        "oid": "f343b08b971023de937a38044a4a6cf642ddd3b1"
+      },
+      "mergedAt": "2026-11-03T07:44:00Z",
+      "number": 116,
+      "state": "MERGED",
+      "statusCheckRollup": [
+        {
+          "__typename": "CheckRun",
+          "completedAt": "2026-11-03T07:41:09Z",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/baiyibing/MyQuant/actions/runs/41597899506/job/125789467211",
+          "name": "data-staging",
+          "startedAt": "2026-11-03T07:40:46Z",
+          "status": "COMPLETED",
+          "workflowName": "ci"
+        },
+        {
+          "__typename": "CheckRun",
+          "completedAt": "2026-11-03T07:41:29Z",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/baiyibing/MyQuant/actions/runs/41597899506/job/125789467270",
+          "name": "joint-return",
+          "startedAt": "2026-11-03T07:40:53Z",
+          "status": "COMPLETED",
+          "workflowName": "ci"
+        },
+        {
+          "__typename": "CheckRun",
+          "completedAt": "2026-11-03T07:42:04Z",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/baiyibing/MyQuant/actions/runs/41597899506/job/125789466932",
+          "name": "pytest",
+          "startedAt": "2026-11-03T07:40:55Z",
+          "status": "COMPLETED",
+          "workflowName": "ci"
+        }
+      ],
+      "url": "https://github.com/baiyibing/MyQuant/pull/116",
+      "checked_head_tree": "07ed67ad0099c22e8b33df7ee4fe0e2f4e5a0c48",
+      "merged_tree": "07ed67ad0099c22e8b33df7ee4fe0e2f4e5a0c48"
+    }
+  ],
+  "domain_documents": {
+    "p11_acceptance": {
+      "source_url": "https://github.com/baiyibing/MyQuant/blob/8f65e08685d47f3ed736409336726654a21723ae/docs/operations/evidence/p11-etf-host-acceptance-2026-11-03/acceptance.json",
+      "git_blob_sha": "06ba7c240050a28a759e0980d7a55ec4e8194092",
+      "content_sha256": "9ff5e6aa7db002893e4195a9fddc6aa040fc42984430f9e5e03c98a4ce0be5d2",
+      "document": {
+        "schema_version": 1,
+        "recorded_at_utc": "2026-11-03T04:39:19.897083+00:00",
+        "decision": "PASS_E3_E4_LOCAL_ISOLATED_SMOKE",
+        "implementation_head": "3e4c992b444480071100fbd1fb9ea3f8717320c9",
+        "runtime_script_sha256": "a8b1f13482c6d22d7affdff1cc9b5eeae18886a18a0cc4a8489adfd564fa005c",
+        "git_blob_sha256": "1458e9f9190daf5664923523f812e40ece43f456b41a3d5d4c5a3a0d1efe40f4",
+        "source_equal_after_lf_normalization": true,
+        "policy": "purged-fit-h1-h2.v1",
+        "historical_policy_ic_not_reused": true,
+        "nominal_segments": {
+          "train": [
+            "2020-01-02",
+            "2024-12-31"
+          ],
+          "valid": [
+            "2025-01-02",
+            "2025-12-31"
+          ],
+          "test": [
+            "2026-01-05",
+            "2026-10-13"
+          ]
+        },
+        "effective_segments": {
+          "train": [
+            "2020-01-02",
+            "2024-12-27"
+          ],
+          "valid": [
+            "2025-01-02",
+            "2025-12-29"
+          ],
+          "test": [
+            "2026-01-05",
+            "2026-10-13"
+          ]
+        },
+        "fit_samples": {
+          "train": {
+            "rows": 583700,
+            "first": "2020-01-02",
+            "last": "2024-12-27",
+            "all_label_dates_in_nominal_segment": true
+          },
+          "valid": {
+            "rows": 137826,
+            "first": "2025-01-02",
+            "last": "2025-12-29",
+            "all_label_dates_in_nominal_segment": true
+          }
+        },
+        "processor_fit": [
+          {
+            "group": "infer",
+            "class": "ProcessInf",
+            "fit_start_time": "None",
+            "fit_end_time": "None"
+          },
+          {
+            "group": "infer",
+            "class": "ZScoreNorm",
+            "fit_start_time": "2020-01-02",
+            "fit_end_time": "2024-12-31"
+          },
+          {
+            "group": "infer",
+            "class": "Fillna",
+            "fit_start_time": "None",
+            "fit_end_time": "None"
+          },
+          {
+            "group": "learn",
+            "class": "DropnaLabel",
+            "fit_start_time": "None",
+            "fit_end_time": "None"
+          },
+          {
+            "group": "learn",
+            "class": "CSZScoreNorm",
+            "fit_start_time": "None",
+            "fit_end_time": "None"
+          }
+        ],
+        "segments": {
+          "train": {
+            "rows": 589944,
+            "accepted": 583700,
+            "ic": 0.19543687032031462,
+            "rank_ic": 0.10436810357367397,
+            "instruments": 573,
+            "first_signal_date": "2020-01-02",
+            "last_signal_date": "2024-12-27",
+            "file_sha256": "b4397893bfafa6c9018e6595c85850b68f9743088980f87996c4721dc5d3e1f2",
+            "independent_mask_and_metrics_match": true
+          },
+          "valid": {
+            "rows": 138093,
+            "accepted": 137826,
+            "ic": 0.05209687278333256,
+            "rank_ic": 0.021861242009160484,
+            "instruments": 573,
+            "first_signal_date": "2025-01-02",
+            "last_signal_date": "2025-12-29",
+            "file_sha256": "a20ba92c91875d1391298948beac2438867a06f7c83ed6f2357e6e43a59ed118",
+            "independent_mask_and_metrics_match": true
+          },
+          "test": {
+            "rows": 106005,
+            "accepted": 104772,
+            "ic": 0.04352180511603148,
+            "rank_ic": 0.01699258654914062,
+            "instruments": 573,
+            "first_signal_date": "2026-01-05",
+            "last_signal_date": "2026-10-13",
+            "file_sha256": "40a00adc64c2d100f115a26f3a33368ca39bbdd2a0d909b1c4ba5d5e1e1ee2f8",
+            "independent_mask_and_metrics_match": true
+          }
+        },
+        "provider_files_verified_unchanged": 11406,
+        "protected_anchors_unchanged": true,
+        "acceptance_json_sha256": "bab2f78a9297b609d225a2ee0ec2552659d693e91353b58f2c15ad0be8aa13fd",
+        "versions": {
+          "pyqlib": "0.0.0",
+          "lightgbm": "4.7.0",
+          "pandas": "2.3.3",
+          "numpy": "2.3.5",
+          "pyarrow": "25.0.0"
+        },
+        "threads": 8,
+        "invocation": {
+          "models": [
+            "lgb"
+          ],
+          "num_boost_round": 80,
+          "exp_name": "p11_etf_20261103_purged",
+          "write_acceptance_artifacts": true,
+          "fresh_mlflow_worktree": "D:\\PycharmProjects\\MyQuant-backtrader\\_agent_runs\\four_repo_consumption_20261103\\myquant"
+        },
+        "limits": [
+          "Fixed historical provider/window, not a newly updated live-lake provider",
+          "Front-adjustment basis and etf_full end-date selection retain the documented research biases",
+          "IC and RankIC are pooled finite-row smoke metrics, not evidence of strategy profitability or daily IC stability",
+          "No default-provider promotion, market writes, QMT login, trading or additional model selection"
+        ],
+        "e3_accepted": true,
+        "e4_accepted": true,
+        "package_closed": true
+      }
+    },
+    "p11_e3": {
+      "source_url": "https://github.com/baiyibing/MyQuant/blob/8f65e08685d47f3ed736409336726654a21723ae/docs/operations/evidence/p11-etf-host-acceptance-2026-11-03/e3-revalidation.json",
+      "git_blob_sha": "4aaba28bd91e263c4bd8dc18537f42ed6f5a4d6d",
+      "content_sha256": "ba2ad8fdda0a1a67ff8481609eeb423cec212ea82e818899d48f276c4e67196c",
+      "document": {
+        "schema_version": 1,
+        "recorded_at_utc": "2026-11-03T04:10:42.813686+00:00",
+        "decision": "PASS_FROZEN_PROVIDER_READBACK",
+        "window": [
+          "2020-01-02",
+          "2026-10-13"
+        ],
+        "provider": "D:\\PycharmProjects\\MyQuant-backtrader\\_agent_runs\\three_repo_batch6_20261102\\etf-host\\my_data_etf",
+        "provider_files_verified": 11406,
+        "provider_changed_files": [],
+        "provider_extra_files": [],
+        "calendar_days": 1640,
+        "all_count": 1629,
+        "etf_full_count": 573,
+        "four_full_window_seven_field_readbacks": [
+          {
+            "code": "SH510050",
+            "rows": 1640,
+            "fields": {
+              "open": {
+                "max_absolute_error": 1.1825561552214481e-07,
+                "max_relative_error": 5.398156492039727e-08
+              },
+              "high": {
+                "max_absolute_error": 1.1825561552214481e-07,
+                "max_relative_error": 5.377699639747867e-08
+              },
+              "low": {
+                "max_absolute_error": 1.1825561552214481e-07,
+                "max_relative_error": 5.548319817677325e-08
+              },
+              "close": {
+                "max_absolute_error": 1.1825561552214481e-07,
+                "max_relative_error": 5.2512164782958525e-08
+              },
+              "volume": {
+                "max_absolute_error": 2.0,
+                "max_relative_error": 5.906446727128599e-08
+              },
+              "amount": {
+                "max_absolute_error": 908.0,
+                "max_relative_error": 5.8766725052631346e-08
+              },
+              "vwap": {
+                "max_absolute_error": 1.1916473274808936e-07,
+                "max_relative_error": 5.4938878401874816e-08
+              }
+            }
+          },
+          {
+            "code": "SH510300",
+            "rows": 1640,
+            "fields": {
+              "open": {
+                "max_absolute_error": 2.3651123104428962e-07,
+                "max_relative_error": 5.7657540478861446e-08
+              },
+              "high": {
+                "max_absolute_error": 2.3651123104428962e-07,
+                "max_relative_error": 5.878976638232941e-08
+              },
+              "low": {
+                "max_absolute_error": 2.3651123104428962e-07,
+                "max_relative_error": 5.718764638815114e-08
+              },
+              "close": {
+                "max_absolute_error": 2.3651123104428962e-07,
+                "max_relative_error": 5.7657540478861446e-08
+              },
+              "volume": {
+                "max_absolute_error": 3.0,
+                "max_relative_error": 5.9333141766396285e-08
+              },
+              "amount": {
+                "max_absolute_error": 1977.0,
+                "max_relative_error": 5.8027827941223146e-08
+              },
+              "vwap": {
+                "max_absolute_error": 2.3794902137552754e-07,
+                "max_relative_error": 5.9468670951875346e-08
+              }
+            }
+          },
+          {
+            "code": "SZ159915",
+            "rows": 1639,
+            "fields": {
+              "open": {
+                "max_absolute_error": 2.2125244125703603e-07,
+                "max_relative_error": 5.7370940126574706e-08
+              },
+              "high": {
+                "max_absolute_error": 2.365112301561112e-07,
+                "max_relative_error": 5.765754026233817e-08
+              },
+              "low": {
+                "max_absolute_error": 2.2888183615066282e-07,
+                "max_relative_error": 5.7370940126574706e-08
+              },
+              "close": {
+                "max_absolute_error": 2.32696533153387e-07,
+                "max_relative_error": 5.7370940126574706e-08
+              },
+              "volume": {
+                "max_absolute_error": 4.0,
+                "max_relative_error": 5.9586030817775964e-08
+              },
+              "amount": {
+                "max_absolute_error": 1552.0,
+                "max_relative_error": 5.884412831809535e-08
+              },
+              "vwap": {
+                "max_absolute_error": 2.3772012891498662e-07,
+                "max_relative_error": 5.785131037932448e-08
+              }
+            }
+          },
+          {
+            "code": "SH518880",
+            "rows": 1640,
+            "fields": {
+              "open": {
+                "max_absolute_error": 4.730224603122224e-07,
+                "max_relative_error": 5.765754026233817e-08
+              },
+              "high": {
+                "max_absolute_error": 4.730224603122224e-07,
+                "max_relative_error": 5.878976638232941e-08
+              },
+              "low": {
+                "max_absolute_error": 4.730224603122224e-07,
+                "max_relative_error": 5.7370940126574706e-08
+              },
+              "close": {
+                "max_absolute_error": 4.730224603122224e-07,
+                "max_relative_error": 5.7370940126574706e-08
+              },
+              "volume": {
+                "max_absolute_error": 1.0,
+                "max_relative_error": 5.238219832895549e-08
+              },
+              "amount": {
+                "max_absolute_error": 996.0,
+                "max_relative_error": 5.9225955846220754e-08
+              },
+              "vwap": {
+                "max_absolute_error": 4.7409430337097547e-07,
+                "max_relative_error": 5.8531018606136104e-08
+              }
+            }
+          }
+        ],
+        "protected_anchors_before": {
+          "$USER_HOME\\.qlib\\qlib_data\\my_data": {
+            "calendars/day.txt": {
+              "exists": false,
+              "sha256": null
+            },
+            "calendars/1min.txt": {
+              "exists": false,
+              "sha256": null
+            },
+            "instruments/all.txt": {
+              "exists": false,
+              "sha256": null
+            }
+          },
+          "$USER_HOME\\.qlib\\qlib_data\\my_data_1min": {
+            "calendars/day.txt": {
+              "exists": false,
+              "sha256": null
+            },
+            "calendars/1min.txt": {
+              "exists": false,
+              "sha256": null
+            },
+            "instruments/all.txt": {
+              "exists": false,
+              "sha256": null
+            }
+          }
+        },
+        "protected_anchors_after": {
+          "$USER_HOME\\.qlib\\qlib_data\\my_data": {
+            "calendars/day.txt": {
+              "exists": false,
+              "sha256": null
+            },
+            "calendars/1min.txt": {
+              "exists": false,
+              "sha256": null
+            },
+            "instruments/all.txt": {
+              "exists": false,
+              "sha256": null
+            }
+          },
+          "$USER_HOME\\.qlib\\qlib_data\\my_data_1min": {
+            "calendars/day.txt": {
+              "exists": false,
+              "sha256": null
+            },
+            "calendars/1min.txt": {
+              "exists": false,
+              "sha256": null
+            },
+            "instruments/all.txt": {
+              "exists": false,
+              "sha256": null
+            }
+          }
+        },
+        "live_source_drift": [
+          {
+            "path": "E:\\stock_data\\etf\\period=1d\\dividend_type=front\\symbol=510050_SH\\data.parquet",
+            "historical_sha256": "57254b39d07fd9997aa998a123255c0d600daae80f2ae43f4cce6bc23fe6c3b9",
+            "current_sha256": "c6d28b4c7594a04aeec0963ce7bf5873d982d4c1129d604a50a310864b574db5",
+            "changed_since_build": true
+          },
+          {
+            "path": "E:\\stock_data\\etf\\period=1d\\dividend_type=none\\symbol=510050_SH\\data.parquet",
+            "historical_sha256": "95d1457b166456530662c27c79a4eec774926f4be3635b172688a33fd7b7fe9f",
+            "current_sha256": "63a62908026481d84f9add11ad4de679e29ff66081c249b4d64477838b9312ad",
+            "changed_since_build": true
+          },
+          {
+            "path": "E:\\stock_data\\etf\\period=1d\\dividend_type=front\\symbol=510300_SH\\data.parquet",
+            "historical_sha256": "a83a67c31e0be54b0e82e7554e7987c8199f11ee92724d088cb7308c4fad6c6b",
+            "current_sha256": "340b58dda8bb42f58ae6aa43e005da2d0197c93685da8b73c1a91a0720eed7fa",
+            "changed_since_build": true
+          },
+          {
+            "path": "E:\\stock_data\\etf\\period=1d\\dividend_type=none\\symbol=510300_SH\\data.parquet",
+            "historical_sha256": "18d82b8b64c478705ee3cf63c05ddc82cb4b40be633a3c43e15a1474bec4c795",
+            "current_sha256": "9874644e9aa42f21ea03388b5e4244c227b57d002163f71684fc618e42801610",
+            "changed_since_build": true
+          },
+          {
+            "path": "E:\\stock_data\\etf\\period=1d\\dividend_type=front\\symbol=159915_SZ\\data.parquet",
+            "historical_sha256": "cb666488503329c60328e45491c807800dde28061c1eda56abde2c75acf0d57a",
+            "current_sha256": "a5f142890e07b3585dacb9bc7be21d99f71fcf464478ca0c596cb92032d3d678",
+            "changed_since_build": true
+          },
+          {
+            "path": "E:\\stock_data\\etf\\period=1d\\dividend_type=none\\symbol=159915_SZ\\data.parquet",
+            "historical_sha256": "cb666488503329c60328e45491c807800dde28061c1eda56abde2c75acf0d57a",
+            "current_sha256": "a5f142890e07b3585dacb9bc7be21d99f71fcf464478ca0c596cb92032d3d678",
+            "changed_since_build": true
+          },
+          {
+            "path": "E:\\stock_data\\etf\\period=1d\\dividend_type=front\\symbol=518880_SH\\data.parquet",
+            "historical_sha256": "585f2ad35afa7c31c392f3202d33b8db6c9e72b73f0b07d90ad2a02fd5056580",
+            "current_sha256": "da940d59dbcf0ad6589d56cc02f5266ef21ca8bd4016a84dd41ef10eaf07e54c",
+            "changed_since_build": true
+          },
+          {
+            "path": "E:\\stock_data\\etf\\period=1d\\dividend_type=none\\symbol=518880_SH\\data.parquet",
+            "historical_sha256": "585f2ad35afa7c31c392f3202d33b8db6c9e72b73f0b07d90ad2a02fd5056580",
+            "current_sha256": "da940d59dbcf0ad6589d56cc02f5266ef21ca8bd4016a84dd41ef10eaf07e54c",
+            "changed_since_build": true
+          }
+        ],
+        "market_writes": false,
+        "provider_writes": false,
+        "scope": "Existing frozen staging/provider snapshot. Current live-lake advancement is reported separately; no current-lake snapshot or production-provider promotion claim."
+      }
+    },
+    "p11_review": {
+      "source_url": "https://github.com/baiyibing/MyQuant/blob/8f65e08685d47f3ed736409336726654a21723ae/docs/operations/evidence/p11-etf-host-acceptance-2026-11-03/evidence-review.json",
+      "git_blob_sha": "88197cb0e5a7652bf0385ffd10652ab0fecb9dde",
+      "content_sha256": "dcd2dc2078c0ded928e35c86adb5dc8c0055bc4d3b5ddff1a203b20f2298ae0e",
+      "document": {
+        "schema_version": 1,
+        "decision": "APPROVE",
+        "reviewer": "Claude Code CLI 2.1.317",
+        "actual_model": [
+          "glm-5.3[1m]"
+        ],
+        "reviewed_implementation": "3e4c992b444480071100fbd1fb9ea3f8717320c9",
+        "reviewed_evidence_commit": "812bad80b0c215b42936445f5a507b183e48dcb5",
+        "read_only_inline_evidence": true,
+        "result": "**APPROVE** — no concrete blockers. Closure is justified for the stated scope only (P11 fixed-window, isolated provider, E3/E4 smoke).\n\nChecked against the receipts:\n\n- **Sample counts** — internally consistent everywhere: train 589944 rows → 583700 accepted (= fit_samples rows; 589944 − 6244 non-finite labels, matching DropnaLabel at fit), valid 138093 → 137826 (−267), test 106005 = 104859 kept + 1146 cross/undefined → 104772 accepted. README table IC/RankIC values match acceptance.json/run-receipt.json to full precision.\n- **Independent recompute** — `verify_p11_host.py` re-derives the mask from the calendar (T+1/T+2 in-segment, position+2 < len) without importing production mask code, asserts all three mask columns equal, recomputes pooled Pearson/Spearman at 1e-12 tolerance, re-hashes every parquet; `independent_mask_and_metrics_match: true` per segment.\n- **Nominal vs effective** — ends 2024-12-27 / 2025-12-29 are the correct last sessions whose T+2 close stays in-segment (Dec 30/31 2024 and Dec 30/31 2025 cross boundaries); test kept nominal with cross-boundary rows excluded; `all_label_dates_in_nominal_segment: true`; ZScoreNorm fit confined to nominal train (backward-looking features only — no label leakage, and disclosed).\n- **Provider immutability** — all 11406 manifest fingerprints re-verified post-training, protected anchors before/after unchanged, anchors re-hashed against the receipt; the 8 changed live-lake files are documented separately without conflating the frozen provider with the current lake.\n- **CRLF/Git hash accounting** — runtime CRLF hash (`a8b1f1…`) and Git blob hash (`1458e9…`) recorded as distinct values with `source_equal_after_lf_normalization: true`, asserted by the verifier; published-byte vs local-original vs runtime hashes explicitly separated in `validation.json` + `publication-sha256.json`.\n- **Limits** — correctly bounded: pooled metrics explicitly not profitability/daily-IC evidence, old IC retained as historical only, survivorship/front-adjust biases retained, no current-lake refresh, no default-provider promotion, no market writes/QMT/trading; P12/QL11 and model comparison explicitly not closed. Boundary-purge defect is honestly documented via `boundary-before.json` rather than papered over."
+      }
+    },
+    "p12_alignment": {
+      "source_url": "https://github.com/baiyibing/MyQuant/blob/bce9613b19ecbd806b96f52e0be5efe09464d11c/docs/operations/evidence/ql11-aligned-host-2026-11-03/acceptance.json",
+      "git_blob_sha": "2e6aefd6691646326c037475d4ab07f0091570d2",
+      "content_sha256": "82059097b956ef5ce5d869f9501443689ab1c3f64f682df84af869f162c50cdb",
+      "document": {
+        "audit_id": "QL11",
+        "package": "P12",
+        "package_closed": false,
+        "status": "PASS_LOCAL_ISOLATED_REAL_LAKE",
+        "source_commit": "a997760a6baaa893d5f5081a6e08910371754ef9",
+        "commands": [
+          [
+            "$PYTHON_ENV\\python.exe",
+            "$REPO\\qlib_scripts\\refresh_mydata_1min.py",
+            "--qlib-dir",
+            "$TASK\\ql11-host-r2\\incremental",
+            "--staging-dir",
+            "$TASK\\ql11-host-r2\\stage-seed",
+            "--start",
+            "2026-10-23",
+            "--end",
+            "2026-10-29",
+            "--max-workers",
+            "2",
+            "--receipt",
+            "$TASK\\ql11-host-r2\\seed-receipt.json",
+            "--symbols",
+            "SZ000001",
+            "SH600000",
+            "SZ300750",
+            "SH688981",
+            "BJ920002",
+            "SH000001",
+            "--rebuild"
+          ],
+          [
+            "$PYTHON_ENV\\python.exe",
+            "$REPO\\qlib_scripts\\refresh_mydata_1min.py",
+            "--qlib-dir",
+            "$TASK\\ql11-host-r2\\incremental",
+            "--staging-dir",
+            "$TASK\\ql11-host-r2\\stage-incremental",
+            "--start",
+            "2026-10-23",
+            "--end",
+            "2026-11-02",
+            "--max-workers",
+            "2",
+            "--receipt",
+            "$TASK\\ql11-host-r2\\incremental-receipt.json",
+            "--symbols",
+            "SZ000001",
+            "SH600000",
+            "SZ300750",
+            "SH688981",
+            "BJ920002",
+            "SH000001",
+            "SH000300"
+          ],
+          [
+            "$PYTHON_ENV\\python.exe",
+            "$REPO\\qlib_scripts\\refresh_mydata_1min.py",
+            "--qlib-dir",
+            "$TASK\\ql11-host-r2\\rebuild",
+            "--staging-dir",
+            "$TASK\\ql11-host-r2\\stage-rebuild",
+            "--start",
+            "2026-10-23",
+            "--end",
+            "2026-11-02",
+            "--max-workers",
+            "2",
+            "--receipt",
+            "$TASK\\ql11-host-r2\\rebuild-receipt.json",
+            "--symbols",
+            "SZ000001",
+            "SH600000",
+            "SZ300750",
+            "SH688981",
+            "BJ920002",
+            "SH000001",
+            "SH000300",
+            "--rebuild"
+          ],
+          [
+            "$PYTHON_ENV\\python.exe",
+            "$REPO\\qlib_scripts\\refresh_mydata_1min.py",
+            "--qlib-dir",
+            "$TASK\\ql11-host-r2\\incremental",
+            "--staging-dir",
+            "$TASK\\ql11-host-r2\\stage-noop",
+            "--start",
+            "2026-10-23",
+            "--end",
+            "2026-11-02",
+            "--max-workers",
+            "2",
+            "--receipt",
+            "$TASK\\ql11-host-r2\\noop-receipt.json",
+            "--symbols",
+            "SZ000001",
+            "SH600000",
+            "SZ300750",
+            "SH688981",
+            "BJ920002",
+            "SH000001",
+            "SH000300"
+          ]
+        ],
+        "window": [
+          "2026-10-23",
+          "2026-11-02"
+        ],
+        "codes": [
+          "SZ000001",
+          "SH600000",
+          "SZ300750",
+          "SH688981",
+          "BJ920002",
+          "SH000001",
+          "SH000300"
+        ],
+        "fields_compared": [
+          {
+            "symbol": "SZ000001",
+            "field": "open",
+            "values": 1687,
+            "bin_sha256": "e28142c71341ce0267ca98d3beaa55a501b15f779fe9837696bceeaad8b583e6"
+          },
+          {
+            "symbol": "SZ000001",
+            "field": "high",
+            "values": 1687,
+            "bin_sha256": "d2ee5a48ae9c43dc7ff3aad6ab391dbbc68966a96353a2898ce2b0f54fa60ec4"
+          },
+          {
+            "symbol": "SZ000001",
+            "field": "low",
+            "values": 1687,
+            "bin_sha256": "6d720433212aca9bb3d6575cc789176065a6af5b6694b3f15204a78322f6f343"
+          },
+          {
+            "symbol": "SZ000001",
+            "field": "close",
+            "values": 1687,
+            "bin_sha256": "18d513eabd6239d8c3450e7fd4565b322d4c16c237d20fd5f64dfb2812a8a861"
+          },
+          {
+            "symbol": "SZ000001",
+            "field": "volume",
+            "values": 1687,
+            "bin_sha256": "a79972b32e53dabdda99edad2004e9704283d17f8f2f334df4d3c790d50c9c2c"
+          },
+          {
+            "symbol": "SZ000001",
+            "field": "amount",
+            "values": 1687,
+            "bin_sha256": "e3959ef05dc8f24749eeb7914f537f8d537bb89681916560ad9ad4a62fa7d362"
+          },
+          {
+            "symbol": "SZ000001",
+            "field": "vwap",
+            "values": 1687,
+            "bin_sha256": "083e30286b2e79e5361ae78f1d518956c5f5cc7c23270e3bf8c87c46e801dda5"
+          },
+          {
+            "symbol": "SH600000",
+            "field": "open",
+            "values": 1687,
+            "bin_sha256": "1c1a9c7c1ea0f767635a7db8d9cc9d2b61f5c03bb4bf90fbaf89153011e209b5"
+          },
+          {
+            "symbol": "SH600000",
+            "field": "high",
+            "values": 1687,
+            "bin_sha256": "7b89e37226d1559ff2f8a5c2688d41ee50002d093cbbc3ce8dcba3ca0858fb63"
+          },
+          {
+            "symbol": "SH600000",
+            "field": "low",
+            "values": 1687,
+            "bin_sha256": "15e2eb6cf7ea156424f1876bf291112e7238720115c71ebf0f546ab71c6c8b9e"
+          },
+          {
+            "symbol": "SH600000",
+            "field": "close",
+            "values": 1687,
+            "bin_sha256": "58475c118cfd7f43735699c1f0697ae7b982b4ff1f8189ac9dd19f49e7e99cf2"
+          },
+          {
+            "symbol": "SH600000",
+            "field": "volume",
+            "values": 1687,
+            "bin_sha256": "6552723c9da23f3274168f1f497c055b56f94f35354c74cda078e9b78df049b7"
+          },
+          {
+            "symbol": "SH600000",
+            "field": "amount",
+            "values": 1687,
+            "bin_sha256": "5d223a389fc3abf4fde059331690ec33f0aa59b60e1c46dec43e823d817e0b12"
+          },
+          {
+            "symbol": "SH600000",
+            "field": "vwap",
+            "values": 1687,
+            "bin_sha256": "deeaac34d901540367df7f0960333037797f440188cb89458891b869733bbc26"
+          },
+          {
+            "symbol": "SZ300750",
+            "field": "open",
+            "values": 1687,
+            "bin_sha256": "594458642313a992ae42eea0d60ef5c160e90c9f60b4dd49ff94ed0851d18278"
+          },
+          {
+            "symbol": "SZ300750",
+            "field": "high",
+            "values": 1687,
+            "bin_sha256": "e87d355f62f58f7624b1195da0947e4e5cfd7f41bfe143347e2d4c0ebaee2e1d"
+          },
+          {
+            "symbol": "SZ300750",
+            "field": "low",
+            "values": 1687,
+            "bin_sha256": "4cae56204d216232f4bec76c3ea25d1c8a321c76b929d5825ee57b84ff7718c9"
+          },
+          {
+            "symbol": "SZ300750",
+            "field": "close",
+            "values": 1687,
+            "bin_sha256": "bd21662f13f06942b647361c95a447e752d533994c4a26dd56a775b0c84e42bc"
+          },
+          {
+            "symbol": "SZ300750",
+            "field": "volume",
+            "values": 1687,
+            "bin_sha256": "93a60f9c0a8c91b4a013a59f8a442ad6521d2c2eab0f1f2600e294e65a49253c"
+          },
+          {
+            "symbol": "SZ300750",
+            "field": "amount",
+            "values": 1687,
+            "bin_sha256": "bb4b612740a0c10dcdf49171a1d1138f6101c8680fd371070cd6ea1bacbdbb1b"
+          },
+          {
+            "symbol": "SZ300750",
+            "field": "vwap",
+            "values": 1687,
+            "bin_sha256": "20ff17e244b08dbbbf2e2292182f3421bd0fb181708ca1956419af7de021938e"
+          },
+          {
+            "symbol": "SH688981",
+            "field": "open",
+            "values": 1687,
+            "bin_sha256": "b022175628fca7fa3e3664a825b890fd0b6301deae045c7a63d3f8d493b4f9c6"
+          },
+          {
+            "symbol": "SH688981",
+            "field": "high",
+            "values": 1687,
+            "bin_sha256": "bdb4803d7b2ff062665e0cd63d710ac879eb5857ec8a02a3a16e6c24c9476ea4"
+          },
+          {
+            "symbol": "SH688981",
+            "field": "low",
+            "values": 1687,
+            "bin_sha256": "d1afa181677d24bbbf8127352b668b48986c716a8c3fe7a4688ee9c6f2c19f99"
+          },
+          {
+            "symbol": "SH688981",
+            "field": "close",
+            "values": 1687,
+            "bin_sha256": "8a9b00c7570fe06eac83ae8d77f789afc7fe28101d59485d3c0a142a48f97f87"
+          },
+          {
+            "symbol": "SH688981",
+            "field": "volume",
+            "values": 1687,
+            "bin_sha256": "10d77fed81df141e8565faf277d014f689148731daaf06da7209eca8de7cee91"
+          },
+          {
+            "symbol": "SH688981",
+            "field": "amount",
+            "values": 1687,
+            "bin_sha256": "ec752454357bba86e30e239e6959886bed9bcacb2febfd240b08a315b20c2214"
+          },
+          {
+            "symbol": "SH688981",
+            "field": "vwap",
+            "values": 1687,
+            "bin_sha256": "49bc592b08f7c002844707feb4a996986bd778f0b68ffb178d4241febf9c09fc"
+          },
+          {
+            "symbol": "BJ920002",
+            "field": "open",
+            "values": 1687,
+            "bin_sha256": "6edd60b08711822e7337b8016aeacfc0fbf856855f56d77e16a1b8319d211f82"
+          },
+          {
+            "symbol": "BJ920002",
+            "field": "high",
+            "values": 1687,
+            "bin_sha256": "560afc5ed576bc4c72e16e79d8b5621e94e6c1e26f41fb62ee5da93bbd963c03"
+          },
+          {
+            "symbol": "BJ920002",
+            "field": "low",
+            "values": 1687,
+            "bin_sha256": "e9cab94b9ec7724eded217eddb5c4ccd0b96a2b137553effaf6214c297db09ba"
+          },
+          {
+            "symbol": "BJ920002",
+            "field": "close",
+            "values": 1687,
+            "bin_sha256": "11c086a3dd4a34a5e654c72e5bd7d74da37a739fe566e6532a1f932468a7e175"
+          },
+          {
+            "symbol": "BJ920002",
+            "field": "volume",
+            "values": 1687,
+            "bin_sha256": "8056e0924f940673d21a861c9d0bfe31abfaea2b4390f09a4458ebcb5afd4123"
+          },
+          {
+            "symbol": "BJ920002",
+            "field": "amount",
+            "values": 1687,
+            "bin_sha256": "7e98fc1e013f8a00123680e8cc402ee1f3b6f3ae0d7a0d4c6a5c39bfe7844bf9"
+          },
+          {
+            "symbol": "BJ920002",
+            "field": "vwap",
+            "values": 1687,
+            "bin_sha256": "c26a0330f5526a96054e84ce586abed90e8d814a111dc5255271eb32547193b1"
+          },
+          {
+            "symbol": "SH000001",
+            "field": "open",
+            "values": 1687,
+            "bin_sha256": "024dab2337cb0f1a37f630a8ce907894829ca7e943192bfa83527de7ba9a96dd"
+          },
+          {
+            "symbol": "SH000001",
+            "field": "high",
+            "values": 1687,
+            "bin_sha256": "1d2b3d549b3af8fa1ce065ad7bb55683dea234bc01e3961049d2df100d86de2c"
+          },
+          {
+            "symbol": "SH000001",
+            "field": "low",
+            "values": 1687,
+            "bin_sha256": "52777b0c905a2fd6b246526cecced712eb37477c6bfdca9de929f5d0660acda3"
+          },
+          {
+            "symbol": "SH000001",
+            "field": "close",
+            "values": 1687,
+            "bin_sha256": "ef264b7a0536faa75bcd7d3126eb306c12b91c4d75566d8413ee1c2c266c99cf"
+          },
+          {
+            "symbol": "SH000001",
+            "field": "volume",
+            "values": 1687,
+            "bin_sha256": "293117ca16f7f33ebbfc4d7a520f817c69902eb14bfbd1ea67fbb580bb161585"
+          },
+          {
+            "symbol": "SH000001",
+            "field": "amount",
+            "values": 1687,
+            "bin_sha256": "2b5f35b6100362e0f678950ccb4ec9b937a8ae383a8f5d556566cf6bcfe8079f"
+          },
+          {
+            "symbol": "SH000001",
+            "field": "vwap",
+            "values": 1687,
+            "bin_sha256": "3e8f035c48c3dc0a6bd95f1c9868bcb5a944a215d1d0f01f449f4ff67c07d83b"
+          },
+          {
+            "symbol": "SH000300",
+            "field": "open",
+            "values": 1687,
+            "bin_sha256": "21cd0982c651c07756ff379ae6cb62fa3082e9aef1febcd13e2e6ac36a51a1f9"
+          },
+          {
+            "symbol": "SH000300",
+            "field": "high",
+            "values": 1687,
+            "bin_sha256": "4d7a4c47a88259a0e7f3385d6be6a6ee095b968e2c28307590f94128b0e7fa35"
+          },
+          {
+            "symbol": "SH000300",
+            "field": "low",
+            "values": 1687,
+            "bin_sha256": "86010abc26df89ec818e2b379a0b8b566d7a82cc5b0203e48f5618756a037aea"
+          },
+          {
+            "symbol": "SH000300",
+            "field": "close",
+            "values": 1687,
+            "bin_sha256": "b040d8c00c0df8dd643bb3331fee6582898ad19de3e0c686b2bc7e59938f1980"
+          },
+          {
+            "symbol": "SH000300",
+            "field": "volume",
+            "values": 1687,
+            "bin_sha256": "f40de9c7f77ef1e1c158f1282a772f8fd25601eb345262a79401ae3790377a86"
+          },
+          {
+            "symbol": "SH000300",
+            "field": "amount",
+            "values": 1687,
+            "bin_sha256": "e7666f6be9297a29059ba76dc2cecf5ad8d8260c1a69ccc9e6b5e62e02a8673d"
+          },
+          {
+            "symbol": "SH000300",
+            "field": "vwap",
+            "values": 1687,
+            "bin_sha256": "03114c1f5e4355ce42b13197c961598bbcb05b2e838bb387372b0b247a86edb3"
+          }
+        ],
+        "seed_calendar_rows": 1205,
+        "final_calendar_rows": 1687,
+        "final_calendar_last": "2026-11-02 15:00:00",
+        "new_calendar_rows": 482,
+        "existing_bin_prefix_files_preserved": 42,
+        "increment_rebuild_features_byte_equal": 49,
+        "instruments_equal": true,
+        "noop_provider_bytes_unchanged": true,
+        "measured_source_files_unchanged": true,
+        "protected_anchor_states_unchanged": true,
+        "protected_anchors_were_absent": true,
+        "limits": [
+          "Seven-symbol/window acceptance, not full-market default-provider refresh.",
+          "No default provider promotion, daily refresh, model training or trading.",
+          "Default-param empty-staging/noop error remains separate; this noop explicitly restages original window.",
+          "Per-file writes atomic; interrupted multi-file updates require backup recovery/rebuild."
+        ]
+      }
+    },
+    "p12_noop": {
+      "source_url": "https://github.com/baiyibing/MyQuant/blob/f343b08b971023de937a38044a4a6cf642ddd3b1/docs/operations/evidence/ql11-default-noop-2026-11-03/acceptance.json",
+      "git_blob_sha": "1c6487904cbefe2e5f8d0ecc7a4fe0cf38c0f82d",
+      "content_sha256": "f000ea0b6cecbd58af5e1dbc941c917d7b46e2cb9294f078570d4673f4bb6360",
+      "document": {
+        "status": "PASS_DEFAULT_NOOP_AND_REJECTIONS",
+        "package": "P12",
+        "audit_id": "QL11",
+        "package_closed": false,
+        "source_commit": "720e42fefaac28d18ea31fecceff35795ebd9c7a",
+        "baseline_defect_reproduced": true,
+        "default_start_end_omitted": true,
+        "positive_receipt": {
+          "audit_id": "QL11",
+          "bars_appended": 0,
+          "daily_day_txt_sha256_after": "",
+          "daily_day_txt_sha256_before": "",
+          "daily_day_txt_unchanged": true,
+          "daily_dir": "$USER_HOME\\.qlib\\qlib_data\\my_data",
+          "empty_increment_proof": {
+            "invalid_time_rows": 0,
+            "provider_close_bins_checked": 7,
+            "raw_rows_in_window": 0,
+            "scope": "Configured input request only; not market freshness or full provider quality",
+            "source_partitions_observed": 7,
+            "source_rows": 921101,
+            "usable_history_rows": 921101
+          },
+          "existing_minute_bars_preserved": true,
+          "market_write_performed": false,
+          "minute_calendar_advanced": false,
+          "minute_calendar_last_after": "2026-11-02 15:00:00",
+          "minute_calendar_last_before": "2026-11-02 15:00:00",
+          "minute_calendar_len_after": 1687,
+          "minute_calendar_len_before": 1687,
+          "mode": "noop",
+          "pred_pkl_untouched": true,
+          "probe_bars_after": 1687,
+          "probe_bars_before": 1687,
+          "probe_symbol": "SZ000001",
+          "qlib_1min_dir": "$TASK\\host\\fixed-provider",
+          "recorded_at_utc": "2026-11-03T07:32:32.098842+00:00",
+          "schema_version": "ql11.1min.v1",
+          "symbols_touched": 0
+        },
+        "runs": [
+          {
+            "label": "baseline",
+            "argv": [
+              "$PYTHON_ENV\\python.exe",
+              "$PREVIOUS_REPO\\qlib_scripts\\refresh_mydata_1min.py",
+              "--qlib-dir",
+              "$TASK\\host\\baseline-provider",
+              "--staging-dir",
+              "$TASK\\host\\baseline-stage",
+              "--max-workers",
+              "2",
+              "--receipt",
+              "$TASK\\host\\baseline-receipt.json",
+              "--symbols",
+              "SZ000001",
+              "SH600000",
+              "SZ300750",
+              "SH688981",
+              "BJ920002",
+              "SH000001",
+              "SH000300"
+            ],
+            "exit_code": 1,
+            "provider_files_unchanged": true,
+            "staging_sentinel_preserved": false,
+            "receipt_exists": false
+          },
+          {
+            "label": "fixed",
+            "argv": [
+              "$PYTHON_ENV\\python.exe",
+              "$REPO\\qlib_scripts\\refresh_mydata_1min.py",
+              "--qlib-dir",
+              "$TASK\\host\\fixed-provider",
+              "--staging-dir",
+              "$TASK\\host\\fixed-stage",
+              "--max-workers",
+              "2",
+              "--receipt",
+              "$TASK\\host\\fixed-receipt.json",
+              "--symbols",
+              "SZ000001",
+              "SH600000",
+              "SZ300750",
+              "SH688981",
+              "BJ920002",
+              "SH000001",
+              "SH000300"
+            ],
+            "exit_code": 0,
+            "provider_files_unchanged": true,
+            "staging_sentinel_preserved": false,
+            "receipt_exists": true
+          },
+          {
+            "label": "missing-root",
+            "argv": [
+              "$PYTHON_ENV\\python.exe",
+              "$REPO\\qlib_scripts\\refresh_mydata_1min.py",
+              "--qlib-dir",
+              "$TASK\\host\\fixed-provider",
+              "--staging-dir",
+              "$TASK\\host\\missing-root-stage",
+              "--max-workers",
+              "2",
+              "--receipt",
+              "$TASK\\host\\missing-root-receipt.json",
+              "--lake-root",
+              "$TASK\\host\\missing-root",
+              "--symbols",
+              "SZ000001",
+              "SH600000",
+              "SZ300750",
+              "SH688981",
+              "BJ920002",
+              "SH000001",
+              "SH000300"
+            ],
+            "exit_code": 1,
+            "provider_files_unchanged": true,
+            "staging_sentinel_preserved": true,
+            "receipt_exists": false
+          },
+          {
+            "label": "unknown-symbol",
+            "argv": [
+              "$PYTHON_ENV\\python.exe",
+              "$REPO\\qlib_scripts\\refresh_mydata_1min.py",
+              "--qlib-dir",
+              "$TASK\\host\\fixed-provider",
+              "--staging-dir",
+              "$TASK\\host\\unknown-symbol-stage",
+              "--max-workers",
+              "2",
+              "--receipt",
+              "$TASK\\host\\unknown-symbol-receipt.json",
+              "--symbols",
+              "SZ000001",
+              "SH600000",
+              "SZ300750",
+              "SH688981",
+              "BJ920002",
+              "SH000001",
+              "SH000300",
+              "SH999999"
+            ],
+            "exit_code": 1,
+            "provider_files_unchanged": true,
+            "staging_sentinel_preserved": true,
+            "receipt_exists": false
+          },
+          {
+            "label": "empty-source",
+            "argv": [
+              "$PYTHON_ENV\\python.exe",
+              "$REPO\\qlib_scripts\\refresh_mydata_1min.py",
+              "--qlib-dir",
+              "$TASK\\host\\fixed-provider",
+              "--staging-dir",
+              "$TASK\\host\\empty-source-stage",
+              "--max-workers",
+              "2",
+              "--receipt",
+              "$TASK\\host\\empty-source-receipt.json",
+              "--lake-root",
+              "$TASK\\host\\empty-source",
+              "--skip-index",
+              "--symbols",
+              "SZ000001",
+              "SH600000",
+              "SZ300750",
+              "SH688981",
+              "BJ920002",
+              "SH000001",
+              "SH000300"
+            ],
+            "exit_code": 1,
+            "provider_files_unchanged": true,
+            "staging_sentinel_preserved": true,
+            "receipt_exists": false
+          },
+          {
+            "label": "bad-close",
+            "argv": [
+              "$PYTHON_ENV\\python.exe",
+              "$REPO\\qlib_scripts\\refresh_mydata_1min.py",
+              "--qlib-dir",
+              "$TASK\\host\\fixed-provider",
+              "--staging-dir",
+              "$TASK\\host\\bad-close-stage",
+              "--max-workers",
+              "2",
+              "--receipt",
+              "$TASK\\host\\bad-close-receipt.json",
+              "--lake-root",
+              "$TASK\\host\\bad-source",
+              "--skip-index",
+              "--symbols",
+              "SZ000001"
+            ],
+            "exit_code": 1,
+            "provider_files_unchanged": true,
+            "staging_sentinel_preserved": false,
+            "receipt_exists": false
+          },
+          {
+            "label": "bad-bin",
+            "argv": [
+              "$PYTHON_ENV\\python.exe",
+              "$REPO\\qlib_scripts\\refresh_mydata_1min.py",
+              "--qlib-dir",
+              "$TASK\\host\\bad-bin-provider",
+              "--staging-dir",
+              "$TASK\\host\\bad-bin-stage",
+              "--max-workers",
+              "2",
+              "--receipt",
+              "$TASK\\host\\bad-bin-receipt.json",
+              "--symbols",
+              "SZ000001",
+              "SH600000",
+              "SZ300750",
+              "SH688981",
+              "BJ920002",
+              "SH000001",
+              "SH000300"
+            ],
+            "exit_code": 1,
+            "provider_files_unchanged": true,
+            "staging_sentinel_preserved": true,
+            "receipt_exists": false
+          }
+        ],
+        "source_files_unchanged": true,
+        "seed_provider_unchanged": true,
+        "protected_anchor_states_unchanged": true,
+        "provider_files_verified": 53,
+        "limits": [
+          "Seven-symbol input request only; no full-market freshness or provider quality signoff.",
+          "Default daily/minute calendar and selected pred anchors absent before/after; no default-provider promotion.",
+          "Bad-close source and bad-bin provider are clearly labeled private fault copies; no market rewrites.",
+          "Source root/list preflight preserves scratch staging; later parse/IO failures do not promise scratch rollback."
+        ]
+      }
+    }
+  }
+}

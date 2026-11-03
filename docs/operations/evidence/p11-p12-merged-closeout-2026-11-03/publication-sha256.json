@@ -1,0 +1,12 @@
+{
+  "byte_basis": "Git blob UTF-8 LF",
+  "sha256": {
+    "acceptance.json": "360baff1c150a5c1146a03928f4135690e0463e968c22b9412cb6f2f38b5278e",
+    "architecture-context.json": "4934e8d71fa4f522a3a180da39ed238da420b2f2749bf811f4d38a75dbe39baa",
+    "audit-sources/revalidate_p11.py": "10f2c21c714664b8437781bc818efe4a74d6b4a52f7ce617a3bf80d53c64b76d",
+    "github-facts.json": "3e425bb4764dfd80a3c511158b61a700ab0bb277790fb4c8c8c065e6ab9a7a5d",
+    "p11-current-revalidation.json": "e58c522ecedc15f83c15f462a093d7f8b47a1d571f371056641eac4619d478c1",
+    "README.md": "9ad270e5b359d88b79cfa607bb340ccf6dda81dd963a184fb983f2d776674c20",
+    "validation.json": "46c1156bf340e1ce04458d4a54b5204934c04042c52e07388fef1611fbb7ef1e"
+  }
+}

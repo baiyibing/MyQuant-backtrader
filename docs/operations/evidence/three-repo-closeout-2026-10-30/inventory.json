@@ -4006,6 +4006,34 @@
       ],
       "signoff_urls": [],
       "summary": "只关闭QL12必需清单失败语义：训练/日池导出主清单及请求副本失败均非零；真实Qlib上下文将失败记录为FAILED且不输出完成。最终回归对旧CLI为6失败，修后455通过/1跳过/18子测试；最终head三CI全绿、合入树相同。现有sweep调用方验证子任务1后0仍返回1并记录两腿退出码。P12独立刷新/分钟现场验收仍开放。"
+    },
+    {
+      "receipt_id": "p11-etf-e3-e4-pr114-merged-20261103",
+      "package_id": "P11",
+      "scope": "package",
+      "audit_ids": [
+        "QL02",
+        "QL03"
+      ],
+      "disposition": "completed",
+      "closed_at_utc": "2026-11-03T05:27:54Z",
+      "recorded_at_utc": "2026-11-03T08:13:44.858272+00:00",
+      "ssot_urls": [
+        "https://github.com/baiyibing/MyQuant/pull/114",
+        "https://github.com/baiyibing/MyQuant/blob/8f65e08685d47f3ed736409336726654a21723ae/docs/operations/evidence/p11-etf-host-acceptance-2026-11-03/acceptance.json",
+        "https://github.com/baiyibing/MyQuant/blob/8f65e08685d47f3ed736409336726654a21723ae/docs/operations/evidence/p11-etf-host-acceptance-2026-11-03/e3-revalidation.json",
+        "https://github.com/baiyibing/MyQuant/blob/8f65e08685d47f3ed736409336726654a21723ae/docs/operations/evidence/p11-etf-host-acceptance-2026-11-03/evidence-review.json"
+      ],
+      "evidence_urls": [
+        "https://github.com/baiyibing/MyQuant/commit/8f65e08685d47f3ed736409336726654a21723ae",
+        "https://github.com/baiyibing/MyQuant/actions/runs/41580138648",
+        "https://github.com/baiyibing/MyQuant/blob/8f65e08685d47f3ed736409336726654a21723ae/docs/operations/evidence/p11-etf-host-acceptance-2026-11-03/acceptance.json",
+        "https://github.com/baiyibing/MyQuant/blob/8f65e08685d47f3ed736409336726654a21723ae/docs/operations/evidence/p11-etf-host-acceptance-2026-11-03/e3-revalidation.json",
+        "https://github.com/baiyibing/MyQuant/blob/8f65e08685d47f3ed736409336726654a21723ae/docs/operations/evidence/p11-etf-host-acceptance-2026-11-03/evidence-review.json"
+      ],
+      "signoff_urls": [],
+      "evidence_record": "docs/operations/evidence/p11-p12-merged-closeout-2026-11-03/acceptance.json",
+      "summary": "仅关闭冻结P11/QL02+QL03：原窗口ETF隔离provider E3与Alpha158+LGB E4均已在原域接受，修正拟合边界泄漏后104772有效测试样本、IC有限；MyQuant114三CI成功且已合，checked/merged树相同。本轮再核11406个provider文件与4ETF×7字段，当前股票日/分钟provider根目录前后均不存在。保留front与幸存者偏差、历史快照和隔离烟测限制；不代签当前湖刷新、默认provider部署、现有线上全树保护、盈利或P12。"
     }
   ],
   "implementation_refs": [
@@ -4230,6 +4258,26 @@
       ],
       "scope": "M5 configured authority/workspace disjoint; 11 named last-row-group sample checks, zero-price001381 and stale512390 retained. Not full coverage/SHM/4090/75 signoff.",
       "evidence_record": "docs/operations/evidence/consumer-host-2026-11-03/p03/readout.json"
+    },
+    {
+      "package_id": "P12",
+      "audit_ids": [
+        "QL11"
+      ],
+      "pr_url": "https://github.com/baiyibing/MyQuant/pull/115",
+      "merged_commit": "bce9613b19ecbd806b96f52e0be5efe09464d11c",
+      "domain_record_url": "https://github.com/baiyibing/MyQuant/blob/bce9613b19ecbd806b96f52e0be5efe09464d11c/docs/operations/evidence/ql11-aligned-host-2026-11-03/acceptance.json",
+      "scope": "完整日历对齐修复及7证券隔离实测已合：1205→1687分钟，42旧bin前缀保留、49字段与独立重建相同；非全市场/default-provider部署。 P12与QL11的完整部署/真实既有日频保护验收仍开放，不追加completed回执。"
+    },
+    {
+      "package_id": "P12",
+      "audit_ids": [
+        "QL11"
+      ],
+      "pr_url": "https://github.com/baiyibing/MyQuant/pull/116",
+      "merged_commit": "f343b08b971023de937a38044a4a6cf642ddd3b1",
+      "domain_record_url": "https://github.com/baiyibing/MyQuant/blob/f343b08b971023de937a38044a4a6cf642ddd3b1/docs/operations/evidence/ql11-default-noop-2026-11-03/acceptance.json",
+      "scope": "默认自动空增量误报修复已合：原CLI不传start/end得到有依据的noop，5个坏输入宿主格拒绝，53个provider文件不变；日频/分钟默认provider锚点缺失已如实记录。 P12与QL11的完整部署/真实既有日频保护验收仍开放，不追加completed回执。"
     }
   ]
 }
