@@ -1,0 +1,40 @@
+{
+  "reviewed_head": "b6daa56b68e0fe6fc8b48ba46c900c6074c537e9",
+  "verdict": "APPROVE",
+  "cli": "Grok CLI",
+  "requested_model": "grok-4.7",
+  "actual_models": [
+    "grok-4.7-build"
+  ],
+  "reasoning_effort": "low",
+  "session_id": "01a1a1aa-e05b-7641-a797-85e9c5858a3f",
+  "raw_review_sha256": "27be6db858bf69cb9e42f0d899e81fc216f20b0aa91a699be6368d5047175438",
+  "bundle_sha256": "ecad448c767c75d1c10287924d1a234473283eab4623e72cf5f5e89efa2d62cf",
+  "git_lf_publication_hashes_verified": 7,
+  "canonical_checks": [
+    {
+      "name": "joint-return",
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "b6daa56b68e0fe6fc8b48ba46c900c6074c537e9",
+      "details_url": "https://github.com/baiyibing/MyQuant/actions/runs/41647168696/job/125955431626"
+    },
+    {
+      "name": "pytest",
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "b6daa56b68e0fe6fc8b48ba46c900c6074c537e9",
+      "details_url": "https://github.com/baiyibing/MyQuant/actions/runs/41647168696/job/125955431556"
+    },
+    {
+      "name": "data-staging",
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "b6daa56b68e0fe6fc8b48ba46c900c6074c537e9",
+      "details_url": "https://github.com/baiyibing/MyQuant/actions/runs/41647168696/job/125955431384"
+    }
+  ],
+  "scope": "Docs-only P20/QL17 status-pointer subset; no host/model rerun, research stamp rewrite, or audit/package closeout",
+  "result": "**APPROVE**\n\nNo blockers in the supplied docs-only snapshot for the P20/QL17 status-pointer subset.\n\n- The diff adds three banners plus `docs/operations/evidence/ql17-status-pointers-2026-11-03/` and leaves the ETF page, production code, CLI defaults, and `TRACK_B_PLAN_HASH_CACHE_PENDING_REVIEW` untouched. `audit_item_closed` and `package_closed` stay false. The frozen 64-item / 21-package inventory is outside this diff.\n- Midterm banner matches frozen roadmap M3-D: implementation `#26` (`a032e5a98b668d842452304f82b72215783b13f6`), recorded outcome “保留实验开关、默认关闭、不改 topk”, with the 2026-09-13 `blocked` body kept.\n- Track B banner matches `#98` / `#99` / `#102` merge commits and both CLI `default=True` excerpts. It records merge facts and leaves the 2026-09-23 pending-review line, stamp, and performance/rollout limits in place. Merge is not treated as a separate Grok approval or 4090 full-data signoff.\n- P6 banner matches the tracked query: only `rebacktest_cost_tiers_summary_20260914T091013Z.json`; T1125/T1127 stay historical/unverified. The original “暂不可作结论依据” text and N6 note remain.\n- Relative links from `docs/plan-midterm-m1m4m2m3-2026-09-13.md`, `docs/perf-issues-windows-qlib-2026-09-14.md`, and `docs/reviews/joint-return-v1/track-b/README.md` resolve to the new README. This review did not recompute the seven published LF hashes or run host tests; the supplied `validation.json` records that canonical CI and fixed-head review are still pending.",
+  "quoted_result_observation_stage": "Preserved verbatim source-review snapshot. Any pending/capability-skip sentence concerns its supplied pre-closeout/local input; current canonical facts are separately attached by this later receipt."
+}

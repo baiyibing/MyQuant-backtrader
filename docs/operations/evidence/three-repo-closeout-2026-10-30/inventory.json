@@ -4316,6 +4316,30 @@
       "evidence_record": "docs/operations/evidence/p12-ql10-path-isolation-2026-11-03/acceptance.json",
       "verification_run_url": "https://github.com/baiyibing/MyQuant/actions/runs/41640632580",
       "scope": "QL10日频刷新路径隔离实现已合：固定headGrokAPPROVE+3CI绿，受测/合入树相同；完整套件本机及Linux均557PASS/4SKIP/18subtests，Linux三种symlink sink已核通过。只记实现进展，QL10现场与P12整包仍开放。"
+    },
+    {
+      "package_id": "P12",
+      "audit_ids": [
+        "QL11"
+      ],
+      "pr_url": "https://github.com/baiyibing/MyQuant/pull/118",
+      "merged_commit": "3b9fdb0edf561619661d673f1bbc12f30e4d89ab",
+      "domain_record_url": "https://github.com/baiyibing/MyQuant/blob/e310c581771127dee406917de4f0c254df769cf8/docs/operations/evidence/ql11-daily-write-boundary-2026-11-03/acceptance.json",
+      "evidence_record": "docs/operations/evidence/p12-p20-merged-progress-2026-11-03/acceptance.json",
+      "verification_run_url": "https://github.com/baiyibing/MyQuant/actions/runs/41642839816",
+      "scope": "分钟刷新 provider/staging/派生full-staging/receipt 对日频provider的解析后同根及双向祖先隔离实现已合；只记实现，实际增量/部署与P12仍开放。"
+    },
+    {
+      "package_id": "P20",
+      "audit_ids": [
+        "QL17"
+      ],
+      "pr_url": "https://github.com/baiyibing/MyQuant/pull/119",
+      "merged_commit": "a509b31cb6cb9901b06885cbc644c4807f31efdb",
+      "domain_record_url": "https://github.com/baiyibing/MyQuant/blob/b6daa56b68e0fe6fc8b48ba46c900c6074c537e9/docs/operations/evidence/ql17-status-pointers-2026-11-03/acceptance.json",
+      "evidence_record": "docs/operations/evidence/p12-p20-merged-progress-2026-11-03/acceptance.json",
+      "verification_run_url": "https://github.com/baiyibing/MyQuant/actions/runs/41647168696",
+      "scope": "MyQuant三份旧文档只加当前状态指针：M3-D/TrackB按已合实现更新，P6保留历史待核；原正文/研究戳不改。QL17/P20整项均未关闭。"
     }
   ]
 }
