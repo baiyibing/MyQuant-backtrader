@@ -1,0 +1,409 @@
+{
+  "observed_at_utc": "2026-11-03T10:57:03.595461+00:00",
+  "source_pr": {
+    "headRefOid": "4d421edd60c502a4a8607a0677de4a163deeeb96",
+    "state": "OPEN",
+    "statusCheckRollup": [
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-03T10:24:35Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/41615076294/job/125846385689",
+        "name": "Common package contract gates (windows)",
+        "startedAt": "2026-11-03T09:57:20Z",
+        "status": "COMPLETED",
+        "workflowName": "Common Package Contract Gates"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-03T10:07:01Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/41615076291/job/125858969230",
+        "name": "Python syntax (AST)",
+        "startedAt": "2026-11-03T10:06:53Z",
+        "status": "COMPLETED",
+        "workflowName": "Linux CI Fast Lane"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-03T09:58:38Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/41615076283/job/125846384738",
+        "name": "Pyright (pyrightconfig.json)",
+        "startedAt": "2026-11-03T09:56:28Z",
+        "status": "COMPLETED",
+        "workflowName": "Release Infra Contract Gates"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-03T09:59:44Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/41615076294/job/125846385795",
+        "name": "Cash ledger module coverage floor (windows)",
+        "startedAt": "2026-11-03T09:58:47Z",
+        "status": "COMPLETED",
+        "workflowName": "Common Package Contract Gates"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-03T10:04:53Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/41615076291/job/125859010654",
+        "name": "Import smoke (no xtquant)",
+        "startedAt": "2026-11-03T10:04:44Z",
+        "status": "COMPLETED",
+        "workflowName": "Linux CI Fast Lane"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-03T10:01:49Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/41615076283/job/125846385236",
+        "name": "Common Infra Go/No-Go Gate / gate",
+        "startedAt": "2026-11-03T10:00:47Z",
+        "status": "COMPLETED",
+        "workflowName": "Release Infra Contract Gates"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-03T09:57:34Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/41615076294/job/125846385510",
+        "name": "Executor mixin_order module coverage floor (windows)",
+        "startedAt": "2026-11-03T09:56:33Z",
+        "status": "COMPLETED",
+        "workflowName": "Common Package Contract Gates"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-03T10:05:51Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/41615076291/job/125858970129",
+        "name": "turnover_resist Python tests",
+        "startedAt": "2026-11-03T10:05:41Z",
+        "status": "COMPLETED",
+        "workflowName": "Linux CI Fast Lane"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-03T09:58:39Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/41615076283/job/125846385211",
+        "name": "Stream order + fallback + capital contract pytest / gate",
+        "startedAt": "2026-11-03T09:57:38Z",
+        "status": "COMPLETED",
+        "workflowName": "Release Infra Contract Gates"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-03T10:50:05Z",
+        "conclusion": "FAILURE",
+        "detailsUrl": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/41615076291/job/125858967516",
+        "name": "Common package contract gates (linux)",
+        "startedAt": "2026-11-03T10:26:51Z",
+        "status": "COMPLETED",
+        "workflowName": "Linux CI Fast Lane"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-03T09:57:17Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/41615076294/job/125846385473",
+        "name": "position_manager module coverage floor (windows)",
+        "startedAt": "2026-11-03T09:56:28Z",
+        "status": "COMPLETED",
+        "workflowName": "Common Package Contract Gates"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-03T10:05:02Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/41615076283/job/125846385350",
+        "name": "Chapter9 Infra Gate / gate",
+        "startedAt": "2026-11-03T10:01:52Z",
+        "status": "COMPLETED",
+        "workflowName": "Release Infra Contract Gates"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-03T09:56:25Z",
+        "conclusion": "SKIPPED",
+        "detailsUrl": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/41615076294/job/125846386823",
+        "name": "Trading core coverage (informational)",
+        "startedAt": "2026-11-03T09:56:26Z",
+        "status": "COMPLETED",
+        "workflowName": "Common Package Contract Gates"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-03T10:05:58Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/41615076291/job/125859022921",
+        "name": "QMT connect guard (bootstrap-only)",
+        "startedAt": "2026-11-03T10:05:53Z",
+        "status": "COMPLETED",
+        "workflowName": "Linux CI Fast Lane"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-03T10:00:44Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/41615076294/job/125846385843",
+        "name": "Frontend gates (build + typecheck + npm audit)",
+        "startedAt": "2026-11-03T09:59:50Z",
+        "status": "COMPLETED",
+        "workflowName": "Common Package Contract Gates"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-03T10:06:52Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/41615076291/job/125858970412",
+        "name": "Pyright (Linux, core packages)",
+        "startedAt": "2026-11-03T10:05:58Z",
+        "status": "COMPLETED",
+        "workflowName": "Linux CI Fast Lane"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-03T10:05:28Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/41615076291/job/125859033154",
+        "name": "Gitleaks",
+        "startedAt": "2026-11-03T10:04:54Z",
+        "status": "COMPLETED",
+        "workflowName": "Linux CI Fast Lane"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-03T10:05:40Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/41615076291/job/125858970040",
+        "name": "Settlement SELECT baseline",
+        "startedAt": "2026-11-03T10:05:33Z",
+        "status": "COMPLETED",
+        "workflowName": "Linux CI Fast Lane"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-03T10:26:50Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/41615076291/job/125858967728",
+        "name": "Docs & PR hygiene",
+        "startedAt": "2026-11-03T10:26:38Z",
+        "status": "COMPLETED",
+        "workflowName": "Linux CI Fast Lane"
+      }
+    ],
+    "url": "https://github.com/baiyibing/OSkhQuant1.3/pull/1275"
+  },
+  "same_source_between_attempts": "4d421edd60c502a4a8607a0677de4a163deeeb96",
+  "attempt1_common_exit_code": 247,
+  "attempt1_pytest_assertion_failure": "NOT_OBSERVED",
+  "attempt1_raw_log_sha256": "7ee93ef10ec04ddbcca05a603d2a7bb6e0fcd424458aa29023e6698b2080bf80",
+  "attempt2_log_availability": "HTTP404 / log not found from both job logs API and gh run view attempt2",
+  "failed_jobs": [
+    {
+      "id": 125846384875,
+      "name": "Common package contract gates (linux)",
+      "conclusion": "failure",
+      "runner_name": "linux-ci-02",
+      "run_attempt": 1,
+      "started_at": "2026-11-03T10:07:02Z",
+      "completed_at": "2026-11-03T10:12:29Z",
+      "html_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/41615076291/job/125846384875",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-11-03T10:07:03Z",
+          "completed_at": "2026-11-03T10:07:03Z"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-11-03T10:07:03Z",
+          "completed_at": "2026-11-03T10:07:04Z"
+        },
+        {
+          "name": "Re-materialize frozen GBK shim bytes",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-11-03T10:07:04Z",
+          "completed_at": "2026-11-03T10:07:04Z"
+        },
+        {
+          "name": "Create artifacts directories",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-11-03T10:07:04Z",
+          "completed_at": "2026-11-03T10:07:04Z"
+        },
+        {
+          "name": "Run common package contract gates",
+          "status": "completed",
+          "conclusion": "failure",
+          "number": 5,
+          "started_at": "2026-11-03T10:07:04Z",
+          "completed_at": "2026-11-03T10:12:25Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 10,
+          "started_at": "2026-11-03T10:12:25Z",
+          "completed_at": "2026-11-03T10:12:27Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11,
+          "started_at": "2026-11-03T10:12:27Z",
+          "completed_at": "2026-11-03T10:12:27Z"
+        }
+      ],
+      "check_annotations": [
+        {
+          "path": ".github",
+          "blob_href": "https://github.com/baiyibing/OSkhQuant1.3/blob/4d421edd60c502a4a8607a0677de4a163deeeb96/.github",
+          "start_line": 2,
+          "start_column": null,
+          "end_line": 2,
+          "end_column": null,
+          "annotation_level": "warning",
+          "title": "",
+          "message": "Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/",
+          "raw_details": ""
+        },
+        {
+          "path": ".github",
+          "blob_href": "https://github.com/baiyibing/OSkhQuant1.3/blob/4d421edd60c502a4a8607a0677de4a163deeeb96/.github",
+          "start_line": 2427,
+          "start_column": null,
+          "end_line": 2427,
+          "end_column": null,
+          "annotation_level": "failure",
+          "title": "",
+          "message": "Process completed with exit code 247.",
+          "raw_details": ""
+        }
+      ]
+    },
+    {
+      "id": 125846384930,
+      "name": "Docs & PR hygiene",
+      "conclusion": "failure",
+      "runner_name": "linux-ci-02",
+      "run_attempt": 1,
+      "started_at": "2026-11-03T10:12:30Z",
+      "completed_at": "2026-11-03T10:22:30Z",
+      "html_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/41615076291/job/125846384930",
+      "steps": [],
+      "check_annotations": [
+        {
+          "path": ".github",
+          "blob_href": "https://github.com/baiyibing/OSkhQuant1.3/blob/4d421edd60c502a4a8607a0677de4a163deeeb96/.github",
+          "start_line": 1,
+          "start_column": null,
+          "end_line": 1,
+          "end_column": null,
+          "annotation_level": "failure",
+          "title": "",
+          "message": "The self-hosted runner lost communication with the server. Verify the machine is running and has a healthy network connection. Anything in your workflow that terminates the runner process, starves it for CPU/Memory, or blocks its network access can cause this error.",
+          "raw_details": ""
+        }
+      ]
+    },
+    {
+      "id": 125858967516,
+      "name": "Common package contract gates (linux)",
+      "conclusion": "failure",
+      "runner_name": "linux-ci-02",
+      "run_attempt": 2,
+      "started_at": "2026-11-03T10:26:51Z",
+      "completed_at": "2026-11-03T10:50:05Z",
+      "html_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/41615076291/job/125858967516",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-11-03T10:26:52Z",
+          "completed_at": "2026-11-03T10:26:53Z"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-11-03T10:26:53Z",
+          "completed_at": "2026-11-03T10:31:42Z"
+        },
+        {
+          "name": "Re-materialize frozen GBK shim bytes",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-11-03T10:31:42Z",
+          "completed_at": "2026-11-03T10:31:42Z"
+        },
+        {
+          "name": "Create artifacts directories",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-11-03T10:31:42Z",
+          "completed_at": "2026-11-03T10:31:43Z"
+        },
+        {
+          "name": "Run common package contract gates",
+          "status": "completed",
+          "conclusion": "failure",
+          "number": 5,
+          "started_at": "2026-11-03T10:31:43Z",
+          "completed_at": "2026-11-03T10:45:38Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "in_progress",
+          "conclusion": null,
+          "number": 10,
+          "started_at": "2026-11-03T10:45:39Z",
+          "completed_at": null
+        }
+      ],
+      "check_annotations": [
+        {
+          "path": ".github",
+          "blob_href": "https://github.com/baiyibing/OSkhQuant1.3/blob/4d421edd60c502a4a8607a0677de4a163deeeb96/.github",
+          "start_line": 1,
+          "start_column": null,
+          "end_line": 1,
+          "end_column": null,
+          "annotation_level": "failure",
+          "title": "",
+          "message": "The self-hosted runner lost communication with the server. Verify the machine is running and has a healthy network connection. Anything in your workflow that terminates the runner process, starves it for CPU/Memory, or blocks its network access can cause this error.",
+          "raw_details": ""
+        }
+      ]
+    }
+  ],
+  "confirmed_block": "Self-hosted linux-ci-02 lost communication with GitHub server; attempt2 annotation states this explicitly.",
+  "unconfirmed_root_cause": "CPU/memory/network/host cause not established. Do not assert OOM or a production defect.",
+  "recovery_attempts": "One bounded rerun of failed jobs at same source; no repeated blind reruns after host lost communication.",
+  "access_boundary": {
+    "document": "grok-bot-ops/docs/bot-vm/linux-vm-grokbot-ci.md:21",
+    "rule": "No public inbound/SSH from Windows; control via VM-owning Grok Bot/Computer session.",
+    "user_input_requested": "Restore VM runner or provide existing control entry; no messages sent to other bots."
+  },
+  "disposition": "PR1275 remains OPEN/unmerged; OP16/P02 remain OPEN pending source merge/canonical CI."
+}

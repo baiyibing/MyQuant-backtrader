@@ -1,5 +1,7 @@
 # 三仓收尾事项明细
 
+> 2026-11-03 实证增量：FullSweep934文件通过，149条历史/全部首见日期保留、0新增/持续失败；源PR#1275因Linuxrunner失联仍待合入。[报告与阻塞证据](evidence/p02-full-sweep-readout-2026-11-03/README.md)。本片仅追加implementation_ref，OP16/P02仍开放，不改写冻结64条记录。
+
 > 2026-11-03 回执增量：P14同市场输入/运行时代码16格通过，旧Slice D仍开放；P20两个issue保留。[证据与边界](evidence/p14-current-input-bridge-2026-11-03/README.md)。本片不关闭OP16/P02，也不改写冻结64条记录。
 
 > 2026-11-03 增量：当前已是四仓，旧“只拆包不拆仓/生产能力均留1.3”按[新架构边界与关闭回执](evidence/p11-p12-merged-closeout-2026-11-03/README.md)更新。P11原范围已完成，P12两片实现已合但整包仍开放；下文与64条机器记录继续保留历史快照。

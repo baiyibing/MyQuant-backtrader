@@ -1,0 +1,64 @@
+{
+  "recorded_at_utc": "2026-11-03T10:59:15.930918+00:00",
+  "package_id": "P02",
+  "audit_id": "OP16",
+  "status": "VERIFIED_FULL_SWEEP_AND_HISTORY__SOURCE_PR_BLOCKED_BY_LINUX_RUNNER",
+  "audit_item_closed": false,
+  "package_closed": false,
+  "source_pr_merged": false,
+  "full_sweep_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/41615284944",
+  "source_head": "4d421edd60c502a4a8607a0677de4a163deeeb96",
+  "source_pr_url": "https://github.com/baiyibing/OSkhQuant1.3/pull/1275",
+  "full_sweep_files": 934,
+  "full_sweep_chunks": 13,
+  "pytest_chunk_totals": {
+    "passed": 11788,
+    "failed": 0,
+    "skipped": 101,
+    "deselected": 35
+  },
+  "history_sequence": {
+    "original_loaded_entries": 134,
+    "previous_loaded_entries": 135,
+    "previous_output_entries": 149,
+    "current_loaded_entries": 149,
+    "current_output_entries": 149,
+    "all_previous_first_seen_dates_preserved": true
+  },
+  "classification": {
+    "original_clock_new": 1,
+    "previous_shm_fake_new": 14,
+    "current_new": 0,
+    "current_old": 0,
+    "previous_failures_removed": [
+      "tests/test_daqmt_shm_l2.py::test_failure_retains_slot_and_retries[commit]",
+      "tests/test_daqmt_shm_l2.py::test_failure_retains_slot_and_retries[setex]",
+      "tests/test_daqmt_shm_l2.py::test_failure_retains_slot_and_retries[xadd]",
+      "tests/test_daqmt_shm_l2.py::test_health_due_publishes_during_continuous_relay",
+      "tests/test_daqmt_shm_l2.py::test_item_order_and_ttl[cancelled-600]",
+      "tests/test_daqmt_shm_l2.py::test_item_order_and_ttl[done-600]",
+      "tests/test_daqmt_shm_l2.py::test_item_order_and_ttl[failed-600]",
+      "tests/test_daqmt_shm_l2.py::test_item_order_and_ttl[progress-86400]",
+      "tests/test_daqmt_shm_l2.py::test_item_order_and_ttl[running-86400]",
+      "tests/test_daqmt_shm_l2.py::test_no_item[[]]",
+      "tests/test_daqmt_shm_l2.py::test_no_item[bad]",
+      "tests/test_daqmt_shm_l2.py::test_no_item[{\"job_id\":\"\"}]",
+      "tests/test_daqmt_shm_l2.py::test_no_item[{\"kind\":\"mm_job\",\"job_id\":\"m\"}]",
+      "tests/test_daqmt_shm_l2.py::test_no_item[{}]"
+    ]
+  },
+  "current_all_chunks_first_attempt_pass": true,
+  "current_flaky_ledger": "Not produced by clean-run producer; no synthetic empty ledger created.",
+  "source_review": "GrokCLI explicitgrok-4.7 APPROVE; currentLinuxcanonicalCI red due runner lost communication, so do not merge.",
+  "remaining": [
+    "Restore VM runner through its Bot/Computer control; establish healthy host before another CI retry.",
+    "PR1275allcanonicalCIgreen + existingGrokAPPROVE => matching-head merge, then append OP16closeout separately.",
+    "P02Ownergovernance and M5SDK/field/paper/live conditions remain open."
+  ],
+  "limits": [
+    "FullSweep934 is exactfeature-head verification, not a claim of source merged or default-branch closure.",
+    "11788pass/101skip/35deselect do not attest physicalQMT/dataquality.",
+    "No confirmedOOM diagnosis; attempt2GitHubannotation confirms lostcommunication only.",
+    "No productionRedis, runtime cutover, trading start, QMT login, lake writes or provider promotion."
+  ]
+}
