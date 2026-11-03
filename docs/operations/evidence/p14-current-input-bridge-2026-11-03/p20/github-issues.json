@@ -1,0 +1,15 @@
+{
+  "recorded_at_utc": "2026-11-03T09:45:28.471744+00:00",
+  "issue34_current_status": {
+    "number": 34,
+    "state": "OPEN",
+    "title": "数据债：14 symbols 的 front/back 复权 parquet 缺失（ETF/指数 + 新股 + 北交所）",
+    "url": "https://github.com/baiyibing/OSkhQuant1.3/issues/34"
+  },
+  "issue37_current_status": {
+    "number": 37,
+    "state": "OPEN",
+    "title": "P1: xtdata 日线提取 orientation 不匹配——compat get_market_data 转置 vs extractor（fund_daily + daily_basic 取不到数据）",
+    "url": "https://github.com/baiyibing/OSkhQuant1.3/issues/37"
+  }
+}

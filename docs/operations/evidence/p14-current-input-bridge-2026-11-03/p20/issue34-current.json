@@ -1,0 +1,681 @@
+{
+  "schema_version": 1,
+  "observed_at_utc": "2026-11-03T09:13:16.478189+00:00",
+  "issue_url": "https://github.com/baiyibing/OSkhQuant1.3/issues/34",
+  "source_identity": "OSKH_SOURCE_PARQUET_ROOT/configured authority resolvers; absolute host paths withheld",
+  "audit_runner_sha256": "19b7327efde934ec27f4fde1b73036cef73b318509cdfa89c1a6eae8a7589f8d",
+  "resolver_source_sha256": "fa2663eace78475a5e2a5ff2b2292e1802eee8fed0d157c86e7fb619d8e77b83",
+  "authority_marker_present": true,
+  "authority_marker_sha256": "7b2ab4ce1d4c1e98dba7320915d09a56eef613d423504bc6af6c88e5d4036e16",
+  "scope": "14 legacy issue symbols resolved into current stock/index/etf daily trees; presence and nonempty row coverage only",
+  "rows": [
+    {
+      "symbol": "000300.SH",
+      "current_kind": "index",
+      "modes": {
+        "none": {
+          "partition_exists": true,
+          "files": [
+            {
+              "file": "data.parquet",
+              "rows": 6021,
+              "sha256": "d9d995fed791c8e1f914857f84c1d7bf3dc3253a8a49ead9990e7fc69c83e5e0",
+              "time_statistics_literal": [
+                {
+                  "name": "time",
+                  "min": "1010102400000",
+                  "max": "1793577600000"
+                }
+              ]
+            }
+          ],
+          "total_rows": 6021
+        },
+        "front": {
+          "partition_exists": false,
+          "files": [],
+          "total_rows": 0
+        },
+        "back": {
+          "partition_exists": false,
+          "files": [],
+          "total_rows": 0
+        }
+      }
+    },
+    {
+      "symbol": "510050.SH",
+      "current_kind": "etf",
+      "modes": {
+        "none": {
+          "partition_exists": true,
+          "files": [
+            {
+              "file": "data.parquet",
+              "rows": 5358,
+              "sha256": "63a62908026481d84f9add11ad4de679e29ff66081c249b4d64477838b9312ad",
+              "time_statistics_literal": [
+                {
+                  "name": "time",
+                  "min": "1097625600000",
+                  "max": "1793577600000"
+                }
+              ]
+            }
+          ],
+          "total_rows": 5358
+        },
+        "front": {
+          "partition_exists": true,
+          "files": [
+            {
+              "file": "data.parquet",
+              "rows": 5271,
+              "sha256": "c6d28b4c7594a04aeec0963ce7bf5873d982d4c1129d604a50a310864b574db5",
+              "time_statistics_literal": [
+                {
+                  "name": "time",
+                  "min": "1109116800000",
+                  "max": "1793577600000"
+                }
+              ]
+            }
+          ],
+          "total_rows": 5271
+        },
+        "back": {
+          "partition_exists": false,
+          "files": [],
+          "total_rows": 0
+        }
+      }
+    },
+    {
+      "symbol": "159915.SZ",
+      "current_kind": "etf",
+      "modes": {
+        "none": {
+          "partition_exists": true,
+          "files": [
+            {
+              "file": "data.parquet",
+              "rows": 1654,
+              "sha256": "a5f142890e07b3585dacb9bc7be21d99f71fcf464478ca0c596cb92032d3d678",
+              "time_statistics_literal": [
+                {
+                  "name": "time",
+                  "min": "1577923200000",
+                  "max": "1793577600000"
+                }
+              ]
+            }
+          ],
+          "total_rows": 1654
+        },
+        "front": {
+          "partition_exists": true,
+          "files": [
+            {
+              "file": "data.parquet",
+              "rows": 1654,
+              "sha256": "a5f142890e07b3585dacb9bc7be21d99f71fcf464478ca0c596cb92032d3d678",
+              "time_statistics_literal": [
+                {
+                  "name": "time",
+                  "min": "1577923200000",
+                  "max": "1793577600000"
+                }
+              ]
+            }
+          ],
+          "total_rows": 1654
+        },
+        "back": {
+          "partition_exists": false,
+          "files": [],
+          "total_rows": 0
+        }
+      }
+    },
+    {
+      "symbol": "588000.SH",
+      "current_kind": "etf",
+      "modes": {
+        "none": {
+          "partition_exists": true,
+          "files": [
+            {
+              "file": "data.parquet",
+              "rows": 5358,
+              "sha256": "ef4d61caa1ac3d28d881a38c8766e3cf167eeadb30c60db312ba0ed1822608d1",
+              "time_statistics_literal": [
+                {
+                  "name": "time",
+                  "min": "1097625600000",
+                  "max": "1793577600000"
+                }
+              ]
+            }
+          ],
+          "total_rows": 5358
+        },
+        "front": {
+          "partition_exists": true,
+          "files": [
+            {
+              "file": "data.parquet",
+              "rows": 1445,
+              "sha256": "cba2e5dee1685515aaab5d4d785e3826c11e7741399bd947a23f31728630f974",
+              "time_statistics_literal": [
+                {
+                  "name": "time",
+                  "min": "1605484800000",
+                  "max": "1793577600000"
+                }
+              ]
+            }
+          ],
+          "total_rows": 1445
+        },
+        "back": {
+          "partition_exists": false,
+          "files": [],
+          "total_rows": 0
+        }
+      }
+    },
+    {
+      "symbol": "000638.SZ",
+      "current_kind": "stock",
+      "modes": {
+        "none": {
+          "partition_exists": true,
+          "files": [
+            {
+              "file": "data.parquet",
+              "rows": 7180,
+              "sha256": "01f4546eb24a66f7ab0b374bb25e10e837fdb96ec1b22bb1feeb66852f030b40",
+              "time_statistics_literal": [
+                {
+                  "name": "time",
+                  "min": "848966400000",
+                  "max": "1783900800000"
+                }
+              ]
+            }
+          ],
+          "total_rows": 7180
+        },
+        "front": {
+          "partition_exists": true,
+          "files": [
+            {
+              "file": "data.parquet",
+              "rows": 7178,
+              "sha256": "cb1b3d478215fc316a8657b180be41262be1ef46d164930b08d21ea1dd4713cb",
+              "time_statistics_literal": [
+                {
+                  "name": "time",
+                  "min": "848966400000",
+                  "max": "1783555200000"
+                }
+              ]
+            }
+          ],
+          "total_rows": 7178
+        },
+        "back": {
+          "partition_exists": false,
+          "files": [],
+          "total_rows": 0
+        }
+      }
+    },
+    {
+      "symbol": "600421.SH",
+      "current_kind": "stock",
+      "modes": {
+        "none": {
+          "partition_exists": true,
+          "files": [
+            {
+              "file": "data.parquet",
+              "rows": 5371,
+              "sha256": "6d321eb5bb897709a76a59d303ee6d79bae8cf5cf2780f8d62a9ad46b2a85a5d",
+              "time_statistics_literal": [
+                {
+                  "name": "time",
+                  "min": "1086566400000",
+                  "max": "1783900800000"
+                }
+              ]
+            }
+          ],
+          "total_rows": 5371
+        },
+        "front": {
+          "partition_exists": true,
+          "files": [
+            {
+              "file": "data.parquet",
+              "rows": 5369,
+              "sha256": "561dfaec0f8c6a936221b379eaa31130676c0efc2e4dfc223ce238bd4322d330",
+              "time_statistics_literal": [
+                {
+                  "name": "time",
+                  "min": "1086566400000",
+                  "max": "1783555200000"
+                }
+              ]
+            }
+          ],
+          "total_rows": 5369
+        },
+        "back": {
+          "partition_exists": false,
+          "files": [],
+          "total_rows": 0
+        }
+      }
+    },
+    {
+      "symbol": "600599.SH",
+      "current_kind": "stock",
+      "modes": {
+        "none": {
+          "partition_exists": true,
+          "files": [
+            {
+              "file": "data.parquet",
+              "rows": 6032,
+              "sha256": "992de897a23c2b066f4e1a8a03f787817d2c767842ec557f0742f25c45c75cbf",
+              "time_statistics_literal": [
+                {
+                  "name": "time",
+                  "min": "998956800000",
+                  "max": "1783900800000"
+                }
+              ]
+            }
+          ],
+          "total_rows": 6032
+        },
+        "front": {
+          "partition_exists": true,
+          "files": [
+            {
+              "file": "data.parquet",
+              "rows": 6030,
+              "sha256": "c554b6c71e11756004b7a63c498b554db8c1563309713d5e9ec1713f24923dbe",
+              "time_statistics_literal": [
+                {
+                  "name": "time",
+                  "min": "998956800000",
+                  "max": "1783555200000"
+                }
+              ]
+            }
+          ],
+          "total_rows": 6030
+        },
+        "back": {
+          "partition_exists": false,
+          "files": [],
+          "total_rows": 0
+        }
+      }
+    },
+    {
+      "symbol": "600608.SH",
+      "current_kind": "stock",
+      "modes": {
+        "none": {
+          "partition_exists": true,
+          "files": [
+            {
+              "file": "data.parquet",
+              "rows": 8348,
+              "sha256": "544e41fcc0cb26db12ce43705abde6108d682f54090949aae0dd4195dd36c3e3",
+              "time_statistics_literal": [
+                {
+                  "name": "time",
+                  "min": "702864000000",
+                  "max": "1783900800000"
+                }
+              ]
+            }
+          ],
+          "total_rows": 8348
+        },
+        "front": {
+          "partition_exists": true,
+          "files": [
+            {
+              "file": "data.parquet",
+              "rows": 8346,
+              "sha256": "a2895b577c73c67d489ab66de4b2567f82b0e01ef3b328d48c0b3dd03874b341",
+              "time_statistics_literal": [
+                {
+                  "name": "time",
+                  "min": "702864000000",
+                  "max": "1783555200000"
+                }
+              ]
+            }
+          ],
+          "total_rows": 8346
+        },
+        "back": {
+          "partition_exists": false,
+          "files": [],
+          "total_rows": 0
+        }
+      }
+    },
+    {
+      "symbol": "600636.SH",
+      "current_kind": "stock",
+      "modes": {
+        "none": {
+          "partition_exists": true,
+          "files": [
+            {
+              "file": "data.parquet",
+              "rows": 8112,
+              "sha256": "89025190c553d81f1319288b842f43382e564d11c4badc89a3f98030d8aecc4c",
+              "time_statistics_literal": [
+                {
+                  "name": "time",
+                  "min": "732240000000",
+                  "max": "1783900800000"
+                }
+              ]
+            }
+          ],
+          "total_rows": 8112
+        },
+        "front": {
+          "partition_exists": true,
+          "files": [
+            {
+              "file": "data.parquet",
+              "rows": 8110,
+              "sha256": "1e7bef32f7d97eeaa96e46ca2220b2a09892a9c8b38dfdaa91c6c247c7f08f76",
+              "time_statistics_literal": [
+                {
+                  "name": "time",
+                  "min": "732240000000",
+                  "max": "1783555200000"
+                }
+              ]
+            }
+          ],
+          "total_rows": 8110
+        },
+        "back": {
+          "partition_exists": false,
+          "files": [],
+          "total_rows": 0
+        }
+      }
+    },
+    {
+      "symbol": "600696.SH",
+      "current_kind": "stock",
+      "modes": {
+        "none": {
+          "partition_exists": true,
+          "files": [
+            {
+              "file": "data.parquet",
+              "rows": 7924,
+              "sha256": "63811509e0d86e6e26c9cab19be9c04bd26dce407f7a24a007d6941d9961b096",
+              "time_statistics_literal": [
+                {
+                  "name": "time",
+                  "min": "755136000000",
+                  "max": "1783900800000"
+                }
+              ]
+            }
+          ],
+          "total_rows": 7924
+        },
+        "front": {
+          "partition_exists": true,
+          "files": [
+            {
+              "file": "data.parquet",
+              "rows": 7922,
+              "sha256": "7a54824abb04f2e600a7401bb148cacea8cc74818b5eb2b6d720bc3245bf1788",
+              "time_statistics_literal": [
+                {
+                  "name": "time",
+                  "min": "755136000000",
+                  "max": "1783555200000"
+                }
+              ]
+            }
+          ],
+          "total_rows": 7922
+        },
+        "back": {
+          "partition_exists": false,
+          "files": [],
+          "total_rows": 0
+        }
+      }
+    },
+    {
+      "symbol": "605081.SH",
+      "current_kind": "stock",
+      "modes": {
+        "none": {
+          "partition_exists": true,
+          "files": [
+            {
+              "file": "data.parquet",
+              "rows": 1311,
+              "sha256": "c2b360a4ab77edd2fcc15950c46bce70a269071b0232800260291d54922fd34b",
+              "time_statistics_literal": [
+                {
+                  "name": "time",
+                  "min": "1612828800000",
+                  "max": "1783900800000"
+                }
+              ]
+            }
+          ],
+          "total_rows": 1311
+        },
+        "front": {
+          "partition_exists": true,
+          "files": [
+            {
+              "file": "data.parquet",
+              "rows": 1309,
+              "sha256": "26e76ae812e7fa00652ae423ae03a3cdc948e752259f399635145e6b9eef9196",
+              "time_statistics_literal": [
+                {
+                  "name": "time",
+                  "min": "1612828800000",
+                  "max": "1783555200000"
+                }
+              ]
+            }
+          ],
+          "total_rows": 1309
+        },
+        "back": {
+          "partition_exists": false,
+          "files": [],
+          "total_rows": 0
+        }
+      }
+    },
+    {
+      "symbol": "688287.SH",
+      "current_kind": "stock",
+      "modes": {
+        "none": {
+          "partition_exists": true,
+          "files": [
+            {
+              "file": "data.parquet",
+              "rows": 1003,
+              "sha256": "870a3426c2cd6146d9ca37bff68564aa0f79e164fc7401651fbacb0cab1f489b",
+              "time_statistics_literal": [
+                {
+                  "name": "time",
+                  "min": "1653436800000",
+                  "max": "1783900800000"
+                }
+              ]
+            }
+          ],
+          "total_rows": 1003
+        },
+        "front": {
+          "partition_exists": true,
+          "files": [
+            {
+              "file": "data.parquet",
+              "rows": 1001,
+              "sha256": "ba7f85fd34b8dc3af1fab53158111c070f6faf1123bd880627bd48aefd8f6b5c",
+              "time_statistics_literal": [
+                {
+                  "name": "time",
+                  "min": "1653436800000",
+                  "max": "1783555200000"
+                }
+              ]
+            }
+          ],
+          "total_rows": 1001
+        },
+        "back": {
+          "partition_exists": false,
+          "files": [],
+          "total_rows": 0
+        }
+      }
+    },
+    {
+      "symbol": "920081.BJ",
+      "current_kind": "stock",
+      "modes": {
+        "none": {
+          "partition_exists": true,
+          "files": [
+            {
+              "file": "data.parquet",
+              "rows": 8754,
+              "sha256": "4213b60970f52f8baac3bd54eb92b890750cc0fe6e3ebec80d844b542584e857",
+              "time_statistics_literal": [
+                {
+                  "name": "time",
+                  "min": "661564800000",
+                  "max": "1793577600000"
+                }
+              ]
+            }
+          ],
+          "total_rows": 8754
+        },
+        "front": {
+          "partition_exists": true,
+          "files": [
+            {
+              "file": "data.parquet",
+              "rows": 83,
+              "sha256": "75159418d817361846a58609c48eb7683f6f1bdafaf82bb309a7d87ecbdd1660",
+              "time_statistics_literal": [
+                {
+                  "name": "time",
+                  "min": "1782864000000",
+                  "max": "1793577600000"
+                }
+              ]
+            }
+          ],
+          "total_rows": 83
+        },
+        "back": {
+          "partition_exists": true,
+          "files": [],
+          "total_rows": 0
+        }
+      }
+    },
+    {
+      "symbol": "920136.BJ",
+      "current_kind": "stock",
+      "modes": {
+        "none": {
+          "partition_exists": true,
+          "files": [
+            {
+              "file": "data.parquet",
+              "rows": 8754,
+              "sha256": "e33e81907a55d03d5c0630aecb347c5522d1af35b7c0571b39a6ac6be2335977",
+              "time_statistics_literal": [
+                {
+                  "name": "time",
+                  "min": "661564800000",
+                  "max": "1793577600000"
+                }
+              ]
+            }
+          ],
+          "total_rows": 8754
+        },
+        "front": {
+          "partition_exists": true,
+          "files": [
+            {
+              "file": "data.parquet",
+              "rows": 88,
+              "sha256": "f2295c70ac2858a5cf5dc2a0904580665f45dffbe5ec23ab856dfb6d26ad5dfc",
+              "time_statistics_literal": [
+                {
+                  "name": "time",
+                  "min": "1782259200000",
+                  "max": "1793577600000"
+                }
+              ]
+            }
+          ],
+          "total_rows": 88
+        },
+        "back": {
+          "partition_exists": true,
+          "files": [],
+          "total_rows": 0
+        }
+      }
+    }
+  ],
+  "stock_nonempty_missing_by_mode": {
+    "none": [],
+    "front": [],
+    "back": [
+      "000638.SZ",
+      "600421.SH",
+      "600599.SH",
+      "600608.SH",
+      "600636.SH",
+      "600696.SH",
+      "605081.SH",
+      "688287.SH",
+      "920081.BJ",
+      "920136.BJ"
+    ]
+  },
+  "selected_files_unchanged_after_read": true,
+  "selected_file_count": 27,
+  "limits": [
+    "No all-market freshness/quality, economic equivalence, adjusted-value correctness, or live-readiness attestation.",
+    "Index has only raw none in this current layout; missing index adjusted copies are not stock omissions.",
+    "Any remaining stock back coverage is retained as open data debt; no raw-to-adjusted copying or downloads."
+  ]
+}

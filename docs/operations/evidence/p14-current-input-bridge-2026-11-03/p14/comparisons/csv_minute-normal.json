@@ -1,0 +1,112 @@
+{
+  "status": "PASS",
+  "differences": [
+    {
+      "path": "run-manifest.json/artifacts/2/md5",
+      "left": "8135dea899786375b34dbc12d068117d",
+      "right": "c1135695b62f29c63c6160525d820b66",
+      "allowed": true,
+      "reason": "predeclared non-economic field"
+    },
+    {
+      "path": "run-manifest.json/artifacts/2/sha256",
+      "left": "5ddbd8ab87f665bd0e3710ac6eecb2d1e7a8a10cc67aec1cdc17201c1999a050",
+      "right": "a5f30c144332f0c192ce8a924c8a0eea8698a69c36aa4d9049443fb94d7e6fd6",
+      "allowed": true,
+      "reason": "predeclared non-economic field"
+    },
+    {
+      "path": "run-manifest.json/bytes",
+      "left": "1a0bf972471e19815c3d3063707529439e244aeca0ae40cea4cc2e38cdb18468",
+      "right": "6f7cb4179229eaf10b8a0a0850cb6bd5a9dba9d928429085e5b6c858bbfb16e1",
+      "allowed": true,
+      "reason": "raw bytes differ"
+    },
+    {
+      "path": "summary.txt/line/15",
+      "left": "  耗时: 池 0.1s | 日线 1.9s | 分钟 59.0s | 除权 1.8s | 指数闸 0.2s | 模拟 22.8s | 缓存 off | 日线缓存 hit\n",
+      "right": "  耗时: 池 0.1s | 日线 2.9s | 分钟 61.9s | 除权 1.8s | 指数闸 0.1s | 模拟 15.5s | 缓存 off | 日线缓存 hit\n",
+      "allowed": true,
+      "reason": "duration numeric captures only"
+    },
+    {
+      "path": "summary.txt/bytes",
+      "left": "5ddbd8ab87f665bd0e3710ac6eecb2d1e7a8a10cc67aec1cdc17201c1999a050",
+      "right": "a5f30c144332f0c192ce8a924c8a0eea8698a69c36aa4d9049443fb94d7e6fd6",
+      "allowed": true,
+      "reason": "raw bytes differ"
+    },
+    {
+      "path": "stdout/line/24",
+      "left": "  耗时: 池 0.1s | 日线 1.9s | 分钟 59.0s | 除权 1.8s | 指数闸 0.2s | 模拟 22.8s | 缓存 off | 日线缓存 hit\n",
+      "right": "  耗时: 池 0.1s | 日线 2.9s | 分钟 61.9s | 除权 1.8s | 指数闸 0.1s | 模拟 15.5s | 缓存 off | 日线缓存 hit\n",
+      "allowed": true,
+      "reason": "duration numeric captures only"
+    },
+    {
+      "path": "stdout/bytes",
+      "left": "6ffc611108213c24c9faa8c043f1df6bfe5edd0307e51d3ddb388b243e7ff267",
+      "right": "921a6f85c7bdb5d62a32a47bb5bd4a7b579eafc20eee63276b0f052c6e1a59b1",
+      "allowed": true,
+      "reason": "raw bytes differ"
+    }
+  ],
+  "raw": {
+    "daily_equity.csv": {
+      "left_sha256": "e7962e5f4ac38998b212b1d6be3b7e3a7f66678637238be02431bf1c93c6d2f5",
+      "right_sha256": "e7962e5f4ac38998b212b1d6be3b7e3a7f66678637238be02431bf1c93c6d2f5",
+      "byte_equal": true
+    },
+    "data-provenance.json": {
+      "left_sha256": "aafb88117f24f6be8b1b41783a52513dc4e7ed71259854dfc64d0f84107d1f51",
+      "right_sha256": "aafb88117f24f6be8b1b41783a52513dc4e7ed71259854dfc64d0f84107d1f51",
+      "byte_equal": true
+    },
+    "execution-audit.json": {
+      "left_sha256": "0591e2881c5d7f8e9b1a3cd2c66c1a91b33ba663cd3cd4b181f4bf2bdef756a1",
+      "right_sha256": "0591e2881c5d7f8e9b1a3cd2c66c1a91b33ba663cd3cd4b181f4bf2bdef756a1",
+      "byte_equal": true
+    },
+    "run-manifest.json": {
+      "left_sha256": "1a0bf972471e19815c3d3063707529439e244aeca0ae40cea4cc2e38cdb18468",
+      "right_sha256": "6f7cb4179229eaf10b8a0a0850cb6bd5a9dba9d928429085e5b6c858bbfb16e1",
+      "byte_equal": false
+    },
+    "summary.txt": {
+      "left_sha256": "5ddbd8ab87f665bd0e3710ac6eecb2d1e7a8a10cc67aec1cdc17201c1999a050",
+      "right_sha256": "a5f30c144332f0c192ce8a924c8a0eea8698a69c36aa4d9049443fb94d7e6fd6",
+      "byte_equal": false
+    },
+    "trades.csv": {
+      "left_sha256": "3ed13ce3c43c64bf8522764ae7db83c9ef8d5d5d43f26aecd709acc2ca9d0d81",
+      "right_sha256": "3ed13ce3c43c64bf8522764ae7db83c9ef8d5d5d43f26aecd709acc2ca9d0d81",
+      "byte_equal": true
+    },
+    "stdout": {
+      "left_sha256": "6ffc611108213c24c9faa8c043f1df6bfe5edd0307e51d3ddb388b243e7ff267",
+      "right_sha256": "921a6f85c7bdb5d62a32a47bb5bd4a7b579eafc20eee63276b0f052c6e1a59b1",
+      "byte_equal": false
+    },
+    "stderr": {
+      "left_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "right_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "byte_equal": true
+    }
+  },
+  "byte_identical": false,
+  "policy": {
+    "required_files": [
+      "trades.csv",
+      "daily_equity.csv",
+      "summary.txt",
+      "run-manifest.json",
+      "execution-audit.json"
+    ],
+    "allowed_json_fields": [],
+    "duration_files": [
+      "summary.txt"
+    ],
+    "duration_stdout": true,
+    "verify_manifest": true
+  }
+}
