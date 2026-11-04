@@ -103,6 +103,11 @@ def test_every_registered_book_has_main_engine_dispatch(name):
         assert callable(hooks["sell_gate"])
     elif name == "version5":
         assert hooks["force_sell_hm"] is not None
+    elif name == "stab_t1":
+        # T+1 close-exit book: classification rides on close_clear (in the
+        # special-hook list); percent stops are deliberately absent.
+        assert callable(hooks["close_clear"])
+        assert hooks["stop_pct"] is None
     else:
         assert _percent(name)
     # Special folds/absolute exits stay in test_v92_minute_fold.py,
