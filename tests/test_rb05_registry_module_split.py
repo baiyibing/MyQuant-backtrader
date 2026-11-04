@@ -41,7 +41,7 @@ FROZEN_NAMES = (
     "version8_3", "version8_4", "version8_5", "version8_6", "version9",
     "version9_2", "version9_3", "version10", "version10_1", "version10_2",
     "version11", "version12", "topk_dropout",
-    "topk_score_exit", "version9_1", "version13",
+    "topk_score_exit", "version9_1", "version13", "stab_t1",
 )
 
 
