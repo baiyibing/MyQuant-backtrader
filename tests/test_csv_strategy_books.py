@@ -105,6 +105,7 @@ def test_registered_books_are_explicit():
         "topk_score_exit",
         "version9_1",
         "version13",
+        "stab_t1",
     )
     assert get_book("version1").allow_add is False
     assert get_book("version1").peak_gap_min == 0
