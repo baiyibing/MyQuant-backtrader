@@ -1,0 +1,107 @@
+[
+  {
+    "event_id": "ca_f96c21c7e2beaf054bfccb7bd3fe5fea9d778430f6a0945e82c378c5444375f1",
+    "announcement_id": "1223633595",
+    "code": "301266.SZ",
+    "ex_date": "2025-05-30",
+    "amount_selection": [
+      {
+        "field": "cash_div_per_share",
+        "extracted_values": [
+          "0.0999998",
+          "0.100"
+        ],
+        "adjusted_values": [],
+        "original_values": [
+          "0.100"
+        ],
+        "actual_values": [],
+        "chosen": "0.1000"
+      },
+      {
+        "field": "bonus_ratio",
+        "extracted_values": [],
+        "adjusted_values": [],
+        "original_values": [],
+        "actual_values": [],
+        "chosen": null
+      },
+      {
+        "field": "transfer_ratio",
+        "extracted_values": [],
+        "adjusted_values": [],
+        "original_values": [],
+        "actual_values": [],
+        "chosen": null
+      }
+    ],
+    "before_listing_policy": {
+      "ex_date": "2025-05-30",
+      "record_date": "2025-05-29",
+      "pay_date": "2025-05-30",
+      "cash_div_per_share": "0.1",
+      "bonus_ratio": "0",
+      "transfer_ratio": "0",
+      "bonus_list_date": null,
+      "transfer_list_date": null,
+      "plan_status": "implementation"
+    },
+    "listing_policy_fields": [],
+    "adapter_zero_policy_fields": [],
+    "method": "Observational wrappers call unmodified v10 functions; result fields/status asserted unchanged"
+  },
+  {
+    "event_id": "ca_c15cf6e7f28514d4c389c6472e4808eb120d23acb168002eed8dda0b951b0ba5",
+    "announcement_id": "1225306973",
+    "code": "301266.SZ",
+    "ex_date": "2026-05-22",
+    "amount_selection": [
+      {
+        "field": "cash_div_per_share",
+        "extracted_values": [
+          "0.1999990",
+          "0.2"
+        ],
+        "adjusted_values": [],
+        "original_values": [],
+        "actual_values": [],
+        "chosen": "0.2000"
+      },
+      {
+        "field": "bonus_ratio",
+        "extracted_values": [],
+        "adjusted_values": [],
+        "original_values": [],
+        "actual_values": [],
+        "chosen": null
+      },
+      {
+        "field": "transfer_ratio",
+        "extracted_values": [
+          "0.2999985",
+          "0.3"
+        ],
+        "adjusted_values": [],
+        "original_values": [],
+        "actual_values": [],
+        "chosen": "0.3000"
+      }
+    ],
+    "before_listing_policy": {
+      "ex_date": "2026-05-22",
+      "record_date": "2026-05-21",
+      "pay_date": "2026-05-22",
+      "cash_div_per_share": "0.2",
+      "bonus_ratio": "0",
+      "transfer_ratio": "0.3",
+      "bonus_list_date": null,
+      "transfer_list_date": null,
+      "plan_status": "implementation"
+    },
+    "listing_policy_fields": [
+      "transfer_list_date"
+    ],
+    "adapter_zero_policy_fields": [],
+    "method": "Observational wrappers call unmodified v10 functions; result fields/status asserted unchanged"
+  }
+]

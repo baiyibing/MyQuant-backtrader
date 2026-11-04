@@ -11,6 +11,10 @@ docs/backtest/b-l2-01-evidence-2026-09-30/** -text
 
 # Actual lake recipe/result hashes are audited against the original host bytes.
 docs/operations/evidence/p14-native-lake-2026-11-01/** -text whitespace=cr-at-eol
+# Four-source research artifacts carry exact input/sample fingerprints.
+docs/operations/evidence/corp-actions-four-source-2026-10-30/** -text whitespace=cr-at-eol
+docs/operations/evidence/corp-actions-four-source-2026-10-30/holdout/** linguist-generated=true
+docs/operations/evidence/corp-actions-four-source-2026-10-30/query_audit/** linguist-generated=true
 
 .githooks/* text eol=lf
 scripts/install-git-hooks.sh text eol=lf

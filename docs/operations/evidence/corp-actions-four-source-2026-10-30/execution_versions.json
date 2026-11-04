@@ -1,0 +1,9 @@
+{
+  "python": "3.12.13 | packaged by Anaconda, Inc. | (main, Jul  9 2026, 14:26:47) [MSC v.1942 64 bit (AMD64)]",
+  "pymupdf": "1.28.2",
+  "requests": "2.34.2",
+  "driver_sha256": "8b81aa9a2ade348fd182c31e7b4d07f0875700084c5900f5476704d1eb87dad5",
+  "extractor_sha256": "9effaebd966749afa07bf77b4a198a8567d0a582e632a73916d52d4bce3382fb",
+  "adapter_sha256": "c18511341bbcbd4c92dcc61a50e7b6cc54484ca9f54d3010d3482950c25dd613",
+  "observation_does_not_change_extract_or_adapter_policy": true
+}

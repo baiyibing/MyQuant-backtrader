@@ -1,0 +1,213 @@
+{
+  "method": "Bounded source-text inspection, not an independently labeled full-sample accuracy test or Owner signoff",
+  "extractor_policy_changed": false,
+  "hithink_snapshot_sha256": "db19162144ca902160931a9eb9472a56e81580dc6d0f4ff4131b9647971c5a27",
+  "wind_snapshot_sha256": "6afe807a996fea68f2f34fa43344f44ca8f4254fb8580c9213bef6d443c3ba4d",
+  "cases": [
+    {
+      "code": "000551.SZ",
+      "announcement_id": "1225385031",
+      "source": {
+        "code": "000551.SZ",
+        "stratum": "SZ_MAIN",
+        "announcement_id": "1225385031",
+        "title": "2025年年度权益分派实施公告",
+        "adjunct": "finalpage/2026-06-25/1225385031.PDF",
+        "announcement_time": 1782316800000,
+        "url": "https://static.cninfo.com.cn/finalpage/2026-06-25/1225385031.PDF",
+        "fetch_at": "2026-10-30T03:11:16.653827+00:00",
+        "pages": 4,
+        "pdf_sha256": "9848dfbd94ffd6724236bc63d8e3a92d613a71f68fc2d30c15558c724c0096ad",
+        "text_sha256": "f5b6fe839adfce0c14f81c48b0fd107c7a63914cc9bb072f1d03ef37d744ce1a"
+      },
+      "observation": "PDF page 2 ends the pay-date sentence at year 2026/month 7; page 3 continues with day 3 after a repeated page header.",
+      "source_pay_date": "2026-07-03",
+      "frozen_v10_pay_date": null,
+      "disposition": "REVIEW_MISSING_PAY_DATE",
+      "classification": "verified_cross_page_parse_miss",
+      "follow_up": "Handle page headers and date continuations in a later revision; keep this run frozen and use a new holdout for rescoring."
+    },
+    {
+      "code": "000088.SZ",
+      "announcement_ids": [
+        "1220064023",
+        "1220070414"
+      ],
+      "sources": [
+        {
+          "code": "000088.SZ",
+          "stratum": "SZ_MAIN",
+          "announcement_id": "1220064023",
+          "title": "2023年度分红派息实施公告",
+          "adjunct": "finalpage/2024-05-16/1220064023.PDF",
+          "announcement_time": 1715788800000,
+          "url": "https://static.cninfo.com.cn/finalpage/2024-05-16/1220064023.PDF",
+          "fetch_at": "2026-10-30T03:10:28.077301+00:00",
+          "pages": 4,
+          "pdf_sha256": "cbd4894875156f6a81708518be9b7bd746e89c0df85ac8474a964d589f1642e6",
+          "text_sha256": "b04ccb65ebf38afbc5794fe26750b2c77f04fac112e0d3388b90b2c15967dd3b"
+        },
+        {
+          "code": "000088.SZ",
+          "stratum": "SZ_MAIN",
+          "announcement_id": "1220070414",
+          "title": "2023年年度分红派息实施的更正公告",
+          "adjunct": "finalpage/2024-05-16/1220070414.PDF",
+          "announcement_time": 1715831413000,
+          "url": "https://static.cninfo.com.cn/finalpage/2024-05-16/1220070414.PDF",
+          "fetch_at": "2026-10-30T03:10:37.369444+00:00",
+          "pages": 5,
+          "pdf_sha256": "b1b72169af137238b1fd7af082adf458bc7deb8663814432c6809d7a93070bfa",
+          "text_sha256": "9832c4dd763321398537e2c15d53cb5eccea98064ac3c51331ab48bf05aa47ce"
+        }
+      ],
+      "observation": "The original implementation notice states May 21 for payment; the explicit correction changes it to May 22 and keeps other terms unchanged.",
+      "original_pay_date": "2024-05-21",
+      "corrected_pay_date": "2024-05-22",
+      "ex_date": "2024-05-22",
+      "disposition": "BOTH_REVIEW_NO_AUTOMATIC_MERGE",
+      "classification": "verified_source_revision_chain",
+      "follow_up": "Resolve an explicit supersedes chain with source identities; a same-day sum or field stitching cannot resolve the revision."
+    },
+    {
+      "code": "300243.SZ",
+      "announcement_ids": [
+        "1220534844",
+        "1224145554"
+      ],
+      "sources": [
+        {
+          "code": "300243.SZ",
+          "stratum": "CHINEXT",
+          "announcement_id": "1220534844",
+          "title": "2023年年度权益分派实施公告",
+          "adjunct": "finalpage/2024-07-04/1220534844.PDF",
+          "announcement_time": 1720088175000,
+          "url": "https://static.cninfo.com.cn/finalpage/2024-07-04/1220534844.PDF",
+          "fetch_at": "2026-10-30T03:25:51.663456+00:00",
+          "pages": 3,
+          "pdf_sha256": "76244d5f43d69ff0c92f0499f45d1bdc0ee4c8aa68f06da00ad762586d6e7d16",
+          "text_sha256": "2ec70ac3a2951a16e951d661217af43e5bbc0915831a8cf3138a678804a76b70"
+        },
+        {
+          "code": "300243.SZ",
+          "stratum": "CHINEXT",
+          "announcement_id": "1224145554",
+          "title": "2024年年度权益分派实施公告",
+          "adjunct": "finalpage/2025-07-11/1224145554.PDF",
+          "announcement_time": 1752229350000,
+          "url": "https://static.cninfo.com.cn/finalpage/2025-07-11/1224145554.PDF",
+          "fetch_at": "2026-10-30T03:25:56.184739+00:00",
+          "pages": 3,
+          "pdf_sha256": "c66763f7f92eeacf4c7dd0f71fdfedfe40cea817f09572418bb140c8be37e9b7",
+          "text_sha256": "abf7ab5ec3e1288212a8ae2085c56858e047ecd3ebb4414598a0cacfa71dd01f"
+        }
+      ],
+      "observation": "Both implementation notices change the per-share payment after share-capital changes while keeping the total payout unchanged. Hithink equals the adjusted gross per-share payment, rather than a different price-only denominator.",
+      "adjusted_gross_cash_per_share": [
+        "0.0999985",
+        "0.0499999"
+      ],
+      "hithink_cash_per_share": [
+        "0.0999985",
+        "0.0499999"
+      ],
+      "frozen_v10_cash_per_share": [
+        "0.1",
+        "0.05"
+      ],
+      "observed_candidates": [
+        {
+          "original": "0.100",
+          "adjusted": "0.0999985",
+          "chosen": "0.1000"
+        },
+        {
+          "original": "0.050",
+          "adjusted": "0.0499999",
+          "chosen": "0.0500"
+        }
+      ],
+      "disposition": "BOTH_ACCEPTED_BY_FROZEN_V10_NO_POLICY_CHANGE",
+      "classification": "verified_precision_loss_under_approved_round4_policy",
+      "follow_up": "Keep the current approved comparison policy for this run; propose separate preservation of exact adjusted/actual source values and comparison tolerance in a later reviewed revision. CNINFO extraction is not independent ground truth."
+    },
+    {
+      "code": "600989.SH",
+      "announcement_id": "1225136155",
+      "source": {
+        "code": "600989.SH",
+        "stratum": "SH_MAIN",
+        "announcement_id": "1225136155",
+        "title": "宁夏宝丰能源集团股份有限公司2025年度末期权益分派实施公告",
+        "adjunct": "finalpage/2026-04-22/1225136155.PDF",
+        "announcement_time": 1776787200000,
+        "url": "https://static.cninfo.com.cn/finalpage/2026-04-22/1225136155.PDF",
+        "fetch_at": "2026-10-30T03:50:47.255194+00:00",
+        "pages": 4,
+        "pdf_sha256": "8ebf1cd4b3dcb2f36ad60ffc5307f32faf43c16ab3f4f580d8b6e3bbef5d6c9b",
+        "text_sha256": "7d418af5fad66317be422196fc7cb2fab919040f26512e8a72ed977bbec9e465"
+      },
+      "observation": "The notice explicitly distinguishes minority holders at 0.4921/share from major holders at 0.3906/share. Its 0.42/share is the virtual payout for the ex-price formula. Frozen Wind has separate 0.4921 and 0.3906 rows; the audit's day sum 0.8827 is not any holder's per-share entitlement.",
+      "minority_cash_per_share": "0.4921",
+      "majority_cash_per_share": "0.3906",
+      "price_reference_virtual_cash": "0.42",
+      "wind_daily_sum_diagnostic": "0.8827",
+      "wind_class_rows": [
+        {
+          "code": "600989.SH",
+          "event_id": "600989.SH_20260428_1",
+          "ex_date": "2026-04-28",
+          "record_date": "2026-04-27",
+          "pay_date": "2026-04-28",
+          "cash_div_per_share": "0.4921",
+          "bonus_ratio": "",
+          "transfer_ratio": "",
+          "bonus_list_date": "",
+          "source": "wind:wind_get_stock_events"
+        },
+        {
+          "code": "600989.SH",
+          "event_id": "600989.SH_20260428_2",
+          "ex_date": "2026-04-28",
+          "record_date": "2026-04-27",
+          "pay_date": "2026-04-28",
+          "cash_div_per_share": "0.3906",
+          "bonus_ratio": "",
+          "transfer_ratio": "",
+          "bonus_list_date": "",
+          "source": "wind:wind_get_stock_events"
+        }
+      ],
+      "frozen_v10_cash": "0.4921",
+      "classification": "verified_holder_classes_make_day_sum_non_entitlement",
+      "follow_up": "Preserve source row identities and verified holder applicability in evidence. The historical daily-sum parity gate remains a diagnostic and cannot authorize economics."
+    },
+    {
+      "code": "920018.BJ",
+      "announcement_id": "1225331866",
+      "source": {
+        "code": "920018.BJ",
+        "stratum": "BJ",
+        "announcement_id": "1225331866",
+        "title": "2025年年度权益分派实施公告",
+        "adjunct": "finalpage/2026-05-26/1225331866.PDF",
+        "announcement_time": 1779724800000,
+        "url": "https://static.cninfo.com.cn/finalpage/2026-05-26/1225331866.PDF",
+        "fetch_at": "2026-10-30T04:14:17.798676+00:00",
+        "pages": 3,
+        "pdf_sha256": "4105181793282910c993f9997820927c0dfc243cd8b23624eaa758b42a957fb6",
+        "text_sha256": "57f891c3e7e46ae165df90605854cdf9550d5c33dde6a77158ed563721f78238"
+      },
+      "observation": "The notice uses the label 权益登记日 with an explicit June 1 date, and states a cash scheme without an explicit gross marker in that clause. Frozen v10 leaves record_date and cash unknown and rejects the document.",
+      "source_record_date": "2026-06-01",
+      "source_ex_date": "2026-06-02",
+      "source_pay_date": "2026-06-02",
+      "frozen_v10_record_date": null,
+      "classification": "verified_bj_template_and_gross_basis_coverage_gap",
+      "follow_up": "Review BJ labels, gross-payment evidence and share-leg component scopes in a later revision; do not invent missing fields or silently broaden approved policies."
+    }
+  ],
+  "owner_signature": null,
+  "lake_write_authorized": false
+}

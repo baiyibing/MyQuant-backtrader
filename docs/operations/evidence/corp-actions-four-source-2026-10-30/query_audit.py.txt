@@ -1,0 +1,93 @@
+"""Audit frozen query responses; never change the collector or issuer mapping."""
+
+from collections import Counter, defaultdict
+import csv
+import hashlib
+import json
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+RAW = HERE / "bt_corp_actions_cninfo_backup_20261030"
+OUT = HERE / "results/query_audit"
+OUT.mkdir(exist_ok=True)
+org = {row["code"]: row["orgId"] for row in json.loads((HERE / "orgmap.json").read_text(encoding="utf-8"))["stockList"]}
+cache = json.loads((RAW / "cache_index.json").read_text(encoding="utf-8"))
+schemas, mismatches, summaries = [], {}, defaultdict(Counter)
+pages = Counter()
+errors = []
+for path in sorted((RAW / "raw_query").glob("*.json")):
+    sec, keyword, page = path.stem.split("_")
+    raw_bytes = path.read_bytes()
+    sha = hashlib.sha256(raw_bytes).hexdigest()
+    assert cache[str(path.relative_to(RAW))] == sha
+    data = json.loads(raw_bytes)
+    items = data.get("announcements")
+    total, more = data.get("totalAnnouncement"), data.get("hasMore")
+    issues = []
+    if type(total) is not int or total < 0:
+        issues.append("invalid_total")
+    if type(more) is not bool:
+        issues.append("invalid_hasMore")
+    if items is None:
+        items = []
+        if total != 0:
+            issues.append("null_items_nonzero_total")
+    if not isinstance(items, list):
+        issues.append("invalid_items")
+        items = []
+    if isinstance(total, int) and total < len(items):
+        issues.append("total_lt_page_items")
+    if more is True and not items:
+        issues.append("empty_nonterminal_page")
+    if page == "01" and more is False and total != len(items):
+        issues.append("terminal_first_page_total_mismatch")
+    exact = 0
+    for item in items:
+        if item.get("secCode") == sec:
+            exact += 1
+        else:
+            key = sec, str(item.get("secCode")), str(item.get("announcementId"))
+            record = dict(requested_code=sec, returned_code=item.get("secCode"),
+                          requested_org_id=org.get(sec), returned_org_id=item.get("orgId"),
+                          same_org_id=org.get(sec) == item.get("orgId"),
+                          announcement_id=item.get("announcementId"),
+                          announcement_title=item.get("announcementTitle"),
+                          adjunct=item.get("adjunctUrl"),
+                          collector_disposition="EXCLUDED_EXACT_SEC_CODE_FILTER",
+                          alias_policy_applied=False)
+            if key in mismatches:
+                assert mismatches[key] == record
+            mismatches[key] = record
+    schemas.append(dict(query_file=path.name, sha256=sha, requested_code=sec, keyword_index=keyword,
+                        page=page, total_announcement=total, page_items=len(items),
+                        has_more=more, exact_issuer_items=exact, other_code_items=len(items)-exact,
+                        schema_issues="|".join(issues)))
+    summaries[sec]["response_pages"] += 1
+    summaries[sec]["response_items"] += len(items)
+    summaries[sec]["exact_issuer_items"] += exact
+    summaries[sec]["other_code_items"] += len(items)-exact
+    summaries[sec]["schema_issue_pages"] += bool(issues)
+    pages[(sec, keyword)] += 1
+    if issues:
+        errors.append(dict(query_file=path.name, issues=issues))
+
+def csv_out(name, rows):
+    if not rows:
+        return
+    with (OUT / name).open("w", encoding="utf-8", newline="") as stream:
+        writer = csv.DictWriter(stream, fieldnames=list(rows[0]), lineterminator="\n")
+        writer.writeheader()
+        writer.writerows(rows)
+
+csv_out("query_pages.csv", schemas)
+csv_out("issuer_code_mismatches.csv", list(mismatches.values()))
+csv_out("issuer_summary.csv", [dict(code=key, **value) for key, value in sorted(summaries.items())])
+report = dict(query_pages=len(schemas), schema_issue_pages=len(errors), schema_issues=errors,
+              other_code_item_occurrences=sum(row["other_code_items"] for row in schemas),
+              distinct_other_code_documents=len(mismatches),
+              requested_codes_with_mismatches=sorted({row["requested_code"] for row in mismatches.values()}),
+              distinct_mismatches_same_org=sum(row["same_org_id"] for row in mismatches.values()),
+              alias_policy_applied=False, collector_changed=False,
+              caveat="Same orgId is an identity diagnostic, not an approved cross-code security mapping.")
+(OUT / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2)+"\n", encoding="utf-8")
+print(json.dumps(report, ensure_ascii=False, indent=2))

@@ -1,0 +1,64 @@
+{
+  "observed_at": "2026-10-30T03:25:20.635132+00:00",
+  "host": "DESKTOP-M5HCFD6",
+  "configured_source_root": "E:\\stock_data",
+  "authority_marker": {
+    "relative_path": ".authority",
+    "sha256": "7b2ab4ce1d4c1e98dba7320915d09a56eef613d423504bc6af6c88e5d4036e16",
+    "content": "oskh-path-ssot-authority=1\n",
+    "bom": false,
+    "nul_count": 0
+  },
+  "qmt_snapshot_sha256": "f19177339468ac43372d4298e9d08db9742d5c9e4aacde7afec042e5e522c601",
+  "qmt_current_sha256": "f19177339468ac43372d4298e9d08db9742d5c9e4aacde7afec042e5e522c601",
+  "current_equals_frozen_snapshot": true,
+  "sidecar_inventory_from_prior_observation": {
+    "adj_factor.parquet": {
+      "rows": 18063722,
+      "schema": "date: date32[day]\nstock_code: string\nclose_front: double\nclose_none: double\ncumulative_adj_factor: double\nadj_factor_back: double",
+      "date": {
+        "min": "1990-12-19",
+        "max": "2026-10-15"
+      },
+      "distinct_codes": 5605
+    },
+    "ex_date_index.parquet": {
+      "rows": 58179,
+      "schema": "stock_code: string\nex_date: string\ndr: double\nfetched_at: string\n-- schema metadata --\npandas: '{\"index_columns\": [], \"column_indexes\": [], \"columns\": [{\"name\":' + 552",
+      "ex_date": {
+        "min": "19910311",
+        "max": "20261015"
+      },
+      "fetched_at": {
+        "min": "2026-07-09T15:49:59.098143+00:00",
+        "max": "2026-10-15T07:43:15.804691+00:00"
+      },
+      "distinct_codes": 5462
+    },
+    "float_shares.parquet": {
+      "rows": 5583,
+      "schema": "stock_code: string\nFloatVolume: double\nTotalVolume: double\nname: string\nupdated_at: string\n-- schema metadata --\npandas: '{\"index_columns\": [], \"column_indexes\": [], \"columns\": [{\"name\":' + 687",
+      "updated_at": {
+        "min": "2026-09-26T05:45:20.570779+00:00",
+        "max": "2026-09-26T05:45:20.570779+00:00"
+      },
+      "distinct_codes": 5583
+    },
+    "free_float_shares.parquet": {
+      "rows": 385130,
+      "schema": "stock_code: string\nm_timetag: timestamp[ns]\nfreeFloatCapital: double\ncirculating_capital: double\nrestrict_circulating_capital: double\ntotal_capital: double\n-- schema metadata --\npandas: '{\"index_columns\": [], \"column_indexes\": [], \"columns\": [{\"name\":' + 878",
+      "m_timetag": {
+        "min": "2001-01-05 00:00:00",
+        "max": "2026-05-30 00:00:00"
+      },
+      "distinct_codes": 5522
+    },
+    "vendor_qmt_winner_chips.parquet": {
+      "rows": 39084,
+      "schema": "stock_code: string\ntrade_date: string\nwinner_ratio: double\nref_price: double\nperiod: string\nsource: string\npulled_at_utc: string\nclient_ver: string\n-- schema metadata --\npandas: '{\"index_columns\": [], \"column_indexes\": [], \"columns\": [{\"name\":' + 1047",
+      "distinct_codes": 5560
+    }
+  },
+  "lake_write_performed": false,
+  "marker_proves_freshness_or_cross_host_sync": false
+}

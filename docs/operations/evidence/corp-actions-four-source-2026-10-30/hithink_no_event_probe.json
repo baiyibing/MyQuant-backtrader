@@ -1,0 +1,364 @@
+[
+  {
+    "code": "001239.SZ",
+    "kind": "directory",
+    "path": "/api/meta/tickers/search",
+    "params": {
+      "q": "001239.SZ",
+      "asset_type": "a-share",
+      "limit": 50
+    },
+    "http_status": 200,
+    "response": {
+      "code": 0,
+      "message": "success",
+      "data": {
+        "timestamp": 1793250021086,
+        "item": [
+          {
+            "thscode": "001239.SZ",
+            "ticker": "001239",
+            "name": "永达股份",
+            "exchange": "SZ",
+            "asset_type": "a-share",
+            "currency": "CNY",
+            "list_date": "2023-12-12",
+            "end_date": null,
+            "last_trade_date": null,
+            "last_delivery_date": null
+          }
+        ]
+      },
+      "request_id": "c6a0b3317cb045e3b5fe05874f8b2610"
+    }
+  },
+  {
+    "code": "001239.SZ",
+    "kind": "events",
+    "path": "/api/a-share/corporate-actions/adjustment-factors",
+    "params": {
+      "thscode": "001239.SZ"
+    },
+    "http_status": 200,
+    "response": {
+      "code": 3002,
+      "message": "No adjustment events for thscode=001239.SZ",
+      "data": null,
+      "request_id": "3b3ab2bf267848628d7e01d4207d383e"
+    }
+  },
+  {
+    "code": "001330.SZ",
+    "kind": "directory",
+    "path": "/api/meta/tickers/search",
+    "params": {
+      "q": "001330.SZ",
+      "asset_type": "a-share",
+      "limit": 50
+    },
+    "http_status": 200,
+    "response": {
+      "code": 0,
+      "message": "success",
+      "data": {
+        "timestamp": 1793250021086,
+        "item": [
+          {
+            "thscode": "001330.SZ",
+            "ticker": "001330",
+            "name": "博纳影业",
+            "exchange": "SZ",
+            "asset_type": "a-share",
+            "currency": "CNY",
+            "list_date": "2022-08-18",
+            "end_date": null,
+            "last_trade_date": null,
+            "last_delivery_date": null
+          }
+        ]
+      },
+      "request_id": "04fc0bb0deca414a81f4a478db25bab8"
+    }
+  },
+  {
+    "code": "001330.SZ",
+    "kind": "events",
+    "path": "/api/a-share/corporate-actions/adjustment-factors",
+    "params": {
+      "thscode": "001330.SZ"
+    },
+    "http_status": 200,
+    "response": {
+      "code": 3002,
+      "message": "No adjustment events for thscode=001330.SZ",
+      "data": null,
+      "request_id": "99d57cf74c1b4c428c234bce199f37b9"
+    }
+  },
+  {
+    "code": "301292.SZ",
+    "kind": "directory",
+    "path": "/api/meta/tickers/search",
+    "params": {
+      "q": "301292.SZ",
+      "asset_type": "a-share",
+      "limit": 50
+    },
+    "http_status": 200,
+    "response": {
+      "code": 0,
+      "message": "success",
+      "data": {
+        "timestamp": 1793250021086,
+        "item": [
+          {
+            "thscode": "301292.SZ",
+            "ticker": "301292",
+            "name": "海科新源",
+            "exchange": "SZ",
+            "asset_type": "a-share",
+            "currency": "CNY",
+            "list_date": "2023-07-07",
+            "end_date": null,
+            "last_trade_date": null,
+            "last_delivery_date": null
+          }
+        ]
+      },
+      "request_id": "01b322ef3b354a2fbd5c88ea6e207822"
+    }
+  },
+  {
+    "code": "301292.SZ",
+    "kind": "events",
+    "path": "/api/a-share/corporate-actions/adjustment-factors",
+    "params": {
+      "thscode": "301292.SZ"
+    },
+    "http_status": 200,
+    "response": {
+      "code": 3002,
+      "message": "No adjustment events for thscode=301292.SZ",
+      "data": null,
+      "request_id": "431644683e6341ea836c84bb3192b5c8"
+    }
+  },
+  {
+    "code": "301565.SZ",
+    "kind": "directory",
+    "path": "/api/meta/tickers/search",
+    "params": {
+      "q": "301565.SZ",
+      "asset_type": "a-share",
+      "limit": 50
+    },
+    "error": "URLError"
+  },
+  {
+    "code": "301565.SZ",
+    "kind": "events",
+    "path": "/api/a-share/corporate-actions/adjustment-factors",
+    "params": {
+      "thscode": "301565.SZ"
+    },
+    "http_status": 200,
+    "response": {
+      "code": 3002,
+      "message": "No adjustment events for thscode=301565.SZ",
+      "data": null,
+      "request_id": "c88f8d9d4c1d414fb464a71e80290db1"
+    }
+  },
+  {
+    "code": "601399.SH",
+    "kind": "directory",
+    "path": "/api/meta/tickers/search",
+    "params": {
+      "q": "601399.SH",
+      "asset_type": "a-share",
+      "limit": 50
+    },
+    "http_status": 200,
+    "response": {
+      "code": 0,
+      "message": "success",
+      "data": {
+        "timestamp": 1793250021086,
+        "item": [
+          {
+            "thscode": "601399.SH",
+            "ticker": "601399",
+            "name": "国机重装",
+            "exchange": "SH",
+            "asset_type": "a-share",
+            "currency": "CNY",
+            "list_date": "2020-06-08",
+            "end_date": null,
+            "last_trade_date": null,
+            "last_delivery_date": null
+          }
+        ]
+      },
+      "request_id": "105dfcb4ea2b4cd483815a3423564c68"
+    }
+  },
+  {
+    "code": "601399.SH",
+    "kind": "events",
+    "path": "/api/a-share/corporate-actions/adjustment-factors",
+    "params": {
+      "thscode": "601399.SH"
+    },
+    "http_status": 200,
+    "response": {
+      "code": 3002,
+      "message": "No adjustment events for thscode=601399.SH",
+      "data": null,
+      "request_id": "4c78fb75630f406a9e4cfba76a4051eb"
+    }
+  },
+  {
+    "code": "688062.SH",
+    "kind": "directory",
+    "path": "/api/meta/tickers/search",
+    "params": {
+      "q": "688062.SH",
+      "asset_type": "a-share",
+      "limit": 50
+    },
+    "http_status": 200,
+    "response": {
+      "code": 0,
+      "message": "success",
+      "data": {
+        "timestamp": 1793250021086,
+        "item": [
+          {
+            "thscode": "688062.SH",
+            "ticker": "688062",
+            "name": "迈威生物-U",
+            "exchange": "SH",
+            "asset_type": "a-share",
+            "currency": "CNY",
+            "list_date": "2022-01-18",
+            "end_date": null,
+            "last_trade_date": null,
+            "last_delivery_date": null
+          }
+        ]
+      },
+      "request_id": "8f83587538334e9ab4ea29ddf6358da6"
+    }
+  },
+  {
+    "code": "688062.SH",
+    "kind": "events",
+    "path": "/api/a-share/corporate-actions/adjustment-factors",
+    "params": {
+      "thscode": "688062.SH"
+    },
+    "http_status": 200,
+    "response": {
+      "code": 3002,
+      "message": "No adjustment events for thscode=688062.SH",
+      "data": null,
+      "request_id": "fea99fc8c9b546fb81d6d6768a8fe03c"
+    }
+  },
+  {
+    "code": "688221.SH",
+    "kind": "directory",
+    "path": "/api/meta/tickers/search",
+    "params": {
+      "q": "688221.SH",
+      "asset_type": "a-share",
+      "limit": 50
+    },
+    "http_status": 200,
+    "response": {
+      "code": 0,
+      "message": "success",
+      "data": {
+        "timestamp": 1793250021241,
+        "item": [
+          {
+            "thscode": "688221.SH",
+            "ticker": "688221",
+            "name": "前沿生物-U",
+            "exchange": "SH",
+            "asset_type": "a-share",
+            "currency": "CNY",
+            "list_date": "2020-10-28",
+            "end_date": null,
+            "last_trade_date": null,
+            "last_delivery_date": null
+          }
+        ]
+      },
+      "request_id": "6837f44cafca41c287bc2beb854e0e15"
+    }
+  },
+  {
+    "code": "688221.SH",
+    "kind": "events",
+    "path": "/api/a-share/corporate-actions/adjustment-factors",
+    "params": {
+      "thscode": "688221.SH"
+    },
+    "http_status": 200,
+    "response": {
+      "code": 3002,
+      "message": "No adjustment events for thscode=688221.SH",
+      "data": null,
+      "request_id": "8624e8d2759147c6850265da238ff124"
+    }
+  },
+  {
+    "code": "688382.SH",
+    "kind": "directory",
+    "path": "/api/meta/tickers/search",
+    "params": {
+      "q": "688382.SH",
+      "asset_type": "a-share",
+      "limit": 50
+    },
+    "http_status": 200,
+    "response": {
+      "code": 0,
+      "message": "success",
+      "data": {
+        "timestamp": 1793250021241,
+        "item": [
+          {
+            "thscode": "688382.SH",
+            "ticker": "688382",
+            "name": "益方生物-U",
+            "exchange": "SH",
+            "asset_type": "a-share",
+            "currency": "CNY",
+            "list_date": "2022-07-25",
+            "end_date": null,
+            "last_trade_date": null,
+            "last_delivery_date": null
+          }
+        ]
+      },
+      "request_id": "0695cef0ef3a461b9881ac442773ef2c"
+    }
+  },
+  {
+    "code": "688382.SH",
+    "kind": "events",
+    "path": "/api/a-share/corporate-actions/adjustment-factors",
+    "params": {
+      "thscode": "688382.SH"
+    },
+    "http_status": 200,
+    "response": {
+      "code": 3002,
+      "message": "No adjustment events for thscode=688382.SH",
+      "data": null,
+      "request_id": "358d57b3eda140e3b8a108230e3d9f14"
+    }
+  }
+]
