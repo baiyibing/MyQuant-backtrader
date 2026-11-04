@@ -1,0 +1,303 @@
+{
+  "schema_version": 1,
+  "recorded_at_utc": "2026-11-02T03:15:27.592886+00:00",
+  "package_id": "P02",
+  "package_closed": false,
+  "pr": {
+    "headRefOid": "a24f2f4a38f7924d8d091fd8b21db96cd49ade26",
+    "mergeCommit": null,
+    "mergedAt": null,
+    "state": "OPEN",
+    "statusCheckRollup": [
+      {
+        "__typename": "CheckRun",
+        "completedAt": "0001-01-01T00:00:00Z",
+        "conclusion": "",
+        "detailsUrl": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/41382012949/job/125074731424",
+        "name": "Common package contract gates (windows)",
+        "startedAt": "2026-11-02T03:14:57Z",
+        "status": "QUEUED",
+        "workflowName": "Common Package Contract Gates"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "0001-01-01T00:00:00Z",
+        "conclusion": "",
+        "detailsUrl": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/41382012990/job/125074658660",
+        "name": "Python syntax (AST)",
+        "startedAt": "2026-11-02T03:14:42Z",
+        "status": "QUEUED",
+        "workflowName": "Linux CI Fast Lane"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "0001-01-01T00:00:00Z",
+        "conclusion": "",
+        "detailsUrl": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/41382012921/job/125074658071",
+        "name": "Pyright (pyrightconfig.json)",
+        "startedAt": "2026-11-02T03:14:41Z",
+        "status": "QUEUED",
+        "workflowName": "Release Infra Contract Gates"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "0001-01-01T00:00:00Z",
+        "conclusion": "",
+        "detailsUrl": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/41382012949/job/125074731285",
+        "name": "Cash ledger module coverage floor (windows)",
+        "startedAt": "2026-11-02T03:14:57Z",
+        "status": "QUEUED",
+        "workflowName": "Common Package Contract Gates"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "0001-01-01T00:00:00Z",
+        "conclusion": "",
+        "detailsUrl": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/41382012990/job/125074658599",
+        "name": "Import smoke (no xtquant)",
+        "startedAt": "2026-11-02T03:14:42Z",
+        "status": "QUEUED",
+        "workflowName": "Linux CI Fast Lane"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "0001-01-01T00:00:00Z",
+        "conclusion": "",
+        "detailsUrl": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/41382012921/job/125074658004",
+        "name": "Common Infra Go/No-Go Gate / gate",
+        "startedAt": "2026-11-02T03:15:00Z",
+        "status": "IN_PROGRESS",
+        "workflowName": "Release Infra Contract Gates"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "0001-01-01T00:00:00Z",
+        "conclusion": "",
+        "detailsUrl": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/41382012949/job/125074731327",
+        "name": "Executor mixin_order module coverage floor (windows)",
+        "startedAt": "2026-11-02T03:14:57Z",
+        "status": "QUEUED",
+        "workflowName": "Common Package Contract Gates"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "0001-01-01T00:00:00Z",
+        "conclusion": "",
+        "detailsUrl": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/41382012990/job/125074658657",
+        "name": "turnover_resist Python tests",
+        "startedAt": "2026-11-02T03:14:42Z",
+        "status": "QUEUED",
+        "workflowName": "Linux CI Fast Lane"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "0001-01-01T00:00:00Z",
+        "conclusion": "",
+        "detailsUrl": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/41382012921/job/125074657963",
+        "name": "Stream order + fallback + capital contract pytest / gate",
+        "startedAt": "2026-11-02T03:14:44Z",
+        "status": "IN_PROGRESS",
+        "workflowName": "Release Infra Contract Gates"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "0001-01-01T00:00:00Z",
+        "conclusion": "",
+        "detailsUrl": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/41382012949/job/125074730983",
+        "name": "position_manager module coverage floor (windows)",
+        "startedAt": "2026-11-02T03:14:57Z",
+        "status": "QUEUED",
+        "workflowName": "Common Package Contract Gates"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "0001-01-01T00:00:00Z",
+        "conclusion": "",
+        "detailsUrl": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/41382012990/job/125074658582",
+        "name": "Common package contract gates (linux)",
+        "startedAt": "2026-11-02T03:14:42Z",
+        "status": "QUEUED",
+        "workflowName": "Linux CI Fast Lane"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "0001-01-01T00:00:00Z",
+        "conclusion": "",
+        "detailsUrl": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/41382012921/job/125074657712",
+        "name": "Chapter9 Infra Gate / gate",
+        "startedAt": "2026-11-02T03:14:44Z",
+        "status": "IN_PROGRESS",
+        "workflowName": "Release Infra Contract Gates"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-02T03:14:57Z",
+        "conclusion": "SKIPPED",
+        "detailsUrl": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/41382012949/job/125074732383",
+        "name": "Trading core coverage (informational)",
+        "startedAt": "2026-11-02T03:14:57Z",
+        "status": "COMPLETED",
+        "workflowName": "Common Package Contract Gates"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-02T03:15:09Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/41382012990/job/125074658333",
+        "name": "QMT connect guard (bootstrap-only)",
+        "startedAt": "2026-11-02T03:14:46Z",
+        "status": "COMPLETED",
+        "workflowName": "Linux CI Fast Lane"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "0001-01-01T00:00:00Z",
+        "conclusion": "",
+        "detailsUrl": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/41382012949/job/125074731292",
+        "name": "Frontend gates (build + typecheck + npm audit)",
+        "startedAt": "2026-11-02T03:14:57Z",
+        "status": "QUEUED",
+        "workflowName": "Common Package Contract Gates"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "0001-01-01T00:00:00Z",
+        "conclusion": "",
+        "detailsUrl": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/41382012990/job/125074658529",
+        "name": "Pyright (Linux, core packages)",
+        "startedAt": "2026-11-02T03:15:14Z",
+        "status": "IN_PROGRESS",
+        "workflowName": "Linux CI Fast Lane"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "0001-01-01T00:00:00Z",
+        "conclusion": "",
+        "detailsUrl": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/41382012990/job/125074658749",
+        "name": "Gitleaks",
+        "startedAt": "2026-11-02T03:14:42Z",
+        "status": "QUEUED",
+        "workflowName": "Linux CI Fast Lane"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "0001-01-01T00:00:00Z",
+        "conclusion": "",
+        "detailsUrl": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/41382012990/job/125074658810",
+        "name": "Settlement SELECT baseline",
+        "startedAt": "2026-11-02T03:14:42Z",
+        "status": "QUEUED",
+        "workflowName": "Linux CI Fast Lane"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "0001-01-01T00:00:00Z",
+        "conclusion": "",
+        "detailsUrl": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/41382012990/job/125074658729",
+        "name": "Docs & PR hygiene",
+        "startedAt": "2026-11-02T03:14:42Z",
+        "status": "QUEUED",
+        "workflowName": "Linux CI Fast Lane"
+      }
+    ],
+    "url": "https://github.com/baiyibing/OSkhQuant1.3/pull/1269"
+  },
+  "merge_receipt": {
+    "recorded_at_utc": "2026-11-02T03:15:28.893507+00:00",
+    "repo": "baiyibing/OSkhQuant1.3",
+    "pr": "1269",
+    "expected_head": "a24f2f4a38f7924d8d091fd8b21db96cd49ade26",
+    "status": "WAITING",
+    "package_closed": false,
+    "acceptable_checks": 2,
+    "total_checks": 19
+  },
+  "observed_pre_fix_nightly": [
+    {
+      "run_id": "41329476600",
+      "url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/41329476600",
+      "head": "4e1d43a9b8625b67ce83ba1292c63b9166dd68d2",
+      "history_loaded": true,
+      "history_entries": 134,
+      "files": 929,
+      "chunks": 13,
+      "failures": [
+        "tests/test_preflight_ledger_freshness.py::test_09_ci_static_skips[False]",
+        "tests/test_stack_lease_clean_stop_integration.py::test_bound_unsupported_holds_with_consumers_alive"
+      ],
+      "new_failures": [],
+      "old_failures": [
+        {
+          "test": "tests/test_preflight_ledger_freshness.py::test_09_ci_static_skips[False]",
+          "days": 1
+        },
+        {
+          "test": "tests/test_stack_lease_clean_stop_integration.py::test_bound_unsupported_holds_with_consumers_alive",
+          "days": 1
+        }
+      ],
+      "workflow_conclusion": "failure",
+      "report_sha256": "d3251d3680c645be91162c5c27c8f31dd88d49d3a684adbf0abbe824273d0642"
+    },
+    {
+      "run_id": "41355972995",
+      "url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/41355972995",
+      "head": "4e1d43a9b8625b67ce83ba1292c63b9166dd68d2",
+      "history_loaded": true,
+      "history_entries": 134,
+      "files": 929,
+      "chunks": 13,
+      "failures": [
+        "tests/test_preflight_ledger_freshness.py::test_09_ci_static_skips[False]"
+      ],
+      "new_failures": [],
+      "old_failures": [
+        {
+          "test": "tests/test_preflight_ledger_freshness.py::test_09_ci_static_skips[False]",
+          "days": 1
+        }
+      ],
+      "workflow_conclusion": "failure",
+      "report_sha256": "e507f4d3fd2b04146e3e4074c82047b325c5174670e1038ea1418273d4128d1f"
+    }
+  ],
+  "implementation_review": {
+    "head": "e256b5ee7a7288626f830f449ef7838d6b14f9d4",
+    "decision": "APPROVE",
+    "reviewed_code_identical_to_final_pr_head": true,
+    "url": "https://github.com/baiyibing/OSkhQuant1.3/blob/a24f2f4a38f7924d8d091fd8b21db96cd49ade26/docs/run-records/evidence/p02-nightly-residuals-2026-11-02/p02-post-repair-implementation-review.json"
+  },
+  "local_validation": {
+    "passed": 77,
+    "skipped": 4,
+    "skip_reason": "actual Windows symlink privilege winerror=1314",
+    "common_bundle_files": 190,
+    "pyright_errors": 0
+  },
+  "p05_readonly_precheck": {
+    "date_used_for_diagnosis_only": "20261102",
+    "exit_code": 1,
+    "source": "1.3 owned isolated worktree at implementation e256b5ee; private inactive paper candidate config",
+    "summary": {
+      "pass": 16,
+      "fail": 5,
+      "warn": 1
+    },
+    "artifact": "p05-input-precheck.json",
+    "trading_started": false,
+    "limits": "No Redis lease or QMT connection, no pool/slot approval, no deployment code update. Config existence does not prove service health or runtime authorization."
+  },
+  "limits": [
+    "Historical clean-stop timing trigger is not independently proven.",
+    "Newest pre-fix nightly has one persisting/zero new failure; intermittent disappearance is not acceptance.",
+    "Await the actual post-merge full workflow including post-sweep steps.",
+    "Nine DATA_REQUIRED market-data cases, P05 runtime/signoff and Owner protection remain open.",
+    "P06/P21 stay deferred."
+  ],
+  "post_merge_nightly_observer": {
+    "recorded_at_utc": "2026-11-02T03:15:27.565790+00:00",
+    "stage": "WAITING_FOR_MERGE_WORKER",
+    "package_id": "P02",
+    "package_closed": false
+  }
+}

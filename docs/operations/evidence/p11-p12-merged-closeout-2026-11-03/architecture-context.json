@@ -1,0 +1,18 @@
+{
+  "recorded_at_utc": "2026-11-03T08:04:36.220261+00:00",
+  "repo_count": 4,
+  "repositories": [
+    "OSkhQuant1.3",
+    "MyQuant",
+    "MyQuant-backtrader",
+    "MyQuant-infra"
+  ],
+  "user_direction": "User explicitly added MyQuant-infra; old three-repo no-new-repository direction is a historical snapshot.",
+  "infra_observed_main": "30e07fd430a797f11950727115832eefcc49a1a3",
+  "source_urls": [
+    "https://github.com/baiyibing/MyQuant-infra/blob/30e07fd430a797f11950727115832eefcc49a1a3/README.md",
+    "https://github.com/baiyibing/MyQuant-infra/blob/30e07fd430a797f11950727115832eefcc49a1a3/docs/architecture/boundary.md"
+  ],
+  "boundary": "Infra migration follows its own boundary.1.3 keeps trading,shim,broker/dljob stream ownership andP0outbox; PDF parsing remains1.3.",
+  "cutover_or_host_signoff": "NOT_ATTESTED; ported packages and dual-run are not production cutover evidence."
+}

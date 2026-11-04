@@ -1,0 +1,18 @@
+{
+  "cli": "Claude Code CLI 2.1.317",
+  "configured_models": [
+    "glm-5.3[1m]"
+  ],
+  "provider_note": "Local Claude CLI routes to GLM-5.3; not an Anthropic-model review.",
+  "session_id": "2e9aa45f-5ce4-4584-872f-072635ebec71",
+  "raw_log_sha256": "de8072e0409b03112f62df2daa61abf560fc91fc61fc99c588c8372c881df123",
+  "verdict_text": "**APPROVE**\n\nReviewer identity, as requested: GLM-5.3 via local Claude Code CLI (not an Anthropic model), consistent with the README's P15 disclosure practice.\n\n**Verified consistent (no tools, commit content only):**\n\n- **P14 arithmetic**: csv_minute sides 292+207+85 = 584 = trade_rows; reason counts sum 584, NaN 85 = EOD_MARK 85. v7 sides 216+374+23 = 613; reasons sum 613, skip_limit_up 216 = SKIP, buy reasons 257+70+26+14+7 = 374 = BUY, stop reasons 9+3+2+8+1 = 23 = SELL. Byte-equality shown for all 3 normal-cell file pairs in both profiles.\n- **P15**: 250,158 rows ≈ 6 × ~173 trading days × 241 bars — plausible; single frame digest across miss/hit/mem; README's 214.75/225.27 MiB conversions of 225,181,696/236,212,224 bytes are correct; miss < hit < mem ordering and loader-status labels are coherent; 5575 explicitly marked as FD projection example, not measured.\n- **P03**: 11 specs = 11 readouts; 001381 flagged REVIEW (4 nonpositive prices, 1 zero volume) and 512390 NO_TARGET (stale 10/15) preserved as sentinels; zero_volume deliberately not a REVIEW trigger, matching the stated limit; per-file/authority sha before=after enforced.\n- **Scope discipline**: every risky claim is affirmatively disclaimed — no economic truth, old Slice D comparison kept open, no combined industry/legacy same-source matrix, no full-market/shard/S1–S3 admission, OS page cache not evicted (no cold-IO claim), no coverage/vendor/other-host signoff, P11 PR OPEN not merged. Sanitization (raw vs publication hashes) disclosed. Scripts genuinely pin code identity per phase (including workers), keep outputs outside code/lake roots, and the OHLC relation check is the correct high≥max(open,low,close) / low≤min(open,high,close) form with nonfinite handled separately.\n\n**Non-blocking follow-ups (not overclaims, traceability only):**\n\n1. `p14/acceptance.json` freezes byte-equality evidence for only the 2 normal cells; the 6 low_cash/invalid_config/bad_output cells rest on the status string plus `validation.json`'s \"8/8 PASS, low cash refusal verified\" (invalid_config/bad_output outcomes not individually described). Future receipt should archive a per-cell outcome/error-signature array.\n2. `economic_artifacts` key `csv_minute` vs README's `version8` requires inference; add an explicit `profile` label field next time.",
+  "reviewed_commit": "ce45c05288148240d94d7f2308f7cfed75c9d0d4",
+  "mode": "tools disabled; fixed inline source/evidence bundle",
+  "bundle_sha256": "e2db5b3b4191da8549624ccc0acda8fac889106761ae4b432535e19e3324695e",
+  "operator_clarifications": [
+    "Reviewer text reverses the time inequality: actual numeric ordering is miss2.520 > hit0.234 > mem0.117 seconds. Published data unchanged.",
+    "Reviewer says both profiles when checking normal byte equality; current evidence has two entry families in legacy profile, not two same-input profiles.",
+    "All8 per-cell statuses, native exits and comparison receipts are already published in p14/result.json and p14/comparisons; reviewer inline bundle included their verified operator summary."
+  ]
+}

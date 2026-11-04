@@ -78,3 +78,32 @@ F8 enabled no-monolithic-partial rewriting remain required.
 S2 codeset owns its own reconciliation and parking-code audit. S3 Arrow
 requires a separate GO/PR and the existing frame contract; no mmap. No P1
 infra, P2 DB/sqlite, CI allowlist changes, cleanup script or lake changes.
+
+## 2026-11-01 本机实测补充（P15 未关闭）
+
+原实现环境缺湖的记录保留。现已在 `DESKTOP-M5HCFD6` 的配置湖上，原样执行上文
+两股、`20251227..20260914` 的示例两次。原生探针及 loader 与已合提交
+`3197ffa6310e3704f0fc4d24d18e295bb27f2c1b` 同树；无代码、行情或运行缓存写入。
+[脱离宿主路径的测量摘要](../operations/evidence/p15-host-samples-2026-11-01/readout.json)
+记录脚本/loader blob、原始报告 hash、两轮 source identity 和具体数值；原始宿主 JSON
+仍保存在忽略的审计目录，不复制入仓。
+
+| 轮次 / 股票 | 行数 | 打开均值 ms | 全窗一次扫描 s | 逐月 / 一次扫描 | 打开 / 扫描 |
+|---|---:|---:|---:|---:|---:|
+| 1 / 600000.SH | 49164 | 0.365 | 0.4112 | 0.997 | 0.089% |
+| 1 / 600036.SH | 49164 | 1.257 | 0.3717 | 1.092 | 0.338% |
+| 2 / 600000.SH | 49164 | 0.427 | 0.3956 | 1.037 | 0.108% |
+| 2 / 600036.SH | 49164 | 0.335 | 0.3339 | 1.243 | 0.100% |
+
+每轮一趟与十个月分别读取的 frame 精确一致，源 size/mtime 与 G2 identity 前后稳定。
+这组样本中的打开开销不到扫描耗时的 0.4%，不足以支持“打开小文件主导”的假设；
+它也不能代表全市场请求成本。`5575 × 10 = 55750` 仅沿用示例的文件数外推，
+不是最新宇宙统计或实际并发句柄数；探针始终串行只持有一个 Parquet 句柄。
+
+OS 页缓存没有清除，两个扫描路径的顺序固定，因此这不是冷缓存吞吐验收。
+分片粒度仍待代表性请求、受控冷/暖读写成本及实际 append/repair 重建计数；
+S1 默认关闭实现、S2、S3 均未由本片推进，P15 保持开放。
+
+## 2026-11-03 单体缓存命中路径补测
+
+在原两股探针之后补六股、250,158 行样本：独立进程私有缓存 miss 2.520s，独立进程 hit 0.234s，同进程 mem 0.117s；三者帧摘要一致。见[运行回执](../operations/evidence/consumer-host-2026-11-03/p15/acceptance.json)与[环境配方](../operations/evidence/consumer-host-2026-11-03/p15/recipe.json)。OS page cache 未清空，这些有序测量不是冷 IO 或全市场预算。没有 shard 实现/真实重建计数，不据此裁定粒度或关闭 P15。

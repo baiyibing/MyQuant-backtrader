@@ -1,0 +1,109 @@
+{
+  "schema_version": 1,
+  "stamp": "20261103T0959Z",
+  "files": 934,
+  "chunks": 13,
+  "elapsed_sec": 2725.7,
+  "chunk_rows": [
+    {
+      "name": "chunk_00",
+      "files": 75,
+      "rc": 0,
+      "attempts": 1,
+      "summary": "846 passed, 4 skipped, 10 warnings in 181.43s (0:03:01)"
+    },
+    {
+      "name": "chunk_01",
+      "files": 75,
+      "rc": 0,
+      "attempts": 1,
+      "summary": "1198 passed, 64 skipped, 1 warning in 222.10s (0:03:42)"
+    },
+    {
+      "name": "chunk_02",
+      "files": 75,
+      "rc": 0,
+      "attempts": 1,
+      "summary": "702 passed, 9 skipped, 1 deselected, 18 warnings in 134.61s (0:02:14)"
+    },
+    {
+      "name": "chunk_03",
+      "files": 75,
+      "rc": 0,
+      "attempts": 1,
+      "summary": "752 passed, 1 warning in 163.18s (0:02:43)"
+    },
+    {
+      "name": "chunk_04",
+      "files": 75,
+      "rc": 0,
+      "attempts": 1,
+      "summary": "628 passed, 1 warning in 167.16s (0:02:47)"
+    },
+    {
+      "name": "chunk_05",
+      "files": 75,
+      "rc": 0,
+      "attempts": 1,
+      "summary": "1025 passed, 2 skipped, 1 warning in 266.04s (0:04:26)"
+    },
+    {
+      "name": "chunk_06",
+      "files": 75,
+      "rc": 0,
+      "attempts": 1,
+      "summary": "1177 passed, 12 skipped, 26 deselected, 20 warnings in 274.11s (0:04:34)"
+    },
+    {
+      "name": "chunk_07",
+      "files": 75,
+      "rc": 0,
+      "attempts": 1,
+      "summary": "1123 passed, 2 skipped, 8 warnings in 185.09s (0:03:05)"
+    },
+    {
+      "name": "chunk_08",
+      "files": 75,
+      "rc": 0,
+      "attempts": 1,
+      "summary": "737 passed, 4 skipped, 8 deselected, 4 warnings, 2 subtests passed in 272.80s (0:04:32)"
+    },
+    {
+      "name": "chunk_09",
+      "files": 75,
+      "rc": 0,
+      "attempts": 1,
+      "summary": "1052 passed, 1 skipped, 4 warnings in 168.92s (0:02:48)"
+    },
+    {
+      "name": "chunk_10",
+      "files": 75,
+      "rc": 0,
+      "attempts": 1,
+      "summary": "768 passed, 2 skipped, 1 warning in 115.97s (0:01:55)"
+    },
+    {
+      "name": "chunk_11",
+      "files": 75,
+      "rc": 0,
+      "attempts": 1,
+      "summary": "1438 passed, 1 skipped, 1 warning in 472.69s (0:07:52)"
+    },
+    {
+      "name": "chunk_12",
+      "files": 34,
+      "rc": 0,
+      "attempts": 1,
+      "summary": "342 passed, 24 warnings in 63.68s (0:01:03)"
+    }
+  ],
+  "failures": [],
+  "new_failures": [],
+  "old_failures": [],
+  "history_loaded": true,
+  "history_entries": 149,
+  "history_path": "$CI/artifacts/test_logs/full_sweep_history.json",
+  "report": "full_sweep_20261103T0959Z.md",
+  "github_sha": "4d421edd60c502a4a8607a0677de4a163deeeb96",
+  "github_run_id": "41615284944"
+}

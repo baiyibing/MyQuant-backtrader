@@ -1,0 +1,37 @@
+{
+  "headRefOid": "9f894adff64bcb35212f7a5759cf42ddc7150b2d",
+  "state": "OPEN",
+  "statusCheckRollup": [
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-03T04:47:43Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/baiyibing/MyQuant/actions/runs/41580138648/job/125732784638",
+      "name": "data-staging",
+      "startedAt": "2026-11-03T04:47:25Z",
+      "status": "COMPLETED",
+      "workflowName": "ci"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-03T04:47:58Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/baiyibing/MyQuant/actions/runs/41580138648/job/125732784547",
+      "name": "joint-return",
+      "startedAt": "2026-11-03T04:47:25Z",
+      "status": "COMPLETED",
+      "workflowName": "ci"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-03T04:49:44Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/baiyibing/MyQuant/actions/runs/41580138648/job/125732784410",
+      "name": "pytest",
+      "startedAt": "2026-11-03T04:47:25Z",
+      "status": "COMPLETED",
+      "workflowName": "ci"
+    }
+  ],
+  "url": "https://github.com/baiyibing/MyQuant/pull/114"
+}

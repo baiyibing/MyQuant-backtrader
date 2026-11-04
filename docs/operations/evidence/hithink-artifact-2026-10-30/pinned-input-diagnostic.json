@@ -1,0 +1,25 @@
+{
+  "raw_rows": 57700,
+  "negative_historical_rows": [
+    {
+      "code": "000887.SZ",
+      "ex_date": "2007-03-30",
+      "bonus": "-0.67335"
+    },
+    {
+      "code": "600381.SH",
+      "ex_date": "2014-06-27",
+      "bonus": "-0.87581"
+    }
+  ],
+  "frozen_fact_keys": 46,
+  "exact_decimal_fact_keys": 47,
+  "additional_unapproved_fact": {
+    "code": "300708.SZ",
+    "ex_date": "2020-06-02",
+    "field": "cash",
+    "wind_value": "0.0199",
+    "hithink_value": "0.02"
+  },
+  "note": "Offline diagnostic over pinned inputs; not a committed production artifact or a successful full run."
+}

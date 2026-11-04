@@ -1,0 +1,12 @@
+{
+  "byte_domain": "Git-published UTF-8 LF bytes; excludes this manifest",
+  "files": {
+    "docs/operations/evidence/p12-ql10-path-isolation-2026-11-03/acceptance.json": "6cbf7b711c5bf687e536b1744edc710b670743bf8aba44848a753050850ebeaa",
+    "docs/operations/evidence/p12-ql10-path-isolation-2026-11-03/github-facts.json": "3afdd36779760291a071b51131a3fd509d2933831e0a601924c905de14a440bf",
+    "docs/operations/evidence/p12-ql10-path-isolation-2026-11-03/implementation-review.json": "793b20c178e77b62f6df0db4d85d304a094356efe3664c80514d51b7b68cda00",
+    "docs/operations/evidence/p12-ql10-path-isolation-2026-11-03/linux-link-coverage.json": "0cd00d010b8e87a70e0b332029ebf9511a3ff522275a56b26b7e7e8bf06f2188",
+    "docs/operations/evidence/p12-ql10-path-isolation-2026-11-03/README.md": "13ded3bc7ff3584976612cf2e6b46686716922eb91f15160a7c9ceb60a5ea54d",
+    "docs/operations/evidence/p12-ql10-path-isolation-2026-11-03/source-references.json": "830d3f49ba8ae44fa1436aea8c70107affb1ef3d1e7f484083e4a1158b86436a",
+    "docs/operations/evidence/p12-ql10-path-isolation-2026-11-03/validation.json": "05986b528374ed41eb9f268cef8851aac30a54db4285c375b0ce8a7ab5bd75e5"
+  }
+}

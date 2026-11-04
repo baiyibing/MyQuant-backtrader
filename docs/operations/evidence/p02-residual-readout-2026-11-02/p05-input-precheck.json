@@ -1,0 +1,122 @@
+{
+  "config": "<configured>",
+  "trading_date": "20261102",
+  "checks": [
+    {
+      "name": "launch_working_directory",
+      "status": "PASS",
+      "reason": "deployment paths absolute or cwd matches the paper launcher"
+    },
+    {
+      "name": "trading_type_paper",
+      "status": "PASS",
+      "reason": "TRADING_TYPE=paper"
+    },
+    {
+      "name": "v653_paper_go",
+      "status": "PASS",
+      "reason": "OSKH_V653_PAPER_GO armed for paper"
+    },
+    {
+      "name": "locked_switches_false",
+      "status": "PASS",
+      "reason": "parking/profit-skim execute and D3 after-fix cycle all explicit false"
+    },
+    {
+      "name": "locked_defaults_false",
+      "status": "PASS",
+      "reason": "strategy_config defaults keep D3 and EXECUTE switches false"
+    },
+    {
+      "name": "identity_static_checks",
+      "status": "PASS",
+      "reason": "preflight inspect_config static checks clean"
+    },
+    {
+      "name": "trading_date_valid",
+      "status": "PASS",
+      "reason": "trading date is YYYYMMDD"
+    },
+    {
+      "name": "trading_date_session",
+      "status": "PASS",
+      "reason": "local SSE reference: target session and 11 completed sessions available"
+    },
+    {
+      "name": "index_source_b_input",
+      "status": "FAIL",
+      "reason": "source B completed sessions are missing or duplicated"
+    },
+    {
+      "name": "day_slot_gate",
+      "status": "FAIL",
+      "reason": "day-slot gate rejected: day_slot_missing"
+    },
+    {
+      "name": "turtle_slot_claim",
+      "status": "FAIL",
+      "reason": "active slot unset or unreadable; cannot rule out a turtle claim"
+    },
+    {
+      "name": "turtle_slot_scan_scope",
+      "status": "WARN",
+      "reason": "read-only scope: only OSKH_ACTIVE_DAY_SLOT_PATH is checked; other deployments' slot files are not scanned"
+    },
+    {
+      "name": "value_ACCOUNT_ID",
+      "status": "PASS",
+      "reason": "set (value not shown)"
+    },
+    {
+      "name": "executor_accounts_binding",
+      "status": "PASS",
+      "reason": "bound to stream key v653 on the configured account (value not shown)"
+    },
+    {
+      "name": "account_ids_consistent",
+      "status": "PASS",
+      "reason": "ACCOUNT_ID and DEFAULT_ACCOUNT_ID agree (values not shown)"
+    },
+    {
+      "name": "secret_REDIS_URL",
+      "status": "PASS",
+      "reason": "set (credential; value/hash/length never shown)"
+    },
+    {
+      "name": "path_QMT_USERDATA_PATH",
+      "status": "PASS",
+      "reason": "exists: yes"
+    },
+    {
+      "name": "path_EXEC_DB_PATH",
+      "status": "PASS",
+      "reason": "exists: yes"
+    },
+    {
+      "name": "path_V653_OPEN_POOL_APPROVAL_PATH",
+      "status": "FAIL",
+      "reason": "missing; point at the deployment-approved pool JSON"
+    },
+    {
+      "name": "approved_pool_artifact",
+      "status": "FAIL",
+      "reason": "valid approval JSON and target date required before artifact validation"
+    },
+    {
+      "name": "env_MINIQMT_CONFIG_PATH",
+      "status": "PASS",
+      "reason": "exists: yes"
+    },
+    {
+      "name": "env_OSKH_MERGE_PYTHON",
+      "status": "PASS",
+      "reason": "exists: yes"
+    }
+  ],
+  "summary": {
+    "pass": 16,
+    "fail": 5,
+    "warn": 1
+  },
+  "result": "FAIL"
+}

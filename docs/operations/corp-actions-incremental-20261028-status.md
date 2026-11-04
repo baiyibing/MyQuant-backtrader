@@ -1,5 +1,9 @@
 # corp-actions 增量更新执行状态 — 2026-10-28
 
+## 2026-10-29 C0：CNINFO backup 规划指针
+
+[CNINFO backup incremental plan](corp-actions-cninfo-backup-incremental-plan-20261029.md) 仅冻结独立 outdir、MVP / sandbox 资产、阻塞项与 Wind 恢复路径；是 docs-only 备份计划，不修复 Wind 401。Wind/Kimi 仍为可用时的 primary，CNINFO 不自动升主，不覆盖 Wind 湖；C1+ 须单独 Human GO。
+
 ## 当前数据情况
 
 ### 基础库（已完成，已备份）

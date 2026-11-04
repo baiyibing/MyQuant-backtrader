@@ -1,0 +1,18 @@
+{
+  "dump_rows": 57709,
+  "dump_sha256": "668ad6cacd8972f6991995c7625d545393e01d3de76cc5d8c2c6a90254991ad3",
+  "negative_rows": [
+    {
+      "code": "000887.SZ",
+      "ex_date": "2007-03-30",
+      "per_share_bonus": -0.67335
+    },
+    {
+      "code": "600381.SH",
+      "ex_date": "2014-06-27",
+      "per_share_bonus": -0.87581
+    }
+  ],
+  "export_exit_code": 2,
+  "committed": false
+}

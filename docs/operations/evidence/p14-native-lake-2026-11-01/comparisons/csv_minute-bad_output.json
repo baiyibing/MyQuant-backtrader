@@ -1,0 +1,41 @@
+{
+  "status": "PASS",
+  "differences": [
+    {
+      "path": "stdout/line/24",
+      "left": "  耗时: 池 0.0s | 日线 0.4s | 分钟 15.4s | 除权 0.6s | 指数闸 0.0s | 模拟 3.6s | 缓存 off | 日线缓存 hit\n",
+      "right": "  耗时: 池 0.0s | 日线 0.4s | 分钟 14.3s | 除权 0.7s | 指数闸 0.0s | 模拟 3.8s | 缓存 off | 日线缓存 hit\n",
+      "allowed": true,
+      "reason": "duration numeric captures only"
+    },
+    {
+      "path": "stdout/bytes",
+      "left": "b125a6ad52eaa2a52c96da9a6a5856725255ae42665b8001b70a4023b9d1262a",
+      "right": "364d57e397dee34ee97c7d9fc467c9780a8a4629b77ffe0546998136368731c6",
+      "allowed": true,
+      "reason": "raw bytes differ"
+    }
+  ],
+  "raw": {
+    "stdout": {
+      "left_sha256": "b125a6ad52eaa2a52c96da9a6a5856725255ae42665b8001b70a4023b9d1262a",
+      "right_sha256": "364d57e397dee34ee97c7d9fc467c9780a8a4629b77ffe0546998136368731c6",
+      "byte_equal": false
+    },
+    "stderr": {
+      "left_sha256": "a6c685be68e57e56dc40eeb0692ea7dc387815f29b46e0697ff77a2ac7a777e2",
+      "right_sha256": "a6c685be68e57e56dc40eeb0692ea7dc387815f29b46e0697ff77a2ac7a777e2",
+      "byte_equal": true
+    }
+  },
+  "byte_identical": false,
+  "policy": {
+    "required_files": [],
+    "allowed_json_fields": [],
+    "duration_files": [
+      "summary.txt"
+    ],
+    "duration_stdout": true,
+    "verify_manifest": false
+  }
+}

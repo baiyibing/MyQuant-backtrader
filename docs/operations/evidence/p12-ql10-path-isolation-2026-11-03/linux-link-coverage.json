@@ -1,0 +1,43 @@
+{
+  "head": "1f7688a5508f74fa506226f5367da9e1cf507a95",
+  "job": 125932940900,
+  "method": "Align all561 remote pytest progress markers with collection at identical head; count and static collection order checked. Nodeids normalized to repo-relative paths. Skips map to one absent-universe test and three Windows-only cases; all three symlink sink cases map to PASS.",
+  "progress_markers": ".........................................................................................................................................................................s................................................................................................................................................................................................................................................sss....................................................................................................................................................",
+  "collected_nodeids_sha256": "a4c4897d48023f9453be019438fc259e59101753d82d422107eff077fbd5aba1",
+  "skip_nodes": [
+    {
+      "index0": 169,
+      "nodeid": "my_tests/test_m3d_industry_source_ready.py::test_shsz_coverage_if_universe_present"
+    },
+    {
+      "index0": 410,
+      "nodeid": "my_tests/test_refresh_path_isolation.py::test_windows_case_aliases_are_rejected_at_every_sink[validate]"
+    },
+    {
+      "index0": 411,
+      "nodeid": "my_tests/test_refresh_path_isolation.py::test_windows_case_aliases_are_rejected_at_every_sink[wipe]"
+    },
+    {
+      "index0": 412,
+      "nodeid": "my_tests/test_refresh_path_isolation.py::test_windows_case_aliases_are_rejected_at_every_sink[swap]"
+    }
+  ],
+  "symlink_nodes": [
+    {
+      "index0": 405,
+      "nodeid": "my_tests/test_refresh_path_isolation.py::test_resolved_directory_aliases_are_rejected_at_every_sink[validate]",
+      "marker": "."
+    },
+    {
+      "index0": 406,
+      "nodeid": "my_tests/test_refresh_path_isolation.py::test_resolved_directory_aliases_are_rejected_at_every_sink[wipe]",
+      "marker": "."
+    },
+    {
+      "index0": 407,
+      "nodeid": "my_tests/test_refresh_path_isolation.py::test_resolved_directory_aliases_are_rejected_at_every_sink[swap]",
+      "marker": "."
+    }
+  ],
+  "result": "PASS"
+}

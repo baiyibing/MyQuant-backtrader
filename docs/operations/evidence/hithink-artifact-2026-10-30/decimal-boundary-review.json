@@ -1,0 +1,42 @@
+{
+  "previous_config_sha256": "ecedbf198917f5449dac06d560f90e4cf43248ecced4ed6f34df744a45a5973a",
+  "previous_count": 46,
+  "current_count": 47,
+  "new_key": {
+    "code": "300708.SZ",
+    "ex_date": "2020-06-02",
+    "field": "cash",
+    "wind_value": "0.0199",
+    "hithink_value": "0.02"
+  },
+  "wind_sha256": "6afe807a996fea68f2f34fa43344f44ca8f4254fb8580c9213bef6d443c3ba4d",
+  "hithink_sha256": "db19162144ca902160931a9eb9472a56e81580dc6d0f4ff4131b9647971c5a27",
+  "wind_original_rows": [
+    {
+      "code": "300708.SZ",
+      "event_id": "300708.SZ_20200602_1",
+      "ex_date": "2020-06-02",
+      "record_date": "2020-06-01",
+      "pay_date": "2020-06-02",
+      "cash_div_per_share": "0.0199",
+      "bonus_ratio": "",
+      "transfer_ratio": "",
+      "bonus_list_date": "",
+      "source": "wind:wind_get_stock_events"
+    }
+  ],
+  "hithink_original_rows": [
+    {
+      "thscode": "300708.SZ",
+      "ticker": "300708",
+      "ex_date_ms": 1591027200000,
+      "dividend_per_share": 0.02,
+      "per_share_bonus": 0.0,
+      "allotment_ratio": 0.0,
+      "allotment_price": 0.0,
+      "currency": "CNY"
+    }
+  ],
+  "decimal_absolute_delta": ".0001",
+  "economic_approval": false
+}

@@ -1,0 +1,164 @@
+{
+  "format_version": 1,
+  "requested_window": {
+    "start": "2026-10-07",
+    "end": "2026-10-28"
+  },
+  "automatic_coverage_release": false,
+  "facts": [
+    {
+      "code": "001239.SZ",
+      "fiscal_period": "2026-H1",
+      "document_kind": "half_year_report",
+      "finding": "No cash distribution, bonus shares or capital-reserve conversion planned for this fiscal period.",
+      "source": {
+        "url": "https://static.cninfo.com.cn/finalpage/2026-08-27/1225507963.PDF",
+        "sha256": "cb9b412c5076b1e0b94641c35e67e6e85fa40e62079f028c0c3da1a00c049c19",
+        "retrieved_at": "2026-10-30T07:23:47.102990+00:00"
+      },
+      "pdf_pages_one_based": [
+        2,
+        26
+      ],
+      "window_no_event_proven": false,
+      "approved": false,
+      "limitation": "A fiscal-period proposal does not establish absence of all ex-dates or other corporate actions throughout the requested October window."
+    },
+    {
+      "code": "001330.SZ",
+      "fiscal_period": "2026-H1",
+      "document_kind": "half_year_report_summary",
+      "finding": "No cash distribution, bonus shares or capital-reserve conversion planned for this fiscal period.",
+      "source": {
+        "url": "https://static.cninfo.com.cn/finalpage/2026-08-26/1225507075.PDF",
+        "sha256": "ece8b0d65121c40cc0db8b03254d90f45b516f060bb7a1532f628a4cb87b6633",
+        "retrieved_at": "2026-10-30T07:23:52.072390+00:00"
+      },
+      "pdf_pages_one_based": [
+        2
+      ],
+      "window_no_event_proven": false,
+      "approved": false,
+      "limitation": "A fiscal-period proposal does not establish absence of all ex-dates or other corporate actions throughout the requested October window."
+    },
+    {
+      "code": "301292.SZ",
+      "fiscal_period": "2026-H1",
+      "document_kind": "half_year_report_summary",
+      "finding": "No cash distribution, bonus shares or capital-reserve conversion planned for this fiscal period.",
+      "source": {
+        "url": "https://static.cninfo.com.cn/finalpage/2026-08-27/1225508048.PDF",
+        "sha256": "955ab3e19a586279a91e328c7c945df03d61215818e31d81060ecc8b72fc64af",
+        "retrieved_at": "2026-10-30T07:23:54.661429+00:00"
+      },
+      "pdf_pages_one_based": [
+        2
+      ],
+      "window_no_event_proven": false,
+      "approved": false,
+      "limitation": "A fiscal-period proposal does not establish absence of all ex-dates or other corporate actions throughout the requested October window."
+    },
+    {
+      "code": "301565.SZ",
+      "fiscal_period": "2026-H1",
+      "document_kind": "half_year_report",
+      "finding": "No cash distribution, bonus shares or capital-reserve conversion planned for this fiscal period.",
+      "source": {
+        "url": "https://static.cninfo.com.cn/finalpage/2026-08-25/1225495577.PDF",
+        "sha256": "e4e0b31dad2bf2ce1eab58b8b0c589db90525b3c6375e6dd483e3cc8a92d668c",
+        "retrieved_at": "2026-10-30T07:24:11.983975+00:00"
+      },
+      "pdf_pages_one_based": [
+        2,
+        37
+      ],
+      "window_no_event_proven": false,
+      "approved": false,
+      "limitation": "A fiscal-period proposal does not establish absence of all ex-dates or other corporate actions throughout the requested October window."
+    },
+    {
+      "code": "601399.SH",
+      "fiscal_period": "2026-H1",
+      "document_kind": "half_year_report",
+      "finding": "No cash distribution, bonus shares or capital-reserve conversion planned for this fiscal period.",
+      "source": {
+        "url": "https://static.cninfo.com.cn/finalpage/2026-08-29/1225527328.PDF",
+        "sha256": "e02abdc8d23825e6bf3c1a708d644ded5bc6b2cb80db9a784d3a11cfb00a0211",
+        "retrieved_at": "2026-10-30T07:24:58.475707+00:00"
+      },
+      "pdf_pages_one_based": [
+        2,
+        17
+      ],
+      "window_no_event_proven": false,
+      "approved": false,
+      "limitation": "A fiscal-period proposal does not establish absence of all ex-dates or other corporate actions throughout the requested October window."
+    },
+    {
+      "code": "688062.SH",
+      "fiscal_period": "2026-H1",
+      "document_kind": "half_year_report_summary",
+      "finding": "No half-year distribution or capital-reserve conversion proposal in this report.",
+      "source": {
+        "url": "https://static.cninfo.com.cn/finalpage/2026-08-31/1225534748.PDF",
+        "sha256": "8f681b9aa46b26c85dcdf1666130ffcba6a6fdd87df86654451daae1a03420d0",
+        "retrieved_at": "2026-10-30T07:25:05.706156+00:00"
+      },
+      "pdf_pages_one_based": [
+        4
+      ],
+      "window_no_event_proven": false,
+      "approved": false,
+      "limitation": "A fiscal-period proposal does not establish absence of all ex-dates or other corporate actions throughout the requested October window."
+    },
+    {
+      "code": "688221.SH",
+      "fiscal_period": "2025-FY",
+      "document_kind": "annual_distribution_proposal_pending_shareholder_vote",
+      "finding": "No cash distribution, bonus shares or capital-reserve conversion planned for this fiscal period.",
+      "source": {
+        "url": "https://static.cninfo.com.cn/finalpage/2026-04-25/1225186461.PDF",
+        "sha256": "0e132a7583c7a76f97509b538befb341d7b1b265bb2acbbbe8aa4addbaae2d77",
+        "retrieved_at": "2026-10-30T07:25:09.783247+00:00"
+      },
+      "pdf_pages_one_based": [
+        1,
+        2
+      ],
+      "window_no_event_proven": false,
+      "approved": false,
+      "limitation": "A fiscal-period proposal does not establish absence of all ex-dates or other corporate actions throughout the requested October window."
+    },
+    {
+      "code": "688382.SH",
+      "fiscal_period": "2025-FY",
+      "document_kind": "annual_shareholder_meeting_agenda_proposal",
+      "finding": "No cash distribution, bonus shares or capital-reserve conversion planned for this fiscal period.",
+      "source": {
+        "url": "https://big5.sse.com.cn/site/cht/www.sse.com.cn/disclosure/listedinfo/announcement/c/new/2026-06-12/688382_20260612_BJXL.pdf",
+        "sha256": "beb454ce901f0996dafe6a20d6e4436e4636ffa0b9e940fa450e9bc5e4bb6d7f",
+        "retrieved_at": "2026-10-30T07:25:19.896388+00:00"
+      },
+      "pdf_pages_one_based": [
+        10
+      ],
+      "window_no_event_proven": false,
+      "approved": false,
+      "limitation": "A fiscal-period proposal does not establish absence of all ex-dates or other corporate actions throughout the requested October window."
+    }
+  ],
+  "rejected_evidence": [
+    {
+      "kind": "hithink_business_code_3002",
+      "reason": "Not a successful empty event response bound to this window."
+    },
+    {
+      "kind": "cninfo_yellowpages_empty_dividend_array",
+      "reason": "No verified requested-window coverage or freshness watermark; some requests returned zero bytes."
+    },
+    {
+      "kind": "cninfo_company_detail_html",
+      "reason": "Template placeholders and recent-period limits do not prove a complete event inventory."
+    }
+  ]
+}

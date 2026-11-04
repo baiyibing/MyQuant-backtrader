@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Wind/Kimi incremental export; assemble and prepare candidates, never apply.
+"""Wind/Kimi export or frozen Hithink import; prepare candidates, never apply.
 
 Human GO 2026-10-24 is limited to this export workflow. See
 docs/operations/corp-actions-incremental-driver.md for the 4090 runbook.
+Human GO 2026-10-30 adds artifact-only Hithink intake from the 1.3 producer.
 """
 
 from __future__ import annotations
@@ -134,8 +135,13 @@ class Run:
         self.config = read_json(self.out / "run.json")
         if self.config["out_dir"] != str(self.out):
             raise ValueError("run directory moved; frozen paths must not change")
-        if self.config["model"] not in MODELS:
+        self.channel = self.config.get("channel", "wind")
+        if self.channel not in ("wind", "hithink"):
+            raise ValueError("unknown frozen channel")
+        if self.channel == "wind" and self.config["model"] not in MODELS:
             raise ValueError("only the two approved inexpensive Kimi aliases are allowed")
+        if self.channel == "hithink" and self.config.get("model") is not None:
+            raise ValueError("hithink cannot specify a model")
         self.path("run.json")
 
     def path(self, relative):
@@ -183,6 +189,17 @@ class Run:
 
 
 def initialize(args):
+    channel = getattr(args, "channel", None) or "wind"
+    if channel == "hithink" and args.model is not None:
+        raise ValueError("--model is not applicable to hithink")
+    exclusions = None
+    if channel == "hithink":
+        exclusions = read_json(Path(args.exclusions) if getattr(args, "exclusions", None) else
+                               Path(__file__).resolve().parents[2] / "config/corp_actions_hithink_exclusions.json")
+        if exclusions.get("format_version") != 1 or not isinstance(exclusions.get("manual_overrides"), list):
+            raise ValueError("invalid hithink exclusions config")
+    elif getattr(args, "exclusions", None):
+        raise ValueError("--exclusions is only applicable to hithink")
     lake = (Path(args.lake_dir) if args.lake_dir else resolve_source_parquet("corp_actions")).resolve()
     universe = (Path(args.universe) if args.universe else lake / "listing.parquet").resolve()
     out = Path(args.out_dir).resolve()
@@ -207,7 +224,7 @@ def initialize(args):
         "format_version": 1, "out_dir": str(out), "lake_dir": str(lake),
         "base_revision": manifest["revision"], "base_snapshot": manifest["snapshot"],
         "base_ask_end": str(ask_end), "base_sha256": hashes,
-        "start": str(start), "end": str(end), "model": args.model,
+        "start": str(start), "end": str(end), "model": args.model, "channel": channel,
         "universe_path": str(universe), "universe_sha256": digest(universe),
         "codes": codes, "protected_roots": roots,
         "lake_write_authorized": False,
@@ -219,9 +236,11 @@ def initialize(args):
     run = Run(out)
     run.save({"tasks": [
         {"id": f"ev_{i // 6:04d}", "codes": codes[i:i + 6], "status": "pending", "attempts": []}
-        for i in range(0, len(codes), 6)
+        for i in (range(0, len(codes), 6) if channel == "wind" else [])
     ]})
     run.write("universe.txt", ("\n".join(codes) + "\n").encode("utf-8"))
+    if exclusions is not None:
+        run.write("hithink_exclusions.json", json_bytes(exclusions))
     return run
 
 
@@ -369,6 +388,11 @@ def summary(state, max_attempts=3):
 
 
 def pull(run, args, runner=None):
+    if run.channel == "hithink":
+        from scripts.data.hithink_incremental import import_artifact
+        return import_artifact(run, args.artifact_dir, refresh=args.refresh)
+    if args.artifact_dir or args.refresh:
+        raise ValueError("artifact-dir/refresh only apply to hithink")
     runner = runner or subprocess.run
     run.verify_base()
     stop = run.path("work/QUOTA_STOP.json")
@@ -482,6 +506,11 @@ def table_bytes_csv(table):
 
 
 def assemble(run):
+    if run.path("merge-prep").exists():
+        raise ValueError("merge-prep already exists; immutable candidate and its assembly evidence")
+    if run.channel == "hithink":
+        from scripts.data.hithink_incremental import assemble as assemble_hithink
+        return assemble_hithink(run)
     run.verify_base()
     state = run.state()
     events, rejected, evidence = {}, [], []
@@ -508,6 +537,7 @@ def assemble(run):
             if reason:
                 rejected.append({"task": task["id"], "reason": reason, "raw": raw})
                 continue
+            assert row is not None
             key = natural_key(row)
             if key in events:
                 old = events[key]
@@ -551,19 +581,37 @@ def validate_base(table, config):
         raise ValueError("duplicate base event_id")
     for row in rows:
         wind_code(row["code"])
-        if not row["event_id"] or not row["source"] or row["ex_date"] is None or row["record_date"] is None:
+        if not row["event_id"] or not row["source"] or row["ex_date"] is None:
             raise ValueError("base has null required fields")
+        from oskh_data.hithink_artifact import SOURCE
+        if not row["source"].startswith("wind:") and row["source"] != SOURCE:
+            raise ValueError("unknown base source")
+        if row["source"].startswith("wind:") and row["record_date"] is None:
+            raise ValueError("base has null required fields")
+        if ((row["record_date"] is not None and row["record_date"] > row["ex_date"])
+                or any(row[k] is not None and row[k] < row["ex_date"] for k in ("pay_date", "bonus_list_date"))):
+            raise ValueError("inconsistent base event dates")
+        for key in NUMBERS:
+            if row[key] is not None:
+                decimal_value(row[key])
         if row["ex_date"] > iso_day(config["base_ask_end"]):
             raise ValueError("base contains events after ask_end; manual reconciliation required")
     return rows
 
 
 def prepare_merge(run):
+    if run.path("merge-prep").exists():
+        raise ValueError("merge-prep already exists; immutable candidate, inspect rather than overwrite")
     delta, report = assemble(run)
     if report["unresolved_tasks"]:
         raise ValueError("unresolved/exhausted tasks; cannot prepare a candidate")
-    covered = {c for t in run.state()["tasks"] for c in (
-        t["codes"] if t["status"] == "no_data" else t.get("accepted_codes", []))}
+    if run.channel == "hithink":
+        if report["mixed_economics_requires_review"]:
+            raise ValueError("mixed economics with allotment requires review")
+        covered = set(report["universe_hits"]) | set(report["codes_no_events"]) | set(report["vendor_unknown_classification"])
+    else:
+        covered = {c for t in run.state()["tasks"] for c in (
+            t["codes"] if t["status"] == "no_data" else t.get("accepted_codes", []))}
     if covered != set(run.config["codes"]):
         raise ValueError("task evidence does not cover the frozen universe")
     lake = Path(run.config["lake_dir"])
@@ -573,6 +621,8 @@ def prepare_merge(run):
     new_rows = delta.to_pylist()
     if any(r["event_id"] in old_ids for r in new_rows):
         raise ValueError("incremental event_id collides with base")
+    if {(r["code"], r["ex_date"]) for r in old_rows} & {(r["code"], r["ex_date"]) for r in new_rows}:
+        raise ValueError("incremental code/ex_date overlaps base; source-independent collision")
     candidate = pa.concat_tables([base.replace_schema_metadata(None), delta])
     candidate = candidate.sort_by([(k, "ascending") for k in ("code", "ex_date", "event_id")])
     if run.path("merge-prep").exists():
@@ -609,15 +659,32 @@ def prepare_merge(run):
             "Review null economics/dates and multiple events per code/date before research consumption.",
         ],
     }
+    if run.channel == "hithink":
+        plan.update(channel="hithink", economics_ready=False,
+                    vendor_unknown_classification=report["vendor_unknown_classification"],
+                    manual_overrides_applied=report["manual_overrides_applied"],
+                    exclusions_sha256=report["exclusions_sha256"])
+        plan["review_requirements"] = [
+            "Separate Human GO and owner-side publisher; this driver has no apply command.",
+            "Recheck all base, artifact, exclusion and candidate hashes before any publication.",
+            "Hithink has NULL record/pay/list dates; positive bonus requires an explicit listing date before economics.",
+            "Hithink bonus is combined bonus/transfer; price-adjustment values need reviewed economic-basis evidence.",
+            "Allotment sidecar is excluded; no inference for restructuring bonus gaps or missing vendor coverage.",
+            "Dump window hits and maximum ex_date do not certify freshness or economic completeness.",
+            "Review each effective override, its calendar expiry and event-date scope; re-evaluate before publication.",
+            "No cross-source field stitching; historical changes require a separately reviewed revision.",
+        ]
     # Deliberately a patch PLAN, not a replacement lake manifest or ready-to-run publisher.
     run.write(relative + "/manifest-patch-plan.json", json_bytes(plan))
     run.verify_base()
+    if run.channel == "hithink" and digest(run.path("hithink_exclusions.json")) != report["exclusions_sha256"]:
+        raise ValueError("exclusions changed during candidate preparation")
     staging.rename(run.path("merge-prep"))
     return plan
 
 
 def parser():
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap = argparse.ArgumentParser(description=(__doc__ or "Corporate-action incremental candidates").splitlines()[0])
     ap.add_argument("command", choices=("init", "pending", "pull", "assemble", "prepare-merge"))
     ap.add_argument("--out-dir", required=True)
     ap.add_argument("--lake-dir", help="init only: explicit read-only corp-actions directory; otherwise resolver")
@@ -625,6 +692,10 @@ def parser():
     ap.add_argument("--start", help="init only: must equal base ask_end + 1 day")
     ap.add_argument("--end", help="init only: default today CST, then frozen for all resumes")
     ap.add_argument("--model", choices=MODELS, help="init only; default kimi-code/kimi-for-coding-highspeed")
+    ap.add_argument("--channel", choices=("wind", "hithink"), help="init only; default wind")
+    ap.add_argument("--exclusions", help="hithink init only: review config copied into the run")
+    ap.add_argument("--artifact-dir", help="hithink pull only: committed 1.3 snapshot; never downloads")
+    ap.add_argument("--refresh", action="store_true", help="hithink pull only; forbidden after assemble")
     ap.add_argument("--kimi-bin", default="kimi", help="pull only: executable on PATH or explicit path")
     ap.add_argument("--calls-per-session", type=int, default=6, help="serial sessions, 1..12 calls each")
     ap.add_argument("--max-attempts", type=int, default=3)
@@ -639,15 +710,28 @@ def main(argv=None):
         if not 1 <= args.calls_per_session <= 12 or args.max_attempts < 1 or args.timeout < 1:
             raise ValueError("invalid session/attempt/timeout bounds")
         if args.command == "init":
-            args.model = args.model or MODELS[0]
+            if (args.channel or "wind") == "wind":
+                args.model = args.model or MODELS[0]
+            if args.artifact_dir or args.refresh:
+                raise ValueError("artifact-dir/refresh only apply to pull")
             run = initialize(args)
             print(json.dumps(run.config, ensure_ascii=False, indent=2))
             return 0
-        if any(getattr(args, k) is not None for k in ("lake_dir", "universe", "start", "end", "model")):
+        if any(getattr(args, k) is not None for k in ("lake_dir", "universe", "start", "end", "model", "channel", "exclusions")):
             raise ValueError("lake/universe/window/model are frozen; set them only on init")
         run = Run(args.out_dir)
+        if args.command != "pull" and (args.artifact_dir or args.refresh):
+            raise ValueError("artifact-dir/refresh only apply to pull")
         if args.command == "pending":
             run.verify_base()
+            if run.channel == "hithink":
+                from scripts.data.hithink_incremental import imported
+                if run.path("work/hithink_committed.json").exists():
+                    state, _, _ = imported(run)
+                    print(json.dumps(state))
+                else:
+                    print(json.dumps({"channel": "hithink", "acquisition": "not_committed"}))
+                return 0
             print(json.dumps({**summary(run.state(), args.max_attempts),
                               "quota_stopped": run.path("work/QUOTA_STOP.json").exists()}))
             return 0

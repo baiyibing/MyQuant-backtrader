@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "recorded_at_utc": "2026-11-02T03:15:27.592886+00:00",
+  "read_only": true,
+  "package_closed": false,
+  "owner_action_required": true,
+  "branches": [
+    {
+      "repo": "baiyibing/OSkhQuant1.3",
+      "branch": "main",
+      "head": "4e1d43a9b8625b67ce83ba1292c63b9166dd68d2",
+      "protected": false
+    },
+    {
+      "repo": "baiyibing/MyQuant",
+      "branch": "master",
+      "head": "1f984f2b7c0e8ffe7d6a19cf087fd7b694ac8d14",
+      "protected": false
+    },
+    {
+      "repo": "baiyibing/MyQuant-backtrader",
+      "branch": "master",
+      "head": "67110adb4d396ec3cc64d7f392d267e2bc50cc70",
+      "protected": false
+    }
+  ]
+}

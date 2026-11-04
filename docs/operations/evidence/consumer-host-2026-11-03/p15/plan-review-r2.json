@@ -1,0 +1,10 @@
+{
+  "cli": "Claude Code CLI 2.1.317",
+  "configured_models": [
+    "glm-5.3[1m]"
+  ],
+  "provider_note": "Local Claude CLI routes to GLM-5.3; not an Anthropic-model review.",
+  "session_id": "4e30f8b0-f384-4350-9753-2a7a2c26dff8",
+  "raw_log_sha256": "e3c12932e11239807d5adfa32b8e8812d149ae1ce257bfe578bfec55351b2f38",
+  "verdict_text": "**APPROVE**\n\nPrevious round's asks are all verifiably addressed in the code: commit+clean-worktree pin enforced in parent, both workers, and the final assertion; RSS sampling covers the recursive child tree; probe gets an explicit `request_codes_caveat` and the shared page-cache caveat; immutability claims are scoped to `measured_input_files_unchanged` / `measured_partition_listings_unchanged` rather than global; runtime provenance pins module paths+sha256 inside ROOT plus interpreter and package versions. No blocking issues remain.\n\nNon-blocking observations (no change required):\n\n- Workers import `ashare_bars` before their `code_identity()` call (`run_worker` top). Immaterial here: the parent pins identity pre-spawn, a mismatch still aborts via `check=True` before any result dump, and the final assertion re-checks — so no tainted evidence can be recorded.\n- `partition_stamps` covers only the six measured partitions' listings, but the acceptance field name says exactly that, so the claim stays honest.\n- `status['cache']` would raise `KeyError` if the loader ever stopped emitting it — acceptable as a loud failure, given the miss/hit/mem branches are confirmed in the frozen source."
+}

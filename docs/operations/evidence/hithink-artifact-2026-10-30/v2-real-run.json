@@ -1,0 +1,68 @@
+{
+  "artifact_version": 2,
+  "producer_fetched_at": "2026-10-30T05:53:10.379899+00:00",
+  "dump_sha256": "668ad6cacd8972f6991995c7625d545393e01d3de76cc5d8c2c6a90254991ad3",
+  "dump_stats": {
+    "accepted_rows": 57706,
+    "deduped_rows": 57708,
+    "dump_rows": 57709,
+    "duplicates": [
+      {
+        "duplicate_index": 3277,
+        "kept_index": 3276
+      }
+    ],
+    "quarantine_records": [
+      {
+        "code": "000887.SZ",
+        "ex_date": "2007-03-30",
+        "negative_fields": [
+          "per_share_bonus"
+        ],
+        "reason": "negative_amount_outside_incremental_window",
+        "row_index": 6397,
+        "row_sha256": "d6d110bfd5d8e59b4c10607192699ccca460b2cc9ae0a036e035565ca9deee3a"
+      },
+      {
+        "code": "600381.SH",
+        "ex_date": "2014-06-27",
+        "negative_fields": [
+          "per_share_bonus"
+        ],
+        "reason": "negative_amount_outside_incremental_window",
+        "row_index": 36251,
+        "row_sha256": "c10286614d7551aaefeeda126937c120f8f5125dac68f38988da283ee4cbfe18"
+      }
+    ],
+    "quarantined_rows": 2
+  },
+  "universe_codes": 2774,
+  "event_rows": 162,
+  "coverage_counts": {
+    "delisted_no_history": 3,
+    "unexplained": 11,
+    "delisted_explained": 4
+  },
+  "unresolved_codes": [
+    "000016.SZ",
+    "001239.SZ",
+    "001330.SZ",
+    "002731.SZ",
+    "301292.SZ",
+    "301565.SZ",
+    "601198.SH",
+    "601399.SH",
+    "688062.SH",
+    "688221.SH",
+    "688382.SH"
+  ],
+  "new_discrepancies": [],
+  "missing_frozen_discrepancies": [],
+  "shared_historical_keys": 21709,
+  "quarantine_in_comparison": [],
+  "unexplained_wind_only_keys": 31,
+  "economics_ready": false,
+  "candidate_prepared": false,
+  "lake_write_authorized": false,
+  "base_kind": "Isolated archive replay; no published lake revision was created"
+}

@@ -1,0 +1,33 @@
+{
+  "status": "PASS",
+  "checks": {
+    "previous_history_loaded": true,
+    "current_history_loaded": true,
+    "actual_cache_restore_success": true,
+    "loaded_all_previous_entries": true,
+    "all_first_seen_dates_preserved": true,
+    "all_chunks_success": true,
+    "no_current_failures": true,
+    "previous_failures_classified_new": true
+  },
+  "previous_loaded_entries": 135,
+  "previous_output_entries": 149,
+  "current_loaded_entries": 149,
+  "current_output_entries": 149,
+  "previous_failures_removed": [
+    "tests/test_daqmt_shm_l2.py::test_failure_retains_slot_and_retries[commit]",
+    "tests/test_daqmt_shm_l2.py::test_failure_retains_slot_and_retries[setex]",
+    "tests/test_daqmt_shm_l2.py::test_failure_retains_slot_and_retries[xadd]",
+    "tests/test_daqmt_shm_l2.py::test_health_due_publishes_during_continuous_relay",
+    "tests/test_daqmt_shm_l2.py::test_item_order_and_ttl[cancelled-600]",
+    "tests/test_daqmt_shm_l2.py::test_item_order_and_ttl[done-600]",
+    "tests/test_daqmt_shm_l2.py::test_item_order_and_ttl[failed-600]",
+    "tests/test_daqmt_shm_l2.py::test_item_order_and_ttl[progress-86400]",
+    "tests/test_daqmt_shm_l2.py::test_item_order_and_ttl[running-86400]",
+    "tests/test_daqmt_shm_l2.py::test_no_item[[]]",
+    "tests/test_daqmt_shm_l2.py::test_no_item[bad]",
+    "tests/test_daqmt_shm_l2.py::test_no_item[{\"job_id\":\"\"}]",
+    "tests/test_daqmt_shm_l2.py::test_no_item[{\"kind\":\"mm_job\",\"job_id\":\"m\"}]",
+    "tests/test_daqmt_shm_l2.py::test_no_item[{}]"
+  ]
+}

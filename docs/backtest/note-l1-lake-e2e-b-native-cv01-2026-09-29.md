@@ -1,5 +1,9 @@
 # B-native-CV-01：CSV/v7 原生 CLI ↔ L1 真湖验收 harness
 
+> 2026-11-03：新industry八格PASS，与当前legacy八格完整市场输入/运行时代码桥接成立；[16格增量回执](../operations/evidence/p14-current-input-bridge-2026-11-03/README.md)。不同workspace身份保留，旧Slice D与P14整包仍开放。
+
+> 2026-11-01：本机 industry 配方八格真湖 PASS，见文末追加回执。P14 整包仍开放。
+
 2026-09-29 · Human「B GO」· 基线 `b3a76a9` · Track B 首刀。
 授权冻结：`/workspace/handoffs/b_native_cv01_20260929/HUMAN_GO.md`；
 规格：`/workspace/handoffs/next_tracks_abcde_order_20260929/ORDER_EVAL.md` §5。
@@ -15,7 +19,9 @@ PASS 是 **固定湖配方下 native↔L1 委托保真**，需要输入身份稳
 及该格实际触发条件同时成立。正常格必须真实买入及卖出、至少两行权益和审计事件；
 成功空跑记 `NOT_COVERED / 未覆盖`。正常现金 1,000,000,000（宽资金配方），
 低现金 1，名单预算 1,000,000；这些显式参数不改生产默认。
-version8 低现金须原生 `InsufficientCashError` 非零退出；v7 须真实 `skip/skip_cash`。
+低现金按显式 `--rule-profile` 验收：默认 industry 的 version8 须在原生审计出现
+`SKIP/skip_cash`；legacy 的 version8 须原生 `InsufficientCashError` 非零退出；
+v7 两种 profile 均须真实 `skip/skip_cash`。规则身份及费用登记见 #540。
 同样报另一个错误是 FAIL，未触发目标资金路径是未覆盖。
 
 此 PASS 不证明湖数据质量、模型经济正确性、可执行收益、收益排名或完整策略认证；
@@ -39,8 +45,11 @@ version8 低现金须原生 `InsufficientCashError` 非零退出；v7 须真实 
 - 原生 summary 可能读取的既有 CSV 日线权益文件集合与 hashes；配置/authority 身份。
 - 每格精确 argv、child cwd、相对输出名、现金、费用、价域、开关、缓存及比较政策。
 
-live 调用前后均重新核对输入身份，变化即 FAIL。CSV `--no-cache`，v7 原生
-`bars_from_pool` 已关闭窗口缓存；仅 numba 代码缓存放在新 receipt 根内。
+live 调用前后均重新核对输入身份，变化即 FAIL。CSV `--no-cache` 和 v7 原生
+`bars_from_pool use_cache=False` 只关闭分钟窗口缓存；日线仍有原生派生缓存。
+验收器预注册两家 normal 原生预热，成功后固定日线缓存文件集合及 hashes，
+每侧调用前后核验，变化即 FAIL。numba 代码缓存放在新 receipt 根内。
+子进程使用已有 `OSKH_PROFILE_SIM=0` 关闭可选计时侧文件；不改原生默认。
 每侧 fresh process / fresh cwd，native argv 完全相同，输出名都为 `artifacts`。
 child resolver 环境显式固定到已解析的绝对根；不更改宿主环境或数据。
 
@@ -105,4 +114,31 @@ OSKH_MERGE_PYTHON=/workspace/vanna312/bin/python \
 
 测试只用明确标注的 comparator 工件 fixtures，无湖依赖，无合成湖认证。
 交接：`/workspace/handoffs/b_native_cv01_20260929/B_NATIVE_CV01_RECEIPT.md`。
-待 Human「合」，本刀不合并。
+该首刀的历史停点不代替后续实施授权；当前状态按下面的追加回执读取。
+
+## 2026-11-01 本机真湖回执
+
+冻结提交 `0c9886fa59bf4a6ef72333a1ba02413655a60f97`，主机
+`DESKTOP-M5HCFD6`，使用 resolver 已配置的真实湖及原有 `stock_pool/`。
+沿用预定 `20251023..20251104` 窗口、303 只股票、industry 规则和上述资金配方。
+[预注册配方](../operations/evidence/p14-native-lake-2026-11-01/recipe.json)、
+[八格结果](../operations/evidence/p14-native-lake-2026-11-01/result.json)与
+[验收及剩余边界](../operations/evidence/p14-native-lake-2026-11-01/acceptance.json)保留输入 hashes、
+实际退出码及各格比较索引；完整原始进程包仍保存在本机独立审计目录。
+
+初跑为 3 PASS / 5 FAIL：正常/低现金经济文件已经逐字节一致，失败来自可选计时
+侧文件、当前六阶段耗时格式及日线缓存冷热。修订验收配方后，CSV/v7 的
+normal、low_cash、invalid_config、bad_output 全部 PASS；两家正常格均有真实买卖，
+低现金格均触发本规则要求的 skip_cash。正常/低现金的成交、权益、审计及存在的
+数据来源文件在初跑/重跑、native/L1 四份之间 hashes 完全相同。
+
+比较器仍拒绝缓存状态、NAV、阶段标签或任意未声明 JSON 字段差异；只补上当前
+六阶段行中明确命名的耗时数值。summary/stdout 计时和派生 manifest hash 差异仍
+逐项保留，因此整体工件不称 byte-identical。离线验收器测试 202 项通过，9 项契约门禁通过。
+
+这只签收本窗口的 native/L1 委托保真。成交核 Slice D 逐书/原因桶矩阵、其他策略、
+最新湖水位、其他宿主及经济口径均未由本回执签收，P14 保持开放。
+
+## 2026-11-03 legacy 配方补验
+
+本机冻结 `6f3a3305` 的 legacy 八格全部 PASS，见[具名回执](../operations/evidence/consumer-host-2026-11-03/p14/acceptance.json)。正常格实际 BUY/SELL；trades、equity、audit 在 native/L1 间逐字节一致。与上轮 industry 各持独立输入身份，不合成同源十六格声明。旧 Slice D 改造前 matching baseline/reason/价格对照仍开放；P14 不整包关闭。

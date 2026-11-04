@@ -1,0 +1,238 @@
+{
+  "schema_version": 1,
+  "recorded_at_utc": "2026-11-01T10:34:58.010274+00:00",
+  "package_id": "P14",
+  "audit_id": "BT-07",
+  "package_closed": false,
+  "scope": "B-native-CV-01 native/L1 fidelity; CSV version8 and standalone v7 only",
+  "host": "DESKTOP-M5HCFD6",
+  "source_commit": "0c9886fa59bf4a6ef72333a1ba02413655a60f97",
+  "source_harness_sha256": "b8872e53aee3b3877132f5c28e1b004495093c4acb76b1b93d39f2626de0b037",
+  "window": {
+    "start": "20251023",
+    "end": "20251104",
+    "origin": "native CLI documented defaults / explicit harness arguments"
+  },
+  "recipe_sha256": "a79f7efa3b255363ac8f362304dbbb47916edc86dd3d02eac70a37c59ce962ab",
+  "baseline_status": "FAIL",
+  "baseline_counts": {
+    "PASS": 3,
+    "FAIL": 5
+  },
+  "pinned_status": "PASS",
+  "pinned_pass_cells": 8,
+  "all_normal_low_cash_economic_files_unchanged_from_baseline": true,
+  "cells": [
+    {
+      "family": "csv_minute",
+      "cell": "normal",
+      "status": "PASS",
+      "native_exit_codes": [
+        0,
+        0
+      ],
+      "byte_identical": false,
+      "economic_artifacts": {
+        "trades.csv": {
+          "baseline_native_sha256": "3ed13ce3c43c64bf8522764ae7db83c9ef8d5d5d43f26aecd709acc2ca9d0d81",
+          "baseline_l1_sha256": "3ed13ce3c43c64bf8522764ae7db83c9ef8d5d5d43f26aecd709acc2ca9d0d81",
+          "pinned_native_sha256": "3ed13ce3c43c64bf8522764ae7db83c9ef8d5d5d43f26aecd709acc2ca9d0d81",
+          "pinned_l1_sha256": "3ed13ce3c43c64bf8522764ae7db83c9ef8d5d5d43f26aecd709acc2ca9d0d81",
+          "all_four_byte_equal": true
+        },
+        "daily_equity.csv": {
+          "baseline_native_sha256": "e7962e5f4ac38998b212b1d6be3b7e3a7f66678637238be02431bf1c93c6d2f5",
+          "baseline_l1_sha256": "e7962e5f4ac38998b212b1d6be3b7e3a7f66678637238be02431bf1c93c6d2f5",
+          "pinned_native_sha256": "e7962e5f4ac38998b212b1d6be3b7e3a7f66678637238be02431bf1c93c6d2f5",
+          "pinned_l1_sha256": "e7962e5f4ac38998b212b1d6be3b7e3a7f66678637238be02431bf1c93c6d2f5",
+          "all_four_byte_equal": true
+        },
+        "execution-audit.json": {
+          "baseline_native_sha256": "0591e2881c5d7f8e9b1a3cd2c66c1a91b33ba663cd3cd4b181f4bf2bdef756a1",
+          "baseline_l1_sha256": "0591e2881c5d7f8e9b1a3cd2c66c1a91b33ba663cd3cd4b181f4bf2bdef756a1",
+          "pinned_native_sha256": "0591e2881c5d7f8e9b1a3cd2c66c1a91b33ba663cd3cd4b181f4bf2bdef756a1",
+          "pinned_l1_sha256": "0591e2881c5d7f8e9b1a3cd2c66c1a91b33ba663cd3cd4b181f4bf2bdef756a1",
+          "all_four_byte_equal": true
+        },
+        "data-provenance.json": {
+          "baseline_native_sha256": "90dacef7bd4fd780669dd028b4e1a3e8f4bd1ac3aaf64b78e28e6b00aa3d0302",
+          "baseline_l1_sha256": "90dacef7bd4fd780669dd028b4e1a3e8f4bd1ac3aaf64b78e28e6b00aa3d0302",
+          "pinned_native_sha256": "90dacef7bd4fd780669dd028b4e1a3e8f4bd1ac3aaf64b78e28e6b00aa3d0302",
+          "pinned_l1_sha256": "90dacef7bd4fd780669dd028b4e1a3e8f4bd1ac3aaf64b78e28e6b00aa3d0302",
+          "all_four_byte_equal": true
+        }
+      }
+    },
+    {
+      "family": "csv_minute",
+      "cell": "low_cash",
+      "status": "PASS",
+      "native_exit_codes": [
+        0,
+        0
+      ],
+      "byte_identical": false,
+      "economic_artifacts": {
+        "trades.csv": {
+          "baseline_native_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+          "baseline_l1_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+          "pinned_native_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+          "pinned_l1_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+          "all_four_byte_equal": true
+        },
+        "daily_equity.csv": {
+          "baseline_native_sha256": "42570b8c3be88f70e11a6c376b195d839ce807b4169541a957e03aa073ccd93c",
+          "baseline_l1_sha256": "42570b8c3be88f70e11a6c376b195d839ce807b4169541a957e03aa073ccd93c",
+          "pinned_native_sha256": "42570b8c3be88f70e11a6c376b195d839ce807b4169541a957e03aa073ccd93c",
+          "pinned_l1_sha256": "42570b8c3be88f70e11a6c376b195d839ce807b4169541a957e03aa073ccd93c",
+          "all_four_byte_equal": true
+        },
+        "execution-audit.json": {
+          "baseline_native_sha256": "0bff2375878752abe4b7cfd07c02b0877caab9f0f59b0fed9af1940e56051ef7",
+          "baseline_l1_sha256": "0bff2375878752abe4b7cfd07c02b0877caab9f0f59b0fed9af1940e56051ef7",
+          "pinned_native_sha256": "0bff2375878752abe4b7cfd07c02b0877caab9f0f59b0fed9af1940e56051ef7",
+          "pinned_l1_sha256": "0bff2375878752abe4b7cfd07c02b0877caab9f0f59b0fed9af1940e56051ef7",
+          "all_four_byte_equal": true
+        },
+        "data-provenance.json": {
+          "baseline_native_sha256": "90dacef7bd4fd780669dd028b4e1a3e8f4bd1ac3aaf64b78e28e6b00aa3d0302",
+          "baseline_l1_sha256": "90dacef7bd4fd780669dd028b4e1a3e8f4bd1ac3aaf64b78e28e6b00aa3d0302",
+          "pinned_native_sha256": "90dacef7bd4fd780669dd028b4e1a3e8f4bd1ac3aaf64b78e28e6b00aa3d0302",
+          "pinned_l1_sha256": "90dacef7bd4fd780669dd028b4e1a3e8f4bd1ac3aaf64b78e28e6b00aa3d0302",
+          "all_four_byte_equal": true
+        }
+      }
+    },
+    {
+      "family": "csv_minute",
+      "cell": "invalid_config",
+      "status": "PASS",
+      "native_exit_codes": [
+        2,
+        2
+      ],
+      "byte_identical": true,
+      "economic_artifacts": {}
+    },
+    {
+      "family": "csv_minute",
+      "cell": "bad_output",
+      "status": "PASS",
+      "native_exit_codes": [
+        1,
+        1
+      ],
+      "byte_identical": false,
+      "economic_artifacts": {}
+    },
+    {
+      "family": "v7",
+      "cell": "normal",
+      "status": "PASS",
+      "native_exit_codes": [
+        0,
+        0
+      ],
+      "byte_identical": false,
+      "economic_artifacts": {
+        "trades.csv": {
+          "baseline_native_sha256": "261205d7f6a5e893535712fa1f210995c8d88d3ac7d231ae2939b1c12649e01e",
+          "baseline_l1_sha256": "261205d7f6a5e893535712fa1f210995c8d88d3ac7d231ae2939b1c12649e01e",
+          "pinned_native_sha256": "261205d7f6a5e893535712fa1f210995c8d88d3ac7d231ae2939b1c12649e01e",
+          "pinned_l1_sha256": "261205d7f6a5e893535712fa1f210995c8d88d3ac7d231ae2939b1c12649e01e",
+          "all_four_byte_equal": true
+        },
+        "daily_equity.csv": {
+          "baseline_native_sha256": "0f56b93e188d51c5ed2cce914ec24df77f5857c293c35c7f6790392dd6e8db55",
+          "baseline_l1_sha256": "0f56b93e188d51c5ed2cce914ec24df77f5857c293c35c7f6790392dd6e8db55",
+          "pinned_native_sha256": "0f56b93e188d51c5ed2cce914ec24df77f5857c293c35c7f6790392dd6e8db55",
+          "pinned_l1_sha256": "0f56b93e188d51c5ed2cce914ec24df77f5857c293c35c7f6790392dd6e8db55",
+          "all_four_byte_equal": true
+        },
+        "execution-audit.json": {
+          "baseline_native_sha256": "0252bbf8d2bfe07bde9a40d06e9b74711d60a88c0c590bc839aee7fe5a26aef9",
+          "baseline_l1_sha256": "0252bbf8d2bfe07bde9a40d06e9b74711d60a88c0c590bc839aee7fe5a26aef9",
+          "pinned_native_sha256": "0252bbf8d2bfe07bde9a40d06e9b74711d60a88c0c590bc839aee7fe5a26aef9",
+          "pinned_l1_sha256": "0252bbf8d2bfe07bde9a40d06e9b74711d60a88c0c590bc839aee7fe5a26aef9",
+          "all_four_byte_equal": true
+        }
+      }
+    },
+    {
+      "family": "v7",
+      "cell": "low_cash",
+      "status": "PASS",
+      "native_exit_codes": [
+        0,
+        0
+      ],
+      "byte_identical": false,
+      "economic_artifacts": {
+        "trades.csv": {
+          "baseline_native_sha256": "c6f3a4a26a6a2e656b9ad03dbdbc1a224eb1801a27e2ee45166aefd99a030657",
+          "baseline_l1_sha256": "c6f3a4a26a6a2e656b9ad03dbdbc1a224eb1801a27e2ee45166aefd99a030657",
+          "pinned_native_sha256": "c6f3a4a26a6a2e656b9ad03dbdbc1a224eb1801a27e2ee45166aefd99a030657",
+          "pinned_l1_sha256": "c6f3a4a26a6a2e656b9ad03dbdbc1a224eb1801a27e2ee45166aefd99a030657",
+          "all_four_byte_equal": true
+        },
+        "daily_equity.csv": {
+          "baseline_native_sha256": "232ab0ea08dca01e74f3660e5ab5a408c4cf4daf8867777e89f154ddbf8c8a62",
+          "baseline_l1_sha256": "232ab0ea08dca01e74f3660e5ab5a408c4cf4daf8867777e89f154ddbf8c8a62",
+          "pinned_native_sha256": "232ab0ea08dca01e74f3660e5ab5a408c4cf4daf8867777e89f154ddbf8c8a62",
+          "pinned_l1_sha256": "232ab0ea08dca01e74f3660e5ab5a408c4cf4daf8867777e89f154ddbf8c8a62",
+          "all_four_byte_equal": true
+        },
+        "execution-audit.json": {
+          "baseline_native_sha256": "1d4b24c66db5f1d5206e26309b8b9095c60d0d1d41d5c2fbb1b6ebe84f1e9b2a",
+          "baseline_l1_sha256": "1d4b24c66db5f1d5206e26309b8b9095c60d0d1d41d5c2fbb1b6ebe84f1e9b2a",
+          "pinned_native_sha256": "1d4b24c66db5f1d5206e26309b8b9095c60d0d1d41d5c2fbb1b6ebe84f1e9b2a",
+          "pinned_l1_sha256": "1d4b24c66db5f1d5206e26309b8b9095c60d0d1d41d5c2fbb1b6ebe84f1e9b2a",
+          "all_four_byte_equal": true
+        }
+      }
+    },
+    {
+      "family": "v7",
+      "cell": "invalid_config",
+      "status": "PASS",
+      "native_exit_codes": [
+        2,
+        2
+      ],
+      "byte_identical": true,
+      "economic_artifacts": {}
+    },
+    {
+      "family": "v7",
+      "cell": "bad_output",
+      "status": "PASS",
+      "native_exit_codes": [
+        1,
+        1
+      ],
+      "byte_identical": false,
+      "economic_artifacts": {}
+    }
+  ],
+  "local_validation": {
+    "targeted_pytest": {
+      "exit_code": 0,
+      "passed": 202
+    },
+    "contract_gates": {
+      "exit_code": 0,
+      "passed": 9
+    },
+    "pyright": {
+      "baseline_errors": 5,
+      "current_errors": 5,
+      "note": "Four existing OptionalMemberAccess errors and existing splatted compare call arity error; same five reproduced at b09d1558. Not represented as a zero-error typecheck."
+    }
+  },
+  "remaining": [
+    "P14 engine Slice D per-book matrix / reason-bucket signoff remains open",
+    "No SSOT R/S comparison or L2 lake authorization",
+    "No certification of all strategies, current lake freshness or other hosts",
+    "Full raw process packets retained locally under the immutable audit output roots"
+  ]
+}

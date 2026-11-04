@@ -1,0 +1,36 @@
+{
+  "audit_groups": 64,
+  "work_packages": 21,
+  "verified_frozen_source_links": 108,
+  "non_snapshot_links": [
+    "https://github.com/baiyibing/MyQuant-backtrader/blob/42662418231ea87af4c72e83f8ee69d6396db715/docs/operations/hithink-coverage-followup-2026-10-30.md",
+    "https://github.com/baiyibing/OSkhQuant1.3/blob/6825f22169/docs/operations/plan-cninfo-economic-date-evidence-2026-10-30.md"
+  ],
+  "non_snapshot_links_verification": "Both supplemental branch files separately verified via gh contents API; blob IDs in review-and-validation.md.",
+  "encoding": "UTF-8 without BOM; NUL=0",
+  "git_diff_cached_check_exit": 0,
+  "closeout_receipts": {
+    "count": 1,
+    "ids": [
+      "oskh-pr1258-v653-test-drift"
+    ],
+    "p01_remaining_audit_ids": [
+      "BT-17",
+      "BT-18",
+      "QL01"
+    ],
+    "fully_covered_packages": []
+  },
+  "file_sha256": {
+    "docs/operations/three-repo-closeout-plan-2026-10-30.md": "400589afc22a3c2b4870a0d48e19173a3cc0457250fe50d8995c759bb1b32948",
+    "docs/operations/three-repo-closeout-inventory-2026-10-30.md": "19a1c408f69179585c05f225a3b52bd09c1769ab0b4d96226e1e3a4ab8160caa",
+    "docs/operations/evidence/three-repo-closeout-2026-10-30/claude-review.md": "8cf6ebb2729b572ca18a66267e21482082c9bab760b6a938e1d735491914fdde",
+    "docs/operations/evidence/three-repo-closeout-2026-10-30/github-refresh.json": "7d68169d5c90247b4a4d44a11f22b3c67fa7848a9738ae9439a65f000cb4cca4",
+    "docs/operations/evidence/three-repo-closeout-2026-10-30/inventory.json": "726061592b09e541d606d2875e97935386598b9dff6c01f5bee01e35830889d9",
+    "docs/operations/evidence/three-repo-closeout-2026-10-30/kimi-review.md": "dec8c9d4ab60f493d65d1e0d935fc1b6ff61c26741098f3d8ea4df7ad66d13ce",
+    "docs/operations/evidence/three-repo-closeout-2026-10-30/review-and-validation.md": "905d945a27f7860282713e73ba7a3d4af7c3e47bf9239f4a31999ad8970a3afb",
+    "docs/operations/evidence/three-repo-closeout-2026-10-30/review-manifest.json": "38a8d419ab3f037cc310757ffc9810fe3c5508ab6b2ab7d1b74e12a50e9e7ab9",
+    "docs/operations/evidence/three-repo-closeout-2026-10-30/user-review-followup.md": "2e495db00b89c98320e46e9452106249fc4353b816f618826d571beb8b4ec6ba"
+  },
+  "errors": []
+}

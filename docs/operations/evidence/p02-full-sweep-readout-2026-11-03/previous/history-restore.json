@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "observed_at_utc": "2026-11-03T08:57:19.689094+00:00",
+  "cache_restore_outcome": "success",
+  "input_history_status": "LOADED",
+  "input_history_entries": 135,
+  "seed_sources": [
+    {
+      "run_id": "41138583298",
+      "head_sha": "1ed67467890edb6c931bf8816c121fa7483cc276",
+      "file": "history_20261030.json",
+      "sha256": "e0f319e7370e4c3f2930ff0919f99ddee6da0cd506659d2a310f16b071ebf573",
+      "entries": 132
+    },
+    {
+      "run_id": "41245038812",
+      "head_sha": "8bf11f8cd3e8c6271a17d98642471dba12b403ae",
+      "file": "history_20261031.json",
+      "sha256": "76653b9cba0be38601b04956b5726cd9ba69a27cfd85205ab3bdbe59b2db5836",
+      "entries": 130
+    }
+  ],
+  "seed_entries_added": 0,
+  "first_seen_dates_corrected": 0,
+  "history_entries": 135,
+  "history_sha256": "0b879436fb433860ce2bf1d217c1e72d551c85ab90f3cf87256fec556b9e60bc",
+  "cache_persistence_verified": false
+}

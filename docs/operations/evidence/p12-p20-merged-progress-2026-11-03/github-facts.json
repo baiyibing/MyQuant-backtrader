@@ -1,0 +1,77 @@
+{
+  "observed_at_utc": "2026-11-03T13:59:04.334787+00:00",
+  "sources": [
+    {
+      "pr": "https://github.com/baiyibing/MyQuant/pull/118",
+      "source_head": "e310c581771127dee406917de4f0c254df769cf8",
+      "source_base": "d64b415b4443f6f3779cbf05124ba15807003e85",
+      "merge_commit": "3b9fdb0edf561619661d673f1bbc12f30e4d89ab",
+      "merged_at_utc": "2026-11-03T13:32:14Z",
+      "head_tree": "3abbbb49600da215619cda0a8e49a591936c5c5a",
+      "merged_tree": "3abbbb49600da215619cda0a8e49a591936c5c5a",
+      "checked_and_merged_tree_equal": true,
+      "canonical_checks": [
+        {
+          "name": "data-staging",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "e310c581771127dee406917de4f0c254df769cf8",
+          "details_url": "https://github.com/baiyibing/MyQuant/actions/runs/41642839816/job/125940430180"
+        },
+        {
+          "name": "joint-return",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "e310c581771127dee406917de4f0c254df769cf8",
+          "details_url": "https://github.com/baiyibing/MyQuant/actions/runs/41642839816/job/125940430132"
+        },
+        {
+          "name": "pytest",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "e310c581771127dee406917de4f0c254df769cf8",
+          "details_url": "https://github.com/baiyibing/MyQuant/actions/runs/41642839816/job/125940429697"
+        }
+      ],
+      "scope": "分钟刷新 provider/staging/派生full-staging/receipt 对日频provider的解析后同根及双向祖先隔离实现已合；只记实现，实际增量/部署与P12仍开放。",
+      "audit_item_closed": false,
+      "package_closed": false
+    },
+    {
+      "pr": "https://github.com/baiyibing/MyQuant/pull/119",
+      "source_head": "b6daa56b68e0fe6fc8b48ba46c900c6074c537e9",
+      "source_base": "3b9fdb0edf561619661d673f1bbc12f30e4d89ab",
+      "merge_commit": "a509b31cb6cb9901b06885cbc644c4807f31efdb",
+      "merged_at_utc": "2026-11-03T13:52:26Z",
+      "head_tree": "7613642e3558b92546079e68f50399c6af1a35ad",
+      "merged_tree": "7613642e3558b92546079e68f50399c6af1a35ad",
+      "checked_and_merged_tree_equal": true,
+      "canonical_checks": [
+        {
+          "name": "joint-return",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "b6daa56b68e0fe6fc8b48ba46c900c6074c537e9",
+          "details_url": "https://github.com/baiyibing/MyQuant/actions/runs/41647168696/job/125955431626"
+        },
+        {
+          "name": "pytest",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "b6daa56b68e0fe6fc8b48ba46c900c6074c537e9",
+          "details_url": "https://github.com/baiyibing/MyQuant/actions/runs/41647168696/job/125955431556"
+        },
+        {
+          "name": "data-staging",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "b6daa56b68e0fe6fc8b48ba46c900c6074c537e9",
+          "details_url": "https://github.com/baiyibing/MyQuant/actions/runs/41647168696/job/125955431384"
+        }
+      ],
+      "scope": "MyQuant三份旧文档只加当前状态指针：M3-D/TrackB按已合实现更新，P6保留历史待核；原正文/研究戳不改。QL17/P20整项均未关闭。",
+      "audit_item_closed": false,
+      "package_closed": false
+    }
+  ]
+}

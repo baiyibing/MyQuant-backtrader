@@ -1,0 +1,27 @@
+{
+  "byte_domain": "Git-published UTF-8 LF bytes; excludes this manifest",
+  "files": {
+    "docs/operations/evidence/p02-full-sweep-readout-2026-11-03/acceptance.json": "5a5c21b8e6fe36424c0c35cc6b963a6620364b8a3a4f560ddb779165266ef503",
+    "docs/operations/evidence/p02-full-sweep-readout-2026-11-03/github-facts.json": "1678403003e9283088cb9b16f03ef6b838ca8ced86a547e4276540374b9e3a56",
+    "docs/operations/evidence/p02-full-sweep-readout-2026-11-03/governance.json": "a4aa5b112808424c4d122a6d65ac8c603bb15c7a07f48590d47939c068fc1106",
+    "docs/operations/evidence/p02-full-sweep-readout-2026-11-03/history-pair-check.json": "95392f68ba15a38f8986d62d56768de45fcbe2c79504c1709cf8d1916c94db43",
+    "docs/operations/evidence/p02-full-sweep-readout-2026-11-03/linux-runner-block.json": "c109ca9322eb6af88d6fe2349bb149e9d692708da5856b4a718aa9156eaf866e",
+    "docs/operations/evidence/p02-full-sweep-readout-2026-11-03/raw-record-hashes.json": "06153142b88fc6f5dcae464db4992b659c8b9a96f287fc6a01ae459a798db62f",
+    "docs/operations/evidence/p02-full-sweep-readout-2026-11-03/README.md": "167e539427a3d29141e9b2275e2c25253e1ca5a43b8c3416696991c70a756952",
+    "docs/operations/evidence/p02-full-sweep-readout-2026-11-03/validation.json": "781e012bcc0f65935fe4922f5cdc2b2cd5e91aabe0bd700c1213f5ece99bfecf",
+    "docs/operations/evidence/p02-full-sweep-readout-2026-11-03/audit-sources/verify_history_pair.py": "0f24a9e7225807361d38e0346eda85737095cf65851c1e538408dc341b4e466f",
+    "docs/operations/evidence/p02-full-sweep-readout-2026-11-03/clock-fix/implementation-review.json": "355306f430a797c49be619a7c158b73304445d6a4c6ba8f810b58582a828d387",
+    "docs/operations/evidence/p02-full-sweep-readout-2026-11-03/clock-fix/pr-ci.json": "f8de2dd7c9cb8154ddf737fee8c7614a80a4262e70c1625b5337d3e0784a41ed",
+    "docs/operations/evidence/p02-full-sweep-readout-2026-11-03/current/history-restore.json": "2bb8c07b989eea9efea62e6ec18485244cebb25f47bace0071814029b0792c68",
+    "docs/operations/evidence/p02-full-sweep-readout-2026-11-03/current/history.json": "3c63a767306d8ad6170e744f4f5027c4dfea42a34d6dd5a154f37d54db68df1f",
+    "docs/operations/evidence/p02-full-sweep-readout-2026-11-03/current/ledger-status.json": "57d029b9c240b6209c4511039c3c59469e61ca0100bf1461b182e2ea8a3c1e2d",
+    "docs/operations/evidence/p02-full-sweep-readout-2026-11-03/current/report.json": "6e9cf04df750b48279c3ae6b76624b47ecd3fc435b118a4780f7957c835ddf12",
+    "docs/operations/evidence/p02-full-sweep-readout-2026-11-03/original/history-restore.json": "199325b581c8a86f555117a79a1ae1057c93abb9cbe74c30d1ee5ccb1a557ab9",
+    "docs/operations/evidence/p02-full-sweep-readout-2026-11-03/original/report.json": "815538cd82c69a97e65025e08c4d87b19abb2065bb19f5467fa3f6443fec19b1",
+    "docs/operations/evidence/p02-full-sweep-readout-2026-11-03/previous/flaky-ledger.json": "d42c1d63b01bda072f7e30f71e518b2b6e5edfcb385407ab6aba0c3e7c77c3c7",
+    "docs/operations/evidence/p02-full-sweep-readout-2026-11-03/previous/history-restore.json": "7d006113d8900e53a70b71b9d30507a4056eeef35b63ebd4adfe759ecb6a9b85",
+    "docs/operations/evidence/p02-full-sweep-readout-2026-11-03/previous/history.json": "fadc01672d8a44bc55f1543ad41eb48f222d2aeed6f0656395c797bf4d1067b2",
+    "docs/operations/evidence/p02-full-sweep-readout-2026-11-03/previous/report.json": "f73faf5922c9efdb3c86edd1f9a1cb3a2f3b1b6d0f76d9a26882ee456afe2458",
+    "docs/operations/evidence/p02-full-sweep-readout-2026-11-03/shm-fix/implementation-review.json": "8d3b7a2760b7e7ae627704504c50f5ecbf62bff6148cfa90067ae085d91552b6"
+  }
+}

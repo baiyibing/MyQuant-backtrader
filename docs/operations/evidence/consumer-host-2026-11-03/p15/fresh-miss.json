@@ -1,0 +1,16 @@
+{
+  "phase": "fresh-miss",
+  "observations": [
+    {
+      "repeat": 0,
+      "elapsed_seconds": 2.520031600026414,
+      "cache_status": "miss",
+      "codes": 6,
+      "rows": 250158,
+      "frame_digest": "55bc4e9099b3faa46027161e99e53cad5cc70de3fad8fb1f98e26b697227b415",
+      "rss_after_bytes": 186187776
+    }
+  ],
+  "sampled_process_tree_peak_rss_bytes": 225181696,
+  "windows_lifetime_peak_wset_bytes": 236212224
+}

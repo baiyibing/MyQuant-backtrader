@@ -1,0 +1,167 @@
+{
+  "schema_version": 1,
+  "recorded_at_utc": "2026-10-30T13:52:08.806959+00:00",
+  "plan": "https://github.com/baiyibing/MyQuant-backtrader/pull/539",
+  "scope": "Batch 0/0.5 local deployment candidate preparation; not first paper-day signoff",
+  "target_paper_host": "DESKTOP-M5HCFD6",
+  "target_host_status": "USER_SELECTED_LOCAL_CANDIDATE_PREPARED_START_BLOCKED",
+  "local_observation": {
+    "host": "DESKTOP-M5HCFD6",
+    "source_root": "E:\\stock_data",
+    "root_exists": true,
+    "marker_exists": true,
+    "marker_sha256": "7b2ab4ce1d4c1e98dba7320915d09a56eef613d423504bc6af6c88e5d4036e16",
+    "marker_format": "non-JSON; contents not printed",
+    "stock_1d_exists": true,
+    "index_1d_exists": true,
+    "etf_1d_exists": true,
+    "stock_1m_exists": true,
+    "observed_at_utc": "2026-10-30T11:38:46.685518+00:00",
+    "resolved_roots": {
+      "container": {
+        "path": "E:\\stock_data",
+        "exists": true
+      },
+      "stock_1d": {
+        "path": "E:\\stock_data\\stock\\period=1d",
+        "exists": true
+      },
+      "stock_1m": {
+        "path": "E:\\stock_data\\stock\\period=1m",
+        "exists": true
+      },
+      "index_1d": {
+        "path": "E:\\stock_data\\index\\period=1d",
+        "exists": true
+      },
+      "etf_1d": {
+        "path": "E:\\stock_data\\etf\\period=1d",
+        "exists": true
+      }
+    }
+  },
+  "readiness": [
+    {
+      "id": "I01",
+      "input": "host/runtime/vendor",
+      "status": "CANDIDATE_CONFIG_VERIFIED_NOT_ACTIVATED",
+      "host_evidence_urls": [
+        "https://github.com/baiyibing/OSkhQuant1.3/blob/78b1ca84e45f708773db8d37608e7b4439e92cd7/docs/run-records/2026-10-30-v653-local-readiness.md",
+        "https://github.com/baiyibing/OSkhQuant1.3/blob/78b1ca84e45f708773db8d37608e7b4439e92cd7/docs/run-records/evidence/v653-local-readiness-2026-10-30.json"
+      ],
+      "observation": "Local isolated checkout; paper/guojin_daqmt/daqmt, no strategy/executor/monitor startup."
+    },
+    {
+      "id": "I02",
+      "input": "account/userdata/independent DB/schema",
+      "status": "SCHEMA_VERIFIED_OLD_STACK_HANDOFF_PENDING",
+      "host_evidence_urls": [
+        "https://github.com/baiyibing/OSkhQuant1.3/blob/78b1ca84e45f708773db8d37608e7b4439e92cd7/docs/run-records/2026-10-30-v653-local-readiness.md",
+        "https://github.com/baiyibing/OSkhQuant1.3/blob/78b1ca84e45f708773db8d37608e7b4439e92cd7/docs/run-records/evidence/v653-local-readiness-2026-10-30.json"
+      ],
+      "observation": "Four independent empty v653 DBs prepared; five-DB check-only passed; shared execution unchanged. Old Turtle residuals not signed clear. Signed capital/name-budget matches prior contract; cash-book initialization remains pending old-strategy handoff."
+    },
+    {
+      "id": "I03",
+      "input": "Redis/SDD namespace and slot",
+      "status": "REDIS_PRIMITIVES_VERIFIED_FORMAL_SLOT_BLOCKED",
+      "host_evidence_urls": [
+        "https://github.com/baiyibing/OSkhQuant1.3/blob/78b1ca84e45f708773db8d37608e7b4439e92cd7/docs/run-records/2026-10-30-v653-local-readiness.md",
+        "https://github.com/baiyibing/OSkhQuant1.3/blob/78b1ca84e45f708773db8d37608e7b4439e92cd7/docs/run-records/evidence/v653-local-readiness-2026-10-30.json"
+      ],
+      "observation": "Authenticated PING and eight isolated synthetic-account lease checks passed; actual day slot absent, full SDD runtime scenarios not signed."
+    },
+    {
+      "id": "I04",
+      "input": "approved pool/file hash/session",
+      "status": "BLOCKED_APPROVED_POOL_PENDING",
+      "host_evidence_urls": [
+        "https://github.com/baiyibing/OSkhQuant1.3/blob/78b1ca84e45f708773db8d37608e7b4439e92cd7/docs/run-records/2026-10-30-v653-local-readiness.md",
+        "https://github.com/baiyibing/OSkhQuant1.3/blob/78b1ca84e45f708773db8d37608e7b4439e92cd7/docs/run-records/evidence/v653-local-readiness-2026-10-30.json"
+      ],
+      "observation": "Latest repository XLS 20261014; no approval JSON generated or accepted for a new first day."
+    },
+    {
+      "id": "I05",
+      "input": "source B index daily OHLCV and vendor evidence",
+      "status": "BLOCKED_STALE_SOURCE_B",
+      "host_evidence_urls": [
+        "https://github.com/baiyibing/OSkhQuant1.3/blob/78b1ca84e45f708773db8d37608e7b4439e92cd7/docs/run-records/2026-10-30-v653-local-readiness.md",
+        "https://github.com/baiyibing/OSkhQuant1.3/blob/78b1ca84e45f708773db8d37608e7b4439e92cd7/docs/run-records/evidence/v653-local-readiness-2026-10-30.json"
+      ],
+      "observation": "Local index 000001_SH 1d/none last date 2026-10-15; tail 11 OHLCV positive finite, insufficient for later first-day T-11..T-1; two-leg现场 evidence remains open."
+    },
+    {
+      "id": "I06",
+      "input": "applicable SHM capability and consumer fields",
+      "status": "DAILY_CONSUMER_CONTRACT_VERIFIED_PRODUCER_SCOPE_PENDING",
+      "host_evidence_urls": [
+        "https://github.com/baiyibing/OSkhQuant1.3/blob/78b1ca84e45f708773db8d37608e7b4439e92cd7/docs/run-records/2026-10-30-v653-local-readiness.md",
+        "https://github.com/baiyibing/OSkhQuant1.3/blob/78b1ca84e45f708773db8d37608e7b4439e92cd7/docs/run-records/evidence/v653-local-readiness-2026-10-30.json"
+      ],
+      "observation": "Index daily volume required; minute bar volume is not a current v653 historical input. This does not sign SHM producer quality or other consumers."
+    },
+    {
+      "id": "I07",
+      "input": "legal new trading day/window",
+      "status": "BLOCKED_APPROVED_NEW_SESSION_PENDING",
+      "host_evidence_urls": [
+        "https://github.com/baiyibing/OSkhQuant1.3/blob/78b1ca84e45f708773db8d37608e7b4439e92cd7/docs/run-records/2026-10-30-v653-local-readiness.md",
+        "https://github.com/baiyibing/OSkhQuant1.3/blob/78b1ca84e45f708773db8d37608e7b4439e92cd7/docs/run-records/evidence/v653-local-readiness-2026-10-30.json"
+      ],
+      "observation": "20261030 used only as precheck date; actual first-day date, current inputs and operational handoff not approved."
+    }
+  ],
+  "static_contract": {
+    "source_sha": "7e52e6e0cd6a289ad04bccaefb5edced40850841",
+    "source_b": {
+      "asset": "index",
+      "period": "1d",
+      "adjust_type": "none",
+      "sessions": "T-11..T-1",
+      "required_positive_finite_fields": [
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume"
+      ],
+      "zero_volume_gate": "UNKNOWN"
+    },
+    "minute_bar_volume_dependency": "Not found in current v653 wiring; target deployment producer dependencies still require verification",
+    "sources": [
+      "https://github.com/baiyibing/OSkhQuant1.3/blob/7e52e6e0cd6a289ad04bccaefb5edced40850841/live_trading/runtime/v653/inputs.py#L36",
+      "https://github.com/baiyibing/OSkhQuant1.3/blob/7e52e6e0cd6a289ad04bccaefb5edced40850841/tests/test_v653_paper_wiring.py#L313"
+    ]
+  },
+  "limits": [
+    "Local host selected by user; candidate config/schema verified, not activated.",
+    "No approved pool, actual first-day date, old-stack residual clearance, formal day slot or OWNER_SIGNOFF.",
+    "No QMT/paper/service startup, market-lake writes, production notifications or training.",
+    "Redis drill used a unique synthetic-account key and removed only its owned value; no actual-account lease/claim/trade keys touched.",
+    "Source B latest 2026-10-15 is stale for a later first paper day; static contract and tail-field validity do not sign session coverage.",
+    "P05, complete SDD scenarios and Mode E remain open; see 1.3 domain record through PR1259 for current status."
+  ],
+  "target_host_selection": {
+    "source": "User explicitly selected local host for first 6.53 paper day",
+    "observed_at_utc": "2026-10-30T13:33:38.814519+00:00"
+  },
+  "target_host_evidence": {
+    "implementation_pr": "https://github.com/baiyibing/OSkhQuant1.3/pull/1259",
+    "deployment_code_sha": "9dcd9c09b0600970ba5d90d9ef7e0110f80a5b06",
+    "precheck_summary": {
+      "pass": 14,
+      "fail": 3,
+      "warn": 1
+    },
+    "precheck_failed_checks": [
+      "day_slot_gate",
+      "turtle_slot_claim",
+      "path_V653_OPEN_POOL_APPROVAL_PATH"
+    ],
+    "dry_run_startup_allowed": false,
+    "recorded_at_utc": "2026-10-30T13:52:08.806959+00:00",
+    "domain_record_url": "https://github.com/baiyibing/OSkhQuant1.3/blob/78b1ca84e45f708773db8d37608e7b4439e92cd7/docs/run-records/2026-10-30-v653-local-readiness.md",
+    "machine_evidence_url": "https://github.com/baiyibing/OSkhQuant1.3/blob/78b1ca84e45f708773db8d37608e7b4439e92cd7/docs/run-records/evidence/v653-local-readiness-2026-10-30.json"
+  }
+}

@@ -21,6 +21,7 @@ from typing import Any, Optional
 
 import duckdb
 
+from l2_analytics.consumer_dedup import exact_deduped_main_sql, exact_deduped_order_sql
 from l2_analytics.db import connect, default_parquet_root
 from l2_analytics.paths import (
     cluster_agg_path,
@@ -35,7 +36,9 @@ _CLUSTER_MIN_NOTIONAL = 1_000_000
 
 # #9 headline reproducible metrics per stock_code x date, stock + continuous 口径
 # (matches vwap / net_inflow template defaults). $date binds the trading day.
-DAILY_METRICS_SQL = """
+# BT-03: reads exact-deduped main rows so byte-identical double-written prints
+# count once; distinct same-TranID rows (STAR after-hours) stay (consumer_dedup).
+DAILY_METRICS_SQL = f"""
 SELECT
   stock_code,
   date,
@@ -45,7 +48,7 @@ SELECT
   SUM(CASE WHEN Type = 'S' THEN Volume * Price ELSE 0 END) AS sell_notional,
   SUM(Volume) AS volume,
   COUNT(*) AS ticks
-FROM l2_main
+FROM {exact_deduped_main_sql()}
 WHERE instrument_type = 'stock'
   AND session LIKE 'continuous%'
   AND date = CAST($date AS DATE)
@@ -55,6 +58,9 @@ ORDER BY stock_code
 
 # #10 拆单聚簇 per stock_code x date x SaleOrderID, materialized with the default
 # HAVING threshold. $date binds the trading day.
+# BT-03: both sides exact-deduped — a double-written print would otherwise join
+# dup-order × dup-main rows and inflate fill_count/total_volume. Distinct
+# same-TranID rows still join per-row as before (TranID-only join key).
 CLUSTER_AGG_SQL = f"""
 SELECT
   o.stock_code,
@@ -65,8 +71,8 @@ SELECT
   SUM(m.Volume * m.Price) AS total_notional,
   MIN(m.TranID) AS first_tran_id,
   MAX(m.TranID) AS last_tran_id
-FROM l2_order o
-INNER JOIN l2_main m
+FROM {exact_deduped_order_sql("o")}
+INNER JOIN {exact_deduped_main_sql("m")}
   ON o.stock_code = m.stock_code AND o.date = m.date AND o.TranID = m.TranID
 WHERE m.instrument_type = 'stock'
   AND m.session LIKE 'continuous%'

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import argparse
 import csv
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 import hashlib
 import io
@@ -23,6 +23,8 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 EXPERIMENT = "B-native-CV-01"
+DEFAULT_RULE_PROFILE = "industry"
+RULE_PROFILES = (DEFAULT_RULE_PROFILE, "legacy")
 NORMAL_CASH = 1_000_000_000  # Frozen ample-capital recipe; native defaults stay unchanged.
 ENTRIES = {
     "csv_minute": "backtest/research/csv_minute_backtest.py",
@@ -38,6 +40,7 @@ TEXT_SUFFIXES = (".csv", ".json", ".txt")
 # Only numeric duration captures may differ after text normalization to LF.
 # Keep #261's capture grammar; every surrounding character must still match.
 DURATION_LINES = (
+    r"  耗时: 池 (?P<pool>\d+\.\d+)s \| 日线 (?P<daily>\d+\.\d+)s \| 分钟 (?P<minute>\d+\.\d+)s \| 除权 (?P<exdiv>\d+\.\d+)s \| 指数闸 (?P<index>\d+\.\d+)s \| 模拟 (?P<sim>\d+\.\d+)s(?: \| 缓存 [^\r\n]+)?(?:\r?\n)?",
     r"  耗时: 池 (?P<pool>\d+\.\d+)s \| 日线 (?P<daily>\d+\.\d+)s \| 分钟 (?P<minute>\d+\.\d+)s \| 模拟 (?P<sim>\d+\.\d+)s(?: \| 缓存 [^\r\n]+)?(?:\r?\n)?",
     r"loaded minute=lake daily=lake: minute_names=\d+ daily_names=\d+ exdiv_names=\d+ st_names=\d+ in (?P<load>\d+\.\d+)s(?:\r?\n)?",
     r"timing load=(?P<load>\d+\.\d+)s simulate=(?P<sim>\d+\.\d+)s total=(?P<total>\d+\.\d+)s(?:\r?\n)?",
@@ -379,10 +382,50 @@ def input_identity(pool_path: Path, start: str, end: str) -> dict:
             "runtime_config_and_authority": config_identity, "csv_daily_comparison_candidates": baseline}
 
 
-def native_argv(family: str, cell: str, pool: Path, start: str, end: str) -> list[str]:
+def daily_cache_snapshot() -> dict:
+    """Pin derived daily caches after native warmup; never mutate or mask them."""
+    from backtest.research.ashare_bars import CACHE_ROOT
+
+    root = CACHE_ROOT.resolve()
+    files = [{"path": str(path), "sha256": file_digest(path),
+              "size": path.stat().st_size, "mtime_ns": path.stat().st_mtime_ns}
+             for path in sorted(root.glob("daily_*"))
+             if path.is_file() and path.suffix in (".parquet", ".json")]
+    return {"root": str(root), "files": files}
+
+
+def economic_contract(rule_profile: str) -> dict:
+    """Resolve the same profile and unoverridden fee schedule as both native CLIs."""
+    from backtest.research.ashare_fees import resolve_account_fee_schedule
+    from backtest.research.rule_profile import resolve_rule_profile
+
+    profile = resolve_rule_profile(rule_profile)
+    fee = resolve_account_fee_schedule(profile.account_fee_schedule)
+    return {"rule_profile": profile.name, "rule_profile_revision": profile.revision,
+            "profile_settings": asdict(profile), "fee_schedule": asdict(fee)}
+
+
+def uses_legacy_cash_exception(family: str, rule_profile: str) -> bool:
+    return family == "csv_minute" and rule_profile == "legacy"
+
+
+def low_cash_trigger_description() -> str:
+    exceptions = "; ".join(
+        f"{family} {profile}: InsufficientCashError"
+        for family in ENTRIES for profile in RULE_PROFILES
+        if uses_legacy_cash_exception(family, profile)
+    )
+    return (f"{exceptions}; otherwise: actual skip_cash rejection "
+            "(cash=1 tests zero affordable quantity, not partial shrink)")
+
+
+def native_argv(family: str, cell: str, pool: Path, start: str, end: str,
+                rule_profile: str = DEFAULT_RULE_PROFILE) -> list[str]:
+    profile_args = ["--rule-profile", rule_profile]
     if cell == "invalid_config":
-        return ["--start", start, "--end", end, "--minute-source", "B_NATIVE_INVALID"]
+        return [*profile_args, "--start", start, "--end", end, "--minute-source", "B_NATIVE_INVALID"]
     args = ["--start", start, "--end", end, "--pool-dir", str(pool),
+            *profile_args,
             "--minute-source", "lake", "--daily-source", "lake",
             "--cash-total", "1" if cell == "low_cash" else str(NORMAL_CASH),
             "--execution-audit-file", "artifacts/execution-audit.json"]
@@ -431,7 +474,8 @@ def launch(side: str, family: str, argv: list[str], cwd: Path, interpreter: Path
     return Observation(cwd / "artifacts", status, process.stdout, process.stderr)
 
 
-def cell_verdict(family: str, cell: str, observations: list[Observation], comparison: dict) -> tuple[str, str]:
+def cell_verdict(family: str, cell: str, observations: list[Observation], comparison: dict,
+                 rule_profile: str = DEFAULT_RULE_PROFILE) -> tuple[str, str]:
     if comparison["status"] == "FAIL":
         return "FAIL", "native / L1 mismatch; see comparison field paths"
     for observed in observations:
@@ -442,7 +486,7 @@ def cell_verdict(family: str, cell: str, observations: list[Observation], compar
             marker = b"NotADirectoryError" if family == "csv_minute" else b"FileExistsError"
             if observed.exit_code == 0 or marker not in observed.stderr or b"artifacts" not in observed.stderr:
                 return "FAIL", "expected native output-file refusal was not observed"
-        elif cell == "low_cash" and family == "csv_minute":
+        elif cell == "low_cash" and uses_legacy_cash_exception(family, rule_profile):
             if observed.exit_code != 0:
                 if not re.search(rb"(?:^|\n)(?:[\w.]+\.)?InsufficientCashError:.*date=.*code=", observed.stderr):
                     return "FAIL", "nonzero exit was not the native InsufficientCashError path"
@@ -451,12 +495,27 @@ def cell_verdict(family: str, cell: str, observations: list[Observation], compar
         elif observed.exit_code != 0:
             return "FAIL", "unexpected native nonzero exit"
         else:
-            with (observed.root / "trades.csv").open(encoding="utf-8-sig", newline="") as handle:
-                trades = list(csv.DictReader(handle))
             if cell == "low_cash":
-                if not any(row.get("reason") == "skip_cash" and row.get("side") == "skip" for row in trades):
-                    return "NOT_COVERED", "未覆盖: real v7 skip_cash did not trigger"
+                artifact = "execution-audit.json" if family == "csv_minute" else "trades.csv"
+                try:
+                    if family == "csv_minute":
+                        # Native CSV books keep refusals outside their trades table.
+                        rows = json.loads((observed.root / artifact).read_bytes())["events"]
+                    else:
+                        with (observed.root / artifact).open(encoding="utf-8-sig", newline="") as handle:
+                            rows = list(csv.DictReader(handle))
+                    if not isinstance(rows, list) or any(
+                        not isinstance(row, dict)
+                        or not isinstance(row.get("side", ""), str) for row in rows
+                    ):
+                        raise ValueError("expected event rows with string sides")
+                except (OSError, ValueError, KeyError, TypeError, csv.Error):
+                    return "NOT_COVERED", f"未覆盖: missing/unusable {artifact}; skip_cash trigger not observed"
+                if not any(row.get("reason") == "skip_cash" and row.get("side", "").lower() == "skip" for row in rows):
+                    return "NOT_COVERED", f"未覆盖: real {family} {rule_profile} skip_cash did not trigger"
             else:
+                with (observed.root / "trades.csv").open(encoding="utf-8-sig", newline="") as handle:
+                    trades = list(csv.DictReader(handle))
                 sides = {row.get("side", "").lower() for row in trades if float(row.get("shares", 0)) > 0}
                 with (observed.root / "daily_equity.csv").open(encoding="utf-8-sig", newline="") as handle:
                     equity = list(csv.DictReader(handle))
@@ -479,6 +538,8 @@ def main(argv=None) -> int:
     parser.add_argument("--output-root", type=Path, help="new directory under a handoff or temp; must not exist")
     parser.add_argument("--start", default="20251023", help="native documented start, validated against existing pool files")
     parser.add_argument("--end", default="20251104", help="native CLI documented short-window end")
+    parser.add_argument("--rule-profile", choices=RULE_PROFILES, default=DEFAULT_RULE_PROFILE,
+                        help="explicit native rules for both sides (default: industry; legacy retains refusal recipe)")
     parser.add_argument("--csv-pool-dir", type=Path, default=ROOT / "stock_pool")
     parser.add_argument("--v7-pool-dir", type=Path, default=ROOT / "stock_pool",
                         help="existing named lists; passed explicitly to v7, never its environment fallback")
@@ -492,6 +553,7 @@ def main(argv=None) -> int:
     sys.path.insert(0, str(ROOT))
     from scripts._script_bootstrap import resolve_oskh_python
 
+    contract = economic_contract(args.rule_profile)
     interpreter = resolve_oskh_python().absolute()  # Preserve venv symlink identity.
     if interpreter != Path(sys.executable).absolute():
         parser.error("launch this harness with the same interpreter selected by resolve_oskh_python")
@@ -506,7 +568,8 @@ def main(argv=None) -> int:
     out.mkdir(parents=True, exist_ok=False)
     env = {**os.environ, "OSKH_MERGE_PYTHON": str(interpreter), "OSKH_TURTLE_POOL_DIR": "",
            "PYTHONPATH": str(ROOT), "PYTHONHASHSEED": "0", "PYTHONDONTWRITEBYTECODE": "1",
-           "NUMBA_CACHE_DIR": str(out / "numba-cache"), "TZ": "Asia/Shanghai"}
+           "NUMBA_CACHE_DIR": str(out / "numba-cache"), "TZ": "Asia/Shanghai",
+           "OSKH_PROFILE_SIM": "0"}
     pools = {"csv_minute": args.csv_pool_dir.resolve(), "v7": args.v7_pool_dir.resolve()}
     identities = {family: input_identity(pool, args.start, args.end) for family, pool in pools.items()}
     # Relative source settings must not change meaning in the isolated child cwd.
@@ -523,9 +586,15 @@ def main(argv=None) -> int:
     if env.get("OSKH_DATA_ROOT"):
         env["OSKH_DATA_ROOT"] = str(Path(env["OSKH_DATA_ROOT"]).resolve())
     cells = [{"family": family, "cell": cell,
-              "argv": native_argv(family, cell, pools[family], args.start, args.end),
+              "rule_profile": contract["rule_profile"],
+              "rule_profile_revision": contract["rule_profile_revision"],
+              "argv": native_argv(family, cell, pools[family], args.start, args.end, args.rule_profile),
               "cwd": {side: str(out / f"{family}-{cell}" / side) for side in ("direct", "l1")}}
              for family in ENTRIES for cell in ("normal", "low_cash", "invalid_config", "bad_output")]
+    warmup_plan = [{"family": family,
+                    "argv": native_argv(family, "normal", pools[family], args.start, args.end, args.rule_profile),
+                    "cwd": str(out / f"{family}-cache-warmup" / "direct")}
+                   for family in ENTRIES]
     git = lambda *tokens: subprocess.check_output(["git", *tokens], cwd=ROOT, text=True).strip()
     # Selected-interpreter environment identity: versions, no secret environment values.
     runtime = subprocess.check_output([str(interpreter), "-c",
@@ -542,18 +611,22 @@ def main(argv=None) -> int:
             "OSKH_DATA_ROOT", "OSKH_SOURCE_PARQUET_ROOT", "OSKH_AUTHORITY_HINT_ROOT",
             "OSKH_PERIOD_1M_ROOT", "OSKH_PERIOD_1D_ROOT", "OSKH_INDEX_DAILY_ROOT",
             "OSKH_MERGE_PYTHON", "OSKH_TURTLE_POOL_DIR", "PYTHONPATH", "PYTHONHASHSEED",
-            "PYTHONDONTWRITEBYTECODE", "NUMBA_CACHE_DIR", "TZ", "MINIQMT_CONFIG_PATH")},
+            "PYTHONDONTWRITEBYTECODE", "NUMBA_CACHE_DIR", "TZ", "MINIQMT_CONFIG_PATH", "OSKH_PROFILE_SIM")},
         "window": {"start": args.start, "end": args.end, "origin": "native CLI documented defaults / explicit harness arguments"},
         "load_windows": {"csv_minute": "minute/daily: start minus native WARMUP_DAYS=10 calendar days through end",
                          "v7": "minute: start..end; daily: start minus native DAILY_PRELOAD_DAYS=40 through end",
                          "index": "native requested window plus 11 preceding sessions; files hashed in full"},
         "inputs": identities, "cells": cells, "output_root": str(out),
         "economic_flags": {"normal_cash": NORMAL_CASH, "low_cash": 1, "name_budget": 1000000,
-                           "fee": "BILATERAL_10BP: buy=sell=0.001, floor=0",
+                           **contract,
+                           "low_cash_trigger": low_cash_trigger_description(),
                            "price_domain": "lake minute/daily none; native exdiv context",
                            "strategy": {"csv_minute": "version8", "v7": "native strategy7"},
                            "other_flags": "native pinned code defaults; no X-02/X-04 or production changes"},
-        "cache": "CSV --no-cache; v7 native bars_from_pool use_cache=False; fresh processes; shared isolated numba code cache only",
+        "cache": "minute: CSV --no-cache / v7 use_cache=False; daily: native normal warmup for each family, then pin hashes before paired cells; fresh processes and isolated numba code cache",
+        "cache_warmup_plan": warmup_plan,
+        "daily_cache_snapshot": "daily-cache-snapshot.json (recorded after warmup, before paired cells)",
+        "profiling": "existing OSKH_PROFILE_SIM=0 disables optional wall-clock sidecars; native defaults and comparison JSON policy unchanged",
         "compare_policy": {"duration_lines": DURATION_LINES, "duration_files": ["summary.txt"],
                            "text": {"suffixes": TEXT_SUFFIXES, "also": ["stdout", "stderr", "declared duration_files"],
                                     "classification": "strict UTF-8; no C0/C1 controls except tab/CR/LF",
@@ -576,6 +649,31 @@ def main(argv=None) -> int:
                 or file_digest(Path(__file__)) != receipt["harness_sha256"]):
             raise RuntimeError("code identity drift after preregistration")
 
+    warmups = {}
+    for warmup in warmup_plan:
+        family = warmup["family"]
+        if identities[family]["sources"]["errors"]:
+            warmups[family] = {"status": "NOT_RUN", "reason": "input source blocked"}
+            continue
+        directory = Path(warmup["cwd"]).parent
+        directory.mkdir()
+        try:
+            check_code_identity()
+            if input_identity(pools[family], args.start, args.end) != identities[family]:
+                raise RuntimeError("input identity drift before cache warmup")
+            observed = launch("direct", family, warmup["argv"], Path(warmup["cwd"]), interpreter, env, False)
+            check_code_identity()
+            if input_identity(pools[family], args.start, args.end) != identities[family]:
+                raise RuntimeError("input identity drift after cache warmup")
+            if observed.exit_code != 0:
+                raise RuntimeError(f"native cache warmup failed ({observed.exit_code})")
+            warmups[family] = {"status": "PASS", "native_exit_code": observed.exit_code}
+        except Exception as exc:
+            warmups[family] = {"status": "FAIL", "reason": f"{type(exc).__name__}: {exc}"}
+    write_json(out / "cache-warmup.json", warmups)
+    cache_pin = daily_cache_snapshot() if any(row["status"] == "PASS" for row in warmups.values()) else None
+    write_json(out / "daily-cache-snapshot.json", cache_pin or {"status": "NOT_RUN"})
+
     results = []
     for cell in cells:
         family, name = cell["family"], cell["cell"]
@@ -583,6 +681,8 @@ def main(argv=None) -> int:
         errors = list(dict.fromkeys(identities[family]["sources"]["errors"]))
         if name != "invalid_config" and errors:
             result.update(status="NOT_RUN", reason="BLOCKED: " + " | ".join(errors))
+        elif name != "invalid_config" and warmups[family]["status"] != "PASS":
+            result.update(status="FAIL", reason="native daily-cache preparation failed: " + warmups[family]["reason"])
         else:
             directory = out / f"{family}-{name}"
             directory.mkdir()
@@ -592,17 +692,21 @@ def main(argv=None) -> int:
                     check_code_identity()
                     if name != "invalid_config" and input_identity(pools[family], args.start, args.end) != identities[family]:
                         raise RuntimeError("input identity drift before " + side)
+                    if name != "invalid_config" and daily_cache_snapshot() != cache_pin:
+                        raise RuntimeError("daily cache identity drift before " + side)
                     observations.append(launch(side, family, cell["argv"], Path(cell["cwd"][side]),
                                                interpreter, env, name == "bad_output"))
                     check_code_identity()
                     if name != "invalid_config" and input_identity(pools[family], args.start, args.end) != identities[family]:
                         raise RuntimeError("input identity drift after " + side)
+                    if name != "invalid_config" and daily_cache_snapshot() != cache_pin:
+                        raise RuntimeError("daily cache identity drift after " + side)
                 require = REQUIRED[family] if name in ("normal", "low_cash") and all(o.exit_code == 0 for o in observations) else ()
                 policy = ComparePolicy(required_files=require, duration_files=("summary.txt",),
                                        duration_stdout=True, verify_manifest="run-manifest.json" in require)
                 comparison = compare_observations(*observations, policy)
                 write_json(directory / "comparison.json", comparison)
-                status, reason = cell_verdict(family, name, observations, comparison)
+                status, reason = cell_verdict(family, name, observations, comparison, args.rule_profile)
                 result.update(status=status, reason=reason, native_exit_codes=[o.exit_code for o in observations],
                               comparison=str(directory / "comparison.json"), byte_identical=comparison["byte_identical"])
             except Exception as exc:

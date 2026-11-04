@@ -1,0 +1,90 @@
+{
+  "format_version": 1,
+  "as_of": "2026-10-28",
+  "requested_window": {
+    "start": "2026-10-07",
+    "end": "2026-10-28"
+  },
+  "automatic_coverage_release": false,
+  "facts": [
+    {
+      "code": "000016.SZ",
+      "classification": "in_window_voluntary_delisting",
+      "decision_date": "2026-10-16",
+      "delist_date": "2026-10-23",
+      "listing_revision_proposal": {
+        "old_delist_date": null,
+        "new_delist_date": "2026-10-23",
+        "approved": false
+      },
+      "source": {
+        "code": "000016.SZ",
+        "notice_id": "1225615607",
+        "url": "https://static.cninfo.com.cn/finalpage/2026-10-23/1225615607.PDF",
+        "sha256": "63d22af39ae73ee789d4492c4643f5a4b4ea02edfe51992d8752028b12dc320d",
+        "bytes": 226002,
+        "retrieved_at": "2026-10-30T07:16:09.659551+00:00",
+        "pdf_pages_one_based": [
+          1
+        ],
+        "published_on": "2026-10-23"
+      },
+      "window_no_event_proven": false,
+      "blocking_reason": "Delisted inside the requested window; pre-delisting interval is not certified empty."
+    },
+    {
+      "code": "002731.SZ",
+      "classification": "in_window_delisting_period",
+      "delisting_period_start": "2026-10-23",
+      "security_short_name": "萃华退",
+      "security_code_unchanged": true,
+      "expected_last_trade_date": "2026-11-12",
+      "actual_delist_date_as_of": null,
+      "source": {
+        "code": "002731.SZ",
+        "notice_id": "2026-113",
+        "url": "https://disc.static.szse.cn/download/disc/disk03/finalpage/2026-10-16/dd74a783-ddb7-4503-9adb-16369ac2757f.PDF",
+        "sha256": "8d2be086e1a9d3329a2c70739f04e57811d01671546cdc8e82fb86ac68cde1fd",
+        "bytes": 120863,
+        "retrieved_at": "2026-10-30T07:16:12.043979+00:00",
+        "pdf_pages_one_based": [
+          1
+        ],
+        "published_on": "2026-10-16"
+      },
+      "window_no_event_proven": false,
+      "blocking_reason": "Still in the delisting period as of cutoff; an expected last trade date cannot become an actual delist date."
+    },
+    {
+      "code": "601198.SH",
+      "classification": "in_window_stock_merger",
+      "delist_date": "2026-10-19",
+      "conversion_record_date": "2026-10-16",
+      "target_code": "601995.SH",
+      "target_shares_per_source_share": "0.4376",
+      "fractional_entitlement_policy": "Shareholder-level allocation by fractional remainder ranking, random allocation for equal remainders; not per-lot flooring.",
+      "source": {
+        "code": "601198.SH",
+        "notice_id": "1225606336",
+        "url": "https://static.cninfo.com.cn/finalpage/2026-10-16/1225606336.PDF",
+        "sha256": "9553a01c4278f46f18fcc05665640fbe39a759c546d5f2f6a47010cc1c7d94cf",
+        "bytes": 165083,
+        "retrieved_at": "2026-10-30T07:16:21.724337+00:00",
+        "pdf_pages_one_based": [
+          1,
+          2
+        ],
+        "published_on": "2026-10-16"
+      },
+      "listing_revision_proposal": {
+        "old_delist_date": null,
+        "new_delist_date": "2026-10-19",
+        "approved": false
+      },
+      "window_no_event_proven": false,
+      "blocking_reason": "Announced stock conversion arrangement in window is outside the cash/bonus ten-column schema. No code alias or no-event waiver. Completion and new-share listing require separate result evidence."
+    }
+  ],
+  "base_ask_end": "2026-10-06",
+  "listing_revision_policy": "Proposals for a new version only; never backfill the frozen pre-window reference."
+}

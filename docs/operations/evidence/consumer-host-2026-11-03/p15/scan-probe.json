@@ -1,0 +1,176 @@
+{
+  "registered_utc": "2026-11-03T05:02:08.392452+00:00",
+  "source_commit": "6f3a3305b2dacba6bb4fe49549a05284227ac43f",
+  "runner_sha256": "f20f8ef786e74db36541cfd69f060d1c1c0adbbf9bd33b365da45de2428e118e",
+  "cache_control": "Fresh private application cache, fresh Python process per phase. OS page cache NOT evicted; ordered observations only.",
+  "request_codes_caveat": "5575 is the historical plan example for FD projection only, not a measured universe.",
+  "probe": {
+    "stage": "S1.1 scaffolding",
+    "identity": {
+      "identity_version": 1,
+      "start": "20251201",
+      "end": "20260930",
+      "dividend_type": "none",
+      "schema": "a2dabd479e94988d5a36f9abefe44098d68c5d754090a5a5e68462ede6da060f",
+      "resolver_identity": "$LAKE\\stock\\period=1m\\dividend_type=none",
+      "source_snapshot": "shallow-v1:9d18ce3bd077531ca54abf829ff95e7e582ac763a2fcd51d24d8e6a48af65c78"
+    },
+    "loader_request": [
+      "20251227",
+      "20260914"
+    ],
+    "month_windows": [
+      [
+        "20251201",
+        "20251231"
+      ],
+      [
+        "20260101",
+        "20260131"
+      ],
+      [
+        "20260201",
+        "20260228"
+      ],
+      [
+        "20260301",
+        "20260331"
+      ],
+      [
+        "20260401",
+        "20260430"
+      ],
+      [
+        "20260501",
+        "20260531"
+      ],
+      [
+        "20260601",
+        "20260630"
+      ],
+      [
+        "20260701",
+        "20260731"
+      ],
+      [
+        "20260801",
+        "20260831"
+      ],
+      [
+        "20260901",
+        "20260930"
+      ]
+    ],
+    "timing_caveat": "ordered reads; OS page cache not evicted; not cold-cache evidence",
+    "source_assumption": "frozen source; preserved-metadata mutations require new explicit token",
+    "observations": [
+      {
+        "code": "000001.SZ",
+        "source_stamp": [
+          3266071,
+          1793613178155299500
+        ],
+        "rows": 49164,
+        "open_s": 0.0004410399997141212,
+        "one_scan_s": 0.38369689998216927,
+        "per_month_scans_s": 0.44379739998839796,
+        "per_month_over_one_scan": 1.156635354648478,
+        "open_over_one_scan": 0.0011494489523752127
+      },
+      {
+        "code": "300750.SZ",
+        "source_stamp": [
+          4124341,
+          1793613601017408000
+        ],
+        "rows": 49164,
+        "open_s": 0.00048584999749436977,
+        "one_scan_s": 0.3467730999691412,
+        "per_month_scans_s": 0.43437490006908774,
+        "per_month_over_one_scan": 1.2526199411307917,
+        "open_over_one_scan": 0.0014010602250797562
+      },
+      {
+        "code": "600000.SH",
+        "source_stamp": [
+          3311060,
+          1793613761800277600
+        ],
+        "rows": 49164,
+        "open_s": 0.0004387349996250123,
+        "one_scan_s": 0.34397069993428886,
+        "per_month_scans_s": 0.43423999997321516,
+        "per_month_over_one_scan": 1.262433108564686,
+        "open_over_one_scan": 0.001275501081077042
+      },
+      {
+        "code": "600036.SH",
+        "source_stamp": [
+          3544209,
+          1793613763112643200
+        ],
+        "rows": 49164,
+        "open_s": 0.0004772749962285161,
+        "one_scan_s": 0.33860560005996376,
+        "per_month_scans_s": 0.4226247000042349,
+        "per_month_over_one_scan": 1.2481326355187043,
+        "open_over_one_scan": 0.0014095307228941143
+      },
+      {
+        "code": "688981.SH",
+        "source_stamp": [
+          3817447,
+          1793615561614000100
+        ],
+        "rows": 49164,
+        "open_s": 0.0004275050014257431,
+        "one_scan_s": 0.35695269994903356,
+        "per_month_scans_s": 0.4459093000041321,
+        "per_month_over_one_scan": 1.2492111701852933,
+        "open_over_one_scan": 0.0011976516818244635
+      },
+      {
+        "code": "920002.BJ",
+        "source_stamp": [
+          3006911,
+          1793615561673212300
+        ],
+        "rows": 49164,
+        "open_s": 0.0004767750040628016,
+        "one_scan_s": 0.33179379999637604,
+        "per_month_scans_s": 0.4331308000255376,
+        "per_month_over_one_scan": 1.3054216203867233,
+        "open_over_one_scan": 0.0014369617638063433
+      }
+    ],
+    "cut_a_modeled_counts": {
+      "modeled_not_measured_request_ends": true,
+      "scenarios": {
+        "same_month_plus_one": {
+          "scenario_base_end": "20260914",
+          "scenario_extended_end": "20260915",
+          "expected_rebuilt_shards_per_changed_symbol": 10
+        },
+        "cross_month_plus_one": {
+          "scenario_base_end": "20260930",
+          "scenario_extended_end": "20261001",
+          "expected_rebuilt_shards_per_changed_symbol": 11
+        }
+      }
+    },
+    "actual_rebuilt_shards": null,
+    "fd_extrapolation": {
+      "request_codes": 5575,
+      "workers": 8,
+      "projected_shard_files": 55750,
+      "serial_probe_peak_parquet_handles": 1,
+      "one_handle_per_worker_projection": 8,
+      "all_shards_open_projection": 55750
+    },
+    "pending": [
+      "actual same-month and cross-month rebuilt counts on frozen host fixtures",
+      "monolith versus shard write/read timings and grain decision",
+      "same-commit CSV reconciliation and cold/warm budgets before S1"
+    ]
+  }
+}

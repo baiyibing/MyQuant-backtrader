@@ -1,0 +1,48 @@
+{
+  "frozen_items_unchanged": 64,
+  "frozen_packages_unchanged": 21,
+  "all_prior_receipts_and_refs_unchanged": true,
+  "new_implementation_refs": [
+    "P12/QL11",
+    "P20/QL17"
+  ],
+  "new_audit_item_closeouts": [],
+  "new_package_closeouts": [],
+  "existing_gates": {
+    "verify_oskh_data_contract.py": {
+      "exit_code": 0,
+      "log_sha256": "9e165f60d000ce820db1c2ea06149e7341a31bf9ed735e93e3fd77c4dbe5fb88"
+    },
+    "verify_data_path_ssot.py": {
+      "exit_code": 0,
+      "log_sha256": "1e3282fec6fcb37f2ccf3aa69dacb34839c233b10017c9d8ec4a049b54e01ea8"
+    },
+    "verify_no_hardcoded_machine_paths.py": {
+      "exit_code": 0,
+      "log_sha256": "25c8523b313e959a1aa4f937ca5ebcfd41ad211216ff7a048db6f8a23cbadcbf"
+    },
+    "verify_tr_bridge_import_ssot.py": {
+      "exit_code": 0,
+      "log_sha256": "ec735b3b22930525549b3724c75625b0b52045917069b9c440f0b7202dd82950"
+    },
+    "verify_book_admission.py": {
+      "exit_code": 0,
+      "log_sha256": "624398ff8039347815dc07b913a5dbb2078abfa3f5e029afb52dcd20ce974b50"
+    },
+    "verify_baseline_admission.py": {
+      "exit_code": 0,
+      "log_sha256": "a3033bb915b0ed362b3db6317bd5e3cd643c287efe02c018768b75aa63cdc998"
+    }
+  },
+  "progress_map_verifier": {
+    "status": "PASS",
+    "marker_count": 595,
+    "passed": 588,
+    "skipped": 7,
+    "six_symlink_markers": "......",
+    "raw_ci_log_hash_and_parser_verified": true,
+    "result": "ql11-progress-check.json",
+    "source": "audit-sources/verify_progress_map.py"
+  },
+  "review_followup": "Added executable map verifier, exact full normalized595-node collection and machine-computed run lengths/windows. Original progress string, indices, source facts and refs unchanged; first review miscounted long dot runs."
+}
