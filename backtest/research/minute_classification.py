@@ -18,6 +18,7 @@ EXTRA_MINUTE_STRATEGIES = ("version7", "topk_app_dropout")
 _SPECIAL_HOOKS = (
     "minute_session", "minute_open", "run_daily_day", "version9_exit",
     "stop_range", "exit_plan", "drawdown_of", "drawdown_take_profit",
+    "close_clear",
 )
 
 
