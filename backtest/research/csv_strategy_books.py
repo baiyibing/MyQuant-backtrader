@@ -15,6 +15,7 @@ from backtest.research import (
     strategy1_rules,
     strategy2_rules,
     strategy3_rules,
+    stab_t1_rules,
     strategy4_rules,
     strategy5_rules,
     strategy6_rules,
@@ -3434,4 +3435,43 @@ register(CsvStrategyBook(
     allow_add=True, peak_gap_min=0, help_lock=strategy13_rules.HELP_LOCK,
     apply=_apply_version13, run_kwargs=_run_kwargs_version13,
     sizing="per_name", name_budget=strategy13_rules.NAME_BUDGET_DEFER,
+))
+
+
+def _apply_stab_t1(**_) -> dict:
+    """STAB_LOW_TREND T+1 收盘卖：close_clear 触发，日线 same-bar 收盘成交。
+
+    take_profit 必须恒 None（分钟引擎逐 bar 评估，真逻辑放 close_clear 只在
+    收盘钟点评估）；stop_pct=None 禁用止损（纯信号 v0）。
+    """
+
+    def _tp(px, cost, peak, n_days):
+        return stab_t1_rules.never_take_profit(px, cost, peak, n_days)
+
+    def _close_clear(cost, peak, n_days):
+        return stab_t1_rules.close_clear_reason(cost, peak, n_days)
+
+    def _rec(st):
+        stab_t1_rules.record_stab_t1_params(st)
+
+    return {
+        "stop_pct": None,
+        "take_profit": _tp,
+        "close_clear": _close_clear,
+        "daily_same_bar_prefixes": ("stab_t1",),
+        "record_params": _rec,
+    }
+
+
+def _run_kwargs_stab_t1(args) -> dict:
+    return dict(strategy="stab_t1", stop_pct=getattr(args, "stop_pct", None))
+
+
+register(CsvStrategyBook(
+    name="stab_t1", tag=stab_t1_rules.BOOK_TAG,
+    aliases=("stab_t1", "stabt1", "l2_stab"),
+    allow_add=stab_t1_rules.ALLOW_ADD,
+    peak_gap_min=stab_t1_rules.PEAK_GAP_MIN,
+    help_lock=stab_t1_rules.HELP_LOCK,
+    apply=_apply_stab_t1, run_kwargs=_run_kwargs_stab_t1,
 ))

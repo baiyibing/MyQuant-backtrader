@@ -150,6 +150,7 @@ PENDING_BOOK_NAMES = (
     "version6_67",
     "version10_1",
     "version10_2",
+    "stab_t1",
 )
 P03_GOLDEN = ROOT / "tests/fixtures/off_byte_baseline_industry_p03_order_commission_20261006.json"
 P03_RULE_REVISION = "industry-p03-order-commission-20261006"
