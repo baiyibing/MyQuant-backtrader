@@ -384,6 +384,9 @@ def _adjust_call_violations(
                 )
             return errors
 
+    if saw_unpack:
+        # **kw may supply kw_name; the unpack warning above already covers the risk.
+        return errors
     errors.append(
         _format_adjust_violation(
             relative,

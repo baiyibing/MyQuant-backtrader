@@ -193,11 +193,11 @@ def test_unpacked_keywords_are_reported(gate: ModuleType, tmp_path: Path) -> Non
         "reader.read_stock(**kw)\nstock_daily_bars(**{'adjust': 'none'})\n",
     )
     errors = gate._check_adjust_type_hot_path()
-    assert len(errors) == 4
     unpack = [error for error in errors if "unpacked keywords may set non-literal" in error]
     omitted = [error for error in errors if "omitted" in error]
     assert len(unpack) == 2
-    assert len(omitted) == 2
+    assert omitted == []
+    assert len(errors) == 2
     assert any("unpacked keywords may set non-literal adjust_type" in error for error in unpack)
     assert any("unpacked keywords may set non-literal adjust —" in error for error in unpack)
 
