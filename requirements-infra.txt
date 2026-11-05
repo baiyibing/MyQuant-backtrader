@@ -1,3 +1,5 @@
 # Optional (private). CI does not install this. Hosts with GH access:
 #   pip install -r requirements-infra.txt
+# D4 + B2 pin/rollback: docs/engineering/b2-bars-adj-infra-switch-20261105.md
+# K18 D4 duckdb IO: docs/engineering/k18-duckdb-infra-switch-20261105.md
 myquant-infra @ git+https://github.com/baiyibing/MyQuant-infra.git@7d48c4e310f9636cad9c3e544db1766025db4e3c

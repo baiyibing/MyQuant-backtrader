@@ -6,6 +6,10 @@ even when none already reaches ``target_date``.
 
 This helper copies ``dividend_type=none/.../data.parquet`` → ``front/...`` for
 those symbols when none exists (optionally requiring none latest >= target).
+
+B2 RESULT_BLOCKER: retain byte-copy seeding. The pinned infra seed canonicalizes
+daily history and has different freshness/default/result contracts.
+See docs/engineering/b2-bars-adj-infra-switch-20261105.md.
 """
 from __future__ import annotations
 

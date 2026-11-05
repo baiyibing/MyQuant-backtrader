@@ -14,6 +14,10 @@ Write modes (``OSKH_DAILY_PARQUET_WRITE_MODE``; default ``batch``):
 Deprecated alias: ``duckdb`` → ``batch`` (old name implied DuckDB writes parquet; it does not).
 
 Phase B: ``mirror_none_tail_to_front`` appends only ``t > max(front.time)``.
+
+B2 RESULT_BLOCKER: retain merge kernels and their callers until infra has A1a
+history-preserving daily merges. Only the shared schema constants match this
+pin; see docs/engineering/b2-bars-adj-infra-switch-20261105.md.
 """
 
 from __future__ import annotations
@@ -37,19 +41,14 @@ logger = get_logger(__name__)
 
 WriteMode = Literal["parallel", "batch", "legacy"]
 
-STANDARD_COLUMNS = ["time", "open", "high", "low", "close", "volume", "amount"]
-
-# Canonical Arrow/pandas dtypes for 1d hive (rebuild schema gate uses the same contract).
-# QMT / pandas often emit volume as float64 ("double"); DuckDB rebuild fail-closes on drift.
-CANONICAL_ARROW_TYPES: dict[str, pa.DataType] = {
-    "time": pa.int64(),
-    "open": pa.float64(),
-    "high": pa.float64(),
-    "low": pa.float64(),
-    "close": pa.float64(),
-    "volume": pa.int64(),
-    "amount": pa.float64(),
-}
+try:
+    from myquant_infra.bars.schema import CANONICAL_ARROW_TYPES, STANDARD_COLUMNS
+except ImportError:  # Public CI: retained A1a kernels need no private package.
+    STANDARD_COLUMNS = ["time", "open", "high", "low", "close", "volume", "amount"]
+    CANONICAL_ARROW_TYPES: dict[str, pa.DataType] = {
+        name: pa.int64() if name in ("time", "volume") else pa.float64()
+        for name in STANDARD_COLUMNS
+    }
 
 _DEFAULT_WORKERS = max(4, min(16, (os.cpu_count() or 8)))
 _MS_PER_DAY = 86_400_000
