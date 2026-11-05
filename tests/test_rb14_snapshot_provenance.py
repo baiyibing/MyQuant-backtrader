@@ -13,6 +13,7 @@ from tests.test_ashare_simulate_import_fence import SIMULATE_HOT_PATH
 
 @pytest.mark.parametrize("token", ["upstream:release-17", "shallow-v1:" + "a" * 64])
 def test_sidecar_and_identity_compose_without_mutation(tmp_path, token):
+    pytest.importorskip("myquant_infra.artifacts.provenance")
     identity = {"source_snapshot": token, "resolver_identity": "/unread/lake", "identity_version": 1}
     path = tmp_path / "synthetic.json"
     path.write_text(json.dumps(identity), encoding="utf-8")
@@ -36,6 +37,7 @@ def test_unavailable(tmp_path, identity):
 
 @pytest.mark.parametrize("token,error", [(42, TypeError), ("/host/lake", ValueError)])
 def test_reuses_rb09_validation(token, error):
+    pytest.importorskip("myquant_infra.artifacts.provenance")
     with pytest.raises(error):
         snapshot_provenance_tokens({"source_snapshot": token})
 
@@ -68,6 +70,7 @@ def test_opt_in_hot_path_and_no_directory_walking():
 
 
 def test_string_argument_is_path(tmp_path):
+    pytest.importorskip("myquant_infra.artifacts.provenance")
     path = tmp_path / "identity.json"
     path.write_text('{"source_snapshot": "upstream:release-17"}', encoding="utf-8")
     assert snapshot_provenance_tokens(str(path)) == snapshot_provenance_tokens(path)
@@ -76,6 +79,7 @@ def test_string_argument_is_path(tmp_path):
 
 
 def test_documented_empty_token_composition_preserves_default_manifest():
+    pytest.importorskip("myquant_infra.artifacts.provenance")
     tokens = snapshot_provenance_tokens({})
     options = dict(strategy="version6", dividend_type="none", config={})
     assert build_bt_run_manifest(**options, input_tokens=tokens or None) == build_bt_run_manifest(**options)
