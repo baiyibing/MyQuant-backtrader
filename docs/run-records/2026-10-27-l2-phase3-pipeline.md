@@ -1,13 +1,18 @@
 # L2 Phase3 pipeline (rar → csv → parquet) — run record
 
+> **Superseded (2026-11-05).** RAR→parquet SSOT and increment orchestration moved to
+> [MyQuant-infra](https://github.com/baiyibing/MyQuant-infra) (`myquant_infra.l2.ingest`
+> / `l2 increment`). BT-side `l2_phase3_pipeline.py`, `extract_stock_rar_data.py`,
+> and `l2_phase3_watch_check.ps1` were removed. This file is a historical freeze.
+
 Historical live design. The proposed four-stage SSD pipeline and its validation
 are documented in [the speed knife record](2026-10-27-l2-phase3-ssd-pipeline.md);
 it has not been deployed or hotcut.
 
 - Date: 2026-10-27 Asia/Shanghai
 - Machine: newtest_4090
-- **SSOT home: this repo (`MyQuant-backtrader`)** — extract + ETL + orchestrator together
-- Status: SSOT in this repo; ops retarget starts pipeline from `scripts/misc/l2_phase3_pipeline.py` (EXTRACT/ETL via repo-relative + `resolve_oskh_python()`)
+- **SSOT home (at land):** this repo — extract + ETL + orchestrator together
+- Status (at land): ops started from `scripts/misc/l2_phase3_pipeline.py` (EXTRACT/ETL via repo-relative + `resolve_oskh_python()`)
 
 ## Layout in this repo
 

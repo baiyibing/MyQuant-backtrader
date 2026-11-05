@@ -1,5 +1,8 @@
 # Phase3 SSD parquet pipeline — speed knife t1039u–t1042u
 
+> **Superseded (2026-11-05).** Lake ingest SSOT is MyQuant-infra
+> `myquant_infra.l2.ingest`; BT Phase3 orchestrator removed. Historical freeze.
+
 Implementation only; no deployment, live PID 20908 stop, or hotcut. Based on
 `e8a3878` (last locally available origin/master); remote freshness could not be
 verified in the development sandbox. The earlier Phase3 run record describes the
