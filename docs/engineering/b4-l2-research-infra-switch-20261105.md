@@ -134,3 +134,7 @@ Retain optional infra pin `7d48c4e310f9636cad9c3e544db1766025db4e3c` for
 B3/B2/D4 consumers; do not uninstall or downgrade it as a B4 rollback. The
 switch performs no data migration and requires no lake restore. Existing
 reports remain research artifacts and are not rewritten during rollback.
+
+## Pin bump after infra #60
+
+Current pin: `3c377e9718e811112993579b6d91a603395db699` (merged origin/main after #60). Prior campaign pins superseded. Rollback: revert host wrappers for B4 and restore the prior pin SHA documented above.
