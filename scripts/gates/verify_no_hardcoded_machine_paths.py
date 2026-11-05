@@ -49,7 +49,6 @@ _PROD_PACKAGES = (
     "backtest",
     "trade_decision",
     "qlib_cost",
-    "l2_analytics",
     "strategies",
 )
 

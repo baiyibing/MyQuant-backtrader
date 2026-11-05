@@ -24,7 +24,7 @@ Seeded from OSkhQuant slim snapshot at `5d41252`。S2（2026-09-09）之后本�
 | Cerebro / Rolling 历史栈 | 已退场（2026-09-16）；chip / ma_chip 对照产物为静态档案，代码路径已删 |
 | `backtest/legacy/` | 非 Cerebro 旧回放 |
 | `oskh_data/` | Parquet/DuckDB 只读（三树 hive） |
-| `l2_analytics/` | L2 离线分析 only（ETL / 聚合；不扩交易核 / 策略书 / LEBS） |
+| （已迁出）逐笔 L2 lake | SSOT → sibling **MyQuant-infra** `myquant_infra.l2`（ingest / rollup / research queries） |
 | `qlib_cost/` | 筹码分布算法 |
 | `turnover-resist/` | 换手阻力 Rust SSOT |
 | `oskh_factors/bridge/turnover_resist.py` | Rust 的 Python 桥 |
@@ -33,7 +33,7 @@ Seeded from OSkhQuant slim snapshot at `5d41252`。S2（2026-09-09）之后本�
 | `trade_decision/presets.py` | 卖点 presets（研究副本，不改 1.3 交易核） |
 | `common/infra/` | 薄基建（timekeeping、path-SSOT） |
 | `scripts/gates/` | 契约 / path-SSOT gates |
-| `scripts/research/` `scripts/data/` `scripts/tr/` | chip / TR / L2 研究 CLI |
+| `scripts/research/` `scripts/data/` `scripts/tr/` | chip / TR 研究 CLI（无 L2 ETL） |
 | `stock_pool/` | 6/8 **可变默认**日名单（非快照；不是海龟池）；实验/冻结见 `exports/` — [pool-csv-contract](docs/backtest/pool-csv-contract.md)#lifecycle-ssot-stock_pool-vs-exports |
 
 ## Environment
