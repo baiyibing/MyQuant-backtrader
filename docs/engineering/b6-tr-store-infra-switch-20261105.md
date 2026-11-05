@@ -142,3 +142,8 @@ After MyQuant-infra #60 merged, re-pin the optional requirement from
 This supersedes the earlier pin and #60 status above; earlier test results
 remain evidence for the previous pin. Verified the exact new requirement
 SHA and `git diff --check`; no full suite was run for this pin-only update.
+
+
+## Pin bump after infra #60
+
+Current pin: `3c377e9718e811112993579b6d91a603395db699` (merged origin/main after #60). Prior campaign pin `4dad4c5` superseded. Rollback: revert B6 wrappers and restore prior pin SHA documented above.
