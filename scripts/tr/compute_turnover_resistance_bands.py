@@ -18,6 +18,7 @@ ensure_repo_on_syspath(__file__)
 
 from common.infra.quant_logger import get_logger
 from oskh_core.turnover_resist_bridge import compute_turnover_resist
+from oskh_factors.chip.bands import compute_tr_bb_columns
 from oskh_data.turnover_resistance_store import (
     DEFAULT_FREE_FLOAT_POLICY,
     DEFAULT_WINDOW,
@@ -81,7 +82,10 @@ def main(argv: list[str] | None = None) -> int:
             context={"window": args.window, "canonical": CANONICAL_WINDOW},
         )
 
-    store = TurnoverResistanceStore(args.parquet_path or None)
+    # Infra owns IO; this host supplies the unchanged numerical producer.
+    store = TurnoverResistanceStore(
+        args.parquet_path or None, bands_producer=compute_tr_bb_columns,
+    )
     trade_date = str(args.date)
 
     if args.backfill_bands_only:

@@ -55,6 +55,7 @@ def store_path(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def store(store_path: Path) -> TurnoverResistanceStore:
+    pytest.importorskip("myquant_infra.derived_data.turnover_resistance.store")
     return TurnoverResistanceStore(store_path)
 
 
@@ -86,6 +87,7 @@ class TestTrBollingerBands:
 
 class TestNormalizeFfiRow:
     def test_maps_all_schema_columns(self):
+        pytest.importorskip("myquant_infra.derived_data.turnover_resistance.store")
         row = normalize_ffi_row(_mock_ffi_row(trade_date="20260102"), trade_date="20260102")
         for col in SCHEMA_COLUMNS:
             assert col in row
@@ -158,6 +160,7 @@ class TestTurnoverResistanceStore:
         assert cross.iloc[0]["tr_bb_middle"] == pytest.approx(manual["tr_bb_middle"])
 
     def test_merge_year_staging_into_canonical(self, tmp_path: Path):
+        pytest.importorskip("myquant_infra.derived_data.turnover_resistance.store")
         staging_dir = tmp_path / "tr_staging"
         canonical = tmp_path / "turnover_resistance_daily.parquet"
         y2025 = resolve_year_staging_path(2025, staging_dir)

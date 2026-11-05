@@ -24,6 +24,7 @@ import duckdb
 from common.infra.quant_logger import get_logger
 from common.infra.timekeeping import shanghai_date_yyyymmdd
 from oskh_core.turnover_resist_bridge import compute_turnover_resist
+from oskh_factors.chip.bands import compute_tr_bb_columns
 from oskh_data.turnover_resistance_store import (
     DEFAULT_FREE_FLOAT_POLICY,
     TurnoverResistanceStore,
@@ -102,6 +103,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=int,
         default=0,
         help="Backfill one calendar year (YYYY0101-YYYY1231 trading days). Implies --all-trading-days.",
+    )
+    parser.add_argument(
+        "--all-trading-days",
+        action="store_true",
+        help="Backfill all trading dates within --start-date/--end-date",
     )
     parser.add_argument(
         "--year-bands",
@@ -199,7 +205,10 @@ def _resolve_dates(args: argparse.Namespace, data_dir: Path) -> list[str]:
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     data_dir = Path(args.data_dir or _default_data_dir())
-    store = TurnoverResistanceStore(args.parquet_path or None)
+    # Infra owns IO; this host supplies the unchanged numerical producer.
+    store = TurnoverResistanceStore(
+        args.parquet_path or None, bands_producer=compute_tr_bb_columns,
+    )
 
     if args.recompute_bands:
         t0 = time.perf_counter()
