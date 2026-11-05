@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from l2_analytics.perf import bytes_to_gb, dir_size_bytes, note_peak, process_rss_bytes
 
 
@@ -32,3 +34,8 @@ def test_dir_size_bytes(tmp_path: Path) -> None:
 def test_bytes_to_gb() -> None:
     assert bytes_to_gb(None) is None
     assert bytes_to_gb(1024**3) == 1.0
+
+
+@pytest.fixture(autouse=True)
+def require_optional_infra():
+    pytest.importorskip("myquant_infra.l2.ingest")

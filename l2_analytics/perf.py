@@ -1,54 +1,24 @@
-"""Lightweight process / temp-dir sampling for L2 ETL and query baselines."""
-
-from __future__ import annotations
-
-import os
+"""Compatibility entrances for infra's L2 process/temp sampling helpers."""
 from pathlib import Path
-from typing import Optional
+
+from l2_analytics._infra import require_l2
 
 
 def process_rss_bytes() -> int | None:
-    """Current process RSS in bytes; None if unavailable."""
-    try:
-        import psutil
-
-        return int(psutil.Process().memory_info().rss)
-    except (ImportError, OSError, AttributeError):
-        return None
+    return require_l2("ingest.perf").process_rss_bytes()
 
 
 def note_peak(peak: list[int | None], value: int | None = None) -> None:
-    """Update a single-slot peak tracker ``[current_max_or_None]``."""
-    v = process_rss_bytes() if value is None else value
-    if v is None:
-        return
-    cur = peak[0]
-    if cur is None or v > cur:
-        peak[0] = v
+    require_l2("ingest.perf").note_peak(peak, value)
 
 
 def dir_size_bytes(path: Path) -> int:
-    """Sum regular-file sizes under ``path`` (0 if missing). Best-effort."""
-    if not path.is_dir():
-        return 0
-    total = 0
-    try:
-        for root, _dirs, files in os.walk(path):
-            for name in files:
-                try:
-                    total += (Path(root) / name).stat().st_size
-                except OSError:
-                    continue
-    except OSError:
-        return total
-    return total
+    return require_l2("ingest.perf").dir_size_bytes(path)
 
 
 def note_temp_peak(peak: list[int | None], temp_dir: Path) -> None:
-    note_peak(peak, dir_size_bytes(temp_dir))
+    require_l2("ingest.perf").note_temp_peak(peak, temp_dir)
 
 
-def bytes_to_gb(n: Optional[int]) -> Optional[float]:
-    if n is None:
-        return None
-    return round(n / (1024**3), 3)
+def bytes_to_gb(n: int | None) -> float | None:
+    return require_l2("ingest.perf").bytes_to_gb(n)

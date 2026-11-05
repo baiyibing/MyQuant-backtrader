@@ -71,6 +71,11 @@ artifact retention must snapshot the DB before an explicit rebuild.
 
 ## Connection allowlist
 
+B3 subsequently delegates the L2 ETL/recovery/compaction implementations to
+infra and removes their eight connection exceptions. The table below records
+the D4 inventory; the current B3 inventory is **13 calls in 10 exact files**.
+See [B3 switch and rollback](b3-l2-ingest-infra-switch-20261105.md).
+
 `scripts/gates/verify_no_host_duckdb_connect_outside_allowlist.py` runs in CI
 before dependency installation. It scans tracked and nonignored new Python files
 using AST, including aliased imports/connectors and simple assignment aliases.

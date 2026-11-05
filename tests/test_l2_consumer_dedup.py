@@ -254,3 +254,8 @@ class TestHelpers:
             con.close()
         assert n == 4  # all same-TranID distinct rows survive the exact collapse
         assert n_dated == 6
+
+
+@pytest.fixture(autouse=True)
+def require_optional_infra():
+    pytest.importorskip("myquant_infra.l2.ingest")

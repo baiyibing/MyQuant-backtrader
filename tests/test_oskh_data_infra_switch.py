@@ -197,6 +197,9 @@ class FakeRedis:
         self.expiry[key] = ex
         return True
 
+    def setex(self, key, seconds, value):
+        return self.set(key, value, ex=seconds)
+
     def delete(self, key):
         self.values.pop(key, None)
 

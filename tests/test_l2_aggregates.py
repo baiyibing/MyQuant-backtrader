@@ -185,3 +185,8 @@ class TestBuildAggregates:
         assert isinstance(agg_rows, list)
         # Same HAVING threshold → same cluster cardinality (column order differs).
         assert len(agg_rows) == len(raw_rows)
+
+
+@pytest.fixture(autouse=True)
+def require_optional_infra():
+    pytest.importorskip("myquant_infra.l2.ingest")

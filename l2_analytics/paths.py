@@ -17,35 +17,35 @@ from __future__ import annotations
 
 from pathlib import Path
 
-_DATE_PREFIX = "date="
+from l2_analytics._infra import require_l2
 
 
 def day_dir(root: Path, date: str) -> Path:
-    return root / f"{_DATE_PREFIX}{date}"
+    return require_l2("ingest.paths").day_dir(root, date)
 
 
 def main_parquet_path(root: Path, date: str) -> Path:
-    return day_dir(root, date) / "main.parquet"
+    return require_l2("ingest.paths").main_parquet_path(root, date)
 
 
 def order_parquet_path(root: Path, date: str) -> Path:
-    return day_dir(root, date) / "order.parquet"
+    return require_l2("ingest.paths").order_parquet_path(root, date)
 
 
 def daily_metrics_path(root: Path, date: str) -> Path:
-    return day_dir(root, date) / "daily_metrics.parquet"
+    return require_l2("ingest.paths").daily_metrics_path(root, date)
 
 
 def cluster_agg_path(root: Path, date: str) -> Path:
-    return day_dir(root, date) / "cluster_agg.parquet"
+    return require_l2("ingest.paths").cluster_agg_path(root, date)
 
 
 def rel_main_part(date: str) -> str:
-    return f"{_DATE_PREFIX}{date}/main.parquet"
+    return require_l2("ingest.paths").rel_main_part(date)
 
 
 def rel_order_part(date: str) -> str:
-    return f"{_DATE_PREFIX}{date}/order.parquet"
+    return require_l2("ingest.paths").rel_order_part(date)
 
 
 def hive_main_glob(root: Path) -> str:
@@ -81,6 +81,4 @@ def has_legacy_flat_main(root: Path) -> bool:
 
 
 def list_legacy_flat_parts(root: Path, date: str) -> tuple[list[Path], list[Path]]:
-    mains = sorted(root.glob(f"{date}.part-*.main.parquet"))
-    orders = sorted(root.glob(f"{date}.part-*.order.parquet"))
-    return mains, orders
+    return require_l2("ingest.paths").list_legacy_flat_parts(root, date)

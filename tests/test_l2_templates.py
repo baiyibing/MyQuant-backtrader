@@ -30,6 +30,7 @@ def _row(tran_id: int, time: str, price: float, vol: int, typ: str) -> tuple:
 @pytest.fixture(scope="module")
 def l2_con(tmp_path_factory: pytest.TempPathFactory):
     """DuckDB connection with l2_main/l2_order views over synthetic parquet."""
+    pytest.importorskip("myquant_infra.l2.ingest")
     from l2_analytics.db import connect
     from l2_analytics.etl_day import etl_one_day
 
@@ -161,6 +162,7 @@ class TestTemplateExecution:
 
 class TestAdjAndTrueLimitTemplates:
     def test_vwap_adj_and_true_limit(self, tmp_path: Path) -> None:
+        pytest.importorskip("myquant_infra.l2.ingest")
         import duckdb
 
         from l2_analytics.db import connect

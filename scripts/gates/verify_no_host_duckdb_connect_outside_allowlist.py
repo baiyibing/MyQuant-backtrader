@@ -19,9 +19,6 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # counts also reject stale entries and additional connections in an allowed file.
 ALLOWLIST: dict[str, tuple[int, str]] = {
     "l2_analytics/db.py": (1, "Offline L2 in-memory query views"),
-    "l2_analytics/etl_day.py": (4, "Offline L2 CSV/Parquet ETL and aggregation"),
-    "scripts/run/run_l2_merge_work_chunks.py": (2, "Offline L2 work-chunk merge"),
-    "scripts/run/run_l2_migrate_hive_compact.py": (2, "Offline L2 compaction"),
     "scripts/gates/verify_l2_manifest.py": (1, "Offline L2 manifest validation"),
     "scripts/tr/backfill_turnover_resistance_bands.py": (1, "TR/Store research date enumeration; no lake artifact management"),
     "scripts/data/full_market_canonical_resist.py": (1, "TR research capital-map query"),

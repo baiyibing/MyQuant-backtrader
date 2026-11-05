@@ -2,4 +2,6 @@
 #   pip install -r requirements-infra.txt
 # D4 + B2 pin/rollback: docs/engineering/b2-bars-adj-infra-switch-20261105.md
 # K18 D4 duckdb IO: docs/engineering/k18-duckdb-infra-switch-20261105.md
+# B3 ingest/aggregates/maintenance: immutable main pin; rollback in
+# docs/engineering/b3-l2-ingest-infra-switch-20261105.md
 myquant-infra @ git+https://github.com/baiyibing/MyQuant-infra.git@7d48c4e310f9636cad9c3e544db1766025db4e3c

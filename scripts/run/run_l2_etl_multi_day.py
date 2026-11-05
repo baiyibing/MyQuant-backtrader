@@ -31,7 +31,12 @@ sys.modules["_script_bootstrap"] = _bs_mod
 _sb_spec.loader.exec_module(_bs_mod)
 _bs_mod.ensure_repo_on_syspath(__file__)
 
-from l2_analytics.etl_day import DayEtlResult, etl_one_day  # noqa: E402
+from typing import TYPE_CHECKING
+
+from l2_analytics.etl_day import etl_one_day  # noqa: E402
+
+if TYPE_CHECKING:
+    from l2_analytics.etl_day import DayEtlResult
 
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 

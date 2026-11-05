@@ -571,3 +571,8 @@ def test_compare_json_scrape():
     assert timing({}, "merge_main_s") == "N/A"
     with pytest.raises(ValueError, match="no final JSON"):
         last_result("progress only")
+
+
+@pytest.fixture(autouse=True)
+def require_optional_infra():
+    pytest.importorskip("myquant_infra.l2.ingest")
