@@ -13,7 +13,11 @@ Local commit only; no merge, push or PR. No production lake rebuild was run.
 
 Infra PR #56, rebased on main after #55 merged:
 `d32a68a2364a87e8d1b98d9c2b64a9bad7070130`.
-The same immutable VCS requirement is in `requirements.txt`.
+The same immutable VCS requirement is in `requirements-infra.txt`. A concurrent
+CI commit moved this private dependency out of the public requirements file.
+Hosts using the switched reader must install it explicitly; the public CI
+workflow currently does not install that optional file. Runtime switch tests
+require the package and do not substitute a local IO implementation.
 
 ```sh
 /workspace/vanna312/bin/python -m pip install -q "myquant-infra @ git+https://github.com/baiyibing/MyQuant-infra.git@d32a68a2364a87e8d1b98d9c2b64a9bad7070130"
@@ -111,16 +115,47 @@ rotation, real restricted-module caller discovery across forwarding frames,
 standalone path injection and path-B filtering/merge behavior. No market lake,
 QMT, network Redis or production artifact is required.
 
-Final counts and gate results are recorded below after validation.
+Validation on 2026-11-05:
+
+- Focused command above plus the synthetic legacy missing-adjustment-DB case:
+  **322 passed, 1 skipped** (the existing removed-downloader/QMT test).
+- All **10** CI contract/admission/classification gates passed, including the
+  new 21-call / 13-file connection fence. Reader and standalone rebuild contain
+  **zero** direct connection calls. `git diff --check` and UTF-8/no-BOM/NUL checks
+  passed for the changed Python/Markdown sources.
+- Full existing non-production/non-benchmark marker run:
+  **9,820 passed, 431 skipped, 24 deselected, 12 failed, 1 error**. The environment
+  has pandas **2.3.3**, while the repository requires **3.0.6**; this run is not
+  represented as a green full-suite result.
+- Every failing/error node was rerun in an isolated worktree at pre-switch
+  `385d213d9f8d410571b9990f4e776c38204825cf`: **10 failed, 3 passed**. The same
+  10 failures are the pandas-version assertion in `test_off_byte_baseline` and
+  nine ns/ms index-dtype assertions in `test_s11_exit_domain_loader`.
+- The other three original failures were subprocess/git-status timeouts in
+  `test_minute_orders_intent_x1_named_consumer`, `test_minute_orders_matchcore`
+  and `test_minute_orders_source_schema_adapt`. Rerunning those three cases in
+  this switched worktree gave **3 passed**. Their isolated pre-switch runs also
+  passed. No unrelated baseline or timeout policy was changed.
+
+The full run started before the final two switch regression cases were added;
+both final cases (failed rebuild retaining the previous DB, and successful
+proxy local/current-session routing) are included in the 322-pass focused run.
+Temporary test lakes were used throughout. No production lake was accessed.
+
+Because `requirements-infra.txt` is private and omitted by public CI, a clean
+CI environment must provision that pinned package before collecting the switch
+runtime tests. The no-dependency static connection gate itself runs pre-pip.
 
 ## Rollback
 
-1. Revert the local commit titled
-   `feat(oskh_data): switch DuckDB lake IO to myquant-infra (Knife R2-18 switch)`
-   with `git revert <switch-commit>`. This restores the pre-switch host reader,
-   cache, adapter, rebuild, requirements and CI gate together. The pre-switch
-   reference is `385d213d9f8d410571b9990f4e776c38204825cf`; do not reset away
-   unrelated work.
+1. Revert the K18 follow-ups in reverse order (the final validation notes,
+   `fe875c1` optional-private-dependency adjustment), then revert switch commit
+   `b0333df` titled
+   `feat(oskh_data): switch DuckDB lake IO to myquant-infra (Knife R2-18 switch)`.
+   Use `git revert <validation-commit> fe875c1 b0333df`. This restores the
+   pre-switch host reader, cache, adapter, rebuild, requirements and CI gate
+   together. The pre-switch reference is
+   `385d213d9f8d410571b9990f4e776c38204825cf`; do not reset away unrelated work.
 2. Reinstall the reverted requirements using vanna312:
    `/workspace/vanna312/bin/python -m pip install -r requirements.txt`.
    The installed infra package may remain unused; uninstall it only in an
