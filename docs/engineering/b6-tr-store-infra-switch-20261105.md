@@ -133,3 +133,12 @@ keeping merged B2/D4. Reinstall `requirements-infra.txt` from the reverted tree
 if restoring an environment. The 33-column parquet contract and file names
 are unchanged; rollback needs no lake rewrite, migration, Redis operation or
 QMT access. No production switch or merge is performed by this task.
+
+## Unified infra pin bump after #60 (2026-11-06)
+
+After MyQuant-infra #60 merged, re-pin the optional requirement from
+`4dad4c5d11bad0f001715248ee354f34a547e4f8` to
+`3c377e9718e811112993579b6d91a603395db699` (merged `origin/main`).
+This supersedes the earlier pin and #60 status above; earlier test results
+remain evidence for the previous pin. Verified the exact new requirement
+SHA and `git diff --check`; no full suite was run for this pin-only update.
