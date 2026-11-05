@@ -81,4 +81,3 @@ class DuckDBDailyBarsProxy(_InfraDailyBarsProxy):
                 },
             )
         return self._reader
-

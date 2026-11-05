@@ -79,6 +79,20 @@ def test_period_overrides_reach_infra_read_and_rebuild(lake, monkeypatch, tmp_pa
             assert list(reader.read_stock("600000.SH")["close"]) == [99.0]
 
 
+def test_failed_rebuild_keeps_previous_database(lake):
+    container, _ = lake
+    frame = write_bars(container / "stock", "1d", "front", "600000.SH", 11.0)
+    output, _ = StockDataReader.build_persistent_db()
+    before = output.read_bytes()
+    path = container / "stock" / "period=1d" / "dividend_type=front" / "symbol=600000_SH" / "data.parquet"
+    frame.assign(volume=frame["volume"].astype("float64")).to_parquet(path, index=False)
+    with pytest.raises(ValueError, match="schema drift"):
+        StockDataReader.build_persistent_db()
+    assert output.read_bytes() == before
+    with StockDataReader(mode="duckdb_persistent") as reader:
+        assert list(reader.read_stock("600000.SH")["close"]) == [11.0]
+
+
 def test_missing_root_and_missing_persistent_db_fail_without_artifacts(monkeypatch, tmp_path):
     monkeypatch.delenv("OSKH_SOURCE_PARQUET_ROOT", raising=False)
     monkeypatch.delenv("OSKH_AUTHORITY_HINT_ROOT", raising=False)
@@ -142,14 +156,6 @@ def test_real_caller_discovery_crosses_infra_forwarding_frames(monkeypatch, tmp_
     delegate = Mock()
     proxy = DuckDBDailyBarsProxy(delegate)
     proxy._reader = reader
-    calls = {
-        "reader": lambda: reader.read_stock("600000.SH", period="1m", adjust_type="front"),
-        "scan": lambda: reader.scan_stocks(["600000.SH"], period="1m", adjust_type="front"),
-        "etf": lambda: etf_local_bars.default_etf_fund_daily("510050.SH", "20261102", "20261104"),
-        "cache": lambda: cache_port.get_daily_bars_cached("600000.SH", "20261102", "20261104", adjust="front"),
-        "proxy": lambda: proxy.stock_daily_bars(symbol="600000.SH", start_date="20261102", end_date="20261104", adjust="front"),
-        "proxy_cfg": lambda: proxy.stock_daily_bars_cfg_only(symbol="600000.SH", start_date="20261102", end_date="20261104", adjust="front"),
-    }
     # Give the call expression a real restricted-module frame. No policy/caller mock.
     hot = ModuleType("trade_decision.k18_probe")
     hot.__dict__.update(reader=reader, etf_local_bars=etf_local_bars, cache_port=cache_port, proxy=proxy)
@@ -201,6 +207,33 @@ def test_cache_roundtrip_pointer_rotation_and_invalidation(monkeypatch):
     assert cache_port.get_daily_bars_cached("600000.SH", "20261102", "20261104") is None
     assert cache_port.invalidate_current_run_id("1d")
     assert cache_port.get_current_run_id("1d") is None
+
+
+def test_proxy_local_response_and_current_session_delegation(lake, monkeypatch):
+    from common.integrations.duckdb_daily_bars_adapter import DuckDBDailyBarsProxy
+    from oskh_data import freshness
+
+    container, _ = lake
+    write_bars(container / "stock", "1d", "front", "600000.SH", 11.0)
+    output, _ = StockDataReader.build_persistent_db()
+    monkeypatch.setattr(freshness, "get_previous_trading_day", lambda: "20261104")
+    delegate = Mock()
+    proxy = DuckDBDailyBarsProxy(delegate, db_path=str(output))
+    try:
+        response = proxy.stock_daily_bars(
+            symbol="600000.SH", start_date="20261104", end_date="20261104", adjust="front",
+        )
+        assert response["ok"] and response["data"]["symbol"] == "600000.SH"
+        assert len(response["data"]["bars"]) == 1
+        assert response["data"]["bars"][0]["close"] == 11.0
+        delegate.stock_daily_bars.assert_not_called()
+        assert proxy.stock_daily_bars(
+            symbol="600000.SH", start_date="20261104", end_date="20261105",
+        ) is delegate.stock_daily_bars.return_value
+        delegate.stock_daily_bars.assert_called_once()
+    finally:
+        if proxy._reader is not None:
+            proxy._reader.close()
 
 
 def test_standalone_rebuild_is_import_safe_and_passes_resolved_paths(lake, monkeypatch):

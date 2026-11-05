@@ -275,7 +275,7 @@ _LAZY_PREV_CLOSE_ETF_READER: Optional[StockDataReader] = None
 _LAZY_PREV_CLOSE_READER_LOCK = threading.Lock()
 
 
-def lazy_prev_close_reader(asset_type: str = "stock") -> Optional[StockDataReader]:
+def lazy_prev_close_reader(asset_type: Literal["stock", "etf"] = "stock") -> Optional[StockDataReader]:
     """Thread-safe singleton for limit_info / gap_down DuckDB ``none`` reads.
 
     Phase 2 P0 fix: accepts ``asset_type`` to route ETF codes to
