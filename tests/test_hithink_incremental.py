@@ -66,6 +66,9 @@ def row(ticker="600036.SH", stamp="2026-10-12", **changes):
 
 
 def bundle(run, path, rows=None, business_code=3002, *, quarantine=False):
+    pytest.importorskip(
+        "myquant_infra.hithink.artifacts", reason="artifact IO requires optional requirements-infra.txt"
+    )
     rows = rows if rows is not None else [row(), row("000001.SZ"), row("000004.SZ", "2026-09-01")]
     path.mkdir()
     pq.write_table(pa.Table.from_pylist(rows), path / "hithink_dump.parquet")
