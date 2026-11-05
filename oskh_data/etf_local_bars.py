@@ -108,6 +108,8 @@ def default_etf_fund_daily(
                 adjust_type=adj,
             )
     except Exception as exc:
+        if "DataAccessPolicyError" in str(exc):
+            raise
         logger.warning(
             "ETF read_stock failed; fund_daily returns empty",
             context={

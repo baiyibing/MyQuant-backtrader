@@ -4,7 +4,7 @@ DuckDB 日线代理 — 拦截 stock_daily_bars 调用，T-1 及以前走 DuckDB
 设计：
   - 代理 DefaultDecisionMarketDataReadPort，仅接管日线查询，其余透传。
   - 路由矩阵：start/end 全部 ≤ T-1 → DuckDB；否则 → delegate QMT。
-  - DuckDB 失败 → fallback delegate。
+  - DuckDB 策略拒绝直接抛出；其他失败 → fallback delegate。
   - 数据格式转换：StockDataReader(time ms) → YYYYMMDD 索引 → fund_daily_bars_records_from_df。
 
 集成：在 resolve_decision_market_data_read_port_for_lt() 中，
@@ -147,7 +147,9 @@ class DuckDBDailyBarsProxy:
                     "DuckDB miss for %s (%s→%s), falling back to QMT",
                     symbol, start_date, end_date,
                 )
-            except Exception:
+            except Exception as exc:
+                if "DataAccessPolicyError" in str(exc):
+                    raise
                 logger.exception(
                     "DuckDB query failed for %s, falling back to QMT",
                     symbol,

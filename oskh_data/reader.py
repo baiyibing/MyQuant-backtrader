@@ -382,7 +382,7 @@ class StockDataReader:
                 "StockDataReader.read_stock(as_of_date=...) is not implemented yet; "
                 "using it would silently assume latest-adjusted data and can introduce look-ahead bias."
             )
-        if self._asset_type == 'stock':
+        if self._asset_type in ('stock', 'etf'):
             _enforce_adjust_type_policy(adjust_type)
         if period in MINUTE_PERIODS:
             adjust_type = 'none'
@@ -420,6 +420,8 @@ class StockDataReader:
                 "StockDataReader.scan_stocks(as_of_date=...) is not implemented yet; "
                 "using it would silently assume latest-adjusted data and can introduce look-ahead bias."
             )
+        if self._asset_type in ('stock', 'etf'):
+            _enforce_adjust_type_policy(adjust_type)
         if period in MINUTE_PERIODS:
             adjust_type = 'none'
 

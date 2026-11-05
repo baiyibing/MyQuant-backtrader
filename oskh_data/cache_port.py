@@ -116,6 +116,12 @@ def get_daily_bars_cached(
 
     命中返回 DataFrame，未命中或 Redis 不可用返回 None（调用方应回退 DuckDB）。
     """
+    normalized_adjust = str(adjust or "none").strip().lower() or "none"
+    if normalized_adjust != "none":
+        from oskh_data.reader import _enforce_adjust_type_policy
+
+        _enforce_adjust_type_policy(normalized_adjust)
+
     r = _get_redis()
     if r is None:
         return None
