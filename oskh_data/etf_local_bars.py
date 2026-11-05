@@ -4,6 +4,8 @@
 Used by ``strategies.etf_rotation`` after ① desession. Independent of global
 ``DAILY_BARS_SOURCE=duckdb`` (that flag is banned for live/paper readiness).
 """
+# Host composition retained for public CI (no private pin). Lake IO still
+# flows through StockDataReader, which thin-wraps myquant-infra when installed.
 from __future__ import annotations
 
 import threading

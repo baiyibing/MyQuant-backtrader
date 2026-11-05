@@ -104,10 +104,13 @@ class TestStockDataReaderDuckDB:
             con.execute("CREATE TABLE stock_data(symbol VARCHAR, time BIGINT, close DOUBLE)")
             con.close()
 
-            reader = StockDataReader(mode="duckdb_persistent", project_root=str(root))
+            reader = StockDataReader(
+                mode="duckdb_persistent", project_root=str(root), base_dir=str(stock_data),
+            )
             # only front DB exists; requesting none must not silently use front DB
-            con_none = reader._get_persistent_con("1d", "none")  # pylint: disable=protected-access
-            assert con_none is None
+            # Exercise the public entrance against deliberately absent parquet;
+            # a differently adjusted artifact must never satisfy this request.
+            assert reader.read_stock("000001.SZ", adjust_type="none") is None
             reader.close()
 
 

@@ -3,6 +3,11 @@
 r"""
 构建日线复权因子表。
 
+B2 RESULT_BLOCKER: keep build_for_symbol's outer join / forward fill and main's
+per-symbol salvage. The pinned infra builder uses an inner join and aborts the
+table on a failed symbol. Metadata publication delegates through the B2 facade.
+See docs/engineering/b2-bars-adj-infra-switch-20261105.md.
+
 2026-07-09 起：front 以 QMT 下载落盘为 ground truth（见
 ``docs/engineering/plan-front-adj-factor-dr-based-2026-07-09.md``）。
 本模块从已落盘的 front/none/back 计算因子，**禁止**再用 back/none 推导 front：
@@ -128,7 +133,7 @@ def build_for_symbol(sym: str) -> pd.DataFrame:
 
     code = to_canonical_symbol(sym)
     if "." not in code or len(code.split(".")[0]) != 6:
-        logger.warning("adj_factor: unrecognized symbol format, skipping: %s", sym)
+        logger.warning("adj_factor: unrecognized symbol format, skipping: {}", sym)
         return pd.DataFrame(columns=cast(Any, [
             "date", "stock_code", "close_front", "close_none",
             "cumulative_adj_factor", "adj_factor_back",

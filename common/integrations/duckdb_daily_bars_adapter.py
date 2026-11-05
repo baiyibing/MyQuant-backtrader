@@ -1,14 +1,7 @@
-"""
-DuckDB 日线代理 — 拦截 stock_daily_bars 调用，T-1 及以前走 DuckDB，T+0 走 QMT。
+"""BT reader/configuration composition over optional myquant-infra daily bars.
 
-设计：
-  - 代理 DefaultDecisionMarketDataReadPort，仅接管日线查询，其余透传。
-  - 路由矩阵：start/end 全部 ≤ T-1 → DuckDB；否则 → delegate QMT。
-  - DuckDB 策略拒绝直接抛出；其他失败 → fallback delegate。
-  - 数据格式转换：StockDataReader(time ms) → YYYYMMDD 索引 → fund_daily_bars_records_from_df。
-
-集成：在 resolve_decision_market_data_read_port_for_lt() 中，
-当 DAILY_BARS_SOURCE=duckdb 时自动包装。
+Public CI has no private pin: host owns T-1 routing + adjust_type gate via
+StockDataReader. Infra subclass is used only when the package is installed.
 """
 from __future__ import annotations
 
@@ -17,6 +10,18 @@ from typing import Any, Dict, Literal, Optional
 
 import pandas as pd
 
+try:
+    from myquant_infra.lake.duckdb_daily_bars import DuckDBDailyBarsProxy as _InfraDailyBarsProxy
+    _INFRA_PROXY = True
+except ImportError:  # CI without private pin
+    _INFRA_PROXY = False
+
+    class _InfraDailyBarsProxy:  # type: ignore[no-redef]
+        """Patchable stub; host subclass must construct without infra."""
+
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
 from common.infra.constants import EnvVarKeys
 from common.infra.quant_logger import get_logger
 from common.infra.runtime_config import config_value_source, get_raw as _cfg_raw
@@ -24,28 +29,37 @@ from common.infra.runtime_config import config_value_source, get_raw as _cfg_raw
 logger = get_logger(__name__)
 
 
-class DuckDBDailyBarsProxy:
-    """代理 DefaultDecisionMarketDataReadPort，仅接管日线查询，其余透传。"""
+class DuckDBDailyBarsProxy(_InfraDailyBarsProxy):
+    """BT owns T-1 routing and policy; lake IO goes through StockDataReader."""
 
     def __init__(
-        self,
-        delegate: Any,
-        *,
-        asset_type: str = "stock",
+        self, delegate: Any, *, asset_type: Literal["stock", "etf"] = "stock",
         db_path: Optional[str] = None,
     ) -> None:
+        if asset_type not in ("stock", "etf"):
+            raise ValueError("asset_type must be stock or etf")
         self._delegate = delegate
-        self._reader = None  # StockDataReader 延迟初始化
-        self._asset_type: Literal["stock", "etf"] = (
-            "etf" if str(asset_type or "stock").strip().lower() == "etf" else "stock"
-        )
+        self._reader = None
+        self._asset_type = asset_type
         self._db_path_override = (db_path or "").strip() or None
+        # Keep infra ctor wired when present (reader_factory / previous_trading_day).
+        if _INFRA_PROXY:
+            super().__init__(
+                delegate, reader_factory=self._get_reader,
+                previous_trading_day=self._previous_trading_day_str,
+            )
+        else:
+            super().__init__()
+
+    @staticmethod
+    def _previous_trading_day_str() -> str:
+        from oskh_data.freshness import get_previous_trading_day
+        return get_previous_trading_day()
 
     def _get_reader(self):
         if self._reader is None:
-            from oskh_data.reader import StockDataReader  # 函数内延迟导入，避免 import common.integrations 时强制加载 duckdb
+            from oskh_data.reader import StockDataReader
 
-            # Explicit db_path injection wins (ETF composition root / tests).
             if self._db_path_override and Path(self._db_path_override).is_file():
                 self._reader = StockDataReader(
                     mode="duckdb_persistent",
@@ -55,8 +69,6 @@ class DuckDBDailyBarsProxy:
                 cfg_src = "ctor_db_path"
                 db_path = self._db_path_override
             else:
-                # P1-08: use get_raw() for correct env+YAML layering.
-                # ETF path must NOT rely on global DAILY_BARS_SOURCE / stock OSKH_DATA_DUCKDB_PATH.
                 db_path = (_cfg_raw(EnvVarKeys.OSKH_DATA_DUCKDB_PATH) or "").strip()
                 if self._asset_type == "etf":
                     self._reader = StockDataReader(
@@ -69,8 +81,6 @@ class DuckDBDailyBarsProxy:
                     self._reader = StockDataReader(mode="duckdb_persistent", db_path=db_path)
                     cfg_src = config_value_source(EnvVarKeys.OSKH_DATA_DUCKDB_PATH)
                 else:
-                    # P1-08 Phase B: inside DuckDBDailyBarsProxy, default to duckdb_persistent
-                    # with auto-detection rather than silently falling back to parquet.
                     self._reader = StockDataReader(mode="duckdb_persistent")
                     cfg_src = "default"
                     if db_path:
@@ -91,10 +101,8 @@ class DuckDBDailyBarsProxy:
         return self._reader
 
     def _is_t_minus_1_or_earlier(self, date_str: str) -> bool:
-        """判断日期是否 ≤ 上一个交易日。"""
         try:
             from oskh_data.freshness import get_previous_trading_day
-
             prev = get_previous_trading_day()
             return date_str <= prev
         except Exception as _fresh_exc:
@@ -102,26 +110,45 @@ class DuckDBDailyBarsProxy:
                 "get_previous_trading_day failed; conservatively assuming T-1 or earlier",
                 context={"error": repr(_fresh_exc)},
             )
-            return True  # 保守：fallback 到 DuckDB
+            return True
 
     def _df_to_bars_response(self, df: pd.DataFrame, symbol: str) -> Dict[str, Any]:
-        """将 StockDataReader 返回的 DataFrame 转换为 bars 响应格式。"""
-        from oskh_core.fund_daily_bars_serialize import fund_daily_bars_records_from_df
-
+        # Slim-fork BT has no oskh_core.fund_daily_bars_serialize; keep a local
+        # YYYYMMDD bar list compatible with decision-market responses.
         if df is None or df.empty:
             return {"ok": True, "data": {"bars": [], "symbol": symbol}}
 
-        df = df.copy()
-        if "time" in df.columns:
-            df["_date"] = pd.to_datetime(df["time"], unit="ms").dt.strftime("%Y%m%d")
-            df = df.set_index("_date")
-        if "symbol" in df.columns:
-            df = df.drop(columns=["symbol"])
+        frame = df.copy()
+        if "time" in frame.columns:
+            frame["_date"] = pd.to_datetime(frame["time"], unit="ms").dt.strftime("%Y%m%d")
+            frame = frame.set_index("_date")
+        elif not isinstance(frame.index, pd.Index) or frame.index.dtype == object:
+            try:
+                frame.index = pd.to_datetime(frame.index).strftime("%Y%m%d")
+            except (TypeError, ValueError):
+                frame.index = pd.Index([str(x) for x in frame.index])
+        if "symbol" in frame.columns:
+            frame = frame.drop(columns=["symbol"])
 
-        bars = fund_daily_bars_records_from_df(df)
+        bars = []
+        for idx, row in frame.iterrows():
+            lab = "".join(c for c in str(idx) if c.isdigit())[:8]
+            if len(lab) != 8:
+                continue
+            try:
+                close_v = float(row["close"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            bar = {"date": lab, "close": close_v}
+            for key in ("open", "high", "low", "volume", "amount"):
+                if key not in frame.columns:
+                    continue
+                try:
+                    bar[key] = int(row[key]) if key == "volume" else float(row[key])
+                except (TypeError, ValueError):
+                    continue
+            bars.append(bar)
         return {"ok": True, "data": {"bars": bars, "symbol": symbol}}
-
-    # ── 拦截：日线查询 ──
 
     def stock_daily_bars(
         self,
@@ -155,7 +182,6 @@ class DuckDBDailyBarsProxy:
                     symbol,
                     context={"symbol": symbol, "start": start_date, "end": end_date},
                 )
-        # T+0 或 DuckDB miss → delegate to QMT
         return self._delegate.stock_daily_bars(
             symbol=symbol,
             start_date=start_date,
@@ -177,7 +203,6 @@ class DuckDBDailyBarsProxy:
         timeout_sec: Optional[float] = None,
         poll_sec: Optional[float] = None,
     ) -> Dict[str, Any]:
-        # cfg_only 路径使用相同逻辑
         return self.stock_daily_bars(
             symbol=symbol,
             start_date=start_date,
@@ -187,8 +212,6 @@ class DuckDBDailyBarsProxy:
             timeout_sec=timeout_sec,
             poll_sec=poll_sec,
         )
-
-    # ── 透传：所有其他方法委托给原 port ──
 
     def __getattr__(self, name: str):
         return getattr(self._delegate, name)

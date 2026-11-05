@@ -5,6 +5,10 @@ Used when DuckDB rebuild fails with::
     Schema validation failed: column type drift ... volume: ('int64', 'double')
 
 Canonical types live in ``oskh_data.daily_parquet_write.CANONICAL_ARROW_TYPES``.
+
+B2 RESULT_BLOCKER: retain the dtype-only repair. The pinned infra schema repair
+quarantines legacy CST timestamps instead of preserving them while fixing types.
+See docs/engineering/b2-bars-adj-infra-switch-20261105.md.
 """
 from __future__ import annotations
 
