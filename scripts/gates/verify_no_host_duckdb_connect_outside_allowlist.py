@@ -18,7 +18,6 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # (number of connection call sites, permitted purpose). Changes require review;
 # counts also reject stale entries and additional connections in an allowed file.
 ALLOWLIST: dict[str, tuple[int, str]] = {
-    "l2_analytics/db.py": (1, "Offline L2 in-memory query views"),
     "scripts/gates/verify_l2_manifest.py": (1, "Offline L2 manifest validation"),
     "scripts/tr/backfill_turnover_resistance_bands.py": (1, "TR/Store research date enumeration; no lake artifact management"),
     "scripts/data/full_market_canonical_resist.py": (1, "TR research capital-map query"),

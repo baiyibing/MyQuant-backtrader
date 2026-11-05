@@ -6,7 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from l2_analytics.templates import TEMPLATE_FILES, load_template, run_template
+from l2_analytics import templates
+from l2_analytics.templates import load_template, run_template
 
 CSV_HEADER = (
     "TranID,Time,Price,Volume,SaleOrderVolume,BuyOrderVolume,"
@@ -51,14 +52,14 @@ def l2_con(tmp_path_factory: pytest.TempPathFactory):
     ])
     out = tmp_path_factory.mktemp("l2_parquet")
     etl_one_day(day, out_root=out, validate_gap_free=False)
-    con = connect(parquet_root=out, memory_limit="2GB", threads=2)
+    con = connect(parquet_root=out, memory_limit="2GB", threads=2, register_adj=False)
     yield con
     con.close()
 
 
 class TestTemplateLoading:
     def test_all_templates_load(self) -> None:
-        for name in TEMPLATE_FILES:
+        for name in templates.TEMPLATE_FILES:
             sql = load_template(name)
             assert "stock_code" in sql, f"{name}: missing stock_code"
             assert "date" in sql, f"{name}: missing date"
@@ -68,11 +69,11 @@ class TestTemplateLoading:
             load_template("nonexistent")
 
     def test_template_count(self) -> None:
-        assert len(TEMPLATE_FILES) == 12
-        assert "buy_order_cluster" in TEMPLATE_FILES
-        assert "large_order_cluster_agg" in TEMPLATE_FILES
-        assert "vwap_adj" in TEMPLATE_FILES
-        assert "limit_up_down_true" in TEMPLATE_FILES
+        assert len(templates.TEMPLATE_FILES) == 12
+        assert "buy_order_cluster" in templates.TEMPLATE_FILES
+        assert "large_order_cluster_agg" in templates.TEMPLATE_FILES
+        assert "vwap_adj" in templates.TEMPLATE_FILES
+        assert "limit_up_down_true" in templates.TEMPLATE_FILES
 
 
 class TestTemplateExecution:
@@ -286,3 +287,8 @@ class TestAdjAndTrueLimitTemplates:
         finally:
             qcon.close()
 
+
+
+@pytest.fixture(autouse=True)
+def require_optional_research():
+    pytest.importorskip("myquant_infra.l2.research.queries")

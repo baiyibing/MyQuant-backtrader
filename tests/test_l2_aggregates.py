@@ -57,7 +57,7 @@ def built_root(tmp_path: Path) -> Path:
 
 class TestBuildAggregates:
     def test_build_creates_files(self, built_root: Path) -> None:
-        con = connect(parquet_root=built_root, memory_limit="2GB", threads=2)
+        con = connect(parquet_root=built_root, memory_limit="2GB", threads=2, register_adj=False)
         try:
             res = build_aggregates_for_date(con, date="2026-01-15", out_root=built_root)
         finally:
@@ -68,13 +68,13 @@ class TestBuildAggregates:
         assert cluster_agg_path(built_root, "2026-01-15").is_file()
 
     def test_daily_metrics_matches_templates(self, built_root: Path) -> None:
-        con = connect(parquet_root=built_root, memory_limit="2GB", threads=2)
+        con = connect(parquet_root=built_root, memory_limit="2GB", threads=2, register_adj=False)
         try:
             build_aggregates_for_date(con, date="2026-01-15", out_root=built_root)
         finally:
             con.close()
         # Reconnect so the l2_daily_metrics view is registered.
-        con = connect(parquet_root=built_root, memory_limit="2GB", threads=2)
+        con = connect(parquet_root=built_root, memory_limit="2GB", threads=2, register_adj=False)
         try:
             vwap_tpl = {
                 r[0]: r[2]
@@ -96,12 +96,12 @@ class TestBuildAggregates:
         assert float(net_inflow) == pytest.approx(float(ni_tpl[code]))
 
     def test_cluster_agg_threshold(self, built_root: Path) -> None:
-        con = connect(parquet_root=built_root, memory_limit="2GB", threads=2)
+        con = connect(parquet_root=built_root, memory_limit="2GB", threads=2, register_adj=False)
         try:
             build_aggregates_for_date(con, date="2026-01-15", out_root=built_root)
         finally:
             con.close()
-        con = connect(parquet_root=built_root, memory_limit="2GB", threads=2)
+        con = connect(parquet_root=built_root, memory_limit="2GB", threads=2, register_adj=False)
         try:
             rows = con.execute(
                 "SELECT fill_count, total_notional FROM l2_cluster_agg"
@@ -113,7 +113,7 @@ class TestBuildAggregates:
 
     def test_views_registered_only_when_files_exist(self, built_root: Path) -> None:
         # Before build: agg views absent.
-        con = connect(parquet_root=built_root, memory_limit="2GB", threads=2)
+        con = connect(parquet_root=built_root, memory_limit="2GB", threads=2, register_adj=False)
         try:
             views = {r[0] for r in con.execute("SHOW TABLES").fetchall()}
             assert "l2_daily_metrics" not in views
@@ -121,12 +121,12 @@ class TestBuildAggregates:
         finally:
             con.close()
         # After build + reconnect: agg views present.
-        con = connect(parquet_root=built_root, memory_limit="2GB", threads=2)
+        con = connect(parquet_root=built_root, memory_limit="2GB", threads=2, register_adj=False)
         try:
             build_aggregates_for_date(con, date="2026-01-15", out_root=built_root)
         finally:
             con.close()
-        con = connect(parquet_root=built_root, memory_limit="2GB", threads=2)
+        con = connect(parquet_root=built_root, memory_limit="2GB", threads=2, register_adj=False)
         try:
             views = {r[0] for r in con.execute("SHOW TABLES").fetchall()}
             assert "l2_daily_metrics" in views
@@ -135,7 +135,7 @@ class TestBuildAggregates:
             con.close()
 
     def test_idempotent_skip(self, built_root: Path) -> None:
-        con = connect(parquet_root=built_root, memory_limit="2GB", threads=2)
+        con = connect(parquet_root=built_root, memory_limit="2GB", threads=2, register_adj=False)
         try:
             build_aggregates_for_date(con, date="2026-01-15", out_root=built_root)
             res2 = build_aggregates_for_date(con, date="2026-01-15", out_root=built_root)
@@ -144,7 +144,7 @@ class TestBuildAggregates:
         assert res2["skipped"] is True
 
     def test_force_rebuild(self, built_root: Path) -> None:
-        con = connect(parquet_root=built_root, memory_limit="2GB", threads=2)
+        con = connect(parquet_root=built_root, memory_limit="2GB", threads=2, register_adj=False)
         try:
             build_aggregates_for_date(con, date="2026-01-15", out_root=built_root)
             res2 = build_aggregates_for_date(
@@ -155,7 +155,7 @@ class TestBuildAggregates:
         assert res2["skipped"] is False
 
     def test_empty_date_no_file(self, built_root: Path) -> None:
-        con = connect(parquet_root=built_root, memory_limit="2GB", threads=2)
+        con = connect(parquet_root=built_root, memory_limit="2GB", threads=2, register_adj=False)
         try:
             res = build_aggregates_for_date(con, date="2099-12-31", out_root=built_root)
         finally:
@@ -171,12 +171,12 @@ class TestBuildAggregates:
         assert daily_metrics_path(built_root, "2026-01-15").is_file()
 
     def test_large_order_cluster_agg_template(self, built_root: Path) -> None:
-        con = connect(parquet_root=built_root, memory_limit="2GB", threads=2)
+        con = connect(parquet_root=built_root, memory_limit="2GB", threads=2, register_adj=False)
         try:
             build_aggregates_for_date(con, date="2026-01-15", out_root=built_root)
         finally:
             con.close()
-        con = connect(parquet_root=built_root, memory_limit="2GB", threads=2)
+        con = connect(parquet_root=built_root, memory_limit="2GB", threads=2, register_adj=False)
         try:
             agg_rows = run_template(con, "large_order_cluster_agg")
             raw_rows = run_template(con, "large_order_cluster")

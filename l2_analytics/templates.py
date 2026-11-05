@@ -1,49 +1,21 @@
-"""Load and run P0b SQL templates against ``l2_main`` / ``l2_order``."""
-
+"""Compatibility entrance for infra's offline research SQL templates."""
 from __future__ import annotations
 
-import re
 from pathlib import Path
-from typing import Any, Mapping, Optional
+from typing import TYPE_CHECKING, Any, Mapping
 
-import duckdb
+from l2_analytics._infra import require_l2
 
-_SQL_DIR = Path(__file__).resolve().parent / "sql"
-
-# order_by allowlist: comma-separated identifiers each optionally ASC/DESC.
-# Blocks injection like order_by="v; DROP TABLE t". Qualified names (a.b) and
-# quoted identifiers are intentionally out of scope (raise -> caller fixes).
-_ORDER_BY_RE = re.compile(
-    r"^\s*[A-Za-z_][A-Za-z0-9_]*(\s+(ASC|DESC))?"
-    r"(\s*,\s*[A-Za-z_][A-Za-z0-9_]*(\s+(ASC|DESC))?)*\s*$",
-    re.IGNORECASE,
-)
-
-TEMPLATE_FILES = {
-    "vwap": "vwap.sql",
-    "vwap_adj": "vwap_adj.sql",
-    "net_inflow": "net_inflow.sql",
-    "large_order_cluster": "large_order_cluster.sql",
-    "large_order_cluster_agg": "large_order_cluster_agg.sql",
-    "buy_order_cluster": "buy_order_cluster.sql",
-    "tick_speed": "tick_speed.sql",
-    "session_distribution": "session_distribution.sql",
-    "price_impact": "price_impact.sql",
-    "limit_up_down": "limit_up_down.sql",
-    "limit_up_down_true": "limit_up_down_true.sql",
-    "opening_auction": "opening_auction.sql",
-}
+if TYPE_CHECKING:
+    import duckdb
 
 
 def sql_dir() -> Path:
-    return _SQL_DIR
+    return require_l2("research.queries.templates").sql_dir()
 
 
 def load_template(name: str) -> str:
-    if name not in TEMPLATE_FILES:
-        raise KeyError(f"unknown template {name!r}; known={sorted(TEMPLATE_FILES)}")
-    path = _SQL_DIR / TEMPLATE_FILES[name]
-    return path.read_text(encoding="utf-8")
+    return require_l2("research.queries.templates").load_template(name)
 
 
 def run_template(
@@ -51,36 +23,16 @@ def run_template(
     name: str,
     *,
     extra_where: str = "",
-    limit: Optional[int] = None,
+    limit: int | None = None,
     order_by: str = "",
-    params: Optional[Mapping[str, Any]] = None,
+    params: Mapping[str, Any] | None = None,
 ) -> list[tuple[Any, ...]]:
-    """Execute a template with optional AND-clause / ORDER BY / LIMIT wrappers.
+    return require_l2("research.queries.templates").run_template(
+        con, name, extra_where=extra_where, limit=limit, order_by=order_by, params=params,
+    )
 
-    ``extra_where`` stays free-form for trusted internal callers; prefer ``$name``
-    placeholders for *values* and pass them via ``params`` (bound by DuckDB), e.g.
-    ``extra_where="stock_code = $code", params={"code": "000001.SZ"}``.
-    ``order_by`` is validated against an identifier allowlist (raises ``ValueError``
-    on anything else); ``limit`` is int-cast.
-    """
-    body = load_template(name).rstrip().rstrip(";")
-    # Inject extra predicates before GROUP BY when present.
-    if extra_where.strip():
-        clause = extra_where.strip()
-        if not clause.upper().startswith("AND"):
-            clause = "AND " + clause
-        if "GROUP BY" in body.upper():
-            # insert before GROUP BY (last occurrence)
-            idx = body.upper().rfind("GROUP BY")
-            body = body[:idx] + f"  {clause}\n" + body[idx:]
-        else:
-            body = body + f"\n{clause}"
-    if order_by.strip():
-        if not _ORDER_BY_RE.match(order_by):
-            raise ValueError(f"invalid order_by: {order_by!r}")
-        body = body + f"\nORDER BY {order_by.strip()}"
-    if limit is not None:
-        body = body + f"\nLIMIT {int(limit)}"
-    if params:
-        return con.execute(body, dict(params)).fetchall()
-    return con.execute(body).fetchall()
+
+def __getattr__(name: str):
+    if name == "TEMPLATE_FILES":
+        return require_l2("research.queries.templates").TEMPLATE_FILES
+    raise AttributeError(name)
