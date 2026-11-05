@@ -53,13 +53,11 @@ def backend_spies(
     monkeypatch: pytest.MonkeyPatch, reader_module: ModuleType,
 ) -> dict[str, Mock]:
     spies = {}
-    for name in (
-        "_read_stock_parquet", "_read_stock_persistent",
-        "_scan_parquet", "_scan_duckdb", "_scan_persistent",
-        "_ensure_connection", "_get_persistent_con",
-    ):
+    # The switch removes local storage implementations. Spy on the real infra
+    # boundary so every original #563 entry/mode/period gate still runs intact.
+    for name in ("read_stock", "scan_stocks", "_daily_connection", "_read_parquet", "_query"):
         spy = Mock(name=name, return_value=pd.DataFrame({"close": [1.0]}))
-        monkeypatch.setattr(reader_module.StockDataReader, name, spy)
+        monkeypatch.setattr(reader_module._InfraStockDataReader, name, spy)
         spies[name] = spy
     return spies
 
@@ -100,9 +98,7 @@ def test_none_still_reaches_reader_backend(
     reader = make_reader(asset_type)
     symbol = "510180.SH" if asset_type == "etf" else "000001.SZ"
     symbols = symbol if entry == "read_stock" else [symbol]
-    backend = backend_spies[
-        "_read_stock_parquet" if entry == "read_stock" else "_scan_parquet"
-    ]
+    backend = backend_spies[entry]
 
     assert getattr(reader, entry)(symbols, adjust_type="none") is backend.return_value
     backend.assert_called_once_with(symbols, None, None, "1d", "none", None)
@@ -120,7 +116,7 @@ def test_ma_provider_whitelist_still_reaches_reader_backend(
         lambda: "live_trading.indicators.ma_provider",
     )
     reader = make_reader(asset_type)
-    backend = backend_spies["_read_stock_parquet"]
+    backend = backend_spies["read_stock"]
     symbol = "510180.SH" if asset_type == "etf" else "000001.SZ"
 
     assert reader.read_stock(symbol, adjust_type=adjust) is backend.return_value
@@ -157,7 +153,7 @@ def test_etf_fund_daily_keeps_non_policy_failure_soft(
     monkeypatch.setattr(
         etf_local_bars, "get_etf_stock_data_reader", Mock(return_value=make_reader("etf")),
     )
-    backend = backend_spies["_read_stock_parquet"]
+    backend = backend_spies["read_stock"]
     backend.side_effect = RuntimeError("storage unavailable")
 
     assert etf_local_bars.default_etf_fund_daily(
@@ -252,7 +248,7 @@ def test_proxy_keeps_non_policy_failure_fallback(
     delegate = Mock()
     proxy = adapter.DuckDBDailyBarsProxy(delegate)
     proxy._reader = make_reader("stock")
-    backend = backend_spies["_read_stock_parquet"]
+    backend = backend_spies["read_stock"]
     backend.side_effect = RuntimeError("storage unavailable")
 
     result = getattr(proxy, entry)(

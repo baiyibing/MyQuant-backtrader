@@ -5,6 +5,8 @@
 pandas==3.0.6
 numpy>=1.24
 duckdb>=1.0
+# Knife R2-18: shared lake IO, pinned to infra PR #56 (on main after #55).
+myquant-infra @ git+https://github.com/baiyibing/MyQuant-infra.git@d32a68a2364a87e8d1b98d9c2b64a9bad7070130
 pyarrow>=15.0
 loguru>=0.7
 PyYAML>=6.0

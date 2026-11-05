@@ -663,50 +663,31 @@ def _path_b_batch(
     *,
     max_workers: int | None,
 ) -> int:
-    """DuckDB batch-**read** today's none, then PyArrow parallel merge-write front."""
-    import duckdb
+    """Infra batch-reads today's none; retain the PyArrow front merge policy."""
+    from oskh_data.reader import StockDataReader
 
     if not codes:
         return 0
 
-    parts = sorted({to_partition_key(to_canonical_symbol(c)) for c in codes})
-    from common.infra.data_root import resolve_period_root
-
-    none_glob = str(
-        resolve_period_root("1d")
-        / "dividend_type=none" / "symbol=*" / "data.parquet"
-    ).replace("\\", "/")
+    symbols = sorted({to_canonical_symbol(c) for c in codes})
     day_end = target_ms + 86_400_000
+    with StockDataReader(mode="duckdb") as reader:
+        today = reader.scan_stocks(
+            symbols, start_time=pd.Timestamp(target_ms, unit="ms").isoformat(),
+            end_time=pd.Timestamp(day_end - 1, unit="ms").isoformat(),
+            period="1d", adjust_type="none",
+        )
+        if reader.last_query_error:
+            raise RuntimeError(f"Path B lake read failed: {reader.last_query_error}")
 
-    conn = duckdb.connect()
-    try:
-        conn.execute("CREATE TEMP TABLE path_b_parts (symbol_dir VARCHAR)")
-        conn.executemany("INSERT INTO path_b_parts VALUES (?)", [(p,) for p in parts])
-        # filename .../symbol=000001_SZ/data.parquet
-        today = conn.execute(
-            f"""
-            SELECT
-                regexp_extract(filename, 'symbol=([^\\\\/]+)', 1) AS symbol_dir,
-                {target_ms}::BIGINT AS time,
-                open, high, low, close, volume, amount
-            FROM read_parquet('{none_glob}', filename=true)
-            WHERE time IS NOT NULL
-              AND close IS NOT NULL
-              AND time >= {target_ms}
-              AND time < {day_end}
-              AND regexp_extract(filename, 'symbol=([^\\\\/]+)', 1) IN (SELECT symbol_dir FROM path_b_parts)
-            """
-        ).df()
-    finally:
-        conn.close()
-
-    if today.empty:
+    if today is None or today.empty:
         return 0
+    today = today.loc[today["close"].notna()].assign(time=target_ms)
 
     items: List[Tuple[Path, pd.DataFrame]] = []
-    for symbol_dir, grp in today.groupby("symbol_dir", sort=False):
+    for symbol, grp in today.groupby("symbol", sort=False):
         row = grp.iloc[[0]][STANDARD_COLUMNS].copy()
-        code = to_canonical_symbol(str(symbol_dir))
+        code = to_canonical_symbol(str(symbol))
         items.append((_file_path(base, "front", code), row))
     ok, _errors = merge_write_many_parallel(items, max_workers=max_workers)
     return ok
