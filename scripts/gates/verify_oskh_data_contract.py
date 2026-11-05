@@ -12,13 +12,17 @@ Checks performed:
   3b. backtest/ must not import download modules or xtquant
   4. data_audit.db direct sqlite3 access is whitelisted in oskh_data/audit.py
   5. live_trading/ and trade_decision/ hot-path calls to stock_daily_bars /
-     stock_daily_bars_cfg_only / read_stock must use adjust_type="none"
-     (whitelist: live_trading_ma_indicator_provider.py)
+     stock_daily_bars_cfg_only / read_stock must pass adjust/adjust_type as
+     the string literal 'none' (keyword, or read_stock's positional slot).
+     Non-literal, omitted, unpacked (**), and positional non-none arguments
+     are violations.
+     (whitelist: live_trading/indicators/ma_provider.py)
 
 Usage (repo root)::
 
   python scripts/gates/verify_oskh_data_contract.py
 """
+
 from __future__ import annotations
 
 import ast
@@ -79,14 +83,12 @@ _FORBIDDEN_BACKTEST_CALL_NAMES: Tuple[str, ...] = (
 # Whitelist: modules allowed to use direct sqlite3 (independent audit db)
 _SQLITE_WHITELIST = {
     "oskh_data/audit.py": "data_audit.db is an independent operations audit database, "
-                          "isolated from the oskh_db.DatabaseGateway five-db routing. "
-                          "See plan-refactor-backtest-data-to-oskh-data-2026-05-16.md §10.1 E.",
+    "isolated from the oskh_db.DatabaseGateway five-db routing. "
+    "See plan-refactor-backtest-data-to-oskh-data-2026-05-16.md §10.1 E.",
 }
 
 # Modules allowed to use adjust_type != "none" (explicitly documented reason required)
-_ADJUST_TYPE_WHITELIST: Tuple[str, ...] = (
-    "live_trading/indicators/ma_provider.py",
-)
+_ADJUST_TYPE_WHITELIST: Tuple[str, ...] = ("live_trading/indicators/ma_provider.py",)
 
 # Hot-path directories to scan for adjust_type misuse
 _HOT_PATH_DIRS: Tuple[Path, ...] = (
@@ -94,11 +96,21 @@ _HOT_PATH_DIRS: Tuple[Path, ...] = (
     _REPO / "trade_decision",
 )
 
-# Method/function names and their adjust keyword parameter names
-_ADJUST_KEYWORD_TARGETS: Tuple[Tuple[str, str], ...] = (
-    ("stock_daily_bars", "adjust"),
-    ("stock_daily_bars_cfg_only", "adjust"),
-    ("read_stock", "adjust_type"),
+# Call name, adjust parameter name, and call-site positional index.
+# Index is for a bound call (`self` is not an argument). None means the
+# parameter is keyword-only, so a positional argument never occupies it.
+# Taken from the implementations (do not guess a different index):
+#   read_stock — oskh_data/reader.py StockDataReader.read_stock
+#     (stock_code, start_time, end_time, period, adjust_type='front', ...) → 4
+#   stock_daily_bars / stock_daily_bars_cfg_only —
+#     common/integrations/duckdb_daily_bars_adapter.py DuckDBDailyBarsProxy
+#     both are keyword-only after `*` (`adjust='none'` has no positional slot).
+# Omitted arguments are still violations on every target: read_stock's default
+# is 'front', and hot path requires an explicit 'none' literal either way.
+_ADJUST_KEYWORD_TARGETS: Tuple[Tuple[str, str, int | None], ...] = (
+    ("stock_daily_bars", "adjust", None),
+    ("stock_daily_bars_cfg_only", "adjust", None),
+    ("read_stock", "adjust_type", 4),
 )
 
 _RED = "\033[91m"
@@ -113,6 +125,7 @@ def _collect_py_files(root: Path) -> List[Path]:
 # ------------------------------------------------------------------
 # Check 1-3: oskh_data module-level imports
 # ------------------------------------------------------------------
+
 
 def _check_module_imports(path: Path) -> List[str]:
     errors: List[str] = []
@@ -146,7 +159,9 @@ def _check_module_imports(path: Path) -> List[str]:
             if node.module:
                 for forbidden, reason in _FORBIDDEN_MODULE_LEVEL_IMPORTS:
                     if node.module == forbidden or node.module.startswith(forbidden + "."):
-                        errors.append(f"{path}: module-level 'from {node.module} import ...' — {reason}")
+                        errors.append(
+                            f"{path}: module-level 'from {node.module} import ...' — {reason}"
+                        )
 
     return errors
 
@@ -208,6 +223,7 @@ def _check_backtest_no_download_ops(path: Path) -> List[str]:
 # Check 4: sqlite3 whitelist
 # ------------------------------------------------------------------
 
+
 def _check_sqlite_whitelist(path: Path) -> List[str]:
     errors: List[str] = []
     relative = str(path.relative_to(_REPO)).replace("\\", "/")
@@ -241,9 +257,20 @@ def _check_sqlite_whitelist(path: Path) -> List[str]:
 # Check 5: adjust_type guard (static scan)
 # ------------------------------------------------------------------
 
+
 def _check_adjust_type_hot_path() -> List[str]:
-    """Scan live_trading/ and trade_decision/ for calls to stock_daily_bars /
-    read_stock with adjust_type != 'none'.
+    """Scan live_trading/ and trade_decision/ for stock_daily_bars / read_stock.
+
+    A call is clean only when adjust/adjust_type is the string literal 'none',
+    passed as a keyword or (read_stock only) in the positional slot documented
+    on ``_ADJUST_KEYWORD_TARGETS``. Reported forms:
+
+    * keyword Constant other than 'none' (unchanged message)
+    * non-literal keyword (Name, Attribute, BinOp, JoinedStr, non-string, ...)
+    * omitted adjust/adjust_type (no keyword and no occupying positional)
+    * ``**`` unpacking (``keyword.arg is None``), which can hide the parameter
+    * positional non-'none' Constant, non-Constant, or a starred arg that
+      covers the slot
     """
     errors: List[str] = []
     for hot_dir in _HOT_PATH_DIRS:
@@ -268,20 +295,122 @@ def _check_adjust_type_hot_path() -> List[str]:
                 if not func_name:
                     continue
 
-                for target_name, kw_name in _ADJUST_KEYWORD_TARGETS:
+                for target_name, kw_name, positional_index in _ADJUST_KEYWORD_TARGETS:
                     if func_name != target_name:
                         continue
-                    # check keyword arguments
-                    for kw in node.keywords:
-                        if kw.arg == kw_name:
-                            val = _resolve_constant(kw.value)
-                            if val is not None and val != "none":
-                                errors.append(
-                                    f"{relative}: {func_name}(..., {kw_name}='{val}') — "
-                                    f"adjust_type must be 'none' in hot-path modules. "
-                                    f"Whitelist: {list(_ADJUST_TYPE_WHITELIST)}"
-                                )
+                    errors.extend(
+                        _adjust_call_violations(
+                            relative, func_name, kw_name, positional_index, node
+                        )
+                    )
     return errors
+
+
+def _hot_path_adjust_suffix() -> str:
+    return (
+        f"adjust_type must be 'none' in hot-path modules. Whitelist: {list(_ADJUST_TYPE_WHITELIST)}"
+    )
+
+
+def _format_adjust_violation(relative: str, func_name: str, detail: str) -> str:
+    return f"{relative}: {func_name}(...) {detail} — {_hot_path_adjust_suffix()}"
+
+
+def _adjust_call_violations(
+    relative: str,
+    func_name: str,
+    kw_name: str,
+    positional_index: int | None,
+    node: ast.Call,
+) -> List[str]:
+    """Violations for one hot-path call. Explicit keyword wins over positionals."""
+    errors: List[str] = []
+    explicit: ast.expr | None = None
+    saw_unpack = False
+    for kw in node.keywords:
+        if kw.arg is None:
+            saw_unpack = True
+        elif kw.arg == kw_name:
+            explicit = kw.value
+
+    if saw_unpack:
+        errors.append(
+            _format_adjust_violation(
+                relative,
+                func_name,
+                f"unpacked keywords may set non-literal {kw_name}",
+            )
+        )
+
+    if explicit is not None:
+        literal = _resolve_constant(explicit)
+        if literal is None:
+            errors.append(_format_adjust_violation(relative, func_name, f"non-literal {kw_name}"))
+        elif literal != "none":
+            # Keep the historical wording for a non-none string literal.
+            errors.append(
+                f"{relative}: {func_name}(..., {kw_name}='{literal}') — {_hot_path_adjust_suffix()}"
+            )
+        return errors
+
+    if positional_index is not None:
+        kind, expr = _positional_adjust_slot(node, positional_index)
+        if kind == "hidden":
+            errors.append(
+                _format_adjust_violation(
+                    relative,
+                    func_name,
+                    f"positional non-literal {kw_name}",
+                )
+            )
+            return errors
+        if kind == "occupied":
+            literal = _resolve_constant(expr) if expr is not None else None
+            if literal is None:
+                errors.append(
+                    _format_adjust_violation(
+                        relative,
+                        func_name,
+                        f"positional non-literal {kw_name}",
+                    )
+                )
+            elif literal != "none":
+                errors.append(
+                    _format_adjust_violation(
+                        relative,
+                        func_name,
+                        f"positional {kw_name}='{literal}'",
+                    )
+                )
+            return errors
+
+    errors.append(
+        _format_adjust_violation(
+            relative,
+            func_name,
+            f"omitted {kw_name} (defaults may be non-none)",
+        )
+    )
+    return errors
+
+
+def _positional_adjust_slot(node: ast.Call, index: int) -> Tuple[str, ast.expr | None]:
+    """Locate positional argument ``index``.
+
+    Returns ``("occupied", expr)``, ``("hidden", None)`` when a starred
+    argument at or before ``index`` may contain the slot, or
+    ``("absent", None)`` when fewer concrete positionals were passed.
+    """
+    concrete = 0
+    for arg in node.args:
+        if isinstance(arg, ast.Starred):
+            if concrete <= index:
+                return ("hidden", None)
+            continue
+        if concrete == index:
+            return ("occupied", arg)
+        concrete += 1
+    return ("absent", None)
 
 
 def _resolve_call_name(node: ast.Call) -> str | None:
@@ -303,6 +432,7 @@ def _resolve_constant(node: ast.expr) -> str | None:
 # ------------------------------------------------------------------
 # Main
 # ------------------------------------------------------------------
+
 
 def main() -> int:
     errors: List[str] = []
