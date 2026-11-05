@@ -126,3 +126,7 @@ Do not uninstall or downgrade it as an L2 rollback. No data migration, productio
 execution or lake write is performed by this PR, so code rollback requires no
 lake restore. Before a later operator-run Phase3 job, retain its explicit paths
 and inspect staged readiness/manifest evidence when resuming across versions.
+
+## Pin bump after infra #60
+
+Current pin: `3c377e9718e811112993579b6d91a603395db699` (merged origin/main after #60). Prior campaign pins superseded. Rollback: revert host wrappers for B3 and restore the prior pin SHA documented above.
