@@ -28,7 +28,7 @@ except ImportError:  # CI hosts without private myquant-infra pin
     def _asset_period_root(container, asset, period):  # type: ignore[misc]
         """Path-only stub matching infra layout; no IO."""
         from pathlib import Path as _P
-        return _P(container) / str(asset) / f"period={period}"
+        return _P(container) / str(asset) / ("period=" + str(period))
 
     class _InfraStockDataReader:  # type: ignore[no-redef]
         """Patchable stub so entry-gate tests construct without the private package.
