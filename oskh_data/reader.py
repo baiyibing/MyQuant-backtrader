@@ -14,9 +14,38 @@ from time import perf_counter
 from typing import List, Literal, Optional
 
 import pandas as pd
-from myquant_infra.bars.duckdb_build import rebuild_front_duckdb as _rebuild_front_duckdb
-from myquant_infra.lake.paths import asset_period_root as _asset_period_root
-from myquant_infra.lake.readers import MINUTE_PERIODS, StockDataReader as _InfraStockDataReader
+from oskh_data._infra import require_infra
+
+try:
+    from myquant_infra.bars.duckdb_build import rebuild_front_duckdb as _rebuild_front_duckdb
+    from myquant_infra.lake.paths import asset_period_root as _asset_period_root
+    from myquant_infra.lake.readers import StockDataReader as _InfraStockDataReader
+except ImportError:  # CI hosts without private myquant-infra pin
+    _rebuild_front_duckdb = None  # type: ignore[assignment]
+    _asset_period_root = None  # type: ignore[assignment]
+
+    class _InfraStockDataReader:  # type: ignore[no-redef]
+        """Patchable stub so entry-gate tests run without the private package."""
+
+        def __init__(self, *args, **kwargs) -> None:
+            raise ImportError(
+                "myquant-infra is required for lake IO; install requirements-infra.txt"
+            )
+
+        def read_stock(self, *args, **kwargs):
+            raise ImportError("myquant-infra required")
+
+        def scan_stocks(self, *args, **kwargs):
+            raise ImportError("myquant-infra required")
+
+        def _daily_connection(self, *args, **kwargs):
+            raise ImportError("myquant-infra required")
+
+        def _read_parquet(self, *args, **kwargs):
+            raise ImportError("myquant-infra required")
+
+        def _query(self, *args, **kwargs):
+            raise ImportError("myquant-infra required")
 
 from common.infra.quant_logger import get_logger
 from common.infra.data_root import resolve_data_root as _resolve_data_root

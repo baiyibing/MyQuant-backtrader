@@ -10,7 +10,10 @@ import threading
 from typing import Any, Dict, Optional
 
 import pandas as pd
-from myquant_infra.lake import etf_bars as _infra_etf_bars
+try:
+    from myquant_infra.lake import etf_bars as _infra_etf_bars
+except ImportError:
+    _infra_etf_bars = None  # type: ignore[assignment]
 
 from common.infra.quant_logger import get_logger
 

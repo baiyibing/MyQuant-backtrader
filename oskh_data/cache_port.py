@@ -4,7 +4,10 @@ from __future__ import annotations
 from typing import Optional
 
 import pandas as pd
-from myquant_infra.lake import cache as _infra_cache
+try:
+    from myquant_infra.lake import cache as _infra_cache
+except ImportError:  # CI without private pin
+    _infra_cache = None  # type: ignore[assignment]
 from common.infra.quant_logger import get_logger
 
 logger = get_logger(__name__)

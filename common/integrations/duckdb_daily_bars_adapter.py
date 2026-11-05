@@ -4,7 +4,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Literal, Optional
 
-from myquant_infra.lake.duckdb_daily_bars import DuckDBDailyBarsProxy as _InfraDailyBarsProxy
+try:
+    from myquant_infra.lake.duckdb_daily_bars import DuckDBDailyBarsProxy as _InfraDailyBarsProxy
+except ImportError:
+    _InfraDailyBarsProxy = None  # type: ignore[assignment]
 from common.infra.constants import EnvVarKeys
 from common.infra.quant_logger import get_logger
 from common.infra.runtime_config import config_value_source, get_raw as _cfg_raw

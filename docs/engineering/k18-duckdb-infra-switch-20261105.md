@@ -12,7 +12,7 @@ Local commit only; no merge, push or PR. No production lake rebuild was run.
 ## Dependency pin
 
 Infra PR #56, rebased on main after #55 merged:
-`d32a68a2364a87e8d1b98d9c2b64a9bad7070130`.
+`7d48c4e310f9636cad9c3e544db1766025db4e3c`.
 The same immutable VCS requirement is in `requirements-infra.txt`. A concurrent
 CI commit moved this private dependency out of the public requirements file.
 Hosts using the switched reader must install it explicitly; the public CI
@@ -20,7 +20,7 @@ workflow currently does not install that optional file. Runtime switch tests
 require the package and do not substitute a local IO implementation.
 
 ```sh
-/workspace/vanna312/bin/python -m pip install -q "myquant-infra @ git+https://github.com/baiyibing/MyQuant-infra.git@d32a68a2364a87e8d1b98d9c2b64a9bad7070130"
+/workspace/vanna312/bin/python -m pip install -q "myquant-infra @ git+https://github.com/baiyibing/MyQuant-infra.git@7d48c4e310f9636cad9c3e544db1766025db4e3c"
 ```
 
 Installed `direct_url.json` was checked against that exact commit. This work

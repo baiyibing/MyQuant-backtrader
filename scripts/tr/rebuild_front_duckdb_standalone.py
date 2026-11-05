@@ -9,7 +9,8 @@ PROJECT_ROOT = next(p for p in Path(__file__).resolve().parents if p.name == "sc
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from myquant_infra.bars.duckdb_build import rebuild_front_duckdb
+from oskh_data._infra import require_infra
+rebuild_front_duckdb = require_infra("bars.duckdb_build").rebuild_front_duckdb
 from common.infra.data_root import resolve_e_stock_data_container, resolve_period_root
 
 
