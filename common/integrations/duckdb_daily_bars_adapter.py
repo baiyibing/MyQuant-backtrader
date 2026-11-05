@@ -6,8 +6,21 @@ from typing import Any, Literal, Optional
 
 try:
     from myquant_infra.lake.duckdb_daily_bars import DuckDBDailyBarsProxy as _InfraDailyBarsProxy
-except ImportError:
-    _InfraDailyBarsProxy = None  # type: ignore[assignment]
+except ImportError:  # CI without private pin
+    class _InfraDailyBarsProxy:  # type: ignore[no-redef]
+        """Patchable stub; host subclass must construct without infra."""
+
+        def __init__(self, delegate, *, reader_factory=None, previous_trading_day=None, **kwargs) -> None:
+            self._delegate = delegate
+            self._reader = None
+            self._reader_factory = reader_factory
+            self._previous_trading_day = previous_trading_day
+
+        def stock_daily_bars(self, *args, **kwargs):
+            raise ImportError("myquant-infra required for DuckDBDailyBarsProxy IO")
+
+        def stock_daily_bars_cfg_only(self, *args, **kwargs):
+            raise ImportError("myquant-infra required for DuckDBDailyBarsProxy IO")
 from common.infra.constants import EnvVarKeys
 from common.infra.quant_logger import get_logger
 from common.infra.runtime_config import config_value_source, get_raw as _cfg_raw

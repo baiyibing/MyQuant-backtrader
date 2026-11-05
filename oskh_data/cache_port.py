@@ -7,7 +7,24 @@ import pandas as pd
 try:
     from myquant_infra.lake import cache as _infra_cache
 except ImportError:  # CI without private pin
-    _infra_cache = None  # type: ignore[assignment]
+    class _InfraCacheStub:
+        @staticmethod
+        def set_current_run_id(*a, **k):
+            raise ImportError("myquant-infra required for cache")
+
+        @staticmethod
+        def get_current_run_id(*a, **k):
+            raise ImportError("myquant-infra required for cache")
+
+        @staticmethod
+        def invalidate_current_run_id(*a, **k):
+            raise ImportError("myquant-infra required for cache")
+
+        @staticmethod
+        def get_daily_bars_cached(*a, **k):
+            raise ImportError("myquant-infra required for cache")
+
+    _infra_cache = _InfraCacheStub()  # type: ignore[assignment]
 from common.infra.quant_logger import get_logger
 
 logger = get_logger(__name__)

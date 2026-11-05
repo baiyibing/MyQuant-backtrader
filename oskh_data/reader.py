@@ -20,23 +20,46 @@ try:
     from myquant_infra.bars.duckdb_build import rebuild_front_duckdb as _rebuild_front_duckdb
     from myquant_infra.lake.paths import asset_period_root as _asset_period_root
     from myquant_infra.lake.readers import StockDataReader as _InfraStockDataReader
+    _INFRA_AVAILABLE = True
 except ImportError:  # CI hosts without private myquant-infra pin
+    _INFRA_AVAILABLE = False
     _rebuild_front_duckdb = None  # type: ignore[assignment]
-    _asset_period_root = None  # type: ignore[assignment]
+
+    def _asset_period_root(container, asset, period):  # type: ignore[misc]
+        """Path-only stub matching infra layout; no IO."""
+        from pathlib import Path as _P
+        return _P(container) / str(asset) / f"period={period}"
 
     class _InfraStockDataReader:  # type: ignore[no-redef]
-        """Patchable stub so entry-gate tests run without the private package."""
+        """Patchable stub so entry-gate tests construct without the private package.
+
+        ``__init__`` must not raise — host subclass calls ``super().__init__`` before
+        any policy gate. Real IO methods raise until monkeypatched or infra is installed.
+        """
 
         def __init__(self, *args, **kwargs) -> None:
-            raise ImportError(
-                "myquant-infra is required for lake IO; install requirements-infra.txt"
-            )
+            self._asset_type = kwargs.get("asset_type", "stock")
+            self._mode = kwargs.get("mode", "parquet")
+            self._base_dir = kwargs.get("base_dir")
+            self._db_dir = kwargs.get("db_dir")
+            self._db_path = kwargs.get("db_path")
+            self._closed = False
+            self.last_query_error = None
 
         def read_stock(self, *args, **kwargs):
-            raise ImportError("myquant-infra required")
+            raise ImportError("myquant-infra is required for lake IO; install requirements-infra.txt")
 
         def scan_stocks(self, *args, **kwargs):
-            raise ImportError("myquant-infra required")
+            raise ImportError("myquant-infra is required for lake IO; install requirements-infra.txt")
+
+        def close(self) -> None:
+            self._closed = True
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            self.close()
 
         def _daily_connection(self, *args, **kwargs):
             raise ImportError("myquant-infra required")
@@ -220,6 +243,10 @@ class StockDataReader(_InfraStockDataReader):
             raise ValueError("only daily stock/ETF front rebuild is supported; minute persistent rebuild is retired")
         if max_backups != 2:
             raise ValueError("max_backups retention is not supported by the infra builder")
+        if _rebuild_front_duckdb is None:
+            raise ImportError(
+                "myquant-infra is required for lake IO; install requirements-infra.txt"
+            )
         with StockDataReader(base_dir=base_dir, mode="parquet", asset_type=asset_type) as reader:
             output = Path(db_path) if db_path else reader._e_container / (
                 "stock_data_etf_front.duckdb" if asset_type == "etf" else "stock_data_front.duckdb"

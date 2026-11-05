@@ -10,7 +10,12 @@ import pytest
 from pandas.testing import assert_frame_equal
 
 from oskh_data import reader as reader_module
-from oskh_data.reader import StockDataReader
+from oskh_data.reader import StockDataReader, _INFRA_AVAILABLE
+
+pytestmark_infra = pytest.mark.skipif(
+    not _INFRA_AVAILABLE,
+    reason="optional myquant-infra not installed (public CI)",
+)
 
 
 def write_bars(root: Path, period: str, adjust: str, symbol: str, close: float) -> pd.DataFrame:
@@ -40,6 +45,7 @@ def lake(monkeypatch, tmp_path):
 
 @pytest.mark.parametrize("asset_type,symbol", [("stock", "600000.SH"), ("etf", "510050.SH")])
 @pytest.mark.parametrize("mode", ["parquet", "duckdb", "duckdb_persistent"])
+@pytestmark_infra
 def test_real_daily_and_minute_io_uses_separate_roots(lake, asset_type, symbol, mode):
     container, workspace = lake
     tree = container / asset_type
@@ -67,6 +73,7 @@ def test_real_daily_and_minute_io_uses_separate_roots(lake, asset_type, symbol, 
         reader.read_stock(symbol, adjust_type="none")
 
 
+@pytestmark_infra
 def test_period_overrides_reach_infra_read_and_rebuild(lake, monkeypatch, tmp_path):
     container, workspace = lake
     override = tmp_path / "override"
@@ -79,6 +86,7 @@ def test_period_overrides_reach_infra_read_and_rebuild(lake, monkeypatch, tmp_pa
             assert list(reader.read_stock("600000.SH")["close"]) == [99.0]
 
 
+@pytestmark_infra
 def test_failed_rebuild_keeps_previous_database(lake):
     container, _ = lake
     frame = write_bars(container / "stock", "1d", "front", "600000.SH", 11.0)
@@ -93,6 +101,7 @@ def test_failed_rebuild_keeps_previous_database(lake):
         assert list(reader.read_stock("600000.SH")["close"]) == [11.0]
 
 
+@pytestmark_infra
 def test_missing_root_and_missing_persistent_db_fail_without_artifacts(monkeypatch, tmp_path):
     monkeypatch.delenv("OSKH_SOURCE_PARQUET_ROOT", raising=False)
     monkeypatch.delenv("OSKH_AUTHORITY_HINT_ROOT", raising=False)
@@ -192,6 +201,7 @@ class FakeRedis:
         self.values.pop(key, None)
 
 
+@pytestmark_infra
 def test_cache_roundtrip_pointer_rotation_and_invalidation(monkeypatch):
     from oskh_data import cache_port
 
@@ -209,6 +219,7 @@ def test_cache_roundtrip_pointer_rotation_and_invalidation(monkeypatch):
     assert cache_port.get_current_run_id("1d") is None
 
 
+@pytestmark_infra
 def test_proxy_local_response_and_current_session_delegation(lake, monkeypatch):
     from common.integrations.duckdb_daily_bars_adapter import DuckDBDailyBarsProxy
     from oskh_data import freshness
@@ -236,6 +247,7 @@ def test_proxy_local_response_and_current_session_delegation(lake, monkeypatch):
             proxy._reader.close()
 
 
+@pytestmark_infra
 def test_standalone_rebuild_is_import_safe_and_passes_resolved_paths(lake, monkeypatch):
     from scripts.tr import rebuild_front_duckdb_standalone as rebuild
 
@@ -246,6 +258,7 @@ def test_standalone_rebuild_is_import_safe_and_passes_resolved_paths(lake, monke
     build.assert_called_once_with(container / "stock" / "period=1d", workspace / "stock_data" / "stock_data_front.duckdb")
 
 
+@pytestmark_infra
 def test_path_b_keeps_day_filter_symbol_selection_and_merge_policy(lake):
     from oskh_data.daily_parquet_write import path_b_append_front_today
 

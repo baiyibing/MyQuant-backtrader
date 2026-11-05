@@ -12,8 +12,17 @@ from typing import Any, Dict, Optional
 import pandas as pd
 try:
     from myquant_infra.lake import etf_bars as _infra_etf_bars
-except ImportError:
-    _infra_etf_bars = None  # type: ignore[assignment]
+except ImportError:  # CI without private pin
+    class _InfraEtfBarsStub:
+        @staticmethod
+        def reader_df_to_fund_daily_df(df):
+            raise ImportError("myquant-infra required for etf_bars")
+
+        @staticmethod
+        def default_etf_fund_daily(*args, **kwargs):
+            raise ImportError("myquant-infra required for etf_bars")
+
+    _infra_etf_bars = _InfraEtfBarsStub()  # type: ignore[assignment]
 
 from common.infra.quant_logger import get_logger
 
