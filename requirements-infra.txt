@@ -2,5 +2,8 @@
 #   pip install -r requirements-infra.txt
 # D4 + B2 pin/rollback: docs/engineering/b2-bars-adj-infra-switch-20261105.md
 # K18 D4 duckdb IO: docs/engineering/k18-duckdb-infra-switch-20261105.md
-myquant-infra @ git+https://github.com/baiyibing/MyQuant-infra.git@7d48c4e310f9636cad9c3e544db1766025db4e3c
 # B7 artifact consumer pin/rollback: docs/engineering/b7-hithink-artifact-infra-switch-20261105.md
+# B6 TR store/IO pin + rollback: docs/engineering/b6-tr-store-infra-switch-20261105.md
+# Rollback B6: revert its host wrappers and restore the prior pin together.
+# Unified tip after infra #60: 3c377e9718e811112993579b6d91a603395db699
+myquant-infra @ git+https://github.com/baiyibing/MyQuant-infra.git@3c377e9718e811112993579b6d91a603395db699

@@ -82,7 +82,8 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     staging_dir = args.staging_dir or None
-    canonical_path = args.canonical_path or None
+    # Resolve host policy once; the facade passes the explicit filename to infra.
+    canonical_path = resolve_parquet_path(args.canonical_path or None)
     t0 = time.perf_counter()
 
     for year in range(args.from_year, args.to_year - 1, -1):
