@@ -339,6 +339,7 @@ def test_v7_run_config_omits_industry_profile_and_keeps_legacy(tmp_path):
 
 
 def test_profile_keys_do_not_change_run_manifest_config(tmp_path):
+    pytest.importorskip("myquant_infra.artifacts.provenance")  # B8: run manifest needs optional infra
     state = _daily_case("industry")
     text = summarize(state, 21_000_000, "20251103", "20251104", engine="daily")
     base_config = {"strategy": "version6", "dividend_type": "none"}

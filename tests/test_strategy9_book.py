@@ -92,6 +92,7 @@ def test_daily_cli_version9_refuses_stock_pool(monkeypatch):
 @pytest.mark.parametrize("host", ["daily", "minute"])
 @pytest.mark.parametrize("enabled", [False, True])
 def test_cli_version9_accepts_explicit_pool(tmp_path, monkeypatch, enabled, host):
+    pytest.importorskip("myquant_infra.artifacts.provenance")  # B8: run manifest needs optional infra
     import backtest.research.csv_minute_backtest as minute
     cli = sim if host == "daily" else minute
     seen = {}

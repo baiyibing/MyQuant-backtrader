@@ -323,6 +323,7 @@ def synthetic_loaders(monkeypatch):
 
 @pytest.mark.parametrize("mode", [None, "close", "open", "intraday", "vwap"])
 def test_cli_run_simulate_and_artifact_contract(tmp_path, synthetic_loaders, mode):
+    pytest.importorskip("myquant_infra.artifacts.provenance")  # B8: run manifest needs optional infra
     out = tmp_path / "out"
     args = ["--strategy", "topk_dropout", "--start", D1, "--end", D1,
             "--pool-dir", str(tmp_path), "--out-dir", str(out), "--cash-total", "100000",
@@ -656,6 +657,7 @@ def test_walkdown_validation_before_load_and_cli(capsys, strategy, mode, message
 
 @pytest.mark.parametrize("mode", ["close", "open", "intraday"])
 def test_walkdown_cli_opt_in_products(tmp_path, synthetic_loaders, mode, monkeypatch):
+    pytest.importorskip("myquant_infra.artifacts.provenance")  # B8: run manifest needs optional infra
     configs = []
     original = minute.write_run_artifacts
 
@@ -799,6 +801,7 @@ def test_limit_rule_cli_validation(strategy, rule, capsys):
 @pytest.mark.parametrize("rule", ["qlib", "real"])
 @pytest.mark.parametrize("mode", ["close", "open"])
 def test_limit_rule_cli_artifacts(tmp_path, synthetic_loaders, rule, mode):
+    pytest.importorskip("myquant_infra.artifacts.provenance")  # B8: run manifest needs optional infra
     out = tmp_path / "out"
     minute.main(["--strategy", "topk_dropout", "--start", D1, "--end", D1,
                  "--pool-dir", str(tmp_path), "--out-dir", str(out),
