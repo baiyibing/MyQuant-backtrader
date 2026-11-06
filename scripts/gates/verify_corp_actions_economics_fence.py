@@ -14,13 +14,11 @@ CONSUMERS = (
     "backtest/research/csv_minute_backtest_v7.py",
     "backtest/research/strategy7_engine.py",
 )
-READ_ONLY_MAINTENANCE = (
-    "scripts/data/pull_corp_actions_incremental.py",
-    "scripts/data/hithink_incremental.py",
-    "scripts/gates/verify_corp_actions_hithink_parity.py",
-    "backtest/research/corp_actions_econ_gate.py",
-    "oskh_data/hithink_artifact.py",
-)
+# 2026-11-06 Human 裁定：BT 只消费成品数据，不处理数据。原白名单四件
+# （pull/hithink_incremental/hithink_artifact/corp_actions_econ_gate）全部迁
+# MyQuant-infra（corp_actions/candidates + corp_actions/econ_gate）并自本仓删除；
+# 白名单清空，机制保留。
+READ_ONLY_MAINTENANCE = ()
 READERS = {"read_table", "read_parquet", "ParquetFile", "read_csv", "dataset"}
 # Existing non-corp-actions reads, reviewed by purpose, expression and count.
 EXISTING_READS = {
@@ -47,16 +45,12 @@ def violations(source, relative):
         if isinstance(node, (ast.Import, ast.ImportFrom)):
             modules = ([node.module or ""] + [(node.module or "") + "." + a.name for a in node.names]
                        if isinstance(node, ast.ImportFrom) else [a.name for a in node.names])
+            # 已迁 infra 的处理模块（2026-11-06）：本仓不再存在，禁入消费侧。
             if any(m.startswith(("scripts.data.hithink_incremental", "scripts.data.pull_corp_actions_incremental",
-                                 "oskh_data.hithink_artifact")) for m in modules):
-                errors.append((node.lineno, "maintenance reader cannot be an economics adapter"))
-            if "backtest.research.corp_actions_econ_gate" in modules and not (
-                isinstance(node, ast.ImportFrom) and node.module == "backtest.research.corp_actions_econ_gate"
-            ):
-                errors.append((node.lineno, "import the gated loader directly; module aliases can bypass it"))
-        if isinstance(node, ast.ImportFrom) and node.module == "backtest.research.corp_actions_econ_gate":
-            if any(alias.name != "load_corp_actions_for_economics" for alias in node.names):
-                errors.append((node.lineno, "economics consumers must use the read-and-gate loader"))
+                                 "oskh_data.hithink_artifact", "backtest.research.corp_actions_econ_gate"))
+                   for m in modules):
+                errors.append((node.lineno, "corp-actions processing moved to MyQuant-infra; "
+                                            "BT consumes finished data only"))
         if isinstance(node, ast.Call):
             reader = node.func.attr if isinstance(node.func, ast.Attribute) else (
                 aliases.get(node.func.id, node.func.id) if isinstance(node.func, ast.Name) else "")
