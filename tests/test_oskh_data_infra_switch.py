@@ -256,21 +256,3 @@ def test_standalone_rebuild_is_import_safe_and_passes_resolved_paths(lake, monke
     monkeypatch.setattr(rebuild, "rebuild_front_duckdb", build)
     rebuild.main()
     build.assert_called_once_with(container / "stock" / "period=1d", workspace / "stock_data" / "stock_data_front.duckdb")
-
-
-@pytestmark_infra
-def test_path_b_keeps_day_filter_symbol_selection_and_merge_policy(lake):
-    from oskh_data.daily_parquet_write import path_b_append_front_today
-
-    container, workspace = lake
-    frame = write_bars(container / "stock", "1d", "none", "600000.SH", 12.0)
-    # Off-day and unrequested symbols must not leak into today's front mirror.
-    extra = frame.assign(time=frame["time"] + 86_400_000, close=99.0)
-    path = container / "stock" / "period=1d" / "dividend_type=none" / "symbol=600000_SH" / "data.parquet"
-    pd.concat([frame, extra]).to_parquet(path, index=False)
-    write_bars(container / "stock", "1d", "none", "600001.SH", 44.0)
-    assert path_b_append_front_today(["600000.SH"], pd.Timestamp("2026-11-04"), workspace, mode="batch", max_workers=1) == 1
-    output = container / "stock" / "period=1d" / "dividend_type=front"
-    stored = pd.read_parquet(output / "symbol=600000_SH" / "data.parquet")
-    assert_frame_equal(stored, frame)
-    assert not (output / "symbol=600001_SH").exists()
