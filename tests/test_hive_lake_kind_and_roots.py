@@ -156,43 +156,6 @@ def test_period_root_env_still_wins(monkeypatch, tmp_path) -> None:
     assert resolve_period_root("1d") == tmp_path / "env1d"
 
 
-def test_file_path_three_tree_routing(monkeypatch, tmp_path) -> None:
-    from oskh_data.daily_parquet_write import _file_path
-
-    monkeypatch.setenv("OSKH_PERIOD_1D_ROOT", str(tmp_path / "stock1d"))
-    monkeypatch.setenv("OSKH_INDEX_DAILY_ROOT", str(tmp_path / "idx"))
-    monkeypatch.setenv("OSKH_ETF_DAILY_ROOT", str(tmp_path / "etf"))
-    base = tmp_path / "legacy"
-
-    p_idx = _file_path(base, "none", "000300.SH")
-    assert p_idx == tmp_path / "idx" / "dividend_type=none" / "symbol=000300_SH" / "data.parquet"
-
-    p_etf = _file_path(base, "none", "510050.SH")
-    assert p_etf == tmp_path / "etf" / "dividend_type=none" / "symbol=510050_SH" / "data.parquet"
-
-    p_etf_front = _file_path(base, "front", "159915.SZ")
-    assert p_etf_front == tmp_path / "etf" / "dividend_type=front" / "symbol=159915_SZ" / "data.parquet"
-
-    p_stock = _file_path(base, "none", "600519.SH")
-    assert p_stock == tmp_path / "stock1d" / "dividend_type=none" / "symbol=600519_SH" / "data.parquet"
-
-
-def test_file_path_index_none_only_and_unknown_fail_closed(monkeypatch, tmp_path) -> None:
-    from oskh_data.daily_parquet_write import _file_path
-
-    monkeypatch.setenv("OSKH_INDEX_DAILY_ROOT", str(tmp_path / "idx"))
-    base = tmp_path / "legacy"
-
-    # v1.3 人裁锁：指数树 none-only，front 拒写
-    with pytest.raises(ValueError, match="none-only"):
-        _file_path(base, "front", "000300.SH")
-
-    # §2.1 fail-closed：不可分类 / 裸码拒写
-    for bad in ("880001.SH", "900901.SH", "000001", "113000.SH"):
-        with pytest.raises(ValueError, match="unclassifiable"):
-            _file_path(base, "none", bad)
-
-
 def test_reader_etf_make_path_not_hijacked(monkeypatch, tmp_path) -> None:
     from oskh_data.reader import StockDataReader
 

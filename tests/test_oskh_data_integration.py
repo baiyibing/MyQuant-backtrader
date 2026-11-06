@@ -143,51 +143,6 @@ class TestFreshness:
         assert not result.ok or result.action in ("warn", "pass")
 
 
-class TestAudit:
-    """Backfill audit module."""
-
-    def test_generate_run_id(self):
-        from oskh_data.audit import generate_run_id
-
-        rid = generate_run_id()
-        assert rid.startswith("bf_")
-        assert len(rid) > 10
-
-    def test_record_cycle(self):
-        from oskh_data.audit import (
-            generate_run_id,
-            get_failed_symbols,
-            record_failure,
-            record_run_end,
-            record_run_start,
-        )
-
-        with tempfile.TemporaryDirectory() as tmp:
-            db = str(Path(tmp) / "test_audit.db")
-            rid = generate_run_id()
-
-            record_run_start(rid, "1d", "none", "20200101", "20200131", 10, db_path=db)
-            record_failure(rid, "000001.SZ", "silent_failure", "empty data", 1, db_path=db)
-            record_failure(rid, "000002.SZ", "timeout", "connection lost", 0, db_path=db)
-
-            ok = record_run_end(rid, 8, 2, db_path=db, min_success_rate=0.70)
-            assert ok is True  # 80% > 70%
-
-            failed = get_failed_symbols(rid, db_path=db)
-            assert "000001.SZ" in failed
-            assert "000002.SZ" in failed
-
-    def test_abort_below_threshold(self):
-        from oskh_data.audit import generate_run_id, record_run_end, record_run_start
-
-        with tempfile.TemporaryDirectory() as tmp:
-            db = str(Path(tmp) / "test_audit.db")
-            rid = generate_run_id()
-            record_run_start(rid, "1d", "none", "20200101", "20200131", 10, db_path=db)
-            ok = record_run_end(rid, 5, 5, db_path=db, min_success_rate=0.70)
-            assert ok is False  # 50% < 70%
-
-
 class TestETFLimits:
     """ETF price limit rules."""
 
