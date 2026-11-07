@@ -10,3 +10,4 @@
 导出和校验都不是合湖授权，也不切换默认源。`owner_signature` 保持空。建议里的 `compatibility_policy_date` 与 `backtest_adopted_value` 本片留空；缺失的上市日不会被写成除权日。
 
 未在本片实现：162+D11 真爬、东兴换股引擎、`reviewed_complete` 覆盖矩阵、prepare-merge。
+东兴换股/证券转换的事实与研究合同正本迁 MyQuant-infra，见 [op06-research-contract-ssot.md](op06-research-contract-ssot.md)；本仓不实现换股引擎，也不把该合同写回 BT。
