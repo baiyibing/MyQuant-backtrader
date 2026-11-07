@@ -454,27 +454,6 @@ def test_version6_both_held_flags_fail_closed(capsys):
 
 
 
-@pytest.fixture
-def version4_adjustments(monkeypatch, tmp_path):
-    # Configure before import: adj_factor binds its daily directories at import.
-    monkeypatch.setenv("OSKH_PERIOD_1D_ROOT", str(tmp_path))
-    from oskh_data import adj_factor
-
-    def install(frame):
-        calls = []
-        def build(symbol):
-            calls.append(symbol)
-            return frame.copy()
-        monkeypatch.setattr(adj_factor, "build_for_symbol", build)
-        return calls
-
-    days = pd.date_range("2026-01-01", periods=13)
-    install(pd.DataFrame(dict(date=days, stock_code=SYMBOL, close_front=10.0,
-                              close_none=10.0, cumulative_adj_factor=1.0)))
-    return adj_factor, install
-
-
-
 def _version4_history_frame(history=10, buy_px=10):
     days = list(pd.date_range("2026-01-01", periods=history + 3).date)
     # Minute history is deliberately different from the factor frame history.
@@ -498,7 +477,7 @@ def test_version4_both_held_flags_fail_closed(monkeypatch, capsys):
 
 
 @pytest.mark.parametrize("missing", [False, True])
-def test_version4_qlib_simulate_daily_source(monkeypatch, capsys, tmp_path, missing, version4_adjustments):
+def test_version4_qlib_simulate_daily_source(monkeypatch, capsys, tmp_path, missing):
     frame, buy_day = _version4_history_frame()
     def load_minute(symbol, start, end, *, source_frames, **kwargs):
         assert kwargs == {"source": "qlib_1min", "qlib_root": tmp_path, "lake_root": None}
