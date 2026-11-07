@@ -23,3 +23,9 @@
   白名单已清空（机制保留）。
 - 经济学口径消费形态：**由 infra 出"经济学合格"成品表，BT 回测只读
   parquet**；禁止在 BT 重建过滤逻辑。
+
+## OP06 事实/研究合同（2026-11-08）
+
+运行时转股阻断（#550 消费侧拒绝门，原因键 `unsupported_stock_conversion_in_cash_bonus_schema`）归属见上表 `myquant_infra.corp_actions.econ_gate`。本仓不删除、不削弱该拒绝合同，也不恢复已迁走的处理模块。
+
+东兴换股/证券转换的**事实与研究合同**正本迁 MyQuant-infra，见 [op06-research-contract-ssot.md](op06-research-contract-ssot.md)。本仓不重实现该合同。
