@@ -1,45 +1,23 @@
-"""Opt-in run provenance; records fee labels without importing engine code."""
+"""Lazy BT provenance facade; fee labels remain labels, with no engine import."""
 
 from __future__ import annotations
 
-import hashlib
-import math
-import re
-import subprocess
 from collections.abc import Iterable, Mapping
-from pathlib import Path, PureWindowsPath
+from pathlib import Path
 from typing import Any
 
+from ._infra import require_infra
 from .signal_bundle import canonical_json_bytes
 
-
-def _json_config(value: Any) -> Any:
-    if isinstance(value, Path):
-        return value.as_posix()
-    if isinstance(value, Mapping):
-        return {key: _json_config(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_json_config(item) for item in value]
-    return value
-
-
-def _identity_string(value: Any, field: str) -> str:
-    if not isinstance(value, str):
-        raise TypeError(f"{field} must be an already-stringified identity")
-    if not value.strip():
-        raise ValueError(f"{field} must be a non-empty string")
-    if value.startswith("/") or PureWindowsPath(value).is_absolute():
-        raise ValueError(f"{field} must not contain an absolute host path")
-    return value
+__all__ = [
+    "build_bt_run_manifest", "canonical_json_bytes", "validate_bt_run_manifest",
+    "write_bt_run_manifest", "write_run_identity_sidecar",
+]
 
 
 def _identity_mapping(value: Any, field: str) -> dict[str, str]:
-    if not isinstance(value, Mapping):
-        raise TypeError(f"{field} must be a mapping")
-    return {
-        _identity_string(key, f"{field} key"): _identity_string(item, field)
-        for key, item in value.items()
-    }
+    """Keep the existing snapshot-provenance caller on the shared validator."""
+    return require_infra("myquant_infra.artifacts.provenance")._identity_mapping(value, field)
 
 
 def build_bt_run_manifest(
@@ -58,96 +36,30 @@ def build_bt_run_manifest(
     input_tokens: Mapping[str, str] | None = None,
     environment: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
-    """Hash resolved flags and caller-supplied artifacts, without changing them.
-
-    Paths in config are serialized as POSIX strings. The config contains flags,
-    not this manifest. No pool sidecars or market data are discovered here.
-    """
-    if not isinstance(strategy, str) or not isinstance(git_commit, str):
-        raise TypeError("strategy and git_commit must be strings")
-    if dividend_type not in ("none", "front", "back"):
-        raise ValueError("invalid dividend_type")
-    if fee_schedule not in ("BILATERAL_10BP", "QLIB_PORTANA"):
-        raise ValueError("invalid fee_schedule")
-    if not isinstance(config, Mapping):
-        raise TypeError("config must be a mapping")
-    if participation_rate is not None:
-        if (
-            isinstance(participation_rate, bool)
-            or not isinstance(participation_rate, (int, float))
-            or not math.isfinite(participation_rate)
-            or not 0 <= participation_rate <= 1
-        ):
-            raise ValueError("participation_rate must be finite and in [0, 1]")
-        participation_rate = float(participation_rate)
-    if signal_bundle_sha256 is not None and (
-        not isinstance(signal_bundle_sha256, str)
-        or re.fullmatch(r"[0-9a-f]{64}", signal_bundle_sha256) is None
-    ):
-        raise ValueError("invalid signal_bundle_sha256")
-    run_identity = {}
-    for field, value in (
-        ("book_rule_revision", book_rule_revision),
-        ("pool_identity", pool_identity),
-        ("price_domain", price_domain),
-    ):
-        if value is not None:
-            run_identity[field] = _identity_string(value, field)
-    for field, value in (("input_tokens", input_tokens), ("environment", environment)):
-        if value is not None:
-            run_identity[field] = _identity_mapping(value, field)
-    artifact_rows = []
-    for artifact in artifacts:
-        path = Path(artifact)
-        data = path.read_bytes()
-        artifact_rows.append({
-            "path": path.as_posix(),
-            "md5": hashlib.md5(data).hexdigest(),
-            "sha256": hashlib.sha256(data).hexdigest(),
-        })
-    manifest = {
-        "schema": "myquant.bt-run/1",
-        "git_commit": git_commit,
-        "strategy": strategy,
-        "dividend_type": dividend_type,
-        "fee_schedule": fee_schedule,
-        "liquidity_cap": "off" if participation_rate is None else "on",
-        "participation_rate": participation_rate,
-        "signal_bundle_sha256": signal_bundle_sha256,
-        "config_sha256": hashlib.sha256(canonical_json_bytes(_json_config(config))).hexdigest(),
-        "artifacts": artifact_rows,
-    }
-    if run_identity:
-        manifest["run_identity"] = run_identity
-        manifest["run_identity_sha256"] = hashlib.sha256(
-            canonical_json_bytes(run_identity)
-        ).hexdigest()
-    return manifest
+    """Delegate explicit flags and artifacts without discovering inputs."""
+    return require_infra("myquant_infra.artifacts.provenance").build_bt_run_manifest(
+        strategy=strategy, dividend_type=dividend_type, config=config, artifacts=artifacts,
+        fee_schedule=fee_schedule, participation_rate=participation_rate,
+        signal_bundle_sha256=signal_bundle_sha256, git_commit=git_commit,
+        book_rule_revision=book_rule_revision, pool_identity=pool_identity,
+        price_domain=price_domain, input_tokens=input_tokens, environment=environment,
+    )
 
 
-def _git_commit() -> str:
-    try:
-        return subprocess.check_output(
-            ["git", "rev-parse", "HEAD"], cwd=Path(__file__).resolve().parents[1],
-            stderr=subprocess.DEVNULL, text=True, timeout=5,
-        ).strip() or "UNKNOWN"
-    except (OSError, subprocess.SubprocessError):
-        return "UNKNOWN"
+def validate_bt_run_manifest(manifest: Mapping[str, Any]) -> None:
+    """Validate the existing BT dialect through infra, without reading inputs."""
+    return require_infra("myquant_infra.artifacts.provenance").validate_bt_run_manifest(manifest)
 
 
 def write_bt_run_manifest(path: str | Path, **kwargs: Any) -> dict[str, Any]:
-    """Write canonical UTF-8 JSON; capture local git provenance when not supplied."""
-    if "git_commit" not in kwargs:
-        kwargs["git_commit"] = _git_commit()
-    manifest = build_bt_run_manifest(**kwargs)
-    Path(path).write_bytes(canonical_json_bytes(manifest))
-    return manifest
+    """Write canonical JSON; omitted git_commit still refers to this BT repo."""
+    return require_infra("myquant_infra.artifacts.provenance").write_bt_run_manifest(
+        path, repo_root=Path(__file__).resolve().parents[1], **kwargs,
+    )
 
 
 def write_run_identity_sidecar(path: str | Path, manifest: Mapping[str, Any]) -> None:
-    """Write the supplied run manifest as canonical JSON only when called.
-
-    The caller selects the sidecar path next to its outputs. No simulation,
-    input discovery, environment inspection, or git lookup is performed.
-    """
-    Path(path).write_bytes(canonical_json_bytes(manifest))
+    """Write only the supplied sidecar, with no git or input discovery."""
+    return require_infra("myquant_infra.artifacts.provenance").write_run_identity_sidecar(
+        path, manifest,
+    )

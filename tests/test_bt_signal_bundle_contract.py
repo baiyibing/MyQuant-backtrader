@@ -22,6 +22,7 @@ def _sign(bundle):
 
 @pytest.fixture
 def bundle(tmp_path):
+    pytest.importorskip("myquant_infra.contracts.signal_bundle")
     data = b"300190\n"
     (tmp_path / "20260925.csv").write_bytes(data)
     return _sign({
@@ -140,4 +141,5 @@ def test_schema_file_sha256_pinned():
 
 
 def test_canonical_json_is_utf8_without_bom():
+    pytest.importorskip("myquant_infra.contracts.signal_bundle")
     assert canonical_json_bytes({"z": "研究", "a": 1}) == '{"a":1,"z":"研究"}\n'.encode()

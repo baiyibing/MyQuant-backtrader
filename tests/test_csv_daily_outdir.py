@@ -45,6 +45,7 @@ def test_cli_out_dir_writes_artifacts_there(tmp_path: Path, monkeypatch):
             "20260323",
             "--out-dir",
             str(dest),
+            "--no-run-manifest",  # Test output routing without private provenance IO.
         ]
     )
     assert rc == 0
@@ -61,7 +62,8 @@ def test_cli_omitted_out_dir_keeps_legacy_layout(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(sim, "REPO", str(tmp_path))
     monkeypatch.setattr(sim, "run", lambda *a, **k: _stub_state())
     rc = sim.main(
-        ["--strategy", "version6", "--start", "20260303", "--end", "20260323"]
+        ["--strategy", "version6", "--start", "20260303", "--end", "20260323",
+         "--no-run-manifest"]
     )
     assert rc == 0
     out = tmp_path / "backtest_output" / "csv_daily_v6_20260303_20260323"

@@ -145,6 +145,7 @@ def test_cap_rejects_unattested_domains_before_loading(loaded, kwargs):
 
 
 def test_cli_cap_emits_rate_and_assumption_manifest(loaded, monkeypatch, tmp_path):
+    pytest.importorskip("myquant_infra.artifacts.provenance")
     import json
 
     options, _, _ = loaded

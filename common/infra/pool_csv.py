@@ -1,4 +1,9 @@
-"""Lightweight pool CSV records and duplicate validation shared by readers."""
+"""Pool primitives delegated to infra when installed.
+
+The existing host parser remains available to public installations without
+private infra. It has no bundle/provenance canonicalization or hashing logic.
+Normalization and the decision to reject duplicates remain caller policy.
+"""
 
 from __future__ import annotations
 
@@ -85,3 +90,17 @@ def iter_pool_csv_rows(
             if line_number == 1 and first.strip('"').strip("'").lower() in _HEADER_FIRST:
                 continue
             yield line_number, parts
+
+
+# Keep public BT pool readers usable without the optional private dependency.
+# Installed-but-incomplete infra must fail visibly instead of using this parser.
+try:
+    from myquant_infra.reference_data.pool_csv import (
+        PoolDuplicateCodeError as PoolDuplicateCodeError,
+        check_pool_duplicate as check_pool_duplicate,
+        iter_pool_csv_rows as iter_pool_csv_rows,
+        pool_cell_to_bare as pool_cell_to_bare,
+    )
+except ModuleNotFoundError as exc:
+    if exc.name != "myquant_infra":
+        raise

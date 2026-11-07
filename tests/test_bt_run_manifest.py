@@ -15,6 +15,7 @@ from bt_contract.run_manifest import build_bt_run_manifest, write_bt_run_manifes
 
 
 def _build(**kwargs):
+    pytest.importorskip("myquant_infra.artifacts.provenance")
     return build_bt_run_manifest(
         strategy="version6", dividend_type="none", config={}, **kwargs
     )
@@ -90,6 +91,7 @@ def test_summarize_source_unchanged():
 
 
 def test_write_manifest_roundtrip_records_config_hash_and_explicit_inputs(tmp_path):
+    pytest.importorskip("myquant_infra.artifacts.provenance")
     config = {"pool_dir": tmp_path / "pool", "nested": [{"root": tmp_path}]}
     normalized = {
         "pool_dir": (tmp_path / "pool").as_posix(),
@@ -118,6 +120,7 @@ def test_write_manifest_roundtrip_records_config_hash_and_explicit_inputs(tmp_pa
 
 
 def test_artifact_manifest_opt_in_preserves_existing_artifact_bytes(tmp_path, state):
+    pytest.importorskip("myquant_infra.artifacts.provenance")
     before = csv_artifacts.write_run_artifacts(tmp_path / "off", state, "报告", "lock")
     after = csv_artifacts.write_run_artifacts(
         tmp_path / "on", state, "报告", "lock", emit_run_manifest=True,
@@ -146,6 +149,8 @@ def test_artifact_manifest_opt_in_preserves_existing_artifact_bytes(tmp_path, st
 def test_cli_manifest_default_on_with_data_provenance(
     tmp_path, state, monkeypatch, engine, mode
 ):
+    if mode != "opt-out":
+        pytest.importorskip("myquant_infra.artifacts.provenance")
     module = importlib.import_module(f"backtest.research.csv_{engine}_backtest")
     calls = []
 

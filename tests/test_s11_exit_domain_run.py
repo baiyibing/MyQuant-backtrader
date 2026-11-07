@@ -166,6 +166,7 @@ def test_cli_help_advertises_default_off(engine, capsys):
 @pytest.mark.parametrize("engine", [daily, minute])
 @pytest.mark.parametrize("enabled", [False, True])
 def test_cli_writes_domain_metadata_outside_legacy_stats(engine, enabled, lake, tmp_path):
+    pytest.importorskip("myquant_infra.artifacts.provenance")  # B8: run manifest needs optional infra
     pool, paths = lake
     out = tmp_path / "out"
     args = ["--strategy", "version11", "--pool-dir", str(pool),

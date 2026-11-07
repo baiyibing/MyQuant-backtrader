@@ -11,12 +11,14 @@ from bt_contract.run_manifest import build_bt_run_manifest, write_run_identity_s
 
 
 def _build(**kwargs):
+    pytest.importorskip("myquant_infra.artifacts.provenance")
     return build_bt_run_manifest(
         strategy="version6", dividend_type="none", config={"flag": True}, **kwargs
     )
 
 
 def test_default_manifest_matches_prior_shape_and_config_hash():
+    pytest.importorskip("myquant_infra.artifacts.provenance")
     expected = {
         "schema": "myquant.bt-run/1", "git_commit": "UNKNOWN",
         "strategy": "version6", "dividend_type": "none",

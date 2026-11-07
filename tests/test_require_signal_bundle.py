@@ -28,6 +28,7 @@ def _save(root, bundle):
 
 @pytest.fixture
 def bundle(tmp_path):
+    pytest.importorskip("myquant_infra.contracts.signal_bundle")
     data = b"300190\n"
     (tmp_path / "20260925.csv").write_bytes(data)
     result = {

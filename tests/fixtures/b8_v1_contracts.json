@@ -1,0 +1,266 @@
+{
+  "baseline_commit": "a13b0f2cf9142c36991e0de099ef238ebb382a56",
+  "infra_commit": "3c377e9718e811112993579b6d91a603395db699",
+  "pool_files": {
+    "20260925.csv": "300190,研究\n",
+    "20260928.csv": "600036\n"
+  },
+  "bundles": [
+    {
+      "name": "empty",
+      "rows": [],
+      "options": {},
+      "expected": {
+        "schema": "myquant.signal-bundle/1",
+        "signal_asof_policy": "pred_minus_one",
+        "availability": "unproven",
+        "available_at": null,
+        "price_domain": "unspecified",
+        "rows": [],
+        "calendar_id": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+        "bundle_sha256": "9f21203c5e6163e4dc8d0d2463fe7b3ec854ecb1b0c7791dbb172811be625abc"
+      },
+      "canonical_sha256": "faec92e983f9314d117e2fd998e0ef3f3b36cad2edfb92b0895eb3666adc8d0e"
+    },
+    {
+      "name": "unproven",
+      "rows": [
+        {
+          "signal_asof": "2026-09-24",
+          "target_session": "2026-09-25",
+          "pool_file": "20260925.csv",
+          "pool_md5": "71e701df667d2f0080ce8121fedb39a6",
+          "pool_sha256": "401341bfc1f59c949e92792fb755c64467c7b7b3522f9b984cae5b8f7bf25d51"
+        }
+      ],
+      "options": {},
+      "expected": {
+        "schema": "myquant.signal-bundle/1",
+        "signal_asof_policy": "pred_minus_one",
+        "availability": "unproven",
+        "available_at": null,
+        "price_domain": "unspecified",
+        "rows": [
+          {
+            "signal_asof": "2026-09-24",
+            "target_session": "2026-09-25",
+            "pool_file": "20260925.csv",
+            "pool_md5": "71e701df667d2f0080ce8121fedb39a6",
+            "pool_sha256": "401341bfc1f59c949e92792fb755c64467c7b7b3522f9b984cae5b8f7bf25d51"
+          }
+        ],
+        "calendar_id": "47ea9933c2e8b962752d5525467e5957eb7cbe452a0f45c9b126153cbd14746d",
+        "bundle_sha256": "d268ea39bb18ecbe85563ae131a1857751e10cb275bf7edae1d64c5ee717b901"
+      },
+      "canonical_sha256": "262ab82358cbed16ee03271ce813a0862aa0860cfe43dcb34a6fee27b72486be"
+    },
+    {
+      "name": "declared-multisession",
+      "rows": [
+        {
+          "signal_asof": "2026-09-25",
+          "target_session": "2026-09-28",
+          "pool_file": "20260928.csv",
+          "pool_md5": "962c41663b0b6a8bb5a6e5a74dfe43ac",
+          "pool_sha256": "1c3d21d0d73600edc1b3088f66ad8a689f9d8bfb784f28294ac06eff679ce426"
+        },
+        {
+          "signal_asof": "2026-09-24",
+          "target_session": "2026-09-25",
+          "pool_file": "20260925.csv",
+          "pool_md5": "71e701df667d2f0080ce8121fedb39a6",
+          "pool_sha256": "401341bfc1f59c949e92792fb755c64467c7b7b3522f9b984cae5b8f7bf25d51"
+        }
+      ],
+      "options": {
+        "availability": "declared",
+        "available_at": "2026-09-24T18:00:00+08:00",
+        "price_domain": "front"
+      },
+      "expected": {
+        "schema": "myquant.signal-bundle/1",
+        "signal_asof_policy": "pred_minus_one",
+        "availability": "declared",
+        "available_at": "2026-09-24T18:00:00+08:00",
+        "price_domain": "front",
+        "rows": [
+          {
+            "signal_asof": "2026-09-25",
+            "target_session": "2026-09-28",
+            "pool_file": "20260928.csv",
+            "pool_md5": "962c41663b0b6a8bb5a6e5a74dfe43ac",
+            "pool_sha256": "1c3d21d0d73600edc1b3088f66ad8a689f9d8bfb784f28294ac06eff679ce426"
+          },
+          {
+            "signal_asof": "2026-09-24",
+            "target_session": "2026-09-25",
+            "pool_file": "20260925.csv",
+            "pool_md5": "71e701df667d2f0080ce8121fedb39a6",
+            "pool_sha256": "401341bfc1f59c949e92792fb755c64467c7b7b3522f9b984cae5b8f7bf25d51"
+          }
+        ],
+        "calendar_id": "2c97bbd4ff2960a250be4b0c553c8c56776cabf271b65923f39c03e464681eab",
+        "bundle_sha256": "6bd7fb02806bbe0dc166c686d53f4dc3a52192cba39f56ee3da47625db1eca2d"
+      },
+      "canonical_sha256": "41a39e0f511148f682d222c2e766b945d52ac19ff9b37e08167ae31c1fc1d15f"
+    },
+    {
+      "name": "identity",
+      "rows": [
+        {
+          "signal_asof": "2026-09-25",
+          "target_session": "2026-09-25",
+          "pool_file": "20260925.csv",
+          "pool_md5": "71e701df667d2f0080ce8121fedb39a6",
+          "pool_sha256": "401341bfc1f59c949e92792fb755c64467c7b7b3522f9b984cae5b8f7bf25d51"
+        }
+      ],
+      "options": {
+        "signal_asof_policy": "identity",
+        "price_domain": "none"
+      },
+      "expected": {
+        "schema": "myquant.signal-bundle/1",
+        "signal_asof_policy": "identity",
+        "availability": "unproven",
+        "available_at": null,
+        "price_domain": "none",
+        "rows": [
+          {
+            "signal_asof": "2026-09-25",
+            "target_session": "2026-09-25",
+            "pool_file": "20260925.csv",
+            "pool_md5": "71e701df667d2f0080ce8121fedb39a6",
+            "pool_sha256": "401341bfc1f59c949e92792fb755c64467c7b7b3522f9b984cae5b8f7bf25d51"
+          }
+        ],
+        "calendar_id": "47ea9933c2e8b962752d5525467e5957eb7cbe452a0f45c9b126153cbd14746d",
+        "bundle_sha256": "ad73f8eab5caad979f20a54b5697eb326786b63d6940e3601a98561fcbfd92a6"
+      },
+      "canonical_sha256": "d199a3e2cf0d6dde33200f5fe7c73c4953f02cd895128d89020c2b613e71d420"
+    }
+  ],
+  "manifests": [
+    {
+      "name": "minimal",
+      "options": {
+        "config": {},
+        "dividend_type": "none",
+        "strategy": "version6"
+      },
+      "expected": {
+        "schema": "myquant.bt-run/1",
+        "git_commit": "UNKNOWN",
+        "strategy": "version6",
+        "dividend_type": "none",
+        "fee_schedule": "BILATERAL_10BP",
+        "liquidity_cap": "off",
+        "participation_rate": null,
+        "signal_bundle_sha256": null,
+        "config_sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+        "artifacts": []
+      },
+      "canonical_sha256": "fa13aa3c5809317fac80ce47f57e9dfaee3cc4db0a7c8a25ebafd4c72fd540a5"
+    },
+    {
+      "name": "rich",
+      "options": {
+        "artifacts": [
+          "trades.csv"
+        ],
+        "book_rule_revision": "version6:rules-v1",
+        "config": {
+          "enabled": true,
+          "nested": [
+            {
+              "root": "inputs"
+            }
+          ],
+          "pool_dir": "pool/研究",
+          "rate": 0.2,
+          "unset": null
+        },
+        "dividend_type": "front",
+        "environment": {
+          "pandas": "3.0.6",
+          "python": "3.12"
+        },
+        "fee_schedule": "QLIB_PORTANA",
+        "git_commit": "a13b0f2cf9142c36991e0de099ef238ebb382a56",
+        "input_tokens": {
+          "cache": "v1",
+          "source_snapshot": "snapshot:研究"
+        },
+        "participation_rate": 0.2,
+        "pool_identity": "pool/sha256:abc",
+        "price_domain": "raw",
+        "signal_bundle_sha256": "d268ea39bb18ecbe85563ae131a1857751e10cb275bf7edae1d64c5ee717b901",
+        "strategy": "version6"
+      },
+      "expected": {
+        "schema": "myquant.bt-run/1",
+        "git_commit": "a13b0f2cf9142c36991e0de099ef238ebb382a56",
+        "strategy": "version6",
+        "dividend_type": "front",
+        "fee_schedule": "QLIB_PORTANA",
+        "liquidity_cap": "on",
+        "participation_rate": 0.2,
+        "signal_bundle_sha256": "d268ea39bb18ecbe85563ae131a1857751e10cb275bf7edae1d64c5ee717b901",
+        "config_sha256": "14424c2b091342078349c9b50a4da8682e66abf69c03628d3c7911a275062bc6",
+        "artifacts": [
+          {
+            "path": "trades.csv",
+            "md5": "99b55cc093a2d96cd66246d682aafe0b",
+            "sha256": "5b79edca1ade6ecbaca217eb8449fdcf904bb2f6f1f271e61ddcda69dc842a12"
+          }
+        ],
+        "run_identity": {
+          "book_rule_revision": "version6:rules-v1",
+          "pool_identity": "pool/sha256:abc",
+          "price_domain": "raw",
+          "input_tokens": {
+            "source_snapshot": "snapshot:研究",
+            "cache": "v1"
+          },
+          "environment": {
+            "python": "3.12",
+            "pandas": "3.0.6"
+          }
+        },
+        "run_identity_sha256": "df8ead7ef2670ac154d6b6804bbc9b2fdd647acb855c9b73722c7e3a8b1162ec"
+      },
+      "canonical_sha256": "c820d7d40faf03898cf37f9f84316a028c3af9ce3b6d6f167fe0431400259132"
+    },
+    {
+      "name": "empty-identity",
+      "options": {
+        "config": {
+          "flag": false
+        },
+        "dividend_type": "back",
+        "environment": {},
+        "input_tokens": {},
+        "participation_rate": 0,
+        "strategy": "version6"
+      },
+      "expected": {
+        "schema": "myquant.bt-run/1",
+        "git_commit": "UNKNOWN",
+        "strategy": "version6",
+        "dividend_type": "back",
+        "fee_schedule": "BILATERAL_10BP",
+        "liquidity_cap": "on",
+        "participation_rate": 0.0,
+        "signal_bundle_sha256": null,
+        "config_sha256": "3f5b8690b5a4b69538e665dce6fe0d1b288472128870f4f1926bb668ed910191",
+        "artifacts": [],
+        "run_identity": {
+          "input_tokens": {},
+          "environment": {}
+        },
+        "run_identity_sha256": "6cf024e7464a7aee88bbeff217d1d93ee783f1ef23204894fef5a5ee2142fd7e"
+      },
+      "canonical_sha256": "abd4b34b16863561c74885854c550f92c42d24b5ac9ac544beec7fa58925aed9"
+    }
+  ]
+}
