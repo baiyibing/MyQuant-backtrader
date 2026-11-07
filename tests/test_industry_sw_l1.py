@@ -18,13 +18,21 @@ from oskh_data.industry_sw_l1 import (
 )
 
 
-def test_normalize_industry_and_code():
+@pytest.fixture
+def infra_industry():
+    return pytest.importorskip(
+        "myquant_infra.reference_data.industry.readers",
+        reason="optional myquant-infra not installed (public CI)",
+    )
+
+
+def test_normalize_industry_and_code(infra_industry):
     assert normalize_industry("银行（申万）") == "银行申万"
     assert normalize_wind_code("600000.sh") == "600000.SH"
     assert normalize_wind_code("bad") is None
 
 
-def test_load_wind_csv_accepts_dotted_industry_header(tmp_path):
+def test_load_wind_csv_accepts_dotted_industry_header(tmp_path, infra_industry):
     path = tmp_path / "batch_0000.csv"
     path.write_text(
         "Wind代码,证券简称,申万一级行业.行业级别\n000001.SZ,平安银行,银行\n",
@@ -34,7 +42,7 @@ def test_load_wind_csv_accepts_dotted_industry_header(tmp_path):
     assert rows[0]["申万一级行业"] == "银行"
 
 
-def test_load_maps_and_lookup(tmp_path):
+def test_load_maps_and_lookup(tmp_path, infra_industry):
     sw = tmp_path / "sw_l1_map.csv"
     sw.write_text(
         "code_gildata,name,sw_l1\n600000.SH,浦发银行,银行\n000001.SZ,平安银行,银行\n",
@@ -54,7 +62,7 @@ def test_load_maps_and_lookup(tmp_path):
     assert industry_bucket_for_stock("999999.SZ", sw_map) == "_UNMAPPED_"
 
 
-def test_load_industry_map_wind_overlays_sw(monkeypatch, tmp_path):
+def test_load_industry_map_wind_overlays_sw(monkeypatch, tmp_path, infra_industry):
     root = tmp_path / "vendor_wind_sw_l1"
     root.mkdir()
     (root / "sw_l1_map.csv").write_text(
@@ -107,7 +115,7 @@ def test_resolve_sw_l1_root_follows_source(monkeypatch, tmp_path):
     assert resolve_sw_l1_root() == Path(lake) / "vendor_wind_sw_l1"
 
 
-def test_stratify_by_industry():
+def test_stratify_by_industry(infra_industry):
     from backtest.research import unified_exit_modea as modea
 
     inst = modea.Instance("600000.SH", "浦发", "20251023", 10.0, True)
