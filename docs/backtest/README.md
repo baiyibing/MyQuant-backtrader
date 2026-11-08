@@ -4,7 +4,7 @@
 
 **研究问题总入口**（三份主名单 × 人工改书 / 机器网格 / 分数轮换；策略 1–12、Mode A/B、TopK 怎么挂）：**[research-backtest-entry.md](research-backtest-entry.md)**。下面是命令与 SSOT 表。
 
-三件成交引擎（本仓向量化 / 1.3 LEBS / 1.3 MockQMT）怎么分工：见 **[engine-positioning-ssot.md](engine-positioning-ssot.md)**。Qlib `PortAnaRecord` 停用；Cerebro / Rolling 已退场（2026-09-16）。本仓没有 `backtest/lebs/`。
+三件成交引擎（本仓向量化 / 1.3 LEBS / 1.3 MockQMT）怎么分工：见 **[engine-positioning-ssot.md](engine-positioning-ssot.md)**。MyQuant 可使用全部 Qlib 组件（含 `PortAnaRecord` / `Exchange`）开展完整研究回测；Cerebro / Rolling 已退场（2026-09-16）。本仓没有 `backtest/lebs/`。
 
 Wind / 同花顺（THS）/ QMT 分钟与日线对齐：[vendor bar alignment SSOT](ssot/vendor-bar-alignment-ssot.md)（标签、单位、稀疏网格；docs-only，不授权写湖）。
 

@@ -2,9 +2,9 @@
 
 研究脸：日名单 CSV + **向量化**回测，以及筹码 / 换手阻力（Python + Rust）。行情只读 path-SSOT parquet；下载在原仓。成交验收（LEBS / MockQMT）在 [OSkhQuant1.3](https://github.com/baiyibing/OSkhQuant1.3)。
 
-三件引擎怎么分工：[`docs/backtest/engine-positioning-ssot.md`](docs/backtest/engine-positioning-ssot.md)。成交核（档位 / 全卖因跌停 / Decimal 涨跌停价 / E-R6 除权日参考价修正）：[`docs/backtest/engine-ashare-correctness.md`](docs/backtest/engine-ashare-correctness.md)。名单 CSV 契约：[`docs/backtest/pool-csv-contract.md`](docs/backtest/pool-csv-contract.md)。Qlib 回测停用；Cerebro / Rolling 已退场（2026-09-16）。本仓没有 `backtest/lebs/`。
+研究与验收引擎怎么分工：[`docs/backtest/engine-positioning-ssot.md`](docs/backtest/engine-positioning-ssot.md)。成交核（档位 / 全卖因跌停 / Decimal 涨跌停价 / E-R6 除权日参考价修正）：[`docs/backtest/engine-ashare-correctness.md`](docs/backtest/engine-ashare-correctness.md)。名单 CSV 契约：[`docs/backtest/pool-csv-contract.md`](docs/backtest/pool-csv-contract.md)。MyQuant 保留完整 Qlib 研究回测（2026-11-08 用户澄清）；Cerebro / Rolling 已退场（2026-09-16）。本仓没有 `backtest/lebs/`。
 
-三仓回测不做重：MyQuant 出信号，本仓向量化研究，1.3 执行验收；LEBS 只在 1.3，且 LEBS ≠ MockQMT 真栈。本仓无 `python -m backtest.lebs` 入口。研究问题地图（三份主名单 × 策略 1–12 / Mode A/B / TopK）：[`docs/backtest/research-backtest-entry.md`](docs/backtest/research-backtest-entry.md)。
+研究与执行分工：MyQuant 负责完整 Qlib 研究回测及信号导出，本仓负责自身向量化研究，1.3 负责执行验收；LEBS 只在 1.3，且 LEBS ≠ MockQMT 真栈。本仓无 `python -m backtest.lebs` 入口。研究问题地图（三份主名单 × 策略 1–12 / Mode A/B / TopK）：[`docs/backtest/research-backtest-entry.md`](docs/backtest/research-backtest-entry.md)。
 
 Seeded from OSkhQuant slim snapshot at `5d41252`。S2（2026-09-09）之后本仓收研究面；交易栈只留 `oskh_factors` chip/bridge 微包。
 

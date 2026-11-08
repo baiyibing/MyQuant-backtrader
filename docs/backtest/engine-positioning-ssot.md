@@ -1,10 +1,10 @@
-# SSOT：三件成交引擎怎么分工
+# SSOT：研究回测与成交验收怎么分工
 
-- 日期：2026-09-16
-- 状态：v2（Cerebro 全局退场）。定位文档，不是排期。路线图见 MyQuant `docs/plan-three-repo-roadmap-2026-09-12.md`。本仓入口命令：同目录 `README.md`（U1，2026-09-12）。研究问题地图：同目录 `research-backtest-entry.md`。
+- 日期：2026-09-16；2026-11-08 按用户澄清恢复完整 Qlib 研究定位
+- 状态：v3（完整 Qlib 研究定位澄清；BT Cerebro 继续退场）。定位文档，不是排期。路线图见 MyQuant `docs/plan-three-repo-roadmap-2026-09-12.md`。本仓入口命令：同目录 `README.md`（U1，2026-09-12）。研究问题地图：同目录 `research-backtest-entry.md`。
 - 涉及：MyQuant / MyQuant-backtrader（本仓）/ OSkhQuant1.3
 
-Qlib `PortAnaRecord` 停用。Cerebro / Rolling 已退场（2026-09-16）。chip / ma_chip 对照产物为静态档案，代码路径已删。留下三件，问的不是同一个问题，不要合成一台，也不要互相当对照净值。
+MyQuant 是基于 Qlib 的完整量化研究仓库，可使用全部组件，包括 `PortAnaRecord`、`Exchange`、executor、费用与收益分析和 replay。2026-11-08 用户澄清后，旧“Qlib 停用”表述不再作为其边界约束。BT 维护自身向量化研究；1.3 维护 LEBS 与 MockQMT 真栈。BT 的 Cerebro / Rolling 继续保持 2026-09-16 退场状态，历史 chip / ma_chip 对照产物仍为静态档案。
 
 ---
 
@@ -12,6 +12,7 @@ Qlib `PortAnaRecord` 停用。Cerebro / Rolling 已退场（2026-09-16）。chip
 
 | 件 | 仓 | 回答的问题 | 不当什么 |
 |---|---|---|---|
+| **Qlib 研究回测** | MyQuant | 特征/策略、训练打分、Qlib 回测、费用/收益分析与信号导出 | 不替代 1.3 真栈验收 |
 | **向量化** | 本仓 | 这份日名单，按规则在日线/分钟上怎么成交 | 不当 Paper 同源，不当柜台验收 |
 | **LEBS** | 1.3 | 同一套 `trade_decision` + 资金核，用 MockQMT 撮合扫参，会怎样 | 不当实盘 parity，不当全市场选股 |
 | **MockQMT 真栈** | 1.3 | 同一套决策核过 Redis / executor / 报单回报，验收过不过 | 不当快速研究扫描 |
@@ -26,7 +27,6 @@ Qlib `PortAnaRecord` 停用。Cerebro / Rolling 已退场（2026-09-16）。chip
 
 | 件 | 仓 | 状态 | 还许做什么 |
 |---|---|---|---|
-| Qlib PortAnaRecord / Exchange | MyQuant | **停用**。不当产品，不当对照基准 | 训练、IC、导出日名单 CSV |
 | Cerebro / Rolling 第一方策略及 chip / ma_chip 宿主壳 | 本仓 | **已退场（2026-09-16）**，禁止复活 | 对照产物为静态档案，代码路径已删；纯逻辑保留。ma_chip 默认归档，version11 CSV 移植另开计划并重裁成交时点 |
 | 1.3 第一方 Cerebro | 1.3 | **已拆** | `vendor/backtrader` 只读不 import |
 
@@ -34,7 +34,11 @@ Qlib `PortAnaRecord` 停用。Cerebro / Rolling 已退场（2026-09-16）。chip
 
 ---
 
-## 3. 三件各自是什么
+## 3. 各研究与验收引擎是什么
+
+### 3.0 Qlib（MyQuant）
+
+MyQuant 自主维护基于 Qlib 的训练、打分、PortAna/Exchange 回测、费用敏感性、收益分析和 replay。是否使用这些组件由具体研究目标决定。通用量化数据产制复用 infra，研究实现保留在 MyQuant。
 
 ### 3.1 向量化（本仓）
 
@@ -74,6 +78,8 @@ L1 已是 native CSV / v7 / JR / grid Mode B / L2-research 完整 run 的薄 fac
 
 ## 4. 怎么串
 
+下图描述名单交接的一条流程；MyQuant 同时可在本仓独立运行完整 Qlib 研究回测。
+
 ```
 名单源 A  MyQuant / Qlib     打分 → 日 CSV
 名单源 B  本仓               技术分析 / chip / TR / 手工
@@ -84,7 +90,7 @@ L1 已是 native CSV / v7 / JR / grid Mode B / L2-research 完整 run 的薄 fac
 1.3 trade_decision 纯函数 → LEBS 扫描 → MockQMT 真栈
 ```
 
-净值三套对不上是预期：向量化当根 close ≠ LEBS/MockQMT 报单回报 ≠ 已停用的 Qlib 日频组合。能比的是名单、reason、可卖股、涨跌停。
+Qlib、向量化、LEBS 与 MockQMT 使用各自的成交、费用和时点假设，结果应标明所用引擎与实验配置。跨引擎对比根据明确合同检查名单、reason、可卖股、涨跌停及相关研究指标。
 
 ---
 
@@ -92,14 +98,14 @@ L1 已是 native CSV / v7 / JR / grid Mode B / L2-research 完整 run 的薄 fac
 
 | 你要做的事 | 用 |
 |---|---|
-| 新名单、新卖点、扫窗、问「这规则赚不赚」 | 本仓向量化 |
+| 新名单、新卖点、扫窗、问「这规则赚不赚」 | 按研究目标选 MyQuant/Qlib 或本仓向量化 |
 | 规则已锁，且产品要和 Paper 同一决策核 | 1.3 LEBS |
 | 改了资金 / 卖核 / 调度，问「栈过不过」 | 1.3 MockQMT 真栈 |
-| 模型打分、IC、出 CSV | MyQuant（不跑 PortAnaRecord；训练/导出已写 `myquant.run-manifest/1`，本仓暂不接） |
+| 模型打分、IC、Qlib 回测、费用/收益研究、出 CSV | MyQuant；研究与信号导出由该仓维护 |
 | 对照「下一开盘才成交」的旧结果 | Cerebro / Rolling 已退场（2026-09-16）；chip / ma_chip 对照产物为静态档案，代码路径已删。保留 backtest_output/、历史报告与 fixtures |
 
 ---
 
 ## 6. 修订
 
-改「留下哪三件 / 停用哪两件」须改本文，并同步根 `README.md`、`AGENTS.md`、`docs/backtest/README.md` 入口段。不要只改其中一个。
+改研究/执行能力归属或停用/退场范围须改本文，并同步根 `README.md`、`AGENTS.md`、`docs/backtest/README.md` 入口段。不要只改其中一个。

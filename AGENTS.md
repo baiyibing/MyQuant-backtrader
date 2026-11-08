@@ -2,7 +2,7 @@
 
 Standalone research-face fork (see [README.md](README.md)). Since migration S2 (2026-09-09) this repo owns the research face; OSkhQuant1.3 stays the trading stack and keeps only the `oskh_factors` chip/bridge micropackage.
 
-**成交引擎定位**：本仓 = 向量化。1.3 = LEBS + MockQMT 真栈。Qlib PortAnaRecord 停用；Cerebro / Rolling 已退场（2026-09-16）。见 [`docs/backtest/engine-positioning-ssot.md`](docs/backtest/engine-positioning-ssot.md)。
+**成交引擎定位**：本仓 = 向量化。1.3 = LEBS + MockQMT 真栈。MyQuant 可使用全部 Qlib 组件开展研究回测；Cerebro / Rolling 已退场（2026-09-16）。见 [`docs/backtest/engine-positioning-ssot.md`](docs/backtest/engine-positioning-ssot.md)。
 **Grok Bot RACI / CLI / 模型钉**：唯一正文在 [`baiyibing/grok-bot-ops`](https://github.com/baiyibing/grok-bot-ops/blob/master/docs/raci/grok-bot-raci-workflow-ssot.md) `docs/raci/grok-bot-raci-workflow-ssot.md`（本仓 `docs/operations/grok-bot-raci-workflow-ssot.md` 为薄指针）。 Owner：**bt**（ops §1）。
 成交核（档位 / 全卖因跌停 / Decimal 涨跌停价）见 [`docs/backtest/engine-ashare-correctness.md`](docs/backtest/engine-ashare-correctness.md)。分钟成交假设、默认锁与混比边界见 [`docs/backtest/minute-fill-policy-ssot.md`](docs/backtest/minute-fill-policy-ssot.md)。研究问题地图（三份名单 × 收益最大化）见 [`docs/backtest/research-backtest-entry.md`](docs/backtest/research-backtest-entry.md)。入口命令见 [`docs/backtest/README.md`](docs/backtest/README.md)。
 
@@ -12,7 +12,7 @@ Standalone research-face fork (see [README.md](README.md)). Since migration S2 (
 
 后续逐片 GO 状态：L2 S1–S5 已交付；2026-09-29 Human「A GO」新增 [minute_orders 专用 synthetic CLI](docs/backtest/note-minute-orders-cli-2026-09-29.md)（显式 JSON/parent/run-id/evidence，L1 仅一条 CLI 注册）。P0 原文为历史停点；无湖接入、无默认 family，`no_ssot_compare_authorization` 不变。
 
-三仓回测不做重：MyQuant 出信号，本仓向量化研究，1.3 执行验收；LEBS 只在 1.3，且 LEBS ≠ MockQMT 真栈。本仓无 `python -m backtest.lebs` 入口。旧 CSV CLI 保留真身，HELP_LOCK 不变（P5=A）。
+研究与执行分工：MyQuant 负责完整 Qlib 研究回测及信号导出，本仓负责自身向量化研究，1.3 负责执行验收；LEBS 只在 1.3，且 LEBS ≠ MockQMT 真栈。本仓无 `python -m backtest.lebs` 入口。旧 CSV CLI 保留真身，HELP_LOCK 不变（P5=A）。
 
 ## Research entries
 
