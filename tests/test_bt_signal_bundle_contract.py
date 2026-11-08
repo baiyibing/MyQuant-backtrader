@@ -134,9 +134,10 @@ def test_validator_does_not_import_research_or_fee_policy():
 
 
 def test_schema_file_sha256_pinned():
-    path = Path(__file__).resolve().parents[1] / "bt_contract/schema/signal-bundle-1.schema.json"
+    from importlib.resources import files
+    path = files("myquant_infra.contracts.signal_bundle").joinpath("schema/signal-bundle-1.schema.json")
     assert hashlib.sha256(path.read_bytes()).hexdigest() == (
-        "5464b038ac827969647f71d68041a732581e74859597f03d4b8b128cb1240f38"
+        "cc337ca826805e45482d0248fcebc5ee0a91fbf83f221fd244417c03a12e4499"
     )
 
 

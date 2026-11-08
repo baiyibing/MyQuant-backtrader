@@ -213,7 +213,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     write_run_artifacts(state, output)
     header = f"strategy={BOOK_TAG} (not strategy 7)\n"
     (output / "summary.txt").write_text(
-        header + summarize_v7(state), encoding="utf-8"
+        header + summarize_v7(state), encoding="utf-8", newline="\n"
     )
     print(header, end="")
     print(summarize_v7(state), end="")

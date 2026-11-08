@@ -161,7 +161,7 @@ def test_full_tree_summary_published_last_and_exact_handcalcs(tmp_path, monkeypa
 
 
 @pytest.mark.parametrize("kind", ["empty", "foreign", "file", "symlink", "dangling_symlink"])
-def test_existing_destination_always_refused_without_foreign_mutation(tmp_path, kind):
+def test_existing_destination_always_refused_without_foreign_mutation(tmp_path, kind, request):
     root = tmp_path / "backtest_output/minute_orders_research_v1/test"
     root.parent.mkdir(parents=True)
     foreign = tmp_path / "foreign"
@@ -170,6 +170,7 @@ def test_existing_destination_always_refused_without_foreign_mutation(tmp_path, 
     if kind == "file":
         root.write_bytes(b"foreign file")
     elif "symlink" in kind:
+        request.getfixturevalue("require_directory_symlink")
         root.symlink_to(foreign if kind == "symlink" else tmp_path / "absent")
     else:
         root.mkdir()
@@ -191,7 +192,7 @@ def test_bad_run_id_fails_before_any_root_creation(tmp_path, run_id):
 
 
 @pytest.mark.parametrize("namespace", ["backtest_output", "backtest_output/minute_orders_research_v1"])
-def test_namespace_symlink_cannot_redirect_into_foreign_family(tmp_path, namespace):
+def test_namespace_symlink_cannot_redirect_into_foreign_family(tmp_path, namespace, require_directory_symlink):
     foreign = tmp_path / "foreign"
     foreign.mkdir()
     (foreign / "pin").write_bytes(b"unchanged")

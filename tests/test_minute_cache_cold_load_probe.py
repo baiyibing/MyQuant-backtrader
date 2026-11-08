@@ -63,7 +63,9 @@ def test_detect_source_change_during_measurement(lake, monkeypatch):
     def read(*args, **kwargs):
         result = original(*args, **kwargs)
         stamp = path.stat()
-        os.utime(path, ns=(stamp.st_atime_ns, stamp.st_mtime_ns + 1))
+        # Use an observable interval on filesystems that round sub-tick times.
+        os.utime(path, ns=(stamp.st_atime_ns, stamp.st_mtime_ns + 1_000_000_000))
+        assert path.stat().st_mtime_ns > stamp.st_mtime_ns
         return result
 
     monkeypatch.setattr(probe.bars, "read_lake_minute_ohlc", read)

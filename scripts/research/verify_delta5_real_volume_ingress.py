@@ -340,7 +340,7 @@ def main(argv=None):
                               "stage": getattr(exc, "stage", receipt["stage"]),
                               "detail": getattr(exc, "detail", None)}
     if root is not None:
-        receipt["outputs"] = {str(p.relative_to(root)): identity(p)
+        receipt["outputs"] = {p.relative_to(root).as_posix(): identity(p)
                               for p in sorted(root.rglob("*.json"))}
         receipt["output_files"] = [*receipt["outputs"], "receipt.json"]
         write_json(root / "receipt.json", receipt)  # No self-referential receipt hash.

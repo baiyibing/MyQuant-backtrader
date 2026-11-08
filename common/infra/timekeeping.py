@@ -14,6 +14,10 @@ See docs/architecture/timezone-v2.md (single entry for clocks and QMT wall-time 
 
 from __future__ import annotations
 
+from myquant_infra.utils.timekeeping import (
+    to_shanghai, utc_iso_z_from_posix, utc_iso_z_from_aware, parse_hhmm_to_minutes,
+)
+
 import os
 import re
 import time as _stdlib_time
@@ -62,16 +66,6 @@ def set_mono_debug_mode(enabled: bool) -> None:
             file=_stdlib_sys.stderr,
             flush=True,
         )
-
-
-def to_shanghai(dt: datetime) -> datetime:
-    """Interpret ``dt`` as an instant in Asia/Shanghai (aware).
-
-    Naive values are treated as Shanghai wall time (same rule as closed-order window helpers).
-    """
-    if dt.tzinfo is None:
-        return dt.replace(tzinfo=CN_TZ)
-    return dt.astimezone(CN_TZ)
 
 
 def utc_now() -> datetime:
@@ -266,33 +260,6 @@ def utc_now_iso_z() -> str:
     )
 
 
-def utc_iso_z_from_posix(ts: float) -> str:
-    """POSIX seconds (e.g. time.time()) to UTC ISO8601 with Z suffix, second resolution."""
-    return (
-        datetime.fromtimestamp(float(ts), tz=timezone.utc)
-        .replace(microsecond=0)
-        .isoformat()
-        .replace("+00:00", "Z")
-    )
-
-
-def utc_iso_z_from_aware(dt: datetime) -> str:
-    """Convert an instant to UTC ISO8601 with Z suffix, second resolution (no microseconds).
-
-    Aware values are converted to UTC. Naive values are treated as UTC wall time
-    (legacy DB / serialized timestamps).
-    """
-    if dt.tzinfo is None:
-        u = dt.replace(tzinfo=timezone.utc)
-    else:
-        u = dt.astimezone(timezone.utc)
-    return (
-        u.replace(microsecond=0)
-        .isoformat()
-        .replace("+00:00", "Z")
-    )
-
-
 def utc_compact_filename_stamp() -> str:
     """UTC wall time YYYYMMDD_HHMMSS for archive filenames (no microseconds)."""
     return utc_now().replace(microsecond=0).strftime("%Y%m%d_%H%M%S")
@@ -316,80 +283,6 @@ def shanghai_date_yyyymmdd() -> str:
 def shanghai_date_iso() -> str:
     """Shanghai local calendar date YYYY-MM-DD."""
     return shanghai_now().date().isoformat()
-
-
-def parse_hhmm_to_minutes(raw: str, *, default: int | None = None) -> int:
-    """Parse ``HH:MM`` or ``HHMM`` string to minutes-from-midnight.
-
-    Args:
-        raw: Time string like ``"14:30"`` or ``"1430"``.
-             ``"HH:MM:SS"``, ``"H:MM"``, and minutes-as-integer are **rejected**.
-        default: If ``None`` (strict mode), raises ``ValueError`` on parse failure.
-                 If ``int`` (lenient mode), returns *default* on failure.
-
-    Returns:
-        Minutes from midnight, 0–1440.
-
-    Raises:
-        ValueError: In strict mode when *raw* cannot be parsed.
-
-    Bootstrap 阶段用 strict 模式（失败即 ConfigurationError），运行时降级路径用
-    explicit default。严格模式防止 typo（如 ``"16:5"``）静默回退导致撤单窗口漂移。
-
-    Single entry point for all HH:MM → minutes parsing across:
-      - ``strategy_config/_bootstrap.py``
-      - ``live_trading/runtime/loop.py``
-      - ``common/infra/csv_production_baseline.py``
-    """
-    s = (raw or "").strip().replace("：", ":")
-    if not s:
-        if default is not None:
-            return default
-        raise ValueError(f"empty time string; expected 'HH:MM' or 'HHMM'")
-
-    # Accept HH:MM (exactly 2 parts) or HHMM (4 digits, no colon)
-    if ":" in s:
-        parts = s.split(":")
-        if len(parts) != 2:
-            if default is not None:
-                return default
-            raise ValueError(
-                f"invalid time string: {raw!r}. "
-                f"Expected 'HH:MM' (e.g. '14:30') with exactly 2 parts, "
-                f"got {len(parts)} parts. HH:MM:SS is not accepted."
-            ) from None
-        try:
-            h = int(parts[0], 10)
-            m = int(parts[1], 10)
-        except (ValueError, IndexError):
-            if default is not None:
-                return default
-            raise ValueError(
-                f"invalid HH:MM time string: {raw!r}. "
-                f"Expected 'HH:MM' (e.g. '14:30') or 'HHMM' (e.g. '1430')"
-            ) from None
-    else:
-        # Try bare HHMM (exactly 4 digits)
-        if len(s) != 4 or not s.isdigit():
-            if default is not None:
-                return default
-            raise ValueError(
-                f"invalid time string: {raw!r}. "
-                f"Expected 'HH:MM' (e.g. '14:30') or 'HHMM' (e.g. '1430') with exactly 4 digits. "
-                f"Hint: minutes-from-midnight format (e.g. 870) is deprecated."
-            ) from None
-        h = int(s[:2], 10)
-        m = int(s[2:], 10)
-
-    if not (0 <= h < 24 and 0 <= m < 60):
-        if default is not None:
-            return default
-        raise ValueError(
-            f"time out of range: {raw!r} → {h:02d}:{m:02d}. "
-            f"Expected 00:00–23:59."
-        ) from None
-
-    return h * 60 + m
 
 
 def _shanghai_instant(
@@ -697,4 +590,3 @@ def mono_now() -> MonoSeconds:
 def wall_now_s() -> WallSeconds:
     """POSIX wall instant in seconds; prefer for persisted REAL columns and broker protocol windows."""
     return WallSeconds(_stdlib_time.time())
-

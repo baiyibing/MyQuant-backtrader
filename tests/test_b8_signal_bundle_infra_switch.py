@@ -37,9 +37,15 @@ def test_baseline_fixture_and_schema_are_frozen():
     assert hashlib.sha256(FIXTURE.read_bytes()).hexdigest() == (
         "f3487a57d395a69abfa92d05d4bb7895122b3bcfe323472342be18b2e6d30fea"
     )
-    schema = ROOT / "bt_contract/schema/signal-bundle-1.schema.json"
-    assert hashlib.sha256(schema.read_bytes()).hexdigest() == (
-        "5464b038ac827969647f71d68041a732581e74859597f03d4b8b128cb1240f38"
+    from importlib.resources import files
+
+    schema = files("myquant_infra.contracts.signal_bundle").joinpath("schema/signal-bundle-1.schema.json")
+    # This digest was computed from the former host schema's JSON value.
+    # Infra owns the schema asset; formatting differs, the contract does not.
+    canonical_schema = json.dumps(json.loads(schema.read_bytes()), sort_keys=True,
+                                  separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    assert hashlib.sha256(canonical_schema).hexdigest() == (
+        "3f1b188bd91e84818cd81cd59cc4c90e7acb7c3a0a78a306e08a9d9f41f60388"
     )
 
 
@@ -177,14 +183,14 @@ import bt_contract
 from bt_contract import signal_bundle, run_manifest
 assert not any(name.startswith("myquant_infra") for name in sys.modules)
 if failure == "absent":
-    from backtest.research import csv_daily_backtest, csv_minute_backtest
-    for module in (csv_daily_backtest, csv_minute_backtest):
+    import importlib
+    for name in ("backtest.research.csv_daily_backtest", "backtest.research.csv_minute_backtest"):
         try:
-            module.main(["--help"])
-        except SystemExit as exc:
-            assert exc.code == 0
+            importlib.import_module(name)
+        except ModuleNotFoundError as exc:
+            assert exc is error
         else:
-            raise AssertionError("--help should exit")
+            raise AssertionError("research consumers must require infra")
 for feature in (
     lambda: bt_contract.canonical_json_bytes({}),
     lambda: signal_bundle.validate_signal_bundle({}),
@@ -250,11 +256,12 @@ def _public_pool_facade(monkeypatch, error=None):
 
 
 @pytest.mark.parametrize("error", [
+    ModuleNotFoundError("private infra unavailable", name="myquant_infra"),
     ModuleNotFoundError("missing pool submodule", name="myquant_infra.reference_data.pool_csv"),
     ModuleNotFoundError("missing transitive dependency", name="broken_dependency"),
     ImportError("cannot import shared pool API"),
 ])
-def test_pool_fallback_only_applies_when_infra_is_absent(monkeypatch, error):
+def test_pool_requires_infra_without_any_local_fallback(monkeypatch, error):
     with pytest.raises(type(error)) as caught:
         _public_pool_facade(monkeypatch, error)
     assert caught.value is error
@@ -267,14 +274,10 @@ def test_pool_facade_reexports_the_existing_infra_twin():
         assert getattr(host, name) is getattr(infra, name)
 
 
-@pytest.mark.parametrize("implementation", ["public", "infra"])
-def test_pool_record_lines_and_duplicate_scope_stay_unchanged(implementation, tmp_path, monkeypatch):
-    if implementation == "infra":
-        pool = pytest.importorskip("myquant_infra.reference_data.pool_csv")
-    else:
-        pool = _public_pool_facade(monkeypatch)
+def test_pool_record_lines_and_duplicate_scope_stay_unchanged(tmp_path):
+    pool = importlib.import_module("common.infra.pool_csv")
     path = tmp_path / "20260925.csv"
-    path.write_text('\ufeffcode,name\n# comment,"\n000001,"first\nname"\n\nsz000001,second\n', encoding="utf-8")
+    path.write_text('\ufeffcode,name\n# comment,"\n000001,"first\nname"\n\nsz000001,second\n', encoding="utf-8", newline="\n")
     assert list(pool.iter_pool_csv_rows(path)) == [
         (3, ["000001", "first\nname"]), (6, ["sz000001", "second"]),
     ]

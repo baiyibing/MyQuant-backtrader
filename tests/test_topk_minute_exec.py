@@ -63,6 +63,7 @@ def write_close_products(target, state):
     )
     (target / "stats.json").write_text(
         json.dumps(state.stats, ensure_ascii=False, indent=2) + "\n", encoding="utf-8",
+        newline="\n",
     )
 
 

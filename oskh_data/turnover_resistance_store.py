@@ -1,8 +1,8 @@
-"""Host path/producer compatibility for the optional infra TR store (B6, D8=A).
+"""Host path/producer compatibility for the infra TR store (B6, D8=A).
 
 All parquet reads, locking, writes, caching and staging merges live in infra.
 Host root/environment policy and the numerical bands producer stay here.
-Importing this module never requires the private package or resolves a lake.
+The shared package is required; host imports do not resolve a lake.
 """
 from __future__ import annotations
 
@@ -21,46 +21,8 @@ if TYPE_CHECKING:
 PathLike = Union[str, Path]
 _INFRA_MODULE = "derived_data.turnover_resistance.store"
 
-# Keep host schema/audit defaults importable in public CI without private infra.
-DEFAULT_WINDOW = 1000
-DEFAULT_FREE_FLOAT_POLICY = "warn-zero"
-UNIQUE_KEYS = ("stock_code", "trade_date", "window")
-
-# Rust FFI 18 cols (normalized) + TR BB 10 cols + audit 5 cols
-SCHEMA_COLUMNS: tuple[str, ...] = (
-    "stock_code",
-    "trade_date",
-    "stock_name",
-    "close",
-    "cyqk_t",
-    "cyqk_t_1",
-    "profit_chip_diff",
-    "turnover",
-    "turnover_resistance",
-    "turnover_free",
-    "turnover_resistance_free",
-    "circulating_capital",
-    "free_float_capital",
-    "bb_upper",
-    "bb_middle",
-    "bb_lower",
-    "bb_position",
-    "bb_width",
-    "tr_bb_upper",
-    "tr_bb_middle",
-    "tr_bb_lower",
-    "tr_bb_position",
-    "tr_bb_width",
-    "tr_bb_free_upper",
-    "tr_bb_free_middle",
-    "tr_bb_free_lower",
-    "tr_bb_free_position",
-    "tr_bb_free_width",
-    "window",
-    "source",
-    "free_float_policy",
-    "updated_at",
-    "bands_computed_at",
+from myquant_infra.derived_data.turnover_resistance.store import (
+    DEFAULT_WINDOW, DEFAULT_FREE_FLOAT_POLICY, UNIQUE_KEYS, SCHEMA_COLUMNS,
 )
 
 

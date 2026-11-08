@@ -118,9 +118,10 @@ def test_unconfigured_root_fails_before_infra(monkeypatch, tmp_path, entry):
     assert list(tmp_path.iterdir()) == []
 
 
-def test_no_private_dependency_keeps_imports_and_help_available(maps):
+def test_missing_private_dependency_fails_before_industry_reads(maps):
     script = '''
 import importlib.abc
+import importlib
 from pathlib import Path
 import sys
 
@@ -130,34 +131,16 @@ class NoInfra(importlib.abc.MetaPathFinder):
             raise ModuleNotFoundError(fullname, name=fullname)
 
 sys.meta_path.insert(0, NoInfra())
-from oskh_data import industry_sw_l1 as industry
-from backtest.research import research_overlay, unified_exit_modea, unified_exit_modeb
-for module in (unified_exit_modea, unified_exit_modeb):
-    try:
-        module.main(["--help"])
-    except SystemExit as exc:
-        assert exc.code == 0
-    else:
-        raise AssertionError("help must exit without IO")
 root = Path(sys.argv[1])
 before = {p.name: p.read_bytes() for p in root.iterdir()}
-industry.resolve_sw_l1_root = lambda: root
-calls = (
-    lambda: industry.normalize_industry("银行（申万）"),
-    lambda: industry.normalize_wind_code("600000.sh"),
-    lambda: industry.load_wind_csv(root / "batch.csv"),
-    lambda: industry.lookup_industry("600000", {"600000.SH": "银行"}),
-    lambda: industry.industry_bucket_for_stock("600000", {}),
-    industry.load_sw_l1_map, industry.load_wind_l1_map, industry.load_industry_map,
-)
-for call in calls:
+for name in ("oskh_data.industry_sw_l1", "backtest.research.unified_exit_modea",
+             "backtest.research.unified_exit_modeb"):
     try:
-        call()
-    except ImportError as exc:
-        assert "requirements-infra.txt" in str(exc)
-        assert "reference_data.industry" in str(exc)
+        importlib.import_module(name)
+    except ModuleNotFoundError as exc:
+        assert exc.name.startswith("myquant_infra")
     else:
-        raise AssertionError("industry operations must explicitly require infra")
+        raise AssertionError("consumer imported without its required infra dependency")
 assert before == {p.name: p.read_bytes() for p in root.iterdir()}
 '''
     env = os.environ.copy()

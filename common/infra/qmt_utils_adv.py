@@ -1,15 +1,19 @@
+"""BT reader configuration and pool duplicate policy over infra helpers."""
+from myquant_infra.data_validation import text as _text
+from myquant_infra.reference_data import symbols as _symbols
+from myquant_infra.data_validation.text import (
+    bom_encoding as _check_bom, _chardet_detect as _detect_encoding,
+)
 from common.infra.quant_logger import get_logger
 import math
 import os
 import re
-import shutil
 from datetime import datetime, date
 
 from common.infra.timekeeping import CN_TZ, parse_qmt_time
 from common.infra.data_root import resolve_e_stock_data_container
 from pathlib import Path
 from typing import Any, List, Dict, Optional, Tuple, cast
-import chardet
 import pandas as pd
 
 # 配置日志
@@ -106,88 +110,14 @@ def _get_stock_data_via_oskh_reader(
     )
 
 # ---------------------------------------------------------------------------
-# Data I/O SSOT (RF-R2 / M-003a): read path only; download/update → oskh_data + scripts/.
+# Reader composition only; downloads and lake maintenance belong to infra.
 # ---------------------------------------------------------------------------
-
-
-class DataCleaner:
-    """数据清理器"""
-
-    @staticmethod
-    def clear_data(base_dir: str = _DEFAULT_STOCK_DATA_DIR, period: Optional[str] = None,
-                   adjust_type: Optional[str] = None, stock_code: Optional[str] = None):
-        """清理数据"""
-        base_path = Path(base_dir)
-        if not base_path.exists():
-            logger.info("目录不存在，无需清理")
-            return
-
-        try:
-            if period is None:
-                # 清理所有数据
-                shutil.rmtree(base_path)
-                logger.info("清理所有数据")
-            else:
-                period_path = base_path / f"period={period}"
-                if adjust_type is None:
-                    # 清理特定周期所有数据
-                    if period_path.exists():
-                        shutil.rmtree(period_path)
-                        logger.info(f"清理周期 {period} 所有数据")
-                else:
-                    adjust_path = period_path / f"dividend_type={adjust_type}"
-                    if stock_code is None:
-                        # 清理特定周期和复权类型数据
-                        if adjust_path.exists():
-                            shutil.rmtree(adjust_path)
-                            logger.info(f"清理周期 {period} 复权 {adjust_type} 数据")
-                    else:
-                        # 清理特定股票数据
-                        stock_path = adjust_path / f"symbol={stock_code.replace('.', '_')}"
-                        if stock_path.exists():
-                            shutil.rmtree(stock_path)
-                            logger.info(f"清理股票 {stock_code} 数据")
-        except Exception as e:
-            logger.error(f"清理数据失败: {e}")
-
-
-def _check_bom(file_path: str) -> str:
-    """Detect encoding via BOM markers."""
-    try:
-        with open(file_path, "rb") as file:
-            raw_data = file.read(4)
-        if raw_data.startswith(b"\xef\xbb\xbf"):
-            return "utf-8-sig"
-        if raw_data.startswith(b"\xff\xfe"):
-            return "utf-16le"
-        if raw_data.startswith(b"\xfe\xff"):
-            return "utf-16be"
-        if raw_data.startswith(b"\xff\xfe\x00\x00"):
-            return "utf-32le"
-        if raw_data.startswith(b"\x00\x00\xfe\xff"):
-            return "utf-32be"
-        return "unknown"
-    except OSError:
-        return "unknown"
-
-
-def _detect_encoding(file_path: str) -> Tuple[str, float]:
-    with open(file_path, "rb") as file:
-        raw_data = file.read()
-    result = chardet.detect(raw_data)
-    encoding = str(result.get("encoding") or "utf-8")
-    confidence = float(result.get("confidence") or 0.0)
-    return encoding, confidence
 
 
 class _StockExchangeMapping:
     """Exchange prefix mapping for ``StockCodeProcessor``."""
 
-    EXCHANGE_MAPPING = {
-        "SH": ["600", "601", "603", "605", "688"],
-        "SZ": ["000", "001", "002", "003", "300", "301"],
-        "BJ": ["43", "82", "83", "84", "87", "88", "920"],
-    }
+    EXCHANGE_MAPPING = _symbols.QMT_POOL_EXCHANGE_PREFIXES
 
 
 class StockCodeProcessor:
@@ -197,71 +127,28 @@ class StockCodeProcessor:
     def read_stock_codes(file_path: str) -> Optional[pd.DataFrame]:
         """Read a single-day pool, rejecting repeated normalized codes."""
         from common.infra.pool_csv import (
-            PoolDuplicateCodeError,
-            iter_pool_csv_rows,
-            pool_cell_to_bare,
-            check_pool_duplicate,
+            check_pool_duplicate, iter_pool_csv_rows, pool_cell_to_bare,
         )
         from oskh_core.a_share_symbol_normalize import canonical_from_bare_code
 
-        try:
-            encoding = _check_bom(file_path)
-            if encoding == "unknown":
-                encoding, _confidence = _detect_encoding(file_path)
-            if encoding in {"GB2312", "gb2312"}:
-                encoding = "GBK"
-            # pandas indexes omit blank lines and count CSV records rather than
-            # physical lines. Read the source records for accurate diagnostics,
-            # including quoted fields that span several physical lines.
-            seen: dict[tuple[str | None, str], int] = {}
-            for line_number, row in iter_pool_csv_rows(Path(file_path), encoding=encoding):
+        def reject_duplicates(path: Path, encoding: str) -> None:
+            seen = {}
+            for line, row in iter_pool_csv_rows(path, encoding=encoding):
                 bare = pool_cell_to_bare(row[0])
                 if bare:
-                    check_pool_duplicate(
-                        Path(file_path), seen,
-                        canonical_from_bare_code(bare), line_number,
-                    )
-            df = pd.read_csv(
-                file_path,
-                header=None,
-                dtype={0: str, 1: str},
-                encoding=encoding,
-                skip_blank_lines=True,
+                    check_pool_duplicate(path, seen, canonical_from_bare_code(bare), line)
+
+        try:
+            return _text.read_stock_codes(
+                file_path, detect_encoding=_detect_encoding, pool_policy=reject_duplicates,
             )
-
-            def _extract_second_element(value: object) -> object:
-                if isinstance(value, tuple):
-                    return value[1] if len(value) > 1 else (value[0] if len(value) > 0 else "")
-                return value
-
-            df[0] = df[0].apply(_extract_second_element)
-            df.rename(columns={0: "stock_code", 1: "stock_name"}, inplace=True)
-            logger.info("read %s stock codes from %s", len(df), file_path)
-            return df
-        except PoolDuplicateCodeError:
-            raise
-        except Exception as exc:
+        except _text.StockCodeFileError as exc:
             logger.error("read_stock_codes failed for %s: %s", file_path, exc)
             return None
 
     @staticmethod
     def format_stock_code(input_str: str) -> str:
-        if not isinstance(input_str, str):
-            raise ValueError("input must be str")
-        digits = re.findall(r"\d+", input_str)
-        if not digits:
-            raise ValueError(f"no digits in {input_str!r}")
-        code_str = "".join(digits).zfill(6)
-        if len(code_str) != 6:
-            raise ValueError(f"stock code must be 6 digits: {code_str}")
-        mapping = _StockExchangeMapping.EXCHANGE_MAPPING
-        if any(code_str.startswith(prefix) for prefix in mapping["SH"]):
-            return f"{code_str}.SH"
-        if any(code_str.startswith(prefix) for prefix in mapping["SZ"]):
-            return f"{code_str}.SZ"
-        if any(code_str.startswith(prefix) for prefix in mapping["BJ"]):
-            return f"{code_str}.BJ"
-        raise ValueError(f"unknown exchange for {code_str}")
+        return _symbols.format_stock_code(input_str)
 
     @staticmethod
     def batch_format_stock_codes(stock_list: List[str]) -> List[str]:
@@ -451,38 +338,15 @@ def ensure_datetime_index(df):
 
 
 def detect_encoding(file_path):
-    """检测文件的编码方式[1,5](@ref)"""
-    with open(file_path, 'rb') as file:  # 以二进制模式打开文件
-        raw_data = file.read()  # 读取原始字节数据
-        result = chardet.detect(raw_data)  # 使用chardet检测编码
-        encoding = result['encoding']
-        confidence = result['confidence']  # 获取检测结果的可信度
-        print(f"检测到编码: {encoding} (可信度: {confidence:.2%})")
-        return encoding, confidence
+    """Keep the public spelling while infra owns encoding detection."""
+    encoding, confidence = _detect_encoding(file_path)
+    print(f"检测到编码: {encoding} (可信度: {confidence:.2%})")
+    return encoding, confidence
 
 
 def check_bom(file_path):
-    """
-    通过检查BOM标记判断编码格式
-    """
-    try:
-        with open(file_path, 'rb') as file:
-            raw_data = file.read(4)
-
-        if raw_data.startswith(b'\xef\xbb\xbf'):
-            return 'utf-8-sig'
-        elif raw_data.startswith(b'\xff\xfe'):
-            return 'utf-16le'
-        elif raw_data.startswith(b'\xfe\xff'):
-            return 'utf-16be'
-        elif raw_data.startswith(b'\xff\xfe\x00\x00'):
-            return 'utf-32le'
-        elif raw_data.startswith(b'\x00\x00\xfe\xff'):
-            return 'utf-32be'
-        else:
-            return 'unknown'
-    except:
-        return 'unknown'
+    """Keep the public spelling while infra owns BOM detection."""
+    return _check_bom(file_path)
 
 
 if __name__ == "__main__":

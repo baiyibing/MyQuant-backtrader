@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 """BT root-policy facade for infra's read-only Wind / 聚源 SW-L1 readers.
 
-1.3 writes ``vendor_wind_sw_l1/`` (harvest + merge). This fork only reads.
+MyQuant-infra writes ``vendor_wind_sw_l1/`` (harvest + merge). This fork only reads.
 Root: ``resolve_source_parquet("vendor_wind_sw_l1")``. Missing configuration
 or a missing map file raises; do not return an empty map.
-The optional ``requirements-infra.txt`` dependency loads only when used.
+Shared implementations are installed through ``requirements-infra.txt``.
 """
 from __future__ import annotations
 

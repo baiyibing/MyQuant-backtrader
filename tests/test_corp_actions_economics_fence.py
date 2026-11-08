@@ -16,6 +16,8 @@ def test_fence_inventory_and_maintenance_exemptions():
     bypass = "from pyarrow import parquet as pq\nx = pq.read_table(root / 'corp_actions' / 'events.parquet')"
     assert fence.violations(bypass, path)
     assert fence.violations("from scripts.data.hithink_incremental import imported", path)
+    assert fence.violations("from myquant_infra.corp_actions.candidates import driver", path)
+    assert fence.violations("import myquant_infra.hithink.artifacts", path)
     assert fence.violations(
         "import backtest.research.corp_actions_econ_gate as eg\neg.gate_rows_for_economics(rows)",
         path,

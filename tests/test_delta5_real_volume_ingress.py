@@ -541,10 +541,18 @@ def test_m11_output_escape_rejected(external, run_id):
     assert not (external / "outputs").exists()
 
 
-def test_output_overlap_symlink_and_configured_roots_rejected(external, monkeypatch):
+def test_output_overlap_and_configured_roots_rejected(external, monkeypatch):
     for parent in (harness.REPO_ROOT, external / "inputs", external):
         with pytest.raises(IngressError, match="overlaps"):
             harness.output_root(parent, "run", external / "inputs")
+    lake = external / "fake-lake"
+    lake.mkdir()
+    monkeypatch.setenv("OSKH_SOURCE_PARQUET_ROOT", str(lake))
+    with pytest.raises(IngressError, match="overlaps"):
+        harness.output_root(lake / "out", "run", external / "inputs")
+
+
+def test_output_symlink_to_configured_root_rejected(external, monkeypatch, require_directory_symlink):
     lake = external / "fake-lake"
     lake.mkdir()
     alias = external / "alias"

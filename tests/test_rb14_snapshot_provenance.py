@@ -44,7 +44,7 @@ def test_reuses_rb09_validation(token, error):
 
 def test_invalid_sidecars_are_explicit_errors(tmp_path):
     path = tmp_path / "bad.json"
-    with pytest.raises(FileNotFoundError):
+    with pytest.raises(OSError):
         snapshot_provenance_tokens(path)
     path.write_text("{", encoding="utf-8")
     with pytest.raises(ValueError):
@@ -74,7 +74,7 @@ def test_string_argument_is_path(tmp_path):
     path = tmp_path / "identity.json"
     path.write_text('{"source_snapshot": "upstream:release-17"}', encoding="utf-8")
     assert snapshot_provenance_tokens(str(path)) == snapshot_provenance_tokens(path)
-    with pytest.raises(FileNotFoundError):
+    with pytest.raises(OSError):
         snapshot_provenance_tokens('{"source_snapshot": "inline"}')
 
 

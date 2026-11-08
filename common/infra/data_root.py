@@ -24,6 +24,8 @@ from __future__ import annotations
 
 import os
 import warnings
+
+from myquant_infra.lake import paths as _lake_paths
 from pathlib import Path
 from typing import Iterable, Optional, Set
 
@@ -104,7 +106,7 @@ def resolve_e_stock_data_container(*, explicit_root: Optional[str] = None) -> Pa
 
     Always under ``OSKH_DATA_ROOT``; does not follow the parquet authority flip.
     """
-    return resolve_data_root(explicit_root=explicit_root) / "stock_data"
+    return _lake_paths.workspace_stock_data(resolve_data_root(explicit_root=explicit_root))
 
 
 def resolve_turnover_resist_parquet_root(*, explicit_root: Optional[str] = None) -> Path:
@@ -128,7 +130,7 @@ def resolve_turnover_resist_parquet_root(*, explicit_root: Optional[str] = None)
 
 def resolve_tr_staging_dir(*, explicit_root: Optional[str] = None) -> Path:
     """Yearly TR backfill staging parquet (same container as canonical)."""
-    return resolve_turnover_resist_parquet_root(explicit_root=explicit_root) / "tr_staging"
+    return _lake_paths.tr_staging_dir(resolve_turnover_resist_parquet_root(explicit_root=explicit_root))
 
 
 def resolve_parquet_container(*, explicit_root: Optional[str] = None) -> Path:
@@ -194,7 +196,7 @@ def resolve_l2_parquet_root(*, explicit_root: Optional[str] = None) -> Path:
     env_root = os.environ.get(EnvVarKeys.OSKH_L2_PARQUET_ROOT)
     if env_root:
         return Path(env_root)
-    resolved = resolve_parquet_container() / "l2_parquet"
+    resolved = _lake_paths.l2_parquet_root(resolve_parquet_container())
     _warn_authority_env_missing(
         env_key=EnvVarKeys.OSKH_L2_PARQUET_ROOT, resolved=resolved
     )
@@ -229,7 +231,7 @@ def resolve_period_root(
     if base is not None:
         return base / f"period={period}"
     container = resolve_parquet_container()
-    stock_root = container / "stock" / f"period={period}"
+    stock_root = _lake_paths.stock_period_root(container, period)
     _warn_authority_env_missing(env_key=env_key, resolved=stock_root)
     return stock_root
 
@@ -253,7 +255,7 @@ def _resolve_kind_daily_root(
     env_root = os.environ.get(env_key)
     if env_root:
         return Path(env_root)
-    resolved = resolve_parquet_container() / kind / "period=1d"
+    resolved = _lake_paths.asset_period_root(resolve_parquet_container(), kind, "1d")
     _warn_authority_env_missing(env_key=env_key, resolved=resolved)
     return resolved
 
@@ -290,14 +292,14 @@ def resolve_source_parquet(
     不检查存在性（调用方 fail-visible：FileNotFoundError 带路径）。
     """
     if explicit_root:
-        return Path(explicit_root) / name
+        return _lake_paths.source_parquet(explicit_root, name)
     from common.infra.constants import EnvVarKeys
 
     env_root = os.environ.get(EnvVarKeys.OSKH_SOURCE_PARQUET_ROOT)
     if env_root:
-        return Path(env_root) / name
+        return _lake_paths.source_parquet(env_root, name)
     container = resolve_parquet_container()
-    resolved = container / name
+    resolved = _lake_paths.source_parquet(container, name)
     _warn_authority_env_missing(
         env_key=EnvVarKeys.OSKH_SOURCE_PARQUET_ROOT, resolved=resolved
     )

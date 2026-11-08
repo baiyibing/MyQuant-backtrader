@@ -245,14 +245,3 @@ def test_proxy_local_response_and_current_session_delegation(lake, monkeypatch):
     finally:
         if proxy._reader is not None:
             proxy._reader.close()
-
-
-@pytestmark_infra
-def test_standalone_rebuild_is_import_safe_and_passes_resolved_paths(lake, monkeypatch):
-    from scripts.tr import rebuild_front_duckdb_standalone as rebuild
-
-    container, workspace = lake
-    build = Mock(return_value=(5, 2))
-    monkeypatch.setattr(rebuild, "rebuild_front_duckdb", build)
-    rebuild.main()
-    build.assert_called_once_with(container / "stock" / "period=1d", workspace / "stock_data" / "stock_data_front.duckdb")

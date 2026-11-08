@@ -40,6 +40,7 @@ def test_empyrical_cum_returns_matches_known_values():
 
 def test_import_plotting_when_matplotlib_present():
     matplotlib = pytest.importorskip("matplotlib")
+    pytest.importorskip("fincore", reason="optional qlib_cost plotting dependency is not installed")
     import qlib_cost.plotting as plotting
 
     assert plotting.Empyrical.__module__.startswith("fincore")
@@ -65,3 +66,4 @@ def test_qlib_cost_requirements_pin_fincore():
     text = (REPO / "qlib_cost" / "requirements.txt").read_text(encoding="utf-8")
     assert "fincore==0.3.0" in text
     assert "empyrical==" not in text
+    assert "pandas==3.0.6" in text

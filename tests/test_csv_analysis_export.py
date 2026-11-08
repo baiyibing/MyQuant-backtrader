@@ -358,6 +358,10 @@ def _bundle_byte_hashes(run: Path, out: Path) -> dict[str, str]:
             raw = str(folder).encode()
             blob = blob.replace(raw.replace(b"\\", b"\\\\"), token)
             blob = blob.replace(raw, token)
+            # Child-path separators are also host metadata, including the
+            # doubled backslashes in JSON. Keep every other output byte pinned.
+            blob = blob.replace(token + b"\\\\", token + b"/")
+            blob = blob.replace(token + b"\\", token + b"/")
         blob = blob.replace(b"\r\n", b"\n")
         hashes[path.name] = hashlib.sha256(blob).hexdigest()
     return hashes

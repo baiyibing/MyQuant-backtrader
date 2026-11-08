@@ -175,7 +175,16 @@ def test_positional_indexes_match_real_signatures() -> None:
     )
     indexes = {name: index for name, _kw, index in gate._ADJUST_KEYWORD_TARGETS}
     for call_name, path, class_name, func_name, param, default in specs:
-        func = _find_method(path, class_name, func_name)
+        if class_name == "DuckDBDailyBarsProxy":
+            import inspect
+            import textwrap
+            from common.integrations.duckdb_daily_bars_adapter import DuckDBDailyBarsProxy
+
+            # Public methods are inherited from infra; inspect their real owner.
+            method = getattr(DuckDBDailyBarsProxy, func_name)
+            func = ast.parse(textwrap.dedent(inspect.getsource(method))).body[0]
+        else:
+            func = _find_method(path, class_name, func_name)
         assert indexes[call_name] == _bound_positional_index(func, param)
         default_node = _default_for(func, param)
         assert isinstance(default_node, ast.Constant)

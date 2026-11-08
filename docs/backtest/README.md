@@ -196,3 +196,5 @@ Cerebro / Rolling 已退场（2026-09-16）；chip / ma_chip 对照产物为静�
 
 - Vendor 分钟只读样本 OHLCV 核对：[PLAN / CLI 合同](vendor-bar-xcheck-2026-10-01/PLAN.md)；不写湖，START→END 仍受样本证据门槛约束；12 个合成测试 / sample PASS 仅覆盖 scaffold 合同，不替代 δ5 certified 或 R4 市场验收（≠δ5 ≠R4）。
 - Vendor→lake Phase2：[PLAN / adapter CLI 合同](vendor-three-symbol-lake-ingest-2026-10-01/PLAN.md)；仅 dry-run staging（END/lots/sparse A，09:30 竞价排除），无湖写入，≠δ5 ≠R4；勿合，等待 Human「合」。
+
+数据平台边界：已迁出的 L2、湖写入/维修及共享读侧实现归 [MyQuant-infra](https://github.com/baiyibing/MyQuant-infra)，本仓只消费。旧 L2 本地入口已删除；使用 infra API/CLI。见 [仓库说明](../../README.md#infra-consumer-boundary)。

@@ -15,6 +15,7 @@ A 股 ETF 涨跌幅与个股不同：
 from __future__ import annotations
 
 from typing import Dict, Optional
+from myquant_infra.reference_data.symbols import is_etf_code
 
 # ETF 涨跌幅限制映射（Phase 2 P1: expanded coverage）
 # key: 代码前缀，value: 涨跌幅百分比（None = 无限制）
@@ -53,21 +54,7 @@ def get_etf_limit_pct(symbol: str) -> float | None:
     return None
 
 
-# Comprehensive ETF prefix list (Phase 2 P1: expanded beyond _ETF_LIMIT_RULES
-# which only covers ETFs with non-standard limits)
-_ETF_PREFIXES = frozenset({
-    "510", "511", "512", "513", "515", "516", "517", "518", "520",
-    "560", "561", "562", "563", "588", "589", "159",
-})
-
 _DEFAULT_ETF_LIMIT = 10.0
-
-
-def is_etf_code(symbol: str) -> bool:
-    """Return True if the symbol matches known ETF code prefixes."""
-    code = symbol.split(".")[0] if "." in symbol else symbol
-    code = code.strip()
-    return any(code.startswith(prefix) for prefix in _ETF_PREFIXES)
 
 
 def is_price_at_limit(

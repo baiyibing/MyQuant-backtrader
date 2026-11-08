@@ -16,35 +16,8 @@ import pytest
 from oskh_data import turnover_resistance_store as host
 from oskh_factors.chip.bands import compute_tr_bb_columns
 from scripts.tr import backfill_turnover_resistance_bands as backfill
+from scripts.tr import backfill_turnover_resistance_yearly as yearly
 from scripts.tr import compute_turnover_resistance_bands as daily
-
-_INTERPRETER_KEYS = (
-    "OSKH_MERGE_PYTHON", "VANNA312_PYTHON", "VANNA311_PYTHON",
-    "OSKH_MERGE_ENV_HOME", "VANNA312_HOME", "VANNA311_HOME",
-)
-
-
-def _import_yearly():
-    """Import the yearly script, which resolves the OSKH interpreter at import.
-
-    Public CI has no canonical interpreter, so ``resolve_oskh_python`` raises
-    SystemExit during collection. Pin it to this test Python for the import only
-    (the script's subprocesses are mocked here); restore the env afterwards.
-    """
-    pinned = not any(os.environ.get(key) for key in _INTERPRETER_KEYS)
-    if pinned:
-        os.environ["OSKH_MERGE_PYTHON"] = sys.executable
-    try:
-        from scripts.tr import backfill_turnover_resistance_yearly as module
-    except SystemExit:
-        pytest.skip("OSKH interpreter unresolvable for scripts.tr yearly", allow_module_level=True)
-    finally:
-        if pinned:
-            os.environ.pop("OSKH_MERGE_PYTHON", None)
-    return module
-
-
-yearly = _import_yearly()
 
 
 @pytest.fixture(autouse=True)
@@ -155,53 +128,26 @@ def test_merge_normalization_and_year_name_delegate(monkeypatch, tmp_path):
     )
 
 
-def test_import_help_and_patchable_surface_without_private_infra(tmp_path):
+def test_missing_infra_fails_instead_of_using_a_local_copy(tmp_path):
     script = '''
 import importlib.abc
-from pathlib import Path
 import sys
-from unittest.mock import Mock
 class NoInfra(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):
         if fullname == "myquant_infra" or fullname.startswith("myquant_infra."):
             raise ModuleNotFoundError("private dependency intentionally unavailable")
 sys.meta_path.insert(0, NoInfra())
-from oskh_data import turnover_resistance_store as host
-from scripts.tr import compute_turnover_resistance_bands as daily
-from scripts.tr import backfill_turnover_resistance_bands as backfill
-from scripts.tr import backfill_turnover_resistance_yearly as yearly
-from scripts.data import refresh_tr_store_window
-mock = Mock(spec=host.TurnoverResistanceStore)
-assert callable(mock.compute_and_update_bands)
-for entry in (daily.main, backfill.main, yearly.main):
-    try:
-        entry(["--help"])
-    except SystemExit as exc:
-        assert exc.code == 0
-assert len(host.SCHEMA_COLUMNS) == 33
-root = Path(sys.argv[1])
-assert host.resolve_parquet_path(root / "tr.parquet") == root / "tr.parquet"
-for action in (
-    lambda: host.TurnoverResistanceStore(root / "tr.parquet"),
-    lambda: host.merge_parquet_into_canonical(root / "year.parquet", canonical_path=root / "tr.parquet"),
-    lambda: host.resolve_year_staging_path(2026, root),
-    lambda: host.normalize_ffi_row({}, trade_date="20261104"),
-):
-    try:
-        action()
-    except ImportError as exc:
-        assert "requirements-infra.txt" in str(exc)
-    else:
-        raise AssertionError("TR IO must require infra")
-assert list(root.iterdir()) == []
+try:
+    from oskh_data import turnover_resistance_store
+except ModuleNotFoundError as exc:
+    assert "private dependency intentionally unavailable" in str(exc)
+else:
+    raise AssertionError("missing infra must not select a local implementation")
 '''
-    env = os.environ.copy()
-    repo = str(Path(__file__).resolve().parents[1])
-    env["PYTHONPATH"] = os.pathsep.join([repo, env.get("PYTHONPATH", "")])
-    if not any(env.get(key) for key in _INTERPRETER_KEYS):
-        env["OSKH_MERGE_PYTHON"] = sys.executable  # yearly resolves an interpreter at import
-    result = subprocess.run([sys.executable, "-c", script, str(tmp_path)], cwd=tmp_path,
-                            env=env, text=True, capture_output=True)
+    result = subprocess.run(
+        [sys.executable, "-c", script], cwd=Path(__file__).resolve().parents[1],
+        capture_output=True, text=True,
+    )
     assert result.returncode == 0, result.stdout + result.stderr
 
 
