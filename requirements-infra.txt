@@ -1,2 +1,10 @@
 # Shared implementations are owned by MyQuant-infra. Immutable consumer pin.
+# Migration history (source-restoring rollback is superseded by AGENTS.md):
+# docs/engineering/b2-bars-adj-infra-switch-20261105.md
+# docs/engineering/k18-duckdb-infra-switch-20261105.md
+# docs/engineering/b7-hithink-artifact-infra-switch-20261105.md
+# docs/engineering/b6-tr-store-infra-switch-20261105.md
+# docs/engineering/b8-signal-bundle-infra-switch-20261105.md
+# docs/engineering/b5-industry-sw-l1-infra-switch-20261105.md
+# docs/engineering/b9-ci-hygiene-infra-adopt-20261106.md
 myquant-infra[lake-readers,tr-store,hithink,calendar-pmc] @ git+https://github.com/baiyibing/MyQuant-infra.git@1a497682258503bf748e1e873aea9be9a818e92e
