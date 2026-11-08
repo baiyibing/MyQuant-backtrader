@@ -97,7 +97,7 @@ def test_daily_files_allow_the_same_code_on_different_dates(tmp_path):
 
 def test_quoted_name_continuation_is_not_a_pool_code(tmp_path):
     path = tmp_path / f"{DAY}.csv"
-    path.write_text('000001,"name, with comma\n000001\n# name"\n', encoding="utf-8")
+    path.write_text('000001,"name, with comma\n000001\n# name"\n', encoding="utf-8", newline="\n")
     assert csv_pool.parse_pool_csv_entries(path) == [
         ("000001.SZ", "name, with comma\n000001\n# name"),
     ]

@@ -80,12 +80,8 @@ _FORBIDDEN_BACKTEST_CALL_NAMES: Tuple[str, ...] = (
     "download_data",
 )
 
-# Whitelist: modules allowed to use direct sqlite3 (independent audit db)
-_SQLITE_WHITELIST = {
-    "oskh_data/audit.py": "data_audit.db is an independent operations audit database, "
-    "isolated from the oskh_db.DatabaseGateway five-db routing. "
-    "See plan-refactor-backtest-data-to-oskh-data-2026-05-16.md §10.1 E.",
-}
+# Data audit storage is owned by infra; no host sqlite3 exemptions.
+_SQLITE_WHITELIST: dict[str, str] = {}
 
 # Modules allowed to use adjust_type != "none" (explicitly documented reason required)
 _ADJUST_TYPE_WHITELIST: Tuple[str, ...] = ("live_trading/indicators/ma_provider.py",)

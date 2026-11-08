@@ -24,9 +24,7 @@ _SCAN_DIRS = ("oskh_data", "oskh_factors", "scripts", "common")
 _ALLOWLIST: Dict[str, Tuple[str, int]] = {
     "oskh_data/freshness.py": ("LABEL_NONPATH", 1),
     # path-SSOT resolver itself joins period=*; docstring hits included by line scanner.
-    "common/infra/data_root.py": ("SSOT_RESOLVER", 3),
-    # Legacy cleanup helper joins period= under an explicit base_dir argument.
-    "common/infra/qmt_utils_adv.py": ("LEGACY_PERIOD_JOIN", 1),
+    "common/infra/data_root.py": ("SSOT_RESOLVER", 2),
     # Research host helper: docstring/help mention lake hive period=1d +
     # turnover_resistance_daily.parquet labels (not production path joins).
     "scripts/data/refresh_tr_store_window.py": ("RESEARCH_HOST_HELPER", 2),

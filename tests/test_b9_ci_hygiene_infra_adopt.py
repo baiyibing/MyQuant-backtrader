@@ -6,6 +6,7 @@ import builtins
 import hashlib
 import importlib.util
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -25,14 +26,16 @@ HOST_GATES = (
 # Frozen against current origin/master tip 3cb707e95948af66514df53f17227668df476135
 # (post #576/#577). No OSkh trading fingerprints. Works in shallow public CI
 # without git history. Intentional future host changes must review fingerprints.
+# 2026-11-08 consumer policy updates path ownership, the corp-actions fence and
+# the private dependency install workflow; other campaign fingerprints stay fixed.
 HOST_FILE_HASHES = {
-    "scripts/gates/verify_data_path_ssot.py": "216ea055388be7e2ee0f1e102e2054d3b1bf17049eb6ef667fdb0da587714f79",
+    "scripts/gates/verify_data_path_ssot.py": "ddc711924a66a117ab0219c88edd64cbd34a5127d691666018a87d2f18788651",
     "scripts/gates/verify_no_hardcoded_machine_paths.py": "02573756c2eb96467a20dd5b6f7b1eb994c6bc9e7605972f823d4d086f0347be",
     "scripts/gates/verify_tr_bridge_import_ssot.py": "fff0bf11b93bb4d750bb91815db5b859744c130cb45fd672d3b777c56f5aeddb",
-    "scripts/gates/verify_corp_actions_economics_fence.py": "b78b127988fd28869bdb403e12913265726029c8abeac65955a8ccd22b56ded6",
+    "scripts/gates/verify_corp_actions_economics_fence.py": "d42e160ac8fea2721e68856beebdad04ee1014a2e0a05b6fcdac3f720e9f6a4e",
     "scripts/install-git-hooks.sh": "4520f8fbda560daad157f4ebbbe8821784e75fb6cf57081da57fbdf4e3453e92",
     "scripts/install-git-hooks.ps1": "920921880b9868a478828c722f3a5c6a8923553eb3dcb08a16e2b1507c1635f6",
-    ".github/workflows/python-tests.yml": "60b6c3420363c981691cf3cdf9b92bebbed36498f149ad8a71d8d0fb640e390f",
+    ".github/workflows/python-tests.yml": "68d237a62c4757305f2334dcafa19d1dd4e1a8671d55f0402d1be0c46307c3bb",
 }
 
 
@@ -223,15 +226,13 @@ def test_trading_trees_are_never_read_by_any_check(
 
 
 @pytest.mark.parametrize("check", ["encoding", "secrets", "links"])
-def test_symlink_rejected_before_reading(infra_root, target, tmp_path, offline, capsys, check):
+def test_symlink_rejected_before_reading(infra_root, target, tmp_path, offline, capsys, check,
+                                       require_directory_symlink):
     outside = tmp_path / "outside.md"
     outside.write_bytes(b"\xff\xfe")
     link = target / "docs/guide.md"  # already tracked; selected by all checks
     link.unlink()
-    try:
-        link.symlink_to(outside)
-    except OSError:
-        pytest.skip("symlinks unavailable on this test host")
+    link.symlink_to(outside)
     assert run(infra_root, target, check) == 2
     assert "symlink-or-escape" in capsys.readouterr().err
 
@@ -290,7 +291,7 @@ def test_host_gates_import_and_keep_public_entrypoints_without_infra(name, monke
         assert module.main() == 0  # These host gates have no argparse/help API.
 
 
-def test_host_contracts_unchanged_from_bt_campaign_base():
+def test_reviewed_host_contract_fingerprints():
     for name, expected in HOST_FILE_HASHES.items():
         # Ignore checkout-only autocrlf conversion on Windows runners.
         source = (adopt.REPO_ROOT / name).read_bytes().replace(b"\r\n", b"\n")
@@ -315,10 +316,10 @@ def test_public_import_does_not_load_optional_or_application_packages(offline):
     assert module.REPO_ROOT == adopt.REPO_ROOT
 
 
-def test_pin_bump_preserves_b2_k18_b7_comments():
+def test_required_pin_preserves_migration_provenance_and_optional_tool_pin():
     text = (adopt.REPO_ROOT / "requirements-infra.txt").read_text(encoding="utf-8")
-    assert text.count("myquant-infra @ git+") == 1
-    assert f"MyQuant-infra.git@{adopt.INFRA_PIN}" in text
-    assert "# D4 + B2 pin/rollback: docs/engineering/b2-bars-adj-infra-switch-20261105.md" in text
-    assert "# K18 D4 duckdb IO: docs/engineering/k18-duckdb-infra-switch-20261105.md" in text
-    assert "# B7 artifact consumer pin/rollback: docs/engineering/b7-hithink-artifact-infra-switch-20261105.md" in text
+    pins = re.findall(r"^myquant-infra(?:\[[^]]+\])? @ git\+(\S+)$", text, re.M)
+    assert len(pins) == 1
+    assert pins[0].endswith(f"MyQuant-infra.git@{adopt.INFRA_PIN}")
+    for record in ("b2-bars-adj", "k18-duckdb", "b7-hithink-artifact"):
+        assert f"docs/engineering/{record}-infra-switch-20261105.md" in text

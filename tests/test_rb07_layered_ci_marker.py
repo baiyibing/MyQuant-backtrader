@@ -1,6 +1,8 @@
 """Data-free checks for the RB-07 shared pytest marker and required job."""
 from pathlib import Path
 import subprocess
+import shutil
+import sys
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -33,8 +35,16 @@ def test_marker_crlf_raw_bytes_via_tr_pipeline(tmp_path):
     assert b"\r" in raw
     sample = tmp_path / "ci_pytest_marker.txt"
     sample.write_bytes(raw)
+    bash = shutil.which("bash")
+    if bash is None and sys.platform == "win32":
+        git = shutil.which("git")
+        if git:
+            candidate = Path(git).resolve().parents[1] / "bin" / "bash.exe"
+            if candidate.is_file():
+                bash = str(candidate)
+    assert bash is not None, "Bash is required to exercise the actual CI/hook pipeline"
     out = subprocess.check_output(
-        ["bash", "-lc", "tr -d '\\r' < \"$1\" | sed 's/[[:space:]]*$//'", "bash", str(sample)],
+        [bash, "-lc", "tr -d '\\r' < \"$1\" | sed 's/[[:space:]]*$//'", "bash", sample.as_posix()],
         text=True,
     )
     assert out.strip("\n") == CANONICAL and "\r" not in out

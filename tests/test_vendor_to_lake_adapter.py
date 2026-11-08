@@ -94,7 +94,7 @@ def test_protected_output(tmp_path, bad):
     assert not out.exists()
 
 
-def test_symlink_and_configured_root(tmp_path, monkeypatch):
+def test_symlink_to_lake_root(tmp_path, require_directory_symlink):
     path = source(tmp_path)
     lake = tmp_path / 'stock_data'
     lake.mkdir()
@@ -102,6 +102,10 @@ def test_symlink_and_configured_root(tmp_path, monkeypatch):
     alias.symlink_to(lake, target_is_directory=True)
     with pytest.raises(SystemExit):
         a.main(['--wind', str(path), '--out-dir', str(alias / 'out')])
+
+
+def test_configured_root(tmp_path, monkeypatch):
+    path = source(tmp_path)
     root = tmp_path / 'custom_lake'
     monkeypatch.setenv('OSKH_SOURCE_PARQUET_ROOT', str(root))
     with pytest.raises(SystemExit):

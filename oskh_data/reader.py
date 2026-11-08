@@ -2,7 +2,7 @@
 
 IO, SQL, connections and result normalization belong to infra. BT retains its
 adjustment gate, path resolvers, freshness policy and stock/ETF API boundary.
-See docs/engineering/k18-duckdb-infra-switch-20261105.md.
+See README.md for the infra consumer boundary.
 """
 from __future__ import annotations
 
@@ -14,61 +14,12 @@ from time import perf_counter
 from typing import List, Literal, Optional
 
 import pandas as pd
-from oskh_data._infra import require_infra
 
-try:
-    from myquant_infra.bars.duckdb_build import rebuild_front_duckdb as _rebuild_front_duckdb
-    from myquant_infra.lake.paths import asset_period_root as _asset_period_root
-    from myquant_infra.lake.readers import StockDataReader as _InfraStockDataReader
-    _INFRA_AVAILABLE = True
-except ImportError:  # CI hosts without private myquant-infra pin
-    _INFRA_AVAILABLE = False
-    _rebuild_front_duckdb = None  # type: ignore[assignment]
+from myquant_infra.bars.duckdb_build import rebuild_front_duckdb as _rebuild_front_duckdb
+from myquant_infra.lake.paths import asset_period_root as _asset_period_root
+from myquant_infra.lake.readers import StockDataReader as _InfraStockDataReader
 
-    def _asset_period_root(container, asset, period):  # type: ignore[misc]
-        """Path-only stub matching infra layout; no IO."""
-        from pathlib import Path as _P
-        return _P(container) / str(asset) / ("period=" + str(period))
-
-    class _InfraStockDataReader:  # type: ignore[no-redef]
-        """Patchable stub so entry-gate tests construct without the private package.
-
-        ``__init__`` must not raise — host subclass calls ``super().__init__`` before
-        any policy gate. Real IO methods raise until monkeypatched or infra is installed.
-        """
-
-        def __init__(self, *args, **kwargs) -> None:
-            self._asset_type = kwargs.get("asset_type", "stock")
-            self._mode = kwargs.get("mode", "parquet")
-            self._base_dir = kwargs.get("base_dir")
-            self._db_dir = kwargs.get("db_dir")
-            self._db_path = kwargs.get("db_path")
-            self._closed = False
-            self.last_query_error = None
-
-        def read_stock(self, *args, **kwargs):
-            raise ImportError("myquant-infra is required for lake IO; install requirements-infra.txt")
-
-        def scan_stocks(self, *args, **kwargs):
-            raise ImportError("myquant-infra is required for lake IO; install requirements-infra.txt")
-
-        def close(self) -> None:
-            self._closed = True
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *exc):
-            self.close()
-
-        def _daily_connection(self, *args, **kwargs):
-            raise ImportError("myquant-infra required")
-
-        def _read_parquet(self, *args, **kwargs):
-            raise ImportError("myquant-infra required")
-
-        def _query(self, *args, **kwargs):
-            raise ImportError("myquant-infra required")
+_INFRA_AVAILABLE = True
 
 from common.infra.quant_logger import get_logger
 from common.infra.data_root import resolve_data_root as _resolve_data_root
@@ -361,23 +312,3 @@ def lazy_prev_close_reader(asset_type: Literal["stock", "etf"] = "stock") -> Opt
         if _LAZY_PREV_CLOSE_READER is None:
             _LAZY_PREV_CLOSE_READER = StockDataReader(mode="duckdb_persistent")
     return _LAZY_PREV_CLOSE_READER
-
-
-if __name__ == "__main__":
-    import argparse
-
-    parser = argparse.ArgumentParser(description="StockDataReader CLI — daily front rebuild via MyQuant-infra")
-    parser.add_argument("--build", action="store_true")
-    parser.add_argument("--period", default="1d", choices=["1d", "1m", "all"])
-    parser.add_argument("--data-dir", default=None)
-    parser.add_argument("--db-path", default=None)
-    parser.add_argument("--adjust-type", default="front", choices=["none", "front", "back"])
-    args = parser.parse_args()
-    if args.build:
-        output, elapsed = StockDataReader.build_persistent_db(
-            base_dir=args.data_dir, db_path=args.db_path,
-            period=args.period, adjust_type=args.adjust_type,
-        )
-        print(f"{output}: {output.stat().st_size / (1024 * 1024):.0f} MB in {elapsed:.1f}s")
-    else:
-        parser.print_help()

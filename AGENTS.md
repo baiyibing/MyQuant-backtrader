@@ -50,15 +50,18 @@ Standalone research-face fork (see [README.md](README.md)). Since migration S2 (
 
 ## Scope
 
-Keep: `backtest/` (incl. `research/` + `research/chip/`), `oskh_data/`, `qlib_cost/`, `turnover-resist/` (Rust SSOT for TR/cyqk audit & Store), `oskh_factors/` (full research copy), `strategies/` (`tr_filter`), research `scripts/` (analysis/backtest/data/diagnostics/gates/run — no L2 ETL), slim `common/infra`, `trade_decision/presets`, `oskh_core` (TR re-export + `a_share_symbol_normalize`).
+**迁出即删除（Human 2026-11-08）**：已迁入 MyQuant-infra 的实现不再留在本仓；需要时调用 `myquant_infra` 公共接口。禁止保留源实现副本、vendor 副本、归档代码或缺依赖时启用的本地实现。只允许保留必要的 import 转发和宿主薄适配（显式路径/配置、调用方门禁、研究规则、reader 生命周期及数值 producer 注入）。缺依赖明确失败，不静默回退。依赖版本见 `requirements-infra.txt`；边界 gate：`scripts/gates/verify_infra_consumer_boundary.py`。此裁定替代旧文档中“迁移后源实现继续保留”的约定。
 
-**CYQ / TR boundary (H13):** full-market daily `winner_ratio` feeder lives in sibling **MyQuant** (`build_winner_ratio.py`, numba); do **not** reimplement it here. This repo’s Rust path is TR/Store/audit — see `docs/backtest/plan-h13-cyq-tr-boundary-2026-09-15.md` and chip inventory §E.
 
-**L2 / 逐笔成交：** write-side + research queries SSOT is sibling **MyQuant-infra** (`myquant_infra.l2`). Do not reintroduce `l2_analytics/` or `run_l2_*` ETL here; product “L2” (`minute_orders`) ≠ tick lake processing.
+Keep: `backtest/` (incl. `research/` + `research/chip/`), `oskh_data/` (infra consumer facades + host policy), `qlib_cost/`, `turnover-resist/` (Rust SSOT for TR/cyqk computation and audit; Store IO in infra), `oskh_factors/` (research numerical code), `strategies/` (`tr_filter`), research `scripts/` (analysis/backtest/data/diagnostics/gates/run; no L2 processing), slim `common/infra` (host configuration/policy and infra compatibility exports), `trade_decision/presets`, `oskh_core` (TR re-export + `a_share_symbol_normalize`).
+
+**CYQ / TR boundary (H13):** full-market daily `winner_ratio` feeder implementation lives in **MyQuant-infra** (`myquant_infra.derived_data.cyq`); MyQuant owns signal/feature wiring; do **not** reimplement it here. This repo’s Rust path is TR/Store/audit — see `docs/backtest/plan-h13-cyq-tr-boundary-2026-09-15.md` and chip inventory §E.
+
+**L2 边界：** ETL、聚合、查询模板及维护实现均归 MyQuant-infra，本仓已删除 `l2_analytics/` 与 `scripts/run/run_l2_*`。需要时显式调用 infra API/CLI；不恢复本地加工副本，不把 CSV 策略书接到 L2。
 
 Do not reintroduce live trading packages (`live_trading`, `executor_stream`, `redis_stream_bridge`, `stream_monitor`, `oskh_db`, full `strategy_config`).
 
-Consume only. All external downloads and vendor merges live in OSkhQuant1.3. This fork only reads the configured lake.
+Consume only. Data collection, lake processing and vendor merges belong to MyQuant-infra. This fork only reads the configured lake.
 
 ## Data disks (do not mix)
 
@@ -67,7 +70,7 @@ Consume only. All external downloads and vendor merges live in OSkhQuant1.3. Thi
 - **Workspace** (duckdb, exp, skip JSON, stale marker): `resolve_e_stock_data_container()` / `OSKH_DATA_ROOT`.
 - `TURNOVER_RESIST_DATA_DIR` is opt-in rollback to an old workspace path; default follows the parquet container.
 - This fork is read-only for market bars. New code must use resolvers, not cwd `stock_data/` literals.
-- **申万一级（只消费）**：`oskh_data/industry_sw_l1.py` 读 `vendor_wind_sw_l1/` 下的 `sw_l1_map.csv` / `wind_l1_map.csv`（两份都要有）。采集与 merge 只在 1.3。Mode A/B 用 `--industry` 才分层，缺表即失败。
+- **申万一级（只消费）**：`oskh_data/industry_sw_l1.py` 读 `vendor_wind_sw_l1/` 下的 `sw_l1_map.csv` / `wind_l1_map.csv`（两份都要有）。采集与 merge 归 MyQuant-infra。Mode A/B 用 `--industry` 才分层，缺表即失败。
 - **CI data-free gates** (no F lake): `verify_oskh_data_contract.py`, `verify_data_path_ssot.py`, `verify_no_hardcoded_machine_paths.py`, `verify_tr_bridge_import_ssot.py` in `.github/workflows/python-tests.yml` before pip; post-pip admission gates: `verify_book_admission.py` and `verify_baseline_admission.py` (require installed dependencies). See `docs/backtest/plan-h10-ci-path-gates-2026-09-15.md` · `docs/backtest/plan-h12-ci-tr-bridge-gate-2026-09-15.md`.
 
 ## Encoding

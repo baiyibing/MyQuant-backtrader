@@ -3,6 +3,9 @@
 # the off_byte_baseline golden fixtures on Windows checkouts (2026-09-26).
 bt_contract/schema/*.json text eol=lf
 tests/fixtures/*.json text eol=lf
+tests/fixtures/topk_exec_master_close/** text eol=lf
+docs/backtest/csv-analysis-fields.txt text eol=lf
+docs/backtest/csv-analysis-identity-fields.txt text eol=lf
 
 # B-L2-01 evidence bundle carries a sha256 manifest (its README); every file in
 # it is byte-pinned to the 4090 host copies (mixed CRLF/LF as produced there).

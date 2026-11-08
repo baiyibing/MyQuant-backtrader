@@ -1,6 +1,6 @@
 # MyQuant-backtrader
 
-研究脸：日名单 CSV + **向量化**回测，以及筹码 / 换手阻力（Python + Rust）。行情只读 path-SSOT parquet；下载在原仓。成交验收（LEBS / MockQMT）在 [OSkhQuant1.3](https://github.com/baiyibing/OSkhQuant1.3)。
+研究脸：日名单 CSV + **向量化**回测，以及筹码 / 换手阻力（Python + Rust）。行情只读 path-SSOT parquet；数据采集与湖加工在 [MyQuant-infra](https://github.com/baiyibing/MyQuant-infra)。成交验收（LEBS / MockQMT）在 [OSkhQuant1.3](https://github.com/baiyibing/OSkhQuant1.3)。
 
 研究与验收引擎怎么分工：[`docs/backtest/engine-positioning-ssot.md`](docs/backtest/engine-positioning-ssot.md)。成交核（档位 / 全卖因跌停 / Decimal 涨跌停价 / E-R6 除权日参考价修正）：[`docs/backtest/engine-ashare-correctness.md`](docs/backtest/engine-ashare-correctness.md)。名单 CSV 契约：[`docs/backtest/pool-csv-contract.md`](docs/backtest/pool-csv-contract.md)。MyQuant 保留完整 Qlib 研究回测（2026-11-08 用户澄清）；Cerebro / Rolling 已退场（2026-09-16）。本仓没有 `backtest/lebs/`。
 
@@ -23,18 +23,38 @@ Seeded from OSkhQuant slim snapshot at `5d41252`。S2（2026-09-09）之后本�
 | `backtest/research/chip/` | Chip 因子消费者 |
 | Cerebro / Rolling 历史栈 | 已退场（2026-09-16）；chip / ma_chip 对照产物为静态档案，代码路径已删 |
 | `backtest/legacy/` | 非 Cerebro 旧回放 |
-| `oskh_data/` | Parquet/DuckDB 只读（三树 hive） |
-| （已迁出）逐笔 L2 lake | SSOT → sibling **MyQuant-infra** `myquant_infra.l2`（ingest / rollup / research queries） |
+| `oskh_data/` | infra 只读消费薄适配（三树 hive）；保留宿主配置与门禁 |
+| L2 数据加工 / 查询 | 已迁至 MyQuant-infra；本仓不保留实现 |
 | `qlib_cost/` | 筹码分布算法 |
 | `turnover-resist/` | 换手阻力 Rust SSOT |
 | `oskh_factors/bridge/turnover_resist.py` | Rust 的 Python 桥 |
 | `strategies/tr_filter.py` | 换手阻力选股过滤 |
 | `oskh_core/` | TR 再导出 + `a_share_symbol_normalize` |
 | `trade_decision/presets.py` | 卖点 presets（研究副本，不改 1.3 交易核） |
-| `common/infra/` | 薄基建（timekeeping、path-SSOT） |
+| `common/infra/` | 宿主配置、时钟/路径政策与 infra import 转发 |
 | `scripts/gates/` | 契约 / path-SSOT gates |
-| `scripts/research/` `scripts/data/` `scripts/tr/` | chip / TR 研究 CLI（无 L2 ETL） |
+| `scripts/research/` `scripts/data/` `scripts/tr/` | chip / TR / 回测研究 CLI |
 | `stock_pool/` | 6/8 **可变默认**日名单（非快照；不是海龟池）；实验/冻结见 `exports/` — [pool-csv-contract](docs/backtest/pool-csv-contract.md)#lifecycle-ssot-stock_pool-vs-exports |
+
+## Infra consumer boundary
+
+已迁入 MyQuant-infra 的代码从本仓删除，需要时调用 `myquant_infra`；本仓只保留必要的 import 转发、路径/配置、复权门禁、reader 生命周期与回测研究规则。缺依赖明确失败，不使用本地实现兜底。L2 加工、湖写入/维修、复权因子产制和数据回填审计入口均在 infra；不会因旧接口语义不同而在 BT 留第二套实现。TR 数值核与研究 producer 仍属本仓，存储 IO 委托 infra。
+
+共享实现由 `requirements-infra.txt` 固定版本，`requirements.txt` 会一并安装；开发机和 CI 都需要具备该依赖仓库的读取权限。边界检查可离线运行：`scripts/gates/verify_infra_consumer_boundary.py`。
+
+2026-11-08 复核依据：[infra 四仓分界](https://github.com/baiyibing/MyQuant-infra/blob/1a497682258503bf748e1e873aea9be9a818e92e/docs/architecture/boundary.md)、[湖 SSOT §7](https://github.com/baiyibing/MyQuant-infra/blob/1a497682258503bf748e1e873aea9be9a818e92e/docs/architecture/data-lake-ssot.md)及 [ops 移交记录](https://github.com/baiyibing/grok-bot-ops/blob/master/docs/ops/HANDOFF_to_MyQuant-infra_20261104.md)。公司行为采集、Hithink 组装、历史对拍及 economics 处理入口沿用已合入的迁出删除裁定；运行时经济权益边界继续受 gate 约束。SSE 日期数据缓存/查询已调用 infra，BT 保留时钟、覆盖窗和进程失败策略。infra pin 更新到 `1a497682`，以覆盖本轮共享 helpers、日历及契约公共接口。
+
+后续清单区分通用能力迁出与研究职责候选。本仓维护自身向量化策略研究，不能把所有信号扫描、因子分析或研究输出都判作数据产制。目标 API、调用方和产物合同对齐后切换调用并删除源实现。
+
+| 当前代码 | 归属与后续处理 |
+| --- | --- |
+| `scripts/research/vendor_to_lake_adapter.py`、`vendor_bar_xcheck.py` | infra：vendor 格式转换与产制对拍；BT 只保留明确的回测 ingress/价格与数量域验收。其 staging 不是生产湖，不因搬迁获得 apply 授权。 |
+| `scripts/run/multi_ai_common.py`、`run_multi_ai_review.py`、`run_codex_adversarial_lanes.py`，`scripts/ops/push_github_pr_via_api.py` | ops：通用评审/CLI 编排和 GitHub 发布工具。先更新 ops 的旧 S4 镜像合同并提供显式 repo/framework 参数；BT 的领域审查提示词可以保留，不再维护模型目录副本。 |
+| `qlib_cost/qlib_workflow.py`、`factor_expr.py` | MyQuant 承接候选：Qlib 模型训练编排与 handler。需核对研究调用方和维护归属；不能仅因使用 Qlib 就直接删除。BT 已停用的 PortAnaRecord 路径不启用；不限制 MyQuant 的完整 Qlib 研究。 |
+| `scripts/data/export_strategy9_pool.py`、`export_ta_pool.py` / `export_strategy10_pool.py`、`export_strategy11_pool.py`、`export_beidou_pool.py`、`export_topk_app_dropout_pool.py` | 当前保留：与本仓策略及 D→T / CSV / manifest 合同耦合的名单生成。若统一交由 MyQuant 生产，再连同规则、调用方和合同一起迁，不能只搬 CLI 留反向依赖。 |
+| `qlib_cost/factor_analyze.py` | 当前保留：纯因子分组分析，尚无通用数据产制或已迁重复实现的证据。`bigdata_ma_cross.py` 沿用 master 已删除状态。 |
+
+上述清单按职责和实际读写入口核对，不是全仓逐行审计。Rust/TR/CYQK 数值核、策略阈值、费用/账本/成交、经济权益门禁与 D8=A 明确保留的研究 producer/物化接线仍在本仓；不能按目录名或“写研究产物”一概搬走。`data/`、`exports/` 与历史证据不作为源码迁移时的删除对象。
 
 ## Environment
 
@@ -72,7 +92,7 @@ Cerebro / Rolling 已退场（2026-09-16）。chip / ma_chip 对照产物为静�
 
 ## Market data (read-only)
 
-Bars、复权、流通股本由原仓生产，这里用 `oskh_data.StockDataReader` 读。无 QMT / xtquant 下载。
+Bars、复权、流通股本由 MyQuant-infra 生产，这里经 `oskh_data.StockDataReader` 薄适配调用 infra 读侧。无 QMT / xtquant 下载。
 
 Config: `config/reader.yaml`（默认 `mode: parquet`）。盘符分层见 `AGENTS.md`。
 
@@ -92,6 +112,19 @@ Python: `from oskh_factors.bridge.turnover_resist import compute_turnover_resist
 ```powershell
 D:\anaconda3\envs\vanna312\python.exe -m pytest -q
 ```
+
+共享环境版本不符时使用独立验证环境，不修改 pandas `3.0.6` 版本钉或重录 golden：
+
+```powershell
+D:\anaconda3\envs\vanna312\python.exe -m venv --system-site-packages backtest_output/.venv-regression
+$env:OSKH_MERGE_PYTHON = (Resolve-Path backtest_output/.venv-regression/Scripts/python.exe).Path
+& $env:OSKH_MERGE_PYTHON -m pip install -r requirements.txt
+& $env:OSKH_MERGE_PYTHON -m pytest -p no:cacheprovider -q -m 'not production and not benchmark'
+```
+
+pytest 默认只发现 `tests/`，临时输出默认放系统临时目录，并尊重显式 `--basetemp`。需避开仓库、输入与湖目录，否则应触发路径保护。Windows 缺少符号链接权限（WinError 1314）时只跳过依赖该能力的用例；Linux CI 设 `BT_REQUIRE_SYMLINK_TESTS=1`，必须实际执行这些保护测试。字节合同说明文本以 LF checkout；测试仅规范化临时路径及平台分隔符，不改变 golden。
+
+CI 安装步骤已接入 `MYQUANT_INFRA_READ_TOKEN`，该 secret 尚未配置。账号持有人须在本仓 **Settings → Secrets and variables → Actions** 添加同名 secret：fine-grained PAT 的资源所有者为 `baiyibing`，仅选 `MyQuant-infra`，Repository permissions 仅需 **Contents: Read-only**（Metadata 为 GitHub 必需项）。不要将令牌放进源码、URL 或聊天。普通 `GITHUB_TOKEN` 的权限只限当前仓库，不能靠扩大本仓 `contents` 权限读取另一个私有仓库；见 [GitHub 权限说明](https://docs.github.com/en/actions/concepts/security/github_token)。缺 secret 会明确失败；不通过 fork PR 提供私有凭据，也不使用 `pull_request_target` 执行未受信代码。
 
 ## Git
 

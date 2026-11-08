@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-"""Local market-data *read* infrastructure.
+"""BT market-data consumer facades over MyQuant-infra.
 
 This fork does not download from QMT. Bars, adj factors, and float-share
-sidecars are produced by the original repo and consumed via path-SSOT.
+sidecars are produced by MyQuant-infra and consumed via path-SSOT.
 """
 from __future__ import annotations
 

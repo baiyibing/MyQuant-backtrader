@@ -163,7 +163,7 @@ def test_invalid_arguments_never_create_output(flag, value, tmp_path):
 
 
 @pytest.mark.parametrize("kind", ["directory", "foreign", "file", "symlink", "dangling"])
-def test_existing_root_is_never_reused(kind, tmp_path):
+def test_existing_root_is_never_reused(kind, tmp_path, request):
     root = tmp_path / "output" / REL_ROOT
     root.parent.mkdir(parents=True)
     foreign = tmp_path / "foreign"
@@ -172,6 +172,7 @@ def test_existing_root_is_never_reused(kind, tmp_path):
     if kind == "file":
         root.write_bytes(b"keep")
     elif kind in ("symlink", "dangling"):
+        request.getfixturevalue("require_directory_symlink")
         root.symlink_to(foreign if kind == "symlink" else tmp_path / "absent", target_is_directory=True)
     else:
         root.mkdir()

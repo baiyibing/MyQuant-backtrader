@@ -5,17 +5,18 @@ from __future__ import annotations
 
 import os
 import sys
+import tempfile
 from pathlib import Path
 
 import pytest
 
 
 def pytest_configure(config: pytest.Config) -> None:  # noqa: ARG001
-    """Ensure repo-local pytest basetemp exists."""
-    root = Path(str(config.rootpath))
-    session_basetemp = root / "artifacts" / "pytest_tmp" / f"run_{os.getpid()}"
-    session_basetemp.mkdir(parents=True, exist_ok=True)
-    config.option.basetemp = str(session_basetemp)
+    """Keep fixtures outside protected repo roots and honor explicit --basetemp."""
+    if config.option.basetemp is None:
+        session_basetemp = Path(tempfile.gettempdir()) / "myquant-bt-pytest" / f"run_{os.getpid()}"
+        session_basetemp.parent.mkdir(parents=True, exist_ok=True)
+        config.option.basetemp = str(session_basetemp)
 
     try:
         from loguru import logger as _loguru_logger
@@ -24,6 +25,21 @@ def pytest_configure(config: pytest.Config) -> None:  # noqa: ARG001
         _loguru_logger.add(sys.__stderr__, level="WARNING", colorize=False)  # type: ignore[reportCallIssue]
     except Exception:
         pass
+
+
+@pytest.fixture(scope="session")
+def require_directory_symlink(tmp_path_factory):
+    """Linux CI requires symlinks; Windows reports the missing OS privilege."""
+    root = tmp_path_factory.mktemp("symlink-capability")
+    target = root / "target"
+    target.mkdir()
+    try:
+        (root / "link").symlink_to(target, target_is_directory=True)
+    except OSError as exc:
+        if (sys.platform == "win32" and getattr(exc, "winerror", None) == 1314
+                and os.environ.get("BT_REQUIRE_SYMLINK_TESTS") != "1"):
+            pytest.skip("Windows lacks symlink privilege; mandatory Linux CI exercises this case")
+        raise
 
 
 @pytest.fixture
