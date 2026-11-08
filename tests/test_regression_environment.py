@@ -22,6 +22,9 @@ def test_private_read_token_is_scoped_to_install_and_not_stored_in_checkout():
     assert "MYQUANT_INFRA_READ_TOKEN" not in job["env"]
     assert install["env"]["MYQUANT_INFRA_READ_TOKEN"] == "${{ secrets.MYQUANT_INFRA_READ_TOKEN }}"
     assert install["env"]["GIT_TERMINAL_PROMPT"] == "0"
+    assert install["env"]["PIP_NO_CACHE_DIR"] == "1"
+    setup = next(step for step in steps if step.get("uses", "").startswith("actions/setup-python@"))
+    assert "cache" not in setup["with"]
     assert install["run"].index('exit 1') < install["run"].index("pip install -r requirements.txt")
     assert 'GIT_ASKPASS="$askpass"' in install["run"]
     assert "https://$" not in install["run"]

@@ -35,7 +35,7 @@ HOST_FILE_HASHES = {
     "scripts/gates/verify_corp_actions_economics_fence.py": "d42e160ac8fea2721e68856beebdad04ee1014a2e0a05b6fcdac3f720e9f6a4e",
     "scripts/install-git-hooks.sh": "4520f8fbda560daad157f4ebbbe8821784e75fb6cf57081da57fbdf4e3453e92",
     "scripts/install-git-hooks.ps1": "920921880b9868a478828c722f3a5c6a8923553eb3dcb08a16e2b1507c1635f6",
-    ".github/workflows/python-tests.yml": "6cf597dc72384eb49447a44ccbb366d1e7146603a1c7e5ff641bf5630df27b99",
+    ".github/workflows/python-tests.yml": "96872247e8a46bc6ac211e4c4b3a78d43c9701d0b6220fcab9811ca0a6ef33ec",
 }
 
 
