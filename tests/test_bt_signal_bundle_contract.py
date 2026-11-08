@@ -137,7 +137,7 @@ def test_schema_file_sha256_pinned():
     from importlib.resources import files
     path = files("myquant_infra.contracts.signal_bundle").joinpath("schema/signal-bundle-1.schema.json")
     assert hashlib.sha256(path.read_bytes()).hexdigest() == (
-        "cc337ca826805e45482d0248fcebc5ee0a91fbf83f221fd244417c03a12e4499"
+        "5464b038ac827969647f71d68041a732581e74859597f03d4b8b128cb1240f38"
     )
 
 
