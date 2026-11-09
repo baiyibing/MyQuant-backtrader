@@ -7,4 +7,4 @@
 - Owner：本仓为 **bt**（见 ops RACI §1）
 - **禁止**在本仓镜像正文或 `-m` pins
 - 历史正文曾在本路径；2026-10-12 迁入 `grok-bot-ops` 后本文件塌缩为薄指针
-- 本仓 `scripts/run/multi_ai_common.py` 为 OSkh/ops **sync-copy**（S4）；`run_multi_ai_review.py` 保留本仓 DOMAIN FRAMEWORK
+- 通用运行时已改为 ops 消费；本仓仅保留薄入口和领域 JSON 配置，禁止恢复 S4 源码/模型目录副本。配置与验收见 [消费契约](ops-runtime-consumer-20261109.md)。

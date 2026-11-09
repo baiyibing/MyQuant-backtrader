@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "lanes": [
+    [
+      "dissent-steelman",
+      "dissent-steelman",
+      "强制立场：反对主笔裁决。必查可测性黑洞、不可逆窗口、主笔「已覆盖」反例。"
+    ],
+    [
+      "domain-safety",
+      "domain-safety",
+      "强制立场：fail-closed。必查 T+1、未来函数、复权混用、盈筹率单位、停牌/涨跌停。"
+    ],
+    [
+      "pattern-evidence",
+      "pattern-evidence",
+      "强制立场：怀疑过度类比。必查是否该复用 chip_indicator / StockDataReader、包边界、文档漂移。"
+    ]
+  ],
+  "prompt_template": "按 docs/prompts/prompt-adversarial-subagent-review.md，你只跑三路中的【{lane_id}】这一路。\n\n{stance}\n\n审查对象：仓库内 `{plan_rel}`（先 Read 全文；行号以你读到的版本为准）。\n\n硬约束：\n- Docs-only：只写本路产物；禁止改 production Python；禁止跑回测。\n- 证据优先；每条 Finding 必须 file:line。\n- 不要再 spawn 子 agent，也不要再套一层 codex exec（宿主机已做进程隔离）。\n- 开工时用 git rev-parse HEAD 与 origin/master（或 plan 内 IMPLEMENTATION_BASE）核对基线。\n\n只写入这一个文件（覆盖写）：\ndocs 相对路径由调用方指定的 out-dir 下的 `{lane_id}.md`\n\n文件结构：\n# {lane_id}\n## 结论\n## Findings（file:line）\n## 对 plan §3 / 主船范围的独立裁决\n## 未验证\n## 模型与 effort（写你实际用到的）\n"
+}
