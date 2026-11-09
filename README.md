@@ -48,12 +48,12 @@ Seeded from OSkhQuant slim snapshot at `5d41252`。S2（2026-09-09）之后本�
 
 2026-11-09 vendor 收尾：当前 infra pin 为 `af27dd08c6b5e3653fa686c6f60e541afd1a4941`（已合入 #88）。新共享接口要求显式仓库、标的及保护根；BT 旧 CLI 保留兼容默认值和宿主配置，处理实现与产制测试迁入 infra。边界 gate 禁止在薄入口恢复本地转换、比较或文件 IO。原 START/END、股/手、边界排除、Sparse A、余数审计与 delta5/R4 验收锁不变；未执行真实数据加工。
 
-后续清单区分通用能力迁出与研究职责候选。本仓维护自身向量化策略研究，不能把所有信号扫描、因子分析或研究输出都判作数据产制。目标 API、调用方和产物合同对齐后切换调用并删除源实现。
+后续清单区分通用能力迁出与研究职责候选。本仓维护自身向量化策略研究，不能把所有信号扫描、因子分析或研究输出都判作数据产制。目标 API、调用方和产物合同对齐后切换调用并删除源实现。2026-11-09 ops 通用运行时迁出后，已核对的 infra 重复产制入口均已收口；Qlib 旧训练/handler 样例仍是单列 MyQuant 归属候选，不能宣称全仓再无迁出项。
 
 | 当前代码 | 归属与后续处理 |
 | --- | --- |
 | `scripts/research/vendor_to_lake_adapter.py`、`vendor_bar_xcheck.py` | 已迁入 infra `adapters.vendor_bars`（#88）。BT 保留 CLI 薄入口、默认研究样本、显式仓库和配置湖根注入；解码、比较、转换、写盘与审计验证均调用 infra。staging 不获 apply 授权。 |
-| `scripts/run/multi_ai_common.py`、`run_multi_ai_review.py`、`run_codex_adversarial_lanes.py`，`scripts/ops/push_github_pr_via_api.py` | ops：通用评审/CLI 编排和 GitHub 发布工具。先更新 ops 的旧 S4 镜像合同并提供显式 repo/framework 参数；BT 的领域审查提示词可以保留，不再维护模型目录副本。 |
+| 通用评审/发布工具 | 接收实现见 [ops #187](https://github.com/baiyibing/grok-bot-ops/pull/187)：本仓删除 `multi_ai_common.py` 与运行/发布实现，仅保留三个薄入口及领域 JSON 配置。显式 `MYQUANT_OPS_ROOT` / `--ops-root`，无本地兜底；见 [消费与剩余边界复核](docs/engineering/ops-runtime-consumer-20261109.md)。 |
 | `qlib_cost/qlib_workflow.py`、`factor_expr.py` | MyQuant 承接候选：Qlib 模型训练编排与 handler。需核对研究调用方和维护归属；不能仅因使用 Qlib 就直接删除。BT 已停用的 PortAnaRecord 路径不启用；不限制 MyQuant 的完整 Qlib 研究。 |
 | `scripts/data/export_strategy9_pool.py`、`export_ta_pool.py` / `export_strategy10_pool.py`、`export_strategy11_pool.py`、`export_beidou_pool.py`、`export_topk_app_dropout_pool.py` | 当前保留：与本仓策略及 D→T / CSV / manifest 合同耦合的名单生成。若统一交由 MyQuant 生产，再连同规则、调用方和合同一起迁，不能只搬 CLI 留反向依赖。 |
 | `qlib_cost/factor_analyze.py` | 当前保留：纯因子分组分析，尚无通用数据产制或已迁重复实现的证据。`bigdata_ma_cross.py` 沿用 master 已删除状态。 |
