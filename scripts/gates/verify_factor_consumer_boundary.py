@@ -34,6 +34,8 @@ def violations(root: Path) -> list[str]:
     for name in ("factor_expr.py", "qlib_workflow.py", "筹码分布因子.ipynb"):
         if (root / "qlib_cost" / name).exists():
             errors.append(f"training source restored: qlib_cost/{name}")
+    if (root / ".github/workflows/turnover-resist-rust.yml").exists():
+        errors.append("Rust source workflow belongs to MyQuant")
     rust = root / "turnover-resist"
     errors.extend(f"Rust source restored: {p.relative_to(root)}" for p in rust.rglob("*")
                   if p.is_file() and (p.suffix == ".rs" or p.name in {"Cargo.toml", "Cargo.lock", "pyproject.toml"}))

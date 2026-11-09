@@ -44,7 +44,8 @@ MyQuant 的调用端口不 import BT。Rust 可执行文件经 `TURNOVER_RESIST_
 MyQuant 接收侧保留迁入数值单测，并验证 handler 解析、模型配置构造、模拟训练
 端口接线、缺输入失败、历史输出完整性和无 BT 反向依赖。38 个通用模块在空的
 显式数据目录中导入，禁止创建 reader。Rust 文件逐字节对照原 BT 提交；
-MyQuant CI 执行无数据的 `cargo check --locked --all-targets`。
+MyQuant CI 执行无数据的 `cargo check --locked --all-targets`，并接收原 BT 的
+Rust fmt、clippy（deny warnings / all features）和单测工作流；BT 删除旧 Rust CI。
 
 Notebook 的 57 个旧输出完全保留，清除执行计数并标记历史图表；本次未运行
 训练、PortAna、真实数据加工或名单发布。Notebook 的环境/缓存路径和 `scr.*`
