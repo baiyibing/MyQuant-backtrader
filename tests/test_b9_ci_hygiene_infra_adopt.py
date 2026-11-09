@@ -29,7 +29,7 @@ HOST_GATES = (
 # 2026-11-08 consumer policy updates path ownership, the corp-actions fence and
 # the private dependency install workflow; other campaign fingerprints stay fixed.
 HOST_FILE_HASHES = {
-    "scripts/gates/verify_data_path_ssot.py": "ddc711924a66a117ab0219c88edd64cbd34a5127d691666018a87d2f18788651",
+    "scripts/gates/verify_data_path_ssot.py": "558282c1f9ae9ea36d517a099796d7d1e8088b746f195cf74639b4143437c5d9",
     "scripts/gates/verify_no_hardcoded_machine_paths.py": "02573756c2eb96467a20dd5b6f7b1eb994c6bc9e7605972f823d4d086f0347be",
     "scripts/gates/verify_tr_bridge_import_ssot.py": "fff0bf11b93bb4d750bb91815db5b859744c130cb45fd672d3b777c56f5aeddb",
     "scripts/gates/verify_corp_actions_economics_fence.py": "989c891aa5cc15a395fe8f627745abe4847ed7004818abc8fc146e397ea235cf",
@@ -116,6 +116,7 @@ def test_missing_infra_is_actionable_without_network(target, offline, capsys):
     assert "requirements-infra.txt" in error
     assert adopt.INFRA_PIN in error
     assert "--infra-root" in error and "git archive" in error
+    assert "core.autocrlf=false" in error
     assert "wheel alone" in error
 
 

@@ -44,13 +44,15 @@ Seeded from OSkhQuant slim snapshot at `5d41252`。S2（2026-09-09）之后本�
 
 2026-11-08 复核依据：[infra 四仓分界](https://github.com/baiyibing/MyQuant-infra/blob/1a497682258503bf748e1e873aea9be9a818e92e/docs/architecture/boundary.md)、[湖 SSOT §7](https://github.com/baiyibing/MyQuant-infra/blob/1a497682258503bf748e1e873aea9be9a818e92e/docs/architecture/data-lake-ssot.md)及 [ops 移交记录](https://github.com/baiyibing/grok-bot-ops/blob/master/docs/ops/HANDOFF_to_MyQuant-infra_20261104.md)。公司行为采集、Hithink 组装、历史对拍及 economics 处理入口沿用已合入的迁出删除裁定；运行时经济权益边界继续受 gate 约束。SSE 日期数据缓存/查询已调用 infra，BT 保留时钟、覆盖窗和进程失败策略。infra pin 更新到 `1a497682`，以覆盖本轮共享 helpers、日历及契约公共接口。
 
-2026-11-09 OP04 收尾：巨潮经济日期 targets 导出与离线证据建议已有 infra 正式入口，本仓删除 `oskh_data/cninfo_economic_date_targets.py`、两个旧产制 CLI 及其产制单测。直接调用固定版本 infra，命令与迁移差异见 [消费指针](docs/operations/plan-cninfo-economic-date-evidence-2026-10-30.md)。当前 pin 为 `6bcf33f38ce88a92ddcdf0be4916cbb9cdd1def0`（已合入的 OP04 离线建议版本）；相对前 pin，湖/reader、参考数据、provenance、TR store、utils 和 CI 脚本均未变化。此变更不接入回测运行时、不转换旧证据包，也不授权采集、合湖或经济批准。
+2026-11-09 OP04 收尾：巨潮经济日期 targets 导出与离线证据建议已有 infra 正式入口，本仓删除 `oskh_data/cninfo_economic_date_targets.py`、两个旧产制 CLI 及其产制单测。直接调用固定版本 infra，命令与迁移差异见 [消费指针](docs/operations/plan-cninfo-economic-date-evidence-2026-10-30.md)。该次 pin 为 `6bcf33f38ce88a92ddcdf0be4916cbb9cdd1def0`（已合入的 OP04 离线建议版本）；相对前 pin，湖/reader、参考数据、provenance、TR store、utils 和 CI 脚本均未变化。此变更不接入回测运行时、不转换旧证据包，也不授权采集、合湖或经济批准。
+
+2026-11-09 vendor 收尾：当前 infra pin 为 `af27dd08c6b5e3653fa686c6f60e541afd1a4941`（已合入 #88）。新共享接口要求显式仓库、标的及保护根；BT 旧 CLI 保留兼容默认值和宿主配置，处理实现与产制测试迁入 infra。边界 gate 禁止在薄入口恢复本地转换、比较或文件 IO。原 START/END、股/手、边界排除、Sparse A、余数审计与 delta5/R4 验收锁不变；未执行真实数据加工。
 
 后续清单区分通用能力迁出与研究职责候选。本仓维护自身向量化策略研究，不能把所有信号扫描、因子分析或研究输出都判作数据产制。目标 API、调用方和产物合同对齐后切换调用并删除源实现。
 
 | 当前代码 | 归属与后续处理 |
 | --- | --- |
-| `scripts/research/vendor_to_lake_adapter.py`、`vendor_bar_xcheck.py` | infra：vendor 格式转换与产制对拍；BT 只保留明确的回测 ingress/价格与数量域验收。其 staging 不是生产湖，不因搬迁获得 apply 授权。 |
+| `scripts/research/vendor_to_lake_adapter.py`、`vendor_bar_xcheck.py` | 已迁入 infra `adapters.vendor_bars`（#88）。BT 保留 CLI 薄入口、默认研究样本、显式仓库和配置湖根注入；解码、比较、转换、写盘与审计验证均调用 infra。staging 不获 apply 授权。 |
 | `scripts/run/multi_ai_common.py`、`run_multi_ai_review.py`、`run_codex_adversarial_lanes.py`，`scripts/ops/push_github_pr_via_api.py` | ops：通用评审/CLI 编排和 GitHub 发布工具。先更新 ops 的旧 S4 镜像合同并提供显式 repo/framework 参数；BT 的领域审查提示词可以保留，不再维护模型目录副本。 |
 | `qlib_cost/qlib_workflow.py`、`factor_expr.py` | MyQuant 承接候选：Qlib 模型训练编排与 handler。需核对研究调用方和维护归属；不能仅因使用 Qlib 就直接删除。BT 已停用的 PortAnaRecord 路径不启用；不限制 MyQuant 的完整 Qlib 研究。 |
 | `scripts/data/export_strategy9_pool.py`、`export_ta_pool.py` / `export_strategy10_pool.py`、`export_strategy11_pool.py`、`export_beidou_pool.py`、`export_topk_app_dropout_pool.py` | 当前保留：与本仓策略及 D→T / CSV / manifest 合同耦合的名单生成。若统一交由 MyQuant 生产，再连同规则、调用方和合同一起迁，不能只搬 CLI 留反向依赖。 |

@@ -39,7 +39,14 @@ FACADES = (
     "common/integrations/duckdb_daily_bars_adapter.py",
     "common/infra/trading_calendar_pmc.py",
     "common/infra/qmt_utils_adv.py",
+    "scripts/research/vendor_bar_xcheck.py", "scripts/research/vendor_to_lake_adapter.py",
 )
+VENDOR_FACADES = {
+    "scripts/research/vendor_bar_xcheck.py": ("myquant_infra.adapters.vendor_bars.compare", {"main"}),
+    "scripts/research/vendor_to_lake_adapter.py": (
+        "myquant_infra.adapters.vendor_bars.staging", {"main", "parser", "safe_output", "_configured_lake_roots"},
+    ),
+}
 FORBIDDEN_IO = {"read_parquet", "to_parquet", "read_metadata", "connect", "execute", "executemany"}
 
 
@@ -68,9 +75,17 @@ def violations(root: Path) -> list[str]:
             errors.append(f"missing consumer facade: {name}")
             continue
         tree = ast.parse(path.read_text(encoding="utf-8"))
+        if name in VENDOR_FACADES:
+            module, allowed_functions = VENDOR_FACADES[name]
+            if not any(isinstance(n, ast.ImportFrom) and n.module == module for n in tree.body):
+                errors.append(f"missing infra vendor import: {name}")
+            if any(isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name not in allowed_functions
+                   or isinstance(n, ast.ClassDef) for n in ast.walk(tree)):
+                errors.append(f"local vendor processing implementation: {name}")
         for node in ast.walk(tree):
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
-                if node.func.attr in FORBIDDEN_IO:
+                forbidden = FORBIDDEN_IO | ({"read_csv", "DataFrame", "merge", "groupby"} if name in VENDOR_FACADES else set())
+                if node.func.attr in forbidden:
                     errors.append(f"local storage implementation: {name}:{node.lineno}")
     return errors
 

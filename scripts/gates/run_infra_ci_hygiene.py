@@ -16,7 +16,7 @@ from pathlib import Path
 from types import ModuleType
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-INFRA_PIN = "6bcf33f38ce88a92ddcdf0be4916cbb9cdd1def0"
+INFRA_PIN = "af27dd08c6b5e3653fa686c6f60e541afd1a4941"
 # scripts/ci is source-only. Verify every script before executing any of them;
 # a clone's HEAD alone cannot detect edits to its working-tree source.
 SCRIPT_HASHES = {
@@ -31,7 +31,8 @@ EXCLUDED_PARTS = frozenset({"live_trading", "trade_decision"})
 def load_scripts(infra_root: Path | None) -> dict[str, ModuleType]:
     hint = (
         f"Use requirements-infra.txt (pin {INFRA_PIN}); "
-        "materialize that pin with git archive from a local MyQuant-infra clone, "
+        "materialize that pin with git archive from a local MyQuant-infra clone "
+        "(git -c core.autocrlf=false archive preserves the pinned bytes), "
         "then pass --infra-root <archive-root>. A wheel alone lacks scripts/ci. "
         "See docs/engineering/b9-ci-hygiene-infra-adopt-20261106.md."
     )
