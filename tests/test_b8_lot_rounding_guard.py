@@ -199,9 +199,6 @@ ALLOWLIST = {
     ('backtest/research/minute_orders_backend/types.py', 'LimitOrderMatchInput.__post_init__',
      'self.remaining_qty % self.lot_size'):
         'Inventory-only L2 typed lot_size input validation.',
-    ('backtest/research/verify_chip_factor_consistency.py', 'main',
-     'done % 100 == 0'):
-        'Non-sizing progress counter: print every 100 processed names.',
 }
 
 

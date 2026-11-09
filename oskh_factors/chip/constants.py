@@ -1,9 +1,7 @@
-# -*- coding: utf-8 -*-
-"""TR window constants (RFC-003 §4.6)."""
+"""BT compatibility alias; implementation is owned by MyQuant."""
+import importlib
+import sys
+import oskh_factors._consumer  # Bind host policy, never a local numerical fallback.
 
-from __future__ import annotations
-
-from typing import Literal
-
-TRWindow = Literal[80, 1000]
-CANONICAL_TR_WINDOW: TRWindow = 1000
+_shared = importlib.import_module("myquant_factors.chip.constants")
+sys.modules[__name__] = _shared

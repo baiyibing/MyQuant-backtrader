@@ -1,5 +1,7 @@
 # Chip / TR slow-path inventory（H11 · Theme D soft）
 
+2026-11-09 归属更新：本文为历史盘点；因子数值核、Rust 源码和通用研究入口先迁 MyQuant，BT 只留薄消费适配。最新清单见 `docs/engineering/factor-owner-migration-20261109.md`。
+
 - 日期：2026-09-15
 - 状态：SSOT 清点（inventory only；无算法 / 卖点变更）；**H13 补边界节**
 - Plan：[../plan-h11-chip-slowpath-inventory-2026-09-15.md](../plan-h11-chip-slowpath-inventory-2026-09-15.md) · [../plan-h13-cyq-tr-boundary-2026-09-15.md](../plan-h13-cyq-tr-boundary-2026-09-15.md)

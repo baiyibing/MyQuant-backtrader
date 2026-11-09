@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Data-free SSOT: TR bridge entry still points at oskh_factors.bridge.turnover_resist.
+"""Data-free compatibility check; the numerical bridge is owned by MyQuant.
 
 H11 Theme D soft — no lake, no compute. Fails if:
   1. oskh_core.turnover_resist_bridge stops re-exporting from oskh_factors.bridge.turnover_resist
@@ -83,25 +83,21 @@ def check_shim() -> List[str]:
 
 
 def check_known_consumers() -> List[str]:
-    errors: List[str] = []
+    errors = []
     for path in _KNOWN_CONSUMERS:
-        rel = path.relative_to(_REPO)
+        expected = "myquant_factors.research.entries.tr." + path.stem
         if not path.is_file():
-            errors.append(f"missing known consumer: {rel}")
+            errors.append(f"missing known consumer: {path.relative_to(_REPO)}")
             continue
-        mods = _imports_compute_turnover_resist(path)
-        if not mods:
-            errors.append(
-                f"{rel}: expected ImportFrom compute_turnover_resist "
-                f"from one of {sorted(_ALLOWED_BRIDGE_MODULES)}"
-            )
-            continue
-        for mod in mods:
-            if mod not in _ALLOWED_BRIDGE_MODULES:
-                errors.append(
-                    f"{rel}: compute_turnover_resist imported from {mod!r}; "
-                    f"allowed={sorted(_ALLOWED_BRIDGE_MODULES)}"
-                )
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        forwards = [node for node in ast.walk(tree) if isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Attribute)
+                    and isinstance(node.func.value, ast.Name)
+                    and node.func.value.id == "importlib" and node.func.attr == "import_module"
+                    and node.args and isinstance(node.args[0], ast.Constant)
+                    and node.args[0].value == expected]
+        if not forwards or any(isinstance(n, (ast.FunctionDef, ast.ClassDef)) for n in ast.walk(tree)):
+            errors.append(f"{path.relative_to(_REPO)} must forward to {expected}")
     return errors
 
 

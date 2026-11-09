@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Factor computation domain (RFC-003 · zero oskh_data dependency)."""
+"""Compatibility imports for MyQuant-owned factors; no numerical implementation."""
 
 from oskh_factors.chip.bands import classify_tr_bb_signal, compute_tr_bb_columns
 from oskh_factors.chip.core import adapt_columns, compute_crossday_turnover_resistance
