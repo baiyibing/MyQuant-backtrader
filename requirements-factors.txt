@@ -1,2 +1,2 @@
 # MyQuant owns factor numerical implementations; immutable public source pin.
-myquant-research-factors @ git+https://github.com/baiyibing/MyQuant.git@c0e4679f97a759b6ebb2b617d412f930f598f583
+myquant-research-factors @ git+https://github.com/baiyibing/MyQuant.git@0f73ea88fed34c900aa864e70e377eb26b9d675e

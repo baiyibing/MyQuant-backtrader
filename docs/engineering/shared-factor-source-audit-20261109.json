@@ -1,0 +1,65 @@
+{
+  "source_repo": "OSkhQuant1.3",
+  "source_commit": "0aff26bd84020dfbbdb0f5490516c8945e7ee201",
+  "files": [
+    {
+      "source": "oskh_factors/chip/bands.py",
+      "shared": "myquant_factors/chip/bands.py",
+      "same_definitions_ignoring_imports": [
+        "tr_bollinger_bands",
+        "_prefix_bb_columns",
+        "compute_tr_bb_columns",
+        "classify_tr_bb_signal"
+      ],
+      "changed_or_absent": []
+    },
+    {
+      "source": "oskh_factors/chip/adj_factor.py",
+      "shared": "myquant_factors/chip/adj_factor.py",
+      "same_definitions_ignoring_imports": [
+        "StaleDataError",
+        "reset_adj_factor_cache_for_testing",
+        "_load_adj_factor_table",
+        "get_adj_factor",
+        "adj_minute_prices"
+      ],
+      "changed_or_absent": []
+    },
+    {
+      "source": "oskh_factors/chip/paths.py",
+      "shared": "myquant_factors/chip/paths.py",
+      "same_definitions_ignoring_imports": [
+        "resolve_stock_data_root",
+        "stock_data_path"
+      ],
+      "changed_or_absent": []
+    },
+    {
+      "source": "oskh_factors/bridge/turnover_resist.py",
+      "shared": "myquant_factors/bridge/turnover_resist.py",
+      "same_definitions_ignoring_imports": [
+        "_load_ffi_module",
+        "compute_turnover_resist",
+        "_ffi_compute",
+        "_default_data_dir",
+        "is_ffi_available",
+        "bridge_mode"
+      ],
+      "changed_or_absent": [
+        "_cli_compute",
+        "_find_exe"
+      ]
+    }
+  ],
+  "synthetic_parity": {
+    "bands_cases": 56,
+    "adjustment_math_cases": 16,
+    "exact_equality": true,
+    "market_data_or_trading_imports": false,
+    "scope": "bands calculations and injected-factor adjustment arithmetic only, not freshness/reader/decision runtime parity",
+    "seed": 20261109
+  },
+  "owner_repo": "MyQuant",
+  "owner_commit": "0f73ea88fed34c900aa864e70e377eb26b9d675e",
+  "comparison": "AST excluding import statements and source positions; not a full host runtime equivalence claim"
+}
