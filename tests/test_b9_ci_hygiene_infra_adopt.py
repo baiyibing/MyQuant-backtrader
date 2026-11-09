@@ -32,7 +32,7 @@ HOST_FILE_HASHES = {
     "scripts/gates/verify_data_path_ssot.py": "ddc711924a66a117ab0219c88edd64cbd34a5127d691666018a87d2f18788651",
     "scripts/gates/verify_no_hardcoded_machine_paths.py": "02573756c2eb96467a20dd5b6f7b1eb994c6bc9e7605972f823d4d086f0347be",
     "scripts/gates/verify_tr_bridge_import_ssot.py": "fff0bf11b93bb4d750bb91815db5b859744c130cb45fd672d3b777c56f5aeddb",
-    "scripts/gates/verify_corp_actions_economics_fence.py": "d42e160ac8fea2721e68856beebdad04ee1014a2e0a05b6fcdac3f720e9f6a4e",
+    "scripts/gates/verify_corp_actions_economics_fence.py": "989c891aa5cc15a395fe8f627745abe4847ed7004818abc8fc146e397ea235cf",
     "scripts/install-git-hooks.sh": "4520f8fbda560daad157f4ebbbe8821784e75fb6cf57081da57fbdf4e3453e92",
     "scripts/install-git-hooks.ps1": "920921880b9868a478828c722f3a5c6a8923553eb3dcb08a16e2b1507c1635f6",
     ".github/workflows/python-tests.yml": "68d237a62c4757305f2334dcafa19d1dd4e1a8671d55f0402d1be0c46307c3bb",

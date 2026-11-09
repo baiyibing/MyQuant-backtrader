@@ -48,6 +48,10 @@ def violations(source, relative):
             # 已迁 infra 的处理模块（2026-11-06）：本仓不再存在，禁入消费侧。
             if any(m.startswith(("scripts.data.hithink_incremental", "scripts.data.pull_corp_actions_incremental",
                                  "oskh_data.hithink_artifact", "backtest.research.corp_actions_econ_gate",
+                                 "oskh_data.cninfo_economic_date_targets",
+                                 "myquant_infra.disclosure.export_cninfo_economic_date_targets",
+                                 "myquant_infra.disclosure.cninfo_economic_date_evidence",
+                                 "myquant_infra.disclosure.cninfo_economic_date_recommendations",
                                  "myquant_infra.corp_actions.candidates", "myquant_infra.hithink.artifacts"))
                    for m in modules):
                 errors.append((node.lineno, "corp-actions processing moved to MyQuant-infra; "
