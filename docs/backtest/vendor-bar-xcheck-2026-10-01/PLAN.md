@@ -1,5 +1,7 @@
 # Wind ↔ QMT/lake 分钟 OHLCV 只读样本核对
 
+> 2026-11-09 实现归属更新：处理实现与产制单测已迁至 MyQuant-infra `myquant_infra.adapters.vendor_bars`（[infra #88](https://github.com/baiyibing/MyQuant-infra/pull/88)）。本仓旧 CLI 是薄入口，仅注入默认研究样本、调用方仓库与配置湖根；缺依赖明确失败，不保留本地处理实现。原验收锁和本文历史证据不变，迁移不授权真实数据加工、合湖、delta5 认证或 R4 验收。
+
 Human「按你建议来」授权本 scaffold；基线 76808e373df05d71a014724796bedffda3e42514（#292）。依据 [vendor alignment SSOT](../ssot/vendor-bar-alignment-ssot.md) §2–§4，以及 box 本地 host RECEIPT / market_PIN.json。此刀不是 ingest 验收。
 
 样本计划：002231.SZ / 300379.SZ / 600200.SH；窗口 20251023–20251028（交易日 23、24、27、28）。host 证据仅证明该批 Wind START shares、历史 siblings lots 及 overlay 未写湖；不能外推全 vendor。物理 host 湖核对留待 Human GO 后由 4090bot 执行，本刀仅合成验证。

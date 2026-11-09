@@ -1,5 +1,7 @@
 # 三票 vendor→lake adapter：Phase2 staging dry-run
 
+> 2026-11-09 实现归属更新：处理实现与产制单测已迁至 MyQuant-infra `myquant_infra.adapters.vendor_bars`（[infra #88](https://github.com/baiyibing/MyQuant-infra/pull/88)）。本仓旧 CLI 是薄入口，仅注入默认研究样本、调用方仓库与配置湖根；缺依赖明确失败，不保留本地处理实现。原验收锁和本文历史证据不变，迁移不授权真实数据加工、合湖、delta5 认证或 R4 验收。
+
 2026-10-01 Human GO via bt executor；基线 `8ff3433e6ac64eebd37de39f4ccb7079bb877d24`（#293）。本刀只交付 adapter CLI、合成测试与 staging 证据，**不写湖；勿合，等待 Human「合」**。
 
 本计划改编自 `/workspace/handoffs/vendor_three_symbol_lake_ingest_plan_20261001/PLAN.md`，依据 [vendor bar alignment SSOT](../ssot/vendor-bar-alignment-ssot.md) §2–§8。原方案待裁事项在本刀已锁定，不重新开题。

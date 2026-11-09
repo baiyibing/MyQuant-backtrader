@@ -1,7 +1,7 @@
 """Regression checks for the no-copies infra consumer boundary."""
 from pathlib import Path
 
-from scripts.gates.verify_infra_consumer_boundary import EXPORTS, FACADES, RETIRED, violations
+from scripts.gates.verify_infra_consumer_boundary import EXPORTS, FACADES, RETIRED, VENDOR_FACADES, violations
 
 
 def test_repository_consumes_migrated_implementations():
@@ -17,6 +17,8 @@ def minimal_consumer_tree(root):
         path = root / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text('"""Host policy only."""\n', encoding="utf-8")
+    for name, (module, _allowed) in VENDOR_FACADES.items():
+        (root / name).write_text(f"from {module} import main\n", encoding="utf-8")
 
 
 def test_gate_rejects_retired_producer_and_l2_code(tmp_path):
@@ -43,4 +45,20 @@ def test_gate_rejects_storage_inside_host_facade(tmp_path):
     minimal_consumer_tree(tmp_path)
     path = tmp_path / "oskh_data/reader.py"
     path.write_text("def read(pd, path):\n    return pd.read_parquet(path)\n", encoding="utf-8")
+    assert any("local storage implementation" in error for error in violations(tmp_path))
+
+
+def test_gate_rejects_vendor_processing_restored_inside_cli(tmp_path):
+    minimal_consumer_tree(tmp_path)
+    path = tmp_path / "scripts/research/vendor_to_lake_adapter.py"
+    with path.open("a", encoding="utf-8") as stream:
+        stream.write("def convert(rows):\n    return rows.copy()\n")
+    assert any("local vendor processing implementation" in error for error in violations(tmp_path))
+
+
+def test_gate_rejects_vendor_io_hidden_in_an_allowed_wrapper(tmp_path):
+    minimal_consumer_tree(tmp_path)
+    path = tmp_path / "scripts/research/vendor_bar_xcheck.py"
+    with path.open("a", encoding="utf-8") as stream:
+        stream.write("def main(pd, path):\n    return pd.read_csv(path)\n")
     assert any("local storage implementation" in error for error in violations(tmp_path))

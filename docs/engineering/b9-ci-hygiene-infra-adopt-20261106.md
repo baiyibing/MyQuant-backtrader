@@ -1,5 +1,11 @@
 # B9 optional infra CI hygiene (2026-11-06)
 
+> 2026-11-09 invocation update: use the current pin in `requirements-infra.txt`
+> (`af27dd08c6b5e3653fa686c6f60e541afd1a4941`) and the matching entrypoint.
+> The three CI script blobs and their hashes are unchanged. On Windows,
+> `git archive` also applies `core.autocrlf`; pass `-c core.autocrlf=false`
+> to preserve the verified bytes. The original delivery record below is historical.
+
 BT adds a manual, read-only entrypoint for the pinned infra encoding, secrets
 and relative Markdown link helpers. This is the research-face twin of
 [OSkh A17 #1316](https://github.com/baiyibing/OSkhQuant1.3/pull/1316).
@@ -23,8 +29,8 @@ from an existing local MyQuant-infra clone and extract it outside BT; no network
 or installation is needed. For example, with explicit local paths:
 
 ```bash
-git -C "$INFRA_LOCAL_CLONE" archive --format=tar \
-  --output="$INFRA_PIN_TAR" 3c377e9718e811112993579b6d91a603395db699
+git -c core.autocrlf=false -C "$INFRA_LOCAL_CLONE" archive --format=tar \
+  --output="$INFRA_PIN_TAR" af27dd08c6b5e3653fa686c6f60e541afd1a4941
 mkdir -p "$B9_INFRA_ARCHIVE"
 tar -xf "$INFRA_PIN_TAR" -C "$B9_INFRA_ARCHIVE"
 "$OSKH_MERGE_PYTHON" scripts/gates/run_infra_ci_hygiene.py \

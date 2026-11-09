@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "bt-contract"
 version = "0.1.0"
 requires-python = ">=3.12"
-dependencies = ["myquant-infra @ git+https://github.com/baiyibing/MyQuant-infra.git@6bcf33f38ce88a92ddcdf0be4916cbb9cdd1def0"]
+dependencies = ["myquant-infra @ git+https://github.com/baiyibing/MyQuant-infra.git@af27dd08c6b5e3653fa686c6f60e541afd1a4941"]
 
 [tool.setuptools.packages.find]
 include = ["bt_contract*"]
