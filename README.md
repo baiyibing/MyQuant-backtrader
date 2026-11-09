@@ -124,7 +124,7 @@ $env:OSKH_MERGE_PYTHON = (Resolve-Path backtest_output/.venv-regression/Scripts/
 
 pytest 默认只发现 `tests/`，临时输出默认放系统临时目录，并尊重显式 `--basetemp`。需避开仓库、输入与湖目录，否则应触发路径保护。Windows 缺少符号链接权限（WinError 1314）时只跳过依赖该能力的用例；Linux CI 设 `BT_REQUIRE_SYMLINK_TESTS=1`，必须实际执行这些保护测试。字节合同说明文本以 LF checkout；测试仅规范化临时路径及平台分隔符，不改变 golden。
 
-CI 安装步骤已接入 `MYQUANT_INFRA_READ_TOKEN`，该 secret 尚未配置。账号持有人须在本仓 **Settings → Secrets and variables → Actions** 添加同名 secret：fine-grained PAT 的资源所有者为 `baiyibing`，仅选 `MyQuant-infra`，Repository permissions 仅需 **Contents: Read-only**（Metadata 为 GitHub 必需项）。不要将令牌放进源码、URL 或聊天。普通 `GITHUB_TOKEN` 的权限只限当前仓库，不能靠扩大本仓 `contents` 权限读取另一个私有仓库；见 [GitHub 权限说明](https://docs.github.com/en/actions/concepts/security/github_token)。缺 secret 会明确失败；不通过 fork PR 提供私有凭据，也不使用 `pull_request_target` 执行未受信代码。
+CI 安装步骤通过 `MYQUANT_INFRA_READ_TOKEN` 获取私有依赖。账号持有人在本仓 **Settings → Secrets and variables → Actions** 维护同名 secret：fine-grained PAT 的资源所有者为 `baiyibing`，仅选 `MyQuant-infra`，Repository permissions 仅需 **Contents: Read-only**（Metadata 为 GitHub 必需项）。不要将令牌放进源码、URL 或聊天。普通 `GITHUB_TOKEN` 的权限只限当前仓库，不能靠扩大本仓 `contents` 权限读取另一个私有仓库；见 [GitHub 权限说明](https://docs.github.com/en/actions/concepts/security/github_token)。缺 secret 会明确失败；不通过 fork PR 提供私有凭据，也不使用 `pull_request_target` 执行未受信代码。
 
 ## Git
 

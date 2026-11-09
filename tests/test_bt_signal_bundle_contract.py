@@ -2,6 +2,7 @@
 
 import ast
 import hashlib
+import json
 from pathlib import Path
 
 import pytest
@@ -133,11 +134,17 @@ def test_validator_does_not_import_research_or_fee_policy():
                 assert ast.unparse(node) != "sys.path"
 
 
-def test_schema_file_sha256_pinned():
+@pytest.mark.parametrize("line_ending", [b"\n", b"\r\n"], ids=["lf", "crlf"])
+def test_schema_canonical_sha256_pinned(line_ending):
     from importlib.resources import files
     path = files("myquant_infra.contracts.signal_bundle").joinpath("schema/signal-bundle-1.schema.json")
-    assert hashlib.sha256(path.read_bytes()).hexdigest() == (
-        "5464b038ac827969647f71d68041a732581e74859597f03d4b8b128cb1240f38"
+    # Pin the same JSON contract as test_b8_signal_bundle_infra_switch;
+    # package checkout line endings are not part of that contract.
+    raw = path.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", line_ending)
+    canonical_schema = json.dumps(json.loads(raw), sort_keys=True,
+                                  separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    assert hashlib.sha256(canonical_schema).hexdigest() == (
+        "3f1b188bd91e84818cd81cd59cc4c90e7acb7c3a0a78a306e08a9d9f41f60388"
     )
 
 
