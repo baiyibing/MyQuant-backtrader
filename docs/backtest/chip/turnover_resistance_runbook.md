@@ -1,5 +1,10 @@
 ## 5. 回测框架
 
+> 2026-11-09 当前归属：公共数值核与 Rust 源码已迁 MyQuant，BT 旧模块仅转发；
+> infra 提供数据/Store IO，BT 保留回测策略与专用名单生成。本文旧实现目录、
+> 框架及构建片段为历史说明；实际入口见[当前索引](README.md)。
+
+
 ### 5.1 选股规则 `RULES`
 
 **源码**：`backtest/chip_factor_analysis.py:318-322`

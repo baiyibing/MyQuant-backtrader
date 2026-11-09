@@ -53,9 +53,16 @@ Standalone research-face fork (see [README.md](README.md)). Since migration S2 (
 **迁出即删除（Human 2026-11-08）**：已迁入 MyQuant-infra 的实现不再留在本仓；需要时调用 `myquant_infra` 公共接口。禁止保留源实现副本、vendor 副本、归档代码或缺依赖时启用的本地实现。只允许保留必要的 import 转发和宿主薄适配（显式路径/配置、调用方门禁、研究规则、reader 生命周期及数值 producer 注入）。缺依赖明确失败，不静默回退。依赖版本见 `requirements-infra.txt`；边界 gate：`scripts/gates/verify_infra_consumer_boundary.py`。此裁定替代旧文档中“迁移后源实现继续保留”的约定。
 
 
-Keep: `backtest/` (incl. `research/` + `research/chip/`), `oskh_data/` (infra consumer facades + host policy), `qlib_cost/`, `turnover-resist/` (Rust SSOT for TR/cyqk computation and audit; Store IO in infra), `oskh_factors/` (research numerical code), `strategies/` (`tr_filter`), research `scripts/` (analysis/backtest/data/diagnostics/gates/run; no L2 processing), slim `common/infra` (host configuration/policy and infra compatibility exports), `trade_decision/presets`, `oskh_core` (TR re-export + `a_share_symbol_normalize`).
+Keep: `backtest/` (incl. `research/` + `research/chip/`), `oskh_data/` (infra consumer facades + host policy), `qlib_cost/` and `oskh_factors/` (MyQuant import facades only), `turnover-resist/README.md` (source-location pointer only; Rust source in MyQuant), `strategies/` (`tr_filter`), research `scripts/` (analysis/backtest/data/diagnostics/gates/run; no L2 processing), slim `common/infra` (host configuration/policy and infra compatibility exports), `trade_decision/presets`, `oskh_core` (TR re-export + `a_share_symbol_normalize`).
 
-**CYQ / TR boundary (H13):** full-market daily `winner_ratio` feeder implementation lives in **MyQuant-infra** (`myquant_infra.derived_data.cyq`); MyQuant owns signal/feature wiring; do **not** reimplement it here. This repo’s Rust path is TR/Store/audit — see `docs/backtest/plan-h13-cyq-tr-boundary-2026-09-15.md` and chip inventory §E.
+**因子归属（Human 2026-11-09）：** 因子研究与 Qlib 训练、模型/研究信号输出归 MyQuant；数据采集、清洗、聚合和正式因子数据供应归 infra；BT 负责回测策略研究、实验输入组织及成交、费用、持仓和收益回测，既消费外部信号也可生成回测专用名单。原筹码/TR/价格带/周线背离数值核（含 Rust）及通用研究工具先迁 MyQuant `myquant_factors`，对这批已迁实现，本仓只留必要的 import 转发和宿主薄适配；MyQuant 不得反向依赖 BT 计算公共因子。依赖见 `requirements-factors.txt`，门禁 `scripts/gates/verify_factor_consumer_boundary.py`。本条替代旧 D8/H13 中因子数值核留 BT 的归属。
+
+**名单与共享计算续裁定（Human 2026-11-09）：** BT 负责回测策略研究与实验输入组织，既消费外部信号，也可生成回测专用候选名单。策略 9/10/11/13 与 App 名单 ∩ Qlib TopK 的条件组合、参数、D→T 映射及 CSV/manifest 导出保留 BT，不再列为必须迁出项；MyQuant 负责 Qlib 模型预测及其研究输出。名单格式或“写 CSV”不决定代码归属。本条细化此前“信号/名单导出”的归属范围，不要求所有名单从 MyQuant 来。
+
+同一口径的公共因子数值核只保留一份权威实现，多个仓通过同一公共 API/包复用，禁止各仓复制或另写等价实现。当前已迁出的筹码/TR 核调用 MyQuant `myquant_factors`；若后续归并到 infra，整项迁移并删除原实现，只留必要转发。研究变体须显式参数化或标明方法/版本；回测策略的条件组合不构成另建公共数值核的理由。
+同一共享组件内部可以维护参考实现与 Rust/Numba 加速后端，但须共用输入/输出与数值口径合同并进行对拍；这不允许各消费仓再保存一套副本。
+
+**CYQ / TR boundary (H13):** full-market daily `winner_ratio` feeder implementation lives in **MyQuant-infra** (`myquant_infra.derived_data.cyq`); MyQuant owns signal/feature wiring; do **not** reimplement it here. Rust numerical source is now in MyQuant; Store IO remains in infra. Historical context — see `docs/backtest/plan-h13-cyq-tr-boundary-2026-09-15.md` and chip inventory §E.
 
 **L2 边界：** ETL、聚合、查询模板及维护实现均归 MyQuant-infra，本仓已删除 `l2_analytics/` 与 `scripts/run/run_l2_*`。需要时显式调用 infra API/CLI；不恢复本地加工副本，不把 CSV 策略书接到 L2。
 
@@ -79,4 +86,4 @@ UTF-8 without BOM for all text files. After writing `.py` / `.md`, verify NUL co
 
 ## Rust
 
-`cd turnover-resist && cargo build` (do not `cargo build --manifest-path` from repo root).
+Rust source/build now belongs to MyQuant: `cd myquant_factors/rust/turnover-resist` then `cargo build --locked --release` there. BT consumes an explicit `TURNOVER_RESIST_EXE` / installed extension; do not restore a local crate.

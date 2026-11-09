@@ -1,5 +1,7 @@
 # H13：CYQ / TR 产品边界（MyQuant numba feeder vs 本仓 Rust）
 
+2026-11-09 归属更新：因子数值核与通用因子研究先迁到 MyQuant，BT 只留消费适配；原文中的 BT Rust/因子实现归属为历史记录。数据处理和正式因子数据供应归 infra；MyQuant 不反向依赖 BT。见[当前迁移记录](../engineering/factor-owner-migration-20261109.md)。
+
 - 日期：2026-09-15
 - 状态：已完成（Grok 核无有效 🔴；已开 PR）
 - 父队列：[plan-hygiene-backlog-2026-09-15.md](plan-hygiene-backlog-2026-09-15.md)（软扩展；H1–H12 已收口）

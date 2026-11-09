@@ -23,3 +23,6 @@ pytest-timeout>=2.3.1
 
 # Shared IO, reference data and contracts (requires repository access).
 -r requirements-infra.txt
+
+# Factor numerical implementation is owned by public MyQuant; no training extras.
+-r requirements-factors.txt

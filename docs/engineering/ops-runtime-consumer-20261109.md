@@ -51,19 +51,22 @@ It found no additional demonstrated copy of an already migrated infra
 producer in those surfaces. This is not a claim that every production data
 source or every line of the repository has been exercised.
 
-- Strategy-specific pool exports, factor analyses, TR numerical producers,
-  fee/execution rules and economics gates stay here. Host clock/configuration,
+- Strategy-specific pool exports, fee/execution rules and economics gates stay
+  here in this ops-only change. Factor analysis and TR numerical ownership was
+  subsequently superseded by the 2026-11-09 Human factor move to MyQuant
+  ([current receipt](factor-owner-migration-20261109.md)). Host clock/configuration,
   logger/trace/security and optional Redis client lifecycle also remain host
   policy under the explicit infra boundary exclusions.
 - `minute_orders_write_lake_staging` is a research contract/report planner;
   inspection confirms that it does not process or write production lake bars.
   Its name alone is not evidence of duplicate infra ETL.
-- **A separate MyQuant ownership candidate remains:** `qlib_cost/qlib_workflow.py`
-  and `factor_expr.py` implement an older Qlib training/handler example, called
-  by the historical chip notebook (`scr.*` paths). They are not runtime
-  consumers of the vectorized CLI. They are not infra or ops utilities and
-  have not been migrated by this change. Do not describe the migration audit
-  as having no remaining candidates, or enable their PortAna path here.
+- The separate Qlib training/handler and historical Notebook candidate has now
+  moved with its numerical dependencies to [MyQuant #139](https://github.com/baiyibing/MyQuant/pull/139).
+  BT deletes the old training/Notebook files and forwards numerical imports.
+  This does not enable PortAna in BT. Human's subsequent 2026-11-09 clarification
+  keeps strategy-specific backtest pool exports in BT as an owned responsibility,
+  not a pending migration. Shared factor numerical kernels have one implementation
+  accessed through public APIs; see the current receipt above.
 
 No real agent, Git Data publication, data collection, lake write or backtest
 experiment is performed by the migration validation. Host consumer tests use

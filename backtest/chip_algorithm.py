@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""Cerebro-facing re-export of ``oskh_factors.chip`` (SSOT).
+"""Compatibility re-export of the MyQuant-owned factor package.
 
-Do not add algorithm here. Change ``oskh_factors.chip`` / ``qlib_cost`` instead.
+Do not add algorithms here. Change MyQuant ``myquant_factors`` instead.
 """
 from __future__ import annotations
 

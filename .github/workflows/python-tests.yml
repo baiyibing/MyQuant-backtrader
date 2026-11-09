@@ -46,6 +46,7 @@ jobs:
           python scripts/gates/verify_tr_bridge_import_ssot.py
           python scripts/gates/verify_infra_consumer_boundary.py
           python scripts/gates/verify_ops_consumer_boundary.py
+          python scripts/gates/verify_factor_consumer_boundary.py
           python scripts/gates/verify_corp_actions_economics_fence.py
           python scripts/gates/verify_no_host_duckdb_connect_outside_allowlist.py
 

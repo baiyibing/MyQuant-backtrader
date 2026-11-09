@@ -28,14 +28,16 @@ HOST_GATES = (
 # without git history. Intentional future host changes must review fingerprints.
 # 2026-11-08 consumer policy updates path ownership, the corp-actions fence and
 # the private dependency install workflow; other campaign fingerprints stay fixed.
+# 2026-11-09 Human factor ownership updates the TR forwarding gate and adds the
+# factor consumer fence to CI; these two reviewed file hashes change, no trading golden.
 HOST_FILE_HASHES = {
     "scripts/gates/verify_data_path_ssot.py": "558282c1f9ae9ea36d517a099796d7d1e8088b746f195cf74639b4143437c5d9",
     "scripts/gates/verify_no_hardcoded_machine_paths.py": "02573756c2eb96467a20dd5b6f7b1eb994c6bc9e7605972f823d4d086f0347be",
-    "scripts/gates/verify_tr_bridge_import_ssot.py": "fff0bf11b93bb4d750bb91815db5b859744c130cb45fd672d3b777c56f5aeddb",
+    "scripts/gates/verify_tr_bridge_import_ssot.py": "fef0e64514f2a1a6be741fca36644bac74e6869d790fe8831b78ad3dba4eaa21",
     "scripts/gates/verify_corp_actions_economics_fence.py": "989c891aa5cc15a395fe8f627745abe4847ed7004818abc8fc146e397ea235cf",
     "scripts/install-git-hooks.sh": "4520f8fbda560daad157f4ebbbe8821784e75fb6cf57081da57fbdf4e3453e92",
     "scripts/install-git-hooks.ps1": "920921880b9868a478828c722f3a5c6a8923553eb3dcb08a16e2b1507c1635f6",
-    ".github/workflows/python-tests.yml": "d9a580d7b65fb56e6d45ac3ea4aa89b1be055cda4005c3b8f913958629cc263e",
+    ".github/workflows/python-tests.yml": "30204ffa2698cda5ebe0f94c7c33e06fe580b59041d4ceff432756611e66444e",
 }
 
 
