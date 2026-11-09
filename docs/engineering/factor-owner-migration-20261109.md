@@ -2,8 +2,9 @@
 
 用户裁定：因子实现不留 BT，先归 MyQuant；MyQuant 不反向依赖 BT 计算因子。
 四仓分工为：MyQuant 管因子定义、计算实验、效果验证、Qlib 训练和信号/名单导出；
-infra 管采集、清洗、聚合及对消费者供应的因子数据产制；BT 管信号/名单消费、
-成交模拟、费用、持仓和收益回测；1.3 管实盘执行和真栈验收。因子是否接入
+infra 管采集、清洗、聚合及对消费者供应的因子数据产制；BT 管回测策略研究、
+实验输入组织、信号/名单消费、成交模拟、费用、持仓和收益回测，也可生成回测专用名单；
+1.3 管实盘执行和真栈验收。因子是否接入
 infra 按数据处理/交付职责判断，不以“成熟”或消费者数量作为自动迁移条件。
 
 本条替代旧 D8/H13 中“TR/Rust 数值核留 BT”的归属。MyQuant 既有完整 Qlib
@@ -39,7 +40,7 @@ infra 按数据处理/交付职责判断，不以“成熟”或消费者数量�
 MyQuant 的调用端口不 import BT。Rust 可执行文件经 `TURNOVER_RESIST_EXE`
 显式提供；构建在 MyQuant crate 目录内进行。
 
-## 验证与未切换事项
+## 验证与保留职责
 
 MyQuant 接收侧保留迁入数值单测，并验证 handler 解析、模型配置构造、模拟训练
 端口接线、缺输入失败、历史输出完整性和无 BT 反向依赖。38 个通用模块在空的
@@ -56,9 +57,18 @@ BT 继续验证分钟 Numba/Python 一致性、TR Store 接线与缓存、复权
 临时目录或缺少 Rust 编译器笼统合并为“环境失败”。最终结果以 PR 的完整 CI
 和本地验证回执为准。
 
-本批不宣称 BT 已完全只消费外部名单：与策略书 D→T、CSV 和 manifest 合同耦合的
+2026-11-09 Human 续裁定：以下回测专用名单生成继续保留 BT，不再作为必须迁出的剩余项：
+与策略书 D→T、CSV 和 manifest 合同耦合的
 `export_strategy9_pool`、`export_ta_pool`、`export_strategy11_pool`、
-`export_beidou_pool`、`export_topk_app_dropout_pool` 仍在 BT。它们需要连同定义、
-调用方和合同另行收口到 MyQuant；不能只搬 CLI 再反向 import BT。
-`strategies/tr_filter.py` 当前为已产截面的宿主筛选政策，数值分类器调用 MyQuant。
-正式数据供应接入 infra、生产任务切流及策略名单生成的归属切换均未在本批启用。
+`export_beidou_pool`、`export_topk_app_dropout_pool`（含 `export_strategy10_pool` 兼容入口）。
+它们负责回测策略条件组合、参数、交易日映射及实验输入导出；名单格式或“写 CSV”
+不决定代码归属。App 名单与 Qlib TopK 的回测组合可在 BT 完成，原始 Qlib 预测仍由
+MyQuant 提供。BT 既可消费外部信号，也可组织自身回测输入，无需全部名单都来自 MyQuant。
+
+同一口径的公共因子数值核只保留一份权威实现，多个仓统一通过 API/包调用，禁止复制、
+vendor 或另写等价实现。当前已迁出的筹码/TR 核继续调用 MyQuant 公共包；若后续归并
+到 infra，须整项迁移并删除旧实现，只保留必要转发。研究变体通过显式参数或方法/版本
+区分。`strategies/tr_filter.py` 保留已产截面的宿主筛选政策，数值分类器调用公共核。
+同一共享组件内部的参考实现与 Rust/Numba 加速后端可共存，须共用合同并做数值对拍；
+各消费仓通过同一组件调用，不各自保存或改写后端。
+本次澄清不回迁公共算法、不变更策略规则，不启用正式数据供应或生产任务切流。

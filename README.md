@@ -1,6 +1,6 @@
 # MyQuant-backtrader
 
-研究脸：消费信号 / 日名单 CSV，负责**向量化**成交模拟、费用、持仓及收益回测。因子定义、计算实验、效果验证和 Qlib 训练/信号导出归 [MyQuant](https://github.com/baiyibing/MyQuant)，本仓不再作为因子算法 SSOT。行情只读 path-SSOT parquet；数据采集与湖加工在 [MyQuant-infra](https://github.com/baiyibing/MyQuant-infra)。成交验收（LEBS / MockQMT）在 [OSkhQuant1.3](https://github.com/baiyibing/OSkhQuant1.3)。
+研究脸：负责回测策略研究、实验输入组织，以及**向量化**成交模拟、费用、持仓和收益回测。既消费外部信号 / 日名单 CSV，也生成回测专用候选名单。因子研究、Qlib 训练/模型信号输出及当前已归并的筹码/TR 公共数值核见 [MyQuant](https://github.com/baiyibing/MyQuant)；同一口径公共计算只保留一份实现，BT 调用公共接口。行情只读 path-SSOT parquet；数据采集与湖加工在 [MyQuant-infra](https://github.com/baiyibing/MyQuant-infra)。成交验收（LEBS / MockQMT）在 [OSkhQuant1.3](https://github.com/baiyibing/OSkhQuant1.3)。
 
 研究与验收引擎怎么分工：[`docs/backtest/engine-positioning-ssot.md`](docs/backtest/engine-positioning-ssot.md)。成交核（档位 / 全卖因跌停 / Decimal 涨跌停价 / E-R6 除权日参考价修正）：[`docs/backtest/engine-ashare-correctness.md`](docs/backtest/engine-ashare-correctness.md)。名单 CSV 契约：[`docs/backtest/pool-csv-contract.md`](docs/backtest/pool-csv-contract.md)。MyQuant 保留完整 Qlib 研究回测（2026-11-08 用户澄清）；Cerebro / Rolling 已退场（2026-09-16）。本仓没有 `backtest/lebs/`。
 
@@ -48,17 +48,17 @@ Seeded from OSkhQuant slim snapshot at `5d41252`。S2（2026-09-09）之后本�
 
 2026-11-09 vendor 收尾：当前 infra pin 为 `af27dd08c6b5e3653fa686c6f60e541afd1a4941`（已合入 #88）。新共享接口要求显式仓库、标的及保护根；BT 旧 CLI 保留兼容默认值和宿主配置，处理实现与产制测试迁入 infra。边界 gate 禁止在薄入口恢复本地转换、比较或文件 IO。原 START/END、股/手、边界排除、Sparse A、余数审计与 delta5/R4 验收锁不变；未执行真实数据加工。
 
-后续清单区分通用能力迁出与研究职责候选。本仓维护自身向量化策略研究，不能把所有信号扫描、因子分析或研究输出都判作数据产制。目标 API、调用方和产物合同对齐后切换调用并删除源实现。2026-11-09 ops 通用运行时迁出后，已核对的 infra 重复产制入口均已收口；Qlib 旧训练/handler、Notebook 与因子计算依赖现已迁入 MyQuant #139；与策略书耦合的名单生成仍单列，不能宣称全仓再无迁出项。
+本仓维护自身向量化策略研究，代码归属按用途判断，名单格式或“写 CSV”不构成迁出依据。2026-11-09 ops 通用运行时与已核对的 infra 重复产制入口已收口；Qlib 旧训练/handler、Notebook 与因子计算依赖迁入 MyQuant #139。Human 续裁定：以下回测专用名单生成属于 BT 的保留职责，不再作为必须迁出的剩余项。
 
 | 当前代码 | 归属与后续处理 |
 | --- | --- |
 | `scripts/research/vendor_to_lake_adapter.py`、`vendor_bar_xcheck.py` | 已迁入 infra `adapters.vendor_bars`（#88）。BT 保留 CLI 薄入口、默认研究样本、显式仓库和配置湖根注入；解码、比较、转换、写盘与审计验证均调用 infra。staging 不获 apply 授权。 |
 | 通用评审/发布工具 | 接收实现见 [ops #187](https://github.com/baiyibing/grok-bot-ops/pull/187)：本仓删除 `multi_ai_common.py` 与运行/发布实现，仅保留三个薄入口及领域 JSON 配置。显式 `MYQUANT_OPS_ROOT` / `--ops-root`，无本地兜底；见 [消费与剩余边界复核](docs/engineering/ops-runtime-consumer-20261109.md)。 |
 | `qlib_cost/qlib_workflow.py`、`factor_expr.py` | 已迁入 MyQuant #139，Notebook 与全部计算依赖一并接收，BT 删除旧训练文件及 Notebook。MyQuant 不依赖 BT 源码。 |
-| `scripts/data/export_strategy9_pool.py`、`export_ta_pool.py` / `export_strategy10_pool.py`、`export_strategy11_pool.py`、`export_beidou_pool.py`、`export_topk_app_dropout_pool.py` | 当前保留：与本仓策略及 D→T / CSV / manifest 合同耦合的名单生成。若统一交由 MyQuant 生产，再连同规则、调用方和合同一起迁，不能只搬 CLI 留反向依赖。 |
+| `scripts/data/export_strategy9_pool.py`、`export_ta_pool.py` / `export_strategy10_pool.py`、`export_strategy11_pool.py`、`export_beidou_pool.py`、`export_topk_app_dropout_pool.py` | Human 确认保留 BT：回测策略的筛选条件组合、参数、D→T 映射、实验名单与 CSV/manifest 导出。App ∩ Qlib 组合可由 BT 完成，原始 Qlib 预测仍由 MyQuant 提供；公共指标计算复用共享接口。不是迁出欠账。 |
 | `qlib_cost/factor_analyze.py` | 已迁入 MyQuant `myquant_factors.factor_analyze`，旧路径只转发。`bigdata_ma_cross.py` 沿用 master 已删除状态。 |
 
-上述清单按职责和实际读写入口核对，不是全仓逐行审计。原 D8=A 保留在 BT 的通用因子数值核和研究入口，已被 2026-11-09 迁出裁定替代；迁移范围与薄适配见[接收记录](docs/engineering/factor-owner-migration-20261109.md)。与策略书规则耦合的名单生成仍需另行切换合同，不能据本批迁移宣称已完全实现“BT 只消费名单”。成交、费用、账本和经济权益门禁继续保留。`data/`、`exports/` 与历史证据不作为源码迁移时的删除对象。
+上述清单按职责和实际读写入口核对，不是全仓逐行审计。原 D8=A 中通用因子数值核和通用研究入口的归属，已由 2026-11-09 迁出裁定替代；范围与薄适配见[接收记录](docs/engineering/factor-owner-migration-20261109.md)。回测专用名单生成、成交、费用、账本和经济权益门禁继续归 BT，无需追求“BT 只能消费外部名单”。同口径公共数值核只保留一份实现；当前调用 MyQuant 公共包，后续若归并到 infra 则整项迁移并删除旧实现。`data/`、`exports/` 与历史证据不作为源码迁移时的删除对象。
 
 ## Environment
 

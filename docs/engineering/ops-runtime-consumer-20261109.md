@@ -63,8 +63,10 @@ source or every line of the repository has been exercised.
 - The separate Qlib training/handler and historical Notebook candidate has now
   moved with its numerical dependencies to [MyQuant #139](https://github.com/baiyibing/MyQuant/pull/139).
   BT deletes the old training/Notebook files and forwards numerical imports.
-  This does not enable PortAna in BT or complete the strategy-specific pool
-  export cutover; see the current receipt above.
+  This does not enable PortAna in BT. Human's subsequent 2026-11-09 clarification
+  keeps strategy-specific backtest pool exports in BT as an owned responsibility,
+  not a pending migration. Shared factor numerical kernels have one implementation
+  accessed through public APIs; see the current receipt above.
 
 No real agent, Git Data publication, data collection, lake write or backtest
 experiment is performed by the migration validation. Host consumer tests use

@@ -2,6 +2,10 @@
 
 2026-11-09 归属更新：因子数值核与通用因子研究先迁到 MyQuant，BT 只留消费适配；原文中的 BT Rust/因子实现归属为历史记录。数据处理和正式因子数据供应归 infra；MyQuant 不反向依赖 BT。见[当前迁移记录](../engineering/factor-owner-migration-20261109.md)。
 
+同日 Human 续裁定：BT 保留回测策略研究与实验输入组织，既消费外部信号，也可生成
+回测专用名单；策略 9/10/11/13 与 App ∩ Qlib 的名单生成不作为必须迁出项。
+同口径公共因子数值核只保留一份，各仓通过公共接口复用，不复制计算实现。
+
 - 日期：2026-09-16；2026-11-08 按用户澄清恢复完整 Qlib 研究定位
 - 状态：v3（完整 Qlib 研究定位澄清；BT Cerebro 继续退场）。定位文档，不是排期。路线图见 MyQuant `docs/plan-three-repo-roadmap-2026-09-12.md`。本仓入口命令：同目录 `README.md`（U1，2026-09-12）。研究问题地图：同目录 `research-backtest-entry.md`。
 - 涉及：MyQuant / MyQuant-backtrader（本仓）/ OSkhQuant1.3
