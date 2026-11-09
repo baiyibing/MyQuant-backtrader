@@ -19,11 +19,6 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # counts also reject stale entries and additional connections in an allowed file.
 ALLOWLIST: dict[str, tuple[int, str]] = {
     # Tick-lake L2 DuckDB writers/readers moved to MyQuant-infra (2026-11-05).
-    "scripts/tr/backfill_turnover_resistance_bands.py": (1, "TR/Store research date enumeration; no lake artifact management"),
-    "scripts/data/full_market_canonical_resist.py": (1, "TR research capital-map query"),
-    "scripts/research/full_market_canonical_resist.py": (1, "TR research capital-map query"),
-    "scripts/gates/verify_single_stock_turnover_resist.py": (1, "TR audit capital-map query"),
-    "scripts/research/verify_single_stock_turnover_resist.py": (1, "TR audit capital-map query"),
     "tests/test_oskh_data_integration.py": (1, "Synthetic legacy daily DB fixture"),
 }
 
