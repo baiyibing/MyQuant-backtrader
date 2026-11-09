@@ -7,4 +7,4 @@
 # docs/engineering/b8-signal-bundle-infra-switch-20261105.md
 # docs/engineering/b5-industry-sw-l1-infra-switch-20261105.md
 # docs/engineering/b9-ci-hygiene-infra-adopt-20261106.md
-myquant-infra[lake-readers,tr-store,hithink,calendar-pmc] @ git+https://github.com/baiyibing/MyQuant-infra.git@1a497682258503bf748e1e873aea9be9a818e92e
+myquant-infra[lake-readers,tr-store,hithink,calendar-pmc] @ git+https://github.com/baiyibing/MyQuant-infra.git@6bcf33f38ce88a92ddcdf0be4916cbb9cdd1def0

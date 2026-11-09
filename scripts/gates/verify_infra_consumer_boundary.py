@@ -16,6 +16,9 @@ RETIRED = (
     "scripts/data/pull_corp_actions_incremental.py", "scripts/data/hithink_incremental.py",
     "scripts/gates/verify_corp_actions_hithink_parity.py",
     "oskh_data/hithink_artifact.py", "backtest/research/corp_actions_econ_gate.py",
+    "oskh_data/cninfo_economic_date_targets.py",
+    "scripts/data/export_cninfo_economic_date_targets.py",
+    "scripts/data/validate_cninfo_economic_date_evidence.py",
 )
 EXPORTS = {
     "oskh_data/period_schema.py": "myquant_infra.lake.metadata",

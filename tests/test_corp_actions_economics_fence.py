@@ -18,6 +18,8 @@ def test_fence_inventory_and_maintenance_exemptions():
     assert fence.violations("from scripts.data.hithink_incremental import imported", path)
     assert fence.violations("from myquant_infra.corp_actions.candidates import driver", path)
     assert fence.violations("import myquant_infra.hithink.artifacts", path)
+    assert fence.violations("from oskh_data import cninfo_economic_date_targets", path)
+    assert fence.violations("import myquant_infra.disclosure.cninfo_economic_date_recommendations", path)
     assert fence.violations(
         "import backtest.research.corp_actions_econ_gate as eg\neg.gate_rows_for_economics(rows)",
         path,

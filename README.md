@@ -44,6 +44,8 @@ Seeded from OSkhQuant slim snapshot at `5d41252`。S2（2026-09-09）之后本�
 
 2026-11-08 复核依据：[infra 四仓分界](https://github.com/baiyibing/MyQuant-infra/blob/1a497682258503bf748e1e873aea9be9a818e92e/docs/architecture/boundary.md)、[湖 SSOT §7](https://github.com/baiyibing/MyQuant-infra/blob/1a497682258503bf748e1e873aea9be9a818e92e/docs/architecture/data-lake-ssot.md)及 [ops 移交记录](https://github.com/baiyibing/grok-bot-ops/blob/master/docs/ops/HANDOFF_to_MyQuant-infra_20261104.md)。公司行为采集、Hithink 组装、历史对拍及 economics 处理入口沿用已合入的迁出删除裁定；运行时经济权益边界继续受 gate 约束。SSE 日期数据缓存/查询已调用 infra，BT 保留时钟、覆盖窗和进程失败策略。infra pin 更新到 `1a497682`，以覆盖本轮共享 helpers、日历及契约公共接口。
 
+2026-11-09 OP04 收尾：巨潮经济日期 targets 导出与离线证据建议已有 infra 正式入口，本仓删除 `oskh_data/cninfo_economic_date_targets.py`、两个旧产制 CLI 及其产制单测。直接调用固定版本 infra，命令与迁移差异见 [消费指针](docs/operations/plan-cninfo-economic-date-evidence-2026-10-30.md)。当前 pin 为 `6bcf33f38ce88a92ddcdf0be4916cbb9cdd1def0`（已合入的 OP04 离线建议版本）；相对前 pin，湖/reader、参考数据、provenance、TR store、utils 和 CI 脚本均未变化。此变更不接入回测运行时、不转换旧证据包，也不授权采集、合湖或经济批准。
+
 后续清单区分通用能力迁出与研究职责候选。本仓维护自身向量化策略研究，不能把所有信号扫描、因子分析或研究输出都判作数据产制。目标 API、调用方和产物合同对齐后切换调用并删除源实现。
 
 | 当前代码 | 归属与后续处理 |
