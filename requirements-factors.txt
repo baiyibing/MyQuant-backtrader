@@ -1,2 +1,3 @@
 # MyQuant owns factor numerical implementations; immutable public source pin.
-myquant-research-factors @ git+https://github.com/baiyibing/MyQuant.git@0f73ea88fed34c900aa864e70e377eb26b9d675e
+# CLI scratch lifecycle fix: MyQuant #143; numerical formulas/Rust are unchanged.
+myquant-research-factors @ git+https://github.com/baiyibing/MyQuant.git@910a7c028ac74930cba44f95c18fe97030779e02
