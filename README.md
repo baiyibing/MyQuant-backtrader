@@ -60,6 +60,8 @@ Seeded from OSkhQuant slim snapshot at `5d41252`。S2（2026-09-09）之后本�
 
 上述清单按职责和实际读写入口核对，不是全仓逐行审计。原 D8=A 中通用因子数值核和通用研究入口的归属，已由 2026-11-09 迁出裁定替代；范围与薄适配见[接收记录](docs/engineering/factor-owner-migration-20261109.md)。回测专用名单生成、成交、费用、账本和经济权益门禁继续归 BT，无需追求“BT 只能消费外部名单”。同口径公共数值核只保留一份实现；当前调用 MyQuant 公共包，后续若归并到 infra 则整项迁移并删除旧实现。`data/`、`exports/` 与历史证据不作为源码迁移时的删除对象。
 
+本轮已完成、未完成及原因，连同 PR 状态和验收范围，见 [四仓分界与 pandas 升级工作总结（2026-11-10）](docs/engineering/work-summary-quant-boundary-pandas306-20261110.md)。
+
 ## Environment
 
 ```text
