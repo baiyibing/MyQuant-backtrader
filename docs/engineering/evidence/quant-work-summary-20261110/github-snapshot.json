@@ -1,0 +1,563 @@
+{
+  "observed_at_utc": "2026-11-10T06:46:24.617953+00:00",
+  "observed_at_beijing": "2026-11-10T14:46:24.617953+08:00",
+  "scope": "PR metadata and current source-head check results, not native SDK or production acceptance",
+  "prs": [
+    {
+      "repo": "MyQuant",
+      "number": 142,
+      "url": "https://github.com/baiyibing/MyQuant/pull/142",
+      "title": "build: pin pandas 3.0.6 across MyQuant and CI",
+      "state": "open",
+      "draft": false,
+      "merged_at": null,
+      "head": "528a6533fd96bd8d19fe8a5f4f17bcf701452af2",
+      "base": "7543bcaaa3d1c00ab6cbb307da70d93d701754b5",
+      "merge_commit": null,
+      "checks": [
+        {
+          "name": "pytest",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/MyQuant/actions/runs/42624510785/job/129184710715"
+        },
+        {
+          "name": "joint-return",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/MyQuant/actions/runs/42624510785/job/129184710696"
+        },
+        {
+          "name": "factor-rust",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/MyQuant/actions/runs/42624510785/job/129184710609"
+        }
+      ]
+    },
+    {
+      "repo": "MyQuant",
+      "number": 143,
+      "url": "https://github.com/baiyibing/MyQuant/pull/143",
+      "title": "fix(factors): keep TR CLI scratch output outside the input lake",
+      "state": "closed",
+      "draft": false,
+      "merged_at": "2026-11-10T05:54:18Z",
+      "head": "910a7c028ac74930cba44f95c18fe97030779e02",
+      "base": "7543bcaaa3d1c00ab6cbb307da70d93d701754b5",
+      "merge_commit": "f54f683624a8539c852307b85ebcb96da0975391",
+      "checks": [
+        {
+          "name": "factor-rust",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/MyQuant/actions/runs/42762700253/job/129651915637"
+        },
+        {
+          "name": "joint-return",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/MyQuant/actions/runs/42762700253/job/129651915633"
+        },
+        {
+          "name": "pytest",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/MyQuant/actions/runs/42762700253/job/129651915266"
+        }
+      ]
+    },
+    {
+      "repo": "MyQuant-infra",
+      "number": 100,
+      "url": "https://github.com/baiyibing/MyQuant-infra/pull/100",
+      "title": "build: unify infra pandas extras on 3.0.6",
+      "state": "open",
+      "draft": false,
+      "merged_at": null,
+      "head": "94bde81f4474d7e36ee6820950c00f9ff355b728",
+      "base": "27405c23b70e0dbdb47262e609b17183364336a1",
+      "merge_commit": null,
+      "checks": [
+        {
+          "name": "test",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/MyQuant-infra/actions/runs/42652321235/job/129281651743"
+        },
+        {
+          "name": "test",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/MyQuant-infra/actions/runs/42652308039/job/129281605257"
+        }
+      ]
+    },
+    {
+      "repo": "MyQuant-backtrader",
+      "number": 590,
+      "url": "https://github.com/baiyibing/MyQuant-backtrader/pull/590",
+      "title": "fix: consume shared TR CLI scratch lifecycle correction",
+      "state": "closed",
+      "draft": false,
+      "merged_at": "2026-11-10T06:09:32Z",
+      "head": "c1278ac2c96dd3b0aae69fd0186bf587725ad0fe",
+      "base": "1b11b265db1afdeee8fc4bdd7ed4651a1d64a065",
+      "merge_commit": "6fc19a8e5d67fd492409bc4fbc2f012276f26a1d",
+      "checks": [
+        {
+          "name": "pytest-and-gates",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/MyQuant-backtrader/actions/runs/42764056523/job/129656261384"
+        }
+      ]
+    },
+    {
+      "repo": "OSkhQuant1.3",
+      "number": 1336,
+      "url": "https://github.com/baiyibing/OSkhQuant1.3/pull/1336",
+      "title": "build: unify pandas 3.0.6 and preserve epoch-ms contracts",
+      "state": "closed",
+      "draft": false,
+      "merged_at": "2026-11-10T05:40:44Z",
+      "head": "c5d11f81ec7053e5c5ed2604ea654bb8e6246caa",
+      "base": "35320ff41a67fb3a0fc4efa33bc2690ddaaa1c6b",
+      "merge_commit": "87fd35a9059fb5e94bce43556ac284e8096e7507",
+      "checks": [
+        {
+          "name": "Docs & PR hygiene",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/42758620161/job/129638774918"
+        },
+        {
+          "name": "Gitleaks",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/42758620161/job/129638774871"
+        },
+        {
+          "name": "Pyright (Linux, core packages)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/42758620161/job/129638774863"
+        },
+        {
+          "name": "QMT connect guard (bootstrap-only)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/42758620161/job/129638774836"
+        },
+        {
+          "name": "Import smoke (no xtquant)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/42758620161/job/129638774808"
+        },
+        {
+          "name": "Settlement SELECT baseline",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/42758620161/job/129638774806"
+        },
+        {
+          "name": "Python syntax (AST)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/42758620161/job/129638774782"
+        },
+        {
+          "name": "turnover_resist Python tests",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/42758620161/job/129638774755"
+        },
+        {
+          "name": "Common package contract gates (linux)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/42758620161/job/129638774612"
+        },
+        {
+          "name": "Trading core coverage (informational)",
+          "status": "completed",
+          "conclusion": "skipped",
+          "html_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/42758619924/job/129638772713"
+        },
+        {
+          "name": "Chapter9 Infra Gate / gate",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/42758620010/job/129638771673"
+        },
+        {
+          "name": "Common Infra Go/No-Go Gate / gate",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/42758620010/job/129638771624"
+        },
+        {
+          "name": "Stream order + fallback + capital contract pytest / gate",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/42758620010/job/129638771584"
+        },
+        {
+          "name": "Frontend gates (build + typecheck + npm audit)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/42758619924/job/129638771481"
+        },
+        {
+          "name": "Cash ledger module coverage floor (windows)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/42758619924/job/129638771450"
+        },
+        {
+          "name": "Executor mixin_order module coverage floor (windows)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/42758619924/job/129638771406"
+        },
+        {
+          "name": "position_manager module coverage floor (windows)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/42758619924/job/129638771380"
+        },
+        {
+          "name": "Pyright (pyrightconfig.json)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/42758620010/job/129638771351"
+        },
+        {
+          "name": "Turtle Strategy Gate (preflight + pytest) / gate",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/42758620016/job/129638771319"
+        },
+        {
+          "name": "Common package contract gates (windows)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/42758619924/job/129638771180"
+        },
+        {
+          "name": "Timestamp contracts (ubuntu-latest)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/42758620011/job/129638771171"
+        },
+        {
+          "name": "Timestamp contracts (windows-latest)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/42758620011/job/129638770885"
+        }
+      ]
+    },
+    {
+      "repo": "OSkhQuant1.3",
+      "number": 1353,
+      "url": "https://github.com/baiyibing/OSkhQuant1.3/pull/1353",
+      "title": "fix(kb): preserve GBK CLI output without UnicodeEncodeError",
+      "state": "closed",
+      "draft": false,
+      "merged_at": "2026-11-10T05:40:40Z",
+      "head": "9dc2310623ea14303c2b88140811680b0643c743",
+      "base": "35320ff41a67fb3a0fc4efa33bc2690ddaaa1c6b",
+      "merge_commit": "ecc124ee69751d041191025f6dc5f74fb0ee3f06",
+      "checks": [
+        {
+          "name": "Gitleaks",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/42759251882/job/129640813814"
+        },
+        {
+          "name": "Import smoke (no xtquant)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/42759251882/job/129640813778"
+        },
+        {
+          "name": "Docs & PR hygiene",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/42759251882/job/129640813744"
+        },
+        {
+          "name": "turnover_resist Python tests",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/42759251882/job/129640813742"
+        },
+        {
+          "name": "Common package contract gates (linux)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/42759251882/job/129640813702"
+        },
+        {
+          "name": "Python syntax (AST)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/42759251882/job/129640813696"
+        },
+        {
+          "name": "QMT connect guard (bootstrap-only)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/42759251882/job/129640813629"
+        },
+        {
+          "name": "Settlement SELECT baseline",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/42759251882/job/129640813588"
+        },
+        {
+          "name": "Pyright (Linux, core packages)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/42759251882/job/129640813477"
+        },
+        {
+          "name": "Trading core coverage (informational)",
+          "status": "completed",
+          "conclusion": "skipped",
+          "html_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/42759251608/job/129640811094"
+        },
+        {
+          "name": "Common Infra Go/No-Go Gate / gate",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/42759251674/job/129640810124"
+        },
+        {
+          "name": "Chapter9 Infra Gate / gate",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/42759251674/job/129640810065"
+        },
+        {
+          "name": "Stream order + fallback + capital contract pytest / gate",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/42759251674/job/129640810021"
+        },
+        {
+          "name": "Pyright (pyrightconfig.json)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/42759251674/job/129640809850"
+        },
+        {
+          "name": "Common package contract gates (windows)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/42759251608/job/129640809826"
+        },
+        {
+          "name": "position_manager module coverage floor (windows)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/42759251608/job/129640809821"
+        },
+        {
+          "name": "Executor mixin_order module coverage floor (windows)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/42759251608/job/129640809782"
+        },
+        {
+          "name": "Frontend gates (build + typecheck + npm audit)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/42759251608/job/129640809752"
+        },
+        {
+          "name": "Cash ledger module coverage floor (windows)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/42759251608/job/129640809517"
+        }
+      ]
+    },
+    {
+      "repo": "OSkhQuant1.3",
+      "number": 1355,
+      "url": "https://github.com/baiyibing/OSkhQuant1.3/pull/1355",
+      "title": "docs: specify remaining shared factor consumer migration contracts",
+      "state": "open",
+      "draft": true,
+      "merged_at": null,
+      "head": "d55a9036e19f9cbe4443fa15a31ed8dea9587d4f",
+      "base": "87fd35a9059fb5e94bce43556ac284e8096e7507",
+      "merge_commit": null,
+      "checks": [
+        {
+          "name": "Import smoke (no xtquant)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/42765100674/job/129659619740"
+        },
+        {
+          "name": "turnover_resist Python tests",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/42765100674/job/129659619580"
+        },
+        {
+          "name": "Gitleaks",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/42765100674/job/129659619551"
+        },
+        {
+          "name": "Pyright (Linux, core packages)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/42765100674/job/129659619538"
+        },
+        {
+          "name": "Docs & PR hygiene",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/42765100674/job/129659619529"
+        },
+        {
+          "name": "QMT connect guard (bootstrap-only)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/42765100674/job/129659619463"
+        },
+        {
+          "name": "Python syntax (AST)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/42765100674/job/129659619459"
+        },
+        {
+          "name": "Settlement SELECT baseline",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/42765100674/job/129659619437"
+        },
+        {
+          "name": "Common package contract gates (linux)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/OSkhQuant1.3/actions/runs/42765100674/job/129659619190"
+        }
+      ]
+    },
+    {
+      "repo": "grok-bot-ops",
+      "number": 200,
+      "url": "https://github.com/baiyibing/grok-bot-ops/pull/200",
+      "title": "fix(runtime): handle long prompts and Windows review process cleanup",
+      "state": "open",
+      "draft": false,
+      "merged_at": null,
+      "head": "2335329fc5e732c62ee78504aaf5bedc5b4b7720",
+      "base": "145e68414196564f2dd69675757aae8a7a15af95",
+      "merge_commit": null,
+      "checks": [
+        {
+          "name": "probe",
+          "status": "completed",
+          "conclusion": "skipped",
+          "html_url": "https://github.com/baiyibing/grok-bot-ops/actions/runs/42634450406/job/129218799344"
+        },
+        {
+          "name": "check",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/baiyibing/grok-bot-ops/actions/runs/42634450356/job/129218796573"
+        },
+        {
+          "name": "probe",
+          "status": "completed",
+          "conclusion": "skipped",
+          "html_url": "https://github.com/baiyibing/grok-bot-ops/actions/runs/42634434851/job/129218747051"
+        }
+      ]
+    },
+    {
+      "repo": "MyQuant-backtrader",
+      "number": 589,
+      "url": "https://github.com/baiyibing/MyQuant-backtrader/pull/589",
+      "title": "Move factor implementations to MyQuant and keep BT consumer facades",
+      "state": "closed",
+      "draft": false,
+      "merged_at": "2026-11-09T11:44:57Z",
+      "head": "799bffbcac083ec71e75ce05b9480ef5e6fbfe09",
+      "base": "aded6cdf5ad3ee078ea6b2d01f564e1267b583c5",
+      "merge_commit": "1b11b265db1afdeee8fc4bdd7ed4651a1d64a065"
+    },
+    {
+      "repo": "MyQuant-backtrader",
+      "number": 587,
+      "url": "https://github.com/baiyibing/MyQuant-backtrader/pull/587",
+      "title": "chore(infra): remove local vendor bar processing implementations",
+      "state": "closed",
+      "draft": false,
+      "merged_at": "2026-11-09T05:20:11Z",
+      "head": "0bff5fa4df1cce56a43ef9f62937ba320fe39a82",
+      "base": "febab21953a33619f6a4d3cefca6b187c8c6e6a5",
+      "merge_commit": "d9fb890403f199b9c349a13625a25ca1b0929753"
+    },
+    {
+      "repo": "MyQuant",
+      "number": 139,
+      "url": "https://github.com/baiyibing/MyQuant/pull/139",
+      "title": "Move BT factor implementations and chip Qlib research into MyQuant",
+      "state": "closed",
+      "draft": false,
+      "merged_at": "2026-11-09T11:42:46Z",
+      "head": "0f73ea88fed34c900aa864e70e377eb26b9d675e",
+      "base": "0c3897ddc481a84ef80a5da56f6278b215dda5b8",
+      "merge_commit": "43f89d2f0e6959071ec5add06505653760a9d672"
+    },
+    {
+      "repo": "MyQuant-infra",
+      "number": 92,
+      "url": "https://github.com/baiyibing/MyQuant-infra/pull/92",
+      "title": "Clarify factor research in MyQuant and data supply in infra",
+      "state": "closed",
+      "draft": false,
+      "merged_at": "2026-11-09T07:46:03Z",
+      "head": "564f1420290efc4b284de55bd81b6b7d66e103d2",
+      "base": "f03bcb1e53b4d0e27c486997d6c47d3a562668ea",
+      "merge_commit": "303f8da4253523a2674b83bc65dec4f6f56ae48a"
+    },
+    {
+      "repo": "MyQuant-infra",
+      "number": 93,
+      "url": "https://github.com/baiyibing/MyQuant-infra/pull/93",
+      "title": "Keep BT backtest pools and require one shared factor implementation",
+      "state": "closed",
+      "draft": false,
+      "merged_at": "2026-11-09T11:45:15Z",
+      "head": "9fd34a68fba6eaa60fc67519966d9eac084eb492",
+      "base": "303f8da4253523a2674b83bc65dec4f6f56ae48a",
+      "merge_commit": "c1c6707de21ecf40c95f21a357d05eb0f444e889"
+    },
+    {
+      "repo": "grok-bot-ops",
+      "number": 187,
+      "url": "https://github.com/baiyibing/grok-bot-ops/pull/187",
+      "title": "feat(ops): receive BT review and publication runtime",
+      "state": "closed",
+      "draft": false,
+      "merged_at": "2026-11-09T05:47:38Z",
+      "head": "03b96bcf6d6c8bcf2ae1e7d111283fad5cced3fb",
+      "base": "05491ea3866b92d004dcf1b6d97c59573a70a763",
+      "merge_commit": "dd88773d76dcb6703db541cd877dcbfb6088e100"
+    }
+  ]
+}
