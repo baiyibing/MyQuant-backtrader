@@ -1,5 +1,7 @@
 # Ops runtime consumer and boundary review (2026-11-09)
 
+> 2026-11-13续修：原迁移收据保留；review profile已升级领域v2，不再保留通用framework/角色全文。现行author/轮次/退出码及capability合同见[消费工作流](multi-ai-review-workflow.md)，依赖ops #244。
+
 Human requires the generic review/publication code in this repo to move to
 [grok-bot-ops #187](https://github.com/baiyibing/grok-bot-ops/pull/187).
 Receiver merged revision: `dd88773d76dcb6703db541cd877dcbfb6088e100`
