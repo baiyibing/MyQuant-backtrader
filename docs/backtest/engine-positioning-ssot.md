@@ -1,5 +1,7 @@
 # SSOT：研究回测与成交验收怎么分工
 
+2026-11-13 评审领域对齐：1.3 的 LEBS 已于 2026-11-09 整体退役（[OSkh #1335](https://github.com/baiyibing/OSkhQuant1.3/pull/1335)）。本文涉及 LEBS 的表格、命令和流程保留作历史背景，不再声明当前可用；1.3 当前职责为生产决策测试、MockQMT 柜台测试和交易真栈验收，入口以[该仓当前 SSOT](https://github.com/baiyibing/OSkhQuant1.3/blob/master/docs/backtest/backtest-architecture-ssot.md)及实际源码为准。
+
 2026-11-09 归属更新：因子数值核与通用因子研究先迁到 MyQuant，BT 只留消费适配；原文中的 BT Rust/因子实现归属为历史记录。数据处理和正式因子数据供应归 infra；MyQuant 不反向依赖 BT。见[当前迁移记录](../engineering/factor-owner-migration-20261109.md)。
 
 同日 Human 续裁定：BT 保留回测策略研究与实验输入组织，既消费外部信号，也可生成

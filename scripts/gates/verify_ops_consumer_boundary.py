@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import ast
+import json
 from pathlib import Path
 
 RETIRED = "scripts/run/multi_ai_common.py"
@@ -12,6 +13,21 @@ ENTRIES = (
 )
 
 
+def _thin_shape(entry: str) -> str:
+    profiles = {ENTRIES[0]: "config/ops/bt-review.json", ENTRIES[1]: "config/ops/bt-adversarial.json"}
+    profile = f", profile={profiles[entry]!r}" if entry in profiles else ""
+    return ast.dump(ast.parse(f'''
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from _ops_bootstrap import run_ops
+def main(argv=None):
+    return run_ops({entry!r}, argv{profile})
+if __name__ == "__main__":
+    raise SystemExit(main())
+'''), include_attributes=False)
+
+
 def violations(root: Path) -> list[str]:
     errors = [f"retired ops implementation restored: {RETIRED}"] if (root / RETIRED).exists() else []
     for name in ENTRIES:
@@ -20,24 +36,17 @@ def violations(root: Path) -> list[str]:
             errors.append(f"missing ops consumer entry: {name}")
             continue
         tree = ast.parse(path.read_text(encoding="utf-8"))
-        if not any(isinstance(n, ast.ImportFrom) and n.module == "_ops_bootstrap"
-                   and any(a.name == "run_ops" for a in n.names) for n in tree.body):
-            errors.append(f"missing shared ops invocation: {name}")
-        for node in ast.walk(tree):
-            if isinstance(node, (ast.Assign, ast.AnnAssign)):
-                errors.append(f"local ops configuration/implementation: {name}:{node.lineno}")
-            if isinstance(node, (ast.ClassDef, ast.AsyncFunctionDef, ast.Lambda)):
-                errors.append(f"local ops implementation: {name}:{node.lineno}")
-            if isinstance(node, ast.FunctionDef):
-                body = node.body
-                if (node.name != "main" or len(body) != 1 or not isinstance(body[0], ast.Return)
-                        or not isinstance(body[0].value, ast.Call)
-                        or not isinstance(body[0].value.func, ast.Name) or body[0].value.func.id != "run_ops"):
-                    errors.append(f"local ops implementation: {name}:{node.lineno}")
-            if isinstance(node, (ast.Import, ast.ImportFrom)):
-                modules = [node.module] if isinstance(node, ast.ImportFrom) else [n.name for n in node.names]
-                if any(module not in {"sys", "pathlib", "_ops_bootstrap"} for module in modules):
-                    errors.append(f"local ops dependency: {name}:{node.lineno}")
+        if tree.body and isinstance(tree.body[0], ast.Expr) and isinstance(tree.body[0].value, ast.Constant) and isinstance(tree.body[0].value.value, str):
+            tree.body = tree.body[1:]
+        if ast.dump(tree, include_attributes=False) != _thin_shape(name):
+            errors.append(f"local ops implementation/configuration: {name}")
+    profile = root / "config/ops/bt-review.json"
+    try:
+        data = json.loads(profile.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        data = None
+    if not isinstance(data, dict) or data.get("schema_version") != 2 or set(data) - {"schema_version", "domain_context", "ssot_paths", "role_suffix"}:
+        errors.append("missing v2 domain profile or duplicated shared prompt/runtime policy")
     return errors
 
 

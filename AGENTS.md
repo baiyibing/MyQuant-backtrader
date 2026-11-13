@@ -2,8 +2,8 @@
 
 Standalone research-face fork (see [README.md](README.md)). Since migration S2 (2026-09-09) this repo owns the research face; OSkhQuant1.3 stays the trading stack and keeps only the `oskh_factors` chip/bridge micropackage.
 
-**成交引擎定位**：本仓 = 向量化。1.3 = LEBS + MockQMT 真栈。MyQuant 可使用全部 Qlib 组件开展研究回测；Cerebro / Rolling 已退场（2026-09-16）。见 [`docs/backtest/engine-positioning-ssot.md`](docs/backtest/engine-positioning-ssot.md)。
-**Grok Bot RACI / CLI / 模型钉**：唯一正文在 [`baiyibing/grok-bot-ops`](https://github.com/baiyibing/grok-bot-ops/blob/master/docs/raci/grok-bot-raci-workflow-ssot.md) `docs/raci/grok-bot-raci-workflow-ssot.md`（本仓 `docs/operations/grok-bot-raci-workflow-ssot.md` 为薄指针）。 Owner：**bt**（ops §1）。
+**成交引擎定位**：本仓 = 向量化。1.3 = 生产决策测试 + MockQMT / 交易真栈验收（LEBS 已于 2026-11-09 整体退役，当前能力以 1.3 自身 SSOT 为准）。MyQuant 可使用全部 Qlib 组件开展研究回测；Cerebro / Rolling 已退场（2026-09-16）。见 [`docs/backtest/engine-positioning-ssot.md`](docs/backtest/engine-positioning-ssot.md)。
+**Grok Bot RACI / CLI / 模型钉**：唯一正文在 [`baiyibing/grok-bot-ops`](https://github.com/baiyibing/grok-bot-ops/blob/master/docs/raci/grok-bot-raci-workflow-ssot.md) `docs/raci/grok-bot-raci-workflow-ssot.md`（本仓 `docs/operations/grok-bot-raci-workflow-ssot.md` 为薄指针）。 Owner：**bt**（ops §1）。review只留domain profile与薄入口，正式调用声明author/逻辑轮，API-v1的v2能力必须可用，见 [`multi-ai-review-workflow.md`](docs/engineering/multi-ai-review-workflow.md)。
 成交核（档位 / 全卖因跌停 / Decimal 涨跌停价）见 [`docs/backtest/engine-ashare-correctness.md`](docs/backtest/engine-ashare-correctness.md)。分钟成交假设、默认锁与混比边界见 [`docs/backtest/minute-fill-policy-ssot.md`](docs/backtest/minute-fill-policy-ssot.md)。研究问题地图（三份名单 × 收益最大化）见 [`docs/backtest/research-backtest-entry.md`](docs/backtest/research-backtest-entry.md)。入口命令见 [`docs/backtest/README.md`](docs/backtest/README.md)。
 
 交易规则站位原则（行业惯例 · 回测≠交易系统）：[`docs/backtest/ssot/backtest-rule-principles-ssot.md`](docs/backtest/ssot/backtest-rule-principles-ssot.md)。
@@ -12,7 +12,7 @@ Standalone research-face fork (see [README.md](README.md)). Since migration S2 (
 
 后续逐片 GO 状态：L2 S1–S5 已交付；2026-09-29 Human「A GO」新增 [minute_orders 专用 synthetic CLI](docs/backtest/note-minute-orders-cli-2026-09-29.md)（显式 JSON/parent/run-id/evidence，L1 仅一条 CLI 注册）。P0 原文为历史停点；无湖接入、无默认 family，`no_ssot_compare_authorization` 不变。
 
-研究与执行分工：MyQuant 负责完整 Qlib 研究回测及信号导出，本仓负责自身向量化研究，1.3 负责执行验收；LEBS 只在 1.3，且 LEBS ≠ MockQMT 真栈。本仓无 `python -m backtest.lebs` 入口。旧 CSV CLI 保留真身，HELP_LOCK 不变（P5=A）。
+研究与执行分工：MyQuant 负责完整 Qlib 研究回测及信号导出，本仓负责自身向量化研究，1.3 负责执行验收；LEBS 已退役；跨仓旧文档中的能力描述须回查该仓当前 SSOT。本仓无 `python -m backtest.lebs` 入口。旧 CSV CLI 保留真身，HELP_LOCK 不变（P5=A）。
 
 ## Research entries
 
@@ -33,8 +33,8 @@ Standalone research-face fork (see [README.md](README.md)). Since migration S2 (
 - 统一卖出规则网格 · 模式 A：`scripts/research/run_unified_exit_modea.py`（库 `backtest/research/unified_exit_modea.py`；产出 `backtest_output/unified_exit_modea/`；提案 `docs/backtest/stock-backtest-unified-exit-proposal-2026-09-17.md`）
 - 统一卖出规则网格 · 模式 B：`scripts/research/run_unified_exit_modeb.py`（默认 P1=A 窄网格；Q38=A 分钟 oracle；产出独立目录 `backtest_output/unified_exit_modeb/`）。
 - 盘后人工分析包（固定文件名，不重跑）：`scripts/research/export_csv_human_analysis.py --run-dir <backtest_output/…>`；提示词 [`docs/backtest/prompt-csv-human-analysis.md`](docs/backtest/prompt-csv-human-analysis.md)。不是 MyQuant PortAna 那套。
-- 名单：`backtest/research/csv_pool.py`（与 1.3 `lebs/csv/universe.py` 同口径）；池 CSV 同日规范化后重复代码报 `PoolDuplicateCodeError`，无需 `--strict-pool`，跨日同码合法。见 [`docs/backtest/pool-csv-contract.md`](docs/backtest/pool-csv-contract.md)。
-- 不要 `python -m backtest.lebs`（包不在本仓；LEBS 只在 1.3，且 LEBS ≠ 真栈）。Cerebro 已退场，禁止复活。
+- 名单：`backtest/research/csv_pool.py`（历史曾与 1.3 `lebs/csv/universe.py` 对齐；该入口已退役，当前以本仓契约为准）；池 CSV 同日规范化后重复代码报 `PoolDuplicateCodeError`，无需 `--strict-pool`，跨日同码合法。见 [`docs/backtest/pool-csv-contract.md`](docs/backtest/pool-csv-contract.md)。
+- 不要 `python -m backtest.lebs`（包不在本仓；LEBS 已从 1.3 整体退役，禁止按旧说明恢复）。Cerebro 已退场，禁止复活。
 - 向量化撮合核收口 plan（已人裁 GO：A/A/C/A/A；范围 A→B→C，D 后置）：`docs/backtest/plan-ashare-engine-refactor-2026-09-18.md` §0.3 / §5。热路径固定清单由 `tests/test_ashare_simulate_import_fence.py` 锁定，禁止扩成 research 全目录扫描。
 - Cerebro / Rolling 已退场（2026-09-16）；chip / ma_chip 对照产物为静态档案，代码路径已删。version11 CSV 已按 [独立计划](docs/backtest/plan-version11-machip-csv-2026-09-21.md) 移植（本 PR，A–C），成交时点与 volume=A 已人裁；框架验证非已验证多头，D 对照未完成。
 - presets 与 1.3 契约：`tests/test_presets_cross_repo_snapshot.py`（勿静默漂移）。
