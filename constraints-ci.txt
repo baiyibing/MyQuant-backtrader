@@ -1,0 +1,2 @@
+# Resolved CI lock for recorded byte baselines; runtime minimum is in requirements.txt.
+pandas==3.0.6

@@ -75,7 +75,7 @@ jobs:
           esac
           SH
           chmod 700 "$askpass"
-          GIT_ASKPASS="$askpass" python -m pip install -r requirements.txt
+          GIT_ASKPASS="$askpass" python -m pip install -r requirements.txt -c constraints-ci.txt
           # scripts/_script_bootstrap.resolve_oskh_python() exits at import when no
           # canonical vanna312 interpreter exists (GitHub-hosted runners). Point the
           # resolver at this job's interpreter so TR backfill subprocesses match pytest.

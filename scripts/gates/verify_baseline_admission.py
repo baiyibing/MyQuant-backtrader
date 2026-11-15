@@ -58,12 +58,17 @@ def main() -> int:
             anchors.append((str(path), manifest["captured_environment"].get("pandas")))
 
     requirements = ROOT / "requirements.txt"
+    constraints = ROOT / "constraints-ci.txt"
     workflow = ROOT / ".github/workflows/python-tests.yml"
     try:
         pins = re.findall(r"^\s*pandas\s*>=\s*([^\s#;]+)\s*(?:#.*)?$",
                           requirements.read_text(encoding="utf-8"), re.MULTILINE)
         if pins != [AUTHORIZED_PANDAS]:
             errors.append(f"{requirements}: expected single pandas>={AUTHORIZED_PANDAS} minimum; found {pins}")
+        ci_pins = re.findall(r"^\s*pandas\s*==\s*([^\s#;]+)\s*(?:#.*)?$",
+                             constraints.read_text(encoding="utf-8"), re.MULTILINE)
+        if ci_pins != [AUTHORIZED_PANDAS]:
+            errors.append(f"{constraints}: expected single pandas=={AUTHORIZED_PANDAS} CI pin; found {ci_pins}")
         assertion = f"Version(pandas.__version__) >= Version('{AUTHORIZED_PANDAS}')"
         if assertion not in workflow.read_text(encoding="utf-8"):
             errors.append(f"{workflow}: missing workflow assert string {assertion}")
