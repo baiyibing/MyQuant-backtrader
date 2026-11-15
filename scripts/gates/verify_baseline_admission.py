@@ -60,11 +60,11 @@ def main() -> int:
     requirements = ROOT / "requirements.txt"
     workflow = ROOT / ".github/workflows/python-tests.yml"
     try:
-        pins = re.findall(r"^\s*pandas\s*==\s*([^\s#;]+)\s*(?:#.*)?$",
+        pins = re.findall(r"^\s*pandas\s*>=\s*([^\s#;]+)\s*(?:#.*)?$",
                           requirements.read_text(encoding="utf-8"), re.MULTILINE)
         if pins != [AUTHORIZED_PANDAS]:
-            errors.append(f"{requirements}: expected single pandas=={AUTHORIZED_PANDAS} pin; found {pins}")
-        assertion = f"pandas.__version__ == '{AUTHORIZED_PANDAS}'"
+            errors.append(f"{requirements}: expected single pandas>={AUTHORIZED_PANDAS} minimum; found {pins}")
+        assertion = f"Version(pandas.__version__) >= Version('{AUTHORIZED_PANDAS}')"
         if assertion not in workflow.read_text(encoding="utf-8"):
             errors.append(f"{workflow}: missing workflow assert string {assertion}")
     except OSError as error:

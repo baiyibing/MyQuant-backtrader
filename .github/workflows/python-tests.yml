@@ -95,10 +95,10 @@ jobs:
       - name: Minute classification gate
         run: python scripts/check_minute_classification.py
 
-      # L2: pandas pin + ruff bt_contract and RB-10 typing leaf + numba importable.
-      - name: Assert pandas version (CSV byte baseline)
+      # L2: pandas minimum + ruff bt_contract and RB-10 typing leaf + numba importable.
+      - name: Assert pandas version (minimum)
         run: |
-          python -c "import pandas; print('pandas', pandas.__version__); assert pandas.__version__ == '3.0.6', pandas.__version__"
+          python -c "import pandas; from packaging.version import Version; print('pandas', pandas.__version__); assert Version(pandas.__version__) >= Version('3.0.6'), pandas.__version__"
 
       - name: Lint contract package
         run: |

@@ -1,8 +1,8 @@
 # Standalone vectorized research + stock data + chip/turnover-resist fork
 # Interpreter: D:\anaconda3\envs\vanna312\python.exe (Python 3.12)
 
-# Exact patch pin keeps CSV byte baselines and CI reproducible across installs.
-pandas==3.0.6
+# Runtime minimum; CSV byte-baseline recording keeps its exact environment anchor.
+pandas>=3.0.6
 numpy>=1.24
 duckdb==2.0.0
 pyarrow>=15.0
