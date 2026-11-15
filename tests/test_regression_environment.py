@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import yaml
+from packaging.version import Version
 
 from tests import conftest as bootstrap
 
@@ -60,6 +61,7 @@ def test_dependency_pins_agree_across_install_entrypoints():
     required_pin = re.findall(r"@([0-9a-f]{40})\b", requirement)
     assert len(required_pin) == 1
     assert re.findall(r"@([0-9a-f]{40})\b", dependency) == required_pin
-    root_pandas = re.findall(r"^pandas==([^\s]+)$", (root / "requirements.txt").read_text(encoding="utf-8"), re.M)
-    optional_pandas = re.findall(r"^pandas==([^\s]+)$", (root / "qlib_cost/requirements.txt").read_text(encoding="utf-8"), re.M)
-    assert root_pandas == optional_pandas == ["3.0.6"]
+    root_pandas = re.findall(r"^pandas>=([^\s]+)$", (root / "requirements.txt").read_text(encoding="utf-8"), re.M)
+    optional_pandas = re.findall(r"^pandas>=([^\s]+)$", (root / "qlib_cost/requirements.txt").read_text(encoding="utf-8"), re.M)
+    assert len(root_pandas) == len(optional_pandas) == 1
+    assert Version(root_pandas[0]) == Version(optional_pandas[0]) == Version("3.0.6")
