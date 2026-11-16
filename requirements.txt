@@ -4,7 +4,7 @@
 # Runtime minimum; CSV byte-baseline recording keeps its exact environment anchor.
 pandas>=3.0.6
 numpy>=2.3.5
-duckdb==2.0.0
+duckdb>=2.0.0
 pyarrow>=25.0.0
 loguru>=0.7
 PyYAML>=6.0
