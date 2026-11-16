@@ -1,6 +1,6 @@
 # MyQuant-backtrader
 
-研究脸：负责回测策略研究、实验输入组织，以及**向量化**成交模拟、费用、持仓和收益回测。既消费外部信号 / 日名单 CSV，也生成回测专用候选名单。因子研究、Qlib 训练/模型信号输出及当前已归并的筹码/TR 公共数值核见 [MyQuant](https://github.com/baiyibing/MyQuant)；同一口径公共计算只保留一份实现，BT 调用公共接口。行情只读 path-SSOT parquet；数据采集与湖加工在 [MyQuant-infra](https://github.com/baiyibing/MyQuant-infra)。成交验收（LEBS / MockQMT）在 [OSkhQuant1.3](https://github.com/baiyibing/OSkhQuant1.3)。
+研究脸：负责回测策略研究、实验输入组织，以及**向量化**成交模拟、费用、持仓和收益回测。既消费外部信号 / 日名单 CSV，也生成回测专用候选名单。因子研究、Qlib 训练/模型信号输出及当前已归并的筹码/TR 公共数值核见 [MyQuant](https://github.com/zhentinginfo/MyQuant)；同一口径公共计算只保留一份实现，BT 调用公共接口。行情只读 path-SSOT parquet；数据采集与湖加工在 [MyQuant-infra](https://github.com/zhentinginfo/MyQuant-infra)。成交验收（LEBS / MockQMT）在 [OSkhQuant1.3](https://github.com/zhentinginfo/OSkhQuant1.3)。
 
 研究与验收引擎怎么分工：[`docs/backtest/engine-positioning-ssot.md`](docs/backtest/engine-positioning-ssot.md)。成交核（档位 / 全卖因跌停 / Decimal 涨跌停价 / E-R6 除权日参考价修正）：[`docs/backtest/engine-ashare-correctness.md`](docs/backtest/engine-ashare-correctness.md)。名单 CSV 契约：[`docs/backtest/pool-csv-contract.md`](docs/backtest/pool-csv-contract.md)。MyQuant 保留完整 Qlib 研究回测（2026-11-08 用户澄清）；Cerebro / Rolling 已退场（2026-09-16）。本仓没有 `backtest/lebs/`。
 
@@ -42,7 +42,7 @@ Seeded from OSkhQuant slim snapshot at `5d41252`。S2（2026-09-09）之后本�
 
 共享实现由 `requirements-infra.txt` 固定版本，`requirements.txt` 会一并安装；开发机和 CI 都需要具备该依赖仓库的读取权限。边界检查可离线运行：`scripts/gates/verify_infra_consumer_boundary.py`。
 
-2026-11-08 复核依据：[infra 四仓分界](https://github.com/baiyibing/MyQuant-infra/blob/1a497682258503bf748e1e873aea9be9a818e92e/docs/architecture/boundary.md)、[湖 SSOT §7](https://github.com/baiyibing/MyQuant-infra/blob/1a497682258503bf748e1e873aea9be9a818e92e/docs/architecture/data-lake-ssot.md)及 [ops 移交记录](https://github.com/baiyibing/grok-bot-ops/blob/master/docs/ops/HANDOFF_to_MyQuant-infra_20261104.md)。公司行为采集、Hithink 组装、历史对拍及 economics 处理入口沿用已合入的迁出删除裁定；运行时经济权益边界继续受 gate 约束。SSE 日期数据缓存/查询已调用 infra，BT 保留时钟、覆盖窗和进程失败策略。infra pin 更新到 `1a497682`，以覆盖本轮共享 helpers、日历及契约公共接口。
+2026-11-08 复核依据：[infra 四仓分界](https://github.com/zhentinginfo/MyQuant-infra/blob/1a497682258503bf748e1e873aea9be9a818e92e/docs/architecture/boundary.md)、[湖 SSOT §7](https://github.com/zhentinginfo/MyQuant-infra/blob/1a497682258503bf748e1e873aea9be9a818e92e/docs/architecture/data-lake-ssot.md)及 [ops 移交记录](https://github.com/baiyibing/grok-bot-ops/blob/master/docs/ops/HANDOFF_to_MyQuant-infra_20261104.md)。公司行为采集、Hithink 组装、历史对拍及 economics 处理入口沿用已合入的迁出删除裁定；运行时经济权益边界继续受 gate 约束。SSE 日期数据缓存/查询已调用 infra，BT 保留时钟、覆盖窗和进程失败策略。infra pin 更新到 `1a497682`，以覆盖本轮共享 helpers、日历及契约公共接口。
 
 2026-11-09 OP04 收尾：巨潮经济日期 targets 导出与离线证据建议已有 infra 正式入口，本仓删除 `oskh_data/cninfo_economic_date_targets.py`、两个旧产制 CLI 及其产制单测。直接调用固定版本 infra，命令与迁移差异见 [消费指针](docs/operations/plan-cninfo-economic-date-evidence-2026-10-30.md)。该次 pin 为 `6bcf33f38ce88a92ddcdf0be4916cbb9cdd1def0`（已合入的 OP04 离线建议版本）；相对前 pin，湖/reader、参考数据、provenance、TR store、utils 和 CI 脚本均未变化。此变更不接入回测运行时、不转换旧证据包，也不授权采集、合湖或经济批准。
 
@@ -104,7 +104,7 @@ Config: `config/reader.yaml`（默认 `mode: parquet`）。盘符分层见 `AGEN
 
 ## Rust turnover-resist
 
-数值实现和构建已迁至 [MyQuant `myquant_factors`](https://github.com/baiyibing/MyQuant/tree/master/myquant_factors)。BT 安装 `requirements-factors.txt` 固定的公共源码包，不安装 Qlib 训练工作流或 Notebook。Rust 产物通过显式 `TURNOVER_RESIST_EXE` 或已安装扩展提供；不再在 BT 构建本地 crate。
+数值实现和构建已迁至 [MyQuant `myquant_factors`](https://github.com/zhentinginfo/MyQuant/tree/master/myquant_factors)。BT 安装 `requirements-factors.txt` 固定的公共源码包，不安装 Qlib 训练工作流或 Notebook。Rust 产物通过显式 `TURNOVER_RESIST_EXE` 或已安装扩展提供；不再在 BT 构建本地 crate。
 
 因子研究命令的旧路径只转发 MyQuant；宿主路径/reader/时钟/门禁由 `oskh_factors/_consumer.py` 注入。MyQuant 不反向 import BT。详细清单与验证见[迁移记录](docs/engineering/factor-owner-migration-20261109.md)。
 
@@ -129,5 +129,5 @@ CI 安装步骤通过 `MYQUANT_INFRA_READ_TOKEN` 获取私有依赖。账号持�
 
 ## Git
 
-- Public: https://github.com/baiyibing/MyQuant-backtrader
+- Public: https://github.com/zhentinginfo/MyQuant-backtrader
 - `master` tracks a private internal remote named `origin`. Do not publish that URL. Use `git push github` for the public mirror.
