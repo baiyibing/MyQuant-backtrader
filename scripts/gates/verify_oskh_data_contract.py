@@ -10,7 +10,7 @@ Checks performed:
   3. oskh_data does not load backtrader at module level, and must not
      import xtquant anywhere (this fork has no QMT download)
   3b. backtest/ must not import download modules or xtquant
-  4. data_audit.db direct sqlite3 access is whitelisted in oskh_data/audit.py
+  4. data_audit.db is owned by infra; no direct host sqlite3 access
   5. live_trading/ and trade_decision/ hot-path calls to stock_daily_bars /
      stock_daily_bars_cfg_only / read_stock must pass adjust/adjust_type as
      the string literal 'none' (keyword, or read_stock's positional slot).

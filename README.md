@@ -42,7 +42,7 @@ Seeded from OSkhQuant slim snapshot at `5d41252`。S2（2026-09-09）之后本�
 
 共享实现由 `requirements-infra.txt` 固定版本，`requirements.txt` 会一并安装；开发机和 CI 都需要具备该依赖仓库的读取权限。边界检查可离线运行：`scripts/gates/verify_infra_consumer_boundary.py`。
 
-2026-11-08 复核依据：[infra 四仓分界](https://github.com/zhentinginfo/MyQuant-infra/blob/1a497682258503bf748e1e873aea9be9a818e92e/docs/architecture/boundary.md)、[湖 SSOT §7](https://github.com/zhentinginfo/MyQuant-infra/blob/1a497682258503bf748e1e873aea9be9a818e92e/docs/architecture/data-lake-ssot.md)及 [ops 移交记录](https://github.com/baiyibing/grok-bot-ops/blob/master/docs/ops/HANDOFF_to_MyQuant-infra_20261104.md)。公司行为采集、Hithink 组装、历史对拍及 economics 处理入口沿用已合入的迁出删除裁定；运行时经济权益边界继续受 gate 约束。SSE 日期数据缓存/查询已调用 infra，BT 保留时钟、覆盖窗和进程失败策略。infra pin 更新到 `1a497682`，以覆盖本轮共享 helpers、日历及契约公共接口。
+2026-11-08 复核依据：[infra 四仓分界](https://github.com/zhentinginfo/MyQuant-infra/blob/1a497682258503bf748e1e873aea9be9a818e92e/docs/architecture/boundary.md)、[湖 SSOT §7](https://github.com/zhentinginfo/MyQuant-infra/blob/1a497682258503bf748e1e873aea9be9a818e92e/docs/architecture/data-lake-ssot.md)及 ops checkout 中的 `docs/ops/HANDOFF_to_MyQuant-infra_20261104.md`（[Gitea 访问方式](docs/operations/grok-bot-raci-workflow-ssot.md#access)）。公司行为采集、Hithink 组装、历史对拍及 economics 处理入口沿用已合入的迁出删除裁定；运行时经济权益边界继续受 gate 约束。SSE 日期数据缓存/查询已调用 infra，BT 保留时钟、覆盖窗和进程失败策略。infra pin 更新到 `1a497682`，以覆盖本轮共享 helpers、日历及契约公共接口。
 
 2026-11-09 OP04 收尾：巨潮经济日期 targets 导出与离线证据建议已有 infra 正式入口，本仓删除 `oskh_data/cninfo_economic_date_targets.py`、两个旧产制 CLI 及其产制单测。直接调用固定版本 infra，命令与迁移差异见 [消费指针](docs/operations/plan-cninfo-economic-date-evidence-2026-10-30.md)。该次 pin 为 `6bcf33f38ce88a92ddcdf0be4916cbb9cdd1def0`（已合入的 OP04 离线建议版本）；相对前 pin，湖/reader、参考数据、provenance、TR store、utils 和 CI 脚本均未变化。此变更不接入回测运行时、不转换旧证据包，也不授权采集、合湖或经济批准。
 
@@ -53,7 +53,7 @@ Seeded from OSkhQuant slim snapshot at `5d41252`。S2（2026-09-09）之后本�
 | 当前代码 | 归属与后续处理 |
 | --- | --- |
 | `scripts/research/vendor_to_lake_adapter.py`、`vendor_bar_xcheck.py` | 已迁入 infra `adapters.vendor_bars`（#88）。BT 保留 CLI 薄入口、默认研究样本、显式仓库和配置湖根注入；解码、比较、转换、写盘与审计验证均调用 infra。staging 不获 apply 授权。 |
-| 通用评审/发布工具 | 接收实现见 [ops #187](https://github.com/baiyibing/grok-bot-ops/pull/187)：本仓删除 `multi_ai_common.py` 与运行/发布实现，仅保留三个薄入口及领域 JSON 配置。显式 `MYQUANT_OPS_ROOT` / `--ops-root`，无本地兜底；见 [消费与剩余边界复核](docs/engineering/ops-runtime-consumer-20261109.md)。 |
+| 通用评审/发布工具 | 接收实现见 [ops 源码与运行时合同](docs/operations/grok-bot-raci-workflow-ssot.md#runtime)：本仓删除 `multi_ai_common.py` 与运行/发布实现，仅保留三个薄入口及领域 JSON 配置。显式 `MYQUANT_OPS_ROOT` / `--ops-root`，无本地兜底；见 [消费与剩余边界复核](docs/engineering/ops-runtime-consumer-20261109.md)。 |
 | `qlib_cost/qlib_workflow.py`、`factor_expr.py` | 已迁入 MyQuant #139，Notebook 与全部计算依赖一并接收，BT 删除旧训练文件及 Notebook。MyQuant 不依赖 BT 源码。 |
 | `scripts/data/export_strategy9_pool.py`、`export_ta_pool.py` / `export_strategy10_pool.py`、`export_strategy11_pool.py`、`export_beidou_pool.py`、`export_topk_app_dropout_pool.py` | Human 确认保留 BT：回测策略的筛选条件组合、参数、D→T 映射、实验名单与 CSV/manifest 导出。App ∩ Qlib 组合可由 BT 完成，原始 Qlib 预测仍由 MyQuant 提供；公共指标计算复用共享接口。不是迁出欠账。 |
 | `qlib_cost/factor_analyze.py` | 已迁入 MyQuant `myquant_factors.factor_analyze`，旧路径只转发。`bigdata_ma_cross.py` 沿用 master 已删除状态。 |
@@ -129,5 +129,13 @@ CI 安装步骤通过 `MYQUANT_INFRA_READ_TOKEN` 获取私有依赖。账号持�
 
 ## Git
 
-- Public: https://github.com/zhentinginfo/MyQuant-backtrader
-- `master` tracks a private internal remote named `origin`. Do not publish that URL. Use `git push github` for the public mirror.
+- Canonical: [zhentinginfo/MyQuant-backtrader](https://github.com/zhentinginfo/MyQuant-backtrader)
+- 保留内部 `origin` 的现有工作区可使用 `github` 远端跟踪新仓库；内部远端 URL 不得公开。以下配置将 `master` 的上游、默认推送目标和 GitHub CLI 默认仓库设为新地址：
+
+```powershell
+git remote set-url github https://github.com/zhentinginfo/MyQuant-backtrader.git
+git fetch github
+git branch --set-upstream-to=github/master master
+git config remote.pushDefault github
+gh repo set-default zhentinginfo/MyQuant-backtrader
+```

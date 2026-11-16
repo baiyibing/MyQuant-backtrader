@@ -1,4 +1,4 @@
-> **Historical episode (S6/S7, 2026-10-12).** Do **not** treat this file as the living roster, Owner table, or model-pin SSOT. Living roles / 4090 CLI roster → `baiyibing/grok-bot-ops` [`docs/raci/grok-bot-raci-workflow-ssot.md`](https://github.com/baiyibing/grok-bot-ops/blob/master/docs/raci/grok-bot-raci-workflow-ssot.md) §1 / §6.1. Body below is preserved as of the episode date.
+> **Historical episode (S6/S7, 2026-10-12).** Do **not** treat this file as the living roster, Owner table, or model-pin SSOT. Living roles / 4090 CLI roster → `baiyibing/grok-bot-ops` [`docs/raci/grok-bot-raci-workflow-ssot.md`](../operations/grok-bot-raci-workflow-ssot.md#raci) §1 / §6.1. Body below is preserved as of the episode date.
 
 # 交接：联合收益 Mode B 性能刀（2026-09-24）——**弧已收官**
 

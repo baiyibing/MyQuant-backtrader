@@ -1,5 +1,7 @@
 # Ops runtime consumer and boundary review (2026-11-09)
 
+> 2026-11-16 forge 续修：ops 已仅保留在 Gitea；当前源码与运行时合同从[显式 ops checkout](../operations/grok-bot-raci-workflow-ssot.md#access)访问。下文原 GitHub PR 编号保留历史身份，原元数据见 ops 迁移归档。
+
 > 2026-11-13续修：原迁移收据保留；review profile已升级领域v2，不再保留通用framework/角色全文。现行author/轮次/退出码及capability合同见[消费工作流](multi-ai-review-workflow.md)，依赖ops #244。
 
 Human requires the generic review/publication code in this repo to move to
@@ -28,7 +30,7 @@ vendor archive, default sibling search or fallback catalog.
 <configured-python> scripts/ops/push_github_pr_via_api.py --ops-root <absolute-ops-checkout> --dry-run
 ```
 
-The shared [runtime contract](https://github.com/baiyibing/grok-bot-ops/blob/master/docs/multi-ai/shared-runtime-20261109.md)
+The shared [runtime contract](../operations/grok-bot-raci-workflow-ssot.md#runtime)
 describes explicit roots, profiles and CLI behavior. Ops owns the current
 model catalog; BT's old snapshot is removed. Research/backtest imports and
 normal pytest do not require an ops checkout. The new data-free
