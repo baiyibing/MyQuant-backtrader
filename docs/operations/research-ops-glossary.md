@@ -2,7 +2,7 @@
 
 本仓**不再维护**本文正文。唯一权威正文在：
 
-`baiyibing/grok-bot-ops` `master` → [`docs/glossary/research-ops-glossary.md`](https://github.com/baiyibing/grok-bot-ops/blob/master/docs/glossary/research-ops-glossary.md)
+`grok-bot-ops` `master`（Gitea-only；[访问方式](grok-bot-raci-workflow-ssot.md#access)）→ `docs/glossary/research-ops-glossary.md`
 
 - Owner：本仓为 **qt**（原 **bt**；见 ops RACI §1）
 - **禁止**在本仓镜像正文或 `-m` pins

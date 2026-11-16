@@ -19,4 +19,4 @@ Backtest / chip / data docs live under `docs/backtest/`. Research map (pools × 
 
 ## Grok Bot ops
 
-RACI / channels SSOT: [`baiyibing/grok-bot-ops`](https://github.com/baiyibing/grok-bot-ops) `master` (local paths under `docs/operations/` are thin pointers). Owner: **bt** (ops §1).
+RACI / channels SSOT: [Gitea-only ops access](docs/operations/grok-bot-raci-workflow-ssot.md#access), branch `master`. Open authoritative bodies from the explicitly configured ops checkout; GitHub ops has been deleted. Owner: see current ops RACI §1.
