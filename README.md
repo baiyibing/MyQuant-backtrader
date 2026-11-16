@@ -129,5 +129,13 @@ CI 安装步骤通过 `MYQUANT_INFRA_READ_TOKEN` 获取私有依赖。账号持�
 
 ## Git
 
-- Public: https://github.com/zhentinginfo/MyQuant-backtrader
-- `master` tracks a private internal remote named `origin`. Do not publish that URL. Use `git push github` for the public mirror.
+- Canonical: [zhentinginfo/MyQuant-backtrader](https://github.com/zhentinginfo/MyQuant-backtrader)
+- 保留内部 `origin` 的现有工作区可使用 `github` 远端跟踪新仓库；内部远端 URL 不得公开。以下配置将 `master` 的上游、默认推送目标和 GitHub CLI 默认仓库设为新地址：
+
+```powershell
+git remote set-url github https://github.com/zhentinginfo/MyQuant-backtrader.git
+git fetch github
+git branch --set-upstream-to=github/master master
+git config remote.pushDefault github
+gh repo set-default zhentinginfo/MyQuant-backtrader
+```

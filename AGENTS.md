@@ -1,5 +1,7 @@
 # AGENTS
 
+Canonical GitHub repository: [`zhentinginfo/MyQuant-backtrader`](https://github.com/zhentinginfo/MyQuant-backtrader). Use this repository for new issues, PRs and GitHub API calls; historical evidence retains its recorded identity.
+
 Standalone research-face fork (see [README.md](README.md)). Since migration S2 (2026-09-09) this repo owns the research face; OSkhQuant1.3 stays the trading stack and keeps only the `oskh_factors` chip/bridge micropackage.
 
 **成交引擎定位**：本仓 = 向量化。1.3 = 生产决策测试 + MockQMT / 交易真栈验收（LEBS 已于 2026-11-09 整体退役，当前能力以 1.3 自身 SSOT 为准）。MyQuant 可使用全部 Qlib 组件开展研究回测；Cerebro / Rolling 已退场（2026-09-16）。见 [`docs/backtest/engine-positioning-ssot.md`](docs/backtest/engine-positioning-ssot.md)。
