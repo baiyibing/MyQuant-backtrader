@@ -1,4 +1,12 @@
-# 说明
+# MyQuant 因子兼容转发
+
+2026-11-09 起，本目录只转发 MyQuant `myquant_factors` 公共接口。筹码分布、CYQ、换手系数及因子分析的数值实现与通用研究工具均已迁出；旧模块调用统一转发公共包。BT 的路径、reader 生命周期及研究门禁由宿主薄适配注入。
+
+安装版本见 [`requirements-factors.txt`](../requirements-factors.txt)，迁移范围见[接收记录](../docs/engineering/factor-owner-migration-20261109.md)。Qlib 训练工作流、模型研究与 Notebook 在 MyQuant；行情读取和数据产制调用 infra。
+
+## 历史说明
+
+以下为原有因子研究材料，`scr/*` 路径、训练和数据下载说明保留作历史记录，不作为本仓现行入口。
 
 参考:
 

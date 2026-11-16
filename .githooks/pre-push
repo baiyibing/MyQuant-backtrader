@@ -1,6 +1,6 @@
 #!/bin/sh
 # Opt-in gate: SKIP_PREPUSH=1 or git push --no-verify bypasses all checks.
-# PYTHON selects an executable; PREPUSH_PYTEST_ARGS adds whitespace-separated
+# Python selection follows AGENTS.md; PREPUSH_PYTEST_ARGS adds whitespace-separated
 # pytest arguments (no shell quoting or evaluation), e.g. tests/test_example.py.
 if [ "${SKIP_PREPUSH:-}" = 1 ]; then
     echo 'pre-push: SKIP_PREPUSH=1, skipping checks' >&2
@@ -55,31 +55,16 @@ if [ "$protected" = 0 ]; then
     echo 'pre-push: marker check passed; pytest skipped (no master/main push)' >&2
     exit 0
 fi
-launcher=0
-if [ -n "${PYTHON:-}" ]; then
-    PY=$PYTHON
-elif command -v python >/dev/null 2>&1 && python --version >/dev/null 2>&1; then
-    PY=python
-elif command -v python3 >/dev/null 2>&1 && python3 --version >/dev/null 2>&1; then
-    PY=python3
-elif command -v py >/dev/null 2>&1 && py -3 --version >/dev/null 2>&1; then
-    PY=py
-    launcher=1
-else
-    fail 'no working Python interpreter found; set PYTHON'
-fi
-run_python() {
-    if [ "$launcher" = 1 ]; then "$PY" -3 "$@"; else "$PY" "$@"; fi
-}
-echo "pre-push: interpreter: $PY (Windows launcher -3: $launcher)" >&2
-run_python --version || fail 'selected Python cannot run'
+PY=${OSKH_MERGE_PYTHON:-${VANNA312_PYTHON:-${VANNA311_PYTHON:-D:/anaconda3/envs/vanna312/python.exe}}}
+echo "pre-push: interpreter: $PY" >&2
+"$PY" --version || fail 'configured Python cannot run; set OSKH_MERGE_PYTHON or VANNA312_PYTHON'
 marker_file="$root/scripts/ci_pytest_marker.txt"
 [ -f "$marker_file" ] || fail "missing pytest marker file: $marker_file"
 pytest_marker=$(tr -d '\r' < "$marker_file" | sed 's/[[:space:]]*$//') || fail "cannot read pytest marker file: $marker_file"
 start=$(date +%s)
 # Intentional field splitting for optional arguments; disable filename expansion.
 set -f
-run_python -m pytest -p no:cacheprovider -q -x -m "$pytest_marker" ${PREPUSH_PYTEST_ARGS:-}
+"$PY" -m pytest -p no:cacheprovider -q -x -m "$pytest_marker" ${PREPUSH_PYTEST_ARGS:-}
 status=$?
 end=$(date +%s)
 echo "pre-push: pytest elapsed $((end - start)) seconds" >&2

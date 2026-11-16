@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-This repository is the **research face**: vectorized CSV backtests + chip/TR. LEBS / MockQMT live in OSkhQuant1.3. See [README.md](README.md), [AGENTS.md](AGENTS.md), and [docs/backtest/engine-positioning-ssot.md](docs/backtest/engine-positioning-ssot.md).
+This repository owns backtest strategy research, experiment inputs and vectorized CSV execution/return simulation. It consumes chip/TR numerical APIs from MyQuant and data/Store APIs from MyQuant-infra. OSkhQuant1.3 owns production decision tests, MockQMT counter tests and trading-stack acceptance; LEBS retired on 2026-11-09. See [README.md](README.md), [AGENTS.md](AGENTS.md), and [docs/backtest/engine-positioning-ssot.md](docs/backtest/engine-positioning-ssot.md).
 
 ## Python
 
