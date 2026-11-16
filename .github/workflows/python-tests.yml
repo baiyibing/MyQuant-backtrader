@@ -68,7 +68,7 @@ jobs:
           PANDAS_LEG: ${{ matrix.pandas }}
         run: |
           if [[ -z "${MYQUANT_INFRA_READ_TOKEN:-}" ]]; then
-            echo "::error::Configure MYQUANT_INFRA_READ_TOKEN with Contents: read access to baiyibing/MyQuant-infra."
+            echo "::error::Configure MYQUANT_INFRA_READ_TOKEN with Contents: read access to zhentinginfo/MyQuant-infra."
             exit 1
           fi
           askpass=$(mktemp "$RUNNER_TEMP/infra-askpass.XXXXXX")
