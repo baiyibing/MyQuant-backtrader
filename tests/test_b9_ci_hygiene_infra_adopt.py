@@ -31,6 +31,7 @@ HOST_GATES = (
 # 2026-11-09 Human factor ownership updates the TR forwarding gate and adds the
 # factor consumer fence to CI; these two reviewed file hashes change, no trading golden.
 # 2026-11-15 pandas minimum + CI constraints change is a reviewed host-file update.
+# 2026-11-16 pandas >=3.0.6 CI constraint + 3.0.6/latest matrix is a reviewed host-file update.
 HOST_FILE_HASHES = {
     "scripts/gates/verify_data_path_ssot.py": "558282c1f9ae9ea36d517a099796d7d1e8088b746f195cf74639b4143437c5d9",
     "scripts/gates/verify_no_hardcoded_machine_paths.py": "02573756c2eb96467a20dd5b6f7b1eb994c6bc9e7605972f823d4d086f0347be",
@@ -38,7 +39,7 @@ HOST_FILE_HASHES = {
     "scripts/gates/verify_corp_actions_economics_fence.py": "989c891aa5cc15a395fe8f627745abe4847ed7004818abc8fc146e397ea235cf",
     "scripts/install-git-hooks.sh": "4520f8fbda560daad157f4ebbbe8821784e75fb6cf57081da57fbdf4e3453e92",
     "scripts/install-git-hooks.ps1": "920921880b9868a478828c722f3a5c6a8923553eb3dcb08a16e2b1507c1635f6",
-    ".github/workflows/python-tests.yml": "68965b25f9084eb009087a3466ddbc36c95f4bc95b4cba5ac9647e2502751782",
+    ".github/workflows/python-tests.yml": "d5e0ef8f6145b077181f5b699474d3c9ff2fbc76764582a244b38b9dfeedaf32",
 }
 
 
