@@ -23,6 +23,7 @@ from backtest.research.csv_strategy_books import csv_strategy_names
 from backtest.research.csv_pool import load_pool_day_map
 from backtest.research.csv_common import DEFAULT_DAILY_QUOTA, STRATEGY4_CALENDAR_SLACK_DAYS
 from backtest.research.csv_daily_loader import warmup_start
+from common.infra.lake_datetime import utc_ms_index
 from backtest.research.qlib_bin_1min import (
     load_qlib_1min_calendar,
     qlib_inst_dir,
@@ -105,7 +106,7 @@ def _load_lake_window(code: str, root: Path, start: str, end: str):
         raise FileNotFoundError(
             f"minute OHLC unavailable for {code} under {root}: {exc}"
         ) from exc
-    utc = pd.to_datetime(table["time"].to_numpy(), unit="ms", utc=True)
+    utc = utc_ms_index(table["time"].to_numpy())
     hm = utc.hour * 60 + utc.minute
     keep = _in_session(hm.to_numpy())
     utc = utc[keep]

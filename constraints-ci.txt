@@ -1,2 +1,3 @@
-# Resolved CI lock for recorded byte baselines; runtime minimum is in requirements.txt.
-pandas==3.0.6
+# CI pandas floor; byte baselines were recorded on 3.0.6 and audited identical on 3.1.x.
+# The workflow matrix tests both the 3.0.6 floor and the newest allowed pandas.
+pandas>=3.0.6

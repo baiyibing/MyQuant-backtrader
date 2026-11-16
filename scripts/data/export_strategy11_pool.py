@@ -30,6 +30,7 @@ if str(REPO_ROOT) not in sys.path:
 from backtest.research import ma_infra, strategy11_rules as rules  # noqa: E402
 from backtest.research.csv_pool import is_repo_stock_pool, validate_pool_dir  # noqa: E402
 from backtest.research.market_layer import is_st_name  # noqa: E402
+from common.infra.lake_datetime import utc_ms_index  # noqa: E402
 from common.infra.data_root import resolve_period_root, resolve_source_parquet  # noqa: E402
 from oskh_data.symbol_format import to_canonical_symbol, to_partition_key  # noqa: E402
 from oskh_factors.bridge.turnover_resist import circulating_capital_asof  # noqa: E402
@@ -212,7 +213,7 @@ def read_front_daily(code, root, start, end):
     """Read only the configured front lake; missing files fail visibly."""
     path = Path(root) / f"symbol={to_partition_key(code)}" / "data.parquet"
     table = pq.ParquetFile(path).read(columns=["time", "open", "high", "low", "close", "volume"])
-    stamps = pd.to_datetime(table["time"].to_numpy(), unit="ms", utc=True)
+    stamps = utc_ms_index(table["time"].to_numpy())
     days = stamps.tz_convert("Asia/Shanghai").tz_localize(None).normalize()
     frame = table.to_pandas().drop(columns="time")
     frame.index = days

@@ -18,6 +18,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from backtest.research.csv_pool import is_repo_stock_pool
+from common.infra.lake_datetime import utc_ms_index
 from backtest.research.market_layer import limit_pct
 from common.infra.data_root import resolve_parquet_container, resolve_period_root
 from oskh_data.symbol_format import to_canonical_symbol
@@ -155,7 +156,7 @@ def main(argv=None):
         if limit_pct(code) is None:
             continue
         f = pd.read_parquet(path)
-        f.index = pd.to_datetime(f.pop("time"), unit="ms", utc=True).dt.tz_localize(None).dt.normalize()
+        f.index = utc_ms_index(f.pop("time")).tz_localize(None).normalize()
         f = f.loc[f.index <= pd.Timestamp(args.end)].sort_index()
         if f.index.has_duplicates:
             raise ValueError(f"duplicate daily bars: {code}")

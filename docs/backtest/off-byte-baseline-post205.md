@@ -97,6 +97,13 @@ canonical 的固定定义为：
 生成器 `--check` 同样先强制断言 canonical，再明确打印字节 SKIP；CLI 不依赖 pytest。
 原 Linux LF / 独立 v7 CRLF 字节契约保持不变。
 
+2026-11-16 pandas 3.1 兼容审计补充：3.0.6 golden 在 3.1.x 下也必须执行原始
+字节断言；`byte_skip_reason` 将已对拍的 3.0 → 3.1 组合作为显式例外，v7/APP
+共用该门禁。未改写 golden 或放宽任何数值/字节期望。湖整数毫秒时间在 BT
+消费边界显式保留 `datetime64[ms]`（先 UTC，随后按原路径去时区/归一化），
+日线/分钟 cache 的既有 `ns` schema 不变。3.0.6 与 3.1.1，以及未修改 master
+与分支的 3.0.6 对拍均覆盖成交、权益、dtype、账户与原始 CSV 字节。
+
 临时环境仅替换 pandas 为 2.3.3 并添加其必需的 pytz，其余 bt-ci 包保持一致。
 3.0.6 的基线为 **79 passed**；2.3.3 为 **1 passed / 78 skipped**，
 skip 原因为 `golden pandas=3.0.6, runtime pandas=2.3.3 (major.minor differs)`，

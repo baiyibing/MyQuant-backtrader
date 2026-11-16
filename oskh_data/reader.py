@@ -1,7 +1,8 @@
 """BT policy/configuration facade over the pinned MyQuant-infra lake reader.
 
 IO, SQL, connections and result normalization belong to infra. BT retains its
-adjustment gate, path resolvers, freshness policy and stock/ETF API boundary.
+adjustment gate, path resolvers, freshness policy, stock/ETF API boundary and
+the pandas 3.0.6 datetime representation of consumed bars.
 See README.md for the infra consumer boundary.
 """
 from __future__ import annotations
@@ -22,6 +23,7 @@ from myquant_infra.lake.readers import StockDataReader as _InfraStockDataReader
 _INFRA_AVAILABLE = True
 
 from common.infra.quant_logger import get_logger
+from common.infra.lake_datetime import lake_datetime_index
 from common.infra.data_root import resolve_data_root as _resolve_data_root
 from common.infra.data_root import resolve_e_stock_data_container as _resolve_e_stock_data_container
 from common.infra.data_root import resolve_parquet_container as _resolve_parquet_container
@@ -155,6 +157,14 @@ class StockDataReader(_InfraStockDataReader):
 
     def _make_path(self, stock_code: str, period: str, adjust_type: str) -> Path:
         return self._period_dir(period, adjust_type) / f"symbol={to_partition_key(stock_code)}" / "data.parquet"
+
+    @staticmethod
+    def _normalize_result_df(frame):
+        # Infra owns timestamp parsing, validation, filtering and sorting. This
+        # host adaptation only pins the returned dtype to the 3.0.6 contract.
+        out = _InfraStockDataReader._normalize_result_df(frame)
+        out.index = lake_datetime_index(out.index)
+        return out
 
     def read_stock(
         self, stock_code: str, start_time: Optional[str] = None,

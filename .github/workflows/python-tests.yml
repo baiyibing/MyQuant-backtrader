@@ -18,6 +18,12 @@ jobs:
   pytest-and-gates:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.0.6 = requirements.txt minimum / recorded golden environment;
+        # latest = newest pandas allowed by constraints-ci.txt (>=3.0.6).
+        pandas: ["3.0.6", "latest"]
     env:
       PYTHONIOENCODING: utf-8
       PYTHONUTF8: "1"
@@ -59,6 +65,7 @@ jobs:
           MYQUANT_INFRA_READ_TOKEN: ${{ secrets.MYQUANT_INFRA_READ_TOKEN }}
           GIT_TERMINAL_PROMPT: "0"
           PIP_NO_CACHE_DIR: "1"
+          PANDAS_LEG: ${{ matrix.pandas }}
         run: |
           if [[ -z "${MYQUANT_INFRA_READ_TOKEN:-}" ]]; then
             echo "::error::Configure MYQUANT_INFRA_READ_TOKEN with Contents: read access to baiyibing/MyQuant-infra."
@@ -75,7 +82,12 @@ jobs:
           esac
           SH
           chmod 700 "$askpass"
-          GIT_ASKPASS="$askpass" python -m pip install -r requirements.txt -c constraints-ci.txt
+          leg_constraints=()
+          if [[ "$PANDAS_LEG" != "latest" ]]; then
+            printf 'pandas==%s\n' "$PANDAS_LEG" > "$RUNNER_TEMP/pandas-leg.txt"
+            leg_constraints=(-c "$RUNNER_TEMP/pandas-leg.txt")
+          fi
+          GIT_ASKPASS="$askpass" python -m pip install -r requirements.txt -c constraints-ci.txt "${leg_constraints[@]}"
           # scripts/_script_bootstrap.resolve_oskh_python() exits at import when no
           # canonical vanna312 interpreter exists (GitHub-hosted runners). Point the
           # resolver at this job's interpreter so TR backfill subprocesses match pytest.
@@ -97,7 +109,10 @@ jobs:
 
       # L2: pandas minimum + ruff bt_contract and RB-10 typing leaf + numba importable.
       - name: Assert pandas version (minimum)
+        env:
+          PANDAS_LEG: ${{ matrix.pandas }}
         run: |
+          if [[ "$PANDAS_LEG" != "latest" ]]; then python -c "import os, pandas; assert pandas.__version__ == os.environ['PANDAS_LEG'], pandas.__version__"; fi
           python -c "import pandas; from packaging.version import Version; print('pandas', pandas.__version__); assert Version(pandas.__version__) >= Version('3.0.6'), pandas.__version__"
 
       - name: Lint contract package

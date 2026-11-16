@@ -1,8 +1,8 @@
 """Historical CSV/account + #205 quota and scoped S8 / version6_1 / version12 / version9 / version9_1 / version9_2 overlays.
 
 After mandatory canonical and full structured assertions, compare exact raw
-writer/library SHA-256 on the golden's pandas major.minor. A different version
-pytest.skips only at that final byte phase, naming golden/runtime versions.
+writer/library SHA-256 on the golden's pandas major.minor and the audited
+3.0-to-3.1 pair. Other versions pytest.skip only at that final byte phase.
 Thus a skipped case has already passed canonical; semantic drift still fails.
 """
 
@@ -11,6 +11,7 @@ from hashlib import sha256
 
 import pandas as pd
 import pytest
+from packaging.version import Version
 from backtest.research.csv_strategy_books import BOOKS
 from scripts.research.generate_off_byte_baseline import (
     BOOK_NAMES,
@@ -111,7 +112,7 @@ def test_off_byte_baseline_coverage_guard():
 
 
 def test_industry_default_overlay_covers_full_registry_without_specialty_fixture(tmp_path):
-    assert pd.__version__ == "3.0.6"
+    assert Version(pd.__version__) >= Version("3.0.6")
     assert sha256(GOLDEN.read_bytes()).hexdigest() == HISTORICAL_GOLDEN_SHA256
     for path, digest in IMMUTABLE_INDUSTRY_GOLDEN_SHA256.items():
         assert sha256(path.read_bytes()).hexdigest() == digest

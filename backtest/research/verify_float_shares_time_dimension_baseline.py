@@ -28,6 +28,7 @@ REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, REPO)
 
 from common.infra.data_root import resolve_period_root, resolve_source_parquet
+from common.infra.lake_datetime import utc_ms_index
 from backtest.chip_algorithm import _get_float_shares, turnover_chip_factors  # noqa: E402
 
 FLOAT_SHARES_PATH = str(resolve_source_parquet("float_shares.parquet"))
@@ -48,7 +49,7 @@ def _load_daily(code: str, bars: int, start: Optional[str], end: Optional[str]) 
     if not os.path.exists(path):
         return None
     df = pd.read_parquet(path)
-    df["dt"] = pd.to_datetime(df["time"], unit="ms")
+    df["dt"] = utc_ms_index(df["time"]).tz_localize(None)
     if start:
         df = df[df["dt"] >= pd.Timestamp(start)]
     if end:

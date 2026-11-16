@@ -40,6 +40,7 @@ from backtest.research.csv_pool import (  # noqa: E402
     validate_pool_dir,
 )
 from backtest.research.market_layer import utc_ms_range  # noqa: E402
+from common.infra.lake_datetime import utc_ms_index  # noqa: E402
 from common.infra.data_root import resolve_period_root  # noqa: E402
 from oskh_core.a_share_symbol_normalize import canonical_from_bare_code  # noqa: E402
 from oskh_data.symbol_format import to_canonical_symbol, to_partition_key  # noqa: E402
@@ -116,7 +117,7 @@ def read_one_daily_ohlcv(
     if table.num_rows == 0:
         return None
     ms = table["time"].to_numpy()
-    idx = pd.to_datetime(ms, unit="ms", utc=True).tz_localize(None).normalize()
+    idx = utc_ms_index(ms).tz_localize(None).normalize()
     out = pd.DataFrame(
         {
             "open": table["open"].to_numpy(),
