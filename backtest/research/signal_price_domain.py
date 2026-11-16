@@ -23,6 +23,7 @@ from oskh_data.symbol_format import to_canonical_symbol, to_partition_key
 
 from backtest.research.ma_infra import sma_asof
 from backtest.research.market_layer import as_datetime, utc_ms_range
+from common.infra.lake_datetime import utc_ms_index
 
 OHLC = ("open", "high", "low", "close")
 PRICE_TICK = Decimal("0.01")
@@ -602,7 +603,7 @@ def _read_strict(path, code, domain, start, end, *, minute=False):
     table = table.filter((pc.field("time") >= first) & (pc.field("time") <= last))
     if not table.num_rows:
         _fail("empty parquet window", code=code, domain=domain, path=path)
-    index = pd.to_datetime(table["time"].to_numpy(), unit="ms", utc=True).tz_localize(None)
+    index = utc_ms_index(table["time"].to_numpy()).tz_localize(None)
     if not minute:
         index = index.normalize()
     frame = pd.DataFrame({key: table[key].to_numpy() for key in columns if key != "time"}, index=index)

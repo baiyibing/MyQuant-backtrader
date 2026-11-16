@@ -7,7 +7,8 @@ Run this script with --check after implementation; generation refuses another
 HEAD or an existing golden, so updating a baseline cannot hide a regression.
 Checks retain the eff77f3 bytes/account contract and require the single #205
 metadata addition. Canonical CSV/account checks always run; raw byte checks
-require the golden's pandas major.minor (otherwise --check reports SKIP).
+require the golden's pandas major.minor or the audited 3.0-to-3.1 pair
+(otherwise --check reports SKIP).
 Six per_name strategy-8 books use the explicit 2026-09-26 correction overlay;
 other historical cases use the immutable files unless explicitly overlaid.
 version12 uses the 2026-10-04 whole-position MA10-stop overlay (69cf371);
@@ -1719,7 +1720,13 @@ def assert_case_canonical(book: str, actual: dict, expected: dict, canonical_exp
 
 def byte_skip_reason(recorded_pandas: str) -> str | None:
     runtime = pd.__version__
-    if runtime.split(".")[:2] != recorded_pandas.split(".")[:2]:
+    runtime_minor = runtime.split(".")[:2]
+    recorded_minor = recorded_pandas.split(".")[:2]
+    # The pandas 3.1 datetime compatibility audit compared ordered rows, dtypes,
+    # account state and raw CSV bytes against the unchanged 3.0.6 goldens.
+    # Keep those byte assertions mandatory on the validated 3.1 runtime too.
+    compatible_31 = recorded_minor == ["3", "0"] and runtime_minor == ["3", "1"]
+    if runtime_minor != recorded_minor and not compatible_31:
         return (f"raw CSV byte checks skipped: golden pandas={recorded_pandas}, "
                 f"runtime pandas={runtime} (major.minor differs); "
                 "canonical trades/equity/cash and full structured assertions passed")

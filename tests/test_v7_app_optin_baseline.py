@@ -2,8 +2,8 @@
 
 import json
 
-import pandas as pd
 import pytest
+from scripts.research.generate_off_byte_baseline import byte_skip_reason
 from scripts.research.generate_v7_app_baseline import CASES, FIXTURE, capture_case
 
 
@@ -15,11 +15,9 @@ def test_v7_app_optin_baseline(case, tmp_path):
     expected = golden["cases"][case]
     assert actual["evidence"] == expected["evidence"]
     assert actual["canonical"] == expected["canonical"]
-    current = ".".join(pd.__version__.split(".")[:2])
-    if current != golden["pandas_major_minor"]:
-        pytest.skip(
-            f"canonical passed; raw bytes require pandas {golden['pandas_major_minor']}, runtime {current}"
-        )
+    reason = byte_skip_reason(golden["pandas"])
+    if reason:
+        pytest.skip(reason)
     assert actual["sha256"] == expected["sha256"]
 
 

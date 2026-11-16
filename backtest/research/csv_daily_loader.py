@@ -25,6 +25,7 @@ import pyarrow.parquet as pq
 
 from backtest.research.bar_store import mem_drop, mem_get, mem_key, mem_put
 from backtest.research.csv_common import WARMUP_DAYS, _progress
+from common.infra.lake_datetime import utc_ms_index
 from backtest.research.market_layer import utc_ms_range
 from common.infra.data_root import resolve_period_root
 from oskh_data.symbol_format import to_partition_key
@@ -87,7 +88,7 @@ def _read_one_daily(code: str, root: Path, start: str, end: str) -> Optional[pd.
         if table.num_rows == 0:
             return None
         ms = table["time"].to_numpy()
-        idx = pd.to_datetime(ms, unit="ms", utc=True).tz_localize(None).normalize()
+        idx = utc_ms_index(ms).tz_localize(None).normalize()
         out = pd.DataFrame(
             {
                 "open": table["open"].to_numpy(),

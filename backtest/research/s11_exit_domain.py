@@ -16,6 +16,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pyarrow.parquet as pq
+from common.infra.lake_datetime import utc_ms_index
 from common.infra.data_root import resolve_period_root
 from oskh_data.symbol_format import to_partition_key
 
@@ -141,7 +142,7 @@ def _read_partition(code: str, path: Path, *, domain: str, start, end):
         missing = {"time", *OHLC} - set(table.column_names)
         if missing:
             raise _error(code, domain, path, f"missing columns: {sorted(missing)}")
-        stamps = pd.to_datetime(table["time"].to_numpy(), unit="ms", utc=True)
+        stamps = utc_ms_index(table["time"].to_numpy())
         if stamps.hasnans:
             raise _error(code, domain, path, "invalid source timestamp")
         dates = stamps.tz_localize(None).normalize()

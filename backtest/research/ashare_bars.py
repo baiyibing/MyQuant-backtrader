@@ -31,6 +31,7 @@ from backtest.research.bar_store import (
     write_span_sidecar,
 )
 from oskh_data.symbol_format import to_canonical_symbol, to_partition_key
+from common.infra.lake_datetime import utc_ms_index
 
 MINUTE_SOURCES = ("lake", "qlib_1min")
 DAILY_SOURCES = ("lake", "qlib_day")
@@ -396,7 +397,7 @@ def read_lake_minute_ohlc(code: str, root: Path, start: str, end: str, *,
         raise MinuteBarReadError(code, path) from exc
     if table.num_rows == 0:
         return None
-    utc = pd.to_datetime(table["time"].to_numpy(), unit="ms", utc=True)
+    utc = utc_ms_index(table["time"].to_numpy())
     hm = utc.hour * 60 + utc.minute
     keep = _in_session(hm.to_numpy())
     if not bool(keep.any()):
