@@ -9,7 +9,7 @@ infra 按数据处理/交付职责判断，不以“成熟”或消费者数量�
 
 本条替代旧 D8/H13 中“TR/Rust 数值核留 BT”的归属。MyQuant 既有完整 Qlib
 研究能力保留；BT 的 Cerebro/LEBS 定位、策略书规则和成交默认值不变。
-正式分界正本：[infra boundary](https://github.com/baiyibing/MyQuant-infra/blob/main/docs/architecture/boundary.md)
+正式分界正本：[infra boundary](https://github.com/zhentinginfo/MyQuant-infra/blob/main/docs/architecture/boundary.md)
 （本次同步 [infra #92](https://github.com/baiyibing/MyQuant-infra/pull/92)）。
 
 ## 本批接收与消费

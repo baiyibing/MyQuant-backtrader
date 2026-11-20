@@ -4,7 +4,7 @@
 
 **研究问题总入口**（三份主名单 × 人工改书 / 机器网格 / 分数轮换；策略 1–12、Mode A/B、TopK 怎么挂）：**[research-backtest-entry.md](research-backtest-entry.md)**。下面是命令与 SSOT 表。
 
-三件成交引擎（本仓向量化 / 1.3 LEBS / 1.3 MockQMT）怎么分工：见 **[engine-positioning-ssot.md](engine-positioning-ssot.md)**。MyQuant 可使用全部 Qlib 组件（含 `PortAnaRecord` / `Exchange`）开展完整研究回测；Cerebro / Rolling 已退场（2026-09-16）。本仓没有 `backtest/lebs/`。
+研究回测与执行验收怎么分工：见 **[engine-positioning-ssot.md](engine-positioning-ssot.md)**。MyQuant 可使用全部 Qlib 组件（含 `PortAnaRecord` / `Exchange`）开展完整研究回测；BT 维护向量化研究，1.3 负责生产决策测试、MockQMT 柜台测试和交易真栈验收。LEBS 已从 1.3 整体退役（2026-11-09），Cerebro / Rolling 已退场（2026-09-16）。本仓没有 `backtest/lebs/`。
 
 Wind / 同花顺（THS）/ QMT 分钟与日线对齐：[vendor bar alignment SSOT](ssot/vendor-bar-alignment-ssot.md)（标签、单位、稀疏网格；docs-only，不授权写湖）。
 
@@ -102,33 +102,30 @@ R5 的 `--start/--end` 必须跟导出的首末文件名走：H0 / `pred_minus_o
 
 规则与闸：策略 7 见 [plan-strategy7-turtle-csv-minute-2026-09-11.md](_archive/plans/plan-strategy7-turtle-csv-minute-2026-09-11.md)。6/8 口径写在各自 CLI 的 help lock。成交核（档位 / 全卖因跌停 / Decimal 涨跌停价 / 停牌净值）见 [engine-ashare-correctness.md](engine-ashare-correctness.md)。名单 as-of 与 ST 名称列见 [pool-csv-contract.md](pool-csv-contract.md)。
 
-数据：只读已设定的湖（`OSKH_SOURCE_PARQUET_ROOT`；未设定或文件缺失即报错，不猜 E/F）。申万一级只读 `vendor_wind_sw_l1/`（`oskh_data/industry_sw_l1.py`），采集写湖在 1.3。ST 三份材料的分工见 [data/st-status-ssot.md](data/st-status-ssot.md)。细则见根 `AGENTS.md`。
+数据：只读已设定的湖（`OSKH_SOURCE_PARQUET_ROOT` 或显式 authority 配置；未设定或文件缺失即报错，不猜 E/F）。申万一级只读 `vendor_wind_sw_l1/`（`oskh_data/industry_sw_l1.py`），采集、merge 和写湖归 MyQuant-infra。ST 三份材料的分工见 [data/st-status-ssot.md](data/st-status-ssot.md)。细则见根 `AGENTS.md`。
 
 **CI contract gates（无 F 湖 / repo-only）：** `.github/workflows/python-tests.yml` 在 `pip` 前跑 `verify_oskh_data_contract.py`、`verify_data_path_ssot.py`（扫 `oskh_data` / `oskh_factors` / `scripts` / `common`）、`verify_no_hardcoded_machine_paths.py`、`verify_tr_bridge_import_ssot.py`（H12）。chip / TR / L2 等需湖门禁不进 CI。清单见 [plan-h10-ci-path-gates-2026-09-15.md](plan-h10-ci-path-gates-2026-09-15.md) · [plan-h12-ci-tr-bridge-gate-2026-09-15.md](plan-h12-ci-tr-bridge-gate-2026-09-15.md)。
 
 **宿主湖门禁（9 个，host-only）：** purpose、跑法、数据要求与退出语义见 [host-lake-gates-cookbook-2026-09-16.md](host-lake-gates-cookbook-2026-09-16.md)；权威入口为 `scripts/gates/`。
 
-## 1.3：LEBS 与 MockQMT（不在本仓跑）
+## 1.3：生产决策测试与交易真栈验收
 
-要和 Paper 同源的扫描、真栈验收，去 **OSkhQuant1.3**（本仓没有 `backtest/lebs/`）：
+生产决策测试、MockQMT 柜台测试和交易真栈验收归 **OSkhQuant1.3**。当前能力和命令以[该仓 SSOT](https://github.com/zhentinginfo/OSkhQuant1.3/blob/master/docs/backtest/backtest-architecture-ssot.md)及实际源码为准；本仓维护向量化研究，不用回测净值替代交易栈验收。
 
-- 研究扫描：`python -m backtest.lebs`（`--strategy turtle` 吃 `stock_pool_turtle/`，与 Paper 同源决策核；或 `csv_v1..csv_v5` 旧 CSV 轨，**不是**本仓 1–10 / 策略 7）
-- 验收：`run_mock_turtle_stack_scenario.py` + `--parity`（真栈；**不用 LEBS 净值代替签字**）
-- SSOT：1.3 `docs/backtest/backtest-architecture-ssot.md`（只管辖 1.3，不描述本仓向量化）
-- 四件怎么选、LEBS ≠ 真栈：本仓 [plan-ashare-engine-refactor-2026-09-18.md](plan-ashare-engine-refactor-2026-09-18.md) §0.3
+LEBS 已于 2026-11-09 从 1.3 整体退役。旧 `python -m backtest.lebs`、`turtle` / `csv_v1..csv_v5` 扫描说明仅属历史，不作为现行入口，也不按旧文档恢复。
 
-本仓不复刻 LEBS / MockQMT，也不承诺和它们净值对齐。策略 7（金榕元）≠ LEBS turtle ≠ Paper 海龟。
+本仓策略 7（金榕元）与历史 LEBS turtle / Paper 海龟的名单和仓位机不同。
 
 ## Cerebro（已退场，2026-09-16）
 
-Cerebro / Rolling 已退场（2026-09-16）；chip / ma_chip 对照产物为静态档案，代码路径已删。保留 `backtest_output/`、历史对照报告和测试 fixtures，以及纯筹码计算、Rust TR 和 CSV 策略规则。ma_chip 默认归档；需要可跑研究时另开 version11 CSV 移植计划，重裁次日开盘与现行 CSV 成交时点语义。**Cerebro 已退场，禁止复活。**
+Cerebro / Rolling 已退场（2026-09-16）；chip / ma_chip 对照产物为静态档案，代码路径已删。保留 `backtest_output/`、历史对照报告、测试 fixtures 和 CSV 策略规则；筹码/TR 数值核及 Rust 源码已迁 MyQuant，本仓只保留消费转发和宿主适配。version11（ma_chip）CSV 移植 A–C 已落地，成交时点与 volume=A 已人裁，D 静态档案对照待完成。**Cerebro 已退场，禁止复活。**
 
 ## SSOT
 
 | 主题 | 文档 |
 |------|------|
 | **★ 研究问题总入口（名单 × 搜法 × 策略号）** | [research-backtest-entry.md](research-backtest-entry.md) |
-| **★ 三件引擎定位（本仓 + 1.3）** | [engine-positioning-ssot.md](engine-positioning-ssot.md) |
+| **★ 研究回测与执行验收分工** | [engine-positioning-ssot.md](engine-positioning-ssot.md) |
 | **★ 向量化成交核（A 股档位 / 跌停 / 停牌）** | [engine-ashare-correctness.md](engine-ashare-correctness.md) |
 | **联合仓库 TopK 回测（讨论中，未编码 GO）** | [topk-joint-research-tracker-2026-09-22.md](topk-joint-research-tracker-2026-09-22.md) · [#164](https://github.com/baiyibing/MyQuant-backtrader/issues/164) · overlay 默认已冻结：[plan-topk-dropout-overlay-2026-09-16.md](plan-topk-dropout-overlay-2026-09-16.md) |
 | **joint-return-v1（Grok Bot/4090 意图回放；≠ topk_dropout）** | [joint-return-frozen-explicit-price.md](joint-return-frozen-explicit-price.md) · 交接 [handoff-joint-return-qlib-to-bt-2026-09-22.md](handoff-joint-return-qlib-to-bt-2026-09-22.md) · 归类 [research-backtest-entry.md](research-backtest-entry.md) §5 |
@@ -143,7 +140,7 @@ Cerebro / Rolling 已退场（2026-09-16）；chip / ma_chip 对照产物为静�
 | **CI TR bridge import gate（H12；无湖）** | [plan-h12-ci-tr-bridge-gate-2026-09-15.md](plan-h12-ci-tr-bridge-gate-2026-09-15.md) · `verify_tr_bridge_import_ssot.py` |
 | **宿主湖门禁 cookbook（WP2；9 个 host-only）** | [host-lake-gates-cookbook-2026-09-16.md](host-lake-gates-cookbook-2026-09-16.md) |
 | **Chip / TR slow-path inventory（H11；Theme D 软）** | [chip/chip-slowpath-inventory-2026-09-15.md](chip/chip-slowpath-inventory-2026-09-15.md) · [plan-h11-chip-slowpath-inventory-2026-09-15.md](plan-h11-chip-slowpath-inventory-2026-09-15.md) |
-| **CYQ / TR 产品边界（H13）** | [plan-h13-cyq-tr-boundary-2026-09-15.md](plan-h13-cyq-tr-boundary-2026-09-15.md) · inventory §E：MyQuant numba `winner_ratio` feeder ≠ 本仓 Rust TR Store |
+| **CYQ / TR 产品边界** | [当前归属](../engineering/factor-owner-migration-20261109.md)：infra 负责 CYQ feeder / Store IO，MyQuant 负责筹码/TR 公共数值核及 Rust；[H13 历史计划](plan-h13-cyq-tr-boundary-2026-09-15.md)保留原记录 |
 | **D1 minute/hybrid chip profile（H14）** | [plan-h14-d1-minute-chip-profile-2026-09-15.md](plan-h14-d1-minute-chip-profile-2026-09-15.md) · [chip/h14-d1-minute-chip-profile-results-2026-09-15.md](chip/h14-d1-minute-chip-profile-results-2026-09-15.md) · `bench_minute_chip_hotpath.py` |
 | **D2 minute chip numba（H15）** | [plan-h15-d2-minute-chip-numba-2026-09-15.md](plan-h15-d2-minute-chip-numba-2026-09-15.md) · `MINUTE_CHIP_BACKEND` / `use_numba` · `tests/test_minute_chip_numba_parity.py` |
 | **Minute `simulate()` real-path profile** | [minute-simulate-profile-results-2026-09-15.md](minute-simulate-profile-results-2026-09-15.md) · `bench_minute_simulate_hotpath.py` |

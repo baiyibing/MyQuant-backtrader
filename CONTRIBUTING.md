@@ -1,23 +1,23 @@
 # Contributing
 
-本仓是独立研究脸：日名单 CSV + 向量化回测、筹码 / 换手阻力研究。交易栈与 LEBS / MockQMT 验收归 OSkhQuant1.3。提交前阅读 [AGENTS.md](AGENTS.md) 与 [成交引擎定位](docs/backtest/engine-positioning-ssot.md)。
+本仓负责回测策略研究、实验输入组织与向量化成交/收益回测；筹码/TR 公共数值核消费 MyQuant，数据产制与 Store IO 调用 MyQuant-infra。OSkhQuant1.3 负责生产决策测试、MockQMT 柜台测试和交易真栈验收，LEBS 已于 2026-11-09 整体退役。提交前阅读 [AGENTS.md](AGENTS.md) 与 [成交引擎定位](docs/backtest/engine-positioning-ssot.md)。
 
 ## 研究入口与数据
 
 - 日线 / 分钟使用 `backtest/research/csv_daily_backtest.py` / `csv_minute_backtest.py`；策略 7 使用独立的 `csv_minute_backtest_v7.py`；`topk_app_dropout` 使用独立的 `csv_minute_backtest_topk_app_dropout.py`（不改策略 7）。参数与名单要求见 [回测专题](docs/backtest/README.md)。
-- 行情只读 F 湖；下载与 vendor 合并在 OSkhQuant1.3。路径使用 resolver，遵守 [AGENTS.md 的盘符分层](AGENTS.md#data-disks-do-not-mix)，不要写死 cwd `stock_data/`；E 盘工作区与 F 湖分开。
+- 行情只读显式配置的湖；下载、清洗、聚合、vendor 合并和湖维护归 MyQuant-infra。使用 resolver，遵守 [AGENTS.md 的数据根约定](AGENTS.md#data-disks-do-not-mix)；湖根须由 `OSKH_SOURCE_PARQUET_ROOT` 或显式 authority 配置提供，工作区由 `OSKH_DATA_ROOT` 配置。缺配置或缺文件明确失败。
 
 ## 不要做
 
 - 不引回 `live_trading`、`executor_stream`、`redis_stream_bridge`、`stream_monitor`、`oskh_db` 或完整 `strategy_config`，不复刻 LEBS / MockQMT。
-- 不在本仓运行 `python -m backtest.lebs`，不恢复 Qlib `PortAnaRecord` 回测。
+- LEBS 已从 1.3 整体退役，不按旧文档恢复或运行 `python -m backtest.lebs`。Qlib 训练、模型信号及完整 Qlib 研究回测归 MyQuant；BT 维护自身向量化研究。
 - Cerebro / Rolling 已退场（2026-09-16），禁止复活；不为新策略开 Cerebro，不新增 `ProfitStrategy.StrategyN` 或扩 Rolling。
 - 不静默漂移成交核、策略书或与 1.3 的 presets 契约；相关改动须同步规则文档与契约检查。
-- 不在本仓复刻 MyQuant 全市场日频 CYQ / `winner_ratio` feeder（`build_winner_ratio.py`）；该产品路径在兄弟仓 MyQuant；本仓 Rust `turnover-resist` 是 TR/cyqk 审计与 Store，见 [plan-h13-cyq-tr-boundary-2026-09-15.md](docs/backtest/plan-h13-cyq-tr-boundary-2026-09-15.md)。
+- 全市场日频 CYQ / `winner_ratio` feeder 调用 MyQuant-infra `myquant_infra.derived_data.cyq`；筹码/TR 公共数值核及 Rust 源码归 MyQuant `myquant_factors`，Store IO 归 infra。本仓只保留必要转发和宿主薄适配，见 [当前因子迁移记录](docs/engineering/factor-owner-migration-20261109.md)。
 
 ## PR 与验证
 
-PR 写清问题、改动与验证结果，使用 GitHub Actions 的 [Python 测试与契约 gates](.github/workflows/python-tests.yml)；涉及 Rust 时还需通过 [Rust 检查](.github/workflows/turnover-resist-rust.yml)。本地 CLI 可用，无需 CloudAgent。
+PR 写清问题、改动与验证结果，使用 GitHub Actions 的 [Python 测试与契约 gates](.github/workflows/python-tests.yml)。共享实现的修改与数值验证在 MyQuant / MyQuant-infra 的所属仓完成，BT 验证公共 API 消费、宿主接线和成交/收益契约。
 
 ### 刷新 presets 跨仓基线
 
@@ -25,12 +25,14 @@ PR 写清问题、改动与验证结果，使用 GitHub Actions 的 [Python 测�
 
 仅在 presets 契约已在两仓有意同步后刷新：在 OSkhQuant1.3 运行 `git rev-parse HEAD`，并对其 `trade_decision/presets.py` 计算完整 SHA-256；将结果分别写入 fixture 的 `upstream_commit` 与 `presets_sha256`。确认本仓同名文件的 SHA-256 相同，再运行 `pytest -q tests/test_presets_cross_repo_snapshot.py`。fixture 与本仓 presets 变更应在同一 PR 中接受审查。
 
-本地 Python 按 [AGENTS.md](AGENTS.md#python) 解析解释器，不隐式使用系统 `python` / `pip`；Rust 在 `turnover-resist/` 内构建。文本使用 UTF-8 无 BOM，写入 `.py` / `.md` 后确认 NUL 为 0。
+本地 Python 按 [AGENTS.md](AGENTS.md#python) 解析解释器，不隐式使用系统 `python` / `pip`；Rust 在 MyQuant 的 `myquant_factors/rust/turnover-resist` 内构建，BT 经显式 `TURNOVER_RESIST_EXE` 或已安装扩展消费。文本使用 UTF-8 无 BOM，写入 `.py` / `.md` 后确认 NUL 为 0。
 
 ## 本地 pre-push 钩子（推 master 前自检）
 
 可选安装：Linux / Git Bash 运行 `sh scripts/install-git-hooks.sh`；PowerShell 运行 `powershell -ExecutionPolicy Bypass -File scripts/install-git-hooks.ps1`，也可直接 `git config core.hooksPath .githooks`。
 
-所有推送检查待推提交的改动文件是否含冲突标记（跳过二进制及独立的 `=======` 下划线）；推 master / main 另跑 CI 同口径 pytest：`not production and not benchmark`，首错即停。找不到 diff base 时警告并跳过该 ref 的标记检查。`PYTHON` 可指定解释器可执行文件；默认依次尝试 python、python3、py -3。`PREPUSH_PYTEST_ARGS` 可追加空白分隔的 pytest 参数以缩小范围（不解析引号）。
+所有推送检查待推提交的改动文件是否含冲突标记（跳过二进制及独立的 `=======` 下划线）；推 master / main 另跑 CI 同口径 pytest：`not production and not benchmark`，首错即停。找不到 diff base 时警告并跳过该 ref 的标记检查。
+
+钩子按 `OSKH_MERGE_PYTHON` → `VANNA312_PYTHON` → `VANNA311_PYTHON` → `D:/anaconda3/envs/vanna312/python.exe` 选择解释器；首个非空配置无效即失败。Linux / CI 宿主须显式配置解释器路径。原 `PYTHON` 覆盖已移除，请改用 `OSKH_MERGE_PYTHON`。`PREPUSH_PYTEST_ARGS` 可追加空白分隔的 pytest 参数以缩小范围（不解析引号）。
 
 临时绕过：Git Bash / Linux 用 `SKIP_PREPUSH=1 git push`；PowerShell 用 `$env:SKIP_PREPUSH=1; git push; Remove-Item Env:SKIP_PREPUSH`；或用 `git push --no-verify`。卸载：`git config --unset core.hooksPath`。

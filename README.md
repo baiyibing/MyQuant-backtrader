@@ -1,10 +1,10 @@
 # MyQuant-backtrader
 
-研究脸：负责回测策略研究、实验输入组织，以及**向量化**成交模拟、费用、持仓和收益回测。既消费外部信号 / 日名单 CSV，也生成回测专用候选名单。因子研究、Qlib 训练/模型信号输出及当前已归并的筹码/TR 公共数值核见 [MyQuant](https://github.com/zhentinginfo/MyQuant)；同一口径公共计算只保留一份实现，BT 调用公共接口。行情只读 path-SSOT parquet；数据采集与湖加工在 [MyQuant-infra](https://github.com/zhentinginfo/MyQuant-infra)。成交验收（LEBS / MockQMT）在 [OSkhQuant1.3](https://github.com/zhentinginfo/OSkhQuant1.3)。
+研究脸：负责回测策略研究、实验输入组织，以及**向量化**成交模拟、费用、持仓和收益回测。既消费外部信号 / 日名单 CSV，也生成回测专用候选名单。因子研究、Qlib 训练/模型信号输出及当前已归并的筹码/TR 公共数值核见 [MyQuant](https://github.com/zhentinginfo/MyQuant)；同一口径公共计算只保留一份实现，BT 调用公共接口。行情只读 path-SSOT parquet；数据采集与湖加工在 [MyQuant-infra](https://github.com/zhentinginfo/MyQuant-infra)。生产决策测试、MockQMT 柜台测试与交易真栈验收在 [OSkhQuant1.3](https://github.com/zhentinginfo/OSkhQuant1.3)。
 
 研究与验收引擎怎么分工：[`docs/backtest/engine-positioning-ssot.md`](docs/backtest/engine-positioning-ssot.md)。成交核（档位 / 全卖因跌停 / Decimal 涨跌停价 / E-R6 除权日参考价修正）：[`docs/backtest/engine-ashare-correctness.md`](docs/backtest/engine-ashare-correctness.md)。名单 CSV 契约：[`docs/backtest/pool-csv-contract.md`](docs/backtest/pool-csv-contract.md)。MyQuant 保留完整 Qlib 研究回测（2026-11-08 用户澄清）；Cerebro / Rolling 已退场（2026-09-16）。本仓没有 `backtest/lebs/`。
 
-研究与执行分工：MyQuant 负责完整 Qlib 研究回测及信号导出，本仓负责自身向量化研究，1.3 负责执行验收；LEBS 只在 1.3，且 LEBS ≠ MockQMT 真栈。本仓无 `python -m backtest.lebs` 入口。研究问题地图（三份主名单 × 策略 1–12 / Mode A/B / TopK）：[`docs/backtest/research-backtest-entry.md`](docs/backtest/research-backtest-entry.md)。
+研究与执行分工：MyQuant 负责完整 Qlib 研究回测及信号导出，本仓负责自身向量化研究，1.3 负责执行验收；LEBS 已于 2026-11-09 从 1.3 整体退役，跨仓入口以该仓当前 SSOT 为准。本仓无 `python -m backtest.lebs` 入口。研究问题地图（三份主名单 × 策略 1–12 / Mode A/B / TopK）：[`docs/backtest/research-backtest-entry.md`](docs/backtest/research-backtest-entry.md)。
 
 Seeded from OSkhQuant slim snapshot at `5d41252`。S2（2026-09-09）之后本仓收研究面；交易栈只留 `oskh_factors` chip/bridge 微包。
 
@@ -77,7 +77,7 @@ D:\anaconda3\envs\vanna312\python.exe -m pip install -r requirements.txt
 ```powershell
 D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_daily_backtest.py --strategy version6 --start 20251023 --end 20260909
 D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_minute_backtest.py --strategy version8 --start 20251023 --end 20260909
-D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_minute_backtest_v7.py --start 20260804 --end 20260909 --pool-dir E:\PycharmProjects\OSkhQuant1.3\stock_pool_turtle
+D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_minute_backtest_v7.py --start 20260804 --end 20260909 --pool-dir <explicit-pool-dir>
 ```
 
 R5（仅做 pred TopN 管道检查）：
@@ -94,7 +94,7 @@ D:\anaconda3\envs\vanna312\python.exe backtest/research/csv_daily_backtest.py --
 
 细则与 1.3 入口：[`docs/backtest/README.md`](docs/backtest/README.md)。
 
-Cerebro / Rolling 已退场（2026-09-16）。chip / ma_chip 对照产物为静态档案，代码路径已删；纯筹码计算与 Rust TR 保留。version11（ma_chip）已注册为 `--strategy version11`，CSV 移植 A–C 已落地；成交时点与 volume=A 已人裁，D 静态档案对照仍待完成。
+Cerebro / Rolling 已退场（2026-09-16）。chip / ma_chip 对照产物为静态档案，代码路径已删；筹码/TR 公共数值核及 Rust 源码已迁 MyQuant，本仓保留消费转发与宿主适配。version11（ma_chip）已注册为 `--strategy version11`，CSV 移植 A–C 已落地；成交时点与 volume=A 已人裁，D 静态档案对照仍待完成。
 
 ## Market data (read-only)
 

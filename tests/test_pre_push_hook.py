@@ -25,6 +25,11 @@ def clean_env():
         'GIT_PREFIX',
         'GIT_CEILING_DIRECTORIES',
         'SKIP_PREPUSH',
+        'OSKH_MERGE_PYTHON',
+        'VANNA312_PYTHON',
+        'VANNA311_PYTHON',
+        'PYTHON',
+        'PREPUSH_PYTEST_ARGS',
     ):
         env.pop(name, None)
     return env
@@ -50,6 +55,102 @@ def test_hook_executable_index(path):
     result = run(['git', 'ls-files', '-s', path], ROOT)
     assert result.returncode == 0, result.stderr
     assert result.stdout.startswith('100755 ')
+
+
+@pytest.fixture
+def protected_push(tmp_path):
+    git_exe = shutil.which('git')
+    if not git_exe:
+        pytest.skip('git unavailable')
+    if os.name == 'nt':
+        shell_path = Path(git_exe).resolve().parents[1] / 'bin' / 'bash.exe'
+        shell = str(shell_path) if shell_path.is_file() else None
+    else:
+        shell = shutil.which('sh')
+    if not shell:
+        pytest.skip('requires POSIX shell or Git Bash')
+
+    def git(*args):
+        result = run([git_exe, *args], tmp_path)
+        assert result.returncode == 0, result.stderr
+        return result.stdout.strip()
+
+    git('init', '-q')
+    scripts = tmp_path / 'scripts'
+    scripts.mkdir()
+    (scripts / 'ci_pytest_marker.txt').write_bytes(
+        (ROOT / 'scripts/ci_pytest_marker.txt').read_bytes()
+    )
+    git('add', '.')
+    git(
+        '-c', f'core.hooksPath={tmp_path / "no-hooks"}',
+        '-c', 'user.name=Hook Test', '-c', 'user.email=hook@example.invalid',
+        'commit', '-qm', 'test',
+    )
+    sha = git('rev-parse', 'HEAD')
+    interpreter = tmp_path / 'configured interpreter.sh'
+    interpreter.write_bytes(
+        b'#!/bin/sh\n'
+        b'printf "<%s>" "$@" >> "$PREPUSH_TEST_LOG"\n'
+        b'printf "\\n" >> "$PREPUSH_TEST_LOG"\n'
+        b'case "$1" in\n'
+        b'  --version) echo "Python hook-test"; exit 0 ;;\n'
+        b'  -m) exit "${PREPUSH_TEST_STATUS:-0}" ;;\n'
+        b'esac\n'
+        b'exit 99\n'
+    )
+    interpreter.chmod(0o755)
+    log = tmp_path / 'interpreter.log'
+
+    def push(config):
+        env = clean_env()
+        env['PREPUSH_TEST_LOG'] = log.as_posix()
+        env.update(config)
+        return run(
+            [shell, HOOK.as_posix(), 'github', 'unused'], tmp_path,
+            input=f'refs/heads/master {sha} refs/heads/master {sha}\n', env=env,
+        )
+
+    return push, interpreter.as_posix(), log
+
+
+@pytest.mark.parametrize(
+    'selected', ['OSKH_MERGE_PYTHON', 'VANNA312_PYTHON', 'VANNA311_PYTHON']
+)
+def test_configured_interpreter_priority_and_arguments(protected_push, selected):
+    push, interpreter, log = protected_push
+    keys = ['OSKH_MERGE_PYTHON', 'VANNA312_PYTHON', 'VANNA311_PYTHON']
+    config = {key: interpreter + '.missing' for key in keys[keys.index(selected):]}
+    config[selected] = interpreter
+    config['PYTHON'] = interpreter + '.obsolete'
+    config['PREPUSH_PYTEST_ARGS'] = 'tests/test_example.py -k smoke'
+    result = push(config)
+    assert result.returncode == 0, result.stderr
+    assert log.read_text(encoding='utf-8').splitlines() == [
+        '<--version>',
+        '<-m><pytest><-p><no:cacheprovider><-q><-x>'
+        '<-m><not production and not benchmark><tests/test_example.py><-k><smoke>',
+    ]
+
+
+def test_invalid_configured_interpreter_fails_without_fallback(protected_push):
+    push, interpreter, log = protected_push
+    result = push({
+        'OSKH_MERGE_PYTHON': interpreter + '.missing',
+        'VANNA312_PYTHON': interpreter,
+        'PYTHON': interpreter,
+    })
+    assert result.returncode != 0
+    assert 'configured Python cannot run' in result.stderr
+    assert not log.exists()
+
+
+def test_selected_interpreter_pytest_failure_blocks_push(protected_push):
+    push, interpreter, log = protected_push
+    result = push({'OSKH_MERGE_PYTHON': interpreter, 'PREPUSH_TEST_STATUS': '23'})
+    assert result.returncode != 0
+    assert 'pytest failed' in result.stderr
+    assert len(log.read_text(encoding='utf-8').splitlines()) == 2
 
 
 @pytest.mark.skipif(

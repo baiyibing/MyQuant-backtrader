@@ -2,7 +2,7 @@
 
 > **日期**：2026-09-22  
 > **这份文档管什么**：本仓向量化回测在做什么、名单从哪来、策略号 / Mode A/B / TopK 怎么挂到同一件「收益最大化」上。  
-> **这份文档不管什么**：成交核数字（档位 / 跌停 / 除权）见 [engine-ashare-correctness.md](engine-ashare-correctness.md)；复制粘贴命令见 [README.md](README.md)；三件引擎分工见 [engine-positioning-ssot.md](engine-positioning-ssot.md)。
+> **这份文档不管什么**：成交核数字（档位 / 跌停 / 除权）见 [engine-ashare-correctness.md](engine-ashare-correctness.md)；复制粘贴命令见 [README.md](README.md)；研究回测与执行验收分工见 [engine-positioning-ssot.md](engine-positioning-ssot.md)。
 
 分钟成交假设、各入口默认、研究 opt-in 与 NAV 混比边界统一见 [minute-fill-policy-ssot.md](minute-fill-policy-ssot.md)（S0 文档总表，生产默认不变）。
 
@@ -36,7 +36,7 @@
 | **qlib / pred** | MyQuant `export_daily_pool.py` → `exports/…`；或 `--pred-csv` / `--scores-dir`；**另一条**走冻结 `intents.csv`（不是日 CSV 池） | 模型日分 | **`topk_dropout` / `topk_score_exit`**（CSV 书、引擎实仓轮换）；**joint-return-v1**（MQ 出意图、本仓分钟回放，见 §5） |
 | **海龟** | 1.3 `stock_pool_turtle/`（本仓策略 7 **必须** `--pool-dir`，不回落 `stock_pool/`） | 海龟/金榕元选股日名单 | **策略 7** 金榕元仓位机 |
 
-这三棵树不是同一宇宙。pred Top10 与手工 `stock_pool` 几乎不重叠（[m5-list-attribution-2026-03-09.md](m5-list-attribution-2026-03-09.md)）。策略 7 ≠ 1.3 LEBS turtle ≠ Paper 海龟：池和仓位机都不是一份。
+这三棵树不是同一宇宙。pred Top10 与手工 `stock_pool` 几乎不重叠（[m5-list-attribution-2026-03-09.md](m5-list-attribution-2026-03-09.md)）。策略 7 与历史 LEBS turtle / Paper 海龟的池和仓位机不同；LEBS 已于 2026-11-09 从 1.3 整体退役。
 
 ---
 
@@ -246,7 +246,7 @@ Python：`D:\anaconda3\envs\vanna312\python.exe`（或 `OSKH_MERGE_PYTHON` / `VA
 - **`topk_dropout` CSV 书 vs joint-return-v1 意图回放**（同分家族、不同工件、不同成交核）
 - 分钟敏感 B 的局部事件 bp vs 全策略 NAV；Book vs v7 vs Mode B
 - 甲（Mode B 卖点臂）vs 乙（整本策略 8）
-- 本仓向量化 vs 1.3 LEBS vs MockQMT 真栈（三件不做重，不对一个数）
+- 本仓向量化收益 vs 1.3 生产决策测试 / MockQMT 交易真栈验收（研究收益不替代执行验收；历史 LEBS 已退役）
 - 合成 / 冻结 `BT_RESEARCH_REPLAY_PASS` vs 真实收益（绿 ≠ 已测净超额）
 
 跨 sizing（`daily_quota` vs `per_name`）只比 lot 收益分布 / 胜率 / 单码敞口，不用 NAV 排名。

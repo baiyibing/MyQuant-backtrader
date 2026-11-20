@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """CSV 选股名单：无后缀六位码 → ``XXXXXX.SH|SZ|BJ``。
 
-与 OSkhQuant1.3 ``backtest/lebs/csv/universe.py::parse_pool_csv`` 同口径。
+历史曾与 OSkhQuant1.3 ``backtest/lebs/csv/universe.py::parse_pool_csv`` 对齐；
+该 LEBS 入口已退役，当前以本仓 ``docs/backtest/pool-csv-contract.md`` 为准。
 后缀只走 ``oskh_core.a_share_symbol_normalize.canonical_from_bare_code``，
 不要用 ``to_canonical_symbol``（那是分区键 ``000001_SZ`` → 点分，不加交易所）。
 """
