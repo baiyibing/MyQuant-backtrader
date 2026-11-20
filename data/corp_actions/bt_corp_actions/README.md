@@ -1,4 +1,8 @@
-# bt_corp_actions — Wind corporate actions + listing dates (read-only pull)
+# bt_corp_actions — Wind corporate actions and listing dates archive
+
+This directory preserves the results and run records of a historical Wind pull.
+MyQuant-infra owns current corporate-action collection and assembly as described
+in the [repository README](../../../README.md).
 
 Generated 2026-10-23 09:07:18 CST on newtest_4090. Source: Kimi Code CLI 2.1.1 headless (`kimi -p`) + kimi-datasource 3.4.0 plugin, data source `wind`. Read-only vendor fetch; no lake/qlib writes, no code/repo changes. No credentials stored here.
 
@@ -24,9 +28,11 @@ repo `D:\PycharmProjects\MyQuant-backtrader\stock_pool` (20251023..20260909, 215
 - Halt/resumption: skipped as instructed.
 - Field fill: record_date 21779, pay_date 21434, bonus/transfer>0 3000, bonus_list_date 2999 rows.
 
-## Resume
-- `D:\anaconda3\python.exe work\driver.py all 3` — idempotent; skips raw files already present; status in work/status.jsonl. On Kimi quota 403 (5-hour usage limit) it sleeps 20 min and retries (not counted as an attempt). Runs work/assemble.py at the end.
-- `D:\anaconda3\python.exe work\assemble.py` — rebuilds the 4 outputs from raw_events/ and raw_listing/ any time. Kimi session logs: work/kimi_logs/.
+## Run records
+
+`work/` contains the archived status, assembly summary, and Kimi session logs.
 
 ## Files
-corp_actions.csv, listing.csv, FAILURES.csv, universe.txt, raw_events/*.csv (Wind raw), raw_listing/*.csv (Wind raw), work/ (driver, status, logs, summary.json)
+
+`corp_actions.csv`, `listing.csv`, `FAILURES.csv`, and `universe.txt` summarize
+the pull. `raw_events/` and `raw_listing/` preserve the raw Wind CSVs.
